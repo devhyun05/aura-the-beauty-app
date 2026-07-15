@@ -11,7 +11,6 @@ const tscPath = join(repoRoot, 'apps/mobile/node_modules/typescript/bin/tsc');
 const srcRoot = join(repoRoot, 'apps/mobile/src');
 const tests = [
   'features/makeup-recommendation/services/makeupRecommendationService.test.ts',
-  'features/makeup-recommendation/components/scenarioPuzzleLayout.test.ts',
   'features/makeup-recommendation/screens/MakeupRecommendationScreen.test.ts',
   'features/ar/services/recommendedMakeupEditService.test.ts',
   'features/ar/services/savedArLookService.test.ts',
@@ -19,15 +18,23 @@ const tests = [
   'app/navigation/routes/arRouteActions.test.ts',
 ];
 
-const scenarioPuzzleWallSource = readFileSync(
-  join(srcRoot, 'features/makeup-recommendation/components/ScenarioPuzzleWall.tsx'),
+const scenarioPromptChipSource = readFileSync(
+  join(srcRoot, 'features/makeup-recommendation/components/ScenarioPromptChip.tsx'),
   'utf8',
 );
-if (scenarioPuzzleWallSource.includes('scenarios.some(item => !measurements[item.id])')) {
-  throw new Error('ScenarioPuzzleWall must keep measured cards visible while appended cards are being measured.');
+for (const requiredChipContract of ["variant?: 'default' | 'popular'", 'borderRadius: radius.pill', 'minHeight: 44']) {
+  if (!scenarioPromptChipSource.includes(requiredChipContract)) {
+    throw new Error(`ScenarioPromptChip is missing its chip contract: ${requiredChipContract}`);
+  }
 }
-if (scenarioPuzzleWallSource.includes('placements.length === 0 ? scenarios.map')) {
-  throw new Error('ScenarioPuzzleWall must measure only missing cards without hiding existing placements.');
+const scenarioChipCloudSource = readFileSync(
+  join(srcRoot, 'features/makeup-recommendation/components/ScenarioChipCloud.tsx'),
+  'utf8',
+);
+for (const requiredCloudContract of ["flexDirection: 'row'", "flexWrap: 'wrap'"]) {
+  if (!scenarioChipCloudSource.includes(requiredCloudContract)) {
+    throw new Error(`ScenarioChipCloud is missing its wrapping contract: ${requiredCloudContract}`);
+  }
 }
 const scenarioDiscoverySource = readFileSync(
   join(srcRoot, 'features/makeup-recommendation/screens/ScenarioDiscoveryView.tsx'),
@@ -38,12 +45,26 @@ for (const duplicatePrompt of ['지금 끌리는 한 문장', '마음 가는 문
     throw new Error(`Scenario discovery must not repeat its prompt: ${duplicatePrompt}`);
   }
 }
+for (const requiredDiscoveryContract of ['자주 찾는 메이크업', '다른 분위기', '문구 더보기', 'popularScenarios']) {
+  if (!scenarioDiscoverySource.includes(requiredDiscoveryContract)) {
+    throw new Error(`Scenario discovery is missing its curated chip contract: ${requiredDiscoveryContract}`);
+  }
+}
 const questionScreenSource = readFileSync(
   join(srcRoot, 'features/makeup-recommendation/screens/MakeupRecommendationScreen.tsx'),
   'utf8',
 );
 if (!questionScreenSource.includes('scenarioLabel={session.scenarioLabel}')) {
   throw new Error('Question screen must keep the initially selected scenario visible.');
+}
+for (const requiredScenarioState of [
+  'INITIAL_GENERAL_SCENARIO_COUNT = 7',
+  'SCENARIO_LOAD_MORE_COUNT = 12',
+  'getPopularMakeupScenarios()',
+]) {
+  if (!questionScreenSource.includes(requiredScenarioState)) {
+    throw new Error(`MakeupRecommendationScreen is missing local scenario state: ${requiredScenarioState}`);
+  }
 }
 const makeupServiceSource = readFileSync(
   join(srcRoot, 'features/makeup-recommendation/services/makeupRecommendationService.ts'),
@@ -55,6 +76,9 @@ const recommendationResultsSource = readFileSync(
 );
 if (makeupServiceSource.includes("generationMode === 'localFallback'") || recommendationResultsSource.includes("generationMode === 'localFallback'")) {
   throw new Error('AI failures must be surfaced for retry instead of displaying fixture recommendations.');
+}
+if (makeupServiceSource.includes('/makeup-recommendations/scenarios')) {
+  throw new Error('Scenario copy must come from the curated local library, not an AI endpoint.');
 }
 if (recommendationResultsSource.includes('임시 추천')) {
   throw new Error('Recommendation results must never be presented as a temporary substitute for failed AI.');

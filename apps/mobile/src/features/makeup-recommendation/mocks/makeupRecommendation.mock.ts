@@ -66,6 +66,11 @@ const scenario = (
 };
 
 export const MAKEUP_SCENARIOS: readonly MakeupScenarioPrompt[] = [
+  scenario('popular-daily', '데일리로 자연스럽게', '매일 부담 없이 자연스럽고 생기 있어 보이는 데일리 메이크업', ['daily', 'natural'], ['occasion'], 'premium'),
+  scenario('popular-work-school', '출근·등교 단정하게', '출근이나 등교에 어울리게 단정하고 또렷한 메이크업', ['work', 'school', 'polished'], ['occasion'], 'premium'),
+  scenario('popular-date', '데이트·약속에서 매력적으로', '데이트나 약속에서 과하지 않지만 매력적으로 보이는 메이크업', ['date', 'meeting', 'attractive'], ['occasion'], 'playful'),
+  scenario('popular-photo', '사진에서 또렷하게', '사진과 영상에서 이목구비가 또렷하게 살아나는 메이크업', ['photo', 'camera', 'defined'], ['occasion'], 'playful'),
+  scenario('popular-important', '중요한 날 오래 유지되게', '중요한 날 오랜 시간 흐트러지지 않고 완성도를 유지하는 메이크업', ['important', 'lasting'], ['occasion'], 'premium'),
   scenario('must-look-beautiful', '중요한 날 잘 나오기', '중요한 날 가장 아름답고 자신 있어 보이는 메이크업', ['important', 'polished'], [], 'playful'),
   scenario('most-beautiful-self', '조용한 프리미엄', '나의 장점을 살린 균형 있고 아름다운 메이크업', ['balanced', 'premium'], [], 'premium'),
   scenario('everyday-balance', '매일의 나를 조금 더 또렷하게', '매일 부담 없이 나에게 잘 어울리는 균형 잡힌 메이크업', ['daily', 'balanced'], ['occasion'], 'narrative'),

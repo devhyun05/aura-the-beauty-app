@@ -1,7 +1,7 @@
-import {ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {ScenarioPuzzleWall} from '../components/ScenarioPuzzleWall';
+import {ScenarioChipCloud} from '../components/ScenarioChipCloud';
 import type {MakeupScenarioPrompt} from '../types';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppCard, AppScreen} from '../../../shared/ui';
@@ -18,9 +18,9 @@ type ScenarioDiscoveryViewProps = {
   onRefreshScenarios: () => void;
   onSelectScenario: (scenario: MakeupScenarioPrompt) => void;
   onSubmitPrompt: () => void;
-  isLoadingScenarios: boolean;
+  canLoadMoreScenarios: boolean;
+  popularScenarios: readonly MakeupScenarioPrompt[];
   prompt: string;
-  scenarioError?: string;
   scenarios: readonly MakeupScenarioPrompt[];
 };
 
@@ -31,9 +31,9 @@ export function ScenarioDiscoveryView({
   onRefreshScenarios,
   onSelectScenario,
   onSubmitPrompt,
-  isLoadingScenarios,
+  canLoadMoreScenarios,
+  popularScenarios,
   prompt,
-  scenarioError,
   scenarios,
 }: ScenarioDiscoveryViewProps) {
   const insets = useSafeAreaInsets();
@@ -57,23 +57,28 @@ export function ScenarioDiscoveryView({
         </View>
 
         <View style={styles.scenarioSection}>
-          <View style={styles.scenarioActions}>
-            <Pressable accessibilityRole="button" disabled={isLoadingScenarios} onPress={onRefreshScenarios} style={styles.refreshButton}>
-              {isLoadingScenarios ? <ActivityIndicator color={colors.textSecondary} size="small" /> : (
-                <Text style={styles.refreshLabel}>{makeupRecommendationDiscoveryCopy.refresh} ↻</Text>
-              )}
-            </Pressable>
+          <View style={styles.scenarioGroup}>
+            <Text style={styles.sectionLabel}>자주 찾는 메이크업</Text>
+            <ScenarioChipCloud onSelect={onSelectScenario} scenarios={popularScenarios} variant="popular" />
           </View>
-          <ScenarioPuzzleWall onSelect={onSelectScenario} scenarios={scenarios} />
-          {scenarioError ? <Text accessibilityRole="alert" style={styles.scenarioError}>{scenarioError}</Text> : null}
-          <Pressable
-            accessibilityRole="button"
-            disabled={isLoadingScenarios}
-            onPress={onLoadMoreScenarios}
-            style={styles.moreButton}
-          >
-            <Text style={styles.moreLabel}>{isLoadingScenarios ? '새 카드를 만드는 중…' : '카드 더보기'}</Text>
-          </Pressable>
+          <View style={styles.scenarioGroup}>
+            <View style={styles.scenarioActions}>
+              <Text style={styles.sectionLabel}>다른 분위기</Text>
+              <Pressable accessibilityRole="button" onPress={onRefreshScenarios} style={styles.refreshButton}>
+                <Text style={styles.refreshLabel}>{makeupRecommendationDiscoveryCopy.refresh} ↻</Text>
+              </Pressable>
+            </View>
+            <ScenarioChipCloud onSelect={onSelectScenario} scenarios={scenarios} />
+          </View>
+          {canLoadMoreScenarios ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={onLoadMoreScenarios}
+              style={styles.moreButton}
+            >
+              <Text style={styles.moreLabel}>문구 더보기</Text>
+            </Pressable>
+          ) : null}
         </View>
       </AppScreen>
 
@@ -121,13 +126,14 @@ const styles = StyleSheet.create({
   composerRow: {alignItems: 'stretch', flexDirection: 'row', gap: spacing.sm},
   composerCard: {flex: 1, justifyContent: 'center', minHeight: 52, paddingHorizontal: spacing.md, paddingVertical: spacing.sm},
   input: {color: colors.textPrimary, flex: 1, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.md, lineHeight: typography.lineHeight.md, minHeight: 36, padding: 0},
-  scenarioSection: {gap: spacing.lg},
-  scenarioActions: {alignItems: 'center', flexDirection: 'row', justifyContent: 'flex-end'},
+  scenarioSection: {gap: spacing.xl},
+  scenarioGroup: {gap: spacing.sm},
+  scenarioActions: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'},
+  sectionLabel: {color: colors.textSecondary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.sm},
   refreshButton: {justifyContent: 'center', minHeight: 44, paddingLeft: spacing.md},
   refreshLabel: {color: colors.textSecondary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.xs},
   moreButton: {alignItems: 'center', alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg},
   moreLabel: {color: colors.textSecondary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.sm},
-  scenarioError: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.xs, textAlign: 'center'},
   floatingHost: {bottom: 0, left: 0, paddingHorizontal: spacing.screenX, position: 'absolute', right: 0},
   floatingSurface: {backgroundColor: colors.bottomSheetSurface, borderColor: colors.border, borderRadius: radius.lg, borderWidth: 1, gap: spacing.sm, padding: spacing.sm},
   submitButton: {alignItems: 'center', backgroundColor: colors.textPrimary, borderRadius: radius.pill, justifyContent: 'center', minHeight: 52, paddingHorizontal: spacing.md},

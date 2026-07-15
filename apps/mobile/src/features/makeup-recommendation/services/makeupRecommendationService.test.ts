@@ -1,11 +1,8 @@
 import {
   answerGeneratedMakeupRecommendationQuestion,
   answerMakeupRecommendationQuestion,
-  getFallbackMakeupScenarios,
   getMakeupScenarioSet,
-  filterFreshMakeupScenarios,
-  composeMakeupScenarioRefresh,
-  mapBackendScenarioItems,
+  getPopularMakeupScenarios,
   mapBackendRecommendationReports,
   mapBackendRecommendationLooks,
   refineGeneratedMakeupRecommendation,
@@ -35,6 +32,18 @@ function expectThrows(action: () => unknown, label: string) {
 }
 
 const scenarios = getMakeupScenarioSet({seed: 0});
+const popularScenarios = getPopularMakeupScenarios();
+expectEqual(popularScenarios.length, 5, 'popular scenario count');
+expectEqual(
+  popularScenarios.map(item => item.displayText).join('|'),
+  '데일리로 자연스럽게|출근·등교 단정하게|데이트·약속에서 매력적으로|사진에서 또렷하게|중요한 날 오래 유지되게',
+  'popular scenario order and copy stay fixed',
+);
+expectEqual(
+  scenarios.some(item => popularScenarios.some(popular => popular.id === item.id)),
+  false,
+  'general scenario pool excludes popular scenarios',
+);
 expectEqual(scenarios.length, 49, 'scenario set count');
 expectEqual(new Set(scenarios.slice(0, 6).map(item => item.tone)).size, 3, 'first six tone coverage');
 expectEqual(new Set(scenarios.map(item => item.copyStyle)).size, 5, 'five copy styles represented');
@@ -55,87 +64,15 @@ expectEqual(
   'today copy is not overused',
 );
 
-const generatedScenarios = mapBackendScenarioItems([
-  {id: 'generated-1', text: '비 오는 날', seedPrompt: '비 오는 날 차분한 메이크업', tags: ['차분']},
-  {id: 'generated-2', text: '기분 전환', seedPrompt: '산뜻한 색으로 기분을 바꾸는 메이크업', tags: ['산뜻']},
-]);
-expectEqual(generatedScenarios.length, 2, 'backend scenarios are mapped');
-expectEqual(generatedScenarios[0].displayText, '비 오는 날', 'backend display text is preserved');
-expectEqual(generatedScenarios[0].intentTags[0], '차분', 'backend tags are preserved');
-expectEqual(generatedScenarios[0].seedPrompt, '비 오는 날 차분한 메이크업', 'backend seed prompt is preserved');
-
-const fallbackScenarios = getFallbackMakeupScenarios({
-  count: 12,
-  excludeTexts: scenarios.slice(0, 12).map(item => item.displayText),
-  seed: 12,
-});
-expectEqual(fallbackScenarios.length, 12, 'local fallback scenario count');
 expectEqual(
-  fallbackScenarios.some(item => scenarios.slice(0, 12).some(seen => seen.displayText === item.displayText)),
+  getMakeupScenarioSet({seed: 0}).map(item => item.id).join(','),
+  scenarios.map(item => item.id).join(','),
+  'same seed keeps general scenario order stable',
+);
+expectEqual(
+  getMakeupScenarioSet({seed: 17}).map(item => item.id).join(',') === scenarios.map(item => item.id).join(','),
   false,
-  'local fallback excludes cards already shown',
-);
-
-const allCuratedBatches = Array.from({length: 5}).reduce<ReturnType<typeof getMakeupScenarioSet>>(
-  accumulated => [
-    ...accumulated,
-    ...getFallbackMakeupScenarios({
-      count: 12,
-      excludeTexts: accumulated.map(item => item.displayText),
-      seed: accumulated.length,
-    }),
-  ],
-  [],
-);
-expectEqual(allCuratedBatches.length, 49, 'complete curated fallback pool stays available');
-expectEqual(
-  new Set(allCuratedBatches.map(item => item.displayText)).size,
-  49,
-  'curated load-more batches never repeat',
-);
-
-const semanticallyFresh = filterFreshMakeupScenarios(
-  mapBackendScenarioItems([
-    {
-      id: 'duplicate-airport',
-      text: '공항 출국 사진 레전드',
-      seedPrompt: '공항 사진에서 또렷하게 보이는 메이크업',
-      tags: ['공항', '사진'],
-    },
-    {
-      id: 'fresh-bookstore',
-      text: '새벽 서점의 온도',
-      seedPrompt: '차분한 브라운과 낮은 채도의 지적인 메이크업',
-      tags: ['차분', '브라운'],
-    },
-  ]),
-  ['공항 출국 레전드'],
-);
-expectEqual(semanticallyFresh.length, 1, 'near-duplicate generated scenarios are filtered');
-expectEqual(semanticallyFresh[0].displayText, '새벽 서점의 온도', 'fresh generated scenario remains');
-
-const genericOnlyDuplicates = filterFreshMakeupScenarios(
-  mapBackendScenarioItems([
-    {id: 'generic-1', text: '오늘 하루', seedPrompt: '가볍고 편안한 데일리 메이크업'},
-    {id: 'generic-2', text: '오늘 하루', seedPrompt: '가볍고 편안한 데일리 메이크업'},
-  ]),
-  [],
-);
-expectEqual(genericOnlyDuplicates.length, 1, 'exact duplicates stay filtered when copy key is empty');
-
-const refreshedScenarios = composeMakeupScenarioRefresh(
-  scenarios.slice(12, 18),
-  semanticallyFresh,
-);
-expectEqual(
-  refreshedScenarios.slice(0, 6).every(item => scenarios.some(curated => curated.id === item.id)),
-  true,
-  'refresh retains a changing curated subset',
-);
-expectEqual(
-  refreshedScenarios.some(item => item.id === semanticallyFresh[0].id),
-  true,
-  'refresh also includes fresh AI cards',
+  'new seed reshuffles general scenarios',
 );
 
 const generatedLooks = mapBackendRecommendationLooks({

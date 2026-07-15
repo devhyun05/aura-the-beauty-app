@@ -8,7 +8,6 @@ export const makeupRecommendationDiscoveryCopy = {
   profile: '내 분석 결과 반영',
   submit: '확인',
   refresh: '새로 보기',
-  scenarioLoadError: '새 카드를 더 만들지 못했어요. 잠시 후 다시 눌러주세요.',
 } as const;
 
 export const makeupRecommendationHistoryCopy = {

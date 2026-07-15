@@ -6,12 +6,9 @@ import {AppScreen} from '../../../shared/ui';
 import {BackendApiError, isRequestAbortedError} from '../../../shared/services/backendApi';
 import {
   answerGeneratedMakeupRecommendationQuestion,
-  fetchGeneratedMakeupScenarios,
   fetchGeneratedMakeupRecommendationReports,
-  composeMakeupScenarioRefresh,
-  filterFreshMakeupScenarios,
-  getFallbackMakeupScenarios,
   getMakeupScenarioSet,
+  getPopularMakeupScenarios,
   refineGeneratedMakeupRecommendation,
   refreshGeneratedMakeupRecommendation,
   restoreMakeupRecommendationReport,
@@ -32,7 +29,6 @@ import {RecommendationHistoryView} from './RecommendationHistoryView';
 import {RecommendationResultsView} from './RecommendationResultsView';
 import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
 import {
-  makeupRecommendationDiscoveryCopy,
   shouldHandleMakeupRecommendationBack,
   type MakeupRecommendationScreenPhase,
 } from './makeupRecommendationViewContracts';
@@ -49,6 +45,8 @@ export type MakeupRecommendationScreenProps = {
 
 const HISTORY_PAGE_SIZE = 20;
 const IMAGE_POLL_MAX_FAILURES = 3;
+export const INITIAL_GENERAL_SCENARIO_COUNT = 7;
+export const SCENARIO_LOAD_MORE_COUNT = 12;
 
 function getMakeupRecommendationErrorDiagnostic(error: unknown): string {
   if (!__DEV__ || !(error instanceof BackendApiError) || !error.code) return '';
@@ -73,13 +71,12 @@ export const MakeupRecommendationScreen = forwardRef<
   MakeupRecommendationScreenProps
 >(function MakeupRecommendationScreen({onApplyAR}, ref) {
   const initialScenarioSeed = useRef(Math.floor(Math.random() * 10_000));
-  const initialScenarios = useRef(getMakeupScenarioSet({seed: initialScenarioSeed.current}).slice(0, 12));
-  const curatedScenarioTexts = useRef(getMakeupScenarioSet({seed: 0}).map(item => item.displayText));
+  const scenarioSeed = useRef(initialScenarioSeed.current);
+  const popularScenarios = useRef(getPopularMakeupScenarios());
   const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>('discovery');
   const [prompt, setPrompt] = useState('');
-  const [scenarios, setScenarios] = useState<MakeupScenarioPrompt[]>(initialScenarios.current);
-  const [isLoadingScenarios, setIsLoadingScenarios] = useState(false);
-  const [scenarioError, setScenarioError] = useState('');
+  const [scenarioOrder, setScenarioOrder] = useState(() => getMakeupScenarioSet({seed: scenarioSeed.current}));
+  const [visibleScenarioCount, setVisibleScenarioCount] = useState(INITIAL_GENERAL_SCENARIO_COUNT);
   const [session, setSession] = useState<MakeupRecommendationSession>();
   const [errorMessage, setErrorMessage] = useState('');
   const [refinementError, setRefinementError] = useState('');
@@ -93,9 +90,6 @@ export const MakeupRecommendationScreen = forwardRef<
   const lastStartInput = useRef<StartMakeupRecommendationInput | undefined>(undefined);
   const lastRefinement = useRef<MakeupRecommendationRefinement | undefined>(undefined);
   const activeScenarioTags = useRef<string[]>([]);
-  const seenScenarioTexts = useRef(new Set(initialScenarios.current.map(item => item.displayText)));
-  const scenarioRequestInFlight = useRef(false);
-  const localScenarioSeed = useRef(initialScenarioSeed.current + 12);
   const imagePollFailureCount = useRef(0);
   const workflowRequest = useRef<{controller: AbortController; id: number} | undefined>(undefined);
   const mutationRequest = useRef<{controller: AbortController; id: number} | undefined>(undefined);
@@ -108,48 +102,16 @@ export const MakeupRecommendationScreen = forwardRef<
     return operation;
   }, []);
 
-  const loadScenarios = useCallback(async (mode: 'replace' | 'append') => {
-    if (scenarioRequestInFlight.current) return;
-    scenarioRequestInFlight.current = true;
-    setIsLoadingScenarios(true);
-    setScenarioError('');
-    try {
-      const generationExclusions = [...new Set([
-        ...curatedScenarioTexts.current,
-        ...seenScenarioTexts.current,
-      ])];
-      const generated = await fetchGeneratedMakeupScenarios({
-        count: 12,
-        excludeTexts: generationExclusions.slice(-100),
-      });
-      const fresh = filterFreshMakeupScenarios(generated, generationExclusions);
-      if (fresh.length === 0) throw new Error('새 문장을 준비하지 못했어요.');
-      fresh.forEach(item => seenScenarioTexts.current.add(item.displayText));
-      if (mode === 'replace') {
-        const curated = getMakeupScenarioSet({seed: localScenarioSeed.current}).slice(0, 6);
-        localScenarioSeed.current += 17;
-        curated.forEach(item => seenScenarioTexts.current.add(item.displayText));
-        setScenarios(composeMakeupScenarioRefresh(curated, fresh));
-      } else {
-        setScenarios(previous => [...previous, ...fresh]);
-      }
-    } catch (error) {
-      const fallback = getFallbackMakeupScenarios({count: 12, excludeTexts: [...seenScenarioTexts.current], seed: localScenarioSeed.current});
-      if (fallback.length > 0) {
-        fallback.forEach(item => seenScenarioTexts.current.add(item.displayText));
-        setScenarios(previous => mode === 'replace' ? fallback : [...previous, ...fallback]);
-      } else {
-        setScenarioError(makeupRecommendationDiscoveryCopy.scenarioLoadError);
-      }
-    } finally {
-      scenarioRequestInFlight.current = false;
-      setIsLoadingScenarios(false);
-    }
+  const scenarios = scenarioOrder.slice(0, visibleScenarioCount);
+  const canLoadMoreScenarios = visibleScenarioCount < scenarioOrder.length;
+  const refreshScenarios = useCallback(() => {
+    scenarioSeed.current += 17;
+    setScenarioOrder(getMakeupScenarioSet({seed: scenarioSeed.current}));
+    setVisibleScenarioCount(INITIAL_GENERAL_SCENARIO_COUNT);
   }, []);
-
-  useEffect(() => {
-    void loadScenarios('append');
-  }, [loadScenarios]);
+  const loadMoreScenarios = useCallback(() => {
+    setVisibleScenarioCount(previous => Math.min(previous + SCENARIO_LOAD_MORE_COUNT, scenarioOrder.length));
+  }, [scenarioOrder.length]);
 
   const runStart = useCallback((input: StartMakeupRecommendationInput) => {
     const operation = beginOperation(workflowRequest);
@@ -371,14 +333,14 @@ export const MakeupRecommendationScreen = forwardRef<
     return (
       <ScenarioDiscoveryView
         onChangePrompt={setPrompt}
-        onLoadMoreScenarios={() => void loadScenarios('append')}
+        onLoadMoreScenarios={loadMoreScenarios}
         onOpenHistory={openHistory}
-        onRefreshScenarios={() => void loadScenarios('replace')}
+        onRefreshScenarios={refreshScenarios}
         onSelectScenario={startFromScenario}
         onSubmitPrompt={startFromPrompt}
-        isLoadingScenarios={isLoadingScenarios}
+        canLoadMoreScenarios={canLoadMoreScenarios}
+        popularScenarios={popularScenarios.current}
         prompt={prompt}
-        scenarioError={scenarioError}
         scenarios={scenarios}
       />
     );

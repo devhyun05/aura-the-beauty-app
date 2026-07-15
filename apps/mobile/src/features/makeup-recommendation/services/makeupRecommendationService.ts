@@ -33,12 +33,13 @@ const QUESTION_PRIORITY: readonly MakeupQuestionDimension[] = [
   'timeSkill',
 ];
 const TONES: readonly MakeupScenarioTone[] = ['narrative', 'playful', 'premium'];
-const COPY_STYLES: readonly MakeupScenarioPrompt['copyStyle'][] = ['editorial', 'scene', 'monologue', 'narrative', 'character'];
-const EMPHASES: readonly MakeupScenarioPrompt['visualEmphasis'][] = ['compact', 'featured', 'standard', 'whisper', 'hero'];
-const PALETTES: readonly MakeupScenarioPrompt['palette'][] = ['paper', 'muted', 'mid', 'soft', 'ink', 'accent'];
-const COLUMN_SPANS: readonly MakeupScenarioPrompt['preferredColumnSpan'][] = [7, 5, 5, 7, 8, 4, 6, 6];
-
-type BackendScenarioItem = {id: string; text: string; seedPrompt?: string; tags?: string[]};
+const POPULAR_SCENARIO_IDS = [
+  'popular-daily',
+  'popular-work-school',
+  'popular-date',
+  'popular-photo',
+  'popular-important',
+] as const;
 type BackendQuestion = {
   id: string;
   title: string;
@@ -76,96 +77,6 @@ type BackendRecommendationReport = {
   createdAt?: string;
 };
 
-export function mapBackendScenarioItems(items: readonly BackendScenarioItem[]): MakeupScenarioPrompt[] {
-  return items
-    .filter(item => item.id?.trim() && item.text?.trim())
-    .map((item, index) => ({
-      id: item.id,
-      displayText: item.text.trim(),
-      seedPrompt: item.seedPrompt?.trim() || item.text.trim(),
-      intentTags: (item.tags ?? []).filter(Boolean),
-      knownDimensions: [],
-      tone: TONES[index % TONES.length],
-      source: 'personalized',
-      copyStyle: COPY_STYLES[index % COPY_STYLES.length],
-      visualEmphasis: EMPHASES[index % EMPHASES.length],
-      palette: PALETTES[index % PALETTES.length],
-      preferredColumnSpan: COLUMN_SPANS[index % COLUMN_SPANS.length],
-    }));
-}
-
-const GENERIC_SCENARIO_WORDS = ['메이크업', '스타일', '분위기', '느낌', '감성', '무드', '사진', '오늘', '하루', '룩'] as const;
-
-function scenarioCopyKey(text: string): string {
-  let normalized = text.toLocaleLowerCase();
-  GENERIC_SCENARIO_WORDS.forEach(word => {
-    normalized = normalized.replaceAll(word, '');
-  });
-  return normalized.replace(/[^0-9a-z가-힣]/g, '');
-}
-
-function bigrams(value: string): string[] {
-  return Array.from({length: Math.max(0, value.length - 1)}, (_, index) => value.slice(index, index + 2));
-}
-
-function scenarioCopyIsSimilar(left: string, right: string): boolean {
-  const rawLeft = left.toLocaleLowerCase().replace(/[^0-9a-z가-힣]/g, '');
-  const rawRight = right.toLocaleLowerCase().replace(/[^0-9a-z가-힣]/g, '');
-  if (rawLeft && rawLeft === rawRight) return true;
-  const leftKey = scenarioCopyKey(left);
-  const rightKey = scenarioCopyKey(right);
-  if (!leftKey || !rightKey) return false;
-  if (leftKey === rightKey) return true;
-  const [shorter, longer] = [leftKey, rightKey].sort((a, b) => a.length - b.length);
-  if (shorter.length >= 4 && longer.includes(shorter)) return true;
-  const leftBigrams = bigrams(leftKey);
-  const rightBigrams = bigrams(rightKey);
-  if (leftBigrams.length === 0 || rightBigrams.length === 0) return false;
-  const remaining = [...rightBigrams];
-  const overlap = leftBigrams.reduce((count, pair) => {
-    const index = remaining.indexOf(pair);
-    if (index < 0) return count;
-    remaining.splice(index, 1);
-    return count + 1;
-  }, 0);
-  return (2 * overlap) / (leftBigrams.length + rightBigrams.length) >= 0.78;
-}
-
-export function composeMakeupScenarioRefresh(
-  curated: readonly MakeupScenarioPrompt[],
-  generated: readonly MakeupScenarioPrompt[],
-): MakeupScenarioPrompt[] {
-  return [...curated.slice(0, 6), ...generated];
-}
-
-export function filterFreshMakeupScenarios(
-  candidates: readonly MakeupScenarioPrompt[],
-  excludeTexts: readonly string[],
-): MakeupScenarioPrompt[] {
-  const accepted: MakeupScenarioPrompt[] = [];
-  const seen = [...excludeTexts];
-  candidates.forEach(candidate => {
-    if (seen.some(text => scenarioCopyIsSimilar(candidate.displayText, text))) return;
-    accepted.push(candidate);
-    seen.push(candidate.displayText);
-  });
-  return accepted;
-}
-
-export async function fetchGeneratedMakeupScenarios({
-  count = 12,
-  excludeTexts = [],
-}: {
-  count?: number;
-  excludeTexts?: readonly string[];
-} = {}): Promise<MakeupScenarioPrompt[]> {
-  const response = await requestBackendJson<{items: BackendScenarioItem[]}>(
-    '/makeup-recommendations/scenarios',
-    {method: 'POST', body: {count, excludeTexts}},
-  );
-  return mapBackendScenarioItems(response.items ?? []);
-}
-
 function ensureToneCoverage(scenarios: MakeupScenarioPrompt[]): MakeupScenarioPrompt[] {
   const selected = scenarios.slice(0, 6);
 
@@ -182,29 +93,35 @@ function ensureToneCoverage(scenarios: MakeupScenarioPrompt[]): MakeupScenarioPr
   return selected;
 }
 
-export function getMakeupScenarioSet({seed}: {seed: number}): MakeupScenarioPrompt[] {
-  const offset = Math.abs(Math.floor(seed)) % MAKEUP_SCENARIOS.length;
-  const rotated = [...MAKEUP_SCENARIOS.slice(offset), ...MAKEUP_SCENARIOS.slice(0, offset)];
-  const firstSix = ensureToneCoverage(rotated);
-  return [
-    ...firstSix,
-    ...rotated.filter(item => !firstSix.some(first => first.id === item.id)),
-  ].slice(0, 49);
+function seededShuffle<T>(items: readonly T[], seed: number): T[] {
+  const shuffled = [...items];
+  let state = (Math.abs(Math.floor(seed)) || 1) >>> 0;
+  const random = () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
+  }
+  return shuffled;
 }
 
-export function getFallbackMakeupScenarios({
-  count,
-  excludeTexts,
-  seed,
-}: {
-  count: number;
-  excludeTexts: readonly string[];
-  seed: number;
-}): MakeupScenarioPrompt[] {
-  const excluded = new Set(excludeTexts.map(text => text.trim().toLocaleLowerCase()).filter(Boolean));
-  return getMakeupScenarioSet({seed})
-    .filter(item => !excluded.has(item.displayText.trim().toLocaleLowerCase()))
-    .slice(0, Math.max(0, count));
+export function getPopularMakeupScenarios(): MakeupScenarioPrompt[] {
+  return POPULAR_SCENARIO_IDS.map(id => MAKEUP_SCENARIOS.find(item => item.id === id)).filter(
+    (item): item is MakeupScenarioPrompt => Boolean(item),
+  );
+}
+
+export function getMakeupScenarioSet({seed}: {seed: number}): MakeupScenarioPrompt[] {
+  const popularIds = new Set<string>(POPULAR_SCENARIO_IDS);
+  const shuffled = seededShuffle(MAKEUP_SCENARIOS.filter(item => !popularIds.has(item.id)), seed);
+  const firstSix = ensureToneCoverage(shuffled);
+  return [
+    ...firstSix,
+    ...shuffled.filter(item => !firstSix.some(first => first.id === item.id)),
+  ];
 }
 
 function inferKnownDimensions(prompt: string): MakeupQuestionDimension[] {
