@@ -14,6 +14,9 @@ Shader "ARMakeup/LowerLid"
         // 아이라인(하) — 색은 상안검 아이라이너와 공용(eyelinerColor).
         _LinerColor ("Lower Liner Color", Color) = (0.09, 0.08, 0.09, 1)
         _LinerIntensity ("Lower Liner Intensity", Range(0, 1)) = 0
+        _LowerLinerStyle ("Lower Liner Style (0 soft 1 waterline 2 outer third)", Float) = 0
+        _LowerLinerFinish ("Lower Liner Finish (0 satin 1 matte 2 gloss 3 pearl)", Float) = 0
+        _LowerLinerShimmer ("Lower Liner Shimmer", Range(0, 1)) = 0
         // 애교살 — 상=하이라이트(가산/스크린, 통통 광채), 하=섀도(감산/곱, 볼록 정의).
         _AegyoHiColor ("Aegyo Highlight Color", Color) = (1.0, 0.95, 0.88, 1)
         _AegyoShColor ("Aegyo Shadow Color", Color) = (0.69, 0.54, 0.41, 1)
@@ -68,6 +71,9 @@ Shader "ARMakeup/LowerLid"
 
             fixed4 _LinerColor;
             float _LinerIntensity;
+            float _LowerLinerStyle;
+            float _LowerLinerFinish;
+            float _LowerLinerShimmer;
             fixed4 _AegyoHiColor;
             fixed4 _AegyoShColor;
             float _AegyoIntensity;
@@ -123,6 +129,18 @@ Shader "ARMakeup/LowerLid"
                 return o;
             }
 
+            float LowerLinerHorizontalMask(float style, float along)
+            {
+                float edgeFade = smoothstep(0.0, 0.08, along)
+                               * (1.0 - smoothstep(0.92, 1.0, along));
+                if (style > 1.5)
+                {
+                    // 해부학 u(안쪽0→바깥1)라 양쪽 눈에서 자동으로 바깥 1/3에 붙는다.
+                    return edgeFade * smoothstep(0.58, 0.82, along);
+                }
+                return edgeFade;
+            }
+
             fixed4 frag(v2f i) : SV_Target
             {
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
@@ -148,7 +166,11 @@ Shader "ARMakeup/LowerLid"
                 float soft = 0.5 + 0.5 * sin(3.14159 * along);
 
                 // 아이라인(하): lash 바로 아래 얇은 라인 (초승달 테이퍼와 무관).
-                float lnAmt = (1.0 - smoothstep(0.10, 0.22, v)) * edge * _LinerIntensity;
+                float linerWidth = (_LowerLinerStyle > 0.5 && _LowerLinerStyle < 1.5)
+                                 ? 0.13 : 0.22;
+                float lnAmt = (1.0 - smoothstep(0.08, linerWidth, v))
+                            * LowerLinerHorizontalMask(_LowerLinerStyle, along)
+                            * _LinerIntensity;
                 // 애교살 하이라이트: 라인 아래 도톰한 밴드. edge를 곱해 꼬리(바깥)
                 // 메시 경계에서 알파가 하드 엣지로 끊기지 않게 한다(안쪽은 thick→0).
                 float hiAmt = smoothstep(0.06, 0.24, vv) * (1.0 - smoothstep(0.40, 0.58, vv))
@@ -185,6 +207,8 @@ Shader "ARMakeup/LowerLid"
                 // 색소(피드 기준 풀강도): 라이너=루마 보존 틴트, 하이라이트=스크린(가산),
                 // 섀도=곱(감산) — FaceMakeup 가·감산 브랜치와 동일 공식.
                 fixed3 pigLn = _LinerColor.rgb * (luma * 1.2 + 0.08);
+                pigLn = ApplyFinish(pigLn, luma, i.uv, _LowerLinerFinish, _LowerLinerShimmer,
+                                    0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
                 fixed3 pigHi = 1.0 - (1.0 - feed) * (1.0 - _AegyoHiColor.rgb);
                 // 애교살 마감 — 하이라이트 밴드에 ApplyFinish(시머=펄 애교살, 매트=톤다운).
                 // sparkleUV는 밴드 로컬 uv라 시머가 밴드에 접착. 0=새틴=무변형(하위호환).

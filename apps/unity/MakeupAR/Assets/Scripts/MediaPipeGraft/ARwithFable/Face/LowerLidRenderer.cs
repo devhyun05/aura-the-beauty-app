@@ -69,6 +69,9 @@ namespace ARMakeup.Face
 
         static readonly int LinerColorId = Shader.PropertyToID("_LinerColor");
         static readonly int LinerIntensityId = Shader.PropertyToID("_LinerIntensity");
+        static readonly int LowerLinerStyleId = Shader.PropertyToID("_LowerLinerStyle");
+        static readonly int LowerLinerFinishId = Shader.PropertyToID("_LowerLinerFinish");
+        static readonly int LowerLinerShimmerId = Shader.PropertyToID("_LowerLinerShimmer");
         static readonly int AegyoHiColorId = Shader.PropertyToID("_AegyoHiColor");
         static readonly int AegyoShColorId = Shader.PropertyToID("_AegyoShColor");
         static readonly int AegyoIntensityId = Shader.PropertyToID("_AegyoIntensity");
@@ -223,7 +226,8 @@ namespace ARMakeup.Face
         public void ApplyParams(
             float aegyoIntensity, string linerColorHex, float linerIntensity, float cornerLift,
             float heightMult, float aegyoStyleIntensity, string aegyoColor,
-            int aegyoFinish, float aegyoShimmer)
+            int aegyoFinish, float aegyoShimmer, float linerStyle,
+            float linerFinish, float linerShimmer)
         {
             _aegyoIntensity = Mathf.Clamp01(aegyoIntensity);
             _linerIntensity = Mathf.Clamp01(linerIntensity);
@@ -254,6 +258,9 @@ namespace ARMakeup.Face
             }
             _material.SetFloat(AegyoIntensityId, _aegyoIntensity);
             _material.SetFloat(LinerIntensityId, _linerIntensity);
+            _material.SetFloat(LowerLinerStyleId, Mathf.Clamp(Mathf.RoundToInt(linerStyle), 0, 2));
+            _material.SetFloat(LowerLinerFinishId, Mathf.Clamp(Mathf.RoundToInt(linerFinish), 0, 3));
+            _material.SetFloat(LowerLinerShimmerId, Mathf.Clamp01(linerShimmer));
             _material.SetFloat(AegyoStyleIntensityId, _aegyoStyleIntensity);
             // 마감 — 애교살 하이라이트 밴드(시머=펄 애교살). 0=새틴=기존 출력(하위호환).
             _material.SetFloat(AegyoFinishId, aegyoFinish);

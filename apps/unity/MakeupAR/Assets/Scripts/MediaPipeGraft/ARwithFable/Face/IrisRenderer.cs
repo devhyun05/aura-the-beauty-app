@@ -80,6 +80,7 @@ namespace ARMakeup.Face
         const int TailSubdiv = 6;              // 눈꼬리 꼬리 테셀레이션 점 수
         const int MainPts = 9 + 8 * LashSubdiv; // 세분된 안쪽 체인 점 수 = 33
         const int ChainPts = MainPts + TailSubdiv; // 꼬리 + 메인 = 39
+        const int EyelinerStyleCount = 6;
         // 두께: 두꺼우면 눈두덩(아이섀도우 자리)을 덮고 꼬리가 스파이크로 보인다(실기기).
         const float EyelinerThickness = 0.26f; // 눈 반경 대비 리본 최대 두께
         // 세그먼트 좌표축(uv.y): 눈꺼풀 파라메트릭 t = 앞머리(안쪽) 0 → 바깥 눈꼬리
@@ -108,9 +109,10 @@ namespace ARMakeup.Face
         const float EyeClosedSnapFloor = 0.25f; // 눈폭 대비 스냅 스케일 하한
         const float InnerCornerLiftImg = 0.055f; // 앞머리 끝 리프트(눈 높이 대비) — 눈구석 접합점보다 살짝 위에서 끝나게(0.05→0.055 실기기 튜닝)
         float _innerLiftOverride = -1f;          // (임시 디버그) 브리지 오버라이드 — 음수=미설정
-        // 스타일 0=윙업(캣아이), 1=다운턴(퍼피), 2=가로롱. 각도>0 = 위로(눈썹 방향).
-        static readonly float[] StyleAngleDeg = { 28f, -22f, 0f };
-        static readonly float[] StyleTailLen = { 0.45f, 0.4f, 0.7f }; // eyeRadius 배수
+        // 0 윙업, 1 퍼피, 2 롱, 3 캣, 4 스트레이트, 5 소프트 드롭.
+        // 각도>0 = 눈썹 방향. 두 배열은 EyelinerStyleCount와 1:1이다.
+        static readonly float[] StyleAngleDeg = { 28f, -22f, 0f, 36f, 2f, -12f };
+        static readonly float[] StyleTailLen = { 0.45f, 0.4f, 0.7f, 0.58f, 0.55f, 0.5f };
 
         // ── 아이섀도우 밴드 (동적) ──
         // 안쪽 경계=lash 라인(감아도 경계까지·아래로 안 샘), 위로만 눈썹 방향 확장.
@@ -483,7 +485,7 @@ namespace ARMakeup.Face
         {
             _irisIntensity = Mathf.Clamp01(p.irisIntensity);
             _eyelinerIntensity = Mathf.Clamp01(p.eyelinerIntensity);
-            _eyelinerStyle = Mathf.Clamp(p.eyelinerStyle, 0, StyleAngleDeg.Length - 1);
+            _eyelinerStyle = Mathf.Clamp(p.eyelinerStyle, 0, EyelinerStyleCount - 1);
             _eyeCornerLift = Mathf.Clamp01(p.eyeCornerLift);
             // 배수 핸들 — JsonUtility 생략 필드는 0이므로 0 이하 = 미설정 → 1(원래).
             _linerThickness = p.eyelinerThickness <= 0f ? 1f : Mathf.Clamp(p.eyelinerThickness, 0.3f, 2.5f);

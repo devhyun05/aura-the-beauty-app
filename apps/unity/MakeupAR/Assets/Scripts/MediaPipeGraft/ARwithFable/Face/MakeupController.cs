@@ -1019,7 +1019,8 @@ namespace ARMakeup.Face
                 LowerLidRenderer.Instance.ApplyParams(
                     p.aegyoIntensity, p.eyelinerColor, p.eyelinerLowerIntensity, p.eyeCornerLift,
                     p.aegyoHeight, p.aegyoStyleIntensity, p.aegyoColor,
-                    p.aegyoFinish, p.aegyoShimmer);
+                    p.aegyoFinish, p.aegyoShimmer, p.eyelinerLowerStyle,
+                    p.eyelinerLowerFinish, p.eyelinerLowerShimmer);
                 // 삼각존(#19b) — 같은 하안검 밴드의 꼬리 쪽 삼각 음영(색·강도 독립, 0=끔).
                 LowerLidRenderer.Instance.ApplyTriangleZone(p.triangleZoneColor, p.triangleZoneIntensity);
                 // 눈밑 컨실러(§08) — shape=0만 밴드로 브라이튼(언더아이 홀로우). shape=1
