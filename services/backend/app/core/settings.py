@@ -115,6 +115,7 @@ class Settings(BaseSettings):
   openai_image_input_max_edge: int = 1024
   openai_image_input_quality: int = 82
   openai_image_output_max_edge: int = 1024
+  makeup_recommendation_source_hosts: str = "d3t1pbvtir1lj.cloudfront.net"
 
   hair_jobs_queue_url: str | None = None
   hair_style_asset_bucket: str | None = None

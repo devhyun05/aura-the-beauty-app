@@ -2,7 +2,10 @@ import type {ImageSourcePropType} from 'react-native';
 
 import {productsMock} from '../mocks/products.mock';
 import type {Product} from '../types/profile';
-import {getBackendApiBaseUrl, requestBackendJson} from './backendApi';
+import {
+  getProductBackendApiBaseUrl,
+  requestProductBackendJson,
+} from './productBackendApi';
 
 type BackendProduct = {
   brandName?: string | null;
@@ -79,13 +82,13 @@ export const getProducts = async (): Promise<Product[]> => {
 };
 
 export const getLikedProducts = async (): Promise<Product[]> => {
-  if (!getBackendApiBaseUrl()) {
+  if (!getProductBackendApiBaseUrl()) {
     return __DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1'
       ? productsMock.filter((product) => product.isLiked)
       : [];
   }
 
-  const response = await requestBackendJson<BackendLikedProductsResponse>('/products/liked');
+  const response = await requestProductBackendJson<BackendLikedProductsResponse>('/products/liked');
   return Array.isArray(response.products)
     ? response.products
         .map(mapBackendProduct)
@@ -105,12 +108,12 @@ export const likeProduct = async (
   productId: string,
   sourceShadeId?: string | null,
 ): Promise<boolean> => {
-  if (!getBackendApiBaseUrl()) {
+  if (!getProductBackendApiBaseUrl()) {
     if (__DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1') return true;
     throw new Error('좋아요를 저장할 서버가 연결되지 않았어요.');
   }
 
-  await requestBackendJson<{liked: boolean; productId: string}>(
+  await requestProductBackendJson<{liked: boolean; productId: string}>(
     `/products/${encodeURIComponent(productId)}/like`,
     {
       method: 'POST',
@@ -125,8 +128,8 @@ export const likeExternalProduct = async (
   productId: string,
   externalSource: string,
 ): Promise<boolean> => {
-  if (!getBackendApiBaseUrl()) throw new Error('좋아요를 저장할 서버가 연결되지 않았어요.');
-  await requestBackendJson<{liked: boolean; productId: string}>(
+  if (!getProductBackendApiBaseUrl()) throw new Error('좋아요를 저장할 서버가 연결되지 않았어요.');
+  await requestProductBackendJson<{liked: boolean; productId: string}>(
     `/products/external/${encodeURIComponent(externalSource)}/${encodeURIComponent(productId)}/like`,
     {method: 'POST'},
   );
@@ -134,7 +137,7 @@ export const likeExternalProduct = async (
 };
 
 export const unlikeProduct = async (productId: string, externalSource?: string | null): Promise<boolean> => {
-  if (!getBackendApiBaseUrl()) {
+  if (!getProductBackendApiBaseUrl()) {
     if (__DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1') return true;
     throw new Error('좋아요를 취소할 서버가 연결되지 않았어요.');
   }
@@ -142,7 +145,7 @@ export const unlikeProduct = async (productId: string, externalSource?: string |
   const path = externalSource
     ? `/products/external/${encodeURIComponent(externalSource)}/${encodeURIComponent(productId)}/like`
     : `/products/${encodeURIComponent(productId)}/like`;
-  await requestBackendJson<{liked: boolean; productId: string}>(
+  await requestProductBackendJson<{liked: boolean; productId: string}>(
     path,
     {method: 'DELETE'},
   );

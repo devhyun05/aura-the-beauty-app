@@ -24,10 +24,7 @@ import {
 } from '../../../shared/services/optionalNativeShareModules';
 import {getUserProfile} from '../../../shared/services/userService';
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import type {
-  FaceAnalysisMakeupCard,
-  FaceAnalysisReport,
-} from '../../../shared/types/faceAnalysis';
+import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {AppScreen} from '../../../shared/ui';
 import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 import {Face3DMetricGrid} from '../../face-3d/components/Face3DMetricGrid';
@@ -45,7 +42,6 @@ import {
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import {PersonalColorTypeCard} from '../../personal-color/components/PersonalColorTypeCard';
 import {MeasurementDetailSection} from '../components/MeasurementDetailSection';
-import {FaceAnalysisV2ReportSections} from '../components/FaceAnalysisV2ReportSections';
 import {shouldUseSessionMeasurements} from '../services/faceAnalysisMeasurements';
 import type {
   AuraPersonalColorResult,
@@ -56,12 +52,10 @@ import {
   faceAnalysisReportLiquidGlassButtonStyle,
   getFaceAnalysisReportEditorialPresentation,
   getFaceAnalysisReportPointGuideItems,
-  getFaceAnalysisReportPrimaryMakeupRecommendation,
   getFaceAnalysisReportScreenFramePresentation,
   getFaceAnalysisReportSummaryItems,
   type FaceAnalysisReportCreateFilterButtonPlacement,
   type FaceAnalysisReportGuideItem,
-  type FaceAnalysisReportPrimaryMakeupRecommendation,
 } from '../services/faceAnalysisReportDetailModel';
 import {
   type FaceAnalysisReportDetailLoadState,
@@ -214,9 +208,6 @@ type FaceAnalysisReportDetailActionFeedback = {
 };
 
 const CREATE_FILTER_BUTTON_HEIGHT = 56;
-const REPORT_IMAGE_POLL_INTERVAL_MS = 2000;
-const REPORT_IMAGE_POLL_INITIAL_DELAY_MS = 800;
-const MAKEUP_IMAGE_PENDING_TEXT = '\uC774\uBBF8\uC9C0 \uC0DD\uC131 \uC911';
 const REPORT_BACKGROUND_COLOR = colors.surfaceMuted;
 const REPORT_PANEL_COLOR = colors.white;
 const REPORT_PANEL_MUTED_COLOR = 'rgba(255, 255, 255, 0.72)';
@@ -266,16 +257,6 @@ export const faceAnalysisReportDeleteConfirmationCopy = {
   message: "삭제한 맞춤 분석 보고서는 되돌릴 수 없어요.",
   title: "보고서 삭제",
 } as const;
-
-function isMakeupImagePending(item?: FaceAnalysisMakeupCard | null) {
-  return item?.imageStatus === 'pending';
-}
-
-function countPendingRecommendedMakeupImages(report: FaceAnalysisReport | null): number {
-  const [primaryMakeup] = report?.recommendedMakeups ?? [];
-
-  return isMakeupImagePending(primaryMakeup) ? 1 : 0;
-}
 
 function getReportCaptureTitle(profileName?: string) {
   return profileName ? [profileName, "님 맞춤 분석 보고서"].join('') : "맞춤 분석 보고서";
@@ -453,10 +434,6 @@ export function FaceAnalysisReportDetailScreen({
     () => (report ? getFaceAnalysisReportPointGuideItems(report) : []),
     [report],
   );
-  const primaryMakeupRecommendation = useMemo(
-    () => (report ? getFaceAnalysisReportPrimaryMakeupRecommendation(report, guideItems) : null),
-    [guideItems, report],
-  );
   // 명시적 과거 조회(reportId)에서는 세션 촬영 사진이 hero 를 오염시키지 않게 한다.
   const heroImageSource = resolveFaceAnalysisReportHeroImageSource(
     reportId ? undefined : capturedPhotoUri,
@@ -492,61 +469,6 @@ export function FaceAnalysisReportDetailScreen({
     () => (report ? getFaceAnalysisReportSummaryItems(report, effectivePersonalColor) : []),
     [effectivePersonalColor, report],
   );
-  const pendingRecommendedMakeupImageCount = useMemo(
-    () => countPendingRecommendedMakeupImages(report),
-    [report],
-  );
-  const isFaceAnalysisPipelinePending =
-    report?.faceAnalysisV2?.pipeline.overall === 'processing';
-
-  useEffect(() => {
-    if (
-      !report?.id ||
-      (pendingRecommendedMakeupImageCount === 0 && !isFaceAnalysisPipelinePending)
-    ) {
-      return;
-    }
-
-    let isCancelled = false;
-    let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    const pollReportImages = async () => {
-      try {
-        const nextReport = await getFaceAnalysisReportById(report.id);
-
-        if (!isCancelled && nextReport) {
-          setLoadState(current =>
-            current.status === 'success'
-              ? {...current, report: nextReport}
-              : current,
-          );
-        }
-      } catch (error) {
-        console.info('[aura:analysis] report-images:poll-failed', {
-          message: error instanceof Error ? error.message : String(error),
-          reportId: report.id,
-        });
-      } finally {
-        if (!isCancelled) {
-          pollTimeoutId = setTimeout(
-            pollReportImages,
-            REPORT_IMAGE_POLL_INTERVAL_MS,
-          );
-        }
-      }
-    };
-
-    pollTimeoutId = setTimeout(pollReportImages, REPORT_IMAGE_POLL_INITIAL_DELAY_MS);
-
-    return () => {
-      isCancelled = true;
-
-      if (pollTimeoutId) {
-        clearTimeout(pollTimeoutId);
-      }
-    };
-  }, [isFaceAnalysisPipelinePending, pendingRecommendedMakeupImageCount, report?.id]);
-
   const handleShareAction = useCallback(async (target: FaceAnalysisReportShareTarget) => {
     if (!report || activeShareTarget) {
       return;
@@ -761,18 +683,6 @@ export function FaceAnalysisReportDetailScreen({
         {effectiveFace3d ? (
           <ReportSection eyebrow="3D FACIAL DEPTH" title={"입체 특성"}>
             <Face3DMetricGrid profile={effectiveFace3d} />
-            <Text style={styles.face3dFrameCaption}>
-              유효 프레임 {effectiveFace3d.validFrameCount}/{effectiveFace3d.targetFrameCount} · ARKit 얼굴 메시 측정
-            </Text>
-            {effectiveFace3d.warnings.length > 0 ? (
-              <View style={styles.face3dWarningCard}>
-                {effectiveFace3d.warnings.map(warning => (
-                  <Text key={warning} selectable style={styles.face3dWarningText}>
-                    • {warning}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
           </ReportSection>
         ) : null}
 
@@ -854,14 +764,6 @@ export function FaceAnalysisReportDetailScreen({
               verticalThirds={effectiveVerticalThirds}
             />
           </ReportSection>
-        ) : null}
-
-        {report.faceAnalysisV2 ? (
-          <FaceAnalysisV2ReportSections analysis={report.faceAnalysisV2} />
-        ) : null}
-
-        {primaryMakeupRecommendation ? (
-          <PrimaryMakeupRecommendationCard recommendation={primaryMakeupRecommendation} />
         ) : null}
 
         <ReportSection eyebrow="MAKEUP TIPS" title={"메이크업 팁"}>
@@ -1061,7 +963,7 @@ function CreateFilterButton({
       unstyled
     >
       <WandSparkles color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />
-      <Text style={styles.createFilterButtonText}>메이크업 필터 만들기</Text>
+      <Text style={styles.createFilterButtonText}>메이크업 추천</Text>
     </Button>
   );
 }
@@ -1108,84 +1010,6 @@ function ReportSection({
       </View>
       {children}
     </View>
-  );
-}
-
-function getMakeupMoodLabels(makeup: FaceAnalysisMakeupCard) {
-  const labels = [
-    "데일리",
-    makeup.subtitle,
-    ...makeup.tags.filter((tag) => tag !== "추천"),
-  ]
-    .map((label) => label.trim())
-    .filter(Boolean);
-
-  return Array.from(new Set(labels)).slice(0, 3);
-}
-
-function PrimaryMakeupRecommendationCard({
-  recommendation,
-}: {
-  recommendation: FaceAnalysisReportPrimaryMakeupRecommendation;
-}) {
-  const {width} = useWindowDimensions();
-  const imageHeight = Math.min(340, Math.max(236, width * 0.76));
-  const {makeup} = recommendation;
-  const isImagePending = isMakeupImagePending(makeup);
-  const moodLabels = getMakeupMoodLabels(makeup);
-  const makeupTitle = makeup.subtitle || makeup.title;
-
-  return (
-    <ReportSection eyebrow="BEST ROUTE" title={"추천 메이크업"}>
-      <View style={styles.makeupCard}>
-        <View style={[styles.makeupImageWrap, {height: imageHeight}]}>
-          <Image
-            resizeMode="cover"
-            source={makeup.imageSource}
-            style={[
-              styles.makeupImage,
-              isImagePending ? styles.makeupImagePending : null,
-            ]}
-          />
-          <View style={styles.makeupImageScrim} />
-          {isImagePending ? (
-            <View style={styles.makeupImagePendingOverlay}>
-              <ActivityIndicator color={colors.white} size="small" />
-              <Text style={styles.makeupImagePendingText}>
-                {MAKEUP_IMAGE_PENDING_TEXT}
-              </Text>
-            </View>
-          ) : null}
-          <View style={styles.makeupImageBadge}>
-            <Text style={styles.makeupImageBadgeText}>BEST MATCH</Text>
-          </View>
-        </View>
-        <View style={styles.makeupBody}>
-          <View style={styles.makeupTitleRow}>
-            <View style={styles.makeupTitleTextGroup}>
-              <Text style={styles.makeupEyebrow}>RECOMMENDED LOOK</Text>
-              <Text numberOfLines={2} style={styles.makeupTitle}>
-                {makeupTitle}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.makeupGuideCallout}>
-            <Text style={styles.makeupGuideCaption}>적용 포인트</Text>
-            <Text style={styles.makeupGuideText}>{recommendation.guideSummary}</Text>
-          </View>
-          <Text style={styles.makeupDescription}>
-            {recommendation.reason}
-          </Text>
-          <View style={styles.makeupMoodRow}>
-            {moodLabels.map((label) => (
-              <Text key={label} numberOfLines={1} style={styles.makeupMoodTag}>
-                {label}
-              </Text>
-            ))}
-          </View>
-        </View>
-      </View>
-    </ReportSection>
   );
 }
 
@@ -1549,21 +1373,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.xs,
     marginTop: spacing.sm,
-  },
-  // 3D 측정 경고 카드 — 랩(Face3DAnalysisPanel) warningCard 팔레트와 동일.
-  face3dWarningCard: {
-    backgroundColor: '#FFF8F6',
-    borderColor: '#F4D8D2',
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-    padding: spacing.lg,
-  },
-  face3dWarningText: {
-    color: REPORT_TEXT_SECONDARY,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
   },
   faceGeometryGrid: {
     flexDirection: 'row',

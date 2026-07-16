@@ -1,4 +1,7 @@
-import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
+import {
+  getProductBackendApiBaseUrl,
+  requestProductBackendJson,
+} from '../../../shared/services/productBackendApi';
 import {productRecommendationMock} from '../mocks/productRecommendation.mock';
 import type {
   ProductRecommendationCategory,
@@ -232,7 +235,7 @@ export const getProductRecommendations = async ({
   lookIndex,
   reportId,
 }: ProductRecommendationRequest = {}): Promise<ProductRecommendationData> => {
-  if (!getBackendApiBaseUrl()) {
+  if (!getProductBackendApiBaseUrl()) {
     return __DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1'
       ? productRecommendationMock
       : buildEmptyApiRecommendationData();
@@ -249,7 +252,7 @@ export const getProductRecommendations = async ({
   }
 
   const query = searchParams.toString() ? `?${searchParams.toString()}` : '';
-  const response = await requestBackendJson<BackendProductRecommendationData>(
+  const response = await requestProductBackendJson<BackendProductRecommendationData>(
     `/products/recommendations${query}`,
   );
   return mapProductRecommendationData(response);
