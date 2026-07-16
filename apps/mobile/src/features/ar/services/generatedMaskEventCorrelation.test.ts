@@ -99,12 +99,15 @@ describe('shouldClearScheduledGeneratedMaskPost', () => {
     ).toBe(false);
   });
 
-  it('falls back to id-only matching when either side lacks a revision', () => {
+  it('keeps a post when the post revision is missing', () => {
     expect(
       shouldClearScheduledGeneratedMaskPost({packageId: 'mask-1'}, 'mask-1', 3),
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it('keeps a post when the ack revision is missing', () => {
     expect(
       shouldClearScheduledGeneratedMaskPost({packageId: 'mask-1', revision: 4}, 'mask-1', undefined),
-    ).toBe(true);
+    ).toBe(false);
   });
 });

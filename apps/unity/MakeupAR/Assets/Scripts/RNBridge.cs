@@ -914,6 +914,7 @@ public sealed class RNBridge : MonoBehaviour
                 + ",\"generatedMaskId\":\"" + EscapeJsonString(payload != null ? NormalizeOptional(payload.generatedMaskId) : "none") + "\""
                 + ",\"captureSetId\":\"" + EscapeJsonString(payload != null ? NormalizeOptional(payload.captureSetId) : "none") + "\""
                 + ",\"maskTextureId\":\"" + EscapeJsonString(maskTextureId) + "\""
+                + ",\"controlRevision\":" + (payload != null ? payload.controlRevision : 0).ToString(CultureInfo.InvariantCulture)
                 + ",\"payloadBytes\":" + (json == null ? 0 : json.Length).ToString(CultureInfo.InvariantCulture)
                 + ",\"faceCount\":0"
                 + ",\"maskTriangles\":0"
@@ -1044,6 +1045,7 @@ public sealed class RNBridge : MonoBehaviour
                 + ",\"generatedMaskId\":\"" + EscapeJsonString(payload != null ? NormalizeOptional(payload.generatedMaskId) : "none") + "\""
                 + ",\"captureSetId\":\"" + EscapeJsonString(payload != null ? NormalizeOptional(payload.captureSetId) : "none") + "\""
                 + ",\"maskTextureId\":\"" + EscapeJsonString(maskTextureId) + "\""
+                + ",\"controlRevision\":" + (payload != null ? payload.controlRevision : 0).ToString(CultureInfo.InvariantCulture)
                 + ",\"payloadBytes\":" + (json == null ? 0 : json.Length).ToString(CultureInfo.InvariantCulture)
                 + ",\"faceCount\":0"
                 + ",\"maskTriangles\":0"
@@ -2194,6 +2196,7 @@ public sealed class RNBridge : MonoBehaviour
                 + ",\"generatedMaskId\":\"" + EscapeJsonString(NormalizeOptional(pendingGeneratedLipMaskApply.Payload.generatedMaskId)) + "\""
                 + ",\"captureSetId\":\"" + EscapeJsonString(NormalizeOptional(pendingGeneratedLipMaskApply.Payload.captureSetId)) + "\""
                 + ",\"maskTextureId\":\"" + EscapeJsonString(layer.MaskTextureId) + "\""
+                + ",\"controlRevision\":" + pendingGeneratedLipMaskApply.Payload.controlRevision.ToString(CultureInfo.InvariantCulture)
                 + ",\"payloadBytes\":" + pendingGeneratedLipMaskApply.PayloadBytes.ToString(CultureInfo.InvariantCulture)
                 + ",\"faceCount\":0"
                 + ",\"maskTriangles\":0"

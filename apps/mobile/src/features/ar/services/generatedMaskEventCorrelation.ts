@@ -45,10 +45,11 @@ export function isTerminalGeneratedMaskEvent(
 
 /**
  * A scheduled native retry post may be cleared by an applied event ONLY when
- * the mask id matches, and — when both sides carry a control revision — the
+ * the mask id matches, both sides carry a numeric control revision, and the
  * post's revision is not newer than the acked one. A delayed ack for an older
  * revision of the same mask (slider tweaks keep the mask id) must not cancel
- * a newer payload before its first send. No id on the event clears nothing.
+ * a newer payload before its first send. Missing ids or revisions clear
+ * nothing.
  */
 export function shouldClearScheduledGeneratedMaskPost(
   post: {packageId?: string; revision?: number},
@@ -61,8 +62,8 @@ export function shouldClearScheduledGeneratedMaskPost(
   if (post.packageId !== appliedMaskId) {
     return false;
   }
-  if (typeof appliedRevision === 'number' && typeof post.revision === 'number') {
-    return post.revision <= appliedRevision;
+  if (typeof appliedRevision !== 'number' || typeof post.revision !== 'number') {
+    return false;
   }
-  return true;
+  return post.revision <= appliedRevision;
 }

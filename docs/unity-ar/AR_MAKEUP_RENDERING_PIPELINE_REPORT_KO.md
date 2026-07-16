@@ -161,7 +161,7 @@ SmoothRegionMask.shader   선언도 제거됨 (원래부터 읽은 적 없음)
 
 > 실제 앞머리 대응은 별개로 존재합니다 — 셰이더 안의 `hairKeep`이 카메라 픽셀을 직접 보고 판단합니다. 모바일이 보낸 신호와는 무관합니다.
 
-- 근거(선언만 존재): `SmoothRegionMask.shader` — 프로퍼티 59–60, 셰이더 변수 197–198. 셰이더 전체에서 이 4곳이 유일한 등장.
+- 근거(제거 전 선언 위치): `SmoothRegionMask.shader` — 프로퍼티 59–60, 셰이더 변수 197–198. 2026-07-17에 선언·세터를 제거했습니다(b9f9a023).
 - 근거(하드코딩): `E3RegionMaskOverlay.ApplyRecipeAppearance` — `_BrowInpaintStrength = 0.92f` (4550–4553), 소비는 셰이더 1152 / 1333.
 - 근거(모바일 계산): `browGenerateCore.ts` — `BROW_NEUTRALIZE_STRENGTH = 0.85` (166), `resolveBrowNeutralizeStrength` (694–718), `cleanupStrength: 0` (328, 423).
 - 근거(운반): `RNBridge` — `GradientAmount`/`GlossBoost` piggyback (1938, 1944) → `E3RegionMaskOverlay` (4580–4588).
@@ -1284,7 +1284,7 @@ finalMask = (ARFace + neck prior) × skinMask × confidence
 - 색을 평평하게 덮지 않고 실제 camera luma를 보존하는 경로가 다수 존재합니다.
 - 마스크를 linear/uncompressed data로 import하여 threshold 계약을 지킵니다.
 - 블렌드 mode, 큐, 가림, 텍스처 캐시가 명시적입니다.
-- 생성 마스크는 schema·local-only·byte count를 검증합니다 (다만 립은 F5).
+- 생성 마스크는 schema·local-only·byte count를 검증합니다 (립 등록 실패도 2026-07-17부터 거부하며 F5는 수리되었습니다).
 - tracking noise, mip shimmer, 프레임 synchronization 등 실기기 AR 문제를 코드에서 직접 다룹니다.
 - 셰이더 주석이 **왜 그렇게 했는지**(discard 이유, 턱 줄무늬 방지 등)를 남겨 놓았습니다.
 

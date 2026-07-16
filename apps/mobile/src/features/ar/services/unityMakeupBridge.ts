@@ -1050,7 +1050,7 @@ function readJsonNumberField(
 function extractGeneratedLipMaskMetadata(payload: string): {
   messageId: string;
   packageId: string;
-  revision: number;
+  revision: number | undefined;
 } {
   try {
     const parsed = JSON.parse(payload) as unknown;
@@ -1059,15 +1059,18 @@ function extractGeneratedLipMaskMetadata(payload: string): {
       readJsonStringField(parsed, 'maskTextureId') ??
       readJsonStringField(parsed, 'captureSetId');
     const packageId = generatedMaskId ?? `generated-lip-payload-${payload.length}`;
-    const revision =
+    const messageIdCounter =
       readJsonNumberField(parsed, 'validationControlRequestId') ??
       readJsonNumberField(parsed, 'controlRequestId') ??
       readJsonNumberField(parsed, 'validationControlRevision') ??
       readJsonNumberField(parsed, 'controlRevision') ??
       0;
+    const revision =
+      readJsonNumberField(parsed, 'validationControlRevision') ??
+      readJsonNumberField(parsed, 'controlRevision');
 
     return {
-      messageId: sanitizeRecipeIdPart(`${packageId}-${revision}-${payload.length}`),
+      messageId: sanitizeRecipeIdPart(`${packageId}-${messageIdCounter}-${payload.length}`),
       packageId,
       revision,
     };
@@ -1075,7 +1078,7 @@ function extractGeneratedLipMaskMetadata(payload: string): {
     return {
       messageId: sanitizeRecipeIdPart(`generated-lip-unparsed-${payload.length}`),
       packageId: `generated-lip-unparsed-${payload.length}`,
-      revision: 0,
+      revision: undefined,
     };
   }
 }
@@ -1083,7 +1086,7 @@ function extractGeneratedLipMaskMetadata(payload: string): {
 function extractGeneratedBrowMaskMetadata(payload: string): {
   messageId: string;
   packageId: string;
-  revision: number;
+  revision: number | undefined;
 } {
   try {
     const parsed = JSON.parse(payload) as unknown;
@@ -1092,15 +1095,18 @@ function extractGeneratedBrowMaskMetadata(payload: string): {
       readJsonStringField(parsed, 'maskTextureId') ??
       readJsonStringField(parsed, 'captureSetId');
     const packageId = generatedMaskId ?? `generated-brow-payload-${payload.length}`;
-    const revision =
+    const messageIdCounter =
       readJsonNumberField(parsed, 'validationControlRequestId') ??
       readJsonNumberField(parsed, 'controlRequestId') ??
       readJsonNumberField(parsed, 'validationControlRevision') ??
       readJsonNumberField(parsed, 'controlRevision') ??
       0;
+    const revision =
+      readJsonNumberField(parsed, 'validationControlRevision') ??
+      readJsonNumberField(parsed, 'controlRevision');
 
     return {
-      messageId: sanitizeRecipeIdPart(`${packageId}-${revision}-${payload.length}`),
+      messageId: sanitizeRecipeIdPart(`${packageId}-${messageIdCounter}-${payload.length}`),
       packageId,
       revision,
     };
@@ -1108,7 +1114,7 @@ function extractGeneratedBrowMaskMetadata(payload: string): {
     return {
       messageId: sanitizeRecipeIdPart(`generated-brow-unparsed-${payload.length}`),
       packageId: `generated-brow-unparsed-${payload.length}`,
-      revision: 0,
+      revision: undefined,
     };
   }
 }
@@ -1569,10 +1575,10 @@ function handleUnityMakeupNativeEvent(event: {message?: string}) {
     const appliedRevision =
       typeof parsed.controlRevision === 'number' ? parsed.controlRevision : undefined;
 
-    // Only clear retry loops under positive correlation (id match, and — when
-    // both sides carry one — post revision not newer than the acked one). An
-    // event WITHOUT a mask id clears nothing: a stale/anonymous ack must never
-    // cancel a freshly scheduled payload before its first send fires.
+    // Only clear retry loops under positive correlation: id match, both sides
+    // carry a numeric revision, and the post is not newer than the ack. An
+    // event without either correlation field clears nothing, so a stale or
+    // anonymous ack cannot cancel a freshly scheduled payload before it sends.
     if (parsed.type === 'generated_lip_mask_applied') {
       Array.from(scheduledNativePosts.entries())
         .filter(
