@@ -230,7 +230,11 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
     <ReferenceMakeupExtractionLoadingScreen
       isAnalysisReady={isAnalysisReady}
       onBack={() => navigation.replace('ReferenceMakeupExtractionUpload')}
-      onComplete={() => navigation.replace('ReferenceMakeupExtractionResult')}
+      onComplete={() => {
+        if (navigation.isFocused()) {
+          navigation.replace('ReferenceMakeupExtractionResult');
+        }
+      }}
       photo={photo}
       progressUpdate={analysisProgress}
     />

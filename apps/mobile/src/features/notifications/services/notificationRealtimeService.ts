@@ -26,7 +26,7 @@ const INITIAL_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 5000;
 const HEARTBEAT_INTERVAL_MS = 20000;
 
-export function buildNotificationWebSocketUrl(authToken: string): string {
+export function buildNotificationWebSocketUrl(): string {
   const apiBaseUrl = getBackendApiBaseUrl();
   if (!apiBaseUrl) {
     throw new Error(
@@ -37,7 +37,6 @@ export function buildNotificationWebSocketUrl(authToken: string): string {
   const url = new URL(apiBaseUrl);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   url.pathname = `${url.pathname.replace(/\/+$/, '')}/notifications/ws`;
-  url.searchParams.set('token', authToken);
   return url.toString();
 }
 
@@ -113,7 +112,18 @@ export function connectNotificationRealtime({
     }
 
     try {
-      socket = new WebSocket(buildNotificationWebSocketUrl(authToken));
+      const ReactNativeWebSocket = WebSocket as unknown as {
+        new (
+          url: string,
+          protocols?: string | string[],
+          options?: {headers?: Record<string, string>},
+        ): WebSocket;
+      };
+      socket = new ReactNativeWebSocket(
+        buildNotificationWebSocketUrl(),
+        undefined,
+        {headers: {Authorization: `Bearer ${authToken}`}},
+      );
     } catch {
       scheduleReconnect();
       return;

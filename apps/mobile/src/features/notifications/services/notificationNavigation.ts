@@ -1,7 +1,7 @@
 import type {NavigationProp} from '@react-navigation/native';
 
 import type {RootStackParamList} from '../../../app/navigation/routeTypes';
-import type {AppNotificationData} from '../types';
+import type {AppNotification, AppNotificationData, AppNotificationType} from '../types';
 
 
 export type AppNotificationNavigationTarget =
@@ -10,6 +10,63 @@ export type AppNotificationNavigationTarget =
   | {name: 'MakeupFeedbackResult'; params: {reportId: string}}
   | {name: 'ReferenceMakeupExtractionResult'; params: {reportId: string}}
   | {name: 'ConsultingNotifications'};
+
+type CurrentRouteSnapshot = {
+  name: string;
+  params?: object | undefined;
+};
+
+const NOTIFICATION_WAITING_ROUTES: Partial<Record<AppNotificationType, string>> = {
+  analysis_report_completed: 'FaceAnalysisLoading',
+  makeup_feedback_completed: 'MakeupFeedbackLoading',
+  filter_extraction_completed: 'ReferenceMakeupExtractionLoading',
+};
+
+const NOTIFICATION_RESULT_ROUTES: Record<AppNotificationType, string> = {
+  analysis_report_completed: 'FaceAnalysisReportDetail',
+  makeup_recommendation_completed: 'MakeupRecommendation',
+  makeup_feedback_completed: 'MakeupFeedbackResult',
+  filter_extraction_completed: 'ReferenceMakeupExtractionResult',
+};
+
+function getRouteReportId(route: CurrentRouteSnapshot): string | undefined {
+  if (!route.params || !('reportId' in route.params)) {
+    return undefined;
+  }
+
+  const reportId = route.params.reportId;
+  return typeof reportId === 'string' ? reportId : undefined;
+}
+
+export function shouldSuppressRealtimeAppNotification(
+  route: CurrentRouteSnapshot | undefined,
+  notification: AppNotification,
+): boolean {
+  if (!route) {
+    return false;
+  }
+
+  const type = notification.notificationType;
+  if (!(type in NOTIFICATION_RESULT_ROUTES)) {
+    return false;
+  }
+
+  const notificationType = type as AppNotificationType;
+  if (NOTIFICATION_WAITING_ROUTES[notificationType] === route.name) {
+    return true;
+  }
+  if (NOTIFICATION_RESULT_ROUTES[notificationType] !== route.name) {
+    return false;
+  }
+
+  const routeReportId = getRouteReportId(route);
+  const notificationReportId = notification.data.reportId;
+  return (
+    !routeReportId ||
+    !notificationReportId ||
+    routeReportId === notificationReportId
+  );
+}
 
 export function getAppNotificationNavigationTarget(
   data: AppNotificationData,

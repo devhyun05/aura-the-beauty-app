@@ -593,6 +593,10 @@ export function FaceAnalysisLoadingRouteScreen({
     setAnalysisRequestKey(currentKey => currentKey + 1);
   }, []);
   const handleAnalysisComplete = React.useCallback(() => {
+    if (!navigation.isFocused()) {
+      return;
+    }
+
     // replace: 로딩을 스택에서 제거한다. navigate로 남겨두면 다음 분석 세션에서
     // 캡처 교체 시 이 화면의 효과들이 백그라운드로 재실행돼 보고서 POST가 중복되고,
     // 완료 자동 이동이 새 흐름(3D 측정 등) 위를 덮는 문제가 있었다.

@@ -25,6 +25,8 @@ import {prefetchHomeHeroImages} from '../features/home/config/homeHeroAssets';
 import {
   NotificationCoordinator,
   navigateToAppNotification,
+  shouldSuppressRealtimeAppNotification,
+  type AppNotification,
 } from '../features/notifications';
 import {typography} from '../shared/theme';
 
@@ -46,6 +48,14 @@ export function AppRoot() {
       setStatusBarStyle(getStatusBarStyleForNavigationState(state));
     },
     [],
+  );
+  const shouldSuppressRealtimeNotification = useCallback(
+    (notification: AppNotification) =>
+      shouldSuppressRealtimeAppNotification(
+        navigationRef.isReady() ? navigationRef.getCurrentRoute() : undefined,
+        notification,
+      ),
+    [navigationRef],
   );
 
   useEffect(() => {
@@ -99,6 +109,9 @@ export function AppRoot() {
                   if (!navigationRef.isReady()) return;
                   navigateToAppNotification(navigationRef, data);
                 }}
+                shouldSuppressRealtimeNotification={
+                  shouldSuppressRealtimeNotification
+                }
               />
               <IncomingConsultingCallGate
                 onAnswer={record => {

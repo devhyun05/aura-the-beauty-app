@@ -3,13 +3,14 @@ import * as Notifications from 'expo-notifications';
 
 import {useAuthSession} from '../../auth';
 import {
+  deleteAppNotification,
   markAppNotificationRead,
   notifyNotificationStateChanged,
   presentRealtimeAppNotification,
   registerForReportNotifications,
 } from '../services/notificationService';
 import {connectNotificationRealtime} from '../services/notificationRealtimeService';
-import type {AppNotificationData} from '../types';
+import type {AppNotification, AppNotificationData} from '../types';
 
 
 Notifications.setNotificationHandler({
@@ -23,6 +24,9 @@ Notifications.setNotificationHandler({
 
 type NotificationCoordinatorProps = {
   onOpenNotification: (data: AppNotificationData) => void;
+  shouldSuppressRealtimeNotification?: (
+    notification: AppNotification,
+  ) => boolean;
 };
 
 function readNotificationData(
@@ -42,6 +46,7 @@ function readNotificationData(
 
 export function NotificationCoordinator({
   onOpenNotification,
+  shouldSuppressRealtimeNotification,
 }: NotificationCoordinatorProps) {
   const {getAuthToken, isRestoringSession, session} = useAuthSession();
   const pendingResponseRef = useRef<Notifications.NotificationResponse | null>(null);
@@ -110,7 +115,6 @@ export function NotificationCoordinator({
         }
 
         const {notification} = event;
-        notifyNotificationStateChanged();
 
         if (realtimeNotificationIds.current.has(notification.id)) {
           return;
@@ -122,6 +126,14 @@ export function NotificationCoordinator({
             realtimeNotificationIds.current.delete(oldestId);
           }
         }
+        if (shouldSuppressRealtimeNotification?.(notification)) {
+          void deleteAppNotification(notification.id).catch(() =>
+            markAppNotificationRead(notification.id).catch(() => undefined),
+          );
+          return;
+        }
+
+        notifyNotificationStateChanged();
         void presentRealtimeAppNotification(notification).catch(error => {
           console.info('[aura:notifications] realtime banner skipped', {
             message: error instanceof Error ? error.message : String(error),
@@ -131,7 +143,12 @@ export function NotificationCoordinator({
     });
 
     return () => client.close();
-  }, [getAuthToken, isRestoringSession, session?.user.id]);
+  }, [
+    getAuthToken,
+    isRestoringSession,
+    session?.user.id,
+    shouldSuppressRealtimeNotification,
+  ]);
 
   useEffect(() => {
     const receivedSubscription = Notifications.addNotificationReceivedListener(() => {

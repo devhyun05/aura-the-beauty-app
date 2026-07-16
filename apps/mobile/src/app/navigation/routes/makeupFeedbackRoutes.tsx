@@ -142,6 +142,9 @@ export function MakeupFeedbackLoadingRouteScreen({
   const handleComplete = React.useCallback(
     (result: MakeupFeedbackResult) => {
       setMakeupFeedbackResult(result);
+      if (!navigation.isFocused()) {
+        return;
+      }
       navigation.replace('MakeupFeedbackResult');
     },
     [navigation, setMakeupFeedbackResult],

@@ -3,6 +3,7 @@ export {NotificationsScreen} from './screens/NotificationsScreen';
 export {
   getAppNotificationNavigationTarget,
   navigateToAppNotification,
+  shouldSuppressRealtimeAppNotification,
 } from './services/notificationNavigation';
 export {
   getAppNotifications,
