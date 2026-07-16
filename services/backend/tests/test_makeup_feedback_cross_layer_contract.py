@@ -148,6 +148,8 @@ async def test_pass_fixture_normalizes_and_worker_persists_completed_payload(
     request_payload,
   )
   report_id = UUID("33333333-3333-3333-3333-333333333333")
+  user_id = UUID("44444444-4444-4444-4444-444444444444")
+  notification_calls: list[dict] = []
 
   class FakeDB:
     def __init__(self) -> None:
@@ -160,7 +162,7 @@ async def test_pass_fixture_normalizes_and_worker_persists_completed_payload(
 
     async def fetchrow(self, *args):
       self.fetchrow_calls.append(args)
-      return {"id": report_id, "status": "completed"}
+      return {"id": report_id, "status": "completed", "user_id": user_id}
 
   settings = Settings()
 
@@ -169,10 +171,18 @@ async def test_pass_fixture_normalizes_and_worker_persists_completed_payload(
     assert actual_settings is settings
     return normalized_result, "bedrock_completed", None
 
+  async def fake_create_notification(_db, _settings, **kwargs):
+    notification_calls.append(kwargs)
+
   monkeypatch.setattr(
     feedback_api,
     "build_makeup_feedback_result_for_request",
     fake_build_result,
+  )
+  monkeypatch.setattr(
+    feedback_api,
+    "create_and_send_notification",
+    fake_create_notification,
   )
   fake_db = FakeDB()
 
@@ -196,3 +206,5 @@ async def test_pass_fixture_normalizes_and_worker_persists_completed_payload(
   assert completed_payload["result"] == normalized_result
   assert completed_payload["analysisStatus"] == "bedrock_completed"
   assert completed_payload["analysisError"] is None
+  assert notification_calls[0]["user_id"] == user_id
+  assert notification_calls[0]["notification_type"] == "makeup_feedback_completed"
