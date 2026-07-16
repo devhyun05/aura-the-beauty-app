@@ -27,7 +27,7 @@ export type FaceAnalysisReportPrimaryMakeupRecommendation = {
 
 export type FaceAnalysisReportCreateFilterButtonPlacement = 'floating-bottom';
 type FaceAnalysisReportLiquidGlassButtonTarget = 'create-filter';
-type FaceAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary' | 'makeup';
+type FaceAnalysisReportLiquidGlassCardTarget = 'hero' | 'summary';
 
 type FaceAnalysisReportGuideLabel = {
   key: keyof FaceAnalysisMakeupGuideline;
@@ -61,7 +61,7 @@ export const faceAnalysisReportCreateFilterButtonAccessibilityLabels: Record<
   FaceAnalysisReportCreateFilterButtonPlacement,
   string
 > = {
-  'floating-bottom': '메이크업 필터 만들기',
+  'floating-bottom': '메이크업 추천',
 };
 
 const faceAnalysisReportAvoidedMakeupRailPresentation = {
@@ -112,7 +112,6 @@ const faceAnalysisReportLiquidGlassPresentation = {
   cardTargets: [
     'hero',
     'summary',
-    'makeup',
   ] as const satisfies readonly FaceAnalysisReportLiquidGlassCardTarget[],
   shadowRadius: faceAnalysisReportLiquidGlassSurfaceStyle.shadowRadius,
   surfaceColor: colors.liquidGlassSurface,

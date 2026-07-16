@@ -84,7 +84,8 @@ import BasicMode from './src/components/BasicMode';
 import type { LaneChip } from './src/components/LaneRow';
 import ComposerSheet from './src/components/ComposerSheet';
 import GuideMode, { SKY } from './src/components/GuideMode';
-import {maskStencilByKeys, stencilStepsFromTree} from './src/composer/stencilSteps';
+import {enableAllStencilRegions} from './src/composer/stencilSelection';
+import {stencilStepsFromTree} from './src/composer/stencilSteps';
 import LightingPanel from './src/components/LightingPanel';
 import PerfumePanel from './src/components/PerfumePanel';
 import BodyPanel from './src/components/BodyPanel';
@@ -104,6 +105,15 @@ import {
   newFitSheet,
   upsertEntry,
 } from './src/composer/fitSheets';
+import {
+  FIT_HANDLE_REGIONS,
+  FIT_HANDLE_RULES,
+  fitHandleDragStartValues,
+  fitHandleDragRules,
+  fitHandleTargetLeaves,
+  normalizeFitHandleAnchor,
+  rebaseFitHandleRules,
+} from './src/composer/fitHandleContract';
 import { applyProductsToLayers } from './src/composer/products';
 import type { ProductDef } from './src/composer/products';
 import type { FitSheet as FitSheetData } from './src/composer/fitSheets';
@@ -184,18 +194,17 @@ const DEFAULT_CALIBRATION: CalibrationParams = {
   cullMode: -1,
 };
 
-// 튜토리얼 스텐실(#2) 기본값 — 열었을 때 립·눈썹만 켜고 농도 0.85로 시작(바로 보임).
-// 나머지 부위는 사용자가 칩으로 켠다.
+// 튜토리얼 스텐실(#2) 기본값 — 가이드 레인 진입 시 지원하는 전체 부위를 보여준다.
 const DEFAULT_STENCIL: StencilParams = {
   opacity: 0.85,
   lips: true,
   brows: true,
-  eyeshadow: false,
-  eyeliner: false,
-  aegyo: false,
-  blush: false,
-  highlighter: false,
-  contour: false,
+  eyeshadow: true,
+  eyeliner: true,
+  aegyo: true,
+  blush: true,
+  highlighter: true,
+  contour: true,
   pulse: true,
   dash: true,
 };
@@ -246,9 +255,15 @@ const INTENSITY_KEYS: (keyof FilterParams)[] = [
   'skinSmoothing',
   'skinBrightening',
   'highlightIntensity',
+  'highlightCheekIntensity',
+  'highlightNoseBridgeIntensity',
+  'highlightNoseTipIntensity',
+  'highlightBrowBoneIntensity',
+  'highlightCupidIntensity',
   'contourIntensity',
   'concealerIntensity',
   'aegyoIntensity',
+  'aegyoShadowIntensity',
   'aegyoStyleIntensity',
   'lipIntensity',
   'lipStyleIntensity',
@@ -525,8 +540,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const stencilEnabledRef = useRef(false);
   const [stencil, setStencilState] = useState<StencilParams>(DEFAULT_STENCIL);
   const stencilRef = useRef<StencilParams>(DEFAULT_STENCIL);
-  // 가이드는 현재 룩에 실제 있는 부위만 그린다(안 올린 부위엔 가이드 없음). 룩에서 유도.
-  const availableStencilKeysRef = useRef<Set<string>>(new Set());
 
   // 좌우 대칭 가이드(#6) — 가이드 레인에서만 활성(레인 이탈=오버레이 끔). 중심축·
   // 대칭쌍 칩 상태는 유저 선호로 유지돼, 레인에 다시 들어오면 켜둔 조합이 복원된다.
@@ -729,11 +742,9 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   // (부위/농도 상태는 유지). 패널 열림과 독립 — 닫아도 활성이면 계속 보인다.
   const pushStencil = useCallback(
     (p: StencilParams, active: boolean) => {
-      // 룩에 없는 부위는 강제로 끔 — 안 올린 부위에 가이드가 뜨지 않게.
-      const masked = maskStencilByKeys(p, availableStencilKeysRef.current);
       sendToUnity({
         type: 'setStencil',
-        stencil: active ? masked : { ...masked, opacity: 0 },
+        stencil: active ? p : { ...p, opacity: 0 },
       });
     },
     [sendToUnity],
@@ -1043,37 +1054,12 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   // 렌더는 아직 부위 단위 합침(엔진 멀티밴드 후속 — §5 A13 렌더 스코프).
   const onHandleDelta = useCallback(
     (key: string, dxVp: number, dyVpUp: number, phase: 'start' | 'move' | 'end') => {
-      const ANCHOR_RULES: Record<
-        string,
-        {
-          region?: RegionKey; // 미지정 = 잎의 자기 region(눈썹 슬롯 공유 등)
-          dyUp?: { field: string; k: number };
-          dxOut?: { field: string; k: number };
-        }
-      > = {
-        blush: {
-          region: 'blush',
-          dyUp: { field: 'blushLift', k: 0.35 },
-          dxOut: { field: 'blushSpread', k: 0.35 },
-        },
-        wing: { region: 'eyelinerUpper', dxOut: { field: 'eyelinerWingLength', k: 3.0 } },
-        aegyo: { region: 'aegyo', dyUp: { field: 'aegyoHeight', k: -2.0 } },
-        eyeshadow: { region: 'eyeshadow', dyUp: { field: 'eyeshadowHeight', k: 1.2 } },
-        doubleLid: { region: 'doubleLid', dyUp: { field: 'doubleLidHeight', k: 1.0 } },
-        mascara: { region: 'mascara', dyUp: { field: 'mascaraLength', k: 1.3 } },
-        lowerMascara: {
-          region: 'lowerMascara',
-          dyUp: { field: 'lowerLashLength', k: -1.3 },
-        },
-        brow: { dyUp: { field: 'browArch', k: 0.35 } }, // 눈썹 슬롯 공유 — 잎 region 사용
-        lip: { region: 'lip', dyUp: { field: 'lipOverline', k: 0.8 } },
-      };
       const [rawAnchor, leafId] = key.split('#');
       if (!leafId) return;
-      const leaf = flattenTree(lookTreeRef.current).find(l => l.id === leafId);
+      const leaves = flattenTree(lookTreeRef.current);
+      const leaf = leaves.find(l => l.id === leafId);
       if (!leaf) return;
-      const side = rawAnchor.endsWith('L') ? 'L' : rawAnchor.endsWith('R') ? 'R' : '';
-      const anchor = side ? rawAnchor.slice(0, -1) : rawAnchor.replace(/\d+$/, '');
+      const {anchor, side} = normalizeFitHandleAnchor(rawAnchor);
       const eyeVp = fitHandlesEyeVpRef.current || 0.12;
 
       // 시트 확보 — 없으면 자동 생성(조정의 연속이라 스튜디오 강제 진입 안 함).
@@ -1107,38 +1093,51 @@ function FilterScreen({ onBack }: StencilARAppProps) {
         return;
       }
 
-      const spec = ANCHOR_RULES[anchor];
+      const spec = FIT_HANDLE_RULES[anchor];
       if (!spec) return;
       const region = spec.region ?? leaf.region;
       const sel = { region, leafId };
       if (phase === 'start') {
         const entry = entryOf(sheet, sel);
-        const startVals: Record<string, number> = {};
-        if (spec.dyUp) startVals[spec.dyUp.field] = entry?.rules?.[spec.dyUp.field] ?? 0;
-        if (spec.dxOut) startVals[spec.dxOut.field] = entry?.rules?.[spec.dxOut.field] ?? 0;
-        handleDragStartRef.current = startVals;
+        handleDragStartRef.current = fitHandleDragStartValues({
+          anchor,
+          leaf,
+          storedRules: entry?.rules,
+          compiledParams: spec.broadcastBrow
+            ? compileWithFit(lookTreeRef.current).params
+            : undefined,
+        });
         if (sheets !== fitSheetsRef.current) changeFitSheets(sheets, mainId);
         return;
       }
-      const out = side === 'L' ? -dxVp : dxVp;
-      const rules: Record<string, number> = {};
-      if (spec.dyUp) {
-        rules[spec.dyUp.field] =
-          (handleDragStartRef.current[spec.dyUp.field] ?? 0) +
-          (dyVpUp / eyeVp) * spec.dyUp.k;
+      const rules = fitHandleDragRules({
+        anchor,
+        side,
+        dxVp,
+        dyVpUp,
+        eyeVp,
+        startValues: handleDragStartRef.current,
+        baseParams: leaf.params,
+        leafRegion: leaf.region,
+      });
+      let nextSheet = sheet;
+      for (const target of fitHandleTargetLeaves(anchor, leaf, leaves)) {
+        const targetRules =
+          target.id === leaf.id
+            ? rules
+            : rebaseFitHandleRules(rules, leaf, target);
+        nextSheet = upsertEntry(
+          nextSheet,
+          { region: spec.region ?? target.region, leafId: target.id },
+          { rules: targetRules },
+        );
       }
-      if (spec.dxOut) {
-        rules[spec.dxOut.field] =
-          (handleDragStartRef.current[spec.dxOut.field] ?? 0) +
-          (out / eyeVp) * spec.dxOut.k;
-      }
-      const nextSheet = upsertEntry(sheet, sel, { rules });
       changeFitSheets(
         sheets.map(sh => (sh.id === nextSheet.id ? nextSheet : sh)),
         mainId,
       );
     },
-    [changeFitSheets],
+    [changeFitSheets, compileWithFit],
   );
 
   // 핸들 팬아웃(A17 v2) — Unity 부위 앵커 × 현재 룩의 보이는 겹 = 점("겹마다 점").
@@ -1166,17 +1165,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       }
       return byRegion.get(anchor) ?? [];
     };
-    const ANCHOR_REGION: Record<string, string> = {
-      blush: 'blush',
-      wing: 'eyelinerUpper',
-      aegyo: 'aegyo',
-      eyeshadow: 'eyeshadow',
-      doubleLid: 'doubleLid',
-      mascara: 'mascara',
-      lowerMascara: 'lowerMascara',
-      brow: 'brow',
-      lip: 'lip',
-    };
     const out: FitHandlePoint[] = [];
     for (const h of fitHandlesMsg.handles) {
       if (!h.key) continue;
@@ -1193,9 +1181,8 @@ function FilterScreen({ onBack }: StencilARAppProps) {
         }
         continue;
       }
-      const side = h.key.endsWith('L') || h.key.endsWith('R') ? h.key.slice(-1) : '';
-      const anchor = side ? h.key.slice(0, -1) : h.key;
-      const regionKey = ANCHOR_REGION[anchor];
+      const {anchor} = normalizeFitHandleAnchor(h.key);
+      const regionKey = FIT_HANDLE_REGIONS[anchor];
       if (!regionKey) continue;
       const leaves = leavesFor(regionKey === 'brow' ? 'brow' : regionKey);
       leaves.forEach((leafId, i) => {
@@ -1610,7 +1597,14 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       const active = next === 'guide';
       if (stencilEnabledRef.current !== active) {
         stencilEnabledRef.current = active;
-        pushStencil(stencilRef.current, active);
+        if (active) {
+          const allGuides = enableAllStencilRegions(stencilRef.current);
+          stencilRef.current = allGuides;
+          setStencilState(allGuides);
+          pushStencil(allGuides, true);
+        } else {
+          pushStencil(stencilRef.current, false);
+        }
         pushSymmetry(symmetryRef.current, active);
       }
       setLane(next);
@@ -2387,16 +2381,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const lookDirty = treeDirty(lookTree);
   // 튜토리얼 가이드 '내 룩 순서' 스텝 — 현재 룩에서 바르는 순서대로 유도(부위 스텐실 있는 것만).
   const stencilSteps = useMemo(() => stencilStepsFromTree(lookTree), [lookTree]);
-  // 룩에 실제 있는 가이드 부위 집합 — 부위별 칩 노출·전송 마스킹에 공용.
-  const availableStencilKeys = useMemo(
-    () => new Set<string>(stencilSteps.map(s => s.key)),
-    [stencilSteps],
-  );
-  useEffect(() => {
-    availableStencilKeysRef.current = availableStencilKeys;
-    // 룩이 바뀌어 부위 구성이 변하면, 켜져 있던 가이드를 새 구성으로 다시 마스킹해 방출.
-    if (stencilEnabledRef.current) pushStencil(stencilRef.current, true);
-  }, [availableStencilKeys, pushStencil]);
   const lookChips: LaneChip[] = [
     { id: 'bare', label: '원본', dirty: lookSel === 'bare' && lookDirty },
     ...SYSTEM_LOOKS.map(p => ({
@@ -3081,7 +3065,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               value={stencil}
               onChange={applyStencil}
               steps={stencilSteps}
-              available={availableStencilKeys}
               symValue={symmetry}
               onSymChange={applySymmetry}
             />

@@ -132,13 +132,20 @@ namespace ARMakeup.Face
             {
                 SubdivideArc(lm, BrowUpper[e], _up);
                 SubdivideArc(lm, BrowLower[e], _lo);
-                // R7 두께/아치 — 밴드를 먼저 워프하면 SampleBand 기반 스트로크가 따라간다.
-                if (_thickness != 1f || _arch != 0f || _shape != 0)
-                    for (var i = 0; i < Seg; i++)
+                // R7 두께/아치와 공용 꼬리 테이퍼 — 밴드를 먼저 워프하면 SampleBand 기반
+                // 스트로크의 뿌리 분포·길이·폭이 파우더 밴드와 함께 점진 축소된다.
+                var shapeBand = _thickness != 1f || _arch != 0f || _shape != 0;
+                for (var i = 0; i < Seg; i++)
+                {
+                    var along = i / (float)(Seg - 1);
+                    if (shapeBand)
                         BrowWarp.ShapeBand(
-                            ref _lo[i], ref _up[i], i / (float)(Seg - 1), _thickness, _arch, _shape);
-                // 꼬리 처짐 클램프 — 워프 뒤(모양 확정 후) 적용, 세 제품 공유.
-                BrowWarp.LiftDroopingTail(_lo, _up, Seg);
+                            ref _lo[i], ref _up[i], along, _thickness, _arch, _shape);
+                    BrowWarp.TaperTail(ref _lo[i], ref _up[i], along);
+                }
+                // 꼬리 처짐 클램프 — 모양 확정 뒤 최종 얼굴 워프 공간에서 적용.
+                var browWarped = BrowWarp.WarpAndLiftDroopingTail(
+                    _lo, _up, Seg, lm, FramePresenter.Instance.ImageAspect);
                 var depth = Depth(lm[BrowUpper[e][2]].z);
 
                 for (var s = 0; s < StrokesPerBrow; s++)
@@ -156,7 +163,7 @@ namespace ARMakeup.Face
 
                     var upDir = up - lo;
                     var bandH = upDir.magnitude;
-                    if (bandH < 1e-6f) { EmitDegenerate(ref vi, lo, depth); continue; }
+                    if (bandH < 1e-6f) { EmitDegenerate(ref vi, lo, depth, browWarped); continue; }
                     var upN = upDir / bandH;
 
                     // 다층 뿌리 — 하단 밀도 편향(h^1.4). 위쪽 뿌리 털은 짧게(밴드 밖 삐짐 방지).
@@ -176,19 +183,19 @@ namespace ARMakeup.Face
                     var w = bandH * WidthMult * (0.7f + 0.6f * h1);
                     var wTip = w * 0.15f;
 
-                    _vertices[vi++] = ImageToWorld(baseP - perp * w, depth);
-                    _vertices[vi++] = ImageToWorld(baseP + perp * w, depth);
-                    _vertices[vi++] = ImageToWorld(tip - perp * wTip, depth);
-                    _vertices[vi++] = ImageToWorld(tip + perp * wTip, depth);
+                    _vertices[vi++] = ImageToWorld(baseP - perp * w, depth, browWarped);
+                    _vertices[vi++] = ImageToWorld(baseP + perp * w, depth, browWarped);
+                    _vertices[vi++] = ImageToWorld(tip - perp * wTip, depth, browWarped);
+                    _vertices[vi++] = ImageToWorld(tip + perp * wTip, depth, browWarped);
                 }
             }
             _mesh.vertices = _vertices;
             _mesh.RecalculateBounds();
         }
 
-        void EmitDegenerate(ref int vi, Vector2 p, float depth)
+        void EmitDegenerate(ref int vi, Vector2 p, float depth, bool alreadyWarped)
         {
-            var w = ImageToWorld(p, depth);
+            var w = ImageToWorld(p, depth, alreadyWarped);
             _vertices[vi++] = w; _vertices[vi++] = w; _vertices[vi++] = w; _vertices[vi++] = w;
         }
 
@@ -242,9 +249,11 @@ namespace ARMakeup.Face
         static Vector2 ImgPt(Vector3[] lm, int idx) => new Vector2(lm[idx].x, lm[idx].y);
         float Depth(float z) => DistanceFromCamera * (1f + z * DepthScale);
 
-        Vector3 ImageToWorld(Vector2 img, float depth)
+        Vector3 ImageToWorld(Vector2 img, float depth, bool alreadyWarped = false)
         {
-            var vp = FramePresenter.Instance.ImageToViewport(img);
+            var vp = alreadyWarped
+                ? FramePresenter.Instance.WarpedImageToViewport(img)
+                : FramePresenter.Instance.ImageToViewport(img);
             return _camera.ViewportToWorldPoint(new Vector3(vp.x, vp.y, depth));
         }
     }

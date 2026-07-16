@@ -32,6 +32,7 @@ function run(command, args) {
 
 run(process.execPath, [
   tscPath,
+  '--ignoreConfig',
   '--module',
   'commonjs',
   '--target',

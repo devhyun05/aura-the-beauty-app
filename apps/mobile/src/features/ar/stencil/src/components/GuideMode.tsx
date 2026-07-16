@@ -9,14 +9,15 @@ import {
 } from 'react-native';
 
 import type {StencilParams, SymmetryParams} from '../bridge/types';
-import {isolateStencilStep, maskStencilByKeys} from '../composer/stencilSteps';
+import {enableAllStencilRegions} from '../composer/stencilSelection';
+import {isolateStencilStep} from '../composer/stencilSteps';
 import type {StencilStep} from '../composer/stencilSteps';
 
 /**
  * 가이드 레인 본문 (#2 튜토리얼 스텐실) — 메이크업/보정과 동렬인 세 번째 레인.
  * 룩의 바르는 순서(잎=제품×바르는곳)를 **스텝 카드**로 늘어놓고, 카드를 고르면
  * 그 부위 가이드 하나만 얼굴에 격리해 켠다(따라 그리기). 맨 앞 '전체' 카드는
- * 룩에 있는 모든 부위 가이드를 한 번에 켠 조감도.
+ * Unity가 지원하는 모든 부위 가이드를 한 번에 켠 조감도.
  *
  * 농도는 공용 헤더 슬라이더가 레인 라우팅(가이드=stencil.opacity)으로 담당 —
  * 메이크업(opacity)/보정(wpGain)과 같은 모델이라 본문엔 슬라이더가 없다.
@@ -46,8 +47,6 @@ interface Props {
   onChange: (next: StencilParams) => void;
   /** 현재 룩에서 유도한 순서 스텝(바르는 순서 = 하단 먼저). */
   steps: StencilStep[];
-  /** 룩에 실제 있는 가이드 부위 집합 — '전체' 카드가 이 부위들만 켠다. */
-  available: Set<string>;
   // ── 좌우 대칭(#6) — 중심축·대칭쌍 칩만(별도 ON/OFF 없음). 오버레이 켬/끔은
   // 가이드 레인 진입/이탈이 담당(App), 칩 조합은 유저 선호로 유지·복원된다.
   symValue: SymmetryParams;
@@ -58,7 +57,6 @@ export default function GuideMode({
   value,
   onChange,
   steps,
-  available,
   symValue,
   onSymChange,
 }: Props) {
@@ -68,23 +66,7 @@ export default function GuideMode({
 
   const selectAll = () => {
     setSelIdx(null);
-    // 룩에 있는 부위 전부 켬 — maskStencilByKeys가 available 밖 부위를 걸러준다.
-    onChange(
-      maskStencilByKeys(
-        {
-          ...value,
-          lips: true,
-          brows: true,
-          eyeshadow: true,
-          eyeliner: true,
-          aegyo: true,
-          blush: true,
-          highlighter: true,
-          contour: true,
-        },
-        available,
-      ),
-    );
+    onChange(enableAllStencilRegions(value));
   };
   const selectStep = (i: number) => {
     setSelIdx(i);
@@ -141,14 +123,14 @@ export default function GuideMode({
             onPress={selectAll}
             testID="guide-card-all">
             <View style={styles.cardBody}>
-              <Text style={[styles.cardNo, sel === null && styles.cardNoOn]}>
-                ★
+              <Text
+                style={[styles.cardBodyLabel, sel === null && styles.cardBodyLabelOn]}
+                numberOfLines={2}>
+                전체
               </Text>
             </View>
             <View style={styles.cardLabelBar}>
-              <Text style={styles.cardLabel} numberOfLines={1}>
-                전체
-              </Text>
+              <Text style={styles.cardBarNo}>★</Text>
             </View>
           </TouchableOpacity>
           {steps.map((s, i) => {
@@ -160,17 +142,18 @@ export default function GuideMode({
                 style={[styles.card, on && styles.cardOn]}
                 activeOpacity={0.85}
                 onPress={() => selectStep(i)}>
+                {/* 몸통(위 넓은 영역) = 부위 라벨('블러셔'·'아이라인 상'처럼 구체적으로).
+                    선택 시 스카이로 강조. */}
                 <View style={styles.cardBody}>
-                  <Text style={[styles.cardNo, on && styles.cardNoOn]}>
-                    {i + 1}
-                  </Text>
-                </View>
-                {/* 라벨 바 배경 = 부위색(도트 대신 — 어떤 부위인지 색으로). 라벨=잎
-                    라벨('블러셔'·'아이라인 상'처럼 구체적으로). */}
-                <View style={[styles.cardLabelBar, {backgroundColor: zc}]}>
-                  <Text style={styles.cardLabel} numberOfLines={1}>
+                  <Text
+                    style={[styles.cardBodyLabel, on && styles.cardBodyLabelOn]}
+                    numberOfLines={2}>
                     {s.label}
                   </Text>
+                </View>
+                {/* 하단 바 = 스텝 번호. 배경색은 부위색(어떤 부위인지 색으로). */}
+                <View style={[styles.cardLabelBar, {backgroundColor: zc}]}>
+                  <Text style={styles.cardBarNo}>{i + 1}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -228,8 +211,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     justifyContent: 'flex-end', // 라벨 바를 하단에
-    // 비선택 카드는 테두리 없음(투명 1px = 자리만 유지) — 선택만 시그니처색 테두리.
-    borderWidth: 1,
+    // 비선택 카드는 테두리 없음(투명 2px = 자리만 유지) — 선택만 시그니처색 테두리.
+    // 폭을 선택(2)과 맞춰 라벨 바 음수 마진(-2)으로 테두리 자리를 덮어 꽉 차게.
+    borderWidth: 2,
     borderColor: 'transparent',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
@@ -242,27 +226,36 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 4,
     gap: 2,
   },
-  cardNo: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 16,
+  // 몸통(위 넓은 영역)에 오는 부위 라벨 — 크게, 부위 이름이 잘 보이게.
+  cardBodyLabel: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
     fontWeight: '800',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.55)',
+    textShadowRadius: 2,
   },
-  cardNoOn: {
+  cardBodyLabelOn: {
     color: SKY,
   },
   // 라벨 바 — 배경색은 인라인으로 부위색 지정('전체'는 기본 어둠). 텍스트는 그 위에
   // 그림자로 가독성 확보(부위색이 밝든 어둡든 흰 글씨가 읽히게).
   cardLabelBar: {
+    // 카드 테두리(2px) 자리를 음수 마진으로 덮어 좌·우·하단 가장자리까지 꽉 채운다.
+    marginHorizontal: -2,
+    marginBottom: -2,
     backgroundColor: 'rgba(0,0,0,0.45)',
     paddingVertical: 3,
     paddingHorizontal: 3,
   },
-  cardLabel: {
+  // 하단 바에 오는 스텝 번호 — 작게.
+  cardBarNo: {
     color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
     textAlign: 'center',
     textShadowColor: 'rgba(0,0,0,0.55)',
     textShadowRadius: 2,

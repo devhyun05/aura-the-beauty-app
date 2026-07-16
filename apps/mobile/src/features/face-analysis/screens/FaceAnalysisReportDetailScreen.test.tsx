@@ -70,7 +70,7 @@ expectEqual(
 );
 expectEqual(
   faceAnalysisReportCreateFilterButtonAccessibilityLabels['floating-bottom'],
-  '메이크업 필터 만들기',
+  '메이크업 추천',
   'image analysis report create filter button copy',
 );
 expectEqual(
@@ -114,9 +114,9 @@ expectEqual(
   'image analysis report summary uses light glass metric cards',
 );
 expectEqual(
-  liquidGlassPresentation.cardTargets.includes('makeup'),
-  true,
-  'image analysis report makeup cards use liquid glass',
+  (liquidGlassPresentation.cardTargets as readonly string[]).includes('makeup'),
+  false,
+  'image analysis report excludes the makeup recommendation card',
 );
 expectEqual(
   editorialPresentation.heroTreatment,

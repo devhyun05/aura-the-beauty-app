@@ -214,6 +214,25 @@ create table if not exists analysis_reports (
 
 comment on table analysis_reports is 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.';
 
+create table if not exists analysis_stage_runs (
+  id uuid primary key default gen_random_uuid(),
+  report_id uuid not null references analysis_reports(id) on delete cascade,
+  stage text not null check (stage in ('ai_measurement', 'ai_perception', 'ai_consulting')),
+  status text not null check (status in ('pending', 'processing', 'completed', 'partial', 'failed')),
+  schema_version text not null,
+  prompt_version text not null,
+  model text not null,
+  input_hash text not null,
+  normalized_output jsonb not null default '{}'::jsonb,
+  raw_response jsonb not null default '{}'::jsonb,
+  error_payload jsonb not null default '{}'::jsonb,
+  attempt_count integer not null default 1 check (attempt_count >= 1),
+  started_at timestamptz,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists hair_analyses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
@@ -1504,6 +1523,13 @@ create index if not exists idx_account_deletion_tombstones_deleted_at on account
 create index if not exists idx_media_assets_owner_created on media_assets (owner_user_id, created_at desc);
 create index if not exists idx_photo_captures_user_type_created on photo_captures (user_id, capture_type, created_at desc);
 create index if not exists idx_analysis_reports_user_analyzed on analysis_reports (user_id, analyzed_at desc);
+create index if not exists idx_analysis_stage_runs_report_stage_created
+  on analysis_stage_runs (report_id, stage, created_at desc);
+create index if not exists idx_analysis_stage_runs_completed_cache
+  on analysis_stage_runs (stage, input_hash, schema_version, prompt_version, model)
+  where status = 'completed';
+create unique index if not exists uq_analysis_stage_runs_one_processing
+  on analysis_stage_runs (report_id, stage) where status = 'processing';
 create index if not exists idx_hair_analyses_user_created on hair_analyses (user_id, created_at desc);
 create index if not exists idx_hair_analyses_status_created on hair_analyses (status, created_at);
 create index if not exists idx_hair_analyses_expires on hair_analyses (expires_at) where status <> 'expired';
@@ -1594,6 +1620,11 @@ for each row execute function set_updated_at();
 drop trigger if exists trg_analysis_reports_updated_at on analysis_reports;
 create trigger trg_analysis_reports_updated_at
 before update on analysis_reports
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_analysis_stage_runs_updated_at on analysis_stage_runs;
+create trigger trg_analysis_stage_runs_updated_at
+before update on analysis_stage_runs
 for each row execute function set_updated_at();
 
 drop trigger if exists trg_hair_analyses_updated_at on hair_analyses;
@@ -2131,6 +2162,75 @@ alter table consulting_bookings
 create index if not exists idx_consulting_payments_user on consulting_payments (user_id, created_at desc);
 create index if not exists idx_user_consulting_memberships_user on user_consulting_memberships (user_id, status);
 
+-- Shared AI makeup situation-card library
+create table if not exists makeup_scenario_library (
+  id uuid primary key default gen_random_uuid(),
+  text text not null,
+  normalized_text text not null unique,
+  seed_prompt text not null,
+  tags jsonb not null default '[]'::jsonb,
+  source text not null default 'ai',
+  model_id text,
+  prompt_version text not null default 'makeup-scenario-v2',
+  status text not null default 'active',
+  usage_count integer not null default 0,
+  last_served_at timestamptz,
+  created_by_user_id uuid references users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_makeup_scenario_library_source check (source in ('ai', 'curated')),
+  constraint chk_makeup_scenario_library_status check (status in ('active', 'disabled')),
+  constraint chk_makeup_scenario_library_usage_count check (usage_count >= 0),
+  constraint chk_makeup_scenario_library_text_length check (char_length(text) between 1 and 60),
+  constraint chk_makeup_scenario_library_seed_prompt_length check (char_length(seed_prompt) between 1 and 240)
+);
+alter table makeup_scenario_library add column if not exists last_served_at timestamptz;
+create index if not exists idx_makeup_scenario_library_active_usage
+  on makeup_scenario_library (status, usage_count, created_at desc);
+create index if not exists idx_makeup_scenario_library_replacement
+  on makeup_scenario_library (source, status, usage_count, last_served_at, created_at);
+
+create table if not exists makeup_scenario_generation_limits (
+  user_id uuid primary key references users(id) on delete cascade,
+  window_started_at timestamptz not null default now(),
+  request_count integer not null default 0,
+  constraint chk_makeup_scenario_generation_limit_count check (request_count between 0 and 4)
+);
+
+-- AI makeup recommendation reports
+create table if not exists makeup_recommendation_reports (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  parent_report_id uuid references makeup_recommendation_reports(id) on delete set null,
+  refinement_type text,
+  scenario_text text not null,
+  scenario_tags jsonb not null default '[]'::jsonb,
+  questions jsonb not null default '[]'::jsonb,
+  answers jsonb not null default '[]'::jsonb,
+  recommendation jsonb not null,
+  image_status text not null default 'pending',
+  image_url text,
+  image_error text,
+  scenario_model_id text,
+  question_model_id text,
+  recommendation_model_id text,
+  image_model_id text,
+  prompt_version text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_makeup_recommendation_reports_image_status
+    check (image_status in ('pending', 'processing', 'completed', 'failed')),
+  constraint chk_makeup_recommendation_reports_refinement_type
+    check (refinement_type is null or refinement_type in ('natural', 'hip', 'differentColor', 'replaceProducts'))
+);
+create index if not exists idx_makeup_recommendation_reports_user_created on makeup_recommendation_reports (user_id, created_at desc);
+create index if not exists idx_makeup_recommendation_reports_parent on makeup_recommendation_reports (parent_report_id);
+
+drop trigger if exists trg_makeup_scenario_library_updated_at on makeup_scenario_library;
+create trigger trg_makeup_scenario_library_updated_at
+before update on makeup_scenario_library
+for each row execute function set_updated_at();
+
 -- Consulting updated_at triggers
 drop trigger if exists trg_consulting_categories_updated_at on consulting_categories;
 create trigger trg_consulting_categories_updated_at
@@ -2175,4 +2275,9 @@ for each row execute function set_updated_at();
 drop trigger if exists trg_community_replies_updated_at on community_replies;
 create trigger trg_community_replies_updated_at
 before update on community_replies
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_makeup_recommendation_reports_updated_at on makeup_recommendation_reports;
+create trigger trg_makeup_recommendation_reports_updated_at
+before update on makeup_recommendation_reports
 for each row execute function set_updated_at();

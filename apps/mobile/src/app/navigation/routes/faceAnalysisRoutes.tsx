@@ -686,9 +686,7 @@ export function FaceAnalysisReportDetailRouteScreen({
           analysisReport={selectedFaceAnalysisReport}
           bottomOverlayHeight={getFaceAnalysisReportFooterReservedHeight(footerBottomInset)}
           capturedPhotoUri={selectedFaceCapture?.imageUri}
-          onCreateARFilter={() =>
-            navigation.navigate('MakeupFilterEdit', {backRoute: 'FaceAnalysisReportDetail'})
-          }
+          onCreateARFilter={() => navigation.navigate('MakeupRecommendation')}
           onDeleteReport={handleDeleteReport}
           onHeaderShareActionChange={handleHeaderShareActionChange}
           onPressProducts={reportId =>

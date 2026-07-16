@@ -1,0 +1,157 @@
+from app.schemas.face_analysis_v2 import MeasurementStatus, MetricEnvelope
+from app.services.face_analysis_measurements import (
+  build_measurement_coverage,
+  filter_metrics_for_audience,
+  merge_measurements,
+  normalize_camera_measurements,
+  with_explicit_unmeasured,
+)
+
+
+def ai_metric(
+  value: str,
+  *,
+  confidence: float = 0.9,
+  sensitivity: int = 1,
+) -> dict:
+  return {
+    "value": value,
+    "unit": "label",
+    "confidence": confidence,
+    "source": "ai",
+    "status": "estimated",
+    "shots": ["S1"],
+    "sensitivity": sensitivity,
+    "warnings": [],
+  }
+
+
+def test_normalizes_current_camera_sections_with_provenance() -> None:
+  result = normalize_camera_measurements(
+    {
+      "schemaVersion": "aura-face-analysis-measurements-v1",
+      "faceVerticalThirds": {
+        "status": "full_success",
+        "quality": {"usable": True, "warnings": []},
+        "verticalThirds": {
+          "confidence": 0.87,
+          "upperNormalized": 0.31,
+          "middleNormalized": 0.34,
+          "lowerNormalized": 0.35,
+          "warnings": [],
+        },
+        "faceLength": {"heightPx": 900, "widthPx": 700, "ratio": 1.286},
+      },
+      "faceGeometry2d": {
+        "status": "full_success",
+        "metrics": {
+          "jawWidthRatio": {"value": 0.72, "unit": "ratio", "warnings": []},
+        },
+      },
+      "face3d": {
+        "warnings": [],
+        "metrics": {
+          "noseTipProjection": {
+            "value": 0.14,
+            "unit": "normalized",
+            "confidence": 0.93,
+            "validFrameCount": 30,
+            "mad": 0.001,
+          },
+        },
+      },
+      "personalColor": {
+        "reported": {
+          "status": "definitive",
+          "measurementConfidence": 0.81,
+          "warnings": [],
+          "axes": {"temperature": {"value": 0.32, "confidence": 0.8}},
+          "tone": {"top": "autumn_muted", "season": "autumn"},
+        },
+      },
+    },
+  )
+
+  assert result["verticalThirds.upperNormalized"].source.value == "landmark"
+  assert result["geometry2d.jawWidthRatio"].source.value == "pixel"
+  assert result["face3d.noseTipProjection"].source.value == "depth"
+  assert result["personalColor.axes.temperature"].source.value == "pixel"
+  assert result["face3d.noseTipProjection"].value == 0.14
+
+
+def test_camera_metric_cannot_be_overwritten_by_ai() -> None:
+  camera = normalize_camera_measurements(
+    {
+      "schemaVersion": "aura-face-analysis-measurements-v1",
+      "face3d": {
+        "warnings": [],
+        "metrics": {
+          "noseTipProjection": {
+            "value": 0.14,
+            "unit": "normalized",
+            "confidence": 0.93,
+          },
+        },
+      },
+    },
+  )
+  coverage = build_measurement_coverage(camera)
+  result = merge_measurements(
+    camera,
+    {"face3d.noseTipProjection": ai_metric("high")},
+    coverage,
+  )
+
+  assert result.profile["face3d.noseTipProjection"].value == 0.14
+  assert result.profile["face3d.noseTipProjection"].source.value == "depth"
+  assert result.rejected_authoritative_keys == ["face3d.noseTipProjection"]
+
+
+def test_coverage_keeps_blocked_camera_owned_and_s2_to_s7_out_of_scope() -> None:
+  blocked = MetricEnvelope.model_validate(
+    {
+      "value": None,
+      "confidence": 0.2,
+      "source": "pixel",
+      "status": "blocked",
+      "shots": ["S1"],
+      "sensitivity": 1,
+      "reason": "pose_gate_failed",
+      "warnings": [],
+    },
+  )
+  coverage = build_measurement_coverage({"geometry2d.eyeOpennessLeft": blocked})
+
+  assert "geometry2d.eyeOpennessLeft" in coverage.authoritative_keys
+  assert coverage.blocked_keys[0].reason == "pose_gate_failed"
+  assert "geometry2d.eyeOpennessLeft" not in coverage.missing_observable_keys
+  assert "profile.fullSideProfile" in coverage.out_of_scope_keys
+  assert "profile.fullSideProfile" not in coverage.missing_observable_keys
+
+
+def test_merge_blocks_low_confidence_and_rejects_unknown_ai_key() -> None:
+  coverage = build_measurement_coverage({})
+  result = merge_measurements(
+    {},
+    {
+      "skin.texture": ai_metric("smooth", confidence=0.2),
+      "unknown.metric": ai_metric("value"),
+    },
+    coverage,
+  )
+
+  assert result.profile["skin.texture"].status is MeasurementStatus.BLOCKED
+  assert result.profile["skin.texture"].value is None
+  assert result.rejected_unknown_keys == ["unknown.metric"]
+
+
+def test_unmeasured_and_sensitive_metrics_are_filtered_safely() -> None:
+  coverage = build_measurement_coverage({})
+  profile = with_explicit_unmeasured({}, coverage.out_of_scope_keys)
+  profile["public"] = MetricEnvelope.model_validate(ai_metric("shown", sensitivity=1))
+  profile["optIn"] = MetricEnvelope.model_validate(ai_metric("detail", sensitivity=2))
+  profile["internal"] = MetricEnvelope.model_validate(ai_metric("hidden", sensitivity=3))
+
+  assert profile["profile.fullSideProfile"].status is MeasurementStatus.UNMEASURED
+  assert set(filter_metrics_for_audience(profile, include_sensitive=False)) == {"public"}
+  assert set(filter_metrics_for_audience(profile, include_sensitive=True)) == {"public", "optIn"}

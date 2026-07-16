@@ -53,6 +53,7 @@ module.exports = {
 
 run(process.execPath, [
   tscPath,
+  '--ignoreConfig',
   '--module',
   'commonjs',
   '--target',

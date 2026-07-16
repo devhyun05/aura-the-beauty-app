@@ -176,6 +176,20 @@ export const EYELINER_STYLES = [
   { value: 0, label: '윙업' },
   { value: 1, label: '퍼피' },
   { value: 2, label: '롱' },
+  { value: 3, label: '캣' },
+  { value: 4, label: '스트레이트' },
+  { value: 5, label: '소프트 드롭' },
+];
+
+export const EYELINER_LOWER_STYLES = [
+  { value: 0, label: '전체 소프트' },
+  { value: 1, label: '점막 밀착' },
+  { value: 2, label: '바깥 1/3' },
+];
+
+export const AEGYO_MODES = [
+  {value: 0, label: '자연 볼륨'},
+  {value: 1, label: '펄 포인트'},
 ];
 
 // 아이라이너 부분 모양 — 리본의 눈꺼풀 구간 마스크 (Eyeliner.shader SEG_* 동기)
@@ -221,10 +235,27 @@ export const MATERIAL_OPTIONS = [
 
 // 아이섀도 모양 (#19b) — Iris/Eyeshadow 밴드 세로·가로 프로파일 분기
 export const EYESHADOW_SHAPES = [
-  { value: 0, label: '리드 전체' },
-  { value: 1, label: '크리스 집중' },
-  { value: 2, label: '스모키' },
-  { value: 3, label: '꼬리 포인트' },
+  { value: 0, label: '베이스 전체' },
+  { value: 1, label: '베이스 앞쪽' },
+  { value: 2, label: '베이스 뒤쪽' },
+  { value: 3, label: '메인 앞쪽' },
+  { value: 4, label: '메인 중앙' },
+  { value: 5, label: '메인 뒤쪽' },
+  { value: 6, label: '포인트 앞머리' },
+  { value: 7, label: '포인트 눈동자 위' },
+  { value: 8, label: '포인트 눈꼬리' },
+  { value: 9, label: '크리스' },
+  { value: 10, label: '스모키' },
+  { value: 11, label: '와이드 그라데' },
+];
+
+// 하단 아이섀도 위치 — LowerLid 영역 프로파일 분기
+export const EYESHADOW_LOWER_SHAPES = [
+  {value: 0, label: '전체'},
+  {value: 1, label: '앞쪽'},
+  {value: 2, label: '중앙'},
+  {value: 3, label: '뒤쪽'},
+  {value: 4, label: '스모키'},
 ];
 
 // 눈썹 모양 (#19b, 슬롯 공통) — BrowWarp 밴드 형태 분기(일자화 파라미터)
@@ -270,6 +301,13 @@ export const FOUNDATION_FINISHES = [
   { value: 0, label: '새틴' },
   { value: 1, label: '매트' },
   { value: 2, label: '듀이' },
+];
+
+// 피부결 제품은 "모공 프라이머에 윤광을 추가"하는 슬라이더가 아니라 서로 다른
+// 프라이머 선택이다. skinGlow는 기존 Unity 브리지 값을 그대로 선택 id로 재사용한다.
+export const SKIN_PRIMER_OPTIONS = [
+  { value: 0, label: '모공 프라이머' },
+  { value: 0.5, label: '윤광 프라이머' },
 ];
 
 // 제형 텍스처(§5 테크닉) — 커버리지 곡선·엣지 하드니스를 갈아끼운다(마감=빛반응과 별개).
@@ -356,6 +394,11 @@ export type RegionKey =
   // 컨투어
   | 'blush'
   | 'highlighter'
+  | 'highlightCheek'
+  | 'highlightNoseBridge'
+  | 'highlightNoseTip'
+  | 'highlightBrowBone'
+  | 'highlightCupid'
   | 'contour'
   // 눈
   | 'eyeshadow'
@@ -499,6 +542,8 @@ export interface RegionDef {
   axes: Partial<Record<AxisKey, ComposerControl[]>>;
   /** 공유 필드 등 사용자 안내 한 줄 */
   note?: string;
+  /** 저장물 호환을 위해 REGION_MAP에는 남기되 새 추가/교체 UI에서 숨기는 legacy 부위 */
+  pickerHidden?: boolean;
 }
 
 export interface RegionGroup {
@@ -520,6 +565,59 @@ const BROW_FIT_AXIS: ComposerControl[] = [
 ];
 const BROW_NOTE = '모양·핏은 눈썹 전체 공통 — 어느 눈썹 부위에서 조정해도 함께 반영돼요';
 
+function highlightAxes(
+  intensityKey: keyof FilterParams,
+  intensityLabel: string,
+): RegionDef['axes'] {
+  return {
+    shape: [
+      {
+        type: 'maskImport',
+        label: '광채 존 마스크',
+        region: 'highlighter',
+        appliedKey: 'highlightMaskImported',
+      },
+    ],
+    color: [
+      {type: 'swatches', key: 'highlightColor', palette: HIGHLIGHT_COLORS},
+    ],
+    finish: [
+      {
+        type: 'finish',
+        finishKey: 'highlightFinish',
+        shimmerKey: 'highlightShimmer',
+        detail: highlightFinishDetail,
+      },
+    ],
+    opacity: [{type: 'slider', label: intensityLabel, key: intensityKey}],
+    fit: [
+      {
+        type: 'slider',
+        label: '광채 높이',
+        key: 'highlightLift',
+        min: -0.08,
+        max: 0.08,
+        gold: true,
+      },
+      {
+        type: 'slider',
+        label: '광채 퍼짐',
+        key: 'highlightSpread',
+        min: -0.08,
+        max: 0.08,
+        gold: true,
+      },
+      {
+        type: 'slider',
+        label: '가장자리 흐림',
+        key: 'highlightEdgeSoftness',
+        min: 0,
+        max: 1,
+      },
+    ],
+  };
+}
+
 export const REGION_GROUPS: RegionGroup[] = [
   {
     title: '피부·베이스',
@@ -530,14 +628,16 @@ export const REGION_GROUPS: RegionGroup[] = [
         key: 'tone',
         label: '언더톤',
         emoji: '🌤️',
-        productName: '톤업크림',
+        // 정본 §3: 언더톤 = 색 캐스트 보정(메이크업 베이스/컬러 코렉터).
+        // '톤업크림'은 브라이트닝 제품이라 정체성이 어긋나 정정(분류체계 정합).
+        productName: '메이크업 베이스',
         onKeys: ['skinBrightening'],
         defaults: { skinBrightening: 0.4 },
         axes: {
           color: [
             { type: 'swatches', key: 'toneBaseColor', palette: TONE_BASE_COLORS },
           ],
-          opacity: [{ type: 'slider', label: '톤업', key: 'skinBrightening' }],
+          opacity: [{ type: 'slider', label: '보정 강도', key: 'skinBrightening' }],
         },
       },
       {
@@ -552,7 +652,9 @@ export const REGION_GROUPS: RegionGroup[] = [
             { type: 'slider', label: '결 보정', key: 'skinSmoothing' },
             { type: 'slider', label: '이마·목 확장 (세그)', key: 'skinSmoothingExtended' },
           ],
-          finish: [{ type: 'slider', label: '윤광', key: 'skinGlow' }],
+          finish: [
+            { type: 'segments', key: 'skinGlow', options: SKIN_PRIMER_OPTIONS },
+          ],
         },
       },
       {
@@ -737,63 +839,58 @@ export const REGION_GROUPS: RegionGroup[] = [
       },
       {
         key: 'highlighter',
-        label: '하이라이터',
+        label: '하이라이터 전체(기존)',
         emoji: '💫',
         productName: '스틱 하이라이터',
         onKeys: ['highlightIntensity'],
         defaults: { highlightIntensity: 0.5 },
-        axes: {
-          shape: [
-            {
-              type: 'maskImport',
-              label: '광채 존 마스크',
-              region: 'highlighter',
-              appliedKey: 'highlightMaskImported',
-            },
-          ],
-          color: [
-            { type: 'swatches', key: 'highlightColor', palette: HIGHLIGHT_COLORS },
-          ],
-          // 마감 — 블러셔와 동일 enum(새틴/매트/글로시/시머 + 시머 게인) + 제형
-          // 스튜디오 세부(#21: 광·펄 입자 크기/밀도·매트·시). 0=새틴=기존 출력.
-          finish: [
-            {
-              type: 'finish',
-              finishKey: 'highlightFinish',
-              shimmerKey: 'highlightShimmer',
-              detail: highlightFinishDetail,
-            },
-          ],
-          opacity: [
-            { type: 'slider', label: '하이라이터', key: 'highlightIntensity' },
-          ],
-          fit: [
-            // 마스크 부위 핏 아핀(A17 확장) — 블러셔 lift/spread 일반화.
-            {
-              type: 'slider',
-              label: '광채 높이',
-              key: 'highlightLift',
-              min: -0.08,
-              max: 0.08,
-              gold: true,
-            },
-            {
-              type: 'slider',
-              label: '광채 퍼짐',
-              key: 'highlightSpread',
-              min: -0.08,
-              max: 0.08,
-              gold: true,
-            },
-            {
-              type: 'slider',
-              label: '가장자리 흐림',
-              key: 'highlightEdgeSoftness',
-              min: 0,
-              max: 1,
-            },
-          ],
-        },
+        axes: highlightAxes('highlightIntensity', '하이라이터'),
+        pickerHidden: true,
+      },
+      {
+        key: 'highlightCheek',
+        label: '광대 하이라이터',
+        emoji: '✨',
+        productName: '스틱 하이라이터',
+        onKeys: ['highlightCheekIntensity'],
+        defaults: {highlightCheekIntensity: 0.45},
+        axes: highlightAxes('highlightCheekIntensity', '광대 광채'),
+      },
+      {
+        key: 'highlightNoseBridge',
+        label: '콧대 하이라이터',
+        emoji: '✨',
+        productName: '스틱 하이라이터',
+        onKeys: ['highlightNoseBridgeIntensity'],
+        defaults: {highlightNoseBridgeIntensity: 0.36},
+        axes: highlightAxes('highlightNoseBridgeIntensity', '콧대 광채'),
+      },
+      {
+        key: 'highlightNoseTip',
+        label: '코끝 하이라이터',
+        emoji: '✨',
+        productName: '스틱 하이라이터',
+        onKeys: ['highlightNoseTipIntensity'],
+        defaults: {highlightNoseTipIntensity: 0.36},
+        axes: highlightAxes('highlightNoseTipIntensity', '코끝 광채'),
+      },
+      {
+        key: 'highlightBrowBone',
+        label: '눈썹뼈 하이라이터',
+        emoji: '✨',
+        productName: '스틱 하이라이터',
+        onKeys: ['highlightBrowBoneIntensity'],
+        defaults: {highlightBrowBoneIntensity: 0.34},
+        axes: highlightAxes('highlightBrowBoneIntensity', '눈썹뼈 광채'),
+      },
+      {
+        key: 'highlightCupid',
+        label: '입술산 하이라이터',
+        emoji: '✨',
+        productName: '스틱 하이라이터',
+        onKeys: ['highlightCupidIntensity'],
+        defaults: {highlightCupidIntensity: 0.32},
+        axes: highlightAxes('highlightCupidIntensity', '입술산 광채'),
       },
       {
         key: 'contour',
@@ -954,6 +1051,13 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { eyeshadowLowerIntensity: 0.3 },
         note: '하안검 아래 섀도(곱 블렌드) — 언더 스모키·그늘. 애교살 아래 깔림',
         axes: {
+          shape: [
+            {
+              type: 'segments',
+              key: 'eyeshadowLowerShape',
+              options: EYESHADOW_LOWER_SHAPES,
+            },
+          ],
           color: [
             {
               type: 'swatches',
@@ -1051,11 +1155,27 @@ export const REGION_GROUPS: RegionGroup[] = [
         productName: '펜슬 라이너',
         onKeys: ['eyelinerLowerIntensity'],
         defaults: { eyelinerLowerIntensity: 0.4 },
-        note: '색은 아이라인 상과 공용 — 여기서 바꾸면 함께 반영',
         axes: {
-          // 공유색 재노출(눈썹 BROW_SHAPE_AXIS 선례) — 하 부위에서도 색을 만질 수 있게.
+          shape: [
+            {
+              type: 'segments',
+              key: 'eyelinerLowerStyle',
+              options: EYELINER_LOWER_STYLES,
+            },
+          ],
           color: [
-            { type: 'swatches', key: 'eyelinerColor', palette: EYELINER_COLORS },
+            {
+              type: 'swatches',
+              key: 'eyelinerLowerColor',
+              palette: EYELINER_COLORS,
+            },
+          ],
+          finish: [
+            {
+              type: 'finish',
+              finishKey: 'eyelinerLowerFinish',
+              shimmerKey: 'eyelinerLowerShimmer',
+            },
           ],
           opacity: [
             { type: 'slider', label: '라인 (아래)', key: 'eyelinerLowerIntensity' },
@@ -1067,31 +1187,29 @@ export const REGION_GROUPS: RegionGroup[] = [
         label: '애교살',
         emoji: '🥺',
         productName: '펄 스틱',
-        onKeys: ['aegyoIntensity', 'aegyoStyleIntensity'],
-        defaults: { aegyoIntensity: 0.5 },
+        onKeys: ['aegyoIntensity'],
+        defaults: {aegyoIntensity: 0.5, aegyoRendererVersion: 1},
         axes: {
+          shape: [
+            {type: 'segments', key: 'aegyoMode', options: AEGYO_MODES},
+          ],
           // 색(07-11 aegyoColor 신설 — 부위 축 감사의 (b) 해소): 하이라이트 펄 톤,
           // 섀도는 Unity가 파생. 빈 값=기본 톤이라 스와치 선택 전 룩은 불변.
           color: [
             { type: 'swatches', key: 'aegyoColor', palette: AEGYO_COLORS },
           ],
-          // 마감 — 하이라이트 밴드에 적용(시머=펄 애교살). 0=새틴=기존 출력.
+          // 새 전용 렌더러는 마감 enum 대신 모드+펄 강도를 사용한다.
           finish: [
             {
-              type: 'finish',
-              finishKey: 'aegyoFinish',
-              shimmerKey: 'aegyoShimmer',
+              type: 'slider',
+              label: '펄 강도',
+              key: 'aegyoShimmer',
             },
           ],
-          texture: [
-            {
-              type: 'import',
-              label: '애교살 그림',
-              action: 'aegyo',
-              intensityKey: 'aegyoStyleIntensity',
-            },
+          opacity: [
+            {type: 'slider', label: '애교살', key: 'aegyoIntensity'},
+            {type: 'slider', label: '볼륨 음영', key: 'aegyoShadowIntensity'},
           ],
-          opacity: [{ type: 'slider', label: '애교살', key: 'aegyoIntensity' }],
           fit: [
             {
               type: 'slider',
@@ -1610,6 +1728,13 @@ export const REGION_DEFS: RegionDef[] = REGION_GROUPS.flatMap(g => g.regions);
 export const REGION_MAP: Record<RegionKey, RegionDef> = Object.fromEntries(
   REGION_DEFS.map(d => [d.key, d]),
 ) as Record<RegionKey, RegionDef>;
+
+/** 새 부위 추가/교체 UI에 노출 가능한 정의. legacy 저장물 해석용 정의는 제외한다. */
+export function pickerVisibleRegionDefs(
+  defs: readonly RegionDef[] = REGION_DEFS,
+): RegionDef[] {
+  return defs.filter(def => !def.pickerHidden);
+}
 
 /** 부위가 소유한 FilterParams 필드 전부 — 축 컨트롤 선언에서 유도한다(드리프트 방지) */
 export function regionOwnKeys(def: RegionDef): (keyof FilterParams)[] {

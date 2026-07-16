@@ -1,0 +1,453 @@
+import asyncio
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+import hashlib
+import json
+from typing import Any, Protocol, TypeVar
+from uuid import UUID
+
+from pydantic import BaseModel
+
+from app.core.errors import AppError
+from app.db.session import Database
+from app.schemas.face_analysis_v2 import (
+  ConsultingResult,
+  FaceAnalysisPipelineState,
+  FaceAnalysisV2,
+  MeasurementStageOutput,
+  PerceptionResult,
+  StageName,
+  StageState,
+  StageStatus,
+)
+from app.services.face_analysis_ai import (
+  CONSULTING_PROMPT_VERSION,
+  MEASUREMENT_PROMPT_VERSION,
+  PERCEPTION_PROMPT_VERSION,
+  FaceAnalysisAI,
+)
+from app.services.face_analysis_measurements import (
+  build_measurement_coverage,
+  filter_metrics_for_audience,
+  merge_measurements,
+  normalize_camera_measurements,
+  with_explicit_unmeasured,
+)
+from app.services.face_analysis_rules import derive_face_analysis
+from app.services.face_analysis_stage_runs import (
+  complete_stage_run,
+  compute_stage_input_hash,
+  fail_stage_run,
+  find_completed_stage_run,
+  start_stage_run,
+)
+
+
+FACE_ANALYSIS_SCHEMA_VERSION = "aura-face-analysis-v2"
+
+
+class StageStore(Protocol):
+  async def find(self, *, stage: StageName, **kwargs: Any) -> dict[str, Any] | None: ...
+  async def start(self, *, stage: StageName, **kwargs: Any) -> dict[str, Any] | None: ...
+  async def complete(
+    self,
+    run_id: UUID,
+    output: dict[str, Any],
+    raw: dict[str, Any],
+    **kwargs: Any,
+  ) -> dict[str, Any] | None: ...
+  async def fail(
+    self,
+    run_id: UUID,
+    error: dict[str, Any],
+  ) -> dict[str, Any] | None: ...
+
+
+class DatabaseStageStore:
+  def __init__(self, db: Database) -> None:
+    self.db = db
+
+  async def find(self, **kwargs: Any) -> dict[str, Any] | None:
+    return await find_completed_stage_run(self.db, **kwargs)
+
+  async def start(self, **kwargs: Any) -> dict[str, Any] | None:
+    return await start_stage_run(self.db, **kwargs)
+
+  async def complete(
+    self,
+    run_id: UUID,
+    output: dict[str, Any],
+    raw: dict[str, Any],
+    **kwargs: Any,
+  ) -> dict[str, Any] | None:
+    return await complete_stage_run(self.db, run_id, output, raw, **kwargs)
+
+  async def fail(
+    self,
+    run_id: UUID,
+    error: dict[str, Any],
+  ) -> dict[str, Any] | None:
+    return await fail_stage_run(self.db, run_id, error)
+
+
+PersistCallback = Callable[[UUID, FaceAnalysisV2], Awaitable[None]]
+StageOutput = TypeVar("StageOutput", bound=BaseModel)
+
+
+def _now() -> str:
+  return datetime.now(UTC).isoformat()
+
+
+def _row_value(row: Any, key: str) -> Any:
+  if isinstance(row, dict):
+    return row.get(key)
+  try:
+    return row[key]
+  except (KeyError, TypeError):
+    return getattr(row, key, None)
+
+
+def _json_object(value: Any) -> dict[str, Any]:
+  if isinstance(value, dict):
+    return value
+  if isinstance(value, str):
+    decoded = json.loads(value)
+    return decoded if isinstance(decoded, dict) else {}
+  return {}
+
+
+def initialize_face_analysis_v2(request_payload: dict[str, Any]) -> FaceAnalysisV2:
+  measurements = request_payload.get("measurements")
+  camera_profile = normalize_camera_measurements(measurements)
+  coverage = build_measurement_coverage(camera_profile)
+  face_profile = with_explicit_unmeasured(camera_profile, coverage.out_of_scope_keys)
+  pipeline = FaceAnalysisPipelineState.pending()
+  requested_stage = request_payload.get("_faceAnalysisRetryStage")
+  if isinstance(requested_stage, str):
+    try:
+      pipeline.retry_requested_stage = StageName(requested_stage)
+    except ValueError:
+      pass
+  return FaceAnalysisV2(
+    coverage=coverage,
+    ai_measurements={},
+    face_profile=face_profile,
+    derived=derive_face_analysis(face_profile),
+    pipeline=pipeline,
+  )
+
+
+async def persist_face_analysis_v2(
+  db: Database,
+  report_id: UUID,
+  result: FaceAnalysisV2,
+) -> None:
+  await db.execute(
+    """
+    update analysis_reports
+    set detail_payload = jsonb_set(
+      jsonb_set(
+        coalesce(detail_payload, '{}'::jsonb),
+        '{result}',
+        coalesce(detail_payload->'result', '{}'::jsonb),
+        true
+      ),
+      '{result,faceAnalysisV2}',
+      $2::jsonb,
+      true
+    )
+    where id = $1
+    """,
+    report_id,
+    json.dumps(result.model_dump(by_alias=True, mode="json"), ensure_ascii=False),
+  )
+
+
+def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
+  perception = result.perception
+  consulting = result.consulting
+  personal_color = "측정 보류"
+  skin_type = "측정 보류"
+  recommended_mood = "균형 중심"
+  skin_summary = result.derived.skin_color.description
+
+  if perception is not None:
+    color = perception.personal_color
+    personal_color = " ".join(
+      value for value in (color.season, color.subtype) if value
+    ) or "측정 보류"
+    skin_type = perception.skin.sebum_dryness.label
+    recommended_mood = perception.gestalt.overall_mood.label
+    skin_summary = perception.skin.texture.description
+
+  legacy: dict[str, Any] = {
+    "faceShape": result.derived.face_shape.label,
+    "personalColor": personal_color,
+    "skinType": skin_type,
+    "toneSummary": result.derived.color_axes.label,
+    "recommendedMood": recommended_mood,
+    "summary": result.derived.face_shape.description,
+    "shortSummary": result.derived.vertical_balance.description,
+    "skinAnalysisSummary": skin_summary,
+    "baseMakeupGuide": "측정 결과를 바탕으로 AI 컨설팅을 준비하고 있어요.",
+    "makeupGuideline": {},
+    "recommendedMakeups": [],
+    "tags": [],
+  }
+  if consulting is None:
+    return legacy
+
+  makeup = consulting.makeup
+  look = consulting.recommended_look
+  legacy.update(
+    {
+      "recommendedMood": consulting.overall_mood,
+      "summary": consulting.summary,
+      "shortSummary": consulting.short_summary,
+      "skinAnalysisSummary": skin_summary,
+      "baseMakeupGuide": makeup.base,
+      "makeupGuideline": {
+        "brow": makeup.brow,
+        "eyeshadow": makeup.eyeshadow,
+        "eyeliner": makeup.eyeliner,
+        "blush": makeup.blush,
+        "contour": makeup.contour,
+        "highlight": makeup.highlight,
+        "lip": makeup.lip,
+      },
+      "recommendedMakeups": [
+        {
+          "title": look.title,
+          "subtitle": look.subtitle,
+          "description": look.description,
+          "tags": look.tags,
+        },
+      ],
+      "tags": consulting.tags,
+    },
+  )
+  return legacy
+
+
+class FaceAnalysisPipeline:
+  def __init__(
+    self,
+    *,
+    db: Database,
+    settings: Any,
+    ai: FaceAnalysisAI,
+    stage_store: StageStore | None = None,
+    persist_callback: PersistCallback | None = None,
+  ) -> None:
+    self.db = db
+    self.settings = settings
+    self.ai = ai
+    self.stage_store = stage_store or DatabaseStageStore(db)
+    self.persist_callback = persist_callback or self._persist
+
+  async def _persist(self, report_id: UUID, result: FaceAnalysisV2) -> None:
+    await persist_face_analysis_v2(self.db, report_id, result)
+
+  def _stage_kwargs(
+    self,
+    *,
+    report_id: UUID,
+    stage: StageName,
+    prompt_version: str,
+    input_value: dict[str, Any],
+  ) -> dict[str, Any]:
+    return {
+      "report_id": report_id,
+      "stage": stage,
+      "input_hash": compute_stage_input_hash(input_value),
+      "schema_version": FACE_ANALYSIS_SCHEMA_VERSION,
+      "prompt_version": prompt_version,
+      "model": self.settings.effective_analysis_model_id,
+    }
+
+  async def _execute_stage(
+    self,
+    *,
+    model_type: type[StageOutput],
+    kwargs: dict[str, Any],
+    invoke: Callable[[], Awaitable[StageOutput]],
+  ) -> tuple[StageOutput | None, StageState]:
+    cached = await self.stage_store.find(**kwargs)
+    if cached is not None:
+      output = model_type.model_validate(
+        _json_object(_row_value(cached, "normalized_output")),
+      )
+      return output, StageState(
+        status=StageStatus.COMPLETED,
+        run_id=str(_row_value(cached, "id")),
+        updated_at=_now(),
+        cache_hit=True,
+      )
+
+    run = await self.stage_store.start(**kwargs)
+    run_id = _row_value(run, "id")
+    if run_id is None:
+      return None, StageState(
+        status=StageStatus.FAILED,
+        error_code="STAGE_RUN_UNAVAILABLE",
+        updated_at=_now(),
+      )
+
+    try:
+      async with asyncio.timeout(self.settings.face_analysis_stage_timeout_seconds):
+        output = await invoke()
+      payload = output.model_dump(by_alias=True, mode="json")
+      status = StageStatus.COMPLETED
+      if isinstance(output, MeasurementStageOutput) and not output.photo_quality.usable:
+        status = StageStatus.PARTIAL
+      await self.stage_store.complete(
+        run_id,
+        payload,
+        payload,
+        status=status,
+      )
+      return output, StageState(
+        status=status,
+        run_id=str(run_id),
+        updated_at=_now(),
+      )
+    except TimeoutError:
+      error = {"code": "FACE_ANALYSIS_STAGE_TIMEOUT", "reason": "timeout"}
+    except AppError as exc:
+      error = {"code": exc.code, "reason": exc.message}
+    except Exception as exc:  # noqa: BLE001 - stage failures must preserve the camera report.
+      error = {"code": "FACE_ANALYSIS_STAGE_FAILED", "reason": exc.__class__.__name__}
+
+    await self.stage_store.fail(run_id, error)
+    return None, StageState(
+      status=StageStatus.FAILED,
+      run_id=str(run_id),
+      error_code=error["code"],
+      updated_at=_now(),
+    )
+
+  @staticmethod
+  def _update_overall(result: FaceAnalysisV2) -> None:
+    states = (
+      result.pipeline.ai_measurement,
+      result.pipeline.ai_perception,
+      result.pipeline.ai_consulting,
+    )
+    if all(state.status is StageStatus.COMPLETED for state in states):
+      result.pipeline.overall = "completed"
+    elif any(state.status in {StageStatus.FAILED, StageStatus.PARTIAL} for state in states):
+      result.pipeline.overall = "partial"
+    else:
+      result.pipeline.overall = "processing"
+
+  async def run(
+    self,
+    *,
+    report_id: UUID,
+    request_payload: dict[str, Any],
+    source_image_bytes: bytes,
+  ) -> FaceAnalysisV2:
+    result = initialize_face_analysis_v2(request_payload)
+    await self.persist_callback(report_id, result)
+    source_hash = hashlib.sha256(source_image_bytes).hexdigest()
+    camera_profile = normalize_camera_measurements(request_payload.get("measurements"))
+
+    measurement_kwargs = self._stage_kwargs(
+      report_id=report_id,
+      stage=StageName.AI_MEASUREMENT,
+      prompt_version=MEASUREMENT_PROMPT_VERSION,
+      input_value={
+        "sourceImageSha256": source_hash,
+        "coverage": result.coverage.model_dump(by_alias=True, mode="json"),
+        "cameraProfile": {
+          key: value.model_dump(by_alias=True, mode="json")
+          for key, value in camera_profile.items()
+        },
+      },
+    )
+    measurement, result.pipeline.ai_measurement = await self._execute_stage(
+      model_type=MeasurementStageOutput,
+      kwargs=measurement_kwargs,
+      invoke=lambda: self.ai.measure(
+        source_image_bytes=source_image_bytes,
+        coverage=result.coverage,
+        camera_profile=camera_profile,
+      ),
+    )
+    if measurement is not None:
+      result.ai_measurements = measurement.metrics
+      merged = merge_measurements(camera_profile, measurement.metrics, result.coverage)
+      result.face_profile = with_explicit_unmeasured(
+        merged.profile,
+        result.coverage.out_of_scope_keys,
+      )
+      result.derived = derive_face_analysis(result.face_profile)
+    self._update_overall(result)
+    await self.persist_callback(report_id, result)
+
+    perception_kwargs = self._stage_kwargs(
+      report_id=report_id,
+      stage=StageName.AI_PERCEPTION,
+      prompt_version=PERCEPTION_PROMPT_VERSION,
+      input_value={
+        "sourceImageSha256": source_hash,
+        "faceProfile": {
+          key: value.model_dump(by_alias=True, mode="json")
+          for key, value in result.face_profile.items()
+        },
+        "derived": result.derived.model_dump(by_alias=True, mode="json"),
+      },
+    )
+    perception, result.pipeline.ai_perception = await self._execute_stage(
+      model_type=PerceptionResult,
+      kwargs=perception_kwargs,
+      invoke=lambda: self.ai.perceive(
+        source_image_bytes=source_image_bytes,
+        profile=result.face_profile,
+        derived=result.derived,
+      ),
+    )
+    if perception is not None:
+      result.perception = perception
+    self._update_overall(result)
+    await self.persist_callback(report_id, result)
+
+    if result.perception is None:
+      result.pipeline.ai_consulting = StageState(
+        status=StageStatus.FAILED,
+        error_code="DEPENDENCY_FAILED",
+        updated_at=_now(),
+      )
+    else:
+      consulting_profile = filter_metrics_for_audience(
+        result.face_profile,
+        include_sensitive=False,
+      )
+      consulting_kwargs = self._stage_kwargs(
+        report_id=report_id,
+        stage=StageName.AI_CONSULTING,
+        prompt_version=CONSULTING_PROMPT_VERSION,
+        input_value={
+          "faceProfile": {
+            key: value.model_dump(by_alias=True, mode="json")
+            for key, value in consulting_profile.items()
+          },
+          "derived": result.derived.model_dump(by_alias=True, mode="json"),
+          "perception": result.perception.model_dump(by_alias=True, mode="json"),
+        },
+      )
+      consulting, result.pipeline.ai_consulting = await self._execute_stage(
+        model_type=ConsultingResult,
+        kwargs=consulting_kwargs,
+        invoke=lambda: self.ai.consult(
+          profile=consulting_profile,
+          derived=result.derived,
+          perception=result.perception,
+        ),
+      )
+      if consulting is not None:
+        result.consulting = consulting
+
+    self._update_overall(result)
+    await self.persist_callback(report_id, result)
+    return result

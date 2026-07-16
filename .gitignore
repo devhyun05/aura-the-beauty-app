@@ -54,6 +54,8 @@ output/
 playwright-report/
 test-results/
 .playwright-mcp/
+.superpowers/
+.codegraph/
 
 # Beard simulation lab local data and rejected experiment artifacts
 tools/beard-simulation-lab/samples/

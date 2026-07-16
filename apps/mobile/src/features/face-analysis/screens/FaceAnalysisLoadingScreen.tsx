@@ -110,9 +110,9 @@ export function FaceAnalysisLoadingScreen({
     >
       <YStack style={styles.content}>
         <YStack style={styles.heroCopy}>
-          <Text style={styles.heroTitle}>AI가 얼굴을 분석하고 있어요</Text>
+          <Text style={styles.heroTitle}>1차 얼굴 보고서를 만들고 있어요</Text>
           <Text style={styles.heroDescription}>
-            촬영 이미지를 기준으로 톤, 균형, 맞춤 필터 조건을 정리합니다.
+            정면 사진과 3D 측정값을 먼저 정리하고, AI 분석은 보고서에 이어서 추가합니다.
           </Text>
         </YStack>
 

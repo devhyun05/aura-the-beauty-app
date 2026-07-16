@@ -23,14 +23,20 @@ import {
 } from 'react-native';
 import ParamSlider from './ParamSlider';
 import type {LaneChip} from './LaneRow';
-import {REGION_GROUPS, REGION_MAP} from '../composer/regions';
+import {
+  pickerVisibleRegionDefs,
+  REGION_GROUPS,
+  REGION_MAP,
+} from '../composer/regions';
 import type {RegionDef, RegionKey} from '../composer/regions';
 import {
   defSwatchColor,
   regionDefsForSlot,
-  regionKeysOfDef,
   setSlotRegion,
+  setSubRegion,
   slotRegionNodes,
+  subDefsForRegion,
+  subRegionNode,
   SLOT_LABEL,
   SLOT_ORDER,
 } from '../composer/lookTree';
@@ -50,7 +56,10 @@ const CATS: Cat[] = [ALL, ...SLOT_ORDER];
 // 슬롯 → 세부부위 정의(카탈로그 순서). 중분류 탭 후보의 단일 출처.
 const REGIONS_BY_SLOT: Record<string, RegionDef[]> = {};
 for (const g of REGION_GROUPS) {
-  REGIONS_BY_SLOT[g.slot] = [...(REGIONS_BY_SLOT[g.slot] ?? []), ...g.regions];
+  REGIONS_BY_SLOT[g.slot] = [
+    ...(REGIONS_BY_SLOT[g.slot] ?? []),
+    ...pickerVisibleRegionDefs(g.regions),
+  ];
 }
 
 // 중분류 탭 라벨 — '톤 조정 베이스'류 장황한 접미사만 걷어낸다(톤·질감).
@@ -112,16 +121,17 @@ export default function BasicMode({
     setMidCat(ALL);
   };
 
-  // 슬롯의 모든 부위 룩 + 각 룩이 건드리는 세부부위(RegionKey) 집합.
+  // 세부부위 탭이 선택됐는가('전체'가 아닌 특정 세부부위) — 정본 계층 분기점:
+  //   · 세부부위 탭 = 세부부위룩(level:'sub') 목록 → 그 세부부위만 교체(setSubRegion)
+  //   · '전체' 탭     = 부위(슬롯)룩(level:'region') 목록 → 슬롯 전체 교체(setSlotRegion)
+  const isSubTab = !isAll && midCat !== ALL;
+  const subRegion: RegionKey | null = isSubTab ? (midCat as RegionKey) : null;
+
+  // '전체' 탭 카드 — 이 슬롯의 부위(슬롯)룩 전부(시스템+사용자).
   const slotDefs = useMemo(
     () => (slot ? regionDefsForSlot(library, slot) : []),
     [library, slot],
   );
-  const defKeys = useMemo(() => {
-    const m = new Map<string, Set<RegionKey>>();
-    for (const d of slotDefs) m.set(d.id, regionKeysOfDef(library, d.id));
-    return m;
-  }, [slotDefs, library]);
 
   // 중분류 후보 — 이 슬롯의 세부부위 전부(룩이 없어도 카테고리로 노출해 구조를 드러냄).
   const midCats = useMemo(
@@ -129,24 +139,35 @@ export default function BasicMode({
     [slot],
   );
 
-  // 카드 = 중분류로 필터(‘전체’면 슬롯 룩 전부).
-  const defs = useMemo(
-    () =>
-      midCat === ALL
-        ? slotDefs
-        : slotDefs.filter(d => defKeys.get(d.id)?.has(midCat)),
-    [slotDefs, midCat, defKeys],
+  // 세부부위 탭 카드 — 그 세부부위의 세부부위룩(level:'sub')만. 슬롯룩이 '포함'
+  //  관계로 세부부위 탭에 중복 노출되던 버그를 계층 준수로 대체(정본 분류체계).
+  const subDefs = useMemo(
+    () => (subRegion ? subDefsForRegion(library, subRegion) : []),
+    [library, subRegion],
   );
 
-  // 부위(슬롯) 뷰 상태 — 전체 탭에선 계산 안 함.
+  // 부위(슬롯) 뷰 상태 — '전체' 탭에서 슬롯 전체 교체의 활성/비움 판정.
   const regions = slot ? slotRegionNodes(tree, slot) : [];
   const single = regions.length === 1 ? regions[0] : null;
-  const activeRef = single?.ref ?? null;
+  const activeRef = single && !single.dirty ? single.ref : null;
   const empty = regions.length === 0;
   const showCustom = !empty && activeRef == null; // 커스텀 또는 다중 region
 
+  // 세부부위 뷰 상태 — 그 세부부위를 소유한 sub 노드 기준(다른 세부부위와 독립).
+  const activeSub =
+    slot && subRegion ? subRegionNode(tree, slot, subRegion) : null;
+  const activeSubRef = activeSub && !activeSub.dirty ? activeSub.ref : null;
+  const subEmpty = isSubTab && activeSub == null; // 이 세부부위 비어 있음
+  const subCustom = activeSub != null && activeSubRef == null; // 커스텀 sub
+
+  // '전체' 탭 = 슬롯 전체 교체. 세부부위 탭 = 그 세부부위만 교체(나머지 보존).
   const choose = (defId: string | null) => {
     if (slot) onChangeTree(setSlotRegion(tree, library, slot, defId));
+  };
+  const chooseSub = (subDefId: string | null) => {
+    if (slot && subRegion) {
+      onChangeTree(setSubRegion(tree, library, slot, subRegion, subDefId));
+    }
   };
 
   // 카테고리 표시 2종: 내용물 있음(밝은 텍스트) / 수정됨(● 도트).
@@ -266,7 +287,48 @@ export default function BasicMode({
                   </TouchableOpacity>
                 );
               })
-            : (
+            : isSubTab ? (
+              // 세부부위 탭 — 그 세부부위의 세부부위룩(level:'sub')만. 선택은
+              // setSubRegion(그 세부부위만 교체, 다른 세부부위 보존).
+              <>
+                <TouchableOpacity
+                  onPress={() => chooseSub(null)}
+                  style={[styles.card, styles.cardTintNone, subEmpty && styles.cardOn]}>
+                  <View style={styles.cardLabelBar}>
+                    <Text style={styles.cardLabel} numberOfLines={2}>
+                      없음
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                {subCustom && (
+                  <View style={[styles.card, styles.cardTintMine, styles.cardOn]}>
+                    <View style={styles.cardLabelBar}>
+                      <Text style={styles.cardLabel} numberOfLines={2}>
+                        ◈ 내 조합
+                      </Text>
+                    </View>
+                  </View>
+                )}
+                {subDefs.map(def => {
+                  const on = def.id === activeSubRef;
+                  const color = defSwatchColor(library, def.id) ?? '#666666';
+                  return (
+                    <TouchableOpacity
+                      key={def.id}
+                      onPress={() => chooseSub(def.id)}
+                      style={[styles.card, {backgroundColor: color}, on && styles.cardOn]}>
+                      <View style={styles.cardLabelBar}>
+                        <Text style={styles.cardLabel} numberOfLines={2}>
+                          {def.owner === 'user' ? '◈ ' : ''}
+                          {def.name}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </>
+            ) : (
+              // '전체' 탭 — 부위(슬롯)룩(level:'region'). 선택은 슬롯 전체 교체.
               <>
                 <TouchableOpacity
                   onPress={() => choose(null)}
@@ -286,7 +348,7 @@ export default function BasicMode({
                     </View>
                   </View>
                 )}
-                {defs.map(def => {
+                {slotDefs.map(def => {
                   const on = def.id === activeRef;
                   const color = defSwatchColor(library, def.id) ?? '#666666';
                   return (
@@ -443,8 +505,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     justifyContent: 'flex-end', // 라벨 바를 하단에
-    // 비선택 카드는 테두리 없음(투명 1px = 자리만 유지) — 선택만 시그니처색 테두리.
-    borderWidth: 1,
+    // 비선택 카드는 테두리 없음(투명 2px = 자리만 유지) — 선택만 시그니처색 테두리.
+    // 폭을 선택(2)과 맞춰 두면 라벨 바의 음수 마진(-2)으로 테두리 자리를 정확히 덮어
+    // 라벨 바가 카드 가장자리까지 꽉 차게 된다.
+    borderWidth: 2,
     borderColor: 'transparent',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
@@ -462,7 +526,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#C9A15E',
   },
   cardLabelBar: {
-    width: '100%',
+    // 카드 테두리(2px) 자리를 음수 마진으로 덮어 좌·우·하단 가장자리까지 꽉 채운다.
+    marginHorizontal: -2,
+    marginBottom: -2,
     paddingVertical: 3,
     paddingHorizontal: 2,
     backgroundColor: 'rgba(0,0,0,0.5)', // 스크림 — 어떤 썸네일 위에도 텍스트 가독

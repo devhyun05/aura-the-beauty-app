@@ -57,10 +57,16 @@ class Settings(BaseSettings):
   image_generation_provider: str = "openai"
   ai_job_execution_mode: str = "inline"
   sqs_ai_job_queue_url: str | None = None
+  face_analysis_v2_enabled: bool = False
+  face_analysis_stage_timeout_seconds: float = Field(default=45.0, ge=5.0, le=180.0)
+  face_analysis_stage_max_attempts: int = Field(default=2, ge=1, le=3)
   openai_enabled: bool = True
   bedrock_model_id: str | None = "anthropic.claude-3-5-sonnet-20241022-v2:0"
   bedrock_analysis_model_id: str | None = None
   bedrock_analysis_inference_id: str | None = None
+  bedrock_scenario_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  bedrock_question_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  bedrock_recommendation_model_id: str | None = "global.anthropic.claude-sonnet-4-6"
   bedrock_analysis_region: str | None = None
   bedrock_guardrail_id: str | None = None
   bedrock_guardrail_version: str | None = None
@@ -135,6 +141,7 @@ class Settings(BaseSettings):
   openai_image_input_max_edge: int = 1024
   openai_image_input_quality: int = 82
   openai_image_output_max_edge: int = 1024
+  makeup_recommendation_source_hosts: str = "d3t1pbvtir1lj.cloudfront.net"
 
   hair_jobs_queue_url: str | None = None
   hair_style_asset_bucket: str | None = None
@@ -318,6 +325,18 @@ class Settings(BaseSettings):
     return (self.openai_analysis_model_id or "").strip()
 
   @property
+  def effective_scenario_model_id(self) -> str:
+    return (self.bedrock_scenario_model_id or self.effective_analysis_model_id).strip()
+
+  @property
+  def effective_question_model_id(self) -> str:
+    return (self.bedrock_question_model_id or self.effective_scenario_model_id).strip()
+
+  @property
+  def effective_recommendation_model_id(self) -> str:
+    return (self.bedrock_recommendation_model_id or self.effective_analysis_model_id).strip()
+
+  @property
   def effective_embedding_model_id(self) -> str:
     return (self.bedrock_embedding_model_id or "").strip()
 
@@ -451,6 +470,21 @@ class Settings(BaseSettings):
         "requiredWhen": "AI_PROVIDER=bedrock.",
         "value": self.effective_analysis_model_id if analysis_provider == "bedrock" else None,
       },
+      "bedrockScenarioModelId": {
+        "configured": bool(self.effective_scenario_model_id) if analysis_provider == "bedrock" else True,
+        "requiredWhen": "AI_PROVIDER=bedrock and makeup scenario generation is enabled.",
+        "value": self.effective_scenario_model_id if analysis_provider == "bedrock" else None,
+      },
+      "bedrockQuestionModelId": {
+        "configured": bool(self.effective_question_model_id) if analysis_provider == "bedrock" else True,
+        "requiredWhen": "AI_PROVIDER=bedrock and makeup question generation is enabled.",
+        "value": self.effective_question_model_id if analysis_provider == "bedrock" else None,
+      },
+      "bedrockRecommendationModelId": {
+        "configured": bool(self.effective_recommendation_model_id) if analysis_provider == "bedrock" else True,
+        "requiredWhen": "AI_PROVIDER=bedrock and makeup recommendation generation is enabled.",
+        "value": self.effective_recommendation_model_id if analysis_provider == "bedrock" else None,
+      },
       "bedrockEmbeddingModelId": {
         "configured": bool(self.effective_embedding_model_id),
         "requiredWhen": "Embedding-backed recommendations or semantic search are used.",
@@ -520,6 +554,9 @@ class Settings(BaseSettings):
       "awsRegion": self.aws_region,
       "aiProvider": analysis_provider,
       "analysisModel": self.effective_analysis_model_id,
+      "makeupScenarioModel": self.effective_scenario_model_id,
+      "makeupQuestionModel": self.effective_question_model_id,
+      "makeupRecommendationModel": self.effective_recommendation_model_id,
       "bedrockGuardrailConfigured": self.bedrock_guardrail_configured,
       "embeddingProvider": "bedrock",
       "embeddingModel": self.effective_embedding_model_id,
