@@ -16,6 +16,10 @@ const testPaths = [
   'features/face-capture/services/faceCapturePitchGate.test.ts',
   'features/face-capture/services/faceCaptureGreenlight.test.ts',
   'features/face-capture/services/realtimeFrameGeometry.test.ts',
+  'features/face-ratio/constants.test.ts',
+  'features/face-ratio/services/faceVerticalThirdsAiPayload.test.ts',
+  'features/face-ratio/services/faceVerticalThirdsHairlineSelection.test.ts',
+  'features/face-ratio/services/faceVerticalThirdsMath.test.ts',
   'features/face-ratio/services/faceVerticalThirdsRollCorrection.test.ts',
 ];
 

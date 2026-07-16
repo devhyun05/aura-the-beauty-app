@@ -63,7 +63,10 @@ type ProductRecommendationPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.ProductRecommendation, 'product-recommendation'>
 >;
 type MakeupRecommendationPathContract = ExpectType<
-  TypeEquals<typeof rootStackLinkingScreens.MakeupRecommendation, 'makeup-recommendation'>
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupRecommendation,
+    'makeup-recommendation/:reportId?'
+  >
 >;
 type FaceAnalysisIntroPathContract = ExpectType<
   TypeEquals<typeof rootStackLinkingScreens.FaceAnalysisIntro, 'face-analysis-intro'>
@@ -123,6 +126,18 @@ type MakeupFeedbackResultsListPathContract = ExpectType<
   TypeEquals<
     typeof rootStackLinkingScreens.MakeupFeedbackResultsList,
     'makeup-feedback-results'
+  >
+>;
+type MakeupFeedbackResultPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupFeedbackResult,
+    'makeup-feedback-result/:reportId?'
+  >
+>;
+type ReferenceMakeupExtractionResultPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.ReferenceMakeupExtractionResult,
+    'reference-makeup-extraction-result/:reportId?'
   >
 >;
 type MakeupRecipeListPathContract = ExpectType<
@@ -303,6 +318,16 @@ expectEqual(
   navigationLinking.config?.screens?.MakeupFeedbackResultsList,
   'makeup-feedback-results',
   'makeup feedback results list path uses document list naming',
+);
+expectEqual(
+  navigationLinking.config?.screens?.MakeupFeedbackResult,
+  'makeup-feedback-result/:reportId?',
+  'makeup feedback result path accepts a report id',
+);
+expectEqual(
+  navigationLinking.config?.screens?.ReferenceMakeupExtractionResult,
+  'reference-makeup-extraction-result/:reportId?',
+  'reference makeup extraction result path accepts a report id',
 );
 expectEqual(
   navigationLinking.config?.screens?.MakeupRecipeList,

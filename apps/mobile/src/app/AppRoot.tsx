@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {InteractionManager} from 'react-native';
 import {
   NavigationContainer,
@@ -22,10 +22,18 @@ import type {RootStackParamList} from '../app/navigation/routeTypes';
 import {prepareUnityMakeupRuntime} from '../features/ar/services/unityMakeupBridge';
 import {IncomingConsultingCallGate} from '../features/consulting/components/IncomingConsultingCallGate';
 import {prefetchHomeHeroImages} from '../features/home/config/homeHeroAssets';
+import {
+  NotificationCoordinator,
+  navigateToAppNotification,
+  shouldSuppressRealtimeAppNotification,
+  type AppNotification,
+  type AppNotificationData,
+} from '../features/notifications';
 import {typography} from '../shared/theme';
 
 export function AppRoot() {
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
+  const pendingNotificationRef = useRef<AppNotificationData | null>(null);
   const [statusBarStyle, setStatusBarStyle] = useState<'dark' | 'light'>('dark');
   const [fontsLoaded] = useFonts({
     [typography.fontFamily.brand]: require('../assets/fonts/NixieOne-Regular.ttf'),
@@ -42,6 +50,39 @@ export function AppRoot() {
       setStatusBarStyle(getStatusBarStyleForNavigationState(state));
     },
     [],
+  );
+  const shouldSuppressRealtimeNotification = useCallback(
+    (notification: AppNotification) =>
+      shouldSuppressRealtimeAppNotification(
+        navigationRef.isReady() ? navigationRef.getCurrentRoute() : undefined,
+        notification,
+      ),
+    [navigationRef],
+  );
+  const flushPendingNotification = useCallback(() => {
+    if (!pendingNotificationRef.current || !navigationRef.isReady()) {
+      return;
+    }
+
+    const currentRoute = navigationRef.getCurrentRoute();
+    if (
+      !currentRoute ||
+      currentRoute.name === 'Login' ||
+      currentRoute.name === 'ProfileSetup'
+    ) {
+      return;
+    }
+
+    const pendingNotification = pendingNotificationRef.current;
+    pendingNotificationRef.current = null;
+    navigateToAppNotification(navigationRef, pendingNotification);
+  }, [navigationRef]);
+  const handleOpenNotification = useCallback(
+    (data: AppNotificationData) => {
+      pendingNotificationRef.current = data;
+      flushPendingNotification();
+    },
+    [flushPendingNotification],
   );
 
   useEffect(() => {
@@ -87,9 +128,21 @@ export function AppRoot() {
             <NavigationContainer
               linking={navigationLinking}
               ref={navigationRef}
-              onReady={() => syncStatusBarStyle(navigationRef.getRootState())}
-              onStateChange={state => syncStatusBarStyle(state)}>
+              onReady={() => {
+                syncStatusBarStyle(navigationRef.getRootState());
+                requestAnimationFrame(flushPendingNotification);
+              }}
+              onStateChange={state => {
+                syncStatusBarStyle(state);
+                requestAnimationFrame(flushPendingNotification);
+              }}>
               <RootNavigator />
+              <NotificationCoordinator
+                onOpenNotification={handleOpenNotification}
+                shouldSuppressRealtimeNotification={
+                  shouldSuppressRealtimeNotification
+                }
+              />
               <IncomingConsultingCallGate
                 onAnswer={record => {
                   if (!navigationRef.isReady()) return;

@@ -61,13 +61,22 @@ function buildThirdsFixture(): FaceVerticalThirdsResult {
     captureId: 'cap-1',
     createdAt: '2026-07-13T00:00:00.000Z',
     faceLength: {heightPx: 975, ratio: 1.383, widthPx: 705},
+    faceLengthJudgment: {band: {hi: 1.412, lo: 1.376}, verdict: 'borderline_wide'},
+    hairlineAnalysis: {
+      analysisEligible: true,
+      confidence: 0.8,
+      outcome: 'detected_high_confidence',
+      provider: 'apple_semantic_matte',
+    },
     interpretation: {dominantPart: 'middle', summary: '중안부가 긴 편', title: '중안부 우세'},
+    judgmentVersion: 'face-length-judgment/v2-provisional-20260717',
     keypoints: {
       G: {confidence: 0.9, method: 'mediapipe', provider: 'mediapipe', x: 500, y: 400},
       H: {confidence: 0.8, method: 'matte', provider: 'apple_semantic_matte', x: 500, y: 120},
       Me: {confidence: 0.95, method: 'mediapipe', provider: 'mediapipe', x: 500, y: 1095},
       Sn: {confidence: 0.92, method: 'mediapipe', provider: 'mediapipe', x: 500, y: 720},
     },
+    measurementMode: 'full_vertical_thirds',
     postCorrection: {
       applied: true,
       center: {x: 540, y: 960},
@@ -78,7 +87,7 @@ function buildThirdsFixture(): FaceVerticalThirdsResult {
     schemaVersion: 'aura-face-vertical-thirds-v1',
     sessionId: 'cap-1',
     sourceImage: {height: 1920, uri: 'file:///tmp/src.jpg', width: 1080},
-    status: 'partial_success',
+    status: 'full_success',
     verticalThirds: {
       confidence: 0.82,
       displayRatio: {lower: 1.08, middle: 1.0, upper: 0.97},
@@ -276,7 +285,76 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(thirds.keypoints.G?.x, 500, 'keypoint G roundtrip');
   expectEqual(thirds.keypoints.Sn?.y, 720, 'keypoint Sn roundtrip');
   expectEqual(thirds.faceLength?.ratio, 1.383, 'faceLength roundtrip');
+  // 판정 스냅샷·버전 왕복(Phase 0-5, 1차 리뷰 반영): encode→camelize→decode
+  expectEqual(
+    thirds.judgmentVersion,
+    'face-length-judgment/v2-provisional-20260717',
+    'judgmentVersion roundtrip',
+  );
+  expectEqual(
+    thirds.faceLengthJudgment?.verdict,
+    'borderline_wide',
+    'faceLengthJudgment verdict roundtrip',
+  );
+  expectEqual(thirds.faceLengthJudgment?.band.hi, 1.412, 'judgment band hi roundtrip');
+  expectEqual(thirds.faceLengthJudgment?.band.lo, 1.376, 'judgment band lo roundtrip');
+  // 오염 입력 계약(3차 셀프 리뷰): band가 비유한/문자열이거나 verdict가
+  // 미지 값이면 스냅샷 전체를 폐기하고 화면 재판정 폴백에 맡긴다.
+  {
+    const contaminated = parseFaceAnalysisMeasurements(
+      simulateBackendCamelize(
+        buildFaceAnalysisMeasurementsPayload({
+          captureId: 'cap-x',
+          face3d: null,
+          faceGeometry2d: null,
+          faceVerticalThirds: {
+            ...buildThirdsFixture(),
+            faceLengthJudgment: {
+              band: {hi: Number.NaN, lo: 1.3},
+              verdict: 'wide',
+            },
+          },
+          personalColor: null,
+        }),
+      ) as Record<string, unknown>,
+      {},
+    );
+    expectEqual(
+      contaminated?.faceVerticalThirds?.faceLengthJudgment,
+      undefined,
+      'contaminated band must drop the snapshot (fallback to re-judgment)',
+    );
+    const unknownVerdict = parseFaceAnalysisMeasurements(
+      simulateBackendCamelize(
+        buildFaceAnalysisMeasurementsPayload({
+          captureId: 'cap-y',
+          face3d: null,
+          faceGeometry2d: null,
+          faceVerticalThirds: {
+            ...buildThirdsFixture(),
+            faceLengthJudgment: {
+              band: {hi: 1.31, lo: 1.3},
+              verdict: 'future-verdict' as never,
+            },
+          },
+          personalColor: null,
+        }),
+      ) as Record<string, unknown>,
+      {},
+    );
+    expectEqual(
+      unknownVerdict?.faceVerticalThirds?.faceLengthJudgment,
+      undefined,
+      'unknown future verdict must drop the snapshot (fallback to re-judgment)',
+    );
+  }
   expectEqual(thirds.verticalThirds?.displayRatio.upper, 0.97, 'ratio roundtrip');
+  expectEqual(thirds.measurementMode, 'full_vertical_thirds', 'measurement mode roundtrip');
+  expectEqual(
+    thirds.hairlineAnalysis.analysisEligible,
+    true,
+    'hairline eligibility roundtrip',
+  );
 
   const face3d = expectDefined(decoded.face3d, 'face3d axis');
   expectEqual(face3d.metrics.noseTipProjection.value, 0.2, 'face3d metric roundtrip');
@@ -321,7 +399,93 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   );
 }
 
-// ── 3. blocked 축·geometry 16키 채움·구버전 방어 ─────────────────────────────
+// ── 3. legacy 세로비율: Apple full 복원 + proxy fail-closed ───────────────────
+{
+  const legacyApplePayload = expectDefined(
+    buildFaceAnalysisMeasurementsPayload({
+      captureId: 'legacy-apple',
+      face3d: null,
+      faceGeometry2d: null,
+      faceVerticalThirds: buildThirdsFixture(),
+      personalColor: null,
+    }),
+    'legacy apple payload',
+  );
+  const legacyApple = legacyApplePayload.faceVerticalThirds as Record<string, unknown>;
+  delete legacyApple.measurementMode;
+  delete legacyApple.hairlineAnalysis;
+  const restoredApple = expectDefined(
+    parseFaceAnalysisMeasurements(simulateBackendCamelize(legacyApplePayload), {}),
+    'legacy apple decode',
+  ).faceVerticalThirds;
+  expectEqual(
+    restoredApple?.measurementMode,
+    'full_vertical_thirds',
+    'legacy full Apple remains full',
+  );
+
+  const proxyFixture: FaceVerticalThirdsResult = {
+    ...buildThirdsFixture(),
+    hairlineAnalysis: {
+      analysisEligible: false,
+      confidence: null,
+      outcome: 'omitted',
+      provider: null,
+    },
+    keypoints: {
+      ...buildThirdsFixture().keypoints,
+      H: {
+        confidence: 0.4,
+        method: 'mediapipe_landmark_10_forehead_approx',
+        provider: 'mediapipe_forehead_approx',
+        x: 500,
+        y: 120,
+      },
+    },
+    measurementMode: 'middle_lower_only',
+    status: 'partial_success',
+  };
+  const legacyProxyPayload = expectDefined(
+    buildFaceAnalysisMeasurementsPayload({
+      captureId: 'legacy-proxy',
+      face3d: null,
+      faceGeometry2d: null,
+      faceVerticalThirds: proxyFixture,
+      personalColor: null,
+    }),
+    'legacy proxy payload',
+  );
+  const legacyProxy = legacyProxyPayload.faceVerticalThirds as Record<string, unknown>;
+  delete legacyProxy.measurementMode;
+  delete legacyProxy.hairlineAnalysis;
+  const restoredProxy = expectDefined(
+    expectDefined(
+      parseFaceAnalysisMeasurements(simulateBackendCamelize(legacyProxyPayload), {}),
+      'legacy proxy measurements',
+    ).faceVerticalThirds,
+    'legacy proxy thirds',
+  );
+  expectEqual(
+    restoredProxy.measurementMode,
+    'middle_lower_only',
+    'legacy proxy downgraded',
+  );
+  expectEqual(restoredProxy.hairlineAnalysis.analysisEligible, false, 'proxy ineligible');
+  expectEqual(
+    restoredProxy.keypoints.H?.provider,
+    'mediapipe_forehead_approx',
+    'legacy proxy raw point preserved for parsing compatibility',
+  );
+  expectEqual(restoredProxy.faceLength, undefined, 'proxy faceLength removed');
+  expectEqual(restoredProxy.verticalThirds?.displayRatio.upper, null, 'proxy upper removed');
+  expectEqual(
+    restoredProxy.interpretation.dominantPart,
+    'unknown',
+    'proxy dominant part removed',
+  );
+}
+
+// ── 4. blocked 축·geometry 16키 채움·구버전 방어 ─────────────────────────────
 {
   const blockedThirds: FaceVerticalThirdsResult = {
     ...buildThirdsFixture(),
@@ -372,7 +536,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(FACE_GEOMETRY_METRIC_KEYS.every(key => key in partialGeometry.metrics), true, '16키 전부');
 }
 
-// ── 4. insufficient PC(tone null) 왕복 ───────────────────────────────────────
+// ── 5. insufficient PC(tone null) 왕복 ───────────────────────────────────────
 {
   const fixture = buildPersonalColorFixture();
   const insufficient: PersonalColorMeasurementInput = {
@@ -396,7 +560,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(decoded.personalColor?.correctionStatus.applied, false, 'correction 미적용');
 }
 
-// ── 5. 스키마·비객체 방어 ────────────────────────────────────────────────────
+// ── 6. 스키마·비객체 방어 ────────────────────────────────────────────────────
 {
   expectEqual(parseFaceAnalysisMeasurements(null, {}), undefined, 'null 방어');
   expectEqual(parseFaceAnalysisMeasurements('x', {}), undefined, '문자열 방어');
@@ -415,7 +579,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   );
 }
 
-// ── 6. identity resolver 4분기 ───────────────────────────────────────────────
+// ── 7. identity resolver 4분기 ───────────────────────────────────────────────
 {
   expectEqual(
     shouldUseSessionMeasurements({explicitReportId: 'r1', reportCaptureId: 'cap-1', sessionCaptureId: 'cap-1'}),
@@ -439,7 +603,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   );
 }
 
-// ── 7. measuredPersonalColor AI 요약 ─────────────────────────────────────────
+// ── 8. measuredPersonalColor AI 요약 ─────────────────────────────────────────
 {
   expectEqual(buildMeasuredPersonalColorAiPayload(null), undefined, 'null → undefined');
 
@@ -463,10 +627,10 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(status.reasons.includes('wb_low_confidence'), true, 'derive reasons 병합');
 }
 
-// ── 8. P0-1: 4표면 종단 일관성 (AI 입력 == DB 저장 == 복원) ───────────────────
-// 측정 데이터 3-반영 규칙: AI 프롬프트에 실리는 measurements 객체와 DB detail_payload
-// 에 저장되는 객체가 "동일 출처"(키 필터·재구성 없음)여야 하고, 백엔드 camelize 왕복
-// 후에도 16개 geometry 키가 값까지 그대로 복원돼야 한다.
+// ── 9. P0-1: 업로드 계약 == DB 저장 원본 == 복원 ──────────────────────────────
+// 모바일은 저장 원본 measurements를 그대로 요청에 싣는다. 백엔드는 DB에는 이 원본을
+// 보존하되 AI 프롬프트를 만들 때 analysis-ineligible H만 별도 안전 투영한다.
+// 백엔드 camelize 왕복 후에도 16개 geometry 키가 값까지 그대로 복원돼야 한다.
 {
   const geometry = buildGeometryFixture();
   const dbMeasurements = expectDefined(
@@ -480,7 +644,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
     '3way db measurements',
   );
 
-  // AI 요청 payload 는 같은 measurements 객체를 그대로 싣는다(동일 출처).
+  // 분석 요청 payload 는 DB 저장용 measurements 객체를 그대로 싣는다.
   const aiPayload = buildFaceAnalysisRequestPayload(
     {bucket: 'b', objectKey: 'k'},
     undefined,

@@ -1,5 +1,7 @@
 import type {
   FaceVerticalThirdsInput,
+  FaceVerticalThirdsHairlineAnalysis,
+  FaceVerticalThirdsMeasurementMode,
   FaceVerticalThirdsQuality,
   FaceVerticalThirdsResult,
   NativeFaceRatioHairline,
@@ -29,11 +31,14 @@ import {createFaceRatioLogger, type FaceRatioLogger} from './faceVerticalThirdsL
 import {evaluateFaceVerticalThirdsQuality} from './faceVerticalThirdsQualityGate';
 import {applyRollCorrectionToKeypoints} from './faceVerticalThirdsRollCorrection';
 import {
-  APPLE_HAIRLINE_FULL_CONFIDENCE,
-  APPLE_HAIRLINE_MIN_CONFIDENCE,
+  FACE_RATIO_JUDGMENT_VERSION,
   HAIRLINE_TUNING,
-  type HairlineSelectionTier,
+  judgeFaceLength,
 } from '../constants';
+import {
+  selectHairlineForAnalysis,
+  type HairlineCandidate,
+} from './faceVerticalThirdsHairlineSelection';
 
 const EMPTY_KEYPOINTS: VerticalThirdsKeypointMap = {
   G: null,
@@ -54,23 +59,14 @@ type KeypointConfig = {
   provider: VerticalThirdsKeypoint['provider'];
 };
 
-type HairlineSelection = {
-  keypoint: VerticalThirdsKeypoint | null;
-  tier: HairlineSelectionTier;
-};
+type StructuralNativeKeypointKey = Exclude<NativeFaceRatioKeypointKey, 'hApprox'>;
 
-const KEYPOINT_CONFIG: Record<NativeFaceRatioKeypointKey, KeypointConfig> = {
+const KEYPOINT_CONFIG: Record<StructuralNativeKeypointKey, KeypointConfig> = {
   glabella: {
     confidence: 0.82,
     key: 'G',
     method: 'mediapipe_median_glabella_brow_group',
     provider: 'mediapipe',
-  },
-  hApprox: {
-    confidence: 0.4,
-    key: 'H',
-    method: 'mediapipe_landmark_10_forehead_approx',
-    provider: 'mediapipe_forehead_approx',
   },
   menton: {
     confidence: 0.84,
@@ -151,45 +147,35 @@ function toAppleHairlineKeypoint(
   };
 }
 
-function selectHairlineKeypoint(
-  nativeResult: NativeFaceRatioAnalyzeResult,
-  approxKeypoint: VerticalThirdsKeypoint | null,
+function toCapturedHairlineCandidate(
+  capturedHairline: FaceVerticalThirdsInput['capturedHairline'],
   imageWidth: number,
   imageHeight: number,
-): HairlineSelection {
-  const appleHairline = nativeResult.hairline;
-
+): HairlineCandidate | null {
   if (
-    appleHairline?.visible &&
-    appleHairline.confidence >= APPLE_HAIRLINE_MIN_CONFIDENCE
+    !capturedHairline ||
+    !Number.isFinite(capturedHairline.confidence) ||
+    !Number.isFinite(capturedHairline.normalizedPoint.x) ||
+    !Number.isFinite(capturedHairline.normalizedPoint.y) ||
+    capturedHairline.normalizedPoint.x < 0 ||
+    capturedHairline.normalizedPoint.x > 1 ||
+    capturedHairline.normalizedPoint.y < 0 ||
+    capturedHairline.normalizedPoint.y > 1 ||
+    imageWidth <= 0 ||
+    imageHeight <= 0
   ) {
-    const appleKeypoint = toAppleHairlineKeypoint(appleHairline, imageWidth, imageHeight);
-
-    if (!appleKeypoint) {
-      return approxKeypoint
-        ? {keypoint: approxKeypoint, tier: 'approx'}
-        : {keypoint: null, tier: 'none'};
-    }
-
-    return {
-      keypoint: appleKeypoint,
-      tier:
-        appleHairline.confidence >= APPLE_HAIRLINE_FULL_CONFIDENCE
-          ? 'apple_full'
-          : 'apple_low',
-    };
-  }
-
-  if (approxKeypoint) {
-    return {
-      keypoint: approxKeypoint,
-      tier: 'approx',
-    };
+    return null;
   }
 
   return {
-    keypoint: null,
-    tier: 'none',
+    analysisEligible: capturedHairline.analysisEligible,
+    keypoint: {
+      confidence: capturedHairline.confidence,
+      method: capturedHairline.method,
+      provider: capturedHairline.provider,
+      x: Number((capturedHairline.normalizedPoint.x * imageWidth).toFixed(2)),
+      y: Number((capturedHairline.normalizedPoint.y * imageHeight).toFixed(2)),
+    },
   };
 }
 
@@ -200,8 +186,9 @@ function mapNativeKeypoints(
 ): VerticalThirdsKeypointMap {
   const keypoints: VerticalThirdsKeypointMap = {...EMPTY_KEYPOINTS};
 
-  (Object.keys(KEYPOINT_CONFIG) as NativeFaceRatioKeypointKey[]).forEach(nativeKey => {
+  (Object.keys(KEYPOINT_CONFIG) as StructuralNativeKeypointKey[]).forEach(nativeKey => {
     const config = KEYPOINT_CONFIG[nativeKey];
+
     keypoints[config.key] = toPixelKeypoint(
       nativeResult.keypoints?.[nativeKey],
       config,
@@ -254,8 +241,15 @@ function computeFaceLength(
 function createResult({
   artifacts,
   faceLength,
+  hairlineAnalysis = {
+    analysisEligible: false,
+    confidence: null,
+    outcome: 'omitted',
+    provider: null,
+  },
   input,
   keypoints,
+  measurementMode = 'middle_lower_only',
   postCorrection,
   quality,
   ratio,
@@ -265,8 +259,10 @@ function createResult({
 }: {
   artifacts: FaceVerticalThirdsResult['artifacts'];
   faceLength?: FaceVerticalThirdsResult['faceLength'];
+  hairlineAnalysis?: FaceVerticalThirdsHairlineAnalysis;
   input: FaceVerticalThirdsInput;
   keypoints: VerticalThirdsKeypointMap;
+  measurementMode?: FaceVerticalThirdsMeasurementMode;
   postCorrection?: FaceVerticalThirdsResult['postCorrection'];
   quality: FaceVerticalThirdsQuality;
   ratio?: VerticalThirdsRatio;
@@ -279,8 +275,16 @@ function createResult({
     captureId: input.captureId,
     createdAt: input.createdAt,
     faceLength,
+    // 판정 스냅샷(Phase 0-5): 측정 시점 pose로 판정해 결과에 동결한다.
+    // 화면·서버는 이 스냅샷을 소비하고, 상수 개정은 judgmentVersion으로 감지.
+    faceLengthJudgment: faceLength
+      ? judgeFaceLength(faceLength.ratio, quality.pitch, quality.yaw)
+      : undefined,
+    hairlineAnalysis,
     interpretation: buildInterpretation(status, ratio),
+    judgmentVersion: FACE_RATIO_JUDGMENT_VERSION,
     keypoints,
+    measurementMode,
     postCorrection,
     quality,
     schemaVersion: 'aura-face-vertical-thirds-v1',
@@ -461,12 +465,20 @@ export async function analyzeFaceVerticalThirds(
   }
 
   const mappedKeypoints = mapNativeKeypoints(nativeResult, imageWidth, imageHeight);
-  const hairlineSelection = selectHairlineKeypoint(
-    nativeResult,
-    mappedKeypoints.H,
-    imageWidth,
-    imageHeight,
-  );
+  const appleKeypoint =
+    nativeResult.hairline?.visible
+      ? toAppleHairlineKeypoint(nativeResult.hairline, imageWidth, imageHeight)
+      : null;
+  const hairlineSelection = selectHairlineForAnalysis({
+    apple: appleKeypoint
+      ? {analysisEligible: true, keypoint: appleKeypoint}
+      : null,
+    captured: toCapturedHairlineCandidate(
+      input.capturedHairline,
+      imageWidth,
+      imageHeight,
+    ),
+  });
   mappedKeypoints.H = hairlineSelection.keypoint;
 
   // 촬영 후 roll 좌표 보정 (기획 §5.2) — quality gate/비율 계산 전에 적용해야
@@ -525,6 +537,31 @@ export async function analyzeFaceVerticalThirds(
     return persistTerminalResult(result);
   }
 
+  const selectedHairline = qualityGate.keypoints.H;
+  const hairlineAnalysis: FaceVerticalThirdsHairlineAnalysis = selectedHairline
+    ? {
+        analysisEligible: hairlineSelection.analysis.analysisEligible,
+        confidence: selectedHairline.confidence,
+        outcome: hairlineSelection.analysis.analysisEligible
+          ? 'detected_high_confidence'
+          : 'detected_low_confidence',
+        provider: selectedHairline.provider,
+      }
+    : {
+        analysisEligible: false,
+        confidence: null,
+        outcome: 'omitted',
+        provider: null,
+      };
+  const measurementMode: FaceVerticalThirdsMeasurementMode =
+    hairlineAnalysis.analysisEligible
+      ? 'full_vertical_thirds'
+      : 'middle_lower_only';
+  const analysisKeypoints: VerticalThirdsKeypointMap = {
+    ...qualityGate.keypoints,
+    H: hairlineAnalysis.analysisEligible ? selectedHairline : null,
+  };
+
   await logEvent(logger, 'hairline:ready', {
     boundaryStdPx: nativeResult.hairline?.boundaryStdPx ?? null,
     candidateCount: nativeResult.hairline?.candidateCount ?? 0,
@@ -532,7 +569,8 @@ export async function analyzeFaceVerticalThirds(
     failureReason: nativeResult.hairlineFailureReason ?? null,
     method: qualityGate.keypoints.H?.method ?? nativeResult.hairline?.method ?? null,
     provider: qualityGate.keypoints.H?.provider ?? null,
-    selectionTier: hairlineSelection.tier,
+    analysisEligible: hairlineAnalysis.analysisEligible,
+    outcome: hairlineAnalysis.outcome,
     visible: nativeResult.hairline?.visible ?? false,
   });
 
@@ -551,7 +589,7 @@ export async function analyzeFaceVerticalThirds(
     Sn: qualityGate.keypoints.Sn,
   });
 
-  const ratio = calculateVerticalThirdsRatio(qualityGate.keypoints);
+  const ratio = calculateVerticalThirdsRatio(analysisKeypoints);
   const abnormalWarnings = getAbnormalDisplayRatioWarnings(ratio);
 
   await logEvent(logger, 'ratio:computed', {
@@ -585,18 +623,17 @@ export async function analyzeFaceVerticalThirds(
       });
     }
 
-    const isFullSuccess =
-      hairlineSelection.tier === 'apple_full' &&
-      qualityGate.keypoints.H?.provider === 'apple_semantic_matte';
     const result = createResult({
       artifacts: {
         ...hairlineDebugArtifacts,
         logJsonlUri: logger.logFileUri ?? undefined,
         sourceImageUri,
       },
-      faceLength: computeFaceLength(nativeResult, qualityGate.keypoints, imageWidth),
+      faceLength: computeFaceLength(nativeResult, analysisKeypoints, imageWidth),
+      hairlineAnalysis,
       input,
       keypoints: qualityGate.keypoints,
+      measurementMode,
       postCorrection: rollCorrection.outcome,
       quality: qualityWithWarnings,
       ratio: ratioWithWarnings,
@@ -604,7 +641,10 @@ export async function analyzeFaceVerticalThirds(
         ...sourceImage,
         uri: sourceImageUri,
       },
-      status: isFullSuccess ? 'full_success' : 'partial_success',
+      status:
+        measurementMode === 'full_vertical_thirds'
+          ? 'full_success'
+          : 'partial_success',
     });
     const persistedResult = await writeResultWithPlannedUri(result);
 

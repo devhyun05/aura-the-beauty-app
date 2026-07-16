@@ -264,8 +264,11 @@ namespace ARMakeup.Face
             // 구조라 MediaPipe 경로에서만 의미가 있다(ARKit 폴백에선 생성 생략).
             if (FaceLandmarkSource.Instance != null)
             {
-                var segGO = new GameObject("Segmentation Source");
-                segGO.AddComponent<SegmentationSource>();
+                if (SegmentationSource.Instance == null)
+                {
+                    var segGO = new GameObject("Segmentation Source");
+                    segGO.AddComponent<SegmentationSource>();
+                }
 
                 // L2 립/눈 영역 마스크(랜드마크 폴리곤 1차) — 같은 부트스트랩 경로.
                 // 랜드마크만 소비하므로 MediaPipe 경로 전용(ARKit 폴백에선 생성 생략).

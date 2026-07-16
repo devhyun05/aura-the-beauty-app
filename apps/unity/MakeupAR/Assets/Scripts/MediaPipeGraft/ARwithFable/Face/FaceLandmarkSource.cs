@@ -58,6 +58,7 @@ namespace ARMakeup.Face
         public int rotationOverride = -1;
 
         ARCameraManager _cameraManager;
+        FaceCameraFrameBroker _frameBroker;
 
         void Awake()
         {
@@ -70,6 +71,7 @@ namespace ARMakeup.Face
 
         void OnDestroy()
         {
+            UnsubscribeFrameBroker();
             if (Instance == this) Instance = null;
 #if MEDIAPIPE
             // Close가 그래프 에러 상태에서 throw해도 버퍼는 반드시 반납한다.
@@ -90,6 +92,49 @@ namespace ARMakeup.Face
         public void Init(ARCameraManager cameraManager)
         {
             _cameraManager = cameraManager;
+            TrySubscribeFrameBroker();
+        }
+
+        void OnEnable()
+        {
+            TrySubscribeFrameBroker();
+        }
+
+        void OnDisable()
+        {
+            UnsubscribeFrameBroker();
+        }
+
+        void TrySubscribeFrameBroker()
+        {
+            FaceCameraFrameBroker broker = FaceCameraFrameBroker.Instance;
+            if (broker == null || broker == _frameBroker)
+            {
+                return;
+            }
+
+            UnsubscribeFrameBroker();
+            _frameBroker = broker;
+            _frameBroker.FrameReceived += OnBrokerFrame;
+        }
+
+        void UnsubscribeFrameBroker()
+        {
+            if (_frameBroker != null)
+            {
+                _frameBroker.FrameReceived -= OnBrokerFrame;
+                _frameBroker = null;
+            }
+        }
+
+        void OnBrokerFrame(FaceCameraFrame frame)
+        {
+#if MEDIAPIPE
+            if (!_externalMode)
+            {
+                CaptureAndDetect(frame);
+            }
+#endif
         }
 
 #if MEDIAPIPE
@@ -144,7 +189,6 @@ namespace ARMakeup.Face
 
         readonly FrameSlot[] _ring = new FrameSlot[RingSize];
         NativeArray<byte> _detectBuffer; // 단일 in-flight이므로 하나를 재사용
-        double _lastCpuImageTimestamp = -1.0; // 같은 센서 프레임 중복 캡처 방지
 
         // ── 카메라 전환 감지 (전면↔후면) ──
         // MakeupController.SetCamera는 requestedFacingDirection만 바꾸고 이 컴포넌트에
@@ -200,6 +244,12 @@ namespace ARMakeup.Face
         readonly Vector3[] _pinned = new Vector3[LandmarkCount]; // 결과 저장용(정지=필터/움직임=raw 블렌드)
         bool _filterPrimed;
         double _lastResultTimestampMs = -1.0;
+        // MediaPipe can miss an otherwise stable face for a single inference
+        // result. Turning every renderer off for that one miss produces a
+        // visible makeup flash. Hold the last filtered landmarks briefly, then
+        // hide normally when the loss is sustained.
+        const int FaceLossGraceResults = 3;
+        int _missingFaceResultStreak;
 
         // 정지=필터(부드럽게)/움직임=raw(완벽 고정) 블렌드.
         // raw 랜드마크는 "그 검출 프레임의 실제 얼굴 위치"라, 지연 재생 프레임에 raw를
@@ -312,9 +362,10 @@ namespace ARMakeup.Face
             // 직접 채운다. 렌더러는 같은 공개 표면(HasFace/Landmarks/샘플)을 그대로 소비.
             if (_externalMode) return;
 
+            TrySubscribeFrameBroker();
             DetectFacingSwitch();
             PromotePendingResult();
-            CaptureAndDetect();
+            MaintainDetectionWatchdog();
             PresentDelayed();
         }
 
@@ -346,8 +397,10 @@ namespace ARMakeup.Face
                         _intervalEmaMs = Mathf.Lerp((float)_intervalEmaMs, (float)interval, 0.1f);
                 }
 
+                var effectiveHasFace = _pendingHasFace;
                 if (_pendingHasFace)
                 {
+                    _missingFaceResultStreak = 0;
                     // 필터 dt는 도착 시각이 아니라 캡처 타임스탬프 간격 — 결과 도착
                     // 지터가 속도 추정에 섞이지 않는다.
                     var dt = _lastResultTimestampMs > 0
@@ -402,7 +455,13 @@ namespace ARMakeup.Face
                 }
                 else
                 {
-                    _filterPrimed = false; // 얼굴을 잃으면 다음 인식 때 필터 리셋
+                    _missingFaceResultStreak++;
+                    effectiveHasFace = _filterPrimed
+                        && _missingFaceResultStreak <= FaceLossGraceResults;
+                    if (!effectiveHasFace)
+                    {
+                        _filterPrimed = false; // 지속 상실 뒤 재인식할 때 필터 리셋
+                    }
                 }
 
                 _lastResultTimestampMs = _pendingTimestampMs;
@@ -411,128 +470,113 @@ namespace ARMakeup.Face
                 _resultHead = (_resultHead + 1) % _results.Length;
                 if (_resultCount < _results.Length) _resultCount++;
                 _results[_resultHead].timestampMs = _pendingTimestampMs;
-                _results[_resultHead].hasFace = _pendingHasFace;
-                if (_pendingHasFace)
+                _results[_resultHead].hasFace = effectiveHasFace;
+                if (effectiveHasFace)
                     Array.Copy(_pinned, _results[_resultHead].points, LandmarkCount);
             }
         }
 
         /// <summary>
-        /// 매 프레임: 카메라 이미지를 표시 링버퍼에 캡처하고, 추론이 놀고 있으면
-        /// 같은 이미지를 저해상도로 변환해 검출에 보낸다.
+        /// 브로커가 소유한 카메라 이미지를 표시 링버퍼에 복사하고, 추론이 놀고 있으면
+        /// 같은 borrowed 이미지를 저해상도로 변환해 검출에 보낸다.
         /// </summary>
-        void CaptureAndDetect()
+        void CaptureAndDetect(FaceCameraFrame frame)
         {
-            if (_cameraManager == null) return;
+            XRCpuImage cpuImage = frame.Image;
+            double nowMs = frame.ObservedAtMs;
 
-            // 워치독: 콜백이 안 오는 채로 잠기면 검출만 조용히 죽는다 — 회복.
-            if (_inFlight &&
-                Time.realtimeSinceStartupAsDouble * 1000.0 - _inFlightSinceMs > DetectTimeoutMs)
+            // ---- 표시용 캡처 (링버퍼) ----
+            var slot = -1;
+            for (var s = 0; s < _ring.Length; s++)
             {
-                _inFlight = false;
-                _consecutiveDetectFailures++;
-                Debug.LogWarning("[FaceLandmarkSource] 추론 결과 타임아웃 — 재제출");
-                if (_consecutiveDetectFailures >= MaxDetectFailures)
+                if (_ring[s].inUse) continue;
+                slot = s;
+                break;
+            }
+            if (slot >= 0)
+            {
+                var conv = new XRCpuImage.ConversionParams(
+                    cpuImage, TextureFormat.RGBA32, XRCpuImage.Transformation.None);
+                var down = Mathf.Max(1, Mathf.RoundToInt(
+                    Mathf.Max(cpuImage.width, cpuImage.height) / (float)DisplayLongSide));
+                conv.outputDimensions = new Vector2Int(
+                    cpuImage.width / down, cpuImage.height / down);
+
+                var size = cpuImage.GetConvertedDataSize(conv);
+                if (!_ring[slot].buffer.IsCreated || _ring[slot].buffer.Length < size)
                 {
-                    RecreateLandmarker();
-                    return;
+                    if (_ring[slot].buffer.IsCreated) _ring[slot].buffer.Dispose();
+                    _ring[slot].buffer = new NativeArray<byte>(size, Allocator.Persistent);
+                }
+                cpuImage.Convert(conv, _ring[slot].buffer);
+
+                _ring[slot].width = conv.outputDimensions.x;
+                _ring[slot].height = conv.outputDimensions.y;
+                _ring[slot].timestampMs = nowMs;
+                _ring[slot].inUse = true;
+                _statCaptures++;
+            }
+            // 슬롯 고갈 시 이 프레임 표시는 건너뛴다 (검출은 계속)
+
+            // ---- 검출용 변환 + 제출 ----
+            if (_ready && !_inFlight)
+            {
+                var dconv = new XRCpuImage.ConversionParams(
+                    cpuImage, TextureFormat.RGBA32, XRCpuImage.Transformation.None);
+                var ddown = Mathf.Max(1, Mathf.RoundToInt(
+                    Mathf.Max(cpuImage.width, cpuImage.height) / (float)DetectLongSide));
+                dconv.outputDimensions = new Vector2Int(
+                    cpuImage.width / ddown, cpuImage.height / ddown);
+
+                var dsize = cpuImage.GetConvertedDataSize(dconv);
+                if (!_detectBuffer.IsCreated || _detectBuffer.Length < dsize)
+                {
+                    if (_detectBuffer.IsCreated) _detectBuffer.Dispose();
+                    _detectBuffer = new NativeArray<byte>(dsize, Allocator.Persistent);
+                }
+                cpuImage.Convert(dconv, _detectBuffer);
+
+                var image = new Image(
+                    ImageFormat.Types.Format.Srgba,
+                    dconv.outputDimensions.x, dconv.outputDimensions.y,
+                    dconv.outputDimensions.x * 4, _detectBuffer);
+
+                // _inFlight가 콜백 전 버퍼 재사용을 막는다 (동시 1프레임만 추론).
+                // DetectAsync는 에러 그래프에서 throw할 수 있다 — 잠김 방지.
+                _inFlight = true;
+                _inFlightSinceMs = nowMs;
+                try
+                {
+                    var processing = new Mediapipe.Tasks.Vision.Core.ImageProcessingOptions(
+                        rotationDegrees: GuessRotationDegrees(
+                            dconv.outputDimensions.x, dconv.outputDimensions.y));
+                    _landmarker.DetectAsync(image, (long)nowMs, processing);
+                }
+                catch (Exception e)
+                {
+                    _inFlight = false;
+                    _consecutiveDetectFailures++;
+                    Debug.LogWarning($"[FaceLandmarkSource] DetectAsync 실패: {e.Message}");
+                    if (_consecutiveDetectFailures >= MaxDetectFailures) RecreateLandmarker();
                 }
             }
+        }
 
-            if (!_cameraManager.TryAcquireLatestCpuImage(out var cpuImage)) return;
-
-            using (cpuImage)
+        void MaintainDetectionWatchdog()
+        {
+            if (!_inFlight
+                || Time.realtimeSinceStartupAsDouble * 1000.0 - _inFlightSinceMs
+                    <= DetectTimeoutMs)
             {
-                // Update가 카메라보다 빠를 때 같은 센서 프레임을 두 번 담지 않는다
-                if (cpuImage.timestamp == _lastCpuImageTimestamp) return;
-                _lastCpuImageTimestamp = cpuImage.timestamp;
+                return;
+            }
 
-                var nowMs = Time.realtimeSinceStartupAsDouble * 1000.0;
-
-                // ---- 표시용 캡처 (링버퍼) ----
-                var slot = -1;
-                for (var s = 0; s < _ring.Length; s++)
-                {
-                    if (_ring[s].inUse) continue;
-                    slot = s;
-                    break;
-                }
-                if (slot >= 0)
-                {
-                    var conv = new XRCpuImage.ConversionParams(
-                        cpuImage, TextureFormat.RGBA32, XRCpuImage.Transformation.None);
-                    var down = Mathf.Max(1, Mathf.RoundToInt(
-                        Mathf.Max(cpuImage.width, cpuImage.height) / (float)DisplayLongSide));
-                    conv.outputDimensions = new Vector2Int(
-                        cpuImage.width / down, cpuImage.height / down);
-
-                    var size = cpuImage.GetConvertedDataSize(conv);
-                    if (!_ring[slot].buffer.IsCreated || _ring[slot].buffer.Length < size)
-                    {
-                        if (_ring[slot].buffer.IsCreated) _ring[slot].buffer.Dispose();
-                        _ring[slot].buffer = new NativeArray<byte>(size, Allocator.Persistent);
-                    }
-                    cpuImage.Convert(conv, _ring[slot].buffer);
-
-                    _ring[slot].width = conv.outputDimensions.x;
-                    _ring[slot].height = conv.outputDimensions.y;
-                    _ring[slot].timestampMs = nowMs;
-                    _ring[slot].inUse = true;
-                    _statCaptures++;
-                }
-                // 슬롯 고갈 시 이 프레임 표시는 건너뛴다 (검출은 계속)
-
-                // ---- 검출용 변환 + 제출 ----
-                if (_ready && !_inFlight)
-                {
-                    var dconv = new XRCpuImage.ConversionParams(
-                        cpuImage, TextureFormat.RGBA32, XRCpuImage.Transformation.None);
-                    var ddown = Mathf.Max(1, Mathf.RoundToInt(
-                        Mathf.Max(cpuImage.width, cpuImage.height) / (float)DetectLongSide));
-                    dconv.outputDimensions = new Vector2Int(
-                        cpuImage.width / ddown, cpuImage.height / ddown);
-
-                    var dsize = cpuImage.GetConvertedDataSize(dconv);
-                    if (!_detectBuffer.IsCreated || _detectBuffer.Length < dsize)
-                    {
-                        if (_detectBuffer.IsCreated) _detectBuffer.Dispose();
-                        _detectBuffer = new NativeArray<byte>(dsize, Allocator.Persistent);
-                    }
-                    cpuImage.Convert(dconv, _detectBuffer);
-
-                    var image = new Image(
-                        ImageFormat.Types.Format.Srgba,
-                        dconv.outputDimensions.x, dconv.outputDimensions.y,
-                        dconv.outputDimensions.x * 4, _detectBuffer);
-
-                    // _inFlight가 콜백 전 버퍼 재사용을 막는다 (동시 1프레임만 추론).
-                    // DetectAsync는 에러 그래프에서 throw할 수 있다 — 잠김 방지.
-                    _inFlight = true;
-                    _inFlightSinceMs = nowMs;
-                    try
-                    {
-                        var processing = new Mediapipe.Tasks.Vision.Core.ImageProcessingOptions(
-                            rotationDegrees: GuessRotationDegrees(
-                                dconv.outputDimensions.x, dconv.outputDimensions.y));
-                        _landmarker.DetectAsync(image, (long)nowMs, processing);
-                    }
-                    catch (Exception e)
-                    {
-                        _inFlight = false;
-                        _consecutiveDetectFailures++;
-                        Debug.LogWarning($"[FaceLandmarkSource] DetectAsync 실패: {e.Message}");
-                        if (_consecutiveDetectFailures >= MaxDetectFailures) RecreateLandmarker();
-                    }
-                }
-
-                // ---- 세그멘테이션 공급 (설계 §11) ----
-                // 랜드마크와 같은 캡처·같은 타임스탬프로 밀어준다(시간 동기 불변식) —
-                // 케이던스 스킵·인플라이트 게이트·변환은 SegmentationSource가 판단.
-                // 회전 신호도 검출과 동일(GuessRotationDegrees — 변환이 방향을 보존하므로
-                // 원본 cpuImage 치수로 충분).
-                if (SegmentationSource.Instance != null)
-                    SegmentationSource.Instance.OnCameraFrame(
-                        cpuImage, nowMs, GuessRotationDegrees(cpuImage.width, cpuImage.height));
+            _inFlight = false;
+            _consecutiveDetectFailures++;
+            Debug.LogWarning("[FaceLandmarkSource] 추론 결과 타임아웃 — 재제출");
+            if (_consecutiveDetectFailures >= MaxDetectFailures)
+            {
+                RecreateLandmarker();
             }
         }
 
@@ -919,11 +963,11 @@ namespace ARMakeup.Face
                 _resultHead = -1;            // 보간(브래킷) 히스토리 비움
                 _resultCount = 0;
                 _filterPrimed = false;       // One Euro 필터 — 다음 결과에서 재프라임
+                _missingFaceResultStreak = 0;
                 _lastResultTimestampMs = -1.0;
             }
 
             for (var s = 0; s < _ring.Length; s++) _ring[s].inUse = false; // 표시 프레임 폐기
-            _lastCpuImageTimestamp = -1.0;
             _lastPresentedTs = -1.0;         // 새 프레임 표시 전까지 보간·외삽 중단
             _hasPresentedFrame = false;      // 엣지 스냅 샘플러의 이전 프레임 참조 차단
             HasFace = false;
@@ -961,6 +1005,11 @@ namespace ARMakeup.Face
 #else
             return IsUserFacing() ? FrontDetectRotationAndroid : RearDetectRotationAndroid;
 #endif
+        }
+
+        public int GetDetectionRotationDegrees(int bufferWidth, int bufferHeight)
+        {
+            return GuessRotationDegrees(bufferWidth, bufferHeight);
         }
 #endif
     }

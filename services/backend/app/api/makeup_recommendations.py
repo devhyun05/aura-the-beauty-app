@@ -27,6 +27,7 @@ from app.services.makeup_recommendation import (
 from app.services.makeup_recommendation_image import generate_recommendation_images
 from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.openai_analysis import OpenAIAnalysisService
+from app.services.push_notifications import create_and_send_notification
 from app.services.users import ensure_user
 
 
@@ -104,16 +105,31 @@ async def run_recommendation_image_job(
       message,
     )
     return
-  await db.execute(
+  completed_report = await db.fetchrow(
     """
     update makeup_recommendation_reports
     set image_status = 'completed', recommendation = $2::jsonb, image_url = $3, image_error = null
     where id = $1 and image_status = 'processing'
+    returning user_id
     """,
     report_id,
     json.dumps(completed_recommendation, ensure_ascii=False),
     image_url,
   )
+  if completed_report is not None:
+    await create_and_send_notification(
+      db,
+      settings,
+      user_id=completed_report["user_id"],
+      notification_type="makeup_recommendation_completed",
+      title="추천 메이크업이 완성됐어요",
+      body="가장 잘 어울리는 메이크업 결과를 확인해 보세요.",
+      data={
+        "reportId": str(report_id),
+        "route": "MakeupRecommendation",
+      },
+      dedupe_key=f"makeup-recommendation:{report_id}:completed",
+    )
 
 
 async def dispatch_recommendation_image_job(

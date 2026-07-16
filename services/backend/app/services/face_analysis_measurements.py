@@ -90,6 +90,12 @@ OUT_OF_SCOPE_METRICS = frozenset(
 )
 
 SUCCESS_STATUSES = {"full_success", "partial_success", "completed", "definitive"}
+AUTHORITATIVE_HAIRLINE_PROVIDERS = {
+  "apple_semantic_matte",
+  "mediapipe_hairline_boundary",
+  "face_parsing",
+}
+AUTHORITATIVE_HAIRLINE_MIN_CONFIDENCE = 0.7
 
 
 @dataclass(frozen=True)
@@ -116,6 +122,30 @@ def _warnings(*values: Any) -> list[str]:
     if isinstance(value, list):
       result.extend(str(item) for item in value if isinstance(item, str) and item.strip())
   return list(dict.fromkeys(result))
+
+
+def _vertical_has_authoritative_hairline(raw: dict[str, Any]) -> bool:
+  measurement_mode = raw.get("measurementMode")
+  explicit_full = measurement_mode == "full_vertical_thirds"
+  legacy_full = (
+    measurement_mode is None
+    and raw.get("schemaVersion") == "aura-face-vertical-thirds-v1"
+    and raw.get("status") == "full_success"
+  )
+  if not explicit_full and not legacy_full:
+    return False
+  analysis = _record(raw.get("hairlineAnalysis"))
+  keypoint = _record(_record(raw.get("keypoints")).get("H"))
+  provider = analysis.get("provider") or keypoint.get("provider")
+  confidence = _finite(analysis.get("confidence"))
+  if confidence is None:
+    confidence = _finite(keypoint.get("confidence"))
+  return (
+    (analysis.get("analysisEligible") is True if explicit_full else True)
+    and provider in AUTHORITATIVE_HAIRLINE_PROVIDERS
+    and confidence is not None
+    and confidence >= AUTHORITATIVE_HAIRLINE_MIN_CONFIDENCE
+  )
 
 
 def _camera_metric(
@@ -156,13 +186,18 @@ def _normalize_vertical(
   ratio = _record(raw.get("verticalThirds"))
   quality = _record(raw.get("quality"))
   confidence = _finite(ratio.get("confidence")) or 0.0
-  usable = raw.get("status") in SUCCESS_STATUSES and quality.get("usable", True) is not False
+  base_usable = raw.get("status") in SUCCESS_STATUSES and quality.get("usable", True) is not False
+  full_vertical_usable = base_usable and _vertical_has_authoritative_hairline(raw)
   warnings = _warnings(ratio.get("warnings"), quality.get("warnings"))
-  reason = raw.get("statusReason") if isinstance(raw.get("statusReason"), str) else None
+  status_reason = raw.get("statusReason") if isinstance(raw.get("statusReason"), str) else None
+  reason = status_reason or (
+    None if full_vertical_usable else "hairline_not_analysis_eligible"
+  )
   for key in ("upperNormalized", "middleNormalized", "lowerNormalized"):
     output[f"verticalThirds.{key}"] = _camera_metric(
       value=_finite(ratio.get(key)), confidence=confidence, source=MeasurementSource.LANDMARK,
-      shot=MeasurementShot.S1, unit="ratio", usable=usable, reason=reason, warnings=warnings,
+      shot=MeasurementShot.S1, unit="ratio", usable=full_vertical_usable, reason=reason,
+      warnings=warnings,
     )
   face_length = _record(raw.get("faceLength"))
   for key, unit in (("heightPx", "score"), ("widthPx", "score"), ("ratio", "ratio")):
@@ -170,8 +205,46 @@ def _normalize_vertical(
     if value is not None:
       output[f"verticalThirds.face{key[0].upper()}{key[1:]}"] = _camera_metric(
         value=value, confidence=confidence, source=MeasurementSource.PIXEL,
-        shot=MeasurementShot.S1, unit=unit, usable=usable, reason=reason, warnings=warnings,
+        shot=MeasurementShot.S1, unit=unit, usable=full_vertical_usable, reason=reason,
+        warnings=warnings,
       )
+  # 판정 단일 정본(2026-07-17, 계획 §B3 해소): 측정 시점의 모바일 판정
+  # (자기내부 dominantPart·길이비 verdict)이 payload에 있으면 profile로
+  # 올려 서버 derived 규칙이 이를 따르게 한다 — 모바일(임계 0.08)과 서버
+  # (임계 0.025/1.38)가 같은 얼굴을 다르게 판정하던 불일치 제거.
+  interpretation = _record(raw.get("interpretation"))
+  dominant = interpretation.get("dominantPart")
+  # 'unknown'(2구간 측정)은 의도적 미발행 — H 의존 normalized 값도 함께
+  # blocked라 서버 규칙은 근거 부족으로 보류된다. full 모드에서 unknown이
+  # 생기는 순간 이 가정이 깨지므로, 그때는 unknown도 발행해 규칙에서
+  # 명시적으로 보류 처리해야 한다(faceLengthVerdict의 indeterminate와 대칭).
+  if isinstance(dominant, str) and dominant in {"balanced", "upper", "middle", "lower"}:
+    output["verticalThirds.dominantPart"] = _camera_metric(
+      value=dominant, confidence=confidence, source=MeasurementSource.LANDMARK,
+      shot=MeasurementShot.S1, unit="label", usable=full_vertical_usable, reason=reason,
+      warnings=warnings,
+    )
+  judgment = _record(raw.get("faceLengthJudgment"))
+  verdict = judgment.get("verdict")
+  if isinstance(verdict, str) and verdict in {
+    "wide", "borderline_wide", "average", "borderline_long", "long", "indeterminate",
+  }:
+    # indeterminate(판정 보류)도 발행한다(2차 리뷰 B-1): 키를 안 내면 서버
+    # 규칙이 스냅샷 부재(구 payload)로 오인해 레거시 임계로 단정을 복원한다
+    # — 모바일 "보류"가 서버 "긴 타원형"으로 뒤집히는 종단 불일치.
+    output["verticalThirds.faceLengthVerdict"] = _camera_metric(
+      value=verdict, confidence=confidence, source=MeasurementSource.PIXEL,
+      shot=MeasurementShot.S1, unit="label", usable=full_vertical_usable, reason=reason,
+      warnings=warnings,
+    )
+  if not full_vertical_usable:
+    # H가 없는 세션에서는 이미지 AI가 이마 폭을 별도로 "보완 추정"하지 못하게
+    # camera-owned blocked key로 선점한다.
+    output["contour.foreheadWidthType"] = _camera_metric(
+      value=None, confidence=confidence, source=MeasurementSource.LANDMARK,
+      shot=MeasurementShot.S1, unit="label", usable=False, reason=reason,
+      warnings=warnings,
+    )
 
 
 def _normalize_geometry(
@@ -199,12 +272,33 @@ def _normalize_face3d(
   if not raw:
     return
   profile_warnings = _warnings(raw.get("warnings"))
+  usable = True
+  reason = None
+  schema_version = raw.get("schemaVersion")
+  if schema_version == "aura.face3d-profile.v2":
+    policy_id = raw.get("collectionPolicyId")
+    if raw.get("sampleMode") == "single_frame":
+      usable = False
+      reason = "face3d_single_frame_not_product_eligible"
+    elif isinstance(policy_id, str) and policy_id.startswith("diagnostics-"):
+      usable = False
+      reason = "face3d_diagnostics_policy_not_product_eligible"
+    elif raw.get("confidenceCalibrationStatus") != "calibrated":
+      usable = False
+      reason = "face3d_confidence_uncalibrated"
+    elif raw.get("sampleMode") != "micro_burst" or raw.get("aggregation") != "median_mad":
+      usable = False
+      reason = "face3d_profile_policy_invalid"
+  elif schema_version not in {None, "aura.face3d-profile.v1"}:
+    usable = False
+    reason = "face3d_schema_unsupported"
   for key, metric_value in _record(raw.get("metrics")).items():
     metric = _record(metric_value)
     output[f"face3d.{key}"] = _camera_metric(
       value=_finite(metric.get("value")), confidence=_finite(metric.get("confidence")) or 0.0,
       source=MeasurementSource.DEPTH, shot=MeasurementShot.FACE3D, unit="ratio",
-      usable=True, warnings=_warnings(profile_warnings, metric.get("warnings")),
+      usable=usable, reason=reason,
+      warnings=_warnings(profile_warnings, metric.get("warnings")),
     )
 
 
@@ -257,14 +351,15 @@ def normalize_camera_measurements(measurements: Any) -> dict[str, MetricEnvelope
 def build_measurement_coverage(
   profile: dict[str, MetricEnvelope],
 ) -> MeasurementCoveragePlan:
+  authoritative = set(profile)
   blocked = [
     BlockedMetricKey(key=key, reason=metric.reason or "camera_measurement_unavailable")
     for key, metric in sorted(profile.items())
     if metric.status is MeasurementStatus.BLOCKED
   ]
   return MeasurementCoveragePlan(
-    authoritative_keys=sorted(profile),
-    missing_observable_keys=sorted(AI_OBSERVABLE_METRICS),
+    authoritative_keys=sorted(authoritative),
+    missing_observable_keys=sorted(set(AI_OBSERVABLE_METRICS) - authoritative),
     out_of_scope_keys=sorted(OUT_OF_SCOPE_METRICS),
     blocked_keys=blocked,
   )

@@ -798,41 +798,10 @@ public sealed class E7SynchronizedCaptureExporter : MonoBehaviour
         out Face3DTopologyFingerprintData topology,
         out string reason)
     {
-        topology = null;
-        if (face == null
-            || !face.vertices.IsCreated
-            || !face.indices.IsCreated
-            || !face.uvs.IsCreated)
-        {
-            reason = "face_mesh_not_ready";
-            return false;
-        }
-
-        Vector3[] vertices = new Vector3[face.vertices.Length];
-        int[] indices = new int[face.indices.Length];
-        Vector2[] uvs = new Vector2[face.uvs.Length];
-        for (int index = 0; index < vertices.Length; index += 1)
-        {
-            vertices[index] = face.vertices[index];
-        }
-        for (int index = 0; index < indices.Length; index += 1)
-        {
-            indices[index] = face.indices[index];
-        }
-        for (int index = 0; index < uvs.Length; index += 1)
-        {
-            uvs[index] = face.uvs[index];
-        }
-
-        Face3DMeshSnapshot snapshot = new Face3DMeshSnapshot(vertices, indices, uvs, 0.0d);
-        if (!Face3DTopologyFingerprint.TryCreate(snapshot, out Face3DTopologyFingerprint fingerprint, out reason))
-        {
-            return false;
-        }
-
-        topology = fingerprint.ToData();
-        reason = string.Empty;
-        return true;
+        return ARFaceMeshSnapshotFactory.TryCreateTopologyFingerprint(
+            face,
+            out topology,
+            out reason);
     }
 
     private static void AppendVectorArray(

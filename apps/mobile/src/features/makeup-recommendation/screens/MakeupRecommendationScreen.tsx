@@ -6,6 +6,7 @@ import {AppScreen} from '../../../shared/ui';
 import {BackendApiError, isRequestAbortedError} from '../../../shared/services/backendApi';
 import {
   answerGeneratedMakeupRecommendationQuestion,
+  fetchGeneratedMakeupRecommendationReport,
   fetchGeneratedMakeupRecommendationReports,
   getMakeupScenarioSet,
   getPopularMakeupScenarios,
@@ -45,6 +46,8 @@ export type MakeupRecommendationScreenHandle = {
 
 export type MakeupRecommendationScreenProps = {
   faceImageUri?: string;
+  initialReportId?: string;
+  initialView?: 'discovery' | 'history';
   onApplyAR?: (look: MakeupLookRecommendation) => void;
   personalColor?: string;
 };
@@ -112,11 +115,16 @@ function buildLoadingContextFromSession(
 export const MakeupRecommendationScreen = forwardRef<
   MakeupRecommendationScreenHandle,
   MakeupRecommendationScreenProps
->(function MakeupRecommendationScreen({faceImageUri, onApplyAR}, ref) {
+>(function MakeupRecommendationScreen({
+  faceImageUri,
+  initialReportId,
+  initialView = 'discovery',
+  onApplyAR,
+}, ref) {
   const initialScenarioSeed = useRef(Math.floor(Math.random() * 10_000));
   const scenarioSeed = useRef(initialScenarioSeed.current);
   const popularScenarios = useRef(getPopularMakeupScenarios());
-  const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>('discovery');
+  const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>(initialView);
   const [prompt, setPrompt] = useState('');
   const [scenarioOrder, setScenarioOrder] = useState(() => getMakeupScenarioSet({seed: scenarioSeed.current}));
   const [visibleScenarioCount, setVisibleScenarioCount] = useState(INITIAL_GENERAL_SCENARIO_COUNT);
@@ -139,6 +147,8 @@ export const MakeupRecommendationScreen = forwardRef<
   const workflowRequest = useRef<{controller: AbortController; id: number} | undefined>(undefined);
   const mutationRequest = useRef<{controller: AbortController; id: number} | undefined>(undefined);
   const operationSequence = useRef(0);
+  const loadedInitialReportId = useRef<string | null>(null);
+  const loadedInitialView = useRef(false);
 
   const beginOperation = useCallback((slot: typeof workflowRequest) => {
     slot.current?.controller.abort();
@@ -217,12 +227,64 @@ export const MakeupRecommendationScreen = forwardRef<
     void loadHistory();
   };
 
+  useEffect(() => {
+    if (initialView !== 'history' || loadedInitialView.current) {
+      return;
+    }
+
+    loadedInitialView.current = true;
+    void loadHistory();
+  }, [initialView, loadHistory]);
+
   const openHistoryReport = (report: MakeupRecommendationReportHistoryItem) => {
     imagePollFailureCount.current = 0;
     setImageRetryError('');
     setSession(restoreMakeupRecommendationReport(report));
     setPhase('results');
   };
+
+  useEffect(() => {
+    const reportId = initialReportId?.trim();
+    if (!reportId || loadedInitialReportId.current === reportId) {
+      return;
+    }
+
+    loadedInitialReportId.current = reportId;
+    const operation = beginOperation(workflowRequest);
+    setLoadingContext({
+      answerKeywords: [],
+      prompt: '완성된 추천 메이크업 보고서를 불러오는 중이에요.',
+      useProfile: false,
+    });
+    setPhase('loading');
+    setErrorMessage('');
+
+    void fetchGeneratedMakeupRecommendationReport(
+      reportId,
+      operation.controller.signal,
+    )
+      .then(report => {
+        if (workflowRequest.current?.id !== operation.id) return;
+        openHistoryReport(report);
+      })
+      .catch(error => {
+        if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) {
+          return;
+        }
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : '추천 메이크업 보고서를 불러오지 못했어요.',
+        );
+        setPhase('error');
+      });
+
+    return () => {
+      if (workflowRequest.current?.id === operation.id) {
+        operation.controller.abort();
+      }
+    };
+  }, [beginOperation, initialReportId]);
 
   const startFromPrompt = () => {
     const trimmedPrompt = prompt.trim();

@@ -1,5 +1,6 @@
-import {ActivityIndicator, Alert, StyleSheet, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, StyleSheet, View} from 'react-native';
 import {useEffect, useState} from 'react';
+import {Settings2} from 'lucide-react-native';
 
 import {useAuthSession} from '../../../features/auth';
 import {
@@ -13,7 +14,6 @@ import {
   ConsultingHomeScreen,
   ConsultingMembershipScreen,
   ConsultingMessagesScreen,
-  ConsultingNotificationsScreen,
   ConsultingRequestConfirmScreen,
   ConsultingReviewScreen,
   ConsultingSummaryScreen,
@@ -31,8 +31,14 @@ import {
   type ConsultingRecord,
   type ConsultingReviewDraft,
 } from '../../../features/consulting';
+import {
+  NotificationsScreen,
+  NotificationSettingsSheet,
+  navigateToAppNotification,
+} from '../../../features/notifications';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import type {AppScreenTopPadding} from '../../../shared/ui/AppScreen';
+import {colors, iconSize} from '../../../shared/theme';
 import {
   navigateMainTab,
   type RootNavigation,
@@ -549,25 +555,41 @@ export function ConsultingMessagesRouteScreen({
 export function ConsultingNotificationsRouteScreen({
   navigation,
 }: RootScreenProps<'ConsultingNotifications'>) {
-  const {getAuthToken} = useAuthSession();
+  const [settingsVisible, setSettingsVisible] = useState(false);
+
   return (
-    <DetailRouteChrome
-      routeName="ConsultingNotifications"
-      onBack={() => goBackToConsulting(navigation)}>
-      <ConsultingNotificationsScreen
-        authToken={getAuthToken()}
-        onPressHistory={() => navigation.navigate('ConsultingHistory')}
-        onPressRecord={record =>
-          isConsultingChatAvailable(record)
-            ? navigation.navigate('ConsultingConversation', {
-                expertId: record.expertId,
-                recordId: record.id,
-                record,
-              })
-            : navigation.navigate('ConsultingHistory')
+    <>
+      <DetailRouteChrome
+        headerRightSlot={
+          <Pressable
+            accessibilityLabel="알림 설정"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => setSettingsVisible(true)}
+            style={({pressed}) => [
+              styles.headerSettingsButton,
+              pressed ? styles.headerSettingsButtonPressed : null,
+            ]}>
+            <Settings2 color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+          </Pressable>
         }
+        routeName="ConsultingNotifications"
+        onBack={() => goBackToConsulting(navigation)}>
+        <NotificationsScreen
+          onPressNotification={notification =>
+            navigateToAppNotification(navigation, {
+              ...notification.data,
+              notificationId: notification.id,
+              type: notification.notificationType,
+            })
+          }
+        />
+      </DetailRouteChrome>
+      <NotificationSettingsSheet
+        onClose={() => setSettingsVisible(false)}
+        visible={settingsVisible}
       />
-    </DetailRouteChrome>
+    </>
   );
 }
 
@@ -751,6 +773,16 @@ export function ConsultingMembershipRouteScreen({
 }
 
 const styles = StyleSheet.create({
+  headerSettingsButton: {
+    alignItems: 'center',
+    borderRadius: 20,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  headerSettingsButtonPressed: {
+    opacity: 0.65,
+  },
   loading: {
     alignItems: 'center',
     flex: 1,

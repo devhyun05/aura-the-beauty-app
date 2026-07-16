@@ -1,4 +1,5 @@
 import {uploadFaceCaptureImage} from '../../face-capture/services/faceCaptureUploadService';
+import {appAssetUri} from '../../../shared/config/mediaAssets';
 import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 import type {
   MakeupFeedbackAnalysisOutcome,
@@ -68,6 +69,7 @@ type BackendFeedbackPayload = {
   analysisStatus?: unknown;
   analysis_status?: unknown;
   error?: {details?: unknown; message?: string | null} | null;
+  request?: Record<string, unknown> | null;
   result?: Record<string, unknown> | null;
 } | null;
 
@@ -76,6 +78,7 @@ type BackendFeedbackJob = {
   id?: string | null;
   modelVersion?: string | null;
   score?: number | null;
+  source?: string | null;
   sourceLabel?: string | null;
   status?: 'cancelled' | 'completed' | 'failed' | 'pending' | 'processing' | null;
 };
@@ -90,6 +93,10 @@ export type MakeupFeedbackAnalysisCallbacks = {
 
 type GetFeedbackReportResponse = {
   report: BackendFeedbackJob;
+};
+
+type ListFeedbackReportsResponse = {
+  reports: BackendFeedbackJob[];
 };
 
 function delay(ms: number): Promise<void> {
@@ -1132,4 +1139,67 @@ export async function analyzeMakeupForFeedback(
   }
 
   return createBackendMakeupFeedback(selection, callbacks);
+}
+
+export async function fetchMakeupFeedbackReport(
+  reportId: string,
+): Promise<MakeupFeedbackCompletedResult> {
+  const {report} = await requestBackendJson<GetFeedbackReportResponse>(
+    '/feedback/reports/' + encodeURIComponent(reportId),
+  );
+  return mapStoredMakeupFeedbackReport(report, reportId);
+}
+
+function mapStoredMakeupFeedbackReport(
+  report: BackendFeedbackJob,
+  reportId = report.id ?? '',
+): MakeupFeedbackCompletedResult {
+  const request = report.feedbackPayload?.request;
+  const fallbackImageUri = appAssetUri('images/analysis/report-retake-20260608.png');
+  const imageUri =
+    stringValue(request?.cdnUrl) ??
+    stringValue(request?.sourceUrl) ??
+    fallbackImageUri;
+
+  if (!imageUri) {
+    throw new BackendApiError(
+      '피드백 보고서 사진을 불러오지 못했어요.',
+      502,
+      'FEEDBACK_REPORT_IMAGE_REQUIRED',
+      {reportId},
+    );
+  }
+
+  const outcome = mapBackendJobToFeedbackOutcome(report, {
+    imageUri,
+    photoSource: report.source === 'camera' ? 'camera' : 'gallery',
+    photoTitle: report.sourceLabel ?? undefined,
+  });
+
+  if (outcome.analysisDecision !== 'completed') {
+    throw new BackendApiError(
+      '완료된 메이크업 피드백 보고서가 아니에요.',
+      409,
+      'FEEDBACK_REPORT_NOT_COMPLETED',
+      {reportId},
+    );
+  }
+
+  return outcome;
+}
+
+export async function fetchMakeupFeedbackReports(): Promise<
+  MakeupFeedbackCompletedResult[]
+> {
+  const {reports} = await requestBackendJson<ListFeedbackReportsResponse>(
+    '/feedback/reports',
+  );
+
+  return (reports ?? []).flatMap(report => {
+    try {
+      return [mapStoredMakeupFeedbackReport(report)];
+    } catch {
+      return [];
+    }
+  });
 }

@@ -4,6 +4,10 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Bell, CalendarDays, MessageCircle} from 'lucide-react-native';
 
 import {useAuthSession} from '../../auth';
+import {
+  getUnreadAppNotificationCount,
+  subscribeNotificationStateChange,
+} from '../../notifications/services/notificationService';
 import {colors, consultingColors, consultingRadius} from '../../../shared/theme';
 import {getConsultingBookings} from '../services/consultingService';
 import {
@@ -38,41 +42,69 @@ export function ConsultingHeaderActions({
   });
   const [records, setRecords] = React.useState<readonly ConsultingRecord[]>([]);
 
-  const refreshUnreadState = React.useCallback(() => {
+  const refreshConsultingUnreadState = React.useCallback(() => {
     if (!getAuthToken()) {
       setRecords([]);
-      setUnreadState({messages: false, notifications: false});
+      setUnreadState(current => ({...current, messages: false}));
       return;
     }
 
     void getConsultingBookings(undefined, {force: true})
-      .then(nextRecords => {
+      .catch(() => [])
+      .then(async nextRecords => {
         setRecords(nextRecords);
-        return getConsultingUnreadState(nextRecords);
+        const consultingUnreadState = await getConsultingUnreadState(nextRecords);
+        return consultingUnreadState.messages;
       })
-      .then(setUnreadState);
+      .then(messages => {
+        setUnreadState(current => ({...current, messages}));
+      });
+  }, [getAuthToken]);
+
+  const refreshNotificationUnreadState = React.useCallback(() => {
+    if (!getAuthToken()) {
+      setUnreadState(current => ({...current, notifications: false}));
+      return;
+    }
+
+    void getUnreadAppNotificationCount()
+      .catch(() => 0)
+      .then(unreadNotificationCount => {
+        setUnreadState(current => ({
+          ...current,
+          notifications: unreadNotificationCount > 0,
+        }));
+      });
   }, [getAuthToken]);
 
   useConsultingBookingStatusSync({
     authToken: getAuthToken(),
-    onStatusChange: refreshUnreadState,
+    onStatusChange: refreshConsultingUnreadState,
     records,
   });
 
-  React.useEffect(
-    () => subscribeConsultingReadStateChange(refreshUnreadState),
-    [refreshUnreadState],
-  );
+  React.useEffect(() => {
+    const unsubscribeConsulting =
+      subscribeConsultingReadStateChange(refreshConsultingUnreadState);
+    const unsubscribeNotifications =
+      subscribeNotificationStateChange(refreshNotificationUnreadState);
+
+    return () => {
+      unsubscribeConsulting();
+      unsubscribeNotifications();
+    };
+  }, [refreshConsultingUnreadState, refreshNotificationUnreadState]);
 
   useFocusEffect(
     React.useCallback(() => {
-      refreshUnreadState();
-      const refreshTimer = setInterval(refreshUnreadState, 30000);
+      refreshConsultingUnreadState();
+      refreshNotificationUnreadState();
+      const refreshTimer = setInterval(refreshConsultingUnreadState, 30000);
 
       return () => {
         clearInterval(refreshTimer);
       };
-    }, [refreshUnreadState]),
+    }, [refreshConsultingUnreadState, refreshNotificationUnreadState]),
   );
 
   return (

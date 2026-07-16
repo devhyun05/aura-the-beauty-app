@@ -15,6 +15,7 @@ from app.api import (
   makeup_recommendations,
   makeup_styles,
   media,
+  notifications,
   products,
   search_events,
   search_sessions,
@@ -35,6 +36,7 @@ api_router.include_router(search_sessions.router)
 api_router.include_router(search_events.router)
 api_router.include_router(makeup_recommendations.router)
 api_router.include_router(makeup_styles.router)
+api_router.include_router(notifications.router)
 api_router.include_router(feedback.router)
 api_router.include_router(filter_extractions.router)
 api_router.include_router(ar.router)

@@ -2,9 +2,9 @@ using System;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using ARMakeup.Face;
 using Unity.Collections;
 using UnityEngine;
-using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
 public sealed class E7HandOcclusionRuntime : MonoBehaviour
@@ -86,8 +86,6 @@ public sealed class E7HandOcclusionRuntime : MonoBehaviour
     private const float MouthOcclusionClipExpansion = 1.16f;
     private const float HandPointSmoothingBase = 0.45f;
 
-    [SerializeField] private ARCameraManager cameraManager;
-
     private readonly object pendingResultLock = new object();
     private readonly Vector4[] smoothedHandPoints = new Vector4[HandLandmarkCount];
     private readonly Vector4[] handMaskShaderPoints = new Vector4[HandLandmarkCount];
@@ -106,6 +104,7 @@ public sealed class E7HandOcclusionRuntime : MonoBehaviour
     private RenderTexture handMaskTexture;
     private Material handMaskMaterial;
     private string lastLoggedState = string.Empty;
+    private FaceCameraFrameBroker frameBroker;
 
 #if UNITY_IOS && !UNITY_EDITOR
     [DllImport("__Internal")]
@@ -161,10 +160,12 @@ public sealed class E7HandOcclusionRuntime : MonoBehaviour
         if (runtimeRequested)
         {
             nextCaptureAt = 0.0f;
+            TrySubscribeFrameBroker();
         }
         else
         {
             latestMouthBoundsAvailable = false;
+            UnsubscribeFrameBroker();
         }
 
         Debug.Log(
@@ -189,7 +190,6 @@ public sealed class E7HandOcclusionRuntime : MonoBehaviour
 
     private void Awake()
     {
-        RefreshSceneReferences();
         latestPose = new EvaluatedHandPose
         {
             Status = "not_started",
@@ -199,22 +199,33 @@ public sealed class E7HandOcclusionRuntime : MonoBehaviour
         };
     }
 
+    private void OnEnable()
+    {
+        if (runtimeRequested)
+        {
+            TrySubscribeFrameBroker();
+        }
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeFrameBroker();
+    }
+
     private void Update()
     {
+        if (runtimeRequested)
+        {
+            TrySubscribeFrameBroker();
+        }
         ConsumePendingPose();
         UpdateOcclusionState();
         UpdateHandMaskTexture();
-
-        if (!runtimeRequested || detectionInFlight || Time.realtimeSinceStartup < nextCaptureAt)
-        {
-            return;
-        }
-
-        CaptureAndDetectAsync();
     }
 
     private void OnDestroy()
     {
+        UnsubscribeFrameBroker();
         if (handMaskTexture != null)
         {
             handMaskTexture.Release();
@@ -229,23 +240,36 @@ public sealed class E7HandOcclusionRuntime : MonoBehaviour
         }
     }
 
-    private void RefreshSceneReferences()
+    private void TrySubscribeFrameBroker()
     {
-        if (cameraManager == null)
+        FaceCameraFrameBroker broker = FaceCameraFrameBroker.Instance;
+        if (broker == null || broker == frameBroker)
         {
-            cameraManager = FindFirstObjectByType<ARCameraManager>();
-        }
-    }
-
-    private void CaptureAndDetectAsync()
-    {
-        RefreshSceneReferences();
-        if (cameraManager == null || !cameraManager.TryAcquireLatestCpuImage(out XRCpuImage image))
-        {
-            nextCaptureAt = Time.realtimeSinceStartup + CaptureIntervalSeconds;
             return;
         }
 
+        UnsubscribeFrameBroker();
+        frameBroker = broker;
+        frameBroker.FrameReceived += OnCameraFrame;
+    }
+
+    private void UnsubscribeFrameBroker()
+    {
+        if (frameBroker != null)
+        {
+            frameBroker.FrameReceived -= OnCameraFrame;
+            frameBroker = null;
+        }
+    }
+
+    private void OnCameraFrame(FaceCameraFrame frame)
+    {
+        if (!runtimeRequested || detectionInFlight || Time.realtimeSinceStartup < nextCaptureAt)
+        {
+            return;
+        }
+
+        XRCpuImage image = frame.Image;
         byte[] rgbaBytes = null;
         int outputWidth = 0;
         int outputHeight = 0;
@@ -272,10 +296,6 @@ public sealed class E7HandOcclusionRuntime : MonoBehaviour
                 "[E7] hand_occlusion_capture_failed"
                 + " error=" + exception.GetType().Name
                 + " detail=" + SanitizeLogValue(exception.Message));
-        }
-        finally
-        {
-            image.Dispose();
         }
 
         nextCaptureAt = Time.realtimeSinceStartup + CaptureIntervalSeconds;

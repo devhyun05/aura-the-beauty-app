@@ -56,8 +56,6 @@ Shader "MakeupAR/SmoothRegionMask"
         _GradientAmount ("Gradient Amount", Range(0, 1)) = 0
         _DetailAmount ("Detail Amount", Range(0, 1)) = 0
         [HideInInspector] _BrowGeneratedMode ("Generated Brow Mode", Float) = 0
-        [HideInInspector] _BrowCleanupStrength ("Brow Cleanup Strength", Range(0, 1)) = 0
-        [HideInInspector] _BrowNeutralizeStrength ("Brow Neutralize Strength", Range(0, 1)) = 0
         // Directional skin inpaint (BROW v1): covers the user's natural brow
         // with forehead skin sampled from the live camera (SkinGate path)
         // BEFORE the drawn brow pigment is composited, killing the
@@ -194,8 +192,6 @@ Shader "MakeupAR/SmoothRegionMask"
             float _GradientAmount;
             float _DetailAmount;
             float _BrowGeneratedMode;
-            float _BrowCleanupStrength;
-            float _BrowNeutralizeStrength;
             float _BrowInpaintStrength;
             float _BrowInpaintTapDistance;
             float _BrowInpaintFeather;

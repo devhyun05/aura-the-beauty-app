@@ -83,9 +83,21 @@ def build_worst_case_request_payload() -> dict:
       "captureId": "11111111-1111-1111-1111-111111111111",
       "createdAt": "2026-07-13T00:00:00.000Z",
       "faceLength": {"heightPx": 975.2, "ratio": 1.383, "widthPx": 705.1},
+      "faceLengthJudgment": {"band": {"hi": 1.4123, "lo": 1.3761}, "verdict": "borderline_wide"},
+      "judgmentVersion": "face-length-judgment/v2-provisional-20260717",
+      "hairlineAnalysis": {
+        "analysisEligible": True, "confidence": 0.82,
+        "outcome": "detected_high_confidence", "provider": "apple_semantic_matte",
+      },
       "interpretation": {"dominantPart": "middle", "summary": "중안부가 비교적 긴 편이에요.",
                          "title": "중안부 우세"},
-      "keypoints": {"G": keypoint, "H": keypoint, "Me": keypoint, "Sn": keypoint},
+      "keypoints": {
+        "G": keypoint,
+        "H": {**keypoint, "confidence": 0.82, "provider": "apple_semantic_matte"},
+        "Me": keypoint,
+        "Sn": keypoint,
+      },
+      "measurementMode": "full_vertical_thirds",
       "postCorrection": {"applied": True, "center": {"x": 540, "y": 960},
                          "method": "mediapipe_pose_roll", "rollCorrectionDeg": 0.6},
       "quality": {"pitch": -2.8, "roll": 0.6, "usable": True,
@@ -142,9 +154,27 @@ def build_worst_case_request_payload() -> dict:
   return {
     "bucket": "client-bucket",
     "contentType": "image/jpeg",
-    "faceVerticalThirds": {"confidence": 0.82, "displayRatio": {"lower": 1.08, "middle": 1.0, "upper": 0.97},
-                           "dominantPart": "middle", "status": "partial_success",
-                           "summary": "중안부가 비교적 긴 편이에요."},
+    "faceVerticalThirds": {
+      "confidence": 0.82,
+      "displayRatio": {"lower": 1.08, "middle": 1.0, "upper": 0.97},
+      "dominantPart": "middle",
+      "faceLength": {"heightPx": 975.2, "ratio": 1.383, "widthPx": 705.1},
+      "faceLengthJudgment": {"band": {"hi": 1.4123, "lo": 1.3761}, "verdict": "borderline_wide"},
+      "judgmentVersion": "face-length-judgment/v2-provisional-20260717",
+      "hairline": {
+        "analysisEligible": True,
+        "confidence": 0.82,
+        "provider": "apple_semantic_matte",
+      },
+      "measurementMode": "full_vertical_thirds",
+      "ratioDetail": {
+        "lowerNormalized": 0.354, "lowerPx": 345.2,
+        "middleNormalized": 0.328, "middlePx": 320.4, "totalPx": 975.2,
+        "upperNormalized": 0.318, "upperPx": 310.1, "warnings": [],
+      },
+      "status": "full_success",
+      "summary": "중안부가 비교적 긴 편이에요.",
+    },
     "faceGeometry2d": {"metrics": measurements["faceGeometry2d"]["metrics"],
                        "pose": measurements["faceGeometry2d"]["pose"],
                        "rollCorrection": {"applied": True, "rollCorrectionDeg": -0.6,
@@ -187,8 +217,12 @@ def test_prompt_injects_and_explains_measurements() -> None:
   assert '"measuredPersonalColor"' in prompt
   assert '"measurements"' in prompt
   assert '"autumn_muted"' in prompt
-  # 원본 4축이 프롬프트에서 제외되지 않는다(측정 데이터 3-반영 규칙).
+  # 세로비율은 검증된 요약만 들어가며 raw measurements 축은 제거된다.
   assert '"faceVerticalThirds"' in prompt
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+  assert "faceVerticalThirds" not in metadata["measurements"]
+  assert metadata["faceVerticalThirds"]["measurementMode"] == "full_vertical_thirds"
+  assert metadata["faceVerticalThirds"]["hairline"]["provider"] == "apple_semantic_matte"
   for metric_key in FACE3D_METRIC_KEYS:
     assert metric_key in prompt
   assert "작을수록 기준선에 가까움" in prompt
@@ -198,6 +232,102 @@ def test_prompt_injects_and_explains_measurements() -> None:
   assert "절대 mm·임상 진단·모집단 백분위가 아니고" in prompt
   # 이미지 위치 필드는 여전히 제외된다.
   assert "https://cdn.example.com/x.jpg" not in prompt
+
+
+def test_prompt_omits_uncalibrated_v2_face3d_but_storage_payload_keeps_it() -> None:
+  payload = build_worst_case_request_payload()
+  v2_face3d = {
+    **payload["face3d"],
+    "aggregation": "median_mad",
+    "captureWindowMs": 280,
+    "collectionPolicyId": "unified-micro-burst-5of8-v1",
+    "completionRatio": 1.0,
+    "confidenceCalibrationStatus": "uncalibrated",
+    "gateVersion": "face3d-gate-v2",
+    "sampleMode": "micro_burst",
+    "schemaVersion": "aura.face3d-profile.v2",
+    "targetFrameCount": 8,
+    "validFrameCount": 8,
+  }
+  payload["face3d"] = v2_face3d
+  payload["measurements"] = {**payload["measurements"], "face3d": v2_face3d}
+
+  trusted = trusted_media_request_payload(Settings(), payload, None)
+  assert trusted["measurements"]["face3d"]["confidenceCalibrationStatus"] == "uncalibrated"
+
+  service = OpenAIAnalysisService(Settings())
+  prompt = service._build_analysis_prompt(payload)
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+  assert "face3d" not in metadata
+  assert "face3d" not in metadata["measurements"]
+
+
+def test_prompt_strips_ineligible_h_dependent_fields_but_keeps_middle_lower() -> None:
+  payload = build_worst_case_request_payload()
+  payload["faceVerticalThirds"] = {
+    "confidence": 0.99,
+    "displayRatio": {"lower": 1.08, "middle": 1.0, "upper": 0.97},
+    "dominantPart": "upper",
+    "faceLength": {"heightPx": 975.2, "ratio": 1.383, "widthPx": 705.1},
+    "hairline": {"confidence": 0.99, "provider": "mediapipe_forehead_approx"},
+    "measurementMode": "middle_lower_only",
+    "middleLowerRatio": {
+      "lower": 1.08, "lowerPx": 345.2, "middle": 1.0, "middlePx": 320.4,
+    },
+    "ratioDetail": {"upperPx": 310.1, "upperNormalized": 0.318},
+    "status": "partial_success",
+    "summary": "상안부가 길어요.",
+  }
+
+  prompt = OpenAIAnalysisService(Settings())._build_analysis_prompt(payload)
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+  thirds = metadata["faceVerticalThirds"]
+  serialized = json.dumps(thirds)
+
+  assert thirds["measurementMode"] == "middle_lower_only"
+  assert thirds["middleLowerRatio"]["lower"] == 1.08
+  for forbidden in (
+    "mediapipe_forehead_approx",
+    "hairline",
+    "upper",
+    "dominantPart",
+    "faceLength",
+    "ratioDetail",
+  ):
+    assert forbidden not in serialized
+  assert "faceVerticalThirds" not in metadata["measurements"]
+
+
+def test_prompt_keeps_legacy_full_success_with_actual_h() -> None:
+  payload = build_worst_case_request_payload()
+  legacy = dict(payload["faceVerticalThirds"])
+  legacy.pop("measurementMode")
+  legacy["hairline"] = {
+    "confidence": 0.91,
+    "provider": "apple_semantic_matte",
+  }
+  legacy["status"] = "full_success"
+  payload["faceVerticalThirds"] = legacy
+
+  prompt = OpenAIAnalysisService(Settings())._build_analysis_prompt(payload)
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+
+  assert metadata["faceVerticalThirds"]["measurementMode"] == "full_vertical_thirds"
+  assert metadata["faceVerticalThirds"]["displayRatio"]["upper"] == 0.97
+  assert metadata["faceVerticalThirds"]["hairline"]["provider"] == "apple_semantic_matte"
+
+
+def test_prompt_rejects_unknown_face3d_schema() -> None:
+  payload = build_worst_case_request_payload()
+  unknown = {**payload["face3d"], "schemaVersion": "aura.face3d-profile.v3"}
+  payload["face3d"] = unknown
+  payload["measurements"] = {**payload["measurements"], "face3d": unknown}
+
+  prompt = OpenAIAnalysisService(Settings())._build_analysis_prompt(payload)
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+
+  assert "face3d" not in metadata
+  assert "face3d" not in metadata["measurements"]
 
 
 def test_prompt_metadata_size_is_bounded() -> None:

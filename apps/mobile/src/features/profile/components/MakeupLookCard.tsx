@@ -50,7 +50,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   imageArea: {
-    aspectRatio: 0.9,
+    aspectRatio: 0.82,
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.md,

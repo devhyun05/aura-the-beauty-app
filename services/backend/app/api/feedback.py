@@ -28,6 +28,7 @@ from app.services.makeup_feedback_conference_preview import (
 )
 from app.services.makeup_feedback_goal_intent import normalize_feedback_goal_context_for_request
 from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
+from app.services.push_notifications import create_and_send_notification
 from app.services.users import ensure_user
 
 
@@ -246,6 +247,19 @@ async def run_feedback_job_background(
     report_id,
     analysis_status,
     score,
+  )
+  await create_and_send_notification(
+    db,
+    settings,
+    user_id=completed_report["user_id"],
+    notification_type="makeup_feedback_completed",
+    title="메이크업 피드백이 완성됐어요",
+    body="잘한 점과 보완할 점을 AURA에서 확인해 보세요.",
+    data={
+      "reportId": str(report_id),
+      "route": "MakeupFeedbackResult",
+    },
+    dedupe_key=f"makeup-feedback:{report_id}:completed",
   )
 
 

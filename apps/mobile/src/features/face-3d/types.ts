@@ -52,7 +52,7 @@ export type Face3DMetric = {
 export type Face3DMetrics = Record<Face3DRequiredMetricKey, Face3DMetric> &
   Partial<Record<Face3DOptionalMetricKey, Face3DMetric>>;
 
-export type Face3DProfile = {
+export type Face3DProfileV1 = {
   gateVersion: 'face3d-gate-v1';
   metrics: Face3DMetrics;
   schemaVersion: 'aura.face3d-profile.v1';
@@ -62,6 +62,27 @@ export type Face3DProfile = {
   validFrameCount: number;
   warnings: string[];
 };
+
+export type Face3DSampleMode = 'micro_burst' | 'single_frame';
+
+export type Face3DProfileV2 = {
+  aggregation: 'median_mad' | 'none';
+  captureWindowMs: number;
+  collectionPolicyId: string;
+  completionRatio: number;
+  confidenceCalibrationStatus: 'uncalibrated' | 'calibrated';
+  gateVersion: 'face3d-gate-v2';
+  metrics: Face3DMetrics;
+  sampleMode: Face3DSampleMode;
+  schemaVersion: 'aura.face3d-profile.v2';
+  source: 'arkit_face_mesh';
+  targetFrameCount: number;
+  topologyFingerprint: string;
+  validFrameCount: number;
+  warnings: string[];
+};
+
+export type Face3DProfile = Face3DProfileV1 | Face3DProfileV2;
 
 export type Face3DStartRequest = {
   gateVersion: 'face3d-gate-v1';

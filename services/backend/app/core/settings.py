@@ -143,6 +143,10 @@ class Settings(BaseSettings):
   openai_image_output_max_edge: int = 1024
   makeup_recommendation_source_hosts: str = "d3t1pbvtir1lj.cloudfront.net"
 
+  push_notifications_enabled: bool = True
+  expo_push_endpoint: str = "https://exp.host/--/api/v2/push/send"
+  expo_push_access_token: str | None = None
+
   hair_jobs_queue_url: str | None = None
   hair_style_asset_bucket: str | None = None
   hair_style_asset_prefix: str = "catalog/hair-styles/v1"

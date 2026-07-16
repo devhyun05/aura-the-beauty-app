@@ -1,4 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
+import {isTerminalGeneratedMaskEvent} from '../services/generatedMaskEventCorrelation';
 import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
@@ -608,6 +609,7 @@ export function UnityMakeupCaptureScreen({
 
   const handleGeneratedLipAppliedEvent = (event: {
     applied?: boolean;
+    blockedReason?: string;
     generatedMaskId?: string;
     maskTriangles?: number;
     status?: string;
@@ -620,6 +622,18 @@ export function UnityMakeupCaptureScreen({
       event.generatedMaskId &&
       event.generatedMaskId !== pendingGeneratedMaskId
     ) {
+      return;
+    }
+
+    // Terminal failures: the payload itself is malformed (size/byte mismatch),
+    // so resending the exact same payload can never succeed. Requires POSITIVE
+    // correlation (event id present, pending id present, equal) so a stale or
+    // anonymous event can never wipe the current request's refs.
+    if (isTerminalGeneratedMaskEvent(event, pendingGeneratedMaskId)) {
+      pendingGeneratedMaskIdRef.current = null;
+      latestGeneratedApplyPayloadRef.current = null;
+      setPhase('error');
+      setNotice(`개인 마스크 적용이 거부되었습니다 (${event.blockedReason}). 아래 버튼으로 다시 생성해 주세요.`);
       return;
     }
 
@@ -672,6 +686,19 @@ export function UnityMakeupCaptureScreen({
     }
 
     logGeneratedBrowAppliedEvent(event);
+
+    // Terminal failures (see lip handler): clear the brow payload so neither
+    // the brow retry nor the lip retry path (which re-posts the brow payload
+    // alongside the lip one) keeps resending a payload that can never apply.
+    // Positive correlation required — during the initial-generation window the
+    // pending brow id is null, and a stale terminal event must not poison it.
+    if (isTerminalGeneratedMaskEvent(event, pendingGeneratedBrowMaskId)) {
+      pendingGeneratedBrowMaskIdRef.current = null;
+      latestGeneratedBrowApplyPayloadRef.current = null;
+      setPhase('error');
+      setNotice(`눈썹 마스크 적용이 거부되었습니다 (${event.blockedReason}). 아래 버튼으로 다시 생성해 주세요.`);
+      return;
+    }
 
     const isApplied =
       (event.status === 'partial' || event.status === 'ready') &&
@@ -1058,6 +1085,15 @@ export function UnityMakeupCaptureScreen({
             <Sparkles color={colors.white} size={iconSize.xs} strokeWidth={2} />
             <Text style={styles.statusText}>{notice}</Text>
           </XStack>
+        ) : null}
+
+        {phase === 'error' ? (
+          <Pressable
+            accessibilityRole="button"
+            style={styles.statusPill}
+            onPress={handleCapturePress}>
+            <Text style={styles.statusText}>다시 생성</Text>
+          </Pressable>
         ) : null}
       </YStack>
 

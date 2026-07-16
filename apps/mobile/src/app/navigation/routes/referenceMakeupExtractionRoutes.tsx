@@ -12,11 +12,14 @@ import {
   ReferenceMakeupExtractionLoadingScreen,
   ReferenceMakeupExtractionResultScreen,
   type MakeupExtractionProgressUpdate,
+  type ReferenceMakeupExtractionReportHistoryItem,
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {
+  fetchReferenceMakeupExtractionReport,
+  fetchReferenceMakeupExtractionReports,
   getReferenceMakeupExtractionDataSync,
   runReferenceMakeupExtraction,
 } from '../../../features/reference-makeup-extraction/services/makeupExtractionService';
@@ -29,6 +32,7 @@ import type {MakeupArea} from '../../../shared/types/makeupGuide';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {RoutePlaceholder} from '../../../shared/ui';
 import {
   buildMakeupFilterSavedLooks,
   getDefaultMakeupFilterSaveSettings,
@@ -100,6 +104,19 @@ function buildMakeupRecipeListItems(
     title: index === 0
       ? extractedMakeupLook.title
       : `${extractedMakeupLook.title} ${index + 1}`,
+  }));
+}
+
+function buildMakeupRecipeListItemsFromReports(
+  reports: readonly ReferenceMakeupExtractionReportHistoryItem[],
+): MakeupRecipeListItem[] {
+  return reports.map(report => ({
+    id: `makeup-recipe-${report.reportId}`,
+    photo: report.photo,
+    reportId: report.reportId,
+    subtitle: report.data.extractedMakeupLook.subtitle,
+    tags: report.data.extractedMakeupLook.tags,
+    title: report.data.extractedMakeupLook.title,
   }));
 }
 
@@ -227,8 +244,21 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
   return (
     <ReferenceMakeupExtractionLoadingScreen
       isAnalysisReady={isAnalysisReady}
-      onBack={() => navigation.replace('ReferenceMakeupExtractionUpload')}
-      onComplete={() => navigation.replace('ReferenceMakeupExtractionResult')}
+      onBack={() => navigation.reset({
+        index: 0,
+        routes: [{name: 'MainTabs', params: {screen: 'HomeTab'}}],
+      })}
+      onComplete={() => {
+        if (navigation.isFocused()) {
+          navigation.reset({
+            index: 1,
+            routes: [
+              {name: 'MainTabs', params: {screen: 'HomeTab'}},
+              {name: 'ReferenceMakeupExtractionResult'},
+            ],
+          });
+        }
+      }}
       photo={photo}
       progressUpdate={analysisProgress}
     />
@@ -237,25 +267,100 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 
 export function ReferenceMakeupExtractionResultRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'ReferenceMakeupExtractionResult'>) {
-  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
-  const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+  const {
+    selectedReferenceMakeupPhoto,
+    setSelectedReferenceMakeupPhoto,
+  } = useNavigationFlowState();
+  const reportId = route.params?.reportId;
+  const shouldReturnToProfile = route.params?.returnTo === 'profile';
+  const [loadedReportPhoto, setLoadedReportPhoto] =
+    useState<ReferenceMakeupPhoto | null>(null);
+  const [reportLoadError, setReportLoadError] = useState('');
+  const photo =
+    loadedReportPhoto ??
+    getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
 
-  const handleBackToUpload = () => {
+  useEffect(() => {
+    if (!reportId) {
+      return;
+    }
+
+    let isMounted = true;
+    setLoadedReportPhoto(null);
+    setReportLoadError('');
+
+    void fetchReferenceMakeupExtractionReport(reportId)
+      .then(({photo: nextPhoto}) => {
+        if (isMounted) {
+          setLoadedReportPhoto(nextPhoto);
+          setSelectedReferenceMakeupPhoto(nextPhoto);
+        }
+      })
+      .catch(error => {
+        if (isMounted) {
+          setReportLoadError(
+            error instanceof Error
+              ? error.message
+              : '메이크업 추출 보고서를 불러오지 못했어요.',
+          );
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [reportId, setSelectedReferenceMakeupPhoto]);
+
+  const handleBack = () => {
+    if (shouldReturnToProfile) {
+      navigateMainTab(navigation, 'ProfileTab');
+      return;
+    }
+
+    if (reportId && navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    navigation.reset({
+      index: 0,
+      routes: [{name: 'MainTabs', params: {screen: 'HomeTab'}}],
+    });
+  };
+
+  const handleRetake = () => {
     navigation.replace('ReferenceMakeupExtractionUpload');
   };
+
+  if (reportId && !loadedReportPhoto) {
+    return (
+      <DetailRouteChrome
+        routeName="ReferenceMakeupExtractionResult"
+        onBack={handleBack}>
+        <RoutePlaceholder
+          description={
+            reportLoadError || '완료된 메이크업 추출 보고서를 불러오고 있어요.'
+          }
+          showHeader={false}
+          title={reportLoadError ? '보고서를 열지 못했어요' : '보고서를 여는 중'}
+        />
+      </DetailRouteChrome>
+    );
+  }
 
   return (
     <DetailRouteChrome
       routeName="ReferenceMakeupExtractionResult"
-      onBack={handleBackToUpload}>
+      onBack={handleBack}>
       <ReferenceMakeupExtractionResultScreen
         onOpenARFilter={() => navigation.navigate('ARFilter', {
           initialGuideMode: 'half',
           initialMakeupFilterId: 'filter-milky-strawberry-pink',
           source: 'recommendedFilter',
         })}
-        onRetake={handleBackToUpload}
+        onRetake={handleRetake}
         photo={photo}
       />
     </DetailRouteChrome>
@@ -439,12 +544,50 @@ export function MakeupRecipeListRouteScreen({
 }: RootScreenProps<'MakeupRecipeList'>) {
   const {selectedReferenceMakeupPhoto, setSelectedReferenceMakeupPhoto} =
     useNavigationFlowState();
-  const recipes = useMemo(
-    () => buildMakeupRecipeListItems(selectedReferenceMakeupPhoto),
+  const fallbackRecipes = useMemo(
+    () =>
+      selectedReferenceMakeupPhoto
+        ? buildMakeupRecipeListItems(selectedReferenceMakeupPhoto).slice(0, 1)
+        : [],
     [selectedReferenceMakeupPhoto],
   );
+  const [recipes, setRecipes] = useState<MakeupRecipeListItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const loadRecipes = React.useCallback(() => {
+    setIsLoading(true);
+    setLoadError('');
+
+    void fetchReferenceMakeupExtractionReports()
+      .then(reports => {
+        const nextRecipes = buildMakeupRecipeListItemsFromReports(reports);
+        setRecipes(nextRecipes.length > 0 ? nextRecipes : fallbackRecipes);
+      })
+      .catch(error => {
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : '메이크업 추출 보고서를 불러오지 못했어요.',
+        );
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [fallbackRecipes]);
+
+  useEffect(() => {
+    loadRecipes();
+  }, [loadRecipes]);
+
   const handlePressRecipe = (recipe: MakeupRecipeListItem) => {
     setSelectedReferenceMakeupPhoto(recipe.photo);
+    if (recipe.reportId) {
+      navigation.navigate('ReferenceMakeupExtractionResult', {
+        reportId: recipe.reportId,
+      });
+      return;
+    }
+
     navigation.navigate('MakeupRecipeDetail');
   };
 
@@ -453,6 +596,9 @@ export function MakeupRecipeListRouteScreen({
       routeName="MakeupRecipeList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <MakeupRecipeListScreen
+        error={loadError}
+        isLoading={isLoading}
+        onRetry={loadRecipes}
         onPressRecipe={handlePressRecipe}
         recipes={recipes}
       />

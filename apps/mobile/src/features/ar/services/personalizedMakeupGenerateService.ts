@@ -33,7 +33,8 @@ type E7NativeLipBoundaryProviders = {
 };
 
 export type GeneratedMaskControls = {
-  blendMode: 'multiply' | 'normal' | 'screen';
+  // 'screen' removed: never implemented (Unity rendered it as normal).
+  blendMode: 'multiply' | 'normal';
   boundaryDebugVisible: boolean;
   colorHex: string;
   coverage: number;

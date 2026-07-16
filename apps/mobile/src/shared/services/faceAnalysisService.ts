@@ -752,6 +752,10 @@ export type FaceAnalysisOnDeviceMeasurementsInput = {
   personalColor: PersonalColorMeasurementInput | null;
 };
 
+export type FaceAnalysisReportCallbacks = {
+  onAnalysisCreated?: (reportId: string) => Promise<void> | void;
+};
+
 export async function createFaceAnalysisReportFromCapture(
   capture?: FaceAnalysisCaptureInput | null,
   faceVerticalThirds?: FaceVerticalThirdsAnalysisPayload,
@@ -760,6 +764,7 @@ export async function createFaceAnalysisReportFromCapture(
   // 2D 얼굴 기하 요약 — 산출 성공 세션에서만 전달된다.
   faceGeometry2d?: FaceGeometryAnalysisPayload,
   onDeviceMeasurements?: FaceAnalysisOnDeviceMeasurementsInput,
+  callbacks?: FaceAnalysisReportCallbacks,
 ): Promise<FaceAnalysisReport> {
   const startedAt = Date.now();
   const hasBackendApiBaseUrl = Boolean(getBackendApiBaseUrl());
@@ -826,6 +831,10 @@ export async function createFaceAnalysisReportFromCapture(
     },
     method: 'POST',
   });
+  if (!job.id) {
+    throw new Error('Analysis job did not return a report id.');
+  }
+  await callbacks?.onAnalysisCreated?.(job.id);
 
   console.info('[aura:analysis] analysis-job:success', {
     durationMs: Date.now() - startedAt,

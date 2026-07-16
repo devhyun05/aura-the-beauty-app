@@ -6,7 +6,6 @@ import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {ProfileEditScreen, ProfileScreen} from '../../../features/profile';
 import {
   getLikedMakeupFilterLooks,
-  mergeSavedAndLikedMakeupLooks,
 } from '../../../shared/services/makeupGuideService';
 import {useNavigationFlowState} from '../flowState';
 import {
@@ -29,15 +28,17 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
     () => getLikedMakeupFilterLooks(likedMakeupFilterIds),
     [likedMakeupFilterIds],
   );
-  const savedAndLikedMakeupLooks = React.useMemo(() => {
-    return mergeSavedAndLikedMakeupLooks({
-      likedMakeupLooks,
-      savedMakeupLook,
-      savedMakeupLooks,
-    });
-  }, [likedMakeupLooks, savedMakeupLook, savedMakeupLooks]);
+  const createdMakeupLooks = React.useMemo(
+    () =>
+      savedMakeupLooks.length > 0
+        ? savedMakeupLooks
+        : savedMakeupLook
+          ? [savedMakeupLook]
+          : [],
+    [savedMakeupLook, savedMakeupLooks],
+  );
   const handleMakeupLookPress = React.useCallback(
-    (makeupLook: (typeof savedAndLikedMakeupLooks)[number]) => {
+    (makeupLook: (typeof likedMakeupLooks)[number]) => {
       const filterId = makeupLook.makeupPresetValues.sourceFilterId;
 
       if (!filterId) {
@@ -54,10 +55,10 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
     <MainTabChrome
       headerRightSlot={
         <ConsultingHeaderActions
-          onPressMessages={() => rootNavigation?.navigate('ConsultingMessages')}
           onPressNotifications={() =>
             rootNavigation?.navigate('ConsultingNotifications')
           }
+          showMessages={false}
         />
       }
       navigation={navigation}
@@ -65,14 +66,46 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
       wrapContentInScreen={false}>
       <ProfileScreen
         onPressFaceAnalysisReport={reportId =>
-          rootNavigation?.navigate('FaceAnalysisReportDetail', {reportId})
+          rootNavigation?.navigate('FaceAnalysisReportDetail', {
+            reportId,
+            returnTo: 'profile',
+          })
         }
         onPressFaceAnalysisReportsList={() =>
           rootNavigation?.navigate('FaceAnalysisReportsList')
         }
+        onPressMakeupRecommendationReport={reportId =>
+          rootNavigation?.navigate('MakeupRecommendation', {reportId})
+        }
+        onPressMakeupRecommendationReportsList={() =>
+          rootNavigation?.navigate('MakeupRecommendation', {view: 'history'})
+        }
+        onPressMakeupExtractionReport={reportId =>
+          rootNavigation?.navigate('ReferenceMakeupExtractionResult', {
+            reportId,
+            returnTo: 'profile',
+          })
+        }
+        onPressMakeupExtractionReportsList={() =>
+          rootNavigation?.navigate('MakeupRecipeList')
+        }
+        onPressMakeupFeedbackReport={reportId =>
+          rootNavigation?.navigate('MakeupFeedbackResult', {
+            reportId,
+            returnTo: 'profile',
+          })
+        }
+        onPressMakeupFeedbackReportsList={() =>
+          rootNavigation?.navigate('MakeupFeedbackResultsList')
+        }
         onPressLikedProductList={() => rootNavigation?.navigate('LikedProductList')}
         onPressMakeupLook={handleMakeupLookPress}
-        onPressMakeupLookList={() => rootNavigation?.navigate('MakeupLookList')}
+        onPressCreatedMakeupLookList={() =>
+          rootNavigation?.navigate('MakeupLookList', {kind: 'created'})
+        }
+        onPressMakeupLookList={() =>
+          rootNavigation?.navigate('MakeupLookList', {kind: 'liked'})
+        }
         onPressProfileEdit={() => rootNavigation?.navigate('ProfileEdit')}
         onPressConsultingHistory={() =>
           rootNavigation?.navigate('ConsultingHistory')
@@ -89,7 +122,8 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
             recordId: record.id,
           })
         }
-        likedMakeupLooks={savedAndLikedMakeupLooks}
+        createdMakeupLooks={createdMakeupLooks}
+        likedMakeupLooks={likedMakeupLooks}
       />
     </MainTabChrome>
   );

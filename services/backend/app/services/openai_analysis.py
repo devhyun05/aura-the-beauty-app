@@ -36,6 +36,189 @@ from app.core.settings import Settings
 
 
 logger = logging.getLogger(__name__)
+
+_AUTHORITATIVE_HAIRLINE_PROVIDERS = {
+  "apple_semantic_matte",
+  "mediapipe_hairline_boundary",
+  "face_parsing",
+}
+_AUTHORITATIVE_HAIRLINE_MIN_CONFIDENCE = 0.7
+
+
+def _prompt_number(value: Any) -> float | None:
+  if isinstance(value, bool) or not isinstance(value, (int, float)):
+    return None
+  number = float(value)
+  return number if number == number and abs(number) != float("inf") else None
+
+
+def _prompt_record(value: Any) -> dict[str, Any]:
+  return value if isinstance(value, dict) else {}
+
+
+def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | None:
+  raw = _prompt_record(value)
+  if not raw:
+    return None
+
+  measurement_mode = raw.get("measurementMode")
+  hairline = _prompt_record(raw.get("hairline"))
+  provider = hairline.get("provider")
+  hairline_confidence = _prompt_number(hairline.get("confidence"))
+  display_ratio = _prompt_record(raw.get("displayRatio"))
+  upper = _prompt_number(display_ratio.get("upper"))
+  lower = _prompt_number(display_ratio.get("lower"))
+  middle = _prompt_number(display_ratio.get("middle"))
+  explicit_full = (
+    measurement_mode == "full_vertical_thirds"
+    and hairline.get("analysisEligible") is True
+  )
+  legacy_full = measurement_mode is None and raw.get("status") == "full_success"
+  full_eligible = (
+    (explicit_full or legacy_full)
+    and provider in _AUTHORITATIVE_HAIRLINE_PROVIDERS
+    and hairline_confidence is not None
+    and hairline_confidence >= _AUTHORITATIVE_HAIRLINE_MIN_CONFIDENCE
+    and upper is not None
+    and lower is not None
+    and middle is not None
+  )
+
+  common = {
+    "measurementMode": (
+      "full_vertical_thirds" if full_eligible else "middle_lower_only"
+    ),
+    "status": raw.get("status"),
+    "statusReason": raw.get("statusReason"),
+    "title": raw.get("title"),
+  }
+
+  # 측정 시점 동결 판정(3차 리뷰 BLOCKER 반영): 화이트리스트가 벗겨내면
+  # 프롬프트의 verdict 추종 지시가 종단에서 무효가 된다 — 검증 후 보존.
+  judgment = _prompt_record(raw.get("faceLengthJudgment"))
+  judgment_band = _prompt_record(judgment.get("band"))
+  judgment_verdict = judgment.get("verdict")
+  band_hi = _prompt_number(judgment_band.get("hi"))
+  band_lo = _prompt_number(judgment_band.get("lo"))
+  safe_judgment = (
+    {
+      "band": {"hi": band_hi, "lo": band_lo},
+      "verdict": judgment_verdict,
+    }
+    if judgment_verdict
+    in {"wide", "borderline_wide", "average", "borderline_long", "long", "indeterminate"}
+    and band_hi is not None
+    and band_lo is not None
+    else None
+  )
+  judgment_version = raw.get("judgmentVersion")
+  safe_judgment_version = (
+    judgment_version if isinstance(judgment_version, str) and judgment_version else None
+  )
+
+  if full_eligible:
+    return {
+      **common,
+      "confidence": _prompt_number(raw.get("confidence")),
+      "displayRatio": {"lower": lower, "middle": middle, "upper": upper},
+      "dominantPart": raw.get("dominantPart"),
+      "faceLength": _prompt_record(raw.get("faceLength")) or None,
+      "faceLengthJudgment": safe_judgment,
+      "judgmentVersion": safe_judgment_version,
+      "hairline": {
+        "analysisEligible": True,
+        "confidence": hairline_confidence,
+        "provider": provider,
+      },
+      "postCorrection": _prompt_record(raw.get("postCorrection")) or None,
+      "quality": _prompt_record(raw.get("quality")),
+      "ratioDetail": _prompt_record(raw.get("ratioDetail")),
+      "summary": raw.get("summary"),
+    }
+
+  middle_lower = _prompt_record(raw.get("middleLowerRatio"))
+  safe_lower = _prompt_number(middle_lower.get("lower"))
+  safe_middle = _prompt_number(middle_lower.get("middle"))
+  safe_lower_px = _prompt_number(middle_lower.get("lowerPx"))
+  safe_middle_px = _prompt_number(middle_lower.get("middlePx"))
+  if safe_lower is None:
+    safe_lower = lower
+  if safe_middle is None:
+    safe_middle = middle
+  if safe_lower is None or safe_middle is None:
+    return None
+
+  return {
+    **common,
+    "middleLowerRatio": {
+      "lower": safe_lower,
+      "lowerPx": safe_lower_px,
+      "middle": safe_middle,
+      "middlePx": safe_middle_px,
+    },
+    "summary": "헤어라인이 충분히 확인되지 않아 중안부와 하안부만 반영했어요.",
+  }
+
+
+def _safe_face3d_prompt_payload(value: Any) -> dict[str, Any] | None:
+  raw = _prompt_record(value)
+  if not raw:
+    return None
+
+  schema_version = raw.get("schemaVersion")
+  if schema_version in {None, "aura.face3d-profile.v1"}:
+    return raw
+  if schema_version != "aura.face3d-profile.v2":
+    return None
+
+  collection_policy_id = raw.get("collectionPolicyId")
+  if (
+    raw.get("confidenceCalibrationStatus") != "calibrated"
+    or raw.get("sampleMode") != "micro_burst"
+    or raw.get("aggregation") != "median_mad"
+    or not isinstance(collection_policy_id, str)
+    or collection_policy_id.startswith("diagnostics-")
+  ):
+    return None
+
+  return raw
+
+
+def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+  metadata = {
+    key: value
+    for key, value in payload.items()
+    if key not in {"imageUrl", "image_url", "cdnUrl", "previewUrl", "sourceUri"}
+  }
+  measurements = _prompt_record(metadata.get("measurements"))
+  if measurements:
+    # DB 저장·과거 복원에는 raw H를 보존하되 AI에는 별도 검증된 요약만 제공한다.
+    safe_measurements = dict(measurements)
+    safe_measurements.pop("faceVerticalThirds", None)
+    safe_measurements.pop("face_vertical_thirds", None)
+    safe_measurements_face3d = _safe_face3d_prompt_payload(
+      safe_measurements.get("face3d"),
+    )
+    if safe_measurements_face3d is None:
+      safe_measurements.pop("face3d", None)
+    else:
+      safe_measurements["face3d"] = safe_measurements_face3d
+    metadata["measurements"] = safe_measurements
+
+  raw_vertical = metadata.pop("face_vertical_thirds", None)
+  safe_vertical = _safe_face_vertical_thirds_prompt_payload(
+    metadata.get("faceVerticalThirds", raw_vertical),
+  )
+  if safe_vertical is None:
+    metadata.pop("faceVerticalThirds", None)
+  else:
+    metadata["faceVerticalThirds"] = safe_vertical
+  safe_face3d = _safe_face3d_prompt_payload(metadata.get("face3d"))
+  if safe_face3d is None:
+    metadata.pop("face3d", None)
+  else:
+    metadata["face3d"] = safe_face3d
+  return metadata
 RECOMMENDED_MAKEUP_COUNT = 1
 
 ANALYSIS_OUTPUT_FIELD_GUIDE = (
@@ -594,11 +777,7 @@ class OpenAIAnalysisService:
     return [dict(by_role[role]) for role in MAKEUP_RECOMMENDATION_ROLES]
 
   def _build_analysis_prompt(self, payload: dict[str, Any]) -> str:
-    metadata = {
-      key: value
-      for key, value in payload.items()
-      if key not in {"imageUrl", "image_url", "cdnUrl", "previewUrl", "sourceUri"}
-    }
+    metadata = _safe_analysis_prompt_metadata(payload)
 
     return (
       "Act as a professional personal color analyst, makeup artist, hairstylist, and image consultant. "
@@ -634,8 +813,12 @@ class OpenAIAnalysisService:
       "비추천 메이크업, 피해야 할 메이크업, avoidedMakeups는 절대 생성하지 마. "
       "각 추천은 앱 카드에 들어갈 수 있게 title은 12자 이내, subtitle은 16자 이내, description은 두 줄 이내, tags는 2개만 포함해. "
       "텍스트는 짧고 실용적으로 작성하고, 일반론이나 누구에게나 맞는 조언을 쓰지 마. "
-      "요청 메타데이터에 faceVerticalThirds(기기에서 실측한 얼굴 세로 3분할 비율: 상안부/중안부/하안부, dominantPart, summary)가 있으면 "
-      "faceShape 판단과 summary, makeupGuideline의 음영/블러셔/눈썹 배치에 이 실측 비율을 근거로 자연스럽게 반영해. "
+      "요청 메타데이터의 faceVerticalThirds.measurementMode가 full_vertical_thirds이면 검증된 상안부/중안부/하안부 실측값을 "
+      "faceShape 판단과 summary, makeupGuideline의 음영/블러셔/눈썹 배치에 자연스럽게 반영해. "
+      "faceVerticalThirds.faceLengthJudgment가 있으면 얼굴 가로/세로 길이 분류는 그 verdict를 그대로 따라 "
+      "(wide=가로 폭이 있는 편, average=평균 범위, long=세로로 긴 편, borderline_wide/borderline_long=경계라 단정 금지, "
+      "indeterminate=판정 보류) 비율 숫자나 사진으로 재판정하지 마. "
+      "measurementMode가 middle_lower_only이면 중안부와 하안부의 상대 길이만 사용할 수 있고, 헤어라인·이마·상안부·전체 얼굴 길이·3분할 우세를 사진이나 평균값으로 추론하지 마. "
       "요청 메타데이터에 face3d(기기 ARKit 얼굴 메시로 실측한 정규화 3D 지표)가 있으면 얼굴 입체감 표현과 "
       "makeupGuideline의 음영/하이라이트 배치에 근거로 반영해. 기본 지표는 noseTipProjection 코끝 돌출, "
       "chinProjection 턱 전방 볼록면(Pogonion) 돌출, upperLipToELine/lowerLipToELine 입술-E라인 signed 거리 "
@@ -651,7 +834,7 @@ class OpenAIAnalysisService:
       "부위별 평균 Lab 색값 regions, 부위 간 명도·색차 relations, measurementConfidence 0..1, correction.applied 조명 보정 여부)가 있으면 "
       "makeupGuideline과 색 선택의 근거로 사진 관찰과 함께 사용하고, 실측과 사진이 다르면 실측 축을 우선해. "
       "단 status가 insufficient이거나 measurementConfidence가 낮으면 사진 관찰을 우선하고, 영문 톤 코드(autumn_muted 등)는 그대로 쓰지 말고 한국어로 풀어 써. "
-      "요청 메타데이터의 measurements는 위 실측 지표들의 원본 전체 기록(과거 보고서 복원용)이야 — 요약 필드와 겹치는 값은 요약을 기준으로 해석해. "
+      "요청 메타데이터의 measurements는 위 실측 지표들의 저장 기록이지만, faceVerticalThirds 원본 H는 AI 입력에서 제외돼 있어. 세로 비율은 검증된 요약 필드만 사용해. "
       "실측 지표(faceVerticalThirds, face3d, faceGeometry2d, measuredPersonalColor)가 사진 관찰과 다르면 실측 지표를 우선하되, "
       "수치를 그대로 나열하지 말고 해석해서 문장에 녹여 써. "
       "아래는 값 예시가 아니라 필드 구조 설명이야. 설명 문구를 복사하지 말고, 반드시 사진을 분석해서 실제 값으로 채워:\n"

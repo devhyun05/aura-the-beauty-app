@@ -17,8 +17,16 @@ import {
   setUnityMakeupPlayerPaused,
 } from '../../../features/ar/services/unityMakeupBridge';
 import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services/face3DEntryEligibility';
+import {isFace3DProfileAnalysisEligible} from '../../../features/face-3d/services/face3DContract';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {UnifiedFaceCaptureScreen} from '../../../features/face-capture/screens/UnifiedFaceCaptureScreen';
+import {buildUnifiedFaceCaptureRequest} from '../../../features/face-capture/services/unifiedFaceCaptureContract';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
+import {isUnifiedFaceCaptureEnabled} from '../../../features/face-capture/services/unifiedFaceCaptureMode';
+import {
+  mapUnifiedHairlineToVerticalThirds,
+  shouldUseUnifiedFaceCaptureRoute,
+} from '../../../features/face-capture/services/unifiedFaceCaptureNavigation';
 import {derivePersonalColorCorrectionStatus} from '../../../features/face-analysis/services/faceAnalysisMeasurements';
 import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
@@ -26,9 +34,16 @@ import {analyzeFaceGeometry2d} from '../../../features/face-geometry/services/fa
 import type {FaceGeometryResult} from '../../../features/face-geometry/types';
 import {buildFaceVerticalThirdsAnalysisPayload} from '../../../features/face-ratio/services/faceVerticalThirdsAiPayload';
 import {analyzeFaceVerticalThirds} from '../../../features/face-ratio/services/faceVerticalThirdsService';
-import type {FaceVerticalThirdsResult} from '../../../features/face-ratio/types';
+import type {
+  FaceVerticalThirdsInput,
+  FaceVerticalThirdsResult,
+} from '../../../features/face-ratio/types';
 import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
 import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
+import {
+  releaseReportCompletionNotificationSuppression,
+  suppressReportCompletionNotification,
+} from '../../../features/notifications';
 import {
   analyzePersonalColorCapture,
   type PersonalColorAnalysisOutcome,
@@ -129,11 +144,23 @@ export function FaceCaptureRouteScreen({
   route,
 }: RootScreenProps<'FaceCapture'>) {
   const {
+    beginUnifiedFaceCapture,
+    commitUnifiedFaceCapture,
+    invalidateUnifiedFaceCapture,
     setSelectedFace3DProfile,
     setSelectedFaceCapture,
     setSelectedFaceCaptureGreenlight,
+    unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const {getAuthToken, isRestoringSession} = useAuthSession();
+  const [forceLegacyCapture, setForceLegacyCapture] = React.useState(false);
+  const unifiedCaptureRequest = React.useMemo(
+    () =>
+      buildUnifiedFaceCaptureRequest({
+        retryAttemptCount: unifiedFaceCaptureFlow.retryAttemptCount,
+      }),
+    [unifiedFaceCaptureFlow.retryAttemptCount],
+  );
 
   React.useEffect(() => {
     if (!isRestoringSession && !getAuthToken()) {
@@ -143,6 +170,46 @@ export function FaceCaptureRouteScreen({
 
   if (isRestoringSession || !getAuthToken()) {
     return null;
+  }
+
+  const shouldUseUnifiedCapture = shouldUseUnifiedFaceCaptureRoute({
+    featureEnabled: isUnifiedFaceCaptureEnabled(),
+    forceLegacyCapture,
+    initialSource: route.params?.initialSource,
+    nativeViewSupported: isUnityMakeupNativeViewSupported(),
+  });
+
+  if (shouldUseUnifiedCapture) {
+    return (
+      <UnifiedFaceCaptureScreen
+        onCancel={() => {
+          invalidateUnifiedFaceCapture({resetRetryAttempt: true});
+          navigateMainTab(navigation, 'HomeTab');
+        }}
+        onCaptureCommitted={(result, upload) => {
+          if (!commitUnifiedFaceCapture(result, upload)) {
+            return false;
+          }
+
+          navigation.replace(
+            'FaceCaptureConfirmation',
+            route.params?.afterAnalysisRoute
+              ? {
+                  afterAnalysisRoute: route.params.afterAnalysisRoute,
+                  target: 'faceAnalysis',
+                }
+              : {target: 'faceAnalysis'},
+          );
+          return true;
+        }}
+        onFallback={() => {
+          invalidateUnifiedFaceCapture({resetRetryAttempt: true});
+          setForceLegacyCapture(true);
+        }}
+        onRequestStarted={beginUnifiedFaceCapture}
+        request={unifiedCaptureRequest}
+      />
+    );
   }
 
   return (
@@ -159,6 +226,7 @@ export function FaceCaptureRouteScreen({
           return;
         }
 
+        invalidateUnifiedFaceCapture({resetRetryAttempt: true});
         setSelectedFaceCapture(result);
         // Face3D 측정 진입 자격 판정용(카메라 촬영 + 그린라이트 3종 충족 여부).
         setSelectedFaceCaptureGreenlight(greenlightReport ?? null);
@@ -243,12 +311,15 @@ export function FaceAnalysisLoadingRouteScreen({
     setSelectedFaceVerticalThirds,
     setSelectedPersonalColor,
     setSelectedPersonalColorCorrection,
+    unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const {clearSession} = useAuthSession();
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
   const [analysisErrorMessage, setAnalysisErrorMessage] = React.useState<string | null>(null);
   const [analysisRequestKey, setAnalysisRequestKey] = React.useState(0);
   const analysisRetryCountRef = React.useRef(0);
+  const activeNotificationReportIdRef = React.useRef<string | null>(null);
+  const reportWasViewedRef = React.useRef(false);
   const verticalThirdsPromiseRef =
     React.useRef<Promise<FaceVerticalThirdsResult | null> | null>(null);
   // 보고서 POST 가 대기하는 2D 기하 promise — POST deps 에 state 를 넣으면
@@ -265,7 +336,22 @@ export function FaceAnalysisLoadingRouteScreen({
 
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
+    reportWasViewedRef.current = false;
   }, [selectedFaceCapture?.mediaId, selectedFaceCapture?.photoCaptureId]);
+
+  React.useEffect(
+    () => () => {
+      const reportId = activeNotificationReportIdRef.current;
+      if (!reportId || reportWasViewedRef.current) {
+        return;
+      }
+      void releaseReportCompletionNotificationSuppression(
+        'analysis_report_completed',
+        reportId,
+      ).catch(() => undefined);
+    },
+    [],
+  );
 
   // [Unity still-analysis lease 시작] 아래 정지영상 분석(세로비율·퍼스널컬러)은
   // Unity homuler(IMAGE 모드) 코루틴에서 돌므로 플레이어 루프가 실행 중이어야
@@ -299,6 +385,10 @@ export function FaceAnalysisLoadingRouteScreen({
 
     let isMounted = true;
     const captureId = selectedFaceCapture.photoCaptureId;
+    const unifiedHairline =
+      unifiedFaceCaptureFlow.committedCapture?.result.hairline;
+    const capturedHairline: FaceVerticalThirdsInput['capturedHairline'] =
+      mapUnifiedHairlineToVerticalThirds(unifiedHairline);
 
     // still-analysis lease 의 resume+ready 뒤에 시작한다 (ready 실패여도 진행 —
     // 서비스가 자체 타임아웃/미탑재를 null 강등으로 흡수한다).
@@ -308,6 +398,7 @@ export function FaceAnalysisLoadingRouteScreen({
       .then(() =>
         analyzeFaceVerticalThirds({
           captureId,
+          capturedHairline,
           createdAt: new Date().toISOString(),
           imageUri: selectedFaceCapture.imageUri,
           semanticMattes: selectedFaceCapture.semanticMattes,
@@ -332,7 +423,11 @@ export function FaceAnalysisLoadingRouteScreen({
     return () => {
       isMounted = false;
     };
-  }, [selectedFaceCapture, setSelectedFaceVerticalThirds]);
+  }, [
+    selectedFaceCapture,
+    setSelectedFaceVerticalThirds,
+    unifiedFaceCaptureFlow.committedCapture,
+  ]);
 
   // 2D 기하 지표도 캡처당 1회 온디바이스로 계산한다. 같은 imageUri 라 Unity
   // 랜드마크 검출은 requestFaceLandmarks dedup 으로 세로비율과 1회를 공유한다.
@@ -476,7 +571,9 @@ export function FaceAnalysisLoadingRouteScreen({
           selectedFaceCapture,
           buildFaceVerticalThirdsAnalysisPayload(verticalThirds),
           // 3D 측정은 로딩 진입 전에 끝나 있으므로(측정 화면 경유) 대기 없이 그대로 싣는다.
-          selectedFace3DProfile ?? undefined,
+          isFace3DProfileAnalysisEligible(selectedFace3DProfile)
+            ? selectedFace3DProfile
+            : undefined,
           buildFaceGeometryAnalysisPayload(faceGeometry),
           // 측정 원본 4축 — 서버 저장(detail_payload)·AI 입력·과거 보고서 복원용.
           {
@@ -484,6 +581,29 @@ export function FaceAnalysisLoadingRouteScreen({
             faceGeometry2d: faceGeometry,
             faceVerticalThirds: verticalThirds,
             personalColor: personalColorOutcome,
+          },
+          {
+            onAnalysisCreated: async reportId => {
+              const previousReportId = activeNotificationReportIdRef.current;
+              if (previousReportId && previousReportId !== reportId) {
+                void releaseReportCompletionNotificationSuppression(
+                  'analysis_report_completed',
+                  previousReportId,
+                ).catch(() => undefined);
+              }
+              activeNotificationReportIdRef.current = reportId;
+              try {
+                await suppressReportCompletionNotification(
+                  'analysis_report_completed',
+                  reportId,
+                );
+              } catch (error) {
+                console.info('[aura:notifications] report-suppression-skipped', {
+                  message: error instanceof Error ? error.message : String(error),
+                  reportId,
+                });
+              }
+            },
           },
         );
       })
@@ -593,6 +713,11 @@ export function FaceAnalysisLoadingRouteScreen({
     setAnalysisRequestKey(currentKey => currentKey + 1);
   }, []);
   const handleAnalysisComplete = React.useCallback(() => {
+    if (!navigation.isFocused()) {
+      return;
+    }
+    reportWasViewedRef.current = true;
+
     // replace: 로딩을 스택에서 제거한다. navigate로 남겨두면 다음 분석 세션에서
     // 캡처 교체 시 이 화면의 효과들이 백그라운드로 재실행돼 보고서 POST가 중복되고,
     // 완료 자동 이동이 새 흐름(3D 측정 등) 위를 덮는 문제가 있었다.
@@ -642,6 +767,7 @@ export function FaceAnalysisReportDetailRouteScreen({
   route,
 }: RootScreenProps<'FaceAnalysisReportDetail'>) {
   const insets = useSafeAreaInsets();
+  const shouldReturnToProfile = route.params?.returnTo === 'profile';
   const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const {
     selectedFace3DProfile,
@@ -671,6 +797,9 @@ export function FaceAnalysisReportDetailRouteScreen({
   );
   const footerBottomInset = Math.max(insets.bottom, spacing.md);
   const currentReportId = route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
+  const handleBackToProfile = React.useCallback(() => {
+    navigateMainTab(navigation, 'ProfileTab');
+  }, [navigation]);
 
   return (
     <DetailRouteChrome
@@ -678,7 +807,12 @@ export function FaceAnalysisReportDetailRouteScreen({
       headerMode="overlay"
       reserveOverlayHeaderSpace={false}
       routeName="FaceAnalysisReportDetail"
-      onOpenDocumentList={() => navigation.navigate('FaceAnalysisReportsList')}
+      onBack={shouldReturnToProfile ? handleBackToProfile : undefined}
+      onOpenDocumentList={
+        shouldReturnToProfile
+          ? undefined
+          : () => navigation.navigate('FaceAnalysisReportsList')
+      }
       onShare={shareAction?.cb}
       shareDisabled={!shareAction}>
       <>

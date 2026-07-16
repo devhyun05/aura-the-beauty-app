@@ -6,13 +6,27 @@ import {
   type Face3DMetrics,
   type Face3DOptionalMetricKey,
   type Face3DProfile,
+  type Face3DProfileV1,
+  type Face3DProfileV2,
   type Face3DStartRequest,
   type Face3DStatus,
 } from '../types';
 
 export const FACE_3D_PROFILE_SCHEMA_VERSION = 'aura.face3d-profile.v1' as const;
+export const FACE_3D_PROFILE_SCHEMA_VERSION_V2 = 'aura.face3d-profile.v2' as const;
 export const FACE_3D_PROFILE_SOURCE = 'arkit_face_mesh' as const;
 export const FACE_3D_GATE_VERSION = 'face3d-gate-v1' as const;
+export const FACE_3D_GATE_VERSION_V2 = 'face3d-gate-v2' as const;
+
+const UNIFIED_MICRO_BURST_POLICY_ID = 'unified-micro-burst-5of8-v1';
+const DIAGNOSTICS_EXACT_POLICY_TARGETS = new Map<string, number>([
+  ['diagnostics-exact-1-v1', 1],
+  ['diagnostics-exact-3-v1', 3],
+  ['diagnostics-exact-5-v1', 5],
+  ['diagnostics-exact-8-v1', 8],
+  ['diagnostics-exact-12-v1', 12],
+  ['diagnostics-exact-30-v1', 30],
+]);
 
 export const DEFAULT_FACE_3D_REQUEST_OPTIONS = {
   gateVersion: FACE_3D_GATE_VERSION,
@@ -101,36 +115,12 @@ function parseMetric(value: unknown): Face3DMetric | null {
   };
 }
 
-export function parseFace3DProfile(value: unknown): Face3DProfile | null {
-  if (!isRecord(value) || !isRecord(value.metrics)) {
-    return null;
-  }
+function parseMetrics(metricsRecord: Record<string, unknown>): Face3DMetrics | null {
+  const parsedMetrics = FACE_3D_REQUIRED_METRIC_KEYS.map(
+    key => [key, parseMetric(metricsRecord[key])] as const,
+  );
 
-  const metricsRecord = value.metrics;
-
-  if (
-    value.schemaVersion !== FACE_3D_PROFILE_SCHEMA_VERSION ||
-    value.source !== FACE_3D_PROFILE_SOURCE
-  ) {
-    return null;
-  }
-
-  const gateVersion = readNonEmptyString(value.gateVersion);
-  const topologyFingerprint = readNonEmptyString(value.topologyFingerprint);
-  const validFrameCount = readNonNegativeInteger(value.validFrameCount);
-  const targetFrameCount = readNonNegativeInteger(value.targetFrameCount);
-  const parsedMetrics = FACE_3D_REQUIRED_METRIC_KEYS.map(key => [
-    key,
-    parseMetric(metricsRecord[key]),
-  ] as const);
-
-  if (
-    gateVersion !== FACE_3D_GATE_VERSION ||
-    !topologyFingerprint ||
-    validFrameCount === null ||
-    targetFrameCount === null ||
-    parsedMetrics.some(([, metric]) => metric === null)
-  ) {
+  if (parsedMetrics.some(([, metric]) => metric === null)) {
     return null;
   }
 
@@ -148,13 +138,32 @@ export function parseFace3DProfile(value: unknown): Face3DProfile | null {
     }
   }
 
-  const metrics = {
+  return {
     ...(Object.fromEntries(parsedMetrics) as Record<
       (typeof FACE_3D_REQUIRED_METRIC_KEYS)[number],
       Face3DMetric
     >),
     ...optionalMetrics,
   } as Face3DMetrics;
+}
+
+function parseFace3DProfileV1(
+  value: Record<string, unknown>,
+  metrics: Face3DMetrics,
+): Face3DProfileV1 | null {
+  const gateVersion = readNonEmptyString(value.gateVersion);
+  const topologyFingerprint = readNonEmptyString(value.topologyFingerprint);
+  const validFrameCount = readNonNegativeInteger(value.validFrameCount);
+  const targetFrameCount = readNonNegativeInteger(value.targetFrameCount);
+
+  if (
+    gateVersion !== FACE_3D_GATE_VERSION ||
+    !topologyFingerprint ||
+    validFrameCount === null ||
+    targetFrameCount === null
+  ) {
+    return null;
+  }
 
   return {
     gateVersion,
@@ -166,6 +175,163 @@ export function parseFace3DProfile(value: unknown): Face3DProfile | null {
     validFrameCount,
     warnings: readWarnings(value.warnings),
   };
+}
+
+function isValidV2PolicyCombination(input: {
+  aggregation: string;
+  captureWindowMs: number;
+  collectionPolicyId: string;
+  sampleMode: string;
+  targetFrameCount: number;
+  validFrameCount: number;
+  warnings: string[];
+}): boolean {
+  if (input.collectionPolicyId === UNIFIED_MICRO_BURST_POLICY_ID) {
+    return (
+      input.sampleMode === 'micro_burst' &&
+      input.aggregation === 'median_mad' &&
+      input.targetFrameCount === 8 &&
+      input.validFrameCount >= 5 &&
+      input.validFrameCount <= 8 &&
+      input.captureWindowMs <= 500
+    );
+  }
+
+  const exactTarget = DIAGNOSTICS_EXACT_POLICY_TARGETS.get(input.collectionPolicyId);
+  if (exactTarget === undefined) {
+    return false;
+  }
+
+  if (input.targetFrameCount !== exactTarget || input.validFrameCount !== exactTarget) {
+    return false;
+  }
+
+  if (exactTarget === 1) {
+    return (
+      input.sampleMode === 'single_frame' &&
+      input.aggregation === 'none' &&
+      input.warnings.includes('single_frame_unaggregated')
+    );
+  }
+
+  return input.sampleMode === 'micro_burst' && input.aggregation === 'median_mad';
+}
+
+function parseFace3DProfileV2(
+  value: Record<string, unknown>,
+  metrics: Face3DMetrics,
+): Face3DProfileV2 | null {
+  const aggregation = readNonEmptyString(value.aggregation);
+  const captureWindowMs = readFiniteNumber(value.captureWindowMs);
+  const collectionPolicyId = readNonEmptyString(value.collectionPolicyId);
+  const completionRatio = readFiniteNumber(value.completionRatio);
+  const confidenceCalibrationStatus = readNonEmptyString(
+    value.confidenceCalibrationStatus,
+  );
+  const gateVersion = readNonEmptyString(value.gateVersion);
+  const sampleMode = readNonEmptyString(value.sampleMode);
+  const targetFrameCount = readNonNegativeInteger(value.targetFrameCount);
+  const topologyFingerprint = readNonEmptyString(value.topologyFingerprint);
+  const validFrameCount = readNonNegativeInteger(value.validFrameCount);
+  const warnings = readWarnings(value.warnings);
+
+  if (
+    gateVersion !== FACE_3D_GATE_VERSION_V2 ||
+    !topologyFingerprint ||
+    !collectionPolicyId ||
+    (sampleMode !== 'micro_burst' && sampleMode !== 'single_frame') ||
+    (aggregation !== 'median_mad' && aggregation !== 'none') ||
+    (confidenceCalibrationStatus !== 'uncalibrated' &&
+      confidenceCalibrationStatus !== 'calibrated') ||
+    captureWindowMs === null ||
+    captureWindowMs < 0 ||
+    completionRatio === null ||
+    completionRatio < 0 ||
+    completionRatio > 1 ||
+    validFrameCount === null ||
+    targetFrameCount === null ||
+    targetFrameCount === 0 ||
+    validFrameCount > targetFrameCount ||
+    Math.abs(completionRatio - validFrameCount / targetFrameCount) > 0.0001 ||
+    !isValidV2PolicyCombination({
+      aggregation,
+      captureWindowMs,
+      collectionPolicyId,
+      sampleMode,
+      targetFrameCount,
+      validFrameCount,
+      warnings,
+    }) ||
+    Object.values(metrics).some(metric => metric.validFrameCount > validFrameCount)
+  ) {
+    return null;
+  }
+
+  return {
+    aggregation,
+    captureWindowMs,
+    collectionPolicyId,
+    completionRatio,
+    confidenceCalibrationStatus,
+    gateVersion,
+    metrics,
+    sampleMode,
+    schemaVersion: FACE_3D_PROFILE_SCHEMA_VERSION_V2,
+    source: FACE_3D_PROFILE_SOURCE,
+    targetFrameCount,
+    topologyFingerprint,
+    validFrameCount,
+    warnings,
+  };
+}
+
+export function parseFace3DProfile(value: unknown): Face3DProfile | null {
+  if (!isRecord(value) || !isRecord(value.metrics)) {
+    return null;
+  }
+
+  const metricsRecord = value.metrics;
+
+  if (value.source !== FACE_3D_PROFILE_SOURCE) {
+    return null;
+  }
+
+  const metrics = parseMetrics(metricsRecord);
+  if (!metrics) {
+    return null;
+  }
+
+  if (value.schemaVersion === FACE_3D_PROFILE_SCHEMA_VERSION) {
+    return parseFace3DProfileV1(value, metrics);
+  }
+
+  if (value.schemaVersion === FACE_3D_PROFILE_SCHEMA_VERSION_V2) {
+    return parseFace3DProfileV2(value, metrics);
+  }
+
+  return null;
+}
+
+// v2 소수 프레임 프로필은 반복성 보정이 완료되고 product policy로 수집된 경우에만
+// 사용자 보고서·AI 해석에 사용한다. diagnostics/single-frame/uncalibrated 결과는
+// 검증 자료로 저장할 수 있지만 제품 해석에는 노출하지 않는다.
+export function isFace3DProfileAnalysisEligible(
+  profile: Face3DProfile | null | undefined,
+): profile is Face3DProfile {
+  if (!profile) {
+    return false;
+  }
+
+  if (profile.schemaVersion === FACE_3D_PROFILE_SCHEMA_VERSION) {
+    return true;
+  }
+
+  return (
+    profile.confidenceCalibrationStatus === 'calibrated' &&
+    profile.sampleMode === 'micro_burst' &&
+    profile.aggregation === 'median_mad' &&
+    !profile.collectionPolicyId.startsWith('diagnostics-')
+  );
 }
 
 function parseMessagePayload(message: unknown): Record<string, unknown> | null {

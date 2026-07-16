@@ -1,6 +1,7 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
-import {Image, StyleSheet} from 'react-native';
-import {CheckCircle2, Circle} from 'lucide-react-native';
+import {Image, Pressable, StyleSheet} from 'react-native';
+import {CheckCircle2, ChevronLeft, Circle} from 'lucide-react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Svg, {Circle as SvgCircle} from 'react-native-svg';
 import {Text, View, XStack, YStack} from 'tamagui';
 
@@ -47,8 +48,10 @@ export function ReferenceMakeupExtractionLoadingScreen({
   isAnalysisReady = true,
   progressUpdate = null,
   photo,
+  onBack,
   onComplete,
 }: ReferenceMakeupExtractionLoadingScreenProps) {
+  const insets = useSafeAreaInsets();
   const data = getReferenceMakeupExtractionDataSync();
   const [elapsedMs, setElapsedMs] = useState(0);
   const [displayedProgress, setDisplayedProgress] = useState(0);
@@ -142,6 +145,14 @@ export function ReferenceMakeupExtractionLoadingScreen({
       scroll={false}
       topPadding="none"
     >
+      <Pressable
+        accessibilityLabel="뒤로가기"
+        accessibilityRole="button"
+        hitSlop={12}
+        onPress={onBack}
+        style={[styles.backButton, {top: insets.top + spacing.xs}]}>
+        <ChevronLeft color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+      </Pressable>
       <YStack style={styles.content}>
 
         <YStack style={styles.analysisCard}>
@@ -253,6 +264,19 @@ const styles = StyleSheet.create({
     shadowOffset: shadows.soft.shadowOffset,
     shadowOpacity: shadows.soft.shadowOpacity,
     shadowRadius: shadows.soft.shadowRadius,
+  },
+  backButton: {
+    alignItems: 'center',
+    backgroundColor: colors.headerOverlaySurface,
+    borderColor: colors.headerOverlayBorder,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    left: spacing.lg,
+    position: 'absolute',
+    width: 40,
+    zIndex: 10,
   },
   content: {
     flex: 1,

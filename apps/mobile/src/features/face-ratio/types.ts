@@ -7,6 +7,7 @@ export type FaceVerticalThirdsStatus =
 export type VerticalThirdsKeypointProvider =
   | 'mediapipe'
   | 'mediapipe_forehead_approx'
+  | 'mediapipe_hairline_boundary'
   | 'apple_semantic_matte'
   | 'face_parsing';
 
@@ -44,6 +45,22 @@ export type VerticalThirdsRatio = {
   warnings: string[];
 };
 
+export type FaceVerticalThirdsMeasurementMode =
+  | 'full_vertical_thirds'
+  | 'middle_lower_only';
+
+export type FaceVerticalThirdsHairlineOutcome =
+  | 'detected_high_confidence'
+  | 'detected_low_confidence'
+  | 'omitted';
+
+export type FaceVerticalThirdsHairlineAnalysis = {
+  analysisEligible: boolean;
+  confidence: number | null;
+  outcome: FaceVerticalThirdsHairlineOutcome;
+  provider: VerticalThirdsKeypointProvider | null;
+};
+
 export type VerticalThirdsDominantPart =
   | 'upper'
   | 'middle'
@@ -69,6 +86,13 @@ export type FaceVerticalThirdsSemanticMattes = {
 
 export type FaceVerticalThirdsInput = {
   captureId: string;
+  capturedHairline?: {
+    analysisEligible: boolean;
+    confidence: number;
+    method: string;
+    normalizedPoint: {x: number; y: number};
+    provider: VerticalThirdsKeypointProvider;
+  };
   createdAt: string;
   debugArtifacts?: boolean;
   imageUri: string;
@@ -105,12 +129,31 @@ export type FaceVerticalThirdsResult = {
   };
   captureId: string;
   createdAt: string;
+  hairlineAnalysis: FaceVerticalThirdsHairlineAnalysis;
   interpretation: {
     dominantPart?: VerticalThirdsDominantPart;
     summary: string;
     title: string;
   };
+  // 판정 버전 스냅샷(계획 Phase 0-5). 판정 상수·규칙(FACE_RATIO_JUDGMENT_VERSION)
+  // 개정 시 과거 저장 결과의 판정이 재렌더에서 조용히 바뀌는 것을 감지하기 위해
+  // 결과 생성 시점의 버전을 저장한다. optional — 스키마 v1 유지(구 결과 부재 허용).
+  judgmentVersion?: string;
+  // 길이비 판정 스냅샷 — 측정 시점의 verdict·오차 구간을 그대로 저장한다.
+  // 화면은 이 스냅샷을 렌더하고(재판정 금지), 스냅샷 없는 구 결과만
+  // 현재 판정기로 폴백한다. 서버 derived 규칙도 이 값을 정본으로 소비한다.
+  faceLengthJudgment?: {
+    band: {hi: number; lo: number};
+    verdict:
+      | 'wide'
+      | 'borderline_wide'
+      | 'average'
+      | 'borderline_long'
+      | 'long'
+      | 'indeterminate';
+  };
   keypoints: VerticalThirdsKeypointMap;
+  measurementMode: FaceVerticalThirdsMeasurementMode;
   // 얼굴 세로/가로 길이 비율 (상단 게이지용). 측정 불가 시 undefined.
   faceLength?: FaceVerticalThirdsLength;
   // 촬영 후 roll 좌표 보정 결과 (H/G/Sn/Me 계산 전 적용). optional — 스키마 v1 유지.

@@ -426,7 +426,9 @@ export function ConsultingTabRouteScreen({
       navigation={navigation}
       routeName="ConsultingTab"
       wrapContentInScreen={false}>
-      {renderConsultingHome(rootNavigation, {topPadding: 'belowOverlayHeader'})}
+      {renderConsultingHome(rootNavigation, {
+        topPadding: 'none',
+      })}
     </MainTabChrome>
   );
 }

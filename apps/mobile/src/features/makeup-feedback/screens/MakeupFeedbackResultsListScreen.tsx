@@ -1,5 +1,11 @@
 import type {ReactNode} from 'react';
-import {Image, Pressable, ScrollView, StyleSheet} from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+} from 'react-native';
 import {CheckCircle2, CircleAlert} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
@@ -9,11 +15,17 @@ import {getMakeupFeedbackAnalysisSourceLabel} from '../services/makeupFeedbackRe
 import type {MakeupFeedbackResult} from '../types';
 
 type MakeupFeedbackResultsListScreenProps = {
+  error?: string;
+  isLoading?: boolean;
+  onRetry?: () => void;
   onPressResult?: (result: MakeupFeedbackResult) => void;
   results: MakeupFeedbackResult[];
 };
 
 export function MakeupFeedbackResultsListScreen({
+  error,
+  isLoading = false,
+  onRetry,
   onPressResult,
   results,
 }: MakeupFeedbackResultsListScreenProps) {
@@ -22,7 +34,22 @@ export function MakeupFeedbackResultsListScreen({
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
-        {results.length > 0 ? (
+        {isLoading && results.length === 0 ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator color={colors.textPrimary} size="small" />
+            <Text style={styles.emptyStateText}>메이크업 피드백을 불러오는 중이에요.</Text>
+          </View>
+        ) : error && results.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>{error}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={onRetry}
+              style={({pressed}) => [styles.retryButton, pressed && styles.cardPressed]}>
+              <Text style={styles.retryButtonText}>다시 불러오기</Text>
+            </Pressable>
+          </View>
+        ) : results.length > 0 ? (
           results.map((result) => (
             <MakeupFeedbackResultCard
               key={result.id}
@@ -146,6 +173,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.lg,
     borderWidth: 1,
+    gap: spacing.md,
     justifyContent: 'center',
     minHeight: 180,
     padding: spacing.xl,
@@ -156,6 +184,20 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
     textAlign: 'center',
+  },
+  retryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.lg,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
   },
   eyebrow: {
     color: colors.textSecondary,

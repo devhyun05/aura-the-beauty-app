@@ -14,6 +14,7 @@ import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
 import {clearMyPageProfileSummaryCache} from '../../../shared/services/profileService';
 import {clearCachedUserProfile} from '../../../shared/services/userService';
 import {resetProductEventCollection} from '../../recommendation/services/productEventService';
+import {unregisterCurrentPushDevice} from '../../notifications/services/notificationService';
 import {refreshAuthSession} from './authService';
 import type {AuthSession} from '../types';
 
@@ -256,6 +257,9 @@ export function AuthSessionProvider({
   }, [refreshSessionIfNeeded, session]);
 
   const clearSession = useCallback(async () => {
+    if (sessionRef.current) {
+      await unregisterCurrentPushDevice().catch(() => undefined);
+    }
     await setSession(null);
   }, [setSession]);
 

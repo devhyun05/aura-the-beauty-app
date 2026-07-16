@@ -54,6 +54,7 @@ env:
   HAIR_WORKER_SERVICE: ${{ vars.HAIR_WORKER_SERVICE }}
   HAIR_WORKER_TASK_DEFINITION: ${{ vars.HAIR_WORKER_TASK_DEFINITION || vars.HAIR_WORKER_SERVICE }}
   AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+  PRODUCT_EVENT_SIGNING_SECRET: ${{ secrets.PRODUCT_EVENT_SIGNING_SECRET }}
 
 jobs:
   build_artifact:
@@ -200,6 +201,11 @@ jobs:
 
           if [ "${#missing[@]}" -gt 0 ]; then
             printf 'Missing required GitHub Variables: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+          if [ -z "$PRODUCT_EVENT_SIGNING_SECRET" ]; then
+            printf 'Missing required GitHub Secret: PRODUCT_EVENT_SIGNING_SECRET\n' >&2
             exit 1
           fi
 
@@ -363,6 +369,7 @@ jobs:
             BEDROCK_SCENARIO_MODEL_ID=${{ env.BEDROCK_SCENARIO_MODEL_ID }}
             BEDROCK_QUESTION_MODEL_ID=${{ env.BEDROCK_QUESTION_MODEL_ID }}
             BEDROCK_RECOMMENDATION_MODEL_ID=${{ env.BEDROCK_RECOMMENDATION_MODEL_ID }}
+            PRODUCT_EVENT_SIGNING_SECRET=${{ env.PRODUCT_EVENT_SIGNING_SECRET }}
 
       - name: Validate and register ECS task definition
         id: register-api-task
@@ -383,7 +390,8 @@ jobs:
                 "ENGAGEMENT_PERSONALIZATION_V1",
                 "COHORT_RECOMMENDATIONS_V1",
                 "PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT",
-                "PRODUCT_COHORT_EXPERIMENT_PERCENT"
+                "PRODUCT_COHORT_EXPERIMENT_PERCENT",
+                "PRODUCT_EVENT_SIGNING_SECRET"
               ] | index($name) | not))
               | sort_by(.name);
 

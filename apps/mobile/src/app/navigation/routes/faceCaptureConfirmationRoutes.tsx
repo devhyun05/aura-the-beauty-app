@@ -6,6 +6,11 @@ import type {
   FaceCaptureImageSource,
   FaceCaptureUploadResult,
 } from '../../../features/face-capture/services/faceCaptureUploadService';
+import {
+  getFaceAnalysisConfirmationDestination,
+  getUnifiedHairlineConfirmationNotice,
+} from '../../../features/face-capture/services/unifiedFaceCaptureNavigation';
+import {deleteUnifiedFaceCaptureTempImage} from '../../../features/face-capture/services/unifiedFaceCaptureTempImageCleanup';
 import type {MakeupFeedbackPhotoSelection} from '../../../features/makeup-feedback';
 import type {ReferenceMakeupPhoto} from '../../../features/reference-makeup-extraction';
 import {DetailRouteChrome} from '../detailHeaderChrome';
@@ -217,6 +222,7 @@ export function FaceCaptureConfirmationRouteScreen({
   route,
 }: RootScreenProps<'FaceCaptureConfirmation'>) {
   const {
+    invalidateUnifiedFaceCapture,
     selectedFaceCapture,
     selectedHairCapture,
     selectedMakeupFeedbackPhoto,
@@ -227,6 +233,7 @@ export function FaceCaptureConfirmationRouteScreen({
     setSelectedHairCapture,
     setSelectedMakeupFeedbackPhoto,
     setSelectedReferenceMakeupPhoto,
+    unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const target = route.params.target;
   const copy = getFaceCaptureConfirmationCopy(target);
@@ -244,8 +251,14 @@ export function FaceCaptureConfirmationRouteScreen({
     selectedReferenceMakeupPhoto,
     target,
   });
+  const unifiedHairlineNotice =
+    target === 'faceAnalysis'
+      ? getUnifiedHairlineConfirmationNotice(
+          unifiedFaceCaptureFlow.committedCapture?.result.hairline,
+        )
+      : null;
 
-  const handleRetake = React.useCallback(() => {
+  const handleRetake = React.useCallback(async () => {
     const retakeRoute = getFaceCaptureConfirmationRetakeRoute({
       afterAnalysisRoute: route.params.afterAnalysisRoute,
       source: photoSource,
@@ -253,6 +266,15 @@ export function FaceCaptureConfirmationRouteScreen({
     });
 
     if (target === 'faceAnalysis') {
+      await deleteUnifiedFaceCaptureTempImage(
+        unifiedFaceCaptureFlow.committedCapture?.result.image.uri,
+      );
+      invalidateUnifiedFaceCapture({
+        incrementRetryAttempt: Boolean(
+          unifiedFaceCaptureFlow.committedCapture?.result.hairline
+            .retryRecommendation.recommended,
+        ),
+      });
       setSelectedFaceCapture(null);
     }
 
@@ -292,6 +314,7 @@ export function FaceCaptureConfirmationRouteScreen({
     navigation.replace('ReferenceMakeupExtractionUpload', retakeRoute.params);
   }, [
     navigation,
+    invalidateUnifiedFaceCapture,
     photoSource,
     route.params.afterAnalysisRoute,
     setMakeupFeedbackResult,
@@ -300,6 +323,7 @@ export function FaceCaptureConfirmationRouteScreen({
     setSelectedMakeupFeedbackPhoto,
     setSelectedReferenceMakeupPhoto,
     target,
+    unifiedFaceCaptureFlow.committedCapture,
   ]);
 
   const handleConfirm = React.useCallback(() => {
@@ -309,6 +333,19 @@ export function FaceCaptureConfirmationRouteScreen({
     }
 
     if (target === 'faceAnalysis') {
+      const destination = getFaceAnalysisConfirmationDestination(
+        Boolean(unifiedFaceCaptureFlow.committedCapture),
+      );
+      if (destination === 'FaceAnalysisLoading') {
+        navigation.replace(
+          'FaceAnalysisLoading',
+          route.params.afterAnalysisRoute
+            ? {afterAnalysisRoute: route.params.afterAnalysisRoute}
+            : undefined,
+        );
+        return;
+      }
+
       // 3D 자동 측정을 경유(셔터 1회 UX). afterAnalysisRoute는 측정 화면이
       // 로딩으로 그대로 이어 전달한다(ProductRecommendation 연속 흐름 보존).
       navigation.replace(
@@ -346,16 +383,29 @@ export function FaceCaptureConfirmationRouteScreen({
     selectedReferenceMakeupPhoto,
     setReferenceMakeupUploadedPhotos,
     target,
+    unifiedFaceCaptureFlow.committedCapture,
   ]);
 
-  const handleClose = React.useCallback(() => {
+  const handleClose = React.useCallback(async () => {
+    if (target === 'faceAnalysis') {
+      await deleteUnifiedFaceCaptureTempImage(
+        unifiedFaceCaptureFlow.committedCapture?.result.image.uri,
+      );
+      invalidateUnifiedFaceCapture({resetRetryAttempt: true});
+    }
+
     if (target === 'makeupFeedback') {
       navigateMainTab(navigation, 'HomeTab');
       return;
     }
 
     navigateMainTab(navigation, 'HomeTab');
-  }, [navigation, target]);
+  }, [
+    invalidateUnifiedFaceCapture,
+    navigation,
+    target,
+    unifiedFaceCaptureFlow.committedCapture,
+  ]);
 
   return (
     <DetailRouteChrome
@@ -364,7 +414,7 @@ export function FaceCaptureConfirmationRouteScreen({
       onClose={handleClose}>
       <FaceCaptureConfirmationScreen
         confirmLabel={copy.confirmLabel}
-        description={copy.description}
+        description={unifiedHairlineNotice ?? copy.description}
         onConfirm={handleConfirm}
         onRetake={handleRetake}
         photoUri={photoUri}

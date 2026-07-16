@@ -19,11 +19,18 @@ import type {
 } from '../../face-geometry/types';
 import {FACE_GEOMETRY_METRIC_KEYS} from '../../face-geometry/types';
 import type {
+  FaceVerticalThirdsHairlineAnalysis,
+  FaceVerticalThirdsMeasurementMode,
   FaceVerticalThirdsResult,
   FaceVerticalThirdsStatus,
   VerticalThirdsKeypoint,
   VerticalThirdsKeypointMap,
 } from '../../face-ratio/types';
+import {
+  APPLE_HAIRLINE_FULL_CONFIDENCE,
+  APPLE_HAIRLINE_MIN_CONFIDENCE,
+} from '../../face-ratio/constants';
+import {isActualHairlineProvider} from '../../face-ratio/services/faceVerticalThirdsHairlineSelection';
 import type {
   AuraAxis,
   AuraPersonalColorResult,
@@ -324,6 +331,43 @@ function readNullableFiniteNumber(value: unknown): number | null {
   return readFiniteNumber(value) ?? null;
 }
 
+const FACE_LENGTH_VERDICTS = new Set([
+  'wide',
+  'borderline_wide',
+  'average',
+  'borderline_long',
+  'long',
+  'indeterminate',
+]);
+
+// 판정 스냅샷 복원(Phase 0-5). verdict가 알려진 값이 아니면(미래 버전의
+// 신규 verdict 등) 스냅샷 전체를 버리고 화면 폴백(재판정)에 맡긴다.
+function decodeFaceLengthJudgment(
+  value: unknown,
+): FaceVerticalThirdsResult['faceLengthJudgment'] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const band = isRecord(value.band) ? value.band : undefined;
+  const hi = readFiniteNumber(band?.hi);
+  const lo = readFiniteNumber(band?.lo);
+  const verdict = readString(value.verdict);
+
+  if (hi === undefined || lo === undefined || verdict === undefined) {
+    return undefined;
+  }
+  if (!FACE_LENGTH_VERDICTS.has(verdict)) {
+    return undefined;
+  }
+
+  return {
+    band: {hi, lo},
+    verdict: verdict as NonNullable<
+      FaceVerticalThirdsResult['faceLengthJudgment']
+    >['verdict'],
+  };
+}
+
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
@@ -381,6 +425,11 @@ const VERTICAL_THIRDS_STATUSES: readonly FaceVerticalThirdsStatus[] = [
   'failed',
 ];
 
+const VERTICAL_THIRDS_MEASUREMENT_MODES: readonly FaceVerticalThirdsMeasurementMode[] = [
+  'full_vertical_thirds',
+  'middle_lower_only',
+];
+
 function readVerticalThirdsKeypoint(value: unknown): VerticalThirdsKeypoint | null {
   if (!isRecord(value)) {
     return null;
@@ -400,6 +449,75 @@ function readVerticalThirdsKeypoint(value: unknown): VerticalThirdsKeypoint | nu
       'mediapipe') as VerticalThirdsKeypoint['provider'],
     x,
     y,
+  };
+}
+
+function resolveVerticalThirdsHairlinePolicy({
+  explicitAnalysis,
+  explicitMode,
+  keypoints,
+  status,
+}: {
+  explicitAnalysis: Record<string, unknown> | undefined;
+  explicitMode: FaceVerticalThirdsMeasurementMode | undefined;
+  keypoints: VerticalThirdsKeypointMap;
+  status: FaceVerticalThirdsStatus;
+}): {
+  hairlineAnalysis: FaceVerticalThirdsHairlineAnalysis;
+  measurementMode: FaceVerticalThirdsMeasurementMode;
+} {
+  const hairline = keypoints.H;
+  const validActualHairline = Boolean(
+    hairline &&
+      keypoints.G &&
+      hairline.y < keypoints.G.y &&
+      hairline.confidence >= APPLE_HAIRLINE_FULL_CONFIDENCE &&
+      isActualHairlineProvider(hairline.provider),
+  );
+  const explicitEligible =
+    explicitMode === 'full_vertical_thirds' &&
+    explicitAnalysis?.analysisEligible === true &&
+    validActualHairline;
+  // 필드가 없는 과거 full_success Apple 결과만 안전하게 복원한다. 과거 partial,
+  // idx-10 proxy, 알 수 없는 provider는 축 자체를 버리지 않고 2구간으로 강등한다.
+  const legacyEligible =
+    explicitMode === undefined &&
+    explicitAnalysis === undefined &&
+    status === 'full_success' &&
+    validActualHairline;
+  const analysisEligible = explicitEligible || legacyEligible;
+  const hasLowConfidenceActualHairline = Boolean(
+    hairline &&
+      keypoints.G &&
+      hairline.y < keypoints.G.y &&
+      hairline.confidence >= APPLE_HAIRLINE_MIN_CONFIDENCE &&
+      isActualHairlineProvider(hairline.provider),
+  );
+
+  return {
+    hairlineAnalysis: analysisEligible
+      ? {
+          analysisEligible: true,
+          confidence: hairline?.confidence ?? null,
+          outcome: 'detected_high_confidence',
+          provider: hairline?.provider ?? null,
+        }
+      : hasLowConfidenceActualHairline
+        ? {
+            analysisEligible: false,
+            confidence: hairline?.confidence ?? null,
+            outcome: 'detected_low_confidence',
+            provider: hairline?.provider ?? null,
+          }
+        : {
+            analysisEligible: false,
+            confidence: null,
+            outcome: 'omitted',
+            provider: null,
+          },
+    measurementMode: analysisEligible
+      ? 'full_vertical_thirds'
+      : 'middle_lower_only',
   };
 }
 
@@ -432,6 +550,23 @@ function decodeVerticalThirds(
     Me: readVerticalThirdsKeypoint(keypointsRecord.Me),
     Sn: readVerticalThirdsKeypoint(keypointsRecord.Sn),
   };
+  const explicitMeasurementMode = readString(value.measurementMode) as
+    | FaceVerticalThirdsMeasurementMode
+    | undefined;
+  const validExplicitMeasurementMode =
+    explicitMeasurementMode &&
+    VERTICAL_THIRDS_MEASUREMENT_MODES.includes(explicitMeasurementMode)
+      ? explicitMeasurementMode
+      : undefined;
+  const explicitHairlineAnalysis = isRecord(value.hairlineAnalysis)
+    ? value.hairlineAnalysis
+    : undefined;
+  const {hairlineAnalysis, measurementMode} = resolveVerticalThirdsHairlinePolicy({
+    explicitAnalysis: explicitHairlineAnalysis,
+    explicitMode: validExplicitMeasurementMode,
+    keypoints,
+    status,
+  });
 
   const interpretationRecord = isRecord(value.interpretation)
     ? value.interpretation
@@ -452,25 +587,85 @@ function decodeVerticalThirds(
     }
 
     verticalThirds = {
-      confidence: readFiniteNumber(ratio.confidence) ?? 0,
+      confidence:
+        measurementMode === 'middle_lower_only'
+          ? Math.min(
+              keypoints.G?.confidence ?? 0,
+              keypoints.Sn?.confidence ?? 0,
+              keypoints.Me?.confidence ?? 0,
+            )
+          : (readFiniteNumber(ratio.confidence) ?? 0),
       displayRatio: {
         lower,
         middle: 1.0,
-        upper: readNullableFiniteNumber(displayRatio?.upper),
+        upper:
+          measurementMode === 'full_vertical_thirds'
+            ? readNullableFiniteNumber(displayRatio?.upper)
+            : null,
       },
-      lowerNormalized: readNullableFiniteNumber(ratio.lowerNormalized),
+      lowerNormalized:
+        measurementMode === 'full_vertical_thirds'
+          ? readNullableFiniteNumber(ratio.lowerNormalized)
+          : null,
       lowerPx,
-      middleNormalized: readNullableFiniteNumber(ratio.middleNormalized),
+      middleNormalized:
+        measurementMode === 'full_vertical_thirds'
+          ? readNullableFiniteNumber(ratio.middleNormalized)
+          : null,
       middlePx,
-      totalPx: readNullableFiniteNumber(ratio.totalPx),
-      upperNormalized: readNullableFiniteNumber(ratio.upperNormalized),
-      upperPx: readNullableFiniteNumber(ratio.upperPx),
+      totalPx:
+        measurementMode === 'full_vertical_thirds'
+          ? readNullableFiniteNumber(ratio.totalPx)
+          : null,
+      upperNormalized:
+        measurementMode === 'full_vertical_thirds'
+          ? readNullableFiniteNumber(ratio.upperNormalized)
+          : null,
+      upperPx:
+        measurementMode === 'full_vertical_thirds'
+          ? readNullableFiniteNumber(ratio.upperPx)
+          : null,
       warnings: readStringArray(ratio.warnings),
     };
   } else if (status === 'full_success' || status === 'partial_success') {
     // 성공 상태인데 비율이 깨졌으면 화면 오버레이 분기가 크래시하므로 축 전체 drop.
     return undefined;
   }
+
+  const resolvedMeasurementMode: FaceVerticalThirdsMeasurementMode =
+    measurementMode === 'full_vertical_thirds' &&
+    verticalThirds?.displayRatio.upper !== null &&
+    verticalThirds?.displayRatio.upper !== undefined &&
+    verticalThirds?.upperPx !== null &&
+    verticalThirds?.upperPx !== undefined
+      ? 'full_vertical_thirds'
+      : 'middle_lower_only';
+  if (verticalThirds && resolvedMeasurementMode === 'middle_lower_only') {
+    verticalThirds = {
+      ...verticalThirds,
+      confidence: Math.min(
+        keypoints.G?.confidence ?? 0,
+        keypoints.Sn?.confidence ?? 0,
+        keypoints.Me?.confidence ?? 0,
+      ),
+      displayRatio: {...verticalThirds.displayRatio, upper: null},
+      lowerNormalized: null,
+      middleNormalized: null,
+      totalPx: null,
+      upperNormalized: null,
+      upperPx: null,
+    };
+  }
+  const resolvedHairlineAnalysis: FaceVerticalThirdsHairlineAnalysis =
+    resolvedMeasurementMode === 'full_vertical_thirds'
+      ? hairlineAnalysis
+      : hairlineAnalysis.analysisEligible
+        ? {
+            ...hairlineAnalysis,
+            analysisEligible: false,
+            outcome: 'detected_low_confidence',
+          }
+        : hairlineAnalysis;
 
   const faceLengthRecord = isRecord(value.faceLength) ? value.faceLength : undefined;
   const faceLengthHeight = readFiniteNumber(faceLengthRecord?.heightPx);
@@ -480,24 +675,42 @@ function decodeVerticalThirds(
     ? value.postCorrection
     : undefined;
 
+  const decodedStatus =
+    (status === 'full_success' || status === 'partial_success') &&
+    resolvedMeasurementMode === 'middle_lower_only'
+      ? 'partial_success'
+      : status;
+
   return {
     artifacts: {},
     captureId: readString(value.captureId) ?? '',
     createdAt: readString(value.createdAt) ?? '',
+    hairlineAnalysis: resolvedHairlineAnalysis,
     faceLength:
+      resolvedMeasurementMode === 'full_vertical_thirds' &&
       faceLengthHeight !== undefined &&
       faceLengthRatio !== undefined &&
       faceLengthWidth !== undefined
         ? {heightPx: faceLengthHeight, ratio: faceLengthRatio, widthPx: faceLengthWidth}
         : undefined,
     interpretation: {
-      dominantPart: readString(interpretationRecord.dominantPart) as
-        | FaceVerticalThirdsResult['interpretation']['dominantPart']
-        | undefined,
-      summary: readString(interpretationRecord.summary) ?? '',
+      dominantPart:
+        resolvedMeasurementMode === 'full_vertical_thirds'
+          ? (readString(interpretationRecord.dominantPart) as
+              | FaceVerticalThirdsResult['interpretation']['dominantPart']
+              | undefined)
+          : 'unknown',
+      summary:
+        resolvedMeasurementMode === 'full_vertical_thirds'
+          ? (readString(interpretationRecord.summary) ?? '')
+          : '헤어라인이 충분히 확인되지 않아 중안부와 하안부만 반영했어요.',
       title: readString(interpretationRecord.title) ?? '',
     },
+    // 판정 스냅샷(Phase 0-5) — 구 저장분에는 없으므로 optional 복원.
+    faceLengthJudgment: decodeFaceLengthJudgment(value.faceLengthJudgment),
+    judgmentVersion: readString(value.judgmentVersion),
     keypoints,
+    measurementMode: resolvedMeasurementMode,
     postCorrection: postCorrectionRecord
       ? {
           applied: readBoolean(postCorrectionRecord.applied, false),
@@ -524,7 +737,7 @@ function decodeVerticalThirds(
     schemaVersion: 'aura-face-vertical-thirds-v1',
     sessionId: readString(value.sessionId) ?? '',
     sourceImage: {height, uri: imageUrl, width},
-    status,
+    status: decodedStatus,
     statusReason: readString(value.statusReason),
     verticalThirds,
   };

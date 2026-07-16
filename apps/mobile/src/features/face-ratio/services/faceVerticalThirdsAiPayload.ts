@@ -1,23 +1,9 @@
 import type {FaceVerticalThirdsResult} from '../types';
+import {APPLE_HAIRLINE_FULL_CONFIDENCE} from '../constants';
+import {isActualHairlineProvider} from './faceVerticalThirdsHairlineSelection';
 
-// 보고서 작성 AI(requestPayload.faceVerticalThirds)로 보내는 요약.
-// 측정 데이터 3-반영 규칙: 해석 가능한 실측 수치는 전부 싣는다 —
-// faceLength(세로/가로 비율)·quality(pose)·postCorrection·ratioDetail(px/normalized)·
-// statusReason까지. raw keypoint 좌표는 measurements(저장·복원층)가 담당한다.
-export type FaceVerticalThirdsAnalysisPayload = {
+type FaceVerticalThirdsAnalysisPayloadBase = {
   confidence: number | null;
-  displayRatio: {
-    lower: number;
-    middle: number;
-    upper: number | null;
-  };
-  dominantPart: string | null;
-  // 얼굴 세로/가로 길이 비율(H→Me / 양볼 폭). 클수록 세로로 긴 얼굴.
-  faceLength: {heightPx: number; ratio: number; widthPx: number} | null;
-  hairline: {
-    confidence: number | null;
-    provider: string | null;
-  };
   postCorrection: {
     applied: boolean;
     method: string;
@@ -31,52 +17,60 @@ export type FaceVerticalThirdsAnalysisPayload = {
     warnings: string[];
     yaw: number | null;
   };
-  ratioDetail: {
-    lowerNormalized: number | null;
-    lowerPx: number;
-    middleNormalized: number | null;
-    middlePx: number;
-    totalPx: number | null;
-    upperNormalized: number | null;
-    upperPx: number | null;
-    warnings: string[];
-  };
   status: string;
   statusReason: string | null;
   summary: string;
   title: string;
 };
 
-export function buildFaceVerticalThirdsAnalysisPayload(
-  result: FaceVerticalThirdsResult | null,
-): FaceVerticalThirdsAnalysisPayload | undefined {
-  if (
-    !result ||
-    (result.status !== 'full_success' && result.status !== 'partial_success') ||
-    !result.verticalThirds
-  ) {
-    return undefined;
-  }
+export type FaceVerticalThirdsAnalysisPayload =
+  | (FaceVerticalThirdsAnalysisPayloadBase & {
+      displayRatio: {
+        lower: number;
+        middle: number;
+        upper: number;
+      };
+      dominantPart: string | null;
+      faceLength: {heightPx: number; ratio: number; widthPx: number} | null;
+      // 측정 시점 동결 판정(Phase 0-5). 레거시 LLM 경로(analyze_text)의
+      // faceShape가 비율값으로 재판정하지 않도록 정본 verdict를 동봉한다.
+      faceLengthJudgment: {
+        band: {hi: number; lo: number};
+        verdict: string;
+      } | null;
+      judgmentVersion: string | null;
+      hairline: {
+        analysisEligible: true;
+        confidence: number;
+        provider: string;
+      };
+      measurementMode: 'full_vertical_thirds';
+      ratioDetail: {
+        lowerNormalized: number | null;
+        lowerPx: number;
+        middleNormalized: number | null;
+        middlePx: number;
+        totalPx: number | null;
+        upperNormalized: number | null;
+        upperPx: number;
+        warnings: string[];
+      };
+    })
+  | (FaceVerticalThirdsAnalysisPayloadBase & {
+      measurementMode: 'middle_lower_only';
+      middleLowerRatio: {
+        lower: number;
+        lowerPx: number;
+        middle: number;
+        middlePx: number;
+      };
+    });
 
+function buildCommonPayload(
+  result: FaceVerticalThirdsResult,
+): FaceVerticalThirdsAnalysisPayloadBase {
   return {
-    confidence: result.verticalThirds.confidence ?? null,
-    displayRatio: {
-      lower: result.verticalThirds.displayRatio.lower,
-      middle: result.verticalThirds.displayRatio.middle,
-      upper: result.verticalThirds.displayRatio.upper,
-    },
-    dominantPart: result.interpretation.dominantPart ?? null,
-    faceLength: result.faceLength
-      ? {
-          heightPx: result.faceLength.heightPx,
-          ratio: result.faceLength.ratio,
-          widthPx: result.faceLength.widthPx,
-        }
-      : null,
-    hairline: {
-      confidence: result.keypoints.H?.confidence ?? null,
-      provider: result.keypoints.H?.provider ?? null,
-    },
+    confidence: result.verticalThirds?.confidence ?? null,
     postCorrection: result.postCorrection
       ? {
           applied: result.postCorrection.applied,
@@ -92,6 +86,94 @@ export function buildFaceVerticalThirdsAnalysisPayload(
       warnings: result.quality.warnings,
       yaw: result.quality.yaw ?? null,
     },
+    status: result.status,
+    statusReason: result.statusReason ?? null,
+    summary:
+      result.measurementMode === 'middle_lower_only'
+        ? '헤어라인이 충분히 확인되지 않아 중안부와 하안부만 반영했어요.'
+        : result.interpretation.summary,
+    title: result.interpretation.title,
+  };
+}
+
+function hasAuthoritativeHairline(result: FaceVerticalThirdsResult): boolean {
+  const hairline = result.keypoints.H;
+
+  return Boolean(
+    result.measurementMode === 'full_vertical_thirds' &&
+      result.hairlineAnalysis.analysisEligible &&
+      hairline &&
+      isActualHairlineProvider(hairline.provider) &&
+      hairline.confidence >= APPLE_HAIRLINE_FULL_CONFIDENCE &&
+      result.verticalThirds?.displayRatio.upper !== null &&
+      result.verticalThirds?.upperPx !== null,
+  );
+}
+
+// DB measurements에는 저신뢰 실제 H를 보존할 수 있지만 AI 요약은 권위 있는
+// 실제 H만 3분할로 직렬화한다. 그 밖의 결과에는 중안부:하안부 값만 남기며
+// hairline/upper/dominantPart/faceLength 키 자체를 만들지 않는다.
+export function buildFaceVerticalThirdsAnalysisPayload(
+  result: FaceVerticalThirdsResult | null,
+): FaceVerticalThirdsAnalysisPayload | undefined {
+  if (
+    !result ||
+    (result.status !== 'full_success' && result.status !== 'partial_success') ||
+    !result.verticalThirds
+  ) {
+    return undefined;
+  }
+
+  const common = buildCommonPayload(result);
+
+  if (!hasAuthoritativeHairline(result)) {
+    return {
+      ...common,
+      measurementMode: 'middle_lower_only',
+      middleLowerRatio: {
+        lower: result.verticalThirds.displayRatio.lower,
+        lowerPx: result.verticalThirds.lowerPx,
+        middle: result.verticalThirds.displayRatio.middle,
+        middlePx: result.verticalThirds.middlePx,
+      },
+    };
+  }
+
+  const hairline = result.keypoints.H!;
+  const upper = result.verticalThirds.displayRatio.upper!;
+  const upperPx = result.verticalThirds.upperPx!;
+
+  return {
+    ...common,
+    displayRatio: {
+      lower: result.verticalThirds.displayRatio.lower,
+      middle: result.verticalThirds.displayRatio.middle,
+      upper,
+    },
+    dominantPart: result.interpretation.dominantPart ?? null,
+    faceLength: result.faceLength
+      ? {
+          heightPx: result.faceLength.heightPx,
+          ratio: result.faceLength.ratio,
+          widthPx: result.faceLength.widthPx,
+        }
+      : null,
+    faceLengthJudgment: result.faceLengthJudgment
+      ? {
+          band: {
+            hi: result.faceLengthJudgment.band.hi,
+            lo: result.faceLengthJudgment.band.lo,
+          },
+          verdict: result.faceLengthJudgment.verdict,
+        }
+      : null,
+    judgmentVersion: result.judgmentVersion ?? null,
+    hairline: {
+      analysisEligible: true,
+      confidence: hairline.confidence,
+      provider: hairline.provider,
+    },
+    measurementMode: 'full_vertical_thirds',
     ratioDetail: {
       lowerNormalized: result.verticalThirds.lowerNormalized,
       lowerPx: result.verticalThirds.lowerPx,
@@ -99,12 +181,8 @@ export function buildFaceVerticalThirdsAnalysisPayload(
       middlePx: result.verticalThirds.middlePx,
       totalPx: result.verticalThirds.totalPx,
       upperNormalized: result.verticalThirds.upperNormalized,
-      upperPx: result.verticalThirds.upperPx,
+      upperPx,
       warnings: result.verticalThirds.warnings,
     },
-    status: result.status,
-    statusReason: result.statusReason ?? null,
-    summary: result.interpretation.summary,
-    title: result.interpretation.title,
   };
 }

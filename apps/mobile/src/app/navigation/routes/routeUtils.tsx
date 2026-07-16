@@ -194,6 +194,7 @@ export function MainTabChrome({
           containerProps={{
             style: [
               styles.overlayHeader,
+              routeName === 'ProfileTab' ? styles.profileHeader : null,
               headerBorderWidth === undefined
                 ? null
                 : {borderBottomWidth: headerBorderWidth},
@@ -239,6 +240,9 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     zIndex: 30,
+  },
+  profileHeader: {
+    paddingHorizontal: spacing.screenX,
   },
   screen: {
     backgroundColor: colors.background,

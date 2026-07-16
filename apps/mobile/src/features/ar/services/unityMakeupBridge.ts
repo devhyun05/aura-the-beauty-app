@@ -1,3 +1,4 @@
+import {shouldClearScheduledGeneratedMaskPost} from './generatedMaskEventCorrelation';
 import {NativeEventEmitter, NativeModules} from 'react-native';
 
 import type {
@@ -5,6 +6,14 @@ import type {
   MakeupArea,
   MakeupFilter,
 } from '../../../shared/types/makeupGuide';
+import type {
+  UnifiedFaceCaptureEvent,
+  UnifiedFaceCaptureRequest,
+} from '../../face-capture/services/unifiedFaceCaptureContract';
+import {
+  parseUnifiedFaceCaptureEvent,
+  parseUnifiedFaceCaptureRequest,
+} from '../../face-capture/services/unifiedFaceCaptureContract';
 import {
   DEFAULT_FULL_FACE_REGION_CONTROLS,
   FULL_FACE_REGION_RUNTIME_ASSETS,
@@ -29,6 +38,9 @@ export const UNITY_MAKEUP_BRIDGE_TARGET = {
   applyGeneratedBrowMaskMethod: 'ApplyGeneratedBrowMaskJson',
   applyGeneratedLipMaskMethod: 'ApplyGeneratedLipMaskJson',
   regionOverlayVisibilityMethod: 'SetE7RegionOverlayVisibleJson',
+  prepareUnifiedFaceCaptureMethod: 'PrepareUnifiedFaceCaptureJson',
+  startUnifiedFaceCaptureMethod: 'StartUnifiedFaceCaptureJson',
+  cancelUnifiedFaceCaptureMethod: 'CancelUnifiedFaceCaptureJson',
 } as const;
 
 export const UNITY_MAKEUP_NATIVE_EVENT_NAME = 'UnityMakeupEvent';
@@ -502,6 +514,96 @@ export function postUnityMessage(
 
   nativeBridge.postMessage(gameObject, method, payload);
   return true;
+}
+
+function postUnityUnifiedFaceCaptureMethod(
+  method:
+    | typeof UNITY_MAKEUP_BRIDGE_TARGET.prepareUnifiedFaceCaptureMethod
+    | typeof UNITY_MAKEUP_BRIDGE_TARGET.startUnifiedFaceCaptureMethod
+    | typeof UNITY_MAKEUP_BRIDGE_TARGET.cancelUnifiedFaceCaptureMethod,
+  payload: string,
+  requestId: string,
+  eventName:
+    | 'unified_face_capture_prepare'
+    | 'unified_face_capture_start'
+    | 'unified_face_capture_cancel',
+): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+
+  if (
+    !nativeBridge?.postMessage ||
+    !isUnityMakeupFrameworkAvailable() ||
+    !requestId.trim()
+  ) {
+    return false;
+  }
+
+  sendNativeUnityMethod(nativeBridge, method, payload, {
+    eventName,
+    messageId: `${eventName}:${requestId}:${Date.now()}`,
+    packageId: requestId,
+    payloadBytes: payload.length,
+    retryKey: `${method}:${requestId}`,
+  });
+  return true;
+}
+
+export function prepareUnityUnifiedFaceCapture(
+  request: UnifiedFaceCaptureRequest,
+): boolean {
+  const validatedRequest = parseUnifiedFaceCaptureRequest(request);
+  const nativeBridge = getNativeUnityMakeupBridge();
+
+  if (
+    !validatedRequest ||
+    !nativeBridge?.postMessage ||
+    nativeBridge.isFrameworkAvailable?.() === false
+  ) {
+    return false;
+  }
+
+  nativeBridge.prepareRuntime?.();
+  return postUnityUnifiedFaceCaptureMethod(
+    UNITY_MAKEUP_BRIDGE_TARGET.prepareUnifiedFaceCaptureMethod,
+    JSON.stringify(validatedRequest),
+    validatedRequest.requestId,
+    'unified_face_capture_prepare',
+  );
+}
+
+export function startUnityUnifiedFaceCapture(
+  request: UnifiedFaceCaptureRequest,
+): boolean {
+  const validatedRequest = parseUnifiedFaceCaptureRequest(request);
+
+  if (!validatedRequest) {
+    return false;
+  }
+
+  return postUnityUnifiedFaceCaptureMethod(
+    UNITY_MAKEUP_BRIDGE_TARGET.startUnifiedFaceCaptureMethod,
+    JSON.stringify(validatedRequest),
+    validatedRequest.requestId,
+    'unified_face_capture_start',
+  );
+}
+
+export function cancelUnityUnifiedFaceCapture(
+  requestId: string,
+  reason?: string,
+): boolean {
+  const normalizedRequestId = requestId.trim();
+  const normalizedReason = reason?.trim();
+
+  return postUnityUnifiedFaceCaptureMethod(
+    UNITY_MAKEUP_BRIDGE_TARGET.cancelUnifiedFaceCaptureMethod,
+    JSON.stringify({
+      requestId: normalizedRequestId,
+      ...(normalizedReason ? {reason: normalizedReason} : {}),
+    }),
+    normalizedRequestId,
+    'unified_face_capture_cancel',
+  );
 }
 
 // Pause/resume the ARwithFable Unity AR session. The Unity player is a persistent
@@ -1049,6 +1151,7 @@ function readJsonNumberField(
 function extractGeneratedLipMaskMetadata(payload: string): {
   messageId: string;
   packageId: string;
+  revision: number | undefined;
 } {
   try {
     const parsed = JSON.parse(payload) as unknown;
@@ -1057,21 +1160,26 @@ function extractGeneratedLipMaskMetadata(payload: string): {
       readJsonStringField(parsed, 'maskTextureId') ??
       readJsonStringField(parsed, 'captureSetId');
     const packageId = generatedMaskId ?? `generated-lip-payload-${payload.length}`;
-    const revision =
+    const messageIdCounter =
       readJsonNumberField(parsed, 'validationControlRequestId') ??
       readJsonNumberField(parsed, 'controlRequestId') ??
       readJsonNumberField(parsed, 'validationControlRevision') ??
       readJsonNumberField(parsed, 'controlRevision') ??
       0;
+    const revision =
+      readJsonNumberField(parsed, 'validationControlRevision') ??
+      readJsonNumberField(parsed, 'controlRevision');
 
     return {
-      messageId: sanitizeRecipeIdPart(`${packageId}-${revision}-${payload.length}`),
+      messageId: sanitizeRecipeIdPart(`${packageId}-${messageIdCounter}-${payload.length}`),
       packageId,
+      revision,
     };
   } catch {
     return {
       messageId: sanitizeRecipeIdPart(`generated-lip-unparsed-${payload.length}`),
       packageId: `generated-lip-unparsed-${payload.length}`,
+      revision: undefined,
     };
   }
 }
@@ -1079,6 +1187,7 @@ function extractGeneratedLipMaskMetadata(payload: string): {
 function extractGeneratedBrowMaskMetadata(payload: string): {
   messageId: string;
   packageId: string;
+  revision: number | undefined;
 } {
   try {
     const parsed = JSON.parse(payload) as unknown;
@@ -1087,21 +1196,26 @@ function extractGeneratedBrowMaskMetadata(payload: string): {
       readJsonStringField(parsed, 'maskTextureId') ??
       readJsonStringField(parsed, 'captureSetId');
     const packageId = generatedMaskId ?? `generated-brow-payload-${payload.length}`;
-    const revision =
+    const messageIdCounter =
       readJsonNumberField(parsed, 'validationControlRequestId') ??
       readJsonNumberField(parsed, 'controlRequestId') ??
       readJsonNumberField(parsed, 'validationControlRevision') ??
       readJsonNumberField(parsed, 'controlRevision') ??
       0;
+    const revision =
+      readJsonNumberField(parsed, 'validationControlRevision') ??
+      readJsonNumberField(parsed, 'controlRevision');
 
     return {
-      messageId: sanitizeRecipeIdPart(`${packageId}-${revision}-${payload.length}`),
+      messageId: sanitizeRecipeIdPart(`${packageId}-${messageIdCounter}-${payload.length}`),
       packageId,
+      revision,
     };
   } catch {
     return {
       messageId: sanitizeRecipeIdPart(`generated-brow-unparsed-${payload.length}`),
       packageId: `generated-brow-unparsed-${payload.length}`,
+      revision: undefined,
     };
   }
 }
@@ -1221,6 +1335,7 @@ type NativeUnityPostMetadata = {
   packageId?: string;
   payloadBytes: number;
   retryKey: string;
+  revision?: number;
 };
 
 type ScheduledNativePost = {
@@ -1319,6 +1434,24 @@ export function addUnityMakeupEventListener(
   return eventEmitter.addListener(UNITY_MAKEUP_NATIVE_EVENT_NAME, event => {
     handleUnityMakeupNativeEvent(event);
     listener(event);
+  });
+}
+
+export function parseUnityUnifiedFaceCaptureMessage(
+  message: unknown,
+): UnifiedFaceCaptureEvent | null {
+  return parseUnifiedFaceCaptureEvent(message);
+}
+
+export function addUnityUnifiedFaceCaptureEventListener(
+  listener: (event: UnifiedFaceCaptureEvent) => void,
+) {
+  return addUnityMakeupEventListener(event => {
+    const parsed = parseUnityUnifiedFaceCaptureMessage(event.message);
+
+    if (parsed) {
+      listener(parsed);
+    }
   });
 }
 
@@ -1554,32 +1687,44 @@ function handleUnityMakeupNativeEvent(event: {message?: string}) {
 
   try {
     const parsed = JSON.parse(event.message) as {
+      controlRevision?: number;
       generatedMaskId?: string;
       type?: string;
     };
+    const appliedRevision =
+      typeof parsed.controlRevision === 'number' ? parsed.controlRevision : undefined;
 
+    // Only clear retry loops under positive correlation: id match, both sides
+    // carry a numeric revision, and the post is not newer than the ack. An
+    // event without either correlation field clears nothing, so a stale or
+    // anonymous ack cannot cancel a freshly scheduled payload before it sends.
     if (parsed.type === 'generated_lip_mask_applied') {
-      clearGeneratedLipMaskNativePosts();
+      Array.from(scheduledNativePosts.entries())
+        .filter(
+          ([retryKey, post]) =>
+            retryKey.startsWith('generated-lip-mask:') &&
+            shouldClearScheduledGeneratedMaskPost(
+              post.metadata,
+              parsed.generatedMaskId,
+              appliedRevision,
+            ),
+        )
+        .forEach(([retryKey]) => clearScheduledNativePost(retryKey));
       return;
     }
 
     if (parsed.type === 'generated_brow_mask_applied') {
-      // Unity keeps streaming applied events (applyTrigger=runtime_sample) for
-      // whatever mask is currently active. Only clear retry loops whose payload
-      // matches the applied mask id — otherwise a stale mask's stream cancels a
-      // freshly scheduled shape/color payload before its first send fires.
-      const appliedMaskId = parsed.generatedMaskId;
-      if (typeof appliedMaskId === 'string' && appliedMaskId.length > 0) {
-        Array.from(scheduledNativePosts.entries())
-          .filter(
-            ([retryKey, post]) =>
-              retryKey.startsWith('generated-brow-mask:') &&
-              post.metadata.packageId === appliedMaskId,
-          )
-          .forEach(([retryKey]) => clearScheduledNativePost(retryKey));
-        return;
-      }
-      clearGeneratedBrowMaskNativePosts();
+      Array.from(scheduledNativePosts.entries())
+        .filter(
+          ([retryKey, post]) =>
+            retryKey.startsWith('generated-brow-mask:') &&
+            shouldClearScheduledGeneratedMaskPost(
+              post.metadata,
+              parsed.generatedMaskId,
+              appliedRevision,
+            ),
+        )
+        .forEach(([retryKey]) => clearScheduledNativePost(retryKey));
     }
   } catch {
     // Unity also sends diagnostic strings that are intentionally passed through.
@@ -1787,6 +1932,7 @@ function postNativeUnityMessageWithWarmupRetries(
     messageId?: string;
     packageId?: string;
     retryKey?: string;
+    revision?: number;
   } = {},
 ) {
   latestNativePostSequence += 1;
@@ -1800,6 +1946,7 @@ function postNativeUnityMessageWithWarmupRetries(
     packageId: metadata.packageId,
     payloadBytes: payload.length,
     retryKey,
+    revision: metadata.revision,
   };
 
   clearScheduledNativePost(retryKey);
@@ -1856,6 +2003,7 @@ export function postUnityGeneratedLipMaskPayload(payload: string): boolean {
         eventName: lipRoute.eventName,
         messageId: lipMaskMetadata.messageId,
         packageId: lipMaskMetadata.packageId,
+        revision: lipMaskMetadata.revision,
         retryKey: `${lipRoute.retryKeyPrefix}:${lipMaskMetadata.messageId}`,
       },
     );
@@ -1866,6 +2014,7 @@ export function postUnityGeneratedLipMaskPayload(payload: string): boolean {
   console.info('[aura:unity] generated-lip-mask:fallback-log', {
     messageId: lipMaskMetadata.messageId,
     packageId: lipMaskMetadata.packageId,
+    revision: lipMaskMetadata.revision,
     payloadBytes: payload.length,
     target: {
       gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
@@ -1896,6 +2045,7 @@ export function postUnityGeneratedBrowMaskPayload(payload: string): boolean {
         eventName: browRoute.eventName,
         messageId: browMaskMetadata.messageId,
         packageId: browMaskMetadata.packageId,
+        revision: browMaskMetadata.revision,
         retryKey: `${browRoute.retryKeyPrefix}:${browMaskMetadata.messageId}`,
       },
     );
@@ -1906,6 +2056,7 @@ export function postUnityGeneratedBrowMaskPayload(payload: string): boolean {
   console.info('[aura:unity] generated-brow-mask:fallback-log', {
     messageId: browMaskMetadata.messageId,
     packageId: browMaskMetadata.packageId,
+    revision: browMaskMetadata.revision,
     payloadBytes: payload.length,
     target: {
       gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
