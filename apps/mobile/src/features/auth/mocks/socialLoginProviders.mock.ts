@@ -11,14 +11,4 @@ export const socialLoginProviders: SocialLoginItem[] = [
     label: 'Google 계정으로 로그인',
     shortLabel: 'G',
   },
-  {
-    id: 'kakao',
-    label: 'Kakao 계정으로 로그인',
-    shortLabel: 'TALK',
-  },
-  {
-    id: 'naver',
-    label: 'Naver 계정으로 로그인',
-    shortLabel: 'N',
-  },
 ];
