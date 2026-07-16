@@ -4,10 +4,16 @@ import {Platform} from 'react-native';
 
 import * as SecureStore from '../../../shared/services/localSecureStore';
 import {requestBackendJson} from '../../../shared/services/backendApi';
-import {isAppNotificationType, type AppNotification} from '../types';
+import {
+  isAppNotificationType,
+  normalizeAppNotificationData,
+  type AppNotification,
+} from '../types';
 
 
 const PUSH_TOKEN_STORAGE_KEY = 'aura.notifications.expoPushToken.v1';
+const BACKGROUND_NOTIFICATION_PREFERENCE_KEY =
+  'aura.notifications.backgroundReportsEnabled.v1';
 const notificationStateListeners = new Set<() => void>();
 
 type NotificationListResponse = {
@@ -19,6 +25,10 @@ export type PushRegistrationResult =
   | {status: 'registered'; expoPushToken: string}
   | {status: 'permission-denied'}
   | {status: 'project-id-missing'};
+
+export type BackgroundNotificationUpdateResult =
+  | PushRegistrationResult
+  | {status: 'disabled'};
 
 export function subscribeNotificationStateChange(listener: () => void): () => void {
   notificationStateListeners.add(listener);
@@ -102,6 +112,35 @@ export async function registerForReportNotifications(): Promise<PushRegistration
   return {status: 'registered', expoPushToken};
 }
 
+export async function getBackgroundReportNotificationsEnabled(): Promise<boolean> {
+  const preference = await SecureStore.getItemAsync(
+    BACKGROUND_NOTIFICATION_PREFERENCE_KEY,
+  );
+  return preference !== 'disabled';
+}
+
+export async function setBackgroundReportNotificationsEnabled(
+  enabled: boolean,
+): Promise<BackgroundNotificationUpdateResult> {
+  if (!enabled) {
+    await unregisterCurrentPushDevice();
+    await SecureStore.setItemAsync(
+      BACKGROUND_NOTIFICATION_PREFERENCE_KEY,
+      'disabled',
+    );
+    return {status: 'disabled'};
+  }
+
+  const result = await registerForReportNotifications();
+  if (result.status === 'registered') {
+    await SecureStore.setItemAsync(
+      BACKGROUND_NOTIFICATION_PREFERENCE_KEY,
+      'enabled',
+    );
+  }
+  return result;
+}
+
 export async function presentRealtimeAppNotification(
   notification: AppNotification,
 ): Promise<void> {
@@ -146,9 +185,14 @@ export async function getAppNotifications(
   );
   return {
     ...response,
-    notifications: (response.notifications ?? []).filter(notification =>
-      isAppNotificationType(notification.notificationType),
-    ),
+    notifications: (response.notifications ?? [])
+      .filter(notification =>
+        isAppNotificationType(notification.notificationType),
+      )
+      .map(notification => ({
+        ...notification,
+        data: normalizeAppNotificationData(notification.data),
+      })),
   };
 }
 

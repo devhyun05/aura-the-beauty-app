@@ -33,3 +33,39 @@ export type AppNotification = {
   readAt?: string | null;
   createdAt: string;
 };
+
+export function normalizeAppNotificationData(
+  value: unknown,
+): AppNotificationData {
+  let source = value;
+
+  if (typeof source === 'string') {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      return {};
+    }
+  }
+
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return {};
+  }
+
+  const record = source as Record<string, unknown>;
+  const readString = (...keys: string[]) => {
+    for (const key of keys) {
+      const candidate = record[key];
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate;
+      }
+    }
+    return undefined;
+  };
+
+  return {
+    notificationId: readString('notificationId', 'notification_id'),
+    reportId: readString('reportId', 'report_id'),
+    route: readString('route'),
+    type: readString('type', 'notificationType', 'notification_type'),
+  };
+}

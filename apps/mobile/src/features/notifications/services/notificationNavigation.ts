@@ -1,7 +1,12 @@
 import type {NavigationProp} from '@react-navigation/native';
 
 import type {RootStackParamList} from '../../../app/navigation/routeTypes';
-import type {AppNotification, AppNotificationData, AppNotificationType} from '../types';
+import {
+  isAppNotificationType,
+  type AppNotification,
+  type AppNotificationData,
+  type AppNotificationType,
+} from '../types';
 
 
 export type AppNotificationNavigationTarget =
@@ -28,6 +33,22 @@ const NOTIFICATION_RESULT_ROUTES: Record<AppNotificationType, string> = {
   makeup_feedback_completed: 'MakeupFeedbackResult',
   filter_extraction_completed: 'ReferenceMakeupExtractionResult',
 };
+
+const NOTIFICATION_TYPE_BY_ROUTE: Record<string, AppNotificationType> = {
+  FaceAnalysisReportDetail: 'analysis_report_completed',
+  MakeupRecommendation: 'makeup_recommendation_completed',
+  MakeupFeedbackResult: 'makeup_feedback_completed',
+  ReferenceMakeupExtractionResult: 'filter_extraction_completed',
+};
+
+function getNotificationType(
+  data: AppNotificationData,
+): AppNotificationType | undefined {
+  if (data.type && isAppNotificationType(data.type)) {
+    return data.type;
+  }
+  return data.route ? NOTIFICATION_TYPE_BY_ROUTE[data.route] : undefined;
+}
 
 function getRouteReportId(route: CurrentRouteSnapshot): string | undefined {
   if (!route.params || !('reportId' in route.params)) {
@@ -71,28 +92,30 @@ export function shouldSuppressRealtimeAppNotification(
 export function getAppNotificationNavigationTarget(
   data: AppNotificationData,
 ): AppNotificationNavigationTarget {
-  if (data.type === 'analysis_report_completed' && data.reportId) {
+  const type = getNotificationType(data);
+
+  if (type === 'analysis_report_completed' && data.reportId) {
     return {
       name: 'FaceAnalysisReportDetail',
       params: {reportId: data.reportId},
     };
   }
 
-  if (data.type === 'makeup_recommendation_completed' && data.reportId) {
+  if (type === 'makeup_recommendation_completed' && data.reportId) {
     return {
       name: 'MakeupRecommendation',
       params: {reportId: data.reportId},
     };
   }
 
-  if (data.type === 'makeup_feedback_completed' && data.reportId) {
+  if (type === 'makeup_feedback_completed' && data.reportId) {
     return {
       name: 'MakeupFeedbackResult',
       params: {reportId: data.reportId},
     };
   }
 
-  if (data.type === 'filter_extraction_completed' && data.reportId) {
+  if (type === 'filter_extraction_completed' && data.reportId) {
     return {
       name: 'ReferenceMakeupExtractionResult',
       params: {reportId: data.reportId},
@@ -103,25 +126,55 @@ export function getAppNotificationNavigationTarget(
 }
 
 export function navigateToAppNotification(
-  navigation: Pick<NavigationProp<RootStackParamList>, 'navigate'>,
+  navigation: Pick<NavigationProp<RootStackParamList>, 'reset'>,
   data: AppNotificationData,
 ): void {
   const target = getAppNotificationNavigationTarget(data);
 
   switch (target.name) {
     case 'FaceAnalysisReportDetail':
-      navigation.navigate(target.name, target.params);
+      navigation.reset({
+        index: 1,
+        routes: [
+          {name: 'MainTabs', params: {screen: 'HomeTab'}},
+          {name: target.name, params: target.params},
+        ],
+      });
       break;
     case 'MakeupRecommendation':
-      navigation.navigate(target.name, target.params);
+      navigation.reset({
+        index: 1,
+        routes: [
+          {name: 'MainTabs', params: {screen: 'HomeTab'}},
+          {name: target.name, params: target.params},
+        ],
+      });
       break;
     case 'MakeupFeedbackResult':
-      navigation.navigate(target.name, target.params);
+      navigation.reset({
+        index: 1,
+        routes: [
+          {name: 'MainTabs', params: {screen: 'HomeTab'}},
+          {name: target.name, params: target.params},
+        ],
+      });
       break;
     case 'ReferenceMakeupExtractionResult':
-      navigation.navigate(target.name, target.params);
+      navigation.reset({
+        index: 1,
+        routes: [
+          {name: 'MainTabs', params: {screen: 'HomeTab'}},
+          {name: target.name, params: target.params},
+        ],
+      });
       break;
     default:
-      navigation.navigate(target.name);
+      navigation.reset({
+        index: 1,
+        routes: [
+          {name: 'MainTabs', params: {screen: 'HomeTab'}},
+          {name: target.name},
+        ],
+      });
   }
 }

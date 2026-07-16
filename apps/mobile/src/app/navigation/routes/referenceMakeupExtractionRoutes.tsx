@@ -229,7 +229,10 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
   return (
     <ReferenceMakeupExtractionLoadingScreen
       isAnalysisReady={isAnalysisReady}
-      onBack={() => navigation.replace('ReferenceMakeupExtractionUpload')}
+      onBack={() => navigation.reset({
+        index: 0,
+        routes: [{name: 'MainTabs', params: {screen: 'HomeTab'}}],
+      })}
       onComplete={() => {
         if (navigation.isFocused()) {
           navigation.replace('ReferenceMakeupExtractionResult');

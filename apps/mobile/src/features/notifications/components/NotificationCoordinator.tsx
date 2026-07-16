@@ -4,13 +4,18 @@ import * as Notifications from 'expo-notifications';
 import {useAuthSession} from '../../auth';
 import {
   deleteAppNotification,
+  getBackgroundReportNotificationsEnabled,
   markAppNotificationRead,
   notifyNotificationStateChanged,
   presentRealtimeAppNotification,
   registerForReportNotifications,
 } from '../services/notificationService';
 import {connectNotificationRealtime} from '../services/notificationRealtimeService';
-import type {AppNotification, AppNotificationData} from '../types';
+import {
+  normalizeAppNotificationData,
+  type AppNotification,
+  type AppNotificationData,
+} from '../types';
 
 
 Notifications.setNotificationHandler({
@@ -32,16 +37,9 @@ type NotificationCoordinatorProps = {
 function readNotificationData(
   response: Notifications.NotificationResponse,
 ): AppNotificationData {
-  const source = response.notification.request.content.data ?? {};
-  const readString = (key: string) =>
-    typeof source[key] === 'string' ? source[key] : undefined;
-
-  return {
-    notificationId: readString('notificationId'),
-    reportId: readString('reportId'),
-    route: readString('route'),
-    type: readString('type'),
-  };
+  return normalizeAppNotificationData(
+    response.notification.request.content.data,
+  );
 }
 
 export function NotificationCoordinator({
@@ -82,9 +80,10 @@ export function NotificationCoordinator({
       return;
     }
 
-    void registerForReportNotifications()
+    void getBackgroundReportNotificationsEnabled()
+      .then(enabled => enabled ? registerForReportNotifications() : null)
       .then(result => {
-        if (result.status === 'project-id-missing') {
+        if (result?.status === 'project-id-missing') {
           console.info(
             '[aura:notifications] EXPO_PUBLIC_EAS_PROJECT_ID is required for push registration.',
           );
@@ -156,12 +155,6 @@ export function NotificationCoordinator({
     });
     const responseSubscription =
       Notifications.addNotificationResponseReceivedListener(handleResponse);
-    const tokenSubscription = Notifications.addPushTokenListener(() => {
-      if (!session) {
-        return;
-      }
-      void registerForReportNotifications().catch(() => undefined);
-    });
 
     void Notifications.getLastNotificationResponseAsync().then(response => {
       if (response) {
@@ -172,7 +165,6 @@ export function NotificationCoordinator({
     return () => {
       receivedSubscription.remove();
       responseSubscription.remove();
-      tokenSubscription.remove();
     };
   }, [handleResponse, session]);
 
