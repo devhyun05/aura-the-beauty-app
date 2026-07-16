@@ -1,9 +1,9 @@
 using System;
-using System.Collections;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using ARMakeup.Face;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.XR.ARFoundation;
@@ -120,7 +120,7 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
     private int noFaceFetchesSinceCombo;
     private bool wroteDebugCapture;
     private bool loadedCaptureFormatPref;
-    private ARCameraManager cameraManager;
+    private FaceCameraFrameBroker frameBroker;
     private BoundarySnapshot latestSnapshot;
     private BoundarySnapshot transitionFromSnapshot;
     private BoundarySnapshot transitionToSnapshot;
@@ -167,6 +167,11 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         if (runtimeRequested)
         {
             nextCaptureAt = 0.0f;
+            TrySubscribeFrameBroker();
+        }
+        else
+        {
+            UnsubscribeFrameBroker();
         }
 
         Debug.Log(
@@ -253,120 +258,125 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
         RefreshSceneReferences();
     }
 
+    private void OnEnable()
+    {
+        if (runtimeRequested)
+        {
+            TrySubscribeFrameBroker();
+        }
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeFrameBroker();
+    }
+
     private void Update()
     {
+        if (runtimeRequested)
+        {
+            TrySubscribeFrameBroker();
+        }
 #if UNITY_IOS && !UNITY_EDITOR
         PollBackgroundBoundary();
 #endif
-
-        if (!runtimeRequested || captureInProgress || Time.realtimeSinceStartup < nextCaptureAt)
-        {
-            return;
-        }
-
-        StartCoroutine(CaptureAndDetectRoutine());
     }
-    // Capture v3 (SNOW-style source): detection runs on the ARKit camera
-    // CPU image via TryAcquireLatestCpuImage — never on the rendered screen.
+
+    // Capture v4: detection runs on the broker-owned ARKit camera CPU image,
+    // never on the rendered screen. The callback is synchronous, so conversion
+    // finishes before the broker disposes the borrowed XRCpuImage.
     // The prior ScreenCapture path interfered with the Metal present loop
     // (visible camera flicker) and captured rendered makeup. The CPU image
     // is converted to a small RGBA frame on the main thread (cheap at 384px)
     // and Vision runs on the native background queue; display rotation is
     // resolved by the orientation probe and locked+persisted.
-    private IEnumerator CaptureAndDetectRoutine()
+    private void OnCameraFrame(FaceCameraFrame frame)
     {
+        if (!runtimeRequested || captureInProgress || Time.realtimeSinceStartup < nextCaptureAt)
+        {
+            return;
+        }
+
         captureInProgress = true;
         RefreshSceneReferences();
         nextCaptureAt = Time.realtimeSinceStartup + CaptureIntervalSeconds;
 
-#if UNITY_IOS && !UNITY_EDITOR
-        LoadPersistedOrientation();
-        if (cameraManager == null
-            || !cameraManager.TryAcquireLatestCpuImage(out XRCpuImage cpuImage))
-        {
-            captureInProgress = false;
-            yield break;
-        }
-
-        int outputWidth = 0;
-        int outputHeight = 0;
-        bool converted = false;
         try
         {
-            float scale = Mathf.Min(1.0f, CaptureWidth / (float)Mathf.Max(1, cpuImage.width));
-            outputWidth = Mathf.Max(64, Mathf.RoundToInt(cpuImage.width * scale));
-            outputHeight = Mathf.Max(64, Mathf.RoundToInt(cpuImage.height * scale));
-            var conversionParams = new XRCpuImage.ConversionParams
+#if UNITY_IOS && !UNITY_EDITOR
+            LoadPersistedOrientation();
+            XRCpuImage cpuImage = frame.Image;
+            int outputWidth = 0;
+            int outputHeight = 0;
+            bool converted = false;
+            try
             {
-                inputRect = new RectInt(0, 0, cpuImage.width, cpuImage.height),
-                outputDimensions = new Vector2Int(outputWidth, outputHeight),
-                outputFormat = TextureFormat.RGBA32,
-                transformation = XRCpuImage.Transformation.MirrorY
-            };
-            int dataSize = cpuImage.GetConvertedDataSize(conversionParams);
-            if (frameUploadBuffer == null || frameUploadBuffer.Length < dataSize)
+                float scale = Mathf.Min(1.0f, CaptureWidth / (float)Mathf.Max(1, cpuImage.width));
+                outputWidth = Mathf.Max(64, Mathf.RoundToInt(cpuImage.width * scale));
+                outputHeight = Mathf.Max(64, Mathf.RoundToInt(cpuImage.height * scale));
+                var conversionParams = new XRCpuImage.ConversionParams
+                {
+                    inputRect = new RectInt(0, 0, cpuImage.width, cpuImage.height),
+                    outputDimensions = new Vector2Int(outputWidth, outputHeight),
+                    outputFormat = TextureFormat.RGBA32,
+                    transformation = XRCpuImage.Transformation.MirrorY
+                };
+                int dataSize = cpuImage.GetConvertedDataSize(conversionParams);
+                if (frameUploadBuffer == null || frameUploadBuffer.Length < dataSize)
+                {
+                    frameUploadBuffer = new byte[dataSize];
+                }
+
+                using (var buffer = new Unity.Collections.NativeArray<byte>(
+                    dataSize, Unity.Collections.Allocator.Temp))
+                {
+                    cpuImage.Convert(conversionParams, new Unity.Collections.NativeSlice<byte>(buffer));
+                    Unity.Collections.NativeArray<byte>.Copy(buffer, 0, frameUploadBuffer, 0, dataSize);
+                }
+
+                converted = true;
+            }
+            catch (Exception exception)
             {
-                frameUploadBuffer = new byte[dataSize];
+                Debug.LogWarning(
+                    "[E7] vision_lip_boundary_capture_failed error=" + exception.GetType().Name);
             }
 
-            using (var buffer = new Unity.Collections.NativeArray<byte>(
-                dataSize, Unity.Collections.Allocator.Temp))
+            if (converted)
             {
-                cpuImage.Convert(conversionParams, new Unity.Collections.NativeSlice<byte>(buffer));
-                Unity.Collections.NativeArray<byte>.Copy(buffer, 0, frameUploadBuffer, 0, dataSize);
-            }
+                // Face bounds pair with this detection so the stabilizer can
+                // rebase the polygon onto the CURRENT face. They are measured in
+                // SCREEN pixels but the landmark points arrive in CAPTURE-image
+                // pixels — every snapshot field must share one coordinate system.
+                FaceScreenBounds submitBounds = CaptureCurrentFaceBounds();
+                if (submitBounds.Available)
+                {
+                    float scaleToCaptureX = outputWidth / (float)Mathf.Max(1, Screen.width);
+                    float scaleToCaptureY = outputHeight / (float)Mathf.Max(1, Screen.height);
+                    submitBounds.Center = new Vector2(
+                        submitBounds.Center.x * scaleToCaptureX,
+                        submitBounds.Center.y * scaleToCaptureY);
+                    submitBounds.Size = new Vector2(
+                        submitBounds.Size.x * scaleToCaptureX,
+                        submitBounds.Size.y * scaleToCaptureY);
+                }
 
-            converted = true;
-        }
-        catch (Exception exception)
-        {
-            Debug.LogWarning(
-                "[E7] vision_lip_boundary_capture_failed error=" + exception.GetType().Name);
+                pendingSubmittedFaceBounds = submitBounds;
+                E7VisionLipBoundarySubmitRgba(
+                    frameUploadBuffer,
+                    outputWidth,
+                    outputHeight,
+                    outputWidth * 4,
+                    0,
+                    0,
+                    OrientationCandidates[captureFormatCombo % OrientationCandidates.Length]);
+            }
+#endif
         }
         finally
         {
-            cpuImage.Dispose();
+            captureInProgress = false;
         }
-
-        if (converted)
-        {
-            // Face bounds pair with this detection so the stabilizer can
-            // rebase the polygon onto the CURRENT face. They are measured in
-            // SCREEN pixels but the landmark points arrive in CAPTURE-image
-            // pixels — every snapshot field must share one coordinate system
-            // or the downstream uniform rescale (TryGetLatestBoundary) blows
-            // the bounds up by the screen/image ratio and the stabilizer
-            // displaces the polygon off the face (empty UV bake, no lips).
-            FaceScreenBounds submitBounds = CaptureCurrentFaceBounds();
-            if (submitBounds.Available)
-            {
-                float scaleToCaptureX = outputWidth / (float)Mathf.Max(1, Screen.width);
-                float scaleToCaptureY = outputHeight / (float)Mathf.Max(1, Screen.height);
-                submitBounds.Center = new Vector2(
-                    submitBounds.Center.x * scaleToCaptureX,
-                    submitBounds.Center.y * scaleToCaptureY);
-                submitBounds.Size = new Vector2(
-                    submitBounds.Size.x * scaleToCaptureX,
-                    submitBounds.Size.y * scaleToCaptureY);
-            }
-
-            pendingSubmittedFaceBounds = submitBounds;
-            E7VisionLipBoundarySubmitRgba(
-                frameUploadBuffer,
-                outputWidth,
-                outputHeight,
-                outputWidth * 4,
-                0,
-                0,
-                OrientationCandidates[captureFormatCombo % OrientationCandidates.Length]);
-        }
-
-        captureInProgress = false;
-        yield break;
-#else
-        captureInProgress = false;
-        yield break;
-#endif
     }
 
 #if UNITY_IOS && !UNITY_EDITOR
@@ -455,6 +465,7 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
 
     private void OnDestroy()
     {
+        UnsubscribeFrameBroker();
         if (captureTexture != null)
         {
             captureTexture.Release();
@@ -484,9 +495,27 @@ public sealed class E7VisionLipBoundaryRuntime : MonoBehaviour
             faceManager = FindFirstObjectByType<ARFaceManager>();
         }
 
-        if (cameraManager == null)
+    }
+
+    private void TrySubscribeFrameBroker()
+    {
+        FaceCameraFrameBroker broker = FaceCameraFrameBroker.Instance;
+        if (broker == null || broker == frameBroker)
         {
-            cameraManager = FindFirstObjectByType<ARCameraManager>();
+            return;
+        }
+
+        UnsubscribeFrameBroker();
+        frameBroker = broker;
+        frameBroker.FrameReceived += OnCameraFrame;
+    }
+
+    private void UnsubscribeFrameBroker()
+    {
+        if (frameBroker != null)
+        {
+            frameBroker.FrameReceived -= OnCameraFrame;
+            frameBroker = null;
         }
     }
 

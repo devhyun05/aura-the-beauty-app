@@ -1,6 +1,7 @@
 import type {Face3DMetricKey, Face3DProfile} from '../types';
 import {
   buildFace3DStartRequest,
+  isFace3DProfileAnalysisEligible,
   parseFace3DEvent,
   parseFace3DProfile,
 } from './face3DContract';
@@ -56,6 +57,39 @@ function createProfile(): Face3DProfile {
     topologyFingerprint: 'synthetic-v8-i12-uv8-a1b2c3d4',
     validFrameCount: 27,
     warnings: ['slight_yaw'],
+  };
+}
+
+function createV2Profile(overrides: Record<string, unknown> = {}) {
+  const metrics = Object.fromEntries(
+    METRIC_KEYS.map((key, index) => [
+      key,
+      {
+        confidence: 0.8 - index * 0.02,
+        mad: 0.004 + index * 0.001,
+        unit: 'normalized' as const,
+        validFrameCount: 7,
+        value: 0.1 + index * 0.02,
+      },
+    ]),
+  );
+
+  return {
+    aggregation: 'median_mad',
+    captureWindowMs: 420,
+    collectionPolicyId: 'unified-micro-burst-5of8-v1',
+    completionRatio: 7 / 8,
+    confidenceCalibrationStatus: 'uncalibrated',
+    gateVersion: 'face3d-gate-v2',
+    metrics,
+    sampleMode: 'micro_burst',
+    schemaVersion: 'aura.face3d-profile.v2',
+    source: 'arkit_face_mesh',
+    targetFrameCount: 8,
+    topologyFingerprint: 'synthetic-v8-i12-uv8-v2',
+    validFrameCount: 7,
+    warnings: ['micro_burst_target_not_reached'],
+    ...overrides,
   };
 }
 
@@ -139,6 +173,99 @@ expectEqual(
   parseFace3DProfile({...profile, schemaVersion: 'aura.face3d-profile.v0'}),
   null,
   'unknown schema rejected',
+);
+
+const v2Profile = parseFace3DProfile(createV2Profile());
+expectEqual(v2Profile?.schemaVersion, 'aura.face3d-profile.v2', 'v2 schema parses');
+expectEqual(
+  v2Profile?.schemaVersion === 'aura.face3d-profile.v2'
+    ? v2Profile.collectionPolicyId
+    : null,
+  'unified-micro-burst-5of8-v1',
+  'v2 collection policy preserved',
+);
+expectEqual(
+  isFace3DProfileAnalysisEligible(v2Profile),
+  false,
+  'uncalibrated micro-burst is not product-analysis eligible',
+);
+const calibratedV2Profile = parseFace3DProfile(
+  createV2Profile({confidenceCalibrationStatus: 'calibrated'}),
+);
+expectEqual(
+  isFace3DProfileAnalysisEligible(calibratedV2Profile),
+  true,
+  'calibrated product micro-burst is analysis eligible',
+);
+expectEqual(
+  parseFace3DProfile(createV2Profile({gateVersion: 'face3d-gate-v1'})),
+  null,
+  'v2 profile with legacy gate rejected',
+);
+expectEqual(
+  parseFace3DProfile(createV2Profile({validFrameCount: 4, completionRatio: 0.5})),
+  null,
+  'product micro-burst below five valid frames rejected',
+);
+expectEqual(
+  parseFace3DProfile(createV2Profile({captureWindowMs: 501})),
+  null,
+  'product micro-burst beyond 500ms rejected',
+);
+expectEqual(
+  parseFace3DProfile(createV2Profile({completionRatio: 1})),
+  null,
+  'inconsistent completion ratio rejected',
+);
+
+const singleFrameProfile = parseFace3DProfile(
+  createV2Profile({
+    aggregation: 'none',
+    captureWindowMs: 0,
+    collectionPolicyId: 'diagnostics-exact-1-v1',
+    completionRatio: 1,
+    metrics: Object.fromEntries(
+      METRIC_KEYS.map((key, index) => [
+        key,
+        {
+          confidence: 0,
+          mad: null,
+          unit: 'normalized',
+          validFrameCount: 1,
+          value: 0.1 + index * 0.02,
+        },
+      ]),
+    ),
+    sampleMode: 'single_frame',
+    targetFrameCount: 1,
+    validFrameCount: 1,
+    warnings: ['single_frame_unaggregated'],
+  }),
+);
+expectEqual(
+  singleFrameProfile?.schemaVersion,
+  'aura.face3d-profile.v2',
+  'diagnostics single-frame profile parses',
+);
+expectEqual(
+  isFace3DProfileAnalysisEligible(singleFrameProfile),
+  false,
+  'single-frame diagnostics never enters product analysis',
+);
+expectEqual(
+  parseFace3DProfile({
+    ...createV2Profile({
+      aggregation: 'none',
+      collectionPolicyId: 'diagnostics-exact-1-v1',
+      completionRatio: 1,
+      sampleMode: 'single_frame',
+      targetFrameCount: 1,
+      validFrameCount: 1,
+    }),
+    warnings: [],
+  }),
+  null,
+  'single-frame profile must disclose unaggregated warning',
 );
 
 // ── Tier-2 optional 키 계약 (docs/face3d/TIER2_METRIC_CONTRACT.md §3) ─────────

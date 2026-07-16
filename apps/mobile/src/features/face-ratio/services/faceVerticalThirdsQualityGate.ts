@@ -5,6 +5,7 @@ import type {
 } from '../types';
 import {APPLE_HAIRLINE_FULL_CONFIDENCE, HAIRLINE_WARNING} from '../constants';
 import {POST_CAPTURE_POSE_GATE} from '../../face-capture/constants/facePoseGates';
+import {isActualHairlineProvider} from './faceVerticalThirdsHairlineSelection';
 
 // 단일 소스(facePoseGates)에서 온다 — 실시간 게이트와의 정합(실시간 ≤ 사후)은
 // facePoseGates.test.ts 가 CI 에서 강제한다.
@@ -133,21 +134,20 @@ export function evaluateFaceVerticalThirdsQuality(
   if (!hairline) {
     nextKeypoints.H = null;
     warnings.push(HAIRLINE_WARNING.unavailable);
+  } else if (!isActualHairlineProvider(hairline.provider)) {
+    nextKeypoints.H = null;
+    warnings.push(HAIRLINE_WARNING.proxyRejected);
   } else if (!(hairline.y < glabella.y)) {
     nextKeypoints.H = null;
+    warnings.push(HAIRLINE_WARNING.invalidOrder);
+  } else if (hairline.confidence >= APPLE_HAIRLINE_FULL_CONFIDENCE) {
     warnings.push(
       hairline.provider === 'apple_semantic_matte'
-        ? HAIRLINE_WARNING.invalidOrder
-        : HAIRLINE_WARNING.approximatedUnusable,
-    );
-  } else if (hairline.provider === 'apple_semantic_matte') {
-    warnings.push(
-      hairline.confidence >= APPLE_HAIRLINE_FULL_CONFIDENCE
         ? HAIRLINE_WARNING.appleMatte
-        : HAIRLINE_WARNING.appleMatteLowConfidence,
+        : HAIRLINE_WARNING.detected,
     );
   } else {
-    warnings.push(HAIRLINE_WARNING.approximated);
+    warnings.push(HAIRLINE_WARNING.lowConfidence);
   }
 
   return {

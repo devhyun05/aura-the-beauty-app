@@ -5,6 +5,14 @@ import type {
   MakeupArea,
   MakeupFilter,
 } from '../../../shared/types/makeupGuide';
+import type {
+  UnifiedFaceCaptureEvent,
+  UnifiedFaceCaptureRequest,
+} from '../../face-capture/services/unifiedFaceCaptureContract';
+import {
+  parseUnifiedFaceCaptureEvent,
+  parseUnifiedFaceCaptureRequest,
+} from '../../face-capture/services/unifiedFaceCaptureContract';
 import {
   DEFAULT_FULL_FACE_REGION_CONTROLS,
   FULL_FACE_REGION_RUNTIME_ASSETS,
@@ -29,6 +37,9 @@ export const UNITY_MAKEUP_BRIDGE_TARGET = {
   applyGeneratedBrowMaskMethod: 'ApplyGeneratedBrowMaskJson',
   applyGeneratedLipMaskMethod: 'ApplyGeneratedLipMaskJson',
   regionOverlayVisibilityMethod: 'SetE7RegionOverlayVisibleJson',
+  prepareUnifiedFaceCaptureMethod: 'PrepareUnifiedFaceCaptureJson',
+  startUnifiedFaceCaptureMethod: 'StartUnifiedFaceCaptureJson',
+  cancelUnifiedFaceCaptureMethod: 'CancelUnifiedFaceCaptureJson',
 } as const;
 
 export const UNITY_MAKEUP_NATIVE_EVENT_NAME = 'UnityMakeupEvent';
@@ -502,6 +513,96 @@ export function postUnityMessage(
 
   nativeBridge.postMessage(gameObject, method, payload);
   return true;
+}
+
+function postUnityUnifiedFaceCaptureMethod(
+  method:
+    | typeof UNITY_MAKEUP_BRIDGE_TARGET.prepareUnifiedFaceCaptureMethod
+    | typeof UNITY_MAKEUP_BRIDGE_TARGET.startUnifiedFaceCaptureMethod
+    | typeof UNITY_MAKEUP_BRIDGE_TARGET.cancelUnifiedFaceCaptureMethod,
+  payload: string,
+  requestId: string,
+  eventName:
+    | 'unified_face_capture_prepare'
+    | 'unified_face_capture_start'
+    | 'unified_face_capture_cancel',
+): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+
+  if (
+    !nativeBridge?.postMessage ||
+    !isUnityMakeupFrameworkAvailable() ||
+    !requestId.trim()
+  ) {
+    return false;
+  }
+
+  sendNativeUnityMethod(nativeBridge, method, payload, {
+    eventName,
+    messageId: `${eventName}:${requestId}:${Date.now()}`,
+    packageId: requestId,
+    payloadBytes: payload.length,
+    retryKey: `${method}:${requestId}`,
+  });
+  return true;
+}
+
+export function prepareUnityUnifiedFaceCapture(
+  request: UnifiedFaceCaptureRequest,
+): boolean {
+  const validatedRequest = parseUnifiedFaceCaptureRequest(request);
+  const nativeBridge = getNativeUnityMakeupBridge();
+
+  if (
+    !validatedRequest ||
+    !nativeBridge?.postMessage ||
+    nativeBridge.isFrameworkAvailable?.() === false
+  ) {
+    return false;
+  }
+
+  nativeBridge.prepareRuntime?.();
+  return postUnityUnifiedFaceCaptureMethod(
+    UNITY_MAKEUP_BRIDGE_TARGET.prepareUnifiedFaceCaptureMethod,
+    JSON.stringify(validatedRequest),
+    validatedRequest.requestId,
+    'unified_face_capture_prepare',
+  );
+}
+
+export function startUnityUnifiedFaceCapture(
+  request: UnifiedFaceCaptureRequest,
+): boolean {
+  const validatedRequest = parseUnifiedFaceCaptureRequest(request);
+
+  if (!validatedRequest) {
+    return false;
+  }
+
+  return postUnityUnifiedFaceCaptureMethod(
+    UNITY_MAKEUP_BRIDGE_TARGET.startUnifiedFaceCaptureMethod,
+    JSON.stringify(validatedRequest),
+    validatedRequest.requestId,
+    'unified_face_capture_start',
+  );
+}
+
+export function cancelUnityUnifiedFaceCapture(
+  requestId: string,
+  reason?: string,
+): boolean {
+  const normalizedRequestId = requestId.trim();
+  const normalizedReason = reason?.trim();
+
+  return postUnityUnifiedFaceCaptureMethod(
+    UNITY_MAKEUP_BRIDGE_TARGET.cancelUnifiedFaceCaptureMethod,
+    JSON.stringify({
+      requestId: normalizedRequestId,
+      ...(normalizedReason ? {reason: normalizedReason} : {}),
+    }),
+    normalizedRequestId,
+    'unified_face_capture_cancel',
+  );
 }
 
 // Pause/resume the ARwithFable Unity AR session. The Unity player is a persistent
@@ -1319,6 +1420,24 @@ export function addUnityMakeupEventListener(
   return eventEmitter.addListener(UNITY_MAKEUP_NATIVE_EVENT_NAME, event => {
     handleUnityMakeupNativeEvent(event);
     listener(event);
+  });
+}
+
+export function parseUnityUnifiedFaceCaptureMessage(
+  message: unknown,
+): UnifiedFaceCaptureEvent | null {
+  return parseUnifiedFaceCaptureEvent(message);
+}
+
+export function addUnityUnifiedFaceCaptureEventListener(
+  listener: (event: UnifiedFaceCaptureEvent) => void,
+) {
+  return addUnityMakeupEventListener(event => {
+    const parsed = parseUnityUnifiedFaceCaptureMessage(event.message);
+
+    if (parsed) {
+      listener(parsed);
+    }
   });
 }
 

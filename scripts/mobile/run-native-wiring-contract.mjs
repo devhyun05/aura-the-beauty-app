@@ -121,6 +121,11 @@ function assertNotContains(source, needle, label) {
   const src = readSource(path);
   assertContains(src, /cameraMetadata:\s*selectedFaceCapture\.cameraMetadata/, `${path}: 보고서 촬영의 cameraMetadata 전달이 없다 — WB 보정/캘리브레이션 수집이 죽음`);
   assertContains(src, /outcome\.reported/, `${path}: 보고 메인 결과(outcome.reported) 배선이 없다 — 화면·저장 정합`);
+  assertContains(
+    src,
+    /mapUnifiedHairlineToVerticalThirds\(unifiedHairline\)/,
+    `${path}: 통합 촬영 H provider 변환이 보고서 세로비율 경로에서 빠졌다`,
+  );
 }
 
 // ── 6. 화면·저장 정합: 서비스가 reported(보정 우선)를 저장하는가 (F13) ──
@@ -159,6 +164,46 @@ function assertNotContains(source, needle, label) {
       );
     }
   }
+}
+
+// ── 8. 통합 촬영 lifecycle·Unity source 단일성 불변식 ────────────────
+{
+  const controllerPath =
+    'apps/unity/MakeupAR/Assets/Scripts/UnifiedFaceCaptureController.cs';
+  const controller = readSource(controllerPath);
+  assertContains(
+    controller,
+    /preparedRequest\s*!=\s*null[\s\S]*SendCancelled\(preparedRequest\.RequestId/,
+    `${controllerPath}: start 전 prepare 요청을 취소하는 경로가 없다`,
+  );
+  assertContains(
+    controller,
+    /segmentationSource\s*=\s*SegmentationSource\.Instance/,
+    `${controllerPath}: 기존 SegmentationSource singleton을 재사용하지 않는다`,
+  );
+
+  const segmentationPath =
+    'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Face/SegmentationSource.cs';
+  const segmentation = readSource(segmentationPath);
+  assertContains(
+    segmentation,
+    /landmarkSource\s*!=\s*null\s*&&\s*landmarkSource\.ExternalMode/,
+    `${segmentationPath}: 외부 편집 모드에서 라이브 segmentation을 멈추지 않는다`,
+  );
+  assertContains(
+    segmentation,
+    /_submissionMetadata\.Remove\(_inFlightSubmitTs\)/,
+    `${segmentationPath}: watchdog timeout 토큰 metadata를 정리하지 않는다`,
+  );
+
+  const makeupPath =
+    'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Face/MakeupController.cs';
+  const makeup = readSource(makeupPath);
+  assertContains(
+    makeup,
+    /SegmentationSource\.Instance\s*==\s*null/,
+    `${makeupPath}: SegmentationSource 중복 생성을 막는 singleton guard가 없다`,
+  );
 }
 
 if (failures > 0) {

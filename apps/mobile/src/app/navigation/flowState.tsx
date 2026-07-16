@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -13,6 +14,16 @@ import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../../fea
 import type {Face3DProfile} from '../../features/face-3d/types';
 import type {FaceCaptureGreenlightReport} from '../../features/face-capture/services/faceCaptureGreenlight';
 import type {FaceCaptureUploadResult} from '../../features/face-capture/services/faceCaptureUploadService';
+import type {UnifiedFaceCaptureCompletedEvent} from '../../features/face-capture/services/unifiedFaceCaptureContract';
+import {
+  beginUnifiedFaceCapture as beginUnifiedFaceCaptureState,
+  commitUnifiedFaceCapture as commitUnifiedFaceCaptureState,
+  INITIAL_UNIFIED_FACE_CAPTURE_FLOW_STATE,
+  invalidateUnifiedFaceCapture as invalidateUnifiedFaceCaptureState,
+  type InvalidateUnifiedFaceCaptureOptions,
+  type UnifiedFaceCaptureCommit,
+  type UnifiedFaceCaptureFlowState,
+} from '../../features/face-capture/services/unifiedFaceCaptureFlowState';
 import type {FaceGeometryResult} from '../../features/face-geometry/types';
 import type {FaceVerticalThirdsResult} from '../../features/face-ratio/types';
 import type {
@@ -49,6 +60,7 @@ export type NavigationFlowState = {
   selectedFaceCapture: FaceCaptureUploadResult | null;
   // 촬영 화면이 산출한 그린라이트 리포트 — Face3D 측정 진입 자격 판정용.
   selectedFaceCaptureGreenlight: FaceCaptureGreenlightReport | null;
+  unifiedFaceCaptureFlow: UnifiedFaceCaptureFlowState;
   selectedHairCapture: FaceCaptureUploadResult | null;
   // 얼굴 분석 세션에서 온디바이스로 계산한 2D 기하 지표(로컬 전용, 세션 한정).
   // 실패/미지원 시 null — 보고서 섹션은 null이면 렌더하지 않는다.
@@ -67,6 +79,14 @@ export type NavigationFlowState = {
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
+  beginUnifiedFaceCapture: (requestId: string) => void;
+  commitUnifiedFaceCapture: (
+    result: UnifiedFaceCaptureCompletedEvent,
+    upload: FaceCaptureUploadResult,
+  ) => boolean;
+  invalidateUnifiedFaceCapture: (
+    options?: InvalidateUnifiedFaceCaptureOptions,
+  ) => void;
   resetNavigationFlowState: () => void;
   setFloatingActionButtonPosition: Dispatch<SetStateAction<FloatingActionButtonPosition>>;
   setFloatingActionIds: Dispatch<SetStateAction<readonly FloatingActionId[]>>;
@@ -107,6 +127,7 @@ export function getInitialNavigationFlowState(): NavigationFlowState {
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedFaceCaptureGreenlight: null,
+    unifiedFaceCaptureFlow: INITIAL_UNIFIED_FACE_CAPTURE_FLOW_STATE,
     selectedHairCapture: null,
     selectedFaceGeometry2d: null,
     selectedFaceVerticalThirds: null,
@@ -143,6 +164,9 @@ export function NavigationFlowStateProvider({
     useState<FaceCaptureGreenlightReport | null>(
       initialState.selectedFaceCaptureGreenlight,
     );
+  const [unifiedFaceCaptureFlow, setUnifiedFaceCaptureFlow] =
+    useState<UnifiedFaceCaptureFlowState>(initialState.unifiedFaceCaptureFlow);
+  const unifiedFaceCaptureFlowRef = useRef(unifiedFaceCaptureFlow);
   const [selectedHairCapture, setSelectedHairCapture] =
     useState<FaceCaptureUploadResult | null>(initialState.selectedHairCapture);
   const [selectedFaceAnalysisReport, setSelectedFaceAnalysisReport] =
@@ -182,6 +206,63 @@ export function NavigationFlowStateProvider({
   const [shouldShowBeautyJourneyGuide, setShouldShowBeautyJourneyGuide] =
     useState<boolean>(initialState.shouldShowBeautyJourneyGuide);
 
+  const setUnifiedFlow = useCallback((next: UnifiedFaceCaptureFlowState) => {
+    unifiedFaceCaptureFlowRef.current = next;
+    setUnifiedFaceCaptureFlow(next);
+  }, []);
+
+  const clearFaceAnalysisCaptureState = useCallback(() => {
+    setSelectedFaceCapture(null);
+    setSelectedFaceCaptureGreenlight(null);
+    setSelectedFace3DProfile(null);
+    setSelectedFaceAnalysisReport(null);
+    setSelectedFaceGeometry2d(null);
+    setSelectedFaceVerticalThirds(null);
+    setSelectedPersonalColor(null);
+    setSelectedPersonalColorCorrection(null);
+  }, []);
+
+  const beginUnifiedFaceCapture = useCallback(
+    (requestId: string) => {
+      clearFaceAnalysisCaptureState();
+      setUnifiedFlow(
+        beginUnifiedFaceCaptureState(unifiedFaceCaptureFlowRef.current, requestId),
+      );
+    },
+    [clearFaceAnalysisCaptureState, setUnifiedFlow],
+  );
+
+  const invalidateUnifiedFaceCapture = useCallback(
+    (options: InvalidateUnifiedFaceCaptureOptions = {}) => {
+      clearFaceAnalysisCaptureState();
+      setUnifiedFlow(
+        invalidateUnifiedFaceCaptureState(
+          unifiedFaceCaptureFlowRef.current,
+          options,
+        ),
+      );
+    },
+    [clearFaceAnalysisCaptureState, setUnifiedFlow],
+  );
+
+  const commitUnifiedFaceCapture = useCallback(
+    (result: UnifiedFaceCaptureCompletedEvent, upload: FaceCaptureUploadResult) => {
+      const commit: UnifiedFaceCaptureCommit = {result, upload};
+      const next = commitUnifiedFaceCaptureState(
+        unifiedFaceCaptureFlowRef.current,
+        commit,
+      );
+
+      if (!next.accepted) {
+        return false;
+      }
+
+      setUnifiedFlow(next.state);
+      return true;
+    },
+    [setUnifiedFlow],
+  );
+
   const resetNavigationFlowState = useCallback(() => {
     const nextState = getInitialNavigationFlowState();
 
@@ -196,6 +277,7 @@ export function NavigationFlowStateProvider({
     setSelectedFaceAnalysisReport(nextState.selectedFaceAnalysisReport);
     setSelectedFaceCapture(nextState.selectedFaceCapture);
     setSelectedFaceCaptureGreenlight(nextState.selectedFaceCaptureGreenlight);
+    setUnifiedFlow(nextState.unifiedFaceCaptureFlow);
     setSelectedHairCapture(nextState.selectedHairCapture);
     setSelectedFaceGeometry2d(nextState.selectedFaceGeometry2d);
     setSelectedFaceVerticalThirds(nextState.selectedFaceVerticalThirds);
@@ -206,7 +288,7 @@ export function NavigationFlowStateProvider({
     setSelectedReferenceMakeupPhoto(nextState.selectedReferenceMakeupPhoto);
     setReferenceMakeupUploadedPhotos(nextState.referenceMakeupUploadedPhotos);
     setShouldShowBeautyJourneyGuide(nextState.shouldShowBeautyJourneyGuide);
-  }, []);
+  }, [setUnifiedFlow]);
 
   const value = useMemo(
     () => ({
@@ -217,10 +299,14 @@ export function NavigationFlowStateProvider({
       makeupFeedbackResult,
       savedMakeupLook,
       savedMakeupLooks,
-      selectedFace3DProfile,
+      selectedFace3DProfile:
+        unifiedFaceCaptureFlow.committedCapture?.result.face3d ??
+        selectedFace3DProfile,
       selectedFaceAnalysisReport,
-      selectedFaceCapture,
+      selectedFaceCapture:
+        unifiedFaceCaptureFlow.committedCapture?.upload ?? selectedFaceCapture,
       selectedFaceCaptureGreenlight,
+      unifiedFaceCaptureFlow,
       selectedHairCapture,
       selectedFaceGeometry2d,
       selectedFaceVerticalThirds,
@@ -231,6 +317,9 @@ export function NavigationFlowStateProvider({
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
       resetNavigationFlowState,
+      beginUnifiedFaceCapture,
+      commitUnifiedFaceCapture,
+      invalidateUnifiedFaceCapture,
       shouldShowBeautyJourneyGuide,
       setFloatingActionButtonPosition,
       setFloatingActionIds,
@@ -276,7 +365,11 @@ export function NavigationFlowStateProvider({
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
       resetNavigationFlowState,
+      beginUnifiedFaceCapture,
+      commitUnifiedFaceCapture,
+      invalidateUnifiedFaceCapture,
       shouldShowBeautyJourneyGuide,
+      unifiedFaceCaptureFlow,
     ],
   );
 
