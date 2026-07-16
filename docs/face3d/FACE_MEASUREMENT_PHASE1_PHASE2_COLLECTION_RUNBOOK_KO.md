@@ -2,7 +2,7 @@
 
 상태: **준비 완료 / 실기기 수집 미실행 / 승격 미실행**
 
-정본은 `docs/superpowers/plans/2026-07-16-face-measurement-analysis-plan.md` v3과
+정본은 `docs/superpowers/plans/2026-07-16-face-measurement-analysis-plan.md` v4와
 `AURA_UNIFIED_FACE_CAPTURE_IMPLEMENTATION_PLAN_KO.md` Phase 6B다. 이 문서는 두
 정본을 재정의하지 않고 로컬 수집 순서, 증거 파일 계약, dry-run 검증 명령만 고정한다.
 
