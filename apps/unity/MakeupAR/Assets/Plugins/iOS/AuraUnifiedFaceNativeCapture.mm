@@ -527,71 +527,75 @@ extern "C"
         const char *utf8Path,
         float quality)
     {
-        AURAUnifiedFaceRetainedSample *sample = AURASampleForToken(token);
-        if (sample == nil
-            || sample->_pixelBuffer == NULL
-            || utf8Path == NULL)
+        @autoreleasepool
         {
-            return 0;
+            AURAUnifiedFaceRetainedSample *sample =
+                AURASampleForToken(token);
+            if (sample == nil
+                || sample->_pixelBuffer == NULL
+                || utf8Path == NULL)
+            {
+                return 0;
+            }
+
+            NSString *path = [NSString stringWithUTF8String:utf8Path];
+            if (path.length == 0)
+            {
+                return 0;
+            }
+
+            CIImage *sourceImage =
+                [CIImage imageWithCVPixelBuffer:sample->_pixelBuffer];
+            CGAffineTransform imageTransform =
+                AURACoreImageTransformForSample(sample);
+            CIImage *outputImage =
+                [[sourceImage imageByApplyingTransform:imageTransform]
+                    imageByCroppingToRect:CGRectMake(
+                        0.0,
+                        0.0,
+                        sample.imageWidth,
+                        sample.imageHeight)];
+
+            static CIContext *context;
+            static dispatch_once_t contextOnceToken;
+            dispatch_once(&contextOnceToken, ^{
+                context = [CIContext contextWithOptions:nil];
+            });
+
+            CGColorSpaceRef colorSpace =
+                CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+            CGImageRef cgImage = [context createCGImage:outputImage
+                                               fromRect:CGRectMake(
+                                                   0.0,
+                                                   0.0,
+                                                   sample.imageWidth,
+                                                   sample.imageHeight)
+                                                 format:kCIFormatRGBA8
+                                             colorSpace:colorSpace];
+            CGColorSpaceRelease(colorSpace);
+            if (cgImage == NULL)
+            {
+                return 0;
+            }
+
+            UIImage *image = [UIImage imageWithCGImage:cgImage
+                                                 scale:1.0
+                                           orientation:UIImageOrientationUp];
+            CGImageRelease(cgImage);
+            NSData *jpeg = UIImageJPEGRepresentation(
+                image,
+                fmaxf(0.0f, fminf(1.0f, quality)));
+            if (jpeg == nil)
+            {
+                return 0;
+            }
+
+            NSError *writeError = nil;
+            BOOL wrote = [jpeg writeToFile:path
+                                   options:NSDataWritingAtomic
+                                     error:&writeError];
+            return wrote && writeError == nil ? 1 : 0;
         }
-
-        NSString *path = [NSString stringWithUTF8String:utf8Path];
-        if (path.length == 0)
-        {
-            return 0;
-        }
-
-        CIImage *sourceImage =
-            [CIImage imageWithCVPixelBuffer:sample->_pixelBuffer];
-        CGAffineTransform imageTransform =
-            AURACoreImageTransformForSample(sample);
-        CIImage *outputImage =
-            [[sourceImage imageByApplyingTransform:imageTransform]
-                imageByCroppingToRect:CGRectMake(
-                    0.0,
-                    0.0,
-                    sample.imageWidth,
-                    sample.imageHeight)];
-
-        static CIContext *context;
-        static dispatch_once_t contextOnceToken;
-        dispatch_once(&contextOnceToken, ^{
-            context = [CIContext contextWithOptions:nil];
-        });
-
-        CGColorSpaceRef colorSpace =
-            CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-        CGImageRef cgImage = [context createCGImage:outputImage
-                                           fromRect:CGRectMake(
-                                               0.0,
-                                               0.0,
-                                               sample.imageWidth,
-                                               sample.imageHeight)
-                                             format:kCIFormatRGBA8
-                                         colorSpace:colorSpace];
-        CGColorSpaceRelease(colorSpace);
-        if (cgImage == NULL)
-        {
-            return 0;
-        }
-
-        UIImage *image = [UIImage imageWithCGImage:cgImage
-                                             scale:1.0
-                                       orientation:UIImageOrientationUp];
-        CGImageRelease(cgImage);
-        NSData *jpeg = UIImageJPEGRepresentation(
-            image,
-            fmaxf(0.0f, fminf(1.0f, quality)));
-        if (jpeg == nil)
-        {
-            return 0;
-        }
-
-        NSError *writeError = nil;
-        BOOL wrote = [jpeg writeToFile:path
-                               options:NSDataWritingAtomic
-                                 error:&writeError];
-        return wrote && writeError == nil ? 1 : 0;
     }
 
     void AuraUnifiedFaceCapture_Release(uint64_t token)

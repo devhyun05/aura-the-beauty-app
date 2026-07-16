@@ -35,6 +35,8 @@ const result = spawnSync(
     'ES2020',
     '--types',
     'node',
+    '--typeRoots',
+    join(repoRoot, 'apps/mobile/node_modules/@types'),
     '--strict',
     '--skipLibCheck',
     '--rootDir',
