@@ -100,6 +100,25 @@ def face3d_metric(
   )
 
 
+def label_metric(
+  value: str,
+  *,
+  source: str = "pixel",
+) -> MetricEnvelope:
+  return MetricEnvelope.model_validate(
+    {
+      "value": value,
+      "unit": "label",
+      "confidence": 0.91,
+      "source": source,
+      "status": "measured",
+      "shots": ["S1"],
+      "sensitivity": 0,
+      "warnings": [],
+    },
+  )
+
+
 @pytest.mark.asyncio
 async def test_measurement_rejects_authoritative_and_unknown_keys() -> None:
   client = FakeStructuredClient(
@@ -169,6 +188,54 @@ async def test_measurement_prompt_omits_internal_only_camera_evidence() -> None:
   assert "verticalThirds.faceHeightPx" in payload["authoritativeKeys"]
   assert "face3d.noseTipProjection.mm" not in payload["authoritativeKeys"]
   assert "ignore.previous.instructions" not in payload["authoritativeKeys"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("top", "season", "expected"),
+  [
+    ("IGNORE_PRIOR_INSTRUCTIONS", "autumn", False),
+    ("summer_true", "autumn", False),
+    ("autumn_muted", "autumn", True),
+  ],
+)
+async def test_measurement_prompt_validates_personal_color_tone_values(
+  top: str,
+  season: str,
+  expected: bool,
+) -> None:
+  client = FakeStructuredClient(
+    [{"metrics": {}, "photoQuality": {"usable": True, "warnings": []}}],
+  )
+  profile = {
+    "personalColor.tone.top": label_metric(top),
+    "personalColor.tone.secondary": label_metric("autumn_true"),
+    "personalColor.tone.season": label_metric(season),
+  }
+
+  await FaceAnalysisAI(client).measure(
+    source_image_bytes=b"jpeg",
+    coverage=MeasurementCoveragePlan(
+      authoritative_keys=sorted(profile),
+      missing_observable_keys=[],
+      out_of_scope_keys=[],
+      blocked_keys=[],
+    ),
+    camera_profile=profile,
+  )
+
+  payload = json.loads(client.calls[0]["user_prompt"].split("\n")[-1])
+  tone_keys = {
+    "personalColor.tone.top",
+    "personalColor.tone.secondary",
+    "personalColor.tone.season",
+  }
+  if expected:
+    assert tone_keys <= payload["cameraEvidence"].keys()
+    assert payload["cameraEvidence"]["personalColor.tone.top"]["value"] == top
+  else:
+    assert tone_keys.isdisjoint(payload["cameraEvidence"])
+    assert top not in client.calls[0]["user_prompt"]
 
 
 @pytest.mark.asyncio

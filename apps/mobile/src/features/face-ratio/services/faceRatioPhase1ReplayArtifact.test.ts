@@ -29,6 +29,11 @@ function expectThrows(action: () => void, pattern: RegExp) {
 }
 
 const validation = {
+  acquisition: {
+    cameraFacing: 'front',
+    captureImplementation: 'native',
+    source: 'camera',
+  },
   captureId: 'cap_phase1_shot_001',
   cohortId: 'cohort_phase1_local',
   condition: {
@@ -113,6 +118,12 @@ expect(
   'raw replay artifact must not persist the source image URI',
 );
 expect(
+  appended.captures[0].acquisition.source === 'camera' &&
+    appended.captures[0].acquisition.captureImplementation === 'native' &&
+    appended.captures[0].acquisition.cameraFacing === 'front',
+  'capture must persist strict camera/native/front acquisition provenance',
+);
+expect(
   isFaceRatioPhase1ReplayArtifactExpired(
     appended,
     '2026-07-23T23:59:59.999Z',
@@ -127,9 +138,39 @@ expect(
   'artifact must expire exactly at deleteByUtc',
 );
 
+const reorderedCapture = {
+  transformationMatrix: capture.transformationMatrix,
+  subjectId: capture.subjectId,
+  landmarks: capture.landmarks,
+  imageWidth: capture.imageWidth,
+  imageHeight: capture.imageHeight,
+  hairline: capture.hairline,
+  condition: {
+    repeatIndex: capture.condition.repeatIndex,
+    repeatGroup: capture.condition.repeatGroup,
+    poseLabel: capture.condition.poseLabel,
+    isReference: capture.condition.isReference,
+    distanceLabel: capture.condition.distanceLabel,
+  },
+  capturedAtUtc: capture.capturedAtUtc,
+  captureId: capture.captureId,
+  acquisition: {
+    source: capture.acquisition.source,
+    captureImplementation: capture.acquisition.captureImplementation,
+    cameraFacing: capture.acquisition.cameraFacing,
+  },
+};
+expect(
+  appendFaceRatioPhase1ReplayCapture(appended, reorderedCapture) === appended,
+  'canonically identical captureId payload must be a successful no-op',
+);
 expectThrows(
-  () => appendFaceRatioPhase1ReplayCapture(appended, capture),
-  /duplicate captureId/,
+  () =>
+    appendFaceRatioPhase1ReplayCapture(appended, {
+      ...capture,
+      imageWidth: capture.imageWidth + 1,
+    }),
+  /already exists with a different payload/,
 );
 expectThrows(
   () =>
@@ -138,6 +179,39 @@ expectThrows(
       subjectId: 'person@example.com',
     }),
   /pseudonymous subj_/,
+);
+expectThrows(
+  () =>
+    validateFaceRatioPhase1ReplayValidation({
+      ...validation,
+      acquisition: {
+        ...validation.acquisition,
+        source: 'gallery',
+      },
+    }),
+  /source must be camera/,
+);
+expectThrows(
+  () =>
+    validateFaceRatioPhase1ReplayValidation({
+      ...validation,
+      acquisition: {
+        ...validation.acquisition,
+        captureImplementation: 'expo',
+      },
+    }),
+  /captureImplementation must be native/,
+);
+expectThrows(
+  () =>
+    validateFaceRatioPhase1ReplayValidation({
+      ...validation,
+      acquisition: {
+        ...validation.acquisition,
+        cameraFacing: 'back',
+      },
+    }),
+  /cameraFacing must be front/,
 );
 expectThrows(
   () =>

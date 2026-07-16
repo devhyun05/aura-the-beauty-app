@@ -272,20 +272,27 @@ function parseCalibrationReceipt(value: unknown): Face3DCalibrationReceipt | nul
     !captureNonce ||
     !profileBindingSha256 ||
     !collectionPolicyId ||
-    gateVersion !== FACE_3D_GATE_VERSION_V2 ||
     !appBuild ||
     !issuedAtUtc ||
     !expiresAtUtc ||
     !subjectContextId ||
     !reportContextId ||
     !approvalArtifactSha256 ||
-    signatureAlgorithm !== 'hmac-sha256-v1' ||
     !signingKeyId ||
-    !signature ||
-    !Number.isFinite(issuedAtMs) ||
-    !Number.isFinite(expiresAtMs) ||
-    issuedAtMs >= expiresAtMs
+    !signature
   ) {
+    return null;
+  }
+  if (gateVersion !== FACE_3D_GATE_VERSION_V2) {
+    return null;
+  }
+  if (signatureAlgorithm !== 'hmac-sha256-v1') {
+    return null;
+  }
+  if (!Number.isFinite(issuedAtMs) || !Number.isFinite(expiresAtMs)) {
+    return null;
+  }
+  if (issuedAtMs >= expiresAtMs) {
     return null;
   }
 

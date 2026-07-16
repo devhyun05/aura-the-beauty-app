@@ -62,6 +62,10 @@ export function inspectEmbeddedUnityFace3DRuntime({
     resolvedBuildDirectory,
     'UnityFramework.framework',
   );
+  const frameworkExecutablePath = path.join(
+    frameworkDirectory,
+    'UnityFramework',
+  );
   const metadataPath = path.join(
     resolvedBuildDirectory,
     'Data/Managed/Metadata/global-metadata.dat',
@@ -69,7 +73,7 @@ export function inspectEmbeddedUnityFace3DRuntime({
   const passiveVerification = {
     deviceActionsExecuted: false,
     unityBuildExecuted: false,
-    verificationScope: 'embedded_il2cpp_metadata_only',
+    verificationScope: 'embedded_framework_and_il2cpp_metadata',
   };
 
   if (
@@ -90,6 +94,27 @@ export function inspectEmbeddedUnityFace3DRuntime({
       'unity_framework_missing',
       `UnityFramework.framework가 없습니다: ${frameworkDirectory}`,
       passiveVerification,
+    );
+  }
+  if (!fs.existsSync(frameworkExecutablePath)) {
+    fail(
+      'unity_framework_executable_missing',
+      `UnityFramework 실행 파일이 없습니다: ${frameworkExecutablePath}`,
+      {
+        ...passiveVerification,
+        frameworkExecutablePath,
+      },
+    );
+  }
+  const frameworkExecutableStat = fs.lstatSync(frameworkExecutablePath);
+  if (!frameworkExecutableStat.isFile() || frameworkExecutableStat.size === 0) {
+    fail(
+      'unity_framework_executable_invalid',
+      `UnityFramework 실행 파일이 비어 있거나 일반 파일이 아닙니다: ${frameworkExecutablePath}`,
+      {
+        ...passiveVerification,
+        frameworkExecutablePath,
+      },
     );
   }
   if (!fs.existsSync(metadataPath)) {
@@ -129,6 +154,7 @@ export function inspectEmbeddedUnityFace3DRuntime({
     ...passiveVerification,
     expectedProfileSchema,
     frameworkDirectory,
+    frameworkExecutablePath,
     metadataPath,
     observedProfileSchemas,
     readyForDeviceCollection: true,

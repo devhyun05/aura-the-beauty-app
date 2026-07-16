@@ -4,7 +4,10 @@ import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 
-import {validatePhase1ReplayArtifact} from './phase1-replay-core.mjs';
+import {
+  appendPhase1ReplayCapture,
+  validatePhase1ReplayArtifact,
+} from './phase1-replay-core.mjs';
 import {PHASE1_REPLAY_SHOTS} from './phase1-replay-shot-plan.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -227,6 +230,11 @@ for (const sample of samples) {
   writeFileSync(
     metadataPath,
     JSON.stringify({
+      acquisition: {
+        cameraFacing: 'front',
+        captureImplementation: 'native',
+        source: 'camera',
+      },
       artifactCreatedAtUtc: '2026-07-17T00:00:00.000Z',
       capturedAtUtc: new Date(
         Date.parse('2026-07-17T00:00:00.000Z') +
@@ -297,6 +305,46 @@ expect(
 function cloneArtifact() {
   return JSON.parse(readFileSync(artifactPath, 'utf8'));
 }
+
+const replayArtifact = cloneArtifact();
+const firstCapture = replayArtifact.captures[0];
+const reorderedFirstCapture = {
+  transformationMatrix: firstCapture.transformationMatrix,
+  subjectId: firstCapture.subjectId,
+  landmarks: firstCapture.landmarks,
+  imageWidth: firstCapture.imageWidth,
+  imageHeight: firstCapture.imageHeight,
+  hairline: firstCapture.hairline,
+  condition: firstCapture.condition,
+  capturedAtUtc: firstCapture.capturedAtUtc,
+  captureId: firstCapture.captureId,
+  acquisition: {
+    source: 'camera',
+    captureImplementation: 'native',
+    cameraFacing: 'front',
+  },
+};
+expect(
+  appendPhase1ReplayCapture(replayArtifact, reorderedFirstCapture) ===
+    replayArtifact,
+  'Canonically identical captureId payload must be an idempotent no-op.',
+);
+let conflictingCaptureError = null;
+try {
+  appendPhase1ReplayCapture(replayArtifact, {
+    ...firstCapture,
+    imageWidth: firstCapture.imageWidth + 1,
+  });
+} catch (error) {
+  conflictingCaptureError = error;
+}
+expect(
+  conflictingCaptureError instanceof Error &&
+    conflictingCaptureError.message.includes(
+      'already exists with a different payload',
+    ),
+  'Conflicting payload for an existing captureId must fail closed.',
+);
 
 function expectReplayReadyRejection(artifact, expectedMessage, label) {
   let rejection = null;
@@ -372,6 +420,20 @@ expect(
     invalidRun.stderr.includes('productPayloadIncluded must be false'),
   'Replay must reject artifacts that claim product-payload inclusion.',
 );
+
+for (const [field, invalidValue, expectedMessage] of [
+  ['source', 'gallery', 'source must be camera'],
+  ['captureImplementation', 'expo', 'captureImplementation must be native'],
+  ['cameraFacing', 'back', 'cameraFacing must be front'],
+]) {
+  const invalidAcquisition = cloneArtifact();
+  invalidAcquisition.captures[0].acquisition[field] = invalidValue;
+  expectReplayReadyRejection(
+    invalidAcquisition,
+    expectedMessage,
+    `Invalid acquisition ${field} must be rejected`,
+  );
+}
 
 const singleReferencePath = join(tempRoot, 'invalid-single-reference.json');
 const singleReference = JSON.parse(readFileSync(artifactPath, 'utf8'));
@@ -502,6 +564,26 @@ expect(
   'Validation replay must disable native tmp matte/debug artifact generation.',
 );
 
+const artifactStoreSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/mobile/src/features/face-ratio/services/faceVerticalThirdsArtifacts.ts',
+  ),
+  'utf8',
+);
+expect(
+  artifactStoreSource.includes(
+    'let phase1ReplayStoreTail: Promise<void> = Promise.resolve()',
+  ) &&
+    artifactStoreSource.includes('withPhase1ReplayStoreLock') &&
+    artifactStoreSource.includes(
+      'pruneExpiredFaceRatioPhase1ReplayArtifactsUnlocked',
+    ) &&
+    artifactStoreSource.includes('writePhase1ReplayArtifactAtomically') &&
+    artifactStoreSource.includes('if (next !== artifact || !fileInfo.exists)'),
+  'Phase 1 replay save must serialize prune/read/append/write and skip identical re-writes.',
+);
+
 const screenSource = readFileSync(
   join(
     repoRoot,
@@ -514,8 +596,30 @@ expect(
     'onAnalysisResult?: (result: FaceVerticalThirdsResult) => void',
   ) &&
     screenSource.includes('reportedAnalysisResultKeyRef.current !== analysisResultKey') &&
-    screenSource.includes('onAnalysisResultRef.current?.(nextResult)'),
-  'Lab screen contract must report one terminal analysis result per capture.',
+    screenSource.includes('onAnalysisResultRef.current?.(nextResult)') &&
+    screenSource.includes(
+      'function LoadingReport({onRetake}: {onRetake?: () => void})',
+    ) &&
+    screenSource.includes(
+      'onRetake={validationReplay ? undefined : onRetake}',
+    ),
+  'Phase 1 must suppress in-flight retake without regressing the ordinary ratio flow.',
+);
+
+const cameraScreenSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/mobile/src/features/face-capture/screens/CameraFaceCaptureScreen.tsx',
+  ),
+  'utf8',
+);
+expect(
+  cameraScreenSource.includes(
+    "captureImplementation: realtimeCaptureAvailable ? 'native' : 'expo'",
+  ) &&
+    cameraScreenSource.includes('cameraFacing: cameraDirection') &&
+    cameraScreenSource.includes("captureImplementation: 'media-library'"),
+  'Camera callback must report the actual facing and capture implementation.',
 );
 
 const labSource = readFileSync(
@@ -530,6 +634,27 @@ expect(
     labSource.includes("if (labMode === 'phase1-replay-10')") &&
     labSource.includes('<Phase1ShotGuide shotIndex={phase1Sequence.shotIndex} />'),
   'The validation-only Phase 1 mode must be explicitly selectable and show shot guidance before capture.',
+);
+expect(
+  labSource.includes(
+    "allowCameraToggle={labMode !== 'phase1-replay-10'}",
+  ) &&
+    labSource.includes("allowGallery={labMode !== 'phase1-replay-10'}") &&
+    labSource.includes("result.source !== 'camera'") &&
+    labSource.includes(
+      "runtimeProvenance?.captureImplementation !== 'native'",
+    ) &&
+    labSource.includes("runtimeProvenance.cameraFacing !== 'front'") &&
+    labSource.includes(
+      'greenlightReport.nativeCameraMetadata?.captureLockedAtMs',
+    ) &&
+    labSource.includes('!isRealtimeFaceCaptureAvailable()') &&
+    labSource.includes('<Phase1NativeCaptureUnavailable') &&
+    labSource.includes(
+      'captureImplementation: runtimeProvenance.captureImplementation',
+    ) &&
+    labSource.includes('cameraFacing: runtimeProvenance.cameraFacing'),
+  'Phase 1 must disable alternate acquisition paths and require camera/native/front provenance.',
 );
 expect(
   labSource.includes('if (phase1RawSaved)') &&

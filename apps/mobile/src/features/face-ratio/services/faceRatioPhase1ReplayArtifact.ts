@@ -85,6 +85,7 @@ type FaceRatioPhase1ReplayHairline = {
 };
 
 export type FaceRatioPhase1ReplayCapture = {
+  acquisition: FaceRatioPhase1ReplayValidation['acquisition'];
   captureId: string;
   capturedAtUtc: string;
   condition: FaceRatioPhase1ReplayCondition;
@@ -190,6 +191,27 @@ function validateCondition(
   );
 }
 
+function validateAcquisition(
+  value: unknown,
+  label: string,
+): asserts value is FaceRatioPhase1ReplayValidation['acquisition'] {
+  invariant(isRecord(value), `${label} must be an object`);
+  exactKeys(
+    value,
+    ['cameraFacing', 'captureImplementation', 'source'],
+    label,
+  );
+  invariant(value.source === 'camera', `${label}.source must be camera`);
+  invariant(
+    value.captureImplementation === 'native',
+    `${label}.captureImplementation must be native`,
+  );
+  invariant(
+    value.cameraFacing === 'front',
+    `${label}.cameraFacing must be front`,
+  );
+}
+
 export function validateFaceRatioPhase1ReplayValidation(
   value: unknown,
 ): asserts value is FaceRatioPhase1ReplayValidation {
@@ -197,6 +219,7 @@ export function validateFaceRatioPhase1ReplayValidation(
   exactKeys(
     value,
     [
+      'acquisition',
       'captureId',
       'cohortId',
       'condition',
@@ -206,6 +229,7 @@ export function validateFaceRatioPhase1ReplayValidation(
     ],
     'validationReplay',
   );
+  validateAcquisition(value.acquisition, 'validationReplay.acquisition');
   invariant(
     typeof value.captureId === 'string' &&
       CAPTURE_ID_PATTERN.test(value.captureId),
@@ -317,6 +341,7 @@ function validateCapture(
   exactKeys(
     value,
     [
+      'acquisition',
       'captureId',
       'capturedAtUtc',
       'condition',
@@ -329,6 +354,7 @@ function validateCapture(
     ],
     label,
   );
+  validateAcquisition(value.acquisition, `${label}.acquisition`);
   invariant(
     typeof value.captureId === 'string' &&
       CAPTURE_ID_PATTERN.test(value.captureId),
@@ -411,6 +437,7 @@ export function createFaceRatioPhase1ReplayCapture({
 }): FaceRatioPhase1ReplayCapture {
   validateFaceRatioPhase1ReplayValidation(validation);
   const capture: FaceRatioPhase1ReplayCapture = {
+    acquisition: {...validation.acquisition},
     captureId: validation.captureId,
     capturedAtUtc,
     condition: {...validation.condition},
@@ -553,6 +580,22 @@ export function appendFaceRatioPhase1ReplayCapture(
   artifact: FaceRatioPhase1ReplayArtifact,
   capture: FaceRatioPhase1ReplayCapture,
 ): FaceRatioPhase1ReplayArtifact {
+  validateFaceRatioPhase1ReplayArtifact(artifact);
+  validateCapture(capture, artifact.captures.length);
+  const existing = artifact.captures.find(
+    candidate => candidate.captureId === capture.captureId,
+  );
+
+  if (existing) {
+    if (canonicalJson(existing) === canonicalJson(capture)) {
+      return artifact;
+    }
+
+    throw new Error(
+      `captureId ${capture.captureId} already exists with a different payload`,
+    );
+  }
+
   const next: FaceRatioPhase1ReplayArtifact = {
     ...artifact,
     captures: [...artifact.captures, capture],
@@ -560,6 +603,20 @@ export function appendFaceRatioPhase1ReplayCapture(
   validateFaceRatioPhase1ReplayArtifact(next);
 
   return next;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+
+  return JSON.stringify(value);
 }
 
 export function isFaceRatioPhase1ReplayArtifactExpired(

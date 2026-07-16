@@ -92,9 +92,16 @@ export type FaceRatioPhase1ReplayCondition = {
   repeatIndex: number;
 };
 
+export type FaceRatioPhase1ReplayAcquisition = {
+  cameraFacing: 'front';
+  captureImplementation: 'native';
+  source: 'camera';
+};
+
 // Phase 1 paired replay 수집 전용 메타데이터. 플래그가 validation-only일 때만
 // 사용하며 모든 ID는 실제 사용자 식별자와 분리된 가명 ID여야 한다.
 export type FaceRatioPhase1ReplayValidation = {
+  acquisition: FaceRatioPhase1ReplayAcquisition;
   captureId: string;
   cohortId: string;
   condition: FaceRatioPhase1ReplayCondition;

@@ -95,14 +95,16 @@ if (
   !metadata.capturedAtUtc ||
   !metadata.sessionId ||
   !metadata.subjectId ||
-  !metadata.condition
+  !metadata.condition ||
+  !metadata.acquisition
 ) {
   throw new Error(
-    'metadata requires cohortId, sessionId, captureId, capturedAtUtc, subjectId, and condition',
+    'metadata requires cohortId, sessionId, captureId, capturedAtUtc, subjectId, condition, and acquisition',
   );
 }
 
 const capture = {
+  acquisition: metadata.acquisition,
   captureId: metadata.captureId,
   capturedAtUtc: metadata.capturedAtUtc,
   subjectId: metadata.subjectId,

@@ -56,6 +56,26 @@ function sha256File(filePath) {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
+test('gate status registry remains fail-closed for v3 calibration', () => {
+  const gateStatus = JSON.parse(
+    fs.readFileSync(
+      new URL('../../docs/face3d/FACE3D_GATE_STATUS.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  const calibration = gateStatus.confidenceCalibration;
+
+  assert.equal(calibration.profileSchemaVersion, 'aura.face3d-profile.v3');
+  assert.equal(calibration.status, 'pending');
+  assert.equal(calibration.validationStatus, 'not_run');
+  assert.equal(calibration.featureFlagDefault, 'off');
+  assert.equal(calibration.policyId, null);
+  assert.equal(calibration.approvalArtifactPath, null);
+  assert.equal(calibration.approvalArtifactSha256, null);
+  assert.equal(calibration.receiptPath, null);
+  assert.equal(calibration.receiptSha256, null);
+});
+
 function metricValues(base, delta = 0) {
   return Object.fromEntries(
     FACE3D_ALL_METRIC_KEYS.map((key, index) => [

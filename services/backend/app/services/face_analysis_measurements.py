@@ -76,6 +76,33 @@ GEOMETRY2D_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
   f"geometry2d.{name}"
   for name in GEOMETRY2D_MODEL_VISIBLE_METRIC_NAMES
 )
+PERSONAL_COLOR_TONE_TO_SEASON = {
+  "spring_light": "spring",
+  "spring_bright": "spring",
+  "spring_true": "spring",
+  "summer_light": "summer",
+  "summer_true": "summer",
+  "summer_muted": "summer",
+  "autumn_muted": "autumn",
+  "autumn_true": "autumn",
+  "autumn_deep": "autumn",
+  "winter_bright": "winter",
+  "winter_true": "winter",
+  "winter_deep": "winter",
+}
+PERSONAL_COLOR_TONE_CODES = frozenset(PERSONAL_COLOR_TONE_TO_SEASON)
+PERSONAL_COLOR_SEASONS = frozenset(PERSONAL_COLOR_TONE_TO_SEASON.values())
+PERSONAL_COLOR_RESULT_STATUSES = frozenset(
+  {"definitive", "mixed", "provisional", "insufficient"},
+)
+PERSONAL_COLOR_USABLE_STATUSES = PERSONAL_COLOR_RESULT_STATUSES - {"insufficient"}
+PERSONAL_COLOR_TONE_PROFILE_KEYS = frozenset(
+  {
+    "personalColor.tone.top",
+    "personalColor.tone.secondary",
+    "personalColor.tone.season",
+  },
+)
 PERSONAL_COLOR_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
   {
     *(
@@ -164,6 +191,43 @@ MODEL_VISIBLE_PROFILE_KEYS = (
 def filter_metric_keys_for_model(keys: Iterable[str]) -> list[str]:
   """Return only known metric keys that may cross the external-model boundary."""
   return sorted(set(keys) & MODEL_VISIBLE_PROFILE_KEYS)
+
+
+def _metric_value(raw_metric: MetricEnvelope | dict[str, Any] | None) -> Any:
+  if isinstance(raw_metric, MetricEnvelope):
+    return raw_metric.value
+  if isinstance(raw_metric, dict):
+    return raw_metric.get("value")
+  return None
+
+
+def _personal_color_tone_profile_is_safe(
+  metrics: Mapping[str, MetricEnvelope | dict[str, Any]],
+) -> bool:
+  present_keys = PERSONAL_COLOR_TONE_PROFILE_KEYS & metrics.keys()
+  if not present_keys:
+    return True
+  if {
+    "personalColor.tone.top",
+    "personalColor.tone.season",
+  } - present_keys:
+    return False
+
+  top = _metric_value(metrics.get("personalColor.tone.top"))
+  season = _metric_value(metrics.get("personalColor.tone.season"))
+  secondary = _metric_value(metrics.get("personalColor.tone.secondary"))
+  return (
+    isinstance(top, str)
+    and top in PERSONAL_COLOR_TONE_CODES
+    and isinstance(season, str)
+    and season in PERSONAL_COLOR_SEASONS
+    and PERSONAL_COLOR_TONE_TO_SEASON[top] == season
+    and (
+      "personalColor.tone.secondary" not in present_keys
+      or isinstance(secondary, str)
+      and secondary in PERSONAL_COLOR_TONE_CODES
+    )
+  )
 
 
 OUT_OF_SCOPE_METRICS = frozenset(
@@ -441,7 +505,8 @@ def _normalize_personal_color(
   if not reported:
     return
   overall_confidence = _finite(reported.get("measurementConfidence")) or 0.0
-  usable = reported.get("status") not in {"insufficient", "failed", "blocked"}
+  reported_status = reported.get("status")
+  usable = reported_status in PERSONAL_COLOR_USABLE_STATUSES
   warnings = _warnings(reported.get("warnings"))
   for key, axis_value in _record(reported.get("axes")).items():
     axis = _record(axis_value)
@@ -451,13 +516,34 @@ def _normalize_personal_color(
       usable=usable, warnings=warnings,
     )
   tone = _record(reported.get("tone"))
-  for key in ("top", "secondary", "season"):
-    value = tone.get(key)
-    if isinstance(value, str) and value.strip():
-      output[f"personalColor.tone.{key}"] = _camera_metric(
-        value=value, confidence=overall_confidence, source=MeasurementSource.PIXEL,
-        shot=MeasurementShot.S1, unit="label", usable=usable, warnings=warnings,
-      )
+  tone_top = tone.get("top")
+  tone_secondary = tone.get("secondary")
+  tone_season = tone.get("season")
+  tone_is_safe = (
+    usable
+    and reported_status != "insufficient"
+    and isinstance(tone_top, str)
+    and tone_top in PERSONAL_COLOR_TONE_CODES
+    and isinstance(tone_season, str)
+    and tone_season in PERSONAL_COLOR_SEASONS
+    and PERSONAL_COLOR_TONE_TO_SEASON[tone_top] == tone_season
+    and (
+      tone_secondary is None
+      or isinstance(tone_secondary, str)
+      and tone_secondary in PERSONAL_COLOR_TONE_CODES
+    )
+  )
+  if tone_is_safe:
+    for key, value in (
+      ("top", tone_top),
+      ("secondary", tone_secondary),
+      ("season", tone_season),
+    ):
+      if isinstance(value, str):
+        output[f"personalColor.tone.{key}"] = _camera_metric(
+          value=value, confidence=overall_confidence, source=MeasurementSource.PIXEL,
+          shot=MeasurementShot.S1, unit="label", usable=True, warnings=warnings,
+        )
   for key, value in _record(reported.get("relations")).items():
     numeric = _finite(value)
     if numeric is not None:
@@ -576,8 +662,11 @@ def filter_metrics_for_model(
 ) -> dict[str, MetricEnvelope]:
   """Project only allowlisted evidence into a provenance-free model envelope."""
   model_visible: dict[str, MetricEnvelope] = {}
+  tone_profile_is_safe = _personal_color_tone_profile_is_safe(metrics)
   for key, raw_metric in metrics.items():
     if key not in MODEL_VISIBLE_PROFILE_KEYS:
+      continue
+    if key in PERSONAL_COLOR_TONE_PROFILE_KEYS and not tone_profile_is_safe:
       continue
 
     try:

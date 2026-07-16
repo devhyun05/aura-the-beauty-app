@@ -139,13 +139,13 @@ function FaceReportIcon() {
   );
 }
 
-function LoadingReport({onRetake}: {onRetake: () => void}) {
+function LoadingReport({onRetake}: {onRetake?: () => void}) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.screen, {paddingTop: insets.top + spacing.xl}]}>
       <StatusBar style="dark" />
-      <RetakeButton onRetake={onRetake} />
+      {onRetake ? <RetakeButton onRetake={onRetake} /> : null}
       <View style={styles.loadingContent}>
         <ActivityIndicator color={REPORT_ACCENT_DARK} />
         <Text style={styles.loadingTitle}>얼굴형 분석</Text>
@@ -886,7 +886,11 @@ export function FaceVerticalThirdsScreen({
   }, [imageLoaded, result, stageLaidOut, validationReplay]);
 
   if (!result) {
-    return <LoadingReport onRetake={onRetake} />;
+    return (
+      <LoadingReport
+        onRetake={validationReplay ? undefined : onRetake}
+      />
+    );
   }
 
   return (

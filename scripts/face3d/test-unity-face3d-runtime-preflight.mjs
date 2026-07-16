@@ -23,9 +23,17 @@ function test(name, fn) {
 
 function createEmbeddedBuild(root, metadataContents) {
   const buildDirectory = path.join(root, 'UnityBuild');
-  fs.mkdirSync(path.join(buildDirectory, 'UnityFramework.framework'), {
+  const frameworkDirectory = path.join(
+    buildDirectory,
+    'UnityFramework.framework',
+  );
+  fs.mkdirSync(frameworkDirectory, {
     recursive: true,
   });
+  fs.writeFileSync(
+    path.join(frameworkDirectory, 'UnityFramework'),
+    Buffer.from('fixture-unity-framework-binary'),
+  );
   const metadataDirectory = path.join(
     buildDirectory,
     'Data/Managed/Metadata',
@@ -85,6 +93,24 @@ test('detects embedded Face3D schema strings without shell tools', () => {
   );
 });
 
+test('root npm aliases preserve the public preflight and source-check commands', () => {
+  const packageJson = JSON.parse(
+    fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+  );
+  assert.equal(
+    packageJson.scripts['face3d:collection:preflight'],
+    'node scripts/face3d/check-unity-face3d-runtime-preflight.mjs',
+  );
+  assert.equal(
+    packageJson.scripts['face3d:check:unity-source-contract'],
+    'node scripts/face3d/check-unity-face3d-source-contract.mjs',
+  );
+  assert.equal(
+    packageJson.scripts['face3d:test:unity-runtime-preflight'],
+    'node scripts/face3d/test-unity-face3d-runtime-preflight.mjs',
+  );
+});
+
 test('embedded runtime preflight accepts v3 and executes no build or device action', () => {
   const buildDirectory = createEmbeddedBuild(
     path.join(root, 'ready'),
@@ -94,9 +120,16 @@ test('embedded runtime preflight accepts v3 and executes no build or device acti
     unityBuildDirectory: buildDirectory,
   });
   assert.equal(result.readyForDeviceCollection, true);
-  assert.equal(result.verificationScope, 'embedded_il2cpp_metadata_only');
+  assert.equal(
+    result.verificationScope,
+    'embedded_framework_and_il2cpp_metadata',
+  );
   assert.equal(result.unityBuildExecuted, false);
   assert.equal(result.deviceActionsExecuted, false);
+  assert.equal(
+    fs.statSync(result.frameworkExecutablePath).size > 0,
+    true,
+  );
   assert.deepEqual(result.observedProfileSchemas, ['aura.face3d-profile.v3']);
 });
 
@@ -137,9 +170,17 @@ test('embedded runtime preflight rejects missing framework and metadata', () => 
   );
 
   const missingMetadata = path.join(root, 'missing-metadata', 'UnityBuild');
-  fs.mkdirSync(path.join(missingMetadata, 'UnityFramework.framework'), {
+  const missingMetadataFramework = path.join(
+    missingMetadata,
+    'UnityFramework.framework',
+  );
+  fs.mkdirSync(missingMetadataFramework, {
     recursive: true,
   });
+  fs.writeFileSync(
+    path.join(missingMetadataFramework, 'UnityFramework'),
+    Buffer.from('fixture-unity-framework-binary'),
+  );
   assert.throws(
     () => inspectEmbeddedUnityFace3DRuntime({
       unityBuildDirectory: missingMetadata,
@@ -147,6 +188,49 @@ test('embedded runtime preflight rejects missing framework and metadata', () => 
     error =>
       error instanceof UnityFace3DRuntimePreflightError
       && error.code === 'unity_metadata_missing',
+  );
+});
+
+test('embedded runtime preflight rejects missing or empty framework executable', () => {
+  const missingExecutable = createEmbeddedBuild(
+    path.join(root, 'missing-executable'),
+    Buffer.from('\0aura.face3d-profile.v3\0', 'utf8'),
+  );
+  fs.rmSync(
+    path.join(
+      missingExecutable,
+      'UnityFramework.framework',
+      'UnityFramework',
+    ),
+  );
+  assert.throws(
+    () => inspectEmbeddedUnityFace3DRuntime({
+      unityBuildDirectory: missingExecutable,
+    }),
+    error =>
+      error instanceof UnityFace3DRuntimePreflightError
+      && error.code === 'unity_framework_executable_missing',
+  );
+
+  const emptyExecutable = createEmbeddedBuild(
+    path.join(root, 'empty-executable'),
+    Buffer.from('\0aura.face3d-profile.v3\0', 'utf8'),
+  );
+  fs.writeFileSync(
+    path.join(
+      emptyExecutable,
+      'UnityFramework.framework',
+      'UnityFramework',
+    ),
+    Buffer.alloc(0),
+  );
+  assert.throws(
+    () => inspectEmbeddedUnityFace3DRuntime({
+      unityBuildDirectory: emptyExecutable,
+    }),
+    error =>
+      error instanceof UnityFace3DRuntimePreflightError
+      && error.code === 'unity_framework_executable_invalid',
   );
 });
 

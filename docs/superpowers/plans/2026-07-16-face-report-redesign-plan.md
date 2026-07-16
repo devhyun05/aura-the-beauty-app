@@ -69,7 +69,7 @@
 - **프론트엔드**: 신규 `apps/report-lab`(React/Vite/TypeScript). 모바일 앱은 web 미지원이고 Lab은 카메라가 필요 없으므로 Expo 실험 앱 스위치에 넣지 않는다. 기본 주소는 `http://127.0.0.1:5173`이며 외부 인터페이스에 bind하지 않는다.
 - **백엔드**: 기존 FastAPI 코드베이스에 lab router/service를 추가하고 `LAB_MODE=true`인 로컬 프로세스로만 기동한다. 기본 주소는 `http://127.0.0.1:8000`; 일반 backend 실행에서는 `LAB_MODE=false`를 유지한다.
 - **인증·격리**: fixture-only 기본 모드는 `127.0.0.1` bind + CORS origin 정확히 `http://127.0.0.1:5173` 하나만 허용한다(`localhost` alias·wildcard 금지). `AUTH_REQUIRED=false`에서는 `fixtureId`만 받고 `reportId`를 항상 거부하며, 감사 기록의 비사용자 principal은 고정 UUID `00000000-0000-4000-8000-000000000027`을 쓴다. 실제 `reportId` 모드를 명시적으로 켤 때만 정상 인증과 `user_id` 소유권 검사를 요구한다.
-- **데이터**: `infra/report-lab/docker-compose.yml`, Compose project `aura-report-lab`, host `127.0.0.1:55432`, database/user `aura_report_lab`, 로컬 전용 비밀값 `aura_report_lab_local_only`로 고정한다. 기본 DSN은 `postgresql://aura_report_lab:aura_report_lab_local_only@127.0.0.1:55432/aura_report_lab`이며 `AURA_REPORT_LAB_DATABASE_URL`로만 주입한다. 기존 backend compose·dev DB·운영 자산과 database/schema/volume을 공유하지 않는다. named volume은 7일 TTL 정리를 위해 실행 간 유지하고 `report-lab:down`에서만 `docker compose -p aura-report-lab -f infra/report-lab/docker-compose.yml down --volumes --remove-orphans`로 제거한다. 테스트는 고유 project suffix와 임시 volume을 사용하고 성공·실패 모두 teardown한다.
+- **데이터**: `infra/report-lab/docker-compose.yml`, Compose project `aura-report-lab`, host `127.0.0.1:55432`, database/user `aura_report_lab`로 고정한다. `report-lab:setup`이 최초 실행 때 32-byte random `AURA_REPORT_LAB_DB_PASSWORD`를 gitignored `.runtime/report-lab.env`에 만들고, DSN `postgresql://aura_report_lab:${AURA_REPORT_LAB_DB_PASSWORD}@127.0.0.1:55432/aura_report_lab`을 같은 파일의 `AURA_REPORT_LAB_DATABASE_URL`로 주입한다. 비밀번호·완성 DSN은 저장소·로그에 넣지 않는다. 기존 backend compose·dev DB·운영 자산과 database/schema/volume을 공유하지 않는다. named volume은 7일 TTL 정리를 위해 실행 간 유지하고 `report-lab:down`에서만 `docker compose -p aura-report-lab --env-file .runtime/report-lab.env -f infra/report-lab/docker-compose.yml down --volumes --remove-orphans`로 제거한다. 테스트는 고유 project suffix와 임시 env/volume을 사용하고 성공·실패 모두 teardown한다.
 - **fixture 형식**: 승인된 repo fixture metadata와 로컬 allowlist 디렉터리의 비식별·합성 이미지를 사용한다. 원본 사용자 얼굴을 fixture로 commit하지 않는다. 실제 이미지가 필요하면 최소 필드 추출·식별자 재발급·명시적 사용 허가·보존/삭제 절차를 먼저 작성한다.
 - **provider 기본값**: `REPORT_LAB_MODEL_PROVIDER=disabled`, `IMAGE_GENERATION_PROVIDER=disabled`. provider를 선택하지 않은 상태에서도 deterministic fixture response로 UI·DTO·validation을 전부 테스트할 수 있어야 한다.
 - **외부 모델 선택**: 이번 구현은 provider-disabled deterministic fixture runner까지만 완료한다. 이후 사용자가 provider와 전송 범위를 별도로 승인한 run에 한해 adapter를 추가할 수 있다. provider 이름·model·promptVersion·토큰/지연을 run에 기록하되 API key와 원문 얼굴 이미지는 로그에 남기지 않는다.
@@ -193,7 +193,7 @@ Claude design(fable) 생성은 완료됐다. 요청 원본은 [2026-07-16-report
 - 공용 numeric-free report DTO/parser/fixture schema를 RN 의존 없는 패키지로 고정하고 mobile/Vite가 소비하는 설치·lockfile 경로를 명시한다.
 - 허가된 synthetic fixture와 provenance를 commit하고 `analysis_lab_runs` SQL·DBML·init/check migration/test를 추가한다.
 - §3.2 lab API, loopback 제한, fixture allowlist, reportId 차단/소유권, rate/budget/audit를 구현한다.
-- `apps/report-lab` skeleton과 `report-lab:{setup,dev,test,stop,status}` 스크립트, SHA 표시, localhost smoke를 완성한다.
+- `apps/report-lab` skeleton과 `report-lab:{setup,dev,test,stop,down,status}` 스크립트, SHA 표시, localhost smoke를 완성한다.
 - plugin/MCP manifest를 생성하고 필수 연결 실패를 먼저 드러낸다.
 
 ### Wave B — 동결 계약 위 병렬 구현

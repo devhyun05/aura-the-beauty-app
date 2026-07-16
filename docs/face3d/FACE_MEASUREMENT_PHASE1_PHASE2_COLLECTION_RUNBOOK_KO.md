@@ -85,8 +85,10 @@ npm run face3d:collection:prepare -- \
 수 있는 `phase1ReplayValidation`이 포함된다.
 
 실기기 빌드나 촬영 전에 임베드된 Unity 런타임이 신규 v3 계약인지 별도로
-검사한다. 이 명령은 Unity 빌드와 기기 동작을 실행하지 않으며, 현재처럼
-v1/v2 산출물이 남아 있으면 fail-closed로 중단하고 재빌드 명령만 안내한다.
+검사한다. 이 명령은 `UnityFramework.framework/UnityFramework`가 일반·비어 있지
+않은 파일인지와 IL2CPP metadata의 v3 문자열을 함께 확인한다. Unity 빌드와 기기
+동작은 실행하지 않으며, 실행 파일이 없거나 현재처럼 v1/v2 산출물이 남아 있으면
+fail-closed로 중단하고 재빌드 명령만 안내한다.
 
 ```bash
 npm run face3d:collection:preflight

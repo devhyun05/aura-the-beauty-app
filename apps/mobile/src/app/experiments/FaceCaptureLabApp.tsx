@@ -18,7 +18,11 @@ import {Face3DEntryBlockedScreen} from '../../features/face-3d/screens/Face3DEnt
 import {Face3DLabScreen} from '../../features/face-3d/screens/Face3DLabScreen';
 import {evaluateFace3DEntryEligibility} from '../../features/face-3d/services/face3DEntryEligibility';
 import {appendFace3DRuntimeEvidence} from '../../features/face-3d/services/face3DRuntimeEvidenceLogger';
-import {CameraFaceCaptureScreen} from '../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {isRealtimeFaceCaptureAvailable} from '../../features/face-capture/components/RealtimeFaceCaptureNativeView';
+import {
+  CameraFaceCaptureScreen,
+  type CameraFaceCaptureRuntimeProvenance,
+} from '../../features/face-capture/screens/CameraFaceCaptureScreen';
 import {UnifiedFaceCaptureScreen} from '../../features/face-capture/screens/UnifiedFaceCaptureScreen';
 import {
   buildUnifiedFaceCaptureRequest,
@@ -49,6 +53,7 @@ import {
   isFaceRatioPhase1ReplayShotComplete,
 } from '../../features/face-ratio/services/faceVerticalThirdsArtifacts';
 import type {
+  FaceRatioPhase1ReplayAcquisition,
   FaceRatioPhase1ReplayCondition,
   FaceRatioPhase1ReplayValidation,
   FaceVerticalThirdsResult,
@@ -59,6 +64,7 @@ type LabCapture = FaceCaptureUploadResult & {
   capturedAt: string;
   greenlightLogUri?: string;
   greenlightReport?: FaceCaptureGreenlightReport;
+  phase1ReplayAcquisition?: FaceRatioPhase1ReplayAcquisition;
 };
 
 type FaceCaptureLabStackParamList = {
@@ -89,7 +95,9 @@ function buildPhase1LabValidation({
   runIndex,
   shotIndex,
   subjectToken,
+  acquisition,
 }: {
+  acquisition: FaceRatioPhase1ReplayAcquisition;
   runIndex: number;
   shotIndex: number;
   subjectToken: string;
@@ -100,12 +108,37 @@ function buildPhase1LabValidation({
   }
 
   return {
+    acquisition: {...acquisition},
     captureId: `cap_${subjectToken}-${runIndex}-${shotIndex}`,
     cohortId: 'cohort_phase1-validation-v3',
     condition: shot.condition,
     retentionDays: 7,
     sessionId: `session_${subjectToken}-${runIndex}`,
     subjectId: `subj_${subjectToken}`,
+  };
+}
+
+function getPhase1ReplayAcquisition(
+  result: FaceCaptureUploadResult,
+  greenlightReport: FaceCaptureGreenlightReport | undefined,
+  runtimeProvenance: CameraFaceCaptureRuntimeProvenance | undefined,
+): FaceRatioPhase1ReplayAcquisition | null {
+  if (
+    result.source !== 'camera' ||
+    runtimeProvenance?.captureImplementation !== 'native' ||
+    runtimeProvenance.cameraFacing !== 'front' ||
+    !greenlightReport?.finalCaptureGreenlight ||
+    !Number.isFinite(
+      greenlightReport.nativeCameraMetadata?.captureLockedAtMs,
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    cameraFacing: runtimeProvenance.cameraFacing,
+    captureImplementation: runtimeProvenance.captureImplementation,
+    source: result.source,
   };
 }
 
@@ -248,6 +281,31 @@ function Phase1ShotGuide({
   );
 }
 
+function Phase1NativeCaptureUnavailable({
+  onChangeMode,
+}: {
+  onChangeMode: () => void;
+}) {
+  return (
+    <SafeAreaView style={styles.modeScreen}>
+      <View style={styles.modeContent}>
+        <Text style={styles.eyebrow}>PHASE 1 BLOCKED</Text>
+        <Text style={styles.modeTitle}>네이티브 전면 카메라가 필요합니다</Text>
+        <Text style={styles.modeDescription}>
+          Phase 1 replay는 AURA 네이티브 전면 카메라에서만 수집합니다. 현재 빌드에
+          네이티브 촬영 모듈이 없으므로 앱을 다시 빌드한 뒤 시도해 주세요.
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onChangeMode}
+          style={styles.modeButton}>
+          <Text style={styles.modeButtonLabel}>촬영 모드 선택으로 돌아가기</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
 function UnifiedLabResult({
   capture,
   onChangeMode,
@@ -348,13 +406,24 @@ function FaceCaptureLabContent() {
   }, [labMode, modeRevision]);
 
   const phase1ValidationReplay = useMemo(
-    () =>
-      buildPhase1LabValidation({
+    () => {
+      if (!capture?.phase1ReplayAcquisition) {
+        return null;
+      }
+
+      return buildPhase1LabValidation({
+        acquisition: capture.phase1ReplayAcquisition,
         runIndex: phase1Sequence.runIndex,
         shotIndex: phase1Sequence.shotIndex,
         subjectToken: phase1SubjectToken,
-      }),
-    [phase1Sequence.runIndex, phase1Sequence.shotIndex, phase1SubjectToken],
+      });
+    },
+    [
+      capture?.phase1ReplayAcquisition,
+      phase1Sequence.runIndex,
+      phase1Sequence.shotIndex,
+      phase1SubjectToken,
+    ],
   );
 
   const releasePhase1LocalCapture = useCallback(
@@ -508,7 +577,7 @@ function FaceCaptureLabContent() {
               photoCaptureId: capture.photoCaptureId,
               semanticMattes: capture.semanticMattes,
               source: capture.source,
-              ...(isPhase1Replay
+              ...(isPhase1Replay && phase1ValidationReplay
                 ? {validationReplay: phase1ValidationReplay}
                 : {}),
             }}
@@ -553,16 +622,53 @@ function FaceCaptureLabContent() {
     );
   }
 
+  if (
+    labMode === 'phase1-replay-10' &&
+    !isRealtimeFaceCaptureAvailable()
+  ) {
+    return <Phase1NativeCaptureUnavailable onChangeMode={changeMode} />;
+  }
+
   const cameraScreen = (
     <CameraFaceCaptureScreen
+      allowCameraToggle={labMode !== 'phase1-replay-10'}
+      allowGallery={labMode !== 'phase1-replay-10'}
       awaitCameraReleaseBeforeComplete
       captureMode="face"
       captureType="face_analysis"
-      onCapture={(result, greenlightReport) => {
+      onCapture={(result, greenlightReport, runtimeProvenance) => {
         if (result) {
+          const phase1ReplayAcquisition =
+            labMode === 'phase1-replay-10'
+              ? getPhase1ReplayAcquisition(
+                  result,
+                  greenlightReport,
+                  runtimeProvenance,
+                )
+              : undefined;
+
+          if (labMode === 'phase1-replay-10' && !phase1ReplayAcquisition) {
+            console.info('[aura:face-capture-lab] phase1:capture-rejected', {
+              cameraFacing: runtimeProvenance?.cameraFacing ?? null,
+              captureImplementation:
+                runtimeProvenance?.captureImplementation ?? null,
+              finalCaptureGreenlight:
+                greenlightReport?.finalCaptureGreenlight ?? false,
+              hasNativeCaptureLock: Number.isFinite(
+                greenlightReport?.nativeCameraMetadata?.captureLockedAtMs,
+              ),
+              source: result.source,
+            });
+            void deleteFaceRatioPhase1LocalCapture(result.imageUri);
+            return;
+          }
+
           const nextCapture = {
             ...(result as LabCapture),
             greenlightReport,
+            ...(phase1ReplayAcquisition
+              ? {phase1ReplayAcquisition}
+              : {}),
           };
 
           setCapture(nextCapture);

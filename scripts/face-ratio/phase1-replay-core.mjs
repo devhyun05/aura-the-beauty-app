@@ -168,6 +168,24 @@ function validateCondition(condition, label) {
   );
 }
 
+function validateAcquisition(acquisition, label) {
+  invariant(isRecord(acquisition), `${label} must be an object`);
+  exactKeys(
+    acquisition,
+    ['cameraFacing', 'captureImplementation', 'source'],
+    label,
+  );
+  invariant(acquisition.source === 'camera', `${label}.source must be camera`);
+  invariant(
+    acquisition.captureImplementation === 'native',
+    `${label}.captureImplementation must be native`,
+  );
+  invariant(
+    acquisition.cameraFacing === 'front',
+    `${label}.cameraFacing must be front`,
+  );
+}
+
 function validateMatrix(matrix, label) {
   invariant(isRecord(matrix), `${label} must be an object`);
   exactKeys(matrix, ['layout', 'values'], label);
@@ -236,6 +254,7 @@ function validateCapture(capture, index) {
   exactKeys(
     capture,
     [
+      'acquisition',
       'captureId',
       'capturedAtUtc',
       'subjectId',
@@ -248,6 +267,7 @@ function validateCapture(capture, index) {
     ],
     label,
   );
+  validateAcquisition(capture.acquisition, `${label}.acquisition`);
   invariant(
     CAPTURE_ID_PATTERN.test(capture.captureId),
     `${label}.captureId must be pseudonymous cap_*`,
@@ -377,12 +397,40 @@ export function validatePhase1ReplayArtifact(
 }
 
 export function appendPhase1ReplayCapture(artifact, capture) {
+  validatePhase1ReplayArtifact(artifact);
+  validateCapture(capture, artifact.captures.length);
+  const existing = artifact.captures.find(
+    candidate => candidate.captureId === capture.captureId,
+  );
+
+  if (existing) {
+    if (canonicalJson(existing) === canonicalJson(capture)) {
+      return artifact;
+    }
+    throw new Error(
+      `captureId ${capture.captureId} already exists with a different payload`,
+    );
+  }
+
   const next = {
     ...artifact,
     captures: [...artifact.captures, capture],
   };
   validatePhase1ReplayArtifact(next);
   return next;
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function median(values) {
