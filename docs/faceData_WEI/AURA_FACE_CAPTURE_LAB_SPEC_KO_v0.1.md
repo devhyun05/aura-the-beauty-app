@@ -277,7 +277,7 @@ npm --prefix apps/mobile run typecheck
 
 - **`FaceVerticalThirdsResult`** (`schemaVersion: "aura-face-vertical-thirds-v1"`, `result.json`):
   `status(full_success|partial_success|blocked|failed)`, `keypoints{H,G,Sn,Me}`, `verticalThirds.displayRatio`,
-  `faceLength`, `quality{yaw,pitch,roll,warnings}`, `interpretation{dominantPart,summary}`, `artifacts{...Uris}`
+  `faceLength`, `faceLengthJudgment{band{hi,lo},verdict}`, `judgmentVersion`, `quality{yaw,pitch,roll,warnings}`, `interpretation{dominantPart,summary}`, `artifacts{...Uris}`
 - **`FaceVerticalThirdsAnalysisPayload`** (다운스트림/AI용, 성공 시에만): `{confidence, displayRatio, dominantPart, hairline{confidence,provider}, status, summary}` — **원시 좌표는 전송 안 함**
 - **로그 이벤트** (`[aura:face-ratio]` JSONL, DEV 한정 파일쓰기): `capture:ready → landmark:ready → matte:ready → post_correction:applied → quality:gate → hairline:ready → keypoint:ready → ratio:computed → analysis:partial|blocked|failed → overlay:saved`
 - **저장 위치**: `<documentDirectory>/face-vertical-thirds/<sessionId>/` (source.jpg, overlay.png, result.json, analysis-log.jsonl, +debug 매트 PNG)

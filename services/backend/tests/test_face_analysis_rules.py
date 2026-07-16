@@ -173,3 +173,14 @@ def test_chain_unusable_quality_stays_withheld() -> None:
   result = derive_face_analysis(profile)
   assert result.face_shape.label == "측정 보류"
 
+
+def test_face_shape_borderline_without_width_evidence_withholds() -> None:
+  # GO 게이트 MEDIUM: 경계 유보 + 폭 근거 부재면 '타원형' 단정 대신 보류.
+  profile = {
+    "verticalThirds.faceRatio": metric(1.50),
+    "verticalThirds.faceLengthVerdict": metric("borderline_long"),
+  }
+
+  result = derive_face_analysis(profile)
+
+  assert result.face_shape.label == "측정 보류"

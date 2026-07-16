@@ -69,6 +69,10 @@ def _derive_face_shape(profile: dict[str, MetricEnvelope]) -> Insight:
   if aspect is None and verdict is None:
     return _insight(profile, keys, None, "")
   width = fmean(value for value in (jaw, lower) if value is not None) if jaw is not None or lower is not None else None
+  if verdict in {"borderline_wide", "borderline_long"} and width is None:
+    # 세로 축은 경계 유보인데 폭 근거마저 없으면 "폭 중심 판단" 자체가
+    # 불가 — 근거 없는 '타원형' 단정 대신 보류한다(GO 게이트 MEDIUM).
+    return _insight(profile, keys, None, "")
   if verdict is not None:
     is_long = verdict == "long"
     is_wide = verdict == "wide"
