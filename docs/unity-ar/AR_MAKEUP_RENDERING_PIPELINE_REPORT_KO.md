@@ -129,10 +129,10 @@ flowchart LR
 | # | 발견 | 영향 | 상세 |
 |---|---|---|---|
 | F1 | 눈썹 강도 컨트롤 2개가 셰이더에서 전혀 읽히지 않음 | 앱의 눈썹 제거 강도 조절이 **무효** | [2.1](#21-f1-눈썹-강도-컨트롤이-셰이더에-도달하지-않는다) |
-| F2 | `screen` 블렌드 모드가 `normal`과 완전히 동일 | 이름만 보고 screen 합성을 기대하면 **틀림** | [2.2](#22-f2-screen-블렌드는-screen이-아니다) |
+| F2 | ~~`screen` 블렌드~~ ✅ 수리됨(2026-07-17, b9f9a023) — 계약 제거+레거시 별칭 |  | [2.2](#22-f2-screen-블렌드는-screen이-아니다) |
 | F3 | 손 가림이 렌더 경로별로 **다른 메커니즘** | "손 가림이 없다"고 오진하기 쉬움 | [2.3](#23-f3-손-가림은-경로마다-메커니즘이-다르다) |
 | F4 | 일반 AR 화면에서 `applyFilter`를 받을 구독자가 없음 | ARwithFable 레인이 **확정적으로** 죽음 (E3가 가림) | [2.4](#24-f4-일반-ar-화면에서-applyfilter는-아무도-받지-않는다) |
-| F5 | 립 마스크 등록 실패를 무시하고 레이어를 적용 | 크기 틀린 립 마스크가 **조용히 통과** | [2.5](#25-f5-립-마스크-등록-실패가-무시된다) |
+| F5 | ~~립 마스크 등록 실패 무시~~ ✅ 수리됨(2026-07-17, b9f9a023) — 거부+RN 재시도 중단 |  | [2.5](#25-f5-립-마스크-등록-실패가-무시된다) |
 | F6 | 칠해진 PNG가 있으면 softness 슬라이더가 무시됨 | MediaPipe에서 블러셔·립 softness **작동 안 함** | [2.6](#26-f6-softness-슬라이더가-일부-부위에서-무효다) |
 | F7 | 진짜 semantic skin class가 저장소에 없음 | "비활성"이 아니라 **미구현** | [2.7](#27-f7-semantic-skin-class는-비활성이-아니라-미구현이다) |
 | F8 | 죽은 코드·죽은 채널·낡은 주석 | 코드를 읽는 사람을 오도함 | [2.8](#28-f8-죽은-코드와-낡은-주석) |
@@ -285,7 +285,7 @@ RN → applyFilter → NativeBridge.OnMessageFromRN (살아 있음)
 | 항목 | 상태 | 근거 |
 |---|---|---|
 | `ScreenSpaceFoundationController.UpdateHandOcclusion` | 정의만 있고 **호출자 0건** — 무조건 `SetRuntimeRequested(true)`를 하지만 실행되지 않음 | 806–817 |
-| 생성 눈썹 마스크의 **A 채널** | 생성기는 `desiredAlpha`를 기록하지만 셰이더는 `mask.a`를 **어디서도 읽지 않음** | `browGenerateCore.ts` 594 vs 셰이더 전체 |
+| 생성 눈썹 마스크의 **A 채널** | ⚠ 정정(2026-07-17): 셰이더는 안 읽지만 **CPU 삼각형 컬링이 G/A를 샘플**(`generated_brow_green_alpha`) — 죽은 채널 아님, 계속 기록 필요 | `E3RegionMaskOverlay.ResolveMaskCoverageSampleChannel` |
 | 렌더 큐 **3002·3003** | 어떤 상수에도 배정되지 않은 빈 번호 | `MakeupQueues.cs` |
 | `E3RegionMaskOverlay` 4521 주석 | *"레시피가 눈썹를 multiply로 보낸다"* — **낡음**. 계약은 이미 `normal`을 보냄 | vs `fullFaceMakeupRecipe.ts:1089` |
 
@@ -1375,7 +1375,7 @@ finalMask = (ARFace + neck prior) × skinMask × confidence
 | mobile → `ApplyFoundationParsingFrameJson` sender 부재 | 저장소 검색 기준 CONFIRMED |
 | screen-space 턱선 → neck candidate → 크로마 게이트 경로 | CONFIRMED |
 | `ScreenSpaceFoundationController.UpdateHandOcclusion` 미호출 (F8) | CONFIRMED |
-| 생성 눈썹 마스크 A 채널 미사용 (F8) | CONFIRMED |
+| 생성 눈썹 마스크 A 채널 — 셰이더 미사용이나 CPU 컬링 사용 (F8 정정) | 2026-07-17 재검증 CONFIRMED |
 | `applyFilter`가 `ARFilterScreen`에서 구독자 없이 버려짐 (F4) | 정적 불일치 CONFIRMED, runtime UNVERIFIED |
 | `SetStencilActive(true)` 발신처가 `StencilUnityViewAdapter` 단 하나 | 저장소 전수 검색 기준 CONFIRMED |
 | ARwithFable 8개 셰이더의 블렌드 state 전부 | CONFIRMED |
