@@ -85,10 +85,13 @@ python -m app.ops.rollback_product_catalog <MANIFEST_UUID> --actor-user-id <UUID
 - `product_seasonal_manifest_v1`은 서로 분리된 creator/reviewer/publisher, source 갱신 시점, content review reference, 기간, 상품 position, 협찬 유형을 요구한다.
 - creator/reviewer/publisher는 각각 활성 `seasonal_editor`/`seasonal_reviewer`/`seasonal_publisher` grant가 있어야 한다. 수동 suspend/rollback은 `seasonal_operator` 또는 `seasonal_publisher`만 가능하다.
 - 공개 API는 현재 유효한 마지막 승인 revision만 읽고 ETag 및 `stale-if-error` 캐시 지시자를 제공한다.
-- 공급자 trend 호출 실패가 임의 상품 생성으로 이어지지 않는다. DB의 유효한 승인 collection이 없으면 empty state다.
+- 공급자 trend 호출 실패가 임의 상품 생성으로 이어지지 않는다. DB의 유효한 승인 collection이 없으면 검증된 DB 인기 상품과 패키지 catalog fallback을 반환하며 모바일 요청 중에는 외부 trend source를 호출하지 않는다.
 
 ```bash
 python -m app.ops.publish_product_seasonal seasonal.json --signature-file seasonal.sig
+python -m app.ops.refresh_product_seasonal_trends
+python -m app.ops.refresh_product_seasonal_trends --apply
+python -m app.ops.refresh_product_seasonal_trends --apply --publish --created-by <UUID> --reviewed-by <UUID> --published-by <UUID>
 python -m app.ops.expire_product_seasonal
 python -m app.ops.expire_product_seasonal --apply
 python -m app.ops.suspend_product_seasonal <COLLECTION_UUID> --actor-user-id <UUID> --reason '<사유>'
@@ -101,7 +104,8 @@ python -m app.ops.rollback_product_seasonal <COLLECTION_UUID> --actor-user-id <U
 
 ## 개인정보·retention
 
-- engagement와 color cohort는 목적별 별도 opt-in이다. 만 14세 이상 확인 전에는 수락할 수 없다.
+- engagement와 color cohort 활용은 로그인 화면 가입 약관의 개인정보 수집·이용 문구에 포함하며, 최초 계정 생성 시 목적별 동의 이력을 `signup_terms` source로 남긴다.
+- 기존 철회 이력이 있는 계정은 로그인/재접속 시 자동 재동의시키지 않는다.
 - 비동의 계정에서는 client event, server-side 검색/좋아요/판매처 event, derived profile을 만들지 않는다.
 - 철회 즉시 해당 event/profile/run/cohort를 삭제한다. “전체 제품 개인화 데이터 삭제”는 두 동의의 철회 이력도 함께 남긴다.
 - 이벤트 queue는 계정 전환 시 삭제되고, 최대 100개·10분·2회 시도로 제한된다.

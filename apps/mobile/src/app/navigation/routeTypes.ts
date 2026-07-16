@@ -77,7 +77,6 @@ export type RootStackParamList = {
     sponsored?: boolean;
     sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
   };
-  ProductPersonalizationSettings: undefined;
   MakeupRecommendation: undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
   AuradinSearch:
@@ -199,7 +198,6 @@ export const rootStackRoutes = [
   'ProductRecommendationShelf',
   'ProductSearchResult',
   'ProductDetail',
-  'ProductPersonalizationSettings',
   'MakeupRecommendation',
   'AuradinSearch',
   'Community',

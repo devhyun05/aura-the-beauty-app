@@ -79,7 +79,7 @@ const SHELF_DEFAULTS: Record<ProductRecommendationShelf, {title: string; descrip
   },
   personalized: {
     title: '회원님만을 위한 추천제품',
-    description: '동의한 좋아요·검색·클릭 기록을 바탕으로 취향에 맞춰 정렬했어요.',
+    description: '가입 시 안내한 좋아요·검색·클릭 기록을 바탕으로 취향에 맞춰 정렬했어요.',
   },
   seasonal: {
     title: '시즌 상품',
@@ -409,6 +409,7 @@ export function ProductRecommendationShelfScreen({
         columnWrapperStyle={visibleItems.length ? styles.grid : undefined}
         contentContainerStyle={[styles.content, {paddingBottom: Math.max(insets.bottom, spacing.xl) + spacing.xxl}]}
         data={state.status === 'ready' ? visibleItems : []}
+        initialNumToRender={6}
         keyExtractor={item => `${item.externalSource ?? 'catalog'}:${item.productId}:${item.shadeId ?? 'family'}`}
         ListEmptyComponent={state.status === 'loading'
           ? <RecommendationSectionState kind="loading" message="추천 제품을 불러오는 중이에요." />
@@ -417,6 +418,7 @@ export function ProductRecommendationShelfScreen({
             : <RecommendationSectionState kind="empty" message={empty} />}
         numColumns={2}
         onViewableItemsChanged={onViewableItemsChanged}
+        maxToRenderPerBatch={6}
         renderItem={({item, index}) => (
           <RecommendationProductCard
             grid
@@ -427,7 +429,10 @@ export function ProductRecommendationShelfScreen({
           />
         )}
         showsVerticalScrollIndicator={false}
+        style={styles.list}
+        updateCellsBatchingPeriod={40}
         viewabilityConfig={viewabilityConfig}
+        windowSize={5}
       />
       {toast}
     </View>
@@ -435,19 +440,20 @@ export function ProductRecommendationShelfScreen({
 }
 
 const styles = StyleSheet.create({
-  root: {backgroundColor: colors.background, flex: 1},
+  root: {backgroundColor: colors.background, flex: 1, minHeight: 0},
   intro: {gap: spacing.xs, paddingBottom: spacing.md, paddingHorizontal: spacing.screenX, paddingTop: spacing.lg},
   title: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xl, lineHeight: typography.lineHeight.xl},
   description: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
   evidence: {...typography.caption, color: colors.textTertiary},
   tabs: {gap: spacing.xs, paddingHorizontal: spacing.screenX},
-  tabScroller: {flexGrow: 0, height: 44},
+  tabScroller: {backgroundColor: colors.background, flexGrow: 0, height: 44, zIndex: 1},
   tab: {alignItems: 'center', borderColor: colors.borderStrong, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md},
   tabSelected: {alignItems: 'center', backgroundColor: colors.black, borderColor: colors.black, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md},
   tabText: {color: colors.textSecondary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm},
   tabTextSelected: {color: colors.white, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm},
   countRow: {gap: spacing.xs, paddingHorizontal: spacing.screenX, paddingVertical: spacing.md},
   count: {...typography.caption, color: colors.textSecondary},
-  content: {flexGrow: 1, gap: spacing.xl, paddingHorizontal: spacing.screenX},
+  content: {flexGrow: 1, gap: spacing.xl, paddingHorizontal: spacing.screenX, paddingTop: spacing.sm},
   grid: {gap: spacing.md},
+  list: {flex: 1, minHeight: 0},
 });

@@ -610,8 +610,13 @@ create table if not exists product_seasonal_collections (
   summary text not null,
   locale text not null default 'ko-KR',
   trend_window text not null,
+  source_name text not null default 'editorial',
+  source_updated_at timestamptz,
   source_labels text[] not null default '{}',
   source_payload jsonb not null default '{}'::jsonb,
+  trend_keywords text[] not null default '{}',
+  reason_codes text[] not null default '{}',
+  confidence_score double precision not null default 0.5,
   valid_from timestamptz not null,
   valid_until timestamptz not null,
   reviewed_at timestamptz,
@@ -627,6 +632,7 @@ create table if not exists product_seasonal_collections (
   updated_at timestamptz not null default now(),
   constraint uq_product_seasonal_collection_revision unique (slug, revision),
   constraint chk_product_seasonal_collection_window check (valid_until > valid_from),
+  constraint chk_product_seasonal_collection_confidence check (confidence_score between 0 and 1),
   constraint chk_product_seasonal_collection_status check (status in ('draft', 'in_review', 'published', 'suspended', 'expired')),
   constraint chk_product_seasonal_two_person_publish check (status <> 'published' or (reviewed_by is not null and published_by is not null and created_by <> published_by and reviewed_by <> published_by))
 );
@@ -637,11 +643,14 @@ create table if not exists product_seasonal_collection_items (
   shade_id uuid,
   position integer not null,
   reason_code text not null,
+  reason_codes text[] not null default '{}',
+  match_score double precision not null default 0,
   sponsorship_type text not null default 'organic',
   created_at timestamptz not null default now(),
   primary key (collection_id, product_id),
   constraint uq_product_seasonal_item_position unique (collection_id, position),
   constraint chk_product_seasonal_item_position check (position >= 0),
+  constraint chk_product_seasonal_item_match_score check (match_score >= 0),
   constraint chk_product_seasonal_sponsorship check (sponsorship_type in ('organic', 'affiliate', 'sponsored'))
 );
 
@@ -1286,6 +1295,13 @@ alter table product_offers
   on delete set null (shade_id);
 
 alter table product_seasonal_collections
+  add column if not exists source_name text not null default 'editorial',
+  add column if not exists source_updated_at timestamptz,
+  add column if not exists trend_keywords text[] not null default '{}',
+  add column if not exists reason_codes text[] not null default '{}',
+  add column if not exists confidence_score double precision not null default 0.5,
+  drop constraint if exists chk_product_seasonal_collection_confidence,
+  add constraint chk_product_seasonal_collection_confidence check (confidence_score between 0 and 1),
   drop constraint if exists fk_product_seasonal_created_by,
   add constraint fk_product_seasonal_created_by foreign key (created_by) references users(id) on delete set null,
   drop constraint if exists fk_product_seasonal_reviewed_by,
@@ -1302,6 +1318,10 @@ alter table product_recommendation_operators
   add constraint fk_product_recommendation_operator_granted_by foreign key (granted_by) references users(id) on delete set null;
 
 alter table product_seasonal_collection_items
+  add column if not exists reason_codes text[] not null default '{}',
+  add column if not exists match_score double precision not null default 0,
+  drop constraint if exists chk_product_seasonal_item_match_score,
+  add constraint chk_product_seasonal_item_match_score check (match_score >= 0),
   drop constraint if exists fk_product_seasonal_items_collection,
   add constraint fk_product_seasonal_items_collection foreign key (collection_id) references product_seasonal_collections(id) on delete cascade,
   drop constraint if exists fk_product_seasonal_items_product,
@@ -1553,6 +1573,7 @@ create index if not exists idx_product_assets_valid_until on product_assets (val
 create index if not exists idx_product_offers_product_active on product_offers (product_id, availability_status, is_active);
 create index if not exists idx_product_offers_valid_until on product_offers (valid_until) where is_active = true;
 create index if not exists idx_product_seasonal_public on product_seasonal_collections (locale, status, valid_from, valid_until);
+create index if not exists idx_product_seasonal_source_updated on product_seasonal_collections (source_updated_at desc);
 create index if not exists idx_product_recommendation_operators_active_roles
   on product_recommendation_operators using gin (roles) where is_active=true;
 create index if not exists idx_product_seasonal_items_order on product_seasonal_collection_items (collection_id, position);

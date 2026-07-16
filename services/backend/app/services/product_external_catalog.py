@@ -291,7 +291,11 @@ def _search_score(item: Mapping[str, Any], query: str) -> float:
   return score + _quality_score(item) * 0.1
 
 
-def _seasonal_score(item: Mapping[str, Any], theme_slug: str) -> float:
+def _seasonal_score(
+  item: Mapping[str, Any],
+  theme_slug: str,
+  trend_keywords: Iterable[str] | None = None,
+) -> float:
   attributes = _attributes(item)
   finish = _text(attributes.get("finish")).casefold()
   texture = _text(attributes.get("texture")).casefold()
@@ -301,6 +305,17 @@ def _seasonal_score(item: Mapping[str, Any], theme_slug: str) -> float:
   ).casefold()
   score = 0.0
   matched = False
+  dynamic_tokens = {
+    token
+    for keyword in trend_keywords or ()
+    for token in _TOKEN_PATTERN.findall(_text(keyword).casefold())
+    if token not in {"메이크업", "화장품", "상품", "제품", "여름", "겨울", "트렌드"}
+  }
+  category_searchable = f"{searchable} {' '.join(_SEARCH_CATEGORY_ALIASES.get(category, ()))}".casefold()
+  dynamic_matches = {token for token in dynamic_tokens if token in category_searchable}
+  if dynamic_matches:
+    score += min(4.0, len(dynamic_matches) * 1.25)
+    matched = True
   if theme_slug == "glossy-lip-flushed-cheek":
     if finish in {"glossy", "sheer", "shimmer"}:
       score += 2.5
@@ -441,6 +456,7 @@ async def get_auradin_catalog_products(
   undertone: str | None = None,
   query: str | None = None,
   seasonal_theme: str | None = None,
+  seasonal_keywords: Iterable[str] | None = None,
   exclude_identities: set[tuple[str, str]] | None = None,
   exclude_liked: bool = False,
 ) -> list[dict[str, Any]]:
@@ -524,7 +540,7 @@ async def get_auradin_catalog_products(
         continue
       mapped.update({"reasonCodes": ["SEARCH_MATCH"], "reasonLabels": ["검색어와 관련된 상품이에요"]})
     elif strategy == "seasonal":
-      score = _seasonal_score(raw_item, seasonal_theme or "")
+      score = _seasonal_score(raw_item, seasonal_theme or "", seasonal_keywords)
       if score <= 0:
         continue
       mapped.update(

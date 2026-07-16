@@ -374,15 +374,24 @@ async def get_seasonal_product_recommendations(
   source = (
     "popular-fallback"
     if collection.get("id") == "popular-fallback" or (not collection and data.get("fallback"))
-    else "live-seasonal-discovery+auradin-catalog"
-    if collection.get("isLive") and collection.get("catalogSupplemented")
-    else "live-seasonal-discovery"
-    if collection.get("isLive")
-    else "editorial-seasonal-v1+auradin-catalog"
+    else "cached-trend-collection+auradin-catalog"
     if collection.get("catalogSupplemented")
-    else "editorial-seasonal-v1"
+    else "cached-trend-collection"
   )
-  return success(data, {"source": source})
+  return success(data, {
+    "source": source,
+    "trendSource": collection.get("sourceName"),
+    "productSource": (
+      "db-popular+auradin-catalog"
+      if collection.get("id") == "popular-fallback"
+      else
+      "licensed-catalog+auradin-catalog"
+      if collection.get("catalogSupplemented")
+      else "licensed-catalog"
+      if collection
+      else "popular-fallback"
+    ),
+  })
 
 
 @router.get("/recommendations/personalized")

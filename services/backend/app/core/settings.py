@@ -174,6 +174,11 @@ class Settings(BaseSettings):
   naver_shopping_insight_enabled: bool = False
   naver_shopping_insight_endpoint: str | None = None
   product_live_seasonal_cache_seconds: int = Field(default=300, ge=60, le=3600)
+  product_trend_mcp_url: str | None = None
+  product_trend_mcp_tool: str = "collect_beauty_trends"
+  product_trend_mcp_bearer_token: str | None = None
+  product_trend_mcp_allowed_hosts: str = ""
+  product_trend_mcp_timeout_seconds: float = Field(default=8.0, ge=1.0, le=30.0)
   product_catalog_allowed_seller_domains: str = ""
   product_catalog_allowed_image_domains: str = ""
   product_event_signing_secret: str | None = None
@@ -431,6 +436,14 @@ class Settings(BaseSettings):
       if domain.strip()
     )
 
+  @property
+  def product_trend_mcp_hosts(self) -> tuple[str, ...]:
+    return tuple(
+      host.strip().lower()
+      for host in self.product_trend_mcp_allowed_hosts.split(",")
+      if host.strip()
+    )
+
   def public_config_status(self) -> dict[str, object]:
     analysis_provider = self.analysis_provider
     image_generation_provider = self.image_generation_provider_normalized
@@ -530,6 +543,11 @@ class Settings(BaseSettings):
       "naverShoppingApi": {
         "configured": bool(self.naver_shopping_client_id and self.naver_shopping_client_secret),
         "requiredWhen": "Korean cosmetic product recommendations should include live purchasable shopping links.",
+      },
+      "productTrendMcp": {
+        "configured": bool(self.product_trend_mcp_url and self.product_trend_mcp_hosts),
+        "requiredWhen": "Seasonal trend collection should use an MCP tool instead of the Naver/curated fallback.",
+        "value": self.product_trend_mcp_tool if self.product_trend_mcp_url else None,
       },
       "awsCredentialsOrRole": {
         "configured": self.aws_credentials_configured,

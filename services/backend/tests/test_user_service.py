@@ -43,6 +43,10 @@ async def test_ensure_user_uses_one_atomic_upsert() -> None:
   assert "do update set" in query
   assert "from account_deletion_tombstones" in query
   assert "where not exists" in query
+  assert "initial_product_consents" in query
+  assert "signup_terms" in query
+  assert "engagement_personalization" in query
+  assert "color_cohort" in query
   assert args == (
     "google",
     "cognito-sub-1",

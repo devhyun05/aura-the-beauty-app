@@ -69,6 +69,7 @@ const searchScreen = source('apps/mobile/src/features/recommendation/screens/Pro
 const likedScreen = source('apps/mobile/src/features/recommendation/screens/LikedProductListScreen.tsx');
 const detailScreen = source('apps/mobile/src/features/recommendation/screens/ProductDetailScreen.tsx');
 const transientToast = source('apps/mobile/src/shared/ui/TransientToast.tsx');
+const loginScreen = source('apps/mobile/src/features/auth/screens/LoginScreen.tsx');
 const iosAppDelegate = source('apps/mobile/ios/AURA/AppDelegate.swift');
 const mobileEntry = source('apps/mobile/index.ts');
 const devRefreshBanner = source('apps/mobile/src/shared/dev/disableDevRefreshBanner.js');
@@ -91,11 +92,10 @@ requireContract(
     likedService.includes('/products/external/') &&
     likedScreen.includes('product.externalSource && product.purchaseUrl') &&
     legacyService.includes('externalSource: firstText(product.externalSource)') &&
-    recommendationScreen.includes('if (product.externalSource) await likeExternalProduct(product.id, product.externalSource)') &&
-    recommendationScreen.includes('unlikeProduct(product.id, product.externalSource)') &&
-    recommendationScreen.includes('isTrustedCatalogProductId(product.id) || Boolean(product.externalSource)') &&
     recommendationScreen.includes('likeExternalProduct(product.productId, product.externalSource)') &&
     recommendationScreen.includes('unlikeProduct(product.productId, product.externalSource)') &&
+    recommendationShelfScreen.includes('likeExternalProduct(product.productId, product.externalSource)') &&
+    recommendationShelfScreen.includes('unlikeProduct(product.productId, product.externalSource)') &&
     auradinSavedProducts.includes("../../../shared/services/productBackendApi") &&
     auradinSavedProducts.includes("../../../shared/services/productService") &&
     auradinSavedProducts.includes("'/products/liked'") &&
@@ -254,16 +254,22 @@ requireContract(
   'AURADIN saves must execute internal/external routes, preserve exact sources, and exclude unrelated external likes.',
 );
 requireContract(
-  hubContent.includes('actionLabel="설정하기"') &&
+  !hubContent.includes('개인화 데이터와 개인정보 설정') &&
+    !hubContent.includes('actionLabel="설정하기"') &&
+    !routeTypes.includes('ProductPersonalizationSettings') &&
+    !recommendationRoutes.includes('ProductPersonalizationSettings') &&
     hubContent.includes('likedFallbackItems') &&
     hubContent.includes('최근 좋아요한 제품을 보여드려요.') &&
     recommendationScreen.includes('hasFocusedHubRef') &&
-    recommendationScreen.includes('setLikedProducts(nextProducts)') &&
+    recommendationScreen.includes('setLikedProducts(products)') &&
     recommendationScreen.includes('getLikedProducts()') &&
-    recommendationScreen.includes('setLikedProductIds(new Set(nextProducts.map(product => product.id)))') &&
+    recommendationScreen.includes('setLikedProductIds(new Set(products.map(product => product.id)))') &&
     recommendationScreen.includes('setHubRefreshKey(current => current + 1)') &&
-    hubContent.includes('}, [refreshKey]);'),
-  'modular shelves must load shared likes, expose consent settings, and refresh after re-entry or like changes.',
+    hubContent.includes('InteractionManager.runAfterInteractions') &&
+    hubContent.includes('}, [refreshKey]);') &&
+    loginScreen.includes('제품 추천 개인화를 위한 좋아요·검색·클릭 데이터 활용') &&
+    loginScreen.includes('익명 컬러 취향 추천에 동의하게 됩니다.'),
+  'modular shelves must load shared likes, defer secondary requests, move consent disclosure to signup, and refresh after re-entry or like changes.',
 );
 requireContract(
   hubContent.includes('state.data?.minimumCohortSize ?? 5') &&
@@ -335,8 +341,8 @@ requireContract(
     auradinOrb.includes("pointerEvents={hidden ? 'none' : 'box-none'}") &&
     recommendationScreen.includes("fast ? 'hidden' : 'compact'") &&
     recommendationScreen.includes("hidden={orbScrollState === 'hidden'}") &&
-    recommendationScreen.includes('horizontalPaddingLeft={contentPaddingLeft}') &&
-    recommendationScreen.includes('horizontalPaddingRight={contentPaddingRight}') &&
+    recommendationScreen.includes('horizontalPaddingLeft={spacing.screenX}') &&
+    recommendationScreen.includes('horizontalPaddingRight={spacing.screenX}') &&
     appScreen.includes('horizontalPaddingLeft = horizontalPadding') &&
     appScreen.includes('horizontalPaddingRight = horizontalPadding'),
   'AURADIN orb must respect Reduce Motion, reserve card-safe edge space, avoid bottom navigation, compact while scrolling, and hide during fast scroll.',
@@ -436,13 +442,11 @@ requireContract(
   'hub must expose four purpose-specific shopping shelves, horizontal product rails, more actions, and stale-response protection.',
 );
 requireContract(
-  recommendationScreen.includes('const handleExpandLegacyRecommendations = useCallback(() => {') &&
-    recommendationScreen.includes('pendingLegacyScrollRef.current = true') &&
-    recommendationScreen.includes('setIsLegacyExpanded(true)') &&
-    recommendationScreen.includes('accessibilityLabel="얼굴 분석 기준 전체 추천 열기"') &&
-    recommendationScreen.includes('onPress={handleExpandLegacyRecommendations}') &&
-    recommendationScreen.includes('보고서·룩·카테고리·정렬 기준을 바꿔 전체 상품을 탐색할 수 있어요.'),
-  'the shopping hub must provide an accessible entry into report-based full recommendations, category filters, and sorting.',
+  !recommendationScreen.includes('얼굴 분석 기준 전체 추천') &&
+    !recommendationScreen.includes('handleExpandLegacyRecommendations') &&
+    !recommendationScreen.includes('getProductRecommendations') &&
+    !recommendationScreen.includes('LegacyRecommendationRail'),
+  'the shopping hub must not render the retired face-analysis full-recommendation section.',
 );
 requireContract(
   routeTypes.includes('ProductRecommendationShelf:') &&
@@ -476,10 +480,12 @@ requireContract(
   'the shelf page must expose the requested commercial makeup category tabs.',
 );
 requireContract(
-  recommendationShelfScreen.includes('tabScroller: {flexGrow: 0, height: 44}') &&
-    recommendationScreen.includes('minHeight: 44') &&
+  recommendationShelfScreen.includes('tabScroller: {backgroundColor: colors.background, flexGrow: 0, height: 44, zIndex: 1}') &&
+    recommendationShelfScreen.includes('content: {flexGrow: 1, gap: spacing.xl, paddingHorizontal: spacing.screenX, paddingTop: spacing.sm}') &&
+    recommendationShelfScreen.includes('initialNumToRender={6}') &&
+    recommendationShelfScreen.includes('windowSize={5}') &&
     hubContent.includes("chipActive: {backgroundColor: colors.black, borderRadius: radius.pill, justifyContent: 'center', minHeight: 44"),
-  'category, sorting, and AR-region controls must keep a 44pt minimum touch target without expanding the shelf viewport.',
+  'category controls must stay above the lazily rendered grid with a 44pt target and explicit content clearance.',
 );
 
 const productShelfCategoryModule = executeTypeScriptModule(
@@ -596,14 +602,20 @@ requireContract(
 );
 await productHubServiceModule.getArRecommendations(undefined, 20, 'lip');
 await productHubServiceModule.getSeasonalRecommendations(undefined, 60, 'base');
+await productHubServiceModule.getSeasonalRecommendations(1, 60, 'base');
 await productHubServiceModule.getPersonalizedRecommendations(60, 'brow');
 await productHubServiceModule.getCohortRecommendations(60, 'shadow');
+const repeatedSeasonalRequests = productHubApiRequests.filter(
+  path => path.includes('/recommendations/seasonal?') && path.includes('category=base'),
+);
 requireContract(
   productHubApiRequests.some(path => path.includes('/recommendations/ar?') && path.includes('regions=lip') && path.includes('per_region_limit=20')) &&
     productHubApiRequests.some(path => path.includes('/recommendations/seasonal?') && path.includes('limit=60') && path.includes('category=base')) &&
     productHubApiRequests.some(path => path.includes('/recommendations/personalized?') && path.includes('limit=60') && path.includes('category=brow')) &&
-    productHubApiRequests.some(path => path.includes('/recommendations/cohort?') && path.includes('limit=60') && path.includes('category=shadow')),
-  'more shelves must execute category-scoped server requests with the expanded commercial page size.',
+    productHubApiRequests.some(path => path.includes('/recommendations/cohort?') && path.includes('limit=60') && path.includes('category=shadow')) &&
+    repeatedSeasonalRequests.length === 1 &&
+    !repeatedSeasonalRequests[0].includes('entry='),
+  'more shelves must execute category-scoped requests while repeated seasonal loads reuse the stable cached URL.',
 );
 const productHubFallbackModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productHubService.ts',

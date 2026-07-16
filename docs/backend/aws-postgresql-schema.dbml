@@ -663,8 +663,13 @@ Table product_seasonal_collections {
   summary text [not null]
   locale text [not null, default: 'ko-KR']
   trend_window text [not null]
+  source_name text [not null, default: 'editorial']
+  source_updated_at timestamptz
   source_labels text[] [not null, default: '{}']
   source_payload jsonb [not null, default: '{}']
+  trend_keywords text[] [not null, default: '{}']
+  reason_codes text[] [not null, default: '{}']
+  confidence_score double [not null, default: 0.5]
   valid_from timestamptz [not null]
   valid_until timestamptz [not null]
   reviewed_at timestamptz
@@ -682,6 +687,7 @@ Table product_seasonal_collections {
   indexes {
     (slug, revision) [unique]
     (locale, status, valid_from, valid_until)
+    source_updated_at
   }
 }
 
@@ -691,6 +697,8 @@ Table product_seasonal_collection_items {
   shade_id uuid
   position integer [not null]
   reason_code text [not null]
+  reason_codes text[] [not null, default: '{}']
+  match_score double [not null, default: 0]
   sponsorship_type text [not null, default: 'organic']
   created_at timestamptz [not null, default: `now()`]
 

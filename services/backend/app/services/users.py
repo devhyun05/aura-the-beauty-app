@@ -51,20 +51,36 @@ async def ensure_user(db: Database, auth: AuthContext) -> dict[str, Any]:
   provider = normalize_auth_provider(auth.provider)
   row = await db.fetchrow(
     """
-    insert into users (auth_provider, oauth_sub, email, name, nickname)
-    select $1, $2, $3, $4, $5
-    where not exists (
-      select 1
-      from account_deletion_tombstones
-      where subject_hash = $6
+    with upserted_user as (
+      insert into users (auth_provider, oauth_sub, email, name, nickname)
+      select $1, $2, $3, $4, $5
+      where not exists (
+        select 1
+        from account_deletion_tombstones
+        where subject_hash = $6
+      )
+      on conflict (auth_provider, oauth_sub)
+        where oauth_sub is not null and deleted_at is null
+      do update set
+        email = coalesce(excluded.email, users.email),
+        name = coalesce(excluded.name, users.name),
+        nickname = coalesce(nullif(users.nickname, ''), excluded.nickname)
+      returning *
+    ), initial_product_consents as (
+      insert into user_consents (
+        user_id,consent_type,version,accepted,accepted_at,metadata
+      )
+      select upserted_user.id,purpose::consent_type,'product-personalization-v1',true,now(),
+        '{"source":"signup_terms"}'::jsonb
+      from upserted_user
+      cross join (values ('engagement_personalization'),('color_cohort')) consent(purpose)
+      where not exists (
+        select 1 from user_consents existing
+        where existing.user_id=upserted_user.id and existing.consent_type::text=purpose
+      )
+      returning id
     )
-    on conflict (auth_provider, oauth_sub)
-      where oauth_sub is not null and deleted_at is null
-    do update set
-      email = coalesce(excluded.email, users.email),
-      name = coalesce(excluded.name, users.name),
-      nickname = coalesce(nullif(users.nickname, ''), excluded.nickname)
-    returning *
+    select * from upserted_user
     """,
     provider,
     auth.subject,

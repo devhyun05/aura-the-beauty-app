@@ -95,16 +95,13 @@ export function LoginScreen({onLoginSuccess, simulateLoginFailure = false}: Logi
           </View>
 
           <Text
-            adjustsFontSizeToFit
-            minimumFontScale={0.82}
-            numberOfLines={1}
             style={styles.termsText}
           >
-            가입 시 <Text style={styles.termsLink}>이용약관</Text> 및{' '}
+            가입 시 <Text style={styles.termsLink}>이용약관</Text>,{' '}
             <Text style={styles.termsLink} onPress={() => setShowPrivacyPolicy(true)}>
-              개인정보처리방침
+              개인정보 수집·이용 및 처리방침
             </Text>
-            에 동의하게 됩니다
+            , 제품 추천 개인화를 위한 좋아요·검색·클릭 데이터 활용과 익명 컬러 취향 추천에 동의하게 됩니다.
           </Text>
         </YStack>
       </YStack>
@@ -178,6 +175,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xs,
     marginTop: 8,
+    maxWidth: 340,
     textAlign: 'center',
     width: '100%',
   },

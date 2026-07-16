@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import json
+import time
 from typing import Any, Iterable
 from uuid import UUID, uuid4
 
@@ -30,7 +32,7 @@ from app.services.product_external_catalog import (
   external_product_identity,
   get_auradin_catalog_products,
 )
-from app.services.product_live_seasonal import get_live_seasonal_recommendations, resolve_live_external_product
+from app.services.product_live_seasonal import resolve_live_external_product
 from app.services.saved_ar_looks import normalize_saved_ar_look
 from app.services.shopping_products import _safe_naver_result_url
 
@@ -55,6 +57,7 @@ POPULAR_FALLBACK_REASON_CODE = "POPULAR_FALLBACK"
 POPULAR_FALLBACK_REASON_LABEL = "추천 데이터가 쌓이는 동안 인기 상품을 보여드려요"
 CONSENT_VERSION_DEFAULT = "product-personalization-v1"
 CONSENT_TYPES = {"engagement_personalization", "color_cohort"}
+_SEASONAL_RESPONSE_CACHE: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
 PERSONALIZATION_SIGNAL_WEIGHTS = {
   "like": 4.0,
   "seller_outbound": 3.0,
@@ -93,8 +96,8 @@ async def get_popular_fallback_products(
   """Return display-safe popular products without claiming personal relevance.
 
   Licensed catalog rows are preferred. When that catalog has not been loaded yet,
-  the helper uses server-verified external-like snapshots, the packaged Auradin
-  external catalog, and finally validated live seasonal results.
+  the helper uses server-verified external-like snapshots and the packaged
+  Auradin external catalog. It never waits for an external provider here.
   Every external URL is re-validated and every item is labelled as a generic
   popularity fallback.
   """
@@ -110,17 +113,6 @@ async def get_popular_fallback_products(
       categories=category_values,
       strategy="popular",
     )
-    if len(packaged) >= limit:
-      return packaged
-    packaged.extend(await _live_popular_fallback_products(
-      settings,
-      limit=limit - len(packaged),
-      categories=category_values,
-      existing_identities={
-        (str(item.get("externalSource") or "catalog"), str(item.get("productId") or ""))
-        for item in packaged
-      },
-    ))
     return packaged
   rows = await db.fetch(
     f"""
@@ -261,21 +253,6 @@ async def get_popular_fallback_products(
       exclude_identities=existing_identities,
     )
   )
-  remaining = limit - len(items)
-  if remaining <= 0:
-    return items
-  existing_identities = {
-    (str(item.get("externalSource") or "catalog"), str(item.get("productId") or ""))
-    for item in items
-  }
-  items.extend(
-    await _live_popular_fallback_products(
-      settings,
-      limit=remaining,
-      categories=category_values,
-      existing_identities=existing_identities,
-    )
-  )
   return items
 
 
@@ -308,64 +285,6 @@ async def _section_popular_fallback_products(
   offset = (slot * limit) % len(pool)
   rotated = pool[offset:] + pool[:offset]
   return rotated[:limit]
-
-
-async def _live_popular_fallback_products(
-  settings: Settings,
-  *,
-  limit: int,
-  categories: Iterable[str],
-  existing_identities: set[tuple[str, str]],
-) -> list[dict[str, Any]]:
-  """Use the server-validated live seasonal feed as an opt-in final fallback."""
-
-  if not settings.auradin_live_discovery_enabled or limit <= 0:
-    return []
-  category_values = set(_fallback_category_values(categories))
-  live = await get_live_seasonal_recommendations(
-    settings,
-    locale="ko-KR",
-    # The provider is category-balanced. Twelve results include two rounds
-    # across all six categories for category-specific AR shelves.
-    limit=max(limit, 12),
-  )
-  items: list[dict[str, Any]] = []
-  seen = set(existing_identities)
-  for candidate in live.get("items", []):
-    if not isinstance(candidate, dict):
-      continue
-    external_source = str(candidate.get("externalSource") or "")
-    product_id = str(candidate.get("productId") or "")
-    category = str(candidate.get("category") or "")
-    identity = (external_source, product_id)
-    if (
-      external_source != "naver_shopping_search"
-      or not product_id
-      or category not in category_values
-      or identity in seen
-    ):
-      continue
-    purchase_url = _safe_naver_result_url(candidate.get("purchaseUrl"))
-    image_url = _safe_naver_result_url(candidate.get("imageUrl"))
-    if not purchase_url or not image_url:
-      continue
-    # Do not mutate a cached seasonal item: that shelf must retain its original
-    # CURRENT_SEASON_TREND explanation after this fallback is assembled.
-    item = dict(candidate)
-    item.update(
-      {
-        "purchaseUrl": purchase_url,
-        "imageUrl": image_url,
-        "viewerState": {"liked": False},
-        "canLike": True,
-        "canUnlike": False,
-      }
-    )
-    items.append(_mark_popular_fallback(item))
-    seen.add(identity)
-    if len(items) >= limit:
-      break
-  return items
 
 
 async def _popular_fallback_groups(
@@ -922,6 +841,38 @@ async def get_seasonal_recommendations(
   limit: int,
   category: str | None = None,
 ) -> dict[str, Any]:
+  cache_key = (
+    id(db), db.is_connected, locale, limit, category,
+    settings.seasonal_recommendations_v1,
+    settings.product_offer_max_age_hours,
+    settings.product_seasonal_source_max_age_days,
+  )
+  cached = _SEASONAL_RESPONSE_CACHE.get(cache_key)
+  if cached and cached[0] > time.monotonic():
+    return deepcopy(cached[1])
+  data = await _build_seasonal_recommendations(
+    db,
+    settings,
+    locale=locale,
+    limit=limit,
+    category=category,
+  )
+  _SEASONAL_RESPONSE_CACHE[cache_key] = (time.monotonic() + 120, deepcopy(data))
+  return data
+
+
+def clear_seasonal_recommendation_cache() -> None:
+  _SEASONAL_RESPONSE_CACHE.clear()
+
+
+async def _build_seasonal_recommendations(
+  db: Database,
+  settings: Settings,
+  *,
+  locale: str,
+  limit: int,
+  category: str | None = None,
+) -> dict[str, Any]:
   category_filter = category if category in PRODUCT_CATEGORY_LABELS else None
   category_values = [category_filter] if category_filter else list(PRODUCT_CATEGORY_LABELS)
   if not settings.seasonal_recommendations_v1:
@@ -940,73 +891,6 @@ async def get_seasonal_recommendations(
     locale,
   ) if db.is_connected else None
   if not collection:
-    if settings.auradin_live_discovery_enabled:
-      live = await get_live_seasonal_recommendations(settings, locale=locale, limit=limit)
-      live = dict(live)
-      live["collection"] = dict(live.get("collection") or {})
-      live_items: list[dict[str, Any]] = []
-      identities: set[tuple[str, str]] = set()
-      for candidate in live.get("items", []):
-        if not isinstance(candidate, dict):
-          continue
-        identity = (
-          str(candidate.get("externalSource") or "catalog"),
-          str(candidate.get("productId") or ""),
-        )
-        if (
-          not identity[1]
-          or identity in identities
-          or (category_filter and candidate.get("category") != category_filter)
-        ):
-          continue
-        live_items.append(candidate)
-        identities.add(identity)
-        if len(live_items) >= limit:
-          break
-      live_item_count = len(live_items)
-      theme_slug = str(live["collection"].get("slug") or "")
-      seasonal_items: list[dict[str, Any]] = []
-      if len(live_items) < limit:
-        seasonal_items = await get_auradin_catalog_products(
-          db,
-          user_id=None,
-          limit=limit - len(live_items),
-          categories=category_values,
-          strategy="seasonal",
-          seasonal_theme=theme_slug,
-          exclude_identities=identities,
-        )
-        live_items.extend(seasonal_items)
-        identities.update(
-          (str(item["externalSource"]), str(item["productId"])) for item in seasonal_items
-        )
-      generic_items: list[dict[str, Any]] = []
-      if len(live_items) < limit:
-        remaining = limit - len(live_items)
-        generic_pool = await get_auradin_catalog_products(
-          db,
-          user_id=None,
-          limit=remaining * 2,
-          categories=category_values,
-          strategy="popular",
-          exclude_identities=identities,
-        )
-        generic_items = (generic_pool[remaining:] + generic_pool[:remaining])[:remaining]
-        live_items.extend(generic_items)
-      if live_items:
-        live["collection"].update(
-          {
-            "catalogSupplemented": bool(seasonal_items or generic_items),
-            "liveItemCount": live_item_count,
-            "attributeMatchedItemCount": len(seasonal_items),
-            "genericCoverageItemCount": len(generic_items),
-          }
-        )
-        if generic_items:
-          live["fallback"] = {"type": "popular", "reason": "LIVE_SEASONAL_COVERAGE"}
-        live["items"] = live_items
-        live["status"] = "ready"
-        return live
     items = await _section_popular_fallback_products(
       db, settings, user_id=None, limit=limit, variant="seasonal", categories=category_values
     )
@@ -1020,7 +904,7 @@ async def get_seasonal_recommendations(
       a.asset_url as image_url,
       o.id as offer_id, o.seller_name, o.seller_domain, o.currency, o.price_amount,
       o.price_updated_at, o.availability_status, o.affiliate_type, o.disclosure_label,
-      i.reason_code, i.sponsorship_type, i.position
+      i.reason_code, i.reason_codes, i.match_score, i.sponsorship_type, i.position
     from product_seasonal_collection_items i
     join products p on p.id = i.product_id
     left join product_shades s on s.id = i.shade_id and s.product_id = p.id and s.is_active = true
@@ -1066,8 +950,19 @@ async def get_seasonal_recommendations(
   items = []
   for row in rows:
     item = map_catalog_product(row)
-    item["reasonCodes"] = [str(row.get("reason_code") or "EDITOR_REVIEWED")]
-    item["reasonLabels"] = ["에디터가 검수했어요"]
+    reason_codes = list(row.get("reason_codes") or []) or [str(row.get("reason_code") or "EDITOR_REVIEWED")]
+    reason_labels = {
+      "EDITOR_REVIEWED": "에디터가 검수했어요",
+      "TREND_CATEGORY_MATCH": "주목받는 메이크업 카테고리와 맞아요",
+      "TREND_KEYWORD_MATCH": "최근 트렌드 키워드와 상품 정보가 맞아요",
+      "TREND_FINISH_MATCH": "트렌드 피니시와 맞아요",
+      "TREND_COLOR_MATCH": "트렌드 색상 계열과 맞아요",
+      "TREND_TAG_MATCH": "트렌드 특성과 상품 태그가 맞아요",
+      "POPULAR_FALLBACK": "트렌드 상품이 부족해 앱 인기 상품으로 채웠어요",
+    }
+    item["reasonCodes"] = reason_codes
+    item["reasonLabels"] = [reason_labels[code] for code in reason_codes if code in reason_labels]
+    item["matchScore"] = float(row.get("match_score") or 0)
     sponsorship_type = str(row.get("sponsorship_type") or "organic")
     item["sponsored"] = sponsorship_type != "organic"
     item["sponsorshipType"] = sponsorship_type
@@ -1087,6 +982,7 @@ async def get_seasonal_recommendations(
       categories=category_values,
       strategy="seasonal",
       seasonal_theme=str(collection.get("slug") or ""),
+      seasonal_keywords=collection.get("trend_keywords") or [],
       exclude_identities=identities,
     )
     items.extend(attribute_matched_items)
@@ -1111,7 +1007,7 @@ async def get_seasonal_recommendations(
     )
     return _seasonal_fallback_response(fallback_items, reason="SEASONAL_COLLECTION_HAS_NO_ELIGIBLE_ITEMS")
   source_payload = _json(collection.get("source_payload"))
-  source_updated_at = source_payload.get("sourceUpdatedAt")
+  source_updated_at = collection.get("source_updated_at") or source_payload.get("sourceUpdatedAt")
   return {
     "status": "ready" if items else "empty",
     "collection": {
@@ -1123,8 +1019,14 @@ async def get_seasonal_recommendations(
       "validUntil": collection["valid_until"],
       "reviewedAt": collection["reviewed_at"],
       "sourceLabels": collection.get("source_labels") or [],
+      "sourceName": collection.get("source_name") or source_payload.get("sourceName") or "editorial",
       "sourceUpdatedAt": source_updated_at,
       "trendWindow": collection.get("trend_window"),
+      "trendKeywords": collection.get("trend_keywords") or [],
+      "reasonCodes": collection.get("reason_codes") or [],
+      "confidenceScore": float(collection.get("confidence_score") or 0),
+      "status": collection.get("status") or "published",
+      "providerStatus": source_payload.get("providerStatus") or "collected",
       "revision": collection.get("revision"),
       "catalogSupplemented": bool(attribute_matched_items or generic_coverage_items),
       "editorialItemCount": editorial_item_count,
@@ -1170,8 +1072,13 @@ def _seasonal_fallback_response(
       "validUntil": now + timedelta(minutes=5),
       "reviewedAt": now,
       "sourceLabels": ["앱 내 인기"],
+      "sourceName": "app_popularity",
       "sourceUpdatedAt": now,
       "trendWindow": "최근 180일",
+      "trendKeywords": [],
+      "reasonCodes": ["POPULAR_FALLBACK"],
+      "confidenceScore": 0.5,
+      "status": "published",
       "revision": 1,
       "isStale": False,
       "isLive": True,

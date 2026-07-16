@@ -22,6 +22,9 @@ const disabledFlags: ProductRecommendationFeatureFlags = {
   legacyNaverProductSearch: false,
   naverShoppingInsightEnabled: false,
 };
+const SEASONAL_CACHE_TTL_MS = 120_000;
+const seasonalResponseCache = new Map<string, {data: SeasonalRecommendationData; expiresAt: number}>();
+const seasonalRequests = new Map<string, Promise<SeasonalRecommendationData>>();
 
 export type SavedArLookOption = {
   id: string;
@@ -186,7 +189,7 @@ export async function getSavedArLookOptions(): Promise<SavedArLookOption[]> {
 }
 
 export async function getSeasonalRecommendations(
-  entryKey?: number,
+  _entryKey?: number,
   limit = 12,
   category?: Exclude<ProductRecommendationCategory, 'all'>,
 ): Promise<SeasonalRecommendationData> {
@@ -197,12 +200,25 @@ export async function getSeasonalRecommendations(
     locale: 'ko-KR',
     limit: String(Math.min(60, Math.max(1, limit))),
   });
-  if (entryKey !== undefined) params.set('entry', String(entryKey));
   if (category) params.set('category', category);
-  const data = await requestProductBackendJson<SeasonalRecommendationData>(
-    `/products/recommendations/seasonal?${params.toString()}`,
-  );
-  return normalizeSeasonalRecommendationData(data);
+  const requestPath = `/products/recommendations/seasonal?${params.toString()}`;
+  const cached = seasonalResponseCache.get(requestPath);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  const pending = seasonalRequests.get(requestPath);
+  if (pending) return pending;
+  const request = requestProductBackendJson<SeasonalRecommendationData>(requestPath)
+    .then(data => {
+      const normalized = normalizeSeasonalRecommendationData(data);
+      if (seasonalResponseCache.size >= 20) seasonalResponseCache.clear();
+      seasonalResponseCache.set(requestPath, {
+        data: normalized,
+        expiresAt: Date.now() + SEASONAL_CACHE_TTL_MS,
+      });
+      return normalized;
+    })
+    .finally(() => seasonalRequests.delete(requestPath));
+  seasonalRequests.set(requestPath, request);
+  return request;
 }
 
 export async function getPersonalizedRecommendations(

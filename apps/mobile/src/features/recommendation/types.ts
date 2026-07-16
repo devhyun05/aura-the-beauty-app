@@ -162,9 +162,14 @@ export type SeasonalRecommendationData = {
     validUntil: string;
     reviewedAt: string;
     sourceLabels: string[];
+    sourceName?: string | null;
     sourceLinks?: string[];
     sourceUpdatedAt?: string | null;
     trendWindow: string;
+    trendKeywords?: string[];
+    reasonCodes?: string[];
+    confidenceScore?: number;
+    status?: 'draft' | 'published' | 'suspended' | 'expired' | string;
     revision: number;
     isStale: boolean;
     isLive?: boolean;

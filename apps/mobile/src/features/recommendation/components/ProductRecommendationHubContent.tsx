@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
-import {Modal, Pressable, ScrollView, StyleSheet, View} from 'react-native';
-import {ChevronRight, SlidersHorizontal, X} from 'lucide-react-native';
+import {InteractionManager, Modal, Pressable, ScrollView, StyleSheet, View} from 'react-native';
+import {ChevronRight, X} from 'lucide-react-native';
 import {Text} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
@@ -43,7 +43,6 @@ export function ProductRecommendationHubContent({
   likedProducts,
   likedProductIds,
   onCreateArLook,
-  onOpenPersonalizationSettings,
   onOpenProduct,
   onOpenShelf,
   onSearch,
@@ -55,7 +54,6 @@ export function ProductRecommendationHubContent({
   likedProducts: Product[];
   likedProductIds: Set<string>;
   onCreateArLook: () => void;
-  onOpenPersonalizationSettings: () => void;
   onOpenProduct: (product: CatalogProduct) => void;
   onOpenShelf: (shelf: ProductRecommendationShelf, title: string, arStyleId?: string | null) => void;
   onSearch: (query: string) => void;
@@ -126,8 +124,11 @@ export function ProductRecommendationHubContent({
   useEffect(() => {
     loadAr();
     loadSeasonal();
-    loadPersonalized();
-    loadCohort();
+    const deferred = InteractionManager.runAfterInteractions(() => {
+      loadPersonalized();
+      loadCohort();
+    });
+    return () => deferred.cancel();
   }, [loadAr, loadCohort, loadPersonalized, loadSeasonal]);
 
   const activeArGroup = useMemo(() => {
@@ -206,13 +207,13 @@ export function ProductRecommendationHubContent({
 
       <View onLayout={event => onSectionLayout?.('personalized', event.nativeEvent.layout.y)}>
         <Section title={personalizedTitle} onAction={() => onOpenShelf('personalized', personalizedTitle)}>
-          <PersonalizedBody section="personalized" state={personalized} fallbackItems={likedFallbackItems} onRetry={loadPersonalized} likedProductIds={likedProductIds} onOpenProduct={onOpenProduct} onOpenSettings={onOpenPersonalizationSettings} onToggleLike={onToggleLike} />
+          <PersonalizedBody section="personalized" state={personalized} fallbackItems={likedFallbackItems} onRetry={loadPersonalized} likedProductIds={likedProductIds} onOpenProduct={onOpenProduct} onToggleLike={onToggleLike} />
         </Section>
       </View>
 
       <View onLayout={event => onSectionLayout?.('seasonal', event.nativeEvent.layout.y)}>
         <Section title="시즌 상품" onAction={() => onOpenShelf('seasonal', '시즌 상품')}>
-          {seasonal.status === 'loading' ? <RecommendationSectionState kind="loading" message="지금 주목받는 메이크업과 실제 상품을 찾고 있어요." /> : null}
+          {seasonal.status === 'loading' ? <RecommendationSectionState kind="loading" message="저장된 최신 트렌드 상품을 불러오고 있어요." /> : null}
           {seasonal.status === 'error' ? <RecommendationSectionState kind="error" message={seasonal.message ?? '시즌 상품을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={loadSeasonal} /> : null}
           {seasonal.status === 'ready' && (seasonal.data?.status !== 'ready' || !seasonal.data?.items.length) ? <RecommendationSectionState kind="empty" message="확인 가능한 최신 시즌 상품을 준비하고 있어요." actionLabel="새로고침" onAction={loadSeasonal} /> : null}
           {seasonal.status === 'ready' && seasonal.data?.status === 'ready' && seasonal.data.items.length > 0 ? <View style={styles.stack}>
@@ -220,18 +221,16 @@ export function ProductRecommendationHubContent({
             <Text numberOfLines={2} style={styles.summary}>{seasonal.data.collection?.summary ?? '트렌드 상품을 갱신하는 동안 최근 인기가 높은 제품을 먼저 보여드려요.'}</Text>
             {seasonal.data.collection?.isStale ? <Text accessibilityLiveRegion="polite" style={styles.staleNotice}>마지막 검수 콘텐츠예요. 원천 데이터 갱신이 지연되고 있어요.</Text> : null}
             <ProductRail items={withLikeState(seasonal.data.items)} onOpen={openSeasonalProduct} onToggleLike={onToggleLike} />
-            {seasonal.data.collection ? <Text numberOfLines={2} style={styles.source}>{seasonal.data.collection.trendWindow} · {seasonal.data.collection.providerStatus === 'shoppingInsight' ? '쇼핑 클릭 변화 반영' : seasonal.data.collection.providerStatus === 'popularFallback' ? '앱 내 인기 반영' : '편집 출처 검토'} · 상품 {Math.max(1, Math.round((seasonal.data.collection.refreshAfterSeconds ?? 300) / 60))}분 갱신</Text> : null}
+            {seasonal.data.collection ? <Text numberOfLines={2} style={styles.source}>{seasonal.data.collection.trendWindow} · {seasonal.data.collection.sourceName ?? (seasonal.data.collection.providerStatus === 'popularFallback' ? '앱 내 인기' : '검증된 트렌드 수집')} · 신뢰도 {Math.round((seasonal.data.collection.confidenceScore ?? 0.5) * 100)}%</Text> : null}
           </View> : null}
         </Section>
       </View>
 
       <View onLayout={event => onSectionLayout?.('cohort', event.nativeEvent.layout.y)}>
         <Section title={cohortTitle} onAction={() => onOpenShelf('cohort', cohortTitle)}>
-          <PersonalizedBody section="cohort" state={cohort} onRetry={loadCohort} likedProductIds={likedProductIds} onOpenProduct={onOpenProduct} onOpenSettings={onOpenPersonalizationSettings} onToggleLike={onToggleLike} />
+          <PersonalizedBody section="cohort" state={cohort} onRetry={loadCohort} likedProductIds={likedProductIds} onOpenProduct={onOpenProduct} onToggleLike={onToggleLike} />
         </Section>
       </View>
-
-      <Pressable accessibilityRole="button" onPress={onOpenPersonalizationSettings} style={styles.privacyLink}><SlidersHorizontal color={colors.textSecondary} size={iconSize.xs} /><Text style={styles.privacyText}>개인화 데이터와 개인정보 설정</Text><ChevronRight color={colors.textSecondary} size={iconSize.xs} /></Pressable>
 
       <Modal animationType="fade" onRequestClose={() => setLookPickerVisible(false)} transparent visible={lookPickerVisible}>
         <View accessibilityViewIsModal style={styles.modalBackdrop}><View style={styles.modalCard}><View style={styles.modalHeader}><Text accessibilityRole="header" style={styles.collectionTitle}>기준 AR 룩 변경</Text><Pressable accessibilityLabel="기준 AR 룩 선택 닫기" accessibilityRole="button" onPress={() => setLookPickerVisible(false)} style={styles.modalClose}><X color={colors.textPrimary} size={iconSize.sm} /></Pressable></View>
@@ -255,7 +254,7 @@ function queuePreferenceEvent(section: 'personalized' | 'cohort', data: Personal
   queueProductEvent({eventType, section, ...productEventIdentity(product), runId: data?.runId ?? undefined, exposureToken: product.exposureToken, position, context: eventType === 'impression' ? {screen: 'product_hub', viewportRatio: 0.6, visibleMs: 700} : {screen: 'product_hub'}});
 }
 
-function PersonalizedBody({section, state, fallbackItems = [], onRetry, likedProductIds, onOpenProduct, onOpenSettings, onToggleLike}: {section: 'personalized' | 'cohort'; state: SectionLoad<PersonalizedRecommendationData>; fallbackItems?: CatalogProduct[]; onRetry: () => void; likedProductIds: Set<string>; onOpenProduct: (product: CatalogProduct) => void; onOpenSettings: () => void; onToggleLike: (product: CatalogProduct) => void}) {
+function PersonalizedBody({section, state, fallbackItems = [], onRetry, likedProductIds, onOpenProduct, onToggleLike}: {section: 'personalized' | 'cohort'; state: SectionLoad<PersonalizedRecommendationData>; fallbackItems?: CatalogProduct[]; onRetry: () => void; likedProductIds: Set<string>; onOpenProduct: (product: CatalogProduct) => void; onToggleLike: (product: CatalogProduct) => void}) {
   const minimumCohortSize = state.data?.minimumCohortSize ?? 5;
   const hasRecommendationItems = Boolean(state.data?.items.length);
   const basisStatus = section === 'personalized'
@@ -263,7 +262,7 @@ function PersonalizedBody({section, state, fallbackItems = [], onRetry, likedPro
     : state.data?.cohortStatus ?? state.data?.status;
   if (state.status === 'loading') return <RecommendationSectionState kind="loading" message={section === 'cohort' ? '익명 컬러 취향 모수를 확인하고 있어요.' : '동의한 활동에서 취향을 정리하고 있어요.'} />;
   if (state.status === 'error') return <RecommendationSectionState kind="error" message={state.message ?? '추천을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={onRetry} />;
-  if (!hasRecommendationItems && basisStatus === 'personalizationOff') return <RecommendationSectionState kind="off" message={section === 'cohort' ? '유사 취향 추천 동의가 꺼져 있어요.' : '좋아요·검색·클릭 기반 개인화 동의가 꺼져 있어요.'} actionLabel="설정하기" onAction={onOpenSettings} />;
+  if (!hasRecommendationItems && basisStatus === 'personalizationOff') return <RecommendationSectionState kind="off" message="가입 동의 정보를 확인하지 못해 인기 상품을 준비하고 있어요." />;
   if (!hasRecommendationItems && basisStatus === 'control') return <RecommendationSectionState kind="off" message="추천 품질을 검증하는 비교 그룹이에요." />;
   if (section === 'personalized' && !hasRecommendationItems && fallbackItems.length > 0) return <View style={styles.stack}><Text style={styles.meta}>새 추천을 준비하는 동안 최근 좋아요한 제품을 보여드려요.</Text><ProductRail items={fallbackItems} onOpen={(product) => onOpenProduct(product)} onToggleLike={onToggleLike} /></View>;
   if (state.data?.status !== 'ready') return <RecommendationSectionState kind="empty" message={section === 'cohort' ? `같은 컬러 취향의 동의 사용자가 ${minimumCohortSize}명 이상 모이면 추천을 시작해요.` : '좋아요·검색·클릭 기록이 더 쌓이면 취향에 맞는 상품을 보여드려요.'} />;
@@ -304,8 +303,6 @@ const styles = StyleSheet.create({
   chipActive: {backgroundColor: colors.black, borderRadius: radius.pill, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md},
   chipText: {...typography.caption, color: colors.textSecondary},
   chipTextActive: {...typography.caption, color: colors.white},
-  privacyLink: {alignItems: 'center', borderTopColor: colors.border, borderTopWidth: 1, flexDirection: 'row', gap: spacing.sm, minHeight: 56, paddingHorizontal: spacing.xs},
-  privacyText: {color: colors.textSecondary, flex: 1, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm},
   modalBackdrop: {backgroundColor: 'rgba(0,0,0,0.42)', flex: 1, justifyContent: 'flex-end', padding: spacing.sm},
   modalCard: {backgroundColor: colors.background, borderRadius: radius.lg, gap: spacing.md, maxHeight: '72%', padding: spacing.lg},
   modalHeader: {alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between'},
