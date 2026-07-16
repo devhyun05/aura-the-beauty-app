@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 EXPO_PUSH_TOKEN_PATTERN = re.compile(r"^(?:Expo|Exponent)PushToken\[[^\]]+\]$")
 EXPO_PUSH_BATCH_SIZE = 100
 MAX_PUSH_ATTEMPTS = 3
+PUSH_SUPPRESSION_GRACE_SECONDS = 1.0
 REPORT_NOTIFICATION_TYPES = frozenset(
   {
     "analysis_report_completed",
@@ -135,6 +137,31 @@ async def _deliver_notification(
   settings: Settings,
   notification_id: UUID,
 ) -> None:
+  notification = await db.fetchrow(
+    """
+    select id, user_id, notification_type, title, body, data
+    from app_notifications
+    where id = $1
+      and read_at is null
+    """,
+    notification_id,
+  )
+
+  if notification is None:
+    await db.execute(
+      """
+      update notification_outbox
+      set status = 'completed',
+          completed_at = now(),
+          last_error = 'notification-viewed-before-push',
+          updated_at = now()
+      where notification_id = $1
+        and status in ('pending', 'failed', 'sending')
+      """,
+      notification_id,
+    )
+    return
+
   outbox = await db.fetchrow(
     """
     update notification_outbox
@@ -152,18 +179,6 @@ async def _deliver_notification(
   )
 
   if outbox is None:
-    return
-
-  notification = await db.fetchrow(
-    """
-    select id, user_id, notification_type, title, body, data
-    from app_notifications
-    where id = $1
-    """,
-    notification_id,
-  )
-
-  if notification is None:
     return
 
   devices = await db.fetch(
@@ -353,6 +368,12 @@ async def create_and_send_notification(
           notification["id"],
           exc_info=True,
         )
+      if settings.push_notifications_enabled:
+        # The foreground app removes or marks this notification as read when
+        # the user is already waiting for or viewing the matching report.
+        # Give that realtime acknowledgement a short window before APNs/Expo
+        # delivery, then _deliver_notification rechecks the unread row.
+        await asyncio.sleep(PUSH_SUPPRESSION_GRACE_SECONDS)
     await _deliver_notification(db, settings, notification["id"])
   except Exception:  # noqa: BLE001 - notification delivery is fail-open.
     logger.warning(
