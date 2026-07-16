@@ -27,6 +27,7 @@ import {
 import {
   getFaceLengthTitle,
   getGaugeMarkerPercent,
+  isJudgmentVersionCurrent,
   judgeFaceLength,
 } from '../constants';
 
@@ -204,8 +205,10 @@ function FaceLengthGauge({result}: {result: FaceVerticalThirdsResult}) {
   }
 
   // 판정 스냅샷 우선(Phase 0-5): 측정 시점에 동결된 판정을 렌더한다 —
-  // 상수 개정이 과거 보고서를 조용히 재판정하지 못하게 하는 실소비 지점.
-  // 스냅샷 없는 구 결과만 현재 판정기로 폴백(동적 유보 구간, Phase 0-2).
+  // 상수 개정이 과거 결과를 조용히 재판정하지 못하게 하는 실소비 지점.
+  // 폴백(현재 판정기 재계산)은 방어용 — 이 화면은 항상 신규 분석이라
+  // 현재는 도달하지 않고, 저장 결과를 이 컴포넌트로 렌더하는 표면이
+  // 생기는 순간부터 스냅샷 부재 구 데이터에 적용된다.
   const judgment =
     result.faceLengthJudgment ??
     judgeFaceLength(lengthRatio, result.quality.pitch, result.quality.yaw);
@@ -213,6 +216,13 @@ function FaceLengthGauge({result}: {result: FaceVerticalThirdsResult}) {
   const isBorderline =
     judgment.verdict === 'borderline_wide' ||
     judgment.verdict === 'borderline_long';
+  // 판정 보류면 범주 마커를 숨긴다 — "보류" 제목 옆에 마커가 특정 범주를
+  // 가리키는 모순 방지(3차 리뷰). 기준 개정 후 복원된 스냅샷은 제목(구 기준)과
+  // 게이지 범주(현행 스케일)가 다를 수 있어 안내를 붙인다.
+  const showsMarker = judgment.verdict !== 'indeterminate';
+  const isStaleJudgment =
+    result.faceLengthJudgment !== undefined &&
+    !isJudgmentVersionCurrent(result.judgmentVersion);
 
   return (
     <View style={styles.lengthSection}>
@@ -228,14 +238,40 @@ function FaceLengthGauge({result}: {result: FaceVerticalThirdsResult}) {
           촬영 각도 정보를 확인하지 못해 판정을 보류했어요.
         </Text>
       ) : null}
+      {isStaleJudgment ? (
+        <Text style={styles.gaugeBorderlineText}>
+          이 판정은 이전 기준으로 측정된 결과예요.
+        </Text>
+      ) : null}
       <View style={styles.gaugeWrap}>
-        <View style={[styles.gaugeMarker, {left: `${markerPercent}%`}]}>
-          <View style={styles.gaugeMarkerPin} />
-        </View>
-        <View style={styles.gaugeTrack}>
-          <View style={[styles.gaugeSegment, styles.gaugeSegmentWide]} />
-          <View style={[styles.gaugeSegment, styles.gaugeSegmentAverage]} />
-          <View style={[styles.gaugeSegment, styles.gaugeSegmentLong]} />
+        {/* 마커·band는 트랙 기준 절대배치 — 래퍼에 다른 자식이 늘어도
+            핀이 트랙에서 이탈하지 않는다(셀프 리뷰 레이아웃 회귀 수정). */}
+        <View style={styles.gaugeTrackWrap}>
+          {isBorderline ? (
+            <View
+              style={[
+                styles.gaugeBandRange,
+                {
+                  left: `${getGaugeMarkerPercent(judgment.band.lo)}%`,
+                  width: `${Math.max(
+                    getGaugeMarkerPercent(judgment.band.hi) -
+                      getGaugeMarkerPercent(judgment.band.lo),
+                    1,
+                  )}%`,
+                },
+              ]}
+            />
+          ) : null}
+          {showsMarker ? (
+            <View style={[styles.gaugeMarker, {left: `${markerPercent}%`}]}>
+              <View style={styles.gaugeMarkerPin} />
+            </View>
+          ) : null}
+          <View style={styles.gaugeTrack}>
+            <View style={[styles.gaugeSegment, styles.gaugeSegmentWide]} />
+            <View style={[styles.gaugeSegment, styles.gaugeSegmentAverage]} />
+            <View style={[styles.gaugeSegment, styles.gaugeSegmentLong]} />
+          </View>
         </View>
         <View style={styles.gaugeLabelRow}>
           <Text style={styles.gaugeLabel}>가로형{'\n'}얼굴</Text>
@@ -541,21 +577,16 @@ function VerticalRatioSection({
           <View style={styles.ratioSummary}>
             {/* Phase 0-3: '평균 비율 1:1:0.8' 기준선 제거(성형광고 관행값 —
                 실측 아님). 중안부=1.00 기준의 자기내부 비교만 표기한다. */}
+            <Text style={styles.ratioBasisText}>중안부 1.00 기준</Text>
             {result.measurementMode === 'full_vertical_thirds' ? (
-              <>
-                <Text style={styles.ratioBasisText}>중안부 1.00 기준</Text>
-                <Text style={styles.myRatioText}>
-                  나의 비율 {formatRatio(ratio.upper)} : 1.00 :{' '}
-                  {formatRatio(ratio.lower)}
-                </Text>
-              </>
+              <Text style={styles.myRatioText}>
+                나의 비율 {formatRatio(ratio.upper)} : 1.00 :{' '}
+                {formatRatio(ratio.lower)}
+              </Text>
             ) : (
-              <>
-                <Text style={styles.ratioBasisText}>중안부 1.00 기준</Text>
-                <Text style={styles.myRatioText}>
-                  중·하안부 비율 1.00 : {formatRatio(ratio.lower)}
-                </Text>
-              </>
+              <Text style={styles.myRatioText}>
+                중·하안부 비율 1.00 : {formatRatio(ratio.lower)}
+              </Text>
             )}
           </View>
           <VerticalRatioBarChart
@@ -875,13 +906,6 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
   },
-  ratioBasisText: {
-    color: REPORT_MUTED,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.md,
-    lineHeight: typography.lineHeight.md,
-    textAlign: 'center',
-  },
   debugPanel: {
     backgroundColor: 'rgba(0, 0, 0, 0.06)',
     borderRadius: radius.md,
@@ -929,7 +953,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     flex: 1,
     height: 14,
-    position: 'relative',
   },
   barValue: {
     color: colors.textPrimary,
@@ -964,12 +987,22 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     width: '100%',
   },
+  gaugeBandRange: {
+    backgroundColor: 'rgba(255, 11, 131, 0.16)',
+    borderColor: REPORT_MARKER,
+    borderRadius: 4,
+    borderWidth: 1,
+    bottom: -3,
+    position: 'absolute',
+    top: -3,
+    zIndex: 1,
+  },
   gaugeMarker: {
     alignItems: 'center',
-    bottom: 20,
-    marginLeft: -23,
+    marginLeft: -14,
     position: 'absolute',
-    width: 46,
+    top: -8,
+    width: 28,
     zIndex: 2,
   },
   gaugeMarkerPin: {
@@ -1010,8 +1043,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: '100%',
   },
+  gaugeTrackWrap: {
+    position: 'relative',
+    width: '100%',
+  },
   gaugeWrap: {
-    marginTop: 50,
+    marginTop: spacing.lg,
     width: '78%',
   },
   headerSection: {
@@ -1076,6 +1113,13 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+  },
+  ratioBasisText: {
+    color: REPORT_MUTED,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.md,
+    lineHeight: typography.lineHeight.md,
+    textAlign: 'center',
   },
   ratioSummary: {
     gap: spacing.xs,

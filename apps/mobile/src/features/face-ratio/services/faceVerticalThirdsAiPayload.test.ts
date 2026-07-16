@@ -13,6 +13,7 @@ function fixture(): FaceVerticalThirdsResult {
     captureId: 'capture',
     createdAt: '2026-07-16T00:00:00.000Z',
     faceLength: {heightPx: 900, ratio: 1.3, widthPx: 690},
+    faceLengthJudgment: {band: {hi: 1.315, lo: 1.296}, verdict: 'wide'},
     hairlineAnalysis: {
       analysisEligible: true,
       confidence: 0.82,
@@ -36,6 +37,7 @@ function fixture(): FaceVerticalThirdsResult {
       Me: {confidence: 0.9, method: 'me', provider: 'mediapipe', x: 100, y: 1000},
       Sn: {confidence: 0.9, method: 'sn', provider: 'mediapipe', x: 100, y: 650},
     },
+    judgmentVersion: 'face-length-judgment/v2-provisional-20260717',
     measurementMode: 'full_vertical_thirds',
     quality: {usable: true, warnings: []},
     schemaVersion: 'aura-face-vertical-thirds-v1',
@@ -64,6 +66,14 @@ expect(
     'displayRatio' in fullPayload,
   'An authoritative actual H must produce the full AI payload.',
 );
+expect(
+  fullPayload?.measurementMode === 'full_vertical_thirds' &&
+    fullPayload.faceLengthJudgment?.verdict === 'wide' &&
+    fullPayload.faceLengthJudgment?.band.hi === 1.315 &&
+    fullPayload.faceLengthJudgment?.band.lo === 1.296 &&
+    fullPayload.judgmentVersion === 'face-length-judgment/v2-provisional-20260717',
+  'Frozen judgment snapshot and version must ride the full AI payload verbatim.',
+);
 
 const lowResult: FaceVerticalThirdsResult = {
   ...fixture(),
@@ -89,6 +99,8 @@ for (const forbidden of [
   '"upperNormalized"',
   '"dominantPart"',
   '"faceLength"',
+  '"faceLengthJudgment"',
+  '"judgmentVersion"',
 ]) {
   expect(!lowJson.includes(forbidden), `Low-confidence AI payload leaked ${forbidden}.`);
 }

@@ -93,6 +93,29 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
     "title": raw.get("title"),
   }
 
+  # 측정 시점 동결 판정(3차 리뷰 BLOCKER 반영): 화이트리스트가 벗겨내면
+  # 프롬프트의 verdict 추종 지시가 종단에서 무효가 된다 — 검증 후 보존.
+  judgment = _prompt_record(raw.get("faceLengthJudgment"))
+  judgment_band = _prompt_record(judgment.get("band"))
+  judgment_verdict = judgment.get("verdict")
+  band_hi = _prompt_number(judgment_band.get("hi"))
+  band_lo = _prompt_number(judgment_band.get("lo"))
+  safe_judgment = (
+    {
+      "band": {"hi": band_hi, "lo": band_lo},
+      "verdict": judgment_verdict,
+    }
+    if judgment_verdict
+    in {"wide", "borderline_wide", "average", "borderline_long", "long", "indeterminate"}
+    and band_hi is not None
+    and band_lo is not None
+    else None
+  )
+  judgment_version = raw.get("judgmentVersion")
+  safe_judgment_version = (
+    judgment_version if isinstance(judgment_version, str) and judgment_version else None
+  )
+
   if full_eligible:
     return {
       **common,
@@ -100,6 +123,8 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
       "displayRatio": {"lower": lower, "middle": middle, "upper": upper},
       "dominantPart": raw.get("dominantPart"),
       "faceLength": _prompt_record(raw.get("faceLength")) or None,
+      "faceLengthJudgment": safe_judgment,
+      "judgmentVersion": safe_judgment_version,
       "hairline": {
         "analysisEligible": True,
         "confidence": hairline_confidence,

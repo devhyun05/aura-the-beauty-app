@@ -155,6 +155,13 @@ export function judgeFaceLength(
   return {band, verdict: 'average'};
 }
 
+// 저장된 판정 스냅샷이 현행 기준으로 만들어졌는지 — 기준(상수·규칙) 개정
+// 후 복원된 구 결과는 제목(스냅샷)과 게이지 범주(현행 스케일)가 어긋날 수
+// 있으므로, 화면이 이 함수로 감지해 "이전 기준" 안내를 붙인다(Phase 0-5).
+export function isJudgmentVersionCurrent(version?: string): boolean {
+  return version === FACE_RATIO_JUDGMENT_VERSION;
+}
+
 // 판정형 제목. 문구 확정은 팀 검토 후(계획 Phase 0-3) — 유보 2종이 신설 축.
 export function getFaceLengthTitle(verdict: FaceLengthVerdict): string {
   switch (verdict) {

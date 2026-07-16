@@ -146,8 +146,9 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 - **판정 기준(자기내부 비교, Phase 0)**: 종전 `1:1:0.8` "평균(이상) 기준선"은 폐기(실측 아님 —
   성형광고 관행값으로 확인). 각 부위를 중안부(1.0)와 **직접 비교**한다 — 인구 기준 불요.
 - `dominantPart`(우세 부위) 판정: `|비율 − 1.0| > 0.08`(+epsilon 대칭화)이면 해당 부위가 길다/짧다로 해석,
-  한국어 요약 문구 생성 (강도: `≥0.22` 뚜렷하게 / `≥0.14` 다소 / else 약간). 판정 스냅샷은
-  `faceLengthJudgment`·`judgmentVersion`으로 결과에 동결 저장된다.
+  한국어 요약 문구 생성 (강도: `≥0.22` 뚜렷하게 / `≥0.14` 다소 / else 약간) — `interpretation`에 저장.
+- 얼굴 **길이비** 판정(별개 축)은 pose 기반 동적 유보 구간(`judgeFaceLength`)으로 산출되어
+  `faceLengthJudgment`(verdict+band)·`judgmentVersion`으로 결과에 동결 저장된다.
 
 ### 4.3 촬영 후 보정 & 품질 게이트
 
@@ -165,7 +166,7 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 | 헤어라인 | `H.y < G.y` (아니면 H를 null 처리, 차단 아님) | 경고만 |
 
 > **게이트가 2단계**입니다: 촬영 전 실시간 **Greenlight**(yaw≤10/roll≤8/거리/안정)와, 촬영 후 정지영상
-> **Quality Gate**(yaw·pitch≤8/roll≤5/얼굴수/기준점 순서). 기준치가 서로 다릅니다.
+> **Quality Gate**(yaw≤8/pitch≤12/roll≤5/얼굴수/기준점 순서). 기준치가 서로 다릅니다.
 
 ### 4.4 헤어라인 소스 티어링 & 최종 상태
 

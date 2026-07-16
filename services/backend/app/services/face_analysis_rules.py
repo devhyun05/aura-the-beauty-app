@@ -83,7 +83,15 @@ def _derive_face_shape(profile: dict[str, MetricEnvelope]) -> Insight:
     label = "각진형"
   else:
     label = "타원형"
-  return _insight(profile, keys, label, "얼굴 세로 비율과 하관 폭을 함께 반영한 결과예요.")
+  # borderline verdict는 세로 축 유보 — 라벨은 폭 중심으로 내리되 설명에
+  # 유보를 명시해 프롬프트 지시("경계라 단정 금지")와 표현 강도를 일치시킨다.
+  is_borderline = verdict in {"borderline_wide", "borderline_long"}
+  description = (
+    "세로 비율은 경계 구간이라 단정하지 않고, 하관 폭 중심으로 판단했어요."
+    if is_borderline
+    else "얼굴 세로 비율과 하관 폭을 함께 반영한 결과예요."
+  )
+  return _insight(profile, keys, label, description)
 
 
 def _derive_vertical_balance(profile: dict[str, MetricEnvelope]) -> Insight:

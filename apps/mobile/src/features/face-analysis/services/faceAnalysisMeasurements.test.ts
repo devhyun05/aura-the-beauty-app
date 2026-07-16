@@ -298,6 +298,56 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   );
   expectEqual(thirds.faceLengthJudgment?.band.hi, 1.412, 'judgment band hi roundtrip');
   expectEqual(thirds.faceLengthJudgment?.band.lo, 1.376, 'judgment band lo roundtrip');
+  // 오염 입력 계약(3차 셀프 리뷰): band가 비유한/문자열이거나 verdict가
+  // 미지 값이면 스냅샷 전체를 폐기하고 화면 재판정 폴백에 맡긴다.
+  {
+    const contaminated = parseFaceAnalysisMeasurements(
+      simulateBackendCamelize(
+        buildFaceAnalysisMeasurementsPayload({
+          captureId: 'cap-x',
+          face3d: null,
+          faceGeometry2d: null,
+          faceVerticalThirds: {
+            ...buildThirdsFixture(),
+            faceLengthJudgment: {
+              band: {hi: Number.NaN, lo: 1.3},
+              verdict: 'wide',
+            },
+          },
+          personalColor: null,
+        }),
+      ) as Record<string, unknown>,
+      {},
+    );
+    expectEqual(
+      contaminated?.faceVerticalThirds?.faceLengthJudgment,
+      undefined,
+      'contaminated band must drop the snapshot (fallback to re-judgment)',
+    );
+    const unknownVerdict = parseFaceAnalysisMeasurements(
+      simulateBackendCamelize(
+        buildFaceAnalysisMeasurementsPayload({
+          captureId: 'cap-y',
+          face3d: null,
+          faceGeometry2d: null,
+          faceVerticalThirds: {
+            ...buildThirdsFixture(),
+            faceLengthJudgment: {
+              band: {hi: 1.31, lo: 1.3},
+              verdict: 'future-verdict' as never,
+            },
+          },
+          personalColor: null,
+        }),
+      ) as Record<string, unknown>,
+      {},
+    );
+    expectEqual(
+      unknownVerdict?.faceVerticalThirds?.faceLengthJudgment,
+      undefined,
+      'unknown future verdict must drop the snapshot (fallback to re-judgment)',
+    );
+  }
   expectEqual(thirds.verticalThirds?.displayRatio.upper, 0.97, 'ratio roundtrip');
   expectEqual(thirds.measurementMode, 'full_vertical_thirds', 'measurement mode roundtrip');
   expectEqual(

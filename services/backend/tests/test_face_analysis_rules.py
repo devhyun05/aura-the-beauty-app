@@ -119,3 +119,57 @@ def test_missing_evidence_is_not_invented() -> None:
   assert result.face_shape.label == "측정 보류"
   assert result.face_shape.confidence == 0
   assert result.color_axes.label == "측정 보류"
+
+# ── 종단 체인(3차 리뷰): normalizer 발행 → 규칙 소비까지 연결 검증 ──────────
+
+from app.services.face_analysis_measurements import normalize_camera_measurements
+
+
+def _thirds_payload(*, verdict: str | None, eligible: bool = True, usable: bool = True):
+  thirds = {
+    "hairlineAnalysis": {
+      "analysisEligible": eligible,
+      "confidence": 0.87,
+      "outcome": "detected_high_confidence" if eligible else "omitted",
+      "provider": "apple_semantic_matte",
+    },
+    "keypoints": {"H": {"confidence": 0.87, "provider": "apple_semantic_matte"}} if eligible else {},
+    "measurementMode": "full_vertical_thirds" if eligible else "middle_lower_only",
+    "status": "full_success" if usable else "blocked",
+    "quality": {"usable": usable, "warnings": []},
+    "verticalThirds": {
+      "confidence": 0.9,
+      "upperNormalized": 0.31,
+      "middleNormalized": 0.34,
+      "lowerNormalized": 0.35,
+      "warnings": [],
+    },
+    "faceLength": {"heightPx": 900, "widthPx": 600, "ratio": 1.50},
+  }
+  if verdict is not None:
+    thirds["faceLengthJudgment"] = {"band": {"hi": 1.53, "lo": 1.49}, "verdict": verdict}
+  return {
+    "schemaVersion": "aura-face-analysis-measurements-v1",
+    "faceVerticalThirds": thirds,
+  }
+
+
+def test_chain_indeterminate_full_session_withholds_face_shape() -> None:
+  profile = normalize_camera_measurements(_thirds_payload(verdict="indeterminate"))
+  result = derive_face_analysis(profile)
+  # ratio 1.50은 레거시 임계(>=1.38)로 '긴 타원형'이지만 보류가 이겨야 한다.
+  assert result.face_shape.label == "측정 보류"
+
+
+def test_chain_missing_hairline_stays_withheld() -> None:
+  profile = normalize_camera_measurements(_thirds_payload(verdict="long", eligible=False))
+  result = derive_face_analysis(profile)
+  # H 부재: verdict envelope는 unusable(value=None) → 규칙은 근거 부족 보류.
+  assert result.face_shape.label == "측정 보류"
+
+
+def test_chain_unusable_quality_stays_withheld() -> None:
+  profile = normalize_camera_measurements(_thirds_payload(verdict="long", usable=False))
+  result = derive_face_analysis(profile)
+  assert result.face_shape.label == "측정 보류"
+
