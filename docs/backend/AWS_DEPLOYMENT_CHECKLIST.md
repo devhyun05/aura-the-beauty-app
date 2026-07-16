@@ -276,7 +276,12 @@ ECS_CLUSTER=<ecs-cluster-name>
 ECS_SERVICE=<ecs-service-name>
 ECS_TASK_DEFINITION=<task-definition-family-or-arn>
 ECS_CONTAINER_NAME=aura-backend-api
+AI_WORKER_SERVICE=aura-ai-worker
+AI_WORKER_TASK_DEFINITION=aura-ai-worker
+AI_WORKER_CONTAINER_NAME=aura-ai-worker
 ```
+
+`AI_WORKER_SERVICE` enables the optional AI worker deployment block. The task definition and container variables fall back to the service name and `aura-ai-worker`, but setting all three explicitly is recommended. The deploy role must also be allowed to register the worker task definition, update the worker service, and pass its task and execution roles.
 
 For AWS authentication, prefer an OIDC role and set this repository Secret:
 

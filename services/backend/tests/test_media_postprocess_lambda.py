@@ -1,4 +1,5 @@
 import io
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -18,6 +19,7 @@ from app.lambdas.media_postprocess import (
   update_media_asset_postprocess_metadata,
 )
 from app.schemas.analysis import FilterExtractionAnalyzeRequest
+from app.services import makeup_feedback_analysis as makeup_feedback_analysis_module
 from app.services.makeup_feedback_analysis import MakeupFeedbackBedrockService
 from app.services.reference_makeup_extraction import ReferenceMakeupBedrockService
 
@@ -38,6 +40,17 @@ def _jpeg_with_orientation(width: int = 80, height: int = 40) -> bytes:
   output = io.BytesIO()
   image.save(output, format="JPEG", exif=exif)
   return output.getvalue()
+
+
+def _heif_image_bytes() -> bytes:
+  pillow_heif = pytest.importorskip("pillow_heif")
+  pillow_heif.register_heif_opener()
+  image = Image.new("RGB", (96, 64), color=(120, 80, 200))
+  output = io.BytesIO()
+  image.save(output, format="HEIF", quality=90)
+  return output.getvalue()
+
+
 
 
 def test_iter_s3_object_created_records_decodes_s3_keys() -> None:
@@ -67,6 +80,8 @@ def test_iter_s3_object_created_records_decodes_s3_keys() -> None:
 def test_should_process_object_key_only_allows_user_analysis_images() -> None:
   assert should_process_object_key("uploads/capture/photo.jpg") is True
   assert should_process_object_key("uploads/makeup_feedback/photo.webp") is True
+  assert should_process_object_key("uploads/makeup_feedback/photo.heic") is True
+  assert should_process_object_key("uploads/makeup_feedback/photo.heif") is True
   assert should_process_object_key("uploads/filter-extraction/photo.png") is True
   assert should_process_object_key("uploads/capture/thumbnails/photo.jpg") is False
   assert should_process_object_key("uploads/makeup-filters/filter.png") is False
@@ -92,6 +107,18 @@ def test_process_image_bytes_removes_exif_and_creates_thumbnail() -> None:
   assert not sanitized.getexif()
   assert max(thumbnail.size) <= 512
   assert processed.thumbnail_content_type == "image/jpeg"
+
+
+def test_process_image_bytes_decodes_heif_for_ios_gallery_uploads() -> None:
+  processed = process_image_bytes(_heif_image_bytes())
+
+  with Image.open(io.BytesIO(processed.body)) as sanitized:
+    assert sanitized.size == (96, 64)
+    assert sanitized.format == "JPEG"
+
+  assert processed.content_type == "image/jpeg"
+  assert processed.width == 96
+  assert processed.height == 64
 
 
 def test_process_image_bytes_rejects_images_above_pixel_limit(monkeypatch) -> None:
@@ -241,27 +268,51 @@ async def test_feedback_worker_sanitizes_image_before_bedrock(
 ) -> None:
   service = MakeupFeedbackBedrockService(Settings())
   captured: dict[str, object] = {}
+  vision_result = SimpleNamespace(
+    detector_available=True,
+    face_count=1,
+    hard_retake=False,
+    quality_issues=(),
+    regions={},
+  )
 
   monkeypatch.setattr(service, "_read_image_bytes", lambda _payload: _jpeg_with_orientation())
 
-  def fake_analyze(payload, image_bytes, content_type):
-    captured["payload"] = payload
-    captured["content_type"] = content_type
-
+  def fake_prepare(image_bytes):
     with Image.open(io.BytesIO(image_bytes)) as image:
       captured["size"] = image.size
+      captured["format"] = image.format
       captured["has_exif"] = bool(image.getexif())
 
+    return vision_result
+
+  def fake_analyze(payload, received_vision_result):
+    captured["payload"] = payload
+    captured["vision_result"] = received_vision_result
     return {"status": "ok"}
 
+  monkeypatch.setattr(
+    makeup_feedback_analysis_module,
+    "prepare_makeup_feedback_vision",
+    fake_prepare,
+  )
   monkeypatch.setattr(service, "_analyze_sync", fake_analyze)
 
-  result = await service.analyze({"contentType": "image/jpeg"})
+  result = await service.analyze(
+    {
+      "contentType": "image/jpeg",
+      "feedbackContext": {
+        "originalGoalText": "test feedback goal",
+        "userGoalText": "test feedback goal",
+      },
+    },
+  )
 
   assert result == {"status": "ok"}
-  assert captured["content_type"] == "image/jpeg"
+  assert captured["format"] == "JPEG"
   assert captured["size"] == (40, 80)
   assert captured["has_exif"] is False
+  assert captured["vision_result"] is vision_result
 
 
 @pytest.mark.asyncio

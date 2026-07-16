@@ -9,62 +9,59 @@
 // 모든 호출은 best-effort — 백엔드 미설정/실패 시 화면 로컬 동작(낙관적 상태)을 해치지 않는다.
 
 import {
-  getBackendApiBaseUrl,
-  requestBackendJson,
-} from '../../../shared/services/backendApi';
+  getProductBackendApiBaseUrl,
+  requestProductBackendJson,
+} from '../../../shared/services/productBackendApi';
+import {
+  likeExternalProduct,
+  likeProduct,
+  unlikeProduct,
+} from '../../../shared/services/productService';
 import {mapCandidate} from './auradinSearchService';
 import type {AuradinCandidateProduct} from '../types';
 
-// dev 머지: 레거시 /products/{id}/like는 UUID 전용이 됐고, Auradin catalogItemId(non-UUID)는
-// dev의 external-product like 경로를 탄다. external_source='auradin_catalog'로 like하면 백엔드가
-// resolve_auradin_catalog_product로 활성 스냅샷 카탈로그에서 상품을 조회하므로 payload가 불필요하다.
-// (services/backend/app/api/products.py: /products/external/{source}/{id}/like)
-const AURADIN_CATALOG_SOURCE = 'auradin_catalog';
-
-// 후보의 출처로 external_source를 정한다 — 큐레이션 카탈로그 픽은 auradin_catalog,
-// 라이브 발견 픽은 auradin_search. 백엔드가 각각 해당 소스로 상품을 resolve한다.
-function likeSourceFor(product: AuradinCandidateProduct): string {
-  return product.externalSource || AURADIN_CATALOG_SOURCE;
-}
-
-function auradinLikePath(productId: string, source: string): string {
-  return `/products/external/${encodeURIComponent(source)}/${encodeURIComponent(productId)}/like`;
-}
+// UUID 내부 상품은 product like 경로를, Auradin 외부 상품은 source별 external 경로를 쓴다.
+// 공용 productService를 재사용해 제품 전용 백엔드 override와 라우팅 규칙을 한곳에서 관리한다.
 
 // 서버 찜 반영 — 실패는 조용히 (보관함 UX는 로컬 상태가 즉답, 서버는 영속화 계층).
-export async function persistAuradinSave(product: AuradinCandidateProduct): Promise<void> {
-  if (!getBackendApiBaseUrl()) {
-    return;
+export async function persistAuradinSave(product: AuradinCandidateProduct): Promise<boolean> {
+  if (!getProductBackendApiBaseUrl()) {
+    return false;
   }
 
   try {
-    await requestBackendJson(auradinLikePath(product.id, likeSourceFor(product)), {method: 'POST'});
+    if (product.externalSource) {
+      await likeExternalProduct(product.id, product.externalSource);
+    } else {
+      await likeProduct(product.id, product.shadeId);
+    }
+    return true;
   } catch (error) {
     console.info('[aura:auradin] save:persist-failed', {
       id: product.id,
       message: error instanceof Error ? error.message : String(error),
     });
+    return false;
   }
 }
 
 export async function removeAuradinSave(
   productId: string,
   externalSource?: string | null,
-): Promise<void> {
-  if (!getBackendApiBaseUrl()) {
-    return;
+): Promise<boolean> {
+  if (!getProductBackendApiBaseUrl()) {
+    return false;
   }
 
   try {
-    await requestBackendJson(
-      auradinLikePath(productId, externalSource || AURADIN_CATALOG_SOURCE),
-      {method: 'DELETE'},
-    );
+    await unlikeProduct(productId, externalSource);
+    return true;
   } catch (error) {
     console.info('[aura:auradin] save:remove-failed', {
       id: productId,
       message: error instanceof Error ? error.message : String(error),
     });
+    return false;
   }
 }
 
@@ -103,7 +100,15 @@ export function mapLikedRowToCandidate(row: BackendLikedRow): AuradinCandidatePr
     return null;
   }
 
-  return mapCandidate({
+  const externalSource: AuradinCandidateProduct['externalSource'] =
+    row.externalSource === 'auradin_catalog' || row.externalSource === 'auradin_search'
+      ? row.externalSource
+      : undefined;
+  if (row.externalSource && !externalSource) {
+    return null;
+  }
+
+  const candidate = mapCandidate({
     id,
     brandName: row.brandName,
     productName: row.productName,
@@ -115,20 +120,22 @@ export function mapLikedRowToCandidate(row: BackendLikedRow): AuradinCandidatePr
     palette: row.palette,
     imageUrl: row.imageUrl,
     purchaseUrl: row.purchaseUrl,
-    externalSource: row.externalSource ?? null,
+    externalSource: externalSource ?? null,
     reason: null,
     reasonCopy: row.reason ?? null,
   });
+
+  return externalSource ? {...candidate, externalSource} : candidate;
 }
 
-// 재마운트 시 보관함 복원. 실패/백엔드 미설정 시 빈 배열(화면 로컬 동작 유지).
+// 포커스 시 보관함 복원. 백엔드 미설정은 빈 배열, 요청 실패는 호출자가 기존 상태를 유지하게 전파한다.
 export async function fetchAuradinSavedProducts(): Promise<AuradinCandidateProduct[]> {
-  if (!getBackendApiBaseUrl()) {
+  if (!getProductBackendApiBaseUrl()) {
     return [];
   }
 
   try {
-    const response = await requestBackendJson<{products?: BackendLikedRow[] | null}>(
+    const response = await requestProductBackendJson<{products?: BackendLikedRow[] | null}>(
       '/products/liked',
     );
 
@@ -142,6 +149,6 @@ export async function fetchAuradinSavedProducts(): Promise<AuradinCandidateProdu
       message: error instanceof Error ? error.message : String(error),
     });
 
-    return [];
+    throw error;
   }
 }

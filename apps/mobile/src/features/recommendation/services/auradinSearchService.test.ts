@@ -53,6 +53,15 @@ const noCopy = mapCandidate({id: 'x', brandName: 'B', productName: 'P', reasonCo
 expectEqual(noCopy.reasonCopy, undefined, 'empty reasonCopy → undefined');
 const internalCandidate = mapCandidate({id: '169fec46-f3e0-4ea1-9c63-0a2ed3aa6cdb'});
 expectEqual(internalCandidate.externalSource, undefined, 'UUID catalog candidates retain the internal like route');
+const uuidExternalCandidate = mapCandidate({
+  id: '269fec46-f3e0-4ea1-9c63-0a2ed3aa6cdb',
+  externalSource: 'auradin_search',
+});
+expectEqual(
+  uuidExternalCandidate.externalSource,
+  'auradin_search',
+  'explicit external source takes precedence over UUID-shaped ids',
+);
 
 // --- 질문 옵션 스와치: colorFamily→3색 그라데이션(§8.2-3), finish/texture→질감(§8.2-1), noop→skip ---
 const colorOption = mapQuestionOption({

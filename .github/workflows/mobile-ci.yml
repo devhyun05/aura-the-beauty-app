@@ -142,8 +142,18 @@ jobs:
           cache: npm
           cache-dependency-path: apps/mobile/package-lock.json
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/backend/requirements.txt
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Install backend dependencies for cross-layer contract
+        run: python -m pip install -r ../../services/backend/requirements.txt
 
       - name: Typecheck
         run: npx tsc --noEmit
@@ -156,6 +166,21 @@ jobs:
 
       - name: Contract — Face capture and analysis request verification
         run: npm run test:face-capture-upload
+
+      - name: Contract — Makeup feedback camera quality
+        run: npm run test:makeup-feedback-camera-quality
+
+      - name: Contract — Makeup feedback cross-layer response
+        run: npm run test:makeup-feedback-cross-layer
+
+      - name: Contract — Realtime face quality native bridge
+        run: npm run test:realtime-face-quality-native
+
+      - name: Contract — Realtime capture frame metadata
+        run: npm run test:realtime-capture-frame-native
+
+      - name: Contract — Cognito redirect URI
+        run: npm run test:cognito-redirect
 
       - name: Contract — Unity makeup bridge (랜드마크 요청/응답 포함)
         run: npm run test:unity-bridge

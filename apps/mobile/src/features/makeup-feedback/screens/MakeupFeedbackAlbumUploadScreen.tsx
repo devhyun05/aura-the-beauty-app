@@ -22,7 +22,7 @@ const copy = {
   retry: '앨범 다시 열기',
 } as const;
 
-const MAKEUP_FEEDBACK_IMAGE_QUALITY = 0.76;
+const MAKEUP_FEEDBACK_IMAGE_QUALITY = 1;
 
 export function MakeupFeedbackAlbumUploadScreen({
   onStartAnalysis,
@@ -66,6 +66,8 @@ export function MakeupFeedbackAlbumUploadScreen({
       }
 
       const selection: MakeupFeedbackPhotoSelection = {
+        contentType: pickedAsset.mimeType ?? null,
+        fileName: pickedAsset.fileName ?? null,
         imageHeight: pickedAsset.height ?? null,
         imageUri: pickedAsset.uri,
         imageWidth: pickedAsset.width ?? null,

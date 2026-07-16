@@ -1,0 +1,388 @@
+{
+  "version": 1,
+  "camera": {
+    "contractLimits": {
+      "minFaceWidthRatio": 0.3,
+      "maxFaceWidthRatio": 0.62,
+      "minFaceAreaRatio": 0.12,
+      "maxFaceAreaRatio": 0.7,
+      "minImageShortSidePx": 480,
+      "minImageLongSidePx": 640,
+      "maxAbsYawDeg": 15,
+      "maxAbsPitchDeg": 12,
+      "maxAbsRollDeg": 10,
+      "minExposureMean": 52,
+      "maxExposureMean": 208,
+      "maxShadowRatio": 0.58,
+      "maxHighlightRatio": 0.58,
+      "minBlurScore": 22,
+      "minStableDurationMs": 400
+    },
+    "guide": {
+      "centerX": 150,
+      "centerY": 300,
+      "width": 300,
+      "height": 420
+    },
+    "passFrame": {
+      "status": "ok",
+      "faceCount": 1,
+      "imageWidth": 1080,
+      "imageHeight": 1440,
+      "imageQuality": {
+        "faceWidthRatio": 0.46,
+        "faceAreaRatio": 0.32,
+        "exposureMean": 128,
+        "shadowRatio": 0.08,
+        "highlightRatio": 0.06,
+        "blurScore": 60
+      },
+      "mediaPipe": {
+        "status": "ok",
+        "faceWidthRatio": 0.46,
+        "yawDeg": 0,
+        "pitchDeg": 0,
+        "rollDeg": 0,
+        "poseSource": "vision",
+        "pitchMeasured": true,
+        "screenLandmarks": {
+          "forehead": {"left": 150, "top": 160},
+          "noseBridge": {"left": 150, "top": 245},
+          "noseTip": {"left": 150, "top": 300},
+          "chin": {"left": 150, "top": 420}
+        }
+      },
+      "cameraStability": {
+        "status": "ok",
+        "isStable": true,
+        "stableDurationMs": 800,
+        "stableThresholdMs": 400
+      }
+    },
+    "blockedCases": [
+      {
+        "id": "resolution_short_side_too_low",
+        "category": "resolution",
+        "expectedReason": "image_resolution_too_low",
+        "patch": {"imageWidth": 479}
+      },
+      {
+        "id": "resolution_long_side_too_low",
+        "category": "resolution",
+        "expectedReason": "image_resolution_too_low",
+        "patch": {"imageWidth": 480, "imageHeight": 639}
+      },
+      {
+        "id": "face_count_none",
+        "category": "faceCount",
+        "expectedReason": "no_face",
+        "patch": {"faceCount": 0, "status": "no_face"}
+      },
+      {
+        "id": "face_count_multiple",
+        "category": "faceCount",
+        "expectedReason": "multiple_faces",
+        "patch": {"faceCount": 2}
+      },
+      {
+        "id": "pose_yaw_camera_only",
+        "category": "pose",
+        "expectedReason": "not_forward",
+        "patch": {"mediaPipe": {"yawDeg": 16}}
+      },
+      {
+        "id": "pose_pitch_camera_only",
+        "category": "pose",
+        "expectedReason": "pitch_out_of_range",
+        "patch": {"mediaPipe": {"pitchDeg": 13}}
+      },
+      {
+        "id": "pose_roll_camera_only",
+        "category": "pose",
+        "expectedReason": "not_forward",
+        "patch": {"mediaPipe": {"rollDeg": 11}}
+      },
+      {
+        "id": "underexposed",
+        "category": "exposure",
+        "expectedReason": "underexposed",
+        "patch": {"imageQuality": {"exposureMean": 50}}
+      },
+      {
+        "id": "overexposed",
+        "category": "exposure",
+        "expectedReason": "overexposed",
+        "patch": {"imageQuality": {"exposureMean": 210}}
+      },
+      {
+        "id": "shadow_clipped",
+        "category": "exposure",
+        "expectedReason": "underexposed",
+        "patch": {"imageQuality": {"shadowRatio": 0.6}}
+      },
+      {
+        "id": "highlight_clipped",
+        "category": "exposure",
+        "expectedReason": "overexposed",
+        "patch": {"imageQuality": {"highlightRatio": 0.6}}
+      },
+      {
+        "id": "blurred",
+        "category": "blur",
+        "expectedReason": "blurred",
+        "patch": {"imageQuality": {"blurScore": 20}}
+      },
+      {
+        "id": "bbox_face_too_far_camera_only",
+        "category": "distance",
+        "expectedReason": "face_too_far",
+        "patch": {"imageQuality": {"faceWidthRatio": 0.29}}
+      },
+      {
+        "id": "bbox_face_too_close_camera_only",
+        "category": "distance",
+        "expectedReason": "face_too_close",
+        "patch": {"imageQuality": {"faceWidthRatio": 0.63}}
+      },
+      {
+        "id": "bbox_face_area_too_small_camera_only",
+        "category": "distance",
+        "expectedReason": "face_too_far",
+        "patch": {"imageQuality": {"faceAreaRatio": 0.11}}
+      },
+      {
+        "id": "bbox_face_area_too_large_camera_only",
+        "category": "distance",
+        "expectedReason": "face_too_close",
+        "patch": {"imageQuality": {"faceAreaRatio": 0.71}}
+      },
+      {
+        "id": "screen_face_too_far_camera_only",
+        "category": "distance",
+        "expectedReason": "face_too_far",
+        "patch": {"mediaPipe": {"faceWidthRatio": 0.29}}
+      },
+      {
+        "id": "screen_face_too_close_camera_only",
+        "category": "distance",
+        "expectedReason": "face_too_close",
+        "patch": {"mediaPipe": {"faceWidthRatio": 0.63}}
+      }
+    ]
+  },
+  "selection": {
+    "imageUri": "file:///makeup-feedback-pass.jpg",
+    "imageWidth": 1080,
+    "imageHeight": 1440,
+    "contentType": "image/jpeg",
+    "fileName": "makeup-feedback-pass.jpg",
+    "photoSource": "camera",
+    "photoTitle": "Camera capture",
+    "feedbackContext": {
+      "goalIntentType": "valid_context",
+      "userGoalText": "Balanced everyday makeup with a natural finish",
+      "normalizedGoalText": "Balanced everyday makeup with a natural finish",
+      "originalGoalText": "Balanced everyday makeup with a natural finish",
+      "profileGender": null
+    }
+  },
+  "requestPayload": {
+    "source": "camera",
+    "feedbackContext": {
+      "goalIntentType": "valid_context",
+      "userGoalText": "Balanced everyday makeup with a natural finish",
+      "originalGoalText": "Balanced everyday makeup with a natural finish",
+      "profileGender": null
+    }
+  },
+  "bedrockResponse": {
+    "analysisDecision": "completed",
+    "captureQuality": {
+      "usable": true,
+      "detectorAvailable": true,
+      "colorConfidence": "high",
+      "issues": []
+    },
+    "score": 89,
+    "scoreRange": [86, 92],
+    "scoreConfidence": 0.84,
+    "scoreEvidenceIds": ["brow-observation-1"],
+    "scoreLabel": "Overall score",
+    "scoreReason": "The visible makeup is balanced and supports the requested natural everyday finish.",
+    "interpretedGoal": {
+      "label": "Balanced everyday makeup",
+      "intensity": "light",
+      "reason": "The user requested a balanced natural finish for everyday wear.",
+      "explicitFacts": ["The user requested balanced everyday makeup with a natural finish."],
+      "unknowns": [],
+      "assumptions": [],
+      "dynamicCriteria": [
+        {
+          "id": "goal-1",
+          "criterion": "Keep visible color and edge intensity balanced for an everyday natural finish.",
+          "derivedFrom": "Balanced everyday makeup"
+        }
+      ]
+    },
+    "evaluations": [
+      {
+        "topicId": "brow",
+        "topicLabel": "눈썹",
+        "status": "strength",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "brow-observation-1", "claim": "The brow shape is clearly visible.", "evidenceLocation": "both brows", "lightingSensitive": false}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Balanced brow shape",
+        "description": "The brow edges support the requested natural finish.",
+        "actionSteps": ["Keep the current brow edge softness."],
+        "scoreImpact": "medium",
+        "confidence": 0.9
+      },
+      {
+        "topicId": "lash",
+        "topicLabel": "속눈썹",
+        "status": "improvement",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "lash-observation-1", "claim": "The lash definition is visible.", "evidenceLocation": "upper lash lines", "lightingSensitive": false}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Soften lash definition",
+        "description": "A slightly softer lash edge would better match the everyday goal.",
+        "actionSteps": ["Separate the outer lashes with a clean spoolie."],
+        "scoreImpact": "medium",
+        "confidence": 0.88
+      },
+      {
+        "topicId": "lens",
+        "topicLabel": "렌즈",
+        "status": "optional",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "lens-observation-1", "claim": "The iris area is clearly visible.", "evidenceLocation": "both eyes", "lightingSensitive": true}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Keep lens contrast subtle",
+        "description": "The visible eye contrast remains compatible with a natural finish.",
+        "actionSteps": ["If using lenses, keep the graphic diameter subtle."],
+        "scoreImpact": "low",
+        "confidence": 0.82
+      },
+      {
+        "topicId": "eyeliner",
+        "topicLabel": "아이라인",
+        "status": "optional",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "eyeliner-observation-1", "claim": "The eyeliner edge is visible.", "evidenceLocation": "upper lash lines", "lightingSensitive": false}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Maintain a fine liner edge",
+        "description": "The liner width is consistent with the requested light intensity.",
+        "actionSteps": ["Keep the outer liner extension short."],
+        "scoreImpact": "low",
+        "confidence": 0.87
+      },
+      {
+        "topicId": "eyeshadow",
+        "topicLabel": "아이섀도",
+        "status": "optional",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "eyeshadow-observation-1", "claim": "The shadow gradient is visible.", "evidenceLocation": "both eyelids", "lightingSensitive": true}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Preserve the soft shadow gradient",
+        "description": "The visible gradient supports an everyday natural finish.",
+        "actionSteps": ["Blend the upper edge with a clean brush."],
+        "scoreImpact": "low",
+        "confidence": 0.85
+      },
+      {
+        "topicId": "aegyosal",
+        "topicLabel": "애교살",
+        "status": "optional",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "aegyosal-observation-1", "claim": "The lower-eye highlight is visible.", "evidenceLocation": "lower eye area", "lightingSensitive": true}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Keep lower-eye detail light",
+        "description": "The lower-eye detail remains subtle enough for the goal.",
+        "actionSteps": ["Use a small amount of product at the center only."],
+        "scoreImpact": "low",
+        "confidence": 0.81
+      },
+      {
+        "topicId": "foundation",
+        "topicLabel": "파운데이션",
+        "status": "optional",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "foundation-observation-1", "claim": "The base finish is visible across both cheeks.", "evidenceLocation": "forehead and cheeks", "lightingSensitive": true}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Maintain an even base",
+        "description": "The visible base coverage is balanced for everyday wear.",
+        "actionSteps": ["Press a thin layer only where coverage is needed."],
+        "scoreImpact": "medium",
+        "confidence": 0.9
+      },
+      {
+        "topicId": "blush",
+        "topicLabel": "블러셔",
+        "status": "optional",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "blush-observation-1", "claim": "The cheek color is visible on both sides.", "evidenceLocation": "left and right cheeks", "lightingSensitive": true}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Keep cheek color diffused",
+        "description": "The cheek color placement supports the balanced goal.",
+        "actionSteps": ["Diffuse the outer edge with the remaining brush product."],
+        "scoreImpact": "low",
+        "confidence": 0.86
+      },
+      {
+        "topicId": "highlight",
+        "topicLabel": "하이라이터",
+        "status": "optional",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "highlight-observation-1", "claim": "The highlight reflection is visible.", "evidenceLocation": "upper cheekbones", "lightingSensitive": true}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Keep highlight controlled",
+        "description": "The visible sheen remains subtle for an everyday finish.",
+        "actionSteps": ["Limit highlight to the highest cheekbone point."],
+        "scoreImpact": "low",
+        "confidence": 0.8
+      },
+      {
+        "topicId": "shading",
+        "topicLabel": "섀딩",
+        "status": "optional",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "shading-observation-1", "claim": "The contour transition is visible.", "evidenceLocation": "jaw and cheek perimeter", "lightingSensitive": true}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Preserve a soft contour transition",
+        "description": "The contour intensity remains compatible with the natural goal.",
+        "actionSteps": ["Blend the contour edge toward the hairline."],
+        "scoreImpact": "low",
+        "confidence": 0.83
+      },
+      {
+        "topicId": "lip",
+        "topicLabel": "립",
+        "status": "optional",
+        "visibility": "clear",
+        "visibilityReason": null,
+        "observations": [{"id": "lip-observation-1", "claim": "The lip color and edge are visible.", "evidenceLocation": "full lip area", "lightingSensitive": true}],
+        "goalCriterionIds": ["goal-1"],
+        "title": "Keep the lip edge softly defined",
+        "description": "The lip finish supports the requested balanced everyday look.",
+        "actionSteps": ["Tap the outer edge once to soften the boundary."],
+        "scoreImpact": "medium",
+        "confidence": 0.89
+      }
+    ],
+    "summary": {
+      "strengthSummary": "The visible brow and base balance support the requested everyday look.",
+      "improvementSummary": "A slightly softer lash edge would make the finish more cohesive."
+    }
+  }
+}

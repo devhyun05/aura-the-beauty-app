@@ -84,6 +84,27 @@ const mockCopyByTopic: Record<MakeupFeedbackEvaluation['topicId'], MockEvaluatio
     status: 'improvement',
     title: '경계 블렌딩',
   },
+  lip: {
+    confidence: 0.77,
+    description: '립 중앙의 색감은 잘 살아 있지만 입꼬리 경계를 한 번 정리하면 전체 인상이 더 또렷해져요.',
+    scoreImpact: 'medium',
+    status: 'improvement',
+    title: '입꼬리 경계 정리',
+  },
+};
+
+const mockActionStepsByTopic: Record<MakeupFeedbackEvaluation['topicId'], string[]> = {
+  brow: ['스크루 브러시로 결을 먼저 세운 뒤 빈 부분만 가볍게 채워요.'],
+  lash: ['마스카라 양을 덜어낸 뒤 뿌리부터 한 번만 빗어 올려요.'],
+  lens: ['렌즈를 사용한다면 원래 눈동자와 명도 차이가 작은 색을 골라요.'],
+  eyeliner: ['면봉으로 꼬리 끝을 정리한 뒤 점막 가까이 얇게 다시 연결해요.'],
+  eyeshadow: ['경계가 보이지 않도록 깨끗한 브러시로 바깥쪽만 한 번 더 풀어요.'],
+  aegyosal: ['눈 밑 중앙에만 밝은 색을 소량 얹고 양끝은 비워 둬요.'],
+  foundation: ['얇은 퍼프로 코 옆과 입가만 눌러 피부 표현을 정돈해요.'],
+  blush: ['광대 위쪽에서 관자놀이 방향으로 남은 양을 짧게 쓸어 올려요.'],
+  highlight: ['빛을 받는 콧대와 광대 중앙에만 소량을 얹어요.'],
+  shading: ['깨끗한 브러시로 턱선과 코 옆 경계를 바깥 방향으로 풀어요.'],
+  lip: ['작은 브러시로 입꼬리 바깥 번짐을 정리하고 중앙 컬러만 한 번 덧발라요.'],
 };
 
 function buildMockEvaluations(): MakeupFeedbackEvaluation[] {
@@ -97,6 +118,7 @@ function buildMockEvaluations(): MakeupFeedbackEvaluation[] {
       status: copy.status,
       title: copy.title,
       description: copy.description,
+      actionSteps: mockActionStepsByTopic[topic.id],
       kind: topic.kind,
       confidence: copy.confidence,
       scoreImpact: copy.scoreImpact,
@@ -109,13 +131,17 @@ export const createMockMakeupFeedback = (
 ): MakeupFeedbackResult => {
   const evaluations = buildMockEvaluations();
   const points = evaluations
-    .filter((evaluation) => evaluation.status === 'improvement')
+    .filter(
+      (evaluation) =>
+        evaluation.status === 'improvement' || evaluation.status === 'optional',
+    )
     .map((evaluation) => ({
       id: `${evaluation.topicId}-point`,
       topicId: evaluation.topicId,
       topicLabel: evaluation.topicLabel,
       title: evaluation.title,
       description: evaluation.description,
+      actionSteps: evaluation.actionSteps,
       actionLabel: '보완 포인트',
       kind: evaluation.kind,
     }));
@@ -127,6 +153,7 @@ export const createMockMakeupFeedback = (
       topicLabel: evaluation.topicLabel,
       title: evaluation.title,
       description: evaluation.description,
+      actionSteps: evaluation.actionSteps,
       icon: index % 2 === 0 ? 'sparkle' : 'heart',
       kind: evaluation.kind,
     }));
@@ -134,11 +161,15 @@ export const createMockMakeupFeedback = (
 
   return {
     id: `mock-feedback-${selection.photoSource}`,
+    analysisSource: 'mock',
+    analysisStatus: 'mock',
+    modelVersion: 'makeup-feedback:demo-v1',
     uploadedImage: selection.imageUri ? {uri: selection.imageUri} : sampleFeedbackImage,
     photoSource: selection.photoSource,
     photoSourceLabel: selection.photoSource === 'camera' ? '선택한 사진' : '선택한 사진',
     score: 84,
     scoreLabel: '종합 점수',
+    scoreReason: '데모 화면용 예시 점수이며 실제 사진을 AI로 분석한 결과가 아니에요.',
     interpretedGoal: {
       intensity: 'medium',
       label: userGoalText ? userGoalText.slice(0, 28) : '목적 맞춤 메이크업',
@@ -156,10 +187,6 @@ export const createMockMakeupFeedback = (
       {
         id: 'improvement-count',
         label: `보완 항목 ${points.length}개`,
-      },
-      {
-        id: 'topic-count',
-        label: '10개 항목 분석',
       },
     ],
     annotations: [],

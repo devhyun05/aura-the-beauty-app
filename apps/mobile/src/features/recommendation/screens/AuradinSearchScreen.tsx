@@ -49,7 +49,6 @@ import type {
   RefineDial,
 } from '../types';
 import {buildRequestParts, type AuradinAttachment} from '../attachments';
-import {getLikedProducts} from '../../../shared/services/productService';
 import {initializeProductEventCollection} from '../services/productEventService';
 import {useTransientToast} from '../../../shared/ui';
 
@@ -59,6 +58,12 @@ const BROAD_SEED = '추천해줘';
 const EMPTY_SUBMIT_QUERY = '물빠진 로즈 느낌의 매트 립';
 const SEARCH_MS = 2300;
 const PICK_MS = 1700;
+
+function savedProductKey(
+  product: Pick<AuradinCandidateProduct, 'id' | 'externalSource'>,
+): string {
+  return `${product.externalSource ?? 'internal'}:${product.id}`;
+}
 
 export type AuradinAvailableReport = {id?: string; personalColor: string};
 
@@ -106,9 +111,11 @@ export function AuradinSearchScreen({
   const [similarLoading, setSimilarLoading] = useState(false);
   const [selected, setSelected] = useState<AuradinCandidateProduct | null>(null);
   const [saved, setSaved] = useState<AuradinCandidateProduct[]>([]);
-  const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
-  const {toast} = useTransientToast(2600);
+  const [likedProductKeys, setLikedProductKeys] = useState<Set<string>>(new Set());
+  const {showToast, toast} = useTransientToast(2600);
   const sessionIdRef = useRef<string | null>(null);
+  const saveMutationVersionRef = useRef(0);
+  const pendingSaveKeysRef = useRef<Set<string>>(new Set());
   // A9 create 멱등 키 — 논리적 submit 단위로 보존: 같은 fingerprint의 네트워크 재시도는
   // 같은 id, 요청 내용이 바뀌면 새 id. 410(만료)·409(키 재사용) 수신 시 ref를 비운다.
   const submitKeyRef = useRef<{
@@ -142,12 +149,18 @@ export function AuradinSearchScreen({
 
   useFocusEffect(useCallback(() => {
     let active = true;
-    getLikedProducts()
+    const requestVersion = saveMutationVersionRef.current;
+    fetchAuradinSavedProducts()
       .then(products => {
-        if (active) setLikedProductIds(new Set(products.map(product => product.id)));
+        if (active && requestVersion === saveMutationVersionRef.current) {
+          setSaved(products);
+          setLikedProductKeys(new Set(products.map(savedProductKey)));
+        }
       })
       .catch(() => undefined);
-    return () => {active = false;};
+    return () => {
+      active = false;
+    };
   }, []));
 
   // 새 세션 요청을 위한 컨트롤러 발급 — 직전 요청은 중단한다.
@@ -388,50 +401,52 @@ export function AuradinSearchScreen({
     setPhase('detail');
   };
 
-  // R1 게이트 1: 보관함 서버 영속화 — 마운트 시 서버 찜 목록으로 복원(재마운트 소실 방지).
-  // 진행 중 세션 상태와 무관한 read-only 시드라 phase 머신을 건드리지 않는다.
-  // (likedProductIds 세트는 useFocusEffect의 getLikedProducts가 같은 백엔드 찜 소스에서 채운다.)
-  useEffect(() => {
-    let alive = true;
-    void fetchAuradinSavedProducts().then((products) => {
-      if (!alive || products.length === 0) {
+  const toggleSave = async (product: AuradinCandidateProduct) => {
+    const productKey = savedProductKey(product);
+    if (pendingSaveKeysRef.current.has(productKey)) {
+      return;
+    }
+    pendingSaveKeysRef.current.add(productKey);
+    saveMutationVersionRef.current += 1;
+    const wasSaved = likedProductKeys.has(productKey);
+    emitProductEvent(wasSaved ? 'unsave' : 'save', product);
+    const updateLocalState = (nextSaved: boolean) => {
+      setSaved((current) =>
+        nextSaved
+          ? [...current.filter((item) => savedProductKey(item) !== productKey), product]
+          : current.filter((item) => savedProductKey(item) !== productKey),
+      );
+      setLikedProductKeys((current) => {
+        const next = new Set(current);
+        if (nextSaved) {
+          next.add(productKey);
+        } else {
+          next.delete(productKey);
+        }
+        return next;
+      });
+    };
+
+    updateLocalState(!wasSaved);
+    try {
+      const persisted = wasSaved
+        ? await removeAuradinSave(product.id, product.externalSource)
+        : await persistAuradinSave(product);
+      if (!persisted) {
+        updateLocalState(wasSaved);
         return;
       }
-      setSaved((current) => {
-        const currentIds = new Set(current.map((item) => item.id));
-        return [...current, ...products.filter((item) => !currentIds.has(item.id))];
-      });
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const toggleSave = (product: AuradinCandidateProduct) => {
-    // 방향은 화면이 보여주는 하트 상태(savedIds=likedProductIds) 기준으로 정한다.
-    const wasSaved = likedProductIds.has(product.id);
-    // R1 게이트 1: Auradin 보관함 서버 영속화(persistAuradinSave/removeAuradinSave) — best-effort.
-    // 어댑터가 실패를 조용히 삼키므로(로컬 상태가 즉답) 롤백 없이 낙관적 갱신만 한다.
-    if (wasSaved) {
-      void removeAuradinSave(product.id);
-    } else {
-      void persistAuradinSave(product);
-    }
-    // saved(상품 객체)와 likedProductIds(하트 소스) 둘 다 갱신 — visibleSaved·하트 표시가 즉답.
-    setSaved((current) =>
-      wasSaved
-        ? current.filter((item) => item.id !== product.id)
-        : [...current.filter((item) => item.id !== product.id), product],
-    );
-    setLikedProductIds((current) => {
-      const next = new Set(current);
-      if (wasSaved) {
-        next.delete(product.id);
-      } else {
-        next.add(product.id);
+      if (!wasSaved) {
+        showToast(
+          '좋아요한 제품에 저장했어요',
+          onOpenLikedProducts ? {label: '보기', onPress: onOpenLikedProducts} : undefined,
+        );
       }
-      return next;
-    });
+    } catch {
+      updateLocalState(wasSaved);
+    } finally {
+      pendingSaveKeysRef.current.delete(productKey);
+    }
   };
 
   const reset = () => {
@@ -454,8 +469,8 @@ export function AuradinSearchScreen({
 
   const question = turn?.question;
   const candidates = turn?.candidates ?? [];
-  const savedIds = likedProductIds;
-  const visibleSaved = saved.filter(product => savedIds.has(product.id));
+  const savedKeys = likedProductKeys;
+  const visibleSaved = saved.filter(product => savedKeys.has(savedProductKey(product)));
 
   // 딥링크·QA 드라이브: prompt=검색 자동 시작, open=상세 열기, dial=refine.
   // 탭과 동일한 핸들러(submit/openDetail/refine)를 그대로 태운다.
@@ -558,7 +573,7 @@ export function AuradinSearchScreen({
 
         {phase === 'detail' && selected ? (
           <DetailView
-            liked={savedIds.has(selected.id)}
+            liked={savedKeys.has(savedProductKey(selected))}
             onBack={() => setPhase('results')}
             onHome={reset}
             // 라이브 발견 픽은 rankedCache(카탈로그) 밖 — 진입점을 숨긴다 (B6 계약).
@@ -575,9 +590,8 @@ export function AuradinSearchScreen({
             }
             onPurchase={() => emitProductEvent('purchase_click', selected)}
             onToggleSave={() => {
-              // A5 save/unsave — 로컬 토글 직전 상태로 방향을 정한다 (보관함 영속화와 독립).
-              emitProductEvent(savedIds.has(selected.id) ? 'unsave' : 'save', selected);
-              toggleSave(selected);
+              // 저장 중 같은 상품의 중복 탭은 toggleSave 내부 pending key가 차단한다.
+              void toggleSave(selected);
             }}
             product={selected}
             similarLoading={similarLoading}

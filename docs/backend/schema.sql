@@ -145,7 +145,7 @@ create table if not exists media_upload_sessions (
   thumbnail_expected_byte_size bigint,
   thumbnail_width integer,
   thumbnail_height integer,
-  status text not null default 'submitted',
+  status text not null default 'pending',
   media_asset_id uuid,
   expires_at timestamptz not null,
   completed_at timestamptz,

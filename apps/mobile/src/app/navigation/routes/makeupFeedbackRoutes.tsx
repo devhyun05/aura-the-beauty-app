@@ -13,7 +13,6 @@ import {
 } from '../../../features/makeup-feedback';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
-import {createMockMakeupFeedback} from '../../../features/makeup-feedback/mocks/makeupFeedback.mock';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -23,27 +22,6 @@ type HeaderShareAction = {
   cb: () => void;
 };
 
-const makeupFeedbackListSelections: readonly MakeupFeedbackPhotoSelection[] = [
-  {
-    feedbackContext: {
-      goalIntentType: 'valid_context',
-      normalizedGoalText: '출근 메이크업',
-      originalGoalText: '출근 전에 보기 좋은 자연스러운 메이크업',
-      userGoalText: '출근 전에 보기 좋은 자연스러운 메이크업',
-    },
-    photoSource: 'gallery',
-  },
-  {
-    feedbackContext: {
-      goalIntentType: 'valid_context',
-      normalizedGoalText: '저녁 약속 메이크업',
-      originalGoalText: '저녁 약속에서 또렷해 보이는 메이크업',
-      userGoalText: '저녁 약속에서 또렷해 보이는 메이크업',
-    },
-    photoSource: 'camera',
-  },
-];
-
 function getMakeupFeedbackPhotoSourceRoute(selection: MakeupFeedbackPhotoSelection) {
   return selection.photoSource === 'gallery'
     ? 'MakeupFeedbackAlbumUpload'
@@ -51,24 +29,18 @@ function getMakeupFeedbackPhotoSourceRoute(selection: MakeupFeedbackPhotoSelecti
 }
 
 function getMakeupFeedbackResultList(currentResult: MakeupFeedbackResult | null) {
-  const mockResults = makeupFeedbackListSelections.map(createMockMakeupFeedback);
-  const results = currentResult ? [currentResult, ...mockResults] : mockResults;
-  const seenResultIds = new Set<string>();
-
-  return results.filter((result) => {
-    if (seenResultIds.has(result.id)) {
-      return false;
-    }
-
-    seenResultIds.add(result.id);
-    return true;
-  });
+  return currentResult ? [currentResult] : [];
 }
 
 export function mapFaceCaptureResultToMakeupFeedbackPhotoSelection(
   result: FaceCaptureUploadResult,
 ): MakeupFeedbackPhotoSelection {
   return {
+    cameraMetadata: result.cameraMetadata,
+    contentType: result.contentType,
+    fileName: result.fileName,
+    imageHeight: result.height,
+    imageWidth: result.width,
     imageUri: result.imageUri,
     photoSource: result.source === 'gallery' ? 'gallery' : 'camera',
   };
@@ -99,6 +71,8 @@ export function MakeupFeedbackCaptureRouteScreen({
       captureMode="face"
       captureType="makeup_feedback"
       onCapture={handleCapture}
+      deferUpload
+      imageQuality={1}
       onClose={() => navigateMainTab(navigation, 'HomeTab')}
     />
   );
@@ -171,6 +145,17 @@ export function MakeupFeedbackLoadingRouteScreen({
     },
     [navigation, setMakeupFeedbackResult],
   );
+  const handleRetake = React.useCallback(() => {
+    setMakeupFeedbackResult(null);
+    navigation.replace('MakeupFeedbackCapture');
+  }, [navigation, setMakeupFeedbackResult]);
+
+  const handleChooseDifferentPhoto = React.useCallback(() => {
+    setMakeupFeedbackResult(null);
+    navigation.replace('MakeupFeedbackAlbumUpload');
+  }, [navigation, setMakeupFeedbackResult]);
+
+
 
   return (
     <DetailRouteChrome
@@ -178,6 +163,8 @@ export function MakeupFeedbackLoadingRouteScreen({
       onBack={handleBack}>
       <MakeupFeedbackLoadingScreen
         onBack={handleBack}
+        onChooseDifferentPhoto={handleChooseDifferentPhoto}
+        onRetake={handleRetake}
         onComplete={handleComplete}
         selection={selectedMakeupFeedbackPhoto}
       />
