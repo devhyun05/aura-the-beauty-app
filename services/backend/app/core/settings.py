@@ -173,6 +173,49 @@ class Settings(BaseSettings):
   legacy_naver_product_search: bool = False
   naver_shopping_insight_enabled: bool = False
   naver_shopping_insight_endpoint: str | None = None
+  naver_search_trend_endpoint: str | None = None
+  naver_trend_content_enabled: bool = False
+  naver_trend_news_endpoint: str | None = None
+  naver_trend_blog_endpoint: str | None = None
+  naver_trend_cafe_endpoint: str | None = None
+  naver_trend_content_interval_hours: int = Field(default=6, ge=1, le=24)
+  naver_trend_validation_interval_hours: int = Field(default=12, ge=1, le=48)
+  # Four seeds keep 6-hour news/blog/cafe collection plus retry reservations
+  # below the default 3,000-call monthly ceiling.
+  naver_trend_content_max_seed_queries: int = Field(default=4, ge=1, le=10)
+  naver_trend_monthly_call_limit: int = Field(default=3000, ge=1, le=100000)
+  naver_trend_http_timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0)
+  naver_trend_http_max_attempts: int = Field(default=2, ge=1, le=4)
+  product_trend_burst_min_documents: int = Field(default=5, ge=2, le=100)
+  product_trend_burst_min_sources: int = Field(default=2, ge=1, le=3)
+  product_trend_burst_min_z_score: float = Field(default=2.5, ge=0.5, le=20.0)
+  kma_weather_enabled: bool = False
+  kma_weather_endpoint: str | None = None
+  kma_weather_service_key: str | None = None
+  kma_weather_interval_hours: int = Field(default=3, ge=1, le=12)
+  # 17 regions * 8 daily releases * 31 days plus retry headroom.
+  kma_weather_monthly_call_limit: int = Field(default=10000, ge=1, le=100000)
+  kma_weather_http_timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0)
+  product_trend_bedrock_enabled: bool = False
+  product_trend_bedrock_model_id: str | None = None
+  product_trend_bedrock_daily_call_limit: int = Field(default=1, ge=0, le=1)
+  product_trend_bedrock_monthly_call_limit: int = Field(default=31, ge=0, le=31)
+  product_trend_bedrock_input_token_limit: int = Field(default=8000, ge=256, le=8000)
+  product_trend_bedrock_output_token_limit: int = Field(default=800, ge=128, le=800)
+  product_trend_bedrock_timeout_seconds: float = Field(default=12.0, ge=1.0, le=30.0)
+  trend_now_recommendations_v2: bool = False
+  product_trend_auto_publish_enabled: bool = False
+  product_trend_shadow_mode: bool = True
+  product_trend_auto_publish_policy_version: str = "trend-now-autopublish-v1"
+  product_trend_target_items: int = Field(default=18, ge=12, le=30)
+  product_trend_min_items: int = Field(default=12, ge=1, le=18)
+  product_trend_pipeline_max_runtime_seconds: int = Field(default=900, ge=60, le=3600)
+  product_trend_service_principal_key: str = "trend-now-orchestrator"
+  product_trend_task_role_arn: str | None = None
+  product_trend_health_min_eligible_items: int = Field(default=12, ge=12, le=30)
+  product_trend_health_max_fallback_ratio: float = Field(default=0.10, ge=0.0, le=1.0)
+  product_trend_health_min_requests: int = Field(default=20, ge=1, le=10000)
+  product_trend_health_bucket_retention_days: int = Field(default=8, ge=1, le=90)
   product_live_seasonal_cache_seconds: int = Field(default=300, ge=60, le=3600)
   product_trend_mcp_url: str | None = None
   product_trend_mcp_tool: str = "collect_beauty_trends"
@@ -277,6 +320,12 @@ class Settings(BaseSettings):
       and self.product_cohort_min_item_support < 5
     ):
       raise ValueError("enabled color cohort recommendations require at least 5 item supporters outside local/test")
+    if self.product_trend_min_items > self.product_trend_target_items:
+      raise ValueError("product_trend_min_items cannot exceed product_trend_target_items")
+    if not self.product_trend_auto_publish_policy_version.strip():
+      raise ValueError("product_trend_auto_publish_policy_version must not be empty")
+    if not self.product_trend_service_principal_key.strip():
+      raise ValueError("product_trend_service_principal_key must not be empty")
     return self
 
   @property
@@ -544,9 +593,43 @@ class Settings(BaseSettings):
         "configured": bool(self.naver_shopping_client_id and self.naver_shopping_client_secret),
         "requiredWhen": "Korean cosmetic product recommendations should include live purchasable shopping links.",
       },
+      "naverTrendAutomation": {
+        "configured": (
+          not self.trend_now_recommendations_v2
+          or bool(
+            self.naver_trend_content_enabled
+            and self.naver_shopping_insight_enabled
+            and (
+              (self.naver_api_hub_client_id and self.naver_api_hub_client_secret)
+              or (self.naver_shopping_client_id and self.naver_shopping_client_secret)
+            )
+            and self.naver_trend_news_endpoint
+            and self.naver_trend_blog_endpoint
+            and self.naver_trend_cafe_endpoint
+            and self.naver_search_trend_endpoint
+            and self.naver_shopping_insight_endpoint
+          )
+        ),
+        "requiredWhen": "TREND_NOW_RECOMMENDATIONS_V2=true.",
+      },
+      "kmaTrendWeather": {
+        "configured": (
+          not self.trend_now_recommendations_v2
+          or bool(self.kma_weather_enabled and self.kma_weather_endpoint and self.kma_weather_service_key)
+        ),
+        "requiredWhen": "TREND_NOW_RECOMMENDATIONS_V2=true for regional weather ranking.",
+      },
+      "trendBedrockClassifier": {
+        "configured": (
+          not self.product_trend_bedrock_enabled
+          or bool(self.product_trend_bedrock_model_id and self.aws_credentials_configured)
+        ),
+        "requiredWhen": "PRODUCT_TREND_BEDROCK_ENABLED=true; this classifier is optional and cost-capped.",
+        "value": self.product_trend_bedrock_model_id if self.product_trend_bedrock_enabled else None,
+      },
       "productTrendMcp": {
-        "configured": bool(self.product_trend_mcp_url and self.product_trend_mcp_hosts),
-        "requiredWhen": "Seasonal trend collection should use an MCP tool instead of the Naver/curated fallback.",
+        "configured": True,
+        "requiredWhen": "Legacy optional adapter only; Trend Now V2 calls approved APIs directly from batch jobs.",
         "value": self.product_trend_mcp_tool if self.product_trend_mcp_url else None,
       },
       "awsCredentialsOrRole": {

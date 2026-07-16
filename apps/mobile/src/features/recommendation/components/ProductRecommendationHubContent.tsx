@@ -24,6 +24,11 @@ import {
   personalizedRecommendationTitle,
   recommendationNickname,
 } from '../services/productRecommendationPresentation';
+import {
+  DEFAULT_TREND_REGION_CODE,
+  resolveTrendRegionCode,
+  type TrendRegionCode,
+} from '../services/trendRegionService';
 import type {
   ArRecommendationData,
   CatalogProduct,
@@ -70,6 +75,7 @@ export function ProductRecommendationHubContent({
   const [lookPickerVisible, setLookPickerVisible] = useState(false);
   const [lookOptions, setLookOptions] = useState<SectionLoad<SavedArLookOption[]>>({status: 'loading'});
   const requestRefs = useRef({ar: 0, seasonal: 0, personalized: 0, cohort: 0, looks: 0});
+  const seasonalRegionCodeRef = useRef<TrendRegionCode>(DEFAULT_TREND_REGION_CODE);
 
   useEffect(() => {setSelectedArStyleId(arStyleId ?? null);}, [arStyleId]);
 
@@ -80,13 +86,17 @@ export function ProductRecommendationHubContent({
       .then(data => {if (requestRefs.current.ar === requestId) setAr({status: 'ready', data});})
       .catch(error => {if (requestRefs.current.ar === requestId) setAr(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : 'AR 추천을 불러오지 못했어요.'});});
   }, [selectedArStyleId]);
-  const loadSeasonal = useCallback(() => {
+  const loadSeasonal = useCallback((regionCode: TrendRegionCode = seasonalRegionCodeRef.current) => {
+    seasonalRegionCodeRef.current = regionCode;
     const requestId = ++requestRefs.current.seasonal;
     setSeasonal(current => current.data ? current : {status: 'loading'});
-    getSeasonalRecommendations(refreshKey)
+    return getSeasonalRecommendations(refreshKey, 12, undefined, regionCode)
       .then(data => {if (requestRefs.current.seasonal === requestId) setSeasonal({status: 'ready', data});})
-      .catch(error => {if (requestRefs.current.seasonal === requestId) setSeasonal(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : '시즌 상품을 불러오지 못했어요.'});});
+      .catch(error => {if (requestRefs.current.seasonal === requestId) setSeasonal(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : '요즘 트렌드 제품을 불러오지 못했어요.'});});
   }, [refreshKey]);
+  const retrySeasonal = useCallback(() => {
+    void loadSeasonal(seasonalRegionCodeRef.current);
+  }, [loadSeasonal]);
   const loadPersonalized = useCallback(() => {
     const requestId = ++requestRefs.current.personalized;
     setPersonalized(current => current.data ? current : {status: 'loading'});
@@ -123,13 +133,34 @@ export function ProductRecommendationHubContent({
 
   useEffect(() => {
     loadAr();
-    loadSeasonal();
     const deferred = InteractionManager.runAfterInteractions(() => {
       loadPersonalized();
       loadCohort();
     });
     return () => deferred.cancel();
-  }, [loadAr, loadCohort, loadPersonalized, loadSeasonal]);
+  }, [loadAr, loadCohort, loadPersonalized]);
+
+  useEffect(() => {
+    let active = true;
+    let deferred: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+    seasonalRegionCodeRef.current = DEFAULT_TREND_REGION_CODE;
+    void loadSeasonal(DEFAULT_TREND_REGION_CODE).then(() => {
+      if (!active) return;
+      // Paint the nationwide shelf before a first-run location permission sheet
+      // can appear. Region resolution is an enhancement, never an initial gate.
+      deferred = InteractionManager.runAfterInteractions(() => {
+        void resolveTrendRegionCode().then(regionCode => {
+          if (active && regionCode !== DEFAULT_TREND_REGION_CODE) {
+            void loadSeasonal(regionCode);
+          }
+        });
+      });
+    });
+    return () => {
+      active = false;
+      deferred?.cancel();
+    };
+  }, [loadSeasonal]);
 
   const activeArGroup = useMemo(() => {
     const groups = ar.data?.groups ?? [];
@@ -212,16 +243,16 @@ export function ProductRecommendationHubContent({
       </View>
 
       <View onLayout={event => onSectionLayout?.('seasonal', event.nativeEvent.layout.y)}>
-        <Section title="시즌 상품" onAction={() => onOpenShelf('seasonal', '시즌 상품')}>
-          {seasonal.status === 'loading' ? <RecommendationSectionState kind="loading" message="저장된 최신 트렌드 상품을 불러오고 있어요." /> : null}
-          {seasonal.status === 'error' ? <RecommendationSectionState kind="error" message={seasonal.message ?? '시즌 상품을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={loadSeasonal} /> : null}
-          {seasonal.status === 'ready' && (seasonal.data?.status !== 'ready' || !seasonal.data?.items.length) ? <RecommendationSectionState kind="empty" message="확인 가능한 최신 시즌 상품을 준비하고 있어요." actionLabel="새로고침" onAction={loadSeasonal} /> : null}
+        <Section title="요즘 트렌드 제품" onAction={() => onOpenShelf('seasonal', '요즘 트렌드 제품')}>
+          {seasonal.status === 'loading' ? <RecommendationSectionState kind="loading" message="요즘 주목받는 트렌드 제품을 불러오고 있어요." /> : null}
+          {seasonal.status === 'error' ? <RecommendationSectionState kind="error" message={seasonal.message ?? '요즘 트렌드 제품을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={retrySeasonal} /> : null}
+          {seasonal.status === 'ready' && (seasonal.data?.status !== 'ready' || !seasonal.data?.items.length) ? <RecommendationSectionState kind="empty" message="확인 가능한 요즘 트렌드 제품을 준비하고 있어요." actionLabel="새로고침" onAction={retrySeasonal} /> : null}
           {seasonal.status === 'ready' && seasonal.data?.status === 'ready' && seasonal.data.items.length > 0 ? <View style={styles.stack}>
-            <Text style={styles.collectionTitle}>{seasonal.data.collection?.title ?? '지금 많이 찾는 시즌 인기 상품'}</Text>
-            <Text numberOfLines={2} style={styles.summary}>{seasonal.data.collection?.summary ?? '트렌드 상품을 갱신하는 동안 최근 인기가 높은 제품을 먼저 보여드려요.'}</Text>
-            {seasonal.data.collection?.isStale ? <Text accessibilityLiveRegion="polite" style={styles.staleNotice}>마지막 검수 콘텐츠예요. 원천 데이터 갱신이 지연되고 있어요.</Text> : null}
+            <Text style={styles.collectionTitle}>{seasonal.data.collection?.title?.replace(/시즌\s*상품/g, '요즘 트렌드 제품') ?? '지금 주목받는 트렌드 제품'}</Text>
+            <Text numberOfLines={2} style={styles.summary}>{seasonal.data.collection?.summary ?? '새 트렌드 신호를 확인하는 동안 최근 반응이 좋은 제품을 먼저 보여드려요.'}</Text>
+            {seasonal.data.collection?.isStale || seasonal.data.collection?.freshnessStatus === 'stale' ? <Text accessibilityLiveRegion="polite" style={styles.staleNotice}>최근 확인된 트렌드 제품이에요. 새 신호를 확인하고 있어요.</Text> : null}
             <ProductRail items={withLikeState(seasonal.data.items)} onOpen={openSeasonalProduct} onToggleLike={onToggleLike} />
-            {seasonal.data.collection ? <Text numberOfLines={2} style={styles.source}>{seasonal.data.collection.trendWindow} · {seasonal.data.collection.sourceName ?? (seasonal.data.collection.providerStatus === 'popularFallback' ? '앱 내 인기' : '검증된 트렌드 수집')} · 신뢰도 {Math.round((seasonal.data.collection.confidenceScore ?? 0.5) * 100)}%</Text> : null}
+            {seasonal.data.collection ? <Text numberOfLines={2} style={styles.source}>{[seasonal.data.collection.regionLabel, seasonal.data.collection.weatherSummary, seasonal.data.collection.trendWindow, seasonal.data.collection.sourceName ?? (seasonal.data.collection.providerStatus === 'popularFallback' ? '앱 내 인기' : '검증된 트렌드 수집')].filter(Boolean).join(' · ')} · 신뢰도 {Math.round((seasonal.data.collection.confidenceScore ?? 0.5) * 100)}%</Text> : null}
           </View> : null}
         </Section>
       </View>

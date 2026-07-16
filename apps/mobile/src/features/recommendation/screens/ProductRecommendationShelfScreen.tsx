@@ -38,6 +38,11 @@ import {
   personalizedRecommendationTitle,
 } from '../services/productRecommendationPresentation';
 import {
+  DEFAULT_TREND_REGION_CODE,
+  resolveTrendRegionCode,
+  type TrendRegionCode,
+} from '../services/trendRegionService';
+import {
   PRODUCT_SHELF_CATEGORY_TABS,
   filterProductShelfItems,
   productShelfCategoryLabel,
@@ -58,6 +63,9 @@ type ShelfPageData = {
   liveCollection?: boolean;
   title?: string | null;
   description?: string | null;
+  regionLabel?: string | null;
+  weatherSummary?: string | null;
+  freshnessStatus?: string | null;
   cohortSizeBand?: string | null;
   personalizationStatus?: ProductSectionStatus;
   cohortStatus?: ProductSectionStatus;
@@ -82,8 +90,8 @@ const SHELF_DEFAULTS: Record<ProductRecommendationShelf, {title: string; descrip
     description: '가입 시 안내한 좋아요·검색·클릭 기록을 바탕으로 취향에 맞춰 정렬했어요.',
   },
   seasonal: {
-    title: '시즌 상품',
-    description: '현재 트렌드 신호와 실제 판매 상품을 확인해 보여드려요.',
+    title: '요즘 트렌드 제품',
+    description: '최근 트렌드와 지역 날씨 신호에 잘 맞는 판매 상품을 보여드려요.',
   },
   cohort: {
     title: '나와 비슷한 분들이 많이 좋아해요',
@@ -105,6 +113,7 @@ async function loadShelfData(
   shelf: ProductRecommendationShelf,
   arStyleId?: string | null,
   category: ProductRecommendationCategory = 'all',
+  regionCode: TrendRegionCode = DEFAULT_TREND_REGION_CODE,
 ): Promise<ShelfPageData> {
   const requestedCategory = category === 'all' ? undefined : category;
   if (shelf === 'ar') {
@@ -126,7 +135,7 @@ async function loadShelfData(
     };
   }
   if (shelf === 'seasonal') {
-    const data = await getSeasonalRecommendations(undefined, 60, requestedCategory);
+    const data = await getSeasonalRecommendations(undefined, 60, requestedCategory, regionCode);
     const items = uniqueProducts(data.items);
     return {
       status: items.length > 0 ? 'ready' : data.status,
@@ -135,6 +144,9 @@ async function loadShelfData(
       liveCollection: data.collection?.isLive,
       title: data.collection?.title,
       description: data.collection?.summary,
+      regionLabel: data.collection?.regionLabel,
+      weatherSummary: data.collection?.weatherSummary,
+      freshnessStatus: data.collection?.freshnessStatus,
       fallback: data.fallback,
     };
   }
@@ -159,7 +171,7 @@ function unavailableMessage(shelf: ProductRecommendationShelf, status?: ProductS
   if (status === 'personalizationOff') return '개인화 설정에서 동의하면 이 추천을 이용할 수 있어요.';
   if (status === 'control') return '추천 품질을 검증하는 비교 그룹이라 현재 상품을 표시하지 않아요.';
   if (shelf === 'ar') return '저장한 AR 룩과 색상 근거가 맞는 판매 상품이 아직 없어요.';
-  if (shelf === 'seasonal') return '확인 가능한 최신 시즌 상품을 준비하고 있어요.';
+  if (shelf === 'seasonal') return '확인 가능한 요즘 트렌드 제품을 준비하고 있어요.';
   if (shelf === 'cohort') return '비슷한 컬러 취향 추천을 준비하고 있어요.';
   return '좋아요·검색·클릭 기록이 더 쌓이면 취향에 맞는 상품을 보여드려요.';
 }
@@ -183,6 +195,11 @@ export function ProductRecommendationShelfScreen({
   const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
   const [categoryStates, setCategoryStates] = useState<ShelfCategoryStates>({});
   const categoryStatesRef = useRef<ShelfCategoryStates>({});
+  const activeCategoryRef = useRef<ProductRecommendationCategory>('all');
+  const seasonalRegionCodeRef = useRef<TrendRegionCode>(DEFAULT_TREND_REGION_CODE);
+  const loadedRegionCodesRef = useRef(new Map<ProductRecommendationCategory, TrendRegionCode>());
+  const regionResolutionStartedRef = useRef(false);
+  const mountedRef = useRef(true);
   const requestIdsRef = useRef(new Map<ProductRecommendationCategory, number>());
   const requestSerialRef = useRef(0);
   const impressed = useRef(new Set<string>());
@@ -194,21 +211,34 @@ export function ProductRecommendationShelfScreen({
     setCategoryStates(categoryStatesRef.current);
   }, []);
 
-  const loadCategory = useCallback((category: ProductRecommendationCategory) => {
+  const loadCategory = useCallback((
+    category: ProductRecommendationCategory,
+    regionCode: TrendRegionCode = seasonalRegionCodeRef.current,
+    preserveExisting = false,
+  ) => {
     const requestId = ++requestSerialRef.current;
     requestIdsRef.current.set(category, requestId);
-    updateCategoryState(category, {status: 'loading'});
-    loadShelfData(shelf, arStyleId, category)
+    const existing = categoryStatesRef.current[category];
+    if (!preserveExisting || !existing?.data) {
+      updateCategoryState(category, {status: 'loading'});
+    }
+    loadShelfData(shelf, arStyleId, category, regionCode)
       .then(data => {
         if (requestIdsRef.current.get(category) === requestId) {
+          if (shelf === 'seasonal') loadedRegionCodesRef.current.set(category, regionCode);
           updateCategoryState(category, {status: 'ready', data});
         }
       })
       .catch(error => {
         if (requestIdsRef.current.get(category) !== requestId) return;
+        if (preserveExisting && categoryStatesRef.current[category]?.data) return;
         updateCategoryState(category, {
           status: 'error',
-          message: error instanceof Error ? error.message : '추천 제품을 불러오지 못했어요.',
+          message: error instanceof Error
+            ? error.message
+            : shelf === 'seasonal'
+              ? '요즘 트렌드 제품을 불러오지 못했어요.'
+              : '추천 제품을 불러오지 못했어요.',
         });
       });
   }, [arStyleId, shelf, updateCategoryState]);
@@ -218,22 +248,57 @@ export function ProductRecommendationShelfScreen({
   }, [activeCategory, loadCategory]);
 
   const selectCategory = useCallback((category: ProductRecommendationCategory) => {
+    activeCategoryRef.current = category;
     setActiveCategory(category);
-    if (!categoryStatesRef.current[category]) loadCategory(category);
-  }, [loadCategory]);
+    const loadedRegion = loadedRegionCodesRef.current.get(category);
+    if (!categoryStatesRef.current[category]) {
+      loadCategory(category);
+    } else if (
+      shelf === 'seasonal'
+      && loadedRegion !== seasonalRegionCodeRef.current
+    ) {
+      loadCategory(category, seasonalRegionCodeRef.current, true);
+    }
+  }, [loadCategory, shelf]);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     void initializeProductEventCollection();
     categoryStatesRef.current = {};
     setCategoryStates({});
     requestIdsRef.current.clear();
+    loadedRegionCodesRef.current.clear();
+    seasonalRegionCodeRef.current = DEFAULT_TREND_REGION_CODE;
+    activeCategoryRef.current = 'all';
+    regionResolutionStartedRef.current = false;
     setActiveCategory('all');
-    loadCategory('all');
+    loadCategory('all', DEFAULT_TREND_REGION_CODE);
     return () => {
       requestSerialRef.current += 1;
       requestIdsRef.current.clear();
     };
   }, [loadCategory]);
+
+  useEffect(() => {
+    if (
+      shelf !== 'seasonal'
+      || regionResolutionStartedRef.current
+      || !categoryStates.all
+      || categoryStates.all.status === 'loading'
+    ) return;
+    regionResolutionStartedRef.current = true;
+    void resolveTrendRegionCode().then(regionCode => {
+      if (mountedRef.current && regionCode !== DEFAULT_TREND_REGION_CODE) {
+        seasonalRegionCodeRef.current = regionCode;
+        loadCategory(activeCategoryRef.current, regionCode, true);
+      }
+    });
+  }, [categoryStates.all, loadCategory, shelf]);
 
   const state = categoryStates[activeCategory] ?? {status: 'loading' as const};
 
@@ -272,11 +337,14 @@ export function ProductRecommendationShelfScreen({
     fallback: state.data.fallback,
     items: state.data.items,
   } : undefined;
+  const suppliedTitle = shelf === 'seasonal'
+    ? SHELF_DEFAULTS.seasonal.title
+    : initialTitle?.trim() || defaults.title;
   const title = shelf === 'personalized'
     ? personalizedRecommendationTitle(recommendationData, initialTitle?.trim() || defaults.title)
     : shelf === 'cohort'
       ? cohortRecommendationTitle(recommendationData, initialNickname, initialTitle?.trim() || defaults.title)
-      : initialTitle?.trim() || defaults.title;
+      : suppliedTitle;
   const description = state.data?.description?.trim() || defaults.description;
 
   const queueShelfEvent = useCallback((eventType: 'impression' | 'product_open', product: CatalogProduct, position: number) => {
@@ -380,6 +448,8 @@ export function ProductRecommendationShelfScreen({
       <View style={styles.intro}>
         <Text accessibilityRole="header" style={styles.title}>{title}</Text>
         <Text style={styles.description}>{description}</Text>
+        {shelf === 'seasonal' && (state.data?.regionLabel || state.data?.weatherSummary) ? <Text style={styles.evidence}>{[state.data.regionLabel, state.data.weatherSummary].filter(Boolean).join(' · ')}</Text> : null}
+        {shelf === 'seasonal' && state.data?.freshnessStatus === 'stale' ? <Text accessibilityLiveRegion="polite" style={styles.evidence}>최근 확인된 트렌드 제품이에요. 새 신호를 확인하고 있어요.</Text> : null}
         {shelf === 'cohort' && state.data?.cohortSizeBand ? <Text style={styles.evidence}>익명 집계 모수 {state.data.cohortSizeBand}</Text> : null}
       </View>
       <ScrollView
@@ -412,9 +482,9 @@ export function ProductRecommendationShelfScreen({
         initialNumToRender={6}
         keyExtractor={item => `${item.externalSource ?? 'catalog'}:${item.productId}:${item.shadeId ?? 'family'}`}
         ListEmptyComponent={state.status === 'loading'
-          ? <RecommendationSectionState kind="loading" message="추천 제품을 불러오는 중이에요." />
+          ? <RecommendationSectionState kind="loading" message={shelf === 'seasonal' ? '요즘 트렌드 제품을 불러오는 중이에요.' : '추천 제품을 불러오는 중이에요.'} />
           : state.status === 'error'
-            ? <RecommendationSectionState kind="error" message={state.message ?? '추천 제품을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={load} />
+            ? <RecommendationSectionState kind="error" message={state.message ?? (shelf === 'seasonal' ? '요즘 트렌드 제품을 불러오지 못했어요.' : '추천 제품을 불러오지 못했어요.')} actionLabel="다시 시도" onAction={load} />
             : <RecommendationSectionState kind="empty" message={empty} />}
         numColumns={2}
         onViewableItemsChanged={onViewableItemsChanged}

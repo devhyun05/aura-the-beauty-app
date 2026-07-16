@@ -19,6 +19,7 @@ EXPECTED_TABLES = {
   "analysis_stage_runs",
   "saved_makeup_styles",
   "product_recommendation_operators",
+  "product_recommendation_service_principals",
   "products",
   "user_product_likes",
   "external_product_likes",
@@ -30,6 +31,17 @@ EXPECTED_TABLES = {
   "product_offers",
   "product_seasonal_collections",
   "product_seasonal_collection_items",
+  "trend_keyword_candidates",
+  "trend_source_observations",
+  "weather_region_snapshots",
+  "product_attribute_evidence",
+  "product_signal_hourly",
+  "search_intent_hourly",
+  "seasonal_serving_health_buckets",
+  "seasonal_ranking_models",
+  "seasonal_pipeline_runs",
+  "trend_external_call_quotas",
+  "seasonal_auto_publish_audit_log",
   "product_catalog_imports",
   "product_engagement_events",
   "product_preference_profiles",
@@ -85,7 +97,19 @@ EXPECTED_CONSTRAINTS = {
   "product_assets": {"fk_product_assets_shade_product"},
   "product_offers": {"fk_product_offers_shade_product"},
   "product_seasonal_collection_items": {"fk_product_seasonal_items_shade_product"},
+  "product_seasonal_collections": {
+    "fk_product_seasonal_pipeline_run",
+    "fk_product_seasonal_service_publisher",
+  },
   "product_engagement_events": {"fk_product_engagement_shade_product"},
+  "product_signal_hourly": {"chk_product_signal_hourly_privacy_threshold"},
+  "search_intent_hourly": {"chk_search_intent_hourly_privacy_threshold"},
+  "seasonal_serving_health_buckets": {
+    "chk_seasonal_serving_health_region",
+    "chk_seasonal_serving_health_counts",
+  },
+  "seasonal_pipeline_runs": {"chk_seasonal_pipeline_run_trigger"},
+  "seasonal_auto_publish_audit_log": {"chk_seasonal_auto_publish_decision_refs"},
 }
 
 EXPECTED_COLUMNS = {
@@ -127,7 +151,33 @@ EXPECTED_COLUMNS = {
     "variant",
   },
   "saved_makeup_styles": {"client_request_id", "style_payload", "archived_at"},
-  "products": {"catalog_status", "catalog_version", "license_status", "allowed_uses"},
+  "products": {
+    "catalog_status",
+    "catalog_version",
+    "license_status",
+    "allowed_uses",
+    "tags",
+    "product_payload",
+  },
+  "product_seasonal_collections": {
+    "region_code",
+    "region_label",
+    "algorithm_version",
+    "input_fingerprint",
+    "freshness_status",
+    "auto_publish_policy_version",
+    "pipeline_run_id",
+    "published_by_service_principal_id",
+    "next_evaluation_at",
+  },
+  "product_seasonal_collection_items": {"score_components", "ranking_model_version"},
+  "seasonal_serving_health_buckets": {
+    "bucket_started_at",
+    "locale",
+    "region_code",
+    "request_count",
+    "fallback_count",
+  },
   "product_recommendation_operators": {"roles", "is_active", "granted_by"},
   "user_product_likes": {"source_shade_id"},
   "external_product_likes": {"external_source", "external_product_id", "purchase_url", "liked_at"},
@@ -197,6 +247,44 @@ EXPECTED_CONSTRAINT_CONTRACTS = {
     "owner_subject",
     "client_event_id",
   ),
+  "chk_product_signal_hourly_privacy_threshold": (
+    "not is_privacy_eligible",
+    "distinct_user_count >= 20",
+  ),
+  "chk_search_intent_hourly_privacy_threshold": (
+    "not is_privacy_eligible",
+    "distinct_user_count >= 20",
+  ),
+  "chk_seasonal_serving_health_counts": (
+    "request_count >= 0",
+    "fallback_count >= 0",
+    "fallback_count <= request_count",
+  ),
+  "chk_seasonal_pipeline_run_trigger": (
+    "'scheduled'",
+    "'manual'",
+    "'retry'",
+    "'health'",
+  ),
+  "chk_seasonal_auto_publish_decision_refs": (
+    "decision = 'published'",
+    "collection_id is not null",
+    "decision = 'rolled_back'",
+    "previous_collection_id is not null",
+  ),
+}
+
+EXPECTED_TRIGGER_CONTRACTS = {
+  "trg_seasonal_auto_publish_audit_immutable": (
+    "before",
+    "delete",
+    "update",
+    "seasonal_auto_publish_audit_log",
+  ),
+  "trg_seasonal_auto_publish_audit_no_truncate": (
+    "before truncate",
+    "seasonal_auto_publish_audit_log",
+  ),
 }
 
 # R1 (schema.sql:product-category-brow-v1) — brow가 빠지면 Auradin 브로우 찜이 lip으로 강등된다.
@@ -221,6 +309,18 @@ EXPECTED_INDEX_CONTRACTS = {
   "idx_auradin_events_session": ("session_id",),
   "idx_auradin_events_manifest": ("data_manifest_id",),
   "idx_auradin_events_received": ("received_at",),
+  "uq_product_seasonal_single_published": (
+    "unique",
+    "product_seasonal_collections",
+    "slug",
+    "where (status = 'published'::text)",
+  ),
+  "idx_seasonal_serving_health_recent": (
+    "seasonal_serving_health_buckets",
+    "locale",
+    "bucket_started_at",
+    "region_code",
+  ),
 }
 
 async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:
@@ -272,14 +372,23 @@ async def fetch_constraints(connection: asyncpg.Connection) -> dict[str, str]:
     """
     select conname, pg_get_constraintdef(oid) as definition
     from pg_constraint
-    where conrelid in (
-      select oid from pg_class
-      where relname in ('auradin_search_sessions', 'auradin_events')
-        and relnamespace = 'public'::regnamespace
-    )
+    where connamespace = 'public'::regnamespace
     """,
   )
   return {str(row["conname"]): str(row["definition"]).lower() for row in rows}
+
+
+async def fetch_triggers(connection: asyncpg.Connection) -> dict[str, str]:
+  rows = await connection.fetch(
+    """
+    select trigger_row.tgname,pg_get_triggerdef(trigger_row.oid) as definition
+    from pg_trigger trigger_row
+    join pg_class relation on relation.oid=trigger_row.tgrelid
+    join pg_namespace namespace_row on namespace_row.oid=relation.relnamespace
+    where namespace_row.nspname='public' and not trigger_row.tgisinternal
+    """,
+  )
+  return {str(row["tgname"]): str(row["definition"]).lower() for row in rows}
 
 
 async def fetch_indexes(connection: asyncpg.Connection) -> dict[str, str]:
@@ -344,6 +453,7 @@ def build_schema_report(
   column_contracts: dict[str, dict[str, str | None]] | None = None,
   constraints: set[str] | dict[str, str] | None = None,
   indexes: dict[str, str] | None = None,
+  triggers: dict[str, str] | None = None,
   enum_values: dict[str, set[str]] | None = None,
   table_constraints: dict[str, set[str]] | None = None,
 ) -> dict[str, object]:
@@ -390,6 +500,12 @@ def build_schema_report(
       definition = indexes.get(name, "")
       if not definition or any(fragment not in definition for fragment in fragments):
         invalid_indexes.append(name)
+  invalid_triggers = []
+  if triggers is not None:
+    for name, fragments in EXPECTED_TRIGGER_CONTRACTS.items():
+      definition = triggers.get(name, "")
+      if not definition or any(fragment not in definition for fragment in fragments):
+        invalid_triggers.append(name)
   missing_enum_values = {}
   if enum_values is not None:
     missing_enum_values = {
@@ -417,6 +533,7 @@ def build_schema_report(
       missing_constraints,
       invalid_constraints,
       invalid_indexes,
+      invalid_triggers,
       missing_enum_values,
       missing_table_constraints,
     )),
@@ -432,6 +549,7 @@ def build_schema_report(
     "missingConstraints": missing_constraints,
     "invalidConstraints": sorted(invalid_constraints),
     "invalidIndexes": sorted(invalid_indexes),
+    "invalidTriggers": sorted(invalid_triggers),
     "expectedConstraints": {table: sorted(constraints) for table, constraints in EXPECTED_CONSTRAINTS.items()},
     "missingTableConstraints": missing_table_constraints,
     "appliedVersions": sorted(applied_versions),
@@ -457,6 +575,7 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
     column_contracts = await fetch_column_contracts(connection)
     constraints = await fetch_constraints(connection)
     indexes = await fetch_indexes(connection)
+    triggers = await fetch_triggers(connection)
     installed_extensions = await fetch_extensions(connection)
     enum_values = await fetch_enum_values(connection)
     table_constraints = await fetch_table_constraints(connection)
@@ -473,6 +592,7 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
     column_contracts=column_contracts,
     constraints=constraints,
     indexes=indexes,
+    triggers=triggers,
     enum_values=enum_values,
     table_constraints=table_constraints,
   )
@@ -490,6 +610,7 @@ def format_schema_report(report: dict[str, object]) -> str:
   missing_constraints = report["missingConstraints"]
   invalid_indexes = report["invalidIndexes"]
   invalid_constraints = report["invalidConstraints"]
+  invalid_triggers = report["invalidTriggers"]
   missing_versions = report["missingVersions"]
   missing_table_constraints = report["missingTableConstraints"]
 
@@ -536,6 +657,10 @@ def format_schema_report(report: dict[str, object]) -> str:
     lines.append("Missing or invalid indexes:")
     lines.extend(f"- {name}" for name in invalid_indexes)
 
+  if invalid_triggers:
+    lines.append("Missing or invalid triggers:")
+    lines.extend(f"- {name}" for name in invalid_triggers)
+
   if not any((
     missing_tables,
     missing_versions,
@@ -546,6 +671,7 @@ def format_schema_report(report: dict[str, object]) -> str:
     missing_constraints,
     invalid_constraints,
     invalid_indexes,
+    invalid_triggers,
     missing_table_constraints,
   )):
     lines.append("All expected tables and migration markers are present.")

@@ -10,7 +10,7 @@ from app.services.face_analysis_schema import FACE_ANALYSIS_STAGE_SCHEMA_SQL
 from app.services.media_upload_schema import MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL
 
 
-SCHEMA_VERSION = "schema.sql:v5-external-product-likes"
+SCHEMA_VERSION = "schema.sql:v7-trend-now-health"
 
 POST_SCHEMA_MIGRATIONS = {
   "schema.sql:external-product-like-auradin-source-v1": """

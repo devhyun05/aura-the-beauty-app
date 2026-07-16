@@ -63,6 +63,7 @@ const appScreen = source('apps/mobile/src/shared/ui/AppScreen.tsx');
 const backendApi = source('apps/mobile/src/shared/services/backendApi.ts');
 const productBackendApi = source('apps/mobile/src/shared/services/productBackendApi.ts');
 const productHubService = source('apps/mobile/src/features/recommendation/services/productHubService.ts');
+const trendRegionService = source('apps/mobile/src/features/recommendation/services/trendRegionService.ts');
 const recommendationRoutes = source('apps/mobile/src/app/navigation/routes/recommendationRoutes.tsx');
 const arRoutes = source('apps/mobile/src/app/navigation/routes/arRoutes.tsx');
 const searchScreen = source('apps/mobile/src/features/recommendation/screens/ProductSearchResultScreen.tsx');
@@ -424,22 +425,43 @@ requireContract(
 );
 requireContract(
   hubContent.includes('seasonal.data.collection?.isStale') &&
-    hubContent.includes('마지막 검수 콘텐츠'),
+    hubContent.includes("freshnessStatus === 'stale'") &&
+    hubContent.includes('최근 확인된 트렌드 제품'),
   'stale seasonal sources must be disclosed instead of appearing current.',
 );
 requireContract(
   hubContent.includes('title="AR 필터 기반 추천제품"') &&
     hubContent.includes('부위별 인기 제품을 먼저 보여드려요.') &&
     hubContent.includes('title={personalizedTitle}') &&
-    hubContent.includes('title="시즌 상품"') &&
+    hubContent.includes('title="요즘 트렌드 제품"') &&
     hubContent.includes('title={cohortTitle}') &&
     hubContent.includes('function Section') &&
     !hubContent.includes('<LegacyRecommendationRail') &&
     hubContent.includes('<ProductRail') &&
     hubContent.includes('requestRefs.current.ar === requestId') &&
     hubContent.includes('requestRefs.current.seasonal === requestId') &&
-    hubContent.includes('getSeasonalRecommendations(refreshKey)'),
+    hubContent.includes('getSeasonalRecommendations(refreshKey, 12, undefined, regionCode)'),
   'hub must expose four purpose-specific shopping shelves, horizontal product rails, more actions, and stale-response protection.',
+);
+const nationwideSeasonalLoadStart = hubContent.indexOf(
+  'void loadSeasonal(DEFAULT_TREND_REGION_CODE).then(() => {',
+);
+const nationwideSeasonalLocationResolve = hubContent.indexOf(
+  'void resolveTrendRegionCode().then(regionCode => {',
+  nationwideSeasonalLoadStart,
+);
+const firstHubLocationResolution = hubContent.indexOf('resolveTrendRegionCode()');
+const nationwideSeasonalSequence = nationwideSeasonalLoadStart >= 0
+  && nationwideSeasonalLocationResolve > nationwideSeasonalLoadStart
+  ? hubContent.slice(nationwideSeasonalLoadStart, nationwideSeasonalLocationResolve)
+  : '';
+requireContract(
+  nationwideSeasonalLoadStart >= 0 &&
+    nationwideSeasonalLocationResolve > nationwideSeasonalLoadStart &&
+    firstHubLocationResolution === nationwideSeasonalLocationResolve + 'void '.length &&
+    nationwideSeasonalSequence.includes('InteractionManager.runAfterInteractions(() => {') &&
+    !nationwideSeasonalSequence.includes('Promise.all(['),
+  'the hub must complete and paint the nationwide seasonal request before resolving location or requesting permission.',
 );
 requireContract(
   !recommendationScreen.includes('얼굴 분석 기준 전체 추천') &&
@@ -507,12 +529,33 @@ requireContract(
 requireContract(
   recommendationShelfScreen.includes("data={state.status === 'ready' ? visibleItems : []}") &&
     recommendationShelfScreen.includes("status: items.length > 0 ? 'ready' : data.status") &&
-    recommendationShelfScreen.includes('getSeasonalRecommendations(undefined, 60, requestedCategory)') &&
+    recommendationShelfScreen.includes('getSeasonalRecommendations(undefined, 60, requestedCategory, regionCode)') &&
     recommendationShelfScreen.includes('getPersonalizedRecommendations(60, requestedCategory)') &&
     recommendationShelfScreen.includes('getCohortRecommendations(60, requestedCategory)') &&
     recommendationShelfScreen.includes('onPress={() => selectCategory(tab.id)}') &&
     !recommendationShelfScreen.includes('shelfSelection.usesAllItemsFallback'),
   'dedicated shelf tabs must request category-ranked products from the server instead of substituting another category.',
+);
+const regionalShelfRefreshStart = recommendationShelfScreen.indexOf(
+  'void resolveTrendRegionCode().then(regionCode => {',
+);
+const regionalShelfRefreshEnd = recommendationShelfScreen.indexOf(
+  '}, [categoryStates.all, loadCategory, shelf]);',
+  regionalShelfRefreshStart,
+);
+const regionalShelfRefresh = regionalShelfRefreshStart >= 0 && regionalShelfRefreshEnd > regionalShelfRefreshStart
+  ? recommendationShelfScreen.slice(regionalShelfRefreshStart, regionalShelfRefreshEnd)
+  : '';
+requireContract(
+  recommendationShelfScreen.includes('preserveExisting = false') &&
+    recommendationShelfScreen.includes('if (!preserveExisting || !existing?.data)') &&
+    recommendationShelfScreen.includes('if (preserveExisting && categoryStatesRef.current[category]?.data) return;') &&
+    recommendationShelfScreen.includes('activeCategoryRef.current = category') &&
+    regionalShelfRefresh.includes('seasonalRegionCodeRef.current = regionCode') &&
+    regionalShelfRefresh.includes('loadCategory(activeCategoryRef.current, regionCode, true)') &&
+    !regionalShelfRefresh.includes("setActiveCategory('all')") &&
+    !regionalShelfRefresh.includes('setCategoryStates({})'),
+  'regional shelf refreshes must preserve nationwide data and the active category, including when the regional request fails.',
 );
 requireContract(
   hubContent.includes("source: seasonal.data?.collection?.isLive ? 'seasonal_live' : 'seasonal_supplement'") &&
@@ -564,6 +607,118 @@ requireContract(
   'recommendation headings must describe popular, report-tone, and privacy-thresholded cohort evidence honestly.',
 );
 
+const nativeTrendRegionStorage = [];
+const trendRegionModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/trendRegionService.ts',
+  {
+    '@react-native-async-storage/async-storage': {
+      default: {
+        getItem: async () => null,
+        setItem: async (_key, value) => {
+          nativeTrendRegionStorage.push(value);
+        },
+      },
+    },
+    'expo-location': {
+      Accuracy: {Low: 1},
+      getForegroundPermissionsAsync: async () => ({status: 'denied', canAskAgain: false}),
+      requestForegroundPermissionsAsync: async () => ({status: 'denied', canAskAgain: false}),
+      getLastKnownPositionAsync: async () => null,
+      getCurrentPositionAsync: async () => ({coords: {latitude: 0, longitude: 0}}),
+      reverseGeocodeAsync: async () => [],
+    },
+  },
+);
+const trendNow = Date.UTC(2026, 6, 16, 12, 0, 0);
+const trendRegionFixtures = [
+  {code: 'KR-11', korean: '서울특별시', english: 'Seoul'},
+  {code: 'KR-26', korean: '부산광역시', english: 'Busan'},
+  {code: 'KR-27', korean: '대구광역시', english: 'Daegu'},
+  {code: 'KR-28', korean: '인천광역시', english: 'Incheon'},
+  {code: 'KR-29', korean: '광주광역시', english: 'Gwangju'},
+  {code: 'KR-30', korean: '대전광역시', english: 'Daejeon'},
+  {code: 'KR-31', korean: '울산광역시', english: 'Ulsan'},
+  {code: 'KR-41', korean: '경기도', english: 'Gyeonggi-do'},
+  {code: 'KR-42', korean: '강원특별자치도', english: 'Gangwon-do'},
+  {code: 'KR-43', korean: '충청북도', english: 'Chungcheongbuk-do'},
+  {code: 'KR-44', korean: '충청남도', english: 'Chungcheongnam-do'},
+  {code: 'KR-45', korean: '전북특별자치도', english: 'Jeollabuk-do'},
+  {code: 'KR-46', korean: '전라남도', english: 'Jeollanam-do'},
+  {code: 'KR-47', korean: '경상북도', english: 'Gyeongsangbuk-do'},
+  {code: 'KR-48', korean: '경상남도', english: 'Gyeongsangnam-do'},
+  {code: 'KR-49', korean: '제주특별자치도', english: 'Jeju-do'},
+  {code: 'KR-50', korean: '세종특별자치시', english: 'Sejong'},
+];
+const allTrendRegionCodes = ['KR-00', ...trendRegionFixtures.map(({code}) => code)];
+requireContract(
+  trendRegionFixtures.length === 17 &&
+    new Set(allTrendRegionCodes).size === 18 &&
+    allTrendRegionCodes.every(code => trendRegionModule.normalizeTrendRegionCode(code.toLowerCase()) === code) &&
+    trendRegionFixtures.every(({code, korean, english}) =>
+      trendRegionModule.mapAddressToTrendRegionCode({isoCountryCode: 'KR', region: korean}) === code &&
+      trendRegionModule.mapAddressToTrendRegionCode({isoCountryCode: 'KR', region: english}) === code) &&
+    trendRegionModule.mapAddressToTrendRegionCode(null) === 'KR-00' &&
+    trendRegionModule.mapAddressToTrendRegionCode({isoCountryCode: 'US', region: 'Seoul'}) === 'KR-00',
+  'device geocoding must map KR-00 and all 17 Korean administrative areas and aliases to the exact ISO region-code contract.',
+);
+const storedTrendRegionValues = [];
+const resolvedTrendRegion = await trendRegionModule.resolveTrendRegionCodeWith({
+  now: () => trendNow,
+  loadCache: async () => null,
+  saveCache: async value => {
+    storedTrendRegionValues.push(value);
+  },
+  getPermission: async () => ({status: 'granted'}),
+  requestPermission: async () => ({status: 'granted'}),
+  getLastKnownCoordinates: async () => ({latitude: 37.5665, longitude: 126.978}),
+  getCurrentCoordinates: async () => {
+    throw new Error('last-known location should be preferred');
+  },
+  reverseGeocode: async () => [{isoCountryCode: 'KR', region: '서울특별시'}],
+});
+const persistedTrendRegion = storedTrendRegionValues[0] ?? '';
+requireContract(
+  resolvedTrendRegion === 'KR-11' &&
+    trendRegionModule.readCachedTrendRegionCode(persistedTrendRegion, trendNow + 1000) === 'KR-11' &&
+    trendRegionModule.readCachedTrendRegionCode(
+      persistedTrendRegion,
+      trendNow + trendRegionModule.TREND_REGION_CACHE_TTL_MS,
+    ) === null &&
+    persistedTrendRegion.includes('"regionCode":"KR-11"') &&
+    !persistedTrendRegion.includes('latitude') &&
+    !persistedTrendRegion.includes('longitude') &&
+    !persistedTrendRegion.includes('37.5665') &&
+    !persistedTrendRegion.includes('126.978') &&
+    trendRegionService.includes('saveCache(JSON.stringify({regionCode, resolvedAt: dependencies.now()}))'),
+  'region resolution must cache only a coarse code for six hours and must never persist coordinates.',
+);
+let deniedLocationCalls = 0;
+const deniedTrendRegion = await trendRegionModule.resolveTrendRegionCodeWith({
+  now: () => trendNow,
+  loadCache: async () => null,
+  saveCache: async () => undefined,
+  getPermission: async () => ({status: 'denied', canAskAgain: false}),
+  requestPermission: async () => {
+    throw new Error('permission must not be requested again');
+  },
+  getLastKnownCoordinates: async () => {
+    deniedLocationCalls += 1;
+    return null;
+  },
+  getCurrentCoordinates: async () => {
+    deniedLocationCalls += 1;
+    return {latitude: 0, longitude: 0};
+  },
+  reverseGeocode: async () => {
+    deniedLocationCalls += 1;
+    return [];
+  },
+});
+requireContract(
+  deniedTrendRegion === 'KR-00' && deniedLocationCalls === 0,
+  'denied location permission must fail open to nationwide recommendations without reading coordinates.',
+);
+
 const productHubApiRequests = [];
 const productHubServiceModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productHubService.ts',
@@ -576,6 +731,10 @@ const productHubServiceModule = executeTypeScriptModule(
         if (path.includes('/recommendations/seasonal?')) return {status: 'ready', collection: null, items: []};
         return {status: 'ready', items: []};
       },
+    },
+    './trendRegionService': {
+      DEFAULT_TREND_REGION_CODE: 'KR-00',
+      normalizeTrendRegionCode: value => value || 'KR-00',
     },
   },
 );
@@ -601,12 +760,16 @@ requireContract(
   'catalog-grounded fallback items must be normalized as renderable while genuinely empty responses retain their status.',
 );
 await productHubServiceModule.getArRecommendations(undefined, 20, 'lip');
-await productHubServiceModule.getSeasonalRecommendations(undefined, 60, 'base');
-await productHubServiceModule.getSeasonalRecommendations(1, 60, 'base');
+await productHubServiceModule.getSeasonalRecommendations(undefined, 60, 'base', 'KR-00');
+await productHubServiceModule.getSeasonalRecommendations(1, 60, 'base', 'KR-00');
+await productHubServiceModule.getSeasonalRecommendations(2, 60, 'base', 'KR-11');
 await productHubServiceModule.getPersonalizedRecommendations(60, 'brow');
 await productHubServiceModule.getCohortRecommendations(60, 'shadow');
 const repeatedSeasonalRequests = productHubApiRequests.filter(
-  path => path.includes('/recommendations/seasonal?') && path.includes('category=base'),
+  path => path.includes('/recommendations/seasonal?') && path.includes('category=base') && path.includes('regionCode=KR-00'),
+);
+const regionalSeasonalRequests = productHubApiRequests.filter(
+  path => path.includes('/recommendations/seasonal?') && path.includes('category=base') && path.includes('regionCode=KR-11'),
 );
 requireContract(
   productHubApiRequests.some(path => path.includes('/recommendations/ar?') && path.includes('regions=lip') && path.includes('per_region_limit=20')) &&
@@ -614,8 +777,11 @@ requireContract(
     productHubApiRequests.some(path => path.includes('/recommendations/personalized?') && path.includes('limit=60') && path.includes('category=brow')) &&
     productHubApiRequests.some(path => path.includes('/recommendations/cohort?') && path.includes('limit=60') && path.includes('category=shadow')) &&
     repeatedSeasonalRequests.length === 1 &&
+    regionalSeasonalRequests.length === 1 &&
+    !regionalSeasonalRequests[0].includes('latitude=') &&
+    !regionalSeasonalRequests[0].includes('longitude=') &&
     !repeatedSeasonalRequests[0].includes('entry='),
-  'more shelves must execute category-scoped requests while repeated seasonal loads reuse the stable cached URL.',
+  'more shelves must execute category/region-scoped requests, isolate region cache keys, and never send coordinates.',
 );
 const productHubFallbackModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productHubService.ts',
@@ -628,6 +794,10 @@ const productHubFallbackModule = executeTypeScriptModule(
         }
         throw {code: 'DATABASE_NOT_CONFIGURED'};
       },
+    },
+    './trendRegionService': {
+      DEFAULT_TREND_REGION_CODE: 'KR-00',
+      normalizeTrendRegionCode: value => value || 'KR-00',
     },
   },
 );

@@ -1,9 +1,17 @@
 from datetime import datetime, timedelta, timezone
+import re
+from uuid import uuid4
 
 import pytest
 
 from app.core.settings import Settings
-from app.services.product_seasonal_pipeline import match_trends_to_products
+from app.core.errors import AppError
+from app.services.product_seasonal_pipeline import (
+  fetch_seasonal_product_candidates,
+  match_trends_to_products,
+  persist_trend_collection,
+)
+from app.services.product_trend_learning import ActiveRankingModel, select_deterministic_exploration
 from app.services.product_trend_sources import (
   MCPTrendSourceAdapter,
   TrendSignal,
@@ -169,3 +177,331 @@ def test_product_shortage_is_filled_with_popular_products() -> None:
   assert len(items) == 3
   assert items[0]["productId"] == "trend-lip"
   assert {item["reasonCode"] for item in items[1:]} == {"POPULAR_FALLBACK"}
+
+
+def test_rrf_records_independent_weather_and_app_components() -> None:
+  snapshot = _snapshot(TrendSignal(
+    keyword="장마철 워터프루프 라이너",
+    categories=("liner",),
+    color_families=(),
+    finishes=(),
+    tags=("waterproof",),
+    reason_codes=("NAVER_CONTENT_BURST",),
+    confidence_score=0.9,
+  ))
+  items = match_trends_to_products(
+    snapshot,
+    [{
+      "product_id": "liner-1",
+      "brand_name": "Rain Brand",
+      "product_name": "워터프루프 라이너",
+      "category": "liner",
+      "app_signal_score": 3.0,
+      "attribute_evidence": [{
+        "attributeKey": "waterproof",
+        "attributeValue": True,
+        "confidenceScore": 0.92,
+        "status": "verified",
+      }],
+    }],
+    limit=1,
+    weather={"precipitationProbabilityPercent": 80, "weatherCode": "rain"},
+  )
+  assert items[0]["reasonCodes"] == [
+    "TREND_CATEGORY_MATCH",
+    "TREND_KEYWORD_MATCH",
+    "WEATHER_ATTRIBUTE_MATCH",
+    "APP_ENGAGEMENT_RISE",
+  ]
+  assert items[0]["scoreComponents"]["weather"] == 1.0
+  assert items[0]["scoreComponents"]["app"] > 0
+  assert items[0]["rankingModelVersion"] == "rrf_v1"
+
+
+def test_rrf_keeps_content_datalab_weather_app_and_evidence_as_independent_ranks() -> None:
+  snapshot = _snapshot(TrendSignal(
+    keyword="물광 워터프루프 베이스",
+    categories=("base",),
+    color_families=(),
+    finishes=("glossy",),
+    tags=("waterproof",),
+    reason_codes=("NAVER_CONTENT_BURST", "SEARCH_INTEREST_RISE"),
+    confidence_score=0.9,
+    content_momentum=3.1,
+    datalab_momentum=0.42,
+  ))
+  model = ActiveRankingModel(
+    id=uuid4(),
+    model_version="logistic-v2",
+    model_type="logistic",
+    coefficients={
+      "intercept": 0.0,
+      "weights": {
+        "logImpressions": 0.1,
+        "openRate": 1.0,
+        "likeRate": 1.0,
+        "outboundRate": 1.0,
+        "negativeRate": -1.0,
+        "positionAdjustedRate": 0.1,
+      },
+      "means": {},
+      "scales": {},
+    },
+  )
+  [item] = match_trends_to_products(
+    snapshot,
+    [{
+      "product_id": "base-1",
+      "brand_name": "Evidence Brand",
+      "product_name": "물광 워터프루프 베이스",
+      "category": "base",
+      "finish": "glossy",
+      "app_signal_score": 5.0,
+      "history_impression_count": 100,
+      "history_product_open_count": 20,
+      "history_like_count": 10,
+      "history_seller_outbound_count": 3,
+      "attribute_evidence": [{
+        "attributeKey": "waterproof",
+        "attributeValue": True,
+        "confidenceScore": 0.95,
+        "status": "verified",
+      }],
+    }],
+    limit=1,
+    weather={"precipitationProbabilityPercent": 80, "weatherCode": "rain"},
+    ranking_model=model,
+  )
+  assert all(
+    item["scoreComponents"][key] > 0
+    for key in ("content", "datalab", "weather", "app", "evidence", "learned")
+  )
+  assert item["rankingModelVersion"] == "logistic-v2"
+
+
+def test_deterministic_exploration_never_selects_outside_overall_top_thirty() -> None:
+  snapshot = _snapshot(TrendSignal(
+    keyword="글로우 립",
+    categories=("lip",),
+    color_families=(),
+    finishes=("glossy",),
+    tags=(),
+    reason_codes=("NAVER_CONTENT_BURST",),
+    confidence_score=0.9,
+  ))
+  candidates = [{
+    "product_id": f"product-{index:02d}",
+    "brand_name": f"Brand {index:02d}",
+    "product_name": f"글로우 립 {index:02d}",
+    "category": "lip",
+    "finish": "glossy",
+    "app_signal_score": 40 - index,
+  } for index in range(40)]
+  baseline = match_trends_to_products(snapshot, candidates, limit=40)
+  top_thirty_ids = {item["productId"] for item in baseline[:30]}
+  key = next(
+    f"revision-{index}"
+    for index in range(10_000)
+    if select_deterministic_exploration(f"revision-{index}", model_version="rrf_v1")
+  )
+  [explored] = match_trends_to_products(
+    snapshot,
+    candidates,
+    limit=1,
+    exploration_key=key,
+  )
+  assert "CONTROLLED_EXPLORATION" in explored["reasonCodes"]
+  assert explored["productId"] in top_thirty_ids
+
+
+class _CandidateQueryDb:
+  is_connected = True
+
+  def __init__(self) -> None:
+    self.query = ""
+
+  async def fetch(self, query: str, *_args):
+    self.query = query
+    return []
+
+
+@pytest.mark.asyncio
+async def test_app_rank_query_uses_privacy_safe_recent_vs_prior_rise() -> None:
+  db = _CandidateQueryDb()
+  await fetch_seasonal_product_candidates(db, Settings(), region_code="KR-00")  # type: ignore[arg-type]
+
+  assert "x.is_privacy_eligible=true" in db.query
+  assert "interval '24 hours'" in db.query
+  assert "interval '48 hours'" in db.query
+  assert ")-coalesce(sum(x.position_adjusted_score)" in db.query
+  assert "sum(x.impression_count) filter" in db.query
+  assert "as history_impression_count" in db.query
+  assert db.query.count("x.bucket_started_at<date_trunc('hour',now())") >= 8
+
+
+class _AsyncContext:
+  def __init__(self, value) -> None:
+    self.value = value
+
+  async def __aenter__(self):
+    return self.value
+
+  async def __aexit__(self, *_args):
+    return None
+
+
+class _DraftConnection:
+  def __init__(self) -> None:
+    self.executed: list[tuple[str, tuple]] = []
+
+  def transaction(self):
+    return _AsyncContext(self)
+
+  async def fetchrow(self, _query: str, *_args):
+    return None
+
+  async def execute(self, query: str, *args):
+    self.executed.append((query, args))
+    return "INSERT 0 1"
+
+
+class _DraftPool:
+  def __init__(self, connection: _DraftConnection) -> None:
+    self.connection = connection
+
+  def acquire(self):
+    return _AsyncContext(self.connection)
+
+
+class _DraftDb:
+  def __init__(self, connection: _DraftConnection) -> None:
+    self.pool = _DraftPool(connection)
+
+
+@pytest.mark.asyncio
+async def test_publish_rejects_duplicate_products_before_persistence() -> None:
+  product_id = str(uuid4())
+  with pytest.raises(AppError) as error:
+    await persist_trend_collection(
+      _DraftDb(_DraftConnection()),  # type: ignore[arg-type]
+      _snapshot(TrendSignal(
+        keyword="글로우 립",
+        categories=("lip",),
+        color_families=(),
+        finishes=("glossy",),
+        tags=(),
+        reason_codes=("NAVER_CONTENT_BURST",),
+        confidence_score=0.9,
+      )),
+      [{"productId": product_id}, {"productId": product_id}],
+      publish=True,
+    )
+  assert error.value.code == "SEASONAL_DUPLICATE_PRODUCTS"
+
+
+class _PublishConnection(_DraftConnection):
+  def __init__(self) -> None:
+    super().__init__()
+    self.eligibility_query = ""
+    self.eligibility_args: tuple = ()
+
+  async def fetchrow(self, query: str, *args):
+    if "from product_recommendation_service_principals" in query:
+      return {"id": args[0]}
+    return None
+
+  async def fetchval(self, query: str, *args):
+    self.eligibility_query = query
+    self.eligibility_args = args
+    return 1
+
+
+@pytest.mark.asyncio
+async def test_automated_publish_revalidates_selected_shade_and_audit_placeholders() -> None:
+  connection = _PublishConnection()
+  product_id = uuid4()
+  shade_id = uuid4()
+  principal_id = uuid4()
+  pipeline_run_id = uuid4()
+  await persist_trend_collection(
+    _DraftDb(connection),  # type: ignore[arg-type]
+    _snapshot(TrendSignal(
+      keyword="글로우 립",
+      categories=("lip",),
+      color_families=(),
+      finishes=("glossy",),
+      tags=(),
+      reason_codes=("NAVER_CONTENT_BURST",),
+      confidence_score=0.9,
+    )),
+    [{
+      "productId": str(product_id),
+      "shadeId": str(shade_id),
+      "position": 0,
+      "reasonCode": "TREND_CATEGORY_MATCH",
+      "reasonCodes": ["TREND_CATEGORY_MATCH"],
+      "matchScore": 0.1,
+      "scoreComponents": {"rrf": 0.1},
+      "rankingModelVersion": "rrf_v1",
+      "sponsorshipType": "organic",
+    }],
+    publish=True,
+    service_principal_id=principal_id,
+    pipeline_run_id=pipeline_run_id,
+    auto_publish_policy_version="policy-v1",
+    input_fingerprint="b" * 64,
+  )
+
+  assert "from jsonb_array_elements($1::jsonb)" in connection.eligibility_query
+  assert "s.id=r.shade_id and s.product_id=p.id" in connection.eligibility_query
+  assert "a.shade_id is null or a.shade_id=r.shade_id" in connection.eligibility_query
+  assert "o.shade_id is null or o.shade_id=r.shade_id" in connection.eligibility_query
+  assert str(product_id) in connection.eligibility_args[0]
+  assert str(shade_id) in connection.eligibility_args[0]
+  audit_query, audit_args = next(
+    (query, args) for query, args in connection.executed
+    if "insert into seasonal_auto_publish_audit_log" in query
+  )
+  placeholders = [int(value) for value in re.findall(r"\$(\d+)", audit_query)]
+  assert max(placeholders) == len(audit_args) == 8
+
+
+@pytest.mark.asyncio
+async def test_draft_persistence_keeps_region_fingerprint_and_score_components() -> None:
+  connection = _DraftConnection()
+  product_id = uuid4()
+  await persist_trend_collection(
+    _DraftDb(connection),  # type: ignore[arg-type]
+    _snapshot(TrendSignal(
+      keyword="글로우 립",
+      categories=("lip",),
+      color_families=(),
+      finishes=("glossy",),
+      tags=(),
+      reason_codes=("NAVER_CONTENT_BURST",),
+      confidence_score=0.9,
+    )),
+    [{
+      "productId": str(product_id),
+      "shadeId": None,
+      "position": 0,
+      "reasonCode": "TREND_CATEGORY_MATCH",
+      "reasonCodes": ["TREND_CATEGORY_MATCH"],
+      "matchScore": 0.1,
+      "scoreComponents": {"rrf": 0.1},
+      "rankingModelVersion": "rrf_v1",
+      "sponsorshipType": "organic",
+    }],
+    publish=False,
+    region_code="KR-11",
+    input_fingerprint="a" * 64,
+  )
+  collection_query, collection_args = connection.executed[0]
+  assert "region_code,region_label" in collection_query
+  assert "input_fingerprint" in collection_query
+  assert collection_args[5:7] == ("KR-11", "서울")
+  placeholders = [int(value) for value in re.findall(r"\$(\d+)", collection_query)]
+  assert max(placeholders) == len(collection_args) == 30
+  item_query, item_args = connection.executed[1]
+  assert "score_components,ranking_model_version" in item_query
+  assert item_args[-3:] == ('{"rrf": 0.1}', "rrf_v1", "organic")

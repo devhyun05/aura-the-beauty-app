@@ -332,6 +332,30 @@ create table if not exists product_recommendation_operators (
 comment on table product_recommendation_operators is
   'Explicit internal RBAC grants for signed catalog and seasonal operations.';
 
+create table if not exists product_recommendation_service_principals (
+  id uuid primary key default gen_random_uuid(),
+  principal_key text not null unique,
+  display_name text not null,
+  external_subject text unique,
+  roles text[] not null default array['seasonal_auto_publisher']::text[],
+  status text not null default 'active',
+  created_by uuid,
+  last_used_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_product_recommendation_service_principal_key
+    check (principal_key ~ '^[a-z0-9][a-z0-9._-]{2,79}$'),
+  constraint chk_product_recommendation_service_principal_roles check (
+    cardinality(roles) > 0
+    and roles <@ array['seasonal_auto_publisher']::text[]
+  ),
+  constraint chk_product_recommendation_service_principal_status
+    check (status in ('active', 'disabled', 'revoked'))
+);
+
+comment on table product_recommendation_service_principals is
+  'Credential-free identities for scheduled recommendation jobs. Human seasonal RBAC remains in product_recommendation_operators.';
+
 create table if not exists products (
   id uuid primary key default gen_random_uuid(),
   external_key text unique,
@@ -609,6 +633,8 @@ create table if not exists product_seasonal_collections (
   title text not null,
   summary text not null,
   locale text not null default 'ko-KR',
+  region_code text not null default 'KR-00',
+  region_label text not null default '전국',
   trend_window text not null,
   source_name text not null default 'editorial',
   source_updated_at timestamptz,
@@ -623,6 +649,13 @@ create table if not exists product_seasonal_collections (
   published_at timestamptz,
   status text not null default 'draft',
   revision integer not null default 1,
+  algorithm_version text not null default 'seasonal_v1',
+  input_fingerprint text,
+  freshness_status text not null default 'fresh',
+  auto_publish_policy_version text,
+  pipeline_run_id uuid,
+  published_by_service_principal_id uuid,
+  next_evaluation_at timestamptz,
   created_by uuid,
   reviewed_by uuid,
   published_by uuid,
@@ -632,9 +665,34 @@ create table if not exists product_seasonal_collections (
   updated_at timestamptz not null default now(),
   constraint uq_product_seasonal_collection_revision unique (slug, revision),
   constraint chk_product_seasonal_collection_window check (valid_until > valid_from),
+  constraint chk_product_seasonal_collection_region check (
+    region_code in ('KR-00','KR-11','KR-26','KR-27','KR-28','KR-29','KR-30','KR-31','KR-41','KR-42','KR-43','KR-44','KR-45','KR-46','KR-47','KR-48','KR-49','KR-50')
+  ),
   constraint chk_product_seasonal_collection_confidence check (confidence_score between 0 and 1),
+  constraint chk_product_seasonal_collection_fingerprint check (
+    input_fingerprint is null or input_fingerprint ~ '^[0-9a-f]{64}$'
+  ),
+  constraint chk_product_seasonal_collection_freshness
+    check (freshness_status in ('fresh', 'stale', 'fallback')),
   constraint chk_product_seasonal_collection_status check (status in ('draft', 'in_review', 'published', 'suspended', 'expired')),
-  constraint chk_product_seasonal_two_person_publish check (status <> 'published' or (reviewed_by is not null and published_by is not null and created_by <> published_by and reviewed_by <> published_by))
+  constraint chk_product_seasonal_two_person_publish check (
+    status <> 'published'
+    or (
+      reviewed_by is not null
+      and published_by is not null
+      and created_by <> published_by
+      and reviewed_by <> published_by
+      and published_by_service_principal_id is null
+    )
+    or (
+      created_by is null
+      and reviewed_by is null
+      and published_by is null
+      and published_by_service_principal_id is not null
+      and auto_publish_policy_version is not null
+      and pipeline_run_id is not null
+    )
+  )
 );
 
 create table if not exists product_seasonal_collection_items (
@@ -645,12 +703,15 @@ create table if not exists product_seasonal_collection_items (
   reason_code text not null,
   reason_codes text[] not null default '{}',
   match_score double precision not null default 0,
+  score_components jsonb not null default '{}'::jsonb,
+  ranking_model_version text,
   sponsorship_type text not null default 'organic',
   created_at timestamptz not null default now(),
   primary key (collection_id, product_id),
   constraint uq_product_seasonal_item_position unique (collection_id, position),
   constraint chk_product_seasonal_item_position check (position >= 0),
   constraint chk_product_seasonal_item_match_score check (match_score >= 0),
+  constraint chk_product_seasonal_item_score_components check (jsonb_typeof(score_components) = 'object'),
   constraint chk_product_seasonal_sponsorship check (sponsorship_type in ('organic', 'affiliate', 'sponsored'))
 );
 
@@ -747,6 +808,333 @@ alter table product_engagement_events
       and char_length(external_product_id) between 1 and 160
     )
   );
+
+create table if not exists trend_keyword_candidates (
+  id uuid primary key default gen_random_uuid(),
+  normalized_keyword text not null,
+  locale text not null default 'ko-KR',
+  status text not null default 'observed',
+  category_codes text[] not null default '{}',
+  benefit_tags text[] not null default '{}',
+  finish_tags text[] not null default '{}',
+  confidence_score double precision not null default 0,
+  first_observed_at timestamptz not null,
+  last_observed_at timestamptz not null,
+  qualified_at timestamptz,
+  expires_at timestamptz,
+  normalization_metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_trend_keyword_candidate unique (locale, normalized_keyword),
+  constraint chk_trend_keyword_candidate_status
+    check (status in ('observed', 'qualified', 'rejected', 'suspended', 'expired')),
+  constraint chk_trend_keyword_candidate_confidence check (confidence_score between 0 and 1),
+  constraint chk_trend_keyword_candidate_window check (last_observed_at >= first_observed_at),
+  constraint chk_trend_keyword_candidate_metadata check (jsonb_typeof(normalization_metadata) = 'object')
+);
+
+create table if not exists trend_source_observations (
+  id uuid primary key default gen_random_uuid(),
+  candidate_id uuid not null,
+  source_name text not null,
+  source_kind text not null,
+  observed_at timestamptz not null,
+  window_started_at timestamptz not null,
+  window_ended_at timestamptz not null,
+  document_count integer not null default 0,
+  distinct_content_type_count integer not null default 0,
+  distinct_user_count integer,
+  baseline_7d double precision,
+  baseline_28d double precision,
+  current_value double precision,
+  change_ratio double precision,
+  z_score double precision,
+  evidence_hash text not null,
+  source_metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  constraint uq_trend_source_observation_evidence unique (candidate_id, source_name, evidence_hash),
+  constraint chk_trend_source_observation_kind check (
+    source_kind in ('content', 'search_trend', 'shopping_insight', 'internal_engagement', 'operator')
+  ),
+  constraint chk_trend_source_observation_window check (window_ended_at > window_started_at),
+  constraint chk_trend_source_observation_counts check (
+    document_count >= 0
+    and distinct_content_type_count >= 0
+    and (distinct_user_count is null or distinct_user_count >= 0)
+  ),
+  constraint chk_trend_source_observation_hash check (evidence_hash ~ '^[0-9a-f]{64}$'),
+  constraint chk_trend_source_observation_metadata check (jsonb_typeof(source_metadata) = 'object')
+);
+
+comment on table trend_source_observations is
+  'Stores aggregate counts and content hashes only; fetched article/blog/cafe bodies and raw user search text are not retained.';
+
+create table if not exists weather_region_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  region_code text not null,
+  region_label text not null,
+  source_name text not null default 'kma_short_term_forecast',
+  source_updated_at timestamptz not null,
+  forecast_at timestamptz not null,
+  expires_at timestamptz not null,
+  temperature_c double precision,
+  humidity_percent smallint,
+  precipitation_probability_percent smallint,
+  precipitation_mm double precision,
+  wind_speed_mps double precision,
+  weather_code text,
+  weather_summary text,
+  created_at timestamptz not null default now(),
+  constraint uq_weather_region_snapshot unique (region_code, source_name, forecast_at),
+  constraint chk_weather_region_snapshot_region check (
+    region_code in ('KR-00','KR-11','KR-26','KR-27','KR-28','KR-29','KR-30','KR-31','KR-41','KR-42','KR-43','KR-44','KR-45','KR-46','KR-47','KR-48','KR-49','KR-50')
+  ),
+  constraint chk_weather_region_snapshot_window check (expires_at > forecast_at),
+  constraint chk_weather_region_snapshot_temperature
+    check (temperature_c is null or temperature_c between -80 and 60),
+  constraint chk_weather_region_snapshot_humidity
+    check (humidity_percent is null or humidity_percent between 0 and 100),
+  constraint chk_weather_region_snapshot_precipitation_probability
+    check (precipitation_probability_percent is null or precipitation_probability_percent between 0 and 100),
+  constraint chk_weather_region_snapshot_precipitation
+    check (precipitation_mm is null or precipitation_mm >= 0),
+  constraint chk_weather_region_snapshot_wind check (wind_speed_mps is null or wind_speed_mps >= 0)
+);
+
+comment on table weather_region_snapshots is
+  'Coarse Korean region forecasts only. Precise device latitude/longitude must never be persisted.';
+
+create table if not exists product_attribute_evidence (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null,
+  attribute_key text not null,
+  attribute_value jsonb not null,
+  source_type text not null,
+  source_reference text,
+  evidence_fingerprint text not null,
+  confidence_score double precision not null default 0,
+  status text not null default 'unverified',
+  observed_at timestamptz,
+  reviewed_at timestamptz,
+  expires_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_product_attribute_evidence unique (product_id, attribute_key, evidence_fingerprint),
+  constraint chk_product_attribute_evidence_key
+    check (attribute_key in (
+      'finish', 'texture', 'coverage', 'lightweight', 'hydrating', 'moisturizing',
+      'oil_control', 'waterproof', 'longwear', 'transfer_resistant', 'skin_type_tags'
+    )),
+  constraint chk_product_attribute_evidence_source
+    check (source_type in ('licensed_catalog', 'brand_official', 'manual_review', 'validated_inference')),
+  constraint chk_product_attribute_evidence_hash check (evidence_fingerprint ~ '^[0-9a-f]{64}$'),
+  constraint chk_product_attribute_evidence_confidence check (confidence_score between 0 and 1),
+  constraint chk_product_attribute_evidence_status
+    check (status in ('unverified', 'verified', 'rejected', 'expired'))
+);
+
+create table if not exists product_signal_hourly (
+  bucket_started_at timestamptz not null,
+  region_code text not null default 'KR-00',
+  product_id uuid not null,
+  impression_count integer not null default 0,
+  product_open_count integer not null default 0,
+  like_count integer not null default 0,
+  unlike_count integer not null default 0,
+  seller_outbound_count integer not null default 0,
+  hide_count integer not null default 0,
+  distinct_user_count integer not null default 0,
+  position_adjusted_score double precision not null default 0,
+  is_privacy_eligible boolean not null default false,
+  updated_at timestamptz not null default now(),
+  primary key (bucket_started_at, region_code, product_id),
+  constraint chk_product_signal_hourly_region check (
+    region_code in ('KR-00','KR-11','KR-26','KR-27','KR-28','KR-29','KR-30','KR-31','KR-41','KR-42','KR-43','KR-44','KR-45','KR-46','KR-47','KR-48','KR-49','KR-50')
+  ),
+  constraint chk_product_signal_hourly_counts check (
+    impression_count >= 0
+    and product_open_count >= 0
+    and like_count >= 0
+    and unlike_count >= 0
+    and seller_outbound_count >= 0
+    and hide_count >= 0
+    and distinct_user_count >= 0
+  ),
+  constraint chk_product_signal_hourly_privacy_threshold check (
+    not is_privacy_eligible or distinct_user_count >= 20
+  )
+);
+
+create table if not exists search_intent_hourly (
+  bucket_started_at timestamptz not null,
+  locale text not null default 'ko-KR',
+  region_code text not null default 'KR-00',
+  intent_hash text not null,
+  candidate_id uuid,
+  search_count integer not null default 0,
+  result_open_count integer not null default 0,
+  distinct_user_count integer not null default 0,
+  is_privacy_eligible boolean not null default false,
+  datalab_confirmed boolean not null default false,
+  updated_at timestamptz not null default now(),
+  primary key (bucket_started_at, locale, region_code, intent_hash),
+  constraint chk_search_intent_hourly_region check (
+    region_code in ('KR-00','KR-11','KR-26','KR-27','KR-28','KR-29','KR-30','KR-31','KR-41','KR-42','KR-43','KR-44','KR-45','KR-46','KR-47','KR-48','KR-49','KR-50')
+  ),
+  constraint chk_search_intent_hourly_hash check (intent_hash ~ '^[0-9a-f]{64}$'),
+  constraint chk_search_intent_hourly_counts check (
+    search_count >= 0 and result_open_count >= 0 and distinct_user_count >= 0
+  ),
+  constraint chk_search_intent_hourly_privacy_threshold check (
+    not is_privacy_eligible or distinct_user_count >= 20
+  )
+);
+
+comment on table search_intent_hourly is
+  'Privacy-thresholded aggregate keyed by an opaque HMAC-SHA-256 intent hash. Raw search queries are prohibited.';
+
+create table if not exists seasonal_serving_health_buckets (
+  bucket_started_at timestamptz not null,
+  locale text not null default 'ko-KR',
+  region_code text not null default 'KR-00',
+  request_count bigint not null default 0,
+  fallback_count bigint not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (bucket_started_at, locale, region_code),
+  constraint chk_seasonal_serving_health_region check (
+    region_code in ('KR-00','KR-11','KR-26','KR-27','KR-28','KR-29','KR-30','KR-31','KR-41','KR-42','KR-43','KR-44','KR-45','KR-46','KR-47','KR-48','KR-49','KR-50')
+  ),
+  constraint chk_seasonal_serving_health_counts check (
+    request_count >= 0 and fallback_count >= 0 and fallback_count <= request_count
+  )
+);
+
+comment on table seasonal_serving_health_buckets is
+  'Anonymous 15-minute serving health counters used for fallback-ratio alarms and automatic rollback.';
+
+create table if not exists seasonal_ranking_models (
+  id uuid primary key default gen_random_uuid(),
+  model_version text not null unique,
+  model_type text not null,
+  status text not null default 'draft',
+  feature_schema jsonb not null default '{}'::jsonb,
+  coefficients jsonb not null default '{}'::jsonb,
+  training_window_started_at timestamptz,
+  training_window_ended_at timestamptz,
+  training_impression_count integer not null default 0,
+  training_action_count integer not null default 0,
+  validation_metrics jsonb not null default '{}'::jsonb,
+  ndcg_at_12 double precision,
+  baseline_ndcg_at_12 double precision,
+  validation_uplift double precision,
+  activated_by_service_principal_id uuid,
+  activated_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_seasonal_ranking_model_type check (model_type in ('rrf', 'logistic')),
+  constraint chk_seasonal_ranking_model_status check (status in ('draft', 'shadow', 'active', 'retired', 'failed')),
+  constraint chk_seasonal_ranking_model_counts
+    check (training_impression_count >= 0 and training_action_count >= 0),
+  constraint chk_seasonal_ranking_model_window check (
+    training_window_started_at is null
+    or training_window_ended_at is null
+    or training_window_ended_at > training_window_started_at
+  ),
+  constraint chk_seasonal_ranking_model_feature_schema check (jsonb_typeof(feature_schema) = 'object'),
+  constraint chk_seasonal_ranking_model_coefficients check (jsonb_typeof(coefficients) = 'object'),
+  constraint chk_seasonal_ranking_model_validation_metrics check (jsonb_typeof(validation_metrics) = 'object')
+);
+
+create table if not exists seasonal_pipeline_runs (
+  id uuid primary key default gen_random_uuid(),
+  idempotency_key text not null unique,
+  trigger_type text not null,
+  status text not null default 'queued',
+  shadow_mode boolean not null default true,
+  scheduled_for timestamptz,
+  started_at timestamptz,
+  completed_at timestamptz,
+  algorithm_version text not null,
+  auto_publish_policy_version text,
+  input_fingerprint text,
+  service_principal_id uuid,
+  ranking_model_id uuid,
+  step_results jsonb not null default '{}'::jsonb,
+  source_usage jsonb not null default '{}'::jsonb,
+  bedrock_invocation_count smallint not null default 0,
+  bedrock_input_tokens integer not null default 0,
+  bedrock_output_tokens integer not null default 0,
+  estimated_cost_usd numeric(12, 6) not null default 0,
+  error_code text,
+  error_message text,
+  created_at timestamptz not null default now(),
+  constraint chk_seasonal_pipeline_run_trigger check (trigger_type in ('scheduled', 'manual', 'retry', 'health')),
+  constraint chk_seasonal_pipeline_run_status
+    check (status in ('queued', 'running', 'succeeded', 'failed', 'skipped')),
+  constraint chk_seasonal_pipeline_run_window check (
+    completed_at is null or started_at is null or completed_at >= started_at
+  ),
+  constraint chk_seasonal_pipeline_run_fingerprint check (
+    input_fingerprint is null or input_fingerprint ~ '^[0-9a-f]{64}$'
+  ),
+  constraint chk_seasonal_pipeline_run_json check (
+    jsonb_typeof(step_results) = 'object' and jsonb_typeof(source_usage) = 'object'
+  ),
+  constraint chk_seasonal_pipeline_run_bedrock_budget check (
+    bedrock_invocation_count between 0 and 1
+    and bedrock_input_tokens between 0 and 8000
+    and bedrock_output_tokens between 0 and 800
+  ),
+  constraint chk_seasonal_pipeline_run_cost check (estimated_cost_usd >= 0)
+);
+
+create table if not exists trend_external_call_quotas (
+  provider text not null,
+  period_start timestamptz not null,
+  period_kind text not null,
+  call_count integer not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (provider, period_start, period_kind),
+  constraint chk_trend_external_call_quota_provider check (
+    provider in ('naver', 'naver_search', 'naver_datalab', 'kma', 'bedrock')
+  ),
+  constraint chk_trend_external_call_quota_period check (period_kind in ('hour', 'day', 'month')),
+  constraint chk_trend_external_call_quota_count check (call_count >= 0)
+);
+
+alter table trend_external_call_quotas
+  drop constraint if exists chk_trend_external_call_quota_provider,
+  add constraint chk_trend_external_call_quota_provider check (
+    provider in ('naver', 'naver_search', 'naver_datalab', 'kma', 'bedrock')
+  );
+
+create table if not exists seasonal_auto_publish_audit_log (
+  id bigserial primary key,
+  pipeline_run_id uuid not null,
+  collection_id uuid,
+  previous_collection_id uuid,
+  service_principal_id uuid not null,
+  policy_version text not null,
+  decision text not null,
+  input_fingerprint text not null,
+  gate_results jsonb not null default '{}'::jsonb,
+  reason_codes text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  constraint chk_seasonal_auto_publish_decision
+    check (decision in ('published', 'blocked', 'skipped', 'rolled_back')),
+  constraint chk_seasonal_auto_publish_fingerprint
+    check (input_fingerprint ~ '^[0-9a-f]{64}$'),
+  constraint chk_seasonal_auto_publish_decision_refs check (
+    (decision='published' and collection_id is not null)
+    or (decision='rolled_back' and collection_id is not null and previous_collection_id is not null)
+    or decision in ('blocked','skipped')
+  ),
+  constraint chk_seasonal_auto_publish_gate_results check (jsonb_typeof(gate_results) = 'object')
+);
+
+comment on table seasonal_auto_publish_audit_log is
+  'Append-only evidence for automated publish gates and rollback decisions.';
 
 create table if not exists product_preference_profiles (
   user_id uuid primary key,
@@ -1300,8 +1688,47 @@ alter table product_seasonal_collections
   add column if not exists trend_keywords text[] not null default '{}',
   add column if not exists reason_codes text[] not null default '{}',
   add column if not exists confidence_score double precision not null default 0.5,
+  add column if not exists region_code text not null default 'KR-00',
+  add column if not exists region_label text not null default '전국',
+  add column if not exists algorithm_version text not null default 'seasonal_v1',
+  add column if not exists input_fingerprint text,
+  add column if not exists freshness_status text not null default 'fresh',
+  add column if not exists auto_publish_policy_version text,
+  add column if not exists pipeline_run_id uuid,
+  add column if not exists published_by_service_principal_id uuid,
+  add column if not exists next_evaluation_at timestamptz,
+  drop constraint if exists chk_product_seasonal_collection_region,
+  add constraint chk_product_seasonal_collection_region check (
+    region_code in ('KR-00','KR-11','KR-26','KR-27','KR-28','KR-29','KR-30','KR-31','KR-41','KR-42','KR-43','KR-44','KR-45','KR-46','KR-47','KR-48','KR-49','KR-50')
+  ),
   drop constraint if exists chk_product_seasonal_collection_confidence,
   add constraint chk_product_seasonal_collection_confidence check (confidence_score between 0 and 1),
+  drop constraint if exists chk_product_seasonal_collection_fingerprint,
+  add constraint chk_product_seasonal_collection_fingerprint check (
+    input_fingerprint is null or input_fingerprint ~ '^[0-9a-f]{64}$'
+  ),
+  drop constraint if exists chk_product_seasonal_collection_freshness,
+  add constraint chk_product_seasonal_collection_freshness
+    check (freshness_status in ('fresh', 'stale', 'fallback')),
+  drop constraint if exists chk_product_seasonal_two_person_publish,
+  add constraint chk_product_seasonal_two_person_publish check (
+    status <> 'published'
+    or (
+      reviewed_by is not null
+      and published_by is not null
+      and created_by <> published_by
+      and reviewed_by <> published_by
+      and published_by_service_principal_id is null
+    )
+    or (
+      created_by is null
+      and reviewed_by is null
+      and published_by is null
+      and published_by_service_principal_id is not null
+      and auto_publish_policy_version is not null
+      and pipeline_run_id is not null
+    )
+  ),
   drop constraint if exists fk_product_seasonal_created_by,
   add constraint fk_product_seasonal_created_by foreign key (created_by) references users(id) on delete set null,
   drop constraint if exists fk_product_seasonal_reviewed_by,
@@ -1309,7 +1736,13 @@ alter table product_seasonal_collections
   drop constraint if exists fk_product_seasonal_published_by,
   add constraint fk_product_seasonal_published_by foreign key (published_by) references users(id) on delete set null,
   drop constraint if exists fk_product_seasonal_previous_revision,
-  add constraint fk_product_seasonal_previous_revision foreign key (previous_revision_id) references product_seasonal_collections(id) on delete set null;
+  add constraint fk_product_seasonal_previous_revision foreign key (previous_revision_id) references product_seasonal_collections(id) on delete set null,
+  drop constraint if exists fk_product_seasonal_pipeline_run,
+  add constraint fk_product_seasonal_pipeline_run foreign key (pipeline_run_id) references seasonal_pipeline_runs(id) on delete set null,
+  drop constraint if exists fk_product_seasonal_service_publisher,
+  add constraint fk_product_seasonal_service_publisher
+    foreign key (published_by_service_principal_id)
+    references product_recommendation_service_principals(id) on delete restrict;
 
 alter table product_recommendation_operators
   drop constraint if exists fk_product_recommendation_operator_user,
@@ -1317,11 +1750,21 @@ alter table product_recommendation_operators
   drop constraint if exists fk_product_recommendation_operator_granted_by,
   add constraint fk_product_recommendation_operator_granted_by foreign key (granted_by) references users(id) on delete set null;
 
+alter table product_recommendation_service_principals
+  drop constraint if exists fk_product_recommendation_service_principal_creator,
+  add constraint fk_product_recommendation_service_principal_creator
+    foreign key (created_by) references users(id) on delete set null;
+
 alter table product_seasonal_collection_items
   add column if not exists reason_codes text[] not null default '{}',
   add column if not exists match_score double precision not null default 0,
+  add column if not exists score_components jsonb not null default '{}'::jsonb,
+  add column if not exists ranking_model_version text,
   drop constraint if exists chk_product_seasonal_item_match_score,
   add constraint chk_product_seasonal_item_match_score check (match_score >= 0),
+  drop constraint if exists chk_product_seasonal_item_score_components,
+  add constraint chk_product_seasonal_item_score_components
+    check (jsonb_typeof(score_components) = 'object'),
   drop constraint if exists fk_product_seasonal_items_collection,
   add constraint fk_product_seasonal_items_collection foreign key (collection_id) references product_seasonal_collections(id) on delete cascade,
   drop constraint if exists fk_product_seasonal_items_product,
@@ -1356,6 +1799,73 @@ alter table product_engagement_events
   add constraint fk_product_engagement_shade_product
   foreign key (shade_id, product_id) references product_shades(id, product_id)
   on delete set null (shade_id);
+
+alter table trend_source_observations
+  drop constraint if exists fk_trend_source_observation_candidate,
+  add constraint fk_trend_source_observation_candidate
+    foreign key (candidate_id) references trend_keyword_candidates(id) on delete cascade;
+
+alter table product_attribute_evidence
+  drop constraint if exists fk_product_attribute_evidence_product,
+  add constraint fk_product_attribute_evidence_product
+    foreign key (product_id) references products(id) on delete cascade;
+
+alter table product_signal_hourly
+  drop constraint if exists chk_product_signal_hourly_privacy_threshold,
+  add constraint chk_product_signal_hourly_privacy_threshold check (
+    not is_privacy_eligible or distinct_user_count >= 20
+  ),
+  drop constraint if exists fk_product_signal_hourly_product,
+  add constraint fk_product_signal_hourly_product
+    foreign key (product_id) references products(id) on delete cascade;
+
+alter table search_intent_hourly
+  drop constraint if exists chk_search_intent_hourly_privacy_threshold,
+  add constraint chk_search_intent_hourly_privacy_threshold check (
+    not is_privacy_eligible or distinct_user_count >= 20
+  ),
+  drop constraint if exists fk_search_intent_hourly_candidate,
+  add constraint fk_search_intent_hourly_candidate
+    foreign key (candidate_id) references trend_keyword_candidates(id) on delete set null;
+
+alter table seasonal_ranking_models
+  drop constraint if exists fk_seasonal_ranking_model_service_principal,
+  add constraint fk_seasonal_ranking_model_service_principal
+    foreign key (activated_by_service_principal_id)
+    references product_recommendation_service_principals(id) on delete restrict;
+
+alter table seasonal_pipeline_runs
+  drop constraint if exists chk_seasonal_pipeline_run_trigger,
+  add constraint chk_seasonal_pipeline_run_trigger
+    check (trigger_type in ('scheduled', 'manual', 'retry', 'health')),
+  drop constraint if exists fk_seasonal_pipeline_run_service_principal,
+  add constraint fk_seasonal_pipeline_run_service_principal
+    foreign key (service_principal_id)
+    references product_recommendation_service_principals(id) on delete restrict,
+  drop constraint if exists fk_seasonal_pipeline_run_ranking_model,
+  add constraint fk_seasonal_pipeline_run_ranking_model
+    foreign key (ranking_model_id) references seasonal_ranking_models(id) on delete set null;
+
+alter table seasonal_auto_publish_audit_log
+  drop constraint if exists chk_seasonal_auto_publish_decision_refs,
+  add constraint chk_seasonal_auto_publish_decision_refs check (
+    (decision='published' and collection_id is not null)
+    or (decision='rolled_back' and collection_id is not null and previous_collection_id is not null)
+    or decision in ('blocked','skipped')
+  ),
+  drop constraint if exists fk_seasonal_auto_publish_pipeline_run,
+  add constraint fk_seasonal_auto_publish_pipeline_run
+    foreign key (pipeline_run_id) references seasonal_pipeline_runs(id) on delete restrict,
+  drop constraint if exists fk_seasonal_auto_publish_collection,
+  add constraint fk_seasonal_auto_publish_collection
+    foreign key (collection_id) references product_seasonal_collections(id) on delete restrict,
+  drop constraint if exists fk_seasonal_auto_publish_previous_collection,
+  add constraint fk_seasonal_auto_publish_previous_collection
+    foreign key (previous_collection_id) references product_seasonal_collections(id) on delete restrict,
+  drop constraint if exists fk_seasonal_auto_publish_service_principal,
+  add constraint fk_seasonal_auto_publish_service_principal
+    foreign key (service_principal_id)
+    references product_recommendation_service_principals(id) on delete restrict;
 
 alter table product_preference_profiles
   drop constraint if exists fk_product_preference_profile_user,
@@ -1573,9 +2083,36 @@ create index if not exists idx_product_assets_valid_until on product_assets (val
 create index if not exists idx_product_offers_product_active on product_offers (product_id, availability_status, is_active);
 create index if not exists idx_product_offers_valid_until on product_offers (valid_until) where is_active = true;
 create index if not exists idx_product_seasonal_public on product_seasonal_collections (locale, status, valid_from, valid_until);
+create index if not exists idx_product_seasonal_region_public
+  on product_seasonal_collections (locale, region_code, status, valid_from desc, valid_until);
 create index if not exists idx_product_seasonal_source_updated on product_seasonal_collections (source_updated_at desc);
+create index if not exists idx_product_seasonal_input_fingerprint
+  on product_seasonal_collections (locale, region_code, input_fingerprint)
+  where input_fingerprint is not null;
+-- Older writers could leave more than one published revision for the same slug.
+-- Deterministically keep the newest revision before enforcing the production invariant.
+with duplicate_published as (
+  select id,row_number() over (
+    partition by slug
+    order by revision desc,published_at desc nulls last,created_at desc,id desc
+  ) as published_rank
+  from product_seasonal_collections
+  where status='published'
+)
+update product_seasonal_collections collection set
+  status='suspended',
+  freshness_status='stale',
+  suspension_reason='superseded_by_schema_repair',
+  updated_at=now()
+from duplicate_published duplicate
+where collection.id=duplicate.id and duplicate.published_rank>1;
+create unique index if not exists uq_product_seasonal_single_published
+  on product_seasonal_collections (slug)
+  where status='published';
 create index if not exists idx_product_recommendation_operators_active_roles
   on product_recommendation_operators using gin (roles) where is_active=true;
+create index if not exists idx_product_recommendation_service_principals_active_roles
+  on product_recommendation_service_principals using gin (roles) where status='active';
 create index if not exists idx_product_seasonal_items_order on product_seasonal_collection_items (collection_id, position);
 create index if not exists idx_product_engagement_user_occurred on product_engagement_events (user_id, occurred_at desc);
 create index if not exists idx_product_engagement_occurred on product_engagement_events (occurred_at);
@@ -1583,6 +2120,47 @@ create index if not exists idx_product_engagement_product_type on product_engage
 create index if not exists idx_product_engagement_external_product_type
   on product_engagement_events (external_source, external_product_id, event_type, occurred_at desc)
   where external_source is not null;
+create index if not exists idx_trend_keyword_candidates_status_observed
+  on trend_keyword_candidates (locale, status, last_observed_at desc);
+create index if not exists idx_trend_keyword_candidates_categories
+  on trend_keyword_candidates using gin (category_codes);
+create index if not exists idx_trend_source_observations_candidate_observed
+  on trend_source_observations (candidate_id, observed_at desc);
+create index if not exists idx_trend_source_observations_source_observed
+  on trend_source_observations (source_kind, source_name, observed_at desc);
+create index if not exists idx_weather_region_snapshots_lookup
+  on weather_region_snapshots (region_code, forecast_at desc, expires_at);
+create index if not exists idx_product_attribute_evidence_usable
+  on product_attribute_evidence (product_id, attribute_key, confidence_score desc)
+  where status='verified';
+create index if not exists idx_product_attribute_evidence_expires
+  on product_attribute_evidence (expires_at) where expires_at is not null;
+create index if not exists idx_product_signal_hourly_product_bucket
+  on product_signal_hourly (product_id, bucket_started_at desc);
+create index if not exists idx_product_signal_hourly_privacy_region
+  on product_signal_hourly (region_code, bucket_started_at desc)
+  where is_privacy_eligible=true;
+create index if not exists idx_search_intent_hourly_privacy_region
+  on search_intent_hourly (locale, region_code, bucket_started_at desc)
+  where is_privacy_eligible=true;
+create index if not exists idx_search_intent_hourly_candidate
+  on search_intent_hourly (candidate_id, bucket_started_at desc)
+  where candidate_id is not null;
+create index if not exists idx_seasonal_serving_health_recent
+  on seasonal_serving_health_buckets (locale, bucket_started_at desc, region_code);
+create index if not exists idx_seasonal_ranking_models_status_created
+  on seasonal_ranking_models (status, created_at desc);
+create index if not exists idx_seasonal_pipeline_runs_status_scheduled
+  on seasonal_pipeline_runs (status, scheduled_for desc);
+create index if not exists idx_seasonal_pipeline_runs_fingerprint
+  on seasonal_pipeline_runs (input_fingerprint) where input_fingerprint is not null;
+create index if not exists idx_trend_external_call_quotas_updated
+  on trend_external_call_quotas (provider, period_kind, updated_at desc);
+create index if not exists idx_seasonal_auto_publish_audit_run
+  on seasonal_auto_publish_audit_log (pipeline_run_id, created_at desc);
+create index if not exists idx_seasonal_auto_publish_audit_collection
+  on seasonal_auto_publish_audit_log (collection_id, created_at desc)
+  where collection_id is not null;
 create index if not exists idx_product_request_rate_window on product_request_rate_limits (window_started_at);
 create index if not exists idx_product_preference_expires on product_preference_profiles (expires_at);
 create index if not exists idx_product_cohort_key_expires on product_color_cohort_memberships (cohort_key, expires_at);
@@ -1667,6 +2245,51 @@ drop trigger if exists trg_products_updated_at on products;
 create trigger trg_products_updated_at
 before update on products
 for each row execute function set_updated_at();
+
+drop trigger if exists trg_product_recommendation_service_principals_updated_at
+  on product_recommendation_service_principals;
+create trigger trg_product_recommendation_service_principals_updated_at
+before update on product_recommendation_service_principals
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_product_seasonal_collections_updated_at on product_seasonal_collections;
+create trigger trg_product_seasonal_collections_updated_at
+before update on product_seasonal_collections
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_trend_keyword_candidates_updated_at on trend_keyword_candidates;
+create trigger trg_trend_keyword_candidates_updated_at
+before update on trend_keyword_candidates
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_product_attribute_evidence_updated_at on product_attribute_evidence;
+create trigger trg_product_attribute_evidence_updated_at
+before update on product_attribute_evidence
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_seasonal_ranking_models_updated_at on seasonal_ranking_models;
+create trigger trg_seasonal_ranking_models_updated_at
+before update on seasonal_ranking_models
+for each row execute function set_updated_at();
+
+create or replace function prevent_seasonal_auto_publish_audit_mutation()
+returns trigger as $$
+begin
+  raise exception 'seasonal_auto_publish_audit_log is append-only';
+end;
+$$ language plpgsql;
+
+drop trigger if exists trg_seasonal_auto_publish_audit_immutable
+  on seasonal_auto_publish_audit_log;
+create trigger trg_seasonal_auto_publish_audit_immutable
+before update or delete on seasonal_auto_publish_audit_log
+for each row execute function prevent_seasonal_auto_publish_audit_mutation();
+
+drop trigger if exists trg_seasonal_auto_publish_audit_no_truncate
+  on seasonal_auto_publish_audit_log;
+create trigger trg_seasonal_auto_publish_audit_no_truncate
+before truncate on seasonal_auto_publish_audit_log
+for each statement execute function prevent_seasonal_auto_publish_audit_mutation();
 
 drop trigger if exists trg_ar_filters_updated_at on ar_filters;
 create trigger trg_ar_filters_updated_at

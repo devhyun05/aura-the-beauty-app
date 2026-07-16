@@ -1,8 +1,11 @@
 from app.db.check_schema import (
   EXPECTED_COLUMNS,
+  EXPECTED_CONSTRAINT_CONTRACTS,
   EXPECTED_CONSTRAINTS,
   EXPECTED_ENUM_VALUES,
+  EXPECTED_INDEX_CONTRACTS,
   EXPECTED_TABLES,
+  EXPECTED_TRIGGER_CONTRACTS,
   build_schema_report,
 )
 from app.db.init_db import POST_SCHEMA_MIGRATIONS, SCHEMA_VERSION, get_schema_path
@@ -17,7 +20,7 @@ def test_schema_path_exists() -> None:
 
   assert path.name == "schema.sql"
   assert path.exists()
-  assert SCHEMA_VERSION == "schema.sql:v5-external-product-likes"
+  assert SCHEMA_VERSION == "schema.sql:v7-trend-now-health"
 
 
 def test_seed_path_exists() -> None:
@@ -97,19 +100,10 @@ def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() ->
     "auradin_search_sessions.owner_subject.nullability",
     "auradin_search_sessions.version.default",
   ]
-  assert report["missingConstraints"] == [
-    "auradin_events_event_type_check",
-    "auradin_events_owner_subject_client_event_id_key",
-    "chk_auradin_sessions_idempotency_fields",
-  ]
-  assert report["invalidIndexes"] == [
-    "idx_auradin_events_manifest",
-    "idx_auradin_events_owner_time",
-    "idx_auradin_events_received",
-    "idx_auradin_events_session",
-    "idx_auradin_sessions_idempotency_expires",
-    "uq_auradin_sessions_owner_client_request",
-  ]
+  assert report["missingConstraints"] == sorted(EXPECTED_CONSTRAINT_CONTRACTS)
+  assert report["invalidIndexes"] == sorted(
+    set(EXPECTED_INDEX_CONTRACTS) - {"idx_auradin_search_sessions_expires_at"}
+  )
 
 
 def test_schema_report_rejects_or_connected_idempotency_constraint() -> None:
@@ -117,6 +111,10 @@ def test_schema_report_rejects_or_connected_idempotency_constraint() -> None:
     set(EXPECTED_TABLES),
     EXPECTED_SCHEMA_VERSIONS,
     constraints={
+      **{
+        name: " ".join(fragments)
+        for name, fragments in EXPECTED_CONSTRAINT_CONTRACTS.items()
+      },
       "chk_auradin_sessions_idempotency_fields": (
         "check (((client_request_id is null) = (request_fingerprint is null)) "
         "or ((client_request_id is null) = (idempotency_expires_at is null)))"
@@ -136,6 +134,22 @@ def test_schema_report_rejects_or_connected_idempotency_constraint() -> None:
   assert report["ok"] is False
   assert report["missingConstraints"] == []
   assert report["invalidConstraints"] == ["chk_auradin_sessions_idempotency_fields"]
+
+
+def test_schema_report_requires_immutable_auto_publish_audit_triggers() -> None:
+  valid_triggers = {
+    name: " ".join(fragments)
+    for name, fragments in EXPECTED_TRIGGER_CONTRACTS.items()
+  }
+  missing = dict(valid_triggers)
+  missing.pop("trg_seasonal_auto_publish_audit_no_truncate")
+  report = build_schema_report(
+    set(EXPECTED_TABLES),
+    EXPECTED_SCHEMA_VERSIONS,
+    triggers=missing,
+  )
+  assert report["ok"] is False
+  assert report["invalidTriggers"] == ["trg_seasonal_auto_publish_audit_no_truncate"]
 
 
 def test_schema_report_requires_external_product_event_identity_columns() -> None:
@@ -191,6 +205,20 @@ def test_product_event_query_minimization_migration_removes_raw_query_context() 
   assert "update product_engagement_events" in normalized
   assert "context = context - 'query'" in normalized
   assert "where context ? 'query'" in normalized
+
+
+def test_seasonal_unique_publish_index_repairs_legacy_duplicates_first() -> None:
+  schema = " ".join(get_schema_path().read_text(encoding="utf-8").lower().split())
+  repair = schema.index("with duplicate_published as")
+  unique_index = schema.index("create unique index if not exists uq_product_seasonal_single_published")
+
+  assert repair < unique_index
+  repair_sql = schema[repair:unique_index]
+  assert "partition by slug" in repair_sql
+  assert "order by revision desc" in repair_sql
+  assert "status='suspended'" in repair_sql
+  assert "suspension_reason='superseded_by_schema_repair'" in repair_sql
+  assert "duplicate.published_rank>1" in repair_sql
 
 
 def test_external_catalog_event_identity_migration_is_registered() -> None:

@@ -178,6 +178,24 @@ async def get_current_user(
   return await verify_cognito_token(credentials.credentials, settings)
 
 
+async def get_optional_current_user(
+  credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+  settings: Settings = Depends(get_settings),
+) -> AuthContext | None:
+  """Resolve a viewer when present while keeping genuinely public reads public.
+
+  Supplying an invalid bearer token still fails closed. In local auth-disabled
+  mode the configured development identity remains available, matching the
+  behavior of authenticated endpoints.
+  """
+
+  if not settings.auth_required:
+    return _dev_auth_context(settings)
+  if credentials is None or not credentials.credentials:
+    return None
+  return await verify_cognito_token(credentials.credentials, settings)
+
+
 def cognito_groups(auth: AuthContext) -> frozenset[str]:
   groups = auth.claims.get("cognito:groups")
   if isinstance(groups, str):

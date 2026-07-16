@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter, OrderedDict, defaultdict
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -33,6 +33,11 @@ from app.services.product_external_catalog import (
   get_auradin_catalog_products,
 )
 from app.services.product_live_seasonal import resolve_live_external_product
+from app.services.product_trend_regions import (
+  NATIONAL_REGION_CODE,
+  TREND_REGION_LABELS,
+  normalize_trend_region_code,
+)
 from app.services.saved_ar_looks import normalize_saved_ar_look
 from app.services.shopping_products import _safe_naver_result_url
 
@@ -57,7 +62,10 @@ POPULAR_FALLBACK_REASON_CODE = "POPULAR_FALLBACK"
 POPULAR_FALLBACK_REASON_LABEL = "추천 데이터가 쌓이는 동안 인기 상품을 보여드려요"
 CONSENT_VERSION_DEFAULT = "product-personalization-v1"
 CONSENT_TYPES = {"engagement_personalization", "color_cohort"}
-_SEASONAL_RESPONSE_CACHE: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+_SEASONAL_RESPONSE_CACHE_MAX_ENTRIES = 512
+_SEASONAL_RESPONSE_CACHE: OrderedDict[
+  tuple[Any, ...], tuple[float, dict[str, Any]]
+] = OrderedDict()
 PERSONALIZATION_SIGNAL_WEIGHTS = {
   "like": 4.0,
   "seller_outbound": 3.0,
@@ -291,7 +299,7 @@ async def _popular_fallback_groups(
   db: Database,
   settings: Settings,
   *,
-  user_id: UUID,
+  user_id: UUID | None,
   per_category_limit: int,
   categories: Iterable[str] | None = None,
 ) -> list[dict[str, Any]]:
@@ -337,6 +345,7 @@ def feature_status(settings: Settings) -> dict[str, bool]:
     "auradinLiveDiscoveryEnabled": settings.auradin_live_discovery_enabled,
     "legacyNaverProductSearch": settings.legacy_naver_product_search,
     "naverShoppingInsightEnabled": settings.naver_shopping_insight_enabled,
+    "trendNowRecommendationsV2": settings.trend_now_recommendations_v2,
   }
 
 
@@ -839,37 +848,58 @@ async def get_seasonal_recommendations(
   *,
   locale: str,
   limit: int,
+  user_id: UUID | None = None,
   category: str | None = None,
+  region_code: str = NATIONAL_REGION_CODE,
 ) -> dict[str, Any]:
+  normalized_region_code = normalize_trend_region_code(region_code)
   cache_key = (
-    id(db), db.is_connected, locale, limit, category,
+    id(db), db.is_connected, str(user_id) if user_id else None,
+    locale, normalized_region_code, limit, category,
     settings.seasonal_recommendations_v1,
     settings.product_offer_max_age_hours,
     settings.product_seasonal_source_max_age_days,
   )
   cached = _SEASONAL_RESPONSE_CACHE.get(cache_key)
   if cached and cached[0] > time.monotonic():
+    _SEASONAL_RESPONSE_CACHE.move_to_end(cache_key)
     return deepcopy(cached[1])
+  if cached:
+    _SEASONAL_RESPONSE_CACHE.pop(cache_key, None)
   data = await _build_seasonal_recommendations(
     db,
     settings,
+    user_id=user_id,
     locale=locale,
+    region_code=normalized_region_code,
     limit=limit,
     category=category,
   )
   _SEASONAL_RESPONSE_CACHE[cache_key] = (time.monotonic() + 120, deepcopy(data))
+  _SEASONAL_RESPONSE_CACHE.move_to_end(cache_key)
+  while len(_SEASONAL_RESPONSE_CACHE) > _SEASONAL_RESPONSE_CACHE_MAX_ENTRIES:
+    _SEASONAL_RESPONSE_CACHE.popitem(last=False)
   return data
 
 
-def clear_seasonal_recommendation_cache() -> None:
-  _SEASONAL_RESPONSE_CACHE.clear()
+def clear_seasonal_recommendation_cache(*, user_id: UUID | None = None) -> None:
+  """Invalidate cached shelves globally or only for one authenticated viewer."""
+  if user_id is None:
+    _SEASONAL_RESPONSE_CACHE.clear()
+    return
+  viewer_key = str(user_id)
+  for cache_key in tuple(_SEASONAL_RESPONSE_CACHE):
+    if len(cache_key) > 2 and cache_key[2] == viewer_key:
+      _SEASONAL_RESPONSE_CACHE.pop(cache_key, None)
 
 
 async def _build_seasonal_recommendations(
   db: Database,
   settings: Settings,
   *,
+  user_id: UUID | None,
   locale: str,
+  region_code: str,
   limit: int,
   category: str | None = None,
 ) -> dict[str, Any]:
@@ -877,24 +907,66 @@ async def _build_seasonal_recommendations(
   category_values = [category_filter] if category_filter else list(PRODUCT_CATEGORY_LABELS)
   if not settings.seasonal_recommendations_v1:
     items = await _section_popular_fallback_products(
-      db, settings, user_id=None, limit=limit, variant="seasonal", categories=category_values
+      db, settings, user_id=user_id, limit=limit, variant="seasonal", categories=category_values
     )
-    return _seasonal_fallback_response(items, reason="SEASONAL_RECOMMENDATIONS_DISABLED", unavailable=True)
-  collection = await db.fetchrow(
-    """
-    select * from product_seasonal_collections
-    where locale = $1 and status = 'published'
-      and valid_from <= now() and valid_until > now()
-      and reviewed_at is not null and published_at is not null
-    order by published_at desc limit 1
-    """,
-    locale,
-  ) if db.is_connected else None
+    return _seasonal_fallback_response(
+      items,
+      reason="SEASONAL_RECOMMENDATIONS_DISABLED",
+      region_code=region_code,
+      unavailable=True,
+    )
+  collection = None
+  served_stale = False
+  if db.is_connected:
+    preferred_regions = (
+      [region_code, NATIONAL_REGION_CODE]
+      if region_code != NATIONAL_REGION_CODE
+      else [NATIONAL_REGION_CODE]
+    )
+    for preferred_region in preferred_regions:
+      collection = await db.fetchrow(
+        """
+        select * from product_seasonal_collections
+        where locale = $1 and region_code = $2 and status = 'published'
+          and valid_from <= now() and valid_until > now()
+          and reviewed_at is not null and published_at is not null
+          and coalesce(freshness_status,'fresh') = 'fresh'
+          and (next_evaluation_at is null or next_evaluation_at>now())
+        order by published_at desc limit 1
+        """,
+        locale,
+        preferred_region,
+      )
+      if collection:
+        break
+    if not collection:
+      collection = await db.fetchrow(
+        """
+        select * from product_seasonal_collections
+        where locale = $1 and region_code = any($2::text[])
+          and published_at >= now()-interval '7 days'
+          and (
+            status = 'published'
+            or (status = 'suspended' and suspension_reason = 'superseded_by_trend_refresh')
+          )
+          and reviewed_at is not null and published_at is not null
+        order by case when region_code=$3 then 0 else 1 end,published_at desc
+        limit 1
+        """,
+        locale,
+        preferred_regions,
+        region_code,
+      )
+      served_stale = bool(collection)
   if not collection:
     items = await _section_popular_fallback_products(
-      db, settings, user_id=None, limit=limit, variant="seasonal", categories=category_values
+      db, settings, user_id=user_id, limit=limit, variant="seasonal", categories=category_values
     )
-    return _seasonal_fallback_response(items, reason="NO_PUBLISHED_SEASONAL_COLLECTION")
+    return _seasonal_fallback_response(
+      items,
+      reason="NO_PUBLISHED_SEASONAL_COLLECTION",
+      region_code=region_code,
+    )
   rows = await db.fetch(
     f"""
     select
@@ -904,9 +976,12 @@ async def _build_seasonal_recommendations(
       a.asset_url as image_url,
       o.id as offer_id, o.seller_name, o.seller_domain, o.currency, o.price_amount,
       o.price_updated_at, o.availability_status, o.affiliate_type, o.disclosure_label,
-      i.reason_code, i.reason_codes, i.match_score, i.sponsorship_type, i.position
+      i.reason_code, i.reason_codes, i.match_score, i.sponsorship_type, i.position,
+      (viewer_like.product_id is not null) as liked
     from product_seasonal_collection_items i
     join products p on p.id = i.product_id
+    left join user_product_likes viewer_like
+      on $5::uuid is not null and viewer_like.user_id=$5 and viewer_like.product_id=p.id
     left join product_shades s on s.id = i.shade_id and s.product_id = p.id and s.is_active = true
       and s.license_status='valid' and s.allowed_uses @> array['mobile_display','recommendation']::text[]
       and (s.license_valid_from is null or s.license_valid_from<=now())
@@ -927,6 +1002,7 @@ async def _build_seasonal_recommendations(
       where candidate.product_id = p.id and candidate.is_active = true
         and candidate.availability_status in ('in_stock', 'limited')
         and candidate.license_status = 'valid'
+        and candidate.affiliate_type <> 'sponsored'
         and candidate.allowed_uses @> array['mobile_display']::text[]
         and (candidate.valid_until is null or candidate.valid_until > now())
         and (candidate.shade_id is null or candidate.shade_id = s.id)
@@ -946,10 +1022,11 @@ async def _build_seasonal_recommendations(
     limit,
     settings.product_offer_max_age_hours,
     category_filter,
+    user_id,
   )
   items = []
   for row in rows:
-    item = map_catalog_product(row)
+    item = map_catalog_product(row, liked=bool(row.get("liked")))
     reason_codes = list(row.get("reason_codes") or []) or [str(row.get("reason_code") or "EDITOR_REVIEWED")]
     reason_labels = {
       "EDITOR_REVIEWED": "에디터가 검수했어요",
@@ -977,7 +1054,7 @@ async def _build_seasonal_recommendations(
   if len(items) < limit:
     attribute_matched_items = await get_auradin_catalog_products(
       db,
-      user_id=None,
+      user_id=user_id,
       limit=limit - len(items),
       categories=category_values,
       strategy="seasonal",
@@ -994,7 +1071,7 @@ async def _build_seasonal_recommendations(
   if len(items) < limit:
     generic_coverage_items = await get_auradin_catalog_products(
       db,
-      user_id=None,
+      user_id=user_id,
       limit=limit - len(items),
       categories=category_values,
       strategy="popular",
@@ -1003,11 +1080,17 @@ async def _build_seasonal_recommendations(
     items.extend(generic_coverage_items)
   if not items:
     fallback_items = await _section_popular_fallback_products(
-      db, settings, user_id=None, limit=limit, variant="seasonal", categories=category_values
+      db, settings, user_id=user_id, limit=limit, variant="seasonal", categories=category_values
     )
-    return _seasonal_fallback_response(fallback_items, reason="SEASONAL_COLLECTION_HAS_NO_ELIGIBLE_ITEMS")
+    return _seasonal_fallback_response(
+      fallback_items,
+      reason="SEASONAL_COLLECTION_HAS_NO_ELIGIBLE_ITEMS",
+      region_code=region_code,
+    )
   source_payload = _json(collection.get("source_payload"))
   source_updated_at = collection.get("source_updated_at") or source_payload.get("sourceUpdatedAt")
+  served_region_code = normalize_trend_region_code(collection.get("region_code"))
+  freshness_status = "stale" if served_stale else str(collection.get("freshness_status") or "fresh")
   return {
     "status": "ready" if items else "empty",
     "collection": {
@@ -1026,6 +1109,16 @@ async def _build_seasonal_recommendations(
       "reasonCodes": collection.get("reason_codes") or [],
       "confidenceScore": float(collection.get("confidence_score") or 0),
       "status": collection.get("status") or "published",
+      "regionCode": served_region_code,
+      "regionLabel": str(collection.get("region_label") or TREND_REGION_LABELS[served_region_code]),
+      "weatherSummary": source_payload.get("weatherSummary"),
+      "weatherUpdatedAt": source_payload.get("weatherUpdatedAt"),
+      "trendUpdatedAt": source_updated_at,
+      "generatedAt": collection.get("created_at") or collection.get("published_at"),
+      "algorithmVersion": collection.get("algorithm_version") or "seasonal_v1",
+      "freshnessStatus": freshness_status,
+      "bedrockUsed": bool(source_payload.get("bedrockUsed")),
+      "nextEvaluationAt": collection.get("next_evaluation_at"),
       "providerStatus": source_payload.get("providerStatus") or "collected",
       "revision": collection.get("revision"),
       "catalogSupplemented": bool(attribute_matched_items or generic_coverage_items),
@@ -1035,7 +1128,7 @@ async def _build_seasonal_recommendations(
       "isStale": _is_seasonal_source_stale(
         source_updated_at,
         max_age_days=settings.product_seasonal_source_max_age_days,
-      ),
+      ) or served_stale,
     },
     "items": items,
     "nextCursor": None,
@@ -1050,6 +1143,7 @@ def _seasonal_fallback_response(
   items: list[dict[str, Any]],
   *,
   reason: str,
+  region_code: str = NATIONAL_REGION_CODE,
   unavailable: bool = False,
 ) -> dict[str, Any]:
   if not items:
@@ -1084,6 +1178,16 @@ def _seasonal_fallback_response(
       "isLive": True,
       "providerStatus": "popularFallback",
       "refreshAfterSeconds": 300,
+      "regionCode": normalize_trend_region_code(region_code),
+      "regionLabel": TREND_REGION_LABELS[normalize_trend_region_code(region_code)],
+      "weatherSummary": None,
+      "weatherUpdatedAt": None,
+      "trendUpdatedAt": now,
+      "generatedAt": now,
+      "algorithmVersion": "popular_fallback_v1",
+      "freshnessStatus": "fallback",
+      "bedrockUsed": False,
+      "nextEvaluationAt": now + timedelta(hours=3),
     },
     "items": items,
     "nextCursor": None,
@@ -1263,16 +1367,35 @@ async def validate_event_reference(
       row = await db.fetchrow(
         """select exists(select 1 from product_seasonal_collection_items i
           join product_seasonal_collections c on c.id=i.collection_id
-          where i.collection_id=$1 and i.product_id=$2 and c.status='published'
-            and c.valid_from<=now() and c.valid_until>now()) as valid""",
+          where i.collection_id=$1 and i.product_id=$2
+            and c.reviewed_at is not null and c.published_at is not null
+            and (
+              (c.status='published' and c.valid_from<=now() and c.valid_until>now())
+              or (
+                c.published_at>=now()-interval '7 days'
+                and (
+                  c.status='published'
+                  or (c.status='suspended' and c.suspension_reason='superseded_by_trend_refresh')
+                )
+              )
+            )) as valid""",
         event.collection_id,
         event.product_id,
       )
     else:
       collection = await db.fetchrow(
         """select exists(select 1 from product_seasonal_collections
-          where id=$1 and status='published'
-            and valid_from<=now() and valid_until>now()) as valid""",
+          where id=$1 and reviewed_at is not null and published_at is not null
+            and (
+              (status='published' and valid_from<=now() and valid_until>now())
+              or (
+                published_at>=now()-interval '7 days'
+                and (
+                  status='published'
+                  or (status='suspended' and suspension_reason='superseded_by_trend_refresh')
+                )
+              )
+            )) as valid""",
         event.collection_id,
       )
       # A published editorial collection can be supplemented at response time
@@ -1479,10 +1602,17 @@ async def record_server_event(
   shade_id: UUID | None = None,
   search_request_id: UUID | None = None,
   context: dict[str, Any] | None = None,
+  consent_granted: bool | None = None,
 ) -> None:
   if not settings.engagement_personalization_v1:
     return
-  if not await consent_is_active(db, user_id=user_id, purpose="engagement_personalization"):
+  if consent_granted is False:
+    return
+  if consent_granted is None and not await consent_is_active(
+    db,
+    user_id=user_id,
+    purpose="engagement_personalization",
+  ):
     return
   await db.execute(
     """

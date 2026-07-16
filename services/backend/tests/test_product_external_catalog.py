@@ -76,6 +76,7 @@ class _PublishedSeasonalDatabase:
         "disclosure_label": None,
         "reason_code": "EDITOR_REVIEWED",
         "sponsorship_type": "organic",
+        "liked": bool(_args[4]) if len(_args) > 4 else False,
       }]
     if "count(distinct user_id)" in query and "from external_product_likes" in query:
       return []
@@ -207,6 +208,21 @@ async def test_missing_published_seasonal_uses_diverse_local_fallback() -> None:
 
 
 @pytest.mark.asyncio
+async def test_region_fallback_keeps_requested_coarse_region_without_coordinates() -> None:
+  result = await get_seasonal_recommendations(
+    _OfflineDatabase(),  # type: ignore[arg-type]
+    Settings(auradin_live_discovery_enabled=False),
+    locale="ko-KR",
+    region_code="KR-11",
+    limit=12,
+  )
+  assert result["status"] == "ready"
+  assert result["collection"]["regionCode"] == "KR-11"
+  assert result["collection"]["regionLabel"] == "서울"
+  assert result["collection"]["freshnessStatus"] == "fallback"
+
+
+@pytest.mark.asyncio
 async def test_sparse_published_seasonal_preserves_editorial_item_and_fills_shelf() -> None:
   db = _PublishedSeasonalDatabase()
   result = await get_seasonal_recommendations(
@@ -228,6 +244,20 @@ async def test_sparse_published_seasonal_preserves_editorial_item_and_fills_shel
     + result["collection"]["attributeMatchedItemCount"]
     + result["collection"]["genericCoverageItemCount"]
   ) == 18
+
+
+@pytest.mark.asyncio
+async def test_published_seasonal_maps_authenticated_viewer_like_state() -> None:
+  db = _PublishedSeasonalDatabase()
+  result = await get_seasonal_recommendations(
+    db,  # type: ignore[arg-type]
+    Settings(auradin_live_discovery_enabled=False),
+    user_id=uuid4(),
+    locale="ko-KR",
+    limit=1,
+  )
+  assert result["items"][0]["productId"] == str(db.product_id)
+  assert result["items"][0]["viewerState"] == {"liked": True}
 
 
 @pytest.mark.asyncio

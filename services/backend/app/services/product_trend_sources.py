@@ -1,7 +1,8 @@
-"""Safe, batch-only trend source adapters for seasonal product collections.
+"""Safe, batch-only trend source adapters for product trend collections.
 
-MCP is intentionally used as a collection/automation boundary.  Mobile request
-handlers never import or call these adapters; they only read published rows.
+Mobile request handlers never import or call these adapters; they only read
+published database rows.  The default source path is live Naver evidence and
+contains no fixed seasonal theme or product fixture.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
 import logging
+import math
 import re
 from typing import Any, Awaitable, Callable, Protocol
 from urllib.parse import urlparse
@@ -17,7 +19,14 @@ from urllib.parse import urlparse
 import httpx
 
 from app.core.settings import Settings
-from app.services.product_trends import NaverShoppingInsightProvider, TrendRequest
+from app.services.product_trend_bedrock import BedrockTrendClassifier
+from app.services.product_trend_discovery import (
+  NaverContentDocument,
+  NaverContentTrendProvider,
+  extract_burst_phrases,
+)
+from app.services.product_trend_quota import TrendCallQuotaLedger
+from app.services.product_trends import NaverTrendMomentumService
 
 
 PRODUCT_CATEGORIES = ("base", "shadow", "brow", "cheek", "lip", "liner")
@@ -62,6 +71,12 @@ class TrendSignal:
   tags: tuple[str, ...]
   reason_codes: tuple[str, ...]
   confidence_score: float
+  # Source magnitudes are kept separate so the product matcher can build
+  # independent ranks instead of blending incomparable provider scales.
+  # Adapters that do not expose a magnitude keep the backward-compatible
+  # defaults and are treated as a content-style trend signal.
+  content_momentum: float = 0.0
+  datalab_momentum: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -100,6 +115,14 @@ class TrendSourceAdapter(Protocol):
 def _text(value: Any, *, max_length: int) -> str:
   value = " ".join(str(value or "").strip().split())
   return value[:max_length]
+
+
+def _nonnegative_float(value: Any) -> float:
+  try:
+    parsed = float(value or 0)
+  except (TypeError, ValueError):
+    return 0.0
+  return parsed if math.isfinite(parsed) and parsed > 0 else 0.0
 
 
 def _string_list(value: Any, *, limit: int = 8, max_length: int = 32) -> tuple[str, ...]:
@@ -189,6 +212,12 @@ def normalize_trend_snapshot(
       tags=_string_list(raw.get("tags")),
       reason_codes=tuple(code.upper().replace(" ", "_") for code in reason_codes),
       confidence_score=confidence,
+      content_momentum=_nonnegative_float(
+        raw.get("contentMomentum", raw.get("contentScore", 0.0))
+      ),
+      datalab_momentum=_nonnegative_float(
+        raw.get("datalabMomentum", raw.get("datalabScore", 0.0))
+      ),
     )
     if signal.keyword not in {existing.keyword for existing in signals}:
       signals.append(signal)
@@ -208,7 +237,13 @@ def normalize_trend_snapshot(
     source_name=source_name,
     source_updated_at=source_updated_at,
     signals=tuple(signals),
-    source_metadata={key: value for key, value in metadata.items() if key in {"provider", "metric", "requestId", "tool"}},
+    source_metadata={
+      key: value for key, value in metadata.items()
+      if key in {
+        "provider", "providers", "metric", "requestId", "tool", "bedrockUsed",
+        "documentCount", "candidateCount",
+      }
+    },
     is_stale=stale,
   )
 
@@ -347,66 +382,138 @@ class MCPTrendSourceAdapter:
     return payload or None
 
 
-_CURATED_SIGNALS = (
-  {"keyword": "글로우 립", "categories": ["lip"], "finishes": ["glossy", "sheer"]},
-  {"keyword": "여름 지속력 베이스", "categories": ["base"], "tags": ["longwear"]},
-  {"keyword": "아이돌 물광 피부", "categories": ["base"], "finishes": ["glossy"]},
-  {"keyword": "장마철 워터프루프", "categories": ["liner", "brow"], "tags": ["waterproof"]},
-  {"keyword": "소프트 블러 메이크업", "categories": ["base", "lip", "cheek"], "finishes": ["matte", "velvet"]},
-)
-
-
 class NaverTrendSourceAdapter:
-  name = "naver_shopping_insight"
+  """Discover, validate and normalize live candidates without fixed keywords."""
 
-  def __init__(self, settings: Settings) -> None:
+  name = "naver_live_beauty_trends"
+
+  def __init__(
+    self,
+    settings: Settings,
+    *,
+    quota_ledger: TrendCallQuotaLedger | None = None,
+    seed_keywords: tuple[str, ...] = (),
+    baseline_documents: tuple[NaverContentDocument, ...] = (),
+    baseline_phrase_counts: dict[str, list[int] | tuple[int, ...]] | None = None,
+    known_vocabulary: set[str] | None = None,
+    content_provider: NaverContentTrendProvider | None = None,
+    momentum_service: NaverTrendMomentumService | None = None,
+    bedrock_classifier: BedrockTrendClassifier | None = None,
+  ) -> None:
     self.settings = settings
+    self.quota_ledger = quota_ledger
+    self.seed_keywords = seed_keywords
+    self.baseline_documents = baseline_documents
+    self.baseline_phrase_counts = baseline_phrase_counts or {}
+    self.known_vocabulary = known_vocabulary or set()
+    self.content_provider = content_provider or NaverContentTrendProvider(
+      settings,
+      quota_ledger=quota_ledger,
+    )
+    self.momentum_service = momentum_service or NaverTrendMomentumService(
+      settings,
+      quota_ledger=quota_ledger,
+    )
+    self.bedrock_classifier = bedrock_classifier
 
   async def collect(self, *, locale: str, now: datetime) -> dict[str, Any] | None:
-    provider = NaverShoppingInsightProvider(self.settings)
-    result = await provider.get_keyword_trends(TrendRequest(
-      keywords=tuple(signal["keyword"] for signal in _CURATED_SIGNALS),
+    if not self.seed_keywords:
+      return None
+    documents = await self.content_provider.collect(self.seed_keywords, now=now)
+    candidates = extract_burst_phrases(
+      documents,
+      list(self.baseline_documents),
+      now=now,
+      baseline_phrase_counts=self.baseline_phrase_counts,
+      min_documents=self.settings.product_trend_burst_min_documents,
+      min_sources=self.settings.product_trend_burst_min_sources,
+      min_z_score=self.settings.product_trend_burst_min_z_score,
+    )
+    if not candidates:
+      return None
+    momenta = await self.momentum_service.collect(
+      tuple(candidate.keyword for candidate in candidates),
       start_date=(now - timedelta(days=28)).date().isoformat(),
       end_date=now.date().isoformat(),
-      category="50000002",
-    ))
-    if result.get("status") != "ready":
-      return None
-    scores: dict[str, float] = {}
-    for series in result.get("series", []):
-      if not isinstance(series, dict):
-        continue
-      points = series.get("data") if isinstance(series.get("data"), list) else []
-      ratios = [float(point.get("ratio", 0)) for point in points if isinstance(point, dict)]
-      if ratios:
-        scores[str(series.get("title") or series.get("keyword") or "").strip()] = sum(ratios[-7:]) / min(7, len(ratios))
-    ranked = sorted(_CURATED_SIGNALS, key=lambda signal: (-scores.get(str(signal["keyword"]), 0.0), str(signal["keyword"])))
-    return {
-      "title": f"{ranked[0]['keyword']} 중심 실시간 트렌드",
-      "summary": "최근 쇼핑 클릭 변화가 큰 메이크업 키워드와 판매 가능한 상품을 연결했어요.",
-      "trendWindow": "최근 28일 쇼핑 클릭 변화",
-      "locale": locale,
-      "sourceName": "Naver Shopping Insight",
-      "sourceUpdatedAt": now.isoformat(),
-      "sourceMetadata": {"provider": self.name, "metric": result.get("metric", "relative_click_ratio")},
-      "trends": [{**signal, "confidenceScore": 0.72, "reasonCodes": ["SHOPPING_CLICK_RISE"]} for signal in ranked],
+      shopping_category="50000002",
+      now=now,
+    )
+    momentum_by_keyword: dict[str, list[Any]] = {}
+    for momentum in momenta:
+      momentum_by_keyword.setdefault(momentum.keyword.casefold(), []).append(momentum)
+
+    bedrock_result = None
+    if self.bedrock_classifier is not None:
+      bedrock_result = await self.bedrock_classifier.classify_if_needed(
+        candidates,
+        documents,
+        known_vocabulary=self.known_vocabulary,
+        now=now,
+      )
+    bedrock_by_keyword = {
+      item.keyword.casefold(): item
+      for item in (bedrock_result.items if bedrock_result is not None else ())
     }
 
-
-class CuratedTrendSourceAdapter:
-  name = "curated_seasonal_fallback"
-
-  async def collect(self, *, locale: str, now: datetime) -> dict[str, Any]:
-    season = "여름" if 6 <= now.month <= 8 else "겨울" if now.month in {12, 1, 2} else "환절기"
+    ranked: list[tuple[float, dict[str, Any]]] = []
+    for candidate in candidates:
+      validations = momentum_by_keyword.get(candidate.keyword.casefold(), [])
+      positive_sources = {value.source for value in validations if value.momentum > 0}
+      semantic = bedrock_by_keyword.get(candidate.keyword.casefold())
+      categories = semantic.categories if semantic is not None else candidate.categories
+      finishes = semantic.finishes if semantic is not None else candidate.finishes
+      tags = semantic.benefit_tags if semantic is not None else candidate.benefit_tags
+      confidence = min(
+        1.0,
+        candidate.confidence_score
+        + min(0.15, len(positive_sources) * 0.075)
+        + (0.08 if semantic is not None else 0.0),
+      )
+      reason_codes = ["NAVER_CONTENT_BURST"]
+      if "naver_search" in positive_sources:
+        reason_codes.append("SEARCH_INTEREST_RISE")
+      if "naver_shopping" in positive_sources:
+        reason_codes.append("SHOPPING_CLICK_RISE")
+      if semantic is not None:
+        reason_codes.append("BEDROCK_AMBIGUITY_RESOLVED")
+      signal = {
+        "keyword": candidate.keyword,
+        "categories": list(categories),
+        "finishes": list(finishes),
+        "tags": list(tags),
+        "confidenceScore": round(confidence, 4),
+        "reasonCodes": reason_codes,
+      }
+      rank_score = candidate.z_score + sum(max(0.0, value.momentum) for value in validations)
+      ranked.append((rank_score, signal))
+    ranked.sort(key=lambda value: (-value[0], str(value[1]["keyword"])))
+    top_keyword = str(ranked[0][1]["keyword"])
+    providers = ["naver_content"]
+    if any(value.source == "naver_search" for value in momenta):
+      providers.append("naver_search")
+    if any(value.source == "naver_shopping" for value in momenta):
+      providers.append("naver_shopping")
+    summary = (
+      "최근 뷰티 콘텐츠 급상승과 검색·쇼핑 클릭 변화를 함께 검증해 구성했어요."
+      if len(providers) > 1
+      else "최근 여러 뷰티 콘텐츠 유형에서 함께 급상승한 표현을 반영했어요."
+    )
     return {
-      "title": f"{season} 메이크업 트렌드",
-      "summary": "외부 트렌드 연결을 갱신하는 동안 계절 적합성과 상품 인기를 함께 반영했어요.",
-      "trendWindow": f"{now.year} {season} 운영 fallback",
+      "title": f"{top_keyword} 중심 요즘 트렌드",
+      "summary": summary,
+      "trendWindow": "최근 24시간 급상승 · 28일 기준선",
       "locale": locale,
-      "sourceName": self.name,
+      "sourceName": "Naver live beauty trends",
       "sourceUpdatedAt": now.isoformat(),
-      "sourceMetadata": {"provider": self.name, "metric": "curated_fallback"},
-      "trends": [{**signal, "confidenceScore": 0.55, "reasonCodes": ["CURATED_SEASONAL_FALLBACK"]} for signal in _CURATED_SIGNALS],
+      "sourceMetadata": {
+        "provider": self.name,
+        "providers": providers,
+        "metric": "content_burst_and_self_momentum",
+        "documentCount": len(documents),
+        "candidateCount": len(ranked),
+        "bedrockUsed": bool(bedrock_result and bedrock_result.invoked),
+      },
+      "trends": [signal for _, signal in ranked],
     }
 
 
@@ -417,14 +524,10 @@ async def collect_trend_snapshot(
   now: datetime | None = None,
   adapters: tuple[TrendSourceAdapter, ...] | None = None,
 ) -> TrendSnapshot:
-  """Try MCP, then live Naver trends, then deterministic curated signals."""
+  """Collect live signals; never manufacture a hardcoded publish candidate."""
 
   collected_at = now or datetime.now(timezone.utc)
-  sources = adapters or (
-    MCPTrendSourceAdapter(settings),
-    NaverTrendSourceAdapter(settings),
-    CuratedTrendSourceAdapter(),
-  )
+  sources = adapters or (NaverTrendSourceAdapter(settings),)
   last_error: Exception | None = None
   for adapter in sources:
     try:

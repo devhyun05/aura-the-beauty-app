@@ -1,4 +1,5 @@
 import type {ImageSourcePropType} from 'react-native';
+import type {TrendRegionCode} from './services/trendRegionService';
 
 export type ProductRecommendationCategory =
   | 'all'
@@ -166,6 +167,16 @@ export type SeasonalRecommendationData = {
     sourceLinks?: string[];
     sourceUpdatedAt?: string | null;
     trendWindow: string;
+    regionCode?: TrendRegionCode;
+    regionLabel?: string | null;
+    weatherSummary?: string | null;
+    weatherUpdatedAt?: string | null;
+    trendUpdatedAt?: string | null;
+    generatedAt?: string | null;
+    algorithmVersion?: string | null;
+    freshnessStatus?: 'fresh' | 'stale' | 'fallback' | string;
+    bedrockUsed?: boolean;
+    nextEvaluationAt?: string | null;
     trendKeywords?: string[];
     reasonCodes?: string[];
     confidenceScore?: number;

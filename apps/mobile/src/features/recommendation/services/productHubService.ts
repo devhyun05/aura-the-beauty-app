@@ -11,6 +11,11 @@ import type {
   ProductSearchData,
   SeasonalRecommendationData,
 } from '../types';
+import {
+  DEFAULT_TREND_REGION_CODE,
+  normalizeTrendRegionCode,
+  type TrendRegionCode,
+} from './trendRegionService';
 
 const disabledFlags: ProductRecommendationFeatureFlags = {
   productHubV2: true,
@@ -192,6 +197,7 @@ export async function getSeasonalRecommendations(
   _entryKey?: number,
   limit = 12,
   category?: Exclude<ProductRecommendationCategory, 'all'>,
+  regionCode: TrendRegionCode = DEFAULT_TREND_REGION_CODE,
 ): Promise<SeasonalRecommendationData> {
   if (!getProductBackendApiBaseUrl()) {
     return {status: 'unavailable', collection: null, items: []};
@@ -199,6 +205,7 @@ export async function getSeasonalRecommendations(
   const params = new URLSearchParams({
     locale: 'ko-KR',
     limit: String(Math.min(60, Math.max(1, limit))),
+    regionCode: normalizeTrendRegionCode(regionCode),
   });
   if (category) params.set('category', category);
   const requestPath = `/products/recommendations/seasonal?${params.toString()}`;

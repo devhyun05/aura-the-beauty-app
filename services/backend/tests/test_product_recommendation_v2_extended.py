@@ -10,7 +10,14 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.api.products import _is_at_least_14, _search_event_context
+import app.services.product_recommendations as product_recommendations_service
+
+from app.api.products import (
+  _is_at_least_14,
+  _normalize_search_intent,
+  _resolve_opaque_search_intent,
+  _search_event_context,
+)
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.schemas.makeup import MakeupStyleCreate
@@ -23,6 +30,7 @@ from app.services.auradin_agent.session_manager import (
 )
 from app.services.auradin_agent.enrichment import _enrich_live_discovery
 from app.services.product_catalog_ingestion import (
+  _expire_omitted_attribute_evidence,
   apply_catalog_manifest,
   canonical_manifest_bytes,
   validate_catalog_manifest,
@@ -220,6 +228,21 @@ def _catalog_manifest() -> dict:
         "brandName": "Licensed Brand",
         "productName": "Reviewed Lip",
         "category": "lip",
+        "priceKrw": 21000,
+        "tags": ["글로우", "여름", "글로우"],
+        "productPayload": {"finish": "gloss", "features": ["lightweight"]},
+        "attributeEvidence": [
+          {
+            "attributeKey": "lightweight",
+            "attributeValue": True,
+            "sourceType": "licensed_catalog",
+            "sourceReference": "contract:attribute:1",
+            "confidenceScore": 0.93,
+            "observedAt": _iso(NOW - timedelta(days=2)),
+            "reviewedAt": _iso(NOW - timedelta(days=1)),
+            "expiresAt": _iso(NOW + timedelta(days=30)),
+          }
+        ],
         "licenseType": "partner_feed",
         "sourceReference": "contract:item:1",
         "licenseStatus": "valid",
@@ -350,6 +373,77 @@ def test_catalog_manifest_accepts_only_complete_rights_evidence() -> None:
   normalized = validate_catalog_manifest(_catalog_manifest(), _catalog_settings())
   assert normalized["products"][0]["shades"][0]["srgbHex"] == "#B96872"
   assert normalized["products"][0]["offers"][0]["sellerDomain"] == "shop.example.com"
+  assert normalized["products"][0]["priceKrw"] == 21000
+  assert normalized["products"][0]["tags"] == ["글로우", "여름"]
+  assert normalized["products"][0]["productPayload"]["finish"] == "gloss"
+  assert normalized["products"][0]["attributeEvidence"][0]["attributeKey"] == "lightweight"
+  assert len(normalized["products"][0]["attributeEvidence"][0]["evidenceFingerprint"]) == 64
+  assert normalized["products"][0]["_attributeEvidenceAuthoritative"] is True
+
+
+class _AttributeEvidenceConnection:
+  def __init__(self) -> None:
+    self.executed: list[tuple[str, tuple[object, ...]]] = []
+
+  async def execute(self, query: str, *args) -> str:
+    self.executed.append((query, args))
+    return "UPDATE 1"
+
+
+@pytest.mark.asyncio
+async def test_authoritative_attribute_evidence_snapshot_expires_omitted_verified_rows() -> None:
+  connection = _AttributeEvidenceConnection()
+  product_id = uuid4()
+  active = ["a" * 64, "b" * 64]
+  await _expire_omitted_attribute_evidence(
+    connection,
+    product_id=product_id,
+    active_fingerprints=active,
+  )
+  query, args = connection.executed[0]
+  assert "status='expired'" in query
+  assert "status='verified'" in query
+  assert "source_type='licensed_catalog'" in query
+  assert "not (evidence_fingerprint=any($2::text[]))" in query
+  assert args == (product_id, active)
+
+  manifest = _catalog_manifest()
+  manifest["products"][0].pop("attributeEvidence")
+  normalized = validate_catalog_manifest(manifest, _catalog_settings())
+  assert normalized["products"][0]["_attributeEvidenceAuthoritative"] is False
+
+
+@pytest.mark.asyncio
+async def test_explicit_empty_attribute_evidence_is_an_authoritative_revocation_snapshot() -> None:
+  manifest = _catalog_manifest()
+  manifest["products"][0]["attributeEvidence"] = []
+  normalized = validate_catalog_manifest(manifest, _catalog_settings())
+  assert normalized["products"][0]["_attributeEvidenceAuthoritative"] is True
+
+  connection = _AttributeEvidenceConnection()
+  await _expire_omitted_attribute_evidence(
+    connection,
+    product_id=normalized["products"][0]["id"],
+    active_fingerprints=[],
+  )
+  assert connection.executed[0][1][1] == []
+
+
+@pytest.mark.parametrize(
+  ("field_value", "expected_code"),
+  (
+    ({"tags": "not-a-list"}, "INVALID_CATALOG_MANIFEST"),
+    ({"productPayload": ["not-an-object"]}, "INVALID_CATALOG_MANIFEST"),
+    ({"priceKrw": -1}, "INVALID_CATALOG_MANIFEST"),
+    ({"attributeEvidence": [{"attributeKey": "season_magic"}]}, "INVALID_CATALOG_MANIFEST"),
+  ),
+)
+def test_catalog_manifest_rejects_invalid_matching_attributes(field_value: dict, expected_code: str) -> None:
+  manifest = _catalog_manifest()
+  manifest["products"][0].update(field_value)
+  with pytest.raises(AppError) as error:
+    validate_catalog_manifest(manifest, _catalog_settings())
+  assert error.value.code == expected_code
 
 
 def test_catalog_manifest_accepts_brow_as_a_first_class_product_category() -> None:
@@ -560,9 +654,106 @@ def test_search_event_context_drops_raw_query_and_allows_only_known_category() -
   assert _search_event_context(None) == {}
 
 
+class _TrendIntentConnection:
+  def __init__(self, rows: list[dict]) -> None:
+    self.rows = rows
+
+  async def fetch(self, query: str):
+    assert "trend_keyword_candidates" in query
+    assert "locale='ko-KR'" in query
+    return self.rows
+
+
+@pytest.mark.asyncio
+async def test_search_intent_is_hmac_only_and_associates_a_known_candidate() -> None:
+  candidate_id = uuid4()
+  settings = Settings(product_event_signing_secret="test-intent-secret")
+  intent = await _resolve_opaque_search_intent(
+    _TrendIntentConnection([
+      {
+        "id": candidate_id,
+        "normalized_keyword": "장마철 워터프루프",
+        "category_codes": ["liner"],
+        "status": "qualified",
+        "confidence_score": 0.9,
+      }
+    ]),
+    settings,
+    query="  장마철, 워터프루프!  ",
+    category="liner",
+  )
+  assert intent["trendCandidateId"] == str(candidate_id)
+  assert len(intent["trendIntentHash"]) == 64
+  assert "장마철" not in json.dumps(intent, ensure_ascii=False)
+  context = _search_event_context("liner", opaque_intent=intent)
+  assert context == {"category": "liner", **intent}
+
+
+@pytest.mark.asyncio
+async def test_search_intent_fails_closed_without_secret_and_never_returns_plaintext() -> None:
+  connection = _TrendIntentConnection([])
+  assert await _resolve_opaque_search_intent(
+    connection,
+    Settings(product_event_signing_secret=None),
+    query="글로우 립",
+    category="lip",
+  ) == {}
+  assert _normalize_search_intent("  글로우-립!! ") == "글로우 립"
+
+
+@pytest.mark.asyncio
+async def test_generic_one_token_search_does_not_attach_a_broader_trend_candidate() -> None:
+  candidate_id = uuid4()
+  intent = await _resolve_opaque_search_intent(
+    _TrendIntentConnection([
+      {
+        "id": candidate_id,
+        "normalized_keyword": "글로우 립",
+        "category_codes": ["lip"],
+        "status": "qualified",
+        "confidence_score": 0.95,
+      }
+    ]),
+    Settings(product_event_signing_secret="test-intent-secret"),
+    query="립",
+    category="lip",
+  )
+
+  assert "trendCandidateId" not in intent
+  assert len(intent["trendIntentHash"]) == 64
+
+
 def test_like_contract_rejects_client_authored_product_metadata() -> None:
   with pytest.raises(ValidationError):
     ProductLikeRequest(purchaseUrl="https://evil.test", productName="Injected")
+
+
+@pytest.mark.asyncio
+async def test_seasonal_viewer_cache_is_bounded_and_can_invalidate_one_user(monkeypatch) -> None:
+  class _DisconnectedDb:
+    is_connected = False
+
+  async def fake_build(*_args, user_id=None, **_kwargs):
+    return {"status": "ready", "viewer": str(user_id), "items": []}
+
+  monkeypatch.setattr(product_recommendations_service, "_build_seasonal_recommendations", fake_build)
+  product_recommendations_service.clear_seasonal_recommendation_cache()
+  db = _DisconnectedDb()
+  viewers = [uuid4() for _ in range(product_recommendations_service._SEASONAL_RESPONSE_CACHE_MAX_ENTRIES + 1)]
+  for viewer in viewers:
+    await product_recommendations_service.get_seasonal_recommendations(
+      db,  # type: ignore[arg-type]
+      Settings(),
+      locale="ko-KR",
+      limit=12,
+      user_id=viewer,
+    )
+
+  assert len(product_recommendations_service._SEASONAL_RESPONSE_CACHE) == 512
+  assert all(key[2] != str(viewers[0]) for key in product_recommendations_service._SEASONAL_RESPONSE_CACHE)
+  product_recommendations_service.clear_seasonal_recommendation_cache(user_id=viewers[-1])
+  assert all(key[2] != str(viewers[-1]) for key in product_recommendations_service._SEASONAL_RESPONSE_CACHE)
+  product_recommendations_service.clear_seasonal_recommendation_cache()
 
 
 def test_exposure_tokens_are_user_product_bound_and_expiring() -> None:
@@ -729,6 +920,18 @@ class _InvalidEventShadeDb:
     return {"valid": False}
 
 
+class _SeasonalEventReferenceDb:
+  def __init__(self) -> None:
+    self.queries: list[str] = []
+
+  async def fetchrow(self, query: str, *_args):
+    self.queries.append(query)
+    assert "superseded_by_trend_refresh" in query
+    assert "automatic_health_rollback" not in query
+    assert "interval '7 days'" in query
+    return {"valid": True}
+
+
 @pytest.mark.asyncio
 async def test_event_shade_must_belong_to_the_event_product() -> None:
   event = ProductEvent(
@@ -746,6 +949,35 @@ async def test_event_shade_must_belong_to_the_event_product() -> None:
       event=event,
     )
   assert error.value.code == "INVALID_EVENT_SHADE"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("external", (False, True))
+async def test_events_accept_the_exact_stale_seasonal_collection_serving_window(external: bool) -> None:
+  db = _SeasonalEventReferenceDb()
+  payload = {
+    "eventId": uuid4(),
+    "eventType": "product_open",
+    "occurredAt": NOW,
+    "section": "seasonal",
+    "collectionId": uuid4(),
+    "position": 0,
+  }
+  if external:
+    payload.update({
+      "externalSource": "auradin_catalog",
+      "externalProductId": "auradin-seed-3f16a4750d11b658",
+    })
+  else:
+    payload["productId"] = uuid4()
+
+  await validate_event_reference(  # type: ignore[arg-type]
+    db,
+    user_id=uuid4(),
+    event=ProductEvent(**payload),
+  )
+
+  assert len(db.queries) == 1
 
 
 def test_experiment_assignment_is_deterministic_and_configurable() -> None:
