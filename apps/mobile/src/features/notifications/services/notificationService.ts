@@ -163,6 +163,26 @@ export async function presentRealtimeAppNotification(
   });
 }
 
+export async function suppressReportCompletionNotification(
+  notificationType: AppNotification['notificationType'],
+  reportId: string,
+): Promise<void> {
+  await requestBackendJson('/notifications/report-suppressions', {
+    method: 'POST',
+    body: {notificationType, reportId},
+  });
+}
+
+export async function releaseReportCompletionNotificationSuppression(
+  notificationType: AppNotification['notificationType'],
+  reportId: string,
+): Promise<void> {
+  await requestBackendJson('/notifications/report-suppressions', {
+    method: 'DELETE',
+    body: {notificationType, reportId},
+  });
+}
+
 export async function unregisterCurrentPushDevice(): Promise<void> {
   const expoPushToken = await SecureStore.getItemAsync(PUSH_TOKEN_STORAGE_KEY);
   if (!expoPushToken) {

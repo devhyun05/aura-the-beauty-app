@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 EXPO_PUSH_TOKEN_PATTERN = re.compile(r"^(?:Expo|Exponent)PushToken\[[^\]]+\]$")
 EXPO_PUSH_BATCH_SIZE = 100
 MAX_PUSH_ATTEMPTS = 3
+PUSH_SUPPRESSION_GRACE_SECONDS = 1.0
 REPORT_NOTIFICATION_TYPES = frozenset(
   {
     "analysis_report_completed",
@@ -30,6 +32,29 @@ REPORT_NOTIFICATION_TYPES = frozenset(
 
 def is_expo_push_token(value: str) -> bool:
   return bool(EXPO_PUSH_TOKEN_PATTERN.fullmatch(value.strip()))
+
+
+async def _is_report_notification_suppressed(
+  db: Database,
+  *,
+  user_id: UUID,
+  notification_type: str,
+  report_id: str,
+) -> bool:
+  suppression = await db.fetchrow(
+    """
+    select 1 as suppressed
+    from report_notification_suppressions
+    where user_id = $1
+      and notification_type = $2
+      and report_id = $3
+      and expires_at > now()
+    """,
+    user_id,
+    notification_type,
+    report_id,
+  )
+  return suppression is not None
 
 
 def _chunks(values: list[dict[str, Any]], size: int) -> Iterable[list[dict[str, Any]]]:
@@ -135,6 +160,31 @@ async def _deliver_notification(
   settings: Settings,
   notification_id: UUID,
 ) -> None:
+  notification = await db.fetchrow(
+    """
+    select id, user_id, notification_type, title, body, data
+    from app_notifications
+    where id = $1
+      and read_at is null
+    """,
+    notification_id,
+  )
+
+  if notification is None:
+    await db.execute(
+      """
+      update notification_outbox
+      set status = 'completed',
+          completed_at = now(),
+          last_error = 'notification-viewed-before-push',
+          updated_at = now()
+      where notification_id = $1
+        and status in ('pending', 'failed', 'sending')
+      """,
+      notification_id,
+    )
+    return
+
   outbox = await db.fetchrow(
     """
     update notification_outbox
@@ -152,18 +202,6 @@ async def _deliver_notification(
   )
 
   if outbox is None:
-    return
-
-  notification = await db.fetchrow(
-    """
-    select id, user_id, notification_type, title, body, data
-    from app_notifications
-    where id = $1
-    """,
-    notification_id,
-  )
-
-  if notification is None:
     return
 
   devices = await db.fetch(
@@ -290,6 +328,21 @@ async def create_and_send_notification(
     return
 
   try:
+    report_id = str(data.get("reportId") or data.get("report_id") or "").strip()
+    if report_id and await _is_report_notification_suppressed(
+      db,
+      user_id=user_id,
+      notification_type=notification_type,
+      report_id=report_id,
+    ):
+      logger.info(
+        "[aura:notifications] viewed-report-skipped type=%s userId=%s reportId=%s",
+        notification_type,
+        user_id,
+        report_id,
+      )
+      return
+
     notification = await db.fetchrow(
       """
       insert into app_notifications (
@@ -353,6 +406,12 @@ async def create_and_send_notification(
           notification["id"],
           exc_info=True,
         )
+      if settings.push_notifications_enabled:
+        # The foreground app removes or marks this notification as read when
+        # the user is already waiting for or viewing the matching report.
+        # Give that realtime acknowledgement a short window before APNs/Expo
+        # delivery, then _deliver_notification rechecks the unread row.
+        await asyncio.sleep(PUSH_SUPPRESSION_GRACE_SECONDS)
     await _deliver_notification(db, settings, notification["id"])
   except Exception:  # noqa: BLE001 - notification delivery is fail-open.
     logger.warning(

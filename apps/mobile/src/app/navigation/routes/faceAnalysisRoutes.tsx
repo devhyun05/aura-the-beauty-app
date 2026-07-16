@@ -41,6 +41,10 @@ import type {
 import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
 import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
 import {
+  releaseReportCompletionNotificationSuppression,
+  suppressReportCompletionNotification,
+} from '../../../features/notifications';
+import {
   analyzePersonalColorCapture,
   type PersonalColorAnalysisOutcome,
 } from '../../../features/personal-color/services/personalColorService';
@@ -314,6 +318,8 @@ export function FaceAnalysisLoadingRouteScreen({
   const [analysisErrorMessage, setAnalysisErrorMessage] = React.useState<string | null>(null);
   const [analysisRequestKey, setAnalysisRequestKey] = React.useState(0);
   const analysisRetryCountRef = React.useRef(0);
+  const activeNotificationReportIdRef = React.useRef<string | null>(null);
+  const reportWasViewedRef = React.useRef(false);
   const verticalThirdsPromiseRef =
     React.useRef<Promise<FaceVerticalThirdsResult | null> | null>(null);
   // 보고서 POST 가 대기하는 2D 기하 promise — POST deps 에 state 를 넣으면
@@ -330,7 +336,22 @@ export function FaceAnalysisLoadingRouteScreen({
 
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
+    reportWasViewedRef.current = false;
   }, [selectedFaceCapture?.mediaId, selectedFaceCapture?.photoCaptureId]);
+
+  React.useEffect(
+    () => () => {
+      const reportId = activeNotificationReportIdRef.current;
+      if (!reportId || reportWasViewedRef.current) {
+        return;
+      }
+      void releaseReportCompletionNotificationSuppression(
+        'analysis_report_completed',
+        reportId,
+      ).catch(() => undefined);
+    },
+    [],
+  );
 
   // [Unity still-analysis lease 시작] 아래 정지영상 분석(세로비율·퍼스널컬러)은
   // Unity homuler(IMAGE 모드) 코루틴에서 돌므로 플레이어 루프가 실행 중이어야
@@ -561,6 +582,29 @@ export function FaceAnalysisLoadingRouteScreen({
             faceVerticalThirds: verticalThirds,
             personalColor: personalColorOutcome,
           },
+          {
+            onAnalysisCreated: async reportId => {
+              const previousReportId = activeNotificationReportIdRef.current;
+              if (previousReportId && previousReportId !== reportId) {
+                void releaseReportCompletionNotificationSuppression(
+                  'analysis_report_completed',
+                  previousReportId,
+                ).catch(() => undefined);
+              }
+              activeNotificationReportIdRef.current = reportId;
+              try {
+                await suppressReportCompletionNotification(
+                  'analysis_report_completed',
+                  reportId,
+                );
+              } catch (error) {
+                console.info('[aura:notifications] report-suppression-skipped', {
+                  message: error instanceof Error ? error.message : String(error),
+                  reportId,
+                });
+              }
+            },
+          },
         );
       })
       .then(report => {
@@ -672,6 +716,7 @@ export function FaceAnalysisLoadingRouteScreen({
     if (!navigation.isFocused()) {
       return;
     }
+    reportWasViewedRef.current = true;
 
     // replace: 로딩을 스택에서 제거한다. navigate로 남겨두면 다음 분석 세션에서
     // 캡처 교체 시 이 화면의 효과들이 백그라운드로 재실행돼 보고서 POST가 중복되고,

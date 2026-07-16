@@ -45,6 +45,15 @@ create table if not exists notification_outbox (
   constraint chk_notification_outbox_attempts check (attempts >= 0)
 );
 
+create table if not exists report_notification_suppressions (
+  user_id uuid not null references users(id) on delete cascade,
+  notification_type text not null,
+  report_id text not null,
+  expires_at timestamptz not null default now() + interval '30 minutes',
+  created_at timestamptz not null default now(),
+  primary key (user_id, notification_type, report_id)
+);
+
 create index if not exists idx_user_push_devices_user_enabled
   on user_push_devices (user_id, enabled, last_seen_at desc);
 create index if not exists idx_app_notifications_user_created
@@ -54,6 +63,8 @@ create index if not exists idx_app_notifications_user_unread
 create index if not exists idx_notification_outbox_pending
   on notification_outbox (status, next_attempt_at)
   where status in ('pending', 'failed');
+create index if not exists idx_report_notification_suppressions_expiry
+  on report_notification_suppressions (expires_at);
 """
 
 
