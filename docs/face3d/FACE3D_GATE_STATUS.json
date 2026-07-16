@@ -41,6 +41,21 @@
     "receiptPath": "artifacts/face3d/semantic-approval-g2/ARKitFaceSemanticMapV1.g2.promotion-receipt.json",
     "receiptSha256": "79329bdf7a037b23d70e1e03a7438998b3b224dca23d0ca9abd6ee5291945e8a"
   },
+  "confidenceCalibration": {
+    "status": "pending",
+    "validationStatus": "not_run",
+    "profileSchemaVersion": "aura.face3d-profile.v2",
+    "policyId": null,
+    "gateVersion": "face3d-gate-v2",
+    "receiptSchemaVersion": "aura.face3d-confidence-calibration-receipt.v1",
+    "signatureAlgorithm": "hmac-sha256-v1",
+    "approvalArtifactPath": null,
+    "approvalArtifactSha256": null,
+    "receiptPath": null,
+    "receiptSha256": null,
+    "featureFlagDefault": "off",
+    "note": "Gate 6B device evidence, independent validation, product-owner approval artifact, HMAC receipt, and backend replay protection are not complete. Calibrated self-claims remain blocked."
+  },
   "offlineDiagnostics17": {
     "captureCount": 17,
     "topologyExactMatchCount": 17,

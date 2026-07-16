@@ -2,12 +2,21 @@
 
 상태: **구현·제품 오너 해부 검수·17캡처 오프라인 승격 완료**
 live map: `arkit-face3d-g2-product-approved-v1`
-프로필 스키마: `aura.face3d-profile.v1` (하위 호환 유지)
+프로필 스키마: 제품 노출 `aura.face3d-profile.v1` (하위 호환 유지),
+검증 전용 raw 거리 `aura.face3d-profile.v2`
 
 ## 0. 제품 경계
 
-- 이 값들은 ARKit/TrueDepth 얼굴 mesh의 local 3D 좌표를 `faceScale`로 나눈 **무차원 상대값**이다.
-- 절대 mm, 의료 진단, 모집단 백분위가 아니다. 보고서에서는 값과 방향 설명만 제공한다.
+- 제품에 노출하는 값들은 ARKit/TrueDepth 얼굴 mesh의 local 3D 좌표를
+  `faceScale`로 나눈 **무차원 상대값**이다.
+- v2는 반복성·보정 검증을 위해 `valueMm`을 내부 병렬 필드로 보존한다.
+  normalized stream과 raw-meter stream은 각각 median/MAD/outlier rejection을
+  수행하며, `valueMmConfidence`, `valueMmValidFrameCount`, `valueMmMad`도 raw
+  집계에서 독립적으로 계산한다. raw inlier 수가 해당 immutable policy의
+  최소 frame 수에 못 미치면 `valueMm:null`로 차단하되 품질 필드는 진단용으로
+  남긴다.
+- v2의 mm 필드는 사용자 카드·AI prompt·제품 판정에 노출하지 않는다. 의료 진단,
+  임상 정확도, 모집단 백분위를 뜻하지 않는다.
 - 기존 G1 프로필에는 Tier-2 여섯 키가 없을 수 있다. 파서·DB 복원·보고서는 이 경우 기존 다섯 키만 정상 처리한다.
 - 제품 오너 결정에 따라 신규 `3명 × 각 3회 neutral` 실기기 반복성 수집은 이번 G2 승격에서 면제했다. 대신 기존 17개 ARFace export의 topology exact match와 11지표 finite 계산을 승격 gate로 사용했다. 이 면제는 임상 정확도나 인구집단 일반화를 뜻하지 않는다.
 
@@ -58,8 +67,11 @@ Tier-2 여섯 지표는 다음과 같다.
 ## 4. 수집·직렬화·저장·표시
 
 1. Unity evaluator가 한 frame의 11지표를 계산한다. Tier-2 그룹 부재·퇴화는 해당 optional 값만 null이며 기본 frame을 차단하지 않는다.
-2. `Face3DProfileCollector`가 각 지표의 median/MAD/confidence/validFrameCount를 집계한다.
-3. canonical profile JSON은 여섯 optional 키도 직렬화하며, 계산 불가는 `value:null`이다.
+2. `Face3DProfileCollector`가 normalized와 raw-meter stream의
+   median/MAD/confidence/validFrameCount를 각각 집계한다.
+3. v1 canonical JSON은 기존 normalized 계약을 바꾸지 않는다. v2 canonical JSON은
+   여섯 optional 키와 내부 `valueMm` 품질 필드를 항상 직렬화하며, raw 품질 최소치
+   미달은 `valueMm:null`이다.
 4. 모바일은 프로필 전체를 AI 요청의 `face3d`와 원본 `measurements.face3d`에 필터 없이 전달한다.
 5. 백엔드는 전체 request payload를 detail JSONB에 저장하고 상세 GET에서 그대로 돌려준다. 목록 응답만 용량을 위해 measurements를 제외한다.
 6. 보고서 상세 화면은 세션 프로필 또는 DB에서 복원한 `measurements.face3d`를 사용해 값이 존재하는 11개 카드를 표시한다. 각 카드는 숫자와 쉬운 방향 설명을 함께 표시한다.

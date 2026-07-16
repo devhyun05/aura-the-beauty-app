@@ -10,6 +10,9 @@
 // 크래시를 일으켜 제거됐고(020cb33), 랜드마크와 pose 는 Unity homuler(IMAGE 모드)가
 // 검출해 options[@"landmarks"] 로 넘겨준다. homuler 는 MediaPipe 와 동일한 478점
 // 메시라 기존 인덱스 상수(9/10/151/234/454/2/97/326/148/152/176/377/400)를 그대로 쓴다.
+// Phase 1 정면화 계산은 RN의 순수 replay 코어가 같은 478점+transformationMatrix로
+// 수행한다. 이 네이티브 payload의 keypoints/debugPoints는 오버레이·bbox가 원본
+// 사진 프레임을 유지하도록 보정 전 좌표만 방출한다.
 
 static CGFloat AURAFaceRatioClamp(CGFloat value)
 {
@@ -425,7 +428,6 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
       }
     }
 
-    NSDictionary *hApprox = idx10;
     NSDictionary *glabella = AURAFaceRatioMedianPoint(glabellaCandidates);
     NSDictionary *subnasale = AURAFaceRatioMedianPoint(subnasaleCandidates);
     NSDictionary *menton = AURAFaceRatioBottomContourPoint(
@@ -443,7 +445,6 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
         ]);
 
     NSMutableDictionary *keypoints = [NSMutableDictionary dictionary];
-    if (hApprox) keypoints[@"hApprox"] = hApprox;
     if (glabella) keypoints[@"glabella"] = glabella;
     if (subnasale) keypoints[@"subnasale"] = subnasale;
     if (menton) keypoints[@"menton"] = menton;

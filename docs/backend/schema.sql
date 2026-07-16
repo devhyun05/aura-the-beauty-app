@@ -214,6 +214,33 @@ create table if not exists analysis_reports (
 
 comment on table analysis_reports is 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.';
 
+create table if not exists face3d_calibration_receipt_consumptions (
+  receipt_id text primary key,
+  capture_nonce text not null unique,
+  profile_binding_sha256 text not null,
+  collection_policy_id text not null,
+  gate_version text not null,
+  signing_key_id text not null,
+  approval_artifact_sha256 text not null,
+  subject_context_id text not null,
+  report_context_id text not null,
+  issued_at timestamptz not null,
+  expires_at timestamptz not null,
+  consumed_at timestamptz not null default now(),
+  constraint chk_face3d_receipt_profile_sha
+    check (profile_binding_sha256 ~ '^[0-9a-f]{64}$'),
+  constraint chk_face3d_receipt_artifact_sha
+    check (approval_artifact_sha256 ~ '^[0-9a-f]{64}$'),
+  constraint chk_face3d_receipt_expiry
+    check (expires_at > issued_at)
+);
+
+create index if not exists idx_face3d_calibration_receipts_context
+  on face3d_calibration_receipt_consumptions (subject_context_id, report_context_id);
+
+comment on table face3d_calibration_receipt_consumptions is
+  'One-time replay ledger for server-verified Face3D calibration receipts. Empty in default-OFF deployments.';
+
 create table if not exists analysis_stage_runs (
   id uuid primary key default gen_random_uuid(),
   report_id uuid not null references analysis_reports(id) on delete cascade,

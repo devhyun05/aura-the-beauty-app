@@ -1,9 +1,9 @@
-"""측정 데이터 3-반영 규칙의 백엔드 계약.
+"""측정 데이터 저장·모델·응답 projection의 백엔드 계약.
 
 - requestPayload.measurements/measuredPersonalColor 가 신뢰화 필터를 통과해 저장된다.
 - 프롬프트가 두 필드를 메타데이터로 주입하고 해설 문장을 갖는다(measurements 제외 없음).
 - worst-case 직렬화 크기가 상한 안에 있다(프롬프트 토큰 예산 고정).
-- 목록 SELECT 만 measurements 를 제외하고 상세 SELECT 는 전량 유지한다.
+- DB 저장본은 전량 유지하고 외부 상세 응답은 내부 mm/receipt를 제거한다.
 """
 
 import json
@@ -13,6 +13,7 @@ from app.api.analysis import (
   ANALYSIS_MEDIA_SELECT,
   build_analysis_detail_payload,
   build_initial_analysis_detail_payload,
+  normalize_analysis_report_row,
 )
 from app.core.settings import Settings
 from app.schemas.analysis import AnalysisJobCreate
@@ -358,6 +359,79 @@ def test_detail_jsonb_round_trip_preserves_all_face3d_metrics() -> None:
 
   assert list(restored["face3d"]["metrics"].keys()) == FACE3D_METRIC_KEYS
   assert list(restored["measurements"]["face3d"]["metrics"].keys()) == FACE3D_METRIC_KEYS
+
+
+def test_detail_response_projection_strips_internal_face3d_mm_and_receipt_proof() -> None:
+  request_payload = build_worst_case_request_payload()
+  profile = request_payload["measurements"]["face3d"]
+  profile.update(
+    {
+      "calibrationReceipt": {
+        "reportContextId": "report_photo_capture_private",
+        "subjectContextId": "subj_user_private",
+      },
+      "captureNonce": "unified-face-private",
+      "profileBindingSha256": "a" * 64,
+      "sensorProvenance": {"deviceModel": "iPhone15,3"},
+      "serverCalibrationReceiptStatus": "verified",
+    },
+  )
+  profile["metrics"]["noseTipProjection"].update(
+    {
+      "valueMm": 2.8,
+      "valueMmConfidence": 0.9,
+      "valueMmMad": 0.03,
+      "valueMmValidFrameCount": 8,
+    },
+  )
+  request_payload["face3d"] = profile
+  detail = {
+    "request": request_payload,
+    "result": {
+      "faceAnalysisV2": {
+        "faceProfile": {
+          "face3d.noseTipProjection": {
+            "value": 0.14,
+            "unit": "ratio",
+            "sensitivity": 0,
+          },
+          "face3d.noseTipProjection.mm": {
+            "value": 2.8,
+            "unit": "mm",
+            "sensitivity": 3,
+          },
+        },
+        "derived": {
+          "asymmetry": {
+            "label": "internal",
+            "sensitivity": 3,
+          },
+        },
+      },
+    },
+  }
+
+  projected = normalize_analysis_report_row({"detail_payload": detail})
+  assert projected is not None
+  response_detail = projected["detail_payload"]
+  response_profile = response_detail["request"]["measurements"]["face3d"]
+  assert "calibrationReceipt" not in response_profile
+  assert "captureNonce" not in response_profile
+  assert "profileBindingSha256" not in response_profile
+  assert "sensorProvenance" not in response_profile
+  assert "serverCalibrationReceiptStatus" not in response_profile
+  metric = response_profile["metrics"]["noseTipProjection"]
+  assert not any(key.startswith("valueMm") for key in metric)
+  face_profile = response_detail["result"]["faceAnalysisV2"]["faceProfile"]
+  assert "face3d.noseTipProjection" in face_profile
+  assert "face3d.noseTipProjection.mm" not in face_profile
+  assert "asymmetry" not in response_detail["result"]["faceAnalysisV2"]["derived"]
+
+  # Response projection must not mutate the stored payload.
+  assert detail["request"]["measurements"]["face3d"]["calibrationReceipt"]
+  assert detail["request"]["measurements"]["face3d"]["metrics"][
+    "noseTipProjection"
+  ]["valueMm"] == 2.8
 
 
 def test_initial_v2_payload_makes_camera_report_immediately_renderable() -> None:

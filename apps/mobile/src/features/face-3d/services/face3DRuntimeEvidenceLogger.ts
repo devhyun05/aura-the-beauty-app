@@ -1,6 +1,9 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
-import type {Face3DEvent} from '../types';
+import {
+  adaptFace3DRuntimeEvidence,
+  type Face3DRuntimeEvidenceInput,
+} from './face3DUnifiedEvidenceAdapter';
 
 const LOG_DIRECTORY_NAME = 'face3d-runtime-evidence';
 const LOG_FILE_NAME = 'events.jsonl';
@@ -27,17 +30,21 @@ async function readExistingLog(fileUri: string) {
   }
 }
 
-async function appendNow(event: Face3DEvent) {
+async function appendNow(input: Face3DRuntimeEvidenceInput) {
   if (!__DEV__) {
     return null;
   }
 
   const {directoryUri, fileUri} = getLogFileUri();
+  const adapted = adaptFace3DRuntimeEvidence(input);
   const entry = {
-    event,
+    event: adapted.event,
     rawFaceDataIncluded: false,
     recordedAtUtc: new Date().toISOString(),
     schemaVersion: 'aura.face3d-runtime-evidence.v1',
+    ...(adapted.unifiedCapture
+      ? {unifiedCapture: adapted.unifiedCapture}
+      : {}),
   };
   const previousLog = await readExistingLog(fileUri);
 
@@ -50,8 +57,8 @@ async function appendNow(event: Face3DEvent) {
   return fileUri;
 }
 
-export function appendFace3DRuntimeEvidence(event: Face3DEvent) {
-  const nextAppend = appendChain.then(() => appendNow(event));
+export function appendFace3DRuntimeEvidence(input: Face3DRuntimeEvidenceInput) {
+  const nextAppend = appendChain.then(() => appendNow(input));
   appendChain = nextAppend.catch(error => {
     console.info('[aura:face3d] evidence-write-failed', {
       message: error instanceof Error ? error.message : String(error),

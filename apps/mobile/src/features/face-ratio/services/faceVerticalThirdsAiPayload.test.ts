@@ -37,7 +37,8 @@ function fixture(): FaceVerticalThirdsResult {
       Me: {confidence: 0.9, method: 'me', provider: 'mediapipe', x: 100, y: 1000},
       Sn: {confidence: 0.9, method: 'sn', provider: 'mediapipe', x: 100, y: 650},
     },
-    judgmentVersion: 'face-length-judgment/v2-provisional-20260717',
+    judgmentVersion:
+      'face-length-judgment/v3-pose-normalization-validation-20260717',
     measurementMode: 'full_vertical_thirds',
     quality: {usable: true, warnings: []},
     schemaVersion: 'aura-face-vertical-thirds-v1',
@@ -71,7 +72,8 @@ expect(
     fullPayload.faceLengthJudgment?.verdict === 'wide' &&
     fullPayload.faceLengthJudgment?.band.hi === 1.315 &&
     fullPayload.faceLengthJudgment?.band.lo === 1.296 &&
-    fullPayload.judgmentVersion === 'face-length-judgment/v2-provisional-20260717',
+    fullPayload.judgmentVersion ===
+      'face-length-judgment/v3-pose-normalization-validation-20260717',
   'Frozen judgment snapshot and version must ride the full AI payload verbatim.',
 );
 
@@ -129,6 +131,34 @@ expect(
   proxyPayload?.measurementMode === 'middle_lower_only' &&
     !JSON.stringify(proxyPayload).includes('mediapipe_forehead_approx'),
   'A malformed proxy result must fail closed and never reach AI.',
+);
+
+const validationOnlyResult: FaceVerticalThirdsResult = {
+  ...fixture(),
+  postCorrection: {
+    applied: true,
+    center: {x: 450, y: 600},
+    method: 'mediapipe_facial_transformation_matrix',
+    poseNormalization: {
+      confidencePolicy: 'diagnostic_only_unvalidated',
+      diagnostics: {
+        correctionMaxPx: 18,
+        correctionRmsPx: 6,
+        landmarkCount: 478,
+        matrixOrthogonalityResidual: 0,
+        matrixRotationDeterminant: 1,
+        matrixScaleSpread: 0,
+        roundTripRmsPx: 0,
+        zSpanPx: 80,
+      },
+      requested: true,
+    },
+    rollCorrectionDeg: null,
+  },
+};
+expect(
+  buildFaceVerticalThirdsAnalysisPayload(validationOnlyResult) === undefined,
+  'Validation-only pose-normalized measurements must not be promoted to the AI payload.',
 );
 
 console.log('faceVerticalThirdsAiPayload.test.ts passed');

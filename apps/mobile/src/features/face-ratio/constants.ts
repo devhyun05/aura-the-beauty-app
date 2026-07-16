@@ -68,7 +68,7 @@ export const HAIRLINE_TUNING: FaceRatioHairlineTuning = {};
 // 스냅샷 저장되어(FaceVerticalThirdsResult.judgmentVersion) 상수 개정이
 // 재렌더에서 과거 판정을 조용히 바꾸는 것을 감지·방지한다(계획 Phase 0-5).
 export const FACE_RATIO_JUDGMENT_VERSION =
-  'face-length-judgment/v2-provisional-20260717';
+  'face-length-judgment/v3-pose-normalization-validation-20260717';
 
 // 1차 출처 부재가 확인된 잠정값(계획 §5 D-1: 미용 얼굴형 휴리스틱 근사로
 // 추정, 정확값의 문헌 완전일치 0건). 한국 여성 실측 앵커 ≈1.37(§5 D-2)

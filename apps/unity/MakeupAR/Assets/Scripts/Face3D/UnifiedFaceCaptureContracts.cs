@@ -14,6 +14,12 @@ namespace Aura.Face3D
         public const string GateVersion = "face3d-gate-v2";
         public const string HairlinePolicy = "soft_nudge_post_capture_omit";
         public const string ConfidenceCalibrationUncalibrated = "uncalibrated";
+        public const string ConfidenceCalibrationCalibrated = "calibrated";
+        public const string CalibrationSignatureAlgorithm = "hmac-sha256-v1";
+        // Gate 6B evidence and a signed receipt must land before this can change.
+        // Keeping the promotion flag in the contract makes a status-string-only
+        // "calibration" impossible in the runtime producer.
+        public const bool CalibrationPromotionEnabled = false;
         public const string AggregationMedianMad = "median_mad";
         public const string AggregationNone = "none";
         public const string SampleModeMicroBurst = "micro_burst";
@@ -26,6 +32,93 @@ namespace Aura.Face3D
         public const string DiagnosticsExact8PolicyId = "diagnostics-exact-8-v1";
         public const string DiagnosticsExact12PolicyId = "diagnostics-exact-12-v1";
         public const string DiagnosticsExact30PolicyId = "diagnostics-exact-30-v1";
+    }
+
+    public sealed class Face3DSensorProvenance
+    {
+        public Face3DSensorProvenance(
+            bool? trueDepthHardware,
+            float? depthDataObservedRatio,
+            bool? faceTrackingSupported,
+            string deviceModel)
+        {
+            TrueDepthHardware = trueDepthHardware;
+            DepthDataObservedRatio = depthDataObservedRatio.HasValue
+                && Face3DNumeric.IsFinite(depthDataObservedRatio.Value)
+                && depthDataObservedRatio.Value >= 0.0f
+                && depthDataObservedRatio.Value <= 1.0f
+                    ? depthDataObservedRatio
+                    : null;
+            FaceTrackingSupported = faceTrackingSupported;
+            DeviceModel = string.IsNullOrWhiteSpace(deviceModel)
+                ? null
+                : deviceModel.Trim();
+        }
+
+        public bool? TrueDepthHardware { get; }
+        public float? DepthDataObservedRatio { get; }
+        public bool? FaceTrackingSupported { get; }
+        public string DeviceModel { get; }
+
+        public static Face3DSensorProvenance Unknown()
+        {
+            return new Face3DSensorProvenance(null, null, null, null);
+        }
+    }
+
+    /// <summary>
+    /// Server/tooling-issued receipt shape. Unity never creates one: the runtime
+    /// producer stays uncalibrated until Gate 6B promotion, and the backend must
+    /// verify the HMAC plus one-time consumption before accepting it.
+    /// </summary>
+    public sealed class Face3DCalibrationReceipt
+    {
+        public Face3DCalibrationReceipt(
+            string receiptId,
+            string captureNonce,
+            string profileBindingSha256,
+            string collectionPolicyId,
+            string gateVersion,
+            string appBuild,
+            string issuedAtUtc,
+            string expiresAtUtc,
+            string subjectContextId,
+            string reportContextId,
+            string approvalArtifactSha256,
+            string signingKeyId,
+            string signature)
+        {
+            ReceiptId = receiptId;
+            CaptureNonce = captureNonce;
+            ProfileBindingSha256 = profileBindingSha256;
+            CollectionPolicyId = collectionPolicyId;
+            GateVersion = gateVersion;
+            AppBuild = appBuild;
+            IssuedAtUtc = issuedAtUtc;
+            ExpiresAtUtc = expiresAtUtc;
+            SubjectContextId = subjectContextId;
+            ReportContextId = reportContextId;
+            ApprovalArtifactSha256 = approvalArtifactSha256;
+            SignatureAlgorithm =
+                UnifiedFaceCaptureContract.CalibrationSignatureAlgorithm;
+            SigningKeyId = signingKeyId;
+            Signature = signature;
+        }
+
+        public string ReceiptId { get; }
+        public string CaptureNonce { get; }
+        public string ProfileBindingSha256 { get; }
+        public string CollectionPolicyId { get; }
+        public string GateVersion { get; }
+        public string AppBuild { get; }
+        public string IssuedAtUtc { get; }
+        public string ExpiresAtUtc { get; }
+        public string SubjectContextId { get; }
+        public string ReportContextId { get; }
+        public string ApprovalArtifactSha256 { get; }
+        public string SignatureAlgorithm { get; }
+        public string SigningKeyId { get; }
+        public string Signature { get; }
     }
 
     [Serializable]
@@ -271,6 +364,8 @@ namespace Aura.Face3D
             UnifiedFaceCapturePolicy policy,
             Face3DProfile aggregate,
             double captureWindowMs,
+            string captureNonce,
+            Face3DSensorProvenance sensorProvenance,
             IEnumerable<string> warnings)
         {
             SchemaVersion = UnifiedFaceCaptureContract.ProfileSchemaVersion;
@@ -287,6 +382,11 @@ namespace Aura.Face3D
                     : 0.0f);
             ConfidenceCalibrationStatus =
                 UnifiedFaceCaptureContract.ConfidenceCalibrationUncalibrated;
+            CaptureNonce = captureNonce;
+            ProfileBindingSha256 = null;
+            CalibrationReceipt = null;
+            SensorProvenance =
+                sensorProvenance ?? Face3DSensorProvenance.Unknown();
             // The collector rejects samples outside the immutable policy window,
             // but finalization runs on a later Unity update and can observe a few
             // milliseconds of scheduler overshoot. Report the bounded sampling
@@ -311,6 +411,10 @@ namespace Aura.Face3D
         public int TargetFrameCount { get; }
         public float CompletionRatio { get; }
         public string ConfidenceCalibrationStatus { get; }
+        public string CaptureNonce { get; }
+        public string ProfileBindingSha256 { get; }
+        public Face3DCalibrationReceipt CalibrationReceipt { get; }
+        public Face3DSensorProvenance SensorProvenance { get; }
         public double CaptureWindowMs { get; }
         public string TopologyFingerprint { get; }
         public Face3DProfileMetrics Metrics { get; }
@@ -319,7 +423,9 @@ namespace Aura.Face3D
         public static Face3DProfileV2 Create(
             UnifiedFaceCapturePolicy policy,
             Face3DProfile aggregate,
-            double captureWindowMs)
+            double captureWindowMs,
+            string captureNonce,
+            Face3DSensorProvenance sensorProvenance = null)
         {
             if (policy == null)
             {
@@ -328,6 +434,12 @@ namespace Aura.Face3D
             if (aggregate == null)
             {
                 throw new ArgumentNullException(nameof(aggregate));
+            }
+            if (string.IsNullOrWhiteSpace(captureNonce))
+            {
+                throw new ArgumentException(
+                    "Capture nonce must be non-empty.",
+                    nameof(captureNonce));
             }
             if (aggregate.ValidFrameCount < policy.MinimumValidFrames
                 || aggregate.ValidFrameCount > policy.TargetValidFrames)
@@ -362,6 +474,8 @@ namespace Aura.Face3D
                     ? WithoutAggregationMetadata(aggregate)
                     : aggregate,
                 captureWindowMs,
+                captureNonce.Trim(),
+                sensorProvenance,
                 sortedWarnings);
         }
 
@@ -407,6 +521,10 @@ namespace Aura.Face3D
                     metric.Value,
                     0.0f,
                     metric.ValidFrameCount,
+                    0.0f,
+                    metric.ValueMm,
+                    0.0f,
+                    metric.ValueMmValidFrameCount,
                     0.0f);
         }
 
@@ -424,22 +542,27 @@ namespace Aura.Face3D
 
         public UnifiedFace3DProfileCollector(
             UnifiedFaceCaptureRequest request,
-            double startTimestampSeconds)
+            double startTimestampSeconds,
+            Face3DSensorProvenance sensorProvenance = null)
         {
             this.request = request ?? throw new ArgumentNullException(nameof(request));
             startTimestampSeconds = Face3DNumeric.IsFinite(startTimestampSeconds)
                 ? startTimestampSeconds
                 : throw new ArgumentOutOfRangeException(nameof(startTimestampSeconds));
             this.startTimestampSeconds = startTimestampSeconds;
+            SensorProvenance =
+                sensorProvenance ?? Face3DSensorProvenance.Unknown();
             collector = new Face3DProfileCollector(
                 startTimestampSeconds,
                 new Face3DCollectionPolicy(
                     request.Policy.MaximumDurationMs / 1000.0,
                     request.Policy.TargetValidFrames,
-                    request.Policy.MinimumValidFrames));
+                    request.Policy.MinimumValidFrames,
+                    separateCompletionFromQuality: true));
         }
 
         public int ValidFrameCount => collector.ValidFrameCount;
+        public Face3DSensorProvenance SensorProvenance { get; }
 
         public Face3DCollectionUpdate AddEvaluation(
             Face3DEvaluationResult evaluation,
@@ -463,6 +586,19 @@ namespace Aura.Face3D
             out Face3DProfileV2 profile,
             out string reason)
         {
+            return TryBuildProfile(
+                timestampSeconds,
+                SensorProvenance,
+                out profile,
+                out reason);
+        }
+
+        public bool TryBuildProfile(
+            double timestampSeconds,
+            Face3DSensorProvenance sensorProvenance,
+            out Face3DProfileV2 profile,
+            out string reason)
+        {
             profile = null;
             if (!collector.TryBuildProfile(
                     timestampSeconds,
@@ -478,7 +614,9 @@ namespace Aura.Face3D
             profile = Face3DProfileV2.Create(
                 request.Policy,
                 aggregate,
-                captureWindowMs);
+                captureWindowMs,
+                request.RequestId,
+                sensorProvenance ?? SensorProvenance);
             reason = string.Empty;
             return true;
         }
@@ -509,6 +647,13 @@ namespace Aura.Face3D
                 "confidenceCalibrationStatus",
                 profile.ConfidenceCalibrationStatus,
                 false);
+            AppendString(json, "captureNonce", profile.CaptureNonce, false);
+            AppendNullableString(
+                json,
+                "profileBindingSha256",
+                profile.ProfileBindingSha256);
+            AppendCalibrationReceipt(json, profile.CalibrationReceipt);
+            AppendSensorProvenance(json, profile.SensorProvenance);
             AppendNumber(json, "captureWindowMs", profile.CaptureWindowMs);
             AppendString(json, "topologyFingerprint", profile.TopologyFingerprint, false);
             json.Append(",\"warnings\":[");
@@ -617,6 +762,30 @@ namespace Aura.Face3D
             {
                 json.Append("null");
             }
+            json.Append(",\"valueMm\":");
+            if (metric != null && metric.ValueMm.HasValue)
+            {
+                AppendNumberValue(json, metric.ValueMm.Value);
+            }
+            else
+            {
+                json.Append("null");
+            }
+            json.Append(",\"valueMmConfidence\":");
+            AppendNumberValue(
+                json,
+                metric != null ? metric.ValueMmConfidence : 0.0f);
+            json.Append(",\"valueMmValidFrameCount\":");
+            json.Append(metric != null ? metric.ValueMmValidFrameCount : 0);
+            json.Append(",\"valueMmMad\":");
+            if (hasAggregationStatistics)
+            {
+                AppendNumberValue(json, metric != null ? metric.ValueMmMad : 0.0f);
+            }
+            else
+            {
+                json.Append("null");
+            }
             json.Append(",\"confidence\":");
             AppendNumberValue(json, metric != null ? metric.Confidence : 0.0f);
             json.Append(",\"unit\":\"normalized\",\"validFrameCount\":");
@@ -629,6 +798,89 @@ namespace Aura.Face3D
             else
             {
                 json.Append("null");
+            }
+            json.Append('}');
+        }
+
+        private static void AppendCalibrationReceipt(
+            StringBuilder json,
+            Face3DCalibrationReceipt receipt)
+        {
+            json.Append(",\"calibrationReceipt\":");
+            if (receipt == null)
+            {
+                json.Append("null");
+                return;
+            }
+
+            json.Append('{');
+            AppendString(json, "receiptId", receipt.ReceiptId, true);
+            AppendString(json, "captureNonce", receipt.CaptureNonce, false);
+            AppendString(
+                json,
+                "profileBindingSha256",
+                receipt.ProfileBindingSha256,
+                false);
+            AppendString(
+                json,
+                "collectionPolicyId",
+                receipt.CollectionPolicyId,
+                false);
+            AppendString(json, "gateVersion", receipt.GateVersion, false);
+            AppendString(json, "appBuild", receipt.AppBuild, false);
+            AppendString(json, "issuedAtUtc", receipt.IssuedAtUtc, false);
+            AppendString(json, "expiresAtUtc", receipt.ExpiresAtUtc, false);
+            AppendString(
+                json,
+                "subjectContextId",
+                receipt.SubjectContextId,
+                false);
+            AppendString(
+                json,
+                "reportContextId",
+                receipt.ReportContextId,
+                false);
+            AppendString(
+                json,
+                "approvalArtifactSha256",
+                receipt.ApprovalArtifactSha256,
+                false);
+            AppendString(
+                json,
+                "signatureAlgorithm",
+                receipt.SignatureAlgorithm,
+                false);
+            AppendString(json, "signingKeyId", receipt.SigningKeyId, false);
+            AppendString(json, "signature", receipt.Signature, false);
+            json.Append('}');
+        }
+
+        private static void AppendSensorProvenance(
+            StringBuilder json,
+            Face3DSensorProvenance provenance)
+        {
+            Face3DSensorProvenance resolved =
+                provenance ?? Face3DSensorProvenance.Unknown();
+            json.Append(",\"sensorProvenance\":{");
+            AppendNullableBoolValue(json, "trueDepthHardware", resolved.TrueDepthHardware, true);
+            AppendNullableNumberValue(
+                json,
+                "depthDataObservedRatio",
+                resolved.DepthDataObservedRatio,
+                false);
+            AppendNullableBoolValue(
+                json,
+                "faceTrackingSupported",
+                resolved.FaceTrackingSupported,
+                false);
+            json.Append(",\"deviceModel\":");
+            if (resolved.DeviceModel == null)
+            {
+                json.Append("null");
+            }
+            else
+            {
+                AppendEscapedValue(json, resolved.DeviceModel);
             }
             json.Append('}');
         }
@@ -653,6 +905,63 @@ namespace Aura.Face3D
             json.Append(',');
             AppendEscapedValue(json, name);
             json.Append(':').Append(value.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void AppendNullableString(
+            StringBuilder json,
+            string name,
+            string value)
+        {
+            json.Append(',');
+            AppendEscapedValue(json, name);
+            json.Append(':');
+            if (value == null)
+            {
+                json.Append("null");
+            }
+            else
+            {
+                AppendEscapedValue(json, value);
+            }
+        }
+
+        private static void AppendNullableBoolValue(
+            StringBuilder json,
+            string name,
+            bool? value,
+            bool first)
+        {
+            if (!first)
+            {
+                json.Append(',');
+            }
+            AppendEscapedValue(json, name);
+            json.Append(':');
+            json.Append(value.HasValue
+                ? (value.Value ? "true" : "false")
+                : "null");
+        }
+
+        private static void AppendNullableNumberValue(
+            StringBuilder json,
+            string name,
+            float? value,
+            bool first)
+        {
+            if (!first)
+            {
+                json.Append(',');
+            }
+            AppendEscapedValue(json, name);
+            json.Append(':');
+            if (value.HasValue)
+            {
+                AppendNumberValue(json, value.Value);
+            }
+            else
+            {
+                json.Append("null");
+            }
         }
 
         private static void AppendNumber(

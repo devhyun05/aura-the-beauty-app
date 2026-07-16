@@ -81,10 +81,16 @@ namespace Aura.Face3D.Tests
                 semanticMap.ChinBottomIndices,
                 Is.EqualTo(CreateIndexRange(70, 3)));
             Assert.That(result.Metrics.NoseTipProjection, Is.EqualTo(0.5f).Within(0.00001f));
+            Assert.That(
+                result.Metrics.NoseTipProjectionMeters,
+                Is.EqualTo(1.0f).Within(0.00001f));
             // C1: chin is now projected onto the midface plane (like noseTip), so in this
             // synthetic mesh where chin and nose share z=1.0 it reads 0.5, not the old 0.25
             // that the chin-neighbor plane produced.
             Assert.That(result.Metrics.ChinProjection, Is.EqualTo(0.5f).Within(0.00001f));
+            Assert.That(
+                result.Metrics.ChinProjectionMeters,
+                Is.EqualTo(1.0f).Within(0.00001f));
             Assert.That(result.Metrics.UpperLipToELine, Is.EqualTo(-0.1f).Within(0.00001f));
             Assert.That(result.Metrics.LowerLipToELine, Is.EqualTo(-0.15f).Within(0.00001f));
             Assert.That(result.Metrics.CentralProjectionScore, Is.EqualTo(0.375f).Within(0.00001f));
@@ -333,6 +339,7 @@ namespace Aura.Face3D.Tests
             Assert.That(json, Does.Contain("\"noseTipProjection\""));
             Assert.That(json, Does.Contain("\"unit\":\"normalized\""));
             Assert.That(json, Does.Contain("\"validFrameCount\":30"));
+            Assert.That(json, Does.Not.Contain("\"valueMm\""));
         }
 
         [Test]
@@ -490,6 +497,9 @@ namespace Aura.Face3D.Tests
             Assert.That(
                 evaluation.Metrics.NoseLength.Value,
                 Is.EqualTo(Mathf.Sqrt(0.45f) / 2.0f).Within(0.0001f));
+            Assert.That(
+                evaluation.Metrics.NoseLengthMeters.Value,
+                Is.EqualTo(Mathf.Sqrt(0.45f)).Within(0.0001f));
             // 중앙선 4점은 nasion→noseTip 직선에서 x+0.2 평행 이동 → 잔차 0.2/2
             Assert.That(evaluation.Metrics.NasalBridgeStraightness.HasValue, Is.True);
             Assert.That(
@@ -540,6 +550,9 @@ namespace Aura.Face3D.Tests
             Assert.That(
                 tier2Profile.Metrics.AlarWidth.Value.Value,
                 Is.EqualTo(0.425f).Within(0.0001f));
+            Assert.That(
+                tier2Profile.Metrics.AlarWidth.ValueMm.Value,
+                Is.EqualTo(850.0f).Within(0.0001f));
             Assert.That(tier2Profile.Metrics.AlarWidth.ValidFrameCount, Is.EqualTo(30));
 
             // g1 맵: tier2 는 value:null 이고, 부재는 경고를 만들지 않는다.

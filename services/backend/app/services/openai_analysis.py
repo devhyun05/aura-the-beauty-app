@@ -33,6 +33,9 @@ except ImportError:  # pragma: no cover - fallback keeps local setup usable befo
 
 from app.core.errors import AppError
 from app.core.settings import Settings
+from app.services.face3d_calibration_receipts import (
+  is_face3d_profile_server_verified,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -171,17 +174,36 @@ def _safe_face3d_prompt_payload(value: Any) -> dict[str, Any] | None:
   if schema_version != "aura.face3d-profile.v2":
     return None
 
-  collection_policy_id = raw.get("collectionPolicyId")
   if (
-    raw.get("confidenceCalibrationStatus") != "calibrated"
+    not is_face3d_profile_server_verified(raw)
     or raw.get("sampleMode") != "micro_burst"
     or raw.get("aggregation") != "median_mad"
-    or not isinstance(collection_policy_id, str)
-    or collection_policy_id.startswith("diagnostics-")
   ):
     return None
 
-  return raw
+  # 검증 증거·nonce·사용자/보고서 문맥은 모델 입력이 아니다. 서버가 product
+  # eligibility를 판정한 뒤 계측 내용과 센서 provenance만 AI에 전달한다.
+  safe = dict(raw)
+  for field in (
+    "calibrationReceipt",
+    "captureNonce",
+    "profileBindingSha256",
+    "serverCalibrationReceiptStatus",
+  ):
+    safe.pop(field, None)
+  metrics = safe.get("metrics")
+  if isinstance(metrics, dict):
+    safe["metrics"] = {
+      key: {
+        metric_key: metric_value
+        for metric_key, metric_value in metric.items()
+        if not metric_key.startswith("valueMm")
+      }
+      if isinstance(metric, dict)
+      else metric
+      for key, metric in metrics.items()
+    }
+  return safe
 
 
 def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
@@ -825,7 +847,8 @@ class OpenAIAnalysisService:
       "(양수는 앞, 음수는 뒤), centralProjectionScore 얼굴 중앙부 입체감이야. Tier-2 지표는 noseLength 코뿌리-코끝 길이, "
       "nasalBridgeStraightness 코뿌리-코끝 선에 대한 콧대 RMS 이탈량(작을수록 기준선에 가까움), nasalAxisDeviation 코축 좌우 편위 "
       "(피사체 기준 음수=Left, 양수=Right), alarWidth alare-alare 콧볼 폭, malarProjectionLeft/Right 좌우 앞광대의 전방 돌출이야. "
-      "모든 face3d 값은 얼굴 크기로 나눈 무차원 상대값이며 절대 mm·임상 진단·모집단 백분위가 아니고, value가 null이면 미측정이야. "
+      "face3d 각 metric의 value는 얼굴 크기로 나눈 무차원 상대값이야. 사용자 출력은 절대 mm·임상 진단·모집단 백분위가 아니고 "
+      "숫자로 노출하면 안 되며, value가 null이면 미측정이야. "
       "요청 메타데이터에 faceGeometry2d(정면 사진에서 실측한 2D 기하 지표: 눈 폭·눈 개방도·미간 비율·눈꼬리 기울기 canthalTilt(도)·"
       "눈-눈썹 간격·눈썹 기울기 browSlope(도)·입 폭·윗입술/아랫입술 두께비·하관 폭 비율·입꼬리 비대칭 — 비율은 무차원, 각도는 도 단위, "
       "Left/Right는 피사체 기준, value가 null이면 미측정)가 있으면 눈매/눈썹/입술 판단과 makeupGuideline의 아이라이너·눈썹·립 배치에 근거로 반영해. "

@@ -10,6 +10,11 @@ from app.schemas.face_analysis_v2 import (
   MeasurementStatus,
   MetricEnvelope,
 )
+from app.services.face3d_calibration_receipts import (
+  FACE3D_PRODUCT_POLICY_GATES,
+  FACE3D_SERVER_RECEIPT_STATUS_FIELD,
+  is_face3d_profile_server_verified,
+)
 
 
 AI_OBSERVABLE_METRICS: dict[str, tuple[int, str]] = {
@@ -277,6 +282,7 @@ def _normalize_face3d(
   schema_version = raw.get("schemaVersion")
   if schema_version == "aura.face3d-profile.v2":
     policy_id = raw.get("collectionPolicyId")
+    gate_version = raw.get("gateVersion")
     if raw.get("sampleMode") == "single_frame":
       usable = False
       reason = "face3d_single_frame_not_product_eligible"
@@ -286,6 +292,20 @@ def _normalize_face3d(
     elif raw.get("confidenceCalibrationStatus") != "calibrated":
       usable = False
       reason = "face3d_confidence_uncalibrated"
+    elif (
+      not isinstance(policy_id, str)
+      or FACE3D_PRODUCT_POLICY_GATES.get(policy_id) != gate_version
+    ):
+      usable = False
+      reason = "face3d_policy_gate_not_approved"
+    elif not is_face3d_profile_server_verified(raw):
+      usable = False
+      server_reason = raw.get(FACE3D_SERVER_RECEIPT_STATUS_FIELD)
+      reason = (
+        server_reason
+        if isinstance(server_reason, str) and server_reason != "verified"
+        else "face3d_calibration_receipt_unverified"
+      )
     elif raw.get("sampleMode") != "micro_burst" or raw.get("aggregation") != "median_mad":
       usable = False
       reason = "face3d_profile_policy_invalid"
@@ -300,6 +320,18 @@ def _normalize_face3d(
       usable=usable, reason=reason,
       warnings=_warnings(profile_warnings, metric.get("warnings")),
     )
+    if "valueMm" in metric:
+      output[f"face3d.{key}.mm"] = _camera_metric(
+        value=_finite(metric.get("valueMm")),
+        confidence=_finite(metric.get("valueMmConfidence")) or 0.0,
+        source=MeasurementSource.DEPTH,
+        shot=MeasurementShot.FACE3D,
+        unit="mm",
+        usable=usable,
+        reason=reason,
+        warnings=_warnings(profile_warnings, metric.get("warnings")),
+        sensitivity=3,
+      )
 
 
 def _normalize_personal_color(
@@ -438,3 +470,37 @@ def filter_metrics_for_audience(
     and metric.sensitivity <= sensitivity_limit
     and metric.sensitivity < 3
   }
+
+
+def filter_metrics_for_model(
+  metrics: dict[str, MetricEnvelope],
+) -> dict[str, MetricEnvelope]:
+  """Keep model-visible evidence while retaining sensitivity-3 data internally."""
+  return {
+    key: metric
+    for key, metric in metrics.items()
+    if metric.sensitivity < 3
+  }
+
+
+_INTERNAL_ONLY = object()
+
+
+def filter_internal_only_payload(value: Any) -> Any:
+  """Remove sensitivity-3 insight records before any external model call."""
+  if isinstance(value, dict):
+    if value.get("sensitivity") == 3:
+      return _INTERNAL_ONLY
+    filtered: dict[str, Any] = {}
+    for key, item in value.items():
+      projected = filter_internal_only_payload(item)
+      if projected is not _INTERNAL_ONLY:
+        filtered[key] = projected
+    return filtered
+  if isinstance(value, list):
+    return [
+      projected
+      for item in value
+      if (projected := filter_internal_only_payload(item)) is not _INTERNAL_ONLY
+    ]
+  return value

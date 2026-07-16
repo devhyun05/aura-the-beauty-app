@@ -7,6 +7,14 @@ from app.services.face_analysis_measurements import (
   with_explicit_unmeasured,
 )
 
+REQUIRED_FACE3D_METRIC_KEYS = (
+  "noseTipProjection",
+  "chinProjection",
+  "upperLipToELine",
+  "lowerLipToELine",
+  "centralProjectionScore",
+)
+
 
 def ai_metric(
   value: str,
@@ -165,6 +173,100 @@ def test_uncalibrated_v2_face3d_is_preserved_but_blocked_from_product_use() -> N
   assert metric.value is None
   assert metric.status is MeasurementStatus.BLOCKED
   assert metric.reason == "face3d_confidence_uncalibrated"
+
+
+def test_verified_v2_face3d_preserves_internal_mm_envelope() -> None:
+  result = normalize_camera_measurements(
+    {
+      "schemaVersion": "aura-face-analysis-measurements-v1",
+      "face3d": {
+        "aggregation": "median_mad",
+        "calibrationReceipt": {
+          "captureNonce": "capture-1",
+          "collectionPolicyId": "unified-micro-burst-5of8-v1",
+          "gateVersion": "face3d-gate-v2",
+          "profileBindingSha256": "b" * 64,
+        },
+        "captureNonce": "capture-1",
+        "captureWindowMs": 280,
+        "collectionPolicyId": "unified-micro-burst-5of8-v1",
+        "completionRatio": 1.0,
+        "confidenceCalibrationStatus": "calibrated",
+        "gateVersion": "face3d-gate-v2",
+        "profileBindingSha256": "b" * 64,
+        "sampleMode": "micro_burst",
+        "schemaVersion": "aura.face3d-profile.v2",
+        "sensorProvenance": {
+          "depthDataObservedRatio": 1.0,
+          "deviceModel": "test-device",
+          "faceTrackingSupported": True,
+          "trueDepthHardware": True,
+        },
+        "serverCalibrationReceiptStatus": "verified",
+        "targetFrameCount": 8,
+        "topologyFingerprint": "test-topology",
+        "validFrameCount": 8,
+        "warnings": [],
+        "metrics": {
+          key: {
+            "value": 0.14 + (index * 0.01),
+            "valueMm": 2.8 + index,
+            "valueMmConfidence": 0.62,
+            "valueMmMad": 0.04,
+            "valueMmValidFrameCount": 7,
+            "unit": "normalized",
+            "confidence": 0.7,
+            "mad": 0.002,
+            "validFrameCount": 8,
+          }
+          for index, key in enumerate(REQUIRED_FACE3D_METRIC_KEYS)
+        },
+      },
+    },
+  )
+
+  ratio = result["face3d.noseTipProjection"]
+  millimeters = result["face3d.noseTipProjection.mm"]
+  assert ratio.value == 0.14
+  assert ratio.unit == "ratio"
+  assert millimeters.value == 2.8
+  assert millimeters.confidence == 0.62
+  assert millimeters.unit == "mm"
+  assert millimeters.sensitivity == 3
+
+
+def test_calibrated_v2_without_server_receipt_verification_stays_blocked() -> None:
+  result = normalize_camera_measurements(
+    {
+      "schemaVersion": "aura-face-analysis-measurements-v1",
+      "face3d": {
+        "aggregation": "median_mad",
+        "captureWindowMs": 280,
+        "collectionPolicyId": "unified-micro-burst-5of8-v1",
+        "completionRatio": 1.0,
+        "confidenceCalibrationStatus": "calibrated",
+        "gateVersion": "face3d-gate-v2",
+        "sampleMode": "micro_burst",
+        "schemaVersion": "aura.face3d-profile.v2",
+        "warnings": [],
+        "metrics": {
+          "noseTipProjection": {
+            "value": 0.14,
+            "valueMm": 2.8,
+            "unit": "normalized",
+            "confidence": 0.7,
+          },
+        },
+      },
+    },
+  )
+
+  assert result["face3d.noseTipProjection"].value is None
+  assert (
+    result["face3d.noseTipProjection"].reason
+    == "face3d_calibration_receipt_unverified"
+  )
+  assert result["face3d.noseTipProjection.mm"].value is None
 
 
 def test_single_frame_face3d_is_never_product_eligible() -> None:

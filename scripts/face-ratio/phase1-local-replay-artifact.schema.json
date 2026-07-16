@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aura.local/schemas/face-ratio-phase1-replay-v1.json",
+  "title": "AURA Face Ratio Phase 1 Local Replay Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactClass",
+    "cohortId",
+    "sessionId",
+    "privacy",
+    "captures"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "aura-face-ratio-phase1-replay/v1"
+    },
+    "artifactClass": {
+      "const": "local-validation-only"
+    },
+    "cohortId": {
+      "type": "string",
+      "pattern": "^cohort_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    },
+    "sessionId": {
+      "type": "string",
+      "pattern": "^session_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "localOnly",
+        "productPayloadIncluded",
+        "pseudonymousSubjects",
+        "rawFaceDataIncluded",
+        "sourceImagesIncluded",
+        "retention"
+      ],
+      "properties": {
+        "localOnly": {"const": true},
+        "productPayloadIncluded": {"const": false},
+        "pseudonymousSubjects": {"const": true},
+        "rawFaceDataIncluded": {"const": true},
+        "sourceImagesIncluded": {"const": false},
+        "retention": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "createdAtUtc",
+            "deleteAfterDays",
+            "deleteByUtc",
+            "deletionRequired"
+          ],
+          "properties": {
+            "createdAtUtc": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "deleteAfterDays": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30
+            },
+            "deleteByUtc": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "deletionRequired": {"const": true}
+          }
+        }
+      }
+    },
+    "captures": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/capture"}
+    }
+  },
+  "$defs": {
+    "landmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["i", "x", "y", "z"],
+      "properties": {
+        "i": {"type": "integer", "minimum": 0, "maximum": 477},
+        "x": {"type": "number"},
+        "y": {"type": "number"},
+        "z": {"type": "number"}
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layout", "values"],
+      "properties": {
+        "layout": {"const": "row-major"},
+        "values": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {"type": "number"}
+        }
+      }
+    },
+    "hairline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confidence", "provider", "x", "y"],
+      "properties": {
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "provider": {"type": "string", "minLength": 1},
+        "x": {"type": "number", "minimum": 0, "maximum": 1},
+        "y": {"type": "number", "minimum": 0, "maximum": 1},
+        "zProxy": {"type": "number"}
+      }
+    },
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "distanceLabel",
+        "isReference",
+        "poseLabel",
+        "repeatGroup",
+        "repeatIndex"
+      ],
+      "properties": {
+        "distanceLabel": {"type": "string", "minLength": 1},
+        "isReference": {"type": "boolean"},
+        "poseLabel": {"type": "string", "minLength": 1},
+        "repeatGroup": {"type": "string", "minLength": 1},
+        "repeatIndex": {"type": "integer", "minimum": 1}
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "captureId",
+        "capturedAtUtc",
+        "subjectId",
+        "condition",
+        "imageWidth",
+        "imageHeight",
+        "landmarks",
+        "transformationMatrix"
+      ],
+      "properties": {
+        "captureId": {
+          "type": "string",
+          "pattern": "^cap_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+        },
+        "capturedAtUtc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "subjectId": {
+          "type": "string",
+          "pattern": "^subj_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+        },
+        "condition": {"$ref": "#/$defs/condition"},
+        "imageWidth": {"type": "number", "exclusiveMinimum": 0},
+        "imageHeight": {"type": "number", "exclusiveMinimum": 0},
+        "landmarks": {
+          "type": "array",
+          "minItems": 478,
+          "maxItems": 478,
+          "items": {"$ref": "#/$defs/landmark"}
+        },
+        "transformationMatrix": {"$ref": "#/$defs/matrix"},
+        "hairline": {"$ref": "#/$defs/hairline"}
+      }
+    }
+  }
+}

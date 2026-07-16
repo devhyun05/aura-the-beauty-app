@@ -1,6 +1,7 @@
 import {
   FACE_3D_OPTIONAL_METRIC_KEYS,
   FACE_3D_REQUIRED_METRIC_KEYS,
+  type Face3DCalibrationReceipt,
   type Face3DEvent,
   type Face3DMetric,
   type Face3DMetrics,
@@ -8,6 +9,7 @@ import {
   type Face3DProfile,
   type Face3DProfileV1,
   type Face3DProfileV2,
+  type Face3DSensorProvenance,
   type Face3DStartRequest,
   type Face3DStatus,
 } from '../types';
@@ -18,7 +20,18 @@ export const FACE_3D_PROFILE_SOURCE = 'arkit_face_mesh' as const;
 export const FACE_3D_GATE_VERSION = 'face3d-gate-v1' as const;
 export const FACE_3D_GATE_VERSION_V2 = 'face3d-gate-v2' as const;
 
-const UNIFIED_MICRO_BURST_POLICY_ID = 'unified-micro-burst-5of8-v1';
+export const UNIFIED_MICRO_BURST_POLICY_ID = 'unified-micro-burst-5of8-v1';
+export const FACE_3D_CALIBRATION_PROMOTION_ENABLED: boolean = false;
+export const FACE_3D_CALIBRATION_APPROVAL_ALLOWLIST = new Map([
+  [
+    UNIFIED_MICRO_BURST_POLICY_ID,
+    {
+      approvalArtifactSha256s: new Set<string>(),
+      gateVersion: FACE_3D_GATE_VERSION_V2,
+      signingKeyIds: new Set<string>(),
+    },
+  ],
+] as const);
 const DIAGNOSTICS_EXACT_POLICY_TARGETS = new Map<string, number>([
   ['diagnostics-exact-1-v1', 1],
   ['diagnostics-exact-3-v1', 3],
@@ -63,6 +76,28 @@ function readFiniteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function readNullableBoolean(value: unknown): boolean | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readNullableString(value: unknown): string | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : undefined;
+}
+
+function readSha256(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value)
+    ? value
+    : null;
+}
+
 function readWarnings(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -93,6 +128,26 @@ function parseMetric(value: unknown): Face3DMetric | null {
   const confidence = readFiniteNumber(value.confidence);
   const validFrameCount = readNonNegativeInteger(value.validFrameCount);
   const mad = value.mad === null ? null : readFiniteNumber(value.mad);
+  const valueMm =
+    value.valueMm === undefined
+      ? undefined
+      : value.valueMm === null
+        ? null
+        : readFiniteNumber(value.valueMm);
+  const valueMmConfidence =
+    value.valueMmConfidence === undefined
+      ? undefined
+      : readFiniteNumber(value.valueMmConfidence);
+  const valueMmValidFrameCount =
+    value.valueMmValidFrameCount === undefined
+      ? undefined
+      : readNonNegativeInteger(value.valueMmValidFrameCount);
+  const valueMmMad =
+    value.valueMmMad === undefined
+      ? undefined
+      : value.valueMmMad === null
+        ? null
+        : readFiniteNumber(value.valueMmMad);
 
   if (
     (value.value !== null && metricValue === null) ||
@@ -101,7 +156,18 @@ function parseMetric(value: unknown): Face3DMetric | null {
     confidence > 1 ||
     validFrameCount === null ||
     (value.mad !== null && mad === null) ||
-    (mad !== null && mad < 0)
+    (mad !== null && mad < 0) ||
+    (value.valueMm !== undefined && value.valueMm !== null && valueMm === null) ||
+    (value.valueMmConfidence !== undefined &&
+      (typeof valueMmConfidence !== 'number' ||
+        valueMmConfidence < 0 ||
+        valueMmConfidence > 1)) ||
+    (value.valueMmValidFrameCount !== undefined &&
+      typeof valueMmValidFrameCount !== 'number') ||
+    (value.valueMmMad !== undefined &&
+      value.valueMmMad !== null &&
+      valueMmMad === null) ||
+    (valueMmMad !== undefined && valueMmMad !== null && valueMmMad < 0)
   ) {
     return null;
   }
@@ -112,6 +178,107 @@ function parseMetric(value: unknown): Face3DMetric | null {
     unit: 'normalized',
     validFrameCount,
     value: metricValue,
+    ...(valueMm !== undefined ? {valueMm} : {}),
+    ...(typeof valueMmConfidence === 'number' ? {valueMmConfidence} : {}),
+    ...(typeof valueMmValidFrameCount === 'number'
+      ? {valueMmValidFrameCount}
+      : {}),
+    ...(valueMmMad !== undefined ? {valueMmMad} : {}),
+  };
+}
+
+function parseSensorProvenance(value: unknown): Face3DSensorProvenance | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const trueDepthHardware = readNullableBoolean(value.trueDepthHardware);
+  const faceTrackingSupported = readNullableBoolean(value.faceTrackingSupported);
+  const deviceModel = readNullableString(value.deviceModel);
+  const depthDataObservedRatio =
+    value.depthDataObservedRatio === null
+      ? null
+      : readFiniteNumber(value.depthDataObservedRatio);
+
+  if (
+    trueDepthHardware === undefined ||
+    faceTrackingSupported === undefined ||
+    deviceModel === undefined ||
+    (depthDataObservedRatio === null &&
+      value.depthDataObservedRatio !== null) ||
+    (depthDataObservedRatio !== null &&
+      (depthDataObservedRatio < 0 || depthDataObservedRatio > 1))
+  ) {
+    return null;
+  }
+
+  return {
+    depthDataObservedRatio,
+    deviceModel,
+    faceTrackingSupported,
+    trueDepthHardware,
+  };
+}
+
+function parseCalibrationReceipt(value: unknown): Face3DCalibrationReceipt | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const receiptId = readNonEmptyString(value.receiptId);
+  const captureNonce = readNonEmptyString(value.captureNonce);
+  const profileBindingSha256 = readSha256(value.profileBindingSha256);
+  const collectionPolicyId = readNonEmptyString(value.collectionPolicyId);
+  const gateVersion = readNonEmptyString(value.gateVersion);
+  const appBuild = readNonEmptyString(value.appBuild);
+  const issuedAtUtc = readNonEmptyString(value.issuedAtUtc);
+  const expiresAtUtc = readNonEmptyString(value.expiresAtUtc);
+  const subjectContextId = readNonEmptyString(value.subjectContextId);
+  const reportContextId = readNonEmptyString(value.reportContextId);
+  const approvalArtifactSha256 = readSha256(value.approvalArtifactSha256);
+  const signatureAlgorithm = readNonEmptyString(value.signatureAlgorithm);
+  const signingKeyId = readNonEmptyString(value.signingKeyId);
+  const signature = readSha256(value.signature);
+  const issuedAtMs = issuedAtUtc ? Date.parse(issuedAtUtc) : Number.NaN;
+  const expiresAtMs = expiresAtUtc ? Date.parse(expiresAtUtc) : Number.NaN;
+
+  if (
+    !receiptId ||
+    !captureNonce ||
+    !profileBindingSha256 ||
+    !collectionPolicyId ||
+    gateVersion !== FACE_3D_GATE_VERSION_V2 ||
+    !appBuild ||
+    !issuedAtUtc ||
+    !expiresAtUtc ||
+    !subjectContextId ||
+    !reportContextId ||
+    !approvalArtifactSha256 ||
+    signatureAlgorithm !== 'hmac-sha256-v1' ||
+    !signingKeyId ||
+    !signature ||
+    !Number.isFinite(issuedAtMs) ||
+    !Number.isFinite(expiresAtMs) ||
+    issuedAtMs >= expiresAtMs
+  ) {
+    return null;
+  }
+
+  return {
+    appBuild,
+    approvalArtifactSha256,
+    captureNonce,
+    collectionPolicyId,
+    expiresAtUtc,
+    gateVersion,
+    issuedAtUtc,
+    profileBindingSha256,
+    receiptId,
+    reportContextId,
+    signature,
+    signatureAlgorithm,
+    signingKeyId,
+    subjectContextId,
   };
 }
 
@@ -217,11 +384,20 @@ function isValidV2PolicyCombination(input: {
   return input.sampleMode === 'micro_burst' && input.aggregation === 'median_mad';
 }
 
+function getV2MetricMinimumFrameCount(collectionPolicyId: string): number | null {
+  if (collectionPolicyId === UNIFIED_MICRO_BURST_POLICY_ID) {
+    return 5;
+  }
+  return DIAGNOSTICS_EXACT_POLICY_TARGETS.get(collectionPolicyId) ?? null;
+}
+
 function parseFace3DProfileV2(
   value: Record<string, unknown>,
   metrics: Face3DMetrics,
+  metricsRecord: Record<string, unknown>,
 ): Face3DProfileV2 | null {
   const aggregation = readNonEmptyString(value.aggregation);
+  const captureNonce = readNonEmptyString(value.captureNonce);
   const captureWindowMs = readFiniteNumber(value.captureWindowMs);
   const collectionPolicyId = readNonEmptyString(value.collectionPolicyId);
   const completionRatio = readFiniteNumber(value.completionRatio);
@@ -234,9 +410,26 @@ function parseFace3DProfileV2(
   const topologyFingerprint = readNonEmptyString(value.topologyFingerprint);
   const validFrameCount = readNonNegativeInteger(value.validFrameCount);
   const warnings = readWarnings(value.warnings);
+  const profileBindingSha256 =
+    value.profileBindingSha256 === null
+      ? null
+      : readSha256(value.profileBindingSha256);
+  const calibrationReceipt =
+    value.calibrationReceipt === null
+      ? null
+      : parseCalibrationReceipt(value.calibrationReceipt);
+  const sensorProvenance = parseSensorProvenance(value.sensorProvenance);
+  const serverCalibrationReceiptStatus =
+    value.serverCalibrationReceiptStatus === undefined
+      ? undefined
+      : readNonEmptyString(value.serverCalibrationReceiptStatus);
+  const metricMinimumFrameCount = collectionPolicyId
+    ? getV2MetricMinimumFrameCount(collectionPolicyId)
+    : null;
 
   if (
     gateVersion !== FACE_3D_GATE_VERSION_V2 ||
+    !captureNonce ||
     !topologyFingerprint ||
     !collectionPolicyId ||
     (sampleMode !== 'micro_burst' && sampleMode !== 'single_frame') ||
@@ -252,6 +445,11 @@ function parseFace3DProfileV2(
     targetFrameCount === null ||
     targetFrameCount === 0 ||
     validFrameCount > targetFrameCount ||
+    (value.profileBindingSha256 !== null && !profileBindingSha256) ||
+    (value.calibrationReceipt !== null && !calibrationReceipt) ||
+    (value.serverCalibrationReceiptStatus !== undefined &&
+      !serverCalibrationReceiptStatus) ||
+    !sensorProvenance ||
     Math.abs(completionRatio - validFrameCount / targetFrameCount) > 0.0001 ||
     !isValidV2PolicyCombination({
       aggregation,
@@ -262,21 +460,57 @@ function parseFace3DProfileV2(
       validFrameCount,
       warnings,
     }) ||
-    Object.values(metrics).some(metric => metric.validFrameCount > validFrameCount)
+    metricMinimumFrameCount === null ||
+    FACE_3D_OPTIONAL_METRIC_KEYS.some(
+      key => key in metricsRecord && metrics[key] === undefined,
+    ) ||
+    Object.values(metrics).some(
+      metric =>
+        metric.validFrameCount > validFrameCount ||
+        metric.valueMm === undefined ||
+        metric.valueMmConfidence === undefined ||
+        metric.valueMmValidFrameCount === undefined ||
+        metric.valueMmMad === undefined ||
+        metric.valueMmValidFrameCount > validFrameCount ||
+        (metric.valueMm !== null &&
+          metric.valueMmValidFrameCount < metricMinimumFrameCount) ||
+        (aggregation === 'median_mad' && metric.valueMmMad === null) ||
+        (aggregation === 'none' &&
+          (metric.valueMmConfidence !== 0 ||
+            metric.valueMmMad !== null ||
+            (metric.valueMm !== null &&
+              metric.valueMmValidFrameCount !== 1))),
+    ) ||
+    (confidenceCalibrationStatus === 'uncalibrated' &&
+      calibrationReceipt !== null) ||
+    (confidenceCalibrationStatus === 'calibrated' &&
+      (!profileBindingSha256 ||
+        !calibrationReceipt ||
+        calibrationReceipt.captureNonce !== captureNonce ||
+        calibrationReceipt.profileBindingSha256 !== profileBindingSha256 ||
+        calibrationReceipt.collectionPolicyId !== collectionPolicyId ||
+        calibrationReceipt.gateVersion !== gateVersion))
   ) {
     return null;
   }
 
   return {
     aggregation,
+    calibrationReceipt,
+    captureNonce,
     captureWindowMs,
     collectionPolicyId,
     completionRatio,
     confidenceCalibrationStatus,
     gateVersion,
     metrics,
+    profileBindingSha256,
     sampleMode,
     schemaVersion: FACE_3D_PROFILE_SCHEMA_VERSION_V2,
+    ...(serverCalibrationReceiptStatus
+      ? {serverCalibrationReceiptStatus}
+      : {}),
+    sensorProvenance,
     source: FACE_3D_PROFILE_SOURCE,
     targetFrameCount,
     topologyFingerprint,
@@ -306,7 +540,7 @@ export function parseFace3DProfile(value: unknown): Face3DProfile | null {
   }
 
   if (value.schemaVersion === FACE_3D_PROFILE_SCHEMA_VERSION_V2) {
-    return parseFace3DProfileV2(value, metrics);
+    return parseFace3DProfileV2(value, metrics, metricsRecord);
   }
 
   return null;
@@ -326,11 +560,36 @@ export function isFace3DProfileAnalysisEligible(
     return true;
   }
 
+  if (!FACE_3D_CALIBRATION_PROMOTION_ENABLED) {
+    return false;
+  }
+
+  const approval = FACE_3D_CALIBRATION_APPROVAL_ALLOWLIST.get(
+    profile.collectionPolicyId as typeof UNIFIED_MICRO_BURST_POLICY_ID,
+  );
+  const receipt = profile.calibrationReceipt;
+
   return (
+    approval !== undefined &&
+    approval.gateVersion === profile.gateVersion &&
     profile.confidenceCalibrationStatus === 'calibrated' &&
+    profile.collectionPolicyId === UNIFIED_MICRO_BURST_POLICY_ID &&
     profile.sampleMode === 'micro_burst' &&
     profile.aggregation === 'median_mad' &&
-    !profile.collectionPolicyId.startsWith('diagnostics-')
+    !profile.collectionPolicyId.startsWith('diagnostics-') &&
+    profile.profileBindingSha256 !== null &&
+    receipt !== null &&
+    receipt.captureNonce === profile.captureNonce &&
+    receipt.profileBindingSha256 === profile.profileBindingSha256 &&
+    receipt.collectionPolicyId === profile.collectionPolicyId &&
+    receipt.gateVersion === profile.gateVersion &&
+    profile.serverCalibrationReceiptStatus === 'verified' &&
+    approval.signingKeyIds.has(receipt.signingKeyId) &&
+    approval.approvalArtifactSha256s.has(receipt.approvalArtifactSha256) &&
+    profile.sensorProvenance.trueDepthHardware === true &&
+    profile.sensorProvenance.faceTrackingSupported === true &&
+    profile.sensorProvenance.depthDataObservedRatio !== null &&
+    profile.sensorProvenance.depthDataObservedRatio > 0
   );
 }
 

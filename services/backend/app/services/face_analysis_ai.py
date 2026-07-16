@@ -12,6 +12,10 @@ from app.schemas.face_analysis_v2 import (
   MetricEnvelope,
   PerceptionResult,
 )
+from app.services.face_analysis_measurements import (
+  filter_internal_only_payload,
+  filter_metrics_for_model,
+)
 
 
 MEASUREMENT_PROMPT_VERSION = "s1-measurement-v1"
@@ -97,10 +101,11 @@ class FaceAnalysisAI:
     coverage: MeasurementCoveragePlan,
     camera_profile: dict[str, MetricEnvelope],
   ) -> MeasurementStageOutput:
+    model_profile = filter_metrics_for_model(camera_profile)
     prompt_payload = {
       "missingObservableKeys": coverage.missing_observable_keys,
-      "authoritativeKeys": coverage.authoritative_keys,
-      "cameraEvidence": _jsonable(camera_profile),
+      "authoritativeKeys": sorted(model_profile),
+      "cameraEvidence": _jsonable(model_profile),
     }
     output = await self._invoke_validated(
       model_type=MeasurementStageOutput,
@@ -143,6 +148,8 @@ class FaceAnalysisAI:
     profile: dict[str, MetricEnvelope],
     derived: DerivedResult | dict[str, Any],
   ) -> PerceptionResult:
+    model_profile = filter_metrics_for_model(profile)
+    model_derived = filter_internal_only_payload(_jsonable(derived))
     return await self._invoke_validated(
       model_type=PerceptionResult,
       developer_prompt=(
@@ -150,7 +157,7 @@ class FaceAnalysisAI:
         f"Never infer {FORBIDDEN_INFERENCES}. Do not create measurements. Return JSON only."
       ),
       user_prompt=json.dumps(
-        {"faceProfile": _jsonable(profile), "derived": _jsonable(derived)},
+        {"faceProfile": _jsonable(model_profile), "derived": model_derived},
         ensure_ascii=False,
         separators=(",", ":"),
       ),
@@ -165,6 +172,13 @@ class FaceAnalysisAI:
     derived: DerivedResult | dict[str, Any],
     perception: PerceptionResult | dict[str, Any],
   ) -> ConsultingResult:
+    model_payload = filter_internal_only_payload(
+      {
+        "faceProfile": _jsonable(profile),
+        "derived": _jsonable(derived),
+        "perception": _jsonable(perception),
+      },
+    )
     return await self._invoke_validated(
       model_type=ConsultingResult,
       developer_prompt=(
@@ -172,11 +186,7 @@ class FaceAnalysisAI:
         f"recommendation on supplied evidence. Never infer {FORBIDDEN_INFERENCES}. Return JSON only."
       ),
       user_prompt=json.dumps(
-        {
-          "faceProfile": _jsonable(profile),
-          "derived": _jsonable(derived),
-          "perception": _jsonable(perception),
-        },
+        model_payload,
         ensure_ascii=False,
         separators=(",", ":"),
       ),

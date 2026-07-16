@@ -1,10 +1,12 @@
 import type {Face3DMetricKey, Face3DProfile} from '../types';
 import {
+  FACE_3D_CALIBRATION_PROMOTION_ENABLED,
   buildFace3DStartRequest,
   isFace3DProfileAnalysisEligible,
   parseFace3DEvent,
   parseFace3DProfile,
 } from './face3DContract';
+import {adaptFace3DRuntimeEvidence} from './face3DUnifiedEvidenceAdapter';
 import {
   INITIAL_FACE_3D_ANALYSIS_STATE,
   reduceFace3DAnalysisState,
@@ -70,20 +72,33 @@ function createV2Profile(overrides: Record<string, unknown> = {}) {
         unit: 'normalized' as const,
         validFrameCount: 7,
         value: 0.1 + index * 0.02,
+        valueMm: 2.1 + index * 0.2,
+        valueMmConfidence: 0.72 - index * 0.01,
+        valueMmMad: 0.11 + index * 0.01,
+        valueMmValidFrameCount: 6,
       },
     ]),
   );
 
   return {
     aggregation: 'median_mad',
+    calibrationReceipt: null,
+    captureNonce: 'capture-nonce-v2',
     captureWindowMs: 420,
     collectionPolicyId: 'unified-micro-burst-5of8-v1',
     completionRatio: 7 / 8,
     confidenceCalibrationStatus: 'uncalibrated',
     gateVersion: 'face3d-gate-v2',
     metrics,
+    profileBindingSha256: null,
     sampleMode: 'micro_burst',
     schemaVersion: 'aura.face3d-profile.v2',
+    sensorProvenance: {
+      depthDataObservedRatio: null,
+      deviceModel: null,
+      faceTrackingSupported: null,
+      trueDepthHardware: null,
+    },
     source: 'arkit_face_mesh',
     targetFrameCount: 8,
     topologyFingerprint: 'synthetic-v8-i12-uv8-v2',
@@ -185,17 +200,83 @@ expectEqual(
   'v2 collection policy preserved',
 );
 expectEqual(
+  v2Profile?.metrics.noseTipProjection.valueMm,
+  2.1,
+  'v2 millimeter value is preserved without user exposure',
+);
+expectEqual(
+  v2Profile?.metrics.noseTipProjection.valueMmValidFrameCount,
+  6,
+  'v2 millimeter quality preserves its independent inlier count',
+);
+expectEqual(
+  v2Profile?.metrics.noseTipProjection.valueMmConfidence,
+  0.72,
+  'v2 millimeter quality does not reuse normalized confidence',
+);
+expectEqual(
   isFace3DProfileAnalysisEligible(v2Profile),
   false,
   'uncalibrated micro-burst is not product-analysis eligible',
 );
+const profileBindingSha256 = 'a'.repeat(64);
+const calibrationReceipt = {
+  appBuild: 'ios-20260717.1',
+  approvalArtifactSha256: 'b'.repeat(64),
+  captureNonce: 'capture-nonce-v2',
+  collectionPolicyId: 'unified-micro-burst-5of8-v1',
+  expiresAtUtc: '2026-07-18T00:00:00.000Z',
+  gateVersion: 'face3d-gate-v2',
+  issuedAtUtc: '2026-07-17T00:00:00.000Z',
+  profileBindingSha256,
+  receiptId: 'receipt-v2-1',
+  reportContextId: 'report-context-1',
+  signature: 'c'.repeat(64),
+  signatureAlgorithm: 'hmac-sha256-v1',
+  signingKeyId: 'face3d-calibration-key-1',
+  subjectContextId: 'subject-context-1',
+};
 const calibratedV2Profile = parseFace3DProfile(
-  createV2Profile({confidenceCalibrationStatus: 'calibrated'}),
+  createV2Profile({
+    calibrationReceipt,
+    confidenceCalibrationStatus: 'calibrated',
+    profileBindingSha256,
+    serverCalibrationReceiptStatus: 'verified',
+    sensorProvenance: {
+      depthDataObservedRatio: 1,
+      deviceModel: 'iPhone-test',
+      faceTrackingSupported: true,
+      trueDepthHardware: true,
+    },
+  }),
+);
+expectEqual(
+  FACE_3D_CALIBRATION_PROMOTION_ENABLED,
+  false,
+  'calibration promotion remains default off before Gate 6B approval',
 );
 expectEqual(
   isFace3DProfileAnalysisEligible(calibratedV2Profile),
-  true,
-  'calibrated product micro-burst is analysis eligible',
+  false,
+  'signed calibrated profile remains blocked while promotion flag is off',
+);
+expectEqual(
+  parseFace3DProfile(
+    createV2Profile({confidenceCalibrationStatus: 'calibrated'}),
+  ),
+  null,
+  'calibrated status without a bound signed receipt is rejected',
+);
+expectEqual(
+  parseFace3DProfile(
+    createV2Profile({
+      calibrationReceipt: {...calibrationReceipt, captureNonce: 'replayed-nonce'},
+      confidenceCalibrationStatus: 'calibrated',
+      profileBindingSha256,
+    }),
+  ),
+  null,
+  'receipt capture nonce must bind to the profile capture nonce',
 );
 expectEqual(
   parseFace3DProfile(createV2Profile({gateVersion: 'face3d-gate-v1'})),
@@ -217,6 +298,27 @@ expectEqual(
   null,
   'inconsistent completion ratio rejected',
 );
+expectEqual(
+  parseFace3DProfile({
+    ...createV2Profile(),
+    metrics: {
+      ...(createV2Profile().metrics as Record<string, unknown>),
+      noseLength: {
+        confidence: 0.8,
+        mad: 0.004,
+        unit: 'normalized',
+        validFrameCount: 7,
+        value: 0.2,
+        valueMm: 'malformed',
+        valueMmConfidence: 0.7,
+        valueMmMad: 0.1,
+        valueMmValidFrameCount: 6,
+      },
+    },
+  }),
+  null,
+  'v2 present-but-malformed optional metric rejects the whole profile',
+);
 
 const singleFrameProfile = parseFace3DProfile(
   createV2Profile({
@@ -233,6 +335,10 @@ const singleFrameProfile = parseFace3DProfile(
           unit: 'normalized',
           validFrameCount: 1,
           value: 0.1 + index * 0.02,
+          valueMm: 2 + index * 0.2,
+          valueMmConfidence: 0,
+          valueMmMad: null,
+          valueMmValidFrameCount: 1,
         },
       ]),
     ),
@@ -254,6 +360,72 @@ expectEqual(
 );
 expectEqual(
   parseFace3DProfile({
+    ...createV2Profile(),
+    metrics: Object.fromEntries(
+      METRIC_KEYS.map((key, index) => [
+        key,
+        {
+          confidence: 0.8,
+          mad: 0.004,
+          unit: 'normalized',
+          validFrameCount: 7,
+          value: 0.1 + index * 0.02,
+          valueMm: 2 + index * 0.2,
+        },
+      ]),
+    ),
+  }),
+  null,
+  'v2 profile without independent millimeter quality metadata is rejected',
+);
+expectEqual(
+  parseFace3DProfile({
+    ...createV2Profile(),
+    metrics: Object.fromEntries(
+      METRIC_KEYS.map((key, index) => [
+        key,
+        {
+          confidence: 0.8,
+          mad: 0.004,
+          unit: 'normalized',
+          validFrameCount: 7,
+          value: 0.1 + index * 0.02,
+          valueMm: 2 + index * 0.2,
+          valueMmConfidence: 0.2,
+          valueMmMad: 4.5,
+          valueMmValidFrameCount: 4,
+        },
+      ]),
+    ),
+  }),
+  null,
+  'product valueMm is rejected when raw inliers are below the 5-frame minimum',
+);
+expectEqual(
+  parseFace3DProfile({
+    ...createV2Profile(),
+    metrics: Object.fromEntries(
+      METRIC_KEYS.map((key, index) => [
+        key,
+        {
+          confidence: 0.8,
+          mad: 0.004,
+          unit: 'normalized',
+          validFrameCount: 7,
+          value: 0.1 + index * 0.02,
+          valueMm: null,
+          valueMmConfidence: 0.2,
+          valueMmMad: 4.5,
+          valueMmValidFrameCount: 4,
+        },
+      ]),
+    ),
+  })?.schemaVersion,
+  'aura.face3d-profile.v2',
+  'suppressed valueMm retains below-minimum raw quality diagnostics',
+);
+expectEqual(
+  parseFace3DProfile({
     ...createV2Profile({
       aggregation: 'none',
       collectionPolicyId: 'diagnostics-exact-1-v1',
@@ -266,6 +438,26 @@ expectEqual(
   }),
   null,
   'single-frame profile must disclose unaggregated warning',
+);
+
+const evidenceV2Profile =
+  v2Profile?.schemaVersion === 'aura.face3d-profile.v2' ? v2Profile : null;
+expect(evidenceV2Profile !== null, 'unified evidence fixture has a v2 profile');
+const adaptedUnifiedEvidence = adaptFace3DRuntimeEvidence({
+  captureId: 'unified-capture-1',
+  face3d: evidenceV2Profile!,
+  requestId: 'unified-request-1',
+  type: 'unified_face_capture_completed',
+});
+expectEqual(
+  adaptedUnifiedEvidence.event.type,
+  'face3d_analyzed',
+  'unified completion adapts to repeatability-compatible analyzed evidence',
+);
+expectEqual(
+  adaptedUnifiedEvidence.unifiedCapture?.captureId,
+  'unified-capture-1',
+  'unified evidence preserves capture id without image data',
 );
 
 // ── Tier-2 optional 키 계약 (docs/face3d/TIER2_METRIC_CONTRACT.md §3) ─────────

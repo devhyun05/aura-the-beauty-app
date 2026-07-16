@@ -60,6 +60,12 @@ class Settings(BaseSettings):
   face_analysis_v2_enabled: bool = False
   face_analysis_stage_timeout_seconds: float = Field(default=45.0, ge=5.0, le=180.0)
   face_analysis_stage_max_attempts: int = Field(default=2, ge=1, le=3)
+  # Phase 2 calibration remains fail-closed until Gate 6B evidence is promoted.
+  # Enabling requires all three values below plus a committed approval artifact.
+  face3d_calibration_promotion_enabled: bool = False
+  face3d_calibration_approval_artifact_sha256: str | None = None
+  face3d_calibration_receipt_signing_key_id: str | None = None
+  face3d_calibration_receipt_hmac_secret: str | None = None
   openai_enabled: bool = True
   bedrock_model_id: str | None = "anthropic.claude-3-5-sonnet-20241022-v2:0"
   bedrock_analysis_model_id: str | None = None

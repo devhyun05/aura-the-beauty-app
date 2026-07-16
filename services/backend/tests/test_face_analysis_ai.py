@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 import pytest
@@ -30,6 +31,16 @@ class FakeStructuredClient:
     return self.responses.pop(0)
 
 
+class CapturingFaceAnalysisAI(FaceAnalysisAI):
+  def __init__(self) -> None:
+    super().__init__(FakeStructuredClient([]))
+    self.invocation: dict[str, Any] | None = None
+
+  async def _invoke_validated(self, **kwargs):
+    self.invocation = kwargs
+    return kwargs
+
+
 COVERAGE = MeasurementCoveragePlan(
   authoritative_keys=["face3d.noseTipProjection"],
   missing_observable_keys=["skin.texture"],
@@ -50,6 +61,21 @@ PROFILE = {
     },
   ),
 }
+
+
+def internal_metric(value: float = 2.8) -> MetricEnvelope:
+  return MetricEnvelope.model_validate(
+    {
+      "value": value,
+      "unit": "mm",
+      "confidence": 0.91,
+      "source": "depth",
+      "status": "measured",
+      "shots": ["FACE3D"],
+      "sensitivity": 3,
+      "warnings": [],
+    },
+  )
 
 
 @pytest.mark.asyncio
@@ -77,6 +103,64 @@ async def test_measurement_rejects_authoritative_and_unknown_keys() -> None:
   assert result.rejected_authoritative_keys == ["face3d.noseTipProjection"]
   assert result.rejected_unknown_keys == ["unknown.metric"]
   assert client.calls[0]["source_image_bytes"] == b"jpeg"
+
+
+@pytest.mark.asyncio
+async def test_measurement_prompt_omits_internal_only_camera_evidence() -> None:
+  client = FakeStructuredClient(
+    [{"metrics": {}, "photoQuality": {"usable": True, "warnings": []}}],
+  )
+  profile = {**PROFILE, "face3d.noseTipProjection.mm": internal_metric()}
+
+  await FaceAnalysisAI(client).measure(
+    source_image_bytes=b"jpeg",
+    coverage=MeasurementCoveragePlan(
+      authoritative_keys=sorted(profile),
+      missing_observable_keys=[],
+      out_of_scope_keys=[],
+      blocked_keys=[],
+    ),
+    camera_profile=profile,
+  )
+
+  payload = json.loads(client.calls[0]["user_prompt"].split("\n")[-1])
+  assert "face3d.noseTipProjection" in payload["cameraEvidence"]
+  assert "face3d.noseTipProjection.mm" not in payload["cameraEvidence"]
+  assert "face3d.noseTipProjection.mm" not in payload["authoritativeKeys"]
+
+
+@pytest.mark.asyncio
+async def test_perception_prompt_omits_internal_metrics_and_insights() -> None:
+  ai = CapturingFaceAnalysisAI()
+  profile = {**PROFILE, "face3d.noseTipProjection.mm": internal_metric()}
+
+  await ai.perceive(
+    source_image_bytes=b"jpeg",
+    profile=profile,
+    derived={
+      "faceShape": {
+        "label": "oval",
+        "description": "public",
+        "confidence": 0.8,
+        "rationaleMetricKeys": ["face3d.noseTipProjection"],
+        "sensitivity": 1,
+      },
+      "asymmetry": {
+        "label": "internal",
+        "description": "internal",
+        "confidence": 0.8,
+        "rationaleMetricKeys": ["face3d.noseTipProjection.mm"],
+        "sensitivity": 3,
+      },
+    },
+  )
+
+  assert ai.invocation is not None
+  payload = json.loads(ai.invocation["user_prompt"])
+  assert "face3d.noseTipProjection" in payload["faceProfile"]
+  assert "face3d.noseTipProjection.mm" not in payload["faceProfile"]
+  assert "faceShape" in payload["derived"]
+  assert "asymmetry" not in payload["derived"]
 
 
 @pytest.mark.asyncio
