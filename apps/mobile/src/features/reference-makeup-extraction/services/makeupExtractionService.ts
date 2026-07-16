@@ -31,6 +31,14 @@ type BackendFilterExtractionResultPayload = {
   aiStatus?: string;
   error?: {message?: string | null} | null;
   productSource?: string;
+  request?: {
+    cdnUrl?: string | null;
+    contentType?: string | null;
+    referenceImageId?: string | null;
+    referenceSource?: 'camera' | 'gallery' | null;
+    referenceTitle?: string | null;
+    sourceUrl?: string | null;
+  } | null;
   result?: BackendReferenceMakeupExtractionResponse | null;
 };
 
@@ -306,6 +314,61 @@ export const getReferenceMakeupExtractionData = async (): Promise<ReferenceMakeu
 
 export const getReferenceMakeupExtractionDataSync = (): ReferenceMakeupExtractionData =>
   latestReferenceMakeupExtractionData;
+
+export async function fetchReferenceMakeupExtractionReport(
+  reportId: string,
+): Promise<{data: ReferenceMakeupExtractionData; photo: ReferenceMakeupPhoto}> {
+  const response = await requestBackendJson<unknown>(
+    '/filter-extractions/' + encodeURIComponent(reportId),
+  );
+  const normalizedResponse = camelizeBackendValue(
+    response,
+  ) as GetFilterExtractionReportResponse;
+  const job = normalizedResponse.report;
+  const completedResponse = extractionResponseFromJob(job);
+
+  if (!completedResponse?.extractedMakeupLook) {
+    throw new BackendApiError(
+      '완료된 메이크업 추출 보고서를 불러오지 못했어요.',
+      409,
+      'FILTER_EXTRACTION_REPORT_NOT_COMPLETED',
+      {reportId, status: job.status ?? null},
+    );
+  }
+
+  const request = job.resultPayload?.request;
+  const fallbackPhoto = referenceMakeupExtractionMock.photos[0];
+  const imageUri = request?.cdnUrl?.trim() || request?.sourceUrl?.trim();
+  const photo: ReferenceMakeupPhoto = {
+    ...fallbackPhoto,
+    contentType: request?.contentType?.trim() || fallbackPhoto.contentType,
+    id: request?.referenceImageId?.trim() || `filter-extraction-${reportId}`,
+    imageSource: imageUri ? {uri: imageUri} : fallbackPhoto.imageSource,
+    referenceSource:
+      request?.referenceSource === 'camera' ? 'camera' : 'album',
+    title:
+      request?.referenceTitle?.trim() ||
+      completedResponse.extractedMakeupLook.title ||
+      fallbackPhoto.title,
+  };
+
+  latestReferenceMakeupExtractionData = {
+    ...referenceMakeupExtractionMock,
+    photos: [
+      photo,
+      ...referenceMakeupExtractionMock.photos.filter(item => item.id !== photo.id),
+    ],
+    loadingSteps:
+      completedResponse.loadingSteps ??
+      referenceMakeupExtractionMock.loadingSteps,
+    extractedMakeupLook: mergeBackendExtractionLook(
+      completedResponse.extractedMakeupLook,
+      photo,
+    ),
+  };
+
+  return {data: latestReferenceMakeupExtractionData, photo};
+}
 
 export async function runReferenceMakeupExtraction(
   photo: ReferenceMakeupPhoto,

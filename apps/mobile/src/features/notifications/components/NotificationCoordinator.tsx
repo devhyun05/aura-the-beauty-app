@@ -1,0 +1,126 @@
+import {useCallback, useEffect, useRef} from 'react';
+import * as Notifications from 'expo-notifications';
+
+import {useAuthSession} from '../../auth';
+import {
+  markAppNotificationRead,
+  notifyNotificationStateChanged,
+  registerForReportNotifications,
+} from '../services/notificationService';
+import type {AppNotificationData} from '../types';
+
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+type NotificationCoordinatorProps = {
+  onOpenNotification: (data: AppNotificationData) => void;
+};
+
+function readNotificationData(
+  response: Notifications.NotificationResponse,
+): AppNotificationData {
+  const source = response.notification.request.content.data ?? {};
+  const readString = (key: string) =>
+    typeof source[key] === 'string' ? source[key] : undefined;
+
+  return {
+    notificationId: readString('notificationId'),
+    reportId: readString('reportId'),
+    route: readString('route'),
+    type: readString('type'),
+  };
+}
+
+export function NotificationCoordinator({
+  onOpenNotification,
+}: NotificationCoordinatorProps) {
+  const {isRestoringSession, session} = useAuthSession();
+  const pendingResponseRef = useRef<Notifications.NotificationResponse | null>(null);
+  const handledResponseIds = useRef(new Set<string>());
+
+  const handleResponse = useCallback(
+    (response: Notifications.NotificationResponse) => {
+      const responseId = response.notification.request.identifier;
+      if (handledResponseIds.current.has(responseId)) {
+        return;
+      }
+
+      if (isRestoringSession || !session) {
+        pendingResponseRef.current = response;
+        return;
+      }
+
+      handledResponseIds.current.add(responseId);
+      pendingResponseRef.current = null;
+      const data = readNotificationData(response);
+      onOpenNotification(data);
+
+      if (data.notificationId) {
+        void markAppNotificationRead(data.notificationId).catch(() => undefined);
+      }
+    },
+    [isRestoringSession, onOpenNotification, session],
+  );
+
+  useEffect(() => {
+    if (isRestoringSession || !session) {
+      return;
+    }
+
+    void registerForReportNotifications()
+      .then(result => {
+        if (result.status === 'project-id-missing') {
+          console.info(
+            '[aura:notifications] EXPO_PUBLIC_EAS_PROJECT_ID is required for push registration.',
+          );
+        }
+      })
+      .catch(error => {
+        console.info('[aura:notifications] registration skipped', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+  }, [isRestoringSession, session?.user.id]);
+
+  useEffect(() => {
+    const receivedSubscription = Notifications.addNotificationReceivedListener(() => {
+      notifyNotificationStateChanged();
+    });
+    const responseSubscription =
+      Notifications.addNotificationResponseReceivedListener(handleResponse);
+    const tokenSubscription = Notifications.addPushTokenListener(() => {
+      if (!session) {
+        return;
+      }
+      void registerForReportNotifications().catch(() => undefined);
+    });
+
+    void Notifications.getLastNotificationResponseAsync().then(response => {
+      if (response) {
+        handleResponse(response);
+      }
+    });
+
+    return () => {
+      receivedSubscription.remove();
+      responseSubscription.remove();
+      tokenSubscription.remove();
+    };
+  }, [handleResponse, session]);
+
+  useEffect(() => {
+    if (isRestoringSession || !session || !pendingResponseRef.current) {
+      return;
+    }
+    handleResponse(pendingResponseRef.current);
+  }, [handleResponse, isRestoringSession, session]);
+
+  return null;
+}

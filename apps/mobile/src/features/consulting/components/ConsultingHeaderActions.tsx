@@ -4,6 +4,10 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Bell, CalendarDays, MessageCircle} from 'lucide-react-native';
 
 import {useAuthSession} from '../../auth';
+import {
+  getUnreadAppNotificationCount,
+  subscribeNotificationStateChange,
+} from '../../notifications/services/notificationService';
 import {colors, consultingColors, consultingRadius} from '../../../shared/theme';
 import {getConsultingBookings} from '../services/consultingService';
 import {
@@ -45,10 +49,17 @@ export function ConsultingHeaderActions({
       return;
     }
 
-    void getConsultingBookings(undefined, {force: true})
-      .then(nextRecords => {
+    void Promise.all([
+      getConsultingBookings(undefined, {force: true}).catch(() => []),
+      getUnreadAppNotificationCount().catch(() => 0),
+    ])
+      .then(async ([nextRecords, unreadNotificationCount]) => {
         setRecords(nextRecords);
-        return getConsultingUnreadState(nextRecords);
+        const consultingUnreadState = await getConsultingUnreadState(nextRecords);
+        return {
+          messages: consultingUnreadState.messages,
+          notifications: unreadNotificationCount > 0,
+        };
       })
       .then(setUnreadState);
   }, [getAuthToken]);
@@ -59,10 +70,17 @@ export function ConsultingHeaderActions({
     records,
   });
 
-  React.useEffect(
-    () => subscribeConsultingReadStateChange(refreshUnreadState),
-    [refreshUnreadState],
-  );
+  React.useEffect(() => {
+    const unsubscribeConsulting =
+      subscribeConsultingReadStateChange(refreshUnreadState);
+    const unsubscribeNotifications =
+      subscribeNotificationStateChange(refreshUnreadState);
+
+    return () => {
+      unsubscribeConsulting();
+      unsubscribeNotifications();
+    };
+  }, [refreshUnreadState]);
 
   useFocusEffect(
     React.useCallback(() => {

@@ -19,6 +19,7 @@ from app.services.reference_makeup_extraction import (
   enrich_reference_makeup_products,
 )
 from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
+from app.services.push_notifications import create_and_send_notification
 from app.services.users import ensure_user
 
 
@@ -164,6 +165,19 @@ async def run_filter_extraction_job_background(
     report_id,
     ai_status,
     product_source,
+  )
+  await create_and_send_notification(
+    db,
+    settings,
+    user_id=completed_report["user_id"],
+    notification_type="filter_extraction_completed",
+    title="메이크업 필터 분석이 완성됐어요",
+    body="추출된 메이크업 룩을 확인하고 AR에 적용해 보세요.",
+    data={
+      "reportId": str(report_id),
+      "route": "ReferenceMakeupExtractionResult",
+    },
+    dedupe_key=f"filter-extraction:{report_id}:completed",
   )
 
 

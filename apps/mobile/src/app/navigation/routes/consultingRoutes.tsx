@@ -13,7 +13,6 @@ import {
   ConsultingHomeScreen,
   ConsultingMembershipScreen,
   ConsultingMessagesScreen,
-  ConsultingNotificationsScreen,
   ConsultingRequestConfirmScreen,
   ConsultingReviewScreen,
   ConsultingSummaryScreen,
@@ -31,6 +30,10 @@ import {
   type ConsultingRecord,
   type ConsultingReviewDraft,
 } from '../../../features/consulting';
+import {
+  NotificationsScreen,
+  navigateToAppNotification,
+} from '../../../features/notifications';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import type {AppScreenTopPadding} from '../../../shared/ui/AppScreen';
 import {
@@ -549,22 +552,17 @@ export function ConsultingMessagesRouteScreen({
 export function ConsultingNotificationsRouteScreen({
   navigation,
 }: RootScreenProps<'ConsultingNotifications'>) {
-  const {getAuthToken} = useAuthSession();
   return (
     <DetailRouteChrome
       routeName="ConsultingNotifications"
       onBack={() => goBackToConsulting(navigation)}>
-      <ConsultingNotificationsScreen
-        authToken={getAuthToken()}
-        onPressHistory={() => navigation.navigate('ConsultingHistory')}
-        onPressRecord={record =>
-          isConsultingChatAvailable(record)
-            ? navigation.navigate('ConsultingConversation', {
-                expertId: record.expertId,
-                recordId: record.id,
-                record,
-              })
-            : navigation.navigate('ConsultingHistory')
+      <NotificationsScreen
+        onPressNotification={notification =>
+          navigateToAppNotification(navigation, {
+            ...notification.data,
+            notificationId: notification.id,
+            type: notification.notificationType,
+          })
         }
       />
     </DetailRouteChrome>

@@ -78,7 +78,7 @@ export type RootStackParamList = {
     sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
   };
   ProductPersonalizationSettings: undefined;
-  MakeupRecommendation: undefined;
+  MakeupRecommendation: {reportId?: string} | undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
   AuradinSearch:
     | {prompt?: string; reportId?: string; personalColor?: string; open?: string; dial?: string; ts?: string}
@@ -140,14 +140,14 @@ export type RootStackParamList = {
   MakeupFeedbackGoalInput: undefined;
   MakeupFeedbackLoading: undefined;
   MakeupFeedbackResultsList: undefined;
-  MakeupFeedbackResult: undefined;
+  MakeupFeedbackResult: {reportId?: string} | undefined;
   MakeupCorrectionGuide: undefined;
   MakeupCorrectionTip: {pointId: string};
   ReferenceMakeupExtractionUpload: {
     initialSource?: 'camera' | 'gallery';
   } | undefined;
   ReferenceMakeupExtractionLoading: undefined;
-  ReferenceMakeupExtractionResult: undefined;
+  ReferenceMakeupExtractionResult: {reportId?: string} | undefined;
   ExtractedMakeupLookAdjust: undefined;
   MakeupFilterSave: undefined;
   MakeupFilterSaveComplete: {arStyleId?: string; saveError?: string} | undefined;

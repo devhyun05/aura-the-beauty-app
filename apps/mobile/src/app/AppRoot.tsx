@@ -22,6 +22,10 @@ import type {RootStackParamList} from '../app/navigation/routeTypes';
 import {prepareUnityMakeupRuntime} from '../features/ar/services/unityMakeupBridge';
 import {IncomingConsultingCallGate} from '../features/consulting/components/IncomingConsultingCallGate';
 import {prefetchHomeHeroImages} from '../features/home/config/homeHeroAssets';
+import {
+  NotificationCoordinator,
+  navigateToAppNotification,
+} from '../features/notifications';
 import {typography} from '../shared/theme';
 
 export function AppRoot() {
@@ -90,6 +94,12 @@ export function AppRoot() {
               onReady={() => syncStatusBarStyle(navigationRef.getRootState())}
               onStateChange={state => syncStatusBarStyle(state)}>
               <RootNavigator />
+              <NotificationCoordinator
+                onOpenNotification={data => {
+                  if (!navigationRef.isReady()) return;
+                  navigateToAppNotification(navigationRef, data);
+                }}
+              />
               <IncomingConsultingCallGate
                 onAnswer={record => {
                   if (!navigationRef.isReady()) return;
