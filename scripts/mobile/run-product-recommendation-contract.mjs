@@ -59,6 +59,7 @@ const recommendationShelfScreen = source('apps/mobile/src/features/recommendatio
 const productShelfCategories = source('apps/mobile/src/features/recommendation/services/productShelfCategories.ts');
 const appScreen = source('apps/mobile/src/shared/ui/AppScreen.tsx');
 const backendApi = source('apps/mobile/src/shared/services/backendApi.ts');
+const productBackendApi = source('apps/mobile/src/shared/services/productBackendApi.ts');
 const productHubService = source('apps/mobile/src/features/recommendation/services/productHubService.ts');
 const recommendationRoutes = source('apps/mobile/src/app/navigation/routes/recommendationRoutes.tsx');
 const arRoutes = source('apps/mobile/src/app/navigation/routes/arRoutes.tsx');
@@ -191,6 +192,11 @@ requireContract(
     backendApi.includes('네트워크 연결을 확인한 뒤 다시 시도해 주세요.'),
   'offline backend failures must have an explicit localized retry contract.',
 );
+requireContract(
+  productBackendApi.includes('EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL') &&
+    productBackendApi.includes('baseUrl: getProductBackendOverride()'),
+  'product APIs must support a dedicated backend without moving login or unrelated APIs.',
+);
 
 const backendApiModule = executeTypeScriptModule(
   'apps/mobile/src/shared/services/backendApi.ts',
@@ -218,6 +224,30 @@ requireContract(
     offlineError.message === '네트워크 연결을 확인한 뒤 다시 시도해 주세요.',
   'an executed offline request must surface the localized retryable network error.',
 );
+
+const productBackendRequests = [];
+const productBackendApiModule = executeTypeScriptModule(
+  'apps/mobile/src/shared/services/productBackendApi.ts',
+  {
+    './backendApi': {
+      getBackendApiBaseUrl: () => 'https://main.example.com/api',
+      requestBackendJson: async (path, options) => {
+        productBackendRequests.push({path, options});
+        return {ok: true};
+      },
+    },
+  },
+);
+const previousProductApiBaseUrl = process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL;
+process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL = 'http://192.0.2.10:8000';
+await productBackendApiModule.requestProductBackendJson('/products/features');
+requireContract(
+  productBackendApiModule.getProductBackendApiBaseUrl() === 'http://192.0.2.10:8000' &&
+    productBackendRequests[0]?.options?.baseUrl === 'http://192.0.2.10:8000',
+  'the dedicated product backend must be selected at runtime and forwarded to the shared authenticated client.',
+);
+if (previousProductApiBaseUrl === undefined) delete process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL;
+else process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL = previousProductApiBaseUrl;
 requireContract(
   productHubService.includes("params.set('shade_id', shadeId)") &&
     recommendationRoutes.includes('shadeId={route.params.shadeId}') &&
@@ -378,9 +408,9 @@ const productHubApiRequests = [];
 const productHubServiceModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productHubService.ts',
   {
-    '../../../shared/services/backendApi': {
-      getBackendApiBaseUrl: () => 'https://api.example.com',
-      requestBackendJson: async (path) => {
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'https://api.example.com',
+      requestProductBackendJson: async (path) => {
         productHubApiRequests.push(path);
         if (path.includes('/recommendations/ar?')) return {status: 'ready', groups: []};
         if (path.includes('/recommendations/seasonal?')) return {status: 'ready', collection: null, items: []};
@@ -421,12 +451,35 @@ requireContract(
     productHubApiRequests.some(path => path.includes('/recommendations/cohort?') && path.includes('limit=60') && path.includes('category=shadow')),
   'more shelves must execute category-scoped server requests with the expanded commercial page size.',
 );
+const productHubFallbackModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/productHubService.ts',
+  {
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'http://127.0.0.1:8000',
+      requestProductBackendJson: async path => {
+        if (path.includes('/recommendations/seasonal?')) {
+          return {status: 'ready', collection: null, items: [fallbackProduct]};
+        }
+        throw {code: 'DATABASE_NOT_CONFIGURED'};
+      },
+    },
+  },
+);
+const fallbackArRecommendation = await productHubFallbackModule.getArRecommendations(undefined, 6, 'lip');
+const fallbackPersonalizedRecommendation = await productHubFallbackModule.getPersonalizedRecommendations(12, 'lip');
+requireContract(
+  fallbackArRecommendation.status === 'ready' &&
+    fallbackArRecommendation.groups[0]?.items[0]?.reasonCodes?.includes('POPULAR_FALLBACK') &&
+    fallbackPersonalizedRecommendation.status === 'ready' &&
+    fallbackPersonalizedRecommendation.items[0]?.productId === 'fallback-product',
+  'database-unavailable AR and personalized shelves must keep rendering real seasonal products instead of an error state.',
+);
 const legacyRecommendationModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productRecommendationService.ts',
   {
-    '../../../shared/services/backendApi': {
-      getBackendApiBaseUrl: () => 'https://api.example.com',
-      requestBackendJson: async () => ({
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'https://api.example.com',
+      requestProductBackendJson: async () => ({
         products: [{
           id: 'auradin-seed-contract-brow',
           externalSource: 'auradin_catalog',
@@ -520,9 +573,9 @@ const eventRequests = [];
 const productEventModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productEventService.ts',
   {
-    '../../../shared/services/backendApi': {
-      getBackendApiBaseUrl: () => 'http://127.0.0.1:8000/api',
-      requestBackendJson: async (path, options) => {
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'http://127.0.0.1:8000/api',
+      requestProductBackendJson: async (path, options) => {
         eventRequests.push({path, options});
         return {};
       },

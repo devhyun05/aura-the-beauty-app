@@ -204,10 +204,11 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
           <HomeScreen
             headerRightSlot={
               <ConsultingHeaderActions
-                onPressMessages={() => rootNavigation?.navigate('ConsultingMessages')}
                 onPressNotifications={() =>
                   rootNavigation?.navigate('ConsultingNotifications')
                 }
+                showMessages={false}
+                variant="hero"
               />
             }
             onOpenFeatureMenu={openFeatureMenu}
