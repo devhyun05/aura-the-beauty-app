@@ -168,6 +168,10 @@ def _converse(settings: Settings, model_id: str, system: str, prompt: str) -> di
   if text.startswith("```") and text.endswith("```"):
     first_newline = text.find("\n")
     text = text[first_newline + 1 : -3].strip() if first_newline >= 0 else text[3:-3].strip()
+  start_idx = text.find("{")
+  end_idx = text.rfind("}")
+  if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+    text = text[start_idx : end_idx + 1]
   try:
     value = json.loads(text)
   except json.JSONDecodeError as exc:
@@ -258,7 +262,10 @@ async def generate_scenarios(settings: Settings, count: int, exclude_texts: list
       "seedPrompt must clearly describe color, texture, emphasis, and occasion without relying on the display copy. "
       f"Do not repeat, reorder, extend, or paraphrase any previously shown idea: {json.dumps([*excluded, *[item['text'] for item in items]], ensure_ascii=False)}",
     )
-    for raw_item in response.get("items", []):
+    raw_items = response.get("items")
+    if not isinstance(raw_items, list):
+      continue
+    for raw_item in raw_items:
       if not isinstance(raw_item, dict):
         continue
       text = str(raw_item.get("text") or "").strip()[:60]

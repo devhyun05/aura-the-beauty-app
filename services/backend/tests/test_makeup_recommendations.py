@@ -83,6 +83,28 @@ def test_converse_accepts_json_code_fence(monkeypatch: pytest.MonkeyPatch) -> No
   assert result["items"][0]["text"] == "퇴근 후 약속"
 
 
+def test_converse_extracts_json_from_text_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
+  class WrappedJsonBedrockClient:
+    def converse(self, **_kwargs):
+      return {
+        "output": {
+          "message": {
+            "content": [
+              {
+                "text": "Here is the JSON:\n{\"items\":[{\"id\":\"fresh-1\",\"text\":\"퇴근 후 약속\"}]}\nDone.",
+              },
+            ],
+          },
+        },
+      }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", lambda *_args, **_kwargs: WrappedJsonBedrockClient())
+
+  result = _converse(Settings(), "model-id", "system", "prompt")
+
+  assert result["items"][0]["text"] == "퇴근 후 약속"
+
+
 def test_converse_uses_bounded_three_look_recommendation_payload(monkeypatch: pytest.MonkeyPatch) -> None:
   client = FakeBedrockClient()
   monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", lambda *_args, **_kwargs: client)
@@ -651,6 +673,29 @@ async def test_scenarios_retry_until_they_are_new_and_unique(monkeypatch: pytest
 
   assert [item["text"] for item in result["items"]] == ["조용한 약속", "기분 전환", "오랜만의 외출"]
   assert result["items"][0]["seedPrompt"] == "차분한 저녁 약속 메이크업"
+
+
+@pytest.mark.asyncio
+async def test_scenarios_skip_non_list_items_response(monkeypatch: pytest.MonkeyPatch) -> None:
+  responses = iter(
+    [
+      {"items": None},
+      {
+        "items": [
+          {"id": "fresh", "text": "조용한 약속", "seedPrompt": "차분한 저녁 약속 메이크업", "tags": ["차분"]},
+        ],
+      },
+    ],
+  )
+
+  async def fake_generate_json(*_args, **_kwargs):
+    return next(responses)
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  result = await generate_scenarios(Settings(), 1, [])
+
+  assert [item["text"] for item in result["items"]] == ["조용한 약속"]
 
 
 @pytest.mark.asyncio
