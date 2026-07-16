@@ -858,7 +858,10 @@ async def list_analysis_reports(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  filters = ["r.user_id = $1"]
+  filters = [
+    "r.user_id = $1",
+    "r.status = 'completed'",
+  ]
   values: list[object] = [user["id"]]
 
   if with_recommended_makeups:

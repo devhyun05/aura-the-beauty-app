@@ -5,6 +5,8 @@ import {CalendarClock, ChevronRight, MessageCircle, Video} from 'lucide-react-na
 import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {subscribeNotificationStateChange} from '../../notifications';
+import {clearMyPageProfileSummaryCache} from '../../../shared/services/profileService';
 import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {AppScreen, SectionHeader} from '../../../shared/ui';
 import {getConsultingBookings} from '../../consulting/services/consultingService';
@@ -114,10 +116,15 @@ export function ProfileScreen({
       isMountedRef.current = true;
       loadProfile({silent: hasLoadedProfileRef.current});
       const cancelConsultingLoad = loadConsultingRecords();
+      const unsubscribeNotificationState = subscribeNotificationStateChange(() => {
+        clearMyPageProfileSummaryCache();
+        loadProfile({silent: true});
+      });
 
       return () => {
         isMountedRef.current = false;
         cancelConsultingLoad();
+        unsubscribeNotificationState();
       };
     }, [loadConsultingRecords, loadProfile]),
   );
