@@ -1347,13 +1347,12 @@ expect(
   'Runtime writer must use a dedicated local path, omit product/source payloads, and prune expired artifacts.',
 );
 expect(
-  artifactSource.includes('deleteFaceRatioPhase1LocalCapture') &&
+    artifactSource.includes('deleteFaceRatioPhase1LocalCapture') &&
     artifactContractSource.includes('isFaceRatioPhase1LocalCaptureUri') &&
     artifactContractSource.includes('PHASE1_LOCAL_CAPTURE_FILE_PATTERN') &&
-    labSource.includes('releasePhase1LocalCapture(captureToRelease)') &&
-    labSource.includes(
-      'void deleteFaceRatioPhase1LocalCapture(captureToRelease.imageUri)',
-    ),
+    labSource.includes('releaseLabLocalCapture(captureToRelease)') &&
+    labSource.includes('void deleteFaceRatioPhase1LocalCapture(') &&
+    labSource.includes('captureToRelease.imageUri'),
   'Phase 1 retake/advance/change-mode must best-effort delete only the native local tmp capture.',
 );
 expect(

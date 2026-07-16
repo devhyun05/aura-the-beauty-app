@@ -1,4 +1,10 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {useFonts} from 'expo-font';
@@ -41,6 +47,10 @@ import {
   type FaceCaptureImageInput,
   type FaceCaptureUploadResult,
 } from '../../features/face-capture/services/faceCaptureUploadService';
+import {
+  FaceCaptureLabTempImageOwnership,
+} from '../../features/face-capture/services/faceCaptureLabTempImageOwnership';
+import {deleteUnifiedFaceCaptureTempImage} from '../../features/face-capture/services/unifiedFaceCaptureTempImageCleanup';
 import {
   type FaceCaptureGreenlightReport,
 } from '../../features/face-capture/services/faceCaptureGreenlight';
@@ -531,6 +541,15 @@ function FaceCaptureLabContent() {
     useState(0);
   const [preparedSequenceError, setPreparedSequenceError] =
     useState<string | null>(null);
+  const unifiedLabImageOwnershipRef =
+    useRef<FaceCaptureLabTempImageOwnership | null>(null);
+  const labMountedRef = useRef(false);
+  if (!unifiedLabImageOwnershipRef.current) {
+    unifiedLabImageOwnershipRef.current =
+      new FaceCaptureLabTempImageOwnership();
+  }
+  const unifiedLabImageOwnership =
+    unifiedLabImageOwnershipRef.current;
   const preparedCollectionPlan =
     PHASE1_COLLECTION_PLAN_RESOLUTION.mode === 'prepared'
       ? PHASE1_COLLECTION_PLAN_RESOLUTION.plan
@@ -647,6 +666,14 @@ function FaceCaptureLabContent() {
     };
   }, [preparedCollectionPlan]);
 
+  useEffect(() => {
+    labMountedRef.current = true;
+    return () => {
+      labMountedRef.current = false;
+      void unifiedLabImageOwnership.releaseAll();
+    };
+  }, [unifiedLabImageOwnership]);
+
   const preparedExact30Completed =
     Boolean(preparedCollectionPlan) &&
     preparedExact30CompletedShotCount >=
@@ -736,19 +763,26 @@ function FaceCaptureLabContent() {
     ],
   );
 
-  const releasePhase1LocalCapture = useCallback(
+  const releaseLabLocalCapture = useCallback(
     (captureToRelease: LabCapture | null) => {
-      if (labMode !== 'phase1-replay-10' || !captureToRelease) {
+      if (!captureToRelease) {
         return;
       }
 
-      // 먼저 결과 화면의 참조를 끊고, 다음 task에서 네이티브 tmp 파일만 지운다.
-      // Documents/앨범/원격 URI는 cleanup helper가 거부한다.
+      // 먼저 결과 화면의 참조를 끊고, 다음 task에서 소유한 로컬 tmp/cache만
+      // 지운다. 두 helper 모두 Documents/앨범/원격/다른 cache 파일은 거부한다.
       setTimeout(() => {
-        void deleteFaceRatioPhase1LocalCapture(captureToRelease.imageUri);
+        if (labMode === 'phase1-replay-10') {
+          void deleteFaceRatioPhase1LocalCapture(
+            captureToRelease.imageUri,
+          );
+        }
+        void unifiedLabImageOwnership.release(
+          captureToRelease.imageUri,
+        );
       }, 0);
     },
-    [labMode],
+    [labMode, unifiedLabImageOwnership],
   );
 
   const resetCapture = useCallback(() => {
@@ -758,8 +792,8 @@ function FaceCaptureLabContent() {
     setPhase1RawSaved(false);
     setResultMode('face3d');
     setModeRevision(current => current + 1);
-    releasePhase1LocalCapture(captureToRelease);
-  }, [capture, releasePhase1LocalCapture]);
+    releaseLabLocalCapture(captureToRelease);
+  }, [capture, releaseLabLocalCapture]);
 
   const finishPhase1Shot = useCallback(() => {
     const captureToRelease = capture;
@@ -794,13 +828,13 @@ function FaceCaptureLabContent() {
     }
     setResultMode('face3d');
     setModeRevision(current => current + 1);
-    releasePhase1LocalCapture(captureToRelease);
+    releaseLabLocalCapture(captureToRelease);
   }, [
     capture,
     phase1RawSaved,
     phase1Sequence.shotIndex,
     preparedCollectionPlan,
-    releasePhase1LocalCapture,
+    releaseLabLocalCapture,
   ]);
 
   const handlePhase1AnalysisResult = useCallback(
@@ -822,8 +856,8 @@ function FaceCaptureLabContent() {
       setPhase1Sequence({runIndex: 1, shotIndex: 1});
     }
     setModeRevision(current => current + 1);
-    releasePhase1LocalCapture(captureToRelease);
-  }, [capture, preparedCollectionPlan, releasePhase1LocalCapture]);
+    releaseLabLocalCapture(captureToRelease);
+  }, [capture, preparedCollectionPlan, releaseLabLocalCapture]);
 
   const resetPreparedReplay = useCallback(() => {
     const firstValidation =
@@ -1053,6 +1087,11 @@ function FaceCaptureLabContent() {
           } else {
             void appendFace3DRuntimeEvidence(result).catch(() => undefined);
           }
+          if (!labMountedRef.current) {
+            await deleteUnifiedFaceCaptureTempImage(result.image.uri);
+            return false;
+          }
+          unifiedLabImageOwnership.take(result.image.uri);
           setCapture({
             ...upload,
             capturedAt: new Date().toISOString(),

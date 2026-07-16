@@ -63,7 +63,16 @@ if (
   !labSource.includes('phase1PrunePending ||') ||
   !labSource.includes('current.shotIndex !== completedShotIndex') ||
   !labSource.includes('completePreparedReplayCleanup') ||
-  !labSource.includes('완료된 기기 raw 삭제 및 세션 종료')
+  !labSource.includes('완료된 기기 raw 삭제 및 세션 종료') ||
+  !labSource.includes('unifiedLabImageOwnership.take(result.image.uri)') ||
+  !labSource.includes('unifiedLabImageOwnership.releaseAll()') ||
+  !labSource.includes('if (!labMountedRef.current)') ||
+  !labSource.includes(
+    'await deleteUnifiedFaceCaptureTempImage(result.image.uri)',
+  ) ||
+  !labSource.includes(
+    'unifiedLabImageOwnership.release(\n          captureToRelease.imageUri',
+  )
 ) {
   throw new Error(
     'Phase 1 lab entry must prune retention artifacts and block collection on prune failure',
@@ -164,6 +173,8 @@ if (
 }
 const testPath =
   'features/face-ratio/services/faceRatioPhase1CollectionPlan.test.ts';
+const tempImageOwnershipTestPath =
+  'features/face-capture/services/faceCaptureLabTempImageOwnership.test.ts';
 
 run(process.execPath, [
   tscPath,
@@ -179,8 +190,12 @@ run(process.execPath, [
   '--outDir',
   outDir,
   join(srcRoot, testPath),
+  join(srcRoot, tempImageOwnershipTestPath),
 ]);
 run(process.execPath, [
   join(outDir, testPath.replace(/\.ts$/, '.js')),
   encodedPlan,
+]);
+run(process.execPath, [
+  join(outDir, tempImageOwnershipTestPath.replace(/\.ts$/, '.js')),
 ]);
