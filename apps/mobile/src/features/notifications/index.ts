@@ -14,8 +14,10 @@ export {
   markAppNotificationRead,
   notifyNotificationStateChanged,
   presentRealtimeAppNotification,
+  releaseReportCompletionNotificationSuppression,
   registerForReportNotifications,
   setBackgroundReportNotificationsEnabled,
+  suppressReportCompletionNotification,
   subscribeNotificationStateChange,
   unregisterCurrentPushDevice,
 } from './services/notificationService';

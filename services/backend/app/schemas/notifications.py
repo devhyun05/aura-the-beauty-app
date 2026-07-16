@@ -1,8 +1,17 @@
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field
 
 from app.schemas.base import CamelModel
+
+
+ReportNotificationType = Literal[
+  "analysis_report_completed",
+  "makeup_recommendation_completed",
+  "makeup_feedback_completed",
+  "filter_extraction_completed",
+]
 
 
 class PushDeviceRegistration(CamelModel):
@@ -25,3 +34,8 @@ class PushDeviceUnregistration(CamelModel):
     max_length=512,
     alias="expoPushToken",
   )
+
+
+class ReportNotificationSuppression(CamelModel):
+  notification_type: ReportNotificationType = Field(alias="notificationType")
+  report_id: UUID = Field(alias="reportId")

@@ -34,6 +34,29 @@ def is_expo_push_token(value: str) -> bool:
   return bool(EXPO_PUSH_TOKEN_PATTERN.fullmatch(value.strip()))
 
 
+async def _is_report_notification_suppressed(
+  db: Database,
+  *,
+  user_id: UUID,
+  notification_type: str,
+  report_id: str,
+) -> bool:
+  suppression = await db.fetchrow(
+    """
+    select 1 as suppressed
+    from report_notification_suppressions
+    where user_id = $1
+      and notification_type = $2
+      and report_id = $3
+      and expires_at > now()
+    """,
+    user_id,
+    notification_type,
+    report_id,
+  )
+  return suppression is not None
+
+
 def _chunks(values: list[dict[str, Any]], size: int) -> Iterable[list[dict[str, Any]]]:
   for index in range(0, len(values), size):
     yield values[index:index + size]
@@ -305,6 +328,21 @@ async def create_and_send_notification(
     return
 
   try:
+    report_id = str(data.get("reportId") or data.get("report_id") or "").strip()
+    if report_id and await _is_report_notification_suppressed(
+      db,
+      user_id=user_id,
+      notification_type=notification_type,
+      report_id=report_id,
+    ):
+      logger.info(
+        "[aura:notifications] viewed-report-skipped type=%s userId=%s reportId=%s",
+        notification_type,
+        user_id,
+        report_id,
+      )
+      return
+
     notification = await db.fetchrow(
       """
       insert into app_notifications (

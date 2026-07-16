@@ -14,6 +14,7 @@ from app.db.session import Database, database, require_database
 from app.schemas.notifications import (
   PushDeviceRegistration,
   PushDeviceUnregistration,
+  ReportNotificationSuppression,
 )
 from app.services.notification_realtime import (
   NotificationRealtimeConnection,
@@ -147,6 +148,62 @@ async def unregister_push_device(
     payload.expo_push_token.strip(),
   )
   return success({"disabled": True})
+
+
+@router.post("/report-suppressions")
+async def suppress_report_notification(
+  payload: ReportNotificationSuppression,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  report_id = str(payload.report_id)
+  await db.execute(
+    """
+    insert into report_notification_suppressions (
+      user_id, notification_type, report_id, expires_at
+    )
+    values ($1, $2, $3, now() + interval '30 minutes')
+    on conflict (user_id, notification_type, report_id) do update set
+      expires_at = excluded.expires_at
+    """,
+    user["id"],
+    payload.notification_type,
+    report_id,
+  )
+  await db.execute(
+    """
+    delete from app_notifications
+    where user_id = $1
+      and notification_type = $2
+      and coalesce(data->>'reportId', data->>'report_id') = $3
+    """,
+    user["id"],
+    payload.notification_type,
+    report_id,
+  )
+  return success({"suppressed": True})
+
+
+@router.delete("/report-suppressions")
+async def release_report_notification_suppression(
+  payload: ReportNotificationSuppression,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  await db.execute(
+    """
+    delete from report_notification_suppressions
+    where user_id = $1
+      and notification_type = $2
+      and report_id = $3
+    """,
+    user["id"],
+    payload.notification_type,
+    str(payload.report_id),
+  )
+  return success({"suppressed": False})
 
 
 @router.get("")
