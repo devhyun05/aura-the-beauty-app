@@ -208,6 +208,29 @@ def _normalize_vertical(
         shot=MeasurementShot.S1, unit=unit, usable=full_vertical_usable, reason=reason,
         warnings=warnings,
       )
+  # 판정 단일 정본(2026-07-17, 계획 §B3 해소): 측정 시점의 모바일 판정
+  # (자기내부 dominantPart·길이비 verdict)이 payload에 있으면 profile로
+  # 올려 서버 derived 규칙이 이를 따르게 한다 — 모바일(임계 0.08)과 서버
+  # (임계 0.025/1.38)가 같은 얼굴을 다르게 판정하던 불일치 제거.
+  interpretation = _record(raw.get("interpretation"))
+  dominant = interpretation.get("dominantPart")
+  if isinstance(dominant, str) and dominant in {"balanced", "upper", "middle", "lower"}:
+    output["verticalThirds.dominantPart"] = _camera_metric(
+      value=dominant, confidence=confidence, source=MeasurementSource.LANDMARK,
+      shot=MeasurementShot.S1, unit="label", usable=full_vertical_usable, reason=reason,
+      warnings=warnings,
+    )
+  judgment = _record(raw.get("faceLengthJudgment"))
+  verdict = judgment.get("verdict")
+  if isinstance(verdict, str) and verdict in {
+    "wide", "borderline_wide", "average", "borderline_long", "long",
+  }:
+    # indeterminate(판정 보류)는 정본으로 승격하지 않는다 — 키 미발행.
+    output["verticalThirds.faceLengthVerdict"] = _camera_metric(
+      value=verdict, confidence=confidence, source=MeasurementSource.PIXEL,
+      shot=MeasurementShot.S1, unit="label", usable=full_vertical_usable, reason=reason,
+      warnings=warnings,
+    )
   if not full_vertical_usable:
     # H가 없는 세션에서는 이미지 AI가 이마 폭을 별도로 "보완 추정"하지 못하게
     # camera-owned blocked key로 선점한다.

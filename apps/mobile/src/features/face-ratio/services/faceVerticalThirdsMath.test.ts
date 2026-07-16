@@ -61,6 +61,24 @@ export function runFaceVerticalThirdsMathTests() {
     deriveDominantPart(buildRatio(1.05, 0.95)) === 'balanced',
     'Deltas inside the 0.08 threshold must stay balanced.',
   );
+  // 부동소수점 경계(1차 리뷰 M4): 1.08−1.0 = 0.08000000000000007,
+  // |0.92−1.0| = 0.07999999999999996 — epsilon 없이는 방향별 비대칭.
+  expect(
+    deriveDominantPart(buildRatio(1.08, 1.0)) === 'balanced' &&
+      deriveDominantPart(buildRatio(0.92, 1.0)) === 'balanced' &&
+      deriveDominantPart(buildRatio(1.0, 1.08)) === 'balanced' &&
+      deriveDominantPart(buildRatio(1.0, 0.92)) === 'balanced',
+    'Exact ±0.08 boundary must be symmetric and non-significant in both directions.',
+  );
+  expect(
+    deriveDominantPart(buildRatio(1.081, 1.0)) === 'upper' &&
+      deriveDominantPart(buildRatio(0.919, 1.0)) === 'middle',
+    'Just beyond the ±0.08 boundary must become significant.',
+  );
+  expect(
+    deriveDominantPart(buildRatio(1.07, 0.93)) === 'balanced',
+    'Opposite-direction deltas inside the threshold (1.07:1:0.93) must stay balanced.',
+  );
   expect(
     deriveDominantPart(buildRatio(null, 1.0)) === 'unknown',
     'Without hairline a two-segment result must not claim a three-part dominant region.',

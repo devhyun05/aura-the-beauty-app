@@ -331,6 +331,43 @@ function readNullableFiniteNumber(value: unknown): number | null {
   return readFiniteNumber(value) ?? null;
 }
 
+const FACE_LENGTH_VERDICTS = new Set([
+  'wide',
+  'borderline_wide',
+  'average',
+  'borderline_long',
+  'long',
+  'indeterminate',
+]);
+
+// 판정 스냅샷 복원(Phase 0-5). verdict가 알려진 값이 아니면(미래 버전의
+// 신규 verdict 등) 스냅샷 전체를 버리고 화면 폴백(재판정)에 맡긴다.
+function decodeFaceLengthJudgment(
+  value: unknown,
+): FaceVerticalThirdsResult['faceLengthJudgment'] {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const band = isRecord(value.band) ? value.band : undefined;
+  const hi = readFiniteNumber(band?.hi);
+  const lo = readFiniteNumber(band?.lo);
+  const verdict = readString(value.verdict);
+
+  if (hi === undefined || lo === undefined || verdict === undefined) {
+    return undefined;
+  }
+  if (!FACE_LENGTH_VERDICTS.has(verdict)) {
+    return undefined;
+  }
+
+  return {
+    band: {hi, lo},
+    verdict: verdict as NonNullable<
+      FaceVerticalThirdsResult['faceLengthJudgment']
+    >['verdict'],
+  };
+}
+
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
@@ -669,7 +706,8 @@ function decodeVerticalThirds(
           : '헤어라인이 충분히 확인되지 않아 중안부와 하안부만 반영했어요.',
       title: readString(interpretationRecord.title) ?? '',
     },
-    // 판정 버전 스냅샷(Phase 0-5) — 구 저장분에는 없으므로 optional 복원.
+    // 판정 스냅샷(Phase 0-5) — 구 저장분에는 없으므로 optional 복원.
+    faceLengthJudgment: decodeFaceLengthJudgment(value.faceLengthJudgment),
     judgmentVersion: readString(value.judgmentVersion),
     keypoints,
     measurementMode: resolvedMeasurementMode,

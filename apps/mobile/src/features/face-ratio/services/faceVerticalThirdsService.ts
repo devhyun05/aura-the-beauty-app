@@ -30,7 +30,11 @@ import {
 import {createFaceRatioLogger, type FaceRatioLogger} from './faceVerticalThirdsLogger';
 import {evaluateFaceVerticalThirdsQuality} from './faceVerticalThirdsQualityGate';
 import {applyRollCorrectionToKeypoints} from './faceVerticalThirdsRollCorrection';
-import {FACE_RATIO_JUDGMENT_VERSION, HAIRLINE_TUNING} from '../constants';
+import {
+  FACE_RATIO_JUDGMENT_VERSION,
+  HAIRLINE_TUNING,
+  judgeFaceLength,
+} from '../constants';
 import {
   selectHairlineForAnalysis,
   type HairlineCandidate,
@@ -271,6 +275,11 @@ function createResult({
     captureId: input.captureId,
     createdAt: input.createdAt,
     faceLength,
+    // 판정 스냅샷(Phase 0-5): 측정 시점 pose로 판정해 결과에 동결한다.
+    // 화면·서버는 이 스냅샷을 소비하고, 상수 개정은 judgmentVersion으로 감지.
+    faceLengthJudgment: faceLength
+      ? judgeFaceLength(faceLength.ratio, quality.pitch, quality.yaw)
+      : undefined,
     hairlineAnalysis,
     interpretation: buildInterpretation(status, ratio),
     judgmentVersion: FACE_RATIO_JUDGMENT_VERSION,

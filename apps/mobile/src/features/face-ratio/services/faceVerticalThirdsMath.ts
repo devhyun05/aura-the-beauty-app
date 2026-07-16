@@ -13,6 +13,14 @@ import {APPLE_HAIRLINE_FULL_CONFIDENCE, HAIRLINE_WARNING} from '../constants';
 // (계획 §0-3·§5 D-3: 실측은 하안부/중안부 ≈ 1.0~1.2 — 한국 20대 여성 1.0).
 // 기준 인구값 없이 성립하는 부위 간 직접 비교가 글로벌 전제(원칙 5)와 정합.
 const DOMINANCE_THRESHOLD = 0.08;
+// 부동소수점 방어: 1.08−1.0=0.08000000000000007 > 0.08 이지만
+// |0.92−1.0|=0.07999999999999996 < 0.08 — 명목상 같은 경계가 방향에 따라
+// 비대칭 처리되는 것을 epsilon으로 대칭화한다(정확히 ±0.08은 both 미유의).
+const DOMINANCE_EPSILON = 1e-9;
+
+function isSignificantDelta(delta: number): boolean {
+  return Math.abs(delta) > DOMINANCE_THRESHOLD + DOMINANCE_EPSILON;
+}
 
 function roundRatio(value: number) {
   return Number(value.toFixed(4));
@@ -132,8 +140,8 @@ export function deriveDominantPart(
 
   // 중안부(1.0)를 기준으로 상/하안부와 직접 비교한다(자기내부 서술).
   // 가장 큰 편차가 +면 그 부위가 길고, -면 상대적으로 중안부가 길어 보인다.
-  const significantDeltas = getDominanceDeltas(ratio).filter(
-    ({delta}) => Math.abs(delta) > DOMINANCE_THRESHOLD,
+  const significantDeltas = getDominanceDeltas(ratio).filter(({delta}) =>
+    isSignificantDelta(delta),
   );
 
   if (significantDeltas.length === 0) {
@@ -197,7 +205,9 @@ function buildSuccessSummary(
   }
 
   if (dominantPart === 'middle') {
-    const shortDeltas = deltas.filter(({delta}) => delta < -DOMINANCE_THRESHOLD);
+    const shortDeltas = deltas.filter(
+      ({delta}) => delta < 0 && isSignificantDelta(delta),
+    );
     const strongestShort = shortDeltas.reduce<DominanceDelta | null>(
       (current, candidate) =>
         !current || Math.abs(candidate.delta) > Math.abs(current.delta)

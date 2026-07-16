@@ -203,13 +203,12 @@ function FaceLengthGauge({result}: {result: FaceVerticalThirdsResult}) {
     );
   }
 
-  // 동적 유보 구간(Phase 0-2): 촬영 pose(pitch/yaw)가 만드는 방향성 편향
-  // 폭이 판정 경계를 걸치면 단정 대신 유보 표현을 쓴다.
-  const judgment = judgeFaceLength(
-    lengthRatio,
-    result.quality.pitch,
-    result.quality.yaw,
-  );
+  // 판정 스냅샷 우선(Phase 0-5): 측정 시점에 동결된 판정을 렌더한다 —
+  // 상수 개정이 과거 보고서를 조용히 재판정하지 못하게 하는 실소비 지점.
+  // 스냅샷 없는 구 결과만 현재 판정기로 폴백(동적 유보 구간, Phase 0-2).
+  const judgment =
+    result.faceLengthJudgment ??
+    judgeFaceLength(lengthRatio, result.quality.pitch, result.quality.yaw);
   const markerPercent = getGaugeMarkerPercent(lengthRatio);
   const isBorderline =
     judgment.verdict === 'borderline_wide' ||
@@ -222,6 +221,11 @@ function FaceLengthGauge({result}: {result: FaceVerticalThirdsResult}) {
       {isBorderline ? (
         <Text style={styles.gaugeBorderlineText}>
           촬영 각도의 영향 범위가 경계에 걸쳐 있어 단정하지 않았어요.
+        </Text>
+      ) : null}
+      {judgment.verdict === 'indeterminate' ? (
+        <Text style={styles.gaugeBorderlineText}>
+          촬영 각도 정보를 확인하지 못해 판정을 보류했어요.
         </Text>
       ) : null}
       <View style={styles.gaugeWrap}>

@@ -51,6 +51,8 @@ def test_normalizes_current_camera_sections_with_provenance() -> None:
           "warnings": [],
         },
         "faceLength": {"heightPx": 900, "widthPx": 700, "ratio": 1.286},
+        "interpretation": {"dominantPart": "balanced", "summary": "s", "title": "t"},
+        "faceLengthJudgment": {"band": {"hi": 1.30, "lo": 1.28}, "verdict": "wide"},
       },
       "faceGeometry2d": {
         "status": "full_success",
@@ -87,6 +89,10 @@ def test_normalizes_current_camera_sections_with_provenance() -> None:
   assert result["face3d.noseTipProjection"].source.value == "depth"
   assert result["personalColor.axes.temperature"].source.value == "pixel"
   assert result["face3d.noseTipProjection"].value == 0.14
+  # 판정 단일 정본 키(2026-07-17): 측정 시점 판정이 profile로 올라온다.
+  assert result["verticalThirds.dominantPart"].value == "balanced"
+  assert result["verticalThirds.dominantPart"].unit == "label"
+  assert result["verticalThirds.faceLengthVerdict"].value == "wide"
 
 
 def test_middle_lower_only_does_not_authorize_h_dependent_metrics() -> None:

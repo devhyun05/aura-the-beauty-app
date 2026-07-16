@@ -139,6 +139,19 @@ export type FaceVerticalThirdsResult = {
   // 개정 시 과거 저장 결과의 판정이 재렌더에서 조용히 바뀌는 것을 감지하기 위해
   // 결과 생성 시점의 버전을 저장한다. optional — 스키마 v1 유지(구 결과 부재 허용).
   judgmentVersion?: string;
+  // 길이비 판정 스냅샷 — 측정 시점의 verdict·오차 구간을 그대로 저장한다.
+  // 화면은 이 스냅샷을 렌더하고(재판정 금지), 스냅샷 없는 구 결과만
+  // 현재 판정기로 폴백한다. 서버 derived 규칙도 이 값을 정본으로 소비한다.
+  faceLengthJudgment?: {
+    band: {hi: number; lo: number};
+    verdict:
+      | 'wide'
+      | 'borderline_wide'
+      | 'average'
+      | 'borderline_long'
+      | 'long'
+      | 'indeterminate';
+  };
   keypoints: VerticalThirdsKeypointMap;
   measurementMode: FaceVerticalThirdsMeasurementMode;
   // 얼굴 세로/가로 길이 비율 (상단 게이지용). 측정 불가 시 undefined.

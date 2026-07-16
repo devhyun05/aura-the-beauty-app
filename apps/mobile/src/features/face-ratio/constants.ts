@@ -101,7 +101,10 @@ export type FaceLengthVerdict =
   | 'borderline_wide'
   | 'average'
   | 'borderline_long'
-  | 'long';
+  | 'long'
+  // pose(pitch/yaw)를 확인하지 못한 입력 — 오차 구간을 계산할 수 없으므로
+  // 정면으로 간주하지 않고(fail-closed) 판정을 보류한다.
+  | 'indeterminate';
 
 export type FaceLengthJudgment = {
   // 촬영 pose가 허용하는 참값 구간. band가 판정 경계를 걸치면 유보 verdict.
@@ -119,10 +122,19 @@ export function judgeFaceLength(
   pitchDeg?: number,
   yawDeg?: number,
 ): FaceLengthJudgment {
-  const toRad = (deg: number | undefined) =>
-    (Math.abs(typeof deg === 'number' && Number.isFinite(deg) ? deg : 0) *
-      Math.PI) /
-    180;
+  // pose 결측·비유한값을 0°로 간주하면 불확실성이 사라져 오히려 단정이
+  // 복원된다(fail-open) — 판정 보류로 처리한다. 정상 경로는 품질 게이트가
+  // 유효 pose를 보장하므로 이 분기는 게이트 밖 호출·구형 데이터 방어용.
+  if (
+    typeof pitchDeg !== 'number' ||
+    !Number.isFinite(pitchDeg) ||
+    typeof yawDeg !== 'number' ||
+    !Number.isFinite(yawDeg)
+  ) {
+    return {band: {hi: lengthRatio, lo: lengthRatio}, verdict: 'indeterminate'};
+  }
+
+  const toRad = (deg: number) => (Math.abs(deg) * Math.PI) / 180;
   const lo = lengthRatio * Math.cos(toRad(yawDeg));
   const hi = lengthRatio / Math.cos(toRad(pitchDeg));
   const band = {hi, lo};
@@ -156,5 +168,7 @@ export function getFaceLengthTitle(verdict: FaceLengthVerdict): string {
       return '평균과 세로형 사이';
     case 'long':
       return '세로로 긴 얼굴';
+    case 'indeterminate':
+      return '길이 비율 판정 보류';
   }
 }

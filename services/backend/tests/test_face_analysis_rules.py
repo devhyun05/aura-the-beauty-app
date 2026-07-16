@@ -43,6 +43,51 @@ def test_vertical_balance_uses_measured_thirds() -> None:
   assert result.vertical_balance.confidence > 0
 
 
+def test_face_shape_follows_measurement_time_verdict_over_legacy_threshold() -> None:
+  # 판정 단일 정본(2026-07-17): aspect 1.42는 레거시 임계(>=1.38)로는
+  # '긴 타원형'이지만, 측정 시점 모바일 verdict가 average면 그것을 따른다.
+  profile = {
+    "verticalThirds.faceRatio": metric(1.42),
+    "verticalThirds.faceLengthVerdict": metric("average"),
+    "geometry2d.jawWidthRatio": metric(0.72),
+    "geometry2d.lowerJawWidthRatio": metric(0.78),
+  }
+
+  result = derive_face_analysis(profile)
+
+  assert result.face_shape.label == "타원형"
+  assert "verticalThirds.faceLengthVerdict" in result.face_shape.rationale_metric_keys
+
+
+def test_face_shape_borderline_verdict_does_not_assert_long() -> None:
+  # 유보(borderline_long)는 단정하지 않는다 — long 분기로 가지 않음.
+  profile = {
+    "verticalThirds.faceRatio": metric(1.50),
+    "verticalThirds.faceLengthVerdict": metric("borderline_long"),
+    "geometry2d.jawWidthRatio": metric(0.72),
+  }
+
+  result = derive_face_analysis(profile)
+
+  assert result.face_shape.label != "긴 타원형"
+
+
+def test_vertical_balance_follows_measurement_time_dominant_part() -> None:
+  # 정규화 0.31/0.34/0.35는 레거시 규칙(0.025)으로는 '하안부 우세'지만,
+  # 측정 시점 모바일 판정(자기내부 0.08 임계)이 balanced면 그것을 따른다.
+  result = derive_face_analysis(
+    {
+      "verticalThirds.upperNormalized": metric(0.31),
+      "verticalThirds.middleNormalized": metric(0.34),
+      "verticalThirds.lowerNormalized": metric(0.35),
+      "verticalThirds.dominantPart": metric("balanced"),
+    },
+  )
+
+  assert result.vertical_balance.label == "세로 비율 균형형"
+  assert "측정 시점 판정" in result.vertical_balance.description
+
+
 def test_l1_is_deterministic_and_internal_asymmetry_is_hidden() -> None:
   profile = {"face3d.centralProjectionScore": metric(0.61, source="depth")}
 
