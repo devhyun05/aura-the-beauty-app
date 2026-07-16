@@ -1,7 +1,7 @@
 # 얼굴 측정·분석 개선 계획 (2026-07-16)
 
-상태: 초안 v2 — 적대적 검토 3라운드(2026-07-16: Fable 코드 대조 → 정본 대조 → 외부 리뷰 검증) 반영, 팀 검토 대기
-브랜치: `docs/WEI/face-measurement-plan-0716` — **2026-07-16 외부 리뷰 후 origin/dev 최신으로 리베이스 완료**(dev의 PR #18이 docs 6커밋을 이미 머지해 중복 탈락, 신규 3커밋만 유지). **주의: 형상·코드 사실표 확인은 시점 스냅샷이다** — dev는 빠르게 움직이므로(리뷰 시점 behind 25 발견) Phase 0 착수 시 dev 재동기화 + §0 사실표의 파일 위치·라인 재검증이 착수 조건.
+상태: v3 — Phase 0 구현 완료 반영(2026-07-17). 검토 이력: 적대 검토 3라운드(계획) + Codex 4라운드·셀프 1회(구현, GO)
+형상: 계획 정본은 dev(PR #20·#26), Phase 0 구현은 PR #21 머지 — 착수 조건이던 형상 확인·사실표 재검증은 완료 이력.
 작성 배경: 얼굴 길이/비율 측정의 정확도 검토 세션(2026-07-16) 결론 종합
 자매 문서: [보고서 재구성 계획](2026-07-16-face-report-redesign-plan.md) — 보고서 트랙(내용 재구성·Report Lab·UI 개편·AR 맞춤 핏). 두 트랙은 fixture 계약 고정 후 병렬 진행(자매 문서 §2).
 
@@ -31,6 +31,8 @@
 | 7 | 신고전 캐논(3분할 균등)은 한국인 표본에서 규범 기준으로 부적합 — 한국계 미국인 여성 표본 충족률 4.2% (Choe 2004, 단일 연구) | 제품 전제 | 높음 |
 | 8 | keypoint confidence가 하드코딩 합성값(현행 소비자 기준 G .82 / Sn .82 / Me .84 — `hApprox .40`은 07-16 커밋에서 소비자 제거 완료, 타입/네이티브 방출만 잔존) — `ratio.confidence`·어조 게이트(§9.2)·Phase 1 confidence 반영이 전부 이 위에 쌓임 | `faceVerticalThirdsService.ts:58`, 스펙 §7 | 높음 |
 
+**Phase 0 구현 후 진단표 상태(2026-07-17, Codex 정합 검토 반영)**: #2(게이지 불일치)·#3(0.8 기준) **해소**. #1(기준 상수)은 **완화** — 출처 고지·단일 정의처·동적 유보로 정직해졌을 뿐 값 자체는 잠정 하드코딩 그대로(교체는 Phase 4). #6(수치 노출)은 **잔존 — R4 이관**(실변경은 길이비 소수 3→2자리뿐, px·Lab·확률은 그대로; "신규 차단"은 자동 가드가 아니라 이번 PR diff의 사실). #7은 **규범 캐논 의존 해소**로 범위 한정(자기내부 비교의 balanced 라벨은 존속). **잔존 = #4(pitch 무보정 — cos band는 표현상 유보일 뿐 측정 미보정)·#5(z 미사용 — 브리지는 전달하나 키포인트·길이 계산이 x/y만 소비)·#8(confidence 하드코딩 .82/.82/.84 그대로, hApprox는 소비만 제거·wire/네이티브 방출 잔존)** — 셋 모두 Phase 1 과제.
+
 측정이 상대적으로 견고한 부분: 세로 3분할(동일 축 비율이라 전역 스케일 약분 — 단 pitch foreshortening은 비균일하므로 위 #4의 2~4%p 잔여 오차는 바로 이 측정에 대한 값), roll 보정(게이트+보정 완비), Face3D Tier-2(3D 정점 거리 + median/MAD 집계).
 
 **Face3D 전제 정정(3라운드 검토로 재정정 2026-07-17)**: 초안의 "30프레임 median/MAD"도, 2차 정정의 "실제 제품 정책 = 500ms/5-of-8"도 부정확했다. 정확한 3계층: ① **현행 제품 기본 = 레거시 v1 프로필 20-valid/30-target** — unified capture 플래그가 기본 false(`unifiedFaceCaptureMode.ts:3`)라 v2 경로 자체가 꺼져 있고, v1은 calibration 검사가 없어 계속 usable. ② **v2 구현 후보 = 500ms micro-burst 5-of-8**(`UnifiedFaceCaptureContracts.cs` ProductPolicyId) — 단 `confidenceCalibrationStatus`가 항상 `uncalibrated`로 직렬화되어 백엔드가 전량 차단(`face3d_confidence_uncalibrated`), Gate 6B 정본도 "출시 전 기본 = 30프레임" 명시. ③ **v2 exact-30 = 진단 비교군**(diagnostics 정책, 제품 영구 차단). "신뢰 축" 승격은 Phase 2 §0의 calibration 워크스트림이 선결이다.
@@ -59,7 +61,17 @@
 
 ## 3. 단계별 계획
 
-### Phase 0 — 표현 정직화 (이번 브랜치, 측정 로직 무변경)
+### Phase 완료 프로토콜 (전 Phase 공통 — 2026-07-17 확정, Phase 0에서 실증한 절차의 표준화)
+
+각 Phase는 아래 3단계를 통과해야 "완료"다. 자매 문서(보고서 재구성 계획)의 R 단계에도 동일 적용.
+
+1. **이중 GO 게이트 → PR**: Codex 적대 리뷰와 Claude 셀프 적대 리뷰(반박 지향, 독립 실행)가 **둘 다 GO**를 낼 때까지 [리뷰 → 발견 코드 검증 → 반영 → 재판정] 루프를 돌린다. NO-GO 발견은 전건 검증 후 반영(맹목 수용 금지 — 틀린 지적은 근거와 함께 반박). 두 GO 확보 후 dev로 PR. (Phase 0 실적: Codex 4라운드 + 셀프 1회, 발견 17건 전건 반영 후 GO.)
+2. **계획 현행화**: 머지 직후 이 문서를 구현 현실에 맞게 갱신 — ① 완료 기록(PR 번호·판정·검증 근거 명령), ② §0 진단표의 해소/완화/잔존 재판정(과대 표기 금지 — "정직해진 것"과 "해소된 것"을 구분), ③ 다음 Phase가 이번 산출물과 맺을 연동·선행 배관 명시, ④ 낡아진 서술 정정. 갱신본은 Codex 정합 검토 1회를 거친다.
+3. **다음 Phase 착수**: 갱신된 계획의 선행 배관·관문 정의를 유일한 입력으로 **새 세션에서** 착수한다(맥락 마모 방지 — 계획 문서가 자기완결이어야 하는 이유).
+
+### Phase 0 — 표현 정직화 (측정 로직 무변경) ✅ 완료 2026-07-17
+
+**완료 기록**: PR #21 머지 — **측정 트랙 소유 산출물 완료**(숫자 전면 철거는 R4 소유로 이관, hApprox wire/네이티브 잔존은 수용·Phase 1 이관), Codex 적대 리뷰 4라운드+셀프 리뷰 1회(발견 17건 전건 반영) 후 GO 판정. **관문 분리**: 측정 트랙 관문(판정형 화면 숫자에 출처·유보 + 이번 diff에 신규 노출 없음)은 통과, 제품 전체 숫자 비노출 관문은 R4 대기. 검증 근거: `npm --prefix apps/mobile run test:face-ratio-distortion` + `run-face-analysis-measurements-contract.mjs` + backend `pytest tests/test_face_analysis_{rules,measurements}.py tests/test_analysis_measurements_payload.py tests/test_prompt_payload_judgment.py`. 구현 정본: `face-ratio/constants.ts`(FACE_LENGTH_REFERENCE·judgeFaceLength·FACE_RATIO_JUDGMENT_VERSION), 판정 스냅샷 `faceLengthJudgment`, 서버 정본 추종(`face_analysis_rules.py`)·sanitizer 보존(`openai_analysis.py`). 유일 잔여: 실기기 게이지 렌더 확인(UNVERIFIED). 아래 항목 서술은 착수 당시 기준의 역사 기록.
 
 1. **기준 상수 4벌 통합 — 정정: 5벌**: `FACE_LENGTH_REFERENCE`(1.351/1.455/1.506) + 게이지 마커 min/max(1.28/1.56) + **색 세그먼트 경계**(균등 3분할) + **판정 임계**([getFaceLengthTitle](../../../apps/mobile/src/features/face-ratio/screens/FaceVerticalThirdsScreen.tsx#L125-L135))를 `face-ratio/constants.ts` 단일 모듈로. **제5의 상수 세트(2026-07-17 셀프 검증 발견)**: 서버 `face_analysis_rules.py`의 `_derive_face_shape`(1.38/1.2)·`_derive_vertical_balance`(0.025)가 모바일과 독립적으로 존재 — 같은 얼굴에 모바일·서버가 다른 판정을 낼 수 있다. 이 서버 임계를 상수 통합 범위에 포함할지(단일 정본 공유 vs 서버 derived로 일원화) 제품 오너 결정 필요 — 보고서 재구성 계획 §2-B3과 동일 항목. 게이지 라벨·마커·세그먼트·판정이 **모두 같은 스케일에서 파생**되도록 렌더링 수정(현재 비율 1.467~1.486이 '세로형' 색 위에 앉는데 제목은 '평균'인 모순 해소). 각 값에 "1차 출처 부재 잠정값 — Phase 4 mean±SD 교체" 주석. `AVERAGE_DISPLAY_RATIO`의 0.8은 '평균' 라벨 제거(아래 3번).
 2. **판정 완화 — 방향성(비대칭) 버퍼**: 고정 ±0.02는 오차 모델이 틀렸다(pitch는 세로를 압축해 비율을 **하향**, yaw는 가로를 압축해 **상향** 편향 — 대칭 노이즈 아님). `quality.pitch/yaw`가 이미 측정되므로 **샷별 동적 유보 구간** `[measured×cos(yaw), measured/cos(pitch)]`을 산출해, 이 구간이 판정 임계를 걸치면 단정 대신 유보("평균~세로형 사이"), 아니면 단정. 최악(pitch12°/yaw8°) 폭 −1.0%~+2.2%, 정면 근접 시 구간이 좁아져 단정 회복(usability도 개선). **측정 로직 무변경 — 표현 계층에서만 판정.** 소수 3자리 노출 제거.
@@ -78,6 +90,14 @@
 3. **keypoint confidence 실측화 (§0-8 해소) — 재설계 필요(2026-07-16 리뷰로 초안 기각)**: MediaPipe FaceLandmarker는 **per-landmark confidence를 제공하지 않는다**(Pose Landmarker에만 존재 — 리서치 확인)는 전제는 유지. 그러나 초안의 "후보군 산포로 산출" 설계는 **기각** — G/Sn/Me 후보들은 동일 점의 반복 추정치가 아니라 **서로 다른 해부학적 정점**이라([AURAFaceRatioAnalyzer.m](../../../apps/mobile/ios/AURA/AURAFaceRatioAnalyzer.m):405-416) 산포가 얼굴 형태·자세를 함께 반영해 검출 불확실성으로 해석할 수 없고, 헤어라인 confidence 공식의 입력(경계 선명도·피부 가시성·coverage)도 G/Sn/Me에는 존재하지 않아 "그대로 이식"이 성립하지 않는다. 재설계 방향 2안(설계 검증을 Phase 1 관문에 포함): **(a) 캡처 시점 멀티프레임 지터** — 실시간 greenlight 스트림에서 셔터 직전 N프레임의 해당 랜드마크 프레임 간 산포를 기록(동일 점의 반복 추정 = 검출 노이즈의 직접 측정), **(b) reprojection residual** — Phase 1의 3D 정렬 후 잔차를 신뢰도로 환산. 하드코딩 상수 정본 위치([faceVerticalThirdsService.ts](../../../apps/mobile/src/features/face-ratio/services/faceVerticalThirdsService.ts):60-79 G .82/Sn .82/Me .84)와 min 집계 2곳(faceVerticalThirdsMath.ts:22-27, faceAnalysisMeasurements.ts) 수정 지점은 유지. 보정 후 잔여 포즈 각도를 confidence에 반영 → Phase 0의 경계 유보와 연결.
 4. **촬영 거리 문제 인지**: 30cm 셀피는 1.5m 대비 코 밑너비를 ~30% 과장(Selfie Effect, §5 A-8). 포즈 정렬로는 원근(거리) 왜곡이 완전 제거되지 않으므로, 거리 가이드 UX 또는 TrueDepth 거리 보정을 Phase 2와 연계 검토(정본 거리 게이트 = §10.2).
 
+**Phase 0 산출물과의 연동(2026-07-17, Codex 정합 검토로 보강)**:
+- **판정 버전 상향 의무**: 보정된 비율을 저장하기 시작하는 **최초 커밋에서** `FACE_RATIO_JUDGMENT_VERSION` 상향 — 스냅샷 렌더·버전 불일치 안내(`isJudgmentVersionCurrent`)가 과거 결과를 보호한다. 계약 테스트 대상: 모바일 저장·복원 + 서버 정본 추종 + sanitizer 보존까지 전 구간. (참고: 서버 normalizer는 verdict만 profile로 올리고 `judgmentVersion`은 미보존 — 규칙·증거 추적이 필요해지면 label envelope 추가, 아니면 의도적 미보존 명시.)
+- **band·confidence 처리 순서 확정**: `faceLengthJudgment.band`는 pose **편향** 구간, confidence는 검출 **노이즈** — 별개 축. 순서: ① 보정 후 **잔여 pose**로 band 산출(구간 축소 → 유보 빈도 감소), ② 낮은 confidence는 `indeterminate` 강등 또는 검증된 오차 모델에 따른 band 추가 확대 중 하나로 처리 — 어느 쪽인지 Phase 1 관문 검증에서 확정.
+- **§6-5 hairline 8° — 단순 상향 금지**: 이 8°는 차단 게이트가 아니라 **confidence의 poseQuality 정규화 분모**다(`AURAFaceRatioHairline.m:44`) — 12°로 올리면 같은 촬영의 신뢰도가 인위적으로 상승한다. Phase 1 실기기 검증에서 8/12/잔여-pose 세 모델을 비교해 결정한다.
+- **재사용 자산**: `StillFaceLandmarkService`가 이미 478점 x/y/z + transformation matrix를 계산하고 Euler로 축약해 버리고 있음 — 신규 검출기가 아니라 **행렬 직렬화 추가**가 §1-a의 실작업.
+- **실시간 지터 제약(§3-a 전제 수정)**: 실시간 캡처 계약은 478점이 아니라 **축약 10점 + 최신 단일 프레임**만 방출 — 멀티프레임 G/Sn/Me 지터 기록에는 네이티브 ring buffer(또는 별도 진단 payload)가 선행 배관.
+- **원시 랜드마크 저장 정책 선행**: 기존 증거 봉투는 `rawFaceDataIncluded:false` 명시 — paired replay용 478점은 제품 payload와 분리된 **로컬 검증 아티팩트 스키마 + 가명 subject ID + 보존·삭제 정책**을 먼저 정의한다.
+
 **관문(핵심 검증) — 2축**: 팀원 **다양성 확보 표본**(§6-11: 성별·연령·인구집단 편향 회피, 3~5명은 최소 하한이지 목표 아님) × 다양한 각도·거리 10회 촬영. **원시 랜드마크를 저장해 보정 전/후 파이프라인을 동일 입력에 재실행(paired 비교)**하여: (1) **재현성** — 동일인 측정값 MAD가 보정 전 대비 감소, (2) **정확도** — 각도·거리 촬영값이 **동일인의 정면·표준거리 촬영값(유사 정답)으로 수렴**(MAE). *MAD만으로는 "더 안정적으로 틀리는 보정"도 통과하므로 정확도 축이 필수.* 재현성만 개선되고 정확도 미개선이면 z 가설 기각 → cos 근사로 후퇴.
 
 ### Phase 2 — TrueDepth 확장: 신뢰 축 이동
@@ -86,10 +106,11 @@
    - **(a) 합격선 = Gate 6B 사전 등록 기준 전문을 따른다 — 재기술 금지.** 본 계획 초안이 기준을 요약하며 "median bias ≤ between-subject spread"로 적어 **원문("spread의 10%")을 10배 완화**하고 p95 bias ≤ 25%·실패율 5%p·p95 capture window 500ms·독립 validation cohort 조건을 누락했다(리뷰 확인). 정본은 [AURA_UNIFIED_FACE_CAPTURE_IMPLEMENTATION_PLAN_KO.md](../../face3d/AURA_UNIFIED_FACE_CAPTURE_IMPLEMENTATION_PLAN_KO.md) §Phase 6B — 이 문서가 유일 기준이며 본 계획은 참조만 한다.
    - **(b) calibration = confidence 함수 자체의 재보정.** 현행 confidence는 `coverage × inlierRatio × stability` 휴리스틱([Face3DProfileCollector.cs](../../../apps/unity/MakeupAR/Assets/Scripts/Face3D/Face3DProfileCollector.cs):448-453) — **상태 문자열만 `calibrated`로 바꾸는 것은 calibration이 아니다.** Gate 6B 원문대로 "선언 target을 품질처럼 쓰는 coverage 항 제거 또는 completion/quality 분리 + pose·무표정·tracking·native sync·독립 반복성 기반 재보정"이 승격의 실체다. Unity `ConfidenceCalibrationCalibrated="calibrated"` 상수 추가와 상태 주입은 이 재보정의 결과 표시일 뿐이다.
    - **(c) 서버측 강제 — 클라이언트 자기선언 차단.** 백엔드는 현재 `diagnostics-*` 접두사 거부 외에 **정책 allowlist가 없어** 임의 `collectionPolicyId` + `calibrated` 자기선언이 통과한다(리뷰가 `attacker-policy-v999` 페이로드 통과를 실증). 승격과 동시에 백엔드 `_normalize_face3d`에 **승인 정책 ID allowlist + gateVersion 검증**을 추가하고, 모바일 `isFace3DProfileAnalysisEligible`도 동일 allowlist로 강화한다 — "소비자 무변경으로 열림"(초안)은 철회. **receipt 검증의 재전송 방어(3라운드 보강)**: 공개된 receipt sha256 단독 대조는 재전송(replay)에 뚫린다. binding을 **profile 내용 해시 + policy ID + gateVersion + app/build**로 묶으면 "다른 profile에 receipt 붙이기"는 막지만 **동일 profile+receipt 재사용은 못 막으므로**, 서명 대상에 `receiptId` + capture nonce(captureId) + 발급·만료 시각 + 사용자/보고서 문맥을 추가하고 서버가 **one-time consumption(또는 replay ledger)** 으로 소진 처리한다. 현재 프로필 wire 계약에는 receipt 필드 자체가 없으므로(모바일 types.ts·Unity serializer 확인) **wire 계약에 receipt 필드 신설**이 작업 범위에 포함된다.
+   - **선행 배관(Codex 정합 검토)**: exact-30 결과 이벤트는 `unified_face_capture_completed`인데 기존 runtime logger·`analyze-repeatability.mjs`는 `face3d_analyzed`만 인식 — **unified 결과 logger/adaptor를 먼저 추가**해야 manifest 생성이 가능하다.
    - 증거 파이프라인: `promote-tier2-semantic-map.mjs` 패턴 복제(`promote-face3d-calibration.mjs` + 계약 테스트), 증거 = `repeatability-{1,3,5,8,12,30}.json` 독립 manifest + Phase -1 validation cohort paired 비교, 출력 = calibration receipt + `FACE3D_GATE_STATUS.json` `confidenceCalibration` 블록(sha256 체인 — (c)의 검증 대상). 비교 분모 = `diagnostics-exact-30-v1` Lab 캡처.
 1. **Face3D 파이프라인에 얼굴 길이비·세로 3분할 대응 지표 추가** — 위 0의 승격 통과 후.
 2. **헤어라인 예외 — 동일 샷 융합 경로 부재(2026-07-16 리뷰 확인)**: 머리카락은 IR 흡수로 TrueDepth가 못 잡음 → H만 Apple hair matte와 융합하는 하이브리드. **단 현재 아키텍처에서 같은 샷의 Face3D+matte를 동시에 얻을 수 없다** — Face3D는 Unity ARKit이 카메라를 소유하고, matte 캡처는 Unity를 pause시킨 뒤 네이티브가 카메라를 인수하는 구조(카메라 배타 소유). 선결 결정: (a) **별도 샷 폴백** — matte 샷을 따로 찍고 시차·정렬 오차를 수용, vs (b) **ARFrame 동기 네이티브 브리지** — Unity ARFrame에서 matte를 생성(Unity 측 작업 수반). 정본 S5 캡처(헤어 올린 정면)가 이 문제 자체를 우회하는 상위 해법(§10.2) — S5 채택 시 matte 융합은 S5 없는 사용자의 폴백으로만 남는다.
-3. **mm 병렬 저장 — 전 구간 계약 변경(초안 "서버 변경 없음"은 오류)**: evaluator가 모든 거리를 `faceScale`로 나누고([Face3DMetricEvaluator.cs](../../../apps/unity/MakeupAR/Assets/Scripts/Face3D/Face3DMetricEvaluator.cs):275/287/318/343/359) 프로필은 `normalized`만 직렬화, 백엔드도 `unit="ratio"` 강제([face_analysis_measurements.py](../../../services/backend/app/services/face_analysis_measurements.py):270), RN 파서는 unit≠normalized를 거부([face3DContract.ts](../../../apps/mobile/src/features/face-3d/services/face3DContract.ts):88)한다 — JSONB 허용성 ≠ 소비 계약 지원. 실제 변경 구간: (a) Unity evaluator 헬퍼가 `(normalized, rawMeters)` 쌍 반환 + `Face3DProfileCollector`가 raw도 별도 robust 집계(median(ratio)×median(scale)≠median(raw)이므로 필수), (b) v2 직렬화 `AppendMetric`에 `valueMm` 키 추가, (c) RN `types.ts`에 `valueMm?` + 파서 보존, (d) 백엔드 normalizer가 `face3d.{key}.mm` 병렬 엔벨로프 발행 — **v2 스키마 `unit` Literal에 `"mm"`은 기존재라 스키마만 무변경**, (e) `docs/face3d/TIER2_METRIC_CONTRACT.md` §0("절대 mm 아니다") 제품 경계 개정. 사용자 비노출.
+3. **mm 병렬 저장 — 전 구간 계약 변경(초안 "서버 변경 없음"은 오류)**: evaluator가 모든 거리를 `faceScale`로 나누고([Face3DMetricEvaluator.cs](../../../apps/unity/MakeupAR/Assets/Scripts/Face3D/Face3DMetricEvaluator.cs):275/287/318/343/359) 프로필은 `normalized`만 직렬화, 백엔드도 `unit="ratio"` 강제([face_analysis_measurements.py](../../../services/backend/app/services/face_analysis_measurements.py):270), RN 파서는 unit≠normalized를 거부([face3DContract.ts](../../../apps/mobile/src/features/face-3d/services/face3DContract.ts):88)한다 — JSONB 허용성 ≠ 소비 계약 지원. 실제 변경 구간: (a) Unity evaluator 헬퍼가 `(normalized, rawMeters)` 쌍 반환 + `Face3DProfileCollector`가 raw도 별도 robust 집계(median(ratio)×median(scale)≠median(raw)이므로 필수), (b) v2 직렬화 `AppendMetric`에 `valueMm` 키 추가, (c) RN `types.ts`에 `valueMm?` + 파서 보존, (d) 백엔드 normalizer가 `face3d.{key}.mm` 병렬 엔벨로프 발행 — **v2 스키마 `unit` Literal에 `"mm"`은 기존재라 스키마만 무변경**, (e) `docs/face3d/TIER2_METRIC_CONTRACT.md` §0("절대 mm 아니다") 제품 경계 개정. 사용자 비노출. **(f) B2 단일 창구 조율(2026-07-17, 정밀화)**: R3 `regionBboxes` + Phase 2 `valueMm` + 센서 provenance를 **하나의 계약 변경 묶음**으로 B2에 등록하고 창구 소유자를 지정한다. R3 bbox는 Phase 1 정렬 도입 후에도 **보정 이전 원본 픽셀 좌표**를 보존해야 하므로(B4) 이를 수용 테스트로 고정.
 4. **오차 프로파일**: 캘리퍼/자 실측 대비 부위별 오차 측정(눈 사이 거리·얼굴 폭 등 큰 치수부터). 산출물 = 부위별 신뢰 가능/불가 목록. 문헌 기대치: 표면 편차 ~0.4mm, 거리 측정 오차 0.88~9.07%(각도 의존) (§5 C-1).
 4-b. **홍채 스케일 병행(정본 §7-1) — 오차 전제 정정(리서치)**: 홍채 가로 지름(HVID) ~11.7mm·개인차 ±0.5mm는 안과 문헌 확인이나 **두 정정 필수**: (1) "인구집단 편차 작다"는 **반박** — 동아시아 HVID는 ~11.1~11.3mm로 11.7mm 가정 시 **+4~5% 체계(방향성) 편향**(한국 사용자 대상 앱은 지역 보정 HVID 사용 또는 사용자 캘리브레이션 권고), (2) 홍채 4.3%는 **거리 추정** 오차이지 얼굴 길이 mm 오차가 아니다 — 얼굴 mm 환산 실측은 별도로 존재(수평 MAPE 2.9%/수직 4.3%, PMC10447546). 귀결: 홍채와 **같은 정면 평면의 수평 거리**만 ~3%로 신뢰, **깊이가 다른 부위(코높이·턱길이)는 단일평면 스케일로 환산 시 편향 누적** → confidence 하향. "리포트 용도 충분"은 부위별 실측 검증 전까지 **가설로 강등**. 3단 폴백: 홍채(전 기기, 정면 수평) → TrueDepth(지원 기기, 입체) → 미지원 항목 AI 추정 표기.
 5. **2D/3D 이중 경로 정책**: 동일 지표 충돌 시 TrueDepth 우선, 폴백은 confidence 하향, 결과에 `source` 명시.
@@ -124,8 +145,8 @@
 
 ## 4. 순서·의존성
 
-- Phase 0: 즉시 (이번 브랜치). **관문 실범위 재조정(트랙 경계 B1, 2026-07-17)**: 게이지 로직 추출 + 상수 통합(서버 임계 포함 여부는 Phase 0-1 결정)까지가 측정 트랙 소유. **`MeasurementDetailSection` 철거와 `FaceAnalysisReportDetailScreen`의 숫자 정리는 보고서 재구성 트랙(R4)에 위임** — 측정 Phase 0은 해당 화면들에 "신규 숫자 노출 차단"만 책임진다(두 트랙이 같은 파일을 고치는 충돌 방지 — 재구성 계획 §2-B1).
-- Phase 1 ↔ 2: 독립적이라 병렬 가능하나 단일 인력이면 1 먼저 — 검증 프로토콜(재현성+정면수렴)을 2에서 재사용. **단 Phase 2는 §0 calibration 승격이 선결**(승격 전엔 Face3D 지표가 백엔드 차단).
+- Phase 0: ✅ 완료(PR #21·GO). 관문 실범위 재조정 기록은 유지: **관문 실범위 재조정(트랙 경계 B1, 2026-07-17)**: 게이지 로직 추출 + 상수 통합(서버 임계 포함 여부는 Phase 0-1 결정)까지가 측정 트랙 소유. **`MeasurementDetailSection` 철거와 `FaceAnalysisReportDetailScreen`의 숫자 정리는 보고서 재구성 트랙(R4)에 위임** — 측정 Phase 0은 해당 화면들에 "신규 숫자 노출 차단"만 책임진다(두 트랙이 같은 파일을 고치는 충돌 방지 — 재구성 계획 §2-B1).
+- Phase 1 ↔ 2: **병렬 확정(2026-07-17 결정, Codex 정합 검토로 정밀화)** — 이점은 실기기 **방문 통합**이지 캡처 통합이 아니다: exact-30은 Unity 정면 게이트(±yaw5/pitch7/roll5)를 통과해야 하므로 Phase 1 다각도 샷과 **별도 캡처**이고, 정면 exact-30 사진만 Phase 1 기준(정면) 샷으로 재사용 가능. 세션 스크립트: **"Phase 1 다각도 촬영 → exact-30 정면 반복(diagnostics 플래그·정책 ID `diagnostics-exact-30-v1`·반복 횟수 명시)"** 순서 — Lab은 캡처마다 한 모드만 선택한다. 검증 프로토콜(재현성+정면수렴)은 2에서 재사용. **단 Phase 2는 §0 calibration 승격이 선결**(승격 전엔 Face3D 지표가 백엔드 차단). **공통 충돌면 5파일**(`FaceCaptureLabApp.tsx`·`unityMakeupBridge.ts`·`faceAnalysisMeasurements.ts`·백엔드 `face_analysis_measurements.py`·`openai_analysis.py`)은 단일 소유자·병합 순서 지정 — Phase 1의 좌표/행렬과 Phase 2의 profile/mm 변경이 동시에 이 경로를 지난다.
 - Phase 3 매핑 테이블: 코드 독립적 — 기획이 지금부터 병렬 시작 가능. 근거 자료는 §5 완비. **선결: 제2 정본 반입(§10.10)**.
 - Phase 4-1(부트스트랩): Phase 3 매핑에 기준 밴드가 필요해지는 시점에. 4-2는 데이터 축적 시간. **Phase 0의 상수 잠정값은 Phase 4에서 자체 촬영셋 mean±SD로 교체(§4 Phase 4-2)**.
 - **법률 검토(§6-10): 현재 스코프 제외** — 미국/EU 실서비스 출시 시 재활성화(선행 조건 아님).
@@ -192,7 +213,7 @@
 2. **정점 앵커링** — "정점 15 = nasion"류 대응은 17캡처 검수 기반, 얼굴형 분포 꼬리에서 미검증. 임상 캘리퍼도 측정자 간 mm 편차가 있는 영역(계측 내재 한계).
 3. **헤어라인** — TrueDepth로 원리적 미해결(IR 흡수). hair matte 융합 품질이 얼굴 길이비의 병목으로 남음.
 4. **브랜치 형상 — 확인은 시점 스냅샷일 뿐(2026-07-16 리뷰로 재기술)** — `feature/WEI/얼굴분석보고서`는 PR #16으로 main 머지 완료, `fix/face-analysis-report-0716`은 PR #18로 dev 머지 완료(체리픽 중복은 리베이스에서 탈락). 문서 형상은 `docs/WEI/face-measurement-plan-0716`로 단일화. **단 "확인 완료"는 그 시점의 사실이고 dev는 계속 움직인다**(같은 날 behind 25 재발) — Phase 0 착수 조건: dev 재동기화 + §0 사실표(파일:라인·상수·게이트 값) 재검증. 특히 dev의 알림/보고서 관련 커밋들이 보고서 화면 사실을 바꿨을 수 있다.
-5. **AURAFaceRatioHairline.m의 pitch 정규화 8° 잔존** — 게이트 12°와 불일치로 8~12° 촬영의 헤어라인 confidence 저평가 (스펙 주석의 "별도 검토" 항목).
+5. **AURAFaceRatioHairline.m의 pitch 정규화 8° 잔존** — 8~12° 촬영의 헤어라인 confidence 저평가. **주의(Codex 정합 검토)**: 이 8°는 게이트가 아니라 confidence 분모라 단순 12° 상향은 신뢰도 인위 상승 — Phase 1 실기기 검증에서 8/12/잔여-pose 모델 비교로 결정(연동 문단 참조).
 6. **MediaPipe z 품질 미검증** — Phase 1의 3D 정렬 개선폭은 z 노이즈에 좌우됨(Phase 1 §2). 재현성 관문 미달 시 cos 근사 보정으로 후퇴.
 7. **플랫폼 범위** — 현재 앱은 iOS 전용. Phase 1의 "폴백"은 non-TrueDepth iOS 기기 대상이며, Android 확장 시 Phase 2의 "TrueDepth = 신뢰 축" 전제는 전면 재검토 사안.
 8. **왜곡 보정 기획서 v1.0과의 결정 충돌 — 제품 오너 승인 필요.** `AURA_FACE_RATIO_DISTORTION_CORRECTION_PLAN_KO_v1.0.md` §6.2는 pitch/yaw 보정을 명시적으로 제외했다("잘못 보정하면 가짜 정확도" — gate로 차단이 원칙). 본 계획 Phase 1은 z기반 3D 정렬을 제안하므로 이 확정 결정의 번복이다. 번복 근거: (a) 결정 당시 전제는 pitch 게이트 ±5°였으나 이후 12°로 완화(2026-07-13 usability 결정)되어 게이트만으로 잔여 왜곡을 막는다는 전제가 무효화됨, (b) Phase 1은 재현성 관문 미달 시 후퇴하는 검증 구조를 내장해 "가짜 정확도" 우려에 대한 방어를 갖춤. 이 논거로 제품 오너 재결정을 받는다.
