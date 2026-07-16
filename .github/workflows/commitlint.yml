@@ -42,7 +42,7 @@ jobs:
              ! git rev-parse --verify --quiet "$BEFORE^{commit}" > /dev/null; then
             npx commitlint --last --verbose
           else
-            npx commitlint --from="$BEFORE" --to="${{ github.sha }}" --verbose
+            npx commitlint --from="$BEFORE" --to="${{ github.sha }}" --git-log-args="--first-parent" --verbose
           fi
 
       - name: Check commit messages on pull request

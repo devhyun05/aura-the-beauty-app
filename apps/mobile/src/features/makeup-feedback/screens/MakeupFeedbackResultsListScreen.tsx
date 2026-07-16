@@ -5,6 +5,7 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
+import {getMakeupFeedbackAnalysisSourceLabel} from '../services/makeupFeedbackResultPresentation';
 import type {MakeupFeedbackResult} from '../types';
 
 type MakeupFeedbackResultsListScreenProps = {
@@ -47,12 +48,13 @@ function MakeupFeedbackResultCard({
   result: MakeupFeedbackResult;
 }) {
   const goalLabel = result.interpretedGoal?.label ?? '메이크업 피드백';
+  const analysisSourceLabel = getMakeupFeedbackAnalysisSourceLabel(result.analysisSource);
   const pointCount = result.points.length;
   const strengthCount = result.strengths.length;
 
   return (
     <Pressable
-      accessibilityLabel={`${goalLabel} 피드백 보기`}
+      accessibilityLabel={`${goalLabel} 피드백, 참고 점수 ${result.score}점, 잘한 점 ${strengthCount}개, 보완할 점 ${pointCount}개, 보기`}
       accessibilityRole="button"
       onPress={onPress}
       style={({pressed}) => [styles.card, pressed && styles.cardPressed]}>
@@ -60,9 +62,14 @@ function MakeupFeedbackResultCard({
       <YStack style={styles.cardBody}>
         <XStack style={styles.cardHeader}>
           <YStack style={styles.titleGroup}>
-            <Text numberOfLines={1} style={styles.eyebrow}>
-              {result.photoSourceLabel}
-            </Text>
+            <XStack style={styles.sourceRow}>
+              <Text numberOfLines={1} style={styles.eyebrow}>
+                {result.photoSourceLabel}
+              </Text>
+              <Text numberOfLines={1} style={styles.sourceBadge}>
+                {analysisSourceLabel}
+              </Text>
+            </XStack>
             <Text numberOfLines={2} style={styles.title}>
               {goalLabel}
             </Text>
@@ -75,12 +82,12 @@ function MakeupFeedbackResultCard({
 
         <XStack style={styles.summaryRow}>
           <SummaryPill
-            icon={<CircleAlert color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />}
-            label={`보완 ${pointCount}`}
-          />
-          <SummaryPill
             icon={<CheckCircle2 color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />}
             label={`잘한 점 ${strengthCount}`}
+          />
+          <SummaryPill
+            icon={<CircleAlert color={colors.textPrimary} size={iconSize.xs} strokeWidth={2} />}
+            label={`보완할 점 ${pointCount}`}
           />
         </XStack>
       </YStack>
@@ -88,7 +95,7 @@ function MakeupFeedbackResultCard({
   );
 }
 
-function SummaryPill({icon, label}: {icon: ReactNode; label: string}) {
+function SummaryPill({icon, label}: {icon?: ReactNode; label: string}) {
   return (
     <XStack style={styles.summaryPill}>
       {icon}
@@ -161,9 +168,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 54,
+    height: 44,
     justifyContent: 'center',
-    width: 54,
+    width: 44,
   },
   scoreLabel: {
     color: colors.textSecondary,
@@ -173,9 +180,25 @@ const styles = StyleSheet.create({
   },
   scoreValue: {
     color: colors.textPrimary,
-    fontSize: typography.fontSize.md,
+    fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.md,
+    lineHeight: typography.lineHeight.sm,
+  },
+  sourceBadge: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.pill,
+    color: colors.textPrimary,
+    flexShrink: 0,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+  },
+  sourceRow: {
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
   },
   summaryPill: {
     alignItems: 'center',

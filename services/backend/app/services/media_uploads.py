@@ -31,7 +31,12 @@ def _validate_uploaded_object(
   if actual_byte_size <= 0 or actual_byte_size > MAX_MEDIA_UPLOAD_BYTES:
     raise AppError(413, "UPLOAD_SIZE_INVALID", "The uploaded object size is not allowed.")
   if expected_byte_size is not None and actual_byte_size != expected_byte_size:
-    raise AppError(409, "UPLOAD_SIZE_MISMATCH", "The uploaded object size does not match the upload session.")
+    raise AppError(
+      409,
+      "UPLOAD_SIZE_MISMATCH",
+      "The uploaded object size does not match the upload session.",
+      {"actualByteSize": actual_byte_size, "expectedByteSize": expected_byte_size},
+    )
   if _normalized_content_type(str(actual["content_type"])) != _normalized_content_type(expected_content_type):
     raise AppError(409, "UPLOAD_CONTENT_TYPE_MISMATCH", "The uploaded object type does not match the upload session.")
 
@@ -114,11 +119,13 @@ async def issue_upload_session(
       thumbnail_expected_byte_size,
       thumbnail_width,
       thumbnail_height,
+      status,
       expires_at
     )
     values (
       $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
       $14, $15, $16, $17, $18, $19, $20,
+      'pending',
       now() + ($21::int * interval '1 second')
     )
     returning id

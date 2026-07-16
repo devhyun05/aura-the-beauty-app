@@ -237,11 +237,12 @@ export function mapCandidate(product: BackendProduct): AuradinCandidateProduct {
     imageSource: {uri: imageUrl},
     role,
     source: product.source === 'live_naver' ? 'live_naver' : 'curated',
-    externalSource: UUID_PATTERN.test(id)
-      ? undefined
-      : product.externalSource === 'auradin_catalog'
-        ? 'auradin_catalog'
-        : 'auradin_search',
+    externalSource:
+      product.externalSource === 'auradin_catalog' || product.externalSource === 'auradin_search'
+        ? product.externalSource
+        : UUID_PATTERN.test(id)
+          ? undefined
+          : 'auradin_search',
     reason,
     reasonCopy: typeof product.reasonCopy === 'string' && product.reasonCopy ? product.reasonCopy : undefined,
     matchRate: typeof product.matchRate === 'number' ? product.matchRate : undefined,

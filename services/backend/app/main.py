@@ -23,6 +23,7 @@ from app.services.auradin_agent.event_logger import (
   flush_search_turn_event_tasks,
 )
 from app.services.auradin_agent.snapshot_manifest import bind_process_snapshot, resolve_and_validate_snapshot
+from app.services.media_upload_schema import ensure_media_upload_schema
 from app.services.product_recommendation_schema import ensure_product_recommendation_runtime_schema
 
 
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
   try:
     await database.connect()
     await ensure_consulting_runtime_schema(database)
+    await ensure_media_upload_schema(database)
     await ensure_media_deletion_schema(database)
     await ensure_account_deletion_schema(database)
     await ensure_hair_schema(database)

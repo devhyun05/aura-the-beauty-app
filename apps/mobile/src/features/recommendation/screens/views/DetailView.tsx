@@ -95,22 +95,7 @@ export function DetailView({
   const insets = useSafeAreaInsets();
   const enter = useEnterTransition(16);
 
-  // "보관함에 담김" toast on the save rising edge
-  const [toast, setToast] = React.useState(false);
   const [buyError, setBuyError] = React.useState(false);
-  const prevLiked = React.useRef(liked);
-  React.useEffect(() => {
-    if (liked && !prevLiked.current) {
-      setToast(true);
-      const t = setTimeout(() => setToast(false), 1600);
-      return () => clearTimeout(t);
-    }
-    return undefined;
-  }, [liked]);
-  // prev 추적은 여기 한 곳에서만 — 위 effect의 조기 return 경로와 무관하게 항상 최신.
-  React.useEffect(() => {
-    prevLiked.current = liked;
-  });
   React.useEffect(() => {
     if (!buyError) return undefined;
     const timer = setTimeout(() => setBuyError(false), 2200);
@@ -356,8 +341,8 @@ export function DetailView({
         </ScrollView>
       </Animated.View>
       <Toast
-        show={toast || buyError}
-        label={buyError ? '판매처 페이지를 열 수 없어요' : '보관함에 담김'}
+        show={buyError}
+        label="판매처 페이지를 열 수 없어요"
         bottom={Math.max(insets.bottom, 18) + 10}
       />
     </View>

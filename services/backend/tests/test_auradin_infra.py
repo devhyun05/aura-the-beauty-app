@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,9 @@ from app.services.auradin_agent.session_manager import (
   get_session_persisted,
 )
 from app.services.auradin_agent.vector_index import EmbeddingVectorIndex
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class FakeBedrockBody:
@@ -218,3 +222,29 @@ async def test_postgres_session_store_does_not_fall_back_to_stale_memory() -> No
     )
     is None
   )
+
+
+def test_backend_image_and_deploy_workflow_include_active_snapshot_assets() -> None:
+  dockerfile = (PROJECT_ROOT / "services/backend/Dockerfile").read_text(encoding="utf-8")
+  workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(encoding="utf-8")
+
+  for copy_contract in (
+    "COPY data/auradin/active_snapshot.json ./data/auradin/active_snapshot.json",
+    "COPY data/auradin/catalog ./data/auradin/catalog",
+    "COPY data/auradin/knowledge ./data/auradin/knowledge",
+    "COPY data/auradin/manifests ./data/auradin/manifests",
+    "COPY data/auradin/vector ./data/auradin/vector",
+  ):
+    assert copy_contract in dockerfile
+
+  for deploy_path in (
+    '"data/auradin/active_snapshot.json"',
+    '"data/auradin/catalog/**"',
+    '"data/auradin/knowledge/**"',
+    '"data/auradin/manifests/**"',
+    '"data/auradin/vector/**"',
+  ):
+    assert deploy_path in workflow
+
+  assert workflow.count("Verify Auradin snapshot in backend image") == 2
+  assert workflow.count("resolve_and_validate_snapshot(Settings(environment='production'), force=True)") == 2

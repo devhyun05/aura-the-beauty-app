@@ -52,6 +52,8 @@ const rootNavigator = source('apps/mobile/src/app/navigation/RootNavigator.tsx')
 const arSave = source('apps/mobile/src/features/ar/services/savedArLookService.ts');
 const auradinService = source('apps/mobile/src/features/recommendation/services/auradinSearchService.ts');
 const auradinScreen = source('apps/mobile/src/features/recommendation/screens/AuradinSearchScreen.tsx');
+const auradinSavedProducts = source('apps/mobile/src/features/recommendation/services/auradinSavedProducts.ts');
+const auradinDetailView = source('apps/mobile/src/features/recommendation/screens/views/DetailView.tsx');
 const legacyAuradinService = source('apps/mobile/src/features/recommendation/services/auradinService.ts');
 const auradinOrb = source('apps/mobile/src/features/recommendation/components/AuradinFloatingOrb.tsx');
 const recommendationScreen = source('apps/mobile/src/features/recommendation/screens/ProductRecommendationScreen.tsx');
@@ -94,10 +96,162 @@ requireContract(
     recommendationScreen.includes('isTrustedCatalogProductId(product.id) || Boolean(product.externalSource)') &&
     recommendationScreen.includes('likeExternalProduct(product.productId, product.externalSource)') &&
     recommendationScreen.includes('unlikeProduct(product.productId, product.externalSource)') &&
-    auradinService.includes("product.externalSource === 'auradin_catalog'") &&
-    auradinScreen.includes('likeExternalProduct(product.id, product.externalSource)') &&
-    auradinScreen.includes('unlikeProduct(product.id, product.externalSource)'),
+    auradinSavedProducts.includes("../../../shared/services/productBackendApi") &&
+    auradinSavedProducts.includes("../../../shared/services/productService") &&
+    auradinSavedProducts.includes("'/products/liked'") &&
+    auradinSavedProducts.includes('likeExternalProduct(product.id, product.externalSource)') &&
+    auradinSavedProducts.includes('likeProduct(product.id, product.shadeId)') &&
+    auradinSavedProducts.includes('unlikeProduct(productId, externalSource)') &&
+    auradinSavedProducts.includes('requestProductBackendJson') &&
+    auradinSavedProducts.includes("row.externalSource === 'auradin_catalog'") &&
+    auradinSavedProducts.includes("row.externalSource === 'auradin_search'") &&
+    auradinService.includes("product.externalSource === 'auradin_catalog' || product.externalSource === 'auradin_search'") &&
+    auradinScreen.includes('persistAuradinSave(product)') &&
+    auradinScreen.includes('removeAuradinSave(product.id, product.externalSource)') &&
+    auradinScreen.includes("product.externalSource ?? 'internal'") &&
+    auradinScreen.includes('pendingSaveKeysRef.current.has(productKey)') &&
+    auradinScreen.includes('requestVersion === saveMutationVersionRef.current') &&
+    auradinScreen.includes("showToast(") &&
+    auradinScreen.includes("onOpenLikedProducts ? {label: '보기'") &&
+    auradinDetailView.includes('show={buyError}') &&
+    !auradinDetailView.includes('보관함에 담김'),
   'server-resolved external products must support like, unlike, MyPage listing, and seller reopening in both product grids.',
+);
+
+const auradinSaveCalls = [];
+const internalSavedId = '11111111-1111-4111-8111-111111111111';
+const searchSavedId = '22222222-2222-4222-8222-222222222222';
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const previousDevFlag = globalThis.__DEV__;
+globalThis.__DEV__ = false;
+const auradinSearchMapperModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/auradinSearchService.ts',
+  {
+    '../../../shared/services/backendApi': {
+      getBackendApiBaseUrl: () => null,
+      isRequestAbortedError: () => false,
+      requestBackendJson: async () => ({}),
+    },
+    './auradinAnonToken': {
+      auradinAnonEventHeaders: async () => ({}),
+      auradinAnonEventHeadersImmediate: () => ({}),
+    },
+    '../mocks/auradin.mock': {
+      auradinDraftMock: {thinkingSteps: [], question: null, candidates: []},
+    },
+  },
+);
+if (previousDevFlag === undefined) {
+  delete globalThis.__DEV__;
+} else {
+  globalThis.__DEV__ = previousDevFlag;
+}
+const mappedInternalUuid = auradinSearchMapperModule.mapCandidate({id: internalSavedId});
+const mappedExternalUuid = auradinSearchMapperModule.mapCandidate({
+  id: searchSavedId,
+  externalSource: 'auradin_search',
+});
+requireContract(
+  mappedInternalUuid.externalSource === undefined &&
+    mappedExternalUuid.externalSource === 'auradin_search',
+  'AURADIN candidate mapping must prefer an explicit external source over UUID-shaped id heuristics.',
+);
+const auradinSavedProductsModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/auradinSavedProducts.ts',
+  {
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'https://products.example.com',
+      requestProductBackendJson: async path => {
+        auradinSaveCalls.push({kind: 'fetch', path});
+        return {
+          products: [
+            {id: internalSavedId, productName: 'Internal product'},
+            {
+              productId: 'catalog-lip-1',
+              externalSource: 'auradin_catalog',
+              productName: 'Catalog product',
+            },
+            {
+              productId: searchSavedId,
+              externalSource: 'auradin_search',
+              productName: 'Search product',
+            },
+            {
+              productId: 'naver-product-1',
+              externalSource: 'naver_shopping_search',
+              productName: 'Naver product',
+            },
+          ],
+        };
+      },
+    },
+    '../../../shared/services/productService': {
+      likeExternalProduct: async (productId, externalSource) => {
+        auradinSaveCalls.push({kind: 'likeExternal', productId, externalSource});
+        return true;
+      },
+      likeProduct: async (productId, shadeId) => {
+        auradinSaveCalls.push({kind: 'likeInternal', productId, shadeId});
+        return true;
+      },
+      unlikeProduct: async (productId, externalSource) => {
+        auradinSaveCalls.push({kind: 'unlike', productId, externalSource});
+        return true;
+      },
+    },
+    './auradinSearchService': {
+      mapCandidate: product => ({
+        id: product.id,
+        shadeId: product.shadeId ?? undefined,
+        brandName: product.brandName ?? '',
+        productName: product.productName ?? '',
+        shadeName: product.shadeName ?? '',
+        priceText: '',
+        matchSummary: '',
+        palette: product.palette ?? [],
+        tags: product.tags ?? [],
+        imageSource: {uri: product.imageUrl ?? ''},
+        externalSource:
+          product.externalSource === 'auradin_catalog' || product.externalSource === 'auradin_search'
+            ? product.externalSource
+            : uuidPattern.test(product.id)
+              ? undefined
+              : 'auradin_search',
+      }),
+    },
+  },
+);
+const internalPersisted = await auradinSavedProductsModule.persistAuradinSave({
+  id: internalSavedId,
+  shadeId: 'shade-1',
+});
+const catalogPersisted = await auradinSavedProductsModule.persistAuradinSave({
+  id: 'catalog-lip-1',
+  externalSource: 'auradin_catalog',
+});
+const searchPersisted = await auradinSavedProductsModule.persistAuradinSave({
+  id: searchSavedId,
+  externalSource: 'auradin_search',
+});
+const searchRemoved = await auradinSavedProductsModule.removeAuradinSave(
+  searchSavedId,
+  'auradin_search',
+);
+const hydratedAuradinSaves = await auradinSavedProductsModule.fetchAuradinSavedProducts();
+requireContract(
+  internalPersisted === true &&
+    catalogPersisted === true &&
+    searchPersisted === true &&
+    searchRemoved === true &&
+    auradinSaveCalls.some(call => call.kind === 'likeInternal' && call.productId === internalSavedId && call.shadeId === 'shade-1') &&
+    auradinSaveCalls.some(call => call.kind === 'likeExternal' && call.productId === 'catalog-lip-1' && call.externalSource === 'auradin_catalog') &&
+    auradinSaveCalls.some(call => call.kind === 'likeExternal' && call.productId === searchSavedId && call.externalSource === 'auradin_search') &&
+    auradinSaveCalls.some(call => call.kind === 'unlike' && call.productId === searchSavedId && call.externalSource === 'auradin_search') &&
+    auradinSaveCalls.some(call => call.kind === 'fetch' && call.path === '/products/liked') &&
+    hydratedAuradinSaves.length === 3 &&
+    hydratedAuradinSaves.some(product => product.id === searchSavedId && product.externalSource === 'auradin_search') &&
+    !hydratedAuradinSaves.some(product => product.id === 'naver-product-1'),
+  'AURADIN saves must execute internal/external routes, preserve exact sources, and exclude unrelated external likes.',
 );
 requireContract(
   hubContent.includes('actionLabel="설정하기"') &&
@@ -513,7 +667,9 @@ requireContract(
 );
 requireContract(
   auradinScreen.includes('useFocusEffect') &&
-    auradinScreen.includes('likeProduct(product.id, product.shadeId)') &&
+    auradinScreen.includes('fetchAuradinSavedProducts()') &&
+    auradinScreen.includes('setSaved(products)') &&
+    auradinScreen.includes('setLikedProductKeys(new Set(products.map(savedProductKey)))') &&
     searchScreen.includes('useFocusEffect') &&
     likedScreen.includes('useFocusEffect') &&
     likedScreen.includes('onOpenProduct?.(product.id, product.shadeId)') &&

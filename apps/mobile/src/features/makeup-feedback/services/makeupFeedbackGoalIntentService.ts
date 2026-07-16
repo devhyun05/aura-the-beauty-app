@@ -13,8 +13,41 @@ export type MakeupFeedbackGoalIntentResult = {
   originalGoalText: string;
 };
 
-export const MAKEUP_FEEDBACK_DEFAULT_GOAL_TEXT =
-  '전체적인 메이크업 균형과 자연스러움 기준으로 피드백';
+const userFacingIntensityTerms = [
+  {raw: 'light', adjective: '가벼운', noun: '가벼운 표현', instrumental: '가벼운 표현으로'},
+  {raw: 'medium', adjective: '적당한', noun: '적당한 강도', instrumental: '적당한 강도로'},
+  {raw: 'bold', adjective: '선명한', noun: '선명한 표현', instrumental: '선명한 표현으로'},
+] as const;
+
+/**
+ * Keeps the API intensity enum intact while preventing its raw English value
+ * from leaking into Korean copy generated for users.
+ */
+export function localizeMakeupFeedbackIntensityTerms(value: string): string {
+  return userFacingIntensityTerms.reduce((localized, term) => {
+    const prefix = '(^|[^A-Za-z0-9_])';
+    const suffix = '(?=$|[^A-Za-z0-9_])';
+
+    return localized
+      .replace(
+        new RegExp(`${prefix}${term.raw}(?:으)?로${suffix}`, 'gi'),
+        `$1${term.instrumental}`,
+      )
+      .replace(
+        new RegExp(`${prefix}${term.raw}한${suffix}`, 'gi'),
+        `$1${term.adjective}`,
+      )
+      .replace(
+        new RegExp(`${prefix}${term.raw}인${suffix}`, 'gi'),
+        `$1${term.noun}인`,
+      )
+      .replace(
+        new RegExp(`${prefix}${term.raw}${suffix}`, 'gi'),
+        `$1${term.noun}`,
+      );
+  }, value);
+}
+
 
 const noiseGoalMessage = '의미 있는 상황을 한 문장으로 적어주세요.';
 const needsDetailGoalMessage = '어떤 상황에서 보일 메이크업인지 한 문장만 더 적어주세요.';
@@ -275,7 +308,7 @@ export function classifyMakeupFeedbackGoalText(value: string): MakeupFeedbackGoa
   if (isGenericDefaultRequest(normalizedText)) {
     return {
       intentType: 'generic_default',
-      normalizedGoalText: MAKEUP_FEEDBACK_DEFAULT_GOAL_TEXT,
+      normalizedGoalText: normalizedText,
       originalGoalText: normalizedText,
     };
   }
