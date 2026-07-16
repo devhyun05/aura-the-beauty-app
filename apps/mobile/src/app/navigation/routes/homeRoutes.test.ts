@@ -27,7 +27,7 @@ const featureNavigationCases = [
   ['faceAnalysis', {source: 'reports'}, 'FaceAnalysisReportsList'],
   ['makeupRecommendation', undefined, 'MakeupRecommendation'],
   ['productRecommendation', undefined, 'ProductRecommendation'],
-  ['productRecommendation', {itemId: 'product-1'}, 'ProductDetail'],
+  ['productRecommendation', {itemId: 'product-1'}, 'ProductSellerOutbound'],
   ['auradin', {source: '데일리 립 추천'}, 'AuradinSearch'],
   ['makeupExtraction', undefined, 'makeupExtractionSheet'],
   ['makeupFeedback', undefined, 'makeupFeedbackSheet'],

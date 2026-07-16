@@ -81,7 +81,7 @@ ANALYSIS_MEDIA_SELECT = """
 # 재선택하면 normalize 의 dict(row) 변환에서 마지막 값이 이겨 축약본이 남는다.
 ANALYSIS_MEDIA_LIST_SELECT = (
   ANALYSIS_MEDIA_SELECT
-  + ",\n  ((((((r.detail_payload #- '{request,measurements}')"
+  + ",\n  (((((((r.detail_payload #- '{request,measurements}')"
   " #- '{result,faceAnalysisV2,coverage}')"
   " #- '{result,faceAnalysisV2,aiMeasurements}')"
   " #- '{result,faceAnalysisV2,faceProfile}')"

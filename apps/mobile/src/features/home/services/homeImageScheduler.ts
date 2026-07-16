@@ -8,7 +8,7 @@ import {
 } from '../../../shared/services/imageCacheService';
 import type {HomeModuleConfig, HomeModuleId} from '../types/homeModules';
 
-export const HOME_IMAGE_PREFETCH_CONCURRENCY = 2;
+export const HOME_IMAGE_PREFETCH_CONCURRENCY = 4;
 export const HOME_CURRENT_MODULE_PREFETCH_LIMIT = 2;
 export const HOME_NEXT_MODULE_PREFETCH_LIMIT = 1;
 
@@ -116,6 +116,16 @@ export function getHomeModulePrefetchWindowSources(
     .slice(0, HOME_NEXT_MODULE_PREFETCH_LIMIT) ?? [];
 
   return [...currentModuleSources, ...nextModuleSources];
+}
+
+export function getAllHomeImageSources(
+  modules: readonly HomeModuleConfig[],
+  additionalSources: readonly (ImageSourcePropType | undefined)[] = [],
+): ImageSourcePropType[] {
+  return [
+    ...modules.flatMap(module => module.imageSources),
+    ...additionalSources.flatMap(source => source ? [source] : []),
+  ];
 }
 
 /**

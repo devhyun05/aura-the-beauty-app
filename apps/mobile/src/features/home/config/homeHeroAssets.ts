@@ -12,14 +12,16 @@ export const homeHeroImageSources = [
   homeHeroAuradin,
 ] as const;
 
-let firstHeroImagePreload: Promise<unknown> | undefined;
+let heroImagesPreload: Promise<unknown> | undefined;
 
 /**
- * Decode only the first hero before Home is shown. Remaining slides are loaded
- * by the carousel at low priority until they become active.
+ * Decode every bundled hero as early as possible so carousel changes never
+ * wait on the image pipeline.
  */
 export function prefetchHomeHeroImages(): void {
-  firstHeroImagePreload ??= ExpoImage.loadAsync(homeHeroFaceDiagnosis).catch(
-    () => undefined,
+  heroImagesPreload ??= Promise.all(
+    homeHeroImageSources.map(source => (
+      ExpoImage.loadAsync(source).catch(() => undefined)
+    )),
   );
 }

@@ -120,6 +120,13 @@ const internalProduct: CatalogProduct = {
   brandName: '웨이크메이크',
   category: 'lip',
   imageUrl: 'https://cdn.example.com/product.webp',
+  offer: {
+    affiliateType: 'affiliate',
+    availability: 'in_stock',
+    offerId: 'offer-1',
+    sellerDomain: 'shop.example.com',
+    sellerName: '예시몰',
+  },
   price: {amount: 25900, currency: 'KRW'},
   productId: '123e4567-e89b-42d3-a456-426614174000',
   productName: '리얼 컬러 립',
@@ -132,6 +139,7 @@ const externalProduct: CatalogProduct = {
   imageUrl: 'https://cdn.example.com/external.webp',
   productId: '223e4567-e89b-42d3-a456-426614174000',
   productName: '외부 카탈로그 립',
+  purchaseUrl: 'https://external.example.com/product',
   shadeId: null,
 };
 const actualContent: HomeFeedContent = {
@@ -145,13 +153,15 @@ const auradinModule = resolvedModules.find(module => module.id === 'auradin');
 expect(productsModule?.imageSources.length === 2, 'real product images drive prefetch sources');
 expect(
   productsModule?.items?.[0]?.targetId === internalProduct.productId
+    && productsModule?.items?.[0]?.metadata?.offerId === internalProduct.offer?.offerId
     && productsModule?.items?.[0]?.metadata?.shadeId === internalProduct.shadeId,
-  'internal catalog product opens its exact product and shade',
+  'internal catalog product carries its exact outbound offer and shade',
 );
 expect(
-  productsModule?.items?.[1]?.targetId === undefined
-    && productsModule?.items?.[1]?.metadata?.source === 'seasonal',
-  'external catalog product returns to its real shelf instead of a broken detail route',
+  productsModule?.items?.[1]?.targetId === externalProduct.productId
+    && productsModule?.items?.[1]?.metadata?.externalSource === externalProduct.externalSource
+    && productsModule?.items?.[1]?.metadata?.purchaseUrl === externalProduct.purchaseUrl,
+  'external catalog product carries the API-provided seller URL',
 );
 expect(
   auradinModule?.imageSources.length === 1

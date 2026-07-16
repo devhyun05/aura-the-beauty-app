@@ -59,6 +59,7 @@ import {
   getHomeFeedContent,
 } from '../services/homeFeedService';
 import {
+  getAllHomeImageSources,
   getHomeImageLoadStagesForViewport,
   homeImageScheduler,
   type HomeImageLoadStage,
@@ -109,6 +110,10 @@ type HomeScreenProps = {
     featureId: HomeFeatureId,
     payload?: HomeFeaturePressPayload,
   ) => void;
+  onToggleHomeProductLike?: (
+    payload: HomeFeaturePressPayload,
+    nextLiked: boolean,
+  ) => Promise<void>;
   isMakeupFilterLiked?: (filterId: string) => boolean;
   onToggleMakeupFilterLike?: (filterId: string) => void;
   onConfirmBeautyJourneyGuide?: () => void;
@@ -133,6 +138,7 @@ export function HomeScreen({
   onPressRecommendedFilterMore,
   onPressRecommendedFilter,
   onPressHomeFeature,
+  onToggleHomeProductLike,
   isMakeupFilterLiked,
   onToggleMakeupFilterLike,
   onConfirmBeautyJourneyGuide,
@@ -171,6 +177,16 @@ export function HomeScreen({
     () => getVisibleHomeModules(audience, homeFeedContent),
     [audience, homeFeedContent],
   );
+  const allHomeImageSources = useMemo(() => getAllHomeImageSources(
+    visibleHomeModules,
+    [
+      homeData.hero.imageSource,
+      ...homeData.hero.trends.map(trend => trend.imageSource),
+      ...recommendedMakeupFilters.map(filter => filter.imageSource),
+      ...homeData.filterStore.map(item => item.imageSource),
+      ...homeData.recommendedLooks.map(look => look.imageSource),
+    ],
+  ), [homeData, recommendedMakeupFilters, visibleHomeModules]);
   const visibleHomeModulesRef = useRef(visibleHomeModules);
   visibleHomeModulesRef.current = visibleHomeModules;
   const moduleViewabilityConfig = useRef({
@@ -286,18 +302,15 @@ export function HomeScreen({
       setRecommendedMakeupFilters(filters);
     });
 
-    const feedTask = InteractionManager.runAfterInteractions(() => {
-      void getHomeFeedContent({isAuthenticated}).then(nextFeedContent => {
-        if (isMounted) {
-          setHomeFeedContent(nextFeedContent);
-          setIsHomeFeedLoading(false);
-        }
-      });
+    void getHomeFeedContent({isAuthenticated}).then(nextFeedContent => {
+      if (isMounted) {
+        setHomeFeedContent(nextFeedContent);
+        setIsHomeFeedLoading(false);
+      }
     });
 
     return () => {
       isMounted = false;
-      feedTask.cancel();
     };
   }, [isAuthenticated]);
 
@@ -308,6 +321,10 @@ export function HomeScreen({
 
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    void homeImageScheduler.scheduleSources(allHomeImageSources);
+  }, [allHomeImageSources]);
 
   useEffect(() => {
     if (hasTrackedHomeEnterRef.current) {
@@ -380,11 +397,13 @@ export function HomeScreen({
         trackHomeModulePress(item.id, featureId, payload?.itemId);
         onPressHomeFeature?.(featureId, payload);
       }}
+      onToggleProductLike={onToggleHomeProductLike}
     />
   ), [
     moduleImageLoadStages,
     isHomeFeedLoading,
     onPressHomeFeature,
+    onToggleHomeProductLike,
   ]);
 
   return (
@@ -1542,7 +1561,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxl * 2 + spacing.sm,
   },
   homeModuleSeparator: {
-    height: spacing.xxl * 2 + spacing.lg,
+    height: spacing.xxl * 2 + spacing.sm,
   },
   heroBackgroundImage: {
     bottom: 0,

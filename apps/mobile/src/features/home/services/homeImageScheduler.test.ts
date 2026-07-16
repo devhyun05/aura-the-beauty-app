@@ -2,6 +2,7 @@ import type {ImageSourcePropType} from 'react-native';
 
 import {
   createHomeImageScheduler,
+  getAllHomeImageSources,
   getHomeImageLoadStagesForViewport,
   getHomeImageSourceForStage,
   getHomeModulePrefetchWindowSources,
@@ -87,6 +88,10 @@ expect(
   getHomeModulePrefetchWindowSources(modules, -1).length === 0,
   'invalid module index does not prefetch',
 );
+expect(
+  getAllHomeImageSources(modules, [stagedSource]).length === 7,
+  'all module and additional home images are included in the eager prefetch set',
+);
 
 async function runSchedulerContract(): Promise<void> {
   let activeCount = 0;
@@ -116,21 +121,27 @@ async function runSchedulerContract(): Promise<void> {
 
   await flushMicrotasks();
   expect(
-    requestedUris.length === HOME_IMAGE_PREFETCH_CONCURRENCY,
-    'scheduler starts only two image requests',
+    requestedUris.length === Math.min(3, HOME_IMAGE_PREFETCH_CONCURRENCY),
+    'scheduler fills the available prefetch slots',
   );
-  expect(scheduler.getActiveCount() === 2, 'scheduler reports two active requests');
+  expect(
+    scheduler.getActiveCount() === Math.min(3, HOME_IMAGE_PREFETCH_CONCURRENCY),
+    'scheduler reports every active request',
+  );
   expect(scheduler.getScheduledUriCount() === 3, 'overlapping window URIs are deduplicated');
 
   releases.shift()?.(true);
   await flushMicrotasks();
-  expect(requestedUris.length === 3, 'third request starts after one slot is released');
-  expect(maxActiveCount === 2, 'prefetch concurrency never exceeds two');
+  expect(requestedUris.length === 3, 'the complete viewport window is scheduled');
+  expect(
+    maxActiveCount <= HOME_IMAGE_PREFETCH_CONCURRENCY,
+    'prefetch concurrency never exceeds its configured limit',
+  );
   expect(
     !requestedUris.includes('https://example.com/current-not-prefetched.webp')
       && !requestedUris.includes('https://example.com/next-not-prefetched.webp')
       && !requestedUris.includes('https://example.com/off-window.webp'),
-    'scheduler never bulk-prefetches the long-scroll image set',
+    'viewport scheduling remains scoped while eager Home prefetch uses the full image set',
   );
 
   while (releases.length > 0) {
@@ -185,7 +196,7 @@ async function runSchedulerContract(): Promise<void> {
   await flushMicrotasks();
   expect(
     sharedScheduler.getActiveCount() === HOME_IMAGE_PREFETCH_CONCURRENCY,
-    'module and filter prefetches share the same two-slot queue',
+    'module and filter prefetches share the configured queue',
   );
 
   while (sharedReleases.length > 0 || sharedScheduler.getActiveCount() > 0) {
@@ -196,7 +207,7 @@ async function runSchedulerContract(): Promise<void> {
   await Promise.all([sharedModuleTask, sharedFilterTask]);
   expect(
     sharedMaxActiveCount === HOME_IMAGE_PREFETCH_CONCURRENCY,
-    'the shared home prefetch queue never exceeds two concurrent requests',
+    'the shared home prefetch queue never exceeds its configured concurrency',
   );
 
   let remoteAssetAttempts = 0;

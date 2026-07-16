@@ -12,8 +12,8 @@ export type HomeFeatureNavigationTarget =
   | 'HomeFilterStore'
   | 'LikedProductList'
   | 'MakeupRecommendation'
-  | 'ProductDetail'
   | 'ProductRecommendation'
+  | 'ProductSellerOutbound'
   | 'SavedMakeupList'
   | 'makeupExtractionSheet'
   | 'makeupFeedbackSheet';
@@ -35,7 +35,7 @@ export function getHomeFeatureNavigationTarget(
   }
   if (featureId === 'makeupRecommendation') return 'MakeupRecommendation';
   if (featureId === 'productRecommendation') {
-    return payload?.itemId ? 'ProductDetail' : 'ProductRecommendation';
+    return payload?.itemId ? 'ProductSellerOutbound' : 'ProductRecommendation';
   }
   if (featureId === 'auradin') return 'AuradinSearch';
   if (featureId === 'makeupExtraction') return 'makeupExtractionSheet';

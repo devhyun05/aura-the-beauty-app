@@ -10,7 +10,7 @@ import {
   type NativeSyntheticEvent,
   type StyleProp,
 } from 'react-native';
-import {ArrowRight, ImageOff, PackageSearch, Search} from 'lucide-react-native';
+import {ArrowRight, Heart, ImageOff, PackageSearch, Search} from 'lucide-react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {Text, View, XStack, YStack} from 'tamagui';
 
@@ -36,12 +36,17 @@ type HomeModuleRendererProps = {
     featureId: HomeFeatureId,
     payload?: HomeFeaturePressPayload,
   ) => void;
+  onToggleProductLike?: (
+    payload: HomeFeaturePressPayload,
+    nextLiked: boolean,
+  ) => Promise<void>;
 };
 
 type ModuleSectionProps = {
   imageLoadStage: HomeImageLoadStage;
   module: HomeModuleConfig;
   onPressFeature: HomeModuleRendererProps['onPressFeature'];
+  onToggleProductLike?: HomeModuleRendererProps['onToggleProductLike'];
 };
 
 export const HOME_MODULE_HORIZONTAL_INSET = spacing.xl;
@@ -55,6 +60,7 @@ export const HomeModuleRenderer = memo(function HomeModuleRenderer({
   isFeedLoading = false,
   module,
   onPressFeature,
+  onToggleProductLike,
 }: HomeModuleRendererProps) {
   if (module.kind === 'faceAnalysis') {
     return (
@@ -73,6 +79,7 @@ export const HomeModuleRenderer = memo(function HomeModuleRenderer({
         isLoading={isFeedLoading}
         module={module}
         onPressFeature={onPressFeature}
+        onToggleProductLike={onToggleProductLike}
       />
     );
   }
@@ -184,6 +191,7 @@ function ProductsModule({
   isLoading,
   module,
   onPressFeature,
+  onToggleProductLike,
 }: ModuleSectionProps & {isLoading: boolean}) {
   const items = module.items ?? [];
   const lastCarouselIndexRef = useRef(0);
@@ -200,9 +208,10 @@ function ProductsModule({
       item={item}
       module={module}
       onPressFeature={onPressFeature}
+      onToggleProductLike={onToggleProductLike}
       priority={imageLoadStage === 'visible' ? 'normal' : 'low'}
     />
-  ), [imageLoadStage, module, onPressFeature]);
+  ), [imageLoadStage, module, onPressFeature, onToggleProductLike]);
   const handleMomentumEnd = useCallback((
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) => {
@@ -270,36 +279,90 @@ function ProductCard({
   item,
   module,
   onPressFeature,
+  onToggleProductLike,
   priority,
 }: {
   imageSource?: ImageSourcePropType;
   item: HomeModuleItem;
   module: HomeModuleConfig;
   onPressFeature: HomeModuleRendererProps['onPressFeature'];
+  onToggleProductLike?: HomeModuleRendererProps['onToggleProductLike'];
   priority: 'low' | 'normal';
 }) {
   const brandName = item.eyebrow;
   const price = getMetadataNumber(item, 'price');
   const disclosureLabel = getMetadataString(item, 'disclosureLabel');
+  const canLike = getMetadataBoolean(item, 'canLike') !== false;
+  const serverLiked = getMetadataBoolean(item, 'liked') === true;
+  const [liked, setLiked] = useState(serverLiked);
+  const [isUpdatingLike, setIsUpdatingLike] = useState(false);
+
+  useEffect(() => {
+    setLiked(serverLiked);
+  }, [serverLiked]);
+
+  const handleToggleLike = async () => {
+    if (!onToggleProductLike || isUpdatingLike) {
+      return;
+    }
+
+    const nextLiked = !liked;
+    setLiked(nextLiked);
+    setIsUpdatingLike(true);
+
+    try {
+      await onToggleProductLike(getItemPressPayload(item), nextLiked);
+    } catch {
+      setLiked(liked);
+    } finally {
+      setIsUpdatingLike(false);
+    }
+  };
 
   return (
-    <Pressable
-      accessibilityLabel={[
-        brandName,
-        item.title,
-        price === undefined ? undefined : `${formatPrice(price)}원`,
-      ].filter(Boolean).join(' ')}
-      accessibilityRole="button"
-      onPress={() => pressItemOrModule(module, item, onPressFeature)}
-      style={({pressed}) => [styles.productCard, pressed && styles.pressed]}>
-      <ModuleImage
-        accessibilityLabel={`${item.title} 제품 이미지`}
-        contentFit="contain"
-        priority={priority}
-        source={imageSource}
-        style={styles.productImage}
-      />
-      <YStack style={styles.productCopy}>
+    <View style={styles.productCard}>
+      <View style={styles.productImageArea}>
+        <Pressable
+          accessibilityLabel={[
+            brandName,
+            item.title,
+            price === undefined ? undefined : `${formatPrice(price)}원`,
+            '판매처로 이동',
+          ].filter(Boolean).join(' ')}
+          accessibilityRole="link"
+          onPress={() => pressItemOrModule(module, item, onPressFeature)}
+          style={({pressed}) => [styles.productImageButton, pressed && styles.pressed]}>
+          <ModuleImage
+            accessibilityLabel={`${item.title} 제품 이미지`}
+            contentFit="contain"
+            priority={priority}
+            source={imageSource}
+            style={styles.productImage}
+          />
+        </Pressable>
+        {canLike && onToggleProductLike ? (
+          <Pressable
+            accessibilityLabel={liked ? '좋아요 취소' : '좋아요 추가'}
+            accessibilityRole="button"
+            accessibilityState={{selected: liked}}
+            disabled={isUpdatingLike}
+            hitSlop={spacing.xs}
+            onPress={() => void handleToggleLike()}
+            style={({pressed}) => [styles.productHeart, pressed && styles.pressed]}>
+            <Heart
+              color={liked ? colors.heart : colors.textPrimary}
+              fill={liked ? colors.heart : colors.white}
+              size={iconSize.xs}
+              strokeWidth={2}
+            />
+          </Pressable>
+        ) : null}
+      </View>
+      <Pressable
+        accessibilityRole="link"
+        onPress={() => pressItemOrModule(module, item, onPressFeature)}
+        style={({pressed}) => pressed && styles.pressed}>
+        <YStack style={styles.productCopy}>
         {disclosureLabel ? (
           <Text numberOfLines={1} style={styles.disclosureLabel}>
             {disclosureLabel}
@@ -318,8 +381,9 @@ function ProductCard({
             {formatPrice(price)}원
           </Text>
         ) : null}
-      </YStack>
-    </Pressable>
+        </YStack>
+      </Pressable>
+    </View>
   );
 }
 
@@ -684,11 +748,29 @@ function pressItemOrModule(
   item: HomeModuleItem,
   onPressFeature: HomeModuleRendererProps['onPressFeature'],
 ) {
+  const payload = getItemPressPayload(item);
+
+  onPressFeature(
+    item.featureId ?? module.featureId,
+    Object.keys(payload).length > 0 ? payload : undefined,
+  );
+}
+
+function getItemPressPayload(item: HomeModuleItem): HomeFeaturePressPayload {
   const payload: HomeFeaturePressPayload = {
     ...(getMetadataString(item, 'disclosureLabel')
       ? {disclosureLabel: getMetadataString(item, 'disclosureLabel')}
       : {}),
+    ...(getMetadataString(item, 'externalSource')
+      ? {externalSource: getMetadataString(item, 'externalSource')}
+      : {}),
     ...(item.targetId ? {itemId: item.targetId} : {}),
+    ...(getMetadataString(item, 'offerId')
+      ? {offerId: getMetadataString(item, 'offerId')}
+      : {}),
+    ...(getMetadataString(item, 'purchaseUrl')
+      ? {purchaseUrl: getMetadataString(item, 'purchaseUrl')}
+      : {}),
     ...(getMetadataString(item, 'shadeId')
       ? {shadeId: getMetadataString(item, 'shadeId')}
       : {}),
@@ -703,10 +785,7 @@ function pressItemOrModule(
       : {}),
   };
 
-  onPressFeature(
-    item.featureId ?? module.featureId,
-    Object.keys(payload).length > 0 ? payload : undefined,
-  );
+  return payload;
 }
 
 function getMetadataNumber(
@@ -1068,6 +1147,28 @@ const styles = StyleSheet.create({
   },
   productImage: {
     backgroundColor: '#F7F7F5',
+    borderRadius: radius.md,
+    height: HOME_PRODUCT_CARD_WIDTH,
+    overflow: 'hidden',
+    width: HOME_PRODUCT_CARD_WIDTH,
+  },
+  productHeart: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderRadius: radius.pill,
+    height: 36,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: spacing.sm,
+    top: spacing.sm,
+    width: 36,
+  },
+  productImageArea: {
+    height: HOME_PRODUCT_CARD_WIDTH,
+    position: 'relative',
+    width: HOME_PRODUCT_CARD_WIDTH,
+  },
+  productImageButton: {
     borderRadius: radius.md,
     height: HOME_PRODUCT_CARD_WIDTH,
     overflow: 'hidden',

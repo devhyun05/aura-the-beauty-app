@@ -18,7 +18,10 @@ export type HomeFeatureId = (typeof HOME_FEATURE_IDS)[number];
 
 export type HomeFeaturePressPayload = {
   disclosureLabel?: string;
+  externalSource?: string;
   itemId?: string;
+  offerId?: string;
+  purchaseUrl?: string;
   shadeId?: string;
   sponsored?: boolean;
   sponsorshipType?: string;

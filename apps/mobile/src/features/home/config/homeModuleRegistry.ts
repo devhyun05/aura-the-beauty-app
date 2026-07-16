@@ -1,4 +1,3 @@
-import {isTrustedCatalogProductId} from '../../recommendation/services/productRecommendationService';
 import type {CatalogProduct} from '../../recommendation/types';
 import {
   emptyHomeFeedContent,
@@ -207,10 +206,6 @@ function mapProductItem(
   const imageUri = getHomeProductImageUri(product);
   const priceAmount = product.price?.amount;
   const priceCurrency = product.price?.currency || 'KRW';
-  const canOpenDetail = (
-    !product.externalSource
-    && isTrustedCatalogProductId(product.productId)
-  );
 
   return {
     description: product.productName,
@@ -219,8 +214,14 @@ function mapProductItem(
     id: `product-${product.productId}-${product.shadeId ?? 'family'}`,
     imageSource: imageUri ? {uri: imageUri} : undefined,
     metadata: {
-      canOpenDetail,
+      canLike: product.canLike !== false,
       currency: priceCurrency,
+      liked: product.viewerState.liked,
+      ...(product.externalSource
+        ? {externalSource: product.externalSource}
+        : {}),
+      ...(product.offer?.offerId ? {offerId: product.offer.offerId} : {}),
+      ...(product.purchaseUrl ? {purchaseUrl: product.purchaseUrl} : {}),
       ...(typeof priceAmount === 'number' ? {price: priceAmount} : {}),
       ...(product.shadeId ? {shadeId: product.shadeId} : {}),
       ...(product.disclosureLabel
@@ -234,7 +235,7 @@ function mapProductItem(
         : {}),
       source,
     },
-    targetId: canOpenDetail ? product.productId : undefined,
+    targetId: product.productId,
     title: product.productName,
   };
 }
