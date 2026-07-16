@@ -23,11 +23,11 @@ function getLogFileUri() {
 }
 
 async function readExistingLog(fileUri: string) {
-  try {
-    return await FileSystem.readAsStringAsync(fileUri);
-  } catch {
+  const info = await FileSystem.getInfoAsync(fileUri);
+  if (!info.exists) {
     return '';
   }
+  return FileSystem.readAsStringAsync(fileUri);
 }
 
 async function appendNow(input: Face3DRuntimeEvidenceInput) {
@@ -67,4 +67,14 @@ export function appendFace3DRuntimeEvidence(input: Face3DRuntimeEvidenceInput) {
   });
 
   return nextAppend;
+}
+
+export async function readFace3DRuntimeEvidenceLog() {
+  if (!__DEV__) {
+    throw new Error(
+      'Face3D runtime evidence is available only in local development builds.',
+    );
+  }
+  const {fileUri} = getLogFileUri();
+  return readExistingLog(fileUri);
 }

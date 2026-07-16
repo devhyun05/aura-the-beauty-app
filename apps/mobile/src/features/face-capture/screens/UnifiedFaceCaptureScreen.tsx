@@ -23,7 +23,7 @@ type UnifiedFaceCaptureScreenProps = {
   onCaptureCommitted: (
     result: UnifiedFaceCaptureCompletedEvent,
     upload: FaceCaptureUploadResult,
-  ) => boolean;
+  ) => boolean | Promise<boolean>;
   onFallback: (reason: string) => void;
   onRequestStarted: (requestId: string) => void;
   request?: UnifiedFaceCaptureRequest;
@@ -181,7 +181,12 @@ export function UnifiedFaceCaptureScreen({
       }
 
       try {
-        if (!callbacksRef.current.onCaptureCommitted(completed, upload)) {
+        if (
+          !(await callbacksRef.current.onCaptureCommitted(
+            completed,
+            upload,
+          ))
+        ) {
           isAbandoningRef.current = true;
           await deleteUnifiedFaceCaptureTempImage(completed.image.uri);
           callbacksRef.current.onFallback('unified_capture_commit_rejected');

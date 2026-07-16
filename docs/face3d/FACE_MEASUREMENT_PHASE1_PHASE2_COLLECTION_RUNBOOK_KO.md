@@ -31,8 +31,14 @@
 - subject↔실제 사람 대응표가 꼭 필요하면 repo와 다른 접근제어 위치에 보관한다.
 - 원시 랜드마크 보존 기간은 실행 시 1~30일 안에서 명시한다. 기본값을 암묵적으로
   가정하지 않는다.
-- 삭제 예정 시각이 오면 raw landmark 디렉터리만 삭제하고, 경로가 사라졌는지 별도로
-  확인한다. 파생 repeatability JSON은 `rawFaceDataIncluded:false`일 때만 보존할 수 있다.
+- `deleteByUtc`는 OS 백그라운드 삭제를 보장하는 시각이 아니다. 앱이 종료·suspend되어
+  코드가 실행되지 않으면 그 시각에 자동 삭제할 수 없다. 대신 Face Measurement
+  Validation Lab의 다음 진입과 공식 cleanup CLI의 다음 실행에서 만료 또는 손상된 raw
+  replay를 fail-closed로 삭제한다.
+- 수집·로컬 export·검증이 끝나면 보존 기간이 남았더라도 공식 cleanup CLI의 `--all`로
+  해당 raw replay artifact를 지우고 파일이 사라졌는지 확인해야 한다. 이 완료
+  cleanup은 Gate/PR 완료 전 필수 운영 절차다.
+- 파생 repeatability JSON은 `rawFaceDataIncluded:false`일 때만 보존할 수 있다.
 
 원시 자료와 파생 증거 디렉터리는 같거나 상하위 경로여서는 안 된다.
 
@@ -77,12 +83,20 @@ npm run face3d:collection:prepare -- \
 
 출력의 `sequence`가 Phase 1 10개 뒤 exact-30 반복으로 이어지는지,
 `deviceActionsExecuted:false`, `uploadAllowed:false`인지 먼저 확인한다.
-`privacy.rawLandmarks.createdAtUtc/deleteByUtc`는 replay artifact 보존 계약과 같아야
-한다. 실제 촬영 시각은 dry-run에서 추정하지 않고 writer가 각 캡처의
-`capturedAtUtc`에 기록한다.
+`executionMode:"dry_run_only"`는 이 파일이 **아직 실행되지 않은 준비 계획**이라는
+뜻이다. prepared wrapper가 이 파일을 앱에 전달해도 계획 파일을 실행 증거로
+변경하거나 `deviceActionsExecuted:true`라고 주장하지 않는다. 실제 실행 증거는
+별도의 runtime artifact/event에서만 판정한다.
+`privacy.rawLandmarks.createdAtUtc/deleteByUtc`는 계획 생성 시점의 보존 계획
+metadata이며 runtime 실행 증거가 아니다. 앱에는 `retentionDays`를 전달하고 실제
+replay artifact writer가 첫 저장 시점의 `createdAtUtc/deleteByUtc`와 각 캡처의
+`capturedAtUtc`를 기록한다.
 
 각 Phase 1 샷에는 앱의 `FaceVerticalThirdsInput.validationReplay`에 그대로 전달할
-수 있는 `phase1ReplayValidation`이 포함된다.
+수 있는 `phase1ReplayValidation`이 포함된다. 현재 계획 schema는
+`aura.face-measurement-collection-plan.v2`이며, 각 tuple에
+`source:"camera"`, `captureImplementation:"native"`, `cameraFacing:"front"`가
+필수다.
 
 실기기 빌드나 촬영 전에 임베드된 Unity 런타임이 신규 v3 계약인지 별도로
 검사한다. 이 명령은 `UnityFramework.framework/UnityFramework`가 일반·비어 있지
@@ -99,23 +113,63 @@ npm run face3d:collection:preflight
 preflight·재빌드 스크립트 준비까지이며 실제 Unity 재빌드와 실기기 수집은
 수행하지 않는다.
 
-앱의 명시적 검증 랩 진입 스크립트도 준비되어 있다. 이 스크립트만
-`validation-only` 플래그를 켜며 일반 앱/기존 face-capture-lab 기본값은 계속 OFF다.
-이 작업에서는 스크립트를 실행해 실기기 수집하지 않는다.
+계획 기반 수집은 반드시 prepared-lab wrapper로 시작한다. wrapper는 계획 JSON을
+다시 검증한 뒤 로컬 process environment로만 전달하며, 앱은 계획의 가명 ID,
+capture ID, retention, 10-shot 조건 순서를 그대로 runtime replay artifact에 쓴다.
+prepared 모드에서 계획이 없거나 앱의 canonical shot plan과 하나라도 다르면 generic
+모드로 폴백하지 않고 진입을 차단한다. 이 작업에서는 스크립트를 실행해 실기기
+수집하지 않는다.
+
+```bash
+npm run mobile:start:face-measurement-prepared-lab -- \
+  --plan ./local-face-measurement/session-plan.json
+# 또는 실기기 빌드 준비 시
+npm run mobile:ios:face-measurement-prepared-lab -- \
+  --plan ./local-face-measurement/session-plan.json -- \
+  --device <UDID>
+```
+
+두 prepared 스크립트만 계획 handoff를 수행한다. 아래 generic 스크립트는 ad-hoc UI
+확인용으로만 분리되어 있으며 새 가명 ID를 앱에서 생성하므로, 위에서 만든
+`session-plan.json`의 공식 수집 증거로 사용하면 안 된다.
 
 ```bash
 npm run mobile:start:face-measurement-validation-lab
-# 또는 실기기 빌드 준비 시
+# 또는
 npm run mobile:ios:face-measurement-validation-lab -- --device <UDID>
 ```
+
+prepared/generic 스크립트만 `validation-only` 플래그를 켜며 일반 앱과 기존
+face-capture-lab 기본값은 계속 OFF다.
 
 랩의 `Phase 1 · 10-shot replay`는 촬영 전·결과 화면 양쪽에 현재 샷의
 각도/거리 안내를 표시한다. `poseNormalizationReplayUri`가 실제 생성된 경우에만
 다음 번호로 이동하며, 10번 reference B 저장 뒤에는 자동 반복하지 않고 모드
 선택 화면으로 돌아가 Exact 30이 다음 순서임을 표시한다.
 
+앱이 중단·재시작되면 prepared plan의 cohort/subject/session/capture ID,
+condition, acquisition이 기존 artifact의 canonical prefix와 모두 같은지 먼저
+검증한다. 일치하는 `n`개가 있으면 `n+1`번부터 재개하고 10개가 있으면 Phase 1
+완료로 복원한다. 유효하지만 다른 plan의 artifact가 같은 경로에 있으면 덮어쓰지
+않고 fail-closed한다. 앱 화면의 `prepared raw 삭제 후 1번부터 다시 시작`을
+명시적으로 눌러 해당 기기 session raw만 제거하거나 새 가명 ID로 계획을 다시
+만든다. repo-local cleanup CLI는 기기 Documents를 대신 삭제하지 않는다.
+
+Phase 2 exact-30의 `shotId`는 plan context hash가 붙은 고유 ID이며 앱은 이를 그대로
+Unity `requestId`로 사용한다. 성공 결과의 requestId/policy/`30/30`을 검증하고
+`events.jsonl` 기록까지 성공한 뒤에만 다음 planned shot으로 전진한다. 앱 재시작 시
+같은 고유 requestId의 durable runtime evidence가 canonical prefix인지 검사해 다음
+번호를 복원한다. 단, 기기 완료 뒤 `events.jsonl` write 전에 프로세스가 중단된
+구간은 자동 판정할 수 없다. 이 경계가 의심되면 동일 ID를 재사용하지 말고 먼저
+runtime log/콘솔을 export해 adapter 또는 수동 확인을 끝낸 뒤 재개한다.
+
 ```json
 {
+  "acquisition": {
+    "cameraFacing": "front",
+    "captureImplementation": "native",
+    "source": "camera"
+  },
   "captureId": "cap_p1_01_0123456789abcdef",
   "cohortId": "cohort_phase1_20260717",
   "sessionId": "session_20260717_a1b2c3d4",
@@ -144,6 +198,40 @@ Phase 1 raw landmark를 실제 paired replay artifact로 준비할 때는
 nonce는 Unity가 실제 unified request ID를 그대로 사용하므로
 `unified-face-*`, `face-capture-lab-*`, 준비 아티팩트의 `cap_*`를 모두
 허용하되, receipt 서명과 one-time ledger로 동일 값을 재사용하지 못하게 한다.
+
+공식 replay writer는 output별 cross-process lock 안에서 read-modify-write를
+직렬화하고, 같은 디렉터리의 임시 파일을 `fsync`한 뒤 rename한다. 동일
+`captureId`+동일 payload 재실행은 성공 no-op이고, 같은 ID의 다른 payload,
+lock timeout, stale lock, 중단된 atomic write는 fail-closed다. stale lock은
+자동으로 훔치거나 지우지 말고 원인을 확인한 뒤 명시적으로 처리한다.
+`artifactCreatedAtUtc`와 1~30의 `deleteAfterDays`는 metadata에 명시해야 하며,
+허용된 repo-local root 안에서도 중간 symlink를 통과하는 output은 거부한다.
+
+앱은 Validation Lab 진입 때 Documents의 만료·손상 replay를 정리한다. repo-local
+artifact는 아래 공식 CLI만 사용한다. 먼저 dry-run을 확인하고, 평상시에는
+만료·손상 항목을 정리한다.
+
+```bash
+npm run face-ratio:phase1:prune -- \
+  --root ./local-face-measurement/raw \
+  --dry-run
+
+npm run face-ratio:phase1:prune -- \
+  --root ./local-face-measurement/raw
+```
+
+수집·export·Gate 검증이 모두 끝난 뒤에는 유효기간이 남은 replay까지 지우는 완료
+cleanup을 실행한다. CLI는 unrelated file/기존 empty directory를 보존하며, tree
+안에서 symlink를 발견하면 어떤 artifact도 삭제하기 전에 전체 작업을 중단한다.
+기기 Documents의 raw는 repo-local CLI 대상이 아니다. Prepared Phase 1과 Exact 30
+완료 뒤 Lab 모드 선택 화면의 `완료된 기기 raw 삭제 및 세션 종료`를 눌러 삭제한다.
+삭제 뒤 같은 plan을 재개하지 말고 새 가명 ID로 새 계획을 만든다.
+
+```bash
+npm run face-ratio:phase1:prune -- \
+  --root ./local-face-measurement/raw \
+  --all
+```
 
 ## 5. runtime event → 공통 repeatability manifest
 
@@ -298,8 +386,12 @@ reportContextId, approvalArtifactSha256
 ```json
 {
   "confidenceCalibration": {
+    "recordedAtUtc": "<registry section update time>",
+    "revision": "confidence-calibration-v3-pending.v1",
+    "scope": "v3 calibration promotion readiness; excludes Unity Editor, device, Gate 6B, signing, and product activation",
     "status": "pending",
     "validationStatus": "not_run",
+    "validatedCommitSha": null,
     "profileSchemaVersion": "aura.face3d-profile.v3",
     "policyId": null,
     "gateVersion": "face3d-gate-v2",
@@ -312,6 +404,13 @@ reportContextId, approvalArtifactSha256
   }
 }
 ```
+
+같은 registry의 `validation`은 과거 G2와 현재 v3를 섞지 않는다. 과거 G2
+Unity EditMode 결과에는 당시 검증 코드 SHA와 `passed_historical_not_current_v3`를
+기록하고, exact SHA에 묶이지 않은 옛 통합 수치는 `unverified_historical`로 둔다.
+현재 v3 Unity Editor 검증은 실제 실행 전까지 `status:"not_run"`,
+`validatedCommitSha:null`, `resultPath:null`이어야 한다. Node 정적 검사가 통과해도
+Unity 컴파일·EditMode 증거로 승격하지 않는다.
 
 backend 허용 조건은 최소한 `status=="approved"`, policy/gate 일치,
 approval/receipt SHA 존재와 committed artifact 일치, HMAC 유효, issued/expires 유효,

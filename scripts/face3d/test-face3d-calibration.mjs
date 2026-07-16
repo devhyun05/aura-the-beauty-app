@@ -64,16 +64,61 @@ test('gate status registry remains fail-closed for v3 calibration', () => {
     ),
   );
   const calibration = gateStatus.confidenceCalibration;
+  const validation = gateStatus.validation;
 
+  assert.equal(gateStatus.schemaVersion, 'aura.face3d-gate-status.v3');
+  assert.equal(gateStatus.registryRevision, 'provenance-separated.v1');
+  assert.match(gateStatus.recordedAtUtc, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  assert.equal(calibration.revision, 'confidence-calibration-v3-pending.v1');
+  assert.match(calibration.recordedAtUtc, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  assert.match(calibration.scope, /excludes Unity Editor, device, Gate 6B/);
   assert.equal(calibration.profileSchemaVersion, 'aura.face3d-profile.v3');
   assert.equal(calibration.status, 'pending');
   assert.equal(calibration.validationStatus, 'not_run');
+  assert.equal(calibration.validatedCommitSha, null);
   assert.equal(calibration.featureFlagDefault, 'off');
   assert.equal(calibration.policyId, null);
   assert.equal(calibration.approvalArtifactPath, null);
   assert.equal(calibration.approvalArtifactSha256, null);
   assert.equal(calibration.receiptPath, null);
   assert.equal(calibration.receiptSha256, null);
+
+  for (const [name, section] of Object.entries(validation)) {
+    assert.equal(typeof section.revision, 'string', `${name}.revision`);
+    assert.equal(typeof section.scope, 'string', `${name}.scope`);
+    assert.equal(typeof section.status, 'string', `${name}.status`);
+    assert.match(
+      section.recordedAtUtc,
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/,
+      `${name}.recordedAtUtc`,
+    );
+  }
+
+  assert.equal(
+    validation.historicalG2UnityEditor.validatedCommitSha,
+    'b1287bde521ce0d10430b3b1048d8a56970e36e8',
+  );
+  assert.equal(
+    validation.historicalG2UnityEditor.status,
+    'passed_historical_not_current_v3',
+  );
+  assert.equal(validation.historicalG2UnityEditor.resultPath, null);
+  assert.equal(
+    validation.historicalG2RepositorySnapshot.status,
+    'unverified_historical',
+  );
+  assert.equal(
+    validation.historicalG2RepositorySnapshot.validatedCommitSha,
+    null,
+  );
+  assert.equal(
+    validation.currentV3StaticNodeValidation.status,
+    'passed_worktree_unbound',
+  );
+  assert.equal(validation.currentV3StaticNodeValidation.validatedCommitSha, null);
+  assert.equal(validation.currentV3UnityEditorValidation.status, 'not_run');
+  assert.equal(validation.currentV3UnityEditorValidation.validatedCommitSha, null);
+  assert.equal(validation.currentV3UnityEditorValidation.resultPath, null);
 });
 
 function metricValues(base, delta = 0) {

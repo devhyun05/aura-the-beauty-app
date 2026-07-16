@@ -248,6 +248,7 @@ export function validateFaceRatioPhase1ReplayValidation(
   invariant(
     typeof value.subjectId === 'string' &&
       SUBJECT_ID_PATTERN.test(value.subjectId) &&
+      !value.subjectId.startsWith('subj_user_') &&
       !value.subjectId.includes('@') &&
       !/\s/.test(value.subjectId),
     'validationReplay.subjectId must be a pseudonymous subj_* identifier',
@@ -362,7 +363,8 @@ function validateCapture(
   );
   invariant(
     typeof value.subjectId === 'string' &&
-      SUBJECT_ID_PATTERN.test(value.subjectId),
+      SUBJECT_ID_PATTERN.test(value.subjectId) &&
+      !value.subjectId.startsWith('subj_user_'),
     `${label}.subjectId must be a pseudonymous subj_* identifier`,
   );
   validUtc(value.capturedAtUtc, `${label}.capturedAtUtc`);

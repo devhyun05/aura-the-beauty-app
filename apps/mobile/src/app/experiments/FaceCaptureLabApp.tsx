@@ -1,4 +1,4 @@
-import React, {useCallback, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {useFonts} from 'expo-font';
@@ -17,7 +17,10 @@ import {tamaguiConfig} from '../../../tamagui.config';
 import {Face3DEntryBlockedScreen} from '../../features/face-3d/screens/Face3DEntryBlockedScreen';
 import {Face3DLabScreen} from '../../features/face-3d/screens/Face3DLabScreen';
 import {evaluateFace3DEntryEligibility} from '../../features/face-3d/services/face3DEntryEligibility';
-import {appendFace3DRuntimeEvidence} from '../../features/face-3d/services/face3DRuntimeEvidenceLogger';
+import {
+  appendFace3DRuntimeEvidence,
+  readFace3DRuntimeEvidenceLog,
+} from '../../features/face-3d/services/face3DRuntimeEvidenceLogger';
 import {isRealtimeFaceCaptureAvailable} from '../../features/face-capture/components/RealtimeFaceCaptureNativeView';
 import {
   CameraFaceCaptureScreen,
@@ -47,10 +50,18 @@ import {
 import {isUnifiedFaceCaptureDiagnosticsEnabled} from '../../features/face-capture/services/unifiedFaceCaptureMode';
 import phase1ReplayShotPlan from '../../features/face-ratio/phase1ReplayShotPlan.json';
 import {FaceVerticalThirdsScreen} from '../../features/face-ratio/screens/FaceVerticalThirdsScreen';
+import {
+  resolveFaceRatioPhase1CollectionPlanFromEnvironment,
+  resolveFaceRatioPreparedCollectionProgress,
+  resolveFaceRatioPreparedExact30Progress,
+} from '../../features/face-ratio/services/faceRatioPhase1CollectionPlan';
 import {isFaceRatioPoseNormalizationEnabled} from '../../features/face-ratio/services/faceRatioPoseNormalization';
 import {
+  deleteFaceRatioPhase1ReplayArtifact,
   deleteFaceRatioPhase1LocalCapture,
   isFaceRatioPhase1ReplayShotComplete,
+  pruneExpiredFaceRatioPhase1ReplayArtifacts,
+  readFaceRatioPhase1ReplayArtifact,
 } from '../../features/face-ratio/services/faceVerticalThirdsArtifacts';
 import type {
   FaceRatioPhase1ReplayAcquisition,
@@ -86,6 +97,13 @@ const PHASE1_REPLAY_SHOTS: readonly {
     label: shot.lab.label,
   })),
 );
+const PHASE1_COLLECTION_PLAN_RESOLUTION =
+  resolveFaceRatioPhase1CollectionPlanFromEnvironment(
+    PHASE1_REPLAY_SHOTS.map((shot, index) => ({
+      condition: shot.condition,
+      shotId: phase1ReplayShotPlan.shots[index].collection.shotId,
+    })),
+  );
 
 function createPhase1PseudonymousToken() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -162,14 +180,32 @@ function createLabCaptureResult(imageInput: FaceCaptureImageInput): LabCapture {
 
 function LabModePicker({
   phase1Completed,
+  phase1PruneError,
+  phase1PrunePending,
+  phase1CompletionCleanupDone,
+  phase1ResumeNotice,
+  preparedCollection,
+  preparedExact30Completed,
+  preparedSequenceError,
   diagnosticsEnabled,
   poseValidationEnabled,
   onSelect,
+  onResetPreparedReplay,
+  onCompletePreparedReplayCleanup,
 }: {
   phase1Completed: boolean;
+  phase1PruneError: string | null;
+  phase1PrunePending: boolean;
+  phase1CompletionCleanupDone: boolean;
+  phase1ResumeNotice: string | null;
+  preparedCollection: boolean;
+  preparedExact30Completed: boolean;
+  preparedSequenceError: string | null;
   diagnosticsEnabled: boolean;
   poseValidationEnabled: boolean;
   onSelect: (mode: FaceCaptureLabMode) => void;
+  onResetPreparedReplay: () => void;
+  onCompletePreparedReplayCleanup: () => void;
 }) {
   const options = [
     {
@@ -216,10 +252,94 @@ function LabModePicker({
             </Text>
           </View>
         ) : null}
+        {phase1PrunePending ? (
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>
+              만료된 Phase 1 raw replay를 정리하고 있어요.
+            </Text>
+          </View>
+        ) : null}
+        {phase1PruneError ? (
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>
+              raw replay 준비/정리에 실패해 Phase 1 수집을 차단했습니다:{' '}
+              {phase1PruneError}. 아래 버튼으로 이 prepared session의 기기 raw를
+              삭제해 처음부터 다시 시작하거나 새 가명 ID로 계획을 생성하세요.
+            </Text>
+            {preparedCollection &&
+            !phase1PrunePending &&
+            !preparedExact30Completed ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={onResetPreparedReplay}
+                style={styles.modeButton}>
+                <Text style={styles.modeButtonLabel}>
+                  prepared raw 삭제 후 1번부터 다시 시작
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+        {phase1ResumeNotice ? (
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>{phase1ResumeNotice}</Text>
+          </View>
+        ) : null}
+        {preparedSequenceError ? (
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>
+              Prepared exact-30 sequence를 차단했습니다:{' '}
+              {preparedSequenceError}. 같은 request ID를 재사용하지 말고
+              events.jsonl을 확인한 뒤 새 계획 또는 검증된 수동 재개 절차를
+              사용하세요.
+            </Text>
+          </View>
+        ) : null}
+        {preparedCollection ? (
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>
+              Prepared collection plan의 가명 ID와 10-shot 순서를 그대로 사용합니다.
+              Phase 1 완료 전에는 다른 수집 모드를 시작할 수 없습니다.
+            </Text>
+          </View>
+        ) : null}
+        {preparedCollection && preparedExact30Completed ? (
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>
+              {phase1CompletionCleanupDone
+                ? '완료된 기기 raw replay를 삭제해 이 세션을 종료했습니다. 같은 plan으로 재개하지 말고 새 가명 ID로 새 계획을 생성하세요.'
+                : 'Prepared Phase 1과 Exact 30 수집이 완료됐습니다. export와 검증을 마쳤다면 아래 버튼으로 기기 raw replay를 삭제해 이 세션을 종료하세요. 삭제 뒤 같은 plan으로 재개하지 말고 새 가명 ID로 새 계획을 생성해야 합니다.'}
+            </Text>
+            {!phase1PrunePending && !phase1CompletionCleanupDone ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={onCompletePreparedReplayCleanup}
+                style={styles.modeButton}>
+                <Text style={styles.modeButtonLabel}>
+                  완료된 기기 raw 삭제 및 세션 종료
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
         <View style={styles.modeList}>
           {options.map(option => {
             const disabled =
               (option.mode === 'phase1-replay-10' && !poseValidationEnabled) ||
+              (preparedCollection && Boolean(preparedSequenceError)) ||
+              (option.mode === 'phase1-replay-10' &&
+                (phase1PrunePending ||
+                  Boolean(phase1PruneError) ||
+                  (preparedCollection && phase1Completed))) ||
+              (preparedCollection &&
+                !phase1Completed &&
+                option.mode !== 'phase1-replay-10') ||
+              (preparedCollection &&
+                phase1Completed &&
+                option.mode !== 'exact-30') ||
+              (preparedCollection &&
+                preparedExact30Completed &&
+                option.mode === 'exact-30') ||
               (option.mode !== 'phase1-replay-10' &&
                 option.mode !== 'legacy-30' &&
                 !diagnosticsEnabled);
@@ -243,6 +363,22 @@ function LabModePicker({
           })}
         </View>
       </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function PreparedCollectionPlanBlocked({message}: {message: string}) {
+  return (
+    <SafeAreaView style={styles.modeScreen}>
+      <View style={styles.modeContent}>
+        <Text style={styles.eyebrow}>PREPARED COLLECTION BLOCKED</Text>
+        <Text style={styles.modeTitle}>수집 계획을 사용할 수 없습니다</Text>
+        <Text style={styles.modeDescription}>{message}</Text>
+        <Text style={styles.modeDescription}>
+          계획을 다시 생성하고 prepared-lab wrapper로 실행하세요. generic lab으로
+          자동 폴백하지 않습니다.
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
@@ -310,11 +446,13 @@ function UnifiedLabResult({
   capture,
   onChangeMode,
   onRetake,
+  primaryActionLabel = '같은 정책으로 다시 촬영',
   result,
 }: {
   capture: LabCapture;
   onChangeMode: () => void;
   onRetake: () => void;
+  primaryActionLabel?: string;
   result: UnifiedFaceCaptureCompletedEvent;
 }) {
   return (
@@ -350,7 +488,7 @@ function UnifiedLabResult({
           accessibilityRole="button"
           onPress={onRetake}
           style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>같은 정책으로 다시 촬영</Text>
+          <Text style={styles.primaryButtonText}>{primaryActionLabel}</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -381,6 +519,142 @@ function FaceCaptureLabContent() {
     useState<UnifiedFaceCaptureCompletedEvent | null>(null);
   const [phase1RawSaved, setPhase1RawSaved] = useState(false);
   const [phase1Completed, setPhase1Completed] = useState(false);
+  const [
+    phase1CompletionCleanupDone,
+    setPhase1CompletionCleanupDone,
+  ] = useState(false);
+  const [phase1PrunePending, setPhase1PrunePending] = useState(true);
+  const [phase1PruneError, setPhase1PruneError] = useState<string | null>(null);
+  const [phase1ResumeNotice, setPhase1ResumeNotice] =
+    useState<string | null>(null);
+  const [preparedExact30CompletedShotCount, setPreparedExact30CompletedShotCount] =
+    useState(0);
+  const [preparedSequenceError, setPreparedSequenceError] =
+    useState<string | null>(null);
+  const preparedCollectionPlan =
+    PHASE1_COLLECTION_PLAN_RESOLUTION.mode === 'prepared'
+      ? PHASE1_COLLECTION_PLAN_RESOLUTION.plan
+      : null;
+
+  useEffect(() => {
+    let active = true;
+
+    void (async () => {
+      const deletedCount =
+        await pruneExpiredFaceRatioPhase1ReplayArtifacts();
+      let resumeNotice =
+        deletedCount > 0
+          ? `만료되거나 손상된 raw replay ${deletedCount}개를 삭제했습니다.`
+          : null;
+
+      if (deletedCount > 0) {
+        console.info('[aura:face-capture-lab] phase1:retention-pruned', {
+          deletedCount,
+        });
+      }
+
+      if (preparedCollectionPlan) {
+        const firstValidation =
+          preparedCollectionPlan.phase1.shots[0]
+            ?.phase1ReplayValidation;
+        if (!firstValidation) {
+          throw new Error(
+            'prepared collection plan has no first Phase 1 validation tuple',
+          );
+        }
+        const artifact =
+          await readFaceRatioPhase1ReplayArtifact(firstValidation);
+        const phase1Progress = resolveFaceRatioPreparedCollectionProgress(
+          artifact,
+          preparedCollectionPlan,
+        );
+
+        if (active) {
+          setPhase1Sequence(current => ({
+            ...current,
+            shotIndex: phase1Progress.nextShotIndex,
+          }));
+          setPhase1Completed(phase1Progress.phase1Completed);
+        }
+        if (phase1Progress.phase1Completed) {
+          resumeNotice =
+            '기존 prepared artifact의 canonical 10-shot을 확인했습니다. Exact 30 단계부터 계속합니다.';
+        } else if (phase1Progress.completedShotCount > 0) {
+          resumeNotice =
+            `기존 prepared artifact ${phase1Progress.completedShotCount}/10을 확인했습니다. ` +
+            `${phase1Progress.nextShotIndex}번 샷부터 재개합니다.`;
+        }
+
+        try {
+          const exact30Progress =
+            resolveFaceRatioPreparedExact30Progress(
+              await readFace3DRuntimeEvidenceLog(),
+              preparedCollectionPlan,
+            );
+          if (
+            exact30Progress.completedShotCount > 0 &&
+            !phase1Progress.phase1Completed
+          ) {
+            throw new Error(
+              'Exact-30 evidence exists before the prepared Phase 1 prefix is complete',
+            );
+          }
+          if (active) {
+            setPreparedExact30CompletedShotCount(
+              exact30Progress.completedShotCount,
+            );
+          }
+          if (exact30Progress.phase2Completed) {
+            resumeNotice =
+              `기존 runtime evidence에서 Exact 30 ${exact30Progress.completedShotCount}/` +
+              `${preparedCollectionPlan.phase2.exact30RepeatCount} 완료를 확인했습니다.`;
+          } else if (phase1Progress.phase1Completed) {
+            resumeNotice =
+              `runtime evidence에서 Exact 30 ${exact30Progress.completedShotCount}/` +
+              `${preparedCollectionPlan.phase2.exact30RepeatCount} durable 완료를 확인했습니다. ` +
+              `${exact30Progress.nextShotIndex}번부터 재개하기 전에, 이전 실행이 기기 완료와 ` +
+              'events.jsonl 기록 사이에서 중단되지 않았는지 확인하세요.';
+          }
+        } catch (error) {
+          if (active) {
+            setPreparedSequenceError(
+              error instanceof Error ? error.message : String(error),
+            );
+          }
+          return;
+        }
+      }
+
+      if (active) {
+        setPhase1ResumeNotice(resumeNotice);
+      }
+    })()
+      .catch(error => {
+        if (active) {
+          setPhase1PruneError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setPhase1PrunePending(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [preparedCollectionPlan]);
+
+  const preparedExact30Completed =
+    Boolean(preparedCollectionPlan) &&
+    preparedExact30CompletedShotCount >=
+      (preparedCollectionPlan?.phase2.exact30RepeatCount ?? 0);
+  const preparedExact30Shot =
+    preparedCollectionPlan?.phase2.shots[
+      preparedExact30CompletedShotCount
+    ] ?? null;
 
   const uploadImage = useCallback(async (imageInput: FaceCaptureImageInput) => {
     return createLabCaptureResult(imageInput);
@@ -393,6 +667,13 @@ function FaceCaptureLabContent() {
     if (labMode === 'phase1-replay-10') {
       return null;
     }
+    if (
+      preparedCollectionPlan &&
+      labMode === 'exact-30' &&
+      !preparedExact30Shot
+    ) {
+      return null;
+    }
     const collectionPolicyId = getUnifiedFaceCaptureLabPolicy(labMode);
     if (!collectionPolicyId) {
       return null;
@@ -401,14 +682,42 @@ function FaceCaptureLabContent() {
     return buildUnifiedFaceCaptureRequest({
       allowDiagnostics: true,
       collectionPolicyId,
-      requestId: `face-capture-lab-${labMode}-${modeRevision}-${Date.now()}`,
+      requestId:
+        preparedCollectionPlan && labMode === 'exact-30'
+          ? preparedExact30Shot!.shotId
+          : `face-capture-lab-${labMode}-${modeRevision}-${Date.now()}`,
     });
-  }, [labMode, modeRevision]);
+  }, [
+    labMode,
+    modeRevision,
+    preparedCollectionPlan,
+    preparedExact30Shot,
+  ]);
 
   const phase1ValidationReplay = useMemo(
     () => {
       if (!capture?.phase1ReplayAcquisition) {
         return null;
+      }
+
+      const preparedValidation =
+        preparedCollectionPlan?.phase1.shots[
+          phase1Sequence.shotIndex - 1
+        ]?.phase1ReplayValidation;
+      if (preparedValidation) {
+        const actualAcquisition = capture.phase1ReplayAcquisition;
+        if (
+          preparedValidation.acquisition.source !==
+            actualAcquisition.source ||
+          preparedValidation.acquisition.captureImplementation !==
+            actualAcquisition.captureImplementation ||
+          preparedValidation.acquisition.cameraFacing !==
+            actualAcquisition.cameraFacing
+        ) {
+          return null;
+        }
+
+        return preparedValidation;
       }
 
       return buildPhase1LabValidation({
@@ -423,6 +732,7 @@ function FaceCaptureLabContent() {
       phase1Sequence.runIndex,
       phase1Sequence.shotIndex,
       phase1SubjectToken,
+      preparedCollectionPlan,
     ],
   );
 
@@ -453,22 +763,33 @@ function FaceCaptureLabContent() {
 
   const finishPhase1Shot = useCallback(() => {
     const captureToRelease = capture;
+    const completedShotIndex = phase1Sequence.shotIndex;
     setCapture(null);
     setUnifiedResult(null);
     setPhase1RawSaved(false);
     if (phase1RawSaved) {
-      if (phase1Sequence.shotIndex >= PHASE1_REPLAY_SHOTS.length) {
-        setPhase1Sequence(current => ({
-          runIndex: current.runIndex + 1,
-          shotIndex: 1,
-        }));
-        setPhase1Completed(true);
-        setLabMode(null);
-      } else {
-        setPhase1Sequence(current => ({
+      setPhase1Sequence(current => {
+        // 결과 버튼의 빠른 연속 탭이 같은 저장 완료를 두 번 소비해
+        // canonical prepared shot을 건너뛰지 못하게 한다.
+        if (current.shotIndex !== completedShotIndex) {
+          return current;
+        }
+        if (completedShotIndex >= PHASE1_REPLAY_SHOTS.length) {
+          return preparedCollectionPlan
+            ? current
+            : {
+                runIndex: current.runIndex + 1,
+                shotIndex: 1,
+              };
+        }
+        return {
           ...current,
           shotIndex: current.shotIndex + 1,
-        }));
+        };
+      });
+      if (completedShotIndex >= PHASE1_REPLAY_SHOTS.length) {
+        setPhase1Completed(true);
+        setLabMode(null);
       }
     }
     setResultMode('face3d');
@@ -478,6 +799,7 @@ function FaceCaptureLabContent() {
     capture,
     phase1RawSaved,
     phase1Sequence.shotIndex,
+    preparedCollectionPlan,
     releasePhase1LocalCapture,
   ]);
 
@@ -495,22 +817,100 @@ function FaceCaptureLabContent() {
     setResultMode('face3d');
     setLabMode(null);
     setPhase1RawSaved(false);
-    setPhase1Completed(false);
-    setPhase1Sequence({runIndex: 1, shotIndex: 1});
+    if (!preparedCollectionPlan) {
+      setPhase1Completed(false);
+      setPhase1Sequence({runIndex: 1, shotIndex: 1});
+    }
     setModeRevision(current => current + 1);
     releasePhase1LocalCapture(captureToRelease);
-  }, [capture, releasePhase1LocalCapture]);
+  }, [capture, preparedCollectionPlan, releasePhase1LocalCapture]);
+
+  const resetPreparedReplay = useCallback(() => {
+    const firstValidation =
+      preparedCollectionPlan?.phase1.shots[0]
+        ?.phase1ReplayValidation;
+    if (!firstValidation) {
+      return;
+    }
+
+    setPhase1PrunePending(true);
+    setPhase1PruneError(null);
+    void deleteFaceRatioPhase1ReplayArtifact(firstValidation)
+      .then(() => pruneExpiredFaceRatioPhase1ReplayArtifacts())
+      .then(() => {
+        setPhase1Sequence({runIndex: 1, shotIndex: 1});
+        setPhase1Completed(false);
+        setPhase1ResumeNotice(
+          '기존 prepared raw를 삭제했습니다. 1번 샷부터 다시 시작합니다.',
+        );
+      })
+      .catch(error => {
+        setPhase1PruneError(
+          error instanceof Error ? error.message : String(error),
+        );
+      })
+      .finally(() => {
+        setPhase1PrunePending(false);
+      });
+  }, [preparedCollectionPlan]);
+
+  const completePreparedReplayCleanup = useCallback(() => {
+    const firstValidation =
+      preparedCollectionPlan?.phase1.shots[0]
+        ?.phase1ReplayValidation;
+    if (!firstValidation || !preparedExact30Completed) {
+      return;
+    }
+
+    setPhase1PrunePending(true);
+    setPhase1PruneError(null);
+    void deleteFaceRatioPhase1ReplayArtifact(firstValidation)
+      .then(() => pruneExpiredFaceRatioPhase1ReplayArtifacts())
+      .then(() => {
+        setPhase1CompletionCleanupDone(true);
+        setPhase1ResumeNotice(
+          '완료된 prepared 기기 raw replay를 삭제했습니다. 이 세션은 종료됐으며 같은 plan으로 재개할 수 없습니다.',
+        );
+      })
+      .catch(error => {
+        setPhase1PruneError(
+          error instanceof Error ? error.message : String(error),
+        );
+      })
+      .finally(() => {
+        setPhase1PrunePending(false);
+      });
+  }, [preparedCollectionPlan, preparedExact30Completed]);
+
+  if (PHASE1_COLLECTION_PLAN_RESOLUTION.mode === 'invalid') {
+    return (
+      <PreparedCollectionPlanBlocked
+        message={PHASE1_COLLECTION_PLAN_RESOLUTION.error}
+      />
+    );
+  }
 
   if (!labMode) {
     return (
       <LabModePicker
         diagnosticsEnabled={diagnosticsEnabled}
+        onCompletePreparedReplayCleanup={completePreparedReplayCleanup}
+        onResetPreparedReplay={resetPreparedReplay}
         onSelect={mode => {
-          setPhase1Completed(false);
+          if (!preparedCollectionPlan) {
+            setPhase1Completed(false);
+          }
           setLabMode(mode);
         }}
         phase1Completed={phase1Completed}
+        phase1CompletionCleanupDone={phase1CompletionCleanupDone}
+        phase1PruneError={phase1PruneError}
+        phase1PrunePending={phase1PrunePending}
+        phase1ResumeNotice={phase1ResumeNotice}
         poseValidationEnabled={poseValidationEnabled}
+        preparedCollection={Boolean(preparedCollectionPlan)}
+        preparedExact30Completed={preparedExact30Completed}
+        preparedSequenceError={preparedSequenceError}
       />
     );
   }
@@ -520,11 +920,26 @@ function FaceCaptureLabContent() {
     capture &&
     unifiedResult
   ) {
+    const isPreparedExact30 =
+      Boolean(preparedCollectionPlan) && labMode === 'exact-30';
     return (
       <UnifiedLabResult
         capture={capture}
         onChangeMode={changeMode}
-        onRetake={resetCapture}
+        onRetake={
+          isPreparedExact30 && preparedExact30Completed
+            ? changeMode
+            : resetCapture
+        }
+        primaryActionLabel={
+          isPreparedExact30
+            ? preparedExact30Completed
+              ? 'Prepared Exact 30 수집 완료'
+              : `다음 Exact 30 (${preparedExact30CompletedShotCount + 1}/${
+                  preparedCollectionPlan!.phase2.exact30RepeatCount
+                })`
+            : undefined
+        }
         result={unifiedResult}
       />
     );
@@ -596,8 +1011,48 @@ function FaceCaptureLabContent() {
     return (
       <UnifiedFaceCaptureScreen
         onCancel={changeMode}
-        onCaptureCommitted={(result, upload) => {
-          void appendFace3DRuntimeEvidence(result);
+        onCaptureCommitted={async (result, upload) => {
+          const isPreparedExact30 =
+            Boolean(preparedCollectionPlan) && labMode === 'exact-30';
+          if (isPreparedExact30) {
+            if (
+              !preparedExact30Shot ||
+              result.type !==
+                preparedExact30Shot.expectedEventType ||
+              result.requestId !== preparedExact30Shot.shotId ||
+              result.face3d.collectionPolicyId !==
+                preparedExact30Shot.collectionPolicyId ||
+              result.face3d.validFrameCount !==
+                preparedExact30Shot.requiredValidFrameCount ||
+              result.face3d.targetFrameCount !==
+                preparedExact30Shot.requiredTargetFrameCount
+            ) {
+              throw new Error(
+                'Prepared exact-30 completion does not match the current planned shot',
+              );
+            }
+            const evidenceUri =
+              await appendFace3DRuntimeEvidence(result);
+            if (!evidenceUri) {
+              throw new Error(
+                'Prepared exact-30 completion was not persisted to runtime evidence',
+              );
+            }
+            setPreparedExact30CompletedShotCount(current =>
+              Math.max(
+                current,
+                preparedExact30CompletedShotCount + 1,
+              ),
+            );
+            setPhase1ResumeNotice(
+              `Prepared Exact 30 ${
+                preparedExact30CompletedShotCount + 1
+              }/${preparedCollectionPlan!.phase2.exact30RepeatCount}을 ` +
+                'events.jsonl에 기록했습니다.',
+            );
+          } else {
+            void appendFace3DRuntimeEvidence(result).catch(() => undefined);
+          }
           setCapture({
             ...upload,
             capturedAt: new Date().toISOString(),
@@ -613,9 +1068,37 @@ function FaceCaptureLabContent() {
           setCapture(null);
           setUnifiedResult(null);
           setResultMode('face3d');
+          if (preparedCollectionPlan && labMode === 'exact-30') {
+            setLabMode(null);
+            if (
+              reason === 'unified_capture_commit_failed' ||
+              reason === 'unified_capture_commit_rejected'
+            ) {
+              setPreparedSequenceError(
+                `planned shot ${preparedExact30Shot?.shotId ?? 'unknown'} commit/evidence persistence failed`,
+              );
+            } else {
+              setPhase1ResumeNotice(
+                `Prepared Exact 30 ${
+                  preparedExact30CompletedShotCount + 1
+                }번은 commit 전에 실패했습니다. 같은 planned shot으로 다시 시도할 수 있습니다.`,
+              );
+            }
+            return;
+          }
           setLabMode('legacy-30');
         }}
-        onRequestStarted={() => undefined}
+        onRequestStarted={requestId => {
+          if (
+            preparedCollectionPlan &&
+            labMode === 'exact-30' &&
+            requestId !== preparedExact30Shot?.shotId
+          ) {
+            setPreparedSequenceError(
+              `unexpected prepared exact-30 requestId ${requestId}`,
+            );
+          }
+        }}
         request={unifiedRequest}
         uploadImage={uploadImage}
       />

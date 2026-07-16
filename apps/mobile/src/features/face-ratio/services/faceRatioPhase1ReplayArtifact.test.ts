@@ -184,6 +184,14 @@ expectThrows(
   () =>
     validateFaceRatioPhase1ReplayValidation({
       ...validation,
+      subjectId: 'subj_user_12345678',
+    }),
+  /pseudonymous subj_/,
+);
+expectThrows(
+  () =>
+    validateFaceRatioPhase1ReplayValidation({
+      ...validation,
       acquisition: {
         ...validation.acquisition,
         source: 'gallery',

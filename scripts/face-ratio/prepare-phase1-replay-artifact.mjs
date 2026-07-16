@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
-import {dirname, resolve} from 'node:path';
+import {existsSync, lstatSync, readFileSync} from 'node:fs';
+import {dirname, join, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
-  appendPhase1ReplayCapture,
-  createEmptyPhase1ReplayArtifact,
-  validatePhase1ReplayArtifact,
-} from './phase1-replay-core.mjs';
+  phase1ReplayFileStoreOptionsFromEnvironment,
+  savePhase1ReplayCaptureFile,
+} from './phase1-replay-file-store.mjs';
 
 function usage() {
   console.error(
@@ -57,20 +56,49 @@ const ignoredSessionRoot = resolve(repoRoot, 'local-face-measurement');
 const responsePath = resolve(args.response);
 const metadataPath = resolve(args.metadata);
 const outputPath = resolve(args.output);
-if (
-  outputPath.startsWith(`${repoRoot}/`) &&
-  outputPath !== ignoredArtifactRoot &&
-  !outputPath.startsWith(`${ignoredArtifactRoot}/`) &&
-  outputPath !== ignoredSessionRoot &&
-  !outputPath.startsWith(`${ignoredSessionRoot}/`)
-) {
-  throw new Error(
-    'repo-local raw replay artifacts must stay under local-face-measurement/ ' +
-      'or artifacts/face-ratio/phase1-local/',
-  );
-}
 const response = unwrapResponse(readJson(responsePath));
 const metadata = readJson(metadataPath);
+
+function isWithin(candidate, root) {
+  return candidate === root || candidate.startsWith(`${root}${sep}`);
+}
+
+function assertRepoLocalOutputBoundary(candidate) {
+  if (!isWithin(candidate, repoRoot)) {
+    return;
+  }
+  const safeRoot = [ignoredArtifactRoot, ignoredSessionRoot].find(root =>
+    isWithin(candidate, root),
+  );
+  if (!safeRoot) {
+    throw new Error(
+      'repo-local raw replay artifacts must stay under local-face-measurement/ ' +
+        'or artifacts/face-ratio/phase1-local/',
+    );
+  }
+
+  let cursor = repoRoot;
+  const parentRelativePath = relative(repoRoot, dirname(candidate));
+  for (const segment of parentRelativePath.split(sep).filter(Boolean)) {
+    cursor = join(cursor, segment);
+    if (!existsSync(cursor)) {
+      continue;
+    }
+    const entry = lstatSync(cursor);
+    if (entry.isSymbolicLink()) {
+      throw new Error(
+        `repo-local raw replay output must not traverse a symlink: ${cursor}`,
+      );
+    }
+    if (!entry.isDirectory()) {
+      throw new Error(
+        `repo-local raw replay parent must be a directory: ${cursor}`,
+      );
+    }
+  }
+}
+
+assertRepoLocalOutputBoundary(outputPath);
 
 if (
   !response ||
@@ -102,6 +130,16 @@ if (
     'metadata requires cohortId, sessionId, captureId, capturedAtUtc, subjectId, condition, and acquisition',
   );
 }
+if (
+  !Number.isFinite(Date.parse(metadata.artifactCreatedAtUtc)) ||
+  !Number.isInteger(metadata.deleteAfterDays) ||
+  metadata.deleteAfterDays < 1 ||
+  metadata.deleteAfterDays > 30
+) {
+  throw new Error(
+    'metadata requires an ISO artifactCreatedAtUtc and explicit deleteAfterDays in [1, 30]',
+  );
+}
 
 const capture = {
   acquisition: metadata.acquisition,
@@ -116,27 +154,24 @@ const capture = {
   ...(metadata.hairline ? {hairline: metadata.hairline} : {}),
 };
 
-const artifact = existsSync(outputPath)
-  ? validatePhase1ReplayArtifact(readJson(outputPath))
-  : createEmptyPhase1ReplayArtifact({
-      cohortId: metadata.cohortId,
-      createdAtUtc: metadata.artifactCreatedAtUtc ?? metadata.capturedAtUtc,
-      deleteAfterDays: metadata.deleteAfterDays ?? 30,
-      sessionId: metadata.sessionId,
-    });
-
-if (
-  artifact.cohortId !== metadata.cohortId ||
-  artifact.sessionId !== metadata.sessionId
-) {
-  throw new Error(
-    `metadata cohort/session does not match ${artifact.cohortId}/${artifact.sessionId}`,
-  );
-}
-
-const next = appendPhase1ReplayCapture(artifact, capture);
-mkdirSync(dirname(outputPath), {recursive: true});
-writeFileSync(outputPath, `${JSON.stringify(next, null, 2)}\n`);
+const fileStoreOptions = phase1ReplayFileStoreOptionsFromEnvironment(
+  process.env,
+);
+const result = savePhase1ReplayCaptureFile({
+  capture,
+  cohortId: metadata.cohortId,
+  createdAtUtc: metadata.artifactCreatedAtUtc,
+  deleteAfterDays: metadata.deleteAfterDays,
+  failBeforeRename: fileStoreOptions.failBeforeRename,
+  lockOptions: fileStoreOptions.lockOptions,
+  ...(fileStoreOptions.nowUtc
+    ? {nowUtc: fileStoreOptions.nowUtc}
+    : {}),
+  outputPath,
+  sessionId: metadata.sessionId,
+});
 console.log(
-  `Prepared local-only Phase 1 replay artifact: ${outputPath} (${next.captures.length} capture(s))`,
+  `Prepared local-only Phase 1 replay artifact: ${outputPath} ` +
+    `(${result.artifact.captures.length} capture(s), ` +
+    `${result.changed ? 'updated' : 'idempotent unchanged'})`,
 );

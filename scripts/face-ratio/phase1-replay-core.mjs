@@ -11,6 +11,16 @@ const CAPTURE_ID_PATTERN = /^cap_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const COHORT_ID_PATTERN = /^cohort_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const SESSION_ID_PATTERN = /^session_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 
+function isLocalPseudonymousSubjectId(value) {
+  return (
+    typeof value === 'string' &&
+    SUBJECT_ID_PATTERN.test(value) &&
+    !value.startsWith('subj_user_') &&
+    !value.includes('@') &&
+    !/\s/.test(value)
+  );
+}
+
 function isRecord(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -274,10 +284,8 @@ function validateCapture(capture, index) {
   );
   utcTimestamp(capture.capturedAtUtc, `${label}.capturedAtUtc`);
   invariant(
-    SUBJECT_ID_PATTERN.test(capture.subjectId) &&
-      !capture.subjectId.includes('@') &&
-      !/\s/.test(capture.subjectId),
-    `${label}.subjectId must be a pseudonymous subj_* identifier`,
+    isLocalPseudonymousSubjectId(capture.subjectId),
+    `${label}.subjectId must be a local pseudonymous subj_* identifier and must not use subj_user_*`,
   );
   validateCondition(capture.condition, `${label}.condition`);
   finiteNumber(capture.imageWidth, `${label}.imageWidth`);
@@ -418,6 +426,18 @@ export function appendPhase1ReplayCapture(artifact, capture) {
   };
   validatePhase1ReplayArtifact(next);
   return next;
+}
+
+export function isPhase1ReplayArtifactExpired(
+  artifact,
+  nowUtc = new Date().toISOString(),
+) {
+  validatePhase1ReplayArtifact(artifact);
+  utcTimestamp(nowUtc, 'nowUtc');
+  return (
+    Date.parse(nowUtc) >=
+    Date.parse(artifact.privacy.retention.deleteByUtc)
+  );
 }
 
 function canonicalJson(value) {

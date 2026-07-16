@@ -6,10 +6,18 @@ import path from 'node:path';
 import process from 'node:process';
 import {fileURLToPath} from 'node:url';
 
-import {PHASE1_REPLAY_SHOTS} from '../face-ratio/phase1-replay-shot-plan.mjs';
+import {
+  PHASE1_REPLAY_SHOTS,
+  phase1ReplayConditionsMatch,
+} from '../face-ratio/phase1-replay-shot-plan.mjs';
 
 export const FACE_MEASUREMENT_COLLECTION_PLAN_SCHEMA_VERSION =
-  'aura.face-measurement-collection-plan.v1';
+  'aura.face-measurement-collection-plan.v2';
+export const FACE_MEASUREMENT_PHASE1_ACQUISITION = Object.freeze({
+  cameraFacing: 'front',
+  captureImplementation: 'native',
+  source: 'camera',
+});
 
 function requireCondition(condition, message) {
   if (!condition) {
@@ -46,6 +54,23 @@ function pathsOverlap(left, right) {
   );
 }
 
+function isRecord(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(',')}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function phase1CaptureId({
   cohortId,
   index,
@@ -58,6 +83,25 @@ function phase1CaptureId({
     .digest('hex')
     .slice(0, 16);
   return `cap_p1_${String(index + 1).padStart(2, '0')}_${digest}`;
+}
+
+function phase2ShotId({
+  cohortId,
+  index,
+  sessionId,
+  subjectContextId,
+}) {
+  const digest = crypto
+    .createHash('sha256')
+    .update(
+      `${cohortId}\0${subjectContextId}\0${sessionId}\0phase2\0${index + 1}`,
+    )
+    .digest('hex')
+    .slice(0, 16);
+  return (
+    `p2-${String(index + 1).padStart(2, '0')}-exact30-frontal-neutral-` +
+    digest
+  );
 }
 
 export function buildFaceMeasurementCollectionPlan({
@@ -102,6 +146,7 @@ export function buildFaceMeasurementCollectionPlan({
       uploadAllowed: false,
       ...shot.collection,
       phase1ReplayValidation: {
+        acquisition: {...FACE_MEASUREMENT_PHASE1_ACQUISITION},
         captureId: phase1CaptureId({
           cohortId,
           index,
@@ -126,7 +171,12 @@ export function buildFaceMeasurementCollectionPlan({
     mode: 'unified_face_capture_lab',
     subjectContextId,
     sessionId,
-    shotId: `p2-${String(index + 1).padStart(2, '0')}-exact30-frontal-neutral`,
+    shotId: phase2ShotId({
+      cohortId,
+      index,
+      sessionId,
+      subjectContextId,
+    }),
     pose: 'frontal',
     distance: 'standard',
     shotKind: 'neutral',
@@ -191,6 +241,128 @@ export function buildFaceMeasurementCollectionPlan({
   };
 }
 
+export function validateFaceMeasurementCollectionPlan(plan) {
+  requireCondition(isRecord(plan), 'collection plan은 object여야 합니다.');
+  requireCondition(
+    plan.schemaVersion === FACE_MEASUREMENT_COLLECTION_PLAN_SCHEMA_VERSION,
+    `collection plan schemaVersion은 ${FACE_MEASUREMENT_COLLECTION_PLAN_SCHEMA_VERSION}이어야 합니다.`,
+  );
+  requireCondition(
+    plan.executionMode === 'dry_run_only',
+    'collection plan executionMode는 dry_run_only여야 합니다.',
+  );
+  requirePseudonymousId(plan.cohortId, 'cohortId', 'cohort_');
+  requirePseudonymousId(
+    plan.subjectContextId,
+    'subjectContextId',
+    'subj_',
+  );
+  requirePseudonymousId(plan.sessionId, 'sessionId', 'session_');
+  requireCondition(
+    isRecord(plan.phase1) &&
+      plan.phase1.shotCount === PHASE1_REPLAY_SHOTS.length &&
+      Array.isArray(plan.phase1.shots) &&
+      plan.phase1.shots.length === PHASE1_REPLAY_SHOTS.length,
+    'collection plan Phase 1은 canonical 10-shot이어야 합니다.',
+  );
+  requireCondition(
+    isRecord(plan.privacy) &&
+      isRecord(plan.privacy.rawLandmarks) &&
+      Number.isInteger(plan.privacy.rawLandmarks.retentionDays) &&
+      plan.privacy.rawLandmarks.retentionDays >= 1 &&
+      plan.privacy.rawLandmarks.retentionDays <= 30 &&
+      typeof plan.privacy.rawLandmarks.deleteByUtc === 'string' &&
+      Number.isFinite(Date.parse(plan.privacy.rawLandmarks.deleteByUtc)),
+    'collection plan raw-landmark retention이 유효하지 않습니다.',
+  );
+  requireCondition(
+    isRecord(plan.phase2) &&
+      Number.isInteger(plan.phase2.exact30RepeatCount) &&
+      plan.phase2.exact30RepeatCount >= 3 &&
+      plan.phase2.exact30RepeatCount <= 12 &&
+      Array.isArray(plan.phase2.shots) &&
+      plan.phase2.shots.length === plan.phase2.exact30RepeatCount &&
+      Array.isArray(plan.sequence) &&
+      plan.sequence.length ===
+        PHASE1_REPLAY_SHOTS.length + plan.phase2.exact30RepeatCount,
+    'collection plan sequence 길이가 Phase 1/2와 일치하지 않습니다.',
+  );
+
+  const captureIds = new Set();
+  plan.phase1.shots.forEach((shot, index) => {
+    const expected = PHASE1_REPLAY_SHOTS[index];
+    const validation = shot?.phase1ReplayValidation;
+    requireCondition(
+      shot?.order === index + 1 &&
+        shot?.phase === 'phase1_pose_distance' &&
+        shot?.mode === 'native_face_ratio_capture' &&
+        shot?.shotId === expected.collection.shotId,
+      `collection plan Phase 1 shot ${index + 1} order/mode/shotId가 canonical plan과 다릅니다.`,
+    );
+    requireCondition(
+      isRecord(validation) &&
+        canonicalJson(validation.acquisition) ===
+          canonicalJson(FACE_MEASUREMENT_PHASE1_ACQUISITION) &&
+        typeof validation.captureId === 'string' &&
+        /^cap_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(
+          validation.captureId,
+        ) &&
+        validation.cohortId === plan.cohortId &&
+        validation.subjectId === plan.subjectContextId &&
+        validation.sessionId === plan.sessionId &&
+        validation.retentionDays ===
+          plan.privacy.rawLandmarks.retentionDays &&
+        phase1ReplayConditionsMatch(
+          validation.condition,
+          expected.condition,
+        ),
+      `collection plan Phase 1 shot ${index + 1} validation tuple이 유효하지 않습니다.`,
+    );
+    requireCondition(
+      !captureIds.has(validation.captureId),
+      `collection plan captureId가 중복됩니다: ${validation.captureId}`,
+    );
+    captureIds.add(validation.captureId);
+    requireCondition(
+      canonicalJson(plan.sequence[index]) === canonicalJson(shot),
+      `collection plan sequence[${index}]가 Phase 1 shot과 일치하지 않습니다.`,
+    );
+  });
+
+  requireCondition(
+    plan.phase1.shots.filter(
+      shot => shot.phase1ReplayValidation.condition.isReference,
+    ).length === 2,
+    'collection plan Phase 1 reference A/B는 정확히 두 개여야 합니다.',
+  );
+  plan.phase2.shots.forEach((shot, index) => {
+    const sequenceIndex = PHASE1_REPLAY_SHOTS.length + index;
+    requireCondition(
+      shot?.order === sequenceIndex + 1 &&
+        shot?.phase === 'phase2_exact30_baseline' &&
+        shot?.mode === 'unified_face_capture_lab' &&
+        shot?.subjectContextId === plan.subjectContextId &&
+        shot?.sessionId === plan.sessionId &&
+        shot?.shotId === phase2ShotId({
+          cohortId: plan.cohortId,
+          index,
+          sessionId: plan.sessionId,
+          subjectContextId: plan.subjectContextId,
+        }) &&
+        shot?.collectionPolicyId === 'diagnostics-exact-30-v1' &&
+        shot?.expectedEventType === 'unified_face_capture_completed' &&
+        shot?.requiredValidFrameCount === 30 &&
+        shot?.requiredTargetFrameCount === 30 &&
+        shot?.uploadAllowed === false &&
+        canonicalJson(plan.sequence[sequenceIndex]) ===
+          canonicalJson(shot),
+      `collection plan Phase 2 shot ${index + 1} exact-30 sequence가 유효하지 않습니다.`,
+    );
+  });
+
+  return plan;
+}
+
 function readFlag(argv, flag) {
   const index = argv.indexOf(flag);
   requireCondition(index !== -1 && typeof argv[index + 1] === 'string', `${flag} 값이 없습니다.`);
@@ -215,6 +387,7 @@ export function runCli(argv = process.argv.slice(2)) {
   const options = parseArguments(argv);
   requireCondition(!fs.existsSync(options.outputPath), `output이 이미 있습니다: ${options.outputPath}`);
   const plan = buildFaceMeasurementCollectionPlan(options);
+  validateFaceMeasurementCollectionPlan(plan);
   fs.mkdirSync(path.dirname(options.outputPath), {recursive: true});
   fs.writeFileSync(options.outputPath, `${JSON.stringify(plan, null, 2)}\n`, 'utf8');
   console.log(`얼굴 측정 Phase 1→exact-30 로컬 수집 dry-run 계획 생성: ${options.outputPath}`);

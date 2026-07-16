@@ -55,11 +55,19 @@ function getPhase1ReplaySessionDirectoryUri(
 }
 
 async function readDirectoryOrEmpty(directoryUri: string) {
-  try {
-    return await FileSystem.readDirectoryAsync(directoryUri);
-  } catch {
+  const info = await FileSystem.getInfoAsync(directoryUri);
+  if (!info.exists) {
     return [];
   }
+  if (!info.isDirectory) {
+    throw new Error(
+      `Phase 1 replay retention path is not a directory: ${directoryUri}`,
+    );
+  }
+
+  // 존재하는 retention tree를 열거하지 못하면 정리를 성공으로 간주하지 않는다.
+  // 호출자는 이 오류를 Lab 진입 차단으로 올려 raw 보존 정책을 fail-closed한다.
+  return FileSystem.readDirectoryAsync(directoryUri);
 }
 
 // raw 얼굴 자료는 dedicated validation root 아래에만 존재한다. 만료 시각이
@@ -122,6 +130,59 @@ export function pruneExpiredFaceRatioPhase1ReplayArtifacts(
   return withPhase1ReplayStoreLock(() =>
     pruneExpiredFaceRatioPhase1ReplayArtifactsUnlocked(now),
   );
+}
+
+export function readFaceRatioPhase1ReplayArtifact(
+  validation: FaceRatioPhase1ReplayValidation,
+) {
+  validateFaceRatioPhase1ReplayValidation(validation);
+
+  return withPhase1ReplayStoreLock(async () => {
+    const directoryUri =
+      getPhase1ReplaySessionDirectoryUri(validation);
+    if (!directoryUri) {
+      throw new Error('Phase 1 replay document directory is unavailable');
+    }
+
+    const fileUri = `${directoryUri}${PHASE1_REPLAY_FILE_NAME}`;
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    if (!fileInfo.exists) {
+      return null;
+    }
+
+    const parsed = JSON.parse(
+      await FileSystem.readAsStringAsync(fileUri),
+    ) as unknown;
+    validateFaceRatioPhase1ReplayArtifact(parsed);
+    if (
+      isFaceRatioPhase1ReplayArtifactExpired(
+        parsed,
+        new Date().toISOString(),
+      )
+    ) {
+      throw new Error(
+        'Phase 1 replay reached deleteByUtc during prepared progress restore',
+      );
+    }
+
+    return parsed;
+  });
+}
+
+export function deleteFaceRatioPhase1ReplayArtifact(
+  validation: FaceRatioPhase1ReplayValidation,
+) {
+  validateFaceRatioPhase1ReplayValidation(validation);
+
+  return withPhase1ReplayStoreLock(async () => {
+    const directoryUri =
+      getPhase1ReplaySessionDirectoryUri(validation);
+    if (!directoryUri) {
+      throw new Error('Phase 1 replay document directory is unavailable');
+    }
+
+    await FileSystem.deleteAsync(directoryUri, {idempotent: true});
+  });
 }
 
 async function writePhase1ReplayArtifactAtomically(
