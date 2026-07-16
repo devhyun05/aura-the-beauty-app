@@ -1,7 +1,5 @@
-import {Image} from 'react-native';
-
 import {uploadFaceCaptureImage} from '../../face-capture/services/faceCaptureUploadService';
-import {appAssetSource} from '../../../shared/config/mediaAssets';
+import {appAssetUri} from '../../../shared/config/mediaAssets';
 import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 import type {
   MakeupFeedbackAnalysisOutcome,
@@ -1146,9 +1144,7 @@ export async function fetchMakeupFeedbackReport(
     '/feedback/reports/' + encodeURIComponent(reportId),
   );
   const request = report.feedbackPayload?.request;
-  const fallbackImageUri = Image.resolveAssetSource(
-    appAssetSource('images/analysis/report-retake-20260608.png'),
-  )?.uri;
+  const fallbackImageUri = appAssetUri('images/analysis/report-retake-20260608.png');
   const imageUri =
     stringValue(request?.cdnUrl) ??
     stringValue(request?.sourceUrl) ??
