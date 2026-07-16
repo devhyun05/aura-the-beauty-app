@@ -1,0 +1,18 @@
+{
+  "backend": "hash",
+  "catalogCount": 618,
+  "catalogPath": "catalog/catalog_items_mvp_20260717.jsonl",
+  "catalogSha256": "02366c4fa57ecf49c6e36743fd0e3a2b901ebfac682b75e65ee7478780e30f11",
+  "chunkCount": 2452,
+  "chunksPath": "knowledge/product_knowledge_chunks_mvp_20260717.jsonl",
+  "chunksSha256": "6b633fa82bd0a50d6d52ee67eacd4d1fde396fb7b9cd51c376842c26b0b2e945",
+  "dimension": 1024,
+  "modelId": "hash-fallback",
+  "runDate": "20260717",
+  "schemaVersion": 1,
+  "seedPath": "catalog/catalog_items_seed_20260717.jsonl",
+  "seedSha256": "f8c1464858973c4bae55c458b5d19e10e8d9462769d849a12126efe4dfc92257",
+  "vectorCount": 2452,
+  "vectorPath": "vector/product_knowledge_vector_index_mvp_20260717.json",
+  "vectorSha256": "48334afd7a0bb6c3b883611378006be2bb9076255ae310648e27fb601e0774b9"
+}

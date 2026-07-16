@@ -73,6 +73,29 @@ class _SearchDatabase:
   pool = _SearchPool()
 
 
+class ProductLikeRoundtripDatabase:
+  """like 업서트(external_key) → unlike 조회 왕복을 흉내내는 최소 fake."""
+
+  def __init__(self) -> None:
+    self.products_by_external_key: dict[str, UUID] = {}
+    self.upsert_args = None
+
+  async def fetchrow(self, query: str, *args):
+    if query.strip().lower().startswith("insert into products"):
+      self.upsert_args = args
+      external_key = args[0]
+      product_id = self.products_by_external_key.setdefault(external_key, uuid4())
+
+      return {"id": product_id}
+
+    external_key = args[0]
+
+    if external_key not in self.products_by_external_key:
+      return None
+
+    return {"id": self.products_by_external_key[external_key]}
+
+
 @pytest.mark.asyncio
 async def test_like_requires_an_eligible_internal_catalog_product() -> None:
   product_id = uuid4()

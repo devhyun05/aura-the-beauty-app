@@ -1,3 +1,4 @@
+import logging
 from functools import lru_cache
 from ipaddress import ip_address
 from pathlib import Path
@@ -77,11 +78,20 @@ class Settings(BaseSettings):
   embedding_dimension: int = 1024
 
   auradin_retrieval_backend: str = "auto"
+  # Immutable data snapshot selection. Production always follows
+  # data/auradin/active_snapshot.json; this override is reserved for local
+  # golden/verification processes.
+  auradin_snapshot_manifest: str | None = None
+  auradin_snapshot_dev_regeneration: bool = False
   auradin_vector_index_path: str | None = None
   auradin_vector_index_autobuild: bool = False
   auradin_session_store: str = "postgres"
   auradin_session_ttl_seconds: int = 15 * 60
+  # A9 create 멱등성 retention — 세션 TTL과 별개로 (owner, clientRequestId) 귀속을 유지하는 기간.
+  auradin_idempotency_retention_seconds: int = 86400
   # §5 랭킹 튜너블 노브 (얇은 슬라이스에서 캘리브레이션한 시작값)
+  # B8/R3는 골든 baseline 사람 재승인 전까지 비활성으로 배포한다.
+  auradin_score_weights_v2: bool = False
   auradin_mmr_lambda: float = 0.7  # MMR 다양성: λ↑ anchor 유사, λ↓ 다양성 (§7 refine 다이얼)
   auradin_floor_semantic: float = 0.5  # floor 게이트 semantic 문턱
   # 점수갭 즉답 종료 임계 (하드 조건 + raw #1-#2 갭≥θ → 질문 스킵).
@@ -97,6 +107,22 @@ class Settings(BaseSettings):
   auradin_question_copy_enabled: bool = True
   auradin_live_discovery_enabled: bool = True  # 발견 슬롯 = Tier2 라이브 주력 (§5, 큐레이션은 폴백)
   auradin_enrich_timeout_seconds: float = 12.0  # enrich 전체 상한 — 초과 시 fallback으로 서빙
+  # A5 (§7.2) 이벤트 로깅 — write feature flag. 기본 OFF: 익명식별 RFC 승인·Release Manifest 준비 전
+  # 수집 시작 금지(D8). 기록 실패는 어떤 경우에도 추천 응답을 막지 않는다(fail-open).
+  auradin_events_enabled: bool = False
+  # Release Manifest 귀속 정본 — 배포 파이프라인이 앱 커밋 SHA(또는 release manifest id)를 주입.
+  # 미설정이면 이벤트는 귀속 불가로 drop된다 — "unknown" 영속 금지(교차 리뷰 A5-2).
+  # auradin_events_enabled=True와 함께 미설정이면 Settings 검증이 경고를 남긴다.
+  auradin_release_manifest_id: str | None = None
+  # 익명식별 RFC §2.1 — 클라이언트 anon token을 HMAC해 anon:v1:<digest> owner를 만들 서버 비밀키.
+  # 미설정이면 anon owner를 만들 수 없어 익명 이벤트는 fail-open으로 건너뛴다.
+  auradin_anon_token_secret: str | None = None
+  # B7 (§7.3) 최소 개인화 루프 — 기본 새도 모드: False면 profileScore를 계산·로깅만 하고
+  # 순위 무영향(wouldBeAnchor 세션 로그), True면 anchor-only 스왑 실행. diverse/discovery·floor 미적용.
+  auradin_profile_score_enabled: bool = False
+  # 배치 산출 user_taste_profile jsonl 경로 (scripts/build_auradin_taste_profiles.py 출력).
+  # 미설정이면 프로필 조회 자체가 없다 — 테이블 생성은 B7 비범위.
+  auradin_taste_profiles_path: str | None = None
 
   cognito_user_pool_id: str | None = None
   cognito_app_client_id: str | None = None
@@ -194,6 +220,17 @@ class Settings(BaseSettings):
       return False
 
     return value
+
+  @model_validator(mode="after")
+  def warn_events_enabled_without_release_manifest(self) -> "Settings":
+    # A5 교차 리뷰: events flag ON + release manifest 미설정이면 모든 이벤트가 귀속 불가로
+    # drop된다("unknown" 영속 금지). 배포 설정 실수를 부팅 시점에 명확히 드러낸다.
+    if self.auradin_events_enabled and not str(self.auradin_release_manifest_id or "").strip():
+      logging.getLogger(__name__).warning(
+        "[aura:auradin-events] auradin_events_enabled=True but auradin_release_manifest_id "
+        "is unset — every event will be dropped (no 'unknown' attribution is persisted)",
+      )
+    return self
 
   @field_validator(
     "product_catalog_allowed_seller_domains",

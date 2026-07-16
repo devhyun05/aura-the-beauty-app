@@ -103,7 +103,7 @@ def test_hash_vector_index_uses_hash_query_even_when_aws_is_configured(
     fail_if_bedrock_client_is_built,
   )
 
-  scores, backend = build_semantic_scores(
+  semantic = build_semantic_scores(
     type("Catalog", (), {"chunks": chunks})(),
     "glossy pink",
     settings=Settings(
@@ -114,8 +114,9 @@ def test_hash_vector_index_uses_hash_query_even_when_aws_is_configured(
     ),
   )
 
-  assert backend == "embedding_file_hash"
-  assert scores["product-1"] > 0
+  assert semantic.backend == "embedding_file_hash"
+  assert semantic.status == "ok"
+  assert semantic.scores["product-1"] > 0
 
 
 @pytest.mark.asyncio

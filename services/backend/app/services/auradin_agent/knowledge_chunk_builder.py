@@ -4,6 +4,9 @@ import hashlib
 from collections import Counter
 from typing import Any
 
+from app.services.auradin_catalog.brand_aliases import find_brand_alias_spans
+from app.services.auradin_catalog.metadata_extractor import infer_brand_clean_undertone_evidence
+
 from .title_keyword_extractor import (
   TITLE_INFERENCE_SOURCE,
   extract_residual_keywords,
@@ -156,6 +159,150 @@ def _palette_for_item(item: dict[str, Any]) -> list[str]:
   return values or DEFAULT_PALETTE_BY_CATEGORY.get(item.get("category"), ["#B85E68"])
 
 
+def _sanitize_brand_only_undertone(
+  seed: dict[str, Any],
+  *,
+  attributes: dict[str, Any],
+  confidence: dict[str, float],
+  hard_filter_eligible: dict[str, bool],
+  residual_keywords: list[dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, float], dict[str, bool], list[dict[str, Any]], list[dict[str, Any]]]:
+  """Invalidate only undertone evidence proven to come from the brand span.
+
+  Legacy rows often lack offsets. In that case we re-run the current
+  brand-clean title inference and inspect the evidence token in raw-title
+  coordinates. Absence of a current-title match alone is not enough to delete
+  a value: the deletion path requires an actual brand-only signal.
+  """
+
+  next_attributes = dict(attributes)
+  next_confidence = dict(confidence)
+  next_hard = dict(hard_filter_eligible)
+  evidence = _as_list(seed.get("evidence"))
+  undertone_evidence = [row for row in evidence if _clean(row.get("field")) == "undertone"]
+  title_sources = {"title_rule_inferred", TITLE_INFERENCE_SOURCE, "title_color_undertone_derived"}
+  removed_evidence: list[dict[str, Any]] = []
+
+  current_undertone = _clean(next_attributes.get("undertone"))
+  if not current_undertone:
+    return next_attributes, next_confidence, next_hard, evidence, removed_evidence
+
+  raw_title = _clean(seed.get("rawTitle")) or _clean(seed.get("productName"))
+  brand_name = _clean(seed.get("brandName"))
+  brand_spans = find_brand_alias_spans(raw_title, brand_name)
+  inferred_support = infer_brand_clean_undertone_evidence(
+    title=raw_title,
+    category=_clean(seed.get("category")),
+    brand=brand_name,
+  )
+  supported_values = {
+    _clean(row.get("value"))
+    for row in [*residual_keywords, *inferred_support]
+    if _clean(row.get("field")) == "undertone"
+  }
+  relevant_evidence = [
+    row for row in undertone_evidence if _clean(row.get("value")) == current_undertone
+  ]
+
+  def is_title_evidence(row: dict[str, Any]) -> bool:
+    return (
+      _clean(row.get("sourceType")) in title_sources
+      or _clean(row.get("rawLabel")) == "productName"
+      or (
+        isinstance(row.get("matchedStart"), int)
+        and isinstance(row.get("matchedEnd"), int)
+        and bool(row.get("rawText"))
+      )
+    )
+
+  has_non_title_evidence = any(not is_title_evidence(row) for row in relevant_evidence)
+
+  def overlaps_brand(start: int, end: int) -> bool:
+    return any(
+      start < int(span.get("end") or 0) and end > int(span.get("start") or 0)
+      for span in brand_spans
+    )
+
+  def proven_brand_only(row: dict[str, Any]) -> bool:
+    start = row.get("matchedStart")
+    end = row.get("matchedEnd")
+    if isinstance(start, int) and isinstance(end, int) and start < end:
+      return overlaps_brand(start, end)
+
+    token = _clean(row.get("matchedToken"))
+    if not token:
+      return False
+    matches: list[tuple[int, int]] = []
+    cursor = 0
+    lowered_title = raw_title.casefold()
+    lowered_token = token.casefold()
+    while (position := lowered_title.find(lowered_token, cursor)) >= 0:
+      matches.append((position, position + len(token)))
+      cursor = position + max(len(token), 1)
+    return bool(matches) and all(overlaps_brand(start_at, end_at) for start_at, end_at in matches)
+
+  brand_carries_cool_marker = current_undertone == "cool" and any(
+    "쿨" in raw_title[int(span.get("start") or 0):int(span.get("end") or 0)].casefold()
+    or "cool" in raw_title[int(span.get("start") or 0):int(span.get("end") or 0)].casefold()
+    for span in brand_spans
+  )
+  proven_brand_rows = [row for row in relevant_evidence if proven_brand_only(row)]
+  all_relevant_proven_brand_only = bool(relevant_evidence) and len(proven_brand_rows) == len(relevant_evidence)
+  evidence_free_brand_only = not relevant_evidence and brand_carries_cool_marker
+  # Legacy extraction matched the generic syllable "쿨" inside "쿨링". It is
+  # a product effect, not a personal undertone. A separate legitimate cool
+  # marker (여쿨/모브/etc.) appears in supported_values and prevents removal;
+  # verified non-title evidence does too.
+  cooling_only = (
+    current_undertone == "cool"
+    and "쿨링" in raw_title
+    and current_undertone not in supported_values
+    and not has_non_title_evidence
+  )
+  # A8 검사기 정렬: cool은 brand-clean 추론(콜라보 축약 '투쿨x', 호수명 '쿨페탈' 등 브랜드 파생
+  # 음절 매치를 배제하는 엄격 토크나이즈)이 지지할 때만 title-단독 근거로 유지할 수 있다.
+  # 느슨한 residual 재매치는 지지 근거로 인정하지 않는다 — a8_quality_summary와 동일 판정.
+  brand_clean_values = {
+    _clean(row.get("value"))
+    for row in inferred_support
+    if _clean(row.get("field")) == "undertone"
+  }
+  checker_unsupported_cool = (
+    current_undertone == "cool"
+    and "cool" not in brand_clean_values
+    and not has_non_title_evidence
+  )
+
+  if (
+    current_undertone not in supported_values
+    and not has_non_title_evidence
+    and (all_relevant_proven_brand_only or evidence_free_brand_only or cooling_only)
+  ) or checker_unsupported_cool:
+    rows_to_remove = relevant_evidence if (cooling_only or checker_unsupported_cool) else proven_brand_rows
+    removed_evidence = rows_to_remove or [
+      {
+        "field": "undertone",
+        "value": current_undertone,
+        "sourceType": TITLE_INFERENCE_SOURCE,
+        "matchedToken": "쿨링" if cooling_only else next(
+          (
+            raw_title[int(span.get("start") or 0):int(span.get("end") or 0)]
+            for span in brand_spans
+            if "쿨" in raw_title[int(span.get("start") or 0):int(span.get("end") or 0)].casefold()
+            or "cool" in raw_title[int(span.get("start") or 0):int(span.get("end") or 0)].casefold()
+          ),
+          None,
+        ),
+      },
+    ]
+    next_attributes.pop("undertone", None)
+    next_confidence.pop("undertone", None)
+    next_hard.pop("undertone", None)
+    evidence = [row for row in evidence if row not in rows_to_remove]
+
+  return next_attributes, next_confidence, next_hard, evidence, removed_evidence
+
+
 def build_mvp_catalog_item(seed: dict[str, Any]) -> dict[str, Any] | None:
   category = _clean(seed.get("category"))
   if category not in SUPPORTED_CATEGORIES:
@@ -174,10 +321,37 @@ def build_mvp_catalog_item(seed: dict[str, Any]) -> dict[str, Any] | None:
   product_name = _clean(seed.get("productName")) or raw_title
   normalized_name = normalize_product_name(product_name, brand_name)
   residual_keywords = extract_residual_keywords(raw_title, normalized_name, brand_name)
+  # A8 검사기 정렬: residual의 느슨한 '쿨' 재매치(콜라보 축약 '투쿨x', 호수명 '쿨페탈' 등)가
+  # sanitize 이후 병합 단계에서 cool을 재주입하는 것을 차단 — brand-clean 추론이 cool을
+  # 지지할 때만 residual cool을 병합 대상으로 인정한다.
+  if any(
+    _clean(row.get("field")) == "undertone" and _clean(row.get("value")) == "cool"
+    for row in residual_keywords
+  ):
+    _brand_clean_support = infer_brand_clean_undertone_evidence(
+      title=raw_title, category=category, brand=brand_name,
+    )
+    if not any(
+      _clean(row.get("field")) == "undertone" and _clean(row.get("value")) == "cool"
+      for row in _brand_clean_support
+    ):
+      residual_keywords = [
+        row for row in residual_keywords
+        if not (_clean(row.get("field")) == "undertone" and _clean(row.get("value")) == "cool")
+      ]
   attributes = seed.get("attributes") if isinstance(seed.get("attributes"), dict) else {}
   confidence = seed.get("attributeConfidence") if isinstance(seed.get("attributeConfidence"), dict) else {}
   hard_filter_eligible = (
     seed.get("hardFilterEligible") if isinstance(seed.get("hardFilterEligible"), dict) else {}
+  )
+  attributes, confidence, hard_filter_eligible, evidence, removed_undertone_evidence = (
+    _sanitize_brand_only_undertone(
+      seed,
+      attributes=attributes,
+      confidence=confidence,
+      hard_filter_eligible=hard_filter_eligible,
+      residual_keywords=residual_keywords,
+    )
   )
   attributes, confidence, hard_filter_eligible = _merge_residual_keywords(
     attributes,
@@ -201,7 +375,6 @@ def build_mvp_catalog_item(seed: dict[str, Any]) -> dict[str, Any] | None:
     "priceKrw": max(float(confidence.get("priceKrw") or 0), 0.9),
     "priceTier": max(float(confidence.get("priceTier") or 0), 0.9),
   }
-  evidence = _as_list(seed.get("evidence"))
   residual_evidence = [
     {
       "field": keyword["field"],
@@ -209,9 +382,23 @@ def build_mvp_catalog_item(seed: dict[str, Any]) -> dict[str, Any] | None:
       "confidence": keyword["confidence"],
       "sourceType": TITLE_INFERENCE_SOURCE,
       "matchedToken": keyword["matchedToken"],
+      "matchedStart": keyword.get("matchedStart"),
+      "matchedEnd": keyword.get("matchedEnd"),
+      "removedBrandSpans": keyword.get("removedBrandSpans") or [],
       "hardFilterEligible": False,
     }
     for keyword in residual_keywords
+  ]
+  sanitization_evidence = [
+    {
+      "field": "undertone",
+      "value": row.get("value"),
+      "sourceType": "brand_alias_sanitization",
+      "action": "removed_brand_only_title_inference",
+      "matchedToken": row.get("matchedToken"),
+      "hardFilterEligible": False,
+    }
+    for row in removed_undertone_evidence
   ]
   retail_presence = seed.get("retailPresence") if isinstance(seed.get("retailPresence"), dict) else {}
   catalog_item = {
@@ -248,8 +435,8 @@ def build_mvp_catalog_item(seed: dict[str, Any]) -> dict[str, Any] | None:
     "brandOrigin": seed.get("brandOrigin") if isinstance(seed.get("brandOrigin"), dict) else {},
     "attributeConfidence": confidence,
     "hardFilterEligible": hard_filter_eligible,
-    "evidence": evidence + residual_evidence,
-    "evidenceSourceTypes": _evidence_source_types(evidence + residual_evidence),
+    "evidence": evidence + residual_evidence + sanitization_evidence,
+    "evidenceSourceTypes": _evidence_source_types(evidence + residual_evidence + sanitization_evidence),
     "qualityFlags": _quality_flags(product_name),
     "palette": _palette_for_item(
       {
@@ -262,6 +449,8 @@ def build_mvp_catalog_item(seed: dict[str, Any]) -> dict[str, Any] | None:
     "schema": "AuradinMvpCatalogItem.20260703.v1",
     "updatedAt": _clean(seed.get("updatedAt")) or "2026-07-03T00:00:00+09:00",
   }
+  if isinstance(seed.get("offerRefreshEvidence"), dict):
+    catalog_item["offerRefreshEvidence"] = dict(seed["offerRefreshEvidence"])
   return catalog_item
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .brand_aliases import remove_brand_alias_spans
 from .text import clean_text
 
 
@@ -48,17 +49,38 @@ INTENSITY_TERMS: dict[str, tuple[str, ...]] = {
 
 UNDERTONE_TERMS: dict[str, tuple[str, ...]] = {
   "warm": ("웜톤", "봄웜", "가을웜", "warm", "coral", "orange", "peach", "brick"),
-  "cool": ("쿨톤", "여름쿨", "겨울쿨", "cool", "mauve", "berry", "plum"),
+  "cool": (
+    "그레이쉬쿨", "여름쿨", "겨울쿨", "쿨톤", "여쿨", "겨쿨", "앙쿨",
+    "cool", "mauve", "berry", "plum",
+  ),
   "neutral": ("뉴트럴", "neutral", "beige", "mlbb"),
 }
 
+# A few legacy catalog rows derived undertone from a shade family instead of an
+# explicit tone word. Keep that compatibility mapping in one place so rebuild
+# sanitization and snapshot validation make the same decision after the brand
+# span has been blanked.
+COLOR_FAMILY_UNDERTONE_SUPPORT: dict[str, str] = {
+  "coral": "warm",
+  "orange": "warm",
+  "peach": "warm",
+  "mauve": "cool",
+  "nude": "neutral",
+}
 
-def _find_first(text: str, term_map: dict[str, tuple[str, ...]]) -> str | None:
-  lowered = text.lower()
 
+def _find_first(text: str, term_map: dict[str, tuple[str, ...]]) -> tuple[str, str, int, int] | None:
   for value, terms in term_map.items():
-    if any(term.lower() in lowered for term in terms):
-      return value
+    for term in sorted(terms, key=lambda candidate: (-len(candidate), candidate.casefold())):
+      for match in re.finditer(re.escape(term), text, flags=re.IGNORECASE):
+        if term.casefold() == "cool":
+          before = text[match.start() - 1:match.start()]
+          after = text[match.end():match.end() + 1]
+          if (before and before.isascii() and before.isalpha()) or (
+            after and after.isascii() and after.isalpha()
+          ):
+            continue
+        return value, match.group(0), match.start(), match.end()
 
   return None
 
@@ -84,11 +106,14 @@ def infer_title_metadata(
   title: str,
   category: str,
   source_url: str,
+  brand: str | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, float]]:
   cleaned_title = clean_text(title)
+  searchable_title, removed_brand_spans = remove_brand_alias_spans(cleaned_title, brand)
   metadata: dict[str, Any] = {}
   evidence: list[dict[str, Any]] = []
   confidence: dict[str, float] = {}
+  evidence_spans: dict[str, dict[str, Any]] = {}
 
   shade_name = _extract_shade_name(cleaned_title)
 
@@ -104,11 +129,17 @@ def infer_title_metadata(
     ("texture", TEXTURE_TERMS, 0.55),
     ("intensity", INTENSITY_TERMS, 0.45),
   ):
-    value = _find_first(cleaned_title, term_map)
+    match = _find_first(searchable_title, term_map)
 
-    if value:
+    if match:
+      value, matched_token, start, end = match
       metadata[field] = value
       confidence[field] = score
+      evidence_spans[field] = {
+        "matchedToken": matched_token,
+        "matchedStart": start,
+        "matchedEnd": end,
+      }
 
   if category == "shadow" and "팔레트" in cleaned_title:
     metadata.setdefault("texture", "powder")
@@ -127,7 +158,52 @@ def infer_title_metadata(
         "sourceUrl": source_url,
         "rawLabel": "productName",
         "rawText": cleaned_title,
+        **evidence_spans.get(field, {}),
+        "removedBrandSpans": removed_brand_spans,
       },
     )
 
   return metadata, evidence, confidence
+
+
+def infer_brand_clean_undertone_evidence(
+  *,
+  title: str,
+  category: str,
+  brand: str | None,
+  source_url: str = "",
+) -> list[dict[str, Any]]:
+  """Return undertone support found outside the current product's brand span.
+
+  ``infer_title_metadata`` already blanks only the selected brand aliases while
+  preserving raw offsets. This adapter also preserves the legacy shade-family
+  inference (for example, Korean ``코랄`` -> warm and ``베이지`` ->
+  neutral) without changing the live extractor's public metadata contract.
+  """
+
+  metadata, evidence, _confidence = infer_title_metadata(
+    title=title,
+    category=category,
+    source_url=source_url,
+    brand=brand,
+  )
+  support: list[dict[str, Any]] = []
+  direct = next((row for row in evidence if row.get("field") == "undertone"), None)
+  if direct is not None:
+    support.append(dict(direct))
+
+  color_family = str(metadata.get("colorFamily") or "").strip()
+  derived_undertone = COLOR_FAMILY_UNDERTONE_SUPPORT.get(color_family)
+  if derived_undertone and not any(row.get("value") == derived_undertone for row in support):
+    color_evidence = next((row for row in evidence if row.get("field") == "colorFamily"), {})
+    support.append(
+      {
+        **dict(color_evidence),
+        "field": "undertone",
+        "value": derived_undertone,
+        "sourceType": "title_color_undertone_derived",
+        "derivedFrom": color_family,
+      },
+    )
+
+  return support

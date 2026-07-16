@@ -1,0 +1,12 @@
+{
+  "approvalConclusion": "approved",
+  "approvedBy": "위승철 (대리기입: claude — 사용자 명시 승인 지시, 세션 기록 2026-07-15)",
+  "evidence": {
+    "after": "reports/auradin/mvp_agent_eval_20260717_weights_v2.json (6/6 PASS)",
+    "before": "reports/auradin/mvp_agent_eval_20260717_weights_v2_before.json (6/6 PASS)",
+    "tests": "test_auradin_score_weights_v2.py 4건 + R2a cap 계약 무회귀"
+  },
+  "flag": "auradin_score_weights_v2 (기본 False — 활성화는 배포 환경변수 AURADIN_SCORE_WEIGHTS_V2=true로만; .env 기입 금지 — 로컬 테스트 결정론 오염)",
+  "reviewedAt": "2026-07-15T08:58:00+09:00",
+  "subject": "B8 가중치 v2 + R3 matchRate 재정의 — C급 baseline 재승인"
+}

@@ -28,10 +28,21 @@ from app.services.auradin_catalog.candidate_normalizer import normalize_naver_it
 from app.services.auradin_catalog.metadata_extractor import infer_title_metadata
 from app.services.bedrock_guardrails import build_bedrock_guardrail_invoke_kwargs
 
+from .attribute_evaluator import evaluate_attribute
+from .catalog_loader import get_catalog
 from .knowledge_chunk_builder import build_mvp_catalog_item
-from .ranking import ATTRIBUTE_LABELS, CATEGORY_LABELS, rank_candidates, to_result_product
-from .retrieval_service import matches_filter
-from .title_keyword_extractor import normalize_product_name
+from .quality_policy import is_quality_cut
+from .ranking import (
+  ATTRIBUTE_LABELS,
+  CATEGORY_LABELS,
+  conditional_mmr_picks,
+  guard_conflicting_candidates,
+  passes_floor,
+  price_delta_matches,
+  rank_candidates,
+  to_result_product,
+)
+from .retrieval_service import apply_hard_filters
 
 
 logger = logging.getLogger(__name__)
@@ -676,6 +687,7 @@ def _live_catalog_item(
     title=candidate["rawTitle"],
     category=candidate["category"],
     source_url=candidate["link"],
+    brand=candidate["brandNormalized"],
   )
   attributes = {
     field: metadata.get(field)
@@ -713,14 +725,9 @@ def _live_catalog_item(
   catalog_item = build_mvp_catalog_item(seed)
   if not catalog_item:
     return None
-  if catalog_item.get("qualityFlags"):
-    return None  # 세트/리필/미니 등 노이즈 컷
+  if is_quality_cut(catalog_item):
+    return None
   return catalog_item
-
-
-def _normalized_key(brand: Any, name: Any) -> str:
-  """정규화 상품명 키 — 같은 상품의 다른 리스팅(다른 id)을 이름으로 중복 판정(#7)."""
-  return normalize_product_name(_clean(name), _clean(brand))
 
 
 async def _enrich_live_discovery(
@@ -751,15 +758,12 @@ async def _enrich_live_discovery(
   queries = _discovery_queries(state, category)
   hard_filters = [f for f in state.get("hardFilters") or [] if _clean(f.get("mode")) != "soft"]
   existing_ids = {product.get("id") for product in products}
-  anchor_brand = _clean(products[0].get("brandName"))
 
   def _eligible(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    # §9: 명시 하드 조건은 라이브 후보에도 그대로 — 조용한 완화 금지.
-    return [
-      item
-      for item in items
-      if item["id"] not in existing_ids and all(matches_filter(item, f) for f in hard_filters)
-    ]
+    # §9/F11: 명시 하드는 라이브에도 동일하게 적용하되, 질문에서 온
+    # clarification hard는 known mismatch만 제거한다(unknown != negative).
+    unseen = [item for item in items if item["id"] not in existing_ids]
+    return apply_hard_filters(unseen, hard_filters)
 
   cache_key = " | ".join(queries)
   cache = state.get("liveDiscoveryCache") if isinstance(state.get("liveDiscoveryCache"), dict) else {}
@@ -804,29 +808,47 @@ async def _enrich_live_discovery(
     eligible,
     hard_filters=hard_filters,
     soft_preferences=state.get("softPreferences") or [],
+    score_weights_v2=bool(settings.auradin_score_weights_v2),
   )
-  # 발견 슬롯의 결: anchor와 다른 브랜드 우선 (안정 정렬 → 점수 순서 유지, 같은 브랜드는 뒤로).
-  ranked.sort(key=lambda r: _clean(r["item"].get("brandName")) == anchor_brand)
+  # A4/F18은 라이브 후보에도 동일한 순서로 적용한다. confirmed conflict는
+  # 재삽입하지 않고, semantic unavailable을 0으로 둔 상태에서 floor를 통과한
+  # 후보만 curated 결과를 seed로 한 조건부 MMR에 들어간다.
+  guarded = guard_conflicting_candidates(ranked)
+  floored = [
+    row
+    for row in guarded
+    if passes_floor(
+      row,
+      s_floor=float(settings.auradin_floor_semantic),
+      hard_filters=hard_filters,
+    )
+  ]
 
   # §5 발견 슬롯 = 라이브가 주력: 큐레이션 discovery는 라이브로 교체하고, Top3에 남는 빈 칸은
   # 라이브로 마저 채운다(빈 '비슷한 후보' 방지). 조건 완화가 아니라 빈 슬롯 채움 — 하드 필터는
   # _eligible에서 이미 강제. 이름 정규화 중복 제거(#7)로 히어로·후보와 같은 상품 리스팅을 배제.
   kept = [product for product in products if product.get("role") != "discovery"]
-  seen_names = {
-    _normalized_key(product.get("brandName"), product.get("productName")) for product in kept
-  }
   kept_roles = {product.get("role") for product in kept}
   missing_roles = [role for role in ("anchor", "diverse", "discovery") if role not in kept_roles]
 
+  catalog = get_catalog()
+  curated_seeds = [
+    {"item": item, "score": 1.0}
+    for product in kept
+    if (item := catalog.get(_clean(product.get("id")))) is not None
+  ]
+  ranked_picks = conditional_mmr_picks(
+    floored,
+    curated_seeds=curated_seeds,
+    lambda_=float(state.get("mmrLambda") or settings.auradin_mmr_lambda),
+    top_n=len(missing_roles),
+  )
+
   caveats = [LIVE_NAVER_CAVEAT, *(extra_caveats or [])]
   picks: list[dict[str, Any]] = []
-  for row in ranked:
+  for row in ranked_picks:
     if not missing_roles:
       break
-    name_key = _normalized_key(row["item"].get("brandName"), row["item"].get("productName"))
-    if name_key in seen_names:
-      continue  # 이름 중복 — 같은 상품의 다른 리스팅
-    seen_names.add(name_key)
     picks.append(
       to_result_product(
         row,
@@ -834,7 +856,7 @@ async def _enrich_live_discovery(
         role=missing_roles.pop(0),
         source="live_naver",
         hard_filters=hard_filters,
-        extra_caveats=caveats,
+        extra_caveats=[*caveats, *(row.get("guardCaveats") or [])],
       ),
     )
 
@@ -853,14 +875,115 @@ async def _enrich_live_discovery(
   }
 
 
+def _question_filter_evaluation(
+  item: dict[str, Any] | None,
+  filter_delta: dict[str, Any],
+) -> str:
+  """Return match|unknown|violation for one final card and question hard."""
+  if not item:
+    return "unknown"
+  attribute = _clean(filter_delta.get("attribute"))
+  if attribute == "priceKrw":
+    live_offer = item.get("liveOffer") if isinstance(item.get("liveOffer"), dict) else {}
+    price = int(live_offer.get("priceKrw") or 0)
+    if price <= 0:
+      return "unknown"
+    return "match" if price_delta_matches(filter_delta, price) else "violation"
+  expected = [
+    _clean(value)
+    for value in (filter_delta.get("values") or [])
+    if _clean(value)
+  ]
+  evaluation = evaluate_attribute(item, attribute, expected)
+  if evaluation["knowledge"] == "unknown":
+    return "unknown"
+  return "match" if evaluation["valueMatches"] else "violation"
+
+
+def _annotate_question_filter_coverage(state: dict[str, Any], result: dict[str, Any]) -> None:
+  """F11 final-card diagnostics and honest unknown caveats.
+
+  Coverage is computed after guard/floor/MMR/live replacement, so the chip and
+  per-card caveat describe the products that are actually served.
+  """
+  question_filters = [
+    filter_delta
+    for filter_delta in state.get("hardFilters") or []
+    if _clean(filter_delta.get("source")) == "question"
+    and _clean(filter_delta.get("mode")) != "soft"
+    and _clean(filter_delta.get("op")) != "noop"
+  ]
+  if not question_filters:
+    state.pop("questionFilterCoverage", None)
+    return
+
+  catalog = get_catalog()
+  raw_by_id = dict(catalog.by_id)
+  live_cache = state.get("liveDiscoveryCache")
+  if isinstance(live_cache, dict):
+    for item in live_cache.get("items") or []:
+      if isinstance(item, dict) and _clean(item.get("id")):
+        raw_by_id[_clean(item.get("id"))] = item
+
+  products = result.get("products") if isinstance(result.get("products"), list) else []
+  summaries: list[dict[str, Any]] = []
+  for filter_delta in question_filters:
+    cards: list[dict[str, str]] = []
+    for product in products:
+      product_id = _clean(product.get("id"))
+      status = _question_filter_evaluation(raw_by_id.get(product_id), filter_delta)
+      cards.append({"productId": product_id, "status": status})
+      if status == "unknown":
+        reason = product.setdefault("reason", {})
+        caveats = reason.setdefault("caveat", [])
+        if "정보 미상이라 제외하지 않음" not in caveats:
+          caveats.append("정보 미상이라 제외하지 않음")
+
+    statuses = {card["status"] for card in cards}
+    coverage = (
+      "violation"
+      if "violation" in statuses
+      else "partial_unknown"
+      if "unknown" in statuses
+      else "complete"
+    )
+    filter_delta["coverage"] = coverage
+    filter_delta["coverageCaveat"] = (
+      "정보 미상 포함" if coverage == "partial_unknown" else None
+    )
+    summaries.append(
+      {
+        "attribute": _clean(filter_delta.get("attribute")),
+        "coverage": coverage,
+        "cards": cards,
+      },
+    )
+
+  state["questionFilterCoverage"] = summaries
+  result["questionFilterCoverage"] = summaries
+  diagnostics = result.setdefault("diagnostics", {})
+  diagnostics["questionFilterCoverage"] = summaries
+
+
 # ---------------------------------------------------------------------------
 # 오케스트레이터 — *_persisted 레이어가 phase=="results"일 때 await
 # ---------------------------------------------------------------------------
 
 
-async def _enrich(state: dict[str, Any], settings: Settings, extra_caveats: list[str] | None) -> None:
+async def _enrich(
+  state: dict[str, Any],
+  settings: Settings,
+  extra_caveats: list[str] | None,
+  *,
+  allow_live_discovery: bool = True,
+) -> None:
   result = state["result"]
-  live_status = await _enrich_live_discovery(state, settings, result, extra_caveats)
+  if allow_live_discovery:
+    live_status = await _enrich_live_discovery(state, settings, result, extra_caveats)
+  else:
+    # B6 /similar cache-only 계약 — live discovery(재검색·세션 mmrLambda MMR)를 실행하지 않는다.
+    live_status = {"status": "skipped_policy"}
+  _annotate_question_filter_coverage(state, result)
   copy_status = await _enrich_reason_copy(state, settings, result.get("products") or [])
   result["enrichment"] = {"liveDiscovery": live_status, "reasonCopy": copy_status}
 
@@ -870,13 +993,14 @@ async def enrich_results(
   *,
   settings: Settings,
   extra_caveats: list[str] | None = None,
+  allow_live_discovery: bool = True,
 ) -> None:
   """결과를 가산 보강한다 — 실패·타임아웃이어도 서빙 결과는 항상 유효(§9, 턴키)."""
   if state.get("phase") != "results" or not isinstance(state.get("result"), dict):
     return
   try:
     await asyncio.wait_for(
-      _enrich(state, settings, extra_caveats),
+      _enrich(state, settings, extra_caveats, allow_live_discovery=allow_live_discovery),
       timeout=float(settings.auradin_enrich_timeout_seconds),
     )
   except TimeoutError:

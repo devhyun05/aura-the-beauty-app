@@ -22,6 +22,9 @@ from app.db.session import Database
 logger = logging.getLogger(__name__)
 
 PRODUCT_CATEGORIES = ("base", "shadow", "brow", "cheek", "lip", "liner")
+# R1: 저장 카탈로그(products.category enum)와 동기 — Auradin 브로우 찜의 like→liked 왕복이
+# 여기서 유실되면 안 된다. dev Shelf 추천 fan-out도 brow 포함 6종을 쓴다(별칭 유지).
+STORED_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES
 SEMANTIC_MATCH_WEIGHT = 0.35
 MAX_EMBEDDING_TEXT_LENGTH = 6000
 COLOR_MATCH_BONUS = 10
@@ -302,6 +305,14 @@ def _stable_external_id(prefix: str, value: str) -> str:
 
 def _normalize_category(category: str | None) -> str | None:
   if category in PRODUCT_CATEGORIES:
+    return category
+
+  return None
+
+
+def _normalize_stored_category(category: str | None) -> str | None:
+  # R1: DB에 저장된 행(찜 포함)은 brow까지 유효 — liked 목록에서 브로우가 유실되면 안 된다.
+  if category in STORED_PRODUCT_CATEGORIES:
     return category
 
   return None
@@ -724,7 +735,10 @@ def _score_product_match(
   profile: dict[str, Any] | None,
 ) -> tuple[int, list[str]]:
   if not profile:
-    return max(82, 96 - index * 2), []
+    # F7: 프로필(리포트)이 없으면 매치 근거가 없다 — 과거의 max(82, 96-2·index)는
+    # 근거 없는 82~96%를 "매치율"로 표시하는 과잉 확신이었다. 순위 기반임을 나타내는
+    # 보수적 값(프로필 기본치 74 미만에서 시작, 순위당 -2, 전역 하한 62)으로 낮춘다.
+    return max(62, 70 - index * 2), []
 
   targets = _target_terms(profile, category)
   matched_terms: list[str] = []
@@ -999,28 +1013,6 @@ def _semantic_reason(
   return f"{reason} {semantic_copy}"
 
 
-def _color_match_adjustment(
-  product: dict[str, Any],
-  profile: dict[str, Any],
-) -> int:
-  category = _normalize_category(product.get("category"))
-  specs = product.get("productInfo")
-  specs = specs if isinstance(specs, dict) else {}
-  target_colors = set(_target_terms(profile, category)["colors"])
-  product_colors = set(specs.get("colors") or [])
-
-  if not target_colors:
-    return 0
-
-  if product_colors & target_colors:
-    return COLOR_MATCH_BONUS
-
-  if category in {"lip", "cheek", "shadow", "base", "brow"}:
-    return -COLOR_MISMATCH_PENALTY
-
-  return 0
-
-
 async def _embed_text(
   client: Any,
   settings: Settings,
@@ -1086,14 +1078,9 @@ async def _apply_semantic_product_scores(
     rule_score = rule_score if isinstance(rule_score, int) else _parse_price(rule_score)
     next_product = {
       **product,
-      "matchRate": min(
-        99,
-        max(
-          62,
-          _combine_match_rate(rule_score or 74, semantic_rate) +
-          _color_match_adjustment(product, profile),
-        ),
-      ),
+      # F7: 색상 가산·감산은 rule 단계(_score_product_match)에서 이미 반영됐다 —
+      # 시맨틱 결합 뒤 _color_match_adjustment로 재가산하던 이중 가산은 제거.
+      "matchRate": _combine_match_rate(rule_score or 74, semantic_rate),
       "semanticScore": round(similarity, 4),
       "semanticMatchRate": semantic_rate,
       "reason": _semantic_reason(product, semantic_rate),
@@ -1438,12 +1425,19 @@ def _map_db_product(
   index: int,
   profile: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-  category = _normalize_category(row.get("category"))
+  category = _normalize_stored_category(row.get("category"))
 
   if not category:
     return None
 
   payload = row.get("product_payload") or {}
+  if isinstance(payload, str):
+    # asyncpg는 jsonb를 코덱 미설정 시 str로 돌려준다 — 실DB에서 liked 목록이
+    # 통째로 비던 원인(purchaseUrl을 못 읽어 전 행 drop). fake DB dict 테스트만 있었음.
+    try:
+      payload = json.loads(payload)
+    except (TypeError, ValueError):
+      payload = {}
   if not isinstance(payload, dict):
     payload = {}
 

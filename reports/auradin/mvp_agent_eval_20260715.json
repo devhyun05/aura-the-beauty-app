@@ -1,0 +1,2598 @@
+{
+  "artifactStatus": "invalid_never_activate",
+  "quarantineReason": "20260715 candidate was rejected as defective; this evaluation must never authorize activation",
+  "canonicalRunDate": "20260716",
+  "results": [
+    {
+      "askedAttributes": [
+        "channel"
+      ],
+      "errorCode": null,
+      "finalPhase": "results",
+      "firstPhase": "question",
+      "firstQuestionAttribute": "channel",
+      "logs": [
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "channel",
+              "confidence": 0.7325,
+              "displayLabel": "올리브영에서 바로 보기",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "oliveyoung"
+              ]
+            },
+            "optionId": "channel-oliveyoung",
+            "questionId": "q-1-channel"
+          },
+          "candidateCountAfter": 84,
+          "candidateCountBefore": 84,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7325,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 1.014389,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 6,
+                "naver": 18,
+                "oliveyoung": 16
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.961241,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "15k_25k": 16,
+                "under_15k": 24
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.768,
+              "coverage": 0.875,
+              "excludedReason": "dominant_value",
+              "gain": 0.43111,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "gel": 1,
+                "gloss": 1,
+                "powder": 1,
+                "tint": 32
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "finish",
+              "confidence": 0.5944,
+              "coverage": 0.9,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.231389,
+              "questionMode": "soft",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 31,
+                "velvet": 5
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.7,
+              "coverage": 0.075,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.046431,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "nude": 1,
+                "peach": 1,
+                "pink": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 40
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.0,
+          "selectedQuestion": {
+            "attribute": "channel",
+            "questionId": "q-1-channel",
+            "type": "hard"
+          },
+          "step": 1,
+          "topScoresAfter": [
+            0.82102,
+            0.82102,
+            0.82102
+          ],
+          "topScoresBefore": [
+            0.82102,
+            0.82102,
+            0.82102
+          ]
+        },
+        {
+          "candidateCountBefore": 84,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7325,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 1.014389,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 6,
+                "naver": 18,
+                "oliveyoung": 16
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.961241,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "15k_25k": 16,
+                "under_15k": 24
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.768,
+              "coverage": 0.875,
+              "excludedReason": "dominant_value",
+              "gain": 0.43111,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "gel": 1,
+                "gloss": 1,
+                "powder": 1,
+                "tint": 32
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "finish",
+              "confidence": 0.5944,
+              "coverage": 0.9,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.231389,
+              "questionMode": "soft",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 31,
+                "velvet": 5
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.7,
+              "coverage": 0.075,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.046431,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "nude": 1,
+                "peach": 1,
+                "pink": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 40
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalStatus": "ok",
+          "scoreGap": 0.0,
+          "step": 2,
+          "topScoresBefore": [
+            0.82102,
+            0.82102,
+            0.82102
+          ]
+        }
+      ],
+      "products": [
+        {
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-4c618f9db3100c1b",
+          "priceKrw": 17100
+        },
+        {
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-35845cb3e83f634a",
+          "priceKrw": 19800
+        },
+        {
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-eea9ead93440c922",
+          "priceKrw": 6300
+        }
+      ],
+      "prompt": "쿨톤인데 너무 진하지 않은 글로시 핑크 립 2만원 이하",
+      "questionCount": 1,
+      "recoverable": null
+    },
+    {
+      "askedAttributes": [
+        "category",
+        "priceTier",
+        "channel"
+      ],
+      "errorCode": null,
+      "finalPhase": "results",
+      "firstPhase": "question",
+      "firstQuestionAttribute": "category",
+      "logs": [
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "category",
+              "confidence": 0.9,
+              "displayLabel": "립",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "lip"
+              ]
+            },
+            "optionId": "category-lip",
+            "questionId": "q-1-category"
+          },
+          "candidateCountAfter": 117,
+          "candidateCountBefore": 618,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7279,
+              "coverage": 0.95,
+              "excludedReason": null,
+              "gain": 2.364724,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 1,
+                "cream": 1,
+                "cushion": 7,
+                "liner": 3,
+                "mascara": 2,
+                "palette": 3,
+                "pencil": 5,
+                "powder": 7,
+                "stick": 1,
+                "tint": 8
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 2.31413,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "base": 10,
+                "brow": 11,
+                "cheek": 4,
+                "liner": 4,
+                "lip": 7,
+                "shadow": 4
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 1.738879,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "15k_25k": 7,
+                "25k_40k": 9,
+                "over_40k": 4,
+                "under_15k": 20
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7213,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 0.976786,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 6,
+                "naver": 21,
+                "oliveyoung": 13
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "finish",
+              "confidence": 0.6019,
+              "coverage": 0.4,
+              "excludedReason": null,
+              "gain": 0.274165,
+              "questionMode": "soft",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 6,
+                "matte": 1,
+                "sheer": 1,
+                "velvet": 8
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.6823,
+              "coverage": 0.325,
+              "excludedReason": null,
+              "gain": 0.215073,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "black": 2,
+                "brown": 6,
+                "nude": 4,
+                "peach": 1
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.011801,
+          "selectedQuestion": {
+            "attribute": "category",
+            "questionId": "q-1-category",
+            "type": "hard"
+          },
+          "step": 1,
+          "topScoresAfter": [
+            0.828494,
+            0.735795,
+            0.732872
+          ],
+          "topScoresBefore": [
+            0.654842,
+            0.643041,
+            0.64273
+          ]
+        },
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "displayLabel": "1만 5천원 이하",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "under_15k"
+              ]
+            },
+            "optionId": "priceTier-under_15k",
+            "questionId": "q-2-priceTier"
+          },
+          "candidateCountAfter": 58,
+          "candidateCountBefore": 117,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 1.255493,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "15k_25k": 11,
+                "25k_40k": 4,
+                "under_15k": 25
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.785,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 0.894263,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 9,
+                "naver": 4,
+                "oliveyoung": 27
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7703,
+              "coverage": 0.925,
+              "excludedReason": null,
+              "gain": 0.823133,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 2,
+                "gloss": 1,
+                "lipstick": 1,
+                "powder": 1,
+                "stick": 1,
+                "tint": 31
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6158,
+              "coverage": 0.775,
+              "excludedReason": null,
+              "gain": 0.67019,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 16,
+                "matte": 1,
+                "velvet": 14
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.64,
+              "coverage": 0.125,
+              "excludedReason": "low_soft_coverage",
+              "gain": 0.067939,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "coral": 2,
+                "nude": 2,
+                "plum": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 40
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.092698,
+          "selectedQuestion": {
+            "attribute": "priceTier",
+            "questionId": "q-2-priceTier",
+            "type": "hard"
+          },
+          "step": 2,
+          "topScoresAfter": [
+            0.73731,
+            0.737005,
+            0.736483
+          ],
+          "topScoresBefore": [
+            0.828494,
+            0.735795,
+            0.732872
+          ]
+        },
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "channel",
+              "confidence": 0.7363,
+              "displayLabel": "올리브영에서 바로 보기",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "oliveyoung"
+              ]
+            },
+            "optionId": "channel-oliveyoung",
+            "questionId": "q-3-channel"
+          },
+          "candidateCountAfter": 58,
+          "candidateCountBefore": 58,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7363,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 0.991837,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 5,
+                "naver": 17,
+                "oliveyoung": 18
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7703,
+              "coverage": 0.925,
+              "excludedReason": null,
+              "gain": 0.823133,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 2,
+                "gloss": 1,
+                "lipstick": 1,
+                "powder": 1,
+                "stick": 1,
+                "tint": 31
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6365,
+              "coverage": 0.775,
+              "excludedReason": null,
+              "gain": 0.746055,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 12,
+                "matte": 2,
+                "velvet": 17
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.62,
+              "coverage": 0.125,
+              "excludedReason": "low_soft_coverage",
+              "gain": 0.083114,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "coral": 1,
+                "nude": 2,
+                "pink": 1,
+                "plum": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 40
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 40
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.000305,
+          "selectedQuestion": {
+            "attribute": "channel",
+            "questionId": "q-3-channel",
+            "type": "hard"
+          },
+          "step": 3,
+          "topScoresAfter": [
+            0.736627,
+            0.736338,
+            0.735842
+          ],
+          "topScoresBefore": [
+            0.73731,
+            0.737005,
+            0.736483
+          ]
+        },
+        {
+          "candidateCountBefore": 58,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7363,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.991837,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 5,
+                "naver": 17,
+                "oliveyoung": 18
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7703,
+              "coverage": 0.925,
+              "excludedReason": null,
+              "gain": 0.823133,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 2,
+                "gloss": 1,
+                "lipstick": 1,
+                "powder": 1,
+                "stick": 1,
+                "tint": 31
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6365,
+              "coverage": 0.775,
+              "excludedReason": null,
+              "gain": 0.746055,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 12,
+                "matte": 2,
+                "velvet": 17
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.62,
+              "coverage": 0.125,
+              "excludedReason": "low_soft_coverage",
+              "gain": 0.083114,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "coral": 1,
+                "nude": 2,
+                "pink": 1,
+                "plum": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 40
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 40
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalStatus": "ok",
+          "scoreGap": 0.000289,
+          "step": 4,
+          "topScoresBefore": [
+            0.736627,
+            0.736338,
+            0.735842
+          ]
+        }
+      ],
+      "products": [
+        {
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-cd74ee5c27ab209e",
+          "priceKrw": 9900
+        },
+        {
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-7af6718710923048",
+          "priceKrw": 13770
+        },
+        {
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-4d5a49451311796c",
+          "priceKrw": 14340
+        }
+      ],
+      "prompt": "데일리로 쓸 만한 제품 추천해줘",
+      "questionCount": 3,
+      "recoverable": null
+    },
+    {
+      "askedAttributes": [
+        "priceTier",
+        "texture",
+        "finish"
+      ],
+      "errorCode": null,
+      "finalPhase": "results",
+      "firstPhase": "question",
+      "firstQuestionAttribute": "priceTier",
+      "logs": [
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "displayLabel": "1만 5천원 이하",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "under_15k"
+              ]
+            },
+            "optionId": "priceTier-under_15k",
+            "questionId": "q-1-priceTier"
+          },
+          "candidateCountAfter": 18,
+          "candidateCountBefore": 28,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 1.186136,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "15k_25k": 8,
+                "25k_40k": 2,
+                "under_15k": 18
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7648,
+              "coverage": 0.8929,
+              "excludedReason": null,
+              "gain": 0.931595,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 1,
+                "gloss": 1,
+                "lipstick": 1,
+                "powder": 1,
+                "stick": 1,
+                "tint": 20
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.615,
+              "coverage": 0.7857,
+              "excludedReason": null,
+              "gain": 0.700009,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 12,
+                "matte": 1,
+                "velvet": 9
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 28
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.8,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "oliveyoung": 28
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.575,
+              "coverage": 0.0714,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "nude": 2
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.002982,
+          "selectedQuestion": {
+            "attribute": "priceTier",
+            "questionId": "q-1-priceTier",
+            "type": "hard"
+          },
+          "step": 1,
+          "topScoresAfter": [
+            0.73781,
+            0.736627,
+            0.735842
+          ],
+          "topScoresBefore": [
+            0.738103,
+            0.735121,
+            0.732085
+          ]
+        },
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "texture",
+              "confidence": 0.7482,
+              "displayLabel": "틴트",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "tint"
+              ]
+            },
+            "optionId": "texture-tint",
+            "questionId": "q-2-texture"
+          },
+          "candidateCountAfter": 15,
+          "candidateCountBefore": 18,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7482,
+              "coverage": 0.9444,
+              "excludedReason": null,
+              "gain": 1.265242,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 1,
+                "gloss": 1,
+                "lipstick": 1,
+                "powder": 1,
+                "stick": 1,
+                "tint": 12
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6162,
+              "coverage": 0.8889,
+              "excludedReason": null,
+              "gain": 0.835985,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 8,
+                "matte": 1,
+                "velvet": 7
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 18
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 18
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.8,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "oliveyoung": 18
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.575,
+              "coverage": 0.1111,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "nude": 2
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.001183,
+          "selectedQuestion": {
+            "attribute": "texture",
+            "questionId": "q-2-texture",
+            "type": "hard"
+          },
+          "step": 2,
+          "topScoresAfter": [
+            0.740937,
+            0.73606,
+            0.7357
+          ],
+          "topScoresBefore": [
+            0.73781,
+            0.736627,
+            0.735842
+          ]
+        },
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "finish",
+              "confidence": 0.6114,
+              "displayLabel": "촉촉한 광택감",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "glossy"
+              ]
+            },
+            "optionId": "finish-glossy",
+            "questionId": "q-3-finish"
+          },
+          "candidateCountAfter": 8,
+          "candidateCountBefore": 15,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6114,
+              "coverage": 0.9333,
+              "excludedReason": null,
+              "gain": 0.887389,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 7,
+                "matte": 1,
+                "velvet": 6
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7371,
+              "coverage": 0.9333,
+              "excludedReason": "already_asked",
+              "gain": 0.58116,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "lipstick": 1,
+                "powder": 1,
+                "tint": 12
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 15
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 15
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.8,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "oliveyoung": 15
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.75,
+              "coverage": 0.0667,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "nude": 1
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.004876,
+          "selectedQuestion": {
+            "attribute": "finish",
+            "questionId": "q-3-finish",
+            "type": "hard"
+          },
+          "step": 3,
+          "topScoresAfter": [
+            0.735202,
+            0.735202,
+            0.724
+          ],
+          "topScoresBefore": [
+            0.740937,
+            0.73606,
+            0.7357
+          ]
+        },
+        {
+          "candidateCountBefore": 8,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "lip": 8
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 8
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "finish",
+              "confidence": 0.5229,
+              "coverage": 0.875,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 7
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7725,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "tint": 8
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.8,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "oliveyoung": 8
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.75,
+              "coverage": 0.125,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "nude": 1
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalStatus": "ok",
+          "scoreGap": 0.0,
+          "step": 4,
+          "topScoresBefore": [
+            0.735202,
+            0.735202,
+            0.724
+          ]
+        }
+      ],
+      "products": [
+        {
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-70b25b3d1039aabf",
+          "priceKrw": 7900
+        },
+        {
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-31db6cb5fc72ec1b",
+          "priceKrw": 10000
+        },
+        {
+          "category": "lip",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-c78f94b3bb19964a",
+          "priceKrw": 8800
+        }
+      ],
+      "prompt": "올리브영에서 살 수 있는 데일리 립",
+      "questionCount": 3,
+      "recoverable": null
+    },
+    {
+      "askedAttributes": [],
+      "errorCode": null,
+      "finalPhase": "results",
+      "firstPhase": "results",
+      "firstQuestionAttribute": null,
+      "logs": [
+        {
+          "candidateCountBefore": 113,
+          "earlyTermination": {
+            "gap": 0.0539,
+            "reason": "decisive_score_gap"
+          },
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 1.430937,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "15k_25k": 12,
+                "25k_40k": 4,
+                "over_40k": 1,
+                "under_15k": 23
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.77,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 1.071368,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 11,
+                "naver": 8,
+                "oliveyoung": 21
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "texture",
+              "confidence": 0.6353,
+              "coverage": 0.95,
+              "excludedReason": null,
+              "gain": 0.579831,
+              "questionMode": "soft",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 5,
+                "cushion": 1,
+                "liquid": 1,
+                "palette": 2,
+                "powder": 28,
+                "tint": 1
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "finish",
+              "confidence": 0.5941,
+              "coverage": 0.85,
+              "excludedReason": "dominant_value",
+              "gain": 0.279993,
+              "questionMode": "soft",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "glossy": 3,
+                "sheer": 2,
+                "velvet": 29
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.6767,
+              "coverage": 0.075,
+              "excludedReason": "low_soft_coverage",
+              "gain": 0.044884,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "mauve": 1,
+                "nude": 1,
+                "plum": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "cheek": 40
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalStatus": "ok",
+          "scoreGap": 0.0539,
+          "step": 1,
+          "topScoresBefore": [
+            0.7779,
+            0.724,
+            0.724
+          ]
+        }
+      ],
+      "products": [
+        {
+          "category": "cheek",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-8e751decfed67c85",
+          "priceKrw": 16570
+        },
+        {
+          "category": "cheek",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-ccf8c379fbce1162",
+          "priceKrw": 10900
+        },
+        {
+          "category": "cheek",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-b33c096db5d9a017",
+          "priceKrw": 27000
+        }
+      ],
+      "prompt": "면접용 자연스러운 블러셔, 너무 붉지 않게",
+      "questionCount": 0,
+      "recoverable": null
+    },
+    {
+      "askedAttributes": [
+        "priceTier",
+        "channel",
+        "texture"
+      ],
+      "errorCode": null,
+      "finalPhase": "results",
+      "firstPhase": "question",
+      "firstQuestionAttribute": "priceTier",
+      "logs": [
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "displayLabel": "1만 5천원 이하",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "under_15k"
+              ]
+            },
+            "optionId": "priceTier-under_15k",
+            "questionId": "q-1-priceTier"
+          },
+          "candidateCountAfter": 36,
+          "candidateCountBefore": 101,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 1.626391,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "15k_25k": 13,
+                "25k_40k": 8,
+                "over_40k": 1,
+                "under_15k": 18
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7497,
+              "coverage": 0.875,
+              "excludedReason": null,
+              "gain": 1.113852,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "palette": 21,
+                "pencil": 1,
+                "powder": 8,
+                "stick": 5
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7625,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 1.066458,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 9,
+                "naver": 10,
+                "oliveyoung": 21
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6582,
+              "coverage": 0.275,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.287177,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "sheer": 1,
+                "shimmer": 6,
+                "velvet": 4
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.715,
+              "coverage": 0.1,
+              "excludedReason": "low_soft_coverage",
+              "gain": 0.059846,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "brown": 1,
+                "coral": 2,
+                "peach": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "shadow": 40
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.008293,
+          "selectedQuestion": {
+            "attribute": "priceTier",
+            "questionId": "q-1-priceTier",
+            "type": "hard"
+          },
+          "step": 1,
+          "topScoresAfter": [
+            0.79716,
+            0.79702,
+            0.79702
+          ],
+          "topScoresBefore": [
+            0.805453,
+            0.79716,
+            0.79702
+          ]
+        },
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "channel",
+              "confidence": 0.7083,
+              "displayLabel": "올리브영에서 바로 보기",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "oliveyoung"
+              ]
+            },
+            "optionId": "channel-oliveyoung",
+            "questionId": "q-2-channel"
+          },
+          "candidateCountAfter": 36,
+          "candidateCountBefore": 36,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7083,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 0.874615,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 4,
+                "naver": 22,
+                "oliveyoung": 10
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "texture",
+              "confidence": 0.6615,
+              "coverage": 0.75,
+              "excludedReason": null,
+              "gain": 0.586563,
+              "questionMode": "soft",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "palette": 4,
+                "pencil": 1,
+                "powder": 16,
+                "stick": 5,
+                "tint": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6514,
+              "coverage": 0.1944,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.174623,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "matte": 1,
+                "sheer": 1,
+                "shimmer": 5
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "shadow": 36
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 36
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.75,
+              "coverage": 0.0278,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "peach": 1
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.00014,
+          "selectedQuestion": {
+            "attribute": "channel",
+            "questionId": "q-2-channel",
+            "type": "hard"
+          },
+          "step": 2,
+          "topScoresAfter": [
+            0.79716,
+            0.79702,
+            0.79702
+          ],
+          "topScoresBefore": [
+            0.79716,
+            0.79702,
+            0.79702
+          ]
+        },
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "texture",
+              "confidence": 0.6615,
+              "displayLabel": "파우더",
+              "locked": false,
+              "mode": "soft",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "powder"
+              ]
+            },
+            "optionId": "texture-powder",
+            "questionId": "q-3-texture"
+          },
+          "candidateCountAfter": 36,
+          "candidateCountBefore": 36,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7083,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.874615,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 4,
+                "naver": 22,
+                "oliveyoung": 10
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "texture",
+              "confidence": 0.6615,
+              "coverage": 0.75,
+              "excludedReason": null,
+              "gain": 0.586563,
+              "questionMode": "soft",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "palette": 4,
+                "pencil": 1,
+                "powder": 16,
+                "stick": 5,
+                "tint": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6514,
+              "coverage": 0.1944,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.174623,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "matte": 1,
+                "sheer": 1,
+                "shimmer": 5
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "shadow": 36
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 36
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.75,
+              "coverage": 0.0278,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "peach": 1
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.00014,
+          "selectedQuestion": {
+            "attribute": "texture",
+            "questionId": "q-3-texture",
+            "type": "soft"
+          },
+          "step": 3,
+          "topScoresAfter": [
+            0.811057,
+            0.81,
+            0.81
+          ],
+          "topScoresBefore": [
+            0.79716,
+            0.79702,
+            0.79702
+          ]
+        },
+        {
+          "candidateCountBefore": 36,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7083,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.874615,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 4,
+                "naver": 22,
+                "oliveyoung": 10
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "texture",
+              "confidence": 0.6615,
+              "coverage": 0.75,
+              "excludedReason": "already_asked",
+              "gain": 0.586563,
+              "questionMode": "soft",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "palette": 4,
+                "pencil": 1,
+                "powder": 16,
+                "stick": 5,
+                "tint": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "finish",
+              "confidence": 0.6514,
+              "coverage": 0.1944,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.174623,
+              "questionMode": "hard",
+              "uxPriority": 1.2,
+              "valueDistribution": {
+                "matte": 1,
+                "sheer": 1,
+                "shimmer": 5
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "shadow": 36
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 36
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.75,
+              "coverage": 0.0278,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "peach": 1
+              }
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalStatus": "ok",
+          "scoreGap": 0.001057,
+          "step": 4,
+          "topScoresBefore": [
+            0.811057,
+            0.81,
+            0.81
+          ]
+        }
+      ],
+      "products": [
+        {
+          "category": "shadow",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-22c78fdf656d3cd0",
+          "priceKrw": 13000
+        },
+        {
+          "category": "shadow",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-b4372141ee1ca9f5",
+          "priceKrw": 6000
+        },
+        {
+          "category": "shadow",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-2016d17d340f944f",
+          "priceKrw": 9120
+        }
+      ],
+      "prompt": "글리터 강한 아이섀도우 말고 은은한 쉬머",
+      "questionCount": 3,
+      "recoverable": null
+    },
+    {
+      "askedAttributes": [
+        "priceTier",
+        "channel",
+        "texture"
+      ],
+      "errorCode": null,
+      "finalPhase": "results",
+      "firstPhase": "question",
+      "firstQuestionAttribute": "priceTier",
+      "logs": [
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "displayLabel": "1만 5천원 이하",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "under_15k"
+              ]
+            },
+            "optionId": "priceTier-under_15k",
+            "questionId": "q-1-priceTier"
+          },
+          "candidateCountAfter": 61,
+          "candidateCountBefore": 96,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 1.357381,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "15k_25k": 7,
+                "25k_40k": 4,
+                "over_40k": 2,
+                "under_15k": 27
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "texture",
+              "confidence": 0.7023,
+              "coverage": 0.975,
+              "excludedReason": null,
+              "gain": 1.15098,
+              "questionMode": "hard",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 1,
+                "mascara": 12,
+                "pencil": 22,
+                "powder": 4
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.695,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 0.742566,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 3,
+                "naver": 28,
+                "oliveyoung": 9
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.667,
+              "coverage": 0.25,
+              "excludedReason": null,
+              "gain": 0.126244,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "brown": 7,
+                "burgundy": 1,
+                "nude": 1,
+                "pink": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "brow": 40
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "finish",
+              "confidence": 0.0,
+              "coverage": 0.0,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 1.2,
+              "valueDistribution": {}
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.000109,
+          "selectedQuestion": {
+            "attribute": "priceTier",
+            "questionId": "q-1-priceTier",
+            "type": "hard"
+          },
+          "step": 1,
+          "topScoresAfter": [
+            0.770867,
+            0.751588,
+            0.747591
+          ],
+          "topScoresBefore": [
+            0.766297,
+            0.766188,
+            0.749094
+          ]
+        },
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "channel",
+              "confidence": 0.7175,
+              "displayLabel": "올리브영에서 바로 보기",
+              "locked": false,
+              "mode": "hard",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "oliveyoung"
+              ]
+            },
+            "optionId": "channel-oliveyoung",
+            "questionId": "q-2-channel"
+          },
+          "candidateCountAfter": 61,
+          "candidateCountBefore": 61,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.7175,
+              "coverage": 1.0,
+              "excludedReason": null,
+              "gain": 0.911105,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 4,
+                "naver": 22,
+                "oliveyoung": 14
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "texture",
+              "confidence": 0.6727,
+              "coverage": 0.75,
+              "excludedReason": null,
+              "gain": 0.549092,
+              "questionMode": "soft",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 1,
+                "mascara": 15,
+                "pencil": 11,
+                "powder": 3
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.6713,
+              "coverage": 0.2,
+              "excludedReason": "low_soft_coverage",
+              "gain": 0.116023,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "brown": 5,
+                "burgundy": 1,
+                "nude": 1,
+                "pink": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "brow": 40
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 40
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "finish",
+              "confidence": 0.0,
+              "coverage": 0.0,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 1.2,
+              "valueDistribution": {}
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.019279,
+          "selectedQuestion": {
+            "attribute": "channel",
+            "questionId": "q-2-channel",
+            "type": "hard"
+          },
+          "step": 2,
+          "topScoresAfter": [
+            0.765937,
+            0.746526,
+            0.743262
+          ],
+          "topScoresBefore": [
+            0.770867,
+            0.751588,
+            0.747591
+          ]
+        },
+        {
+          "answer": {
+            "filterDelta": {
+              "attribute": "texture",
+              "confidence": 0.6667,
+              "displayLabel": "파우더",
+              "locked": false,
+              "mode": "soft",
+              "op": "eq",
+              "source": "question",
+              "values": [
+                "powder"
+              ]
+            },
+            "optionId": "texture-powder",
+            "questionId": "q-3-texture"
+          },
+          "candidateCountAfter": 61,
+          "candidateCountBefore": 61,
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.725,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.968134,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 5,
+                "naver": 20,
+                "oliveyoung": 15
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "texture",
+              "confidence": 0.6667,
+              "coverage": 0.75,
+              "excludedReason": null,
+              "gain": 0.54817,
+              "questionMode": "soft",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 1,
+                "mascara": 14,
+                "pencil": 12,
+                "powder": 3
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.67,
+              "coverage": 0.225,
+              "excludedReason": "low_soft_coverage",
+              "gain": 0.121687,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "brown": 6,
+                "burgundy": 1,
+                "nude": 1,
+                "pink": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "brow": 40
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 40
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "finish",
+              "confidence": 0.0,
+              "coverage": 0.0,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 1.2,
+              "valueDistribution": {}
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalBackendAfter": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalDegradedReasonAfter": null,
+          "retrievalStatus": "ok",
+          "retrievalStatusAfter": "ok",
+          "scoreGap": 0.019411,
+          "selectedQuestion": {
+            "attribute": "texture",
+            "questionId": "q-3-texture",
+            "type": "soft"
+          },
+          "step": 3,
+          "topScoresAfter": [
+            0.883052,
+            0.837803,
+            0.834
+          ],
+          "topScoresBefore": [
+            0.765937,
+            0.746526,
+            0.743262
+          ]
+        },
+        {
+          "candidateCountBefore": 61,
+          "earlyTermination": {
+            "gap": 0.045249,
+            "reason": "decisive_score_gap"
+          },
+          "proposedAttributes": [
+            {
+              "actionability": 1.0,
+              "attribute": "channel",
+              "confidence": 0.725,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.968134,
+              "questionMode": "hard",
+              "uxPriority": 0.95,
+              "valueDistribution": {
+                "department_store": 5,
+                "naver": 20,
+                "oliveyoung": 15
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "texture",
+              "confidence": 0.6667,
+              "coverage": 0.75,
+              "excludedReason": "already_asked",
+              "gain": 0.54817,
+              "questionMode": "soft",
+              "uxPriority": 1.15,
+              "valueDistribution": {
+                "balm": 1,
+                "mascara": 14,
+                "pencil": 12,
+                "powder": 3
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "colorFamily",
+              "confidence": 0.67,
+              "coverage": 0.225,
+              "excludedReason": "low_soft_coverage",
+              "gain": 0.121687,
+              "questionMode": "soft",
+              "uxPriority": 0.9,
+              "valueDistribution": {
+                "brown": 6,
+                "burgundy": 1,
+                "nude": 1,
+                "pink": 1
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "category",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "locked_by_prompt",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.05,
+              "valueDistribution": {
+                "brow": 40
+              }
+            },
+            {
+              "actionability": 1.0,
+              "attribute": "priceTier",
+              "confidence": 0.9,
+              "coverage": 1.0,
+              "excludedReason": "already_asked",
+              "gain": 0.0,
+              "questionMode": "hard",
+              "uxPriority": 1.1,
+              "valueDistribution": {
+                "under_15k": 40
+              }
+            },
+            {
+              "actionability": 0.62,
+              "attribute": "finish",
+              "confidence": 0.0,
+              "coverage": 0.0,
+              "excludedReason": "single_value",
+              "gain": 0.0,
+              "questionMode": "soft",
+              "uxPriority": 1.2,
+              "valueDistribution": {}
+            }
+          ],
+          "retrievalBackend": "embedding_file_hash",
+          "retrievalDegradedReason": null,
+          "retrievalStatus": "ok",
+          "scoreGap": 0.045249,
+          "step": 4,
+          "topScoresBefore": [
+            0.883052,
+            0.837803,
+            0.834
+          ]
+        }
+      ],
+      "products": [
+        {
+          "category": "brow",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-0d0175b841d07230",
+          "priceKrw": 9000
+        },
+        {
+          "category": "brow",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-9cfedba983db34a0",
+          "priceKrw": 13740
+        },
+        {
+          "category": "brow",
+          "hasImage": true,
+          "hasPurchase": true,
+          "id": "auradin-seed-e02289f5816c776e",
+          "priceKrw": 11700
+        }
+      ],
+      "prompt": "브로우 추천해줘",
+      "questionCount": 3,
+      "recoverable": null
+    }
+  ],
+  "snapshot": {
+    "catalogPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/catalog/catalog_items_mvp_20260715.jsonl",
+    "catalogSha256": "a1dd144206fd8a03b012afcbe38e6284d912882f5755913d6fcd93bc3afda110",
+    "chunksPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/knowledge/product_knowledge_chunks_mvp_20260715.jsonl",
+    "chunksSha256": "4abaf1898a887bf0cdddb3ef22984ecc87ccc32b3d0ba7196287057500828a52",
+    "degradedReason": null,
+    "retrievalBackend": "embedding_file_hash",
+    "retrievalBackends": [
+      "embedding_file_hash"
+    ],
+    "retrievalStatus": "ok",
+    "retrievalStatuses": [
+      "ok"
+    ],
+    "snapshotManifestPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/manifests/snapshot_20260715.json",
+    "snapshotManifestSha256": "585a12b3ee287480d0cd28ef1883fa8f69c1e7354cdff7b0abb2ae9356df241a",
+    "snapshotRunDate": "20260715",
+    "snapshotSource": "manifest_override",
+    "vectorPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/vector/product_knowledge_vector_index_mvp_20260715.json",
+    "vectorSha256": "c68ce3d326fc7076cf583ebf8f3a0848e3ebf56ee3d3e9e440a61541501b8bd0"
+  }
+}
