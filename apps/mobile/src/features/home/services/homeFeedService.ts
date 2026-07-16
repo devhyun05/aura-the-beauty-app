@@ -1,4 +1,5 @@
 import {
+  getPersonalizedRecommendations,
   getSeasonalRecommendations,
 } from '../../recommendation/services/productHubService';
 import type {CatalogProduct} from '../../recommendation/types';
@@ -18,11 +19,11 @@ export const emptyHomeFeedContent: HomeFeedContent = {
 const HOME_PRODUCT_LIMIT = 8;
 
 export async function getHomeFeedContent({
-  isAuthenticated: _isAuthenticated,
+  isAuthenticated,
 }: {
   isAuthenticated: boolean;
 }): Promise<HomeFeedContent> {
-  const productResult = await loadHomeProducts();
+  const productResult = await loadHomeProducts(isAuthenticated);
 
   return {
     productShelf: productResult.shelf,
@@ -76,10 +77,23 @@ function getEligibleProducts(
   }).slice(0, HOME_PRODUCT_LIMIT);
 }
 
-async function loadHomeProducts(): Promise<{
+async function loadHomeProducts(isAuthenticated: boolean): Promise<{
   products: CatalogProduct[];
   shelf: HomeProductShelf;
 }> {
+  if (isAuthenticated) {
+    try {
+      const personalized = await getPersonalizedRecommendations(HOME_PRODUCT_LIMIT);
+      const products = getEligibleProducts(personalized.items);
+
+      if (products.length > 0) {
+        return {products, shelf: 'personalized'};
+      }
+    } catch {
+      // Keep the approved product rail available through the public shelf.
+    }
+  }
+
   try {
     const seasonal = await getSeasonalRecommendations(undefined, HOME_PRODUCT_LIMIT);
     return {

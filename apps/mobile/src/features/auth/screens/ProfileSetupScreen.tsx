@@ -25,7 +25,7 @@ export type ProfileSetupFormValues = {
 
 
 type ProfileSetupScreenProps = {
-  onSubmit?: (values: ProfileSetupFormValues) => void;
+  onSubmit?: (values: ProfileSetupFormValues) => Promise<void> | void;
   user?: AuthUser | null;
 };
 
@@ -293,6 +293,8 @@ export function ProfileSetupScreen({onSubmit, user}: ProfileSetupScreenProps) {
   }));
   const [isCalendarSheetVisible, setIsCalendarSheetVisible] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(defaultBirthDateMonth));
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const normalizedValues = useMemo(() => normalizeFormValues(values), [values]);
   const calendarCells = useMemo(() => createCalendarCells(calendarMonth), [calendarMonth]);
@@ -348,12 +350,25 @@ export function ProfileSetupScreen({onSubmit, user}: ProfileSetupScreenProps) {
     closeCalendarSheet();
   };
 
-  const handleSubmit = () => {
-    if (!canSubmit) {
+  const handleSubmit = async () => {
+    if (!canSubmit || isSubmitting) {
       return;
     }
 
-    onSubmit?.(normalizedValues);
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      await onSubmit?.(normalizedValues);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : '정보를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.',
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -451,14 +466,27 @@ export function ProfileSetupScreen({onSubmit, user}: ProfileSetupScreenProps) {
         </FieldGroup>
       </YStack>
 
+      {submitError ? (
+        <Text accessibilityLiveRegion="polite" style={styles.submitError}>
+          {submitError}
+        </Text>
+      ) : null}
+
       <Pressable
         accessibilityLabel="정보 등록"
         accessibilityRole="button"
-        disabled={!canSubmit}
+        disabled={!canSubmit || isSubmitting}
         onPress={handleSubmit}
-        style={[styles.submitButton, !canSubmit ? styles.submitButtonDisabled : null]}>
-        <Text style={[styles.submitText, !canSubmit ? styles.submitTextDisabled : null]}>
-          정보 등록
+        style={[
+          styles.submitButton,
+          !canSubmit || isSubmitting ? styles.submitButtonDisabled : null,
+        ]}>
+        <Text
+          style={[
+            styles.submitText,
+            !canSubmit || isSubmitting ? styles.submitTextDisabled : null,
+          ]}>
+          {isSubmitting ? '등록 중...' : '정보 등록'}
         </Text>
       </Pressable>
 
@@ -748,6 +776,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
     borderColor: colors.border,
     borderWidth: 1,
+  },
+  submitError: {
+    color: colors.danger,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+    textAlign: 'center',
   },
   submitText: {
     color: colors.white,

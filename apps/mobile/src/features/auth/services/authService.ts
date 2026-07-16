@@ -645,6 +645,9 @@ export async function loginWithSocialProvider(
       provider,
     });
 
-    return session;
+    // A raw Cognito session does not contain the backend profile completion
+    // state. Continuing with it makes a temporary backend outage look like a
+    // brand-new account and incorrectly routes returning users to setup.
+    throw error;
   }
 }

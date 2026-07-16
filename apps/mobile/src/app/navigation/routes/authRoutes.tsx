@@ -171,41 +171,39 @@ export function ProfileSetupRouteScreen({navigation}: RootScreenProps<'ProfileSe
     }
   }, [isRestoringSession, navigation, session]);
 
-  const handleProfileSetupSubmit = (values: ProfileSetupFormValues) => {
+  const handleProfileSetupSubmit = async (values: ProfileSetupFormValues) => {
     if (!session) {
       navigation.replace('Login');
       return;
     }
 
-    void (async () => {
-      const currentProfile = await getUserProfile();
-      const profileSetupUser = getProfileSetupUser(session);
-      const nextProfile = {
-        ...currentProfile,
-        birthDate: values.birthDate,
+    const currentProfile = await getUserProfile();
+    const profileSetupUser = getProfileSetupUser(session);
+    const nextProfile = {
+      ...currentProfile,
+      birthDate: values.birthDate,
+      email: values.email,
+      gender: values.gender,
+      id: profileSetupUser.id,
+      name: values.name,
+      nickname: values.nickname,
+    };
+    const nextSession: AuthSession = {
+      ...session,
+      user: {
+        ...profileSetupUser,
         email: values.email,
-        gender: values.gender,
-        id: profileSetupUser.id,
         name: values.name,
         nickname: values.nickname,
-      };
-      const nextSession: AuthSession = {
-        ...session,
-        user: {
-          ...profileSetupUser,
-          email: values.email,
-          name: values.name,
-          nickname: values.nickname,
-          profileCompleted: true,
-        },
-      };
+        profileCompleted: true,
+      },
+    };
 
-      await updateUserProfile(nextProfile);
-      await markProfileSetupCompleted(nextSession.user);
-      await setSession(nextSession);
-      setShouldShowBeautyJourneyGuide(true);
-      navigation.replace('MainTabs', {screen: 'HomeTab'});
-    })();
+    await updateUserProfile(nextProfile);
+    await markProfileSetupCompleted(nextSession.user);
+    await setSession(nextSession);
+    setShouldShowBeautyJourneyGuide(true);
+    navigation.replace('MainTabs', {screen: 'HomeTab'});
   };
 
   if (isRestoringSession || !session) {
