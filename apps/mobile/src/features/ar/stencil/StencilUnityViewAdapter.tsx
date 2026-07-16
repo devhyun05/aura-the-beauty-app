@@ -43,8 +43,15 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
       try {
         const parsed = JSON.parse(message) as {type?: string};
         if (parsed.type === 'ready' || parsed.type === 'unity_initialized') {
-          this.activateStencilRuntime();
+          if (this.didReceiveReady) {
+            return;
+          }
+
+          // Mark ready before activation. SetStencilActive(true) synchronously
+          // emits another ready event, so activating first recursively re-enters
+          // this handler and floods the bridge.
           this.reportReady(message);
+          this.activateStencilRuntime();
           return;
         }
       } catch {

@@ -96,6 +96,12 @@ namespace ARMakeup.Face
             var renderer = gameObject.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
             _material = material;
+
+            // The embedded AURA scene can activate the makeup graph before the
+            // first delayed camera frame reaches Present(). Initialise the
+            // coordinate map from the default camera aspect immediately so
+            // face vertices never go through a 0 / 0 viewport transform.
+            RebuildMapping();
         }
 
         Material _material;
@@ -265,6 +271,7 @@ namespace ARMakeup.Face
         /// </summary>
         public Vector2 ImageToViewport(Vector2 imageUV)
         {
+            EnsureMapping();
             if (FaceWarpField.Instance != null)
             {
                 var warped = FaceWarpField.Instance.Forward(imageUV);
@@ -280,8 +287,25 @@ namespace ARMakeup.Face
         /// BrowWarp.WarpAndLiftDroopingTail처럼 최종 워프 공간에서 기하를 만든 경로만
         /// 사용한다. ImageToViewport를 호출하면 얼굴형 워프가 두 번 적용되므로 금지한다.
         /// </summary>
-        public Vector2 WarpedImageToViewport(Vector2 warpedImageUV) =>
-            ImageToViewportRaw(warpedImageUV);
+        public Vector2 WarpedImageToViewport(Vector2 warpedImageUV)
+        {
+            EnsureMapping();
+            return ImageToViewportRaw(warpedImageUV);
+        }
+
+        void EnsureMapping()
+        {
+            if (!float.IsNaN(_coverScale) && !float.IsInfinity(_coverScale)
+                && _coverScale > 1e-6f
+                && IsFinite(_screenUnits)
+                && Mathf.Abs(_screenUnits.x) > 1e-6f
+                && Mathf.Abs(_screenUnits.y) > 1e-6f)
+            {
+                return;
+            }
+
+            RebuildMapping();
+        }
 
         static bool IsFinite(Vector2 value) =>
             !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
