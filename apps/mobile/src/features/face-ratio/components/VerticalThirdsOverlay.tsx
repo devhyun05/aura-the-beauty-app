@@ -142,7 +142,13 @@ export function VerticalThirdsOverlay({
   debug?: boolean;
   result: FaceVerticalThirdsResult;
 }) {
-  const {G: glabella, H: hairline, Me: menton, Sn: subnasale} = result.keypoints;
+  const {G: glabella, H: measuredHairline, Me: menton, Sn: subnasale} =
+    result.keypoints;
+  const hairline =
+    result.measurementMode === 'full_vertical_thirds' &&
+    result.hairlineAnalysis.analysisEligible
+      ? measuredHairline
+      : null;
   const imageWidth = result.sourceImage.width;
   const imageHeight = result.sourceImage.height;
   const strokeWidth = getLineStroke(imageHeight);

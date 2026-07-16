@@ -28,6 +28,7 @@ import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {AppScreen} from '../../../shared/ui';
 import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 import {Face3DMetricGrid} from '../../face-3d/components/Face3DMetricGrid';
+import {isFace3DProfileAnalysisEligible} from '../../face-3d/services/face3DContract';
 import {
   FACE_GEOMETRY_METRIC_KEYS,
   type FaceGeometryMetric,
@@ -451,8 +452,11 @@ export function FaceAnalysisReportDetailScreen({
     (useSessionMeasurements ? verticalThirds : null) ??
     measurements?.faceVerticalThirds ??
     null;
-  const effectiveFace3d =
+  const candidateFace3d =
     (useSessionMeasurements ? face3d : null) ?? measurements?.face3d ?? null;
+  const effectiveFace3d = isFace3DProfileAnalysisEligible(candidateFace3d)
+    ? candidateFace3d
+    : null;
   const effectiveFaceGeometry2d =
     (useSessionMeasurements ? faceGeometry2d : null) ??
     measurements?.faceGeometry2d ??
@@ -656,11 +660,18 @@ export function FaceAnalysisReportDetailScreen({
           effectiveVerticalThirds.status === 'partial_success' ? (
             <ReportSection title={"얼굴 세로 비율"}>
               {effectiveVerticalThirds.sourceImage.uri ? (
-                <PhotoStage
-                  imageUri={effectiveVerticalThirds.sourceImage.uri}
-                  result={effectiveVerticalThirds}>
-                  <VerticalThirdsOverlay result={effectiveVerticalThirds} />
-                </PhotoStage>
+                <>
+                  <PhotoStage
+                    imageUri={effectiveVerticalThirds.sourceImage.uri}
+                    result={effectiveVerticalThirds}>
+                    <VerticalThirdsOverlay result={effectiveVerticalThirds} />
+                  </PhotoStage>
+                  {effectiveVerticalThirds.measurementMode === 'middle_lower_only' ? (
+                    <Text style={styles.sectionBlockedNotice}>
+                      헤어라인이 충분히 확인되지 않아 중안부와 하안부만 반영했어요.
+                    </Text>
+                  ) : null}
+                </>
               ) : (
                 // 복원 경로에서 보고서 이미지 URL 을 못 구한 경우(소스 미디어 삭제
                 // 등) 오버레이 대신 해석 요약을 표시한다 — 조용한 실패 금지.

@@ -14,6 +14,14 @@ const testPaths = [
   'features/face-3d/services/face3DSemanticCaptureContract.test.ts',
   'features/face-3d/services/face3DTier2PassThrough.test.ts',
   'features/face-analysis/services/faceAnalysisCaptureGuidance.test.ts',
+  'features/face-capture/services/unifiedFaceCaptureContract.test.ts',
+  'features/face-capture/services/unifiedFaceCaptureMode.test.ts',
+  'features/face-capture/services/unifiedFaceCaptureFlowState.test.ts',
+  'features/face-capture/services/unifiedFaceCaptureLifecycle.test.ts',
+  'features/face-capture/services/unifiedFaceCaptureDeferredCleanup.test.ts',
+  'features/face-capture/services/unifiedFaceCaptureTempImageCleanup.test.ts',
+  'features/face-capture/services/unifiedFaceCaptureDiagnostics.test.ts',
+  'features/face-capture/services/unifiedFaceCaptureNavigation.test.ts',
 ];
 
 const result = spawnSync(
@@ -25,6 +33,10 @@ const result = spawnSync(
     'commonjs',
     '--target',
     'ES2020',
+    '--types',
+    'node',
+    '--typeRoots',
+    join(repoRoot, 'apps/mobile/node_modules/@types'),
     '--strict',
     '--skipLibCheck',
     '--rootDir',

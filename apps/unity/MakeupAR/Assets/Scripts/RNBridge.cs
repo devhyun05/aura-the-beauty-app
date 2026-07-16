@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Collections;
 using System.IO;
+using ARMakeup.Face;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.XR.ARFoundation;
@@ -502,10 +503,13 @@ public sealed class RNBridge : MonoBehaviour
     }
 
     [SerializeField] private ARFaceManager faceManager;
+    [SerializeField] private ARCameraManager cameraManager;
     [SerializeField] private Material overlayMaterial;
     [SerializeField] private E7SynchronizedCaptureExporter referenceCaptureExporter;
     [SerializeField] private FaceTrackingStatusReporter statusReporter;
     [SerializeField] private Face3DSessionController face3DSessionController;
+    [SerializeField] private FaceCameraFrameBroker faceCameraFrameBroker;
+    [SerializeField] private UnifiedFaceCaptureController unifiedFaceCaptureController;
 
     private E3RegionMaskOverlay regionMaskOverlay;
     private readonly Dictionary<Renderer, bool> suppressedFaceRendererStates =
@@ -543,9 +547,11 @@ public sealed class RNBridge : MonoBehaviour
     private void Awake()
     {
         RefreshSceneReferences();
+        EnsureFaceCameraFrameBroker();
         EnsureRegionMaskOverlay();
         EnsureReferenceCaptureExporter();
         EnsureFace3DSessionController();
+        EnsureUnifiedFaceCaptureController();
         SetFaceRenderersSuppressed(true);
     }
 
@@ -1083,6 +1089,11 @@ public sealed class RNBridge : MonoBehaviour
         SendUnityEvent(json, "[Face3D]");
     }
 
+    public void SendUnifiedFaceCaptureEvent(string json)
+    {
+        SendUnityEvent(json, "[UnifiedFaceCapture]");
+    }
+
     public void SendE7MetricSampleEvent(string json)
     {
         SendUnityEvent(json, "[E7]");
@@ -1256,6 +1267,11 @@ public sealed class RNBridge : MonoBehaviour
             faceManager = FindFirstObjectByType<ARFaceManager>();
         }
 
+        if (cameraManager == null)
+        {
+            cameraManager = FindFirstObjectByType<ARCameraManager>();
+        }
+
         SubscribeGeneratedLipFaceManager();
 
         if (statusReporter == null)
@@ -1359,6 +1375,57 @@ public sealed class RNBridge : MonoBehaviour
         }
 
         face3DSessionController.Configure(faceManager, this);
+    }
+
+    private void EnsureFaceCameraFrameBroker()
+    {
+        RefreshSceneReferences();
+
+        if (faceCameraFrameBroker == null)
+        {
+            faceCameraFrameBroker = FaceCameraFrameBroker.Instance;
+        }
+
+        if (faceCameraFrameBroker == null && cameraManager != null)
+        {
+            faceCameraFrameBroker =
+                cameraManager.GetComponent<FaceCameraFrameBroker>();
+        }
+
+        if (faceCameraFrameBroker == null && cameraManager != null)
+        {
+            faceCameraFrameBroker =
+                cameraManager.gameObject.AddComponent<FaceCameraFrameBroker>();
+        }
+
+        if (faceCameraFrameBroker != null)
+        {
+            faceCameraFrameBroker.Configure(cameraManager);
+        }
+    }
+
+    private void EnsureUnifiedFaceCaptureController()
+    {
+        RefreshSceneReferences();
+        EnsureFaceCameraFrameBroker();
+
+        if (unifiedFaceCaptureController == null)
+        {
+            unifiedFaceCaptureController =
+                GetComponent<UnifiedFaceCaptureController>();
+        }
+
+        if (unifiedFaceCaptureController == null)
+        {
+            unifiedFaceCaptureController =
+                gameObject.AddComponent<UnifiedFaceCaptureController>();
+        }
+
+        unifiedFaceCaptureController.Configure(
+            faceManager,
+            cameraManager,
+            faceCameraFrameBroker,
+            this);
     }
 
     private void SetFaceRenderersSuppressed(bool suppressed)
