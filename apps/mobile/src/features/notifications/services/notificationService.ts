@@ -102,6 +102,28 @@ export async function registerForReportNotifications(): Promise<PushRegistration
   return {status: 'registered', expoPushToken};
 }
 
+export async function presentRealtimeAppNotification(
+  notification: AppNotification,
+): Promise<void> {
+  if (!(await requestNotificationPermission())) {
+    return;
+  }
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: notification.title,
+      body: notification.body,
+      sound: 'default',
+      data: {
+        ...notification.data,
+        notificationId: notification.id,
+        type: notification.notificationType,
+      },
+    },
+    trigger: null,
+  });
+}
+
 export async function unregisterCurrentPushDevice(): Promise<void> {
   const expoPushToken = await SecureStore.getItemAsync(PUSH_TOKEN_STORAGE_KEY);
   if (!expoPushToken) {
@@ -148,5 +170,15 @@ export async function markAppNotificationRead(
 
 export async function markAllAppNotificationsRead(): Promise<void> {
   await requestBackendJson('/notifications/read-all', {method: 'POST'});
+  notifyNotificationStateChanged();
+}
+
+export async function deleteAppNotification(
+  notificationId: string,
+): Promise<void> {
+  await requestBackendJson(
+    `/notifications/${encodeURIComponent(notificationId)}`,
+    {method: 'DELETE'},
+  );
   notifyNotificationStateChanged();
 }

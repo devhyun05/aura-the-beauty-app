@@ -5,8 +5,10 @@ import {useAuthSession} from '../../auth';
 import {
   markAppNotificationRead,
   notifyNotificationStateChanged,
+  presentRealtimeAppNotification,
   registerForReportNotifications,
 } from '../services/notificationService';
+import {connectNotificationRealtime} from '../services/notificationRealtimeService';
 import type {AppNotificationData} from '../types';
 
 
@@ -41,9 +43,10 @@ function readNotificationData(
 export function NotificationCoordinator({
   onOpenNotification,
 }: NotificationCoordinatorProps) {
-  const {isRestoringSession, session} = useAuthSession();
+  const {getAuthToken, isRestoringSession, session} = useAuthSession();
   const pendingResponseRef = useRef<Notifications.NotificationResponse | null>(null);
   const handledResponseIds = useRef(new Set<string>());
+  const realtimeNotificationIds = useRef(new Set<string>());
 
   const handleResponse = useCallback(
     (response: Notifications.NotificationResponse) => {
@@ -88,6 +91,47 @@ export function NotificationCoordinator({
         });
       });
   }, [isRestoringSession, session?.user.id]);
+
+  useEffect(() => {
+    if (isRestoringSession || !session) {
+      return;
+    }
+
+    const authToken = getAuthToken();
+    if (!authToken) {
+      return;
+    }
+
+    const client = connectNotificationRealtime({
+      authToken,
+      onEvent: event => {
+        if (event.type !== 'notification.created') {
+          return;
+        }
+
+        const {notification} = event;
+        notifyNotificationStateChanged();
+
+        if (realtimeNotificationIds.current.has(notification.id)) {
+          return;
+        }
+        realtimeNotificationIds.current.add(notification.id);
+        if (realtimeNotificationIds.current.size > 100) {
+          const oldestId = realtimeNotificationIds.current.values().next().value;
+          if (oldestId) {
+            realtimeNotificationIds.current.delete(oldestId);
+          }
+        }
+        void presentRealtimeAppNotification(notification).catch(error => {
+          console.info('[aura:notifications] realtime banner skipped', {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
+      },
+    });
+
+    return () => client.close();
+  }, [getAuthToken, isRestoringSession, session?.user.id]);
 
   useEffect(() => {
     const receivedSubscription = Notifications.addNotificationReceivedListener(() => {

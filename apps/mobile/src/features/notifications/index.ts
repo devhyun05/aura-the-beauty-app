@@ -10,6 +10,7 @@ export {
   markAllAppNotificationsRead,
   markAppNotificationRead,
   notifyNotificationStateChanged,
+  presentRealtimeAppNotification,
   registerForReportNotifications,
   subscribeNotificationStateChange,
   unregisterCurrentPushDevice,

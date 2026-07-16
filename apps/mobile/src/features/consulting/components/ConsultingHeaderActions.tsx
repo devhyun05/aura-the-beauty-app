@@ -42,55 +42,69 @@ export function ConsultingHeaderActions({
   });
   const [records, setRecords] = React.useState<readonly ConsultingRecord[]>([]);
 
-  const refreshUnreadState = React.useCallback(() => {
+  const refreshConsultingUnreadState = React.useCallback(() => {
     if (!getAuthToken()) {
       setRecords([]);
-      setUnreadState({messages: false, notifications: false});
+      setUnreadState(current => ({...current, messages: false}));
       return;
     }
 
-    void Promise.all([
-      getConsultingBookings(undefined, {force: true}).catch(() => []),
-      getUnreadAppNotificationCount().catch(() => 0),
-    ])
-      .then(async ([nextRecords, unreadNotificationCount]) => {
+    void getConsultingBookings(undefined, {force: true})
+      .catch(() => [])
+      .then(async nextRecords => {
         setRecords(nextRecords);
         const consultingUnreadState = await getConsultingUnreadState(nextRecords);
-        return {
-          messages: consultingUnreadState.messages,
-          notifications: unreadNotificationCount > 0,
-        };
+        return consultingUnreadState.messages;
       })
-      .then(setUnreadState);
+      .then(messages => {
+        setUnreadState(current => ({...current, messages}));
+      });
+  }, [getAuthToken]);
+
+  const refreshNotificationUnreadState = React.useCallback(() => {
+    if (!getAuthToken()) {
+      setUnreadState(current => ({...current, notifications: false}));
+      return;
+    }
+
+    void getUnreadAppNotificationCount()
+      .catch(() => 0)
+      .then(unreadNotificationCount => {
+        setUnreadState(current => ({
+          ...current,
+          notifications: unreadNotificationCount > 0,
+        }));
+      });
   }, [getAuthToken]);
 
   useConsultingBookingStatusSync({
     authToken: getAuthToken(),
-    onStatusChange: refreshUnreadState,
+    onStatusChange: refreshConsultingUnreadState,
     records,
   });
 
   React.useEffect(() => {
     const unsubscribeConsulting =
-      subscribeConsultingReadStateChange(refreshUnreadState);
+      subscribeConsultingReadStateChange(refreshConsultingUnreadState);
     const unsubscribeNotifications =
-      subscribeNotificationStateChange(refreshUnreadState);
+      subscribeNotificationStateChange(refreshNotificationUnreadState);
 
     return () => {
       unsubscribeConsulting();
       unsubscribeNotifications();
     };
-  }, [refreshUnreadState]);
+  }, [refreshConsultingUnreadState, refreshNotificationUnreadState]);
 
   useFocusEffect(
     React.useCallback(() => {
-      refreshUnreadState();
-      const refreshTimer = setInterval(refreshUnreadState, 30000);
+      refreshConsultingUnreadState();
+      refreshNotificationUnreadState();
+      const refreshTimer = setInterval(refreshConsultingUnreadState, 30000);
 
       return () => {
         clearInterval(refreshTimer);
       };
-    }, [refreshUnreadState]),
+    }, [refreshConsultingUnreadState, refreshNotificationUnreadState]),
   );
 
   return (

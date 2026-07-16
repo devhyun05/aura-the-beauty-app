@@ -1,12 +1,13 @@
 import {useCallback, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
-import {Pressable, StyleSheet, View as RNView} from 'react-native';
+import {Alert, Pressable, StyleSheet, View as RNView} from 'react-native';
 import {
   Bell,
   ChevronRight,
   MessageSquareText,
   ScanFace,
   Sparkles,
+  Trash2,
   WandSparkles,
 } from 'lucide-react-native';
 import {Text, View} from 'tamagui';
@@ -20,9 +21,11 @@ import {
   typography,
 } from '../../../shared/theme';
 import {
+  deleteAppNotification,
   getAppNotifications,
   markAllAppNotificationsRead,
   markAppNotificationRead,
+  subscribeNotificationStateChange,
 } from '../services/notificationService';
 import type {AppNotification, AppNotificationType} from '../types';
 
@@ -82,8 +85,10 @@ export function NotificationsScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const loadNotifications = useCallback(async () => {
-    setIsLoading(true);
+  const loadNotifications = useCallback(async (silent = false) => {
+    if (!silent) {
+      setIsLoading(true);
+    }
     setErrorMessage('');
 
     try {
@@ -97,13 +102,22 @@ export function NotificationsScreen({
         error instanceof Error ? error.message : '알림을 불러오지 못했어요.',
       );
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       void loadNotifications();
+      const unsubscribe = subscribeNotificationStateChange(() => {
+        void loadNotifications(true);
+      });
+
+      return () => {
+        unsubscribe();
+      };
     }, [loadNotifications]),
   );
 
@@ -115,6 +129,36 @@ export function NotificationsScreen({
       onPressNotification(notification);
     },
     [onPressNotification],
+  );
+
+  const handleDeleteNotification = useCallback(
+    (notification: AppNotification) => {
+      Alert.alert(
+        '알림 삭제',
+        '이 알림을 목록에서 삭제할까요?',
+        [
+          {text: '취소', style: 'cancel'},
+          {
+            text: '삭제',
+            style: 'destructive',
+            onPress: () => {
+              setNotifications(current =>
+                current.filter(item => item.id !== notification.id),
+              );
+              void deleteAppNotification(notification.id).catch(error => {
+                setErrorMessage(
+                  error instanceof Error
+                    ? error.message
+                    : '알림을 삭제하지 못했어요.',
+                );
+                void loadNotifications(true);
+              });
+            },
+          },
+        ],
+      );
+    },
+    [loadNotifications],
   );
 
   return (
@@ -163,6 +207,20 @@ export function NotificationsScreen({
                   {notification.body}
                 </Text>
               </RNView>
+              <Pressable
+                accessibilityLabel={`${notification.title} 알림 삭제`}
+                accessibilityRole="button"
+                hitSlop={10}
+                onPress={event => {
+                  event.stopPropagation();
+                  handleDeleteNotification(notification);
+                }}
+                style={({pressed}) => [
+                  styles.deleteButton,
+                  pressed ? styles.pressed : null,
+                ]}>
+                <Trash2 color={consultingColors.textSoft} size={18} />
+              </Pressable>
               <ChevronRight color={consultingColors.textSoft} size={18} />
             </Pressable>
           ))}
@@ -204,6 +262,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: 24,
     paddingVertical: 38,
+  },
+  deleteButton: {
+    alignItems: 'center',
+    borderRadius: consultingRadius.pill,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
   },
   emptyText: {
     color: consultingColors.textMuted,

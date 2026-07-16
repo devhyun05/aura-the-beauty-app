@@ -11,6 +11,7 @@ import httpx
 
 from app.core.settings import Settings
 from app.db.session import Database
+from app.services.notification_realtime import publish_notification_created
 
 
 logger = logging.getLogger(__name__)
@@ -296,7 +297,14 @@ async def create_and_send_notification(
       )
       values ($1, $2, $3, $4, $5::jsonb, $6)
       on conflict (user_id, dedupe_key) do nothing
-      returning id
+      returning
+        id,
+        user_id,
+        notification_type,
+        title,
+        body,
+        data,
+        created_at
       """,
       user_id,
       notification_type,
@@ -305,11 +313,19 @@ async def create_and_send_notification(
       json.dumps(data, ensure_ascii=False),
       dedupe_key,
     )
+    notification_created = notification is not None
 
     if notification is None:
       notification = await db.fetchrow(
         """
-        select id
+        select
+          id,
+          user_id,
+          notification_type,
+          title,
+          body,
+          data,
+          created_at
         from app_notifications
         where user_id = $1 and dedupe_key = $2
         """,
@@ -328,6 +344,15 @@ async def create_and_send_notification(
       """,
       notification["id"],
     )
+    if notification_created:
+      try:
+        await publish_notification_created(db, notification)
+      except Exception:  # noqa: BLE001 - remote push must still be attempted.
+        logger.warning(
+          "[aura:notifications] realtime-publish-failed notificationId=%s",
+          notification["id"],
+          exc_info=True,
+        )
     await _deliver_notification(db, settings, notification["id"])
   except Exception:  # noqa: BLE001 - notification delivery is fail-open.
     logger.warning(

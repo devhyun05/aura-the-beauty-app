@@ -1,7 +1,9 @@
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
 
+from app.api import notifications as notifications_api
 from app.core.settings import Settings
 from app.services.push_notifications import (
   create_and_send_notification,
@@ -25,7 +27,15 @@ class FakeNotificationDatabase:
     normalized_query = " ".join(query.split())
 
     if normalized_query.startswith("insert into app_notifications"):
-      return {"id": self.notification_id}
+      return {
+        "id": self.notification_id,
+        "user_id": self.user_id,
+        "notification_type": "analysis_report_completed",
+        "title": "얼굴 분석 보고서가 완성됐어요",
+        "body": "결과를 확인해 보세요.",
+        "data": {"reportId": str(self.report_id)},
+        "created_at": datetime.now(timezone.utc),
+      }
 
     if normalized_query.startswith("update notification_outbox"):
       return {"id": uuid4(), "attempts": 1}
@@ -76,6 +86,10 @@ async def test_report_notification_persists_when_push_is_disabled() -> None:
     for query in database.executed_queries
   )
   assert any(
+    query.startswith("select pg_notify")
+    for query in database.executed_queries
+  )
+  assert any(
     "set status = 'completed'" in query
     for query in database.executed_queries
   )
@@ -99,3 +113,39 @@ async def test_non_report_notification_is_skipped() -> None:
   )
 
   assert database.executed_queries == []
+
+
+class FakeDeleteNotificationDatabase:
+  def __init__(self) -> None:
+    self.deleted_notification_id = uuid4()
+    self.query_args: tuple | None = None
+
+  async def fetchrow(self, query: str, *args):
+    normalized_query = " ".join(query.split())
+    assert normalized_query.startswith("delete from app_notifications")
+    self.query_args = args
+    return {"id": self.deleted_notification_id}
+
+
+@pytest.mark.asyncio
+async def test_delete_notification_is_scoped_to_current_user(monkeypatch) -> None:
+  database = FakeDeleteNotificationDatabase()
+  user_id = uuid4()
+  notification_id = uuid4()
+
+  async def fake_ensure_user(db, auth):
+    assert db is database
+    return {"id": user_id}
+
+  monkeypatch.setattr(notifications_api, "ensure_user", fake_ensure_user)
+
+  response = await notifications_api.delete_notification(
+    notification_id,
+    auth=object(),
+    db=database,
+  )
+
+  assert response["data"]["deleted"] is True
+  assert database.query_args is not None
+  assert database.query_args[0] == notification_id
+  assert database.query_args[1] == user_id

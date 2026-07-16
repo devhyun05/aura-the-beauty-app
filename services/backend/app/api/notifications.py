@@ -1,14 +1,23 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
 from app.core.errors import AppError
 from app.core.responses import success
-from app.core.security import AuthContext, get_current_user
-from app.db.session import Database, require_database
+from app.core.security import (
+  AuthContext,
+  get_current_user,
+  verify_cognito_token,
+)
+from app.core.settings import Settings, get_settings
+from app.db.session import Database, database, require_database
 from app.schemas.notifications import (
   PushDeviceRegistration,
   PushDeviceUnregistration,
+)
+from app.services.notification_realtime import (
+  NotificationRealtimeConnection,
+  notification_realtime_manager,
 )
 from app.services.push_notifications import (
   REPORT_NOTIFICATION_TYPES,
@@ -18,6 +27,69 @@ from app.services.users import ensure_user
 
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
+
+
+def _extract_socket_token(websocket: WebSocket) -> str | None:
+  authorization = websocket.headers.get("authorization")
+  if authorization and authorization.lower().startswith("bearer "):
+    return authorization.split(" ", 1)[1].strip() or None
+
+  token = websocket.query_params.get("token")
+  return token.strip() if token else None
+
+
+async def _get_socket_auth_context(
+  websocket: WebSocket,
+  settings: Settings,
+) -> AuthContext | None:
+  if not settings.auth_required:
+    return AuthContext(
+      subject=settings.dev_user_sub,
+      provider="google",
+      email=settings.dev_user_email,
+      name=settings.dev_user_name,
+      claims={"token_use": "dev", "sub": settings.dev_user_sub},
+    )
+
+  token = _extract_socket_token(websocket)
+  if not token:
+    return None
+  return await verify_cognito_token(token, settings)
+
+
+@router.websocket("/ws")
+async def notification_socket(
+  websocket: WebSocket,
+  settings: Settings = Depends(get_settings),
+) -> None:
+  connection: NotificationRealtimeConnection | None = None
+  try:
+    auth = await _get_socket_auth_context(websocket, settings)
+    if auth is None or not database.is_connected:
+      await websocket.close(code=1008)
+      return
+
+    user = await ensure_user(database, auth)
+    connection = await notification_realtime_manager.connect(
+      websocket,
+      user_id=user["id"],
+    )
+
+    while True:
+      message = await websocket.receive_text()
+      if '"type":"ping"' in message.replace(" ", ""):
+        await notification_realtime_manager.send(
+          connection,
+          {"type": "pong"},
+        )
+  except WebSocketDisconnect:
+    pass
+  except Exception:
+    if connection is None:
+      await websocket.close(code=1008)
+  finally:
+    if connection is not None:
+      await notification_realtime_manager.disconnect(connection)
 
 
 @router.post("/devices")
@@ -183,3 +255,27 @@ async def mark_notification_read(
   if notification is None:
     raise AppError(404, "NOTIFICATION_NOT_FOUND", "Notification was not found.")
   return success({"notification": notification})
+
+
+@router.delete("/{notification_id}")
+async def delete_notification(
+  notification_id: UUID,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  notification = await db.fetchrow(
+    """
+    delete from app_notifications
+    where id = $1
+      and user_id = $2
+      and notification_type = any($3::text[])
+    returning id
+    """,
+    notification_id,
+    user["id"],
+    list(REPORT_NOTIFICATION_TYPES),
+  )
+  if notification is None:
+    raise AppError(404, "NOTIFICATION_NOT_FOUND", "Notification was not found.")
+  return success({"deleted": True})
