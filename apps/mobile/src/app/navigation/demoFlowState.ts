@@ -2,6 +2,7 @@ import type {MakeupFeedbackPhotoSelection} from '../../features/makeup-feedback'
 import {createMockMakeupFeedback} from '../../features/makeup-feedback/mocks/makeupFeedback.mock';
 import {getReferenceMakeupExtractionDataSync} from '../../features/reference-makeup-extraction/services/makeupExtractionService';
 import type {MakeupLookPreview} from '../../shared/types/profile';
+import {INITIAL_UNIFIED_FACE_CAPTURE_FLOW_STATE} from '../../features/face-capture/services/unifiedFaceCaptureFlowState';
 import {
   DEFAULT_FLOATING_ACTION_IDS,
   DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
@@ -41,6 +42,7 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
     selectedFaceAnalysisReport: null,
     selectedFaceCapture: null,
     selectedFaceCaptureGreenlight: null,
+    unifiedFaceCaptureFlow: INITIAL_UNIFIED_FACE_CAPTURE_FLOW_STATE,
     selectedFaceGeometry2d: null,
     selectedFaceVerticalThirds: null,
     selectedHairCapture: null,

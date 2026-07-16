@@ -114,6 +114,8 @@ public static class MakeupARValidationSetup
         EnsureSwiftCompatibilityLinks(project, targetGuid);
 
         project.AddFrameworkToProject(targetGuid, "ARKit.framework", false);
+        project.AddFrameworkToProject(targetGuid, "CoreImage.framework", false);
+        project.AddFrameworkToProject(targetGuid, "ImageIO.framework", false);
         project.AddFrameworkToProject(targetGuid, "CoreLocation.framework", false);
         project.AddFrameworkToProject(targetGuid, "MetalPerformanceShaders.framework", false);
         project.AddFrameworkToProject(targetGuid, "RoomPlan.framework", true);

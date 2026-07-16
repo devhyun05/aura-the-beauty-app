@@ -7,6 +7,7 @@ export type FaceVerticalThirdsStatus =
 export type VerticalThirdsKeypointProvider =
   | 'mediapipe'
   | 'mediapipe_forehead_approx'
+  | 'mediapipe_hairline_boundary'
   | 'apple_semantic_matte'
   | 'face_parsing';
 
@@ -44,6 +45,22 @@ export type VerticalThirdsRatio = {
   warnings: string[];
 };
 
+export type FaceVerticalThirdsMeasurementMode =
+  | 'full_vertical_thirds'
+  | 'middle_lower_only';
+
+export type FaceVerticalThirdsHairlineOutcome =
+  | 'detected_high_confidence'
+  | 'detected_low_confidence'
+  | 'omitted';
+
+export type FaceVerticalThirdsHairlineAnalysis = {
+  analysisEligible: boolean;
+  confidence: number | null;
+  outcome: FaceVerticalThirdsHairlineOutcome;
+  provider: VerticalThirdsKeypointProvider | null;
+};
+
 export type VerticalThirdsDominantPart =
   | 'upper'
   | 'middle'
@@ -69,6 +86,13 @@ export type FaceVerticalThirdsSemanticMattes = {
 
 export type FaceVerticalThirdsInput = {
   captureId: string;
+  capturedHairline?: {
+    analysisEligible: boolean;
+    confidence: number;
+    method: string;
+    normalizedPoint: {x: number; y: number};
+    provider: VerticalThirdsKeypointProvider;
+  };
   createdAt: string;
   debugArtifacts?: boolean;
   imageUri: string;
@@ -105,12 +129,14 @@ export type FaceVerticalThirdsResult = {
   };
   captureId: string;
   createdAt: string;
+  hairlineAnalysis: FaceVerticalThirdsHairlineAnalysis;
   interpretation: {
     dominantPart?: VerticalThirdsDominantPart;
     summary: string;
     title: string;
   };
   keypoints: VerticalThirdsKeypointMap;
+  measurementMode: FaceVerticalThirdsMeasurementMode;
   // 얼굴 세로/가로 길이 비율 (상단 게이지용). 측정 불가 시 undefined.
   faceLength?: FaceVerticalThirdsLength;
   // 촬영 후 roll 좌표 보정 결과 (H/G/Sn/Me 계산 전 적용). optional — 스키마 v1 유지.
