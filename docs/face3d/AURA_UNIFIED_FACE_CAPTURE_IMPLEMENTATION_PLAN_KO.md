@@ -61,7 +61,7 @@ PR 준비 기준: 2026-07-16 재조회에서 `origin/dev = 3247a164`로 6개 커
 | `FaceVerticalThirdsScreen`이 MediaPipe H를 계산에서 버린다 | 표현 교정 후 수용 | 계산에서 버리지는 않지만 Apple provider만 “감지됨”으로 표시한다. provider 중립 표시로 수정한다. |
 | H가 없어도 현재 partial 결과가 `dominantPart`와 성공 요약을 만들 수 있다 | 독립 확인, 추가 반영 | H가 없으면 3분할 우세 판정은 `unknown`으로 고정하고, 별도 중안부:하안부 2구간 결과만 표시·직렬화한다. |
 | hard gate의 escape 조건이 본문·완료 정의·테스트에서 서로 다르다 | 문제는 수용, 해법은 교체 | 헤어라인이 셔터를 잠그지 않으므로 escape·8초·안내 3회 계약을 모두 삭제한다. |
-| segmentation의 의복 class로 가림 원인을 세분해야 한다 | 기각 | 셔터 차단이 없고 재촬영도 선택 사항이므로 의복 종류를 추정할 제품 이득보다 오분류 위험이 크다. 구현 후보는 `likely_occluded`·`unknown`을 생산하며, `environment_issue`는 low-light·motion 입력을 연결한 뒤 사용할 확장 계약으로 남긴다. |
+| segmentation class로 가림 원인을 세분해야 한다 | 기각 | 셔터 차단이 없고 재촬영도 선택 사항이므로 세부 가림 유형을 추정할 제품 이득보다 오분류 위험이 크다. 구현 후보는 `likely_occluded`·`unknown`을 생산하며, `environment_issue`는 low-light·motion 입력을 연결한 뒤 사용할 확장 계약으로 남긴다. |
 | `not_applicable`을 낮은 ROI와 구분하고 해부학 상태를 세분해야 한다 | 문제는 수용, 상태 추론은 기각 | 초기 ROI 위쪽을 한 번 확장해 실제 경계를 다시 찾되, 영상만으로 탈모 유형이나 H의 존재 여부를 추정하지 않는다. 끝내 H가 없으면 모두 `omitted`다. |
 | `unobservable`에는 근사값을 허용하고 `not_applicable`만 생략해야 한다 | 기각 | 현재 idx-10은 실제 헤어라인 검출이 아니며 평균 회귀 편향을 만든다. 실패 원인과 무관하게 실제 H가 없으면 권위 있는 상안부 계산과 AI 입력에서 제외한다. |
 | 검증 하위군을 명시적 6개로 사전 등록해야 한다 | 수용 | 서로 겹칠 수 있는 6개 하위군, 최소 표본 수, 고정된 검증 지표를 Phase -1에 명시한다. |
