@@ -330,11 +330,15 @@ namespace Aura.Face3D
                     nameof(aggregate));
             }
 
+            bool isSingleFrame = string.Equals(
+                policy.SampleMode,
+                UnifiedFaceCaptureContract.SampleModeSingleFrame,
+                StringComparison.Ordinal);
             HashSet<string> normalizedWarnings = new HashSet<string>(
                 aggregate.Warnings,
                 StringComparer.Ordinal);
             normalizedWarnings.Remove("target_frame_count_not_reached");
-            if (policy.SampleMode == UnifiedFaceCaptureContract.SampleModeSingleFrame)
+            if (isSingleFrame)
             {
                 normalizedWarnings.Add("single_frame_unaggregated");
             }
@@ -347,9 +351,56 @@ namespace Aura.Face3D
             sortedWarnings.Sort(StringComparer.Ordinal);
             return new Face3DProfileV2(
                 policy,
-                aggregate,
+                isSingleFrame
+                    ? WithoutAggregationMetadata(aggregate)
+                    : aggregate,
                 captureWindowMs,
                 sortedWarnings);
+        }
+
+        private static Face3DProfile WithoutAggregationMetadata(
+            Face3DProfile aggregate)
+        {
+            return new Face3DProfile(
+                aggregate.TopologyFingerprint,
+                aggregate.ValidFrameCount,
+                aggregate.TargetFrameCount,
+                aggregate.Warnings,
+                new Face3DProfileMetrics(
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.NoseTipProjection),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.ChinProjection),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.UpperLipToELine),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.LowerLipToELine),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.CentralProjectionScore),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.NoseLength),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.NasalBridgeStraightness),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.NasalAxisDeviation),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.AlarWidth),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.MalarProjectionLeft),
+                    WithoutAggregationMetadata(
+                        aggregate.Metrics.MalarProjectionRight)));
+        }
+
+        private static Face3DProfileMetric WithoutAggregationMetadata(
+            Face3DProfileMetric metric)
+        {
+            return metric == null
+                ? null
+                : new Face3DProfileMetric(
+                    metric.Value,
+                    0.0f,
+                    metric.ValidFrameCount,
+                    0.0f);
         }
 
         public string ToCanonicalJson()
@@ -464,17 +515,76 @@ namespace Aura.Face3D
             }
             json.Append(']');
             json.Append(",\"metrics\":{");
-            AppendMetric(json, Face3DContract.NoseTipProjection, profile.Metrics.NoseTipProjection, true);
-            AppendMetric(json, Face3DContract.ChinProjection, profile.Metrics.ChinProjection, false);
-            AppendMetric(json, Face3DContract.UpperLipToELine, profile.Metrics.UpperLipToELine, false);
-            AppendMetric(json, Face3DContract.LowerLipToELine, profile.Metrics.LowerLipToELine, false);
-            AppendMetric(json, Face3DContract.CentralProjectionScore, profile.Metrics.CentralProjectionScore, false);
-            AppendMetric(json, Face3DContract.NoseLength, profile.Metrics.NoseLength, false);
-            AppendMetric(json, Face3DContract.NasalBridgeStraightness, profile.Metrics.NasalBridgeStraightness, false);
-            AppendMetric(json, Face3DContract.NasalAxisDeviation, profile.Metrics.NasalAxisDeviation, false);
-            AppendMetric(json, Face3DContract.AlarWidth, profile.Metrics.AlarWidth, false);
-            AppendMetric(json, Face3DContract.MalarProjectionLeft, profile.Metrics.MalarProjectionLeft, false);
-            AppendMetric(json, Face3DContract.MalarProjectionRight, profile.Metrics.MalarProjectionRight, false);
+            bool hasAggregationStatistics = !string.Equals(
+                profile.Aggregation,
+                UnifiedFaceCaptureContract.AggregationNone,
+                StringComparison.Ordinal);
+            AppendMetric(
+                json,
+                Face3DContract.NoseTipProjection,
+                profile.Metrics.NoseTipProjection,
+                true,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.ChinProjection,
+                profile.Metrics.ChinProjection,
+                false,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.UpperLipToELine,
+                profile.Metrics.UpperLipToELine,
+                false,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.LowerLipToELine,
+                profile.Metrics.LowerLipToELine,
+                false,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.CentralProjectionScore,
+                profile.Metrics.CentralProjectionScore,
+                false,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.NoseLength,
+                profile.Metrics.NoseLength,
+                false,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.NasalBridgeStraightness,
+                profile.Metrics.NasalBridgeStraightness,
+                false,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.NasalAxisDeviation,
+                profile.Metrics.NasalAxisDeviation,
+                false,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.AlarWidth,
+                profile.Metrics.AlarWidth,
+                false,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.MalarProjectionLeft,
+                profile.Metrics.MalarProjectionLeft,
+                false,
+                hasAggregationStatistics);
+            AppendMetric(
+                json,
+                Face3DContract.MalarProjectionRight,
+                profile.Metrics.MalarProjectionRight,
+                false,
+                hasAggregationStatistics);
             json.Append("}}");
             return json.ToString();
         }
@@ -483,7 +593,8 @@ namespace Aura.Face3D
             StringBuilder json,
             string name,
             Face3DProfileMetric metric,
-            bool first)
+            bool first,
+            bool hasAggregationStatistics)
         {
             if (!first)
             {
@@ -504,7 +615,14 @@ namespace Aura.Face3D
             json.Append(",\"unit\":\"normalized\",\"validFrameCount\":");
             json.Append(metric != null ? metric.ValidFrameCount : 0);
             json.Append(",\"mad\":");
-            AppendNumberValue(json, metric != null ? metric.Mad : 0.0f);
+            if (hasAggregationStatistics)
+            {
+                AppendNumberValue(json, metric != null ? metric.Mad : 0.0f);
+            }
+            else
+            {
+                json.Append("null");
+            }
             json.Append('}');
         }
 

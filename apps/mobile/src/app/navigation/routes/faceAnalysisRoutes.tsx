@@ -23,7 +23,10 @@ import {UnifiedFaceCaptureScreen} from '../../../features/face-capture/screens/U
 import {buildUnifiedFaceCaptureRequest} from '../../../features/face-capture/services/unifiedFaceCaptureContract';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {isUnifiedFaceCaptureEnabled} from '../../../features/face-capture/services/unifiedFaceCaptureMode';
-import {shouldUseUnifiedFaceCaptureRoute} from '../../../features/face-capture/services/unifiedFaceCaptureNavigation';
+import {
+  mapUnifiedHairlineToVerticalThirds,
+  shouldUseUnifiedFaceCaptureRoute,
+} from '../../../features/face-capture/services/unifiedFaceCaptureNavigation';
 import {derivePersonalColorCorrectionStatus} from '../../../features/face-analysis/services/faceAnalysisMeasurements';
 import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
@@ -364,21 +367,7 @@ export function FaceAnalysisLoadingRouteScreen({
     const unifiedHairline =
       unifiedFaceCaptureFlow.committedCapture?.result.hairline;
     const capturedHairline: FaceVerticalThirdsInput['capturedHairline'] =
-      unifiedHairline &&
-      unifiedHairline.provider !== 'none' &&
-      unifiedHairline.confidence !== null &&
-      unifiedHairline.normalizedPoint
-        ? {
-            analysisEligible: unifiedHairline.analysisEligible,
-            confidence: unifiedHairline.confidence,
-            method: `unified_${unifiedHairline.provider}`,
-            normalizedPoint: unifiedHairline.normalizedPoint,
-            provider:
-              unifiedHairline.provider === 'mediapipe_selfie_multiclass'
-                ? 'mediapipe'
-                : 'apple_semantic_matte',
-          }
-        : undefined;
+      mapUnifiedHairlineToVerticalThirds(unifiedHairline);
 
     // still-analysis lease 의 resume+ready 뒤에 시작한다 (ready 실패여도 진행 —
     // 서비스가 자체 타임아웃/미탑재를 null 강등으로 흡수한다).

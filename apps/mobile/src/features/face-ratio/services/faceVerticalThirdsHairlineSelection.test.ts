@@ -25,6 +25,18 @@ expect(
   'A proxy H must never become a new authoritative or reference hairline.',
 );
 
+const genericMediaPipeLandmark = selectHairlineForAnalysis({
+  captured: {
+    analysisEligible: true,
+    keypoint: point('mediapipe', 0.99),
+  },
+});
+expect(
+  genericMediaPipeLandmark.keypoint === null &&
+    !genericMediaPipeLandmark.analysis.analysisEligible,
+  'A generic MediaPipe landmark must not be accepted as an actual hairline boundary.',
+);
+
 const appleHigh = selectHairlineForAnalysis({
   apple: {
     analysisEligible: true,
@@ -68,6 +80,20 @@ expect(
     !low.analysis.analysisEligible &&
     low.analysis.outcome === 'detected_low_confidence',
   'A low-confidence actual H may be retained only as analysis-ineligible reference data.',
+);
+
+const capturedLow = selectHairlineForAnalysis({
+  captured: {
+    analysisEligible: false,
+    keypoint: point('mediapipe_hairline_boundary', 0.58),
+  },
+});
+expect(
+  capturedLow.keypoint?.provider === 'mediapipe_hairline_boundary' &&
+    capturedLow.analysis.confidence === 0.58 &&
+    !capturedLow.analysis.analysisEligible &&
+    capturedLow.analysis.outcome === 'detected_low_confidence',
+  'A low-confidence captured boundary must be preserved without entering the full report.',
 );
 
 const upstreamIneligible = selectHairlineForAnalysis({

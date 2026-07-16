@@ -1,5 +1,13 @@
 import type {UnifiedFaceCaptureResult} from './unifiedFaceCaptureContract';
 
+export type UnifiedFaceCaptureVerticalThirdsHairline = {
+  analysisEligible: boolean;
+  confidence: number;
+  method: string;
+  normalizedPoint: {x: number; y: number};
+  provider: 'apple_semantic_matte' | 'mediapipe_hairline_boundary';
+};
+
 export function shouldUseUnifiedFaceCaptureRoute({
   featureEnabled,
   forceLegacyCapture,
@@ -23,6 +31,30 @@ export function getFaceAnalysisConfirmationDestination(
   hasUnifiedCapture: boolean,
 ): 'Face3DMeasurement' | 'FaceAnalysisLoading' {
   return hasUnifiedCapture ? 'FaceAnalysisLoading' : 'Face3DMeasurement';
+}
+
+export function mapUnifiedHairlineToVerticalThirds(
+  hairline: UnifiedFaceCaptureResult['hairline'] | undefined,
+): UnifiedFaceCaptureVerticalThirdsHairline | undefined {
+  if (
+    !hairline ||
+    hairline.provider === 'none' ||
+    hairline.confidence === null ||
+    !hairline.normalizedPoint
+  ) {
+    return undefined;
+  }
+
+  return {
+    analysisEligible: hairline.analysisEligible,
+    confidence: hairline.confidence,
+    method: `unified_${hairline.provider}`,
+    normalizedPoint: hairline.normalizedPoint,
+    provider:
+      hairline.provider === 'mediapipe_selfie_multiclass'
+        ? 'mediapipe_hairline_boundary'
+        : 'apple_semantic_matte',
+  };
 }
 
 export function getUnifiedHairlineConfirmationNotice(

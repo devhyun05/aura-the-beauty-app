@@ -1,6 +1,7 @@
 import {
   getFaceAnalysisConfirmationDestination,
   getUnifiedHairlineConfirmationNotice,
+  mapUnifiedHairlineToVerticalThirds,
   shouldUseUnifiedFaceCaptureRoute,
 } from './unifiedFaceCaptureNavigation';
 
@@ -83,4 +84,62 @@ expectEqual(
   }),
   null,
   'eligible H keeps the normal confirmation copy',
+);
+
+const mappedHighConfidenceHairline = mapUnifiedHairlineToVerticalThirds({
+  analysisEligible: true,
+  confidence: 0.82,
+  normalizedPoint: {x: 0.5, y: 0.15},
+  outcome: 'detected_high_confidence',
+  provider: 'mediapipe_selfie_multiclass',
+  retryRecommendation: {attemptCount: 0, recommended: false},
+});
+expectEqual(
+  mappedHighConfidenceHairline?.provider,
+  'mediapipe_hairline_boundary',
+  'unified MediaPipe boundary maps to an actual hairline provider',
+);
+expectEqual(
+  mappedHighConfidenceHairline?.analysisEligible,
+  true,
+  'high-confidence unified H remains eligible for the full report',
+);
+
+const mappedLowConfidenceHairline = mapUnifiedHairlineToVerticalThirds({
+  analysisEligible: false,
+  confidence: 0.58,
+  normalizedPoint: {x: 0.51, y: 0.14},
+  outcome: 'detected_low_confidence',
+  provider: 'mediapipe_selfie_multiclass',
+  retryRecommendation: {attemptCount: 0, recommended: false},
+});
+expectEqual(
+  mappedLowConfidenceHairline?.provider,
+  'mediapipe_hairline_boundary',
+  'low-confidence unified MediaPipe H keeps its actual boundary provider',
+);
+expectEqual(
+  mappedLowConfidenceHairline?.analysisEligible,
+  false,
+  'low-confidence unified H remains preserved but analysis-ineligible',
+);
+expectEqual(
+  mappedLowConfidenceHairline?.confidence,
+  0.58,
+  'low-confidence unified H preserves its measured confidence',
+);
+expectEqual(
+  mappedLowConfidenceHairline?.normalizedPoint.x,
+  0.51,
+  'low-confidence unified H preserves its measured x coordinate',
+);
+expectEqual(
+  mappedLowConfidenceHairline?.normalizedPoint.y,
+  0.14,
+  'low-confidence unified H preserves its measured y coordinate',
+);
+expectEqual(
+  mappedLowConfidenceHairline?.method,
+  'unified_mediapipe_selfie_multiclass',
+  'low-confidence unified H preserves its capture method',
 );

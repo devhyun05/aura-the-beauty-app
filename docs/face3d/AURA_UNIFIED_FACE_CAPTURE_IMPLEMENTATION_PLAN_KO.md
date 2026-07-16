@@ -2,7 +2,7 @@
 
 작성일: 2026-07-16 KST
 
-상태: 기능 플래그 후보 구현 완료 / 정적·EditMode·iOS UnityFramework 빌드 검증 완료 / 일반 품질 게이트 보강·실기기 런타임·보정 검증 대기
+상태: 기능 플래그 후보 구현 완료 / rebase 전 전체 EditMode·iOS UnityFramework 및 rebase 후 focused 계약 검증 완료 / 일반 품질 게이트 보강·실기기 런타임·보정 검증 대기
 
 기준 브랜치: `feature/WEI/얼굴분석보고서`
 
@@ -12,7 +12,7 @@
 
 원격 차이 영향: 이전 검토에서 확인한 19개 makeup-recommendation 계열 커밋은 구현 전에 fast-forward로 통합했다. 통합 뒤 계획 대상 파일의 기존 사용자 변경을 다시 확인하고 구현을 시작했다.
 
-PR 준비 기준: 2026-07-16 재조회에서 `origin/dev = 3247a164`로 6개 커밋이 추가돼 해당 기준으로 rebase했다. 구현 파일과 겹친 `FaceLandmarkSource.cs`는 broker 전환과 upstream의 `FaceLossGraceResults = 3` 얼굴 미검출 grace 로직을 함께 보존했으며, 최종 `HEAD...origin/dev = 1 0`이다.
+PR 준비 기준: 2026-07-16 재조회에서 `origin/dev = 3247a164`로 6개 커밋이 추가돼 해당 기준으로 rebase했다. 구현 파일과 겹친 `FaceLandmarkSource.cs`는 broker 전환과 upstream의 `FaceLossGraceResults = 3` 얼굴 미검출 grace 로직을 함께 보존했으며, rebase 직후 `HEAD...origin/dev = 1 0`이었다. PR 생성 전 원격 기준을 다시 조회한다.
 
 관련 문서:
 
@@ -81,12 +81,12 @@ PR 준비 기준: 2026-07-16 재조회에서 `origin/dev = 3247a164`로 6개 커
 | 이미지 1장 | 고정 anchor가 결정된 뒤에만 `ARFrame.capturedImage`를 upright·non-mirrored JPEG 한 장으로 인코딩한다. | native provider 및 iOS arm64 링크 심볼 |
 | 헤어라인 soft advisory | 400ms 시간 debounce를 적용한 `likely_visible`·`likely_occluded`·`unknown` 안내를 제공하며 hairline 상태는 셔터 greenlight에 포함하지 않는다. `environment_issue`는 TS 확장 계약만 있고 Unity producer는 아직 없다. | `HairlineVisibilityEstimator.cs`, controller gate |
 | 일반 촬영 품질 | native provider 가용성·단일 얼굴·pose gate는 구현했다. 기존 native 경로의 거리·노출·blur·400ms 카메라 안정성 평가는 아직 통합 후보에 이식하지 않았다. | `UnifiedFaceCaptureController.cs`, `faceCaptureGreenlight.ts` |
-| 촬영 후 H 정책 | 같은 camera token·1ms sensor timestamp의 segmentation만 사용한다. `>=0.70`만 H 의존 분석에 사용하고, `0.45–0.70`은 실제 좌표를 보존하되 보고서 계산에서는 제외하며, 미검출은 proxy 없이 생략한다. | Unity/TS 계약과 vertical-thirds selector |
+| 촬영 후 H 정책 | 같은 camera token·1ms sensor timestamp의 segmentation만 사용한다. `>=0.70`만 H 의존 분석에 사용하고, `0.45–0.70`은 실제 좌표를 보존하되 보고서 계산에서는 제외하며, 미검출은 proxy 없이 생략한다. 통합 결과의 `mediapipe_selfie_multiclass`는 보고서 입력에서 실제 경계 provider인 `mediapipe_hairline_boundary`로 변환한다. generic `mediapipe` landmark는 공식 H 후보에서 거부한다. | `unifiedFaceCaptureNavigation.ts`, vertical-thirds selector 및 계약 테스트 |
 | 재촬영 | 교정 가능한 첫 실패에서만 최대 한 번 권고하고, 같은 흐름의 수동 재촬영에서도 attempt 1을 유지한다. | `unifiedFaceCaptureFlowState.ts` 및 계약 테스트 |
 | 보고서 안전성 | H가 없으면 상안부·3분할 우세·H 의존 얼굴 길이와 AI 서사를 생략하고 중안부:하안부만 제공한다. | mobile/backend 측정·AI payload 회귀 테스트 |
 | 원자적 RN 흐름 | 이미지 업로드와 v2 Face3D 결과를 request 단위로 원자 커밋하고 stale/duplicate 완료를 거부한다. 통합 성공 시 별도 30프레임 측정 화면을 건너뛴다. | unified capture hook, flow state, routes |
 | 임시 파일 정리 | 미커밋 취소·fallback·commit 실패·확인 화면 재촬영/닫기에서 앱 cache 직속 통합 JPEG만 idempotent 삭제한다. | `unifiedFaceCaptureTempImageCleanup.ts` |
-| 프레임 비교 Lab | exact 1/3/5/8/12/30과 legacy 30을 명시적으로 구별하는 요청·파싱·Lab 선택 경로를 구현했다. 실제 기기 수집 성공은 아직 검증하지 않았다. 제품 후보는 5-of-8/500ms이고 기본 feature flag는 off다. | `FaceCaptureLabApp.tsx`, diagnostics contract |
+| 프레임 비교 Lab | exact 1/3/5/8/12/30과 legacy 30을 명시적으로 구별하는 요청·파싱·Lab 선택 경로를 구현했다. Exact 1은 공개 v2 profile factory에서 raw 1/1 값은 유지하되 metric confidence를 0으로 강제하고 JSON의 MAD를 `null`로 내보내며 `single_frame_unaggregated`를 남긴다. 실제 기기 수집 성공은 아직 검증하지 않았다. 제품 후보는 5-of-8/500ms이고 기본 feature flag는 off다. | `FaceCaptureLabApp.tsx`, `UnifiedFaceCaptureContracts.cs` 및 계약 테스트 |
 
 검증 완료:
 
@@ -97,7 +97,7 @@ PR 준비 기준: 2026-07-16 재조회에서 `origin/dev = 3247a164`로 6개 커
 - Unity iOS export와 arm64 `UnityFramework.framework` 빌드 성공
 - 빌드 산출물에 `AuraUnifiedFaceCapture_*` native 심볼 포함 확인
 
-위 자동 검증과 UnityFramework 빌드는 최신 `origin/dev` 6개 커밋을 rebase하기 전 구현 snapshot에서 통과했다. rebase 뒤 겹친 `FaceLandmarkSource.cs`는 broker 전환과 upstream face-loss grace를 정적으로 함께 확인했으며, 사용자 지시에 따라 통합 `HEAD`의 추가 빌드는 실행하지 않았다.
+전체 Unity Face3D EditMode `78/78`과 UnityFramework 빌드는 최신 `origin/dev` 6개 커밋을 rebase하기 전 구현 snapshot에서 통과했다. rebase 뒤 겹친 `FaceLandmarkSource.cs`는 broker 전환과 upstream face-loss grace를 정적으로 함께 확인했다. 이후 통합 `HEAD`의 provider mapping 회귀 테스트를 통과했고, Exact-1 변경은 Unity 생성 compiler response로 `Aura.Face3D` 제품·테스트 어셈블리를 컴파일한 뒤 관련 테스트 2개를 직접 실행해 통과했다. Unity headless EditMode 재실행은 licensing client 연결 실패로 시작되지 않았으며, 사용자 지시에 따라 통합 `HEAD`의 앱·UnityFramework 추가 빌드는 실행하지 않았다.
 
 아직 `UNVERIFIED`:
 
@@ -765,7 +765,8 @@ npm run typecheck --prefix apps/mobile
 - [ ] image↔segmentation token 일치는 H 채택 조건으로, image↔ARFace native sensor delta는 통합 캡처 조건으로 검사한다. segmentation token 불일치는 H를 생략하고, ARFace 상한 밖 표본은 제외한다. Unity 관찰 delta로 대체하지 않는다.
 - [x] 고정 `ARFrame.capturedImage`를 upright·non-mirrored JPEG로 앱 전용 임시 cache 디렉터리에 저장한다.
 - [ ] 각 유효 snapshot에 `Face3DMetricEvaluator.Evaluate()`를 호출하고 현재 median/MAD 집계기를 5/8 정책으로 실행한다.
-- [ ] 5~7개로 끝나면 `micro_burst_target_not_reached`, single mode에는 `single_frame_unaggregated`를 기록한다.
+- [ ] 5~7개로 끝나면 `micro_burst_target_not_reached`를 기록한다.
+- [x] Lab `single_frame`은 결과 계약에서 raw metric 1개를 유지하고 metric confidence를 0, MAD를 `null`로 내보내며 `single_frame_unaggregated`를 기록한다. 공개 v2 profile factory에서도 같은 규칙을 강제한다.
 - [ ] 5개 미만이면 image와 부분 프로필을 폐기하고 성공 이벤트를 보내지 않는다.
 - [ ] 성공 이벤트는 request당 정확히 한 번만 방출한다.
 
@@ -833,11 +834,11 @@ npm run typecheck --prefix apps/mobile
 - [ ] 사진 확인에서 통합 프로필이 있으면 `Face3DMeasurement`를 건너뛰고 `FaceAnalysisLoading`으로 이동한다.
 - [ ] legacy 프로필이 없으면 현재 `Face3DMeasurement` 경로를 유지한다.
 - [ ] `afterAnalysisRoute`를 확인→로딩까지 그대로 전달한다.
-- [ ] `FaceVerticalThirdsInput`에 통합 캡처가 계산한 normalized H, provider, confidence, `analysisEligible`을 전달하는 optional seam을 추가한다.
+- [x] `FaceVerticalThirdsInput`에 통합 캡처가 계산한 normalized H, provider, confidence, `analysisEligible`을 전달하는 optional seam을 추가하고, Unity의 `mediapipe_selfie_multiclass`를 공식 경계 provider `mediapipe_hairline_boundary`로 변환한다.
 - [ ] 결과에 `measurementMode: 'full_vertical_thirds' | 'middle_lower_only'`와 H 분석 적격성을 명시한다. 기존 schema를 유지하려면 additive optional field로 시작하고, 백엔드 저장·복원 테스트를 함께 추가한다.
 - [ ] Apple 실제 H와 통합 MediaPipe 실제 H의 선택 우선순위·confidence·H<G 검사를 순수 selector로 분리해 계약 테스트로 고정한다. 기존 idx-10 근사 H는 권위 있는 선택지에서 제거한다.
 - [x] 같은 저장 이미지에 Apple auxiliary semantic matte가 실제로 있으면 검증된 Apple H를 우선한다. auxiliary matte가 없는 통합 ARFrame 경로에서는 같은 broker token의 검증된 MediaPipe 실제 H만 사용한다. 제공되지 않은 Apple metadata를 재생성한 것처럼 취급하지 않는다.
-- [ ] 고신뢰 실제 H만 `analysisEligible: true`로 사용한다. 저신뢰 실제 H는 보정·참고 데이터로 보존할 수 있지만 검증 전에는 H 의존 계산과 AI 전달에서 제외한다.
+- [x] 현재 후보 임계값 기준 고신뢰 실제 H만 `analysisEligible: true`로 사용한다. 저신뢰 실제 H는 좌표·confidence를 보존하되 H 의존 계산과 AI 전달에서는 제외한다.
 - [ ] 유효 H가 없으면 `FaceVerticalThirdsMath`에 H를 null로 전달해 중안부:하안부 상대비만 만들고, `upper`, 3분할 `dominantPart`, H 의존 `faceLength`는 생성하지 않는다. `deriveDominantPart()`가 lower만 보고 3분할 균형·우세를 판정하지 않도록 바꾼다.
 - [ ] H가 없는 partial summary가 `상·중·하 비율이 고르다` 같은 3분할 문구를 만들지 않고, `중안부와 하안부만 비교했어요`라는 별도 2구간 서사를 사용하도록 테스트한다.
 - [ ] `faceVerticalThirdsAiPayload.ts`가 analysis-ineligible H, 상안부, H 의존 우세 판정·얼굴 길이를 직렬화하지 않는지 테스트한다.
