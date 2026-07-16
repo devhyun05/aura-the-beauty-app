@@ -372,6 +372,10 @@ type StencilARAppProps = {
   onBack?: () => void;
 };
 
+// The stencil source includes authoring/debug utilities that are useful while
+// developing the Unity scene but are not part of AURA's customer-facing AR UI.
+const SHOW_INTERNAL_AR_TOOLS = false;
+
 function App({ onBack }: StencilARAppProps) {
   return (
     <SafeAreaProvider>
@@ -381,14 +385,12 @@ function App({ onBack }: StencilARAppProps) {
 }
 
 function FilterScreen({ onBack }: StencilARAppProps) {
-  console.log('[RN] FilterScreen render');
   const insets = useSafeAreaInsets();
   const unityRef = useRef<UnityView | null>(null);
   const paramsRef = useRef<FilterParams>(BARE);
   const opacityRef = useRef(0.75); // 전역 메이크업 농도 (0~1) — 기본 75%
 
   const [unityReady, setUnityReady] = useState(false);
-  const [faceTracked, setFaceTracked] = useState(false);
   const [params, setParams] = useState<FilterParams>(BARE);
   // photoUri = 전체화면 미리보기(개발용 UV 템플릿 export 전용). 실제 촬영은
   // 미리보기 대신 화면 깜빡임(flashOpacity)만 준다.
@@ -2198,9 +2200,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
           // 아니라 전 편집 상태를 재방출해 재동기화(전역 농도·레이어·가이드·조명 등).
           resyncAll();
           break;
-        case 'faceTracked':
-          setFaceTracked(msg.tracked);
-          break;
         case 'fitHandles':
           // 온페이스 핏 핸들(A17) — 핏 패널 열림 동안 ~10Hz. eyeVp는 드래그 정규화용.
           fitHandlesEyeVpRef.current = msg.eyeVp || fitHandlesEyeVpRef.current;
@@ -2570,28 +2569,27 @@ function FilterScreen({ onBack }: StencilARAppProps) {
           </View>
         </View>
 
-        {/* 상태칩 — 반반 토글 바로 아래 중앙. 얼굴 인식되면 아예 숨긴다(로딩·미인식 때만). */}
-        {!faceTracked && (
+        {/* Unity가 준비되는 동안에만 표시한다. 얼굴 추적 안내는 카메라 화면을 계속
+            가리므로 준비 완료 뒤에는 얼굴 인식 여부와 무관하게 숨긴다. */}
+        {!unityReady && (
           <View
             style={[styles.statusRow, { top: insets.top + 50 }]}
             pointerEvents="box-none">
             <View
               style={[
                 styles.statusChip,
-                unityReady ? styles.statusWait : styles.statusLoading,
+                styles.statusLoading,
               ]}
               pointerEvents="none"
             >
-              <Text style={styles.statusText}>
-                {!unityReady ? 'Unity 로딩 중…' : '얼굴을 화면에 맞춰주세요'}
-              </Text>
+              <Text style={styles.statusText}>Unity 로딩 중…</Text>
             </View>
           </View>
         )}
 
         {/* 디버그 레일(좌측) — 실기기 캘리브레이션·디버그 토글. ⚙️로 여닫음(이전과 동일,
             위치만 좌측). */}
-        {settingsOpen && (
+        {SHOW_INTERNAL_AR_TOOLS && settingsOpen && (
           <View
             style={[styles.debugRail, { top: insets.top + 96 }]}
             pointerEvents="box-none">
@@ -2654,7 +2652,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
 
         {/* 룩 추출 진단(개발용, #1) — 측정치·최종농도 표시 + 게인 슬라이더 + WB 끄기 토글.
             settingsOpen(DEV) 하위 토글로 여닫음. 사용자 UI와 분리된 하단 디버그 오버레이. */}
-        {extractDiagOpen && (
+        {SHOW_INTERNAL_AR_TOOLS && extractDiagOpen && (
           <ExtractDiagPanel
             measurement={lastMeasurement}
             gain={extractGain}
@@ -2667,13 +2665,16 @@ function FilterScreen({ onBack }: StencilARAppProps) {
 
         {/* 룩 추출 원본 썸네일(#1, 검증용) — 좌상단. 탭하면 전체화면 확대해 추출색과 비교.
             추출을 한 번도 안 했으면(URI null) 미표시. 우측 도구 레일·하단 시트와 안 겹침. */}
-        <ExtractSourceThumb uri={extractSourceUri} topOffset={insets.top + 8} />
+        {SHOW_INTERNAL_AR_TOOLS && (
+          <ExtractSourceThumb uri={extractSourceUri} topOffset={insets.top + 8} />
+        )}
 
         {/* 도구 레일(우측) — 메이크업 조작과 독립인 분석/코치 도구 토글.
             #2 가이드·#6 대칭(이후 #4 조명 추가). 각 패널은 하단에 스택된다. */}
-        <View
-          style={[styles.toolRail, { top: insets.top + 8 }]}
-          pointerEvents="box-none">
+        {SHOW_INTERNAL_AR_TOOLS && (
+          <View
+            style={[styles.toolRail, { top: insets.top + 8 }]}
+            pointerEvents="box-none">
           {/* 개발자 설정(캘리브레이션·디버그) — 아이콘 대신 'DEV' 글씨. 아래로 도구 버튼. */}
           <TouchableOpacity
             style={[styles.toolBtn, settingsOpen && styles.toolBtnOn]}
@@ -2735,7 +2736,8 @@ function FilterScreen({ onBack }: StencilARAppProps) {
             <Icon name="scissors" size={19} />
             <Text style={styles.toolLabel}>헤어</Text>
           </TouchableOpacity>
-        </View>
+          </View>
+        )}
 
         {/* 온페이스 핏 핸들(A17) — 핏 패널 열림 동안 골드 점을 얼굴 위에 드래그.
             Unity=좌표만, 터치·기록=RN. 하단 패널보다 아래(z) 두어 패널이 가리게. */}
@@ -3183,7 +3185,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       {/* 스튜디오 허브(A18) — 저작·관리 풀시트. 핏 시트 만들기/관리(레일 패널은
           조정 전용), 에셋 카탈로그 진입, 제품 만들기(A12) 자리. */}
       <StudioHub
-        visible={studioOpen}
+        visible={SHOW_INTERNAL_AR_TOOLS && studioOpen}
         onClose={() => setStudioOpen(false)}
         sheets={fitSheets}
         mainId={mainFitId}

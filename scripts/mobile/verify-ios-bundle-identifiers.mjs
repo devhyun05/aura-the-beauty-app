@@ -9,39 +9,74 @@ const xcodeProjectPath = path.join(
   repositoryRoot,
   'apps/mobile/ios/AURA.xcodeproj/project.pbxproj',
 );
+const entitlementsPath = path.join(
+  repositoryRoot,
+  'apps/mobile/ios/AURA/AURA.entitlements',
+);
 
-const productionBundleId = 'com.aura.mobile';
-const developmentBundleId = 'com.aiarmakeupguides.mobile';
+const expectedBundleId = 'com.aurathebeautyapp.mobile';
+const expectedTeamId = 'BRA7W3G4QS';
 
-const [appJsonSource, xcodeProject] = await Promise.all([
+const [appJsonSource, xcodeProject, entitlements] = await Promise.all([
   readFile(appJsonPath, 'utf8'),
   readFile(xcodeProjectPath, 'utf8'),
+  readFile(entitlementsPath, 'utf8'),
 ]);
 
 const appConfig = JSON.parse(appJsonSource);
 const expoBundleId = appConfig?.expo?.ios?.bundleIdentifier;
 
-if (expoBundleId !== developmentBundleId) {
+if (expoBundleId !== expectedBundleId) {
   throw new Error(
-    `Expo development bundle identifier must be ${developmentBundleId}; received ${expoBundleId ?? 'undefined'}.`,
+    `Expo bundle identifier must be ${expectedBundleId}; received ${expoBundleId ?? 'undefined'}.`,
   );
+}
+
+if (appConfig?.expo?.ios?.appleTeamId !== expectedTeamId) {
+  throw new Error(
+    `Expo Apple team ID must be ${expectedTeamId}; received ${appConfig?.expo?.ios?.appleTeamId ?? 'undefined'}.`,
+  );
+}
+
+if (appConfig?.expo?.ios?.usesAppleSignIn !== true) {
+  throw new Error('Expo ios.usesAppleSignIn must be enabled.');
 }
 
 const configuredBundleIds = [
   ...xcodeProject.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g),
 ].map((match) => match[1]);
 
-const expectedBundleIds = [developmentBundleId, productionBundleId];
+const expectedBundleIds = [expectedBundleId, expectedBundleId];
 
 if (
   configuredBundleIds.length !== expectedBundleIds.length ||
   configuredBundleIds.some((bundleId, index) => bundleId !== expectedBundleIds[index])
 ) {
   throw new Error(
-    `Xcode bundle identifiers must be Debug=${developmentBundleId} and Release=${productionBundleId}; received ${configuredBundleIds.join(', ') || 'none'}.`,
+    `Xcode bundle identifiers must both be ${expectedBundleId}; received ${configuredBundleIds.join(', ') || 'none'}.`,
   );
 }
 
+const configuredTeamIds = [
+  ...xcodeProject.matchAll(/DEVELOPMENT_TEAM = ([^;]+);/g),
+].map((match) => match[1]);
+
+if (
+  configuredTeamIds.length !== 2 ||
+  configuredTeamIds.some((teamId) => teamId !== expectedTeamId)
+) {
+  throw new Error(
+    `Xcode development teams must both be ${expectedTeamId}; received ${configuredTeamIds.join(', ') || 'none'}.`,
+  );
+}
+
+if (
+  !entitlements.includes('<key>com.apple.developer.applesignin</key>') ||
+  !entitlements.includes('<string>Default</string>')
+) {
+  throw new Error('Sign in with Apple entitlement must be configured with Default access.');
+}
+
 console.log(
-  `iOS bundle identifiers verified: Debug=${developmentBundleId}, Release=${productionBundleId}.`,
+  `iOS Apple login identifiers verified: Bundle ID=${expectedBundleId}, Team ID=${expectedTeamId}.`,
 );

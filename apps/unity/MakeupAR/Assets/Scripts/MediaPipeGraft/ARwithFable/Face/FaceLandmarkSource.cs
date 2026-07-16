@@ -200,6 +200,12 @@ namespace ARMakeup.Face
         readonly Vector3[] _pinned = new Vector3[LandmarkCount]; // 결과 저장용(정지=필터/움직임=raw 블렌드)
         bool _filterPrimed;
         double _lastResultTimestampMs = -1.0;
+        // MediaPipe can miss an otherwise stable face for a single inference
+        // result. Turning every renderer off for that one miss produces a
+        // visible makeup flash. Hold the last filtered landmarks briefly, then
+        // hide normally when the loss is sustained.
+        const int FaceLossGraceResults = 3;
+        int _missingFaceResultStreak;
 
         // 정지=필터(부드럽게)/움직임=raw(완벽 고정) 블렌드.
         // raw 랜드마크는 "그 검출 프레임의 실제 얼굴 위치"라, 지연 재생 프레임에 raw를
@@ -346,8 +352,10 @@ namespace ARMakeup.Face
                         _intervalEmaMs = Mathf.Lerp((float)_intervalEmaMs, (float)interval, 0.1f);
                 }
 
+                var effectiveHasFace = _pendingHasFace;
                 if (_pendingHasFace)
                 {
+                    _missingFaceResultStreak = 0;
                     // 필터 dt는 도착 시각이 아니라 캡처 타임스탬프 간격 — 결과 도착
                     // 지터가 속도 추정에 섞이지 않는다.
                     var dt = _lastResultTimestampMs > 0
@@ -402,7 +410,13 @@ namespace ARMakeup.Face
                 }
                 else
                 {
-                    _filterPrimed = false; // 얼굴을 잃으면 다음 인식 때 필터 리셋
+                    _missingFaceResultStreak++;
+                    effectiveHasFace = _filterPrimed
+                        && _missingFaceResultStreak <= FaceLossGraceResults;
+                    if (!effectiveHasFace)
+                    {
+                        _filterPrimed = false; // 지속 상실 뒤 재인식할 때 필터 리셋
+                    }
                 }
 
                 _lastResultTimestampMs = _pendingTimestampMs;
@@ -411,8 +425,8 @@ namespace ARMakeup.Face
                 _resultHead = (_resultHead + 1) % _results.Length;
                 if (_resultCount < _results.Length) _resultCount++;
                 _results[_resultHead].timestampMs = _pendingTimestampMs;
-                _results[_resultHead].hasFace = _pendingHasFace;
-                if (_pendingHasFace)
+                _results[_resultHead].hasFace = effectiveHasFace;
+                if (effectiveHasFace)
                     Array.Copy(_pinned, _results[_resultHead].points, LandmarkCount);
             }
         }
@@ -919,6 +933,7 @@ namespace ARMakeup.Face
                 _resultHead = -1;            // 보간(브래킷) 히스토리 비움
                 _resultCount = 0;
                 _filterPrimed = false;       // One Euro 필터 — 다음 결과에서 재프라임
+                _missingFaceResultStreak = 0;
                 _lastResultTimestampMs = -1.0;
             }
 
