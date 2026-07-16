@@ -83,6 +83,8 @@ def build_worst_case_request_payload() -> dict:
       "captureId": "11111111-1111-1111-1111-111111111111",
       "createdAt": "2026-07-13T00:00:00.000Z",
       "faceLength": {"heightPx": 975.2, "ratio": 1.383, "widthPx": 705.1},
+      "faceLengthJudgment": {"band": {"hi": 1.4123, "lo": 1.3761}, "verdict": "borderline_wide"},
+      "judgmentVersion": "face-length-judgment/v2-provisional-20260717",
       "hairlineAnalysis": {
         "analysisEligible": True, "confidence": 0.82,
         "outcome": "detected_high_confidence", "provider": "apple_semantic_matte",
@@ -157,6 +159,8 @@ def build_worst_case_request_payload() -> dict:
       "displayRatio": {"lower": 1.08, "middle": 1.0, "upper": 0.97},
       "dominantPart": "middle",
       "faceLength": {"heightPx": 975.2, "ratio": 1.383, "widthPx": 705.1},
+      "faceLengthJudgment": {"band": {"hi": 1.4123, "lo": 1.3761}, "verdict": "borderline_wide"},
+      "judgmentVersion": "face-length-judgment/v2-provisional-20260717",
       "hairline": {
         "analysisEligible": True,
         "confidence": 0.82,

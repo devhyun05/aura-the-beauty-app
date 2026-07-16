@@ -223,9 +223,11 @@ def _normalize_vertical(
   judgment = _record(raw.get("faceLengthJudgment"))
   verdict = judgment.get("verdict")
   if isinstance(verdict, str) and verdict in {
-    "wide", "borderline_wide", "average", "borderline_long", "long",
+    "wide", "borderline_wide", "average", "borderline_long", "long", "indeterminate",
   }:
-    # indeterminate(판정 보류)는 정본으로 승격하지 않는다 — 키 미발행.
+    # indeterminate(판정 보류)도 발행한다(2차 리뷰 B-1): 키를 안 내면 서버
+    # 규칙이 스냅샷 부재(구 payload)로 오인해 레거시 임계로 단정을 복원한다
+    # — 모바일 "보류"가 서버 "긴 타원형"으로 뒤집히는 종단 불일치.
     output["verticalThirds.faceLengthVerdict"] = _camera_metric(
       value=verdict, confidence=confidence, source=MeasurementSource.PIXEL,
       shot=MeasurementShot.S1, unit="label", usable=full_vertical_usable, reason=reason,

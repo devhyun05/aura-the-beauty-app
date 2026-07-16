@@ -143,9 +143,11 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 - `middlePx = Sn.y − G.y` (기준, 항상 1.0으로 정규화)
 - `lowerPx = Me.y − Sn.y`, `upperPx = G.y − H.y` (헤어라인 없으면 null)
 - `displayRatio = { upper: upperPx/middlePx | null, middle: 1.0, lower: lowerPx/middlePx }`
-- **평균(이상) 기준선**: `상 1.0 : 중 1.0 : 하 0.8` — **앱이 정한 미적 기준**이며 고전적 1:1:1이 아님.
-- `dominantPart`(우세 부위) 판정: 편차 `> 0.08`이면 해당 부위가 길다/짧다로 해석, 한국어 요약 문구 생성
-  (강도: `≥0.22` 뚜렷하게 / `≥0.14` 다소 / else 약간).
+- **판정 기준(자기내부 비교, Phase 0)**: 종전 `1:1:0.8` "평균(이상) 기준선"은 폐기(실측 아님 —
+  성형광고 관행값으로 확인). 각 부위를 중안부(1.0)와 **직접 비교**한다 — 인구 기준 불요.
+- `dominantPart`(우세 부위) 판정: `|비율 − 1.0| > 0.08`(+epsilon 대칭화)이면 해당 부위가 길다/짧다로 해석,
+  한국어 요약 문구 생성 (강도: `≥0.22` 뚜렷하게 / `≥0.14` 다소 / else 약간). 판정 스냅샷은
+  `faceLengthJudgment`·`judgmentVersion`으로 결과에 동결 저장된다.
 
 ### 4.3 촬영 후 보정 & 품질 게이트
 

@@ -62,6 +62,10 @@ def _derive_face_shape(profile: dict[str, MetricEnvelope]) -> Insight:
   # 분류는 그것을 따른다(모바일 1.351/1.506 + pose 유보 vs 서버 1.38/1.2
   # 독립 임계의 불일치 제거). 없으면(구 payload) 레거시 임계 폴백.
   verdict = _text(profile.get(keys[3]))
+  if verdict == "indeterminate":
+    # 측정 시점 판정 보류(pose 결측 등) — 레거시 임계로 단정을 복원하지
+    # 않고 서버도 함께 보류한다(2차 리뷰 B-1).
+    return _insight(profile, keys, None, "")
   if aspect is None and verdict is None:
     return _insight(profile, keys, None, "")
   width = fmean(value for value in (jaw, lower) if value is not None) if jaw is not None or lower is not None else None

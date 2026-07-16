@@ -72,6 +72,20 @@ def test_face_shape_borderline_verdict_does_not_assert_long() -> None:
   assert result.face_shape.label != "긴 타원형"
 
 
+def test_face_shape_indeterminate_verdict_withholds_instead_of_legacy_threshold() -> None:
+  # 2차 리뷰 B-1 종단 반례: ratio 1.50 + 판정 보류 → 레거시 임계(>=1.38)로
+  # '긴 타원형'을 복원하지 않고 서버도 함께 보류한다.
+  profile = {
+    "verticalThirds.faceRatio": metric(1.50),
+    "verticalThirds.faceLengthVerdict": metric("indeterminate"),
+    "geometry2d.jawWidthRatio": metric(0.72),
+  }
+
+  result = derive_face_analysis(profile)
+
+  assert result.face_shape.label == "측정 보류"
+
+
 def test_vertical_balance_follows_measurement_time_dominant_part() -> None:
   # 정규화 0.31/0.34/0.35는 레거시 규칙(0.025)으로는 '하안부 우세'지만,
   # 측정 시점 모바일 판정(자기내부 0.08 임계)이 balanced면 그것을 따른다.

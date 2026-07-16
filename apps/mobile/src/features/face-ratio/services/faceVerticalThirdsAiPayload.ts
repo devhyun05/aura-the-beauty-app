@@ -32,6 +32,13 @@ export type FaceVerticalThirdsAnalysisPayload =
       };
       dominantPart: string | null;
       faceLength: {heightPx: number; ratio: number; widthPx: number} | null;
+      // 측정 시점 동결 판정(Phase 0-5). 레거시 LLM 경로(analyze_text)의
+      // faceShape가 비율값으로 재판정하지 않도록 정본 verdict를 동봉한다.
+      faceLengthJudgment: {
+        band: {hi: number; lo: number};
+        verdict: string;
+      } | null;
+      judgmentVersion: string | null;
       hairline: {
         analysisEligible: true;
         confidence: number;
@@ -151,6 +158,16 @@ export function buildFaceVerticalThirdsAnalysisPayload(
           widthPx: result.faceLength.widthPx,
         }
       : null,
+    faceLengthJudgment: result.faceLengthJudgment
+      ? {
+          band: {
+            hi: result.faceLengthJudgment.band.hi,
+            lo: result.faceLengthJudgment.band.lo,
+          },
+          verdict: result.faceLengthJudgment.verdict,
+        }
+      : null,
+    judgmentVersion: result.judgmentVersion ?? null,
     hairline: {
       analysisEligible: true,
       confidence: hairline.confidence,
