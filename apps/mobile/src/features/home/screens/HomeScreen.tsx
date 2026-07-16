@@ -1,15 +1,30 @@
-import {useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode} from 'react';
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import {
+  AppState,
+  FlatList,
+  InteractionManager,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView as NativeScrollView,
   StyleSheet,
   type ImageSourcePropType,
+  type ListRenderItemInfo,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type ViewToken,
   useWindowDimensions,
 } from 'react-native';
+import {useIsFocused} from '@react-navigation/native';
 import {
+  ArrowRight,
   Camera,
   ChevronUp,
   Compass,
@@ -31,10 +46,39 @@ import {
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
-import {AuraLogo, MenuHeaderIcon, SectionMoreButton} from '../../../shared/ui';
-import {CachedImage, prefetchImageSources} from '../../../shared/ui/CachedImage';
+import {AuraLogo, MenuHeaderIcon} from '../../../shared/ui';
+import {CachedImage} from '../../../shared/ui/CachedImage';
+import {HomeModuleRenderer} from '../components/HomeLongScrollModules';
+import {
+  defaultHomeAudienceState,
+  getVisibleHomeModules,
+} from '../config/homeModuleRegistry';
 import {homeMock} from '../mocks/home.mock';
+import {
+  emptyHomeFeedContent,
+  getHomeFeedContent,
+} from '../services/homeFeedService';
+import {
+  getHomeImageLoadStagesForViewport,
+  homeImageScheduler,
+  type HomeImageLoadStage,
+} from '../services/homeImageScheduler';
+import {
+  trackHomeFilterCardPress,
+  trackHomeEnter,
+  trackHomeHeroBannerPress,
+  trackHomeModuleImpression,
+  trackHomeModulePress,
+  trackHomeSectionMorePress,
+} from '../services/homeAnalytics';
 import {getHomeData} from '../services/homeService';
+import type {
+  HomeAudienceState,
+  HomeFeatureId,
+  HomeFeaturePressPayload,
+  HomeModuleConfig,
+  HomeModuleId,
+} from '../types/homeModules';
 import type {
   HomeData,
   HomeHeroFeatureId,
@@ -46,6 +90,7 @@ export {getHomeMakeupFeedbackActionLabels} from '../components/MakeupFeedbackAct
 
 type HomeScreenProps = {
   headerRightSlot?: ReactNode;
+  isAuthenticated?: boolean;
   onOpenFeatureMenu?: () => void;
   onPressArFilter?: () => void;
   onPressFaceDiagnosis?: () => void;
@@ -60,6 +105,10 @@ type HomeScreenProps = {
   onPressRecommendedFilterMore?: () => void;
   onPressHeroTrendFilter?: (filterId: string) => void;
   onPressRecommendedFilter?: (filterId: string) => void;
+  onPressHomeFeature?: (
+    featureId: HomeFeatureId,
+    payload?: HomeFeaturePressPayload,
+  ) => void;
   isMakeupFilterLiked?: (filterId: string) => boolean;
   onToggleMakeupFilterLike?: (filterId: string) => void;
   onConfirmBeautyJourneyGuide?: () => void;
@@ -68,6 +117,7 @@ type HomeScreenProps = {
 
 export function HomeScreen({
   headerRightSlot,
+  isAuthenticated = false,
   onOpenFeatureMenu,
   onPressArFilter,
   onPressFaceDiagnosis,
@@ -82,15 +132,31 @@ export function HomeScreen({
   onPressProductRecommendations,
   onPressRecommendedFilterMore,
   onPressRecommendedFilter,
+  onPressHomeFeature,
   isMakeupFilterLiked,
   onToggleMakeupFilterLike,
   onConfirmBeautyJourneyGuide,
   showBeautyJourneyGuide = false,
 }: HomeScreenProps) {
   const [homeData, setHomeData] = useState<HomeData>(homeMock);
+  const [homeFeedContent, setHomeFeedContent] = useState(emptyHomeFeedContent);
+  const [isHomeFeedLoading, setIsHomeFeedLoading] = useState(true);
+  const audience = useMemo<HomeAudienceState>(() => ({
+    ...defaultHomeAudienceState,
+    isAuthenticated,
+  }), [isAuthenticated]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [moduleImageLoadStages, setModuleImageLoadStages] = useState<
+    Partial<Record<HomeModuleId, HomeImageLoadStage>>
+  >({});
+  const [isAppActive, setIsAppActive] = useState(AppState.currentState === 'active');
+  const [isHeroViewportVisible, setIsHeroViewportVisible] = useState(true);
   const [showScrollTopButton, setShowScrollTopButton] = useState(false);
-  const listRef = useRef<ElementRef<typeof NativeScrollView>>(null);
+  const listRef = useRef<FlatList<HomeModuleConfig>>(null);
+  const impressedModuleIdsRef = useRef(new Set<string>());
+  const hasTrackedHomeEnterRef = useRef(false);
   const insets = useSafeAreaInsets();
+  const isScreenFocused = useIsFocused();
   const {width} = useWindowDimensions();
   const heroBannerWidth = width;
   const heroBannerHeight = Math.round(heroBannerWidth / HOME_HERO_BANNER_ASPECT_RATIO);
@@ -101,24 +167,41 @@ export function HomeScreen({
     [recommendedMakeupFilters],
   );
   const recommendedFilterPreviewCardWidth = getRecommendedFilterPreviewCardWidth(width);
+  const visibleHomeModules = useMemo(
+    () => getVisibleHomeModules(audience, homeFeedContent),
+    [audience, homeFeedContent],
+  );
+  const visibleHomeModulesRef = useRef(visibleHomeModules);
+  visibleHomeModulesRef.current = visibleHomeModules;
+  const moduleViewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 22,
+    minimumViewTime: 120,
+  }).current;
   const bottomPadding =
     APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + Math.max(insets.bottom, spacing.md);
 
-  const handleListScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const shouldShowButton = getIsHomeScrollTopButtonVisible(
-      event.nativeEvent.contentOffset.y,
-    );
+  const handleListScroll = useCallback((
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    const scrollOffsetY = event.nativeEvent.contentOffset.y;
+    const shouldShowButton = getIsHomeScrollTopButtonVisible(scrollOffsetY);
+    const shouldRunHero = scrollOffsetY < heroBannerHeight;
 
     setShowScrollTopButton(current => (
       current === shouldShowButton ? current : shouldShowButton
     ));
-  };
+    setIsHeroViewportVisible(current => (
+      current === shouldRunHero ? current : shouldRunHero
+    ));
+  }, [heroBannerHeight]);
 
-  const handleScrollToTop = () => {
-    listRef.current?.scrollTo({animated: true, y: 0});
-  };
+  const handleScrollToTop = useCallback(() => {
+    listRef.current?.scrollToOffset({animated: true, offset: 0});
+  }, []);
 
-  const handleHeroFeaturePress = (featureId: HomeHeroFeatureId) => {
+  const handleHeroFeaturePress = useCallback((featureId: HomeHeroFeatureId) => {
+    trackHomeHeroBannerPress('feature', featureId);
+
     if (featureId === 'faceDiagnosis') {
       onPressFaceDiagnosis?.();
       return;
@@ -134,50 +217,179 @@ export function HomeScreen({
       return;
     }
 
+    if (featureId === 'auradin') {
+      onPressHomeFeature?.('auradin');
+      return;
+    }
+
     onPressProductRecommendations?.();
-  };
+  }, [
+    onPressConsulting,
+    onPressFaceDiagnosis,
+    onPressMakeupExtraction,
+    onPressHomeFeature,
+    onPressProductRecommendations,
+  ]);
+
+  const handleHeroFilterPress = useCallback((filterId: string) => {
+    trackHomeHeroBannerPress('filter', filterId);
+    onPressHeroTrendFilter?.(filterId);
+  }, [onPressHeroTrendFilter]);
+
+  const handleRecommendedFilterPress = useCallback((filterId: string) => {
+    trackHomeFilterCardPress(filterId);
+    onPressRecommendedFilter?.(filterId);
+  }, [onPressRecommendedFilter]);
+
+  const handleRecommendedFilterMorePress = useCallback(() => {
+    trackHomeSectionMorePress();
+    onPressRecommendedFilterMore?.();
+  }, [onPressRecommendedFilterMore]);
+
+  const loadHomeContent = useCallback(async () => {
+    const [nextHomeData, filters, nextFeedContent] = await Promise.all([
+      getHomeData(),
+      getRecommendedMakeupFiltersFromApi(),
+      getHomeFeedContent({isAuthenticated}),
+    ]);
+
+    setHomeData(nextHomeData);
+    setRecommendedMakeupFilters(filters);
+    setHomeFeedContent(nextFeedContent);
+    setIsHomeFeedLoading(false);
+  }, [isAuthenticated]);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+
+    try {
+      await loadHomeContent();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [loadHomeContent]);
 
   useEffect(() => {
     let isMounted = true;
+    setHomeFeedContent(emptyHomeFeedContent);
+    setIsHomeFeedLoading(true);
 
-    getHomeData().then((data) => {
-      if (isMounted) {
-        setHomeData(data);
-        prefetchImageSources([
-          data.hero.imageSource,
-          ...data.hero.trends.map((trend) => trend.imageSource),
-        ]);
+    void Promise.all([
+      getHomeData(),
+      getRecommendedMakeupFiltersFromApi(),
+    ]).then(([nextHomeData, filters]) => {
+      if (!isMounted) {
+        return;
       }
+
+      setHomeData(nextHomeData);
+      setRecommendedMakeupFilters(filters);
+    });
+
+    const feedTask = InteractionManager.runAfterInteractions(() => {
+      void getHomeFeedContent({isAuthenticated}).then(nextFeedContent => {
+        if (isMounted) {
+          setHomeFeedContent(nextFeedContent);
+          setIsHomeFeedLoading(false);
+        }
+      });
     });
 
     return () => {
       isMounted = false;
+      feedTask.cancel();
     };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      setIsAppActive(state === 'active');
+    });
+
+    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
-    prefetchImageSources(
-      recommendedFilterPreviewItems.map((filter) => filter.imageSource),
+    if (hasTrackedHomeEnterRef.current) {
+      return;
+    }
+
+    hasTrackedHomeEnterRef.current = true;
+    trackHomeEnter(audience);
+  }, [audience]);
+
+  const handleModuleViewabilityChanged = useRef(({
+    viewableItems,
+  }: {
+    viewableItems: Array<ViewToken<HomeModuleConfig>>;
+  }) => {
+    const modules = visibleHomeModulesRef.current;
+    const firstVisibleItem = viewableItems.find(token => (
+      token.isViewable && typeof token.index === 'number'
+    ));
+
+    if (typeof firstVisibleItem?.index === 'number') {
+      void homeImageScheduler.scheduleAroundModule(
+        modules,
+        firstVisibleItem.index,
+      );
+    }
+
+    const visibleModuleIndices = viewableItems.flatMap(token => (
+      token.isViewable && typeof token.index === 'number'
+        ? [token.index]
+        : []
+    ));
+
+    const nextImageLoadStages = getHomeImageLoadStagesForViewport(
+      modules,
+      visibleModuleIndices,
     );
-  }, [recommendedFilterPreviewItems]);
 
-  useEffect(() => {
-    let isMounted = true;
+    setModuleImageLoadStages(currentStages => (
+      modules.some(module => (
+        (currentStages[module.id] ?? 'deferred')
+          !== (nextImageLoadStages[module.id] ?? 'deferred')
+      ))
+        ? nextImageLoadStages
+        : currentStages
+    ));
 
-    getRecommendedMakeupFiltersFromApi().then((filters) => {
-      if (isMounted) {
-        setRecommendedMakeupFilters(filters);
+    viewableItems.forEach(token => {
+      if (!token.isViewable || !token.item) {
+        return;
       }
-    });
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+      if (impressedModuleIdsRef.current.has(token.item.id)) {
+        return;
+      }
+
+      impressedModuleIdsRef.current.add(token.item.id);
+      trackHomeModuleImpression(token.item.id, token.index ?? 0);
+    });
+  }).current;
+
+  const renderHomeModule = useCallback(({
+    item,
+  }: ListRenderItemInfo<HomeModuleConfig>) => (
+    <HomeModuleRenderer
+      imageLoadStage={moduleImageLoadStages[item.id] ?? 'deferred'}
+      isFeedLoading={isHomeFeedLoading}
+      module={item}
+      onPressFeature={(featureId, payload) => {
+        trackHomeModulePress(item.id, featureId, payload?.itemId);
+        onPressHomeFeature?.(featureId, payload);
+      }}
+    />
+  ), [
+    moduleImageLoadStages,
+    isHomeFeedLoading,
+    onPressHomeFeature,
+  ]);
 
   return (
     <View style={styles.homeContainer}>
-      <NativeScrollView
+      <FlatList
         ref={listRef}
         automaticallyAdjustContentInsets={false}
         contentInsetAdjustmentBehavior="never"
@@ -186,46 +398,75 @@ export function HomeScreen({
           styles.homeListContent,
           {paddingBottom: bottomPadding},
         ]}
+        data={visibleHomeModules}
+        initialNumToRender={2}
+        ItemSeparatorComponent={HomeModuleSeparator}
+        keyExtractor={module => module.id}
+        ListHeaderComponent={
+          <YStack style={styles.homeListHeader}>
+            <HeroBannerCarousel
+              bannerHeight={heroBannerHeight}
+              bannerWidth={heroBannerWidth}
+              fallbackImageSource={homeData.hero.imageSource}
+              headerRightSlot={headerRightSlot}
+              isAutoScrollEnabled={
+                isScreenFocused && isAppActive && isHeroViewportVisible
+              }
+              onOpenFeatureMenu={onOpenFeatureMenu}
+              onPressFeature={handleHeroFeaturePress}
+              onPressFilter={onPressHeroTrendFilter ? handleHeroFilterPress : undefined}
+              topInset={insets.top}
+              trends={homeData.hero.trends}
+            />
+
+            <HomeServiceShortcutSection
+              onPressArFilter={onPressArFilter}
+              onPressFaceDiagnosis={onPressFaceDiagnosis}
+              onPressConsulting={onPressConsulting}
+              onPressHalfMakeup={onPressHalfMakeup}
+              onPressMakeupRecommendation={onPressMakeupRecommendation}
+              onPressHairRemovalSimulation={onPressHairRemovalSimulation}
+              onPressMakeupExtraction={onPressMakeupExtraction}
+              onPressMakeupFeedback={onPressMakeupFeedback}
+              onPressMakeupFilter={onPressMakeupFilter}
+              onPressProductRecommendations={onPressProductRecommendations}
+              onPressRecommendedFilterMore={onPressRecommendedFilterMore}
+            />
+
+            <RecommendedFilterPreviewSection
+              cardWidth={recommendedFilterPreviewCardWidth}
+              filters={recommendedFilterPreviewItems}
+              isMakeupFilterLiked={isMakeupFilterLiked}
+              onPressFilter={
+                onPressRecommendedFilter ? handleRecommendedFilterPress : undefined
+              }
+              onPressMore={
+                onPressRecommendedFilterMore
+                  ? handleRecommendedFilterMorePress
+                  : undefined
+              }
+              onToggleFilterLike={onToggleMakeupFilterLike}
+            />
+          </YStack>
+        }
+        maxToRenderPerBatch={2}
         onScroll={handleListScroll}
+        onViewableItemsChanged={handleModuleViewabilityChanged}
+        refreshControl={
+          <RefreshControl
+            onRefresh={handleRefresh}
+            refreshing={isRefreshing}
+            tintColor={colors.textSecondary}
+          />
+        }
+        removeClippedSubviews
+        renderItem={renderHomeModule}
         scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}>
-        <YStack style={styles.homeListHeader}>
-          <HeroBannerCarousel
-            bannerHeight={heroBannerHeight}
-            bannerWidth={heroBannerWidth}
-            fallbackImageSource={homeData.hero.imageSource}
-            headerRightSlot={headerRightSlot}
-            onOpenFeatureMenu={onOpenFeatureMenu}
-            onPressFeature={handleHeroFeaturePress}
-            onPressFilter={onPressHeroTrendFilter}
-            topInset={insets.top}
-            trends={homeData.hero.trends}
-          />
-
-          <HomeServiceShortcutSection
-            onPressArFilter={onPressArFilter}
-            onPressFaceDiagnosis={onPressFaceDiagnosis}
-            onPressConsulting={onPressConsulting}
-            onPressHalfMakeup={onPressHalfMakeup}
-            onPressMakeupRecommendation={onPressMakeupRecommendation}
-            onPressHairRemovalSimulation={onPressHairRemovalSimulation}
-            onPressMakeupExtraction={onPressMakeupExtraction}
-            onPressMakeupFeedback={onPressMakeupFeedback}
-            onPressMakeupFilter={onPressMakeupFilter}
-            onPressProductRecommendations={onPressProductRecommendations}
-            onPressRecommendedFilterMore={onPressRecommendedFilterMore}
-          />
-
-          <RecommendedFilterPreviewSection
-            cardWidth={recommendedFilterPreviewCardWidth}
-            filters={recommendedFilterPreviewItems}
-            isMakeupFilterLiked={isMakeupFilterLiked}
-            onPressFilter={onPressRecommendedFilter}
-            onPressMore={onPressRecommendedFilterMore}
-            onToggleFilterLike={onToggleMakeupFilterLike}
-          />
-        </YStack>
-      </NativeScrollView>
+        showsVerticalScrollIndicator={false}
+        updateCellsBatchingPeriod={80}
+        viewabilityConfig={moduleViewabilityConfig}
+        windowSize={5}
+      />
       {showScrollTopButton ? (
         <Pressable
           accessibilityLabel="맨 위로 이동"
@@ -253,6 +494,7 @@ type HeroBannerCarouselProps = {
   bannerWidth: number;
   fallbackImageSource: ImageSourcePropType;
   headerRightSlot?: ReactNode;
+  isAutoScrollEnabled: boolean;
   onOpenFeatureMenu?: () => void;
   onPressFeature?: (featureId: HomeHeroFeatureId) => void;
   onPressFilter?: (filterId: string) => void;
@@ -269,6 +511,7 @@ type HeroBannerCardProps = {
   featureId?: HomeHeroFeatureId;
   filterId?: string;
   imageSource: ImageSourcePropType;
+  isActive: boolean;
   itemCount: number;
   onPressFeature?: (featureId: HomeHeroFeatureId) => void;
   onPressFilter?: (filterId: string) => void;
@@ -478,6 +721,7 @@ function HeroBannerCarousel({
   bannerWidth,
   fallbackImageSource,
   headerRightSlot,
+  isAutoScrollEnabled,
   onOpenFeatureMenu,
   onPressFeature,
   onPressFilter,
@@ -515,7 +759,7 @@ function HeroBannerCarousel({
   }, [heroItems.length, initialScrollOffsetX]);
 
   useEffect(() => {
-    if (heroItems.length <= 1 || snapInterval <= 0) {
+    if (!isAutoScrollEnabled || heroItems.length <= 1 || snapInterval <= 0) {
       return undefined;
     }
 
@@ -539,7 +783,7 @@ function HeroBannerCarousel({
     return () => {
       clearInterval(intervalId);
     };
-  }, [heroItems.length, snapInterval]);
+  }, [heroItems.length, isAutoScrollEnabled, snapInterval]);
 
   const handleHeroCarouselScroll = (
     event: NativeSyntheticEvent<NativeScrollEvent>,
@@ -612,6 +856,7 @@ function HeroBannerCarousel({
             featureId={item.featureId}
             filterId={item.filterId}
             imageSource={item.imageSource}
+            isActive={item.id === heroItems[activeHeroIndex]?.id}
             itemCount={heroItems.length}
             key={`${item.id}-${index}`}
             onPressFeature={onPressFeature}
@@ -672,6 +917,7 @@ function HeroBannerCard({
   featureId,
   filterId,
   imageSource,
+  isActive,
   itemCount,
   onPressFeature,
   onPressFilter,
@@ -698,7 +944,7 @@ function HeroBannerCard({
       ]}>
       <CachedImage
         contentFit="cover"
-        priority="high"
+        priority={isActive ? 'high' : 'low'}
         source={imageSource}
         style={styles.heroBackgroundImage}
       />
@@ -1033,6 +1279,40 @@ function RecommendedFilterPreviewSection({
   onPressMore?: () => void;
   onToggleFilterLike?: (filterId: string) => void;
 }) {
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const viewabilityConfig = useRef({itemVisiblePercentThreshold: 35}).current;
+  const handleViewableItemsChanged = useRef(({
+    viewableItems,
+  }: {
+    viewableItems: Array<ViewToken<RecommendedMakeupFilter>>;
+  }) => {
+    const lastVisibleIndex = viewableItems.reduce(
+      (highestIndex, token) => Math.max(highestIndex, token.index ?? -1),
+      -1,
+    );
+
+    if (lastVisibleIndex < 0) {
+      return;
+    }
+
+    void homeImageScheduler.scheduleSources(
+      filtersRef.current
+        .slice(lastVisibleIndex + 1, lastVisibleIndex + 3)
+        .map(filter => filter.imageSource),
+    );
+  }).current;
+
+  useEffect(() => {
+    const prefetchTask = InteractionManager.runAfterInteractions(() => {
+      void homeImageScheduler.scheduleSources(
+        filters.slice(0, 2).map(filter => filter.imageSource),
+      );
+    });
+
+    return () => prefetchTask.cancel();
+  }, [filters]);
+
   if (filters.length === 0) {
     return null;
   }
@@ -1047,21 +1327,33 @@ function RecommendedFilterPreviewSection({
         title={recommendedFilterSectionTitle}
       />
 
-      <NativeScrollView
+      <FlatList
+        data={filters}
+        getItemLayout={(_, index) => ({
+          index,
+          length: cardWidth + spacing.md,
+          offset: (cardWidth + spacing.md) * index,
+        })}
         horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.recommendedFilterPreviewList}>
-        {filters.map(filter => (
+        initialNumToRender={2}
+        keyExtractor={filter => filter.id}
+        maxToRenderPerBatch={2}
+        onViewableItemsChanged={handleViewableItemsChanged}
+        removeClippedSubviews
+        renderItem={({item: filter}) => (
           <RecommendedFilterCard
             cardWidth={cardWidth}
             filter={filter}
             isLiked={Boolean(isMakeupFilterLiked?.(filter.id))}
-            key={filter.id}
             onPress={onPressFilter}
             onToggleLike={onToggleFilterLike}
           />
-        ))}
-      </NativeScrollView>
+        )}
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.recommendedFilterPreviewList}
+        viewabilityConfig={viewabilityConfig}
+        windowSize={3}
+      />
     </YStack>
   );
 }
@@ -1165,9 +1457,6 @@ function RecommendedFilterCard({
         style={styles.recommendedFilterImage}
       />
       <YStack style={styles.recommendedFilterCopy}>
-        <Text numberOfLines={1} style={styles.recommendedFilterHeadline}>
-          {filter.headline}
-        </Text>
         <Text numberOfLines={1} style={styles.recommendedFilterTitle}>
           {filter.displayTitle}
         </Text>
@@ -1221,14 +1510,22 @@ function SectionHeader({
         ) : null}
       </YStack>
       {actionLabel && onPressAction ? (
-        <SectionMoreButton
+        <Pressable
           accessibilityLabel={actionAccessibilityLabel ?? actionLabel}
-          label={actionLabel}
+          accessibilityRole="button"
+          hitSlop={spacing.sm}
           onPress={onPressAction}
-        />
+          style={({pressed}) => [styles.sectionMoreAction, pressed && styles.pressed]}>
+          <Text style={styles.sectionMoreLabel}>{actionLabel}</Text>
+          <ArrowRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={1.8} />
+        </Pressable>
       ) : null}
     </XStack>
   );
+}
+
+function HomeModuleSeparator() {
+  return <View style={styles.homeModuleSeparator} />;
 }
 
 const styles = StyleSheet.create({
@@ -1241,8 +1538,11 @@ const styles = StyleSheet.create({
     paddingTop: homeHeroLayoutMetrics.listTopPadding,
   },
   homeListHeader: {
-    gap: spacing.xl,
-    paddingBottom: spacing.lg,
+    gap: spacing.xxl + spacing.sm,
+    paddingBottom: spacing.xxl * 2 + spacing.sm,
+  },
+  homeModuleSeparator: {
+    height: spacing.xxl * 2 + spacing.lg,
   },
   heroBackgroundImage: {
     bottom: 0,
@@ -1452,15 +1752,6 @@ const styles = StyleSheet.create({
     right: spacing.sm,
     zIndex: 1,
   },
-  recommendedFilterHeadline: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-    textShadowColor: 'rgba(0, 0, 0, 0.42)',
-    textShadowOffset: {width: 0, height: 1},
-    textShadowRadius: 4,
-  },
   recommendedFilterImage: {
     height: '100%',
     width: '100%',
@@ -1485,7 +1776,7 @@ const styles = StyleSheet.create({
   },
   recommendedFilterPreviewList: {
     gap: spacing.md,
-    paddingRight: spacing.screenX,
+    paddingRight: spacing.xl,
   },
   recommendedFilterTitle: {
     color: colors.white,
@@ -1564,14 +1855,26 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   section: {
-    gap: spacing.md,
-    paddingHorizontal: spacing.screenX,
+    gap: spacing.xl,
+    paddingHorizontal: spacing.xl,
   },
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.md,
     justifyContent: 'space-between',
+  },
+  sectionMoreAction: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 2,
+    minHeight: 40,
+  },
+  sectionMoreLabel: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
   },
   sectionDescription: {
     color: colors.textSecondary,
@@ -1582,8 +1885,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
+    fontSize: typography.fontSize.xl,
+    lineHeight: typography.lineHeight.xl,
   },
   sectionTitleGroup: {
     flex: 1,

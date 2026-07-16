@@ -1,4 +1,8 @@
-import {Image as ExpoImage} from 'expo-image';
+import {
+  Image as ExpoImage,
+  type ImageErrorEventData,
+  type ImageLoadEventData,
+} from 'expo-image';
 import type {ImageSourcePropType, ImageStyle, StyleProp} from 'react-native';
 
 export {prefetchImageSources} from '../services/imageCacheService';
@@ -11,6 +15,8 @@ export type CachedImageProps = {
   accessible?: boolean;
   cachePolicy?: 'none' | 'disk' | 'memory' | 'memory-disk';
   contentFit?: ImageContentFit;
+  onError?: (event: ImageErrorEventData) => void;
+  onLoad?: (event: ImageLoadEventData) => void;
   priority?: 'low' | 'normal' | 'high';
   recyclingKey?: string | null;
   source: ImageSourcePropType;

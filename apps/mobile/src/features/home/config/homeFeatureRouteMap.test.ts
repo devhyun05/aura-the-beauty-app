@@ -1,26 +1,11 @@
-import {
-  getHomeProductRecommendationRouteName,
-  getHomeRecommendedFilterMoreRouteName,
-} from './homeRoutes';
-import {getHomeFeatureNavigationTarget} from '../../../features/home/config/homeFeatureRouteMap';
+import {HOME_FEATURE_IDS} from '../types/homeModules';
+import {getHomeFeatureNavigationTarget} from './homeFeatureRouteMap';
 
-function expectEqual<T>(actual: T, expected: T, label: string) {
+function expectEqual<T>(actual: T, expected: T, label: string): void {
   if (actual !== expected) {
     throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
   }
 }
-
-expectEqual(
-  getHomeRecommendedFilterMoreRouteName(),
-  'HomeFilterStore',
-  'home recommended filter more route',
-);
-
-expectEqual(
-  getHomeProductRecommendationRouteName(),
-  'ProductRecommendation',
-  'home product recommendation opens the hub instead of Auradin',
-);
 
 const featureNavigationCases = [
   ['faceAnalysis', undefined, 'FaceAnalysisIntro'],
@@ -45,3 +30,9 @@ featureNavigationCases.forEach(([featureId, payload, expectedTarget]) => {
     `${featureId} home feature navigation target`,
   );
 });
+
+expectEqual(
+  new Set(featureNavigationCases.map(([featureId]) => featureId)).size,
+  HOME_FEATURE_IDS.length,
+  'every Home feature id has a navigation contract',
+);

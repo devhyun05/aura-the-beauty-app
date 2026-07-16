@@ -7,6 +7,11 @@ import {
   HomeScreen,
   SavedMakeupListScreen,
 } from '../../../features/home';
+import type {
+  HomeFeatureId,
+  HomeFeaturePressPayload,
+} from '../../../features/home/types/homeModules';
+import {getHomeFeatureNavigationTarget} from '../../../features/home/config/homeFeatureRouteMap';
 import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
 import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
 import {useAuthSession} from '../../../features/auth';
@@ -194,6 +199,106 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     [likedMakeupFilterIds],
   );
 
+  const handleHomeFeaturePress = React.useCallback((
+    featureId: HomeFeatureId,
+    payload?: HomeFeaturePressPayload,
+  ) => {
+    const target = getHomeFeatureNavigationTarget(featureId, payload);
+
+    if (target === 'FaceAnalysisIntro') {
+      rootNavigation?.navigate('FaceAnalysisIntro');
+      return;
+    }
+
+    if (target === 'FaceAnalysisReportsList') {
+      rootNavigation?.navigate('FaceAnalysisReportsList');
+      return;
+    }
+
+    if (target === 'MakeupRecommendation') {
+      rootNavigation?.navigate('MakeupRecommendation');
+      return;
+    }
+
+    if (target === 'ProductDetail' && payload?.itemId) {
+      rootNavigation?.navigate('ProductDetail', {
+        productId: payload.itemId,
+        ...(payload.shadeId ? {shadeId: payload.shadeId} : {}),
+        ...(payload.disclosureLabel
+          ? {disclosureLabel: payload.disclosureLabel}
+          : {}),
+        ...(payload.sponsored !== undefined
+          ? {sponsored: payload.sponsored}
+          : {}),
+        ...(payload.sponsorshipType
+          ? {sponsorshipType: payload.sponsorshipType}
+          : {}),
+      });
+      return;
+    }
+
+    if (target === 'ProductRecommendation') {
+      const initialSection = (
+        payload?.source === 'ar'
+        || payload?.source === 'cohort'
+        || payload?.source === 'personalized'
+        || payload?.source === 'seasonal'
+      ) ? payload.source : undefined;
+
+      rootNavigation?.navigate(
+        'ProductRecommendation',
+        initialSection ? {initialSection} : undefined,
+      );
+      return;
+    }
+
+    if (target === 'AuradinSearch') {
+      rootNavigation?.navigate(
+        'AuradinSearch',
+        payload?.source ? {prompt: payload.source} : undefined,
+      );
+      return;
+    }
+
+    if (target === 'makeupExtractionSheet') {
+      handleMakeupExtractionPress();
+      return;
+    }
+
+    if (target === 'makeupFeedbackSheet') {
+      handleMakeupFeedbackPress();
+      return;
+    }
+
+    if (target === 'ConsultingTab') {
+      navigation.navigate('ConsultingTab');
+      return;
+    }
+
+    if (target === 'SavedMakeupList') {
+      rootNavigation?.navigate('SavedMakeupList');
+      return;
+    }
+
+    if (target === 'LikedProductList') {
+      rootNavigation?.navigate('LikedProductList');
+      return;
+    }
+
+    if (target === 'ARFilter') {
+      handleMakeupFilterPress();
+      return;
+    }
+
+    rootNavigation?.navigate('HomeFilterStore');
+  }, [
+    handleMakeupExtractionPress,
+    handleMakeupFeedbackPress,
+    handleMakeupFilterPress,
+    navigation,
+    rootNavigation,
+  ]);
+
   return (
     <MainTabChrome
       navigation={navigation}
@@ -202,6 +307,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       {({openFeatureMenu}) => (
         <>
           <HomeScreen
+            isAuthenticated={Boolean(session)}
             headerRightSlot={
               <ConsultingHeaderActions
                 onPressNotifications={() =>
@@ -233,6 +339,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
               rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
             }
             onPressRecommendedFilter={handleRecommendedFilterPress}
+            onPressHomeFeature={handleHomeFeaturePress}
             isMakeupFilterLiked={isMakeupFilterLiked}
             onToggleMakeupFilterLike={handleToggleMakeupFilterLike}
             showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}
