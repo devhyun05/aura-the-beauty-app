@@ -69,9 +69,13 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
   upper = _prompt_number(display_ratio.get("upper"))
   lower = _prompt_number(display_ratio.get("lower"))
   middle = _prompt_number(display_ratio.get("middle"))
-  full_eligible = (
+  explicit_full = (
     measurement_mode == "full_vertical_thirds"
     and hairline.get("analysisEligible") is True
+  )
+  legacy_full = measurement_mode is None and raw.get("status") == "full_success"
+  full_eligible = (
+    (explicit_full or legacy_full)
     and provider in _AUTHORITATIVE_HAIRLINE_PROVIDERS
     and hairline_confidence is not None
     and hairline_confidence >= _AUTHORITATIVE_HAIRLINE_MIN_CONFIDENCE
@@ -136,8 +140,11 @@ def _safe_face3d_prompt_payload(value: Any) -> dict[str, Any] | None:
   if not raw:
     return None
 
-  if raw.get("schemaVersion") != "aura.face3d-profile.v2":
+  schema_version = raw.get("schemaVersion")
+  if schema_version in {None, "aura.face3d-profile.v1"}:
     return raw
+  if schema_version != "aura.face3d-profile.v2":
+    return None
 
   collection_policy_id = raw.get("collectionPolicyId")
   if (

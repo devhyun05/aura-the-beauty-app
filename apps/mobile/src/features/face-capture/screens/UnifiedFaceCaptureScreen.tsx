@@ -96,11 +96,15 @@ export function UnifiedFaceCaptureScreen({
     (completed: UnifiedFaceCaptureCompletedEvent | null) => {
       if (
         !completed ||
+        isUploadingRef.current ||
         committedCaptureIdRef.current === completed.captureId
       ) {
         return Promise.resolve(false);
       }
 
+      // The upload reads this exact local file. Closing while it is in flight
+      // marks the capture abandoned; attemptUpload deletes it after the read
+      // completes instead of racing the uploader here.
       return deleteUnifiedFaceCaptureTempImage(completed.image.uri);
     },
     [],

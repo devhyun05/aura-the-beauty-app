@@ -320,23 +320,41 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
             // Invalid cancellation must never cancel another request.
         }
 
-        if (!sessionActive
-            || payload == null
+        if (payload == null
             || string.IsNullOrWhiteSpace(payload.requestId)
-            || !string.Equals(
-                payload.requestId.Trim(),
-                activeRequest.RequestId,
-                StringComparison.Ordinal))
+        )
         {
             return;
         }
 
-        SendCancelled(
-            activeRequest.RequestId,
-            string.IsNullOrWhiteSpace(payload.reason)
-                ? "user_cancelled"
-                : payload.reason.Trim());
-        FinishSession();
+        string requestId = payload.requestId.Trim();
+        string cancelReason = string.IsNullOrWhiteSpace(payload.reason)
+            ? "user_cancelled"
+            : payload.reason.Trim();
+        if (sessionActive
+            && activeRequest != null
+            && string.Equals(
+                requestId,
+                activeRequest.RequestId,
+                StringComparison.Ordinal))
+        {
+            SendCancelled(activeRequest.RequestId, cancelReason);
+            FinishSession();
+            return;
+        }
+
+        if (!sessionActive
+            && preparedRequest != null
+            && string.Equals(
+                requestId,
+                preparedRequest.RequestId,
+                StringComparison.Ordinal))
+        {
+            SendCancelled(preparedRequest.RequestId, cancelReason);
+            preparedRequest = null;
+            ResetHairlineAdvisoryState(
+                Time.realtimeSinceStartupAsDouble);
+        }
     }
 
     private void Awake()
@@ -1018,6 +1036,10 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
             return false;
         }
 
+        // FaceLandmarker returns normalized points in the ImageProcessingOptions
+        // rotation space. Segmentation's ReferenceToMask mapping describes that
+        // same processed upright space; InputImageToMask is only for raw
+        // XRCpuImage UVs and must not be applied to these landmarks.
         Vector3[] landmarks = landmarkSource.Landmarks;
         Vector2 left = landmarks[MediaPipeLeftFaceIndex];
         Vector2 right = landmarks[MediaPipeRightFaceIndex];
@@ -1320,7 +1342,8 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
             return;
         }
 
-        landmarkSource =
+        landmarkSource = FaceLandmarkSource.Instance;
+        landmarkSource ??=
             cameraManager.GetComponent<FaceLandmarkSource>();
         if (landmarkSource == null)
         {
@@ -1329,7 +1352,8 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         }
         landmarkSource.Init(cameraManager);
 
-        segmentationSource =
+        segmentationSource = SegmentationSource.Instance;
+        segmentationSource ??=
             cameraManager.GetComponent<SegmentationSource>();
         if (segmentationSource == null)
         {

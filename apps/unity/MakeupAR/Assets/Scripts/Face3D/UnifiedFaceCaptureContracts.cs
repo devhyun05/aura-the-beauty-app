@@ -287,7 +287,14 @@ namespace Aura.Face3D
                     : 0.0f);
             ConfidenceCalibrationStatus =
                 UnifiedFaceCaptureContract.ConfidenceCalibrationUncalibrated;
-            CaptureWindowMs = Math.Max(0.0, captureWindowMs);
+            // The collector rejects samples outside the immutable policy window,
+            // but finalization runs on a later Unity update and can observe a few
+            // milliseconds of scheduler overshoot. Report the bounded sampling
+            // window, not finalization latency, so partial 5-7 frame profiles keep
+            // the same <=500ms wire contract as full 8-frame profiles.
+            CaptureWindowMs = Math.Min(
+                policy.MaximumDurationMs,
+                Math.Max(0.0, captureWindowMs));
             TopologyFingerprint = aggregate.TopologyFingerprint;
             Metrics = aggregate.Metrics;
             this.warnings = new ReadOnlyCollection<string>(

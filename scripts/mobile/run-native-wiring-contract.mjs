@@ -166,6 +166,46 @@ function assertNotContains(source, needle, label) {
   }
 }
 
+// ── 8. 통합 촬영 lifecycle·Unity source 단일성 불변식 ────────────────
+{
+  const controllerPath =
+    'apps/unity/MakeupAR/Assets/Scripts/UnifiedFaceCaptureController.cs';
+  const controller = readSource(controllerPath);
+  assertContains(
+    controller,
+    /preparedRequest\s*!=\s*null[\s\S]*SendCancelled\(preparedRequest\.RequestId/,
+    `${controllerPath}: start 전 prepare 요청을 취소하는 경로가 없다`,
+  );
+  assertContains(
+    controller,
+    /segmentationSource\s*=\s*SegmentationSource\.Instance/,
+    `${controllerPath}: 기존 SegmentationSource singleton을 재사용하지 않는다`,
+  );
+
+  const segmentationPath =
+    'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Face/SegmentationSource.cs';
+  const segmentation = readSource(segmentationPath);
+  assertContains(
+    segmentation,
+    /landmarkSource\s*!=\s*null\s*&&\s*landmarkSource\.ExternalMode/,
+    `${segmentationPath}: 외부 편집 모드에서 라이브 segmentation을 멈추지 않는다`,
+  );
+  assertContains(
+    segmentation,
+    /_submissionMetadata\.Remove\(_inFlightSubmitTs\)/,
+    `${segmentationPath}: watchdog timeout 토큰 metadata를 정리하지 않는다`,
+  );
+
+  const makeupPath =
+    'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Face/MakeupController.cs';
+  const makeup = readSource(makeupPath);
+  assertContains(
+    makeup,
+    /SegmentationSource\.Instance\s*==\s*null/,
+    `${makeupPath}: SegmentationSource 중복 생성을 막는 singleton guard가 없다`,
+  );
+}
+
 if (failures > 0) {
   console.error(`[aura:native-wiring] ${failures}건 실패 — 기능 배선이 끊겼습니다. 020cb33 류 회귀인지 확인하세요.`);
   process.exit(1);

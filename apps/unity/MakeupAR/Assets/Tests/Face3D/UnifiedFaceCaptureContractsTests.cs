@@ -227,6 +227,27 @@ namespace Aura.Face3D.Tests
         }
 
         [Test]
+        public void PartialProductBurstClampsFinalizationOvershootToPolicyWindow()
+        {
+            Assert.That(
+                UnifiedFaceCaptureRequestValidator.TryGetPolicy(
+                    UnifiedFaceCaptureContract.ProductPolicyId,
+                    out UnifiedFaceCapturePolicy policy),
+                Is.True);
+
+            Face3DProfileV2 profile = Face3DProfileV2.Create(
+                policy,
+                CreateAggregate(5, 8, "target_frame_count_not_reached"),
+                528.0);
+
+            Assert.That(profile.CaptureWindowMs, Is.EqualTo(500.0));
+            Assert.That(profile.ValidFrameCount, Is.EqualTo(5));
+            Assert.That(
+                profile.Warnings,
+                Does.Contain("micro_burst_target_not_reached"));
+        }
+
+        [Test]
         public void LegacyV1ConstantsRemainUnchanged()
         {
             Assert.That(Face3DContract.ProfileSchemaVersion, Is.EqualTo("aura.face3d-profile.v1"));

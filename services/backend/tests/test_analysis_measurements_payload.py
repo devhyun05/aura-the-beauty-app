@@ -294,6 +294,38 @@ def test_prompt_strips_ineligible_h_dependent_fields_but_keeps_middle_lower() ->
   assert "faceVerticalThirds" not in metadata["measurements"]
 
 
+def test_prompt_keeps_legacy_full_success_with_actual_h() -> None:
+  payload = build_worst_case_request_payload()
+  legacy = dict(payload["faceVerticalThirds"])
+  legacy.pop("measurementMode")
+  legacy["hairline"] = {
+    "confidence": 0.91,
+    "provider": "apple_semantic_matte",
+  }
+  legacy["status"] = "full_success"
+  payload["faceVerticalThirds"] = legacy
+
+  prompt = OpenAIAnalysisService(Settings())._build_analysis_prompt(payload)
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+
+  assert metadata["faceVerticalThirds"]["measurementMode"] == "full_vertical_thirds"
+  assert metadata["faceVerticalThirds"]["displayRatio"]["upper"] == 0.97
+  assert metadata["faceVerticalThirds"]["hairline"]["provider"] == "apple_semantic_matte"
+
+
+def test_prompt_rejects_unknown_face3d_schema() -> None:
+  payload = build_worst_case_request_payload()
+  unknown = {**payload["face3d"], "schemaVersion": "aura.face3d-profile.v3"}
+  payload["face3d"] = unknown
+  payload["measurements"] = {**payload["measurements"], "face3d": unknown}
+
+  prompt = OpenAIAnalysisService(Settings())._build_analysis_prompt(payload)
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+
+  assert "face3d" not in metadata
+  assert "face3d" not in metadata["measurements"]
+
+
 def test_prompt_metadata_size_is_bounded() -> None:
   # worst-case 측정 payload 직렬화 상한 — 프롬프트 토큰 예산 고정. 계약이 커져
   # 이 값을 넘으면 상한을 올리기 전에 payload 설계를 재검토할 것.

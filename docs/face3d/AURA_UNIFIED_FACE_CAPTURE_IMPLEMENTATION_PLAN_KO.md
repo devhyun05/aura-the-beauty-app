@@ -112,6 +112,42 @@ PR 준비 기준: 2026-07-16 재조회에서 `origin/dev = 3247a164`로 6개 커
 
 따라서 기능 플래그 후보 구현과 출시 승인은 분리한다. feature flag는 위 보강·실기기 gate를 통과할 때까지 기본 off이며 기존 30프레임 경로가 fallback이다. 현재 로컬 실기기 서명 profile은 2026-07-18 만료 예정이므로 이후 검증 전 갱신이 필요하다.
 
+### 0.3 커밋 `0ffa1011` 적대적 검토의 비판적 반영
+
+첨부된 최종 검토는 `0ffa1011`을 기준으로 작성됐으므로, 이후 커밋과 현재 작업 트리를 다시 대조해 판정했다. provider 매핑과 Exact-1 집계 문제는 후속 커밋 `7dac2000`에서 이미 수정됐다. 나머지 항목은 아래처럼 반영한다.
+
+| 검토 주장 | 판정 | 반영 |
+|---|---|---|
+| timeout 종료가 500ms를 넘겨 5~7프레임 완료 payload가 TS validator에서 거부된다 | 수용 | collector는 500ms 밖 표본을 받지 않으므로 wire의 `captureWindowMs`는 finalization 지연이 아니라 정책상 표본 창으로 clamp한다. 5/8 부분 완료 회귀 테스트를 추가한다. |
+| 라이브 헤어라인 좌표에 90도 변환이 빠졌다 | 기각 | FaceLandmarker 결과는 `ImageProcessingOptions`가 적용된 upright 처리 공간 좌표다. 같은 공간의 `ReferenceToMask`가 맞고, raw `XRCpuImage`용 `InputImageToMask`를 다시 적용하면 이중 회전이 된다. 호출부에 좌표 공간 주석을 남긴다. 실기기 orientation 증거는 별도 미검증 항목이다. |
+| 새 필드가 없는 모든 구버전 세로비율 payload가 강등된다 | 제한 수용 | `measurementMode`가 없더라도 schema v1·`full_success`·실제 H provider·confidence 0.70 이상을 모두 만족하는 과거 payload만 전체 세로비율로 인정한다. proxy provider와 partial payload는 계속 fail-closed다. |
+| in-flight token을 accepted로 세는 계약 자체가 잘못됐다 | 일부 기각 | 고정 anchor가 “segmenter에 정확히 제출된 token”을 예약하는 현재 의미는 유지한다. 다만 watchdog timeout 때 metadata를 제거해 죽은 promise가 남지 않게 한다. 재생성 상한이 있어 딕셔너리가 무한 증가한다는 표현은 과장이다. |
+| iOS `inactive`에서도 요청을 영구 종료한다 | 수용 | 알림 센터·일시 중단에 해당하는 `inactive`는 유지하고 실제 `background` 전환에서만 종료한다. |
+| start 전 cancel이 prepare 상태를 해제하지 않는다 | 수용 | request ID가 일치하는 prepared request도 cancelled terminal을 보내고 advisory 상태와 prepared 상태를 정리한다. |
+| `SegmentationSource`가 중복 생성될 수 있다 | 수용 | controller와 `MakeupController` 모두 기존 singleton을 우선 재사용하고 없을 때만 생성한다. |
+| 외부 사진·영상 편집 중 라이브 segmentation이 계속 실행된다 | 수용 | `FaceLandmarkSource.ExternalMode` 동안 broker frame segmentation 제출을 중단한다. |
+| 미지 Face3D schema가 검증 없이 제품·AI 입력으로 통과한다 | 수용 | schema 없음과 v1만 legacy로 허용하고, v2는 현 정책 검증을 유지하며, 그 밖의 schema는 저장 원본을 보존하되 제품 metric과 AI prompt에서는 차단한다. |
+| 닫기와 업로드가 경합해 원본 파일을 먼저 지울 수 있다 | 수용 | 업로드 중 닫기는 abandon만 표시하고, 업로드 reader가 끝난 뒤 완료 경로에서 임시 파일을 삭제한다. |
+
+이번 반영에서 다음 항목은 범위를 확대하지 않는다.
+
+- 10Hz React 갱신, mask 복제, 중복 landmark 처리 같은 성능 항목은 계측값 없이 구조를 바꾸지 않고 실기기 fps·RSS·thermal 측정 단계에서 우선순위를 정한다.
+- pose·confidence·Apple/C# 튜닝 상수 통합은 독립 계약 정리 작업으로 분리한다.
+- `OnDisable` terminal 보강, native sync 세부 사유 노출, JSON 제어문자 escape는 이번 확정 결함 수정과 별도 후속 항목으로 남긴다.
+- C#과 TS의 양방향 fixture 생성은 유효한 재발 방지 방향이지만, 이번 변경에서는 경계값별 focused 계약 테스트와 정적 wiring guard를 먼저 추가한다.
+
+앱·UnityFramework 빌드 없이 수행한 현재 작업 트리의 focused 검증은 다음과 같다.
+
+- 모바일 TypeScript typecheck 통과
+- 모바일 Face3D·통합 lifecycle 계약 테스트 통과
+- 모바일 얼굴비율 왜곡 회귀 테스트 통과
+- native/Unity wiring 정적 계약 테스트 통과
+- 백엔드 세로비율·Face3D 저장/AI payload focused 테스트 `21 passed`
+- Unity 생성 response file 기준 `Aura.Face3D`, `AuraMediaPipeGraft`, `Assembly-CSharp` 컴파일 통과
+- `PartialProductBurstClampsFinalizationOvershootToPolicyWindow`를 포함한 Unity focused 계약 테스트 3개 통과
+
+이 반영 후에도 제품 기본 프레임 수 결정은 바뀌지 않는다. 5-of-8/500ms는 기능 후보이며, 단일 프레임은 진단 전용이다. 30프레임 대비 반복성·실패율·지연의 사전 등록 기준을 실기기에서 통과하기 전에는 기존 30프레임 경로를 기본값으로 유지한다.
+
 ---
 
 ## 1. 현재 구현과 Git 이력에서 확인된 사실

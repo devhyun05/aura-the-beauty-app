@@ -219,6 +219,57 @@ def test_legacy_proxy_h_is_never_authoritative() -> None:
   assert "contour.foreheadWidthType" not in coverage.missing_observable_keys
 
 
+def test_legacy_full_success_with_actual_h_remains_authoritative() -> None:
+  result = normalize_camera_measurements(
+    {
+      "schemaVersion": "aura-face-analysis-measurements-v1",
+      "faceVerticalThirds": {
+        "schemaVersion": "aura-face-vertical-thirds-v1",
+        "status": "full_success",
+        "quality": {"usable": True, "warnings": []},
+        "keypoints": {
+          "H": {"confidence": 0.91, "provider": "apple_semantic_matte"},
+        },
+        "verticalThirds": {
+          "confidence": 0.91,
+          "upperNormalized": 0.31,
+          "middleNormalized": 0.34,
+          "lowerNormalized": 0.35,
+          "warnings": [],
+        },
+        "faceLength": {"heightPx": 900, "widthPx": 700, "ratio": 1.286},
+      },
+    },
+  )
+
+  assert result["verticalThirds.upperNormalized"].value == 0.31
+  assert result["verticalThirds.faceRatio"].value == 1.286
+
+
+def test_unknown_face3d_schema_is_preserved_but_blocked() -> None:
+  result = normalize_camera_measurements(
+    {
+      "schemaVersion": "aura-face-analysis-measurements-v1",
+      "face3d": {
+        "schemaVersion": "aura.face3d-profile.v3",
+        "warnings": [],
+        "metrics": {
+          "noseTipProjection": {
+            "value": 0.14,
+            "unit": "normalized",
+            "confidence": 0.93,
+          },
+        },
+      },
+    },
+  )
+
+  metric = result["face3d.noseTipProjection"]
+  assert metric.value is None
+  assert metric.status is MeasurementStatus.BLOCKED
+  assert metric.reason == "face3d_schema_unsupported"
+
+
 def test_camera_metric_cannot_be_overwritten_by_ai() -> None:
   camera = normalize_camera_measurements(
     {

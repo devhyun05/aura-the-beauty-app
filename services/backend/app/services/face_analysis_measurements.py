@@ -125,7 +125,14 @@ def _warnings(*values: Any) -> list[str]:
 
 
 def _vertical_has_authoritative_hairline(raw: dict[str, Any]) -> bool:
-  if raw.get("measurementMode") != "full_vertical_thirds":
+  measurement_mode = raw.get("measurementMode")
+  explicit_full = measurement_mode == "full_vertical_thirds"
+  legacy_full = (
+    measurement_mode is None
+    and raw.get("schemaVersion") == "aura-face-vertical-thirds-v1"
+    and raw.get("status") == "full_success"
+  )
+  if not explicit_full and not legacy_full:
     return False
   analysis = _record(raw.get("hairlineAnalysis"))
   keypoint = _record(_record(raw.get("keypoints")).get("H"))
@@ -134,7 +141,7 @@ def _vertical_has_authoritative_hairline(raw: dict[str, Any]) -> bool:
   if confidence is None:
     confidence = _finite(keypoint.get("confidence"))
   return (
-    analysis.get("analysisEligible") is True
+    (analysis.get("analysisEligible") is True if explicit_full else True)
     and provider in AUTHORITATIVE_HAIRLINE_PROVIDERS
     and confidence is not None
     and confidence >= AUTHORITATIVE_HAIRLINE_MIN_CONFIDENCE
@@ -238,7 +245,8 @@ def _normalize_face3d(
   profile_warnings = _warnings(raw.get("warnings"))
   usable = True
   reason = None
-  if raw.get("schemaVersion") == "aura.face3d-profile.v2":
+  schema_version = raw.get("schemaVersion")
+  if schema_version == "aura.face3d-profile.v2":
     policy_id = raw.get("collectionPolicyId")
     if raw.get("sampleMode") == "single_frame":
       usable = False
@@ -252,6 +260,9 @@ def _normalize_face3d(
     elif raw.get("sampleMode") != "micro_burst" or raw.get("aggregation") != "median_mad":
       usable = False
       reason = "face3d_profile_policy_invalid"
+  elif schema_version not in {None, "aura.face3d-profile.v1"}:
+    usable = False
+    reason = "face3d_schema_unsupported"
   for key, metric_value in _record(raw.get("metrics")).items():
     metric = _record(metric_value)
     output[f"face3d.{key}"] = _camera_metric(

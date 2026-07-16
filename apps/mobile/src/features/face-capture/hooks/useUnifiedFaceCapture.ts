@@ -18,6 +18,7 @@ import type {
 } from '../services/unifiedFaceCaptureContract';
 import {isUnifiedFaceCaptureCompletionCompatible} from '../services/unifiedFaceCaptureContract';
 import {UnifiedFaceCaptureDeferredCleanup} from '../services/unifiedFaceCaptureDeferredCleanup';
+import {shouldFinalizeUnifiedCaptureForAppState} from '../services/unifiedFaceCaptureLifecycle';
 
 const CAPTURE_RESULT_GRACE_MS = 13000;
 
@@ -150,7 +151,7 @@ export function useUnifiedFaceCapture(request: UnifiedFaceCaptureRequest) {
 
     const appStateSubscription = AppState.addEventListener('change', nextState => {
       if (
-        nextState === 'active' ||
+        !shouldFinalizeUnifiedCaptureForAppState(nextState) ||
         finalizedRequestIdsRef.current.has(request.requestId)
       ) {
         return;

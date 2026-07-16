@@ -17,6 +17,7 @@ const testPaths = [
   'features/face-capture/services/unifiedFaceCaptureContract.test.ts',
   'features/face-capture/services/unifiedFaceCaptureMode.test.ts',
   'features/face-capture/services/unifiedFaceCaptureFlowState.test.ts',
+  'features/face-capture/services/unifiedFaceCaptureLifecycle.test.ts',
   'features/face-capture/services/unifiedFaceCaptureDeferredCleanup.test.ts',
   'features/face-capture/services/unifiedFaceCaptureTempImageCleanup.test.ts',
   'features/face-capture/services/unifiedFaceCaptureDiagnostics.test.ts',

@@ -196,6 +196,10 @@ namespace ARMakeup.Face
         {
 #if MEDIAPIPE
             FaceLandmarkSource landmarkSource = FaceLandmarkSource.Instance;
+            if (landmarkSource != null && landmarkSource.ExternalMode)
+            {
+                return;
+            }
             int rotationDegrees = landmarkSource != null
                 ? landmarkSource.GetDetectionRotationDegrees(
                     frame.Image.width,
@@ -449,6 +453,13 @@ namespace ARMakeup.Face
             {
                 _inFlight = false;
                 _consecutiveFailures++;
+                lock (_resultLock)
+                {
+                    // A timed-out submission cannot be promised to exact-token
+                    // consumers. A late callback is ignored because its
+                    // metadata is no longer present.
+                    _submissionMetadata.Remove(_inFlightSubmitTs);
+                }
                 if (_inputBuffer.IsCreated)
                 {
                     _orphanBuffers.Add(((double)_inFlightSubmitTs, _inputBuffer));
@@ -659,11 +670,11 @@ namespace ARMakeup.Face
         }
 
         /// <summary>
-        /// Returns true only when this exact broker frame token was accepted by
-        /// ImageSegmenter and is still in-flight, awaiting main-thread promotion,
-        /// or retained in result history. A cadence/in-flight-skipped camera frame
-        /// is never reported as accepted, and no past CPU image is reacquired or
-        /// reconstructed.
+        /// Returns true only when this exact broker frame token was submitted to
+        /// ImageSegmenter and remains a live in-flight promise, is awaiting
+        /// main-thread promotion, or is retained in result history. Timed-out,
+        /// cadence-skipped, and in-flight-skipped frames are never reported as
+        /// accepted, and no past CPU image is reacquired or reconstructed.
         /// </summary>
         public bool HasAcceptedFrameToken(string frameToken)
         {
