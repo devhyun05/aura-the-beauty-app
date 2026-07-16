@@ -2,7 +2,8 @@ import json
 from uuid import UUID
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.config import Config
+from botocore.exceptions import ClientError, ReadTimeoutError
 from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
@@ -38,7 +39,11 @@ REFINED_REPORT_ID = UUID("33333333-3333-3333-3333-333333333333")
 
 
 class FakeBedrockClient:
-  def converse(self, **_kwargs):
+  def __init__(self):
+    self.calls: list[dict] = []
+
+  def converse(self, **kwargs):
+    self.calls.append(kwargs)
     return {
       "output": {
         "message": {
@@ -52,12 +57,62 @@ class FakeBedrockClient:
     }
 
 
+def test_converse_uses_bounded_bedrock_timeout_and_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+  client = FakeBedrockClient()
+  captured_kwargs: dict = {}
+
+  def fake_boto_client(*_args, **kwargs):
+    captured_kwargs.update(kwargs)
+    return client
+
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", fake_boto_client)
+
+  _converse(Settings(), "model-id", "system", "prompt")
+
+  config = captured_kwargs.get("config")
+  assert isinstance(config, Config)
+  assert config.read_timeout <= 55
+  assert config.retries == {"max_attempts": 1, "mode": "standard"}
+
+
 def test_converse_accepts_json_code_fence(monkeypatch: pytest.MonkeyPatch) -> None:
   monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", lambda *_args, **_kwargs: FakeBedrockClient())
 
   result = _converse(Settings(), "model-id", "system", "prompt")
 
   assert result["items"][0]["text"] == "퇴근 후 약속"
+
+
+def test_converse_extracts_json_from_text_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
+  class WrappedJsonBedrockClient:
+    def converse(self, **_kwargs):
+      return {
+        "output": {
+          "message": {
+            "content": [
+              {
+                "text": "Here is the JSON:\n{\"items\":[{\"id\":\"fresh-1\",\"text\":\"퇴근 후 약속\"}]}\nDone.",
+              },
+            ],
+          },
+        },
+      }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", lambda *_args, **_kwargs: WrappedJsonBedrockClient())
+
+  result = _converse(Settings(), "model-id", "system", "prompt")
+
+  assert result["items"][0]["text"] == "퇴근 후 약속"
+
+
+def test_converse_uses_bounded_three_look_recommendation_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+  client = FakeBedrockClient()
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", lambda *_args, **_kwargs: client)
+
+  _converse(Settings(), "model-id", "system", "prompt")
+
+  assert 3000 <= client.calls[0]["inferenceConfig"]["maxTokens"] <= 4000
+  assert client.calls[0]["inferenceConfig"]["temperature"] <= 0.5
 
 
 def test_bedrock_access_denial_keeps_safe_provider_diagnostics() -> None:
@@ -78,6 +133,14 @@ def test_bedrock_access_denial_keeps_safe_provider_diagnostics() -> None:
     "providerRequestId": "request-123",
   }
   assert "role is not authorized" not in error.message
+
+
+def test_bedrock_read_timeout_is_reported_as_timeout() -> None:
+  error = _bedrock_app_error(ReadTimeoutError(endpoint_url="https://bedrock-runtime.example.com"))
+
+  assert error.status_code == 504
+  assert error.code == "BEDROCK_REQUEST_TIMEOUT"
+  assert error.details == {"providerCode": "ReadTimeoutError"}
 
 
 def test_product_only_refinement_preserves_makeup_and_replaces_products() -> None:
@@ -132,8 +195,10 @@ class RecommendationDatabase:
 
 
 class RecommendationReportDatabase:
-  def __init__(self) -> None:
+  def __init__(self, image_status: str = "failed") -> None:
+    self.image_status = image_status
     self.executed: list[tuple[str, tuple]] = []
+    self.fetchrow_queries: list[tuple[str, tuple]] = []
 
   async def fetch(self, query: str, *args):
     assert "from makeup_recommendation_reports" in query
@@ -151,8 +216,11 @@ class RecommendationReportDatabase:
     ]
 
   async def fetchrow(self, query: str, *args):
+    self.fetchrow_queries.append((query, args))
     if "select id, image_status" in query:
-      return {"id": REPORT_ID, "image_status": "failed"}
+      return {"id": REPORT_ID, "image_status": self.image_status}
+    if "set image_status = 'pending'" in query and "returning id" in query:
+      return {"id": REPORT_ID} if self.image_status == "failed" else None
     raise AssertionError(f"Unexpected query: {query}")
 
   async def execute(self, query: str, *args):
@@ -393,6 +461,54 @@ def test_user_can_list_saved_recommendation_reports(monkeypatch: pytest.MonkeyPa
   assert response.json()["data"]["reports"][0]["scenarioText"] == "퇴근 후 약속"
 
 
+def test_user_can_poll_owned_report_with_camel_case_image_state(monkeypatch: pytest.MonkeyPatch) -> None:
+  recommendation = {
+    "looks": [
+      {"id": role, "role": role, "title": role, "summary": role}
+      for role in ("anchor", "bold", "discovery")
+    ],
+  }
+
+  class PollDatabase:
+    async def fetchrow(self, query: str, *args):
+      assert "from makeup_recommendation_reports" in query
+      assert args == (REPORT_ID, USER_ID)
+      return {
+        "id": REPORT_ID,
+        "scenario_text": "퇴근 후 약속",
+        "scenario_tags": json.dumps(["차분"], ensure_ascii=False),
+        "questions": json.dumps([{"id": "mood"}], ensure_ascii=False),
+        "answers": json.dumps([{"questionId": "mood", "optionId": "soft"}], ensure_ascii=False),
+        "recommendation": json.dumps(recommendation, ensure_ascii=False),
+        "image_status": "processing",
+        "image_url": None,
+        "image_error": None,
+        "created_at": "2026-07-14T00:00:00Z",
+        "updated_at": "2026-07-14T00:00:10Z",
+      }
+
+  db = PollDatabase()
+  app = create_app(Settings(database_url=None))
+  app.dependency_overrides[get_current_user] = auth_context
+  app.dependency_overrides[require_database] = lambda: db
+
+  async def fake_ensure_user(_db, _auth):
+    return {"id": USER_ID}
+
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+
+  response = TestClient(app).get(f"/api/makeup-recommendations/{REPORT_ID}")
+
+  assert response.status_code == 200
+  assert response.json()["data"]["scenarioText"] == "퇴근 후 약속"
+  assert response.json()["data"]["imageStatus"] == "processing"
+  assert response.json()["data"]["scenarioTags"] == ["차분"]
+  assert response.json()["data"]["questions"] == [{"id": "mood"}]
+  assert response.json()["data"]["answers"] == [{"questionId": "mood", "optionId": "soft"}]
+  assert response.json()["data"]["recommendation"] == recommendation
+  assert "image_error" not in response.json()["data"]
+
+
 def test_failed_report_image_can_be_retried(monkeypatch: pytest.MonkeyPatch) -> None:
   db = RecommendationReportDatabase()
   app = create_app(Settings(database_url=None))
@@ -413,7 +529,45 @@ def test_failed_report_image_can_be_retried(monkeypatch: pytest.MonkeyPatch) -> 
   assert response.status_code == 200
   assert response.json()["data"]["imageStatus"] == "pending"
   assert dispatched["report_id"] == REPORT_ID
-  assert any("image_status = 'pending'" in query for query, _args in db.executed)
+  assert any(
+    "image_status = 'pending'" in query and "image_status = 'failed'" in query
+    for query, _args in db.fetchrow_queries
+  )
+
+
+@pytest.mark.parametrize(
+  ("image_status", "expected_code"),
+  [
+    ("pending", "MAKEUP_RECOMMENDATION_IMAGE_PENDING"),
+    ("processing", "MAKEUP_RECOMMENDATION_IMAGE_PROCESSING"),
+  ],
+)
+def test_active_report_image_cannot_enqueue_a_duplicate_retry(
+  monkeypatch: pytest.MonkeyPatch,
+  image_status: str,
+  expected_code: str,
+) -> None:
+  db = RecommendationReportDatabase(image_status=image_status)
+  app = create_app(Settings(database_url=None))
+  app.dependency_overrides[get_current_user] = auth_context
+  app.dependency_overrides[require_database] = lambda: db
+  dispatched = False
+
+  async def fake_ensure_user(_db, _auth):
+    return {"id": USER_ID}
+
+  async def fake_dispatch(**_kwargs):
+    nonlocal dispatched
+    dispatched = True
+
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(makeup_api, "dispatch_recommendation_image_job", fake_dispatch)
+
+  response = TestClient(app).post(f"/api/makeup-recommendations/{REPORT_ID}/image/retry")
+
+  assert response.status_code == 409
+  assert response.json()["error"]["code"] == expected_code
+  assert dispatched is False
 
 
 def test_refinement_creates_a_new_saved_report(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -478,6 +632,18 @@ def test_makeup_report_is_part_of_schema_contract() -> None:
   }
 
 
+def test_makeup_prompt_contract_accepts_full_generated_seed_prompt() -> None:
+  prompt = "가" * 240
+
+  question = makeup_api.MakeupQuestionRequest.model_validate({"scenarioText": prompt, "scenarioLabel": "공항 출국 레전드"})
+  recommendation = makeup_api.MakeupRecommendationRequest.model_validate({"scenarioText": prompt, "scenarioLabel": "공항 출국 레전드"})
+
+  assert question.scenario_text == prompt
+  assert question.scenario_label == "공항 출국 레전드"
+  assert recommendation.scenario_text == prompt
+  assert recommendation.scenario_label == "공항 출국 레전드"
+
+
 @pytest.mark.asyncio
 async def test_scenarios_retry_until_they_are_new_and_unique(monkeypatch: pytest.MonkeyPatch) -> None:
   responses = iter(
@@ -507,6 +673,29 @@ async def test_scenarios_retry_until_they_are_new_and_unique(monkeypatch: pytest
 
   assert [item["text"] for item in result["items"]] == ["조용한 약속", "기분 전환", "오랜만의 외출"]
   assert result["items"][0]["seedPrompt"] == "차분한 저녁 약속 메이크업"
+
+
+@pytest.mark.asyncio
+async def test_scenarios_skip_non_list_items_response(monkeypatch: pytest.MonkeyPatch) -> None:
+  responses = iter(
+    [
+      {"items": None},
+      {
+        "items": [
+          {"id": "fresh", "text": "조용한 약속", "seedPrompt": "차분한 저녁 약속 메이크업", "tags": ["차분"]},
+        ],
+      },
+    ],
+  )
+
+  async def fake_generate_json(*_args, **_kwargs):
+    return next(responses)
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  result = await generate_scenarios(Settings(), 1, [])
+
+  assert [item["text"] for item in result["items"]] == ["조용한 약속"]
 
 
 @pytest.mark.asyncio
@@ -580,6 +769,124 @@ async def test_scenario_prompt_uses_curated_copy_direction(monkeypatch: pytest.M
   assert "나다운 프로필 사진" in captured["prompt"]
   assert "성수동 느좋 감성" in captured["prompt"]
   assert "generic" in captured["system"].casefold()
+
+
+@pytest.mark.asyncio
+async def test_makeup_generators_route_to_configured_model_ids(monkeypatch: pytest.MonkeyPatch) -> None:
+  calls: list[str] = []
+
+  async def fake_generate_json(_settings, model_id, _system, prompt):
+    calls.append(model_id)
+    if '"items"' in prompt:
+      return {
+        "items": [{
+          "id": "scenario",
+          "text": "첫 회의의 여유",
+          "seedPrompt": "첫 회의에서 단정하고 여유롭게 보이는 메이크업",
+          "tags": ["업무"],
+        }],
+      }
+    if '"questions"' in prompt and "Return exactly this shape" not in prompt:
+      return {
+        "questions": [{
+          "id": "mood",
+          "title": "어떤 방향이 좋아요?",
+          "options": [
+            {"id": "soft", "label": "은은하게"},
+            {"id": "clear", "label": "또렷하게"},
+            {"id": "bold", "label": "과감하게"},
+            {"id": "ai_pick", "label": "AI가 골라줘"},
+          ],
+        }],
+      }
+    areas = ("base", "brow", "eye", "cheek", "lip")
+    return {
+      "looks": [
+        {
+          "id": role,
+          "role": role,
+          "title": role,
+          "summary": f"{role} summary",
+          "reasons": ["선택한 조건 반영"],
+          "appliedConditions": ["퇴근 후 약속"],
+          "durationMinutes": 20,
+          "difficulty": "medium",
+          "steps": [
+            {"order": index, "area": area, "instruction": f"{area} 표현"}
+            for index, area in enumerate(areas, start=1)
+          ],
+          "products": [
+            {
+              "area": area,
+              "brandName": "브랜드",
+              "productName": f"{area} 제품",
+              "shadeName": "01",
+              "reason": "조화로운 색",
+            }
+            for area in areas[:3]
+          ],
+        }
+        for role in ("anchor", "bold", "discovery")
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+  settings = Settings(
+    bedrock_scenario_model_id="scenario-haiku",
+    bedrock_question_model_id="question-haiku",
+    bedrock_recommendation_model_id="recommendation-sonnet",
+  )
+
+  await generate_scenarios(settings, 1, [])
+  await generate_questions(settings, "퇴근 후 약속", [])
+  await generate_recommendation(settings, "퇴근 후 약속", [], [], [])
+
+  assert calls == ["scenario-haiku", "question-haiku", "recommendation-sonnet"]
+
+
+@pytest.mark.asyncio
+async def test_question_prompt_asks_for_story_direction_instead_of_makeup_specs(monkeypatch: pytest.MonkeyPatch) -> None:
+  captured: dict[str, str] = {}
+
+  async def fake_generate_json(_settings, _model_id, system, prompt):
+    captured["system"] = system
+    captured["prompt"] = prompt
+    return {
+      "questions": [{
+        "id": "presence",
+        "title": "평소보다 얼마나 과감해질까요?",
+        "options": [
+          {"id": "familiar", "label": "평소의 나답게"},
+          {"id": "different", "label": "조금 낯설게"},
+          {"id": "bold", "label": "확실히 달라지게"},
+          {"id": "ai_pick", "label": "AI가 골라줘"},
+        ],
+      }],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  await generate_questions(
+    Settings(),
+    "사진에서 또렷하되 과하게 꾸민 느낌은 피하는 메이크업",
+    ["공항", "사진"],
+    "공항 출국 레전드",
+  )
+
+  assert "어디에서 어떻게 보이고 싶은지" in captured["system"]
+  assert "어떤 분위기가 끌리는지" in captured["system"]
+  assert "평소보다 얼마나 과감해지고 싶은지" in captured["system"]
+  assert "시간과 난이도를 어느 정도 감수할지" in captured["system"]
+  assert "색상, 질감, 강조 부위" in captured["system"]
+  assert "정확히 4개" in captured["system"]
+  assert "서로 배타적" in captured["system"]
+  assert "피부톤" in captured["system"]
+  assert "언더톤" in captured["system"]
+  assert "퍼스널컬러" in captured["system"]
+  assert "밝은 톤/중간 톤/어두운 톤/쿨 톤/웜 톤" in captured["system"]
+  assert "재미" in captured["system"]
+  assert "공항 출국 레전드" in captured["prompt"]
+  assert "exactly 4 options" in captured["prompt"]
 
 
 @pytest.mark.asyncio
@@ -984,6 +1291,59 @@ async def test_questions_reject_malformed_option_counts(monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
+async def test_questions_reject_more_than_four_options(monkeypatch: pytest.MonkeyPatch) -> None:
+  async def fake_generate_json(*_args, **_kwargs):
+    return {
+      "questions": [
+        {
+          "id": "story_direction",
+          "title": "오늘의 반전은 어느 쪽이에요?",
+          "options": [
+            {"id": "quiet", "label": "조용히 시선 끌기"},
+            {"id": "entrance", "label": "등장부터 장면 만들기"},
+            {"id": "afterimage", "label": "돌아선 뒤 여운 남기기"},
+            {"id": "closeup", "label": "가까이서 반전 보이기"},
+            {"id": "ai_pick", "label": "AI가 골라줘"},
+          ],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  with pytest.raises(AppError) as exc_info:
+    await generate_questions(Settings(), "퇴근 후 약속", ["반전"])
+
+  assert exc_info.value.code == "BEDROCK_INVALID_QUESTIONS"
+
+
+@pytest.mark.asyncio
+async def test_questions_reject_skin_tone_and_undertone_axes(monkeypatch: pytest.MonkeyPatch) -> None:
+  async def fake_generate_json(*_args, **_kwargs):
+    return {
+      "questions": [
+        {
+          "id": "skin_tone",
+          "title": "피부톤은 어디에 가까워요?",
+          "options": [
+            {"id": "light", "label": "밝은 톤"},
+            {"id": "cool", "label": "쿨 톤"},
+            {"id": "warm", "label": "웜 톤"},
+            {"id": "ai_pick", "label": "AI가 골라줘"},
+          ],
+        },
+      ],
+    }
+
+  monkeypatch.setattr("app.services.makeup_recommendation.generate_json", fake_generate_json)
+
+  with pytest.raises(AppError) as exc_info:
+    await generate_questions(Settings(), "공항 출국 레전드", ["사진"])
+
+  assert exc_info.value.code == "BEDROCK_INVALID_QUESTIONS"
+
+
+@pytest.mark.asyncio
 async def test_recommendation_requires_three_distinct_roles(monkeypatch: pytest.MonkeyPatch) -> None:
   async def fake_generate_json(*_args, **_kwargs):
     return {
@@ -1174,3 +1534,40 @@ async def test_image_job_persists_three_generated_look_urls(monkeypatch: pytest.
   saved_recommendation = json.loads(completed_args[1])
   assert len(saved_recommendation["looks"]) == 3
   assert saved_recommendation["looks"][2]["imageUrl"].endswith("discovery.png")
+
+
+@pytest.mark.asyncio
+async def test_image_job_ignores_duplicate_delivery_when_atomic_claim_fails(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  class FakeDB:
+    def __init__(self) -> None:
+      self.claim_query = ""
+      self.executed = False
+
+    async def fetchrow(self, query: str, *_args):
+      self.claim_query = query
+      return None
+
+    async def execute(self, _query: str, *_args):
+      self.executed = True
+      return "UPDATE 1"
+
+  generated = False
+
+  async def fake_generate_images(*_args, **_kwargs):
+    nonlocal generated
+    generated = True
+    return []
+
+  monkeypatch.setattr(makeup_api, "generate_recommendation_images", fake_generate_images)
+  db = FakeDB()
+
+  await makeup_api.run_recommendation_image_job(REPORT_ID, USER_ID, Settings(), db=db)  # type: ignore[arg-type]
+
+  assert "update makeup_recommendation_reports" in db.claim_query
+  assert "image_status = 'pending'" in db.claim_query
+  assert "updated_at < now() - interval '15 minutes'" in db.claim_query
+  assert "returning" in db.claim_query
+  assert generated is False
+  assert db.executed is False

@@ -21,6 +21,7 @@ type RecommendationQuestionViewProps = {
   onBack: () => void;
   question: MakeupRecommendationQuestion;
   questionCount: number;
+  scenarioLabel?: string;
 };
 
 export function RecommendationQuestionView({
@@ -29,6 +30,7 @@ export function RecommendationQuestionView({
   onBack,
   question,
   questionCount,
+  scenarioLabel,
 }: RecommendationQuestionViewProps) {
   const [selectedOptionId, setSelectedOptionId] = useState<string>();
   const [freeText, setFreeText] = useState('');
@@ -85,6 +87,13 @@ export function RecommendationQuestionView({
           <Text style={styles.progress}>{currentQuestionIndex + 1} / {questionCount}</Text>
         </View>
 
+        {scenarioLabel ? (
+          <View style={styles.scenarioContext}>
+            <Text style={styles.scenarioContextLabel}>처음 고른 문장</Text>
+            <Text style={styles.scenarioContextText}>{scenarioLabel}</Text>
+          </View>
+        ) : null}
+
         <View accessibilityLabel={`추천 질문 ${currentQuestionIndex + 1}/${questionCount}`} style={styles.progressTrack}>
           {getQuestionProgressSegments({currentQuestionIndex, questionCount}).map((segment, index) => (
             <View key={index} style={[styles.progressSegment, segment === 'complete' && styles.progressSegmentComplete]} />
@@ -119,6 +128,7 @@ export function RecommendationQuestionView({
           <Text style={styles.freeTextLabel}>선택지에 없다면 직접 말해도 좋아요</Text>
           <TextInput
             accessibilityLabel="질문에 직접 답하기"
+            maxLength={240}
             multiline
             onChangeText={value => {
               setFreeText(value);
@@ -136,6 +146,7 @@ export function RecommendationQuestionView({
             {conditionInputVisible ? (
               <TextInput
                 accessibilityLabel="추가 조건 입력"
+                maxLength={240}
                 onChangeText={setAdditionalConstraints}
                 placeholder="예: 글리터 제외, 립 강조, 15분 이내"
                 placeholderTextColor={colors.textTertiary}
@@ -201,6 +212,9 @@ const styles = StyleSheet.create({
   progressTrack: {flexDirection: 'row', gap: spacing.xs},
   progressSegment: {backgroundColor: colors.borderStrong, borderRadius: radius.pill, flex: 1, height: 3},
   progressSegmentComplete: {backgroundColor: colors.textPrimary},
+  scenarioContext: {backgroundColor: colors.surfaceMuted, borderRadius: radius.md, gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm},
+  scenarioContextLabel: {color: colors.textTertiary, fontFamily: typography.fontFamily.medium, fontSize: typography.fontSize.xs},
+  scenarioContextText: {color: colors.textPrimary, fontFamily: typography.fontFamily.semibold, fontSize: typography.fontSize.sm},
   heading: {gap: spacing.sm},
   eyebrow: {
     color: colors.textSecondary,

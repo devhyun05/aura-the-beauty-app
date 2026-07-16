@@ -8,7 +8,7 @@ import type {
   MakeupLookRecommendation,
   MakeupRecommendationRefinement,
 } from '../types';
-import {makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
+import {makeupRecommendationImageStatusCopy, makeupRecommendationReportStatusCopy, makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 export {makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 
 const difficultyLabels: Record<MakeupLookRecommendation['difficulty'], string> = {
@@ -39,6 +39,11 @@ type RecommendationResultsViewProps = {
   onRetryRefinement: () => void;
   refinementError?: string;
   results: readonly MakeupLookRecommendation[];
+  imageStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  imageRetryError?: string;
+  isReportSaved: boolean;
+  isRefining: boolean;
+  onRetryImages: () => void;
 };
 
 function ResultCard({
@@ -46,15 +51,13 @@ function ResultCard({
   onApplyAR,
   expanded,
   onToggleExpanded,
-  onToggleSave,
-  saved,
+  reportSaved,
 }: {
   look: MakeupLookRecommendation;
   onApplyAR: () => void;
   expanded: boolean;
   onToggleExpanded: () => void;
-  onToggleSave: () => void;
-  saved: boolean;
+  reportSaved: boolean;
 }) {
   return (
     <AppCard padded={false} style={styles.resultCard}>
@@ -62,15 +65,11 @@ function ResultCard({
       <View style={styles.cardBody}>
         <View style={styles.roleRow}>
           <Text style={styles.roleLabel}>{makeupRecommendationResultRoleLabels[look.role]}</Text>
-          <Pressable
-            accessibilityLabel={`${look.title} ${saved ? '저장 해제' : '저장'}`}
-            accessibilityRole="button"
-            accessibilityState={{selected: saved}}
-            onPress={onToggleSave}
-            style={styles.saveButton}
-          >
-            <Text style={styles.saveLabel}>{saved ? '저장됨' : '저장'}</Text>
-          </Pressable>
+          {reportSaved ? (
+            <Text accessibilityLabel={`${look.title} 보고서 저장됨`} style={styles.saveLabel}>
+              {makeupRecommendationReportStatusCopy.saved}
+            </Text>
+          ) : null}
         </View>
         <View style={styles.lookHeading}>
           <Text style={styles.lookTitle}>{look.title}</Text>
@@ -141,8 +140,12 @@ export function RecommendationResultsView({
   onRetryRefinement,
   refinementError,
   results,
+  imageStatus,
+  imageRetryError,
+  isReportSaved,
+  isRefining,
+  onRetryImages,
 }: RecommendationResultsViewProps) {
-  const [savedLookIds, setSavedLookIds] = useState<Set<string>>(() => new Set());
   const [expandedLookIds, setExpandedLookIds] = useState<Set<string>>(() => new Set());
 
   if (results.length === 0) {
@@ -156,35 +159,35 @@ export function RecommendationResultsView({
     );
   }
 
-  const toggleSaved = (lookId: string) => {
-    setSavedLookIds(previous => {
-      const next = new Set(previous);
-      if (next.has(lookId)) next.delete(lookId);
-      else next.add(lookId);
-      return next;
-    });
-  };
-
-  const [bestLook] = results;
-
   return (
     <AppScreen contentGap={spacing.xxl} topPadding="belowShellHeader">
       <View style={styles.resultsHeading}>
-        <Text style={styles.eyebrow}>가장 잘 어울리는 룩을 골랐어요</Text>
-        <Text style={styles.resultsTitle}>오늘의 얼굴에 가장 어울리는 메이크업</Text>
-        <Text style={styles.resultsDescription}>분석 결과와 원하는 분위기를 반영한 최적의 한 가지예요.</Text>
+        <Text style={styles.eyebrow}>세 가지 방향으로 풀어봤어요</Text>
+        <Text style={styles.resultsTitle}>오늘의 얼굴에 어울릴 메이크업</Text>
+        <Text style={styles.resultsDescription}>안정적인 선택부터 예상 밖의 발견까지 비교해보세요.</Text>
+        {imageStatus === 'pending' || imageStatus === 'processing' ? (
+          <Text style={styles.imageStatus}>세 가지 추천 이미지를 만들고 있어요. 완성되면 자동으로 바뀌어요.</Text>
+        ) : imageStatus === 'failed' ? (
+          <View style={styles.imageFailureRow}>
+            <Text style={styles.imageStatus}>이미지는 준비하지 못했지만 추천 내용은 그대로 볼 수 있어요.</Text>
+            <Pressable accessibilityRole="button" onPress={onRetryImages} style={styles.imageRetryButton}>
+              <Text style={styles.imageRetryLabel}>{makeupRecommendationImageStatusCopy.failedAction}</Text>
+            </Pressable>
+            {imageRetryError ? <Text accessibilityRole="alert" style={styles.imageStatus}>{imageRetryError}</Text> : null}
+          </View>
+        ) : null}
       </View>
 
-      {bestLook ? (
+      {results.map(look => (
         <ResultCard
-          expanded={expandedLookIds.has(bestLook.id)}
-          look={bestLook}
-          onApplyAR={() => onApplyAR(bestLook)}
-          onToggleSave={() => toggleSaved(bestLook.id)}
-          onToggleExpanded={() => setExpandedLookIds(previous => toggleExpandedLookId(previous, bestLook.id))}
-          saved={savedLookIds.has(bestLook.id)}
+          key={look.id}
+          expanded={expandedLookIds.has(look.id)}
+          look={look}
+          onApplyAR={() => onApplyAR(look)}
+          onToggleExpanded={() => setExpandedLookIds(previous => toggleExpandedLookId(previous, look.id))}
+          reportSaved={isReportSaved}
         />
-      ) : null}
+      ))}
 
       <View style={styles.refinementSection}>
         <Text style={styles.detailTitle}>조금 다르게 보고 싶다면</Text>
@@ -192,11 +195,13 @@ export function RecommendationResultsView({
           {refinementActions.map(action => (
             <Pressable
               accessibilityRole="button"
+              accessibilityState={{disabled: isRefining}}
+              disabled={isRefining}
               key={action.value}
               onPress={() => onRefine(action.value)}
               style={styles.refinementButton}
             >
-              <Text style={styles.refinementLabel}>{action.label}</Text>
+              <Text style={styles.refinementLabel}>{isRefining ? '조정 중…' : action.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -241,6 +246,19 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
+  imageStatus: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  imageFailureRow: {alignItems: 'flex-start', gap: spacing.xs},
+  imageRetryButton: {justifyContent: 'center', minHeight: 44},
+  imageRetryLabel: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+  },
   resultCard: {overflow: 'hidden'},
   lookImage: {backgroundColor: colors.surfaceMuted, height: 230, width: '100%'},
   cardBody: {gap: spacing.lg, padding: spacing.lg},
@@ -251,11 +269,10 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     letterSpacing: 0.4,
   },
-  saveButton: {justifyContent: 'center', minHeight: 48, paddingLeft: spacing.lg},
   saveLabel: {
-    color: colors.textPrimary,
+    color: colors.textTertiary,
     fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
+    fontSize: typography.fontSize.xs,
   },
   lookHeading: {gap: spacing.xs},
   lookTitle: {

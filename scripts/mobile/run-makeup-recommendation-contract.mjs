@@ -1,4 +1,4 @@
-import {mkdtempSync} from 'node:fs';
+import {mkdtempSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -11,13 +11,78 @@ const tscPath = join(repoRoot, 'apps/mobile/node_modules/typescript/bin/tsc');
 const srcRoot = join(repoRoot, 'apps/mobile/src');
 const tests = [
   'features/makeup-recommendation/services/makeupRecommendationService.test.ts',
-  'features/makeup-recommendation/components/scenarioPuzzleLayout.test.ts',
   'features/makeup-recommendation/screens/MakeupRecommendationScreen.test.ts',
   'features/ar/services/recommendedMakeupEditService.test.ts',
   'features/ar/services/savedArLookService.test.ts',
   'app/navigation/routes/makeupRecommendationRouteActions.test.ts',
   'app/navigation/routes/arRouteActions.test.ts',
 ];
+
+const scenarioPromptChipSource = readFileSync(
+  join(srcRoot, 'features/makeup-recommendation/components/ScenarioPromptChip.tsx'),
+  'utf8',
+);
+for (const requiredChipContract of ["variant?: 'default' | 'popular'", 'borderRadius: radius.pill', 'minHeight: 44']) {
+  if (!scenarioPromptChipSource.includes(requiredChipContract)) {
+    throw new Error(`ScenarioPromptChip is missing its chip contract: ${requiredChipContract}`);
+  }
+}
+const scenarioChipCloudSource = readFileSync(
+  join(srcRoot, 'features/makeup-recommendation/components/ScenarioChipCloud.tsx'),
+  'utf8',
+);
+for (const requiredCloudContract of ["flexDirection: 'row'", "flexWrap: 'wrap'"]) {
+  if (!scenarioChipCloudSource.includes(requiredCloudContract)) {
+    throw new Error(`ScenarioChipCloud is missing its wrapping contract: ${requiredCloudContract}`);
+  }
+}
+const scenarioDiscoverySource = readFileSync(
+  join(srcRoot, 'features/makeup-recommendation/screens/ScenarioDiscoveryView.tsx'),
+  'utf8',
+);
+for (const duplicatePrompt of ['지금 끌리는 한 문장', '마음 가는 문장을 골라보세요.']) {
+  if (scenarioDiscoverySource.includes(duplicatePrompt)) {
+    throw new Error(`Scenario discovery must not repeat its prompt: ${duplicatePrompt}`);
+  }
+}
+for (const requiredDiscoveryContract of ['자주 찾는 메이크업', '다른 분위기', '문구 더보기', 'popularScenarios']) {
+  if (!scenarioDiscoverySource.includes(requiredDiscoveryContract)) {
+    throw new Error(`Scenario discovery is missing its curated chip contract: ${requiredDiscoveryContract}`);
+  }
+}
+const questionScreenSource = readFileSync(
+  join(srcRoot, 'features/makeup-recommendation/screens/MakeupRecommendationScreen.tsx'),
+  'utf8',
+);
+if (!questionScreenSource.includes('scenarioLabel={session.scenarioLabel}')) {
+  throw new Error('Question screen must keep the initially selected scenario visible.');
+}
+for (const requiredScenarioState of [
+  'INITIAL_GENERAL_SCENARIO_COUNT = 7',
+  'SCENARIO_LOAD_MORE_COUNT = 12',
+  'getPopularMakeupScenarios()',
+]) {
+  if (!questionScreenSource.includes(requiredScenarioState)) {
+    throw new Error(`MakeupRecommendationScreen is missing local scenario state: ${requiredScenarioState}`);
+  }
+}
+const makeupServiceSource = readFileSync(
+  join(srcRoot, 'features/makeup-recommendation/services/makeupRecommendationService.ts'),
+  'utf8',
+);
+const recommendationResultsSource = readFileSync(
+  join(srcRoot, 'features/makeup-recommendation/screens/RecommendationResultsView.tsx'),
+  'utf8',
+);
+if (makeupServiceSource.includes("generationMode === 'localFallback'") || recommendationResultsSource.includes("generationMode === 'localFallback'")) {
+  throw new Error('AI failures must be surfaced for retry instead of displaying fixture recommendations.');
+}
+if (makeupServiceSource.includes('/makeup-recommendations/scenarios')) {
+  throw new Error('Scenario copy must come from the curated local library, not an AI endpoint.');
+}
+if (recommendationResultsSource.includes('임시 추천')) {
+  throw new Error('Recommendation results must never be presented as a temporary substitute for failed AI.');
+}
 
 function run(command, args) {
   const result = spawnSync(command, args, {cwd: repoRoot, stdio: 'inherit'});

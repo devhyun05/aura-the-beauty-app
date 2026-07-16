@@ -64,6 +64,7 @@ export type MakeupRecommendationSession = {
   id: string;
   phase: 'question' | 'results';
   prompt: string;
+  scenarioLabel?: string;
   questions: MakeupRecommendationQuestion[];
   currentQuestionIndex: number;
   answers: MakeupRecommendationAnswer[];
@@ -71,15 +72,19 @@ export type MakeupRecommendationSession = {
   results: MakeupLookRecommendation[];
   useProfile: boolean;
   personalColor?: string;
+  reportId?: string;
+  imageStatus?: 'pending' | 'processing' | 'completed' | 'failed';
+  imageError?: string;
+  generationMode?: 'backend';
 };
-
 export type MakeupRecommendationReportHistoryItem = {
   reportId: string;
-  createdAt: string;
   scenarioText: string;
+  createdAt: string;
+  imageStatus: 'pending' | 'processing' | 'completed' | 'failed';
+  imageError?: string;
   results: MakeupLookRecommendation[];
 };
-
 export type ProductRecommendationProvider = {
   recommendProducts(lookId: string): MakeupRecommendationProduct[];
 };

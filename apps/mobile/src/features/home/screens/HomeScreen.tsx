@@ -18,7 +18,7 @@ import {
   PackageSearch,
   ScanFace,
   ScanSearch,
-  Scissors,
+  Sparkles,
   Store,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -51,7 +51,7 @@ type HomeScreenProps = {
   onPressFaceDiagnosis?: () => void;
   onPressConsulting?: () => void;
   onPressHalfMakeup?: () => void;
-  onPressHairAnalysis?: () => void;
+  onPressMakeupRecommendation?: () => void;
   onPressHairRemovalSimulation?: () => void;
   onPressMakeupExtraction?: () => void;
   onPressMakeupFeedback?: () => void;
@@ -74,7 +74,7 @@ export function HomeScreen({
   onPressHeroTrendFilter,
   onPressConsulting,
   onPressHalfMakeup,
-  onPressHairAnalysis,
+  onPressMakeupRecommendation,
   onPressHairRemovalSimulation,
   onPressMakeupExtraction,
   onPressMakeupFeedback,
@@ -207,7 +207,7 @@ export function HomeScreen({
             onPressFaceDiagnosis={onPressFaceDiagnosis}
             onPressConsulting={onPressConsulting}
             onPressHalfMakeup={onPressHalfMakeup}
-            onPressHairAnalysis={onPressHairAnalysis}
+            onPressMakeupRecommendation={onPressMakeupRecommendation}
             onPressHairRemovalSimulation={onPressHairRemovalSimulation}
             onPressMakeupExtraction={onPressMakeupExtraction}
             onPressMakeupFeedback={onPressMakeupFeedback}
@@ -760,7 +760,7 @@ export const HOME_SERVICE_SHORTCUT_LABELS = [
   '필터 스토어',
   '추천 제품',
   '컨설팅',
-  '헤어 분석',
+  '메이크업 추천',
 ] as const;
 export const HOME_SERVICE_SHORTCUT_ROW_LABELS = [
   HOME_SERVICE_SHORTCUT_LABELS.slice(0, 4),
@@ -827,11 +827,11 @@ const homeServiceShortcutRows = [
       ),
     },
     {
-      id: 'hairAnalysis',
+      id: 'makeupRecommendation',
       label: HOME_SERVICE_SHORTCUT_LABELS[7],
-      accessibilityLabel: '헤어 분석 시작',
+      accessibilityLabel: '메이크업 추천 시작',
       icon: (color: string) => (
-        <Scissors color={color} size={iconSize.lg} strokeWidth={1.9} />
+        <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
   ],
@@ -850,7 +850,7 @@ type HomeServiceShortcutHandlers = {
   onPressConsulting?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressHalfMakeup?: () => void;
-  onPressHairAnalysis?: () => void;
+  onPressMakeupRecommendation?: () => void;
   onPressHairRemovalSimulation?: () => void;
   onPressMakeupExtraction?: () => void;
   onPressMakeupFeedback?: () => void;
@@ -866,7 +866,7 @@ export function getHomeServiceShortcutPressHandler(
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressHalfMakeup,
-    onPressHairAnalysis,
+    onPressMakeupRecommendation,
     onPressHairRemovalSimulation,
     onPressMakeupExtraction,
     onPressMakeupFeedback,
@@ -883,8 +883,8 @@ export function getHomeServiceShortcutPressHandler(
     return onPressMakeupFilter;
   }
 
-  if (actionId === 'hairAnalysis') {
-    return onPressHairAnalysis;
+  if (actionId === 'makeupRecommendation') {
+    return onPressMakeupRecommendation;
   }
 
   if (actionId === 'makeupExtraction') {
@@ -937,7 +937,7 @@ function HomeServiceShortcutSection({
   onPressConsulting,
   onPressFaceDiagnosis,
   onPressHalfMakeup,
-  onPressHairAnalysis,
+  onPressMakeupRecommendation,
   onPressHairRemovalSimulation,
   onPressMakeupExtraction,
   onPressMakeupFeedback,
@@ -950,7 +950,7 @@ function HomeServiceShortcutSection({
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressHalfMakeup,
-    onPressHairAnalysis,
+    onPressMakeupRecommendation,
     onPressHairRemovalSimulation,
     onPressMakeupExtraction,
     onPressMakeupFeedback,

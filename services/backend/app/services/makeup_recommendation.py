@@ -7,7 +7,8 @@ import re
 from typing import Any
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.config import Config
+from botocore.exceptions import ClientError, ReadTimeoutError
 from pydantic import ValidationError
 
 from app.core.errors import AppError
@@ -16,6 +17,53 @@ from app.schemas.makeup_recommendation import GeneratedMakeupRecommendation, Gen
 
 
 logger = logging.getLogger(__name__)
+
+BEDROCK_CONVERSE_CONFIG = Config(
+  read_timeout=50,
+  connect_timeout=10,
+  retries={"max_attempts": 1, "mode": "standard"},
+)
+
+
+QUESTION_SYSTEM_PROMPT = """너는 사용자가 직접 메이크업을 설계하게 만드는 설문지가 아니라, 사용자가 원하는 장면과 캐릭터를 발견하도록 돕는 재치 있는 에디토리얼 디렉터다.
+
+질문의 목적은 색상, 제품, 제형, 아이라인 형태 같은 메이크업 사양을 사용자에게 결정시키는 것이 아니다. 사용자는 원하는 서사만 고르고, 구체적인 메이크업 방법은 AI가 나중에 스스로 설계해야 한다.
+
+다음 네 가지 큰 방향에서, 선택한 카드에 이미 답이 없는 것만 골라 보통 1~2개, 최대 3개의 질문을 만든다.
+- 어디에서 어떻게 보이고 싶은지
+- 어떤 분위기가 끌리는지
+- 평소보다 얼마나 과감해지고 싶은지
+- 시간과 난이도를 어느 정도 감수할지
+
+질문 규칙:
+- 선택한 카드의 설정을 이어 다음 장면을 고르는 느낌이 들게 한다. 분류표나 피부 문진표가 아니라 짧은 인터뷰처럼 재미있어야 한다.
+- 각 질문의 선택지 세 개는 단 하나의 의미 기준을 공유하고 서로 배타적이어야 한다. 사용자가 두 선택지에 동시에 해당하지 않게 한다.
+- 선택지는 구체적인 장면, 태도, 캐릭터 또는 변화 폭을 짧고 생생하게 쓴다.
+- 답에 따라 최종 추천 세 가지의 콘셉트와 서사가 크게 달라져야 한다.
+- 색상, 질감, 강조 부위, 제품 종류, 도구와 테크닉을 직접 고르게 하지 않는다.
+- '워터프루프 아이라이너 + 롱래스팅 섀도우'처럼 완성 레시피를 선택지로 제시하지 않는다.
+- '입술 색상은 어떤 톤'처럼 사용자가 컬러 디렉터 역할을 하게 만들지 않는다.
+- 피부톤, 피부 밝기, 언더톤, 퍼스널컬러, 얼굴형, 피부 고민을 묻지 않는다. 이것은 추천을 설계할 AI의 일이다.
+- '밝은 톤/중간 톤/어두운 톤/쿨 톤/웜 톤'은 밝기와 언더톤이라는 다른 기준을 섞은 금지 예시다.
+- 선택한 카드 문구와 내부 의도에 이미 드러난 상황은 반복해서 묻지 않는다.
+- 자연스럽게/은은하게/부드럽게처럼 의미가 겹치는 선택지를 함께 쓰지 않는다.
+- '어떤 톤이 좋아요?', '어디를 강조할까요?' 같은 예측 가능한 메이크업 설문을 금지한다.
+- 성별, 나이, 외모 결점, 피부색의 우열을 추정하거나 암시하지 않는다.
+- 질문은 짧고 자연스러운 한국어 존댓말로 쓴다.
+- 선택지는 질문당 정확히 4개다. 서로 배타적인 서사 선택지 3개 다음, 마지막은 반드시 {\"id\":\"ai_pick\",\"label\":\"AI가 골라줘\"}다.
+- id는 고유한 영문 snake_case로 쓴다.
+
+좋은 질문 예시:
+- 어디에서 어떻게 보이고 싶어요?
+- 어떤 분위기가 끌리나요?
+- 평소보다 얼마나 과감해질까요?
+- 오늘은 어느 정도 공들일 수 있어요?
+
+재미있는 선택지 예시:
+- 오늘의 반전은 어느 쪽이에요? / '조용히 시선 끌기', '등장부터 장면 만들기', '돌아선 뒤 여운 남기기'
+- 사진 속 나는 어떤 인물이었으면 해요? / '여유 있는 주인공', '조용한 신스틸러', '우연히 잡힌 슈퍼스타'
+
+설명이나 마크다운 없이 유효한 JSON 객체만 반환한다."""
 
 
 SCENARIO_COPY_EXAMPLES = (
@@ -105,12 +153,12 @@ def apply_refinement_contract(
 
 
 def _converse(settings: Settings, model_id: str, system: str, prompt: str) -> dict[str, Any]:
-  client = boto3.client("bedrock-runtime", region_name=settings.aws_region)
+  client = boto3.client("bedrock-runtime", region_name=settings.aws_region, config=BEDROCK_CONVERSE_CONFIG)
   response = client.converse(
     modelId=model_id,
     system=[{"text": system}],
     messages=[{"role": "user", "content": [{"text": prompt}]}],
-    inferenceConfig={"maxTokens": 1800, "temperature": 0.7},
+    inferenceConfig={"maxTokens": 3500, "temperature": 0.35},
   )
   text = "".join(
     block.get("text", "")
@@ -120,6 +168,10 @@ def _converse(settings: Settings, model_id: str, system: str, prompt: str) -> di
   if text.startswith("```") and text.endswith("```"):
     first_newline = text.find("\n")
     text = text[first_newline + 1 : -3].strip() if first_newline >= 0 else text[3:-3].strip()
+  start_idx = text.find("{")
+  end_idx = text.rfind("}")
+  if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+    text = text[start_idx : end_idx + 1]
   try:
     value = json.loads(text)
   except json.JSONDecodeError as exc:
@@ -148,6 +200,14 @@ async def generate_json(settings: Settings, model_id: str, system: str, prompt: 
 
 
 def _bedrock_app_error(exc: Exception) -> AppError:
+  if isinstance(exc, ReadTimeoutError):
+    return AppError(
+      504,
+      "BEDROCK_REQUEST_TIMEOUT",
+      "The Bedrock request timed out.",
+      {"providerCode": "ReadTimeoutError"},
+    )
+
   if not isinstance(exc, ClientError):
     return AppError(502, "BEDROCK_REQUEST_FAILED", "The Bedrock request failed.")
 
@@ -202,7 +262,10 @@ async def generate_scenarios(settings: Settings, count: int, exclude_texts: list
       "seedPrompt must clearly describe color, texture, emphasis, and occasion without relying on the display copy. "
       f"Do not repeat, reorder, extend, or paraphrase any previously shown idea: {json.dumps([*excluded, *[item['text'] for item in items]], ensure_ascii=False)}",
     )
-    for raw_item in response.get("items", []):
+    raw_items = response.get("items")
+    if not isinstance(raw_items, list):
+      continue
+    for raw_item in raw_items:
       if not isinstance(raw_item, dict):
         continue
       text = str(raw_item.get("text") or "").strip()[:60]
@@ -462,22 +525,43 @@ async def generate_shared_scenarios(
   return {"items": combined[:count]}
 
 
-async def generate_questions(settings: Settings, scenario_text: str, tags: list[str]) -> dict[str, Any]:
+async def generate_questions(
+  settings: Settings,
+  scenario_text: str,
+  tags: list[str],
+  scenario_label: str | None = None,
+) -> dict[str, Any]:
   for _attempt in range(2):
     response = await generate_json(
       settings,
       settings.effective_question_model_id,
-      "Generate simple, non-overlapping Korean multiple-choice questions for makeup discovery. Return JSON only.",
-      f"Scenario: {scenario_text}\nTags: {', '.join(tags)}\nReturn {{\"questions\":[{{\"id\":\"string\",\"title\":\"string\",\"options\":[{{\"id\":\"string\",\"label\":\"string\"}}]}}]}} with 1 to 3 questions and 4 to 6 options each. Every question must include an option equivalent to 'AI가 골라줘'. Ask only for important information not already clear from the scenario.",
+      QUESTION_SYSTEM_PROMPT,
+      f"선택한 카드 문구: {scenario_label or '(자유 입력)'}\n"
+      f"카드가 담은 내부 의도 또는 사용자 입력: {scenario_text}\n"
+      f"태그: {', '.join(tags) or '(없음)'}\n\n"
+      "카드 문구와 내부 의도를 질문 생성의 출발점으로 함께 고려하라. 내부 의도에 적힌 색이나 테크닉을 사용자에게 되묻지 말고, AI가 나중에 알아서 구현해야 할 정보로 취급하라. "
+      "Return {\"questions\":[{\"id\":\"string\",\"title\":\"string\",\"options\":[{\"id\":\"string\",\"label\":\"string\"}]}]} with 1 to 3 questions and exactly 4 options each: 3 mutually exclusive story choices plus ai_pick last.",
     )
     try:
       return GeneratedQuestions.model_validate(response).model_dump(by_alias=True)
-    except ValidationError:
+    except ValidationError as exc:
+      logger.warning(
+        "[aura:makeup-recommendation] questions:validation-failed modelId=%s errors=%s",
+        settings.effective_question_model_id,
+        exc.errors(include_input=False),
+      )
       continue
   raise AppError(502, "BEDROCK_INVALID_QUESTIONS", "Bedrock returned invalid makeup questions.")
 
 
-async def generate_recommendation(settings: Settings, scenario_text: str, tags: list[str], questions: list[dict[str, Any]], answers: list[dict[str, Any]]) -> dict[str, Any]:
+async def generate_recommendation(
+  settings: Settings,
+  scenario_text: str,
+  tags: list[str],
+  questions: list[dict[str, Any]],
+  answers: list[dict[str, Any]],
+  scenario_label: str | None = None,
+) -> dict[str, Any]:
   output_contract = (
     '{"looks":[{"id":"string","role":"anchor|bold|discovery","title":"string",'
     '"summary":"string","reasons":["string"],"appliedConditions":["string"],'
@@ -486,15 +570,30 @@ async def generate_recommendation(settings: Settings, scenario_text: str, tags: 
     '"products":[{"area":"base|brow|eye|cheek|lip","brandName":"string",'
     '"productName":"string","shadeName":"string","reason":"string"}]}]}'
   )
-  for _attempt in range(2):
+  validation_errors: list[dict[str, Any]] = []
+  for _attempt in range(1):
     response = await generate_json(
       settings,
       settings.effective_recommendation_model_id,
-      "Generate practical, inclusive Korean makeup recommendations. Do not use face analysis or personal color data. Return JSON only.",
-      f"Scenario: {scenario_text}\nTags: {tags}\nQuestions: {json.dumps(questions, ensure_ascii=False)}\nAnswers: {json.dumps(answers, ensure_ascii=False)}\nReturn exactly this shape: {output_contract}. Return exactly three meaningfully different looks in this order: anchor (safe and balanced), bold (clearer and more expressive), discovery (unexpected but wearable). Each look must include one step for every area: base, brow, eye, cheek, lip, plus 3 to 8 realistic Korean-market product suggestions. Direct user answers and constraints take priority.",
+      "Generate practical, inclusive Korean makeup recommendations. The AI must do the makeup design work: translate the user's chosen story and answers into colors, textures, emphasis, techniques, and products without asking the user to design the recipe. Do not use face analysis or personal color data. Return JSON only. The response must be valid against the exact schema in the user message.",
+      f"Selected scenario card: {scenario_label or '(free input)'}\nScenario intent: {scenario_text}\nTags: {tags}\nQuestions: {json.dumps(questions, ensure_ascii=False)}\nAnswers: {json.dumps(answers, ensure_ascii=False)}\nReturn exactly this shape: {output_contract}. Treat both the initially selected card and every answer as binding creative context. Return exactly three meaningfully different looks in this order: anchor (safe and balanced), bold (clearer and more expressive), discovery (unexpected but wearable). The three looks must differ in overall character and story, not merely in one shade or intensity. Each look must include one step for every area: base, brow, eye, cheek, lip, plus 3 to 8 realistic Korean-market product suggestions. Direct user answers and constraints take priority.",
     )
     try:
       return GeneratedMakeupRecommendation.model_validate(response).model_dump(by_alias=True)
-    except ValidationError:
+    except ValidationError as exc:
+      validation_errors = exc.errors(include_input=False)
+      logger.warning(
+        "[aura:makeup-recommendation] recommendation:validation-failed modelId=%s errors=%s",
+        settings.effective_recommendation_model_id,
+        validation_errors,
+      )
       continue
-  raise AppError(502, "BEDROCK_INVALID_RECOMMENDATION", "Bedrock returned an invalid makeup recommendation.")
+  raise AppError(
+    502,
+    "BEDROCK_INVALID_RECOMMENDATION",
+    "Bedrock returned an invalid makeup recommendation.",
+    {
+      "modelId": settings.effective_recommendation_model_id,
+      "validationErrors": validation_errors[:12],
+    },
+  )

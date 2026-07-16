@@ -1,5 +1,8 @@
+import {makeupFilterAssetSource} from '../../../shared/config/mediaAssets';
 import type {
+  MakeupLookRecommendation,
   MakeupQuestionDimension,
+  MakeupRecommendationProduct,
   MakeupRecommendationQuestion,
   MakeupScenarioCopyStyle,
   MakeupScenarioPalette,
@@ -63,6 +66,11 @@ const scenario = (
 };
 
 export const MAKEUP_SCENARIOS: readonly MakeupScenarioPrompt[] = [
+  scenario('popular-daily', '데일리로 자연스럽게', '매일 부담 없이 자연스럽고 생기 있어 보이는 데일리 메이크업', ['daily', 'natural'], ['occasion'], 'premium'),
+  scenario('popular-work-school', '출근·등교 단정하게', '출근이나 등교에 어울리게 단정하고 또렷한 메이크업', ['work', 'school', 'polished'], ['occasion'], 'premium'),
+  scenario('popular-date', '데이트·약속에서 매력적으로', '데이트나 약속에서 과하지 않지만 매력적으로 보이는 메이크업', ['date', 'meeting', 'attractive'], ['occasion'], 'playful'),
+  scenario('popular-photo', '사진에서 또렷하게', '사진과 영상에서 이목구비가 또렷하게 살아나는 메이크업', ['photo', 'camera', 'defined'], ['occasion'], 'playful'),
+  scenario('popular-important', '중요한 날 오래 유지되게', '중요한 날 오랜 시간 흐트러지지 않고 완성도를 유지하는 메이크업', ['important', 'lasting'], ['occasion'], 'premium'),
   scenario('must-look-beautiful', '중요한 날 잘 나오기', '중요한 날 가장 아름답고 자신 있어 보이는 메이크업', ['important', 'polished'], [], 'playful'),
   scenario('most-beautiful-self', '조용한 프리미엄', '나의 장점을 살린 균형 있고 아름다운 메이크업', ['balanced', 'premium'], [], 'premium'),
   scenario('everyday-balance', '매일의 나를 조금 더 또렷하게', '매일 부담 없이 나에게 잘 어울리는 균형 잡힌 메이크업', ['daily', 'balanced'], ['occasion'], 'narrative'),
@@ -132,3 +140,37 @@ export const MAKEUP_QUESTIONS: Record<MakeupQuestionDimension, MakeupRecommendat
     options: [{id: 'quick', label: '5분 커트'}, {id: 'steady', label: '15분 차분히'}, {id: 'detailed', label: '시간을 들여 정교하게'}, {id: 'ai-pick', label: 'AI가 골라줘'}],
   },
 };
+
+const products = (prefix: string, accent: string): MakeupRecommendationProduct[] => [
+  {id: `${prefix}-base`, area: 'base', brandName: '루미에르', productName: '라이트 핏 쿠션', shadeName: '21N', reason: '얇고 균일한 피부 표현'},
+  {id: `${prefix}-eye`, area: 'eye', brandName: '벨루어', productName: '음영 팔레트', shadeName: accent, reason: '메이크업의 주조색을 연결'},
+  {id: `${prefix}-brow`, area: 'brow', brandName: '아티에', productName: '슬림 브로우', shadeName: '내추럴 브라운', reason: '눈매와 자연스럽게 조율'},
+  {id: `${prefix}-cheek`, area: 'cheek', brandName: '루네라', productName: '에어리 블러셔', shadeName: accent, reason: '아이와 립 색감을 중간에서 연결'},
+  {id: `${prefix}-lip`, area: 'lip', brandName: '로제드', productName: '세럼 틴트', shadeName: accent, reason: '전체 메이크업의 포인트를 완성'},
+];
+
+const steps = (eye: string, lip: string) => [
+  {area: 'base' as const, instruction: '얇게 밀착시켜 피부 톤을 균일하게 정리해요.', order: 1},
+  {area: 'brow' as const, instruction: '빈 곳만 채워 부드러운 결을 만들어요.', order: 2},
+  {area: 'eye' as const, instruction: eye, order: 3},
+  {area: 'cheek' as const, instruction: '눈 아래부터 광대를 감싸듯 엷게 발라요.', order: 4},
+  {area: 'lip' as const, instruction: lip, order: 5},
+];
+
+export const MAKEUP_LOOK_FIXTURES: readonly MakeupLookRecommendation[] = [
+  {
+    id: 'look-anchor-rose', arFilterId: 'filter-milky-strawberry-pink', role: 'anchor', title: '로지 밸런스', summary: '낯익은 로즈 톤을 정돈해 가장 안정적으로 어울리는 메이크업',
+    imageSource: makeupFilterAssetSource('community-lookbook-rose.png'), reasons: ['피부와 색조의 균형', '일상부터 약속까지 활용'], appliedConditions: [], durationMinutes: 15, difficulty: 'easy',
+    steps: steps('로즈 브라운을 눈두덩에 엷게 펼쳐요.', '로즈 틴트를 안쪽부터 부드럽게 퍼뜨려요.'), products: products('anchor', '로즈 베일'),
+  },
+  {
+    id: 'look-bold-smoky', arFilterId: 'filter-clean-smoky-city', role: 'bold', title: '클린 스모키', summary: '깊은 눈매와 절제된 색조로 확실한 인상을 남기는 메이크업',
+    imageSource: makeupFilterAssetSource('community-question-smoky.png'), reasons: ['눈매를 또렷하게 강조', '조명에서 선명한 음영'], appliedConditions: [], durationMinutes: 25, difficulty: 'advanced',
+    steps: steps('차콜 브라운을 눈꼬리 방향으로 층층이 쌓아요.', '저채도 베리 립으로 눈매의 깊이를 받쳐요.'), products: products('bold', '모피 버건디'),
+  },
+  {
+    id: 'look-discovery-muted', arFilterId: 'filter-plum-syrup-gloss', role: 'discovery', title: '뮤티드 라일락', summary: '낯선 라일락과 뮤티드 질감으로 새로운 취향을 제안하는 메이크업',
+    imageSource: makeupFilterAssetSource('community-combo-muted.png'), reasons: ['기존 취향을 해치지 않는 변화', '절제된 색 포인트'], appliedConditions: [], durationMinutes: 20, difficulty: 'medium',
+    steps: steps('뮤티드 라일락을 눈두덩 중앙에 엷게 올려요.', '누드 모브를 입술 전체에 얇게 발라요.'), products: products('discovery', '뮤티드 라일락'),
+  },
+];

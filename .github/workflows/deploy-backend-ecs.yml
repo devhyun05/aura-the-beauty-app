@@ -840,3 +840,102 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
           wait-max-delay-seconds: 15
+
+  diagnose:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'diagnose' }}
+    name: Read ECS failure evidence
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+
+      - name: Report service events and stopped tasks
+        shell: bash
+        run: |
+          set -u
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query 'services[0].{status:status,runningCount:runningCount,pendingCount:pendingCount,deployments:deployments[*].{id:id,status:status,rolloutState:rolloutState,rolloutStateReason:rolloutStateReason,taskDefinition:taskDefinition},events:events[0:15].[createdAt,message]}' \
+            --output json
+
+          running_task_arn="$(aws ecs list-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --service-name "$ECS_SERVICE" \
+            --desired-status RUNNING \
+            --query 'taskArns[0]' \
+            --output text)"
+          if [ -n "$running_task_arn" ] && [ "$running_task_arn" != "None" ]; then
+            running_task_definition="$(aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$running_task_arn" \
+              --query 'tasks[0].taskDefinitionArn' \
+              --output text)"
+            running_log_group="$(aws ecs describe-task-definition \
+              --task-definition "$running_task_definition" \
+              --query "taskDefinition.containerDefinitions[?name=='$ECS_CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-group\"" \
+              --output text)"
+            running_stream_prefix="$(aws ecs describe-task-definition \
+              --task-definition "$running_task_definition" \
+              --query "taskDefinition.containerDefinitions[?name=='$ECS_CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-stream-prefix\"" \
+              --output text)"
+            running_task_id="${running_task_arn##*/}"
+            running_log_stream="$running_stream_prefix/$ECS_CONTAINER_NAME/$running_task_id"
+            echo "Recent makeup recommendation logs: $running_log_group :: $running_log_stream"
+            aws logs get-log-events \
+              --log-group-name "$running_log_group" \
+              --log-stream-name "$running_log_stream" \
+              --limit 500 \
+              --query "events[?contains(message, 'aura:makeup-recommendation')].[timestamp,message]" \
+              --output text || true
+          else
+            echo "No running API task was returned."
+          fi
+
+          mapfile -t task_arns < <(aws ecs list-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --service-name "$ECS_SERVICE" \
+            --desired-status STOPPED \
+            --max-items 20 \
+            --query 'taskArns' \
+            --output text | tr '\t' '\n')
+
+          if [ "${#task_arns[@]}" -eq 0 ] || [ -z "${task_arns[0]}" ]; then
+            echo "No stopped tasks were returned."
+            exit 0
+          fi
+
+          aws ecs describe-tasks \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "${task_arns[@]}" \
+            --query 'tasks[*].{taskArn:taskArn,taskDefinitionArn:taskDefinitionArn,createdAt:createdAt,stoppedAt:stoppedAt,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[*].{name:name,lastStatus:lastStatus,exitCode:exitCode,reason:reason}}' \
+            --output json
+
+          for task_arn in "${task_arns[@]}"; do
+            task_id="${task_arn##*/}"
+            task_definition="$(aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$task_arn" \
+              --query 'tasks[0].taskDefinitionArn' \
+              --output text)"
+            log_group="$(aws ecs describe-task-definition \
+              --task-definition "$task_definition" \
+              --query "taskDefinition.containerDefinitions[?name=='$ECS_CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-group\"" \
+              --output text)"
+            stream_prefix="$(aws ecs describe-task-definition \
+              --task-definition "$task_definition" \
+              --query "taskDefinition.containerDefinitions[?name=='$ECS_CONTAINER_NAME']|[0].logConfiguration.options.\"awslogs-stream-prefix\"" \
+              --output text)"
+            log_stream="$stream_prefix/$ECS_CONTAINER_NAME/$task_id"
+
+            echo "Log stream: $log_group :: $log_stream"
+            aws logs get-log-events \
+              --log-group-name "$log_group" \
+              --log-stream-name "$log_stream" \
+              --limit 100 \
+              --query 'events[*].message' \
+              --output text || true
+          done
