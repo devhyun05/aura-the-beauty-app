@@ -61,6 +61,14 @@
 
 ## 3. 단계별 계획
 
+### Phase 완료 프로토콜 (전 Phase 공통 — 2026-07-17 확정, Phase 0에서 실증한 절차의 표준화)
+
+각 Phase는 아래 3단계를 통과해야 "완료"다. 자매 문서(보고서 재구성 계획)의 R 단계에도 동일 적용.
+
+1. **이중 GO 게이트 → PR**: Codex 적대 리뷰와 Claude 셀프 적대 리뷰(반박 지향, 독립 실행)가 **둘 다 GO**를 낼 때까지 [리뷰 → 발견 코드 검증 → 반영 → 재판정] 루프를 돌린다. NO-GO 발견은 전건 검증 후 반영(맹목 수용 금지 — 틀린 지적은 근거와 함께 반박). 두 GO 확보 후 dev로 PR. (Phase 0 실적: Codex 4라운드 + 셀프 1회, 발견 17건 전건 반영 후 GO.)
+2. **계획 현행화**: 머지 직후 이 문서를 구현 현실에 맞게 갱신 — ① 완료 기록(PR 번호·판정·검증 근거 명령), ② §0 진단표의 해소/완화/잔존 재판정(과대 표기 금지 — "정직해진 것"과 "해소된 것"을 구분), ③ 다음 Phase가 이번 산출물과 맺을 연동·선행 배관 명시, ④ 낡아진 서술 정정. 갱신본은 Codex 정합 검토 1회를 거친다.
+3. **다음 Phase 착수**: 갱신된 계획의 선행 배관·관문 정의를 유일한 입력으로 **새 세션에서** 착수한다(맥락 마모 방지 — 계획 문서가 자기완결이어야 하는 이유).
+
 ### Phase 0 — 표현 정직화 (측정 로직 무변경) ✅ 완료 2026-07-17
 
 **완료 기록**: PR #21 머지 — **측정 트랙 소유 산출물 완료**(숫자 전면 철거는 R4 소유로 이관, hApprox wire/네이티브 잔존은 수용·Phase 1 이관), Codex 적대 리뷰 4라운드+셀프 리뷰 1회(발견 17건 전건 반영) 후 GO 판정. **관문 분리**: 측정 트랙 관문(판정형 화면 숫자에 출처·유보 + 이번 diff에 신규 노출 없음)은 통과, 제품 전체 숫자 비노출 관문은 R4 대기. 검증 근거: `npm --prefix apps/mobile run test:face-ratio-distortion` + `run-face-analysis-measurements-contract.mjs` + backend `pytest tests/test_face_analysis_{rules,measurements}.py tests/test_analysis_measurements_payload.py tests/test_prompt_payload_judgment.py`. 구현 정본: `face-ratio/constants.ts`(FACE_LENGTH_REFERENCE·judgeFaceLength·FACE_RATIO_JUDGMENT_VERSION), 판정 스냅샷 `faceLengthJudgment`, 서버 정본 추종(`face_analysis_rules.py`)·sanitizer 보존(`openai_analysis.py`). 유일 잔여: 실기기 게이지 렌더 확인(UNVERIFIED). 아래 항목 서술은 착수 당시 기준의 역사 기록.
