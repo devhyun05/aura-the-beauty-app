@@ -23,9 +23,9 @@
 
 ## 1. 새 목차 ↔ 데이터 매핑
 
-**정찰 발견(셀프 적대 검증으로 2026-07-17 정정)**: `FaceAnalysisV2ReportSections`(AI 보완측정 53키·해석 9종·인상·컨설팅 렌더 가능)가 **렌더 소비 0인 dead 컴포넌트**인 것은 사실이다(전 저장소 import 0건 — 비렌더 소비는 2종: 폴링 조기종료 게이트 + recommendedMakeups fallback 분기). **그러나 초안의 "데이터가 이미 내려오는데 버려진다"는 저장소 증거상 거짓** — `FACE_ANALYSIS_V2_ENABLED` 기본 false이고 저장소의 기본 설정에도 ON이 없으며, V2 파이프라인 자체가 2026-07-15 작성·07-16 머지(PR #16)다. 제품 환경의 과거 잡 상태를 추측하지 않고, R0는 승인된 fixture provenance 또는 허가된 로컬 DB 실측만 evidence로 사용한다. 따라서 R0의 실체는:
+**정찰 발견(셀프 적대 검증으로 2026-07-17 정정)**: `FaceAnalysisV2ReportSections`(AI 보완측정 53키·해석 9종·인상·컨설팅 렌더 가능)가 **렌더 소비 0인 dead 컴포넌트**인 것은 사실이다(전 저장소 import 0건 — 비렌더 소비는 2종: 폴링 조기종료 게이트 + recommendedMakeups fallback 분기). **그러나 초안의 "데이터가 이미 내려오는데 버려진다"는 저장소 증거상 거짓** — `FACE_ANALYSIS_V2_ENABLED` 기본 false이고 저장소의 기본 설정에도 ON이 없으며, V2 파이프라인 자체가 2026-07-15 작성·07-16 머지(PR #16)다. 제품 환경의 과거 잡 상태를 추측하지 않고, R0는 승인된 fixture provenance 또는 전용 localhost Report Lab DB 실측만 evidence로 사용한다. 따라서 R0의 실체는:
 
-1. **데이터 공급**: 제품 `FACE_ANALYSIS_V2_ENABLED`는 기본 OFF를 유지한다. 로컬 Lab은 비식별 fixture를 1급 입력으로 사용한다. 실제 `reportId`는 사용자가 명시적으로 로컬 DB 모드를 선택하고 정상 인증+소유권 검사를 통과한 경우에만 읽는다. 착수 전 허가된 local/dev DB에서 `detail_payload->'request'->'measurements'->>'schemaVersion'` 실측 카운트 1회 또는 fixture provenance를 evidence로 남긴다. 이 단계는 제품 플래그 승격 근거가 아니다.
+1. **데이터 공급**: 제품 `FACE_ANALYSIS_V2_ENABLED`는 기본 OFF를 유지한다. 로컬 Lab은 비식별 fixture를 1급 입력으로 사용한다. 실제 `reportId`는 전용 localhost Report Lab DB에 소유권이 확인된 비식별 snapshot이 있을 때만 정상 인증+소유권 검사 뒤 읽는다. 원격 dev/운영 DB에는 접속하지 않는다. 착수 전 이 전용 DB에서 `detail_payload->'request'->'measurements'->>'schemaVersion'` 실측 카운트 1회 또는 승인된 fixture provenance를 evidence로 남긴다. 이 단계는 제품 플래그 승격 근거가 아니다.
 2. **소비 지점 제약**: 목록 GET은 faceAnalysisV2의 coverage/derived 등을 **벗겨서 내려주므로**(경량화 strip) 배선은 **상세 GET payload에만** 가능 — 목록·홈에 연결하면 영원히 빈 값.
 3. **직마운트 금지(Codex BLOCKER 반영)**: 기존 컴포넌트는 `metricValue`가 소수 3자리·단위·confidence %를 그대로 렌더 — 마운트 즉시 원칙 4 위반. 순서는 **타입 파서 → 표현용 DTO(숫자 없는 서술·밴드 라벨만) → 신규 UI → feature flag 마운트**. 기존 컴포넌트는 Lab/개발 모드 전용으로 강등.
 
@@ -68,13 +68,13 @@
 
 - **프론트엔드**: 신규 `apps/report-lab`(React/Vite/TypeScript). 모바일 앱은 web 미지원이고 Lab은 카메라가 필요 없으므로 Expo 실험 앱 스위치에 넣지 않는다. 기본 주소는 `http://127.0.0.1:5173`이며 외부 인터페이스에 bind하지 않는다.
 - **백엔드**: 기존 FastAPI 코드베이스에 lab router/service를 추가하고 `LAB_MODE=true`인 로컬 프로세스로만 기동한다. 기본 주소는 `http://127.0.0.1:8000`; 일반 backend 실행에서는 `LAB_MODE=false`를 유지한다.
-- **인증·격리**: fixture-only 기본 모드는 `127.0.0.1` bind + CORS origin 정확히 `http://127.0.0.1:5173` 하나만 허용한다(`localhost` alias·wildcard 금지). `AUTH_REQUIRED=false`에서는 `fixtureId`만 받고 `reportId`를 항상 거부하며, 감사 기록의 비사용자 principal은 고정 UUID `00000000-0000-4000-8000-000000000027`을 쓴다. 실제 `reportId` 모드를 명시적으로 켤 때만 정상 인증과 `user_id` 소유권 검사를 요구한다.
+- **인증·격리**: fixture-only 기본 모드는 `127.0.0.1` bind + CORS origin 정확히 `http://127.0.0.1:5173` 하나만 허용한다(`localhost` alias·wildcard 금지). `AUTH_REQUIRED=false`에서는 `fixtureId`만 받고 `reportId`를 항상 거부하며, 감사 기록의 비사용자 principal은 고정 UUID `00000000-0000-4000-8000-000000000027`을 쓴다. `reportId` 모드는 전용 localhost DB의 소유권 확인된 비식별 snapshot에만 한정하고 정상 인증과 `user_id` 소유권 검사를 요구한다. 원격 dev/운영 DB 접속은 허용하지 않는다.
 - **데이터**: `infra/report-lab/docker-compose.yml`, Compose project `aura-report-lab`, host `127.0.0.1:55432`, database/user `aura_report_lab`로 고정한다. `report-lab:setup`이 최초 실행 때 32-byte random `AURA_REPORT_LAB_DB_PASSWORD`를 gitignored `.runtime/report-lab.env`에 만들고, DSN `postgresql://aura_report_lab:${AURA_REPORT_LAB_DB_PASSWORD}@127.0.0.1:55432/aura_report_lab`을 같은 파일의 `AURA_REPORT_LAB_DATABASE_URL`로 주입한다. 비밀번호·완성 DSN은 저장소·로그에 넣지 않는다. 기존 backend compose·dev DB·운영 자산과 database/schema/volume을 공유하지 않는다. named volume은 7일 TTL 정리를 위해 실행 간 유지하고 `report-lab:down`에서만 `docker compose -p aura-report-lab --env-file .runtime/report-lab.env -f infra/report-lab/docker-compose.yml down --volumes --remove-orphans`로 제거한다. 테스트는 고유 project suffix와 임시 env/volume을 사용하고 성공·실패 모두 teardown한다.
 - **fixture 형식**: 승인된 repo fixture metadata와 로컬 allowlist 디렉터리의 비식별·합성 이미지를 사용한다. 원본 사용자 얼굴을 fixture로 commit하지 않는다. 실제 이미지가 필요하면 최소 필드 추출·식별자 재발급·명시적 사용 허가·보존/삭제 절차를 먼저 작성한다.
 - **provider 기본값**: `REPORT_LAB_MODEL_PROVIDER=disabled`, `IMAGE_GENERATION_PROVIDER=disabled`. provider를 선택하지 않은 상태에서도 deterministic fixture response로 UI·DTO·validation을 전부 테스트할 수 있어야 한다.
-- **외부 모델 선택**: 이번 구현은 provider-disabled deterministic fixture runner까지만 완료한다. 이후 사용자가 provider와 전송 범위를 별도로 승인한 run에 한해 adapter를 추가할 수 있다. provider 이름·model·promptVersion·토큰/지연을 run에 기록하되 API key와 원문 얼굴 이미지는 로그에 남기지 않는다.
+- **외부 모델 선택**: 이번 구현과 본 계획은 provider-disabled deterministic fixture runner까지만 완료한다. 외부 adapter·provider key·모델 호출은 현 범위에서 만들거나 실행하지 않는다. 향후 필요하면 사용자의 새 승인과 별도 계획에서 전송 범위·비용·보존 정책부터 다시 심사한다.
 - **Bedrock 제외**: cloud 사용 취소에 따라 Bedrock adapter·AWS 전송·Bedrock fallback은 이번 계획 범위에 없다. 소스 코드·git diff·계획·리뷰 문서를 외부 provider에 전송하지 않으며, Codex×Claude 코드 리뷰는 first-party Claude 로컬 로그인 경로만 사용한다.
-- **비용·보존**: 외부 provider run 횟수·토큰·동시성·세션 예산과 로컬 retention TTL을 설정한다. prompt·raw response 로그는 얼굴 이미지·인증 토큰·서명 receipt·nonce를 포함하지 않도록 redact한다.
+- **계측·보존**: 현재 실행의 외부 provider run은 항상 `0`, `tokenUsage`는 `null` 또는 `0`이다. 로컬 latency·동시성·세션 run 상한·retention TTL만 계측한다. prompt·fixture response 로그는 얼굴 이미지·인증 토큰·서명 receipt·nonce를 포함하지 않도록 redact한다.
 - **consult 스테이지는 이미지 불필요(순수 JSON)** → 프롬프트 반복 실험의 최적 시작점. 신설 lab 엔드포인트는 stage별 이미지 로드를 분기해 consult run이 로컬 이미지 파일 접근 없이 동작해야 한다.
 
 ### 3.2 백엔드 신설 — 실험용 오버라이드 엔드포인트 1개
@@ -102,7 +102,7 @@ POST /api/lab/analysis/stage-run   (LAB_MODE + loopback + 입력 모드별 role 
 - `FaceAnalysisAI`를 프롬프트/버전/세팅 **주입형**으로 리팩터(실험용 서브클래스 가능). 프롬프트 본문은 캐시 키에 안 들어가므로(버전 문자열만) **버전 미변경 프롬프트 수정 = stale 캐시**라는 함정을 Lab UI가 강제로 막는다(프롬프트 변경 시 버전 자동 suffix).
 - 엔드포인트 요구사항 추가: stage별 이미지 로드 분기(consult는 이미지 read 생략), `LAB_MODE`+loopback/role 게이트, fixtureId allowlist, `AUTH_REQUIRED=false`일 때 reportId 거부, 인증 모드의 reportId 소유권 검사, rate/budget limit, audit event.
 - `rawResponse`는 `REPORT_LAB_RAW_RESPONSE_ADMIN_TOKEN`이 비어 있지 않고 요청의 `X-Aura-Lab-Admin-Token`과 상수시간 비교로 일치할 때만 반환한다. 기본 env 예제에는 값이 없으므로 raw 응답은 기본 차단된다. 토큰은 DB·로그·응답에 저장하지 않으며 일반 tester에는 `normalizedOutput`·검증 오류·비식별 계측만 제공한다.
-- **실험 기록은 `analysis_stage_runs` 재사용 금지(Codex 반영)** — 이 테이블은 `(report_id, stage)` processing 유니크 제약 + `on conflict do nothing returning *` 구조라, Lab 실행이 **운영 파이프라인의 진행 중 행을 가로채 완료/실패 처리**할 수 있다. **별도 `analysis_lab_runs` 테이블로 분리하되 스키마는 독자 설계**(3라운드 정정: "동일 컬럼" 복제는 `report_id NOT NULL` FK 때문에 fixture-only 실행을 기록할 수 없음) — `fixture_id` 필수 + `source_report_id` **nullable** + 실험 메타(prompt_version·model·overrides). reportId 모드는 소유권 확인 뒤 허가된 최소 필드를 로컬 비식별 snapshot으로 고정하고 그 새 fixtureId를 기록한 다음 실행한다.
+- **실험 기록은 `analysis_stage_runs` 재사용 금지(Codex 반영)** — 이 테이블은 `(report_id, stage)` processing 유니크 제약 + `on conflict do nothing returning *` 구조라, Lab 실행이 **운영 파이프라인의 진행 중 행을 가로채 완료/실패 처리**할 수 있다. **별도 `analysis_lab_runs` 테이블로 분리하되 스키마는 독자 설계**(3라운드 정정: "동일 컬럼" 복제는 `report_id NOT NULL` FK 때문에 fixture-only 실행을 기록할 수 없음) — `fixture_id` 필수 + `source_report_id` **nullable** + 실험 메타(prompt_version·model·overrides). reportId 모드는 전용 localhost DB에서 소유권을 확인한 최소 필드만 비식별 snapshot으로 고정하고 그 새 fixtureId를 기록한 다음 실행한다.
 
 ### 3.3 Lab 화면 구성
 
@@ -110,9 +110,9 @@ POST /api/lab/analysis/stage-run   (LAB_MODE + loopback + 입력 모드별 role 
 |---|---|
 | 좌: 입력 | fixture 선택(잡 목록/스냅샷), 스테이지 선택, 프롬프트 에디터(developer/user 분리, diff 뷰), 세팅(model/maxTokens/temperature), 반복 횟수 N |
 | 우: 결과 | 구조화 출력 렌더(실제 보고서 섹션 프리뷰와 동형) + lab admin role 전용 raw JSON 토글, **run 간 비교**(같은 입력 N회 산포·다른 프롬프트 A/B), 검증 실패 표시 |
-| 하: 이력 | run 목록(promptVersion·model·latency·토큰), 우수 run 북마크 → 확정 프롬프트를 `face_analysis_ai.py`에 반영하는 체크리스트 |
+| 하: 이력 | run 목록(promptVersion·runner·로컬 latency·`tokenUsage=null/0`), 우수 run 북마크 → 확정 프롬프트를 `face_analysis_ai.py`에 반영하는 체크리스트 |
 
-**관문 2축(셀프 비판 반영 — 도구 가동과 품질 판정 분리)**: ① 도구: 같은 fixture로 프롬프트 2종 A/B 실행 → 보고서 프리뷰 비교가 브라우저에서 3분 내 도는 것. ② 품질: 프롬프트 확정(R2)은 **블라인드 비교 루브릭**으로 — 팀원이 A/B 산출물을 소스 모른 채 항목별(정확성·어조 게이트 준수·근거 연결·중복) 채점, 과반 우세 없이는 교체 금지. *도구가 돈다는 것과 보고서가 좋아졌다는 것은 다른 명제다.* 비용·지연도 run 이력에서 함께 계측(보고서 1건당 토큰·초 예산은 R2에서 실측 후 설정).
+**관문 2축(셀프 비판 반영 — 도구 가동과 품질 판정 분리)**: ① 도구: 같은 fixture로 프롬프트 2종 A/B 실행 → 보고서 프리뷰 비교가 브라우저에서 3분 내 도는 것. ② 품질: 프롬프트 확정(R2)은 **블라인드 비교 루브릭**으로 — 팀원이 A/B 산출물을 소스 모른 채 항목별(정확성·어조 게이트 준수·근거 연결·중복) 채점, 과반 우세 없이는 교체 금지. *도구가 돈다는 것과 보고서가 좋아졌다는 것은 다른 명제다.* 현재는 로컬 latency와 run 상한만 계측하고 외부 비용·토큰 예산은 두지 않는다(`tokenUsage=null/0`). 외부 adapter는 새 계획에서 승인될 때만 별도 예산 관문을 정의한다.
 
 ### 3.4 로컬 구동·운영 표면
 
@@ -130,7 +130,7 @@ POST /api/lab/analysis/stage-run   (LAB_MODE + loopback + 입력 모드별 role 
 
 **판정(정찰)**: 현 저장 데이터로는 불가 — 저장 좌표가 H/G/Sn/Me 4점뿐이고 478 랜드마크는 분석 직후 버려진다. 단 분석 시점에는 전부 있으므로 **산출→저장→복원→렌더 사슬에서 '저장'만 비어 있다.**
 
-채택 방식: **SVG viewBox 확대**(픽셀 crop 아님) — `VerticalThirdsOverlay`의 픽셀 좌표계 viewBox 패턴을 부위 bbox로 좁혀 재사용. 원격 이미지 URL 그대로 동작, 다운로드·신규 라이브러리 불필요(expo-image-manipulator는 의존성만 있고 실사용 0 — no-op 스텁 확인).
+채택 방식: **SVG viewBox 확대**(픽셀 crop 아님) — `VerticalThirdsOverlay`의 픽셀 좌표계 viewBox 패턴을 부위 bbox로 좁혀 재사용. 기존 모바일 renderer의 원격 이미지 URL 호환은 변경하지 않되 Local Lab fixture는 allowlist된 로컬 URL 또는 object URL만 사용한다. 다운로드·신규 라이브러리는 불필요하다(expo-image-manipulator는 의존성만 있고 실사용 0 — no-op 스텁 확인).
 
 신규 배관 6건:
 1. `landmarkIndices` 확장(코끝·콧볼 인덱스 — 현재 Sn만 존재)
@@ -186,7 +186,7 @@ Claude design(fable) 생성은 완료됐다. 요청 원본은 [2026-07-16-report
 4. Node/Python/PostgreSQL/Playwright/CodeGraph와 필요한 plugin/MCP를 설치·동기화한다. plugin/MCP는 ON을 유지하고 실제 버전·연결 상태를 manifest에 기록한다.
 5. 로컬 Claude를 first-party 계정으로 로그인하고 정확한 `claude-fable-5`, effort `high`, plugin/MCP ON 조합을 dry-run한다. 실패하면 해당 리뷰 gate만 `BLOCKED`; Sonnet·Bedrock·다른 모델로 대체하지 않는다.
 6. `얼굴분석-설계.html`, `메이크업-분류체계-정의.html`은 부재 상태를 기록하되 측정 계획 v5의 대체 계약을 이번 구현 정본으로 사용한다. 원본이 나중에 반입되면 별도 delta review를 수행한다.
-7. 보고서 생성 provider는 이번 실행에서 `disabled/fixture`로 고정한다. 외부 호출 없이 deterministic stage runner를 실제 실행하고, provider가 별도로 선택된 뒤에만 외부 adapter를 연다.
+7. 보고서 생성 provider는 이번 실행에서 `disabled/fixture`로 고정한다. 외부 호출 없이 deterministic stage runner를 실제 실행하고, 새 사용자 승인과 별도 계획 전에는 외부 adapter를 열지 않는다.
 
 ### Wave A — 계약·fixture·로컬 골격
 
@@ -198,7 +198,7 @@ Claude design(fable) 생성은 완료됐다. 요청 원본은 [2026-07-16-report
 
 ### Wave B — 동결 계약 위 병렬 구현
 
-- **Prompt/measurement 세션**: 7섹션 prompt, `visualEvidence`, 내추럴/글램 2종, prompt override/version/cache/privacy/provider adapter.
+- **Prompt/measurement 세션**: 7섹션 prompt, `visualEvidence`, 내추럴/글램 2종, prompt override/version/cache/privacy와 provider-disabled stage-runner interface. 외부 provider adapter는 현 범위에서 제외한다.
 - **Geometry/bbox 세션**: 7-class 얼굴형·대비·피부 균일도, 원본 픽셀 bbox, sanitization·회전/복원 테스트.
 - **Web UI 세션**: 로컬 Claude 디자인 S1–S7 typed React 이식, prompt runner, run 비교, 접근성·Playwright.
 - **Local contract 세션**: 공용 DTO·schema/API·PostgreSQL·로컬 구동 스크립트 단일 창구. 다른 세션은 공유 schema와 runner를 직접 수정하지 않는다.

@@ -412,7 +412,7 @@ Tier-2(3D) 미가용 기기용 `noseLengthRatio`/`noseWidthRatio` 2D 근사. Pha
 
 1. 측정 계획의 남은 코드 범위(Phase 3, Phase 4의 데이터 비의존 배관)와 보고서 계획 R0~R5의 **결정 가능한 범위**가 구현돼 있다.
 2. Claude 디자인의 S1~S7을 이식한 `apps/report-lab`이 localhost에서 실행된다.
-3. 비식별 synthetic fixture로 프롬프트 stage를 실행해 numeric-free 얼굴 분석 보고서를 생성하고, raw/normalized 결과·검증 오류·latency/token을 비교할 수 있다.
+3. 비식별 synthetic fixture로 provider-disabled 프롬프트 stage를 실행해 numeric-free 얼굴 분석 보고서를 생성하고, fixture/normalized 결과·검증 오류·로컬 latency를 비교할 수 있다. 외부 run은 0이고 `tokenUsage`는 `null/0`이다.
 4. backend/mobile/web/DB migration/Playwright/security 테스트와 동일 SHA의 Codex·Claude Fable high 리뷰가 모두 GO다.
 5. dev PR과 다음 계획 현행화가 같은 변경 집합에 포함된다.
 
@@ -429,10 +429,10 @@ Tier-2(3D) 미가용 기기용 `noseLengthRatio`/`noseWidthRatio` 2D 근사. Pha
 | 누락 정본 | `얼굴분석-설계.html`, `메이크업-분류체계-정의.html` 없음 | 본 v5 대체 계약을 구현 기준으로 고정. 원본 반입 시 별도 delta review |
 | 로컬 도구 | Node/Python/Postgres/Playwright/MCP 상태 혼재 | lockfile 설치, backend venv, 보고서 계획 §3.1의 전용 `aura-report-lab` Postgres(`127.0.0.1:55432`), Chromium, CodeGraph sync와 tool smoke 성공 |
 | Claude gate | first-party 설정이나 CLI 로그아웃 | 사용자가 로컬 `claude auth login`; `claude-fable-5` high와 plugin/MCP ON 상태 dry-run 성공 |
-| 모델 provider | 자동 선택 미승인 | fixture/mock이 기본. 실제 프롬프트 호출은 사용자가 선택한 provider만 사용하며 Bedrock 자동 fallback 금지 |
+| 모델 provider | cloud 계획 취소 | `disabled/fixture` 고정. 외부 adapter·provider key·모델 호출·네트워크 전송은 0이며, 새 사용자 승인과 별도 계획 전에는 추가하지 않음 |
 | 제품 결정 | 안전 기본값 확정 | 무규준 locale 게이지 숨김+자기이력만, body profile AI 제외, 스텐실 opt-in OFF, 라이브 AR 후속, 신규 δ=0 |
 
-**비밀 관리 불변식**: 토큰·DB 비밀번호·provider key를 저장소나 리뷰 prompt에 넣지 않는다. Claude 리뷰에는 코드만 전달하며 Bedrock을 사용하지 않는다. Report Lab의 실제 모델 호출은 선택된 fixture와 분석 prompt만 전달한다.
+**비밀 관리 불변식**: 토큰·DB 비밀번호·provider key를 저장소나 리뷰 prompt에 넣지 않는다. Claude 리뷰에는 코드만 전달하며 Bedrock을 사용하지 않는다. Report Lab은 disabled/fixture runner만 실행하고 fixture·분석 prompt를 포함한 어떤 데이터도 외부 provider나 원격 네트워크에 전송하지 않는다.
 
 ### 11.3 도구·MCP·플러그인 계약
 

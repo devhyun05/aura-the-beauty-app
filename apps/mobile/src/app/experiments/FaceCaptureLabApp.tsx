@@ -50,6 +50,9 @@ import {
 import {
   FaceCaptureLabTempImageOwnership,
 } from '../../features/face-capture/services/faceCaptureLabTempImageOwnership';
+import {
+  FaceCaptureLabPreparedCommitCoordinator,
+} from '../../features/face-capture/services/faceCaptureLabPreparedCommitCoordinator';
 import {deleteUnifiedFaceCaptureTempImage} from '../../features/face-capture/services/unifiedFaceCaptureTempImageCleanup';
 import {
   type FaceCaptureGreenlightReport,
@@ -196,6 +199,7 @@ function LabModePicker({
   phase1ResumeNotice,
   preparedCollection,
   preparedExact30Completed,
+  preparedCommitPendingRequestId,
   preparedSequenceError,
   diagnosticsEnabled,
   poseValidationEnabled,
@@ -210,6 +214,7 @@ function LabModePicker({
   phase1ResumeNotice: string | null;
   preparedCollection: boolean;
   preparedExact30Completed: boolean;
+  preparedCommitPendingRequestId: string | null;
   preparedSequenceError: string | null;
   diagnosticsEnabled: boolean;
   poseValidationEnabled: boolean;
@@ -305,6 +310,14 @@ function LabModePicker({
             </Text>
           </View>
         ) : null}
+        {preparedCommitPendingRequestId ? (
+          <View style={styles.noticeCard}>
+            <Text style={styles.noticeText}>
+              {preparedCommitPendingRequestId} evidence 기록을 마무리하고 있어요.
+              완료되기 전에는 촬영 모드를 다시 시작할 수 없습니다.
+            </Text>
+          </View>
+        ) : null}
         {preparedCollection ? (
           <View style={styles.noticeCard}>
             <Text style={styles.noticeText}>
@@ -335,6 +348,7 @@ function LabModePicker({
         <View style={styles.modeList}>
           {options.map(option => {
             const disabled =
+              Boolean(preparedCommitPendingRequestId) ||
               (option.mode === 'phase1-replay-10' && !poseValidationEnabled) ||
               (preparedCollection && Boolean(preparedSequenceError)) ||
               (option.mode === 'phase1-replay-10' &&
@@ -539,17 +553,29 @@ function FaceCaptureLabContent() {
     useState<string | null>(null);
   const [preparedExact30CompletedShotCount, setPreparedExact30CompletedShotCount] =
     useState(0);
+  const [
+    pendingPreparedCommitRequestId,
+    setPendingPreparedCommitRequestId,
+  ] = useState<string | null>(null);
   const [preparedSequenceError, setPreparedSequenceError] =
     useState<string | null>(null);
   const unifiedLabImageOwnershipRef =
     useRef<FaceCaptureLabTempImageOwnership | null>(null);
+  const preparedCommitCoordinatorRef =
+    useRef<FaceCaptureLabPreparedCommitCoordinator | null>(null);
   const labMountedRef = useRef(false);
   if (!unifiedLabImageOwnershipRef.current) {
     unifiedLabImageOwnershipRef.current =
       new FaceCaptureLabTempImageOwnership();
   }
+  if (!preparedCommitCoordinatorRef.current) {
+    preparedCommitCoordinatorRef.current =
+      new FaceCaptureLabPreparedCommitCoordinator();
+  }
   const unifiedLabImageOwnership =
     unifiedLabImageOwnershipRef.current;
+  const preparedCommitCoordinator =
+    preparedCommitCoordinatorRef.current;
   const preparedCollectionPlan =
     PHASE1_COLLECTION_PLAN_RESOLUTION.mode === 'prepared'
       ? PHASE1_COLLECTION_PLAN_RESOLUTION.plan
@@ -670,9 +696,10 @@ function FaceCaptureLabContent() {
     labMountedRef.current = true;
     return () => {
       labMountedRef.current = false;
+      preparedCommitCoordinator.invalidate();
       void unifiedLabImageOwnership.releaseAll();
     };
-  }, [unifiedLabImageOwnership]);
+  }, [preparedCommitCoordinator, unifiedLabImageOwnership]);
 
   const preparedExact30Completed =
     Boolean(preparedCollectionPlan) &&
@@ -787,17 +814,19 @@ function FaceCaptureLabContent() {
 
   const resetCapture = useCallback(() => {
     const captureToRelease = capture;
+    preparedCommitCoordinator.invalidate();
     setCapture(null);
     setUnifiedResult(null);
     setPhase1RawSaved(false);
     setResultMode('face3d');
     setModeRevision(current => current + 1);
     releaseLabLocalCapture(captureToRelease);
-  }, [capture, releaseLabLocalCapture]);
+  }, [capture, preparedCommitCoordinator, releaseLabLocalCapture]);
 
   const finishPhase1Shot = useCallback(() => {
     const captureToRelease = capture;
     const completedShotIndex = phase1Sequence.shotIndex;
+    preparedCommitCoordinator.invalidate();
     setCapture(null);
     setUnifiedResult(null);
     setPhase1RawSaved(false);
@@ -834,6 +863,7 @@ function FaceCaptureLabContent() {
     phase1RawSaved,
     phase1Sequence.shotIndex,
     preparedCollectionPlan,
+    preparedCommitCoordinator,
     releaseLabLocalCapture,
   ]);
 
@@ -846,6 +876,7 @@ function FaceCaptureLabContent() {
 
   const changeMode = useCallback(() => {
     const captureToRelease = capture;
+    preparedCommitCoordinator.invalidate();
     setCapture(null);
     setUnifiedResult(null);
     setResultMode('face3d');
@@ -857,7 +888,16 @@ function FaceCaptureLabContent() {
     }
     setModeRevision(current => current + 1);
     releaseLabLocalCapture(captureToRelease);
-  }, [capture, preparedCollectionPlan, releaseLabLocalCapture]);
+  }, [
+    capture,
+    preparedCollectionPlan,
+    preparedCommitCoordinator,
+    releaseLabLocalCapture,
+  ]);
+
+  const invalidatePreparedCommit = useCallback(() => {
+    preparedCommitCoordinator.invalidate();
+  }, [preparedCommitCoordinator]);
 
   const resetPreparedReplay = useCallback(() => {
     const firstValidation =
@@ -931,6 +971,9 @@ function FaceCaptureLabContent() {
         onCompletePreparedReplayCleanup={completePreparedReplayCleanup}
         onResetPreparedReplay={resetPreparedReplay}
         onSelect={mode => {
+          if (preparedCommitCoordinator.pendingRequestId) {
+            return;
+          }
           if (!preparedCollectionPlan) {
             setPhase1Completed(false);
           }
@@ -943,6 +986,7 @@ function FaceCaptureLabContent() {
         phase1ResumeNotice={phase1ResumeNotice}
         poseValidationEnabled={poseValidationEnabled}
         preparedCollection={Boolean(preparedCollectionPlan)}
+        preparedCommitPendingRequestId={pendingPreparedCommitRequestId}
         preparedExact30Completed={preparedExact30Completed}
         preparedSequenceError={preparedSequenceError}
       />
@@ -1044,6 +1088,7 @@ function FaceCaptureLabContent() {
   if (unifiedRequest) {
     return (
       <UnifiedFaceCaptureScreen
+        onAbandonStarted={invalidatePreparedCommit}
         onCancel={changeMode}
         onCaptureCommitted={async (result, upload) => {
           const isPreparedExact30 =
@@ -1065,25 +1110,54 @@ function FaceCaptureLabContent() {
                 'Prepared exact-30 completion does not match the current planned shot',
               );
             }
-            const evidenceUri =
-              await appendFace3DRuntimeEvidence(result);
-            if (!evidenceUri) {
-              throw new Error(
-                'Prepared exact-30 completion was not persisted to runtime evidence',
-              );
+            const completedShotCount =
+              preparedExact30Shot.order -
+              preparedCollectionPlan!.phase1.shotCount;
+            setPendingPreparedCommitRequestId(result.requestId);
+            try {
+              return await preparedCommitCoordinator.run({
+                requestId: result.requestId,
+                persistEvidence: () =>
+                  appendFace3DRuntimeEvidence(result),
+                finalize: async ({isCurrent, value: evidenceUri}) => {
+                  if (!evidenceUri) {
+                    throw new Error(
+                      'Prepared exact-30 completion was not persisted to runtime evidence',
+                    );
+                  }
+                  if (labMountedRef.current) {
+                    setPreparedExact30CompletedShotCount(current =>
+                      Math.max(current, completedShotCount),
+                    );
+                    setPhase1ResumeNotice(
+                      `Prepared Exact 30 ${completedShotCount}/${
+                        preparedCollectionPlan!.phase2.exact30RepeatCount
+                      }을 events.jsonl에 기록했습니다.`,
+                    );
+                  }
+                  if (!isCurrent() || !labMountedRef.current) {
+                    await deleteUnifiedFaceCaptureTempImage(
+                      result.image.uri,
+                    );
+                    return true;
+                  }
+                  unifiedLabImageOwnership.take(result.image.uri);
+                  setCapture({
+                    ...upload,
+                    capturedAt: new Date().toISOString(),
+                  });
+                  setUnifiedResult(result);
+                  setResultMode('unified');
+                  return true;
+                },
+              });
+            } finally {
+              if (labMountedRef.current) {
+                setPendingPreparedCommitRequestId(
+                  preparedCommitCoordinator.pendingRequestId,
+                );
+              }
             }
-            setPreparedExact30CompletedShotCount(current =>
-              Math.max(
-                current,
-                preparedExact30CompletedShotCount + 1,
-              ),
-            );
-            setPhase1ResumeNotice(
-              `Prepared Exact 30 ${
-                preparedExact30CompletedShotCount + 1
-              }/${preparedCollectionPlan!.phase2.exact30RepeatCount}을 ` +
-                'events.jsonl에 기록했습니다.',
-            );
           } else {
             void appendFace3DRuntimeEvidence(result).catch(() => undefined);
           }
@@ -1101,6 +1175,7 @@ function FaceCaptureLabContent() {
           return true;
         }}
         onFallback={reason => {
+          preparedCommitCoordinator.invalidate();
           console.info('[aura:face-capture-lab] unified:fallback', {
             reason,
           });

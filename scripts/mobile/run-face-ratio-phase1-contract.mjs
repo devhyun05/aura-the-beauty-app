@@ -53,6 +53,13 @@ const labSource = readFileSync(
   join(repoRoot, 'apps/mobile/src/app/experiments/FaceCaptureLabApp.tsx'),
   'utf8',
 );
+const unifiedCaptureScreenSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/mobile/src/features/face-capture/screens/UnifiedFaceCaptureScreen.tsx',
+  ),
+  'utf8',
+);
 if (
   !labSource.includes('pruneExpiredFaceRatioPhase1ReplayArtifacts()') ||
   !labSource.includes('deleteFaceRatioPhase1ReplayArtifact(') ||
@@ -66,7 +73,9 @@ if (
   !labSource.includes('완료된 기기 raw 삭제 및 세션 종료') ||
   !labSource.includes('unifiedLabImageOwnership.take(result.image.uri)') ||
   !labSource.includes('unifiedLabImageOwnership.releaseAll()') ||
-  !labSource.includes('if (!labMountedRef.current)') ||
+  !labSource.includes('preparedCommitCoordinator.run({') ||
+  !labSource.includes('onAbandonStarted={invalidatePreparedCommit}') ||
+  !labSource.includes('if (!isCurrent() || !labMountedRef.current)') ||
   !labSource.includes(
     'await deleteUnifiedFaceCaptureTempImage(result.image.uri)',
   ) ||
@@ -76,6 +85,31 @@ if (
 ) {
   throw new Error(
     'Phase 1 lab entry must prune retention artifacts and block collection on prune failure',
+  );
+}
+const closeHandlerStart = unifiedCaptureScreenSource.indexOf(
+  'accessibilityLabel="통합 얼굴 촬영 닫기"',
+);
+const closeAbandonIndex = unifiedCaptureScreenSource.indexOf(
+  'callbacksRef.current.onAbandonStarted?.()',
+  closeHandlerStart,
+);
+const closeCancelIndex = unifiedCaptureScreenSource.indexOf(
+  "captureState.cancel('user_closed')",
+  closeHandlerStart,
+);
+const closeCleanupIndex = unifiedCaptureScreenSource.indexOf(
+  'cleanupUncommittedImage(captureState.completed)',
+  closeHandlerStart,
+);
+if (
+  closeHandlerStart < 0 ||
+  closeAbandonIndex < closeHandlerStart ||
+  closeCancelIndex < closeAbandonIndex ||
+  closeCleanupIndex < closeCancelIndex
+) {
+  throw new Error(
+    'Unified capture close must invalidate a prepared commit before cancel and async cleanup',
   );
 }
 const artifactStoreSource = readFileSync(
@@ -175,6 +209,8 @@ const testPath =
   'features/face-ratio/services/faceRatioPhase1CollectionPlan.test.ts';
 const tempImageOwnershipTestPath =
   'features/face-capture/services/faceCaptureLabTempImageOwnership.test.ts';
+const preparedCommitCoordinatorTestPath =
+  'features/face-capture/services/faceCaptureLabPreparedCommitCoordinator.test.ts';
 
 run(process.execPath, [
   tscPath,
@@ -191,6 +227,7 @@ run(process.execPath, [
   outDir,
   join(srcRoot, testPath),
   join(srcRoot, tempImageOwnershipTestPath),
+  join(srcRoot, preparedCommitCoordinatorTestPath),
 ]);
 run(process.execPath, [
   join(outDir, testPath.replace(/\.ts$/, '.js')),
@@ -198,4 +235,7 @@ run(process.execPath, [
 ]);
 run(process.execPath, [
   join(outDir, tempImageOwnershipTestPath.replace(/\.ts$/, '.js')),
+]);
+run(process.execPath, [
+  join(outDir, preparedCommitCoordinatorTestPath.replace(/\.ts$/, '.js')),
 ]);

@@ -23,7 +23,7 @@ v0.1→v0.2 결정: 스텐실 레인만 우선 구현, 사용자 opt-in 기본 O
 [얼굴 분석 1회]                    [메이크업 적용 시마다]
 faceGeometry2d 16지표 ──┐
 Face3D 11지표(가용 시) ──┤→ ② 매핑 엔진 → ③ PersonalFitProfile 저장 → ④ 핏 시트 병합 → ⑤ 기존 브리지로 송신
-세로3분할·faceLength ────┘   (순수함수)      (AsyncStorage/서버)        (자동 entry 주입)    (Unity 무변경)
+세로3분할·faceLength ────┘   (순수함수)      (AsyncStorage; 서버 sync는 후속/현 범위 밖)        (자동 entry 주입)    (Unity 무변경)
 ```
 
 - ② 매핑 엔진은 **순수함수** `deriveFitDeltas(measurements) → FitEntry[]` — LLM·네트워크 무관, 결정적. 산출물은 기존 평면 `FitEntry` 형식 그대로(§3).
