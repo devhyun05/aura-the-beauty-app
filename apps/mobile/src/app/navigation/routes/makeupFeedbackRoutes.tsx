@@ -135,7 +135,13 @@ export function MakeupFeedbackLoadingRouteScreen({
 }: RootScreenProps<'MakeupFeedbackLoading'>) {
   const {selectedMakeupFeedbackPhoto, setMakeupFeedbackResult} = useNavigationFlowState();
 
-  const handleBack = React.useCallback(() => {
+  const handleBackToHome = React.useCallback(() => {
+    navigation.reset({
+      index: 0,
+      routes: [{name: 'MainTabs', params: {screen: 'HomeTab'}}],
+    });
+  }, [navigation]);
+  const handleEditGoal = React.useCallback(() => {
     navigation.replace('MakeupFeedbackGoalInput');
   }, [navigation]);
 
@@ -164,9 +170,9 @@ export function MakeupFeedbackLoadingRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackLoading"
-      onBack={handleBack}>
+      onBack={handleBackToHome}>
       <MakeupFeedbackLoadingScreen
-        onBack={handleBack}
+        onBack={handleEditGoal}
         onChooseDifferentPhoto={handleChooseDifferentPhoto}
         onRetake={handleRetake}
         onComplete={handleComplete}
