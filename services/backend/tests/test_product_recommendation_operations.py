@@ -25,8 +25,14 @@ def test_public_feature_status_is_honest_without_a_catalog_database() -> None:
   assert data["readiness"]["eligibleProducts"] == 0
   assert data["readiness"]["popularFallbackReady"] is True
   assert data["readiness"]["popularFallbackSource"] == "auradin_catalog"
-  assert data["readiness"]["auradinCatalogProducts"] == 618
-  assert data["readiness"]["auradinCatalogDisplayableProducts"] >= 500
+  # 카탈로그 크기는 승인된 스냅샷 승격(C급 baseline)마다 커진다 — 절대값 대신 최초
+  # 6카테고리 시드(618) 하한 + displayable ≤ total 정합으로 단언한다.
+  assert data["readiness"]["auradinCatalogProducts"] >= 618
+  assert (
+    500
+    <= data["readiness"]["auradinCatalogDisplayableProducts"]
+    <= data["readiness"]["auradinCatalogProducts"]
+  )
 
 
 def test_catalog_monitor_exit_gate_catches_invalid_or_relational_rows() -> None:

@@ -514,7 +514,11 @@ def _quote_url(url: str) -> str:
   return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, query, parsed.fragment))
 
 
+FETCH_RETRY_BACKOFF_SECONDS = 1.5
+
+
 def _fetch_text(url: str, *, timeout_seconds: float, user_agent: str) -> tuple[str, dict[str, Any]]:
+  # §6.2 견고화: 일시 오류(타임아웃/리셋) 1회 재시도 + 백오프 — 우회가 아니라 재시도만.
   request = urllib.request.Request(
     _quote_url(url),
     headers={
@@ -527,22 +531,30 @@ def _fetch_text(url: str, *, timeout_seconds: float, user_agent: str) -> tuple[s
   if urllib.parse.urlparse(url).scheme == "https" and certifi is not None:
     context = ssl.create_default_context(cafile=certifi.where())
 
-  try:
-    with urllib.request.urlopen(request, timeout=timeout_seconds, context=context) as response:
-      body = response.read()
-      charset = response.headers.get_content_charset() or "utf-8"
-      return body.decode(charset, errors="replace"), {
-        "contentLength": len(body),
-        "httpStatus": int(response.status),
-        "urlEffective": response.geturl(),
-      }
-  except Exception as exc:
-    return "", {
-      "contentLength": 0,
-      "error": f"{type(exc).__name__}: {exc}",
-      "httpStatus": None,
-      "urlEffective": url,
-    }
+  last_error = ""
+  for attempt in (1, 2):
+    try:
+      with urllib.request.urlopen(request, timeout=timeout_seconds, context=context) as response:
+        body = response.read()
+        charset = response.headers.get_content_charset() or "utf-8"
+        return body.decode(charset, errors="replace"), {
+          "attempts": attempt,
+          "contentLength": len(body),
+          "httpStatus": int(response.status),
+          "urlEffective": response.geturl(),
+        }
+    except Exception as exc:
+      last_error = f"{type(exc).__name__}: {exc}"
+      if attempt == 1:
+        time.sleep(FETCH_RETRY_BACKOFF_SECONDS)
+
+  return "", {
+    "attempts": 2,
+    "contentLength": 0,
+    "error": last_error,
+    "httpStatus": None,
+    "urlEffective": url,
+  }
 
 
 def _product_id_from_url(url: str) -> str:

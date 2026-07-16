@@ -10,6 +10,7 @@ import {
   shouldHandleMakeupRecommendationBack,
   toggleExpandedLookId,
 } from './makeupRecommendationViewContracts';
+import {getMakeupRecommendationAgentMessage} from '../services/makeupRecommendationAgentConversation';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -94,3 +95,33 @@ expectEqual(
 const opened = toggleExpandedLookId(new Set<string>(), 'look-a');
 expectEqual(opened.has('look-a'), true, 'result detail opens');
 expectEqual(toggleExpandedLookId(opened, 'look-a').has('look-a'), false, 'result detail closes');
+
+const loadingContext = {
+  answerKeywords: [
+    {dimension: 'occasion' as const, label: '출근할 때'},
+    {dimension: 'mood' as const, label: '맑고 단정하게'},
+    {dimension: 'boldness' as const, label: '자연스럽게'},
+    {dimension: 'timeSkill' as const, label: '10분 안에'},
+  ],
+  personalColor: '여름 쿨톤',
+  prompt: '회사에서 자연스러운 메이크업',
+  useProfile: true,
+};
+const loadingMessages = Array.from({length: 40}, (_, index) =>
+  getMakeupRecommendationAgentMessage(loadingContext, index),
+);
+expectEqual(
+  loadingMessages.some(message => message.text.includes('맑고 단정하게')),
+  true,
+  'agent conversation includes reverse-question mood keyword',
+);
+expectEqual(
+  loadingMessages.some(message => message.text.includes('10분 안에')),
+  true,
+  'agent conversation includes reverse-question routine keyword',
+);
+expectEqual(
+  loadingMessages[39].text.length > 0,
+  true,
+  'agent conversation keeps producing messages during long generation',
+);

@@ -12,6 +12,7 @@ class FakeDB:
   def __init__(self) -> None:
     self.execute_queries: list[str] = []
     self.fetch_queries: list[str] = []
+    self.fetch_args: list[tuple[object, ...]] = []
 
   async def execute(self, query: str, *args: object) -> str:
     assert not args
@@ -19,8 +20,8 @@ class FakeDB:
     return "OK"
 
   async def fetch(self, query: str, *args: object) -> list[dict[str, str]]:
-    assert not args
     self.fetch_queries.append(" ".join(query.split()))
+    self.fetch_args.append(args)
     return [{"session_id": "auradin-expired-1"}]
 
 
@@ -42,6 +43,8 @@ async def test_find_expired_sessions_only_reads_expired_auradin_rows(
   assert "where expires_at < now()" in query
   assert "user_product_likes" not in query
   assert "products" not in query
+  assert "limit $1" in query
+  assert db.fetch_args[0] == (500,)
 
 
 @pytest.mark.asyncio
@@ -55,11 +58,14 @@ async def test_cleanup_deletes_only_expired_auradin_rows(
 
   assert result.total == 1
   query = db.fetch_queries[0]
-  assert query.startswith("delete from auradin_search_sessions")
+  assert query.startswith("with expired as")
   assert "where expires_at < now()" in query
-  assert "returning session_id" in query
+  assert "limit $1" in query
+  assert "for update skip locked" in query
+  assert "returning sessions.session_id" in query
   assert "user_product_likes" not in query
   assert "products" not in query
+  assert db.fetch_args[0] == (500,)
 
 
 def test_print_result_reports_count_without_dumping_session_ids(capsys) -> None:

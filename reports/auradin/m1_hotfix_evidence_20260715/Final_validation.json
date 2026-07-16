@@ -1,0 +1,40 @@
+{
+  "status": "IMPLEMENTED_WITH_EXTERNAL_GATES",
+  "focusedValidation": {
+    "stage0": ["56 passed", "31 passed latest integration subset"],
+    "stage1RankingIntegration": "64 passed",
+    "stage2SanitizationPreprocessingManifest": "36 passed",
+    "stage2PromotionGoldenHealth": "26 passed",
+    "mobileTypecheck": "PASS",
+    "baselineGolden": "6/6 PASS",
+    "candidateGolden": "6/6 PASS"
+  },
+  "longRunningSuiteDisclosure": {
+    "backend": "manually interrupted after 112 passed, 0 failures, 500.10s",
+    "auradinGlob": "manually interrupted after 31 passed, 0 failures, 75.76s",
+    "claim": "not represented as a complete suite pass"
+  },
+  "probes": {
+    "reportMaxAbsoluteScoreSwing": 0.020000000000000018,
+    "reportProbeTop3Changed": false,
+    "candidateInvalidCoolCount": 0,
+    "candidatePositiveControls": "3/3",
+    "priceAndNegationResidualPollution": 0,
+    "activationWithoutApprovalEvidence": "exit 1"
+  },
+  "activeSnapshot": {
+    "runDate": "20260708",
+    "manifestSha256": "7a08fe6f23f15b3dae370c43d7fdd7e1df04136ebc9e00c7fc155cd103afa7be"
+  },
+  "candidateSnapshot": {
+    "runDate": "20260716",
+    "manifestSha256": "928fdef244c66038ae3e0f284d15bbecf2133e8b5653b55ce77e5f44c6ac7823",
+    "status": "prepared_not_activated"
+  },
+  "remainingExternalGates": [
+    "real PostgreSQL concurrency and migration fixture",
+    "human approval evidence sealed by SHA",
+    "deployment worker/filesystem/restart/persistence preflight"
+  ],
+  "commitOrPushPerformed": false
+}

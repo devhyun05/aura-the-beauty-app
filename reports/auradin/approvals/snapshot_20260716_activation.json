@@ -1,0 +1,24 @@
+{
+  "snapshotManifestSha256": "928fdef244c66038ae3e0f284d15bbecf2133e8b5653b55ce77e5f44c6ac7823",
+  "golden": {
+    "status": "PASS",
+    "passed": 6,
+    "total": 6,
+    "reportPath": "reports/auradin/mvp_agent_eval_20260716.json",
+    "reportSha256": "419f0fc1d8173614f4d45b721aaa63a02708d936c56b21c884140c83ffd780c0"
+  },
+  "a8": {
+    "status": "PASS",
+    "passed": true,
+    "invalidCoolCount": 0,
+    "positiveControls": {
+      "여쿨라": true,
+      "그레이쉬쿨": true,
+      "앙쿨모브": true
+    }
+  },
+  "coverageClassification": "canonical_replacement_for_rejected_20260715_candidate",
+  "approvedBy": "",
+  "reviewedAt": "",
+  "approvalConclusion": "pending"
+}

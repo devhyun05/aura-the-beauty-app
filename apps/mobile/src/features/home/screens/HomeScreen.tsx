@@ -31,7 +31,7 @@ import {
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
-import {MenuHeaderIcon, SectionMoreButton} from '../../../shared/ui';
+import {AuraLogo, MenuHeaderIcon, SectionMoreButton} from '../../../shared/ui';
 import {CachedImage, prefetchImageSources} from '../../../shared/ui/CachedImage';
 import {homeMock} from '../mocks/home.mock';
 import {getHomeData} from '../services/homeService';
@@ -643,20 +643,21 @@ function HomeHeroChrome({
     <XStack
       pointerEvents="box-none"
       style={[styles.homeHeroChrome, {paddingTop: topInset + spacing.sm}]}>
-      <Pressable
-        accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
-        accessibilityRole="button"
-        disabled={!onOpenFeatureMenu}
-        hitSlop={spacing.xs}
-        onPress={onOpenFeatureMenu}
-        style={({pressed}) => [
-          styles.homeHeroMenuButton,
-          pressed && styles.pressed,
-        ]}>
-        <MenuHeaderIcon color={colors.brandMuted} size={20} strokeWidth={2} />
-      </Pressable>
+      <AuraLogo style={styles.homeHeroLogo} variant="header" />
       <XStack style={styles.homeHeroRightActions}>
         {headerRightSlot}
+        <Pressable
+          accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
+          accessibilityRole="button"
+          disabled={!onOpenFeatureMenu}
+          hitSlop={spacing.xs}
+          onPress={onOpenFeatureMenu}
+          style={({pressed}) => [
+            styles.homeHeroMenuButton,
+            pressed && styles.pressed,
+          ]}>
+          <MenuHeaderIcon color={colors.brandMuted} size={20} strokeWidth={2} />
+        </Pressable>
       </XStack>
     </XStack>
   );
@@ -1332,13 +1333,18 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.78)',
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 38,
+    height: 40,
     justifyContent: 'center',
     shadowColor: shadows.soft.shadowColor,
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.10,
     shadowRadius: 10,
-    width: 38,
+    width: 40,
+  },
+  homeHeroLogo: {
+    textShadowColor: 'rgba(255, 255, 255, 0.72)',
+    textShadowOffset: {height: 0, width: 0},
+    textShadowRadius: 8,
   },
   homeHeroRightActions: {
     alignItems: 'center',

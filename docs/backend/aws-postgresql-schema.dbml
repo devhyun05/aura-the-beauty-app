@@ -52,7 +52,7 @@ Enum product_category {
   shadow
   liner
   base
-  brow
+  brow // R1 (schema.sql:product-category-brow-v1) — Auradin 브로우 찜 카테고리 손실 방지
 }
 
 Enum filter_category {
@@ -489,12 +489,54 @@ Table auradin_search_sessions {
   state jsonb [not null]
   expires_at timestamptz [not null]
   updated_at timestamptz [not null]
+  owner_subject text [not null]
+  version integer [not null, default: 0]
+  client_request_id text
+  request_fingerprint text
+  idempotency_expires_at timestamptz
 
   indexes {
     expires_at
+    (owner_subject, client_request_id) [unique, note: 'partial: client_request_id is not null']
+    idempotency_expires_at [note: 'partial: idempotency_expires_at is not null']
   }
 
-  Note: 'Temporary Auradin conversation state. Product likes remain in user_product_likes.'
+  Note: 'Temporary Auradin conversation state. Product likes remain in user_product_likes. A9 v2: create 멱등성(client_request_id+fingerprint+retention)과 mutator version CAS.'
+}
+
+Table auradin_events {
+  id bigserial [pk]
+  client_event_id text [not null]
+  schema_version smallint [not null, default: 1]
+  owner_subject text [not null, note: 'anon:v1:<HMAC-digest> | user:v1:<issuer-scope>:<sub> — dev fallback 공용 subject 금지']
+  session_id text
+  turn_id text
+  result_set_id text
+  event_type text [not null, note: '11종 enum: session_start | question_answered | impression | product_open | save | unsave | purchase_click | refine_dial | refine_prompt | hide | unhide']
+  product_id text
+  category text
+  rank int
+  role text
+  match_rate int
+  data_manifest_id text [not null, note: '귀속 정본 (Data Manifest)']
+  release_manifest_id text [not null, note: '귀속 정본 (Release Manifest)']
+  catalog_run_date text
+  ranker_version text
+  payload jsonb [note: 'scoreSnapshot/filterDelta/dial 등 구조화 값만 — raw query 원문 저장 금지']
+  occurred_at timestamptz [not null, note: '클라이언트 발생 시각']
+  received_at timestamptz [not null, default: `now()`, note: '서버 수신 시각']
+  experiment_id text
+  variant text
+
+  indexes {
+    (owner_subject, client_event_id) [unique]
+    (owner_subject, occurred_at) [note: 'occurred_at desc']
+    session_id
+    data_manifest_id
+    received_at
+  }
+
+  Note: 'A5 §7.2 Auradin behavioral events. 보존: received_at 기반 주기 배치 DELETE. 사용자 삭제는 파생 user_taste_profile과 한 트랜잭션.'
 }
 
 Table product_recommendation_runs {

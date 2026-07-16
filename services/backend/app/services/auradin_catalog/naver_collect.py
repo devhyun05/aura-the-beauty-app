@@ -25,6 +25,7 @@ def build_query_plan(
   brands: list[str] | None = None,
   categories: list[str] | None = None,
   max_queries: int | None = None,
+  all_templates: bool = False,
 ) -> list[NaverQuery]:
   ordered_brands = sorted(
     brands or list(BRAND_PRIORITY),
@@ -37,7 +38,8 @@ def build_query_plan(
     for category in ordered_categories:
       templates = DEFAULT_CATEGORY_QUERIES.get(category, ())
 
-      for template in templates[:1]:
+      selected_templates = templates if all_templates else templates[:1]
+      for template in selected_templates:
         queries.append(
           NaverQuery(
             brand=brand,

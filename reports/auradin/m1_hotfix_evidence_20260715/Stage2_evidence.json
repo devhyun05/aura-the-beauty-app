@@ -1,0 +1,69 @@
+{
+  "item": "Stage 2 — A8 undertone sanitization and snapshot promotion gate",
+  "baseCommit": "7724e1c249f83b2bc3e9600cb46c046a847d1358",
+  "supersededCandidate": {
+    "runDate": "20260715",
+    "status": "invalid_never_activated",
+    "reason": "blanket sanitization removed legitimate signals; immutable identifier is not reused"
+  },
+  "candidateSnapshot": {
+    "runDate": "20260716",
+    "manifestPath": "data/auradin/manifests/snapshot_20260716.json",
+    "manifestSha256": "928fdef244c66038ae3e0f284d15bbecf2133e8b5653b55ce77e5f44c6ac7823",
+    "catalogSha256": "d8b326b399f57d0e223d2e3a34a7549a851985138b881adfc8ae4e9d11aa4b52",
+    "chunksSha256": "867cf1306717c46137588ee8b3e41d1291a587576e53cac27741badfcb555dbe",
+    "vectorSha256": "593f97eae2162ca6caec85064771511487c7f5e3218a4f38d5332de00018529b",
+    "catalogCount": 618,
+    "chunkCount": 2454,
+    "vectorCount": 2454,
+    "vectorDimension": 1024,
+    "retrievalBackend": "embedding_file_hash",
+    "retrievalStatus": "ok",
+    "retrievalDegradedReason": null
+  },
+  "a8Gate": {
+    "brandOnlyCoolBefore": 42,
+    "brandOnlyCoolAfter": 0,
+    "coolingOnlyCoolBefore": 1,
+    "coolingOnlyCoolAfter": 0,
+    "invalidCoolAfter": 0,
+    "positiveControls": {
+      "여쿨라": true,
+      "그레이쉬쿨": true,
+      "앙쿨모브": true
+    },
+    "undertoneCoverage": {
+      "active20260708": 95,
+      "candidate20260716": 52,
+      "classification": "expected",
+      "accounting": "42 brand-only cool + 1 cooling false positive"
+    },
+    "crossArtifactIdIntegrity": "catalog == chunks == vector",
+    "result": "pass"
+  },
+  "goldenDiff": {
+    "baselineSnapshot": "20260708",
+    "candidateSnapshot": "20260716",
+    "prompts": 6,
+    "candidatePass": "6/6",
+    "productIdQueriesChanged": 1,
+    "firstQuestionQueriesChanged": 0,
+    "classification": "expected A8 removal; human approval pending"
+  },
+  "promotionContracts": [
+    "preprocessing sidecar runDate/seed SHA/path/count validation",
+    "move-journal interruption recovery",
+    "completed prepare SHA-identical reuse",
+    "golden report persisted before non-zero FAIL exit",
+    "activation requires evidence file SHA + manifest SHA + golden/A8/coverage/human approval",
+    "active pointer CAS"
+  ],
+  "tests": "Stage 2 focused suites passed; final aggregate count is recorded in Final_validation.json",
+  "promotion": {
+    "status": "prepared_not_activated",
+    "activeManifestPath": "data/auradin/manifests/snapshot_20260708.json",
+    "activeManifestSha256": "7a08fe6f23f15b3dae370c43d7fdd7e1df04136ebc9e00c7fc155cd103afa7be",
+    "negativeActivationProbe": "exit 1: activation preflight is incomplete",
+    "reason": "human approval evidence and deployment preflight are absent"
+  }
+}

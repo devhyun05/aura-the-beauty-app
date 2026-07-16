@@ -320,7 +320,7 @@ async function expectAbortSignalIsForwarded() {
         id: 'mood',
         title: '어떤 방향이 좋아요?',
         options: Array.from({length: 4}, (_, index) => ({
-          id: `option-${index + 1}`,
+          id: index === 3 ? 'ai_pick' : `option-${index + 1}`,
           label: index === 3 ? 'AI가 골라줘' : `선택 ${index + 1}`,
         })),
       }],
@@ -355,7 +355,7 @@ async function expectGeneratedBackendFlowCompletesAndKeepsSavedReport() {
             {id: 'soft', label: '은은하게'},
             {id: 'clear', label: '또렷하게'},
             {id: 'bold', label: '과감하게'},
-            {id: 'ai', label: 'AI가 골라줘'},
+            {id: 'ai_pick', label: 'AI가 골라줘'},
           ],
         }],
       } as T;

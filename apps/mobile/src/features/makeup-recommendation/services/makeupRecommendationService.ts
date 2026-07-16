@@ -2,7 +2,7 @@ import {
   MAKEUP_LOOK_FIXTURES,
   MAKEUP_QUESTIONS,
   MAKEUP_SCENARIOS,
-} from '../mocks/makeupRecommendation.mock';
+} from '../data/makeupRecommendationCatalog';
 import {requestBackendJson} from '../../../shared/services/backendApi';
 import type {
   MakeupLookRecommendation,
@@ -160,25 +160,6 @@ function buildQuestionSession(
   };
 }
 
-function cloneLook(look: MakeupLookRecommendation): MakeupLookRecommendation {
-  return {
-    ...look,
-    reasons: [...look.reasons],
-    appliedConditions: [...look.appliedConditions],
-    steps: look.steps.map(step => ({...step})),
-    products: look.products.map(product => ({...product})),
-  };
-}
-
-export class FixtureProductRecommendationProvider implements ProductRecommendationProvider {
-  recommendProducts(lookId: string): MakeupRecommendationProduct[] {
-    const fixture = MAKEUP_LOOK_FIXTURES.find(look => look.id === lookId) ?? MAKEUP_LOOK_FIXTURES[0];
-    return fixture.products.map(product => ({...product}));
-  }
-}
-
-const fixtureProductProvider = new FixtureProductRecommendationProvider();
-
 function selectedAnswerLabels(
   questions: MakeupRecommendationQuestion[],
   answers: MakeupRecommendationAnswer[],
@@ -209,6 +190,25 @@ function buildAppliedConditions(
 
   return [...new Set([...directConditions, ...inferredConditions])];
 }
+
+function cloneLook(look: MakeupLookRecommendation): MakeupLookRecommendation {
+  return {
+    ...look,
+    reasons: [...look.reasons],
+    appliedConditions: [...look.appliedConditions],
+    steps: look.steps.map(step => ({...step})),
+    products: look.products.map(product => ({...product})),
+  };
+}
+
+export class FixtureProductRecommendationProvider implements ProductRecommendationProvider {
+  recommendProducts(lookId: string): MakeupRecommendationProduct[] {
+    const fixture = MAKEUP_LOOK_FIXTURES.find(look => look.id === lookId) ?? MAKEUP_LOOK_FIXTURES[0];
+    return fixture.products.map(product => ({...product}));
+  }
+}
+
+const fixtureProductProvider = new FixtureProductRecommendationProvider();
 
 function completeSession(
   session: MakeupRecommendationSession,
@@ -270,9 +270,11 @@ export function answerMakeupRecommendationQuestion(
   const nextIndex = session.currentQuestionIndex + 1;
   const additionalConstraints =
     answer.additionalConstraints?.trim() || session.additionalConstraints;
-  return nextIndex >= session.questions.length
-    ? completeSession(session, answers, additionalConstraints)
-    : {...session, answers, currentQuestionIndex: nextIndex, additionalConstraints};
+  if (nextIndex >= session.questions.length) {
+    return completeSession(session, answers, additionalConstraints);
+  }
+
+  return {...session, answers, currentQuestionIndex: nextIndex, additionalConstraints};
 }
 
 function applyFixtureRefinement(
@@ -321,12 +323,19 @@ export function refineMakeupRecommendation(
 
 function mapBackendQuestions(questions: readonly BackendQuestion[]): MakeupRecommendationQuestion[] {
   return questions
-    .filter(question =>
-      question.id?.trim()
-      && question.title?.trim()
-      && question.options?.length === 4
-      && question.options.every(option => option.id?.trim() && option.label?.trim()),
-    )
+    .filter(question => {
+      const delegateOption = question.options?.[3];
+      return Boolean(
+        question.id?.trim()
+        && question.title?.trim()
+        && question.options?.length === 4
+        && question.options.every(option => option.id?.trim() && option.label?.trim())
+        && new Set(question.options.map(option => option.id)).size === question.options.length
+        && new Set(question.options.map(option => option.label.trim().toLowerCase())).size === question.options.length
+        && delegateOption?.id === 'ai_pick'
+        && delegateOption.label === 'AI가 골라줘',
+      );
+    })
     .slice(0, 3)
     .map((question, index) => ({
       id: question.id,

@@ -70,6 +70,11 @@ def parse_args() -> argparse.Namespace:
   parser.add_argument("--categories", help="Comma-separated category subset, e.g. lip,shadow,base.")
   parser.add_argument("--display", type=int, default=100)
   parser.add_argument("--max-queries", type=int, default=12)
+  parser.add_argument(
+    "--all-templates",
+    action="store_true",
+    help="Run every configured query template for each brand/category pair.",
+  )
   parser.add_argument("--request-delay-seconds", type=float, default=1.0)
   parser.add_argument("--timeout-seconds", type=float, default=10.0)
   parser.add_argument("--output-root", type=Path, default=REPO_ROOT / "data" / "auradin")
@@ -90,6 +95,7 @@ async def run() -> int:
     brands=_split_csv(args.brands),
     categories=_split_csv(args.categories),
     max_queries=args.max_queries,
+    all_templates=args.all_templates,
   )
 
   if args.dry_run:

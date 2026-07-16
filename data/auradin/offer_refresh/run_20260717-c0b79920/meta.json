@@ -1,0 +1,28 @@
+{
+  "activeManifestSha": "7a08fe6f23f15b3dae370c43d7fdd7e1df04136ebc9e00c7fc155cd103afa7be",
+  "inputSeedSha": "4d24358d1111547c995e655fcd1e5688b109e96e40dcc7e1ea7e4bfceb808dc3",
+  "margin": 0.15,
+  "minScore": 0.5,
+  "resume": [
+    {
+      "appliedReview": "data/auradin/offer_refresh/run_20260717-c0b79920/review_decisions.csv",
+      "resumedAtTs": "2026-07-17T03:00:00+09:00"
+    },
+    {
+      "appliedReview": "data/auradin/offer_refresh/run_20260717-c0b79920/review_decisions.csv",
+      "resumedAtTs": "2026-07-17T03:00:00+09:00"
+    }
+  ],
+  "runDate": "20260717",
+  "runId": "20260717-c0b79920",
+  "runTs": "2026-07-17T03:00:00+09:00",
+  "sealBackfilled": "2026-07-15 cross-review fix — values verifiable from git history",
+  "seedInput": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/catalog/catalog_items_seed_20260708.jsonl",
+  "shas": {
+    "diff.json": "9fcce9cde464dc953cbbf0c5fa7c0ef1cd3cf1e8f3f4d2d9ceda4250d2143921",
+    "results.jsonl": "6573e3b3cd62a5fa17f4fd361c171e368c1dea0173cf0a88c5863d2c72760495",
+    "review_template.csv": "d3f0335648bb336b00f3486560c8407a7c62b7d8f2973b1aadafc81257a0b779",
+    "seed.jsonl": "f8c1464858973c4bae55c458b5d19e10e8d9462769d849a12126efe4dfc92257"
+  },
+  "staleStateBefore": {}
+}

@@ -1,0 +1,271 @@
+{
+  "approvalStatus": "pending_human_review",
+  "backend": "hash",
+  "dimension": 1024,
+  "modelId": "hash-fallback",
+  "notes": [
+    "The golden top-k set is a relevance proxy, not item-level human relevance labels.",
+    "Hash-backend output is diagnostic only and must not be reused after an embedding switch.",
+    "Rerun with --backend embedding after building the real index before changing s_floor."
+  ],
+  "related": {
+    "distribution": {
+      "count": 56,
+      "max": 0.37385784027743607,
+      "min": 0.07380875189632363,
+      "p10": 0.09950737714883373,
+      "p25": 0.12376862894835419,
+      "p50": 0.17909966248232945,
+      "p75": 0.22260362369766779,
+      "p90": 0.25878695658824247
+    },
+    "label": "golden top-k proxy",
+    "queries": [
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.194841,
+        "prompt": "쿨톤인데 너무 진하지 않은 글로시 핑크 립 2만원 이하",
+        "resultCount": 55,
+        "status": "ok",
+        "topKMedian": 0.160739,
+        "topScores": [
+          0.194841,
+          0.194343,
+          0.181961,
+          0.176238,
+          0.168568,
+          0.152911,
+          0.127474,
+          0.127096,
+          0.121716,
+          0.120356
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.171024,
+        "prompt": "데일리로 쓸 만한 제품 추천해줘",
+        "resultCount": 6,
+        "status": "ok",
+        "topKMedian": 0.1,
+        "topScores": [
+          0.171024,
+          0.102598,
+          0.1,
+          0.1,
+          0.091287,
+          0.073809
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.222856,
+        "prompt": "올리브영에서 살 수 있는 데일리 립",
+        "resultCount": 41,
+        "status": "ok",
+        "topKMedian": 0.167607,
+        "topScores": [
+          0.222856,
+          0.222856,
+          0.215909,
+          0.20857,
+          0.206453,
+          0.128762,
+          0.128057,
+          0.127753,
+          0.123769,
+          0.123769
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.154303,
+        "prompt": "면접용 자연스러운 블러셔, 너무 붉지 않게",
+        "resultCount": 68,
+        "status": "ok",
+        "topKMedian": 0.116753,
+        "topScores": [
+          0.154303,
+          0.149651,
+          0.139077,
+          0.134321,
+          0.118731,
+          0.114775,
+          0.099015,
+          0.099015,
+          0.096225,
+          0.093659
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.264194,
+        "prompt": "글리터 강한 아이섀도우 말고 은은한 쉬머",
+        "resultCount": 59,
+        "status": "ok",
+        "topKMedian": 0.200427,
+        "topScores": [
+          0.264194,
+          0.222604,
+          0.222604,
+          0.217732,
+          0.201751,
+          0.199102,
+          0.199102,
+          0.193897,
+          0.184619,
+          0.184619
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.373858,
+        "prompt": "브로우 추천해줘",
+        "resultCount": 47,
+        "status": "ok",
+        "topKMedian": 0.260819,
+        "topScores": [
+          0.373858,
+          0.269612,
+          0.268257,
+          0.268257,
+          0.268257,
+          0.25338,
+          0.242505,
+          0.242505,
+          0.242505,
+          0.240757
+        ]
+      }
+    ]
+  },
+  "retrievalBackends": [
+    "embedding_file_hash"
+  ],
+  "snapshotManifestPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/manifests/snapshot_20260716.json",
+  "snapshotRunDate": "20260716",
+  "suggestion": {
+    "balancedAccuracy": 0.767857,
+    "relatedRecall": 0.535714,
+    "threshold": 0.170342,
+    "unrelatedRejection": 1.0
+  },
+  "topKPerQuery": 10,
+  "unrelated": {
+    "distribution": {
+      "count": 41,
+      "max": 0.1696608883922115,
+      "min": 0.07001400420140051,
+      "p10": 0.09534625892455925,
+      "p25": 0.10636058748792362,
+      "p50": 0.11470786693528089,
+      "p75": 0.13566003581778052,
+      "p90": 0.15683756729740647
+    },
+    "label": "unrelated-query top-k",
+    "queries": [
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.159277,
+        "prompt": "자동차 타이어 교체 시기와 추천 규격",
+        "resultCount": 41,
+        "status": "ok",
+        "topKMedian": 0.123114,
+        "topScores": [
+          0.159277,
+          0.154878,
+          0.138013,
+          0.138013,
+          0.127753,
+          0.118475,
+          0.118475,
+          0.111685,
+          0.107719,
+          0.102062
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.156838,
+        "prompt": "서울에서 부산까지 기차 시간표",
+        "resultCount": 6,
+        "status": "ok",
+        "topKMedian": 0.121904,
+        "topScores": [
+          0.156838,
+          0.133631,
+          0.129099,
+          0.114708,
+          0.1066,
+          0.102062
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.110971,
+        "prompt": "파이썬 웹 서버 성능 튜닝 방법",
+        "resultCount": 2,
+        "status": "ok",
+        "topKMedian": 0.090492,
+        "topScores": [
+          0.110971,
+          0.070014
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.169661,
+        "prompt": "주말 등산용 텐트와 침낭 추천",
+        "resultCount": 35,
+        "status": "ok",
+        "topKMedian": 0.108705,
+        "topScores": [
+          0.169661,
+          0.16424,
+          0.129783,
+          0.111803,
+          0.108944,
+          0.108465,
+          0.106361,
+          0.102598,
+          0.095346,
+          0.095346
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.157248,
+        "prompt": "환율과 금리 전망을 알려줘",
+        "resultCount": 6,
+        "status": "ok",
+        "topKMedian": 0.136229,
+        "topScores": [
+          0.157248,
+          0.144542,
+          0.14028,
+          0.132179,
+          0.115439,
+          0.111803
+        ]
+      },
+      {
+        "backend": "embedding_file_hash",
+        "maxScore": 0.13566,
+        "prompt": "반려견 사료 성분을 비교해줘",
+        "resultCount": 7,
+        "status": "ok",
+        "topKMedian": 0.102062,
+        "topScores": [
+          0.13566,
+          0.117851,
+          0.111803,
+          0.102062,
+          0.087039,
+          0.087039,
+          0.084515
+        ]
+      }
+    ]
+  },
+  "vectorPath": "/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/data/auradin/vector/product_knowledge_vector_index_mvp_20260716.json"
+}

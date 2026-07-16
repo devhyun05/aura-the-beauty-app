@@ -1,5 +1,5 @@
 import {forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState} from 'react';
-import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
+import {Pressable, StyleSheet, Text} from 'react-native';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
@@ -16,6 +16,10 @@ import {
   startGeneratedMakeupRecommendation,
   type StartMakeupRecommendationInput,
 } from '../services/makeupRecommendationService';
+import {
+  type MakeupRecommendationAnswerKeyword,
+  type MakeupRecommendationLoadingContext,
+} from '../services/makeupRecommendationAgentConversation';
 import type {
   MakeupLookRecommendation,
   MakeupRecommendationAnswer,
@@ -26,6 +30,7 @@ import type {
 } from '../types';
 import {RecommendationQuestionView} from './RecommendationQuestionView';
 import {RecommendationHistoryView} from './RecommendationHistoryView';
+import {RecommendationAgentLoadingView} from './RecommendationAgentLoadingView';
 import {RecommendationResultsView} from './RecommendationResultsView';
 import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
 import {
@@ -39,6 +44,7 @@ export type MakeupRecommendationScreenHandle = {
 };
 
 export type MakeupRecommendationScreenProps = {
+  faceImageUri?: string;
   onApplyAR?: (look: MakeupLookRecommendation) => void;
   personalColor?: string;
 };
@@ -66,10 +72,47 @@ function getMakeupRecommendationErrorDiagnostic(error: unknown): string {
   return ` (${[error.code, providerCode, validationSummary].filter(Boolean).join(' / ')})`;
 }
 
+function getAnswerKeyword(
+  session: MakeupRecommendationSession,
+  answer: MakeupRecommendationAnswer,
+): MakeupRecommendationAnswerKeyword | null {
+  const question = session.questions.find(item => item.id === answer.questionId);
+
+  if (!question) {
+    return null;
+  }
+
+  const optionLabel = question.options.find(option => option.id === answer.optionId)?.label;
+  const label = optionLabel ?? answer.freeText?.trim();
+
+  return label ? {dimension: question.dimension, label} : null;
+}
+
+function buildLoadingContextFromSession(
+  session: MakeupRecommendationSession,
+  nextAnswer?: MakeupRecommendationAnswer,
+  refinement?: MakeupRecommendationRefinement,
+): MakeupRecommendationLoadingContext {
+  const answers = nextAnswer ? [...session.answers, nextAnswer] : session.answers;
+  const answerKeywords = answers
+    .map(answer => getAnswerKeyword(session, answer))
+    .filter((keyword): keyword is MakeupRecommendationAnswerKeyword => Boolean(keyword));
+
+  return {
+    additionalConstraints:
+      nextAnswer?.additionalConstraints?.trim() || session.additionalConstraints,
+    answerKeywords,
+    personalColor: session.personalColor,
+    prompt: session.prompt,
+    refinement,
+    useProfile: session.useProfile,
+  };
+}
+
 export const MakeupRecommendationScreen = forwardRef<
   MakeupRecommendationScreenHandle,
   MakeupRecommendationScreenProps
->(function MakeupRecommendationScreen({onApplyAR}, ref) {
+>(function MakeupRecommendationScreen({faceImageUri, onApplyAR}, ref) {
   const initialScenarioSeed = useRef(Math.floor(Math.random() * 10_000));
   const scenarioSeed = useRef(initialScenarioSeed.current);
   const popularScenarios = useRef(getPopularMakeupScenarios());
@@ -87,6 +130,8 @@ export const MakeupRecommendationScreen = forwardRef<
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
   const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [loadingContext, setLoadingContext] =
+    useState<MakeupRecommendationLoadingContext | null>(null);
   const lastStartInput = useRef<StartMakeupRecommendationInput | undefined>(undefined);
   const lastRefinement = useRef<MakeupRecommendationRefinement | undefined>(undefined);
   const activeScenarioTags = useRef<string[]>([]);
@@ -117,6 +162,12 @@ export const MakeupRecommendationScreen = forwardRef<
     const operation = beginOperation(workflowRequest);
     lastStartInput.current = input;
     imagePollFailureCount.current = 0;
+    setLoadingContext({
+      answerKeywords: [],
+      personalColor: input.personalColor,
+      prompt: input.prompt,
+      useProfile: input.useProfile,
+    });
     setPhase('loading');
     setErrorMessage('');
     setImageRetryError('');
@@ -195,6 +246,7 @@ export const MakeupRecommendationScreen = forwardRef<
     if (!session) return;
     const operation = beginOperation(workflowRequest);
     imagePollFailureCount.current = 0;
+    setLoadingContext(buildLoadingContextFromSession(session, answer));
     setPhase('loading');
     setErrorMessage('');
     setImageRetryError('');
@@ -225,18 +277,22 @@ export const MakeupRecommendationScreen = forwardRef<
     lastRefinement.current = refinement;
     setRefinementError('');
     setIsRefining(true);
+    setLoadingContext(buildLoadingContextFromSession(session, undefined, refinement));
+    setPhase('loading');
 
     Promise.resolve()
       .then(() => refineGeneratedMakeupRecommendation(session, refinement, operation.controller.signal))
       .then(nextSession => {
         if (mutationRequest.current?.id !== operation.id) return;
         setSession(nextSession);
+        setPhase(nextSession.phase);
       })
       .catch(error => {
         if (isRequestAbortedError(error) || mutationRequest.current?.id !== operation.id) return;
         setRefinementError(
           error instanceof Error ? error.message : '조정하지 못했어요. 기존 추천은 그대로 두었어요.',
         );
+        setPhase('results');
       })
       .finally(() => {
         if (mutationRequest.current?.id === operation.id) setIsRefining(false);
@@ -267,6 +323,7 @@ export const MakeupRecommendationScreen = forwardRef<
     setPrompt('');
     setErrorMessage('');
     setRefinementError('');
+    setLoadingContext(null);
     setImageRetryError('');
     imagePollFailureCount.current = 0;
     lastStartInput.current = undefined;
@@ -363,13 +420,9 @@ export const MakeupRecommendationScreen = forwardRef<
   }
 
   if (phase === 'loading') {
-    return (
-      <AppScreen contentGap={spacing.md} scroll={false} topPadding="belowShellHeader">
-        <ActivityIndicator color={colors.textPrimary} size="small" />
-        <Text style={styles.loadingTitle}>당신의 오늘을 읽고 있어요</Text>
-        <Text style={styles.loadingDescription}>상황과 무드가 자연스럽게 만나는 지점을 찾는 중이에요.</Text>
-      </AppScreen>
-    );
+    return loadingContext ? (
+      <RecommendationAgentLoadingView context={loadingContext} faceImageUri={faceImageUri} />
+    ) : null;
   }
 
   if (phase === 'question' && session) {
@@ -424,14 +477,6 @@ export const MakeupRecommendationScreen = forwardRef<
 });
 
 const styles = StyleSheet.create({
-  loadingTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xl,
-    lineHeight: typography.lineHeight.xl,
-    marginTop: spacing.lg,
-    textAlign: 'center',
-  },
   loadingDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.regular,

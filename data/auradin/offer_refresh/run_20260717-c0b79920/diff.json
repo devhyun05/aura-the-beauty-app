@@ -1,0 +1,3975 @@
+{
+  "counts": {
+    "ambiguous": 13,
+    "fetch_failed": 0,
+    "matched": 566,
+    "no_match": 39
+  },
+  "items": [
+    {
+      "catalogItemId": "auradin-seed-521b3c329daee6fa",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-af27b16a2026120a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8ee7754daa9ace6b",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3f16a4750d11b658",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3b36899948f8d82a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9cfedba983db34a0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0727802037845706,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-dfcbff3fdd9ba91d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f5d6b311bb8eabef",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.07818608287724785,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e9518714b3215bbc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a0bad392ba2fada7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e11af5acf8c2da47",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-40585f23018879b2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-043d87109c1a1b00",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.37998733375554145,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d7f93e815b3347f7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-36167b4620ad35f9",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2dcbddd5bee08f86",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-eef79a2356c172d8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7e2b5600678a4be3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5dcf280df3c0649d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c8f2b81809c401f5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.600539811066127,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4d5a49451311796c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-16bb89cc08d5df3b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e3d42490fabba6ed",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -4.559650218613367,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4d27f592ca9626e7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-25684b3d07ef7d8a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-388390db821fb983",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a2549f1ab67a54bd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7d06fe7cc9654a75",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b7d1e7d53350171c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8f92daa96e12a837",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d9cf12b99beee2a2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5ba3cf646d7e64e1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.9615384615384616,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-fdcacbff631f0f77",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7517603933992de9",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-97967b0766080272",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 3.188775510204082,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-929e338d7e4360a2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3ec2a1d62c65698b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -11.76470588235294,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-6b00091a7b7b4461",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a89b6af703a56b11",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-172034ac33701b9c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-91c709598216b251",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d65f096b1715ef05",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bf9669e0494bfbc8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-512fbe48a7519525",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6e3ddc0cf1054f7a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b33c096db5d9a017",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-707cc067a9d6ed7c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-97a138a7e6b2584e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2807992dd8f4791b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-edb10013c3035791",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.940298507462686,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-b3c823d4a2a9486d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-65ba97d30071751d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a3714aeca1914f28",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1fe572c58e2bc264",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-95c5c1f99cfb6e36",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-36eb3038b5c81920",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e6c8584759cea5c2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d493bf5eae4e7651",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d630948443276902",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-faf5b753047945e2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-fbbe041ff15882d4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-53c1d3037a0ede18",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ba8700b9536cbd25",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-70964540736db2b6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-36295eae9d0249aa",
+      "imageChanged": true,
+      "linkChanged": true,
+      "priceDeltaPct": 5.263157894736842,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-85fadb318c2cc6e0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-64aa2ad0174edc2f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a618c99a664aa8b0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-88f1c84f9162dfde",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-679a9b2058cbf5f4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0ae16fd421b15403",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-090bbbe7ecb099d8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6a11c686c3bb1287",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e0e47fa1341fcadf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ce4ec96600d7c572",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.7643312101910829,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-860cb423037e0098",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-465343e6376506a7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6f1b1ec6e6aac224",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0d11c231d628f7f1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0dcbc4d93b4cbd9a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a429260e7f67a040",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c8b03394783c8bb8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.23992322456813817,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c2203b94b747fbd3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-111aa7ee2a94e6d4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5c58b7c5d1310ea0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bfcbfacf3e059d5a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b6f5e72f08e522f3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-29c9eec11aaa3a9d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7238d139b7124c90",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ff7970626a922b29",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d38660fac004c700",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1671adebdfcea13a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3ce2fabd18a6ed80",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-99180d0c667df201",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1b6d0f07f317f039",
+      "imageChanged": true,
+      "linkChanged": true,
+      "priceDeltaPct": 5.263157894736842,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f75f02cc94dbdb36",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-274a7f37c44b6e2b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ce16fe7ef9142aa1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f8e0faabd12ea872",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -17.545100813583304,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-0242406883625612",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-fca9b5186017966f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a934b86fabea1f57",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-58b16d089e6417d2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.2279484638255695,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-ea1ec553b1dffbce",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.216242984483328,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4995cee5669357c8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-93fb69e4b4d2eab3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2bc60d925ae1c275",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e4201f895dcf8d78",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.08673026886383348,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8c3cf9d10b04ea0f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -23.05295950155763,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-9ec1164faceb7910",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ebfedf32a24205f2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.259740259740259,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-8e751decfed67c85",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-90f240a70bcc9540",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.47664442326024786,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4243297050c9387d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 35.87786259541985,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-c2b044d62bff5935",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a842f316cf95a5be",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ea1da51d4a11ba2d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-08a4309af0b7eaaa",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-006d4fbc8413c7e0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.05875440658049354,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-af8bd04163585072",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-96b32c1d6848d6e4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3f8822ae9393611e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -36.85064935064935,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-683102e99d8bf8b1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -35.2185089974293,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-40dfb89408358cb6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -42.288961038961034,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-190efc4045d3fd09",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a89182b286679f23",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-839bab3d05aa6a63",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.317769130998703,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-28414dacabbad964",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.420353982300885,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-459d0b4fe8c5cf26",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-22c78fdf656d3cd0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5be805c6bb232def",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d2f9a39a873f3905",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b7b5f9d5fb91d266",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -8.924485125858125,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-dafb196e89e08ad0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0ffcfbc7c612d911",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bb36e06cb523869c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-52aaf03b730eca41",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7e0cb7a3fa67374c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-36f48ac98e262fd2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b12cec4606b1cffb",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-dd66e58863a1f278",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9228b94647924247",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d8821d47d618a0e0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4b964ea075444191",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9edeb752a64e1825",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a630ef229738dd83",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-91a644b126a47432",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-851e48b6f6144163",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4407cd7e0ad4909a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-656a5d7fae7520c8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-392a7ad5bbfab1d9",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-eef83cfa426a592a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2a44619571aa63e7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0cc54865be8e3557",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-37e41868faa2169b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-89f648085c145d4f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a66debfd4ce25a9d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.23154848046309695,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-148dd052a3ac6769",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.6072874493927125,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f8962ea867a2cbd8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0b66356a24d390e5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -3.046404534183493,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ab8d676ec440e6d1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -25.412186379928315,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-2b59ff08bddd2cb1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -21.243523316062177,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ec33ec01f579531a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e02289f5816c776e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8b02aa510a268563",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.16,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-76ba621dccc55f4c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.08,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-79cfdb2f5a93860b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.08,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1c8c23d2cf725795",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-78252aa83031a19a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.16,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-dc4b0f82a56d578e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ab749e8fdcccd290",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 17.647058823529413,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6a19b9e06fd0acf5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 4.776119402985075,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d66f53d73e4de527",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3e5c2519dae09cff",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2f45c19aa13313fb",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c1e46ad43b1bc44c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-182f1d8cb720406f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d6add1c6eda160b5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-847b305f5e0e8668",
+      "imageChanged": true,
+      "linkChanged": true,
+      "priceDeltaPct": 2.526412494258153,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3b2386de9ebcf098",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-067b67da9183f955",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ab952f6d3976fb60",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3a42a66240f09f1d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d8d8dd616ed932f3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2732b015c109ef43",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ecbd81e7bba3cc1b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-70b25b3d1039aabf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-35845cb3e83f634a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.11111111111111,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-23480023cad65901",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-14e4e816337cfd55",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ef3c3f58313bb4c5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ba8acbbefadb8390",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ee331cad85b5b55d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9e8fa574c01a6887",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1ba592d7145e45f6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-74a630272ad74966",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8f3c993aad7a113e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-33f67d8cd34a9c11",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-43729c3c26d07b88",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7c99be49b86aaafa",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f78b964e445c4332",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2f56b0f022c0db18",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4e4bd7a67828001e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 5.58659217877095,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-70f04f52cda0f9ff",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8b29b348facacb0d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d217bb8925c1a4e1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bd6fb1eaa72510df",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 21.21212121212121,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b06e60afb275e351",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ebf171f6711f0931",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4a8ba1b7a866ed05",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-859ca66f87b50fbf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-64b0d71d2d093847",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1314c8e3dc251f5a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2456e648114ce1b0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bce0e11f49e145e6",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": -0.7142857142857143,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2280e3fb5b7ab9a4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0c6ba31900b4626b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-cd74ee5c27ab209e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f1ffadab5c475979",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b42e1671e5e51e9b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-cc6c665f38bdaa39",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 29.292929292929294,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2cd0f2698be9567d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e62b3afd96833666",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-531551996bf5ef8a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -4.49438202247191,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3ab52473be1df3f8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -9.569377990430622,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-444d28bd9e6d7c14",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1111ccd0af6f1dc6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ec030317dfef2d68",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0084efaf7904a738",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1f4d59ada14e3e68",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5e921cfe3ce43107",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -10.76923076923077,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-adf7435401b51d13",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2a98ebcb5c56878b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-64722a728effcd3c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-19bedfbb5316407b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 5.88235294117647,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c24db407c6b6a151",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-da52233e753e7782",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-96db148d1f7dd8b3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.06345177664974619,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0346798fbb35640b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.06345177664974619,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3be4acd2449c3dea",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.06345177664974619,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3eb310aba029952e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 12.5,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-967be3b291f7bf3c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -17.36111111111111,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-14c3938102e88878",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c7dadd8d6a1bf516",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0ed3f7701295dd20",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": -9.798887462558836,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e27f51783911a26a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-26401a1a083f5f04",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": 10.552763819095476,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3733b8930439d220",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-cd36c6d62159db82",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bd9cda04d24779b7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-132fbaed266ac253",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d5fd4efcaeec5e87",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-70806641025f1bcc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-463f2341fd59e04b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9186725e7a4cb468",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-81b166f72753002f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-01d951fb351f2eab",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 6.25,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-89d3af879800b6f9",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4fc9c31670e75bd3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-832542bfdc87bf50",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.028336639274582034,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c3990982099616cf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.028336639274582034,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ff12597f16037365",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-dadc57559ee5d8a5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-10f8a19daec4f29a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-281e07b306b0b851",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4a0f8dadd9107a2f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-18df0ac880e41c3f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e7bc7c87604d5162",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": 7.6923076923076925,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-59978fde52dfcce3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -11.11111111111111,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6bb9e6fd50243ee6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.555555555555555,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a5c0fbc1dfeb7071",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c9e719847852d9f7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-89c563d21da4adb6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5adf01a58db02cb4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0e4bb5d17ff79c25",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-079c8d355c85ecd4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-43b747eaf02c0d9a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c6e74e7155dbee61",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-27f8b8b1ee1b802a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-cd3e43dfaed35971",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b098440a8ff836dd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7d3c5d526d594cfe",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6a90ea1179e234ab",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b46fb8f42b0c2a83",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 12.631578947368421,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-533ed0222de1c4bc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b0cd997df725efc8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-264927c906251c32",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -6.25,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4cfe6764194c9b4f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f342c50bf2a73469",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -11.11111111111111,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-3c4cf4a69c6ec1c2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2016d17d340f944f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-aaf02690686904e5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ea2379a34b536115",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-35a4f7c392b49594",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -4.395604395604396,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-62096479b12ecadf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 8.333333333333332,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d296c1894f9f547f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 3.6090225563909777,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3745ee26ec0caee5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 1.6774193548387095,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-924c7dad4bdeedf2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.88235294117647,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d8958ed96ff27012",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -13.421750663129972,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a38d5434fec44323",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 5.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-cac8444b3830fb4b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-88784c6aafea0321",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 8.367816091954023,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-44764b6c90d898e5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -1.7857142857142856,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-66428e80c1167078",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3bafd129e3f7c462",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 8.333333333333332,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-501756754e0d90dc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 1.7037037037037037,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b077075673947f84",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 8.373333333333335,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bdfb516abd0643d7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -3.225806451612903,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8e5f7984a716cdd1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -3.225806451612903,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-47ed9745014fb88d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-da48366562826701",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d201ff9382bec568",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f6796ca1bdd14512",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-150cd91511371a50",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-59510c28c743116a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a5a39725fae442a7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 7.142857142857142,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5df1692a8e4ece4a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -6.212121212121212,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e896f6317ac94c3e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 7.142857142857142,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c695c4af254e3e1d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -1.1173184357541899,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-55350174d12621a3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 5.769230769230769,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f8997ef7c46cf0d6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-095ea6d0a2186711",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-89eaa4aec421464b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e48f53f003acef97",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ecf215697c006c0e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-49b609f9fe87b926",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7fe5be52f3a7a3f1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-141dcfccb5e17203",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9e88fcfd5a218142",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0d0175b841d07230",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-fe8a5c2375bf67ec",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8b7134b100430951",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-847e61b2de8ab9b1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-48f0cca12c1d666e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ccf8c379fbce1162",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f6eea1886ae38598",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e759c32a02b55cee",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-564257216f145374",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-95857cfb97ddeb52",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 8.855885588558856,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9c22e35deb775bea",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4ffb6098db11c990",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d287286110ff7507",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -3.418803418803419,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3d45baa87614cc53",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-84854ff7009d56a6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-98decc59b30260b7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ed4a028eb5f8bae9",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-07bd6fdf17698f08",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ce6d1de1abbd25d0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 23.43459392436454,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ef5e201dadab2227",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.09765625,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d3575fe504ad8e1e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d647f3b425519e80",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 7.6923076923076925,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f7789014a23bd0cf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d6d69859bde6ddbd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-94a29705c4468a15",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-af766e09ca2fb21b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9735584a43dac230",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-739b431a191607da",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-03356bbc6a9baf7d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3ec87370b1bdc722",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-b04b5962db4cd9c8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b5b11259b0372dfe",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f34d0026fa63eb14",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a8adbb47058c4124",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-338151d8215c6cbc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4e046389f14ab9a2",
+      "imageChanged": true,
+      "linkChanged": true,
+      "priceDeltaPct": -8.458591217211907,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-98a5cfb217db53ac",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.832747716092762,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0e3bb359dd1a7f8e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 2.259136212624585,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6b30d38690f44d15",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": 3.6585365853658534,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0143692d903941cb",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-eb13172525821833",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a33507083165dcdc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-362728cdca6376cc",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c01db4982b59c105",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8960b77e264529e3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bd334799b2ea48c1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-58e8f5d5b11d7a62",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-677292e5079c20c6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 3.6585365853658534,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e88bad4c6c661abd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 3.6585365853658534,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-204b461fc3bb3b33",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 3.6585365853658534,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-d149d4230d78fdc5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-b517dca0f2ec9930",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7814e9e0178d6087",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4945509bd45c8b65",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.0,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-c2a3e35b5f2d83da",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 2.242152466367713,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-29ece1bf7b0ae09d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-32819ae26c7c875f",
+      "imageChanged": true,
+      "linkChanged": true,
+      "priceDeltaPct": 25.0,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-a0088586a53fdc46",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-573fffde33b2d2b6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d3e4f49a7e2d51eb",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f0c6642f12cd0b21",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7df5abd53161e999",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-eb3b65093cd71d03",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-62d8c30772026cbf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-72d780ab6d5a6bbc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ef4c675a14a75e1a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-fa23724749947db6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-773825e6a9448741",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2dc40d9670cd5d4d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ae38f06d82ae92a3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-87b7663a3f42d520",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-fb1ae7cb82fbf21e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1fbcb01c5b215ba0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-83d0fde1671c79e3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6f7cdd646dd5d28f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3c12899aeee4a97d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -0.9250693802035153,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0ccb07f79a0a6ffa",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b74177660a25452a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-68a8e1e54bea35af",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 8.641975308641975,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-eea9ead93440c922",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c78f94b3bb19964a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-31db6cb5fc72ec1b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-241384e5e3b9658e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-393fc0bca8df3b7e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-05ca0359e942b130",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-99f92e47c1ef4367",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-63ca70cd61d4b14c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2fd825cda1eb3146",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f0fdf29c9931c5dd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-09058bd59a2529fd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-51dd6415096248dd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b7350ec6f2f5c8b3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5d58c823ccf356ad",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-66c634f7221ef372",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-885a07838975001f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 10.294117647058822,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-b6a07de38ed41f46",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b7b87d50f9e255d4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-58fb4a9d6aedf662",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-cb5a53c5e49f74cb",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -3.45679012345679,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-539560fe0afbf710",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b4c7484c058763cf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ea0b60608942d169",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ae2184b9f49b1970",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-038fd70cae3d5224",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 4.472843450479233,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b8c3a5e75d43fb06",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 16.61807580174927,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-8a6a6d5bb871ca0d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-33099bcd2d8a2d39",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b2120ea773c08bcf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0c3d8c1048402acc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c91daa06c2a1bab6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-16f24da9a3e869b5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c6bf9a17efe07eed",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d4684ad3a8ed9441",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e12c9aadceef43e0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-12aaaf7c386734df",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bf9dd086dc77f55b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2c539066b5bf2bbb",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -5.182341650671785,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-dad6a0e9d0492bfd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 7.681564245810056,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-38fc8bd34e075cb6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.659192825112108,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5d7ac076b39c25a7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e6f1353595c3a219",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8f11a78729a385a4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-aab51baea74c4240",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-d6c513dddc144d0d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.11111111111111,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-3a79c7374a106611",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b9baab0a14d1c93f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ce47210db51ad5a1",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bf7b6b4f1c4e7258",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 7.643600180913614,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e390b260c556ab99",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-36ff8dd973593fef",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c7489c865736784c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-cebc50e5ff0553dc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8ed49c29d6f39635",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 16.666666666666664,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-24d6cf0cbe836e65",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5168388e6d3c0f07",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-708066d608d11161",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5bb828bb40053491",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b96955b64f4c7007",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-fe85e0bb841f095b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1e6944caf44c2c8f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -15.306122448979592,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-5b4c2d6159a67596",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-edb0e5d2c04bc381",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a887dee5414bd2b8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-eb806663c803fe35",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -10.112359550561797,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3ac0a71d68f3cf81",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f9404c6009164415",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e508692fa7a4ab13",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b5d380f82235eec2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.11111111111111,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ee8487789c60ef30",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-fecb1ca653c881f2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-585edfd73cae7b62",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-58795594beeda35e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-2a9b06e317829dc2",
+      "imageChanged": true,
+      "linkChanged": true,
+      "priceDeltaPct": 42.857142857142854,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e65c5bb7100e9d18",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 7.5,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-62fc4a094835c633",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 7.474747474747474,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1aff811544e0cea8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5582dde6b5512411",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c21482349484a86c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 7.5,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7af6718710923048",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6ca98f3a83c90d5d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.11111111111111,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-005e061c31b11bd3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7cf5556c7adc0eb8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-97e6a6b9d70ee236",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.098901098901099,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6c60305525bb223a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.063829787234042,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-543647da90c10b10",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8fe293cc4d41e4e0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.105527638190955,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-0eb1c016fe33850e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b4372141ee1ca9f5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a745810e519208a3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e31ae31440569168",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5c9e1338d482e0f9",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-16726491909b3d46",
+      "imageChanged": true,
+      "linkChanged": false,
+      "priceDeltaPct": -44.4,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-2c4eafbfba1f85aa",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -13.375,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-989f6e4f15956118",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5da5ee43a244d616",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1e6f5c69c09e70f2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -13.375,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-966964928fc44815",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c7954995760613dd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-6002595d81646d13",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-53df4599d3cc62bc",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-225d7ea6ae4ef0e8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1744496480a95d71",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-20caea8bdb68b9c4",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a7c71bf7cd0b5597",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e2be8ef844afccec",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9dfde088430ef052",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bd8d693750e1265c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-afcbf98e6baba032",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 5.1766639276910436,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1131b25d1e71620c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8a4f219009b64998",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-8e357eb432a6e75d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e6db5c241cb39de0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-87d1119c0de34043",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 2.376599634369287,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-39f0c617568df46f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 5.256869772998805,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3d1ea688aedf5cb5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 6.777777777777779,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-98ffad867be4df2e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f5dff067d0251c15",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-73a2f8247222f1d5",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 10.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5ea2e10d8b204f40",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 5.170902716914987,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5a721b93aa72de4c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.160714285714286,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-bbb234c64564b7e8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-03cb6c48d42bf27c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e9839f67a33ab9f3",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-df6720d98e22395b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ec19f76dff4eaa8f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c07d948159e34af8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-47ea31ec76e224e6",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-85db753b821289c0",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": -14.99749373433584,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-1668bf70b16f8092",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 17.647058823529413,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-919bdb82274add23",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-c1bf4a35b8eaf378",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-5b13bd1a9a69107e",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-a0fd1824ac0d5e9a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.11111111111111,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-893d28d4d5b12a17",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 25.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-b522f16a85818d25",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7e279120c5e18893",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-f8197d67719fba8d",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-71b3abc5ee3afc18",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-01595bdcc7b46fdb",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9961964414058fd7",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4b96783c68ac70cf",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9419330ffff487b8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-afe2826e80aad53f",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-9d820414d4a0c57c",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-3b175307c77b8a80",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-ab7c4dcc29ffa31b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-4c618f9db3100c1b",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-02d6cb87eaa0b564",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-909b0376715ba5ca",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-cd100755a57c192a",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-7a37d937640a95d8",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-df122f5d011bcf27",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-40a939583b4bf2d2",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 11.11111111111111,
+      "priceTierChanged": true
+    },
+    {
+      "catalogItemId": "auradin-seed-c83b2f8e2523babd",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-e30f45f3db707a59",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-845d5a4880152cff",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    },
+    {
+      "catalogItemId": "auradin-seed-cdc05c8cacaecd17",
+      "imageChanged": false,
+      "linkChanged": false,
+      "priceDeltaPct": 0.0,
+      "priceTierChanged": false
+    }
+  ],
+  "linkChanged": 6,
+  "priceChanged": 149,
+  "priceTierChanged": 21
+}
