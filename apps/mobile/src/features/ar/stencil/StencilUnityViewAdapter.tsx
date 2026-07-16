@@ -8,6 +8,7 @@ import {UnityMakeupNativeView} from '../components/UnityMakeupNativeView';
 import {
   addUnityMakeupEventListener,
   hideUnityMakeupView,
+  isUnityMakeupReady,
   postUnityMessage,
   prepareUnityMakeupRuntime,
   setUnityMakeupPlayerPaused,
@@ -41,9 +42,10 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
 
       try {
         const parsed = JSON.parse(message) as {type?: string};
-        if (parsed.type === 'ready') {
-          this.didReceiveReady = true;
-          this.stopActivationRetry();
+        if (parsed.type === 'ready' || parsed.type === 'unity_initialized') {
+          this.activateStencilRuntime();
+          this.reportReady(message);
+          return;
         }
       } catch {
         // The original handler owns protocol validation and ignores unknown data.
@@ -56,12 +58,12 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
 
     setUnityMakeupPlayerPaused(false);
     prepareUnityMakeupRuntime();
-    this.activateStencilRuntime();
     this.activationTimer = setInterval(() => {
-      if (!this.didReceiveReady) {
-        this.activateStencilRuntime();
-      }
+      this.activateStencilRuntime();
+      this.recoverMissedReadyEvent();
     }, 350);
+    this.activateStencilRuntime();
+    this.recoverMissedReadyEvent();
   }
 
   componentWillUnmount() {
@@ -79,6 +81,34 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
   private activateStencilRuntime() {
     postUnityMessage('Aura Stencil Runtime', 'SetStencilActive', 'true');
     postUnityMessage('NativeBridge', 'SendReady', '');
+  }
+
+  private recoverMissedReadyEvent() {
+    if (this.didReceiveReady || !isUnityMakeupReady()) {
+      return;
+    }
+
+    // Unity is prewarmed before this screen mounts. Its ready event can therefore
+    // fire before the RN listener exists; replay the state once so the stencil UI
+    // does not remain on "Unity 로딩 중…" forever.
+    this.reportReady(JSON.stringify({type: 'ready'}));
+  }
+
+  private reportReady(message: string) {
+    if (this.didReceiveReady) {
+      return;
+    }
+
+    this.didReceiveReady = true;
+    this.stopActivationRetry();
+    this.props.onUnityMessage?.({
+      nativeEvent: {
+        message:
+          message.includes('unity_initialized')
+            ? JSON.stringify({type: 'ready'})
+            : message,
+      },
+    } as UnityMessageEvent);
   }
 
   private stopActivationRetry() {
