@@ -1170,6 +1170,58 @@ def _normalize_summary(raw_summary: Any) -> dict[str, str]:
   }
 
 
+def _repair_score_evidence_ids(
+  score_evidence_ids: list[str],
+  evaluations: list[dict[str, Any]],
+  evaluation_by_observation_id: dict[str, dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+  evaluation_by_topic_id = {
+    evaluation["topicId"]: evaluation
+    for evaluation in evaluations
+  }
+  repaired_ids: list[str] = []
+  unresolved_ids: list[str] = []
+
+  for evidence_id in score_evidence_ids:
+    if evidence_id in evaluation_by_observation_id:
+      repaired_ids.append(evidence_id)
+      continue
+
+    topic_id = next(
+      (
+        topic["id"]
+        for topic in FEEDBACK_TOPICS
+        if evidence_id.startswith(f"{topic['id']}-")
+        or evidence_id.startswith(f"{topic['id']}_")
+      ),
+      None,
+    )
+    evaluation = evaluation_by_topic_id.get(topic_id) if topic_id else None
+    replacement_id = next(
+      (
+        observation["id"]
+        for observation in evaluation["observations"]
+        if evaluation["status"] in SCORE_EVIDENCE_STATUSES
+      ),
+      None,
+    ) if evaluation else None
+
+    if replacement_id:
+      if replacement_id not in repaired_ids:
+        repaired_ids.append(replacement_id)
+      logger.warning(
+        "[aura:feedback-bedrock] output:repaired field=scoreEvidenceIds from=%s to=%s topicId=%s",
+        evidence_id,
+        replacement_id,
+        topic_id,
+      )
+      continue
+
+    unresolved_ids.append(evidence_id)
+
+  return repaired_ids, unresolved_ids
+
+
 def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dict[str, Any]) -> dict[str, Any]:
   raw_result = _require_mapping(result, "result")
   source = _clean_text(payload.get("source"), "camera")
@@ -1246,8 +1298,10 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
 
     score = None
 
-  unknown_score_evidence_ids = sorted(
-    set(score_evidence_ids) - set(evaluation_by_observation_id),
+  score_evidence_ids, unknown_score_evidence_ids = _repair_score_evidence_ids(
+    score_evidence_ids,
+    evaluations,
+    evaluation_by_observation_id,
   )
 
   if unknown_score_evidence_ids:

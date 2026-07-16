@@ -164,6 +164,64 @@ async def test_dispatch_analysis_job_sqs_failure_marks_report_failed(monkeypatch
   assert "update analysis_reports" in fake_db.executed[0][0]
 
 
+@pytest.mark.asyncio
+async def test_analysis_completion_notification_precedes_slow_post_processing(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  events: list[str] = []
+
+  class FakeDB:
+    async def execute(self, *_args):
+      return "UPDATE 1"
+
+    async def fetchrow(self, *_args):
+      events.append("report-persisted")
+      return {"id": REPORT_ID, "user_id": USER_ID}
+
+  class FakeAnalysisService:
+    def __init__(self, _settings: Settings) -> None:
+      pass
+
+    async def analyze_text(self, _request_payload):
+      return {
+        "recommendedMakeups": [{"title": "Daily look"}],
+        "shortSummary": "Report ready",
+      }
+
+  async def fake_create_notification(_db, _settings, **kwargs):
+    events.append("notification")
+    assert kwargs["user_id"] == USER_ID
+    assert kwargs["notification_type"] == "analysis_report_completed"
+
+  async def fake_update_embedding(_db, _report):
+    events.append("embedding")
+    return True
+
+  monkeypatch.setattr(analysis_api, "OpenAIAnalysisService", FakeAnalysisService)
+  monkeypatch.setattr(
+    analysis_api,
+    "create_and_send_notification",
+    fake_create_notification,
+  )
+  monkeypatch.setattr(
+    analysis_api,
+    "update_analysis_report_embedding",
+    fake_update_embedding,
+  )
+
+  await analysis_api.run_analysis_job_background(
+    REPORT_ID,
+    AnalysisJobCreate(requestPayload={"source": "test"}),
+    Settings(
+      face_analysis_v2_enabled=False,
+      image_generation_provider="disabled",
+    ),
+    db=FakeDB(),
+  )
+
+  assert events == ["report-persisted", "notification", "embedding"]
+
+
 def test_ai_job_queue_publisher_sends_feedback_job_message(monkeypatch: pytest.MonkeyPatch) -> None:
   calls: dict[str, object] = {}
 
@@ -302,17 +360,25 @@ async def test_run_feedback_job_background_completes_report(
 
     async def fetchrow(self, *args):
       self.fetchrow_calls.append(args)
-      return {"id": REPORT_ID, "status": "completed"}
+      return {"id": REPORT_ID, "status": "completed", "user_id": USER_ID}
 
   async def fake_build_result(request_payload, settings):
     calls["request_payload"] = request_payload
     calls["settings"] = settings
     return {"score": 87, "modelVersion": "feedback-test-v1"}, "bedrock_completed", None
 
+  async def fake_create_notification(_db, _settings, **kwargs):
+    calls["notification"] = kwargs
+
   monkeypatch.setattr(
     feedback_api,
     "build_makeup_feedback_result_for_request",
     fake_build_result,
+  )
+  monkeypatch.setattr(
+    feedback_api,
+    "create_and_send_notification",
+    fake_create_notification,
   )
   fake_db = FakeDB()
   settings = Settings()
@@ -333,6 +399,8 @@ async def test_run_feedback_job_background_completes_report(
   assert completed_payload["analysisStatus"] == "bedrock_completed"
   assert calls["request_payload"] == request_payload
   assert calls["settings"] is settings
+  assert calls["notification"]["user_id"] == USER_ID
+  assert calls["notification"]["notification_type"] == "makeup_feedback_completed"
 
 def test_ai_job_queue_publisher_sends_filter_extraction_message(
   monkeypatch: pytest.MonkeyPatch,
@@ -438,7 +506,7 @@ async def test_run_filter_extraction_job_background_completes_report(
 
     async def fetchrow(self, *args):
       self.fetchrow_calls.append(args)
-      return {"id": REPORT_ID, "status": "completed"}
+      return {"id": REPORT_ID, "status": "completed", "user_id": USER_ID}
 
   extraction_payload = {
     "loading_steps": [],
@@ -460,6 +528,9 @@ async def test_run_filter_extraction_job_background_completes_report(
     assert payload is extraction_payload
     return payload, "database"
 
+  async def fake_create_notification(_db, _settings, **kwargs):
+    calls["notification"] = kwargs
+
   monkeypatch.setattr(
     filter_extractions_api,
     "build_reference_makeup_extraction_payload_for_request",
@@ -469,6 +540,11 @@ async def test_run_filter_extraction_job_background_completes_report(
     filter_extractions_api,
     "enrich_reference_makeup_products",
     fake_enrich_products,
+  )
+  monkeypatch.setattr(
+    filter_extractions_api,
+    "create_and_send_notification",
+    fake_create_notification,
   )
   fake_db = FakeDB()
   settings = Settings()
@@ -497,3 +573,5 @@ async def test_run_filter_extraction_job_background_completes_report(
   assert calls["payload"] is payload
   assert calls["settings"] is settings
   assert calls["db"] is fake_db
+  assert calls["notification"]["user_id"] == USER_ID
+  assert calls["notification"]["notification_type"] == "filter_extraction_completed"

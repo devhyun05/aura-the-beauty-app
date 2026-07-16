@@ -1502,11 +1502,16 @@ async def test_worker_dispatches_makeup_recommendation_image(monkeypatch: pytest
 
 @pytest.mark.asyncio
 async def test_image_job_persists_three_generated_look_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+  notification_calls: list[dict] = []
+
   class FakeDB:
     def __init__(self) -> None:
-      self.executed: list[tuple[str, tuple]] = []
+      self.fetchrow_calls: list[tuple[str, tuple]] = []
 
-    async def fetchrow(self, _query: str, *_args):
+    async def fetchrow(self, query: str, *args):
+      self.fetchrow_calls.append((query, args))
+      if "set image_status = 'completed'" in query:
+        return {"user_id": USER_ID}
       return {
         "id": REPORT_ID,
         "user_id": USER_ID,
@@ -1517,23 +1522,29 @@ async def test_image_job_persists_three_generated_look_urls(monkeypatch: pytest.
         "image_status": "pending",
       }
 
-    async def execute(self, query: str, *args):
-      self.executed.append((query, args))
-      return "UPDATE 1"
-
   async def fake_generate_images(_settings, _report_id, _scenario_text, looks):
     return [{**look, "imageUrl": f"https://cdn.example.com/{look['role']}.png"} for look in looks]
 
+  async def fake_create_notification(_db, _settings, **kwargs):
+    notification_calls.append(kwargs)
+
   monkeypatch.setattr(makeup_api, "generate_recommendation_images", fake_generate_images)
+  monkeypatch.setattr(
+    makeup_api,
+    "create_and_send_notification",
+    fake_create_notification,
+  )
   db = FakeDB()
 
   await makeup_api.run_recommendation_image_job(REPORT_ID, USER_ID, Settings(), db=db)  # type: ignore[arg-type]
 
-  completed_query, completed_args = db.executed[-1]
+  completed_query, completed_args = db.fetchrow_calls[-1]
   assert "recommendation = $2::jsonb" in completed_query
   saved_recommendation = json.loads(completed_args[1])
   assert len(saved_recommendation["looks"]) == 3
   assert saved_recommendation["looks"][2]["imageUrl"].endswith("discovery.png")
+  assert notification_calls[0]["user_id"] == USER_ID
+  assert notification_calls[0]["notification_type"] == "makeup_recommendation_completed"
 
 
 @pytest.mark.asyncio

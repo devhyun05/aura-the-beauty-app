@@ -13,6 +13,9 @@
     "extra": {
       "router": {
         "root": "app"
+      },
+      "eas": {
+        "projectId": "93feec85-77bc-481c-bc28-142f56db9782"
       }
     },
     "ios": {
@@ -46,6 +49,7 @@
       ],
       "expo-web-browser",
       "expo-secure-store",
+      "expo-notifications",
       [
         "expo-media-library",
         {
@@ -58,6 +62,7 @@
         }
       ],
       "expo-sharing"
-    ]
+    ],
+    "owner": "devhyun05"
   }
 }

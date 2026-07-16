@@ -844,6 +844,54 @@ create table if not exists makeup_feedback_reports (
 
 comment on table makeup_feedback_reports is 'FeedbackResult/Guide/Tip. summaryBadges, callouts, points, strengths live in feedback_payload.';
 
+create table if not exists user_push_devices (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  expo_push_token text not null,
+  platform text not null,
+  app_version text,
+  enabled boolean not null default true,
+  last_seen_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_user_push_devices_token unique (expo_push_token),
+  constraint chk_user_push_devices_platform check (platform in ('ios', 'android'))
+);
+
+comment on table user_push_devices is 'Authenticated Expo Push Service device registrations. iOS delivery uses APNs without Firebase.';
+
+create table if not exists app_notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  notification_type text not null,
+  title text not null,
+  body text not null,
+  data jsonb not null default '{}'::jsonb,
+  dedupe_key text not null,
+  read_at timestamptz,
+  created_at timestamptz not null default now(),
+  constraint uq_app_notifications_user_dedupe unique (user_id, dedupe_key)
+);
+
+comment on table app_notifications is 'Unified in-app completion notifications for face analysis, makeup recommendation, extraction, and feedback reports.';
+
+create table if not exists notification_outbox (
+  id uuid primary key default gen_random_uuid(),
+  notification_id uuid not null,
+  status text not null default 'pending',
+  attempts integer not null default 0,
+  next_attempt_at timestamptz not null default now(),
+  last_error text,
+  completed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_notification_outbox_notification unique (notification_id),
+  constraint chk_notification_outbox_status check (status in ('pending', 'sending', 'completed', 'failed')),
+  constraint chk_notification_outbox_attempts check (attempts >= 0)
+);
+
+comment on table notification_outbox is 'Idempotent, retryable delivery state for Expo push notifications.';
+
 create table if not exists home_hero_banners (
   id uuid primary key default gen_random_uuid(),
   eyebrow text,
@@ -1390,6 +1438,21 @@ alter table makeup_feedback_reports
   add constraint fk_makeup_feedback_reports_uploaded_media
   foreign key (uploaded_media_id) references media_assets(id) on delete set null;
 
+alter table user_push_devices
+  drop constraint if exists fk_user_push_devices_user,
+  add constraint fk_user_push_devices_user
+  foreign key (user_id) references users(id) on delete cascade;
+
+alter table app_notifications
+  drop constraint if exists fk_app_notifications_user,
+  add constraint fk_app_notifications_user
+  foreign key (user_id) references users(id) on delete cascade;
+
+alter table notification_outbox
+  drop constraint if exists fk_notification_outbox_notification,
+  add constraint fk_notification_outbox_notification
+  foreign key (notification_id) references app_notifications(id) on delete cascade;
+
 alter table home_hero_banners
   drop constraint if exists fk_home_hero_banners_image_media,
   add constraint fk_home_hero_banners_image_media
@@ -1573,6 +1636,10 @@ create index if not exists idx_ar_filters_category_public on ar_filters (categor
 create index if not exists idx_user_ar_filter_states_user_created on user_ar_filter_states (user_id, created_at desc);
 create index if not exists idx_filter_extraction_reports_user_created on filter_extraction_reports (user_id, created_at desc);
 create index if not exists idx_makeup_feedback_reports_user_created on makeup_feedback_reports (user_id, created_at desc);
+create index if not exists idx_user_push_devices_user_enabled on user_push_devices (user_id, enabled, last_seen_at desc);
+create index if not exists idx_app_notifications_user_created on app_notifications (user_id, created_at desc);
+create index if not exists idx_app_notifications_user_unread on app_notifications (user_id, created_at desc) where read_at is null;
+create index if not exists idx_notification_outbox_pending on notification_outbox (status, next_attempt_at) where status in ('pending', 'failed');
 create index if not exists idx_home_hero_banners_active_order on home_hero_banners (is_active, sort_order);
 create index if not exists idx_home_notices_hero_order on home_notices (hero_banner_id, sort_order);
 create index if not exists idx_home_notices_active_order on home_notices (is_active, sort_order);

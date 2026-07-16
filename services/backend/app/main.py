@@ -24,6 +24,8 @@ from app.services.auradin_agent.event_logger import (
 )
 from app.services.auradin_agent.snapshot_manifest import bind_process_snapshot, resolve_and_validate_snapshot
 from app.services.media_upload_schema import ensure_media_upload_schema
+from app.services.notification_schema import ensure_notification_schema
+from app.services.notification_realtime import notification_database_listener
 from app.services.product_recommendation_schema import ensure_product_recommendation_runtime_schema
 
 
@@ -46,7 +48,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_account_deletion_schema(database)
     await ensure_hair_schema(database)
     await ensure_face_analysis_schema(database)
+    await ensure_notification_schema(database)
     await ensure_product_recommendation_runtime_schema(database)
+    await notification_database_listener.start(database)
     yield
   finally:
     # graceful shutdown — DB를 닫기 전에 대기 중인 A5 이벤트 insert를 상한 내에서 flush한다.
@@ -56,6 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
       await flush_search_turn_event_tasks(timeout=EVENT_SHUTDOWN_FLUSH_TIMEOUT)
     except Exception:  # noqa: BLE001 — flush 실패도 종료를 막지 않는다
       logger.warning("[aura:auradin-events] shutdown flush failed (fail-open)", exc_info=True)
+    await notification_database_listener.stop()
     await database.close()
     bind_process_snapshot(None)
     reset_catalog_cache()

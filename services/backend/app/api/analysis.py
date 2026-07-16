@@ -36,6 +36,7 @@ from app.services.owned_media import (
   resolve_owned_source_media,
   trusted_media_request_payload,
 )
+from app.services.push_notifications import create_and_send_notification
 from app.services.users import ensure_user
 
 
@@ -81,12 +82,13 @@ ANALYSIS_MEDIA_SELECT = """
 # 재선택하면 normalize 의 dict(row) 변환에서 마지막 값이 이겨 축약본이 남는다.
 ANALYSIS_MEDIA_LIST_SELECT = (
   ANALYSIS_MEDIA_SELECT
-  + ",\n  ((((((r.detail_payload #- '{request,measurements}')"
-  " #- '{result,faceAnalysisV2,coverage}')"
-  " #- '{result,faceAnalysisV2,aiMeasurements}')"
-  " #- '{result,faceAnalysisV2,faceProfile}')"
-  " #- '{result,faceAnalysisV2,derived}')"
-  " #- '{result,faceAnalysisV2,perception}')"
+  + ",\n  (r.detail_payload"
+  " #- '{request,measurements}'"
+  " #- '{result,faceAnalysisV2,coverage}'"
+  " #- '{result,faceAnalysisV2,aiMeasurements}'"
+  " #- '{result,faceAnalysisV2,faceProfile}'"
+  " #- '{result,faceAnalysisV2,derived}'"
+  " #- '{result,faceAnalysisV2,perception}'"
   " #- '{result,faceAnalysisV2,consulting}') as detail_payload"
 )
 
@@ -543,6 +545,24 @@ async def run_analysis_job_background(
     )
     return
 
+  # The report text is already renderable at this point. Publish its completion
+  # event before the slower recommended-image generation so users outside the
+  # loading/result screen receive the notification as soon as My Page can show
+  # the completed report.
+  await create_and_send_notification(
+    db,
+    settings,
+    user_id=report["user_id"],
+    notification_type="analysis_report_completed",
+    title="맞춤 분석 보고서가 완성됐어요",
+    body="AURA에서 얼굴 분석 결과를 확인해 보세요.",
+    data={
+      "reportId": str(report_id),
+      "route": "FaceAnalysisReportDetail",
+    },
+    dedupe_key=f"analysis-report:{report_id}:completed",
+  )
+
   await update_analysis_report_embedding(db, report)
 
   if generates_images:
@@ -838,7 +858,10 @@ async def list_analysis_reports(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  filters = ["r.user_id = $1"]
+  filters = [
+    "r.user_id = $1",
+    "r.status = 'completed'",
+  ]
   values: list[object] = [user["id"]]
 
   if with_recommended_makeups:

@@ -17,6 +17,7 @@ import {
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {
+  fetchReferenceMakeupExtractionReport,
   getReferenceMakeupExtractionDataSync,
   runReferenceMakeupExtraction,
 } from '../../../features/reference-makeup-extraction/services/makeupExtractionService';
@@ -29,6 +30,7 @@ import type {MakeupArea} from '../../../shared/types/makeupGuide';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {RoutePlaceholder} from '../../../shared/ui';
 import {
   buildMakeupFilterSavedLooks,
   getDefaultMakeupFilterSaveSettings,
@@ -227,8 +229,15 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
   return (
     <ReferenceMakeupExtractionLoadingScreen
       isAnalysisReady={isAnalysisReady}
-      onBack={() => navigation.replace('ReferenceMakeupExtractionUpload')}
-      onComplete={() => navigation.replace('ReferenceMakeupExtractionResult')}
+      onBack={() => navigation.reset({
+        index: 0,
+        routes: [{name: 'MainTabs', params: {screen: 'HomeTab'}}],
+      })}
+      onComplete={() => {
+        if (navigation.isFocused()) {
+          navigation.replace('ReferenceMakeupExtractionResult');
+        }
+      }}
       photo={photo}
       progressUpdate={analysisProgress}
     />
@@ -237,13 +246,74 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 
 export function ReferenceMakeupExtractionResultRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'ReferenceMakeupExtractionResult'>) {
-  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
-  const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+  const {
+    selectedReferenceMakeupPhoto,
+    setSelectedReferenceMakeupPhoto,
+  } = useNavigationFlowState();
+  const reportId = route.params?.reportId;
+  const [loadedReportPhoto, setLoadedReportPhoto] =
+    useState<ReferenceMakeupPhoto | null>(null);
+  const [reportLoadError, setReportLoadError] = useState('');
+  const photo =
+    loadedReportPhoto ??
+    getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+
+  useEffect(() => {
+    if (!reportId) {
+      return;
+    }
+
+    let isMounted = true;
+    setLoadedReportPhoto(null);
+    setReportLoadError('');
+
+    void fetchReferenceMakeupExtractionReport(reportId)
+      .then(({photo: nextPhoto}) => {
+        if (isMounted) {
+          setLoadedReportPhoto(nextPhoto);
+          setSelectedReferenceMakeupPhoto(nextPhoto);
+        }
+      })
+      .catch(error => {
+        if (isMounted) {
+          setReportLoadError(
+            error instanceof Error
+              ? error.message
+              : '메이크업 추출 보고서를 불러오지 못했어요.',
+          );
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [reportId, setSelectedReferenceMakeupPhoto]);
 
   const handleBackToUpload = () => {
+    if (reportId && navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
     navigation.replace('ReferenceMakeupExtractionUpload');
   };
+
+  if (reportId && !loadedReportPhoto) {
+    return (
+      <DetailRouteChrome
+        routeName="ReferenceMakeupExtractionResult"
+        onBack={handleBackToUpload}>
+        <RoutePlaceholder
+          description={
+            reportLoadError || '완료된 메이크업 추출 보고서를 불러오고 있어요.'
+          }
+          showHeader={false}
+          title={reportLoadError ? '보고서를 열지 못했어요' : '보고서를 여는 중'}
+        />
+      </DetailRouteChrome>
+    );
+  }
 
   return (
     <DetailRouteChrome

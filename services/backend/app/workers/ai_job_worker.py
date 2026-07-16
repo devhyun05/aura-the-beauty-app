@@ -8,6 +8,7 @@ from app.core.errors import AppError
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, database
 from app.services.ai_job_queue import build_sqs_client
+from app.services.notification_schema import ensure_notification_schema
 from app.workers.job_dispatcher import AIJobDispatcher, AIJobWorkerError, parse_ai_job_message
 
 
@@ -124,6 +125,7 @@ def build_parser() -> argparse.ArgumentParser:
 async def run_worker(args: argparse.Namespace) -> None:
   settings = get_settings()
   await database.connect()
+  await ensure_notification_schema(database)
   stop_event = asyncio.Event()
   loop = asyncio.get_running_loop()
   registered_signals: list[signal.Signals] = []

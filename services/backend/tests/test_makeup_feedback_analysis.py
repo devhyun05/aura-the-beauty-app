@@ -786,6 +786,16 @@ def test_live_result_rejects_unknown_score_evidence_reference() -> None:
   assert exc_info.value.details["unknownIds"] == ["missing-observation"]
 
 
+def test_live_result_repairs_topic_prefixed_score_evidence_reference() -> None:
+  raw_result = _valid_result()
+  raw_result["evaluations"][0]["observations"][0]["id"] = "brow-observation-primary"
+  raw_result["scoreEvidenceIds"] = ["brow-obs-1"]
+
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert result["scoreEvidenceIds"] == ["brow-observation-primary"]
+
+
 def test_live_result_rejects_score_range_that_does_not_include_score() -> None:
   raw_result = _valid_result()
   raw_result["scoreRange"] = [0, 80]

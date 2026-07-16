@@ -471,6 +471,23 @@ export async function fetchGeneratedMakeupRecommendationReports({
   return mapBackendRecommendationReports(response.reports ?? []);
 }
 
+export async function fetchGeneratedMakeupRecommendationReport(
+  reportId: string,
+  signal?: AbortSignal,
+): Promise<MakeupRecommendationReportHistoryItem> {
+  const report = await requestBackendJson<BackendRecommendationReport>(
+    `/makeup-recommendations/${encodeURIComponent(reportId)}`,
+    {signal},
+  );
+  const mappedReport = mapBackendRecommendationReports([report])[0];
+
+  if (!mappedReport) {
+    throw new Error('추천 메이크업 보고서 결과가 비어 있어요.');
+  }
+
+  return mappedReport;
+}
+
 export async function startGeneratedMakeupRecommendation(
   input: StartMakeupRecommendationInput,
   scenarioTags: readonly string[] = [],
