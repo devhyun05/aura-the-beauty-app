@@ -14,7 +14,6 @@ import {getRecommendedFilterRouteParams} from '../../../features/home';
 import {getFaceAnalysisReportById} from '../../../shared/services/faceAnalysisService';
 import {
   getLikedMakeupFilterLooks,
-  mergeSavedAndLikedMakeupLooks,
 } from '../../../shared/services/makeupGuideService';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -291,6 +290,7 @@ export function ProductPersonalizationSettingsRouteScreen({
 
 export function MakeupLookListRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'MakeupLookList'>) {
   const {
     likedMakeupFilterIds,
@@ -302,15 +302,21 @@ export function MakeupLookListRouteScreen({
     () => getLikedMakeupFilterLooks(likedMakeupFilterIds),
     [likedMakeupFilterIds],
   );
-  const savedAndLikedMakeupLooks = React.useMemo(() => {
-    return mergeSavedAndLikedMakeupLooks({
-      likedMakeupLooks,
-      savedMakeupLook,
-      savedMakeupLooks,
-    });
-  }, [likedMakeupLooks, savedMakeupLook, savedMakeupLooks]);
+  const createdMakeupLooks = React.useMemo(
+    () =>
+      savedMakeupLooks.length > 0
+        ? savedMakeupLooks
+        : savedMakeupLook
+          ? [savedMakeupLook]
+          : [],
+    [savedMakeupLook, savedMakeupLooks],
+  );
+  const visibleMakeupLooks =
+    route.params?.kind === 'created'
+      ? createdMakeupLooks
+      : likedMakeupLooks;
   const handleMakeupLookPress = React.useCallback(
-    (makeupLook: (typeof savedAndLikedMakeupLooks)[number]) => {
+    (makeupLook: (typeof visibleMakeupLooks)[number]) => {
       const filterId = makeupLook.makeupPresetValues.sourceFilterId;
 
       if (!filterId) {
@@ -328,7 +334,12 @@ export function MakeupLookListRouteScreen({
       routeName="MakeupLookList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <MakeupLookListScreen
-        likedMakeupLooks={savedAndLikedMakeupLooks}
+        emptyLabel={
+          route.params?.kind === 'created'
+            ? '아직 만든 필터가 없어요.'
+            : '좋아요한 메이크업 필터가 없어요.'
+        }
+        likedMakeupLooks={visibleMakeupLooks}
         onPressMakeupLook={handleMakeupLookPress}
       />
     </DetailRouteChrome>

@@ -4,7 +4,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
 from app.core.errors import AppError
 from app.core.responses import success
@@ -335,6 +335,42 @@ async def analyze_filter_extraction(
   )
 
   return success({"job": normalize_filter_extraction_report_row(report)})
+
+
+@router.get("")
+async def list_filter_extractions(
+  limit: int = Query(default=20, ge=1, le=50),
+  offset: int = Query(default=0, ge=0),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  reports = await db.fetch(
+    """
+    select *
+    from filter_extraction_reports
+    where user_id = $1
+      and status = 'completed'
+    order by created_at desc
+    limit $2 offset $3
+    """,
+    user["id"],
+    limit,
+    offset,
+  )
+
+  return success(
+    {
+      "reports": [
+        normalized
+        for report in reports
+        if (normalized := normalize_filter_extraction_report_row(report)) is not None
+      ],
+      "limit": limit,
+      "offset": offset,
+    },
+  )
+
 
 @router.get("/{report_id}")
 async def get_filter_extraction(

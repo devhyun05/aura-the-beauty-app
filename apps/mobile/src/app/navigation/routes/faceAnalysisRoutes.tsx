@@ -767,6 +767,7 @@ export function FaceAnalysisReportDetailRouteScreen({
   route,
 }: RootScreenProps<'FaceAnalysisReportDetail'>) {
   const insets = useSafeAreaInsets();
+  const shouldReturnToProfile = route.params?.returnTo === 'profile';
   const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const {
     selectedFace3DProfile,
@@ -796,6 +797,9 @@ export function FaceAnalysisReportDetailRouteScreen({
   );
   const footerBottomInset = Math.max(insets.bottom, spacing.md);
   const currentReportId = route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
+  const handleBackToProfile = React.useCallback(() => {
+    navigateMainTab(navigation, 'ProfileTab');
+  }, [navigation]);
 
   return (
     <DetailRouteChrome
@@ -803,7 +807,12 @@ export function FaceAnalysisReportDetailRouteScreen({
       headerMode="overlay"
       reserveOverlayHeaderSpace={false}
       routeName="FaceAnalysisReportDetail"
-      onOpenDocumentList={() => navigation.navigate('FaceAnalysisReportsList')}
+      onBack={shouldReturnToProfile ? handleBackToProfile : undefined}
+      onOpenDocumentList={
+        shouldReturnToProfile
+          ? undefined
+          : () => navigation.navigate('FaceAnalysisReportsList')
+      }
       onShare={shareAction?.cb}
       shareDisabled={!shareAction}>
       <>

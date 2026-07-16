@@ -303,7 +303,13 @@ export function ConsultingHomeScreen({
       bottomPadding="floatingFooter"
       contentGap={spacing.xxl}
       topPadding={topPadding}>
-      <View style={styles.heroSection}>
+      <RNView
+        style={[
+          styles.heroSection,
+          topPadding === 'none'
+            ? styles.heroSectionFlush
+            : null,
+        ]}>
         <ScrollView
           decelerationRate="fast"
           contentContainerStyle={styles.heroCarouselContent}
@@ -340,7 +346,7 @@ export function ConsultingHomeScreen({
             {activeHeroIndex + 1} / {heroSlides.length}
           </Text>
         </RNView>
-      </View>
+      </RNView>
 
       <View style={styles.discoverySection}>
         <RNView>
@@ -736,6 +742,10 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     gap: spacing.md,
+    marginTop: -spacing.lg,
+  },
+  heroSectionFlush: {
+    marginTop: 0,
   },
   heroSubtitle: {
     color: 'rgba(255, 255, 255, 0.82)',

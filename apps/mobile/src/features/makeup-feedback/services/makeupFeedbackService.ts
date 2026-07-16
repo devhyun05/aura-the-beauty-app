@@ -95,6 +95,10 @@ type GetFeedbackReportResponse = {
   report: BackendFeedbackJob;
 };
 
+type ListFeedbackReportsResponse = {
+  reports: BackendFeedbackJob[];
+};
+
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => {
     setTimeout(resolve, ms);
@@ -1143,6 +1147,13 @@ export async function fetchMakeupFeedbackReport(
   const {report} = await requestBackendJson<GetFeedbackReportResponse>(
     '/feedback/reports/' + encodeURIComponent(reportId),
   );
+  return mapStoredMakeupFeedbackReport(report, reportId);
+}
+
+function mapStoredMakeupFeedbackReport(
+  report: BackendFeedbackJob,
+  reportId = report.id ?? '',
+): MakeupFeedbackCompletedResult {
   const request = report.feedbackPayload?.request;
   const fallbackImageUri = appAssetUri('images/analysis/report-retake-20260608.png');
   const imageUri =
@@ -1175,4 +1186,20 @@ export async function fetchMakeupFeedbackReport(
   }
 
   return outcome;
+}
+
+export async function fetchMakeupFeedbackReports(): Promise<
+  MakeupFeedbackCompletedResult[]
+> {
+  const {reports} = await requestBackendJson<ListFeedbackReportsResponse>(
+    '/feedback/reports',
+  );
+
+  return (reports ?? []).flatMap(report => {
+    try {
+      return [mapStoredMakeupFeedbackReport(report)];
+    } catch {
+      return [];
+    }
+  });
 }

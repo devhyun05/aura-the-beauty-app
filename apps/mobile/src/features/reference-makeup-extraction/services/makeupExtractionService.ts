@@ -1,13 +1,16 @@
 import {Image} from 'react-native';
 
 import {uploadFaceCaptureImage} from '../../face-capture/services/faceCaptureUploadService';
+import {notifyNotificationStateChanged} from '../../notifications/services/notificationService';
 import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
+import * as SecureStore from '../../../shared/services/localSecureStore';
 import {referenceMakeupExtractionMock} from '../mocks/referenceMakeupExtraction.mock';
 import type {
   MakeupExtractionProgressUpdate,
   MakeupExtractionStep,
   ReferenceMakeupAreaGuide,
   ReferenceMakeupExtractionData,
+  ReferenceMakeupExtractionReportHistoryItem,
   ReferenceMakeupExtractionResult,
   ReferenceMakeupPhoto,
 } from '../types';
@@ -25,6 +28,14 @@ type BackendReferenceMakeupExtractionResponse = {
 
 const REFERENCE_EXTRACTION_TIMEOUT_MS = 180000;
 const REFERENCE_EXTRACTION_POLL_INTERVAL_MS = 2000;
+const REFERENCE_EXTRACTION_REPORT_IDS_STORAGE_KEY =
+  'aura.referenceMakeupExtraction.reportIds.v1';
+const MAX_STORED_REFERENCE_EXTRACTION_REPORTS = 50;
+
+type StoredReferenceExtractionReport = {
+  createdAt: string;
+  reportId: string;
+};
 
 type BackendFilterExtractionResultPayload = {
   aiError?: unknown;
@@ -43,6 +54,7 @@ type BackendFilterExtractionResultPayload = {
 };
 
 type BackendFilterExtractionJob = {
+  createdAt?: string | null;
   id?: string | null;
   resultPayload?: BackendFilterExtractionResultPayload | null;
   status?: 'cancelled' | 'completed' | 'failed' | 'pending' | 'processing' | null;
@@ -54,6 +66,20 @@ type CreateFilterExtractionJobResponse = {
 
 type GetFilterExtractionReportResponse = {
   report: BackendFilterExtractionJob;
+};
+
+type ListFilterExtractionReportsResponse = {
+  reports: BackendFilterExtractionJob[];
+};
+
+type FilterExtractionNotification = {
+  createdAt?: string | null;
+  data?: unknown;
+  notificationType?: string | null;
+};
+
+type FilterExtractionNotificationListResponse = {
+  notifications?: FilterExtractionNotification[];
 };
 
 function delay(ms: number): Promise<void> {
@@ -85,6 +111,91 @@ function camelizeBackendValue(value: unknown): unknown {
     nextValue[camelizeBackendKey(key)] = camelizeBackendValue(nestedValue);
     return nextValue;
   }, {});
+}
+
+function parseStoredReferenceExtractionReports(
+  value: string | null,
+): StoredReferenceExtractionReport[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.flatMap(item => {
+      if (!isPlainBackendObject(item)) {
+        return [];
+      }
+
+      const reportId =
+        typeof item.reportId === 'string' ? item.reportId.trim() : '';
+      const createdAt =
+        typeof item.createdAt === 'string' ? item.createdAt.trim() : '';
+
+      return reportId ? [{createdAt, reportId}] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function getStoredReferenceExtractionReports(): Promise<
+  StoredReferenceExtractionReport[]
+> {
+  return parseStoredReferenceExtractionReports(
+    await SecureStore.getItemAsync(
+      REFERENCE_EXTRACTION_REPORT_IDS_STORAGE_KEY,
+    ),
+  );
+}
+
+async function rememberReferenceExtractionReport(
+  reportId: string,
+  createdAt = new Date().toISOString(),
+): Promise<void> {
+  const normalizedReportId = reportId.trim();
+
+  if (!normalizedReportId) {
+    return;
+  }
+
+  const storedReports = await getStoredReferenceExtractionReports();
+  const nextReports = [
+    {createdAt, reportId: normalizedReportId},
+    ...storedReports.filter(report => report.reportId !== normalizedReportId),
+  ].slice(0, MAX_STORED_REFERENCE_EXTRACTION_REPORTS);
+
+  await SecureStore.setItemAsync(
+    REFERENCE_EXTRACTION_REPORT_IDS_STORAGE_KEY,
+    JSON.stringify(nextReports),
+  );
+}
+
+function getNotificationReportId(data: unknown): string | null {
+  let normalizedData = data;
+
+  if (typeof normalizedData === 'string') {
+    try {
+      normalizedData = JSON.parse(normalizedData) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  if (!isPlainBackendObject(normalizedData)) {
+    return null;
+  }
+
+  const reportId = normalizedData.reportId ?? normalizedData.report_id;
+
+  return typeof reportId === 'string' && reportId.trim()
+    ? reportId.trim()
+    : null;
 }
 
 function extractionResponseFromJob(
@@ -315,25 +426,15 @@ export const getReferenceMakeupExtractionData = async (): Promise<ReferenceMakeu
 export const getReferenceMakeupExtractionDataSync = (): ReferenceMakeupExtractionData =>
   latestReferenceMakeupExtractionData;
 
-export async function fetchReferenceMakeupExtractionReport(
-  reportId: string,
-): Promise<{data: ReferenceMakeupExtractionData; photo: ReferenceMakeupPhoto}> {
-  const response = await requestBackendJson<unknown>(
-    '/filter-extractions/' + encodeURIComponent(reportId),
-  );
-  const normalizedResponse = camelizeBackendValue(
-    response,
-  ) as GetFilterExtractionReportResponse;
-  const job = normalizedResponse.report;
+function mapCompletedFilterExtractionReport(
+  job: BackendFilterExtractionJob,
+  fallbackReportId = '',
+): ReferenceMakeupExtractionReportHistoryItem | null {
   const completedResponse = extractionResponseFromJob(job);
+  const reportId = job.id?.trim() || fallbackReportId.trim();
 
-  if (!completedResponse?.extractedMakeupLook) {
-    throw new BackendApiError(
-      '완료된 메이크업 추출 보고서를 불러오지 못했어요.',
-      409,
-      'FILTER_EXTRACTION_REPORT_NOT_COMPLETED',
-      {reportId, status: job.status ?? null},
-    );
+  if (!reportId || !completedResponse?.extractedMakeupLook) {
+    return null;
   }
 
   const request = job.resultPayload?.request;
@@ -351,8 +452,7 @@ export async function fetchReferenceMakeupExtractionReport(
       completedResponse.extractedMakeupLook.title ||
       fallbackPhoto.title,
   };
-
-  latestReferenceMakeupExtractionData = {
+  const data: ReferenceMakeupExtractionData = {
     ...referenceMakeupExtractionMock,
     photos: [
       photo,
@@ -367,7 +467,147 @@ export async function fetchReferenceMakeupExtractionReport(
     ),
   };
 
-  return {data: latestReferenceMakeupExtractionData, photo};
+  return {
+    createdAt: job.createdAt?.trim() || '',
+    data,
+    photo,
+    reportId,
+  };
+}
+
+export async function fetchReferenceMakeupExtractionReport(
+  reportId: string,
+): Promise<{data: ReferenceMakeupExtractionData; photo: ReferenceMakeupPhoto}> {
+  const response = await requestBackendJson<unknown>(
+    '/filter-extractions/' + encodeURIComponent(reportId),
+  );
+  const normalizedResponse = camelizeBackendValue(
+    response,
+  ) as GetFilterExtractionReportResponse;
+  const job = normalizedResponse.report;
+  const mappedReport = mapCompletedFilterExtractionReport(job, reportId);
+
+  if (!mappedReport) {
+    throw new BackendApiError(
+      '완료된 메이크업 추출 보고서를 불러오지 못했어요.',
+      409,
+      'FILTER_EXTRACTION_REPORT_NOT_COMPLETED',
+      {reportId, status: job.status ?? null},
+    );
+  }
+
+  latestReferenceMakeupExtractionData = mappedReport.data;
+  await rememberReferenceExtractionReport(
+    mappedReport.reportId,
+    mappedReport.createdAt || new Date().toISOString(),
+  );
+
+  return {data: latestReferenceMakeupExtractionData, photo: mappedReport.photo};
+}
+
+export async function fetchReferenceMakeupExtractionReports({
+  limit = 20,
+  offset = 0,
+}: {
+  limit?: number;
+  offset?: number;
+} = {}): Promise<ReferenceMakeupExtractionReportHistoryItem[]> {
+  try {
+    const response = await requestBackendJson<unknown>(
+      `/filter-extractions?limit=${limit}&offset=${offset}`,
+    );
+    const normalizedResponse = camelizeBackendValue(
+      response,
+    ) as ListFilterExtractionReportsResponse;
+
+    return (normalizedResponse.reports ?? []).flatMap(report => {
+      const mappedReport = mapCompletedFilterExtractionReport(report);
+      return mappedReport ? [mappedReport] : [];
+    });
+  } catch {
+    return fetchReferenceMakeupExtractionReportsFromNotifications({
+      limit,
+      offset,
+    });
+  }
+}
+
+async function fetchReferenceMakeupExtractionReportsFromNotifications({
+  limit,
+  offset,
+}: {
+  limit: number;
+  offset: number;
+}): Promise<ReferenceMakeupExtractionReportHistoryItem[]> {
+  const notificationLimit = Math.min(100, Math.max(50, limit + offset));
+  const [storedReports, response] = await Promise.all([
+    getStoredReferenceExtractionReports(),
+    requestBackendJson<FilterExtractionNotificationListResponse>(
+      `/notifications?limit=${notificationLimit}&offset=0`,
+    ).catch(() => ({notifications: []})),
+  ]);
+  const notificationReportIds = new Set<string>();
+  const notificationReports = (response.notifications ?? []).flatMap(
+    notification => {
+      const reportId = getNotificationReportId(notification.data);
+
+      if (
+        notification.notificationType !== 'filter_extraction_completed' ||
+        !reportId ||
+        notificationReportIds.has(reportId)
+      ) {
+        return [];
+      }
+
+      notificationReportIds.add(reportId);
+      return [{createdAt: notification.createdAt?.trim() || '', reportId}];
+    },
+  );
+  const seenReportIds = new Set<string>();
+  const reportCandidates = [...storedReports, ...notificationReports].filter(
+    report => {
+      if (seenReportIds.has(report.reportId)) {
+        return false;
+      }
+
+      seenReportIds.add(report.reportId);
+      return true;
+    },
+  );
+  const selectedReports = reportCandidates.slice(
+    offset,
+    offset + limit,
+  );
+  const reports = await Promise.all(
+    selectedReports.map(async storedReport => {
+      try {
+        const response = await requestBackendJson<unknown>(
+          '/filter-extractions/' + encodeURIComponent(storedReport.reportId),
+        );
+        const normalizedResponse = camelizeBackendValue(
+          response,
+        ) as GetFilterExtractionReportResponse;
+        const mappedReport = mapCompletedFilterExtractionReport(
+          normalizedResponse.report,
+          storedReport.reportId,
+        );
+
+        return mappedReport
+          ? {
+              ...mappedReport,
+              createdAt: mappedReport.createdAt || storedReport.createdAt,
+            }
+          : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return reports.filter(
+    (report): report is ReferenceMakeupExtractionReportHistoryItem =>
+      report !== null,
+  );
 }
 
 export async function runReferenceMakeupExtraction(
@@ -444,6 +684,7 @@ export async function runReferenceMakeupExtraction(
     const createResponse = camelizeBackendValue(
       response,
     ) as CreateFilterExtractionJobResponse;
+    const reportId = createResponse.job.id?.trim() || '';
     const normalizedResponse = await waitForCompleteFilterExtractionJob(
       createResponse.job,
       onProgress,
@@ -454,10 +695,20 @@ export async function runReferenceMakeupExtraction(
 
     latestReferenceMakeupExtractionData = {
       ...referenceMakeupExtractionMock,
+      photos: [
+        photo,
+        ...referenceMakeupExtractionMock.photos.filter(
+          item => item.id !== photo.id,
+        ),
+      ],
       loadingSteps: normalizedResponse.loadingSteps ?? referenceMakeupExtractionMock.loadingSteps,
       extractedMakeupLook: mergeBackendExtractionLook(normalizedResponse.extractedMakeupLook, photo),
     };
 
+    if (reportId) {
+      await rememberReferenceExtractionReport(reportId);
+    }
+    notifyNotificationStateChanged();
     onProgress?.({activeStepId: 'ar-filter-ready', phase: 'complete', progress: 1});
 
     console.info('[aura:reference-extraction] analyze:success', {
