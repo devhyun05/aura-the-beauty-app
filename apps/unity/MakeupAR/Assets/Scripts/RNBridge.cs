@@ -861,11 +861,18 @@ public sealed class RNBridge : MonoBehaviour
 
             if (hasRawMaskPayload)
             {
-                regionMaskOverlay.RegisterGeneratedLipMaskTexture(
+                // Mirror the brow path: a size/byte-mismatched mask must be
+                // rejected here, not silently skipped — otherwise the layer
+                // below still applies and renders with a missing/stale texture.
+                bool registered = regionMaskOverlay.RegisterGeneratedLipMaskTexture(
                     maskTextureId,
                     payload.maskRawRgbaBase64,
                     payload.maskTextureWidth,
                     payload.maskTextureHeight);
+                if (!registered)
+                {
+                    throw new InvalidOperationException("Generated lip mask texture registration failed.");
+                }
             }
 
             ParsedRecipeLayer layer = BuildGeneratedLipMaskLayer(payload, maskTextureId, json.Length);
@@ -913,6 +920,7 @@ public sealed class RNBridge : MonoBehaviour
                 + ",\"generatedMaskId\":\"" + EscapeJsonString(payload != null ? NormalizeOptional(payload.generatedMaskId) : "none") + "\""
                 + ",\"captureSetId\":\"" + EscapeJsonString(payload != null ? NormalizeOptional(payload.captureSetId) : "none") + "\""
                 + ",\"maskTextureId\":\"" + EscapeJsonString(maskTextureId) + "\""
+                + ",\"controlRevision\":" + (payload != null ? payload.controlRevision : 0).ToString(CultureInfo.InvariantCulture)
                 + ",\"payloadBytes\":" + (json == null ? 0 : json.Length).ToString(CultureInfo.InvariantCulture)
                 + ",\"faceCount\":0"
                 + ",\"maskTriangles\":0"
@@ -1043,6 +1051,7 @@ public sealed class RNBridge : MonoBehaviour
                 + ",\"generatedMaskId\":\"" + EscapeJsonString(payload != null ? NormalizeOptional(payload.generatedMaskId) : "none") + "\""
                 + ",\"captureSetId\":\"" + EscapeJsonString(payload != null ? NormalizeOptional(payload.captureSetId) : "none") + "\""
                 + ",\"maskTextureId\":\"" + EscapeJsonString(maskTextureId) + "\""
+                + ",\"controlRevision\":" + (payload != null ? payload.controlRevision : 0).ToString(CultureInfo.InvariantCulture)
                 + ",\"payloadBytes\":" + (json == null ? 0 : json.Length).ToString(CultureInfo.InvariantCulture)
                 + ",\"faceCount\":0"
                 + ",\"maskTriangles\":0"
@@ -2002,6 +2011,10 @@ public sealed class RNBridge : MonoBehaviour
             Coverage = ResolveGeneratedBrowPositive01(payload.coverage, 0.90f),
             Finish = finish,
             TextureAmount = strandTextureAmount,
+            // NOTE: cleanup/neutralize strengths ride GradientAmount/GlossBoost but
+            // are CURRENTLY UNCONSUMED downstream — the shader never read the
+            // _Brow*Strength uniforms and E3 no longer sets them. Kept for
+            // payload-schema stability only (see browGenerateCore.ts).
             GradientAmount = ResolveGeneratedBrowPositive01(payload.cleanupStrength, 0.0f),
             Roughness = ResolveGeneratedBrowPositive01(payload.roughness, 0.36f),
             Specular = ResolveGeneratedBrowPositive01(payload.specular, 0.03f),
@@ -2250,6 +2263,7 @@ public sealed class RNBridge : MonoBehaviour
                 + ",\"generatedMaskId\":\"" + EscapeJsonString(NormalizeOptional(pendingGeneratedLipMaskApply.Payload.generatedMaskId)) + "\""
                 + ",\"captureSetId\":\"" + EscapeJsonString(NormalizeOptional(pendingGeneratedLipMaskApply.Payload.captureSetId)) + "\""
                 + ",\"maskTextureId\":\"" + EscapeJsonString(layer.MaskTextureId) + "\""
+                + ",\"controlRevision\":" + pendingGeneratedLipMaskApply.Payload.controlRevision.ToString(CultureInfo.InvariantCulture)
                 + ",\"payloadBytes\":" + pendingGeneratedLipMaskApply.PayloadBytes.ToString(CultureInfo.InvariantCulture)
                 + ",\"faceCount\":0"
                 + ",\"maskTriangles\":0"
@@ -2698,6 +2712,13 @@ public sealed class RNBridge : MonoBehaviour
             ? exception.Message
             : string.Empty;
 
+        if (message.Contains("texture registration failed", StringComparison.Ordinal))
+        {
+            // Terminal: the payload itself is malformed (size/byte mismatch).
+            // RN must NOT retry the same payload — see UnityMakeupCaptureScreen.
+            return "generated_lip_mask_texture_registration_failed";
+        }
+
         if (message.Contains("localOnly", StringComparison.Ordinal))
         {
             return "privacy_local_only_false";
@@ -2780,6 +2801,12 @@ public sealed class RNBridge : MonoBehaviour
             ? exception.Message
             : string.Empty;
 
+        if (message.Contains("texture registration failed", StringComparison.Ordinal))
+        {
+            // Terminal: malformed payload (size/byte mismatch) — RN must not retry.
+            return "generated_brow_mask_texture_registration_failed";
+        }
+
         if (message.Contains("localOnly", StringComparison.Ordinal))
         {
             return "privacy_local_only_false";
@@ -2823,11 +2850,6 @@ public sealed class RNBridge : MonoBehaviour
         if (message.Contains("byte count mismatch", StringComparison.Ordinal))
         {
             return "raw_rgba_byte_count_mismatch";
-        }
-
-        if (message.Contains("texture registration failed", StringComparison.Ordinal))
-        {
-            return "texture_registration_failed";
         }
 
         if (message.Contains("Unsupported generated brow mask texture id", StringComparison.Ordinal)
@@ -4523,7 +4545,15 @@ public sealed class RNBridge : MonoBehaviour
 
         string value = blendMode.Trim().ToLowerInvariant();
 
-        if (value == "normal" || value == "multiply" || value == "screen")
+        // 'screen' was never implemented (GPU state was identical to normal) and
+        // has been removed from the RN contracts. Alias legacy payloads to
+        // "normal" so old app versions keep the exact behavior they always had.
+        if (value == "screen")
+        {
+            return "normal";
+        }
+
+        if (value == "normal" || value == "multiply")
         {
             return value;
         }

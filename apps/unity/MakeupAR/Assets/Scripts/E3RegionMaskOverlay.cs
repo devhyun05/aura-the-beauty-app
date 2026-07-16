@@ -467,16 +467,28 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         int height)
     {
         maskTextureId = NormalizeGeneratedLipMaskTextureId(maskTextureId);
-        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0)
+        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0 || width > 512 || height > 512)
         {
             return false;
         }
 
         try
         {
+            long expectedByteCount = (long)width * height * 4L;
+            // Reject oversized payloads BEFORE decoding: Base64 encodes 3 bytes
+            // per 4 chars, so a well-formed payload cannot exceed this length.
+            long maxBase64Length = ((expectedByteCount + 2L) / 3L) * 4L + 8L;
+            if (rawRgbaBase64.Length > maxBase64Length)
+            {
+                Debug.LogWarning(
+                    "[E7] generated_mask_base64_oversized"
+                    + " length=" + rawRgbaBase64.Length.ToString(CultureInfo.InvariantCulture)
+                    + " max=" + maxBase64Length.ToString(CultureInfo.InvariantCulture));
+                return false;
+            }
+
             byte[] rawBytes = Convert.FromBase64String(rawRgbaBase64);
-            int expectedByteCount = width * height * 4;
-            if (rawBytes.Length != expectedByteCount)
+            if (rawBytes.LongLength != expectedByteCount)
             {
                 Debug.LogWarning(
                     "[E7] generated_lip_mask_texture_invalid"
@@ -525,16 +537,28 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         int height)
     {
         maskTextureId = NormalizeGeneratedBrowMaskTextureId(maskTextureId);
-        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0)
+        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0 || width > 512 || height > 512)
         {
             return false;
         }
 
         try
         {
+            long expectedByteCount = (long)width * height * 4L;
+            // Reject oversized payloads BEFORE decoding: Base64 encodes 3 bytes
+            // per 4 chars, so a well-formed payload cannot exceed this length.
+            long maxBase64Length = ((expectedByteCount + 2L) / 3L) * 4L + 8L;
+            if (rawRgbaBase64.Length > maxBase64Length)
+            {
+                Debug.LogWarning(
+                    "[E7] generated_mask_base64_oversized"
+                    + " length=" + rawRgbaBase64.Length.ToString(CultureInfo.InvariantCulture)
+                    + " max=" + maxBase64Length.ToString(CultureInfo.InvariantCulture));
+                return false;
+            }
+
             byte[] rawBytes = Convert.FromBase64String(rawRgbaBase64);
-            int expectedByteCount = width * height * 4;
-            if (rawBytes.Length != expectedByteCount)
+            if (rawBytes.LongLength != expectedByteCount)
             {
                 Debug.LogWarning(
                     "[E7] generated_brow_mask_texture_invalid"
@@ -4517,8 +4541,10 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             // BROW directional skin inpaint requires an ALPHA-OVER blend so the
             // shader can composite: (1) forehead-skin fill covering the user's
             // natural brow, then (2) the drawn brow pigment ON TOP, in a single
-            // SrcAlpha/OneMinusSrcAlpha pass. The recipe ships the brow as
-            // blendMode "multiply" (DstColor/Zero, _PigmentMultiply=1), under
+            // SrcAlpha/OneMinusSrcAlpha pass. The RN contract already ships the
+            // brow as blendMode "normal" (fullFaceMakeupRecipe derives normal for
+            // brow/lens) — this forcing block is DEFENSIVE for any non-RN producer
+            // that might still send "multiply", under
             // which the brow branch's premultiplied return would be reinterpreted
             // as a pure darken and the skin fill (which must LIGHTEN over the dark
             // natural brow) is impossible — AND the multiply path early-returns
@@ -4577,15 +4603,11 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             }
         }
 
-        if (material.HasProperty("_BrowCleanupStrength"))
-        {
-            material.SetFloat("_BrowCleanupStrength", generatedBrowMask ? recipe.GradientAmount : 0.0f);
-        }
-
-        if (material.HasProperty("_BrowNeutralizeStrength"))
-        {
-            material.SetFloat("_BrowNeutralizeStrength", generatedBrowMask ? recipe.GlossBoost : 0.0f);
-        }
+        // _BrowCleanupStrength/_BrowNeutralizeStrength setters removed: the
+        // shader declared but never read those uniforms, so the mobile-computed
+        // cleanup/neutralize strengths were dead on arrival. The real inpaint
+        // opacity is _BrowInpaintStrength above. If per-user neutralize strength
+        // is ever wired for real, consume it in the shader first, then re-add.
 
         if (material.HasProperty("_PreserveDetail"))
         {
@@ -5242,10 +5264,9 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
                     destinationBlend = BlendMode.Zero;
                 }
                 break;
-            case "screen":
-                sourceBlend = BlendMode.SrcAlpha;
-                destinationBlend = BlendMode.OneMinusSrcAlpha;
-                break;
+            // case "screen" removed: it re-assigned the same values as the
+            // default (never a real screen blend). Legacy "screen" strings are
+            // normalized to "normal" upstream (NormalizeBlendMode).
         }
 
         if (material.HasProperty("_SrcBlend"))
@@ -7401,7 +7422,14 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
             ? string.Empty
             : blendMode.Trim().ToLowerInvariant();
 
-        if (blendMode == "normal" || blendMode == "screen" || blendMode == "multiply")
+        if (blendMode == "screen")
+        {
+            // Unimplemented alias (GPU state was identical to normal); removed
+            // from RN contracts. Kept for legacy payload compatibility.
+            return "normal";
+        }
+
+        if (blendMode == "normal" || blendMode == "multiply")
         {
             return blendMode;
         }
