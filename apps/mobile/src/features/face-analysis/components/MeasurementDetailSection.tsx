@@ -80,7 +80,7 @@ function buildVerticalThirdsRows(result: FaceVerticalThirdsResult): MeasurementR
   if (result.faceLength) {
     rows.push({
       label: '세로/가로 비율',
-      value: `${formatNumber(result.faceLength.ratio, 3)} (${formatNumber(
+      value: `${formatNumber(result.faceLength.ratio, 2)} (${formatNumber(
         result.faceLength.heightPx,
         0,
       )}px / ${formatNumber(result.faceLength.widthPx, 0)}px)`,

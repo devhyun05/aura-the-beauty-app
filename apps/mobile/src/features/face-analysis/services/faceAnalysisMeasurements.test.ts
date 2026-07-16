@@ -61,6 +61,7 @@ function buildThirdsFixture(): FaceVerticalThirdsResult {
     captureId: 'cap-1',
     createdAt: '2026-07-13T00:00:00.000Z',
     faceLength: {heightPx: 975, ratio: 1.383, widthPx: 705},
+    faceLengthJudgment: {band: {hi: 1.412, lo: 1.376}, verdict: 'borderline_wide'},
     hairlineAnalysis: {
       analysisEligible: true,
       confidence: 0.8,
@@ -68,6 +69,7 @@ function buildThirdsFixture(): FaceVerticalThirdsResult {
       provider: 'apple_semantic_matte',
     },
     interpretation: {dominantPart: 'middle', summary: '중안부가 긴 편', title: '중안부 우세'},
+    judgmentVersion: 'face-length-judgment/v2-provisional-20260717',
     keypoints: {
       G: {confidence: 0.9, method: 'mediapipe', provider: 'mediapipe', x: 500, y: 400},
       H: {confidence: 0.8, method: 'matte', provider: 'apple_semantic_matte', x: 500, y: 120},
@@ -283,6 +285,69 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(thirds.keypoints.G?.x, 500, 'keypoint G roundtrip');
   expectEqual(thirds.keypoints.Sn?.y, 720, 'keypoint Sn roundtrip');
   expectEqual(thirds.faceLength?.ratio, 1.383, 'faceLength roundtrip');
+  // 판정 스냅샷·버전 왕복(Phase 0-5, 1차 리뷰 반영): encode→camelize→decode
+  expectEqual(
+    thirds.judgmentVersion,
+    'face-length-judgment/v2-provisional-20260717',
+    'judgmentVersion roundtrip',
+  );
+  expectEqual(
+    thirds.faceLengthJudgment?.verdict,
+    'borderline_wide',
+    'faceLengthJudgment verdict roundtrip',
+  );
+  expectEqual(thirds.faceLengthJudgment?.band.hi, 1.412, 'judgment band hi roundtrip');
+  expectEqual(thirds.faceLengthJudgment?.band.lo, 1.376, 'judgment band lo roundtrip');
+  // 오염 입력 계약(3차 셀프 리뷰): band가 비유한/문자열이거나 verdict가
+  // 미지 값이면 스냅샷 전체를 폐기하고 화면 재판정 폴백에 맡긴다.
+  {
+    const contaminated = parseFaceAnalysisMeasurements(
+      simulateBackendCamelize(
+        buildFaceAnalysisMeasurementsPayload({
+          captureId: 'cap-x',
+          face3d: null,
+          faceGeometry2d: null,
+          faceVerticalThirds: {
+            ...buildThirdsFixture(),
+            faceLengthJudgment: {
+              band: {hi: Number.NaN, lo: 1.3},
+              verdict: 'wide',
+            },
+          },
+          personalColor: null,
+        }),
+      ) as Record<string, unknown>,
+      {},
+    );
+    expectEqual(
+      contaminated?.faceVerticalThirds?.faceLengthJudgment,
+      undefined,
+      'contaminated band must drop the snapshot (fallback to re-judgment)',
+    );
+    const unknownVerdict = parseFaceAnalysisMeasurements(
+      simulateBackendCamelize(
+        buildFaceAnalysisMeasurementsPayload({
+          captureId: 'cap-y',
+          face3d: null,
+          faceGeometry2d: null,
+          faceVerticalThirds: {
+            ...buildThirdsFixture(),
+            faceLengthJudgment: {
+              band: {hi: 1.31, lo: 1.3},
+              verdict: 'future-verdict' as never,
+            },
+          },
+          personalColor: null,
+        }),
+      ) as Record<string, unknown>,
+      {},
+    );
+    expectEqual(
+      unknownVerdict?.faceVerticalThirds?.faceLengthJudgment,
+      undefined,
+      'unknown future verdict must drop the snapshot (fallback to re-judgment)',
+    );
+  }
   expectEqual(thirds.verticalThirds?.displayRatio.upper, 0.97, 'ratio roundtrip');
   expectEqual(thirds.measurementMode, 'full_vertical_thirds', 'measurement mode roundtrip');
   expectEqual(

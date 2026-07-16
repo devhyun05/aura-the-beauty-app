@@ -143,9 +143,12 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 - `middlePx = Sn.y − G.y` (기준, 항상 1.0으로 정규화)
 - `lowerPx = Me.y − Sn.y`, `upperPx = G.y − H.y` (헤어라인 없으면 null)
 - `displayRatio = { upper: upperPx/middlePx | null, middle: 1.0, lower: lowerPx/middlePx }`
-- **평균(이상) 기준선**: `상 1.0 : 중 1.0 : 하 0.8` — **앱이 정한 미적 기준**이며 고전적 1:1:1이 아님.
-- `dominantPart`(우세 부위) 판정: 편차 `> 0.08`이면 해당 부위가 길다/짧다로 해석, 한국어 요약 문구 생성
-  (강도: `≥0.22` 뚜렷하게 / `≥0.14` 다소 / else 약간).
+- **판정 기준(자기내부 비교, Phase 0)**: 종전 `1:1:0.8` "평균(이상) 기준선"은 폐기(실측 아님 —
+  성형광고 관행값으로 확인). 각 부위를 중안부(1.0)와 **직접 비교**한다 — 인구 기준 불요.
+- `dominantPart`(우세 부위) 판정: `|비율 − 1.0| > 0.08`(+epsilon 대칭화)이면 해당 부위가 길다/짧다로 해석,
+  한국어 요약 문구 생성 (강도: `≥0.22` 뚜렷하게 / `≥0.14` 다소 / else 약간) — `interpretation`에 저장.
+- 얼굴 **길이비** 판정(별개 축)은 pose 기반 동적 유보 구간(`judgeFaceLength`)으로 산출되어
+  `faceLengthJudgment`(verdict+band)·`judgmentVersion`으로 결과에 동결 저장된다.
 
 ### 4.3 촬영 후 보정 & 품질 게이트
 
@@ -157,13 +160,13 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 | 조건 | 기준 | 실패 사유 |
 |---|---|---|
 | 얼굴 검출 | 1개 | `face_not_detected` / `multiple_faces_detected` |
-| 포즈 | `|yaw|≤8°, |pitch|≤8°, |roll|≤5°` | `pose_gate_failed` |
+| 포즈 | `|yaw|≤8°, |pitch|≤12°, |roll|≤5°` (pitch 12°는 2026-07-13 usability 결정 — `facePoseGates.ts` 단일 정의처 참조) | `pose_gate_failed` |
 | 필수 기준점 | G, Sn, Me 존재 | `required_keypoints_missing` |
 | Y 순서 | `G.y < Sn.y < Me.y` | `vertical_keypoint_order_invalid` |
 | 헤어라인 | `H.y < G.y` (아니면 H를 null 처리, 차단 아님) | 경고만 |
 
 > **게이트가 2단계**입니다: 촬영 전 실시간 **Greenlight**(yaw≤10/roll≤8/거리/안정)와, 촬영 후 정지영상
-> **Quality Gate**(yaw·pitch≤8/roll≤5/얼굴수/기준점 순서). 기준치가 서로 다릅니다.
+> **Quality Gate**(yaw≤8/pitch≤12/roll≤5/얼굴수/기준점 순서). 기준치가 서로 다릅니다.
 
 ### 4.4 헤어라인 소스 티어링 & 최종 상태
 
@@ -177,7 +180,7 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 
 ### 4.5 부가 산출물
 
-- **얼굴 길이 비율**: `세로(H→Me) / 가로(볼 idx234↔454)` → 게이지 표시(기준 wide 1.351 / avg 1.455 / long 1.506, 하드코딩).
+- **얼굴 길이 비율**: `세로(H→Me) / 가로(볼 idx234↔454)` → 게이지 표시. 기준값(wide 1.351 / avg 1.455 / long 1.506)은 `face-ratio/constants.ts` 단일 정의처의 **잠정값**(1차 출처 부재 확인 — Phase 4에서 자체 mean±SD 교체)이며, 게이지 스케일·세그먼트 경계·판정이 전부 이 상수에서 파생된다. 판정은 촬영 pose 기반 동적 유보 구간(`judgeFaceLength`)을 거치고, 결과에 `judgmentVersion` 스냅샷이 저장된다.
 - **디버그 오버레이(SVG)**: 상·중·하 3개 반투명 밴드 + 각 기준점 가이드선 + (debug) 점별 라벨/제공자/포즈 패널,
   `react-native-view-shot`로 `overlay.png` 스냅샷.
 
@@ -191,10 +194,10 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 |---|---|---|---|
 | `AURARealtimeFaceCaptureView` | 실시간 카메라 뷰 + 촬영 | AVCaptureSession, MediaPipe(video), Vision(frame), Apple 시맨틱 매트 | ✅ 실제 |
 | `AURAFaceLandmarkDetector` | 정지영상 폴백 검출 | Vision `VNDetectFaceLandmarksRequest` | ✅ 실제 |
-| `AURAFaceRatioAnalyzer` (+`AURAFaceRatioHairline`) | 세로비율 분석 + 헤어라인 | MediaPipe(image), Apple 매트 경계 스캔 | ✅ 실제 / ⚠️ 헤어라인 휴리스틱 |
+| `AURAFaceRatioAnalyzer` (+`AURAFaceRatioHairline`) | 세로비율 분석 + 헤어라인 | **Unity homuler 랜드마크 입력**(정규화 478점+pose — CocoaPods MediaPipe 제거 후 네이티브 자체 검출 없음, `faceRatioAnalyzerNative.ts` 계약), Apple 매트 경계 스캔 | ✅ 실제 / ⚠️ 헤어라인 휴리스틱 |
 
-- **MediaPipe**: `MPPFaceLandmarker`, 번들 모델 `face_landmarker.task`(≈3.7MB, 478점), pose는
-  facial-transformation matrix 분해. (numFaces 1, minConfidence 0.5)
+- **랜드마크 공급(현행)**: 세로비율 분석의 478점은 Unity homuler(IMAGE 모드)가 검출해 JS 브리지로
+  전달한다 — 종전 CocoaPods `MPPFaceLandmarker` 경로는 제거됨. 실시간 뷰의 MediaPipe(video)는 별도 경로.
 - **Apple 매트**: `AVSemanticSegmentationMatte`(Hair/Skin)를 사진 임베드 후 `ImageIO` aux-data로 read-back.
 - **헤어라인 위치 산출**: 매트는 실제지만, 정수리선 **점**은 이마 ROI에서 alpha/gradient 임계값으로 hair→skin
   경계를 **컬럼 스캔**하는 휴리스틱(가중 median). confidence도 가중식(sharpness .40/consistency .30/skin .20/pose .10).
@@ -234,7 +237,7 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 
 ### ⚠️ 휴리스틱·근사·하드코딩 (모델 값 아님)
 - **헤어라인 점**: 실제 매트 위의 임계값 컬럼 스캔(휴리스틱), confidence는 수작업 가중식 → "모델 confidence로 표기 금지"
-- **keypoint confidence**: 하드코딩 상수(glabella .82 / subnasale .82 / menton .84 / hApprox .40) → 보고되는 `ratio.confidence`는 합성값
+- **keypoint confidence**: 하드코딩 상수(glabella .82 / subnasale .82 / menton .84 — `hApprox .40`은 2026-07-16 커밋에서 소비자 제거, 네이티브 좌표 방출·wire 타입만 잔존) → 보고되는 `ratio.confidence`는 합성값. 실측화 재설계는 측정 계획 Phase 1 §3(멀티프레임 지터/reprojection residual)
 - **볼·턱 랜드마크**: Vision 바운딩박스의 고정 비율(실검출 아님). 실제 검출은 눈/코/입 + MediaPipe 메시(G/Sn/Me)뿐
 - **faceWidthRatio(거리)**: 눈/입 스팬 × 하드코딩 배수(2.35/2.15), **cm 미보정**
 - 기하 포즈 폴백(매트릭스 부재 시): 매직 상수(yaw×42.0 등)
@@ -274,7 +277,7 @@ npm --prefix apps/mobile run typecheck
 
 - **`FaceVerticalThirdsResult`** (`schemaVersion: "aura-face-vertical-thirds-v1"`, `result.json`):
   `status(full_success|partial_success|blocked|failed)`, `keypoints{H,G,Sn,Me}`, `verticalThirds.displayRatio`,
-  `faceLength`, `quality{yaw,pitch,roll,warnings}`, `interpretation{dominantPart,summary}`, `artifacts{...Uris}`
+  `faceLength`, `faceLengthJudgment{band{hi,lo},verdict}`, `judgmentVersion`, `quality{yaw,pitch,roll,warnings}`, `interpretation{dominantPart,summary}`, `artifacts{...Uris}`
 - **`FaceVerticalThirdsAnalysisPayload`** (다운스트림/AI용, 성공 시에만): `{confidence, displayRatio, dominantPart, hairline{confidence,provider}, status, summary}` — **원시 좌표는 전송 안 함**
 - **로그 이벤트** (`[aura:face-ratio]` JSONL, DEV 한정 파일쓰기): `capture:ready → landmark:ready → matte:ready → post_correction:applied → quality:gate → hairline:ready → keypoint:ready → ratio:computed → analysis:partial|blocked|failed → overlay:saved`
 - **저장 위치**: `<documentDirectory>/face-vertical-thirds/<sessionId>/` (source.jpg, overlay.png, result.json, analysis-log.jsonl, +debug 매트 PNG)

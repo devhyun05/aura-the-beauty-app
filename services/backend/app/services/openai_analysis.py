@@ -93,6 +93,29 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
     "title": raw.get("title"),
   }
 
+  # 측정 시점 동결 판정(3차 리뷰 BLOCKER 반영): 화이트리스트가 벗겨내면
+  # 프롬프트의 verdict 추종 지시가 종단에서 무효가 된다 — 검증 후 보존.
+  judgment = _prompt_record(raw.get("faceLengthJudgment"))
+  judgment_band = _prompt_record(judgment.get("band"))
+  judgment_verdict = judgment.get("verdict")
+  band_hi = _prompt_number(judgment_band.get("hi"))
+  band_lo = _prompt_number(judgment_band.get("lo"))
+  safe_judgment = (
+    {
+      "band": {"hi": band_hi, "lo": band_lo},
+      "verdict": judgment_verdict,
+    }
+    if judgment_verdict
+    in {"wide", "borderline_wide", "average", "borderline_long", "long", "indeterminate"}
+    and band_hi is not None
+    and band_lo is not None
+    else None
+  )
+  judgment_version = raw.get("judgmentVersion")
+  safe_judgment_version = (
+    judgment_version if isinstance(judgment_version, str) and judgment_version else None
+  )
+
   if full_eligible:
     return {
       **common,
@@ -100,6 +123,8 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
       "displayRatio": {"lower": lower, "middle": middle, "upper": upper},
       "dominantPart": raw.get("dominantPart"),
       "faceLength": _prompt_record(raw.get("faceLength")) or None,
+      "faceLengthJudgment": safe_judgment,
+      "judgmentVersion": safe_judgment_version,
       "hairline": {
         "analysisEligible": True,
         "confidence": hairline_confidence,
@@ -790,6 +815,9 @@ class OpenAIAnalysisService:
       "텍스트는 짧고 실용적으로 작성하고, 일반론이나 누구에게나 맞는 조언을 쓰지 마. "
       "요청 메타데이터의 faceVerticalThirds.measurementMode가 full_vertical_thirds이면 검증된 상안부/중안부/하안부 실측값을 "
       "faceShape 판단과 summary, makeupGuideline의 음영/블러셔/눈썹 배치에 자연스럽게 반영해. "
+      "faceVerticalThirds.faceLengthJudgment가 있으면 얼굴 가로/세로 길이 분류는 그 verdict를 그대로 따라 "
+      "(wide=가로 폭이 있는 편, average=평균 범위, long=세로로 긴 편, borderline_wide/borderline_long=경계라 단정 금지, "
+      "indeterminate=판정 보류) 비율 숫자나 사진으로 재판정하지 마. "
       "measurementMode가 middle_lower_only이면 중안부와 하안부의 상대 길이만 사용할 수 있고, 헤어라인·이마·상안부·전체 얼굴 길이·3분할 우세를 사진이나 평균값으로 추론하지 마. "
       "요청 메타데이터에 face3d(기기 ARKit 얼굴 메시로 실측한 정규화 3D 지표)가 있으면 얼굴 입체감 표현과 "
       "makeupGuideline의 음영/하이라이트 배치에 근거로 반영해. 기본 지표는 noseTipProjection 코끝 돌출, "

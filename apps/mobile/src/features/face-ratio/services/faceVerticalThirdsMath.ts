@@ -7,13 +7,20 @@ import type {
 } from '../types';
 import {APPLE_HAIRLINE_FULL_CONFIDENCE, HAIRLINE_WARNING} from '../constants';
 
-export const AVERAGE_DISPLAY_RATIO = {
-  lower: 0.8,
-  middle: 1.0,
-  upper: 1.0,
-} as const;
-
+// Phase 0-3 (2026-07-17): 종전 AVERAGE_DISPLAY_RATIO(1:1:0.8) 기준 판정을
+// 폐기하고 자기 얼굴 내부 비교(각 부위 vs 중안부=1.0)로 전환했다.
+// 0.8은 실측 평균이 아니라 한국 성형광고 파생 관행값으로 확인됨
+// (계획 §0-3·§5 D-3: 실측은 하안부/중안부 ≈ 1.0~1.2 — 한국 20대 여성 1.0).
+// 기준 인구값 없이 성립하는 부위 간 직접 비교가 글로벌 전제(원칙 5)와 정합.
 const DOMINANCE_THRESHOLD = 0.08;
+// 부동소수점 방어: 1.08−1.0=0.08000000000000007 > 0.08 이지만
+// |0.92−1.0|=0.07999999999999996 < 0.08 — 명목상 같은 경계가 방향에 따라
+// 비대칭 처리되는 것을 epsilon으로 대칭화한다(정확히 ±0.08은 both 미유의).
+const DOMINANCE_EPSILON = 1e-9;
+
+function isSignificantDelta(delta: number): boolean {
+  return Math.abs(delta) > DOMINANCE_THRESHOLD + DOMINANCE_EPSILON;
+}
 
 function roundRatio(value: number) {
   return Number(value.toFixed(4));
@@ -98,18 +105,20 @@ type DominanceDelta = {
   part: 'upper' | 'lower';
 };
 
+// 자기내부 비교: displayRatio는 중안부=1.0 정규화이므로, 각 부위의
+// (비율 − 1.0)이 곧 "중안부 대비 얼마나 긴가"다. 인구 기준 불요.
 function getDominanceDeltas(ratio: VerticalThirdsRatio): DominanceDelta[] {
   const deltas: DominanceDelta[] = [];
 
   if (ratio.displayRatio.upper !== null) {
     deltas.push({
-      delta: ratio.displayRatio.upper - AVERAGE_DISPLAY_RATIO.upper,
+      delta: ratio.displayRatio.upper - 1.0,
       part: 'upper',
     });
   }
 
   deltas.push({
-    delta: ratio.displayRatio.lower - AVERAGE_DISPLAY_RATIO.lower,
+    delta: ratio.displayRatio.lower - 1.0,
     part: 'lower',
   });
 
@@ -129,10 +138,10 @@ export function deriveDominantPart(
     return 'unknown';
   }
 
-  // 중안부(middle)가 기준(1.0)이므로 상/하안부의 평균 대비 편차로 판정한다.
+  // 중안부(1.0)를 기준으로 상/하안부와 직접 비교한다(자기내부 서술).
   // 가장 큰 편차가 +면 그 부위가 길고, -면 상대적으로 중안부가 길어 보인다.
-  const significantDeltas = getDominanceDeltas(ratio).filter(
-    ({delta}) => Math.abs(delta) > DOMINANCE_THRESHOLD,
+  const significantDeltas = getDominanceDeltas(ratio).filter(({delta}) =>
+    isSignificantDelta(delta),
   );
 
   if (significantDeltas.length === 0) {
@@ -185,18 +194,20 @@ function buildSuccessSummary(
   const deltas = ratio ? getDominanceDeltas(ratio) : [];
 
   if (dominantPart === 'balanced') {
-    return '상·중·하안 비율이 평균 기준에 고르게 가깝게 잡혔어요.';
+    return '상·중·하안부 길이가 서로 비슷하게 잡혔어요.';
   }
 
   if (dominantPart === 'upper' || dominantPart === 'lower') {
     const partDelta = deltas.find(({part}) => part === dominantPart);
     const strength = describeDeltaStrength(Math.abs(partDelta?.delta ?? 0));
 
-    return `${PART_LABEL[dominantPart]}가 평균보다 ${strength} 긴 편이에요.`;
+    return `${PART_LABEL[dominantPart]}가 중안부보다 ${strength} 긴 편이에요.`;
   }
 
   if (dominantPart === 'middle') {
-    const shortDeltas = deltas.filter(({delta}) => delta < -DOMINANCE_THRESHOLD);
+    const shortDeltas = deltas.filter(
+      ({delta}) => delta < 0 && isSignificantDelta(delta),
+    );
     const strongestShort = shortDeltas.reduce<DominanceDelta | null>(
       (current, candidate) =>
         !current || Math.abs(candidate.delta) > Math.abs(current.delta)
@@ -211,7 +222,7 @@ function buildSuccessSummary(
     const shortPartLabel = strongestShort.part === 'upper' ? '상안부' : '하안부';
     const strength = describeDeltaStrength(Math.abs(strongestShort.delta));
 
-    return `${shortPartLabel}가 평균보다 ${strength} 짧아 중안부가 상대적으로 길어 보여요.`;
+    return `${shortPartLabel}가 중안부보다 ${strength} 짧아 중안부가 상대적으로 길어 보여요.`;
   }
 
   return '중안부와 하안부만 비교했어요.';
