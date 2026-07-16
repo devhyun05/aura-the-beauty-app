@@ -608,12 +608,30 @@ export function UnityMakeupCaptureScreen({
 
   const handleGeneratedLipAppliedEvent = (event: {
     applied?: boolean;
+    blockedReason?: string;
     generatedMaskId?: string;
     maskTriangles?: number;
     status?: string;
     uvAvailable?: boolean;
   }) => {
     const pendingGeneratedMaskId = pendingGeneratedMaskIdRef.current;
+
+    // Terminal failures: the payload itself is malformed (size/byte mismatch),
+    // so resending the exact same payload can never succeed. Stop the retry
+    // loop instead of re-posting it forever.
+    const TERMINAL_BLOCKED_REASONS = [
+      'generated_lip_mask_texture_registration_failed',
+      'generated_brow_mask_texture_registration_failed',
+      'mask_texture_dimensions_invalid',
+      'raw_rgba_byte_count_mismatch',
+    ];
+    if (event.blockedReason && TERMINAL_BLOCKED_REASONS.includes(event.blockedReason)) {
+      pendingGeneratedMaskIdRef.current = null;
+      latestGeneratedApplyPayloadRef.current = null;
+      setPhase('error');
+      setNotice(`개인 마스크 적용이 거부되었습니다 (${event.blockedReason}). 마스크를 다시 생성해 주세요.`);
+      return;
+    }
 
     if (
       pendingGeneratedMaskId &&

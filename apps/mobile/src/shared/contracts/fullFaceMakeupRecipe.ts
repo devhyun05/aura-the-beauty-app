@@ -110,7 +110,9 @@ export type FullFaceMakeupRecipeLayer = {
   textureMode: 'sample';
   intensity: number;
   feather: number;
-  blendMode: 'normal' | 'multiply' | 'screen';
+  // 'screen' removed: never implemented (Unity rendered it as normal).
+  // Unity aliases legacy 'screen' payloads to 'normal' for old app versions.
+  blendMode: 'normal' | 'multiply';
   rendererMode: 'smooth-region-mask';
   coverage: number;
   maskSpreadX: number;

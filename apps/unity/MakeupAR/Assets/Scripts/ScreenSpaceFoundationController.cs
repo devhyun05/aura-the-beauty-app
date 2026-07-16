@@ -803,6 +803,13 @@ public sealed class ScreenSpaceFoundationController : MonoBehaviour
         }
     }
 
+    // TRACKED DEFECT (F9): this is the ONLY code that feeds hand-occlusion
+    // uniforms into the screen-space foundation material, and it has ZERO
+    // callers — screen-space foundation currently renders with hand occlusion
+    // permanently disabled (shader defaults). Do NOT call this casually: it
+    // unconditionally requests the E7 runtime and lazily AddComponents it,
+    // which fights E3RegionMaskOverlay's ownership of SetRuntimeRequested.
+    // Wiring this correctly = ownership + lifecycle work, not a hotfix.
     private void UpdateHandOcclusion(Rect faceViewportBounds)
     {
         if (handOcclusionRuntime == null)

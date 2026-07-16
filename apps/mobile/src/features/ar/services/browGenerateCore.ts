@@ -160,9 +160,11 @@ const BROW_SHAPE_ENGINE_SAMPLE_COUNT = 18;
 // Device feedback: max color read too dark. Drop the runtime boost so the top
 // of the 발색/투명도 range is a bit softer (was 1.18).
 const BROW_RUNTIME_COLOR_STRENGTH_GAIN = 1.0;
-// Real-brow neutralization strength sent to Unity (_BrowNeutralizeStrength).
-// The shader reads the live camera and paints surrounding skin over the real
-// brow (red-channel region) so it does not stick out past the makeup shape.
+// Real-brow neutralization strength. CURRENTLY UNCONSUMED: the shader never
+// read _BrowNeutralizeStrength (declaration removed), and Unity no longer sets
+// it. Actual inpaint opacity is a fixed _BrowInpaintStrength on the Unity side.
+// Kept in the payload for schema stability until the strength contract is
+// either wired for real (shader-first) or removed end-to-end.
 const BROW_NEUTRALIZE_STRENGTH = 0.85;
 // Bang (앞머리) attenuation: the native appearance sampler reports how dark the
 // band above each brow is (aboveBrowDarkRatio). Below CLEAR the forehead is
@@ -582,8 +584,11 @@ function buildBrowUvMaskRawRgba({
             lerp(0.7, 1.0, clamp01(controls.strandTextureAmount)),
         );
         // Red channel = real-brow neutralize coverage. The shader paints
-        // surrounding skin here (gated by _BrowNeutralizeStrength) so the user's
-        // real brow does not stick out past the generated makeup shape.
+        // surrounding skin here (at a FIXED strength — _BrowNeutralizeStrength
+        // was never consumed by the shader) so the user's real brow does not
+        // stick out past the generated makeup shape. Alpha channel: NOT read by
+        // the shader, but CPU-side triangle culling samples green/alpha coverage
+        // (E3RegionMaskOverlay generated_brow_green_alpha) — keep writing it.
         const neutralizeAlpha = Math.round(
           clamp01(neutralizeSamples / (BROW_SUPERSAMPLE_GRID * BROW_SUPERSAMPLE_GRID)) *
             255,
