@@ -320,14 +320,13 @@ async def generate_analysis_images_background(
 
   generated_image_count = count_generated_makeup_images(result)
 
-  completed_report = await db.fetchrow(
+  await db.execute(
     """
     update analysis_reports
     set status = 'completed',
         error_message = null,
         detail_payload = $2::jsonb
     where id = $1
-    returning user_id
     """,
     report_id,
     json.dumps(build_analysis_detail_payload(payload, result)),
@@ -339,20 +338,6 @@ async def generate_analysis_images_background(
     result.get("imageGenerationStatus"),
     generated_image_count,
   )
-  if completed_report is not None:
-    await create_and_send_notification(
-      db,
-      settings,
-      user_id=completed_report["user_id"],
-      notification_type="analysis_report_completed",
-      title="맞춤 분석 보고서가 완성됐어요",
-      body="AURA에서 얼굴 분석 결과를 확인해 보세요.",
-      data={
-        "reportId": str(report_id),
-        "route": "FaceAnalysisReportDetail",
-      },
-      dedupe_key=f"analysis-report:{report_id}:completed",
-    )
 
 
 def schedule_analysis_images_background(
@@ -560,6 +545,24 @@ async def run_analysis_job_background(
     )
     return
 
+  # The report text is already renderable at this point. Publish its completion
+  # event before the slower recommended-image generation so users outside the
+  # loading/result screen receive the notification as soon as My Page can show
+  # the completed report.
+  await create_and_send_notification(
+    db,
+    settings,
+    user_id=report["user_id"],
+    notification_type="analysis_report_completed",
+    title="맞춤 분석 보고서가 완성됐어요",
+    body="AURA에서 얼굴 분석 결과를 확인해 보세요.",
+    data={
+      "reportId": str(report_id),
+      "route": "FaceAnalysisReportDetail",
+    },
+    dedupe_key=f"analysis-report:{report_id}:completed",
+  )
+
   await update_analysis_report_embedding(db, report)
 
   if generates_images:
@@ -600,19 +603,6 @@ async def run_analysis_job_background(
     "[aura:analysis-api] background:completed reportId=%s durationMs=%s",
     report_id,
     round((time.monotonic() - started_at) * 1000),
-  )
-  await create_and_send_notification(
-    db,
-    settings,
-    user_id=report["user_id"],
-    notification_type="analysis_report_completed",
-    title="맞춤 분석 보고서가 완성됐어요",
-    body="AURA에서 얼굴 분석 결과를 확인해 보세요.",
-    data={
-      "reportId": str(report_id),
-      "route": "FaceAnalysisReportDetail",
-    },
-    dedupe_key=f"analysis-report:{report_id}:completed",
   )
 
 

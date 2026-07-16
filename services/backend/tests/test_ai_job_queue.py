@@ -164,6 +164,64 @@ async def test_dispatch_analysis_job_sqs_failure_marks_report_failed(monkeypatch
   assert "update analysis_reports" in fake_db.executed[0][0]
 
 
+@pytest.mark.asyncio
+async def test_analysis_completion_notification_precedes_slow_post_processing(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  events: list[str] = []
+
+  class FakeDB:
+    async def execute(self, *_args):
+      return "UPDATE 1"
+
+    async def fetchrow(self, *_args):
+      events.append("report-persisted")
+      return {"id": REPORT_ID, "user_id": USER_ID}
+
+  class FakeAnalysisService:
+    def __init__(self, _settings: Settings) -> None:
+      pass
+
+    async def analyze_text(self, _request_payload):
+      return {
+        "recommendedMakeups": [{"title": "Daily look"}],
+        "shortSummary": "Report ready",
+      }
+
+  async def fake_create_notification(_db, _settings, **kwargs):
+    events.append("notification")
+    assert kwargs["user_id"] == USER_ID
+    assert kwargs["notification_type"] == "analysis_report_completed"
+
+  async def fake_update_embedding(_db, _report):
+    events.append("embedding")
+    return True
+
+  monkeypatch.setattr(analysis_api, "OpenAIAnalysisService", FakeAnalysisService)
+  monkeypatch.setattr(
+    analysis_api,
+    "create_and_send_notification",
+    fake_create_notification,
+  )
+  monkeypatch.setattr(
+    analysis_api,
+    "update_analysis_report_embedding",
+    fake_update_embedding,
+  )
+
+  await analysis_api.run_analysis_job_background(
+    REPORT_ID,
+    AnalysisJobCreate(requestPayload={"source": "test"}),
+    Settings(
+      face_analysis_v2_enabled=False,
+      image_generation_provider="disabled",
+    ),
+    db=FakeDB(),
+  )
+
+  assert events == ["report-persisted", "notification", "embedding"]
+
+
 def test_ai_job_queue_publisher_sends_feedback_job_message(monkeypatch: pytest.MonkeyPatch) -> None:
   calls: dict[str, object] = {}
 
