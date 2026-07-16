@@ -1559,6 +1559,20 @@ function handleUnityMakeupNativeEvent(event: {message?: string}) {
     };
 
     if (parsed.type === 'generated_lip_mask_applied') {
+      // Mirror the brow path below: only clear retry loops whose payload
+      // matches the applied mask id, so a stale mask's event stream cannot
+      // cancel a freshly scheduled payload before its first send fires.
+      const appliedLipMaskId = parsed.generatedMaskId;
+      if (typeof appliedLipMaskId === 'string' && appliedLipMaskId.length > 0) {
+        Array.from(scheduledNativePosts.entries())
+          .filter(
+            ([retryKey, post]) =>
+              retryKey.startsWith('generated-lip-mask:') &&
+              post.metadata.packageId === appliedLipMaskId,
+          )
+          .forEach(([retryKey]) => clearScheduledNativePost(retryKey));
+        return;
+      }
       clearGeneratedLipMaskNativePosts();
       return;
     }

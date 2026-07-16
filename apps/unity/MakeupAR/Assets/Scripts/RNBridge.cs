@@ -2782,11 +2782,6 @@ public sealed class RNBridge : MonoBehaviour
             return "raw_rgba_byte_count_mismatch";
         }
 
-        if (message.Contains("texture registration failed", StringComparison.Ordinal))
-        {
-            return "texture_registration_failed";
-        }
-
         if (message.Contains("Unsupported generated brow mask texture id", StringComparison.Ordinal)
             || message.Contains("Unsupported mask texture id", StringComparison.Ordinal))
         {

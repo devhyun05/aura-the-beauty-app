@@ -467,15 +467,27 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         int height)
     {
         maskTextureId = NormalizeGeneratedLipMaskTextureId(maskTextureId);
-        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0 || width > 4096 || height > 4096)
+        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0 || width > 512 || height > 512)
         {
             return false;
         }
 
         try
         {
-            byte[] rawBytes = Convert.FromBase64String(rawRgbaBase64);
             long expectedByteCount = (long)width * height * 4L;
+            // Reject oversized payloads BEFORE decoding: Base64 encodes 3 bytes
+            // per 4 chars, so a well-formed payload cannot exceed this length.
+            long maxBase64Length = ((expectedByteCount + 2L) / 3L) * 4L + 8L;
+            if (rawRgbaBase64.Length > maxBase64Length)
+            {
+                Debug.LogWarning(
+                    "[E7] generated_mask_base64_oversized"
+                    + " length=" + rawRgbaBase64.Length.ToString(CultureInfo.InvariantCulture)
+                    + " max=" + maxBase64Length.ToString(CultureInfo.InvariantCulture));
+                return false;
+            }
+
+            byte[] rawBytes = Convert.FromBase64String(rawRgbaBase64);
             if (rawBytes.LongLength != expectedByteCount)
             {
                 Debug.LogWarning(
@@ -525,15 +537,27 @@ public sealed class E3RegionMaskOverlay : MonoBehaviour
         int height)
     {
         maskTextureId = NormalizeGeneratedBrowMaskTextureId(maskTextureId);
-        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0 || width > 4096 || height > 4096)
+        if (string.IsNullOrWhiteSpace(rawRgbaBase64) || width <= 0 || height <= 0 || width > 512 || height > 512)
         {
             return false;
         }
 
         try
         {
-            byte[] rawBytes = Convert.FromBase64String(rawRgbaBase64);
             long expectedByteCount = (long)width * height * 4L;
+            // Reject oversized payloads BEFORE decoding: Base64 encodes 3 bytes
+            // per 4 chars, so a well-formed payload cannot exceed this length.
+            long maxBase64Length = ((expectedByteCount + 2L) / 3L) * 4L + 8L;
+            if (rawRgbaBase64.Length > maxBase64Length)
+            {
+                Debug.LogWarning(
+                    "[E7] generated_mask_base64_oversized"
+                    + " length=" + rawRgbaBase64.Length.ToString(CultureInfo.InvariantCulture)
+                    + " max=" + maxBase64Length.ToString(CultureInfo.InvariantCulture));
+                return false;
+            }
+
+            byte[] rawBytes = Convert.FromBase64String(rawRgbaBase64);
             if (rawBytes.LongLength != expectedByteCount)
             {
                 Debug.LogWarning(

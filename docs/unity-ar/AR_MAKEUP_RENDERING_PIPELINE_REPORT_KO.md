@@ -144,12 +144,16 @@ flowchart LR
 ```text
 browGenerateCore.ts  neutralizeStrength (최대 0.85)
       ↓
-RNBridge             GlossBoost 필드에 실어 보냄 (piggyback)
+RNBridge             GlossBoost 필드에 실어 보냄 (piggyback — 스키마 유지용)
       ↓
-E3RegionMaskOverlay  _BrowNeutralizeStrength 에 설정
-      ↓
-SmoothRegionMask.shader   ← 여기서 소멸. 선언만 있고 아무도 안 읽음
+E3RegionMaskOverlay  (2026-07-17 수리: 세터 제거 — 여기서 명시적으로 끊김)
+      ✕
+SmoothRegionMask.shader   선언도 제거됨 (원래부터 읽은 적 없음)
 ```
+
+> 2026-07-17: 죽은 유니폼 선언과 세터를 제거해 계약 단절을 명시화했다
+> (b9f9a023). 강도 조절 기능 자체는 여전히 없으며, 구현하려면 셰이더부터
+> 소비를 만들어야 한다.
 
 `_BrowCleanupStrength`와 `_BrowNeutralizeStrength` 두 셰이더 변수은 셰이더에 **선언만 되어 있고 프래그먼트 계산에서 단 한 번도 읽히지 않습니다.** 실제 눈썹 덮기 불투명도는 E3가 넣는 **하드코딩 `0.92`** 가 결정합니다.
 
@@ -1301,10 +1305,10 @@ finalMask = (ARFace + neck prior) × skinMask × confidence
 1. 화면 모드별 활성 렌더러를 하나의 route-level controller가 명시적으로 켜고 끕니다.
 2. `point`, `fullFace`, `generatedValidation`, `stencil` 모드별 bridge target을 표로 고정합니다.
 3. 같은 부위가 두 graph에서 동시에 렌더되지 않도록 단일 authority를 둡니다.
-4. **F1 결정:** `_BrowNeutralizeStrength`를 `inpaintAlpha` 계산에 연결하거나, piggyback 경로 전체를 제거합니다. 둘 중 하나여야 합니다.
-5. **F2 결정:** `screen` 이름과 실제 블렌드 state가 다르면 contract를 수정하거나 진짜 구현을 추가합니다.
-6. **F5 수정:** 립도 눈썹처럼 등록 실패를 거부해야 합니다.
-7. **F8 정리:** 죽은 코드(`UpdateHandOcclusion`), 죽은 채널(마스크 A), 낡은 주석(4521)을 제거합니다.
+4. ~~F1 결정~~ ✅ 처리됨(2026-07-17): 죽은 선언·세터를 제거해 명시적으로 무효화. 강도 기능을 원하면 셰이더 소비 구현이 선행 과제.
+5. ~~F2 결정~~ ✅ 처리됨(2026-07-17): 계약에서 제거 + 레거시 별칭. 진짜 screen(하이라이터용)은 백로그.
+6. ~~F5 수정~~ ✅ 처리됨(2026-07-17): 립도 거부 + RN 터미널 처리로 재시도 중단.
+7. **F8/F9 정리:** `UpdateHandOcclusion`은 삭제 대신 결함 추적(F9 — SSF 손 가림 미배선의 유일한 배선 후보). 마스크 A 채널은 CPU 컬링이 사용하므로 유지(정정). 낡은 주석은 정정 완료.
 8. Generated 텍스처 transport는 장기적으로 파일/공유 buffer/네이티브 텍스처 경로를 검토합니다.
 9. GPU capture에서 패스 수, GrabPass, overdraw, 텍스처 bandwidth를 측정한 뒤 셰이더 분리를 결정합니다.
 

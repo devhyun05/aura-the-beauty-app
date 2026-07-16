@@ -711,7 +711,7 @@ A. 눈꺼풀이 내려오면 렌즈가 보이면 안 되죠. 깜박임 정도에
 |---|---|---|
 | 피부 게이트 스위치 | `_SkinGateEnabled` | `SmoothRegionMask.shader` |
 | 눈썹 덮기 강도(고정 0.92) | `_BrowInpaintStrength` | `E3RegionMaskOverlay.cs` → 셰이더 |
-| ⚠ 끊긴 눈썹 강도 2종 | `_BrowCleanupStrength`, `_BrowNeutralizeStrength` | 선언만, 미사용 |
+| ~~끊긴 눈썹 강도 2종~~ | `_BrowCleanupStrength`, `_BrowNeutralizeStrength` | **2026-07-17 제거됨** — 선언·세터 삭제(명시적 무효화) |
 | 앞머리 비침 장치 | `hairKeep` (`_BrowHairKeepStrength`) | `SmoothRegionMask.shader` |
 | 손 가림 마스크 | `_HandOcclusionMaskTex` | `SmoothRegionMask.shader` 외 |
 | Fable 세그멘테이션 게이트 | `OccludeGate()` | `Occlusion.cginc` |
