@@ -422,7 +422,11 @@ public sealed class Face3DSessionController : MonoBehaviour
             return;
         }
 
-        if (!TryCreateSnapshot(trackingFace, now, out Face3DMeshSnapshot snapshot, out string snapshotReason))
+        if (!ARFaceMeshSnapshotFactory.TryCreate(
+                trackingFace,
+                now,
+                out Face3DMeshSnapshot snapshot,
+                out string snapshotReason))
         {
             SendTrackingStatusIfDue(
                 now,
@@ -505,43 +509,6 @@ public sealed class Face3DSessionController : MonoBehaviour
         }
 
         BlockSession(reason);
-    }
-
-    private bool TryCreateSnapshot(
-        ARFace face,
-        double timestampSeconds,
-        out Face3DMeshSnapshot snapshot,
-        out string reason)
-    {
-        snapshot = null;
-        if (face == null
-            || !face.vertices.IsCreated
-            || !face.indices.IsCreated
-            || !face.uvs.IsCreated)
-        {
-            reason = "face_mesh_not_ready";
-            return false;
-        }
-
-        Vector3[] vertices = new Vector3[face.vertices.Length];
-        int[] indices = new int[face.indices.Length];
-        Vector2[] uvs = new Vector2[face.uvs.Length];
-        for (int index = 0; index < vertices.Length; index += 1)
-        {
-            vertices[index] = face.vertices[index];
-        }
-        for (int index = 0; index < indices.Length; index += 1)
-        {
-            indices[index] = face.indices[index];
-        }
-        for (int index = 0; index < uvs.Length; index += 1)
-        {
-            uvs[index] = face.uvs[index];
-        }
-
-        snapshot = new Face3DMeshSnapshot(vertices, indices, uvs, timestampSeconds);
-        reason = string.Empty;
-        return true;
     }
 
     // Reads the tracked face's ARKit blend shapes and folds the distorting ones into the

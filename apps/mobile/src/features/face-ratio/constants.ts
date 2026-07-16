@@ -3,8 +3,8 @@
 
 // hairlineConfidence >= FULL → apple H 채택 + full_success 가능 (문서 v0.2 §4.3.5)
 export const APPLE_HAIRLINE_FULL_CONFIDENCE = 0.7;
-// MIN <= confidence < FULL → apple H 사용하되 low-confidence warning + partial_success
-// confidence < MIN → apple H 기각, idx-10 근사 폴백(현행 동작)
+// MIN <= confidence < FULL → 실제 H를 참고 데이터로만 보존하고 공식 계산에서는 제외.
+// confidence < MIN → H 자체를 omitted 처리한다.
 export const APPLE_HAIRLINE_MIN_CONFIDENCE = 0.45;
 
 // quality gate / math / screen에서 공유하는 warning 문자열. 하드코딩 금지, 여기서 import.
@@ -13,15 +13,18 @@ export const HAIRLINE_WARNING = {
   appleMatteLowConfidence: 'hairline_apple_matte_low_confidence',
   approximated: 'hairline_approximated_mediapipe',
   approximatedUnusable: 'hairline_approximated_mediapipe_unusable',
+  detected: 'hairline_detected',
   invalidOrder: 'hairline_invalid_order',
+  lowConfidence: 'hairline_low_confidence',
+  proxyRejected: 'hairline_proxy_rejected',
   unavailable: 'hairline_unavailable',
 } as const;
 
 export type HairlineWarning =
   (typeof HAIRLINE_WARNING)[keyof typeof HAIRLINE_WARNING];
 
-// selectHairlineKeypoint가 반환하는 H 채택 등급. full_success는 'apple_full'이 quality gate를
-// 통과한 경우에만 가능하다.
+// 과거 저장 결과 파싱 호환용 등급. 신규 공식 선택 경로는
+// faceVerticalThirdsHairlineSelection의 provider 중립 outcome을 사용한다.
 export type HairlineSelectionTier = 'apple_full' | 'apple_low' | 'approx' | 'none';
 
 // 네이티브 스캔 상수 override. 키 이름은 ios/AURA/AURAFaceRatioHairline.m 상단의

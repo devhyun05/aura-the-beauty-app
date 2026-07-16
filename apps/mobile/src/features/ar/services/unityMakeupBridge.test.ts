@@ -5,13 +5,19 @@ import {
   UNITY_MAKEUP_LAYER_ORDER,
   UNITY_STILL_FACE_LANDMARKS_TARGET,
   buildAnalyzeFaceLandmarksStillRequest,
+  cancelUnityUnifiedFaceCapture,
   createUnityMakeupRecipeBatch,
   createUnityMakeupRecipeBatchFromARFilterSelections,
   getUnityGeneratedMaskBridgeRoute,
   getUnityMakeupLayerRegionsForMakeupArea,
   parseFaceLandmarksMessage,
+  parseUnityUnifiedFaceCaptureMessage,
+  prepareUnityUnifiedFaceCapture,
+  startUnityUnifiedFaceCapture,
 } from './unityMakeupBridge';
+import {NativeModules} from 'react-native';
 import type {MakeupFilter} from '../../../shared/types/makeupGuide';
+import {buildUnifiedFaceCaptureRequest} from '../../face-capture/services/unifiedFaceCaptureContract';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -201,6 +207,141 @@ expectEqual(
   UNITY_STILL_FACE_LANDMARKS_TARGET.analyzeMethod,
   'AnalyzeStillJson',
   'still landmarks method',
+);
+
+// 통합 얼굴 촬영 v2도 기존 RNBridge GameObject를 사용하되 legacy Face3D v1
+// Start/Cancel 메서드와 분리된 immutable 요청 경로로 보낸다.
+expectEqual(
+  UNITY_MAKEUP_BRIDGE_TARGET.prepareUnifiedFaceCaptureMethod,
+  'PrepareUnifiedFaceCaptureJson',
+  'unified capture prepare method',
+);
+expectEqual(
+  UNITY_MAKEUP_BRIDGE_TARGET.startUnifiedFaceCaptureMethod,
+  'StartUnifiedFaceCaptureJson',
+  'unified capture start method',
+);
+expectEqual(
+  UNITY_MAKEUP_BRIDGE_TARGET.cancelUnifiedFaceCaptureMethod,
+  'CancelUnifiedFaceCaptureJson',
+  'unified capture cancel method',
+);
+
+const unifiedBridgeCalls: Array<{
+  gameObject: string;
+  method: string;
+  payload: string;
+}> = [];
+let unifiedPrepareRuntimeCallCount = 0;
+Object.assign(NativeModules.UnityMakeupBridge, {
+  isFrameworkAvailable: () => true,
+  postMessage: (gameObject: string, method: string, payload: string) => {
+    unifiedBridgeCalls.push({gameObject, method, payload});
+  },
+  prepareRuntime: () => {
+    unifiedPrepareRuntimeCallCount += 1;
+  },
+});
+
+const unifiedRequest = buildUnifiedFaceCaptureRequest({
+  requestId: 'unified-bridge-1',
+});
+expectEqual(
+  prepareUnityUnifiedFaceCapture(unifiedRequest),
+  true,
+  'unified capture prepare posts',
+);
+expectEqual(unifiedPrepareRuntimeCallCount, 1, 'unified prepare warms runtime');
+expectEqual(
+  unifiedBridgeCalls[0]?.gameObject,
+  UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+  'unified prepare gameObject',
+);
+expectEqual(
+  unifiedBridgeCalls[0]?.method,
+  UNITY_MAKEUP_BRIDGE_TARGET.prepareUnifiedFaceCaptureMethod,
+  'unified prepare target method',
+);
+expectEqual(
+  JSON.parse(unifiedBridgeCalls[0]?.payload ?? '{}').collectionPolicyId,
+  'unified-micro-burst-5of8-v1',
+  'unified prepare preserves immutable policy',
+);
+
+expectEqual(
+  startUnityUnifiedFaceCapture(unifiedRequest),
+  true,
+  'unified capture start posts',
+);
+expectEqual(
+  unifiedBridgeCalls[1]?.method,
+  UNITY_MAKEUP_BRIDGE_TARGET.startUnifiedFaceCaptureMethod,
+  'unified start target method',
+);
+expectEqual(
+  JSON.parse(unifiedBridgeCalls[1]?.payload ?? '{}').requestId,
+  unifiedRequest.requestId,
+  'unified start requestId',
+);
+expectEqual(
+  startUnityUnifiedFaceCapture({
+    ...unifiedRequest,
+    targetValidFrames: 30,
+  }),
+  false,
+  'mutated unified policy is rejected before Unity post',
+);
+expectEqual(
+  unifiedBridgeCalls.length,
+  2,
+  'invalid unified start does not reach native bridge',
+);
+
+expectEqual(
+  cancelUnityUnifiedFaceCapture(unifiedRequest.requestId, 'screen_unmounted'),
+  true,
+  'unified capture cancel posts',
+);
+expectEqual(
+  unifiedBridgeCalls[2]?.method,
+  UNITY_MAKEUP_BRIDGE_TARGET.cancelUnifiedFaceCaptureMethod,
+  'unified cancel target method',
+);
+expectEqual(
+  JSON.parse(unifiedBridgeCalls[2]?.payload ?? '{}').reason,
+  'screen_unmounted',
+  'unified cancel reason',
+);
+expectEqual(
+  cancelUnityUnifiedFaceCapture('   '),
+  false,
+  'blank unified cancel requestId rejected',
+);
+
+const unifiedBlockedEvent = parseUnityUnifiedFaceCaptureMessage(
+  JSON.stringify({
+    reason: 'native_face_frame_sync_unavailable',
+    requestId: unifiedRequest.requestId,
+    type: 'unified_face_capture_blocked',
+    warnings: ['native_sync_unavailable'],
+  }),
+);
+expectEqual(
+  unifiedBlockedEvent?.type,
+  'unified_face_capture_blocked',
+  'unified event parsed from generic Unity event message',
+);
+expectEqual(
+  parseUnityUnifiedFaceCaptureMessage(
+    JSON.stringify({requestId: unifiedRequest.requestId, type: 'face3d_status'}),
+  ),
+  null,
+  'legacy Face3D event is not reclassified as unified',
+);
+expectEqual(
+  parseUnityUnifiedFaceCaptureMessage('{bad-json'),
+  null,
+  'malformed unified event ignored',
 );
 
 // Unity SendFailure 형식(빈 landmarks + error, imageWidth/pose 없음)도 파싱

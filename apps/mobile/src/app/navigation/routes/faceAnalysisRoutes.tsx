@@ -17,8 +17,13 @@ import {
   setUnityMakeupPlayerPaused,
 } from '../../../features/ar/services/unityMakeupBridge';
 import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services/face3DEntryEligibility';
+import {isFace3DProfileAnalysisEligible} from '../../../features/face-3d/services/face3DContract';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {UnifiedFaceCaptureScreen} from '../../../features/face-capture/screens/UnifiedFaceCaptureScreen';
+import {buildUnifiedFaceCaptureRequest} from '../../../features/face-capture/services/unifiedFaceCaptureContract';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
+import {isUnifiedFaceCaptureEnabled} from '../../../features/face-capture/services/unifiedFaceCaptureMode';
+import {shouldUseUnifiedFaceCaptureRoute} from '../../../features/face-capture/services/unifiedFaceCaptureNavigation';
 import {derivePersonalColorCorrectionStatus} from '../../../features/face-analysis/services/faceAnalysisMeasurements';
 import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
@@ -26,7 +31,10 @@ import {analyzeFaceGeometry2d} from '../../../features/face-geometry/services/fa
 import type {FaceGeometryResult} from '../../../features/face-geometry/types';
 import {buildFaceVerticalThirdsAnalysisPayload} from '../../../features/face-ratio/services/faceVerticalThirdsAiPayload';
 import {analyzeFaceVerticalThirds} from '../../../features/face-ratio/services/faceVerticalThirdsService';
-import type {FaceVerticalThirdsResult} from '../../../features/face-ratio/types';
+import type {
+  FaceVerticalThirdsInput,
+  FaceVerticalThirdsResult,
+} from '../../../features/face-ratio/types';
 import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
 import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
 import {
@@ -129,11 +137,23 @@ export function FaceCaptureRouteScreen({
   route,
 }: RootScreenProps<'FaceCapture'>) {
   const {
+    beginUnifiedFaceCapture,
+    commitUnifiedFaceCapture,
+    invalidateUnifiedFaceCapture,
     setSelectedFace3DProfile,
     setSelectedFaceCapture,
     setSelectedFaceCaptureGreenlight,
+    unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const {getAuthToken, isRestoringSession} = useAuthSession();
+  const [forceLegacyCapture, setForceLegacyCapture] = React.useState(false);
+  const unifiedCaptureRequest = React.useMemo(
+    () =>
+      buildUnifiedFaceCaptureRequest({
+        retryAttemptCount: unifiedFaceCaptureFlow.retryAttemptCount,
+      }),
+    [unifiedFaceCaptureFlow.retryAttemptCount],
+  );
 
   React.useEffect(() => {
     if (!isRestoringSession && !getAuthToken()) {
@@ -143,6 +163,46 @@ export function FaceCaptureRouteScreen({
 
   if (isRestoringSession || !getAuthToken()) {
     return null;
+  }
+
+  const shouldUseUnifiedCapture = shouldUseUnifiedFaceCaptureRoute({
+    featureEnabled: isUnifiedFaceCaptureEnabled(),
+    forceLegacyCapture,
+    initialSource: route.params?.initialSource,
+    nativeViewSupported: isUnityMakeupNativeViewSupported(),
+  });
+
+  if (shouldUseUnifiedCapture) {
+    return (
+      <UnifiedFaceCaptureScreen
+        onCancel={() => {
+          invalidateUnifiedFaceCapture({resetRetryAttempt: true});
+          navigateMainTab(navigation, 'HomeTab');
+        }}
+        onCaptureCommitted={(result, upload) => {
+          if (!commitUnifiedFaceCapture(result, upload)) {
+            return false;
+          }
+
+          navigation.replace(
+            'FaceCaptureConfirmation',
+            route.params?.afterAnalysisRoute
+              ? {
+                  afterAnalysisRoute: route.params.afterAnalysisRoute,
+                  target: 'faceAnalysis',
+                }
+              : {target: 'faceAnalysis'},
+          );
+          return true;
+        }}
+        onFallback={() => {
+          invalidateUnifiedFaceCapture({resetRetryAttempt: true});
+          setForceLegacyCapture(true);
+        }}
+        onRequestStarted={beginUnifiedFaceCapture}
+        request={unifiedCaptureRequest}
+      />
+    );
   }
 
   return (
@@ -159,6 +219,7 @@ export function FaceCaptureRouteScreen({
           return;
         }
 
+        invalidateUnifiedFaceCapture({resetRetryAttempt: true});
         setSelectedFaceCapture(result);
         // Face3D 측정 진입 자격 판정용(카메라 촬영 + 그린라이트 3종 충족 여부).
         setSelectedFaceCaptureGreenlight(greenlightReport ?? null);
@@ -243,6 +304,7 @@ export function FaceAnalysisLoadingRouteScreen({
     setSelectedFaceVerticalThirds,
     setSelectedPersonalColor,
     setSelectedPersonalColorCorrection,
+    unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const {clearSession} = useAuthSession();
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
@@ -299,6 +361,24 @@ export function FaceAnalysisLoadingRouteScreen({
 
     let isMounted = true;
     const captureId = selectedFaceCapture.photoCaptureId;
+    const unifiedHairline =
+      unifiedFaceCaptureFlow.committedCapture?.result.hairline;
+    const capturedHairline: FaceVerticalThirdsInput['capturedHairline'] =
+      unifiedHairline &&
+      unifiedHairline.provider !== 'none' &&
+      unifiedHairline.confidence !== null &&
+      unifiedHairline.normalizedPoint
+        ? {
+            analysisEligible: unifiedHairline.analysisEligible,
+            confidence: unifiedHairline.confidence,
+            method: `unified_${unifiedHairline.provider}`,
+            normalizedPoint: unifiedHairline.normalizedPoint,
+            provider:
+              unifiedHairline.provider === 'mediapipe_selfie_multiclass'
+                ? 'mediapipe'
+                : 'apple_semantic_matte',
+          }
+        : undefined;
 
     // still-analysis lease 의 resume+ready 뒤에 시작한다 (ready 실패여도 진행 —
     // 서비스가 자체 타임아웃/미탑재를 null 강등으로 흡수한다).
@@ -308,6 +388,7 @@ export function FaceAnalysisLoadingRouteScreen({
       .then(() =>
         analyzeFaceVerticalThirds({
           captureId,
+          capturedHairline,
           createdAt: new Date().toISOString(),
           imageUri: selectedFaceCapture.imageUri,
           semanticMattes: selectedFaceCapture.semanticMattes,
@@ -332,7 +413,11 @@ export function FaceAnalysisLoadingRouteScreen({
     return () => {
       isMounted = false;
     };
-  }, [selectedFaceCapture, setSelectedFaceVerticalThirds]);
+  }, [
+    selectedFaceCapture,
+    setSelectedFaceVerticalThirds,
+    unifiedFaceCaptureFlow.committedCapture,
+  ]);
 
   // 2D 기하 지표도 캡처당 1회 온디바이스로 계산한다. 같은 imageUri 라 Unity
   // 랜드마크 검출은 requestFaceLandmarks dedup 으로 세로비율과 1회를 공유한다.
@@ -476,7 +561,9 @@ export function FaceAnalysisLoadingRouteScreen({
           selectedFaceCapture,
           buildFaceVerticalThirdsAnalysisPayload(verticalThirds),
           // 3D 측정은 로딩 진입 전에 끝나 있으므로(측정 화면 경유) 대기 없이 그대로 싣는다.
-          selectedFace3DProfile ?? undefined,
+          isFace3DProfileAnalysisEligible(selectedFace3DProfile)
+            ? selectedFace3DProfile
+            : undefined,
           buildFaceGeometryAnalysisPayload(faceGeometry),
           // 측정 원본 4축 — 서버 저장(detail_payload)·AI 입력·과거 보고서 복원용.
           {

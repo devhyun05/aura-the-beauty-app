@@ -18,8 +18,8 @@ namespace ARMakeup.Face
     /// 머리카락 인식(§14)의 공급자.
     ///
     /// 파이프라인 (FaceLandmarkSource 지연 재생 구조의 동승자):
-    ///  - 공급: FaceLandmarkSource.CaptureAndDetect가 캡처한 <b>같은 CPU 프레임·같은 타임스탬프</b>를
-    ///    OnCameraFrame으로 밀어준다 — §11 시간 동기 불변식. depth API처럼 "최신 프레임" 기준이면
+    ///  - 공급: FaceCameraFrameBroker가 획득한 <b>같은 CPU 프레임·같은 카메라 토큰</b>을
+    ///    동기 콜백으로 밀어준다 — §11 시간 동기 불변식. depth API처럼 "최신 프레임" 기준이면
     ///    지연 재생 중인 표시 프레임과 시점이 어긋나므로, 반드시 같은 캡처에서 출발해야 한다.
     ///  - 추론: SegCadenceFps(12fps)로 프레임을 스킵하며 LIVE_STREAM 제출(GPU delegate→CPU 폴백).
     ///    동시 1건(_inFlight)만 — 결과 콜백(워커 스레드)이 6클래스 확률맵을 RGBA32 한 장으로 패킹.
@@ -40,6 +40,72 @@ namespace ARMakeup.Face
     {
         public static SegmentationSource Instance { get; private set; }
 
+        public sealed class SegmentationFrameSnapshot
+        {
+            internal SegmentationFrameSnapshot(
+                string frameToken,
+                double sensorTimestampMs,
+                double observedAtMs,
+                int inputWidth,
+                int inputHeight,
+                int width,
+                int height,
+                int rotationDegrees,
+                Vector3 inputImageToMaskX,
+                Vector3 inputImageToMaskY,
+                Vector3 referenceToMaskX,
+                Vector3 referenceToMaskY,
+                byte[] rgba)
+            {
+                FrameToken = frameToken;
+                SensorTimestampMs = sensorTimestampMs;
+                ObservedAtMs = observedAtMs;
+                InputWidth = inputWidth;
+                InputHeight = inputHeight;
+                Width = width;
+                Height = height;
+                RotationDegrees = rotationDegrees;
+                InputImageToMaskX = inputImageToMaskX;
+                InputImageToMaskY = inputImageToMaskY;
+                ReferenceToMaskX = referenceToMaskX;
+                ReferenceToMaskY = referenceToMaskY;
+                Rgba = rgba;
+            }
+
+            public string FrameToken { get; }
+            public double SensorTimestampMs { get; }
+            public double ObservedAtMs { get; }
+            public int InputWidth { get; }
+            public int InputHeight { get; }
+            public int Width { get; }
+            public int Height { get; }
+            public int RotationDegrees { get; }
+            /// <summary>
+            /// Raw XRCpuImage normalized UV to packed-mask normalized U.
+            /// The synchronized native hairline reference is portrait-upright;
+            /// callers must pass an explicit portrait-reference-to-mask mapping
+            /// to the pure estimator instead of assuming this raw-input mapping.
+            /// </summary>
+            public Vector3 InputImageToMaskX { get; }
+            /// <summary>Raw XRCpuImage normalized UV to packed-mask normalized V.</summary>
+            public Vector3 InputImageToMaskY { get; }
+            /// <summary>
+            /// Portrait-unmirrored normalized native face reference to packed
+            /// mask U. ImageSegmenter emits its content in the same processed
+            /// upright normalized space, so this is identity for the current
+            /// provider. Keeping the rows explicit prevents a caller from
+            /// accidentally reapplying raw XRCpuImage rotation.
+            /// </summary>
+            public Vector3 ReferenceToMaskX { get; }
+            /// <summary>Portrait-unmirrored native face reference to packed mask V.</summary>
+            public Vector3 ReferenceToMaskY { get; }
+            /// <summary>
+            /// Snapshot-owned deep copy. Mutating it cannot affect the source
+            /// history or a later frame.
+            /// </summary>
+            public byte[] Rgba { get; }
+        }
+
         // 전역 유니폼 — 프레임당 1회 기록(머티리얼별 중복 세팅 회피).
         static readonly int SegMaskId = Shader.PropertyToID("_SegMask");
         static readonly int SegOnId = Shader.PropertyToID("_SegOn");
@@ -50,12 +116,23 @@ namespace ARMakeup.Face
         static readonly int ScreenToMaskYId = Shader.PropertyToID("_SegScreenToMaskY");
         static readonly int ImgToMaskXId = Shader.PropertyToID("_SegImgToMaskX");
         static readonly int ImgToMaskYId = Shader.PropertyToID("_SegImgToMaskY");
+        FaceCameraFrameBroker _frameBroker;
 
         void Awake()
         {
             Instance = this;
             Shader.SetGlobalFloat(SegOnId, 0f);   // 첫 결과 전까지 명시적 폴백(게이트 1)
             Shader.SetGlobalFloat(SegDebugId, 0f);
+        }
+
+        void OnEnable()
+        {
+            TrySubscribeFrameBroker();
+        }
+
+        void OnDisable()
+        {
+            UnsubscribeFrameBroker();
         }
 
         /// <summary>세그 채널 컬러 오버레이 토글(setCalibration.debugSeg) — CameraFeed.shader가 소비.</summary>
@@ -66,6 +143,7 @@ namespace ARMakeup.Face
 
         void OnDestroy()
         {
+            UnsubscribeFrameBroker();
             if (Instance == this) Instance = null;
             Shader.SetGlobalFloat(SegOnId, 0f); // 소비자 게이트 즉시 폴백(1)
 #if MEDIAPIPE
@@ -77,6 +155,53 @@ namespace ARMakeup.Face
             DisposeOrphanBuffers(); // Close() 이후 — 네이티브 참조 종료 보장 후에만 안전
             if (_inputBuffer.IsCreated) _inputBuffer.Dispose();
             if (_maskTexture != null) Destroy(_maskTexture);
+#endif
+        }
+
+        public bool IsReady
+        {
+            get
+            {
+#if MEDIAPIPE
+                return _ready;
+#else
+                return false;
+#endif
+            }
+        }
+
+        void TrySubscribeFrameBroker()
+        {
+            FaceCameraFrameBroker broker = FaceCameraFrameBroker.Instance;
+            if (broker == null || broker == _frameBroker)
+            {
+                return;
+            }
+
+            UnsubscribeFrameBroker();
+            _frameBroker = broker;
+            _frameBroker.FrameReceived += OnBrokerFrame;
+        }
+
+        void UnsubscribeFrameBroker()
+        {
+            if (_frameBroker != null)
+            {
+                _frameBroker.FrameReceived -= OnBrokerFrame;
+                _frameBroker = null;
+            }
+        }
+
+        void OnBrokerFrame(FaceCameraFrame frame)
+        {
+#if MEDIAPIPE
+            FaceLandmarkSource landmarkSource = FaceLandmarkSource.Instance;
+            int rotationDegrees = landmarkSource != null
+                ? landmarkSource.GetDetectionRotationDegrees(
+                    frame.Image.width,
+                    frame.Image.height)
+                : (frame.Image.height >= frame.Image.width ? 0 : 90);
+            OnCameraFrame(frame, rotationDegrees);
 #endif
         }
 
@@ -111,8 +236,10 @@ namespace ARMakeup.Face
 
         const string ModelFile = "selfie_multiclass_256x256.tflite";
 
-        // 마스크 히스토리(최근접 ts 스냅용) — 12fps 결과 × 재생 지연 ≤150ms → 4장이면 여유.
-        const int HistorySize = 4;
+        // 12fps × 16장 ≈ 1.3초. 통합 촬영은 8-frame 수집 종료 뒤 exact-token
+        // segmentation을 최대 약 750ms 기다리므로, 4칸이면 anchor token이 결과 도착 전에
+        // 밀릴 수 있다. 256px RGBA 기준 수 MB 이내에서 exact-frame 보존을 우선한다.
+        const int HistorySize = 16;
 
         ImageSegmenter _segmenter;
         bool _ready;
@@ -143,13 +270,26 @@ namespace ARMakeup.Face
         // 그 경로는 버퍼를 _orphanBuffers로 옮기고 이 필드를 미할당으로 리셋한다(OnCameraFrame
         // 워치독 분기 참조). 즉 "콜백 전 재사용 차단"은 정상 완료 경로에서만 성립한다.
         NativeArray<byte> _inputBuffer;
-        int _inputW, _inputH, _inputRotation;
 
         // 워치독 타임아웃으로 고아가 된 입력 버퍼 — 스톨된 네이티브 그래프가 아직 제로카피로
         // 참조 중일 수 있어 즉시 Dispose하지 않는다. RecreateSegmenter/OnDestroy가 Close()
         // 이후(네이티브 참조 종료 보장 후)에만 일괄 Dispose한다.
         readonly List<(double ts, NativeArray<byte> buf)> _orphanBuffers =
             new List<(double, NativeArray<byte>)>();
+
+        struct SubmissionMetadata
+        {
+            public string frameToken;
+            public double sensorTimestampMs;
+            public double observedAtMs;
+            public int inputW;
+            public int inputH;
+            public int rotationDegrees;
+        }
+
+        readonly Dictionary<long, SubmissionMetadata> _submissionMetadata =
+            new Dictionary<long, SubmissionMetadata>();
+        long _lastMediaPipeTimestampMs = long.MinValue;
 
         struct MaskFrame
         {
@@ -158,6 +298,8 @@ namespace ARMakeup.Face
             public int inputW, inputH;  // 제출 입력 치수 — 회전 여부 판별용
             public int rotationDegrees; // 제출 시 회전 — 마스크가 회전 공간으로 나오는 특성 보정용
             public double timestampMs;
+            public double sensorTimestampMs;
+            public string frameToken;
             public bool valid;
         }
 
@@ -235,6 +377,10 @@ namespace ARMakeup.Face
             catch (Exception e) { Debug.LogWarning($"[SegmentationSource] Close 실패: {e.Message}"); }
             _segmenter = null;
             _inFlight = false;
+            lock (_resultLock)
+            {
+                _submissionMetadata.Clear();
+            }
             DisposeOrphanBuffers(); // Close() 이후 — 네이티브 참조 종료 보장 후에만 안전
 
             Debug.LogWarning("[SegmentationSource] 세그멘터 재생성 (연속 추론 실패)");
@@ -281,13 +427,16 @@ namespace ARMakeup.Face
         public void SetResolution(int longSide) => _resolution = Mathf.Clamp(longSide, 96, 512);
 
         /// <summary>
-        /// FaceLandmarkSource.CaptureAndDetect가 매 캡처 프레임 호출 — 랜드마크와 같은
-        /// XRCpuImage·같은 nowMs 타임스탬프(§11 시간 동기 불변식). 케이던스 스킵과
-        /// 인플라이트/워치독 판단은 전부 여기서 한다(호출측은 무조건 밀어주기만).
+        /// FaceCameraFrameBroker의 borrowed 프레임 콜백. 랜드마크와 같은 XRCpuImage,
+        /// camera token, sensor timestamp를 보존한다. 케이던스 스킵과 인플라이트/
+        /// 워치독 판단은 전부 여기서 한다.
         /// </summary>
-        public void OnCameraFrame(XRCpuImage cpuImage, double nowMs, int rotationDegrees)
+        void OnCameraFrame(FaceCameraFrame frame, int rotationDegrees)
         {
             if (!_ready) return;
+
+            XRCpuImage cpuImage = frame.Image;
+            double nowMs = frame.ObservedAtMs;
 
             // 워치독: 콜백이 안 오는 채로 잠기면 세그만 조용히 죽는다 — 회복.
             // 주의: 강제로 _inFlight를 풀어도 네이티브 그래프가 죽은 게 아니라 스톨된(느리지만
@@ -336,15 +485,31 @@ namespace ARMakeup.Face
                 conv.outputDimensions.x, conv.outputDimensions.y,
                 conv.outputDimensions.x * 4, _inputBuffer);
 
-            _inputW = conv.outputDimensions.x;
-            _inputH = conv.outputDimensions.y;
-            _inputRotation = ((rotationDegrees % 360) + 360) % 360;
+            int normalizedRotation = ((rotationDegrees % 360) + 360) % 360;
+            long mediaPipeTimestampMs = Math.Max(
+                (long)Math.Round(nowMs),
+                _lastMediaPipeTimestampMs == long.MaxValue
+                    ? long.MaxValue
+                    : _lastMediaPipeTimestampMs + 1);
+            _lastMediaPipeTimestampMs = mediaPipeTimestampMs;
 
             _inFlight = true;
             _inFlightSinceMs = nowMs;
             _lastSubmitMs = nowMs;
             _submitGen++;
-            _inFlightSubmitTs = (long)nowMs; // OnResult가 자기 세대인지 판별하는 상관 키
+            _inFlightSubmitTs = mediaPipeTimestampMs;
+            lock (_resultLock)
+            {
+                _submissionMetadata[mediaPipeTimestampMs] = new SubmissionMetadata
+                {
+                    frameToken = frame.CameraFrameToken,
+                    sensorTimestampMs = frame.SensorTimestampMs,
+                    observedAtMs = frame.ObservedAtMs,
+                    inputW = conv.outputDimensions.x,
+                    inputH = conv.outputDimensions.y,
+                    rotationDegrees = normalizedRotation
+                };
+            }
             try
             {
                 // 회전: 모델이 직립 인물 학습이라 랜드마커와 같은 회전 신호가 필수(0으로 두면
@@ -352,13 +517,17 @@ namespace ARMakeup.Face
                 // 되돌리지 않아(플러그인 샘플 주석 — SelfieSegmenter 계열 특성) 마스크가
                 // 회전 공간으로 나온다 → 재생 시 _SegImgToMask 아핀으로 보정(TryComputeImgToMask).
                 var processing = new Mediapipe.Tasks.Vision.Core.ImageProcessingOptions(
-                    rotationDegrees: _inputRotation);
-                _segmenter.SegmentAsync(image, (long)nowMs, processing);
+                    rotationDegrees: normalizedRotation);
+                _segmenter.SegmentAsync(image, mediaPipeTimestampMs, processing);
                 _statSubmits++;
             }
             catch (Exception e)
             {
                 _inFlight = false;
+                lock (_resultLock)
+                {
+                    _submissionMetadata.Remove(mediaPipeTimestampMs);
+                }
                 _consecutiveFailures++;
                 Debug.LogWarning($"[SegmentationSource] SegmentAsync 실패: {e.Message}");
                 if (_consecutiveFailures >= MaxDetectFailures) RecreateSegmenter();
@@ -371,6 +540,15 @@ namespace ARMakeup.Face
         {
             try
             {
+                SubmissionMetadata metadata;
+                lock (_resultLock)
+                {
+                    if (!_submissionMetadata.TryGetValue(timestampMs, out metadata))
+                    {
+                        return;
+                    }
+                }
+
                 var masks = result.confidenceMasks;
                 if (masks == null || masks.Count < ClassCount) return; // 빈 결과 — 스테일 폴백에 맡김
 
@@ -413,12 +591,18 @@ namespace ARMakeup.Face
                     }
                     _pending.width = w;
                     _pending.height = h;
-                    _pending.inputW = _inputW;       // 단일 인플라이트 — 제출값이 이 결과의 것
-                    _pending.inputH = _inputH;
-                    _pending.rotationDegrees = _inputRotation;
-                    _pending.timestampMs = timestampMs;
+                    _pending.inputW = metadata.inputW;
+                    _pending.inputH = metadata.inputH;
+                    _pending.rotationDegrees = metadata.rotationDegrees;
+                    _pending.timestampMs = metadata.observedAtMs;
+                    _pending.sensorTimestampMs = metadata.sensorTimestampMs;
+                    _pending.frameToken = metadata.frameToken;
                     _pending.valid = true;
                     _hasPending = true;
+                    // Keep the accepted token continuously observable while the
+                    // worker packs the result: the metadata entry is replaced by
+                    // this pending frame under the same lock.
+                    _submissionMetadata.Remove(timestampMs);
                 }
             }
             catch (Exception e)
@@ -427,6 +611,13 @@ namespace ARMakeup.Face
             }
             finally
             {
+                lock (_resultLock)
+                {
+                    // Empty/invalid/error results never become pending/history.
+                    // Removing here makes HasAcceptedFrameToken fail cleanly
+                    // instead of claiming a result can still arrive.
+                    _submissionMetadata.Remove(timestampMs);
+                }
                 var masks = result.confidenceMasks;
                 if (masks != null)
                 {
@@ -446,9 +637,14 @@ namespace ARMakeup.Face
             {
                 _hasPending = false;
                 _pending.valid = false;
+                _submissionMetadata.Clear();
+                _historyHead = -1;
+                _historyCount = 0;
+                for (int index = 0; index < _history.Length; index += 1)
+                {
+                    _history[index].valid = false;
+                }
             }
-            _historyHead = -1;
-            _historyCount = 0;
             _uploadedTs = -1.0;
             _resetMs = Time.realtimeSinceStartupAsDouble * 1000.0;
             Shader.SetGlobalFloat(SegOnId, 0f);
@@ -456,9 +652,239 @@ namespace ARMakeup.Face
 
         void LateUpdate()
         {
+            TrySubscribeFrameBroker();
             PromotePendingResult();
             PublishMask();
             LogStats();
+        }
+
+        /// <summary>
+        /// Returns true only when this exact broker frame token was accepted by
+        /// ImageSegmenter and is still in-flight, awaiting main-thread promotion,
+        /// or retained in result history. A cadence/in-flight-skipped camera frame
+        /// is never reported as accepted, and no past CPU image is reacquired or
+        /// reconstructed.
+        /// </summary>
+        public bool HasAcceptedFrameToken(string frameToken)
+        {
+            if (string.IsNullOrWhiteSpace(frameToken))
+            {
+                return false;
+            }
+
+            lock (_resultLock)
+            {
+                foreach (SubmissionMetadata metadata in _submissionMetadata.Values)
+                {
+                    if (string.Equals(
+                            metadata.frameToken,
+                            frameToken,
+                            StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+
+                if (_pending.valid
+                    && string.Equals(
+                        _pending.frameToken,
+                        frameToken,
+                        StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                for (int offset = 0; offset < _historyCount; offset += 1)
+                {
+                    int index = (_historyHead - offset + HistorySize) % HistorySize;
+                    MaskFrame frame = _history[index];
+                    if (frame.valid
+                        && string.Equals(
+                            frame.frameToken,
+                            frameToken,
+                            StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        public bool TryCopyFrame(
+            string frameToken,
+            out SegmentationFrameSnapshot snapshot)
+        {
+            snapshot = null;
+            if (string.IsNullOrWhiteSpace(frameToken))
+            {
+                return false;
+            }
+
+            lock (_resultLock)
+            {
+                for (int offset = 0; offset < _historyCount; offset += 1)
+                {
+                    int index = (_historyHead - offset + HistorySize) % HistorySize;
+                    MaskFrame frame = _history[index];
+                    if (!frame.valid
+                        || !string.Equals(
+                            frame.frameToken,
+                            frameToken,
+                            StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    return TryCopySnapshot(frame, out snapshot);
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Deep-copies the newest promoted result. This overload does not invent
+        /// a freshness clock; callers that need a freshness gate must use the
+        /// observed-time overload below.
+        /// </summary>
+        public bool TryCopyLatestFrame(out SegmentationFrameSnapshot snapshot)
+        {
+            snapshot = null;
+            lock (_resultLock)
+            {
+                for (int offset = 0; offset < _historyCount; offset += 1)
+                {
+                    int index = (_historyHead - offset + HistorySize) % HistorySize;
+                    if (TryCopySnapshot(_history[index], out snapshot))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Deep-copies the newest result only when it is fresh relative to the
+        /// caller-owned observation clock. This is safe for post-capture use
+        /// because it does not call Unity time APIs from an unknown thread.
+        /// </summary>
+        public bool TryCopyLatestFrame(
+            double referenceObservedAtMs,
+            double maximumAgeMs,
+            out SegmentationFrameSnapshot snapshot)
+        {
+            snapshot = null;
+            if (!IsFiniteNonNegative(referenceObservedAtMs)
+                || !IsFiniteNonNegative(maximumAgeMs)
+                || !TryCopyLatestFrame(out SegmentationFrameSnapshot latest)
+                || Math.Abs(referenceObservedAtMs - latest.ObservedAtMs) > maximumAgeMs)
+            {
+                return false;
+            }
+
+            snapshot = latest;
+            return true;
+        }
+
+        /// <summary>
+        /// Finds the promoted segmentation result closest to an exact camera
+        /// sensor timestamp, bounded by a caller-selected delta. The returned
+        /// token remains the broker token; timestamp proximity is diagnostics,
+        /// not a fabricated native frame identity.
+        /// </summary>
+        public bool TryCopyClosestFrame(
+            double sensorTimestampMs,
+            double maximumAbsoluteDeltaMs,
+            out SegmentationFrameSnapshot snapshot,
+            out double absoluteDeltaMs)
+        {
+            snapshot = null;
+            absoluteDeltaMs = double.PositiveInfinity;
+            if (!IsFiniteNonNegative(sensorTimestampMs)
+                || !IsFiniteNonNegative(maximumAbsoluteDeltaMs))
+            {
+                return false;
+            }
+
+            lock (_resultLock)
+            {
+                MaskFrame best = default;
+                bool found = false;
+                for (int offset = 0; offset < _historyCount; offset += 1)
+                {
+                    int index = (_historyHead - offset + HistorySize) % HistorySize;
+                    MaskFrame frame = _history[index];
+                    if (!frame.valid || !IsFiniteNonNegative(frame.sensorTimestampMs))
+                    {
+                        continue;
+                    }
+
+                    double delta = Math.Abs(
+                        frame.sensorTimestampMs - sensorTimestampMs);
+                    if (!found || delta < absoluteDeltaMs)
+                    {
+                        found = true;
+                        best = frame;
+                        absoluteDeltaMs = delta;
+                    }
+                }
+
+                if (!found
+                    || absoluteDeltaMs > maximumAbsoluteDeltaMs
+                    || !TryCopySnapshot(best, out snapshot))
+                {
+                    snapshot = null;
+                    absoluteDeltaMs = double.PositiveInfinity;
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        static bool IsFiniteNonNegative(double value)
+        {
+            return !double.IsNaN(value)
+                && !double.IsInfinity(value)
+                && value >= 0.0;
+        }
+
+        static bool TryCopySnapshot(
+            in MaskFrame frame,
+            out SegmentationFrameSnapshot snapshot)
+        {
+            snapshot = null;
+            if (!frame.valid
+                || frame.rgba == null
+                || frame.width <= 0
+                || frame.height <= 0
+                || frame.inputW <= 0
+                || frame.inputH <= 0
+                || frame.rgba.Length != frame.width * frame.height * 4
+                || !TryComputeImgToMask(frame, out Vector4 rowX, out Vector4 rowY))
+            {
+                return false;
+            }
+
+            snapshot = new SegmentationFrameSnapshot(
+                frame.frameToken,
+                frame.sensorTimestampMs,
+                frame.timestampMs,
+                frame.inputW,
+                frame.inputH,
+                frame.width,
+                frame.height,
+                frame.rotationDegrees,
+                new Vector3(rowX.x, rowX.y, rowX.z),
+                new Vector3(rowY.x, rowY.y, rowY.z),
+                new Vector3(1.0f, 0.0f, 0.0f),
+                new Vector3(0.0f, 1.0f, 0.0f),
+                (byte[])frame.rgba.Clone());
+            return true;
         }
 
         /// <summary>워커 스레드 결과를 히스토리로 승격한다(버퍼 스왑 — 정상 상태 무할당).</summary>
@@ -655,6 +1081,45 @@ namespace ARMakeup.Face
                 $"cadence {_cadenceFps:F0}fps res {_resolution}px");
             _statSubmits = _statResults = 0;
             _statWindowStart = Time.realtimeSinceStartup;
+        }
+#else
+        public bool HasAcceptedFrameToken(string frameToken)
+        {
+            return false;
+        }
+
+        public bool TryCopyFrame(
+            string frameToken,
+            out SegmentationFrameSnapshot snapshot)
+        {
+            snapshot = null;
+            return false;
+        }
+
+        public bool TryCopyLatestFrame(out SegmentationFrameSnapshot snapshot)
+        {
+            snapshot = null;
+            return false;
+        }
+
+        public bool TryCopyLatestFrame(
+            double referenceObservedAtMs,
+            double maximumAgeMs,
+            out SegmentationFrameSnapshot snapshot)
+        {
+            snapshot = null;
+            return false;
+        }
+
+        public bool TryCopyClosestFrame(
+            double sensorTimestampMs,
+            double maximumAbsoluteDeltaMs,
+            out SegmentationFrameSnapshot snapshot,
+            out double absoluteDeltaMs)
+        {
+            snapshot = null;
+            absoluteDeltaMs = double.PositiveInfinity;
+            return false;
         }
 #endif
     }

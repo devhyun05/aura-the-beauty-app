@@ -25,7 +25,6 @@ import {
   finalizeOverlayArtifact,
 } from '../services/faceVerticalThirdsService';
 import {AVERAGE_DISPLAY_RATIO} from '../services/faceVerticalThirdsMath';
-import {HAIRLINE_WARNING} from '../constants';
 
 type FaceVerticalThirdsCapture = {
   capturedAt?: string;
@@ -88,7 +87,14 @@ function getStageSourceUri(result: FaceVerticalThirdsResult | null, fallbackUri:
   return result?.sourceImage.uri ?? fallbackUri;
 }
 
-function getVerticalTitle(part: VerticalThirdsDominantPart | undefined) {
+function getVerticalTitle(
+  part: VerticalThirdsDominantPart | undefined,
+  measurementMode: FaceVerticalThirdsResult['measurementMode'],
+) {
+  if (measurementMode === 'middle_lower_only') {
+    return '중안부·하안부 비율';
+  }
+
   if (part === 'upper') {
     return '상안부는 참고용 비율';
   }
@@ -373,7 +379,13 @@ function VerticalThirdsOverlay({
   debug?: boolean;
   result: FaceVerticalThirdsResult;
 }) {
-  const {G: glabella, H: hairline, Me: menton, Sn: subnasale} = result.keypoints;
+  const {G: glabella, H: measuredHairline, Me: menton, Sn: subnasale} =
+    result.keypoints;
+  const hairline =
+    result.measurementMode === 'full_vertical_thirds' &&
+    result.hairlineAnalysis.analysisEligible
+      ? measuredHairline
+      : null;
   const imageWidth = result.sourceImage.width;
   const imageHeight = result.sourceImage.height;
   const strokeWidth = getLineStroke(imageHeight);
@@ -520,7 +532,7 @@ function VerticalRatioSection({
     <View style={styles.analysisSection}>
       <Text style={styles.sectionEyebrow}>얼굴 세로 비율</Text>
       <Text style={styles.sectionTitle}>
-        {getVerticalTitle(result.interpretation.dominantPart)}
+        {getVerticalTitle(result.interpretation.dominantPart, result.measurementMode)}
       </Text>
       <PhotoStage
         imageUri={imageUri}
@@ -533,16 +545,31 @@ function VerticalRatioSection({
       {ratio ? (
         <>
           <View style={styles.ratioSummary}>
-            <Text style={styles.averageRatioText}>
-              평균 비율 {AVERAGE_DISPLAY_RATIO.upper.toFixed(1)} :{' '}
-              {AVERAGE_DISPLAY_RATIO.middle.toFixed(1)} :{' '}
-              {AVERAGE_DISPLAY_RATIO.lower.toFixed(1)}
-            </Text>
-            <Text style={styles.myRatioText}>
-              나의 비율 {formatRatio(ratio.upper)} : 1.00 : {formatRatio(ratio.lower)}
-            </Text>
+            {result.measurementMode === 'full_vertical_thirds' ? (
+              <>
+                <Text style={styles.averageRatioText}>
+                  평균 비율 {AVERAGE_DISPLAY_RATIO.upper.toFixed(1)} :{' '}
+                  {AVERAGE_DISPLAY_RATIO.middle.toFixed(1)} :{' '}
+                  {AVERAGE_DISPLAY_RATIO.lower.toFixed(1)}
+                </Text>
+                <Text style={styles.myRatioText}>
+                  나의 비율 {formatRatio(ratio.upper)} : 1.00 :{' '}
+                  {formatRatio(ratio.lower)}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.averageRatioText}>중안부 1.00 기준</Text>
+                <Text style={styles.myRatioText}>
+                  중·하안부 비율 1.00 : {formatRatio(ratio.lower)}
+                </Text>
+              </>
+            )}
           </View>
-          <VerticalRatioBarChart ratio={ratio} />
+          <VerticalRatioBarChart
+            measurementMode={result.measurementMode}
+            ratio={ratio}
+          />
         </>
       ) : null}
     </View>
@@ -579,18 +606,22 @@ function RatioBarRow({
 }
 
 function VerticalRatioBarChart({
+  measurementMode,
   ratio,
 }: {
+  measurementMode: FaceVerticalThirdsResult['measurementMode'];
   ratio: NonNullable<FaceVerticalThirdsResult['verticalThirds']>['displayRatio'];
 }) {
   return (
     <View style={styles.barChart}>
-      <RatioBarRow
-        average={AVERAGE_DISPLAY_RATIO.upper}
-        color={REPORT_ACCENT}
-        label="상안부"
-        value={ratio.upper}
-      />
+      {measurementMode === 'full_vertical_thirds' ? (
+        <RatioBarRow
+          average={AVERAGE_DISPLAY_RATIO.upper}
+          color={REPORT_ACCENT}
+          label="상안부"
+          value={ratio.upper}
+        />
+      ) : null}
       <RatioBarRow
         average={AVERAGE_DISPLAY_RATIO.middle}
         color={REPORT_ACCENT_DARK}
@@ -669,14 +700,10 @@ function ArtifactFooter({
   debug?: boolean;
   result: FaceVerticalThirdsResult;
 }) {
-  const hairline = result.keypoints.H;
-  const showsApproxWarning =
-    result.quality.warnings.includes(HAIRLINE_WARNING.approximated) ||
-    result.quality.warnings.includes(HAIRLINE_WARNING.approximatedUnusable);
+  const showsDetected = result.hairlineAnalysis.analysisEligible;
   const showsLowConfidenceWarning =
-    result.quality.warnings.includes(HAIRLINE_WARNING.appleMatteLowConfidence);
-  const showsAppleDetected =
-    hairline?.provider === 'apple_semantic_matte' && !showsLowConfidenceWarning;
+    result.hairlineAnalysis.outcome === 'detected_low_confidence';
+  const showsOmitted = result.hairlineAnalysis.outcome === 'omitted';
 
   return (
     <View style={styles.artifactFooter}>
@@ -686,14 +713,18 @@ function ArtifactFooter({
           <Text style={styles.debugText}>{formatPoseDebug(result)}</Text>
         </View>
       ) : null}
-      {showsApproxWarning ? (
-        <Text style={styles.warningText}>이마 기준선은 근사값이에요.</Text>
-      ) : null}
-      {showsAppleDetected ? (
+      {showsDetected ? (
         <Text style={styles.warningText}>헤어라인이 감지되었어요.</Text>
       ) : null}
       {showsLowConfidenceWarning ? (
-        <Text style={styles.warningText}>헤어라인 신뢰도가 낮아 참고용이에요.</Text>
+        <Text style={styles.warningText}>
+          헤어라인 신뢰도가 낮아 상안부 분석에는 반영하지 않았어요.
+        </Text>
+      ) : null}
+      {showsOmitted ? (
+        <Text style={styles.warningText}>
+          헤어라인이 충분히 확인되지 않아 중안부와 하안부만 반영했어요.
+        </Text>
       ) : null}
       {result.artifacts.logJsonlUri ? (
         <Text selectable style={styles.artifactPathText}>

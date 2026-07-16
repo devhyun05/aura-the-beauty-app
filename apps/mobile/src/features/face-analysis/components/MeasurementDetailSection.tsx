@@ -33,24 +33,46 @@ function buildVerticalThirdsRows(result: FaceVerticalThirdsResult): MeasurementR
   const ratio = result.verticalThirds;
 
   if (ratio) {
-    rows.push({
-      label: '상·중·하 표시 비율',
-      value: `${formatNumber(ratio.displayRatio.upper, 2)} : ${formatNumber(
-        ratio.displayRatio.middle,
-        2,
-      )} : ${formatNumber(ratio.displayRatio.lower, 2)}`,
-    });
-    rows.push({
-      label: '상안부',
-      value: `${formatNumber(ratio.upperPx, 0)}px · ${formatPercent(ratio.upperNormalized)}`,
-    });
+    if (result.measurementMode === 'full_vertical_thirds') {
+      rows.push({
+        label: '상·중·하 표시 비율',
+        value: `${formatNumber(ratio.displayRatio.upper, 2)} : ${formatNumber(
+          ratio.displayRatio.middle,
+          2,
+        )} : ${formatNumber(ratio.displayRatio.lower, 2)}`,
+      });
+      rows.push({
+        label: '상안부',
+        value: `${formatNumber(ratio.upperPx, 0)}px · ${formatPercent(
+          ratio.upperNormalized,
+        )}`,
+      });
+    } else {
+      rows.push({
+        label: '중·하안부 표시 비율',
+        value: `${formatNumber(ratio.displayRatio.middle, 2)} : ${formatNumber(
+          ratio.displayRatio.lower,
+          2,
+        )}`,
+      });
+    }
     rows.push({
       label: '중안부',
-      value: `${formatNumber(ratio.middlePx, 0)}px · ${formatPercent(ratio.middleNormalized)}`,
+      value:
+        result.measurementMode === 'full_vertical_thirds'
+          ? `${formatNumber(ratio.middlePx, 0)}px · ${formatPercent(
+              ratio.middleNormalized,
+            )}`
+          : `${formatNumber(ratio.middlePx, 0)}px`,
     });
     rows.push({
       label: '하안부',
-      value: `${formatNumber(ratio.lowerPx, 0)}px · ${formatPercent(ratio.lowerNormalized)}`,
+      value:
+        result.measurementMode === 'full_vertical_thirds'
+          ? `${formatNumber(ratio.lowerPx, 0)}px · ${formatPercent(
+              ratio.lowerNormalized,
+            )}`
+          : `${formatNumber(ratio.lowerPx, 0)}px`,
     });
     rows.push({label: '측정 신뢰도', value: formatPercent(ratio.confidence)});
   }
@@ -83,10 +105,18 @@ function buildVerticalThirdsRows(result: FaceVerticalThirdsResult): MeasurementR
   }
 
   const hairline = result.keypoints.H;
-  if (hairline) {
+  if (hairline && result.hairlineAnalysis.analysisEligible) {
     rows.push({
       label: '헤어라인 기준점',
       value: `${hairline.provider} · 신뢰도 ${formatPercent(hairline.confidence)}`,
+    });
+  } else {
+    rows.push({
+      label: '헤어라인 반영',
+      value:
+        result.hairlineAnalysis.outcome === 'detected_low_confidence'
+          ? '신뢰도가 낮아 반영하지 않음'
+          : '확인되지 않아 반영하지 않음',
     });
   }
 

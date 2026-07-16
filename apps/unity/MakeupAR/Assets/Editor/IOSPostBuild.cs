@@ -28,6 +28,8 @@ namespace ARMakeup.EditorTools
             // VideoRecorder.mm(AVAssetWriter H.264 인코더)이 요구하는 프레임워크.
             // UIKit은 Unity 기본 링크라 생략, 나머지는 명시적으로 건다.
             proj.AddFrameworkToProject(frameworkTarget, "AVFoundation.framework", false);
+            proj.AddFrameworkToProject(frameworkTarget, "CoreImage.framework", false);
+            proj.AddFrameworkToProject(frameworkTarget, "ImageIO.framework", false);
             proj.AddFrameworkToProject(frameworkTarget, "CoreMedia.framework", false);
             proj.AddFrameworkToProject(frameworkTarget, "CoreVideo.framework", false);
 
