@@ -14,6 +14,7 @@ import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {AppScreen, ImagePlaceholder} from '../../../shared/ui';
 
 type MakeupLookListScreenProps = {
+  emptyLabel?: string;
   likedMakeupLooks?: readonly MakeupLookPreview[];
   onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
 };
@@ -21,6 +22,7 @@ type MakeupLookListScreenProps = {
 const MAKEUP_LOOKS_PAGE_SIZE = 4;
 
 export function MakeupLookListScreen({
+  emptyLabel = '좋아요한 메이크업 필터가 없어요.',
   likedMakeupLooks = [],
   onPressMakeupLook,
 }: MakeupLookListScreenProps = {}) {
@@ -55,7 +57,7 @@ export function MakeupLookListScreen({
   if (visibleMakeupLooks.length === 0) {
     return (
       <AppScreen contentGap={spacing.xl} topPadding="none">
-        <EmptyState label="저장한 메이크업 룩이 없어요." />
+        <EmptyState label={emptyLabel} />
       </AppScreen>
     );
   }

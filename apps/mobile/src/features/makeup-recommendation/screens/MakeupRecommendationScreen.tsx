@@ -47,6 +47,7 @@ export type MakeupRecommendationScreenHandle = {
 export type MakeupRecommendationScreenProps = {
   faceImageUri?: string;
   initialReportId?: string;
+  initialView?: 'discovery' | 'history';
   onApplyAR?: (look: MakeupLookRecommendation) => void;
   personalColor?: string;
 };
@@ -117,12 +118,13 @@ export const MakeupRecommendationScreen = forwardRef<
 >(function MakeupRecommendationScreen({
   faceImageUri,
   initialReportId,
+  initialView = 'discovery',
   onApplyAR,
 }, ref) {
   const initialScenarioSeed = useRef(Math.floor(Math.random() * 10_000));
   const scenarioSeed = useRef(initialScenarioSeed.current);
   const popularScenarios = useRef(getPopularMakeupScenarios());
-  const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>('discovery');
+  const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>(initialView);
   const [prompt, setPrompt] = useState('');
   const [scenarioOrder, setScenarioOrder] = useState(() => getMakeupScenarioSet({seed: scenarioSeed.current}));
   const [visibleScenarioCount, setVisibleScenarioCount] = useState(INITIAL_GENERAL_SCENARIO_COUNT);
@@ -146,6 +148,7 @@ export const MakeupRecommendationScreen = forwardRef<
   const mutationRequest = useRef<{controller: AbortController; id: number} | undefined>(undefined);
   const operationSequence = useRef(0);
   const loadedInitialReportId = useRef<string | null>(null);
+  const loadedInitialView = useRef(false);
 
   const beginOperation = useCallback((slot: typeof workflowRequest) => {
     slot.current?.controller.abort();
@@ -223,6 +226,15 @@ export const MakeupRecommendationScreen = forwardRef<
     setPhase('history');
     void loadHistory();
   };
+
+  useEffect(() => {
+    if (initialView !== 'history' || loadedInitialView.current) {
+      return;
+    }
+
+    loadedInitialView.current = true;
+    void loadHistory();
+  }, [initialView, loadHistory]);
 
   const openHistoryReport = (report: MakeupRecommendationReportHistoryItem) => {
     imagePollFailureCount.current = 0;

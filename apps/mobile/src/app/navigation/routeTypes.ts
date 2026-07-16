@@ -41,7 +41,9 @@ export type RootStackParamList = {
   Face3DMeasurement: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
   FaceAnalysisLoading: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
   FaceAnalysisReportsList: undefined;
-  FaceAnalysisReportDetail: {reportId?: string} | undefined;
+  FaceAnalysisReportDetail:
+    | {reportId?: string; returnTo?: 'profile'}
+    | undefined;
   FloatingActionSettings: undefined;
   AppSettings: undefined;
   Faq: undefined;
@@ -78,7 +80,9 @@ export type RootStackParamList = {
     sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
   };
   ProductPersonalizationSettings: undefined;
-  MakeupRecommendation: {reportId?: string} | undefined;
+  MakeupRecommendation:
+    | {reportId?: string; view?: 'history'}
+    | undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
   AuradinSearch:
     | {prompt?: string; reportId?: string; personalColor?: string; open?: string; dial?: string; ts?: string}
@@ -115,7 +119,7 @@ export type RootStackParamList = {
   };
   ConsultingMembership: undefined;
   ConsultingReview: {expertId: string; recordId: string};
-  MakeupLookList: undefined;
+  MakeupLookList: {kind?: 'created' | 'liked'} | undefined;
   LikedProductList: undefined;
   ARFilter:
     | {
@@ -140,14 +144,18 @@ export type RootStackParamList = {
   MakeupFeedbackGoalInput: undefined;
   MakeupFeedbackLoading: undefined;
   MakeupFeedbackResultsList: undefined;
-  MakeupFeedbackResult: {reportId?: string} | undefined;
+  MakeupFeedbackResult:
+    | {reportId?: string; returnTo?: 'profile'}
+    | undefined;
   MakeupCorrectionGuide: undefined;
   MakeupCorrectionTip: {pointId: string};
   ReferenceMakeupExtractionUpload: {
     initialSource?: 'camera' | 'gallery';
   } | undefined;
   ReferenceMakeupExtractionLoading: undefined;
-  ReferenceMakeupExtractionResult: {reportId?: string} | undefined;
+  ReferenceMakeupExtractionResult:
+    | {reportId?: string; returnTo?: 'profile'}
+    | undefined;
   ExtractedMakeupLookAdjust: undefined;
   MakeupFilterSave: undefined;
   MakeupFilterSaveComplete: {arStyleId?: string; saveError?: string} | undefined;

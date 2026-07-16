@@ -1,6 +1,11 @@
 import {useCallback, useRef, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
-import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
+import {
+  Pressable,
+  ScrollView as NativeScrollView,
+  StyleSheet,
+  useWindowDimensions,
+} from 'react-native';
 import {CalendarClock, ChevronRight, MessageCircle, Video} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
@@ -11,9 +16,10 @@ import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {AppScreen, SectionHeader} from '../../../shared/ui';
 import {getConsultingBookings} from '../../consulting/services/consultingService';
 import type {ConsultingRecord} from '../../consulting/types';
-import {FaceAnalysisSummaryCard} from '../components/FaceAnalysisSummaryCard';
 import {MakeupLookCard} from '../components/MakeupLookCard';
 import {ProductCard} from '../components/ProductCard';
+import {ProfileReportListActionSheet} from '../components/ProfileReportListActionSheet';
+import {ProfileReportPreviewCard} from '../components/ProfileReportPreviewCard';
 import {ProfileSummaryCard} from '../components/ProfileSummaryCard';
 import {
   PROFILE_LOAD_ERROR_DESCRIPTION,
@@ -27,28 +33,46 @@ type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
   onPressFaceAnalysisReport?: (reportId: string) => void;
   onPressFaceAnalysisReportsList?: () => void;
+  onPressMakeupRecommendationReport?: (reportId: string) => void;
+  onPressMakeupRecommendationReportsList?: () => void;
+  onPressMakeupExtractionReport?: (reportId: string) => void;
+  onPressMakeupExtractionReportsList?: () => void;
+  onPressMakeupFeedbackReport?: (reportId: string) => void;
+  onPressMakeupFeedbackReportsList?: () => void;
   onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
+  onPressCreatedMakeupLookList?: () => void;
   onPressMakeupLookList?: () => void;
   onPressLikedProductList?: () => void;
   onPressConsultingHistory?: () => void;
   onPressConsultingReview?: (record: ConsultingRecord) => void;
   onPressConsultingSummary?: (record: ConsultingRecord) => void;
+  createdMakeupLooks?: readonly MakeupLookPreview[];
   likedMakeupLooks?: readonly MakeupLookPreview[];
 };
 
 export const PROFILE_SCREEN_LAYOUT_MODE = 'dashboard';
 export const PROFILE_SCREEN_PREVIEW_COLUMN_COUNT = 2;
+export const PROFILE_SCREEN_REPORT_COLUMN_COUNT = 2;
+export const PROFILE_SCREEN_REPORT_SCROLL_AXIS = 'horizontal';
 
 export function ProfileScreen({
   onPressProfileEdit,
   onPressFaceAnalysisReport,
   onPressFaceAnalysisReportsList,
+  onPressMakeupRecommendationReport,
+  onPressMakeupRecommendationReportsList,
+  onPressMakeupExtractionReport,
+  onPressMakeupExtractionReportsList,
+  onPressMakeupFeedbackReport,
+  onPressMakeupFeedbackReportsList,
   onPressMakeupLook,
+  onPressCreatedMakeupLookList,
   onPressMakeupLookList,
   onPressLikedProductList,
   onPressConsultingHistory,
   onPressConsultingReview,
   onPressConsultingSummary,
+  createdMakeupLooks = [],
   likedMakeupLooks = [],
 }: ProfileScreenProps) {
   const {width} = useWindowDimensions();
@@ -61,6 +85,7 @@ export function ProfileScreen({
     readonly ConsultingRecord[]
   >([]);
   const [isConsultingLoading, setIsConsultingLoading] = useState(false);
+  const [isReportListSheetVisible, setIsReportListSheetVisible] = useState(false);
   const contentWidth = width - spacing.screenX * 2;
   const previewGap =
     spacing.md * (PROFILE_SCREEN_PREVIEW_COLUMN_COUNT - 1);
@@ -71,6 +96,15 @@ export function ProfileScreen({
     flexBasis: previewCardWidth,
     maxWidth: previewCardWidth,
     width: previewCardWidth,
+  };
+  const reportCardWidth = Math.max(
+    136,
+    Math.min(168, Math.floor(width * 0.4)),
+  );
+  const reportCardLayout = {
+    flexBasis: reportCardWidth,
+    maxWidth: reportCardWidth,
+    width: reportCardWidth,
   };
 
   const loadProfile = useCallback((options?: {silent?: boolean}) => {
@@ -166,14 +200,8 @@ export function ProfileScreen({
   }
 
   const data = loadState.data;
-  const faceAnalysisReport = data.faceAnalysisReport;
-  const faceAnalysisReports =
-    data.faceAnalysisReports.length > 0
-      ? data.faceAnalysisReports
-      : faceAnalysisReport
-        ? [faceAnalysisReport]
-        : [];
-  const previewMakeupLooks = likedMakeupLooks.slice(0, 4);
+  const previewCreatedMakeupLooks = createdMakeupLooks.slice(0, 4);
+  const previewLikedMakeupLooks = likedMakeupLooks.slice(0, 4);
   const previewProducts = data.likedProducts.slice(0, 4);
 
   return (
@@ -187,44 +215,83 @@ export function ProfileScreen({
           onPressSettings={onPressProfileEdit}
           profile={data.profile}
         />
-
-        <ProfileOverview
-          analysisCount={faceAnalysisReports.length}
-          likedProductCount={data.likedProducts.length}
-          savedLookCount={likedMakeupLooks.length}
-        />
       </View>
 
       <View style={styles.section}>
         <SectionHeader
           actionLabel="더보기"
-          onPressAction={onPressFaceAnalysisReportsList}
-          title="얼굴 분석 결과"
+          onPressAction={() => setIsReportListSheetVisible(true)}
+          title="내 보고서 목록"
         />
-        {faceAnalysisReports.length > 0 ? (
-          <View style={styles.faceAnalysisReportList}>
-            {faceAnalysisReports.map((report) => (
-              <FaceAnalysisSummaryCard
-                key={report.id}
-                onPress={() => onPressFaceAnalysisReport?.(report.id)}
-                report={report}
-              />
-            ))}
-          </View>
-        ) : (
-          <EmptySection label="저장된 얼굴 분석 결과가 없어요." />
-        )}
+        <NativeScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.reportHub}>
+          <ProfileReportPreviewCard
+            description="얼굴형·피부톤 분석"
+            label="얼굴 분석"
+            onPressLatest={
+              data.reportHub.faceAnalysis
+                ? () => onPressFaceAnalysisReport?.(data.reportHub.faceAnalysis!.id)
+                : undefined
+            }
+            preview={data.reportHub.faceAnalysis}
+            style={reportCardLayout}
+          />
+          <ProfileReportPreviewCard
+            description="나에게 어울리는 룩"
+            label="메이크업 추천"
+            onPressLatest={
+              data.reportHub.makeupRecommendation
+                ? () =>
+                    onPressMakeupRecommendationReport?.(
+                      data.reportHub.makeupRecommendation!.id,
+                    )
+                : undefined
+            }
+            preview={data.reportHub.makeupRecommendation}
+            style={reportCardLayout}
+          />
+          <ProfileReportPreviewCard
+            description="사진 속 메이크업 분석"
+            label="메이크업 추출"
+            onPressLatest={
+              data.reportHub.makeupExtraction
+                ? () =>
+                    onPressMakeupExtractionReport?.(
+                      data.reportHub.makeupExtraction!.id,
+                    )
+                : undefined
+            }
+            preview={data.reportHub.makeupExtraction}
+            style={reportCardLayout}
+          />
+          <ProfileReportPreviewCard
+            description="평가와 보완 포인트"
+            label="메이크업 피드백"
+            onPressLatest={
+              data.reportHub.makeupFeedback
+                ? () =>
+                    onPressMakeupFeedbackReport?.(
+                      data.reportHub.makeupFeedback!.id,
+                    )
+                : undefined
+            }
+            preview={data.reportHub.makeupFeedback}
+            style={reportCardLayout}
+          />
+        </NativeScrollView>
       </View>
 
       <View style={styles.section}>
         <SectionHeader
           actionLabel="더보기"
-          onPressAction={onPressMakeupLookList}
-          title="메이크업 룩"
+          onPressAction={onPressCreatedMakeupLookList}
+          title="내가 만든 필터"
         />
-        {previewMakeupLooks.length > 0 ? (
+        {previewCreatedMakeupLooks.length > 0 ? (
           <View style={styles.previewGrid}>
-            {previewMakeupLooks.map((makeupLook) => (
+            {previewCreatedMakeupLooks.map(makeupLook => (
               <MakeupLookCard
                 key={makeupLook.id}
                 makeupLook={makeupLook}
@@ -234,7 +301,29 @@ export function ProfileScreen({
             ))}
           </View>
         ) : (
-          <EmptySection label="저장한 메이크업 룩이 없어요." />
+          <EmptySection label="아직 만든 필터가 없어요." />
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader
+          actionLabel="더보기"
+          onPressAction={onPressMakeupLookList}
+          title="좋아요한 메이크업 필터"
+        />
+        {previewLikedMakeupLooks.length > 0 ? (
+          <View style={styles.previewGrid}>
+            {previewLikedMakeupLooks.map((makeupLook) => (
+              <MakeupLookCard
+                key={makeupLook.id}
+                makeupLook={makeupLook}
+                onPress={onPressMakeupLook}
+                style={previewCardLayout}
+              />
+            ))}
+          </View>
+        ) : (
+          <EmptySection label="좋아요한 메이크업 필터가 없어요." />
         )}
       </View>
 
@@ -305,6 +394,15 @@ export function ProfileScreen({
           )}
         </View>
       ) : null}
+
+      <ProfileReportListActionSheet
+        isVisible={isReportListSheetVisible}
+        onClose={() => setIsReportListSheetVisible(false)}
+        onPressFaceAnalysis={onPressFaceAnalysisReportsList}
+        onPressMakeupExtraction={onPressMakeupExtractionReportsList}
+        onPressMakeupFeedback={onPressMakeupFeedbackReportsList}
+        onPressMakeupRecommendation={onPressMakeupRecommendationReportsList}
+      />
     </AppScreen>
   );
 }
@@ -313,39 +411,6 @@ function EmptySection({label}: {label: string}) {
   return (
     <View style={styles.empty}>
       <Text style={styles.emptyText}>{label}</Text>
-    </View>
-  );
-}
-
-function ProfileOverview({
-  analysisCount,
-  likedProductCount,
-  savedLookCount,
-}: {
-  analysisCount: number;
-  likedProductCount: number;
-  savedLookCount: number;
-}) {
-  return (
-    <View style={styles.overviewPanel}>
-      <ProfileOverviewItem label="분석" value={analysisCount} />
-      <View style={styles.overviewDivider} />
-      <ProfileOverviewItem label="저장 룩" value={savedLookCount} />
-      <View style={styles.overviewDivider} />
-      <ProfileOverviewItem label="좋아요" value={likedProductCount} />
-    </View>
-  );
-}
-
-function ProfileOverviewItem({label, value}: {label: string; value: number}) {
-  return (
-    <View style={styles.overviewItem}>
-      <Text numberOfLines={1} style={styles.overviewValue}>
-        {value}
-      </Text>
-      <Text numberOfLines={1} style={styles.overviewLabel}>
-        {label}
-      </Text>
     </View>
   );
 }
@@ -584,9 +649,6 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.md,
     textAlign: 'center',
   },
-  faceAnalysisReportList: {
-    gap: spacing.md,
-  },
   hero: {
     gap: spacing.md,
   },
@@ -601,42 +663,14 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
-  overviewDivider: {
-    backgroundColor: colors.divider,
-    height: 36,
-    width: 1,
-  },
-  overviewItem: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 2,
-    justifyContent: 'center',
-    minWidth: 0,
-  },
-  overviewLabel: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.xs,
-  },
-  overviewPanel: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.lg,
-    flexDirection: 'row',
-    minHeight: 76,
-    paddingHorizontal: spacing.lg,
-  },
-  overviewValue: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.xl,
-    fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.xl,
-  },
   previewGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.md,
+  },
+  reportHub: {
+    gap: spacing.md,
+    paddingRight: spacing.screenX,
   },
   retryButton: {
     alignItems: 'center',

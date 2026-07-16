@@ -11,7 +11,10 @@ import {
   type MakeupFeedbackPhotoSelection,
   type MakeupFeedbackResult,
 } from '../../../features/makeup-feedback';
-import {fetchMakeupFeedbackReport} from '../../../features/makeup-feedback/services/makeupFeedbackService';
+import {
+  fetchMakeupFeedbackReport,
+  fetchMakeupFeedbackReports,
+} from '../../../features/makeup-feedback/services/makeupFeedbackService';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {RoutePlaceholder} from '../../../shared/ui';
@@ -186,13 +189,40 @@ export function MakeupFeedbackResultsListRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupFeedbackResultsList'>) {
   const {makeupFeedbackResult, setMakeupFeedbackResult} = useNavigationFlowState();
-  const results = React.useMemo(
+  const initialResults = React.useMemo(
     () => getMakeupFeedbackResultList(makeupFeedbackResult),
     [makeupFeedbackResult],
   );
+  const [results, setResults] = React.useState(initialResults);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState('');
+  const loadResults = React.useCallback(() => {
+    setIsLoading(true);
+    setLoadError('');
+
+    void fetchMakeupFeedbackReports()
+      .then(reports => {
+        setResults(reports.length > 0 ? reports : initialResults);
+      })
+      .catch(error => {
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : '메이크업 피드백을 불러오지 못했어요.',
+        );
+      })
+      .finally(() => {
+        setIsLoading(false);
+      });
+  }, [initialResults]);
+
+  React.useEffect(() => {
+    loadResults();
+  }, [loadResults]);
+
   const handlePressResult = React.useCallback((result: MakeupFeedbackResult) => {
     setMakeupFeedbackResult(result);
-    navigation.navigate('MakeupFeedbackResult');
+    navigation.navigate('MakeupFeedbackResult', {reportId: result.analysisId});
   }, [navigation, setMakeupFeedbackResult]);
 
   return (
@@ -200,6 +230,9 @@ export function MakeupFeedbackResultsListRouteScreen({
       routeName="MakeupFeedbackResultsList"
       onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
       <MakeupFeedbackResultsListScreen
+        error={loadError}
+        isLoading={isLoading}
+        onRetry={loadResults}
         onPressResult={handlePressResult}
         results={results}
       />
@@ -213,6 +246,7 @@ export function MakeupFeedbackResultRouteScreen({
 }: RootScreenProps<'MakeupFeedbackResult'>) {
   const {makeupFeedbackResult, setMakeupFeedbackResult} = useNavigationFlowState();
   const reportId = route.params?.reportId;
+  const shouldReturnToProfile = route.params?.returnTo === 'profile';
   const reportIsLoaded =
     !reportId || makeupFeedbackResult?.analysisId === reportId;
   const [reportLoadError, setReportLoadError] = React.useState('');
@@ -223,6 +257,15 @@ export function MakeupFeedbackResultRouteScreen({
     },
     [],
   );
+  const handleBackToProfile = React.useCallback(() => {
+    navigateMainTab(navigation, 'ProfileTab');
+  }, [navigation]);
+  const detailHeaderNavigationProps = shouldReturnToProfile
+    ? {onBack: handleBackToProfile}
+    : {
+        onOpenDocumentList: () =>
+          navigation.navigate('MakeupFeedbackResultsList'),
+      };
 
   React.useEffect(() => {
     if (!reportId || reportIsLoaded) {
@@ -256,8 +299,8 @@ export function MakeupFeedbackResultRouteScreen({
   if (reportId && !reportIsLoaded) {
     return (
       <DetailRouteChrome
+        {...detailHeaderNavigationProps}
         routeName="MakeupFeedbackResult"
-        onOpenDocumentList={() => navigation.navigate('MakeupFeedbackResultsList')}
         shareDisabled>
         <RoutePlaceholder
           description={
@@ -273,8 +316,8 @@ export function MakeupFeedbackResultRouteScreen({
   if (!makeupFeedbackResult) {
     return (
       <DetailRouteChrome
+        {...detailHeaderNavigationProps}
         routeName="MakeupFeedbackResult"
-        onOpenDocumentList={() => navigation.navigate('MakeupFeedbackResultsList')}
         onShare={shareAction?.cb}
         shareDisabled>
         <RoutePlaceholder
@@ -288,8 +331,8 @@ export function MakeupFeedbackResultRouteScreen({
 
   return (
     <DetailRouteChrome
+      {...detailHeaderNavigationProps}
       routeName="MakeupFeedbackResult"
-      onOpenDocumentList={() => navigation.navigate('MakeupFeedbackResultsList')}
       onShare={shareAction?.cb}
       shareDisabled={!shareAction}>
       <MakeupFeedbackResultScreen

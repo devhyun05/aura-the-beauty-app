@@ -56,6 +56,7 @@ EXPECTED_ROUTES = {
   ("GET", "/api/feedback/reports"),
   ("POST", "/api/filter-extractions/jobs"),
   ("POST", "/api/filter-extractions/analyze"),
+  ("GET", "/api/filter-extractions"),
   ("GET", "/api/filter-extractions/{report_id}"),
   ("GET", "/api/ar/filters"),
   ("GET", "/api/ar/filter-states"),

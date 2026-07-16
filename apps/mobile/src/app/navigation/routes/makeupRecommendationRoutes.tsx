@@ -35,6 +35,7 @@ export function MakeupRecommendationRouteScreen({
       <MakeupRecommendationScreen
         faceImageUri={selectedFaceCapture?.imageUri}
         initialReportId={route.params?.reportId}
+        initialView={route.params?.view}
         onApplyAR={look =>
           navigation.navigate(
             'ARFilter',
