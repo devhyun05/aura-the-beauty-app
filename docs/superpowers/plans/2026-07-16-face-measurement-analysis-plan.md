@@ -3,6 +3,7 @@
 상태: 초안 — 팀 검토 대기
 브랜치: `fix/face-analysis-report-0716` (Phase 0 구현 대상)
 작성 배경: 얼굴 길이/비율 측정의 정확도 검토 세션(2026-07-16) 결론 종합
+참고 문서: `docs/faceData_WEI/얼굴형분류기제안서.md`, `engine_제안서.md`(§3–4만 유효), `AURA_FACE_RATIO_DISTORTION_CORRECTION_PLAN_KO_v1.0.md` — §7~9와 §6 리스크 8·9에 반영
 
 ---
 
@@ -34,10 +35,14 @@
 ## 2. 목표 아키텍처
 
 ```
-[촬영] → [측정 계층] → [지각 번역 계층] → [보고서/추천]
-          · TrueDepth 3D 우선        · 측정값 → 인상 서술        · 숫자 비공개
-          · 2D+z 포즈 정규화 폴백    · → 기법 추천 매핑          · 특징+기법 언어
-          · mm 내부 저장(검증용)     · 근거 등급별 어조 규칙      · 경계값 히스테리시스
+[촬영] → [측정 계층] ──────────────────┐
+          · TrueDepth 3D 우선           │
+          · 2D+z 포즈 정규화 폴백       ├→ [해석 융합 계층] → [보고서/추천]
+          · mm 내부 저장(검증용)        │    · 측정 × AI 관찰 융합      · 숫자 비공개
+          · 얼굴형 feature/scorer (§7)  │    · 인상·타입 다축 서술 (§9) · 특징+기법 언어
+[사진] → [AI 정성 관찰 계층 (§8)] ─────┘    · 근거 등급별 어조 규칙    · 경계값 히스테리시스
+          · 비전 AI: 측정 불가 속성만
+          · 구조화 관찰 + 시각 근거 필수
 ```
 
 ## 3. 단계별 계획
@@ -144,3 +149,97 @@
 5. **AURAFaceRatioHairline.m의 pitch 정규화 8° 잔존** — 게이트 12°와 불일치로 8~12° 촬영의 헤어라인 confidence 저평가 (스펙 주석의 "별도 검토" 항목).
 6. **MediaPipe z 품질 미검증** — Phase 1의 3D 정렬 개선폭은 z 노이즈에 좌우됨(Phase 1 §2). 재현성 관문 미달 시 cos 근사 보정으로 후퇴.
 7. **플랫폼 범위** — 현재 앱은 iOS 전용. Phase 1의 "폴백"은 non-TrueDepth iOS 기기 대상이며, Android 확장 시 Phase 2의 "TrueDepth = 신뢰 축" 전제는 전면 재검토 사안.
+8. **왜곡 보정 기획서 v1.0과의 결정 충돌 — 제품 오너 승인 필요.** `AURA_FACE_RATIO_DISTORTION_CORRECTION_PLAN_KO_v1.0.md` §6.2는 pitch/yaw 보정을 명시적으로 제외했다("잘못 보정하면 가짜 정확도" — gate로 차단이 원칙). 본 계획 Phase 1은 z기반 3D 정렬을 제안하므로 이 확정 결정의 번복이다. 번복 근거: (a) 결정 당시 전제는 pitch 게이트 ±5°였으나 이후 12°로 완화(2026-07-13 usability 결정)되어 게이트만으로 잔여 왜곡을 막는다는 전제가 무효화됨, (b) Phase 1은 재현성 관문 미달 시 후퇴하는 검증 구조를 내장해 "가짜 정확도" 우려에 대한 방어를 갖춤. 이 논거로 제품 오너 재결정을 받는다.
+9. **왜곡 방지 게이트의 기획-구현 드리프트** — 기획서는 ARKit FaceAnchor 게이트(±5/6/3°) + 거리 35cm 게이트 + Sn–principal point 정렬을 확정했으나, ARKit 취소로 현재는 MediaPipe 게이트(8/12/5°)이고 미터 단위 거리 게이트는 미구현(타원 프레이밍이 간접 대용), principal point는 "ARKit 재도입 대비" 코드로만 잔존. **Selfie Effect(§5 A-8) 방어가 기획 의도보다 약한 상태** — Phase 1 §4의 거리 가이드 검토와 직결.
+
+## 7. 측정 요소 확장 — 설계 문서 통합
+
+`얼굴형분류기제안서.md`와 `engine_제안서.md` §3의 측정 요소를 현 구현과 대조한 결과, engine 1군 13개 중 상당수는 **이미 구현되어 있다**. 신규는 세 덩어리다.
+
+### 7.1 이미 구현 (재사용)
+
+| engine 1군 요소 | 현 구현 |
+|---|---|
+| face length-width ratio | `faceLength.ratio` |
+| midface/lower-face balance | 세로 3분할 `dominantPart` |
+| eye aspect ratio / spacing / tilt | `eyeOpenness` / `interCanthalRatio` / `canthalTiltDeg` |
+| brow-eye distance, brow tilt | `eyeBrowGap`, `browSlopeDeg` |
+| lip fullness / mouth width / corner tilt | `lipThicknessRatio` / `mouthWidthRatio` / `mouthCornerAsymmetry` |
+| jaw balance | `jawWidthRatio`, `lowerJawWidthRatio` |
+| nose length/width | Face3D Tier-2 (3D) |
+| pose/lighting quality | quality 게이트 체계 |
+| lip-skin contrast (2군) | personalColor `relations.dL_skinLip`/`dE00_skinLip` |
+
+### 7.2 신규 ① — 얼굴형 7-class 확률 스코어러 (분류기제안서 채택)
+
+- feature 추가: `foreheadToCheek`(헤어라인 의존 — 가림 시 null), `templeToCheek`, `cheekDominance`, `jawAngleScore`, `chinPointedness`, `contourRoundness`, `chinToCheek`
+- 산출: `faceShapeScores`(7종 각 점수) + `top2` + `confidenceGap`. **hard label 단정 금지**(제안서 §15.1), 혼합형 표현 기본.
+- 실행 시점: 2D 랜드마크 기반이라 Phase 1과 병렬 가능. rule scorer 우선, Core ML은 데이터 축적 후(제안서 Phase 3 준용). threshold는 한국인 표본 보정 전까지 잠정값으로 명시.
+
+### 7.3 신규 ② — facial contrast·skin evenness (engine 1군 잔여)
+
+- facial contrast(눈·눈썹·입술 ↔ 피부 명도/색 대비): personalColor Lab 측정치에서 파생 가능 — §5 A-7(Russell)이 근거 축이므로 **지각 번역에서 가장 활용 가치 높은 신규 요소**. 메이크업 강도 추천의 1차 입력.
+- skin evenness/redness: personalColor 영역 통계(분산·영역 간 차)에서 부분 파생. 완전판은 별도 ROI 분석 필요 — 후순위.
+
+### 7.4 신규 ③ — 2D 코 비율 폴백
+
+Tier-2(3D) 미가용 기기용 `noseLengthRatio`/`noseWidthRatio` 2D 근사. Phase 1의 포즈 정규화 이후에만 신뢰 가능하므로 Phase 1 완료 후.
+
+## 8. AI 정성 관찰 계층
+
+수치 측정이 원리적으로 못 잡는 속성을 비전 AI가 사진에서 관찰한다. `engine_제안서.md` §3–4의 원칙을 계승한다: **AI는 기하 계산이 아니라 해석·관찰 담당, raw 478 랜드마크 전달 금지, 사진 + 요약 FaceProfile JSON + 품질 metadata를 함께 전달.**
+
+### 8.1 AI가 담당할 것 (측정 불가 영역만)
+
+- 헤어스타일·앞머리 유무(→ 헤어라인 측정 결측의 **맥락** 제공: "앞머리로 가려짐" vs "검출 실패" 구분)
+- 눈매 인상(쌍꺼풀 유형, 눈매 분위기), 피부 질감 인상(광/매트/결)
+- 전체 분위기·스타일 맥락(현재 메이크업 유무, 안경·액세서리)
+- 표정 상태(측정 품질 해석 보조)
+
+### 8.2 AI가 하지 말 것
+
+- 좌표·거리·각도·비율 계산 (측정 계층 소관 — 측정값과 모순되는 기하 주장 금지)
+- 인종·나이 단정, 미추(美醜) 평가·점수화
+- 측정 JSON에 이미 있는 값의 재추정
+
+### 8.3 구조화 출력과 환각 방지
+
+관찰 항목마다 `{attribute, value, confidence, visualEvidence}` — `visualEvidence`는 "무엇을 보고 판단했는지" 한 줄 서술을 **필수**로 하여 환각을 구조적으로 억제한다. confidence 낮은 관찰은 해석 융합에서 자동 제외.
+
+### 8.4 융합 규칙
+
+1. 기하학적 사실은 **측정이 항상 우선**. AI 관찰이 측정과 충돌하면 해당 관찰 폐기 + conflict 로그(프롬프트 개선 신호).
+2. AI는 측정 공백(정성 속성)만 채운다 — 역할 중첩 금지.
+3. 저장 시 `measurements`와 `aiObservations`를 분리 필드로 — 모든 최종 서술은 출처(측정/관찰/융합)를 추적 가능해야 한다.
+4. 사진의 외부 AI 전송은 개인정보 처리 — 포괄동의 문구가 이 전송을 포함하는지 확인(동의 정책은 앱 전역 포괄동의로 확정되어 있음 — 기능별 게이트를 만들지 않는다).
+
+## 9. 인상·타입 서술 체계 — "최대한 다양하게"의 설계
+
+다양성은 **축의 수**로 확보하고, 각 축의 신뢰성은 어조 게이트로 지킨다.
+
+### 9.1 서술 축 (각 축 독립 산출, 조합으로 다양성)
+
+| 축 | 산출원 | 형태 |
+|---|---|---|
+| 얼굴형 | §7.2 스코어러 | 7-class 확률 + 혼합형 |
+| 세로 비율 특징 | 3분할 dominantPart | 특징 서술 |
+| 이목구비 인상 | faceGeometry 지표군 | 축별 경향(눈매 각도·간격, 입술 볼륨 등) |
+| 대비 인상 | §7.3 facial contrast | 저대비(soft)↔고대비(clear) |
+| 퍼스널 컬러 | 기존 12타입 엔진 | 톤 + 혼합형 |
+| 정성 인상 | §8 AI 관찰 | 분위기·스타일 서술 |
+| 입체감 | Face3D 11지표 | 부위별 돌출 경향 |
+
+### 9.2 어조 이중 게이트
+
+모든 서술은 두 게이트 중 **낮은 쪽**을 따른다:
+1. **통계 확신도** (분류기제안서 §10.3 준용): `confidenceGap ≥ 0.20` 단정형 / `0.10~0.20` 경향형("~에 조금 더 가까워요") / `< 0.10` 혼합형("~과 ~ 특징이 함께 보여요")
+2. **근거 등급** (Phase 3 §2): A급 단정 / B급 조건부 / C급 제안형
+
+예: 얼굴형 confidenceGap 0.25(단정 가능)여도 그에 붙는 블러셔 추천이 C급이면 추천 문구는 제안형.
+
+### 9.3 원칙
+
+- **다양성 ≠ 무근거 서술 허가.** 새 축 추가는 근거 행(§5) 추가와 함께만 가능.
+- 혼합형 표현이 기본값 — "당신은 X형"이 아니라 "X 특징이 우세하고 Y 특징이 함께 보임".
+- 축 간 조합 서술("긴 얼굴형 + 저대비 + 여름쿨 → …")은 융합 계층이 생성하되, 조합 규칙도 매핑 테이블에 근거와 함께 등재.
+- 실행 시점: §9는 Phase 3의 구체화이며, 매핑 테이블 작업과 함께 기획이 병렬 시작 가능.
