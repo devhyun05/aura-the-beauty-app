@@ -157,7 +157,7 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 | 조건 | 기준 | 실패 사유 |
 |---|---|---|
 | 얼굴 검출 | 1개 | `face_not_detected` / `multiple_faces_detected` |
-| 포즈 | `|yaw|≤8°, |pitch|≤8°, |roll|≤5°` | `pose_gate_failed` |
+| 포즈 | `|yaw|≤8°, |pitch|≤12°, |roll|≤5°` (pitch 12°는 2026-07-13 usability 결정 — `facePoseGates.ts` 단일 정의처 참조) | `pose_gate_failed` |
 | 필수 기준점 | G, Sn, Me 존재 | `required_keypoints_missing` |
 | Y 순서 | `G.y < Sn.y < Me.y` | `vertical_keypoint_order_invalid` |
 | 헤어라인 | `H.y < G.y` (아니면 H를 null 처리, 차단 아님) | 경고만 |
@@ -177,7 +177,7 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 
 ### 4.5 부가 산출물
 
-- **얼굴 길이 비율**: `세로(H→Me) / 가로(볼 idx234↔454)` → 게이지 표시(기준 wide 1.351 / avg 1.455 / long 1.506, 하드코딩).
+- **얼굴 길이 비율**: `세로(H→Me) / 가로(볼 idx234↔454)` → 게이지 표시. 기준값(wide 1.351 / avg 1.455 / long 1.506)은 `face-ratio/constants.ts` 단일 정의처의 **잠정값**(1차 출처 부재 확인 — Phase 4에서 자체 mean±SD 교체)이며, 게이지 스케일·세그먼트 경계·판정이 전부 이 상수에서 파생된다. 판정은 촬영 pose 기반 동적 유보 구간(`judgeFaceLength`)을 거치고, 결과에 `judgmentVersion` 스냅샷이 저장된다.
 - **디버그 오버레이(SVG)**: 상·중·하 3개 반투명 밴드 + 각 기준점 가이드선 + (debug) 점별 라벨/제공자/포즈 패널,
   `react-native-view-shot`로 `overlay.png` 스냅샷.
 
@@ -191,10 +191,10 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 |---|---|---|---|
 | `AURARealtimeFaceCaptureView` | 실시간 카메라 뷰 + 촬영 | AVCaptureSession, MediaPipe(video), Vision(frame), Apple 시맨틱 매트 | ✅ 실제 |
 | `AURAFaceLandmarkDetector` | 정지영상 폴백 검출 | Vision `VNDetectFaceLandmarksRequest` | ✅ 실제 |
-| `AURAFaceRatioAnalyzer` (+`AURAFaceRatioHairline`) | 세로비율 분석 + 헤어라인 | MediaPipe(image), Apple 매트 경계 스캔 | ✅ 실제 / ⚠️ 헤어라인 휴리스틱 |
+| `AURAFaceRatioAnalyzer` (+`AURAFaceRatioHairline`) | 세로비율 분석 + 헤어라인 | **Unity homuler 랜드마크 입력**(정규화 478점+pose — CocoaPods MediaPipe 제거 후 네이티브 자체 검출 없음, `faceRatioAnalyzerNative.ts` 계약), Apple 매트 경계 스캔 | ✅ 실제 / ⚠️ 헤어라인 휴리스틱 |
 
-- **MediaPipe**: `MPPFaceLandmarker`, 번들 모델 `face_landmarker.task`(≈3.7MB, 478점), pose는
-  facial-transformation matrix 분해. (numFaces 1, minConfidence 0.5)
+- **랜드마크 공급(현행)**: 세로비율 분석의 478점은 Unity homuler(IMAGE 모드)가 검출해 JS 브리지로
+  전달한다 — 종전 CocoaPods `MPPFaceLandmarker` 경로는 제거됨. 실시간 뷰의 MediaPipe(video)는 별도 경로.
 - **Apple 매트**: `AVSemanticSegmentationMatte`(Hair/Skin)를 사진 임베드 후 `ImageIO` aux-data로 read-back.
 - **헤어라인 위치 산출**: 매트는 실제지만, 정수리선 **점**은 이마 ROI에서 alpha/gradient 임계값으로 hair→skin
   경계를 **컬럼 스캔**하는 휴리스틱(가중 median). confidence도 가중식(sharpness .40/consistency .30/skin .20/pose .10).
@@ -234,7 +234,7 @@ App.tsx  → EXPO_PUBLIC_AURA_EXPERIMENT_APP === 'face-capture-lab'
 
 ### ⚠️ 휴리스틱·근사·하드코딩 (모델 값 아님)
 - **헤어라인 점**: 실제 매트 위의 임계값 컬럼 스캔(휴리스틱), confidence는 수작업 가중식 → "모델 confidence로 표기 금지"
-- **keypoint confidence**: 하드코딩 상수(glabella .82 / subnasale .82 / menton .84 / hApprox .40) → 보고되는 `ratio.confidence`는 합성값
+- **keypoint confidence**: 하드코딩 상수(glabella .82 / subnasale .82 / menton .84 — `hApprox .40`은 2026-07-16 커밋에서 소비자 제거, 네이티브 좌표 방출·wire 타입만 잔존) → 보고되는 `ratio.confidence`는 합성값. 실측화 재설계는 측정 계획 Phase 1 §3(멀티프레임 지터/reprojection residual)
 - **볼·턱 랜드마크**: Vision 바운딩박스의 고정 비율(실검출 아님). 실제 검출은 눈/코/입 + MediaPipe 메시(G/Sn/Me)뿐
 - **faceWidthRatio(거리)**: 눈/입 스팬 × 하드코딩 배수(2.35/2.15), **cm 미보정**
 - 기하 포즈 폴백(매트릭스 부재 시): 매직 상수(yaw×42.0 등)

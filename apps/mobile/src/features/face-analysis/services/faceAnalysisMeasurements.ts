@@ -669,6 +669,8 @@ function decodeVerticalThirds(
           : '헤어라인이 충분히 확인되지 않아 중안부와 하안부만 반영했어요.',
       title: readString(interpretationRecord.title) ?? '',
     },
+    // 판정 버전 스냅샷(Phase 0-5) — 구 저장분에는 없으므로 optional 복원.
+    judgmentVersion: readString(value.judgmentVersion),
     keypoints,
     measurementMode: resolvedMeasurementMode,
     postCorrection: postCorrectionRecord

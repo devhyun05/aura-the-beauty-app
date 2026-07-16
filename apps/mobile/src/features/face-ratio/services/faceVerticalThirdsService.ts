@@ -30,7 +30,7 @@ import {
 import {createFaceRatioLogger, type FaceRatioLogger} from './faceVerticalThirdsLogger';
 import {evaluateFaceVerticalThirdsQuality} from './faceVerticalThirdsQualityGate';
 import {applyRollCorrectionToKeypoints} from './faceVerticalThirdsRollCorrection';
-import {HAIRLINE_TUNING} from '../constants';
+import {FACE_RATIO_JUDGMENT_VERSION, HAIRLINE_TUNING} from '../constants';
 import {
   selectHairlineForAnalysis,
   type HairlineCandidate,
@@ -273,6 +273,7 @@ function createResult({
     faceLength,
     hairlineAnalysis,
     interpretation: buildInterpretation(status, ratio),
+    judgmentVersion: FACE_RATIO_JUDGMENT_VERSION,
     keypoints,
     measurementMode,
     postCorrection,

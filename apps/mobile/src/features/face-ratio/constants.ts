@@ -57,3 +57,104 @@ export type FaceRatioHairlineTuning = Partial<{
 }>;
 
 export const HAIRLINE_TUNING: FaceRatioHairlineTuning = {};
+
+// ─────────────────────────────────────────────────────────────────────────
+// 얼굴 길이비(세로 H→Me / 가로 볼 idx234↔454) 판정·게이지의 단일 정의처.
+// 종전에는 기준값(화면 로컬 상수)·마커 스케일(1.28/1.56)·라벨 x좌표('28%/47%')·
+// 판정 임계(±0.02)가 4벌로 흩어져 화면에서 서로 어긋났다
+// (docs/superpowers/plans/2026-07-16-face-measurement-analysis-plan.md §0-2).
+
+// 판정 버전. 아래 기준값·판정 규칙이 바뀌면 이 문자열을 올린다 — 결과에
+// 스냅샷 저장되어(FaceVerticalThirdsResult.judgmentVersion) 상수 개정이
+// 재렌더에서 과거 판정을 조용히 바꾸는 것을 감지·방지한다(계획 Phase 0-5).
+export const FACE_RATIO_JUDGMENT_VERSION =
+  'face-length-judgment/v2-provisional-20260717';
+
+// 1차 출처 부재가 확인된 잠정값(계획 §5 D-1: 미용 얼굴형 휴리스틱 근사로
+// 추정, 정확값의 문헌 완전일치 0건). 한국 여성 실측 앵커 ≈1.37(§5 D-2)
+// 대비 average가 과대할 수 있어 판정은 단정 대신 동적 유보 구간
+// (judgeFaceLength)을 거친다. Phase 4에서 자체 촬영셋 mean±SD로 교체.
+export const FACE_LENGTH_REFERENCE = {
+  wide: 1.351,
+  average: 1.455,
+  long: 1.506,
+} as const;
+
+// 게이지 스케일은 판정 경계(wide/long)에서 파생한다: 균등 3분할 색
+// 세그먼트의 경계가 판정 경계와 정확히 일치하도록, 경계 간격만큼 양끝을
+// 확장한다(min = wide−간격, max = long+간격 → 경계가 정확히 33.3%/66.7%).
+const REFERENCE_BAND = FACE_LENGTH_REFERENCE.long - FACE_LENGTH_REFERENCE.wide;
+export const FACE_LENGTH_GAUGE = {
+  max: FACE_LENGTH_REFERENCE.long + REFERENCE_BAND,
+  min: FACE_LENGTH_REFERENCE.wide - REFERENCE_BAND,
+} as const;
+
+export function getGaugeMarkerPercent(lengthRatio: number): number {
+  const span = FACE_LENGTH_GAUGE.max - FACE_LENGTH_GAUGE.min;
+  const raw = ((lengthRatio - FACE_LENGTH_GAUGE.min) / span) * 100;
+
+  return Math.max(0, Math.min(100, raw));
+}
+
+export type FaceLengthVerdict =
+  | 'wide'
+  | 'borderline_wide'
+  | 'average'
+  | 'borderline_long'
+  | 'long';
+
+export type FaceLengthJudgment = {
+  // 촬영 pose가 허용하는 참값 구간. band가 판정 경계를 걸치면 유보 verdict.
+  band: {hi: number; lo: number};
+  verdict: FaceLengthVerdict;
+};
+
+// 동적 유보 구간(계획 Phase 0-2). 오차는 대칭 노이즈가 아니라 방향성 편향:
+// pitch는 세로를 cos(pitch)로 압축해 측정비를 낮추고(참값 상한 = m/cos(pitch)),
+// yaw는 가로를 압축해 측정비를 높인다(참값 하한 = m×cos(yaw)).
+// 게이트 최악(pitch 12°/yaw 8°)에서 구간 폭 −1.0%~+2.2%. 정면에 가까운
+// 촬영은 구간이 좁아져 단정이 회복된다. 측정 로직 무변경 — 표현 계층 판정.
+export function judgeFaceLength(
+  lengthRatio: number,
+  pitchDeg?: number,
+  yawDeg?: number,
+): FaceLengthJudgment {
+  const toRad = (deg: number | undefined) =>
+    (Math.abs(typeof deg === 'number' && Number.isFinite(deg) ? deg : 0) *
+      Math.PI) /
+    180;
+  const lo = lengthRatio * Math.cos(toRad(yawDeg));
+  const hi = lengthRatio / Math.cos(toRad(pitchDeg));
+  const band = {hi, lo};
+
+  if (hi <= FACE_LENGTH_REFERENCE.wide) {
+    return {band, verdict: 'wide'};
+  }
+  if (lo >= FACE_LENGTH_REFERENCE.long) {
+    return {band, verdict: 'long'};
+  }
+  if (lo < FACE_LENGTH_REFERENCE.wide) {
+    return {band, verdict: 'borderline_wide'};
+  }
+  if (hi > FACE_LENGTH_REFERENCE.long) {
+    return {band, verdict: 'borderline_long'};
+  }
+
+  return {band, verdict: 'average'};
+}
+
+// 판정형 제목. 문구 확정은 팀 검토 후(계획 Phase 0-3) — 유보 2종이 신설 축.
+export function getFaceLengthTitle(verdict: FaceLengthVerdict): string {
+  switch (verdict) {
+    case 'wide':
+      return '가로형 얼굴';
+    case 'borderline_wide':
+      return '가로형과 평균 사이';
+    case 'average':
+      return '평균에 가까운 얼굴';
+    case 'borderline_long':
+      return '평균과 세로형 사이';
+    case 'long':
+      return '세로로 긴 얼굴';
+  }
+}

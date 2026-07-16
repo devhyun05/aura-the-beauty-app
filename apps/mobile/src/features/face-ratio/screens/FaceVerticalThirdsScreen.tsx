@@ -24,7 +24,11 @@ import {
   analyzeFaceVerticalThirds,
   finalizeOverlayArtifact,
 } from '../services/faceVerticalThirdsService';
-import {AVERAGE_DISPLAY_RATIO} from '../services/faceVerticalThirdsMath';
+import {
+  getFaceLengthTitle,
+  getGaugeMarkerPercent,
+  judgeFaceLength,
+} from '../constants';
 
 type FaceVerticalThirdsCapture = {
   capturedAt?: string;
@@ -49,20 +53,14 @@ const REPORT_ACCENT_DARK = '#22AEDD';
 const REPORT_MARKER = '#FF0B83';
 const REPORT_MUTED = '#A8A8A8';
 const REPORT_DIVIDER = '#F0F0F0';
-const FACE_LENGTH_REFERENCE = {
-  average: 1.455,
-  long: 1.506,
-  wide: 1.351,
-} as const;
+// 길이비 기준값·게이지·판정은 ../constants 단일 정의처에서 파생(Phase 0-1).
+// 종전 화면 로컬 상수(1.351/1.455/1.506)·마커 스케일(1.28/1.56)·
+// 라벨 x좌표('28%/47%')·±0.02 임계의 4중 하드코딩을 제거했다.
 
 function formatRatio(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value)
     ? value.toFixed(2)
     : '-';
-}
-
-function formatLengthRatio(value: number) {
-  return value.toFixed(3);
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -104,7 +102,7 @@ function getVerticalTitle(
   }
 
   if (part === 'lower') {
-    return '평균보다 하안부가 긴 얼굴';
+    return '하안부가 중안부보다 긴 얼굴';
   }
 
   if (part === 'balanced') {
@@ -120,25 +118,6 @@ function getFaceLengthRatio(result: FaceVerticalThirdsResult | null): number | n
   const ratio = result?.faceLength?.ratio;
 
   return typeof ratio === 'number' && Number.isFinite(ratio) ? ratio : null;
-}
-
-function getFaceLengthTitle(lengthRatio: number) {
-  if (lengthRatio >= FACE_LENGTH_REFERENCE.long - 0.02) {
-    return '세로로 긴 얼굴';
-  }
-
-  if (lengthRatio <= FACE_LENGTH_REFERENCE.wide + 0.02) {
-    return '가로형 얼굴';
-  }
-
-  return '평균에 가까운 얼굴';
-}
-
-function getGaugeMarkerPercent(lengthRatio: number) {
-  const min = 1.28;
-  const max = 1.56;
-
-  return clamp(((lengthRatio - min) / (max - min)) * 100, 0, 100);
 }
 
 function FaceReportIcon() {
@@ -224,21 +203,29 @@ function FaceLengthGauge({result}: {result: FaceVerticalThirdsResult}) {
     );
   }
 
+  // 동적 유보 구간(Phase 0-2): 촬영 pose(pitch/yaw)가 만드는 방향성 편향
+  // 폭이 판정 경계를 걸치면 단정 대신 유보 표현을 쓴다.
+  const judgment = judgeFaceLength(
+    lengthRatio,
+    result.quality.pitch,
+    result.quality.yaw,
+  );
   const markerPercent = getGaugeMarkerPercent(lengthRatio);
+  const isBorderline =
+    judgment.verdict === 'borderline_wide' ||
+    judgment.verdict === 'borderline_long';
 
   return (
     <View style={styles.lengthSection}>
       <Text style={styles.sectionEyebrow}>얼굴 길이 비율</Text>
-      <Text style={styles.sectionTitle}>{getFaceLengthTitle(lengthRatio)}</Text>
+      <Text style={styles.sectionTitle}>{getFaceLengthTitle(judgment.verdict)}</Text>
+      {isBorderline ? (
+        <Text style={styles.gaugeBorderlineText}>
+          촬영 각도의 영향 범위가 경계에 걸쳐 있어 단정하지 않았어요.
+        </Text>
+      ) : null}
       <View style={styles.gaugeWrap}>
-        <View style={[styles.gaugeValue, styles.gaugeWideValue]}>
-          <Text style={styles.gaugeValueText}>{FACE_LENGTH_REFERENCE.wide}</Text>
-        </View>
-        <View style={[styles.gaugeValue, styles.gaugeAverageValue]}>
-          <Text style={styles.gaugeValueText}>{FACE_LENGTH_REFERENCE.average}</Text>
-        </View>
         <View style={[styles.gaugeMarker, {left: `${markerPercent}%`}]}>
-          <Text style={styles.gaugeMarkerText}>{formatLengthRatio(lengthRatio)}</Text>
           <View style={styles.gaugeMarkerPin} />
         </View>
         <View style={styles.gaugeTrack}>
@@ -251,6 +238,9 @@ function FaceLengthGauge({result}: {result: FaceVerticalThirdsResult}) {
           <Text style={styles.gaugeLabel}>평균</Text>
           <Text style={styles.gaugeLabel}>세로형{'\n'}얼굴</Text>
         </View>
+        <Text style={styles.gaugeProvenanceText}>
+          기준 구간은 잠정값이에요 — 실측 기반 기준으로 교체될 예정이에요.
+        </Text>
       </View>
     </View>
   );
@@ -545,13 +535,11 @@ function VerticalRatioSection({
       {ratio ? (
         <>
           <View style={styles.ratioSummary}>
+            {/* Phase 0-3: '평균 비율 1:1:0.8' 기준선 제거(성형광고 관행값 —
+                실측 아님). 중안부=1.00 기준의 자기내부 비교만 표기한다. */}
             {result.measurementMode === 'full_vertical_thirds' ? (
               <>
-                <Text style={styles.averageRatioText}>
-                  평균 비율 {AVERAGE_DISPLAY_RATIO.upper.toFixed(1)} :{' '}
-                  {AVERAGE_DISPLAY_RATIO.middle.toFixed(1)} :{' '}
-                  {AVERAGE_DISPLAY_RATIO.lower.toFixed(1)}
-                </Text>
+                <Text style={styles.ratioBasisText}>중안부 1.00 기준</Text>
                 <Text style={styles.myRatioText}>
                   나의 비율 {formatRatio(ratio.upper)} : 1.00 :{' '}
                   {formatRatio(ratio.lower)}
@@ -559,7 +547,7 @@ function VerticalRatioSection({
               </>
             ) : (
               <>
-                <Text style={styles.averageRatioText}>중안부 1.00 기준</Text>
+                <Text style={styles.ratioBasisText}>중안부 1.00 기준</Text>
                 <Text style={styles.myRatioText}>
                   중·하안부 비율 1.00 : {formatRatio(ratio.lower)}
                 </Text>
@@ -576,29 +564,26 @@ function VerticalRatioSection({
   );
 }
 
-// 상/중/하안부 비율을 x축(가로) 막대로 비교. 막대 끝 눈금이 평균 기준선.
+// 상/중/하안부 비율을 x축(가로) 막대로 비교 — 부위 간 상대 길이의
+// 자기내부 비교 차트(Phase 0-3: 종전 '평균 기준선' 눈금 제거).
 const RATIO_CHART_MAX = 1.6;
 
 function RatioBarRow({
-  average,
   color,
   label,
   value,
 }: {
-  average: number;
   color: string;
   label: string;
   value: number | null;
 }) {
   const fillPercent = value === null ? 0 : clamp((value / RATIO_CHART_MAX) * 100, 0, 100);
-  const averagePercent = clamp((average / RATIO_CHART_MAX) * 100, 0, 100);
 
   return (
     <View style={styles.barRow}>
       <Text style={styles.barLabel}>{label}</Text>
       <View style={styles.barTrack}>
         <View style={[styles.barFill, {backgroundColor: color, width: `${fillPercent}%`}]} />
-        <View style={[styles.barAvgMark, {left: `${averagePercent}%`}]} />
       </View>
       <Text style={styles.barValue}>{value === null ? '–' : value.toFixed(2)}</Text>
     </View>
@@ -615,29 +600,10 @@ function VerticalRatioBarChart({
   return (
     <View style={styles.barChart}>
       {measurementMode === 'full_vertical_thirds' ? (
-        <RatioBarRow
-          average={AVERAGE_DISPLAY_RATIO.upper}
-          color={REPORT_ACCENT}
-          label="상안부"
-          value={ratio.upper}
-        />
+        <RatioBarRow color={REPORT_ACCENT} label="상안부" value={ratio.upper} />
       ) : null}
-      <RatioBarRow
-        average={AVERAGE_DISPLAY_RATIO.middle}
-        color={REPORT_ACCENT_DARK}
-        label="중안부"
-        value={ratio.middle}
-      />
-      <RatioBarRow
-        average={AVERAGE_DISPLAY_RATIO.lower}
-        color={REPORT_ACCENT}
-        label="하안부"
-        value={ratio.lower}
-      />
-      <View style={styles.barLegendRow}>
-        <View style={styles.barAvgMarkLegend} />
-        <Text style={styles.barLegendText}>세로선 = 평균 기준</Text>
-      </View>
+      <RatioBarRow color={REPORT_ACCENT_DARK} label="중안부" value={ratio.middle} />
+      <RatioBarRow color={REPORT_ACCENT} label="하안부" value={ratio.lower} />
     </View>
   );
 }
@@ -905,7 +871,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.xs,
     textAlign: 'center',
   },
-  averageRatioText: {
+  ratioBasisText: {
     color: REPORT_MUTED,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.md,
@@ -933,20 +899,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     textAlign: 'center',
   },
-  barAvgMark: {
-    backgroundColor: colors.textPrimary,
-    bottom: -3,
-    marginLeft: -1,
-    position: 'absolute',
-    top: -3,
-    width: 2,
-  },
-  barAvgMarkLegend: {
-    backgroundColor: colors.textPrimary,
-    height: 12,
-    marginRight: spacing.xs,
-    width: 2,
-  },
   barChart: {
     gap: spacing.sm,
     marginTop: spacing.lg,
@@ -962,18 +914,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
     width: 52,
-  },
-  barLegendRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: spacing.xs,
-  },
-  barLegendText: {
-    color: REPORT_MUTED,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
   },
   barRow: {
     alignItems: 'center',
@@ -998,8 +938,13 @@ const styles = StyleSheet.create({
   content: {
     backgroundColor: colors.background,
   },
-  gaugeAverageValue: {
-    left: '47%',
+  gaugeBorderlineText: {
+    color: REPORT_MUTED,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+    marginTop: spacing.xs,
+    textAlign: 'center',
   },
   gaugeLabel: {
     color: colors.textSecondary,
@@ -1031,16 +976,13 @@ const styles = StyleSheet.create({
     transform: [{rotate: '45deg'}],
     width: 28,
   },
-  gaugeMarkerText: {
-    backgroundColor: REPORT_MARKER,
-    borderRadius: radius.pill,
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
+  gaugeProvenanceText: {
+    color: REPORT_MUTED,
+    fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 2,
+    marginTop: spacing.md,
+    textAlign: 'center',
   },
   gaugeSegment: {
     flex: 1,
@@ -1063,19 +1005,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     overflow: 'hidden',
     width: '100%',
-  },
-  gaugeValue: {
-    bottom: 34,
-    position: 'absolute',
-  },
-  gaugeValueText: {
-    color: REPORT_MARKER,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  gaugeWideValue: {
-    left: '28%',
   },
   gaugeWrap: {
     marginTop: 50,
