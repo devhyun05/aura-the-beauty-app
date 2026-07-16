@@ -1,6 +1,9 @@
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 import math
 from typing import Any
+
+from pydantic import ValidationError
 
 from app.schemas.face_analysis_v2 import (
   BlockedMetricKey,
@@ -13,7 +16,87 @@ from app.schemas.face_analysis_v2 import (
 from app.services.face3d_calibration_receipts import (
   FACE3D_PRODUCT_POLICY_GATES,
   FACE3D_SERVER_RECEIPT_STATUS_FIELD,
+  FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION,
   is_face3d_profile_server_verified,
+)
+
+
+FACE3D_MODEL_VISIBLE_METRIC_NAMES = (
+  "noseTipProjection",
+  "chinProjection",
+  "upperLipToELine",
+  "lowerLipToELine",
+  "centralProjectionScore",
+  "noseLength",
+  "nasalBridgeStraightness",
+  "nasalAxisDeviation",
+  "alarWidth",
+  "malarProjectionLeft",
+  "malarProjectionRight",
+)
+FACE3D_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
+  f"face3d.{name}"
+  for name in FACE3D_MODEL_VISIBLE_METRIC_NAMES
+)
+
+# Model-visible camera keys are explicit trust-boundary allowlists. Keep the
+# geometry tuple synchronized with mobile FACE_GEOMETRY_METRIC_KEYS; a backend
+# test reads the TypeScript source and fails when the contracts drift.
+VERTICAL_THIRDS_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
+  {
+    "verticalThirds.upperNormalized",
+    "verticalThirds.middleNormalized",
+    "verticalThirds.lowerNormalized",
+    "verticalThirds.faceHeightPx",
+    "verticalThirds.faceWidthPx",
+    "verticalThirds.faceRatio",
+    "verticalThirds.dominantPart",
+    "verticalThirds.faceLengthVerdict",
+  },
+)
+GEOMETRY2D_MODEL_VISIBLE_METRIC_NAMES = (
+  "browSlopeLeftDeg",
+  "browSlopeRightDeg",
+  "canthalTiltLeftDeg",
+  "canthalTiltRightDeg",
+  "eyeBrowGapLeft",
+  "eyeBrowGapRight",
+  "eyeOpennessLeft",
+  "eyeOpennessRight",
+  "eyeWidthRatioLeft",
+  "eyeWidthRatioRight",
+  "interCanthalRatio",
+  "jawWidthRatio",
+  "lipThicknessRatio",
+  "lowerJawWidthRatio",
+  "mouthCornerAsymmetry",
+  "mouthWidthRatio",
+)
+GEOMETRY2D_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
+  f"geometry2d.{name}"
+  for name in GEOMETRY2D_MODEL_VISIBLE_METRIC_NAMES
+)
+PERSONAL_COLOR_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
+  {
+    *(
+      f"personalColor.axes.{name}"
+      for name in ("temperature", "value", "chroma", "clarity", "contrast")
+    ),
+    *(
+      f"personalColor.tone.{name}"
+      for name in ("top", "secondary", "season")
+    ),
+    *(
+      f"personalColor.relations.{name}"
+      for name in ("dL_skinHair", "dL_skinLip", "dE00_skinHair", "dE00_skinLip")
+    ),
+  },
+)
+CAMERA_MODEL_VISIBLE_PROFILE_KEYS = (
+  VERTICAL_THIRDS_MODEL_VISIBLE_PROFILE_KEYS
+  | GEOMETRY2D_MODEL_VISIBLE_PROFILE_KEYS
+  | PERSONAL_COLOR_MODEL_VISIBLE_PROFILE_KEYS
+  | FACE3D_MODEL_VISIBLE_PROFILE_KEYS
 )
 
 
@@ -72,6 +155,16 @@ AI_OBSERVABLE_METRICS: dict[str, tuple[int, str]] = {
   "skin.pigmentationDistribution": (2, "label"),
   "skin.marksAndScarsMap": (2, "label"),
 }
+MODEL_VISIBLE_PROFILE_KEYS = (
+  CAMERA_MODEL_VISIBLE_PROFILE_KEYS
+  | frozenset(AI_OBSERVABLE_METRICS)
+)
+
+
+def filter_metric_keys_for_model(keys: Iterable[str]) -> list[str]:
+  """Return only known metric keys that may cross the external-model boundary."""
+  return sorted(set(keys) & MODEL_VISIBLE_PROFILE_KEYS)
+
 
 OUT_OF_SCOPE_METRICS = frozenset(
   {
@@ -280,7 +373,10 @@ def _normalize_face3d(
   usable = True
   reason = None
   schema_version = raw.get("schemaVersion")
-  if schema_version == "aura.face3d-profile.v2":
+  if schema_version is not None and not isinstance(schema_version, str):
+    usable = False
+    reason = "face3d_schema_unsupported"
+  elif schema_version == FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION:
     policy_id = raw.get("collectionPolicyId")
     gate_version = raw.get("gateVersion")
     if raw.get("sampleMode") == "single_frame":
@@ -309,7 +405,10 @@ def _normalize_face3d(
     elif raw.get("sampleMode") != "micro_burst" or raw.get("aggregation") != "median_mad":
       usable = False
       reason = "face3d_profile_policy_invalid"
-  elif schema_version not in {None, "aura.face3d-profile.v1"}:
+  elif schema_version == "aura.face3d-profile.v2":
+    usable = False
+    reason = "face3d_legacy_v2_not_product_eligible"
+  elif schema_version not in (None, "aura.face3d-profile.v1"):
     usable = False
     reason = "face3d_schema_unsupported"
   for key, metric_value in _record(raw.get("metrics")).items():
@@ -320,7 +419,7 @@ def _normalize_face3d(
       usable=usable, reason=reason,
       warnings=_warnings(profile_warnings, metric.get("warnings")),
     )
-    if "valueMm" in metric:
+    if schema_version == FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION and "valueMm" in metric:
       output[f"face3d.{key}.mm"] = _camera_metric(
         value=_finite(metric.get("valueMm")),
         confidence=_finite(metric.get("valueMmConfidence")) or 0.0,
@@ -473,14 +572,50 @@ def filter_metrics_for_audience(
 
 
 def filter_metrics_for_model(
-  metrics: dict[str, MetricEnvelope],
+  metrics: Mapping[str, MetricEnvelope | dict[str, Any]],
 ) -> dict[str, MetricEnvelope]:
-  """Keep model-visible evidence while retaining sensitivity-3 data internally."""
-  return {
-    key: metric
-    for key, metric in metrics.items()
-    if metric.sensitivity < 3
-  }
+  """Project only allowlisted evidence into a provenance-free model envelope."""
+  model_visible: dict[str, MetricEnvelope] = {}
+  for key, raw_metric in metrics.items():
+    if key not in MODEL_VISIBLE_PROFILE_KEYS:
+      continue
+
+    try:
+      metric = (
+        raw_metric
+        if isinstance(raw_metric, MetricEnvelope)
+        else MetricEnvelope.model_validate(raw_metric)
+      )
+    except (TypeError, ValidationError):
+      continue
+
+    if (
+      metric.sensitivity >= 3
+      or metric.status in {
+        MeasurementStatus.BLOCKED,
+        MeasurementStatus.UNMEASURED,
+      }
+    ):
+      continue
+
+    # Camera envelopes contain client-owned warnings/reasons/provenance, and
+    # AI envelopes may contain prior model prose. Rebuild the minimum typed
+    # evidence needed by the next external-model stage.
+    model_visible[key] = MetricEnvelope.model_validate(
+      {
+        "value": metric.value,
+        "unit": metric.unit,
+        "confidence": metric.confidence,
+        "source": metric.source.value,
+        "status": metric.status.value,
+        "shots": [shot.value for shot in metric.shots],
+        "sensitivity": metric.sensitivity,
+        "reason": None,
+        "warnings": [],
+        "derivedFrom": [],
+      },
+    )
+  return model_visible
 
 
 _INTERNAL_ONLY = object()

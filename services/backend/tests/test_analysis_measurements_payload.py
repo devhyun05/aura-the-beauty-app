@@ -6,6 +6,7 @@
 - DB 저장본은 전량 유지하고 외부 상세 응답은 내부 mm/receipt를 제거한다.
 """
 
+from copy import deepcopy
 import json
 
 from app.api.analysis import (
@@ -320,9 +321,61 @@ def test_prompt_keeps_legacy_full_success_with_actual_h() -> None:
 
 def test_prompt_rejects_unknown_face3d_schema() -> None:
   payload = build_worst_case_request_payload()
-  unknown = {**payload["face3d"], "schemaVersion": "aura.face3d-profile.v3"}
+  unknown = {**payload["face3d"], "schemaVersion": "aura.face3d-profile.v4"}
   payload["face3d"] = unknown
   payload["measurements"] = {**payload["measurements"], "face3d": unknown}
+
+  prompt = OpenAIAnalysisService(Settings())._build_analysis_prompt(payload)
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+
+  assert "face3d" not in metadata
+  assert "face3d" not in metadata["measurements"]
+
+
+def test_prompt_rejects_non_string_face3d_schema_without_type_error() -> None:
+  payload = build_worst_case_request_payload()
+  invalid = {
+    **payload["face3d"],
+    "schemaVersion": {"attacker": "controlled"},
+  }
+  payload["face3d"] = invalid
+  payload["measurements"] = {**payload["measurements"], "face3d": invalid}
+
+  prompt = OpenAIAnalysisService(Settings())._build_analysis_prompt(payload)
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+
+  assert "face3d" not in metadata
+  assert "face3d" not in metadata["measurements"]
+
+
+def test_prompt_uses_measurements_face3d_as_the_only_authoritative_source() -> None:
+  payload = build_worst_case_request_payload()
+  primary = deepcopy(payload["measurements"]["face3d"])
+  secondary = deepcopy(primary)
+  secondary["metrics"]["noseTipProjection"]["value"] = 999.0
+  payload["measurements"]["face3d"] = primary
+  payload["face3d"] = secondary
+
+  prompt = OpenAIAnalysisService(Settings())._build_analysis_prompt(payload)
+  metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
+
+  assert "face3d" not in metadata
+  assert (
+    metadata["measurements"]["face3d"]["metrics"]["noseTipProjection"]["value"]
+    == primary["metrics"]["noseTipProjection"]["value"]
+  )
+
+
+def test_prompt_never_falls_back_to_secondary_when_primary_face3d_is_ineligible() -> None:
+  payload = build_worst_case_request_payload()
+  primary = {
+    **deepcopy(payload["measurements"]["face3d"]),
+    "schemaVersion": "aura.face3d-profile.v2",
+  }
+  secondary = deepcopy(payload["face3d"])
+  secondary["metrics"]["noseTipProjection"]["value"] = 999.0
+  payload["measurements"]["face3d"] = primary
+  payload["face3d"] = secondary
 
   prompt = OpenAIAnalysisService(Settings())._build_analysis_prompt(payload)
   metadata = json.loads(prompt.split("요청 메타데이터: ", 1)[1])
@@ -406,6 +459,12 @@ def test_detail_response_projection_strips_internal_face3d_mm_and_receipt_proof(
             "label": "internal",
             "sensitivity": 3,
           },
+          "unexpected": {
+            "face3d.noseTipProjection.mm": {
+              "unit": "mm",
+              "value": 2.8,
+            },
+          },
         },
       },
     },
@@ -426,6 +485,10 @@ def test_detail_response_projection_strips_internal_face3d_mm_and_receipt_proof(
   assert "face3d.noseTipProjection" in face_profile
   assert "face3d.noseTipProjection.mm" not in face_profile
   assert "asymmetry" not in response_detail["result"]["faceAnalysisV2"]["derived"]
+  assert (
+    "face3d.noseTipProjection.mm"
+    not in response_detail["result"]["faceAnalysisV2"]["derived"]["unexpected"]
+  )
 
   # Response projection must not mutate the stored payload.
   assert detail["request"]["measurements"]["face3d"]["calibrationReceipt"]

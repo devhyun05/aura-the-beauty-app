@@ -1,4 +1,4 @@
-import type {Face3DProfileV2} from '../../face-3d/types';
+import type {Face3DProfileV3} from '../../face-3d/types';
 import {parseFace3DProfile} from '../../face-3d/services/face3DContract';
 
 export const UNIFIED_FACE_CAPTURE_SCHEMA_VERSION =
@@ -70,7 +70,7 @@ export type UnifiedFaceCaptureResult = {
     whiteBalanceAvailable: boolean;
   };
   captureId: string;
-  face3d: Face3DProfileV2;
+  face3d: Face3DProfileV3;
   hairline: {
     analysisEligible: boolean;
     confidence: number | null;
@@ -550,7 +550,7 @@ function parseCompletedEvent(
       segmentationSensorTimestampMs === null) ||
     (!faceNativeFrameToken && anchorFaceNativeTimestampMs === null) ||
     !parsedFace3D ||
-    parsedFace3D.schemaVersion !== 'aura.face3d-profile.v2'
+    parsedFace3D.schemaVersion !== 'aura.face3d-profile.v3'
   ) {
     return null;
   }

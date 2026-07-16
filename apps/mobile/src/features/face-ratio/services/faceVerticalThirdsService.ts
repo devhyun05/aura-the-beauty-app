@@ -542,7 +542,10 @@ export async function analyzeFaceVerticalThirds(
 
     nativeResult = await analyzeFacePhoto(input.imageUri, {
       hairline: {
-        debugArtifacts: input.debugArtifacts,
+        // Phase 1 raw replay에는 matte/debug PNG가 필요하지 않다. 헤어라인 계산은
+        // 임베드된 matte buffer에서 끝나므로 validation 세션에서는 네이티브 tmp
+        // 파일 생성을 원천 차단한다.
+        debugArtifacts: input.validationReplay ? false : input.debugArtifacts,
         enabled: shouldAnalyzeHairline,
         tuning: HAIRLINE_TUNING,
       },
@@ -719,75 +722,53 @@ export async function analyzeFaceVerticalThirds(
     return persistTerminalResult(result);
   }
 
-  if (poseNormalization?.outcome.applied) {
-    const blockReplayArtifact = async ({
+  const blockReplayArtifact = async ({
+    message,
+    reason,
+  }: {
+    message?: string;
+    reason:
+      | 'pose_normalization_artifact_write_failed'
+      | 'pose_normalization_replay_metadata_missing';
+  }) => {
+    const quality: FaceVerticalThirdsQuality = {
+      pitch: nativeResult.pose?.pitchDeg,
+      roll: nativeResult.pose?.rollDeg,
+      usable: false,
+      warnings: [reason],
+      yaw: nativeResult.pose?.yawDeg,
+    };
+    const result = createResult({
+      artifacts: {
+        logJsonlUri: logger.logFileUri ?? undefined,
+      },
+      input,
+      keypoints: rawKeypoints,
+      postCorrection: correction.outcome,
+      quality,
+      sourceImage,
+      status: 'blocked',
+      statusReason: reason,
+    });
+
+    await logEvent(logger, 'analysis:blocked', {
       message,
       reason,
-    }: {
-      message?: string;
-      reason:
-        | 'pose_normalization_artifact_write_failed'
-        | 'pose_normalization_replay_metadata_missing';
-    }) => {
-      const quality: FaceVerticalThirdsQuality = {
-        pitch: nativeResult.pose?.pitchDeg,
-        roll: nativeResult.pose?.rollDeg,
-        usable: false,
-        warnings: [reason],
-        yaw: nativeResult.pose?.yawDeg,
-      };
-      const result = createResult({
-        artifacts: {
-          logJsonlUri: logger.logFileUri ?? undefined,
-        },
-        input,
-        keypoints: rawKeypoints,
-        postCorrection: correction.outcome,
-        quality,
-        sourceImage,
-        status: 'blocked',
-        statusReason: reason,
-      });
+      warnings: quality.warnings,
+    });
 
-      await logEvent(logger, 'analysis:blocked', {
-        message,
-        reason,
-        warnings: quality.warnings,
-      });
+    return persistTerminalResult(result);
+  };
+  const replayValidation = input.validationReplay;
+  const replayTransformationMatrix = landmarkInput?.transformationMatrix;
 
-      return persistTerminalResult(result);
-    };
-
-    if (!input.validationReplay || !landmarkInput?.transformationMatrix) {
-      return blockReplayArtifact({
-        reason: 'pose_normalization_replay_metadata_missing',
-      });
-    }
-
-    try {
-      poseNormalizationReplayUri =
-        await saveFaceRatioPhase1ReplayArtifact({
-          capturedAtUtc: input.createdAt,
-          hairline: rawKeypoints.H,
-          imageHeight,
-          imageWidth,
-          landmarks: landmarkInput.points,
-          transformationMatrix: landmarkInput.transformationMatrix,
-          validation: input.validationReplay,
-          zProxy: rawGeometry.debugPoints.idx10?.z,
-        });
-      await logEvent(logger, 'pose_normalization:raw-artifact-saved', {
-        captureId: input.validationReplay.captureId,
-        localOnly: true,
-        productPayloadIncluded: false,
-        retentionDays: input.validationReplay.retentionDays,
-      });
-    } catch (error) {
-      return blockReplayArtifact({
-        message: getErrorMessage(error),
-        reason: 'pose_normalization_artifact_write_failed',
-      });
-    }
+  if (
+    poseNormalization?.outcome.applied &&
+    (!replayValidation || !replayTransformationMatrix)
+  ) {
+    return blockReplayArtifact({
+      reason: 'pose_normalization_replay_metadata_missing',
+    });
   }
 
   const qualityGate = evaluateFaceVerticalThirdsQuality(
@@ -910,6 +891,11 @@ export async function analyzeFaceVerticalThirds(
   const normalizationWarnings = poseNormalization?.outcome.applied
     ? ['pose_normalization_confidence_unvalidated']
     : [];
+  const faceLength = computeFaceLength(
+    measurementGeometry.debugPoints,
+    analysisKeypoints,
+    imageWidth,
+  );
 
   await logEvent(logger, 'ratio:computed', {
     displayRatio: ratio.displayRatio,
@@ -936,32 +922,34 @@ export async function analyzeFaceVerticalThirds(
         ...normalizationWarnings,
       ],
     };
-    const sourceImageUri = await saveSourceImage(input.sessionId, input.imageUri);
+    // Phase 1 raw replay는 전용 retention root만 사용한다. 일반 결과 디렉터리에
+    // 원본 셀피나 matte/debug 이미지를 추가 복사하면 7일 삭제 경계를 우회한다.
+    const sourceImageUri = input.validationReplay
+      ? input.imageUri
+      : await saveSourceImage(input.sessionId, input.imageUri);
     let hairlineDebugArtifacts: FaceVerticalThirdsResult['artifacts'] = {};
 
-    try {
-      hairlineDebugArtifacts = await saveHairlineDebugArtifacts(
-        input.sessionId,
-        nativeResult.debugArtifacts,
-      );
-    } catch (error) {
-      await logEvent(logger, 'hairline:debug-artifacts-failed', {
-        message: getErrorMessage(error),
-      });
+    if (!input.validationReplay) {
+      try {
+        hairlineDebugArtifacts = await saveHairlineDebugArtifacts(
+          input.sessionId,
+          nativeResult.debugArtifacts,
+        );
+      } catch (error) {
+        await logEvent(logger, 'hairline:debug-artifacts-failed', {
+          message: getErrorMessage(error),
+        });
+      }
     }
 
-    const result = createResult({
+    let result = createResult({
       artifacts: {
         ...hairlineDebugArtifacts,
         logJsonlUri: logger.logFileUri ?? undefined,
         poseNormalizationReplayUri,
         sourceImageUri,
       },
-      faceLength: computeFaceLength(
-        measurementGeometry.debugPoints,
-        analysisKeypoints,
-        imageWidth,
-      ),
+      faceLength,
       hairlineAnalysis,
       input,
       judgmentIndeterminate: Boolean(poseNormalization?.outcome.applied),
@@ -982,7 +970,58 @@ export async function analyzeFaceVerticalThirds(
           ? 'full_success'
           : 'partial_success',
     });
-    const persistedResult = await writeResultWithPlannedUri(result);
+
+    // 실패/partial 촬영은 같은 captureId로 재시도할 수 있어야 한다. 따라서 raw
+    // append는 quality gate를 통과하고 full 결과와 faceLength가 모두 완성된
+    // terminal result가 구성된 뒤에만 수행한다.
+    if (
+      poseNormalization?.outcome.applied &&
+      qualityGate.quality.usable &&
+      measurementMode === 'full_vertical_thirds' &&
+      faceLength &&
+      replayValidation &&
+      replayTransformationMatrix
+    ) {
+      try {
+        poseNormalizationReplayUri =
+          await saveFaceRatioPhase1ReplayArtifact({
+            capturedAtUtc: input.createdAt,
+            hairline: rawKeypoints.H,
+            imageHeight,
+            imageWidth,
+            landmarks: landmarkInput?.points ?? [],
+            transformationMatrix: replayTransformationMatrix,
+            validation: replayValidation,
+            zProxy: rawGeometry.debugPoints.idx10?.z,
+          });
+        result = {
+          ...result,
+          artifacts: {
+            ...result.artifacts,
+            poseNormalizationReplayUri,
+          },
+        };
+        await logEvent(logger, 'pose_normalization:raw-artifact-saved', {
+          captureId: replayValidation.captureId,
+          localOnly: true,
+          productPayloadIncluded: false,
+          retentionDays: replayValidation.retentionDays,
+        });
+      } catch (error) {
+        return blockReplayArtifact({
+          message: getErrorMessage(error),
+          reason: 'pose_normalization_artifact_write_failed',
+        });
+      }
+    }
+
+    // raw append가 성공한 뒤 일반 진단 result.json 쓰기 실패를 촬영 실패로
+    // 되돌리면 같은 captureId 재시도가 duplicate로 막힌다. 전용 replay가
+    // 정본이므로 이 경우 result.json은 best-effort로만 유지한다.
+    const persistedResult =
+      input.validationReplay && poseNormalizationReplayUri
+        ? await persistTerminalResult(result)
+        : await writeResultWithPlannedUri(result);
 
     await logEvent(logger, 'analysis:partial', {
       artifacts: persistedResult.artifacts,

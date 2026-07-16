@@ -91,7 +91,7 @@ def calibrated_face3d_profile(now: datetime) -> dict:
     },
     "profileBindingSha256": None,
     "sampleMode": "micro_burst",
-    "schemaVersion": "aura.face3d-profile.v2",
+    "schemaVersion": "aura.face3d-profile.v3",
     "sensorProvenance": {
       "depthDataObservedRatio": 1.0,
       "deviceModel": "test-device",

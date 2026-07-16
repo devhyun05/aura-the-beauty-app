@@ -222,6 +222,10 @@ export function runCli(argv = process.argv.slice(2)) {
     `device actions=0; Phase 1=${plan.phase1.shotCount} shots; `
       + `exact-30=${plan.phase2.exact30RepeatCount} repeats`,
   );
+  console.log(
+    '실기기 수집 전 별도 fail-closed 검사: '
+      + 'npm run face3d:collection:preflight (자동 Unity 빌드/기기 동작 없음)',
+  );
 }
 
 const isDirectExecution = process.argv[1]

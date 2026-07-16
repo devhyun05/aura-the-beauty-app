@@ -19,7 +19,7 @@ import {
   FACE3D_EXACT_POLICY_IDS,
   FACE3D_GATE_VERSION_V2,
   FACE3D_PRODUCT_POLICY_TUPLES,
-  FACE3D_PROFILE_SCHEMA_V2,
+  FACE3D_PROFILE_SCHEMA_V3,
   FACE3D_PROMOTION_CANDIDATE_FRAME_COUNTS,
   FACE3D_REPEATABILITY_MANIFEST_SCHEMA_VERSION,
   FACE3D_VALIDATION_COHORT_SCHEMA_VERSION,
@@ -653,7 +653,7 @@ export function evaluateFace3DCalibrationPromotion({manifest, manifestPath}) {
   requireCondition(isRecord(profileEnvelope.profile), 'calibrated profile이 없습니다.');
   assertNoRawFaceData(profileEnvelope.profile);
   requireCondition(
-    profileEnvelope.profile.schemaVersion === FACE3D_PROFILE_SCHEMA_V2
+    profileEnvelope.profile.schemaVersion === FACE3D_PROFILE_SCHEMA_V3
       && profileEnvelope.profile.collectionPolicyId === manifest.requestedPolicyId
       && profileEnvelope.profile.gateVersion === FACE3D_GATE_VERSION_V2
       && profileEnvelope.profile.confidenceCalibrationStatus === 'calibrated',
@@ -697,7 +697,7 @@ export function evaluateFace3DCalibrationPromotion({manifest, manifestPath}) {
     confidenceCalibrationRegistryPreview: {
       status: 'pending',
       validationStatus: 'evidence_validated_unsigned',
-      profileSchemaVersion: FACE3D_PROFILE_SCHEMA_V2,
+      profileSchemaVersion: FACE3D_PROFILE_SCHEMA_V3,
       policyId: manifest.requestedPolicyId,
       gateVersion: FACE3D_GATE_VERSION_V2,
       receiptSchemaVersion: FACE3D_CALIBRATION_RECEIPT_SCHEMA_VERSION,

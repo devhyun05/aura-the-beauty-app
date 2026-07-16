@@ -426,9 +426,11 @@ class FaceAnalysisPipeline:
         updated_at=_now(),
       )
     else:
-      consulting_profile = filter_metrics_for_audience(
-        result.face_profile,
-        include_sensitive=False,
+      consulting_profile = filter_metrics_for_model(
+        filter_metrics_for_audience(
+          result.face_profile,
+          include_sensitive=False,
+        ),
       )
       consulting_model_input = filter_internal_only_payload(
         {

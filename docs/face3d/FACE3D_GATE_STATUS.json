@@ -44,7 +44,7 @@
   "confidenceCalibration": {
     "status": "pending",
     "validationStatus": "not_run",
-    "profileSchemaVersion": "aura.face3d-profile.v2",
+    "profileSchemaVersion": "aura.face3d-profile.v3",
     "policyId": null,
     "gateVersion": "face3d-gate-v2",
     "receiptSchemaVersion": "aura.face3d-confidence-calibration-receipt.v1",
@@ -54,7 +54,7 @@
     "receiptPath": null,
     "receiptSha256": null,
     "featureFlagDefault": "off",
-    "note": "Gate 6B device evidence, independent validation, product-owner approval artifact, HMAC receipt, and backend replay protection are not complete. Calibrated self-claims remain blocked."
+    "note": "Gate 6B device evidence, independent validation, product-owner approval artifact, HMAC receipt, and backend replay protection are not complete. New calibration evidence requires aura.face3d-profile.v3; v1/v2 remain legacy read-only. Calibrated self-claims remain blocked."
   },
   "offlineDiagnostics17": {
     "captureCount": 17,

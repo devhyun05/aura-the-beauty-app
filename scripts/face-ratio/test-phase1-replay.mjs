@@ -473,6 +473,34 @@ expect(
     serviceSource.includes('pose_normalization_replay_metadata_missing'),
   'Runtime integration must store original-frame keypoints while measuring on the normalized frame.',
 );
+const qualityGateIndex = serviceSource.indexOf(
+  'const qualityGate = evaluateFaceVerticalThirdsQuality',
+);
+const faceLengthIndex = serviceSource.indexOf('const faceLength = computeFaceLength');
+const replayAppendIndex = serviceSource.indexOf(
+  'await saveFaceRatioPhase1ReplayArtifact',
+  faceLengthIndex,
+);
+const replayAppendGuard = serviceSource.slice(
+  serviceSource.lastIndexOf('if (', replayAppendIndex),
+  replayAppendIndex,
+);
+expect(
+  qualityGateIndex >= 0 &&
+    faceLengthIndex > qualityGateIndex &&
+    replayAppendIndex > faceLengthIndex &&
+    replayAppendGuard.includes('qualityGate.quality.usable') &&
+    replayAppendGuard.includes("measurementMode === 'full_vertical_thirds'") &&
+    replayAppendGuard.includes('faceLength') &&
+    serviceSource.includes('\n      faceLength,\n'),
+  'Raw replay append must occur only after a usable full measurement has one shared faceLength result.',
+);
+expect(
+  serviceSource.includes(
+    'debugArtifacts: input.validationReplay ? false : input.debugArtifacts',
+  ),
+  'Validation replay must disable native tmp matte/debug artifact generation.',
+);
 
 const screenSource = readFileSync(
   join(
@@ -506,7 +534,7 @@ expect(
 expect(
   labSource.includes('if (phase1RawSaved)') &&
     labSource.includes(
-      'setPhase1RawSaved(Boolean(result.artifacts.poseNormalizationReplayUri))',
+      'setPhase1RawSaved(isFaceRatioPhase1ReplayShotComplete(result))',
     ) &&
     labSource.includes('setPhase1Completed(true)') &&
     labSource.includes(
@@ -556,6 +584,17 @@ const artifactContractSource = readFileSync(
   'utf8',
 );
 expect(
+  artifactSource.includes('isFaceRatioPhase1ReplayShotComplete') &&
+    artifactSource.includes("result.status === 'full_success'") &&
+    artifactSource.includes(
+      "result.measurementMode === 'full_vertical_thirds'",
+    ) &&
+    artifactSource.includes('result.quality.usable') &&
+    artifactSource.includes('result.verticalThirds') &&
+    artifactSource.includes('result.faceLength'),
+  'A blocked or incomplete measurement must not consume a Phase 1 shot.',
+);
+expect(
   artifactSource.includes('face-ratio-phase1-validation/') &&
     artifactSource.includes('source image URI나 제품 payload는 저장하지 않는다') &&
     artifactSource.includes('pruneExpiredFaceRatioPhase1ReplayArtifacts') &&
@@ -564,6 +603,26 @@ expect(
     artifactContractSource.includes('sourceImagesIncluded: false') &&
     !artifactContractSource.includes('imageUri'),
   'Runtime writer must use a dedicated local path, omit product/source payloads, and prune expired artifacts.',
+);
+expect(
+  artifactSource.includes('deleteFaceRatioPhase1LocalCapture') &&
+    artifactContractSource.includes('isFaceRatioPhase1LocalCaptureUri') &&
+    artifactContractSource.includes('PHASE1_LOCAL_CAPTURE_FILE_PATTERN') &&
+    labSource.includes('releasePhase1LocalCapture(captureToRelease)') &&
+    labSource.includes(
+      'void deleteFaceRatioPhase1LocalCapture(captureToRelease.imageUri)',
+    ),
+  'Phase 1 retake/advance/change-mode must best-effort delete only the native local tmp capture.',
+);
+expect(
+  serviceSource.includes('input.validationReplay') &&
+    serviceSource.includes(': await saveSourceImage(input.sessionId, input.imageUri)') &&
+    serviceSource.includes('if (!input.validationReplay)') &&
+    screenSource.includes('validationReplay ||') &&
+    screenSource.includes(
+      '[imageLoaded, result, stageLaidOut, validationReplay]',
+    ),
+  'Validation replay must not copy source/debug/overlay images outside the retention root.',
 );
 
 console.log('Phase 1 face-ratio replay contract tests passed');

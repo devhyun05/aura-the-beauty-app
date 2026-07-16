@@ -34,7 +34,11 @@ except ImportError:  # pragma: no cover - fallback keeps local setup usable befo
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.services.face3d_calibration_receipts import (
+  FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION,
   is_face3d_profile_server_verified,
+)
+from app.services.face_analysis_measurements import (
+  FACE3D_MODEL_VISIBLE_METRIC_NAMES,
 )
 
 
@@ -57,6 +61,49 @@ def _prompt_number(value: Any) -> float | None:
 
 def _prompt_record(value: Any) -> dict[str, Any]:
   return value if isinstance(value, dict) else {}
+
+
+def _safe_face3d_prompt_metric(value: Any) -> dict[str, Any] | None:
+  raw = _prompt_record(value)
+  if not raw:
+    return None
+
+  metric_value = (
+    None
+    if raw.get("value") is None
+    else _prompt_number(raw.get("value"))
+  )
+  confidence = _prompt_number(raw.get("confidence"))
+  mad = None if raw.get("mad") is None else _prompt_number(raw.get("mad"))
+  valid_frame_count = _prompt_number(raw.get("validFrameCount"))
+  if (
+    (raw.get("value") is not None and metric_value is None)
+    or confidence is None
+    or confidence < 0
+    or confidence > 1
+    or valid_frame_count is None
+    or valid_frame_count < 0
+    or (raw.get("mad") is not None and (mad is None or mad < 0))
+  ):
+    return None
+
+  return {
+    "confidence": confidence,
+    "mad": mad,
+    "unit": "normalized",
+    "validFrameCount": int(valid_frame_count),
+    "value": metric_value,
+  }
+
+
+def _safe_face3d_prompt_metrics(value: Any) -> dict[str, Any]:
+  raw = _prompt_record(value)
+  safe: dict[str, Any] = {}
+  for key in FACE3D_MODEL_VISIBLE_METRIC_NAMES:
+    metric = _safe_face3d_prompt_metric(raw.get(key))
+    if metric is not None:
+      safe[key] = metric
+  return safe
 
 
 def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | None:
@@ -169,9 +216,23 @@ def _safe_face3d_prompt_payload(value: Any) -> dict[str, Any] | None:
     return None
 
   schema_version = raw.get("schemaVersion")
+  if schema_version is not None and not isinstance(schema_version, str):
+    return None
+  metrics = _safe_face3d_prompt_metrics(raw.get("metrics"))
+  if not metrics:
+    return None
+
   if schema_version in {None, "aura.face3d-profile.v1"}:
-    return raw
-  if schema_version != "aura.face3d-profile.v2":
+    # Legacy payloads remain useful for normalized geometry, but their dict is
+    # untrusted. Reconstruct an allowlisted numeric view so receipt/provenance,
+    # valueMm*, raw landmarks, and prompt-injection strings cannot cross the
+    # external-model boundary.
+    return {
+      "metrics": metrics,
+      "schemaVersion": schema_version or "aura.face3d-profile.v1",
+      "source": "arkit_face_mesh",
+    }
+  if schema_version != FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION:
     return None
 
   if (
@@ -181,29 +242,25 @@ def _safe_face3d_prompt_payload(value: Any) -> dict[str, Any] | None:
   ):
     return None
 
-  # 검증 증거·nonce·사용자/보고서 문맥은 모델 입력이 아니다. 서버가 product
-  # eligibility를 판정한 뒤 계측 내용과 센서 provenance만 AI에 전달한다.
-  safe = dict(raw)
-  for field in (
-    "calibrationReceipt",
-    "captureNonce",
-    "profileBindingSha256",
-    "serverCalibrationReceiptStatus",
-  ):
-    safe.pop(field, None)
-  metrics = safe.get("metrics")
-  if isinstance(metrics, dict):
-    safe["metrics"] = {
-      key: {
-        metric_key: metric_value
-        for metric_key, metric_value in metric.items()
-        if not metric_key.startswith("valueMm")
-      }
-      if isinstance(metric, dict)
-      else metric
-      for key, metric in metrics.items()
-    }
-  return safe
+  sensor_provenance = _prompt_record(raw.get("sensorProvenance"))
+  depth_ratio = _prompt_number(sensor_provenance.get("depthDataObservedRatio"))
+
+  # 서버 검증이 끝난 v3도 원본 dict를 전달하지 않는다. Receipt/nonce/context,
+  # valueMm*, device model, unknown fields는 제외하고 모델에 필요한 수치만 재구성한다.
+  return {
+    "aggregation": "median_mad",
+    "collectionPolicyId": raw.get("collectionPolicyId"),
+    "confidenceCalibrationStatus": "calibrated",
+    "metrics": metrics,
+    "sampleMode": "micro_burst",
+    "schemaVersion": FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION,
+    "sensorProvenance": {
+      "depthDataObservedRatio": depth_ratio,
+      "faceTrackingSupported": sensor_provenance.get("faceTrackingSupported") is True,
+      "trueDepthHardware": sensor_provenance.get("trueDepthHardware") is True,
+    },
+    "source": "arkit_face_mesh",
+  }
 
 
 def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
@@ -212,19 +269,28 @@ def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
     for key, value in payload.items()
     if key not in {"imageUrl", "image_url", "cdnUrl", "previewUrl", "sourceUri"}
   }
-  measurements = _prompt_record(metadata.get("measurements"))
-  if measurements:
+  raw_measurements = metadata.get("measurements")
+  measurements = _prompt_record(raw_measurements)
+  measurement_face3d = measurements.get("face3d")
+  top_level_face3d = metadata.pop("face3d", None)
+  face3d_from_measurements = isinstance(measurement_face3d, dict)
+  primary_face3d = (
+    measurement_face3d
+    if face3d_from_measurements
+    else top_level_face3d
+    if isinstance(top_level_face3d, dict)
+    else None
+  )
+  safe_face3d = _safe_face3d_prompt_payload(primary_face3d)
+
+  if isinstance(raw_measurements, dict):
     # DB 저장·과거 복원에는 raw H를 보존하되 AI에는 별도 검증된 요약만 제공한다.
     safe_measurements = dict(measurements)
     safe_measurements.pop("faceVerticalThirds", None)
     safe_measurements.pop("face_vertical_thirds", None)
-    safe_measurements_face3d = _safe_face3d_prompt_payload(
-      safe_measurements.get("face3d"),
-    )
-    if safe_measurements_face3d is None:
-      safe_measurements.pop("face3d", None)
-    else:
-      safe_measurements["face3d"] = safe_measurements_face3d
+    safe_measurements.pop("face3d", None)
+    if face3d_from_measurements and safe_face3d is not None:
+      safe_measurements["face3d"] = safe_face3d
     metadata["measurements"] = safe_measurements
 
   raw_vertical = metadata.pop("face_vertical_thirds", None)
@@ -235,10 +301,7 @@ def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
     metadata.pop("faceVerticalThirds", None)
   else:
     metadata["faceVerticalThirds"] = safe_vertical
-  safe_face3d = _safe_face3d_prompt_payload(metadata.get("face3d"))
-  if safe_face3d is None:
-    metadata.pop("face3d", None)
-  else:
+  if not face3d_from_measurements and safe_face3d is not None:
     metadata["face3d"] = safe_face3d
   return metadata
 RECOMMENDED_MAKEUP_COUNT = 1

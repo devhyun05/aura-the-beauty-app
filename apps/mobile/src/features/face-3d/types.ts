@@ -96,6 +96,23 @@ export type Face3DCalibrationReceipt = {
 
 export type Face3DProfileV2 = {
   aggregation: 'median_mad' | 'none';
+  captureWindowMs: number;
+  collectionPolicyId: string;
+  completionRatio: number;
+  confidenceCalibrationStatus: 'uncalibrated' | 'calibrated';
+  gateVersion: 'face3d-gate-v2';
+  metrics: Face3DMetrics;
+  sampleMode: Face3DSampleMode;
+  schemaVersion: 'aura.face3d-profile.v2';
+  source: 'arkit_face_mesh';
+  targetFrameCount: number;
+  topologyFingerprint: string;
+  validFrameCount: number;
+  warnings: string[];
+};
+
+export type Face3DProfileV3 = {
+  aggregation: 'median_mad' | 'none';
   calibrationReceipt: Face3DCalibrationReceipt | null;
   captureNonce: string;
   captureWindowMs: number;
@@ -110,7 +127,7 @@ export type Face3DProfileV2 = {
   // {$face3dNumber: fixed12_trimmed}, then key-sorts compact JSON before SHA-256.
   profileBindingSha256: string | null;
   sampleMode: Face3DSampleMode;
-  schemaVersion: 'aura.face3d-profile.v2';
+  schemaVersion: 'aura.face3d-profile.v3';
   // Added only by the backend after signature, binding, expiry, context, and
   // one-time receipt-consumption checks. Unity never emits "verified".
   serverCalibrationReceiptStatus?: string;
@@ -122,7 +139,10 @@ export type Face3DProfileV2 = {
   warnings: string[];
 };
 
-export type Face3DProfile = Face3DProfileV1 | Face3DProfileV2;
+export type Face3DProfile =
+  | Face3DProfileV1
+  | Face3DProfileV2
+  | Face3DProfileV3;
 
 export type Face3DStartRequest = {
   gateVersion: 'face3d-gate-v1';

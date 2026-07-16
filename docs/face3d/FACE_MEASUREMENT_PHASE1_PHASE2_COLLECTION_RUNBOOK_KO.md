@@ -2,7 +2,7 @@
 
 상태: **준비 완료 / 실기기 수집 미실행 / 승격 미실행**
 
-정본은 `docs/superpowers/plans/2026-07-16-face-measurement-analysis-plan.md` v4와
+정본은 `docs/superpowers/plans/2026-07-16-face-measurement-analysis-plan.md` v5와
 `AURA_UNIFIED_FACE_CAPTURE_IMPLEMENTATION_PLAN_KO.md` Phase 6B다. 이 문서는 두
 정본을 재정의하지 않고 로컬 수집 순서, 증거 파일 계약, dry-run 검증 명령만 고정한다.
 
@@ -83,6 +83,19 @@ npm run face3d:collection:prepare -- \
 
 각 Phase 1 샷에는 앱의 `FaceVerticalThirdsInput.validationReplay`에 그대로 전달할
 수 있는 `phase1ReplayValidation`이 포함된다.
+
+실기기 빌드나 촬영 전에 임베드된 Unity 런타임이 신규 v3 계약인지 별도로
+검사한다. 이 명령은 Unity 빌드와 기기 동작을 실행하지 않으며, 현재처럼
+v1/v2 산출물이 남아 있으면 fail-closed로 중단하고 재빌드 명령만 안내한다.
+
+```bash
+npm run face3d:collection:preflight
+```
+
+실패 시 안내되는 `bash scripts/unity/build_ios_unity_framework.sh`로 Unity
+산출물을 갱신한 다음 같은 preflight를 다시 통과해야 한다. 이번 작업 범위는
+preflight·재빌드 스크립트 준비까지이며 실제 Unity 재빌드와 실기기 수집은
+수행하지 않는다.
 
 앱의 명시적 검증 랩 진입 스크립트도 준비되어 있다. 이 스크립트만
 `validation-only` 플래그를 켜며 일반 앱/기존 face-capture-lab 기본값은 계속 OFF다.
@@ -178,11 +191,16 @@ adapter는 다음 두 입력을 같은 `aura.face3d-repeatability-manifest.v2`�
 - 기존 `face3d_analyzed.profile`: legacy 호환 입력. 공통 분석에는 쓸 수 있지만 Gate 6B
   승격 증거로는 거부된다.
 
-v2 metric은 `valueMm`, `valueMmConfidence`, `valueMmValidFrameCount`,
+`aura.face3d-repeatability-manifest.v2`의 metric entry는 `valueMm`,
+`valueMmConfidence`, `valueMmValidFrameCount`,
 `valueMmMad`를 한 묶음으로 보존한다. 각 값은 normalized 집계 품질을 복사하지 않고
 raw-meter 표본에서 별도로 계산한다. raw inlier가 exact policy의 N개(제품
 micro-burst는 최소 5개)에 못 미치면 `valueMm`은 반드시 null이어야 한다. single-frame
 exact-1은 두 confidence가 0이고 두 MAD가 null이어야 한다.
+
+manifest 버전 v2와 embedded Face3D profile 버전은 별개다. 신규 수집·calibration
+후보는 반드시 `aura.face3d-profile.v3`이어야 하며 v1/v2 profile은 legacy read-only
+분석에만 허용하고 calibration 승격 증거로는 거부한다.
 
 공통 manifest에는 profile/metric과 source SHA만 남고 이미지·랜드마크·vertex는 남지
 않는다. 각 파일은 정확히 3명×각 3회 neutral 성공 캡처를 가져야 하며, 실패 attempt는
@@ -280,7 +298,7 @@ reportContextId, approvalArtifactSha256
   "confidenceCalibration": {
     "status": "pending",
     "validationStatus": "not_run",
-    "profileSchemaVersion": "aura.face3d-profile.v2",
+    "profileSchemaVersion": "aura.face3d-profile.v3",
     "policyId": null,
     "gateVersion": "face3d-gate-v2",
     "receiptSchemaVersion": "aura.face3d-confidence-calibration-receipt.v1",

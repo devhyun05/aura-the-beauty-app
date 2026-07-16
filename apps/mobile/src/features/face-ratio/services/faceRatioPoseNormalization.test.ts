@@ -144,7 +144,7 @@ expect(
 expect(
   normalized.outcome.diagnostics.landmarkCount === 478 &&
     (normalized.outcome.diagnostics.roundTripRmsPx ?? 1) < 1e-8,
-  'Normalization must retain all points and round-trip through the matrix.',
+  'The accepted transform must be numerically self-consistent under its own inverse/forward diagnostic.',
 );
 
 for (const index of [0, 2, 9, 10, 97, 152, 234, 326, 454, 477]) {
@@ -192,6 +192,113 @@ expect(
     missingMatrix.outcome.skippedReason === 'matrix_missing',
   'Correction must fail closed when the facial transformation matrix is absent.',
 );
+
+const shearedMatrix: FaceRatioTransformationMatrix = {
+  layout: 'row-major',
+  values: [
+    1, 0.5, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+  ],
+};
+const sheared = normalizeFaceRatioLandmarks({
+  enabled: true,
+  imageHeight,
+  imageWidth,
+  matrix: shearedMatrix,
+  points: frontal,
+});
+expect(
+  !sheared.outcome.applied &&
+    sheared.outcome.skippedReason === 'matrix_non_orthogonal',
+  'Shear must fail closed before Gram-Schmidt can hide the invalid matrix.',
+);
+
+const projectiveMatrix: FaceRatioTransformationMatrix = {
+  layout: 'row-major',
+  values: [
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0.001, 0, 0, 1,
+  ],
+};
+const projective = normalizeFaceRatioLandmarks({
+  enabled: true,
+  imageHeight,
+  imageWidth,
+  matrix: projectiveMatrix,
+  points: frontal,
+});
+expect(
+  !projective.outcome.applied &&
+    projective.outcome.skippedReason === 'matrix_non_affine',
+  'A projective bottom row must fail closed instead of being treated as a rigid affine transform.',
+);
+
+const nonUniformScaleMatrix: FaceRatioTransformationMatrix = {
+  layout: 'row-major',
+  values: [
+    2, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 0.5, 0,
+    0, 0, 0, 1,
+  ],
+};
+const nonUniformScale = normalizeFaceRatioLandmarks({
+  enabled: true,
+  imageHeight,
+  imageWidth,
+  matrix: nonUniformScaleMatrix,
+  points: frontal,
+});
+expect(
+  !nonUniformScale.outcome.applied &&
+    nonUniformScale.outcome.skippedReason === 'matrix_non_uniform_scale',
+  'Axis-specific scale must fail closed while uniform similarity scale remains allowed.',
+);
+
+const translatedMatrix: FaceRatioTransformationMatrix = {
+  layout: 'row-major',
+  values: matrix.values.map((value, index) => {
+    if (index === 3) {
+      return 123.5;
+    }
+    if (index === 7) {
+      return -41.25;
+    }
+    if (index === 11) {
+      return 7.75;
+    }
+    return value;
+  }),
+};
+const translated = normalizeFaceRatioLandmarks({
+  enabled: true,
+  imageHeight,
+  imageWidth,
+  matrix: translatedMatrix,
+  points: posed,
+});
+expect(
+  translated.outcome.applied,
+  'Canonical-space translation may be ignored while image-space pose shape is centered on observed landmarks.',
+);
+for (const index of [10, 152, 234, 454]) {
+  expectClose(
+    translated.points[index].x,
+    frontal[index].x,
+    1e-10,
+    `translated x ${index}`,
+  );
+  expectClose(
+    translated.points[index].y,
+    frontal[index].y,
+    1e-10,
+    `translated y ${index}`,
+  );
+}
 
 const syntheticHairline = applyFaceRatioPoseTransform(
   {...posed[10], i: -10, y: posed[10].y - 0.04},

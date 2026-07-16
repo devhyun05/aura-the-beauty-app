@@ -3,6 +3,7 @@ import {
   createFaceRatioPhase1ReplayArtifact,
   createFaceRatioPhase1ReplayCapture,
   isFaceRatioPhase1ReplayArtifactExpired,
+  isFaceRatioPhase1LocalCaptureUri,
   validateFaceRatioPhase1ReplayArtifact,
   validateFaceRatioPhase1ReplayValidation,
 } from './faceRatioPhase1ReplayArtifact';
@@ -153,6 +154,32 @@ expectThrows(
       },
     }),
   /exactly 478/,
+);
+
+const localPhase1Capture =
+  'file:///var/mobile/Containers/Data/Application/app-id/tmp/' +
+  'aura-face-3F2504E0-4F89-41D3-9A0C-0305E82C3301.jpg';
+expect(
+  isFaceRatioPhase1LocalCaptureUri(localPhase1Capture),
+  'native Phase 1 capture in the app tmp directory must be eligible for cleanup',
+);
+expect(
+  !isFaceRatioPhase1LocalCaptureUri(
+    localPhase1Capture.replace('/tmp/', '/Documents/'),
+  ) &&
+    !isFaceRatioPhase1LocalCaptureUri(
+      'https://cdn.example.com/aura-face-3F2504E0-4F89-41D3-9A0C-0305E82C3301.jpg',
+    ) &&
+    !isFaceRatioPhase1LocalCaptureUri(
+      'content://media/external/images/aura-face-3F2504E0-4F89-41D3-9A0C-0305E82C3301.jpg',
+    ) &&
+    !isFaceRatioPhase1LocalCaptureUri(
+      'file:///var/mobile/Containers/Data/Application/app-id/tmp/user-photo.jpg',
+    ) &&
+    !isFaceRatioPhase1LocalCaptureUri(
+      'file:///tmp/aura-face-3F2504E0-4F89-41D3-9A0C-0305E82C3301.jpg',
+    ),
+  'cleanup must reject Documents, remote, content, unrelated photos, and non-app tmp files',
 );
 
 console.log('faceRatioPhase1ReplayArtifact tests passed');

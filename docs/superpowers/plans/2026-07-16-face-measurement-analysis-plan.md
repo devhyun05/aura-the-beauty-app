@@ -1,7 +1,7 @@
 # 얼굴 측정·분석 개선 계획 (2026-07-16)
 
-상태: v4 — Phase 1∥2 구현·수집 준비 GO 반영(2026-07-17). **실기기 MAD·MAE·mm 오차 프로파일과 calibration 제품 승격은 PENDING/UNVERIFIED이며 보정 기본값은 OFF.** 검토 이력: 계획 적대 검토 3라운드 + Phase 0 Codex 4라운드·셀프 1회(GO) + Phase 1∥2 Codex 적대 리뷰 GO·Claude `claude-fable-5` high 독립 리뷰 GO(blocker 0) + v4 Codex 정합 검토 2갈래(5건 정정 후 GO).
-형상: 계획 정본은 dev(PR #20·#26), Phase 0 구현은 PR #21 머지. Phase 1∥2 구현 커밋 `31515d84`는 dev PR #27에 포함됐고 본 v4 현행화도 같은 브랜치에 추가한다. PR은 현재 **OPEN** — 머지 완료로 표기하지 않는다.
+상태: v5 — Phase 1∥2 PR #27 적대 리뷰 hardening과 **남은 Phase 3∥4 + 보고서 R0∥R5의 로컬 자율 실행 계획** 반영(2026-07-17). **실기기 MAD·MAE·mm 오차 프로파일과 calibration 제품 승격은 PENDING/UNVERIFIED이며 보정 기본값은 OFF.** 구현·fixture 기반 웹앱 생성/테스트·이중 리뷰·dev PR은 로컬 워크플로로 수행하며, 실기기·캘리퍼·사람 품질 관문을 완료로 대체하지 않는다.
+형상: 계획 정본은 dev(PR #20·#26), Phase 0 구현은 PR #21 머지. Phase 1∥2 구현과 후속 적대 리뷰 hardening은 dev PR #27에 포함하며 본 v5 현행화도 같은 브랜치에 추가한다. PR은 현재 **OPEN** — 머지 완료나 최종 이중 GO를 선기록하지 않는다.
 작성 배경: 얼굴 길이/비율 측정의 정확도 검토 세션(2026-07-16) 결론 종합
 자매 문서: [보고서 재구성 계획](2026-07-16-face-report-redesign-plan.md) — 보고서 트랙(내용 재구성·Report Lab·UI 개편·AR 맞춤 핏). 두 트랙은 fixture 계약 고정 후 병렬 진행(자매 문서 §2).
 
@@ -11,8 +11,13 @@
 2. **길이비 상수** — 자체 촬영셋 mean±SD로 교체 (1.351/1.455/1.506은 1차 출처 부재, avg 과대 §0-1/§5 D-1·D-2)
 3. **숫자 노출** — 원칙 4(전면 비노출)로 단일화, 정본 §9보다 우선 (§10.7-3)
 4. **법률(BIPA/GDPR)** — 현 스코프 과설계로 판단해 제외, 실서비스 출시 시 재검토 (§6-10)
+5. **무규준 locale UI** — 모집단 밴드와 길이형 판정 게이지를 숨기고 자기이력 변화와 자기내부 부위 비교만 제공. locale norm은 승인 데이터가 생길 때까지 OFF
+6. **body profile** — 보고서에는 연결하되 외부 AI prompt에서는 기본 제외
+7. **R5 AR 맞춤** — 스텐실 레인만 우선, 사용자 opt-in 토글 기본 OFF, `PersonalFitEntry.provenance`만 신설하고 기존 생성 계약은 변경하지 않음
+8. **R5 신규 축** — `eyelinerInnerExtension`을 스텐실 계약에 신설하되 δ와 자동 적용은 승인 전 0/OFF. 라이브 레인 지원은 후속
+9. **누락 정본 대체** — 미반입 HTML 2종 대신 본 v5의 스키마·어조·안전 기본값을 이번 구현 정본으로 사용. 원본이 나중에 들어오면 delta review만 수행
 참고 문서: `docs/faceData_WEI/얼굴형분류기제안서.md`, `engine_제안서.md`(§3–4만 유효), `AURA_FACE_RATIO_DISTORTION_CORRECTION_PLAN_KO_v1.0.md` — §7~9와 §6 리스크 8·9에 반영
-**정본 설계**: `docs/faceData_WEI/얼굴분석-설계.html` v1 (2026-07-09 확정 + **07-11 갱신 포함** — 초안의 "07-09 확정본" 단일 표기는 부정확, ARwithFable) — 계층 모델(L0~L3)·항목 카탈로그·캡처 프로토콜(S1~S7)·노출 정책의 정본. 본 계획과의 정합은 §10. 07-11 갱신이 지정한 제2 정본 `메이크업-분류체계-정의.html`은 **저장소 미반입 — 반입 필요**(§10.7-4). (`docs/superpowers/plans/2026-07-15-s1-face-analysis-ai-pipeline.md`는 폐기 — 사용자 확정 2026-07-16)
+**정본 설계**: 계획 이력상 `docs/faceData_WEI/얼굴분석-설계.html` v1과 제2 정본 `메이크업-분류체계-정의.html`을 가리키지만, **2026-07-17 현재 worktree에는 두 파일 모두 없다.** 이번 구현은 본 v5가 정리한 대체 계약을 정본으로 사용하고, 원본이 나중에 반입되면 별도 delta review로 차이만 반영한다(§10.10, §11.2). (`docs/superpowers/plans/2026-07-15-s1-face-analysis-ai-pipeline.md`는 폐기 — 사용자 확정 2026-07-16)
 
 ---
 
@@ -31,16 +36,16 @@
 | 7 | 신고전 캐논(3분할 균등)은 한국인 표본에서 규범 기준으로 부적합 — 한국계 미국인 여성 표본 충족률 4.2% (Choe 2004, 단일 연구) | 제품 전제 | 높음 |
 | 8 | keypoint confidence가 하드코딩 합성값(현행 소비자 기준 G .82 / Sn .82 / Me .84 — `hApprox .40`은 07-16 커밋에서 소비자 제거 완료, 타입/네이티브 방출만 잔존) — `ratio.confidence`·어조 게이트(§9.2)·Phase 1 confidence 반영이 전부 이 위에 쌓임 | `faceVerticalThirdsService.ts:58`, 스펙 §7 | 높음 |
 
-**Phase 1∥2 구현 후 진단표 상태(2026-07-17, v4 Codex 정합 GO 반영)**: #2(게이지 불일치)·#3(0.8 기준)은 **해소**. #1(기준 상수)은 **완화** — 출처 고지·단일 정의처·동적 유보로 정직해졌을 뿐 값 자체는 잠정 하드코딩 그대로(교체는 Phase 4). #6(수치 노출)은 **잔존 — R4 이관**, #7은 **규범 캐논 의존 해소**로 범위 한정한다. #4(pitch 무보정)·#5(z 미사용)는 478점 z+4x4 행렬 정규화와 paired replay 배관이 구현되어 **검증 가능 상태로 완화**됐지만, 정확한 `validation-only` 플래그에서만 동작하고 제품 저장·backend·AI에는 차단되므로 실기기 MAD·MAE 관문 전에는 **해소 아님**. #8은 제품 기본 경로의 `LEGACY_UNCALIBRATED_KEYPOINT_CONFIDENCE`(.82/.82/.84)가 그대로여서 **잔존** — 보정 진단 경로가 confidence 0·`indeterminate`로 강등하는 것은 실제 confidence 실측화가 아니다.
+**Phase 1∥2 구현 후 진단표 상태(2026-07-17, v5 PR #27 hardening 반영)**: #2(게이지 불일치)·#3(0.8 기준)은 **해소**. #1(기준 상수)은 **완화** — 출처 고지·단일 정의처·동적 유보로 정직해졌을 뿐 값 자체는 잠정 하드코딩 그대로(교체는 Phase 4). #6(수치 노출)은 **잔존 — R4 이관**, #7은 **규범 캐논 의존 해소**로 범위 한정한다. #4(pitch 무보정)·#5(z 미사용)는 478점 z+4x4 행렬 정규화와 paired replay 배관이 구현되어 **검증 가능 상태로 완화**됐지만, 정확한 `validation-only` 플래그에서만 동작하고 제품 저장·backend·AI에는 차단되므로 실기기 MAD·MAE 관문 전에는 **해소 아님**. PR #27 적대 리뷰에서 affine bottom row와 shear/non-uniform scale/reflection을 fail-closed 처리하고 R/Rᵀ 수치 왕복 진단을 추가했다. 이 왕복값은 행렬과 랜드마크의 독립적인 correspondence 증거가 아니다. #8은 제품 기본 경로의 `LEGACY_UNCALIBRATED_KEYPOINT_CONFIDENCE`(.82/.82/.84)가 그대로여서 **잔존** — 보정 진단 경로가 confidence 0·`indeterminate`로 강등하는 것은 실제 confidence 실측화가 아니다.
 
 측정이 상대적으로 견고한 부분: 세로 3분할(동일 축 비율이라 전역 스케일 약분 — 단 pitch foreshortening은 비균일하므로 위 #4의 2~4%p 잔여 오차는 바로 이 측정에 대한 값), roll 보정(게이트+보정 완비), Face3D Tier-2(3D 정점 거리 + median/MAD 집계).
 
-**Face3D 현행 3계층(v4, 2026-07-17)**: ① **현행 제품 기본 = 레거시 v1 프로필 20-valid/30-target** — 변경 없음. ② **v2 제품 후보 = 500ms micro-burst 5-of-8** — `valueMm` 독립 집계·sensor provenance·immutable policy/gate·HMAC receipt·one-time consumption 배관까지 구현됐지만 mobile/backend promotion flag가 기본 false이고 signing-key/approval-artifact 승인값과 backend secret이 비어 있으며 `FACE3D_GATE_STATUS.json`은 `pending/not_run/off`; 자기선언 calibrated 프로필은 계속 차단된다. ③ **v2 exact-30 = 진단 비교군** — unified evidence logger/adaptor와 1/3/5/8/12/30 repeatability·Gate 6B dry-run 도구는 준비됐으나 실기기 증거는 없다. 따라서 "TrueDepth 신뢰 축 이동"은 구현 준비 GO일 뿐 제품 승격 완료가 아니다.
+**Face3D 현행 3계층(v5, 2026-07-17)**: ① **현행 제품 기본 = 레거시 v1 프로필 20-valid/30-target** — 변경 없음. v1/no-schema의 임의 `.mm`와 raw/receipt/provenance는 fail-closed 또는 모델 입력에서 제거한다. ② **레거시 v2 = 역사 증거 전용** — 기존 v2 프로필은 호환 파싱하되 새 trust/mm/receipt 의미를 소급 적용하지 않고 분석 승격을 항상 차단한다. ③ **v3 제품 후보 = 500ms micro-burst 5-of-8 + exact-30 진단 모드** — `valueMm` 독립 집계·sensor provenance·immutable policy/gate·HMAC receipt·one-time consumption 배관까지 구현됐지만 mobile/backend promotion flag가 기본 false이고 signing-key/approval-artifact 승인값과 backend secret이 비어 있으며 `FACE3D_GATE_STATUS.json`은 `pending/not_run/off`; 자기선언 calibrated 프로필은 계속 차단된다. exact-30 evidence logger/adaptor와 1/3/5/8/12/30 repeatability·Gate 6B dry-run 도구는 준비됐으나 실기기 증거는 없다. 따라서 "TrueDepth 신뢰 축 이동"은 구현 준비 GO일 뿐 제품 승격 완료가 아니다.
 
 ## 1. 설계 원칙
 
 1. **측정과 해석의 분리.** 측정 계층은 "정확하고 재현되는 물리량"만 책임진다. 사용자에게 말을 거는 것은 전부 지각 번역 계층이다.
-2. **3D(TrueDepth)가 측정의 신뢰 축.** 3D 정점 계측은 원근·포즈 왜곡에 원리적으로 강건하다. **단 "원리적 부재"라는 단정은 금지**(리서치 검증): ARKit face tracking은 iOS 14+/A12+ 기기에서 **TrueDepth 없이도 동작**하고(mesh API 동일, `capturedDepthData`만 센서 차이), Apple은 정확도 동일성을 보증하지 않는다. v4에서 `.mm` provider의 `trueDepthHardware`/`depthDataObservedRatio`/`faceTrackingSupported`/기기모델 provenance 기록은 구현됐지만, 신뢰 축 채택은 여전히 (a) Gate 6B 독립 validation, (b) calibration receipt 실제 발급·승격, (c) 기기군별 mm 오차 자체 검증을 선결로 한다. 2D는 z좌표 포즈 정규화로 보강한 폴백 후보이며 관문 전 기본 OFF다.
+2. **3D(TrueDepth)가 측정의 신뢰 축.** 3D 정점 계측은 원근·포즈 왜곡에 원리적으로 강건하다. **단 "원리적 부재"라는 단정은 금지**(리서치 검증): ARKit face tracking은 iOS 14+/A12+ 기기에서 **TrueDepth 없이도 동작**하고(mesh API 동일, `capturedDepthData`만 센서 차이), Apple은 정확도 동일성을 보증하지 않는다. v5에서 `.mm` provider의 `trueDepthHardware`/`depthDataObservedRatio`/`faceTrackingSupported`/기기모델 provenance 기록과 v3 trust 계약은 구현됐지만, 신뢰 축 채택은 여전히 (a) Gate 6B 독립 validation, (b) calibration receipt 실제 발급·승격, (c) 기기군별 mm 오차 자체 검증을 선결로 한다. 2D는 z좌표 포즈 정규화로 보강한 폴백 후보이며 관문 전 기본 OFF다.
 3. **지각이 해석의 축.** 메이크업은 실제 기하가 아니라 지각을 바꾸는 기술(shape-from-shading 응용)이므로, 최종 출력은 "실측 대비 편차 판정"이 아니라 "지각적 특징 서술 → 기법 추천".
 4. **측정 수치는 사용자 비노출 (제품 오너 확정 2026-07-16).** mm·비율 원시값은 내부 저장·검증 전용. **이 원칙이 정본 §9(민감도 태그 필터 — 무표기 항목은 자유 노출)보다 우선한다** — 노출 정책 3파전(원칙 4 vs 정본 §9 vs 현행 3-반영 규칙)은 원칙 4로 단일화(§10.7-3). 귀결: 현행 `MeasurementDetailSection`의 px·Lab·확률 노출은 **제거 대상**이며 이 작업이 Phase 0 관문의 실제 범위다. (전환 시점: 화면 숫자의 실제 제거는 Phase 3의 번역 계층 완성과 함께 — Phase 0은 과도기로 노출 중인 숫자에 출처·유보만 강제하되, 신규 숫자 노출은 금지.)
 5. **기준값 의존 최소화.** 자기 얼굴 내부의 상대 비교를 기본으로 한다 — **글로벌 서비스에서 인구집단 중립으로 성립하는 유일한 기준**. 인구 기준을 쓸 때는 사용자가 속한 모집단의 실측 분포만(신고전 캐논·황금비·단일 인구 norm의 전역 적용 금지). 얼굴에서 인종·민족을 추론하지 않는다 — 모집단 구분이 필요하면 자기선택(locale/설정)만 사용.
@@ -66,14 +71,14 @@
 각 Phase는 아래 3단계를 통과해야 "완료"다. 자매 문서(보고서 재구성 계획)의 R 단계에도 동일 적용.
 
 1. **이중 GO 게이트 → PR**: Codex 적대 리뷰와 Claude 셀프 적대 리뷰(반박 지향, 독립 실행)가 **둘 다 GO**를 낼 때까지 [리뷰 → 발견 코드 검증 → 반영 → 재판정] 루프를 돌린다. NO-GO 발견은 전건 검증 후 반영(맹목 수용 금지 — 틀린 지적은 근거와 함께 반박). 두 GO 확보 후 dev로 PR. (Phase 0 실적: Codex 4라운드 + 셀프 1회, 발견 17건 전건 반영 후 GO.)
-2. **계획 현행화**: **2026-07-17 제품 오너가 이번 세션의 완료 순서를 `이중 GO → dev PR 생성 → 같은 PR에서 계획 v4 → 종료`로 확정했다.** 따라서 PR 번호 확보 직후 이 문서를 구현 현실에 맞게 갱신한다 — ① PR 상태·판정·검증 근거 명령, ② §0 진단표의 해소/완화/잔존 재판정(과대 표기 금지 — "정직해진 것"과 "해소된 것"을 구분), ③ 다음 Phase가 이번 산출물과 맺을 연동·선행 배관 명시, ④ 낡아진 서술 정정. PR이 열려 있으면 `OPEN`으로 기록하고 머지 완료를 선기록하지 않는다. 갱신본은 Codex 정합 검토 1회를 거치며, 머지 후 형상·CI·충돌 상태가 달라지면 해당 사실만 후속 반영한다.
+2. **계획 현행화**: 완료 순서는 항상 `Codex GO + Claude claude-fable-5 high GO(동일 SHA) → dev PR 생성/갱신 → 같은 PR에서 다음 계획 버전 현행화 → 종료`다. PR 번호 확보 직후 이 문서를 구현 현실에 맞게 갱신한다 — ① PR 상태·판정·검증 근거 명령, ② §0 진단표의 해소/완화/잔존 재판정(과대 표기 금지 — "정직해진 것"과 "해소된 것"을 구분), ③ 다음 Phase가 이번 산출물과 맺을 연동·선행 배관 명시, ④ 낡아진 서술 정정. PR이 열려 있으면 `OPEN`으로 기록하고 머지 완료를 선기록하지 않는다. Claude 리뷰는 first-party Claude Pro OAuth만 사용하고 **Bedrock 또는 Sonnet으로 fallback하지 않는다**. 플러그인/MCP는 비활성화하지 않으며 리뷰 artifact에 model·effort·활성 plugin/MCP·SHA를 기록한다.
 3. **다음 Phase 착수**: 갱신된 계획의 선행 배관·관문 정의를 유일한 입력으로 **새 세션에서** 착수한다(맥락 마모 방지 — 계획 문서가 자기완결이어야 하는 이유).
 
 ### Phase 0 — 표현 정직화 (측정 로직 무변경) ✅ 완료 2026-07-17
 
 **완료 기록**: PR #21 머지 — **측정 트랙 소유 산출물 완료**(숫자 전면 철거는 R4 소유로 이관, hApprox wire/네이티브 잔존은 수용·Phase 1 이관), Codex 적대 리뷰 4라운드+셀프 리뷰 1회(발견 17건 전건 반영) 후 GO 판정. **관문 분리**: 측정 트랙 관문(판정형 화면 숫자에 출처·유보 + 이번 diff에 신규 노출 없음)은 통과, 제품 전체 숫자 비노출 관문은 R4 대기. 검증 근거: `npm --prefix apps/mobile run test:face-ratio-distortion` + `run-face-analysis-measurements-contract.mjs` + backend `pytest tests/test_face_analysis_{rules,measurements}.py tests/test_analysis_measurements_payload.py tests/test_prompt_payload_judgment.py`. 구현 정본: `face-ratio/constants.ts`(FACE_LENGTH_REFERENCE·judgeFaceLength·FACE_RATIO_JUDGMENT_VERSION), 판정 스냅샷 `faceLengthJudgment`, 서버 정본 추종(`face_analysis_rules.py`)·sanitizer 보존(`openai_analysis.py`). 유일 잔여: 실기기 게이지 렌더 확인(UNVERIFIED). 아래 항목 서술은 착수 당시 기준의 역사 기록.
 
-1. **기준 상수 4벌 통합 — 정정: 5벌**: `FACE_LENGTH_REFERENCE`(1.351/1.455/1.506) + 게이지 마커 min/max(1.28/1.56) + **색 세그먼트 경계**(균등 3분할) + **판정 임계**([getFaceLengthTitle](../../../apps/mobile/src/features/face-ratio/screens/FaceVerticalThirdsScreen.tsx#L125-L135))를 `face-ratio/constants.ts` 단일 모듈로. **제5의 상수 세트(2026-07-17 셀프 검증 발견)**: 서버 `face_analysis_rules.py`의 `_derive_face_shape`(1.38/1.2)·`_derive_vertical_balance`(0.025)가 모바일과 독립적으로 존재 — 같은 얼굴에 모바일·서버가 다른 판정을 낼 수 있다. 이 서버 임계를 상수 통합 범위에 포함할지(단일 정본 공유 vs 서버 derived로 일원화) 제품 오너 결정 필요 — 보고서 재구성 계획 §2-B3과 동일 항목. 게이지 라벨·마커·세그먼트·판정이 **모두 같은 스케일에서 파생**되도록 렌더링 수정(현재 비율 1.467~1.486이 '세로형' 색 위에 앉는데 제목은 '평균'인 모순 해소). 각 값에 "1차 출처 부재 잠정값 — Phase 4 mean±SD 교체" 주석. `AVERAGE_DISPLAY_RATIO`의 0.8은 '평균' 라벨 제거(아래 3번).
+1. **기준 상수 4벌 통합 — 정정: 5벌**: `FACE_LENGTH_REFERENCE`(1.351/1.455/1.506) + 게이지 마커 min/max(1.28/1.56) + **색 세그먼트 경계**(균등 3분할) + **판정 임계**([getFaceLengthTitle](../../../apps/mobile/src/features/face-ratio/screens/FaceVerticalThirdsScreen.tsx#L125-L135))를 `face-ratio/constants.ts` 단일 모듈로. **제5의 상수 세트(2026-07-17 셀프 검증 발견 및 해소)**: 서버 `face_analysis_rules.py`의 legacy 임계(1.38/1.2·0.025)는 저장된 모바일 판정 스냅샷이 없는 구 payload 폴백에만 사용하고, 신규 보고서는 모바일 스냅샷을 정본으로 따른다. 게이지 라벨·마커·세그먼트·판정이 **모두 같은 스케일에서 파생**되도록 렌더링 수정(현재 비율 1.467~1.486이 '세로형' 색 위에 앉는데 제목은 '평균'인 모순 해소). 각 값에 "1차 출처 부재 잠정값 — Phase 4 mean±SD 교체" 주석. `AVERAGE_DISPLAY_RATIO`의 0.8은 '평균' 라벨 제거(아래 3번).
 2. **판정 완화 — 방향성(비대칭) 버퍼**: 고정 ±0.02는 오차 모델이 틀렸다(pitch는 세로를 압축해 비율을 **하향**, yaw는 가로를 압축해 **상향** 편향 — 대칭 노이즈 아님). `quality.pitch/yaw`가 이미 측정되므로 **샷별 동적 유보 구간** `[measured×cos(yaw), measured/cos(pitch)]`을 산출해, 이 구간이 판정 임계를 걸치면 단정 대신 유보("평균~세로형 사이"), 아니면 단정. 최악(pitch12°/yaw8°) 폭 −1.0%~+2.2%, 정면 근접 시 구간이 좁아져 단정 회복(usability도 개선). **측정 로직 무변경 — 표현 계층에서만 판정.** 소수 3자리 노출 제거.
 3. **'평균' 라벨 제거 + 자기내부 서술 (제품 오너 확정)**: 0.8은 실측 평균이 아니라 성형광고 관행값(§0-3)이므로 화면에서 "평균 비율" 기준선·눈금을 제거. 판정형 제목("평균보다 하안부가 긴 얼굴") → **내 얼굴 안의 상대 서술**("하안부가 중안부보다 약간 긴 편이에요")로 매핑 테이블 자리 마련(기준선 없이 부위 간 비교만). 문구 확정은 팀 검토 후.
 4. **회귀 테스트 — 게이지 로직 추출 선행**: `calculateVerticalThirdsRatio`·`deriveDominantPart`·`buildInterpretation`은 [faceVerticalThirdsMath.test.ts](../../../apps/mobile/src/features/face-ratio/services/faceVerticalThirdsMath.test.ts)로 **이미 커버됨**(초안의 "현재 없음"은 오류). 실제 공백은 화면 로컬·미export 함수 `getFaceLengthTitle`/`getGaugeMarkerPercent`뿐 → **`constants.ts`로 추출 후 테스트 추가**가 작업. 4중 불일치·비대칭 버퍼 케이스 포함.
@@ -87,9 +92,9 @@
 
 **구현·검토 기록**: commit `31515d84`에서 Unity→mobile 478점 `{x,y,z}`+row-major 4x4 행렬, 전체 랜드마크 정면화, H/G/Sn/Me 재계산, exact ordered canonical 10-shot replay, 로컬 가명 raw artifact·보존/삭제 정책을 구현했다. `FACE_RATIO_JUDGMENT_VERSION`은 보정 저장 최초 커밋에서 `face-length-judgment/v3-pose-normalization-validation-20260717`로 상향됐다. Codex 적대 리뷰는 10-shot 전체 tuple 순서 검증 등 발견 4건을 반영한 뒤 GO, Claude `claude-fable-5` high 독립 리뷰(session `8519bd29-96ae-4098-898d-c9494ea9f28d`)는 blocker 0으로 GO. 검증 근거: `npm run mobile:test:face-ratio-phase1`, `npm run mobile:test:face-ratio-distortion`, `npm run mobile:test:face-analysis-measurements`, `npm run mobile:test:unity-bridge`, Objective-C++ syntax 검사, `git diff --check`. **관문 분리**: 코드는 검증 가능 상태지만 플래그는 정확히 `validation-only`만 허용하고 기본 OFF이며, `diagnostic_only_unvalidated` 보정 결과는 제품 저장·backend·AI에서 차단된다. 실기기 paired MAD·MAE, Unity 행렬 convention 런타임, 8°/12°/잔여-pose confidence 비교는 **UNVERIFIED**.
 
-1. **구현됨 — 478점+행렬 정면화**: MediaPipe 478점 `{x,y,z}`와 `output_facial_transformation_matrixes` 4x4 행렬을 Unity에서 직렬화하고 mobile에서 reflection/singular/orthogonality/round-trip 조건을 fail-closed 검증한 뒤, 키포인트 추출 전에 전체 점을 정면 좌표로 역변환한다. 정규화→픽셀은 `x_px=x×W, y_px=y×H, z_px=z×W`; z는 카메라 절대 깊이가 아니라 weak-perspective 상대 깊이이므로 같은 프레임의 3D 비율·정면화에만 사용한다. 기존 roll 보정은 기본 제품 경로에 유지되고, 새 경로는 검증 플래그 안에서만 비교된다.
+1. **구현됨 — 478점+행렬 정면화**: MediaPipe 478점 `{x,y,z}`와 `output_facial_transformation_matrixes` 4x4 행렬을 Unity에서 직렬화하고 mobile에서 affine bottom row `[0,0,0,1]`, reflection/singular/orthogonality/shear/non-uniform scale을 fail-closed 검증한 뒤, 키포인트 추출 전에 전체 점을 정면 좌표로 역변환한다. 동일 R/Rᵀ를 쓴 왕복 RMS는 구현의 수치 안정성 진단일 뿐 행렬↔랜드마크 correspondence를 독립 검증하지 않으며, 실제 convention·효과는 paired 실기기 관문으로만 판정한다. 정규화→픽셀은 `x_px=x×W, y_px=y×H, z_px=z×W`; z는 카메라 절대 깊이가 아니라 weak-perspective 상대 깊이이므로 같은 프레임의 3D 비율·정면화에만 사용한다. 기존 roll 보정은 기본 제품 경로에 유지되고, 새 경로는 검증 플래그 안에서만 비교된다.
 2. **MediaPipe z 품질은 가설로 취급**: 역회전 시 y' ≈ y·cosθ − z·sinθ 이므로 z의 오차·스케일 불일치가 sin(pitch)에 비례해 세로 거리로 **직접 유입**되며 비율에서 약분되지 않는다(약분되는 것은 전역 스케일뿐). Phase 1 관문(재현성 + 정면 수렴)이 이 가설의 검증 장치 — 개선이 없으면 cos 근사 보정으로 후퇴.
-3. **keypoint confidence 실측화 (§0-8) — 미완료, 후속 관문 유지**: MediaPipe FaceLandmarker는 per-landmark confidence를 제공하지 않는다. 제품 기본 경로는 `LEGACY_UNCALIBRATED_KEYPOINT_CONFIDENCE`(G .82/Sn .82/Me .84)를 계속 사용한다. v4 구현은 미검증 정규화 결과를 confidence 0·`indeterminate`로 강등해 과신을 막았을 뿐, confidence를 실측화하지 않았다. 후보군 산포 방식은 해부학적 정점 차이를 검출 노이즈로 오인하므로 계속 기각한다. 후속 후보는 (a) 셔터 직전 동일 랜드마크 멀티프레임 지터, (b) 3D 정렬 reprojection residual이며 실제 표본에서 검증해야 한다.
+3. **keypoint confidence 실측화 (§0-8) — 미완료, 후속 관문 유지**: MediaPipe FaceLandmarker는 per-landmark confidence를 제공하지 않는다. 제품 기본 경로는 `LEGACY_UNCALIBRATED_KEYPOINT_CONFIDENCE`(G .82/Sn .82/Me .84)를 계속 사용한다. v5 구현은 미검증 정규화 결과를 confidence 0·`indeterminate`로 강등하고 비강체 행렬을 fail-closed해 과신을 막았을 뿐, confidence를 실측화하지 않았다. 후보군 산포 방식은 해부학적 정점 차이를 검출 노이즈로 오인하므로 계속 기각한다. 후속 후보는 (a) 셔터 직전 동일 랜드마크 멀티프레임 지터, (b) 3D 정렬 reprojection residual이며 실제 표본에서 검증해야 한다.
 4. **촬영 거리 문제 인지**: 30cm 셀피는 1.5m 대비 코 밑너비를 ~30% 과장(Selfie Effect, §5 A-8). 포즈 정렬로는 원근(거리) 왜곡이 완전 제거되지 않으므로, 거리 가이드 UX 또는 TrueDepth 거리 보정을 Phase 2와 연계 검토(정본 거리 게이트 = §10.2).
 
 **Phase 0 산출물과의 연동(2026-07-17, Codex 정합 검토로 보강)**:
@@ -106,7 +111,7 @@
 
 **구현·검토 기록**: commit `31515d84`에서 `valueMm` 독립 robust 집계와 전용 confidence/frameCount/MAD, native→Unity→mobile→backend sensor provenance, unified exact-30 evidence adaptor, 1/3/5/8/12/30 repeatability, Gate 6B dry-run promotion, approved immutable policy/gate+Gate-selected-frame binding, profile hash·app/build·사용자/보고서 문맥 HMAC receipt, expiry·nonce·원자적 one-time consumption을 구현했다. mm/sensitivity-3와 receipt 내부 증거는 외부 모델 입력·consulting cache hash·사용자 응답에서 제거한다. Codex는 provenance/product tuple parity·consulting 필터/hash·selected-frame policy binding 수정 후 GO, Claude Fable high는 blocker 0 GO. 검증 근거: focused backend `47 passed`, consulting privacy `10 passed`, `npm run mobile:test:face3d`, `npm run face3d:test:calibration` 21/21, `npm run face3d:test:repeatability` 12/12, `git diff --check`. **관문 분리**: Unity는 calibrated receipt를 방출하지 않고, mobile/backend promotion flag는 false, signing-key/approval-artifact 승인값과 backend secret은 비어 있으며 gate status는 `pending/not_run/off`. 실기기 Gate 6B cohort·실측 mm 오차 프로파일·실제 승인 artifact/HMAC receipt는 **미수행**.
 
-0. **[배관 구현·승격 PENDING] Face3D confidence calibration 워크스트림** — v2 제품 후보의 검증·서명·소비 계약은 구현됐지만 Unity는 계속 `uncalibrated`를 방출하고 제품 flag가 OFF이므로 "신뢰 축" 승격 전에는 Phase 2 지표가 제품에 못 실린다. 3요소의 현행 상태:
+0. **[배관 구현·승격 PENDING] Face3D confidence calibration 워크스트림** — v3 제품 후보의 검증·서명·소비 계약은 구현됐지만 Unity는 계속 `uncalibrated`를 방출하고 제품 flag가 OFF이므로 "신뢰 축" 승격 전에는 Phase 2 지표가 제품에 못 실린다. 3요소의 현행 상태:
    - **(a) 합격선 = Gate 6B 사전 등록 기준 전문을 따른다 — 재기술 금지.** 본 계획 초안이 기준을 요약하며 "median bias ≤ between-subject spread"로 적어 **원문("spread의 10%")을 10배 완화**하고 p95 bias ≤ 25%·실패율 5%p·p95 capture window 500ms·독립 validation cohort 조건을 누락했다(리뷰 확인). 정본은 [AURA_UNIFIED_FACE_CAPTURE_IMPLEMENTATION_PLAN_KO.md](../../face3d/AURA_UNIFIED_FACE_CAPTURE_IMPLEMENTATION_PLAN_KO.md) §Phase 6B — 이 문서가 유일 기준이며 본 계획은 참조만 한다.
    - **(b) calibration = confidence 함수 자체의 재보정 — 구조 분리 구현, 데이터 재보정 미수행.** completion과 quality를 분리하고 valueMm 품질도 독립 집계하도록 바꿨지만, Gate 6B 실기기 validation으로 함수가 보정된 것은 아니다. 상태 문자열만 바꾸는 승격은 계속 금지한다.
    - **(c) 서버측 강제 — 구현 완료·승격 OFF.** promotion 도구는 Gate 6B가 선택한 frame 수가 immutable product policy tuple과 일치하는지 확인하고 그 tuple·증거 bundle·calibration model을 approval artifact에 묶는다. profile hash는 선택된 profile 본문(sensor provenance·valueMm 품질 포함)을 canonical hash하고, receipt가 이 hash와 policy/gate·approval artifact SHA·`receiptId`·capture nonce·발급/만료·사용자/보고서 문맥을 함께 HMAC 서명한다. backend는 report insert 트랜잭션에서 receipt를 원자적으로 한 번만 소비한다. mobile의 signing-key/approval-artifact 승인 set은 비어 있고 backend approval artifact/key/secret은 미설정이며 promotion flag가 OFF라 calibrated 자기선언은 fail-closed 차단된다.
@@ -114,7 +119,7 @@
    - **증거 파이프라인 — dry-run 준비 완료, 실제 증거 없음**: `promote-face3d-calibration.mjs`와 계약 테스트가 `repeatability-{1,3,5,8,12,30}.json`·독립 cohort·Gate 6B 기준·approval artifact·receipt chain을 검증한다. `FACE3D_GATE_STATUS.json`은 의도적으로 `receiptPath:null`, `receiptSha256:null`, `validationStatus:not_run`, `featureFlagDefault:off`다.
 1. **Face3D 파이프라인에 얼굴 길이비·세로 3분할 대응 지표 추가** — 위 0의 승격 통과 후.
 2. **헤어라인 예외 — 동일 샷 융합 경로 부재(2026-07-16 리뷰 확인)**: 머리카락은 IR 흡수로 TrueDepth가 못 잡음 → H만 Apple hair matte와 융합하는 하이브리드. **단 현재 아키텍처에서 같은 샷의 Face3D+matte를 동시에 얻을 수 없다** — Face3D는 Unity ARKit이 카메라를 소유하고, matte 캡처는 Unity를 pause시킨 뒤 네이티브가 카메라를 인수하는 구조(카메라 배타 소유). 선결 결정: (a) **별도 샷 폴백** — matte 샷을 따로 찍고 시차·정렬 오차를 수용, vs (b) **ARFrame 동기 네이티브 브리지** — Unity ARFrame에서 matte를 생성(Unity 측 작업 수반). 정본 S5 캡처(헤어 올린 정면)가 이 문제 자체를 우회하는 상위 해법(§10.2) — S5 채택 시 matte 융합은 S5 없는 사용자의 폴백으로만 남는다.
-3. **mm 병렬 저장 — 전 구간 계약 구현 완료, 제품 비노출**: Unity evaluator가 `(normalized, rawMeters)`를 함께 계산하고 `Face3DProfileCollector`가 rawMeters를 별도 robust 집계한다. v2 wire/RN/backend는 `valueMm`과 전용 confidence/frameCount/MAD를 보존하며 backend가 `face3d.{key}.mm` sensitivity-3 엔벨로프를 만든다. 외부 모델과 consulting cache/model payload에서는 `valueMm`·receipt·nonce·profile binding·서버 검증 상태를 제거하되, 서버 검증된 v2의 sensor provenance는 source/quality 문맥으로 모델에 남긴다. 사용자 response에서는 sensor provenance까지 포함한 내부 필드를 제거한다. R3 `regionBboxes`는 Phase 1 정렬 전 원본 픽셀 좌표를 유지해야 하는 B2/B4 계약을 계속 따른다.
+3. **mm 병렬 저장 — 전 구간 계약 구현 완료, 제품 비노출**: Unity evaluator가 `(normalized, rawMeters)`를 함께 계산하고 `Face3DProfileCollector`가 rawMeters를 별도 robust 집계한다. **v3 wire/RN/backend만** `valueMm`과 전용 confidence/frameCount/MAD를 신뢰 후보로 보존하며 backend가 `face3d.{key}.mm` sensitivity-3 엔벨로프를 만든다. v1/no-schema와 레거시 v2는 이 승격 경로를 탈 수 없다. 외부 모델과 consulting cache/model payload에서는 `valueMm`·receipt·nonce·profile binding·서버 검증 상태를 제거하고, 사용자 response에서는 `.mm` suffix 내부 필드를 재귀적으로 제거한다. R3 `regionBboxes`는 Phase 1 정렬 전 원본 픽셀 좌표를 유지해야 하는 B2/B4 계약을 계속 따른다.
 4. **오차 프로파일**: 캘리퍼/자 실측 대비 부위별 오차 측정(눈 사이 거리·얼굴 폭 등 큰 치수부터). 산출물 = 부위별 신뢰 가능/불가 목록. 문헌 기대치: 표면 편차 ~0.4mm, 거리 측정 오차 0.88~9.07%(각도 의존) (§5 C-1).
 4-b. **홍채 스케일 병행(정본 §7-1) — 오차 전제 정정(리서치)**: 홍채 가로 지름(HVID) ~11.7mm·개인차 ±0.5mm는 안과 문헌 확인이나 **두 정정 필수**: (1) "인구집단 편차 작다"는 **반박** — 동아시아 HVID는 ~11.1~11.3mm로 11.7mm 가정 시 **+4~5% 체계(방향성) 편향**(한국 사용자 대상 앱은 지역 보정 HVID 사용 또는 사용자 캘리브레이션 권고), (2) 홍채 4.3%는 **거리 추정** 오차이지 얼굴 길이 mm 오차가 아니다 — 얼굴 mm 환산 실측은 별도로 존재(수평 MAPE 2.9%/수직 4.3%, PMC10447546). 귀결: 홍채와 **같은 정면 평면의 수평 거리**만 ~3%로 신뢰, **깊이가 다른 부위(코높이·턱길이)는 단일평면 스케일로 환산 시 편향 누적** → confidence 하향. "리포트 용도 충분"은 부위별 실측 검증 전까지 **가설로 강등**. 3단 폴백: 홍채(전 기기, 정면 수평) → TrueDepth(지원 기기, 입체) → 미지원 항목 AI 추정 표기.
 5. **2D/3D 이중 경로 정책**: 동일 지표 충돌 시 TrueDepth 우선, 폴백은 confidence 하향, 결과에 `source` 명시.
@@ -141,7 +146,7 @@
 
 **전제: 글로벌 서비스.** 단일 인구(한국인 포함) norm의 전역 적용은 신고전 캐논과 같은 오류의 반복이다 — Farkas 국제 비교 연구가 보여주듯 계측 분포는 인구집단별로 체계적으로 다르다(§5 참조). 따라서:
 
-1. **기본값(모든 사용자)**: 자기 얼굴 내부의 상대 비교 + 지각 특징 서술 — 인구 기준 자체가 불필요한 서술 구조(§9)가 1차 방어선. 이것만으로 제품이 성립해야 한다. **단 얼굴 길이비는 스칼라 1개라 자기내부 비교 대상이 없다**(세로 3분할은 부위 3개라 가능) — 기준 밴드 없는 locale에서 게이지는 맨숫자 외 판정 불가. **결정 필요 항목**: 무기준 locale의 길이 게이지 처리(제거 / 자기이력 대비 / 밴드 확보 후 노출) — Phase 4 착수 시 제품 오너 확정.
+1. **기본값(모든 사용자)**: 자기 얼굴 내부의 상대 비교 + 지각 특징 서술 — 인구 기준 자체가 불필요한 서술 구조(§9)가 1차 방어선. 이것만으로 제품이 성립해야 한다. **단 얼굴 길이비는 스칼라 1개라 자기내부 비교 대상이 없다**(세로 3분할은 부위 3개라 가능). 따라서 기준 밴드 없는 locale에서는 모집단 게이지와 길이형 판정을 숨기고, 동일 사용자·동일 측정 계약의 자기이력이 2건 이상일 때만 방향성 변화 서술을 제공한다. 이 결정은 데이터 승인 전 기본값이며 norm feature flag는 OFF다.
 2. **상수 교체 = 자체 촬영셋 mean±SD (제품 오너 확정 2026-07-16)**: 1.351/1.455/1.506은 1차 출처 부재(§0-1). 문헌 인용 대신 **앱과 동일한 2랜드마크**(헤어라인 idx10·턱끝 / 볼 idx234-454)로 자체 촬영셋의 `mean±SD`를 산출해 `avg=mean, wide<mean−1SD, long>mean+1SD`로 재정의 — 측정 조건·랜드마크 정의가 완전 일치하는 유일한 방법. 즉시 인용 앵커(수집 전 잠정): 한국 여성 실측 1.37(187.05/136.6)·임상 균형 1.33~1.43(현 avg 1.455는 과대). **캐비엇**: 볼폭(idx234-454)이 완전 광대폭(zy-zy)보다 좁으면 측정비율이 올라가므로 반드시 실측 캘리브레이션으로 확정. 세로 3분할 0.8은 기준 자체를 폐기(§0-3, 자기내부 서술로 대체).
 3. **locale별 부트스트랩(옵션, 후순위)**: 사용자 자기선택 locale에 해당하는 실측 문헌이 있을 때만 잠정 기준 밴드 제공. 한국 locale은 Choe 2004·한국 계측 연구군·Size Korea(§5 B)가 후보 — 랜드마크 정의의 파이프라인 일치 검증 필수. 타 locale은 Farkas 국제 데이터 등 해당 인구 문헌 확보 전까지 기준 밴드 미제공(자기상대 서술만). **얼굴에서 인종 추론 금지 — locale은 자기선택만.**
 4. **수렴(장기)**: 우리 파이프라인으로 측정된 자체 사용자 분포를 locale 세그먼트로 축적 → 백분위 기반 상대 위치로 전환. 측정 조건 동일 + 모집단 일치라는 두 조건을 모두 만족하는 유일한 기준.
@@ -150,8 +155,8 @@
 ## 4. 순서·의존성
 
 - Phase 0: ✅ 완료(PR #21·GO). 관문 실범위 재조정 기록은 유지: **관문 실범위 재조정(트랙 경계 B1, 2026-07-17)**: 게이지 로직 추출 + 상수 통합(서버 임계 포함 여부는 Phase 0-1 결정)까지가 측정 트랙 소유. **`MeasurementDetailSection` 철거와 `FaceAnalysisReportDetailScreen`의 숫자 정리는 보고서 재구성 트랙(R4)에 위임** — 측정 Phase 0은 해당 화면들에 "신규 숫자 노출 차단"만 책임진다(두 트랙이 같은 파일을 고치는 충돌 방지 — 재구성 계획 §2-B1).
-- Phase 1 ↔ 2: **병렬 구현 배관 완료(PR #27 OPEN), 실기기 관문은 별도 PENDING** — 공통 충돌면 5파일(`FaceCaptureLabApp.tsx`·`unityMakeupBridge.ts`·`faceAnalysisMeasurements.ts`·백엔드 `face_analysis_measurements.py`·`openai_analysis.py`)을 단일 커밋/소유 경로에서 통합해 좌표·행렬, profile/valueMm, privacy filter 충돌을 해소했다. 준비된 세션 순서는 **"Phase 1 canonical 다각도 10-shot → 별도 diagnostics exact-30 정면 반복"**이며 캡처 통합이 아니라 방문만 통합한다. 정면 exact-30은 Phase 1의 정면 기준 샷으로만 재사용 가능하다. 다음 수집 작업은 **새 세션에서 본 v4를 유일한 시작 입력**으로 삼고, v4가 `docs/face3d/FACE_MEASUREMENT_PHASE1_PHASE2_COLLECTION_RUNBOOK_KO.md`와 `scripts/face3d/prepare-face-measurement-collection.mjs`로 라우팅한다. Phase 2 제품 소비는 calibration 승격 전 계속 차단한다.
-- Phase 3 매핑 테이블: 코드 독립적 — 기획이 지금부터 병렬 시작 가능. 근거 자료는 §5 완비. **선결: 제2 정본 반입(§10.10)**.
+- Phase 1 ↔ 2: **병렬 구현 배관 완료(PR #27 OPEN), 실기기 관문은 별도 PENDING** — 공통 충돌면 5파일(`FaceCaptureLabApp.tsx`·`unityMakeupBridge.ts`·`faceAnalysisMeasurements.ts`·백엔드 `face_analysis_measurements.py`·`openai_analysis.py`)을 단일 커밋/소유 경로에서 통합해 좌표·행렬, profile/valueMm, privacy filter 충돌을 해소했다. 준비된 세션 순서는 **"Phase 1 canonical 다각도 10-shot → 별도 diagnostics exact-30 정면 반복"**이며 캡처 통합이 아니라 방문만 통합한다. 정면 exact-30은 Phase 1의 정면 기준 샷으로만 재사용 가능하다. 다음 수집 작업은 **새 세션에서 본 v5를 유일한 시작 입력**으로 삼고, v5가 `docs/face3d/FACE_MEASUREMENT_PHASE1_PHASE2_COLLECTION_RUNBOOK_KO.md`와 `scripts/face3d/prepare-face-measurement-collection.mjs`로 라우팅한다. 이번 로컬 작업은 이 스크립트와 fixture 준비까지만 수행하며 실제 촬영을 자동 완료로 기록하지 않는다. Phase 2 제품 소비는 calibration 승격 전 계속 차단한다.
+- Phase 3 매핑 테이블: 코드 독립적 — 기획이 지금부터 병렬 시작 가능. 근거 자료는 §5 완비. 미반입 제2 정본은 이번 구현을 막지 않으며 본 v5의 근거 등급·어조·3채널 안전 기본값을 대체 정본으로 사용한다.
 - Phase 4-1(부트스트랩): Phase 3 매핑에 기준 밴드가 필요해지는 시점에. 4-2는 데이터 축적 시간. **Phase 0의 상수 잠정값은 Phase 4에서 자체 촬영셋 mean±SD로 교체(§4 Phase 4-2)**.
 - **법률 검토(§6-10): 현재 스코프 제외** — 미국/EU 실서비스 출시 시 재활성화(선행 조건 아님).
 
@@ -216,15 +221,15 @@
 1. **ARKit 메쉬의 모델 피팅 편향** — 애플 메쉬는 형태 모델 피팅 결과라 개인별 계통 편향 가능성(미검증 가설). Phase 2 오차 프로파일에서 간접 확인. 재현성 관점에선 사진 대비 우위 확실.
 2. **정점 앵커링** — "정점 15 = nasion"류 대응은 17캡처 검수 기반, 얼굴형 분포 꼬리에서 미검증. 임상 캘리퍼도 측정자 간 mm 편차가 있는 영역(계측 내재 한계).
 3. **헤어라인** — TrueDepth로 원리적 미해결(IR 흡수). hair matte 융합 품질이 얼굴 길이비의 병목으로 남음.
-4. **브랜치 형상 — PR #27 OPEN**: Phase 1∥2 구현은 `feature/WEI/face-measurement-phase1-phase2-0717` commit `31515d84`, 기준은 최신 확인 시 `origin/dev` `c3c53667`, PR #27은 dev 대상 MERGEABLE 상태로 생성됐다. 본 v4도 같은 PR에 포함한다. 아직 머지 전이므로 dev 반영 완료로 간주하지 않으며, 머지 시점의 dev drift·CI·충돌을 다시 확인한다.
+4. **브랜치 형상 — PR #27 OPEN**: Phase 1∥2 구현은 `feature/WEI/face-measurement-phase1-phase2-0717` commit `31515d84`에서 시작했고, 2026-07-17 로컬 확인 기준 `origin/dev`는 `ecaba62e`다. PR #27 적대 리뷰 hardening과 본 v5를 같은 PR에 포함한다. 아직 머지 전이므로 dev 반영 완료로 간주하지 않으며, 최종 push 뒤 exact head SHA·mergeability·CI·dev drift를 다시 기록한다.
 5. **AURAFaceRatioHairline.m의 pitch 정규화 8° 잔존** — 8~12° 촬영의 헤어라인 confidence 저평가. **주의(Codex 정합 검토)**: 이 8°는 게이트가 아니라 confidence 분모라 단순 12° 상향은 신뢰도 인위 상승 — Phase 1 실기기 검증에서 8/12/잔여-pose 모델 비교로 결정(연동 문단 참조).
 6. **MediaPipe z·행렬 runtime 품질 미검증** — 정렬 코드·reflection/singular/orthogonality fail-closed 검사는 구현됐지만 실기기에서 Unity 행렬 convention과 z 노이즈가 개선을 만드는지는 미확인이다. paired MAD·MAE 관문 미달 시 제품 flag를 열지 않고 cos 근사 후보로 후퇴한다.
 7. **플랫폼 범위** — 현재 앱은 iOS 전용. Phase 1의 "폴백"은 non-TrueDepth iOS 기기 대상이며, Android 확장 시 Phase 2의 "TrueDepth = 신뢰 축" 전제는 전면 재검토 사안.
-8. **왜곡 보정 기획서 v1.0과의 결정 충돌 — 검증 레인만 승인, 제품 승격 미승인.** `AURA_FACE_RATIO_DISTORTION_CORRECTION_PLAN_KO_v1.0.md` §6.2의 pitch/yaw 보정 제외 결정과 충돌하므로 v4 구현은 정확한 `validation-only`·기본 OFF·제품 payload 차단으로 한정했다. 제품 경로 활성화는 paired MAD·MAE가 모두 개선되고 제품 오너가 별도로 재결정할 때만 가능하다.
+8. **왜곡 보정 기획서 v1.0과의 결정 충돌 — 검증 레인만 승인, 제품 승격 미승인.** `AURA_FACE_RATIO_DISTORTION_CORRECTION_PLAN_KO_v1.0.md` §6.2의 pitch/yaw 보정 제외 결정과 충돌하므로 v5 구현은 정확한 `validation-only`·기본 OFF·제품 payload 차단으로 한정했다. 제품 경로 활성화는 paired MAD·MAE가 모두 개선되고 제품 오너가 별도로 재결정할 때만 가능하다.
 9. **왜곡 방지 게이트의 기획-구현 드리프트** — 기획서는 ARKit FaceAnchor 게이트(±5/6/3°) + 거리 35cm 게이트 + Sn–principal point 정렬을 확정했으나, ARKit 취소로 현재는 MediaPipe 게이트(8/12/5°)이고 미터 단위 거리 게이트는 미구현(타원 프레이밍이 간접 대용), principal point는 "ARKit 재도입 대비" 코드로만 잔존. **Selfie Effect(§5 A-8) 방어가 기획 의도보다 약한 상태** — Phase 1 §4의 거리 가이드 검토와 직결.
 10. **글로벌 생체정보 규제 — 현재 스코프 제외 (제품 오너 판단 2026-07-16), 단 범위 한정 재기술(외부 리뷰 반영).** 얼굴 기하 측정치는 원리적으로 GDPR 특수범주·미국 주법(일리노이 BIPA 등) 규율 대상이 될 수 있으나, 제품 오너가 현 단계(부트캠프 최종 프로젝트, 미국 상용 출시 아님)에서 **법률 검토 게이트**를 과설계로 판단해 착수 선행 조건에서 제외한다. **단 이 제외의 범위는 "법률 검토"에 한정되며 다음 둘은 면제되지 않는다**(2026-07-16 외부 리뷰 이의 반영): (a) **Apple 스토어 요건** — ARKit 얼굴 추적 사용 자체가 얼굴 데이터 사용을 설명하는 개인정보처리방침을 요구([Apple ARKit 문서](https://developer.apple.com/documentation/arkit/arfacetrackingconfiguration/)) — 이는 법역과 무관한 앱 제출 게이트다. (b) **의도된 기술 가드** — 현행 계약의 `longTermRawFrameStored: false` 리터럴 강제·삭제 파이프라인·privacy-strip 테스트는 법률 회피용이 아니라 의도된 제품 결정이므로, 완화는 "법률 스코프 제외"의 자동 귀결이 아니라 **별도 제품 오너 명시 결정 + 처리방침 문구 갱신**을 요구한다(§10.7-1). BIPA §15(b) 서면 동의·§15(a) 보존 정책 공개·GDPR Art.28/Chapter V 체크리스트는 §5 리서치 원자료에 보존(미국/EU 실서비스 출시 시 활성화).
 11. **측정 파이프라인의 인구집단 편향** — MediaPipe·ARKit 모두 학습/설계 분포가 공개되지 않아 인구집단별 정확도 차이가 미검증(홍채 HVID 동아시아 편향 §5 E-1이 실증 사례). Phase 1·2의 재현성/오차 검증 표본을 팀 내부 소수로만 잡으면 이 편향을 못 본다 — **검증 표본의 성별·연령·인구집단 다양성 확보를 관문 설계에 명문화**(Phase 1 관문의 "3~5명"은 최소 하한이지 목표 아님). *§6-11이 요구한 다양성을 Phase 1 관문이 무시하던 자기모순 해소.*
-12. **이중 GO의 비차단 잔여** — Claude Fable high 리뷰가 기록한 merge 비차단 항목은 후속 hardening 대상으로 유지한다: legacy v1/no-schema Face3D dict의 외부 모델 sanitizer 범위, TS 키포인트의 native clamp 차이(fail-closed null), 구 Unity serializer의 z 결측 호환성, stage-run 내부 coverage key 이름에 `.mm` 문자열 잔존(값은 미포함), RN requestId 기반 capture nonce, receipt 최대 수명 상한 부재. 현재 v2 증거 비노출·receipt one-time 방어·기본 OFF 불변식을 깨지는 않지만 제품 승격 전 재평가한다.
+12. **PR #27 적대 리뷰 hardening** — legacy v1/no-schema의 외부 모델 sanitizer, v1 `.mm` 승격 차단, 레거시 v2와 신규 v3 분리, 사용자 응답의 재귀 `.mm` 제거, pose 행렬 affine bottom row·shear·non-uniform scale·reflection fail-closed와 수치 왕복 진단, validation source/tmp artifact 정리, 불완전 shot 재촬영 보장, Unity 임베디드 v3 preflight, CI에 Phase 1·calibration·Unity 정적 계약 suite 편입을 반영했다. 수치 왕복은 correspondence 증거로 과대해석하지 않는다. 잔여 비차단 후보(TS 키포인트 native clamp 차이, 구 Unity serializer z 결측 호환성, RN requestId 기반 nonce, receipt 최대 수명 상한)는 최종 이중 GO에서 다시 판정하고 제품 승격 전 해소한다.
 
 ## 7. 측정 요소 확장 — 설계 문서 통합
 
@@ -282,7 +287,7 @@ Tier-2(3D) 미가용 기기용 `noseLengthRatio`/`noseWidthRatio` 2D 근사. Pha
 
 ### 8.3-b AI 호출 구조 (정본 설계 §10 확정 사항 채택)
 
-단일 거대 호출 금지 — **3단 분리 호출**: ① 질감·외관(사진 위주) → ② 인상 종합+퍼스널컬러(①결과+온디바이스 수치 동봉) → ③ 컨설팅(①②결과). 각 단계 구조화 출력(스키마 강제, 산문 금지). 분리해야 부분 재분석이 성립한다(드레이핑 후 퍼컬만 재판정, 취향 변경 시 컨설팅만 재생성). 비용 정책: 사진 1회 업로드 후 file 참조 재사용, 프로필 캐시, 명시적 요청 시에만 재분석, 단계별 모델 티어링(질감 태깅=저비용, 인상·컨설팅=상위 티어). **구현 현실(리서치)**: "file 참조 재사용"은 **미구현** — 현재는 잡당 1회 읽은 bytes를 스테이지마다(측정+지각, 검증 실패 시 ×2) base64 재전송하고 consult는 이미지 없음. Bedrock 경로는 inline base64 외 대안이 없어 입력 이미지 다운스케일 정책 필요, OpenAI 경로는 Files API `file_id` 재사용을 신규 작업으로 추가. S2~S7 도입 시 페이로드가 shot 수배로 커지므로 이 최적화가 선행.
+단일 거대 호출 금지 — **3단 분리 호출**: ① 질감·외관(사진 위주) → ② 인상 종합+퍼스널컬러(①결과+온디바이스 수치 동봉) → ③ 컨설팅(①②결과). 각 단계 구조화 출력(스키마 강제, 산문 금지). 분리해야 부분 재분석이 성립한다(드레이핑 후 퍼컬만 재판정, 취향 변경 시 컨설팅만 재생성). 현재 로컬 실행 범위는 provider가 `disabled`인 deterministic fixture runner이며, 이미지는 프로세스 내부에서 한 번 읽어 stage 간 재사용하고 외부 업로드를 하지 않는다. 실제 외부 provider의 file 참조·비용 최적화는 사용자가 별도로 provider와 전송 범위를 승인한 뒤의 후속 작업이다. Bedrock adapter·AWS 전송·cloud 실행은 이번 계획 범위에서 제외한다.
 
 ### 8.4 융합 규칙
 
@@ -385,13 +390,164 @@ Tier-2(3D) 미가용 기기용 `noseLengthRatio`/`noseWidthRatio` 2D 근사. Pha
 |---|---|---|---|
 | S2~S7 멀티샷 | 백엔드 `MeasurementShot` = `S1\|FACE3D`뿐, `validate_provenance`가 S1 고정 | Phase 2(S3/S4·S5 depth) + Phase 3(S2 동적) | enum 확장 + provenance 규칙 재작성 + wire 스키마 버전업 + shot별 normalize + 프롬프트/캐시 키 개정 + 파이프라인 다중 shot 입력맵([face_analysis_v2.py](../../../services/backend/app/schemas/face_analysis_v2.py):25-63 외 5지점) |
 | `visualEvidence` | `Insight` 5필드에 없음 | Phase 3 | 백엔드/모바일 스키마 필드 추가 + perception 프롬프트 필수화(§8.3) |
-| 사진 1회 업로드 재사용 | 미구현(스테이지×시도마다 base64 재전송) | Phase 3 선행 | OpenAI Files API file_id 재사용, Bedrock 다운스케일(§8.3-b) |
+| 로컬 이미지 1회 읽기·stage 재사용 | 미구현 | Phase 3 선행 | provider-disabled fixture runner에서 bytes를 메모리 재사용하고 외부 업로드 0건을 테스트 |
 | 드레이핑 시뮬레이션 | 전무 | Phase 3(§10.5) | AR 색페어 렌더 + 판정 경로 신설, `source:'draping'` 봉투 |
 | 센서 provenance | native→Unity→mobile→backend 기록·fail-closed 검증 구현, 실제 기기 표본 미수집 | Phase 2(PR #27) | `trueDepthHardware`·`depthDataObservedRatio`·`faceTrackingSupported`·기기모델 봉투 구현; Gate 6B 전 제품 OFF |
 | 거리 게이트 | 미구현(타원 프레이밍 간접) | Phase 1 §4 | 얼굴 크기 밴드 게이트(§10.2) |
 | 멀티샷 UX 마찰 | — | 리스크 | S1~S7 촬영 단계 증가의 이탈률·완주율 리스크를 §6에 등재(pitch 8°→12° usability 완화 이력보다 큰 결정) |
 
-### 10.10 미반입·미결
+### 10.10 미반입 정본의 처리
 
-- **제2 정본 `메이크업-분류체계-정의.html` 미반입** — 07-11 갱신이 메이크업 출력 3채널(핏 시트/색·제품/룩)의 정본으로 지정했으나 저장소에 없음. 정본 HTML과 동일하게 **반입 필요**(Phase 3 컨설팅 출력 설계 착수 전 선결).
+- **제1 정본 `얼굴분석-설계.html` 미반입** — 계획 이력과 링크는 존재하지만 2026-07-17 worktree 실사에서 파일이 없다. 본 v5의 L0~L3·S1 기준·근거/어조 계약을 이번 구현 정본으로 사용하고, 원본 반입 시 delta review를 수행한다.
+- **제2 정본 `메이크업-분류체계-정의.html` 미반입** — 메이크업 출력 3채널은 본 v5와 보고서 계획의 안전 기본값(핏 시트/색·제품/내추럴·글램 룩)으로 구현한다. 원본 반입은 착수 선결이 아니다.
 - **정본 §9 "민0" 용어 미정의** — 시작 기본값에 등장하나 태그 체계(무표기/민1/민2/민3)에 정의 없음. "무표기"의 오기로 추정 — 정본 반영 시 정정.
+
+## 11. 남은 Phase·보고서·홈 통합 로컬 자율 실행 계획 (v5 신규 정본)
+
+### 11.1 목표와 완료 정의
+
+2026-07-17 제품 오너 결정으로 cloud 사용 계획은 취소했다. 다음 실행은 **로컬 병렬 구현 → 로컬 자동 검증 → Codex/Claude 게이트 → dev PR → 다음 계획 현행화** 흐름으로 진행한다.
+
+아침 확인 시점의 자동 완료 정의:
+
+1. 측정 계획의 남은 코드 범위(Phase 3, Phase 4의 데이터 비의존 배관)와 보고서 계획 R0~R5의 **결정 가능한 범위**가 구현돼 있다.
+2. Claude 디자인의 S1~S7을 이식한 `apps/report-lab`이 localhost에서 실행된다.
+3. 비식별 synthetic fixture로 프롬프트 stage를 실행해 numeric-free 얼굴 분석 보고서를 생성하고, raw/normalized 결과·검증 오류·latency/token을 비교할 수 있다.
+4. backend/mobile/web/DB migration/Playwright/security 테스트와 동일 SHA의 Codex·Claude Fable high 리뷰가 모두 GO다.
+5. dev PR과 다음 계획 현행화가 같은 변경 집합에 포함된다.
+
+다음은 자동 완료 정의에 **포함하지 않는다**: 실제 iPhone 촬영, paired MAD·MAE, Gate 6B, 캘리퍼 mm 오차, 실제 calibration receipt 발급, 자체 촬영셋 mean±SD, 사람 blind A/B, AR 실기기 시각 승인. 이 항목은 §11.7의 `HUMAN_DEVICE_GATE / PENDING / UNVERIFIED`로 남고 모든 보정·판정 승격 플래그는 계속 기본 `OFF`다.
+
+### 11.2 Local Phase L0 — 착수 전 선행 관문
+
+| 관문 | 현재 상태 | 통과 조건 |
+|---|---|---|
+| PR #27 기준선 | OPEN | 현재 branch에서 hardening을 완료하고 동일 SHA Codex·Claude GO 후 PR #27 갱신 |
+| 디자인 입력 | 로컬 6파일 전부 untracked | 로컬 레퍼런스로 읽되 원본 얼굴 자산은 허가 전 stage/commit 금지. 구현 코드는 별도 typed 컴포넌트로 작성 |
+| 디자인 런타임 | DC 전용 `support.js`, runtime JSX/eval, `window.omelette` bridge 의존 | HTML을 직접 배포하지 않고 typed React/Vite로 이식. `support.js`, `new Function`, 호스트 bridge는 배포물 제외 |
+| 얼굴 이미지 | sidecar 포함 여부·사용권 미확정 | 사용자 허가가 없으면 synthetic fixture로 교체. 실제 얼굴 이미지는 외부 모델에 전송 금지 |
+| 누락 정본 | `얼굴분석-설계.html`, `메이크업-분류체계-정의.html` 없음 | 본 v5 대체 계약을 구현 기준으로 고정. 원본 반입 시 별도 delta review |
+| 로컬 도구 | Node/Python/Postgres/Playwright/MCP 상태 혼재 | lockfile 설치, backend venv, 보고서 계획 §3.1의 전용 `aura-report-lab` Postgres(`127.0.0.1:55432`), Chromium, CodeGraph sync와 tool smoke 성공 |
+| Claude gate | first-party 설정이나 CLI 로그아웃 | 사용자가 로컬 `claude auth login`; `claude-fable-5` high와 plugin/MCP ON 상태 dry-run 성공 |
+| 모델 provider | 자동 선택 미승인 | fixture/mock이 기본. 실제 프롬프트 호출은 사용자가 선택한 provider만 사용하며 Bedrock 자동 fallback 금지 |
+| 제품 결정 | 안전 기본값 확정 | 무규준 locale 게이지 숨김+자기이력만, body profile AI 제외, 스텐실 opt-in OFF, 라이브 AR 후속, 신규 δ=0 |
+
+**비밀 관리 불변식**: 토큰·DB 비밀번호·provider key를 저장소나 리뷰 prompt에 넣지 않는다. Claude 리뷰에는 코드만 전달하며 Bedrock을 사용하지 않는다. Report Lab의 실제 모델 호출은 선택된 fixture와 분석 prompt만 전달한다.
+
+### 11.3 도구·MCP·플러그인 계약
+
+플러그인/MCP는 끄지 않는다. 각 run은 실제 사용 목록과 version을 artifact로 남긴다.
+
+| 단계 | 필수 도구 |
+|---|---|
+| 코드 탐색·충돌 분석 | CodeGraph `sync`, GitHub |
+| 라이브러리·API 확인 | Context7, 실제 선택한 provider의 공식 문서 MCP(해당 adapter를 수정할 때만) |
+| DB 계약·migration | 전용 Compose project `aura-report-lab` + Postgres MCP `restricted`; 기존 dev/운영 DB 공유 금지 |
+| 웹 UI·회귀·접근성 | Playwright MCP/Chromium |
+| Claude 독립 리뷰 | Superpowers, code-review, frontend-design, Playwright plugin + project MCP config |
+| PR·CI | GitHub. 원격 배포는 이번 계획 범위에서 제외 |
+
+로컬 bootstrap은 idempotent script로 관리하고 Node/npm, Python venv, mobile/backend dependencies, Chromium, CodeGraph index, restricted Postgres MCP를 검증한다.
+
+Claude 리뷰 계약:
+
+- model: `claude-fable-5`
+- effort: `high`
+- auth: first-party Claude Pro OAuth
+- plugin/MCP: ON, manifest 기록
+- Bedrock·Anthropic API key 경로 사용 금지
+- Sonnet/다른 모델 자동 fallback 금지
+- exact model 또는 OAuth dry-run 실패 시 NO-GO/blocked
+
+### 11.4 실행 Wave와 병렬 세션
+
+#### Wave A — 공용 계약·로컬 골격
+
+- `apps/report-lab`: React + Vite + TypeScript 독립 앱
+- `packages/face-report-contract`: web/mobile 공용 numeric-free DTO, strict parser, versioned fixtures
+- `analysis_lab_runs`: `fixture_id` 필수, `source_report_id` nullable인 별도 테이블; SQL과 DBML 동시 변경
+- `POST /api/lab/analysis/stage-run`: fixture-first, `reportId`는 정상 인증+소유권 검증에서만 허용
+- consult-only 실행은 원본 이미지/S3 read 없이 동작
+- raw model response는 관리자 lab UI에서만, 제품 응답에는 normalized numeric-free DTO만 노출
+- 기본값: `127.0.0.1` bind, fixture-only, image generation disabled, CORS `http://127.0.0.1:5173` 단일 origin, 고정 fixture principal, raw-response admin token 기본 미설정, rate/budget limit, 운영 DB/S3 공유 금지
+- 한 명령으로 local backend·Report Lab·fixture DB를 시작/종료하는 script와 Playwright smoke
+
+#### Wave B — 4갈래 병렬 구현
+
+| lane | 소유 범위 | 핵심 산출물 |
+|---|---|---|
+| Prompt/측정 | `face_analysis_v2.py`, `face_analysis_ai.py`, `face_analysis_pipeline.py` | Phase 3 evidence mapping, `PerceptionInsight.visualEvidence` 필수, 2개 추천 룩, prompt override/cache/version, raw mm/receipt/nonce 차단 |
+| Geometry/bbox | geometry·landmark·measurement codec·bbox | 7-class 얼굴형 scorer, facial contrast/skin evenness, 원본 pixel bbox, 회전/크롭/sanitization 테스트 |
+| Web UI | `apps/report-lab/**` | Claude 디자인 S1~S7 typed 이식, fixture/prompt editor, run 비교, numeric-free preview, Playwright visual test |
+| Local/contract | 공용 DTO·schema·workflow·settings | lab API/auth/rate/cost, migration, bootstrap, tool/MCP manifest |
+
+#### Wave C — 모바일 보고서 통합
+
+- 웹과 모바일은 DTO만 공유하고 renderer는 React와 React Native로 분리한다.
+- `FaceAnalysisReportDetailScreen`, `MeasurementDetailSection`, `FaceAnalysisV2ReportSections`, 중복 `VerticalThirdsOverlay`는 Mobile report UI lane만 수정한다.
+- 사용자 화면의 px/mm/비율/Lab/confidence 숫자를 제거하고 사진 overlay·spectrum chip·blend bar·palette로 교체한다.
+- body profile 연결은 별도 최상위 계약으로 두며 AI prompt 유입 여부는 제품 결정 전 기본 제외한다.
+- `2026-07-16-home-makeup-recommendation-shortcut.md`는 이미 구현 완료이므로 재구현하지 않고 home/navigation 회귀 테스트만 수행한다.
+
+#### Wave D — Phase 4와 R5
+
+- Phase 4는 schema, locale 선택, 자기이력 비교, offline estimator와 feature flag까지 구현할 수 있다.
+- 실제 locale mean±SD, norm 판정, calibration 승격은 데이터·제품 승인 전까지 OFF다.
+- R5는 `AR맞춤핏-계약초안-v0.md` v0.2의 D1~D6 안전 기본값에 따라 stencil lane을 구현한다. opt-in과 non-zero δ는 계속 OFF이며 로컬 자동 완료는 static bridge/contract 테스트까지이고 iPhone/Unity visual proof를 대체하지 않는다.
+
+### 11.5 충돌면 단일 소유권
+
+| 충돌면 | 단일 소유 lane |
+|---|---|
+| `face_analysis_v2.py`, `face_analysis_ai.py`, `face_analysis_pipeline.py` | Prompt/측정 |
+| `openai_analysis.py`, `face_analysis_measurements.py` | Contract |
+| `schema.sql`, DBML, DB init/check | Local/contract |
+| numeric-free DTO·fixture schema | Contract |
+| `FaceAnalysisReportDetailScreen`, `MeasurementDetailSection`, `VerticalThirdsOverlay` | Mobile report UI |
+| geometry·landmark·bbox | Geometry |
+| `fitSheets.ts`, `lookStore.ts`, `StencilARApp.tsx`, Unity bridge/types | AR fit |
+| 로컬 bootstrap·`.github/workflows/**` | Local/contract |
+| 본 문서·보고서 계획·홈 계획 | root orchestrator |
+| 홈 바로가기 구현 파일 | 수정 금지, 회귀 발견 시에만 home lane |
+
+같은 충돌면을 두 lane이 수정해야 하면 병렬 세션을 멈추고 owner가 통합한다. 공유 fixture와 DTO version을 먼저 고정하고, schema writer는 Local/contract lane 하나만 둔다.
+
+### 11.6 자동 완료 게이트
+
+순서:
+
+1. 로컬 병렬 구현과 통합
+2. backend 전체/focused pytest, 고유 Compose project의 임시 PostgreSQL migration 후 volume teardown
+3. report-lab typecheck/unit/build + localhost Playwright fixture/visual/accessibility
+4. mobile typecheck와 face-report/home/navigation/Face3D 계약 테스트
+5. auth/ownership/path traversal/CORS/prompt injection/raw response/mm privacy/rate-limit 검사
+6. Codex 적대 리뷰 GO
+7. 동일 SHA Claude `claude-fable-5` high 독립 리뷰 GO
+8. dev PR 생성 또는 갱신
+9. PR CI 확인; 수정이 생기면 1~8을 새 SHA에서 재실행
+10. 같은 PR에서 세 계획을 실제 결과와 다음 관문 기준으로 현행화
+
+자동 게이트 artifact에는 commit SHA, 테스트 명령/결과, localhost 실행 명령, DB migration SHA, model/effort, plugin/MCP manifest, 미검증 관문을 기록한다.
+
+### 11.7 별도 사람·실기기 관문
+
+- Phase 1 paired MAD·MAE와 Unity 행렬 convention
+- Phase 2 Gate 6B cohort, 캘리퍼 mm 오차, 실제 approval artifact/HMAC receipt
+- Phase 4 자체 촬영셋 mean±SD와 locale 승격 승인
+- 보고서 blind A/B 품질 승인
+- AR 맞춤 핏 iPhone/Unity 시각 검증
+
+이 관문은 로컬 테스트와 CI가 녹색이어도 자동 통과하지 않는다. 실기기 수집은 runbook·스크립트·결과 스키마 준비까지만 자동 작업으로 인정한다.
+
+### 11.8 외부 입력과 무인 실행 기본값
+
+계획과 구현은 아래 기본값으로 사용자 응답 없이 진행한다.
+
+1. 누락 정본 두 파일은 본 v5 대체 계약으로 갈음한다.
+2. 디자인 sidecar 얼굴 이미지는 사용하지 않고 synthetic placeholder를 사용한다.
+3. model provider는 `disabled/fixture`로 고정한다. 실제 provider 호출은 별도 명시 선택 전 수행하지 않는다.
+4. Phase 4는 모집단 게이지 숨김 + 자기이력만, body profile은 AI prompt 제외다.
+5. R5는 스텐실 레인, 사용자 opt-in 기본 OFF, 기존 생성 계약 무변경, `eyelinerInnerExtension` δ=0/OFF, 라이브 레인 후속으로 고정한다.
+6. 실기기·캘리퍼·사람 품질 관문은 실행하지 않고 `PENDING/UNVERIFIED`로 남긴다.
+
+유일한 외부 인증 관문은 로컬 Claude CLI의 first-party Pro 로그인이다. 로그아웃 상태면 코드·테스트·PR 준비는 계속하되 동일 SHA Claude GO만 `BLOCKED`로 남기며 Sonnet·Bedrock·다른 모델로 대체하지 않는다.

@@ -22,6 +22,10 @@ export type FaceRatioPoseNormalizationSkippedReason =
   | 'landmark_count_invalid'
   | 'landmark_value_invalid'
   | 'matrix_missing'
+  | 'matrix_non_affine'
+  | 'matrix_non_orthogonal'
+  | 'matrix_non_uniform_scale'
+  | 'matrix_round_trip_invalid'
   | 'matrix_value_invalid'
   | 'matrix_singular'
   | 'matrix_reflection';
@@ -64,6 +68,16 @@ export type FaceRatioPoseNormalizationResult = {
 };
 
 export const FACE_RATIO_POSE_NORMALIZATION_VALIDATION_FLAG = 'validation-only';
+
+// MediaPipe describes the face pose as a rigid canonical-to-runtime mapping.
+// Float32 noise should be far below these deliberately generous validation
+// bounds. Uniform similarity scale is allowed; shear and axis-specific scale
+// are rejected before Gram-Schmidt can hide them.
+const MAX_MATRIX_ORTHOGONALITY_RESIDUAL = 0.02;
+const MAX_MATRIX_ROTATION_DETERMINANT_ERROR = 0.02;
+const MAX_MATRIX_SCALE_SPREAD = 0.02;
+const MAX_MATRIX_AFFINE_BOTTOM_ROW_RESIDUAL = 1e-5;
+const MAX_ROUND_TRIP_RMS_PX = 0.25;
 
 export function resolveFaceRatioPoseNormalizationEnabled(
   flagValue: string | undefined,
@@ -216,6 +230,16 @@ function buildTransform({
   }
 
   const values = matrix.values;
+  const affineBottomRowResidual = Math.max(
+    Math.abs(values[12]),
+    Math.abs(values[13]),
+    Math.abs(values[14]),
+    Math.abs(values[15] - 1),
+  );
+  if (affineBottomRowResidual > MAX_MATRIX_AFFINE_BOTTOM_ROW_RESIDUAL) {
+    return 'matrix_non_affine';
+  }
+
   // Unity Matrix4x4의 m00..m33을 row-major로 직렬화한다. 회전축은 열벡터다.
   const columnX: Vector3 = [values[0], values[4], values[8]];
   const columnY: Vector3 = [values[1], values[5], values[9]];
@@ -231,8 +255,31 @@ function buildTransform({
     return 'matrix_singular';
   }
 
+  const rawDeterminant = dot(normalizedX, cross(normalizedY, normalizedZ));
+  const orthogonalityResidual = Math.max(
+    Math.abs(dot(normalizedX, normalizedY)),
+    Math.abs(dot(normalizedX, normalizedZ)),
+    Math.abs(dot(normalizedY, normalizedZ)),
+  );
+  const maxScale = Math.max(scaleX, scaleY, scaleZ);
+  const minScale = Math.min(scaleX, scaleY, scaleZ);
+  const scaleSpread = maxScale > 0 ? (maxScale - minScale) / maxScale : 0;
+
+  if (rawDeterminant <= 0) {
+    return 'matrix_reflection';
+  }
+  if (
+    orthogonalityResidual > MAX_MATRIX_ORTHOGONALITY_RESIDUAL ||
+    Math.abs(rawDeterminant - 1) > MAX_MATRIX_ROTATION_DETERMINANT_ERROR
+  ) {
+    return 'matrix_non_orthogonal';
+  }
+  if (scaleSpread > MAX_MATRIX_SCALE_SPREAD) {
+    return 'matrix_non_uniform_scale';
+  }
+
   // FaceLandmarker 행렬은 rigid/similarity transform이어야 한다. 수치 오차는
-  // Gram-Schmidt로 제거하되 residual 자체는 진단값으로 남긴다.
+  // 위 fail-closed 검사를 통과한 뒤에만 Gram-Schmidt로 제거한다.
   const yWithoutX = subtract(normalizedY, multiply(normalizedX, dot(normalizedY, normalizedX)));
   const axisY = normalizeVector(yWithoutX);
 
@@ -252,14 +299,10 @@ function buildTransform({
     return 'matrix_reflection';
   }
 
-  const rawDeterminant = dot(normalizedX, cross(normalizedY, normalizedZ));
-  const orthogonalityResidual = Math.max(
-    Math.abs(dot(normalizedX, normalizedY)),
-    Math.abs(dot(normalizedX, normalizedZ)),
-    Math.abs(dot(normalizedY, normalizedZ)),
-  );
-  const maxScale = Math.max(scaleX, scaleY, scaleZ);
-  const minScale = Math.min(scaleX, scaleY, scaleZ);
+  // m03/m13/m23 translation은 canonical metric 좌표계의 값이고, 여기의
+  // landmark는 image-normalized 좌표다. 서로 다른 단위를 섞지 않고 관측점
+  // centroid를 중심으로 R^T만 적용한다. 평행이동은 shape/ratio에 영향을 주지
+  // 않으며, rigid affine 여부는 bottom row 검사로 별도 fail-closed 한다.
   const centerPx = points.reduce(
     (sum, point) => ({
       x: sum.x + point.x * imageWidth,
@@ -276,7 +319,7 @@ function buildTransform({
     diagnostics: {
       matrixOrthogonalityResidual: finiteOrNull(orthogonalityResidual),
       matrixRotationDeterminant: finiteOrNull(rawDeterminant),
-      matrixScaleSpread: finiteOrNull(maxScale > 0 ? (maxScale - minScale) / maxScale : 0),
+      matrixScaleSpread: finiteOrNull(scaleSpread),
     },
     transform: {
       axisX,
@@ -418,6 +461,8 @@ export function normalizeFaceRatioLandmarks({
       imageWidth,
       imageHeight,
     );
+    // 같은 승인된 R/R^T 구현의 수치적 역연산 진단일 뿐, matrix와 landmark가
+    // 독립적으로 서로 대응한다는 증거는 아니다.
     const reprojected = forwardProject(point, built.transform);
     const roundTrip = pointDistancePx(
       reprojected,
@@ -432,6 +477,18 @@ export function normalizeFaceRatioLandmarks({
     maxZ = Math.max(maxZ, original.z * imageWidth);
   });
 
+  const roundTripRmsPx = Math.sqrt(roundTripSquaredSum / normalizedPoints.length);
+  if (
+    !Number.isFinite(roundTripRmsPx) ||
+    roundTripRmsPx > MAX_ROUND_TRIP_RMS_PX
+  ) {
+    return skippedResult({
+      points,
+      reason: 'matrix_round_trip_invalid',
+      requested: true,
+    });
+  }
+
   return {
     outcome: {
       applied: true,
@@ -443,9 +500,7 @@ export function normalizeFaceRatioLandmarks({
         ),
         landmarkCount: normalizedPoints.length,
         ...built.diagnostics,
-        roundTripRmsPx: finiteOrNull(
-          Math.sqrt(roundTripSquaredSum / normalizedPoints.length),
-        ),
+        roundTripRmsPx: finiteOrNull(roundTripRmsPx),
         zSpanPx: finiteOrNull(maxZ - minZ),
       },
       method: 'mediapipe_facial_transformation_matrix',

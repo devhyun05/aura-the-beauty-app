@@ -15,6 +15,66 @@ const SUBJECT_ID_PATTERN = /^subj_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const CAPTURE_ID_PATTERN = /^cap_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const COHORT_ID_PATTERN = /^cohort_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const SESSION_ID_PATTERN = /^session_[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
+const PHASE1_LOCAL_CAPTURE_FILE_PATTERN =
+  /^aura-face-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:heic|jpe?g|png)$/i;
+
+function normalizeFileUriPath(uri: string): string | null {
+  try {
+    const parsed = new URL(uri);
+    if (
+      parsed.protocol !== 'file:' ||
+      (parsed.hostname && parsed.hostname !== 'localhost') ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return null;
+    }
+
+    const normalizedSegments: string[] = [];
+    for (const segment of decodeURIComponent(parsed.pathname).split('/')) {
+      if (!segment || segment === '.') {
+        continue;
+      }
+      if (segment === '..') {
+        if (normalizedSegments.length === 0) {
+          return null;
+        }
+        normalizedSegments.pop();
+        continue;
+      }
+      normalizedSegments.push(segment);
+    }
+
+    return `/${normalizedSegments.join('/')}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Phase 1 카메라가 NSTemporaryDirectory에 만든 파일만 식별한다.
+ * 일반 file URI, Documents/앨범 파일, 원격/content URI는 삭제 대상으로 삼지 않는다.
+ */
+export function isFaceRatioPhase1LocalCaptureUri(uri: string): boolean {
+  const path = normalizeFileUriPath(uri);
+  if (!path) {
+    return false;
+  }
+
+  const separatorIndex = path.lastIndexOf('/');
+  const parentPath = path.slice(0, separatorIndex);
+  if (
+    separatorIndex < 0 ||
+    parentPath.endsWith('/tmp') === false ||
+    parentPath.includes('/Containers/Data/Application/') === false
+  ) {
+    return false;
+  }
+
+  return PHASE1_LOCAL_CAPTURE_FILE_PATTERN.test(
+    path.slice(separatorIndex + 1),
+  );
+}
 
 type FaceRatioPhase1ReplayHairline = {
   confidence: number;

@@ -44,6 +44,10 @@ import {isUnifiedFaceCaptureDiagnosticsEnabled} from '../../features/face-captur
 import phase1ReplayShotPlan from '../../features/face-ratio/phase1ReplayShotPlan.json';
 import {FaceVerticalThirdsScreen} from '../../features/face-ratio/screens/FaceVerticalThirdsScreen';
 import {isFaceRatioPoseNormalizationEnabled} from '../../features/face-ratio/services/faceRatioPoseNormalization';
+import {
+  deleteFaceRatioPhase1LocalCapture,
+  isFaceRatioPhase1ReplayShotComplete,
+} from '../../features/face-ratio/services/faceVerticalThirdsArtifacts';
 import type {
   FaceRatioPhase1ReplayCondition,
   FaceRatioPhase1ReplayValidation,
@@ -353,15 +357,33 @@ function FaceCaptureLabContent() {
     [phase1Sequence.runIndex, phase1Sequence.shotIndex, phase1SubjectToken],
   );
 
+  const releasePhase1LocalCapture = useCallback(
+    (captureToRelease: LabCapture | null) => {
+      if (labMode !== 'phase1-replay-10' || !captureToRelease) {
+        return;
+      }
+
+      // 먼저 결과 화면의 참조를 끊고, 다음 task에서 네이티브 tmp 파일만 지운다.
+      // Documents/앨범/원격 URI는 cleanup helper가 거부한다.
+      setTimeout(() => {
+        void deleteFaceRatioPhase1LocalCapture(captureToRelease.imageUri);
+      }, 0);
+    },
+    [labMode],
+  );
+
   const resetCapture = useCallback(() => {
+    const captureToRelease = capture;
     setCapture(null);
     setUnifiedResult(null);
     setPhase1RawSaved(false);
     setResultMode('face3d');
     setModeRevision(current => current + 1);
-  }, []);
+    releasePhase1LocalCapture(captureToRelease);
+  }, [capture, releasePhase1LocalCapture]);
 
   const finishPhase1Shot = useCallback(() => {
+    const captureToRelease = capture;
     setCapture(null);
     setUnifiedResult(null);
     setPhase1RawSaved(false);
@@ -382,16 +404,23 @@ function FaceCaptureLabContent() {
     }
     setResultMode('face3d');
     setModeRevision(current => current + 1);
-  }, [phase1RawSaved, phase1Sequence.shotIndex]);
+    releasePhase1LocalCapture(captureToRelease);
+  }, [
+    capture,
+    phase1RawSaved,
+    phase1Sequence.shotIndex,
+    releasePhase1LocalCapture,
+  ]);
 
   const handlePhase1AnalysisResult = useCallback(
     (result: FaceVerticalThirdsResult) => {
-      setPhase1RawSaved(Boolean(result.artifacts.poseNormalizationReplayUri));
+      setPhase1RawSaved(isFaceRatioPhase1ReplayShotComplete(result));
     },
     [],
   );
 
   const changeMode = useCallback(() => {
+    const captureToRelease = capture;
     setCapture(null);
     setUnifiedResult(null);
     setResultMode('face3d');
@@ -400,7 +429,8 @@ function FaceCaptureLabContent() {
     setPhase1Completed(false);
     setPhase1Sequence({runIndex: 1, shotIndex: 1});
     setModeRevision(current => current + 1);
-  }, []);
+    releasePhase1LocalCapture(captureToRelease);
+  }, [capture, releasePhase1LocalCapture]);
 
   if (!labMode) {
     return (

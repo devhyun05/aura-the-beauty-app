@@ -104,7 +104,7 @@ function profileMetrics(values, validFrameCount = 30) {
 
 function exactProfile(frameCount, values, overrides = {}) {
   return {
-    schemaVersion: 'aura.face3d-profile.v2',
+    schemaVersion: 'aura.face3d-profile.v3',
     source: 'arkit_face_mesh',
     collectionPolicyId: FACE3D_EXACT_POLICY_IDS[frameCount],
     sampleMode: frameCount === 1 ? 'single_frame' : 'micro_burst',
@@ -553,7 +553,7 @@ test('repeatability analyzer reads unified JSONL and embedded profiles', () => {
 
 test('profile binding canonicalization wraps every number and normalizes -0', () => {
   const profile = {
-    schemaVersion: 'aura.face3d-profile.v2',
+    schemaVersion: 'aura.face3d-profile.v3',
     count: 1,
     negativeZero: -0,
     nested: {value: 0.125},
@@ -566,7 +566,7 @@ test('profile binding canonicalization wraps every number and normalizes -0', ()
 
 test('profile binding hash matches the backend Python canonicalization fixture', () => {
   const profile = {
-    schemaVersion: 'aura.face3d-profile.v2',
+    schemaVersion: 'aura.face3d-profile.v3',
     captureNonce: 'cap_fixture_1234',
     metrics: {
       x: {
@@ -579,7 +579,7 @@ test('profile binding hash matches the backend Python canonicalization fixture',
   };
   assert.equal(
     computeProfileBindingSha256(profile),
-    '878a4e7eeb86b592f8384965e021b498b32d2d4700fc31c0ef34712a1f5e5a8c',
+    'a8a683cdb1e81c1ebbeb890f7ccd9fe7c43ea2ef0fd6719ca001c20bb3cbe6cd',
   );
 
   const receiptContext = {

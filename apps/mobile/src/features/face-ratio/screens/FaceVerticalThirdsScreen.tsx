@@ -847,6 +847,7 @@ export function FaceVerticalThirdsScreen({
 
   useEffect(() => {
     if (
+      validationReplay ||
       !isSuccessResult(result) ||
       !imageLoaded ||
       !stageLaidOut ||
@@ -882,7 +883,7 @@ export function FaceVerticalThirdsScreen({
       isMounted = false;
       clearTimeout(captureTimer);
     };
-  }, [imageLoaded, result, stageLaidOut]);
+  }, [imageLoaded, result, stageLaidOut, validationReplay]);
 
   if (!result) {
     return <LoadingReport onRetake={onRetake} />;

@@ -9,6 +9,7 @@ import {
   type Face3DProfile,
   type Face3DProfileV1,
   type Face3DProfileV2,
+  type Face3DProfileV3,
   type Face3DSensorProvenance,
   type Face3DStartRequest,
   type Face3DStatus,
@@ -16,6 +17,7 @@ import {
 
 export const FACE_3D_PROFILE_SCHEMA_VERSION = 'aura.face3d-profile.v1' as const;
 export const FACE_3D_PROFILE_SCHEMA_VERSION_V2 = 'aura.face3d-profile.v2' as const;
+export const FACE_3D_PROFILE_SCHEMA_VERSION_V3 = 'aura.face3d-profile.v3' as const;
 export const FACE_3D_PROFILE_SOURCE = 'arkit_face_mesh' as const;
 export const FACE_3D_GATE_VERSION = 'face3d-gate-v1' as const;
 export const FACE_3D_GATE_VERSION_V2 = 'face3d-gate-v2' as const;
@@ -57,6 +59,12 @@ const FACE_3D_STATUSES = new Set<Face3DStatus>([
   'blocked',
   'error',
 ]);
+const FACE_3D_MILLIMETER_METRIC_FIELDS = [
+  'valueMm',
+  'valueMmConfidence',
+  'valueMmMad',
+  'valueMmValidFrameCount',
+] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -119,7 +127,10 @@ function readStatus(value: unknown): Face3DStatus | null {
     : null;
 }
 
-function parseMetric(value: unknown): Face3DMetric | null {
+function parseMetric(
+  value: unknown,
+  includeMillimeterFields: boolean,
+): Face3DMetric | null {
   if (!isRecord(value) || value.unit !== 'normalized') {
     return null;
   }
@@ -129,21 +140,21 @@ function parseMetric(value: unknown): Face3DMetric | null {
   const validFrameCount = readNonNegativeInteger(value.validFrameCount);
   const mad = value.mad === null ? null : readFiniteNumber(value.mad);
   const valueMm =
-    value.valueMm === undefined
+    !includeMillimeterFields || value.valueMm === undefined
       ? undefined
       : value.valueMm === null
         ? null
         : readFiniteNumber(value.valueMm);
   const valueMmConfidence =
-    value.valueMmConfidence === undefined
+    !includeMillimeterFields || value.valueMmConfidence === undefined
       ? undefined
       : readFiniteNumber(value.valueMmConfidence);
   const valueMmValidFrameCount =
-    value.valueMmValidFrameCount === undefined
+    !includeMillimeterFields || value.valueMmValidFrameCount === undefined
       ? undefined
       : readNonNegativeInteger(value.valueMmValidFrameCount);
   const valueMmMad =
-    value.valueMmMad === undefined
+    !includeMillimeterFields || value.valueMmMad === undefined
       ? undefined
       : value.valueMmMad === null
         ? null
@@ -157,14 +168,20 @@ function parseMetric(value: unknown): Face3DMetric | null {
     validFrameCount === null ||
     (value.mad !== null && mad === null) ||
     (mad !== null && mad < 0) ||
-    (value.valueMm !== undefined && value.valueMm !== null && valueMm === null) ||
-    (value.valueMmConfidence !== undefined &&
+    (includeMillimeterFields &&
+      value.valueMm !== undefined &&
+      value.valueMm !== null &&
+      valueMm === null) ||
+    (includeMillimeterFields &&
+      value.valueMmConfidence !== undefined &&
       (typeof valueMmConfidence !== 'number' ||
         valueMmConfidence < 0 ||
         valueMmConfidence > 1)) ||
-    (value.valueMmValidFrameCount !== undefined &&
+    (includeMillimeterFields &&
+      value.valueMmValidFrameCount !== undefined &&
       typeof valueMmValidFrameCount !== 'number') ||
-    (value.valueMmMad !== undefined &&
+    (includeMillimeterFields &&
+      value.valueMmMad !== undefined &&
       value.valueMmMad !== null &&
       valueMmMad === null) ||
     (valueMmMad !== undefined && valueMmMad !== null && valueMmMad < 0)
@@ -185,6 +202,14 @@ function parseMetric(value: unknown): Face3DMetric | null {
       : {}),
     ...(valueMmMad !== undefined ? {valueMmMad} : {}),
   };
+}
+
+function hasMillimeterMetricFields(metricsRecord: Record<string, unknown>): boolean {
+  return Object.values(metricsRecord).some(
+    metric =>
+      isRecord(metric) &&
+      FACE_3D_MILLIMETER_METRIC_FIELDS.some(field => field in metric),
+  );
 }
 
 function parseSensorProvenance(value: unknown): Face3DSensorProvenance | null {
@@ -282,9 +307,13 @@ function parseCalibrationReceipt(value: unknown): Face3DCalibrationReceipt | nul
   };
 }
 
-function parseMetrics(metricsRecord: Record<string, unknown>): Face3DMetrics | null {
+function parseMetrics(
+  metricsRecord: Record<string, unknown>,
+  includeMillimeterFields: boolean,
+): Face3DMetrics | null {
   const parsedMetrics = FACE_3D_REQUIRED_METRIC_KEYS.map(
-    key => [key, parseMetric(metricsRecord[key])] as const,
+    key =>
+      [key, parseMetric(metricsRecord[key], includeMillimeterFields)] as const,
   );
 
   if (parsedMetrics.some(([, metric]) => metric === null)) {
@@ -299,7 +328,7 @@ function parseMetrics(metricsRecord: Record<string, unknown>): Face3DMetrics | n
       continue;
     }
 
-    const metric = parseMetric(metricsRecord[key]);
+    const metric = parseMetric(metricsRecord[key], includeMillimeterFields);
     if (metric) {
       optionalMetrics[key] = metric;
     }
@@ -344,6 +373,74 @@ function parseFace3DProfileV1(
   };
 }
 
+function parseFace3DProfileV2(
+  value: Record<string, unknown>,
+  metrics: Face3DMetrics,
+): Face3DProfileV2 | null {
+  const aggregation = readNonEmptyString(value.aggregation);
+  const captureWindowMs = readFiniteNumber(value.captureWindowMs);
+  const collectionPolicyId = readNonEmptyString(value.collectionPolicyId);
+  const completionRatio = readFiniteNumber(value.completionRatio);
+  const confidenceCalibrationStatus = readNonEmptyString(
+    value.confidenceCalibrationStatus,
+  );
+  const gateVersion = readNonEmptyString(value.gateVersion);
+  const sampleMode = readNonEmptyString(value.sampleMode);
+  const targetFrameCount = readNonNegativeInteger(value.targetFrameCount);
+  const topologyFingerprint = readNonEmptyString(value.topologyFingerprint);
+  const validFrameCount = readNonNegativeInteger(value.validFrameCount);
+  const warnings = readWarnings(value.warnings);
+
+  if (
+    gateVersion !== FACE_3D_GATE_VERSION_V2 ||
+    !topologyFingerprint ||
+    !collectionPolicyId ||
+    (sampleMode !== 'micro_burst' && sampleMode !== 'single_frame') ||
+    (aggregation !== 'median_mad' && aggregation !== 'none') ||
+    (confidenceCalibrationStatus !== 'uncalibrated' &&
+      confidenceCalibrationStatus !== 'calibrated') ||
+    captureWindowMs === null ||
+    captureWindowMs < 0 ||
+    completionRatio === null ||
+    completionRatio < 0 ||
+    completionRatio > 1 ||
+    validFrameCount === null ||
+    targetFrameCount === null ||
+    targetFrameCount === 0 ||
+    validFrameCount > targetFrameCount ||
+    Math.abs(completionRatio - validFrameCount / targetFrameCount) > 0.0001 ||
+    !isValidV2PolicyCombination({
+      aggregation,
+      captureWindowMs,
+      collectionPolicyId,
+      sampleMode,
+      targetFrameCount,
+      validFrameCount,
+      warnings,
+    }) ||
+    Object.values(metrics).some(metric => metric.validFrameCount > validFrameCount)
+  ) {
+    return null;
+  }
+
+  return {
+    aggregation,
+    captureWindowMs,
+    collectionPolicyId,
+    completionRatio,
+    confidenceCalibrationStatus,
+    gateVersion,
+    metrics,
+    sampleMode,
+    schemaVersion: FACE_3D_PROFILE_SCHEMA_VERSION_V2,
+    source: FACE_3D_PROFILE_SOURCE,
+    targetFrameCount,
+    topologyFingerprint,
+    validFrameCount,
+    warnings,
+  };
+}
+
 function isValidV2PolicyCombination(input: {
   aggregation: string;
   captureWindowMs: number;
@@ -384,18 +481,18 @@ function isValidV2PolicyCombination(input: {
   return input.sampleMode === 'micro_burst' && input.aggregation === 'median_mad';
 }
 
-function getV2MetricMinimumFrameCount(collectionPolicyId: string): number | null {
+function getV3MetricMinimumFrameCount(collectionPolicyId: string): number | null {
   if (collectionPolicyId === UNIFIED_MICRO_BURST_POLICY_ID) {
     return 5;
   }
   return DIAGNOSTICS_EXACT_POLICY_TARGETS.get(collectionPolicyId) ?? null;
 }
 
-function parseFace3DProfileV2(
+function parseFace3DProfileV3(
   value: Record<string, unknown>,
   metrics: Face3DMetrics,
   metricsRecord: Record<string, unknown>,
-): Face3DProfileV2 | null {
+): Face3DProfileV3 | null {
   const aggregation = readNonEmptyString(value.aggregation);
   const captureNonce = readNonEmptyString(value.captureNonce);
   const captureWindowMs = readFiniteNumber(value.captureWindowMs);
@@ -424,7 +521,7 @@ function parseFace3DProfileV2(
       ? undefined
       : readNonEmptyString(value.serverCalibrationReceiptStatus);
   const metricMinimumFrameCount = collectionPolicyId
-    ? getV2MetricMinimumFrameCount(collectionPolicyId)
+    ? getV3MetricMinimumFrameCount(collectionPolicyId)
     : null;
 
   if (
@@ -506,7 +603,7 @@ function parseFace3DProfileV2(
     metrics,
     profileBindingSha256,
     sampleMode,
-    schemaVersion: FACE_3D_PROFILE_SCHEMA_VERSION_V2,
+    schemaVersion: FACE_3D_PROFILE_SCHEMA_VERSION_V3,
     ...(serverCalibrationReceiptStatus
       ? {serverCalibrationReceiptStatus}
       : {}),
@@ -530,25 +627,40 @@ export function parseFace3DProfile(value: unknown): Face3DProfile | null {
     return null;
   }
 
-  const metrics = parseMetrics(metricsRecord);
-  if (!metrics) {
-    return null;
-  }
-
   if (value.schemaVersion === FACE_3D_PROFILE_SCHEMA_VERSION) {
+    if (hasMillimeterMetricFields(metricsRecord)) {
+      return null;
+    }
+    const metrics = parseMetrics(metricsRecord, false);
+    if (!metrics) {
+      return null;
+    }
     return parseFace3DProfileV1(value, metrics);
   }
 
   if (value.schemaVersion === FACE_3D_PROFILE_SCHEMA_VERSION_V2) {
-    return parseFace3DProfileV2(value, metrics, metricsRecord);
+    const metrics = parseMetrics(metricsRecord, false);
+    if (!metrics) {
+      return null;
+    }
+    return parseFace3DProfileV2(value, metrics);
+  }
+
+  if (value.schemaVersion === FACE_3D_PROFILE_SCHEMA_VERSION_V3) {
+    const metrics = parseMetrics(metricsRecord, true);
+    if (!metrics) {
+      return null;
+    }
+    return parseFace3DProfileV3(value, metrics, metricsRecord);
   }
 
   return null;
 }
 
-// v2 소수 프레임 프로필은 반복성 보정이 완료되고 product policy로 수집된 경우에만
+// v3 소수 프레임 프로필은 반복성 보정이 완료되고 product policy로 수집된 경우에만
 // 사용자 보고서·AI 해석에 사용한다. diagnostics/single-frame/uncalibrated 결과는
-// 검증 자료로 저장할 수 있지만 제품 해석에는 노출하지 않는다.
+// 검증 자료로 저장할 수 있지만 제품 해석에는 노출하지 않는다. 기존 v2는
+// wire 호환 파싱만 허용하고 제품 해석에는 절대 승격하지 않는다.
 export function isFace3DProfileAnalysisEligible(
   profile: Face3DProfile | null | undefined,
 ): profile is Face3DProfile {
@@ -558,6 +670,10 @@ export function isFace3DProfileAnalysisEligible(
 
   if (profile.schemaVersion === FACE_3D_PROFILE_SCHEMA_VERSION) {
     return true;
+  }
+
+  if (profile.schemaVersion === FACE_3D_PROFILE_SCHEMA_VERSION_V2) {
+    return false;
   }
 
   if (!FACE_3D_CALIBRATION_PROMOTION_ENABLED) {

@@ -10,7 +10,7 @@ namespace Aura.Face3D
     public static class UnifiedFaceCaptureContract
     {
         public const string SchemaVersion = "aura.unified-face-capture.v1";
-        public const string ProfileSchemaVersion = "aura.face3d-profile.v2";
+        public const string ProfileSchemaVersion = "aura.face3d-profile.v3";
         public const string GateVersion = "face3d-gate-v2";
         public const string HairlinePolicy = "soft_nudge_post_capture_omit";
         public const string ConfidenceCalibrationUncalibrated = "uncalibrated";

@@ -1,4 +1,5 @@
 import json
+from collections.abc import Mapping
 from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -13,6 +14,7 @@ from app.schemas.face_analysis_v2 import (
   PerceptionResult,
 )
 from app.services.face_analysis_measurements import (
+  filter_metric_keys_for_model,
   filter_internal_only_payload,
   filter_metrics_for_model,
 )
@@ -104,7 +106,9 @@ class FaceAnalysisAI:
     model_profile = filter_metrics_for_model(camera_profile)
     prompt_payload = {
       "missingObservableKeys": coverage.missing_observable_keys,
-      "authoritativeKeys": sorted(model_profile),
+      "authoritativeKeys": filter_metric_keys_for_model(
+        coverage.authoritative_keys,
+      ),
       "cameraEvidence": _jsonable(model_profile),
     }
     output = await self._invoke_validated(
@@ -168,13 +172,14 @@ class FaceAnalysisAI:
   async def consult(
     self,
     *,
-    profile: dict[str, MetricEnvelope],
+    profile: Mapping[str, MetricEnvelope | dict[str, Any]],
     derived: DerivedResult | dict[str, Any],
     perception: PerceptionResult | dict[str, Any],
   ) -> ConsultingResult:
+    model_profile = filter_metrics_for_model(profile)
     model_payload = filter_internal_only_payload(
       {
-        "faceProfile": _jsonable(profile),
+        "faceProfile": _jsonable(model_profile),
         "derived": _jsonable(derived),
         "perception": _jsonable(perception),
       },

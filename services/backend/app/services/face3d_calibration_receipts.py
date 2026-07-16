@@ -34,6 +34,7 @@ FACE3D_REQUIRED_METRIC_KEYS = frozenset(
 )
 FACE3D_RECEIPT_SIGNATURE_ALGORITHM = "hmac-sha256-v1"
 FACE3D_SERVER_RECEIPT_STATUS_FIELD = "serverCalibrationReceiptStatus"
+FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION = "aura.face3d-profile.v3"
 
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 _SIGNED_RECEIPT_FIELDS = (
@@ -279,7 +280,7 @@ def is_face3d_profile_server_verified(profile: dict[str, Any]) -> bool:
   gate_version = _non_empty_string(profile.get("gateVersion"))
   receipt = _record(profile.get("calibrationReceipt"))
   return (
-    profile.get("schemaVersion") == "aura.face3d-profile.v2"
+    profile.get("schemaVersion") == FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION
     and profile.get("confidenceCalibrationStatus") == "calibrated"
     and profile.get(FACE3D_SERVER_RECEIPT_STATUS_FIELD) == "verified"
     and policy_id is not None
@@ -302,7 +303,7 @@ def verify_face3d_calibration_receipt(
   expected_subject_context_id: str,
   now: datetime | None = None,
 ) -> Face3DCalibrationReceiptVerification:
-  if profile.get("schemaVersion") != "aura.face3d-profile.v2":
+  if profile.get("schemaVersion") != FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION:
     return Face3DCalibrationReceiptVerification(
       reason="face3d_schema_unsupported",
       receipt=None,
@@ -550,9 +551,9 @@ async def verify_and_consume_face3d_calibration_receipt(
     return None
 
   primary = candidates[0]
-  if primary.get("schemaVersion") != "aura.face3d-profile.v2":
+  if primary.get("schemaVersion") != FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION:
     for candidate in candidates[1:]:
-      if candidate.get("schemaVersion") == "aura.face3d-profile.v2":
+      if candidate.get("schemaVersion") == FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION:
         candidate[FACE3D_SERVER_RECEIPT_STATUS_FIELD] = (
           "face3d_profile_not_authoritative"
         )
@@ -609,7 +610,7 @@ async def verify_and_consume_face3d_calibration_receipt(
     primary_binding = ""
   primary_receipt_json = _canonical_json(_record(primary.get("calibrationReceipt")))
   for candidate in candidates:
-    if candidate.get("schemaVersion") != "aura.face3d-profile.v2":
+    if candidate.get("schemaVersion") != FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION:
       continue
     try:
       candidate_binding = compute_face3d_profile_binding_sha256(candidate)

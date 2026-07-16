@@ -14,6 +14,7 @@ import {
   appendFaceRatioPhase1ReplayCapture,
   createFaceRatioPhase1ReplayArtifact,
   createFaceRatioPhase1ReplayCapture,
+  isFaceRatioPhase1LocalCaptureUri,
   isFaceRatioPhase1ReplayArtifactExpired,
   validateFaceRatioPhase1ReplayArtifact,
   validateFaceRatioPhase1ReplayValidation,
@@ -191,6 +192,41 @@ export async function saveFaceRatioPhase1ReplayArtifact({
   await FileSystem.writeAsStringAsync(fileUri, JSON.stringify(next, null, 2));
 
   return fileUri;
+}
+
+/**
+ * 결과 화면이 캡처를 더 이상 참조하지 않는 retake/advance/change-mode 시점에
+ * Phase 1 네이티브 카메라의 tmp 사진만 best-effort로 삭제한다.
+ */
+export async function deleteFaceRatioPhase1LocalCapture(
+  uri: string | null | undefined,
+) {
+  if (!uri || !isFaceRatioPhase1LocalCaptureUri(uri)) {
+    return false;
+  }
+
+  try {
+    await FileSystem.deleteAsync(uri, {idempotent: true});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isFaceRatioPhase1ReplayShotComplete(
+  result: FaceVerticalThirdsResult,
+) {
+  return Boolean(
+    result.artifacts.poseNormalizationReplayUri &&
+      result.status === 'full_success' &&
+      result.measurementMode === 'full_vertical_thirds' &&
+      result.quality.usable &&
+      result.verticalThirds &&
+      result.faceLength &&
+      result.postCorrection?.applied &&
+      result.postCorrection.method ===
+        'mediapipe_facial_transformation_matrix',
+  );
 }
 
 async function ensureSessionDirectory(sessionId: string) {

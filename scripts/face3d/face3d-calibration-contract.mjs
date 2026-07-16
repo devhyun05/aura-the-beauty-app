@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 export const FACE3D_CALIBRATION_RECEIPT_SCHEMA_VERSION =
   'aura.face3d-confidence-calibration-receipt.v1';
 export const FACE3D_CALIBRATION_SIGNATURE_ALGORITHM = 'hmac-sha256-v1';
-export const FACE3D_PROFILE_SCHEMA_V2 = 'aura.face3d-profile.v2';
+export const FACE3D_PROFILE_SCHEMA_V3 = 'aura.face3d-profile.v3';
 export const FACE3D_GATE_VERSION_V2 = 'face3d-gate-v2';
 export const FACE3D_REPEATABILITY_MANIFEST_SCHEMA_VERSION =
   'aura.face3d-repeatability-manifest.v2';
@@ -355,8 +355,8 @@ export function validateExactDiagnosticProfile(profile, frameCount) {
   requireCondition(isRecord(profile), `${frameCount}프레임 profile이 없습니다.`);
   assertNoRawFaceData(profile);
   requireCondition(
-    profile.schemaVersion === FACE3D_PROFILE_SCHEMA_V2,
-    `${frameCount}프레임 profile schemaVersion이 v2가 아닙니다.`,
+    profile.schemaVersion === FACE3D_PROFILE_SCHEMA_V3,
+    `${frameCount}프레임 profile schemaVersion이 v3가 아닙니다.`,
   );
   requireCondition(
     profile.collectionPolicyId === FACE3D_EXACT_POLICY_IDS[frameCount],

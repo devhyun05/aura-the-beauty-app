@@ -26,6 +26,7 @@ from app.services.face_analysis_pipeline import (
   project_legacy_analysis_result,
 )
 from app.services.face3d_calibration_receipts import (
+  FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION,
   build_face3d_calibration_receipt_request_context,
   verify_face3d_calibration_receipt,
   verify_and_consume_face3d_calibration_receipt,
@@ -151,6 +152,8 @@ def _project_internal_only_records(value: object) -> object:
       return _INTERNAL_ONLY
     projected: dict = {}
     for key, item in value.items():
+      if isinstance(key, str) and key.endswith(".mm"):
+        continue
       if key == "rationaleMetricKeys" and isinstance(item, list):
         projected[key] = [
           metric_key
@@ -186,30 +189,9 @@ def project_analysis_detail_payload_for_response(detail_payload: dict) -> dict:
 
   result = projected.get("result")
   if isinstance(result, dict):
-    for container in (result, result.get("faceAnalysisV2")):
-      if not isinstance(container, dict):
-        continue
-      for field in ("aiMeasurements", "faceProfile"):
-        metrics = container.get(field)
-        if isinstance(metrics, dict):
-          container[field] = {
-            key: value
-            for key, value in metrics.items()
-            if (
-              isinstance(key, str)
-              and not key.endswith(".mm")
-              and not (
-                isinstance(value, dict)
-                and not isinstance(value.get("sensitivity"), bool)
-                and isinstance(value.get("sensitivity"), (int, float))
-                and value.get("sensitivity") >= 3
-              )
-            )
-          }
-      filtered_container = _project_internal_only_records(container)
-      if isinstance(filtered_container, dict):
-        container.clear()
-        container.update(filtered_container)
+    filtered_result = _project_internal_only_records(result)
+    if isinstance(filtered_result, dict):
+      projected["result"] = filtered_result
   return projected
 
 
@@ -861,7 +843,7 @@ async def create_analysis_job(
       expected_subject_context_id=receipt_request_context.subject_context_id,
     )
     if isinstance(primary_face3d, dict)
-    and primary_face3d.get("schemaVersion") == "aura.face3d-profile.v2"
+    and primary_face3d.get("schemaVersion") == FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION
     and primary_face3d.get("confidenceCalibrationStatus") == "calibrated"
     else None
   )

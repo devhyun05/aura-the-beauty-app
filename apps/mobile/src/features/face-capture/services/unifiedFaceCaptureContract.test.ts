@@ -150,7 +150,7 @@ function completedFixture(overrides: Record<string, unknown> = {}) {
       metrics,
       profileBindingSha256: null,
       sampleMode: 'micro_burst',
-      schemaVersion: 'aura.face3d-profile.v2',
+      schemaVersion: 'aura.face3d-profile.v3',
       sensorProvenance: {
         depthDataObservedRatio: null,
         deviceModel: null,

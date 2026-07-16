@@ -130,7 +130,7 @@ namespace Aura.Face3D.Tests
             Assert.That(profile.Metrics.NoseTipProjection.ValueMmValidFrameCount, Is.Zero);
             Assert.That(profile.Metrics.NoseTipProjection.ValueMmMad, Is.Zero);
             Assert.That(profile.Warnings, Does.Contain("single_frame_unaggregated"));
-            Assert.That(profile.ToCanonicalJson(), Does.Contain("\"schemaVersion\":\"aura.face3d-profile.v2\""));
+            Assert.That(profile.ToCanonicalJson(), Does.Contain("\"schemaVersion\":\"aura.face3d-profile.v3\""));
             Assert.That(profile.ToCanonicalJson(), Does.Contain("\"completionRatio\":1"));
             Assert.That(profile.ToCanonicalJson(), Does.Contain("\"mad\":null"));
             Assert.That(profile.ToCanonicalJson(), Does.Contain("\"valueMm\":null"));
