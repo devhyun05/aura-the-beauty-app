@@ -24,12 +24,13 @@ RUN python /tmp/download_face_landmarker.py --output /app/models/face_landmarker
 COPY services/backend/app ./app
 COPY docs/backend/schema.sql ./docs/backend/schema.sql
 COPY docs/backend/seed.sql ./docs/backend/seed.sql
-# Auradin 검색 카탈로그 데이터 — 이게 없으면 배포 백엔드는 빈 카탈로그로 모든 검색이 실패한다.
-# 런타임에 실제로 읽는 것만: catalog(시드/mvp) + knowledge(청크). vector 인덱스는 선택
-# (없으면 lexical 폴백), detail/raw/processed 등은 빌드타임 산출물이라 제외 → 이미지 경량.
-# catalog_loader는 AURADIN_DATA_ROOT 밑에서 data/auradin/**를 읽는다.
+# Auradin startup validates the active pointer and every manifest-referenced artifact.
+# Keep the immutable catalog, knowledge, manifest, and vector assets in the runtime image.
+COPY data/auradin/active_snapshot.json ./data/auradin/active_snapshot.json
 COPY data/auradin/catalog ./data/auradin/catalog
 COPY data/auradin/knowledge ./data/auradin/knowledge
+COPY data/auradin/manifests ./data/auradin/manifests
+COPY data/auradin/vector ./data/auradin/vector
 ENV AURADIN_DATA_ROOT=/app
 
 RUN adduser --disabled-password --gecos "" appuser

@@ -90,28 +90,23 @@ def _identities(items: list[dict]) -> set[tuple[str, str]]:
 
 
 def test_packaged_catalog_readiness_has_full_canonical_category_coverage() -> None:
+  # 카탈로그 크기는 승인된 스냅샷 승격마다 커진다(20260719 보충 등) — 정확한 카운트
+  # 딕셔너리를 하드코딩하지 않고, 6종 전 카테고리 커버리지 + 총합·displayable 정합을 단언한다.
+  canonical_categories = {"base", "shadow", "brow", "cheek", "lip", "liner"}
   readiness = get_auradin_catalog_readiness()
-  assert readiness == {
-    "auradinCatalogReady": True,
-    "auradinCatalogProducts": 618,
-    "auradinCatalogCategoryCounts": {
-      "base": 103,
-      "shadow": 101,
-      "brow": 96,
-      "cheek": 113,
-      "lip": 117,
-      "liner": 88,
-    },
-    "auradinCatalogDisplayableProducts": 537,
-    "auradinCatalogDisplayableCategoryCounts": {
-      "base": 87,
-      "shadow": 89,
-      "brow": 82,
-      "cheek": 106,
-      "lip": 93,
-      "liner": 80,
-    },
-  }
+
+  assert readiness["auradinCatalogReady"] is True
+  assert readiness["auradinCatalogProducts"] >= 618  # 최초 6카테고리 시드 하한
+  category_counts = readiness["auradinCatalogCategoryCounts"]
+  displayable_counts = readiness["auradinCatalogDisplayableCategoryCounts"]
+  assert set(category_counts) == canonical_categories
+  assert set(displayable_counts) == canonical_categories
+  assert sum(category_counts.values()) == readiness["auradinCatalogProducts"]
+  assert sum(displayable_counts.values()) == readiness["auradinCatalogDisplayableProducts"]
+  assert readiness["auradinCatalogDisplayableProducts"] <= readiness["auradinCatalogProducts"]
+  for category in canonical_categories:
+    assert category_counts[category] > 0
+    assert 0 <= displayable_counts[category] <= category_counts[category]
 
 
 def test_packaged_product_is_mapped_as_external_with_safe_offer_contract() -> None:

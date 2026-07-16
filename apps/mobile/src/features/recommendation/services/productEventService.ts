@@ -1,4 +1,7 @@
-import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
+import {
+  getProductBackendApiBaseUrl,
+  requestProductBackendJson,
+} from '../../../shared/services/productBackendApi';
 import type {CatalogProduct} from '../types';
 
 export type ProductEventSection =
@@ -83,13 +86,13 @@ export function setProductEventCollectionEnabled(nextEnabled: boolean): void {
 
 export async function initializeProductEventCollection(): Promise<boolean> {
   if (initialized) return enabled;
-  if (!getBackendApiBaseUrl()) {
+  if (!getProductBackendApiBaseUrl()) {
     initialized = true;
     enabled = false;
     return false;
   }
   if (initialization) return initialization;
-  initialization = requestBackendJson<{
+  initialization = requestProductBackendJson<{
     purposes: {engagement_personalization?: {accepted?: boolean}};
   }>('/products/consents')
     .then(data => {
@@ -122,7 +125,7 @@ export function resetProductEventCollection(): void {
 export function queueProductEvent(
   event: Omit<ProductClientEvent, 'eventId' | 'occurredAt'>,
 ): void {
-  if (!enabled || !getBackendApiBaseUrl()) return;
+  if (!enabled || !getProductBackendApiBaseUrl()) return;
   const hasInternalIdentity = Boolean(event.productId?.trim());
   const hasExternalIdentity = Boolean(event.externalSource?.trim() && event.externalProductId?.trim());
   if (hasInternalIdentity === hasExternalIdentity) return;
@@ -140,13 +143,13 @@ export function queueProductEvent(
 export async function flushProductEvents(): Promise<void> {
   if (timer) clearTimeout(timer);
   timer = null;
-  if (flushing || !enabled || queue.length === 0 || !getBackendApiBaseUrl()) return;
+  if (flushing || !enabled || queue.length === 0 || !getProductBackendApiBaseUrl()) return;
   flushing = true;
   queue = queue.filter(event => Date.now() - event.queuedAtMs <= QUEUE_TTL_MS);
   const pending = queue.splice(0, 50);
   try {
     const events = pending.map(({queuedAtMs: _queuedAtMs, attempts: _attempts, ...event}) => event);
-    await requestBackendJson('/products/events', {method: 'POST', body: {events}});
+    await requestProductBackendJson('/products/events', {method: 'POST', body: {events}});
   } catch {
     if (enabled) {
       const retryable = pending

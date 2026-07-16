@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -16,25 +17,48 @@ from app.services.account_deletion import ensure_account_deletion_schema
 from app.services.face_analysis_schema import ensure_face_analysis_schema
 from app.services.media_deletion import ensure_media_deletion_schema
 from app.services.hair_schema import ensure_hair_schema
+from app.services.auradin_agent.catalog_loader import reset_catalog_cache
+from app.services.auradin_agent.event_logger import (
+  EVENT_SHUTDOWN_FLUSH_TIMEOUT,
+  flush_search_turn_event_tasks,
+)
+from app.services.auradin_agent.snapshot_manifest import bind_process_snapshot, resolve_and_validate_snapshot
 from app.services.media_upload_schema import ensure_media_upload_schema
 from app.services.product_recommendation_schema import ensure_product_recommendation_runtime_schema
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-  await database.connect()
-  await ensure_consulting_runtime_schema(database)
-  await ensure_media_upload_schema(database)
-  await ensure_media_deletion_schema(database)
-  await ensure_account_deletion_schema(database)
-  await ensure_hair_schema(database)
-  await ensure_face_analysis_schema(database)
-  await ensure_product_recommendation_runtime_schema(database)
+logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+  # Snapshot integrity is a startup invariant and must fail before opening a DB
+  # connection. This prevents a catalog-only deploy from silently degrading to
+  # lexical retrieval or lazy runtime regeneration.
+  app.state.auradin_snapshot = resolve_and_validate_snapshot(app.state.settings)
+  bind_process_snapshot(app.state.auradin_snapshot)
+  reset_catalog_cache()
   try:
+    await database.connect()
+    await ensure_consulting_runtime_schema(database)
+    await ensure_media_upload_schema(database)
+    await ensure_media_deletion_schema(database)
+    await ensure_account_deletion_schema(database)
+    await ensure_hair_schema(database)
+    await ensure_face_analysis_schema(database)
+    await ensure_product_recommendation_runtime_schema(database)
     yield
   finally:
+    # graceful shutdown — DB를 닫기 전에 대기 중인 A5 이벤트 insert를 상한 내에서 flush한다.
+    # 상한(EVENT_SHUTDOWN_FLUSH_TIMEOUT) 초과분은 event_logger가 cancel + drop + 카운터로
+    # 남기고 종료를 진행시킨다 — flush가 종료를 무한정 막지 않는다(fail-open).
+    try:
+      await flush_search_turn_event_tasks(timeout=EVENT_SHUTDOWN_FLUSH_TIMEOUT)
+    except Exception:  # noqa: BLE001 — flush 실패도 종료를 막지 않는다
+      logger.warning("[aura:auradin-events] shutdown flush failed (fail-open)", exc_info=True)
     await database.close()
+    bind_process_snapshot(None)
+    reset_catalog_cache()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -45,6 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     debug=settings.debug,
     lifespan=lifespan,
   )
+  app.state.settings = settings
 
   if settings.cors_enabled:
     app.add_middleware(

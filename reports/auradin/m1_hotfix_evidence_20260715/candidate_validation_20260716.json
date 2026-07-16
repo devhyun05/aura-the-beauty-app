@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "7724e1c249f83b2bc3e9600cb46c046a847d1358",
+  "snapshotManifestPath": "data/auradin/manifests/snapshot_20260716.json",
+  "snapshotManifestSha256": "928fdef244c66038ae3e0f284d15bbecf2133e8b5653b55ce77e5f44c6ac7823",
+  "golden": {
+    "status": "PASS",
+    "passed": 6,
+    "total": 6,
+    "report": "reports/auradin/mvp_agent_eval_20260716.json"
+  },
+  "a8": {
+    "status": "PASS",
+    "brandOnlyCoolBefore": 42,
+    "brandOnlyCoolAfter": 0,
+    "coolingOnlyCoolBefore": 1,
+    "coolingOnlyCoolAfter": 0,
+    "positiveControls": {
+      "여쿨라": true,
+      "그레이쉬쿨": true,
+      "앙쿨모브": true
+    }
+  },
+  "coverageClassification": {
+    "undertoneTotal": {
+      "before": 95,
+      "after": 52,
+      "classification": "expected",
+      "explanation": "43 removals are fully accounted for: 42 brand-only cool values and 1 cooling false positive"
+    },
+    "goldenQueries": {
+      "changed": 1,
+      "unchanged": 5,
+      "classification": "expected",
+      "explanation": "the changed cool-tone lip query removed a brand-contaminated product"
+    }
+  },
+  "artifacts": {
+    "catalogPath": "data/auradin/catalog/catalog_items_mvp_20260716.jsonl",
+    "catalogSha256": "d8b326b399f57d0e223d2e3a34a7549a851985138b881adfc8ae4e9d11aa4b52",
+    "catalogCount": 618,
+    "chunksPath": "data/auradin/knowledge/product_knowledge_chunks_mvp_20260716.jsonl",
+    "chunksSha256": "867cf1306717c46137588ee8b3e41d1291a587576e53cac27741badfcb555dbe",
+    "chunkCount": 2454,
+    "vectorPath": "data/auradin/vector/product_knowledge_vector_index_mvp_20260716.json",
+    "vectorSha256": "593f97eae2162ca6caec85064771511487c7f5e3218a4f38d5332de00018529b",
+    "vectorCount": 2454,
+    "dimension": 1024,
+    "backend": "hash",
+    "modelId": "hash-fallback"
+  },
+  "activeSnapshot": {
+    "runDate": "20260708",
+    "manifestSha256": "7a08fe6f23f15b3dae370c43d7fdd7e1df04136ebc9e00c7fc155cd103afa7be"
+  },
+  "approvedBy": null,
+  "approvalConclusion": "pending",
+  "activationAllowed": false,
+  "activationBlockers": [
+    "human approval is absent",
+    "approval evidence file SHA is not sealed",
+    "worker/filesystem/restart/persistence deployment preflight is absent"
+  ]
+}

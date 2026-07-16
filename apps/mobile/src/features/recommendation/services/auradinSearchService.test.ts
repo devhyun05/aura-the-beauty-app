@@ -53,14 +53,38 @@ const noCopy = mapCandidate({id: 'x', brandName: 'B', productName: 'P', reasonCo
 expectEqual(noCopy.reasonCopy, undefined, 'empty reasonCopy → undefined');
 const internalCandidate = mapCandidate({id: '169fec46-f3e0-4ea1-9c63-0a2ed3aa6cdb'});
 expectEqual(internalCandidate.externalSource, undefined, 'UUID catalog candidates retain the internal like route');
+const uuidExternalCandidate = mapCandidate({
+  id: '269fec46-f3e0-4ea1-9c63-0a2ed3aa6cdb',
+  externalSource: 'auradin_search',
+});
+expectEqual(
+  uuidExternalCandidate.externalSource,
+  'auradin_search',
+  'explicit external source takes precedence over UUID-shaped ids',
+);
 
-// --- 질문 옵션 스와치: colorFamily→hex, noop→skip ---
+// --- 질문 옵션 스와치: colorFamily→3색 그라데이션(§8.2-3), finish/texture→질감(§8.2-1), noop→skip ---
 const colorOption = mapQuestionOption({
   id: 'colorFamily-coral',
   label: '코랄',
   filterDelta: {attribute: 'colorFamily', op: 'eq', values: ['coral']},
 });
-expectEqual(colorOption.swatch, '#F2896B', 'colorFamily option swatch → hex');
+const colorSwatch = colorOption.swatch;
+expectEqual(
+  typeof colorSwatch === 'object' && colorSwatch.kind,
+  'gradient',
+  'colorFamily option swatch → 3-stop gradient',
+);
+expectEqual(
+  typeof colorSwatch === 'object' && colorSwatch.kind === 'gradient' ? colorSwatch.colors.length : 0,
+  3,
+  'colorFamily gradient has 3 stops (brightness range)',
+);
+expectEqual(
+  typeof colorSwatch === 'object' && colorSwatch.kind === 'gradient' ? colorSwatch.colors[1] : '',
+  '#F2896B',
+  'colorFamily gradient keeps the legacy base hex as the middle stop',
+);
 
 const noopOption = mapQuestionOption({
   id: 'finish-noop',
@@ -74,7 +98,32 @@ const finishOption = mapQuestionOption({
   label: '보송한 매트',
   filterDelta: {attribute: 'finish', op: 'eq', values: ['matte']},
 });
-expectEqual(Boolean(finishOption.swatch), true, 'non-color option gets a tile swatch');
+const finishSwatch = finishOption.swatch;
+expectEqual(
+  typeof finishSwatch === 'object' && finishSwatch.kind === 'texture' ? finishSwatch.texture : '',
+  'matte',
+  'finish option → abstract texture swatch (matte)',
+);
+
+const textureOption = mapQuestionOption({
+  id: 'texture-cream',
+  label: '크림',
+  filterDelta: {attribute: 'texture', op: 'eq', values: ['cream']},
+});
+const textureSwatch = textureOption.swatch;
+expectEqual(
+  typeof textureSwatch === 'object' && textureSwatch.kind === 'texture' ? textureSwatch.texture : '',
+  'velvet',
+  'texture option maps into the 4-kind abstract set (cream → velvet)',
+);
+
+// 매핑이 없는 속성/값 → 중립 단색 폴백 (라벨이 의미 전달, 제품 이미지 금지 §8.2-2)
+const channelOption = mapQuestionOption({
+  id: 'channel-naver',
+  label: '구매 링크만 있으면 괜찮아요',
+  filterDelta: {attribute: 'channel', op: 'eq', values: ['naver']},
+});
+expectEqual(channelOption.swatch, '#E4D6D2', 'unmapped option → neutral solid swatch');
 
 // --- turn 매핑: phase / 구매 가능 카드만 / 질문 / 헤더 ---
 const resultsTurn = mapSearchTurn({
@@ -129,11 +178,16 @@ const filtersTurn = mapSearchTurn({
   result: {headerLabel: 'x', products: []},
   appliedFilters: [
     {label: '립', source: 'prompt'},
-    {label: '쿨톤 참고', source: 'report'},
+    {label: '쿨톤 참고', source: 'report', coverage: 'partial_unknown'},
     {label: '', source: 'prompt'}, // 빈 label은 제거돼야
   ],
 });
 expectEqual(filtersTurn.appliedFilters?.length, 2, 'appliedFilters drops empty labels');
 expectEqual(filtersTurn.appliedFilters?.[0].label, '립', 'appliedFilters label passthrough');
 expectEqual(filtersTurn.appliedFilters?.[1].source, 'report', 'appliedFilters report source passthrough');
+expectEqual(
+  filtersTurn.appliedFilters?.[1].label,
+  '쿨톤 참고 · 정보 미상 포함',
+  'partial unknown coverage appends an honest chip suffix',
+);
 expectEqual(mapSearchTurn({phase: 'results'}).appliedFilters?.length, 0, 'missing appliedFilters → []');

@@ -7,8 +7,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_seoul_makeup_model_defaults_use_global_inference_profiles() -> None:
-  env_example = (PROJECT_ROOT / "services/backend/.env.example").read_text()
-  workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text()
+  env_example = (PROJECT_ROOT / "services/backend/.env.example").read_text(encoding="utf-8")
+  workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(encoding="utf-8")
 
   expected = {
     "BEDROCK_SCENARIO_MODEL_ID": "global.anthropic.claude-haiku-4-5-20251001-v1:0",

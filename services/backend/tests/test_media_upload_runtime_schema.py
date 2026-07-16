@@ -77,6 +77,9 @@ async def test_app_lifespan_ensures_media_upload_schema_at_startup(monkeypatch) 
   async def fake_hair_schema(_db) -> None:
     await record("hair")
 
+  async def fake_flush_search_turn_event_tasks(*, timeout: float) -> int:
+    return 0
+
   monkeypatch.setattr(main_module.database, "connect", fake_connect)
   monkeypatch.setattr(main_module.database, "close", fake_close)
   monkeypatch.setattr(main_module, "ensure_consulting_runtime_schema", fake_consulting_schema)
@@ -85,7 +88,13 @@ async def test_app_lifespan_ensures_media_upload_schema_at_startup(monkeypatch) 
   monkeypatch.setattr(main_module, "ensure_account_deletion_schema", fake_account_deletion_schema)
   monkeypatch.setattr(main_module, "ensure_hair_schema", fake_hair_schema)
 
-  async with main_module.lifespan(None):  # type: ignore[arg-type]
+  monkeypatch.setattr(main_module, "resolve_and_validate_snapshot", lambda _settings: object())
+  monkeypatch.setattr(main_module, "bind_process_snapshot", lambda _snapshot: None)
+  monkeypatch.setattr(main_module, "reset_catalog_cache", lambda: None)
+  monkeypatch.setattr(main_module, "flush_search_turn_event_tasks", fake_flush_search_turn_event_tasks)
+
+  app = main_module.create_app()
+  async with main_module.lifespan(app):
     await record("yield")
 
   assert calls == [

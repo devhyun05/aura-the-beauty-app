@@ -52,6 +52,8 @@ const rootNavigator = source('apps/mobile/src/app/navigation/RootNavigator.tsx')
 const arSave = source('apps/mobile/src/features/ar/services/savedArLookService.ts');
 const auradinService = source('apps/mobile/src/features/recommendation/services/auradinSearchService.ts');
 const auradinScreen = source('apps/mobile/src/features/recommendation/screens/AuradinSearchScreen.tsx');
+const auradinSavedProducts = source('apps/mobile/src/features/recommendation/services/auradinSavedProducts.ts');
+const auradinDetailView = source('apps/mobile/src/features/recommendation/screens/views/DetailView.tsx');
 const legacyAuradinService = source('apps/mobile/src/features/recommendation/services/auradinService.ts');
 const auradinOrb = source('apps/mobile/src/features/recommendation/components/AuradinFloatingOrb.tsx');
 const recommendationScreen = source('apps/mobile/src/features/recommendation/screens/ProductRecommendationScreen.tsx');
@@ -59,6 +61,7 @@ const recommendationShelfScreen = source('apps/mobile/src/features/recommendatio
 const productShelfCategories = source('apps/mobile/src/features/recommendation/services/productShelfCategories.ts');
 const appScreen = source('apps/mobile/src/shared/ui/AppScreen.tsx');
 const backendApi = source('apps/mobile/src/shared/services/backendApi.ts');
+const productBackendApi = source('apps/mobile/src/shared/services/productBackendApi.ts');
 const productHubService = source('apps/mobile/src/features/recommendation/services/productHubService.ts');
 const recommendationRoutes = source('apps/mobile/src/app/navigation/routes/recommendationRoutes.tsx');
 const arRoutes = source('apps/mobile/src/app/navigation/routes/arRoutes.tsx');
@@ -93,10 +96,162 @@ requireContract(
     recommendationScreen.includes('isTrustedCatalogProductId(product.id) || Boolean(product.externalSource)') &&
     recommendationScreen.includes('likeExternalProduct(product.productId, product.externalSource)') &&
     recommendationScreen.includes('unlikeProduct(product.productId, product.externalSource)') &&
-    auradinService.includes("product.externalSource === 'auradin_catalog'") &&
-    auradinScreen.includes('likeExternalProduct(product.id, product.externalSource)') &&
-    auradinScreen.includes('unlikeProduct(product.id, product.externalSource)'),
+    auradinSavedProducts.includes("../../../shared/services/productBackendApi") &&
+    auradinSavedProducts.includes("../../../shared/services/productService") &&
+    auradinSavedProducts.includes("'/products/liked'") &&
+    auradinSavedProducts.includes('likeExternalProduct(product.id, product.externalSource)') &&
+    auradinSavedProducts.includes('likeProduct(product.id, product.shadeId)') &&
+    auradinSavedProducts.includes('unlikeProduct(productId, externalSource)') &&
+    auradinSavedProducts.includes('requestProductBackendJson') &&
+    auradinSavedProducts.includes("row.externalSource === 'auradin_catalog'") &&
+    auradinSavedProducts.includes("row.externalSource === 'auradin_search'") &&
+    auradinService.includes("product.externalSource === 'auradin_catalog' || product.externalSource === 'auradin_search'") &&
+    auradinScreen.includes('persistAuradinSave(product)') &&
+    auradinScreen.includes('removeAuradinSave(product.id, product.externalSource)') &&
+    auradinScreen.includes("product.externalSource ?? 'internal'") &&
+    auradinScreen.includes('pendingSaveKeysRef.current.has(productKey)') &&
+    auradinScreen.includes('requestVersion === saveMutationVersionRef.current') &&
+    auradinScreen.includes("showToast(") &&
+    auradinScreen.includes("onOpenLikedProducts ? {label: '보기'") &&
+    auradinDetailView.includes('show={buyError}') &&
+    !auradinDetailView.includes('보관함에 담김'),
   'server-resolved external products must support like, unlike, MyPage listing, and seller reopening in both product grids.',
+);
+
+const auradinSaveCalls = [];
+const internalSavedId = '11111111-1111-4111-8111-111111111111';
+const searchSavedId = '22222222-2222-4222-8222-222222222222';
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const previousDevFlag = globalThis.__DEV__;
+globalThis.__DEV__ = false;
+const auradinSearchMapperModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/auradinSearchService.ts',
+  {
+    '../../../shared/services/backendApi': {
+      getBackendApiBaseUrl: () => null,
+      isRequestAbortedError: () => false,
+      requestBackendJson: async () => ({}),
+    },
+    './auradinAnonToken': {
+      auradinAnonEventHeaders: async () => ({}),
+      auradinAnonEventHeadersImmediate: () => ({}),
+    },
+    '../mocks/auradin.mock': {
+      auradinDraftMock: {thinkingSteps: [], question: null, candidates: []},
+    },
+  },
+);
+if (previousDevFlag === undefined) {
+  delete globalThis.__DEV__;
+} else {
+  globalThis.__DEV__ = previousDevFlag;
+}
+const mappedInternalUuid = auradinSearchMapperModule.mapCandidate({id: internalSavedId});
+const mappedExternalUuid = auradinSearchMapperModule.mapCandidate({
+  id: searchSavedId,
+  externalSource: 'auradin_search',
+});
+requireContract(
+  mappedInternalUuid.externalSource === undefined &&
+    mappedExternalUuid.externalSource === 'auradin_search',
+  'AURADIN candidate mapping must prefer an explicit external source over UUID-shaped id heuristics.',
+);
+const auradinSavedProductsModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/auradinSavedProducts.ts',
+  {
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'https://products.example.com',
+      requestProductBackendJson: async path => {
+        auradinSaveCalls.push({kind: 'fetch', path});
+        return {
+          products: [
+            {id: internalSavedId, productName: 'Internal product'},
+            {
+              productId: 'catalog-lip-1',
+              externalSource: 'auradin_catalog',
+              productName: 'Catalog product',
+            },
+            {
+              productId: searchSavedId,
+              externalSource: 'auradin_search',
+              productName: 'Search product',
+            },
+            {
+              productId: 'naver-product-1',
+              externalSource: 'naver_shopping_search',
+              productName: 'Naver product',
+            },
+          ],
+        };
+      },
+    },
+    '../../../shared/services/productService': {
+      likeExternalProduct: async (productId, externalSource) => {
+        auradinSaveCalls.push({kind: 'likeExternal', productId, externalSource});
+        return true;
+      },
+      likeProduct: async (productId, shadeId) => {
+        auradinSaveCalls.push({kind: 'likeInternal', productId, shadeId});
+        return true;
+      },
+      unlikeProduct: async (productId, externalSource) => {
+        auradinSaveCalls.push({kind: 'unlike', productId, externalSource});
+        return true;
+      },
+    },
+    './auradinSearchService': {
+      mapCandidate: product => ({
+        id: product.id,
+        shadeId: product.shadeId ?? undefined,
+        brandName: product.brandName ?? '',
+        productName: product.productName ?? '',
+        shadeName: product.shadeName ?? '',
+        priceText: '',
+        matchSummary: '',
+        palette: product.palette ?? [],
+        tags: product.tags ?? [],
+        imageSource: {uri: product.imageUrl ?? ''},
+        externalSource:
+          product.externalSource === 'auradin_catalog' || product.externalSource === 'auradin_search'
+            ? product.externalSource
+            : uuidPattern.test(product.id)
+              ? undefined
+              : 'auradin_search',
+      }),
+    },
+  },
+);
+const internalPersisted = await auradinSavedProductsModule.persistAuradinSave({
+  id: internalSavedId,
+  shadeId: 'shade-1',
+});
+const catalogPersisted = await auradinSavedProductsModule.persistAuradinSave({
+  id: 'catalog-lip-1',
+  externalSource: 'auradin_catalog',
+});
+const searchPersisted = await auradinSavedProductsModule.persistAuradinSave({
+  id: searchSavedId,
+  externalSource: 'auradin_search',
+});
+const searchRemoved = await auradinSavedProductsModule.removeAuradinSave(
+  searchSavedId,
+  'auradin_search',
+);
+const hydratedAuradinSaves = await auradinSavedProductsModule.fetchAuradinSavedProducts();
+requireContract(
+  internalPersisted === true &&
+    catalogPersisted === true &&
+    searchPersisted === true &&
+    searchRemoved === true &&
+    auradinSaveCalls.some(call => call.kind === 'likeInternal' && call.productId === internalSavedId && call.shadeId === 'shade-1') &&
+    auradinSaveCalls.some(call => call.kind === 'likeExternal' && call.productId === 'catalog-lip-1' && call.externalSource === 'auradin_catalog') &&
+    auradinSaveCalls.some(call => call.kind === 'likeExternal' && call.productId === searchSavedId && call.externalSource === 'auradin_search') &&
+    auradinSaveCalls.some(call => call.kind === 'unlike' && call.productId === searchSavedId && call.externalSource === 'auradin_search') &&
+    auradinSaveCalls.some(call => call.kind === 'fetch' && call.path === '/products/liked') &&
+    hydratedAuradinSaves.length === 3 &&
+    hydratedAuradinSaves.some(product => product.id === searchSavedId && product.externalSource === 'auradin_search') &&
+    !hydratedAuradinSaves.some(product => product.id === 'naver-product-1'),
+  'AURADIN saves must execute internal/external routes, preserve exact sources, and exclude unrelated external likes.',
 );
 requireContract(
   hubContent.includes('actionLabel="설정하기"') &&
@@ -191,6 +346,11 @@ requireContract(
     backendApi.includes('네트워크 연결을 확인한 뒤 다시 시도해 주세요.'),
   'offline backend failures must have an explicit localized retry contract.',
 );
+requireContract(
+  productBackendApi.includes('EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL') &&
+    productBackendApi.includes('baseUrl: getProductBackendOverride()'),
+  'product APIs must support a dedicated backend without moving login or unrelated APIs.',
+);
 
 const backendApiModule = executeTypeScriptModule(
   'apps/mobile/src/shared/services/backendApi.ts',
@@ -218,6 +378,30 @@ requireContract(
     offlineError.message === '네트워크 연결을 확인한 뒤 다시 시도해 주세요.',
   'an executed offline request must surface the localized retryable network error.',
 );
+
+const productBackendRequests = [];
+const productBackendApiModule = executeTypeScriptModule(
+  'apps/mobile/src/shared/services/productBackendApi.ts',
+  {
+    './backendApi': {
+      getBackendApiBaseUrl: () => 'https://main.example.com/api',
+      requestBackendJson: async (path, options) => {
+        productBackendRequests.push({path, options});
+        return {ok: true};
+      },
+    },
+  },
+);
+const previousProductApiBaseUrl = process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL;
+process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL = 'http://192.0.2.10:8000';
+await productBackendApiModule.requestProductBackendJson('/products/features');
+requireContract(
+  productBackendApiModule.getProductBackendApiBaseUrl() === 'http://192.0.2.10:8000' &&
+    productBackendRequests[0]?.options?.baseUrl === 'http://192.0.2.10:8000',
+  'the dedicated product backend must be selected at runtime and forwarded to the shared authenticated client.',
+);
+if (previousProductApiBaseUrl === undefined) delete process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL;
+else process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL = previousProductApiBaseUrl;
 requireContract(
   productHubService.includes("params.set('shade_id', shadeId)") &&
     recommendationRoutes.includes('shadeId={route.params.shadeId}') &&
@@ -378,9 +562,9 @@ const productHubApiRequests = [];
 const productHubServiceModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productHubService.ts',
   {
-    '../../../shared/services/backendApi': {
-      getBackendApiBaseUrl: () => 'https://api.example.com',
-      requestBackendJson: async (path) => {
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'https://api.example.com',
+      requestProductBackendJson: async (path) => {
         productHubApiRequests.push(path);
         if (path.includes('/recommendations/ar?')) return {status: 'ready', groups: []};
         if (path.includes('/recommendations/seasonal?')) return {status: 'ready', collection: null, items: []};
@@ -421,12 +605,35 @@ requireContract(
     productHubApiRequests.some(path => path.includes('/recommendations/cohort?') && path.includes('limit=60') && path.includes('category=shadow')),
   'more shelves must execute category-scoped server requests with the expanded commercial page size.',
 );
+const productHubFallbackModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/productHubService.ts',
+  {
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'http://127.0.0.1:8000',
+      requestProductBackendJson: async path => {
+        if (path.includes('/recommendations/seasonal?')) {
+          return {status: 'ready', collection: null, items: [fallbackProduct]};
+        }
+        throw {code: 'DATABASE_NOT_CONFIGURED'};
+      },
+    },
+  },
+);
+const fallbackArRecommendation = await productHubFallbackModule.getArRecommendations(undefined, 6, 'lip');
+const fallbackPersonalizedRecommendation = await productHubFallbackModule.getPersonalizedRecommendations(12, 'lip');
+requireContract(
+  fallbackArRecommendation.status === 'ready' &&
+    fallbackArRecommendation.groups[0]?.items[0]?.reasonCodes?.includes('POPULAR_FALLBACK') &&
+    fallbackPersonalizedRecommendation.status === 'ready' &&
+    fallbackPersonalizedRecommendation.items[0]?.productId === 'fallback-product',
+  'database-unavailable AR and personalized shelves must keep rendering real seasonal products instead of an error state.',
+);
 const legacyRecommendationModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productRecommendationService.ts',
   {
-    '../../../shared/services/backendApi': {
-      getBackendApiBaseUrl: () => 'https://api.example.com',
-      requestBackendJson: async () => ({
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'https://api.example.com',
+      requestProductBackendJson: async () => ({
         products: [{
           id: 'auradin-seed-contract-brow',
           externalSource: 'auradin_catalog',
@@ -460,7 +667,9 @@ requireContract(
 );
 requireContract(
   auradinScreen.includes('useFocusEffect') &&
-    auradinScreen.includes('likeProduct(product.id, product.shadeId)') &&
+    auradinScreen.includes('fetchAuradinSavedProducts()') &&
+    auradinScreen.includes('setSaved(products)') &&
+    auradinScreen.includes('setLikedProductKeys(new Set(products.map(savedProductKey)))') &&
     searchScreen.includes('useFocusEffect') &&
     likedScreen.includes('useFocusEffect') &&
     likedScreen.includes('onOpenProduct?.(product.id, product.shadeId)') &&
@@ -520,9 +729,9 @@ const eventRequests = [];
 const productEventModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productEventService.ts',
   {
-    '../../../shared/services/backendApi': {
-      getBackendApiBaseUrl: () => 'http://127.0.0.1:8000/api',
-      requestBackendJson: async (path, options) => {
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'http://127.0.0.1:8000/api',
+      requestProductBackendJson: async (path, options) => {
         eventRequests.push({path, options});
         return {};
       },

@@ -4,7 +4,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Bell, CalendarDays, MessageCircle} from 'lucide-react-native';
 
 import {useAuthSession} from '../../auth';
-import {consultingColors, consultingRadius} from '../../../shared/theme';
+import {colors, consultingColors, consultingRadius} from '../../../shared/theme';
 import {getConsultingBookings} from '../services/consultingService';
 import {
   getConsultingUnreadState,
@@ -16,16 +16,20 @@ import type {ConsultingRecord} from '../types';
 
 type ConsultingHeaderActionsProps = {
   onPressHistory?: () => void;
-  onPressMessages: () => void;
+  onPressMessages?: () => void;
   onPressNotifications: () => void;
+  showMessages?: boolean;
   showHistory?: boolean;
+  variant?: 'default' | 'hero';
 };
 
 export function ConsultingHeaderActions({
   onPressHistory,
   onPressMessages,
   onPressNotifications,
+  showMessages = true,
   showHistory = false,
+  variant = 'default',
 }: ConsultingHeaderActionsProps) {
   const {getAuthToken} = useAuthSession();
   const [unreadState, setUnreadState] = React.useState<ConsultingUnreadState>({
@@ -78,18 +82,23 @@ export function ConsultingHeaderActions({
         label="알림"
         onPress={onPressNotifications}
         showDot={unreadState.notifications}
+        variant={variant}
       />
-      <ConsultingHeaderActionButton
-        icon="message"
-        label="톡"
-        onPress={onPressMessages}
-        showDot={unreadState.messages}
-      />
+      {showMessages && onPressMessages ? (
+        <ConsultingHeaderActionButton
+          icon="message"
+          label="톡"
+          onPress={onPressMessages}
+          showDot={unreadState.messages}
+          variant={variant}
+        />
+      ) : null}
       {showHistory && onPressHistory ? (
         <ConsultingHeaderActionButton
           icon="calendar"
           label="내역"
           onPress={onPressHistory}
+          variant={variant}
         />
       ) : null}
     </RNView>
@@ -101,11 +110,13 @@ function ConsultingHeaderActionButton({
   label,
   onPress,
   showDot = false,
+  variant = 'default',
 }: {
   icon: 'bell' | 'calendar' | 'message';
   label: string;
   onPress: () => void;
   showDot?: boolean;
+  variant?: 'default' | 'hero';
 }) {
   const Icon =
     icon === 'bell'
@@ -122,9 +133,14 @@ function ConsultingHeaderActionButton({
       onPress={onPress}
       style={({pressed}) => [
         styles.actionButton,
+        variant === 'hero' ? styles.heroActionButton : null,
         pressed ? styles.pressed : null,
       ]}>
-      <Icon color={consultingColors.text} size={21} strokeWidth={2.1} />
+      <Icon
+        color={variant === 'hero' ? colors.brandMuted : consultingColors.text}
+        size={variant === 'hero' ? 20 : 21}
+        strokeWidth={variant === 'hero' ? 2 : 2.1}
+      />
       {showDot ? (
         <RNView style={styles.badge}>
           <RNText style={styles.badgeText}>1</RNText>
@@ -168,6 +184,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 15,
     textAlign: 'center',
+  },
+  heroActionButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.58)',
+    borderColor: 'rgba(255, 255, 255, 0.78)',
   },
   pressed: {
     opacity: 0.82,

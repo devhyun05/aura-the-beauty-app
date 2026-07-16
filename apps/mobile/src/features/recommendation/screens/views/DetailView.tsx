@@ -14,13 +14,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { color, font, layout, radius, text, tracking } from '../../theme/auradinTokens';
-import type { AuradinCandidateProduct } from '../../types';
+import type { AuradinCandidateProduct, AuradinSimilarIntent } from '../../types';
 import {
   Badge,
+  Chip,
   CTAButton,
   GlassBase,
   GlassCard,
   HeartButton,
+  LoaderDots,
   PaletteSwatches,
   ProductThumb,
   Toast,
@@ -32,8 +34,15 @@ export type DetailViewProps = {
   product: AuradinCandidateProduct;
   liked: boolean;
   onToggleSave: () => void;
+  // A5: 구매 링크 이동 직전 purchase_click 이벤트 훅 — fire-and-forget, 이동을 막지 않는다.
+  onPurchase?: () => void;
   onBack: () => void;
   onHome: () => void;
+  // B6 §10.3-2: '이 제품과 비슷한 것' 의향 버튼 — 큐레이션 제품에서만 내려온다
+  // (라이브 발견 픽은 rankedCache 계약 밖이라 화면이 진입점을 숨긴다).
+  onSimilar?: (intent: AuradinSimilarIntent) => void;
+  similarLoading?: boolean;
+  // dev: 신뢰제품(TrustedProduct) 상세·판매처로 이동 — 있으면 구매 CTA가 이 경로를 우선한다.
   onOpenTrustedProduct?: () => void;
 };
 
@@ -76,29 +85,17 @@ export function DetailView({
   product: p,
   liked,
   onToggleSave,
+  onPurchase,
   onBack,
   onHome,
+  onSimilar,
+  similarLoading = false,
   onOpenTrustedProduct,
 }: DetailViewProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const enter = useEnterTransition(16);
 
-  // "보관함에 담김" toast on the save rising edge
-  const [toast, setToast] = React.useState(false);
   const [buyError, setBuyError] = React.useState(false);
-  const prevLiked = React.useRef(liked);
-  React.useEffect(() => {
-    if (liked && !prevLiked.current) {
-      setToast(true);
-      const t = setTimeout(() => setToast(false), 1600);
-      return () => clearTimeout(t);
-    }
-    return undefined;
-  }, [liked]);
-  // prev 추적은 여기 한 곳에서만 — 위 effect의 조기 return 경로와 무관하게 항상 최신.
-  React.useEffect(() => {
-    prevLiked.current = liked;
-  });
   React.useEffect(() => {
     if (!buyError) return undefined;
     const timer = setTimeout(() => setBuyError(false), 2200);
@@ -107,7 +104,9 @@ export function DetailView({
 
   const r = p.reason;
   const openBuy = () => {
+    // dev 우선 경로: 신뢰제품 상세/판매처가 연결돼 있으면 그쪽으로 위임한다.
     if (onOpenTrustedProduct) {
+      onPurchase?.(); // A5 purchase_click — trusted 위임이든 일반 링크든 구매 의도는 기록돼야 함
       onOpenTrustedProduct();
       return;
     }
@@ -115,6 +114,7 @@ export function DetailView({
       setBuyError(true);
       return;
     }
+    onPurchase?.(); // A5 purchase_click — 링크 이동을 막지 않는 fire-and-forget
     Linking.openURL(p.purchaseUrl).catch(() => setBuyError(true));
   };
 
@@ -291,6 +291,35 @@ export function DetailView({
             </View>
           </View>
 
+          {/* B6 §10.3-2 — 이 제품과 비슷한 것: 세션 후보 내 재정렬(재검색 아님), 의향 3버튼 */}
+          {onSimilar ? (
+            <View style={{ marginTop: 18 }}>
+              <Text
+                style={{
+                  fontFamily: font.mono,
+                  fontSize: 9.5,
+                  letterSpacing: tracking(9.5, 0.16),
+                  textTransform: 'uppercase',
+                  color: color.inkFaint,
+                }}
+                allowFontScaling={false}
+              >
+                이 제품과 비슷한 것
+              </Text>
+              {similarLoading ? (
+                <View style={{ marginTop: 10, alignItems: 'flex-start' }}>
+                  <LoaderDots tone="ink" label="비슷한 결로 다시 고르는 중" />
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                  <Chip label="색 유지" onPress={() => onSimilar('keep_color')} />
+                  <Chip label="더 저렴하게" onPress={() => onSimilar('cheaper')} />
+                  <Chip label="다른 브랜드" onPress={() => onSimilar('other_brand')} />
+                </View>
+              )}
+            </View>
+          ) : null}
+
           <View
             style={{
               flexDirection: 'row',
@@ -312,8 +341,8 @@ export function DetailView({
         </ScrollView>
       </Animated.View>
       <Toast
-        show={toast || buyError}
-        label={buyError ? '판매처 페이지를 열 수 없어요' : '보관함에 담김'}
+        show={buyError}
+        label="판매처 페이지를 열 수 없어요"
         bottom={Math.max(insets.bottom, 18) + 10}
       />
     </View>

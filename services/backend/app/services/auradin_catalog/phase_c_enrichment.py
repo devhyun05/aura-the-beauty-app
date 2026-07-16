@@ -237,6 +237,7 @@ def _stage_row(
     title=str(row.get("productName") or ""),
     category=str(row.get("category") or "other"),
     source_url=primary_source_url,
+    brand=str(row.get("brand") or "") or None,
   )
   existing_confidence = row.get("confidence") if isinstance(row.get("confidence"), dict) else {}
   confidence = {

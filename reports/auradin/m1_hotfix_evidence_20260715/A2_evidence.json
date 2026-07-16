@@ -1,0 +1,18 @@
+{
+  "item": "A2 tie-break neutralization (F4)",
+  "baseCommit": "7724e1c249f83b2bc3e9600cb46c046a847d1358",
+  "snapshot": "20260708 (AURADIN_RUN_DATE explicit)",
+  "change": "ranking.rank_candidates tie-break (score, brandName desc) -> (score, sha256(id)[:16])",
+  "goldenDiff": {
+    "queriesChanged": 4,
+    "of": 9,
+    "anchorsPreserved": "9/9",
+    "classification": "expected",
+    "basis": "계획 v4 A2 절의 사전 실측(4/9 변경·anchor 유지)과 정확히 일치"
+  },
+  "tests": "tests/test_auradin_tiebreak.py 3 passed + 영향 스위트 54 passed",
+  "files": [
+    "golden_baseline_7724e1c2.json",
+    "golden_after_A2.json"
+  ]
+}

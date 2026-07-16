@@ -86,6 +86,21 @@ class Database:
 
     return await self._run_with_secret_refresh(operation)
 
+  async def run_in_transaction(
+    self,
+    operation: Callable[[asyncpg.Connection], Awaitable[T]],
+  ) -> T:
+    """한 connection의 실제 PostgreSQL transaction 안에서 복수 문장을 원자 실행한다."""
+    async def run() -> T:
+      if self.pool is None:
+        raise RuntimeError("Database is not connected.")
+
+      async with self.pool.acquire() as connection:
+        async with connection.transaction():
+          return await operation(connection)
+
+    return await self._run_with_secret_refresh(run)
+
   async def _run_with_secret_refresh(self, operation: Callable[[], Awaitable[T]]) -> T:
     try:
       return await operation()

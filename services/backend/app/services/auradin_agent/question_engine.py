@@ -4,8 +4,8 @@ import math
 from collections import Counter
 from typing import Any
 
+from .attribute_evaluator import evaluate_attribute, hard_question_keeps, soft_expected_matches
 from .ranking import top_score_gap
-from .retrieval_service import matches_filter
 
 # 점수갭 즉답 종료가 반응하는 하드 조건 (명시 category/price/channel)
 HARD_CONSTRAINT_ATTRIBUTES = {"category", "priceKrw", "channel"}
@@ -28,6 +28,9 @@ ATTRIBUTE_LABELS = {
     "lip": "립",
     "cheek": "블러셔/치크",
     "shadow": "아이섀도우",
+    "base": "베이스",
+    "brow": "브로우",
+    "liner": "라이너",
   },
   "priceTier": {
     "under_15k": "1만 5천원 이하",
@@ -94,22 +97,34 @@ def _as_list(value: Any) -> list[Any]:
 
 
 def _value_for(item: dict[str, Any], attribute: str) -> str | None:
+  values = _values_for(item, attribute)
+  return values[0] if values else None
+
+
+def _values_for(item: dict[str, Any], attribute: str) -> list[str]:
   attrs = item.get("attributes") if isinstance(item.get("attributes"), dict) else {}
   if attribute == "category":
-    return _clean(item.get("category"))
+    value = _clean(item.get("category"))
+    return [value] if value else []
   if attribute == "priceTier":
-    return _clean(item.get("liveOffer", {}).get("priceTier"))
+    value = _clean(item.get("liveOffer", {}).get("priceTier"))
+    return [value] if value else []
   if attribute == "channel":
     retail = item.get("retailPresence") if isinstance(item.get("retailPresence"), dict) else {}
+    values: list[str] = []
     if retail.get("oliveYoung", {}).get("listed") is True:
-      return "oliveyoung"
+      values.append("oliveyoung")
     if retail.get("departmentStore", {}).get("listed") is True:
-      return "department_store"
-    return "naver"
+      values.append("department_store")
+    live_offer = item.get("liveOffer") if isinstance(item.get("liveOffer"), dict) else {}
+    if _clean(live_offer.get("purchaseUrl")):
+      values.append("naver")
+    return values
   value = attrs.get(attribute)
   if isinstance(value, list):
-    return _clean(value[0]) if value else None
-  return _clean(value) or None
+    return [_clean(entry) for entry in value if _clean(entry)]
+  cleaned = _clean(value)
+  return [cleaned] if cleaned else []
 
 
 def _confidence_for(item: dict[str, Any], attribute: str) -> float:
@@ -128,7 +143,7 @@ def _confidence_for(item: dict[str, Any], attribute: str) -> float:
 
 def _hard_eligible_for(item: dict[str, Any], attribute: str) -> bool:
   if attribute in {"category", "priceTier", "channel"}:
-    return True
+    return bool(_value_for(item, attribute))
   hard = item.get("hardFilterEligible") if isinstance(item.get("hardFilterEligible"), dict) else {}
   return bool(hard.get(attribute))
 
@@ -152,6 +167,13 @@ def _locked_attributes(intent: dict[str, Any]) -> set[str]:
   }
   if "priceKrw" in locked:
     locked.add("priceTier")
+  # R5 §11.1 — 사용자가 프롬프트에서 이미 밝힌 soft 속성을 다시 묻지 않는다.
+  # report는 사용자 명시가 아니므로 질문 veto 권한이 없다.
+  locked.update(
+    _clean(preference.get("attribute"))
+    for preference in intent.get("softPreferences", [])
+    if _clean(preference.get("source")) == "prompt" and _clean(preference.get("attribute"))
+  )
   return locked
 
 
@@ -171,19 +193,20 @@ def analyze_attributes(
   analyses: list[dict[str, Any]] = []
 
   for attribute in ("category", "priceTier", "finish", "texture", "channel", "colorFamily"):
-    values = [_value_for(item, attribute) for item in items]
-    known_values = [value for value in values if value]
+    values_by_item = [_values_for(item, attribute) for item in items]
+    known_values = [value for values in values_by_item for value in values]
     counter = Counter(known_values)
     total = len(items)
-    coverage = len(known_values) / total if total else 0
+    known_items = sum(1 for values in values_by_item if values)
+    coverage = known_items / total if total else 0
     confidence = (
-      sum(_confidence_for(item, attribute) for item in items if _value_for(item, attribute))
-      / max(len(known_values), 1)
+      sum(_confidence_for(item, attribute) for item, values in zip(items, values_by_item) if values)
+      / max(known_items, 1)
     )
     dominant_share = max(counter.values()) / max(sum(counter.values()), 1) if counter else 1
     hard_ratio = (
-      sum(1 for item in items if _value_for(item, attribute) and _hard_eligible_for(item, attribute))
-      / max(len(known_values), 1)
+      sum(1 for item, values in zip(items, values_by_item) if values and _hard_eligible_for(item, attribute))
+      / max(known_items, 1)
     )
     question_mode = "hard" if attribute in HARD_ATTRIBUTES and hard_ratio >= 0.45 else "soft"
     actionability = 1.0 if question_mode == "hard" else 0.62
@@ -197,7 +220,7 @@ def analyze_attributes(
     excluded_reason = None
     if attribute in asked:
       excluded_reason = "already_asked"
-    elif attribute in locked and attribute not in {"finish", "texture", "colorFamily"}:
+    elif attribute in locked:
       excluded_reason = "locked_by_prompt"
     elif len(counter) < 2:
       excluded_reason = "single_value"
@@ -240,9 +263,15 @@ def _filter_delta(attribute: str, value: str, mode: str, confidence: float) -> d
 
 
 def _expected_count(items: list[dict[str, Any]], filter_delta: dict[str, Any], mode: str) -> int:
-  if filter_delta.get("op") == "noop" or mode == "soft":
+  if filter_delta.get("op") == "noop":
     return len(items)
-  return sum(1 for item in items if matches_filter(item, filter_delta))
+  attribute = _clean(filter_delta.get("attribute"))
+  expected = [_clean(value) for value in _as_list(filter_delta.get("values")) if _clean(value)]
+  evaluations = [evaluate_attribute(item, attribute, expected) for item in items]
+  # F11/R5: 하드 질문의 카운트는 실제 필터와 같은 unknown-pass reducer를,
+  # soft 질문의 예상 수는 실제 값 매치만 세는 reducer를 사용한다.
+  reducer = hard_question_keeps if mode == "hard" else soft_expected_matches
+  return sum(1 for evaluation in evaluations if reducer(evaluation))
 
 
 def build_question(
@@ -250,22 +279,35 @@ def build_question(
   analysis: dict[str, Any],
   *,
   question_count: int,
+  excluded_values: set[str] | None = None,
+  force_all_labeled_values: bool = False,
 ) -> dict[str, Any] | None:
   attribute = analysis["attribute"]
   distribution = analysis.get("valueDistribution") or {}
   mode = analysis.get("questionMode") or "soft"
   items = _candidate_items(ranked)
+  excluded_values = excluded_values or set()
+  max_values = 6 if attribute == "category" else 4 if attribute == "priceTier" else 3
+  value_source = (
+    [(value, 0) for value in ATTRIBUTE_LABELS.get(attribute, {})]
+    if force_all_labeled_values
+    else sorted(distribution.items(), key=lambda row: row[1], reverse=True)
+  )
   values = [
     value
-    for value, _count in sorted(distribution.items(), key=lambda row: row[1], reverse=True)
-    if value in ATTRIBUTE_LABELS.get(attribute, {}) and not (attribute == "channel" and value == "naver")
-  ][:3]
+    for value, _count in value_source
+    if (
+      value in ATTRIBUTE_LABELS.get(attribute, {})
+      and value not in excluded_values
+      and not (attribute == "channel" and value == "naver")
+    )
+  ][:max_values]
   options: list[dict[str, Any]] = []
 
   for value in values:
     delta = _filter_delta(attribute, value, mode, float(analysis.get("confidence") or 0.6))
     expected_count = _expected_count(items, delta, mode)
-    if expected_count <= 0:
+    if expected_count <= 0 and not force_all_labeled_values:
       continue
     options.append(
       {
@@ -302,6 +344,7 @@ def build_question(
     "type": mode,
     "title": QUESTION_TITLES.get(attribute, "조금 더 좁혀볼까요?"),
     "expectedCandidateCount": len(items),
+    "countBasis": {"kind": "top_window", "estimated": True, "windowSize": 40},
     "options": options,
   }
 
@@ -319,7 +362,16 @@ def propose_question(
   viable = [analysis for analysis in analyses if not analysis.get("excludedReason")]
   best = viable[0] if viable else None
   locked = _locked_attributes(intent)
-  if intent.get("broad") and "category" not in locked:
+  # 가격 OR는 현 filterDelta가 표현할 수 없으므로 priceTier 질문으로 명시적
+  # clarification을 우선한다. 절대로 두 경계를 AND로 축소하지 않는다.
+  if intent.get("priceOrDetected") and "priceTier" not in locked:
+    price_analysis = next(
+      (analysis for analysis in analyses if analysis.get("attribute") == "priceTier"),
+      None,
+    )
+    if price_analysis:
+      best = {**price_analysis, "excludedReason": None, "questionMode": "hard"}
+  elif intent.get("broad") and "category" not in locked:
     category_analysis = next(
       (analysis for analysis in viable if analysis.get("attribute") == "category"),
       None,
@@ -336,10 +388,14 @@ def propose_question(
     "scoreGap": round(score_gap, 6),
     "proposedAttributes": analyses,
   }
+  if intent.get("priceOrDetected"):
+    decision_log["clarificationReason"] = "unsupported_price_disjunction"
 
   # §11 점수갭 즉답 종료 — 하드 조건이 있고 anchor 갭이 결정적이면 질문 없이 결과로.
   # (§0-B: 질문은 정체성이 아니라 후보 좁히는 수단 — 좁힐 게 명확하면 스킵.)
   if (
+    not intent.get("priceOrDetected")
+    and
     score_gap_threshold is not None
     and locked & HARD_CONSTRAINT_ATTRIBUTES
     and score_gap >= score_gap_threshold
@@ -351,7 +407,9 @@ def propose_question(
     return None, decision_log
 
   should_ask = False
-  if intent.get("broad") and question_count < 1:
+  if intent.get("priceOrDetected") and question_count < 1:
+    should_ask = True
+  elif intent.get("broad") and question_count < 1:
     should_ask = True
   elif intent.get("broad") and question_count < 2 and not last_answer_was_noop:
     should_ask = best["gain"] >= 0.08
@@ -363,7 +421,31 @@ def propose_question(
   if not should_ask:
     return None, decision_log
 
-  question = build_question(ranked, best, question_count=question_count)
+  ordered_analyses = [best, *(analysis for analysis in viable if analysis is not best)]
+  build_failures: list[dict[str, str]] = []
+  question = None
+  avoid_categories = {
+    _clean(value) for value in intent.get("avoidCategories", []) if _clean(value)
+  }
+  for analysis in ordered_analyses:
+    excluded_values = avoid_categories if analysis.get("attribute") == "category" else set()
+    question = build_question(
+      ranked,
+      analysis,
+      question_count=question_count,
+      excluded_values=excluded_values,
+      force_all_labeled_values=(
+        (bool(intent.get("broad")) and analysis.get("attribute") == "category")
+        or (bool(intent.get("priceOrDetected")) and analysis.get("attribute") == "priceTier")
+      ),
+    )
+    if question:
+      break
+    build_failures.append(
+      {"attribute": str(analysis.get("attribute") or ""), "reason": "insufficient_options"},
+    )
+  if build_failures:
+    decision_log["questionBuildFailures"] = build_failures
   if not question:
     return None, decision_log
 

@@ -1,0 +1,31 @@
+{
+  "a8": {
+    "passed": true,
+    "status": "PASS"
+  },
+  "approvalConclusion": "approved",
+  "approvedBy": "위승철 (대리기입: claude — 사용자 명시 승인 지시, 세션 기록 2026-07-15)",
+  "coverageClassification": "see_diff_report",
+  "diffSummary": {
+    "counts": {
+      "ambiguous": 13,
+      "fetch_failed": 0,
+      "matched": 566,
+      "no_match": 39
+    },
+    "linkChanged": 6,
+    "priceChanged": 149,
+    "priceTierChanged": 21
+  },
+  "golden": {
+    "passed": 6,
+    "status": "PASS",
+    "total": 6
+  },
+  "resultsSha": "6573e3b3cd62a5fa17f4fd361c171e368c1dea0173cf0a88c5863d2c72760495",
+  "reviewDecisionsSha": "89adb3cc1cecb35d116c5676c1b5035190e794da8ac48a5d7477c7f6c03665c5",
+  "reviewedAt": "2026-07-15T08:55:00+09:00",
+  "runDate": "20260717",
+  "runId": "20260717-c0b79920",
+  "snapshotManifestSha256": "1dbf1617d260e7bb327de7f57c34d0fc76801c8ef7a6bc34bf0e84a31eb02581"
+}

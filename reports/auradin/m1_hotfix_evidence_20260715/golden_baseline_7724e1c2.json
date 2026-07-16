@@ -1,0 +1,966 @@
+[
+  {
+    "query": "글리터 추천해줘",
+    "intent": {
+      "category": "shadow",
+      "lockedFilters": [
+        "category"
+      ],
+      "softPreferences": [
+        [
+          "finish",
+          [
+            "shimmer"
+          ]
+        ]
+      ],
+      "broad": false
+    },
+    "retrieval": {
+      "candidatesAfterFilters": 101,
+      "backend": "embedding_file_hash"
+    },
+    "slice": {
+      "rankedCount": 101,
+      "floorCount": 88,
+      "topScoreGap": 0.219256,
+      "lambda": 0.7,
+      "sFloor": 0.5
+    },
+    "products": [
+      {
+        "role": "anchor",
+        "source": "curated",
+        "brandName": "투쿨포스쿨",
+        "productName": "투쿨포스쿨 아이 글리츠",
+        "category": "shadow",
+        "shadeName": "",
+        "matchRate": 84,
+        "price": 6000,
+        "palette": [
+          "#8B6A55",
+          "#D7BFA8"
+        ],
+        "reason": {
+          "matchedOn": [
+            "아이섀도우"
+          ],
+          "inferred": [
+            "쉬머 단서"
+          ],
+          "caveat": [
+            "'글리터'는 카탈로그 기준 아이섀도우·쉬머 계열로 해석했어요",
+            "톤은 제품 단서 기반 참고용이며 확정 아님",
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "diverse",
+        "source": "curated",
+        "brandName": "롬앤",
+        "productName": "[롬앤]베러댄팔레트6g",
+        "category": "shadow",
+        "shadeName": "",
+        "matchRate": 62,
+        "price": 17370,
+        "palette": [
+          "#8B6A55",
+          "#D7BFA8"
+        ],
+        "reason": {
+          "matchedOn": [
+            "아이섀도우",
+            "팔레트"
+          ],
+          "inferred": [],
+          "caveat": [
+            "'글리터'는 카탈로그 기준 아이섀도우·쉬머 계열로 해석했어요"
+          ]
+        }
+      },
+      {
+        "role": "discovery",
+        "source": "curated",
+        "brandName": "3CE",
+        "productName": "3CE 아이 스위치 스틱+미니틴트(랜덤)",
+        "category": "shadow",
+        "shadeName": "",
+        "matchRate": 62,
+        "price": 14950,
+        "palette": [
+          "#8B6A55",
+          "#D7BFA8"
+        ],
+        "reason": {
+          "matchedOn": [
+            "아이섀도우",
+            "stick"
+          ],
+          "inferred": [],
+          "caveat": [
+            "'글리터'는 카탈로그 기준 아이섀도우·쉬머 계열로 해석했어요"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "query": "플럼 립 추천해줘",
+    "intent": {
+      "category": "lip",
+      "lockedFilters": [
+        "category"
+      ],
+      "softPreferences": [
+        [
+          "colorFamily",
+          [
+            "plum"
+          ]
+        ]
+      ],
+      "broad": false
+    },
+    "retrieval": {
+      "candidatesAfterFilters": 117,
+      "backend": "embedding_file_hash"
+    },
+    "slice": {
+      "rankedCount": 117,
+      "floorCount": 110,
+      "topScoreGap": 0.21018,
+      "lambda": 0.7,
+      "sFloor": 0.5
+    },
+    "products": [
+      {
+        "role": "anchor",
+        "source": "curated",
+        "brandName": "더샘",
+        "productName": "[온누리상품] 더샘 새미스 젤리 샷 틴트 3.2g 05 포도",
+        "category": "lip",
+        "shadeName": "포도",
+        "matchRate": 83,
+        "price": 11670,
+        "palette": [
+          "#B85E68",
+          "#EFA3B4"
+        ],
+        "reason": {
+          "matchedOn": [
+            "립",
+            "틴트"
+          ],
+          "inferred": [
+            "플럼 단서"
+          ],
+          "caveat": [
+            "톤은 제품 단서 기반 참고용이며 확정 아님",
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "diverse",
+        "source": "curated",
+        "brandName": "롬앤",
+        "productName": "롬앤 컬러 립 매트",
+        "category": "lip",
+        "shadeName": "",
+        "matchRate": 62,
+        "price": 9900,
+        "palette": [
+          "#B85E68",
+          "#EFA3B4"
+        ],
+        "reason": {
+          "matchedOn": [
+            "립",
+            "매트"
+          ],
+          "inferred": [
+            "lipstick 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "discovery",
+        "source": "curated",
+        "brandName": "투쿨포스쿨",
+        "productName": "투쿨포스쿨 스웨이 립 벨벳 기획/단품",
+        "category": "lip",
+        "shadeName": "",
+        "matchRate": 62,
+        "price": 13770,
+        "palette": [
+          "#B85E68",
+          "#EFA3B4"
+        ],
+        "reason": {
+          "matchedOn": [
+            "립",
+            "벨벳"
+          ],
+          "inferred": [],
+          "caveat": [
+            "톤은 제품 단서 기반 참고용이며 확정 아님"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "query": "올리브영에서 살 수 있는 매트 립",
+    "intent": {
+      "category": "lip",
+      "lockedFilters": [
+        "category",
+        "channel"
+      ],
+      "softPreferences": [
+        [
+          "finish",
+          [
+            "matte"
+          ]
+        ]
+      ],
+      "broad": false
+    },
+    "retrieval": {
+      "candidatesAfterFilters": 28,
+      "backend": "embedding_file_hash"
+    },
+    "slice": {
+      "rankedCount": 28,
+      "floorCount": 28,
+      "topScoreGap": 0.221309,
+      "lambda": 0.7,
+      "sFloor": 0.5
+    },
+    "products": [
+      {
+        "role": "anchor",
+        "source": "curated",
+        "brandName": "롬앤",
+        "productName": "롬앤 컬러 립 매트",
+        "category": "lip",
+        "shadeName": "",
+        "matchRate": 84,
+        "price": 9900,
+        "palette": [
+          "#B85E68",
+          "#EFA3B4"
+        ],
+        "reason": {
+          "matchedOn": [
+            "립",
+            "매트"
+          ],
+          "inferred": [
+            "lipstick 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "diverse",
+        "source": "curated",
+        "brandName": "투쿨포스쿨",
+        "productName": "투쿨포스쿨 스웨이 립 벨벳 기획/단품",
+        "category": "lip",
+        "shadeName": "",
+        "matchRate": 62,
+        "price": 13770,
+        "palette": [
+          "#B85E68",
+          "#EFA3B4"
+        ],
+        "reason": {
+          "matchedOn": [
+            "립",
+            "벨벳"
+          ],
+          "inferred": [],
+          "caveat": [
+            "톤은 제품 단서 기반 참고용이며 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "discovery",
+        "source": "curated",
+        "brandName": "라카",
+        "productName": "[올영단독컬러] 라카 맥시 글레이어 틴트 미니 2.2g",
+        "category": "lip",
+        "shadeName": "",
+        "matchRate": 62,
+        "price": 7900,
+        "palette": [
+          "#B85E68",
+          "#EFA3B4"
+        ],
+        "reason": {
+          "matchedOn": [
+            "립",
+            "틴트"
+          ],
+          "inferred": [
+            "글로시 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "query": "데일리로 쓸 만한 블러셔 추천해줘",
+    "intent": {
+      "category": "cheek",
+      "lockedFilters": [
+        "category"
+      ],
+      "softPreferences": [
+        [
+          "intensity",
+          [
+            "medium"
+          ]
+        ],
+        [
+          "occasion",
+          [
+            "daily"
+          ]
+        ]
+      ],
+      "broad": false
+    },
+    "retrieval": {
+      "candidatesAfterFilters": 113,
+      "backend": "embedding_file_hash"
+    },
+    "slice": {
+      "rankedCount": 113,
+      "floorCount": 108,
+      "topScoreGap": 0.004869,
+      "lambda": 0.7,
+      "sFloor": 0.5
+    },
+    "products": [
+      {
+        "role": "anchor",
+        "source": "curated",
+        "brandName": "VDL",
+        "productName": "[NEW제형출시] VDL 치크스테인 블러셔 밤 5.5g",
+        "category": "cheek",
+        "shadeName": "",
+        "matchRate": 62,
+        "price": 18400,
+        "palette": [
+          "#EF8A73",
+          "#F4B3A5"
+        ],
+        "reason": {
+          "matchedOn": [
+            "블러셔/치크",
+            "밤"
+          ],
+          "inferred": [
+            "벨벳 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "diverse",
+        "source": "curated",
+        "brandName": "웨이크메이크",
+        "productName": "[핑거퍼프 기획]웨이크메이크 쉬어 글로우 리퀴드 블러셔 5COLOR 기획",
+        "category": "cheek",
+        "shadeName": "",
+        "matchRate": 61,
+        "price": 10900,
+        "palette": [
+          "#EF8A73",
+          "#F4B3A5"
+        ],
+        "reason": {
+          "matchedOn": [
+            "블러셔/치크",
+            "리퀴드"
+          ],
+          "inferred": [
+            "글로시 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "discovery",
+        "source": "curated",
+        "brandName": "하트퍼센트",
+        "productName": "도트 온 무드 커스텀 립앤치크",
+        "category": "cheek",
+        "shadeName": "",
+        "matchRate": 60,
+        "price": 19200,
+        "palette": [
+          "#EF8A73",
+          "#F4B3A5"
+        ],
+        "reason": {
+          "matchedOn": [
+            "블러셔/치크"
+          ],
+          "inferred": [
+            "파우더 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "query": "2만원 이하 촉촉한 립 틴트",
+    "intent": {
+      "category": "lip",
+      "lockedFilters": [
+        "category",
+        "priceKrw"
+      ],
+      "softPreferences": [
+        [
+          "finish",
+          [
+            "glossy"
+          ]
+        ],
+        [
+          "texture",
+          [
+            "tint"
+          ]
+        ]
+      ],
+      "broad": false
+    },
+    "retrieval": {
+      "candidatesAfterFilters": 84,
+      "backend": "embedding_file_hash"
+    },
+    "slice": {
+      "rankedCount": 84,
+      "floorCount": 80,
+      "topScoreGap": 0.229204,
+      "lambda": 0.7,
+      "sFloor": 0.5
+    },
+    "products": [
+      {
+        "role": "anchor",
+        "source": "curated",
+        "brandName": "3CE",
+        "productName": "3CE [NEW/이슬틴트] 미스티 립 베어 4.6g+미스티 틴트 링",
+        "category": "lip",
+        "shadeName": "",
+        "matchRate": 84,
+        "price": 16010,
+        "palette": [
+          "#B85E68",
+          "#EFA3B4"
+        ],
+        "reason": {
+          "matchedOn": [
+            "립",
+            "20,000원 이하"
+          ],
+          "inferred": [
+            "글로시 단서",
+            "틴트 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "diverse",
+        "source": "curated",
+        "brandName": "투쿨포스쿨",
+        "productName": "투쿨포스쿨 스웨이 립 벨벳 기획/단품",
+        "category": "lip",
+        "shadeName": "",
+        "matchRate": 61,
+        "price": 13770,
+        "palette": [
+          "#B85E68",
+          "#EFA3B4"
+        ],
+        "reason": {
+          "matchedOn": [
+            "립",
+            "20,000원 이하",
+            "벨벳"
+          ],
+          "inferred": [],
+          "caveat": [
+            "톤은 제품 단서 기반 참고용이며 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "discovery",
+        "source": "curated",
+        "brandName": "클리오",
+        "productName": "클리오 [NEW] 크리스탈 글램 밤",
+        "category": "lip",
+        "shadeName": "",
+        "matchRate": 61,
+        "price": 11340,
+        "palette": [
+          "#B85E68",
+          "#EFA3B4"
+        ],
+        "reason": {
+          "matchedOn": [
+            "립",
+            "20,000원 이하",
+            "밤"
+          ],
+          "inferred": [],
+          "caveat": []
+        }
+      }
+    ]
+  },
+  {
+    "query": "은은한 쉬머 아이섀도우 팔레트",
+    "intent": {
+      "category": "shadow",
+      "lockedFilters": [
+        "category"
+      ],
+      "softPreferences": [
+        [
+          "finish",
+          [
+            "shimmer"
+          ]
+        ],
+        [
+          "texture",
+          [
+            "palette"
+          ]
+        ],
+        [
+          "intensity",
+          [
+            "sheer"
+          ]
+        ]
+      ],
+      "broad": false
+    },
+    "retrieval": {
+      "candidatesAfterFilters": 101,
+      "backend": "embedding_file_hash"
+    },
+    "slice": {
+      "rankedCount": 101,
+      "floorCount": 88,
+      "topScoreGap": 0.098374,
+      "lambda": 0.7,
+      "sFloor": 0.5
+    },
+    "products": [
+      {
+        "role": "anchor",
+        "source": "curated",
+        "brandName": "하트퍼센트",
+        "productName": "하트퍼센트 아이섀도우 팔레트 펄 글리터 도트 온 무드 MNS",
+        "category": "shadow",
+        "shadeName": "",
+        "matchRate": 75,
+        "price": 57760,
+        "palette": [
+          "#8B6A55",
+          "#D7BFA8"
+        ],
+        "reason": {
+          "matchedOn": [
+            "아이섀도우",
+            "쉬머",
+            "팔레트"
+          ],
+          "inferred": [],
+          "caveat": []
+        }
+      },
+      {
+        "role": "diverse",
+        "source": "curated",
+        "brandName": "에뛰드",
+        "productName": "[에뛰드] 재창조 메이커 쉐딩스틱 + 올데이맑은BB크림02아이보리 1ml*5 증정",
+        "category": "shadow",
+        "shadeName": "",
+        "matchRate": 66,
+        "price": 9120,
+        "palette": [
+          "#8B6A55",
+          "#D7BFA8"
+        ],
+        "reason": {
+          "matchedOn": [
+            "아이섀도우",
+            "stick"
+          ],
+          "inferred": [
+            "시어 단서",
+            "은은한 발색 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "discovery",
+        "source": "curated",
+        "brandName": "투쿨포스쿨",
+        "productName": "투쿨포스쿨 프로타주 펜슬 (기획/단품)",
+        "category": "shadow",
+        "shadeName": "",
+        "matchRate": 61,
+        "price": 9900,
+        "palette": [
+          "#8B6A55",
+          "#D7BFA8"
+        ],
+        "reason": {
+          "matchedOn": [
+            "아이섀도우",
+            "pencil"
+          ],
+          "inferred": [],
+          "caveat": [
+            "톤은 제품 단서 기반 참고용이며 확정 아님"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "query": "커버 좋은 쿠션 추천해줘",
+    "intent": {
+      "category": "base",
+      "lockedFilters": [
+        "category"
+      ],
+      "softPreferences": [],
+      "broad": false
+    },
+    "retrieval": {
+      "candidatesAfterFilters": 103,
+      "backend": "embedding_file_hash"
+    },
+    "slice": {
+      "rankedCount": 103,
+      "floorCount": 63,
+      "topScoreGap": 0.009896,
+      "lambda": 0.7,
+      "sFloor": 0.5
+    },
+    "products": [
+      {
+        "role": "anchor",
+        "source": "curated",
+        "brandName": "투쿨포스쿨",
+        "productName": "투쿨포스쿨 픽싱 커버 핏 쿠션 (+리필2개 단독기획)",
+        "category": "base",
+        "shadeName": "",
+        "matchRate": 73,
+        "price": 19000,
+        "palette": [
+          "#D8A287",
+          "#E8C6A0"
+        ],
+        "reason": {
+          "matchedOn": [
+            "베이스",
+            "cushion"
+          ],
+          "inferred": [],
+          "caveat": [
+            "톤은 제품 단서 기반 참고용이며 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "diverse",
+        "source": "curated",
+        "brandName": "컬러그램",
+        "productName": "[파데프리템]컬러그램 긱 누드 스킨 틴트 4COLOR",
+        "category": "base",
+        "shadeName": "누드",
+        "matchRate": 72,
+        "price": 8400,
+        "palette": [
+          "#D8A287"
+        ],
+        "reason": {
+          "matchedOn": [
+            "베이스"
+          ],
+          "inferred": [
+            "틴트 단서",
+            "누드 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "discovery",
+        "source": "curated",
+        "brandName": "웨이크메이크",
+        "productName": "웨이크메이크 워터 글로우 코팅밤 본품+리필",
+        "category": "base",
+        "shadeName": "",
+        "matchRate": 72,
+        "price": 24750,
+        "palette": [
+          "#D8A287",
+          "#E8C6A0"
+        ],
+        "reason": {
+          "matchedOn": [
+            "베이스",
+            "밤"
+          ],
+          "inferred": [
+            "글로시 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "query": "자연스러운 브로우 펜슬 추천해줘",
+    "intent": {
+      "category": "brow",
+      "lockedFilters": [
+        "category"
+      ],
+      "softPreferences": [
+        [
+          "intensity",
+          [
+            "sheer"
+          ]
+        ]
+      ],
+      "broad": false
+    },
+    "retrieval": {
+      "candidatesAfterFilters": 96,
+      "backend": "embedding_file_hash"
+    },
+    "slice": {
+      "rankedCount": 96,
+      "floorCount": 62,
+      "topScoreGap": 0.191616,
+      "lambda": 0.7,
+      "sFloor": 0.5
+    },
+    "products": [
+      {
+        "role": "anchor",
+        "source": "curated",
+        "brandName": "VDL",
+        "productName": "VDL 아이 파인 내추럴 브로우 카라 01 그레이브라운 | 셀러허브_뷰티 - 하프클럽",
+        "category": "brow",
+        "shadeName": "그레이브라운",
+        "matchRate": 82,
+        "price": 34860,
+        "palette": [
+          "#8B5E4E"
+        ],
+        "reason": {
+          "matchedOn": [
+            "브로우",
+            "브라운"
+          ],
+          "inferred": [
+            "mascara 단서",
+            "은은한 발색 단서"
+          ],
+          "caveat": [
+            "톤은 제품 단서 기반 참고용이며 확정 아님",
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "diverse",
+        "source": "curated",
+        "brandName": "클리오",
+        "productName": "클리오 킬 브로우 오토 하드 브로우 펜슬 3개",
+        "category": "brow",
+        "shadeName": "",
+        "matchRate": 63,
+        "price": 29130,
+        "palette": [
+          "#6E5A4E",
+          "#8B7355"
+        ],
+        "reason": {
+          "matchedOn": [
+            "브로우",
+            "pencil"
+          ],
+          "inferred": [],
+          "caveat": []
+        }
+      },
+      {
+        "role": "discovery",
+        "source": "curated",
+        "brandName": "하트퍼센트",
+        "productName": "[NEW] 하트퍼센트 컬러 체인저 원유즈",
+        "category": "brow",
+        "shadeName": "",
+        "matchRate": 60,
+        "price": 6900,
+        "palette": [
+          "#6E5A4E",
+          "#8B7355"
+        ],
+        "reason": {
+          "matchedOn": [
+            "브로우"
+          ],
+          "inferred": [],
+          "caveat": []
+        }
+      }
+    ]
+  },
+  {
+    "query": "또렷한 아이라이너 추천해줘",
+    "intent": {
+      "category": "liner",
+      "lockedFilters": [
+        "category"
+      ],
+      "softPreferences": [],
+      "broad": false
+    },
+    "retrieval": {
+      "candidatesAfterFilters": 88,
+      "backend": "embedding_file_hash"
+    },
+    "slice": {
+      "rankedCount": 88,
+      "floorCount": 67,
+      "topScoreGap": 0.005709,
+      "lambda": 0.7,
+      "sFloor": 0.5
+    },
+    "products": [
+      {
+        "role": "anchor",
+        "source": "curated",
+        "brandName": "웨이크메이크",
+        "productName": "웨이크메이크 리얼 디파이닝 펜슬 라이너 - /R 아이라이너",
+        "category": "liner",
+        "shadeName": "",
+        "matchRate": 73,
+        "price": 5670,
+        "palette": [
+          "#2E2A28",
+          "#5A4B42"
+        ],
+        "reason": {
+          "matchedOn": [
+            "라이너",
+            "pencil"
+          ],
+          "inferred": [],
+          "caveat": []
+        }
+      },
+      {
+        "role": "diverse",
+        "source": "curated",
+        "brandName": "더샘",
+        "productName": "더샘 [더샘][뉴코아 울산점] 어드밴스드 파워프루프 아이라이너 01 딥 블랙",
+        "category": "liner",
+        "shadeName": "딥 블랙",
+        "matchRate": 73,
+        "price": 7520,
+        "palette": [
+          "#2E2A28",
+          "#5A4B42"
+        ],
+        "reason": {
+          "matchedOn": [
+            "라이너",
+            "black"
+          ],
+          "inferred": [
+            "liner 단서",
+            "선명한 발색 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      },
+      {
+        "role": "discovery",
+        "source": "curated",
+        "brandName": "페리페라",
+        "productName": "페리페라 스피디 스키니 브러쉬 라이너",
+        "category": "liner",
+        "shadeName": "",
+        "matchRate": 71,
+        "price": 5470,
+        "palette": [
+          "#2E2A28",
+          "#5A4B42"
+        ],
+        "reason": {
+          "matchedOn": [
+            "라이너"
+          ],
+          "inferred": [
+            "리퀴드 단서"
+          ],
+          "caveat": [
+            "색·마감은 제품명·옵션 단서 기반이라 확정 아님"
+          ]
+        }
+      }
+    ]
+  }
+]

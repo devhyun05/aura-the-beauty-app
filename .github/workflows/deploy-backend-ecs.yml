@@ -8,8 +8,11 @@ on:
       - "services/backend/**"
       - "docs/backend/schema.sql"
       - "docs/backend/seed.sql"
+      - "data/auradin/active_snapshot.json"
       - "data/auradin/catalog/**"
       - "data/auradin/knowledge/**"
+      - "data/auradin/manifests/**"
+      - "data/auradin/vector/**"
       - ".github/workflows/deploy-backend-ecs.yml"
   workflow_dispatch:
     inputs:
@@ -96,6 +99,13 @@ jobs:
         env:
           LOCAL_IMAGE: aura-backend:${{ github.sha }}
         run: docker build -f services/backend/Dockerfile -t "$LOCAL_IMAGE" .
+
+      - name: Verify Auradin snapshot in backend image
+        env:
+          LOCAL_IMAGE: aura-backend:${{ github.sha }}
+        run: |
+          docker run --rm "$LOCAL_IMAGE" \
+            python -c "from app.core.settings import Settings; from app.services.auradin_agent.snapshot_manifest import resolve_and_validate_snapshot; resolve_and_validate_snapshot(Settings(environment='production'), force=True)"
 
       - name: Install verified Trivy scanner
         env:
@@ -244,6 +254,13 @@ jobs:
 
           echo "image=$image_uri" >> "$GITHUB_OUTPUT"
           echo "latest-image=$latest_uri" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Auradin snapshot in backend image
+        env:
+          IMAGE: ${{ steps.build-image.outputs.image }}
+        run: |
+          docker run --rm "$IMAGE" \
+            python -c "from app.core.settings import Settings; from app.services.auradin_agent.snapshot_manifest import resolve_and_validate_snapshot; resolve_and_validate_snapshot(Settings(environment='production'), force=True)"
 
       - name: Install verified Trivy scanner
         env:

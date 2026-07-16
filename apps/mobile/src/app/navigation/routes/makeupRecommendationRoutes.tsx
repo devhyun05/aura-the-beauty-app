@@ -12,7 +12,7 @@ import type {RootScreenProps} from './routeUtils';
 export function MakeupRecommendationRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupRecommendation'>) {
-  const {selectedFaceAnalysisReport} = useNavigationFlowState();
+  const {selectedFaceAnalysisReport, selectedFaceCapture} = useNavigationFlowState();
   const screenRef = React.useRef<MakeupRecommendationScreenHandle>(null);
   const handleBack = React.useCallback(() => {
     if (!screenRef.current?.handleBack()) navigation.goBack();
@@ -32,6 +32,7 @@ export function MakeupRecommendationRouteScreen({
       routeName="MakeupRecommendation"
     >
       <MakeupRecommendationScreen
+        faceImageUri={selectedFaceCapture?.imageUri}
         onApplyAR={look =>
           navigation.navigate(
             'ARFilter',

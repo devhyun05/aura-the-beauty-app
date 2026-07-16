@@ -17,6 +17,9 @@ apps/mobile/.expo/
 !**/.env.example
 services/backend/partner-credentials*.json
 
+# Local agent control-plane secrets
+.agents/local.env
+
 # Logs
 npm-debug.log*
 yarn-debug.log*
@@ -51,8 +54,21 @@ apps/mobile/screenshots/
 output/
 playwright-report/
 test-results/
+.playwright-mcp/
 .superpowers/
 .codegraph/
+
+# Beard simulation lab local data and rejected experiment artifacts
+tools/beard-simulation-lab/samples/
+tools/beard-simulation-lab/outputs/
+tools/beard-simulation-lab/external/
+tools/beard-simulation-lab/.hf-cache/
+tools/beard-simulation-lab/.mplconfig/
+
+# Local prototypes and photo archives
+AuradinRN 2/
+newbeards/
+아카이브/
 
 # Local Face3D calibration captures and reviews (may embed raw face frames)
 /artifacts/face3d/
@@ -79,4 +95,6 @@ tmp-debug/
 apps/unity/MakeupAR/Assets/XR/Temp/
 apps/unity/MakeupAR/Assets/XR/Temp.meta
 apps/unity/MakeupAR/Packages/local/
+data/auradin/.active_snapshot.lock
+logs/
 apps/unity/MakeupAR/Assets/StreamingAssets/selfie_multiclass_256x256.tflite

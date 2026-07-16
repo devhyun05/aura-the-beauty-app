@@ -12,6 +12,7 @@ from app.core.settings import Settings, get_settings
 from app.db.session import Database, require_database
 from app.schemas.makeup_recommendation import (
   MakeupQuestionRequest,
+  MakeupRecommendationGenerate,
   MakeupRecommendationRefinementRequest,
   MakeupRecommendationRequest,
   MakeupScenarioRequest,
@@ -25,6 +26,7 @@ from app.services.makeup_recommendation import (
 )
 from app.services.makeup_recommendation_image import generate_recommendation_images
 from app.services.ai_job_queue import AIJobQueuePublisher
+from app.services.openai_analysis import OpenAIAnalysisService
 from app.services.users import ensure_user
 
 
@@ -148,6 +150,19 @@ async def create_scenarios(
 @router.post("/questions")
 async def create_questions(payload: MakeupQuestionRequest, settings: Settings = Depends(get_settings), _: AuthContext = Depends(get_current_user)) -> dict:
   return success(await generate_questions(settings, payload.scenario_text, payload.scenario_tags))
+
+
+@router.post("/generate")
+async def generate_makeup_recommendations(
+  payload: MakeupRecommendationGenerate,
+  _auth: AuthContext = Depends(get_current_user),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  service = OpenAIAnalysisService(settings)
+  result = await service.generate_personalized_makeup_recommendations(
+    payload.model_dump(by_alias=True, exclude_none=True),
+  )
+  return success(result)
 
 
 @router.post("")

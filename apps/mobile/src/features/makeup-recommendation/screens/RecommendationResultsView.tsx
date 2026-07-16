@@ -165,25 +165,26 @@ export function RecommendationResultsView({
     });
   };
 
+  const [bestLook] = results;
+
   return (
     <AppScreen contentGap={spacing.xxl} topPadding="belowShellHeader">
       <View style={styles.resultsHeading}>
-        <Text style={styles.eyebrow}>세 가지 방향으로 골라봤어요</Text>
-        <Text style={styles.resultsTitle}>오늘의 얼굴에 어울릴 메이크업</Text>
-        <Text style={styles.resultsDescription}>안정적인 선택부터 예상 밖의 취향까지 비교해보세요.</Text>
+        <Text style={styles.eyebrow}>가장 잘 어울리는 룩을 골랐어요</Text>
+        <Text style={styles.resultsTitle}>오늘의 얼굴에 가장 어울리는 메이크업</Text>
+        <Text style={styles.resultsDescription}>분석 결과와 원하는 분위기를 반영한 최적의 한 가지예요.</Text>
       </View>
 
-      {results.map(look => (
+      {bestLook ? (
         <ResultCard
-          key={look.id}
-          expanded={expandedLookIds.has(look.id)}
-          look={look}
-          onApplyAR={() => onApplyAR(look)}
-          onToggleSave={() => toggleSaved(look.id)}
-          onToggleExpanded={() => setExpandedLookIds(previous => toggleExpandedLookId(previous, look.id))}
-          saved={savedLookIds.has(look.id)}
+          expanded={expandedLookIds.has(bestLook.id)}
+          look={bestLook}
+          onApplyAR={() => onApplyAR(bestLook)}
+          onToggleSave={() => toggleSaved(bestLook.id)}
+          onToggleExpanded={() => setExpandedLookIds(previous => toggleExpandedLookId(previous, bestLook.id))}
+          saved={savedLookIds.has(bestLook.id)}
         />
-      ))}
+      ) : null}
 
       <View style={styles.refinementSection}>
         <Text style={styles.detailTitle}>조금 다르게 보고 싶다면</Text>

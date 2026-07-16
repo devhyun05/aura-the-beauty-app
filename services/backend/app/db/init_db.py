@@ -655,6 +655,73 @@ POST_SCHEMA_MIGRATIONS = {
     create index if not exists idx_auradin_search_sessions_owner_subject
       on auradin_search_sessions ((state ->> 'ownerSubject'));
   """,
+  "schema.sql:auradin-sessions-v2": """
+    -- A9 세션 멱등성·CAS (M1 핫픽스 Stage 0). 기존 행 backfill 후 NOT NULL —
+    -- backfill 불가한 행이 남아 있으면 set not null이 실패해 마이그레이션이 중단된다(의도된 사전검사).
+    alter table auradin_search_sessions add column if not exists owner_subject text;
+    alter table auradin_search_sessions add column if not exists version integer;
+    alter table auradin_search_sessions add column if not exists client_request_id text;
+    alter table auradin_search_sessions add column if not exists request_fingerprint text;
+    alter table auradin_search_sessions add column if not exists idempotency_expires_at timestamptz;
+    update auradin_search_sessions set owner_subject = state->>'ownerSubject' where owner_subject is null;
+    update auradin_search_sessions set version = 0 where version is null;
+    alter table auradin_search_sessions alter column owner_subject set not null;
+    alter table auradin_search_sessions alter column version set not null;
+    alter table auradin_search_sessions alter column version set default 0;
+    do $$
+    begin
+      if not exists (
+        select 1 from pg_constraint
+        where conname = 'chk_auradin_sessions_idempotency_fields'
+          and conrelid = 'public.auradin_search_sessions'::regclass
+      ) then
+        alter table auradin_search_sessions
+          add constraint chk_auradin_sessions_idempotency_fields
+          check (
+            ((client_request_id is null) = (request_fingerprint is null))
+            and ((client_request_id is null) = (idempotency_expires_at is null))
+          );
+      end if;
+    end $$;
+    create unique index if not exists uq_auradin_sessions_owner_client_request
+      on auradin_search_sessions (owner_subject, client_request_id)
+      where client_request_id is not null;
+    create index if not exists idx_auradin_sessions_idempotency_expires
+      on auradin_search_sessions (idempotency_expires_at)
+      where idempotency_expires_at is not null;
+  """,
+  "schema.sql:auradin-events-v1": """
+    -- A5 이벤트 로깅 (M3) — §7.2 SQL 정본. 멱등성은 (owner_subject, client_event_id) 복합 유니크,
+    -- owner_subject는 익명 식별 계약(anon:v1/user:v1)만 — dev fallback 공용 subject 적재 금지.
+    -- payload는 allowlist 구조화 값만(raw query 원문 금지). 보존은 received_at 인덱스 기반 배치 DELETE.
+    create table if not exists auradin_events (
+      id bigserial primary key,
+      client_event_id text not null,
+      schema_version smallint not null default 1,
+      owner_subject text not null,
+      session_id text, turn_id text, result_set_id text,
+      event_type text not null check (event_type in (
+        'session_start','question_answered','impression','product_open',
+        'save','unsave','purchase_click','refine_dial','refine_prompt','hide','unhide')),
+      product_id text, category text, rank int, role text, match_rate int,
+      data_manifest_id text not null,
+      release_manifest_id text not null,
+      catalog_run_date text, ranker_version text,
+      payload jsonb,
+      occurred_at timestamptz not null,
+      received_at timestamptz not null default now(),
+      experiment_id text, variant text,
+      unique (owner_subject, client_event_id)
+    );
+    create index if not exists idx_auradin_events_owner_time
+      on auradin_events (owner_subject, occurred_at desc);
+    create index if not exists idx_auradin_events_session
+      on auradin_events (session_id);
+    create index if not exists idx_auradin_events_manifest
+      on auradin_events (data_manifest_id);
+    create index if not exists idx_auradin_events_received
+      on auradin_events (received_at);
+  """,
   "schema.sql:account-deletion-v1": """
     create table if not exists account_deletion_tombstones (
       subject_hash text primary key,

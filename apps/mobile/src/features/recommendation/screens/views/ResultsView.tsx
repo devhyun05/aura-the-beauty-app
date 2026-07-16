@@ -1,4 +1,4 @@
-// AURADIN — Results: the "bright reveal". One hero pick + '비슷한 후보' list on
+// AURADIN — Results: the "bright reveal". One hero pick + '다른 결 후보' list on
 // glass, ink-first text, refine dials, reset link. The orb recedes top-right
 // (host). Recreated from prompts/3-results.md (+ refine dials from the port brief).
 import * as React from 'react';
@@ -196,6 +196,26 @@ export function ResultsView({
                 {top.matchSummary}
               </Text>
             </View>
+            {/* B6 진입점 — 상세의 '이 제품과 비슷한 것' 의향 3버튼으로 이어진다 */}
+            <Pressable
+              onPress={() => onOpen(top)}
+              accessibilityRole="button"
+              accessibilityLabel="이 제품과 비슷한 것 찾기"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ alignSelf: 'flex-start', marginTop: 10 }}
+            >
+              <Text
+                style={{
+                  fontFamily: font.sans,
+                  fontSize: 12,
+                  color: color.inkSoft,
+                  textDecorationLine: 'underline',
+                }}
+                allowFontScaling={false}
+              >
+                이 제품과 비슷한 것 →
+              </Text>
+            </Pressable>
           </GlassCard>
         ) : (
           <Text
@@ -211,7 +231,7 @@ export function ResultsView({
           </Text>
         )}
 
-        {/* '비슷한 후보'는 대안이 있을 때만 — 빈 슬롯은 라이브 NAVER로 채워지므로 보통 존재하고,
+        {/* '다른 결 후보'는 모순 가드 뒤 대안이 있을 때만 — Top2도 정상 결과다.
             그래도 비면 제목을 숨겨 '고장'처럼 읽히지 않게 한다. */}
         {alts.length > 0 ? (
           <>
@@ -228,7 +248,7 @@ export function ResultsView({
               ]}
               allowFontScaling={false}
             >
-              비슷한 후보
+              다른 결 후보
             </Text>
             <View style={{ gap: 10 }}>
               {alts.map((p) => (

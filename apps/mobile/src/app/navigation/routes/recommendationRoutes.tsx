@@ -11,6 +11,7 @@ import {
   ProductSearchResultScreen,
 } from '../../../features/recommendation';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
+import {getFaceAnalysisReportById} from '../../../shared/services/faceAnalysisService';
 import {
   getLikedMakeupFilterLooks,
   mergeSavedAndLikedMakeupLooks,
@@ -18,10 +19,18 @@ import {
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {
+  resolveAuradinLandingReport,
+  type AuradinLandingReport,
+} from './auradinLandingReport';
+import {
   navigateMainTab,
   type RootScreenProps,
 } from './routeUtils';
 
+// 얼굴분석 완료·리포트 상세의 추천 랜딩 (Shelf 정본 — dev 진열/스폰서십/신뢰제품 표면).
+// Auradin은 이 화면의 진입점(onOpenAuradin → AuradinSearch)에서 하위 라우트로 도달하고,
+// personalColor 첨부 해석(R1 게이트 2)은 AuradinSearchRouteScreen이 담당한다
+// (resolveAuradinLandingReport·getFaceAnalysisReportById). 뒤로가기는 다시 이 랜딩.
 export function ProductRecommendationRouteScreen({
   navigation,
   route,
@@ -47,7 +56,12 @@ export function ProductRecommendationRouteScreen({
           })
         }
         onCreateArLook={() => navigation.navigate('UnityMakeupCapture')}
-        onOpenAuradin={() => navigation.navigate('AuradinSearch')}
+        onOpenAuradin={() =>
+          navigation.navigate(
+            'AuradinSearch',
+            sourceReportId ? {reportId: sourceReportId} : undefined,
+          )
+        }
         onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
         onOpenPersonalizationSettings={() =>
           navigation.navigate('ProductPersonalizationSettings')
@@ -84,6 +98,8 @@ export function ProductRecommendationRouteScreen({
   );
 }
 
+// dev Shelf 라우트 — 진열/스폰서십/신뢰제품(TrustedProduct) 진입. 얼굴분석 랜딩에서
+// onOpenShelf로 도달하고, 뒤로가기는 랜딩으로 복귀한다.
 export function ProductRecommendationShelfRouteScreen({
   navigation,
   route,
@@ -127,15 +143,19 @@ const DEMO_DRIVE_STEPS: Array<{delayMs: number; step: Record<string, string>}> =
 
 export function AuradinSearchRouteScreen({navigation, route}: RootScreenProps<'AuradinSearch'>) {
   const [drive, setDrive] = React.useState(route.params);
-  // 리포트 첨부: nav state의 선택된 얼굴분석 리포트 → availableReport (첨부 트레이가 소비).
   const {selectedFaceAnalysisReport} = useNavigationFlowState();
-  const availableReport = React.useMemo(
-    () =>
-      selectedFaceAnalysisReport?.personalColor
-        ? {id: selectedFaceAnalysisReport.id, personalColor: selectedFaceAnalysisReport.personalColor}
-        : null,
-    [selectedFaceAnalysisReport],
+
+  // R1 게이트 2: Auradin 진입 시 리포트 첨부(personalColor) 해석. 한 곳에서
+  // 동기 확보(ready) / 과거 리포트 서버 조회(fetch) / 첨부 없음을 판정한다. 과거 리포트
+  // 상세로 들어온 경우(fetch)는 personalColor 해석이 끝난 뒤 AuradinSearchScreen을 마운트한다
+  // — availableReport 첨부 시드가 마운트 시점에 확정돼야 하기 때문(§13 R1).
+  const resolution = resolveAuradinLandingReport(
+    route.params?.reportId ?? null,
+    selectedFaceAnalysisReport,
   );
+  const fetchReportId = resolution.kind === 'fetch' ? resolution.reportId : null;
+  const [fetchedReport, setFetchedReport] = React.useState<AuradinLandingReport | null>(null);
+  const [resolving, setResolving] = React.useState(fetchReportId != null);
 
   React.useEffect(() => {
     if (route.params) {
@@ -152,6 +172,38 @@ export function AuradinSearchRouteScreen({navigation, route}: RootScreenProps<'A
     );
     return () => timers.forEach(clearTimeout);
   }, []);
+
+  React.useEffect(() => {
+    if (!fetchReportId) {
+      return undefined;
+    }
+
+    let alive = true;
+    getFaceAnalysisReportById(fetchReportId)
+      .then(report => {
+        if (alive && report?.personalColor) {
+          setFetchedReport({id: report.id, personalColor: report.personalColor});
+        }
+      })
+      .catch(() => {
+        // 상세 조회 실패 → 첨부 없이 진입 (broad 흐름, 검색 자체는 정상 동작)
+      })
+      .finally(() => {
+        if (alive) {
+          setResolving(false);
+        }
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [fetchReportId]);
+
+  if (resolving) {
+    return null; // 짧은 상세 GET 동안 대기 — 첨부 시드가 마운트 시점에 확정돼야 한다
+  }
+
+  const availableReport = resolution.kind === 'ready' ? resolution.report : fetchedReport;
 
   return (
     <AuradinSearchScreen
