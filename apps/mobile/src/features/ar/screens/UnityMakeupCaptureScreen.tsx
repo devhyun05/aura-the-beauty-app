@@ -1,4 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
+import {isTerminalGeneratedMaskEvent} from '../services/generatedMaskEventCorrelation';
 import {
   type GestureResponderEvent,
   type LayoutChangeEvent,
@@ -606,15 +607,6 @@ export function UnityMakeupCaptureScreen({
     }
   };
 
-  // Payload-level failures that can never succeed on resend (size/byte/id
-  // mismatch). Shared by the lip and brow applied-event handlers.
-  const TERMINAL_GENERATED_MASK_BLOCKED_REASONS = [
-    'generated_lip_mask_texture_registration_failed',
-    'generated_brow_mask_texture_registration_failed',
-    'mask_texture_dimensions_invalid',
-    'raw_rgba_byte_count_mismatch',
-  ];
-
   const handleGeneratedLipAppliedEvent = (event: {
     applied?: boolean;
     blockedReason?: string;
@@ -634,10 +626,10 @@ export function UnityMakeupCaptureScreen({
     }
 
     // Terminal failures: the payload itself is malformed (size/byte mismatch),
-    // so resending the exact same payload can never succeed. Runs AFTER the
-    // mask-id correlation check so a stale event from a previous request
-    // cannot clear the current payload refs.
-    if (event.blockedReason && TERMINAL_GENERATED_MASK_BLOCKED_REASONS.includes(event.blockedReason)) {
+    // so resending the exact same payload can never succeed. Requires POSITIVE
+    // correlation (event id present, pending id present, equal) so a stale or
+    // anonymous event can never wipe the current request's refs.
+    if (isTerminalGeneratedMaskEvent(event, pendingGeneratedMaskId)) {
       pendingGeneratedMaskIdRef.current = null;
       latestGeneratedApplyPayloadRef.current = null;
       setPhase('error');
@@ -698,7 +690,9 @@ export function UnityMakeupCaptureScreen({
     // Terminal failures (see lip handler): clear the brow payload so neither
     // the brow retry nor the lip retry path (which re-posts the brow payload
     // alongside the lip one) keeps resending a payload that can never apply.
-    if (event.blockedReason && TERMINAL_GENERATED_MASK_BLOCKED_REASONS.includes(event.blockedReason)) {
+    // Positive correlation required — during the initial-generation window the
+    // pending brow id is null, and a stale terminal event must not poison it.
+    if (isTerminalGeneratedMaskEvent(event, pendingGeneratedBrowMaskId)) {
       pendingGeneratedBrowMaskIdRef.current = null;
       latestGeneratedBrowApplyPayloadRef.current = null;
       setPhase('error');
