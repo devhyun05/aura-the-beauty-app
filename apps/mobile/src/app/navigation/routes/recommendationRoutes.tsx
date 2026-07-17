@@ -5,7 +5,6 @@ import {
   LikedProductListScreen,
   MakeupLookListScreen,
   ProductDetailScreen,
-  ProductPersonalizationSettingsScreen,
   ProductRecommendationScreen,
   ProductRecommendationShelfScreen,
   ProductSearchResultScreen,
@@ -62,9 +61,6 @@ export function ProductRecommendationRouteScreen({
           )
         }
         onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
-        onOpenPersonalizationSettings={() =>
-          navigation.navigate('ProductPersonalizationSettings')
-        }
         onOpenProduct={(productId, shadeId, recommendationContext) =>
           navigation.navigate('ProductDetail', {
             productId,
@@ -272,18 +268,6 @@ export function ProductDetailRouteScreen({
         shadeId={route.params.shadeId}
         recommendationContext={recommendationContext}
       />
-    </DetailRouteChrome>
-  );
-}
-
-export function ProductPersonalizationSettingsRouteScreen({
-  navigation,
-}: RootScreenProps<'ProductPersonalizationSettings'>) {
-  return (
-    <DetailRouteChrome
-      routeName="ProductPersonalizationSettings"
-      onBack={() => navigation.goBack()}>
-      <ProductPersonalizationSettingsScreen />
     </DetailRouteChrome>
   );
 }

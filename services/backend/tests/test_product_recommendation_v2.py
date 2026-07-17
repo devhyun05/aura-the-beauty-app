@@ -309,39 +309,9 @@ async def test_popular_fallback_uses_packaged_catalog_when_database_sources_are_
 
 
 @pytest.mark.asyncio
-async def test_popular_fallback_uses_validated_live_seasonal_items_as_opt_in_last_resort(
+async def test_popular_fallback_does_not_call_live_provider_in_request_path(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-  cached_lip = {
-    "productId": "live-lip",
-    "brandName": "Live Brand",
-    "productName": "Live Lip",
-    "category": "lip",
-    "imageUrl": "https://cdn.example.com/live-lip.png",
-    "purchaseUrl": "https://shop.example.com/live-lip",
-    "viewerState": {"liked": False},
-    "externalSource": "naver_shopping_search",
-    "reasonCodes": ["CURRENT_SEASON_TREND"],
-    "reasonLabels": ["여름 트렌드"],
-  }
-  cached_items = [
-    cached_lip,
-    dict(cached_lip),  # duplicate identity
-    {**cached_lip, "productId": "live-base", "category": "base"},
-    {**cached_lip, "productId": "unsafe-url", "purchaseUrl": "http://shop.example.com/unsafe"},
-    {**cached_lip, "productId": "wrong-source", "externalSource": "client_payload"},
-  ]
-
-  async def fake_live_seasonal(_settings: Settings, *, locale: str, limit: int) -> dict:
-    assert locale == "ko-KR"
-    assert limit >= 12
-    return {"status": "ready", "items": cached_items}
-
-  monkeypatch.setattr(
-    "app.services.product_recommendations.get_live_seasonal_recommendations",
-    fake_live_seasonal,
-  )
-
   async def no_packaged_products(*_args, **_kwargs) -> list[dict]:
     return []
 
@@ -357,14 +327,7 @@ async def test_popular_fallback_uses_validated_live_seasonal_items_as_opt_in_las
     categories=["lip"],
   )
 
-  assert [item["productId"] for item in items] == ["live-lip"]
-  assert items[0]["viewerState"] == {"liked": False}
-  assert items[0]["reasonCodes"] == ["POPULAR_FALLBACK"]
-  assert items[0]["recommendationBasis"] == "popularFallback"
-  # The seasonal provider caches dictionaries, so fallback labelling must only
-  # affect a copy and leave the seasonal explanation intact.
-  assert cached_lip["reasonCodes"] == ["CURRENT_SEASON_TREND"]
-  assert cached_lip["reasonLabels"] == ["여름 트렌드"]
+  assert items == []
 
 
 @pytest.mark.asyncio
@@ -407,8 +370,7 @@ async def test_each_recommendation_section_returns_popular_items_when_its_basis_
     limit=12,
   )
   assert seasonal["status"] == "ready"
-  assert seasonal["collection"]["providerStatus"] == "editorialFallback"
-  assert seasonal["collection"]["catalogSupplemented"] is True
+  assert seasonal["collection"]["providerStatus"] == "popularFallback"
   assert seasonal["items"]
 
   cohort = await get_cohort_recommendations(

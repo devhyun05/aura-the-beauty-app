@@ -74,7 +74,6 @@ export const rootStackLinkingScreens = {
   ProductRecommendationShelf: 'product-recommendation/:shelf',
   ProductSearchResult: 'product-search',
   ProductDetail: 'product/:productId',
-  ProductPersonalizationSettings: 'product-personalization-settings',
   MakeupRecommendation: 'makeup-recommendation/:reportId?',
   AuradinSearch: 'auradin-search',
   Community: 'community',

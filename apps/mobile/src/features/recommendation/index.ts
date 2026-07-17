@@ -5,4 +5,3 @@ export {ProductRecommendationScreen} from './screens/ProductRecommendationScreen
 export {ProductRecommendationShelfScreen} from './screens/ProductRecommendationShelfScreen';
 export {ProductSearchResultScreen} from './screens/ProductSearchResultScreen';
 export {ProductDetailScreen} from './screens/ProductDetailScreen';
-export {ProductPersonalizationSettingsScreen} from './screens/ProductPersonalizationSettingsScreen';

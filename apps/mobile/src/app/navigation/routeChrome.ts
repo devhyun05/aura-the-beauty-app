@@ -296,14 +296,6 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '제품 상세',
   },
-  ProductPersonalizationSettings: {
-    category: 'form-edit',
-    contextLabel: 'PRIVACY',
-    depth: 'sub',
-    kind: 'detail',
-    statusBarStyle: 'dark',
-    title: '제품 개인화 설정',
-  },
   MakeupRecommendation: {
     category: 'feature-entry',
     contextLabel: 'MAKEUP RECOMMENDATION',

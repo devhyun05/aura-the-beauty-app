@@ -79,7 +79,6 @@ export type RootStackParamList = {
     sponsored?: boolean;
     sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
   };
-  ProductPersonalizationSettings: undefined;
   MakeupRecommendation:
     | {reportId?: string; view?: 'history'}
     | undefined;
@@ -207,7 +206,6 @@ export const rootStackRoutes = [
   'ProductRecommendationShelf',
   'ProductSearchResult',
   'ProductDetail',
-  'ProductPersonalizationSettings',
   'MakeupRecommendation',
   'AuradinSearch',
   'Community',

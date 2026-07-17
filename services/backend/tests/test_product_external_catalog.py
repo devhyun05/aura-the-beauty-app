@@ -76,6 +76,7 @@ class _PublishedSeasonalDatabase:
         "disclosure_label": None,
         "reason_code": "EDITOR_REVIEWED",
         "sponsorship_type": "organic",
+        "liked": bool(_args[4]) if len(_args) > 4 else False,
       }]
     if "count(distinct user_id)" in query and "from external_product_likes" in query:
       return []
@@ -191,36 +192,7 @@ async def test_generic_section_variants_do_not_return_identical_product_sets() -
 
 
 @pytest.mark.asyncio
-async def test_sparse_live_seasonal_is_filled_to_diverse_unique_shelf(monkeypatch) -> None:
-  live_item = {
-    "productId": "live-lip",
-    "externalSource": "naver_shopping_search",
-    "brandName": "Live Brand",
-    "productName": "Live Lip",
-    "category": "lip",
-    "imageUrl": "https://cdn.example.com/live.png",
-    "purchaseUrl": "https://shop.example.com/live",
-    "reasonCodes": ["CURRENT_SEASON_TREND"],
-    "reasonLabels": ["실시간 트렌드"],
-  }
-
-  async def sparse_live(*_args, **_kwargs) -> dict:
-    return {
-      "status": "ready",
-      "collection": {
-        "id": "live-glossy-lip-flushed-cheek",
-        "slug": "glossy-lip-flushed-cheek",
-        "providerStatus": "editorialFallback",
-        "isLive": True,
-      },
-      "items": [live_item, dict(live_item), {**live_item, "productId": "live-cheek", "category": "cheek"}],
-      "nextCursor": None,
-    }
-
-  monkeypatch.setattr(
-    "app.services.product_recommendations.get_live_seasonal_recommendations",
-    sparse_live,
-  )
+async def test_missing_published_seasonal_uses_diverse_local_fallback() -> None:
   result = await get_seasonal_recommendations(
     _OfflineDatabase(),  # type: ignore[arg-type]
     Settings(auradin_live_discovery_enabled=True),
@@ -231,13 +203,23 @@ async def test_sparse_live_seasonal_is_filled_to_diverse_unique_shelf(monkeypatc
   assert len(result["items"]) == 18
   assert len(_identities(result["items"])) == 18
   assert len({item["category"] for item in result["items"]}) >= 4
-  assert result["collection"]["liveItemCount"] == 2
-  assert result["collection"]["attributeMatchedItemCount"] > 0
-  for item in result["items"][2:]:
-    if item.get("recommendationBasis") == "seasonalAttributeMatch":
-      assert item["reasonCodes"] == ["CURRENT_SEASON_TREND"]
-    else:
-      assert item["reasonCodes"] == ["POPULAR_FALLBACK"]
+  assert result["collection"]["providerStatus"] == "popularFallback"
+  assert all(item["reasonCodes"] == ["POPULAR_FALLBACK"] for item in result["items"])
+
+
+@pytest.mark.asyncio
+async def test_region_fallback_keeps_requested_coarse_region_without_coordinates() -> None:
+  result = await get_seasonal_recommendations(
+    _OfflineDatabase(),  # type: ignore[arg-type]
+    Settings(auradin_live_discovery_enabled=False),
+    locale="ko-KR",
+    region_code="KR-11",
+    limit=12,
+  )
+  assert result["status"] == "ready"
+  assert result["collection"]["regionCode"] == "KR-11"
+  assert result["collection"]["regionLabel"] == "서울"
+  assert result["collection"]["freshnessStatus"] == "fallback"
 
 
 @pytest.mark.asyncio
@@ -262,6 +244,20 @@ async def test_sparse_published_seasonal_preserves_editorial_item_and_fills_shel
     + result["collection"]["attributeMatchedItemCount"]
     + result["collection"]["genericCoverageItemCount"]
   ) == 18
+
+
+@pytest.mark.asyncio
+async def test_published_seasonal_maps_authenticated_viewer_like_state() -> None:
+  db = _PublishedSeasonalDatabase()
+  result = await get_seasonal_recommendations(
+    db,  # type: ignore[arg-type]
+    Settings(auradin_live_discovery_enabled=False),
+    user_id=uuid4(),
+    locale="ko-KR",
+    limit=1,
+  )
+  assert result["items"][0]["productId"] == str(db.product_id)
+  assert result["items"][0]["viewerState"] == {"liked": True}
 
 
 @pytest.mark.asyncio

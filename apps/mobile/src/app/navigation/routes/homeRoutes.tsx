@@ -1,4 +1,5 @@
 import React from 'react';
+import {Alert, Linking} from 'react-native';
 
 import {
   FilterStoreScreen,
@@ -7,10 +8,16 @@ import {
   HomeScreen,
   SavedMakeupListScreen,
 } from '../../../features/home';
+import type {
+  HomeFeatureId,
+  HomeFeaturePressPayload,
+} from '../../../features/home/types/homeModules';
+import {getHomeFeatureNavigationTarget} from '../../../features/home/config/homeFeatureRouteMap';
 import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
 import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
 import {useAuthSession} from '../../../features/auth';
 import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
+import {openTrustedProductOffer} from '../../../features/recommendation/services/productHubService';
 import {
   CommunityCreateThreadScreen,
   CommunityHomeScreen,
@@ -21,6 +28,11 @@ import {
   ConsultingHeaderActions,
 } from '../../../features/consulting';
 import {RoutePlaceholder} from '../../../shared/ui';
+import {
+  likeExternalProduct,
+  likeProduct,
+  unlikeProduct,
+} from '../../../shared/services/productService';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {renderConsultingHome} from './consultingRoutes';
@@ -194,6 +206,137 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     [likedMakeupFilterIds],
   );
 
+  const handleHomeProductPress = React.useCallback(async (
+    payload: HomeFeaturePressPayload,
+  ) => {
+    try {
+      let sellerUrl = payload.purchaseUrl;
+
+      if (!payload.externalSource && payload.itemId && payload.offerId) {
+        const outbound = await openTrustedProductOffer(payload.itemId, payload.offerId);
+        sellerUrl = outbound.url;
+      }
+
+      if (!sellerUrl || !(await Linking.canOpenURL(sellerUrl))) {
+        throw new Error('판매처 URL을 열 수 없습니다.');
+      }
+
+      await Linking.openURL(sellerUrl);
+    } catch {
+      Alert.alert('판매처를 열 수 없어요', '잠시 후 다시 시도해 주세요.');
+    }
+  }, []);
+
+  const handleToggleHomeProductLike = React.useCallback(async (
+    payload: HomeFeaturePressPayload,
+    nextLiked: boolean,
+  ) => {
+    if (!payload.itemId) {
+      throw new Error('좋아요를 저장할 제품 정보가 없습니다.');
+    }
+
+    if (!nextLiked) {
+      await unlikeProduct(payload.itemId, payload.externalSource);
+      return;
+    }
+
+    if (payload.externalSource) {
+      await likeExternalProduct(payload.itemId, payload.externalSource);
+      return;
+    }
+
+    await likeProduct(payload.itemId, payload.shadeId);
+  }, []);
+
+  const handleHomeFeaturePress = React.useCallback((
+    featureId: HomeFeatureId,
+    payload?: HomeFeaturePressPayload,
+  ) => {
+    const target = getHomeFeatureNavigationTarget(featureId, payload);
+
+    if (target === 'FaceAnalysisIntro') {
+      rootNavigation?.navigate('FaceAnalysisIntro');
+      return;
+    }
+
+    if (target === 'FaceAnalysisReportsList') {
+      rootNavigation?.navigate('FaceAnalysisReportsList');
+      return;
+    }
+
+    if (target === 'MakeupRecommendation') {
+      rootNavigation?.navigate('MakeupRecommendation');
+      return;
+    }
+
+    if (target === 'ProductSellerOutbound' && payload) {
+      void handleHomeProductPress(payload);
+      return;
+    }
+
+    if (target === 'ProductRecommendation') {
+      const initialSection = (
+        payload?.source === 'ar'
+        || payload?.source === 'cohort'
+        || payload?.source === 'personalized'
+        || payload?.source === 'seasonal'
+      ) ? payload.source : undefined;
+
+      rootNavigation?.navigate(
+        'ProductRecommendation',
+        initialSection ? {initialSection} : undefined,
+      );
+      return;
+    }
+
+    if (target === 'AuradinSearch') {
+      rootNavigation?.navigate(
+        'AuradinSearch',
+        payload?.source ? {prompt: payload.source} : undefined,
+      );
+      return;
+    }
+
+    if (target === 'makeupExtractionSheet') {
+      handleMakeupExtractionPress();
+      return;
+    }
+
+    if (target === 'makeupFeedbackSheet') {
+      handleMakeupFeedbackPress();
+      return;
+    }
+
+    if (target === 'ConsultingTab') {
+      navigation.navigate('ConsultingTab');
+      return;
+    }
+
+    if (target === 'SavedMakeupList') {
+      rootNavigation?.navigate('SavedMakeupList');
+      return;
+    }
+
+    if (target === 'LikedProductList') {
+      rootNavigation?.navigate('LikedProductList');
+      return;
+    }
+
+    if (target === 'ARFilter') {
+      handleMakeupFilterPress();
+      return;
+    }
+
+    rootNavigation?.navigate('HomeFilterStore');
+  }, [
+    handleMakeupExtractionPress,
+    handleMakeupFeedbackPress,
+    handleMakeupFilterPress,
+    handleHomeProductPress,
+    navigation,
+    rootNavigation,
+  ]);
+
   return (
     <MainTabChrome
       navigation={navigation}
@@ -202,6 +345,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
       {({openFeatureMenu}) => (
         <>
           <HomeScreen
+            isAuthenticated={Boolean(session)}
             headerRightSlot={
               <ConsultingHeaderActions
                 onPressNotifications={() =>
@@ -233,6 +377,8 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
               rootNavigation?.navigate(getHomeRecommendedFilterMoreRouteName())
             }
             onPressRecommendedFilter={handleRecommendedFilterPress}
+            onPressHomeFeature={handleHomeFeaturePress}
+            onToggleHomeProductLike={handleToggleHomeProductLike}
             isMakeupFilterLiked={isMakeupFilterLiked}
             onToggleMakeupFilterLike={handleToggleMakeupFilterLike}
             showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}

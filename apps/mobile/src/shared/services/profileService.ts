@@ -51,7 +51,7 @@ export const getMyPageProfileSummary = async (): Promise<MyPageProfileSummary> =
     .then(async profile => {
       const [beautyProfile, faceAnalysisReports, likedProducts] = await Promise.all([
         getBeautyProfile(),
-        getFaceAnalysisReports({limit: 3}),
+        getFaceAnalysisReports({limit: 3}).catch(() => []),
         getLikedProductPreviews(3).catch(() => []),
       ]);
       const summary: MyPageProfileSummary = {

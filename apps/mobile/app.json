@@ -44,7 +44,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "AURA가 현재 위치 주변의 네이버 뷰티샵을 보여주기 위해 위치 접근 권한이 필요합니다."
+          "locationWhenInUsePermission": "AURA가 현재 위치 주변의 네이버 뷰티샵을 보여주고 지역 날씨 기반 요즘 트렌드 제품을 추천하기 위해 위치 접근 권한이 필요합니다."
         }
       ],
       "expo-web-browser",

@@ -93,6 +93,21 @@ def validate_seasonal_manifest(manifest: dict[str, Any], settings: Settings, sig
     "trendMetric": str(source_payload.get("trendMetric") or "editorial_signal")[:80],
     "providerStatus": str(source_payload.get("providerStatus") or "reviewed")[:40],
   }
+  source_name = str(manifest.get("sourceName") or (source_labels[0] if source_labels else "editorial")).strip()[:80]
+  trend_keywords = list(dict.fromkeys(
+    str(item).strip()[:48] for item in manifest.get("trendKeywords") or [] if str(item).strip()
+  ))[:24]
+  reason_codes = list(dict.fromkeys(
+    str(item).strip().upper().replace(" ", "_")[:40]
+    for item in manifest.get("reasonCodes") or []
+    if str(item).strip()
+  ))[:24]
+  try:
+    confidence_score = float(manifest.get("confidenceScore", 0.5))
+  except (TypeError, ValueError) as error:
+    raise AppError(422, "INVALID_SEASONAL_MANIFEST", "confidenceScore must be numeric.") from error
+  if not 0 <= confidence_score <= 1:
+    raise AppError(422, "INVALID_SEASONAL_MANIFEST", "confidenceScore must be between 0 and 1.")
   items = manifest.get("items")
   if not source_labels or not manifest.get("trendWindow") or not isinstance(items, list) or not items:
     raise AppError(422, "INVALID_SEASONAL_MANIFEST", "Trend window, sources and products are required.")
@@ -105,7 +120,11 @@ def validate_seasonal_manifest(manifest: dict[str, Any], settings: Settings, sig
   for item in items:
     if str(item.get("sponsorshipType") or "organic") not in {"organic", "affiliate", "sponsored"}:
       raise AppError(422, "INVALID_SEASONAL_ITEMS", "Unsupported sponsorship type.")
-    if str(item.get("reasonCode") or "EDITOR_REVIEWED") not in {"EDITOR_REVIEWED", "TREND_CLICK_RISE", "SEASONAL_FIT"}:
+    if str(item.get("reasonCode") or "EDITOR_REVIEWED") not in {
+      "EDITOR_REVIEWED", "TREND_CLICK_RISE", "SEASONAL_FIT", "TREND_CATEGORY_MATCH",
+      "TREND_KEYWORD_MATCH", "TREND_FINISH_MATCH", "TREND_COLOR_MATCH", "TREND_TAG_MATCH",
+      "POPULAR_FALLBACK",
+    }:
       raise AppError(422, "INVALID_SEASONAL_ITEMS", "Seasonal reason code is not approved.")
   try:
     previous_revision_id = UUID(str(manifest["previousRevisionId"])) if manifest.get("previousRevisionId") else None
@@ -122,6 +141,11 @@ def validate_seasonal_manifest(manifest: dict[str, Any], settings: Settings, sig
     "validFrom": valid_from,
     "validUntil": valid_until,
     "sourceLabels": source_labels,
+    "sourceName": source_name,
+    "sourceUpdatedAt": source_updated_at,
+    "trendKeywords": trend_keywords,
+    "reasonCodes": reason_codes,
+    "confidenceScore": confidence_score,
     "sourcePayload": source_payload,
     "previousRevisionId": previous_revision_id,
     "revision": revision,
@@ -197,14 +221,18 @@ async def publish_seasonal_manifest(db: Database, settings: Settings, *, manifes
         )
       inserted = await connection.fetchrow(
         """insert into product_seasonal_collections (id,slug,title,summary,locale,trend_window,
-          source_labels,source_payload,valid_from,valid_until,reviewed_at,published_at,status,revision,
+          source_name,source_updated_at,source_labels,source_payload,trend_keywords,reason_codes,
+          confidence_score,valid_from,valid_until,reviewed_at,published_at,status,revision,
           created_by,reviewed_by,published_by,previous_revision_id)
-          values ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,now(),now(),'published',$11,$12,$13,$14,$15)
+          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14,$15,
+            now(),now(),'published',$16,$17,$18,$19,$20)
           on conflict (slug,revision) do nothing returning id""",
         collection_id,normalized["slug"],normalized["title"],normalized["summary"],
-        normalized.get("locale","ko-KR"),normalized["trendWindow"],normalized["sourceLabels"],
-        json.dumps(normalized["sourcePayload"]),normalized["validFrom"],normalized["validUntil"],
-        normalized["revision"],normalized["createdBy"],normalized["reviewedBy"],normalized["publishedBy"],
+        normalized.get("locale","ko-KR"),normalized["trendWindow"],normalized["sourceName"],
+        normalized["sourceUpdatedAt"],normalized["sourceLabels"],json.dumps(normalized["sourcePayload"]),
+        normalized["trendKeywords"],normalized["reasonCodes"],normalized["confidenceScore"],
+        normalized["validFrom"],normalized["validUntil"],normalized["revision"],
+        normalized["createdBy"],normalized["reviewedBy"],normalized["publishedBy"],
         normalized["previousRevisionId"],
       )
       if not inserted:
@@ -225,10 +253,12 @@ async def publish_seasonal_manifest(db: Database, settings: Settings, *, manifes
       for item in normalized["items"]:
         await connection.execute(
           """insert into product_seasonal_collection_items
-            (collection_id,product_id,shade_id,position,reason_code,sponsorship_type)
-            values ($1,$2,$3,$4,$5,$6) on conflict (collection_id,product_id) do nothing""",
+            (collection_id,product_id,shade_id,position,reason_code,reason_codes,match_score,sponsorship_type)
+            values ($1,$2,$3,$4,$5,$6,$7,$8) on conflict (collection_id,product_id) do nothing""",
           collection_id,UUID(str(item["productId"])),UUID(str(item["shadeId"])) if item.get("shadeId") else None,
-          item["position"],item.get("reasonCode","EDITOR_REVIEWED"),item.get("sponsorshipType","organic"),
+          item["position"],item.get("reasonCode","EDITOR_REVIEWED"),
+          item.get("reasonCodes") or [item.get("reasonCode","EDITOR_REVIEWED")],
+          max(0.0, float(item.get("matchScore") or 0)),item.get("sponsorshipType","organic"),
         )
       await connection.execute(
         """insert into audit_logs (actor_user_id,action,entity_type,entity_id,metadata)

@@ -54,6 +54,15 @@ requireEqual(
   info.NSLocationWhenInUseUsageDescription,
   location.locationWhenInUsePermission,
 );
+const locationPurpose = String(location.locationWhenInUsePermission ?? '');
+if (
+  !locationPurpose.includes('지역 날씨') ||
+  !/요즘\s*트렌드\s*제품.*추천/.test(locationPurpose)
+) {
+  throw new Error(
+    'NSLocationWhenInUseUsageDescription must explain regional-weather-based recommendations for 요즘 트렌드 제품.',
+  );
+}
 
 const urlSchemes = (info.CFBundleURLTypes ?? []).flatMap(
   (entry) => entry.CFBundleURLSchemes ?? [],

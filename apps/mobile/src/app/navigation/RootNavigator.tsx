@@ -70,7 +70,6 @@ import {
   LikedProductListRouteScreen,
   MakeupLookListRouteScreen,
   ProductDetailRouteScreen,
-  ProductPersonalizationSettingsRouteScreen,
   ProductRecommendationRouteScreen,
   ProductRecommendationShelfRouteScreen,
   ProductSearchResultRouteScreen,
@@ -156,10 +155,6 @@ export function RootNavigator() {
       <Stack.Screen name="ProductRecommendationShelf" component={ProductRecommendationShelfRouteScreen} />
       <Stack.Screen name="ProductSearchResult" component={ProductSearchResultRouteScreen} />
       <Stack.Screen name="ProductDetail" component={ProductDetailRouteScreen} />
-      <Stack.Screen
-        name="ProductPersonalizationSettings"
-        component={ProductPersonalizationSettingsRouteScreen}
-      />
       <Stack.Screen name="MakeupRecommendation" component={MakeupRecommendationRouteScreen} />
       <Stack.Screen name="AuradinSearch" component={AuradinSearchRouteScreen} />
       <Stack.Screen name="Community" component={CommunityRouteScreen} />

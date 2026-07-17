@@ -45,6 +45,21 @@
 The user always connects the iPhone over WiFi (never USB). Follow this order to build,
 install, run, and verify a device measurement in one pass. Each step lists the failure it prevents.
 
+### Real-device only (no Simulator / Emulator testing)
+- All iOS runtime testing in this project is **physical-device only**. Never boot, create, or use
+  an iOS Simulator or emulator as a test target.
+- Xcode 26.6 bundles physical-device iOS Platform Support and the matching Simulator runtime in
+  one Components download (for example, `iOS 26.5.1 + iOS 26.5 Simulator`). When Xcode reports
+  `iOS 26.5 is not installed`, install that combined **iOS Platform Support** package from
+  `Xcode > Settings > Components`; it is required even when testing only on a physical iPhone.
+- Install only the required iOS Platform Support row. Do not install unrelated watchOS, tvOS, or
+  visionOS components, and do not launch the bundled Simulator runtime.
+- Do **not** use `xcodebuild -downloadPlatform iOS` as a substitute for the Components package.
+  That command downloads a standalone Simulator runtime and may not install/register the combined
+  physical-device Platform Support required by Xcode.
+- After the Components installation finishes, re-run `xcodebuild -showdestinations` and continue
+  only when the physical iPhone appears as an eligible destination.
+
 ### Device identity
 - Get the UDID from `xctrace`, NOT `devicectl`. `xcrun devicectl list devices` prints a
   CoreDevice UUID that expo/xcodebuild reject with "No device UDID or name matching ...".

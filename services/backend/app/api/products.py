@@ -2,15 +2,18 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 import hashlib
+import hmac
 import json
+import re
 from typing import Annotated, Any, Literal
+import unicodedata
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Body, Depends, Header, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, Query, Response
 
 from app.core.errors import AppError
 from app.core.responses import success
-from app.core.security import AuthContext, get_current_user
+from app.core.security import AuthContext, get_current_user, get_optional_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, get_database, require_database
 from app.schemas.product_recommendation import (
@@ -36,6 +39,8 @@ from app.services.product_external_catalog import (
   resolve_auradin_catalog_product,
 )
 from app.services.product_recommendations import (
+  clear_seasonal_recommendation_cache,
+  consent_is_active,
   delete_product_personalization,
   feature_status,
   get_ar_recommendations,
@@ -51,6 +56,8 @@ from app.services.product_recommendations import (
 )
 from app.services.product_rate_limit import enforce_product_rate_limit
 from app.services.product_live_seasonal import resolve_live_external_product
+from app.services.product_trend_regions import NATIONAL_REGION_CODE, TREND_REGION_LABELS
+from app.services.product_trend_health import record_seasonal_serving_outcome
 from app.services.auradin_agent.session_manager import resolve_auradin_result_product
 from app.services.shopping_products import _safe_naver_result_url, build_product_recommendation_data
 from app.services.users import ensure_user
@@ -58,11 +65,99 @@ from app.services.users import ensure_user
 
 router = APIRouter(prefix="/products", tags=["products"])
 RecommendationCategory = Literal["base", "shadow", "brow", "cheek", "lip", "liner"]
+_SEARCH_INTENT_NON_WORD = re.compile(r"[^0-9a-zA-Z\u3131-\u318e\uac00-\ud7a3]+")
+
+
+def _normalize_search_intent(value: str) -> str:
+  normalized = unicodedata.normalize("NFKC", value).casefold()
+  return " ".join(_SEARCH_INTENT_NON_WORD.sub(" ", normalized).split())[:80]
+
+
+def _search_intent_similarity(query: str, candidate: str) -> float:
+  if not query or not candidate:
+    return 0.0
+  if query == candidate:
+    return 1.0
+  query_tokens = set(query.split())
+  candidate_tokens = set(candidate.split())
+  if not query_tokens or not candidate_tokens:
+    return 0.0
+  overlap = len(query_tokens & candidate_tokens) / len(query_tokens | candidate_tokens)
+  smaller_size = min(len(query_tokens), len(candidate_tokens))
+  containment = 0.85 if (
+    smaller_size >= 2
+    and (query_tokens <= candidate_tokens or candidate_tokens <= query_tokens)
+  ) else 0.0
+  return max(overlap, containment)
+
+
+async def _resolve_opaque_search_intent(
+  connection: Any,
+  settings: Settings,
+  *,
+  query: str,
+  category: str | None,
+) -> dict[str, str]:
+  """Return a server-authored opaque intent and optional known trend candidate.
+
+  The query text and its normalized representation are deliberately never
+  persisted.  Known candidates provide a stable canonical intent; otherwise
+  only a domain-separated HMAC digest leaves this function.
+  """
+
+  secret = (settings.product_event_signing_secret or "").strip()
+  normalized_query = _normalize_search_intent(query)
+  if not secret or not normalized_query:
+    return {}
+
+  rows = await connection.fetch(
+    """
+    select id,normalized_keyword,category_codes,status,confidence_score
+    from trend_keyword_candidates
+    where locale='ko-KR' and status in ('observed','qualified')
+      and last_observed_at >= now()-interval '28 days'
+    order by case when status='qualified' then 0 else 1 end,
+      confidence_score desc,last_observed_at desc
+    limit 200
+    """
+  )
+  best_row = None
+  best_score = 0.0
+  best_category_match = False
+  for row in rows:
+    candidate = _normalize_search_intent(str(row.get("normalized_keyword") or ""))
+    score = _search_intent_similarity(normalized_query, candidate)
+    category_codes = {str(value) for value in (row.get("category_codes") or [])}
+    category_match = bool(category and category in category_codes)
+    if (score, category_match) > (best_score, best_category_match):
+      best_row = row
+      best_score = score
+      best_category_match = category_match
+
+  # Candidate association is intentionally conservative: unrelated queries
+  # must not inflate a trend merely because they share one generic token.
+  candidate_id = str(best_row["id"]) if best_row is not None and best_score >= 0.67 else None
+  canonical_intent = (
+    _normalize_search_intent(str(best_row.get("normalized_keyword") or ""))
+    if candidate_id and best_row is not None
+    else normalized_query
+  )
+  digest = hmac.new(
+    secret.encode("utf-8"),
+    b"trend-search-intent-v1\0" + canonical_intent.encode("utf-8"),
+    hashlib.sha256,
+  ).hexdigest()
+  result = {"trendIntentHash": digest}
+  if candidate_id:
+    result["trendCandidateId"] = candidate_id
+  return result
 
 
 def _search_event_context(
   category: str | None,
   items: list[dict[str, Any]] | None = None,
+  *,
+  opaque_intent: dict[str, str] | None = None,
 ) -> dict[str, Any]:
   """Keep search analytics useful without persisting the user's raw query."""
   items = items or []
@@ -90,6 +185,8 @@ def _search_event_context(
       "catalogColorFamily": str(top_result.get("colorFamily") or "").strip(),
     }
     context.update({key: value for key, value in derived.items() if value})
+  if opaque_intent:
+    context.update(opaque_intent)
   return context
 
 
@@ -354,35 +451,80 @@ async def get_ar_product_recommendations(
 @router.get("/recommendations/seasonal")
 async def get_seasonal_product_recommendations(
   response: Response,
-  locale: str = Query(default="ko-KR", min_length=2, max_length=12),
+  background_tasks: BackgroundTasks,
+  locale: Literal["ko-KR"] = Query(default="ko-KR"),
   limit: int = Query(default=12, ge=1, le=60),
   category: RecommendationCategory | None = Query(default=None),
+  region_code: str = Query(
+    default=NATIONAL_REGION_CODE,
+    alias="regionCode",
+    min_length=5,
+    max_length=5,
+    pattern=r"^KR-[0-9]{2}$",
+  ),
   db: Database = Depends(get_database),
   settings: Settings = Depends(get_settings),
+  auth: AuthContext | None = Depends(get_optional_current_user),
   if_none_match: str | None = Header(default=None, alias="If-None-Match"),
 ) -> Any:
+  if region_code not in TREND_REGION_LABELS:
+    raise AppError(422, "INVALID_REGION_CODE", "regionCode must be KR-00 or a supported Korean region code.")
+  viewer_id = None
+  if auth is not None and db.is_connected:
+    viewer_id = (await ensure_user(db, auth))["id"]
   data = await get_seasonal_recommendations(
-    db, settings, locale=locale, limit=limit, category=category
+    db,
+    settings,
+    user_id=viewer_id,
+    locale=locale,
+    region_code=region_code,
+    limit=limit,
+    category=category,
   )
+  collection = data.get("collection") or {}
+  used_fallback = bool(data.get("fallback")) or bool(
+    collection.get("id") == "popular-fallback"
+    or collection.get("regionCode") != region_code
+    or collection.get("freshnessStatus") in {"stale", "fallback"}
+  )
+  if category is None and limit == 12:
+    background_tasks.add_task(
+      record_seasonal_serving_outcome,
+      db,
+      locale=locale,
+      region_code=region_code,
+      used_fallback=used_fallback,
+    )
   etag_payload = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str).encode()
   etag = f'"{hashlib.sha256(etag_payload).hexdigest()}"'
+  cache_control = "private, max-age=120, stale-if-error=300" if viewer_id else "public, max-age=120, stale-if-error=300"
+  response_headers = {"ETag": etag, "Cache-Control": cache_control, "Vary": "Authorization"}
   if if_none_match and etag in {value.strip() for value in if_none_match.split(",")}:
-    return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "public, max-age=120, stale-if-error=300"})
+    return Response(status_code=304, headers=response_headers)
   response.headers["ETag"] = etag
-  response.headers["Cache-Control"] = "public, max-age=120, stale-if-error=300"
-  collection = data.get("collection") or {}
+  response.headers["Cache-Control"] = cache_control
+  response.headers["Vary"] = "Authorization"
   source = (
     "popular-fallback"
     if collection.get("id") == "popular-fallback" or (not collection and data.get("fallback"))
-    else "live-seasonal-discovery+auradin-catalog"
-    if collection.get("isLive") and collection.get("catalogSupplemented")
-    else "live-seasonal-discovery"
-    if collection.get("isLive")
-    else "editorial-seasonal-v1+auradin-catalog"
+    else "cached-trend-collection+auradin-catalog"
     if collection.get("catalogSupplemented")
-    else "editorial-seasonal-v1"
+    else "cached-trend-collection"
   )
-  return success(data, {"source": source})
+  return success(data, {
+    "source": source,
+    "trendSource": collection.get("sourceName"),
+    "productSource": (
+      "db-popular+auradin-catalog"
+      if collection.get("id") == "popular-fallback"
+      else
+      "licensed-catalog+auradin-catalog"
+      if collection.get("catalogSupplemented")
+      else "licensed-catalog"
+      if collection
+      else "popular-fallback"
+    ),
+  })
 
 
 @router.get("/recommendations/personalized")
@@ -492,6 +634,23 @@ async def search_products(
             else AURADIN_CATALOG_SOURCE
           )
           items.extend(external_items)
+      consent_granted = bool(
+        settings.engagement_personalization_v1
+        and await consent_is_active(
+          connection,  # type: ignore[arg-type]
+          user_id=user["id"],
+          purpose="engagement_personalization",
+        )
+      )
+      opaque_intent = (
+        await _resolve_opaque_search_intent(
+          connection,
+          settings,
+          query=q,
+          category=category,
+        )
+        if consent_granted else {}
+      )
       await record_server_event(
         connection,  # type: ignore[arg-type]
         settings,
@@ -499,7 +658,8 @@ async def search_products(
         event_type="search_submit",
         section="search",
         search_request_id=request_id,
-        context=_search_event_context(category, items),
+        context=_search_event_context(category, items, opaque_intent=opaque_intent),
+        consent_granted=consent_granted,
       )
   return success(
     {"status": "ready" if items else "empty", "searchRequestId": str(request_id), "items": items, "nextCursor": None},
@@ -650,6 +810,7 @@ async def like_external_product(
       user["id"],
       external_product_id,
     )
+  clear_seasonal_recommendation_cache(user_id=user["id"])
   return success({"productId": external_product_id, "externalSource": external_source, "liked": True})
 
 
@@ -675,6 +836,7 @@ async def unlike_external_product(
       "delete from external_product_likes where user_id=$1 and external_source=$2 and external_product_id=$3",
       user["id"], external_source, external_product_id,
     )
+  clear_seasonal_recommendation_cache(user_id=user["id"])
   return success({"productId": external_product_id, "externalSource": external_source, "liked": False})
 
 
@@ -822,6 +984,7 @@ async def like_product(
     uuid4(),
     settings.engagement_personalization_v1,
   )
+  clear_seasonal_recommendation_cache(user_id=user["id"])
   return success({"productId": str(product_id), "liked": True})
 
 
@@ -858,6 +1021,7 @@ async def unlike_product(
     uuid4(),
     settings.engagement_personalization_v1,
   )
+  clear_seasonal_recommendation_cache(user_id=user["id"])
   return success({"productId": str(product_id), "liked": False})
 
 

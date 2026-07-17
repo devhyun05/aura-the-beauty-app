@@ -25,6 +25,25 @@ from app.services.product_color import normalize_hex_color, srgb_hex_to_lab
 
 REQUIRED_USES = {"mobile_display", "recommendation"}
 DISALLOWED_PRODUCT_SOURCES = {"naver", "naver-shopping-search", "naver_shopping_search"}
+PRODUCT_ATTRIBUTE_KEYS = {
+  "finish",
+  "texture",
+  "coverage",
+  "lightweight",
+  "hydrating",
+  "moisturizing",
+  "oil_control",
+  "waterproof",
+  "longwear",
+  "transfer_resistant",
+  "skin_type_tags",
+}
+PRODUCT_ATTRIBUTE_SOURCE_TYPES = {
+  "licensed_catalog",
+  "brand_official",
+  "manual_review",
+  "validated_inference",
+}
 
 
 def canonical_manifest_bytes(manifest: dict[str, Any]) -> bytes:
@@ -64,6 +83,136 @@ def _uses(value: Any, field: str, *, require_recommendation: bool = True) -> lis
   if not required.issubset(uses):
     raise AppError(422, "CATALOG_RIGHTS_MISSING", f"{field} must allow {sorted(required)}.")
   return sorted(uses)
+
+
+def _product_tags(value: Any, field: str) -> list[str]:
+  if value in (None, ""):
+    return []
+  if not isinstance(value, list):
+    raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} must be a list of strings.")
+  normalized: list[str] = []
+  seen: set[str] = set()
+  for item in value:
+    if not isinstance(item, str):
+      raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} must be a list of strings.")
+    tag = item.strip()
+    if not tag:
+      continue
+    if len(tag) > 80:
+      raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} entries must be at most 80 characters.")
+    folded = tag.casefold()
+    if folded not in seen:
+      normalized.append(tag)
+      seen.add(folded)
+  if len(normalized) > 64:
+    raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} supports at most 64 entries.")
+  return normalized
+
+
+def _product_payload(value: Any, field: str) -> dict[str, Any]:
+  if value in (None, ""):
+    return {}
+  if not isinstance(value, dict):
+    raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} must be an object.")
+  try:
+    encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+  except (TypeError, ValueError) as error:
+    raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} must be valid JSON.") from error
+  if len(encoded.encode("utf-8")) > 32_768:
+    raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} must be at most 32 KiB.")
+  return value
+
+
+def _price_krw(value: Any, field: str) -> int:
+  if value in (None, ""):
+    return 0
+  if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+    raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} must be a non-negative integer.")
+  return value
+
+
+def _attribute_evidence(value: Any, field: str) -> list[dict[str, Any]]:
+  if value in (None, ""):
+    return []
+  if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+    raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} must be a list of objects.")
+  if len(value) > 64:
+    raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field} supports at most 64 entries.")
+  normalized: list[dict[str, Any]] = []
+  seen: set[str] = set()
+  for index, item in enumerate(value[:64]):
+    key = str(item.get("attributeKey") or "").strip().casefold()
+    source_type = str(item.get("sourceType") or "").strip().casefold()
+    source_reference = str(item.get("sourceReference") or "").strip()
+    attribute_value = item.get("attributeValue")
+    observed_at = _time(item.get("observedAt"), f"{field}[{index}].observedAt")
+    reviewed_at = _time(item.get("reviewedAt"), f"{field}[{index}].reviewedAt")
+    expires_at = _time(item.get("expiresAt"), f"{field}[{index}].expiresAt")
+    try:
+      confidence = float(item.get("confidenceScore"))
+      encoded_value = json.dumps(attribute_value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except (TypeError, ValueError) as error:
+      raise AppError(422, "INVALID_CATALOG_MANIFEST", f"{field}[{index}] value/confidence is invalid.") from error
+    if (
+      key not in PRODUCT_ATTRIBUTE_KEYS
+      or source_type not in PRODUCT_ATTRIBUTE_SOURCE_TYPES
+      or not source_reference
+      or attribute_value is None
+      or not observed_at
+      or not reviewed_at
+      or observed_at > datetime.now(timezone.utc) + timedelta(minutes=5)
+      or reviewed_at > datetime.now(timezone.utc) + timedelta(minutes=5)
+      or not 0 <= confidence <= 1
+      or (expires_at is not None and expires_at <= datetime.now(timezone.utc))
+    ):
+      raise AppError(
+        422,
+        "INVALID_CATALOG_ATTRIBUTE_EVIDENCE",
+        f"{field}[{index}] needs an approved key, provenance, review, confidence and valid expiry.",
+      )
+    fingerprint = hashlib.sha256(
+      f"{key}\0{encoded_value}\0{source_type}\0{source_reference}".encode()
+    ).hexdigest()
+    if fingerprint in seen:
+      continue
+    seen.add(fingerprint)
+    normalized.append({
+      "attributeKey": key,
+      "attributeValue": attribute_value,
+      "sourceType": source_type,
+      "sourceReference": source_reference,
+      "evidenceFingerprint": fingerprint,
+      "confidenceScore": confidence,
+      "observedAt": observed_at,
+      "reviewedAt": reviewed_at,
+      "expiresAt": expires_at,
+    })
+  return normalized
+
+
+async def _expire_omitted_attribute_evidence(
+  connection: Any,
+  *,
+  product_id: UUID,
+  active_fingerprints: list[str],
+) -> None:
+  """Expire verified evidence omitted from an explicit authoritative snapshot.
+
+  An absent ``attributeEvidence`` field remains patch-like and changes nothing;
+  an explicitly supplied list (including ``[]``) is a full snapshot for the
+  product. This boundary is signed and restricted to a catalog administrator.
+  """
+
+  await connection.execute(
+    """
+    update product_attribute_evidence set
+      status='expired',expires_at=least(coalesce(expires_at,now()),now()),updated_at=now()
+    where product_id=$1 and status='verified' and source_type='licensed_catalog'
+      and not (evidence_fingerprint=any($2::text[]))
+    """,
+    product_id,
+    active_fingerprints,
+  )
 
 
 def validate_catalog_manifest(manifest: dict[str, Any], settings: Settings) -> dict[str, Any]:
@@ -110,6 +259,17 @@ def validate_catalog_manifest(manifest: dict[str, Any], settings: Settings) -> d
     license_status = str(raw_product.get("licenseStatus") or "")
     catalog_status = str(raw_product.get("catalogStatus") or "")
     allowed_uses = _uses(raw_product.get("allowedUses"), f"products[{index}].allowedUses")
+    tags = _product_tags(raw_product.get("tags"), f"products[{index}].tags")
+    product_payload = _product_payload(
+      raw_product.get("productPayload"),
+      f"products[{index}].productPayload",
+    )
+    price_krw = _price_krw(raw_product.get("priceKrw"), f"products[{index}].priceKrw")
+    attribute_evidence = _attribute_evidence(
+      raw_product.get("attributeEvidence"),
+      f"products[{index}].attributeEvidence",
+    )
+    attribute_evidence_authoritative = isinstance(raw_product.get("attributeEvidence"), list)
     if license_status != "valid" or catalog_status not in {"reviewed", "published"}:
       raise AppError(422, "CATALOG_RIGHTS_MISSING", "Only reviewed, rights-valid catalog data can be imported.")
     valid_from = _time(raw_product.get("licenseValidFrom"), "licenseValidFrom")
@@ -310,6 +470,11 @@ def validate_catalog_manifest(manifest: dict[str, Any], settings: Settings) -> d
       {
         **raw_product,
         "id": product_id,
+        "priceKrw": price_krw,
+        "tags": tags,
+        "productPayload": product_payload,
+        "attributeEvidence": attribute_evidence,
+        "_attributeEvidenceAuthoritative": attribute_evidence_authoritative,
         "allowedUses": allowed_uses,
         "licenseValidFrom": valid_from,
         "licenseValidUntil": valid_until,
@@ -355,13 +520,15 @@ async def apply_catalog_manifest(
       for product in normalized["products"]:
         row = await connection.fetchrow(
           """
-          insert into products (id,external_key,brand_name,product_name,category,source_provider,
+          insert into products (id,external_key,brand_name,product_name,category,price_krw,tags,
+            product_payload,source_provider,
             source_license_type,source_reference,license_status,license_valid_from,license_valid_until,
             allowed_uses,catalog_status,catalog_version,is_active)
-          values ($1,$2,$3,$4,$5::product_category,$6,$7,$8,'valid',$9,$10,$11,$12,$13,true)
+          values ($1,$2,$3,$4,$5::product_category,$6,$7,$8::jsonb,$9,$10,$11,'valid',$12,$13,$14,$15,$16,true)
           on conflict (id) do update set external_key=excluded.external_key,
             brand_name=excluded.brand_name,product_name=excluded.product_name,
-            category=excluded.category,source_license_type=excluded.source_license_type,
+            category=excluded.category,price_krw=excluded.price_krw,tags=excluded.tags,
+            product_payload=excluded.product_payload,source_license_type=excluded.source_license_type,
             source_reference=excluded.source_reference,license_status=excluded.license_status,
             license_valid_from=excluded.license_valid_from,
             license_valid_until=excluded.license_valid_until,allowed_uses=excluded.allowed_uses,
@@ -371,13 +538,48 @@ async def apply_catalog_manifest(
           returning id
           """,
           product["id"], product.get("externalKey"), product["brandName"], product["productName"],
-          product["category"], normalized["sourceProvider"], product.get("licenseType"),
-          product.get("sourceReference"), product["licenseValidFrom"], product["licenseValidUntil"],
-          product["allowedUses"], product["catalogStatus"], normalized["catalogVersion"],
+          product["category"], product["priceKrw"], product["tags"],
+          json.dumps(product["productPayload"], ensure_ascii=False), normalized["sourceProvider"],
+          product.get("licenseType"), product.get("sourceReference"), product["licenseValidFrom"],
+          product["licenseValidUntil"], product["allowedUses"], product["catalogStatus"],
+          normalized["catalogVersion"],
         )
         if not row:
           raise AppError(409, "CATALOG_SOURCE_CONFLICT", "A product is owned by another catalog provider.")
         counts["products"] += 1
+        for evidence in product["attributeEvidence"]:
+          await connection.execute(
+            """
+            insert into product_attribute_evidence (
+              product_id,attribute_key,attribute_value,source_type,source_reference,
+              evidence_fingerprint,confidence_score,status,observed_at,reviewed_at,expires_at
+            ) values ($1,$2,$3::jsonb,$4,$5,$6,$7,'verified',$8,$9,$10)
+            on conflict (product_id,attribute_key,evidence_fingerprint) do update set
+              attribute_value=excluded.attribute_value,source_type=excluded.source_type,
+              source_reference=excluded.source_reference,confidence_score=excluded.confidence_score,
+              status='verified',observed_at=excluded.observed_at,reviewed_at=excluded.reviewed_at,
+              expires_at=excluded.expires_at,updated_at=now()
+            """,
+            product["id"],
+            evidence["attributeKey"],
+            json.dumps(evidence["attributeValue"], ensure_ascii=False),
+            evidence["sourceType"],
+            evidence["sourceReference"],
+            evidence["evidenceFingerprint"],
+            evidence["confidenceScore"],
+            evidence["observedAt"],
+            evidence["reviewedAt"],
+            evidence["expiresAt"],
+          )
+        if product["_attributeEvidenceAuthoritative"]:
+          await _expire_omitted_attribute_evidence(
+            connection,
+            product_id=product["id"],
+            active_fingerprints=[
+              evidence["evidenceFingerprint"]
+              for evidence in product["attributeEvidence"]
+            ],
+          )
         for shade in product["shades"]:
           shade_row = await connection.fetchrow(
             """
