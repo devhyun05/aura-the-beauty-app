@@ -36,6 +36,11 @@ export function ReportScreenScaffold({
   const cardY = useRef<Record<string, number>>({});
   const onScroll = useAnimatedScrollHandler(e => { scrollY.value = e.contentOffset.y; });
 
+  // Sections live inside the capture wrapper, so their onLayout y is relative to
+  // that wrapper — not to the ScrollView content. Track where the wrapper itself
+  // starts and add it back, or "카드 보기" scrolls short by the top bar's height.
+  const captureOffsetY = useRef(0);
+
   // S2 lens "카드 보기" → scroll to the matching S3 region card, 64px below the top edge.
   // No-op when S3 isn't rendered (no real region data yet) — scrolling to 0 would
   // read as a broken button rather than an honest "not available" state.
@@ -43,7 +48,7 @@ export function ReportScreenScaffold({
     if (!data.s3) {
       return;
     }
-    const y = (sectionY.current.s3 ?? 0) + (cardY.current[key] ?? 0);
+    const y = captureOffsetY.current + (sectionY.current.s3 ?? 0) + (cardY.current[key] ?? 0);
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 64), animated: true });
   };
 
@@ -78,7 +83,10 @@ export function ReportScreenScaffold({
             Capture target for 공유/이미지 저장. Wraps the report body (not the
             top bar) and lives inside the ScrollView so the captured image
             contains the whole report, not just the visible viewport.
+            The outer View exists only to measure where this wrapper starts,
+            since the sections' onLayout y is now relative to it.
           */}
+          <View onLayout={e => { captureOffsetY.current = e.nativeEvent.layout.y; }}>
           <OptionalViewShot ref={captureRef} options={REPORT_CAPTURE_OPTIONS} style={{ backgroundColor: color.bg }}>
           <View onLayout={e => { sectionY.current.s1 = e.nativeEvent.layout.y; }}>
             <S1Summary data={data.s1} />
@@ -112,6 +120,7 @@ export function ReportScreenScaffold({
             </View>
           ) : null}
           </OptionalViewShot>
+          </View>
 
           <View style={{ paddingTop: 26, paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 0) + 96, alignItems: 'center', gap: 14 }}>
             <Text style={[font(11.5, '400', 1.65), { color: color.muted, textAlign: 'center', maxWidth: 300 }]}>
