@@ -591,9 +591,7 @@ namespace ARMakeup.Face
             // 스텐실 소비자: 렌즈(Equal — 눈 안만) + 하안검 밴드(NotEqual — 눈알 침범 방지).
             var stencilOn = irisOn ||
                             (visible && LowerLidRenderer.Instance != null &&
-                             LowerLidRenderer.Instance.NeedsEyeMask) ||
-                            (visible && AegyoRenderer.Instance != null &&
-                             AegyoRenderer.Instance.NeedsEyeMask);
+                             LowerLidRenderer.Instance.NeedsEyeMask);
 
             if (_stencil.renderer.enabled != stencilOn) _stencil.renderer.enabled = stencilOn;
             if (_iris.renderer.enabled != irisOn) _iris.renderer.enabled = irisOn;

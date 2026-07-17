@@ -33,30 +33,29 @@ namespace ARMakeup.Face
         public const int DoubleLid = 3006;     // 쌍꺼풀 크리스(상안검 위 얇은 음영 라인) — 아이섀도
                                                // 위·아이라인 아래. 상안검 리드 위 피부라 스텐실 불필요
         public const int LowerLid = 3007;      // 하안검 밴드 (섀도 코너 스머지 위, 눈알 밖만)
-        public const int Aegyo = 3008;         // 전용 볼륨광+음영 (하안검 제품 위·아래속눈썹 아래)
-        public const int LowerLash = 3009;     // 아래 속눈썹 스트로크 (애교살·아이라인(하) 위에 털.
+        public const int LowerLash = 3008;     // 아래 속눈썹 스트로크 (애교살·아이라인(하) 위에 털.
                                                // 아래로 뻗어 눈알 밖 — 스텐실 불필요. 상안검 라이너
-                                               // (3011)와의 겹침은 바깥 코너 근처뿐이라 그 아래여도 무방)
-        public const int Iris = 3010;
-        public const int Eyeliner = 3011;
-        public const int EyelinerStyle = 3012;
-        public const int Mascara = 3013;       // 속눈썹 스트로크 (라이너 위에 털)
+                                               // (3010)와의 겹침은 바깥 코너 근처뿐이라 그 아래여도 무방)
+        public const int Iris = 3009;
+        public const int Eyeliner = 3010;
+        public const int EyelinerStyle = 3011;
+        public const int Mascara = 3012;       // 속눈썹 스트로크 (라이너 위에 털)
 
         // 눈썹 스택 (섀도 밴드 상단과 겹치는 곳은 털이 위로)
-        public const int BrowConceal = 3014;   // 눈썹 지우기(스킨톤 컨실, §15) — 스택 최하 밑작업.
+        public const int BrowConceal = 3013;   // 눈썹 지우기(스킨톤 컨실, §15) — 스택 최하 밑작업.
                                                // 큐 순서로 "지우고 그 위에 그리기"가 자동 성립
-        public const int BrowLightener = 3015;
-        public const int BrowPowder = 3016;
-        public const int BrowMascara = 3017;
-        public const int BrowPencil = 3018;
-        public const int BrowStyle = 3019;
+        public const int BrowLightener = 3014;
+        public const int BrowPowder = 3015;
+        public const int BrowMascara = 3016;
+        public const int BrowPencil = 3017;
+        public const int BrowStyle = 3018;
 
         // 립 (독립 영역 — 치아 → 링 → 그림 → 라이너 순서로 위에)
-        public const int Teeth = 3020;         // 치아 미백 (내측 립 링 안쪽 폴리곤 — 립 링 아래라
+        public const int Teeth = 3019;         // 치아 미백 (내측 립 링 안쪽 폴리곤 — 립 링 아래라
                                                // 립·라이너 엣지가 치아 존 경계 위에서 또렷)
-        public const int Lip = 3021;
-        public const int LipDecal = 3022;
-        public const int LipLiner = 3023;      // 외곽 라이너 (엣지가 위에서 또렷하게)
+        public const int Lip = 3020;
+        public const int LipDecal = 3021;
+        public const int LipLiner = 3022;      // 외곽 라이너 (엣지가 위에서 또렷하게)
 
         // 반반 모드 — 메이크업 위·조명 아래. 맨얼굴 쪽 절반에 원본 피드(_CameraFeed)를
         // 복원한다(SplitMaskRenderer). 복원된 절반도 조명 그레이드를 함께 받도록 조명 아래.

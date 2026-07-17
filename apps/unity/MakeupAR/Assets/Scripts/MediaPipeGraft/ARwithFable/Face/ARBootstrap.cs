@@ -105,10 +105,6 @@ namespace ARMakeup.Face
             var lowerLidGO = new GameObject("Lower Lid Renderer");
             lowerLidGO.AddComponent<LowerLidRenderer>().Init(cam, landmarkSource);
 
-            // 애교살 — 하안검 제품과 높이를 공유하지 않는 전용 자연 볼륨/펄 렌더러.
-            var aegyoGO = new GameObject("Aegyo Renderer");
-            aegyoGO.AddComponent<AegyoRenderer>().Init(cam, landmarkSource);
-
             // 마스카라 — 상안검 lash 라인에 절차적 속눈썹 스트로크(Pencil lash 일반화).
             var lashGO = new GameObject("Lash Renderer");
             lashGO.AddComponent<LashRenderer>().Init(cam, landmarkSource);
