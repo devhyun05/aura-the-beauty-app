@@ -81,14 +81,19 @@ export const getProducts = async (): Promise<Product[]> => {
     : [];
 };
 
-export const getLikedProducts = async (): Promise<Product[]> => {
+export const getLikedProducts = async (
+  {timeoutMs}: {timeoutMs?: number} = {},
+): Promise<Product[]> => {
   if (!getProductBackendApiBaseUrl()) {
     return __DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1'
       ? productsMock.filter((product) => product.isLiked)
       : [];
   }
 
-  const response = await requestProductBackendJson<BackendLikedProductsResponse>('/products/liked');
+  const response = await requestProductBackendJson<BackendLikedProductsResponse>(
+    '/products/liked',
+    {timeoutMs},
+  );
   return Array.isArray(response.products)
     ? response.products
         .map(mapBackendProduct)
@@ -98,8 +103,9 @@ export const getLikedProducts = async (): Promise<Product[]> => {
 
 export const getLikedProductPreviews = async (
   limit = 3,
+  options: {timeoutMs?: number} = {},
 ): Promise<Product[]> => {
-  const products = await getLikedProducts();
+  const products = await getLikedProducts(options);
 
   return products.slice(0, limit);
 };
