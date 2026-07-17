@@ -28,9 +28,16 @@ export function WhatIfRail({ axis, config }: Props) {
     setZone(prev => (prev === idx ? prev : idx));
   };
 
+  // Same gesture contract as LightingDial: this rail sits inside the report's
+  // vertical ScrollView next to an iOS swipe-back gesture, so it must capture the
+  // touch and refuse termination or the drag gets stolen mid-gesture.
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponderCapture: () => true,
     onMoveShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponderCapture: () => true,
+    onPanResponderTerminationRequest: () => false,
+    onShouldBlockNativeResponder: () => true,
     onPanResponderGrant: e => setFromX(e.nativeEvent.locationX),
     onPanResponderMove: e => setFromX(e.nativeEvent.locationX),
   }), []);

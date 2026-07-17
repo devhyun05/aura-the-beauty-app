@@ -16,9 +16,20 @@ export function LightingDial({ value, heading, warmLabel, coolLabel, captions }:
   const [zone, setZone] = useState<-1 | 0 | 1>(0);
   const start = useRef(0);
 
+  // The dial lives inside the report's vertical ScrollView, and the screen has an
+  // iOS swipe-back gesture. Without claiming the touch on capture AND refusing
+  // termination, the ScrollView steals the drag mid-gesture (page scrolls) and a
+  // horizontal drag can fall through to swipe-back. Capture + refusing to
+  // terminate keeps the gesture here once it starts on the dial.
   const pan = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponderCapture: () => true,
     onMoveShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponderCapture: () => true,
+    // Never hand the gesture to the parent ScrollView once the dial owns it.
+    onPanResponderTerminationRequest: () => false,
+    // Stop native scroll / swipe-back from taking over.
+    onShouldBlockNativeResponder: () => true,
     onPanResponderGrant: () => { start.current = value.value; },
     onPanResponderMove: (_e, g) => {
       const v = Math.max(-1, Math.min(1, start.current + g.dx / 70));
@@ -37,10 +48,14 @@ export function LightingDial({ value, heading, warmLabel, coolLabel, captions }:
       paddingVertical: 10, paddingHorizontal: 6,
     }}>
       <Text style={[font(10, '800', undefined, 0.8), { color: color.muted }]}>{heading}</Text>
-      <View {...pan.panHandlers} style={{
-        width: 52, height: 52, borderRadius: 26, backgroundColor: color.dial,
-        borderWidth: 1, borderColor: 'rgba(22,48,59,0.1)',
-      }}>
+      <View
+        {...pan.panHandlers}
+        // 52px is a small drag target; extend the touch area without changing layout.
+        hitSlop={{top: 12, bottom: 12, left: 12, right: 12}}
+        style={{
+          width: 52, height: 52, borderRadius: 26, backgroundColor: color.dial,
+          borderWidth: 1, borderColor: 'rgba(22,48,59,0.1)',
+        }}>
         <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center' }, tickStyle]}>
           <View style={{ width: 3, height: 16, borderRadius: 2, backgroundColor: color.magenta, marginTop: 5 }} />
         </Animated.View>
