@@ -6,7 +6,6 @@ import {YStack} from 'tamagui';
 import {
   createFaceAnalysisReportFromCapture,
   FaceAnalysisIntroScreen,
-  FaceAnalysisReportDetailScreen,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
@@ -61,10 +60,6 @@ import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootNavigation, type RootScreenProps} from './routeUtils';
-
-type HeaderShareAction = {
-  cb: () => void;
-};
 
 const MAX_ANALYSIS_RETRY_COUNT = 2;
 // 온디바이스 정지영상 분석(세로비율 등)이 이 시간 안에 끝나지 않으면 해당 축 없이
@@ -723,92 +718,6 @@ export function FaceAnalysisReportsListRouteScreen({
   );
 }
 
-export function FaceAnalysisReportDetailRouteScreen({
-  navigation,
-  route,
-}: RootScreenProps<'FaceAnalysisReportDetail'>) {
-  const insets = useSafeAreaInsets();
-  const shouldReturnToProfile = route.params?.returnTo === 'profile';
-  const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
-  const {
-    selectedFace3DProfile,
-    selectedFaceAnalysisReport,
-    selectedFaceCapture,
-    selectedFaceGeometry2d,
-    selectedFaceVerticalThirds,
-    selectedPersonalColor,
-    selectedPersonalColorCorrection,
-    setSelectedFaceAnalysisReport,
-  } = useNavigationFlowState();
-  const handleHeaderShareActionChange = React.useCallback(
-    (nextShareAction: (() => void) | null) => {
-      setShareAction(nextShareAction ? {cb: nextShareAction} : null);
-    },
-    [],
-  );
-  const handleDeleteReport = React.useCallback(
-    async (reportId: string) => {
-      await deleteFaceAnalysisReport(reportId);
-      setSelectedFaceAnalysisReport(currentReport =>
-        currentReport?.id === reportId ? null : currentReport,
-      );
-      navigation.navigate('FaceAnalysisReportsList');
-    },
-    [navigation, setSelectedFaceAnalysisReport],
-  );
-  const footerBottomInset = Math.max(insets.bottom, spacing.md);
-  const currentReportId = route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
-  const handleBackToProfile = React.useCallback(() => {
-    navigateMainTab(navigation, 'ProfileTab');
-  }, [navigation]);
-
-  return (
-    <DetailRouteChrome
-      backgroundColor={colors.surfaceMuted}
-      headerMode="overlay"
-      reserveOverlayHeaderSpace={false}
-      routeName="FaceAnalysisReportDetail"
-      onBack={shouldReturnToProfile ? handleBackToProfile : undefined}
-      onOpenDocumentList={
-        shouldReturnToProfile
-          ? undefined
-          : () => navigation.navigate('FaceAnalysisReportsList')
-      }
-      onShare={shareAction?.cb}
-      shareDisabled={!shareAction}>
-      <>
-        <FaceAnalysisReportDetailScreen
-          analysisReport={selectedFaceAnalysisReport}
-          bottomOverlayHeight={getFaceAnalysisReportFooterReservedHeight(footerBottomInset)}
-          capturedPhotoUri={selectedFaceCapture?.imageUri}
-          onCreateARFilter={() => navigation.navigate('MakeupRecommendation')}
-          onDeleteReport={handleDeleteReport}
-          onHeaderShareActionChange={handleHeaderShareActionChange}
-          onPressProducts={reportId =>
-            navigation.navigate('ProductRecommendation', {reportId})
-          }
-          face3d={route.params?.reportId ? null : selectedFace3DProfile}
-          faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
-          personalColor={route.params?.reportId ? null : selectedPersonalColor}
-          personalColorCorrection={
-            route.params?.reportId ? null : selectedPersonalColorCorrection
-          }
-          reportId={route.params?.reportId ?? null}
-          // 세션 캡처 ID — 화면이 "세션 props vs 서버 복원 measurements" 를
-          // identity(captureId 일치)로 판정하는 기준. id 없는 진입(AR 복귀 등)
-          // 에서 다른 보고서에 stale 세션 측정값이 얹히는 것을 막는다.
-          sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
-          verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
-        />
-        <FaceAnalysisReportBottomNav
-          currentReportId={currentReportId}
-          navigation={navigation}
-        />
-      </>
-    </DetailRouteChrome>
-  );
-}
-
 // The report screen: redesigned S1–S7 UI (features/face-report). Owns the
 // canonical FaceAnalysisReportDetail route, so every entry point (post-analysis,
 // reports list, profile, home, AR back) lands here. Session props follow the
@@ -824,7 +733,19 @@ export function FaceAnalysisReportPreviewRouteScreen({
     selectedFaceCapture,
     selectedFaceVerticalThirds,
     selectedPersonalColor,
+    setSelectedFaceAnalysisReport,
   } = useNavigationFlowState();
+
+  const handleDeleteReport = React.useCallback(
+    async (reportId: string) => {
+      await deleteFaceAnalysisReport(reportId);
+      setSelectedFaceAnalysisReport(currentReport =>
+        currentReport?.id === reportId ? null : currentReport,
+      );
+      navigation.navigate('FaceAnalysisReportsList');
+    },
+    [navigation, setSelectedFaceAnalysisReport],
+  );
 
   return (
     <FaceAnalysisReportPreviewScreen
@@ -833,6 +754,9 @@ export function FaceAnalysisReportPreviewRouteScreen({
       onBack={() =>
         shouldReturnToProfile ? navigateMainTab(navigation, 'ProfileTab') : navigation.goBack()
       }
+      onCreateARFilter={() => navigation.navigate('MakeupRecommendation')}
+      onDeleteReport={handleDeleteReport}
+      onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
       onRetake={() => navigation.navigate('FaceCapture')}
       personalColor={route.params?.reportId ? null : selectedPersonalColor}
       reportId={route.params?.reportId ?? null}

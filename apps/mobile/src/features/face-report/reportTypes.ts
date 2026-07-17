@@ -186,6 +186,13 @@ export interface ReportScreenProps {
   entryAnimation?: boolean; // rise-in on scroll into view (default true)
   onBack?: () => void;
   onMore?: () => void;
-  onRetake?: () => void;    // S2 재촬영 링크 + footer CTA
+  onRetake?: () => void;    // S2 재촬영 링크 (헤어라인 미확인 안내)
   onResurvey?: () => void;  // S5 다시 답하기
+  // Footer CTA. Separate from onRetake: the CTA is labelled with
+  // `data.footer.cta` (메이크업 추천), so wiring it to retake would fire
+  // 재촬영 from a button that promises makeup recommendations.
+  onPressCta?: () => void;
+  // Wraps the report body so the screen can capture it as an image
+  // (공유/이미지 저장). Must sit inside the ScrollView to capture full content.
+  captureRef?: React.Ref<any>;
 }
