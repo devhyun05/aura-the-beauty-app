@@ -196,12 +196,16 @@ function buildS2(vt: FaceVerticalThirdsResult | null | undefined): S2Data | null
           lower: vt.verticalThirds.displayRatio.lower,
         }
       : undefined,
-    faceLength: {
-      ratio: vt.faceLength?.ratio ?? null,
-      band: vt.faceLengthJudgment?.band ?? null,
-      verdict: vt.faceLengthJudgment?.verdict ?? null,
-      confidence: vt.verticalThirds?.confidence ?? null,
-    },
+    // 길이비 판정 스냅샷이 있을 때만 밴드 섹션을 채운다 — 판정 자체가 없는
+    // 보고서에 "얼굴 길이비 · 판정 보류"가 상시 노출되는 소음을 막는다.
+    faceLength: vt.faceLengthJudgment
+      ? {
+          ratio: vt.faceLength?.ratio ?? null,
+          band: vt.faceLengthJudgment.band ?? null,
+          verdict: vt.faceLengthJudgment.verdict ?? null,
+          confidence: vt.verticalThirds?.confidence ?? null,
+        }
+      : undefined,
     paragraph: vt.interpretation.summary || vt.interpretation.title || '측정 결과를 요약하지 못했어요.',
   };
 }
@@ -299,7 +303,7 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
     axes: axesData,
     drape: {
       title: '직접 입혀 보세요',
-      sub: '아래 색을 탭하면 드레이프처럼 둘러볼 수 있어요 · 다이얼로 조명도 바꿔 보세요',
+      sub: '아래 색을 탭하면 드레이프처럼 둘러볼 수 있어요 · 슬라이더로 조명도 바꿔 보세요',
       photo: heroUri ? {uri: heroUri, placeholderLabel: '셀피'} : {placeholderLabel: '셀피'},
       goodTag: '잘 어울리는 색',
       badTag: '피할 색',
