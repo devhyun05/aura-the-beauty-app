@@ -300,6 +300,7 @@ export function MakeupFeedbackResultRouteScreen({
     return (
       <DetailRouteChrome
         {...detailHeaderNavigationProps}
+        backOnlyHeader={shouldReturnToProfile}
         routeName="MakeupFeedbackResult"
         shareDisabled>
         <RoutePlaceholder
@@ -317,6 +318,7 @@ export function MakeupFeedbackResultRouteScreen({
     return (
       <DetailRouteChrome
         {...detailHeaderNavigationProps}
+        backOnlyHeader={shouldReturnToProfile}
         routeName="MakeupFeedbackResult"
         onShare={shareAction?.cb}
         shareDisabled>
@@ -332,6 +334,7 @@ export function MakeupFeedbackResultRouteScreen({
   return (
     <DetailRouteChrome
       {...detailHeaderNavigationProps}
+      backOnlyHeader={shouldReturnToProfile}
       routeName="MakeupFeedbackResult"
       onShare={shareAction?.cb}
       shareDisabled={!shareAction}>

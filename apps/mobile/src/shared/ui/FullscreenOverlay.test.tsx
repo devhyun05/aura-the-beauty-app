@@ -33,8 +33,8 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
   }
 }
 
-const sharedSurfaceMaterial: 'rgba(255, 255, 255, 0.74)' = colors.surface;
-const sharedMutedSurfaceMaterial: 'rgba(247, 247, 247, 0.60)' = colors.surfaceMuted;
+const sharedSurfaceMaterial: 'rgba(255, 255, 255, 0.86)' = colors.surface;
+const sharedMutedSurfaceMaterial: 'rgba(247, 247, 247, 0.74)' = colors.surfaceMuted;
 const sharedBorderMaterial: 'rgba(255, 255, 255, 0.92)' = colors.border;
 
 expectEqual(

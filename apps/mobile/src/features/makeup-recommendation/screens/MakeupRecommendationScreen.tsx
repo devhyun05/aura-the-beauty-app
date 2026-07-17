@@ -45,6 +45,7 @@ export type MakeupRecommendationScreenHandle = {
 };
 
 export type MakeupRecommendationScreenProps = {
+  compactReportView?: boolean;
   faceImageUri?: string;
   initialReportId?: string;
   initialView?: 'discovery' | 'history';
@@ -116,6 +117,7 @@ export const MakeupRecommendationScreen = forwardRef<
   MakeupRecommendationScreenHandle,
   MakeupRecommendationScreenProps
 >(function MakeupRecommendationScreen({
+  compactReportView = false,
   faceImageUri,
   initialReportId,
   initialView = 'discovery',
@@ -506,6 +508,7 @@ export const MakeupRecommendationScreen = forwardRef<
   if (phase === 'results' && session) {
     return (
       <RecommendationResultsView
+        compactReportView={compactReportView}
         onApplyAR={look => onApplyAR?.(look)}
         onRefine={handleRefine}
         onReset={reset}

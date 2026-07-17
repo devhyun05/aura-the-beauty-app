@@ -337,6 +337,7 @@ export function ReferenceMakeupExtractionResultRouteScreen({
   if (reportId && !loadedReportPhoto) {
     return (
       <DetailRouteChrome
+        backOnlyHeader={shouldReturnToProfile}
         routeName="ReferenceMakeupExtractionResult"
         onBack={handleBack}>
         <RoutePlaceholder
@@ -352,6 +353,7 @@ export function ReferenceMakeupExtractionResultRouteScreen({
 
   return (
     <DetailRouteChrome
+      backOnlyHeader={shouldReturnToProfile}
       routeName="ReferenceMakeupExtractionResult"
       onBack={handleBack}>
       <ReferenceMakeupExtractionResultScreen

@@ -45,14 +45,14 @@ const footerSideTabWidth: 58 = APP_FOOTER_SIDE_TAB_WIDTH;
 const footerTabOrder: readonly ['home', 'consulting', 'profile'] =
   APP_FOOTER_TAB_ORDER;
 const footerBarOverflow: 'visible' = APP_FOOTER_BAR_OVERFLOW;
-const footerGlassBackground: 'rgba(255, 255, 255, 0.74)' =
+const footerGlassBackground: 'rgba(255, 255, 255, 0.86)' =
   APP_FOOTER_GLASS_BACKGROUND;
 const footerGlassBorder: 'rgba(255, 255, 255, 0.92)' = APP_FOOTER_GLASS_BORDER;
 const footerGlassHighlight: 'rgba(255, 255, 255, 0.42)' =
   APP_FOOTER_GLASS_HIGHLIGHT;
 const footerShowsLabelsByDefault: false = APP_FOOTER_SHOW_LABELS_BY_DEFAULT;
 const footerCaptureButtonBackground:
-  'rgba(255, 255, 255, 0.74)' =
+  'rgba(255, 255, 255, 0.86)' =
     CAMERA_CAPTURE_BUTTON_LIQUID_GLASS_BACKGROUND;
 
 if (APP_FOOTER_ACTIVE_TAB_BACKGROUND !== colors.blackSurface) {

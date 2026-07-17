@@ -32,6 +32,7 @@ const refinementActions: readonly {label: string; value: MakeupRecommendationRef
   {label: '제품만 바꾸기', value: 'replaceProducts'},
 ];
 type RecommendationResultsViewProps = {
+  compactReportView?: boolean;
   onApplyAR: (look: MakeupLookRecommendation) => void;
   onRefine: (refinement: MakeupRecommendationRefinement) => void;
   onReset: () => void;
@@ -133,6 +134,7 @@ function ResultCard({
 }
 
 export function RecommendationResultsView({
+  compactReportView = false,
   onApplyAR,
   onRefine,
   onReset,
@@ -160,8 +162,10 @@ export function RecommendationResultsView({
   }
 
   return (
-    <AppScreen contentGap={spacing.xxl} topPadding="belowShellHeader">
-      <View style={styles.resultsHeading}>
+    <AppScreen
+      contentGap={spacing.xxl}
+      topPadding={compactReportView ? 'none' : 'belowShellHeader'}>
+      {!compactReportView ? <View style={styles.resultsHeading}>
         <Text style={styles.eyebrow}>세 가지 방향으로 풀어봤어요</Text>
         <Text style={styles.resultsTitle}>오늘의 얼굴에 어울릴 메이크업</Text>
         <Text style={styles.resultsDescription}>안정적인 선택부터 예상 밖의 발견까지 비교해보세요.</Text>
@@ -176,7 +180,7 @@ export function RecommendationResultsView({
             {imageRetryError ? <Text accessibilityRole="alert" style={styles.imageStatus}>{imageRetryError}</Text> : null}
           </View>
         ) : null}
-      </View>
+      </View> : null}
 
       {results.map(look => (
         <ResultCard

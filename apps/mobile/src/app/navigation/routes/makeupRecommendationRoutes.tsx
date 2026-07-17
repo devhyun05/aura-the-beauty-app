@@ -29,10 +29,12 @@ export function MakeupRecommendationRouteScreen({
 
   return (
     <DetailRouteChrome
+      backOnlyHeader={Boolean(route.params?.reportId)}
       onBack={handleBack}
       routeName="MakeupRecommendation"
     >
       <MakeupRecommendationScreen
+        compactReportView={Boolean(route.params?.reportId)}
         faceImageUri={selectedFaceCapture?.imageUri}
         initialReportId={route.params?.reportId}
         initialView={route.params?.view}

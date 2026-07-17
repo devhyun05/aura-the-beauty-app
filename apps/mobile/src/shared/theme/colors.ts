@@ -15,8 +15,8 @@ const headerOverlaySurface = headerSurface;
 const headerOverlayBorder = 'rgba(17, 17, 17, 0.05)';
 const headerControlSurface = 'rgba(255, 255, 255, 0.46)';
 const headerControlBorder = 'rgba(17, 17, 17, 0.07)';
-const liquidGlassSurface = 'rgba(255, 255, 255, 0.74)';
-const liquidGlassMutedSurface = 'rgba(247, 247, 247, 0.60)';
+const liquidGlassSurface = 'rgba(255, 255, 255, 0.86)';
+const liquidGlassMutedSurface = 'rgba(247, 247, 247, 0.74)';
 
 export const colors = {
   transparent: 'transparent',

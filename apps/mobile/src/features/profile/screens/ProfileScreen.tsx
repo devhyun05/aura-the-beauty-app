@@ -258,6 +258,7 @@ export function ProfileScreen({
           contentContainerStyle={styles.reportHub}>
           <ProfileReportPreviewCard
             description="얼굴형·피부톤 분석"
+            kind="faceAnalysis"
             label="얼굴 분석"
             onPressLatest={
               data.reportHub.faceAnalysis
@@ -269,6 +270,7 @@ export function ProfileScreen({
           />
           <ProfileReportPreviewCard
             description="나에게 어울리는 룩"
+            kind="makeupRecommendation"
             label="메이크업 추천"
             onPressLatest={
               data.reportHub.makeupRecommendation
@@ -283,6 +285,7 @@ export function ProfileScreen({
           />
           <ProfileReportPreviewCard
             description="사진 속 메이크업 분석"
+            kind="makeupExtraction"
             label="메이크업 추출"
             onPressLatest={
               data.reportHub.makeupExtraction
@@ -297,6 +300,7 @@ export function ProfileScreen({
           />
           <ProfileReportPreviewCard
             description="평가와 보완 포인트"
+            kind="makeupFeedback"
             label="메이크업 피드백"
             onPressLatest={
               data.reportHub.makeupFeedback

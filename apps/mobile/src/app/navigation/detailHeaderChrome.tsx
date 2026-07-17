@@ -5,7 +5,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, spacing, typography} from '../../shared/theme';
-import {XIcon} from '../../shared/ui';
+import {ChevronLeftIcon, XIcon} from '../../shared/ui';
 import {AppScreenOverlayHeaderHeightProvider} from '../../shared/ui/AppScreen';
 import {APP_HEADER_BASE_HEIGHT, AppHeader} from '../../shared/ui/AppHeader';
 import {
@@ -51,6 +51,7 @@ export function getDetailHeaderPresentation(
 }
 
 type DetailRouteChromeProps = {
+  backOnlyHeader?: boolean;
   backgroundColor?: string;
   children: ReactNode;
   headerBackgroundColor?: string;
@@ -68,6 +69,7 @@ type DetailRouteChromeProps = {
 };
 
 export function DetailRouteChrome({
+  backOnlyHeader = false,
   backgroundColor = colors.background,
   children,
   headerBackgroundColor,
@@ -88,35 +90,61 @@ export function DetailRouteChrome({
   const isOverlayHeader = headerMode === 'overlay';
   const resolvedHeaderBackgroundColor =
     headerBackgroundColor ??
-    (isOverlayHeader
+    (backOnlyHeader
+      ? 'transparent'
+      : isOverlayHeader
       ? DETAIL_ROUTE_OVERLAY_HEADER_BACKGROUND_COLOR
       : colors.headerSurface);
   const resolvedHeaderBorderColor =
     headerBorderColor ??
-    (isOverlayHeader ? colors.headerOverlayBorder : colors.border);
+    (backOnlyHeader
+      ? 'transparent'
+      : isOverlayHeader
+        ? colors.headerOverlayBorder
+        : colors.border);
   const overlayHeaderHeight = APP_HEADER_BASE_HEIGHT + insets.top;
   const headerContentColor = colors.textPrimary;
-  const leftSlot = onOpenDocumentList ? (
-    <HeaderIconAction
-      accessibilityLabel="문서 목록 열기"
-      onPress={onOpenDocumentList}>
-      <ChevronDown color={headerContentColor} size={iconSize.sm} strokeWidth={2} />
+  const leftSlot = backOnlyHeader && onBack ? (
+    <HeaderIconAction accessibilityLabel="뒤로가기" onPress={onBack}>
+      <ChevronLeftIcon color={headerContentColor} size={iconSize.sm} />
     </HeaderIconAction>
-  ) : undefined;
+  ) : onOpenDocumentList ? (
+      <HeaderIconAction
+        accessibilityLabel="문서 목록 열기"
+        onPress={onOpenDocumentList}>
+        <ChevronDown color={headerContentColor} size={iconSize.sm} strokeWidth={2} />
+      </HeaderIconAction>
+    ) : undefined;
   const rightSlot =
-    headerRightSlot ??
-    renderRightSlot({
-      actions: presentation.rightActions,
-      iconColor: headerContentColor,
-      onBack,
-      onClose,
-      onDone,
-      onShare,
-      shareDisabled,
-    });
+    backOnlyHeader
+      ? <View />
+      : headerRightSlot ??
+        renderRightSlot({
+          actions: presentation.rightActions,
+          iconColor: headerContentColor,
+          onBack,
+          onClose,
+          onDone,
+          onShare,
+          shareDisabled,
+        });
   const shouldReserveLeftSlot =
     !onBack && !leftSlot && presentation.rightActions.length > 0;
-  const header = (
+  const header = backOnlyHeader ? (
+    <RNView
+      pointerEvents="box-none"
+      style={[
+        styles.headerHost,
+        styles.overlayHeaderHost,
+        {height: overlayHeaderHeight},
+      ]}>
+      <RNView
+        pointerEvents="box-none"
+        style={[styles.backOnlyHeader, {paddingTop: insets.top}]}>
+        {leftSlot}
+      </RNView>
+    </RNView>
+  ) : (
     <RNView
       pointerEvents={isOverlayHeader ? 'box-none' : 'auto'}
       style={[
@@ -125,7 +153,7 @@ export function DetailRouteChrome({
           ? [styles.overlayHeaderHost, {height: overlayHeaderHeight}]
           : undefined,
       ]}>
-      {isOverlayHeader ? (
+      {isOverlayHeader && !backOnlyHeader ? (
         <OverlayHeaderBackground
           backgroundColor={resolvedHeaderBackgroundColor}
           borderColor={resolvedHeaderBorderColor}
@@ -148,6 +176,7 @@ export function DetailRouteChrome({
         variant="default"
         rightSlot={rightSlot}
         title={presentation.title}
+        titleSlot={backOnlyHeader ? <View /> : undefined}
       />
     </RNView>
   );
@@ -156,7 +185,11 @@ export function DetailRouteChrome({
     <YStack style={[styles.screen, {backgroundColor}]}>
       {isOverlayHeader ? null : header}
       <AppScreenOverlayHeaderHeightProvider
-        headerHeight={isOverlayHeader && reserveOverlayHeaderSpace ? overlayHeaderHeight : 0}>
+        headerHeight={
+          isOverlayHeader && reserveOverlayHeaderSpace && !backOnlyHeader
+            ? overlayHeaderHeight
+            : 0
+        }>
         <YStack style={[styles.body, {backgroundColor}]}>
           {children}
         </YStack>
@@ -286,6 +319,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  backOnlyHeader: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    paddingHorizontal: spacing.lg,
+  },
   body: {
     flex: 1,
   },
@@ -328,6 +369,8 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
     height: 40,
     justifyContent: 'center',
     padding: 0,

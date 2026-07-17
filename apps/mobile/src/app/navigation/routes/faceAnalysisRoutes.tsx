@@ -763,6 +763,7 @@ export function FaceAnalysisReportDetailRouteScreen({
 
   return (
     <DetailRouteChrome
+      backOnlyHeader={shouldReturnToProfile}
       backgroundColor={colors.surfaceMuted}
       headerMode="overlay"
       reserveOverlayHeaderSpace={false}

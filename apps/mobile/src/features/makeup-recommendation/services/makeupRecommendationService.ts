@@ -77,6 +77,11 @@ type BackendRecommendationReport = {
   createdAt?: string;
 };
 
+export type MakeupRecommendationReportSummary = {
+  reportId: string;
+  scenarioText: string;
+};
+
 function ensureToneCoverage(scenarios: MakeupScenarioPrompt[]): MakeupScenarioPrompt[] {
   const selected = scenarios.slice(0, 6);
 
@@ -472,6 +477,32 @@ export async function fetchGeneratedMakeupRecommendationReports({
     {timeoutMs},
   );
   return mapBackendRecommendationReports(response.reports ?? []);
+}
+
+export async function fetchMakeupRecommendationReportSummaries({
+  limit = 20,
+  offset = 0,
+  timeoutMs,
+}: {
+  limit?: number;
+  offset?: number;
+  timeoutMs?: number;
+} = {}): Promise<MakeupRecommendationReportSummary[]> {
+  const response = await requestBackendJson<{reports: BackendRecommendationReport[]}>(
+    `/makeup-recommendations?limit=${limit}&offset=${offset}`,
+    {timeoutMs},
+  );
+
+  return (response.reports ?? []).flatMap(report => {
+    const reportId = report.id?.trim();
+
+    return reportId
+      ? [{
+          reportId,
+          scenarioText: report.scenarioText?.trim() || '저장된 메이크업 추천',
+        }]
+      : [];
+  });
 }
 
 export async function fetchGeneratedMakeupRecommendationReport(
