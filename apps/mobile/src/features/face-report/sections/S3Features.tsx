@@ -30,7 +30,28 @@ function RegionCard({ card }: { card: RegionCardData }) {
           ? <WhatIfRail key={i} axis={axis} config={card.whatIf.config} />
           : <SpectrumRail key={i} axis={axis} />
       )}
-      <Text style={[font(13, '400', 1.7), { color: color.body }]}>{card.paragraph}</Text>
+      {card.insight ? (
+        <View style={{ gap: 6 }}>
+          <Text style={[font(13.5, '700', 1.6), { color: color.ink }]}>{card.insight}</Text>
+          {card.evidence ? (
+            <Text style={[font(12.5, '400', 1.6), { color: color.muted }]}>
+              근거 · {card.evidence}
+            </Text>
+          ) : null}
+          {card.recommendation ? (
+            <View style={{
+              backgroundColor: color.accentWash, borderRadius: radius.md,
+              paddingVertical: 9, paddingHorizontal: 12,
+            }}>
+              <Text style={[font(12.5, '600', 1.55), { color: color.accentInk }]}>
+                메이크업 · {card.recommendation}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <Text style={[font(13, '400', 1.7), { color: color.body }]}>{card.paragraph}</Text>
+      )}
     </Card>
   );
 }
