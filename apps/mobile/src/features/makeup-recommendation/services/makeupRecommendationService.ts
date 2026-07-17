@@ -461,12 +461,15 @@ export function restoreMakeupRecommendationReport(
 export async function fetchGeneratedMakeupRecommendationReports({
   limit = 20,
   offset = 0,
+  timeoutMs,
 }: {
   limit?: number;
   offset?: number;
+  timeoutMs?: number;
 } = {}): Promise<MakeupRecommendationReportHistoryItem[]> {
   const response = await requestBackendJson<{reports: BackendRecommendationReport[]}>(
     `/makeup-recommendations?limit=${limit}&offset=${offset}`,
+    {timeoutMs},
   );
   return mapBackendRecommendationReports(response.reports ?? []);
 }

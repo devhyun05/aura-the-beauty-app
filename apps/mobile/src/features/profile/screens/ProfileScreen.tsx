@@ -27,7 +27,10 @@ import {
   type ProfileLoadState,
   resolveProfileLoadState,
 } from '../services/profileLoadState';
-import {loadProfileScreenData} from '../services/profileScreenData';
+import {
+  loadProfileScreenData,
+  loadProfileScreenSnapshot,
+} from '../services/profileScreenData';
 
 type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
@@ -78,6 +81,7 @@ export function ProfileScreen({
   const {width} = useWindowDimensions();
   const isMountedRef = useRef(false);
   const hasLoadedProfileRef = useRef(false);
+  const profileLoadGenerationRef = useRef(0);
   const [loadState, setLoadState] = useState<ProfileLoadState>({
     status: 'loading',
   });
@@ -108,20 +112,45 @@ export function ProfileScreen({
   };
 
   const loadProfile = useCallback((options?: {silent?: boolean}) => {
+    const loadGeneration = profileLoadGenerationRef.current + 1;
+    profileLoadGenerationRef.current = loadGeneration;
+
     if (!options?.silent) {
       setLoadState({status: 'loading'});
     }
 
+    if (!hasLoadedProfileRef.current) {
+      resolveProfileLoadState(loadProfileScreenSnapshot).then((nextState) => {
+        if (
+          isMountedRef.current &&
+          profileLoadGenerationRef.current === loadGeneration &&
+          nextState.status === 'success'
+        ) {
+          hasLoadedProfileRef.current = true;
+          setLoadState(nextState);
+        }
+      });
+    }
+
     resolveProfileLoadState(loadProfileScreenData).then((nextState) => {
-      if (isMountedRef.current) {
-        hasLoadedProfileRef.current = true;
-        setLoadState(nextState);
+      if (
+        isMountedRef.current &&
+        profileLoadGenerationRef.current === loadGeneration
+      ) {
+        if (nextState.status === 'success') {
+          hasLoadedProfileRef.current = true;
+        }
+
+        if (nextState.status === 'success' || !hasLoadedProfileRef.current) {
+          setLoadState(nextState);
+        }
       }
     });
   }, []);
 
+  const hasConsultingHistoryAction = Boolean(onPressConsultingHistory);
   const loadConsultingRecords = useCallback(() => {
-    if (!onPressConsultingHistory) {
+    if (!hasConsultingHistoryAction) {
       return () => {};
     }
 
@@ -143,7 +172,7 @@ export function ProfileScreen({
     return () => {
       isActive = false;
     };
-  }, [onPressConsultingHistory]);
+  }, [hasConsultingHistoryAction]);
 
   useFocusEffect(
     useCallback(() => {

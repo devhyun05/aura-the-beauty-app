@@ -7,7 +7,6 @@ import {
   getBackgroundReportNotificationsEnabled,
   markAppNotificationRead,
   notifyNotificationStateChanged,
-  presentRealtimeAppNotification,
   registerForReportNotifications,
 } from '../services/notificationService';
 import {connectNotificationRealtime} from '../services/notificationRealtimeService';
@@ -133,11 +132,10 @@ export function NotificationCoordinator({
         }
 
         notifyNotificationStateChanged();
-        void presentRealtimeAppNotification(notification).catch(error => {
-          console.info('[aura:notifications] realtime banner skipped', {
-            message: error instanceof Error ? error.message : String(error),
-          });
-        });
+        // The backend publishes this same notification through realtime and
+        // Expo/APNs. Realtime is only responsible for refreshing in-app state;
+        // scheduling another local notification here displays two banners for
+        // a single completed report.
       },
     });
 

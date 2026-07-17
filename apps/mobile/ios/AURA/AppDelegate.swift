@@ -59,6 +59,42 @@ class AppDelegate: ExpoAppDelegate {
 class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
   // Extension point for config-plugins
 
+  override func customize(_ rootView: UIView) {
+    super.customize(rootView)
+
+    guard !UIAccessibility.isReduceMotionEnabled,
+          let splashView = rootView.value(forKey: "loadingView") as? UIView else {
+      return
+    }
+
+    animateAuraSplash(splashView)
+  }
+
+  private func animateAuraSplash(_ splashView: UIView) {
+    splashView.layoutIfNeeded()
+
+    let logo = splashView.viewWithTag(4101)
+    let tagline = splashView.viewWithTag(4103)
+    let accent = splashView.viewWithTag(4102)
+
+    UIView.animate(
+      withDuration: 0.62,
+      delay: 0,
+      options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
+    ) {
+      logo?.alpha = 1
+    }
+
+    UIView.animate(
+      withDuration: 0.5,
+      delay: 0.12,
+      options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
+    ) {
+      tagline?.alpha = 1
+      accent?.alpha = 1
+    }
+  }
+
   override func sourceURL(for bridge: RCTBridge) -> URL? {
     // Prefer the explicit bundle URL in debug builds so a stale bridge URL
     // cannot surface as "No script URL provided" on physical devices.

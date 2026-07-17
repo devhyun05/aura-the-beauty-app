@@ -41,6 +41,7 @@ import {
   removeAuradinSave,
 } from '../services/auradinSavedProducts';
 import {BackendApiError} from '../../../shared/services/backendApi';
+import {setFeaturePerformanceStage} from '../../../shared/performance/featurePerformanceLogger';
 import type {
   AuradinCandidateProduct,
   AuradinPhase,
@@ -129,6 +130,10 @@ export function AuradinSearchScreen({
   const abortRef = useRef<AbortController | null>(null);
   // 3-1: HomeView 로테이션이 올려주는 '현재 표시 중 추천 질의' — 빈 전송 시 이 질의로 검색.
   const currentSuggestionRef = useRef<string>('');
+
+  useEffect(() => {
+    setFeaturePerformanceStage(`auradin:${phase}`);
+  }, [phase]);
 
   useEffect(() => {
     cancelled.current = false;

@@ -1188,11 +1188,12 @@ function mapStoredMakeupFeedbackReport(
   return outcome;
 }
 
-export async function fetchMakeupFeedbackReports(): Promise<
-  MakeupFeedbackCompletedResult[]
-> {
+export async function fetchMakeupFeedbackReports(
+  {timeoutMs}: {timeoutMs?: number} = {},
+): Promise<MakeupFeedbackCompletedResult[]> {
   const {reports} = await requestBackendJson<ListFeedbackReportsResponse>(
     '/feedback/reports',
+    {timeoutMs},
   );
 
   return (reports ?? []).flatMap(report => {
