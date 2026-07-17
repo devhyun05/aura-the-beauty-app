@@ -80,7 +80,7 @@ export type RootStackParamList = {
     sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
   };
   MakeupRecommendation:
-    | {reportId?: string; view?: 'history'}
+    | {analysisReportId?: string; reportId?: string; view?: 'history'}
     | undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
   AuradinSearch:

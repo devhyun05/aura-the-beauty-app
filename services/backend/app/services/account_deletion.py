@@ -15,6 +15,7 @@ from app.core.settings import Settings
 from app.db.session import Database
 from app.services.account_identity import hash_auth_subject, normalize_auth_provider
 from app.services.auradin_agent.session_manager import purge_in_memory_owner_sessions
+from app.services.s3 import is_makeup_recommendation_object_key
 
 
 logger = logging.getLogger(__name__)
@@ -64,11 +65,31 @@ def _collect_media_objects(media_rows: list[asyncpg.Record]) -> list[tuple[UUID,
   return list(objects.values())
 
 
+def _collect_makeup_recommendation_objects(
+  asset_rows: list[asyncpg.Record],
+  settings: Settings,
+) -> list[tuple[UUID, str, str]]:
+  objects: dict[tuple[str, str], tuple[UUID, str, str]] = {}
+  for row in asset_rows:
+    bucket = row["storage_bucket"]
+    object_key = row["object_key"]
+    bucket_is_managed = not settings.s3_bucket_name or bucket == settings.s3_bucket_name
+    if (
+      bucket
+      and object_key
+      and bucket_is_managed
+      and is_makeup_recommendation_object_key(object_key, settings)
+    ):
+      objects[(bucket, object_key)] = (row["report_id"], bucket, object_key)
+  return list(objects.values())
+
+
 async def delete_user_account(
   db: Database,
   *,
   auth: AuthContext,
   reason: str | None = None,
+  settings: Settings,
   user_id: UUID | str,
 ) -> AccountDeletionResult:
   if db.pool is None:
@@ -111,12 +132,31 @@ async def delete_user_account(
       )
       media_objects = _collect_media_objects(media_rows)
       media_ids = [row["id"] for row in media_rows]
+      makeup_asset_rows: list[asyncpg.Record] = []
+      has_makeup_assets = await connection.fetchval(
+        "select to_regclass('public.makeup_recommendation_assets') is not null",
+      )
+      if has_makeup_assets:
+        makeup_asset_rows = await connection.fetch(
+          """
+          select asset.report_id, asset.storage_bucket, asset.object_key
+          from makeup_recommendation_assets asset
+          join makeup_recommendation_reports report on report.id = asset.report_id
+          where report.user_id = $1
+            and asset.storage_bucket is not null
+            and asset.object_key is not null
+          for update of asset
+          """,
+          user_id,
+        )
+      makeup_objects = _collect_makeup_recommendation_objects(makeup_asset_rows, settings)
 
       # Reviews use ON DELETE SET NULL so remove authored content before deleting the user.
       audit_metadata = {
         "authProvider": provider,
         "mediaAssetCount": len(media_rows),
         "mediaObjectCount": len(media_objects),
+        "makeupRecommendationObjectCount": len(makeup_objects),
       }
 
       if reason:
@@ -180,6 +220,39 @@ async def delete_user_account(
         )
 
         if outbox:
+          outbox_ids.append(outbox["id"])
+
+      for report_id, bucket, object_key in makeup_objects:
+        outbox = await connection.fetchrow(
+          """
+          insert into media_deletion_outbox (
+            report_id,
+            media_asset_id,
+            bucket,
+            object_key,
+            reason,
+            status,
+            next_attempt_at
+          )
+          values ($1, null, $2, $3, 'account_deleted', 'pending', now())
+          on conflict (report_id, bucket, object_key)
+          do update set
+            status = case
+              when media_deletion_outbox.status = 'completed' then 'completed'
+              else 'pending'
+            end,
+            next_attempt_at = case
+              when media_deletion_outbox.status = 'completed' then media_deletion_outbox.next_attempt_at
+              else now()
+            end,
+            updated_at = now()
+          returning id, status
+          """,
+          report_id,
+          bucket,
+          object_key,
+        )
+        if outbox and outbox["status"] != "completed":
           outbox_ids.append(outbox["id"])
 
       await connection.execute(

@@ -226,13 +226,28 @@ permissions: s3:GetObject, s3:PutObject on the media bucket
 - Set:
 
 ```env
+AI_PROVIDER=bedrock
+IMAGE_GENERATION_PROVIDER=openai
 OPENAI_API_KEY=
+# Retained only for non-makeup legacy analysis routes.
 OPENAI_ANALYSIS_MODEL_ID=gpt-5.5
-OPENAI_IMAGE_MODEL_ID=gpt-image-1
+OPENAI_IMAGE_MODEL_ID=gpt-image-2
 OPENAI_IMAGE_QUALITY=low
-OPENAI_IMAGE_SIZE=1024x1024
+OPENAI_IMAGE_SIZE=768x1024
+OPENAI_IMAGE_OUTPUT_FORMAT=jpeg
+OPENAI_IMAGE_OUTPUT_COMPRESSION=80
+MAKEUP_RECOMMENDATION_V2_ENABLED=true
+MAKEUP_TREND_KEYWORDS_ENABLED=true
+MAKEUP_PERSONALIZED_IMAGE_ENABLED=true
+MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED=true
+MAKEUP_PRIVATE_ASSET_PREFIX=private/generated-makeup-recommendations
+MAKEUP_PRIVATE_URL_TTL_SECONDS=900
 ```
 
+- Makeup question/recommendation text must use the configured Claude models on
+  Bedrock. OpenAI is permitted only for GPT Image 2 generation/editing.
+- Personalized face-derived objects stay private and are returned through a
+  fresh authenticated signed URL; never configure the private prefix as public CDN content.
 - Development path can use `runImmediately=true` on `POST /api/analysis/jobs`.
 - Production can run execution through SQS/ECS worker without changing the
   mobile job status contract.

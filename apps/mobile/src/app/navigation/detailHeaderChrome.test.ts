@@ -69,9 +69,9 @@ expectEqual(
   'makeup filter save route header actions',
 );
 expectEqual(
-  getDetailHeaderRightActions('FaceAnalysisReportDetail').join(','),
-  'share',
-  'face analysis report route header actions',
+  routeChromeByRoute.FaceAnalysisReportDetail.kind,
+  'fullscreen',
+  'face analysis report renders its own header actions',
 );
 expectEqual(
   getDetailHeaderRightActions('MakeupFeedbackResult').join(','),

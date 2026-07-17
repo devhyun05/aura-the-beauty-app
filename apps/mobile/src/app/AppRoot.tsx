@@ -30,6 +30,11 @@ import {
   type AppNotification,
   type AppNotificationData,
 } from '../features/notifications';
+import {
+  recordFeaturePerformanceMarker,
+  recordFeaturePerformanceRoute,
+  startFeaturePerformanceLogging,
+} from '../shared/performance/featurePerformanceLogger';
 import {typography} from '../shared/theme';
 import {
   makeupJourneyBackendAnalyticsAdapter,
@@ -137,6 +142,8 @@ export function AppRoot() {
     prefetchHomeHeroImages();
   }, []);
 
+  useEffect(() => startFeaturePerformanceLogging(), []);
+
   useEffect(() => {
     const minimumTimer = setTimeout(
       () => setHasStartupMinimumElapsed(true),
@@ -162,7 +169,9 @@ export function AppRoot() {
         // Unity splash plays offscreen, and the first AR frame is produced
         // BEFORE the user ever enters the AR screen. Entry then reveals an
         // already-live scene instead of a splash/black loading flash.
-        prepareUnityMakeupRuntime();
+        recordFeaturePerformanceMarker('unity-preload-start');
+        const started = prepareUnityMakeupRuntime();
+        recordFeaturePerformanceMarker('unity-preload-dispatched', {started});
       }, UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS);
     });
 
@@ -189,11 +198,13 @@ export function AppRoot() {
               ref={navigationRef}
               onReady={() => {
                 syncStatusBarStyle(navigationRef.getRootState());
+                recordFeaturePerformanceRoute(navigationRef.getCurrentRoute()?.name);
                 requestAnimationFrame(() => setIsNavigationReady(true));
                 requestAnimationFrame(flushPendingNotification);
               }}
               onStateChange={state => {
                 syncStatusBarStyle(state);
+                recordFeaturePerformanceRoute(navigationRef.getCurrentRoute()?.name);
                 requestAnimationFrame(flushPendingNotification);
               }}>
               <RootNavigator />

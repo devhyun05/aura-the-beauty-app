@@ -137,7 +137,7 @@ export const MAKEUP_QUESTIONS: Record<MakeupQuestionDimension, MakeupRecommendat
   },
   timeSkill: {
     id: 'question-time-skill', dimension: 'timeSkill', title: '시간과 난이도는 어느 정도가 좋아요?',
-    options: [{id: 'quick', label: '5분 커트'}, {id: 'steady', label: '15분 차분히'}, {id: 'detailed', label: '시간을 들여 정교하게'}, {id: 'ai-pick', label: 'AI가 골라줘'}],
+    options: [{id: 'quick', label: '15분 안에 빠르게'}, {id: 'steady', label: '30분 정도 차분히'}, {id: 'detailed', label: '60분 이상 정교하게'}, {id: 'ai-pick', label: 'AI가 골라줘'}],
   },
 };
 

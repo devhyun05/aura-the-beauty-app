@@ -30,3 +30,27 @@ These files are local mock assets for the profile, analysis, look, and product p
 - Consulting expert and hero images are stored outside the repository in S3 and served through CloudFront.
 - No attribution is required for these local mock assets.
 - Before app-store release, replace or explicitly approve these mock assets through the team's final design/legal review process.
+
+## Makeup recommendation situation cards (2026-07-16)
+
+The following 768 x 768 WebP assets were generated specifically for the app with OpenAI's image-generation tool, then resized and compressed locally. They are not stock photos and do not intentionally depict real people, public figures, brands, products, logos, or readable signage:
+
+- `makeup-recommendation/situations/daily.webp` — late-20s Seoul daily get-ready moment, butter yellow and silver styling.
+- `makeup-recommendation/situations/work.webp` — early-30s creative-office presentation preparation, cobalt and charcoal styling.
+- `makeup-recommendation/situations/date.webp` — late-20s rooftop-date arrival at blue hour, cherry and espresso styling.
+- `makeup-recommendation/situations/social.webp` — late-20s/early-30s friends at a listening bar, plum and electric-blue direct-flash styling.
+- `makeup-recommendation/situations/formal-event.webp` — early-30s contemporary wedding guest in a design hotel, dusty rose and navy styling.
+- `makeup-recommendation/situations/travel-outdoor.webp` — late-20s coastal travel and sunscreen moment, sky-blue and terracotta styling.
+- `makeup-recommendation/situations/camera-content.webp` — late-20s creator in a compact studio, lilac and cool-blue lighting.
+- `makeup-recommendation/situations/festival-performance.webp` — late-20s friends applying a chrome eye accent before a festival, indigo and silver styling.
+
+Shared prompt direction: a cohesive 2026 Seoul K-beauty/fashion editorial campaign for users in their 20s and 30s, candid motion, situation-specific lighting and color, clear mobile-thumbnail storytelling, and a calm lower area for an in-app text overlay. Every prompt explicitly excluded embedded text, watermarks, logos, branded packaging, readable screens, and generic stock-photo composition. When regenerated source PNGs are staged beside the assets as `<name>-source.png`, `scripts/mobile/optimize-makeup-situation-images.py` reproducibly builds and validates the checked-in WebP files. Large source PNGs are intentionally not committed.
+### Situation-image provenance ledger
+
+- Generation date: 2026-07-16.
+- Generator: OpenAI image-generation tool exposed in Codex. The tool response did not expose a stable underlying model revision or random seed, so no unverified model identifier is recorded.
+- Inputs/rights: text-only synthetic generation; no stock image, real-person photo, celebrity likeness, brand asset, or third-party reference image was supplied.
+- Retained prompt brief: the shared direction above plus the per-file scene description in this section. The provider may internally expand prompts; that hidden expansion is not available for archival.
+- Post-processing: converted to RGB, resized to 768×768 with Lanczos, encoded as WebP at the first quality in 84→68 that met 150 KiB, and stripped of EXIF by `scripts/mobile/optimize-makeup-situation-images.py`.
+- Technical QA: all eight checked-in files pass RIFF/WEBP, lossy RGB/no-alpha, 768×768, and ≤150 KiB checks in `npm run test:makeup-recommendation`; no embedded text, logo, watermark, or branded packaging was intentionally retained.
+- Review status: technical and product-direction QA complete; final app-store brand/legal approval remains a release gate.

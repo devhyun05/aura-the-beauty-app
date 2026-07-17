@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {ChevronLeft, Sparkles} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {setFeaturePerformanceStage} from '../../../shared/performance/featurePerformanceLogger';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
@@ -377,6 +378,10 @@ export function UnityMakeupCaptureScreen({
   const generatedMaskControlRevisionRef = useRef(0);
   const generatedBrowControlRevisionRef = useRef(0);
   const preparePollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    setFeaturePerformanceStage(`ar:${isPreparingUnity ? 'preparing' : phase}`);
+  }, [isPreparingUnity, phase]);
 
   useEffect(() => {
     return () => {

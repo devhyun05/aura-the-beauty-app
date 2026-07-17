@@ -1435,7 +1435,9 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
         capability[@"availableTypes"]);
 
   // SSM 생성은 depth 파이프라인에 의존하므로 matte type이 있어도 depth delivery가
-  // 미지원인 포맷(720p 등)에서는 matte가 나오지 않을 수 있다 → Photo 프리셋으로 승격.
+  // 미지원인 포맷(1080p/720p 등)에서는 matte가 나오지 않을 수 있다 → Photo 프리셋으로 승격.
+  // 이 경로는 화각이 4:3으로 바뀌어 촬영 가이드 임계값이 어긋나지만, matte 자체가
+  // 안 나오면 헤어라인을 못 잡으므로 기능 확보를 우선한 기존 트레이드오프다.
   if ((!supported || !_photoOutput.depthDataDeliverySupported) &&
       [_session canSetSessionPreset:AVCaptureSessionPresetPhoto]) {
     _session.sessionPreset = AVCaptureSessionPresetPhoto;
@@ -1470,7 +1472,19 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 - (BOOL)configureSession
 {
   [_session beginConfiguration];
-  _session.sessionPreset = AVCaptureSessionPreset1280x720;
+  // 정지 사진 해상도는 세션 프리셋에 묶인다. 720p면 iPhone 16에서도 720x1280
+  // 셀피가 나와 눈 흰자 ROI가 수십 픽셀로 쪼그라들고 조명 보정이 표본 부족
+  // (sclera_too_few_samples)으로 항상 스킵된다.
+  //
+  // 단 Photo 프리셋으로 올리면 안 된다: 화각이 16:9 크롭에서 4:3 전체로 넓어져
+  // 같은 거리에서 얼굴이 더 작게 잡히고, 16:9 기준으로 튜닝된 촬영 가이드
+  // 임계값(faceHeightMin 등)이 전부 어긋나 그린라이트가 서지 않는다(실기기 확인).
+  //
+  // 그래서 화각을 유지하는 같은 16:9 계열에서 해상도만 올린다. 1080p는 720p
+  // 대비 픽셀 면적 2.25배라 흰자 표본이 늘고, 가이드 임계값은 그대로 유효하다.
+  _session.sessionPreset = [_session canSetSessionPreset:AVCaptureSessionPreset1920x1080]
+      ? AVCaptureSessionPreset1920x1080
+      : AVCaptureSessionPreset1280x720;
   _matteCapability = nil;
   [self stopCameraStabilityMonitoring];
 

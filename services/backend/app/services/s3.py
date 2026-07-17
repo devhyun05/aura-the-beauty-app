@@ -16,6 +16,7 @@ PRIVATE_HAIR_MEDIA_KINDS = {
   "hair-simulation-result",
 }
 PRIVATE_HAIR_OBJECT_PREFIXES = tuple(f"uploads/{kind}/" for kind in PRIVATE_HAIR_MEDIA_KINDS)
+PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX = "uploads/generated-makeup-recommendations/"
 SERVER_MANAGED_MEDIA_KINDS = {
   "face-analysis",
   "generated-makeup",
@@ -36,6 +37,15 @@ MANAGED_MEDIA_OBJECT_PREFIXES = tuple(
 
 def is_private_hair_object_key(object_key: str) -> bool:
   return object_key.startswith(PRIVATE_HAIR_OBJECT_PREFIXES)
+
+
+def is_makeup_recommendation_object_key(object_key: str, settings: Settings) -> bool:
+  private_prefix = settings.makeup_private_asset_prefix.strip("/") + "/"
+  return object_key.startswith((PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX, private_prefix))
+
+
+def is_private_makeup_recommendation_object_key(object_key: str, settings: Settings) -> bool:
+  return object_key.startswith(settings.makeup_private_asset_prefix.strip("/") + "/")
 
 
 class S3Service:
@@ -75,7 +85,11 @@ class S3Service:
     configured_bucket = self.settings.s3_bucket_name
     if not configured_bucket:
       raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required for media access.")
-    if bucket != configured_bucket or not object_key.startswith(MANAGED_MEDIA_OBJECT_PREFIXES):
+    managed = object_key.startswith(MANAGED_MEDIA_OBJECT_PREFIXES) or is_makeup_recommendation_object_key(
+      object_key,
+      self.settings,
+    )
+    if bucket != configured_bucket or not managed:
       raise AppError(403, "S3_TARGET_NOT_MANAGED", "The requested object is outside the managed media location.")
 
   def create_presigned_upload(

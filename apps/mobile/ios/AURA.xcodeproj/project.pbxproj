@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0FA0A731B5B2E91D85A3C0C3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1CF056D4BCFBCB119E2FD9FD /* PrivacyInfo.xcprivacy */; };
+		A9F0A1012FA0000000FE0001 /* AURAPerformanceMonitor.m in Sources */ = {isa = PBXBuildFile; fileRef = A9F0A1002FA0000000FE0001 /* AURAPerformanceMonitor.m */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		4A831081BA29FEC55EC6EDD3 /* libPods-AURA.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 90F57427B8CDFED1AC0B228A /* libPods-AURA.a */; };
@@ -36,6 +37,7 @@
 		504346C7D22F1FFCE44CAEE5 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-AURA/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
 		6986E656A2EB340C2DE7FA3C /* Pods-AURA.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AURA.debug.xcconfig"; path = "Target Support Files/Pods-AURA/Pods-AURA.debug.xcconfig"; sourceTree = "<group>"; };
 		90F57427B8CDFED1AC0B228A /* libPods-AURA.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-AURA.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A9F0A1002FA0000000FE0001 /* AURAPerformanceMonitor.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; name = AURAPerformanceMonitor.m; path = AURA/AURAPerformanceMonitor.m; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = AURA/SplashScreen.storyboard; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
 		D9C44DF0657BF1437F17C109 /* Pods-AURA.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-AURA.release.xcconfig"; path = "Target Support Files/Pods-AURA/Pods-AURA.release.xcconfig"; sourceTree = "<group>"; };
@@ -74,6 +76,7 @@
 			isa = PBXGroup;
 			children = (
 				F11748412D0307B40044C1D9 /* AppDelegate.swift */,
+				A9F0A1002FA0000000FE0001 /* AURAPerformanceMonitor.m */,
 				F4E2A61A2F6C8B2400C7D101 /* UnityMakeupBridge.m */,
 				E7C001002F90000000C00110 /* AURAChimeMeeting.swift */,
 				E7C001012F90000000C00111 /* AURAChimeMeetingBridge.m */,
@@ -405,6 +408,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
+				A9F0A1012FA0000000FE0001 /* AURAPerformanceMonitor.m in Sources */,
 				F4E2A61B2F6C8B2400C7D101 /* UnityMakeupBridge.m in Sources */,
 				E7C001102F90000000C00110 /* AURAChimeMeeting.swift in Sources */,
 				E7C001112F90000000C00111 /* AURAChimeMeetingBridge.m in Sources */,

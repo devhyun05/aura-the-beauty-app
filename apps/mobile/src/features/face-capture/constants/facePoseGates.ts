@@ -66,6 +66,17 @@ export const REALTIME_FACE_ANALYSIS_POSE_GATE = Object.freeze({
   requireValidPose: true,
 });
 
+// 통합 촬영(ARKit) greenlight 의 pose 게이트. 사용자 확정(2026-07-18): 통합
+// 게이트는 현재 Unity IsPoseReady 임계값(yaw5/pitch7/roll5)을 그대로 유지한다.
+// RN 이 판정처가 되므로 그 값을 여기 단일 소스로 둔다. (레거시 AVCapture 촬영의
+// REALTIME_FACE_ANALYSIS_POSE_GATE=8/12/5 와는 별개 — 통합은 더 엄격.)
+export const UNIFIED_FACE_ANALYSIS_POSE_GATE: PoseGateLimits = Object.freeze({
+  maxAbsYawDeg: 5,
+  maxAbsPitchDeg: 7,
+  maxAbsRollDeg: 5,
+  requireValidPose: true,
+});
+
 // personal_color / hair_analysis 등 사후 pose 게이트가 없는 촬영 타입의
 // 실시간 게이트 — 폐기 리스크가 없으므로 종전 UX(완화값)를 유지한다.
 // (퍼스널컬러 품질은 조명 게이트 colorLightingGreenlight 와 노출 게이트

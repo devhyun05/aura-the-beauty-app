@@ -6,9 +6,9 @@ import {YStack} from 'tamagui';
 import {
   createFaceAnalysisReportFromCapture,
   FaceAnalysisIntroScreen,
-  FaceAnalysisReportDetailScreen,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
+import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
@@ -62,10 +62,6 @@ import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootNavigation, type RootScreenProps} from './routeUtils';
-
-type HeaderShareAction = {
-  cb: () => void;
-};
 
 const MAX_ANALYSIS_RETRY_COUNT = 2;
 // 온디바이스 정지영상 분석(세로비율 등)이 이 시간 안에 끝나지 않으면 해당 축 없이
@@ -151,7 +147,6 @@ export function FaceCaptureRouteScreen({
     unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const {getAuthToken, isRestoringSession} = useAuthSession();
-  const [forceLegacyCapture, setForceLegacyCapture] = React.useState(false);
   const unifiedCaptureRequest = React.useMemo(
     () =>
       buildUnifiedFaceCaptureRequest({
@@ -170,9 +165,12 @@ export function FaceCaptureRouteScreen({
     return null;
   }
 
+  // 통합 촬영이 실패해도 레거시 2단계 촬영으로 넘어가지 않는다(촬영 1회 경로만).
+  // 실패 시 홈으로 보내 사용자가 통합 촬영을 다시 시작하게 한다. 갤러리·Unity
+  // 미지원 기기는 여기와 무관하게 처음부터 레거시로 간다(아래 조건).
   const shouldUseUnifiedCapture = shouldUseUnifiedFaceCaptureRoute({
     featureEnabled: isUnifiedFaceCaptureEnabled(),
-    forceLegacyCapture,
+    forceLegacyCapture: false,
     initialSource: route.params?.initialSource,
     nativeViewSupported: isUnityMakeupNativeViewSupported(),
   });
@@ -201,8 +199,11 @@ export function FaceCaptureRouteScreen({
           return true;
         }}
         onFallback={() => {
+          // 통합 촬영 실패 시 레거시 2단계 촬영으로 폴백하지 않는다(촬영 1회 경로만).
+          // 홈으로 돌려보내 사용자가 통합 촬영을 다시 시작하게 한다. 실패 사유는
+          // [aura:unified-face-capture] fallback-to-legacy 로그로 남는다.
           invalidateUnifiedFaceCapture({resetRetryAttempt: true});
-          setForceLegacyCapture(true);
+          navigateMainTab(navigation, 'HomeTab');
         }}
         onRequestStarted={beginUnifiedFaceCapture}
         request={unifiedCaptureRequest}
@@ -724,29 +725,26 @@ export function FaceAnalysisReportsListRouteScreen({
   );
 }
 
-export function FaceAnalysisReportDetailRouteScreen({
+// The report screen: redesigned S1–S7 UI (features/face-report). Owns the
+// canonical FaceAnalysisReportDetail route, so every entry point (post-analysis,
+// reports list, profile, home, AR back) lands here. Session props follow the
+// same rule as before — route.params.reportId means "past report", so session
+// measurements are withheld and the server-stored ones are restored instead.
+export function FaceAnalysisReportPreviewRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'FaceAnalysisReportDetail'>) {
-  const insets = useSafeAreaInsets();
   const shouldReturnToProfile = route.params?.returnTo === 'profile';
-  const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const {
-    selectedFace3DProfile,
     selectedFaceAnalysisReport,
     selectedFaceCapture,
-    selectedFaceGeometry2d,
     selectedFaceVerticalThirds,
     selectedPersonalColor,
-    selectedPersonalColorCorrection,
     setSelectedFaceAnalysisReport,
   } = useNavigationFlowState();
-  const handleHeaderShareActionChange = React.useCallback(
-    (nextShareAction: (() => void) | null) => {
-      setShareAction(nextShareAction ? {cb: nextShareAction} : null);
-    },
-    [],
-  );
+  const currentReportId =
+    route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
+
   const handleDeleteReport = React.useCallback(
     async (reportId: string) => {
       await deleteFaceAnalysisReport(reportId);
@@ -757,56 +755,29 @@ export function FaceAnalysisReportDetailRouteScreen({
     },
     [navigation, setSelectedFaceAnalysisReport],
   );
-  const footerBottomInset = Math.max(insets.bottom, spacing.md);
-  const currentReportId = route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
-  const handleBackToProfile = React.useCallback(() => {
-    navigateMainTab(navigation, 'ProfileTab');
-  }, [navigation]);
 
   return (
-    <DetailRouteChrome
-      backgroundColor={colors.surfaceMuted}
-      headerMode="overlay"
-      reserveOverlayHeaderSpace={false}
-      routeName="FaceAnalysisReportDetail"
-      onBack={shouldReturnToProfile ? handleBackToProfile : undefined}
-      onOpenDocumentList={
-        shouldReturnToProfile
-          ? undefined
-          : () => navigation.navigate('FaceAnalysisReportsList')
+    <FaceAnalysisReportPreviewScreen
+      analysisReport={selectedFaceAnalysisReport}
+      capturedPhotoUri={selectedFaceCapture?.imageUri}
+      onBack={() =>
+        shouldReturnToProfile ? navigateMainTab(navigation, 'ProfileTab') : navigation.goBack()
       }
-      onShare={shareAction?.cb}
-      shareDisabled={!shareAction}>
-      <>
-        <FaceAnalysisReportDetailScreen
-          analysisReport={selectedFaceAnalysisReport}
-          bottomOverlayHeight={getFaceAnalysisReportFooterReservedHeight(footerBottomInset)}
-          capturedPhotoUri={selectedFaceCapture?.imageUri}
-          onCreateARFilter={() => navigation.navigate('MakeupRecommendation')}
-          onDeleteReport={handleDeleteReport}
-          onHeaderShareActionChange={handleHeaderShareActionChange}
-          onPressProducts={reportId =>
-            navigation.navigate('ProductRecommendation', {reportId})
-          }
-          face3d={route.params?.reportId ? null : selectedFace3DProfile}
-          faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
-          personalColor={route.params?.reportId ? null : selectedPersonalColor}
-          personalColorCorrection={
-            route.params?.reportId ? null : selectedPersonalColorCorrection
-          }
-          reportId={route.params?.reportId ?? null}
-          // 세션 캡처 ID — 화면이 "세션 props vs 서버 복원 measurements" 를
-          // identity(captureId 일치)로 판정하는 기준. id 없는 진입(AR 복귀 등)
-          // 에서 다른 보고서에 stale 세션 측정값이 얹히는 것을 막는다.
-          sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
-          verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
-        />
-        <FaceAnalysisReportBottomNav
-          currentReportId={currentReportId}
-          navigation={navigation}
-        />
-      </>
-    </DetailRouteChrome>
+      onCreateARFilter={() => {
+        if (currentReportId) {
+          navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
+          return;
+        }
+        navigation.navigate('MakeupRecommendation');
+      }}
+      onDeleteReport={handleDeleteReport}
+      onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
+      onRetake={() => navigation.navigate('FaceCapture')}
+      personalColor={route.params?.reportId ? null : selectedPersonalColor}
+      reportId={route.params?.reportId ?? null}
+      sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
+      verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
+    />
   );
 }
 
@@ -945,6 +916,10 @@ function FaceAnalysisReportBottomNav({
       }
 
       if (actionId === 'makeupRecommendation') {
+        if (currentReportId) {
+          navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
+          return;
+        }
         navigation.navigate('MakeupRecommendation');
         return;
       }

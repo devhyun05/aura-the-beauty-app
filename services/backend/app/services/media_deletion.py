@@ -11,7 +11,12 @@ import asyncpg
 
 from app.core.settings import Settings
 from app.db.session import Database
-from app.services.s3 import S3Service, is_private_hair_object_key
+from app.services.s3 import (
+  PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX,
+  S3Service,
+  is_makeup_recommendation_object_key,
+  is_private_hair_object_key,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -20,6 +25,7 @@ DELETABLE_REPORT_OBJECT_PREFIXES = (
   "uploads/capture/",
   "uploads/face-analysis/",
   "uploads/generated-makeup/",
+  PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX,
   "uploads/photo-captures/",
   "uploads/recommended-makeups/",
 )
@@ -564,7 +570,11 @@ async def process_media_deletion_outbox_item(
       return
 
     s3 = S3Service(settings)
-    delete = s3.delete_object_permanently if is_private_hair_object_key(object_key) else s3.delete_object
+    permanently_delete = is_private_hair_object_key(object_key) or is_makeup_recommendation_object_key(
+      object_key,
+      settings,
+    )
+    delete = s3.delete_object_permanently if permanently_delete else s3.delete_object
     delete(bucket=bucket, object_key=object_key)
 
     async with db.pool.acquire() as connection:

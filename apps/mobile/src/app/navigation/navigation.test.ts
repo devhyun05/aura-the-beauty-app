@@ -49,9 +49,9 @@ expectEqual(
 expectEqual(getRouteChrome('ARFilter').kind, 'fullscreen', 'AR chrome');
 expectEqual(getRouteChrome('ARFilter').depth, 'immersive', 'AR depth');
 expectEqual(
-  getDetailRouteTitle('FaceAnalysisReportDetail'),
-  '맞춤 분석 보고서',
-  'detail route title',
+  getRouteChrome('FaceAnalysisReportDetail').kind,
+  'fullscreen',
+  'face analysis report owns its fullscreen chrome',
 );
 expectEqual(
   getDetailRouteTitle('HomeFilterStore'),

@@ -41,10 +41,31 @@ export type HairlineActionableReason =
   | 'motion'
   | 'segmentation_temporarily_unavailable';
 
+// 레거시 greenlight 오버레이·메시지를 RN 이 재현하기 위한 원시 신호.
+// Unity SendGate 가 실어보내며(구버전 빌드엔 없어 optional), RN 이 화면 매핑 후
+// evaluateFaceCaptureGreenlight/evaluateFacePitchGate 로 판정한다.
+//
+// faceBox = ARKit face mesh 를 preview 카메라로 투영한 화면 바운딩박스.
+// 정규화[0,1]·top-left 원점·미러 반영됨(RN 은 previewSize 만 곱하면 화면 좌표).
+export type UnifiedFaceCaptureGateFaceBox = {
+  centerX: number;
+  centerY: number;
+  height: number;
+  width: number;
+};
+
+export type UnifiedFaceCaptureGateGreenlight = {
+  cameraStability: {isStable: boolean; stableDurationMs: number};
+  // null = 이 프레임에 추적 얼굴 없음.
+  faceBox: UnifiedFaceCaptureGateFaceBox | null;
+  pose: {pitchDeg: number; rollDeg: number; valid: boolean; yawDeg: number};
+};
+
 export type UnifiedFaceCaptureGateEvent = {
   cameraReady: boolean;
   faceReady: boolean;
   finalCaptureGreenlight: boolean;
+  greenlight?: UnifiedFaceCaptureGateGreenlight;
   hairline: {
     actionableReason?: HairlineActionableReason;
     confidence: number | null;
@@ -244,6 +265,11 @@ function readFiniteNonNegative(value: unknown): number | null {
     : null;
 }
 
+// pose 각도(yaw/roll)는 음수가 될 수 있어 부호를 허용하는 유한 리더가 필요하다.
+function readFinite(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 function readPositiveInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value > 0
     ? value
@@ -415,6 +441,47 @@ export function isUnifiedFaceCaptureCompletionCompatible(
   );
 }
 
+// greenlight 원시 신호 파싱. 구버전 Unity 빌드엔 이 필드가 없으므로 부재는
+// null 반환(게이트 이벤트 자체는 유효 — 오버레이만 안 뜬다). pose 는 필수,
+// faceBox 는 프레임에 추적 얼굴이 없으면 null 일 수 있다.
+function parseGateGreenlight(
+  value: unknown,
+): UnifiedFaceCaptureGateGreenlight | null {
+  if (!isRecord(value) || !isRecord(value.pose) || !isRecord(value.cameraStability)) {
+    return null;
+  }
+
+  const yawDeg = readFinite(value.pose.yawDeg);
+  const pitchDeg = readFinite(value.pose.pitchDeg);
+  const rollDeg = readFinite(value.pose.rollDeg);
+  if (yawDeg === null || pitchDeg === null || rollDeg === null) {
+    return null;
+  }
+
+  const isStable = value.cameraStability.isStable;
+  const stableDurationMs = readFiniteNonNegative(value.cameraStability.stableDurationMs);
+  if (typeof isStable !== 'boolean' || stableDurationMs === null) {
+    return null;
+  }
+
+  let faceBox: UnifiedFaceCaptureGateFaceBox | null = null;
+  if (isRecord(value.faceBox)) {
+    const centerX = readFinite(value.faceBox.centerX);
+    const centerY = readFinite(value.faceBox.centerY);
+    const width = readFiniteNonNegative(value.faceBox.width);
+    const height = readFiniteNonNegative(value.faceBox.height);
+    if (centerX !== null && centerY !== null && width !== null && height !== null) {
+      faceBox = {centerX, centerY, height, width};
+    }
+  }
+
+  return {
+    cameraStability: {isStable, stableDurationMs},
+    faceBox,
+    pose: {pitchDeg, rollDeg, valid: value.pose.valid === true, yawDeg},
+  };
+}
+
 function parseGateEvent(
   payload: Record<string, unknown>,
   requestId: string,
@@ -458,10 +525,15 @@ function parseGateEvent(
     return null;
   }
 
+  // Unity SendGate 는 pose/landmarks/faceWidthRatio/cameraStability 를 gate 의
+  // 최상위 필드로 내보낸다(중첩 greenlight 래퍼 없음). payload 자체를 넘긴다.
+  const greenlight = parseGateGreenlight(payload);
+
   return {
     cameraReady: payload.cameraReady,
     faceReady: payload.faceReady,
     finalCaptureGreenlight: payload.finalCaptureGreenlight,
+    ...(greenlight ? {greenlight} : {}),
     hairline: {
       ...(actionableReason
         ? {actionableReason: actionableReason as HairlineActionableReason}
