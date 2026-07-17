@@ -26,6 +26,7 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 .codex-logs/
+/.runtime/
 
 # Python local state
 __pycache__/
@@ -57,6 +58,9 @@ test-results/
 .playwright-mcp/
 .superpowers/
 .codegraph/
+apps/report-lab/dist/
+apps/report-lab/.npm-cache/
+apps/report-lab/coverage/
 
 # Beard simulation lab local data and rejected experiment artifacts
 tools/beard-simulation-lab/samples/

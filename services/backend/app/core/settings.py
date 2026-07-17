@@ -3,9 +3,11 @@ from functools import lru_cache
 from ipaddress import ip_address
 from pathlib import Path
 import re
+from urllib.parse import urlsplit
 from typing import Literal
+from uuid import UUID
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,6 +62,44 @@ class Settings(BaseSettings):
   face_analysis_v2_enabled: bool = False
   face_analysis_stage_timeout_seconds: float = Field(default=45.0, ge=5.0, le=180.0)
   face_analysis_stage_max_attempts: int = Field(default=2, ge=1, le=3)
+  # Phase 4 population norms remain fail-closed. Turning the flag on is not
+  # sufficient: the resolver also verifies an approved registry bundle and the
+  # configured approval artifact SHA before returning an internal model.
+  face_length_norm_enabled: bool = False
+  face_length_norm_registry_path: str | None = None
+  face_length_norm_approval_artifact_sha256: str | None = Field(
+    default=None,
+    pattern=r"^[0-9a-f]{64}$",
+  )
+
+  # Report Lab is a separate, local-only process surface. These settings never
+  # enable a model provider; LAB_MODE additionally validates the ambient AI and
+  # database configuration before the app is created.
+  lab_mode: bool = False
+  report_lab_model_provider: Literal["disabled"] = "disabled"
+  # Use integers rather than Literal[int]: environment variables arrive as
+  # strings and Pydantic does not coerce a string into an integer Literal.
+  # The validator below still keeps the safety contract immutable.
+  report_lab_max_runs_per_request: int = Field(default=5, ge=1, le=5)
+  report_lab_session_budget_runs: int = Field(default=50, ge=1, le=50)
+  report_lab_retention_days: int = Field(default=7, ge=1, le=7)
+  report_lab_fixture_principal_id: UUID = UUID("00000000-0000-4000-8000-000000000027")
+  report_lab_fixture_root: str | None = None
+  report_lab_raw_response_admin_token: SecretStr | None = None
+  report_lab_commit_sha: str | None = Field(
+    default=None,
+    pattern=r"^[0-9a-f]{40}$",
+  )
+  report_lab_cors_origin: Literal["http://127.0.0.1:5173"] = "http://127.0.0.1:5173"
+  # The lifecycle test runner reserves a collision-free loopback port and
+  # binds this value into the child process. It is forbidden outside the test
+  # environment and must exactly match DATABASE_URL when present.
+  report_lab_test_db_port: int | None = Field(
+    default=None,
+    ge=1024,
+    le=65535,
+    exclude=True,
+  )
   # Phase 2 calibration remains fail-closed until Gate 6B evidence is promoted.
   # Enabling requires all three values below plus a committed approval artifact.
   face3d_calibration_promotion_enabled: bool = False
@@ -288,6 +328,80 @@ class Settings(BaseSettings):
       logging.getLogger(__name__).warning(
         "[aura:auradin-events] auradin_events_enabled=True but auradin_release_manifest_id "
         "is unset — every event will be dropped (no 'unknown' attribution is persisted)",
+      )
+    return self
+
+  @model_validator(mode="after")
+  def validate_face_length_norm_activation_configuration(self) -> "Settings":
+    if not self.face_length_norm_enabled:
+      return self
+    if self.lab_mode:
+      raise ValueError("FACE_LENGTH_NORM_ENABLED is forbidden in LAB_MODE")
+    if not str(self.face_length_norm_registry_path or "").strip():
+      raise ValueError(
+        "FACE_LENGTH_NORM_ENABLED requires FACE_LENGTH_NORM_REGISTRY_PATH",
+      )
+    if not str(self.face_length_norm_approval_artifact_sha256 or "").strip():
+      raise ValueError(
+        "FACE_LENGTH_NORM_ENABLED requires FACE_LENGTH_NORM_APPROVAL_ARTIFACT_SHA256",
+      )
+    return self
+
+  @model_validator(mode="after")
+  def validate_report_lab_is_local_and_provider_disabled(self) -> "Settings":
+    if not self.lab_mode:
+      return self
+
+    environment = self.environment.strip().lower()
+    if environment not in {"local", "test"}:
+      raise ValueError("LAB_MODE is restricted to local/test environments")
+    if self.analysis_provider != "disabled":
+      raise ValueError("LAB_MODE requires AI_PROVIDER=disabled")
+    if self.image_generation_provider_normalized != "disabled":
+      raise ValueError("LAB_MODE requires IMAGE_GENERATION_PROVIDER=disabled")
+    if self.report_lab_fixture_principal_id != UUID("00000000-0000-4000-8000-000000000027"):
+      raise ValueError("LAB_MODE fixture principal is immutable")
+    if (
+      self.report_lab_max_runs_per_request != 5
+      or self.report_lab_session_budget_runs != 50
+      or self.report_lab_retention_days != 7
+    ):
+      raise ValueError("LAB_MODE run limits and retention are immutable")
+    if (self.database_secret_id or "").strip():
+      raise ValueError("LAB_MODE forbids DATABASE_SECRET_ID and remote secret resolution")
+    if environment != "test" and self.report_lab_test_db_port is not None:
+      raise ValueError("REPORT_LAB_TEST_DB_PORT is forbidden outside test")
+
+    database_url = (self.database_url or "").strip()
+    if not database_url:
+      # Route dependencies still fail closed with DATABASE_NOT_CONFIGURED. This
+      # keeps OpenAPI and unit-test app construction possible without a live DB.
+      return self
+
+    try:
+      parsed = urlsplit(database_url)
+      port = parsed.port
+    except ValueError as exc:
+      raise ValueError("LAB_MODE DATABASE_URL is invalid") from exc
+
+    if environment == "test":
+      # Unit tests may exercise the canonical fixed-port configuration without
+      # a live cluster. A dynamically reserved port is accepted only when the
+      # lifecycle runner binds it through REPORT_LAB_TEST_DB_PORT.
+      expected_port = self.report_lab_test_db_port or 55432
+    else:
+      expected_port = 55432
+
+    if (
+      parsed.scheme not in {"postgres", "postgresql"}
+      or parsed.hostname != "127.0.0.1"
+      or port != expected_port
+      or parsed.path != "/aura_report_lab"
+      or parsed.username != "aura_report_lab"
+    ):
+      raise ValueError(
+        "LAB_MODE DATABASE_URL must target the bound loopback "
+        "aura_report_lab/aura_report_lab database",
       )
     return self
 

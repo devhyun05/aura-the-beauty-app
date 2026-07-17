@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Modal, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Modal, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {
   getFaceAnalysisReportById,
@@ -56,6 +57,7 @@ export function FaceAnalysisReportPreviewScreen({
   onMore,
   onRetake,
 }: FaceAnalysisReportPreviewScreenProps) {
+  const insets = useSafeAreaInsets();
   const [loadState, setLoadState] = useState<FaceAnalysisReportDetailLoadState>({status: 'loading'});
   const [bodyProfile, setBodyProfile] = useState<BodyProfile | null>(null);
   const [isBodySurveyOpen, setIsBodySurveyOpen] = useState(false);
@@ -155,14 +157,46 @@ export function FaceAnalysisReportPreviewScreen({
         onResurvey={() => setIsBodySurveyOpen(true)}
         onRetake={onRetake}
       />
-      <Modal animationType="slide" onRequestClose={handleCloseBodySurvey} visible={isBodySurveyOpen}>
-        <BodyPanel onClose={handleCloseBodySurvey} />
+      {/*
+        BodyPanel is the AR stencil's overlay card (maxHeight 460, dark glass) —
+        not a full-screen screen. Rendered raw in a Modal it starts at y=0, which
+        pushes its ✕ under the notch and out of reach. Center it over a dim
+        backdrop inside the safe area so the close button is tappable, and let a
+        backdrop tap dismiss too.
+      */}
+      <Modal
+        animationType="fade"
+        onRequestClose={handleCloseBodySurvey}
+        transparent
+        visible={isBodySurveyOpen}>
+        <View style={styles.bodySurveyBackdrop}>
+          <Pressable
+            accessibilityLabel="체형 설문 닫기"
+            onPress={handleCloseBodySurvey}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            style={[
+              styles.bodySurveySheet,
+              {paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12},
+            ]}>
+            <BodyPanel onClose={handleCloseBodySurvey} />
+          </View>
+        </View>
       </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  bodySurveyBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  bodySurveySheet: {
+    justifyContent: 'center',
+  },
   centered: {
     alignItems: 'center',
     backgroundColor: color.bg,

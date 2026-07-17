@@ -8,9 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.health import router as health_router
+from app.api.lab_analysis import router as report_lab_router
 from app.api.router import api_router
 from app.core.errors import AppError, app_error_handler, http_error_handler, validation_error_handler
 from app.core.settings import Settings, get_settings
+from app.db.connection_config import resolve_database_connection_config
 from app.db.session import database
 from app.services.consulting_schema import ensure_consulting_runtime_schema
 from app.services.account_deletion import ensure_account_deletion_schema
@@ -27,13 +29,42 @@ from app.services.media_upload_schema import ensure_media_upload_schema
 from app.services.notification_schema import ensure_notification_schema
 from app.services.notification_realtime import notification_database_listener
 from app.services.product_recommendation_schema import ensure_product_recommendation_runtime_schema
+from app.services.report_lab_schema import ensure_report_lab_schema
 
 
 logger = logging.getLogger(__name__)
 
 
+async def _connect_report_lab_database(settings: Settings) -> None:
+  """Connect the shared dependency to the already-validated local Lab DSN.
+
+  Database.connect() resolves the process-global settings cache, which is right
+  for the normal module-level app but unsafe for an explicitly constructed Lab
+  app. Lab mode forbids secret-backed connections, so creating the pool from
+  this exact Settings object remains local and cannot trigger AWS resolution.
+  """
+
+  # Never inherit an already-open pool from another app instance.
+  await database.close()
+  config = resolve_database_connection_config(settings)
+  if config is None:
+    return
+  database.pool = await database._create_pool(config)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+  if app.state.settings.lab_mode:
+    # The local Lab process intentionally excludes every production startup
+    # service (snapshot binding, listeners, queues and provider-backed APIs).
+    try:
+      await _connect_report_lab_database(app.state.settings)
+      await ensure_report_lab_schema(database)
+      yield
+    finally:
+      await database.close()
+    return
+
   # Snapshot integrity is a startup invariant and must fail before opening a DB
   # connection. This prevents a catalog-only deploy from silently degrading to
   # lexical retrieval or lazy runtime regeneration.
@@ -76,7 +107,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
   )
   app.state.settings = settings
 
-  if settings.cors_enabled:
+  if settings.lab_mode:
+    app.add_middleware(
+      CORSMiddleware,
+      allow_origins=[settings.report_lab_cors_origin],
+      allow_credentials=True,
+      allow_methods=["GET", "POST", "OPTIONS"],
+      allow_headers=["Authorization", "Content-Type", "X-Aura-Lab-Admin-Token"],
+    )
+  elif settings.cors_enabled:
     app.add_middleware(
       CORSMiddleware,
       allow_origins=settings.cors_origins or ["*"],
@@ -92,8 +131,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
   if provided_settings is not None:
     app.dependency_overrides[get_settings] = lambda: settings
 
-  app.include_router(health_router)
-  app.include_router(api_router, prefix=settings.api_prefix)
+  if settings.lab_mode:
+    app.include_router(report_lab_router, prefix=settings.api_prefix)
+  else:
+    app.include_router(health_router)
+    app.include_router(api_router, prefix=settings.api_prefix)
 
   return app
 

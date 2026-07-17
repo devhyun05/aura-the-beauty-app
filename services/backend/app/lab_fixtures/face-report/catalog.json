@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "aura-report-lab-fixture-catalog-v1",
+  "fixtures": [
+    {
+      "fixtureId": "synthetic-balanced-v1",
+      "file": "synthetic-balanced-v1.json",
+      "label": "결정적 균형형 얼굴 보고서",
+      "synthetic": true,
+      "syntheticScope": "numeric-free-json-only",
+      "provenance": {
+        "kind": "deterministic-json-fixture",
+        "imageState": "omitted-no-approved-provenance",
+        "containsUserData": false,
+        "externalProviderSource": false
+      }
+    }
+  ]
+}

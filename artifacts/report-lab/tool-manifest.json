@@ -1,0 +1,121 @@
+{
+  "schemaVersion": "aura.report-lab-tool-manifest.v1",
+  "generatedAtUtc": "2026-07-17T00:18:16.283Z",
+  "commitSha": "3801ee980c2115529fb543ace3442afe32301fbf",
+  "dirty": true,
+  "policy": {
+    "execution": "local-only",
+    "cloudPlan": "cancelled",
+    "externalModelProviders": "disabled",
+    "secretsOrDatabaseDsnIncluded": false
+  },
+  "tools": [
+    {
+      "name": "CodeGraph",
+      "kind": "mcp",
+      "version": "1.2.0",
+      "configured": true,
+      "status": "CONFIGURED_PRIMARY_WORKTREE_INDEX_USED",
+      "purpose": "code exploration and conflict analysis",
+      "reason": "The stacked worktree intentionally reuses the indexed primary worktree for read-only exploration; current changed files are re-read directly."
+    },
+    {
+      "name": "Context7",
+      "kind": "mcp",
+      "version": null,
+      "configured": true,
+      "status": "CONFIGURED_SMOKED",
+      "purpose": "live library documentation",
+      "reason": "Connection and documentation lookup were exercised for FastAPI application factories, CORS, and Vite loopback binding."
+    },
+    {
+      "name": "GitHub",
+      "kind": "mcp-and-cli",
+      "version": "gh version 2.96.0 (2026-07-02)",
+      "configured": true,
+      "status": "CONFIGURED_CLI_AUTHENTICATED",
+      "purpose": "PR creation, review comments, and checks",
+      "verification": {
+        "method": "gh auth status --active --hostname github.com",
+        "reasonCode": "LIVE_ACTIVE_AUTH_OK"
+      },
+      "reason": null
+    },
+    {
+      "name": "Playwright",
+      "kind": "mcp-and-local-package",
+      "version": null,
+      "configured": true,
+      "status": "CONFIGURED_MCP_PERMISSION_PENDING",
+      "purpose": "E2E, accessibility, visual QA, and browser debugging",
+      "reason": "The configured MCP can run browser QA after explicit user permission; a duplicate local package is not required by setup."
+    },
+    {
+      "name": "postgres-lab",
+      "kind": "mcp",
+      "version": "postgres (PostgreSQL) 16.14 (Homebrew)",
+      "configured": true,
+      "status": "CONFIGURED_DEDICATED_LOCAL_TARGET",
+      "purpose": "restricted inspection of the dedicated local Report Lab database",
+      "expectedTarget": {
+        "host": "127.0.0.1",
+        "port": 55432,
+        "database": "aura_report_lab"
+      },
+      "verification": {
+        "method": "live-codex-mcp-json-config-in-process",
+        "reasonCode": "LIVE_CONFIG_AND_CONNECTION_MATCH"
+      },
+      "reason": "Target verified without recording credentials or a DSN in this manifest."
+    },
+    {
+      "name": "Expo",
+      "kind": "claude-plugin",
+      "version": "1.8.2",
+      "configured": true,
+      "status": "CLAUDE_PLUGIN_ENABLED",
+      "purpose": "mobile integration checks; no real-device run in this phase",
+      "reason": "Real-device collection remains script-preparation-only by plan."
+    }
+  ],
+  "claudeReviewGate": {
+    "cliVersion": "2.1.211 (Claude Code)",
+    "model": "claude-fable-5",
+    "effort": "high",
+    "apiProviderRequired": "firstParty",
+    "apiProviderObserved": "firstParty",
+    "loggedIn": true,
+    "status": "READY_FOR_DRY_RUN",
+    "requiredPlugins": {
+      "superpowers": {
+        "enabled": true,
+        "version": "6.1.1"
+      },
+      "code-review": {
+        "enabled": true,
+        "version": "unknown"
+      },
+      "frontend-design": {
+        "enabled": true,
+        "version": "unknown"
+      },
+      "playwright": {
+        "enabled": true,
+        "version": "unknown"
+      }
+    },
+    "reason": null
+  },
+  "localRuntime": {
+    "node": "v22.23.0",
+    "npm": "10.9.8",
+    "postgres": "postgres (PostgreSQL) 16.14 (Homebrew)",
+    "databaseEngine": "native-postgresql-16",
+    "databaseTarget": {
+      "host": "127.0.0.1",
+      "port": 55432,
+      "database": "aura_report_lab"
+    },
+    "dockerFallback": "not-used-disk-pressure"
+  }
+}
