@@ -47,6 +47,16 @@ export const FACE_GEOMETRY_LANDMARK_INDICES = {
 export const BROW_CORE_RIGHT_INDICES = [46, 53, 52, 65, 55, 107, 66, 105, 63, 70] as const;
 export const BROW_CORE_LEFT_INDICES = [276, 283, 282, 295, 285, 336, 296, 334, 293, 300] as const;
 
+// 부위 크롭·가이드 폴리라인용 인덱스(P3). MediaPipe face_mesh topology 기준, 피사체 L/R.
+// 콧대 중심선(nasion→코끝): 168·6·197·195·5·4·1.
+export const NOSE_BRIDGE_MIDLINE_INDICES = [168, 6, 197, 195, 5, 4, 1] as const;
+// 콧볼(alare) 좌우 — 중안부 크롭 폭.
+export const NOSE_ALAE_INDICES = [98, 327] as const;
+// 외곽 입술 링(윗입술 좌→우, 아랫입술 우→좌) — 입술 라인 가이드 + 하안부 크롭.
+export const OUTER_LIP_RING_INDICES = [61, 40, 39, 37, 0, 267, 269, 270, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146] as const;
+// 하악 실루엣(피사체 오른턱→턱끝152→왼턱) — 턱 곡선 가이드 + 외곽 크롭.
+export const JAW_SILHOUETTE_INDICES = [172, 136, 150, 149, 176, 148, 152, 377, 400, 378, 379, 365, 397] as const;
+
 // 서비스 입구 가드: 아래 인덱스가 전부 존재+finite 가 아니면 결과 전체를
 // blocked(required_landmarks_missing) 처리한다 (478 전수 검사가 아님).
 export const FACE_GEOMETRY_REQUIRED_INDICES: readonly number[] = [
