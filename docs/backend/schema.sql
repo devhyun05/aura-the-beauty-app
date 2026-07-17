@@ -1255,6 +1255,9 @@ create table if not exists makeup_feedback_reports (
   user_id uuid not null,
   photo_capture_id uuid,
   uploaded_media_id uuid,
+  entry_date date not null default ((now() at time zone 'Asia/Seoul')::date),
+  feedback_kind text not null default 'initial',
+  parent_feedback_report_id uuid,
   source media_source_type not null,
   source_label text,
   score integer,
@@ -1263,10 +1266,67 @@ create table if not exists makeup_feedback_reports (
   feedback_payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   completed_at timestamptz,
-  constraint chk_makeup_feedback_score check (score is null or score between 0 and 100)
+  constraint chk_makeup_feedback_score check (score is null or score between 0 and 100),
+  constraint chk_makeup_feedback_kind check (feedback_kind in ('initial', 'correction')),
+  constraint chk_makeup_feedback_parent_presence check (
+    (feedback_kind = 'initial' and parent_feedback_report_id is null)
+    or (feedback_kind = 'correction' and parent_feedback_report_id is not null)
+  ),
+  constraint chk_makeup_feedback_parent_not_self check (
+    parent_feedback_report_id is null or parent_feedback_report_id <> id
+  )
 );
 
 comment on table makeup_feedback_reports is 'FeedbackResult/Guide/Tip. summaryBadges, callouts, points, strengths live in feedback_payload.';
+
+create table if not exists makeup_journey_settings (
+  user_id uuid primary key,
+  goal_score smallint not null,
+  mission_level text not null,
+  timezone_name text not null default 'Asia/Seoul',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_makeup_journey_goal_score check (goal_score between 1 and 100),
+  constraint chk_makeup_journey_mission_level check (
+    mission_level in ('beginner', 'intermediate', 'advanced')
+  ),
+  constraint chk_makeup_journey_timezone_name check (char_length(btrim(timezone_name)) between 1 and 64)
+);
+
+create table if not exists makeup_journey_day_notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  entry_date date not null,
+  content text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_makeup_journey_day_notes_user_date unique (user_id, entry_date),
+  constraint chk_makeup_journey_day_note_length check (char_length(content) <= 2000)
+);
+
+create table if not exists makeup_journey_missions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
+  entry_date date not null,
+  source text not null,
+  difficulty text not null,
+  title text not null,
+  is_completed boolean not null default false,
+  completed_at timestamptz,
+  sort_order smallint not null default 0,
+  generation_payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_makeup_journey_mission_source check (source in ('curated', 'ai', 'user')),
+  constraint chk_makeup_journey_mission_difficulty check (
+    difficulty in ('beginner', 'intermediate', 'advanced')
+  ),
+  constraint chk_makeup_journey_mission_title check (char_length(btrim(title)) between 1 and 120),
+  constraint chk_makeup_journey_mission_completion check (
+    (is_completed and completed_at is not null)
+    or (not is_completed and completed_at is null)
+  )
+);
 
 create table if not exists user_push_devices (
   id uuid primary key default gen_random_uuid(),
@@ -1985,6 +2045,30 @@ alter table filter_extraction_reports
   foreign key (result_media_id) references media_assets(id) on delete set null;
 
 alter table makeup_feedback_reports
+  add column if not exists entry_date date,
+  add column if not exists feedback_kind text not null default 'initial',
+  add column if not exists parent_feedback_report_id uuid;
+
+update makeup_feedback_reports
+set entry_date = (coalesce(completed_at, created_at) at time zone 'Asia/Seoul')::date
+where entry_date is null;
+
+alter table makeup_feedback_reports
+  alter column entry_date set default ((now() at time zone 'Asia/Seoul')::date),
+  alter column entry_date set not null,
+  alter column feedback_kind set default 'initial',
+  alter column feedback_kind set not null,
+  drop constraint if exists chk_makeup_feedback_kind,
+  add constraint chk_makeup_feedback_kind check (feedback_kind in ('initial', 'correction')),
+  drop constraint if exists chk_makeup_feedback_parent_presence,
+  add constraint chk_makeup_feedback_parent_presence check (
+    (feedback_kind = 'initial' and parent_feedback_report_id is null)
+    or (feedback_kind = 'correction' and parent_feedback_report_id is not null)
+  ),
+  drop constraint if exists chk_makeup_feedback_parent_not_self,
+  add constraint chk_makeup_feedback_parent_not_self check (
+    parent_feedback_report_id is null or parent_feedback_report_id <> id
+  ),
   drop constraint if exists fk_makeup_feedback_reports_user,
   add constraint fk_makeup_feedback_reports_user
   foreign key (user_id) references users(id) on delete cascade,
@@ -1993,7 +2077,25 @@ alter table makeup_feedback_reports
   foreign key (photo_capture_id) references photo_captures(id) on delete set null,
   drop constraint if exists fk_makeup_feedback_reports_uploaded_media,
   add constraint fk_makeup_feedback_reports_uploaded_media
-  foreign key (uploaded_media_id) references media_assets(id) on delete set null;
+  foreign key (uploaded_media_id) references media_assets(id) on delete set null,
+  drop constraint if exists fk_makeup_feedback_reports_parent,
+  add constraint fk_makeup_feedback_reports_parent
+  foreign key (parent_feedback_report_id) references makeup_feedback_reports(id) on delete cascade;
+
+alter table makeup_journey_settings
+  drop constraint if exists fk_makeup_journey_settings_user,
+  add constraint fk_makeup_journey_settings_user
+  foreign key (user_id) references users(id) on delete cascade;
+
+alter table makeup_journey_day_notes
+  drop constraint if exists fk_makeup_journey_day_notes_user,
+  add constraint fk_makeup_journey_day_notes_user
+  foreign key (user_id) references users(id) on delete cascade;
+
+alter table makeup_journey_missions
+  drop constraint if exists fk_makeup_journey_missions_user,
+  add constraint fk_makeup_journey_missions_user
+  foreign key (user_id) references users(id) on delete cascade;
 
 alter table user_push_devices
   drop constraint if exists fk_user_push_devices_user,
@@ -2262,6 +2364,15 @@ create index if not exists idx_ar_filters_category_public on ar_filters (categor
 create index if not exists idx_user_ar_filter_states_user_created on user_ar_filter_states (user_id, created_at desc);
 create index if not exists idx_filter_extraction_reports_user_created on filter_extraction_reports (user_id, created_at desc);
 create index if not exists idx_makeup_feedback_reports_user_created on makeup_feedback_reports (user_id, created_at desc);
+create index if not exists idx_makeup_feedback_reports_user_entry_status_completed
+  on makeup_feedback_reports (user_id, entry_date, status, completed_at, id);
+create index if not exists idx_makeup_feedback_reports_parent
+  on makeup_feedback_reports (parent_feedback_report_id)
+  where parent_feedback_report_id is not null;
+create index if not exists idx_makeup_journey_missions_user_date_order
+  on makeup_journey_missions (user_id, entry_date, sort_order);
+create unique index if not exists uq_makeup_journey_missions_user_date_title_ci
+  on makeup_journey_missions (user_id, entry_date, lower(title));
 create index if not exists idx_user_push_devices_user_enabled on user_push_devices (user_id, enabled, last_seen_at desc);
 create index if not exists idx_app_notifications_user_created on app_notifications (user_id, created_at desc);
 create index if not exists idx_app_notifications_user_unread on app_notifications (user_id, created_at desc) where read_at is null;

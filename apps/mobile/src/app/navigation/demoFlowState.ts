@@ -8,6 +8,8 @@ import {
   DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
 } from '../../shared/ui';
+import {DEFAULT_FLOATING_ACTION_ANCHOR} from '../../shared/services/floatingActionAnchorStore';
+import {getInitialMakeupFeedbackJourneyFlowContext} from '../../features/makeup-feedback/services/makeupFeedbackJourneyContext';
 import type {NavigationFlowState} from './flowState';
 
 const demoSelectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection = {
@@ -15,6 +17,8 @@ const demoSelectedMakeupFeedbackPhoto: MakeupFeedbackPhotoSelection = {
 };
 
 export function getDemoNavigationFlowState(): NavigationFlowState {
+  const makeupFeedbackJourneyContext =
+    getInitialMakeupFeedbackJourneyFlowContext();
   const selectedReferenceMakeupPhoto = getReferenceMakeupExtractionDataSync().photos[0];
   const savedMakeupLook: MakeupLookPreview = {
     id: 'capture-demo-saved-makeup-look',
@@ -31,11 +35,20 @@ export function getDemoNavigationFlowState(): NavigationFlowState {
   };
 
   return {
+    floatingActionAnchor: DEFAULT_FLOATING_ACTION_ANCHOR,
     floatingActionButtonPosition: DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
     floatingActionIds: DEFAULT_FLOATING_ACTION_IDS,
     floatingActionInteractionMode: DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
     likedMakeupFilterIds: [],
     makeupFeedbackResult: createMockMakeupFeedback(demoSelectedMakeupFeedbackPhoto),
+    makeupFeedbackEntryDate: makeupFeedbackJourneyContext.entryDate,
+    makeupFeedbackKind: makeupFeedbackJourneyContext.feedbackKind,
+    makeupFeedbackParentReportId:
+      makeupFeedbackJourneyContext.parentFeedbackReportId,
+    makeupFeedbackInheritedGoalContext:
+      makeupFeedbackJourneyContext.inheritedGoalContext,
+    makeupFeedbackParentScore: makeupFeedbackJourneyContext.parentScore,
+    makeupFeedbackFlowOrigin: makeupFeedbackJourneyContext.origin,
     savedMakeupLook,
     savedMakeupLooks: [],
     selectedFace3DProfile: null,

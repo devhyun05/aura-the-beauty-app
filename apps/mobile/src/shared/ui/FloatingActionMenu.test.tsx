@@ -12,14 +12,21 @@ import {
   FLOATING_ACTION_MAIN_ICON_SIZE,
   FLOATING_ACTION_MAIN_ICON_STROKE_WIDTH,
   FLOATING_ACTION_MAX_ITEM_COUNT,
+  FLOATING_ACTION_LONG_PRESS_MS,
   FLOATING_ACTION_SETTINGS_BACKGROUND,
   FLOATING_ACTION_SETTINGS_SIZE,
   FLOATING_ACTION_TAP_MAX_DISTANCE,
   floatingActionButtonPositionOptions,
   floatingActionInteractionModeOptions,
   getFloatingActionButtonScale,
+  getFloatingActionAnchorFromCenter,
+  getFloatingActionCenter,
+  getClampedFloatingActionAnchor,
   getFloatingActionDefinition,
+  getFloatingActionFreeReleaseIntent,
+  getFloatingActionLongPressTransition,
   getFloatingActionMenuTarget,
+  getFloatingActionQuadrant,
   getFloatingActionReleaseOutcome,
   getFloatingActionSelectedSlotNumber,
   getFloatingActionSettingsSlotOffset,
@@ -28,6 +35,7 @@ import {
   getFloatingActionSlotOffset,
   getNextFloatingActionSelection,
   getVisibleFloatingActionIds,
+  shouldBeginFloatingActionMenuSelection,
   type FloatingActionId,
 } from './FloatingActionMenu';
 import {colors} from '../theme';
@@ -76,8 +84,8 @@ const inlineLeftPositionEndSlot = getFloatingActionSlotOffset(
   'left',
 );
 const inlineArFilterSlot = getFloatingActionSlotOffsetForAction('arFilter', 'inline');
-const inlineMakeupExtractionSlot = getFloatingActionSlotOffsetForAction(
-  'makeupExtraction',
+const inlineMakeupRecommendationSlot = getFloatingActionSlotOffsetForAction(
+  'makeupRecommendation',
   'inline',
 );
 const inlineMakeupFeedbackSlot = getFloatingActionSlotOffsetForAction(
@@ -103,9 +111,9 @@ const inlineLeftSettingsRelease = getFloatingActionReleaseOutcome(
   null,
   'left',
 );
-const inlineSettingsExtractionDistance = Math.hypot(
-  inlineSettingsSlot.x - inlineMakeupExtractionSlot.x,
-  inlineSettingsSlot.y - inlineMakeupExtractionSlot.y,
+const inlineSettingsRecommendationDistance = Math.hypot(
+  inlineSettingsSlot.x - inlineMakeupRecommendationSlot.x,
+  inlineSettingsSlot.y - inlineMakeupRecommendationSlot.y,
 );
 const inlineLeftSettingsExtractionDistance = Math.hypot(
   inlineLeftPositionSettingsSlot.x - inlineLeftPositionMiddleSlot.x,
@@ -119,9 +127,206 @@ const customOrderedFloatingActions: readonly FloatingActionId[] = [
   'makeupExtraction',
 ];
 const arFilterFloatingActionDefinition = getFloatingActionDefinition('arFilter');
+const constrainedViewport = {
+  bottomInset: 12,
+  bottomReserved: 90,
+  height: 340,
+  leftInset: 8,
+  rightInset: 8,
+  topInset: 20,
+  width: 240,
+};
+const clampedRestoredAnchor = getClampedFloatingActionAnchor(
+  {xRatio: 1, yRatio: 1},
+  constrainedViewport,
+);
+const constrainedFreeCenter = getFloatingActionCenter(
+  {xRatio: 0.5, yRatio: 0.5},
+  constrainedViewport,
+);
+const constrainedFreeLayout = {
+  center: constrainedFreeCenter,
+  viewport: constrainedViewport,
+};
+const constrainedActionSlot = getFloatingActionSlotOffsetForAction(
+  'makeupFeedback',
+  'free',
+  1,
+  3,
+  'right',
+  'topLeft',
+  constrainedFreeLayout,
+);
+const constrainedSettingsSlot = getFloatingActionSettingsSlotOffset(
+  'free',
+  'right',
+  'topLeft',
+  constrainedFreeLayout,
+);
 
 expectEqual(FLOATING_ACTION_MAX_ITEM_COUNT, 3, 'floating action max item count');
-expectEqual(FLOATING_ACTION_TAP_MAX_DISTANCE, 10, 'floating action tap distance threshold');
+expectEqual(FLOATING_ACTION_TAP_MAX_DISTANCE, 8, 'floating action tap distance threshold');
+expectEqual(FLOATING_ACTION_LONG_PRESS_MS, 400, 'floating action long press threshold');
+const freeReleaseBoundaryCases = [
+  {
+    dragDistance: 7,
+    durationMs: 399,
+    expected: 'toggle',
+    label: '399ms short press with sub-threshold movement toggles the menu',
+  },
+  {
+    dragDistance: 7,
+    durationMs: 400,
+    expected: 'drag',
+    label: '400ms release resolves as a drag even if the timer callback races release',
+  },
+  {
+    dragDistance: 7,
+    durationMs: 401,
+    expected: 'drag',
+    label: 'presses over 400ms remain long-press drags',
+  },
+  {
+    dragDistance: 8,
+    durationMs: 399,
+    expected: 'none',
+    label: 'movement at the 8pt boundary is not treated as a short tap',
+  },
+  {
+    dragDistance: 8,
+    durationMs: 400,
+    expected: 'drag',
+    label: 'the 8pt boundary still permits an exact-threshold long press',
+  },
+] as const;
+
+freeReleaseBoundaryCases.forEach(({dragDistance, durationMs, expected, label}) => {
+  expectEqual(
+    getFloatingActionFreeReleaseIntent({
+      dragDistance,
+      durationMs,
+      wasDragging: false,
+      wasSelecting: false,
+    }),
+    expected,
+    label,
+  );
+});
+expectEqual(
+  getFloatingActionFreeReleaseIntent({
+    dragDistance: 96,
+    durationMs: 450,
+    wasDragging: true,
+    wasSelecting: false,
+  }),
+  'drag',
+  'an active long-press drag commits its anchor regardless of release distance',
+);
+expectEqual(
+  getFloatingActionFreeReleaseIntent({
+    dragDistance: 96,
+    durationMs: 450,
+    wasDragging: false,
+    wasSelecting: true,
+  }),
+  'selection',
+  'an early drag-to-select gesture remains a selection after a long hold',
+);
+expectEqual(
+  shouldBeginFloatingActionMenuSelection('drag', 9),
+  true,
+  'early drag keeps the configured drag-to-select interaction',
+);
+expectEqual(
+  shouldBeginFloatingActionMenuSelection('tap', 9),
+  false,
+  'tap interaction does not turn movement into menu selection',
+);
+const collapsedLongPressTransition = getFloatingActionLongPressTransition({
+  isGestureActive: true,
+  isMenuExpanded: false,
+});
+expectEqual(
+  collapsedLongPressTransition.shouldBeginDrag,
+  true,
+  'an active 400ms long press begins dragging',
+);
+expectEqual(
+  collapsedLongPressTransition.shouldCloseMenu,
+  false,
+  'a collapsed menu does not emit a redundant close transition',
+);
+const expandedLongPressTransition = getFloatingActionLongPressTransition({
+  isGestureActive: true,
+  isMenuExpanded: true,
+});
+expectEqual(
+  expandedLongPressTransition.shouldBeginDrag,
+  true,
+  'an expanded menu still enters drag mode after a long press',
+);
+expectEqual(
+  expandedLongPressTransition.shouldCloseMenu,
+  true,
+  'entering drag mode closes an expanded menu',
+);
+expectEqual(
+  getFloatingActionLongPressTransition({
+    isGestureActive: false,
+    isMenuExpanded: true,
+  }).shouldBeginDrag,
+  false,
+  'a cancelled gesture cannot be revived by a delayed long-press timer',
+);
+expectEqual(
+  clampedRestoredAnchor.xRatio < 1 && clampedRestoredAnchor.yRatio < 1,
+  true,
+  'restored anchor is renormalized after viewport constraints change',
+);
+expectEqual(
+  constrainedFreeCenter.y + constrainedActionSlot.y <=
+    constrainedViewport.height -
+      constrainedViewport.bottomInset -
+      constrainedViewport.bottomReserved -
+      8 -
+      (FLOATING_ACTION_ITEM_SIZE * FLOATING_ACTION_ACTIVE_SCALE) / 2,
+  true,
+  'expanded active action item is clamped above the reserved bottom area',
+);
+expectEqual(
+  constrainedFreeCenter.x + constrainedSettingsSlot.x <=
+    constrainedViewport.width -
+      constrainedViewport.rightInset -
+      8 -
+      FLOATING_ACTION_SETTINGS_SIZE / 2,
+  true,
+  'expanded settings item is clamped inside the horizontal safe area',
+);
+expectEqual(
+  getFloatingActionMenuTarget(
+    {translationX: constrainedActionSlot.x, translationY: constrainedActionSlot.y},
+    defaultFloatingActions,
+    'free',
+    'right',
+    'topLeft',
+    constrainedFreeLayout,
+  ),
+  'makeupFeedback',
+  'clamped free action target matches its rendered position',
+);
+expectEqual(
+  getFloatingActionReleaseOutcome(
+    {translationX: constrainedSettingsSlot.x, translationY: constrainedSettingsSlot.y},
+    defaultFloatingActions,
+    'free',
+    null,
+    'right',
+    'topLeft',
+    constrainedFreeLayout,
+  ).kind,
+  'settings',
+  'clamped free settings target matches its rendered position',
+);
 expectEqual(FLOATING_ACTION_MAIN_ICON_SIZE, 20, 'floating action main icon size');
 expectEqual(
   FLOATING_ACTION_MAIN_ICON_STROKE_WIDTH,
@@ -130,7 +335,7 @@ expectEqual(
 );
 expectEqual(
   defaultFloatingActions.join(','),
-  'arFilter,makeupExtraction,makeupFeedback',
+  'makeupRecommendation,makeupFeedback,arFilter',
   'default floating action ids',
 );
 expectEqual(
@@ -201,18 +406,18 @@ expectEqual(inlineLeftSlot.x, -52, 'inline floating action extraction arc x offs
 expectEqual(inlineLeftSlot.y, -52, 'inline floating action extraction arc y offset');
 expectEqual(inlineRightSlot.x, -74, 'inline floating action feedback arc x offset');
 expectEqual(inlineRightSlot.y, 0, 'inline floating action feedback arc y offset');
-expectEqual(inlineArFilterSlot.x, 0, 'inline AR filter sits at 12 o clock');
-expectEqual(inlineArFilterSlot.y, -74, 'inline AR filter sits closer above the star');
-expectEqual(inlineMakeupExtractionSlot.x, -52, 'inline makeup extraction follows the tighter arc');
-expectEqual(inlineMakeupExtractionSlot.y, -52, 'inline makeup extraction sits on the tighter upper-left arc');
-expectEqual(inlineMakeupFeedbackSlot.x, -74, 'inline makeup feedback continues the tighter arc');
-expectEqual(inlineMakeupFeedbackSlot.y, 0, 'inline makeup feedback sits at 9 o clock');
+expectEqual(inlineMakeupRecommendationSlot.x, 0, 'inline makeup recommendation sits at 12 o clock');
+expectEqual(inlineMakeupRecommendationSlot.y, -74, 'inline makeup recommendation starts the tighter arc');
+expectEqual(inlineMakeupFeedbackSlot.x, -52, 'inline makeup feedback follows the tighter arc');
+expectEqual(inlineMakeupFeedbackSlot.y, -52, 'inline makeup feedback sits on the upper-left arc');
+expectEqual(inlineArFilterSlot.x, -74, 'inline AR filter finishes the default action arc');
+expectEqual(inlineArFilterSlot.y, 0, 'inline AR filter sits at 9 o clock');
 expectEqual(inlineSettingsSlot.x, -44, 'inline settings finishes the tighter arc toward 7 o clock');
 expectEqual(inlineSettingsSlot.y, 24, 'inline settings sits closer below-left of the star');
 expectGreaterThan(
-  inlineSettingsExtractionDistance,
+  inlineSettingsRecommendationDistance,
   settingsExtractionMinimumDistance,
-  'inline settings avoids makeup extraction overlap',
+  'inline settings avoids makeup recommendation overlap',
 );
 expectEqual(
   inactiveSettingsVisualState.backgroundColor,
@@ -324,29 +529,78 @@ expectEqual(FLOATING_ACTION_IDLE_SCALE, 1, 'floating action idle scale');
 expectEqual(FLOATING_ACTION_ACTIVE_SCALE, 1.2, 'floating action active scale');
 expectEqual(getFloatingActionButtonScale(false), 1, 'inactive floating action scale');
 expectEqual(getFloatingActionButtonScale(true), 1.2, 'active floating action scale');
+
+const phoneViewport = {
+  bottomInset: 34,
+  bottomReserved: 68,
+  height: 874,
+  leftInset: 0,
+  rightInset: 0,
+  topInset: 47,
+  width: 402,
+};
+const topLeftClampedCenter = getFloatingActionCenter(
+  {xRatio: 0, yRatio: 0},
+  phoneViewport,
+);
+const bottomRightClampedCenter = getFloatingActionCenter(
+  {xRatio: 1, yRatio: 1},
+  phoneViewport,
+);
+expectEqual(topLeftClampedCenter.x, 39, 'free anchor clamps against left edge');
+expectEqual(topLeftClampedCenter.y, 86, 'free anchor clamps below top safe area');
+expectEqual(bottomRightClampedCenter.x, 363, 'free anchor clamps against right edge');
+expectEqual(bottomRightClampedCenter.y, 733, 'free anchor clears footer and bottom safe area');
+expectEqual(
+  getFloatingActionQuadrant(bottomRightClampedCenter, phoneViewport),
+  'bottomRight',
+  'free anchor resolves normalized quadrant',
+);
+expectEqual(
+  getFloatingActionAnchorFromCenter(bottomRightClampedCenter, phoneViewport).xRatio,
+  363 / 402,
+  'free anchor persists a normalized x coordinate',
+);
+const freeBottomRightTopSlot = getFloatingActionSlotOffset(
+  0,
+  3,
+  'free',
+  'right',
+  'bottomRight',
+);
+const freeTopLeftEndSlot = getFloatingActionSlotOffset(
+  2,
+  3,
+  'free',
+  'left',
+  'topLeft',
+);
+expectEqual(freeBottomRightTopSlot.y, -112, 'bottom-right menu expands upward');
+expectEqual(freeTopLeftEndSlot.x, 97, 'top-left menu expands rightward');
+expectEqual(freeTopLeftEndSlot.y, 56, 'top-left menu expands downward');
 expectEqual(
   getFloatingActionMenuTarget(
     {translationX: 6, translationY: -108},
     defaultFloatingActions,
   ),
-  'arFilter',
-  'dragging upward selects AR filter',
+  'makeupRecommendation',
+  'dragging upward selects makeup recommendation',
 );
 expectEqual(
   getFloatingActionMenuTarget(
     {translationX: -96, translationY: -72},
     defaultFloatingActions,
   ),
-  'makeupExtraction',
-  'dragging upper-left selects makeup extraction',
+  'makeupFeedback',
+  'dragging upper-left selects makeup feedback',
 );
 expectEqual(
   getFloatingActionMenuTarget(
     {translationX: 96, translationY: -72},
     defaultFloatingActions,
   ),
-  'makeupFeedback',
-  'dragging upper-right selects makeup feedback',
+  'arFilter',
+  'dragging upper-right selects AR filter',
 );
 expectEqual(
   getFloatingActionMenuTarget(
@@ -354,8 +608,8 @@ expectEqual(
     defaultFloatingActions,
     'inline',
   ),
-  'makeupFeedback',
-  'inline dragging inward-left selects makeup feedback without leaving the screen',
+  'arFilter',
+  'inline dragging inward-left selects AR filter without leaving the screen',
 );
 expectEqual(
   getFloatingActionMenuTarget(
@@ -441,7 +695,7 @@ expectEqual(
   'short lower-left drag near settings still folds the quick action menu back',
 );
 const inlineFeedbackRelease = getFloatingActionReleaseOutcome(
-  {translationX: -74, translationY: 0},
+  {translationX: -52, translationY: -52},
   defaultFloatingActions,
   'inline',
   null,
@@ -453,7 +707,7 @@ expectEqual(
   'inline release selects makeup feedback',
 );
 const inlineFeedbackFlickRelease = getFloatingActionReleaseOutcome(
-  {translationX: -100, translationY: 0},
+  {translationX: -86, translationY: -86},
   defaultFloatingActions,
   'inline',
   'makeupFeedback',

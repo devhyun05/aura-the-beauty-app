@@ -10,9 +10,86 @@ from app.services.face_analysis_schema import FACE_ANALYSIS_STAGE_SCHEMA_SQL
 from app.services.media_upload_schema import MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL
 
 
-SCHEMA_VERSION = "schema.sql:v7-trend-now-health"
+SCHEMA_VERSION = "schema.sql:v8-makeup-journey"
 
 POST_SCHEMA_MIGRATIONS = {
+  "schema.sql:makeup-journey-v1": """
+    alter table makeup_feedback_reports
+      add column if not exists entry_date date,
+      add column if not exists feedback_kind text not null default 'initial',
+      add column if not exists parent_feedback_report_id uuid;
+
+    update makeup_feedback_reports
+    set entry_date = (coalesce(completed_at, created_at) at time zone 'Asia/Seoul')::date
+    where entry_date is null;
+
+    alter table makeup_feedback_reports
+      alter column entry_date set default ((now() at time zone 'Asia/Seoul')::date),
+      alter column entry_date set not null,
+      drop constraint if exists chk_makeup_feedback_kind,
+      add constraint chk_makeup_feedback_kind check (feedback_kind in ('initial', 'correction')),
+      drop constraint if exists chk_makeup_feedback_parent_presence,
+      add constraint chk_makeup_feedback_parent_presence check (
+        (feedback_kind = 'initial' and parent_feedback_report_id is null)
+        or (feedback_kind = 'correction' and parent_feedback_report_id is not null)
+      ),
+      drop constraint if exists chk_makeup_feedback_parent_not_self,
+      add constraint chk_makeup_feedback_parent_not_self check (
+        parent_feedback_report_id is null or parent_feedback_report_id <> id
+      ),
+      drop constraint if exists fk_makeup_feedback_reports_parent,
+      add constraint fk_makeup_feedback_reports_parent
+        foreign key (parent_feedback_report_id) references makeup_feedback_reports(id) on delete cascade;
+
+    create table if not exists makeup_journey_settings (
+      user_id uuid primary key references users(id) on delete cascade,
+      goal_score smallint not null check (goal_score between 1 and 100),
+      mission_level text not null check (mission_level in ('beginner', 'intermediate', 'advanced')),
+      timezone_name text not null default 'Asia/Seoul'
+        check (char_length(btrim(timezone_name)) between 1 and 64),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists makeup_journey_day_notes (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null references users(id) on delete cascade,
+      entry_date date not null,
+      content text not null check (char_length(content) <= 2000),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique (user_id, entry_date)
+    );
+
+    create table if not exists makeup_journey_missions (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null references users(id) on delete cascade,
+      entry_date date not null,
+      source text not null check (source in ('curated', 'ai', 'user')),
+      difficulty text not null check (difficulty in ('beginner', 'intermediate', 'advanced')),
+      title text not null check (char_length(btrim(title)) between 1 and 120),
+      is_completed boolean not null default false,
+      completed_at timestamptz,
+      sort_order smallint not null default 0,
+      generation_payload jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint chk_makeup_journey_mission_completion check (
+        (is_completed and completed_at is not null)
+        or (not is_completed and completed_at is null)
+      )
+    );
+
+    create index if not exists idx_makeup_feedback_reports_user_entry_status_completed
+      on makeup_feedback_reports (user_id, entry_date, status, completed_at, id);
+    create index if not exists idx_makeup_feedback_reports_parent
+      on makeup_feedback_reports (parent_feedback_report_id)
+      where parent_feedback_report_id is not null;
+    create index if not exists idx_makeup_journey_missions_user_date_order
+      on makeup_journey_missions (user_id, entry_date, sort_order);
+    create unique index if not exists uq_makeup_journey_missions_user_date_title_ci
+      on makeup_journey_missions (user_id, entry_date, lower(title));
+  """,
   "schema.sql:external-product-like-auradin-source-v1": """
     alter table external_product_likes
       drop constraint if exists chk_external_product_likes_source,

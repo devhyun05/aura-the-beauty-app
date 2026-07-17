@@ -57,6 +57,7 @@ class Settings(BaseSettings):
   image_generation_provider: str = "openai"
   ai_job_execution_mode: str = "inline"
   sqs_ai_job_queue_url: str | None = None
+  makeup_journey_enabled: bool = True
   face_analysis_v2_enabled: bool = False
   face_analysis_stage_timeout_seconds: float = Field(default=45.0, ge=5.0, le=180.0)
   face_analysis_stage_max_attempts: int = Field(default=2, ge=1, le=3)

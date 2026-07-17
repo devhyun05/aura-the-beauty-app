@@ -31,6 +31,12 @@ import {
   type AppNotificationData,
 } from '../features/notifications';
 import {typography} from '../shared/theme';
+import {
+  makeupJourneyBackendAnalyticsAdapter,
+  setMakeupJourneyAnalyticsAdapter,
+} from '../shared/services/makeupJourneyAnalytics';
+
+setMakeupJourneyAnalyticsAdapter(makeupJourneyBackendAnalyticsAdapter);
 
 const UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS = 5000;
 const STARTUP_SCREEN_MIN_DURATION_MS = 700;

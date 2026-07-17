@@ -34,8 +34,9 @@ type MainTabLinkingScreenConfig = NonNullable<
 
 export const mainTabLinkingScreens = {
   HomeTab: 'home',
-  ProfileTab: 'profile',
   ConsultingTab: 'consulting-tab',
+  MakeupJourneyTab: 'makeup-journey',
+  ProfileTab: 'profile',
 } as const satisfies Record<MainTabRouteName, MainTabLinkingScreenConfig>;
 
 export const rootStackLinkingScreens = {
@@ -105,6 +106,8 @@ export const rootStackLinkingScreens = {
   MakeupFeedbackLoading: 'makeup-feedback-loading',
   MakeupFeedbackResultsList: 'makeup-feedback-results',
   MakeupFeedbackResult: 'makeup-feedback-result/:reportId?',
+  MakeupJourneyDayDetail: 'makeup-journey/day/:entryDate',
+  MakeupJourneyTrend: 'makeup-journey/trend/:entryDate',
   MakeupCorrectionGuide: 'makeup-correction-guide',
   MakeupCorrectionTip: 'makeup-correction-tip/:pointId',
   ReferenceMakeupExtractionUpload: 'reference-makeup-extraction-upload',

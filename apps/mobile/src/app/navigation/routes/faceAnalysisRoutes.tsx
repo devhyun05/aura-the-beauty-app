@@ -48,7 +48,9 @@ import {useAuthSession} from '../../../features/auth';
 import {FaceCaptureTutorialSheet} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import {deleteFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
+import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAnalytics';
 import {colors, spacing} from '../../../shared/theme';
+import {isMakeupJourneyEnabled} from '../../../shared/config/featureFlags';
 import {
   AppFooter,
   FLOATING_ACTION_HOST_EXTRA_HEIGHT,
@@ -816,21 +818,34 @@ function FaceAnalysisReportBottomNav({
   navigation: RootNavigation;
 }) {
   const insets = useSafeAreaInsets();
-  const {height: windowHeight} = useWindowDimensions();
+  const {height: windowHeight, width: windowWidth} = useWindowDimensions();
   const [isExtractionSheetVisible, setIsExtractionSheetVisible] = React.useState(false);
   const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = React.useState(false);
   const [isFloatingActionMenuExpanded, setIsFloatingActionMenuExpanded] =
     React.useState(false);
   const {
+    beginMakeupFeedbackFlow,
+    floatingActionAnchor,
     floatingActionButtonPosition,
     floatingActionIds,
     floatingActionInteractionMode,
     setMakeupFeedbackResult,
+    setFloatingActionAnchor,
+    setFloatingActionButtonPosition,
     setSelectedMakeupFeedbackPhoto,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
   const footerBottomInset = Math.max(insets.bottom, spacing.md);
+  const floatingActionViewport = React.useMemo(() => ({
+    bottomInset: insets.bottom,
+    bottomReserved: APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + spacing.md,
+    height: windowHeight,
+    leftInset: insets.left,
+    rightInset: insets.right,
+    topInset: insets.top,
+    width: windowWidth,
+  }), [insets, windowHeight, windowWidth]);
 
   const handleFooterTabPress = React.useCallback(
     (tab: FooterTabKey) => {
@@ -843,6 +858,11 @@ function FaceAnalysisReportBottomNav({
 
       if (tab === 'consulting') {
         navigateMainTab(navigation, 'ConsultingTab');
+        return;
+      }
+
+      if (tab === 'journey') {
+        navigateMainTab(navigation, 'MakeupJourneyTab');
         return;
       }
 
@@ -875,6 +895,7 @@ function FaceAnalysisReportBottomNav({
 
   const startMakeupFeedback = React.useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
+    beginMakeupFeedbackFlow();
     setMakeupFeedbackResult(null);
     setSelectedMakeupFeedbackPhoto({photoSource});
 
@@ -886,7 +907,12 @@ function FaceAnalysisReportBottomNav({
 
       navigation.navigate('MakeupFeedbackAlbumUpload');
     });
-  }, [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto]);
+  }, [
+    beginMakeupFeedbackFlow,
+    navigation,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  ]);
 
   const handleSelectFloatingAction = React.useCallback(
     (actionId: FloatingActionId) => {
@@ -918,6 +944,11 @@ function FaceAnalysisReportBottomNav({
         return;
       }
 
+      if (actionId === 'makeupRecommendation') {
+        navigation.navigate('MakeupRecommendation');
+        return;
+      }
+
       navigation.navigate(
         'ProductRecommendation',
         currentReportId ? {reportId: currentReportId} : undefined,
@@ -929,6 +960,13 @@ function FaceAnalysisReportBottomNav({
   const handleFloatingActionSettingsPress = React.useCallback(() => {
     navigation.navigate('FloatingActionSettings');
   }, [navigation]);
+  const handleFloatingActionAnchorChange = React.useCallback((anchor: {
+    xRatio: number;
+    yRatio: number;
+  }) => {
+    setFloatingActionAnchor(anchor);
+    setFloatingActionButtonPosition(anchor.xRatio <= 0.5 ? 'left' : 'right');
+  }, [setFloatingActionAnchor, setFloatingActionButtonPosition]);
 
   return (
     <>
@@ -948,23 +986,30 @@ function FaceAnalysisReportBottomNav({
             style={styles.reportFooterDismissLayer}
           />
         ) : null}
+        <FloatingActionMenu
+          actionIds={floatingActionIds}
+          anchor={floatingActionAnchor}
+          buttonPosition={floatingActionButtonPosition}
+          interactionMode={floatingActionInteractionMode}
+          isExpanded={isFloatingActionMenuExpanded}
+          onAnchorChange={handleFloatingActionAnchorChange}
+          onExpandedChange={setIsFloatingActionMenuExpanded}
+          onPressSettings={handleFloatingActionSettingsPress}
+          onReposition={quadrant => {
+            trackMakeupJourneyEvent({
+              name: 'floating_action_repositioned',
+              properties: {quadrant},
+            });
+          }}
+          onSelectAction={handleSelectFloatingAction}
+          placement="free"
+          viewport={floatingActionViewport}
+        />
         <AppFooter
-          actionSlotPosition={floatingActionButtonPosition}
-          actionSlot={
-            <FloatingActionMenu
-              actionIds={floatingActionIds}
-              buttonPosition={floatingActionButtonPosition}
-              interactionMode={floatingActionInteractionMode}
-              isExpanded={isFloatingActionMenuExpanded}
-              onExpandedChange={setIsFloatingActionMenuExpanded}
-              onPressSettings={handleFloatingActionSettingsPress}
-              onSelectAction={handleSelectFloatingAction}
-              placement="inline"
-            />
-          }
           activeTab="profile"
           bottomInset={insets.bottom}
           floating
+          hiddenTabs={isMakeupJourneyEnabled() ? undefined : ['journey']}
           onTabPress={handleFooterTabPress}
         />
       </YStack>

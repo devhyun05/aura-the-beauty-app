@@ -5,8 +5,21 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "1"
+      }
     },
-    "production": {}
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "0"
+      }
+    },
+    "production-makeup-journey": {
+      "extends": "production",
+      "env": {
+        "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "1"
+      }
+    }
   }
 }

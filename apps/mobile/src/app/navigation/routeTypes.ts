@@ -144,8 +144,17 @@ export type RootStackParamList = {
   MakeupFeedbackLoading: undefined;
   MakeupFeedbackResultsList: undefined;
   MakeupFeedbackResult:
-    | {reportId?: string; returnTo?: 'profile'}
+    | {
+        entryDate?: string;
+        reportId?: string;
+        returnTo?: 'profile' | 'makeupJourney';
+      }
     | undefined;
+  MakeupJourneyDayDetail: {entryDate: string};
+  MakeupJourneyTrend: {
+    entryDate: string;
+    range?: '7d' | '30d' | '90d';
+  };
   MakeupCorrectionGuide: undefined;
   MakeupCorrectionTip: {pointId: string};
   ReferenceMakeupExtractionUpload: {
@@ -165,8 +174,9 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   HomeTab: undefined;
-  ProfileTab: undefined;
   ConsultingTab: undefined;
+  MakeupJourneyTab: {month?: string} | undefined;
+  ProfileTab: undefined;
 };
 
 export type RootStackRouteName = keyof RootStackParamList;
@@ -237,6 +247,8 @@ export const rootStackRoutes = [
   'MakeupFeedbackLoading',
   'MakeupFeedbackResultsList',
   'MakeupFeedbackResult',
+  'MakeupJourneyDayDetail',
+  'MakeupJourneyTrend',
   'MakeupCorrectionGuide',
   'MakeupCorrectionTip',
   'ReferenceMakeupExtractionUpload',
@@ -252,8 +264,9 @@ export const rootStackRoutes = [
 
 export const mainTabRoutes = [
   'HomeTab',
-  'ProfileTab',
   'ConsultingTab',
+  'MakeupJourneyTab',
+  'ProfileTab',
 ] as const satisfies readonly MainTabRouteName[];
 
 export const routes = [

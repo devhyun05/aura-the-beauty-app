@@ -3,6 +3,7 @@ import {
   getNavigationFlowStateProviderErrorMessage,
 } from './flowState';
 import {getDemoNavigationFlowState} from './demoFlowState';
+import {getFloatingActionButtonPositionForAnchor} from '../../shared/services/floatingActionAnchorStore';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -24,7 +25,7 @@ expectEqual(
 
 expectEqual(
   getInitialNavigationFlowState().floatingActionIds.join(','),
-  'arFilter,makeupExtraction,makeupFeedback',
+  'makeupRecommendation,makeupFeedback,arFilter',
   'initial floating action ids',
 );
 
@@ -38,6 +39,40 @@ expectEqual(
   getInitialNavigationFlowState().floatingActionButtonPosition,
   'right',
   'initial floating action button position',
+);
+expectEqual(
+  getInitialNavigationFlowState().floatingActionButtonPosition,
+  getFloatingActionButtonPositionForAnchor(
+    getInitialNavigationFlowState().floatingActionAnchor,
+  ),
+  'initial and reset flow state derive the legacy side from the normalized anchor',
+);
+
+expectEqual(
+  getInitialNavigationFlowState().makeupFeedbackKind,
+  'initial',
+  'initial makeup feedback kind',
+);
+
+expectEqual(
+  getInitialNavigationFlowState().makeupFeedbackParentReportId,
+  null,
+  'initial makeup feedback parent',
+);
+
+expectEqual(
+  /^\d{4}-\d{2}-\d{2}$/.test(
+    getInitialNavigationFlowState().makeupFeedbackEntryDate,
+  ),
+  true,
+  'initial makeup feedback entry date format',
+);
+
+expectEqual(
+  getInitialNavigationFlowState().floatingActionAnchor.xRatio >= 0 &&
+    getInitialNavigationFlowState().floatingActionAnchor.xRatio <= 1,
+  true,
+  'initial floating action anchor is normalized',
 );
 
 expectEqual(
@@ -98,7 +133,7 @@ expectEqual(
 
 expectEqual(
   demoState.floatingActionIds.join(','),
-  'arFilter,makeupExtraction,makeupFeedback',
+  'makeupRecommendation,makeupFeedback,arFilter',
   'demo floating action ids',
 );
 

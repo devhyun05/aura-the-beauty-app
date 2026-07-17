@@ -1,5 +1,6 @@
 from app.db.check_schema import (
   EXPECTED_COLUMNS,
+  EXPECTED_COLUMN_CONTRACTS,
   EXPECTED_CONSTRAINT_CONTRACTS,
   EXPECTED_CONSTRAINTS,
   EXPECTED_ENUM_VALUES,
@@ -20,7 +21,7 @@ def test_schema_path_exists() -> None:
 
   assert path.name == "schema.sql"
   assert path.exists()
-  assert SCHEMA_VERSION == "schema.sql:v7-trend-now-health"
+  assert SCHEMA_VERSION == "schema.sql:v8-makeup-journey"
 
 
 def test_seed_path_exists() -> None:
@@ -70,10 +71,18 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
 
 
 def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() -> None:
+  valid_column_contracts = {
+    name: {
+      "is_nullable": expected.get("is_nullable"),
+      "column_default": expected.get("default_contains"),
+    }
+    for name, expected in EXPECTED_COLUMN_CONTRACTS.items()
+  }
   report = build_schema_report(
     set(EXPECTED_TABLES),
     EXPECTED_SCHEMA_VERSIONS,
     column_contracts={
+      **valid_column_contracts,
       "auradin_search_sessions.owner_subject": {"is_nullable": "YES", "column_default": None},
       "auradin_search_sessions.version": {"is_nullable": "NO", "column_default": None},
       # A5 auradin_events 계약 컬럼은 유효값으로 채워 세션 계약 위반만 검출한다.

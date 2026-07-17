@@ -1,8 +1,10 @@
+import json
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -12,17 +14,21 @@ from app.api.router import api_router
 from app.core.errors import AppError, app_error_handler, http_error_handler, validation_error_handler
 from app.core.settings import Settings, get_settings
 from app.db.session import database
-from app.services.consulting_schema import ensure_consulting_runtime_schema
 from app.services.account_deletion import ensure_account_deletion_schema
-from app.services.face_analysis_schema import ensure_face_analysis_schema
-from app.services.media_deletion import ensure_media_deletion_schema
-from app.services.hair_schema import ensure_hair_schema
 from app.services.auradin_agent.catalog_loader import reset_catalog_cache
 from app.services.auradin_agent.event_logger import (
   EVENT_SHUTDOWN_FLUSH_TIMEOUT,
   flush_search_turn_event_tasks,
 )
 from app.services.auradin_agent.snapshot_manifest import bind_process_snapshot, resolve_and_validate_snapshot
+from app.services.consulting_schema import ensure_consulting_runtime_schema
+from app.services.face_analysis_schema import ensure_face_analysis_schema
+from app.services.hair_schema import ensure_hair_schema
+from app.services.makeup_journey_observability import (
+  build_makeup_journey_http_metric,
+  classify_makeup_journey_observed_route,
+)
+from app.services.media_deletion import ensure_media_deletion_schema
 from app.services.media_upload_schema import ensure_media_upload_schema
 from app.services.notification_schema import ensure_notification_schema
 from app.services.notification_realtime import notification_database_listener
@@ -84,6 +90,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
       allow_methods=["*"],
       allow_headers=["*"],
     )
+
+  @app.middleware("http")
+  async def observe_makeup_journey_requests(request: Request, call_next):
+    observed_route = classify_makeup_journey_observed_route(
+      request.url.path,
+      settings.api_prefix,
+    )
+    if observed_route is None:
+      return await call_next(request)
+
+    started_at = time.perf_counter()
+    try:
+      response = await call_next(request)
+    except Exception:
+      metric = build_makeup_journey_http_metric(
+        duration_ms=round((time.perf_counter() - started_at) * 1000),
+        method=request.method,
+        route=observed_route,
+        status_code=500,
+      )
+      logger.exception(
+        "[aura:makeup-journey-http] %s",
+        json.dumps(metric, ensure_ascii=False, separators=(",", ":")),
+      )
+      raise
+
+    metric = build_makeup_journey_http_metric(
+      duration_ms=round((time.perf_counter() - started_at) * 1000),
+      method=request.method,
+      route=observed_route,
+      status_code=response.status_code,
+    )
+    logger.log(
+      logging.WARNING if response.status_code >= 500 else logging.INFO,
+      "[aura:makeup-journey-http] %s",
+      json.dumps(metric, ensure_ascii=False, separators=(",", ":")),
+    )
+    return response
 
   app.add_exception_handler(AppError, app_error_handler)
   app.add_exception_handler(StarletteHTTPException, http_error_handler)

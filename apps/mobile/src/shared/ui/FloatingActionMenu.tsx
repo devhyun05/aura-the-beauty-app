@@ -30,6 +30,7 @@ import {colors, iconSize, radius, shadows, spacing} from '../theme';
 
 export type FloatingActionId =
   | 'arFilter'
+  | 'makeupRecommendation'
   | 'makeupExtraction'
   | 'makeupFeedback'
   | 'faceAnalysis'
@@ -54,7 +55,38 @@ export type FloatingActionSlotOffset = {
   y: number;
 };
 
-export type FloatingActionPlacement = 'floating' | 'inline';
+export type FloatingActionAnchor = {
+  xRatio: number;
+  yRatio: number;
+};
+
+export type FloatingActionViewport = {
+  bottomInset: number;
+  bottomReserved: number;
+  height: number;
+  leftInset: number;
+  rightInset: number;
+  topInset: number;
+  width: number;
+};
+
+export type FloatingActionCenter = {
+  x: number;
+  y: number;
+};
+
+export type FloatingActionFreeLayout = {
+  center: FloatingActionCenter;
+  viewport: FloatingActionViewport;
+};
+
+export type FloatingActionQuadrant =
+  | 'topLeft'
+  | 'topRight'
+  | 'bottomLeft'
+  | 'bottomRight';
+
+export type FloatingActionPlacement = 'floating' | 'inline' | 'free';
 export type FloatingActionInteractionMode = 'tap' | 'drag';
 export type FloatingActionButtonPosition = 'right' | 'left';
 
@@ -62,6 +94,12 @@ export type FloatingActionReleaseOutcome =
   | {kind: 'select'; actionId: FloatingActionId}
   | {kind: 'settings'}
   | {kind: 'close'};
+
+export type FloatingActionFreeReleaseIntent =
+  | 'drag'
+  | 'selection'
+  | 'toggle'
+  | 'none';
 
 export type FloatingActionInteractionModeOption = {
   description: string;
@@ -82,7 +120,10 @@ export type FloatingActionSettingsVisualState = {
 };
 
 export const FLOATING_ACTION_MAX_ITEM_COUNT = 3;
-export const FLOATING_ACTION_TAP_MAX_DISTANCE = 10;
+export const FLOATING_ACTION_TAP_MAX_DISTANCE = 8;
+export const FLOATING_ACTION_LONG_PRESS_MS = 400;
+export const FLOATING_ACTION_EDGE_INSET = 8;
+export const FLOATING_ACTION_ACCESSIBILITY_MOVE_STEP = 44;
 export const FLOATING_ACTION_MIN_DRAG_DISTANCE = 48;
 export const FLOATING_ACTION_SELECTION_RADIUS = 54;
 export const FLOATING_ACTION_FLICK_ALIGNMENT = 0.88;
@@ -113,13 +154,196 @@ const FLOATING_ACTION_INLINE_ARC_SLOT_OFFSETS = [
   {x: -52, y: -52},
   {x: -74, y: 0},
 ] as const satisfies readonly FloatingActionSlotOffset[];
+const FLOATING_ACTION_FREE_ARC_RADIUS = 112;
+const FLOATING_ACTION_FREE_HOST_SIZE = 300;
 export const DEFAULT_FLOATING_ACTION_INTERACTION_MODE: FloatingActionInteractionMode = 'drag';
 export const DEFAULT_FLOATING_ACTION_BUTTON_POSITION: FloatingActionButtonPosition = 'right';
 export const DEFAULT_FLOATING_ACTION_IDS = [
-  'arFilter',
-  'makeupExtraction',
+  'makeupRecommendation',
   'makeupFeedback',
+  'arFilter',
 ] as const satisfies readonly FloatingActionId[];
+
+export type FloatingActionLongPressTransition = {
+  shouldBeginDrag: boolean;
+  shouldCloseMenu: boolean;
+};
+
+export function getFloatingActionLongPressTransition(input: {
+  isGestureActive: boolean;
+  isMenuExpanded: boolean;
+}): FloatingActionLongPressTransition {
+  return {
+    shouldBeginDrag: input.isGestureActive,
+    shouldCloseMenu: input.isGestureActive && input.isMenuExpanded,
+  };
+}
+
+export function shouldBeginFloatingActionMenuSelection(
+  interactionMode: FloatingActionInteractionMode,
+  dragDistance: number,
+): boolean {
+  return (
+    interactionMode === 'drag' &&
+    dragDistance > FLOATING_ACTION_TAP_MAX_DISTANCE
+  );
+}
+
+export function getFloatingActionFreeReleaseIntent(input: {
+  dragDistance: number;
+  durationMs: number;
+  wasDragging: boolean;
+  wasSelecting: boolean;
+}): FloatingActionFreeReleaseIntent {
+  if (input.wasDragging) {
+    return 'drag';
+  }
+
+  if (input.wasSelecting) {
+    return 'selection';
+  }
+
+  // The timer and release event can be delivered in either order at exactly
+  // 400ms. Resolve that boundary here so a valid long press is never dropped.
+  if (
+    input.durationMs >= FLOATING_ACTION_LONG_PRESS_MS &&
+    input.dragDistance <= FLOATING_ACTION_TAP_MAX_DISTANCE
+  ) {
+    return 'drag';
+  }
+
+  if (
+    input.durationMs < FLOATING_ACTION_LONG_PRESS_MS &&
+    input.dragDistance < FLOATING_ACTION_TAP_MAX_DISTANCE
+  ) {
+    return 'toggle';
+  }
+
+  return 'none';
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  if (maximum < minimum) {
+    return (minimum + maximum) / 2;
+  }
+
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+export function getFloatingActionCenter(
+  anchor: FloatingActionAnchor,
+  viewport: FloatingActionViewport,
+): FloatingActionCenter {
+  const buttonRadius = FLOATING_ACTION_BUTTON_SIZE / 2;
+  const minimumX = viewport.leftInset + FLOATING_ACTION_EDGE_INSET + buttonRadius;
+  const maximumX =
+    viewport.width - viewport.rightInset - FLOATING_ACTION_EDGE_INSET - buttonRadius;
+  const minimumY = viewport.topInset + FLOATING_ACTION_EDGE_INSET + buttonRadius;
+  const maximumY =
+    viewport.height -
+    viewport.bottomInset -
+    viewport.bottomReserved -
+    FLOATING_ACTION_EDGE_INSET -
+    buttonRadius;
+
+  return {
+    x: clamp(anchor.xRatio * viewport.width, minimumX, maximumX),
+    y: clamp(anchor.yRatio * viewport.height, minimumY, maximumY),
+  };
+}
+
+export function getFloatingActionAnchorFromCenter(
+  center: FloatingActionCenter,
+  viewport: FloatingActionViewport,
+): FloatingActionAnchor {
+  const clampedCenter = getFloatingActionCenter(
+    {
+      xRatio: viewport.width > 0 ? center.x / viewport.width : 0.5,
+      yRatio: viewport.height > 0 ? center.y / viewport.height : 0.5,
+    },
+    viewport,
+  );
+
+  return {
+    xRatio: viewport.width > 0 ? clampedCenter.x / viewport.width : 0.5,
+    yRatio: viewport.height > 0 ? clampedCenter.y / viewport.height : 0.5,
+  };
+}
+
+export function getClampedFloatingActionAnchor(
+  anchor: FloatingActionAnchor,
+  viewport: FloatingActionViewport,
+): FloatingActionAnchor {
+  return getFloatingActionAnchorFromCenter(
+    getFloatingActionCenter(anchor, viewport),
+    viewport,
+  );
+}
+
+function floatingActionAnchorsEqual(
+  left: FloatingActionAnchor,
+  right: FloatingActionAnchor,
+): boolean {
+  const epsilon = 0.000001;
+  return (
+    Math.abs(left.xRatio - right.xRatio) <= epsilon &&
+    Math.abs(left.yRatio - right.yRatio) <= epsilon
+  );
+}
+
+export function getFloatingActionQuadrant(
+  center: FloatingActionCenter,
+  viewport: Pick<FloatingActionViewport, 'height' | 'width'>,
+): FloatingActionQuadrant {
+  const horizontal = center.x <= viewport.width / 2 ? 'Left' : 'Right';
+  const vertical = center.y <= viewport.height / 2 ? 'top' : 'bottom';
+
+  return `${vertical}${horizontal}` as FloatingActionQuadrant;
+}
+
+function getFreeFloatingActionSlotOffset(
+  index: number,
+  quadrant: FloatingActionQuadrant,
+): FloatingActionSlotOffset {
+  const xDirection = quadrant.endsWith('Left') ? 1 : -1;
+  const yDirection = quadrant.startsWith('top') ? 1 : -1;
+
+  if (index <= 0) {
+    return {x: 0, y: yDirection * FLOATING_ACTION_FREE_ARC_RADIUS};
+  }
+
+  if (index === 1) {
+    return {x: xDirection * 56, y: yDirection * 97};
+  }
+
+  return {x: xDirection * 97, y: yDirection * 56};
+}
+
+export function getClampedFloatingActionSlotOffset(
+  slotOffset: FloatingActionSlotOffset,
+  itemSize: number,
+  layout: FloatingActionFreeLayout,
+): FloatingActionSlotOffset {
+  const itemRadius = itemSize / 2;
+  const minimumX = layout.viewport.leftInset + FLOATING_ACTION_EDGE_INSET + itemRadius;
+  const maximumX =
+    layout.viewport.width -
+    layout.viewport.rightInset -
+    FLOATING_ACTION_EDGE_INSET -
+    itemRadius;
+  const minimumY = layout.viewport.topInset + FLOATING_ACTION_EDGE_INSET + itemRadius;
+  const maximumY =
+    layout.viewport.height -
+    layout.viewport.bottomInset -
+    layout.viewport.bottomReserved -
+    FLOATING_ACTION_EDGE_INSET -
+    itemRadius;
+
+  return {
+    x: clamp(layout.center.x + slotOffset.x, minimumX, maximumX) - layout.center.x,
+    y: clamp(layout.center.y + slotOffset.y, minimumY, maximumY) - layout.center.y,
+  };
+}
 
 export const floatingActionInteractionModeOptions = [
   {
@@ -160,6 +384,13 @@ export const floatingActionDefinitions = [
     icon: (color: string) => <Camera color={color} size={iconSize.sm} strokeWidth={2.1} />,
     id: 'arFilter',
     label: '메이크업 필터',
+  },
+  {
+    accessibilityLabel: '메이크업 추천 시작',
+    description: '오늘의 상황에 맞는 메이크업을 추천받아요.',
+    icon: (color: string) => <Sparkles color={color} size={iconSize.sm} strokeWidth={2} />,
+    id: 'makeupRecommendation',
+    label: '메이크업 추천',
   },
   {
     accessibilityLabel: '메이크업 추출 시작',
@@ -272,7 +503,12 @@ export function getFloatingActionSlotOffset(
   itemCount: number,
   placement: FloatingActionPlacement = 'floating',
   buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  quadrant: FloatingActionQuadrant = 'bottomRight',
 ): FloatingActionSlotOffset {
+  if (placement === 'free') {
+    return getFreeFloatingActionSlotOffset(index, quadrant);
+  }
+
   if (placement === 'inline') {
     const resolveInlineOffset = (rightCornerOffset: FloatingActionSlotOffset) =>
       buttonPosition === 'left'
@@ -311,18 +547,49 @@ export function getFloatingActionSlotOffsetForAction(
   fallbackIndex?: number,
   itemCount = FLOATING_ACTION_MAX_ITEM_COUNT,
   buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  quadrant: FloatingActionQuadrant = 'bottomRight',
+  freeLayout?: FloatingActionFreeLayout,
 ): FloatingActionSlotOffset {
   const defaultActionIndex =
     (DEFAULT_FLOATING_ACTION_IDS as readonly FloatingActionId[]).indexOf(actionId);
   const resolvedIndex = fallbackIndex ?? (defaultActionIndex >= 0 ? defaultActionIndex : 0);
 
-  return getFloatingActionSlotOffset(resolvedIndex, itemCount, placement, buttonPosition);
+  const slotOffset = getFloatingActionSlotOffset(
+    resolvedIndex,
+    itemCount,
+    placement,
+    buttonPosition,
+    quadrant,
+  );
+  return placement === 'free' && freeLayout
+    ? getClampedFloatingActionSlotOffset(
+        slotOffset,
+        FLOATING_ACTION_ITEM_SIZE * FLOATING_ACTION_ACTIVE_SCALE,
+        freeLayout,
+      )
+    : slotOffset;
 }
 
 export function getFloatingActionSettingsSlotOffset(
   placement: FloatingActionPlacement = 'floating',
   buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  quadrant: FloatingActionQuadrant = 'bottomRight',
+  freeLayout?: FloatingActionFreeLayout,
 ): FloatingActionSlotOffset {
+  if (placement === 'free') {
+    const slotOffset = {
+      x: (quadrant.endsWith('Left') ? 1 : -1) * FLOATING_ACTION_FREE_ARC_RADIUS,
+      y: 0,
+    };
+    return freeLayout
+      ? getClampedFloatingActionSlotOffset(
+          slotOffset,
+          FLOATING_ACTION_SETTINGS_SIZE,
+          freeLayout,
+        )
+      : slotOffset;
+  }
+
   if (placement !== 'inline') {
     return {x: 120, y: 0};
   }
@@ -354,6 +621,8 @@ function getFloatingActionSlotOffsetById(
   actionIds: readonly FloatingActionId[],
   placement: FloatingActionPlacement,
   buttonPosition: FloatingActionButtonPosition,
+  quadrant: FloatingActionQuadrant,
+  freeLayout?: FloatingActionFreeLayout,
 ): FloatingActionSlotOffset | null {
   const visibleActionIds = getVisibleFloatingActionIds(actionIds);
   const actionIndex = visibleActionIds.indexOf(actionId);
@@ -368,6 +637,8 @@ function getFloatingActionSlotOffsetById(
     actionIndex,
     visibleActionIds.length,
     buttonPosition,
+    quadrant,
+    freeLayout,
   );
 }
 
@@ -377,12 +648,16 @@ function isFloatingActionFlickActivation(
   actionIds: readonly FloatingActionId[],
   placement: FloatingActionPlacement,
   buttonPosition: FloatingActionButtonPosition,
+  quadrant: FloatingActionQuadrant,
+  freeLayout?: FloatingActionFreeLayout,
 ) {
   const slotOffset = getFloatingActionSlotOffsetById(
     activeActionId,
     actionIds,
     placement,
     buttonPosition,
+    quadrant,
+    freeLayout,
   );
 
   if (!slotOffset) {
@@ -408,6 +683,8 @@ export function getFloatingActionMenuTarget(
   actionIds: readonly FloatingActionId[],
   placement: FloatingActionPlacement = 'floating',
   buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  quadrant: FloatingActionQuadrant = 'bottomRight',
+  freeLayout?: FloatingActionFreeLayout,
 ): FloatingActionId | null {
   const visibleActionIds = getVisibleFloatingActionIds(actionIds);
   const dragDistance = Math.hypot(dragPoint.translationX, dragPoint.translationY);
@@ -426,6 +703,8 @@ export function getFloatingActionMenuTarget(
       index,
       visibleActionIds.length,
       buttonPosition,
+      quadrant,
+      freeLayout,
     );
     const distance = Math.hypot(
       dragPoint.translationX - slotOffset.x,
@@ -445,6 +724,8 @@ function isFloatingActionSettingsTarget(
   dragPoint: FloatingActionDragPoint,
   placement: FloatingActionPlacement,
   buttonPosition: FloatingActionButtonPosition,
+  quadrant: FloatingActionQuadrant,
+  freeLayout?: FloatingActionFreeLayout,
 ) {
   const dragDistance = Math.hypot(dragPoint.translationX, dragPoint.translationY);
 
@@ -452,7 +733,12 @@ function isFloatingActionSettingsTarget(
     return false;
   }
 
-  const slotOffset = getFloatingActionSettingsSlotOffset(placement, buttonPosition);
+  const slotOffset = getFloatingActionSettingsSlotOffset(
+    placement,
+    buttonPosition,
+    quadrant,
+    freeLayout,
+  );
   const distance = Math.hypot(
     dragPoint.translationX - slotOffset.x,
     dragPoint.translationY - slotOffset.y,
@@ -467,8 +753,16 @@ export function getFloatingActionReleaseOutcome(
   placement: FloatingActionPlacement = 'floating',
   activeActionId: FloatingActionId | null = null,
   buttonPosition: FloatingActionButtonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+  quadrant: FloatingActionQuadrant = 'bottomRight',
+  freeLayout?: FloatingActionFreeLayout,
 ): FloatingActionReleaseOutcome {
-  if (isFloatingActionSettingsTarget(dragPoint, placement, buttonPosition)) {
+  if (isFloatingActionSettingsTarget(
+    dragPoint,
+    placement,
+    buttonPosition,
+    quadrant,
+    freeLayout,
+  )) {
     return {kind: 'settings'};
   }
 
@@ -477,6 +771,8 @@ export function getFloatingActionReleaseOutcome(
     actionIds,
     placement,
     buttonPosition,
+    quadrant,
+    freeLayout,
   );
 
   if (directTargetActionId) {
@@ -491,6 +787,8 @@ export function getFloatingActionReleaseOutcome(
       actionIds,
       placement,
       buttonPosition,
+      quadrant,
+      freeLayout,
     )
   ) {
     return {kind: 'select', actionId: activeActionId};
@@ -501,26 +799,42 @@ export function getFloatingActionReleaseOutcome(
 
 type FloatingActionMenuProps = {
   actionIds?: readonly FloatingActionId[];
+  anchor?: FloatingActionAnchor;
   bottomOffset?: number;
   interactionMode?: FloatingActionInteractionMode;
   isExpanded?: boolean;
   buttonPosition?: FloatingActionButtonPosition;
+  onAnchorChange?: (anchor: FloatingActionAnchor) => void;
   onExpandedChange?: (isExpanded: boolean) => void;
   onPressSettings?: () => void;
+  onReposition?: (quadrant: FloatingActionQuadrant) => void;
   onSelectAction?: (actionId: FloatingActionId) => void;
   placement?: FloatingActionPlacement;
+  viewport?: FloatingActionViewport;
 };
 
 export function FloatingActionMenu({
   actionIds = DEFAULT_FLOATING_ACTION_IDS,
+  anchor = {xRatio: 0.88, yRatio: 0.8},
   bottomOffset = 0,
   buttonPosition = DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   interactionMode = DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
   isExpanded: controlledIsExpanded,
+  onAnchorChange,
   onExpandedChange,
   onPressSettings,
+  onReposition,
   onSelectAction,
   placement = 'floating',
+  viewport = {
+    bottomInset: 0,
+    bottomReserved: 0,
+    height: FLOATING_ACTION_HOST_EXTRA_HEIGHT,
+    leftInset: 0,
+    rightInset: 0,
+    topInset: 0,
+    width: FLOATING_ACTION_BUTTON_SIZE,
+  },
 }: FloatingActionMenuProps) {
   const visibleActionIds = useMemo(() => getVisibleFloatingActionIds(actionIds), [actionIds]);
   const [uncontrolledIsExpanded, setUncontrolledIsExpanded] = useState(false);
@@ -530,7 +844,47 @@ export function FloatingActionMenu({
   const [activeActionId, setActiveActionId] = useState<FloatingActionId | null>(null);
   const activeActionIdRef = useRef<FloatingActionId | null>(null);
   const [isSettingsActive, setIsSettingsActive] = useState(false);
+  const [freeDragPoint, setFreeDragPoint] = useState<FloatingActionDragPoint>({
+    translationX: 0,
+    translationY: 0,
+  });
+  const [isAccessibilityMoveMode, setIsAccessibilityMoveMode] = useState(false);
+  const freeGestureActiveRef = useRef(false);
+  const freeDragActiveRef = useRef(false);
+  const freeSelectionActiveRef = useRef(false);
+  const freeGestureStartedAtRef = useRef(0);
+  const freeLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const freeLastDragPointRef = useRef<FloatingActionDragPoint>({
+    translationX: 0,
+    translationY: 0,
+  });
   const visibleDefinitions = visibleActionIds.map(getFloatingActionDefinition);
+  const baseFreeCenter = useMemo(
+    () => getFloatingActionCenter(anchor, viewport),
+    [anchor, viewport],
+  );
+  const clampedFreeAnchor = useMemo(
+    () => getClampedFloatingActionAnchor(anchor, viewport),
+    [anchor, viewport],
+  );
+  const displayedFreeCenter = useMemo(
+    () => getFloatingActionCenter(
+      getFloatingActionAnchorFromCenter(
+        {
+          x: baseFreeCenter.x + freeDragPoint.translationX,
+          y: baseFreeCenter.y + freeDragPoint.translationY,
+        },
+        viewport,
+      ),
+      viewport,
+    ),
+    [baseFreeCenter, freeDragPoint, viewport],
+  );
+  const freeQuadrant = getFloatingActionQuadrant(displayedFreeCenter, viewport);
+  const freeLayout = useMemo<FloatingActionFreeLayout>(
+    () => ({center: displayedFreeCenter, viewport}),
+    [displayedFreeCenter, viewport],
+  );
 
   isExpandedRef.current = isExpanded;
 
@@ -568,7 +922,247 @@ export function FloatingActionMenu({
     }
   }, [clearActiveTargets, isExpanded]);
 
-  const panResponder = useMemo(
+  useEffect(() => {
+    if (
+      placement === 'free' &&
+      !floatingActionAnchorsEqual(anchor, clampedFreeAnchor)
+    ) {
+      onAnchorChange?.(clampedFreeAnchor);
+    }
+  }, [anchor, clampedFreeAnchor, onAnchorChange, placement]);
+
+  const clearFreeLongPressTimer = useCallback(() => {
+    if (freeLongPressTimerRef.current) {
+      clearTimeout(freeLongPressTimerRef.current);
+      freeLongPressTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearFreeLongPressTimer, [clearFreeLongPressTimer]);
+
+  const commitFreeAnchor = useCallback((dragPoint: FloatingActionDragPoint) => {
+    const nextAnchor = getFloatingActionAnchorFromCenter(
+      {
+        x: baseFreeCenter.x + dragPoint.translationX,
+        y: baseFreeCenter.y + dragPoint.translationY,
+      },
+      viewport,
+    );
+    const nextCenter = getFloatingActionCenter(nextAnchor, viewport);
+
+    setFreeDragPoint({translationX: 0, translationY: 0});
+    onAnchorChange?.(nextAnchor);
+    onReposition?.(getFloatingActionQuadrant(nextCenter, viewport));
+  }, [baseFreeCenter, onAnchorChange, onReposition, viewport]);
+
+  const updateSelectionTargets = useCallback((dragPoint: FloatingActionDragPoint) => {
+    const nextIsSettingsActive = Boolean(
+      onPressSettings &&
+      isFloatingActionSettingsTarget(
+        dragPoint,
+        placement,
+        buttonPosition,
+        freeQuadrant,
+        freeLayout,
+      ),
+    );
+    const nextActionId = getFloatingActionMenuTarget(
+      dragPoint,
+      visibleActionIds,
+      placement,
+      buttonPosition,
+      freeQuadrant,
+      freeLayout,
+    );
+    let retainedActionId: FloatingActionId | null = null;
+
+    if (!nextIsSettingsActive) {
+      retainedActionId = nextActionId;
+
+      if (
+        !retainedActionId &&
+        activeActionIdRef.current &&
+        isFloatingActionFlickActivation(
+          dragPoint,
+          activeActionIdRef.current,
+          visibleActionIds,
+          placement,
+          buttonPosition,
+          freeQuadrant,
+          freeLayout,
+        )
+      ) {
+        retainedActionId = activeActionIdRef.current;
+      }
+    }
+
+    activeActionIdRef.current = retainedActionId;
+    setActiveActionId(retainedActionId);
+    setIsSettingsActive(nextIsSettingsActive);
+  }, [
+    buttonPosition,
+    freeLayout,
+    freeQuadrant,
+    onPressSettings,
+    placement,
+    visibleActionIds,
+  ]);
+
+  const freePanResponder = useMemo(
+    () => PanResponder.create({
+      onStartShouldSetPanResponder: () => placement === 'free',
+      onStartShouldSetPanResponderCapture: () => placement === 'free',
+      onMoveShouldSetPanResponder: () => placement === 'free',
+      onMoveShouldSetPanResponderCapture: () => placement === 'free',
+      onPanResponderGrant: () => {
+        freeGestureActiveRef.current = true;
+        freeDragActiveRef.current = false;
+        freeSelectionActiveRef.current = false;
+        freeGestureStartedAtRef.current = Date.now();
+        freeLastDragPointRef.current = {translationX: 0, translationY: 0};
+        clearFreeLongPressTimer();
+        freeLongPressTimerRef.current = setTimeout(() => {
+          const transition = getFloatingActionLongPressTransition({
+            isGestureActive: freeGestureActiveRef.current,
+            isMenuExpanded: isExpandedRef.current,
+          });
+          if (!transition.shouldBeginDrag) {
+            return;
+          }
+
+          freeDragActiveRef.current = true;
+          setIsAccessibilityMoveMode(false);
+          if (transition.shouldCloseMenu) {
+            closeMenu();
+          }
+        }, FLOATING_ACTION_LONG_PRESS_MS);
+      },
+      onPanResponderMove: (
+        _event: GestureResponderEvent,
+        gestureState: PanResponderGestureState,
+      ) => {
+        const dragPoint = {
+          translationX: gestureState.dx,
+          translationY: gestureState.dy,
+        };
+        freeLastDragPointRef.current = dragPoint;
+
+        if (freeDragActiveRef.current) {
+          setFreeDragPoint(dragPoint);
+          return;
+        }
+
+        const dragDistance = Math.hypot(gestureState.dx, gestureState.dy);
+        if (dragDistance > FLOATING_ACTION_TAP_MAX_DISTANCE) {
+          clearFreeLongPressTimer();
+          if (shouldBeginFloatingActionMenuSelection(interactionMode, dragDistance)) {
+            freeSelectionActiveRef.current = true;
+            setExpanded(true);
+            updateSelectionTargets(dragPoint);
+          }
+        }
+      },
+      onPanResponderRelease: (
+        _event: GestureResponderEvent,
+        gestureState: PanResponderGestureState,
+      ) => {
+        const wasDragging = freeDragActiveRef.current;
+        const wasSelecting = freeSelectionActiveRef.current;
+        const durationMs = Date.now() - freeGestureStartedAtRef.current;
+        const dragDistance = Math.hypot(gestureState.dx, gestureState.dy);
+        const releaseIntent = getFloatingActionFreeReleaseIntent({
+          dragDistance,
+          durationMs,
+          wasDragging,
+          wasSelecting,
+        });
+
+        freeGestureActiveRef.current = false;
+        freeDragActiveRef.current = false;
+        freeSelectionActiveRef.current = false;
+        clearFreeLongPressTimer();
+
+        if (releaseIntent === 'drag') {
+          commitFreeAnchor({
+            translationX: gestureState.dx,
+            translationY: gestureState.dy,
+          });
+          return;
+        }
+
+        if (releaseIntent === 'selection') {
+          const releaseOutcome = getFloatingActionReleaseOutcome(
+            {
+              translationX: gestureState.dx,
+              translationY: gestureState.dy,
+            },
+            visibleActionIds,
+            placement,
+            activeActionIdRef.current,
+            buttonPosition,
+            freeQuadrant,
+            freeLayout,
+          );
+
+          if (releaseOutcome.kind === 'select') {
+            selectAction(releaseOutcome.actionId);
+            return;
+          }
+          if (releaseOutcome.kind === 'settings') {
+            closeMenu();
+            onPressSettings?.();
+            return;
+          }
+          closeMenu();
+          return;
+        }
+
+        setFreeDragPoint({translationX: 0, translationY: 0});
+        if (releaseIntent === 'toggle') {
+          clearActiveTargets();
+          setExpanded(current => !current);
+        }
+      },
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderTerminate: () => {
+        const wasDragging = freeDragActiveRef.current;
+        const wasSelecting = freeSelectionActiveRef.current;
+        const lastDragPoint = freeLastDragPointRef.current;
+
+        freeGestureActiveRef.current = false;
+        freeDragActiveRef.current = false;
+        freeSelectionActiveRef.current = false;
+        clearFreeLongPressTimer();
+        if (wasDragging) {
+          commitFreeAnchor(lastDragPoint);
+          return;
+        }
+        if (wasSelecting) {
+          closeMenu();
+          return;
+        }
+        setFreeDragPoint({translationX: 0, translationY: 0});
+      },
+    }),
+    [
+      clearActiveTargets,
+      clearFreeLongPressTimer,
+      closeMenu,
+      commitFreeAnchor,
+      buttonPosition,
+      freeQuadrant,
+      freeLayout,
+      interactionMode,
+      onPressSettings,
+      placement,
+      selectAction,
+      setExpanded,
+      updateSelectionTargets,
+      visibleActionIds,
+    ],
+  );
+
+  const selectionPanResponder = useMemo(
     () => PanResponder.create({
       onStartShouldSetPanResponder: () => interactionMode === 'drag',
       onStartShouldSetPanResponderCapture: () => interactionMode === 'drag',
@@ -587,39 +1181,7 @@ export function FloatingActionMenu({
           translationX: gestureState.dx,
           translationY: gestureState.dy,
         };
-        const nextIsSettingsActive = Boolean(
-          onPressSettings &&
-          isFloatingActionSettingsTarget(dragPoint, placement, buttonPosition),
-        );
-        const nextActionId = getFloatingActionMenuTarget(
-          dragPoint,
-          visibleActionIds,
-          placement,
-          buttonPosition,
-        );
-        let retainedActionId: FloatingActionId | null = null;
-
-        if (!nextIsSettingsActive) {
-          retainedActionId = nextActionId;
-
-          if (
-            !retainedActionId &&
-            activeActionIdRef.current &&
-            isFloatingActionFlickActivation(
-              dragPoint,
-              activeActionIdRef.current,
-              visibleActionIds,
-              placement,
-              buttonPosition,
-            )
-          ) {
-            retainedActionId = activeActionIdRef.current;
-          }
-        }
-
-        activeActionIdRef.current = retainedActionId;
-        setActiveActionId(retainedActionId);
-        setIsSettingsActive(nextIsSettingsActive);
+        updateSelectionTargets(dragPoint);
       },
       onPanResponderRelease: (
         _event: GestureResponderEvent,
@@ -647,6 +1209,8 @@ export function FloatingActionMenu({
           placement,
           activeActionIdRef.current,
           buttonPosition,
+          freeQuadrant,
+          freeLayout,
         );
 
         if (releaseOutcome.kind === 'select') {
@@ -670,21 +1234,88 @@ export function FloatingActionMenu({
       interactionMode,
       placement,
       buttonPosition,
+      freeQuadrant,
+      freeLayout,
       onPressSettings,
       selectAction,
       setExpanded,
+      updateSelectionTargets,
       visibleActionIds,
     ],
   );
+
+  const moveAnchorForAccessibility = useCallback((x: number, y: number) => {
+    commitFreeAnchor({translationX: x, translationY: y});
+  }, [commitFreeAnchor]);
+
+  const accessibilityActions = isAccessibilityMoveMode
+    ? [
+        {label: '위로 이동', name: 'moveUp'},
+        {label: '아래로 이동', name: 'moveDown'},
+        {label: '왼쪽으로 이동', name: 'moveLeft'},
+        {label: '오른쪽으로 이동', name: 'moveRight'},
+        {label: '위치 이동 완료', name: 'finishMove'},
+      ]
+    : [
+        {label: '빠른 실행 위치 이동', name: 'movePosition'},
+        {label: isExpanded ? '메뉴 닫기' : '메뉴 열기', name: 'activate'},
+      ];
+
+  const handleAccessibilityAction = useCallback((actionName: string) => {
+    if (actionName === 'movePosition') {
+      closeMenu();
+      setIsAccessibilityMoveMode(true);
+      return;
+    }
+
+    if (actionName === 'finishMove') {
+      setIsAccessibilityMoveMode(false);
+      return;
+    }
+
+    if (actionName === 'moveUp') {
+      moveAnchorForAccessibility(0, -FLOATING_ACTION_ACCESSIBILITY_MOVE_STEP);
+      return;
+    }
+
+    if (actionName === 'moveDown') {
+      moveAnchorForAccessibility(0, FLOATING_ACTION_ACCESSIBILITY_MOVE_STEP);
+      return;
+    }
+
+    if (actionName === 'moveLeft') {
+      moveAnchorForAccessibility(-FLOATING_ACTION_ACCESSIBILITY_MOVE_STEP, 0);
+      return;
+    }
+
+    if (actionName === 'moveRight') {
+      moveAnchorForAccessibility(FLOATING_ACTION_ACCESSIBILITY_MOVE_STEP, 0);
+      return;
+    }
+
+    if (actionName === 'activate') {
+      setExpanded(current => !current);
+    }
+  }, [closeMenu, isExpanded, moveAnchorForAccessibility, setExpanded]);
 
   return (
     <View
       pointerEvents="box-none"
       style={[
-        placement === 'inline' ? styles.inlineHost : styles.host,
+        placement === 'inline'
+          ? styles.inlineHost
+          : placement === 'free'
+            ? [
+                styles.freeHost,
+                {
+                  top: displayedFreeCenter.y - FLOATING_ACTION_FREE_HOST_SIZE / 2,
+                  left: displayedFreeCenter.x - FLOATING_ACTION_FREE_HOST_SIZE / 2,
+                },
+              ]
+            : styles.host,
         placement === 'floating' ? {bottom: bottomOffset} : undefined,
       ]}>
-      {isExpanded ? (
+      {isExpanded && placement !== 'free' ? (
         <Pressable
           accessibilityLabel="빠른 실행 메뉴 닫기"
           accessibilityRole="button"
@@ -694,7 +1325,14 @@ export function FloatingActionMenu({
       ) : null}
 
       {isExpanded ? (
-        <View pointerEvents="box-none" style={styles.actionLayer}>
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.actionLayer,
+            placement === 'free'
+              ? {bottom: FLOATING_ACTION_FREE_HOST_SIZE / 2 - FLOATING_ACTION_BUTTON_SIZE / 2}
+              : undefined,
+          ]}>
           {visibleDefinitions.map((definition, index) => {
             const slotOffset = getFloatingActionSlotOffsetForAction(
               definition.id,
@@ -702,6 +1340,8 @@ export function FloatingActionMenu({
               index,
               visibleDefinitions.length,
               buttonPosition,
+              freeQuadrant,
+              freeLayout,
             );
             const isActive = definition.id === activeActionId;
 
@@ -725,12 +1365,53 @@ export function FloatingActionMenu({
                 onPressSettings();
               }}
               placement={placement}
+              quadrant={freeQuadrant}
+              freeLayout={freeLayout}
             />
           ) : null}
         </View>
       ) : null}
 
-      {interactionMode === 'drag' ? (
+      {placement === 'free' ? (
+        <View
+          accessible
+          accessibilityActions={accessibilityActions}
+          accessibilityHint={
+            isAccessibilityMoveMode
+              ? '위, 아래, 왼쪽, 오른쪽 동작으로 위치를 옮길 수 있어요.'
+              : '짧게 누르면 메뉴를 열고, 길게 누르면 위치를 옮길 수 있어요.'
+          }
+          accessibilityLabel={
+            isAccessibilityMoveMode
+              ? '빠른 실행 위치 이동 중'
+              : isExpanded
+                ? '빠른 실행 메뉴 닫기'
+                : '빠른 실행 메뉴 열기'
+          }
+          accessibilityRole="button"
+          onAccessibilityAction={event => {
+            handleAccessibilityAction(event.nativeEvent.actionName);
+          }}
+          style={[
+            styles.mainButton,
+            {
+              bottom:
+                FLOATING_ACTION_FREE_HOST_SIZE / 2 -
+                FLOATING_ACTION_BUTTON_SIZE / 2,
+              left:
+                FLOATING_ACTION_FREE_HOST_SIZE / 2 -
+                FLOATING_ACTION_BUTTON_SIZE / 2,
+            },
+            isExpanded && styles.mainButtonExpanded,
+          ]}
+          {...freePanResponder.panHandlers}>
+          <Sparkles
+            color={isExpanded ? colors.white : colors.textPrimary}
+            size={FLOATING_ACTION_MAIN_ICON_SIZE}
+            strokeWidth={FLOATING_ACTION_MAIN_ICON_STROKE_WIDTH}
+          />
+        </View>
+      ) : interactionMode === 'drag' ? (
         <View
           accessible
           accessibilityLabel={isExpanded ? '빠른 실행 메뉴 닫기' : '빠른 실행 메뉴 열기'}
@@ -739,7 +1420,7 @@ export function FloatingActionMenu({
             styles.mainButton,
             isExpanded && styles.mainButtonExpanded,
           ]}
-          {...panResponder.panHandlers}>
+          {...selectionPanResponder.panHandlers}>
           <Sparkles
             color={isExpanded ? colors.white : colors.textPrimary}
             size={FLOATING_ACTION_MAIN_ICON_SIZE}
@@ -776,11 +1457,15 @@ function FloatingActionSettingsButton({
   isActive,
   onPress,
   placement,
+  quadrant,
+  freeLayout,
 }: {
   buttonPosition: FloatingActionButtonPosition;
   isActive: boolean;
   onPress: () => void;
   placement: FloatingActionPlacement;
+  quadrant: FloatingActionQuadrant;
+  freeLayout: FloatingActionFreeLayout;
 }) {
   const visualState = getFloatingActionSettingsVisualState(isActive);
 
@@ -792,7 +1477,12 @@ function FloatingActionSettingsButton({
       style={({pressed}) => [
         styles.settingsButton,
         getFloatingActionPlacementStyle(
-          getFloatingActionSettingsSlotOffset(placement, buttonPosition),
+          getFloatingActionSettingsSlotOffset(
+            placement,
+            buttonPosition,
+            quadrant,
+            freeLayout,
+          ),
           FLOATING_ACTION_SETTINGS_SIZE,
         ),
         {
@@ -943,6 +1633,13 @@ const styles = StyleSheet.create({
     left: 0,
     position: 'absolute',
     right: 0,
+    zIndex: 30,
+  },
+  freeHost: {
+    height: FLOATING_ACTION_FREE_HOST_SIZE,
+    overflow: 'visible',
+    position: 'absolute',
+    width: FLOATING_ACTION_FREE_HOST_SIZE,
     zIndex: 30,
   },
   inlineHost: {

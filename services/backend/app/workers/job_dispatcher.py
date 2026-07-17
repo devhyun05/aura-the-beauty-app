@@ -273,6 +273,7 @@ class AIJobDispatcher:
     request_payload = build_feedback_request_payload_from_report(report)
     await run_feedback_job_background(
       message.job_id,
+      message.user_id,
       request_payload,
       self.settings,
       db=self.db,

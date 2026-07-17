@@ -134,6 +134,18 @@ type MakeupFeedbackResultPathContract = ExpectType<
     'makeup-feedback-result/:reportId?'
   >
 >;
+type MakeupJourneyDayDetailPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupJourneyDayDetail,
+    'makeup-journey/day/:entryDate'
+  >
+>;
+type MakeupJourneyTrendPathContract = ExpectType<
+  TypeEquals<
+    typeof rootStackLinkingScreens.MakeupJourneyTrend,
+    'makeup-journey/trend/:entryDate'
+  >
+>;
 type ReferenceMakeupExtractionResultPathContract = ExpectType<
   TypeEquals<
     typeof rootStackLinkingScreens.ReferenceMakeupExtractionResult,
@@ -171,7 +183,7 @@ expectEqual(
 );
 expectEqual(
   rootStackLinkingScreens.MakeupRecommendation,
-  'makeup-recommendation',
+  'makeup-recommendation/:reportId?',
   'makeup recommendation path',
 );
 expectEqual(
@@ -323,6 +335,16 @@ expectEqual(
   navigationLinking.config?.screens?.MakeupFeedbackResult,
   'makeup-feedback-result/:reportId?',
   'makeup feedback result path accepts a report id',
+);
+expectEqual(
+  navigationLinking.config?.screens?.MakeupJourneyDayDetail,
+  'makeup-journey/day/:entryDate',
+  'makeup journey detail path preserves the local entry date string',
+);
+expectEqual(
+  navigationLinking.config?.screens?.MakeupJourneyTrend,
+  'makeup-journey/trend/:entryDate',
+  'makeup journey trend path preserves the selected entry date',
 );
 expectEqual(
   navigationLinking.config?.screens?.ReferenceMakeupExtractionResult,
