@@ -1,5 +1,6 @@
+import {isRunningInExpoGo} from 'expo';
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
+import type * as ExpoNotifications from 'expo-notifications';
 import {Platform} from 'react-native';
 
 import * as SecureStore from '../../../shared/services/localSecureStore';
@@ -15,6 +16,7 @@ const PUSH_TOKEN_STORAGE_KEY = 'aura.notifications.expoPushToken.v1';
 const BACKGROUND_NOTIFICATION_PREFERENCE_KEY =
   'aura.notifications.backgroundReportsEnabled.v1';
 const notificationStateListeners = new Set<() => void>();
+let notificationsModulePromise: Promise<typeof ExpoNotifications> | null = null;
 
 type NotificationListResponse = {
   notifications: AppNotification[];
@@ -24,7 +26,8 @@ type NotificationListResponse = {
 export type PushRegistrationResult =
   | {status: 'registered'; expoPushToken: string}
   | {status: 'permission-denied'}
-  | {status: 'project-id-missing'};
+  | {status: 'project-id-missing'}
+  | {status: 'unsupported-in-expo-go'};
 
 export type BackgroundNotificationUpdateResult =
   | PushRegistrationResult
@@ -39,6 +42,17 @@ export function notifyNotificationStateChanged(): void {
   notificationStateListeners.forEach(listener => listener());
 }
 
+export function getExpoNotificationsModule(): Promise<
+  typeof ExpoNotifications | null
+> {
+  if (Platform.OS === 'android' && isRunningInExpoGo()) {
+    return Promise.resolve(null);
+  }
+
+  notificationsModulePromise ??= import('expo-notifications');
+  return notificationsModulePromise;
+}
+
 function getExpoProjectId(): string | null {
   const configuredProjectId = process.env.EXPO_PUBLIC_EAS_PROJECT_ID?.trim();
   const configProjectId = Constants.expoConfig?.extra?.eas?.projectId;
@@ -48,7 +62,8 @@ function getExpoProjectId(): string | null {
 }
 
 function isPermissionGranted(
-  permission: Notifications.NotificationPermissionsStatus,
+  Notifications: typeof ExpoNotifications,
+  permission: ExpoNotifications.NotificationPermissionsStatus,
 ): boolean {
   const iosStatus = permission.ios?.status;
 
@@ -60,9 +75,11 @@ function isPermissionGranted(
   );
 }
 
-async function requestNotificationPermission(): Promise<boolean> {
+async function requestNotificationPermission(
+  Notifications: typeof ExpoNotifications,
+): Promise<boolean> {
   const currentPermission = await Notifications.getPermissionsAsync();
-  if (isPermissionGranted(currentPermission)) {
+  if (isPermissionGranted(Notifications, currentPermission)) {
     return true;
   }
 
@@ -73,10 +90,15 @@ async function requestNotificationPermission(): Promise<boolean> {
       allowSound: true,
     },
   });
-  return isPermissionGranted(requestedPermission);
+  return isPermissionGranted(Notifications, requestedPermission);
 }
 
 export async function registerForReportNotifications(): Promise<PushRegistrationResult> {
+  const Notifications = await getExpoNotificationsModule();
+  if (!Notifications) {
+    return {status: 'unsupported-in-expo-go'};
+  }
+
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('reports', {
       name: '보고서 완료',
@@ -87,7 +109,7 @@ export async function registerForReportNotifications(): Promise<PushRegistration
     });
   }
 
-  if (!(await requestNotificationPermission())) {
+  if (!(await requestNotificationPermission(Notifications))) {
     return {status: 'permission-denied'};
   }
 
@@ -113,6 +135,10 @@ export async function registerForReportNotifications(): Promise<PushRegistration
 }
 
 export async function getBackgroundReportNotificationsEnabled(): Promise<boolean> {
+  if (Platform.OS === 'android' && isRunningInExpoGo()) {
+    return false;
+  }
+
   const preference = await SecureStore.getItemAsync(
     BACKGROUND_NOTIFICATION_PREFERENCE_KEY,
   );
@@ -144,7 +170,8 @@ export async function setBackgroundReportNotificationsEnabled(
 export async function presentRealtimeAppNotification(
   notification: AppNotification,
 ): Promise<void> {
-  if (!(await requestNotificationPermission())) {
+  const Notifications = await getExpoNotificationsModule();
+  if (!Notifications || !(await requestNotificationPermission(Notifications))) {
     return;
   }
 

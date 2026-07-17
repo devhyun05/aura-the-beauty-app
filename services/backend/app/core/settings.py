@@ -59,6 +59,10 @@ class Settings(BaseSettings):
   image_generation_provider: str = "openai"
   ai_job_execution_mode: str = "inline"
   sqs_ai_job_queue_url: str | None = None
+  makeup_recommendation_v2_enabled: bool = True
+  makeup_trend_keywords_enabled: bool = True
+  makeup_personalized_image_enabled: bool = True
+  makeup_recommendation_v1_compat_enabled: bool = True
   face_analysis_v2_enabled: bool = False
   face_analysis_stage_timeout_seconds: float = Field(default=45.0, ge=5.0, le=180.0)
   face_analysis_stage_max_attempts: int = Field(default=2, ge=1, le=3)
@@ -180,14 +184,16 @@ class Settings(BaseSettings):
   openai_api_key: str | None = None
   openai_analysis_model_id: str = "gpt-5.5"
   openai_image_model_id: str = "gpt-image-2"
-  openai_image_quality: str = "low"
-  openai_image_size: str = "auto"
-  openai_image_output_format: str = "jpeg"
-  openai_image_output_compression: int = 80
-  openai_image_input_max_edge: int = 1024
-  openai_image_input_quality: int = 82
-  openai_image_output_max_edge: int = 1024
+  openai_image_quality: Literal["low", "medium", "high", "auto"] = "low"
+  openai_image_size: str = "768x1024"
+  openai_image_output_format: Literal["jpeg", "jpg", "png", "webp"] = "jpeg"
+  openai_image_output_compression: int = Field(default=80, ge=0, le=100)
+  openai_image_input_max_edge: int = Field(default=1024, ge=256, le=4096)
+  openai_image_input_quality: int = Field(default=82, ge=40, le=100)
+  openai_image_output_max_edge: int = Field(default=1024, ge=256, le=4096)
   makeup_recommendation_source_hosts: str = "d3t1pbvtir1lj.cloudfront.net"
+  makeup_private_asset_prefix: str = "private/generated-makeup-recommendations"
+  makeup_private_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
 
   push_notifications_enabled: bool = True
   expo_push_endpoint: str = "https://exp.host/--/api/v2/push/send"
@@ -320,6 +326,19 @@ class Settings(BaseSettings):
 
     return value
 
+  @field_validator("makeup_private_asset_prefix")
+  @classmethod
+  def validate_makeup_private_asset_prefix(cls, value: str) -> str:
+    prefix = str(value or "").strip().strip("/")
+    segments = prefix.split("/")
+    if (
+      not prefix
+      or prefix.startswith("uploads/")
+      or any(segment in {"", ".", ".."} for segment in segments)
+    ):
+      raise ValueError("makeup private assets require a dedicated non-public S3 prefix")
+    return prefix
+
   @model_validator(mode="after")
   def warn_events_enabled_without_release_manifest(self) -> "Settings":
     # A5 교차 리뷰: events flag ON + release manifest 미설정이면 모든 이벤트가 귀속 불가로
@@ -451,6 +470,34 @@ class Settings(BaseSettings):
     if not self.product_trend_service_principal_key.strip():
       raise ValueError("product_trend_service_principal_key must not be empty")
     return self
+
+  @model_validator(mode="after")
+  def validate_makeup_model_boundaries(self) -> "Settings":
+    environment = self.environment.strip().lower()
+    if (
+      self.makeup_recommendation_v2_enabled
+      and environment in {"staging", "stage", "production", "prod"}
+      and not self.makeup_model_boundaries_configured
+    ):
+      raise ValueError(
+        "makeup recommendation V2 requires Claude on Bedrock for text analysis "
+        "and OpenAI gpt-image-2 for image generation",
+      )
+    return self
+
+  @property
+  def makeup_model_boundaries_configured(self) -> bool:
+    claude_models = (
+      self.effective_scenario_model_id,
+      self.effective_question_model_id,
+      self.effective_recommendation_model_id,
+    )
+    return (
+      self.analysis_provider == "bedrock"
+      and all("anthropic.claude" in model_id.lower() for model_id in claude_models)
+      and self.image_generation_provider_normalized == "openai"
+      and self.openai_image_model_id.strip().lower().startswith("gpt-image-2")
+    )
 
   @property
   def analysis_provider(self) -> str:
@@ -699,6 +746,11 @@ class Settings(BaseSettings):
         "configured": bool(self.openai_image_model_id) if image_generation_provider == "openai" else True,
         "requiredWhen": "IMAGE_GENERATION_PROVIDER=openai.",
       },
+      "makeupRecommendationModelBoundary": {
+        "configured": self.makeup_model_boundaries_configured,
+        "requiredWhen": "MAKEUP_RECOMMENDATION_V2_ENABLED=true.",
+        "value": "bedrock:claude-text/openai:gpt-image-2",
+      },
       "imageGenerationProvider": {
         "configured": image_generation_provider == "openai",
         "requiredWhen": "Recommendation images should be generated.",
@@ -783,6 +835,10 @@ class Settings(BaseSettings):
       "makeupScenarioModel": self.effective_scenario_model_id,
       "makeupQuestionModel": self.effective_question_model_id,
       "makeupRecommendationModel": self.effective_recommendation_model_id,
+      "makeupRecommendationV2Enabled": self.makeup_recommendation_v2_enabled,
+      "makeupTrendKeywordsEnabled": self.makeup_trend_keywords_enabled,
+      "makeupPersonalizedImageEnabled": self.makeup_personalized_image_enabled,
+      "makeupRecommendationV1CompatEnabled": self.makeup_recommendation_v1_compat_enabled,
       "bedrockGuardrailConfigured": self.bedrock_guardrail_configured,
       "embeddingProvider": "bedrock",
       "embeddingModel": self.effective_embedding_model_id,

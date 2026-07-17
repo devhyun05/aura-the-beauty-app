@@ -1,4 +1,4 @@
-import {mkdtempSync, readFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -8,8 +8,11 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '../..');
 const outDir = mkdtempSync(join(tmpdir(), 'aura-makeup-recommendation-contract-'));
 const tscPath = join(repoRoot, 'apps/mobile/node_modules/typescript/bin/tsc');
+const typeRoots = join(repoRoot, 'apps/mobile/node_modules/@types');
 const srcRoot = join(repoRoot, 'apps/mobile/src');
+const featureRoot = join(srcRoot, 'features/makeup-recommendation');
 const tests = [
+  'features/makeup-recommendation/services/makeupRecommendationCustomSituationValidation.test.ts',
   'features/makeup-recommendation/services/makeupRecommendationService.test.ts',
   'features/makeup-recommendation/screens/MakeupRecommendationScreen.test.ts',
   'features/ar/services/recommendedMakeupEditService.test.ts',
@@ -18,71 +21,180 @@ const tests = [
   'app/navigation/routes/arRouteActions.test.ts',
 ];
 
-const scenarioPromptChipSource = readFileSync(
-  join(srcRoot, 'features/makeup-recommendation/components/ScenarioPromptChip.tsx'),
-  'utf8',
-);
-for (const requiredChipContract of ["variant?: 'default' | 'popular'", 'borderRadius: radius.pill', 'minHeight: 44']) {
-  if (!scenarioPromptChipSource.includes(requiredChipContract)) {
-    throw new Error(`ScenarioPromptChip is missing its chip contract: ${requiredChipContract}`);
+function read(...segments) {
+  return readFileSync(join(...segments), 'utf8');
+}
+
+function requireIncludes(source, contracts, label) {
+  for (const contract of contracts) {
+    if (!source.includes(contract)) {
+      throw new Error(label + ' is missing its V2 contract: ' + contract);
+    }
   }
 }
-const scenarioChipCloudSource = readFileSync(
-  join(srcRoot, 'features/makeup-recommendation/components/ScenarioChipCloud.tsx'),
-  'utf8',
-);
-for (const requiredCloudContract of ["flexDirection: 'row'", "flexWrap: 'wrap'"]) {
-  if (!scenarioChipCloudSource.includes(requiredCloudContract)) {
-    throw new Error(`ScenarioChipCloud is missing its wrapping contract: ${requiredCloudContract}`);
+
+function validateSituationWebP(assetPath) {
+  const bytes = readFileSync(assetPath);
+  if (bytes.length > 150 * 1024) throw new Error('Situation image exceeds 150 KiB: ' + assetPath);
+  if (bytes.toString('ascii', 0, 4) !== 'RIFF' || bytes.toString('ascii', 8, 12) !== 'WEBP') {
+    throw new Error('Situation image is not WebP: ' + assetPath);
+  }
+  if (bytes.toString('ascii', 12, 16) !== 'VP8 ') {
+    throw new Error('Situation image must be lossy RGB WebP without alpha: ' + assetPath);
+  }
+  const width = bytes.readUInt16LE(26) & 0x3fff;
+  const height = bytes.readUInt16LE(28) & 0x3fff;
+  if (width !== 768 || height !== 768) {
+    throw new Error(`Situation image must be 768x768, got ${width}x${height}: ${assetPath}`);
   }
 }
-const scenarioDiscoverySource = readFileSync(
-  join(srcRoot, 'features/makeup-recommendation/screens/ScenarioDiscoveryView.tsx'),
-  'utf8',
+
+const situationKeys = [
+  ['daily', 'daily.webp'],
+  ['formal_event', 'formal-event.webp'],
+  ['camera_content', 'camera-content.webp'],
+  ['festival_performance', 'festival-performance.webp'],
+];
+const assetRegistry = read(featureRoot, 'data/situations/makeupRecommendationSituationAssets.ts');
+for (const [key, filename] of situationKeys) {
+  requireIncludes(assetRegistry, [key + ': require(', '/situations/' + filename], 'Situation asset registry');
+  const assetPath = join(srcRoot, 'assets/images/makeup-recommendation/situations', filename);
+  if (!existsSync(assetPath)) throw new Error('Situation image is missing: ' + assetPath);
+  validateSituationWebP(assetPath);
+}
+if (assetRegistry.includes('-source.png')) {
+  throw new Error('Metro registry must reference optimized WebP assets only.');
+}
+
+const catalog = read(featureRoot, 'data/makeupRecommendationV2Catalog.ts');
+for (const [key] of situationKeys) {
+  requireIncludes(catalog, ["situation('" + key + "'"], 'Situation catalog');
+}
+requireIncludes(catalog, ['TREND_K_BEAUTY_2026', 'TREND_GLOBAL_SS26', 'STEADY', 'CURATED'], 'Trend badge catalog');
+
+const grid = read(featureRoot, 'components/SituationCardGrid.tsx');
+requireIncludes(grid, ['horizontal', 'snapToInterval', 'decelerationRate="fast"', 'width * 0.42'], 'Responsive situation carousel');
+const situationCard = read(featureRoot, 'components/SituationCard.tsx');
+if (situationCard.includes('scrim') || situationCard.includes('rgba(17')) {
+  throw new Error('Situation card must keep its photo free of dark overlays.');
+}
+
+const discovery = read(featureRoot, 'screens/ScenarioDiscoveryView.tsx');
+requireIncludes(discovery, [
+  'AnalysisReportSelectorCard',
+  'AnalysisReportPickerSheet',
+  'SituationCardGrid',
+  'SituationKeywordSheet',
+  'EditorialTrendSection',
+  'CustomSituationComposer',
+  'onStartFaceAnalysis',
+  '선택한 보고서 기반으로 추천메이크업이 생성됩니다',
+], 'Discovery hierarchy');
+if (discovery.includes('TrendKeywordPanel') || discovery.includes('accessibilityRole="checkbox"')) {
+  throw new Error('Discovery must not inline situation keywords or show a personalized-image checkbox.');
+}
+
+const customComposer = read(featureRoot, 'components/CustomSituationComposer.tsx');
+requireIncludes(customComposer, [
+  '<Modal',
+  'KeyboardAvoidingView',
+  "Platform.OS === 'ios' ? 'padding' : 'height'",
+  'backgroundColor: colors.background',
+  'autoFocus',
+], 'Keyboard-aware custom situation sheet');
+
+const reducer = read(featureRoot, 'state/makeupRecommendationDiscoveryReducer.ts');
+requireIncludes(reducer, [
+  "type: 'report/selected'",
+  "type: 'situation/selected'",
+  "type: 'keyword/selected'",
+  "type: 'custom/opened'",
+], 'Discovery reducer');
+if (reducer.includes('imageMode')) {
+  throw new Error('Discovery reducer must not retain the removed personalized-image toggle.');
+}
+
+const screen = read(featureRoot, 'screens/MakeupRecommendationScreen.tsx');
+requireIncludes(screen, [
+  'reportId?: string;',
+  'fetchMakeupRecommendationDiscovery',
+  'startGeneratedMakeupRecommendationV2',
+  'answerGeneratedMakeupRecommendationQuestionV2',
+  'generateMakeupRecommendationV2',
+  'scenarioLabel={session.scenarioLabel}',
+  "imageMode: 'personalized'",
+  'editorialPresetId: trend.id',
+  'editorialPresetLabel: trend.displayText',
+  'editorialPresetPrompt: trend.seedPrompt',
+  'pollGeneratingSession',
+  'MAKEUP_SESSION_GENERATING',
+  'MAKEUP_SESSION_STATE_CHANGED',
+], 'Makeup recommendation screen');
+
+const editorialTrends = read(featureRoot, 'data/makeupRecommendationEditorialTrends.ts');
+requireIncludes(editorialTrends, [
+  "id: 'wanghong-glass'",
+  "requireScenario('baseball-camera')",
+  "requireScenario('trend-my-way')",
+  'MAKEUP_RECOMMENDATION_EDITORIAL_TREND_INITIAL_COUNT = 6',
+], 'Editorial trend catalog');
+
+const service = read(featureRoot, 'services/makeupRecommendationService.ts');
+requireIncludes(service, [
+  '/makeup-recommendations/discovery',
+  "'/makeup-recommendations/sessions'",
+  '/answers',
+  '/generate',
+  '/image/retry',
+  'Idempotency-Key',
+  'editorialPresetId',
+], 'Makeup recommendation service');
+
+const notificationCoordinator = read(
+  srcRoot,
+  'features/notifications/components/NotificationCoordinator.tsx',
 );
-for (const duplicatePrompt of ['지금 끌리는 한 문장', '마음 가는 문장을 골라보세요.']) {
-  if (scenarioDiscoverySource.includes(duplicatePrompt)) {
-    throw new Error(`Scenario discovery must not repeat its prompt: ${duplicatePrompt}`);
-  }
-}
-for (const requiredDiscoveryContract of ['자주 찾는 메이크업', '다른 분위기', '문구 더보기', 'popularScenarios']) {
-  if (!scenarioDiscoverySource.includes(requiredDiscoveryContract)) {
-    throw new Error(`Scenario discovery is missing its curated chip contract: ${requiredDiscoveryContract}`);
-  }
-}
-const questionScreenSource = readFileSync(
-  join(srcRoot, 'features/makeup-recommendation/screens/MakeupRecommendationScreen.tsx'),
-  'utf8',
+const notificationService = read(
+  srcRoot,
+  'features/notifications/services/notificationService.ts',
 );
-if (!questionScreenSource.includes('scenarioLabel={session.scenarioLabel}')) {
-  throw new Error('Question screen must keep the initially selected scenario visible.');
+const runtimeNotificationImport = /^\s*import(?!\s+type\b).*['"]expo-notifications['"]/m;
+if (
+  runtimeNotificationImport.test(notificationCoordinator) ||
+  runtimeNotificationImport.test(notificationService)
+) {
+  throw new Error(
+    'Expo Go boot path must not statically import the expo-notifications runtime.',
+  );
 }
-for (const requiredScenarioState of [
-  'INITIAL_GENERAL_SCENARIO_COUNT = 7',
-  'SCENARIO_LOAD_MORE_COUNT = 12',
-  'getPopularMakeupScenarios()',
-]) {
-  if (!questionScreenSource.includes(requiredScenarioState)) {
-    throw new Error(`MakeupRecommendationScreen is missing local scenario state: ${requiredScenarioState}`);
-  }
+requireIncludes(notificationService, [
+  "import {isRunningInExpoGo} from 'expo';",
+  "Platform.OS === 'android' && isRunningInExpoGo()",
+  "import('expo-notifications')",
+], 'Expo Go notification guard');
+if (
+  notificationService.indexOf("Platform.OS === 'android' && isRunningInExpoGo()") >
+  notificationService.indexOf("import('expo-notifications')")
+) {
+  throw new Error('Expo Go guard must run before loading expo-notifications.');
 }
-const makeupServiceSource = readFileSync(
-  join(srcRoot, 'features/makeup-recommendation/services/makeupRecommendationService.ts'),
-  'utf8',
+requireIncludes(
+  notificationCoordinator,
+  ['getExpoNotificationsModule()', 'if (!isActive || !Notifications)'],
+  'Expo Go notification coordinator',
 );
-const recommendationResultsSource = readFileSync(
-  join(srcRoot, 'features/makeup-recommendation/screens/RecommendationResultsView.tsx'),
-  'utf8',
-);
-if (makeupServiceSource.includes("generationMode === 'localFallback'") || recommendationResultsSource.includes("generationMode === 'localFallback'")) {
-  throw new Error('AI failures must be surfaced for retry instead of displaying fixture recommendations.');
+
+const results = read(featureRoot, 'screens/RecommendationResultsView.tsx');
+if (service.includes("generationMode === 'localFallback'") || results.includes("generationMode === 'localFallback'")) {
+  throw new Error('Backend AI failures must be surfaced instead of shown as successful fixture recommendations.');
 }
-if (makeupServiceSource.includes('/makeup-recommendations/scenarios')) {
-  throw new Error('Scenario copy must come from the curated local library, not an AI endpoint.');
-}
-if (recommendationResultsSource.includes('임시 추천')) {
-  throw new Error('Recommendation results must never be presented as a temporary substitute for failed AI.');
-}
+
+const routeTypes = read(srcRoot, 'app/navigation/routeTypes.ts');
+const routeScreen = read(srcRoot, 'app/navigation/routes/makeupRecommendationRoutes.tsx');
+const faceRoutes = read(srcRoot, 'app/navigation/routes/faceAnalysisRoutes.tsx');
+requireIncludes(routeTypes, ['MakeupRecommendation:', "{analysisReportId?: string; reportId?: string; view?: 'history'}"], 'Recommendation route params');
+requireIncludes(routeScreen, ['analysisReportId={analysisReportId}', 'reportId={route.params?.reportId}', 'onStartFaceAnalysis', "navigate('FaceAnalysisIntro')"], 'Recommendation route wiring');
+requireIncludes(faceRoutes, ["navigate('MakeupRecommendation', {analysisReportId: currentReportId})"], 'Face report recommendation CTA');
 
 function run(command, args) {
   const result = spawnSync(command, args, {cwd: repoRoot, stdio: 'inherit'});
@@ -96,6 +208,7 @@ run(process.execPath, [
   '--target', 'ES2023',
   '--lib', 'ES2023,DOM',
   '--types', 'node',
+  '--typeRoots', typeRoots,
   '--esModuleInterop',
   '--skipLibCheck',
   '--rootDir', srcRoot,

@@ -15,6 +15,12 @@ export function MakeupRecommendationRouteScreen({
 }: RootScreenProps<'MakeupRecommendation'>) {
   const {selectedFaceAnalysisReport, selectedFaceCapture} = useNavigationFlowState();
   const screenRef = React.useRef<MakeupRecommendationScreenHandle>(null);
+  const analysisReportId = route.params?.analysisReportId
+    ?? (route.params?.reportId ? undefined : selectedFaceAnalysisReport?.id);
+  const canUseSelectedFlowData = Boolean(selectedFaceAnalysisReport)
+    && !route.params?.reportId
+    && (!route.params?.analysisReportId
+      || route.params.analysisReportId === selectedFaceAnalysisReport?.id);
   const handleBack = React.useCallback(() => {
     if (!screenRef.current?.handleBack()) navigation.goBack();
   }, [navigation]);
@@ -33,8 +39,8 @@ export function MakeupRecommendationRouteScreen({
       routeName="MakeupRecommendation"
     >
       <MakeupRecommendationScreen
-        faceImageUri={selectedFaceCapture?.imageUri}
-        initialReportId={route.params?.reportId}
+        analysisReportId={analysisReportId}
+        faceImageUri={canUseSelectedFlowData ? selectedFaceCapture?.imageUri : undefined}
         initialView={route.params?.view}
         onApplyAR={look =>
           navigation.navigate(
@@ -42,8 +48,10 @@ export function MakeupRecommendationRouteScreen({
             getMakeupRecommendationARFilterRouteParams(look.arFilterId),
           )
         }
-        personalColor={selectedFaceAnalysisReport?.personalColor}
+        onStartFaceAnalysis={() => navigation.navigate('FaceAnalysisIntro')}
+        personalColor={canUseSelectedFlowData ? selectedFaceAnalysisReport?.personalColor : undefined}
         ref={screenRef}
+        reportId={route.params?.reportId}
       />
     </DetailRouteChrome>
   );

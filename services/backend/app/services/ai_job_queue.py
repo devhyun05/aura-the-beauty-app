@@ -1,7 +1,8 @@
 import json
 import logging
 from dataclasses import dataclass
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 import boto3
 
@@ -10,6 +11,7 @@ from app.core.settings import Settings
 
 
 AI_JOB_MESSAGE_VERSION = 1
+MAKEUP_RECOMMENDATION_JOB_MESSAGE_VERSION = 2
 SUPPORTED_AI_JOB_TYPES = {"analysis", "feedback", "filter_extraction", "makeup_recommendation"}
 
 logger = logging.getLogger(__name__)
@@ -41,14 +43,19 @@ class AIJobQueueMessage:
   job_type: str
   job_id: UUID
   user_id: UUID
+  version: int = AI_JOB_MESSAGE_VERSION
+  payload: dict[str, Any] | None = None
 
-  def body(self) -> dict[str, int | str]:
-    return {
-      "version": AI_JOB_MESSAGE_VERSION,
+  def body(self) -> dict[str, Any]:
+    body: dict[str, Any] = {
+      "version": self.version,
       "jobType": self.job_type,
       "jobId": str(self.job_id),
       "userId": str(self.user_id),
     }
+    if self.payload is not None:
+      body["payload"] = self.payload
+    return body
 
 
 class AIJobQueuePublisher:
@@ -85,12 +92,26 @@ class AIJobQueuePublisher:
       ),
     )
 
-  def publish_makeup_recommendation_job(self, report_id: UUID, user_id: UUID) -> dict[str, str | None]:
+  def publish_makeup_recommendation_job(
+    self,
+    report_id: UUID,
+    user_id: UUID,
+    look_id: str | None = None,
+  ) -> dict[str, str | None]:
+    normalized_look_id = str(look_id or "").strip() or None
+    if normalized_look_id is not None and len(normalized_look_id) > 120:
+      raise AppError(
+        400,
+        "MAKEUP_LOOK_ID_INVALID",
+        "The makeup recommendation look ID is too long.",
+      )
     return self.publish(
       AIJobQueueMessage(
         job_type="makeup_recommendation",
         job_id=report_id,
         user_id=user_id,
+        version=MAKEUP_RECOMMENDATION_JOB_MESSAGE_VERSION,
+        payload={"lookId": normalized_look_id} if normalized_look_id else {},
       ),
     )
 
@@ -118,12 +139,21 @@ class AIJobQueuePublisher:
       "MessageAttributes": {
         "jobType": {"DataType": "String", "StringValue": message.job_type},
         "jobId": {"DataType": "String", "StringValue": str(message.job_id)},
+        "version": {"DataType": "Number", "StringValue": str(message.version)},
       },
     }
 
     if queue_url.endswith(".fifo"):
       params["MessageGroupId"] = message.job_type
-      params["MessageDeduplicationId"] = f"{message.job_type}:{message.job_id}"
+      if message.version == MAKEUP_RECOMMENDATION_JOB_MESSAGE_VERSION:
+        look_id = str((message.payload or {}).get("lookId") or "all")
+        # Explicit retries must not be swallowed by SQS's five-minute FIFO
+        # deduplication window. Database asset claims remain the concurrency guard.
+        params["MessageDeduplicationId"] = (
+          f"{message.job_type}:{message.job_id}:{look_id}:{uuid4()}"
+        )
+      else:
+        params["MessageDeduplicationId"] = f"{message.job_type}:{message.job_id}"
 
     try:
       response = self._client().send_message(**params)

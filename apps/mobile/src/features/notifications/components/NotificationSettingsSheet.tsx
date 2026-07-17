@@ -93,6 +93,12 @@ export function NotificationSettingsSheet({
         return;
       }
 
+      if (result.status === 'unsupported-in-expo-go') {
+        setEnabled(false);
+        setMessage('Expo Go에서는 백그라운드 푸시 알림을 지원하지 않아요.');
+        return;
+      }
+
       setMessage(
         result.status === 'registered'
           ? '앱이 꺼져 있어도 완료 알림을 받을 수 있어요.'

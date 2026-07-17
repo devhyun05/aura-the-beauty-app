@@ -17,6 +17,7 @@ export {getQuestionActionMode, getQuestionProgressSegments} from './makeupRecomm
 
 type RecommendationQuestionViewProps = {
   currentQuestionIndex: number;
+  initialAnswer?: MakeupRecommendationAnswer;
   onAnswer: (answer: MakeupRecommendationAnswer) => void;
   onBack: () => void;
   question: MakeupRecommendationQuestion;
@@ -26,6 +27,7 @@ type RecommendationQuestionViewProps = {
 
 export function RecommendationQuestionView({
   currentQuestionIndex,
+  initialAnswer,
   onAnswer,
   onBack,
   question,
@@ -40,11 +42,11 @@ export function RecommendationQuestionView({
   const isFinal = actionMode === 'complete';
 
   useEffect(() => {
-    setSelectedOptionId(undefined);
-    setFreeText('');
-    setConditionInputVisible(false);
-    setAdditionalConstraints('');
-  }, [question.id]);
+    setSelectedOptionId(initialAnswer?.optionId);
+    setFreeText(initialAnswer?.freeText ?? '');
+    setConditionInputVisible(Boolean(initialAnswer?.additionalConstraints));
+    setAdditionalConstraints(initialAnswer?.additionalConstraints ?? '');
+  }, [initialAnswer, question.id]);
 
   const handleOptionPress = (optionId: string) => {
     if (!isFinal) {
@@ -82,14 +84,14 @@ export function RecommendationQuestionView({
       >
         <View style={styles.topRow}>
           <Pressable accessibilityRole="button" onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backLabel}>처음으로</Text>
+            <Text style={styles.backLabel}>{currentQuestionIndex > 0 ? '이전 질문' : '선택 수정'}</Text>
           </Pressable>
           <Text style={styles.progress}>{currentQuestionIndex + 1} / {questionCount}</Text>
         </View>
 
         {scenarioLabel ? (
           <View style={styles.scenarioContext}>
-            <Text style={styles.scenarioContextLabel}>처음 고른 문장</Text>
+            <Text style={styles.scenarioContextLabel}>선택한 상황 키워드</Text>
             <Text style={styles.scenarioContextText}>{scenarioLabel}</Text>
           </View>
         ) : null}

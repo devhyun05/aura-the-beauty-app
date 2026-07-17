@@ -1,4 +1,5 @@
 from app.db.check_schema import (
+  EXPECTED_COLUMN_CONTRACTS,
   EXPECTED_COLUMNS,
   EXPECTED_CONSTRAINT_CONTRACTS,
   EXPECTED_CONSTRAINTS,
@@ -13,6 +14,23 @@ from app.db.seed_db import SEED_VERSION, get_seed_path
 
 
 EXPECTED_SCHEMA_VERSIONS = {SCHEMA_VERSION, *POST_SCHEMA_MIGRATIONS}
+
+
+def _valid_column_contracts() -> dict[str, dict[str, str | None]]:
+  return {
+    column: {
+      "is_nullable": expected.get("is_nullable"),
+      "column_default": expected.get("default_contains"),
+    }
+    for column, expected in EXPECTED_COLUMN_CONTRACTS.items()
+  }
+
+
+def _valid_index_contracts() -> dict[str, str]:
+  return {
+    name: " ".join(fragments)
+    for name, fragments in EXPECTED_INDEX_CONTRACTS.items()
+  }
 
 
 def test_schema_path_exists() -> None:
@@ -66,7 +84,7 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
   )
 
   assert report["ok"] is False
-  assert report["missingColumns"] == {"analysis_reports": ["embedding"]}
+  assert report["missingColumns"] == {"analysis_reports": ["deleted_at", "embedding"]}
 
 
 def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() -> None:
@@ -74,6 +92,7 @@ def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() ->
     set(EXPECTED_TABLES),
     EXPECTED_SCHEMA_VERSIONS,
     column_contracts={
+      **_valid_column_contracts(),
       "auradin_search_sessions.owner_subject": {"is_nullable": "YES", "column_default": None},
       "auradin_search_sessions.version": {"is_nullable": "NO", "column_default": None},
       # A5 auradin_events 계약 컬럼은 유효값으로 채워 세션 계약 위반만 검출한다.
@@ -88,6 +107,12 @@ def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() ->
     },
     constraints=set(),
     indexes={
+      **_valid_index_contracts(),
+      "idx_auradin_sessions_idempotency_expires": "",
+      "idx_auradin_events_owner_time": "",
+      "idx_auradin_events_session": "",
+      "idx_auradin_events_manifest": "",
+      "idx_auradin_events_received": "",
       "idx_auradin_search_sessions_expires_at": "create index on auradin_search_sessions (expires_at)",
       "uq_auradin_sessions_owner_client_request": (
         "create unique index on auradin_search_sessions (owner_subject, client_request_id)"
@@ -101,9 +126,14 @@ def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() ->
     "auradin_search_sessions.version.default",
   ]
   assert report["missingConstraints"] == sorted(EXPECTED_CONSTRAINT_CONTRACTS)
-  assert report["invalidIndexes"] == sorted(
-    set(EXPECTED_INDEX_CONTRACTS) - {"idx_auradin_search_sessions_expires_at"}
-  )
+  assert report["invalidIndexes"] == sorted({
+    "idx_auradin_sessions_idempotency_expires",
+    "idx_auradin_events_owner_time",
+    "idx_auradin_events_session",
+    "idx_auradin_events_manifest",
+    "idx_auradin_events_received",
+    "uq_auradin_sessions_owner_client_request",
+  })
 
 
 def test_schema_report_rejects_or_connected_idempotency_constraint() -> None:
@@ -128,6 +158,11 @@ def test_schema_report_rejects_or_connected_idempotency_constraint() -> None:
       "auradin_events_owner_subject_client_event_id_key": (
         "unique (owner_subject, client_event_id)"
       ),
+      "chk_makeup_scenario_library_trend_evidence": (
+        "check (((keyword_kind <> 'trend'::text) or ((source_name is not null) and "
+        "(source_url is not null) and (source_published_at is not null) and "
+        "(market_scope is not null) and (as_of is not null) and (expires_at is not null))))"
+      ),
     },
   )
 
@@ -150,6 +185,21 @@ def test_schema_report_requires_immutable_auto_publish_audit_triggers() -> None:
   )
   assert report["ok"] is False
   assert report["invalidTriggers"] == ["trg_seasonal_auto_publish_audit_no_truncate"]
+
+def test_schema_report_rejects_old_trend_constraint_that_requires_approval() -> None:
+  report = build_schema_report(
+    set(EXPECTED_TABLES),
+    EXPECTED_SCHEMA_VERSIONS,
+    constraints={
+      "chk_makeup_scenario_library_trend_evidence": (
+        "check (((keyword_kind <> 'trend'::text) or ((source_name is not null) and "
+        "(source_url is not null) and (source_published_at is not null) and "
+        "(market_scope is not null) and (as_of is not null) and (expires_at is not null) "
+        "and (review_status = 'approved'::text))))"
+      ),
+    },
+  )
+  assert report["invalidConstraints"] == ["chk_makeup_scenario_library_trend_evidence"]
 
 
 def test_schema_report_requires_external_product_event_identity_columns() -> None:
@@ -197,6 +247,19 @@ def test_product_event_shade_parent_migration_is_registered() -> None:
 def test_product_brow_category_migration_is_registered() -> None:
   migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:product-category-brow-v1"]
   assert "alter type product_category add value if not exists 'brow'" in migration_sql
+
+
+def test_makeup_trend_draft_evidence_migration_is_registered() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:makeup-trend-draft-evidence-v1"]
+  normalized = " ".join(migration_sql.lower().split())
+  assert "drop constraint if exists chk_makeup_scenario_library_trend_evidence" in normalized
+  assert "add constraint chk_makeup_scenario_library_trend_evidence check" in normalized
+  assert "source_url is not null" in normalized
+  assert "source_published_at is not null" in normalized
+  assert "market_scope is not null" in normalized
+  assert "as_of is not null" in normalized
+  assert "expires_at is not null" in normalized
+  assert "review_status = 'approved'" not in normalized
 
 
 def test_product_event_query_minimization_migration_removes_raw_query_context() -> None:

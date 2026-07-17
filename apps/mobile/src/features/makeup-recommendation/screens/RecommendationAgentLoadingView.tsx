@@ -21,7 +21,7 @@ import {
 } from '../services/makeupRecommendationAgentConversation';
 
 const FIRST_MESSAGE_DELAY_MS = 420;
-const MESSAGE_INTERVAL_MS = 1460;
+const MESSAGE_INTERVAL_MS = 3600;
 const MAX_VISIBLE_MESSAGES = 24;
 
 type AgentIcon = ComponentType<{
@@ -131,17 +131,6 @@ export function RecommendationAgentLoadingView({
       scroll={false}
       topPadding="belowShellHeader">
       <YStack style={styles.content}>
-        <YStack style={styles.heading}>
-          <XStack style={styles.liveStatus}>
-            <LiveDot />
-            <Text style={styles.liveStatusText}>AURA 메이크업 크루</Text>
-          </XStack>
-          <Text style={styles.title}>가장 어울리는 메이크업을 만드는 중이에요</Text>
-          <Text style={styles.description}>
-            선택한 답변과 얼굴 분석 사진을 함께 보며 결과가 완성될 때까지 의견을 맞춰볼게요.
-          </Text>
-        </YStack>
-
         <ReportPhotoScan faceImageUri={faceImageUri} />
 
         <View style={styles.conversationPanel}>
@@ -420,26 +409,11 @@ const styles = StyleSheet.create({
     shadowOpacity: shadows.soft.shadowOpacity,
     shadowRadius: shadows.soft.shadowRadius,
   },
-  description: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-    textAlign: 'center',
-  },
-  heading: {alignItems: 'center', gap: spacing.sm},
   liveDot: {
     backgroundColor: colors.heart,
     borderRadius: radius.pill,
     height: 8,
     width: 8,
-  },
-  liveStatus: {alignItems: 'center', gap: spacing.xs},
-  liveStatusText: {
-    color: colors.brandMuted,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    letterSpacing: 1.1,
   },
   messageBubble: {
     backgroundColor: colors.white,
@@ -527,13 +501,6 @@ const styles = StyleSheet.create({
     shadowOffset: {height: 0, width: 0},
     shadowOpacity: 0.78,
     shadowRadius: 9,
-  },
-  title: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xl,
-    lineHeight: typography.lineHeight.xl,
-    textAlign: 'center',
   },
   typingBubble: {
     alignItems: 'center',
