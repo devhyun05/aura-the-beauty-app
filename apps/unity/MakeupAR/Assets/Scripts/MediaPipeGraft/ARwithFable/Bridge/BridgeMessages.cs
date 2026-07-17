@@ -179,7 +179,6 @@ namespace ARMakeup.Bridge
         // A3 아이섀도 하 — 하안검 lash 아래로 페이드하는 섀도 밴드(LowerLid 밴드 확장). 애교살보다 아래 깔림. 0=끔.
         public string eyeshadowLowerColor = "";
         public float eyeshadowLowerIntensity;
-        public int eyeshadowLowerShape = 0;
         public int eyeshadowLowerFinish = 0;       // 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         public float eyeshadowLowerShimmer = 0.5f; // 시머 게인 0..1 (finish=3일 때)
         public string irisColor = "#5B7B8C";      // 컬러렌즈 색 (intensity 0 = 끔)
