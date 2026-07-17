@@ -460,11 +460,12 @@ export function CameraFaceCaptureScreen({
     // ARwithFable Unity(ARKit + MediaPipe + 렌더)가 백그라운드에 상주한 채 이 화면의
     // 무거운 카메라 파이프라인(전면 + Depth + Vision + 매트)이 겹치면 메모리 초과로
     // 앱이 강제 종료된다(jetsam). 이 화면 동안 Unity 플레이어를 pause해 자원·전면
-    // 카메라를 넘겨주고, 나갈 때 resume한다. AR 필터의 Unity 생명주기는 안 건드림.
-    // Unity 미기동이면 no-op.
+    // 카메라를 넘기고, 다음 Unity 화면의 native container가 진입할 때 재개한다.
+    // Unity 미기동이면 no-op. 다음 Unity 소비 화면이 진입 시 명시적으로 resume하므로
+    // 이 화면을 나갈 때도 pause를 유지해 홈에서 숨은 런타임이 다시 돌지 않게 한다.
     setUnityMakeupPlayerPaused(true);
     return () => {
-      setUnityMakeupPlayerPaused(false);
+      setUnityMakeupPlayerPaused(true);
     };
   }, []);
 

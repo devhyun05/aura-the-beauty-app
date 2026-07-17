@@ -95,11 +95,9 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
       liveRef.current = true;
       Animated.timing(liveOpacity, { toValue: 1, duration: 600, useNativeDriver: true }).start();
     }
-    // 첫 표시 두 프레임만 동기 flush한다. 매 프레임 getError()는 CPU가 GPU 완료를
-    // 기다리게 만들어 지속 부하가 커진다. 이후에는 endFrameEXP만으로 제출한다.
-    if (frameCountRef.current <= 2) {
-      h.gl.getError();
-    }
+    // 동기 GL 호출로 커맨드 큐 강제 플러시 — 이것 없이는 EXGL이 three의 프레임을
+    // 화면 버퍼로 옮기지 못하는 레이스가 있다 (probe7 성공/실패 전수 대조로 특정).
+    h.gl.getError();
     h.gl.endFrameEXP();
   }, []);
 
@@ -183,9 +181,7 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
           renderer = new THREE.WebGL1Renderer({
             canvas: canvasStub,
             context: gl as unknown as WebGLRenderingContext,
-            // Retina 해상도에서 작은 구체는 MSAA 없이도 가장자리가 충분히 부드럽다.
-            // 투명 GL surface의 multisample resolve 비용을 제거한다.
-            antialias: false,
+            antialias: true,
             alpha: true,
           });
         } finally {
@@ -215,8 +211,7 @@ export function OrbGLCanvas({ glowTarget, paused, onFail, style }: OrbGLCanvasPr
         const blobGeo = new THREE.IcosahedronGeometry(A.BLOB_RADIUS, A.BLOB_DETAIL);
         const blobMat = new THREE.ShaderMaterial({
           vertexShader: NOISE + BLOB_VERT,
-          // fragment는 저비용 파동 함수를 사용하므로 simplex 라이브러리를 붙이지 않는다.
-          fragmentShader: BLOB_FRAG,
+          fragmentShader: NOISE + BLOB_FRAG,
           uniforms,
           transparent: true,
         });

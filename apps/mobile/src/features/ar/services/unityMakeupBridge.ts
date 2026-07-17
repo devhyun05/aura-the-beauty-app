@@ -1258,7 +1258,10 @@ type NativeUnityMakeupBridge = {
   ) => void;
   prepareFramework?: () => void;
   prepareRuntime?: () => void;
+  prepareRuntimeAndPauseWhenReady?: () => void;
   setPlayerPaused?: (paused: boolean) => void;
+  acquireHiddenRunLease?: (leaseId: string) => void;
+  releaseHiddenRunLease?: (leaseId: string) => void;
 };
 
 function getNativeUnityMakeupBridge(): NativeUnityMakeupBridge | undefined {
@@ -1272,17 +1275,25 @@ function getNativeUnityMakeupBridge(): NativeUnityMakeupBridge | undefined {
 // ARSession.enabled toggle (setUnityMakeupSessionPaused), the player pause does
 // not corrupt Unity's state, so resume(false) restores it cleanly.
 //
-// Pause 소유권 계약(얼굴 분석 플로): pause 상태는 화면 간 암묵 공유 자원이다.
-//  - 촬영 화면: mount 에 pause — 네이티브 카메라(전면+Depth+Vision+matte)와 동시
-//    상주하면 jetsam. unmount 에 resume.
-//  - 3D 측정 화면: 진입 시 resume, 종료 시 pause(카메라 반납 — Unity 측 취소는
-//    ARSession 을 끄지 않으므로 pause 가 유일한 카메라 해제 수단이다).
-//  - 로딩 화면: lease 소유 — 진입 시 ensureUnityMakeupRunningForStillAnalysis 로
-//    resume+ready 를 보장(정지영상 랜드마크 분석은 플레이어 루프 필수)하고,
-//    분석이 모두 settle 하면 pause 로 반납한다.
-//  - 그 외: 무거운 네이티브 카메라를 여는 화면이 pause 를 소유한다.
+// Pause 소유권 계약:
+//  - 보이는 Unity native container가 있으면 실행하고, 사라지면 warm-paused 상태다.
+//  - 정지영상 분석만 고유 lease로 화면 없이 실행하며 settle/unmount 시 반납한다.
+//  - 네이티브 카메라·상담 화면은 pause를 유지하고, 다음 Unity container가 재개한다.
 export function setUnityMakeupPlayerPaused(paused: boolean): void {
   getNativeUnityMakeupBridge()?.setPlayerPaused?.(paused);
+}
+
+/**
+ * Keeps the warm Unity loop alive without a visible native view for a specific
+ * still-image analysis job. Lease IDs make cleanup idempotent and prevent an
+ * older screen from pausing a newer analysis or visible AR owner.
+ */
+export function acquireUnityMakeupHiddenRunLease(leaseId: string): void {
+  getNativeUnityMakeupBridge()?.acquireHiddenRunLease?.(leaseId);
+}
+
+export function releaseUnityMakeupHiddenRunLease(leaseId: string): void {
+  getNativeUnityMakeupBridge()?.releaseHiddenRunLease?.(leaseId);
 }
 
 // 정지영상 랜드마크 분석(세로비율·퍼스널컬러·2D 기하) 진입 전, Unity 플레이어가
@@ -1297,14 +1308,25 @@ export function setUnityMakeupPlayerPaused(paused: boolean): void {
 //   < faceAnalysisRoutes 의 STILL_ANALYSIS_WAIT_TIMEOUT_MS 8000ms.
 //   셋 중 하나를 바꾸면 함께 조정해야 한다.
 export function ensureUnityMakeupRunningForStillAnalysis({
+  leaseId,
   pollIntervalMs = 160,
   timeoutMs = 4200,
-}: {pollIntervalMs?: number; timeoutMs?: number} = {}): Promise<boolean> {
+}: {
+  leaseId?: string;
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+} = {}): Promise<boolean> {
   if (!isUnityMakeupFrameworkAvailable()) {
     return Promise.resolve(false);
   }
 
-  setUnityMakeupPlayerPaused(false);
+  if (leaseId) {
+    acquireUnityMakeupHiddenRunLease(leaseId);
+  } else {
+    // Backward-compatible fallback for callers that have not migrated to a
+    // tokenized hidden-analysis lease yet.
+    setUnityMakeupPlayerPaused(false);
+  }
 
   if (isUnityMakeupReady()) {
     return Promise.resolve(true);
@@ -1383,6 +1405,26 @@ export function prepareUnityMakeupRuntime(): boolean {
   }
 
   nativeBridge.prepareRuntime?.();
+  return true;
+}
+
+/**
+ * App-start-only warm path: fully initialize Unity once, then freeze its
+ * render/camera/MediaPipe loop while no Unity view is on screen. The regular
+ * prepareUnityMakeupRuntime path remains available to hidden still analysis,
+ * which intentionally needs the player to keep running.
+ */
+export function prewarmUnityMakeupRuntime(): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+  const canPrewarm =
+    nativeBridge?.isFrameworkAvailable?.() === true &&
+    typeof nativeBridge.prepareRuntimeAndPauseWhenReady === 'function';
+
+  if (!canPrewarm) {
+    return false;
+  }
+
+  nativeBridge.prepareRuntimeAndPauseWhenReady?.();
   return true;
 }
 

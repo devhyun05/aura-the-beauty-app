@@ -204,7 +204,8 @@ namespace ARMakeup.Face
         ARCameraBackground _cameraBackground;
         MeshRenderer _presenterRenderer;
         Behaviour[] _controlled = Array.Empty<Behaviour>();
-        bool _active;
+        bool _stencilRequestedActive;
+        bool _runtimeActive = true;
 
         public void Initialize(
             ARCameraBackground cameraBackground,
@@ -216,44 +217,57 @@ namespace ARMakeup.Face
                 ? presenter.GetComponent<MeshRenderer>()
                 : null;
             _controlled = controlled.ToArray();
-            ApplyActive(false);
+            _stencilRequestedActive = false;
+            ApplyState();
         }
 
         // Called through UnitySendMessage by StencilUnityViewAdapter.
         public void SetStencilActive(string value)
         {
-            var active = string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+            _stencilRequestedActive =
+                string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
                 || value == "1";
-            ApplyActive(active);
-            if (active)
+            ApplyState();
+            if (_stencilRequestedActive && _runtimeActive)
             {
                 NativeBridge.SendReady();
             }
         }
 
-        void ApplyActive(bool active)
+        /// <summary>
+        /// Runtime-level gate controlled by the host lifecycle coordinator.
+        /// It intentionally does not overwrite the route's stencil request,
+        /// so returning to AR restores the exact presentation state.
+        /// </summary>
+        public void SetRuntimeActive(bool active)
         {
-            _active = active;
+            _runtimeActive = active;
+            ApplyState();
+        }
+
+        void ApplyState()
+        {
+            var stencilRendering = _runtimeActive && _stencilRequestedActive;
             if (_cameraBackground != null)
             {
-                _cameraBackground.enabled = !active;
+                _cameraBackground.enabled = _runtimeActive && !stencilRendering;
             }
             if (_presenterRenderer != null)
             {
-                _presenterRenderer.enabled = active;
+                _presenterRenderer.enabled = stencilRendering;
             }
             foreach (var behaviour in _controlled)
             {
                 if (behaviour != null)
                 {
-                    behaviour.enabled = active;
+                    behaviour.enabled = stencilRendering;
                 }
             }
         }
 
         void OnApplicationPause(bool paused)
         {
-            if (!paused && _active)
+            if (!paused && _runtimeActive && _stencilRequestedActive)
             {
                 NativeBridge.SendReady();
             }

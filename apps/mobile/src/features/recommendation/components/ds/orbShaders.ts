@@ -49,13 +49,34 @@ export const BLOB_VERT = `
     return snoise(p*0.65+vec3(t,t*0.6,t*0.45))*0.085;
   }
   void main(){
-    // 앱에서는 ripple/drag 입력을 사용하지 않는다. 비활성 uniform을 위한 4회
-    // 반복과 유한차분 normal 계산을 제거해 정점당 noise 호출을 4회에서 1회로 줄인다.
-    // 실제 변형은 그대로 유지하고 조명 normal만 원본 메시를 사용한다.
     float d=disp(normal);
-    vec3 pos=position+normal*d;
-    vRip=0.0;
-    vN=normalize(normalMatrix*normal);
+    float rip=0.0; float ripGlow=0.0;
+    for(int i=0;i<4;i++){
+      float st=uRipples[i].w;
+      float age=uTime-st;
+      if(st>0.0 && age>0.0 && age<3.0){
+        float gd=acos(clamp(dot(normalize(position),normalize(uRipples[i].xyz)),-1.0,1.0));
+        float fade=exp(-age*1.1)*(1.0-smoothstep(2.2,3.0,age));
+        float w=sin(gd*14.0-age*2.6)*exp(-gd*2.2)*fade;
+        rip+=w*0.032;
+        ripGlow+=abs(w)*exp(-age*0.9)*(1.0-smoothstep(2.2,3.0,age));
+      }
+    }
+    vec3 pos=position+normal*(d+rip);
+    vRip=ripGlow;
+    float dragMag=length(uDragL);
+    if(dragMag>0.0001){
+      float gdg=acos(clamp(dot(normalize(position),normalize(uGrab)),-1.0,1.0));
+      float w=exp(-gdg*gdg*1.6);
+      pos+=uDragL*w*0.55;
+    }
+    float e=0.12;
+    vec3 t1=normalize(cross(normal,vec3(0.0,1.0,0.001)));
+    vec3 t2=normalize(cross(normal,t1));
+    vec3 nA=normalize(normal+t1*e); vec3 nB=normalize(normal+t2*e);
+    vec3 pA=nA*(1.0+disp(nA)); vec3 pB=nB*(1.0+disp(nB)); vec3 pC=normal*(1.0+d);
+    vN=normalize(cross(pA-pC,pB-pC));
+    if(dot(vN,normal)<0.0) vN=-vN;
     vec4 mv=modelViewMatrix*vec4(pos,1.0);
     vV=normalize(-mv.xyz); vD=d;
     gl_Position=projectionMatrix*mv;
@@ -81,11 +102,8 @@ export const BLOB_FRAG = `
   void main(){
     vec3 n=normalize(vN); vec3 v=normalize(vV);
     float fres=pow(1.0-max(dot(n,v),0.0),2.2);
-    // simplex noise는 픽셀마다 permutation/gradient 계산을 수행한다. 두 개의 느린
-    // 파동을 섞어 같은 액체 색 이동을 만들면 모양은 유지하면서 fragment 비용이 작다.
-    float waveA=sin(n.x*4.2+n.y*2.7+uTime*0.22);
-    float waveB=sin(n.y*3.6-n.x*2.1-uTime*0.16);
-    float swirl=(waveA+waveB)*0.075;
+    // 전역 저사양 하향(3-3): 픽셀당 2번째 swirl 옥타브 제거 (프래그먼트 snoise 2→1).
+    float swirl=snoise(vec3(n.xy*1.6,uTime*0.12))*0.30;
     float hue=n.x*0.28+n.y*0.2+vD*1.4+uTime*0.045+swirl+vRip*1.4;
     fres=min(fres+vRip*0.55,1.0);
     vec3 iri=palette(hue);
@@ -108,15 +126,10 @@ export const BLOB_FRAG = `
 /** Scene/animation constants (JS side — mirrors the web original's timeline). */
 export const ORB_ANIM = {
   CAMERA_FOV: 35,
-  // GLView를 실제 구체 크기로 줄였으므로 카메라를 당겨 기존 화면상 지름을 유지한다.
-  // 1.32x GL box 안에 최대 displacement/boing까지 잘리지 않는 약 4% 여백이 남는다.
-  CAMERA_Z: 1.8,
+  CAMERA_Z: 3, // box framing — the Animated PersistentOrb container does phase scaling
   BLOB_RADIUS: 0.43,
-  // 화면에서 실제 구체 지름은 최대 155px라 detail 12에서도 윤곽 차이가 거의 없다.
-  // detail 24 대비 삼각형/정점 작업량은 약 27% 수준으로 줄어든다.
-  BLOB_DETAIL: 8,
-  // 시간 기반 모션을 30fps로 유지해 저프레임 끊김 없이 자연스럽게 보이게 한다.
-  MIN_FRAME_MS: 33,
+  BLOB_DETAIL: 24, // 전역 저사양 하향(3-3): 32→24 (정점 ≈(25/33)²≈0.57배). 155px 박스에선 시각차 미미
+  MIN_FRAME_MS: 33, // 전역 30fps 상한(3-3) — 느긋한 젤리 모션은 30fps로도 부드럽고, GPU 부하 절반
   GLOW_LERP: 0.04,
   ROTATE_SPEED: 0.07, // rad/s around y
   FLOAT_FREQ: 0.7,

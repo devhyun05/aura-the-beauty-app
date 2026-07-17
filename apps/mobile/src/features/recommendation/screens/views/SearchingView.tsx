@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { color, font, layout, tracking } from '../../theme/auradinTokens';
 import type { ThinkingStep } from '../../types';
 import {
+  GlassBase,
   LoaderDots,
   ThinkingSteps,
   useEnterTransition,
@@ -57,24 +58,19 @@ export function SearchingView({ query, answering, onHome }: SearchingViewProps):
       </View>
 
       {/* query echo — iridescent mount 1 of 2 app-wide (the other: results hero).
-          검색 중에는 WebGL과 동시에 Skia useClock을 돌리지 않도록 정적인 유리 칩을 쓴다. */}
+          The soap-film rim is this screen's one emphasis. */}
       <View style={{ marginTop: 26, alignItems: 'center' }}>
-        <View
-          style={{
-            maxWidth: '100%',
+        <GlassBase
+          tier="dark"
+          radius={999}
+          iridescent
+          style={{ maxWidth: '100%' }}
+          contentStyle={{
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
             paddingVertical: 9,
             paddingHorizontal: 16,
-            borderRadius: 999,
-            backgroundColor: 'rgba(255,255,255,0.09)',
-            borderWidth: 1,
-            borderColor: 'rgba(220,205,255,0.44)',
-            shadowColor: '#CABAFB',
-            shadowOpacity: 0.18,
-            shadowRadius: 10,
-            shadowOffset: { width: 0, height: 2 },
           }}
         >
           <Text
@@ -95,7 +91,7 @@ export function SearchingView({ query, answering, onHome }: SearchingViewProps):
           >
             {query}
           </Text>
-        </View>
+        </GlassBase>
       </View>
 
       {/* the glowing orb floats here (host-mounted PersistentOrb, phase="searching") */}

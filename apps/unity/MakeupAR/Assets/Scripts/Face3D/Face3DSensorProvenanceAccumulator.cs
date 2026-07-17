@@ -87,3 +87,4 @@ namespace Aura.Face3D
             inconsistent = false;
         }
     }
+}

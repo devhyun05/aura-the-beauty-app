@@ -55,10 +55,6 @@ export const ORB_BY_PHASE: Record<AuradinPhase, OrbPhaseSpec> = {
 const BOX = 430;
 const C = BOX / 2; // 215
 const R = 98;
-// WebGL 본체는 유지하되 실제 구체보다 큰 후광 영역까지 GL 버퍼로 만들지 않는다.
-// 후광은 SVG로 남기고, GLView는 실제 구체에 안전 여백만 더한 크기로 중앙 배치한다.
-const USE_LIGHTWEIGHT_ORB = false;
-const GL_CORE_BOX_RATIO = 1.32;
 
 /** Layered-SVG fallback artwork (pre-GL orb) — used only when GL fails. */
 function OrbArtwork(): React.JSX.Element {
@@ -183,22 +179,11 @@ export function PersistentOrb({ phase, diameter, paused = false, style }: Persis
   const reduced = useReducedMotion();
   const frozen = reduced || paused;
   const dia = diameter ?? Math.min(W * 0.36, 155);
-  const box = dia * (BOX / (R * 2)); // SVG halo box in px
-  const glBox = dia * GL_CORE_BOX_RATIO;
+  const box = dia * (BOX / (R * 2)); // halo/canvas box in px
 
   // GL failure → layered-SVG fallback (kept for the app's lifetime)
   const [glFailed, setGlFailed] = React.useState(false);
   const onGlFail = React.useCallback(() => setGlFailed(true), []);
-  const useWebGL = !USE_LIGHTWEIGHT_ORB && !glFailed;
-
-  // 질문/결과 화면에서는 구체가 작게 물러나 있으므로 WebGL을 계속 다시 그릴
-  // 필요가 없다. phase 전환 시 최종 한 프레임만 갱신하고 RAF를 멈춘다.
-  // 홈/검색 중에는 30fps 내부 변형을 유지해 기존 인상을 보존한다.
-  const glPaused = frozen || !(['home', 'searching'] as AuradinPhase[]).includes(phase);
-  // WebGL 자체의 boing/float/rotate가 움직이므로 컨테이너의 breath/float/glow를
-  // 중복 실행하지 않는다. GL 실패로 SVG fallback일 때만 외부 모션을 사용한다.
-  const idleMotionPaused =
-    frozen || (useWebGL ? true : !(['home', 'searching'] as AuradinPhase[]).includes(phase));
 
   const spec = ORB_BY_PHASE[phase];
   const tx = React.useRef(new Animated.Value(spec.cx * W - box / 2)).current;
@@ -226,7 +211,7 @@ export function PersistentOrb({ phase, diameter, paused = false, style }: Persis
   // Idle life: breathing scale + slow float + halo glow pulse (frozen on
   // reduced motion or host pause — the GL loop freezes via the same flag).
   React.useEffect(() => {
-    if (idleMotionPaused) {
+    if (frozen) {
       breath.setValue(1);
       float.setValue(0);
       glowPulse.setValue(1);
@@ -254,13 +239,11 @@ export function PersistentOrb({ phase, diameter, paused = false, style }: Persis
     ];
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
-  }, [breath, float, glowPulse, idleMotionPaused]);
+  }, [breath, float, frozen, glowPulse]);
 
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Animated.View
-        shouldRasterizeIOS={!useWebGL}
-        renderToHardwareTextureAndroid={!useWebGL}
         style={{
           position: 'absolute',
           width: box,
@@ -273,31 +256,18 @@ export function PersistentOrb({ phase, diameter, paused = false, style }: Persis
           ],
         }}
       >
-        <View shouldRasterizeIOS renderToHardwareTextureAndroid style={StyleSheet.absoluteFill}>
-          <Halo kind="ambient" />
-        </View>
-        <Animated.View
-          shouldRasterizeIOS
-          renderToHardwareTextureAndroid
-          style={[StyleSheet.absoluteFill, { opacity: Animated.multiply(glow, glowPulse) }]}>
+        <Halo kind="ambient" />
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: Animated.multiply(glow, glowPulse) }]}>
           <Halo kind="glow" />
         </Animated.View>
-        {!useWebGL ? (
-          <View shouldRasterizeIOS renderToHardwareTextureAndroid style={StyleSheet.absoluteFill}>
-            <OrbArtwork />
-          </View>
+        {glFailed ? (
+          <OrbArtwork />
         ) : (
           <OrbGLCanvas
             glowTarget={spec.glow}
-            paused={glPaused}
+            paused={frozen}
             onFail={onGlFail}
-            style={{
-              position: 'absolute',
-              width: glBox,
-              height: glBox,
-              left: (box - glBox) / 2,
-              top: (box - glBox) / 2,
-            }}
+            style={StyleSheet.absoluteFill}
           />
         )}
       </Animated.View>

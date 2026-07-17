@@ -15,7 +15,7 @@ import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/F
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
 import {
   ensureUnityMakeupRunningForStillAnalysis,
-  setUnityMakeupPlayerPaused,
+  releaseUnityMakeupHiddenRunLease,
 } from '../../../features/ar/services/unityMakeupBridge';
 import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services/face3DEntryEligibility';
 import {isFace3DProfileAnalysisEligible} from '../../../features/face-3d/services/face3DContract';
@@ -324,6 +324,7 @@ export function FaceAnalysisLoadingRouteScreen({
   // Unity still-analysis lease: 진입 시 resume+ready 를 보장하는 promise.
   // 아래 정지영상 분석 효과들이 이 promise 를 체인해 시작 순서를 보장한다.
   const stillAnalysisReadyPromiseRef = React.useRef<Promise<boolean> | null>(null);
+  const stillAnalysisLeaseIdRef = React.useRef<string | null>(null);
   // 퍼스널 컬러 outcome 전달 + end-lease 게이트 겸용. 보고서 POST 가 이 ref 로
   // outcome(보정 후 결과 포함)을 받아 measurements·measuredPersonalColor 를 싣는다.
   const personalColorOutcomePromiseRef =
@@ -342,14 +343,30 @@ export function FaceAnalysisLoadingRouteScreen({
   // 남을 수 있는데, 그 인스턴스가 촬영 화면 밑에서 Unity 를 resume 하면 안 된다.
   React.useEffect(() => {
     stillAnalysisReadyPromiseRef.current = null;
+    stillAnalysisLeaseIdRef.current = null;
 
     if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
-      return;
+      return undefined;
     }
 
-    stillAnalysisReadyPromiseRef.current = navigation.isFocused()
-      ? ensureUnityMakeupRunningForStillAnalysis()
-      : Promise.resolve(false);
+    const leaseId = `face-analysis:${selectedFaceCapture.photoCaptureId}:${Date.now()}:${Math.random()
+      .toString(36)
+      .slice(2)}`;
+
+    if (navigation.isFocused()) {
+      stillAnalysisLeaseIdRef.current = leaseId;
+      stillAnalysisReadyPromiseRef.current =
+        ensureUnityMakeupRunningForStillAnalysis({leaseId});
+    } else {
+      stillAnalysisReadyPromiseRef.current = Promise.resolve(false);
+    }
+
+    return () => {
+      releaseUnityMakeupHiddenRunLease(leaseId);
+      if (stillAnalysisLeaseIdRef.current === leaseId) {
+        stillAnalysisLeaseIdRef.current = null;
+      }
+    };
   }, [navigation, selectedFaceCapture]);
 
   // 얼굴 세로 비율은 캡처당 1회만 온디바이스로 계산한다.
@@ -642,31 +659,32 @@ export function FaceAnalysisLoadingRouteScreen({
     setSelectedFaceAnalysisReport,
   ]);
 
-  // [Unity still-analysis lease 반납] 정지영상 분석이 모두 settle 하면 플레이어를
-  // pause 해 자원(카메라 포함)을 반납한다. unmount 후에는 pause 하지 않는다 —
-  // stale 인스턴스의 뒤늦은 pause 가 다음 Unity 소유 화면(AR 필터·3D 측정)을
-  // 얼리는 것을 막기 위해서다(그 화면들이 자기 생명주기로 관리).
+  // [Unity still-analysis lease 반납] 정지영상 분석이 모두 settle 하면 이 화면의
+  // 고유 lease만 반납한다. 화면 이탈 cleanup에서도 같은 ID를 반납하므로 홈으로
+  // 일찍 나가도 Unity가 계속 돌지 않고, 늦은 cleanup이 새 AR 화면이나 새 분석을
+  // 멈추지도 않는다.
   React.useEffect(() => {
     if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
       return undefined;
     }
 
-    let cancelled = false;
+    const leaseId = stillAnalysisLeaseIdRef.current;
 
     void Promise.allSettled([
       verticalThirdsPromiseRef.current ?? Promise.resolve(null),
       faceGeometry2dPromiseRef.current ?? Promise.resolve(null),
       personalColorOutcomePromiseRef.current ?? Promise.resolve(null),
     ]).then(() => {
-      if (!cancelled && navigation.isFocused()) {
-        setUnityMakeupPlayerPaused(true);
+      if (leaseId) {
+        releaseUnityMakeupHiddenRunLease(leaseId);
+        if (stillAnalysisLeaseIdRef.current === leaseId) {
+          stillAnalysisLeaseIdRef.current = null;
+        }
       }
     });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [navigation, selectedFaceCapture]);
+    return undefined;
+  }, [selectedFaceCapture]);
 
   const handleRetryAnalysis = React.useCallback(() => {
     analysisRetryCountRef.current = 0;

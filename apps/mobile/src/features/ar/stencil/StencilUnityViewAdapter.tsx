@@ -11,7 +11,6 @@ import {
   isUnityMakeupReady,
   postUnityMessage,
   prepareUnityMakeupRuntime,
-  setUnityMakeupPlayerPaused,
 } from '../services/unityMakeupBridge';
 
 type UnityMessageEvent = NativeSyntheticEvent<{message: string}>;
@@ -63,7 +62,9 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
       } as UnityMessageEvent);
     });
 
-    setUnityMakeupPlayerPaused(false);
+    // The native Unity container owns the live-runtime lease. Keeping the
+    // legacy global resume lease here meant it survived after this screen was
+    // removed and left Unity, ARKit and the camera running on Home.
     prepareUnityMakeupRuntime();
     this.activationTimer = setInterval(() => {
       this.activateStencilRuntime();
