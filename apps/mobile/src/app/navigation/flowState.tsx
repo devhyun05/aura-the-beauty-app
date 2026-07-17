@@ -2,6 +2,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -10,7 +11,18 @@ import React, {
   type SetStateAction,
 } from 'react';
 
-import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../../features/makeup-feedback';
+import type {
+  MakeupFeedbackContext,
+  MakeupFeedbackFlowOrigin,
+  MakeupFeedbackKind,
+  MakeupFeedbackPhotoSelection,
+  MakeupFeedbackResult,
+} from '../../features/makeup-feedback';
+import {
+  clearMakeupFeedbackJourneyContext,
+  getInitialMakeupFeedbackJourneyFlowContext,
+  type MakeupFeedbackJourneyFlowContext,
+} from '../../features/makeup-feedback/services/makeupFeedbackJourneyContext';
 import type {Face3DProfile} from '../../features/face-3d/types';
 import type {FaceCaptureGreenlightReport} from '../../features/face-capture/services/faceCaptureGreenlight';
 import type {FaceCaptureUploadResult} from '../../features/face-capture/services/faceCaptureUploadService';
@@ -35,22 +47,35 @@ import type {FaceAnalysisReport} from '../../shared/types/faceAnalysis';
 import type {MakeupLookPreview} from '../../shared/types/profile';
 import {
   DEFAULT_FLOATING_ACTION_IDS,
-  DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
   type FloatingActionButtonPosition,
+  type FloatingActionAnchor,
   type FloatingActionId,
   type FloatingActionInteractionMode,
 } from '../../shared/ui';
+import {
+  getFloatingActionButtonPositionForAnchor,
+  getSessionFloatingActionAnchor,
+  loadFloatingActionAnchor,
+  saveFloatingActionAnchor,
+} from '../../shared/services/floatingActionAnchorStore';
 
 export const NAVIGATION_FLOW_STATE_PROVIDER_ERROR =
   'useNavigationFlowState must be used inside NavigationFlowStateProvider';
 
 export type NavigationFlowState = {
+  floatingActionAnchor: FloatingActionAnchor;
   floatingActionButtonPosition: FloatingActionButtonPosition;
   floatingActionIds: readonly FloatingActionId[];
   floatingActionInteractionMode: FloatingActionInteractionMode;
   likedMakeupFilterIds: readonly string[];
   makeupFeedbackResult: MakeupFeedbackResult | null;
+  makeupFeedbackEntryDate: string;
+  makeupFeedbackKind: MakeupFeedbackKind;
+  makeupFeedbackParentReportId: string | null;
+  makeupFeedbackInheritedGoalContext: MakeupFeedbackContext | null;
+  makeupFeedbackParentScore: number | null;
+  makeupFeedbackFlowOrigin: MakeupFeedbackFlowOrigin;
   savedMakeupLook: MakeupLookPreview | null;
   savedMakeupLooks: readonly MakeupLookPreview[];
   // 얼굴 분석 세션에서 ARKit 라이브 측정으로 얻은 3D 프로필(온디바이스, 세션 한정).
@@ -79,6 +104,9 @@ export type NavigationFlowState = {
 };
 
 export type NavigationFlowStateContextValue = NavigationFlowState & {
+  beginMakeupFeedbackFlow: (
+    context?: Partial<MakeupFeedbackJourneyFlowContext>,
+  ) => void;
   beginUnifiedFaceCapture: (requestId: string) => void;
   commitUnifiedFaceCapture: (
     result: UnifiedFaceCaptureCompletedEvent,
@@ -87,7 +115,9 @@ export type NavigationFlowStateContextValue = NavigationFlowState & {
   invalidateUnifiedFaceCapture: (
     options?: InvalidateUnifiedFaceCaptureOptions,
   ) => void;
+  clearMakeupFeedbackFlowContext: () => void;
   resetNavigationFlowState: () => void;
+  setFloatingActionAnchor: (anchor: FloatingActionAnchor) => void;
   setFloatingActionButtonPosition: Dispatch<SetStateAction<FloatingActionButtonPosition>>;
   setFloatingActionIds: Dispatch<SetStateAction<readonly FloatingActionId[]>>;
   setFloatingActionInteractionMode: Dispatch<SetStateAction<FloatingActionInteractionMode>>;
@@ -115,12 +145,26 @@ const NavigationFlowStateContext =
   createContext<NavigationFlowStateContextValue | null>(null);
 
 export function getInitialNavigationFlowState(): NavigationFlowState {
+  const makeupFeedbackJourneyContext =
+    getInitialMakeupFeedbackJourneyFlowContext();
+  const floatingActionAnchor = getSessionFloatingActionAnchor();
+
   return {
-    floatingActionButtonPosition: DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
+    floatingActionAnchor,
+    floatingActionButtonPosition:
+      getFloatingActionButtonPositionForAnchor(floatingActionAnchor),
     floatingActionIds: DEFAULT_FLOATING_ACTION_IDS,
     floatingActionInteractionMode: DEFAULT_FLOATING_ACTION_INTERACTION_MODE,
     likedMakeupFilterIds: [],
     makeupFeedbackResult: null,
+    makeupFeedbackEntryDate: makeupFeedbackJourneyContext.entryDate,
+    makeupFeedbackKind: makeupFeedbackJourneyContext.feedbackKind,
+    makeupFeedbackParentReportId:
+      makeupFeedbackJourneyContext.parentFeedbackReportId,
+    makeupFeedbackInheritedGoalContext:
+      makeupFeedbackJourneyContext.inheritedGoalContext,
+    makeupFeedbackParentScore: makeupFeedbackJourneyContext.parentScore,
+    makeupFeedbackFlowOrigin: makeupFeedbackJourneyContext.origin,
     savedMakeupLook: null,
     savedMakeupLooks: [],
     selectedFace3DProfile: null,
@@ -197,18 +241,59 @@ export function NavigationFlowStateProvider({
     useState<FloatingActionInteractionMode>(initialState.floatingActionInteractionMode);
   const [floatingActionButtonPosition, setFloatingActionButtonPosition] =
     useState<FloatingActionButtonPosition>(initialState.floatingActionButtonPosition);
+  const [floatingActionAnchor, setFloatingActionAnchorState] =
+    useState<FloatingActionAnchor>(initialState.floatingActionAnchor);
   const [savedMakeupLook, setSavedMakeupLook] =
     useState<MakeupLookPreview | null>(initialState.savedMakeupLook);
   const [savedMakeupLooks, setSavedMakeupLooks] =
     useState<readonly MakeupLookPreview[]>(initialState.savedMakeupLooks);
   const [makeupFeedbackResult, setMakeupFeedbackResult] =
     useState<MakeupFeedbackResult | null>(initialState.makeupFeedbackResult);
+  const [makeupFeedbackEntryDate, setMakeupFeedbackEntryDate] =
+    useState(initialState.makeupFeedbackEntryDate);
+  const [makeupFeedbackKind, setMakeupFeedbackKind] =
+    useState<MakeupFeedbackKind>(initialState.makeupFeedbackKind);
+  const [makeupFeedbackParentReportId, setMakeupFeedbackParentReportId] =
+    useState<string | null>(initialState.makeupFeedbackParentReportId);
+  const [makeupFeedbackInheritedGoalContext, setMakeupFeedbackInheritedGoalContext] =
+    useState<MakeupFeedbackContext | null>(
+      initialState.makeupFeedbackInheritedGoalContext,
+    );
+  const [makeupFeedbackParentScore, setMakeupFeedbackParentScore] =
+    useState<number | null>(initialState.makeupFeedbackParentScore);
+  const [makeupFeedbackFlowOrigin, setMakeupFeedbackFlowOrigin] =
+    useState<MakeupFeedbackFlowOrigin>(initialState.makeupFeedbackFlowOrigin);
   const [shouldShowBeautyJourneyGuide, setShouldShowBeautyJourneyGuide] =
     useState<boolean>(initialState.shouldShowBeautyJourneyGuide);
 
   const setUnifiedFlow = useCallback((next: UnifiedFaceCaptureFlowState) => {
     unifiedFaceCaptureFlowRef.current = next;
     setUnifiedFaceCaptureFlow(next);
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    void loadFloatingActionAnchor().then(anchor => {
+      if (isMounted) {
+        setFloatingActionAnchorState(anchor);
+        setFloatingActionButtonPosition(
+          getFloatingActionButtonPositionForAnchor(anchor),
+        );
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const setFloatingActionAnchor = useCallback((anchor: FloatingActionAnchor) => {
+    setFloatingActionAnchorState(anchor);
+    setFloatingActionButtonPosition(
+      getFloatingActionButtonPositionForAnchor(anchor),
+    );
+    void saveFloatingActionAnchor(anchor);
   }, []);
 
   const clearFaceAnalysisCaptureState = useCallback(() => {
@@ -263,14 +348,44 @@ export function NavigationFlowStateProvider({
     [setUnifiedFlow],
   );
 
+  const beginMakeupFeedbackFlow = useCallback((
+    context: Partial<MakeupFeedbackJourneyFlowContext> = {},
+  ) => {
+    const next = {
+      ...getInitialMakeupFeedbackJourneyFlowContext(),
+      ...context,
+    };
+
+    setMakeupFeedbackEntryDate(next.entryDate);
+    setMakeupFeedbackKind(next.feedbackKind);
+    setMakeupFeedbackParentReportId(next.parentFeedbackReportId);
+    setMakeupFeedbackInheritedGoalContext(next.inheritedGoalContext);
+    setMakeupFeedbackParentScore(next.parentScore);
+    setMakeupFeedbackFlowOrigin(next.origin);
+  }, []);
+
+  const clearMakeupFeedbackFlowContext = useCallback(() => {
+    beginMakeupFeedbackFlow();
+    setSelectedMakeupFeedbackPhoto(clearMakeupFeedbackJourneyContext);
+  }, [beginMakeupFeedbackFlow]);
+
   const resetNavigationFlowState = useCallback(() => {
     const nextState = getInitialNavigationFlowState();
 
     setFloatingActionButtonPosition(nextState.floatingActionButtonPosition);
+    setFloatingActionAnchorState(nextState.floatingActionAnchor);
     setFloatingActionIds(nextState.floatingActionIds);
     setFloatingActionInteractionMode(nextState.floatingActionInteractionMode);
     setLikedMakeupFilterIds(nextState.likedMakeupFilterIds);
     setMakeupFeedbackResult(nextState.makeupFeedbackResult);
+    setMakeupFeedbackEntryDate(nextState.makeupFeedbackEntryDate);
+    setMakeupFeedbackKind(nextState.makeupFeedbackKind);
+    setMakeupFeedbackParentReportId(nextState.makeupFeedbackParentReportId);
+    setMakeupFeedbackInheritedGoalContext(
+      nextState.makeupFeedbackInheritedGoalContext,
+    );
+    setMakeupFeedbackParentScore(nextState.makeupFeedbackParentScore);
+    setMakeupFeedbackFlowOrigin(nextState.makeupFeedbackFlowOrigin);
     setSavedMakeupLook(nextState.savedMakeupLook);
     setSavedMakeupLooks(nextState.savedMakeupLooks);
     setSelectedFace3DProfile(nextState.selectedFace3DProfile);
@@ -292,11 +407,18 @@ export function NavigationFlowStateProvider({
 
   const value = useMemo(
     () => ({
+      floatingActionAnchor,
       floatingActionButtonPosition,
       floatingActionIds,
       floatingActionInteractionMode,
       likedMakeupFilterIds,
       makeupFeedbackResult,
+      makeupFeedbackEntryDate,
+      makeupFeedbackKind,
+      makeupFeedbackParentReportId,
+      makeupFeedbackInheritedGoalContext,
+      makeupFeedbackParentScore,
+      makeupFeedbackFlowOrigin,
       savedMakeupLook,
       savedMakeupLooks,
       selectedFace3DProfile:
@@ -317,11 +439,14 @@ export function NavigationFlowStateProvider({
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
       resetNavigationFlowState,
+      beginMakeupFeedbackFlow,
+      clearMakeupFeedbackFlowContext,
       beginUnifiedFaceCapture,
       commitUnifiedFaceCapture,
       invalidateUnifiedFaceCapture,
       shouldShowBeautyJourneyGuide,
       setFloatingActionButtonPosition,
+      setFloatingActionAnchor,
       setFloatingActionIds,
       setFloatingActionInteractionMode,
       setLikedMakeupFilterIds,
@@ -345,10 +470,17 @@ export function NavigationFlowStateProvider({
     }),
     [
       floatingActionIds,
+      floatingActionAnchor,
       floatingActionButtonPosition,
       floatingActionInteractionMode,
       likedMakeupFilterIds,
       makeupFeedbackResult,
+      makeupFeedbackEntryDate,
+      makeupFeedbackKind,
+      makeupFeedbackParentReportId,
+      makeupFeedbackInheritedGoalContext,
+      makeupFeedbackParentScore,
+      makeupFeedbackFlowOrigin,
       savedMakeupLook,
       savedMakeupLooks,
       selectedFace3DProfile,
@@ -365,6 +497,9 @@ export function NavigationFlowStateProvider({
       selectedReferenceMakeupPhoto,
       referenceMakeupUploadedPhotos,
       resetNavigationFlowState,
+      beginMakeupFeedbackFlow,
+      clearMakeupFeedbackFlowContext,
+      setFloatingActionAnchor,
       beginUnifiedFaceCapture,
       commitUnifiedFaceCapture,
       invalidateUnifiedFaceCapture,

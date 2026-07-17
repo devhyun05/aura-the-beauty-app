@@ -3,8 +3,16 @@ import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
+import { OptionalViewShot } from '../../shared/ui/OptionalViewShot';
 import { color, font, radius, shadow } from './reportTokens';
 import type { BandKey, ReportScreenProps } from './reportTypes';
+
+// Matches the legacy report screen's capture settings.
+const REPORT_CAPTURE_OPTIONS = {
+  format: 'jpg',
+  quality: 0.95,
+  result: 'tmpfile',
+} as const;
 import { ScrollAnimContext } from './visuals/RiseIn';
 import { S1Summary } from './sections/S1Summary';
 import { S2Proportion } from './sections/S2Proportion';
@@ -19,7 +27,7 @@ import { S7Styling } from './sections/S7Styling';
  * Pure & props-driven — navigation, retake and survey actions bubble up as callbacks.
  */
 export function ReportScreenScaffold({
-  data, entryAnimation = true, onBack, onMore, onRetake, onResurvey,
+  data, entryAnimation = true, onBack, onMore, onRetake, onResurvey, onPressCta, captureRef,
 }: ReportScreenProps) {
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
@@ -28,6 +36,11 @@ export function ReportScreenScaffold({
   const cardY = useRef<Record<string, number>>({});
   const onScroll = useAnimatedScrollHandler(e => { scrollY.value = e.contentOffset.y; });
 
+  // Sections live inside the capture wrapper, so their onLayout y is relative to
+  // that wrapper — not to the ScrollView content. Track where the wrapper itself
+  // starts and add it back, or "카드 보기" scrolls short by the top bar's height.
+  const captureOffsetY = useRef(0);
+
   // S2 lens "카드 보기" → scroll to the matching S3 region card, 64px below the top edge.
   // No-op when S3 isn't rendered (no real region data yet) — scrolling to 0 would
   // read as a broken button rather than an honest "not available" state.
@@ -35,7 +48,7 @@ export function ReportScreenScaffold({
     if (!data.s3) {
       return;
     }
-    const y = (sectionY.current.s3 ?? 0) + (cardY.current[key] ?? 0);
+    const y = captureOffsetY.current + (sectionY.current.s3 ?? 0) + (cardY.current[key] ?? 0);
     scrollRef.current?.scrollTo({ y: Math.max(0, y - 64), animated: true });
   };
 
@@ -66,6 +79,15 @@ export function ReportScreenScaffold({
             {circleBtn(<MoreHorizontal size={16} color={color.body} />, onMore)}
           </View>
 
+          {/*
+            Capture target for 공유/이미지 저장. Wraps the report body (not the
+            top bar) and lives inside the ScrollView so the captured image
+            contains the whole report, not just the visible viewport.
+            The outer View exists only to measure where this wrapper starts,
+            since the sections' onLayout y is now relative to it.
+          */}
+          <View onLayout={e => { captureOffsetY.current = e.nativeEvent.layout.y; }}>
+          <OptionalViewShot ref={captureRef} options={REPORT_CAPTURE_OPTIONS} style={{ backgroundColor: color.bg }}>
           <View onLayout={e => { sectionY.current.s1 = e.nativeEvent.layout.y; }}>
             <S1Summary data={data.s1} />
           </View>
@@ -97,12 +119,14 @@ export function ReportScreenScaffold({
               <S7Styling data={data.s7} />
             </View>
           ) : null}
+          </OptionalViewShot>
+          </View>
 
           <View style={{ paddingTop: 26, paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 0) + 96, alignItems: 'center', gap: 14 }}>
             <Text style={[font(11.5, '400', 1.65), { color: color.muted, textAlign: 'center', maxWidth: 300 }]}>
               {data.footer.disclaimer}
             </Text>
-            <Pressable onPress={onRetake} style={({ pressed }) => [{
+            <Pressable onPress={onPressCta} style={({ pressed }) => [{
               alignSelf: 'stretch', paddingVertical: 15, borderRadius: radius.lg,
               backgroundColor: color.accent, alignItems: 'center', opacity: pressed ? 0.9 : 1,
             }, shadow.cta]}>

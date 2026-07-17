@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from app.core.settings import Settings
 from app.ops.export_openapi import build_openapi_schema, write_openapi_schema
@@ -21,3 +22,17 @@ def test_write_openapi_schema_outputs_json_file(tmp_path) -> None:
 
   assert result == output
   assert json.loads(output.read_text(encoding="utf-8"))["info"]["title"] == "test"
+
+
+def test_tracked_openapi_schema_matches_runtime_generation() -> None:
+  repository_root = Path(__file__).resolve().parents[3]
+  tracked_schema = json.loads(
+    (repository_root / "docs/backend/openapi.json").read_text(encoding="utf-8"),
+  )
+
+  stable_settings = Settings(
+    app_name="AI AR Makeup Backend",
+    api_prefix="/api",
+    _env_file=None,
+  )
+  assert tracked_schema == build_openapi_schema(stable_settings)

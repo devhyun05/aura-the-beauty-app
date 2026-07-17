@@ -38,6 +38,7 @@ env:
   ECS_SERVICE: ${{ vars.ECS_SERVICE }}
   ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION || vars.ECS_SERVICE }}
   CHIME_ENABLED: ${{ vars.CHIME_ENABLED || 'false' }}
+  MAKEUP_JOURNEY_ENABLED: ${{ vars.MAKEUP_JOURNEY_ENABLED || 'true' }}
   CONSULTING_CALL_ENFORCE_EARLY_WINDOW: ${{ vars.CONSULTING_CALL_ENFORCE_EARLY_WINDOW || 'true' }}
   AI_WORKER_CONTAINER_NAME: ${{ vars.AI_WORKER_CONTAINER_NAME || 'aura-ai-worker' }}
   AI_WORKER_SERVICE: ${{ vars.AI_WORKER_SERVICE }}
@@ -46,9 +47,16 @@ env:
   COHORT_RECOMMENDATIONS_V1: ${{ vars.COHORT_RECOMMENDATIONS_V1 || 'true' }}
   PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT: ${{ vars.PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT || '100' }}
   PRODUCT_COHORT_EXPERIMENT_PERCENT: ${{ vars.PRODUCT_COHORT_EXPERIMENT_PERCENT || '100' }}
+  AI_PROVIDER: bedrock
+  IMAGE_GENERATION_PROVIDER: openai
   BEDROCK_SCENARIO_MODEL_ID: ${{ vars.BEDROCK_SCENARIO_MODEL_ID || 'global.anthropic.claude-haiku-4-5-20251001-v1:0' }}
   BEDROCK_QUESTION_MODEL_ID: ${{ vars.BEDROCK_QUESTION_MODEL_ID || 'global.anthropic.claude-haiku-4-5-20251001-v1:0' }}
   BEDROCK_RECOMMENDATION_MODEL_ID: ${{ vars.BEDROCK_RECOMMENDATION_MODEL_ID || 'global.anthropic.claude-sonnet-4-6' }}
+  OPENAI_IMAGE_MODEL_ID: ${{ vars.OPENAI_IMAGE_MODEL_ID || 'gpt-image-2' }}
+  MAKEUP_RECOMMENDATION_V2_ENABLED: ${{ vars.MAKEUP_RECOMMENDATION_V2_ENABLED || 'true' }}
+  MAKEUP_TREND_KEYWORDS_ENABLED: ${{ vars.MAKEUP_TREND_KEYWORDS_ENABLED || 'true' }}
+  MAKEUP_PERSONALIZED_IMAGE_ENABLED: ${{ vars.MAKEUP_PERSONALIZED_IMAGE_ENABLED || 'true' }}
+  MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED: ${{ vars.MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED || 'true' }}
   BACKEND_PUBLIC_BASE_URL: ${{ vars.BACKEND_PUBLIC_BASE_URL || 'https://d3t1pbvtir1lj.cloudfront.net' }}
   HAIR_WORKER_CONTAINER_NAME: ${{ vars.HAIR_WORKER_CONTAINER_NAME || 'aura-hair-worker' }}
   HAIR_WORKER_SERVICE: ${{ vars.HAIR_WORKER_SERVICE }}
@@ -63,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: postgres
@@ -157,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: postgres
@@ -361,14 +369,22 @@ jobs:
           image: ${{ steps.build-image.outputs.image }}
           environment-variables: |
             CHIME_ENABLED=${{ env.CHIME_ENABLED }}
+            MAKEUP_JOURNEY_ENABLED=${{ env.MAKEUP_JOURNEY_ENABLED }}
             CONSULTING_CALL_ENFORCE_EARLY_WINDOW=${{ env.CONSULTING_CALL_ENFORCE_EARLY_WINDOW }}
             ENGAGEMENT_PERSONALIZATION_V1=${{ env.ENGAGEMENT_PERSONALIZATION_V1 }}
             COHORT_RECOMMENDATIONS_V1=${{ env.COHORT_RECOMMENDATIONS_V1 }}
             PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT=${{ env.PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT }}
             PRODUCT_COHORT_EXPERIMENT_PERCENT=${{ env.PRODUCT_COHORT_EXPERIMENT_PERCENT }}
+            AI_PROVIDER=${{ env.AI_PROVIDER }}
+            IMAGE_GENERATION_PROVIDER=${{ env.IMAGE_GENERATION_PROVIDER }}
             BEDROCK_SCENARIO_MODEL_ID=${{ env.BEDROCK_SCENARIO_MODEL_ID }}
             BEDROCK_QUESTION_MODEL_ID=${{ env.BEDROCK_QUESTION_MODEL_ID }}
             BEDROCK_RECOMMENDATION_MODEL_ID=${{ env.BEDROCK_RECOMMENDATION_MODEL_ID }}
+            OPENAI_IMAGE_MODEL_ID=${{ env.OPENAI_IMAGE_MODEL_ID }}
+            MAKEUP_RECOMMENDATION_V2_ENABLED=${{ env.MAKEUP_RECOMMENDATION_V2_ENABLED }}
+            MAKEUP_TREND_KEYWORDS_ENABLED=${{ env.MAKEUP_TREND_KEYWORDS_ENABLED }}
+            MAKEUP_PERSONALIZED_IMAGE_ENABLED=${{ env.MAKEUP_PERSONALIZED_IMAGE_ENABLED }}
+            MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED=${{ env.MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED }}
             PRODUCT_EVENT_SIGNING_SECRET=${{ env.PRODUCT_EVENT_SIGNING_SECRET }}
 
       - name: Validate and register ECS task definition
@@ -386,6 +402,7 @@ jobs:
             def retained_environment:
               map(select(.name as $name | [
                 "CHIME_ENABLED",
+                "MAKEUP_JOURNEY_ENABLED",
                 "CONSULTING_CALL_ENFORCE_EARLY_WINDOW",
                 "ENGAGEMENT_PERSONALIZATION_V1",
                 "COHORT_RECOMMENDATIONS_V1",
@@ -620,6 +637,17 @@ jobs:
           task-definition: ai-worker-task-definition.json
           container-name: ${{ env.AI_WORKER_CONTAINER_NAME }}
           image: ${{ steps.build-image.outputs.image }}
+          environment-variables: |
+            AI_PROVIDER=${{ env.AI_PROVIDER }}
+            IMAGE_GENERATION_PROVIDER=${{ env.IMAGE_GENERATION_PROVIDER }}
+            BEDROCK_SCENARIO_MODEL_ID=${{ env.BEDROCK_SCENARIO_MODEL_ID }}
+            BEDROCK_QUESTION_MODEL_ID=${{ env.BEDROCK_QUESTION_MODEL_ID }}
+            BEDROCK_RECOMMENDATION_MODEL_ID=${{ env.BEDROCK_RECOMMENDATION_MODEL_ID }}
+            OPENAI_IMAGE_MODEL_ID=${{ env.OPENAI_IMAGE_MODEL_ID }}
+            MAKEUP_RECOMMENDATION_V2_ENABLED=${{ env.MAKEUP_RECOMMENDATION_V2_ENABLED }}
+            MAKEUP_TREND_KEYWORDS_ENABLED=${{ env.MAKEUP_TREND_KEYWORDS_ENABLED }}
+            MAKEUP_PERSONALIZED_IMAGE_ENABLED=${{ env.MAKEUP_PERSONALIZED_IMAGE_ENABLED }}
+            MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED=${{ env.MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED }}
 
       - name: Deploy ECS service
         id: deploy-api
@@ -650,6 +678,45 @@ jobs:
         continue-on-error: true
         run: |
           base_url="${BACKEND_PUBLIC_BASE_URL%/}"
+
+          verify_makeup_journey_auth_boundary() {
+            local expected_code
+            local expected_status
+            local status
+
+            case "${MAKEUP_JOURNEY_ENABLED,,}" in
+              true|1)
+                expected_status="401"
+                expected_code="UNAUTHORIZED"
+                ;;
+              false|0)
+                expected_status="404"
+                expected_code="MAKEUP_JOURNEY_DISABLED"
+                ;;
+              *)
+                echo "MAKEUP_JOURNEY_ENABLED must be true/false or 1/0." >&2
+                return 1
+                ;;
+            esac
+
+            if ! status="$(
+              curl --silent --show-error --max-time 20 \
+                --output makeup-journey-auth.json \
+                --write-out '%{http_code}' \
+                "$base_url/api/makeup-journey/settings?deployment=$GITHUB_SHA"
+            )"; then
+              return 1
+            fi
+
+            if [ "$status" != "$expected_status" ]; then
+              echo "Makeup Journey auth boundary returned HTTP $status; expected $expected_status." >&2
+              return 1
+            fi
+
+            jq -e --arg code "$expected_code" '.error.code == $code' \
+              makeup-journey-auth.json > /dev/null
+          }
+
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error --max-time 15 \
               "$base_url/health?deployment=$GITHUB_SHA" > health.json \
@@ -663,6 +730,15 @@ jobs:
                 and .paths["/api/feedback/jobs"]
                 and .paths["/api/feedback/conference-preview-messages"]
                 and .paths["/api/feedback/conference-messages"]
+                and .paths["/api/makeup-journey/analytics/events"]
+                and .paths["/api/makeup-journey/settings"]
+                and .paths["/api/makeup-journey/calendar"]
+                and .paths["/api/makeup-journey/days/{entry_date}"]
+                and .paths["/api/makeup-journey/trends"]
+                and .paths["/api/makeup-journey/days/{entry_date}/note"]
+                and .paths["/api/makeup-journey/days/{entry_date}/missions/generate"]
+                and .paths["/api/makeup-journey/days/{entry_date}/missions"]
+                and .paths["/api/makeup-journey/missions/{mission_id}"]
                 and .paths["/api/products/liked"]
                 and .paths["/api/products/features"]
                 and .paths["/api/products/recommendations/ar"]
@@ -670,6 +746,7 @@ jobs:
                 and .paths["/api/products/recommendations/personalized"]
                 and .paths["/api/products/recommendations/cohort"]
               ' openapi.json > /dev/null \
+              && verify_makeup_journey_auth_boundary \
               && curl --fail --silent --show-error --max-time 20 \
                 "$base_url/api/products/features?deployment=$GITHUB_SHA" > product-features.json \
               && curl --fail --silent --show-error --max-time 30 \

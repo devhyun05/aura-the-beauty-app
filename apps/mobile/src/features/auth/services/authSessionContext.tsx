@@ -13,6 +13,7 @@ import * as SecureStore from '../../../shared/services/localSecureStore';
 import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
 import {clearMyPageProfileSummaryCache} from '../../../shared/services/profileService';
 import {clearCachedUserProfile} from '../../../shared/services/userService';
+import {invalidateMakeupJourneyCache} from '../../makeup-journey/services/makeupJourneyCache';
 import {resetProductEventCollection} from '../../recommendation/services/productEventService';
 import {unregisterCurrentPushDevice} from '../../notifications/services/notificationService';
 import {refreshAuthSession} from './authService';
@@ -140,8 +141,9 @@ export function AuthSessionProvider({
   const setSession = useCallback(async (nextSession: AuthSession | null) => {
     const previousUserId = sessionRef.current?.user.id ?? null;
     const nextUserId = nextSession?.user.id ?? null;
+    const userChanged = previousUserId !== nextUserId;
 
-    if (previousUserId !== nextUserId) {
+    if (userChanged) {
       resetProductEventCollection();
       clearMyPageProfileSummaryCache();
       await clearCachedUserProfile();
@@ -149,6 +151,9 @@ export function AuthSessionProvider({
 
     sessionRef.current = nextSession;
     setSessionState(nextSession);
+    if (userChanged) {
+      invalidateMakeupJourneyCache();
+    }
     await saveSessionToSecureStore(nextSession);
   }, []);
 

@@ -493,6 +493,7 @@ def test_list_select_strips_measurements_but_detail_keeps() -> None:
   assert "#- '{result,faceAnalysisV2,faceProfile}'" in ANALYSIS_MEDIA_LIST_SELECT
   assert "#- '{result,faceAnalysisV2,pipeline}'" not in ANALYSIS_MEDIA_LIST_SELECT
   assert "#- '{request,measurements}'" not in ANALYSIS_MEDIA_SELECT
+  assert ANALYSIS_MEDIA_LIST_SELECT.count("(") == ANALYSIS_MEDIA_LIST_SELECT.count(")")
   # 축약본이 dict(row) 변환에서 원본을 덮도록 같은 별칭으로 뒤에 온다.
   assert ANALYSIS_MEDIA_LIST_SELECT.rstrip().endswith("as detail_payload")
 

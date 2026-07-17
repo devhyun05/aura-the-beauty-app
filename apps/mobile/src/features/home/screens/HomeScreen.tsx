@@ -34,7 +34,7 @@ import {
   ScanFace,
   ScanSearch,
   Sparkles,
-  Store,
+  WandSparkles,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ScrollView as TamaguiScrollView, Text, View, XStack, YStack} from 'tamagui';
@@ -262,6 +262,10 @@ export function HomeScreen({
     onPressRecommendedFilterMore?.();
   }, [onPressRecommendedFilterMore]);
 
+  const handleAuradinShortcutPress = useCallback(() => {
+    onPressHomeFeature?.('auradin');
+  }, [onPressHomeFeature]);
+
   const loadHomeContent = useCallback(async () => {
     const [nextHomeData, filters, nextFeedContent] = await Promise.all([
       getHomeData(),
@@ -440,6 +444,7 @@ export function HomeScreen({
 
             <HomeServiceShortcutSection
               onPressArFilter={onPressArFilter}
+              onPressAuradin={handleAuradinShortcutPress}
               onPressFaceDiagnosis={onPressFaceDiagnosis}
               onPressConsulting={onPressConsulting}
               onPressHalfMakeup={onPressHalfMakeup}
@@ -449,7 +454,6 @@ export function HomeScreen({
               onPressMakeupFeedback={onPressMakeupFeedback}
               onPressMakeupFilter={onPressMakeupFilter}
               onPressProductRecommendations={onPressProductRecommendations}
-              onPressRecommendedFilterMore={onPressRecommendedFilterMore}
             />
 
             <RecommendedFilterPreviewSection
@@ -1015,14 +1019,14 @@ function HeroPaginationIndicator({
     </XStack>
   );
 }
-export const HOME_FILTER_STORE_SERVICE_SHORTCUT_ICON_NAME = 'Store';
+export const HOME_AURADIN_SERVICE_SHORTCUT_ICON_NAME = 'WandSparkles';
 export const HOME_CONSULTING_SERVICE_SHORTCUT_ICON_NAME = 'Compass';
 export const HOME_SERVICE_SHORTCUT_LABELS = [
   '얼굴 분석',
   '메이크업 필터',
   '메이크업 추출',
   '메이크업 피드백',
-  '필터 스토어',
+  '아우라딘',
   '추천 제품',
   '컨설팅',
   '메이크업 추천',
@@ -1068,11 +1072,11 @@ const homeServiceShortcutRows = [
   ],
   [
     {
-      id: 'filterStore',
+      id: 'auradin',
       label: HOME_SERVICE_SHORTCUT_LABELS[4],
-      accessibilityLabel: '필터 스토어 보기',
+      accessibilityLabel: '아우라딘 열기',
       icon: (color: string) => (
-        <Store color={color} size={iconSize.lg} strokeWidth={1.9} />
+        <WandSparkles color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
     {
@@ -1112,6 +1116,7 @@ export type HomeServiceShortcutPresentation =
 
 type HomeServiceShortcutHandlers = {
   onPressArFilter?: () => void;
+  onPressAuradin?: () => void;
   onPressConsulting?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressHalfMakeup?: () => void;
@@ -1121,13 +1126,13 @@ type HomeServiceShortcutHandlers = {
   onPressMakeupFeedback?: () => void;
   onPressMakeupFilter?: () => void;
   onPressProductRecommendations?: () => void;
-  onPressRecommendedFilterMore?: () => void;
 };
 
 export function getHomeServiceShortcutPressHandler(
   actionId: HomeServiceShortcutId,
   {
     onPressArFilter,
+    onPressAuradin,
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressHalfMakeup,
@@ -1137,7 +1142,6 @@ export function getHomeServiceShortcutPressHandler(
     onPressMakeupFeedback,
     onPressMakeupFilter,
     onPressProductRecommendations,
-    onPressRecommendedFilterMore,
   }: HomeServiceShortcutHandlers,
 ): (() => void) | undefined {
   if (actionId === 'diagnosis') {
@@ -1160,8 +1164,8 @@ export function getHomeServiceShortcutPressHandler(
     return onPressProductRecommendations;
   }
 
-  if (actionId === 'filterStore') {
-    return onPressRecommendedFilterMore;
+  if (actionId === 'auradin') {
+    return onPressAuradin;
   }
 
   if (actionId === 'consulting') {
@@ -1199,6 +1203,7 @@ export function getHomeServiceShortcutRowLabels(): readonly (readonly string[])[
 
 function HomeServiceShortcutSection({
   onPressArFilter,
+  onPressAuradin,
   onPressConsulting,
   onPressFaceDiagnosis,
   onPressHalfMakeup,
@@ -1208,10 +1213,10 @@ function HomeServiceShortcutSection({
   onPressMakeupFeedback,
   onPressMakeupFilter,
   onPressProductRecommendations,
-  onPressRecommendedFilterMore,
 }: HomeServiceShortcutHandlers) {
   const homeServiceShortcutHandlers: HomeServiceShortcutHandlers = {
     onPressArFilter,
+    onPressAuradin,
     onPressConsulting,
     onPressFaceDiagnosis,
     onPressHalfMakeup,
@@ -1221,7 +1226,6 @@ function HomeServiceShortcutSection({
     onPressMakeupFeedback,
     onPressMakeupFilter,
     onPressProductRecommendations,
-    onPressRecommendedFilterMore,
   };
 
   return (

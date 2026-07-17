@@ -13,6 +13,7 @@ export type ScreenCategory =
   | 'main-home'
   | 'main-profile'
   | 'main-consulting'
+  | 'main-journey'
   | 'feature-entry'
   | 'list'
   | 'detail-report'
@@ -536,6 +537,22 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '메이크업 피드백',
   },
+  MakeupJourneyDayDetail: {
+    category: 'detail-report',
+    contextLabel: 'MAKEUP JOURNEY',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '메이크업 성장',
+  },
+  MakeupJourneyTrend: {
+    category: 'detail-report',
+    contextLabel: 'MAKEUP JOURNEY',
+    depth: 'sub',
+    kind: 'detail',
+    statusBarStyle: 'dark',
+    title: '성장 그래프',
+  },
   MakeupCorrectionGuide: {
     category: 'detail-report',
     contextLabel: 'CORRECTION GUIDE',
@@ -643,6 +660,14 @@ export const routeChromeByRoute = {
     kind: 'mainTab',
     statusBarStyle: 'dark',
   },
+  MakeupJourneyTab: {
+    category: 'main-journey',
+    depth: 'main',
+    footerTab: 'journey',
+    headerVariant: 'custom',
+    kind: 'mainTab',
+    statusBarStyle: 'dark',
+  },
 } as const satisfies Record<RouteName, RouteChrome>;
 
 export function getRouteChrome(route: RouteName): RouteChrome {
@@ -676,6 +701,10 @@ export function getFooterTargetRoute(tab: FooterTabKey): FooterTargetRoute {
 
   if (tab === 'consulting') {
     return 'ConsultingTab';
+  }
+
+  if (tab === 'journey') {
+    return 'MakeupJourneyTab';
   }
 
   return 'HomeTab';

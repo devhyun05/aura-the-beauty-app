@@ -1,12 +1,19 @@
 import argparse
 import asyncio
 import json
+import os
+import re
 
 import asyncpg
 
 from app.core.settings import get_settings
 from app.db.connection_config import DatabaseConfigurationError, connect_database
-from app.db.init_db import POST_SCHEMA_MIGRATIONS, SCHEMA_VERSION
+from app.db.init_db import (
+  POST_SCHEMA_MIGRATIONS,
+  REPORT_LAB_SCHEMA_VERSION,
+  SCHEMA_VERSION,
+  assert_report_lab_database,
+)
 from app.db.seed_db import SEED_VERSION
 
 
@@ -17,6 +24,10 @@ EXPECTED_TABLES = {
   "photo_captures",
   "analysis_reports",
   "analysis_stage_runs",
+  "analysis_lab_sessions",
+  "analysis_lab_runs",
+  "face_measurement_preferences",
+  "face_length_measurement_snapshots",
   "saved_makeup_styles",
   "product_recommendation_operators",
   "product_recommendation_service_principals",
@@ -51,9 +62,17 @@ EXPECTED_TABLES = {
   "user_ar_filter_states",
   "filter_extraction_reports",
   "makeup_feedback_reports",
+  "makeup_journey_settings",
+  "makeup_journey_day_notes",
+  "makeup_journey_missions",
   "makeup_scenario_library",
   "makeup_scenario_generation_limits",
+  "makeup_situations",
+  "makeup_situation_keywords",
+  "makeup_keyword_question_templates",
+  "makeup_recommendation_sessions",
   "makeup_recommendation_reports",
+  "makeup_recommendation_assets",
   "community_threads",
   "community_thread_media",
   "community_replies",
@@ -88,6 +107,35 @@ EXPECTED_TABLES = {
 EXPECTED_EXTENSIONS = {"btree_gist", "pg_trgm", "vector"}
 
 EXPECTED_CONSTRAINTS = {
+  "face_measurement_preferences": {
+    "face_measurement_preferences_pkey",
+    "face_measurement_preferences_user_id_fkey",
+    "chk_face_measurement_preferences_source",
+    "chk_face_measurement_preferences_locale_format",
+    "chk_face_measurement_preferences_selection_state",
+  },
+  "face_length_measurement_snapshots": {
+    "face_length_measurement_snapshots_pkey",
+    "face_length_measurement_snapshots_report_id_fkey",
+    "chk_face_length_snapshot_capture_id",
+    "chk_face_length_snapshot_contract_id",
+    "chk_face_length_snapshot_finite_positive",
+    "chk_face_length_snapshot_band",
+    "chk_face_length_snapshot_client_observed_only",
+  },
+  "analysis_lab_runs": {
+    "analysis_lab_runs_session_id_fkey",
+    "analysis_lab_runs_external_provider_runs_check",
+    "analysis_lab_runs_status_check",
+    "chk_analysis_lab_runs_batch_ordinal",
+    "chk_analysis_lab_runs_cache_provenance",
+    "chk_analysis_lab_runs_fixture_id",
+    "chk_analysis_lab_runs_json_shapes",
+  },
+  "analysis_lab_sessions": {
+    "analysis_lab_sessions_pkey",
+    "analysis_lab_sessions_status_check",
+  },
   "product_recommendation_operators": {
     "fk_product_recommendation_operator_user",
     "fk_product_recommendation_operator_granted_by",
@@ -110,10 +158,104 @@ EXPECTED_CONSTRAINTS = {
   },
   "seasonal_pipeline_runs": {"chk_seasonal_pipeline_run_trigger"},
   "seasonal_auto_publish_audit_log": {"chk_seasonal_auto_publish_decision_refs"},
+  "makeup_feedback_reports": {
+    "fk_makeup_feedback_reports_parent",
+    "chk_makeup_feedback_kind",
+    "chk_makeup_feedback_parent_presence",
+    "chk_makeup_feedback_parent_not_self",
+  },
+  "makeup_journey_settings": {
+    "fk_makeup_journey_settings_user",
+    "chk_makeup_journey_goal_score",
+    "chk_makeup_journey_mission_level",
+    "chk_makeup_journey_timezone_name",
+  },
+  "makeup_journey_day_notes": {
+    "fk_makeup_journey_day_notes_user",
+    "uq_makeup_journey_day_notes_user_date",
+    "chk_makeup_journey_day_note_length",
+  },
+  "makeup_journey_missions": {
+    "fk_makeup_journey_missions_user",
+    "chk_makeup_journey_mission_source",
+    "chk_makeup_journey_mission_difficulty",
+    "chk_makeup_journey_mission_title",
+    "chk_makeup_journey_mission_completion",
+  },
+  "makeup_recommendation_sessions": {
+    "uq_makeup_recommendation_sessions_user_idempotency",
+    "uq_makeup_recommendation_sessions_report",
+  },
+  "makeup_recommendation_reports": {"fk_makeup_recommendation_reports_session"},
+  "makeup_scenario_library": {"chk_makeup_scenario_library_trend_evidence"},
+  "makeup_recommendation_assets": {
+    "uq_makeup_recommendation_assets_report_look",
+    "chk_makeup_recommendation_assets_private_url",
+    "chk_makeup_recommendation_assets_provenance",
+  },
 }
 
 EXPECTED_COLUMNS = {
-  "analysis_reports": {"embedding"},
+  "analysis_reports": {"embedding", "deleted_at"},
+  "face_measurement_preferences": {
+    "user_id",
+    "self_selected_locale",
+    "locale_selection_source",
+    "locale_selected_at",
+    "created_at",
+    "updated_at",
+  },
+  "face_length_measurement_snapshots": {
+    "report_id",
+    "measurement_capture_id",
+    "measurement_contract_id",
+    "face_length_ratio",
+    "estimate_low",
+    "estimate_high",
+    "captured_at",
+    "evidence_provenance",
+    "norm_training_eligible",
+    "norm_attestation_id",
+    "created_at",
+  },
+  "analysis_lab_runs": {
+    "id",
+    "session_id",
+    "client_request_id",
+    "batch_ordinal",
+    "fixture_id",
+    "principal_id",
+    "stage",
+    "status",
+    "schema_version",
+    "prompt_version",
+    "provider",
+    "model",
+    "input_hash",
+    "overrides",
+    "normalized_output",
+    "raw_response",
+    "validation_errors",
+    "error_payload",
+    "latency_ms",
+    "token_usage",
+    "external_provider_runs",
+    "cache_hit",
+    "cached_from_run_id",
+    "started_at",
+    "completed_at",
+    "expires_at",
+    "created_at",
+    "updated_at",
+  },
+  "analysis_lab_sessions": {
+    "id",
+    "principal_id",
+    "status",
+    "expires_at",
+    "created_at",
+    "updated_at",
+  },
   "community_threads": {"embedding"},
   "auradin_search_sessions": {
     "state",
@@ -190,6 +332,13 @@ EXPECTED_COLUMNS = {
     "recommendation_model_id",
     "parent_report_id",
     "refinement_type",
+    "source_analysis_report_id",
+    "session_id",
+    "situation_id",
+    "keyword_id",
+    "context_snapshot",
+    "schema_version",
+    "image_mode",
   },
   "makeup_scenario_library": {
     "normalized_text",
@@ -198,16 +347,132 @@ EXPECTED_COLUMNS = {
     "usage_count",
     "model_id",
     "last_served_at",
+    "keyword_kind",
+    "source_name",
+    "source_url",
+    "source_published_at",
+    "evidence_summary",
+    "market_scope",
+    "trend_score",
+    "confidence",
+    "review_status",
+    "locale",
+    "as_of",
+    "valid_from",
+    "expires_at",
   },
   "makeup_scenario_generation_limits": {
     "user_id",
     "window_started_at",
     "request_count",
   },
+  "makeup_situations": {
+    "key",
+    "label",
+    "description",
+    "image_asset_key",
+    "icon_key",
+    "sort_order",
+    "status",
+  },
+  "makeup_situation_keywords": {
+    "situation_id",
+    "keyword_id",
+    "relevance_score",
+    "sort_order",
+    "status",
+  },
+  "makeup_keyword_question_templates": {
+    "keyword_id",
+    "template_version",
+    "locale",
+    "questions",
+    "source",
+    "model_id",
+    "prompt_version",
+    "review_status",
+    "status",
+    "reviewed_at",
+  },
+  "makeup_recommendation_sessions": {
+    "user_id",
+    "analysis_report_id",
+    "situation_id",
+    "keyword_id",
+    "custom_situation_text",
+    "context_snapshot",
+    "questions",
+    "answers",
+    "current_question_index",
+    "status",
+    "report_id",
+    "idempotency_key",
+    "image_mode",
+    "expires_at",
+  },
+  "makeup_recommendation_assets": {
+    "report_id",
+    "look_id",
+    "role",
+    "status",
+    "image_url",
+    "storage_bucket",
+    "object_key",
+    "content_type",
+    "is_private",
+    "input_media_id",
+    "provenance",
+    "attempt_count",
+  },
   "user_consents": {"recorded_at"},
+  "makeup_feedback_reports": {"entry_date", "feedback_kind", "parent_feedback_report_id"},
+  "makeup_journey_settings": {
+    "user_id", "goal_score", "mission_level", "timezone_name", "created_at", "updated_at",
+  },
+  "makeup_journey_day_notes": {
+    "id", "user_id", "entry_date", "content", "created_at", "updated_at",
+  },
+  "makeup_journey_missions": {
+    "id", "user_id", "entry_date", "source", "difficulty", "title", "is_completed",
+    "completed_at", "sort_order", "generation_payload", "created_at", "updated_at",
+  },
 }
 
 EXPECTED_COLUMN_CONTRACTS = {
+  "face_measurement_preferences.user_id": {"is_nullable": "NO"},
+  "face_measurement_preferences.self_selected_locale": {"is_nullable": "YES"},
+  "face_measurement_preferences.locale_selection_source": {
+    "is_nullable": "NO",
+    "default_contains": "unset",
+  },
+  "face_length_measurement_snapshots.report_id": {"is_nullable": "NO"},
+  "face_length_measurement_snapshots.measurement_capture_id": {"is_nullable": "NO"},
+  "face_length_measurement_snapshots.measurement_contract_id": {"is_nullable": "NO"},
+  "face_length_measurement_snapshots.face_length_ratio": {"is_nullable": "NO"},
+  "face_length_measurement_snapshots.estimate_low": {"is_nullable": "NO"},
+  "face_length_measurement_snapshots.estimate_high": {"is_nullable": "NO"},
+  "face_length_measurement_snapshots.captured_at": {"is_nullable": "NO"},
+  "face_length_measurement_snapshots.evidence_provenance": {
+    "is_nullable": "NO",
+    "default_contains": "client_observed_unverified",
+  },
+  "face_length_measurement_snapshots.norm_training_eligible": {
+    "is_nullable": "NO",
+    "default_contains": "false",
+  },
+  "face_length_measurement_snapshots.norm_attestation_id": {"is_nullable": "YES"},
+  "analysis_lab_runs.fixture_id": {"is_nullable": "NO"},
+  "analysis_lab_runs.client_request_id": {"is_nullable": "NO"},
+  "analysis_lab_runs.batch_ordinal": {"is_nullable": "NO"},
+  "analysis_lab_runs.cache_hit": {"is_nullable": "NO", "default_contains": "false"},
+  "analysis_lab_runs.cached_from_run_id": {"is_nullable": "YES"},
+  "analysis_lab_runs.provider": {"is_nullable": "NO", "default_contains": "disabled"},
+  "analysis_lab_runs.model": {"is_nullable": "NO", "default_contains": "disabled"},
+  "analysis_lab_runs.external_provider_runs": {"is_nullable": "NO", "default_contains": "0"},
+  "analysis_lab_runs.expires_at": {"is_nullable": "NO", "default_contains": "7 days"},
+  "analysis_lab_sessions.principal_id": {"is_nullable": "NO"},
+  "analysis_lab_sessions.status": {"is_nullable": "NO", "default_contains": "active"},
+  "analysis_lab_sessions.expires_at": {"is_nullable": "NO", "default_contains": "7 days"},
   "auradin_search_sessions.owner_subject": {"is_nullable": "NO"},
   "auradin_search_sessions.version": {"is_nullable": "NO", "default_contains": "0"},
   # A5 — MVP 필수 계약 필드(멱등성·귀속·시간)는 소급 추가 불가라 NOT NULL을 검증한다.
@@ -219,9 +484,61 @@ EXPECTED_COLUMN_CONTRACTS = {
   "auradin_events.release_manifest_id": {"is_nullable": "NO"},
   "auradin_events.occurred_at": {"is_nullable": "NO"},
   "auradin_events.received_at": {"is_nullable": "NO", "default_contains": "now"},
+  "makeup_feedback_reports.entry_date": {
+    "is_nullable": "NO",
+    "default_contains": "Asia/Seoul",
+  },
+  "makeup_feedback_reports.feedback_kind": {"is_nullable": "NO", "default_contains": "initial"},
+  "makeup_journey_settings.goal_score": {"is_nullable": "NO"},
+  "makeup_journey_settings.mission_level": {"is_nullable": "NO"},
+  "makeup_journey_settings.timezone_name": {
+    "is_nullable": "NO",
+    "default_contains": "Asia/Seoul",
+  },
+  "makeup_journey_day_notes.user_id": {"is_nullable": "NO"},
+  "makeup_journey_day_notes.entry_date": {"is_nullable": "NO"},
+  "makeup_journey_day_notes.content": {"is_nullable": "NO"},
+  "makeup_journey_missions.user_id": {"is_nullable": "NO"},
+  "makeup_journey_missions.entry_date": {"is_nullable": "NO"},
+  "makeup_journey_missions.source": {"is_nullable": "NO"},
+  "makeup_journey_missions.difficulty": {"is_nullable": "NO"},
+  "makeup_journey_missions.title": {"is_nullable": "NO"},
+  "makeup_journey_missions.is_completed": {
+    "is_nullable": "NO",
+    "default_contains": "false",
+  },
+  "makeup_journey_missions.sort_order": {"is_nullable": "NO", "default_contains": "0"},
+  "makeup_journey_missions.generation_payload": {"is_nullable": "NO", "default_contains": "{}"},
+  "makeup_recommendation_sessions.user_id": {"is_nullable": "NO"},
+  "makeup_recommendation_sessions.analysis_report_id": {"is_nullable": "NO"},
+  "makeup_recommendation_sessions.idempotency_key": {"is_nullable": "NO"},
+  "makeup_recommendation_sessions.image_mode": {"is_nullable": "NO", "default_contains": "generic"},
+  "makeup_recommendation_reports.context_snapshot": {"is_nullable": "NO"},
+  "makeup_recommendation_reports.schema_version": {
+    "is_nullable": "NO",
+    "default_contains": "makeup-recommendation-v2",
+  },
+  "makeup_recommendation_reports.image_mode": {"is_nullable": "NO", "default_contains": "generic"},
+  "makeup_recommendation_assets.is_private": {"is_nullable": "NO", "default_contains": "false"},
+  "makeup_recommendation_assets.provenance": {"is_nullable": "NO", "default_contains": "{}"},
 }
 
 EXPECTED_CONSTRAINT_CONTRACTS = {
+  "chk_face_length_snapshot_client_observed_only": (
+    "evidence_provenance = 'client_observed_unverified'",
+    "norm_training_eligible = false",
+    "norm_attestation_id is null",
+    " and ",
+  ),
+  "chk_makeup_scenario_library_trend_evidence": (
+    "keyword_kind <> 'trend'",
+    "source_name is not null",
+    "source_url is not null",
+    "source_published_at is not null",
+    "market_scope is not null",
+    "as_of is not null",
+    "expires_at is not null",
+  ),
   "chk_auradin_sessions_idempotency_fields": (
     "(client_request_id is null) = (request_fingerprint is null)",
     "(client_request_id is null) = (idempotency_expires_at is null)",
@@ -272,6 +589,52 @@ EXPECTED_CONSTRAINT_CONTRACTS = {
     "decision = 'rolled_back'",
     "previous_collection_id is not null",
   ),
+  "chk_makeup_feedback_parent_presence": (
+    "feedback_kind = 'initial'::text",
+    "parent_feedback_report_id is null",
+    "feedback_kind = 'correction'::text",
+    "parent_feedback_report_id is not null",
+  ),
+  "chk_makeup_feedback_parent_not_self": (
+    "parent_feedback_report_id is null",
+    "parent_feedback_report_id <> id",
+  ),
+  "chk_makeup_journey_goal_score": (
+    "goal_score >= 1",
+    "goal_score <= 100",
+  ),
+  "chk_makeup_journey_mission_level": (
+    "'beginner'",
+    "'intermediate'",
+    "'advanced'",
+  ),
+  "chk_makeup_journey_timezone_name": (
+    "char_length(btrim(timezone_name)) >= 1",
+    "char_length(btrim(timezone_name)) <= 64",
+  ),
+  "chk_makeup_journey_day_note_length": (
+    "char_length(content) <= 2000",
+  ),
+  "chk_makeup_journey_mission_source": (
+    "'curated'",
+    "'ai'",
+    "'user'",
+  ),
+  "chk_makeup_journey_mission_difficulty": (
+    "'beginner'",
+    "'intermediate'",
+    "'advanced'",
+  ),
+  "chk_makeup_journey_mission_title": (
+    "char_length(btrim(title)) >= 1",
+    "char_length(btrim(title)) <= 120",
+  ),
+  "chk_makeup_journey_mission_completion": (
+    "is_completed",
+    "completed_at is not null",
+    "not is_completed",
+    "completed_at is null",
+  ),
 }
 
 EXPECTED_TRIGGER_CONTRACTS = {
@@ -287,12 +650,77 @@ EXPECTED_TRIGGER_CONTRACTS = {
   ),
 }
 
+FORBIDDEN_CONSTRAINT_FRAGMENTS = {
+  "chk_makeup_scenario_library_trend_evidence": ("review_status = 'approved'",),
+}
+
 # R1 (schema.sql:product-category-brow-v1) — brow가 빠지면 Auradin 브로우 찜이 lip으로 강등된다.
 EXPECTED_ENUM_VALUES = {
   "product_category": {"lip", "cheek", "shadow", "liner", "base", "brow"},
 }
 
 EXPECTED_INDEX_CONTRACTS = {
+  "idx_face_length_snapshots_contract_captured": (
+    "measurement_contract_id",
+    "captured_at",
+    "report_id",
+  ),
+  "idx_analysis_lab_runs_session_created": ("session_id", "created_at"),
+  "idx_analysis_lab_runs_fixture_stage_created": ("fixture_id", "stage", "created_at"),
+  "idx_analysis_lab_runs_completed_cache": (
+    "fixture_id",
+    "principal_id",
+    "stage",
+    "schema_version",
+    "input_hash",
+    "completed_at",
+    "where",
+    "status = 'completed'",
+    "external_provider_runs = 0",
+  ),
+  "idx_analysis_lab_runs_expires": ("expires_at",),
+  "uq_analysis_lab_runs_batch_ordinal": (
+    "unique",
+    "session_id",
+    "client_request_id",
+    "batch_ordinal",
+  ),
+  "idx_analysis_lab_sessions_expires": ("expires_at",),
+  "idx_analysis_reports_user_active_analyzed": (
+    "user_id",
+    "analyzed_at",
+    "where (deleted_at is null)",
+  ),
+  "idx_makeup_situations_active_sort": ("status", "sort_order", "key"),
+  "idx_makeup_situation_keywords_discovery": ("situation_id", "status", "sort_order"),
+  "idx_makeup_keyword_question_templates_lookup": (
+    "keyword_id",
+    "locale",
+    "status",
+    "review_status",
+    "template_version",
+  ),
+  "uq_makeup_keyword_question_templates_active_reviewed": (
+    "unique",
+    "keyword_id",
+    "where",
+    "status = 'active'",
+    "review_status = 'approved'",
+  ),
+  "idx_makeup_scenario_library_discovery": ("locale", "keyword_kind", "review_status", "status"),
+  "uq_makeup_scenario_library_locale_scope": (
+    "unique",
+    "normalized_text",
+    "locale",
+    "coalesce",
+    "market_scope",
+  ),
+  "idx_makeup_recommendation_sessions_active": ("user_id", "status", "expires_at"),
+  "uq_makeup_recommendation_reports_session": (
+    "unique",
+    "session_id",
+  ),
+  "idx_makeup_recommendation_assets_report_status": ("report_id", "status", "role"),
   "idx_auradin_search_sessions_expires_at": ("expires_at",),
   "uq_auradin_sessions_owner_client_request": (
     "unique",
@@ -321,7 +749,51 @@ EXPECTED_INDEX_CONTRACTS = {
     "bucket_started_at",
     "region_code",
   ),
+  "idx_makeup_feedback_reports_user_entry_status_completed": (
+    "user_id", "entry_date", "status", "completed_at", "id",
+  ),
+  "idx_makeup_journey_missions_user_date_order": (
+    "user_id", "entry_date", "sort_order",
+  ),
+  "uq_makeup_journey_missions_user_date_title_ci": (
+    "unique", "user_id", "entry_date", "lower(title)",
+  ),
 }
+
+REPORT_LAB_EXPECTED_TABLES = {
+  "analysis_lab_sessions",
+  "analysis_lab_runs",
+  "schema_migrations",
+}
+REPORT_LAB_EXPECTED_COLUMNS = {
+  "analysis_lab_sessions": EXPECTED_COLUMNS["analysis_lab_sessions"],
+  "analysis_lab_runs": EXPECTED_COLUMNS["analysis_lab_runs"],
+}
+REPORT_LAB_EXPECTED_COLUMN_CONTRACTS = {
+  name: contract
+  for name, contract in EXPECTED_COLUMN_CONTRACTS.items()
+  if name.startswith(("analysis_lab_runs.", "analysis_lab_sessions."))
+}
+REPORT_LAB_EXPECTED_INDEX_CONTRACTS = {
+  name: fragments
+  for name, fragments in EXPECTED_INDEX_CONTRACTS.items()
+  if name.startswith((
+    "idx_analysis_lab_runs_",
+    "idx_analysis_lab_sessions_",
+    "uq_analysis_lab_runs_",
+  ))
+}
+
+def _is_legacy_global_keyword_unique_index(definition: str) -> bool:
+  normalized = " ".join(str(definition or "").lower().replace('"', "").split())
+  return bool(
+    re.search(
+      r"\bcreate unique index\b.*\bon (?:public\.)?makeup_scenario_library"
+      r"(?: using [a-z0-9_]+)? \(normalized_text\)(?:\s|$)",
+      normalized,
+    ),
+  )
+
 
 async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:
   rows = await connection.fetch(
@@ -492,14 +964,24 @@ def build_schema_report(
     if isinstance(constraints, dict):
       for name, fragments in EXPECTED_CONSTRAINT_CONTRACTS.items():
         definition = constraints.get(name, "")
-        if definition and any(fragment not in definition for fragment in fragments):
+        forbidden = FORBIDDEN_CONSTRAINT_FRAGMENTS.get(name, ())
+        if definition and (
+          any(fragment not in definition for fragment in fragments)
+          or any(fragment in definition for fragment in forbidden)
+        ):
           invalid_constraints.append(name)
   invalid_indexes = []
+  legacy_global_unique_indexes = []
   if indexes is not None:
     for name, fragments in EXPECTED_INDEX_CONTRACTS.items():
       definition = indexes.get(name, "")
       if not definition or any(fragment not in definition for fragment in fragments):
         invalid_indexes.append(name)
+    legacy_global_unique_indexes = sorted(
+      name
+      for name, definition in indexes.items()
+      if _is_legacy_global_keyword_unique_index(definition)
+    )
   invalid_triggers = []
   if triggers is not None:
     for name, fragments in EXPECTED_TRIGGER_CONTRACTS.items():
@@ -534,6 +1016,7 @@ def build_schema_report(
       invalid_constraints,
       invalid_indexes,
       invalid_triggers,
+      legacy_global_unique_indexes,
       missing_enum_values,
       missing_table_constraints,
     )),
@@ -550,7 +1033,84 @@ def build_schema_report(
     "invalidConstraints": sorted(invalid_constraints),
     "invalidIndexes": sorted(invalid_indexes),
     "invalidTriggers": sorted(invalid_triggers),
+    "legacyGlobalUniqueIndexes": legacy_global_unique_indexes,
     "expectedConstraints": {table: sorted(constraints) for table, constraints in EXPECTED_CONSTRAINTS.items()},
+    "missingTableConstraints": missing_table_constraints,
+    "appliedVersions": sorted(applied_versions),
+    "missingVersions": missing_versions,
+  }
+
+
+def build_report_lab_schema_report(
+  table_names: set[str],
+  applied_versions: set[str],
+  table_columns: dict[str, set[str]],
+  column_contracts: dict[str, dict[str, str | None]],
+  indexes: dict[str, str],
+  table_constraints: dict[str, set[str]],
+) -> dict[str, object]:
+  missing_tables = sorted(REPORT_LAB_EXPECTED_TABLES - table_names)
+  missing_versions = (
+    [] if REPORT_LAB_SCHEMA_VERSION in applied_versions else [REPORT_LAB_SCHEMA_VERSION]
+  )
+  missing_columns = {
+    table: sorted(expected - table_columns.get(table, set()))
+    for table, expected in REPORT_LAB_EXPECTED_COLUMNS.items()
+    if expected - table_columns.get(table, set())
+  }
+  invalid_column_contracts = []
+  for column, expected in REPORT_LAB_EXPECTED_COLUMN_CONTRACTS.items():
+    actual = column_contracts.get(column, {})
+    nullable = expected.get("is_nullable")
+    default_contains = expected.get("default_contains")
+    if nullable and actual.get("is_nullable") != nullable:
+      invalid_column_contracts.append(f"{column}.nullability")
+    if default_contains and default_contains not in str(actual.get("column_default") or ""):
+      invalid_column_contracts.append(f"{column}.default")
+
+  invalid_indexes = []
+  for name, fragments in REPORT_LAB_EXPECTED_INDEX_CONTRACTS.items():
+    definition = indexes.get(name, "")
+    if not definition or any(fragment not in definition for fragment in fragments):
+      invalid_indexes.append(name)
+
+  expected_constraints = {
+    table: EXPECTED_CONSTRAINTS[table]
+    for table in ("analysis_lab_sessions", "analysis_lab_runs")
+  }
+  missing_table_constraints = {
+    table: sorted(expected - table_constraints.get(table, set()))
+    for table, expected in expected_constraints.items()
+    if expected - table_constraints.get(table, set())
+  }
+
+  return {
+    "ok": not any((
+      missing_tables,
+      missing_versions,
+      missing_columns,
+      invalid_column_contracts,
+      invalid_indexes,
+      missing_table_constraints,
+    )),
+    "mode": "fixture-only-report-lab",
+    "expectedTables": sorted(REPORT_LAB_EXPECTED_TABLES),
+    "missingTables": missing_tables,
+    "expectedExtensions": [],
+    "missingExtensions": [],
+    "expectedColumns": {
+      table: sorted(columns) for table, columns in REPORT_LAB_EXPECTED_COLUMNS.items()
+    },
+    "missingColumns": missing_columns,
+    "expectedEnumValues": {},
+    "missingEnumValues": {},
+    "invalidColumnContracts": sorted(invalid_column_contracts),
+    "missingConstraints": [],
+    "invalidConstraints": [],
+    "invalidIndexes": sorted(invalid_indexes),
+    "expectedConstraints": {
+      table: sorted(constraints) for table, constraints in expected_constraints.items()
+    },
     "missingTableConstraints": missing_table_constraints,
     "appliedVersions": sorted(applied_versions),
     "missingVersions": missing_versions,
@@ -598,6 +1158,36 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
   )
 
 
+async def check_report_lab_schema(database_url: str | None = None) -> dict[str, object]:
+  dsn = database_url or os.getenv("DATABASE_URL")
+  if not dsn:
+    settings = get_settings()
+    dsn = settings.database_url
+  if not dsn:
+    raise RuntimeError("DATABASE_URL is required for the isolated Report Lab schema check.")
+
+  connection = await asyncpg.connect(dsn=dsn)
+  try:
+    await assert_report_lab_database(connection)
+    table_names = await fetch_table_names(connection)
+    table_columns = await fetch_table_columns(connection)
+    column_contracts = await fetch_column_contracts(connection)
+    indexes = await fetch_indexes(connection)
+    table_constraints = await fetch_table_constraints(connection)
+    applied_versions = await fetch_applied_versions(connection)
+  finally:
+    await connection.close()
+
+  return build_report_lab_schema_report(
+    table_names,
+    applied_versions,
+    table_columns,
+    column_contracts,
+    indexes,
+    table_constraints,
+  )
+
+
 def format_schema_report(report: dict[str, object]) -> str:
   status = "ok" if report["ok"] else "failed"
   lines = [f"Schema check: {status}"]
@@ -609,6 +1199,7 @@ def format_schema_report(report: dict[str, object]) -> str:
   invalid_column_contracts = report["invalidColumnContracts"]
   missing_constraints = report["missingConstraints"]
   invalid_indexes = report["invalidIndexes"]
+  legacy_global_unique_indexes = report["legacyGlobalUniqueIndexes"]
   invalid_constraints = report["invalidConstraints"]
   invalid_triggers = report["invalidTriggers"]
   missing_versions = report["missingVersions"]
@@ -660,6 +1251,9 @@ def format_schema_report(report: dict[str, object]) -> str:
   if invalid_triggers:
     lines.append("Missing or invalid triggers:")
     lines.extend(f"- {name}" for name in invalid_triggers)
+  if legacy_global_unique_indexes:
+    lines.append("Legacy global keyword unique indexes that must be removed:")
+    lines.extend(f"- {name}" for name in legacy_global_unique_indexes)
 
   if not any((
     missing_tables,
@@ -672,6 +1266,7 @@ def format_schema_report(report: dict[str, object]) -> str:
     invalid_constraints,
     invalid_indexes,
     invalid_triggers,
+    legacy_global_unique_indexes,
     missing_table_constraints,
   )):
     lines.append("All expected tables and migration markers are present.")
@@ -682,10 +1277,21 @@ def format_schema_report(report: dict[str, object]) -> str:
 async def main() -> None:
   parser = argparse.ArgumentParser(description="Check backend PostgreSQL schema readiness.")
   parser.add_argument("--require-seed", action="store_true", help="Require the seed.sql marker too.")
+  parser.add_argument(
+    "--report-lab",
+    action="store_true",
+    help="Check only the fixture-mode schema in the dedicated local Report Lab database.",
+  )
   parser.add_argument("--json", action="store_true", help="Print the full report as JSON.")
   args = parser.parse_args()
 
-  report = await check_schema(require_seed=args.require_seed)
+  if args.report_lab and args.require_seed:
+    parser.error("--require-seed cannot be combined with --report-lab.")
+  report = (
+    await check_report_lab_schema()
+    if args.report_lab
+    else await check_schema(require_seed=args.require_seed)
+  )
 
   if args.json:
     print(json.dumps(report, indent=2))

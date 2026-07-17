@@ -1,6 +1,9 @@
+import * as FileSystem from 'expo-file-system/legacy';
+
 import {BackendApiError, requestBackendJson} from '../../../shared/services/backendApi';
 import {
   buildFaceCaptureCompleteUploadBody,
+  getBase64DecodedByteSize,
 } from './faceCaptureUploadContract';
 
 export type FaceCaptureImageSource = 'camera' | 'gallery';
@@ -127,40 +130,72 @@ export function getFaceCaptureFilename(uri: string, fallback?: string | null): s
   return filename?.includes('.') ? filename : `face-capture-${Date.now()}.jpg`;
 }
 
-function readImageBlobWithXhr(uri: string): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
+type PreparedFaceCaptureFile = {
+  byteSize: number;
+  cleanup?: () => Promise<void>;
+  fileUri: string;
+};
 
-    request.open('GET', uri);
-    request.responseType = 'blob';
-    request.onload = () => {
-      const isLocalFileRead = request.status === 0;
-      const isHttpSuccess = request.status >= 200 && request.status < 300;
+function isDeviceFileUri(uri: string): boolean {
+  return uri.startsWith('file:') || uri.startsWith('content:');
+}
 
-      if (!isLocalFileRead && !isHttpSuccess) {
-        reject(new Error(`Failed to read image file with HTTP ${request.status}.`));
-        return;
-      }
+function getFilenameExtension(filename: string): string {
+  const sanitized = filename.split('?')[0];
+  const extension = sanitized.includes('.') ? sanitized.slice(sanitized.lastIndexOf('.')) : '';
 
-      if (!(request.response instanceof Blob)) {
-        reject(new Error('Failed to read image file as a blob.'));
-        return;
-      }
+  return extension && extension.length <= 8 ? extension : '.jpg';
+}
 
-      resolve(request.response);
-    };
-    request.onerror = () => reject(new Error('Failed to read image file from the device.'));
-    request.send();
+async function getRequiredFileSize(uri: string): Promise<number> {
+  // iOS의 네이티브 캡처 파일은 getInfoAsync/Blob.size 값과 실제 전송 바이트가
+  // 다를 수 있다. 파일 내용을 base64로 읽어 디코딩 바이트 수를 직접 계산한다.
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
   });
+  const byteSize = getBase64DecodedByteSize(base64);
+
+  if (!byteSize || byteSize > MAX_MEDIA_UPLOAD_BYTES) {
+    throw new Error('Upload file size must be between 1 byte and 50 MiB.');
+  }
+
+  return byteSize;
 }
 
-async function readImageBlob(uri: string): Promise<Blob> {
-  return readImageBlobWithXhr(uri);
+async function deleteCacheFile(uri: string): Promise<void> {
+  try {
+    await FileSystem.deleteAsync(uri, {idempotent: true});
+  } catch {
+    // Best-effort cache cleanup only.
+  }
 }
 
-// RN(특히 Android)에서 파일 기반 Blob의 size 메타가 실제 전송 바이트와 간헐적으로
-// 어긋나 백엔드 무결성 검사(409 UPLOAD_*_MISMATCH)에 걸릴 수 있다. 이 경우에만
-// Blob을 새로 읽어 새 업로드 세션으로 1회 재시도한다.
+async function prepareFaceCaptureFile(
+  uri: string,
+  originalFilename: string,
+): Promise<PreparedFaceCaptureFile> {
+  if (isDeviceFileUri(uri)) {
+    return {
+      byteSize: await getRequiredFileSize(uri),
+      fileUri: uri,
+    };
+  }
+
+  if (!FileSystem.cacheDirectory) {
+    throw new Error('File cache directory is not available for media upload.');
+  }
+
+  const fileUri = `${FileSystem.cacheDirectory}face-capture-${Date.now()}${getFilenameExtension(originalFilename)}`;
+  const downloaded = await FileSystem.downloadAsync(uri, fileUri);
+
+  return {
+    byteSize: await getRequiredFileSize(downloaded.uri),
+    cleanup: () => deleteCacheFile(downloaded.uri),
+    fileUri: downloaded.uri,
+  };
+}
+
+// 업로드 세션과 S3 객체 검증이 일시적으로 어긋난 경우에만 새 세션으로 1회 재시도한다.
 function isRetryableUploadMismatch(error: unknown): boolean {
   return (
     error instanceof BackendApiError &&
@@ -192,82 +227,82 @@ async function uploadImageObjectOnce({
   width?: number | null;
 }): Promise<UploadedMediaObject> {
   const readStartedAt = Date.now();
-  const imageBlob = await readImageBlob(uri);
-
-  if (imageBlob.size <= 0 || imageBlob.size > MAX_MEDIA_UPLOAD_BYTES) {
-    throw new Error('Upload file size must be between 1 byte and 50 MiB.');
-  }
+  const uploadFile = await prepareFaceCaptureFile(uri, originalFilename);
 
   console.info('[aura:capture-upload] image-read:success', {
-    byteSize: imageBlob.size,
+    byteSize: uploadFile.byteSize,
     durationMs: Date.now() - readStartedAt,
   });
 
-  console.info('[aura:capture-upload] presigned-upload:start');
-  const {upload} = await requestBackendJson<PresignedUploadResponse>('/media/presigned-upload', {
-    body: {
-      byteSize: imageBlob.size,
-      contentType,
-      height,
-      mediaKind,
-      originalFilename,
-      source,
-      width,
-    },
-    method: 'POST',
-  });
-
-  console.info('[aura:capture-upload] presigned-upload:success', {
-    expiresIn: upload.expiresIn,
-    hasCdnUrl: Boolean(upload.cdnUrl),
-    hasUploadId: Boolean(upload.uploadId?.trim()),
-  });
-
-  const s3StartedAt = Date.now();
-  console.info('[aura:capture-upload] s3-put:start');
-  const uploadResponse = await fetch(upload.uploadUrl, {
-    body: imageBlob,
-    headers: {
-      ...(upload.cacheControl ? {'Cache-Control': upload.cacheControl} : {}),
-      'Content-Type': contentType,
-    },
-    method: upload.method,
-  });
-
-  if (!uploadResponse.ok) {
-    console.info('[aura:capture-upload] s3-put:fail', {
-      durationMs: Date.now() - s3StartedAt,
-      status: uploadResponse.status,
+  try {
+    console.info('[aura:capture-upload] presigned-upload:start');
+    const {upload} = await requestBackendJson<PresignedUploadResponse>('/media/presigned-upload', {
+      body: {
+        byteSize: uploadFile.byteSize,
+        contentType,
+        height,
+        mediaKind,
+        originalFilename,
+        source,
+        width,
+      },
+      method: 'POST',
     });
 
-    throw new Error(`S3 upload failed with HTTP ${uploadResponse.status}.`);
+    console.info('[aura:capture-upload] presigned-upload:success', {
+      expiresIn: upload.expiresIn,
+      hasCdnUrl: Boolean(upload.cdnUrl),
+      hasUploadId: Boolean(upload.uploadId?.trim()),
+    });
+
+    const s3StartedAt = Date.now();
+    console.info('[aura:capture-upload] s3-put:start');
+    const uploadResult = await FileSystem.uploadAsync(upload.uploadUrl, uploadFile.fileUri, {
+      headers: {
+        ...(upload.cacheControl ? {'Cache-Control': upload.cacheControl} : {}),
+        'Content-Type': contentType,
+      },
+      httpMethod: upload.method,
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+    });
+
+    if (uploadResult.status < 200 || uploadResult.status >= 300) {
+      console.info('[aura:capture-upload] s3-put:fail', {
+        durationMs: Date.now() - s3StartedAt,
+        status: uploadResult.status,
+      });
+
+      throw new Error(`S3 upload failed with HTTP ${uploadResult.status}.`);
+    }
+
+    console.info('[aura:capture-upload] s3-put:success', {
+      durationMs: Date.now() - s3StartedAt,
+      status: uploadResult.status,
+    });
+
+    console.info('[aura:capture-upload] media-complete:start');
+    const {media} = await requestBackendJson<CompleteUploadResponse>('/media/complete-upload', {
+      body: buildFaceCaptureCompleteUploadBody(upload, {
+        byteSize: uploadFile.byteSize,
+        contentType,
+        height,
+        mediaKind,
+        originalFilename,
+        source,
+        width,
+      }),
+      method: 'POST',
+    });
+
+    console.info('[aura:capture-upload] media-complete:success', {
+      hasCdnUrl: Boolean(media.cdnUrl),
+      mediaId: media.id,
+    });
+
+    return {media, byteSize: uploadFile.byteSize};
+  } finally {
+    await uploadFile.cleanup?.();
   }
-
-  console.info('[aura:capture-upload] s3-put:success', {
-    durationMs: Date.now() - s3StartedAt,
-    status: uploadResponse.status,
-  });
-
-  console.info('[aura:capture-upload] media-complete:start');
-  const {media} = await requestBackendJson<CompleteUploadResponse>('/media/complete-upload', {
-    body: buildFaceCaptureCompleteUploadBody(upload, {
-      byteSize: imageBlob.size,
-      contentType,
-      height,
-      mediaKind,
-      originalFilename,
-      source,
-      width,
-    }),
-    method: 'POST',
-  });
-
-  console.info('[aura:capture-upload] media-complete:success', {
-    hasCdnUrl: Boolean(media.cdnUrl),
-    mediaId: media.id,
-  });
-
-  return {media, byteSize: imageBlob.size};
 }
 
 export async function uploadFaceCaptureImage({

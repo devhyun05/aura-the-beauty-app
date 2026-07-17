@@ -1,7 +1,17 @@
 name: Backend CI
 
 on:
-  # PR에서는 실행하지 않는다. 필요할 때만 Actions 화면에서 수동 실행한다.
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - "services/backend/**"
+      - "docs/backend/**"
+      - "scripts/aws/**"
+      - "apps/mobile/eas.json"
+      - ".github/workflows/backend-ci.yml"
+      - ".github/workflows/deploy-backend-ecs.yml"
   workflow_dispatch:
 
 permissions:
@@ -14,7 +24,7 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: postgres

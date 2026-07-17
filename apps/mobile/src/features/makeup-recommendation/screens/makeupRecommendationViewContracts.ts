@@ -1,10 +1,33 @@
-import type {MakeupLookRole} from '../types';
+import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
+import type {
+  MakeupLookRole,
+  MakeupRecommendationDiscovery,
+  MakeupRecommendationProfileGender,
+} from '../types';
+
+type ReportVisibilityDiscovery = Pick<MakeupRecommendationDiscovery, 'source' | 'sourceReportIds'>;
+
+export function isMakeupRecommendationReportAllowedByDiscovery(
+  reportId: string,
+  discovery?: ReportVisibilityDiscovery,
+): boolean {
+  return discovery?.source !== 'api' || new Set(discovery.sourceReportIds ?? []).has(reportId);
+}
+
+export function filterMakeupRecommendationReportsByDiscovery(
+  reports: FaceAnalysisReport[],
+  discovery?: ReportVisibilityDiscovery,
+): FaceAnalysisReport[] {
+  if (discovery?.source !== 'api') return reports;
+  const allowedReportIds = new Set(discovery.sourceReportIds ?? []);
+  return reports.filter(report => allowedReportIds.has(report.id));
+}
 
 export const makeupRecommendationDiscoveryCopy = {
-  eyebrow: '',
-  title: '지금 끌리는 한 문장에서 시작해보세요.',
-  description: '',
-  placeholder: '내 이야기로 추천 받기',
+  eyebrow: 'AI MAKEUP RECOMMENDATION',
+  title: '어떤 상황을 위한 메이크업인가요?',
+  description: '얼굴 분석 보고서와 상황을 함께 보고 나에게 맞는 룩을 추천해요.',
+  placeholder: '원하는 상황을 직접 설명해 주세요',
   profile: '내 분석 결과 반영',
   submit: '확인',
   refresh: '새로 보기',
@@ -42,10 +65,23 @@ export const makeupRecommendationResultRoleLabels: Record<MakeupLookRole, string
 };
 export const makeupRecommendationImageStatusCopy = {
   failedAction: '이미지 다시 만들기',
+  partial: '일부 룩 이미지는 준비 중이거나 실패했어요. 완성된 추천과 부위별 가이드는 바로 볼 수 있어요.',
 } as const;
 export const makeupRecommendationReportStatusCopy = {
   saved: '보고서 저장됨',
 } as const;
+
+export const neutralGenderRecommendationNote =
+  '성별을 선택하지 않아 중성적인 표현을 기준으로 추천했어요.';
+
+export function getNeutralGenderRecommendationNote(
+  profileGender?: MakeupRecommendationProfileGender,
+): string | undefined {
+  return profileGender === 'unspecified'
+    ? neutralGenderRecommendationNote
+    : undefined;
+}
+
 export function toggleExpandedLookId(previous: Set<string>, lookId: string): Set<string> {
   const next = new Set(previous);
   if (next.has(lookId)) next.delete(lookId);

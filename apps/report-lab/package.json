@@ -1,0 +1,26 @@
+{
+  "name": "@aura/report-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm --prefix ../../packages/face-report-contract run test && node --experimental-strip-types --test test/*.test.ts",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@aura/face-report-contract": "file:../../packages/face-report-contract",
+    "@phosphor-icons/react": "^2.1.10",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "5.0.4",
+    "typescript": "^6.0.3",
+    "vite": "6.4.2"
+  }
+}

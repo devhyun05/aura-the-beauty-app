@@ -7,6 +7,7 @@
 // 켜기: EXPO_PUBLIC_AURADIN_PRIMARY_SURFACE=1 (또는 true/on/yes).
 
 const AURADIN_PRIMARY_SURFACE_DEFAULT = false;
+const MAKEUP_JOURNEY_DEFAULT = false;
 
 const TRUTHY_FLAG_VALUES = new Set(['1', 'true', 'on', 'yes']);
 const FALSY_FLAG_VALUES = new Set(['0', 'false', 'off', 'no']);
@@ -37,5 +38,16 @@ export function isAuradinPrimarySurfaceEnabled(): boolean {
   return parseFeatureFlagValue(
     process.env.EXPO_PUBLIC_AURADIN_PRIMARY_SURFACE,
     AURADIN_PRIMARY_SURFACE_DEFAULT,
+  );
+}
+
+/**
+ * 서버 선배포 뒤 앱 표면만 즉시 되돌릴 수 있는 메이크업 성장 롤아웃 스위치다.
+ * 환경값이 없거나 잘못되면 숨겨져, 배포 경로가 달라도 롤아웃이 fail-closed다.
+ */
+export function isMakeupJourneyEnabled(): boolean {
+  return parseFeatureFlagValue(
+    process.env.EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED,
+    MAKEUP_JOURNEY_DEFAULT,
   );
 }

@@ -1390,6 +1390,7 @@ async def test_feedback_job_marks_report_failed_when_analysis_raises(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   report_id = UUID("11111111-1111-1111-1111-111111111111")
+  user_id = UUID("22222222-2222-2222-2222-222222222222")
 
   class FakeDB:
     def __init__(self) -> None:
@@ -1417,6 +1418,7 @@ async def test_feedback_job_marks_report_failed_when_analysis_raises(
 
   await feedback_api.run_feedback_job_background(
     report_id,
+    user_id,
     _request_payload(),
     Settings(),
     db=db,  # type: ignore[arg-type]
@@ -1425,6 +1427,9 @@ async def test_feedback_job_marks_report_failed_when_analysis_raises(
   assert len(db.executed) == 2
   assert "status = 'processing'" in db.executed[0][0]
   assert "status = 'failed'" in db.executed[1][0]
-  failed_payload = json.loads(db.executed[1][2])
+  assert "user_id = $2" in db.executed[0][0]
+  assert "user_id = $2" in db.executed[1][0]
+  assert db.executed[0][1:3] == (report_id, user_id)
+  failed_payload = json.loads(db.executed[1][3])
   assert failed_payload["error"]["details"]["field"] == "scoreReason"
   assert db.fetchrow_called is False

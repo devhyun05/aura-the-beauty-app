@@ -3,9 +3,11 @@ from functools import lru_cache
 from ipaddress import ip_address
 from pathlib import Path
 import re
+from urllib.parse import urlsplit
 from typing import Literal
+from uuid import UUID
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,9 +59,52 @@ class Settings(BaseSettings):
   image_generation_provider: str = "openai"
   ai_job_execution_mode: str = "inline"
   sqs_ai_job_queue_url: str | None = None
+  makeup_journey_enabled: bool = True
+  makeup_recommendation_v2_enabled: bool = True
+  makeup_trend_keywords_enabled: bool = True
+  makeup_personalized_image_enabled: bool = True
+  makeup_recommendation_v1_compat_enabled: bool = True
   face_analysis_v2_enabled: bool = False
   face_analysis_stage_timeout_seconds: float = Field(default=45.0, ge=5.0, le=180.0)
   face_analysis_stage_max_attempts: int = Field(default=2, ge=1, le=3)
+  # Phase 4 population norms remain fail-closed. Turning the flag on is not
+  # sufficient: the resolver also verifies an approved registry bundle and the
+  # configured approval artifact SHA before returning an internal model.
+  face_length_norm_enabled: bool = False
+  face_length_norm_registry_path: str | None = None
+  face_length_norm_approval_artifact_sha256: str | None = Field(
+    default=None,
+    pattern=r"^[0-9a-f]{64}$",
+  )
+
+  # Report Lab is a separate, local-only process surface. These settings never
+  # enable a model provider; LAB_MODE additionally validates the ambient AI and
+  # database configuration before the app is created.
+  lab_mode: bool = False
+  report_lab_model_provider: Literal["disabled"] = "disabled"
+  # Use integers rather than Literal[int]: environment variables arrive as
+  # strings and Pydantic does not coerce a string into an integer Literal.
+  # The validator below still keeps the safety contract immutable.
+  report_lab_max_runs_per_request: int = Field(default=5, ge=1, le=5)
+  report_lab_session_budget_runs: int = Field(default=50, ge=1, le=50)
+  report_lab_retention_days: int = Field(default=7, ge=1, le=7)
+  report_lab_fixture_principal_id: UUID = UUID("00000000-0000-4000-8000-000000000027")
+  report_lab_fixture_root: str | None = None
+  report_lab_raw_response_admin_token: SecretStr | None = None
+  report_lab_commit_sha: str | None = Field(
+    default=None,
+    pattern=r"^[0-9a-f]{40}$",
+  )
+  report_lab_cors_origin: Literal["http://127.0.0.1:5173"] = "http://127.0.0.1:5173"
+  # The lifecycle test runner reserves a collision-free loopback port and
+  # binds this value into the child process. It is forbidden outside the test
+  # environment and must exactly match DATABASE_URL when present.
+  report_lab_test_db_port: int | None = Field(
+    default=None,
+    ge=1024,
+    le=65535,
+    exclude=True,
+  )
   # Phase 2 calibration remains fail-closed until Gate 6B evidence is promoted.
   # Enabling requires all three values below plus a committed approval artifact.
   face3d_calibration_promotion_enabled: bool = False
@@ -140,14 +185,16 @@ class Settings(BaseSettings):
   openai_api_key: str | None = None
   openai_analysis_model_id: str = "gpt-5.5"
   openai_image_model_id: str = "gpt-image-2"
-  openai_image_quality: str = "low"
-  openai_image_size: str = "auto"
-  openai_image_output_format: str = "jpeg"
-  openai_image_output_compression: int = 80
-  openai_image_input_max_edge: int = 1024
-  openai_image_input_quality: int = 82
-  openai_image_output_max_edge: int = 1024
+  openai_image_quality: Literal["low", "medium", "high", "auto"] = "low"
+  openai_image_size: str = "768x1024"
+  openai_image_output_format: Literal["jpeg", "jpg", "png", "webp"] = "jpeg"
+  openai_image_output_compression: int = Field(default=80, ge=0, le=100)
+  openai_image_input_max_edge: int = Field(default=1024, ge=256, le=4096)
+  openai_image_input_quality: int = Field(default=82, ge=40, le=100)
+  openai_image_output_max_edge: int = Field(default=1024, ge=256, le=4096)
   makeup_recommendation_source_hosts: str = "d3t1pbvtir1lj.cloudfront.net"
+  makeup_private_asset_prefix: str = "private/generated-makeup-recommendations"
+  makeup_private_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
 
   push_notifications_enabled: bool = True
   expo_push_endpoint: str = "https://exp.host/--/api/v2/push/send"
@@ -280,6 +327,19 @@ class Settings(BaseSettings):
 
     return value
 
+  @field_validator("makeup_private_asset_prefix")
+  @classmethod
+  def validate_makeup_private_asset_prefix(cls, value: str) -> str:
+    prefix = str(value or "").strip().strip("/")
+    segments = prefix.split("/")
+    if (
+      not prefix
+      or prefix.startswith("uploads/")
+      or any(segment in {"", ".", ".."} for segment in segments)
+    ):
+      raise ValueError("makeup private assets require a dedicated non-public S3 prefix")
+    return prefix
+
   @model_validator(mode="after")
   def warn_events_enabled_without_release_manifest(self) -> "Settings":
     # A5 교차 리뷰: events flag ON + release manifest 미설정이면 모든 이벤트가 귀속 불가로
@@ -288,6 +348,80 @@ class Settings(BaseSettings):
       logging.getLogger(__name__).warning(
         "[aura:auradin-events] auradin_events_enabled=True but auradin_release_manifest_id "
         "is unset — every event will be dropped (no 'unknown' attribution is persisted)",
+      )
+    return self
+
+  @model_validator(mode="after")
+  def validate_face_length_norm_activation_configuration(self) -> "Settings":
+    if not self.face_length_norm_enabled:
+      return self
+    if self.lab_mode:
+      raise ValueError("FACE_LENGTH_NORM_ENABLED is forbidden in LAB_MODE")
+    if not str(self.face_length_norm_registry_path or "").strip():
+      raise ValueError(
+        "FACE_LENGTH_NORM_ENABLED requires FACE_LENGTH_NORM_REGISTRY_PATH",
+      )
+    if not str(self.face_length_norm_approval_artifact_sha256 or "").strip():
+      raise ValueError(
+        "FACE_LENGTH_NORM_ENABLED requires FACE_LENGTH_NORM_APPROVAL_ARTIFACT_SHA256",
+      )
+    return self
+
+  @model_validator(mode="after")
+  def validate_report_lab_is_local_and_provider_disabled(self) -> "Settings":
+    if not self.lab_mode:
+      return self
+
+    environment = self.environment.strip().lower()
+    if environment not in {"local", "test"}:
+      raise ValueError("LAB_MODE is restricted to local/test environments")
+    if self.analysis_provider != "disabled":
+      raise ValueError("LAB_MODE requires AI_PROVIDER=disabled")
+    if self.image_generation_provider_normalized != "disabled":
+      raise ValueError("LAB_MODE requires IMAGE_GENERATION_PROVIDER=disabled")
+    if self.report_lab_fixture_principal_id != UUID("00000000-0000-4000-8000-000000000027"):
+      raise ValueError("LAB_MODE fixture principal is immutable")
+    if (
+      self.report_lab_max_runs_per_request != 5
+      or self.report_lab_session_budget_runs != 50
+      or self.report_lab_retention_days != 7
+    ):
+      raise ValueError("LAB_MODE run limits and retention are immutable")
+    if (self.database_secret_id or "").strip():
+      raise ValueError("LAB_MODE forbids DATABASE_SECRET_ID and remote secret resolution")
+    if environment != "test" and self.report_lab_test_db_port is not None:
+      raise ValueError("REPORT_LAB_TEST_DB_PORT is forbidden outside test")
+
+    database_url = (self.database_url or "").strip()
+    if not database_url:
+      # Route dependencies still fail closed with DATABASE_NOT_CONFIGURED. This
+      # keeps OpenAPI and unit-test app construction possible without a live DB.
+      return self
+
+    try:
+      parsed = urlsplit(database_url)
+      port = parsed.port
+    except ValueError as exc:
+      raise ValueError("LAB_MODE DATABASE_URL is invalid") from exc
+
+    if environment == "test":
+      # Unit tests may exercise the canonical fixed-port configuration without
+      # a live cluster. A dynamically reserved port is accepted only when the
+      # lifecycle runner binds it through REPORT_LAB_TEST_DB_PORT.
+      expected_port = self.report_lab_test_db_port or 55432
+    else:
+      expected_port = 55432
+
+    if (
+      parsed.scheme not in {"postgres", "postgresql"}
+      or parsed.hostname != "127.0.0.1"
+      or port != expected_port
+      or parsed.path != "/aura_report_lab"
+      or parsed.username != "aura_report_lab"
+    ):
+      raise ValueError(
+        "LAB_MODE DATABASE_URL must target the bound loopback "
+        "aura_report_lab/aura_report_lab database",
       )
     return self
 
@@ -337,6 +471,34 @@ class Settings(BaseSettings):
     if not self.product_trend_service_principal_key.strip():
       raise ValueError("product_trend_service_principal_key must not be empty")
     return self
+
+  @model_validator(mode="after")
+  def validate_makeup_model_boundaries(self) -> "Settings":
+    environment = self.environment.strip().lower()
+    if (
+      self.makeup_recommendation_v2_enabled
+      and environment in {"staging", "stage", "production", "prod"}
+      and not self.makeup_model_boundaries_configured
+    ):
+      raise ValueError(
+        "makeup recommendation V2 requires Claude on Bedrock for text analysis "
+        "and OpenAI gpt-image-2 for image generation",
+      )
+    return self
+
+  @property
+  def makeup_model_boundaries_configured(self) -> bool:
+    claude_models = (
+      self.effective_scenario_model_id,
+      self.effective_question_model_id,
+      self.effective_recommendation_model_id,
+    )
+    return (
+      self.analysis_provider == "bedrock"
+      and all("anthropic.claude" in model_id.lower() for model_id in claude_models)
+      and self.image_generation_provider_normalized == "openai"
+      and self.openai_image_model_id.strip().lower().startswith("gpt-image-2")
+    )
 
   @property
   def analysis_provider(self) -> str:
@@ -585,6 +747,11 @@ class Settings(BaseSettings):
         "configured": bool(self.openai_image_model_id) if image_generation_provider == "openai" else True,
         "requiredWhen": "IMAGE_GENERATION_PROVIDER=openai.",
       },
+      "makeupRecommendationModelBoundary": {
+        "configured": self.makeup_model_boundaries_configured,
+        "requiredWhen": "MAKEUP_RECOMMENDATION_V2_ENABLED=true.",
+        "value": "bedrock:claude-text/openai:gpt-image-2",
+      },
       "imageGenerationProvider": {
         "configured": image_generation_provider == "openai",
         "requiredWhen": "Recommendation images should be generated.",
@@ -669,6 +836,10 @@ class Settings(BaseSettings):
       "makeupScenarioModel": self.effective_scenario_model_id,
       "makeupQuestionModel": self.effective_question_model_id,
       "makeupRecommendationModel": self.effective_recommendation_model_id,
+      "makeupRecommendationV2Enabled": self.makeup_recommendation_v2_enabled,
+      "makeupTrendKeywordsEnabled": self.makeup_trend_keywords_enabled,
+      "makeupPersonalizedImageEnabled": self.makeup_personalized_image_enabled,
+      "makeupRecommendationV1CompatEnabled": self.makeup_recommendation_v1_compat_enabled,
       "bedrockGuardrailConfigured": self.bedrock_guardrail_configured,
       "embeddingProvider": "bedrock",
       "embeddingModel": self.effective_embedding_model_id,

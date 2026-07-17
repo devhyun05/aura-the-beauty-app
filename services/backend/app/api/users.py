@@ -98,6 +98,7 @@ async def delete_my_account(
     db,
     auth=auth,
     reason=payload.reason if payload else None,
+    settings=settings,
     user_id=user["id"],
   )
   identity_deleted = await delete_cognito_identity(auth, settings)

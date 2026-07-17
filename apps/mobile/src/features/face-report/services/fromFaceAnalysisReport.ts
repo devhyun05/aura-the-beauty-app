@@ -189,6 +189,19 @@ function buildS2(vt: FaceVerticalThirdsResult | null | undefined): S2Data | null
     ],
     missingNotice: S2_HAIRLINE_MISSING_NOTICE,
     viewCardLabel: '카드 보기 ›',
+    ratioNumbers: vt.verticalThirds
+      ? {
+          upper: vt.verticalThirds.displayRatio.upper,
+          middle: vt.verticalThirds.displayRatio.middle,
+          lower: vt.verticalThirds.displayRatio.lower,
+        }
+      : undefined,
+    faceLength: {
+      ratio: vt.faceLength?.ratio ?? null,
+      band: vt.faceLengthJudgment?.band ?? null,
+      verdict: vt.faceLengthJudgment?.verdict ?? null,
+      confidence: vt.verticalThirds?.confidence ?? null,
+    },
     paragraph: vt.interpretation.summary || vt.interpretation.title || '측정 결과를 요약하지 못했어요.',
   };
 }
@@ -277,6 +290,11 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
         secondaryLabel: tone.secondary ? TYPE_LABEL_KO[tone.secondary] : '단일 톤',
         dominantRatio: Math.min(1, Math.max(0, tone.typeScore)),
       },
+    },
+    seasonConfidence: {
+      topLabel: TYPE_LABEL_KO[tone.top],
+      secondaryLabel: tone.secondary ? TYPE_LABEL_KO[tone.secondary] : null,
+      typeScore: Math.min(1, Math.max(0, tone.typeScore)),
     },
     axes: axesData,
     drape: {

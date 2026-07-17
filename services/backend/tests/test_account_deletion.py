@@ -8,7 +8,11 @@ from app.core.errors import AppError
 from app.core.security import AuthContext
 from app.core.settings import Settings
 from app.schemas.users import AccountDeletionRequest
-from app.services.account_deletion import AccountDeletionResult, delete_cognito_identity
+from app.services.account_deletion import (
+  AccountDeletionResult,
+  _collect_makeup_recommendation_objects,
+  delete_cognito_identity,
+)
 from app.services.account_identity import hash_auth_subject
 from app.services.users import ensure_user
 
@@ -39,6 +43,27 @@ def test_auth_subject_hash_is_stable_and_does_not_store_raw_identity() -> None:
   assert "cognito-user-subject" not in digest
 
 
+def test_makeup_recommendation_account_assets_are_limited_to_managed_prefix_and_bucket() -> None:
+  report_id = uuid4()
+  settings = Settings(
+    s3_bucket_name="aura-media",
+    makeup_private_asset_prefix="private/generated-makeup-recommendations",
+  )
+  objects = _collect_makeup_recommendation_objects(
+    [
+      {"report_id": report_id, "storage_bucket": "aura-media", "object_key": "uploads/generated-makeup-recommendations/report/look.webp"},
+      {"report_id": report_id, "storage_bucket": "aura-media", "object_key": "private/generated-makeup-recommendations/report/look.webp"},
+      {"report_id": report_id, "storage_bucket": "other-bucket", "object_key": "private/generated-makeup-recommendations/report/other.webp"},
+      {"report_id": report_id, "storage_bucket": "aura-media", "object_key": "backups/database.sql"},
+    ],
+    settings,
+  )
+
+  assert {object_key for _, _, object_key in objects} == {
+    "uploads/generated-makeup-recommendations/report/look.webp",
+    "private/generated-makeup-recommendations/report/look.webp",
+  }
+
 @pytest.mark.asyncio
 async def test_deleted_identity_cannot_be_recreated_by_a_still_valid_token() -> None:
   with pytest.raises(AppError) as exc_info:
@@ -62,8 +87,9 @@ async def test_delete_account_response_and_media_cleanup_task(monkeypatch) -> No
   async def fake_ensure_user(_db, _auth):
     return {"id": uuid4()}
 
-  async def fake_delete_user_account(_db, *, auth, reason, user_id):
+  async def fake_delete_user_account(_db, *, auth, reason, settings, user_id):
     assert auth.subject == "cognito-user-subject"
+    assert settings.s3_bucket_name is None
     assert reason == "privacy_concerns"
     assert user_id is not None
     return AccountDeletionResult(media_count=1, outbox_ids=(outbox_id,))

@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import os
 from pathlib import Path
 
 import asyncpg
@@ -7,12 +8,131 @@ import asyncpg
 from app.core.settings import get_settings
 from app.db.connection_config import DatabaseConfigurationError, connect_database
 from app.services.face_analysis_schema import FACE_ANALYSIS_STAGE_SCHEMA_SQL
+from app.services.face_measurement_schema import (
+  FACE_MEASUREMENT_MIGRATION_SQL,
+  FACE_MEASUREMENT_SCHEMA_VERSION,
+)
 from app.services.media_upload_schema import MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL
+from app.services.report_lab_schema import ANALYSIS_LAB_RUNS_SCHEMA_SQL
+from app.services.makeup_recommendation_schema import MAKEUP_RECOMMENDATION_SCHEMA_SQL
 
 
-SCHEMA_VERSION = "schema.sql:v7-trend-now-health"
+SCHEMA_VERSION = "schema.sql:v8-makeup-journey"
+REPORT_LAB_SCHEMA_VERSION = "schema.sql:analysis-lab-runs-v3"
+REPORT_LAB_DATABASE_NAME = "aura_report_lab"
+REPORT_LAB_DATABASE_USER = "aura_report_lab"
+REPORT_LAB_ALLOWED_TABLES = {
+  "analysis_reports",
+  "analysis_lab_sessions",
+  "analysis_lab_runs",
+  "schema_migrations",
+}
+
+# The current local Report Lab is JSON-fixture-only. It deliberately creates no
+# product/user/report anchor. It creates only Lab sessions/runs; `analysis_reports`
+# remains allowlisted above only so a pre-v2 database can upgrade without a drop.
+REPORT_LAB_BOOTSTRAP_SCHEMA_SQL = """
+select 1;
+"""
+
+ANALYSIS_LAB_RUNS_MIGRATION_SQL = ANALYSIS_LAB_RUNS_SCHEMA_SQL + """
+  create or replace function set_updated_at()
+  returns trigger as $function$
+  begin
+    new.updated_at = now();
+    return new;
+  end;
+  $function$ language plpgsql;
+
+  drop trigger if exists trg_analysis_lab_runs_updated_at on analysis_lab_runs;
+  create trigger trg_analysis_lab_runs_updated_at
+  before update on analysis_lab_runs
+  for each row execute function set_updated_at();
+
+  drop trigger if exists trg_analysis_lab_sessions_updated_at on analysis_lab_sessions;
+  create trigger trg_analysis_lab_sessions_updated_at
+  before update on analysis_lab_sessions
+  for each row execute function set_updated_at();
+"""
 
 POST_SCHEMA_MIGRATIONS = {
+  "schema.sql:makeup-journey-v1": """
+    alter table makeup_feedback_reports
+      add column if not exists entry_date date,
+      add column if not exists feedback_kind text not null default 'initial',
+      add column if not exists parent_feedback_report_id uuid;
+
+    update makeup_feedback_reports
+    set entry_date = (coalesce(completed_at, created_at) at time zone 'Asia/Seoul')::date
+    where entry_date is null;
+
+    alter table makeup_feedback_reports
+      alter column entry_date set default ((now() at time zone 'Asia/Seoul')::date),
+      alter column entry_date set not null,
+      drop constraint if exists chk_makeup_feedback_kind,
+      add constraint chk_makeup_feedback_kind check (feedback_kind in ('initial', 'correction')),
+      drop constraint if exists chk_makeup_feedback_parent_presence,
+      add constraint chk_makeup_feedback_parent_presence check (
+        (feedback_kind = 'initial' and parent_feedback_report_id is null)
+        or (feedback_kind = 'correction' and parent_feedback_report_id is not null)
+      ),
+      drop constraint if exists chk_makeup_feedback_parent_not_self,
+      add constraint chk_makeup_feedback_parent_not_self check (
+        parent_feedback_report_id is null or parent_feedback_report_id <> id
+      ),
+      drop constraint if exists fk_makeup_feedback_reports_parent,
+      add constraint fk_makeup_feedback_reports_parent
+        foreign key (parent_feedback_report_id) references makeup_feedback_reports(id) on delete cascade;
+
+    create table if not exists makeup_journey_settings (
+      user_id uuid primary key references users(id) on delete cascade,
+      goal_score smallint not null check (goal_score between 1 and 100),
+      mission_level text not null check (mission_level in ('beginner', 'intermediate', 'advanced')),
+      timezone_name text not null default 'Asia/Seoul'
+        check (char_length(btrim(timezone_name)) between 1 and 64),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists makeup_journey_day_notes (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null references users(id) on delete cascade,
+      entry_date date not null,
+      content text not null check (char_length(content) <= 2000),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique (user_id, entry_date)
+    );
+
+    create table if not exists makeup_journey_missions (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null references users(id) on delete cascade,
+      entry_date date not null,
+      source text not null check (source in ('curated', 'ai', 'user')),
+      difficulty text not null check (difficulty in ('beginner', 'intermediate', 'advanced')),
+      title text not null check (char_length(btrim(title)) between 1 and 120),
+      is_completed boolean not null default false,
+      completed_at timestamptz,
+      sort_order smallint not null default 0,
+      generation_payload jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint chk_makeup_journey_mission_completion check (
+        (is_completed and completed_at is not null)
+        or (not is_completed and completed_at is null)
+      )
+    );
+
+    create index if not exists idx_makeup_feedback_reports_user_entry_status_completed
+      on makeup_feedback_reports (user_id, entry_date, status, completed_at, id);
+    create index if not exists idx_makeup_feedback_reports_parent
+      on makeup_feedback_reports (parent_feedback_report_id)
+      where parent_feedback_report_id is not null;
+    create index if not exists idx_makeup_journey_missions_user_date_order
+      on makeup_journey_missions (user_id, entry_date, sort_order);
+    create unique index if not exists uq_makeup_journey_missions_user_date_title_ci
+      on makeup_journey_missions (user_id, entry_date, lower(title));
+  """,
   "schema.sql:external-product-like-auradin-source-v1": """
     alter table external_product_likes
       drop constraint if exists chk_external_product_likes_source,
@@ -366,6 +486,8 @@ POST_SCHEMA_MIGRATIONS = {
     alter table analysis_reports add column if not exists embedding vector(1024);
   """,
   "schema.sql:analysis-stage-runs-v1": FACE_ANALYSIS_STAGE_SCHEMA_SQL,
+  FACE_MEASUREMENT_SCHEMA_VERSION: FACE_MEASUREMENT_MIGRATION_SQL,
+  REPORT_LAB_SCHEMA_VERSION: ANALYSIS_LAB_RUNS_MIGRATION_SQL,
   "schema.sql:media-thumbnails-v1": """
     alter table media_assets add column if not exists thumbnail_bucket text;
     alter table media_assets add column if not exists thumbnail_object_key text;
@@ -731,6 +853,28 @@ POST_SCHEMA_MIGRATIONS = {
     create index if not exists idx_account_deletion_tombstones_deleted_at
       on account_deletion_tombstones (deleted_at);
   """,
+  "schema.sql:makeup-recommendation-v2": MAKEUP_RECOMMENDATION_SCHEMA_SQL,
+  "schema.sql:makeup-trend-draft-evidence-v1": """
+    do $migration$
+    begin
+      if to_regclass('public.makeup_scenario_library') is not null then
+        alter table makeup_scenario_library
+          drop constraint if exists chk_makeup_scenario_library_trend_evidence;
+        alter table makeup_scenario_library
+          add constraint chk_makeup_scenario_library_trend_evidence check (
+            keyword_kind <> 'trend'
+            or (
+              source_name is not null
+              and source_url is not null
+              and source_published_at is not null
+              and market_scope is not null
+              and as_of is not null
+              and expires_at is not null
+            )
+          );
+      end if;
+    end $migration$;
+  """,
   "schema.sql:media-upload-sessions-v1": MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL,
 }
 
@@ -792,6 +936,74 @@ async def apply_pending_schema_migrations(connection: asyncpg.Connection) -> lis
     applied.append(version)
   return applied
 
+
+async def assert_report_lab_database(connection: asyncpg.Connection) -> None:
+  identity = await connection.fetchrow(
+    """
+    select current_database() as database_name,
+           current_user as database_user,
+           host(inet_server_addr()) as server_address
+    """,
+  )
+  if (
+    identity is None
+    or identity["database_name"] != REPORT_LAB_DATABASE_NAME
+    or identity["database_user"] != REPORT_LAB_DATABASE_USER
+    or identity["server_address"] not in {"127.0.0.1", "::1"}
+  ):
+    actual = "missing" if identity is None else (
+      f"user={identity['database_user']}, database={identity['database_name']}, "
+      f"address={identity['server_address']}"
+    )
+    raise RuntimeError(
+      "Refusing Report Lab bootstrap outside the dedicated loopback "
+      f"{REPORT_LAB_DATABASE_USER}/{REPORT_LAB_DATABASE_NAME} database ({actual}).",
+    )
+
+  rows = await connection.fetch(
+    """
+    select table_name
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_type = 'BASE TABLE'
+    """,
+  )
+  unexpected_tables = sorted(
+    {str(row["table_name"]) for row in rows} - REPORT_LAB_ALLOWED_TABLES,
+  )
+  if unexpected_tables:
+    raise RuntimeError(
+      "Refusing fixture-only Report Lab bootstrap in a non-empty database; "
+      f"unexpected tables: {', '.join(unexpected_tables)}.",
+    )
+
+
+async def apply_report_lab_schema(database_url: str | None = None) -> str:
+  """Apply only the fixture-mode Report Lab schema to its dedicated local DB."""
+  # Keep this focused bootstrap usable even if unrelated product settings are
+  # incomplete. The lifecycle runner always provides this loopback-only DSN.
+  dsn = database_url or os.getenv("DATABASE_URL")
+
+  if not dsn:
+    settings = get_settings()
+    dsn = settings.database_url
+  if not dsn:
+    raise RuntimeError("DATABASE_URL is required for the isolated Report Lab schema.")
+
+  connection = await asyncpg.connect(dsn=dsn)
+  try:
+    await assert_report_lab_database(connection)
+    await ensure_migration_table(connection)
+    already_applied = await has_schema_version(connection, REPORT_LAB_SCHEMA_VERSION)
+    async with connection.transaction():
+      await connection.execute(REPORT_LAB_BOOTSTRAP_SCHEMA_SQL)
+      await connection.execute(ANALYSIS_LAB_RUNS_MIGRATION_SQL)
+      await record_schema_version(connection, REPORT_LAB_SCHEMA_VERSION)
+    action = "Refreshed" if already_applied else "Applied"
+    return f"{action} {REPORT_LAB_SCHEMA_VERSION} (fixture-only Report Lab)."
+  finally:
+    await connection.close()
+
 async def apply_schema(database_url: str | None = None, force: bool = False) -> str:
   settings = get_settings()
   dsn = database_url or settings.database_url
@@ -828,8 +1040,15 @@ async def apply_schema(database_url: str | None = None, force: bool = False) -> 
 async def main() -> None:
   parser = argparse.ArgumentParser(description="Apply backend PostgreSQL schema.")
   parser.add_argument("--force", action="store_true", help="Apply schema even when the marker exists.")
+  parser.add_argument(
+    "--report-lab",
+    action="store_true",
+    help="Apply only the fixture-mode schema to the dedicated local Report Lab database.",
+  )
   args = parser.parse_args()
-  result = await apply_schema(force=args.force)
+  if args.report_lab and args.force:
+    parser.error("--force cannot be combined with --report-lab; Lab bootstrap is idempotent.")
+  result = await apply_report_lab_schema() if args.report_lab else await apply_schema(force=args.force)
   print(result)
 
 

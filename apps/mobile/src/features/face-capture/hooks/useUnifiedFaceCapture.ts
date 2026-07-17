@@ -93,6 +93,24 @@ export function useUnifiedFaceCapture(request: UnifiedFaceCaptureRequest) {
     let receivedGate = false;
 
     const subscription = addUnityUnifiedFaceCaptureEventListener(event => {
+      // 생명주기 이벤트(blocked/completed/cancelled)만 남긴다. blocked 는 곧바로
+      // 레거시 촬영으로 폴백시키는데, 로그가 없으면 폰에서는 "촬영을 두 번 한다"
+      // 라는 증상으로만 보이고 사유를 알 수 없다. gate 는 고빈도라 제외한다.
+      if (event.type !== 'unified_face_capture_gate') {
+        console.info('[aura:unified-face-capture] unity-event', {
+          detail: event.type === 'unified_face_capture_blocked' ? event.detail : undefined,
+          matchesActiveRequest: event.requestId === request.requestId,
+          reason:
+            event.type === 'unified_face_capture_blocked' ||
+            event.type === 'unified_face_capture_cancelled'
+              ? event.reason
+              : undefined,
+          type: event.type,
+          warnings:
+            event.type === 'unified_face_capture_blocked' ? event.warnings : undefined,
+        });
+      }
+
       if (
         event.requestId !== request.requestId ||
         finalizedRequestIdsRef.current.has(event.requestId)
@@ -108,6 +126,30 @@ export function useUnifiedFaceCapture(request: UnifiedFaceCaptureRequest) {
 
       if (event.type === 'unified_face_capture_completed') {
         if (!isUnifiedFaceCaptureCompletionCompatible(event, request)) {
+          // 호환성 검사는 11개 조건의 단일 boolean이라 어떤 항목이 어긋났는지
+          // 알 수 없다. 폴백 전에 양쪽 값을 나란히 남겨 비교할 수 있게 한다.
+          console.info('[aura:unified-face-capture] contract-mismatch', {
+            actual: {
+              captureWindowMs: event.face3d.captureWindowMs,
+              collectionPolicyId: event.face3d.collectionPolicyId,
+              gateVersion: event.face3d.gateVersion,
+              maxAbsFaceSensorDeltaMs: event.timestamps.maxAbsFaceSensorDeltaMs,
+              retryAttemptCount: event.hairline.retryRecommendation.attemptCount,
+              sampleMode: event.face3d.sampleMode,
+              targetFrameCount: event.face3d.targetFrameCount,
+              validFrameCount: event.face3d.validFrameCount,
+            },
+            expected: {
+              collectionPolicyId: request.collectionPolicyId,
+              gateVersion: request.gateVersion,
+              maxAbsFaceSensorDeltaMs: request.maxAbsFaceSensorDeltaMs,
+              maximumDurationMs: request.maximumDurationMs,
+              minimumValidFrames: request.minimumValidFrames,
+              retryAttemptCount: request.retryAttemptCount,
+              sampleMode: request.sampleMode,
+              targetValidFrames: request.targetValidFrames,
+            },
+          });
           finalizeRequest(
             request.requestId,
             'unified_capture_contract_mismatch',

@@ -32,6 +32,26 @@ const pythonCandidates = [
 ];
 const pythonPath = pythonCandidates.find(candidate => existsSync(candidate)) ?? 'python';
 const normalizedJobPath = join(outputDirectory, 'normalized-backend-job.json');
+const runtimeShimPath = join(outputDirectory, 'runtime-shim.cjs');
+
+writeFileSync(
+  runtimeShimPath,
+  `const Module = require('node:module');
+const originalLoad = Module._load;
+
+Module._load = function patchedLoad(request, parent, isMain) {
+  if (request === 'expo-file-system/legacy') {
+    return {
+      EncodingType: {Base64: 'base64'},
+      FileSystemUploadType: {BINARY_CONTENT: 0},
+    };
+  }
+
+  return originalLoad.call(this, request, parent, isMain);
+};
+`,
+  'utf8',
+);
 
 function run(command, args, echoStdout = true) {
   const result = spawnSync(command, args, {
@@ -78,6 +98,8 @@ run(process.execPath, [
 ]);
 
 run(process.execPath, [
+  '--require',
+  runtimeShimPath,
   join(
     outputDirectory,
     'features/makeup-feedback/services/makeupFeedbackCrossLayerContract.test.js',
@@ -87,6 +109,8 @@ run(process.execPath, [
 ]);
 
 run(process.execPath, [
+  '--require',
+  runtimeShimPath,
   join(
     outputDirectory,
     'features/makeup-feedback/services/makeupFeedbackAgentConferenceService.test.js',

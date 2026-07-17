@@ -8,6 +8,7 @@ from app.services.auradin_agent.snapshot_manifest import (
   SnapshotValidationError,
   resolve_and_validate_snapshot,
 )
+from app.services.bedrock_credential_readiness import BedrockCredentialReadinessProbe
 
 
 router = APIRouter(tags=["health"])
@@ -45,7 +46,24 @@ async def health_ready(
       descriptor = resolve_and_validate_snapshot(settings)
   except SnapshotValidationError as exc:
     raise AppError(503, "AURADIN_SNAPSHOT_NOT_READY", "Auradin snapshot validation failed.") from exc
-  return success({"status": "ready", **descriptor.public_status()})
+  readiness: dict[str, object] = {"status": "ready", **descriptor.public_status()}
+  if settings.makeup_recommendation_v2_enabled:
+    probe = getattr(request.app.state, "makeup_recommendation_bedrock_credential_probe", None)
+    if probe is None:
+      probe = BedrockCredentialReadinessProbe()
+      request.app.state.makeup_recommendation_bedrock_credential_probe = probe
+
+    bedrock = await probe.check(settings)
+    if not bedrock.ready:
+      raise AppError(
+        503,
+        "MAKEUP_RECOMMENDATION_BEDROCK_NOT_READY",
+        "Makeup recommendation Bedrock credentials are not ready.",
+        {"component": "makeup_recommendation_bedrock", **bedrock.public_status()},
+      )
+    readiness["makeup_recommendation_bedrock"] = bedrock.public_status()
+
+  return success(readiness)
 
 
 @router.get("/health/db")

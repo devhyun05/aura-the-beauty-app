@@ -62,6 +62,10 @@ static const int kScleraEyeIndexCount = 16;
 static const int kScleraGridStepsX = 36;
 static const int kScleraGridStepsY = 22;
 static const uint8_t kScleraDarkMin = 60; // 절대 하한 floor (홍채/동공/속눈썹)
+// 실측 실험(2026-07-18): 20%로 조였더니 표본이 눈당 34/46→4/5로 88% 급감.
+// 흰자 픽셀 대부분이 20~28% 채도(분홍빛)에 분포 = 확산성 충혈로, 중립 백색은
+// 눈당 4-5개뿐이었다. 즉 붉음은 ROI 오염이 아니라 실제 충혈이며(충혈 게이트가
+// 올바르게 감지·스킵), 채도 게이트를 조여도 흰자가 실제로 붉어 소용없다. 28 유지.
 static const int kScleraSatRelPctMax = 28; // (mx-mn) ≤ mx의 28% — 상대 채도(밝기 적응). 홍채색/메이크업 배제
 // 오염 방어(실기기에서 붉은기 오염 → 전역 red-cut 편향 확인):
 static const double kScleraMinOpenRatio = 0.2;  // 픽셀 공간 세로/가로 비 이 미만 = 감은/가는 눈 → 스킵
@@ -283,6 +287,9 @@ typedef struct {
   long accumulated; // specular 제외 후 실제 누적 수
   long overCount, underCount, specularCount;
   int hist[512];
+  // 채널별 256-히스토그램 — 중앙값(median) 산출용. 평균은 소수 이상치(국소
+  // 실핏줄)에 끌려가지만, 중앙값은 breakdown 50%라 소수 붉은 픽셀을 자동 무시한다.
+  int rHist[256], gHist[256], bHist[256];
 } AURAPCAcc;
 
 static void AURAPCAccInit(AURAPCAcc *a) {
@@ -312,6 +319,9 @@ static void AURAPCAccAdd(AURAPCAcc *a, uint8_t r, uint8_t g, uint8_t b, double w
   a->accumulated += 1;
   int bin = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5);
   a->hist[bin] += 1;
+  a->rHist[r] += 1;
+  a->gHist[g] += 1;
+  a->bHist[b] += 1;
 }
 
 static double AURAPCVar(double sumWc2, double sumWc, double sumW) {
@@ -319,6 +329,18 @@ static double AURAPCVar(double sumWc2, double sumWc, double sumW) {
   double mean = sumWc / sumW;
   double var = sumWc2 / sumW - mean * mean;
   return fmax(0.0, var);
+}
+
+// 채널 히스토그램의 중앙값(50번째 백분위) 채널값. total = 누적 픽셀 수.
+static double AURAPCMedianFromHist(const int *hist, long total) {
+  if (total <= 0) return 0.0;
+  long half = total / 2;
+  long cum = 0;
+  for (int v = 0; v < 256; v++) {
+    cum += hist[v];
+    if (cum > half) return (double)v;
+  }
+  return 255.0;
 }
 
 static NSDictionary *AURAPCFinalizeRegion(AURAPCAcc *a) {
@@ -350,8 +372,16 @@ static NSDictionary *AURAPCFinalizeRegion(AURAPCAcc *a) {
   double confidence = fmax(0.0, fmin(1.0, 0.5 * countTerm + 0.3 * expTerm + 0.2 * specTerm));
   (void)coverage;
 
+  // 채널별 중앙값 — 조명 캐스트 추정(흰자)에서 rgbMean 대신 쓴다. 소수 국소
+  // 실핏줄에 강건: breakdown 50%라 붉은 픽셀이 절반 미만이면 중앙값은 깨끗한
+  // 흰자색을 가리키고, 절반을 넘으면(전반적 충혈) 중앙값도 붉어 충혈 게이트가 스킵.
+  double medR = AURAPCMedianFromHist(a->rHist, a->accumulated);
+  double medG = AURAPCMedianFromHist(a->gHist, a->accumulated);
+  double medB = AURAPCMedianFromHist(a->bHist, a->accumulated);
+
   return @{
     @"rgbMean": @{@"r": @(meanR), @"g": @(meanG), @"b": @(meanB)},
+    @"rgbMedian": @{@"r": @(medR), @"g": @(medG), @"b": @(medB)},
     @"rgbVariance": @{
       @"r": @(AURAPCVar(a->sumWR2, a->sumWR, a->sumW)),
       @"g": @(AURAPCVar(a->sumWG2, a->sumWG, a->sumW)),

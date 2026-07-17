@@ -80,7 +80,7 @@ export type RootStackParamList = {
     sponsorshipType?: 'organic' | 'affiliate' | 'sponsored' | string;
   };
   MakeupRecommendation:
-    | {reportId?: string; view?: 'history'}
+    | {analysisReportId?: string; reportId?: string; view?: 'history'}
     | undefined;
   // prompt: 딥링크 검색 자동 시작. reportId/personalColor: 리포트 첨부. open/dial: QA·데모 드라이브 훅.
   AuradinSearch:
@@ -144,8 +144,17 @@ export type RootStackParamList = {
   MakeupFeedbackLoading: undefined;
   MakeupFeedbackResultsList: undefined;
   MakeupFeedbackResult:
-    | {reportId?: string; returnTo?: 'profile'}
+    | {
+        entryDate?: string;
+        reportId?: string;
+        returnTo?: 'profile' | 'makeupJourney';
+      }
     | undefined;
+  MakeupJourneyDayDetail: {entryDate: string};
+  MakeupJourneyTrend: {
+    entryDate: string;
+    range?: '7d' | '30d' | '90d';
+  };
   MakeupCorrectionGuide: undefined;
   MakeupCorrectionTip: {pointId: string};
   ReferenceMakeupExtractionUpload: {
@@ -165,8 +174,9 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   HomeTab: undefined;
-  ProfileTab: undefined;
   ConsultingTab: undefined;
+  MakeupJourneyTab: {month?: string} | undefined;
+  ProfileTab: undefined;
 };
 
 export type RootStackRouteName = keyof RootStackParamList;
@@ -237,6 +247,8 @@ export const rootStackRoutes = [
   'MakeupFeedbackLoading',
   'MakeupFeedbackResultsList',
   'MakeupFeedbackResult',
+  'MakeupJourneyDayDetail',
+  'MakeupJourneyTrend',
   'MakeupCorrectionGuide',
   'MakeupCorrectionTip',
   'ReferenceMakeupExtractionUpload',
@@ -252,8 +264,9 @@ export const rootStackRoutes = [
 
 export const mainTabRoutes = [
   'HomeTab',
-  'ProfileTab',
   'ConsultingTab',
+  'MakeupJourneyTab',
+  'ProfileTab',
 ] as const satisfies readonly MainTabRouteName[];
 
 export const routes = [

@@ -1,0 +1,88 @@
+import {
+  getJourneyDigestContent,
+  getJourneyScorePresentation,
+  getMakeupJourneyLandingMode,
+  getMissionDifficultyGuide,
+} from './presentation';
+
+function expect(condition: boolean, message: string): void {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+const single = getJourneyScorePresentation({
+  firstScore: 84,
+  latestScore: 84,
+  reportCount: 1,
+  scoreDelta: 0,
+});
+expect(single?.label === '최초 84 · 최신 84', 'single report shows equal first/latest scores');
+expect(single?.deltaLabel === null, 'single report hides the score delta');
+
+const multiple = getJourneyScorePresentation({
+  firstScore: 76,
+  latestScore: 84,
+  reportCount: 2,
+  scoreDelta: 8,
+});
+expect(multiple?.label === '최초 76 → 최신 84', 'multiple reports show the score transition');
+expect(multiple?.deltaLabel === '+8', 'positive score delta includes a plus sign');
+
+expect(
+  getMakeupJourneyLandingMode({
+    calendarError: null,
+    calendarHasData: false,
+    calendarIsLoading: false,
+    settings: null,
+    settingsError: null,
+    settingsIsLoading: false,
+  }) === 'onboarding',
+  'missing settings enters onboarding without blocking the empty calendar',
+);
+expect(
+  getMakeupJourneyLandingMode({
+    calendarError: null,
+    calendarHasData: false,
+    calendarIsLoading: false,
+    settings: null,
+    settingsError: 'network unavailable',
+    settingsIsLoading: false,
+  }) === 'settings-error',
+  'settings error exposes the retry state',
+);
+expect(
+  getMakeupJourneyLandingMode({
+    calendarError: 'late refresh failed',
+    calendarHasData: true,
+    calendarIsLoading: false,
+    settings: {goalScore: 80},
+    settingsError: null,
+    settingsIsLoading: false,
+  }) === 'calendar',
+  'refresh errors preserve already rendered calendar data',
+);
+
+const longText = '긴 문장 '.repeat(120).trim();
+const digest = getJourneyDigestContent({
+  headline: longText,
+  improvementCount: 3,
+  improvements: ['아이섀도', '블러셔', '아이라인'],
+  nextAction: longText,
+  reportId: 'report-1',
+  strengthCount: 3,
+  strengths: ['눈썹', '피부', '립'],
+});
+expect(digest.headline === longText, 'large-text headline is not truncated');
+expect(digest.nextAction === longText, 'large-text action expands without truncation');
+expect(digest.strengths.length === 2, 'digest renders at most two strength titles');
+expect(digest.improvements.length === 2, 'digest renders at most two improvement titles');
+
+const beginnerMission = getMissionDifficultyGuide('beginner');
+const intermediateMission = getMissionDifficultyGuide('intermediate');
+const advancedMission = getMissionDifficultyGuide('advanced');
+expect(beginnerMission.duration === '1~5분', 'beginner mission is an immediately accessible habit');
+expect(intermediateMission.shortDescription.includes('루틴'), 'intermediate mission is one beauty routine');
+expect(advancedMission.shortDescription.includes('도전'), 'advanced mission leaves a result or record');
+
+console.log('makeup journey presentation contract passed');

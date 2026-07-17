@@ -21,8 +21,8 @@ expectEqual(getRouteChrome('HomeTab').kind, 'mainTab', 'home tab chrome');
 expectEqual(getRouteChrome('HomeTab').depth, 'main', 'home tab depth');
 expectEqual(
   mainTabRoutes.join(','),
-  'HomeTab,ProfileTab,ConsultingTab',
-  'main tab route order includes consulting',
+  'HomeTab,ConsultingTab,MakeupJourneyTab,ProfileTab',
+  'main tab route order follows home, consulting, journey, profile',
 );
 expectEqual(
   rootStackRoutes.map(routeName => String(routeName)).includes('Magazine'),
@@ -49,9 +49,9 @@ expectEqual(
 expectEqual(getRouteChrome('ARFilter').kind, 'fullscreen', 'AR chrome');
 expectEqual(getRouteChrome('ARFilter').depth, 'immersive', 'AR depth');
 expectEqual(
-  getDetailRouteTitle('FaceAnalysisReportDetail'),
-  '맞춤 분석 보고서',
-  'detail route title',
+  getRouteChrome('FaceAnalysisReportDetail').kind,
+  'fullscreen',
+  'face analysis report owns its fullscreen chrome',
 );
 expectEqual(
   getDetailRouteTitle('HomeFilterStore'),
@@ -65,7 +65,7 @@ expectEqual(
 );
 expectEqual(
   getDetailRouteTitle('ProductRecommendation'),
-  '추천 제품',
+  '제품 추천',
   'product recommendation detail route title',
 );
 expectEqual(
@@ -133,6 +133,17 @@ expectEqual(
 expectEqual(getFooterTargetRoute('home'), 'HomeTab', 'home footer target');
 expectEqual(getFooterTargetRoute('profile'), 'ProfileTab', 'profile footer target');
 expectEqual(getFooterTargetRoute('consulting'), 'ConsultingTab', 'consulting footer target');
+expectEqual(getFooterTargetRoute('journey'), 'MakeupJourneyTab', 'journey footer target');
+expectEqual(
+  getDetailRouteTitle('MakeupJourneyDayDetail'),
+  '메이크업 성장',
+  'makeup journey detail route title',
+);
+expectEqual(
+  getDetailRouteTitle('MakeupJourneyTrend'),
+  '성장 그래프',
+  'makeup journey trend route title',
+);
 expectEqual(
   getRoutesByDepth('terminal').join(','),
   'MakeupFilterSaveComplete,MakeupRecipeSaveComplete',
@@ -153,14 +164,15 @@ expectEqual(
           index: 2,
           routes: [
             {name: 'HomeTab'},
-            {name: 'ProfileTab'},
             {name: 'ConsultingTab'},
+            {name: 'MakeupJourneyTab'},
+            {name: 'ProfileTab'},
           ],
         },
       },
     ],
   }),
-  'ConsultingTab',
+  'MakeupJourneyTab',
   'nested active route',
 );
 expectEqual(

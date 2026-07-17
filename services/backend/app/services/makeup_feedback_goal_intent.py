@@ -343,16 +343,41 @@ def classify_makeup_feedback_goal_text(value: Any) -> GoalIntentResult:
   }
 
 
-def _extract_feedback_goal_input(request_payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
+FEEDBACK_GOAL_CONTEXT_KEYS = (
+  ("userGoalText", "user_goal_text"),
+  ("originalGoalText", "original_goal_text"),
+  ("normalizedGoalText", "normalized_goal_text"),
+  ("analysisGoalText", "analysis_goal_text"),
+  ("goalIntentType", "goal_intent_type"),
+  ("profileGender", "profile_gender"),
+)
+
+
+def extract_feedback_goal_context(request_payload: dict[str, Any]) -> dict[str, Any]:
+  """Return the canonical goal context for current and legacy feedback payloads."""
   raw_context = request_payload.get("feedbackContext") or request_payload.get("feedback_context")
   feedback_context = dict(raw_context) if isinstance(raw_context, dict) else {}
+
+  for camel_key, snake_key in FEEDBACK_GOAL_CONTEXT_KEYS:
+    value = feedback_context.get(camel_key)
+    if value is None:
+      value = feedback_context.get(snake_key)
+    if value is None:
+      value = request_payload.get(camel_key)
+    if value is None:
+      value = request_payload.get(snake_key)
+    if value is not None:
+      feedback_context[camel_key] = value
+    feedback_context.pop(snake_key, None)
+
+  return feedback_context
+
+
+def _extract_feedback_goal_input(request_payload: dict[str, Any]) -> tuple[dict[str, Any], str]:
+  feedback_context = extract_feedback_goal_context(request_payload)
   raw_goal_text = clean_goal_text(
     feedback_context.get("originalGoalText")
-    or feedback_context.get("original_goal_text")
     or feedback_context.get("userGoalText")
-    or feedback_context.get("user_goal_text")
-    or request_payload.get("userGoalText")
-    or request_payload.get("user_goal_text"),
   )
   return feedback_context, raw_goal_text
 
