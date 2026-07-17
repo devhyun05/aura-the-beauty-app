@@ -7,6 +7,7 @@ import { GuidePhotoOverlay } from '../visuals/GuidePhotoOverlay';
 import { RegionLens } from '../visuals/RegionLens';
 import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
+import { ThirdsRatioReadout } from '../visuals/ThirdsRatioReadout';
 
 interface Props {
   data: S2Data;
@@ -49,6 +50,7 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
           style={{ marginTop: 10 }}
         />
       )}
+      <ThirdsRatioReadout ratio={data.ratioNumbers} faceLength={data.faceLength} />
       <Text style={[font(12.5, '400', 1.7), { color: color.text, marginTop: 10, marginHorizontal: 2 }]}>
         {data.paragraph}
       </Text>
