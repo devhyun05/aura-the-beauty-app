@@ -33,6 +33,18 @@ except ImportError:  # pragma: no cover - fallback keeps local setup usable befo
 
 from app.core.errors import AppError
 from app.core.settings import Settings
+from app.services.face3d_calibration_receipts import (
+  FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION,
+  is_face3d_profile_server_verified,
+)
+from app.services.face_analysis_measurements import (
+  FACE3D_MODEL_VISIBLE_METRIC_NAMES,
+  GEOMETRY2D_MODEL_VISIBLE_METRIC_NAMES,
+  PERSONAL_COLOR_RESULT_STATUSES,
+  PERSONAL_COLOR_SEASONS,
+  PERSONAL_COLOR_TONE_CODES,
+  PERSONAL_COLOR_TONE_TO_SEASON,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +55,84 @@ _AUTHORITATIVE_HAIRLINE_PROVIDERS = {
   "face_parsing",
 }
 _AUTHORITATIVE_HAIRLINE_MIN_CONFIDENCE = 0.7
+_ANALYSIS_PROMPT_TASKS = {"face_makeup_recommendation_report_v1"}
+_ANALYSIS_PROMPT_SOURCES = {"camera", "gallery"}
+_FACE_VERTICAL_THIRDS_STATUSES = {
+  "full_success",
+  "partial_success",
+}
+_FACE_VERTICAL_THIRDS_DOMINANT_PARTS = {
+  "upper",
+  "middle",
+  "lower",
+  "balanced",
+  "unknown",
+}
+_FACE_LENGTH_VERDICTS = {
+  "wide",
+  "borderline_wide",
+  "average",
+  "borderline_long",
+  "long",
+  "indeterminate",
+}
+_FACE_LENGTH_JUDGMENT_VERSIONS = {
+  "face-length-judgment/v2-provisional-20260717",
+  "face-length-judgment/v3-pose-normalization-validation-20260717",
+}
+_FACE_VERTICAL_CORRECTION_METHODS = {
+  "mediapipe_facial_transformation_matrix",
+  "mediapipe_pose_roll",
+  "none",
+}
+_FACE_VERTICAL_CORRECTION_SKIP_REASONS = {
+  "disabled",
+  "dimension_invalid",
+  "landmark_count_invalid",
+  "landmark_value_invalid",
+  "matrix_missing",
+  "matrix_non_affine",
+  "matrix_non_orthogonal",
+  "matrix_non_uniform_scale",
+  "matrix_round_trip_invalid",
+  "matrix_value_invalid",
+  "matrix_singular",
+  "matrix_reflection",
+  "roll_unavailable",
+  "roll_out_of_range",
+}
+_FACE_GEOMETRY_STATUSES = {
+  "full_success",
+  "partial_success",
+}
+_FACE_GEOMETRY_CORRECTION_SKIP_REASONS = {
+  "dimension_invalid",
+  "roll_out_of_range",
+  "roll_unavailable",
+}
+_PERSONAL_COLOR_AXIS_NAMES = (
+  "temperature",
+  "value",
+  "chroma",
+  "clarity",
+  "contrast",
+)
+_PERSONAL_COLOR_REGIONS = {"skin", "hair", "lip"}
+_PERSONAL_COLOR_CORRECTION_SOURCES = {"sclera", "wb", "none"}
+_PERSONAL_COLOR_RELATION_ALIASES = {
+  "skinHairColorDelta": ("skinHairColorDelta", "dE00_skinHair", "dE00SkinHair"),
+  "skinHairLightnessDelta": (
+    "skinHairLightnessDelta",
+    "dL_skinHair",
+    "dLSkinHair",
+  ),
+  "skinLipColorDelta": ("skinLipColorDelta", "dE00_skinLip", "dE00SkinLip"),
+  "skinLipLightnessDelta": (
+    "skinLipLightnessDelta",
+    "dL_skinLip",
+    "dLSkinLip",
+  ),
+}
 
 
 def _prompt_number(value: Any) -> float | None:
@@ -56,9 +146,77 @@ def _prompt_record(value: Any) -> dict[str, Any]:
   return value if isinstance(value, dict) else {}
 
 
+def _prompt_enum(value: Any, allowed: set[str] | frozenset[str]) -> str | None:
+  return value if isinstance(value, str) and value in allowed else None
+
+
+def _prompt_bool(value: Any) -> bool | None:
+  return value if isinstance(value, bool) else None
+
+
+def _safe_numeric_record(
+  value: Any,
+  keys: tuple[str, ...],
+) -> dict[str, float]:
+  raw = _prompt_record(value)
+  safe: dict[str, float] = {}
+  for key in keys:
+    number = _prompt_number(raw.get(key))
+    if number is not None:
+      safe[key] = number
+  return safe
+
+
+def _safe_face3d_prompt_metric(value: Any) -> dict[str, Any] | None:
+  raw = _prompt_record(value)
+  if not raw:
+    return None
+
+  metric_value = (
+    None
+    if raw.get("value") is None
+    else _prompt_number(raw.get("value"))
+  )
+  confidence = _prompt_number(raw.get("confidence"))
+  mad = None if raw.get("mad") is None else _prompt_number(raw.get("mad"))
+  valid_frame_count = _prompt_number(raw.get("validFrameCount"))
+  if (
+    (raw.get("value") is not None and metric_value is None)
+    or confidence is None
+    or confidence < 0
+    or confidence > 1
+    or valid_frame_count is None
+    or valid_frame_count < 0
+    or (raw.get("mad") is not None and (mad is None or mad < 0))
+  ):
+    return None
+
+  return {
+    "confidence": confidence,
+    "mad": mad,
+    "unit": "normalized",
+    "validFrameCount": int(valid_frame_count),
+    "value": metric_value,
+  }
+
+
+def _safe_face3d_prompt_metrics(value: Any) -> dict[str, Any]:
+  raw = _prompt_record(value)
+  safe: dict[str, Any] = {}
+  for key in FACE3D_MODEL_VISIBLE_METRIC_NAMES:
+    metric = _safe_face3d_prompt_metric(raw.get(key))
+    if metric is not None:
+      safe[key] = metric
+  return safe
+
+
 def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | None:
   raw = _prompt_record(value)
   if not raw:
+    return None
+  raw_status = raw.get("status")
+  status = _prompt_enum(raw_status, _FACE_VERTICAL_THIRDS_STATUSES)
+  if raw_status is not None and status is None:
     return None
 
   measurement_mode = raw.get("measurementMode")
@@ -84,14 +242,51 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
     and middle is not None
   )
 
-  common = {
+  common: dict[str, Any] = {
     "measurementMode": (
       "full_vertical_thirds" if full_eligible else "middle_lower_only"
     ),
-    "status": raw.get("status"),
-    "statusReason": raw.get("statusReason"),
-    "title": raw.get("title"),
   }
+  if status is not None:
+    common["status"] = status
+
+  confidence = _prompt_number(raw.get("confidence"))
+  if confidence is not None and 0 <= confidence <= 1:
+    common["confidence"] = confidence
+
+  post_correction = _prompt_record(raw.get("postCorrection"))
+  applied = _prompt_bool(post_correction.get("applied"))
+  correction_method = _prompt_enum(
+    post_correction.get("method"),
+    _FACE_VERTICAL_CORRECTION_METHODS,
+  )
+  roll_correction = _prompt_number(post_correction.get("rollCorrectionDeg"))
+  correction_skip_reason = _prompt_enum(
+    post_correction.get("skippedReason"),
+    _FACE_VERTICAL_CORRECTION_SKIP_REASONS,
+  )
+  safe_post_correction: dict[str, Any] = {}
+  if applied is not None:
+    safe_post_correction["applied"] = applied
+  if correction_method is not None:
+    safe_post_correction["method"] = correction_method
+  if roll_correction is not None:
+    safe_post_correction["rollCorrectionDeg"] = roll_correction
+  if correction_skip_reason is not None:
+    safe_post_correction["skippedReason"] = correction_skip_reason
+  if safe_post_correction:
+    common["postCorrection"] = safe_post_correction
+
+  quality = _prompt_record(raw.get("quality"))
+  safe_quality: dict[str, Any] = _safe_numeric_record(
+    quality,
+    ("pitch", "roll", "yaw"),
+  )
+  quality_usable = _prompt_bool(quality.get("usable"))
+  if quality_usable is not None:
+    safe_quality["usable"] = quality_usable
+  if safe_quality:
+    common["quality"] = safe_quality
 
   # 측정 시점 동결 판정(3차 리뷰 BLOCKER 반영): 화이트리스트가 벗겨내면
   # 프롬프트의 verdict 추종 지시가 종단에서 무효가 된다 — 검증 후 보존.
@@ -105,24 +300,42 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
       "band": {"hi": band_hi, "lo": band_lo},
       "verdict": judgment_verdict,
     }
-    if judgment_verdict
-    in {"wide", "borderline_wide", "average", "borderline_long", "long", "indeterminate"}
+    if judgment_verdict in _FACE_LENGTH_VERDICTS
     and band_hi is not None
     and band_lo is not None
     else None
   )
-  judgment_version = raw.get("judgmentVersion")
-  safe_judgment_version = (
-    judgment_version if isinstance(judgment_version, str) and judgment_version else None
+  safe_judgment_version = _prompt_enum(
+    raw.get("judgmentVersion"),
+    _FACE_LENGTH_JUDGMENT_VERSIONS,
   )
 
   if full_eligible:
+    face_length = _safe_numeric_record(
+      raw.get("faceLength"),
+      ("heightPx", "ratio", "widthPx"),
+    )
+    dominant_part = _prompt_enum(
+      raw.get("dominantPart"),
+      _FACE_VERTICAL_THIRDS_DOMINANT_PARTS,
+    )
+    ratio_detail = _safe_numeric_record(
+      raw.get("ratioDetail"),
+      (
+        "lowerNormalized",
+        "lowerPx",
+        "middleNormalized",
+        "middlePx",
+        "totalPx",
+        "upperNormalized",
+        "upperPx",
+      ),
+    )
     return {
       **common,
-      "confidence": _prompt_number(raw.get("confidence")),
       "displayRatio": {"lower": lower, "middle": middle, "upper": upper},
-      "dominantPart": raw.get("dominantPart"),
-      "faceLength": _prompt_record(raw.get("faceLength")) or None,
+      "dominantPart": dominant_part,
+      "faceLength": face_length or None,
       "faceLengthJudgment": safe_judgment,
       "judgmentVersion": safe_judgment_version,
       "hairline": {
@@ -130,10 +343,7 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
         "confidence": hairline_confidence,
         "provider": provider,
       },
-      "postCorrection": _prompt_record(raw.get("postCorrection")) or None,
-      "quality": _prompt_record(raw.get("quality")),
-      "ratioDetail": _prompt_record(raw.get("ratioDetail")),
-      "summary": raw.get("summary"),
+      "ratioDetail": ratio_detail,
     }
 
   middle_lower = _prompt_record(raw.get("middleLowerRatio"))
@@ -156,8 +366,242 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
       "middle": safe_middle,
       "middlePx": safe_middle_px,
     },
-    "summary": "헤어라인이 충분히 확인되지 않아 중안부와 하안부만 반영했어요.",
   }
+
+
+def _safe_face_geometry_prompt_payload(value: Any) -> dict[str, Any] | None:
+  raw = _prompt_record(value)
+  if not raw:
+    return None
+
+  raw_status = raw.get("status")
+  status = _prompt_enum(raw_status, _FACE_GEOMETRY_STATUSES)
+  if raw_status is not None and status is None:
+    return None
+
+  metrics = _prompt_record(raw.get("metrics"))
+  safe_metrics: dict[str, dict[str, Any]] = {}
+  for key in GEOMETRY2D_MODEL_VISIBLE_METRIC_NAMES:
+    metric = _prompt_record(metrics.get(key))
+    if not metric:
+      continue
+    raw_value = metric.get("value")
+    metric_value = None if raw_value is None else _prompt_number(raw_value)
+    if raw_value is not None and metric_value is None:
+      continue
+    safe_metrics[key] = {
+      "unit": "deg" if key.endswith("Deg") else "ratio",
+      "value": metric_value,
+    }
+  if not safe_metrics:
+    return None
+
+  safe: dict[str, Any] = {"metrics": safe_metrics}
+  if status is not None:
+    safe["status"] = status
+
+  pose = _safe_numeric_record(
+    raw.get("pose"),
+    ("pitchDeg", "rollDeg", "yawDeg"),
+  )
+  if pose:
+    safe["pose"] = pose
+
+  roll_correction = _prompt_record(raw.get("rollCorrection"))
+  applied = _prompt_bool(roll_correction.get("applied"))
+  correction_degrees = _prompt_number(roll_correction.get("rollCorrectionDeg"))
+  skipped_reason = _prompt_enum(
+    roll_correction.get("skippedReason"),
+    _FACE_GEOMETRY_CORRECTION_SKIP_REASONS,
+  )
+  safe_roll_correction: dict[str, Any] = {}
+  if applied is not None:
+    safe_roll_correction["applied"] = applied
+  if correction_degrees is not None:
+    safe_roll_correction["rollCorrectionDeg"] = correction_degrees
+  if skipped_reason is not None:
+    safe_roll_correction["skippedReason"] = skipped_reason
+  if safe_roll_correction:
+    safe["rollCorrection"] = safe_roll_correction
+  return safe
+
+
+def _safe_personal_color_tone(
+  value: Any,
+  *,
+  status: str | None,
+) -> dict[str, Any] | None:
+  raw = _prompt_record(value)
+  if not raw or status == "insufficient":
+    return None
+
+  top = _prompt_enum(raw.get("top"), PERSONAL_COLOR_TONE_CODES)
+  season = _prompt_enum(raw.get("season"), PERSONAL_COLOR_SEASONS)
+  raw_secondary = raw.get("secondary")
+  secondary = (
+    None
+    if raw_secondary is None
+    else _prompt_enum(raw_secondary, PERSONAL_COLOR_TONE_CODES)
+  )
+  if (
+    top is None
+    or season is None
+    or PERSONAL_COLOR_TONE_TO_SEASON[top] != season
+    or raw_secondary is not None
+    and secondary is None
+  ):
+    return None
+
+  safe: dict[str, Any] = {
+    "season": season,
+    "secondary": secondary,
+    "top": top,
+  }
+  is_mixed = _prompt_bool(raw.get("isMixed"))
+  if is_mixed is not None:
+    safe["isMixed"] = is_mixed
+  for key in ("gap", "typeScore"):
+    number = _prompt_number(raw.get(key))
+    if number is not None:
+      safe[key] = number
+  return safe
+
+
+def _safe_personal_color_correction(value: Any) -> dict[str, Any] | None:
+  raw = _prompt_record(value)
+  if not raw:
+    return None
+
+  safe: dict[str, Any] = {}
+  for key in ("applied", "capped"):
+    boolean = _prompt_bool(raw.get(key))
+    if boolean is not None:
+      safe[key] = boolean
+  for key in ("confidence", "strength"):
+    number = _prompt_number(raw.get(key))
+    if number is not None:
+      safe[key] = number
+
+  source = _prompt_enum(raw.get("source"), _PERSONAL_COLOR_CORRECTION_SOURCES)
+  if source is not None:
+    safe["source"] = source
+
+  gains = _safe_numeric_record(raw.get("gains"), ("r", "g", "b"))
+  if gains:
+    safe["gains"] = gains
+
+  raw_sclera = _prompt_record(raw.get("scleraSummary"))
+  if not raw_sclera:
+    raw_sclera = _prompt_record(raw.get("sclera"))
+  safe_sclera = _safe_numeric_record(
+    raw_sclera,
+    ("eyesUsed", "leftRightAgreement", "sampleCount"),
+  )
+  measured_lab = _safe_numeric_record(
+    raw_sclera.get("measuredLab"),
+    ("L", "a", "b"),
+  )
+  if measured_lab:
+    safe_sclera["measuredLab"] = measured_lab
+  if safe_sclera:
+    safe["scleraSummary"] = safe_sclera
+
+  raw_wb = _prompt_record(raw.get("wbRatio"))
+  if not raw_wb:
+    raw_wb = _prompt_record(raw.get("wb"))
+  safe_wb = _safe_numeric_record(raw_wb, ("bg", "rg"))
+  if safe_wb:
+    safe["wbRatio"] = safe_wb
+  return safe or None
+
+
+def _safe_personal_color_prompt_payload(value: Any) -> dict[str, Any] | None:
+  raw = _prompt_record(value)
+  if not raw:
+    return None
+  reported = _prompt_record(raw.get("reported")) or raw
+
+  safe: dict[str, Any] = {}
+  raw_status = reported.get("status")
+  status = _prompt_enum(raw_status, PERSONAL_COLOR_RESULT_STATUSES)
+  if raw_status is not None and status is None:
+    return None
+  if status is not None:
+    safe["status"] = status
+  calibration_applied = _prompt_bool(reported.get("calibrationApplied"))
+  if calibration_applied is not None:
+    safe["calibrationApplied"] = calibration_applied
+  measurement_confidence = _prompt_number(reported.get("measurementConfidence"))
+  if measurement_confidence is not None and 0 <= measurement_confidence <= 1:
+    safe["measurementConfidence"] = measurement_confidence
+
+  axes = _prompt_record(reported.get("axes"))
+  safe_axes: dict[str, dict[str, float | None]] = {}
+  for axis_name in _PERSONAL_COLOR_AXIS_NAMES:
+    axis = _prompt_record(axes.get(axis_name))
+    if not axis:
+      continue
+    raw_value = axis.get("value")
+    axis_value = None if raw_value is None else _prompt_number(raw_value)
+    confidence = _prompt_number(axis.get("confidence"))
+    if (
+      raw_value is not None
+      and axis_value is None
+      or confidence is None
+      or not 0 <= confidence <= 1
+    ):
+      continue
+    safe_axes[axis_name] = {
+      "confidence": confidence,
+      "value": axis_value,
+    }
+  if safe_axes:
+    safe["axes"] = safe_axes
+
+  relations = _prompt_record(reported.get("relations"))
+  safe_relations: dict[str, float] = {}
+  for output_key, aliases in _PERSONAL_COLOR_RELATION_ALIASES.items():
+    for alias in aliases:
+      number = _prompt_number(relations.get(alias))
+      if number is not None:
+        safe_relations[output_key] = number
+        break
+  if safe_relations:
+    safe["relations"] = safe_relations
+
+  safe_regions: list[dict[str, Any]] = []
+  raw_regions = reported.get("regions")
+  if isinstance(raw_regions, list):
+    for raw_region in raw_regions:
+      region = _prompt_record(raw_region)
+      region_name = _prompt_enum(region.get("region"), _PERSONAL_COLOR_REGIONS)
+      if region_name is None:
+        continue
+      safe_region: dict[str, Any] = {"region": region_name}
+      for key in ("areaRatio", "qEff"):
+        number = _prompt_number(region.get(key))
+        if number is not None:
+          safe_region[key] = number
+      lab = _safe_numeric_record(region.get("lab"), ("L", "a", "b"))
+      lch = _safe_numeric_record(region.get("lch"), ("C", "h"))
+      if lab:
+        safe_region["lab"] = lab
+      if lch:
+        safe_region["lch"] = lch
+      safe_regions.append(safe_region)
+  if safe_regions:
+    safe["regions"] = safe_regions
+
+  tone = _safe_personal_color_tone(reported.get("tone"), status=status)
+  if tone is not None:
+    safe["tone"] = tone
+
+  correction = _safe_personal_color_correction(
+    raw.get("correction", raw.get("correctionReport")),
+  )
+  if correction is not None:
+    safe["correction"] = correction
+  return safe or None
 
 
 def _safe_face3d_prompt_payload(value: Any) -> dict[str, Any] | None:
@@ -166,57 +610,118 @@ def _safe_face3d_prompt_payload(value: Any) -> dict[str, Any] | None:
     return None
 
   schema_version = raw.get("schemaVersion")
-  if schema_version in {None, "aura.face3d-profile.v1"}:
-    return raw
-  if schema_version != "aura.face3d-profile.v2":
+  if schema_version is not None and not isinstance(schema_version, str):
+    return None
+  metrics = _safe_face3d_prompt_metrics(raw.get("metrics"))
+  if not metrics:
     return None
 
-  collection_policy_id = raw.get("collectionPolicyId")
+  if schema_version in {None, "aura.face3d-profile.v1"}:
+    # Legacy payloads remain useful for normalized geometry, but their dict is
+    # untrusted. Reconstruct an allowlisted numeric view so receipt/provenance,
+    # valueMm*, raw landmarks, and prompt-injection strings cannot cross the
+    # external-model boundary.
+    return {
+      "metrics": metrics,
+      "schemaVersion": schema_version or "aura.face3d-profile.v1",
+      "source": "arkit_face_mesh",
+    }
+  if schema_version != FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION:
+    return None
+
   if (
-    raw.get("confidenceCalibrationStatus") != "calibrated"
+    not is_face3d_profile_server_verified(raw)
     or raw.get("sampleMode") != "micro_burst"
     or raw.get("aggregation") != "median_mad"
-    or not isinstance(collection_policy_id, str)
-    or collection_policy_id.startswith("diagnostics-")
   ):
     return None
 
-  return raw
+  sensor_provenance = _prompt_record(raw.get("sensorProvenance"))
+  depth_ratio = _prompt_number(sensor_provenance.get("depthDataObservedRatio"))
+
+  # 서버 검증이 끝난 v3도 원본 dict를 전달하지 않는다. Receipt/nonce/context,
+  # valueMm*, device model, unknown fields는 제외하고 모델에 필요한 수치만 재구성한다.
+  return {
+    "aggregation": "median_mad",
+    "collectionPolicyId": raw.get("collectionPolicyId"),
+    "confidenceCalibrationStatus": "calibrated",
+    "metrics": metrics,
+    "sampleMode": "micro_burst",
+    "schemaVersion": FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION,
+    "sensorProvenance": {
+      "depthDataObservedRatio": depth_ratio,
+      "faceTrackingSupported": sensor_provenance.get("faceTrackingSupported") is True,
+      "trueDepthHardware": sensor_provenance.get("trueDepthHardware") is True,
+    },
+    "source": "arkit_face_mesh",
+  }
 
 
 def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
-  metadata = {
-    key: value
-    for key, value in payload.items()
-    if key not in {"imageUrl", "image_url", "cdnUrl", "previewUrl", "sourceUri"}
-  }
-  measurements = _prompt_record(metadata.get("measurements"))
-  if measurements:
-    # DB 저장·과거 복원에는 raw H를 보존하되 AI에는 별도 검증된 요약만 제공한다.
-    safe_measurements = dict(measurements)
-    safe_measurements.pop("faceVerticalThirds", None)
-    safe_measurements.pop("face_vertical_thirds", None)
-    safe_measurements_face3d = _safe_face3d_prompt_payload(
-      safe_measurements.get("face3d"),
-    )
-    if safe_measurements_face3d is None:
-      safe_measurements.pop("face3d", None)
-    else:
-      safe_measurements["face3d"] = safe_measurements_face3d
-    metadata["measurements"] = safe_measurements
+  # External model input is reconstructed from typed primitives only. The raw
+  # request remains stored for report replay, but no arbitrary client prose,
+  # identifiers, media paths, warnings, or unknown keys cross this boundary.
+  metadata: dict[str, Any] = {}
+  task = _prompt_enum(payload.get("task"), _ANALYSIS_PROMPT_TASKS)
+  if task is not None:
+    metadata["task"] = task
+  source = _prompt_enum(payload.get("source"), _ANALYSIS_PROMPT_SOURCES)
+  if source is not None:
+    metadata["source"] = source
 
-  raw_vertical = metadata.pop("face_vertical_thirds", None)
-  safe_vertical = _safe_face_vertical_thirds_prompt_payload(
-    metadata.get("faceVerticalThirds", raw_vertical),
+  raw_measurements = payload.get("measurements")
+  measurements = _prompt_record(raw_measurements)
+  measurement_face3d = measurements.get("face3d")
+  top_level_face3d = payload.get("face3d")
+  face3d_from_measurements = isinstance(measurement_face3d, dict)
+  primary_face3d = (
+    measurement_face3d
+    if face3d_from_measurements
+    else top_level_face3d
+    if isinstance(top_level_face3d, dict)
+    else None
   )
-  if safe_vertical is None:
-    metadata.pop("faceVerticalThirds", None)
-  else:
+  safe_face3d = _safe_face3d_prompt_payload(primary_face3d)
+
+  if isinstance(raw_measurements, dict):
+    # DB 저장·과거 복원에는 raw payload를 보존하되, AI에는 검증된 숫자·enum
+    # 요약만 제공한다. Raw H, 경고, statusReason, 식별자는 포함하지 않는다.
+    safe_measurements: dict[str, Any] = {}
+    if measurements.get("schemaVersion") == "aura-face-analysis-measurements-v1":
+      safe_measurements["schemaVersion"] = "aura-face-analysis-measurements-v1"
+    if face3d_from_measurements and safe_face3d is not None:
+      safe_measurements["face3d"] = safe_face3d
+    safe_geometry = _safe_face_geometry_prompt_payload(
+      measurements.get("faceGeometry2d"),
+    )
+    if safe_geometry is not None:
+      safe_measurements["faceGeometry2d"] = safe_geometry
+    safe_personal_color = _safe_personal_color_prompt_payload(
+      measurements.get("personalColor"),
+    )
+    if safe_personal_color is not None:
+      safe_measurements["personalColor"] = safe_personal_color
+    if safe_measurements:
+      metadata["measurements"] = safe_measurements
+
+  raw_vertical = payload.get("face_vertical_thirds")
+  safe_vertical = _safe_face_vertical_thirds_prompt_payload(
+    payload.get("faceVerticalThirds", raw_vertical),
+  )
+  if safe_vertical is not None:
     metadata["faceVerticalThirds"] = safe_vertical
-  safe_face3d = _safe_face3d_prompt_payload(metadata.get("face3d"))
-  if safe_face3d is None:
-    metadata.pop("face3d", None)
-  else:
+
+  safe_geometry = _safe_face_geometry_prompt_payload(payload.get("faceGeometry2d"))
+  if safe_geometry is not None:
+    metadata["faceGeometry2d"] = safe_geometry
+
+  safe_personal_color = _safe_personal_color_prompt_payload(
+    payload.get("measuredPersonalColor"),
+  )
+  if safe_personal_color is not None:
+    metadata["measuredPersonalColor"] = safe_personal_color
+
+  if not face3d_from_measurements and safe_face3d is not None:
     metadata["face3d"] = safe_face3d
   return metadata
 RECOMMENDED_MAKEUP_COUNT = 1
@@ -825,7 +1330,8 @@ class OpenAIAnalysisService:
       "(양수는 앞, 음수는 뒤), centralProjectionScore 얼굴 중앙부 입체감이야. Tier-2 지표는 noseLength 코뿌리-코끝 길이, "
       "nasalBridgeStraightness 코뿌리-코끝 선에 대한 콧대 RMS 이탈량(작을수록 기준선에 가까움), nasalAxisDeviation 코축 좌우 편위 "
       "(피사체 기준 음수=Left, 양수=Right), alarWidth alare-alare 콧볼 폭, malarProjectionLeft/Right 좌우 앞광대의 전방 돌출이야. "
-      "모든 face3d 값은 얼굴 크기로 나눈 무차원 상대값이며 절대 mm·임상 진단·모집단 백분위가 아니고, value가 null이면 미측정이야. "
+      "face3d 각 metric의 value는 얼굴 크기로 나눈 무차원 상대값이야. 사용자 출력은 절대 mm·임상 진단·모집단 백분위가 아니고 "
+      "숫자로 노출하면 안 되며, value가 null이면 미측정이야. "
       "요청 메타데이터에 faceGeometry2d(정면 사진에서 실측한 2D 기하 지표: 눈 폭·눈 개방도·미간 비율·눈꼬리 기울기 canthalTilt(도)·"
       "눈-눈썹 간격·눈썹 기울기 browSlope(도)·입 폭·윗입술/아랫입술 두께비·하관 폭 비율·입꼬리 비대칭 — 비율은 무차원, 각도는 도 단위, "
       "Left/Right는 피사체 기준, value가 null이면 미측정)가 있으면 눈매/눈썹/입술 판단과 makeupGuideline의 아이라이너·눈썹·립 배치에 근거로 반영해. "

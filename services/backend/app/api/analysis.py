@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 import logging
 import time
@@ -23,6 +24,12 @@ from app.services.face_analysis_pipeline import (
   FaceAnalysisPipeline,
   initialize_face_analysis_v2,
   project_legacy_analysis_result,
+)
+from app.services.face3d_calibration_receipts import (
+  FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION,
+  build_face3d_calibration_receipt_request_context,
+  verify_face3d_calibration_receipt,
+  verify_and_consume_face3d_calibration_receipt,
 )
 from app.services.media_deletion import (
   collect_report_media_refs,
@@ -77,9 +84,9 @@ ANALYSIS_MEDIA_SELECT = """
   preview_media.height as preview_media_ref_height
 """
 
-# 목록 응답 경량화: 측정 원본(request.measurements)은 목록에서 제외하고 상세
-# GET 에서만 전량 내려준다. r.* 뒤에 같은 이름(detail_payload)으로 축약본을
-# 재선택하면 normalize 의 dict(row) 변환에서 마지막 값이 이겨 축약본이 남는다.
+# 목록 응답 경량화: 측정 원본(request.measurements)은 목록 SQL에서도 제외한다.
+# 상세 응답은 아래 response projection에서 mm/receipt 같은 내부 전용 필드를
+# 제거한다. DB에는 검증·감사를 위해 원본 detail_payload를 그대로 보존한다.
 ANALYSIS_MEDIA_LIST_SELECT = (
   ANALYSIS_MEDIA_SELECT
   + ",\n  (r.detail_payload"
@@ -108,12 +115,94 @@ def decode_json_object(value: object) -> dict:
   return {}
 
 
+_FACE3D_INTERNAL_PROFILE_FIELDS = {
+  "calibrationReceipt",
+  "captureNonce",
+  "profileBindingSha256",
+  "sensorProvenance",
+  "serverCalibrationReceiptStatus",
+}
+_INTERNAL_ONLY = object()
+
+
+def _project_face3d_profile_for_response(value: object) -> object:
+  if not isinstance(value, dict):
+    return value
+  projected = copy.deepcopy(value)
+  for field in _FACE3D_INTERNAL_PROFILE_FIELDS:
+    projected.pop(field, None)
+  metrics = projected.get("metrics")
+  if isinstance(metrics, dict):
+    for metric in metrics.values():
+      if isinstance(metric, dict):
+        for field in list(metric):
+          if field.startswith("valueMm"):
+            metric.pop(field, None)
+  return projected
+
+
+def _project_internal_only_records(value: object) -> object:
+  if isinstance(value, dict):
+    sensitivity = value.get("sensitivity")
+    if (
+      not isinstance(sensitivity, bool)
+      and isinstance(sensitivity, (int, float))
+      and sensitivity >= 3
+    ):
+      return _INTERNAL_ONLY
+    projected: dict = {}
+    for key, item in value.items():
+      if isinstance(key, str) and key.endswith(".mm"):
+        continue
+      if key == "rationaleMetricKeys" and isinstance(item, list):
+        projected[key] = [
+          metric_key
+          for metric_key in item
+          if isinstance(metric_key, str) and not metric_key.endswith(".mm")
+        ]
+        continue
+      child = _project_internal_only_records(item)
+      if child is not _INTERNAL_ONLY:
+        projected[key] = child
+    return projected
+  if isinstance(value, list):
+    projected_items = []
+    for item in value:
+      child = _project_internal_only_records(item)
+      if child is not _INTERNAL_ONLY:
+        projected_items.append(child)
+    return projected_items
+  return value
+
+
+def project_analysis_detail_payload_for_response(detail_payload: dict) -> dict:
+  projected = copy.deepcopy(detail_payload)
+  request = projected.get("request")
+  if isinstance(request, dict):
+    if "face3d" in request:
+      request["face3d"] = _project_face3d_profile_for_response(request["face3d"])
+    measurements = request.get("measurements")
+    if isinstance(measurements, dict) and "face3d" in measurements:
+      measurements["face3d"] = _project_face3d_profile_for_response(
+        measurements["face3d"],
+      )
+
+  result = projected.get("result")
+  if isinstance(result, dict):
+    filtered_result = _project_internal_only_records(result)
+    if isinstance(filtered_result, dict):
+      projected["result"] = filtered_result
+  return projected
+
+
 def normalize_analysis_report_row(row: dict | None) -> dict | None:
   if row is None:
     return None
 
   normalized = dict(row)
-  normalized["detail_payload"] = decode_json_object(normalized.get("detail_payload"))
+  normalized["detail_payload"] = project_analysis_detail_payload_for_response(
+    decode_json_object(normalized.get("detail_payload")),
+  )
   attach_analysis_media_reference(normalized, "source_media_ref", "source_media")
   attach_analysis_media_reference(normalized, "preview_media_ref", "preview_media")
 
@@ -697,36 +786,89 @@ async def create_analysis_job(
     payload.run_immediately,
     execution_mode,
   )
-  report = await db.fetchrow(
-    """
-    insert into analysis_reports (
-      user_id,
-      photo_capture_id,
-      source_media_id,
-      preview_media_id,
-      status,
-      title,
-      report_title,
-      environment_label,
-      detail_payload
-    )
-    values ($1, $2, $3, $4, 'pending', $5, $6, $7, $8::jsonb)
-    returning *
-    """,
-    user["id"],
-    payload.photo_capture_id,
-    payload.source_media_id,
-    payload.preview_media_id,
-    payload.title,
-    payload.report_title or payload.title,
-    payload.environment_label,
-    json.dumps(
-      build_initial_analysis_detail_payload(
-        payload,
-        face_analysis_v2_enabled=settings.face_analysis_v2_enabled,
+  async def insert_report(executor) -> dict | None:
+    row = await executor.fetchrow(
+      """
+      insert into analysis_reports (
+        user_id,
+        photo_capture_id,
+        source_media_id,
+        preview_media_id,
+        status,
+        title,
+        report_title,
+        environment_label,
+        detail_payload
+      )
+      values ($1, $2, $3, $4, 'pending', $5, $6, $7, $8::jsonb)
+      returning *
+      """,
+      user["id"],
+      payload.photo_capture_id,
+      payload.source_media_id,
+      payload.preview_media_id,
+      payload.title,
+      payload.report_title or payload.title,
+      payload.environment_label,
+      json.dumps(
+        build_initial_analysis_detail_payload(
+          payload,
+          face_analysis_v2_enabled=settings.face_analysis_v2_enabled,
+        ),
       ),
-    ),
+    )
+    return dict(row) if row else None
+
+  measurements = payload.request_payload.get("measurements")
+  measurement_face3d = (
+    measurements.get("face3d")
+    if isinstance(measurements, dict)
+    else None
   )
+  primary_face3d = (
+    measurement_face3d
+    if isinstance(measurement_face3d, dict)
+    else payload.request_payload.get("face3d")
+  )
+  receipt_request_context = build_face3d_calibration_receipt_request_context(
+    user_id=user["id"],
+    photo_capture_id=payload.photo_capture_id,
+    source_media_id=payload.source_media_id,
+  )
+  receipt_verification = (
+    verify_face3d_calibration_receipt(
+      primary_face3d,
+      settings,
+      expected_report_context_id=receipt_request_context.report_context_id,
+      expected_subject_context_id=receipt_request_context.subject_context_id,
+    )
+    if isinstance(primary_face3d, dict)
+    and primary_face3d.get("schemaVersion") == FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION
+    and primary_face3d.get("confidenceCalibrationStatus") == "calibrated"
+    else None
+  )
+
+  if receipt_verification is not None and receipt_verification.verified:
+    async def consume_and_insert(connection) -> dict | None:
+      await verify_and_consume_face3d_calibration_receipt(
+        connection,
+        settings,
+        payload.request_payload,
+        expected_report_context_id=receipt_request_context.report_context_id,
+        expected_subject_context_id=receipt_request_context.subject_context_id,
+      )
+      return await insert_report(connection)
+
+    report = await db.run_in_transaction(consume_and_insert)
+  else:
+    await verify_and_consume_face3d_calibration_receipt(
+      db,
+      settings,
+      payload.request_payload,
+      expected_report_context_id=receipt_request_context.report_context_id,
+      expected_subject_context_id=receipt_request_context.subject_context_id,
+    )
+    report = await insert_report(db)
 
   if payload.run_immediately:
     await dispatch_analysis_job(

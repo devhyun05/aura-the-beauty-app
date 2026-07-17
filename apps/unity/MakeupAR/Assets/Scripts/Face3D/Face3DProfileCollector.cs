@@ -17,7 +17,8 @@ namespace Aura.Face3D
             int targetFrameCount = ProvisionalTargetFrameCount,
             int minimumFrameCount = ProvisionalMinimumFrameCount,
             float outlierMadMultiplier = ProvisionalOutlierMadMultiplier,
-            float confidenceMadScale = ProvisionalConfidenceMadScale)
+            float confidenceMadScale = ProvisionalConfidenceMadScale,
+            bool separateCompletionFromQuality = false)
         {
             if (!Face3DNumeric.IsFinite(maximumDurationSeconds)
                 || maximumDurationSeconds <= 0.0)
@@ -52,6 +53,7 @@ namespace Aura.Face3D
             MinimumFrameCount = minimumFrameCount;
             OutlierMadMultiplier = outlierMadMultiplier;
             ConfidenceMadScale = confidenceMadScale;
+            SeparateCompletionFromQuality = separateCompletionFromQuality;
         }
 
         public double MaximumDurationSeconds { get; private set; }
@@ -59,6 +61,7 @@ namespace Aura.Face3D
         public int MinimumFrameCount { get; private set; }
         public float OutlierMadMultiplier { get; private set; }
         public float ConfidenceMadScale { get; private set; }
+        public bool SeparateCompletionFromQuality { get; private set; }
     }
 
     public enum Face3DCollectionAddStatus
@@ -245,42 +248,87 @@ namespace Aura.Face3D
                 return false;
             }
 
-            Face3DRobustAggregationResult noseTip = Aggregate(
-                delegate(Face3DMetrics metrics) { return metrics.NoseTipProjection; });
-            Face3DRobustAggregationResult chin = Aggregate(
-                delegate(Face3DMetrics metrics) { return metrics.ChinProjection; });
-            Face3DRobustAggregationResult upperLip = Aggregate(
-                delegate(Face3DMetrics metrics) { return metrics.UpperLipToELine; });
-            Face3DRobustAggregationResult lowerLip = Aggregate(
-                delegate(Face3DMetrics metrics) { return metrics.LowerLipToELine; });
-            Face3DRobustAggregationResult central = Aggregate(
-                delegate(Face3DMetrics metrics) { return metrics.CentralProjectionScore; });
+            Face3DRobustAggregationResult noseTip = AggregateWithMeters(
+                delegate(Face3DMetrics metrics) { return metrics.NoseTipProjection; },
+                delegate(Face3DMetrics metrics) { return metrics.NoseTipProjectionMeters; },
+                out Face3DRobustAggregationResult noseTipMeters);
+            Face3DRobustAggregationResult chin = AggregateWithMeters(
+                delegate(Face3DMetrics metrics) { return metrics.ChinProjection; },
+                delegate(Face3DMetrics metrics) { return metrics.ChinProjectionMeters; },
+                out Face3DRobustAggregationResult chinMeters);
+            Face3DRobustAggregationResult upperLip = AggregateWithMeters(
+                delegate(Face3DMetrics metrics) { return metrics.UpperLipToELine; },
+                delegate(Face3DMetrics metrics) { return metrics.UpperLipToELineMeters; },
+                out Face3DRobustAggregationResult upperLipMeters);
+            Face3DRobustAggregationResult lowerLip = AggregateWithMeters(
+                delegate(Face3DMetrics metrics) { return metrics.LowerLipToELine; },
+                delegate(Face3DMetrics metrics) { return metrics.LowerLipToELineMeters; },
+                out Face3DRobustAggregationResult lowerLipMeters);
+            Face3DRobustAggregationResult central = AggregateWithMeters(
+                delegate(Face3DMetrics metrics) { return metrics.CentralProjectionScore; },
+                delegate(Face3DMetrics metrics) { return metrics.CentralProjectionScoreMeters; },
+                out Face3DRobustAggregationResult centralMeters);
 
             // Tier-2: 프레임별로 존재한 표본만 집계 — 전부 부재(g1)면 value:null 지표.
-            Face3DRobustAggregationResult noseLength = AggregateOptional(
-                delegate(Face3DMetrics metrics) { return metrics.NoseLength; });
-            Face3DRobustAggregationResult nasalBridgeStraightness = AggregateOptional(
-                delegate(Face3DMetrics metrics) { return metrics.NasalBridgeStraightness; });
-            Face3DRobustAggregationResult nasalAxisDeviation = AggregateOptional(
-                delegate(Face3DMetrics metrics) { return metrics.NasalAxisDeviation; });
-            Face3DRobustAggregationResult alarWidth = AggregateOptional(
-                delegate(Face3DMetrics metrics) { return metrics.AlarWidth; });
-            Face3DRobustAggregationResult malarProjectionLeft = AggregateOptional(
-                delegate(Face3DMetrics metrics) { return metrics.MalarProjectionLeft; });
-            Face3DRobustAggregationResult malarProjectionRight = AggregateOptional(
-                delegate(Face3DMetrics metrics) { return metrics.MalarProjectionRight; });
+            Face3DRobustAggregationResult noseLength = AggregateOptionalWithMeters(
+                delegate(Face3DMetrics metrics) { return metrics.NoseLength; },
+                delegate(Face3DMetrics metrics) { return metrics.NoseLengthMeters; },
+                out Face3DRobustAggregationResult noseLengthMeters);
+            Face3DRobustAggregationResult nasalBridgeStraightness =
+                AggregateOptionalWithMeters(
+                    delegate(Face3DMetrics metrics) { return metrics.NasalBridgeStraightness; },
+                    delegate(Face3DMetrics metrics) { return metrics.NasalBridgeStraightnessMeters; },
+                    out Face3DRobustAggregationResult nasalBridgeStraightnessMeters);
+            Face3DRobustAggregationResult nasalAxisDeviation =
+                AggregateOptionalWithMeters(
+                    delegate(Face3DMetrics metrics) { return metrics.NasalAxisDeviation; },
+                    delegate(Face3DMetrics metrics) { return metrics.NasalAxisDeviationMeters; },
+                    out Face3DRobustAggregationResult nasalAxisDeviationMeters);
+            Face3DRobustAggregationResult alarWidth = AggregateOptionalWithMeters(
+                delegate(Face3DMetrics metrics) { return metrics.AlarWidth; },
+                delegate(Face3DMetrics metrics) { return metrics.AlarWidthMeters; },
+                out Face3DRobustAggregationResult alarWidthMeters);
+            Face3DRobustAggregationResult malarProjectionLeft =
+                AggregateOptionalWithMeters(
+                    delegate(Face3DMetrics metrics) { return metrics.MalarProjectionLeft; },
+                    delegate(Face3DMetrics metrics) { return metrics.MalarProjectionLeftMeters; },
+                    out Face3DRobustAggregationResult malarProjectionLeftMeters);
+            Face3DRobustAggregationResult malarProjectionRight =
+                AggregateOptionalWithMeters(
+                    delegate(Face3DMetrics metrics) { return metrics.MalarProjectionRight; },
+                    delegate(Face3DMetrics metrics) { return metrics.MalarProjectionRightMeters; },
+                    out Face3DRobustAggregationResult malarProjectionRightMeters);
 
             AddAggregationWarning(Face3DContract.NoseTipProjection, noseTip);
             AddAggregationWarning(Face3DContract.ChinProjection, chin);
             AddAggregationWarning(Face3DContract.UpperLipToELine, upperLip);
             AddAggregationWarning(Face3DContract.LowerLipToELine, lowerLip);
             AddAggregationWarning(Face3DContract.CentralProjectionScore, central);
+            AddMetersAggregationWarning(Face3DContract.NoseTipProjection, noseTipMeters);
+            AddMetersAggregationWarning(Face3DContract.ChinProjection, chinMeters);
+            AddMetersAggregationWarning(Face3DContract.UpperLipToELine, upperLipMeters);
+            AddMetersAggregationWarning(Face3DContract.LowerLipToELine, lowerLipMeters);
+            AddMetersAggregationWarning(Face3DContract.CentralProjectionScore, centralMeters);
             AddOptionalAggregationWarning(Face3DContract.NoseLength, noseLength);
             AddOptionalAggregationWarning(Face3DContract.NasalBridgeStraightness, nasalBridgeStraightness);
             AddOptionalAggregationWarning(Face3DContract.NasalAxisDeviation, nasalAxisDeviation);
             AddOptionalAggregationWarning(Face3DContract.AlarWidth, alarWidth);
             AddOptionalAggregationWarning(Face3DContract.MalarProjectionLeft, malarProjectionLeft);
             AddOptionalAggregationWarning(Face3DContract.MalarProjectionRight, malarProjectionRight);
+            AddMetersAggregationWarning(Face3DContract.NoseLength, noseLengthMeters);
+            AddMetersAggregationWarning(
+                Face3DContract.NasalBridgeStraightness,
+                nasalBridgeStraightnessMeters);
+            AddMetersAggregationWarning(
+                Face3DContract.NasalAxisDeviation,
+                nasalAxisDeviationMeters);
+            AddMetersAggregationWarning(Face3DContract.AlarWidth, alarWidthMeters);
+            AddMetersAggregationWarning(
+                Face3DContract.MalarProjectionLeft,
+                malarProjectionLeftMeters);
+            AddMetersAggregationWarning(
+                Face3DContract.MalarProjectionRight,
+                malarProjectionRightMeters);
             if (samples.Count < policy.TargetFrameCount)
             {
                 warnings.Add("target_frame_count_not_reached");
@@ -320,6 +368,17 @@ namespace Aura.Face3D
             return Face3DRobustMetricAggregator.Aggregate(values, policy);
         }
 
+        private Face3DRobustAggregationResult AggregateWithMeters(
+            Func<Face3DMetrics, float> normalizedSelector,
+            Func<Face3DMetrics, float?> metersSelector,
+            out Face3DRobustAggregationResult metersResult)
+        {
+            Face3DRobustAggregationResult normalizedResult = Aggregate(
+                normalizedSelector);
+            metersResult = AggregateOptional(metersSelector);
+            return AttachValueMm(normalizedResult, metersResult);
+        }
+
         // Tier-2: null(그룹 부재·프레임 결측) 표본은 집계에서 제외한다. 표본이 하나도
         // 없으면 Aggregate 가 value:null 지표를 반환한다.
         private Face3DRobustAggregationResult AggregateOptional(
@@ -336,6 +395,43 @@ namespace Aura.Face3D
             }
 
             return Face3DRobustMetricAggregator.Aggregate(values, policy);
+        }
+
+        private Face3DRobustAggregationResult AggregateOptionalWithMeters(
+            Func<Face3DMetrics, float?> normalizedSelector,
+            Func<Face3DMetrics, float?> metersSelector,
+            out Face3DRobustAggregationResult metersResult)
+        {
+            Face3DRobustAggregationResult normalizedResult = AggregateOptional(
+                normalizedSelector);
+            metersResult = AggregateOptional(metersSelector);
+            return AttachValueMm(normalizedResult, metersResult);
+        }
+
+        private Face3DRobustAggregationResult AttachValueMm(
+            Face3DRobustAggregationResult normalizedResult,
+            Face3DRobustAggregationResult metersResult)
+        {
+            Face3DProfileMetric normalizedMetric = normalizedResult.Metric;
+            Face3DProfileMetric metersMetric = metersResult.Metric;
+            bool rawAggregateMeetsMinimum =
+                metersMetric.Value.HasValue
+                && metersMetric.ValidFrameCount >= policy.MinimumFrameCount;
+            float? valueMm = rawAggregateMeetsMinimum
+                ? metersMetric.Value.Value * 1000.0f
+                : (float?)null;
+            return new Face3DRobustAggregationResult(
+                new Face3DProfileMetric(
+                    normalizedMetric.Value,
+                    normalizedMetric.Confidence,
+                    normalizedMetric.ValidFrameCount,
+                    normalizedMetric.Mad,
+                    valueMm,
+                    metersMetric.Confidence,
+                    metersMetric.ValidFrameCount,
+                    metersMetric.Mad * 1000.0f),
+                normalizedResult.InputCount,
+                normalizedResult.OutlierCount);
         }
 
         private void AddAggregationWarning(
@@ -365,6 +461,29 @@ namespace Aura.Face3D
             }
 
             AddAggregationWarning(metricName, result);
+        }
+
+        private void AddMetersAggregationWarning(
+            string metricName,
+            Face3DRobustAggregationResult result)
+        {
+            if (result.InputCount == 0)
+            {
+                return;
+            }
+
+            if (result.OutlierCount > 0)
+            {
+                warnings.Add(
+                    metricName
+                    + "_raw_meters_outliers_rejected:"
+                    + result.OutlierCount);
+            }
+
+            if (result.Metric.ValidFrameCount < policy.MinimumFrameCount)
+            {
+                warnings.Add(metricName + "_raw_meters_inliers_below_minimum");
+            }
         }
 
         private Face3DCollectionUpdate BuildUpdate(
@@ -450,7 +569,10 @@ namespace Aura.Face3D
             float inlierRatio = (float)inliers.Count / values.Count;
             float stability = 1.0f / (
                 1.0f + (finalMad / resolvedPolicy.ConfidenceMadScale));
-            float confidence = Mathf.Clamp01(coverage * inlierRatio * stability);
+            float quality = Mathf.Clamp01(inlierRatio * stability);
+            float confidence = resolvedPolicy.SeparateCompletionFromQuality
+                ? quality
+                : Mathf.Clamp01(coverage * quality);
 
             return new Face3DRobustAggregationResult(
                 new Face3DProfileMetric(

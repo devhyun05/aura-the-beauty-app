@@ -119,7 +119,12 @@ export function buildFaceVerticalThirdsAnalysisPayload(
   if (
     !result ||
     (result.status !== 'full_success' && result.status !== 'partial_success') ||
-    !result.verticalThirds
+    !result.verticalThirds ||
+    // Phase 1 correction is validation-only until paired MAD+MAE gate passes.
+    // Local result/replay is allowed, but unvalidated corrected measurements must
+    // not be promoted into the AI/product analysis payload.
+    result.postCorrection?.poseNormalization?.confidencePolicy ===
+      'diagnostic_only_unvalidated'
   ) {
     return undefined;
   }

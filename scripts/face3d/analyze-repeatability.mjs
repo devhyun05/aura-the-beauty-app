@@ -8,6 +8,7 @@
 //
 // Pure core is exported for the contract test; the CLI at the bottom reads real captures.
 
+import path from 'node:path';
 import {readFileSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 
@@ -197,13 +198,29 @@ export function analyzeRepeatability(captures, options = {}) {
   };
 }
 
-// Pulls the 5 metric values out of the last face3d_analyzed event in an events.jsonl file,
-// or out of a bare profile JSON. Raw vertices never appear in these files.
-export function extractMetricsFromCaptureFile(path) {
-  const text = readFileSync(path, 'utf8').trim();
-  let profile = null;
+export function extractMetricsFromProfile(profile) {
+  if (!profile || !profile.metrics) {
+    throw new Error('Face3D profile with metrics is required');
+  }
+  const metrics = {};
+  // required 5 + Tier-2 optional 6. Tier-2 가 프로필에 없거나 value:null 이면 NaN 이
+  // 되어 분석기의 finite 필터에서 자동 제외된다(g1 캡처 그대로 통과).
+  for (const key of FACE3D_ALL_METRIC_KEYS) {
+    const metric = profile.metrics[key];
+    metrics[key] = metric && typeof metric.value === 'number' ? metric.value : Number.NaN;
+  }
+  return metrics;
+}
 
-  if (path.endsWith('.jsonl')) {
+// Pulls metric values out of a selected face3d_analyzed or
+// unified_face_capture_completed event, or out of a bare profile JSON.
+// captureId가 있으면 여러 unified event가 있는 JSONL에서도 정확한 캡처만 고른다.
+// Raw vertices never appear in these files.
+export function extractMetricsFromCaptureFile(capturePath, options = {}) {
+  const text = readFileSync(capturePath, 'utf8').trim();
+  const profiles = [];
+
+  if (capturePath.endsWith('.jsonl')) {
     for (const line of text.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed) {
@@ -217,26 +234,60 @@ export function extractMetricsFromCaptureFile(path) {
       }
       const event = entry.event ?? entry;
       if (event && event.type === 'face3d_analyzed' && event.profile) {
-        profile = event.profile;
+        profiles.push({
+          captureId:
+            entry.unifiedCapture?.sourceEventType === 'unified_face_capture_completed'
+              && typeof entry.unifiedCapture?.captureId === 'string'
+              ? entry.unifiedCapture.captureId
+              : null,
+          profile: event.profile,
+        });
+      }
+      if (
+        event
+        && event.type === 'unified_face_capture_completed'
+        && event.face3d
+      ) {
+        profiles.push({
+          captureId: typeof event.captureId === 'string' ? event.captureId : null,
+          profile: event.face3d,
+        });
       }
     }
   } else {
     const parsed = JSON.parse(text);
-    profile = parsed.profile ?? parsed;
+    const event = parsed.event ?? parsed;
+    if (event?.type === 'unified_face_capture_completed' && event.face3d) {
+      profiles.push({
+        captureId: typeof event.captureId === 'string' ? event.captureId : null,
+        profile: event.face3d,
+      });
+    } else if (
+      (event?.type === 'face3d_analyzed' || event?.type === 'face3DAnalyzed')
+      && event.profile
+    ) {
+      profiles.push({captureId: null, profile: event.profile});
+    } else {
+      profiles.push({captureId: null, profile: parsed.profile ?? parsed});
+    }
   }
 
-  if (!profile || !profile.metrics) {
-    throw new Error(`No face3d_analyzed profile with metrics in ${path}`);
+  let selected;
+  if (options.captureId) {
+    selected = profiles.filter(candidate => candidate.captureId === options.captureId);
+  } else if (profiles.length > 1 && profiles.every(candidate => candidate.captureId === null)) {
+    // Legacy events.jsonl은 여러 face3d_analyzed 실행이 누적될 수 있고 기존 계약은
+    // 마지막 profile을 사용했다. unified 캡처는 captureId로 명시 선택해야 한다.
+    selected = [profiles[profiles.length - 1]];
+  } else {
+    selected = profiles;
   }
-
-  const metrics = {};
-  // required 5 + Tier-2 optional 6. Tier-2 가 프로필에 없거나 value:null 이면 NaN 이
-  // 되어 분석기의 finite 필터에서 자동 제외된다(g1 캡처 그대로 통과).
-  for (const key of FACE3D_ALL_METRIC_KEYS) {
-    const metric = profile.metrics[key];
-    metrics[key] = metric && typeof metric.value === 'number' ? metric.value : Number.NaN;
+  if (selected.length !== 1 || !selected[0].profile?.metrics) {
+    throw new Error(
+      `Expected exactly one Face3D profile with metrics in ${capturePath}; got ${selected.length}`,
+    );
   }
-  return metrics;
+  return extractMetricsFromProfile(selected[0].profile);
 }
 
 function runCli(argv) {
@@ -263,10 +314,22 @@ function runCli(argv) {
     process.exit(2);
   }
 
-  const captures = (manifest.captures ?? []).map(entry => ({
-    subjectId: entry.subjectId,
-    metrics: extractMetricsFromCaptureFile(entry.capturePath),
-  }));
+  const manifestDirectory = path.dirname(path.resolve(manifestPath));
+  const captures = (manifest.captures ?? []).map(entry => {
+    if (entry.profile) {
+      return {
+        subjectId: entry.subjectId,
+        metrics: extractMetricsFromProfile(entry.profile),
+      };
+    }
+    const capturePath = path.isAbsolute(entry.capturePath)
+      ? entry.capturePath
+      : path.resolve(manifestDirectory, entry.capturePath);
+    return {
+      subjectId: entry.subjectId,
+      metrics: extractMetricsFromCaptureFile(capturePath, {captureId: entry.captureId}),
+    };
+  });
 
   const summary = {
     ...analyzeRepeatability(captures, {

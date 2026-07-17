@@ -43,6 +43,9 @@ public sealed class ARKitUnifiedFaceNativeCaptureProvider :
         public int triangleIndexCount;
         public int textureCoordinateCount;
         public int projectedVertexCount;
+        public int trueDepthHardware;
+        public int depthDataObserved;
+        public int faceTrackingSupported;
     }
 
 #if UNITY_IOS && !UNITY_EDITOR
@@ -271,7 +274,11 @@ public sealed class ARKitUnifiedFaceNativeCaptureProvider :
                 info.imageHeight,
                 info.token,
                 meshSnapshot,
-                portraitProjectedVertices);
+                portraitProjectedVertices,
+                info.trueDepthHardware == 1,
+                info.depthDataObserved == 1,
+                info.faceTrackingSupported == 1,
+                SystemInfo.deviceModel);
             return true;
         }
         finally
@@ -461,7 +468,16 @@ public sealed class ARKitUnifiedFaceNativeCaptureProvider :
             && info.textureCoordinateCount == info.vertexCount
             && info.triangleIndexCount > 0
             && info.triangleIndexCount <= MaximumTriangleIndexCount
-            && info.triangleIndexCount % 3 == 0;
+            && info.triangleIndexCount % 3 == 0
+            && IsNativeBoolean(info.trueDepthHardware)
+            && IsNativeBoolean(info.depthDataObserved)
+            && IsNativeBoolean(info.faceTrackingSupported)
+            && !(info.depthDataObserved == 1 && info.trueDepthHardware == 0);
+    }
+
+    private static bool IsNativeBoolean(int value)
+    {
+        return value == 0 || value == 1;
     }
 
     private static bool IsFiniteNonNegative(double value)

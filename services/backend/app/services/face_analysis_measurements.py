@@ -1,6 +1,9 @@
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 import math
 from typing import Any
+
+from pydantic import ValidationError
 
 from app.schemas.face_analysis_v2 import (
   BlockedMetricKey,
@@ -9,6 +12,118 @@ from app.schemas.face_analysis_v2 import (
   MeasurementSource,
   MeasurementStatus,
   MetricEnvelope,
+)
+from app.services.face3d_calibration_receipts import (
+  FACE3D_PRODUCT_POLICY_GATES,
+  FACE3D_SERVER_RECEIPT_STATUS_FIELD,
+  FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION,
+  is_face3d_profile_server_verified,
+)
+
+
+FACE3D_MODEL_VISIBLE_METRIC_NAMES = (
+  "noseTipProjection",
+  "chinProjection",
+  "upperLipToELine",
+  "lowerLipToELine",
+  "centralProjectionScore",
+  "noseLength",
+  "nasalBridgeStraightness",
+  "nasalAxisDeviation",
+  "alarWidth",
+  "malarProjectionLeft",
+  "malarProjectionRight",
+)
+FACE3D_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
+  f"face3d.{name}"
+  for name in FACE3D_MODEL_VISIBLE_METRIC_NAMES
+)
+
+# Model-visible camera keys are explicit trust-boundary allowlists. Keep the
+# geometry tuple synchronized with mobile FACE_GEOMETRY_METRIC_KEYS; a backend
+# test reads the TypeScript source and fails when the contracts drift.
+VERTICAL_THIRDS_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
+  {
+    "verticalThirds.upperNormalized",
+    "verticalThirds.middleNormalized",
+    "verticalThirds.lowerNormalized",
+    "verticalThirds.faceHeightPx",
+    "verticalThirds.faceWidthPx",
+    "verticalThirds.faceRatio",
+    "verticalThirds.dominantPart",
+    "verticalThirds.faceLengthVerdict",
+  },
+)
+GEOMETRY2D_MODEL_VISIBLE_METRIC_NAMES = (
+  "browSlopeLeftDeg",
+  "browSlopeRightDeg",
+  "canthalTiltLeftDeg",
+  "canthalTiltRightDeg",
+  "eyeBrowGapLeft",
+  "eyeBrowGapRight",
+  "eyeOpennessLeft",
+  "eyeOpennessRight",
+  "eyeWidthRatioLeft",
+  "eyeWidthRatioRight",
+  "interCanthalRatio",
+  "jawWidthRatio",
+  "lipThicknessRatio",
+  "lowerJawWidthRatio",
+  "mouthCornerAsymmetry",
+  "mouthWidthRatio",
+)
+GEOMETRY2D_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
+  f"geometry2d.{name}"
+  for name in GEOMETRY2D_MODEL_VISIBLE_METRIC_NAMES
+)
+PERSONAL_COLOR_TONE_TO_SEASON = {
+  "spring_light": "spring",
+  "spring_bright": "spring",
+  "spring_true": "spring",
+  "summer_light": "summer",
+  "summer_true": "summer",
+  "summer_muted": "summer",
+  "autumn_muted": "autumn",
+  "autumn_true": "autumn",
+  "autumn_deep": "autumn",
+  "winter_bright": "winter",
+  "winter_true": "winter",
+  "winter_deep": "winter",
+}
+PERSONAL_COLOR_TONE_CODES = frozenset(PERSONAL_COLOR_TONE_TO_SEASON)
+PERSONAL_COLOR_SEASONS = frozenset(PERSONAL_COLOR_TONE_TO_SEASON.values())
+PERSONAL_COLOR_RESULT_STATUSES = frozenset(
+  {"definitive", "mixed", "provisional", "insufficient"},
+)
+PERSONAL_COLOR_USABLE_STATUSES = PERSONAL_COLOR_RESULT_STATUSES - {"insufficient"}
+PERSONAL_COLOR_TONE_PROFILE_KEYS = frozenset(
+  {
+    "personalColor.tone.top",
+    "personalColor.tone.secondary",
+    "personalColor.tone.season",
+  },
+)
+PERSONAL_COLOR_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
+  {
+    *(
+      f"personalColor.axes.{name}"
+      for name in ("temperature", "value", "chroma", "clarity", "contrast")
+    ),
+    *(
+      f"personalColor.tone.{name}"
+      for name in ("top", "secondary", "season")
+    ),
+    *(
+      f"personalColor.relations.{name}"
+      for name in ("dL_skinHair", "dL_skinLip", "dE00_skinHair", "dE00_skinLip")
+    ),
+  },
+)
+CAMERA_MODEL_VISIBLE_PROFILE_KEYS = (
+  VERTICAL_THIRDS_MODEL_VISIBLE_PROFILE_KEYS
+  | GEOMETRY2D_MODEL_VISIBLE_PROFILE_KEYS
+  | PERSONAL_COLOR_MODEL_VISIBLE_PROFILE_KEYS
+  | FACE3D_MODEL_VISIBLE_PROFILE_KEYS
 )
 
 
@@ -67,6 +182,53 @@ AI_OBSERVABLE_METRICS: dict[str, tuple[int, str]] = {
   "skin.pigmentationDistribution": (2, "label"),
   "skin.marksAndScarsMap": (2, "label"),
 }
+MODEL_VISIBLE_PROFILE_KEYS = (
+  CAMERA_MODEL_VISIBLE_PROFILE_KEYS
+  | frozenset(AI_OBSERVABLE_METRICS)
+)
+
+
+def filter_metric_keys_for_model(keys: Iterable[str]) -> list[str]:
+  """Return only known metric keys that may cross the external-model boundary."""
+  return sorted(set(keys) & MODEL_VISIBLE_PROFILE_KEYS)
+
+
+def _metric_value(raw_metric: MetricEnvelope | dict[str, Any] | None) -> Any:
+  if isinstance(raw_metric, MetricEnvelope):
+    return raw_metric.value
+  if isinstance(raw_metric, dict):
+    return raw_metric.get("value")
+  return None
+
+
+def _personal_color_tone_profile_is_safe(
+  metrics: Mapping[str, MetricEnvelope | dict[str, Any]],
+) -> bool:
+  present_keys = PERSONAL_COLOR_TONE_PROFILE_KEYS & metrics.keys()
+  if not present_keys:
+    return True
+  if {
+    "personalColor.tone.top",
+    "personalColor.tone.season",
+  } - present_keys:
+    return False
+
+  top = _metric_value(metrics.get("personalColor.tone.top"))
+  season = _metric_value(metrics.get("personalColor.tone.season"))
+  secondary = _metric_value(metrics.get("personalColor.tone.secondary"))
+  return (
+    isinstance(top, str)
+    and top in PERSONAL_COLOR_TONE_CODES
+    and isinstance(season, str)
+    and season in PERSONAL_COLOR_SEASONS
+    and PERSONAL_COLOR_TONE_TO_SEASON[top] == season
+    and (
+      "personalColor.tone.secondary" not in present_keys
+      or isinstance(secondary, str)
+      and secondary in PERSONAL_COLOR_TONE_CODES
+    )
+  )
+
 
 OUT_OF_SCOPE_METRICS = frozenset(
   {
@@ -275,8 +437,12 @@ def _normalize_face3d(
   usable = True
   reason = None
   schema_version = raw.get("schemaVersion")
-  if schema_version == "aura.face3d-profile.v2":
+  if schema_version is not None and not isinstance(schema_version, str):
+    usable = False
+    reason = "face3d_schema_unsupported"
+  elif schema_version == FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION:
     policy_id = raw.get("collectionPolicyId")
+    gate_version = raw.get("gateVersion")
     if raw.get("sampleMode") == "single_frame":
       usable = False
       reason = "face3d_single_frame_not_product_eligible"
@@ -286,10 +452,27 @@ def _normalize_face3d(
     elif raw.get("confidenceCalibrationStatus") != "calibrated":
       usable = False
       reason = "face3d_confidence_uncalibrated"
+    elif (
+      not isinstance(policy_id, str)
+      or FACE3D_PRODUCT_POLICY_GATES.get(policy_id) != gate_version
+    ):
+      usable = False
+      reason = "face3d_policy_gate_not_approved"
+    elif not is_face3d_profile_server_verified(raw):
+      usable = False
+      server_reason = raw.get(FACE3D_SERVER_RECEIPT_STATUS_FIELD)
+      reason = (
+        server_reason
+        if isinstance(server_reason, str) and server_reason != "verified"
+        else "face3d_calibration_receipt_unverified"
+      )
     elif raw.get("sampleMode") != "micro_burst" or raw.get("aggregation") != "median_mad":
       usable = False
       reason = "face3d_profile_policy_invalid"
-  elif schema_version not in {None, "aura.face3d-profile.v1"}:
+  elif schema_version == "aura.face3d-profile.v2":
+    usable = False
+    reason = "face3d_legacy_v2_not_product_eligible"
+  elif schema_version not in (None, "aura.face3d-profile.v1"):
     usable = False
     reason = "face3d_schema_unsupported"
   for key, metric_value in _record(raw.get("metrics")).items():
@@ -300,6 +483,18 @@ def _normalize_face3d(
       usable=usable, reason=reason,
       warnings=_warnings(profile_warnings, metric.get("warnings")),
     )
+    if schema_version == FACE3D_TRUSTED_PROFILE_SCHEMA_VERSION and "valueMm" in metric:
+      output[f"face3d.{key}.mm"] = _camera_metric(
+        value=_finite(metric.get("valueMm")),
+        confidence=_finite(metric.get("valueMmConfidence")) or 0.0,
+        source=MeasurementSource.DEPTH,
+        shot=MeasurementShot.FACE3D,
+        unit="mm",
+        usable=usable,
+        reason=reason,
+        warnings=_warnings(profile_warnings, metric.get("warnings")),
+        sensitivity=3,
+      )
 
 
 def _normalize_personal_color(
@@ -310,7 +505,8 @@ def _normalize_personal_color(
   if not reported:
     return
   overall_confidence = _finite(reported.get("measurementConfidence")) or 0.0
-  usable = reported.get("status") not in {"insufficient", "failed", "blocked"}
+  reported_status = reported.get("status")
+  usable = reported_status in PERSONAL_COLOR_USABLE_STATUSES
   warnings = _warnings(reported.get("warnings"))
   for key, axis_value in _record(reported.get("axes")).items():
     axis = _record(axis_value)
@@ -320,13 +516,34 @@ def _normalize_personal_color(
       usable=usable, warnings=warnings,
     )
   tone = _record(reported.get("tone"))
-  for key in ("top", "secondary", "season"):
-    value = tone.get(key)
-    if isinstance(value, str) and value.strip():
-      output[f"personalColor.tone.{key}"] = _camera_metric(
-        value=value, confidence=overall_confidence, source=MeasurementSource.PIXEL,
-        shot=MeasurementShot.S1, unit="label", usable=usable, warnings=warnings,
-      )
+  tone_top = tone.get("top")
+  tone_secondary = tone.get("secondary")
+  tone_season = tone.get("season")
+  tone_is_safe = (
+    usable
+    and reported_status != "insufficient"
+    and isinstance(tone_top, str)
+    and tone_top in PERSONAL_COLOR_TONE_CODES
+    and isinstance(tone_season, str)
+    and tone_season in PERSONAL_COLOR_SEASONS
+    and PERSONAL_COLOR_TONE_TO_SEASON[tone_top] == tone_season
+    and (
+      tone_secondary is None
+      or isinstance(tone_secondary, str)
+      and tone_secondary in PERSONAL_COLOR_TONE_CODES
+    )
+  )
+  if tone_is_safe:
+    for key, value in (
+      ("top", tone_top),
+      ("secondary", tone_secondary),
+      ("season", tone_season),
+    ):
+      if isinstance(value, str):
+        output[f"personalColor.tone.{key}"] = _camera_metric(
+          value=value, confidence=overall_confidence, source=MeasurementSource.PIXEL,
+          shot=MeasurementShot.S1, unit="label", usable=True, warnings=warnings,
+        )
   for key, value in _record(reported.get("relations")).items():
     numeric = _finite(value)
     if numeric is not None:
@@ -438,3 +655,76 @@ def filter_metrics_for_audience(
     and metric.sensitivity <= sensitivity_limit
     and metric.sensitivity < 3
   }
+
+
+def filter_metrics_for_model(
+  metrics: Mapping[str, MetricEnvelope | dict[str, Any]],
+) -> dict[str, MetricEnvelope]:
+  """Project only allowlisted evidence into a provenance-free model envelope."""
+  model_visible: dict[str, MetricEnvelope] = {}
+  tone_profile_is_safe = _personal_color_tone_profile_is_safe(metrics)
+  for key, raw_metric in metrics.items():
+    if key not in MODEL_VISIBLE_PROFILE_KEYS:
+      continue
+    if key in PERSONAL_COLOR_TONE_PROFILE_KEYS and not tone_profile_is_safe:
+      continue
+
+    try:
+      metric = (
+        raw_metric
+        if isinstance(raw_metric, MetricEnvelope)
+        else MetricEnvelope.model_validate(raw_metric)
+      )
+    except (TypeError, ValidationError):
+      continue
+
+    if (
+      metric.sensitivity >= 3
+      or metric.status in {
+        MeasurementStatus.BLOCKED,
+        MeasurementStatus.UNMEASURED,
+      }
+    ):
+      continue
+
+    # Camera envelopes contain client-owned warnings/reasons/provenance, and
+    # AI envelopes may contain prior model prose. Rebuild the minimum typed
+    # evidence needed by the next external-model stage.
+    model_visible[key] = MetricEnvelope.model_validate(
+      {
+        "value": metric.value,
+        "unit": metric.unit,
+        "confidence": metric.confidence,
+        "source": metric.source.value,
+        "status": metric.status.value,
+        "shots": [shot.value for shot in metric.shots],
+        "sensitivity": metric.sensitivity,
+        "reason": None,
+        "warnings": [],
+        "derivedFrom": [],
+      },
+    )
+  return model_visible
+
+
+_INTERNAL_ONLY = object()
+
+
+def filter_internal_only_payload(value: Any) -> Any:
+  """Remove sensitivity-3 insight records before any external model call."""
+  if isinstance(value, dict):
+    if value.get("sensitivity") == 3:
+      return _INTERNAL_ONLY
+    filtered: dict[str, Any] = {}
+    for key, item in value.items():
+      projected = filter_internal_only_payload(item)
+      if projected is not _INTERNAL_ONLY:
+        filtered[key] = projected
+    return filtered
+  if isinstance(value, list):
+    return [
+      projected
+      for item in value
+      if (projected := filter_internal_only_payload(item)) is not _INTERNAL_ONLY
+    ]
+  return value

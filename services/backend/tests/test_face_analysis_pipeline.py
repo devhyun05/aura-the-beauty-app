@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -15,6 +16,8 @@ from app.services.face_analysis_pipeline import (
   initialize_face_analysis_v2,
   project_legacy_analysis_result,
 )
+from app.services.face_analysis_ai import FaceAnalysisAI
+from app.services.face_analysis_stage_runs import compute_stage_input_hash
 
 
 REPORT_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -137,13 +140,15 @@ class FakeStageStore:
     self.cached: dict[StageName, dict] = {}
     self.completed: list[StageName] = []
     self.failed: list[StageName] = []
+    self.started: dict[StageName, dict] = {}
     self._current_stage: StageName | None = None
 
   async def find(self, *, stage: StageName, **_kwargs):
     return self.cached.get(stage)
 
-  async def start(self, *, stage: StageName, **_kwargs):
+  async def start(self, *, stage: StageName, **kwargs):
     self._current_stage = stage
+    self.started[stage] = kwargs
     return {"id": uuid4(), "attempt_count": 1}
 
   async def complete(self, _run_id, _output, _raw, **_kwargs):
@@ -230,6 +235,77 @@ async def test_l2_failure_blocks_l3() -> None:
 
   assert ai.consult_calls == 0
   assert result.pipeline.ai_consulting.error_code == "DEPENDENCY_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_consulting_filters_internal_insights_and_hashes_model_visible_payload() -> None:
+  class CapturingStructuredClient:
+    def __init__(self) -> None:
+      self.calls: list[dict] = []
+
+    async def analyze_structured_json(self, **kwargs):
+      self.calls.append(kwargs)
+      return consulting().model_dump(by_alias=True, mode="json")
+
+  class ConsultingPromptAI(FaceAnalysisAI):
+    def __init__(self, client: CapturingStructuredClient) -> None:
+      super().__init__(client)
+
+    async def measure(self, **_kwargs):
+      return MeasurementStageOutput.model_validate(
+        {
+          "metrics": {},
+          "photoQuality": {"usable": True, "warnings": []},
+        },
+      )
+
+    async def perceive(self, **_kwargs):
+      payload = perception().model_dump(by_alias=True, mode="json")
+      payload["volume"]["visibleHollows"] = [
+        {
+          "label": "internal hollow",
+          "description": "must stay internal",
+          "confidence": 0.8,
+          "rationaleMetricKeys": ["face3d.noseTipProjection"],
+          "sensitivity": 3,
+        },
+      ]
+      return PerceptionResult.model_validate(payload)
+
+  client = CapturingStructuredClient()
+  ai = ConsultingPromptAI(client)
+  store = FakeStageStore()
+  pipeline = FaceAnalysisPipeline(
+    db=object(),
+    settings=settings(),
+    ai=ai,
+    stage_store=store,
+    persist_callback=lambda _report_id, _result: _async_none(),
+  )
+
+  result = await pipeline.run(
+    report_id=REPORT_ID,
+    request_payload=REQUEST,
+    source_image_bytes=b"jpeg",
+  )
+
+  assert result.consulting is not None
+  assert len(client.calls) == 1
+  model_payload = json.loads(client.calls[0]["user_prompt"])
+  assert "faceShape" in model_payload["derived"]
+  assert "asymmetry" not in model_payload["derived"]
+  assert model_payload["perception"]["volume"]["visibleHollows"] == []
+  assert (
+    store.started[StageName.AI_CONSULTING]["input_hash"]
+    == compute_stage_input_hash(model_payload)
+  )
+
+  raw_derived = initialize_face_analysis_v2(REQUEST).derived
+  raw_perception = await ai.perceive()
+  await ai.consult(profile={}, derived=raw_derived, perception=raw_perception)
+  direct_payload = json.loads(client.calls[1]["user_prompt"])
+  assert "asymmetry" not in direct_payload["derived"]
+  assert direct_payload["perception"]["volume"]["visibleHollows"] == []
 
 
 async def _async_none() -> None:

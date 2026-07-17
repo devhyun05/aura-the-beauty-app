@@ -1,0 +1,201 @@
+{
+  "schemaVersion": "aura.face-ratio.phase1-shot-plan.v1",
+  "shots": [
+    {
+      "collection": {
+        "distance": "standard",
+        "pose": "frontal",
+        "purpose": "paired replay reference A",
+        "shotId": "p1-01-frontal-standard-reference-a"
+      },
+      "condition": {
+        "distanceLabel": "standard",
+        "isReference": true,
+        "poseLabel": "frontal",
+        "repeatGroup": "frontal-standard",
+        "repeatIndex": 1
+      },
+      "lab": {
+        "instruction": "정면·표준거리에서 기준 사진 A를 촬영하세요.",
+        "label": "Reference A"
+      }
+    },
+    {
+      "collection": {
+        "distance": "standard",
+        "pose": "yaw_subject_left",
+        "purpose": "yaw convergence",
+        "shotId": "p1-02-yaw-left-moderate",
+        "targetAbsDeg": 6
+      },
+      "condition": {
+        "distanceLabel": "standard",
+        "isReference": false,
+        "poseLabel": "yaw-subject-left-6deg",
+        "repeatGroup": "yaw-subject-left-6deg-standard",
+        "repeatIndex": 1
+      },
+      "lab": {
+        "instruction": "피사체 기준 왼쪽으로 약 6° 돌리세요.",
+        "label": "Yaw left · 6°"
+      }
+    },
+    {
+      "collection": {
+        "distance": "standard",
+        "pose": "yaw_subject_right",
+        "purpose": "yaw convergence",
+        "shotId": "p1-03-yaw-right-moderate",
+        "targetAbsDeg": 6
+      },
+      "condition": {
+        "distanceLabel": "standard",
+        "isReference": false,
+        "poseLabel": "yaw-subject-right-6deg",
+        "repeatGroup": "yaw-subject-right-6deg-standard",
+        "repeatIndex": 1
+      },
+      "lab": {
+        "instruction": "피사체 기준 오른쪽으로 약 6° 돌리세요.",
+        "label": "Yaw right · 6°"
+      }
+    },
+    {
+      "collection": {
+        "distance": "standard",
+        "pose": "pitch_chin_up",
+        "purpose": "pitch convergence",
+        "shotId": "p1-04-chin-up-moderate",
+        "targetAbsDeg": 8
+      },
+      "condition": {
+        "distanceLabel": "standard",
+        "isReference": false,
+        "poseLabel": "pitch-chin-up-8deg",
+        "repeatGroup": "pitch-chin-up-8deg-standard",
+        "repeatIndex": 1
+      },
+      "lab": {
+        "instruction": "턱을 약 8° 들어 올리세요.",
+        "label": "Chin up · 8°"
+      }
+    },
+    {
+      "collection": {
+        "distance": "standard",
+        "pose": "pitch_chin_down",
+        "purpose": "pitch convergence",
+        "shotId": "p1-05-chin-down-moderate",
+        "targetAbsDeg": 8
+      },
+      "condition": {
+        "distanceLabel": "standard",
+        "isReference": false,
+        "poseLabel": "pitch-chin-down-8deg",
+        "repeatGroup": "pitch-chin-down-8deg-standard",
+        "repeatIndex": 1
+      },
+      "lab": {
+        "instruction": "턱을 약 8° 내려 주세요.",
+        "label": "Chin down · 8°"
+      }
+    },
+    {
+      "collection": {
+        "distance": "standard",
+        "pose": "roll_subject_left",
+        "purpose": "roll residual check",
+        "shotId": "p1-06-roll-left-light",
+        "targetAbsDeg": 3
+      },
+      "condition": {
+        "distanceLabel": "standard",
+        "isReference": false,
+        "poseLabel": "roll-subject-left-3deg",
+        "repeatGroup": "roll-subject-left-3deg-standard",
+        "repeatIndex": 1
+      },
+      "lab": {
+        "instruction": "피사체 기준 왼쪽으로 약 3° 기울이세요.",
+        "label": "Roll left · 3°"
+      }
+    },
+    {
+      "collection": {
+        "distance": "standard",
+        "pose": "roll_subject_right",
+        "purpose": "roll residual check",
+        "shotId": "p1-07-roll-right-light",
+        "targetAbsDeg": 3
+      },
+      "condition": {
+        "distanceLabel": "standard",
+        "isReference": false,
+        "poseLabel": "roll-subject-right-3deg",
+        "repeatGroup": "roll-subject-right-3deg-standard",
+        "repeatIndex": 1
+      },
+      "lab": {
+        "instruction": "피사체 기준 오른쪽으로 약 3° 기울이세요.",
+        "label": "Roll right · 3°"
+      }
+    },
+    {
+      "collection": {
+        "distance": "near_within_existing_greenlight",
+        "pose": "frontal",
+        "purpose": "perspective distance sensitivity",
+        "shotId": "p1-08-frontal-near-greenlight"
+      },
+      "condition": {
+        "distanceLabel": "near-within-existing-greenlight",
+        "isReference": false,
+        "poseLabel": "frontal",
+        "repeatGroup": "frontal-near-within-existing-greenlight",
+        "repeatIndex": 1
+      },
+      "lab": {
+        "instruction": "기존 촬영 가이드가 허용하는 가까운 거리에서 정면을 유지하세요.",
+        "label": "Frontal · near"
+      }
+    },
+    {
+      "collection": {
+        "distance": "far_within_existing_greenlight",
+        "pose": "frontal",
+        "purpose": "perspective distance sensitivity",
+        "shotId": "p1-09-frontal-far-greenlight"
+      },
+      "condition": {
+        "distanceLabel": "far-within-existing-greenlight",
+        "isReference": false,
+        "poseLabel": "frontal",
+        "repeatGroup": "frontal-far-within-existing-greenlight",
+        "repeatIndex": 1
+      },
+      "lab": {
+        "instruction": "기존 촬영 가이드가 허용하는 먼 거리에서 정면을 유지하세요.",
+        "label": "Frontal · far"
+      }
+    },
+    {
+      "collection": {
+        "distance": "standard",
+        "pose": "frontal",
+        "purpose": "paired replay reference B",
+        "shotId": "p1-10-frontal-standard-reference-b"
+      },
+      "condition": {
+        "distanceLabel": "standard",
+        "isReference": true,
+        "poseLabel": "frontal",
+        "repeatGroup": "frontal-standard",
+        "repeatIndex": 2
+      },
+      "lab": {
+        "instruction": "정면·표준거리로 돌아와 기준 사진 B를 촬영하세요.",
+        "label": "Reference B"
+      }
+    }
+  ]
+}

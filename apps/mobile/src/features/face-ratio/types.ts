@@ -84,6 +84,32 @@ export type FaceVerticalThirdsSemanticMattes = {
   skin: boolean;
 };
 
+export type FaceRatioPhase1ReplayCondition = {
+  distanceLabel: string;
+  isReference: boolean;
+  poseLabel: string;
+  repeatGroup: string;
+  repeatIndex: number;
+};
+
+export type FaceRatioPhase1ReplayAcquisition = {
+  cameraFacing: 'front';
+  captureImplementation: 'native';
+  source: 'camera';
+};
+
+// Phase 1 paired replay 수집 전용 메타데이터. 플래그가 validation-only일 때만
+// 사용하며 모든 ID는 실제 사용자 식별자와 분리된 가명 ID여야 한다.
+export type FaceRatioPhase1ReplayValidation = {
+  acquisition: FaceRatioPhase1ReplayAcquisition;
+  captureId: string;
+  cohortId: string;
+  condition: FaceRatioPhase1ReplayCondition;
+  retentionDays: number;
+  sessionId: string;
+  subjectId: string;
+};
+
 export type FaceVerticalThirdsInput = {
   captureId: string;
   capturedHairline?: {
@@ -98,15 +124,50 @@ export type FaceVerticalThirdsInput = {
   imageUri: string;
   semanticMattes?: FaceVerticalThirdsSemanticMattes;
   sessionId: string;
+  validationReplay?: FaceRatioPhase1ReplayValidation;
 };
 
 // 촬영 후 roll 좌표 보정 결과 (기획 §5.2). 분석기 pose.rollDeg 기반, 이미지 중심 회전.
 export type FaceVerticalThirdsPostCorrection = {
   applied: boolean;
   center: {x: number; y: number} | null;
-  method: 'mediapipe_pose_roll' | 'none';
+  method:
+    | 'mediapipe_facial_transformation_matrix'
+    | 'mediapipe_pose_roll'
+    | 'none';
+  // Phase 1 validation-only 정면화 진단. raw 478점/행렬은 여기에 넣지 않는다.
+  // 숫자 confidence로 임의 환산하지 않고 paired replay 관문 전까지
+  // diagnostic_only_unvalidated 상태를 보존한다.
+  poseNormalization?: {
+    confidencePolicy: 'diagnostic_only_unvalidated';
+    diagnostics: {
+      correctionMaxPx: number | null;
+      correctionRmsPx: number | null;
+      landmarkCount: number;
+      matrixOrthogonalityResidual: number | null;
+      matrixRotationDeterminant: number | null;
+      matrixScaleSpread: number | null;
+      roundTripRmsPx: number | null;
+      zSpanPx: number | null;
+    };
+    requested: boolean;
+  };
   rollCorrectionDeg: number | null;
-  skippedReason?: 'roll_unavailable' | 'roll_out_of_range' | 'dimension_invalid';
+  skippedReason?:
+    | 'disabled'
+    | 'dimension_invalid'
+    | 'landmark_count_invalid'
+    | 'landmark_value_invalid'
+    | 'matrix_missing'
+    | 'matrix_non_affine'
+    | 'matrix_non_orthogonal'
+    | 'matrix_non_uniform_scale'
+    | 'matrix_round_trip_invalid'
+    | 'matrix_value_invalid'
+    | 'matrix_singular'
+    | 'matrix_reflection'
+    | 'roll_unavailable'
+    | 'roll_out_of_range';
 };
 
 // 얼굴 세로/가로 길이 비율. heightPx(헤어라인 H→턱끝 Me) / widthPx(양 볼 idx234↔454).
@@ -124,6 +185,7 @@ export type FaceVerticalThirdsResult = {
     hairlineDebugUri?: string;
     logJsonlUri?: string;
     overlayImageUri?: string;
+    poseNormalizationReplayUri?: string;
     resultJsonUri?: string;
     sourceImageUri?: string;
   };
@@ -178,7 +240,6 @@ export type NativeFaceRatioPoint = {
 };
 
 export type NativeFaceRatioKeypointKey =
-  | 'hApprox'
   | 'glabella'
   | 'subnasale'
   | 'menton';

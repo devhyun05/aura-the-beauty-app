@@ -28,7 +28,9 @@ from app.services.face_analysis_ai import (
 )
 from app.services.face_analysis_measurements import (
   build_measurement_coverage,
+  filter_internal_only_payload,
   filter_metrics_for_audience,
+  filter_metrics_for_model,
   merge_measurements,
   normalize_camera_measurements,
   with_explicit_unmeasured,
@@ -351,6 +353,7 @@ class FaceAnalysisPipeline:
     await self.persist_callback(report_id, result)
     source_hash = hashlib.sha256(source_image_bytes).hexdigest()
     camera_profile = normalize_camera_measurements(request_payload.get("measurements"))
+    model_camera_profile = filter_metrics_for_model(camera_profile)
 
     measurement_kwargs = self._stage_kwargs(
       report_id=report_id,
@@ -361,7 +364,7 @@ class FaceAnalysisPipeline:
         "coverage": result.coverage.model_dump(by_alias=True, mode="json"),
         "cameraProfile": {
           key: value.model_dump(by_alias=True, mode="json")
-          for key, value in camera_profile.items()
+          for key, value in model_camera_profile.items()
         },
       },
     )
@@ -371,7 +374,7 @@ class FaceAnalysisPipeline:
       invoke=lambda: self.ai.measure(
         source_image_bytes=source_image_bytes,
         coverage=result.coverage,
-        camera_profile=camera_profile,
+        camera_profile=model_camera_profile,
       ),
     )
     if measurement is not None:
@@ -385,6 +388,10 @@ class FaceAnalysisPipeline:
     self._update_overall(result)
     await self.persist_callback(report_id, result)
 
+    model_face_profile = filter_metrics_for_model(result.face_profile)
+    model_derived = filter_internal_only_payload(
+      result.derived.model_dump(by_alias=True, mode="json"),
+    )
     perception_kwargs = self._stage_kwargs(
       report_id=report_id,
       stage=StageName.AI_PERCEPTION,
@@ -393,9 +400,9 @@ class FaceAnalysisPipeline:
         "sourceImageSha256": source_hash,
         "faceProfile": {
           key: value.model_dump(by_alias=True, mode="json")
-          for key, value in result.face_profile.items()
+          for key, value in model_face_profile.items()
         },
-        "derived": result.derived.model_dump(by_alias=True, mode="json"),
+        "derived": model_derived,
       },
     )
     perception, result.pipeline.ai_perception = await self._execute_stage(
@@ -403,8 +410,8 @@ class FaceAnalysisPipeline:
       kwargs=perception_kwargs,
       invoke=lambda: self.ai.perceive(
         source_image_bytes=source_image_bytes,
-        profile=result.face_profile,
-        derived=result.derived,
+        profile=model_face_profile,
+        derived=model_derived,
       ),
     )
     if perception is not None:
@@ -419,15 +426,14 @@ class FaceAnalysisPipeline:
         updated_at=_now(),
       )
     else:
-      consulting_profile = filter_metrics_for_audience(
-        result.face_profile,
-        include_sensitive=False,
+      consulting_profile = filter_metrics_for_model(
+        filter_metrics_for_audience(
+          result.face_profile,
+          include_sensitive=False,
+        ),
       )
-      consulting_kwargs = self._stage_kwargs(
-        report_id=report_id,
-        stage=StageName.AI_CONSULTING,
-        prompt_version=CONSULTING_PROMPT_VERSION,
-        input_value={
+      consulting_model_input = filter_internal_only_payload(
+        {
           "faceProfile": {
             key: value.model_dump(by_alias=True, mode="json")
             for key, value in consulting_profile.items()
@@ -436,13 +442,19 @@ class FaceAnalysisPipeline:
           "perception": result.perception.model_dump(by_alias=True, mode="json"),
         },
       )
+      consulting_kwargs = self._stage_kwargs(
+        report_id=report_id,
+        stage=StageName.AI_CONSULTING,
+        prompt_version=CONSULTING_PROMPT_VERSION,
+        input_value=consulting_model_input,
+      )
       consulting, result.pipeline.ai_consulting = await self._execute_stage(
         model_type=ConsultingResult,
         kwargs=consulting_kwargs,
         invoke=lambda: self.ai.consult(
-          profile=consulting_profile,
-          derived=result.derived,
-          perception=result.perception,
+          profile=consulting_model_input["faceProfile"],
+          derived=consulting_model_input["derived"],
+          perception=consulting_model_input["perception"],
         ),
       )
       if consulting is not None:

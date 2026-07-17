@@ -16,6 +16,7 @@ import {captureRef} from 'react-native-view-shot';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import type {
+  FaceVerticalThirdsInput,
   FaceVerticalThirdsResult,
   VerticalThirdsDominantPart,
   VerticalThirdsKeypoint,
@@ -41,11 +42,13 @@ type FaceVerticalThirdsCapture = {
   // matte:ready 로그와 hairline 파싱 스킵 판단에 사용한다.
   semanticMattes?: {hair: boolean; requested: boolean; skin: boolean};
   source?: string;
+  validationReplay?: FaceVerticalThirdsInput['validationReplay'];
 };
 
 type FaceVerticalThirdsScreenProps = {
   capture: FaceVerticalThirdsCapture;
   debug?: boolean;
+  onAnalysisResult?: (result: FaceVerticalThirdsResult) => void;
   onRetake: () => void;
 };
 
@@ -136,13 +139,13 @@ function FaceReportIcon() {
   );
 }
 
-function LoadingReport({onRetake}: {onRetake: () => void}) {
+function LoadingReport({onRetake}: {onRetake?: () => void}) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={[styles.screen, {paddingTop: insets.top + spacing.xl}]}>
       <StatusBar style="dark" />
-      <RetakeButton onRetake={onRetake} />
+      {onRetake ? <RetakeButton onRetake={onRetake} /> : null}
       <View style={styles.loadingContent}>
         <ActivityIndicator color={REPORT_ACCENT_DARK} />
         <Text style={styles.loadingTitle}>얼굴형 분석</Text>
@@ -764,11 +767,14 @@ function ArtifactFooter({
 export function FaceVerticalThirdsScreen({
   capture,
   debug = false,
+  onAnalysisResult,
   onRetake,
 }: FaceVerticalThirdsScreenProps) {
   const insets = useSafeAreaInsets();
   const overlayRef = useRef<View>(null);
   const overlayCaptureStartedRef = useRef(false);
+  const onAnalysisResultRef = useRef(onAnalysisResult);
+  const reportedAnalysisResultKeyRef = useRef<string | null>(null);
   const fallbackCaptureId = useMemo(
     () => `face-ratio-${Date.now()}`,
     [capture.imageUri],
@@ -779,6 +785,14 @@ export function FaceVerticalThirdsScreen({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [stageLaidOut, setStageLaidOut] = useState(false);
   const imageUri = getStageSourceUri(result, capture.imageUri);
+  const validationReplay = capture.validationReplay;
+  const analysisResultKey = `${captureId}:${
+    validationReplay?.captureId ?? 'no-validation-replay'
+  }:${capture.imageUri}`;
+
+  useEffect(() => {
+    onAnalysisResultRef.current = onAnalysisResult;
+  }, [onAnalysisResult]);
 
   useEffect(() => {
     let isMounted = true;
@@ -794,16 +808,38 @@ export function FaceVerticalThirdsScreen({
       imageUri: capture.imageUri,
       semanticMattes: capture.semanticMattes,
       sessionId: captureId,
+      validationReplay,
     }).then(nextResult => {
       if (isMounted) {
         setResult(nextResult);
+        if (reportedAnalysisResultKeyRef.current !== analysisResultKey) {
+          reportedAnalysisResultKeyRef.current = analysisResultKey;
+          onAnalysisResultRef.current?.(nextResult);
+        }
       }
     });
 
     return () => {
       isMounted = false;
     };
-  }, [capture.capturedAt, capture.imageUri, capture.semanticMattes, captureId, debug]);
+  }, [
+    capture.capturedAt,
+    capture.imageUri,
+    capture.semanticMattes,
+    validationReplay?.captureId,
+    validationReplay?.cohortId,
+    validationReplay?.condition.distanceLabel,
+    validationReplay?.condition.isReference,
+    validationReplay?.condition.poseLabel,
+    validationReplay?.condition.repeatGroup,
+    validationReplay?.condition.repeatIndex,
+    validationReplay?.retentionDays,
+    validationReplay?.sessionId,
+    validationReplay?.subjectId,
+    captureId,
+    debug,
+    analysisResultKey,
+  ]);
 
   useEffect(() => {
     setImageLoaded(false);
@@ -811,6 +847,7 @@ export function FaceVerticalThirdsScreen({
 
   useEffect(() => {
     if (
+      validationReplay ||
       !isSuccessResult(result) ||
       !imageLoaded ||
       !stageLaidOut ||
@@ -846,10 +883,14 @@ export function FaceVerticalThirdsScreen({
       isMounted = false;
       clearTimeout(captureTimer);
     };
-  }, [imageLoaded, result, stageLaidOut]);
+  }, [imageLoaded, result, stageLaidOut, validationReplay]);
 
   if (!result) {
-    return <LoadingReport onRetake={onRetake} />;
+    return (
+      <LoadingReport
+        onRetake={validationReplay ? undefined : onRetake}
+      />
+    );
   }
 
   return (

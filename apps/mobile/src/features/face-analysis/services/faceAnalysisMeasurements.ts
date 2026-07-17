@@ -10,7 +10,7 @@
 // 역정규화한다. 저장(DB)과 프롬프트는 raw 키 그대로다.
 
 import type {Face3DProfile} from '../../face-3d/types';
-import {parseFace3DProfile} from '../../face-3d/services/face3DContract';
+import {parseTrustedServerFace3DProfile} from '../../face-3d/services/face3DContract';
 import type {
   FaceGeometryMetricKey,
   FaceGeometryMetricUnit,
@@ -132,7 +132,18 @@ export function buildFaceAnalysisMeasurementsPayload(
   };
 }
 
-function encodeVerticalThirds(result: FaceVerticalThirdsResult): Record<string, unknown> {
+function encodeVerticalThirds(
+  result: FaceVerticalThirdsResult,
+): Record<string, unknown> | undefined {
+  // Phase 1 행렬 보정은 paired replay MAD+MAE 관문 전까지 로컬 검증 전용이다.
+  // 보정된 비율뿐 아니라 진단 메타데이터도 product/AI 저장 경로로 승격하지 않는다.
+  if (
+    result.postCorrection?.poseNormalization?.confidencePolicy ===
+    'diagnostic_only_unvalidated'
+  ) {
+    return undefined;
+  }
+
   const {artifacts: _artifacts, sourceImage, ...rest} = result;
 
   return {
@@ -382,6 +393,77 @@ function readStringArray(value: unknown): string[] {
   }
 
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+const VERTICAL_THIRDS_POST_CORRECTION_METHODS = new Set<
+  NonNullable<FaceVerticalThirdsResult['postCorrection']>['method']
+>([
+  'mediapipe_facial_transformation_matrix',
+  'mediapipe_pose_roll',
+  'none',
+]);
+
+const VERTICAL_THIRDS_POST_CORRECTION_SKIP_REASONS = new Set<
+  NonNullable<
+    NonNullable<FaceVerticalThirdsResult['postCorrection']>['skippedReason']
+  >
+>([
+  'disabled',
+  'dimension_invalid',
+  'landmark_count_invalid',
+  'landmark_value_invalid',
+  'matrix_missing',
+  'matrix_value_invalid',
+  'matrix_singular',
+  'matrix_reflection',
+  'roll_unavailable',
+  'roll_out_of_range',
+]);
+
+function decodeVerticalThirdsPoseNormalization(
+  value: unknown,
+): NonNullable<
+  NonNullable<FaceVerticalThirdsResult['postCorrection']>['poseNormalization']
+> | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const confidencePolicy = readString(value.confidencePolicy);
+  const diagnostics = isRecord(value.diagnostics) ? value.diagnostics : undefined;
+  const landmarkCount = readFiniteNumber(diagnostics?.landmarkCount);
+  const requested =
+    typeof value.requested === 'boolean' ? value.requested : undefined;
+
+  if (
+    confidencePolicy !== 'diagnostic_only_unvalidated' ||
+    !diagnostics ||
+    landmarkCount === undefined ||
+    !Number.isInteger(landmarkCount) ||
+    landmarkCount < 0 ||
+    requested === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    confidencePolicy,
+    diagnostics: {
+      correctionMaxPx: readNullableFiniteNumber(diagnostics.correctionMaxPx),
+      correctionRmsPx: readNullableFiniteNumber(diagnostics.correctionRmsPx),
+      landmarkCount,
+      matrixOrthogonalityResidual: readNullableFiniteNumber(
+        diagnostics.matrixOrthogonalityResidual,
+      ),
+      matrixRotationDeterminant: readNullableFiniteNumber(
+        diagnostics.matrixRotationDeterminant,
+      ),
+      matrixScaleSpread: readNullableFiniteNumber(diagnostics.matrixScaleSpread),
+      roundTripRmsPx: readNullableFiniteNumber(diagnostics.roundTripRmsPx),
+      zSpanPx: readNullableFiniteNumber(diagnostics.zSpanPx),
+    },
+    requested,
+  };
 }
 
 const PERSONAL_COLOR_TYPE_KEYS = Object.keys(TYPE_LABEL_KO) as PersonalColor12Type[];
@@ -674,6 +756,15 @@ function decodeVerticalThirds(
   const postCorrectionRecord = isRecord(value.postCorrection)
     ? value.postCorrection
     : undefined;
+  const postCorrectionCenter = isRecord(postCorrectionRecord?.center)
+    ? postCorrectionRecord.center
+    : undefined;
+  const postCorrectionCenterX = readFiniteNumber(postCorrectionCenter?.x);
+  const postCorrectionCenterY = readFiniteNumber(postCorrectionCenter?.y);
+  const postCorrectionMethod = readString(postCorrectionRecord?.method);
+  const postCorrectionSkippedReason = readString(
+    postCorrectionRecord?.skippedReason,
+  );
 
   const decodedStatus =
     (status === 'full_success' || status === 'partial_success') &&
@@ -714,17 +805,43 @@ function decodeVerticalThirds(
     postCorrection: postCorrectionRecord
       ? {
           applied: readBoolean(postCorrectionRecord.applied, false),
-          center: null,
-          method: (readString(postCorrectionRecord.method) ??
-            'none') as 'mediapipe_pose_roll' | 'none',
+          center:
+            postCorrectionCenterX !== undefined &&
+            postCorrectionCenterY !== undefined
+              ? {x: postCorrectionCenterX, y: postCorrectionCenterY}
+              : null,
+          method:
+            postCorrectionMethod &&
+            VERTICAL_THIRDS_POST_CORRECTION_METHODS.has(
+              postCorrectionMethod as NonNullable<
+                FaceVerticalThirdsResult['postCorrection']
+              >['method'],
+            )
+              ? (postCorrectionMethod as NonNullable<
+                  FaceVerticalThirdsResult['postCorrection']
+                >['method'])
+              : 'none',
+          poseNormalization: decodeVerticalThirdsPoseNormalization(
+            postCorrectionRecord.poseNormalization,
+          ),
           rollCorrectionDeg: readNullableFiniteNumber(
             postCorrectionRecord.rollCorrectionDeg,
           ),
-          skippedReason: readString(postCorrectionRecord.skippedReason) as
-            | 'roll_unavailable'
-            | 'roll_out_of_range'
-            | 'dimension_invalid'
-            | undefined,
+          skippedReason:
+            postCorrectionSkippedReason &&
+            VERTICAL_THIRDS_POST_CORRECTION_SKIP_REASONS.has(
+              postCorrectionSkippedReason as NonNullable<
+                NonNullable<
+                  FaceVerticalThirdsResult['postCorrection']
+                >['skippedReason']
+              >,
+            )
+              ? (postCorrectionSkippedReason as NonNullable<
+                  NonNullable<
+                    FaceVerticalThirdsResult['postCorrection']
+                  >['skippedReason']
+                >)
+              : undefined,
         }
       : undefined,
     quality: {
@@ -1119,8 +1236,9 @@ export function parseFaceAnalysisMeasurements(
     value.faceVerticalThirds,
     options.imageUrl ?? '',
   );
-  // face3d 는 기존 v1 파서를 그대로 재사용한다(필수 5지표 검증 포함).
-  const face3d = parseFace3DProfile(value.face3d) ?? undefined;
+  // 인증된 backend detail 복원 경계에서만 serverCalibrationReceiptStatus를 허용한다.
+  // Unity/device 이벤트 parser는 같은 필드를 fail-closed로 거부한다.
+  const face3d = parseTrustedServerFace3DProfile(value.face3d) ?? undefined;
   const faceGeometry2d = decodeFaceGeometry(value.faceGeometry2d);
   const personalColor = decodePersonalColor(value.personalColor);
 

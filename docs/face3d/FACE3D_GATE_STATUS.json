@@ -1,6 +1,7 @@
 {
-  "schemaVersion": "aura.face3d-gate-status.v2",
-  "recordedAtUtc": "2026-07-14T20:10:05Z",
+  "schemaVersion": "aura.face3d-gate-status.v3",
+  "recordedAtUtc": "2026-07-16T21:25:19Z",
+  "registryRevision": "provenance-separated.v1",
   "source": "arkit_face_mesh",
   "profileSchemaVersion": "aura.face3d-profile.v1",
   "topologyFingerprint": {
@@ -41,7 +42,31 @@
     "receiptPath": "artifacts/face3d/semantic-approval-g2/ARKitFaceSemanticMapV1.g2.promotion-receipt.json",
     "receiptSha256": "79329bdf7a037b23d70e1e03a7438998b3b224dca23d0ca9abd6ee5291945e8a"
   },
+  "confidenceCalibration": {
+    "recordedAtUtc": "2026-07-16T21:21:24Z",
+    "revision": "confidence-calibration-v3-pending.v1",
+    "scope": "v3 calibration promotion readiness; excludes Unity Editor, device, Gate 6B, signing, and product activation",
+    "status": "pending",
+    "validationStatus": "not_run",
+    "validatedCommitSha": null,
+    "profileSchemaVersion": "aura.face3d-profile.v3",
+    "policyId": null,
+    "gateVersion": "face3d-gate-v2",
+    "receiptSchemaVersion": "aura.face3d-confidence-calibration-receipt.v1",
+    "signatureAlgorithm": "hmac-sha256-v1",
+    "approvalArtifactPath": null,
+    "approvalArtifactSha256": null,
+    "receiptPath": null,
+    "receiptSha256": null,
+    "featureFlagDefault": "off",
+    "note": "Gate 6B device evidence, independent validation, product-owner approval artifact, HMAC receipt, and backend replay protection are not complete. New calibration evidence requires aura.face3d-profile.v3; v1/v2 remain legacy read-only. Calibrated self-claims remain blocked."
+  },
   "offlineDiagnostics17": {
+    "recordedAtUtc": "2026-07-14T19:49:52Z",
+    "revision": "g2-offline-diagnostics-17.v1",
+    "scope": "historical 17-capture gross sanity evidence; not repeatability, population norms, or v3 calibration validation",
+    "status": "historical_gross_sanity_only",
+    "validatedCommitSha": null,
     "captureCount": 17,
     "topologyExactMatchCount": 17,
     "metricKeyCount": 11,
@@ -62,6 +87,11 @@
     "scopeWarning": "The 17 captures mix three subjects, poses, and repeats. Overall ranges are gross sanity evidence, not within-person repeatability or population norms."
   },
   "endToEndProductPath": {
+    "recordedAtUtc": "2026-07-14T20:10:05Z",
+    "revision": "g2-end-to-end-product-path.v1",
+    "scope": "historical G2 product-path integration before v3 calibration/profile changes",
+    "status": "passed_historical_not_current_v3",
+    "validatedCommitSha": "b1287bde521ce0d10430b3b1048d8a56970e36e8",
     "actualUnityMeasurement": "implemented",
     "canonicalProfileSerialization": "implemented_backward_compatible",
     "mobileAiRequestPassThrough": "implemented_tested",
@@ -72,29 +102,75 @@
     "listResponseMeasurements": "intentionally_omitted_for_payload_size",
     "interpretationBoundary": "faceScale-normalized relative values; not millimeters, medical diagnosis, percentiles, or population grades"
   },
-  "currentValidation": {
-    "face3dNodeContractSuite": "passed",
-    "mobileFace3dAndMeasurementTests": "passed",
-    "mobileCleanInstall": "passed_after_origin_dev_lockfile_sync",
-    "mobileCiContractSuite": "passed",
-    "mobileTypecheck": "passed",
-    "backendFullPytest": {
-      "passed": 563,
-      "skipped": 1,
-      "warnings": 78
-    },
-    "gitDiffCheck": "passed",
-    "unityEditModeCurrentG2Changes": {
-      "status": "passed",
+  "validation": {
+    "historicalG2UnityEditor": {
+      "recordedAtUtc": "2026-07-14T20:10:05Z",
+      "revision": "g2-unity-editmode-59.v1",
+      "scope": "Aura.Face3D EditMode tests for G2 integration before v3 calibration/profile changes",
+      "status": "passed_historical_not_current_v3",
+      "validatedCommitSha": "b1287bde521ce0d10430b3b1048d8a56970e36e8",
+      "evidenceRecordCommitSha": "709aa76e7df395d17fbef1ded736613226369a73",
       "total": 59,
       "passed": 59,
       "failed": 0,
-      "resultPath": "/tmp/face3d-g2-devbase-editmode-results.xml",
-      "note": "All 59 Aura.Face3D.Tests ran against the latest origin/dev AR stencil integration base."
+      "resultPath": null,
+      "historicalResultPathReported": "/tmp/face3d-g2-devbase-editmode-results.xml",
+      "note": "The result path was local and is not a committed artifact. The validated code SHA predates all v3 calibration/profile changes and must not be reused as current v3 evidence."
+    },
+    "historicalG2RepositorySnapshot": {
+      "recordedAtUtc": "2026-07-14T20:10:05Z",
+      "revision": "g2-repository-validation-snapshot.v1",
+      "scope": "historical Node, mobile, backend, clean-install, CI, typecheck, and diff summary recorded before v3 changes",
+      "status": "unverified_historical",
+      "validatedCommitSha": null,
+      "reportedResults": {
+        "face3dNodeContractSuite": "passed",
+        "mobileFace3dAndMeasurementTests": "passed",
+        "mobileCleanInstall": "passed_after_origin_dev_lockfile_sync",
+        "mobileCiContractSuite": "passed",
+        "mobileTypecheck": "passed",
+        "backendFullPytest": {
+          "passed": 563,
+          "skipped": 1,
+          "warnings": 78
+        },
+        "gitDiffCheck": "passed"
+      },
+      "note": "No immutable artifact binds the complete reported workspace to one exact SHA, so this section is historical context only."
+    },
+    "currentV3StaticNodeValidation": {
+      "recordedAtUtc": "2026-07-16T21:25:19Z",
+      "revision": "v3-static-node-contracts.v1",
+      "scope": "static Unity source policy/promotion guard, embedded-runtime preflight fixtures, calibration registry, and repeatability Node contracts; excludes Unity Editor and devices",
+      "status": "passed_worktree_unbound",
+      "validatedCommitSha": null,
+      "commands": [
+        "npm run face3d:check:unity-source-contract",
+        "npm run face3d:test:unity-runtime-preflight",
+        "npm run face3d:test:calibration",
+        "npm run face3d:test:repeatability"
+      ],
+      "note": "Exact commit binding is intentionally null to avoid a self-referential registry commit. CI/review artifacts must bind these commands to an immutable SHA."
+    },
+    "currentV3UnityEditorValidation": {
+      "recordedAtUtc": "2026-07-16T21:21:24Z",
+      "revision": "v3-unity-editmode.v1",
+      "scope": "Unity compilation and EditMode tests for v3 schema, immutable 5-of-8 policy, and calibration producer defaults",
+      "status": "not_run",
+      "validatedCommitSha": null,
+      "total": null,
+      "passed": null,
+      "failed": null,
+      "resultPath": null,
+      "note": "No Unity Editor validation has run for the current v3 changes. Static source checks are not a substitute."
     }
   },
   "historicalDeviceEvidence": {
+    "recordedAtUtc": "2026-07-12T14:05:00Z",
+    "revision": "g1-device-evidence.v1",
+    "scope": "historical G1 five-metric device runtime only; excludes G2 landmarks and v3 calibration",
     "status": "preserved_not_reused_for_g2_landmarks",
+    "validatedCommitSha": null,
     "date": "2026-07-12",
     "g1RuntimeSmoke": "passed_30_of_30_five_metrics",
     "neutralExpressionGate": "passed",

@@ -46,6 +46,11 @@ export type Face3DMetric = {
   unit: 'normalized';
   validFrameCount: number;
   value: number | null;
+  // Internal validation only. Never render this field in a user-facing metric grid.
+  valueMm?: number | null;
+  valueMmConfidence?: number;
+  valueMmMad?: number | null;
+  valueMmValidFrameCount?: number;
 };
 
 // 필수 5지표는 전량 존재, Tier-2 는 있을 때만 존재하는 교차 타입.
@@ -65,6 +70,30 @@ export type Face3DProfileV1 = {
 
 export type Face3DSampleMode = 'micro_burst' | 'single_frame';
 
+export type Face3DSensorProvenance = {
+  depthDataObservedRatio: number | null;
+  deviceModel: string | null;
+  faceTrackingSupported: boolean | null;
+  trueDepthHardware: boolean | null;
+};
+
+export type Face3DCalibrationReceipt = {
+  appBuild: string;
+  approvalArtifactSha256: string;
+  captureNonce: string;
+  collectionPolicyId: string;
+  expiresAtUtc: string;
+  gateVersion: 'face3d-gate-v2';
+  issuedAtUtc: string;
+  profileBindingSha256: string;
+  receiptId: string;
+  reportContextId: string;
+  signature: string;
+  signatureAlgorithm: 'hmac-sha256-v1';
+  signingKeyId: string;
+  subjectContextId: string;
+};
+
 export type Face3DProfileV2 = {
   aggregation: 'median_mad' | 'none';
   captureWindowMs: number;
@@ -82,7 +111,38 @@ export type Face3DProfileV2 = {
   warnings: string[];
 };
 
-export type Face3DProfile = Face3DProfileV1 | Face3DProfileV2;
+export type Face3DProfileV3 = {
+  aggregation: 'median_mad' | 'none';
+  calibrationReceipt: Face3DCalibrationReceipt | null;
+  captureNonce: string;
+  captureWindowMs: number;
+  collectionPolicyId: string;
+  completionRatio: number;
+  confidenceCalibrationStatus: 'uncalibrated' | 'calibrated';
+  gateVersion: 'face3d-gate-v2';
+  metrics: Face3DMetrics;
+  // Opaque server/tooling digest. Never recompute with JSON.stringify:
+  // canonicalization recursively replaces every finite number (including
+  // integers, with -0 normalized to 0) by
+  // {$face3dNumber: fixed12_trimmed}, then key-sorts compact JSON before SHA-256.
+  profileBindingSha256: string | null;
+  sampleMode: Face3DSampleMode;
+  schemaVersion: 'aura.face3d-profile.v3';
+  // Added only by the backend after signature, binding, expiry, context, and
+  // one-time receipt-consumption checks. Unity never emits "verified".
+  serverCalibrationReceiptStatus?: string;
+  sensorProvenance: Face3DSensorProvenance;
+  source: 'arkit_face_mesh';
+  targetFrameCount: number;
+  topologyFingerprint: string;
+  validFrameCount: number;
+  warnings: string[];
+};
+
+export type Face3DProfile =
+  | Face3DProfileV1
+  | Face3DProfileV2
+  | Face3DProfileV3;
 
 export type Face3DStartRequest = {
   gateVersion: 'face3d-gate-v1';

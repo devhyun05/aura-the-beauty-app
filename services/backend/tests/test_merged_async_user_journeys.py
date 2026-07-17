@@ -1,3 +1,5 @@
+from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 import json
 from uuid import UUID
 
@@ -11,6 +13,10 @@ from app.core.security import AuthContext
 from app.core.settings import Settings
 from app.schemas.analysis import AnalysisJobCreate, FilterExtractionAnalyzeRequest
 from app.schemas.media import CompleteUploadRequest
+from app.services.face3d_calibration_receipts import (
+  compute_face3d_profile_binding_sha256,
+  sign_face3d_calibration_receipt,
+)
 
 
 USER_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -18,6 +24,9 @@ MEDIA_ID = UUID("22222222-2222-2222-2222-222222222222")
 REPORT_ID = UUID("33333333-3333-3333-3333-333333333333")
 UPLOAD_ID = UUID("44444444-4444-4444-4444-444444444444")
 QUEUE_URL = "https://sqs.ap-northeast-2.amazonaws.com/123456789012/aura-ai-jobs"
+FACE3D_APPROVAL_SHA = "a" * 64
+FACE3D_SIGNING_KEY_ID = "face3d-calibration-test-v1"
+FACE3D_SIGNING_SECRET = "face3d-calibration-test-secret"
 
 FACE3D_METRIC_KEYS = [
   "noseTipProjection",
@@ -54,6 +63,70 @@ def face3d_profile() -> dict:
     "validFrameCount": 30,
     "warnings": [],
   }
+
+
+def calibrated_face3d_profile(now: datetime) -> dict:
+  profile = {
+    "aggregation": "median_mad",
+    "calibrationReceipt": None,
+    "captureNonce": "capture-nonce-api-001",
+    "captureWindowMs": 420,
+    "collectionPolicyId": "unified-micro-burst-5of8-v1",
+    "completionRatio": 1.0,
+    "confidenceCalibrationStatus": "calibrated",
+    "gateVersion": "face3d-gate-v2",
+    "metrics": {
+      key: {
+        "confidence": 0.91,
+        "mad": 0.002,
+        "unit": "normalized",
+        "validFrameCount": 8,
+        "value": 0.1 + (index * 0.01),
+        "valueMm": 2.0 + index,
+        "valueMmConfidence": 0.88,
+        "valueMmMad": 0.04,
+        "valueMmValidFrameCount": 8,
+      }
+      for index, key in enumerate(FACE3D_METRIC_KEYS)
+    },
+    "profileBindingSha256": None,
+    "sampleMode": "micro_burst",
+    "schemaVersion": "aura.face3d-profile.v3",
+    "sensorProvenance": {
+      "depthDataObservedRatio": 1.0,
+      "deviceModel": "test-device",
+      "faceTrackingSupported": True,
+      "trueDepthHardware": True,
+    },
+    "source": "arkit_face_mesh",
+    "targetFrameCount": 8,
+    "topologyFingerprint": "face3d-g2-api-topology",
+    "validFrameCount": 8,
+    "warnings": [],
+  }
+  binding = compute_face3d_profile_binding_sha256(profile)
+  profile["profileBindingSha256"] = binding
+  receipt = {
+    "appBuild": "test-build-1",
+    "approvalArtifactSha256": FACE3D_APPROVAL_SHA,
+    "captureNonce": profile["captureNonce"],
+    "collectionPolicyId": profile["collectionPolicyId"],
+    "expiresAtUtc": (now + timedelta(hours=1)).isoformat(),
+    "gateVersion": profile["gateVersion"],
+    "issuedAtUtc": (now - timedelta(minutes=1)).isoformat(),
+    "profileBindingSha256": binding,
+    "receiptId": "receipt-api-001",
+    "reportContextId": f"report_source_media_{MEDIA_ID}",
+    "signatureAlgorithm": "hmac-sha256-v1",
+    "signingKeyId": FACE3D_SIGNING_KEY_ID,
+    "subjectContextId": f"subj_user_{USER_ID}",
+  }
+  receipt["signature"] = sign_face3d_calibration_receipt(
+    receipt,
+    FACE3D_SIGNING_SECRET,
+  )
+  profile["calibrationReceipt"] = receipt
+  return profile
 
 
 def auth_context() -> AuthContext:
@@ -99,6 +172,50 @@ class AnalysisDatabase:
       "status": "pending",
       "detail_payload": args[-1],
     }
+
+
+class TransactionalAnalysisDatabase:
+  def __init__(self) -> None:
+    self.operations: list[str] = []
+    self.receipt_consumed = False
+    self.transaction_calls = 0
+    self.insert_args: tuple | None = None
+
+  async def run_in_transaction(self, operation):
+    self.transaction_calls += 1
+    self.operations.append("transaction:start")
+    result = await operation(self)
+    self.operations.append("transaction:commit")
+    return result
+
+  async def execute(self, query: str, *_args):
+    normalized = " ".join(query.split()).lower()
+    if "create table if not exists face3d_calibration_receipt_consumptions" in normalized:
+      self.operations.append("receipt-schema")
+    elif "create index if not exists idx_face3d_calibration_receipts_context" in normalized:
+      self.operations.append("receipt-index")
+    else:
+      raise AssertionError(f"unexpected execute query: {normalized}")
+    return "OK"
+
+  async def fetchrow(self, query: str, *args):
+    normalized = " ".join(query.split()).lower()
+    if "insert into face3d_calibration_receipt_consumptions" in normalized:
+      self.operations.append("receipt-consume")
+      if self.receipt_consumed:
+        return None
+      self.receipt_consumed = True
+      return {"receipt_id": args[0]}
+    if "insert into analysis_reports" in normalized:
+      self.operations.append("report-insert")
+      self.insert_args = args
+      return {
+        "id": REPORT_ID,
+        "user_id": USER_ID,
+        "status": "pending",
+        "detail_payload": args[-1],
+      }
+    raise AssertionError(f"unexpected fetchrow query: {normalized}")
 
 
 class FilterExtractionDatabase:
@@ -179,6 +296,69 @@ async def test_owned_analysis_media_is_queued_after_trusted_payload_rewrite(
   inserted_request = json.loads(db.insert_args[-1])["request"]
   assert inserted_request["face3d"] == face3d
   assert inserted_request["measurements"]["face3d"] == face3d
+
+
+@pytest.mark.asyncio
+async def test_calibrated_face3d_receipt_is_consumed_atomically_with_report(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  monkeypatch.setattr(analysis_api, "ensure_user", ensure_test_user)
+  monkeypatch.setattr(analysis_api, "resolve_owned_source_media", resolve_test_media)
+  profile = calibrated_face3d_profile(datetime.now(UTC))
+  db = TransactionalAnalysisDatabase()
+
+  response = await analysis_api.create_analysis_job(
+    AnalysisJobCreate.model_validate(
+      {
+        "runImmediately": False,
+        "sourceMediaId": str(MEDIA_ID),
+        "requestPayload": {
+          "face3d": deepcopy(profile),
+          "measurements": {
+            "captureId": str(REPORT_ID),
+            "face3d": deepcopy(profile),
+            "schemaVersion": "aura.face-analysis-measurements.v1",
+          },
+          "task": "face_makeup_recommendation_report_v1",
+        },
+      },
+    ),
+    BackgroundTasks(),
+    auth=auth_context(),
+    db=db,
+    settings=Settings(
+      face3d_calibration_approval_artifact_sha256=FACE3D_APPROVAL_SHA,
+      face3d_calibration_promotion_enabled=True,
+      face3d_calibration_receipt_hmac_secret=FACE3D_SIGNING_SECRET,
+      face3d_calibration_receipt_signing_key_id=FACE3D_SIGNING_KEY_ID,
+      s3_bucket_name="media-bucket",
+    ),
+  )
+
+  assert response["data"]["job"]["status"] == "pending"
+  assert db.transaction_calls == 1
+  assert db.operations == [
+    "transaction:start",
+    "receipt-schema",
+    "receipt-index",
+    "receipt-consume",
+    "report-insert",
+    "transaction:commit",
+  ]
+  assert db.insert_args is not None
+  stored_request = json.loads(db.insert_args[-1])["request"]
+  assert (
+    stored_request["measurements"]["face3d"]["serverCalibrationReceiptStatus"]
+    == "verified"
+  )
+  assert stored_request["face3d"]["serverCalibrationReceiptStatus"] == "verified"
+  response_request = response["data"]["job"]["detailPayload"]["request"]
+  assert (
+    "serverCalibrationReceiptStatus"
+    not in response_request["measurements"]["face3d"]
+  )
+  assert "calibrationReceipt" not in response_request["measurements"]["face3d"]
+  assert "serverCalibrationReceiptStatus" not in response_request["face3d"]
 
 
 @pytest.mark.asyncio
