@@ -67,6 +67,17 @@ const faceMakeupShaderSource = readFileSync(
   join(unityResourcesRoot, 'FaceMakeup.shader'),
   'utf8',
 );
+const stencilBridgeTypesSource = readFileSync(
+  join(repoRoot, 'apps/mobile/src/features/ar/stencil/src/bridge/types.ts'),
+  'utf8',
+);
+const bridgeMessagesSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Bridge/BridgeMessages.cs',
+  ),
+  'utf8',
+);
 
 assert.equal(
   existsSync(join(graftFaceRoot, 'AegyoRenderer.cs')) ||
@@ -108,6 +119,56 @@ assert.match(
   /#include "Foundation\.cginc"[\s\S]*FoundationTextureParams\([\s\S]*FoundationTarget\([\s\S]*FoundationSoftClip\([\s\S]*FoundationBlend\(/,
   '파운데이션은 ARwithFable 정본 Foundation.cginc 색 파이프라인을 사용해야 한다',
 );
+
+function bodyBetween(source, startPattern, endPattern) {
+  const start = source.search(startPattern);
+  assert.notEqual(start, -1, `계약 시작점을 찾을 수 없다: ${startPattern}`);
+  const rest = source.slice(start);
+  const end = rest.search(endPattern);
+  assert.notEqual(end, -1, `계약 끝점을 찾을 수 없다: ${endPattern}`);
+  return rest.slice(0, end);
+}
+
+const tsFilterBody = bodyBetween(
+  stencilBridgeTypesSource,
+  /export interface FilterParams\s*\{/,
+  /\n\}/,
+);
+const csFilterBody = bodyBetween(
+  bridgeMessagesSource,
+  /public class FilterParams\s*\{/,
+  /\n\s*\[Serializable\]\s*\n\s*public class LensLayerParams/,
+);
+const tsFilterFields = new Set(
+  [...tsFilterBody.matchAll(/^\s{2}([A-Za-z_]\w*)\??:/gm)].map(match => match[1]),
+);
+const csFilterFields = new Set(
+  [...csFilterBody.matchAll(/^\s*public\s+(?:string|float|int|bool)\s+([A-Za-z_]\w*)\b/gm)]
+    .map(match => match[1]),
+);
+const serializedTsFilterFields = new Set(
+  [...tsFilterFields].filter(field => !field.endsWith('Imported')),
+);
+assert.deepEqual(
+  [...serializedTsFilterFields].sort(),
+  [...csFilterFields].sort(),
+  'RN FilterParams와 C# JsonUtility FilterParams 필드는 완전히 같은 이름이어야 한다',
+);
+for (const forkOnlyField of [
+  'aegyoMode',
+  'aegyoShadowIntensity',
+  'aegyoRendererVersion',
+  'highlightZoneVersion',
+  'eyelinerLowerColor',
+  'eyelinerLowerStyle',
+  'eyelinerLowerShimmer',
+]) {
+  assert.equal(
+    tsFilterFields.has(forkOnlyField) || csFilterFields.has(forkOnlyField),
+    false,
+    `정본에 없는 FilterParams 필드를 제거해야 한다: ${forkOnlyField}`,
+  );
+}
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {

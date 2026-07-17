@@ -23,12 +23,7 @@
  */
 import type { FilterParams } from '../bridge/types';
 import type { ComposerLayer } from './model';
-import {
-  isDecoRegion,
-  pickerVisibleRegionDefs,
-  REGION_DEFS,
-  REGION_MAP,
-} from './regions';
+import { isDecoRegion, REGION_DEFS, REGION_MAP } from './regions';
 import type { RegionKey } from './regions';
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
@@ -133,7 +128,7 @@ export function fitFieldsOfRegion(region: RegionKey): FitFieldDef[] {
 
 /** 핏을 걸 수 있는 부위 전부 — 골드 필드 보유 또는 데코(배치 아핀). UI 칩 재료. */
 export function fitCapableRegions(): RegionKey[] {
-  return pickerVisibleRegionDefs(REGION_DEFS).filter(
+  return REGION_DEFS.filter(
     d => isDecoRegion(d.key) || fitFieldsOfRegion(d.key).length > 0,
   ).map(d => d.key);
 }

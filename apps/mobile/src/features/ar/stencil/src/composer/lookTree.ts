@@ -160,9 +160,6 @@ export interface LeafDef {
   technique?: { strength: number };
 }
 
-/** 세부부위 선택기 노출 범위. internal은 상위 룩 조립 전용, standalone만 직접 선택. */
-export type SubPickerScope = 'internal' | 'standalone';
-
 export interface LookDef {
   id: string;
   name: string;
@@ -174,10 +171,11 @@ export interface LookDef {
    *  인스턴스화된다(instantiateGroup). 미지정=일반 룩 정의. 하위호환: 옛 라이브러리엔
    *  이 필드가 없어 undefined로 로드되며 일반 정의로 동작한다. */
   kind?: 'group';
-  /** sub 정의 전용. 옛 사용자 정의(undefined)는 하위호환상 standalone으로 취급한다. */
-  pickerScope?: SubPickerScope;
-  /** upstream(ARwithFable) 호환 별칭 — internal===true는 pickerScope 'internal'과
-   *  동일하게 픽커에서 제외된다. upstream 룩 데이터가 이 필드로 시딩되므로 유지. */
+  /** 내부 구성 요소(sub 레벨 전용) — 여러 파트로 이뤄진 상위 부위 룩의 조각이라
+   *  단독으로는 의미가 없다("파운데이션"만 떼면 어느 룩의 것인지 알 수 없다).
+   *  세부부위 ⇄ 픽커(subDefsForRegion)에 노출하지 않는다. 라이브러리에는 그대로
+   *  남아 상위 룩 인스턴스화·기존 스냅샷 revive에 쓰인다. 미지정=standalone
+   *  (하위호환: 옛 저장본엔 이 필드가 없어 undefined로 로드되고 노출된다). */
   internal?: boolean;
   /** face/region 레벨: 하위 정의 id 배열 · sub 레벨: 잎 정의 배열 */
   kids: string[] | LeafDef[];
@@ -379,7 +377,6 @@ export function buildSystemLibrary(): LookLibrary {
           level: 'sub',
           slot,
           owner: 'system',
-          pickerScope: 'internal',
           kids: [
             {
               label,
@@ -722,16 +719,15 @@ export function swapSubNode(
   return { ...root, kids, dirty: true };
 }
 
-/** 이 세부부위(잎 region)로 구성된 라이브러리 sub 룩 정의 전부 — 세부부위 ⇄ 교체
- *  픽커용(시스템 먼저, 이름순). */
+/** 이 세부부위(잎 region)로 구성된 standalone 라이브러리 sub 룩 정의 전부 —
+ *  세부부위 ⇄ 교체 픽커용(시스템 먼저, 이름순). internal(상위 룩의 내부 파트)은
+ *  제외한다 — 같은 "파운데이션" 라벨로 여러 상위 룩의 조각이 섞여 뜨던 계약 버그. */
 export function subDefsForRegion(lib: LookLibrary, region: RegionKey): LookDef[] {
   return Object.values(lib)
     .filter(
       d =>
         d.level === 'sub' &&
         !d.internal &&
-        (d.pickerScope === 'standalone' ||
-          (d.pickerScope == null && d.owner === 'user')) &&
         (d.kids as LeafDef[]).some(leaf => leaf.region === region),
     )
     .sort((a, b) =>
@@ -1705,7 +1701,6 @@ function materializeSub(node: LookNode, lib: LookLibrary): string {
     level: 'sub',
     slot: node.slot,
     owner: 'user',
-    pickerScope: 'internal',
     kids: node.kids.filter(isLeaf).map(lf => ({
       label: lf.label,
       region: lf.region,

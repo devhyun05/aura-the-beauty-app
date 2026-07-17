@@ -86,8 +86,7 @@ import BasicMode from './src/components/BasicMode';
 import type { LaneChip } from './src/components/LaneRow';
 import ComposerSheet from './src/components/ComposerSheet';
 import GuideMode from './src/components/GuideMode';
-import {enableAllStencilRegions} from './src/composer/stencilSelection';
-import {stencilStepsFromTree} from './src/composer/stencilSteps';
+import {maskStencilByKeys, stencilStepsFromTree} from './src/composer/stencilSteps';
 import LightingPanel from './src/components/LightingPanel';
 import PerfumePanel from './src/components/PerfumePanel';
 import BodyPanel from './src/components/BodyPanel';
@@ -278,7 +277,6 @@ const INTENSITY_KEYS: (keyof FilterParams)[] = [
   'contourIntensity',
   'concealerIntensity',
   'aegyoIntensity',
-  'aegyoShadowIntensity',
   'aegyoStyleIntensity',
   'lipIntensity',
   'lipStyleIntensity',
@@ -478,10 +476,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const fndOvalSizeRef = useRef(1.1);
   const [fndOvalFeather, setFndOvalFeather] = useState(0.15); // 얼굴 오벌 경계 페더 (FND_OVAL_FEATHER)
   const fndOvalFeatherRef = useRef(0.15);
-  // ── 임시 디버그(하이라이터 존 세트 비교) — 포크 5존(v0) vs upstream 9존 재설계(v1)를
-  //    실기기에서 눈으로 비교. 0=기본(픽셀 동일). 확정 후 이 상태·ref·버튼을 걷어낸다. ──
-  const [hlZoneV9, setHlZoneV9] = useState(false);
-  const hlZoneVersionRef = useRef(0);
   // 추출에 쓴 원본 사진 URI(검증용) — 썸네일·확대 모달 표시. null=한 번도 추출 안 함.
   const [extractSourceUri, setExtractSourceUri] = useState<string | null>(null);
   const [opacity, setOpacityState] = useState(0.75); // 전역 메이크업 농도 슬라이더 — 기본 75%
@@ -590,6 +584,8 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const stencilEnabledRef = useRef(false);
   const [stencil, setStencilState] = useState<StencilParams>(DEFAULT_STENCIL);
   const stencilRef = useRef<StencilParams>(DEFAULT_STENCIL);
+  // 가이드는 현재 룩에 실제 있는 부위만 그린다(안 올린 부위엔 가이드 없음). 룩에서 유도.
+  const availableStencilKeysRef = useRef<Set<string>>(new Set());
 
   // 좌우 대칭 가이드(#6) — 가이드 레인에서만 활성(레인 이탈=오버레이 끔). 중심축·
   // 대칭쌍 칩 상태는 유저 선호로 유지돼, 레인에 다시 들어오면 켜둔 조합이 복원된다.
@@ -741,9 +737,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       scaled.fndSegHiDbg = fndSegHiRef.current;
       scaled.fndOvalSizeDbg = fndOvalSizeRef.current;
       scaled.fndOvalFeatherDbg = fndOvalFeatherRef.current;
-      // 임시 디버그(하이라이터 존 세트) — 0=포크 5존(기본) 1=upstream 9존. 룩 상태와
-      // 무관한 존 지오메트리 스위치라 모든 applyFilter에 주입. 0이면 현재 픽셀과 동일.
-      scaled.highlightZoneVersion = hlZoneVersionRef.current;
       sendToUnity({ type: 'applyFilter', filter: scaled });
     },
     [sendToUnity],
@@ -815,13 +808,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     },
     [sendScaled],
   );
-  // 임시 디버그(하이라이터 존 세트) — 5존↔9존 토글 후 현재 룩을 즉시 재전송(존 스위치 반영).
-  const toggleHlZoneV9 = useCallback(() => {
-    const next = !hlZoneV9;
-    hlZoneVersionRef.current = next ? 1 : 0;
-    setHlZoneV9(next);
-    sendScaled(paramsRef.current, opacityRef.current);
-  }, [hlZoneV9, sendScaled]);
   const setFndSegLoDbg = useCallback(
     (v: number) => {
       fndSegLoRef.current = v;
@@ -886,9 +872,10 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   // (부위/농도 상태는 유지). 패널 열림과 독립 — 닫아도 활성이면 계속 보인다.
   const pushStencil = useCallback(
     (p: StencilParams, active: boolean) => {
+      const masked = maskStencilByKeys(p, availableStencilKeysRef.current);
       sendToUnity({
         type: 'setStencil',
-        stencil: active ? p : { ...p, opacity: 0 },
+        stencil: active ? masked : { ...masked, opacity: 0 },
       });
     },
     [sendToUnity],
@@ -1741,14 +1728,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       const active = next === 'guide';
       if (stencilEnabledRef.current !== active) {
         stencilEnabledRef.current = active;
-        if (active) {
-          const allGuides = enableAllStencilRegions(stencilRef.current);
-          stencilRef.current = allGuides;
-          setStencilState(allGuides);
-          pushStencil(allGuides, true);
-        } else {
-          pushStencil(stencilRef.current, false);
-        }
+        pushStencil(stencilRef.current, active);
         pushSymmetry(symmetryRef.current, active);
       }
       setLane(next);
@@ -2554,6 +2534,15 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const lookDirty = treeDirty(lookTree);
   // 튜토리얼 가이드 '내 룩 순서' 스텝 — 현재 룩에서 바르는 순서대로 유도(부위 스텐실 있는 것만).
   const stencilSteps = useMemo(() => stencilStepsFromTree(lookTree), [lookTree]);
+  // 룩에 실제 있는 가이드 부위 집합 — 부위별 칩 노출·전송 마스킹에 공용.
+  const availableStencilKeys = useMemo(
+    () => new Set<string>(stencilSteps.map(s => s.key)),
+    [stencilSteps],
+  );
+  useEffect(() => {
+    availableStencilKeysRef.current = availableStencilKeys;
+    if (stencilEnabledRef.current) pushStencil(stencilRef.current, true);
+  }, [availableStencilKeys, pushStencil]);
   const lookChips: LaneChip[] = [
     { id: 'bare', label: '원본', dirty: lookSel === 'bare' && lookDirty },
     ...SYSTEM_LOOKS.map(p => ({
@@ -2836,13 +2825,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               <Text style={styles.debugText}>
                 이음새 {seamDebugOpen ? 'ON' : 'off'}
               </Text>
-            </TouchableOpacity>
-            {/* 임시 디버그(하이라이터 존 5↔9) — 포크 5존 vs upstream 9존 재설계 실기기 비교.
-                걷어낼 때 이 버튼·toggleHlZoneV9·상태·ref·sendScaled 주입을 함께 제거 */}
-            <TouchableOpacity
-              style={[styles.debugBtn, hlZoneV9 && styles.debugBtnOn]}
-              onPress={toggleHlZoneV9}>
-              <Text style={styles.debugText}>HL {hlZoneV9 ? '9존' : '5존'}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -3262,6 +3244,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               value={stencil}
               onChange={applyStencil}
               steps={stencilSteps}
+              available={availableStencilKeys}
               symValue={symmetry}
               onSymChange={applySymmetry}
             />

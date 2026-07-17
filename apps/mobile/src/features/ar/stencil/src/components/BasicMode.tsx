@@ -23,11 +23,7 @@ import {
 } from 'react-native';
 import ParamSlider from './ParamSlider';
 import type {LaneChip} from './LaneRow';
-import {
-  pickerVisibleRegionDefs,
-  REGION_GROUPS,
-  REGION_MAP,
-} from '../composer/regions';
+import {REGION_GROUPS, REGION_MAP} from '../composer/regions';
 import type {RegionDef, RegionKey} from '../composer/regions';
 import {
   defSwatchColor,
@@ -63,10 +59,7 @@ const CATS: Cat[] = [ALL, ...SLOT_ORDER];
 // 슬롯 → 세부부위 정의(카탈로그 순서). 중분류 탭 후보의 단일 출처.
 const REGIONS_BY_SLOT: Record<string, RegionDef[]> = {};
 for (const g of REGION_GROUPS) {
-  REGIONS_BY_SLOT[g.slot] = [
-    ...(REGIONS_BY_SLOT[g.slot] ?? []),
-    ...pickerVisibleRegionDefs(g.regions),
-  ];
+  REGIONS_BY_SLOT[g.slot] = [...(REGIONS_BY_SLOT[g.slot] ?? []), ...g.regions];
 }
 
 // 중분류 탭 라벨 — '톤 조정 베이스'류 장황한 접미사만 걷어낸다(톤·질감).

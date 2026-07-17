@@ -81,16 +81,12 @@ export interface FilterParams {
   /** 넓은 면 보정 (얼굴 셰이더, 가·감산 블렌드) */
   highlightColor: string;
   highlightIntensity: number;
-  /** 부위별 하이라이터 강도. 하나라도 >0이면 legacy highlightIntensity 대신 5존 경로 사용. */
+  /** AURA 존별 입력은 Unity에서 최댓값을 정본의 단일 하이라이터 강도로 승격한다. */
   highlightCheekIntensity?: number;
   highlightNoseBridgeIntensity?: number;
   highlightNoseTipIntensity?: number;
   highlightBrowBoneIntensity?: number;
   highlightCupidIntensity?: number;
-  /** 하이라이터 존 세트 버전(실기기 비교용 스위치) — 0=포크 5존(기본, 픽셀 동일)
-   *  1=upstream 9존 재설계(눈썹뼈 아치 상향·콧대 축소·코끝 분리·큐피드보우 2타원·턱끝 신설).
-   *  생략 시 0(기존 동작). */
-  highlightZoneVersion?: number;
   /** 하이라이터 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
   highlightFinish?: number;
   /** 시머 게인 0..1 (highlightFinish=3일 때). 생략 시 Unity 기본 0.5 */
@@ -134,12 +130,6 @@ export interface FilterParams {
   aegyoFinish?: number;
   /** 시머 게인 0..1 (aegyoFinish=3일 때). 생략 시 Unity 기본 0.5 */
   aegyoShimmer?: number;
-  /** 애교살 전용 렌더 모드: 0=자연 볼륨, 1=펄 포인트 */
-  aegyoMode?: number;
-  /** 볼륨광 바로 아래의 부드러운 음영 강도 0..1 */
-  aegyoShadowIntensity?: number;
-  /** 새 애교살 렌더 계약 존재 마커. 1=mode 0도 명시값, 0/생략=legacy finish로 이관 */
-  aegyoRendererVersion?: number;
   eyeshadowColor: string;
   eyeshadowIntensity: number;
   /** 아이섀도 하(A3, 하안검 아래 섀도 밴드) — 곱 블렌드. 생략 시 0(끔) */
@@ -183,15 +173,10 @@ export interface FilterParams {
   eyelinerFinish?: number;
   /** 임포트 아이라인 텍스처(밴드 워프) 강도. 색은 eyelinerColor 공용 */
   eyelinerStyleIntensity: number;
-  /** 아이라인(하) — 하안검 밴드. 생략 시 0(끔) */
-  eyelinerLowerColor?: string;
+  /** 아이라인(하) — 하안검 밴드. 색은 eyelinerColor 공용. 생략 시 0(끔) */
   eyelinerLowerIntensity?: number;
-  /** 아이라인(하) 모양: 0=전체 소프트, 1=점막 밀착, 2=바깥 1/3 */
-  eyelinerLowerStyle?: number;
-  /** 아이라인(하) 마감: 0=새틴, 1=매트, 2=글로시, 3=펄 */
+  /** 아이라인(하) 마감: 0=새틴(기본) 1=매트 2=글로시 (시머 없음 — 리본에 과함). 생략 시 0 */
   eyelinerLowerFinish?: number;
-  /** 아이라인(하) 펄 강도 0..1 */
-  eyelinerLowerShimmer?: number;
   /** 눈꼬리 띄우기(R7 워프): 바깥 눈꼬리 리프트 0..1 (0=원래). 골드=워프 조작 */
   eyeCornerLift?: number;
   /** 마스카라(속눈썹 스트로크). 생략 시 0(끔) */
@@ -352,7 +337,7 @@ export interface FilterParams {
   /** 립글로스 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
   lipGlossFinish?: number;
   /** ── 축 개선 5건 #19b (모양 축) — 생략 0 = 기존 동작 ── */
-  /** 아이섀도 모양: 0..11=베이스/메인/포인트 위치+크리스/스모키/와이드. 생략 0 */
+  /** 아이섀도 모양: 0=리드 전체 1=크리스 집중 2=스모키 3=꼬리 포인트. 생략 0 */
   eyeshadowShape?: number;
   /** 눈썹 모양(슬롯 공통): 0=내추럴 1=일자 2=아치 3=각진. 생략 0 */
   browShape?: number;

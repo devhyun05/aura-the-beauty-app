@@ -42,11 +42,6 @@ const REGION_TO_STENCIL: Partial<Record<RegionKey, StencilKey>> = {
   aegyo: 'aegyo',
   blush: 'blush',
   highlighter: 'highlighter',
-  highlightCheek: 'highlighter',
-  highlightNoseBridge: 'highlighter',
-  highlightNoseTip: 'highlighter',
-  highlightBrowBone: 'highlighter',
-  highlightCupid: 'highlighter',
   contour: 'contour',
 };
 
@@ -101,6 +96,27 @@ export function stencilStepsFromTree(tree: LookNode | null): StencilStep[] {
   };
   walk(tree);
   return out;
+}
+
+/**
+ * 룩에 없는 부위 강제 끔 — 안 올린 부위엔 가이드가 뜨지 않게(부위별 수동 토글·기본 ON
+ * 부위 모두 이 마스크를 통과). keys = 현재 룩에 있는 가이드 부위 집합. 연출·농도는 유지.
+ */
+export function maskStencilByKeys(
+  p: StencilParams,
+  keys: Set<string>,
+): StencilParams {
+  return {
+    ...p,
+    lips: p.lips && keys.has('lips'),
+    brows: p.brows && keys.has('brows'),
+    eyeshadow: p.eyeshadow && keys.has('eyeshadow'),
+    eyeliner: p.eyeliner && keys.has('eyeliner'),
+    aegyo: p.aegyo && keys.has('aegyo'),
+    blush: p.blush && keys.has('blush'),
+    highlighter: p.highlighter && keys.has('highlighter'),
+    contour: p.contour && keys.has('contour'),
+  };
 }
 
 /**

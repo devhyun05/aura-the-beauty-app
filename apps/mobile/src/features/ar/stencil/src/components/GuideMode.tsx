@@ -9,8 +9,7 @@ import {
 } from 'react-native';
 
 import type {StencilParams, SymmetryParams} from '../bridge/types';
-import {enableAllStencilRegions} from '../composer/stencilSelection';
-import {isolateStencilStep} from '../composer/stencilSteps';
+import {isolateStencilStep, maskStencilByKeys} from '../composer/stencilSteps';
 import type {StencilStep} from '../composer/stencilSteps';
 import {CONTROL_H, PANEL_INSET, SP, labelTextOn} from '../theme';
 
@@ -18,7 +17,7 @@ import {CONTROL_H, PANEL_INSET, SP, labelTextOn} from '../theme';
  * 가이드 레인 본문 (#2 튜토리얼 스텐실) — 메이크업/보정과 동렬인 세 번째 레인.
  * 룩의 바르는 순서(잎=제품×바르는곳)를 **스텝 카드**로 늘어놓고, 카드를 고르면
  * 그 부위 가이드 하나만 얼굴에 격리해 켠다(따라 그리기). 맨 앞 '전체' 카드는
- * Unity가 지원하는 모든 부위 가이드를 한 번에 켠 조감도.
+ * 룩에 있는 모든 부위 가이드를 한 번에 켠 조감도.
  *
  * 농도는 공용 헤더 슬라이더가 레인 라우팅(가이드=stencil.opacity)으로 담당 —
  * 메이크업(opacity)/보정(wpGain)과 같은 모델이라 본문엔 슬라이더가 없다.
@@ -52,6 +51,8 @@ interface Props {
   onChange: (next: StencilParams) => void;
   /** 현재 룩에서 유도한 순서 스텝(바르는 순서 = 하단 먼저). */
   steps: StencilStep[];
+  /** 룩에 실제 있는 가이드 부위 집합 — '전체' 카드가 이 부위들만 켠다. */
+  available: Set<string>;
   // ── 좌우 대칭(#6) — 중심축·대칭쌍 칩만(별도 ON/OFF 없음). 오버레이 켬/끔은
   // 가이드 레인 진입/이탈이 담당(App), 칩 조합은 유저 선호로 유지·복원된다.
   symValue: SymmetryParams;
@@ -62,6 +63,7 @@ export default function GuideMode({
   value,
   onChange,
   steps,
+  available,
   symValue,
   onSymChange,
 }: Props) {
@@ -71,7 +73,23 @@ export default function GuideMode({
 
   const selectAll = () => {
     setSelIdx(null);
-    onChange(enableAllStencilRegions(value));
+    // 룩에 있는 부위 전부 켬 — maskStencilByKeys가 available 밖 부위를 걸러준다.
+    onChange(
+      maskStencilByKeys(
+        {
+          ...value,
+          lips: true,
+          brows: true,
+          eyeshadow: true,
+          eyeliner: true,
+          aegyo: true,
+          blush: true,
+          highlighter: true,
+          contour: true,
+        },
+        available,
+      ),
+    );
   };
   const selectStep = (i: number) => {
     setSelIdx(i);

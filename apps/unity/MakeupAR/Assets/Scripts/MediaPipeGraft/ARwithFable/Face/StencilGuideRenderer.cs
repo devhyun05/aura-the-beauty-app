@@ -92,20 +92,7 @@ namespace ARMakeup.Face
 
         // 마스크 기반 부위 캐노니컬 존 — MaskGenerator(MediaPipe UV) 복사. 드리프트 시
         // 동기화. (cx, cy, rx, ry) 캐노니컬 UV. UV 리졸버로 마스크와 동일하게 화면 투영.
-        // v0 = 포크 5존(MaskGenerator.HighlightRegion 실측 사본 — 드리프트 동기화). 옛 좌표
-        // (0.305/0.42 볼·6존)는 마스크와 어긋나 있었다. C존(볼) 상향·코끝 분리 반영.
-        static readonly Vector4[] HighlightZonesV0 =
-        {
-            new Vector4(0.27f,  0.52f, 0.082f, 0.050f), // 광대뼈 C존 L
-            new Vector4(0.73f,  0.52f, 0.082f, 0.050f), // 광대뼈 C존 R
-            new Vector4(0.50f,  0.46f, 0.035f, 0.120f), // 콧대
-            new Vector4(0.50f,  0.335f,0.038f, 0.030f), // 코끝
-            new Vector4(0.50f,  0.28f, 0.055f, 0.030f), // 큐피드보우
-            new Vector4(0.35f,  0.55f, 0.058f, 0.040f), // 눈썹뼈 L
-            new Vector4(0.65f,  0.55f, 0.058f, 0.040f), // 눈썹뼈 R
-        };
-        // v1 = upstream 9존 재설계(MaskGenerator.HighlightRegionV1 사본). 존 순서 고정.
-        static readonly Vector4[] HighlightZonesV1 =
+        static readonly Vector4[] HighlightZones =
         {
             new Vector4(0.27f, 0.52f, 0.082f, 0.050f), // 광대뼈 C존 L
             new Vector4(0.73f, 0.52f, 0.082f, 0.050f), // 광대뼈 C존 R
@@ -148,11 +135,7 @@ namespace ARMakeup.Face
             new Vector4(0.25f, 0.42f, 0.085f, 0.055f), new Vector4(0.75f, 0.42f, 0.085f, 0.055f),
             new Vector4(0.16f, 0.49f, 0.055f, 0.045f), new Vector4(0.84f, 0.49f, 0.055f, 0.045f),
         };
-        // HlZones = 존 슬롯 예약 수 = 두 버전 중 최대(v0 7존, v1 9존 → 9). 활성 버전이
-        // 쓰는 존만 그리고 나머지는 접는다(블러셔 프리셋 가변과 같은 규약).
-        const int HlZonesV0 = 7;   // 포크 5존(볼·콧대·코끝·큐피드·눈썹뼈L/R)
-        const int HlZonesV1 = 9;   // upstream 9존 재설계
-        const int HlZones = 9;     // 예약 슬롯(최대)
+        const int HlZones = 9;
         const int CtZones = 8;
         const int BlMaxZones = 4;
         const int ZoneTotal = HlZones + CtZones + BlMaxZones; // 캐시 크기
@@ -161,7 +144,7 @@ namespace ARMakeup.Face
 
         // ── 슬롯 배치(고정 순서) ──
         // 0=립, 1·2=눈썹, 3·4=아이섀도, 5·6=블러셔(랜드마크·미사용), 7·8=컨투어(랜드마크·미사용),
-        // 9·10=아이라인, 11·12=애교살, 13~21=하이라이터(9존 예약), 22~29=컨투어 UV, 30~33=블러셔 UV
+        // 9·10=아이라인, 11·12=애교살, 13~21=하이라이터(9존), 22~29=컨투어 UV, 30~33=블러셔 UV
         const int MaxStrokes = 34;
         const int S_LIP = 0, S_BROW = 1, S_SHADOW = 3, S_BLUSH = 5, S_CONTOUR = 7,
                   S_LINER = 9, S_AEGYO = 11, S_HL = 13, S_CTZ = 22, S_BLZ = 30;
@@ -243,11 +226,6 @@ namespace ARMakeup.Face
         readonly bool[] _zOk = new bool[ZoneTotal * HlPts];
         bool _hlDirty = true;          // 하이라이터 존 재해석 플래그(커스텀 마스크 교체 포함)
         bool _ctDirty = true;          // 컨투어 존 재해석 플래그
-        // 활성 하이라이터 존 세트(highlightZoneVersion) — 기본 v0(포크 5존). 버전이 바뀌면
-        // 배열·개수를 교체하고 _hlDirty로 재해석한다(마스크와 동일 존을 오버레이).
-        Vector4[] _hlZones = HighlightZonesV0;
-        int _hlCount = HlZonesV0;
-        int _hlVersion = 0;
 
         // 디자이너 커스텀 마스크(#2 C) — 임포트되면 캐노니컬 타원 대신 이 마스크의 실제
         // 경계를 존 중심에서 레이캐스트 추적. MakeupController.SetRegionMaskFromFile이 통지.
@@ -462,15 +440,6 @@ namespace ARMakeup.Face
             _lipLinerWidth = p.lipLinerWidth <= 0f
                 ? 1f : Mathf.Clamp(p.lipLinerWidth, 0.4f, 2.5f);
             _eyelinerStyle = Mathf.Clamp(p.eyelinerStyle, 0, StyleAngleDeg.Length - 1);
-            // 존 세트 버전 스위치 — 마스크(MaskGenerator)와 같은 존을 가이드가 따라간다.
-            var hlVersion = p.highlightZoneVersion == 1 ? 1 : 0;
-            if (hlVersion != _hlVersion)
-            {
-                _hlVersion = hlVersion;
-                _hlZones = hlVersion == 1 ? HighlightZonesV1 : HighlightZonesV0;
-                _hlCount = hlVersion == 1 ? HlZonesV1 : HlZonesV0;
-                _hlDirty = true;
-            }
             var highlightLift = Mathf.Clamp(p.highlightLift, -0.15f, 0.15f);
             var highlightSpread = Mathf.Clamp(p.highlightSpread, -0.15f, 0.15f);
             if (!Mathf.Approximately(highlightLift, _highlightLift)
@@ -704,7 +673,7 @@ namespace ARMakeup.Face
                 if (mesh != null && mesh.TopologyReady)
                 {
                     // 그룹별 dirty일 때만 재해석(정적 UV·커스텀 마스크 교체 시).
-                    if (_hlDirty) { ResolveGroup(mesh, _hlZones, _hlCount, 0, _customHl,
+                    if (_hlDirty) { ResolveGroup(mesh, HighlightZones, HlZones, 0, _customHl,
                         _highlightLift, _highlightSpread); _hlDirty = false; }
                     if (_ctDirty) { ResolveGroup(mesh, ContourZones, CtZones, HlZones, _customCt,
                         _contourLift, _contourSpread); _ctDirty = false; }
@@ -712,8 +681,7 @@ namespace ARMakeup.Face
                     var eyeVp = (mesh.ViewportOfVertex(EyeOuterL) - mesh.ViewportOfVertex(EyeOuterR)).magnitude;
                     var halfWVp = eyeVp * RibbonWidthFactor;
                     var zDepth = Depth(lm[1].z);
-                    DrawZones(mesh, 0, _hlCount, S_HL, halfWVp, zDepth);          // 하이라이터(활성 버전)
-                    for (var z = _hlCount; z < HlZones; z++) CollapseSlot(S_HL + z); // 미사용 존 정리(v0=7)
+                    DrawZones(mesh, 0, HlZones, S_HL, halfWVp, zDepth);           // 하이라이터
                     DrawZones(mesh, HlZones, CtZones, S_CTZ, halfWVp, zDepth);    // 컨투어
                     DrawZones(mesh, BlCache, _blushCount, S_BLZ, halfWVp, zDepth);// 블러셔(프리셋별)
                     for (var z = _blushCount; z < BlMaxZones; z++) CollapseSlot(S_BLZ + z); // 미사용 존 정리
@@ -984,8 +952,8 @@ namespace ARMakeup.Face
             Add("blushR", MaskZoneHandleVp(mesh, blushZones[1], _blushLift, _blushSpread));
             if (_customHl == null)
             {
-                Add("highlightL", MaskZoneHandleVp(mesh, _hlZones[0], _highlightLift, _highlightSpread));
-                Add("highlightR", MaskZoneHandleVp(mesh, _hlZones[1], _highlightLift, _highlightSpread));
+                Add("highlightL", MaskZoneHandleVp(mesh, HighlightZones[0], _highlightLift, _highlightSpread));
+                Add("highlightR", MaskZoneHandleVp(mesh, HighlightZones[1], _highlightLift, _highlightSpread));
             }
             else
             {

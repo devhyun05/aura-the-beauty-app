@@ -80,80 +80,24 @@ namespace ARMakeup.Face
         // ★볼(C존)은 구운 블러셔 마스크 실측 애플(u 0.277/0.723, v 0.468 — blush.png 측정)을
         // 기준으로 배치한다. 옛 좌표(0.305/0.42)는 미렌더 절차 BlushRegion(v0.38)에 상대 배치돼
         // 애플보다 아래·안쪽(코옆 하안검)에 떠 잘못됐다. C존 = 애플 위·바깥(눈꼬리 아래) 광대뼈.
-        static readonly Ellipse[] HighlightCheekRegion =
-        {
-            new Ellipse(0.27f, 0.52f, 0.082f, 0.050f, 0.5f), // 광대뼈 C존 L (애플 위·바깥)
-            new Ellipse(0.73f, 0.52f, 0.082f, 0.050f, 0.5f), // 광대뼈 C존 R
-        };
-        static readonly Ellipse[] HighlightNoseBridgeRegion =
-        {
-            new Ellipse(0.50f, 0.46f, 0.035f, 0.120f, 0.5f),  // 콧대
-        };
-        static readonly Ellipse[] HighlightNoseTipRegion =
-        {
-            new Ellipse(0.50f, 0.335f, 0.038f, 0.030f, 0.55f), // 코끝 포인트
-        };
-        static readonly Ellipse[] HighlightCupidRegion =
-        {
-            new Ellipse(0.50f, 0.28f, 0.055f, 0.030f, 0.5f),  // 큐피드보우
-        };
-        static readonly Ellipse[] HighlightBrowBoneRegion =
-        {
-            new Ellipse(0.35f, 0.55f, 0.058f, 0.040f, 0.5f),  // 눈썹뼈 L
-            new Ellipse(0.65f, 0.55f, 0.058f, 0.040f, 0.5f),  // 눈썹뼈 R
-        };
-        // legacy 전체 마스크 + 디자이너 마스크 기본 게이트. 코끝을 포함해 5존의 합집합이다.
-        static readonly Ellipse[] HighlightRegion =
-        {
-            new Ellipse(0.27f, 0.52f, 0.082f, 0.050f, 0.5f),
-            new Ellipse(0.73f, 0.52f, 0.082f, 0.050f, 0.5f),
-            new Ellipse(0.50f, 0.46f, 0.035f, 0.120f, 0.5f),
-            new Ellipse(0.50f, 0.335f, 0.038f, 0.030f, 0.55f),
-            new Ellipse(0.50f, 0.28f, 0.055f, 0.030f, 0.5f),
-            new Ellipse(0.35f, 0.55f, 0.058f, 0.040f, 0.5f),
-            new Ellipse(0.65f, 0.55f, 0.058f, 0.040f, 0.5f),
-        };
-
-        // ── 하이라이터 존 v1: upstream 7335e1c "캐노니컬 실측 9존 재설계" ─────────────────
-        // highlightZoneVersion=1(실기기 비교용 대체 존)에서만 선택. v0(기본)은 위 5존 그대로.
         // ★존 좌표는 canonical_face_model.obj의 vt(캐노니컬 UV) 실측으로 잡는다(추정 금지).
         // 실측 근거(랜드마크 UV): 코끝 1=(0.500,0.453)/4=(0.500,0.473), 콧대 5=(0.500,0.502)·
         // 195=(0.500,0.530)·197=(0.500,0.560)·6=(0.500,0.599)·나시온168=(0.500,0.649),
         // 콧벽 97/326=(0.468/0.532,0.398), 큐피드산 37=(0.472,0.350)/0=(0.500,0.348)/
         // 267=(0.528,0.350), 눈썹아치 52=(0.337,0.717)/65=(0.386,0.719)·눈썹중앙 105=(0.327,0.744),
         // 턱끝 152=(0.500,0.046)/175=(0.500,0.091)/199=(0.500,0.133)·턱옆 171/396=(0.44/0.559,0.097).
-        // 볼(C존)은 v0와 동일 좌표라 HighlightCheekRegion을 그대로 공유(바이트 동일).
-        static readonly Ellipse[] HighlightNoseBridgeRegionV1 =
+        // 존 순서 고정: 0·1=C존(핸들 highlightL/R가 참조) → 그 뒤 배치는 자유.
+        static readonly Ellipse[] HighlightRegion =
         {
+            new Ellipse(0.27f, 0.52f, 0.082f, 0.050f, 0.5f),  // 광대뼈 C존 L (애플 위·바깥, blush.png 실측 상대)
+            new Ellipse(0.73f, 0.52f, 0.082f, 0.050f, 0.5f),  // 광대뼈 C존 R
             new Ellipse(0.50f, 0.55f, 0.032f, 0.070f, 0.5f),  // 콧대 — 콧대 구간만(나시온 아래~코끝 위 v0.48~0.62), 인중 미침범
-        };
-        static readonly Ellipse[] HighlightNoseTipRegionV1 =
-        {
             new Ellipse(0.50f, 0.45f, 0.028f, 0.030f, 0.45f), // 코끝 — 콧대와 분리한 작은 원(v0.42~0.48, 콧벽/인중 밖)
-        };
-        static readonly Ellipse[] HighlightCupidRegionV1 =
-        {
             new Ellipse(0.47f, 0.36f, 0.024f, 0.016f, 0.45f), // 큐피드보우 L — 입술산 봉우리(37) 바로 위
             new Ellipse(0.53f, 0.36f, 0.024f, 0.016f, 0.45f), // 큐피드보우 R — 입술산 봉우리(267) 바로 위
-        };
-        static readonly Ellipse[] HighlightBrowBoneRegionV1 =
-        {
             new Ellipse(0.36f, 0.68f, 0.060f, 0.030f, 0.5f),  // 눈썹뼈 L — 눈썹 아치(52/65) 바로 아래·눈 위(v0.65~0.71)
             new Ellipse(0.64f, 0.68f, 0.060f, 0.030f, 0.5f),  // 눈썹뼈 R
-        };
-        // v1 legacy 전체 마스크(셰이더 _HighlightMask가 소비) — 9존의 합집합. 턱끝은 전용
-        // 셰이더 유니폼이 없어 이 합집합 경로로만 렌더된다(v1 신설 존).
-        static readonly Ellipse[] HighlightRegionV1 =
-        {
-            new Ellipse(0.27f, 0.52f, 0.082f, 0.050f, 0.5f),  // 광대뼈 C존 L (애플 위·바깥, v0와 동일)
-            new Ellipse(0.73f, 0.52f, 0.082f, 0.050f, 0.5f),  // 광대뼈 C존 R
-            new Ellipse(0.50f, 0.55f, 0.032f, 0.070f, 0.5f),  // 콧대 — 축소(인중 미침범)
-            new Ellipse(0.50f, 0.45f, 0.028f, 0.030f, 0.45f), // 코끝 — 콧대와 분리
-            new Ellipse(0.47f, 0.36f, 0.024f, 0.016f, 0.45f), // 큐피드보우 L
-            new Ellipse(0.53f, 0.36f, 0.024f, 0.016f, 0.45f), // 큐피드보우 R
-            new Ellipse(0.36f, 0.68f, 0.060f, 0.030f, 0.5f),  // 눈썹뼈 L — 아치 상향
-            new Ellipse(0.64f, 0.68f, 0.060f, 0.030f, 0.5f),  // 눈썹뼈 R
-            new Ellipse(0.50f, 0.11f, 0.048f, 0.048f, 0.45f), // 턱끝 — 신설(턱 중앙 융기 175~199)
+            new Ellipse(0.50f, 0.11f, 0.048f, 0.048f, 0.45f), // 턱끝 — 턱 중앙 융기(175~199 사이, 입 아래·인중 밖)
         };
         static readonly Ellipse[] ContourRegion =
         {
@@ -187,18 +131,6 @@ namespace ARMakeup.Face
         static readonly Texture2D[] _blushIgariBuckets = new Texture2D[SoftnessBuckets]; // 모양 1(이가리)
         static readonly Texture2D[] _blushDrapeBuckets = new Texture2D[SoftnessBuckets]; // 모양 2(드레이핑)
         static readonly Texture2D[] _highlightBuckets = new Texture2D[SoftnessBuckets];
-        static readonly Texture2D[] _highlightCheekBuckets = new Texture2D[SoftnessBuckets];
-        static readonly Texture2D[] _highlightNoseBridgeBuckets = new Texture2D[SoftnessBuckets];
-        static readonly Texture2D[] _highlightNoseTipBuckets = new Texture2D[SoftnessBuckets];
-        static readonly Texture2D[] _highlightBrowBoneBuckets = new Texture2D[SoftnessBuckets];
-        static readonly Texture2D[] _highlightCupidBuckets = new Texture2D[SoftnessBuckets];
-        // v1(9존, highlightZoneVersion=1) 재베이크 버킷 — 볼(C존)은 v0와 좌표가 같아
-        // _highlightCheekBuckets를 공유(별도 배열 불필요). 턱끝은 합집합 마스크에만 존재.
-        static readonly Texture2D[] _highlightV1Buckets = new Texture2D[SoftnessBuckets];
-        static readonly Texture2D[] _highlightNoseBridgeV1Buckets = new Texture2D[SoftnessBuckets];
-        static readonly Texture2D[] _highlightNoseTipV1Buckets = new Texture2D[SoftnessBuckets];
-        static readonly Texture2D[] _highlightBrowBoneV1Buckets = new Texture2D[SoftnessBuckets];
-        static readonly Texture2D[] _highlightCupidV1Buckets = new Texture2D[SoftnessBuckets];
         static readonly Texture2D[] _contourBuckets = new Texture2D[SoftnessBuckets];
 
         public static Texture2D LipMask => _lip != null ? _lip : _lip = LoadOrGenerate("lips", LipRegion, 0f);
@@ -217,30 +149,8 @@ namespace ARMakeup.Face
         public static Texture2D ContourMask => Bucketed(_contourBuckets, "contour", ContourRegion, 0f);
         /// <summary>하이라이터/컨투어 재베이크 마스크(가장자리 softness 버킷) —
         /// softnessScale 0 = 기존 마스크(버킷 0)와 바이트 동일.</summary>
-        // hlVersion 0=포크 5존(기본, 버킷/좌표 바이트 동일) 1=upstream 9존 재설계.
-        // v1 baseName은 구운 PNG가 없어(Masks/에 highlight*.png 부재) 항상 절차 생성된다.
-        public static Texture2D HighlightShapeMask(float softnessScale, int hlVersion = 0) =>
-            hlVersion == 1
-                ? Bucketed(_highlightV1Buckets, "highlight_v9", HighlightRegionV1, softnessScale)
-                : Bucketed(_highlightBuckets, "highlight", HighlightRegion, softnessScale);
-        public static Texture2D HighlightCheekShapeMask(float softnessScale, int hlVersion = 0) =>
-            Bucketed(_highlightCheekBuckets, "highlight_cheek", HighlightCheekRegion, softnessScale); // 볼은 v0=v1 동일
-        public static Texture2D HighlightNoseBridgeShapeMask(float softnessScale, int hlVersion = 0) =>
-            hlVersion == 1
-                ? Bucketed(_highlightNoseBridgeV1Buckets, "highlight_nose_bridge_v9", HighlightNoseBridgeRegionV1, softnessScale)
-                : Bucketed(_highlightNoseBridgeBuckets, "highlight_nose_bridge", HighlightNoseBridgeRegion, softnessScale);
-        public static Texture2D HighlightNoseTipShapeMask(float softnessScale, int hlVersion = 0) =>
-            hlVersion == 1
-                ? Bucketed(_highlightNoseTipV1Buckets, "highlight_nose_tip_v9", HighlightNoseTipRegionV1, softnessScale)
-                : Bucketed(_highlightNoseTipBuckets, "highlight_nose_tip", HighlightNoseTipRegion, softnessScale);
-        public static Texture2D HighlightBrowBoneShapeMask(float softnessScale, int hlVersion = 0) =>
-            hlVersion == 1
-                ? Bucketed(_highlightBrowBoneV1Buckets, "highlight_brow_bone_v9", HighlightBrowBoneRegionV1, softnessScale)
-                : Bucketed(_highlightBrowBoneBuckets, "highlight_brow_bone", HighlightBrowBoneRegion, softnessScale);
-        public static Texture2D HighlightCupidShapeMask(float softnessScale, int hlVersion = 0) =>
-            hlVersion == 1
-                ? Bucketed(_highlightCupidV1Buckets, "highlight_cupid_v9", HighlightCupidRegionV1, softnessScale)
-                : Bucketed(_highlightCupidBuckets, "highlight_cupid", HighlightCupidRegion, softnessScale);
+        public static Texture2D HighlightShapeMask(float softnessScale) =>
+            Bucketed(_highlightBuckets, "highlight", HighlightRegion, softnessScale);
         public static Texture2D ContourShapeMask(float softnessScale) =>
             Bucketed(_contourBuckets, "contour", ContourRegion, softnessScale);
         // 아이섀도우는 IrisRenderer의 동적 밴드로 분리됨 (정적 마스크 경로 제거)
