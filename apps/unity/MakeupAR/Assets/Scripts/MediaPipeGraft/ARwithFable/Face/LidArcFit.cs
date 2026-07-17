@@ -22,6 +22,22 @@ namespace ARMakeup.Face
         float[] _u = new float[16]; // 점별 현 투영 위치(재작성용 스크래치, 필요 시 확장)
         float _k0, _k1;
         bool _primed;
+        // 애교살 SDF(3d71a28) — 마지막 Apply가 확정한 기준 프레임·계수. 셰이더가 정점
+        // 로컬 좌표에서 같은 곡선 v(u)=k0·u(1−u)+k1·u²(1−u)을 재구성해 픽셀당 수직거리를
+        // 재려면 프레임(코너 원점·현축·아래축)과 길이·계수가 필요하다(LowerLidRenderer 선례).
+        Vector2 _fitInner, _fitXAxis, _fitYAxis;
+        float _fitLen;
+
+        /// <summary>피팅 곡선 계수(EMA 후) — v(u)=K0·u(1−u)+K1·u²(1−u).</summary>
+        public float K0 => _k0;
+        public float K1 => _k1;
+        /// <summary>안쪽 코너(현 원점, 이미지 정규화 좌표).</summary>
+        public Vector2 Inner => _fitInner;
+        /// <summary>현축(안쪽→바깥 단위 벡터)·아래축(피부 방향 v&gt;0 단위 벡터).</summary>
+        public Vector2 XAxis => _fitXAxis;
+        public Vector2 YAxis => _fitYAxis;
+        /// <summary>현 길이 L(눈폭, 이미지 단위) — SDF t=localX/L 정규화 분모.</summary>
+        public float ChordLength => _fitLen;
 
         /// <param name="emaAlpha">계수 시간 평활(낮을수록 안정·반응 느림).
         /// 랜드마크가 이미 상류 필터링돼 있어 0.4면 충분(LowerLidRenderer.FitEma).</param>
@@ -44,7 +60,14 @@ namespace ARMakeup.Face
             var outer = pts[n - 1];
             var chord = outer - inner;
             var len = chord.magnitude;
-            if (len < 1e-6f) return;
+            if (len < 1e-6f)
+            {
+                // 축퇴 폴백 — SDF 기준 프레임을 안전값으로 채운다(셰이더 Lc·Troll 클램프로 무해).
+                _fitInner = inner; _fitXAxis = Vector2.right;
+                _fitYAxis = upHint.sqrMagnitude > 1e-12f ? upHint.normalized : Vector2.up;
+                _fitLen = 1e-5f;
+                return;
+            }
             var xAxis = chord / len;
             var yAxis = new Vector2(-xAxis.y, xAxis.x);
             if (Vector2.Dot(yAxis, upHint) < 0f) yAxis = -yAxis;
@@ -81,6 +104,9 @@ namespace ARMakeup.Face
                 _k0 = Mathf.Lerp(_k0, k0, _ema);
                 _k1 = Mathf.Lerp(_k1, k1, _ema);
             }
+
+            // SDF 기준 프레임 확정(EMA 계수와 동일 프레임) — 셰이더가 이 곡선을 재구성.
+            _fitInner = inner; _fitXAxis = xAxis; _fitYAxis = yAxis; _fitLen = len;
 
             for (var j = 1; j < n - 1; j++)
             {

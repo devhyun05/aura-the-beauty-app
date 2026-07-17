@@ -1025,17 +1025,19 @@ namespace ARMakeup.Face
             // A14 재베이크(배치 A ③) — 하이라이터·컨투어 마스크를 softness 버킷으로 재-세팅
             // (highlight/contour는 CreateMaterial 1회 세팅뿐이라 여기서 확장). 임포트 오버라이드는
             // ApplyTo 뒤 ReassertMaskOverrides가 복원하므로 순서상 자동 정합. softness 0=버킷 0=기존.
-            mat.SetTexture(HighlightMaskId, MaskGenerator.HighlightShapeMask(p.highlightEdgeSoftness));
+            // 존 세트 버전 — 0=포크 5존(기본, 픽셀 동일) 1=upstream 9존 재설계(실기기 비교).
+            var hlVer = p.highlightZoneVersion;
+            mat.SetTexture(HighlightMaskId, MaskGenerator.HighlightShapeMask(p.highlightEdgeSoftness, hlVer));
             mat.SetTexture(HighlightCheekMaskId,
-                MaskGenerator.HighlightCheekShapeMask(p.highlightEdgeSoftness));
+                MaskGenerator.HighlightCheekShapeMask(p.highlightEdgeSoftness, hlVer));
             mat.SetTexture(HighlightNoseBridgeMaskId,
-                MaskGenerator.HighlightNoseBridgeShapeMask(p.highlightEdgeSoftness));
+                MaskGenerator.HighlightNoseBridgeShapeMask(p.highlightEdgeSoftness, hlVer));
             mat.SetTexture(HighlightNoseTipMaskId,
-                MaskGenerator.HighlightNoseTipShapeMask(p.highlightEdgeSoftness));
+                MaskGenerator.HighlightNoseTipShapeMask(p.highlightEdgeSoftness, hlVer));
             mat.SetTexture(HighlightBrowBoneMaskId,
-                MaskGenerator.HighlightBrowBoneShapeMask(p.highlightEdgeSoftness));
+                MaskGenerator.HighlightBrowBoneShapeMask(p.highlightEdgeSoftness, hlVer));
             mat.SetTexture(HighlightCupidMaskId,
-                MaskGenerator.HighlightCupidShapeMask(p.highlightEdgeSoftness));
+                MaskGenerator.HighlightCupidShapeMask(p.highlightEdgeSoftness, hlVer));
             mat.SetTexture(ContourMaskId, MaskGenerator.ContourShapeMask(p.contourEdgeSoftness));
             // 컨실러 — FaceMakeup 머티리얼은 붉은기 자동(shape=1)만 소비한다. 눈밑
             // 존(shape=0)은 아래 하안검 밴드로 라우팅(§08). Color/Intensity/Shape는
@@ -1173,7 +1175,7 @@ namespace ARMakeup.Face
                     : Mathf.Clamp01(p.aegyoIntensity * 0.68f);
                 AegyoRenderer.Instance.ApplyParams(
                     p.aegyoIntensity, p.aegyoColor, p.aegyoHeight, normalizedAegyoMode,
-                    normalizedShadow, p.aegyoShimmer);
+                    normalizedShadow, p.aegyoShimmer, p.aegyoTexture, p.aegyoShape);
             }
             // 쌍꺼풀 크리스(#19b) — 상안검 위 얇은 음영(색은 자연 음영 고정, 강도 0=끔).
             if (DoubleLidRenderer.Instance != null)

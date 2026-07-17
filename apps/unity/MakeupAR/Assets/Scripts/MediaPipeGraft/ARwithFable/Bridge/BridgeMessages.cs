@@ -63,6 +63,10 @@ namespace ARMakeup.Bridge
         public float highlightNoseTipIntensity = 0f;
         public float highlightBrowBoneIntensity = 0f;
         public float highlightCupidIntensity = 0f;
+        // 하이라이터 존 세트 버전(실기기 비교용 스위치) — 0=포크 5존(기본, 픽셀 동일)
+        // 1=upstream 9존 재설계(캐노니컬 실측: 눈썹뼈 아치 상향·콧대 축소·코끝 분리·
+        // 큐피드보우 2타원·턱끝 신설). 생략(JsonUtility 0)=기존 동작.
+        public int highlightZoneVersion = 0;
         public int highlightFinish = 0;             // 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         public float highlightShimmer = 0.5f;       // 시머 게인 0..1 (highlightFinish=3일 때)
         // 제형 스튜디오(#21) — 하이라이터 마감 세부. 전부 0 = enum 기존 동작(하위호환).

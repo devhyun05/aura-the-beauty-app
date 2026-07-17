@@ -475,6 +475,10 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const fndOvalSizeRef = useRef(1.1);
   const [fndOvalFeather, setFndOvalFeather] = useState(0.15); // 얼굴 오벌 경계 페더 (FND_OVAL_FEATHER)
   const fndOvalFeatherRef = useRef(0.15);
+  // ── 임시 디버그(하이라이터 존 세트 비교) — 포크 5존(v0) vs upstream 9존 재설계(v1)를
+  //    실기기에서 눈으로 비교. 0=기본(픽셀 동일). 확정 후 이 상태·ref·버튼을 걷어낸다. ──
+  const [hlZoneV9, setHlZoneV9] = useState(false);
+  const hlZoneVersionRef = useRef(0);
   // 추출에 쓴 원본 사진 URI(검증용) — 썸네일·확대 모달 표시. null=한 번도 추출 안 함.
   const [extractSourceUri, setExtractSourceUri] = useState<string | null>(null);
   const [opacity, setOpacityState] = useState(0.75); // 전역 메이크업 농도 슬라이더 — 기본 75%
@@ -734,6 +738,9 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       scaled.fndSegHiDbg = fndSegHiRef.current;
       scaled.fndOvalSizeDbg = fndOvalSizeRef.current;
       scaled.fndOvalFeatherDbg = fndOvalFeatherRef.current;
+      // 임시 디버그(하이라이터 존 세트) — 0=포크 5존(기본) 1=upstream 9존. 룩 상태와
+      // 무관한 존 지오메트리 스위치라 모든 applyFilter에 주입. 0이면 현재 픽셀과 동일.
+      scaled.highlightZoneVersion = hlZoneVersionRef.current;
       sendToUnity({ type: 'applyFilter', filter: scaled });
     },
     [sendToUnity],
@@ -805,6 +812,13 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     },
     [sendScaled],
   );
+  // 임시 디버그(하이라이터 존 세트) — 5존↔9존 토글 후 현재 룩을 즉시 재전송(존 스위치 반영).
+  const toggleHlZoneV9 = useCallback(() => {
+    const next = !hlZoneV9;
+    hlZoneVersionRef.current = next ? 1 : 0;
+    setHlZoneV9(next);
+    sendScaled(paramsRef.current, opacityRef.current);
+  }, [hlZoneV9, sendScaled]);
   const setFndSegLoDbg = useCallback(
     (v: number) => {
       fndSegLoRef.current = v;
@@ -2819,6 +2833,13 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               <Text style={styles.debugText}>
                 이음새 {seamDebugOpen ? 'ON' : 'off'}
               </Text>
+            </TouchableOpacity>
+            {/* 임시 디버그(하이라이터 존 5↔9) — 포크 5존 vs upstream 9존 재설계 실기기 비교.
+                걷어낼 때 이 버튼·toggleHlZoneV9·상태·ref·sendScaled 주입을 함께 제거 */}
+            <TouchableOpacity
+              style={[styles.debugBtn, hlZoneV9 && styles.debugBtnOn]}
+              onPress={toggleHlZoneV9}>
+              <Text style={styles.debugText}>HL {hlZoneV9 ? '9존' : '5존'}</Text>
             </TouchableOpacity>
           </View>
         )}

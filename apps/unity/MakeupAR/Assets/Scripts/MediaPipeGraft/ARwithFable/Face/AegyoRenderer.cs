@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace ARMakeup.Face
@@ -25,7 +26,9 @@ namespace ARMakeup.Face
         const int LidPts = 9;
         const int Seg = 25;
         const float BandHeightFactor = 0.34f;
-        const float HighlightPeakV = 0.34f;
+        // 능선(하이라이트) 피크의 대표 raw v(핏 핸들 캡처용). SDF 롤 재설계로 롤이 얇아지고
+        // lash 라인 쪽으로 붙어 피크가 위로 올라왔다(aegyoV 0.32 × AEGYO_BAND 0.50 ≈ 0.16).
+        const float HighlightPeakV = 0.16f;
         const float DistanceFromCamera = 0.5f;
         const float DepthScale = 1f;
 
@@ -34,6 +37,8 @@ namespace ARMakeup.Face
         static readonly int ShadowIntensityId = Shader.PropertyToID("_AegyoShadowIntensity");
         static readonly int ModeId = Shader.PropertyToID("_AegyoMode");
         static readonly int ShimmerId = Shader.PropertyToID("_AegyoShimmer");
+        static readonly int TextureId = Shader.PropertyToID("_AegyoTexture");
+        static readonly int ShapeId = Shader.PropertyToID("_AegyoShape");
         static readonly Color DefaultColor = new Color(0.95f, 0.82f, 0.78f, 1f);
 
         Camera _camera;
@@ -49,6 +54,10 @@ namespace ARMakeup.Face
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _curve = new Vector2[Seg];
         readonly LidArcFit[] _arcFits = { new LidArcFit(0.4f), new LidArcFit(0.4f) };
+        // 애교살 SDF(3d71a28) — 정점당 밴드 로컬 좌표(uv1)와 눈당 곡선 계수(uv2, k0/k1/L/bandWidth).
+        // 셰이더가 픽셀당 FitArc 곡선까지 수직거리를 재도록 정점에 실어 보낸다. SetUVs로 매 프레임 갱신.
+        List<Vector2> _sdfLocalXY;
+        List<Vector4> _sdfCurve;
         readonly Vector2[] _fitPeakVp = new Vector2[Eyes];
         readonly int[] _fitPeakFrame = { -1, -1 };
         readonly bool[] _fitPeakValid = new bool[Eyes];
@@ -97,6 +106,12 @@ namespace ARMakeup.Face
             _mesh.vertices = _vertices;
             _mesh.uv = uvs;
             _mesh.triangles = tris;
+            // 애교살 SDF 정점 채널 — 초기값 0(강도 0이면 미사용). LateUpdate가 매 프레임
+            // 실제 밴드 로컬 좌표·곡선 계수로 덮어쓴다.
+            _sdfLocalXY = new List<Vector2>(new Vector2[vertexCount]);
+            _sdfCurve = new List<Vector4>(new Vector4[vertexCount]);
+            _mesh.SetUVs(1, _sdfLocalXY);
+            _mesh.SetUVs(2, _sdfCurve);
             gameObject.AddComponent<MeshFilter>().sharedMesh = _mesh;
             _renderer = gameObject.AddComponent<MeshRenderer>();
             _renderer.sharedMaterial = _material;
@@ -108,7 +123,7 @@ namespace ARMakeup.Face
 
         public void ApplyParams(
             float intensity, string colorHex, float height, int mode,
-            float shadowIntensity, float shimmer)
+            float shadowIntensity, float shimmer, int texture, int shape)
         {
             _intensity = Mathf.Clamp01(intensity);
             _shadowIntensity = Mathf.Clamp01(shadowIntensity);
@@ -123,6 +138,8 @@ namespace ARMakeup.Face
             _material.SetFloat(ShadowIntensityId, _shadowIntensity);
             _material.SetFloat(ModeId, Mathf.Clamp(mode, 0, 1));
             _material.SetFloat(ShimmerId, Mathf.Clamp01(shimmer));
+            _material.SetFloat(TextureId, Mathf.Max(0, texture)); // 제형 GENERIC enum(0=크림)
+            _material.SetFloat(ShapeId, Mathf.Clamp(shape, 0, 2)); // 모양(0 초승달 1 일자 2 중앙)
         }
 
         public bool TryGetAegyoFitHandle(int eye, out Vector2 peakVp)
@@ -169,6 +186,13 @@ namespace ARMakeup.Face
                 var bandHeight = eyeWidth * BandHeightFactor * _height;
                 var depth = Depth(landmarks[lids[4]].z);
                 var b = eye * Seg * 2;
+                // 애교살 SDF 곡선 계수(눈당 상수) — LidArcFit이 확정한 프레임·계수. 셰이더가
+                // 정점 로컬 좌표에서 v(u)=k0·u(1−u)+k1·u²(1−u)을 재구성해 픽셀당 수직거리를 잰다.
+                var fit = _arcFits[eye];
+                var arcInner = fit.Inner;
+                var arcX = fit.XAxis;
+                var arcY = fit.YAxis;
+                var curveVec = new Vector4(fit.K0, fit.K1, fit.ChordLength, bandHeight);
                 for (var i = 0; i < Seg; i++)
                 {
                     var prev = _curve[Mathf.Max(0, i - 1)];
@@ -181,6 +205,16 @@ namespace ARMakeup.Face
                     var bottom = _curve[i] + normal * bandHeight;
                     _vertices[b + i * 2] = ImageToWorld(_curve[i], depth);
                     _vertices[b + i * 2 + 1] = ImageToWorld(bottom, depth);
+                    // 밴드 로컬 좌표(현축 X=눈머리→눈꼬리, 아래축 Y=피부)를 이미지 공간에서 실어
+                    // 보낸다. X/Y는 위치의 아핀 함수라 프래그 보간이 픽셀 실좌표와 정확히 일치.
+                    var topRel = _curve[i] - arcInner;
+                    var botRel = bottom - arcInner;
+                    _sdfLocalXY[b + i * 2] = new Vector2(
+                        Vector2.Dot(topRel, arcX), Vector2.Dot(topRel, arcY));
+                    _sdfLocalXY[b + i * 2 + 1] = new Vector2(
+                        Vector2.Dot(botRel, arcX), Vector2.Dot(botRel, arcY));
+                    _sdfCurve[b + i * 2] = curveVec;
+                    _sdfCurve[b + i * 2 + 1] = curveVec;
                     if (i == Seg / 2)
                     {
                         var peak = Vector2.Lerp(_curve[i], bottom, HighlightPeakV);
@@ -191,6 +225,8 @@ namespace ARMakeup.Face
                 }
             }
             _mesh.vertices = _vertices;
+            _mesh.SetUVs(1, _sdfLocalXY); // 애교살 SDF 밴드 로컬 좌표
+            _mesh.SetUVs(2, _sdfCurve);   // 애교살 SDF 곡선 계수(눈당)
             _mesh.RecalculateBounds();
         }
 

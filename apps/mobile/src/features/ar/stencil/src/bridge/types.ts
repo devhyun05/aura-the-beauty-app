@@ -87,6 +87,10 @@ export interface FilterParams {
   highlightNoseTipIntensity?: number;
   highlightBrowBoneIntensity?: number;
   highlightCupidIntensity?: number;
+  /** 하이라이터 존 세트 버전(실기기 비교용 스위치) — 0=포크 5존(기본, 픽셀 동일)
+   *  1=upstream 9존 재설계(눈썹뼈 아치 상향·콧대 축소·코끝 분리·큐피드보우 2타원·턱끝 신설).
+   *  생략 시 0(기존 동작). */
+  highlightZoneVersion?: number;
   /** 하이라이터 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
   highlightFinish?: number;
   /** 시머 게인 0..1 (highlightFinish=3일 때). 생략 시 Unity 기본 0.5 */
