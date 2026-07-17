@@ -214,6 +214,83 @@ create table if not exists analysis_reports (
 
 comment on table analysis_reports is 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.';
 
+create table if not exists face_measurement_preferences (
+  user_id uuid primary key references users(id) on delete cascade,
+  self_selected_locale text,
+  locale_selection_source text not null default 'unset',
+  locale_selected_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_face_measurement_preferences_source
+    check (locale_selection_source in ('unset', 'self_selected')),
+  constraint chk_face_measurement_preferences_locale_format
+    check (
+      self_selected_locale is null
+      or self_selected_locale ~ '^[A-Za-z0-9][A-Za-z0-9._-]{1,31}$'
+    ),
+  constraint chk_face_measurement_preferences_selection_state
+    check (
+      (
+        self_selected_locale is null
+        and locale_selection_source = 'unset'
+        and locale_selected_at is null
+      )
+      or (
+        self_selected_locale is not null
+        and locale_selection_source = 'self_selected'
+        and locale_selected_at is not null
+      )
+    )
+);
+
+comment on table face_measurement_preferences is
+  'Explicit user selection only. Device locale, network, profile, and face inference must never populate this row.';
+
+create table if not exists face_length_measurement_snapshots (
+  report_id uuid primary key references analysis_reports(id) on delete cascade,
+  measurement_capture_id text not null,
+  measurement_contract_id text not null,
+  face_length_ratio double precision not null,
+  estimate_low double precision not null,
+  estimate_high double precision not null,
+  captured_at timestamptz not null,
+  evidence_provenance text not null default 'client_observed_unverified',
+  norm_training_eligible boolean not null default false,
+  norm_attestation_id text,
+  created_at timestamptz not null default now(),
+  constraint chk_face_length_snapshot_capture_id
+    check (char_length(btrim(measurement_capture_id)) between 1 and 160),
+  constraint chk_face_length_snapshot_contract_id
+    check (char_length(btrim(measurement_contract_id)) between 1 and 160),
+  constraint chk_face_length_snapshot_finite_positive check (
+    face_length_ratio > 0
+    and face_length_ratio < 'Infinity'::double precision
+    and estimate_low > 0
+    and estimate_low < 'Infinity'::double precision
+    and estimate_high > 0
+    and estimate_high < 'Infinity'::double precision
+  ),
+  constraint chk_face_length_snapshot_band check (
+    estimate_low <= face_length_ratio
+    and face_length_ratio <= estimate_high
+  ),
+  constraint chk_face_length_snapshot_client_observed_only check (
+    evidence_provenance = 'client_observed_unverified'
+    and norm_training_eligible = false
+    and norm_attestation_id is null
+  )
+);
+
+create index if not exists idx_face_length_snapshots_contract_captured
+  on face_length_measurement_snapshots (
+    measurement_contract_id,
+    captured_at desc,
+    report_id
+  );
+
+comment on table face_length_measurement_snapshots is
+  'Unverified client-observed face-length history for same-user comparisons only. Norm training and activation are prohibited. Raw images and landmarks are prohibited.';
+
 create table if not exists face3d_calibration_receipt_consumptions (
   receipt_id text primary key,
   capture_nonce text not null unique,
@@ -259,6 +336,79 @@ create table if not exists analysis_stage_runs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists analysis_lab_sessions (
+  id uuid primary key,
+  principal_id uuid not null,
+  status text not null default 'active' check (status in ('active', 'cancelled')),
+  expires_at timestamptz not null default (now() + interval '7 days'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists analysis_lab_runs (
+  id uuid primary key default gen_random_uuid(),
+  session_id uuid not null references analysis_lab_sessions(id) on delete cascade,
+  client_request_id uuid not null,
+  batch_ordinal integer not null,
+  fixture_id text not null,
+  principal_id uuid not null,
+  stage text not null check (stage in ('measure', 'perceive', 'consult')),
+  status text not null check (status in ('processing', 'completed', 'failed', 'cancelled')),
+  schema_version text not null,
+  prompt_version text not null,
+  provider text not null default 'disabled' check (provider = 'disabled'),
+  model text not null default 'disabled' check (model = 'disabled'),
+  input_hash text not null check (input_hash ~ '^[0-9a-f]{64}$'),
+  overrides jsonb not null default '{}'::jsonb,
+  normalized_output jsonb not null default '{}'::jsonb,
+  raw_response jsonb not null default '{}'::jsonb,
+  validation_errors jsonb not null default '[]'::jsonb,
+  error_payload jsonb not null default '{}'::jsonb,
+  latency_ms integer check (latency_ms is null or latency_ms >= 0),
+  token_usage jsonb,
+  external_provider_runs integer not null default 0 check (external_provider_runs = 0),
+  cache_hit boolean not null default false,
+  cached_from_run_id uuid,
+  started_at timestamptz not null default now(),
+  completed_at timestamptz,
+  expires_at timestamptz not null default (now() + interval '7 days'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint chk_analysis_lab_runs_fixture_id
+    check (fixture_id ~ '^[a-z0-9][a-z0-9._-]{0,79}$'),
+  constraint chk_analysis_lab_runs_batch_ordinal
+    check (batch_ordinal between 1 and 5),
+  constraint chk_analysis_lab_runs_cache_provenance check (
+    (cache_hit and cached_from_run_id is not null)
+    or (not cache_hit and cached_from_run_id is null)
+  ),
+  constraint chk_analysis_lab_runs_json_shapes check (
+    jsonb_typeof(overrides) = 'object'
+    and jsonb_typeof(normalized_output) = 'object'
+    and jsonb_typeof(raw_response) = 'object'
+    and jsonb_typeof(validation_errors) = 'array'
+    and jsonb_typeof(error_payload) = 'object'
+    and (token_usage is null or jsonb_typeof(token_usage) = 'object')
+  )
+);
+
+create index if not exists idx_analysis_lab_runs_session_created
+  on analysis_lab_runs (session_id, created_at desc);
+create index if not exists idx_analysis_lab_runs_fixture_stage_created
+  on analysis_lab_runs (fixture_id, stage, created_at desc);
+create index if not exists idx_analysis_lab_runs_completed_cache
+  on analysis_lab_runs (fixture_id, principal_id, stage, schema_version, input_hash, completed_at desc)
+  where status = 'completed' and external_provider_runs = 0;
+create index if not exists idx_analysis_lab_runs_expires
+  on analysis_lab_runs (expires_at);
+create unique index if not exists uq_analysis_lab_runs_batch_ordinal
+  on analysis_lab_runs (session_id, client_request_id, batch_ordinal);
+create index if not exists idx_analysis_lab_sessions_expires
+  on analysis_lab_sessions (expires_at);
+
+comment on table analysis_lab_runs is
+  'Local JSON-fixture-only Report Lab history; product reports and users are outside this contract.';
 
 create table if not exists hair_analyses (
   id uuid primary key default gen_random_uuid(),
@@ -2315,9 +2465,25 @@ create trigger trg_analysis_reports_updated_at
 before update on analysis_reports
 for each row execute function set_updated_at();
 
+drop trigger if exists trg_face_measurement_preferences_updated_at
+  on face_measurement_preferences;
+create trigger trg_face_measurement_preferences_updated_at
+before update on face_measurement_preferences
+for each row execute function set_updated_at();
+
 drop trigger if exists trg_analysis_stage_runs_updated_at on analysis_stage_runs;
 create trigger trg_analysis_stage_runs_updated_at
 before update on analysis_stage_runs
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_analysis_lab_runs_updated_at on analysis_lab_runs;
+create trigger trg_analysis_lab_runs_updated_at
+before update on analysis_lab_runs
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_analysis_lab_sessions_updated_at on analysis_lab_sessions;
+create trigger trg_analysis_lab_sessions_updated_at
+before update on analysis_lab_sessions
 for each row execute function set_updated_at();
 
 drop trigger if exists trg_hair_analyses_updated_at on hair_analyses;
