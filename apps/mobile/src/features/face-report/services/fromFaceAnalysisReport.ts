@@ -402,6 +402,25 @@ const S3_REGION_META: Record<
   },
 };
 
+// 구버전 보고서는 regionNotes 값이 string일 수 있고 신버전은
+// {insight, evidence, recommendation} 객체다. 어댑터 경계에서 둘을 흡수한다.
+function normalizeRegionNote(
+  raw: unknown,
+): {insight: string; evidence: string; recommendation: string} {
+  if (raw && typeof raw === 'object') {
+    const o = raw as Record<string, unknown>;
+    return {
+      insight: typeof o.insight === 'string' ? o.insight : '',
+      evidence: typeof o.evidence === 'string' ? o.evidence : '',
+      recommendation: typeof o.recommendation === 'string' ? o.recommendation : '',
+    };
+  }
+  if (typeof raw === 'string') {
+    return {insight: raw, evidence: '', recommendation: ''};
+  }
+  return {insight: '', evidence: '', recommendation: ''};
+}
+
 function buildS3(regionNotes: FaceAnalysisRegionNotes | undefined, photo: S1Data['photo']): S3Data | null {
   if (!regionNotes) {
     return null;
@@ -418,7 +437,15 @@ function buildS3(regionNotes: FaceAnalysisRegionNotes | undefined, photo: S1Data
       guideLabel: meta.guideLabel,
       guideLabelX: meta.guideLabelX,
       axes: [],
-      paragraph: regionNotes[key],
+      ...(() => {
+        const note = normalizeRegionNote(regionNotes[key]);
+        return {
+          insight: note.insight,
+          evidence: note.evidence,
+          recommendation: note.recommendation,
+          paragraph: note.insight, // 폴백/구컨슈머 호환
+        };
+      })(),
     };
   });
 
@@ -475,8 +502,8 @@ function buildS6(
     ],
     faceGuides: [0.36, 0.64],
     items: [
-      {n: 1, color: color.magenta, text: `눈가 — ${regionNotes.upper}`},
-      {n: 2, color: color.accent, text: `입가 — ${regionNotes.lower}`},
+      {n: 1, color: color.magenta, text: `눈가 — ${normalizeRegionNote(regionNotes.upper).insight}`},
+      {n: 2, color: color.accent, text: `입가 — ${normalizeRegionNote(regionNotes.lower).insight}`},
     ],
     stepMs: [950, 1150],
     keywords: impressionNotes.keywords,

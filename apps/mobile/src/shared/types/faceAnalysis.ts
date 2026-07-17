@@ -24,11 +24,20 @@ export interface FaceAnalysisMakeupCard {
 // AI가 같은 분석 호출에서 함께 생성하는 부위별/전체 인상/스타일링 텍스트 —
 // 좌표·수치가 아니라 서술만 담는다(정본 원칙 4: 측정 수치 비노출). 구버전
 // 보고서(이 필드 추가 이전 생성분)에는 없을 수 있어 전부 optional.
+// 부위별 근거·인사이트·조언(정본 원칙 완화 2026-07-18: 수치 비노출은 유지하되
+// 근거·조언 서술을 담는다). 구버전 보고서는 각 값이 string일 수 있어 어댑터
+// 경계에서 {insight, evidence, recommendation}로 승격한다.
+export interface FaceAnalysisRegionNote {
+  insight: string;
+  evidence: string;
+  recommendation: string;
+}
+
 export interface FaceAnalysisRegionNotes {
-  upper: string;
-  mid: string;
-  lower: string;
-  jaw: string;
+  upper: FaceAnalysisRegionNote;
+  mid: FaceAnalysisRegionNote;
+  lower: FaceAnalysisRegionNote;
+  jaw: FaceAnalysisRegionNote;
 }
 
 export interface FaceAnalysisImpressionNotes {

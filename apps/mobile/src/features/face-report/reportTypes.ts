@@ -103,6 +103,10 @@ export interface RegionCardData {
   blend?: BlendData;                    // jaw card: rendered before the axes
   axes: SpectrumAxisData[];
   whatIf?: { axisIndex: number; config: WhatIfConfig };
+  // 부위 근거·인사이트·조언(P2). 값이 없으면 컴포넌트가 paragraph로 폴백.
+  insight?: string;
+  evidence?: string;
+  recommendation?: string;
   paragraph: string;
 }
 export interface S3Data { eyebrow: string; title: string; sub: string; cards: RegionCardData[] }
