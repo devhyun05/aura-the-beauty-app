@@ -13,6 +13,7 @@ import {
 import type {FitDelta, FitSheet} from '../composer/fitSheets';
 import {isDecoRegion, REGION_MAP} from '../composer/regions';
 import type {RegionKey} from '../composer/regions';
+import {NEUTRAL_ACCENT, PANEL_BG, TEXT_HINT, TEXT_SUB} from '../theme';
 
 /**
  * 내 핏 패널(§5 A13) — 핏 시트(개인 공간 델타 스타일시트)의 편집 표면.
@@ -36,8 +37,6 @@ interface Props {
    *  마운트되므로 초기값으로만 쓰인다. */
   initialSheetId?: string | null;
 }
-
-const GOLD = '#C9A15E';
 
 // 데코(자유 배치)의 아핀 델타 슬라이더 — 배치 필드는 골드 슬라이더가 아니라
 // 오버레이 transform이라 여기서 직접 정의한다(fitSheets.applyFitToLayers와 짝).
@@ -205,8 +204,8 @@ export default function FitSheetPanel({
                     minimumValue={f.min}
                     maximumValue={f.max}
                     value={(entry?.[f.key] as number | undefined) ?? 0}
-                    minimumTrackTintColor={GOLD}
-                    thumbTintColor={GOLD}
+                    minimumTrackTintColor={NEUTRAL_ACCENT}
+                    thumbTintColor={NEUTRAL_ACCENT}
                     onValueChange={v =>
                       setDelta({[f.key]: Math.abs(v) < 1e-4 ? 0 : v})
                     }
@@ -223,8 +222,8 @@ export default function FitSheetPanel({
                       minimumValue={-half}
                       maximumValue={half}
                       value={entry?.rules?.[f.key as string] ?? 0}
-                      minimumTrackTintColor={GOLD}
-                      thumbTintColor={GOLD}
+                      minimumTrackTintColor={NEUTRAL_ACCENT}
+                      thumbTintColor={NEUTRAL_ACCENT}
                       onValueChange={v =>
                         setDelta({
                           rules: {[f.key as string]: Math.abs(v) < 1e-4 ? 0 : v},
@@ -258,7 +257,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     padding: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: PANEL_BG,
     maxHeight: 420,
     gap: 8,
   },
@@ -267,41 +266,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  title: {color: GOLD, fontSize: 13, fontWeight: '700'},
-  closeText: {color: '#C9BFC6', fontSize: 14},
+  title: {color: 'rgba(255,255,255,0.92)', fontSize: 13, fontWeight: '700'},
+  closeText: {color: TEXT_SUB, fontSize: 14},
   sliderScroll: {maxHeight: 200},
-  hint: {color: '#8B7E8C', fontSize: 11, lineHeight: 15},
+  hint: {color: TEXT_HINT, fontSize: 11, lineHeight: 15},
   studioBtn: {
     paddingVertical: 12,
     alignItems: 'center',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(201,161,94,0.4)',
+    borderColor: 'rgba(255,255,255,0.3)',
   },
-  studioBtnText: {color: GOLD, fontSize: 12, fontWeight: '600'},
+  studioBtnText: {color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600'},
   chipRow: {flexDirection: 'row', gap: 6, paddingVertical: 2},
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(201,161,94,0.35)',
+    borderColor: 'rgba(255,255,255,0.25)',
   },
-  chipOn: {backgroundColor: 'rgba(201,161,94,0.18)', borderColor: GOLD},
-  chipText: {color: '#C9BFC6', fontSize: 12},
-  chipTextOn: {color: GOLD, fontWeight: '700'},
+  chipOn: {backgroundColor: '#E9E9E9', borderColor: '#E9E9E9'},
+  chipText: {color: TEXT_SUB, fontSize: 12},
+  chipTextOn: {color: '#1A1206', fontWeight: '700'},
   regionChip: {
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
-  regionChipOn: {borderBottomColor: GOLD},
-  regionText: {color: '#8B7E8C', fontSize: 12},
-  regionTextOn: {color: GOLD, fontWeight: '700'},
+  regionChipOn: {borderBottomColor: 'rgba(255,255,255,0.9)'},
+  regionText: {color: TEXT_HINT, fontSize: 12},
+  regionTextOn: {color: '#FFFFFF', fontWeight: '700'},
   leafBadgeRow: {flexDirection: 'row', alignItems: 'center', gap: 10},
-  leafBadgeText: {color: GOLD, fontSize: 11, fontWeight: '700'},
-  leafBadgeClear: {color: '#8B7E8C', fontSize: 11, textDecorationLine: 'underline'},
+  leafBadgeText: {color: '#FFFFFF', fontSize: 11, fontWeight: '700'},
+  leafBadgeClear: {color: TEXT_HINT, fontSize: 11, textDecorationLine: 'underline'},
   roleRow: {flexDirection: 'row', gap: 6},
   roleBtn: {
     paddingHorizontal: 9,
@@ -310,12 +309,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
-  roleBtnOn: {borderColor: GOLD, backgroundColor: 'rgba(201,161,94,0.12)'},
-  roleText: {color: '#8B7E8C', fontSize: 11},
-  roleTextOn: {color: GOLD, fontWeight: '600'},
+  roleBtnOn: {borderColor: 'rgba(255,255,255,0.9)', backgroundColor: 'rgba(255,255,255,0.12)'},
+  roleText: {color: TEXT_HINT, fontSize: 11},
+  roleTextOn: {color: '#FFFFFF', fontWeight: '600'},
   sliderRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  sliderLabel: {color: '#C9BFC6', fontSize: 12, width: 92},
+  sliderLabel: {color: TEXT_SUB, fontSize: 12, width: 92},
   slider: {flex: 1, height: 28},
   resetBtn: {alignSelf: 'flex-start', paddingVertical: 4},
-  resetText: {color: '#8B7E8C', fontSize: 11, textDecorationLine: 'underline'},
+  resetText: {color: TEXT_HINT, fontSize: 11, textDecorationLine: 'underline'},
 });

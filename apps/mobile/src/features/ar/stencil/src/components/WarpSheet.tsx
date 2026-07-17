@@ -1,7 +1,7 @@
 /**
- * 보정 시트 — 보정 레인 편집기 (골드 톤). 메이크업 기본모드와 구조 통일:
+ * 보정 시트 — 보정 레인 편집기 (무채색 톤). 메이크업 기본모드와 구조 통일:
  *  0) 카테고리 탭: [전체] + 부위(이마·눈썹·눈·코·볼·입·턱). 전체가 이마 왼쪽 맨 앞.
- *                   · 내용물 있음(워프 적용) → 칩 배경 골드(보정 메인컬러).
+ *                   · 내용물 있음(워프 적용) → 칩 배경 무채색(보정 레인은 색 분기 없음).
  *                   · 수정됨(현재 프리셋과 다름) → 이름 옆 ●.
  *  1) 전체 탭 = 보정 룩(보정 프리셋 + ◈내 필터)을 카드형으로 → 고르면 전체 워프 로드.
  *     부위 탭 = 그 부위 워프 슬라이더(연속 조절).
@@ -19,7 +19,7 @@ import {
   View,
 } from 'react-native';
 import ParamSlider from './ParamSlider';
-import { GOLD } from '../composer/regions';
+import { NEUTRAL_ACCENT } from '../theme';
 import { WARP_PRESETS, PART_PRESETS, WARP_SLIDERS } from '../composer/warpPresets';
 import type {
   WarpLane,
@@ -124,8 +124,8 @@ export default function FitSheet({
     <View style={styles.sheet}>
       {headerBar}
 
-      {/* 0) 카테고리 탭 — 밑줄 탭(메이크업 기본모드와 동일 디자인, 골드 강조).
-              기본=흐림, 내용물(워프≠0)=밝은 텍스트, 선택=골드+밑줄, 수정=● */}
+      {/* 0) 카테고리 탭 — 밑줄 탭(메이크업 기본모드와 동일 디자인, 무채색 강조).
+              기본=흐림, 내용물(워프≠0)=밝은 텍스트, 선택=흰색+밑줄, 수정=● */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -250,7 +250,7 @@ export default function FitSheet({
                 key={def.key}
                 label={def.label}
                 value={offToSlider(lane.params[def.key], def.range ?? 1)}
-                accent={GOLD}
+                accent={NEUTRAL_ACCENT}
                 onChange={v => onChangeParam(def.key, sliderToOff(v, def.range ?? 1))}
               />
             ) : (
@@ -258,7 +258,7 @@ export default function FitSheet({
                 key={def.key}
                 label={def.label}
                 value={lane.params[def.key] ?? 0}
-                accent={GOLD}
+                accent={NEUTRAL_ACCENT}
                 onChange={v => onChangeParam(def.key, v)}
               />
             ),
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    color: '#ECD9A8',
+    color: 'rgba(255,255,255,0.92)',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.92)', // 내용 있음(워프≠0) = 밝은 텍스트
   },
   catTabTextOn: {
-    color: GOLD, // 선택됨 = 골드
+    color: '#FFFFFF', // 선택됨 = 흰색(무채색)
     fontWeight: '800',
   },
   catUnderline: {
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent', // 레이아웃 안정용 항상 자리 차지
   },
   catUnderlineOn: {
-    backgroundColor: GOLD,
+    backgroundColor: '#FFFFFF',
   },
   // 카드형 보정 룩 — 한 줄 가로 스크롤(캐러셀)
   cardScroll: {
@@ -364,32 +364,42 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   // 카드 = 5:6 썸네일 한 장(텍스트를 하단에 스크림 얹어 오버레이). 외곽 상자 없음.
+  // 5라운드: BasicMode/GuideMode와 카드 규격 전수 통일(테두리 2px·라벨 바 마진 트릭).
   card: {
     width: CARD_W,
     aspectRatio: 5 / 6, // 카드 전체가 세로형 썸네일(가로5:세로6).
     borderRadius: 10,
     overflow: 'hidden',
     justifyContent: 'flex-end',
-    // 비선택 카드는 테두리 없음(투명 1px = 자리만 유지) — 선택만 시그니처색 테두리.
-    borderWidth: 1,
+    // 비선택 카드는 테두리 없음(투명 2px = 자리만 유지) — 선택만 흰 테두리.
+    // 폭을 선택(2)과 맞춰 라벨 바 음수 마진(-2)으로 테두리 자리를 덮어 꽉 차게
+    // (BasicMode/GuideMode와 동일 트릭 — 기존 1px은 두 파일과 어긋난 값이었다).
+    borderWidth: 2,
     borderColor: 'transparent',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   cardOn: {
-    borderColor: GOLD,
+    borderColor: 'rgba(255,255,255,0.9)',
     borderWidth: 2,
+    // GuideMode.cardOn과 동일한 선택 하이라이트 배경 — 이 카드들은 실제 제품
+    // 스와치가 아니라 중립 틴트(cardTintFit/None)라 배경을 덮어써도 정보 손실이
+    // 없다(BasicMode는 스와치 색이 실제 정보라 이 배경을 넣지 않음, 기능상 예외).
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
   cardTintFit: {
-    backgroundColor: 'rgba(201,161,94,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   cardTintNone: {
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
   cardLabelBar: {
-    width: '100%',
+    // 카드 테두리(2px) 자리를 음수 마진으로 덮어 좌·우·하단 가장자리까지 꽉 채운다
+    // (BasicMode/GuideMode와 동일 — 기존 width:'100%'는 1px 테두리 시절의 임시값).
+    marginHorizontal: -2,
+    marginBottom: -2,
     paddingVertical: 3,
-    paddingHorizontal: 2,
-    backgroundColor: 'rgba(0,0,0,0.5)', // 스크림 — 썸네일 위 텍스트 가독
+    paddingHorizontal: 3, // GuideMode 라벨 바와 통일(기존 2 → 3)
+    backgroundColor: 'rgba(255,255,255,0.1)', // 회색조 — GuideMode 라벨 바와 통일
   },
   cardLabel: {
     color: '#FFFFFF',

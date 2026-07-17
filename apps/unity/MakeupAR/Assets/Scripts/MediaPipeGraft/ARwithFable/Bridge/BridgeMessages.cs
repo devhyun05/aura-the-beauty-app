@@ -17,6 +17,7 @@ namespace ARMakeup.Bridge
         public float lipIntensity = 0.5f;
         public string lipLinerColor = "#A83A50";  // 립라이너(외곽 얇은 링, 매트) 색
         public float lipLinerIntensity = 0f;      // 0 = 끔 (립 색과 독립)
+        public int lipLinerFinish = 1;           // 립라이너 마감: 0=새틴 1=매트(기본, 연필 질감) 2=글로시. 기본 1=현행 렌더 유지(생략 하위호환)
         public int lipFinish = 0;                // 립 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         public float lipShimmer = 0.5f;          // 시머 게인 0..1 (lipFinish=3일 때만 사용)
         public int lipMaterial = 0;              // 재질: 0=없음(기본) 1=벨벳 2=메탈 3=홀로그램
@@ -94,12 +95,42 @@ namespace ARMakeup.Bridge
         public float contourEdgeSoftness = 0f;
         public string concealerColor = "#FADCC2";   // 컨실러(눈밑 밝힘)
         public float concealerIntensity = 0f;
+        public int concealerFinish = 0;              // 컨실러 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머 (두 경로 공통)
         // ── 베이스 팩(#18) — 전부 0/""=기존 픽셀 동일 ──
         public string foundationColor = "#E8C4A8";  // 파운데이션 색(밝은 쿨~딥 웜)
         public float foundationIntensity = 0f;      // 커버리지(0=끔)
         public int foundationFinish = 0;            // 0=새틴(기본) 1=매트 2=듀이
         // 제형 텍스처(배치 A ①) — 커버 램프(게인·chroma·커버) 분기. 0=바이트 동일(하위호환).
         public int foundationTexture = 0;           // 0=리퀴드(기본) 1=쿠션(커버↑) 2=스킨틴트(커버↓)
+        // 제형(텍스처) 공통 축(W1) — 부위군 템플릿 enum. 0=ZERO=현행 픽셀 바이트 동일.
+        // 셰이더가 TexBundleFromEnum으로 시드 미러링(RN regions.ts 정본). W1 셰이더 소비는
+        // 블러셔(TintFinish)만 배선 — 나머지는 저장·왕복만(각 셰이더 배선은 후속 웨이브).
+        public int toneTexture = 0;
+        public int skinTexture = 0;
+        public int concealerTexture = 0;
+        public int powderTexture = 0;
+        public int blushTexture = 0;
+        public int highlightTexture = 0;
+        public int contourTexture = 0;
+        public int eyeshadowTexture = 0;
+        public int eyeshadowLowerTexture = 0;
+        public int aegyoTexture = 0;
+        public int triangleZoneTexture = 0;
+        public int browConcealTexture = 0;
+        public int browTexture = 0;
+        public int browPencilTexture = 0;
+        public int browLightenerTexture = 0;
+        public int browStyleTexture = 0;
+        public int lipBaseTexture = 0;
+        public int lipLinerTexture = 0;
+        public int lipGlossTexture = 0;
+        // ── 임시 디버그(파운데 색 튜닝) — Foundation.cginc 전역 유니폼 조절. 확정값을 리터럴로
+        //    굽고 나면 이 3필드(및 셰이더 유니폼·RN 슬라이더)를 걷어낸다. 초기값=옛 #define 상수라
+        //    RN이 안 건드리면 현재 픽셀과 동일. refLuma/gain은 0이 비정상값이라 리터럴 폴백,
+        //    chroma는 0도 유효값이라 셰이더는 음수 sentinel로 미설정 판정(앱은 항상 유효값 push).
+        public float fndRefLumaDbg = 0.798322f;     // 기준 루마 분모(밝기). 낮을수록 밝음
+        public float fndLumaGainDbg = 1f;           // shade 게인(밝기 여유)
+        public float fndChromaDbg = 0.4f;           // 회색 혼합량(탁함). 낮을수록 선명
         public float powderIntensity = 0f;          // 파우더(유분광 억제, 세팅) — 파운데와 독립
         public string powderColor = "";             // 컬러 파우더 캐스트 ""=무색(트랜스루선트, 기존 출력)
         public int powderFinish = 0;                // 파우더 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머(펄)
@@ -153,19 +184,24 @@ namespace ARMakeup.Bridge
         public float eyeCornerLift = 0f;           // 눈꼬리 띄우기(R7 명명 워프): 바깥 눈꼬리 리프트 0..1 (0=원래)
         public string mascaraColor = "#181418";    // 마스카라(속눈썹 스트로크) 색
         public float mascaraIntensity = 0f;        // 0 = 끔
+        public int mascaraFinish = 0;              // 속눈썹 상 마감: 0=새틴(기본) 1=매트 2=듀이
         // 눈썹 제품 스택 (겹쳐 쓰기). browColor/Intensity = 마스카라/젤(결 보존).
         public string browColor = "#3A2A20";       // 마스카라/젤 색
         public float browIntensity = 0f;           // 0 = 끔
+        public int browFinish = 0;                 // 눈썹 결 마감: 0=새틴(기본) 1=매트 2=듀이
         public string browPowderColor = "#4A3628"; // 파우더 색(빈 곳 채움)
         public float browPowderIntensity = 0f;
         public int browPowderTexture = 0;          // 채움 제형: 0=파우더 1=포마드 2=젤
         public int browPowderFinish = 0;           // 채움 마감: 0=새틴 1=매트 2=글로시 3=시머
         public float browPowderShimmer = 0.5f;     // 시머 게인 0..1 (finish=3일 때)
         public float browLightenerIntensity = 0f;  // 옅은 눈썹(피부톤 커버, 색 없음)
+        public int browLightenerFinish = 0;        // 라이트너 마감: 0=새틴(기본) 1=매트 2=듀이
         public string browPencilColor = "#2A1E16"; // 펜슬 색(개별 털 스트로크)
         public float browPencilIntensity = 0f;
+        public int browPencilFinish = 0;           // 펜슬(한올) 마감: 0=새틴(기본) 1=매트 2=듀이
         public string browStyleColor = "#3A2A20";  // 스타일(텍스처 워프) 틴트 색
         public float browStyleIntensity = 0f;      // 임포트/기본 눈썹 텍스처 강도
+        public int browStyleFinish = 0;            // 스타일(텍스처 눈썹) 마감: 0=새틴(기본) 1=매트 2=듀이
         public float browThickness = 1f;           // 눈썹 두께 배수 (1 = 원래)
         public float browArch = 0f;                // 아치 올림 (0 = 원래)
         // 사용자가 UV 템플릿 위에 그린 메이크업 룩(얼굴 UV 데칼) 강도. 텍스처는
@@ -174,28 +210,37 @@ namespace ARMakeup.Bridge
         // ── 명명 핸들(핏/배치) 확장 — 배수는 1=원래(JsonUtility 생략 0은 Unity가
         // 1로 보정), 오프셋은 0=원래. 전역 농도의 스케일 대상 아님(browThickness 선례).
         public float eyelinerThickness = 1f;   // 아이라이너 리본 두께 배수
+        public float eyelinerLowerThickness = 1f; // 아이라이너(하) 리본 두께 배수 (상라이너와 독립)
         public float eyelinerWingLength = 1f;  // 윙(꼬리) 길이 배수 (스타일 위 미세조정)
         public float eyelinerInnerLift = -1f;  // (임시 디버그) 앞머리 끝 리프트 오버라이드 — <0=미설정(상수 사용)
         public float eyeshadowHeight = 1f;     // 아이섀도 밴드 높이 배수 (스모키 정도)
+        public float eyeshadowLowerHeight = 1f;// 아이섀도 하(하안검 아래 섀도) 밴드 높이 배수
         public float mascaraLength = 1f;       // 속눈썹 길이 배수
         public int mascaraStyle = 0;           // 속눈썹 모양: 0=내추럴 1=돌리 2=캣아이 3=오픈아이 4=위스피 5=처짐(위 전용)
         public int lowerLashStyle = 0;         // 아래 속눈썹 모양 — 위와 같은 5종, 값 독립
         public float aegyoHeight = 1f;         // 하안검 밴드 높이 배수 (애교살 두께)
+        public float triangleZoneHeight = 1f;  // 삼각존(눈꼬리 아래 삼각 음영) 밴드 높이 배수
         public float lipLinerWidth = 1f;       // 립라이너 폭 배수
+        public float lipBaseOverline = 0f;     // 베이스립 마스크 확장(±, UV) — 메인립 lipOverline과 독립
+        public float lipGlossOverline = 0f;    // 립글로스 마스크 확장(±, UV) — 메인립 lipOverline과 독립
         public float blushLift = 0f;           // 블러셔 위/아래 (캐노니컬 UV, + = 위)
         public float blushSpread = 0f;         // 블러셔 바깥/안쪽 (+ = 바깥, 좌우 미러)
         public int blushShape = 0;             // 블러셔 모양: 0=클래식(양볼) 1=이가리(코걸침) 2=드레이핑
         // ── 부위 확장(컨실·치아·아래 속눈썹) ── 강도는 0=끔, 길이 배수는 1=원래
         // (JsonUtility 생략 0은 Unity가 1로 보정 — mascaraLength 선례).
         public float browConcealIntensity = 0f;  // 눈썹 지우기(스킨톤 컨실 — 눈썹 스택 밑작업)
+        public int browConcealFinish = 0;        // 눈썹 지우기 마감: 0=새틴(기본) 1=매트 2=듀이
         public float teethWhitenIntensity = 0f;  // 치아 미백(내측 립 링 안쪽, 입 다물면 자동 무효과)
+        public int teethFinish = 0;              // 치아 미백 마감: 0=새틴(기본) 1=매트 2=듀이(글로시 스마일)
         public float lowerLashIntensity = 0f;    // 아래 속눈썹 스트로크(색은 mascaraColor 공용)
         public float lowerLashLength = 1f;       // 아래 속눈썹 길이 배수(mascaraLength와 독립)
+        public int lowerMascaraFinish = 0;       // 속눈썹 하 마감: 0=새틴(기본) 1=매트 2=듀이
         // ── 세그 확장(§11 P3·§14) — CameraFeed 배경 셰이더 소비. 세그 폴백(_SegOn=0:
         // 패키지 미설치·모델 부재·추론 실패·스테일)이면 자동 무효과.
         public float skinSmoothingExtended = 0f; // 이마·목 스무딩 확장(face+body-skin) — skinSmoothing과 독립 (0=끔)
         public string hairTintColor = "#3B2A20"; // 헤어 염색 색 (다크브라운 기본)
         public float hairTintIntensity = 0f;     // 헤어 염색 강도 (0=끔)
+        public int hairFinish = 0;               // 헤어 염색 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         // ── 얼굴형 보정 워프(설계 섹션 10, 골드) — 0=원래. 배치·강도와 무관한 형태 보정.
         // 턱 계열은 −1..+1 부호형(축소↔확대) — 단일 "턱슬림"은 기괴한 V가 돼 부위 분해.
         public float eyeEnlarge = 0f;          // 눈확대(홍채 중심 방사 스케일) 0..1
@@ -221,12 +266,16 @@ namespace ARMakeup.Bridge
         // ── 부위 확장 팩 #19b — 신규 렌더 4종 배선 (전부 생략=0/기본=끔=기존 동작) ──
         public string triangleZoneColor = "#4A342A"; // 삼각존(눈꼬리 아래 음영) 딥브라운
         public float triangleZoneIntensity = 0f;     // 삼각존 강도 (0=끔) — LowerLidRenderer
+        public int triangleZoneFinish = 0;           // 삼각존 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         public float doubleLidIntensity = 0f;        // 쌍꺼풀 크리스 강도 (0=끔) — DoubleLidRenderer
         public float doubleLidHeight = 1f;           // 쌍꺼풀 크리스 높이 배수 (생략 0은 렌더러가 1 보정)
+        public int doubleLidFinish = 0;              // 쌍꺼풀 마감: 0=새틴(기본) 1=매트 2=듀이
         public string lipBaseColor = "#D9A896";      // 베이스립 누드 색
         public float lipBaseIntensity = 0f;          // 베이스립 커버 (0=끔) — LipRenderer.ApplyLipBase
+        public int lipBaseFinish = 0;                // 베이스립 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         public string lipGlossColor = "#FFFFFF";     // 립글로스 틴트 (흰색=무색 광)
         public float lipGlossIntensity = 0f;         // 립글로스 광량 (0=끔) — LipRenderer.ApplyLipGloss
+        public int lipGlossFinish = 0;               // 립글로스 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         // ── 축 개선 5건 (모양 축) — 생략 0 = 기존 동작 ──
         public int eyeshadowShape = 0;   // 0=리드 전체 1=크리스 집중 2=스모키 3=꼬리 포인트
         public int browShape = 0;        // 눈썹 모양(슬롯 공통): 0=내추럴 1=일자 2=아치 3=각진
@@ -258,6 +307,12 @@ namespace ARMakeup.Bridge
         public float blushShimmerDensity = 0f;
         public float blushMatte = 0f;
         public float blushSheen = 0f;
+        // ── 모양 축 W1+W2 (하안검 밴드 4부위 + 쌍꺼풀) — 생략 0 = 현행 픽셀 동일 ──
+        public int eyeshadowLowerShape = 0;  // 하안검 섀도 실루엣: 0=기본밴드 1=넓게 2=꼬리집중 — LowerLidRenderer
+        public int eyelinerLowerSegment = 0; // 하안검 라이너 구간: 0=전체 1=꼬리만 2=앞+꼬리(중앙 비움) — LowerLidRenderer
+        public int aegyoShape = 0;           // 애교살 실루엣: 0=초승달(현행) 1=일자 2=중앙도톰 — LowerLidRenderer
+        public int triangleZoneShape = 0;    // 삼각존 모양: 0=기본 1=좁게 2=넓게 — LowerLidRenderer
+        public int doubleLidShape = 0;       // 쌍꺼풀 라인: 0=인라인(현행) 1=아웃라인 2=세미 — DoubleLidRenderer
     }
 
     /// <summary>

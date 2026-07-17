@@ -33,6 +33,24 @@ Shader "ARMakeup/LowerLid"
         // 경로(세부 0 상수)라 0=새틴=기존 출력과 바이트 동일(하위호환).
         _LowerShadowFinish ("Lower Shadow Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
         _LowerShadowShimmer ("Lower Shadow Shimmer Gain", Range(0, 1)) = 0.5
+        // 삼각존·컨실러 마감 — ApplyFinish 레거시 경로(세부 0 상수)라 0=새틴=기존 출력(하위호환).
+        _TriFinish ("Triangle Zone Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
+        _ConcealerFinish ("Concealer Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
+        // 핏(개인 공간 델타) 배수 — 1=원래(현행 프로파일과 바이트 동일). 각 제품의 세로
+        // 프로파일 폭(밴드 높이/라인 두께)만 스케일하며 부위 간 독립(자기 텀에만 곱).
+        _LinerThickness ("Lower Liner Thickness Mult", Float) = 1
+        _TriHeight ("Triangle Zone Height Mult", Float) = 1
+        _LowerShadowHeight ("Lower Shadow Height Mult", Float) = 1
+        // 제형(텍스처) — GENERIC 템플릿 enum(0=크림=현행). Finish.cginc TexBundleFromEnum 미러.
+        // 컨실러는 FaceMakeup 붉은기 경로와 같은 concealerTexture 값을 공유(부위 1개, 셰이더 2곳).
+        // _AegyoTexture는 애교살 분리(Aegyo.shader) 전까지 언팩만 선언 유지.
+        _AegyoTexture ("Aegyo Texture (generic enum)", Float) = 0
+        _TriTexture ("Triangle Zone Texture (generic enum)", Float) = 0
+        _LowerShadowTexture ("Lower Shadow Texture (generic enum)", Float) = 0
+        _ConcealerTexture ("Concealer Texture (generic enum)", Float) = 0
+        // 모양 축(W1+W2) — 부위별 실루엣 프리셋. 0=현행 프로파일과 바이트 동일(하위호환).
+        _LinerSegment ("Lower Liner Segment (0 full 1 tail 2 front+tail)", Float) = 0
+        _TriShape ("Triangle Zone Shape (0 base 1 narrow 2 wide)", Float) = 0
     }
 
     SubShader
@@ -75,6 +93,21 @@ Shader "ARMakeup/LowerLid"
             // 마감 — 아이섀도 하. 0=새틴=기존 출력(하위호환).
             float _LowerShadowFinish;
             float _LowerShadowShimmer;
+            // 삼각존·컨실러 마감 — 0=새틴=기존 출력(하위호환).
+            float _TriFinish;
+            float _ConcealerFinish;
+            // 핏 배수(1=원래) — 자기 제품 세로 프로파일 폭만 스케일.
+            float _LinerThickness;
+            float _TriHeight;
+            float _LowerShadowHeight;
+            // 제형(텍스처) — GENERIC 템플릿 enum(0=크림=현행).
+            float _AegyoTexture;
+            float _TriTexture;
+            float _LowerShadowTexture;
+            float _ConcealerTexture; // 눈밑존 — FaceMakeup 붉은기 경로와 같은 값 공유
+            // 모양 축(W1+W2) — 0=현행 프로파일과 바이트 동일(하위호환).
+            float _LinerSegment;
+            float _TriShape;
 
             // 삼각존 프로파일 상수 (전부 실기기 튜닝 대상).
             #define TRI_U_START 0.62   // 꼬리 가중 시작 u (0.6~0.7 사이에서 상승)
@@ -145,26 +178,50 @@ Shader "ARMakeup/LowerLid"
                 fixed3 feed = tex2D(_CameraFeed, screenUV).rgb;
                 float luma = dot(feed, fixed3(0.299, 0.587, 0.114));
 
+                // 제형(텍스처) — GENERIC 시드 번들(애교살·삼각존·아이섀도 하·눈밑 컨실러).
+                // body/grain=색소, coverage/edge=밴드 amt. enum 0(크림)=ZERO → 네 헬퍼
+                // 조기 반환 = 바이트 동일(하위호환).
+                float agTexE, agTexG, agTexC, agTexB; TexBundleFromEnum(0.0, _AegyoTexture, agTexE, agTexG, agTexC, agTexB);
+                float trTexE, trTexG, trTexC, trTexB; TexBundleFromEnum(0.0, _TriTexture, trTexE, trTexG, trTexC, trTexB);
+                float esTexE, esTexG, esTexC, esTexB; TexBundleFromEnum(0.0, _LowerShadowTexture, esTexE, esTexG, esTexC, esTexB);
+                float ccTexE, ccTexG, ccTexC, ccTexB; TexBundleFromEnum(0.0, _ConcealerTexture, ccTexE, ccTexG, ccTexC, ccTexB);
+
                 float along = i.uv.x;
                 float v = i.uv.y;
 
                 // 가로 가중: 코너 페이드(라인용).
                 float edge = smoothstep(0.0, 0.08, along) * (1.0 - smoothstep(0.92, 1.0, along));
 
+                // 하안검 라이너 구간(_LinerSegment) — along(0 앞머리→1 꼬리) 구간 게이트.
+                // 0=전체=현행 바이트 동일. 1=꼬리만(바깥 1/3). 2=앞+꼬리(중앙 비움). 상라이너
+                // EYELINER_SEGMENTS 관례를 하안검 along 축에 이식(경계 smoothstep 페더).
+                float lnSeg = 1.0;
+                if (_LinerSegment > 1.5)        // 2 = 앞 + 꼬리 (중앙 비움)
+                    lnSeg = max(1.0 - smoothstep(0.28, 0.38, along), smoothstep(0.62, 0.72, along));
+                else if (_LinerSegment > 0.5)   // 1 = 꼬리만 (바깥 1/3)
+                    lnSeg = smoothstep(0.62, 0.72, along);
                 // 아이라인(하): lash 바로 아래 얇은 라인 (초승달 테이퍼와 무관).
+                // 두께 핸들(_LinerThickness) — 세로 폭 [0.08, linerWidth]를 배수. 1=원래(하위호환).
                 float linerWidth = (_LowerLinerStyle > 0.5 && _LowerLinerStyle < 1.5)
                                  ? 0.13 : 0.22;
-                float lnAmt = (1.0 - smoothstep(0.08, linerWidth, v))
+                float lnAmt = (1.0 - smoothstep(0.08 * _LinerThickness, linerWidth * _LinerThickness, v))
                             * LowerLinerHorizontalMask(_LowerLinerStyle, along)
-                            * _LinerIntensity;
+                            * _LinerIntensity * lnSeg;
                 // 삼각존: 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 애교살과 무관한
                 // 별도 텀 — 꼬리(u 바깥 1/3)에서 상승, 코너에서 페더, 세로는 lash 라인(v=0)
                 // 근처에 집중(위 라인↔아래로 잇는 음영). 초승달 테이퍼 vv가 아닌 원시 v를
                 // 써서 라인에 딱 붙는 삼각 그림자로 둔다.
                 float triAlong = smoothstep(TRI_U_START, TRI_U_START + TRI_U_RAMP, along)
                                  * (1.0 - smoothstep(1.0 - TRI_FEATHER, 1.0, along));
-                float triV = 1.0 - smoothstep(0.0, TRI_V_WIDTH, v); // 라인에서 아래로 페이드
+                // 높이 핸들(_TriHeight) — 세로 폭 TRI_V_WIDTH를 배수. 1=원래(하위호환).
+                // 모양(_TriShape) — 세로 폭 배수(0=기본=1.0=현행 바이트 동일, 1=좁게, 2=넓게).
+                float triShapeW = (_TriShape > 1.5) ? 1.6 : ((_TriShape > 0.5) ? 0.6 : 1.0);
+                // 페이드 거리는 밴드 세로 범위(v<=1)를 넘지 않게 클램프 — 넓게(1.6)×높이(2.0)
+                // 극값 조합에서 v=1 하단이 안 꺼져 직선 컷으로 삐져나오는 것 방지. 기본값
+                // (0.55×1×1=0.55<1)에선 min이 항등이라 바이트 동일.
+                float triV = 1.0 - smoothstep(0.0, min(TRI_V_WIDTH * _TriHeight * triShapeW, 1.0), v); // 라인에서 아래로 페이드
                 float triAmt = triAlong * triV * _TriIntensity;
+                triAmt = TexEdge(TexCoverage(saturate(triAmt), trTexC), trTexE); // 제형 커버·엣지(삼각존)
 
                 // 눈밑 컨실러(§08): lash 라인 아래 언더아이 홀로우를 덮는 넓고 부드러운
                 // 브라이튼. 애교살 하이라이트(vv 기준 도톰한 리본)와 달리 원시 v를 써서
@@ -173,24 +230,40 @@ Shader "ARMakeup/LowerLid"
                 float ccBand = smoothstep(CC_V_LO, CC_V_LO_HI, v)
                                * (1.0 - smoothstep(CC_V_HI_LO, CC_V_HI, v));
                 float ccAmt = ccBand * edge * _ConcealerIntensity;
+                ccAmt = TexEdge(TexCoverage(saturate(ccAmt), ccTexC), ccTexE); // 제형 커버·엣지(눈밑 컨실러)
 
                 // A3 아이섀도 하: lash 라인(v=0) 바로 아래에서 ES_V_FADE까지 부드럽게
                 // 페이드하는 섀도 밴드. hiAmt/shAmt 프로파일과 동형(edge 코너 접기·원시 v
                 // 기준). 라인·애교살보다 아래에 곱 블렌드로 깔린다(아래 comb 단계). 강도 0 = 무영향.
-                float esBand = 1.0 - smoothstep(0.0, ES_V_FADE, v);
+                // 높이 핸들(_LowerShadowHeight) — 페이드 폭 ES_V_FADE를 배수. 1=원래(하위호환).
+                // 페이드 거리 클램프(triV와 동일 근거) — 극값에서 v=1 직선 컷 방지, 기본값 항등.
+                float esBand = 1.0 - smoothstep(0.0, min(ES_V_FADE * _LowerShadowHeight, 1.0), v);
                 float esAmt = esBand * LowerShadowHorizontalMask(_LowerShadowShape, along)
                             * _LowerShadowIntensity;
+                esAmt = TexEdge(TexCoverage(saturate(esAmt), esTexC), esTexE); // 제형 커버·엣지(아이섀도 하)
 
                 // 색소(피드 기준 풀강도): 라이너=루마 보존 틴트.
                 fixed3 pigLn = _LinerColor.rgb * (luma * 1.2 + 0.08);
                 pigLn = ApplyFinish(pigLn, luma, i.uv, _LowerLinerFinish, _LowerLinerShimmer,
                                     0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
                 fixed3 pigTri = feed * _TriColor.rgb; // 삼각존 = 곱(감산) 딥브라운 섀도
+                pigTri = TexBody(pigTri, luma, trTexB); // 제형 발색 body(삼각존)
+                // 삼각존 마감 — 0=새틴=무변형(하위호환).
+                pigTri = ApplyFinish(pigTri, luma, i.uv, _TriFinish, 0,
+                                     0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
+                pigTri = TexGrain(pigTri, i.uv, trTexG); // 제형 그레인(삼각존)
                 // 컨실러 = 스크린(가산) 브라이튼 — FaceMakeup 눈밑 존 마스크 경로와 동일 공식.
                 fixed3 pigCc = 1.0 - (1.0 - feed) * (1.0 - _ConcealerColor.rgb);
+                pigCc = TexBody(pigCc, luma, ccTexB); // 제형 발색 body(눈밑 컨실러)
+                // 눈밑 컨실러 마감 — 0=새틴=무변형(하위호환).
+                pigCc = ApplyFinish(pigCc, luma, i.uv, _ConcealerFinish, 0,
+                                    0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
+                pigCc = TexGrain(pigCc, i.uv, ccTexG); // 제형 그레인(눈밑 컨실러)
                 fixed3 pigEs = feed * _LowerShadowColor.rgb; // A3 아이섀도 하 = 곱(감산) 섀도
+                pigEs = TexBody(pigEs, luma, esTexB); // 제형 발색 body(아이섀도 하)
                 pigEs = ApplyFinish(pigEs, luma, i.uv, _LowerShadowFinish, _LowerShadowShimmer,
                                     0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
+                pigEs = TexGrain(pigEs, i.uv, esTexG); // 제형 그레인(아이섀도 하)
 
                 float total = lnAmt + triAmt + ccAmt;
                 float procA = saturate(total);

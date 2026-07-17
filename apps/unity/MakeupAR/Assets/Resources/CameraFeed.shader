@@ -64,6 +64,7 @@ Shader "ARMakeup/CameraFeed"
             float _SkinSmoothExt;      // 이마·목 스무딩 확장 강도(skinSmoothingExtended, 0=끔)
             fixed4 _HairTintColor;     // 헤어 염색 색(hairTintColor)
             float _HairTintIntensity;  // 헤어 염색 강도(hairTintIntensity, 0=끔)
+            float _HairFinish;         // 헤어 염색 마감(0=새틴=기존 출력, 1 매트 2 글로시 3 시머)
             // ── 베이스 팩(#18) 파운데이션 이마·목 확장 — FaceMakeup 머티리얼과 같은 값을
             //    전역으로도 세팅(MakeupController.ApplyTo). face-skin(R)+body-skin(B: 목)
             //    게이트로 얼굴 메시 밖까지 같은 틴트. _SegOn=0(폴백)이면 완전 무효과.
@@ -238,6 +239,10 @@ Shader "ARMakeup/CameraFeed"
                         float hairLuma = dot(col, fixed3(0.299, 0.587, 0.114));
                         fixed3 dyed = _HairTintColor.rgb *
                             (hairLuma * HAIR_TINT_LUMA_GAIN + HAIR_TINT_LUMA_LIFT);
+                        // 헤어 염색 마감 — 0=새틴=무변형(하위호환). 파운데 확장과 동일하게
+                        // sparkleUV·screenUV로 src(워프 역샘플)를 넘긴다.
+                        dyed = ApplyFinish(dyed, hairLuma, src, _HairFinish, 0.0,
+                                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, src, _PearlLightGain);
                         col = lerp(col, saturate(dyed), seg.g * _HairTintIntensity);
                     }
 

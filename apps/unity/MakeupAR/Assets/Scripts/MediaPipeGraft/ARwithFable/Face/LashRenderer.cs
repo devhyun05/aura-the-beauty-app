@@ -94,6 +94,7 @@ namespace ARMakeup.Face
 
         static readonly int ColorId = Shader.PropertyToID("_BrowColor");
         static readonly int IntensityId = Shader.PropertyToID("_BrowIntensity");
+        static readonly int FinishId = Shader.PropertyToID("_PencilFinish"); // 마감(Tier B) — 위·아래 머티리얼 독립
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _lash = new Vector2[Seg];
@@ -163,7 +164,7 @@ namespace ARMakeup.Face
         /// 없이 마스카라만 켜져도 ComputeLidSnaps를 유지하는 수요 게이트.</summary>
         public bool WantsLidSnaps => _intensity > 0f;
 
-        public void ApplyParams(string colorHex, float intensity, float cornerLift, float lengthMult, int style)
+        public void ApplyParams(string colorHex, float intensity, float cornerLift, float lengthMult, int style, int finish)
         {
             _intensity = Mathf.Clamp01(intensity);
             _cornerLift = Mathf.Clamp01(cornerLift);
@@ -175,11 +176,13 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(ColorId, c);
             _material.SetFloat(IntensityId, _intensity);
+            // 마감(Tier B) — 위 속눈썹 머티리얼 전용(하 속눈썹과 독립). 0=새틴=기존 출력.
+            _material.SetFloat(FinishId, finish);
         }
 
         /// <summary>아래 속눈썹 — 색은 mascaraColor 공용, 길이 배수는 mascaraLength와
         /// 독립(lowerLashLength). 눈꼬리 리프트는 ApplyParams가 공유 필드로 설정.</summary>
-        public void ApplyLowerParams(string colorHex, float intensity, float lengthMult, int style)
+        public void ApplyLowerParams(string colorHex, float intensity, float lengthMult, int style, int finish)
         {
             _lowerIntensity = Mathf.Clamp01(intensity);
             // 길이 배수 핸들 — JsonUtility 생략 0은 미설정 → 1(원래).
@@ -190,6 +193,8 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _lowerMaterial.SetColor(ColorId, c);
             _lowerMaterial.SetFloat(IntensityId, _lowerIntensity);
+            // 마감(Tier B) — 아래 속눈썹 머티리얼 전용(위 속눈썹과 독립). 0=새틴=기존 출력.
+            _lowerMaterial.SetFloat(FinishId, finish);
         }
 
         void LateUpdate()

@@ -73,6 +73,21 @@ namespace ARMakeup.Face
         // 마감 — 아이섀도 하. 블러셔와 동일 enum(0=새틴=기존 출력).
         static readonly int LowerShadowFinishId = Shader.PropertyToID("_LowerShadowFinish");
         static readonly int LowerShadowShimmerId = Shader.PropertyToID("_LowerShadowShimmer");
+        // 삼각존·컨실러 마감 — 0=새틴=기존 출력(하위호환).
+        static readonly int TriFinishId = Shader.PropertyToID("_TriFinish");
+        static readonly int ConcealerFinishId = Shader.PropertyToID("_ConcealerFinish");
+        // 핏(개인 공간 델타) 배수 — 자기 제품 세로 프로파일 폭만 스케일(1=원래).
+        static readonly int LinerThicknessId = Shader.PropertyToID("_LinerThickness");
+        static readonly int TriHeightId = Shader.PropertyToID("_TriHeight");
+        static readonly int LowerShadowHeightId = Shader.PropertyToID("_LowerShadowHeight");
+        // 제형(텍스처) GENERIC — 삼각존·아이섀도 하·눈밑 컨실러(컨실러는 FaceMakeup
+        // 붉은기 경로와 같은 concealerTexture 값 공유). 0=크림=현행(하위호환).
+        static readonly int TriTextureId = Shader.PropertyToID("_TriTexture");
+        static readonly int LowerShadowTextureId = Shader.PropertyToID("_LowerShadowTexture");
+        static readonly int ConcealerTextureId = Shader.PropertyToID("_ConcealerTexture");
+        // 모양 축(W1+W2) — 부위별 실루엣 프리셋 enum. 0=현행 프로파일과 바이트 동일(하위호환).
+        static readonly int LinerSegmentId = Shader.PropertyToID("_LinerSegment");
+        static readonly int TriShapeId = Shader.PropertyToID("_TriShape");
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _lash = new Vector2[Seg];
@@ -140,7 +155,7 @@ namespace ARMakeup.Face
         /// <summary>삼각존 — 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 하안검 밴드의
         /// 꼬리 쪽(u 바깥 1/3)에 가중된 어두운 섀도 텀. 색·강도 독립(0=끔), 애교살/아이라인
         /// (하)과 같은 밴드에서 블렌드. 기본 딥브라운(#4A342A 계열)은 셰이더 기본값.</summary>
-        public void ApplyTriangleZone(string colorHex, float intensity)
+        public void ApplyTriangleZone(string colorHex, float intensity, int finish, float heightMult, int texture, int shape)
         {
             _triIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -148,6 +163,14 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(TriColorId, c);
             _material.SetFloat(TriIntensityId, _triIntensity);
+            // 마감 — 애교살과 동일 enum. 생략(0)=새틴=기존 출력(하위호환).
+            _material.SetFloat(TriFinishId, finish);
+            // 밴드 높이 배수(핏) — 생략 0은 미설정 → 1(원래). eyeshadowHeight 선례 클램프(0.3~2).
+            _material.SetFloat(TriHeightId, heightMult <= 0f ? 1f : Mathf.Clamp(heightMult, 0.3f, 2f));
+            // 제형(텍스처) GENERIC — 0=크림=현행(하위호환).
+            _material.SetFloat(TriTextureId, texture);
+            // 모양(triangleZoneShape) — 0=기본=현행 바이트 동일 1=좁게 2=넓게.
+            _material.SetFloat(TriShapeId, shape);
         }
 
         /// <summary>눈밑 컨실러(§08) — 언더아이 홀로우(눈물고랑)를 밝히는 넓고 부드러운
@@ -156,7 +179,7 @@ namespace ARMakeup.Face
         /// concealerIntensity 강도. 애교살과 독립(둘 다 켜도 밴드에서 자연 합성). 색은 밝은
         /// 톤이라 색 반전 없음(FaceMakeup 눈밑 존 마스크 경로의 밴드 정식판). 0=끔.
         /// shape=1(붉은기 자동)은 FaceMakeup 전담이라 여기 강도는 0으로 들어온다.</summary>
-        public void ApplyConcealer(string colorHex, float intensity)
+        public void ApplyConcealer(string colorHex, float intensity, int finish, int texture)
         {
             _concealerIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -164,13 +187,18 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(ConcealerColorId, c);
             _material.SetFloat(ConcealerIntensityId, _concealerIntensity);
+            // 마감 — FaceMakeup 붉은기 자동 경로와 같은 필드(concealerFinish) 공용. 0=새틴=기존.
+            _material.SetFloat(ConcealerFinishId, finish);
+            // 제형(텍스처) GENERIC — FaceMakeup 붉은기 경로와 같은 concealerTexture 값 공유.
+            _material.SetFloat(ConcealerTextureId, texture);
         }
 
         /// <summary>A3 아이섀도 하 — 하안검 lash 라인 아래로 부드럽게 페이드하는 섀도 밴드.
         /// 애교살/아이라인보다 아래(먼저)에 곱 블렌드로 깔려 위 제품이 섀도 위로 뜬다. 색·강도
         /// 독립(0=끔, 기존 룩 불변). ApplyConcealer와 동일 패턴.</summary>
         public void ApplyLowerShadow(
-            string colorHex, float intensity, int shape, int finish, float shimmer)
+            string colorHex, float intensity, int shape, int finish, float shimmer,
+            float heightMult, int texture)
         {
             _lowerShadowIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -182,12 +210,16 @@ namespace ARMakeup.Face
             // 마감 — 블러셔와 동일 enum. 생략(0)=새틴=기존 출력(하위호환).
             _material.SetFloat(LowerShadowFinishId, finish);
             _material.SetFloat(LowerShadowShimmerId, Mathf.Clamp01(shimmer));
+            // 밴드 높이 배수(핏) — 생략 0은 미설정 → 1(원래). eyeshadowHeight 선례 클램프(0.3~2).
+            _material.SetFloat(LowerShadowHeightId, heightMult <= 0f ? 1f : Mathf.Clamp(heightMult, 0.3f, 2f));
+            // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). eyeshadowLowerTexture 값.
+            _material.SetFloat(LowerShadowTextureId, texture);
         }
 
         /// <summary>아이라인(하) 색은 전용 색을 사용하며 legacy payload는 컨트롤러에서 폴백한다.</summary>
         public void ApplyParams(
             string linerColorHex, float linerIntensity, float cornerLift, float linerStyle,
-            float linerFinish, float linerShimmer)
+            float linerFinish, float linerShimmer, float linerThickness, int linerSegment)
         {
             _linerIntensity = Mathf.Clamp01(linerIntensity);
             _cornerLift = Mathf.Clamp01(cornerLift);
@@ -199,6 +231,10 @@ namespace ARMakeup.Face
             _material.SetFloat(LowerLinerStyleId, Mathf.Clamp(Mathf.RoundToInt(linerStyle), 0, 2));
             _material.SetFloat(LowerLinerFinishId, Mathf.Clamp(Mathf.RoundToInt(linerFinish), 0, 3));
             _material.SetFloat(LowerLinerShimmerId, Mathf.Clamp01(linerShimmer));
+            // 아이라이너(하) 두께 배수(핏) — 생략 0은 미설정 → 1(원래). eyelinerThickness 선례 클램프(0.3~2.5).
+            _material.SetFloat(LinerThicknessId, linerThickness <= 0f ? 1f : Mathf.Clamp(linerThickness, 0.3f, 2.5f));
+            // 하안검 라이너 구간(W1) — 0=전체=현행 바이트 동일 1=꼬리만 2=앞+꼬리(중앙 비움).
+            _material.SetFloat(LinerSegmentId, linerSegment);
         }
 
         void LateUpdate()

@@ -18,6 +18,8 @@ Shader "ARMakeup/Eyeshadow"
         // 마감(finish): 0=새틴(기본) 1=매트 2=글로시 3=시머. 피드 luma만(신규의존0).
         _EyeshadowFinish ("Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
         _EyeshadowShimmer ("Shimmer Gain", Range(0, 1)) = 0.5
+        // 제형(텍스처) — GENERIC 템플릿 enum(0=크림=현행). Finish.cginc TexBundleFromEnum 미러.
+        _EyeshadowTexture ("Eyeshadow Texture (generic enum)", Float) = 0
         // ── 제형 스튜디오(#21) — 마감 세부 파라미터. 전부 0 = enum 기존 동작(하위호환). ──
         _EyeshadowGlossLo ("Eyeshadow Finish Gloss Lo", Range(0, 1)) = 0
         _EyeshadowGlossGain ("Eyeshadow Finish Gloss Gain", Range(0, 1)) = 0
@@ -82,6 +84,7 @@ Shader "ARMakeup/Eyeshadow"
             float _EyeshadowIntensity;
             float _EyeshadowFinish;
             float _EyeshadowShimmer;
+            float _EyeshadowTexture; // 제형(텍스처) GENERIC 템플릿(0=크림=현행)
             // 제형 스튜디오(#21) 마감 세부 — 0 = enum 기존 동작(하위호환).
             float _EyeshadowGlossLo;
             float _EyeshadowGlossGain;
@@ -211,6 +214,12 @@ Shader "ARMakeup/Eyeshadow"
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
                 fixed3 feed = tex2D(_CameraFeed, screenUV).rgb;
 
+                // 제형(텍스처) — GENERIC 템플릿 시드 번들(밴드 공통). body/grain=색소,
+                // coverage/edge=커버리지 amt. enum 0(크림)=ZERO → 네 헬퍼 조기 반환 =
+                // 바이트 동일(하위호환). 멀티밴드·단일 두 경로가 공유.
+                float esTexEdge, esTexGrain, esTexCoverage, esTexBody;
+                TexBundleFromEnum(0.0, _EyeshadowTexture, esTexEdge, esTexGrain, esTexCoverage, esTexBody);
+
                 // ── 멀티밴드(A14 ①) — 아래(uv.x=0 lash)에서 위로 N밴드 over 합성. 배열
                 // 순서 = 그리는 순서(뒤 밴드가 위). _EsLayerCount==0이면 이 블록을 건너뛰어
                 // 아래 단일 경로 그대로(레거시 — 픽셀 동일).
@@ -241,17 +250,20 @@ Shader "ARMakeup/Eyeshadow"
                         float localV = vxm / max(cutoff, 1e-4);
                         float shapeMask = EyeshadowShapeWeight(shapeB, localV, i.bandUV.x);
                         float amt = shapeMask * _EsLayerColor[b].a; // a = 밴드 강도
+                        amt = TexEdge(TexCoverage(saturate(amt), esTexCoverage), esTexEdge); // 제형 커버·엣지
 
                         // 색·세로 그라데(§3.1) — 리드(uv.x=0)=스톱B 진한 색 → 위=스톱A.
                         // gradB=0이면 lerp 항등 → 단색.
                         fixed3 shadowBase = lerp(_EsLayerColor[b].rgb, _EsLayerColor2[b].rgb,
                                                  (1.0 - vxm) * gradB);
                         fixed3 pigment = shadowBase * PigmentBase(lumaM, 1.5, 0.15);
+                        pigment = TexBody(pigment, lumaM, esTexBody); // 제형 발색 body
                         pigment = ApplyFinish(pigment, lumaM, i.uv, finishB, _EyeshadowShimmer,
                                               _EyeshadowGlossLo, esGlossGainM, _EyeshadowShimmerSize,
                                               esShimmerDensityM, _EyeshadowMatte, _EyeshadowSheen,
                                               screenUV, _PearlLightGain); // A15 방향 게인
                         pigment = ApplyMaterial(pigment, lumaM, screenUV, i.vnormal, _EyeshadowMaterial, _EyeshadowMaterialStrength);
+                        pigment = TexGrain(pigment, i.uv, esTexGrain); // 제형 그레인
 
                         // over — 밴드 b를 누적 위에 얹는다(배열 뒤=위). 프리멀티 누적 후
                         // 최종에서 언프리멀티 → 알파 블렌드(SrcAlpha)가 N밴드 스택을 재현.
@@ -275,6 +287,8 @@ Shader "ARMakeup/Eyeshadow"
                     amt *= tex2D(_EyeshadowDesign,
                                  float2(saturate(i.bandUV.x), saturate(i.bandUV.y))).r;
                 }
+                // 제형 커버·엣지 — 최종 커버리지 amt에 배선(enum 0=무변조).
+                amt = TexEdge(TexCoverage(saturate(amt), esTexCoverage), esTexEdge);
 
                 // 루마 보존 색소 (FaceMakeup.Tint와 동일). 알파 블렌드가 단일 amt로
                 // dest(스무딩된 피부)와 섞어 lerp(dest, pigment, amt)를 만든다.
@@ -286,6 +300,7 @@ Shader "ARMakeup/Eyeshadow"
                 fixed3 shadowBase = lerp(_EyeshadowColor.rgb, _EyeshadowColor2.rgb,
                                          (1.0 - saturate(i.uv.x)) * _EyeshadowGradient);
                 fixed3 pigment = shadowBase * PigmentBase(luma, 1.5, 0.15);
+                pigment = TexBody(pigment, luma, esTexBody); // 제형 발색 body(0=무변조)
                 // 질감 맵(#22) — 밴드 uv로 광 게인·시머 밀도를 픽셀별 변조(눈꺼풀 접착).
                 // 맵 없으면(_HasFinishMap=0) 계수 1.0 → 스칼라 그대로(하위호환).
                 fixed4 esFinishMap = tex2D(_EyeshadowFinishMap, i.uv);
@@ -298,6 +313,7 @@ Shader "ARMakeup/Eyeshadow"
                                       screenUV, _PearlLightGain); // A15 방향 게인
                 pigment = ApplyMaterial(pigment, luma, screenUV, i.vnormal, _EyeshadowMaterial, _EyeshadowMaterialStrength);
                 pigment = ApplyGrain(pigment, i.uv);   // 매트 파우더 입자감(전역, 0=무변조)
+                pigment = TexGrain(pigment, i.uv, esTexGrain); // 제형 그레인(전역 위 가산, 0=무변조)
                 // 입자(글리터) — 밴드 위 반짝. coverage=1(출력 알파 amt가 게이트, 이중 게이트 방지).
                 pigment = ApplyParticles(pigment, luma, i.uv, screenUV,
                                          _EsParticleSize, _EsParticleDensity, _EsParticleBrightness,

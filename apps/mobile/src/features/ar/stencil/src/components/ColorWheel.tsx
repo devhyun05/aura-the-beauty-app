@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import ParamSlider from './ParamSlider';
 import {hexToHsv, hsToPos, hsvToHex, posToHS} from '../composer/color';
+import {ACCENT} from '../theme';
 
 const WHEEL = require('../assets/color-wheel.png');
 const WHEEL_SIZE = 240;
@@ -188,7 +189,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   btnPrimary: {
-    backgroundColor: '#FF7E9D',
+    backgroundColor: ACCENT,
   },
   btnText: {
     color: 'rgba(255,255,255,0.9)',

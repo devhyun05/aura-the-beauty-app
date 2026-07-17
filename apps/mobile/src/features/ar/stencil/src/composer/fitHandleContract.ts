@@ -91,6 +91,18 @@ export const FIT_HANDLE_RULES: Record<string, FitHandleRule> = {
     region: 'eyeshadow',
     dyUp: { field: 'eyeshadowHeight', k: 1.2 },
   },
+  eyeshadowLower: {
+    region: 'eyeshadowLower',
+    dyUp: { field: 'eyeshadowLowerHeight', k: 1.2 },
+  },
+  eyelinerLower: {
+    region: 'eyelinerLower',
+    dyUp: { field: 'eyelinerLowerThickness', k: 1.2 },
+  },
+  triangleZone: {
+    region: 'triangleZone',
+    dyUp: { field: 'triangleZoneHeight', k: 1.2 },
+  },
   doubleLid: {
     region: 'doubleLid',
     dyUp: { field: 'doubleLidHeight', k: 1 },
@@ -118,6 +130,14 @@ export const FIT_HANDLE_RULES: Record<string, FitHandleRule> = {
   lipLiner: {
     region: 'lipLiner',
     dyUp: { field: 'lipLinerWidth', k: -1.2 },
+  },
+  lipBase: {
+    region: 'lipBase',
+    dyUp: { field: 'lipBaseOverline', k: 0.8 },
+  },
+  lipGloss: {
+    region: 'lipGloss',
+    dyUp: { field: 'lipGlossOverline', k: 0.8 },
   },
 };
 

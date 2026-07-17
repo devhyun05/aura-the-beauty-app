@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import LegalScreen, {type LegalKind} from './LegalScreen';
+import {ACCENT, PANEL_BG} from '../theme';
 
 /**
  * 사용자용 설정 패널 (배포용). 개발자 캘리브레이션(⚙️ 디버그 레일)과 별개.
@@ -157,7 +158,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     padding: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: PANEL_BG,
     gap: 10,
   },
   headerRow: {
@@ -219,7 +220,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   trackOn: {
-    backgroundColor: '#FF7E9D',
+    backgroundColor: ACCENT,
   },
   knob: {
     width: 22,

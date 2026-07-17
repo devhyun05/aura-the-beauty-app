@@ -169,6 +169,9 @@ export interface LookDef {
   kind?: 'group';
   /** sub 정의 전용. 옛 사용자 정의(undefined)는 하위호환상 standalone으로 취급한다. */
   pickerScope?: SubPickerScope;
+  /** upstream(ARwithFable) 호환 별칭 — internal===true는 pickerScope 'internal'과
+   *  동일하게 픽커에서 제외된다. upstream 룩 데이터가 이 필드로 시딩되므로 유지. */
+  internal?: boolean;
   /** face/region 레벨: 하위 정의 id 배열 · sub 레벨: 잎 정의 배열 */
   kids: string[] | LeafDef[];
 }
@@ -578,6 +581,7 @@ export function subDefsForRegion(lib: LookLibrary, region: RegionKey): LookDef[]
     .filter(
       d =>
         d.level === 'sub' &&
+        !d.internal &&
         (d.pickerScope === 'standalone' ||
           (d.pickerScope == null && d.owner === 'user')) &&
         (d.kids as LeafDef[]).some(leaf => leaf.region === region),
@@ -1810,4 +1814,205 @@ export function applySaveDecisions(
   }
 
   return { root: nextRoot, lib: nextLib, appliedNotes: notes };
+}
+
+// ── 저장 스코프 판정 — 실제 편집 범위를 따라 등록 레벨을 자동 결정 ───────────
+// 사용자 지적: 세부부위 하나(아이라인)만 편집해도 저장이 '전체 룩'으로 굳었다.
+// 저장 단위는 내용 범위를 따라야 한다 — 세부부위 1개=sub, 한 슬롯 여러 세부=region,
+// 여러 슬롯=face. 판정은 기본값이고 사용자는 시트에서 상위 레벨로 올릴 수 있다.
+
+export type SaveLevel = 'sub' | 'region' | 'face';
+
+interface ContentSub {
+  sub: LookNode;
+  slot: SlotKey;
+  /** 세부부위 표시 라벨(첫 잎 region의 REGION_MAP.label) */
+  regionLabel: string;
+}
+
+/** leaf를 하나라도 가진 sub 노드 전부 = '내용 있는 세부부위'. 스코프 판정의 원재료. */
+function contentSubs(root: LookNode | null): ContentSub[] {
+  const out: ContentSub[] = [];
+  if (!root) return out;
+  const walk = (node: LookNode) => {
+    for (const c of node.kids) {
+      if (isLeaf(c)) continue;
+      if (c.level === 'sub') {
+        const leaves = c.kids.filter(isLeaf);
+        if (leaves.length > 0) {
+          out.push({
+            sub: c,
+            slot: c.slot,
+            regionLabel: REGION_MAP[leaves[0].region]?.label ?? c.name,
+          });
+          continue; // sub 아래는 잎뿐 — 더 내려가지 않는다
+        }
+      }
+      walk(c);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+export interface SaveScope {
+  /** 내용에 맞는 최소(가장 좁은) 등록 레벨 — 저장 시트 기본 선택값 */
+  level: SaveLevel;
+  /** 내용 있는 세부부위 수 */
+  subCount: number;
+  /** 내용 있는 슬롯 수 */
+  slotCount: number;
+  /** 내용 슬롯 표시 라벨(SLOT_LABEL) */
+  slotLabels: string[];
+  /** 내용 세부부위 표시 라벨(REGION_MAP.label) */
+  subLabels: string[];
+}
+
+/**
+ * 작업본 트리의 내용을 스캔해 기본 저장 레벨을 판정한다.
+ *  ① 세부부위 1개 → 'sub'  ② 한 슬롯 안 여러 세부부위 → 'region'  ③ 여러 슬롯 → 'face'.
+ * 내용이 없으면 'face'로 폴백(빈 저장은 시트가 '변경 없음'으로 별도 안내).
+ */
+export function analyzeSaveScope(root: LookNode | null): SaveScope {
+  const subs = contentSubs(root);
+  const slots = [...new Set(subs.map(s => s.slot))];
+  let level: SaveLevel;
+  if (subs.length === 0) level = 'face';
+  else if (subs.length === 1) level = 'sub';
+  else if (slots.length === 1) level = 'region';
+  else level = 'face';
+  return {
+    level,
+    subCount: subs.length,
+    slotCount: slots.length,
+    slotLabels: slots.map(s => SLOT_LABEL[s]),
+    subLabels: subs.map(s => s.regionLabel),
+  };
+}
+
+/** 이 스코프에서 선택 가능한 레벨(판정 레벨 이상만 — 좁히기는 불가, 넓히기만 허용). */
+export function selectableLevels(scope: SaveScope): SaveLevel[] {
+  if (scope.subCount === 0) return ['face'];
+  if (scope.level === 'sub') return ['sub', 'region', 'face'];
+  if (scope.level === 'region') return ['region', 'face'];
+  return ['face'];
+}
+
+// ── 스코프 저장 실행 — 세부부위/부위 레벨은 라이브러리 정의로 등록 ──────────
+
+function leafDefFromLeaf(lf: ProductLeaf): LeafDef {
+  return {
+    label: lf.label,
+    region: lf.region,
+    params: { ...lf.params },
+    ...(lf.overlay ? { overlay: { ...lf.overlay } } : {}),
+    ...(lf.lens ? { lens: { ...lf.lens } } : {}),
+    ...(lf.role ? { role: lf.role } : {}),
+    ...(lf.productId ? { productId: lf.productId } : {}),
+    ...(lf.technique ? { technique: { ...lf.technique } } : {}),
+  };
+}
+
+/** 트리 전체 dirty 해제 + 지정 노드를 새 정의로 re-ref(스코프 저장 후 작업본 정리). */
+function cleanReref(node: LookNode, targetId: string | null, defId: string): LookNode {
+  const kids = node.kids.map(c =>
+    isLeaf(c) ? (c.dirty ? { ...c, dirty: false } : c) : cleanReref(c, targetId, defId),
+  );
+  return {
+    ...node,
+    dirty: false,
+    ...(targetId != null && node.id === targetId ? { ref: defId } : {}),
+    kids,
+  };
+}
+
+export interface ScopedSaveResult {
+  lib: LookLibrary;
+  root: LookNode;
+  defId: string;
+  level: 'sub' | 'region';
+  /** 등록된 정의 이름(충돌 회피 반영 후) */
+  name: string;
+}
+
+/**
+ * 세부부위/부위 레벨 저장 — 편집한 범위만 사용자 라이브러리 정의로 등록한다
+ * (전체 룩 카드로 굳지 않게 — 사용자 지적 대응). 등록 후 작업본은 dirty 해제하고
+ * 해당 노드를 새 정의에 re-ref한다. 'face'는 이 경로를 타지 않는다(호출부가 카드로 저장).
+ *  - 'sub'   : 내용 세부부위 1개 → 사용자 sub 정의(subDefsForRegion 픽커 노출).
+ *  - 'region': 한 슬롯의 세부부위 전부 → 사용자 region 정의(regionDefsForSlot 픽커).
+ *     region의 멤버 sub은 internal로 등록해 세부부위 픽커를 어지럽히지 않는다(계약).
+ * 이름 충돌은 같은 레벨 사용자 정의와 자동 번호로 피한다. 내용 없으면 null.
+ */
+export function registerScopedLook(
+  root: LookNode,
+  lib: LookLibrary,
+  level: 'sub' | 'region',
+  name: string,
+): ScopedSaveResult | null {
+  const subs = contentSubs(root);
+  if (subs.length === 0) return null;
+  const nextLib: LookLibrary = { ...lib };
+  const slot = subs[0].slot;
+
+  // 이름 충돌 회피 — 같은 레벨의 사용자(비-internal·비-group) 정의 이름과 비교.
+  const taken = new Set(
+    Object.values(lib)
+      .filter(
+        d => d.owner === 'user' && d.level === level && !d.internal && d.kind !== 'group',
+      )
+      .map(d => d.name),
+  );
+  let clean = name.trim() || (level === 'sub' ? '내 세부룩' : '내 부위룩');
+  if (taken.has(clean)) {
+    let n = 2;
+    while (taken.has(`${clean} ${n}`)) n += 1;
+    clean = `${clean} ${n}`;
+  }
+
+  if (level === 'sub') {
+    const sub = subs[0].sub;
+    const defId = newDefId();
+    nextLib[defId] = {
+      id: defId,
+      name: clean,
+      level: 'sub',
+      slot,
+      owner: 'user',
+      kids: sub.kids.filter(isLeaf).map(leafDefFromLeaf),
+    };
+    return { lib: nextLib, root: cleanReref(root, sub.id, defId), defId, level, name: clean };
+  }
+
+  // region — 그 슬롯의 내용 세부부위 전부를 하나의 사용자 region 정의로 묶는다
+  // (슬롯에 region 노드가 여럿이어도 견고하게: 노드 수와 무관하게 잎을 모은다).
+  const slotSubs = subs.filter(s => s.slot === slot).map(s => s.sub);
+  const subIds = slotSubs.map(sub => {
+    const sid = newDefId();
+    nextLib[sid] = {
+      id: sid,
+      name: sub.name,
+      level: 'sub',
+      slot,
+      owner: 'user',
+      internal: true, // 상위 부위 룩의 조각 — 세부부위 픽커에 개별 노출 안 함
+      kids: sub.kids.filter(isLeaf).map(leafDefFromLeaf),
+    };
+    return sid;
+  });
+  const defId = newDefId();
+  nextLib[defId] = {
+    id: defId,
+    name: clean,
+    level: 'region',
+    slot,
+    owner: 'user',
+    kids: subIds,
+  };
+  // 슬롯에 region 노드가 정확히 하나면 그것을 re-ref, 아니면 dirty만 정리.
+  const regionNodes = root.kids.filter(
+    (c): c is LookNode => !isLeaf(c) && c.slot === slot,
+  );
+  const targetId = regionNodes.length === 1 ? regionNodes[0].id : null;
+  return { lib: nextLib, root: cleanReref(root, targetId, defId), defId, level, name: clean };
 }

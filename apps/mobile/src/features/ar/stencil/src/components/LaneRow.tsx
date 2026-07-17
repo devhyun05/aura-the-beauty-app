@@ -6,8 +6,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 
-export const ROSE = '#FF7E9D';
-export const GOLD_ACCENT = '#C9A15E';
+import { ACCENT_LIGHT, GOLD_CTA, GOLD_LIGHT, accentAlpha } from '../theme';
 
 export interface LaneChip {
   id: string;
@@ -104,10 +103,10 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   laneLabelRose: {
-    color: ROSE,
+    color: 'rgba(255,255,255,0.9)',
   },
   laneLabelGold: {
-    color: GOLD_ACCENT,
+    color: 'rgba(255,255,255,0.9)',
   },
   chip: {
     paddingHorizontal: 13,
@@ -122,13 +121,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chipOnRose: {
-    backgroundColor: ROSE,
+    backgroundColor: '#E9E9E9',
   },
   chipOnGold: {
-    backgroundColor: GOLD_ACCENT,
+    backgroundColor: '#E9E9E9',
   },
   chipTextOnRose: {
-    color: '#FFFFFF',
+    color: '#1A1206',
   },
   chipTextOnGold: {
     color: '#1A1206',
@@ -140,13 +139,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(201,161,94,0.14)',
   },
   mineText: {
-    color: '#E4CF9E',
+    color: GOLD_LIGHT,
   },
   // ＋만들기 — 레인 색 아웃라인
   makeChipRose: {
-    backgroundColor: 'rgba(255,126,157,0.18)',
+    backgroundColor: accentAlpha(0.18),
     borderWidth: 1,
-    borderColor: 'rgba(255,126,157,0.9)',
+    borderColor: accentAlpha(0.9),
   },
   makeChipGold: {
     backgroundColor: 'rgba(201,161,94,0.16)',
@@ -154,12 +153,12 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(201,161,94,0.9)',
   },
   makeTextRose: {
-    color: '#FF9EB5',
+    color: ACCENT_LIGHT,
     fontSize: 12,
     fontWeight: '700',
   },
   makeTextGold: {
-    color: '#E6C687',
+    color: GOLD_CTA,
     fontSize: 12,
     fontWeight: '700',
   },

@@ -41,8 +41,7 @@ import type {
 } from '../composer/products';
 import { FINISHES } from '../composer/regions';
 import ParamSlider from './ParamSlider';
-
-const GOLD = '#C9A15E';
+import { GOLD, GOLD_LIGHT, TEXT_HINT, TEXT_SUB } from '../theme';
 
 // 베이스 색 스와치 — 부위 무관 중립 8색(제품군을 가리지 않는 공통 팔레트).
 const BASE_SWATCHES = [
@@ -225,7 +224,7 @@ export default function StudioHub({
                 return (
                   <View key={s.id}>
                     <TouchableOpacity
-                      style={[styles.row, isSel && styles.rowOn]}
+                      style={[styles.row, isSel && styles.rowOnNeutral]}
                       onPress={() => setSelectedId(s.id)}>
                       {isMain && <Text style={styles.mainStar}>★</Text>}
                       <Text style={styles.rowName} numberOfLines={1}>
@@ -301,7 +300,7 @@ export default function StudioHub({
 
             {/* ③ 제품 만들기(A12) — 채널 4종 세부 편집 ────────────────── */}
             <View style={styles.divider} />
-            <Text style={styles.sectionTitle}>제품 만들기</Text>
+            <Text style={[styles.sectionTitle, styles.sectionTitleGold]}>제품 만들기</Text>
             <Text style={styles.sectionNote}>
               제품군을 고르면 그 제품군이 노출하는 채널만 편집합니다 — base(색·농도)·
               pearl(광)·glitter(입자)·neon(발광).
@@ -342,7 +341,7 @@ export default function StudioHub({
                       <View style={styles.editPanel}>
                         {/* 이름(인라인) */}
                         <TextInput
-                          style={styles.nameInput}
+                          style={[styles.nameInput, styles.nameInputGold]}
                           value={p.name}
                           onChangeText={t => patchProduct(p.id, { name: t })}
                           placeholder="제품 이름"
@@ -497,9 +496,9 @@ export default function StudioHub({
               </View>
             ) : (
               <TouchableOpacity
-                style={styles.addBtn}
+                style={[styles.addBtn, styles.addBtnGold]}
                 onPress={() => setPicking(true)}>
-                <Text style={styles.addText}>＋ 새 제품</Text>
+                <Text style={[styles.addText, styles.addTextGold]}>＋ 새 제품</Text>
               </TouchableOpacity>
             )}
 
@@ -543,7 +542,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   closeText: {
-    color: '#C9BFC6',
+    color: TEXT_SUB,
     fontSize: 16,
   },
   // 접기 — 헤더만 남는 컴팩트 바(상태 유지). ⌄=접기 ⌃=펼치기.
@@ -551,7 +550,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   collapseText: {
-    color: '#C9BFC6',
+    color: TEXT_SUB,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -562,11 +561,15 @@ const styles = StyleSheet.create({
   body: {
     marginTop: 4,
   },
+  // 기본(무채색) — 내 핏 시트·에셋 카탈로그 헤더. 제품 만들기만 sectionTitleGold로 덮어씀.
   sectionTitle: {
-    color: GOLD,
+    color: 'rgba(255,255,255,0.92)',
     fontSize: 13,
     fontWeight: '700',
     marginTop: 4,
+  },
+  sectionTitleGold: {
+    color: GOLD,
   },
   sectionNote: {
     color: 'rgba(255,255,255,0.5)',
@@ -575,7 +578,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   empty: {
-    color: '#8B7E8C',
+    color: TEXT_HINT,
     fontSize: 12,
     paddingVertical: 10,
   },
@@ -591,12 +594,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
     marginBottom: 6,
   },
+  // 제품 행 선택(제품 만들기, 골드 유지) — 핏 시트 행은 rowOnNeutral 사용.
   rowOn: {
     borderColor: GOLD,
     backgroundColor: 'rgba(201,161,94,0.12)',
   },
+  rowOnNeutral: {
+    borderColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
   mainStar: {
-    color: GOLD,
+    color: '#FFFFFF',
     fontSize: 13,
   },
   rowName: {
@@ -606,8 +614,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   mainBadge: {
-    color: '#E4CF9E',
-    backgroundColor: 'rgba(201,161,94,0.16)',
+    color: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.16)',
     fontSize: 9,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -631,14 +639,18 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     gap: 8,
   },
+  // 기본(무채색) — 핏 시트 이름 편집. 제품 이름 편집은 nameInputGold로 덮어씀.
   nameInput: {
     borderWidth: 1,
-    borderColor: 'rgba(201,161,94,0.9)',
+    borderColor: 'rgba(255,255,255,0.35)',
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
     color: '#FFFFFF',
     fontSize: 14,
+  },
+  nameInputGold: {
+    borderColor: 'rgba(201,161,94,0.9)',
   },
   actionRow: {
     flexDirection: 'row',
@@ -651,35 +663,42 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)',
   },
   actionText: {
-    color: '#C9BFC6',
+    color: TEXT_SUB,
     fontSize: 12,
   },
-  // 조정 — 핏 시그니처(골드) 강조: 시트 편집의 주 액션이라 다른 버튼과 구분.
+  // 조정 — 무채색 강조: 시트 편집의 주 액션이라 다른 버튼과 구분(레인 시그니처 제거).
   adjustBtn: {
-    backgroundColor: 'rgba(201,161,94,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
     borderWidth: 1,
-    borderColor: 'rgba(201,161,94,0.55)',
+    borderColor: 'rgba(255,255,255,0.5)',
   },
   adjustText: {
-    color: '#F5E4C3',
+    color: '#FFFFFF',
     fontWeight: '700',
   },
+  // 기본(무채색) — "＋ 새 핏 시트". "＋ 새 제품"은 addBtnGold/addTextGold로 덮어씀.
   addBtn: {
     alignSelf: 'flex-start',
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(201,161,94,0.5)',
+    borderColor: 'rgba(255,255,255,0.3)',
     marginTop: 2,
   },
   addText: {
-    color: GOLD,
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
   },
+  addBtnGold: {
+    borderColor: 'rgba(201,161,94,0.5)',
+  },
+  addTextGold: {
+    color: GOLD,
+  },
   hint: {
-    color: '#8B7E8C',
+    color: TEXT_HINT,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 10,
@@ -694,12 +713,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: 'rgba(201,161,94,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(201,161,94,0.5)',
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   catalogText: {
-    color: '#E4CF9E',
+    color: 'rgba(255,255,255,0.9)',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -711,7 +730,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   familyBadge: {
-    color: '#E4CF9E',
+    color: GOLD_LIGHT,
     backgroundColor: 'rgba(201,161,94,0.16)',
     fontSize: 9,
     paddingHorizontal: 6,
@@ -720,7 +739,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   deleteText: {
-    color: '#8B7E8C',
+    color: TEXT_HINT,
     fontSize: 12,
   },
   editPanel: {
@@ -773,15 +792,15 @@ const styles = StyleSheet.create({
     borderColor: GOLD,
   },
   segText: {
-    color: '#C9BFC6',
+    color: TEXT_SUB,
     fontSize: 12,
   },
   segTextOn: {
-    color: '#E4CF9E',
+    color: GOLD_LIGHT,
     fontWeight: '700',
   },
   note: {
-    color: '#8B7E8C',
+    color: TEXT_HINT,
     fontSize: 10.5,
     lineHeight: 14,
     marginTop: 2,
@@ -802,7 +821,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(201,161,94,0.1)',
   },
   familyChipText: {
-    color: '#E4CF9E',
+    color: GOLD_LIGHT,
     fontSize: 12,
     fontWeight: '600',
   },

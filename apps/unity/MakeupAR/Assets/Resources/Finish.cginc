@@ -327,4 +327,65 @@ fixed3 ApplyGrain(fixed3 c, float2 uv)
     return c + n * saturate(_MatteGrain) * 0.06;   // 은은한 입자(과하지 않게)
 }
 
+// ── 제형(텍스처) 공통 골격(W1) — 마감(빛 반응)과 별개 축. 커버리지 곡선·엣지 하드니스·
+// 입자감(그레인)·발색 body(색소 밀도)를 갈아끼운다. 네 축 전부 0 = 무변조(하위호환
+// 바이트 동일, 1e-5 조기 반환). RN(regions.ts TEXTURE_ENUM_SEED)이 시드 정본이고 아래
+// TexBundleFromEnum이 그 미러다(마감 FINISH_ENUM_SEED↔ApplyFinish 레거시 경로 선례).
+// W2(제형 스튜디오)는 부위별 오버라이드 유니폼을 이 시드 위에 얹어 연다(FinishBundle 선례).
+
+// 엣지 하드니스 — 커버리지 마스크 경계의 부드럽기. edgeSoft>0=경계를 mid로 당겨 소프트,
+// edgeSoft<0=경계를 대비화(또렷한 펜슬/젤). 0=입력 그대로.
+float TexEdge(float baseEdge, float edgeSoft)
+{
+    if (abs(edgeSoft) <= 1e-5) return baseEdge;
+    if (edgeSoft > 0.0) return lerp(baseEdge, smoothstep(0.0, 1.0, baseEdge), saturate(edgeSoft));
+    return lerp(baseEdge, saturate((baseEdge - 0.5) * 2.0 + 0.5), saturate(-edgeSoft)); // 대비↑
+}
+
+// 커버리지 — 발색 마스크 세기 스케일(리퀴드=얇게 등). coverage>0=더 덮음, <0=얇게. 0=그대로.
+float TexCoverage(float baseCov, float coverage)
+{
+    if (abs(coverage) <= 1e-5) return baseCov;
+    return saturate(baseCov * (1.0 + coverage));
+}
+
+// 그레인(입자감) — ApplyGrain(_MatteGrain 전역)의 스칼라 일반화. uv 고정 미세 밝기 노이즈.
+// 전역 매트 그레인과 가산적으로 얹힌다(전역 경로는 ApplyGrain이 그대로 유지).
+fixed3 TexGrain(fixed3 c, float2 uv, float grain)
+{
+    if (grain <= 1e-5) return c;
+    float n = frac(sin(dot(uv * 512.0, float2(12.9898, 78.233))) * 43758.5453) - 0.5;
+    return c + n * saturate(grain) * 0.06;
+}
+
+// body(발색 두께감) — 색소 밀도. body>0=진하게(지수>1, 미드톤을 내려 딥 펜슬), body<0=옅게
+// (지수<1, 미드톤을 띄워 물광 리퀴드). 무채화 없이 색을 유지한 채 명도 곡선만 굽힌다.
+// luma는 조명 적응형 바디 보정용 예약 인자 — 현재 미사용.
+fixed3 TexBody(fixed3 pig, float luma, float body)
+{
+    if (abs(body) <= 1e-5) return pig;
+    float k = 1.0 + 0.35 * clamp(body, -1.0, 1.0);
+    return pow(saturate(pig), max(k, 0.2));
+}
+
+// enum → TextureBundle 시드(RN TEXTURE_ENUM_SEED 미러). templateId: 0 generic/1 tone/2 teeth.
+// texEnum≈0 = 각 템플릿 ZERO(무변조). 하위호환: 미설정(0) = 전부 0 → 위 4함수 조기 반환.
+void TexBundleFromEnum(float templateId, float texEnum,
+                       out float edgeSoft, out float grain, out float coverage, out float body)
+{
+    edgeSoft = 0.0; grain = 0.0; coverage = 0.0; body = 0.0;
+    if (templateId < 0.5)            // generic (크림/파우더/리퀴드/젤/펜슬)
+    {
+        if (texEnum > 3.5)      { edgeSoft = -0.2; grain = 0.5; body = 0.3; }   // 펜슬
+        else if (texEnum > 2.5) { edgeSoft = 0.15; }                            // 젤
+        else if (texEnum > 1.5) { edgeSoft = 0.3;  coverage = -0.1; }           // 리퀴드
+        else if (texEnum > 0.5) { edgeSoft = 0.2;  grain = 0.4; body = -0.1; }  // 파우더
+    }
+    else if (templateId < 1.5)       // tone (매끈/파우더리 — grain 축만)
+    {
+        if (texEnum > 0.5) grain = 0.4;
+    }
+    // teeth(templateId≈2) = 젤 단일 = ZERO
+}
+
 #endif // ARMAKEUP_FINISH_INCLUDED

@@ -55,6 +55,7 @@ namespace ARMakeup.Face
         float _intensity;
 
         static readonly int WhitenIntensityId = Shader.PropertyToID("_WhitenIntensity");
+        static readonly int FinishId = Shader.PropertyToID("_TeethFinish"); // 마감(Tier B, 0=새틴=기존)
 
         readonly Vector2[] _ctrl = new Vector2[Ring];
         readonly float[] _ctrlDepth = new float[Ring];
@@ -108,11 +109,13 @@ namespace ARMakeup.Face
             _renderer.enabled = false;
         }
 
-        public void ApplyParams(float intensity)
+        public void ApplyParams(float intensity, int finish)
         {
             _intensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
             _material.SetFloat(WhitenIntensityId, _intensity);
+            // 마감(Tier B) — 0=새틴=기존 출력(하위호환). 듀이=글로시 스마일.
+            _material.SetFloat(FinishId, finish);
         }
 
         void LateUpdate()

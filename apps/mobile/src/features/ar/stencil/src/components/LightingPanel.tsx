@@ -3,6 +3,7 @@ import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import Slider from '@react-native-community/slider';
 
 import type {LightingParams} from '../bridge/types';
+import {ACCENT, PANEL_BG, accentAlpha} from '../theme';
 
 /**
  * 조명 시뮬레이션 패널 (#4) — 같은 메이크업을 프리셋 조명(자연광/형광등/노을/실내)
@@ -63,7 +64,7 @@ export default function LightingPanel({value, onChange, onClose}: Props) {
           maximumValue={1}
           value={value.intensity}
           onValueChange={v => onChange({...value, intensity: v})}
-          minimumTrackTintColor="#FFD27F"
+          minimumTrackTintColor={ACCENT}
           maximumTrackTintColor="rgba(255,255,255,0.25)"
           thumbTintColor="#FFFFFF"
           disabled={value.preset === 0}
@@ -104,7 +105,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     padding: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: PANEL_BG,
     gap: 10,
   },
   headerRow: {
@@ -145,8 +146,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   chipOn: {
-    backgroundColor: 'rgba(255,210,127,0.35)',
-    borderColor: '#FFD27F',
+    backgroundColor: accentAlpha(0.35),
+    borderColor: ACCENT,
   },
   chipText: {
     color: 'rgba(255,255,255,0.85)',

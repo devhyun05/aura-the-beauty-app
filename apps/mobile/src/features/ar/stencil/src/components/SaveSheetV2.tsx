@@ -19,15 +19,16 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { SaveItem } from '../composer/lookTree';
-
-const ROSE = '#FF7E9D';
-const GOLD = '#C9A15E';
+import type { SaveItem, SaveLevel, SaveScope } from '../composer/lookTree';
+import { selectableLevels } from '../composer/lookTree';
+import { ACCENT, GOLD, GOLD_LIGHT, PANEL_BG } from '../theme';
 
 export interface SaveDecision {
   name: string;
   items: SaveItem[];
   overwrite: boolean;
+  /** 저장 레벨(스코프) — 'sub'/'region'=편집 범위만 라이브러리 등록, 'face'=전체 룩 카드 */
+  level: SaveLevel;
 }
 
 interface Props {
@@ -35,6 +36,8 @@ interface Props {
   defaultName: string;
   /** collectChanges 결과 — 라디오/승격 토글의 초기 상태 */
   items: SaveItem[];
+  /** 저장 스코프 판정 — 기본 레벨·범위 설명·레벨 선택지 */
+  scope: SaveScope;
   /** 트리에 dirty가 있는가 — 항목이 없어도 '조합 구성 변경' 안내에 쓴다 */
   treeDirty: boolean;
   /** 내 룩 편집 중이면 그 이름 — 덮어쓰기 버튼 노출 */
@@ -43,9 +46,29 @@ interface Props {
   onSave: (decision: SaveDecision) => void;
 }
 
+/** 레벨별 '무엇으로 저장되는지' 한 줄 설명 — 범위를 명시(사용자 지적 대응). */
+function describeLevel(level: SaveLevel, scope: SaveScope): string {
+  if (level === 'sub') {
+    const label = scope.subLabels[0] ?? '세부부위';
+    return `세부부위 룩 — "${label}"만 저장`;
+  }
+  if (level === 'region') {
+    const label = scope.slotLabels[0] ?? '부위';
+    return `부위 룩 — ${label} 전체 저장 (세부부위 ${scope.subCount}개)`;
+  }
+  return `전체 룩 — ${scope.slotCount}개 부위 포함`;
+}
+
+const LEVEL_TITLE: Record<SaveLevel, string> = {
+  sub: '세부부위 룩',
+  region: '부위 룩',
+  face: '전체 룩',
+};
+
 export default function SaveSheetV2({
   defaultName,
   items: initialItems,
+  scope,
   treeDirty,
   editingName,
   onCancel,
@@ -53,6 +76,12 @@ export default function SaveSheetV2({
 }: Props) {
   const [name, setName] = useState(defaultName);
   const [items, setItems] = useState<SaveItem[]>(initialItems);
+  const levels = selectableLevels(scope);
+  // 편집 중(내 룩 카드 덮어쓰기)일 땐 전체 룩 고정 — 카드 스코프를 바꾸지 않는다.
+  const [level, setLevel] = useState<SaveLevel>(
+    editingName != null ? 'face' : scope.level,
+  );
+  const showLevelPicker = editingName == null && levels.length > 1;
 
   const patchItem = (nodeId: string, patch: Partial<SaveItem>) => {
     setItems(prev => prev.map(i => (i.nodeId === nodeId ? { ...i, ...patch } : i)));
@@ -61,10 +90,12 @@ export default function SaveSheetV2({
   const decide = (overwrite: boolean) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onSave({ name: trimmed, items, overwrite });
+    onSave({ name: trimmed, items, overwrite, level: overwrite ? 'face' : level });
   };
 
-  const anyRow = items.length > 0 || treeDirty;
+  // 스코프 저장(sub/region)에선 copy-on-write 항목 목록이 의미 없다(범위만 등록).
+  const showItems = level === 'face';
+  const anyRow = (showItems && items.length > 0) || treeDirty;
 
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
@@ -88,10 +119,38 @@ export default function SaveSheetV2({
             보정(FIT)은 보정 레인에서 따로 저장돼요 — 이 저장물은 메이크업만 담아요
           </Text>
 
+          {/* 저장 범위(레벨) — 편집한 만큼만 등록되게 자동 판정, 넓히기만 허용 */}
+          {showLevelPicker ? (
+            <View>
+              <Text style={styles.miniTitle}>저장 범위</Text>
+              <View style={styles.levelRow}>
+                {levels.map(lv => (
+                  <TouchableOpacity
+                    key={lv}
+                    style={[styles.levelChip, level === lv && styles.levelChipOn]}
+                    onPress={() => setLevel(lv)}>
+                    <Text style={[styles.levelChipText, level === lv && styles.levelChipTextOn]}>
+                      {LEVEL_TITLE[lv]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.scopeNote}>{describeLevel(level, scope)}</Text>
+            </View>
+          ) : (
+            editingName == null &&
+            scope.subCount > 0 && (
+              <Text style={styles.scopeNote}>{describeLevel(level, scope)}</Text>
+            )
+          )}
+
+          {showItems && (
           <Text style={styles.miniTitle}>
             변경 요약 <Text style={styles.miniMute}>— 확인이 필요한 것만 선택지가 생깁니다</Text>
           </Text>
+          )}
 
+          {showItems && (
           <ScrollView style={styles.changeScroll}>
             {items.map(item => (
               <View key={item.nodeId} style={styles.changeBox}>
@@ -171,6 +230,7 @@ export default function SaveSheetV2({
               </View>
             )}
           </ScrollView>
+          )}
 
           {editingName != null && (
             <TouchableOpacity
@@ -202,7 +262,7 @@ export default function SaveSheetV2({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: PANEL_BG,
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
@@ -240,6 +300,36 @@ const styles = StyleSheet.create({
     color: 'rgba(228,207,158,0.85)',
     fontSize: 10.5,
   },
+  levelRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
+  levelChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  levelChipOn: {
+    borderColor: ACCENT,
+    backgroundColor: 'rgba(201,161,94,0.16)',
+  },
+  levelChipText: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  levelChipTextOn: {
+    color: '#FFFFFF',
+  },
+  scopeNote: {
+    color: GOLD_LIGHT,
+    fontSize: 11,
+    marginTop: 6,
+  },
   changeScroll: {
     maxHeight: 260,
   },
@@ -267,11 +357,11 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   dirtyStar: {
-    color: ROSE,
+    color: ACCENT,
     fontWeight: '800',
   },
   ownBadge: {
-    color: '#E4CF9E',
+    color: GOLD_LIGHT,
     backgroundColor: 'rgba(201,161,94,0.16)',
     fontSize: 9,
     paddingHorizontal: 6,
@@ -280,7 +370,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   autoText: {
-    color: '#E4CF9E',
+    color: GOLD_LIGHT,
     fontSize: 10.5,
   },
   optCol: {
@@ -300,8 +390,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.45)',
   },
   radioOn: {
-    borderColor: ROSE,
-    backgroundColor: ROSE,
+    borderColor: ACCENT,
+    backgroundColor: ACCENT,
   },
   radioText: {
     flex: 1,
@@ -333,7 +423,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
   },
   promoteTextOn: {
-    color: '#E4CF9E',
+    color: GOLD_LIGHT,
   },
   noChange: {
     borderWidth: 1,
@@ -366,7 +456,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   btnPrimary: {
-    backgroundColor: ROSE,
+    backgroundColor: ACCENT,
   },
   btnPrimaryText: {
     color: '#FFFFFF',

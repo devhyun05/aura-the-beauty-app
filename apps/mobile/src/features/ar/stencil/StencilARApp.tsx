@@ -78,12 +78,13 @@ import { emptyCatalog, loadCatalog } from './src/assets/assetCatalog';
 import type { AssetKind, CatalogManifest } from './src/assets/assetCatalog';
 import ParamSlider from './src/components/ParamSlider';
 import ExtractDiagPanel from './src/components/ExtractDiagPanel';
+import FndColorDebugPanel from './src/components/FndColorDebugPanel';
 import ExtractSourceThumb from './src/components/ExtractSourceThumb';
 import Icon from './src/components/Icon';
 import BasicMode from './src/components/BasicMode';
 import type { LaneChip } from './src/components/LaneRow';
 import ComposerSheet from './src/components/ComposerSheet';
-import GuideMode, { SKY } from './src/components/GuideMode';
+import GuideMode from './src/components/GuideMode';
 import {enableAllStencilRegions} from './src/composer/stencilSelection';
 import {stencilStepsFromTree} from './src/composer/stencilSteps';
 import LightingPanel from './src/components/LightingPanel';
@@ -122,7 +123,6 @@ import type { SaveDecision } from './src/components/SaveSheetV2';
 import { compileLayers } from './src/composer/model';
 import { measurementToLook } from './src/composer/lookExtract';
 import {
-  GOLD,
   isDecoRegion,
   REGION_DEFS,
   regionOwnKeys,
@@ -135,6 +135,7 @@ import type {
   TextureMapRegion,
 } from './src/composer/regions';
 import {
+  analyzeSaveScope,
   applySaveDecisions,
   buildSystemLibrary,
   collectChanges,
@@ -145,6 +146,7 @@ import {
   instantiate,
   isLeaf,
   promoteGroup,
+  registerScopedLook,
   reviveTree,
   setNodeFitRef,
   SLOT_OF_REGION,
@@ -152,7 +154,7 @@ import {
   treeDirty,
   updateLeaf,
 } from './src/composer/lookTree';
-import type { SlotKey } from './src/composer/lookTree';
+import type { SaveScope, SlotKey } from './src/composer/lookTree';
 import type {
   LookLibrary,
   LookNode,
@@ -179,9 +181,14 @@ import type {
 } from './src/composer/warpPresets';
 import * as History from './src/composer/history';
 import type { EditSnapshot } from './src/composer/history';
-
-// 레인 시그니처 색 — 메이크업(로즈)·보정(골드, GOLD import). 세그먼트 도트/텍스트 강조 공용.
-const ROSE = '#FF7E9D';
+import {
+  ACCENT,
+  ACCENT_LIGHT,
+  GOLD_CTA,
+  NEUTRAL_ACCENT,
+  PANEL_BG,
+  accentAlpha,
+} from './src/theme';
 
 // iOS 실기기(iPhone 15 Pro) 확정값: displayMatrix(행렬1)가 y뒤집기를 포함하므로 flipY 불필요.
 // Android는 미확정 — 실기기 캘리브레이션 후 갱신할 것.
@@ -434,6 +441,17 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const extractGainRef = useRef(1);
   const [extractNoWB, setExtractNoWB] = useState(false); // WB 끄기(다음 추출부터)
   const extractNoWBRef = useRef(false);
+  // ── 임시 디버그(파운데 색 튜닝) — Foundation.cginc 전역 유니폼 3종을 실기기에서 눈으로
+  //    맞추는 dev 슬라이더. 확정값을 셰이더 리터럴로 굽고 나면 이 블록(패널·주입·토글)을
+  //    통째로 걷어낸다. 값은 매 applyFilter에 주입되므로 ref만 있으면 되나, 라벨 표시용으로
+  //    state도 둔다. 기본값=옛 #define 상수라 안 건드리면 현재 픽셀과 동일. ──
+  const [fndDebugOpen, setFndDebugOpen] = useState(false);
+  const [fndRefLuma, setFndRefLuma] = useState(0.798322); // 기준 루마(밝기) 0.45~0.90
+  const fndRefLumaRef = useRef(0.798322);
+  const [fndChroma, setFndChroma] = useState(0.4); // 채도 혼합(탁함) 0.0~0.5
+  const fndChromaRef = useRef(0.4);
+  const [fndLumaGain, setFndLumaGain] = useState(1); // luma 게인(밝기 여유) 0.8~1.5
+  const fndLumaGainRef = useRef(1);
   // 추출에 쓴 원본 사진 URI(검증용) — 썸네일·확대 모달 표시. null=한 번도 추출 안 함.
   const [extractSourceUri, setExtractSourceUri] = useState<string | null>(null);
   const [opacity, setOpacityState] = useState(0.75); // 전역 메이크업 농도 슬라이더 — 기본 75%
@@ -624,6 +642,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const [saveCtx, setSaveCtx] = useState<{
     defaultName: string;
     items: SaveItem[];
+    scope: SaveScope;
   } | null>(null);
 
   // lookSelRef를 state와 동기 — 렌더 커밋 후 미러 갱신(편집 직전 캡처용).
@@ -679,6 +698,12 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const sendScaled = useCallback(
     (base: FilterParams, op: number, sg: SlotGain = slotGainRef.current) => {
       const scaled = scaleParams(base, op, sg);
+      // 임시 디버그(파운데 색 튜닝) — 모든 applyFilter의 단일 관문에서 유니폼 3종을 항상
+      // 주입(룩 상태와 무관하므로 여기서만 실음). ref 기본값=옛 #define 상수라 슬라이더를
+      // 안 건드리면 현재 픽셀과 동일. 확정 후 이 3줄과 관련 ref/패널을 걷어낸다.
+      scaled.fndRefLumaDbg = fndRefLumaRef.current;
+      scaled.fndChromaDbg = fndChromaRef.current;
+      scaled.fndLumaGainDbg = fndLumaGainRef.current;
       sendToUnity({ type: 'applyFilter', filter: scaled });
     },
     [sendToUnity],
@@ -709,6 +734,33 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       slotGainRef.current = next;
       setSlotGainState(next);
       sendScaled(paramsRef.current, opacityRef.current, next);
+    },
+    [sendScaled],
+  );
+
+  // 임시 디버그(파운데 색 튜닝) — 3종 슬라이더 변경 → ref·state 갱신 후 현재 룩을 즉시 재전송
+  // (sendScaled가 주입). 확정값을 셰이더 리터럴로 굽고 나면 이 세 핸들러를 걷어낸다.
+  const setFndRefLumaDbg = useCallback(
+    (v: number) => {
+      fndRefLumaRef.current = v;
+      setFndRefLuma(v);
+      sendScaled(paramsRef.current, opacityRef.current);
+    },
+    [sendScaled],
+  );
+  const setFndChromaDbg = useCallback(
+    (v: number) => {
+      fndChromaRef.current = v;
+      setFndChroma(v);
+      sendScaled(paramsRef.current, opacityRef.current);
+    },
+    [sendScaled],
+  );
+  const setFndLumaGainDbg = useCallback(
+    (v: number) => {
+      fndLumaGainRef.current = v;
+      setFndLumaGain(v);
+      sendScaled(paramsRef.current, opacityRef.current);
     },
     [sendScaled],
   );
@@ -1834,12 +1886,44 @@ function FilterScreen({ onBack }: StencilARAppProps) {
           tree?.name ?? '내 룩',
           userStylesV2Ref.current.map(s => s.name),
         );
-    setSaveCtx({ defaultName, items });
+    // 저장 스코프 판정 — 편집 범위(세부부위/부위/전체)에 맞는 기본 등록 레벨.
+    const scope = analyzeSaveScope(tree);
+    setSaveCtx({ defaultName, items, scope });
   }, [editingStyleId]);
 
   const confirmSaveV2 = useCallback(
     (decision: SaveDecision) => {
       const tree = lookTreeRef.current;
+
+      // 스코프 저장(세부부위/부위) — 편집한 범위만 라이브러리 정의로 등록하고
+      // 전체 룩 카드는 만들지 않는다(사용자 지적: 아이라인만 편집해도 전체룩 등록).
+      if (tree && decision.level !== 'face') {
+        const res = registerScopedLook(
+          tree,
+          lookLibraryRef.current,
+          decision.level,
+          decision.name,
+        );
+        if (res) {
+          lookLibraryRef.current = res.lib;
+          setLookLibrary(res.lib);
+          saveUserLibrary(res.lib);
+          // 작업본은 dirty 해제·재ref된 트리로 교체(시각 동일).
+          lookTreeRef.current = res.root;
+          setLookTreeState(res.root);
+          setEditingStyleId(null);
+          setSaveCtx(null);
+          Alert.alert(
+            '저장 완료',
+            res.level === 'sub'
+              ? `'${res.name}' 세부부위 룩으로 저장했어요. 같은 세부부위를 편집할 때 목록에 나타나요.`
+              : `'${res.name}' 부위 룩으로 저장했어요. 같은 부위를 편집할 때 목록에 나타나요.`,
+          );
+          return;
+        }
+        // res=null(내용 없음)이면 전체 룩 경로로 폴백.
+      }
+
       let finalTree = tree;
       // 시트 결정 적용 — 원본 반영/승격은 라이브러리 갱신, 나머지 수정분은
       // 참조 분리(익명 사본) + dirty 해제. 원본 정의는 여기서만 바뀔 수 있다.
@@ -2647,6 +2731,14 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                 룩진단 {extractDiagOpen ? 'ON' : 'off'}
               </Text>
             </TouchableOpacity>
+            {/* 임시 디버그(파운데 색 튜닝) — 걷어낼 때 이 버튼과 아래 패널·상태를 함께 제거 */}
+            <TouchableOpacity
+              style={[styles.debugBtn, fndDebugOpen && styles.debugBtnOn]}
+              onPress={() => setFndDebugOpen(o => !o)}>
+              <Text style={styles.debugText}>
+                파운데색 {fndDebugOpen ? 'ON' : 'off'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -2666,7 +2758,22 @@ function FilterScreen({ onBack }: StencilARAppProps) {
         {/* 룩 추출 원본 썸네일(#1, 검증용) — 좌상단. 탭하면 전체화면 확대해 추출색과 비교.
             추출을 한 번도 안 했으면(URI null) 미표시. 우측 도구 레일·하단 시트와 안 겹침. */}
         {SHOW_INTERNAL_AR_TOOLS && (
-          <ExtractSourceThumb uri={extractSourceUri} topOffset={insets.top + 8} />
+          <>
+            {/* 임시 디버그(파운데 색 튜닝) — 확정값을 셰이더에 굽고 나면 이 블록을 걷어낸다. */}
+            {fndDebugOpen && (
+              <FndColorDebugPanel
+                refLuma={fndRefLuma}
+                onRefLumaChange={setFndRefLumaDbg}
+                chroma={fndChroma}
+                onChromaChange={setFndChromaDbg}
+                lumaGain={fndLumaGain}
+                onLumaGainChange={setFndLumaGainDbg}
+                onClose={() => setFndDebugOpen(false)}
+              />
+            )}
+
+            <ExtractSourceThumb uri={extractSourceUri} topOffset={insets.top + 8} />
+          </>
         )}
 
         {/* 도구 레일(우측) — 메이크업 조작과 독립인 분석/코치 도구 토글.
@@ -2872,9 +2979,10 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                           ? wpGain
                           : stencil.opacity
                     }
-                    accent={
-                      lane === 'makeup' ? undefined : lane === 'warp' ? GOLD : SKY
-                    }
+                    // 이 분기는 항상 mode==='detail'이거나 warp/guide 레인이다(기본
+                    // 모드는 위에서 spacer로 걸러짐) — 메이크업=상세모드(ACCENT
+                    // 예외 유지), 보정·가이드=세 모드 스코프라 무채색.
+                    accent={lane === 'makeup' ? undefined : NEUTRAL_ACCENT}
                     onChange={
                       lane === 'makeup'
                         ? setOpacityUser
@@ -3175,6 +3283,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
         <SaveSheetV2
           defaultName={saveCtx.defaultName}
           items={saveCtx.items}
+          scope={saveCtx.scope}
           treeDirty={lookDirty}
           editingName={editingStyle?.name ?? null}
           onCancel={() => setSaveCtx(null)}
@@ -3447,8 +3556,10 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 11,
   },
+  // 반반(왼쪽/전체/오른쪽) 토글 — 레인 무관 상시 노출 크롬(세 모드 화면 위에도 뜸)이라
+  // 무채색으로 통일(레인 세그먼트와 동일 컨벤션: 밝은 배경 + 어두운 텍스트).
   splitBtnOn: {
-    backgroundColor: '#FF7E9D',
+    backgroundColor: '#E9E9E9',
   },
   splitText: {
     color: 'rgba(255,255,255,0.7)',
@@ -3456,7 +3567,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   splitTextOn: {
-    color: '#FFFFFF',
+    color: '#1F1F1F',
   },
   toolRail: {
     // top은 세이프에어리어 인셋 기준으로 런타임 지정(노치 아래 우측 세로 레일).
@@ -3477,8 +3588,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
+  // 우측 도구 레일 — 세 모드 화면 위에 항상 떠 있는 크롬이라 무채색(레인 색 제거).
   toolBtnOn: {
-    backgroundColor: 'rgba(127,208,255,0.55)',
+    backgroundColor: 'rgba(255,255,255,0.3)',
   },
   toolLabel: {
     color: '#FFFFFF',
@@ -3504,7 +3616,7 @@ const styles = StyleSheet.create({
     marginTop: -3, // 헤더(undo/redo 줄)와 붙임
     borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: PANEL_BG,
   },
   // 레인(메이크업/보정) 토글 버튼 — 깊이 버튼 왼쪽. 솔리드 필로 깊이(아웃라인)와 구분.
   // 'MODE' 라벨 — 레인 버튼 왼쪽.
@@ -3529,14 +3641,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // 레인 구분은 무채색으로 통일 — 활성 배경은 밝은 회색 + 어두운 텍스트(레인별 색 분기 없음).
   laneSegBtnMakeupOn: {
-    backgroundColor: ROSE,
+    backgroundColor: '#E9E9E9',
   },
   laneSegBtnWarpOn: {
-    backgroundColor: GOLD,
+    backgroundColor: '#E9E9E9',
   },
   laneSegBtnGuideOn: {
-    backgroundColor: SKY,
+    backgroundColor: '#E9E9E9',
   },
   laneSegText: {
     color: 'rgba(255,255,255,0.7)',
@@ -3544,13 +3657,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   laneSegTextMakeupOn: {
-    color: '#FFFFFF',
+    color: '#1F1F1F',
   },
   laneSegTextWarpOn: {
-    color: '#FFFFFF',
+    color: '#1F1F1F',
   },
   laneSegTextGuideOn: {
-    color: '#FFFFFF',
+    color: '#1F1F1F',
   },
   densityInline: {
     flex: 1,
@@ -3563,16 +3676,16 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: ROSE,
+    backgroundColor: '#E9E9E9',
   },
   headerSaveText: {
-    color: '#FFFFFF',
+    color: '#1A1206',
     fontSize: 12,
     fontWeight: '800',
   },
-  // 보정 레인 변형 — 골드 알약 + 짙은 텍스트(골드 위 가독).
+  // 보정 레인 변형 — 무채색으로 통일(레인 시그니처 색 제거).
   headerSaveBtnWarp: {
-    backgroundColor: GOLD,
+    backgroundColor: '#E9E9E9',
   },
   headerSaveTextWarp: {
     color: '#1A1206',
@@ -3616,16 +3729,18 @@ const styles = StyleSheet.create({
   headerSpacer: {
     flex: 1,
   },
+  // 기본/상세 깊이 토글 — 상세모드(ComposerSheet) 진입점이라 ACCENT 유지(세 모드
+  // 무채색화 대상 아님, lane==='makeup'에서만 노출).
   depthBtn: {
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 13,
-    backgroundColor: 'rgba(255,126,157,0.22)',
+    backgroundColor: accentAlpha(0.22),
     borderWidth: 1,
-    borderColor: 'rgba(255,126,157,0.9)',
+    borderColor: accentAlpha(0.9),
   },
   depthBtnText: {
-    color: '#FF9EB5',
+    color: ACCENT_LIGHT,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -3750,7 +3865,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   sideButtonGold: {
-    color: '#E6C687',
+    color: GOLD_CTA,
   },
   // ── 사전 촬영 미디어 보정 ──
   editBar: {
@@ -3799,7 +3914,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
     paddingVertical: 12,
     borderRadius: 24,
-    backgroundColor: '#E6C687',
+    backgroundColor: GOLD_CTA,
   },
   editBtnPrimaryText: {
     color: '#1A1206',
@@ -3841,7 +3956,7 @@ const styles = StyleSheet.create({
   editProgressFill: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#E6C687',
+    backgroundColor: GOLD_CTA,
   },
   editProgressHint: {
     color: 'rgba(255,255,255,0.6)',
@@ -4004,7 +4119,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   catalogModalBtnPrimary: {
-    backgroundColor: '#FF7E9D',
+    backgroundColor: ACCENT,
   },
   catalogModalBtnText: {
     color: 'rgba(255,255,255,0.9)',

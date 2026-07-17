@@ -20,6 +20,9 @@ Shader "ARMakeup/Lip"
         _LipShimmer ("Lip Shimmer Gain", Range(0, 1)) = 0.5
         // 제형 텍스처(배치 A ①) — 엣지 하드니스/커버로 제형감. 0=립스틱(현행 룩).
         _LipTexture ("Lip Texture (0 lipstick 1 velvet 2 water)", Float) = 0
+        // 제형(텍스처, 라이너 인스턴스) — GENERIC 템플릿 enum(0=크림=현행). 메인 립 메시는
+        // 기본 0(무영향), 라이너 머티리얼만 MakeupController가 세팅(메인 _LipTexture=W2와 독립 축).
+        _LipLinerTexture ("Lip Liner Texture (generic enum)", Float) = 0
         // ── 제형 스튜디오(#21) — 마감 세부 파라미터. 전부 0 = 미지정 = enum 기존 동작
         // (Finish.cginc가 다섯 값 합 0이면 레거시 경로로 분기, 하위호환 대수 검증).
         // _GlossLumaLo(아래 립글로스 톱코트 임계)와는 다른 값 — 이건 마감(finish)의 광 임계.
@@ -55,12 +58,29 @@ Shader "ARMakeup/Lip"
         // 기본 0 = 끔 = 기존 픽셀 동일. 립라이너 머티리얼은 이 유니폼을 안 만짐(기본 0).
         _LipBaseColor ("Lip Base Cover Color (nude)", Color) = (0.85, 0.66, 0.60, 1)
         _LipBaseIntensity ("Lip Base Cover", Range(0, 1)) = 0
+        // 베이스립 마감 — 메인 립(_LipFinish)과 독립. ApplyFinish 레거시 경로(세부 0)라
+        // 0=새틴=기존 출력과 바이트 동일(하위호환).
+        _LipBaseFinish ("Lip Base Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
+        // 제형(텍스처, 베이스립) — GENERIC 템플릿 enum(0=크림=현행). Finish.cginc 미러.
+        _LipBaseTexture ("Lip Base Texture (generic enum)", Float) = 0
         // ── 립글로스(맨 위 광) ── 마감(_LipFinish)과 독립된 가산 스펙 하이라이트
         // (피드 luma 상위 증폭) + 틴트색. 기본 흰색 = 무색 광, 기본 강도 0 = 끔.
         // 매트 마감 위에도 얹힌다. 립라이너는 기본 0이라 무영향.
         _LipGlossColor ("Lip Gloss Color", Color) = (1, 1, 1, 1)
         _LipGlossIntensity ("Lip Gloss", Range(0, 1)) = 0
+        // 립글로스 마감 — 가산 광 틴트색에만 적용. 0=새틴=기존 출력(하위호환).
+        _LipGlossFinish ("Lip Gloss Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
+        // 제형(텍스처, 립글로스) — GENERIC 템플릿 enum(0=크림=현행). Finish.cginc 미러.
+        _LipGlossTexture ("Lip Gloss Texture (generic enum)", Float) = 0
         _GlossLumaLo ("Gloss Luma Lo", Range(0, 1)) = 0.6 // 광 하한 — 이상 luma에서 반짝 // 실기기 튜닝 대상
+        // 핏(개인 공간 델타) — 베이스립·립글로스 오버라인 값(진짜 모양 확장). 0=원래(메인
+        // 틴트 edge와 동일). 링 메시가 max(overline)만큼 실제 확장되고, 각 레이어 경계는 확장된
+        // UV에서 자기 값 기준으로 (E−ov)·k 만큼 되돌려 독립 배치된다. 립라이너는 미설정 → 0(무영향).
+        _LipBaseOverline ("Lip Base Overline (own value)", Float) = 0
+        _LipGlossOverline ("Lip Gloss Overline (own value)", Float) = 0
+        // 메인 틴트 자기 오버라인 값 + 링 메시 확장량 E=max(overline,base,gloss,0). 둘 다 0=원래.
+        _LipOverline ("Lip Overline (tint own value)", Float) = 0
+        _LipMeshOverline ("Lip Mesh Overline (max expand)", Float) = 0
     }
 
     SubShader
@@ -91,6 +111,7 @@ Shader "ARMakeup/Lip"
             float _LipFinish;
             float _LipShimmer;
             float _LipTexture; // 제형 텍스처(①) 0=립스틱 1=벨벳틴트 2=워터틴트
+            float _LipLinerTexture; // 제형(텍스처) GENERIC — 라이너 인스턴스만 세팅(메인 립 0=무영향)
             // 제형 스튜디오(#21) 마감 세부 — 0 = enum 기존 동작(하위호환).
             float _LipGlossLo;
             float _LipGlossGain;
@@ -109,9 +130,17 @@ Shader "ARMakeup/Lip"
             float _LipGradient;  // R2 그라데 강도 0..1 (0=끔=기존)
             fixed4 _LipBaseColor;     // 베이스립 커버 색(누드/스킨톤)
             float _LipBaseIntensity;  // 베이스립 커버리지 0..1 (0=끔=기존)
+            float _LipBaseFinish;     // 베이스립 마감(0=새틴=기존, 메인 _LipFinish와 독립)
+            float _LipBaseTexture;    // 제형(텍스처) GENERIC(0=크림=현행)
             fixed4 _LipGlossColor;    // 립글로스 광 틴트색(기본 흰=무색)
             float _LipGlossIntensity; // 립글로스 강도 0..1 (0=끔=기존)
+            float _LipGlossFinish;    // 립글로스 마감(0=새틴=기존)
+            float _LipGlossTexture;   // 제형(텍스처) GENERIC(0=크림=현행)
             float _GlossLumaLo;       // 글로스 luma 하한
+            float _LipBaseOverline;   // 베이스립 오버라인 값(±, 진짜 확장, 0=원래)
+            float _LipGlossOverline;  // 립글로스 오버라인 값(±, 진짜 확장, 0=원래)
+            float _LipOverline;       // 메인 틴트 자기 오버라인 값(0=원래 입술선)
+            float _LipMeshOverline;   // 링 메시 확장량 E=max(overline,base,gloss,0)
             // 제형 텍스처(①) — 엣지 하드니스 상한/커버로 제형감. 0=립스틱은 현행값(하위호환).
             #define LIP_TEX_VELVET_EDGE 0.20    // 벨벳틴트: 엣지 소프트(smoothstep 상한↑) // 실기기 튜닝 대상
             #define LIP_TEX_WATER_EDGE 0.28     // 워터틴트: 엣지 더 소프트 // 실기기 튜닝 대상
@@ -122,6 +151,7 @@ Shader "ARMakeup/Lip"
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;   // 재질(MatCap)용
                 float2 uv : TEXCOORD0; // x = 반경(0 바깥→1 안쪽)
+                float2 uv2 : TEXCOORD1; // x = 레이어 경계 uv 스케일 k=Ms/폭 (mesh.uv2)
             };
 
             struct v2f
@@ -130,6 +160,7 @@ Shader "ARMakeup/Lip"
                 float2 uv : TEXCOORD0;
                 float4 grabPos : TEXCOORD1;
                 float3 vnormal : TEXCOORD2; // 뷰공간 법선(재질)
+                float lipK : TEXCOORD3;     // 레이어 경계 uv 스케일 k
             };
 
             v2f vert(appdata v)
@@ -137,6 +168,7 @@ Shader "ARMakeup/Lip"
                 v2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.uv = v.uv;
+                o.lipK = v.uv2.x;
                 o.grabPos = ComputeGrabScreenPos(o.pos);
                 o.vnormal = normalize(mul((float3x3)UNITY_MATRIX_IT_MV, v.normal));
                 if (o.vnormal.z < 0.0) o.vnormal = -o.vnormal; // 카메라 향하는 반구로
@@ -162,7 +194,21 @@ Shader "ARMakeup/Lip"
                 float edgeHi = lerp(0.14, LIP_TEX_VELVET_EDGE, texVelvet);
                 edgeHi = lerp(edgeHi, LIP_TEX_WATER_EDGE, texWater);
                 float lipTexCov = 1.0 - texWater * LIP_TEX_WATER_COV_DOWN;
-                float edge = smoothstep(0.0, edgeHi, i.uv.x);
+                // 레이어별 커버 경계를 확장된 UV 공간에서 자기 오버라인 값 기준으로 독립 계산.
+                // 링 메시는 max()로 정한 E=_LipMeshOverline 만큼 바깥으로 확장됐고(외곽 uv.x=0가
+                // 물리적으로 입술선 +E·Ms 위치), 각 레이어는 자기 값 ov와 E의 차 (E−ov)를 반경 uv로
+                // 환산(i.lipK=Ms/폭)해 그만큼 안쪽으로 경계를 되돌린다. E=ov인 레이어(=max를 만든
+                // 레이어)는 오프셋 0이라 확장된 바깥 경계까지 덮어 실제 입술선 밖까지 나가고, 값이
+                // 작은 레이어는 자기 값 위치(입술선 등)에 머문다. 음수 ov는 (E−ov)가 커져 경계가
+                // 입술선 안쪽으로 이동(± 통일). 전부 0이면 E=0·오프셋 0 → 기존 smoothstep(0,edgeHi,
+                // uv.x)와 바이트 동일(하위호환). 라이너 머티리얼은 유니폼 미설정(전부 0)+uv2=0이라
+                // 오프셋 0 → 무영향.
+                float offTint  = (_LipMeshOverline - _LipOverline)      * i.lipK;
+                float offBase  = (_LipMeshOverline - _LipBaseOverline)  * i.lipK;
+                float offGloss = (_LipMeshOverline - _LipGlossOverline) * i.lipK;
+                float edge = smoothstep(0.0, edgeHi, i.uv.x - offTint);
+                float edgeBase = smoothstep(0.0, edgeHi, i.uv.x - offBase);
+                float edgeGloss = smoothstep(0.0, edgeHi, i.uv.x - offGloss);
 
                 float luma = dot(feed, fixed3(0.299, 0.587, 0.114));
 
@@ -174,8 +220,14 @@ Shader "ARMakeup/Lip"
 
                 // ② 메인 틴트 색소(루마 보존, FaceMakeup.Tint 원리) — 피드 luma 기준(원본
                 // 불변). R2 그라데(§3.1): uv.x(0 바깥→1 안쪽)로 스톱B 혼합, _LipGradient=0=끔.
+                // 제형(텍스처, 라이너) — GENERIC 시드 번들. 메인 립 메시는 _LipLinerTexture=0
+                // (무영향), 라이너 머티리얼 인스턴스만 세팅. body/grain=색소, coverage/edge=aTint.
+                // enum 0(크림)=ZERO → 조기 반환 = 메인 립 바이트 동일(하위호환).
+                float lnTexE, lnTexG, lnTexC, lnTexB;
+                TexBundleFromEnum(0.0, _LipLinerTexture, lnTexE, lnTexG, lnTexC, lnTexB);
                 fixed3 lipBase = lerp(_LipColor.rgb, _LipColor2.rgb, i.uv.x * _LipGradient);
                 fixed3 pigment = lipBase * PigmentBase(luma, 1.5, 0.15);
+                pigment = TexBody(pigment, luma, lnTexB); // 제형 발색 body(라이너, 메인 립 0=무변조)
                 // 질감 맵(#22) — 링 uv(x=반경)로 광 게인·시머 밀도를 픽셀별 변조.
                 // 맵 없으면(_HasFinishMap=0) 계수 1.0 → 스칼라 그대로(하위호환).
                 fixed4 lipFinishMap = tex2D(_LipFinishMap, i.uv);
@@ -190,14 +242,26 @@ Shader "ARMakeup/Lip"
                 // 립은 법선 미계산 → 정면 기본값(0,0,1). (추후 립 메시 법선 시 대체)
                 pigment = ApplyMaterial(pigment, luma, screenUV, i.vnormal, _LipMaterial, _LipMaterialStrength);
                 pigment = ApplyGrain(pigment, i.uv);   // 매트 파우더 입자감(전역, 0=무변조)
+                pigment = TexGrain(pigment, i.uv, lnTexG); // 제형 그레인(라이너, 메인 립 0=무변조)
 
                 // ① 베이스 커버 색(누드/스킨톤, luma 보존) — 틴트 아래 반투명 레이어.
+                // 제형(텍스처, 베이스립) — GENERIC 시드 번들(라이너 인스턴스는 미설정 0=무영향).
+                float lbTexE, lbTexG, lbTexC, lbTexB;
+                TexBundleFromEnum(0.0, _LipBaseTexture, lbTexE, lbTexG, lbTexC, lbTexB);
                 fixed3 baseTone = _LipBaseColor.rgb * PigmentBase(luma, 1.5, 0.15);
+                baseTone = TexBody(baseTone, luma, lbTexB); // 제형 발색 body(베이스립)
+                // 베이스립 마감 — 메인 립과 독립(0=새틴=무변형). 립 메시 uv가 1D(반경)라
+                // 스파클 좌표는 screenUV(메인 립 finish와 동일 규약), 시머 게인은 립 공용 _LipShimmer.
+                baseTone = ApplyFinish(baseTone, luma, screenUV, _LipBaseFinish, _LipShimmer,
+                                       0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
+                baseTone = TexGrain(baseTone, i.uv, lbTexG); // 제형 그레인(베이스립)
 
                 // 두 레이어 알파: 틴트 aTint=edge·intensity(=원본 amt), 베이스 aBase.
                 // 제형 텍스처(①) 워터틴트만 메인 틴트 커버를 낮춘다(lipTexCov=1이면 원본).
                 float aTint = edge * _LipIntensity * lipTexCov;
-                float aBase = edge * _LipBaseIntensity;
+                aTint = TexEdge(TexCoverage(saturate(aTint), lnTexC), lnTexE); // 제형 커버·엣지(라이너)
+                float aBase = edgeBase * _LipBaseIntensity;
+                aBase = TexEdge(TexCoverage(saturate(aBase), lbTexC), lbTexE); // 제형 커버·엣지(베이스립)
                 // 베이스(아래) 위에 틴트(위)를 over 합성한 결과를 피드 위 단일 (색, A)로.
                 //   out = pigment·aTint + (1−aTint)·(baseTone·aBase + (1−aBase)·feed)
                 // ⇒ 합집합 알파 A = 1−(1−aTint)(1−aBase),  프리멀티 numer = pigment·aTint
@@ -213,8 +277,17 @@ Shader "ARMakeup/Lip"
                 // A는 안 올려 목적지 피드가 살아있으므로, 클리어 글로스 단독(틴트·베이스 0)도
                 // feed 위에 밝힘으로 얹힌다(SrcAlpha였다면 검정 위 블렌드로 오히려 어두워짐 —
                 // 적대 리뷰 confirmed). 강도 0이면 무가산 → 기존과 동일.
-                float glossAmt = edge * smoothstep(_GlossLumaLo, 1.0, luma) * _LipGlossIntensity;
-                premult += _LipGlossColor.rgb * glossAmt;
+                // 제형(텍스처, 립글로스) — GENERIC 시드 번들(라이너 인스턴스는 미설정 0=무영향).
+                float lgTexE, lgTexG, lgTexC, lgTexB;
+                TexBundleFromEnum(0.0, _LipGlossTexture, lgTexE, lgTexG, lgTexC, lgTexB);
+                float glossAmt = edgeGloss * smoothstep(_GlossLumaLo, 1.0, luma) * _LipGlossIntensity;
+                glossAmt = TexEdge(TexCoverage(saturate(glossAmt), lgTexC), lgTexE); // 제형 커버·엣지(글로스)
+                // 립글로스 마감 — 가산량(glossAmt)은 유지하고 글로스 틴트색만 마감 변조
+                // (0=새틴=무변형, 하위호환). 매트=톤다운·시머=펄 글로스. 제형 body는 색 발색.
+                fixed3 glossPig = ApplyFinish(TexBody(_LipGlossColor.rgb, luma, lgTexB), luma, screenUV, _LipGlossFinish,
+                                              _LipShimmer, 0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
+                glossPig = TexGrain(glossPig, i.uv, lgTexG); // 제형 그레인(글로스)
+                premult += glossPig * glossAmt;
                 // 입자(글리터) — 립 위 반짝. premult에 가산(립글로스와 동일, 알파 불변).
                 // c=0으로 호출해 순수 반짝 기여만 얻어 더한다. coverage=edge(립 모양).
                 premult += ApplyParticles(fixed3(0,0,0), luma, i.uv, screenUV,

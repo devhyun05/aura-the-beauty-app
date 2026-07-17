@@ -67,6 +67,8 @@ namespace ARMakeup.Face
         float _creaseMult = 1f; // 크리스 높이 배수 핸들(1=기본 위치)
 
         static readonly int IntensityId = Shader.PropertyToID("_DoubleLidIntensity");
+        static readonly int FinishId = Shader.PropertyToID("_DoubleLidFinish"); // 마감(Tier B, 0=새틴=기존)
+        static readonly int ShapeId = Shader.PropertyToID("_DoubleLidShape");   // 모양(§3 A7, 0=인라인=현행)
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _crease = new Vector2[Seg]; // 세분된 크리스 접힘선(이미지 좌표)
@@ -122,13 +124,17 @@ namespace ARMakeup.Face
 
         /// <summary>쌍꺼풀 크리스 — intensity 0=끔. creaseHeight = 기본 크리스 위치 배수
         /// (1=기본, 생략 0은 미설정 → 1로 보정). 색은 자연 음영 고정(셰이더 기본값).</summary>
-        public void ApplyDoubleLid(float intensity, float creaseHeight)
+        public void ApplyDoubleLid(float intensity, float creaseHeight, int finish, int shape)
         {
             _intensity = Mathf.Clamp01(intensity);
             // JsonUtility 생략 0은 미설정 → 1(기본 위치). 하한 0.3 = 아주 낮은 크리스까지 허용.
             _creaseMult = creaseHeight <= 0f ? 1f : Mathf.Clamp(creaseHeight, 0.3f, 2f);
             if (_material == null) return;
             _material.SetFloat(IntensityId, _intensity);
+            // 마감(Tier B) — 0=새틴=기존 출력(하위호환).
+            _material.SetFloat(FinishId, finish);
+            // 모양(doubleLidShape) — 0=인라인=현행 바이트 동일 1=아웃라인 2=세미.
+            _material.SetFloat(ShapeId, shape);
         }
 
         void LateUpdate()

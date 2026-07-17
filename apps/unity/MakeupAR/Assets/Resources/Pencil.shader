@@ -9,6 +9,13 @@ Shader "ARMakeup/Pencil"
     {
         _BrowColor ("Pencil Color", Color) = (0.24, 0.17, 0.12, 1)
         _BrowIntensity ("Pencil Intensity", Range(0, 1)) = 0.0
+        // 마감(Tier B) — 0=새틴(기본, 기존 출력) 1=매트 2=듀이. ApplyFinish 레거시 경로.
+        // 이 셰이더는 세 머티리얼 인스턴스(펜슬·위 속눈썹·아래 속눈썹)가 공유하며,
+        // 각 인스턴스가 자기 _PencilFinish 값을 독립 SetFloat 한다.
+        _PencilFinish ("Pencil Finish (0 satin 1 matte 2 dewy)", Float) = 0
+        // 제형(텍스처) — GENERIC 템플릿 enum(0=크림=현행). Finish.cginc TexBundleFromEnum 미러.
+        // 펜슬 인스턴스만 세팅 — 마스카라(위·아래) 인스턴스는 기본 0 → 무영향(하위호환).
+        _PencilTexture ("Pencil Texture (generic enum)", Float) = 0
     }
 
     SubShader
@@ -31,10 +38,12 @@ Shader "ARMakeup/Pencil"
             #include "UnityCG.cginc"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
             #include "Ambient.cginc"   // 저조도 색소 바닥(BROW_KNEE) — 어둠 눈썹 발광 방지
+            #include "Finish.cginc"    // 마감(ApplyFinish) 공용 — _CameraFeed도 여기서 선언
 
-            sampler2D _CameraFeed;
             fixed4 _BrowColor;
             float _BrowIntensity;
+            float _PencilFinish; // 마감(Tier B) — 0=새틴=기존 출력(하위호환, 인스턴스별 독립)
+            float _PencilTexture; // 제형(텍스처) GENERIC 템플릿(0=크림=현행, 펜슬 인스턴스만 세팅)
 
             struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 grabPos : TEXCOORD1; };
@@ -56,10 +65,21 @@ Shader "ARMakeup/Pencil"
                 // 끝으로 갈수록 가늘게 페이드(뿌리 진함 → 끝 사라짐), 가장자리도 페더.
                 float taper = 1.0 - smoothstep(0.5, 1.0, i.uv.x);
                 float edge = 1.0 - smoothstep(0.4, 1.0, abs(i.uv.y * 2.0 - 1.0));
+                // 제형(텍스처) — GENERIC 시드 번들. body/grain=색소, coverage/edge=스트로크 amt.
+                // enum 0(크림)=ZERO → 조기 반환 = 바이트 동일(하위호환, 마스카라 인스턴스 포함).
+                float pnTexE, pnTexG, pnTexC, pnTexB;
+                TexBundleFromEnum(0.0, _PencilTexture, pnTexE, pnTexG, pnTexC, pnTexB);
                 float amt = taper * edge * _BrowIntensity;
+                amt = TexEdge(TexCoverage(saturate(amt), pnTexC), pnTexE); // 제형 커버·엣지
 
                 float luma = dot(feed, fixed3(0.299, 0.587, 0.114));
                 fixed3 pigment = _BrowColor.rgb * PigmentBaseKnee(luma, 0.9, 0.4, BROW_KNEE);
+                pigment = TexBody(pigment, luma, pnTexB); // 제형 발색 body
+                // 마감 — 0=새틴=무변형(ApplyFinish 레거시 경로, 세부 6값 0). 스트로크라
+                // 시머 게인 0. sparkleUV=스트로크 로컬 uv.
+                pigment = ApplyFinish(pigment, luma, i.uv, _PencilFinish, 0,
+                                      0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
+                pigment = TexGrain(pigment, i.uv, pnTexG); // 제형 그레인
                 // §11 오클루전 — 손·머리카락이 앞이면 그 픽셀 색소 제외(세그 없으면 1).
                 // 이 셰이더는 눈썹 펜슬·마스카라(LashRenderer)가 공유 — 게이트 동일 적용.
                 return fixed4(pigment, amt * OccludeGate(i.grabPos));

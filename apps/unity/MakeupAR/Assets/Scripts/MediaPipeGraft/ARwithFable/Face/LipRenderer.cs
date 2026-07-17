@@ -92,10 +92,16 @@ namespace ARMakeup.Face
         MeshRenderer _renderer;
         Material _material;
         Vector3[] _vertices;
+        Vector2[] _uv2; // 레이어 경계 uv 스케일 k=Ms/폭 (per fine-vertex, 매 프레임 갱신)
         float _intensity;
         float _overline; // 오버립 워프 강도 0..1 (0 = 원래)
         float _baseIntensity;  // 베이스립 커버리지 (0 = 끔) — 립 색과 독립으로 켜짐
         float _glossIntensity; // 립글로스 강도 (0 = 끔) — 립 색과 독립으로 켜짐
+        // 베이스립·립글로스 오버라인 값(음수 허용) — 링 메시 확장·레이어 경계 계산에 쓰인다.
+        // 메인 _overline과 같은 값 도메인(× MaxOverline·rad = 물리 확장)이라 max()로 섞인다.
+        float _baseOverline;
+        float _glossOverline;
+        float _lipRad; // 립 평균 외곽 반경(이미지) — Ms=MaxOverline·rad(레이어 경계 uv 스케일) 기준
         // 립라이너 — 외곽 곡선을 공유하는 별도 얇은 링(색·강도 독립, 매트 연필 질감).
         Mesh _linerMesh;
         MeshRenderer _linerRenderer;
@@ -109,12 +115,25 @@ namespace ARMakeup.Face
         static readonly int LipFinishId = Shader.PropertyToID("_LipFinish");
         static readonly int LipShimmerId = Shader.PropertyToID("_LipShimmer");
         static readonly int LipTextureId = Shader.PropertyToID("_LipTexture"); // 제형 텍스처(①) — 립 메시 전용
+        // 제형(텍스처) GENERIC — 베이스립·립글로스(립 메시)·라이너(별도 인스턴스). 0=크림=현행.
+        static readonly int LipBaseTextureId = Shader.PropertyToID("_LipBaseTexture");
+        static readonly int LipGlossTextureId = Shader.PropertyToID("_LipGlossTexture");
+        static readonly int LipLinerTextureId = Shader.PropertyToID("_LipLinerTexture");
         static readonly int LipColor2Id = Shader.PropertyToID("_LipColor2");       // R2 그라데 스톱B
         static readonly int LipGradientId = Shader.PropertyToID("_LipGradient");   // R2 그라데 강도
         static readonly int LipBaseColorId = Shader.PropertyToID("_LipBaseColor");
         static readonly int LipBaseIntensityId = Shader.PropertyToID("_LipBaseIntensity");
         static readonly int LipGlossColorId = Shader.PropertyToID("_LipGlossColor");
         static readonly int LipGlossIntensityId = Shader.PropertyToID("_LipGlossIntensity");
+        // 베이스립·립글로스 마감 — 메인 립(_LipFinish)과 독립(0=새틴=기존). 립 메시 전용(라이너 무영향).
+        static readonly int LipBaseFinishId = Shader.PropertyToID("_LipBaseFinish");
+        static readonly int LipGlossFinishId = Shader.PropertyToID("_LipGlossFinish");
+        // 핏(개인 공간 델타) — 베이스립·립글로스 오버라인 값(진짜 모양 확장, 0=원래).
+        static readonly int LipBaseOverlineId = Shader.PropertyToID("_LipBaseOverline");
+        static readonly int LipGlossOverlineId = Shader.PropertyToID("_LipGlossOverline");
+        // 메인 틴트 자기 오버라인 값(경계 계산용)과 링 메시 확장량 E=max(overline,base,gloss,0).
+        static readonly int LipOverlineId = Shader.PropertyToID("_LipOverline");
+        static readonly int LipMeshOverlineId = Shader.PropertyToID("_LipMeshOverline");
         // 제형 스튜디오(#21) — 마감 세부(0=미지정=enum 기존 동작). 립 메시 전용(라이너 무영향).
         static readonly int LipGlossLoId = Shader.PropertyToID("_LipGlossLo");
         static readonly int LipGlossGainId = Shader.PropertyToID("_LipGlossGain");
@@ -259,8 +278,10 @@ namespace ARMakeup.Face
                 tris[t + 3] = b; tris[t + 4] = d; tris[t + 5] = c;
             }
             _vertices = new Vector3[RingFine * 2];
+            _uv2 = new Vector2[RingFine * 2]; // 경계 uv 스케일 k — LateUpdate가 매 프레임 채움(초기 0)
             _mesh.vertices = _vertices;
             _mesh.uv = uvs;
+            _mesh.uv2 = _uv2;
             _mesh.triangles = tris;
 
             gameObject.AddComponent<MeshFilter>().sharedMesh = _mesh;
@@ -283,6 +304,9 @@ namespace ARMakeup.Face
             _linerVertices = new Vector3[RingFine * 2];
             _linerMesh.vertices = _linerVertices;
             _linerMesh.uv = uvs;          // 동일 토폴로지 재사용 (Unity가 복사 보관)
+            // 라이너는 오버라인 유니폼을 안 만져(E=0·ov=0) 경계 오프셋이 0이라 k 무의미하지만,
+            // 셰이더가 uv2(TEXCOORD1)를 읽으므로 스트림 부재 경고 방지로 0 채운 uv2를 준다.
+            _linerMesh.uv2 = new Vector2[RingFine * 2];
             _linerMesh.triangles = tris;
             linerGO.AddComponent<MeshFilter>().sharedMesh = _linerMesh;
             _linerRenderer = linerGO.AddComponent<MeshRenderer>();
@@ -301,6 +325,9 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(LipColorId, c);
             _material.SetFloat(LipIntensityId, _intensity);
+            // 메인 틴트 자기 오버라인 값 — 셰이더가 (E−_overline)로 틴트 경계를 (확장된 메시
+            // 안에서) 자기 값 위치에 되돌린다. 0=원래 입술선. E는 매 프레임 ComputeOuterSnap이 설정.
+            _material.SetFloat(LipOverlineId, _overline);
             // 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 셰이더 분기값과 1:1.
             _material.SetFloat(LipFinishId, finish);
             _material.SetFloat(LipShimmerId, Mathf.Clamp01(shimmer));
@@ -320,7 +347,7 @@ namespace ARMakeup.Face
         /// <summary>베이스립 — luma 보존 커버(입술 원색을 누드/스킨톤으로 보간). 색·강도
         /// 독립(0=끔). 메인 틴트·마감·글로스의 "맨 아래" 캔버스. 립 메시 전용(라이너 무영향).
         /// 기존 ApplyLipParams 시그니처는 무변경 — 이 메서드만 추가 라우팅.</summary>
-        public void ApplyLipBase(string colorHex, float intensity)
+        public void ApplyLipBase(string colorHex, float intensity, int finish, float overline, int texture)
         {
             _baseIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -328,11 +355,20 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(LipBaseColorId, c);
             _material.SetFloat(LipBaseIntensityId, _baseIntensity);
+            // 마감 — 메인 립(_LipFinish)과 독립. 0=새틴=기존 출력(하위호환).
+            _material.SetFloat(LipBaseFinishId, finish);
+            // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). 립 메시 전용(라이너 무영향).
+            _material.SetFloat(LipBaseTextureId, texture);
+            // 베이스립 오버라인(±, 핏) — 진짜 모양 확장: 양수면 링 메시가 max(overline)만큼
+            // 바깥 확장(ComputeOuterSnap)돼 베이스 커버가 실제 입술선 밖까지 나간다. 경계는
+            // 메인 틴트와 독립(자기 값 기준). 음수는 경계를 입술선 안쪽으로 이동(통일). 0=원래.
+            _baseOverline = Mathf.Clamp(overline, -0.15f, 0.15f);
+            _material.SetFloat(LipBaseOverlineId, _baseOverline);
         }
 
         /// <summary>립글로스 — 마감과 독립된 "맨 위" 가산 광 레이어(매트 위에도 얹힘).
         /// 색·강도 독립(0=끔), 기본 흰색=무색 광. 립 메시 전용(라이너 무영향).</summary>
-        public void ApplyLipGloss(string colorHex, float intensity)
+        public void ApplyLipGloss(string colorHex, float intensity, int finish, float overline, int texture)
         {
             _glossIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -340,6 +376,15 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(LipGlossColorId, c);
             _material.SetFloat(LipGlossIntensityId, _glossIntensity);
+            // 마감 — 가산 광 틴트색에만 적용. 0=새틴=기존 출력(하위호환).
+            _material.SetFloat(LipGlossFinishId, finish);
+            // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). 립 메시 전용(라이너 무영향).
+            _material.SetFloat(LipGlossTextureId, texture);
+            // 립글로스 오버라인(±, 핏) — 진짜 모양 확장(베이스립과 동일 원리): 양수면 링 메시가
+            // max(overline)만큼 확장돼 글로스가 실제 입술선 밖까지 나가고, 경계는 메인 틴트와
+            // 독립. 음수는 입술선 안쪽으로 경계 이동. 0=원래.
+            _glossOverline = Mathf.Clamp(overline, -0.15f, 0.15f);
+            _material.SetFloat(LipGlossOverlineId, _glossOverline);
         }
 
         /// <summary>제형 스튜디오(#21) 마감 세부 — 광 임계·게인·펄 크기·밀도·억제 + 벨벳 시(sheen).
@@ -385,7 +430,7 @@ namespace ARMakeup.Face
         }
 
         /// <summary>립라이너 — 색·강도 독립(0=끔). 외곽 곡선은 립과 공유(오버립 포함).</summary>
-        public void ApplyLinerParams(string colorHex, float intensity, float widthMult)
+        public void ApplyLinerParams(string colorHex, float intensity, int finish, float widthMult, int texture)
         {
             _linerIntensity = Mathf.Clamp01(intensity);
             // 폭 배수 핸들 — JsonUtility 생략 0은 미설정 → 1(원래).
@@ -395,6 +440,12 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _linerMaterial.SetColor(LipColorId, c);
             _linerMaterial.SetFloat(LipIntensityId, _linerIntensity);
+            // 라이너 마감 — Lip.shader 별도 인스턴스라 _LipFinish로 직접 세팅. Init은 매트(1)로
+            // 시드, 이 값(lipLinerFinish 기본 1=매트)이 매 프레임 덮어써 현행 연필 질감 유지.
+            _linerMaterial.SetFloat(LipFinishId, finish);
+            // 제형(텍스처) GENERIC — 라이너 인스턴스 전용 _LipLinerTexture(메인 립 메시는 미설정
+            // → 0 = 무영향). 0=크림=현행(하위호환).
+            _linerMaterial.SetFloat(LipLinerTextureId, texture);
         }
 
         /// <summary>실제 립 메시의 윗입술 중앙 외곽과 실제 라이너 밴드 중앙
@@ -467,6 +518,16 @@ namespace ARMakeup.Face
                     var ip = CatmullRom(n0, n1, n2, n3, u);
                     _vertices[2 * f] = ImageToWorld(new Vector2(op.x, op.y), op.z);
                     _vertices[2 * f + 1] = ImageToWorld(new Vector2(ip.x, ip.y), ip.z);
+                    // 레이어 경계 uv 스케일 k = Ms/폭 (Ms=MaxOverline·rad = 오버라인 1값의 물리
+                    // 확장, 폭 = 이 슬라이스의 외곽↔내곽 이미지 거리). 셰이더가 (E−ov)·k 만큼
+                    // uv.x를 안쪽으로 밀어 각 레이어 경계를 물리 오프셋 그대로 배치한다. 두 정점
+                    // (외곽·내곽)에 동일 k를 실어 반경 방향 보간이 상수(폭은 이 슬라이스에서 일정).
+                    var dfx = op.x - ip.x;
+                    var dfy = op.y - ip.y;
+                    var df = Mathf.Sqrt(dfx * dfx + dfy * dfy);
+                    var kf = df > 1e-6f ? (MaxOverline * _lipRad) / df : 0f;
+                    _uv2[2 * f] = new Vector2(kf, 0f);
+                    _uv2[2 * f + 1] = new Vector2(kf, 0f);
                     // 립라이너 — 외곽은 립 곡선 공유(오버립 포함), 내곽은 중심 쪽으로
                     // 반경 비례만큼 당긴 얇은 링.
                     var lp = Vector2.Lerp(new Vector2(op.x, op.y), _lipCenter,
@@ -487,6 +548,7 @@ namespace ARMakeup.Face
                 }
             }
             _mesh.vertices = _vertices;
+            _mesh.uv2 = _uv2;             // 레이어 경계 uv 스케일 k (per fine-vertex)
             _mesh.RecalculateBounds();
             _mesh.RecalculateNormals();   // 재질(메탈/홀로/멀티크롬)이 입술 굴곡에 반응하도록
             _linerMesh.vertices = _linerVertices;
@@ -591,6 +653,14 @@ namespace ARMakeup.Face
                 rad += Vector2.Distance(_outerFixed[i], center);
             rad /= Ring;
 
+            // 링 메시 확장량 E = max(overline, base, gloss, 0). 세 오버라인이 같은 값 도메인이라
+            // (× MaxOverline·rad = 물리 확장) 그냥 max. 메시는 이 E만큼만 바깥으로 확장하고,
+            // 각 레이어는 셰이더에서 자기 값(E−ov)만큼 안쪽으로 경계를 되돌려 독립 계산한다.
+            // 음수 오버라인은 max()가 0에 흡수 → 메시를 줄이지 않고(안쪽 축소는 셰이더 경계 이동만).
+            var meshOverline = Mathf.Max(Mathf.Max(_overline, _baseOverline), Mathf.Max(_glossOverline, 0f));
+            _lipRad = rad;
+            if (_material != null) _material.SetFloat(LipMeshOverlineId, meshOverline);
+
             // 1차: 점별 원시 스냅 오프셋 (+ 점 위치·바깥방향 임시 저장)
             for (var i = 0; i < Ring; i++)
             {
@@ -652,7 +722,7 @@ namespace ARMakeup.Face
                 // 스냅 오프셋에만 곱한다(bias는 무테이퍼) — 오버립·M자 바이어스는 코너에서도
                 // 유효해야 하고, OuterBiasWeight(0)=OuterBiasWeight(10)=0이라 M자는 이미 코너 제외.
                 var taper = Mathf.Min(cd / CornerSnapTaperSteps, 1f);
-                var bias = UpperOuterBias * rad * OuterBiasWeight(i) + _overline * MaxOverline * rad;
+                var bias = UpperOuterBias * rad * OuterBiasWeight(i) + meshOverline * MaxOverline * rad;
                 _outerSnap[i] = _outerPtmp[i] + _outerDtmp[i] * (_outerOffEma[i] * taper + bias);
             }
             _snapPrimed = true;

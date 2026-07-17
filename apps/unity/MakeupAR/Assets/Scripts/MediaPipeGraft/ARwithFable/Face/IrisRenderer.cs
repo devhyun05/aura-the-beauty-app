@@ -434,6 +434,7 @@ namespace ARMakeup.Face
         static readonly int EyeshadowColorId = Shader.PropertyToID("_EyeshadowColor");
         static readonly int EyeshadowIntensityId = Shader.PropertyToID("_EyeshadowIntensity");
         static readonly int EyeshadowFinishId = Shader.PropertyToID("_EyeshadowFinish");
+        static readonly int EyeshadowTextureId = Shader.PropertyToID("_EyeshadowTexture"); // 제형(텍스처) GENERIC(0=크림=현행)
         static readonly int EyeshadowShimmerId = Shader.PropertyToID("_EyeshadowShimmer");
         static readonly int EyeshadowColor2Id = Shader.PropertyToID("_EyeshadowColor2");     // R2 그라데 스톱B
         static readonly int EyeshadowGradientId = Shader.PropertyToID("_EyeshadowGradient"); // R2 그라데 강도
@@ -521,6 +522,8 @@ namespace ARMakeup.Face
                 esMat.SetFloat(EyeshadowIntensityId, _eyeshadowIntensity);
                 esMat.SetFloat(EyeshadowFinishId, p.eyeshadowFinish);
                 esMat.SetFloat(EyeshadowShimmerId, Mathf.Clamp01(p.eyeshadowShimmer));
+                // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). 밴드 공통(멀티밴드 시 마지막 값 유지).
+                esMat.SetFloat(EyeshadowTextureId, p.eyeshadowTexture);
                 // ── R2 그라데이션(§3.1) — 스톱B(리드=속눈썹 라인 진한 색) + 강도. 빈 색(생략)은
                 // 스톱A와 동일 취급 → 단색 유지. gradient 생략(JsonUtility 0) = 끔 = 기존 출력.
                 var esStopB = string.IsNullOrEmpty(p.eyeshadowColor2) ? p.eyeshadowColor : p.eyeshadowColor2;

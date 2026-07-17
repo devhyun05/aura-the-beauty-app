@@ -5,11 +5,19 @@
 // 호출 순서: FoundationTarget -> FoundationSoftClip -> finish ->
 // (듀이일 때만 FoundationSoftClip) -> FoundationBlend.
 
-#define FND_REFERENCE_LUMA 0.798322 // 제품 기본 피부색에 고정된 기준 루마
-#define FND_LUMA_GAIN 1.0           // 1.0 = 기준 피부색에서 입력 루마 보존
 #define FND_LUMA_LIFT 0.04          // 암부 연속성을 유지하는 소량 커버 리프트
-#define FND_CHROMA 0.4              // 커버리지 비례 chroma 평탄화
 #define FND_HIGHLIGHT_CEIL 0.95     // hue 보존 균일 소프트클립 점근 상한
+
+// ── 임시 디버그(파운데 색 튜닝) ────────────────────────────────────────────
+// 아래 3개 유니폼은 실기기에서 파운데 칙칙함을 눈으로 맞추기 위한 임시 조절값이다.
+// 원래는 #define FND_REFERENCE_LUMA(0.798322)·FND_LUMA_GAIN(1.0)·FND_CHROMA(0.4)로
+// 박혀 있던 상수. 확정값을 코드 리터럴로 굽고 나면 이 블록(및 브리지·RN 슬라이더)을
+// 통째로 걷어낸다. MakeupController가 앱 시작·매 applyFilter에 유효값을 전역 push하므로
+// 아래 인라인 폴백은 유니폼 미설정(0) 프레임에 대한 순수 방어용이다.
+float _FndRefLumaDbg;   // 기준 루마 분모 (기본 0.798322). 미설정(≤1e-4)이면 리터럴 폴백.
+float _FndLumaGainDbg;  // shade 게인 (기본 1.0). 미설정(≤1e-4)이면 리터럴 폴백.
+float _FndChromaDbg;    // 회색 혼합량(채도 평탄화, 기본 0.4). 0도 유효값이라 음수 sentinel로 판정.
+// ──────────────────────────────────────────────────────────────────────────
 
 // 제형별 상대 조정. 0=리퀴드, 1=쿠션, 2=스킨틴트.
 #define FND_CUSHION_GAIN 0.12
@@ -24,9 +32,14 @@ void FoundationTextureParams(float textureMode, float intensity,
 {
     float cushionAmount = saturate(1.0 - abs(textureMode - 1.0));
     float skinTintAmount = saturate(textureMode - 1.0);
-    gain = FND_LUMA_GAIN *
+    // (임시 디버그: 파운데 색 튜닝) 유니폼 미설정(0) 프레임 폴백 — 리터럴은 옛 #define 값.
+    float lumaGain = _FndLumaGainDbg > 1e-4 ? _FndLumaGainDbg : 1.0;
+    // 미설정 방어는 하지 않는다: 미설정 전역 float은 0(=선명, 유효값)으로 읽혀 센티널로 구분
+    // 불가하고, MakeupController.Init()이 0.4를 선시딩하므로 미설정 프레임 자체가 없다.
+    float baseChroma = _FndChromaDbg;
+    gain = lumaGain *
         (1.0 + cushionAmount * FND_CUSHION_GAIN - skinTintAmount * FND_SKINTINT_GAIN);
-    chroma = FND_CHROMA *
+    chroma = baseChroma *
         (1.0 + cushionAmount * FND_CUSHION_CHROMA - skinTintAmount * FND_SKINTINT_CHROMA);
     coverage = intensity *
         (1.0 + cushionAmount * FND_CUSHION_COVERAGE - skinTintAmount * FND_SKINTINT_COVERAGE);
@@ -36,7 +49,9 @@ fixed3 FoundationTarget(fixed3 foundationColor, float sourceLuma, float gain)
 {
     // 선택색 루마로 나누면 near-black 색에서 gain이 급증한다. 기본 피부색의 고정
     // 기준 루마만 사용해 색 선택 전 구간에서 연속적인 명암 이식을 보장한다.
-    float shade = (sourceLuma / FND_REFERENCE_LUMA) * gain + FND_LUMA_LIFT;
+    // (임시 디버그: 파운데 색 튜닝) 유니폼 미설정(0) 프레임 폴백 — 리터럴은 옛 #define 값.
+    float refLuma = _FndRefLumaDbg > 1e-4 ? _FndRefLumaDbg : 0.798322;
+    float shade = (sourceLuma / refLuma) * gain + FND_LUMA_LIFT;
     return foundationColor * shade;
 }
 

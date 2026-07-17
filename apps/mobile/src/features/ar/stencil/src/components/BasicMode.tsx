@@ -41,8 +41,8 @@ import {
   SLOT_ORDER,
 } from '../composer/lookTree';
 import type {LookLibrary, LookNode, SlotKey} from '../composer/lookTree';
+import {GOLD, NEUTRAL_ACCENT, compositeOverWhite, labelTextOn} from '../theme';
 
-const ROSE = '#FF7E9D';
 // 카드 = 5:6 세로형 썸네일, 한 줄 가로 스크롤(캐러셀). 한 화면에 ~6장 보이게 폭 산정.
 const CARD_W = Math.floor((Dimensions.get('window').width - 48) / 6);
 const CARD_H = Math.round((CARD_W * 6) / 5); // 5:6 → 카드 높이(캐러셀 고정 높이용)
@@ -64,6 +64,12 @@ for (const g of REGION_GROUPS) {
 
 // 중분류 탭 라벨 — '톤 조정 베이스'류 장황한 접미사만 걷어낸다(톤·질감).
 const midLabelOf = (label: string): string => label.replace(/ 조정 베이스$/, '');
+
+// 스와치 카드 라벨 색 — 카드 배경(defSwatchColor)이 임의 제품색이라 그림자로
+// 억지 가독을 만드는 대신, 라벨 바의 반투명 회색조(0.1)를 실제로 합성한 색의
+// 휘도로 밝은/어두운 텍스트를 고른다(GuideMode ZONE_TEXT와 동일 판정 로직).
+const swatchLabelColor = (color: string): string =>
+  labelTextOn(compositeOverWhite(color, 0.1));
 
 interface Props {
   /** 작업본 룩 트리 — null이면 원본(빈 조합) */
@@ -199,7 +205,7 @@ export default function BasicMode({
     <View style={styles.panel}>
       {!hideHeader && headerBar}
 
-      {/* 0) 대분류(슬롯) 탭 — 밑줄 탭. 내용물=밝은 텍스트, 선택=로즈+밑줄, 수정=● */}
+      {/* 0) 대분류(슬롯) 탭 — 밑줄 탭. 내용물=밝은 텍스트, 선택=흰색+밑줄, 수정=● */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -318,7 +324,9 @@ export default function BasicMode({
                       onPress={() => chooseSub(def.id)}
                       style={[styles.card, {backgroundColor: color}, on && styles.cardOn]}>
                       <View style={styles.cardLabelBar}>
-                        <Text style={styles.cardLabel} numberOfLines={2}>
+                        <Text
+                          style={[styles.cardLabel, {color: swatchLabelColor(color)}]}
+                          numberOfLines={2}>
                           {def.owner === 'user' ? '◈ ' : ''}
                           {def.name}
                         </Text>
@@ -357,7 +365,9 @@ export default function BasicMode({
                       onPress={() => choose(def.id)}
                       style={[styles.card, {backgroundColor: color}, on && styles.cardOn]}>
                       <View style={styles.cardLabelBar}>
-                        <Text style={styles.cardLabel} numberOfLines={2}>
+                        <Text
+                          style={[styles.cardLabel, {color: swatchLabelColor(color)}]}
+                          numberOfLines={2}>
                           {def.owner === 'user' ? '◈ ' : ''}
                           {def.name}
                         </Text>
@@ -378,6 +388,7 @@ export default function BasicMode({
           label={isAll ? '전체 농도' : `${catLabel(cat)} 농도`}
           value={isAll ? opacity : slotGain[slot!] ?? 1}
           onChange={isAll ? onOpacity : v => onSlotGain(slot!, v)}
+          accent={NEUTRAL_ACCENT}
         />
       </View>
     </View>
@@ -417,7 +428,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 15,
   },
-  // 대분류 탭 — 심플한 밑줄 탭(배경 없음). 기본=흐림, 내용물=밝게, 선택=로즈+밑줄.
+  // 대분류 탭 — 심플한 밑줄 탭(배경 없음). 기본=흐림, 내용물=밝게, 선택=흰색+밑줄(무채색 통일).
   catRow: {
     gap: 14,
     alignItems: 'flex-end',
@@ -438,7 +449,7 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.92)', // 내용 있음 = 밝은 텍스트
   },
   catTabTextOn: {
-    color: ROSE, // 선택됨 = 로즈
+    color: '#FFFFFF', // 선택됨 = 흰색(무채색, 카드 선택 테두리와 통일)
     fontWeight: '800',
   },
   catUnderline: {
@@ -448,7 +459,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent', // 레이아웃 안정용 항상 자리 차지
   },
   catUnderlineOn: {
-    backgroundColor: ROSE,
+    backgroundColor: '#FFFFFF',
   },
   // 중분류 탭 — 더 작은 밑줄 탭. 대분류와 위계 구분.
   midRow: {
@@ -469,7 +480,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   midTabTextOn: {
-    color: ROSE,
+    color: '#FFFFFF',
     fontWeight: '700',
   },
   midUnderline: {
@@ -479,7 +490,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   midUnderlineOn: {
-    backgroundColor: ROSE,
+    backgroundColor: '#FFFFFF',
   },
   // 카드형 룩 칩
   cardScroll: {
@@ -513,26 +524,37 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   cardOn: {
-    borderColor: ROSE,
+    // 흰색 — 카드 배경이 defSwatchColor 임의색(블루 계열 스와치 위에서 ACCENT 테두리가
+    // 묻히는 문제)이라 색 불문 대비가 되는 흰색으로 통일(GuideMode/WarpSheet와 동일).
+    borderColor: 'rgba(255,255,255,0.9)',
     borderWidth: 2,
   },
+  // '전체' 탭의 완성 룩(LOOK) 카드 틴트 — 선택 표현이 아니라 "이 카드는 완성 룩
+  // 타입"이라는 카드 종류 구분색(부위 스와치 카드와 시각적으로 구분). 3라운드 정정:
+  // 기본 모드는 세 모드(무채색) 스코프라 ACCENT를 뺐다 — WarpSheet.cardTintFit과
+  // 동일값(0.18)으로 통일, cardTintNone(0.06)과는 여전히 구분된다.
   cardTintLook: {
-    backgroundColor: 'rgba(255,126,157,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   cardTintNone: {
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
   cardTintMine: {
-    backgroundColor: '#C9A15E',
+    backgroundColor: GOLD,
   },
   cardLabelBar: {
     // 카드 테두리(2px) 자리를 음수 마진으로 덮어 좌·우·하단 가장자리까지 꽉 채운다.
     marginHorizontal: -2,
     marginBottom: -2,
     paddingVertical: 3,
-    paddingHorizontal: 2,
-    backgroundColor: 'rgba(0,0,0,0.5)', // 스크림 — 어떤 썸네일 위에도 텍스트 가독
+    paddingHorizontal: 3, // GuideMode 라벨 바와 통일(기존 2 → 3)
+    backgroundColor: 'rgba(255,255,255,0.1)', // 회색조 — GuideMode 라벨 바와 통일(레인 시그니처 제거)
   },
+  // 카드 배경은 defSwatchColor 임의색(하이라이터·톤베이스류는 거의 흰색까지 감).
+  // 5라운드: 그림자로 억지 가독을 만드는 대신 GuideMode의 ZONE_TEXT와 같은 원리
+  // (라벨 텍스트 색 자체를 배경 밝기에 맞춰 전환)로 통일 — 기본색은 '없음'·'내
+  // 조합'·완성 룩 카드(전부 어두운 틴트 배경)용, 스와치 카드는 JSX에서
+  // swatchLabelColor(color)로 인라인 오버라이드한다.
   cardLabel: {
     color: '#FFFFFF',
     fontSize: 10,
