@@ -1,5 +1,7 @@
 // reportTypes.ts — typed props/DTO model for the face-analysis report.
-// Hard rule: no raw measurements anywhere. Numbers exist only as normalized 0..1 geometry.
+// 원칙(2026-07-18 완화): 원측정(mm)·모집단 백분위·confidence %는 계속 비노출.
+// 단 세로 3분할의 정규화 비율과 얼굴 길이비의 측정된 평균 밴드는 노출을 허용한다
+// (spec 2026-07-18-face-report-content-refinement-design.md §3 영역1 · §7-4).
 
 export interface PhotoSlotData { uri?: string; placeholderLabel: string }
 
@@ -76,6 +78,10 @@ export interface S2Data {
   bands: S2BandData[];
   missingNotice: { title: string; body: string; cta: string };
   viewCardLabel: string;
+  // 세로 3분할 정규화 비율(중안부=1.0 기준). 상안부는 헤어라인 미확인 시 null.
+  ratioNumbers?: { upper: number | null; middle: number; lower: number };
+  // 얼굴 세로/가로 길이비 + 측정된 정상 구간(평균 밴드) 판정 스냅샷.
+  faceLength?: { ratio: number | null; band: { lo: number; hi: number } | null; verdict: string | null; confidence: number | null };
   paragraph: string;
 }
 
@@ -106,6 +112,8 @@ export interface SwatchData { name: string; color: string }
 export interface S4Data {
   eyebrow: string; title: string;
   season: { headline: string; blend: BlendData };
+  // 봄 라이트 확신도 게이지용(typeScore 0..1).
+  seasonConfidence?: { topLabel: string; secondaryLabel: string | null; typeScore: number };
   axes: SpectrumAxisData[];
   drape: {
     title: string; sub: string;
