@@ -133,13 +133,15 @@ namespace ARMakeup.Bridge
         public float fndLumaGainDbg = 1f;           // shade 게인(밝기 여유)
         public float fndChromaDbg = 0.4f;           // 회색 혼합량(탁함). 낮을수록 선명
         // ── 임시 디버그(이음새 세그 게이트 튜닝 — 값 확정 후 제거) — CameraFeed 전역 유니폼 조절.
-        //    파운데 seg 게이트 임계 4종+시각화 토글. 임계는 sentinel -1(미설정=셰이더 리터럴 폴백,
-        //    LO는 0도 유효값이라 음수 sentinel). RN이 안 건드리면 리터럴과 동일 → 현행 픽셀 동일. ──
-        public float segSeamDbg = 0f;    // 세그 시각화 토글 (0=off)
-        public float fndSegLoDbg = -1f;  // 이음새 전이대 하한 (미설정 -1 = 리터럴 폴백)
-        public float fndSegHiDbg = -1f;  // 이음새 전이대 상한
-        public float fndCoreLoDbg = -1f; // 오벌 코어 감쇠 시작
-        public float fndCoreHiDbg = -1f; // 오벌 코어 완전 제외
+        //    파운데 seg 게이트 임계 4종(전이 2 + 얼굴 오벌 크기·페더) + 시각화 토글. 임계는
+        //    sentinel -1(미설정=셰이더 리터럴 폴백, 전이 LO는 0도 유효값이라 음수 sentinel;
+        //    타원 크기·페더도 양수라 같은 가드로 안전). RN이 안 건드리면 리터럴과 동일 → 현행
+        //    픽셀 동일. 07-17 코어 제외(seg.r 램프)를 랜드마크 타원 게이트로 교체. ──
+        public float segSeamDbg = 0f;        // 세그 시각화 토글 (0=off)
+        public float fndSegLoDbg = -1f;      // 이음새 전이대 하한 (미설정 -1 = 리터럴 폴백)
+        public float fndSegHiDbg = -1f;      // 이음새 전이대 상한
+        public float fndOvalSizeDbg = -1f;   // 얼굴 오벌 반경 배수 (미설정 -1 = 리터럴 폴백)
+        public float fndOvalFeatherDbg = -1f; // 얼굴 오벌 경계 페더
         public float powderIntensity = 0f;          // 파우더(유분광 억제, 세팅) — 파운데와 독립
         public string powderColor = "";             // 컬러 파우더 캐스트 ""=무색(트랜스루선트, 기존 출력)
         public int powderFinish = 0;                // 파우더 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머(펄)

@@ -71,6 +71,15 @@ namespace ARMakeup.Face
         // 눈 바깥꼬리(전역 스케일 = 안쪽 눈간 거리 기준).
         const int EyeOuterR = 33, EyeOuterL = 263;
 
+        // 얼굴 오벌 실루엣(MediaPipe FACEMESH_FACE_OVAL 36점, 이마~턱) — 파운데 seg 게이트용
+        // 방향 타원(공분산 PCA) 계산 소스. 랜드마크 기반 정적 기하(이미지 재탐색 없음).
+        static readonly int[] FaceOval =
+        {
+            10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
+            397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+            172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
+        };
+
         // ── 부위 라인 색(고정 팔레트 — 서로 구분되는 코치 색) ──
         static readonly Color ColLips = new Color(1.00f, 0.35f, 0.55f);   // 로즈
         static readonly Color ColBrows = new Color(0.62f, 0.44f, 0.30f);  // 브라운
@@ -296,6 +305,12 @@ namespace ARMakeup.Face
         static readonly int PulseId = Shader.PropertyToID("_Pulse");
         static readonly int DashId = Shader.PropertyToID("_Dash");
 
+        // 얼굴 오벌 게이트(파운데 seg 코어 제외 대체) — CameraFeed.shader가 소비하는 전역.
+        // 가이드 슬롯 on/off와 독립: 트래킹 중이면 매 프레임 기록, 소실 시 무효(z=0)로 폴백.
+        static readonly int FndOvalId = Shader.PropertyToID("_FndOval");
+        static readonly int FndOvalAxisId = Shader.PropertyToID("_FndOvalAxis");
+        static readonly Vector4 OvalInactive = Vector4.zero; // z=0 = 타원 무효 → seg 파운데 off
+
         // ── A17 온페이스 핏 핸들 (좌표 방출; 터치는 RN 소관) ──
         // 가이드(setStencil) on/off와 독립. 켜져 있으면 트래킹 중 FitHandleInterval 프레임마다
         // 각 메이크업 부위의 모양 결정점 뷰포트 좌표 + 눈꼬리간 거리(eyeVp)를 방출.
@@ -354,6 +369,9 @@ namespace ARMakeup.Face
             _renderer.sharedMaterial = _material;
             _renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _renderer.enabled = false;
+
+            // 얼굴 오벌 게이트 초기값 = 무효(첫 LateUpdate 전·얼굴 소실 시 seg 파운데 off).
+            Shader.SetGlobalVector(FndOvalAxisId, OvalInactive);
         }
 
         /// <summary>
@@ -461,8 +479,49 @@ namespace ARMakeup.Face
             var visible = tracking && _opacity > 0f && AnyOn();
             if (_renderer.enabled != visible) _renderer.enabled = visible;
             if (visible) DrawGuides();
+            // 얼굴 오벌 게이트(파운데 seg 코어 제외) — 가이드 슬롯 on/off와 독립. 트래킹 중이면
+            // 매 프레임 타원을 기록하고, 소실 시 무효(z=0)로 폴백해 seg 파운데를 끈다.
+            if (tracking) WriteFaceOval(_source.Landmarks);
+            else Shader.SetGlobalVector(FndOvalAxisId, OvalInactive);
             // A17 온페이스 핏 핸들 — 가이드 슬롯 on/off와 독립. 트래킹 중이면 6프레임마다 좌표 방출.
             if (_fitHandlesEnabled && tracking) EmitFitHandles(_source.Landmarks);
+        }
+
+        /// <summary>
+        /// 얼굴 오벌 랜드마크의 이미지 UV 무게중심·공분산으로 방향 타원(중심·반경·주축)을
+        /// 만들어 CameraFeed 파운데 seg 게이트에 전역으로 넘긴다. 이미지 UV 공간은 표시 회전
+        /// 전이라 얼굴이 눕고 기울 수 있어 축정렬 대신 2×2 공분산 주축(PCA)으로 타원을
+        /// 회전시킨다. 셰이더의 src(워프 역샘플 이미지 UV)와 같은 공간이라 그대로 비교된다.
+        /// 랜드마크 기반 정적 기하 — 이미지 재탐색(엣지 스냅) 없음(울렁임 방지 원칙).
+        /// </summary>
+        void WriteFaceOval(Vector3[] lm)
+        {
+            var n = FaceOval.Length;
+            var c = Vector2.zero;
+            for (var i = 0; i < n; i++) c += ImgPt(lm, FaceOval[i]);
+            c /= n;
+            float cxx = 0f, cxy = 0f, cyy = 0f;
+            for (var i = 0; i < n; i++)
+            {
+                var d = ImgPt(lm, FaceOval[i]) - c;
+                cxx += d.x * d.x; cxy += d.x * d.y; cyy += d.y * d.y;
+            }
+            // 주축 각도 = 2×2 공분산 고유벡터 방향. cxy≈0·cxx≈cyy(원형)면 θ=0이라 안전.
+            var theta = 0.5f * Mathf.Atan2(2f * cxy, cxx - cyy);
+            var cos = Mathf.Cos(theta);
+            var sin = Mathf.Sin(theta);
+            // 반경 = 주축·부축 방향 최대 투영(오벌 경계점을 감싸는 타원). 셰이더 sizeMul(기본
+            // 1.1)이 이 위에 여유를 더해 메시 오벌보다 살짝 넉넉히 덮는다.
+            float rx = 0f, ry = 0f;
+            for (var i = 0; i < n; i++)
+            {
+                var d = ImgPt(lm, FaceOval[i]) - c;
+                rx = Mathf.Max(rx, Mathf.Abs(d.x * cos + d.y * sin));
+                ry = Mathf.Max(ry, Mathf.Abs(-d.x * sin + d.y * cos));
+            }
+            Shader.SetGlobalVector(FndOvalId,
+                new Vector4(c.x, c.y, Mathf.Max(rx, 1e-4f), Mathf.Max(ry, 1e-4f)));
+            Shader.SetGlobalVector(FndOvalAxisId, new Vector4(cos, sin, 1f, 0f)); // z=1 = active
         }
 
         /// <summary>setStencil로 켜진 슬롯의 가이드 스트로크/존을 매 프레임 재구성해 리본

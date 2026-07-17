@@ -454,12 +454,12 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   //    통째로 걷어낸다. 값은 매 applyFilter에 주입되므로 ref만 있으면 되나, 라벨 표시용으로
   //    state도 둔다. 기본값=옛 #define 상수라 안 건드리면 현재 픽셀과 동일. ──
   const [fndDebugOpen, setFndDebugOpen] = useState(false);
-  const [fndRefLuma, setFndRefLuma] = useState(0.798322); // 기준 루마(밝기) 0.45~0.90
-  const fndRefLumaRef = useRef(0.798322);
-  const [fndChroma, setFndChroma] = useState(0.4); // 채도 혼합(탁함) 0.0~0.5
-  const fndChromaRef = useRef(0.4);
-  const [fndLumaGain, setFndLumaGain] = useState(1); // luma 게인(밝기 여유) 0.8~1.5
-  const fndLumaGainRef = useRef(1);
+  const [fndRefLuma, setFndRefLuma] = useState(0.45); // 기준 루마(밝기) 0.30~0.50, 시작 0.45
+  const fndRefLumaRef = useRef(0.45);
+  const [fndChroma, setFndChroma] = useState(0.15); // 채도 혼합(탁함) 0.00~0.20, 시작 0.15
+  const fndChromaRef = useRef(0.15);
+  const [fndLumaGain, setFndLumaGain] = useState(1.05); // luma 게인(밝기 여유) 1.00~1.50, 시작 1.05
+  const fndLumaGainRef = useRef(1.05);
   // ── 임시 디버그(이음새 세그 게이트 튜닝) — 귀·턱-목 이음새 파운데 공백의 원인 판별·값
   //    확정용 dev 도구(FndColorDebugPanel 선례). CameraFeed 파운데 seg 게이트 임계 4종 +
   //    세그 채널 시각화 토글을 실기기에서 눈으로 맞춘다. 기본값=현 셰이더 리터럴이라 안
@@ -467,14 +467,14 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const [seamDebugOpen, setSeamDebugOpen] = useState(false);
   const [segViz, setSegViz] = useState(false); // 세그 채널 시각화 오버레이 on/off
   const segVizRef = useRef(false);
-  const [fndSegLo, setFndSegLo] = useState(0.12); // 이음새 전이대 하한 (FND_SEG_LO)
-  const fndSegLoRef = useRef(0.12);
-  const [fndSegHi, setFndSegHi] = useState(0.45); // 이음새 전이대 상한 (FND_SEG_HI)
-  const fndSegHiRef = useRef(0.45);
-  const [fndCoreLo, setFndCoreLo] = useState(0.4); // 오벌 코어 감쇠 시작 (FND_FACE_CORE_LO)
-  const fndCoreLoRef = useRef(0.4);
-  const [fndCoreHi, setFndCoreHi] = useState(0.75); // 오벌 코어 완전 제외 (FND_FACE_CORE_HI)
-  const fndCoreHiRef = useRef(0.75);
+  const [fndSegLo, setFndSegLo] = useState(0.1); // 이음새 전이대 하한 (FND_SEG_LO)
+  const fndSegLoRef = useRef(0.1);
+  const [fndSegHi, setFndSegHi] = useState(0.25); // 이음새 전이대 상한 (FND_SEG_HI)
+  const fndSegHiRef = useRef(0.25);
+  const [fndOvalSize, setFndOvalSize] = useState(1.1); // 얼굴 오벌 반경 배수 (FND_OVAL_SIZE)
+  const fndOvalSizeRef = useRef(1.1);
+  const [fndOvalFeather, setFndOvalFeather] = useState(0.15); // 얼굴 오벌 경계 페더 (FND_OVAL_FEATHER)
+  const fndOvalFeatherRef = useRef(0.15);
   // 추출에 쓴 원본 사진 URI(검증용) — 썸네일·확대 모달 표시. null=한 번도 추출 안 함.
   const [extractSourceUri, setExtractSourceUri] = useState<string | null>(null);
   const [opacity, setOpacityState] = useState(0.75); // 전역 메이크업 농도 슬라이더 — 기본 75%
@@ -732,8 +732,8 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       scaled.segSeamDbg = segVizRef.current ? 1 : 0;
       scaled.fndSegLoDbg = fndSegLoRef.current;
       scaled.fndSegHiDbg = fndSegHiRef.current;
-      scaled.fndCoreLoDbg = fndCoreLoRef.current;
-      scaled.fndCoreHiDbg = fndCoreHiRef.current;
+      scaled.fndOvalSizeDbg = fndOvalSizeRef.current;
+      scaled.fndOvalFeatherDbg = fndOvalFeatherRef.current;
       sendToUnity({ type: 'applyFilter', filter: scaled });
     },
     [sendToUnity],
@@ -821,18 +821,18 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     },
     [sendScaled],
   );
-  const setFndCoreLoDbg = useCallback(
+  const setFndOvalSizeDbg = useCallback(
     (v: number) => {
-      fndCoreLoRef.current = v;
-      setFndCoreLo(v);
+      fndOvalSizeRef.current = v;
+      setFndOvalSize(v);
       sendScaled(paramsRef.current, opacityRef.current);
     },
     [sendScaled],
   );
-  const setFndCoreHiDbg = useCallback(
+  const setFndOvalFeatherDbg = useCallback(
     (v: number) => {
-      fndCoreHiRef.current = v;
-      setFndCoreHi(v);
+      fndOvalFeatherRef.current = v;
+      setFndOvalFeather(v);
       sendScaled(paramsRef.current, opacityRef.current);
     },
     [sendScaled],
@@ -2862,10 +2862,10 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                 onSegLoChange={setFndSegLoDbg}
                 segHi={fndSegHi}
                 onSegHiChange={setFndSegHiDbg}
-                coreLo={fndCoreLo}
-                onCoreLoChange={setFndCoreLoDbg}
-                coreHi={fndCoreHi}
-                onCoreHiChange={setFndCoreHiDbg}
+                ovalSize={fndOvalSize}
+                onOvalSizeChange={setFndOvalSizeDbg}
+                ovalFeather={fndOvalFeather}
+                onOvalFeatherChange={setFndOvalFeatherDbg}
                 onClose={() => setSeamDebugOpen(false)}
               />
             )}

@@ -1,7 +1,9 @@
 /**
  * 이음새 세그 게이트 튜닝 패널 (임시 디버그, dev-facing) — 귀·턱-목 이음새에서 파운데가
  * 안 닿는 공백의 원인 판별·값 확정용. CameraFeed의 파운데 seg 게이트 임계 4종
- * (FND_SEG_LO/HI·FND_FACE_CORE_LO/HI)을 전역 유니폼으로 승격해 실기기에서 눈으로 맞춘다.
+ * (전이대 FND_SEG_LO/HI + 얼굴 오벌 FND_OVAL_SIZE/FEATHER)을 전역 유니폼으로 승격해
+ * 실기기에서 눈으로 맞춘다. 07-17 코어 제외(seg.r 램프)는 실측상 목·얼굴을 못 갈라
+ * 랜드마크 타원 게이트로 교체됨 — "코어시작/제외" 대신 "타원 크기/페더"를 조절한다.
  * "세그표시" 토글을 켜면 CameraFeed가 세그 채널을 오버레이한다:
  *   빨강 = face-skin(seg.r) · 파랑 = body-skin(seg.b, 목·귀) · 초록 = 파운데 게이트 통과 영역.
  *   빨강/파랑인데 초록이 안 뜨는 곳 = 파운데 미도달 = 공백 원인.
@@ -24,12 +26,12 @@ interface Props {
   /** 이음새 전이대 상한(넘으면 완전 커버) 0..1 */
   segHi: number;
   onSegHiChange: (v: number) => void;
-  /** 오벌 코어 감쇠 시작(이 이상 face-skin부터 seg 파운데 감쇠) 0..1 */
-  coreLo: number;
-  onCoreLoChange: (v: number) => void;
-  /** 오벌 코어 완전 제외(메시 소유 코어) 0..1 */
-  coreHi: number;
-  onCoreHiChange: (v: number) => void;
+  /** 얼굴 오벌 반경 배수(메시 오벌 대비, 0.9~1.4) — 클수록 코어 제외 범위 넓음 */
+  ovalSize: number;
+  onOvalSizeChange: (v: number) => void;
+  /** 얼굴 오벌 경계 페더(0~0.3) — 클수록 제외 경계가 부드럽게 번짐 */
+  ovalFeather: number;
+  onOvalFeatherChange: (v: number) => void;
   onClose: () => void;
 }
 
@@ -72,10 +74,10 @@ export default function SegSeamDebugPanel({
   onSegLoChange,
   segHi,
   onSegHiChange,
-  coreLo,
-  onCoreLoChange,
-  coreHi,
-  onCoreHiChange,
+  ovalSize,
+  onOvalSizeChange,
+  ovalFeather,
+  onOvalFeatherChange,
   onClose,
 }: Props) {
   return (
@@ -111,22 +113,22 @@ export default function SegSeamDebugPanel({
           onChange={onSegHiChange}
         />
         <DbgSlider
-          label="코어시작"
-          value={coreLo}
-          min={0}
-          max={1}
-          onChange={onCoreLoChange}
+          label="타원 크기"
+          value={ovalSize}
+          min={0.9}
+          max={1.4}
+          onChange={onOvalSizeChange}
         />
         <DbgSlider
-          label="코어제외"
-          value={coreHi}
+          label="타원 페더"
+          value={ovalFeather}
           min={0}
-          max={1}
-          onChange={onCoreHiChange}
+          max={0.3}
+          onChange={onOvalFeatherChange}
         />
         <Text style={styles.hint}>
-          빨강/파랑인데 초록 없는 곳=파운데 공백. 전이하한↓·코어제외↑로 메움 · 값을 읽어
-          셰이더에 굽습니다.
+          초록=목·귀만 뜨고 얼굴 오벌(코어)은 비어야 이중 도포 없음. 얼굴에 초록이 새면
+          타원 크기↑, 목에 초록이 안 뜨면 전이하한↓ · 값을 읽어 셰이더에 굽습니다.
         </Text>
       </View>
     </View>

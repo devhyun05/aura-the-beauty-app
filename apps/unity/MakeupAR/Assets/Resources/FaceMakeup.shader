@@ -277,6 +277,45 @@ Shader "ARMakeup/FaceMakeup"
             #define FACE_CENTER_HI 0.40  // 방사 이 거리 이상 = 완전 제외
             #define FND_FEATHER_LO 0.28  // 파운데 외곽 페더: 방사 이 거리부터 감쇠 시작
             #define FND_FEATHER_HI 0.46  // 방사 이 거리 이상 = 완전 페더(0)
+            // 파운데 전용 경계 페더 — 세미매트 스킨에서 얼굴 메시 오벌 경계선(턱선·헤어라인·
+            // 관자)이 뚜렷하게 끊겨 보이는 걸 없앤다. 위 FND_FEATHER(FoundationShape==2 opt-in)와
+            // 달리 파운데가 켜지면 항상 적용하고, TempleFades(전역 i.fade)를 대체하지 않고 곱으로
+            // 결합한다(fCov에 곱한 뒤, 프래그 말미 lerp(original,col,i.fade)에서 다시 곱).
+            // 얼굴 오벌은 원이 아니라 가로가 더 넓어(캐노니컬 UV 실측: x반경 0.49 > y반경 0.42)
+            // 순수 방사 거리로는 턱끝(방사 0.45)과 볼옆(0.49)을 한 밴드로 균일하게 못 덮는다.
+            // 오벌에 맞춘 타원 정규화 거리를 쓰면 경계 전체가 d≈0.88~0.945에 모여(실측 spread
+            // 0.066) 한 밴드로 균일 페더된다. 중심·반경·밴드 전부 실기기 튜닝 대상.
+            #define FND_EDGE_CX 0.5   // 오벌 중심 x (실기기 튜닝 대상)
+            #define FND_EDGE_CY 0.48  // 오벌 중심 y (실기기 튜닝 대상)
+            #define FND_EDGE_AX 0.53  // 타원 x 반경 정규화 (실기기 튜닝 대상)
+            #define FND_EDGE_AY 0.46  // 타원 y 반경 정규화 (실기기 튜닝 대상)
+            #define FND_EDGE_LO 0.80  // 타원거리 이하 = 커버 100% (실기기 튜닝 대상)
+            #define FND_EDGE_HI 0.94  // 타원거리 이상 = 완전 페더(0); 밴드폭 ≈ UV 0.07 ≈ 눈폭 15~25% (실기기 튜닝 대상)
+            // ── 특징부(눈알 개구부·입술·콧구멍) 파운데 제외 — 캐노니컬 UV 타원 ──
+            // 실기기 버그: 파운데가 눈꺼풀 개구부·입술·콧방울 같은 특징부에도 발려
+            // "안 먹혀야 할 곳에 피부화장이 먹은 느낌"(파운데 시작 루마 0.45로 밝아져 드러남).
+            // 처방: fCov(파운데 커버)에만 곱하는 특징부 제외 게이트. 좌표는 추정이 아니라
+            // canonical_face_model.obj의 vt(캐노니컬 UV) 실측(HighlightRegion 실측 규약과 동일):
+            //   눈 개구부 RIGHT_EYE 실측 center(0.350,0.622) rx0.069 ry0.023,
+            //   입술 LIPS_OUTER center(0.500,0.306) rx0.118 ry0.043,
+            //   콧구멍 lm98/64(0.423,0.414~0.437). 눈·코는 좌우 대칭이라 u 폴딩(0.5-|u-0.5|)로 공용.
+            // 눈두덩(쌍꺼풀)은 실화장에서 파운데 얹는 게 정상 → ry를 개구부에 타이트하게(과제외 금지).
+            // luma 추정이 아닌 순수 기하 타원이라 붉은 피부·조명에 오판 없음. 강도 상수화 →
+            // FND_FEATURE_EXCLUDE=0이면 fCov 무변(하위호환), 파운데 0이면 블록 자체 미실행.
+            #define FEAT_LIP_CX 0.500  // 입술 타원 중심 x (실측 0.500)
+            #define FEAT_LIP_CY 0.306  // 입술 타원 중심 y (실측 0.306)
+            #define FEAT_LIP_RX 0.122  // 입술 x 반경 (실측 0.118 + 소여유) 실기기 튜닝 대상
+            #define FEAT_LIP_RY 0.052  // 입술 y 반경 (실측 0.043 + 윗/아랫 입술선 여유) 실기기 튜닝 대상
+            #define FEAT_EYE_CX 0.350  // 눈 개구부 중심 x (미러 폴딩 후 우안 기준, 실측 0.350)
+            #define FEAT_EYE_CY 0.622  // 눈 개구부 중심 y (실측 0.622)
+            #define FEAT_EYE_RX 0.078  // 눈 x 반경 (실측 0.069 + 눈꼬리 여유) 실기기 튜닝 대상
+            #define FEAT_EYE_RY 0.028  // 눈 y 반경 (실측 0.023, 개구부 타이트 — 눈두덩 보호) 실기기 튜닝 대상
+            #define FEAT_NOS_CX 0.423  // 콧구멍 중심 x (미러 폴딩 후, 실측 0.423)
+            #define FEAT_NOS_CY 0.423  // 콧구멍 중심 y (실측 0.414~0.437 중앙)
+            #define FEAT_NOS_RX 0.034  // 콧구멍 x 반경 (콧방울 안쪽 타이트) 실기기 튜닝 대상
+            #define FEAT_NOS_RY 0.030  // 콧구멍 y 반경 실기기 튜닝 대상
+            #define FEAT_FEATHER 0.30  // 타원 경계 페더 폭(정규화 거리 d 단위) 실기기 튜닝 대상
+            #define FND_FEATURE_EXCLUDE 0.85 // 특징부 제외 강도 [0=제외안함=기존, 1=완전제외] 실기기 튜닝 대상
             // 베이스 팩(#18)
             fixed4 _FoundationColor;
             float _FoundationIntensity;
@@ -588,6 +627,24 @@ Shader "ARMakeup/FaceMakeup"
                     else if (_FoundationShape > 0.5) fZone = 1.0 - smoothstep(PWD_TZONE_LO, PWD_TZONE_HI, faceDx);
                     fCov *= fZone;
                     fChroma *= fZone;
+                    // 경계 페더 — 오벌 외곽으로 갈수록 커버리지 감쇠(경계선 제거). 커버(fCov)에만
+                    // 곱하면 FoundationBlend의 blendAmount가 색·chroma 평탄화를 함께 옅게 한다.
+                    // 파운데 0(위 if로 게이트)이면 미실행이라 하위호환.
+                    float2 fndRimN = (i.uv - float2(FND_EDGE_CX, FND_EDGE_CY))
+                                   / float2(FND_EDGE_AX, FND_EDGE_AY);
+                    float fndRim = 1.0 - smoothstep(FND_EDGE_LO, FND_EDGE_HI, length(fndRimN));
+                    fCov *= fndRim;
+                    // 특징부 제외 — 눈알 개구부·입술·콧구멍은 파운데를 얹지 않는다(캐노니컬 UV
+                    // 타원, 실측 상수). 각 타원의 정규화 거리 d(경계=1)를 페더 스텝으로 안쪽=1,
+                    // 밖=0 만들어 합집합(max)한 뒤 fCov·fChroma를 감쇠. 눈·코는 u 폴딩으로 좌우 공용.
+                    float uFold = 0.5 - abs(i.uv.x - 0.5); // 좌우 미러 → 우측 기준 타원 재사용
+                    float dLip = length((i.uv - float2(FEAT_LIP_CX, FEAT_LIP_CY)) / float2(FEAT_LIP_RX, FEAT_LIP_RY));
+                    float dEye = length((float2(uFold, i.uv.y) - float2(FEAT_EYE_CX, FEAT_EYE_CY)) / float2(FEAT_EYE_RX, FEAT_EYE_RY));
+                    float dNos = length((float2(uFold, i.uv.y) - float2(FEAT_NOS_CX, FEAT_NOS_CY)) / float2(FEAT_NOS_RX, FEAT_NOS_RY));
+                    float feat = 1.0 - smoothstep(1.0 - FEAT_FEATHER, 1.0 + FEAT_FEATHER, min(min(dLip, dEye), dNos));
+                    float featKeep = 1.0 - FND_FEATURE_EXCLUDE * feat; // 특징부에서 커버 감쇠
+                    fCov *= featKeep;
+                    fChroma *= featKeep;
                     fixed3 found = _FoundationColor.rgb * (fLuma * fGain + FND_LUMA_LIFT);
                     // 파운데는 제형 스튜디오 대상 아님 — 세부 0 상수로 호출(enum 기존 경로).
                     found = ApplyFinish(found, fLuma, i.uv, _FoundationFinish, 0.0,

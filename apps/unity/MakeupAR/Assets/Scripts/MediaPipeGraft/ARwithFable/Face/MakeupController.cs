@@ -129,8 +129,8 @@ namespace ARMakeup.Face
         static readonly int SegSeamDbgId = Shader.PropertyToID("_SegSeamDbg");
         static readonly int FndSegLoDbgId = Shader.PropertyToID("_FndSegLoDbg");
         static readonly int FndSegHiDbgId = Shader.PropertyToID("_FndSegHiDbg");
-        static readonly int FndCoreLoDbgId = Shader.PropertyToID("_FndCoreLoDbg");
-        static readonly int FndCoreHiDbgId = Shader.PropertyToID("_FndCoreHiDbg");
+        static readonly int FndOvalSizeDbgId = Shader.PropertyToID("_FndOvalSizeDbg");
+        static readonly int FndOvalFeatherDbgId = Shader.PropertyToID("_FndOvalFeatherDbg");
         static readonly int PowderIntensityId = Shader.PropertyToID("_PowderIntensity");
         // 컬러/펄 파우더 — ""=무색(흰색=identity)·0=새틴=기존 출력(하위호환).
         static readonly int PowderColorId = Shader.PropertyToID("_PowderColor");
@@ -331,14 +331,16 @@ namespace ARMakeup.Face
             Shader.SetGlobalFloat(FndLumaGainDbgId, 1f);
             Shader.SetGlobalFloat(FndChromaDbgId, 0.4f);
 
-            // 임시 디버그(이음새 세그 게이트) — 임계 4종은 sentinel -1(미설정=셰이더 리터럴
-            // 폴백, LO는 0도 유효값이라 음수 sentinel)로, 시각화 토글은 0(끔)으로 1회 시딩.
-            // 첫 applyFilter 전에도 게이트가 리터럴로 동작해 현행 픽셀과 동일.
+            // 임시 디버그(이음새 세그 게이트) — 임계 4종(전이 2 + 타원 크기·페더)은 sentinel -1
+            // (미설정=셰이더 리터럴 폴백, 전이 LO는 0도 유효값이라 음수 sentinel)로, 시각화
+            // 토글은 0(끔)으로 1회 시딩. 첫 applyFilter 전에도 게이트가 리터럴로 동작해 현행
+            // 픽셀과 동일. (얼굴 오벌 유니폼 _FndOval/_FndOvalAxis는 StencilGuideRenderer가
+            // 소유·매 프레임 기록하고 Init에서 무효 시딩 — MediaPipe 경로에만 존재.)
             Shader.SetGlobalFloat(SegSeamDbgId, 0f);
             Shader.SetGlobalFloat(FndSegLoDbgId, -1f);
             Shader.SetGlobalFloat(FndSegHiDbgId, -1f);
-            Shader.SetGlobalFloat(FndCoreLoDbgId, -1f);
-            Shader.SetGlobalFloat(FndCoreHiDbgId, -1f);
+            Shader.SetGlobalFloat(FndOvalSizeDbgId, -1f);
+            Shader.SetGlobalFloat(FndOvalFeatherDbgId, -1f);
 
             // 텍스처 MatCap(크롬) — "조명 구운 구슬" 이미지를 절차 생성해 전역 텍스처로.
             // 메탈 재질이 법선으로 이걸 샘플해 진짜 반사에 가까운 크롬을 낸다(수식 근사 대체).
@@ -1097,8 +1099,8 @@ namespace ARMakeup.Face
             Shader.SetGlobalFloat(SegSeamDbgId, p.segSeamDbg);
             Shader.SetGlobalFloat(FndSegLoDbgId, p.fndSegLoDbg);
             Shader.SetGlobalFloat(FndSegHiDbgId, p.fndSegHiDbg);
-            Shader.SetGlobalFloat(FndCoreLoDbgId, p.fndCoreLoDbg);
-            Shader.SetGlobalFloat(FndCoreHiDbgId, p.fndCoreHiDbg);
+            Shader.SetGlobalFloat(FndOvalSizeDbgId, p.fndOvalSizeDbg);
+            Shader.SetGlobalFloat(FndOvalFeatherDbgId, p.fndOvalFeatherDbg);
             mat.SetFloat(MakeupOverlayIntensityId, Mathf.Clamp01(p.faceOverlayIntensity));
 
             // 립·눈 오버레이는 별도 메시/머티리얼(윤곽 링·랜드마크 오버레이)이 소유한다.

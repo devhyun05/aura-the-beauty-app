@@ -24,34 +24,42 @@ interface Props {
   onClose: () => void;
 }
 
-/** 라벨 + 슬라이더 + 현재값(소수 3자리) 한 줄. 확정값을 코드에 굽기 위해 값을 읽는다. */
+/**
+ * 라벨 + 슬라이더 + 현재값(소수 3자리) 한 줄, 그 아래 효과 설명 한 줄.
+ * 확정값을 코드에 굽기 위해 값을 읽는다.
+ */
 function DbgSlider({
   label,
+  desc,
   value,
   min,
   max,
   onChange,
 }: {
   label: string;
+  desc: string;
   value: number;
   min: number;
   max: number;
   onChange: (v: number) => void;
 }) {
   return (
-    <View style={styles.row}>
-      <Text style={styles.label}>{label}</Text>
-      <Slider
-        style={styles.slider}
-        minimumValue={min}
-        maximumValue={max}
-        value={value}
-        onValueChange={onChange}
-        minimumTrackTintColor="#FFB067"
-        maximumTrackTintColor="rgba(255,255,255,0.25)"
-        thumbTintColor="#FFFFFF"
-      />
-      <Text style={styles.value}>{value.toFixed(3)}</Text>
+    <View style={styles.field}>
+      <View style={styles.row}>
+        <Text style={styles.label}>{label}</Text>
+        <Slider
+          style={styles.slider}
+          minimumValue={min}
+          maximumValue={max}
+          value={value}
+          onValueChange={onChange}
+          minimumTrackTintColor="#FFB067"
+          maximumTrackTintColor="rgba(255,255,255,0.25)"
+          thumbTintColor="#FFFFFF"
+        />
+        <Text style={styles.value}>{value.toFixed(3)}</Text>
+      </View>
+      <Text style={styles.desc}>{desc}</Text>
     </View>
   );
 }
@@ -76,28 +84,29 @@ export default function FndColorDebugPanel({
         </View>
         <DbgSlider
           label="기준루마"
+          desc="기준 루마 — 낮출수록 밝게 발림"
           value={refLuma}
-          min={0.45}
-          max={0.9}
+          min={0.3}
+          max={0.5}
           onChange={onRefLumaChange}
         />
         <DbgSlider
           label="채도혼합"
+          desc="채도 혼합 — 원 피부색 눌러 커버(높으면 창백)"
           value={chroma}
           min={0}
-          max={0.5}
+          max={0.2}
           onChange={onChromaChange}
         />
         <DbgSlider
           label="luma게인"
+          desc="루마 게인 — 명암 이식 배율(1=원본)"
           value={lumaGain}
-          min={0.8}
+          min={1}
           max={1.5}
           onChange={onLumaGainChange}
         />
-        <Text style={styles.hint}>
-          기준루마↓=밝게 · 채도혼합↓=선명 · 값을 읽어 셰이더에 굽습니다.
-        </Text>
+        <Text style={styles.hint}>값을 읽어 셰이더에 굽습니다.</Text>
       </View>
     </View>
   );
@@ -138,10 +147,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingHorizontal: 4,
   },
+  field: {
+    marginVertical: 2,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 2,
+  },
+  desc: {
+    marginLeft: 64,
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 10,
   },
   label: {
     width: 64,
