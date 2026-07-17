@@ -133,7 +133,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'natural',
     name: '내추럴',
     params: {
-      skinSmoothing: 0.53,
+      skinSmoothing: 0.45,
       skinBrightening: 0.2,
       // 피부톤 — 중립 라이트, 얇은 커버로 결만 정리.
       foundationColor: '#F3D9C6',
@@ -191,7 +191,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'rosy',
     name: '로지',
     params: {
-      skinSmoothing: 0.63,
+      skinSmoothing: 0.55,
       skinBrightening: 0.3,
       // 피부톤 — 핑크 언더톤 + 듀이로 물광 로지.
       foundationColor: '#F2D2CC',
@@ -251,7 +251,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'peach',
     name: '피치',
     params: {
-      skinSmoothing: 0.58,
+      skinSmoothing: 0.5,
       skinBrightening: 0.35,
       // 피부톤 — 웜 코랄 언더톤, 마감은 새틴 유지(립·블러셔가 이미 따뜻함).
       foundationColor: '#F5D4B8',
@@ -311,7 +311,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'glam',
     name: '글램',
     params: {
-      skinSmoothing: 0.68,
+      skinSmoothing: 0.6,
       skinBrightening: 0.25,
       // 피부톤 — 중립, 고커버 + 듀이(무대광 베이스).
       foundationColor: '#EFD0BC',
@@ -382,7 +382,7 @@ export const PRESETS: FilterPreset[] = [
     id: 'smoky',
     name: '스모키',
     params: {
-      skinSmoothing: 0.58,
+      skinSmoothing: 0.5,
       skinBrightening: 0.15,
       // 피부톤 — 황갈로 한 단계 눌러 매트 마감과 방향을 맞춤.
       foundationColor: '#E8C4A8',
