@@ -3851,6 +3851,53 @@
         ]
       }
     },
+    "/api/makeup-recommendations/events": {
+      "post": {
+        "tags": [
+          "makeup-recommendations"
+        ],
+        "summary": "Record Makeup Recommendation Event",
+        "operationId": "record_makeup_recommendation_event_api_makeup_recommendations_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeupRecommendationEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Record Makeup Recommendation Event Api Makeup Recommendations Events Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/makeup-recommendations/scenarios": {
       "post": {
         "tags": [
@@ -3992,6 +4039,255 @@
         ]
       }
     },
+    "/api/makeup-recommendations/discovery": {
+      "get": {
+        "tags": [
+          "makeup-recommendations"
+        ],
+        "summary": "Get Makeup Discovery",
+        "operationId": "get_makeup_discovery_api_makeup_recommendations_discovery_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Makeup Discovery Api Makeup Recommendations Discovery Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/makeup-recommendations/sessions": {
+      "post": {
+        "tags": [
+          "makeup-recommendations"
+        ],
+        "summary": "Create Makeup Recommendation Session",
+        "operationId": "create_makeup_recommendation_session_api_makeup_recommendations_sessions_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeupRecommendationSessionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Create Makeup Recommendation Session Api Makeup Recommendations Sessions Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/makeup-recommendations/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "makeup-recommendations"
+        ],
+        "summary": "Get Makeup Recommendation Session",
+        "operationId": "get_makeup_recommendation_session_api_makeup_recommendations_sessions__session_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Makeup Recommendation Session Api Makeup Recommendations Sessions  Session Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/makeup-recommendations/sessions/{session_id}/answers": {
+      "post": {
+        "tags": [
+          "makeup-recommendations"
+        ],
+        "summary": "Answer Makeup Recommendation Session",
+        "operationId": "answer_makeup_recommendation_session_api_makeup_recommendations_sessions__session_id__answers_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeupRecommendationSessionAnswer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Answer Makeup Recommendation Session Api Makeup Recommendations Sessions  Session Id  Answers Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/makeup-recommendations/sessions/{session_id}/generate": {
+      "post": {
+        "tags": [
+          "makeup-recommendations"
+        ],
+        "summary": "Generate Makeup Recommendation Session",
+        "operationId": "generate_makeup_recommendation_session_api_makeup_recommendations_sessions__session_id__generate_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Generate Makeup Recommendation Session Api Makeup Recommendations Sessions  Session Id  Generate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/makeup-recommendations": {
       "post": {
         "tags": [
@@ -4123,6 +4419,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MakeupRecommendationImageRetryRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -13495,6 +13808,113 @@
         ],
         "title": "MakeupQuestionRequest"
       },
+      "MakeupRecommendationEventMetadata": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "modelVersion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modelversion"
+          },
+          "durationMs": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 86400000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Durationms"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._:-]+$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MakeupRecommendationEventMetadata"
+      },
+      "MakeupRecommendationEventRequest": {
+        "properties": {
+          "eventName": {
+            "type": "string",
+            "enum": [
+              "makeup_recommendation_opened",
+              "analysis_report_selected",
+              "makeup_situation_selected",
+              "makeup_keyword_selected",
+              "custom_situation_submitted",
+              "recommendation_question_answered",
+              "recommendation_generation_started",
+              "recommendation_text_completed",
+              "recommendation_image_completed",
+              "recommendation_image_failed",
+              "recommendation_area_opened",
+              "recommendation_ar_applied"
+            ],
+            "title": "Eventname"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/MakeupRecommendationEventMetadata"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "eventName"
+        ],
+        "title": "MakeupRecommendationEventRequest"
+      },
       "MakeupRecommendationGenerate": {
         "properties": {
           "prompt": {
@@ -13563,6 +13983,25 @@
           "sourceImageUrl"
         ],
         "title": "MakeupRecommendationGenerate"
+      },
+      "MakeupRecommendationImageRetryRequest": {
+        "properties": {
+          "lookId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lookid"
+          }
+        },
+        "type": "object",
+        "title": "MakeupRecommendationImageRetryRequest"
       },
       "MakeupRecommendationProfile": {
         "properties": {
@@ -13699,6 +14138,141 @@
           "scenarioText"
         ],
         "title": "MakeupRecommendationRequest"
+      },
+      "MakeupRecommendationSessionAnswer": {
+        "properties": {
+          "questionId": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Questionid"
+          },
+          "optionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Optionid"
+          },
+          "freeText": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freetext"
+          },
+          "additionalConstraints": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additionalconstraints"
+          }
+        },
+        "type": "object",
+        "required": [
+          "questionId"
+        ],
+        "title": "MakeupRecommendationSessionAnswer"
+      },
+      "MakeupRecommendationSessionCreate": {
+        "properties": {
+          "analysisReportId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Analysisreportid"
+          },
+          "situationId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Situationid"
+          },
+          "keywordId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keywordid"
+          },
+          "editorialPresetId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Editorialpresetid"
+          },
+          "customSituationText": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customsituationtext"
+          },
+          "customSituationLabel": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customsituationlabel"
+          },
+          "imageMode": {
+            "type": "string",
+            "enum": [
+              "personalized",
+              "generic"
+            ],
+            "title": "Imagemode",
+            "default": "generic"
+          }
+        },
+        "type": "object",
+        "required": [
+          "analysisReportId"
+        ],
+        "title": "MakeupRecommendationSessionCreate"
       },
       "MakeupScenarioRequest": {
         "properties": {
