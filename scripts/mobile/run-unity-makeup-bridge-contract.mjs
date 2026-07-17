@@ -1,4 +1,5 @@
-import {mkdirSync, mkdtempSync, writeFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+import {mkdirSync, mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -15,6 +16,18 @@ const testPath = join(
 const bridgePath = join(
   repoRoot,
   'apps/mobile/src/features/ar/services/unityMakeupBridge.ts',
+);
+const lipRendererPath = join(
+  repoRoot,
+  'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Face/LipRenderer.cs',
+);
+
+const lipRendererSource = readFileSync(lipRendererPath, 'utf8');
+
+assert.doesNotMatch(
+  lipRendererSource,
+  /EnableSnap|ComputeOuterSnap|TrySampleColor|Snap(?:InRange|OutRange|Steps|MinDrop|Ema|EmaCorner)|_outer(?:Ptmp|Dtmp|RawTmp|OffEma)|_snapPrimed/,
+  '립 외곽은 카메라 색상 경계 스냅 없이 정본 랜드마크 경계만 사용해야 한다',
 );
 
 function run(command, args, options = {}) {

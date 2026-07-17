@@ -6,8 +6,8 @@ namespace ARMakeup.Face
     /// <summary>
     /// 립 틴트를 입술 윤곽 랜드마크로 만든 링(도넛) 메시로 렌더한다.
     ///
-    /// 칠한 UV 마스크(대략적 타원 + 색 판별 보정)를 대체한다. 아이라이너(E1)가 색 추측이
-    /// 아니라 속눈썹 라인 랜드마크를 실제 엣지로 스냅해 잘 됐던 것과 같은 원리를 립에 적용:
+    /// 칠한 UV 마스크(대략적 타원 + 색 판별 보정)를 대체하고, 립에는 색 추측 없이
+    /// 얼굴 랜드마크가 제공하는 입술 윤곽을 그대로 적용한다:
     ///   외곽·내곽 립 윤곽(각 20점, index 정렬)을 iso→월드로 올려 그 사이 버밀리언을
     ///   링 메시로 채운다. 링은 실제 입술 그 자체라 (1) 경계가 입술에 맞고(스필 없음),
     ///   (2) 안쪽 윤곽이 입 안쪽·치아를 애초에 제외한다(입 벌려도 링은 입술만).
@@ -16,9 +16,7 @@ namespace ARMakeup.Face
     /// 색 로직은 버리지 않는다 — Lip.shader가 GrabPass로 실제 입술 픽셀을 루마 보존
     /// 틴트하므로 "색소 얹힌 느낌"은 그대로. 하이브리드(기하 1차 + 색 2차).
     ///
-    /// 외곽 엣지 스냅(버밀리언 경계=붉은기 급락 지점)은 ComputeOuterSnap이 담당 —
-    /// 랜드마크의 관례점 편향을 실제 경계로 당겨 입술산·스필을 마저 정리한다.
-    /// 그 이전 단계로 ApplyCornerArcFix가 입꼬리 접착(요 회전 시 코너 근처 랜드마크
+    /// ApplyCornerArcFix가 입꼬리 접착(요 회전 시 코너 근처 랜드마크
     /// 처짐)을 코너 고정 아크 피팅으로 보정한다 — 랜드마크만 입력(픽셀 재탐색 없음).
     /// 좌표 매핑은 FramePresenter를 공유(배경 영상·얼굴 메시와 동일 변환). MediaPipe 전용.
     /// </summary>
@@ -39,22 +37,6 @@ namespace ARMakeup.Face
         const float DistanceFromCamera = 0.5f; // CanonicalFaceMesh와 동일
         const float DepthScale = 1.0f;
 
-        // 외곽 엣지 스냅: 립→피부 붉은기(R−max(G,B)) 급락 지점으로 외곽점을 당긴다.
-        const bool EnableSnap = true;
-        const float SnapInRange = 0.18f;   // 립 반경(이미지) 대비 안쪽 탐색
-        const float SnapOutRange = 0.28f;  // 바깥(피부쪽) 탐색
-        const int SnapSteps = 12;
-        const float SnapMinDrop = 0.04f;   // 붉은기 낙차 이 이상이어야 스냅(약하면 랜드마크)
-        const float SnapEma = 0.12f;       // 낮을수록 안정(꿀렁임 방지) — 아이라이너 E1과 동일
-        // 코너 무스냅 테이퍼 — 입꼬리(코너 인덱스 0=61, 10=291) 근처는 붉은기 급락 지점이
-        // 실제 립 경계가 아니라 입꼬리 크리스(구각) 그림자라, 스냅이 링을 크리스로 끌어당겨
-        // 요/틸트 시 옆끝이 처지거나 뜬다(아이라인 카런클 그림자와 동일 실패,
-        // IrisRenderer.ComputeLidSnaps 709-714). 스냅 오프셋을 코너에서 0, 코너 옆 0.5,
-        // 2스텝부터 1로 테이퍼해 코너는 아크 보정된 랜드마크(_outerFixed)에 정확히 머물게 한다.
-        const float CornerSnapTaperSteps = 2f;  // 코너에서 0→1 도달까지 링 스텝 수(아이라인 준용, 실기기 튜닝)
-        // 코너 근처 오프셋 추가 시간 안정화 — 고개 회전 후 들뜸 방지(아이라인 SnapOffEmaFront=0.08 준용).
-        const float SnapEmaCorner = 0.06f;      // 코너 ≤2스텝 점에 적용(중앙 SnapEma=0.12보다 강함, 실기기 튜닝)
-
         // 윗입술 채움 보정: 윗입술 밴드(외곽-top↔내곽-top)가 너무 좁게 잡혀 위(입술산
         // 가장자리)·아래(마우스라인) 모두 덜 칠해진다(실기기 픽셀 확인). 윗입술 점만 골라
         // 외곽은 경계 쪽(바깥)으로, 내곽은 마우스라인 쪽(립 중심)으로 소폭 이동해 밴드를
@@ -65,7 +47,7 @@ namespace ARMakeup.Face
         // (오버라인). 립 색이 실제 입술선 밖 피부까지 얹혀 "오버라인" 효과(실제 화장 기법).
         // 정규화(평균 반경 대비)라 얼굴 크기·표정 무관(설계 섹션 09 워프 규칙). 0 = 원래.
         const float MaxOverline = 0.12f;     // 최대 확장 = 평균 반경 × 이 값
-        // 립라이너(섹션 12 step 4) — 외곽 스냅 곡선을 그대로 재사용한 얇은 안쪽 링.
+        // 립라이너(섹션 12 step 4) — 외곽 랜드마크 곡선을 재사용한 얇은 안쪽 링.
         // 폭 = 외곽→립중심 거리의 비율(반경 비례라 얼굴 크기 무관).
         const float LinerWidthFrac = 0.10f;
 
@@ -164,16 +146,14 @@ namespace ARMakeup.Face
         static readonly int LipHasFinishMapId = Shader.PropertyToID("_LipHasFinishMap");
         Texture2D _finishMap; // 소유(교체·해제 시 파기)
 
-        readonly Vector2[] _outerSnap = new Vector2[Ring];
-        readonly float[] _outerOffEma = new float[Ring];
-        bool _snapPrimed;
+        readonly Vector2[] _outerBoundary = new Vector2[Ring];
         // 입꼬리 아크 보정 — 보정된 외곽 랜드마크(이미지 좌표). ApplyCornerArcFix가
-        // 채우고, ComputeOuterSnap이 원시 랜드마크 대신 이것을 입력으로 사용한다.
+        // 채우고, ComputeOuterGeometry가 원시 랜드마크 대신 이것을 입력으로 사용한다.
         readonly Vector2[] _outerFixed = new Vector2[Ring];
         // 아크 계수 [상 반원, 하 반원][k0, k1] — 반원별 독립 EMA 버퍼.
         readonly float[][] _lipFitK = { new float[2], new float[2] };
         bool _lipFitPrimed;
-        Vector2 _lipCenter; // 립 중심(이미지) — 내곽 구멍 축소 방향 기준. ComputeOuterSnap이 갱신.
+        Vector2 _lipCenter; // 립 중심(이미지) — 내곽 구멍 축소 방향 기준.
         Vector2 _fitLipOuterVp;
         Vector2 _fitLipLinerVp;
         int _fitLipFrame = -1;
@@ -202,22 +182,6 @@ namespace ARMakeup.Face
                 default: return 0f;
             }
         }
-        // 링 위에서 가장 가까운 입꼬리(코너 인덱스 0 또는 10)까지의 스텝 거리. 아이라인은 열린
-        // 체인이라 min(i, n-1-i)였지만, 립은 닫힌 20링·코너 2개라 두 코너까지 링 거리(wrap 고려)
-        // 최소값을 쓴다. 예: i=19 → 코너 0에서 1스텝, i=9/11 → 코너 10에서 1스텝.
-        static int CornerRingDist(int i)
-        {
-            var a0 = Mathf.Abs(i - 0);
-            var a10 = Mathf.Abs(i - 10);
-            var d0 = Mathf.Min(a0, Ring - a0);
-            var d10 = Mathf.Min(a10, Ring - a10);
-            return Mathf.Min(d0, d10);
-        }
-        // 스냅 2-pass 임시 버퍼 (점 위치·바깥방향·원시 오프셋).
-        readonly Vector2[] _outerPtmp = new Vector2[Ring];
-        readonly Vector2[] _outerDtmp = new Vector2[Ring];
-        readonly float[] _outerRawTmp = new float[Ring];
-
         // 스플라인 컨트롤점(이미지 x,y + 깊이 z). 매 프레임 20점 채운 뒤 세분 리샘플.
         readonly Vector3[] _outerCtrl = new Vector3[Ring];
         readonly Vector3[] _innerCtrl = new Vector3[Ring];
@@ -343,7 +307,7 @@ namespace ARMakeup.Face
                 _material.SetColor(LipColorId, c);
             _material.SetFloat(LipIntensityId, _intensity);
             // 메인 틴트 자기 오버라인 값 — 셰이더가 (E−_overline)로 틴트 경계를 (확장된 메시
-            // 안에서) 자기 값 위치에 되돌린다. 0=원래 입술선. E는 매 프레임 ComputeOuterSnap이 설정.
+            // 안에서) 자기 값 위치에 되돌린다. 0=원래 입술선. E는 매 프레임 ComputeOuterGeometry가 설정.
             _material.SetFloat(LipOverlineId, _overline);
             // 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 셰이더 분기값과 1:1.
             _material.SetFloat(LipFinishId, finish);
@@ -380,7 +344,7 @@ namespace ARMakeup.Face
             // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). 립 메시 전용(라이너 무영향).
             _material.SetFloat(LipBaseTextureId, texture);
             // 베이스립 오버라인(±, 핏) — 진짜 모양 확장: 양수면 링 메시가 max(overline)만큼
-            // 바깥 확장(ComputeOuterSnap)돼 베이스 커버가 실제 입술선 밖까지 나간다. 경계는
+            // 바깥 확장(ComputeOuterGeometry)돼 베이스 커버가 실제 입술선 밖까지 나간다. 경계는
             // 메인 틴트와 독립(자기 값 기준). 음수는 경계를 입술선 안쪽으로 이동(통일). 0=원래.
             _baseOverline = Mathf.Clamp(overline, -0.15f, 0.15f);
             _material.SetFloat(LipBaseOverlineId, _baseOverline);
@@ -505,19 +469,16 @@ namespace ARMakeup.Face
 
             var lm = _source.Landmarks;
 
-            // 적용 지점: 랜드마크→링 정점 생성 직전, 스냅 이전. 여기서 외곽 랜드마크를
-            // 아크 보정해 두면 ComputeOuterSnap(방사 스냅)·M자 바이어스·오버립·립라이너가
-            // 전부 보정된 점을 공통 기준으로 물려받는다 — 스냅 이후에 더하면 스냅 오프셋과
-            // 아크 델타가 같은 처짐을 이중 보정하거나, 스냅 탐색이 처진 원점에서 출발해
-            // 엉뚱한 경계를 잡는다. 프레임당 1회(LateUpdate 단일 진입) 계산.
+            // 적용 지점: 랜드마크→링 정점 생성 직전. 외곽 랜드마크를 아크 보정해 두면
+            // M자 바이어스·오버립·립라이너가 모두 같은 랜드마크 경계를 사용한다.
             ApplyCornerArcFix(lm);
 
-            ComputeOuterSnap(lm);
+            ComputeOuterGeometry(lm);
 
-            // 20개 랜드마크(외곽 스냅 + 내곽)를 이미지 공간 컨트롤점으로.
+            // 20개 랜드마크(외곽 경계 + 내곽)를 이미지 공간 컨트롤점으로.
             for (var i = 0; i < Ring; i++)
             {
-                var outer = _outerSnap[i]; // 이미지 좌표(스냅)
+                var outer = _outerBoundary[i];
                 var inner = ImgPt(lm, LipsInner[i]);
                 // 윗입술만 내곽을 마우스라인(립 중심) 쪽으로 소폭 당겨 구멍을 줄인다
                 // → 윗입술 아래 가장자리·입술 사이 덜참을 채움. 코너·아랫입술은 무보정.
@@ -563,7 +524,7 @@ namespace ARMakeup.Face
                                           LinerWidthFrac * _linerWidthMult);
                     _linerVertices[2 * f] = _vertices[2 * f];
                     _linerVertices[2 * f + 1] = ImageToWorld(lp, op.z);
-                    // k=5,j=0은 LipsOuter[5]=랜드마크 0의 실제 스냅된 윗입술 중앙.
+                    // k=5,j=0은 LipsOuter[5]=랜드마크 0의 윗입술 중앙.
                     // 라이너 핸들은 외곽~내곽 사이 실제 밴드 중앙에 둔다.
                     if (k == 5 && j == 0)
                     {
@@ -666,12 +627,9 @@ namespace ARMakeup.Face
             _lipFitPrimed = true;
         }
 
-        /// <summary>외곽점을 버밀리언 경계(붉은기 급락)로 스냅. 이미지 공간.
-        /// 외곽 입력은 원시 랜드마크가 아니라 아크 보정된 _outerFixed(입꼬리 접착).</summary>
-        void ComputeOuterSnap(Vector3[] lm)
+        /// <summary>아크 보정된 랜드마크 외곽에 윗입술 바이어스와 오버라인만 적용한다.</summary>
+        void ComputeOuterGeometry(Vector3[] lm)
         {
-            var haveFrame = EnableSnap && _source.HasPresentedFrame;
-
             Vector2 center = Vector2.zero;
             for (var i = 0; i < Ring; i++)
                 center += _outerFixed[i] + ImgPt(lm, LipsInner[i]);
@@ -690,71 +648,19 @@ namespace ARMakeup.Face
             _lipRad = rad;
             if (_material != null) _material.SetFloat(LipMeshOverlineId, meshOverline);
 
-            // 1차: 점별 원시 스냅 오프셋 (+ 점 위치·바깥방향 임시 저장)
             for (var i = 0; i < Ring; i++)
             {
                 var p = _outerFixed[i]; // 아크 보정된 외곽점(입꼬리 접착)에서 출발
-                _outerPtmp[i] = p;
                 var outward = p - center;
                 if (outward.sqrMagnitude < 1e-12f)
                 {
-                    _outerDtmp[i] = Vector2.zero;
-                    _outerRawTmp[i] = 0f;
+                    _outerBoundary[i] = p;
                     continue;
                 }
                 outward.Normalize();
-                _outerDtmp[i] = outward;
-
-                var rawOff = 0f; // 기본 = 랜드마크 유지
-                if (haveFrame && rad > 1e-5f)
-                {
-                    float bestOff = 0f, bestDrop = 0f, prevRed = -1f, prevT = 0f;
-                    var found = false;
-                    for (var s = 0; s <= SnapSteps; s++)
-                    {
-                        var t = Mathf.Lerp(-SnapInRange, SnapOutRange, s / (float)SnapSteps);
-                        var q = p + outward * (t * rad);
-                        var red = 0f;
-                        if (_source.TrySampleColor(q.x, q.y, out var r, out var g, out var b))
-                            red = r - Mathf.Max(g, b);
-                        if (prevRed >= 0f)
-                        {
-                            var drop = prevRed - red; // 바깥으로 붉은기 감소 = 경계
-                            if (drop > bestDrop)
-                            {
-                                bestDrop = drop;
-                                bestOff = (prevT + t) * 0.5f * rad; // 두 샘플 사이
-                                found = true;
-                            }
-                        }
-                        prevRed = red;
-                        prevT = t;
-                    }
-                    if (found && bestDrop >= SnapMinDrop) rawOff = bestOff;
-                }
-                _outerRawTmp[i] = rawOff;
-            }
-
-            // 2차: 오프셋을 인접점끼리 공간 스무딩(닫힌 루프) 후 시간 EMA — 촘촘한
-            // 스플라인에서 인접점 독립 요동('꿀렁임')을 막는다(아이라이너 E1과 동일).
-            for (var i = 0; i < Ring; i++)
-            {
-                var a = _outerRawTmp[(i - 1 + Ring) % Ring];
-                var b = _outerRawTmp[(i + 1) % Ring];
-                var sm = 0.5f * _outerRawTmp[i] + 0.25f * (a + b);
-                var cd = CornerRingDist(i);
-                // 코너 근처(≤2스텝)는 더 강한 EMA로 요 회전 후 들뜸 억제(아이라인 앞머리 준용).
-                var ema = cd <= 2 ? SnapEmaCorner : SnapEma;
-                if (!_snapPrimed) _outerOffEma[i] = sm;
-                else _outerOffEma[i] = Mathf.Lerp(_outerOffEma[i], sm, ema);
-                // 코너 무스냅 테이퍼: 코너 0 → 옆 0.5 → 2스텝부터 1. 아이라인 cornerTaper 준용.
-                // 스냅 오프셋에만 곱한다(bias는 무테이퍼) — 오버립·M자 바이어스는 코너에서도
-                // 유효해야 하고, OuterBiasWeight(0)=OuterBiasWeight(10)=0이라 M자는 이미 코너 제외.
-                var taper = Mathf.Min(cd / CornerSnapTaperSteps, 1f);
                 var bias = UpperOuterBias * rad * OuterBiasWeight(i) + meshOverline * MaxOverline * rad;
-                _outerSnap[i] = _outerPtmp[i] + _outerDtmp[i] * (_outerOffEma[i] * taper + bias);
+                _outerBoundary[i] = p + outward * bias;
             }
-            _snapPrimed = true;
         }
 
         // 모양 축 W4 — 링 위치(f/RingFine)로 중앙도·윗입술도를 낸다. LipsOuter 순서상 코너=인덱스
