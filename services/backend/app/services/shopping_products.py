@@ -861,6 +861,9 @@ def _bedrock_embedding_client(settings: Settings):
       },
     )
 
+  if settings.aws_profile_name:
+    return boto3.Session(profile_name=settings.aws_profile_name).client("bedrock-runtime", **client_kwargs)
+
   return boto3.client("bedrock-runtime", **client_kwargs)
 
 

@@ -33,7 +33,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-import { CameraRoll } from '@react-native-camera-roll/camera-roll';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import UnityView from './StencilUnityViewAdapter';
 import { launchImageLibrary } from 'react-native-image-picker';
 
@@ -2343,8 +2343,12 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   // 갱신. 권한 거부/미지원이면 best-effort로 조용히 스킵(세션 촬영분 유지).
   const refreshLatestPhoto = useCallback(async () => {
     try {
-      const page = await CameraRoll.getPhotos({ first: 1, assetType: 'Photos' });
-      const uri = page.edges[0]?.node?.image?.uri;
+      const page = await MediaLibrary.getAssetsAsync({
+        first: 1,
+        mediaType: MediaLibrary.MediaType.photo,
+        sortBy: [[MediaLibrary.SortBy.creationTime, false]],
+      });
+      const uri = page.assets[0]?.uri;
       if (uri) setLastPhotoUri(uri);
     } catch {
       // 권한 없음/시뮬레이터 빈 라이브러리 등 — 무시

@@ -36,13 +36,18 @@ from app.workers.job_dispatcher import AIJobDispatcher, ParsedAIJobMessage
 USER_ID = UUID("11111111-1111-1111-1111-111111111111")
 REPORT_ID = UUID("22222222-2222-2222-2222-222222222222")
 REFINED_REPORT_ID = UUID("33333333-3333-3333-3333-333333333333")
+VALID_TEST_PNG_B64 = (
+  "iVBORw0KGgoAAAANSUhEUgAAAEAAAAAwCAIAAAAuKetIAAAAaElEQVR4nNXOQREAIAzAsFKtiEAY"
+  "AhGxB9coyLpnUyZxEidxEidxEidxEidxEidxEidxEidxEidxEidxEidxEidxEidxEidxEidxEidx"
+  "EidxEidxEidxEidxEidxEidxEidxEidxEidxEufvwNQDeREB8OxDzioAAAAASUVORK5CYII="
+)
 
 
 class FakeBedrockClient:
   def __init__(self):
     self.calls: list[dict] = []
 
-  def converse(self, **kwargs):
+  def converse_stream(self, **kwargs):
     self.calls.append(kwargs)
     return {
       "output": {
@@ -85,7 +90,7 @@ def test_converse_accepts_json_code_fence(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_converse_extracts_json_from_text_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
   class WrappedJsonBedrockClient:
-    def converse(self, **_kwargs):
+    def converse_stream(self, **_kwargs):
       return {
         "output": {
           "message": {
@@ -181,11 +186,13 @@ def test_product_only_refinement_preserves_makeup_and_replaces_products() -> Non
 class RecommendationDatabase:
   def __init__(self) -> None:
     self.insert_args: tuple | None = None
+    self.insert_query: str | None = None
     self.executed: list[tuple[str, tuple]] = []
 
   async def fetchrow(self, query: str, *args):
     if "insert into makeup_recommendation_reports" in query:
       self.insert_args = args
+      self.insert_query = query
       return {"id": REPORT_ID}
     raise AssertionError(f"Unexpected query: {query}")
 
@@ -202,6 +209,7 @@ class RecommendationReportDatabase:
 
   async def fetch(self, query: str, *args):
     assert "from makeup_recommendation_reports" in query
+    assert "as profile_gender" in query
     assert args == (USER_ID, 20, 0)
     return [
       {
@@ -210,6 +218,7 @@ class RecommendationReportDatabase:
         "recommendation": {"looks": []},
         "image_status": "completed",
         "image_url": "https://cdn.example.com/anchor.png",
+        "profile_gender": "unspecified",
         "created_at": "2026-07-14T00:00:00Z",
         "updated_at": "2026-07-14T00:00:00Z",
       },
@@ -405,6 +414,9 @@ def test_recommendation_saves_report_without_face_analysis(monkeypatch: pytest.M
   assert "winter" not in str(db.insert_args)
   assert "oval" not in str(db.insert_args)
   assert "anthropic.claude-sonnet-4-6" in db.insert_args
+  assert db.insert_query is not None
+  assert "schema_version" in db.insert_query
+  assert "'makeup-recommendation-v1'" in db.insert_query
 
 
 def test_recommendation_survives_image_queue_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -458,7 +470,9 @@ def test_user_can_list_saved_recommendation_reports(monkeypatch: pytest.MonkeyPa
   response = TestClient(app).get("/api/makeup-recommendations?limit=20&offset=0")
 
   assert response.status_code == 200
-  assert response.json()["data"]["reports"][0]["scenarioText"] == "퇴근 후 약속"
+  report = response.json()["data"]["reports"][0]
+  assert report["scenarioText"] == "퇴근 후 약속"
+  assert report["profileGender"] == "unspecified"
 
 
 def test_user_can_poll_owned_report_with_camel_case_image_state(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -985,6 +999,9 @@ class SharedScenarioDatabase:
 
   async def fetch(self, query: str, *args):
     assert "from makeup_scenario_library" in query
+    assert "locale = 'ko-KR'" in query
+    assert "coalesce(market_scope, '') = ''" in query
+    assert "keyword_kind = 'legacy_scenario'" in query
     return list(self.rows)
 
   async def fetchrow(self, query: str, *args):
@@ -1037,6 +1054,10 @@ async def test_persist_statement_serializes_and_caps_ai_rows() -> None:
   assert "status = 'active'" in query
   assert "last_served_at < now() - interval '7 days'" in query
   assert "for update skip locked" in query
+  assert "locale = 'ko-kr'" in query
+  assert "coalesce(market_scope, '') = ''" in query
+  assert "created_by_user_id, locale, market_scope" in query
+  assert "on conflict (normalized_text, locale, (coalesce(market_scope, '')))" in query
   assert db.last_args[0] == item["text"]
   assert db.last_args[-1] == USER_ID
 
@@ -1394,7 +1415,7 @@ async def test_recommendation_image_is_generated_and_uploaded(monkeypatch: pytes
 
   class FakeImages:
     def generate(self, **_kwargs):
-      return type("Response", (), {"data": [type("Image", (), {"b64_json": "aW1hZ2U="})()]})()
+      return type("Response", (), {"data": [type("Image", (), {"b64_json": VALID_TEST_PNG_B64})()]})()
 
   class FakeOpenAI:
     def __init__(self, **_kwargs):
@@ -1421,16 +1442,17 @@ async def test_recommendation_image_is_generated_and_uploaded(monkeypatch: pytes
 
   assert image_url.startswith("https://cdn.example.com/uploads/generated-makeup-recommendations/")
   assert uploaded["Bucket"] == "makeup-bucket"
-  assert uploaded["Body"] == b"image"
+  assert uploaded["Body"].startswith(b"\xff\xd8")
+  assert uploaded["ContentType"] == "image/jpeg"
 
 
 @pytest.mark.asyncio
-async def test_all_three_recommendation_looks_receive_images(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_only_anchor_recommendation_look_receives_an_image(monkeypatch: pytest.MonkeyPatch) -> None:
   uploads: list[dict] = []
 
   class FakeImages:
     def generate(self, **_kwargs):
-      return type("Response", (), {"data": [type("Image", (), {"b64_json": "aW1hZ2U="})()]})()
+      return type("Response", (), {"data": [type("Image", (), {"b64_json": VALID_TEST_PNG_B64})()]})()
 
   class FakeOpenAI:
     def __init__(self, **_kwargs):
@@ -1454,9 +1476,11 @@ async def test_all_three_recommendation_looks_receive_images(monkeypatch: pytest
     looks,
   )
 
-  assert len(uploads) == 3
+  assert len(uploads) == 1
   assert [look["role"] for look in generated] == ["anchor", "bold", "discovery"]
-  assert all(look["imageUrl"].startswith("https://cdn.example.com/") for look in generated)
+  assert generated[0]["imageUrl"].startswith("https://cdn.example.com/")
+  assert "imageUrl" not in generated[1]
+  assert "imageUrl" not in generated[2]
 
 
 @pytest.mark.asyncio

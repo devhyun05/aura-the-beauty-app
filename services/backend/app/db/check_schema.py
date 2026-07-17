@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 
 import asyncpg
 
@@ -63,7 +64,12 @@ EXPECTED_TABLES = {
   "makeup_feedback_reports",
   "makeup_scenario_library",
   "makeup_scenario_generation_limits",
+  "makeup_situations",
+  "makeup_situation_keywords",
+  "makeup_keyword_question_templates",
+  "makeup_recommendation_sessions",
   "makeup_recommendation_reports",
+  "makeup_recommendation_assets",
   "community_threads",
   "community_thread_media",
   "community_replies",
@@ -149,10 +155,21 @@ EXPECTED_CONSTRAINTS = {
   },
   "seasonal_pipeline_runs": {"chk_seasonal_pipeline_run_trigger"},
   "seasonal_auto_publish_audit_log": {"chk_seasonal_auto_publish_decision_refs"},
+  "makeup_recommendation_sessions": {
+    "uq_makeup_recommendation_sessions_user_idempotency",
+    "uq_makeup_recommendation_sessions_report",
+  },
+  "makeup_recommendation_reports": {"fk_makeup_recommendation_reports_session"},
+  "makeup_scenario_library": {"chk_makeup_scenario_library_trend_evidence"},
+  "makeup_recommendation_assets": {
+    "uq_makeup_recommendation_assets_report_look",
+    "chk_makeup_recommendation_assets_private_url",
+    "chk_makeup_recommendation_assets_provenance",
+  },
 }
 
 EXPECTED_COLUMNS = {
-  "analysis_reports": {"embedding"},
+  "analysis_reports": {"embedding", "deleted_at"},
   "face_measurement_preferences": {
     "user_id",
     "self_selected_locale",
@@ -288,6 +305,13 @@ EXPECTED_COLUMNS = {
     "recommendation_model_id",
     "parent_report_id",
     "refinement_type",
+    "source_analysis_report_id",
+    "session_id",
+    "situation_id",
+    "keyword_id",
+    "context_snapshot",
+    "schema_version",
+    "image_mode",
   },
   "makeup_scenario_library": {
     "normalized_text",
@@ -296,11 +320,82 @@ EXPECTED_COLUMNS = {
     "usage_count",
     "model_id",
     "last_served_at",
+    "keyword_kind",
+    "source_name",
+    "source_url",
+    "source_published_at",
+    "evidence_summary",
+    "market_scope",
+    "trend_score",
+    "confidence",
+    "review_status",
+    "locale",
+    "as_of",
+    "valid_from",
+    "expires_at",
   },
   "makeup_scenario_generation_limits": {
     "user_id",
     "window_started_at",
     "request_count",
+  },
+  "makeup_situations": {
+    "key",
+    "label",
+    "description",
+    "image_asset_key",
+    "icon_key",
+    "sort_order",
+    "status",
+  },
+  "makeup_situation_keywords": {
+    "situation_id",
+    "keyword_id",
+    "relevance_score",
+    "sort_order",
+    "status",
+  },
+  "makeup_keyword_question_templates": {
+    "keyword_id",
+    "template_version",
+    "locale",
+    "questions",
+    "source",
+    "model_id",
+    "prompt_version",
+    "review_status",
+    "status",
+    "reviewed_at",
+  },
+  "makeup_recommendation_sessions": {
+    "user_id",
+    "analysis_report_id",
+    "situation_id",
+    "keyword_id",
+    "custom_situation_text",
+    "context_snapshot",
+    "questions",
+    "answers",
+    "current_question_index",
+    "status",
+    "report_id",
+    "idempotency_key",
+    "image_mode",
+    "expires_at",
+  },
+  "makeup_recommendation_assets": {
+    "report_id",
+    "look_id",
+    "role",
+    "status",
+    "image_url",
+    "storage_bucket",
+    "object_key",
+    "content_type",
+    "is_private",
+    "input_media_id",
+    "provenance",
+    "attempt_count",
   },
   "user_consents": {"recorded_at"},
 }
@@ -351,6 +446,18 @@ EXPECTED_COLUMN_CONTRACTS = {
   "auradin_events.release_manifest_id": {"is_nullable": "NO"},
   "auradin_events.occurred_at": {"is_nullable": "NO"},
   "auradin_events.received_at": {"is_nullable": "NO", "default_contains": "now"},
+  "makeup_recommendation_sessions.user_id": {"is_nullable": "NO"},
+  "makeup_recommendation_sessions.analysis_report_id": {"is_nullable": "NO"},
+  "makeup_recommendation_sessions.idempotency_key": {"is_nullable": "NO"},
+  "makeup_recommendation_sessions.image_mode": {"is_nullable": "NO", "default_contains": "generic"},
+  "makeup_recommendation_reports.context_snapshot": {"is_nullable": "NO"},
+  "makeup_recommendation_reports.schema_version": {
+    "is_nullable": "NO",
+    "default_contains": "makeup-recommendation-v2",
+  },
+  "makeup_recommendation_reports.image_mode": {"is_nullable": "NO", "default_contains": "generic"},
+  "makeup_recommendation_assets.is_private": {"is_nullable": "NO", "default_contains": "false"},
+  "makeup_recommendation_assets.provenance": {"is_nullable": "NO", "default_contains": "{}"},
 }
 
 EXPECTED_CONSTRAINT_CONTRACTS = {
@@ -359,6 +466,15 @@ EXPECTED_CONSTRAINT_CONTRACTS = {
     "norm_training_eligible = false",
     "norm_attestation_id is null",
     " and ",
+  ),
+  "chk_makeup_scenario_library_trend_evidence": (
+    "keyword_kind <> 'trend'",
+    "source_name is not null",
+    "source_url is not null",
+    "source_published_at is not null",
+    "market_scope is not null",
+    "as_of is not null",
+    "expires_at is not null",
   ),
   "chk_auradin_sessions_idempotency_fields": (
     "(client_request_id is null) = (request_fingerprint is null)",
@@ -425,6 +541,10 @@ EXPECTED_TRIGGER_CONTRACTS = {
   ),
 }
 
+FORBIDDEN_CONSTRAINT_FRAGMENTS = {
+  "chk_makeup_scenario_library_trend_evidence": ("review_status = 'approved'",),
+}
+
 # R1 (schema.sql:product-category-brow-v1) — brow가 빠지면 Auradin 브로우 찜이 lip으로 강등된다.
 EXPECTED_ENUM_VALUES = {
   "product_category": {"lip", "cheek", "shadow", "liner", "base", "brow"},
@@ -457,6 +577,41 @@ EXPECTED_INDEX_CONTRACTS = {
     "batch_ordinal",
   ),
   "idx_analysis_lab_sessions_expires": ("expires_at",),
+  "idx_analysis_reports_user_active_analyzed": (
+    "user_id",
+    "analyzed_at",
+    "where (deleted_at is null)",
+  ),
+  "idx_makeup_situations_active_sort": ("status", "sort_order", "key"),
+  "idx_makeup_situation_keywords_discovery": ("situation_id", "status", "sort_order"),
+  "idx_makeup_keyword_question_templates_lookup": (
+    "keyword_id",
+    "locale",
+    "status",
+    "review_status",
+    "template_version",
+  ),
+  "uq_makeup_keyword_question_templates_active_reviewed": (
+    "unique",
+    "keyword_id",
+    "where",
+    "status = 'active'",
+    "review_status = 'approved'",
+  ),
+  "idx_makeup_scenario_library_discovery": ("locale", "keyword_kind", "review_status", "status"),
+  "uq_makeup_scenario_library_locale_scope": (
+    "unique",
+    "normalized_text",
+    "locale",
+    "coalesce",
+    "market_scope",
+  ),
+  "idx_makeup_recommendation_sessions_active": ("user_id", "status", "expires_at"),
+  "uq_makeup_recommendation_reports_session": (
+    "unique",
+    "session_id",
+  ),
+  "idx_makeup_recommendation_assets_report_status": ("report_id", "status", "role"),
   "idx_auradin_search_sessions_expires_at": ("expires_at",),
   "uq_auradin_sessions_owner_client_request": (
     "unique",
@@ -510,6 +665,17 @@ REPORT_LAB_EXPECTED_INDEX_CONTRACTS = {
     "uq_analysis_lab_runs_",
   ))
 }
+
+def _is_legacy_global_keyword_unique_index(definition: str) -> bool:
+  normalized = " ".join(str(definition or "").lower().replace('"', "").split())
+  return bool(
+    re.search(
+      r"\bcreate unique index\b.*\bon (?:public\.)?makeup_scenario_library"
+      r"(?: using [a-z0-9_]+)? \(normalized_text\)(?:\s|$)",
+      normalized,
+    ),
+  )
+
 
 async def fetch_table_names(connection: asyncpg.Connection) -> set[str]:
   rows = await connection.fetch(
@@ -680,14 +846,24 @@ def build_schema_report(
     if isinstance(constraints, dict):
       for name, fragments in EXPECTED_CONSTRAINT_CONTRACTS.items():
         definition = constraints.get(name, "")
-        if definition and any(fragment not in definition for fragment in fragments):
+        forbidden = FORBIDDEN_CONSTRAINT_FRAGMENTS.get(name, ())
+        if definition and (
+          any(fragment not in definition for fragment in fragments)
+          or any(fragment in definition for fragment in forbidden)
+        ):
           invalid_constraints.append(name)
   invalid_indexes = []
+  legacy_global_unique_indexes = []
   if indexes is not None:
     for name, fragments in EXPECTED_INDEX_CONTRACTS.items():
       definition = indexes.get(name, "")
       if not definition or any(fragment not in definition for fragment in fragments):
         invalid_indexes.append(name)
+    legacy_global_unique_indexes = sorted(
+      name
+      for name, definition in indexes.items()
+      if _is_legacy_global_keyword_unique_index(definition)
+    )
   invalid_triggers = []
   if triggers is not None:
     for name, fragments in EXPECTED_TRIGGER_CONTRACTS.items():
@@ -722,6 +898,7 @@ def build_schema_report(
       invalid_constraints,
       invalid_indexes,
       invalid_triggers,
+      legacy_global_unique_indexes,
       missing_enum_values,
       missing_table_constraints,
     )),
@@ -738,6 +915,7 @@ def build_schema_report(
     "invalidConstraints": sorted(invalid_constraints),
     "invalidIndexes": sorted(invalid_indexes),
     "invalidTriggers": sorted(invalid_triggers),
+    "legacyGlobalUniqueIndexes": legacy_global_unique_indexes,
     "expectedConstraints": {table: sorted(constraints) for table, constraints in EXPECTED_CONSTRAINTS.items()},
     "missingTableConstraints": missing_table_constraints,
     "appliedVersions": sorted(applied_versions),
@@ -903,6 +1081,7 @@ def format_schema_report(report: dict[str, object]) -> str:
   invalid_column_contracts = report["invalidColumnContracts"]
   missing_constraints = report["missingConstraints"]
   invalid_indexes = report["invalidIndexes"]
+  legacy_global_unique_indexes = report["legacyGlobalUniqueIndexes"]
   invalid_constraints = report["invalidConstraints"]
   invalid_triggers = report["invalidTriggers"]
   missing_versions = report["missingVersions"]
@@ -954,6 +1133,9 @@ def format_schema_report(report: dict[str, object]) -> str:
   if invalid_triggers:
     lines.append("Missing or invalid triggers:")
     lines.extend(f"- {name}" for name in invalid_triggers)
+  if legacy_global_unique_indexes:
+    lines.append("Legacy global keyword unique indexes that must be removed:")
+    lines.extend(f"- {name}" for name in legacy_global_unique_indexes)
 
   if not any((
     missing_tables,
@@ -966,6 +1148,7 @@ def format_schema_report(report: dict[str, object]) -> str:
     invalid_constraints,
     invalid_indexes,
     invalid_triggers,
+    legacy_global_unique_indexes,
     missing_table_constraints,
   )):
     lines.append("All expected tables and migration markers are present.")

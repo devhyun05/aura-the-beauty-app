@@ -781,7 +781,13 @@ export function FaceAnalysisReportDetailRouteScreen({
           analysisReport={selectedFaceAnalysisReport}
           bottomOverlayHeight={getFaceAnalysisReportFooterReservedHeight(footerBottomInset)}
           capturedPhotoUri={selectedFaceCapture?.imageUri}
-          onCreateARFilter={() => navigation.navigate('MakeupRecommendation')}
+          onCreateARFilter={() => {
+            if (currentReportId) {
+              navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
+              return;
+            }
+            navigation.navigate('MakeupRecommendation');
+          }}
           onDeleteReport={handleDeleteReport}
           onHeaderShareActionChange={handleHeaderShareActionChange}
           onPressProducts={reportId =>

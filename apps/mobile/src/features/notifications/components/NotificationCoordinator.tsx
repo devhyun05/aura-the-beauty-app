@@ -1,10 +1,11 @@
 import {useCallback, useEffect, useRef} from 'react';
-import * as Notifications from 'expo-notifications';
+import type {NotificationResponse} from 'expo-notifications';
 
 import {useAuthSession} from '../../auth';
 import {
   deleteAppNotification,
   getBackgroundReportNotificationsEnabled,
+  getExpoNotificationsModule,
   markAppNotificationRead,
   notifyNotificationStateChanged,
   registerForReportNotifications,
@@ -17,15 +18,6 @@ import {
 } from '../types';
 
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-
 type NotificationCoordinatorProps = {
   onOpenNotification: (data: AppNotificationData) => void;
   shouldSuppressRealtimeNotification?: (
@@ -34,7 +26,7 @@ type NotificationCoordinatorProps = {
 };
 
 function readNotificationData(
-  response: Notifications.NotificationResponse,
+  response: NotificationResponse,
 ): AppNotificationData {
   return normalizeAppNotificationData(
     response.notification.request.content.data,
@@ -46,12 +38,12 @@ export function NotificationCoordinator({
   shouldSuppressRealtimeNotification,
 }: NotificationCoordinatorProps) {
   const {getAuthToken, isRestoringSession, session} = useAuthSession();
-  const pendingResponseRef = useRef<Notifications.NotificationResponse | null>(null);
+  const pendingResponseRef = useRef<NotificationResponse | null>(null);
   const handledResponseIds = useRef(new Set<string>());
   const realtimeNotificationIds = useRef(new Set<string>());
 
   const handleResponse = useCallback(
-    (response: Notifications.NotificationResponse) => {
+    (response: NotificationResponse) => {
       const responseId = response.notification.request.identifier;
       if (handledResponseIds.current.has(responseId)) {
         return;
@@ -148,21 +140,50 @@ export function NotificationCoordinator({
   ]);
 
   useEffect(() => {
-    const receivedSubscription = Notifications.addNotificationReceivedListener(() => {
-      notifyNotificationStateChanged();
-    });
-    const responseSubscription =
-      Notifications.addNotificationResponseReceivedListener(handleResponse);
+    let isActive = true;
+    let removeReceivedListener: (() => void) | null = null;
+    let removeResponseListener: (() => void) | null = null;
 
-    void Notifications.getLastNotificationResponseAsync().then(response => {
-      if (response) {
-        handleResponse(response);
-      }
-    });
+    void getExpoNotificationsModule()
+      .then(Notifications => {
+        if (!isActive || !Notifications) {
+          return;
+        }
+
+        Notifications.setNotificationHandler({
+          handleNotification: async () => ({
+            shouldPlaySound: true,
+            shouldSetBadge: true,
+            shouldShowBanner: true,
+            shouldShowList: true,
+          }),
+        });
+
+        const receivedSubscription =
+          Notifications.addNotificationReceivedListener(() => {
+            notifyNotificationStateChanged();
+          });
+        const responseSubscription =
+          Notifications.addNotificationResponseReceivedListener(handleResponse);
+        removeReceivedListener = () => receivedSubscription.remove();
+        removeResponseListener = () => responseSubscription.remove();
+
+        void Notifications.getLastNotificationResponseAsync().then(response => {
+          if (isActive && response) {
+            handleResponse(response);
+          }
+        });
+      })
+      .catch(error => {
+        console.info('[aura:notifications] native listeners skipped', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
 
     return () => {
-      receivedSubscription.remove();
-      responseSubscription.remove();
+      isActive = false;
+      removeReceivedListener?.();
+      removeResponseListener?.();
     };
   }, [handleResponse, session]);
 

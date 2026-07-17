@@ -3,7 +3,7 @@ import asyncio
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query
 
 from app.core.responses import success
 from app.core.errors import AppError
@@ -12,8 +12,12 @@ from app.core.settings import Settings, get_settings
 from app.db.session import Database, require_database
 from app.schemas.makeup_recommendation import (
   MakeupQuestionRequest,
+  MakeupRecommendationEventRequest,
   MakeupRecommendationGenerate,
+  MakeupRecommendationImageRetryRequest,
   MakeupRecommendationRefinementRequest,
+  MakeupRecommendationSessionAnswer,
+  MakeupRecommendationSessionCreate,
   MakeupRecommendationRequest,
   MakeupScenarioRequest,
 )
@@ -22,18 +26,55 @@ from app.services.makeup_recommendation import (
   enforce_scenario_generation_limit,
   generate_questions,
   generate_recommendation,
+  generate_recommendation_v2,
   generate_shared_scenarios,
 )
-from app.services.makeup_recommendation_image import generate_recommendation_images
+from app.services.makeup_recommendation_image import (
+  PersonalizedImageInput,
+  generate_recommendation_images,
+)
 from app.services.ai_job_queue import AIJobQueuePublisher
-from app.services.openai_analysis import OpenAIAnalysisService
+from app.services.makeup_recommendation_prompt import adapt_v1_recommendation
+from app.services.makeup_recommendation_products import enrich_makeup_recommendation_products
+from app.services.makeup_recommendation_session import (
+  answer_session,
+  begin_generation,
+  complete_generation,
+  create_session,
+  fail_generation,
+  get_owned_session,
+  session_response,
+)
+from app.services.makeup_trends import curated_fallback_discovery, fetch_discovery, fetch_source_report_projections
 from app.services.push_notifications import create_and_send_notification
+from app.services.s3 import S3Service
 from app.services.users import ensure_user
 
 
 router = APIRouter(prefix="/makeup-recommendations", tags=["makeup-recommendations"])
 logger = logging.getLogger(__name__)
 
+
+def _require_makeup_v2(settings: Settings) -> None:
+  if not settings.makeup_recommendation_v2_enabled:
+    raise AppError(404, "MAKEUP_RECOMMENDATION_V2_DISABLED", "Makeup recommendation V2 is disabled.")
+
+
+def _require_makeup_v1_compat(settings: Settings) -> None:
+  if not settings.makeup_recommendation_v1_compat_enabled:
+    raise AppError(410, "MAKEUP_RECOMMENDATION_V1_DISABLED", "Legacy makeup recommendation generation is disabled.")
+
+@router.post("/events")
+async def record_makeup_recommendation_event(
+  payload: MakeupRecommendationEventRequest,
+  _auth: AuthContext = Depends(get_current_user),
+) -> dict:
+  metadata = payload.metadata.model_dump(by_alias=True, exclude_none=True)
+  logger.info(
+    "makeup_recommendation_event",
+    extra={"event_name": payload.event_name, "event_metadata": metadata},
+  )
+  return success({"accepted": True})
 
 def _json_value(value, fallback):
   if isinstance(value, str):
@@ -44,14 +85,375 @@ def _json_value(value, fallback):
   return value if isinstance(value, type(fallback)) else fallback
 
 
-def _recommendation_report_response(report: dict) -> dict:
+async def _recommendation_report_response(
+  report: dict,
+  *,
+  db: Database | None = None,
+  settings: Settings | None = None,
+) -> dict:
+  recommendation = _json_value(report.get("recommendation"), {})
+  schema_version = str(report.get("schema_version") or "makeup-recommendation-v1")
+  if schema_version == "makeup-recommendation-v2":
+    recommendation = adapt_v1_recommendation(recommendation)
+  assets: list[dict] = []
+  if schema_version == "makeup-recommendation-v2" and db is not None:
+    assets = await db.fetch(
+      """
+      select look_id, role, status, image_url, image_error, storage_bucket,
+             object_key, content_type, is_private, input_media_id, model_id, prompt_version,
+             provenance
+      from makeup_recommendation_assets
+      where report_id = $1
+      order by case role when 'anchor' then 1 when 'bold' then 2 else 3 end
+      """,
+      report["id"],
+    )
+    assets_by_look = {str(asset.get("look_id") or ""): dict(asset) for asset in assets}
+    response_looks: list[dict] = []
+    for look in recommendation.get("looks", []):
+      if not isinstance(look, dict):
+        continue
+      look_id = str(look.get("id") or look.get("role") or "")
+      asset = assets_by_look.get(look_id)
+      if asset is None:
+        response_looks.append(look)
+        continue
+      delivery_url = str(asset.get("image_url") or "") or None
+      if (
+        asset.get("is_private")
+        and asset.get("status") == "completed"
+        and asset.get("storage_bucket")
+        and asset.get("object_key")
+        and settings is not None
+      ):
+        delivery_url = S3Service(settings).create_presigned_download(
+          bucket=str(asset["storage_bucket"]),
+          object_key=str(asset["object_key"]),
+          expires_in=settings.makeup_private_url_ttl_seconds,
+        )
+      image_asset = {
+        "imageUrl": delivery_url,
+        "contentType": asset.get("content_type"),
+        "isPrivate": bool(asset.get("is_private")),
+        "inputMediaId": str(asset.get("input_media_id") or "") or None,
+        "modelId": asset.get("model_id"),
+        "promptVersion": asset.get("prompt_version"),
+        "provenance": _json_value(asset.get("provenance"), {}),
+      }
+      response_look = {
+        **look,
+        "imageStatus": str(asset.get("status") or "pending"),
+        "imageAsset": image_asset,
+      }
+      if delivery_url:
+        response_look["imageUrl"] = delivery_url
+      else:
+        response_look.pop("imageUrl", None)
+      if asset.get("image_error"):
+        response_look["imageError"] = str(asset["image_error"])
+      response_looks.append(response_look)
+    recommendation = {**recommendation, "looks": response_looks}
+
+  context_snapshot = _json_value(report.get("context_snapshot"), {})
+  analysis_context = (
+    context_snapshot.get("analysisReport")
+    if isinstance(context_snapshot.get("analysisReport"), dict)
+    else None
+  )
+  if analysis_context is not None and "sourceMediaId" in analysis_context:
+    context_snapshot = {
+      **context_snapshot,
+      "analysisReport": {
+        key: value
+        for key, value in analysis_context.items()
+        if key != "sourceMediaId"
+      },
+    }
   return {
     **report,
+    "schema_version": schema_version,
     "scenario_tags": _json_value(report.get("scenario_tags"), []),
     "questions": _json_value(report.get("questions"), []),
     "answers": _json_value(report.get("answers"), []),
-    "recommendation": _json_value(report.get("recommendation"), {}),
+    "context_snapshot": context_snapshot,
+    "recommendation": recommendation,
+    "recommendation_v2": adapt_v1_recommendation(recommendation),
+    "assets": [
+      {
+        "lookId": str(asset.get("look_id") or ""),
+        "role": str(asset.get("role") or ""),
+        "status": str(asset.get("status") or "pending"),
+        "isPrivate": bool(asset.get("is_private")),
+      }
+      for asset in assets
+    ],
   }
+
+async def _personalized_source_input(
+  db: Database,
+  settings: Settings,
+  report: dict,
+  user_id: UUID,
+) -> PersonalizedImageInput | None:
+  context = _json_value(report.get("context_snapshot"), {})
+  image_context = context.get("image") if isinstance(context.get("image"), dict) else {}
+  if not image_context.get("personalizedConsent"):
+    return None
+  source_report_id = report.get("source_analysis_report_id")
+  if source_report_id is None:
+    return None
+  media = await db.fetchrow(
+    """
+    select media.id, media.owner_user_id, media.bucket, media.object_key,
+           media.content_type, media.original_filename
+    from analysis_reports analysis
+    join media_assets media
+      on media.id = analysis.source_media_id
+     and media.owner_user_id = analysis.user_id
+     and media.status = 'active'
+     and media.deleted_at is null
+    where analysis.id = $1 and analysis.user_id = $2
+      and analysis.status = 'completed'
+    """,
+    source_report_id,
+    user_id,
+  )
+  if media is None or not media.get("bucket") or not media.get("object_key"):
+    return None
+  try:
+    s3 = S3Service(settings)
+    s3.assert_managed_media_location(bucket=str(media["bucket"]), object_key=str(media["object_key"]))
+    content, detected_content_type = await asyncio.to_thread(
+      s3.get_object_bytes,
+      bucket=str(media["bucket"]),
+      object_key=str(media["object_key"]),
+      max_bytes=20 * 1024 * 1024,
+    )
+  except Exception:
+    logger.exception(
+      "[aura:makeup-recommendation] personalized-source:read-failed reportId=%s",
+      report.get("id"),
+    )
+    return None
+  return PersonalizedImageInput(
+    media_id=media["id"],
+    owner_user_id=media["owner_user_id"],
+    requested_user_id=user_id,
+    content=content,
+    content_type=str(media.get("content_type") or detected_content_type),
+    consent=True,
+    filename=str(media.get("original_filename") or "source.jpg"),
+  )
+
+def _merge_generated_looks(
+  looks: list[dict],
+  generated_looks: list[dict],
+) -> list[dict]:
+  generated_by_id = {
+    str(look.get("id") or look.get("role") or ""): look
+    for look in generated_looks
+    if isinstance(look, dict)
+  }
+  return [
+    generated_by_id.get(str(look.get("id") or look.get("role") or ""), look)
+    for look in looks
+    if isinstance(look, dict)
+  ]
+
+
+async def _persist_v2_image_assets(
+  db: Database,
+  report_id: UUID,
+  looks: list[dict],
+  *,
+  generation_attempt: int,
+) -> bool:
+  persisted_any = False
+  for look in looks:
+    look_id = str(look.get("id") or look.get("role") or "")
+    if not look_id:
+      continue
+    asset = look.get("imageAsset") if isinstance(look.get("imageAsset"), dict) else {}
+    status = str(look.get("imageStatus") or "pending")
+    persisted = await db.fetchrow(
+      """
+      update makeup_recommendation_assets
+      set role = $3,
+        status = $4,
+        image_url = $5,
+        image_error = $6,
+        storage_bucket = $7,
+        object_key = $8,
+        content_type = $9,
+        is_private = $10,
+        input_media_id = $11,
+        model_id = $12,
+        prompt_version = $13,
+        provenance = case
+          when $14::jsonb = '{}'::jsonb then provenance
+          else $14::jsonb
+        end,
+        completed_at = case when $4 = 'completed' then now() else null end,
+        updated_at = now()
+      where report_id = $1 and look_id = $2
+        and attempt_count = $15
+        and status = 'processing'
+      returning look_id
+      """,
+      report_id,
+      look_id,
+      str(look.get("role") or look_id),
+      status,
+      asset.get("imageUrl") if not asset.get("isPrivate") else None,
+      str(look.get("imageError") or "") or None,
+      asset.get("storageBucket"),
+      asset.get("objectKey"),
+      asset.get("contentType"),
+      bool(asset.get("isPrivate")),
+      asset.get("inputMediaId"),
+      asset.get("modelId"),
+      asset.get("promptVersion"),
+      json.dumps(asset.get("provenance") if isinstance(asset.get("provenance"), dict) else {}),
+      generation_attempt,
+    )
+    if persisted is not None:
+      persisted_any = True
+  return persisted_any
+
+
+async def _initialize_v2_image_assets(
+  db: Database,
+  report_id: UUID,
+  recommendation: dict,
+  model_id: str,
+  image_mode: str = "generic",
+) -> None:
+  await db.execute(
+    """
+    insert into makeup_recommendation_assets
+      (report_id, look_id, role, status, model_id, prompt_version, provenance)
+    select $1,
+           coalesce(nullif(look->>'id', ''), look->>'role'),
+           look->>'role',
+           'pending',
+           $3,
+           'makeup-image-v2',
+           jsonb_build_object(
+             'modelId', $3,
+             'promptVersion', 'makeup-image-v2',
+             'consentStatus', case when $4::text = 'personalized' then 'pending-verification' else 'not-required' end,
+             'rightsStatus', case when $4::text = 'personalized' then 'pending-verification' else 'synthetic-reference' end,
+             'sourceMediaId', null
+           )
+    from jsonb_array_elements(coalesce($2::jsonb->'looks', '[]'::jsonb)) as look
+    where look->>'role' = 'anchor'
+    on conflict (report_id, look_id) do nothing
+    """,
+    report_id,
+    json.dumps(recommendation, ensure_ascii=False),
+    model_id,
+    image_mode,
+  )
+
+
+def _aggregate_v2_image_state(looks: list[dict]) -> tuple[str, str | None, str | None]:
+  statuses = [str(look.get("imageStatus") or "pending") for look in looks if isinstance(look, dict)]
+  if statuses and all(status == "completed" for status in statuses):
+    status = "completed"
+  elif any(status == "completed" for status in statuses) and any(status == "failed" for status in statuses):
+    status = "partial"
+  elif any(status == "failed" for status in statuses):
+    status = "failed"
+  elif any(status == "processing" for status in statuses):
+    status = "processing"
+  else:
+    status = "pending"
+  image_url = next(
+    (
+      str(look.get("imageUrl"))
+      for look in looks
+      if isinstance(look, dict) and look.get("role") == "anchor" and look.get("imageUrl")
+    ),
+    None,
+  )
+  error = next(
+    (
+      str(look.get("imageError"))
+      for look in looks
+      if isinstance(look, dict) and look.get("imageError")
+    ),
+    None,
+  )
+  return status, image_url, error
+
+
+async def _notify_makeup_recommendation_completed(
+  db: Database,
+  settings: Settings,
+  *,
+  report_id: UUID,
+  user_id: UUID,
+) -> None:
+  await create_and_send_notification(
+    db,
+    settings,
+    user_id=user_id,
+    notification_type="makeup_recommendation_completed",
+    title="추천 메이크업이 완성됐어요",
+    body="가장 잘 어울리는 메이크업 결과를 확인해 보세요.",
+    data={
+      "reportId": str(report_id),
+      "route": "MakeupRecommendation",
+    },
+    dedupe_key=f"makeup-recommendation:{report_id}:completed",
+  )
+
+
+async def _refresh_v2_report_image_state(db: Database, report_id: UUID) -> str:
+  assets = await db.fetch(
+    """
+    select role, status, image_url, image_error
+    from makeup_recommendation_assets
+    where report_id = $1 and role = 'anchor'
+    """,
+    report_id,
+  )
+  state_looks = [
+    {
+      "role": str(asset.get("role") or ""),
+      "imageStatus": str(asset.get("status") or "pending"),
+      "imageUrl": asset.get("image_url"),
+      "imageError": asset.get("image_error"),
+    }
+    for asset in assets
+  ]
+  status, image_url, image_error = _aggregate_v2_image_state(state_looks)
+  await db.execute(
+    """
+    update makeup_recommendation_reports
+    set image_status = case
+          when image_status in ('completed', 'partial', 'failed') and $2 = 'processing'
+            then image_status
+          else $2
+        end,
+        image_url = case
+          when $2 = 'processing' and $3::text is null then image_url
+          else $3::text
+        end,
+        image_error = case
+          when image_status in ('completed', 'partial', 'failed') and $2 = 'processing'
+            then image_error
+          else $4::text
+        end,
+        updated_at = now()
+    where id = $1
+    """,
+    report_id,
+    status,
+    image_url,
+    image_error,
+  )
+  return status
 
 
 async def run_recommendation_image_job(
@@ -60,41 +462,273 @@ async def run_recommendation_image_job(
   settings: Settings,
   *,
   db: Database,
+  look_id: str | None = None,
 ) -> None:
-  report = await db.fetchrow(
-    """
-    update makeup_recommendation_reports
-    set image_status = 'processing', image_error = null, updated_at = now()
-    where id = $1 and user_id = $2
-      and (
-        image_status = 'pending'
-        or (image_status = 'processing' and updated_at < now() - interval '15 minutes')
+  claimed_attempts: dict[str, int] = {}
+  if look_id is None:
+    report = await db.fetchrow(
+      """
+      update makeup_recommendation_reports
+      set image_status = 'processing', image_error = null, updated_at = now()
+      where id = $1 and user_id = $2
+        and (
+          image_status = 'pending'
+          or (image_status = 'processing' and updated_at < now() - interval '15 minutes')
+        )
+      returning id, user_id, scenario_text, recommendation, image_status,
+                schema_version, image_mode, context_snapshot, source_analysis_report_id
+      """,
+      report_id,
+      user_id,
+    )
+  else:
+    report = await db.fetchrow(
+      """
+      select id, user_id, scenario_text, recommendation, image_status,
+             schema_version, image_mode, context_snapshot, source_analysis_report_id
+      from makeup_recommendation_reports
+      where id = $1 and user_id = $2
+      """,
+      report_id,
+      user_id,
+    )
+    if report is not None:
+      claimed_asset = await db.fetchrow(
+        """
+        update makeup_recommendation_assets
+        set status = 'processing', image_error = null,
+            attempt_count = attempt_count + 1, last_attempt_at = now(), updated_at = now()
+        where report_id = $1 and look_id = $2
+          and role = 'anchor'
+          and (
+            status = 'pending'
+            or status = 'failed'
+            or (status = 'processing' and updated_at < now() - interval '15 minutes')
+          )
+        returning id, look_id, attempt_count
+        """,
+        report_id,
+        look_id,
       )
-    returning id, user_id, scenario_text, recommendation, image_status
-    """,
-    report_id,
-    user_id,
-  )
+      if claimed_asset is None:
+        return
+      claimed_attempts[str(claimed_asset["look_id"])] = int(
+        claimed_asset["attempt_count"],
+      )
+      await db.execute(
+        "update makeup_recommendation_reports set image_status = 'processing', image_error = null, updated_at = now() where id = $1 and user_id = $2",
+        report_id,
+        user_id,
+      )
   if report is None:
     return
-  try:
-    recommendation = report.get("recommendation")
-    if isinstance(recommendation, str):
-      recommendation = json.loads(recommendation)
-    looks = recommendation.get("looks") if isinstance(recommendation, dict) else None
-    if not isinstance(looks, list) or len(looks) != 3:
-      raise AppError(502, "MAKEUP_RECOMMENDATION_LOOKS_INVALID", "The recommendation does not contain three looks.")
-    generated_looks = await generate_recommendation_images(
-      settings,
+
+  recommendation = _json_value(report.get("recommendation"), {})
+  looks = recommendation.get("looks") if isinstance(recommendation, dict) else None
+  if not isinstance(looks, list) or len(looks) != 3:
+    error = AppError(502, "MAKEUP_RECOMMENDATION_LOOKS_INVALID", "The recommendation does not contain three looks.")
+    await db.execute(
+      "update makeup_recommendation_reports set image_status = 'failed', image_error = $2, updated_at = now() where id = $1",
       report_id,
-      str(report.get("scenario_text") or ""),
-      looks,
+      error.message,
     )
-    completed_recommendation = {**recommendation, "looks": generated_looks}
-    image_url = str(generated_looks[0].get("imageUrl") or "")
+    return
+
+  is_v2 = str(report.get("schema_version") or "") == "makeup-recommendation-v2"
+  context_snapshot = _json_value(report.get("context_snapshot"), {})
+  profile = context_snapshot.get("profile") if isinstance(context_snapshot.get("profile"), dict) else {}
+  profile_presentation = str(profile.get("presentation") or "neutral")
+  if profile_presentation not in {"feminine", "masculine", "neutral"}:
+    profile_presentation = "neutral"
+  try:
+    if not is_v2:
+      generated_looks = await generate_recommendation_images(
+        settings,
+        report_id,
+        str(report.get("scenario_text") or ""),
+        looks,
+      )
+      completed_recommendation = {**recommendation, "looks": generated_looks}
+      image_url = str(generated_looks[0].get("imageUrl") or "")
+      completed_report = await db.fetchrow(
+        """
+        update makeup_recommendation_reports
+        set image_status = 'completed', recommendation = $2::jsonb, image_url = $3, image_error = null
+        where id = $1 and image_status = 'processing'
+        returning user_id
+        """,
+        report_id,
+        json.dumps(completed_recommendation, ensure_ascii=False),
+        image_url,
+      )
+      if completed_report is not None:
+        await _notify_makeup_recommendation_completed(
+          db,
+          settings,
+          report_id=report_id,
+          user_id=completed_report["user_id"],
+        )
+      return
+
+    if look_id is None:
+      claimed_assets = await db.fetch(
+        """
+        update makeup_recommendation_assets
+        set status = 'processing', image_error = null,
+            attempt_count = attempt_count + 1, last_attempt_at = now(), updated_at = now()
+        where report_id = $1
+          and role = 'anchor'
+          and (
+            status in ('pending', 'failed', 'completed')
+            or (status = 'processing' and updated_at < now() - interval '15 minutes')
+          )
+        returning look_id, attempt_count
+        """,
+        report_id,
+      )
+      claimed_attempts = {
+        str(asset["look_id"]): int(asset["attempt_count"])
+        for asset in claimed_assets
+      }
+      if not claimed_attempts:
+        await _refresh_v2_report_image_state(db, report_id)
+        return
+
+    requested_image_mode = str(report.get("image_mode") or "generic")
+    image_mode = requested_image_mode
+    source_image = None
+    if requested_image_mode == "personalized":
+      if settings.makeup_personalized_image_enabled:
+        source_image = await _personalized_source_input(db, settings, report, user_id)
+      if source_image is None:
+        image_mode = "generic"
+        logger.warning(
+          "[aura:makeup-recommendation] personalized-source:fallback-generic reportId=%s",
+          report_id,
+        )
+        await db.execute(
+          "update makeup_recommendation_reports set image_mode = 'generic', updated_at = now() where id = $1 and user_id = $2",
+          report_id,
+          user_id,
+        )
+
+    ordered_looks = sorted(
+      [
+        look
+        for look in looks
+        if isinstance(look, dict)
+        and str(look.get("id") or look.get("role") or "") in claimed_attempts
+      ],
+      key=lambda look: (
+        ("anchor", "bold", "discovery").index(str(look.get("role")))
+        if str(look.get("role")) in {"anchor", "bold", "discovery"}
+        else 3
+      ),
+    )
+
+    async def generate_and_persist(current_look: dict, generation_attempt: int) -> None:
+      stable_look_id = str(current_look.get("id") or current_look.get("role") or "")
+      try:
+        generated = await generate_recommendation_images(
+          settings,
+          report_id,
+          str(report.get("scenario_text") or ""),
+          looks,
+          image_mode=image_mode,
+          source_image=source_image,
+          look_id=stable_look_id,
+          continue_on_error=True,
+          generation_attempt=generation_attempt,
+          profile_presentation=profile_presentation,
+        )
+      except Exception as exc:
+        message = exc.message if isinstance(exc, AppError) else "Recommendation image generation failed."
+        generated = [
+          {
+            **current_look,
+            "imageStatus": "failed",
+            "imageError": message,
+            "imageAsset": {
+              "imageUrl": None,
+              "isPrivate": image_mode == "personalized",
+              "inputMediaId": str(source_image.media_id) if source_image else None,
+              "modelId": settings.openai_image_model_id,
+              "promptVersion": "makeup-image-v2",
+              "lookId": stable_look_id,
+            },
+          },
+        ]
+      await _persist_v2_image_assets(
+        db,
+        report_id,
+        generated,
+        generation_attempt=generation_attempt,
+      )
+      await _refresh_v2_report_image_state(db, report_id)
+
+    if look_id is not None:
+      selected = [
+        look
+        for look in ordered_looks
+        if str(look.get("id") or look.get("role") or "") == look_id
+      ]
+      if not selected:
+        raise AppError(404, "MAKEUP_LOOK_NOT_FOUND", "The requested recommendation look was not found.")
+      await generate_and_persist(selected[0], claimed_attempts[look_id])
+    else:
+      if ordered_looks:
+        first_look_id = str(
+          ordered_looks[0].get("id") or ordered_looks[0].get("role") or "",
+        )
+        await generate_and_persist(
+          ordered_looks[0], claimed_attempts[first_look_id],
+        )
+      if len(ordered_looks) > 1:
+        await asyncio.gather(
+          *(
+            generate_and_persist(
+              look,
+              claimed_attempts[
+                str(look.get("id") or look.get("role") or "")
+              ],
+            )
+            for look in ordered_looks[1:]
+          ),
+        )
+
+    final_status = await _refresh_v2_report_image_state(db, report_id)
+    if final_status == "completed":
+      await _notify_makeup_recommendation_completed(
+        db,
+        settings,
+        report_id=report_id,
+        user_id=user_id,
+      )
   except Exception as exc:
     message = exc.message if isinstance(exc, AppError) else "Recommendation image generation failed."
-    logger.exception("[aura:makeup-recommendation] image:failed reportId=%s", report_id)
+    logger.exception(
+      "[aura:makeup-recommendation] image:failed reportId=%s lookId=%s",
+      report_id,
+      look_id,
+    )
+    if is_v2:
+      for claimed_look_id, generation_attempt in claimed_attempts.items():
+        await db.fetchrow(
+          """
+          update makeup_recommendation_assets
+          set status = 'failed', image_error = $3, updated_at = now()
+          where report_id = $1 and look_id = $2
+            and attempt_count = $4
+            and status = 'processing'
+          returning look_id
+          """,
+          report_id,
+          claimed_look_id,
+          message,
+          generation_attempt,
+        )
+      await _refresh_v2_report_image_state(db, report_id)
+      return
     await db.execute(
       """
       update makeup_recommendation_reports
@@ -105,31 +739,6 @@ async def run_recommendation_image_job(
       message,
     )
     return
-  completed_report = await db.fetchrow(
-    """
-    update makeup_recommendation_reports
-    set image_status = 'completed', recommendation = $2::jsonb, image_url = $3, image_error = null
-    where id = $1 and image_status = 'processing'
-    returning user_id
-    """,
-    report_id,
-    json.dumps(completed_recommendation, ensure_ascii=False),
-    image_url,
-  )
-  if completed_report is not None:
-    await create_and_send_notification(
-      db,
-      settings,
-      user_id=completed_report["user_id"],
-      notification_type="makeup_recommendation_completed",
-      title="추천 메이크업이 완성됐어요",
-      body="가장 잘 어울리는 메이크업 결과를 확인해 보세요.",
-      data={
-        "reportId": str(report_id),
-        "route": "MakeupRecommendation",
-      },
-      dedupe_key=f"makeup-recommendation:{report_id}:completed",
-    )
 
 
 async def dispatch_recommendation_image_job(
@@ -139,10 +748,11 @@ async def dispatch_recommendation_image_job(
   report_id: UUID,
   user_id: UUID,
   settings: Settings,
+  look_id: str | None = None,
 ) -> str:
   execution_mode = settings.ai_job_execution_mode_normalized
   if execution_mode == "inline":
-    background_tasks.add_task(run_recommendation_image_job, report_id, user_id, settings, db=db)
+    background_tasks.add_task(run_recommendation_image_job, report_id, user_id, settings, db=db, look_id=look_id)
     return "pending"
   try:
     if execution_mode != "sqs":
@@ -153,7 +763,7 @@ async def dispatch_recommendation_image_job(
         {"executionMode": execution_mode},
       )
     publisher = AIJobQueuePublisher(settings)
-    await asyncio.to_thread(publisher.publish_makeup_recommendation_job, report_id, user_id)
+    await asyncio.to_thread(publisher.publish_makeup_recommendation_job, report_id, user_id, look_id)
     return "pending"
   except Exception as exc:
     message = exc.message if isinstance(exc, AppError) else "Recommendation image job dispatch failed."
@@ -161,6 +771,18 @@ async def dispatch_recommendation_image_job(
     await db.execute(
       "update makeup_recommendation_reports set image_status = 'failed', image_error = $2 where id = $1",
       report_id,
+      message,
+    )
+    await db.execute(
+      """
+      update makeup_recommendation_assets
+      set status = 'failed', image_error = $3, updated_at = now()
+      where report_id = $1
+        and ($2::text is null or look_id = $2)
+        and status = 'pending'
+      """,
+      report_id,
+      look_id,
       message,
     )
     return "failed"
@@ -173,6 +795,7 @@ async def create_scenarios(
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
 ) -> dict:
+  _require_makeup_v1_compat(settings)
   user = await ensure_user(db, auth)
   await enforce_scenario_generation_limit(db, user["id"])
   return success(await generate_shared_scenarios(settings, db, payload.count, payload.exclude_texts, user["id"]))
@@ -180,6 +803,7 @@ async def create_scenarios(
 
 @router.post("/questions")
 async def create_questions(payload: MakeupQuestionRequest, settings: Settings = Depends(get_settings), _: AuthContext = Depends(get_current_user)) -> dict:
+  _require_makeup_v1_compat(settings)
   return success(await generate_questions(settings, payload.scenario_text, payload.scenario_tags, payload.scenario_label))
 
 
@@ -189,12 +813,123 @@ async def generate_makeup_recommendations(
   _auth: AuthContext = Depends(get_current_user),
   settings: Settings = Depends(get_settings),
 ) -> dict:
-  service = OpenAIAnalysisService(settings)
-  result = await service.generate_personalized_makeup_recommendations(
-    payload.model_dump(by_alias=True, exclude_none=True),
+  _require_makeup_v1_compat(settings)
+  raise AppError(
+    410,
+    "MAKEUP_RECOMMENDATION_LEGACY_GENERATE_DEPRECATED",
+    "This OpenAI text-analysis route is deprecated. Use the v2 session flow.",
   )
-  return success(result)
 
+
+@router.get("/discovery")
+async def get_makeup_discovery(
+  settings: Settings = Depends(get_settings),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  _require_makeup_v2(settings)
+  user = await ensure_user(db, auth)
+  discovery = (
+    await fetch_discovery(db)
+    if settings.makeup_trend_keywords_enabled
+    else curated_fallback_discovery()
+  )
+  discovery["sourceReports"] = await fetch_source_report_projections(db, user["id"])
+  return success(discovery)
+
+
+@router.post("/sessions")
+async def create_makeup_recommendation_session(
+  payload: MakeupRecommendationSessionCreate,
+  idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+  settings: Settings = Depends(get_settings),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  _require_makeup_v2(settings)
+  user = await ensure_user(db, auth)
+  return success(
+    await create_session(
+      db,
+      settings,
+      user["id"],
+      payload,
+      idempotency_key,
+      profile_gender=user.get("gender"),
+    ),
+  )
+
+
+@router.get("/sessions/{session_id}")
+async def get_makeup_recommendation_session(
+  session_id: UUID,
+  settings: Settings = Depends(get_settings),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  _require_makeup_v2(settings)
+  user = await ensure_user(db, auth)
+
+
+  return success(session_response(await get_owned_session(db, user["id"], session_id)))
+
+
+@router.post("/sessions/{session_id}/answers")
+async def answer_makeup_recommendation_session(
+  session_id: UUID,
+  payload: MakeupRecommendationSessionAnswer,
+  settings: Settings = Depends(get_settings),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  _require_makeup_v2(settings)
+  user = await ensure_user(db, auth)
+  return success(await answer_session(db, user["id"], session_id, payload))
+
+
+@router.post("/sessions/{session_id}/generate")
+async def generate_makeup_recommendation_session(
+  session_id: UUID,
+  background_tasks: BackgroundTasks,
+  settings: Settings = Depends(get_settings),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  _require_makeup_v2(settings)
+  user = await ensure_user(db, auth)
+  generation = await begin_generation(db, user["id"], session_id)
+  if generation.get("reused"):
+    generation.pop("reused", None)
+    return success(generation)
+
+  session = generation["session"]
+  context = _json_value(session.get("context_snapshot"), {})
+  questions = _json_value(session.get("questions"), [])
+  answers = _json_value(session.get("answers"), [])
+  try:
+    recommendation = await generate_recommendation_v2(settings, context, questions, answers)
+    recommendation = await enrich_makeup_recommendation_products(
+      db,
+      settings,
+      recommendation,
+      context,
+      answers,
+    )
+    result = await complete_generation(db, settings, user["id"], session, recommendation)
+  except Exception:
+    await fail_generation(db, user["id"], session_id)
+    raise
+
+  image_status = await dispatch_recommendation_image_job(
+    db=db,
+    background_tasks=background_tasks,
+    report_id=result["reportId"],
+    user_id=user["id"],
+    settings=settings,
+  )
+  result["imageStatus"] = image_status or result["imageStatus"]
+  result.pop("reused", None)
+  return success(result)
 
 @router.post("")
 async def create_recommendation(
@@ -204,6 +939,7 @@ async def create_recommendation(
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
 ) -> dict:
+  _require_makeup_v1_compat(settings)
   user = await ensure_user(db, auth)
   recommendation = await generate_recommendation(
     settings,
@@ -217,8 +953,8 @@ async def create_recommendation(
     """
     insert into makeup_recommendation_reports
       (user_id, scenario_text, scenario_tags, questions, answers, recommendation,
-       scenario_model_id, question_model_id, recommendation_model_id, image_model_id, prompt_version)
-    values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11)
+       scenario_model_id, question_model_id, recommendation_model_id, image_model_id, prompt_version, schema_version)
+    values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, 'makeup-recommendation-v1')
     returning id
     """,
     user["id"],
@@ -253,7 +989,10 @@ async def list_recommendation_reports(
   user = await ensure_user(db, auth)
   reports = await db.fetch(
     """
-    select id, scenario_text, recommendation, image_status, image_url, image_error, created_at, updated_at
+    select id, scenario_text, recommendation, image_status, image_url, image_error,
+           schema_version, image_mode,
+           context_snapshot #>> '{profile,gender}' as profile_gender,
+           created_at, updated_at
     from makeup_recommendation_reports
     where user_id = $1
     order by created_at desc
@@ -270,11 +1009,70 @@ async def list_recommendation_reports(
 async def retry_recommendation_images(
   report_id: UUID,
   background_tasks: BackgroundTasks,
+  payload: MakeupRecommendationImageRetryRequest | None = None,
   settings: Settings = Depends(get_settings),
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
+  look_id = payload.look_id if payload is not None else None
+  if look_id is not None:
+    asset = await db.fetchrow(
+      """
+      select asset.look_id, asset.status
+      from makeup_recommendation_assets asset
+      join makeup_recommendation_reports report on report.id = asset.report_id
+      where asset.report_id = $1 and asset.look_id = $2 and report.user_id = $3
+      """,
+      report_id,
+      look_id,
+      user["id"],
+    )
+    if asset is None:
+      raise AppError(404, "MAKEUP_LOOK_NOT_FOUND", "The requested recommendation look was not found.")
+    if asset.get("status") == "completed":
+      return success({"reportId": report_id, "lookId": look_id, "imageStatus": "completed"})
+    if asset.get("status") == "pending":
+      raise AppError(409, "MAKEUP_RECOMMENDATION_IMAGE_PENDING", "This look is already waiting to be generated.")
+    claimed_asset = await db.fetchrow(
+      """
+      update makeup_recommendation_assets asset
+      set status = 'pending', image_error = null, updated_at = now()
+      from makeup_recommendation_reports report
+      where asset.report_id = $1 and asset.look_id = $2
+        and report.id = asset.report_id and report.user_id = $3
+        and (
+          asset.status = 'failed'
+          or (asset.status = 'processing' and asset.updated_at < now() - interval '15 minutes')
+        )
+      returning asset.id
+      """,
+      report_id,
+      look_id,
+      user["id"],
+    )
+    if claimed_asset is None:
+      raise AppError(
+        409,
+        "MAKEUP_RECOMMENDATION_IMAGE_PROCESSING",
+        "This look is already being generated.",
+      )
+    image_status = await dispatch_recommendation_image_job(
+      db=db,
+      background_tasks=background_tasks,
+      report_id=report_id,
+      user_id=user["id"],
+      settings=settings,
+      look_id=look_id,
+    )
+    return success(
+      {
+        "reportId": report_id,
+        "lookId": look_id,
+        "imageStatus": image_status or "pending",
+      },
+    )
+
   report = await db.fetchrow(
     "select id, image_status from makeup_recommendation_reports where id = $1 and user_id = $2",
     report_id,
@@ -294,6 +1092,7 @@ async def retry_recommendation_images(
     where id = $1 and user_id = $2
       and (
         image_status = 'failed'
+        or image_status = 'partial'
         or (image_status = 'processing' and updated_at < now() - interval '15 minutes')
       )
     returning id
@@ -314,7 +1113,6 @@ async def retry_recommendation_images(
   )
   return success({"reportId": report_id, "imageStatus": image_status or "pending"})
 
-
 @router.post("/{report_id}/refine")
 async def refine_recommendation_report(
   report_id: UUID,
@@ -327,7 +1125,9 @@ async def refine_recommendation_report(
   user = await ensure_user(db, auth)
   source = await db.fetchrow(
     """
-    select id, scenario_text, scenario_tags, questions, answers, recommendation
+    select id, scenario_text, scenario_tags, questions, answers, recommendation,
+           source_analysis_report_id, situation_id, keyword_id, context_snapshot,
+           schema_version, image_mode
     from makeup_recommendation_reports
     where id = $1 and user_id = $2
     """,
@@ -355,21 +1155,50 @@ async def refine_recommendation_report(
       "previousRecommendation": previous_recommendation,
     },
   ]
-  recommendation = await generate_recommendation(
-    settings,
-    str(source.get("scenario_text") or ""),
-    scenario_tags,
-    questions,
-    refined_answers,
-  )
+  schema_version = str(source.get("schema_version") or "makeup-recommendation-v1")
+  if schema_version == "makeup-recommendation-v2":
+    _require_makeup_v2(settings)
+  else:
+    _require_makeup_v1_compat(settings)
+  if schema_version == "makeup-recommendation-v2":
+    refinement_context = {
+      **_json_value(source.get("context_snapshot"), {}),
+      "refinement": {
+        "type": payload.refinement,
+        "instruction": refinement_instructions[payload.refinement],
+        "previousRecommendation": previous_recommendation,
+      },
+    }
+    recommendation = await generate_recommendation_v2(
+      settings,
+      refinement_context,
+      questions,
+      [
+        *answers,
+        {
+          "refinement": payload.refinement,
+          "instruction": refinement_instructions[payload.refinement],
+        },
+      ],
+    )
+  else:
+    recommendation = await generate_recommendation(
+      settings,
+      str(source.get("scenario_text") or ""),
+      scenario_tags,
+      questions,
+      refined_answers,
+    )
   recommendation = apply_refinement_contract(previous_recommendation, recommendation, payload.refinement)
   row = await db.fetchrow(
     """
     insert into makeup_recommendation_reports
       (user_id, scenario_text, scenario_tags, questions, answers, recommendation,
        scenario_model_id, question_model_id, recommendation_model_id, image_model_id,
-       prompt_version, parent_report_id, refinement_type)
-    values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, $12, $13)
+       prompt_version, parent_report_id, refinement_type, source_analysis_report_id,
+       situation_id, keyword_id, context_snapshot, schema_version, image_mode)
+    values ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8, $9, $10,
+            $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19)
     returning id
     """,
     user["id"],
@@ -385,7 +1214,21 @@ async def refine_recommendation_report(
     "makeup-recommendation-v2",
     report_id,
     payload.refinement,
+    source.get("source_analysis_report_id"),
+    source.get("situation_id"),
+    source.get("keyword_id"),
+    json.dumps(_json_value(source.get("context_snapshot"), {}), ensure_ascii=False, default=str),
+    schema_version,
+    str(source.get("image_mode") or "generic"),
   )
+  if schema_version == "makeup-recommendation-v2":
+    await _initialize_v2_image_assets(
+      db,
+      row["id"],
+      recommendation,
+      settings.openai_image_model_id,
+      str(source.get("image_mode") or "generic"),
+    )
   image_status = await dispatch_recommendation_image_job(
     db=db,
     background_tasks=background_tasks,
@@ -393,12 +1236,29 @@ async def refine_recommendation_report(
     user_id=user["id"],
     settings=settings,
   )
-  return success({"reportId": row["id"], "recommendation": recommendation, "imageStatus": image_status or "pending"})
+  response_recommendation = recommendation
+  if schema_version == "makeup-recommendation-v2":
+    response_recommendation = {
+      **recommendation,
+      "looks": [
+        {**look, "imageStatus": str(look.get("imageStatus") or "pending")}
+        for look in recommendation.get("looks", [])
+        if isinstance(look, dict)
+      ],
+    }
+  return success(
+    {
+      "reportId": row["id"],
+      "recommendation": response_recommendation,
+      "imageStatus": image_status or "pending",
+    },
+  )
 
 
 @router.get("/{report_id}")
 async def get_recommendation_report(
   report_id: UUID,
+  settings: Settings = Depends(get_settings),
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
 ) -> dict:
@@ -406,7 +1266,9 @@ async def get_recommendation_report(
   report = await db.fetchrow(
     """
     select id, scenario_text, scenario_tags, questions, answers, recommendation,
-           image_status, image_url, image_error, created_at, updated_at
+           image_status, image_url, image_error, schema_version, context_snapshot,
+           source_analysis_report_id, session_id, situation_id, keyword_id, image_mode,
+           created_at, updated_at
     from makeup_recommendation_reports
     where id = $1 and user_id = $2
     """,
@@ -415,4 +1277,4 @@ async def get_recommendation_report(
   )
   if report is None:
     raise AppError(404, "MAKEUP_RECOMMENDATION_NOT_FOUND", "The makeup recommendation report was not found.")
-  return success(_recommendation_report_response(report))
+  return success(await _recommendation_report_response(report, db=db, settings=settings))
