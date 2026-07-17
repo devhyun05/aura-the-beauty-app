@@ -15,9 +15,14 @@ import type {FaceGeometryResult} from '../../features/face-geometry/types';
 import type {FaceVerticalThirdsAnalysisPayload} from '../../features/face-ratio/services/faceVerticalThirdsAiPayload';
 import type {FaceVerticalThirdsResult} from '../../features/face-ratio/types';
 import type {
+  FaceAnalysisImpressionNotes,
   FaceAnalysisMakeupCard,
   FaceAnalysisMakeupGuideline,
+  FaceAnalysisRegionNotes,
   FaceAnalysisReport,
+  FaceAnalysisStylingLook,
+  FaceAnalysisStylingLookRowCategory,
+  FaceAnalysisStylingLooks,
 } from '../types/faceAnalysis';
 import {
   buildFaceAnalysisRequestPayload,
@@ -52,6 +57,28 @@ type BackendMakeupCard = {
 
 type BackendMakeupGuideline = Partial<Record<keyof FaceAnalysisMakeupGuideline, string | null>>;
 
+type BackendRegionNotes = Partial<Record<'upper' | 'mid' | 'lower' | 'jaw', string | null>>;
+type BackendImpressionNotes = {
+  overallMood?: string | null;
+  keywords?: string[] | null;
+  paragraph?: string | null;
+};
+type BackendStylingLookRow = {
+  category?: string | null;
+  note?: string | null;
+  why?: string | null;
+};
+type BackendStylingLook = {
+  title?: string | null;
+  subtitle?: string | null;
+  description?: string | null;
+  rows?: BackendStylingLookRow[] | null;
+};
+type BackendStylingLooks = {
+  natural?: BackendStylingLook | null;
+  glam?: BackendStylingLook | null;
+};
+
 type BackendAnalysisResult = {
   avoidedMakeups?: BackendMakeupCard[] | null;
   baseMakeupGuide?: string | null;
@@ -62,6 +89,9 @@ type BackendAnalysisResult = {
   imageGenerationStatus?: string | null;
   recommendedMakeups?: BackendMakeupCard[] | null;
   recommendedMood?: string | null;
+  regionNotes?: BackendRegionNotes | null;
+  impressionNotes?: BackendImpressionNotes | null;
+  stylingLooks?: BackendStylingLooks | null;
   shortSummary?: string | null;
   skinAnalysisSummary?: string | null;
   skinType?: string | null;
@@ -346,6 +376,72 @@ function mergeMakeupGuideline(
   };
 }
 
+const STYLING_LOOK_ROW_CATEGORIES: readonly FaceAnalysisStylingLookRowCategory[] = [
+  'base',
+  'brow',
+  'eyeshadow',
+  'eyeliner',
+  'blush',
+  'lip',
+];
+
+function isStylingLookRowCategory(value: unknown): value is FaceAnalysisStylingLookRowCategory {
+  return (
+    typeof value === 'string' &&
+    (STYLING_LOOK_ROW_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
+// 이 필드들은 구버전 보고서에는 없다(추가 이전 생성분) — 없거나 형태가 깨지면
+// undefined 로 강등해 어댑터가 섹션을 숨기게 한다(지어내지 않음).
+function parseRegionNotes(value: BackendRegionNotes | null | undefined): FaceAnalysisRegionNotes | undefined {
+  const upper = firstText(value?.upper);
+  const mid = firstText(value?.mid);
+  const lower = firstText(value?.lower);
+  const jaw = firstText(value?.jaw);
+
+  return upper && mid && lower && jaw ? {upper, mid, lower, jaw} : undefined;
+}
+
+function parseImpressionNotes(
+  value: BackendImpressionNotes | null | undefined,
+): FaceAnalysisImpressionNotes | undefined {
+  const overallMood = firstText(value?.overallMood);
+  const paragraph = firstText(value?.paragraph);
+  const keywords = firstStringArray(value?.keywords ?? null, []);
+
+  return overallMood && paragraph && keywords.length > 0
+    ? {overallMood, paragraph, keywords}
+    : undefined;
+}
+
+function parseStylingLook(value: BackendStylingLook | null | undefined): FaceAnalysisStylingLook | undefined {
+  const title = firstText(value?.title);
+  const subtitle = firstText(value?.subtitle);
+  const description = firstText(value?.description);
+  const rows = (value?.rows ?? [])
+    .map(row => {
+      const category = row?.category;
+      const note = firstText(row?.note);
+      const why = firstText(row?.why);
+      return isStylingLookRowCategory(category) && note && why
+        ? {category, note, why}
+        : null;
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+
+  return title && subtitle && description && rows.length > 0
+    ? {title, subtitle, description, rows}
+    : undefined;
+}
+
+function parseStylingLooks(value: BackendStylingLooks | null | undefined): FaceAnalysisStylingLooks | undefined {
+  const natural = parseStylingLook(value?.natural);
+  const glam = parseStylingLook(value?.glam);
+
+  return natural && glam ? {natural, glam} : undefined;
+}
+
 function resolveMakeupImageStatus(
   card: BackendMakeupCard | null | undefined,
   generatedImageUrl: string | undefined,
@@ -603,6 +699,9 @@ function mapBackendJobToFaceAnalysisReport(
       fallback.makeupGuideline,
     ),
     personalColor,
+    regionNotes: parseRegionNotes(result.regionNotes),
+    impressionNotes: parseImpressionNotes(result.impressionNotes),
+    stylingLooks: parseStylingLooks(result.stylingLooks),
     recommendedMakeups:
       faceAnalysisV2 && !faceAnalysisV2.consulting && !result.recommendedMakeups?.length
         ? []

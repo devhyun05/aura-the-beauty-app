@@ -9,6 +9,7 @@ import {
   FaceAnalysisReportDetailScreen,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
+import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
@@ -805,6 +806,39 @@ export function FaceAnalysisReportDetailRouteScreen({
         />
       </>
     </DetailRouteChrome>
+  );
+}
+
+// The report screen: redesigned S1–S7 UI (features/face-report). Owns the
+// canonical FaceAnalysisReportDetail route, so every entry point (post-analysis,
+// reports list, profile, home, AR back) lands here. Session props follow the
+// same rule as before — route.params.reportId means "past report", so session
+// measurements are withheld and the server-stored ones are restored instead.
+export function FaceAnalysisReportPreviewRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'FaceAnalysisReportDetail'>) {
+  const shouldReturnToProfile = route.params?.returnTo === 'profile';
+  const {
+    selectedFaceAnalysisReport,
+    selectedFaceCapture,
+    selectedFaceVerticalThirds,
+    selectedPersonalColor,
+  } = useNavigationFlowState();
+
+  return (
+    <FaceAnalysisReportPreviewScreen
+      analysisReport={selectedFaceAnalysisReport}
+      capturedPhotoUri={selectedFaceCapture?.imageUri}
+      onBack={() =>
+        shouldReturnToProfile ? navigateMainTab(navigation, 'ProfileTab') : navigation.goBack()
+      }
+      onRetake={() => navigation.navigate('FaceCapture')}
+      personalColor={route.params?.reportId ? null : selectedPersonalColor}
+      reportId={route.params?.reportId ?? null}
+      sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
+      verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
+    />
   );
 }
 
