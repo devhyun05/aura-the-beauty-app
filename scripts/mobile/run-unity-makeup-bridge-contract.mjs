@@ -119,6 +119,16 @@ assert.match(
   /#include "Foundation\.cginc"[\s\S]*FoundationTextureParams\([\s\S]*FoundationTarget\([\s\S]*FoundationSoftClip\([\s\S]*FoundationBlend\(/,
   '파운데이션은 ARwithFable 정본 Foundation.cginc 색 파이프라인을 사용해야 한다',
 );
+assert.match(
+  makeupControllerSource,
+  /case "applyFilter":[\s\S]*ClearForkRecipeOverlays\(\);[\s\S]*ApplyTo\(_material, msg\.filter\)/,
+  'flat 정본 필터를 적용하기 전 RNBridge/E3 fork 레시피 오버레이를 비워야 한다',
+);
+assert.match(
+  makeupControllerSource,
+  /void ClearForkRecipeOverlays\(\)[\s\S]*FindFirstObjectByType<global::E3RegionMaskOverlay>\(\)[\s\S]*ClearRecipesAndHideOverlays\(\)/,
+  '스크린스페이스 파운데이션과 비전 립 경계는 flat 정본 필터 경로에 남아 있으면 안 된다',
+);
 
 function bodyBetween(source, startPattern, endPattern) {
   const start = source.search(startPattern);

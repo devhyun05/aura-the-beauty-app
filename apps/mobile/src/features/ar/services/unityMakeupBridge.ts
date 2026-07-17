@@ -461,11 +461,9 @@ export function buildFilterParamsFromARFilterSelections(
             break;
           }
           case 'foundation': {
-            // AURA 스크린스페이스 base (FaceMakeup.shader에 이식). 선택한 shade가
-            // 파운데이션 색(HSV 가산광채 톤), skinSmoothing이 잡티제거. 기존
-            // ARwithFable flat brighten/concealer 매핑은 폐기.
-            // 파운데이션을 고르는 순간에도 결 보정이 분명하게 느껴지도록 하되,
-            // foundation intensity는 gentle 톤보정 기본값을 유지한다.
+            // ARwithFable FaceMakeup 단일 패스. 선택한 shade는 정본
+            // Foundation.cginc 색 파이프라인으로 전달하고, 결 보정과
+            // foundation intensity는 정렬된 gentle 기본값을 유지한다.
             params.skinSmoothing = 0.45;
             params.foundationIntensity = 0.45;
             if (hex) {

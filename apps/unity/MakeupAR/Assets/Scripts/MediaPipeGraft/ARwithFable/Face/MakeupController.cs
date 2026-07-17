@@ -477,6 +477,19 @@ namespace ARMakeup.Face
             "setRegionMask", "setTextureMap", "setFaceOverlay", "setOverlayLayers", "setLensLayers",
         };
 
+        void ClearForkRecipeOverlays()
+        {
+            // AURA's recipe renderer is not part of the ARwithFable flat-filter
+            // pipeline. Unity is kept warm across screens, so clear any latched
+            // screen-space foundation / vision-boundary state before the
+            // canonical filter is applied.
+            var forkOverlay = FindFirstObjectByType<global::E3RegionMaskOverlay>();
+            if (forkOverlay != null)
+            {
+                forkOverlay.ClearRecipesAndHideOverlays();
+            }
+        }
+
         void OnMessage(RNToUnityMessage msg)
         {
             // 원격 카탈로그 게이트(§16 v2) — 원격/스트리밍 에셋이면 캐시로 먼저 내려받고
@@ -487,6 +500,7 @@ namespace ARMakeup.Face
                 case "applyFilter":
                     if (msg.filter != null && _material != null)
                     {
+                        ClearForkRecipeOverlays();
                         ApplyTo(_material, msg.filter);
                         // ApplyTo가 블러셔 shape 절차 마스크를 매번 다시 세팅하므로,
                         // 임포트 마스크가 있으면 그 뒤에 재적용해 덮어쓰기를 되돌린다.
