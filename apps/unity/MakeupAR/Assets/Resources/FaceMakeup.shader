@@ -190,6 +190,7 @@ Shader "ARMakeup/FaceMakeup"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
             #include "Finish.cginc"    // 마감(ApplyFinish) 공용 — 제형 스튜디오 세부 파라미터
             #include "Ambient.cginc"   // 저조도 색소 바닥(PigmentBase) — 어둠 발광 방지
+            #include "Foundation.cginc" // 얼굴·목 파운데이션 색 파이프라인 공용
 
             // _CameraFeed / _CameraFeed_TexelSize 는 Finish.cginc(1곳)에서 선언 — A15 방향 게인이 공유.
             sampler2D _BlushMask;
@@ -331,23 +332,15 @@ Shader "ARMakeup/FaceMakeup"
             float _PowderShimmer;
             fixed4 _ToneBaseColor;
             float _SkinGlow;
-            // 파운데 루마 보존 게인/리프트(TintFinish 계열)·커버리지 비례 chroma 평탄화·
-            // 윤광 스펙 추출/게인·파우더 유분광 억제/미세 chroma — 전부 실기기 튜닝 대상.
-            #define FND_LUMA_GAIN 1.5        // 실기기 튜닝 대상
-            #define FND_LUMA_LIFT 0.15       // 실기기 튜닝 대상
-            #define FND_CHROMA 0.5           // 실기기 튜닝 대상
-            // 제형 텍스처(①) — 쿠션/스킨틴트가 게인·chroma·커버리지를 상대 조정(0=리퀴드는 배수 1).
-            #define FND_TEX_CUSHION_GAIN 0.12    // 쿠션: 루마 게인 소폭 상향(커버↑) // 실기기 튜닝 대상
-            #define FND_TEX_SKINTINT_GAIN 0.15   // 스킨틴트: 게인 하향(커버↓) // 실기기 튜닝 대상
-            #define FND_TEX_CUSHION_CHROMA 0.20  // 쿠션: chroma 평탄화 상향 // 실기기 튜닝 대상
-            #define FND_TEX_SKINTINT_CHROMA 0.30 // 스킨틴트: chroma 하향 // 실기기 튜닝 대상
-            #define FND_TEX_CUSHION_COV 0.15     // 쿠션: 커버리지 상향 // 실기기 튜닝 대상
-            #define FND_TEX_SKINTINT_COV 0.30    // 스킨틴트: 커버리지 하향 // 실기기 튜닝 대상
+            // 파운데이션 target/softclip/blend 상수와 제형 램프는 Foundation.cginc에서
+            // 얼굴·목 경로가 공유한다. 아래는 파우더·프라이머 전용 튜닝 상수.
             #define GLOW_SPEC_LO 0.6         // 실기기 튜닝 대상
             #define GLOW_GAIN 0.35           // 실기기 튜닝 대상
             #define POWDER_SHINE_LO 0.62     // 실기기 튜닝 대상
-            #define POWDER_SPEC_SUPPRESS 0.5 // 실기기 튜닝 대상
-            #define POWDER_CHROMA 0.12       // 실기기 튜닝 대상
+            // 이전 0.5는 하이라이트를 최대 50% 감쇠 → 파운데가 이미 압축한 하이라이트를
+            // 이중으로 눌러 입체 소실(밋밋). 유분광만 부드럽게 눌러 매트감은 남기고 입체 보존.
+            #define POWDER_SPEC_SUPPRESS 0.3 // 실기기 튜닝 대상(이전 0.5 → 0.3)
+            #define POWDER_CHROMA 0.1        // 미세 chroma 평탄화 소폭 완화(이전 0.12). 실기기 튜닝 대상
             sampler2D _MakeupOverlay;
             float _MakeupOverlayIntensity;
             float4 _Overlay0Transform;
@@ -611,14 +604,11 @@ Shader "ARMakeup/FaceMakeup"
                 if (_FoundationIntensity > 0.001)
                 {
                     float fLuma = dot(col, fixed3(0.299, 0.587, 0.114));
-                    // 제형 텍스처(①) — 0=리퀴드(현행 상수) 1=쿠션(게인·chroma·커버↑) 2=스킨틴트(↓).
-                    // 분기 없이 텍스처값으로 상수를 select(lerp)해 배수를 민다. 텍스처 0이면 배수
-                    // 전부 1 → 곱셈 항등 → 기존 픽셀과 바이트 동일(하위호환).
-                    float fTexCushion = saturate(1.0 - abs(_FoundationTexture - 1.0)); // 1 at cushion
-                    float fTexSkintint = saturate(_FoundationTexture - 1.0);           // 1 at skintint
-                    float fGain = FND_LUMA_GAIN * (1.0 + fTexCushion * FND_TEX_CUSHION_GAIN - fTexSkintint * FND_TEX_SKINTINT_GAIN);
-                    float fChroma = FND_CHROMA * (1.0 + fTexCushion * FND_TEX_CUSHION_CHROMA - fTexSkintint * FND_TEX_SKINTINT_CHROMA);
-                    float fCov = _FoundationIntensity * (1.0 + fTexCushion * FND_TEX_CUSHION_COV - fTexSkintint * FND_TEX_SKINTINT_COV);
+                    float fGain;
+                    float fChroma;
+                    float fCov;
+                    FoundationTextureParams(_FoundationTexture, _FoundationIntensity,
+                                            fGain, fChroma, fCov);
                     // 모양 축 W3 — 파운데 커버 존(얼굴 메시 한정, 목 세그 확장과 무관).
                     //   1=T존 집중(중앙 세로 스트립 강조) 2=외곽 페더 강화(방사 외곽 감쇠).
                     // 커버(fCov)·chroma 평탄화(fChroma)를 존만큼 곱 → 존 0이면 fZone=1=바이트 동일.
@@ -645,13 +635,18 @@ Shader "ARMakeup/FaceMakeup"
                     float featKeep = 1.0 - FND_FEATURE_EXCLUDE * feat; // 특징부에서 커버 감쇠
                     fCov *= featKeep;
                     fChroma *= featKeep;
-                    fixed3 found = _FoundationColor.rgb * (fLuma * fGain + FND_LUMA_LIFT);
+                    fixed3 found = FoundationTarget(_FoundationColor.rgb, fLuma, fGain);
+                    found = FoundationSoftClip(found);
                     // 파운데는 제형 스튜디오 대상 아님 — 세부 0 상수로 호출(enum 기존 경로).
                     found = ApplyFinish(found, fLuma, i.uv, _FoundationFinish, 0.0,
                                         0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                                         screenUV, _PearlLightGain); // A15 방향 게인
-                    fixed3 desat = lerp(col, fLuma.xxx, fChroma * fCov);
-                    col = lerp(desat, saturate(found), saturate(fCov));
+                    // 듀이 마감의 가산광만 같은 hue 보존 상한을 다시 통과시킨다.
+                    // 새틴은 ApplyFinish가 항등이고 매트는 감산이므로 재클립하면 동일 색을
+                    // 불필요하게 두 번 압축한다(FoundationSoftClip은 멱등이 아님).
+                    if (_FoundationFinish > 1.5 && _FoundationFinish < 2.5)
+                        found = FoundationSoftClip(found);
+                    col = FoundationBlend(col, found, fLuma, fChroma, fCov);
                 }
 
                 // 립은 LipRenderer(윤곽 링 메시)로 분리됨. 얼굴 메시엔 블러셔 + 넓은면 보정.

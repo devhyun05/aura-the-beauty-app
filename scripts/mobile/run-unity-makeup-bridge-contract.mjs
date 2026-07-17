@@ -63,6 +63,10 @@ const lowerLidShaderSource = readFileSync(
   join(unityResourcesRoot, 'LowerLid.shader'),
   'utf8',
 );
+const faceMakeupShaderSource = readFileSync(
+  join(unityResourcesRoot, 'FaceMakeup.shader'),
+  'utf8',
+);
 
 assert.equal(
   existsSync(join(graftFaceRoot, 'AegyoRenderer.cs')) ||
@@ -98,6 +102,11 @@ assert.match(
   lowerLidShaderSource,
   /float shAmt\s*=\s*valley[^;]*_AegyoIntensity[\s\S]*fixed3 pigHi\s*=\s*1\.0\s*-\s*\(1\.0\s*-\s*feed\)/,
   '애교살 능선과 골은 정본 LowerLid 셰이더 프로파일을 사용해야 한다',
+);
+assert.match(
+  faceMakeupShaderSource,
+  /#include "Foundation\.cginc"[\s\S]*FoundationTextureParams\([\s\S]*FoundationTarget\([\s\S]*FoundationSoftClip\([\s\S]*FoundationBlend\(/,
+  '파운데이션은 ARwithFable 정본 Foundation.cginc 색 파이프라인을 사용해야 한다',
 );
 
 function run(command, args, options = {}) {
