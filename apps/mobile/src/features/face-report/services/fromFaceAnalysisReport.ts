@@ -24,6 +24,7 @@ import type {
 import {getFaceAnalysisReportSummaryItems} from '../../face-analysis/services/faceAnalysisReportDetailModel';
 import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceAnalysisMeasurements';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
+import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
 import {TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
 import type {AxisName, ColorFamily, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
 import {analyzeBody} from '../../ar/stencil/src/composer/bodyProfile';
@@ -49,6 +50,10 @@ export type FaceReportAdapterInput = {
   verticalThirds?: FaceVerticalThirdsResult | null;
   personalColor?: MeasuredPersonalColorView | null;
   bodyProfile?: BodyProfile | null;
+  // Restored per-region crop rect + real landmark polyline guide (S3 cards).
+  // Absent/null for legacy reports — buildS3 falls back to the fixed
+  // S3_REGION_META guide + full photo, never fabricating a crop/polyline.
+  regionVisuals?: RegionVisuals | null;
 };
 
 function resolveHeroUri(report: FaceAnalysisReport, heroImageUri?: string): string | undefined {
@@ -421,20 +426,50 @@ function normalizeRegionNote(
   return {insight: '', evidence: '', recommendation: ''};
 }
 
-function buildS3(regionNotes: FaceAnalysisRegionNotes | undefined, photo: S1Data['photo']): S3Data | null {
+function buildS3(
+  regionNotes: FaceAnalysisRegionNotes | undefined,
+  photo: S1Data['photo'],
+  regionVisuals: RegionVisuals | null,
+): S3Data | null {
   if (!regionNotes) {
     return null;
   }
 
   const cards = (['upper', 'mid', 'lower', 'jaw'] as const).map(key => {
     const meta = S3_REGION_META[key];
+    // Real per-user crop + landmark polyline, when available (regionVisuals
+    // is only produced by an on-device geometry pass — legacy reports and
+    // degenerate crops never have it). Falls back to the fixed illustrative
+    // S3_REGION_META guide + full (uncropped) photo — same "조용한 생성 금지"
+    // posture as the rest of this adapter.
+    const rv = regionVisuals?.[key];
+    const visual = rv
+      ? {
+          photo: {...photo, cropRect: rv.cropRect},
+          cropRect: rv.cropRect,
+          // Guide points are normalized to the FULL source image; the card
+          // shows only the crop sub-rect, so re-normalize each point into the
+          // crop's own 0..1 frame before GuideOverlay multiplies by its
+          // measured render size.
+          guide: {
+            kind: 'polyline' as const,
+            points: rv.guide.points.map(p => ({
+              x: (p.x - rv.cropRect.x) / rv.cropRect.w,
+              y: (p.y - rv.cropRect.y) / rv.cropRect.h,
+            })),
+          },
+          guideLabel: rv.guide.label,
+        }
+      : {
+          photo,
+          guide: meta.guide,
+          guideLabel: meta.guideLabel,
+        };
     return {
       key,
       regionChip: meta.chip,
       regionTitle: meta.title,
-      photo,
-      guide: meta.guide,
-      guideLabel: meta.guideLabel,
+      ...visual,
       guideLabelX: meta.guideLabelX,
       axes: [],
       ...(() => {
@@ -578,7 +613,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
     s1: buildS1(report, heroUri, personalColor ?? null),
     s2: buildS2(verticalThirds),
-    s3: buildS3(report.regionNotes, featurePhoto),
+    s3: buildS3(report.regionNotes, featurePhoto, input.regionVisuals ?? null),
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile),
     s6: buildS6(report.regionNotes, report.impressionNotes),

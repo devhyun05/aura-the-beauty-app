@@ -128,6 +128,12 @@ export function FaceAnalysisReportPreviewScreen({
     (useSessionMeasurements ? verticalThirds : null) ?? measurements?.faceVerticalThirds ?? null;
   const effectivePersonalColor =
     (useSessionMeasurements ? personalColor : null) ?? measurements?.personalColor?.reported ?? null;
+  // No session-fresh regionVisuals prop exists yet (unlike verticalThirds/
+  // personalColor, it isn't threaded through navigation flow state) — the
+  // server-restored measurements value is the only source today. Once a
+  // session path is wired, mirror the pattern above:
+  // (useSessionMeasurements ? regionVisuals : null) ?? measurements?.regionVisuals ?? null.
+  const effectiveRegionVisuals = measurements?.regionVisuals ?? null;
 
   const reportData = useMemo(() => {
     if (!report) {
@@ -139,8 +145,17 @@ export function FaceAnalysisReportPreviewScreen({
       verticalThirds: effectiveVerticalThirds,
       personalColor: effectivePersonalColor,
       bodyProfile,
+      regionVisuals: effectiveRegionVisuals,
     });
-  }, [bodyProfile, capturedPhotoUri, effectivePersonalColor, effectiveVerticalThirds, report, reportId]);
+  }, [
+    bodyProfile,
+    capturedPhotoUri,
+    effectivePersonalColor,
+    effectiveRegionVisuals,
+    effectiveVerticalThirds,
+    report,
+    reportId,
+  ]);
 
   const handleCloseBodySurvey = useCallback(() => {
     setIsBodySurveyOpen(false);

@@ -3,7 +3,13 @@
 // 단 세로 3분할의 정규화 비율과 얼굴 길이비의 측정된 평균 밴드는 노출을 허용한다
 // (spec 2026-07-18-face-report-content-refinement-design.md §3 영역1 · §7-4).
 
-export interface PhotoSlotData { uri?: string; placeholderLabel: string }
+export interface PhotoSlotData {
+  uri?: string;
+  placeholderLabel: string;
+  // S3 region cards: normalized (0..1) sub-rect of the full photo to crop the
+  // display to. Absent for the legacy fixed-guide fallback (full photo).
+  cropRect?: { x: number; y: number; w: number; h: number };
+}
 
 export type EvidenceKind = 'measured' | 'artist';
 
@@ -89,13 +95,20 @@ export interface S2Data {
 export type FeatureGuide =
   | { kind: 'slantLine'; from: { x: number; y: number }; length: number; angleDeg: number; marker: { x: number; y: number } }
   | { kind: 'dashedVertical'; x: number; top: number; height: number }
-  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; dashed: boolean };
+  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; dashed: boolean }
+  // Real landmark polyline (restored regionVisuals), re-normalized to the
+  // crop frame by buildS3 — points are already 0..1 in the CROPPED view, not
+  // the full original image.
+  | { kind: 'polyline'; points: { x: number; y: number }[] };
 
 export interface RegionCardData {
   key: string;
   regionChip: string;
   regionTitle: string;
   photo: PhotoSlotData;
+  // Same crop sub-rect as photo.cropRect (kept alongside photo for callers
+  // that need the rect without unpacking photo). Absent = legacy fallback.
+  cropRect?: { x: number; y: number; w: number; h: number };
   guide: FeatureGuide;
   guideLabel: string;
   guideLabelX: number;                  // normalized offset of the label pill

@@ -15,9 +15,26 @@ interface Props {
 /** Photo slot: renders the image when `uri` is present, otherwise the design's hatched placeholder. */
 export function PhotoSlot({ slot, shape = 'rect', radius = 0, style }: Props) {
   const br = shape === 'circle' ? 999 : radius;
+  const c = slot.cropRect;
+  const hasCrop = shape !== 'circle' && !!c && c.w > 0 && c.h > 0;
   return (
     <View style={[{ borderRadius: br, overflow: 'hidden', backgroundColor: color.hatchB }, style]}>
-      {slot.uri ? (
+      {slot.uri && hasCrop && c ? (
+        <View style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
+          <Image
+            source={{ uri: slot.uri }}
+            contentFit="cover"
+            transition={150}
+            style={{
+              position: 'absolute',
+              width: `${100 / c.w}%`,
+              height: `${100 / c.h}%`,
+              left: `${(-c.x * 100) / c.w}%`,
+              top: `${(-c.y * 100) / c.h}%`,
+            }}
+          />
+        </View>
+      ) : slot.uri ? (
         <Image source={{ uri: slot.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={150} />
       ) : (
         <View style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', padding: 8 }}>
