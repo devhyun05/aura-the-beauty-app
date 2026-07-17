@@ -1436,7 +1436,10 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 
   // SSM 생성은 depth 파이프라인에 의존하므로 matte type이 있어도 depth delivery가
   // 미지원인 포맷(720p 등)에서는 matte가 나오지 않을 수 있다 → Photo 프리셋으로 승격.
+  // configureSession이 이미 Photo를 잡았으면 이 블록은 no-op이고, Photo를 못 잡아
+  // 720p로 내려간 기기에서만 실제 승격 시도로 동작한다.
   if ((!supported || !_photoOutput.depthDataDeliverySupported) &&
+      ![_session.sessionPreset isEqualToString:AVCaptureSessionPresetPhoto] &&
       [_session canSetSessionPreset:AVCaptureSessionPresetPhoto]) {
     _session.sessionPreset = AVCaptureSessionPresetPhoto;
     if (_photoOutput.depthDataDeliverySupported) {
@@ -1470,7 +1473,15 @@ static NSDictionary *AURARealtimePoseFromGeometry(NSDictionary *landmarks)
 - (BOOL)configureSession
 {
   [_session beginConfiguration];
-  _session.sessionPreset = AVCaptureSessionPreset1280x720;
+  // 정지 사진 해상도는 세션 프리셋에 묶인다. 720p로 두면 iPhone 16에서도
+  // 720x1280 셀피가 나와 얼굴이 프레임의 1/3만 차지하고, 눈 흰자 ROI가
+  // 수십 픽셀로 쪼그라들어 조명 보정이 표본 부족(sclera_too_few_samples)으로
+  // 항상 스킵됐다. Photo 프리셋은 전체 해상도 스틸을 주고 matte/depth도
+  // 지원하며, matte 미지원 기기용 폴백 경로에서 이미 쓰이던 구성이다.
+  // 실패 시에만 720p로 내려간다.
+  _session.sessionPreset = [_session canSetSessionPreset:AVCaptureSessionPresetPhoto]
+      ? AVCaptureSessionPresetPhoto
+      : AVCaptureSessionPreset1280x720;
   _matteCapability = nil;
   [self stopCameraStabilityMonitoring];
 

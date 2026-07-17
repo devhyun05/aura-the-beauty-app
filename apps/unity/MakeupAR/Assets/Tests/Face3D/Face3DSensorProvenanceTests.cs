@@ -56,3 +56,4 @@ namespace Aura.Face3D.Tests
                 Is.False);
         }
     }
+}
