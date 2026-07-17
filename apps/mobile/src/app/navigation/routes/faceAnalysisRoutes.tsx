@@ -145,7 +145,6 @@ export function FaceCaptureRouteScreen({
     unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const {getAuthToken, isRestoringSession} = useAuthSession();
-  const [forceLegacyCapture, setForceLegacyCapture] = React.useState(false);
   const unifiedCaptureRequest = React.useMemo(
     () =>
       buildUnifiedFaceCaptureRequest({
@@ -164,9 +163,12 @@ export function FaceCaptureRouteScreen({
     return null;
   }
 
+  // 통합 촬영이 실패해도 레거시 2단계 촬영으로 넘어가지 않는다(촬영 1회 경로만).
+  // 실패 시 홈으로 보내 사용자가 통합 촬영을 다시 시작하게 한다. 갤러리·Unity
+  // 미지원 기기는 여기와 무관하게 처음부터 레거시로 간다(아래 조건).
   const shouldUseUnifiedCapture = shouldUseUnifiedFaceCaptureRoute({
     featureEnabled: isUnifiedFaceCaptureEnabled(),
-    forceLegacyCapture,
+    forceLegacyCapture: false,
     initialSource: route.params?.initialSource,
     nativeViewSupported: isUnityMakeupNativeViewSupported(),
   });
@@ -195,8 +197,11 @@ export function FaceCaptureRouteScreen({
           return true;
         }}
         onFallback={() => {
+          // 통합 촬영 실패 시 레거시 2단계 촬영으로 폴백하지 않는다(촬영 1회 경로만).
+          // 홈으로 돌려보내 사용자가 통합 촬영을 다시 시작하게 한다. 실패 사유는
+          // [aura:unified-face-capture] fallback-to-legacy 로그로 남는다.
           invalidateUnifiedFaceCapture({resetRetryAttempt: true});
-          setForceLegacyCapture(true);
+          navigateMainTab(navigation, 'HomeTab');
         }}
         onRequestStarted={beginUnifiedFaceCapture}
         request={unifiedCaptureRequest}
