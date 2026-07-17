@@ -82,14 +82,12 @@ export default function FndColorDebugPanel({
             <Text style={styles.close}>✕</Text>
           </TouchableOpacity>
         </View>
-        {/* 범위는 fork Foundation.cginc 리터럴(0.798322/0.4/1.0)이 항상 범위 안에 오도록
-            잡는다 — upstream 재조정 범위(0.30–0.50 등)는 upstream 수식 전용이라 부적합. */}
         <DbgSlider
           label="기준루마"
           desc="기준 루마 — 낮출수록 밝게 발림"
           value={refLuma}
-          min={0.45}
-          max={0.9}
+          min={0.3}
+          max={0.5}
           onChange={onRefLumaChange}
         />
         <DbgSlider
@@ -97,14 +95,14 @@ export default function FndColorDebugPanel({
           desc="채도 혼합 — 원 피부색 눌러 커버(높으면 창백)"
           value={chroma}
           min={0}
-          max={0.5}
+          max={0.2}
           onChange={onChromaChange}
         />
         <DbgSlider
           label="luma게인"
           desc="루마 게인 — 명암 이식 배율(1=원본)"
           value={lumaGain}
-          min={0.8}
+          min={1}
           max={1.5}
           onChange={onLumaGainChange}
         />
