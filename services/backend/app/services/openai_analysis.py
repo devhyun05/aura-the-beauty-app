@@ -726,6 +726,11 @@ def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
   return metadata
 RECOMMENDED_MAKEUP_COUNT = 1
 
+DEFAULT_IMPRESSION_AXES = (
+  {"key": "softness", "leftLabel": "부드러움", "rightLabel": "또렷함", "value": 0.0},
+  {"key": "vividness", "leftLabel": "차분함", "rightLabel": "화사함", "value": 0.0},
+)
+
 ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "Top-level JSON keys: faceShape, skinType, "
   "recommendedMood, tags, summary, shortSummary, skinAnalysisSummary, "
@@ -743,7 +748,8 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "measured signals make it read that way (interpreted, never raw numbers), "
   "recommendation = the concrete makeup move that follows. "
   "impressionNotes keys: overallMood (<=18 chars), keywords (array of 3-5 "
-  "short Korean strings), paragraph (<=2 sentences). "
+  "short Korean strings), paragraph (<=2 sentences), axes (array of exactly "
+  "2 objects, each with keys key, leftLabel, rightLabel, value(-1..1)). "
   "stylingLooks keys: natural, glam. Each is an object with title (<=12 "
   "chars), subtitle (<=16 chars), description (<=2 sentences), and rows "
   "(array of 4-6 objects). Each row object has keys category (one of base, "
@@ -1366,6 +1372,8 @@ class OpenAIAnalysisService:
       "좋은지 한 문장으로 써. 세 문장 모두 숫자·mm·백분위를 노출하지 마. "
       "impressionNotes는 top-level 필드로 overallMood(전체 인상을 18자 이내로), keywords(전체 인상 키워드 3~5개 배열), "
       "paragraph(전체 인상을 종합하는 두 문장 이내 설명)를 포함해. "
+      "axes는 인상을 2개 축으로 배치: 각 {key, leftLabel, rightLabel, value(-1..1)}. "
+      "예: 부드러움↔또렷함, 차분함↔화사함. 숫자는 사용자에게 노출되지 않으니 인상 위치만 정직하게. "
       "stylingLooks는 top-level 필드로 natural과 glam 두 키를 포함해. 같은 사용자 얼굴 특징과 퍼스널 컬러에 근거하되 "
       "natural은 일상에 어울리는 옅은 강도, glam은 포인트를 살린 진한 강도로 강도만 다르게 구분해. "
       "각각 title, subtitle, description과 rows(4~6개, category는 base/brow/eyeshadow/eyeliner/blush/lip 중 하나, "
@@ -1714,6 +1722,23 @@ class OpenAIAnalysisService:
     if not keywords:
       keywords = (tag_keywords + [recommended_mood])[:5] or [recommended_mood]
 
+    raw_axes = normalized_notes.get("axes")
+    axes = []
+    for i, default in enumerate(DEFAULT_IMPRESSION_AXES):
+      raw = (
+        raw_axes[i]
+        if isinstance(raw_axes, list) and i < len(raw_axes) and isinstance(raw_axes[i], dict)
+        else {}
+      )
+      value = raw.get("value")
+      value = float(value) if isinstance(value, (int, float)) else 0.0
+      axes.append({
+        "key": self._first_normalized_text(raw.get("key"), default["key"]),
+        "leftLabel": self._first_normalized_text(raw.get("leftLabel"), default["leftLabel"]),
+        "rightLabel": self._first_normalized_text(raw.get("rightLabel"), default["rightLabel"]),
+        "value": max(-1.0, min(1.0, value)),
+      })
+
     return {
       "overallMood": self._trim_text_field(
         self._first_normalized_text(normalized_notes.get("overallMood"), recommended_mood),
@@ -1725,6 +1750,7 @@ class OpenAIAnalysisService:
         summary,
         f"{recommended_mood} 인상이 전체적으로 자연스럽게 이어져요.",
       ),
+      "axes": axes,
     }
 
   def _default_styling_look_rows(
