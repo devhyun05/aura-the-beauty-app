@@ -4,15 +4,15 @@
 // measurements/survey answers. S3/S6/S7 are built from `regionNotes` /
 // `impressionNotes` / `stylingLooks` — text the backend's existing Bedrock
 // analysis call now also generates alongside faceShape/recommendedMood/etc
-// (services/backend/app/services/openai_analysis.py) — combined with a FIXED,
-// non-personalized diagram template for the parts that would otherwise need
-// per-user pixel coordinates we don't have (region photo-guide markers, gaze
-// diagram geometry). The template is the same for every report, same
-// rationale as S5's generic silhouette illustration; only the wording is
-// per-user. Reports created before this field existed simply won't have
-// regionNotes/impressionNotes/stylingLooks, so those sections stay hidden for
-// them (never fabricated, but never withheld once the backend can generate
-// them either) — see reportTypes.ts's ReportData doc comment.
+// (services/backend/app/services/openai_analysis.py). S3 region crops + guide
+// lines and S6 impression-axis positions now come from real per-user
+// measurements (regionVisuals / impressionNotes.axes) when present, falling
+// back to a neutral template (fixed S3_REGION_META guide / DEFAULT_S6_AXES) —
+// same "never fabricate" rationale as S5's generic silhouette illustration.
+// Reports created before these fields existed simply won't have
+// regionNotes/impressionNotes/stylingLooks (or regionVisuals), so those
+// sections stay hidden or fall back to the neutral template (never fabricated)
+// — see reportTypes.ts's ReportData doc comment.
 
 import type {
   FaceAnalysisImpressionNotes,
