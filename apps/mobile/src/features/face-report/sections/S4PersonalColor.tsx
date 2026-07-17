@@ -11,6 +11,7 @@ import { SectionHeader } from '../visuals/SectionHeader';
 import { SpectrumRail } from '../visuals/SpectrumRail';
 import { SwatchRow } from '../visuals/SwatchRow';
 import { BlendBar } from '../visuals/BlendBar';
+import { ConfidenceGauge } from '../visuals/ConfidenceGauge';
 
 /** S4 퍼스널 컬러 — season blend + 5 axes, then the interactive drape stage (swatch tap + lighting dial). */
 export function S4PersonalColor({ data }: { data: S4Data }) {
@@ -36,6 +37,7 @@ export function S4PersonalColor({ data }: { data: S4Data }) {
         <Card gap={14}>
           <View style={{ gap: 7 }}>
             <Text style={[font(14, '800'), { color: color.ink }]}>{data.season.headline}</Text>
+            {data.seasonConfidence ? <ConfidenceGauge data={data.seasonConfidence} /> : null}
             <BlendBar data={data.season.blend} />
           </View>
           <View style={{ gap: 12 }}>
