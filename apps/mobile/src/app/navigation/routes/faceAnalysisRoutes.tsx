@@ -746,6 +746,81 @@ export function FaceAnalysisReportPreviewRouteScreen({
     },
     [navigation, setSelectedFaceAnalysisReport],
   );
+  const footerBottomInset = Math.max(insets.bottom, spacing.md);
+  const currentReportId = route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
+  const handleBackToProfile = React.useCallback(() => {
+    navigateMainTab(navigation, 'ProfileTab');
+  }, [navigation]);
+
+  return (
+    <DetailRouteChrome
+      backgroundColor={colors.surfaceMuted}
+      headerMode="overlay"
+      reserveOverlayHeaderSpace={false}
+      routeName="FaceAnalysisReportDetail"
+      onBack={shouldReturnToProfile ? handleBackToProfile : undefined}
+      onOpenDocumentList={
+        shouldReturnToProfile
+          ? undefined
+          : () => navigation.navigate('FaceAnalysisReportsList')
+      }
+      onShare={shareAction?.cb}
+      shareDisabled={!shareAction}>
+      <>
+        <FaceAnalysisReportDetailScreen
+          analysisReport={selectedFaceAnalysisReport}
+          bottomOverlayHeight={getFaceAnalysisReportFooterReservedHeight(footerBottomInset)}
+          capturedPhotoUri={selectedFaceCapture?.imageUri}
+          onCreateARFilter={() => {
+            if (currentReportId) {
+              navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
+              return;
+            }
+            navigation.navigate('MakeupRecommendation');
+          }}
+          onDeleteReport={handleDeleteReport}
+          onHeaderShareActionChange={handleHeaderShareActionChange}
+          onPressProducts={reportId =>
+            navigation.navigate('ProductRecommendation', {reportId})
+          }
+          face3d={route.params?.reportId ? null : selectedFace3DProfile}
+          faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
+          personalColor={route.params?.reportId ? null : selectedPersonalColor}
+          personalColorCorrection={
+            route.params?.reportId ? null : selectedPersonalColorCorrection
+          }
+          reportId={route.params?.reportId ?? null}
+          // 세션 캡처 ID — 화면이 "세션 props vs 서버 복원 measurements" 를
+          // identity(captureId 일치)로 판정하는 기준. id 없는 진입(AR 복귀 등)
+          // 에서 다른 보고서에 stale 세션 측정값이 얹히는 것을 막는다.
+          sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
+          verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
+        />
+        <FaceAnalysisReportBottomNav
+          currentReportId={currentReportId}
+          navigation={navigation}
+        />
+      </>
+    </DetailRouteChrome>
+  );
+}
+
+// The report screen: redesigned S1–S7 UI (features/face-report). Owns the
+// canonical FaceAnalysisReportDetail route, so every entry point (post-analysis,
+// reports list, profile, home, AR back) lands here. Session props follow the
+// same rule as before — route.params.reportId means "past report", so session
+// measurements are withheld and the server-stored ones are restored instead.
+export function FaceAnalysisReportPreviewRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'FaceAnalysisReportDetail'>) {
+  const shouldReturnToProfile = route.params?.returnTo === 'profile';
+  const {
+    selectedFaceAnalysisReport,
+    selectedFaceCapture,
+    selectedFaceVerticalThirds,
+    selectedPersonalColor,
+  } = useNavigationFlowState();
 
   return (
     <FaceAnalysisReportPreviewScreen

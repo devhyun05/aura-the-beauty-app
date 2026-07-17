@@ -14,6 +14,7 @@ from app.services.face_measurement_schema import (
 )
 from app.services.media_upload_schema import MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL
 from app.services.report_lab_schema import ANALYSIS_LAB_RUNS_SCHEMA_SQL
+from app.services.makeup_recommendation_schema import MAKEUP_RECOMMENDATION_SCHEMA_SQL
 
 
 SCHEMA_VERSION = "schema.sql:v7-trend-now-health"
@@ -774,6 +775,28 @@ POST_SCHEMA_MIGRATIONS = {
     );
     create index if not exists idx_account_deletion_tombstones_deleted_at
       on account_deletion_tombstones (deleted_at);
+  """,
+  "schema.sql:makeup-recommendation-v2": MAKEUP_RECOMMENDATION_SCHEMA_SQL,
+  "schema.sql:makeup-trend-draft-evidence-v1": """
+    do $migration$
+    begin
+      if to_regclass('public.makeup_scenario_library') is not null then
+        alter table makeup_scenario_library
+          drop constraint if exists chk_makeup_scenario_library_trend_evidence;
+        alter table makeup_scenario_library
+          add constraint chk_makeup_scenario_library_trend_evidence check (
+            keyword_kind <> 'trend'
+            or (
+              source_name is not null
+              and source_url is not null
+              and source_published_at is not null
+              and market_scope is not null
+              and as_of is not null
+              and expires_at is not null
+            )
+          );
+      end if;
+    end $migration$;
   """,
   "schema.sql:media-upload-sessions-v1": MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL,
 }

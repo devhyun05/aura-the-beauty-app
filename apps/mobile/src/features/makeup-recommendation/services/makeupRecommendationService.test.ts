@@ -1,5 +1,10 @@
 import {
   answerGeneratedMakeupRecommendationQuestion,
+  answerGeneratedMakeupRecommendationQuestionV2,
+  createMakeupRecommendationIdempotencyKey,
+  fetchMakeupRecommendationDiscovery,
+  fetchGeneratedMakeupRecommendationSessionV2,
+  generateMakeupRecommendationV2,
   answerMakeupRecommendationQuestion,
   getMakeupScenarioSet,
   getPopularMakeupScenarios,
@@ -9,10 +14,30 @@ import {
   refineMakeupRecommendation,
   refreshGeneratedMakeupRecommendation,
   restoreMakeupRecommendationReport,
+  retryGeneratedMakeupRecommendationImages,
   startGeneratedMakeupRecommendation,
+  startGeneratedMakeupRecommendationV2,
   startMakeupRecommendation,
 } from './makeupRecommendationService';
+import {buildRecommendedAreaGuides} from './makeupRecommendationMappers';
+import {
+  MAKEUP_RECOMMENDATION_EVENT_NAMES,
+  markKnownMakeupRecommendationImageEvents,
+  sanitizeMakeupRecommendationEventMetadata,
+  takeNewMakeupRecommendationImageEvents,
+  trackMakeupRecommendationEvent,
+} from './makeupRecommendationTelemetry';
+import {
+  clearCurrentMakeupRecommendationSessionId,
+  getMakeupRecommendationSessionRestoreDestination,
+  MAKEUP_RECOMMENDATION_CURRENT_SESSION_ID_STORAGE_KEY,
+  readCurrentMakeupRecommendationSessionId,
+  saveCurrentMakeupRecommendationSessionId,
+  shouldDiscardStoredMakeupRecommendationSessionForError,
+  type MakeupRecommendationSessionIdStorage,
+} from './makeupRecommendationSessionPersistence';
 import {BackendApiError, requestBackendJson} from '../../../shared/services/backendApi';
+import {MAKEUP_SITUATION_FIXTURES} from '../data/makeupRecommendationV2Catalog';
 import type {MakeupRecommendationSession} from '../types';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -30,6 +55,11 @@ function expectThrows(action: () => unknown, label: string) {
   }
   expectEqual(threw, true, label);
 }
+
+const intentKeyA = createMakeupRecommendationIdempotencyKey();
+const intentKeyB = createMakeupRecommendationIdempotencyKey();
+expectEqual(/^makeup-v2-[0-9a-f-]{36}$/.test(intentKeyA), true, 'v2 intent key format');
+expectEqual(intentKeyA === intentKeyB, false, 'each new intent gets a distinct idempotency key');
 
 const scenarios = getMakeupScenarioSet({seed: 0});
 const popularScenarios = getPopularMakeupScenarios();
@@ -97,6 +127,57 @@ const generatedLooks = mapBackendRecommendationLooks({
 });
 expectEqual(generatedLooks.length, 3, 'three backend looks are mapped');
 expectEqual(generatedLooks.map(look => look.role).join(','), 'anchor,bold,discovery', 'backend look roles are preserved');
+expectEqual(
+  generatedLooks[0].areaGuides?.find(guide => guide.area === 'base')?.products[0]?.brandName,
+  '브랜드',
+  'backend product data is preserved for its matching area',
+);
+expectEqual(
+  generatedLooks[0].areaGuides?.find(guide => guide.area === 'eye')?.products.length,
+  0,
+  'missing backend area products stay empty instead of using fixture brands',
+);
+
+const legacyGuide = buildRecommendedAreaGuides({
+  look: generatedLooks[0],
+  directGuides: [{
+    area: 'base',
+    colors: [{name: '레거시 로즈', hex: '#AABBCC'}],
+    steps: ['레거시 단계를 얇게 바르기'],
+    avoid: '두껍게 쌓지 않기',
+  }],
+})[0];
+expectEqual(legacyGuide.color.name, '레거시 로즈', 'legacy backend colors are preserved');
+expectEqual(legacyGuide.steps[0].instruction, '레거시 단계를 얇게 바르기', 'legacy string steps are preserved');
+expectEqual(legacyGuide.avoid[0], '두껍게 쌓지 않기', 'legacy string avoid is normalized');
+
+const canonicalGuide = buildRecommendedAreaGuides({
+  look: generatedLooks[0],
+  directGuides: [{
+    area: 'base',
+    color: {name: '캐노니컬 베이지', hex: '#D9B49A'},
+    steps: [{order: 2, instruction: '중앙부터 펴 바르기'}],
+    avoid: ['경계 남기기'],
+  }],
+})[0];
+expectEqual(canonicalGuide.color.name, '캐노니컬 베이지', 'canonical backend color is preserved');
+expectEqual(canonicalGuide.steps[0].order, 2, 'canonical ordered step is preserved');
+expectEqual(canonicalGuide.avoid[0], '경계 남기기', 'canonical avoid list is preserved');
+
+const explicitEmptyProductGuide = buildRecommendedAreaGuides({
+  look: generatedLooks[0],
+  directGuides: [{area: 'base', products: []}],
+})[0];
+expectEqual(
+  explicitEmptyProductGuide.products.length,
+  0,
+  'explicitly empty backend area products remain empty',
+);
+const missingBrandGuide = buildRecommendedAreaGuides({
+  look: generatedLooks[0],
+  directGuides: [{area: 'base', products: [{productName: '이름만 검증된 제품'}]}],
+})[0];
+expectEqual(missingBrandGuide.products[0].brandName, '', 'missing backend brand stays empty instead of using a label as a brand');
 
 const reportHistory = mapBackendRecommendationReports([
   {
@@ -118,16 +199,20 @@ const reportHistory = mapBackendRecommendationReports([
     },
     imageStatus: 'completed',
     createdAt: '2026-07-14T12:34:56Z',
+    profileGender: 'unspecified',
+    contextSnapshot: JSON.stringify({profile: {gender: 'male'}}),
   },
 ]);
 expectEqual(reportHistory.length, 1, 'saved report history count');
 expectEqual(reportHistory[0].reportId, 'report-1', 'saved report id');
 expectEqual(reportHistory[0].scenarioText, '퇴근 후 약속', 'saved report scenario');
+expectEqual(reportHistory[0].profileGender, 'unspecified', 'history prefers scalar profile gender');
 expectEqual(reportHistory[0].results.length, 3, 'saved report restores three looks');
 expectEqual(reportHistory[0].results[0].title, 'anchor title', 'saved report restores look copy');
 const restoredReport = restoreMakeupRecommendationReport(reportHistory[0]);
 expectEqual(restoredReport.phase, 'results', 'saved report opens in results phase');
 expectEqual(restoredReport.reportId, 'report-1', 'restored session keeps report id');
+expectEqual(restoredReport.profileGender, 'unspecified', 'restored report keeps snapshot gender');
 expectEqual(restoredReport.generationMode, 'backend', 'restored report is server-backed');
 expectEqual(restoredReport.results.length, 3, 'restored session keeps all looks');
 
@@ -165,6 +250,12 @@ const freeTextAnswered = answerMakeupRecommendationQuestion(started, {
   freeText: '조명에서 맑게',
 });
 expectEqual(freeTextAnswered.answers[0].freeText, '조명에서 맑게', 'free text accepted');
+const editedFirstAnswer = answerMakeupRecommendationQuestion(
+  {...freeTextAnswered, currentQuestionIndex: 0},
+  {questionId: started.questions[0].id, optionId: started.questions[0].options[0].id},
+);
+expectEqual(editedFirstAnswer.answers.length, 1, 'editing previous fixture answer does not duplicate it');
+expectEqual(editedFirstAnswer.answers[0].optionId, started.questions[0].options[0].id, 'previous fixture answer is replaced');
 
 const completed = started.questions.reduce(
   (session, question, index) => answerMakeupRecommendationQuestion(session, {
@@ -494,6 +585,7 @@ async function expectPollingParsesJsonStringRecommendationAndKeepsResults() {
     answers: [],
     results: initialResults,
     useProfile: false,
+    profileGender: 'unspecified',
     imageStatus: 'pending',
     generationMode: 'backend',
   };
@@ -504,17 +596,443 @@ async function expectPollingParsesJsonStringRecommendationAndKeepsResults() {
       scenarioText: '공항 출국 레전드',
       recommendation: JSON.stringify(backendRecommendation),
       imageStatus: 'processing',
+      contextSnapshot: {profile: {gender: 'male'}},
     } as T;
   }
 
   const refreshed = await refreshGeneratedMakeupRecommendation(session, undefined, backendRequest);
 
   expectEqual(refreshed.imageStatus, 'processing', 'polling image status updates');
+  expectEqual(refreshed.profileGender, 'male', 'refresh restores report snapshot gender');
   expectEqual(refreshed.results.length, 3, 'polling keeps all three looks from json string recommendation');
   expectEqual(refreshed.results[0].title, '폴링 추천 1', 'polling parses saved recommendation copy');
 }
 
+async function expectV2DiscoverySessionAnswerGenerateContract() {
+  const specialSituation = MAKEUP_SITUATION_FIXTURES.find(item => item.key === 'formal_event');
+  const keyword = specialSituation?.keywords[0];
+  if (!specialSituation || !keyword) throw new Error('special-day fixture is required');
+  const requestLog: Array<{path: string; body?: unknown; headers?: HeadersInit}> = [];
+  const question = {
+    id: 'finish',
+    title: '어떤 마무리가 좋아요?',
+    options: [
+      {id: 'soft', label: '은은하게'},
+      {id: 'clear', label: '또렷하게'},
+      {id: 'glossy', label: '촉촉하게'},
+      {id: 'ai_pick', label: 'AI가 골라줘'},
+    ],
+  };
+  async function backendRequest<T>(path: string, init?: Parameters<typeof requestBackendJson>[1]): Promise<T> {
+    requestLog.push({path, body: init?.body, headers: init?.headers});
+    if (path.endsWith('/discovery')) {
+      return {
+        generatedAt: '2026-07-16T00:00:00Z',
+        sourceReports: [{id: 'analysis-report-1'}],
+        situations: [{
+          id: 'formal-event-api-id',
+          key: 'formal_event',
+          label: '특별한 날',
+          description: '데이트, 중요한 일정과 기념일',
+          imageAssetKey: 'formal_event',
+          sortOrder: 20,
+          keywords: [{
+            id: 'keyword-api-id',
+            label: '소개팅·데이트',
+            kind: 'curated',
+            badge: 'CURATED',
+            seedPrompt: '소개팅이나 데이트를 앞둔 특별한 약속 상황',
+            tags: ['formal_event', 'date'],
+          }],
+        }],
+      } as T;
+    }
+    if (path.endsWith('/sessions')) {
+      return {
+        id: 'session-v2',
+        status: 'questioning',
+        profileGender: 'female',
+        currentQuestionIndex: 0,
+        questions: [question],
+        answers: [],
+        sourceAnalysisReportId: 'analysis-report-1',
+        expiresAt: '2026-07-17T00:00:00Z',
+      } as T;
+    }
+    if (path.endsWith('/answers')) {
+      return {
+        id: 'session-v2',
+        status: 'ready',
+        currentQuestionIndex: 1,
+        questions: [question],
+        answers: [{questionId: 'finish', optionId: 'soft'}],
+        sourceAnalysisReportId: 'analysis-report-1',
+      } as T;
+    }
+    return {
+      reportId: 'report-v2',
+      imageStatus: 'pending',
+      recommendation: {
+        looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
+          id: `v2-look-${index + 1}`,
+          role,
+          title: `V2 룩 ${index + 1}`,
+          summary: '보고서와 상황을 반영한 추천',
+          reasons: ['선택한 얼굴 분석 보고서와 키워드를 반영했어요.'],
+          durationMinutes: 15,
+          difficulty: 'medium',
+          areaGuides: [{
+            area: 'base',
+            label: '베이스',
+            goal: '결을 정돈해요',
+            color: {name: '뉴트럴 베이지', hex: '#D9B49A'},
+            texture: '새틴',
+            placement: '얼굴 중앙',
+            technique: '얇게 펴 발라요',
+            reason: '피부 분석을 반영했어요',
+            avoid: [],
+            steps: [{order: 1, instruction: '소량씩 바르기'}],
+            products: [],
+            arSupported: true,
+          }],
+        })),
+      },
+    } as T;
+  }
+
+  const discovery = await fetchMakeupRecommendationDiscovery(backendRequest);
+  expectEqual(discovery.source, 'api', 'v2 discovery uses validated api payload');
+  expectEqual(discovery.sourceReportIds?.[0], 'analysis-report-1', 'discovery keeps owned completed report ids');
+  expectEqual(discovery.situations[0].keywords[0].badge, 'CURATED', 'situation keyword stays curated');
+
+  const started = await startGeneratedMakeupRecommendationV2({
+    analysisReportId: 'analysis-report-1',
+    idempotencyKey: 'makeup-v2-test-intent',
+    situation: specialSituation,
+    keyword,
+    imageMode: 'generic',
+  }, backendRequest);
+  expectEqual(started.phase, 'question', 'v2 session starts with reverse question');
+  expectEqual(started.sourceAnalysisReportId, 'analysis-report-1', 'selected report id is retained');
+  expectEqual(started.profileGender, 'female', 'start keeps account gender');
+  expectEqual(started.useProfile, true, 'v2 always uses selected analysis profile');
+  expectEqual(
+    (requestLog.find(item => item.path.endsWith('/sessions'))?.headers as Record<string, string>)?.['Idempotency-Key'],
+    'makeup-v2-test-intent',
+    'v2 session reuses the caller intent idempotency key',
+  );
+
+  const editorialStarted = await startGeneratedMakeupRecommendationV2({
+    analysisReportId: 'analysis-report-1',
+    idempotencyKey: 'makeup-v2-editorial-intent',
+    editorialPresetId: 'baseball-camera',
+    editorialPresetLabel: '야구장 전광판에 잡히고 싶은 날',
+    editorialPresetPrompt: '야외 야구장에서 생기 있고 또렷하며 오래 유지되는 메이크업',
+    imageMode: 'personalized',
+  }, backendRequest);
+  const editorialRequest = requestLog.filter(item => item.path.endsWith('/sessions')).at(-1);
+  const editorialBody = editorialRequest?.body as Record<string, unknown>;
+  expectEqual(editorialStarted.phase, 'question', 'editorial preset starts the reviewed reverse-question flow');
+  expectEqual(editorialStarted.scenarioLabel, '야구장 전광판에 잡히고 싶은 날', 'editorial display label is preserved');
+  expectEqual(editorialStarted.editorialPresetId, 'baseball-camera', 'editorial preset id is preserved');
+  expectEqual(editorialBody.editorialPresetId, 'baseball-camera', 'editorial selection sends its reviewed preset id');
+  expectEqual(editorialBody.customSituationText, null, 'editorial preset does not masquerade as custom user input');
+  expectEqual(editorialBody.customSituationLabel, null, 'editorial copy is resolved from the trusted server preset');
+  expectEqual(editorialBody.imageMode, 'personalized', 'editorial prompt requests the selected face image');
+  expectEqual(editorialBody.situationId, undefined, 'independent editorial prompt has no parent situation id');
+  expectEqual(editorialBody.keywordId, undefined, 'independent editorial prompt has no mapped keyword id');
+
+  const ready = await answerGeneratedMakeupRecommendationQuestionV2(
+    started,
+    {questionId: 'finish', optionId: 'soft'},
+    backendRequest,
+  );
+  expectEqual(ready.phase, 'ready', 'last reverse answer makes v2 session ready');
+  expectEqual(ready.answers.length, 1, 'v2 answer is preserved');
+  expectEqual(ready.profileGender, 'female', 'answer keeps previous account gender');
+
+  const completed = await generateMakeupRecommendationV2(ready, backendRequest);
+  expectEqual(completed.phase, 'results', 'v2 generate reaches results');
+  expectEqual(completed.reportId, 'report-v2', 'v2 saved report id is kept');
+  expectEqual(completed.profileGender, 'female', 'generate keeps session account gender');
+  expectEqual(completed.results.length, 3, 'v2 keeps three look roles');
+  expectEqual(completed.results.every(look => (look.areaGuides?.length ?? 0) >= 5), true, 'v1/v2 adapter guarantees five area guides');
+  expectEqual(
+    completed.results.every(look => look.areaGuides?.every(guide => guide.products.length === 0)),
+    true,
+    'v2 empty area products never receive fixture brands',
+  );
+}
+
+async function expectV2OnlyFallsBackForUnavailableEndpoint() {
+  const situation = MAKEUP_SITUATION_FIXTURES[0];
+  async function unavailableRequest<T>(): Promise<T> {
+    throw new BackendApiError('not found', 404, 'NOT_FOUND');
+  }
+  const fallback = await startGeneratedMakeupRecommendationV2({
+    analysisReportId: 'analysis-report-fixture',
+    forceFixture: true,
+    situation,
+    keyword: situation.keywords[0],
+  }, unavailableRequest);
+  expectEqual(fallback.generationMode, 'fixture', 'missing v2 endpoint uses local fixture flow');
+  expectEqual(fallback.sourceAnalysisReportId, 'analysis-report-fixture', 'fixture keeps selected report id');
+
+  const previousApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+  process.env.EXPO_PUBLIC_API_BASE_URL = 'https://api.example.com';
+  let configuredEndpointError: unknown;
+  try {
+    await startGeneratedMakeupRecommendationV2({
+      analysisReportId: 'analysis-report-production',
+      situation,
+      keyword: situation.keywords[0],
+    }, unavailableRequest);
+  } catch (error) {
+    configuredEndpointError = error;
+  } finally {
+    if (previousApiBaseUrl === undefined) delete process.env.EXPO_PUBLIC_API_BASE_URL;
+    else process.env.EXPO_PUBLIC_API_BASE_URL = previousApiBaseUrl;
+  }
+  expectEqual(configuredEndpointError instanceof BackendApiError, true, 'configured api failure is surfaced instead of fixture recommendation');
+
+  async function forbiddenRequest<T>(): Promise<T> {
+    throw new BackendApiError('forbidden', 403, 'FORBIDDEN');
+  }
+  let forbidden: unknown;
+  try {
+    await startGeneratedMakeupRecommendationV2({
+      analysisReportId: 'another-user-report',
+      situation,
+      keyword: situation.keywords[0],
+    }, forbiddenRequest);
+  } catch (error) {
+    forbidden = error;
+  }
+  expectEqual(forbidden instanceof BackendApiError, true, 'ownership/auth errors never masquerade as fixture success');
+}
+
+async function expectLookRetryTargetsOnlyFailedLook() {
+  let requestBody: unknown;
+  async function backendRequest<T>(_path: string, init?: Parameters<typeof requestBackendJson>[1]): Promise<T> {
+    requestBody = init?.body;
+    return {reportId: 'report-retry', lookId: 'look-bold', imageStatus: 'pending'} as T;
+  }
+  const session = restoreMakeupRecommendationReport({...reportHistory[0], imageStatus: 'partial'});
+  const retried = await retryGeneratedMakeupRecommendationImages(session, undefined, 'look-bold', backendRequest);
+  expectEqual((requestBody as {lookId?: string}).lookId, 'look-bold', 'image retry sends selected look id');
+  expectEqual(retried.imageStatus, 'pending', 'look retry returns pending aggregate state');
+}
+
+function expectMakeupRecommendationTelemetryContract() {
+  expectEqual(MAKEUP_RECOMMENDATION_EVENT_NAMES.join(','), [
+    'makeup_recommendation_opened',
+    'analysis_report_selected',
+    'makeup_situation_selected',
+    'makeup_keyword_selected',
+    'custom_situation_submitted',
+    'recommendation_question_answered',
+    'recommendation_generation_started',
+    'recommendation_text_completed',
+    'recommendation_image_completed',
+    'recommendation_image_failed',
+    'recommendation_area_opened',
+    'recommendation_ar_applied',
+  ].join(','), 'telemetry keeps the 12-event product contract');
+
+  const safeMetadata = sanitizeMakeupRecommendationEventMetadata({
+    id: ' report-1 ',
+    category: 'trend',
+    modelVersion: 'claude-test',
+    durationMs: 12.6,
+    status: 'completed',
+    customPrompt: 'private custom prompt',
+    faceShape: 'sensitive face value',
+  });
+  expectEqual(safeMetadata.id, 'report-1', 'telemetry trims safe identifiers');
+  expectEqual(safeMetadata.durationMs, 13, 'telemetry rounds duration');
+  expectEqual('customPrompt' in safeMetadata, false, 'telemetry rejects raw custom prompts');
+  expectEqual('faceShape' in safeMetadata, false, 'telemetry rejects sensitive face values');
+
+  const emittedKeys = new Set<string>();
+  const failedInput = {
+    contextId: 'report-1',
+    reportStatus: 'partial' as const,
+    looks: [{id: 'look-1', role: 'anchor' as const, imageStatus: 'failed' as const}],
+  };
+  expectEqual(takeNewMakeupRecommendationImageEvents(failedInput, emittedKeys).length, 1, 'first image terminal event emits');
+  expectEqual(takeNewMakeupRecommendationImageEvents(failedInput, emittedKeys).length, 0, 'same image terminal event is deduplicated');
+  const completedInput = {
+    contextId: 'report-1',
+    reportStatus: 'completed' as const,
+    looks: [{id: 'look-1', role: 'anchor' as const, imageStatus: 'completed' as const}],
+  };
+  expectEqual(takeNewMakeupRecommendationImageEvents(completedInput, emittedKeys)[0]?.eventName, 'recommendation_image_completed', 'failed image retry may later complete once');
+
+  const knownKeys = new Set<string>();
+  markKnownMakeupRecommendationImageEvents(failedInput, knownKeys);
+  expectEqual(takeNewMakeupRecommendationImageEvents(failedInput, knownKeys).length, 0, 'retry primes known terminal image state');
+}
+
+async function expectMakeupRecommendationTelemetryIsFireAndForget() {
+  let capturedPath = '';
+  let capturedBody: unknown;
+  function backendRequest<T>(path: string, init?: Parameters<typeof requestBackendJson>[1]): Promise<T> {
+    capturedPath = path;
+    capturedBody = init?.body;
+    return Promise.resolve({} as T);
+  }
+  trackMakeupRecommendationEvent('makeup_keyword_selected', {
+    id: 'keyword-1',
+    category: 'trend',
+    status: 'selected',
+  }, backendRequest);
+  expectEqual(capturedPath, '/makeup-recommendations/events', 'telemetry uses the event endpoint');
+  const captured = capturedBody as {eventName: string; metadata: Record<string, unknown>};
+  expectEqual(captured.eventName, 'makeup_keyword_selected', 'telemetry sends the selected event name');
+  expectEqual(captured.metadata.id, 'keyword-1', 'telemetry sends only safe metadata');
+
+  trackMakeupRecommendationEvent('makeup_recommendation_opened', {}, async () => {
+    throw new Error('telemetry unavailable');
+  });
+  let syncFailureEscaped = false;
+  try {
+    trackMakeupRecommendationEvent('makeup_recommendation_opened', {}, () => {
+      throw new Error('telemetry unavailable synchronously');
+    });
+  } catch {
+    syncFailureEscaped = true;
+  }
+  expectEqual(syncFailureEscaped, false, 'synchronous telemetry failure never interrupts the flow');
+  await Promise.resolve();
+}
+
+async function expectMakeupRecommendationSessionIdPersistenceContract() {
+  let storedValue: string | null = null;
+  let removeCount = 0;
+  const storage: MakeupRecommendationSessionIdStorage = {
+    async getItem(key) {
+      expectEqual(key, MAKEUP_RECOMMENDATION_CURRENT_SESSION_ID_STORAGE_KEY, 'session storage read key');
+      return storedValue;
+    },
+    async setItem(key, value) {
+      expectEqual(key, MAKEUP_RECOMMENDATION_CURRENT_SESSION_ID_STORAGE_KEY, 'session storage write key');
+      storedValue = value;
+    },
+    async removeItem(key) {
+      expectEqual(key, MAKEUP_RECOMMENDATION_CURRENT_SESSION_ID_STORAGE_KEY, 'session storage remove key');
+      storedValue = null;
+      removeCount += 1;
+    },
+  };
+
+  await saveCurrentMakeupRecommendationSessionId(' session-v2 ', storage);
+  expectEqual(storedValue, 'session-v2', 'AsyncStorage contains the opaque current session id only');
+  expectEqual(String(storedValue).includes('customSituationText'), false, 'storage never contains custom prompt context');
+  expectEqual(await readCurrentMakeupRecommendationSessionId(storage), 'session-v2', 'stored session id is readable');
+  await clearCurrentMakeupRecommendationSessionId(storage, 'another-session');
+  expectEqual(storedValue, 'session-v2', 'stale completion cannot clear a newer session id');
+  await clearCurrentMakeupRecommendationSessionId(storage, 'session-v2');
+  expectEqual(storedValue, null, 'matching completed or cancelled session is cleared');
+  expectEqual(removeCount, 1, 'matching session cleanup removes once');
+
+  storedValue = '   ';
+  expectEqual(await readCurrentMakeupRecommendationSessionId(storage), null, 'invalid persisted id is discarded');
+  expectEqual(removeCount, 2, 'invalid persisted id is removed');
+
+  const unavailableStorage: MakeupRecommendationSessionIdStorage = {
+    async getItem() { throw new Error('storage unavailable'); },
+    async setItem() { throw new Error('storage unavailable'); },
+    async removeItem() { throw new Error('storage unavailable'); },
+  };
+  await saveCurrentMakeupRecommendationSessionId('session-v2', unavailableStorage);
+  await clearCurrentMakeupRecommendationSessionId(unavailableStorage);
+  expectEqual(await readCurrentMakeupRecommendationSessionId(unavailableStorage), null, 'storage errors fail open');
+}
+
+async function expectGeneratedV2SessionRestoreContract() {
+  let requestPath = '';
+  let requestMethod: string | undefined;
+  let responseStatus: 'questioning' | 'ready' | 'generating' | 'completed' | 'failed' = 'generating';
+  async function backendRequest<T>(path: string, init?: Parameters<typeof requestBackendJson>[1]): Promise<T> {
+    requestPath = path;
+    requestMethod = init?.method;
+    return {
+      id: 'session-v2',
+      status: responseStatus,
+      profileGender: 'male',
+      currentQuestionIndex: responseStatus === 'questioning' ? 0 : 1,
+      questions: [{
+        id: 'finish',
+        title: '어떤 마무리가 좋아요?',
+        options: [
+          {id: 'soft', label: '은은하게'},
+          {id: 'clear', label: '또렷하게'},
+          {id: 'glossy', label: '촉촉하게'},
+          {id: 'ai_pick', label: 'AI가 골라줘'},
+        ],
+      }],
+      answers: responseStatus === 'questioning' ? [] : [{questionId: 'finish', optionId: 'soft'}],
+      sourceAnalysisReportId: 'analysis-report-1',
+      situation: {id: 'situation-date', key: 'date', label: '데이트', description: '낮부터 저녁까지'},
+      keyword: {
+        id: 'keyword-date',
+        label: '스트로베리 밀크',
+        kind: 'trend',
+        badge: 'TREND_K_BEAUTY_2026',
+        seedPrompt: '투명한 핑크 톤 메이크업',
+        tags: ['date'],
+      },
+      reportId: responseStatus === 'completed' ? 'report-v2' : undefined,
+      expiresAt: '2099-07-17T00:00:00Z',
+    } as T;
+  }
+
+  const generating = await fetchGeneratedMakeupRecommendationSessionV2('session-v2', backendRequest);
+  expectEqual(requestPath, '/makeup-recommendations/sessions/session-v2', 'resume fetches the owned server session');
+  expectEqual(requestMethod, undefined, 'resume uses GET');
+  expectEqual(generating.phase, 'ready', 'generating server session maps to loading-capable client phase');
+  expectEqual(generating.status, 'generating', 'generating status is preserved for polling');
+  expectEqual(generating.profileGender, 'male', 'server session restore keeps account gender');
+  expectEqual(generating.prompt, '투명한 핑크 톤 메이크업', 'prompt is reconstructed from server context, not local storage');
+  expectEqual(generating.answers.length, 1, 'server-owned answers are restored');
+  expectEqual(generating.sourceAnalysisReportId, 'analysis-report-1', 'owned analysis report id is restored');
+  responseStatus = 'questioning';
+  const questioning = await fetchGeneratedMakeupRecommendationSessionV2('session-v2', backendRequest);
+  expectEqual(questioning.phase, 'question', 'questioning session restores its current reverse question');
+  expectEqual(questioning.currentQuestionIndex, 0, 'questioning session restores the server index');
+
+  responseStatus = 'ready';
+  const ready = await fetchGeneratedMakeupRecommendationSessionV2('session-v2', backendRequest);
+  expectEqual(ready.phase, 'ready', 'ready session can resume generation');
+
+  responseStatus = 'failed';
+  const failed = await fetchGeneratedMakeupRecommendationSessionV2('session-v2', backendRequest);
+  expectEqual(failed.phase, 'ready', 'failed server session remains generation-capable on the client');
+  expectEqual(failed.status, 'failed', 'failed server status is preserved for explicit retry UX');
+  expectEqual(failed.answers.length, 1, 'failed session restores server-owned answers for retry');
+
+  responseStatus = 'completed';
+  const completed = await fetchGeneratedMakeupRecommendationSessionV2('session-v2', backendRequest);
+  expectEqual(completed.phase, 'results', 'completed session maps to results hydration');
+  expectEqual(completed.reportId, 'report-v2', 'completed session keeps its report id');
+
+  const activeExpiry = '2099-07-17T00:00:00Z';
+  expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'questioning', expiresAt: activeExpiry}), 'question', 'questioning resumes at question');
+  expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'ready', expiresAt: activeExpiry}), 'loading', 'ready resumes at loading');
+  expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'generating', expiresAt: activeExpiry}), 'loading', 'generating resumes at loading');
+  expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'failed', expiresAt: activeExpiry}), 'retry', 'failed session waits for explicit user retry');
+  expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'completed', reportId: 'report-v2', expiresAt: activeExpiry}), 'results', 'completed resumes through result hydration');
+  expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'completed', expiresAt: activeExpiry}), 'discard', 'completed session without report is discarded');
+  expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'ready', expiresAt: '2020-01-01T00:00:00Z'}), 'discard', 'expired session is discarded');
+  expectEqual(shouldDiscardStoredMakeupRecommendationSessionForError(new BackendApiError('missing', 404, 'NOT_FOUND')), true, '404 clears persisted id');
+  expectEqual(shouldDiscardStoredMakeupRecommendationSessionForError(new BackendApiError('conflict', 409, 'CONFLICT')), true, '409 clears persisted id');
+  expectEqual(shouldDiscardStoredMakeupRecommendationSessionForError(new BackendApiError('generating', 409, 'MAKEUP_SESSION_GENERATING')), false, 'in-flight generation conflict keeps persisted id for polling');
+  expectEqual(shouldDiscardStoredMakeupRecommendationSessionForError(new BackendApiError('race', 409, 'MAKEUP_SESSION_STATE_CHANGED')), false, 'generation claim race also keeps persisted id for polling');
+  expectEqual(shouldDiscardStoredMakeupRecommendationSessionForError(new BackendApiError('expired', 410, 'EXPIRED')), true, 'expired response clears persisted id');
+  expectEqual(shouldDiscardStoredMakeupRecommendationSessionForError(new BackendApiError('temporary', 500, 'TEMPORARY')), false, 'transient restore error keeps id for a later retry');
+}
 async function runAsyncContracts() {
+  expectMakeupRecommendationTelemetryContract();
   await expectGeneratedQuestionFailureIsSurfaced();
   await expectGeneratedQuestionsRejectSixOptions();
   await expectAuthFailureDoesNotMasqueradeAsFallback();
@@ -522,6 +1040,12 @@ async function runAsyncContracts() {
   await expectGeneratedBackendFlowCompletesAndKeepsSavedReport();
   await expectGeneratedRecommendationFailureIsSurfaced();
   await expectPollingParsesJsonStringRecommendationAndKeepsResults();
+  await expectV2DiscoverySessionAnswerGenerateContract();
+  await expectV2OnlyFallsBackForUnavailableEndpoint();
+  await expectLookRetryTargetsOnlyFailedLook();
+  await expectMakeupRecommendationTelemetryIsFireAndForget();
+  await expectMakeupRecommendationSessionIdPersistenceContract();
+  await expectGeneratedV2SessionRestoreContract();
 }
 
 void runAsyncContracts().catch(error => {

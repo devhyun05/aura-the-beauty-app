@@ -14,6 +14,7 @@ from app.schemas.analysis import AnalysisJobCreate, FilterExtractionAnalyzeReque
 
 
 SUPPORTED_AI_JOB_MESSAGE_VERSION = 1
+SUPPORTED_AI_JOB_MESSAGE_VERSIONS = {1, 2}
 TERMINAL_JOB_STATUSES = {"completed", "failed"}
 
 logger = logging.getLogger(__name__)
@@ -63,22 +64,36 @@ def parse_ai_job_message(body: str) -> ParsedAIJobMessage:
   if not isinstance(payload, dict):
     raise AIJobMessageParseError("SQS message body must be a JSON object.")
 
-  version = payload.get("version")
-
-  if version != SUPPORTED_AI_JOB_MESSAGE_VERSION:
-    raise AIJobMessageParseError("Unsupported AI job message version.")
-
   job_type = payload.get("jobType")
-
   if not isinstance(job_type, str) or not job_type.strip():
     raise AIJobMessageParseError("jobType is required.")
+  job_type = job_type.strip()
+  version = payload.get("version")
+  if version not in SUPPORTED_AI_JOB_MESSAGE_VERSIONS:
+    raise AIJobMessageParseError("Unsupported AI job message version.")
+  if version == 2 and job_type != "makeup_recommendation":
+    raise AIJobMessageParseError("AI job message version 2 is only valid for makeup recommendations.")
+
+  detail = payload.get("payload", {})
+  if not isinstance(detail, dict):
+    raise AIJobMessageParseError("payload must be a JSON object.")
+  if version == 2:
+    look_id = detail.get("lookId")
+    if look_id is not None and (
+      not isinstance(look_id, str)
+      or not look_id.strip()
+      or len(look_id.strip()) > 120
+    ):
+      raise AIJobMessageParseError("payload.lookId must be a non-empty string of at most 120 characters.")
+    if isinstance(look_id, str):
+      detail = {**detail, "lookId": look_id.strip()}
 
   return ParsedAIJobMessage(
     version=version,
-    job_type=job_type.strip(),
+    job_type=job_type,
     job_id=_parse_uuid(payload.get("jobId"), "jobId"),
     user_id=_parse_uuid(payload.get("userId"), "userId"),
-    payload=payload,
+    payload=detail,
   )
 
 
@@ -224,12 +239,22 @@ class AIJobDispatcher:
       message.job_id,
       message.user_id,
     )
-    await run_recommendation_image_job(
-      message.job_id,
-      message.user_id,
-      self.settings,
-      db=self.db,
-    )
+    look_id = message.payload.get("lookId")
+    if isinstance(look_id, str):
+      await run_recommendation_image_job(
+        message.job_id,
+        message.user_id,
+        self.settings,
+        db=self.db,
+        look_id=look_id,
+      )
+    else:
+      await run_recommendation_image_job(
+        message.job_id,
+        message.user_id,
+        self.settings,
+        db=self.db,
+      )
 
   async def dispatch_feedback(self, message: ParsedAIJobMessage) -> None:
     logger.info(

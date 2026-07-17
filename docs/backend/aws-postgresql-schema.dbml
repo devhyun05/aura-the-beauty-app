@@ -220,9 +220,11 @@ Table analysis_reports {
   embedding vector(1024)
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
 
   indexes {
     (user_id, analyzed_at)
+    (user_id, analyzed_at) [note: 'Partial index where deleted_at is null']
   }
 
   Note: 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.'
@@ -359,6 +361,141 @@ Table analysis_lab_runs {
   Note: 'Dedicated JSON-fixture-only Report Lab history. Product reports and users are outside this contract.'
 }
 
+
+Table makeup_situations {
+  id uuid [pk, default: `gen_random_uuid()`]
+  key text [not null, unique]
+  label text [not null]
+  description text [not null]
+  image_asset_key text [note: 'Mobile bundled static asset registry key; null for custom']
+  icon_key text
+  sort_order integer [not null, default: 0]
+  status text [not null, default: 'active', note: 'active | disabled']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (status, sort_order, key)
+  }
+
+  Note: 'Stable parent situations. The custom row has no required parent image.'
+}
+
+Table makeup_scenario_library {
+  id uuid [pk, default: `gen_random_uuid()`]
+  text text [not null]
+  normalized_text text [not null]
+  seed_prompt text [not null]
+  tags jsonb [not null, default: `'[]'::jsonb`]
+  source text [not null, default: 'ai', note: 'ai | curated']
+  model_id text
+  prompt_version text [not null, default: 'makeup-scenario-v2']
+  status text [not null, default: 'active', note: 'active | disabled']
+  usage_count integer [not null, default: 0]
+  last_served_at timestamptz
+  created_by_user_id uuid
+  keyword_kind text [not null, default: 'legacy_scenario', note: 'curated | steady | trend | legacy_scenario']
+  source_name text
+  source_url text
+  source_published_at timestamptz
+  evidence_summary text
+  market_scope text
+  trend_score numeric(5,4)
+  confidence text [note: 'A | B']
+  review_status text [not null, default: 'draft', note: 'draft | approved | rejected; evidence-complete imports remain draft until explicit approval']
+  locale text [not null, default: 'ko-KR']
+  as_of timestamptz
+  valid_from timestamptz
+  expires_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (status, usage_count, created_at)
+    (source, status, usage_count, last_served_at, created_at)
+    (locale, keyword_kind, review_status, status, expires_at)
+    (normalized_text, locale, `coalesce(market_scope, '')`) [unique, name: 'uq_makeup_scenario_library_locale_scope']
+  }
+
+  Note: 'Backward-compatible V1 scenario library extended as the V2 keyword registry. Trend rows require source and freshness evidence even while draft. Keyword uniqueness is scoped to normalized_text + locale + coalesced market_scope; only approved, active-mapped, non-expired rows are exposed with trend badges.'
+}
+
+Table makeup_situation_keywords {
+  situation_id uuid [not null]
+  keyword_id uuid [not null]
+  relevance_score numeric(5,4) [not null, default: 1]
+  sort_order integer [not null, default: 0]
+  status text [not null, default: 'active', note: 'active | disabled']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (situation_id, keyword_id) [pk]
+    (situation_id, status, sort_order, relevance_score)
+  }
+
+  Note: 'Many-to-many mapping so the same makeup keyword can appear under several parent situations.'
+}
+
+Table makeup_keyword_question_templates {
+  id uuid [pk, default: `gen_random_uuid()`]
+  keyword_id uuid [not null]
+  template_version integer [not null, note: 'Positive reviewed-copy version']
+  locale text [not null, default: 'ko-KR']
+  questions jsonb [not null, note: 'Validated GeneratedQuestions array with 1..3 questions']
+  source text [not null, default: 'curated', note: 'curated | ai_generated']
+  model_id text
+  prompt_version text [not null]
+  review_status text [not null, default: 'draft', note: 'draft | approved | rejected']
+  status text [not null, default: 'active', note: 'active | retired']
+  reviewed_at timestamptz [note: 'Required when review_status is approved']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (keyword_id, template_version) [unique]
+    keyword_id [unique, name: 'uq_makeup_keyword_question_templates_active_reviewed', note: 'Partial unique index where status = active and review_status = approved']
+    (keyword_id, locale, status, review_status, template_version) [name: 'idx_makeup_keyword_question_templates_lookup']
+  }
+
+  Note: 'Versioned, human-reviewed reverse-question copy for predefined situation keywords. Runtime AI is reserved for custom input or an explicitly unreviewed keyword.'
+}
+
+Table makeup_scenario_generation_limits {
+  user_id uuid [pk]
+  window_started_at timestamptz [not null, default: `now()`]
+  request_count integer [not null, default: 0, note: '0..4; retained for V1 compatibility']
+}
+
+Table makeup_recommendation_sessions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  analysis_report_id uuid [not null]
+  situation_id uuid [note: 'Nullable for the custom prompt path']
+  keyword_id uuid
+  custom_situation_text text
+  context_snapshot jsonb [not null, default: `'{}'::jsonb`]
+  questions jsonb [not null, default: `'[]'::jsonb`]
+  answers jsonb [not null, default: `'[]'::jsonb`]
+  current_question_index integer [not null, default: 0]
+  status text [not null, default: 'questioning', note: 'questioning | ready | generating | completed | failed | expired']
+  report_id uuid
+  idempotency_key text [not null]
+  image_mode text [not null, default: 'generic', note: 'generic | personalized']
+  expires_at timestamptz [not null, default: `now() + interval '24 hours'`]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, idempotency_key) [unique]
+    (report_id) [unique]
+    (user_id, created_at)
+    (user_id, status, expires_at)
+  }
+
+  Note: 'Server-authoritative V2 question flow, report selection, context snapshot and idempotency state.'
+}
+
 Table makeup_recommendation_reports {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
@@ -369,55 +506,61 @@ Table makeup_recommendation_reports {
   questions jsonb [not null, default: `'[]'::jsonb`]
   answers jsonb [not null, default: `'[]'::jsonb`]
   recommendation jsonb [not null]
-  image_status text [not null, default: 'pending', note: 'pending | processing | completed | failed']
-  image_url text
+  image_status text [not null, default: 'pending', note: 'pending | processing | partial | completed | failed']
+  image_url text [note: 'Generic public compatibility URL only; never persisted for a private personalized asset']
   image_error text
   scenario_model_id text
   question_model_id text
   recommendation_model_id text
   image_model_id text
   prompt_version text [not null]
+  source_analysis_report_id uuid
+  session_id uuid
+  situation_id uuid [note: 'Nullable for the custom prompt path']
+  keyword_id uuid
+  context_snapshot jsonb [not null, default: `'{}'::jsonb`]
+  schema_version text [not null, default: 'makeup-recommendation-v2']
+  image_mode text [not null, default: 'generic', note: 'generic | personalized']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
     (user_id, created_at)
     (parent_report_id)
+    (session_id) [unique]
   }
 
-  Note: 'Stores generated situation context, answers, recommendation, model provenance, and image generation state. Face analysis is intentionally excluded.'
+  Note: 'Stores V1-compatible recommendation data plus the selected owned analysis report, immutable allowlisted context snapshot, V2 session, taxonomy and image mode.'
 }
 
-Table makeup_scenario_library {
+Table makeup_recommendation_assets {
   id uuid [pk, default: `gen_random_uuid()`]
-  text text [not null]
-  normalized_text text [not null, unique]
-  seed_prompt text [not null]
-  tags jsonb [not null, default: `'[]'::jsonb`]
-  source text [not null, default: 'ai', note: 'ai | curated']
-  model_id text
-  prompt_version text [not null, default: 'makeup-scenario-v2']
-  status text [not null, default: 'active', note: 'active | disabled']
-  usage_count integer [not null, default: 0]
-  last_served_at timestamptz
-  created_by_user_id uuid
+  report_id uuid [not null]
+  look_id text [not null]
+  role text [not null, note: 'anchor | bold | discovery']
+  status text [not null, default: 'pending', note: 'pending | processing | completed | failed']
+  image_url text [note: 'Only generic delivery URL; private personalized rows keep this null']
+  image_error text
+  storage_bucket text
+  object_key text
+  content_type text
+  is_private boolean [not null, default: false]
+  input_media_id uuid
+  model_id text [not null]
+  prompt_version text [not null]
+  provenance jsonb [not null, default: `'{}'::jsonb`, note: 'Exact sent prompt, model/prompt version, consent and rights status, and validated output format/dimensions']
+  attempt_count integer [not null, default: 0]
+  last_attempt_at timestamptz
+  completed_at timestamptz
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (status, usage_count, created_at)
-    (source, status, usage_count, last_served_at, created_at)
+    (report_id, look_id) [unique]
+    (report_id, status, role)
   }
 
-  Note: 'Shared library of validated AI-generated makeup situation cards. Active cards can be reused across users.'
-}
-
-Table makeup_scenario_generation_limits {
-  user_id uuid [pk]
-  window_started_at timestamptz [not null, default: `now()`]
-  request_count integer [not null, default: 0, note: '0..4; 4 represents a throttled live window']
-
-  Note: 'One bounded rolling-window counter per user for scenario generation cost control.'
+  Note: 'Per-look image lifecycle. Personalized objects are private and delivered through a fresh authenticated signed URL, never a persisted public URL.'
 }
 
 Table hair_analyses {
@@ -1939,10 +2082,24 @@ Ref: face_measurement_preferences.user_id > users.id [delete: cascade]
 Ref: face_length_measurement_snapshots.report_id > analysis_reports.id [delete: cascade]
 Ref: analysis_stage_runs.report_id > analysis_reports.id [delete: cascade]
 Ref: analysis_lab_runs.session_id > analysis_lab_sessions.id [delete: cascade]
-Ref: makeup_recommendation_reports.user_id > users.id
-Ref: makeup_recommendation_reports.parent_report_id > makeup_recommendation_reports.id
 Ref: makeup_scenario_library.created_by_user_id > users.id
+Ref: makeup_situation_keywords.situation_id > makeup_situations.id [delete: cascade]
+Ref: makeup_situation_keywords.keyword_id > makeup_scenario_library.id [delete: cascade]
+Ref: makeup_keyword_question_templates.keyword_id > makeup_scenario_library.id [delete: cascade]
 Ref: makeup_scenario_generation_limits.user_id - users.id
+Ref: makeup_recommendation_sessions.user_id > users.id [delete: cascade]
+Ref: makeup_recommendation_sessions.analysis_report_id > analysis_reports.id
+Ref: makeup_recommendation_sessions.situation_id > makeup_situations.id
+Ref: makeup_recommendation_sessions.keyword_id > makeup_scenario_library.id
+Ref: makeup_recommendation_sessions.report_id > makeup_recommendation_reports.id
+Ref: makeup_recommendation_reports.user_id > users.id [delete: cascade]
+Ref: makeup_recommendation_reports.parent_report_id > makeup_recommendation_reports.id
+Ref: makeup_recommendation_reports.source_analysis_report_id > analysis_reports.id
+Ref: makeup_recommendation_reports.session_id > makeup_recommendation_sessions.id
+Ref: makeup_recommendation_reports.situation_id > makeup_situations.id
+Ref: makeup_recommendation_reports.keyword_id > makeup_scenario_library.id
+Ref: makeup_recommendation_assets.report_id > makeup_recommendation_reports.id [delete: cascade]
+Ref: makeup_recommendation_assets.input_media_id > media_assets.id
 
 Ref: hair_analyses.user_id > users.id
 Ref: hair_analyses.photo_capture_id > photo_captures.id

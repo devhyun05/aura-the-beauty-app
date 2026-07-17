@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "text": "투명 베리 글레이즈",
+      "seedPrompt": "얇은 베리 색과 투명한 광택을 눈, 치크, 립에 제한적으로 연결한다.",
+      "sourceName": "Approved editorial source",
+      "sourceUrl": "https://example.com/editorial/transparent-berry-glaze",
+      "sourcePublishedAt": "2026-07-01T00:00:00Z",
+      "market": "KR",
+      "locale": "ko-KR",
+      "evidence": "원문에서 얇은 베리 레이어와 투명 광택을 2026 메이크업 방향으로 제시했다.",
+      "asOf": "2026-07-16T00:00:00Z",
+      "expiresAt": "2026-10-14T00:00:00Z",
+      "confidence": "A",
+      "situations": ["date", "camera_content"],
+      "tags": ["berry", "glaze"],
+      "trendScore": 0.82,
+      "sortOrder": 30
+    }
+  ]
+}
