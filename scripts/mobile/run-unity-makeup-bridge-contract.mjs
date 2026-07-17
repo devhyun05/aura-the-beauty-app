@@ -50,6 +50,10 @@ const makeupControllerSource = readFileSync(
   'utf8',
 );
 const irisRendererSource = readFileSync(join(graftFaceRoot, 'IrisRenderer.cs'), 'utf8');
+const eyeshadowShaderSource = readFileSync(
+  join(unityResourcesRoot, 'Eyeshadow.shader'),
+  'utf8',
+);
 const stencilGuideRendererSource = readFileSync(
   join(graftFaceRoot, 'StencilGuideRenderer.cs'),
   'utf8',
@@ -99,6 +103,16 @@ assert.match(
   '메이크업 합성 큐는 ARwithFable 정본 순서를 따라야 한다',
 );
 assert.doesNotMatch(makeupQueuesSource, /\bAegyo\s*=/, '별도 애교살 렌더 큐가 있으면 안 된다');
+assert.match(
+  irisRendererSource,
+  /StyleAngleDeg\s*=\s*\{\s*28f,\s*-22f,\s*0f\s*\}[\s\S]*Mathf\.Clamp\(p\.eyeshadowShape,\s*0,\s*3\)/,
+  '아이라이너 3종·아이쉐도 4종 범위는 ARwithFable 정본과 같아야 한다',
+);
+assert.doesNotMatch(
+  irisRendererSource + eyeshadowShaderSource,
+  /EyelinerStyleCount|EyeshadowShapeCount|EyeshadowBell|EyeshadowShapeWeight|EyeshadowTailAnatomicalX/,
+  '정본에 없는 아이라이너·아이쉐도 확장 렌더 분기가 남아 있으면 안 된다',
+);
 assert.match(
   lowerLidRendererSource,
   /ApplyParams\(\s*float aegyoIntensity/,

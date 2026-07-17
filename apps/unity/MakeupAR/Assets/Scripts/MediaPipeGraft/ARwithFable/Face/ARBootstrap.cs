@@ -101,7 +101,7 @@ namespace ARMakeup.Face
             var eyelinerStyleGO = new GameObject("Eyeliner Style Renderer");
             eyelinerStyleGO.AddComponent<EyelinerStyleRenderer>().Init(cam, landmarkSource);
 
-            // 하안검 밴드 — 아이라인(하)·아이섀도 하·삼각존·컨실러.
+            // 하안검 밴드 — 아이라인(하) + 애교살 2줄 (캐노니컬 마스크 추정판 대체).
             var lowerLidGO = new GameObject("Lower Lid Renderer");
             lowerLidGO.AddComponent<LowerLidRenderer>().Init(cam, landmarkSource);
 
