@@ -268,12 +268,15 @@ async function writeStoredUserProfile(profile: UserProfile): Promise<void> {
 
 async function fetchBackendUserProfile(
   fallbackProfile: UserProfile,
+  timeoutMs?: number,
 ): Promise<UserProfile | null> {
   if (!getBackendApiBaseUrl()) {
     return null;
   }
 
-  const {user} = await requestBackendJson<BackendUserResponse>('/users/me');
+  const {user} = await requestBackendJson<BackendUserResponse>('/users/me', {
+    timeoutMs,
+  });
 
   if (!user) {
     return null;
@@ -317,15 +320,24 @@ async function updateBackendUserProfile(
   return user ? mapBackendUserToProfile(user, profile) : null;
 }
 
-export const getUserProfile = async (): Promise<UserProfile> => {
+export const getUserProfile = async (
+  options: {cacheOnly?: boolean; timeoutMs?: number} = {},
+): Promise<UserProfile> => {
   const storedProfile = await readStoredUserProfile();
 
   if (storedProfile) {
     currentUserProfile = storedProfile;
   }
 
+  if (options.cacheOnly) {
+    return currentUserProfile;
+  }
+
   try {
-    const backendProfile = await fetchBackendUserProfile(currentUserProfile);
+    const backendProfile = await fetchBackendUserProfile(
+      currentUserProfile,
+      options.timeoutMs,
+    );
 
     if (backendProfile) {
       currentUserProfile = backendProfile;
