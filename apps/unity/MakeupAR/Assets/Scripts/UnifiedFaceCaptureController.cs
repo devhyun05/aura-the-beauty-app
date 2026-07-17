@@ -210,6 +210,11 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
     private double advisoryCandidateStartedAtSeconds;
     private double advisoryStableStartedAtSeconds;
     private double nextGateRefreshAtSeconds;
+    // greenlight cameraStability("잠시 움직이지 마세요") 프록시 — gate 갱신 간
+    // pose 각속도가 임계 이하로 유지된 시간. AVFoundation 노출 게이트의 대역이다.
+    private Vector3 previousGatePose = Vector3.zero;
+    private bool hasPreviousGatePose;
+    private double gatePoseStableSinceSeconds;
     private readonly Face3DSensorProvenanceAccumulator
         sensorProvenanceAccumulator =
             new Face3DSensorProvenanceAccumulator();
@@ -248,6 +253,11 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
 
         RefreshSceneReferences();
         EnsureAdvisorySources();
+        // 얼굴 추적 수를 바꾸면 ARFoundation 이 얼굴 서브시스템을 재구성해 추적
+        // 중이던 ARFace 가 사라지고 재획득까지 수백 ms 가 걸린다. 셔터 시점에
+        // 바꾸면 그 공백이 버스트 창(제품 정책 500ms)을 통째로 덮어 유효 프레임이
+        // 0개가 된다. 화면 진입 시점에 미리 올려 두어 셔터 전에 추적을 안정시킨다.
+        PromoteRequestedFaceCount();
         ResetHairlineAdvisoryState(
             Time.realtimeSinceStartupAsDouble);
         nextGateRefreshAtSeconds =
@@ -320,10 +330,9 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         finalizationDeadlineSeconds = 0.0;
         maximumObservedNativeDeltaMs = 0.0;
         sensorProvenanceAccumulator.Reset();
-        previousRequestedMaximumFaceCount =
-            Math.Max(1, faceManager.requestedMaximumFaceCount);
-        faceCountRestored = false;
-        faceManager.requestedMaximumFaceCount = RequestedFaceCount;
+        // Prepare 에서 이미 올려 두었으면 여기서는 아무 일도 하지 않는다. 셔터
+        // 시점에 올리면 추적 재획득이 버스트 창을 통째로 먹는다.
+        PromoteRequestedFaceCount();
         sessionActive = true;
         SubscribeFaceManager();
         SendGate(request.RequestId);
@@ -374,6 +383,10 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         {
             SendCancelled(preparedRequest.RequestId, cancelReason);
             preparedRequest = null;
+            // 이 경로는 세션을 시작한 적이 없어 FinishSession 을 타지 않는다.
+            // prepare 가 얼굴 추적 수를 올려 두므로 여기서 직접 되돌리지 않으면
+            // 촬영 없이 화면을 닫았을 때 씬에 승격된 값이 남는다.
+            RestoreRequestedFaceCount();
             ResetHairlineAdvisoryState(
                 Time.realtimeSinceStartupAsDouble);
         }
@@ -520,16 +533,19 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
                 trackingFace,
                 out UnifiedFaceNativeCaptureSample nativeSample))
         {
-            sessionWarnings.Add("native_face_frame_sample_rejected");
+            sessionWarnings.Add("native_face_frame_sample_unavailable");
             return;
         }
 
         bool retainedByController = false;
         try
         {
-            if (!TryValidateNativeSample(nativeSample, out double nativeDeltaMs))
+            if (!TryValidateNativeSample(
+                    nativeSample,
+                    out double nativeDeltaMs,
+                    out string sampleRejectReason))
             {
-                sessionWarnings.Add("native_face_frame_sample_rejected");
+                sessionWarnings.Add(sampleRejectReason);
                 return;
             }
             if (!acceptedNativeFaceTokens.Add(nativeSample.FaceNativeFrameToken))
@@ -628,11 +644,16 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         }
     }
 
+    // 거부 사유를 하나의 문자열로 뭉뚱그리면 "구조가 깨진 샘플" 과 "카메라·얼굴
+    // 타임스탬프가 허용 오차를 넘은 샘플" 을 로그에서 구분할 수 없다. 둘은 원인도
+    // 대응도 다르므로 나눠서 보고한다.
     private bool TryValidateNativeSample(
         UnifiedFaceNativeCaptureSample sample,
-        out double absoluteDeltaMs)
+        out double absoluteDeltaMs,
+        out string rejectReason)
     {
         absoluteDeltaMs = double.PositiveInfinity;
+        rejectReason = null;
         if (sample == null
             || string.IsNullOrWhiteSpace(sample.CameraFrameToken)
             || string.IsNullOrWhiteSpace(sample.FaceNativeFrameToken)
@@ -652,12 +673,19 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
             || !IsFiniteNonNegative(sample.CameraObservedAtMs)
             || !IsFiniteNonNegative(sample.FaceObservedAtMs))
         {
+            rejectReason = "native_face_frame_sample_invalid";
             return false;
         }
 
         absoluteDeltaMs = Math.Abs(
             sample.CameraSensorTimestampMs - sample.FaceNativeTimestampMs);
-        return absoluteDeltaMs <= activeRequest.MaxAbsFaceSensorDeltaMs;
+        if (absoluteDeltaMs > activeRequest.MaxAbsFaceSensorDeltaMs)
+        {
+            rejectReason = "native_face_sensor_delta_exceeded";
+            return false;
+        }
+
+        return true;
     }
 
     private static bool IsPersistedImageSampleValid(
@@ -1037,6 +1065,9 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         // greenlight expression. Unknown/omitted H never locks the shutter.
         json.Append(",\"finalCaptureGreenlight\":").Append(Bool(
             cameraReady && faceReady && poseReady && nativeSyncReady));
+        // 레거시 greenlight 오버레이·메시지를 RN 이 재현할 원시 신호(pose 각도·
+        // ARKit 얼굴 박스·카메라 안정성). 판정은 RN 이 한다.
+        AppendGateGeometry(json, faceReady, face, pose, now);
         json.Append(",\"hairline\":{");
         json.Append("\"status\":").Append(Quote(hairlineStatus));
         json.Append(",\"confidence\":").Append(
@@ -1504,16 +1535,36 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         }
     }
 
-    private void FinishSession()
+    // 승격/복원은 짝으로만 의미가 있고 prepare·start·cancel·finish 네 경로에서
+    // 불린다. 두 번 올리면 원래 값을 잃어버리므로 승격은 반드시 멱등해야 한다.
+    private void PromoteRequestedFaceCount()
     {
-        ReleaseFixedAnchorCandidate();
-        nativeCaptureProvider?.Reset();
+        if (faceManager == null || !faceCountRestored)
+        {
+            return;
+        }
+
+        previousRequestedMaximumFaceCount =
+            Math.Max(1, faceManager.requestedMaximumFaceCount);
+        faceCountRestored = false;
+        faceManager.requestedMaximumFaceCount = RequestedFaceCount;
+    }
+
+    private void RestoreRequestedFaceCount()
+    {
         if (!faceCountRestored && faceManager != null)
         {
             faceManager.requestedMaximumFaceCount =
                 Math.Max(1, previousRequestedMaximumFaceCount);
         }
         faceCountRestored = true;
+    }
+
+    private void FinishSession()
+    {
+        ReleaseFixedAnchorCandidate();
+        nativeCaptureProvider?.Reset();
+        RestoreRequestedFaceCount();
         sessionActive = false;
         collectionFinalizationPending = false;
         activeRequest = null;
@@ -1572,6 +1623,152 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         return !double.IsNaN(value)
             && !double.IsInfinity(value)
             && value >= 0.0;
+    }
+
+    // 레거시 greenlight 재현용 원시 신호를 gate JSON 에 덧붙인다. Unity 는 판정하지
+    // 않고 값만 싣는다 — RN 이 화면 매핑 후 evaluateFaceCaptureGreenlight/
+    // evaluateFacePitchGate 로 통일 판정한다.
+    private void AppendGateGeometry(
+        StringBuilder json,
+        bool faceReady,
+        ARFace face,
+        Vector3 pose,
+        double now)
+    {
+        // pose 각도(도): pose.y=yaw, pose.x=pitch, pose.z=roll (IsPoseReady 규약).
+        json.Append(",\"pose\":{");
+        json.Append("\"yawDeg\":").Append(Number(pose.y));
+        json.Append(",\"pitchDeg\":").Append(Number(pose.x));
+        json.Append(",\"rollDeg\":").Append(Number(pose.z));
+        json.Append(",\"valid\":").Append(Bool(faceReady));
+        json.Append('}');
+
+        // 얼굴 박스: ARKit face mesh 를 preview 카메라로 투영한 화면 바운딩박스를
+        // 정규화[0,1]·top-left 원점으로 낸다. MediaPipe FaceLandmarkSource 는 이
+        // 게이트 시점에 좌표가 붕괴(세로 span≈0)해 못 쓰므로, 캡처가 신뢰하는
+        // ARFace.vertices + 카메라 투영을 쓴다(E7VisionLipBoundaryRuntime 과 동일).
+        // 미러/회전은 렌더 카메라 투영에 이미 반영돼 RN 이 별도 미러할 필요 없다.
+        Vector2 boxCenter = Vector2.zero;
+        Vector2 boxSize = Vector2.zero;
+        bool haveBox = faceReady && TryComputeArkitFaceBox(face, out boxCenter, out boxSize);
+        if (haveBox)
+        {
+            json.Append(",\"faceBox\":{");
+            json.Append("\"centerX\":").Append(Number(boxCenter.x));
+            json.Append(",\"centerY\":").Append(Number(boxCenter.y));
+            json.Append(",\"width\":").Append(Number(boxSize.x));
+            json.Append(",\"height\":").Append(Number(boxSize.y));
+            json.Append('}');
+        }
+        else
+        {
+            json.Append(",\"faceBox\":null");
+        }
+
+        bool isStable = UpdateGateStability(faceReady, pose, now, out double stableMs);
+        json.Append(",\"cameraStability\":{");
+        json.Append("\"isStable\":").Append(Bool(isStable));
+        json.Append(",\"stableDurationMs\":").Append(Number(stableMs));
+        json.Append(",\"status\":\"ok\"}");
+    }
+
+    // ARFace.vertices 를 preview 렌더 카메라로 투영한 화면 바운딩박스를
+    // 정규화[0,1]·top-left 원점으로 반환한다. 투영 패턴은
+    // E7VisionLipBoundaryRuntime.TryProjectFaceBounds 와 동일하다.
+    private bool TryComputeArkitFaceBox(
+        ARFace face,
+        out Vector2 centerNormalized,
+        out Vector2 sizeNormalized)
+    {
+        centerNormalized = Vector2.zero;
+        sizeNormalized = Vector2.zero;
+        if (face == null || !face.vertices.IsCreated || face.vertices.Length == 0)
+        {
+            return false;
+        }
+
+        Camera cam = cameraManager != null
+            ? cameraManager.GetComponent<Camera>()
+            : Camera.main;
+        int screenWidth = Screen.width;
+        int screenHeight = Screen.height;
+        if (cam == null || screenWidth <= 0 || screenHeight <= 0)
+        {
+            return false;
+        }
+
+        float minX = float.MaxValue;
+        float minY = float.MaxValue;
+        float maxX = float.MinValue;
+        float maxY = float.MinValue;
+        int count = 0;
+        for (int index = 0; index < face.vertices.Length; index += 1)
+        {
+            Vector3 screen = cam.WorldToScreenPoint(
+                face.transform.TransformPoint(face.vertices[index]));
+            if (screen.z <= 0.0f)
+            {
+                continue;
+            }
+            float topLeftY = screenHeight - screen.y;
+            minX = Mathf.Min(minX, screen.x);
+            maxX = Mathf.Max(maxX, screen.x);
+            minY = Mathf.Min(minY, topLeftY);
+            maxY = Mathf.Max(maxY, topLeftY);
+            count += 1;
+        }
+        if (count <= 0 || maxX <= minX || maxY <= minY)
+        {
+            return false;
+        }
+
+        centerNormalized = new Vector2(
+            ((minX + maxX) * 0.5f) / screenWidth,
+            ((minY + maxY) * 0.5f) / screenHeight);
+        sizeNormalized = new Vector2(
+            (maxX - minX) / screenWidth,
+            (maxY - minY) / screenHeight);
+        return true;
+    }
+
+    // gate 갱신 사이 pose 각속도가 임계 이하로 유지된 시간을 stableDurationMs 로.
+    // 레거시 cameraStability(isStable + stableDurationMs)의 대역.
+    private bool UpdateGateStability(
+        bool faceReady,
+        Vector3 pose,
+        double now,
+        out double stableDurationMs)
+    {
+        const float PoseStableDeltaDeg = 1.2f;
+        const double StableThresholdMs = 400.0;
+
+        if (!faceReady)
+        {
+            hasPreviousGatePose = false;
+            gatePoseStableSinceSeconds = now;
+            stableDurationMs = 0.0;
+            return false;
+        }
+
+        if (hasPreviousGatePose)
+        {
+            float delta = Mathf.Abs(pose.x - previousGatePose.x)
+                + Mathf.Abs(pose.y - previousGatePose.y)
+                + Mathf.Abs(pose.z - previousGatePose.z);
+            if (delta > PoseStableDeltaDeg)
+            {
+                gatePoseStableSinceSeconds = now;
+            }
+        }
+        else
+        {
+            gatePoseStableSinceSeconds = now;
+        }
+        previousGatePose = pose;
+        hasPreviousGatePose = true;
+
+        stableDurationMs = Math.Max(0.0, (now - gatePoseStableSinceSeconds) * 1000.0);
+        return stableDurationMs >= StableThresholdMs;
     }
 
     private static bool IsFiniteNormalized(Vector2 value)
