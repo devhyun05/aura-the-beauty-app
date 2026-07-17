@@ -627,24 +627,10 @@ Shader "ARMakeup/FaceMakeup"
                     else if (_FoundationShape > 0.5) fZone = 1.0 - smoothstep(PWD_TZONE_LO, PWD_TZONE_HI, faceDx);
                     fCov *= fZone;
                     fChroma *= fZone;
-                    // 경계 페더 — 오벌 외곽으로 갈수록 커버리지 감쇠(경계선 제거). 커버(fCov)에만
-                    // 곱하면 FoundationBlend의 blendAmount가 색·chroma 평탄화를 함께 옅게 한다.
-                    // 파운데 0(위 if로 게이트)이면 미실행이라 하위호환.
-                    float2 fndRimN = (i.uv - float2(FND_EDGE_CX, FND_EDGE_CY))
-                                   / float2(FND_EDGE_AX, FND_EDGE_AY);
-                    float fndRim = 1.0 - smoothstep(FND_EDGE_LO, FND_EDGE_HI, length(fndRimN));
-                    fCov *= fndRim;
-                    // 특징부 제외 — 눈알 개구부·입술·콧구멍은 파운데를 얹지 않는다(캐노니컬 UV
-                    // 타원, 실측 상수). 각 타원의 정규화 거리 d(경계=1)를 페더 스텝으로 안쪽=1,
-                    // 밖=0 만들어 합집합(max)한 뒤 fCov·fChroma를 감쇠. 눈·코는 u 폴딩으로 좌우 공용.
-                    float uFold = 0.5 - abs(i.uv.x - 0.5); // 좌우 미러 → 우측 기준 타원 재사용
-                    float dLip = length((i.uv - float2(FEAT_LIP_CX, FEAT_LIP_CY)) / float2(FEAT_LIP_RX, FEAT_LIP_RY));
-                    float dEye = length((float2(uFold, i.uv.y) - float2(FEAT_EYE_CX, FEAT_EYE_CY)) / float2(FEAT_EYE_RX, FEAT_EYE_RY));
-                    float dNos = length((float2(uFold, i.uv.y) - float2(FEAT_NOS_CX, FEAT_NOS_CY)) / float2(FEAT_NOS_RX, FEAT_NOS_RY));
-                    float feat = 1.0 - smoothstep(1.0 - FEAT_FEATHER, 1.0 + FEAT_FEATHER, min(min(dLip, dEye), dNos));
-                    float featKeep = 1.0 - FND_FEATURE_EXCLUDE * feat; // 특징부에서 커버 감쇠
-                    fCov *= featKeep;
-                    fChroma *= featKeep;
+                    // [동기화 보류] upstream 172c0be 경계 페더(fndRim) + 5d919d0 특징부 제외
+                    // 타원(featKeep) — 상수들이 upstream 좌표계·수식 기준 실기기 튜닝값이라
+                    // fork 스택에서는 파운데가 얼굴보다 작게 잘리는 현상 확인(2026-07-18 실기기).
+                    // fork 실기기 재튜닝 전까지 소비 무력화(정의는 유지, 곱은 미적용).
                     fixed3 found = _FoundationColor.rgb * (fLuma * fGain + FND_LUMA_LIFT);
                     // 파운데는 제형 스튜디오 대상 아님 — 세부 0 상수로 호출(enum 기존 경로).
                     found = ApplyFinish(found, fLuma, i.uv, _FoundationFinish, 0.0,

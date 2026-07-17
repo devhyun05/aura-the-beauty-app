@@ -62,37 +62,12 @@ inline half4 OccSampleMask(float4 grabPos)
     return tex2D(_SegMask, m);
 }
 
-// ── §11.1 메시 하한(floor) — 비정형 피부·저확신 지역 과차단 완화 ──
-// 실기기 버그: (①) 세미매트 스킨 이마 윗부분 일부가 파운데 미커버, (②) 긁혀 붉어진 자극
-// 피부에만 피부화장이 전혀 안 먹음. 원인 = face-skin(R) 확률이 이 지역에서 낮게 나와
-// smoothstep(_OccLo,_OccHi,R)이 0으로 떨어져 메이크업을 통째로 제외. 하지만 얼굴 메시가
-// 그리는 픽셀은 랜드마크가 이미 "얼굴"을 보증하므로, 게이트의 본래 목적(손·앞머리 가림)이
-// "아닐 때"만 게이트에 하한을 깔아 과차단을 막는다.
-//
-// 핵심: 하한은 "가림 클래스(hair G + body-skin B — 손·목·귀 포함)가 낮을 때만" 열린다.
-// - 손을 얼굴 앞에 대면 B가 높아 floorOpen→0, floor 폐쇄, rawGate(≈0)로 복귀 → 손 위
-//   색소 제거는 그대로 유지(§11 가림 방어 불변).
-// - 이마로 내려온 진짜 앞머리는 G가 높아 floor 폐쇄 → §14 앞머리 오클루전 유지.
-// - 붉은 자극피부·세미매트 이마 잔머리는 R만 애매하고 G/B가 낮아 floorOpen→1 → 하한이
-//   열려 파운데가 최소 OCC_MESH_FLOOR만큼 커버된다(두 증상 해소).
-// 즉 게이트가 그동안 겸했던 두 역할(가림 제거[의도] + 비정형 피부 사각[버그])을 분리해,
-// 가림 클래스가 낮은 곳에서는 세그가 얼굴 안 화장을 깎지 못하게 한다(§11 본래 목적 = 가림뿐).
-// 하위호환: _SegOn=0이면 아래 lerp가 1을 반환 → floor 경로 자체가 무영향(불변식 유지).
-#define OCC_MESH_FLOOR   0.7   // 메시 위 최소 커버리지 [0=하한없음=기존, 1=세그 무력화]. 실기기 튜닝 대상
-#define OCC_OCCLUDER_LO  0.35  // 가림 클래스 확률 이하 = 가림 아님(floor 완전 개방). 실기기 튜닝 대상
-#define OCC_OCCLUDER_HI  0.65  // 가림 클래스 확률 이상 = 가림 확정(floor 완전 폐쇄). 실기기 튜닝 대상
-
 // 표준 게이트 — 최종 알파(불투명 셰이더는 lerp 가중)에 곱하는 값 [0,1].
 inline float OccludeGate(float4 grabPos)
 {
-    half4 m = OccSampleMask(grabPos);
+    float faceSkin = OccSampleMask(grabPos).r;
     // smoothstep 페더: 확률 경계가 부드러워 하드 엣지·플리커 없이 사라진다.
-    float raw = smoothstep(_OccLo, _OccHi, m.r);
-    // 메시 하한 — 가림 클래스(hair·body-skin)가 낮을 때만 열려 진짜 가림 방어를 보존한다.
-    float occluder = max(m.g, m.b);
-    float floorOpen = 1.0 - smoothstep(OCC_OCCLUDER_LO, OCC_OCCLUDER_HI, occluder);
-    float gated = max(raw, OCC_MESH_FLOOR * floorOpen);
-    return lerp(1.0, gated, _SegOn);
+    return lerp(1.0, smoothstep(_OccLo, _OccHi, faceSkin), _SegOn);
 }
 
 // 입안 변형 게이트 — 치아 미백 전용. SelfieMulticlass의 face-skin이 열린 입 안(치아)을
