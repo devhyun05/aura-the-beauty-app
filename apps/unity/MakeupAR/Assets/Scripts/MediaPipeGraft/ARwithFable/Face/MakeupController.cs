@@ -164,6 +164,12 @@ namespace ARMakeup.Face
             Shader.PropertyToID("_Overlay0Color"), Shader.PropertyToID("_Overlay1Color"),
             Shader.PropertyToID("_Overlay2Color"), Shader.PropertyToID("_Overlay3Color"),
         };
+        // 데코 마감 0새틴/1매트/2듀이(FOUNDATION_FINISHES) — FaceMakeup ApplyOverlay 소비(0=새틴=항등).
+        static readonly int[] OverlayFinishIds =
+        {
+            Shader.PropertyToID("_Overlay0Finish"), Shader.PropertyToID("_Overlay1Finish"),
+            Shader.PropertyToID("_Overlay2Finish"), Shader.PropertyToID("_Overlay3Finish"),
+        };
         static readonly Vector4 OverlayIdentity = new Vector4(0.5f, 0.5f, 1f, 0f); // 캔버스 전체
         // 디자이너 마스크(모양 축, §16) — 부위 "존"을 정의하는 캐노니컬 UV 마스크 슬롯을
         // 임포트 흑백/알파 스텐실로 런타임 스왑. 대상은 FaceMakeup의 캐노니컬 UV 존 마스크
@@ -640,7 +646,7 @@ namespace ARMakeup.Face
                 });
                 return;
             }
-            SetOverlaySlot(0, tex, path, OverlayIdentity, 1f, 0f, null);
+            SetOverlaySlot(0, tex, path, OverlayIdentity, 1f, 0f, null, 0); // 단일 임포트 어댑터 — 마감 새틴(항등)
         }
 
         /// <summary>
@@ -826,13 +832,13 @@ namespace ARMakeup.Face
                 var scale = layer.scale <= 0f ? 1f : layer.scale;
                 SetOverlaySlot(slot, tex, layer.path,
                     new Vector4(layer.x, layer.y, scale, layer.rotation * Mathf.Deg2Rad),
-                    layer.intensity, layer.blendMode, layer.color);
+                    layer.intensity, layer.blendMode, layer.color, layer.finish);
             }
         }
 
         // 슬롯에 텍스처를 얹는다(이전 소유 텍스처 파기). transform=(중심x, 중심y, 크기, 회전rad).
         void SetOverlaySlot(int slot, Texture2D tex, string path, Vector4 transform,
-                            float intensity, float blend, string colorHex)
+                            float intensity, float blend, string colorHex, int finish)
         {
             if (_overlayTexes[slot] != null && _overlayTexes[slot] != tex) Destroy(_overlayTexes[slot]);
             // 내장 공유 텍스처(builtin:dot)는 소유하지 않는다 — Clear/Destroy 시 파기 금지.
@@ -845,6 +851,7 @@ namespace ARMakeup.Face
             var color = Color.white; // 빈 값 = 흰색 = 텍스처 원본색
             if (!string.IsNullOrEmpty(colorHex)) ColorUtility.TryParseHtmlString(colorHex, out color);
             _material.SetColor(OverlayColorIds[slot], color);
+            _material.SetFloat(OverlayFinishIds[slot], Mathf.Clamp(finish, 0, 2)); // 0새틴/1매트/2듀이
         }
 
         void ClearOverlaySlot(int slot)
@@ -857,6 +864,7 @@ namespace ARMakeup.Face
             _material.SetFloat(OverlayIntensityIds[slot], 0f);
             _material.SetFloat(OverlayBlendIds[slot], 0f);
             _material.SetColor(OverlayColorIds[slot], Color.white);
+            _material.SetFloat(OverlayFinishIds[slot], 0f); // 새틴=항등(빈 슬롯 리셋)
         }
 
         void OnDestroy()

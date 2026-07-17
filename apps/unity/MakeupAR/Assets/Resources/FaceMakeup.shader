@@ -118,25 +118,32 @@ Shader "ARMakeup/FaceMakeup"
         // 컨투어급 화질, 섹션 08 (c) "마스크 틴트+데칼 아트"의 틴트 측).
         // 슬롯별 Color: 텍스처에 곱하는 틴트(기본 흰색=원본). 내장 소프트 점
         // (builtin:dot, 흰색 알파 폴오프)에 색을 입혀 그림 없이 블러셔 점을 만든다.
+        // 슬롯별 Finish(데코 마감): 0=새틴(기본) 1=매트 2=듀이 — FOUNDATION_FINISHES. 젬(젬스톤
+        // 광)에 특히 유효. ApplyOverlay가 ApplyFinish 레거시 enum 경로(세부 0)로 소비 —
+        // 0=새틴=항등이라 기존 오버레이와 바이트 동일(구 저장물 필드 부재 하위호환).
         _Overlay0Transform ("Overlay 0 Transform (cx cy scale rad)", Vector) = (0.5, 0.5, 1, 0)
         _Overlay0Intensity ("Overlay 0 Intensity", Range(0, 1)) = 1
         _Overlay0Blend ("Overlay 0 Blend (0 art 1 tint 2 neon)", Range(0, 2)) = 0
         _Overlay0Color ("Overlay 0 Color", Color) = (1, 1, 1, 1)
+        _Overlay0Finish ("Overlay 0 Finish (0 satin 1 matte 2 dewy)", Float) = 0
         _Overlay1 ("Overlay 1", 2D) = "black" {}
         _Overlay1Transform ("Overlay 1 Transform (cx cy scale rad)", Vector) = (0.5, 0.5, 1, 0)
         _Overlay1Intensity ("Overlay 1 Intensity", Range(0, 1)) = 0
         _Overlay1Blend ("Overlay 1 Blend (0 art 1 tint 2 neon)", Range(0, 2)) = 0
         _Overlay1Color ("Overlay 1 Color", Color) = (1, 1, 1, 1)
+        _Overlay1Finish ("Overlay 1 Finish (0 satin 1 matte 2 dewy)", Float) = 0
         _Overlay2 ("Overlay 2", 2D) = "black" {}
         _Overlay2Transform ("Overlay 2 Transform (cx cy scale rad)", Vector) = (0.5, 0.5, 1, 0)
         _Overlay2Intensity ("Overlay 2 Intensity", Range(0, 1)) = 0
         _Overlay2Blend ("Overlay 2 Blend (0 art 1 tint 2 neon)", Range(0, 2)) = 0
         _Overlay2Color ("Overlay 2 Color", Color) = (1, 1, 1, 1)
+        _Overlay2Finish ("Overlay 2 Finish (0 satin 1 matte 2 dewy)", Float) = 0
         _Overlay3 ("Overlay 3", 2D) = "black" {}
         _Overlay3Transform ("Overlay 3 Transform (cx cy scale rad)", Vector) = (0.5, 0.5, 1, 0)
         _Overlay3Intensity ("Overlay 3 Intensity", Range(0, 1)) = 0
         _Overlay3Blend ("Overlay 3 Blend (0 art 1 tint 2 neon)", Range(0, 2)) = 0
         _Overlay3Color ("Overlay 3 Color", Color) = (1, 1, 1, 1)
+        _Overlay3Finish ("Overlay 3 Finish (0 satin 1 matte 2 dewy)", Float) = 0
         // 립은 LipRenderer(윤곽 링 메시)로, 아이섀도우는 IrisRenderer 동적 밴드로 분리됨.
         // 제형(텍스처) 배선 — 얼굴 메시 6부위 enum(0=현행=무변조). 블러셔(_BlushTexture) 선례.
         // Finish.cginc TexBundleFromEnum이 시드 번들로 번역. tone/skin=TONE 템플릿(grain 축만),
@@ -282,21 +289,25 @@ Shader "ARMakeup/FaceMakeup"
             float _Overlay0Intensity;
             float _Overlay0Blend;
             fixed4 _Overlay0Color;
+            float _Overlay0Finish;
             sampler2D _Overlay1;
             float4 _Overlay1Transform;
             float _Overlay1Intensity;
             float _Overlay1Blend;
             fixed4 _Overlay1Color;
+            float _Overlay1Finish;
             sampler2D _Overlay2;
             float4 _Overlay2Transform;
             float _Overlay2Intensity;
             float _Overlay2Blend;
             fixed4 _Overlay2Color;
+            float _Overlay2Finish;
             sampler2D _Overlay3;
             float4 _Overlay3Transform;
             float _Overlay3Intensity;
             float _Overlay3Blend;
             fixed4 _Overlay3Color;
+            float _Overlay3Finish;
             // 제형(텍스처) 배선 — 얼굴 메시 6부위 enum(0=ZERO=현행). TexBundleFromEnum 미러.
             float _ToneTexture;      // TONE 템플릿(1) — grain 축만
             float _SkinTexture;      // TONE 템플릿(1) — grain 축만
@@ -423,7 +434,11 @@ Shader "ARMakeup/FaceMakeup"
             // (루마 보존, TintFinish 기본형), 2=네온 발광(§5 네온 채널 — 루마 무시
             // 가산, 어두운 피드일수록 도드라짐). 경로 A(v1): 큐 3000 유지라 조명 시뮬은
             // 네온을 살짝 그레이드(연출). '조명 완전 독립'은 경로 B(별도 큐 3500) 장기.
-            fixed3 ApplyOverlay(fixed3 col, fixed4 ov, float2 layerUV, float intensity, float blend)
+            // finish(데코 마감 0새틴/1매트/2듀이)는 ApplyFinish 레거시 enum 경로(세부 0)로
+            // 데칼 색에 적용 — 0=새틴=항등이라 기존 오버레이와 바이트 동일(하위호환). 듀이(2)는
+            // 레거시 글로시 분기로 젖은 광(젬스톤). 발광(neon)은 이미 가산광이라 마감 제외.
+            fixed3 ApplyOverlay(fixed3 col, fixed4 ov, float2 layerUV, float intensity,
+                                float blend, float finish, float2 screenUV)
             {
                 float cover = ov.a * OverlayInside(layerUV) * intensity * _MakeupOverlayIntensity;
                 // blend 2 = 발광: pigment 무시하고 색·게인을 가산(over/틴트 lerp와 분리).
@@ -434,6 +449,10 @@ Shader "ARMakeup/FaceMakeup"
                 float luma = dot(col, fixed3(0.299, 0.587, 0.114));
                 fixed3 pigment = ov.rgb * PigmentBase(luma, 1.5, 0.15);
                 fixed3 target = lerp(ov.rgb, pigment, saturate(blend));
+                // 데칼 색 자체의 루마로 마감 판정(젬이 밝은 곳에 광). finish=0이면 항등.
+                float tLuma = dot(target, fixed3(0.299, 0.587, 0.114));
+                target = ApplyFinish(target, tLuma, layerUV, finish, 0.0,
+                                     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, screenUV, 0.0);
                 return lerp(col, target, cover);
             }
 
@@ -633,13 +652,13 @@ Shader "ARMakeup/FaceMakeup"
                 // 사용자 임포트 메이크업 룩 — 캐노니컬 데칼 N장을 순서대로 합성(뒤=위).
                 // R1 자유배치·R8 순서·R9 여러 그림의 게이트(설계 섹션 07 블로커).
                 float2 uv0 = OverlayUV(i.uv, _Overlay0Transform);
-                col = ApplyOverlay(col, tex2D(_MakeupOverlay, uv0) * _Overlay0Color, uv0, _Overlay0Intensity, _Overlay0Blend);
+                col = ApplyOverlay(col, tex2D(_MakeupOverlay, uv0) * _Overlay0Color, uv0, _Overlay0Intensity, _Overlay0Blend, _Overlay0Finish, screenUV);
                 float2 uv1 = OverlayUV(i.uv, _Overlay1Transform);
-                col = ApplyOverlay(col, tex2D(_Overlay1, uv1) * _Overlay1Color, uv1, _Overlay1Intensity, _Overlay1Blend);
+                col = ApplyOverlay(col, tex2D(_Overlay1, uv1) * _Overlay1Color, uv1, _Overlay1Intensity, _Overlay1Blend, _Overlay1Finish, screenUV);
                 float2 uv2 = OverlayUV(i.uv, _Overlay2Transform);
-                col = ApplyOverlay(col, tex2D(_Overlay2, uv2) * _Overlay2Color, uv2, _Overlay2Intensity, _Overlay2Blend);
+                col = ApplyOverlay(col, tex2D(_Overlay2, uv2) * _Overlay2Color, uv2, _Overlay2Intensity, _Overlay2Blend, _Overlay2Finish, screenUV);
                 float2 uv3 = OverlayUV(i.uv, _Overlay3Transform);
-                col = ApplyOverlay(col, tex2D(_Overlay3, uv3) * _Overlay3Color, uv3, _Overlay3Intensity, _Overlay3Blend);
+                col = ApplyOverlay(col, tex2D(_Overlay3, uv3) * _Overlay3Color, uv3, _Overlay3Intensity, _Overlay3Blend, _Overlay3Finish, screenUV);
 
                 // 이마 연장 밴드 끝에서 효과를 원본으로 되돌린다 (경계선 방지)
                 col = lerp(original, col, saturate(i.fade));

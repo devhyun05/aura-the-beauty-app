@@ -31,6 +31,7 @@ import {
   AXIS_LABELS,
   FINISHES,
   FINISH_ENUM_SEED,
+  FOUNDATION_FINISHES,
   finishBundleToPatch,
   GOLD,
   isCustomFinish,
@@ -2220,6 +2221,31 @@ function DecoEditor({
           value={overlay.intensity}
           onChange={v => onPatch({ intensity: v })}
         />
+
+        {/* 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 젬(젬스톤 광)에 특히 유효.
+            0=새틴=기존 출력(하위호환) */}
+        <Text style={styles.swatchLabel}>마감</Text>
+        <View style={styles.segRow}>
+          {FOUNDATION_FINISHES.map(f => (
+            <TouchableOpacity
+              key={f.value}
+              style={[
+                styles.segBtn,
+                (overlay.finish ?? 0) === f.value && styles.segBtnOn,
+              ]}
+              onPress={() => onPatch({ finish: f.value })}
+            >
+              <Text
+                style={[
+                  styles.segText,
+                  (overlay.finish ?? 0) === f.value && styles.segTextOn,
+                ]}
+              >
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <TouchableOpacity style={styles.importBtn} onPress={onPickImage}>
           <Text style={styles.importBtnText}>내 그림 불러오기 (파일에서 · 투명 PNG)</Text>
         </TouchableOpacity>
@@ -2321,6 +2347,30 @@ function LensEditor({
           value={lens.intensity}
           onChange={v => onPatch({ intensity: v })}
         />
+
+        {/* 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환). 겹별 독립 */}
+        <Text style={styles.swatchLabel}>마감</Text>
+        <View style={styles.segRow}>
+          {FOUNDATION_FINISHES.map(f => (
+            <TouchableOpacity
+              key={f.value}
+              style={[
+                styles.segBtn,
+                (lens.finish ?? 0) === f.value && styles.segBtnOn,
+              ]}
+              onPress={() => onPatch({ finish: f.value })}
+            >
+              <Text
+                style={[
+                  styles.segText,
+                  (lens.finish ?? 0) === f.value && styles.segTextOn,
+                ]}
+              >
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {/* 방사 존(직경/두께) — 세부별 의미 분기. smoothstep 경계는 셰이더가 처리 */}
         {lens.part === 2 ? (

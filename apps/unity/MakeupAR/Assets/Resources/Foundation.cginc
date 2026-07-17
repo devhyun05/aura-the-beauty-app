@@ -27,6 +27,15 @@ float _FndChromaDbg;    // 회색 혼합량(채도 평탄화, 기본 0.4). 0도 
 #define FND_CUSHION_COVERAGE 0.15
 #define FND_SKINTINT_COVERAGE 0.30
 
+// ── 제형 스튜디오(#21·W2) 진입점 — 향후 오버라이드 유니폼 ────────────────────────
+// 위 제형 enum(0 리퀴드/1 쿠션/2 스킨틴트)은 레거시 축이고, 여기 두 축은 제형 스튜디오가
+// 시드 위에 얹을 세부 델타다(TexBundle 4축 중 파운데에 매핑되는 것만). 파운데는 전면 스킨
+// 블렌드라 마스크 edge/grain 축은 해당 없음(픽셀 마스크 패스가 없어 적용 지점이 없다) →
+// coverage(발색 세기)·body(발색 두께=gain) 두 축만 연다. 전역 유니폼(_FndRefLumaDbg 선례) —
+// MakeupController가 세팅하지 않으면 0(미지정=레거시)이고, 현 웨이브는 항상 0이다.
+float _FndTexCoverage;  // 발색 세기 델타(0=레거시). TexCoverage 미러: cov*(1+delta).
+float _FndTexBody;      // 발색 두께 델타(0=레거시). TexBody 게인 미러: gain*(1+0.35·clamp).
+
 void FoundationTextureParams(float textureMode, float intensity,
                              out float gain, out float chroma, out float coverage)
 {
@@ -43,6 +52,18 @@ void FoundationTextureParams(float textureMode, float intensity,
         (1.0 + cushionAmount * FND_CUSHION_CHROMA - skinTintAmount * FND_SKINTINT_CHROMA);
     coverage = intensity *
         (1.0 + cushionAmount * FND_CUSHION_COVERAGE - skinTintAmount * FND_SKINTINT_COVERAGE);
+
+    // ── 제형 스튜디오(#21·W2) — 커스텀 세부가 오면 번들 축을 위 레거시 출력에 얹는다.
+    // 픽셀 동일 논증: 두 오버라이드가 모두 0이면 fndTexCustom=0 → 아래 분기 전체가 실행되지
+    // 않아 gain·chroma·coverage는 레거시 값 그대로다(리퀴드/쿠션/스킨틴트 전 enum에서 바이트
+    // 동일). 활성 시 cov·gain에 선형 델타만 얹으므로 delta=0 극한도 항등(TexCoverage/TexBody
+    // 인라인 미러 — Foundation.cginc를 Finish.cginc에 의존시키지 않으려 소식을 인라인).
+    float fndTexCustom = abs(_FndTexCoverage) + abs(_FndTexBody);
+    if (fndTexCustom > 1e-5)
+    {
+        coverage = saturate(coverage * (1.0 + _FndTexCoverage));   // TexCoverage 미러
+        gain *= 1.0 + 0.35 * clamp(_FndTexBody, -1.0, 1.0);        // TexBody 게인 미러
+    }
 }
 
 fixed3 FoundationTarget(fixed3 foundationColor, float sourceLuma, float gain)

@@ -20,6 +20,14 @@ Shader "ARMakeup/Lip"
         _LipShimmer ("Lip Shimmer Gain", Range(0, 1)) = 0.5
         // 제형 텍스처(배치 A ①) — 엣지 하드니스/커버로 제형감. 0=립스틱(현행 룩).
         _LipTexture ("Lip Texture (0 lipstick 1 velvet 2 water)", Float) = 0
+        // ── 제형 스튜디오(#21·W2) — 메인 립 제형(_LipTexture 립스틱/벨벳/워터)의 레거시
+        // 분기(edgeHi·lipTexCov)는 그대로 두고, 이 4축 세부 델타가 오면 TexBundle 함수로
+        // 메인 틴트에 얹어 재해석한다. 전부 0 = 미지정 = 레거시 enum 동작(하위호환·픽셀 동일).
+        // 라이너 머티리얼(동일 셰이더 공유)은 이 유니폼을 안 만짐(기본 0 → 무영향).
+        _LipTexEdge ("Lip Tex Edge (studio)", Range(-1, 1)) = 0
+        _LipTexGrain ("Lip Tex Grain (studio)", Range(0, 1)) = 0
+        _LipTexCoverage ("Lip Tex Coverage (studio)", Range(-1, 1)) = 0
+        _LipTexBody ("Lip Tex Body (studio)", Range(-1, 1)) = 0
         // 제형(텍스처, 라이너 인스턴스) — GENERIC 템플릿 enum(0=크림=현행). 메인 립 메시는
         // 기본 0(무영향), 라이너 머티리얼만 MakeupController가 세팅(메인 _LipTexture=W2와 독립 축).
         _LipLinerTexture ("Lip Liner Texture (generic enum)", Float) = 0
@@ -111,6 +119,11 @@ Shader "ARMakeup/Lip"
             float _LipFinish;
             float _LipShimmer;
             float _LipTexture; // 제형 텍스처(①) 0=립스틱 1=벨벳틴트 2=워터틴트
+            // 제형 스튜디오(#21·W2) 메인 립 세부 델타 — 0 = 미지정 = 레거시 enum 동작(하위호환).
+            float _LipTexEdge;
+            float _LipTexGrain;
+            float _LipTexCoverage;
+            float _LipTexBody;
             float _LipLinerTexture; // 제형(텍스처) GENERIC — 라이너 인스턴스만 세팅(메인 립 0=무영향)
             // 제형 스튜디오(#21) 마감 세부 — 0 = enum 기존 동작(하위호환).
             float _LipGlossLo;
@@ -262,6 +275,21 @@ Shader "ARMakeup/Lip"
                 aTint = TexEdge(TexCoverage(saturate(aTint), lnTexC), lnTexE); // 제형 커버·엣지(라이너)
                 float aBase = edgeBase * _LipBaseIntensity;
                 aBase = TexEdge(TexCoverage(saturate(aBase), lbTexC), lbTexE); // 제형 커버·엣지(베이스립)
+
+                // ── 제형 스튜디오(#21·W2) — 메인 립 제형(_LipTexture)의 레거시 분기(edgeHi·
+                // lipTexCov)는 위에서 그대로 적용됐다. 커스텀 세부가 오면 TexBundle 4축을 메인
+                // 틴트 색소·알파에 얹어 재해석한다(라이너/베이스/글로스 세부는 W1 경로로 독립).
+                // 픽셀 동일 논증: 네 오버라이드가 모두 0이면 lipTexCustom=0 → 블록 스킵 →
+                // pigment·aTint는 레거시 값 그대로다(립스틱·벨벳·워터 전 enum 바이트 동일). 라이너
+                // 머티리얼은 이 유니폼 미설정(0) → 항상 스킵(무영향).
+                float lipTexCustom = abs(_LipTexEdge) + abs(_LipTexGrain)
+                                   + abs(_LipTexCoverage) + abs(_LipTexBody);
+                if (lipTexCustom > 1e-5)
+                {
+                    pigment = TexBody(pigment, luma, _LipTexBody);
+                    pigment = TexGrain(pigment, i.uv, _LipTexGrain);
+                    aTint = TexEdge(TexCoverage(aTint, _LipTexCoverage), _LipTexEdge);
+                }
                 // 베이스(아래) 위에 틴트(위)를 over 합성한 결과를 피드 위 단일 (색, A)로.
                 //   out = pigment·aTint + (1−aTint)·(baseTone·aBase + (1−aBase)·feed)
                 // ⇒ 합집합 알파 A = 1−(1−aTint)(1−aBase),  프리멀티 numer = pigment·aTint

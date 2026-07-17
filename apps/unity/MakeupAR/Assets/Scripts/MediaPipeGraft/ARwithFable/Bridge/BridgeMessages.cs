@@ -330,6 +330,7 @@ namespace ARMakeup.Bridge
         public float inner;     // 방사 UV 안쪽 경계 0..1
         public float outer;     // 방사 UV 바깥쪽 경계 0..1
         public string designPath; // 방사 디자인 텍스처 경로 (file:// · http(s):// 원격 §16 v2 허용, 빈 값 = 절차 그라데)
+        public int finish = 0;  // 겹 마감: 0=새틴(기본) 1=매트 2=듀이 — 겹별 독립. IrisRenderer가 _LensFinish로 전달
     }
 
     /// <summary>
@@ -369,6 +370,7 @@ namespace ARMakeup.Bridge
         public int blendMode;    // 0=그림 그대로(스티커) 1=색소 틴트(루마 보존 — 블러셔급) 2=네온 발광(가산)
         public string color;     // 텍스처에 곱할 틴트 "#RRGGBB" (빈 값 = 흰색 = 원본색).
                                  // path가 "builtin:dot"(내장 소프트 점)일 때 사실상 점의 색.
+        public int finish = 0;   // 마감: 0=새틴(기본) 1=매트 2=듀이 — FaceMakeup ApplyOverlay가 _OverlayNFinish로 소비(젬 광)
     }
 
     /// <summary>

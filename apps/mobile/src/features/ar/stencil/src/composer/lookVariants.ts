@@ -45,15 +45,29 @@ function addRegionLook(
   exposeAtRegionLevel = true,
 ): void {
   const regionId = `sys:var:${slotSlug}:${nameSlug}`;
+  // 내부 파트 판정(구조 기준, 이름 무관): 부위 룩으로 노출되는 **복합** 룩(파트 2개
+  // 이상)의 sub는 그 룩의 조각일 뿐이다 — 파트 이름('파운데이션'·'라이너'·'렌즈')이
+  // 룩 이름이 아니라 역할명이라 세부부위 카드에 단독으로 띄우면 출처를 알 수 없다
+  // (글로우/세미매트/커버의 "파운데이션" 3장이 동명으로 섞이던 버그). 반대로
+  //  · 파트 1개짜리 부위 룩 → sub가 곧 룩 전체(coextensive) → 노출 유지
+  //  · exposeAtRegionLevel=false → region 래퍼가 없어 sub가 유일한 선택 경로 →
+  //    반드시 노출(하이라이터·컨투어 등 전용 세부부위 룩)
+  const internal = exposeAtRegionLevel && subs.length > 1;
+  // 단일 파트(subs.length===1)면 sub ≡ 룩 전체(coextensive) — 세부부위 카드에 그
+  // 파트의 제품명(SubSpec.name, 예 "블러셔")이 아니라 룩 이름(예 "클래식 로즈")을
+  // 써야 같은 카드 안에서 서로 다른 룩을 구분할 수 있다("블러셔"×6 동명 문제).
+  // 제품명은 leaf.label에 그대로 남아 잎 표시(ComposerSheet)에서 보존된다.
+  // 파트 2개 이상(internal)은 역할명이 맞는 이름이라 건드리지 않는다.
   const subIds = subs.map((sub, i) => {
     const subId = `${regionId}:s${i}`;
     lib[subId] = {
       id: subId,
-      name: sub.name,
+      name: subs.length === 1 ? name : sub.name,
       level: 'sub',
       slot,
       owner: 'system',
-      pickerScope: exposeAtRegionLevel ? 'internal' : 'standalone',
+      pickerScope: internal ? 'internal' : 'standalone',
+      ...(internal ? { internal: true } : {}),
       kids: sub.leaves.map(leaf => ({
         label: leaf.label,
         region: leaf.region,
@@ -95,7 +109,7 @@ export function buildVariantLibrary(): LookLibrary {
 
   // ── 립 8종 — LIP_COLORS 팔레트 축 + finish 다양화(매트/글로시/새틴≈벨벳/시머)
   addRegionLook(lib, 'lip', 'mlbb', 'MLBB 벨벳', '립',
-    single('MLBB 벨벳', 'lip', { lipColor: '#C94F6D', lipIntensity: 0.4, lipFinish: 0 }));
+    single('MLBB 벨벳', 'lip', { lipColor: '#C94F6D', lipIntensity: 0.4, lipFinish: 0, lipTexture: 1 })); // 벨벳틴트
   addRegionLook(lib, 'lip', 'red', '레드 매트', '립',
     single('레드 매트', 'lip', { lipColor: '#B01E3C', lipIntensity: 0.65, lipFinish: 1 }));
   addRegionLook(lib, 'lip', 'coral', '코랄 글로시', '립',
@@ -121,7 +135,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '립 펜슬',
         region: 'lipLiner',
-        params: { lipLinerColor: '#7A2A40', lipLinerIntensity: 0.35 },
+        params: { lipLinerColor: '#7A2A40', lipLinerIntensity: 0.35, lipLinerTexture: 4 }, // 립 펜슬
       }],
     },
   ]);
@@ -399,6 +413,7 @@ export function buildVariantLibrary(): LookLibrary {
     single('브로우 펜슬', 'browPencil', {
       browPencilColor: '#2A1E16',
       browPencilIntensity: 0.5,
+      browPencilTexture: 4, // 펜슬
     }));
   addRegionLook(lib, 'brow', 'soft-lighten', '소프트 라이트닝', '눈썹', [
     {
@@ -445,7 +460,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '스킨틴트',
         region: 'foundation',
-        params: { foundationColor: '#EFD0BC', foundationIntensity: 0.3, foundationFinish: 2 },
+        params: { foundationColor: '#EFD0BC', foundationIntensity: 0.3, foundationFinish: 2, foundationTexture: 2 }, // 스킨틴트
       }],
     },
   ]);
@@ -463,7 +478,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '쿠션 파운데이션',
         region: 'foundation',
-        params: { foundationColor: '#E8C4A8', foundationIntensity: 0.5, foundationFinish: 0 },
+        params: { foundationColor: '#E8C4A8', foundationIntensity: 0.5, foundationFinish: 0, foundationTexture: 1 }, // 쿠션
       }],
     },
     {
@@ -471,7 +486,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '트랜스루선트 파우더',
         region: 'powder',
-        params: { powderIntensity: 0.3 },
+        params: { powderIntensity: 0.3, powderTexture: 1 }, // 트랜스루선트 파우더
       }],
     },
   ]);
@@ -497,7 +512,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '트랜스루선트 파우더',
         region: 'powder',
-        params: { powderIntensity: 0.5 },
+        params: { powderIntensity: 0.5, powderTexture: 1 }, // 트랜스루선트 파우더
       }],
     },
   ]);
@@ -517,6 +532,168 @@ export function buildVariantLibrary(): LookLibrary {
 
   // ── 세부부위 룩 — BasicMode의 세부부위 탭은 level='sub' 정의를 직접 조회한다.
   //    기존 '전체' 탭의 슬롯 룩 목록과 섞이지 않도록 region 래퍼는 만들지 않는다.
+
+  // (질감 프라이머 2종은 위 skin-primer standalone 정의가 이미 제공 — 중복 시딩 생략)
+
+  // 파운데이션 3종 — 제형(FOUNDATION_TEXTURES) × 마감. 색·커버리지·마감은 피부 3종의
+  //    '파운데이션' 파트 값 재사용(스킨틴트/쿠션/리퀴드), 제형만 라벨에 맞춰 명시.
+  addRegionLook(lib, 'foundation', 'skin-tint', '스킨틴트 듀이', '피부',
+    single('스킨틴트 듀이', 'foundation', {
+      foundationTexture: 2,
+      foundationColor: '#EFD0BC',
+      foundationIntensity: 0.3,
+      foundationFinish: 2,
+    }), false);
+  addRegionLook(lib, 'foundation', 'cushion', '쿠션 새틴', '피부',
+    single('쿠션 새틴', 'foundation', {
+      foundationTexture: 1,
+      foundationColor: '#E8C4A8',
+      foundationIntensity: 0.5,
+      foundationFinish: 0,
+    }), false);
+  addRegionLook(lib, 'foundation', 'liquid-cover', '리퀴드 커버', '피부',
+    single('리퀴드 커버', 'foundation', {
+      foundationTexture: 0,
+      foundationColor: '#DFB79A',
+      foundationIntensity: 0.65,
+      foundationFinish: 0,
+    }), false);
+
+  // 컨실러 2종 — 커버 스킨의 '부분 커버' 파트 색 그대로, 강도만 단계화.
+  addRegionLook(lib, 'concealer', 'natural-cover', '내추럴 컨실', '피부',
+    single('내추럴 컨실', 'concealer', {
+      concealerColor: '#F0DCC8',
+      concealerIntensity: 0.35,
+    }), false);
+  addRegionLook(lib, 'concealer', 'full-cover', '풀 커버 컨실', '피부',
+    single('풀 커버 컨실', 'concealer', {
+      concealerColor: '#F0DCC8',
+      concealerIntensity: 0.5,
+    }), false);
+  // 컬러 코렉터 3종 — CONCEALER_COLORS 보정색 + 모양(눈밑/붉은기 자동)·마감 축 조합.
+  addRegionLook(lib, 'concealer', 'green-corrector', '그린 코렉터', '피부',
+    single('그린 코렉터', 'concealer', {
+      concealerColor: '#BFE3C8', // 붉은 트러블 중화
+      concealerShape: 1, // 붉은기 자동
+      concealerIntensity: 0.4,
+    }), false);
+  addRegionLook(lib, 'concealer', 'peach-undereye', '피치 다크서클', '피부',
+    single('피치 다크서클', 'concealer', {
+      concealerColor: '#F7C9A8', // 다크서클 중화
+      concealerShape: 0, // 눈밑 존
+      concealerIntensity: 0.42,
+    }), false);
+  addRegionLook(lib, 'concealer', 'lavender-bright', '라벤더 브라이트', '피부',
+    single('라벤더 브라이트', 'concealer', {
+      concealerColor: '#D9C8E8', // 노란기 중화
+      concealerIntensity: 0.35,
+      concealerFinish: 2, // 듀이
+    }), false);
+
+  // 파우더 2종 — 무색(POWDER_COLORS[0] 트랜스루선트)에 매트화 강도만 2단(세미매트·커버 파트 값).
+  addRegionLook(lib, 'powder', 'translucent-soft', '트랜스루선트 소프트', '피부',
+    single('트랜스루선트 소프트', 'powder', {
+      powderColor: '#FFFFFF',
+      powderIntensity: 0.3,
+    }), false);
+  addRegionLook(lib, 'powder', 'translucent-matte', '트랜스루선트 매트', '피부',
+    single('트랜스루선트 매트', 'powder', {
+      powderColor: '#FFFFFF',
+      powderIntensity: 0.5,
+    }), false);
+  // 컬러·존·펄 3종 — POWDER_COLORS 캐스트 + 존(전체/T존)·시머 마감 축 조합.
+  addRegionLook(lib, 'powder', 'pink-toneup', '핑크 톤업 파우더', '피부',
+    single('핑크 톤업 파우더', 'powder', {
+      powderColor: '#FBE8EC', // 핑크 톤업
+      powderIntensity: 0.4,
+    }), false);
+  addRegionLook(lib, 'powder', 'tzone-set', 'T존 세팅', '피부',
+    single('T존 세팅', 'powder', {
+      powderColor: '#FFFFFF',
+      powderShape: 1, // T존
+      powderIntensity: 0.5,
+    }), false);
+  addRegionLook(lib, 'powder', 'pearl-finish', '펄 피니시 파우더', '피부',
+    single('펄 피니시 파우더', 'powder', {
+      powderColor: '#FAE9DC', // 피치 세팅
+      powderFinish: 3, // 시머
+      powderShimmer: 0.4,
+      powderIntensity: 0.35,
+    }), false);
+
+  // 렌즈 내부·림 — 레이어드 렌즈 3종의 내부 파트가 쓰던 lens payload 그대로 단독 제공.
+  addRegionLook(lib, 'lens-detail', 'hazel-gradient', '헤이즐 디테일', '렌즈', [
+    {
+      name: '헤이즐 디테일',
+      leaves: [{
+        label: '내부 디테일',
+        region: 'lensDetail',
+        params: {},
+        lens: { part: 1, color: '#B79A5A', blendMode: 2, intensity: 0.4, inner: 0, outer: 0.5 },
+      }],
+    },
+  ], false);
+  addRegionLook(lib, 'lens-rim', 'dark-rim', '다크 림', '렌즈', [
+    {
+      name: '다크 림',
+      leaves: [{
+        label: '테두리 림',
+        region: 'lensRim',
+        params: {},
+        lens: { part: 2, color: '#2A2A2E', blendMode: 1, intensity: 0.65, inner: 0.8, outer: 1 },
+      }],
+    },
+  ], false);
+
+  // 눈썹 라이트너 2종 — 소프트 라이트닝의 파트 값(0.5) 기준으로 강도만 2단.
+  addRegionLook(lib, 'brow-lightener', 'soft-lighten', '소프트 라이트너', '눈썹',
+    single('소프트 라이트너', 'browLightener', {
+      browLightenerIntensity: 0.3,
+    }), false);
+  addRegionLook(lib, 'brow-lightener', 'full-lighten', '풀 라이트너', '눈썹',
+    single('풀 라이트너', 'browLightener', {
+      browLightenerIntensity: 0.5,
+    }), false);
+  // 제형·마감 변주 2종 — 색 축이 없는 부위라 텍스처·마감으로 성격을 가른다.
+  addRegionLook(lib, 'brow-lightener', 'powder-lighten', '파우더 라이트너', '눈썹',
+    single('파우더 라이트너', 'browLightener', {
+      browLightenerIntensity: 0.4,
+      browLightenerTexture: 1, // 파우더 — 보송한 옅음
+    }), false);
+  addRegionLook(lib, 'brow-lightener', 'gel-soft-lighten', '젤 소프트 라이트너', '눈썹',
+    single('젤 소프트 라이트너', 'browLightener', {
+      browLightenerIntensity: 0.32,
+      browLightenerTexture: 3, // 젤 — 매끈 코팅
+      browLightenerFinish: 2, // 듀이
+    }), false);
+
+  // 립라이너 3종 — 버건디 매트의 '라이너' 파트 값 + LIP_COLORS 팔레트 색.
+  addRegionLook(lib, 'lip-liner', 'deep-burgundy', '딥 버건디 라인', '립',
+    single('딥 버건디 라인', 'lipLiner', {
+      lipLinerColor: '#7A2A40',
+      lipLinerIntensity: 0.35,
+    }), false);
+  addRegionLook(lib, 'lip-liner', 'mlbb-line', 'MLBB 라인', '립',
+    single('MLBB 라인', 'lipLiner', {
+      lipLinerColor: '#C94F6D',
+      lipLinerIntensity: 0.3,
+    }), false);
+  addRegionLook(lib, 'lip-liner', 'red-line', '레드 라인', '립',
+    single('레드 라인', 'lipLiner', {
+      lipLinerColor: '#B01E3C',
+      lipLinerIntensity: 0.35,
+    }), false);
+  // LIP_COLORS 팔레트 확장 2종 — 웜 코랄·로즈 윤곽(립보다 한 톤 딥하게).
+  addRegionLook(lib, 'lip-liner', 'coral-line', '코랄 라인', '립',
+    single('코랄 라인', 'lipLiner', {
+      lipLinerColor: '#F2846B',
+      lipLinerIntensity: 0.3,
+    }), false);
+  addRegionLook(lib, 'lip-liner', 'rose-line', '로즈 라인', '립',
+    single('로즈 라인', 'lipLiner', {
+      lipLinerColor: '#D96C7B',
+      lipLinerIntensity: 0.32,
+    }), false);
 
   // 하이라이터 5부위 × 은은/펄. 각 룩은 자기 부위 강도만 소유해 독립 토글된다.
   const highlighterLooks: Array<{
@@ -785,6 +962,19 @@ export function buildVariantLibrary(): LookLibrary {
     single('딥 음영존', 'triangleZone', {
       triangleZoneColor: '#3E2C24',
       triangleZoneIntensity: 0.3,
+    }), false);
+  // 폭 축(TRIANGLE_ZONE_SHAPES) 변주 2종 — 좁게 또렷 / 넓게 부드러운 그늘.
+  addRegionLook(lib, 'triangle-zone', 'narrow-taupe', '좁은 토프존', '눈',
+    single('좁은 토프존', 'triangleZone', {
+      triangleZoneColor: '#5A4034',
+      triangleZoneIntensity: 0.2,
+      triangleZoneShape: 1, // 좁게
+    }), false);
+  addRegionLook(lib, 'triangle-zone', 'wide-warm', '넓은 웜 그늘', '눈',
+    single('넓은 웜 그늘', 'triangleZone', {
+      triangleZoneColor: '#4A342A',
+      triangleZoneIntensity: 0.24,
+      triangleZoneShape: 2, // 넓게
     }), false);
 
   // 쌍꺼풀 3종 — 고정 자연 음영에 강도·크리스 높이만 조절.

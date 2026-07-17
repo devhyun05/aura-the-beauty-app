@@ -506,6 +506,9 @@ export interface LensLayer {
   outer: number;
   /** 방사 디자인 텍스처 경로(꽃무늬·별·헤이즐 등, file:// 허용). 생략 = 절차 방사 그라데 */
   designPath?: string;
+  /** 겹 마감: 0=새틴(기본) 1=매트 2=듀이. 세 겹(베이스/내부/림)이 각자 독립 소유.
+   *  생략/0 = 새틴 = 현행 픽셀 동일(구 저장물 필드 부재 하위호환). Iris.shader ApplyFinish 소비 */
+  finish?: number;
 }
 
 /**
@@ -559,6 +562,9 @@ export interface OverlayLayer {
   /** 데코 세부부위(중분류) 종류 — 'deco'(점)|'decoTattoo'|'decoGem'|'decoPaint'|'decoEtc'.
    *  렌더에는 영향 없고(공통 오버레이 엔진), 저장·왕복 시 세부부위 복원용. Unity는 무시. */
   kind?: string;
+  /** 마감: 0=새틴(기본) 1=매트 2=듀이. 젬(젬스톤 광)에 특히 유효. 생략/0 = 새틴 = 현행
+   *  픽셀 동일(구 저장물 필드 부재 하위호환). FaceMakeup.shader ApplyOverlay가 ApplyFinish로 소비 */
+  finish?: number;
 }
 
 /**

@@ -238,6 +238,7 @@ namespace ARMakeup.Face
                 {
                     _lensColors[slot] = Vector4.zero;
                     _lensZones[slot] = Vector4.zero;
+                    _lensFinishes[slot] = Vector4.zero;
                     ClearLensDesign(slot, mat);
                     continue;
                 }
@@ -250,10 +251,13 @@ namespace ARMakeup.Face
                 var hasDesign = LoadLensDesign(slot, layer.designPath, mat) ? 1f : 0f;
                 // 블렌드 모드 0~9 (0노말 1멀티 2스크린 3오버레이 4소프트 5닷지 6번 7라이튼 8다큰 9하드) — Iris.shader LensBlend와 일치
                 _lensZones[slot] = new Vector4(inner, outer, Mathf.Clamp(layer.blendMode, 0, 9), hasDesign);
+                // 겹 마감 0새틴/1매트/2듀이 (FOUNDATION_FINISHES) — 겹별 독립. .x만 사용.
+                _lensFinishes[slot] = new Vector4(Mathf.Clamp(layer.finish, 0, 2), 0f, 0f, 0f);
             }
             _lensCount = count;
             mat.SetVectorArray(LensColorId, _lensColors);
             mat.SetVectorArray(LensZoneId, _lensZones);
+            mat.SetVectorArray(LensFinishId, _lensFinishes);
             mat.SetFloat(LensCountId, _lensCount);
         }
 
@@ -414,6 +418,7 @@ namespace ARMakeup.Face
         const int MaxLensLayers = 6;
         static readonly int LensColorId = Shader.PropertyToID("_LensColor");
         static readonly int LensZoneId = Shader.PropertyToID("_LensZone");
+        static readonly int LensFinishId = Shader.PropertyToID("_LensFinish");
         static readonly int LensCountId = Shader.PropertyToID("_LensCount");
         static readonly int[] LensDesignIds =
         {
@@ -423,6 +428,7 @@ namespace ARMakeup.Face
         };
         readonly Vector4[] _lensColors = new Vector4[MaxLensLayers];
         readonly Vector4[] _lensZones = new Vector4[MaxLensLayers];
+        readonly Vector4[] _lensFinishes = new Vector4[MaxLensLayers]; // .x=finish enum, yzw 예약
         int _lensCount; // >0 = 레이어드 경로, 0 = legacy irisColor/irisIntensity 어댑터
         readonly Texture2D[] _lensDesignTex = new Texture2D[MaxLensLayers]; // 슬롯별 소유(교체 시 파기)
         readonly string[] _lensDesignPaths = new string[MaxLensLayers];     // 재전송 시 재로드 방지 캐시 키

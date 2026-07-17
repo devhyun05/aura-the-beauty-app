@@ -17,6 +17,13 @@ Shader "ARMakeup/BrowPowder"
         // 마감 — 블러셔와 동일 enum. 0=새틴=기존 출력(ApplyFinish 레거시 경로).
         _BrowPowderFinish ("Fill Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
         _BrowPowderShimmer ("Fill Shimmer Gain", Range(0, 1)) = 0.5
+        // ── 제형 스튜디오(#21·W2) — 마감 스튜디오(_LipGloss* 선례)와 같은 진입점. 위 제형
+        // enum(_BrowPowderTexture)의 레거시 분기는 그대로 두고, 이 4축 세부 델타가 오면
+        // TexBundle 함수로 얹어 재해석한다. 전부 0 = 미지정 = 레거시 enum 동작(하위호환).
+        _BrowPowderTexEdge ("Fill Tex Edge (studio)", Range(-1, 1)) = 0
+        _BrowPowderTexGrain ("Fill Tex Grain (studio)", Range(0, 1)) = 0
+        _BrowPowderTexCoverage ("Fill Tex Coverage (studio)", Range(-1, 1)) = 0
+        _BrowPowderTexBody ("Fill Tex Body (studio)", Range(-1, 1)) = 0
     }
 
     SubShader
@@ -49,6 +56,11 @@ Shader "ARMakeup/BrowPowder"
             float _BrowPowderTexture; // 0 파우더 1 포마드 2 젤
             float _BrowPowderFinish;
             float _BrowPowderShimmer;
+            // 제형 스튜디오(#21·W2) 세부 델타 — 0 = 미지정 = 레거시 enum 동작(하위호환).
+            float _BrowPowderTexEdge;
+            float _BrowPowderTexGrain;
+            float _BrowPowderTexCoverage;
+            float _BrowPowderTexBody;
 
             struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 grabPos : TEXCOORD1; };
@@ -90,6 +102,20 @@ Shader "ARMakeup/BrowPowder"
                 // 스파클 UV는 밴드 로컬 uv라 눈썹에 접착.
                 pigment = ApplyFinish(pigment, luma, i.uv, _BrowPowderFinish, _BrowPowderShimmer,
                                       0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
+
+                // ── 제형 스튜디오(#21·W2) — 위 제형 enum(파우더/포마드/젤) 레거시 분기는 그대로
+                // 유지됐다. 커스텀 세부가 오면 TexBundle 4축을 색소·채움량에 얹어 재해석한다.
+                // 픽셀 동일 논증: 네 오버라이드가 모두 0이면 texCustom=0 → 이 블록이 통째로
+                // 스킵돼 pigment·amt는 레거시 값 그대로다(파우더·포마드·젤 전 enum 바이트 동일).
+                // (활성 시에도 각 Tex* 함수가 delta=0에서 항등이라 델타 0 극한 연속.)
+                float texCustom = abs(_BrowPowderTexEdge) + abs(_BrowPowderTexGrain)
+                                + abs(_BrowPowderTexCoverage) + abs(_BrowPowderTexBody);
+                if (texCustom > 1e-5)
+                {
+                    pigment = TexBody(pigment, luma, _BrowPowderTexBody);   // 발색 두께
+                    pigment = TexGrain(pigment, i.uv, _BrowPowderTexGrain); // 입자감
+                    amt = TexEdge(TexCoverage(amt, _BrowPowderTexCoverage), _BrowPowderTexEdge);
+                }
                 // §11 오클루전 — face-skin 양성 게이트(§14 화이트리스트 불필요, Occlusion.cginc 주석).
                 return fixed4(pigment, amt * OccludeGate(i.grabPos));
             }
