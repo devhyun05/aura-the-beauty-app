@@ -75,3 +75,21 @@ export function resolveFaceLengthBand(input: {
     inBand: ratio >= band.lo && ratio <= band.hi,
   };
 }
+
+export interface SeasonConfidenceView {
+  percentLabel: string;
+  gapLabel: string | null;
+}
+
+export function formatSeasonConfidence(input: {
+  topLabel: string;
+  secondaryLabel: string | null;
+  typeScore: number;
+}): SeasonConfidenceView {
+  const clamped = Math.max(0, Math.min(1, input.typeScore));
+  const pct = Math.round(clamped * 100);
+  return {
+    percentLabel: `${input.topLabel} ${pct}%`,
+    gapLabel: input.secondaryLabel ? `2순위 ${input.secondaryLabel}` : null,
+  };
+}

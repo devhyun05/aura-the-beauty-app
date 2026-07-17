@@ -1,4 +1,4 @@
-import {formatThirdsRatio, resolveFaceLengthBand} from './reportFormat';
+import {formatSeasonConfidence, formatThirdsRatio, resolveFaceLengthBand} from './reportFormat';
 
 function assert(cond: boolean, label: string): void {
   if (!cond) throw new Error(`FAIL: ${label}`);
@@ -43,6 +43,18 @@ function assert(cond: boolean, label: string): void {
 {
   const v = resolveFaceLengthBand({ratio: 1.4, band: {lo: 1.3, hi: 1.5}, verdict: 'average', confidence: 0.2});
   assert(v.kind === 'withheld', 'low confidence -> withheld');
+}
+// formatSeasonConfidence — 확신도 %, 2순위 라벨
+{
+  const v = formatSeasonConfidence({topLabel: '봄 라이트', secondaryLabel: '가을 뮤트', typeScore: 0.82});
+  assert(v.percentLabel === '봄 라이트 82%', 'percent label 82');
+  assert(v.gapLabel === '2순위 가을 뮤트', 'gap label secondary');
+}
+// formatSeasonConfidence — 1.0 초과 클램프, 2순위 없음
+{
+  const v = formatSeasonConfidence({topLabel: '봄 라이트', secondaryLabel: null, typeScore: 1.2});
+  assert(v.percentLabel === '봄 라이트 100%', 'clamp to 100');
+  assert(v.gapLabel === null, 'no secondary -> null gap');
 }
 
 // eslint-disable-next-line no-console
