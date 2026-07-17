@@ -1451,6 +1451,26 @@ export function addUnityUnifiedFaceCaptureEventListener(
 
     if (parsed) {
       listener(parsed);
+      return;
+    }
+
+    // Unity가 통합 캡처 이벤트를 보냈는데 계약 파싱에 실패하면 listener 가 아예
+    // 호출되지 않아 RN 쪽은 침묵한 채 prepare 타임아웃까지 기다린다. 그 무응답과
+    // "Unity가 안 보냄" 을 구분할 수 있게 남긴다.
+    const message = event.message;
+    const rawType =
+      typeof message === 'object' && message !== null
+        ? (message as {type?: unknown}).type
+        : undefined;
+
+    if (typeof rawType === 'string' && rawType.startsWith('unified_face_capture')) {
+      console.info('[aura:unified-face-capture] unity-event:parse-failed', {
+        rawType,
+        keys:
+          typeof message === 'object' && message !== null
+            ? Object.keys(message)
+            : [],
+      });
     }
   });
 }

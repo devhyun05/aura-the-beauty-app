@@ -1,5 +1,5 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Modal, Pressable, StyleSheet, Text, View} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {
@@ -18,9 +18,20 @@ import {
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import {loadBodyProfile} from '../../ar/stencil/src/storage/bodyProfileStore';
 import BodyPanel from '../../ar/stencil/src/components/BodyPanel';
+import type {OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 import {ReportScreenScaffold} from '../ReportScreenScaffold';
 import {color, font} from '../reportTokens';
 import {buildReportDataFromFaceAnalysisReport} from '../services/fromFaceAnalysisReport';
+import {
+  captureReportImage,
+  getReportCaptureTitle,
+  getShareErrorMessage,
+  requestReportImageSavePermission,
+  reportShareTargetLabels,
+  saveReportImageToLibrary,
+  shareReportImageWithSystemSheet,
+  type ReportShareTarget,
+} from '../services/reportImageShare';
 
 export type FaceAnalysisReportPreviewScreenProps = {
   // Same session-props shape as FaceAnalysisReportDetailScreen — this preview
@@ -33,8 +44,11 @@ export type FaceAnalysisReportPreviewScreenProps = {
   sessionCaptureId?: string | null;
   verticalThirds?: FaceVerticalThirdsResult | null;
   onBack?: () => void;
-  onMore?: () => void;
   onRetake?: () => void;
+  // 옛 보고서 화면에 있던 액션들 — 화면 교체로 사라지지 않도록 포팅했다.
+  onCreateARFilter?: () => void;
+  onDeleteReport?: (reportId: string) => Promise<void> | void;
+  onPressProducts?: (reportId: string) => void;
 };
 
 function CenteredMessage({title, description}: {title: string; description?: string}) {
@@ -54,13 +68,17 @@ export function FaceAnalysisReportPreviewScreen({
   sessionCaptureId,
   verticalThirds,
   onBack,
-  onMore,
   onRetake,
+  onCreateARFilter,
+  onDeleteReport,
+  onPressProducts,
 }: FaceAnalysisReportPreviewScreenProps) {
   const insets = useSafeAreaInsets();
   const [loadState, setLoadState] = useState<FaceAnalysisReportDetailLoadState>({status: 'loading'});
   const [bodyProfile, setBodyProfile] = useState<BodyProfile | null>(null);
   const [isBodySurveyOpen, setIsBodySurveyOpen] = useState(false);
+  const [activeShareTarget, setActiveShareTarget] = useState<ReportShareTarget | null>(null);
+  const reportCaptureRef = useRef<OptionalViewShotRef | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -129,6 +147,106 @@ export function FaceAnalysisReportPreviewScreen({
     reloadBodyProfile();
   }, [reloadBodyProfile]);
 
+  const profileName = loadState.status === 'success' ? loadState.profile?.name : undefined;
+
+  const handleShareAction = useCallback(
+    async (target: ReportShareTarget) => {
+      if (!report || activeShareTarget) {
+        return;
+      }
+
+      setActiveShareTarget(target);
+      try {
+        if (target === 'save-image') {
+          await requestReportImageSavePermission();
+        }
+
+        const imageUri = await captureReportImage(reportCaptureRef);
+
+        if (target === 'save-image') {
+          await saveReportImageToLibrary(imageUri);
+          return;
+        }
+
+        await shareReportImageWithSystemSheet({
+          imageUri,
+          title: getReportCaptureTitle(profileName),
+        });
+      } catch (error) {
+        console.info('[aura:analysis] report-share:failed', {
+          message: error instanceof Error ? error.message : String(error),
+          target,
+        });
+        Alert.alert(`${reportShareTargetLabels[target]} 실패`, getShareErrorMessage(error));
+      } finally {
+        setActiveShareTarget(null);
+      }
+    },
+    [activeShareTarget, profileName, report],
+  );
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!report || !onDeleteReport) {
+      return;
+    }
+    try {
+      await onDeleteReport(report.id);
+    } catch (error) {
+      console.info('[aura:analysis] report-detail:delete-failed', {
+        message: error instanceof Error ? error.message : String(error),
+        reportId: report.id,
+      });
+      Alert.alert('삭제 실패', '보고서를 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    }
+  }, [onDeleteReport, report]);
+
+  // 상단 "더보기" → 옛 화면의 공유/저장/추천제품/삭제 액션 메뉴.
+  const handleMore = useCallback(() => {
+    if (!report) {
+      return;
+    }
+    if (activeShareTarget) {
+      Alert.alert('공유 준비 중', '이전 공유 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
+      return;
+    }
+
+    const options: Array<{text: string; onPress?: () => void; style?: 'cancel' | 'destructive'}> = [
+      {
+        text: reportShareTargetLabels['save-image'],
+        onPress: () => void handleShareAction('save-image'),
+      },
+      {
+        text: reportShareTargetLabels['share-report'],
+        onPress: () => void handleShareAction('share-report'),
+      },
+    ];
+
+    if (onPressProducts) {
+      options.push({text: '추천 제품', onPress: () => onPressProducts(report.id)});
+    }
+    if (onDeleteReport) {
+      options.push({
+        text: '삭제',
+        style: 'destructive',
+        onPress: () =>
+          Alert.alert('보고서 삭제', '삭제한 맞춤 분석 보고서는 되돌릴 수 없어요.', [
+            {text: '취소', style: 'cancel'},
+            {text: '삭제', style: 'destructive', onPress: () => void handleConfirmDelete()},
+          ]),
+      });
+    }
+    options.push({text: '취소', style: 'cancel'});
+
+    Alert.alert('맞춤 분석 보고서', '원하는 작업을 선택해 주세요.', options);
+  }, [
+    activeShareTarget,
+    handleConfirmDelete,
+    handleShareAction,
+    onDeleteReport,
+    onPressProducts,
+    report,
+  ]);
+
   if (loadState.status === 'loading') {
     return (
       <View style={styles.centered}>
@@ -151,9 +269,13 @@ export function FaceAnalysisReportPreviewScreen({
   return (
     <>
       <ReportScreenScaffold
+        captureRef={reportCaptureRef}
         data={reportData}
         onBack={onBack}
-        onMore={onMore}
+        onMore={handleMore}
+        // 푸터 CTA는 '메이크업 추천 보러가기' 라벨이므로 AR 추천으로 간다.
+        // 재촬영은 S2의 "이마가 보이게 다시 찍기" 링크가 담당한다.
+        onPressCta={onCreateARFilter}
         onResurvey={() => setIsBodySurveyOpen(true)}
         onRetake={onRetake}
       />

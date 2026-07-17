@@ -6,7 +6,6 @@ import {YStack} from 'tamagui';
 import {
   createFaceAnalysisReportFromCapture,
   FaceAnalysisIntroScreen,
-  FaceAnalysisReportDetailScreen,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
@@ -61,10 +60,6 @@ import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {navigateMainTab, type RootNavigation, type RootScreenProps} from './routeUtils';
-
-type HeaderShareAction = {
-  cb: () => void;
-};
 
 const MAX_ANALYSIS_RETRY_COUNT = 2;
 // 온디바이스 정지영상 분석(세로비율 등)이 이 시간 안에 끝나지 않으면 해당 축 없이
@@ -723,29 +718,24 @@ export function FaceAnalysisReportsListRouteScreen({
   );
 }
 
-export function FaceAnalysisReportDetailRouteScreen({
+// The report screen: redesigned S1–S7 UI (features/face-report). Owns the
+// canonical FaceAnalysisReportDetail route, so every entry point (post-analysis,
+// reports list, profile, home, AR back) lands here. Session props follow the
+// same rule as before — route.params.reportId means "past report", so session
+// measurements are withheld and the server-stored ones are restored instead.
+export function FaceAnalysisReportPreviewRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'FaceAnalysisReportDetail'>) {
-  const insets = useSafeAreaInsets();
   const shouldReturnToProfile = route.params?.returnTo === 'profile';
-  const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const {
-    selectedFace3DProfile,
     selectedFaceAnalysisReport,
     selectedFaceCapture,
-    selectedFaceGeometry2d,
     selectedFaceVerticalThirds,
     selectedPersonalColor,
-    selectedPersonalColorCorrection,
     setSelectedFaceAnalysisReport,
   } = useNavigationFlowState();
-  const handleHeaderShareActionChange = React.useCallback(
-    (nextShareAction: (() => void) | null) => {
-      setShareAction(nextShareAction ? {cb: nextShareAction} : null);
-    },
-    [],
-  );
+
   const handleDeleteReport = React.useCallback(
     async (reportId: string) => {
       await deleteFaceAnalysisReport(reportId);
@@ -839,6 +829,9 @@ export function FaceAnalysisReportPreviewRouteScreen({
       onBack={() =>
         shouldReturnToProfile ? navigateMainTab(navigation, 'ProfileTab') : navigation.goBack()
       }
+      onCreateARFilter={() => navigation.navigate('MakeupRecommendation')}
+      onDeleteReport={handleDeleteReport}
+      onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
       onRetake={() => navigation.navigate('FaceCapture')}
       personalColor={route.params?.reportId ? null : selectedPersonalColor}
       reportId={route.params?.reportId ?? null}
