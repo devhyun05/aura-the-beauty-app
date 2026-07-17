@@ -1,6 +1,8 @@
 // 2D 정적 얼굴 기하 지표 — MediaPipe 478 랜드마크(Unity homuler IMAGE 모드) 기반,
 // 온디바이스 전용. status 퍼널은 face-ratio(FaceVerticalThirdsResult) 관례를 따른다.
 
+import type {RegionVisuals} from './services/faceGeometryCore/regionVisualsBuilder';
+
 export type FaceGeometryStatus =
   | 'full_success'
   | 'partial_success'
@@ -59,6 +61,9 @@ export type FaceGeometryResult = {
   createdAt: string;
   metrics: FaceGeometryMetrics;
   pose: FaceGeometryPose | null;
+  // 부위별 크롭 rect + 가이드 폴리라인(정규화 0..1) — 화면 카드 렌더용 파생 기하.
+  // 코덱(faceAnalysisMeasurements)이 top-level로 lift 하므로 여기서는 전달용.
+  regionVisuals?: RegionVisuals;
   rollCorrection: FaceGeometryRollCorrection;
   schemaVersion: 'aura-face-geometry-v1';
   sessionId: string;

@@ -766,4 +766,50 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectDefined(restored.faceVerticalThirds, '복원 thirds 축');
 }
 
+// ── 10. regionVisuals round-trip(measurements v1 optional key, schemaVersion 불변) ──
+{
+  const rv = {
+    upper: {
+      cropRect: {x: 0.1, y: 0.2, w: 0.3, h: 0.2},
+      guide: {points: [{x: 0.2, y: 0.3}, {x: 0.5, y: 0.3}], label: '눈가'},
+    },
+  };
+  const payload = expectDefined(
+    buildFaceAnalysisMeasurementsPayload({
+      captureId: 'c1',
+      face3d: null,
+      faceGeometry2d: {...buildGeometryFixture(), regionVisuals: rv},
+      faceVerticalThirds: null,
+      personalColor: null,
+    }),
+    'regionVisuals payload',
+  );
+  expectDefined(
+    (payload as {regionVisuals?: unknown}).regionVisuals,
+    'regionVisuals가 top-level로 lift되어야 함',
+  );
+  expectEqual(
+    Object.prototype.hasOwnProperty.call(
+      (payload as {faceGeometry2d?: Record<string, unknown>}).faceGeometry2d ?? {},
+      'regionVisuals',
+    ),
+    false,
+    'nested faceGeometry2d에는 regionVisuals 중복 저장 없음',
+  );
+  expectEqual(
+    payload.schemaVersion,
+    'aura-face-analysis-measurements-v1',
+    'schemaVersion 불변(버전 미변경)',
+  );
+
+  const parsed = expectDefined(
+    parseFaceAnalysisMeasurements(payload, {imageUrl: undefined}),
+    'regionVisuals parsed',
+  );
+  const upper = expectDefined(parsed.regionVisuals?.upper, 'regionVisuals.upper 복원');
+  expectEqual(upper.guide.label, '눈가', 'guide label 보존');
+  expectEqual(upper.cropRect.w, 0.3, 'cropRect 값 보존');
+  expectEqual(upper.guide.points.length, 2, 'guide points 개수 보존');
+}
+
 console.log('faceAnalysisMeasurements.test.ts passed');

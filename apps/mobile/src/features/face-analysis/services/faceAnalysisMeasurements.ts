@@ -18,6 +18,7 @@ import type {
   FaceGeometryStatus,
 } from '../../face-geometry/types';
 import {FACE_GEOMETRY_METRIC_KEYS} from '../../face-geometry/types';
+import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
 import type {
   FaceVerticalThirdsHairlineAnalysis,
   FaceVerticalThirdsMeasurementMode,
@@ -66,6 +67,9 @@ export type FaceAnalysisReportMeasurements = {
   faceGeometry2d?: FaceGeometryResult;
   faceVerticalThirds?: FaceVerticalThirdsResult;
   personalColor?: FaceAnalysisMeasurementsPersonalColor;
+  // faceGeometry2d.regionVisuals 에서 lift 된 top-level 사본(중복 저장 방지 —
+  // encode 가 nested 에서는 제거한다). 구버전 저장분엔 없으므로 optional.
+  regionVisuals?: RegionVisuals;
   schemaVersion: typeof FACE_ANALYSIS_MEASUREMENTS_SCHEMA_VERSION;
 };
 
@@ -117,6 +121,9 @@ export function buildFaceAnalysisMeasurementsPayload(
   const personalColor = input.personalColor
     ? encodePersonalColor(input.personalColor)
     : undefined;
+  // faceGeometry2d 에 실려온 화면 렌더용 파생 기하를 top-level 로 lift —
+  // encodeFaceGeometry 가 nested 사본은 이미 제거했으므로 중복 저장 없음.
+  const regionVisuals = encodeRegionVisuals(input.faceGeometry2d?.regionVisuals);
 
   if (!faceVerticalThirds && !faceGeometry2d && !personalColor && !input.face3d) {
     return undefined;
@@ -129,6 +136,7 @@ export function buildFaceAnalysisMeasurementsPayload(
     ...(input.face3d ? {face3d: input.face3d} : {}),
     ...(faceGeometry2d ? {faceGeometry2d} : {}),
     ...(personalColor ? {personalColor} : {}),
+    ...(regionVisuals ? {regionVisuals} : {}),
   };
 }
 
@@ -152,13 +160,19 @@ function encodeVerticalThirds(
   };
 }
 
+// regionVisuals 는 buildFaceAnalysisMeasurementsPayload 가 top-level 로 lift 하므로
+// nested 사본은 여기서 뺀다(중복 저장 방지).
 function encodeFaceGeometry(result: FaceGeometryResult): Record<string, unknown> {
-  const {sourceImage, ...rest} = result;
+  const {regionVisuals: _regionVisuals, sourceImage, ...rest} = result;
 
   return {
     ...rest,
     sourceImage: {height: sourceImage.height, width: sourceImage.width},
   };
+}
+
+function encodeRegionVisuals(rv: RegionVisuals | undefined): RegionVisuals | undefined {
+  return rv && Object.keys(rv).length > 0 ? rv : undefined;
 }
 
 function encodePersonalColor(
@@ -940,6 +954,50 @@ function decodeFaceGeometry(value: unknown): FaceGeometryResult | undefined {
   };
 }
 
+// ── decode: 부위별 시각 가이드(top-level lift) ───────────────────────────────
+
+const REGION_VISUAL_KEYS = ['upper', 'mid', 'lower', 'jaw'] as const;
+
+function decodeRegionVisuals(value: unknown): RegionVisuals | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const out: RegionVisuals = {};
+
+  for (const key of REGION_VISUAL_KEYS) {
+    const r = value[key];
+    if (!isRecord(r) || !isRecord(r.cropRect) || !isRecord(r.guide)) {
+      continue;
+    }
+
+    const cr = r.cropRect;
+    const g = r.guide;
+    const rawPoints = Array.isArray(g.points) ? g.points : [];
+    const points = rawPoints
+      .filter(isRecord)
+      .map(p => ({x: readFiniteNumber(p.x), y: readFiniteNumber(p.y)}))
+      .filter((p): p is {x: number; y: number} => p.x !== undefined && p.y !== undefined);
+
+    // 가이드 선/박스를 구성할 최소치(2점) 미만이면 그 부위는 통째로 drop.
+    if (points.length < 2) {
+      continue;
+    }
+
+    out[key] = {
+      cropRect: {
+        x: readFiniteNumber(cr.x) ?? 0,
+        y: readFiniteNumber(cr.y) ?? 0,
+        w: readFiniteNumber(cr.w) ?? 0,
+        h: readFiniteNumber(cr.h) ?? 0,
+      },
+      guide: {points, label: typeof g.label === 'string' ? g.label : ''},
+    };
+  }
+
+  return Object.keys(out).length ? out : undefined;
+}
+
 // ── decode: 퍼스널 컬러 ──────────────────────────────────────────────────────
 
 const PERSONAL_COLOR_STATUSES: readonly PersonalColorStatus[] = [
@@ -1241,6 +1299,7 @@ export function parseFaceAnalysisMeasurements(
   const face3d = parseTrustedServerFace3DProfile(value.face3d) ?? undefined;
   const faceGeometry2d = decodeFaceGeometry(value.faceGeometry2d);
   const personalColor = decodePersonalColor(value.personalColor);
+  const regionVisuals = decodeRegionVisuals(value.regionVisuals);
 
   return {
     captureId,
@@ -1249,6 +1308,7 @@ export function parseFaceAnalysisMeasurements(
     ...(face3d ? {face3d} : {}),
     ...(faceGeometry2d ? {faceGeometry2d} : {}),
     ...(personalColor ? {personalColor} : {}),
+    ...(regionVisuals ? {regionVisuals} : {}),
   };
 }
 
