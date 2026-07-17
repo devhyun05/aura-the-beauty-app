@@ -164,8 +164,8 @@ export interface S7Data {
   eyebrow: string; title: string;
   noteParts: NotePart[];
   naturalLabel: string; glamLabel: string;
-  mixZones: { nearNatural: string; middle: string; nearGlam: string }; // thresholds .35 / .65
-  lookSummary: { natural: { title: string; desc: string }; glam: { title: string; desc: string } }; // switches at .5
+  mixZones?: { nearNatural: string; middle: string; nearGlam: string }; // thresholds .35 / .65
+  lookSummary?: { natural: { title: string; desc: string }; glam: { title: string; desc: string } }; // switches at .5
   naturalCard: LookCardData;
   glamCard: LookCardData;
 }
