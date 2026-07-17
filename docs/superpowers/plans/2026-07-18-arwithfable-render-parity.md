@@ -135,4 +135,3 @@
 - [ ] Run `npm run face3d:collection:preflight`.
 - [ ] Run `find apps -name "*.rej" -print`; expect no output.
 - [ ] Review `git diff`, `git status`, and commit history before reporting.
-
