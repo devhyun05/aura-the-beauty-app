@@ -499,6 +499,7 @@ function parseFace3DProfileV3(
   value: Record<string, unknown>,
   metrics: Face3DMetrics,
   metricsRecord: Record<string, unknown>,
+  allowServerCalibrationReceiptStatus: boolean,
 ): Face3DProfileV3 | null {
   const aggregation = readNonEmptyString(value.aggregation);
   const captureNonce = readNonEmptyString(value.captureNonce);
@@ -551,6 +552,8 @@ function parseFace3DProfileV3(
     validFrameCount > targetFrameCount ||
     (value.profileBindingSha256 !== null && !profileBindingSha256) ||
     (value.calibrationReceipt !== null && !calibrationReceipt) ||
+    (!allowServerCalibrationReceiptStatus &&
+      value.serverCalibrationReceiptStatus !== undefined) ||
     (value.serverCalibrationReceiptStatus !== undefined &&
       !serverCalibrationReceiptStatus) ||
     !sensorProvenance ||
@@ -623,7 +626,10 @@ function parseFace3DProfileV3(
   };
 }
 
-export function parseFace3DProfile(value: unknown): Face3DProfile | null {
+function parseFace3DProfileWithTrust(
+  value: unknown,
+  allowServerCalibrationReceiptStatus: boolean,
+): Face3DProfile | null {
   if (!isRecord(value) || !isRecord(value.metrics)) {
     return null;
   }
@@ -658,10 +664,30 @@ export function parseFace3DProfile(value: unknown): Face3DProfile | null {
     if (!metrics) {
       return null;
     }
-    return parseFace3DProfileV3(value, metrics, metricsRecord);
+    return parseFace3DProfileV3(
+      value,
+      metrics,
+      metricsRecord,
+      allowServerCalibrationReceiptStatus,
+    );
   }
 
   return null;
+}
+
+/** Parse Unity/device-originated profiles. Backend-only trust fields are rejected. */
+export function parseFace3DProfile(value: unknown): Face3DProfile | null {
+  return parseFace3DProfileWithTrust(value, false);
+}
+
+/**
+ * Parse a profile restored from the authenticated backend detail response. Only this
+ * boundary may retain the server-issued receipt verdict used by the product gate.
+ */
+export function parseTrustedServerFace3DProfile(
+  value: unknown,
+): Face3DProfile | null {
+  return parseFace3DProfileWithTrust(value, true);
 }
 
 // v3 소수 프레임 프로필은 반복성 보정이 완료되고 product policy로 수집된 경우에만

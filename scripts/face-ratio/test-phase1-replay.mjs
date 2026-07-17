@@ -352,6 +352,25 @@ expect(
   'Aggregate report must not contain raw landmarks or product payload data.',
 );
 
+const missingRawHairlineZPath = join(
+  tempRoot,
+  'invalid-missing-raw-hairline-z.json',
+);
+const missingRawHairlineZ = JSON.parse(readFileSync(artifactPath, 'utf8'));
+delete missingRawHairlineZ.captures[1].hairline.zProxy;
+writeFileSync(missingRawHairlineZPath, JSON.stringify(missingRawHairlineZ));
+const missingRawHairlineZRun = run(
+  'scripts/face-ratio/replay-phase1-pose-normalization.mjs',
+  ['--input', missingRawHairlineZPath],
+  1,
+);
+expect(
+  missingRawHairlineZRun.stderr.includes(
+    'pose-normalized replay requires hairline.zProxy from the raw capture frame',
+  ),
+  'Normalized replay must fail closed instead of transforming normalized idx10.z a second time.',
+);
+
 function cloneArtifact() {
   return JSON.parse(readFileSync(artifactPath, 'utf8'));
 }

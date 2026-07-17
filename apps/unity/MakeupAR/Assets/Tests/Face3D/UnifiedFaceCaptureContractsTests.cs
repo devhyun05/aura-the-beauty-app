@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
@@ -247,10 +248,21 @@ namespace Aura.Face3D.Tests
             Assert.That(profile.Metrics.AlarWidth.ValidFrameCount, Is.Zero);
             Assert.That(profile.Warnings, Does.Contain("blocked_before_valid"));
             Assert.That(profile.Warnings, Does.Contain("single_frame_unaggregated"));
-            Assert.That(profile.ToCanonicalJson(), Does.Contain("\"mad\":null"));
-            Assert.That(profile.ToCanonicalJson(), Does.Contain("\"valueMm\":2.1"));
+            string canonicalJson = profile.ToCanonicalJson();
+            Assert.That(canonicalJson, Does.Contain("\"mad\":null"));
+            const string valueMmMarker = "\"valueMm\":";
+            int valueMmStart = canonicalJson.IndexOf(
+                valueMmMarker,
+                StringComparison.Ordinal) + valueMmMarker.Length;
+            int valueMmEnd = canonicalJson.IndexOf(',', valueMmStart);
+            Assert.That(valueMmStart, Is.GreaterThanOrEqualTo(valueMmMarker.Length));
+            Assert.That(valueMmEnd, Is.GreaterThan(valueMmStart));
+            double serializedValueMm = double.Parse(
+                canonicalJson.Substring(valueMmStart, valueMmEnd - valueMmStart),
+                CultureInfo.InvariantCulture);
+            Assert.That(serializedValueMm, Is.EqualTo(2.1d).Within(0.000001d));
             Assert.That(
-                profile.ToCanonicalJson(),
+                canonicalJson,
                 Does.Contain(
                     "\"valueMmConfidence\":0,\"valueMmValidFrameCount\":1,"
                     + "\"valueMmMad\":null"));

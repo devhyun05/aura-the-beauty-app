@@ -37,6 +37,7 @@ import {
   FACE3D_CALIBRATION_APPROVAL_SCHEMA_VERSION,
   FACE3D_CALIBRATION_MODEL_SCHEMA_VERSION,
   FACE3D_CALIBRATION_PROMOTION_MANIFEST_SCHEMA_VERSION,
+  evaluateGate6B,
   evaluateFace3DCalibrationPromotion,
 } from './promote-face3d-calibration.mjs';
 
@@ -727,6 +728,50 @@ test('Gate 6B dry-run validates six manifests and selects the smallest passing 5
   assert.equal(result.safeguards.actualSigningPerformed, false);
   assert.equal(result.safeguards.liveGateStatusMutated, false);
   assert.equal(result.safeguards.productPromotionPerformed, false);
+});
+
+test('Gate 6B rejects per-metric subject floor gaps even when aggregate ratios look passing', () => {
+  const repeatability = {};
+  for (const frameCount of [5, 8, 12, 30]) {
+    repeatability[frameCount] = {
+      analysis: {
+        minSubjects: 3,
+        minRepeatedSubjects: 3,
+        metrics: Object.fromEntries(
+          FACE3D_METRIC_KEYS.map(key => [key, {
+            between: 0.2,
+            discriminability: 200,
+            pass: true,
+            repeatedSubjectCount: 3,
+            subjectCount: 3,
+            within: 0.001,
+          }]),
+        ),
+      },
+    };
+  }
+  const validation = {
+    captureWindows: {5: [300], 8: [350], 12: [400]},
+    failureRates: {5: 0, 8: 0, 12: 0, 30: 0},
+    metricBiases: Object.fromEntries(
+      [5, 8, 12].map(frameCount => [
+        frameCount,
+        Object.fromEntries(FACE3D_METRIC_KEYS.map(key => [key, [0.001]])),
+      ]),
+    ),
+  };
+
+  repeatability[5].analysis.metrics.noseTipProjection = {
+    ...repeatability[5].analysis.metrics.noseTipProjection,
+    pass: false,
+    repeatedSubjectCount: 2,
+    subjectCount: 2,
+  };
+
+  const result = evaluateGate6B({repeatability, validation});
+  assert.equal(result.candidates[5].metrics.noseTipProjection.sampleFloorPass, false);
+  assert.equal(result.candidates[5].pass, false);
+  assert.equal(result.selectedFrameCount, 8);
 });
 
 test('promotion rejects a product profile without TrueDepth sensor provenance', () => {

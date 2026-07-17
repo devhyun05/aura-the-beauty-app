@@ -410,13 +410,31 @@ export function evaluateGate6B({repeatability, validation}) {
       const p95BiasRatio = between > 0
         ? p95Bias / between
         : Number.POSITIVE_INFINITY;
+      const shortSampleFloorPass =
+        shortMetric.pass === true
+        && Number.isInteger(shortMetric.subjectCount)
+        && shortMetric.subjectCount >= current.analysis.minSubjects
+        && Number.isInteger(shortMetric.repeatedSubjectCount)
+        && shortMetric.repeatedSubjectCount >= current.analysis.minRepeatedSubjects;
+      const baselineSampleFloorPass =
+        baselineMetric.pass === true
+        && Number.isInteger(baselineMetric.subjectCount)
+        && baselineMetric.subjectCount >= baseline.analysis.minSubjects
+        && Number.isInteger(baselineMetric.repeatedSubjectCount)
+        && baselineMetric.repeatedSubjectCount >= baseline.analysis.minRepeatedSubjects;
       const pass =
-        shortMetric.discriminability >= 2.0
+        shortSampleFloorPass
+        && baselineSampleFloorPass
+        && shortMetric.discriminability >= 2.0
         && withinRatio <= 1.25
         && medianBiasRatio <= 0.10
         && p95BiasRatio <= 0.25;
       metricResults[key] = {
         discriminability: shortMetric.discriminability,
+        subjectCount: shortMetric.subjectCount,
+        repeatedSubjectCount: shortMetric.repeatedSubjectCount,
+        sampleFloorPass: shortSampleFloorPass,
+        exact30SampleFloorPass: baselineSampleFloorPass,
         withinRatioToExact30: withinRatio,
         pairedMedianBias: medianBias,
         pairedMedianBiasToExact30Between: medianBiasRatio,
@@ -455,6 +473,8 @@ export function evaluateGate6B({repeatability, validation}) {
     schemaVersion: 'aura.face3d-gate6b-evaluation.v1',
     criteria: {
       discriminabilityMinimum: 2.0,
+      repeatabilityMinimumSubjects: baseline.analysis.minSubjects,
+      repeatabilityMinimumRepeatedSubjects: baseline.analysis.minRepeatedSubjects,
       withinSpreadMaximumVsExact30: 1.25,
       pairedMedianBiasMaximumVsExact30Between: 0.10,
       pairedP95BiasMaximumVsExact30Between: 0.25,

@@ -490,7 +490,6 @@ function measurementsFor({
   const G = geometry.keypoints.glabella;
   const Sn = geometry.keypoints.subnasale;
   const Me = geometry.keypoints.menton;
-  const idx10 = geometry.debugPoints.idx10;
   const left = geometry.debugPoints.idx234;
   const right = geometry.debugPoints.idx454;
   const output = {};
@@ -505,16 +504,14 @@ function measurementsFor({
 
   let measurementHairline = hairline;
   if (hairline && transform) {
-    const zProxy =
-      typeof hairline.zProxy === 'number' ? hairline.zProxy : idx10?.z;
-    if (typeof zProxy === 'number') {
-      measurementHairline = applyTransform(
-        {i: -10, x: hairline.x, y: hairline.y, z: zProxy},
-        transform,
-      );
-    } else {
-      measurementHairline = null;
-    }
+    invariant(
+      typeof hairline.zProxy === 'number' && Number.isFinite(hairline.zProxy),
+      'pose-normalized replay requires hairline.zProxy from the raw capture frame',
+    );
+    measurementHairline = applyTransform(
+      {i: -10, x: hairline.x, y: hairline.y, z: hairline.zProxy},
+      transform,
+    );
   }
 
   if (G && measurementHairline) {

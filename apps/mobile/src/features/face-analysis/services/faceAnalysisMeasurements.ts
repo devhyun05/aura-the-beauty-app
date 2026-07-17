@@ -10,7 +10,7 @@
 // 역정규화한다. 저장(DB)과 프롬프트는 raw 키 그대로다.
 
 import type {Face3DProfile} from '../../face-3d/types';
-import {parseFace3DProfile} from '../../face-3d/services/face3DContract';
+import {parseTrustedServerFace3DProfile} from '../../face-3d/services/face3DContract';
 import type {
   FaceGeometryMetricKey,
   FaceGeometryMetricUnit,
@@ -1236,8 +1236,9 @@ export function parseFaceAnalysisMeasurements(
     value.faceVerticalThirds,
     options.imageUrl ?? '',
   );
-  // face3d 는 기존 v1 파서를 그대로 재사용한다(필수 5지표 검증 포함).
-  const face3d = parseFace3DProfile(value.face3d) ?? undefined;
+  // 인증된 backend detail 복원 경계에서만 serverCalibrationReceiptStatus를 허용한다.
+  // Unity/device 이벤트 parser는 같은 필드를 fail-closed로 거부한다.
+  const face3d = parseTrustedServerFace3DProfile(value.face3d) ?? undefined;
   const faceGeometry2d = decodeFaceGeometry(value.faceGeometry2d);
   const personalColor = decodePersonalColor(value.personalColor);
 

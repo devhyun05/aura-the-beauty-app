@@ -5,6 +5,7 @@ import {
   isFace3DProfileAnalysisEligible,
   parseFace3DEvent,
   parseFace3DProfile,
+  parseTrustedServerFace3DProfile,
 } from './face3DContract';
 import {adaptFace3DRuntimeEvidence} from './face3DUnifiedEvidenceAdapter';
 import {
@@ -350,19 +351,32 @@ const calibrationReceipt = {
   signingKeyId: 'face3d-calibration-key-1',
   subjectContextId: 'subject-context-1',
 };
-const calibratedV3Profile = parseFace3DProfile(
-  createV3Profile({
-    calibrationReceipt,
-    confidenceCalibrationStatus: 'calibrated',
-    profileBindingSha256,
-    serverCalibrationReceiptStatus: 'verified',
-    sensorProvenance: {
-      depthDataObservedRatio: 1,
-      deviceModel: 'iPhone-test',
-      faceTrackingSupported: true,
-      trueDepthHardware: true,
-    },
-  }),
+const calibratedServerProfilePayload = createV3Profile({
+  calibrationReceipt,
+  confidenceCalibrationStatus: 'calibrated',
+  profileBindingSha256,
+  serverCalibrationReceiptStatus: 'verified',
+  sensorProvenance: {
+    depthDataObservedRatio: 1,
+    deviceModel: 'iPhone-test',
+    faceTrackingSupported: true,
+    trueDepthHardware: true,
+  },
+});
+expectEqual(
+  parseFace3DProfile(calibratedServerProfilePayload),
+  null,
+  'device parser rejects forged backend-only receipt status',
+);
+const calibratedV3Profile = parseTrustedServerFace3DProfile(
+  calibratedServerProfilePayload,
+);
+expectEqual(
+  calibratedV3Profile?.schemaVersion === 'aura.face3d-profile.v3'
+    ? calibratedV3Profile.serverCalibrationReceiptStatus
+    : undefined,
+  'verified',
+  'trusted backend detail parser retains server receipt status',
 );
 expectEqual(
   FACE_3D_CALIBRATION_PROMOTION_ENABLED,

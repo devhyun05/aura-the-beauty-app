@@ -78,3 +78,20 @@ export async function readFace3DRuntimeEvidenceLog() {
   const {fileUri} = getLogFileUri();
   return readExistingLog(fileUri);
 }
+
+export async function drainFace3DRuntimeEvidenceWrites() {
+  // A stale mounted instance can enqueue another append while this barrier is
+  // already waiting. Drain until the observed tail is still the current tail.
+  for (;;) {
+    const observedTail = appendChain;
+    await observedTail;
+    if (observedTail === appendChain) {
+      return;
+    }
+  }
+}
+
+export async function readFace3DRuntimeEvidenceLogAfterPendingWrites() {
+  await drainFace3DRuntimeEvidenceWrites();
+  return readFace3DRuntimeEvidenceLog();
+}

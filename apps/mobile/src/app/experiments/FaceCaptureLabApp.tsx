@@ -25,7 +25,7 @@ import {Face3DLabScreen} from '../../features/face-3d/screens/Face3DLabScreen';
 import {evaluateFace3DEntryEligibility} from '../../features/face-3d/services/face3DEntryEligibility';
 import {
   appendFace3DRuntimeEvidence,
-  readFace3DRuntimeEvidenceLog,
+  readFace3DRuntimeEvidenceLogAfterPendingWrites,
 } from '../../features/face-3d/services/face3DRuntimeEvidenceLogger';
 import {isRealtimeFaceCaptureAvailable} from '../../features/face-capture/components/RealtimeFaceCaptureNativeView';
 import {
@@ -633,7 +633,7 @@ function FaceCaptureLabContent() {
         try {
           const exact30Progress =
             resolveFaceRatioPreparedExact30Progress(
-              await readFace3DRuntimeEvidenceLog(),
+              await readFace3DRuntimeEvidenceLogAfterPendingWrites(),
               preparedCollectionPlan,
             );
           if (

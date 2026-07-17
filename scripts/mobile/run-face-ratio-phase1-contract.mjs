@@ -1,4 +1,4 @@
-import {mkdtempSync, readFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, readFileSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -74,6 +74,7 @@ if (
   !labSource.includes('unifiedLabImageOwnership.take(result.image.uri)') ||
   !labSource.includes('unifiedLabImageOwnership.releaseAll()') ||
   !labSource.includes('preparedCommitCoordinator.run({') ||
+  !labSource.includes('readFace3DRuntimeEvidenceLogAfterPendingWrites()') ||
   !labSource.includes('onAbandonStarted={invalidatePreparedCommit}') ||
   !labSource.includes('if (!isCurrent() || !labMountedRef.current)') ||
   !labSource.includes(
@@ -211,6 +212,17 @@ const tempImageOwnershipTestPath =
   'features/face-capture/services/faceCaptureLabTempImageOwnership.test.ts';
 const preparedCommitCoordinatorTestPath =
   'features/face-capture/services/faceCaptureLabPreparedCommitCoordinator.test.ts';
+const runtimeEvidenceLoggerTestPath =
+  'features/face-3d/services/face3DRuntimeEvidenceLogger.test.ts';
+const runtimeEvidenceTestGlobalsPath = join(
+  outDir,
+  'runtime-evidence-test-globals.d.ts',
+);
+writeFileSync(
+  runtimeEvidenceTestGlobalsPath,
+  'declare const __DEV__: boolean;\n',
+  'utf8',
+);
 
 run(process.execPath, [
   tscPath,
@@ -228,7 +240,61 @@ run(process.execPath, [
   join(srcRoot, testPath),
   join(srcRoot, tempImageOwnershipTestPath),
   join(srcRoot, preparedCommitCoordinatorTestPath),
+  join(srcRoot, runtimeEvidenceLoggerTestPath),
+  runtimeEvidenceTestGlobalsPath,
 ]);
+const fileSystemMockDirectory = join(
+  outDir,
+  'node_modules/expo-file-system',
+);
+mkdirSync(fileSystemMockDirectory, {recursive: true});
+writeFileSync(
+  join(fileSystemMockDirectory, 'legacy.js'),
+  `
+let contents = '';
+let exists = false;
+let nextWriteBarrier = null;
+
+module.exports = {
+  documentDirectory: 'file:///documents/',
+  async getInfoAsync() {
+    return {exists};
+  },
+  async readAsStringAsync() {
+    return contents;
+  },
+  async makeDirectoryAsync() {},
+  async writeAsStringAsync(_fileUri, value) {
+    const barrier = nextWriteBarrier;
+    nextWriteBarrier = null;
+    if (barrier) {
+      barrier.markStarted();
+      await barrier.promise;
+    }
+    contents = value;
+    exists = true;
+  },
+  reset() {
+    contents = '';
+    exists = false;
+    nextWriteBarrier = null;
+  },
+  blockNextWrite() {
+    let markStarted;
+    let release;
+    const started = new Promise(resolve => {
+      markStarted = resolve;
+    });
+    const promise = new Promise(resolve => {
+      release = resolve;
+    });
+    nextWriteBarrier = {markStarted, promise};
+    return {release, started};
+  },
+};
+`,
+  'utf8',
+);
 run(process.execPath, [
   join(outDir, testPath.replace(/\.ts$/, '.js')),
   encodedPlan,
@@ -238,4 +304,7 @@ run(process.execPath, [
 ]);
 run(process.execPath, [
   join(outDir, preparedCommitCoordinatorTestPath.replace(/\.ts$/, '.js')),
+]);
+run(process.execPath, [
+  join(outDir, runtimeEvidenceLoggerTestPath.replace(/\.ts$/, '.js')),
 ]);
