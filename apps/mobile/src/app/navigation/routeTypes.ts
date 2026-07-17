@@ -44,6 +44,13 @@ export type RootStackParamList = {
   FaceAnalysisReportDetail:
     | {reportId?: string; returnTo?: 'profile'}
     | undefined;
+  // Redesigned S1–S7 report UI (docs/superpowers/plans/2026-07-16-face-report-
+  // redesign-plan.md) rendered against real data — reachable as an alternate
+  // view of the same report while S3/S6/S7's real data sources are still
+  // unwired on the backend.
+  FaceAnalysisReportPreview:
+    | {reportId?: string; returnTo?: 'profile'}
+    | undefined;
   FloatingActionSettings: undefined;
   AppSettings: undefined;
   Faq: undefined;
@@ -186,6 +193,7 @@ export const rootStackRoutes = [
   'FaceAnalysisLoading',
   'FaceAnalysisReportsList',
   'FaceAnalysisReportDetail',
+  'FaceAnalysisReportPreview',
   'FloatingActionSettings',
   'AppSettings',
   'Faq',

@@ -51,6 +51,7 @@ import {
   FaceAnalysisIntroRouteScreen,
   FaceAnalysisLoadingRouteScreen,
   FaceAnalysisReportDetailRouteScreen,
+  FaceAnalysisReportPreviewRouteScreen,
   FaceAnalysisReportsListRouteScreen,
   FaceCaptureRouteScreen,
 } from './routes/faceAnalysisRoutes';
@@ -128,6 +129,10 @@ export function RootNavigator() {
       <Stack.Screen
         name="FaceAnalysisReportDetail"
         component={FaceAnalysisReportDetailRouteScreen}
+      />
+      <Stack.Screen
+        name="FaceAnalysisReportPreview"
+        component={FaceAnalysisReportPreviewRouteScreen}
       />
       <Stack.Screen
         name="FloatingActionSettings"

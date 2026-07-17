@@ -9,6 +9,7 @@ import {
   FaceAnalysisReportDetailScreen,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
+import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
@@ -826,6 +827,12 @@ export function FaceAnalysisReportDetailRouteScreen({
           onPressProducts={reportId =>
             navigation.navigate('ProductRecommendation', {reportId})
           }
+          onPreviewRedesign={() =>
+            navigation.navigate('FaceAnalysisReportPreview', {
+              reportId: route.params?.reportId,
+              returnTo: route.params?.returnTo,
+            })
+          }
           face3d={route.params?.reportId ? null : selectedFace3DProfile}
           faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
           personalColor={route.params?.reportId ? null : selectedPersonalColor}
@@ -845,6 +852,38 @@ export function FaceAnalysisReportDetailRouteScreen({
         />
       </>
     </DetailRouteChrome>
+  );
+}
+
+// Redesigned S1–S7 report UI as an alternate view of the same report/session
+// measurements — mirrors FaceAnalysisReportDetailRouteScreen's session-prop
+// wiring (route.params.reportId means "past report", so session props are
+// withheld the same way) rather than duplicating the loading/measurement logic.
+export function FaceAnalysisReportPreviewRouteScreen({
+  navigation,
+  route,
+}: RootScreenProps<'FaceAnalysisReportPreview'>) {
+  const shouldReturnToProfile = route.params?.returnTo === 'profile';
+  const {
+    selectedFaceAnalysisReport,
+    selectedFaceCapture,
+    selectedFaceVerticalThirds,
+    selectedPersonalColor,
+  } = useNavigationFlowState();
+
+  return (
+    <FaceAnalysisReportPreviewScreen
+      analysisReport={selectedFaceAnalysisReport}
+      capturedPhotoUri={selectedFaceCapture?.imageUri}
+      onBack={() =>
+        shouldReturnToProfile ? navigateMainTab(navigation, 'ProfileTab') : navigation.goBack()
+      }
+      onRetake={() => navigation.navigate('FaceCapture')}
+      personalColor={route.params?.reportId ? null : selectedPersonalColor}
+      reportId={route.params?.reportId ?? null}
+      sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
+      verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
+    />
   );
 }
 

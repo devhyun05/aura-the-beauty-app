@@ -729,13 +729,26 @@ RECOMMENDED_MAKEUP_COUNT = 1
 ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "Top-level JSON keys: faceShape, skinType, "
   "recommendedMood, tags, summary, shortSummary, skinAnalysisSummary, "
-  "baseMakeupGuide, makeupGuideline, recommendedMakeups, beautyGuide. "
+  "baseMakeupGuide, makeupGuideline, recommendedMakeups, beautyGuide, "
+  "regionNotes, impressionNotes, stylingLooks. "
   "makeupGuideline keys: brow, blush, highlight, eyeshadow, eyeliner, lip. "
   "recommendedMakeups must be exactly 1 object. The object keys: title, "
   "subtitle, description, tags. tags must contain exactly 2 strings. "
   "beautyGuide is optional but recommended. beautyGuide keys: bestColors, "
   "bestNeutrals, bestAccentColors, avoidColors, hairColorDirection, "
-  "hairstyleDirection, finalFormula."
+  "hairstyleDirection, finalFormula. "
+  "regionNotes keys: upper, mid, lower, jaw — each a short Korean sentence "
+  "describing that face region's impression. "
+  "impressionNotes keys: overallMood (<=18 chars), keywords (array of 3-5 "
+  "short Korean strings), paragraph (<=2 sentences). "
+  "stylingLooks keys: natural, glam. Each is an object with title (<=12 "
+  "chars), subtitle (<=16 chars), description (<=2 sentences), and rows "
+  "(array of 4-6 objects). Each row object has keys category (one of base, "
+  "brow, eyeshadow, eyeliner, blush, lip), note (how that category is "
+  "styled for this look), why (why it suits this user). natural and glam "
+  "must be grounded in the same face/personal-color analysis but differ in "
+  "intensity — natural is a light daily version, glam is a stronger, more "
+  "defined version."
 )
 
 MAKEUP_RECOMMENDATION_ROLES = ("anchor",)
@@ -1343,6 +1356,15 @@ class OpenAIAnalysisService:
       "요청 메타데이터의 measurements는 위 실측 지표들의 저장 기록이지만, faceVerticalThirds 원본 H는 AI 입력에서 제외돼 있어. 세로 비율은 검증된 요약 필드만 사용해. "
       "실측 지표(faceVerticalThirds, face3d, faceGeometry2d, measuredPersonalColor)가 사진 관찰과 다르면 실측 지표를 우선하되, "
       "수치를 그대로 나열하지 말고 해석해서 문장에 녹여 써. "
+      "regionNotes는 top-level 필드로 상안부(upper: 이마·눈썹·눈)·중안부(mid: 코·인중·볼)·하안부(lower: 입술)·"
+      "광대와 턱(jaw) 4개 부위 각각의 인상적 특징을 한 문장씩 설명해. 숫자를 나열하지 말고 위에서 설명한 실측 지표를 "
+      "있으면 근거로 자연스럽게 풀어 쓰고, 없으면 사진 관찰로만 판단해. "
+      "impressionNotes는 top-level 필드로 overallMood(전체 인상을 18자 이내로), keywords(전체 인상 키워드 3~5개 배열), "
+      "paragraph(전체 인상을 종합하는 두 문장 이내 설명)를 포함해. "
+      "stylingLooks는 top-level 필드로 natural과 glam 두 키를 포함해. 같은 사용자 얼굴 특징과 퍼스널 컬러에 근거하되 "
+      "natural은 일상에 어울리는 옅은 강도, glam은 포인트를 살린 진한 강도로 강도만 다르게 구분해. "
+      "각각 title, subtitle, description과 rows(4~6개, category는 base/brow/eyeshadow/eyeliner/blush/lip 중 하나, "
+      "note는 그 부위를 어떻게 표현하는지, why는 이 사용자에게 왜 어울리는지)를 채워. "
       "아래는 값 예시가 아니라 필드 구조 설명이야. 설명 문구를 복사하지 말고, 반드시 사진을 분석해서 실제 값으로 채워:\n"
       f"{ANALYSIS_OUTPUT_FIELD_GUIDE}\n"
       f"요청 메타데이터: {json.dumps(metadata, ensure_ascii=False)}"
@@ -1635,12 +1657,149 @@ class OpenAIAnalysisService:
 
     return normalized_cards
 
+  def _ensure_region_notes(self, result: dict[str, Any]) -> dict[str, str]:
+    notes = result.get("regionNotes")
+    normalized_notes = notes if isinstance(notes, dict) else {}
+    face_shape = self._first_normalized_text(result.get("faceShape"), "얼굴형")
+    recommended_mood = self._first_normalized_text(result.get("recommendedMood"), "은은한 분위기")
+
+    report_based_defaults = {
+      "upper": f"{face_shape} 인상 안에서 눈매와 눈썹이 표정의 시작점이 돼요.",
+      "mid": "코와 볼의 흐름이 완만하게 이어지는 구획이에요.",
+      "lower": f"{recommended_mood} 분위기를 입술이 자연스럽게 마무리해요.",
+      "jaw": "광대에서 턱끝으로 내려오는 선이 전체 윤곽을 정리해요.",
+    }
+
+    return {
+      key: self._first_normalized_text(normalized_notes.get(key), fallback)
+      for key, fallback in report_based_defaults.items()
+    }
+
+  def _ensure_impression_notes(self, result: dict[str, Any]) -> dict[str, Any]:
+    notes = result.get("impressionNotes")
+    normalized_notes = notes if isinstance(notes, dict) else {}
+    recommended_mood = self._first_normalized_text(result.get("recommendedMood"), "정돈된 분위기")
+    summary = self._first_normalized_text(result.get("shortSummary"), result.get("summary"))
+    raw_tags = result.get("tags")
+    tag_keywords = [
+      str(tag).strip()
+      for tag in raw_tags
+      if isinstance(raw_tags, list) and str(tag).strip()
+    ] if isinstance(raw_tags, list) else []
+
+    raw_keywords = normalized_notes.get("keywords")
+    keywords = [
+      str(keyword).strip()
+      for keyword in raw_keywords
+      if isinstance(raw_keywords, list) and str(keyword).strip()
+    ] if isinstance(raw_keywords, list) else []
+    if not keywords:
+      keywords = (tag_keywords + [recommended_mood])[:5] or [recommended_mood]
+
+    return {
+      "overallMood": self._trim_text_field(
+        self._first_normalized_text(normalized_notes.get("overallMood"), recommended_mood),
+        18,
+      ),
+      "keywords": keywords[:5],
+      "paragraph": self._first_normalized_text(
+        normalized_notes.get("paragraph"),
+        summary,
+        f"{recommended_mood} 인상이 전체적으로 자연스럽게 이어져요.",
+      ),
+    }
+
+  def _default_styling_look_rows(
+    self,
+    result: dict[str, Any],
+    intensity: str,
+  ) -> list[dict[str, str]]:
+    guideline = self._ensure_makeup_guideline(result)
+    intensity_prefix = "은은하게" if intensity == "natural" else "또렷하게"
+    categories = ("base", "brow", "eyeshadow", "eyeliner", "blush", "lip")
+
+    return [
+      {
+        "category": category,
+        "note": guideline.get("blush" if category == "base" else category, ""),
+        "why": f"{intensity_prefix} 표현해도 사용자 얼굴 특징과 자연스럽게 어울려요.",
+      }
+      for category in categories
+    ]
+
+  def _default_styling_look(self, result: dict[str, Any], intensity: str) -> dict[str, Any]:
+    recommended_mood = self._first_normalized_text(result.get("recommendedMood"), "데일리 무드")
+    label = "데일리" if intensity == "natural" else "포인트"
+
+    return {
+      "title": self._trim_text_field(f"{label} {recommended_mood}", 12),
+      "subtitle": self._trim_text_field(
+        "은은한 데일리 강도" if intensity == "natural" else "또렷한 포인트 강도",
+        16,
+      ),
+      "description": (
+        f"{recommended_mood} 방향을 {'가볍게' if intensity == 'natural' else '진하게'} 풀어낸 룩이에요."
+      ),
+      "rows": self._default_styling_look_rows(result, intensity),
+    }
+
+  def _ensure_styling_look(
+    self,
+    result: dict[str, Any],
+    looks: dict[str, Any],
+    intensity: str,
+  ) -> dict[str, Any]:
+    look = looks.get(intensity)
+    normalized_look = look if isinstance(look, dict) else {}
+    fallback = self._default_styling_look(result, intensity)
+
+    raw_rows = normalized_look.get("rows")
+    rows = [row for row in raw_rows if isinstance(row, dict)] if isinstance(raw_rows, list) else []
+    normalized_rows = [
+      {
+        "category": self._first_normalized_text(row.get("category"), fallback_row["category"]),
+        "note": self._first_normalized_text(row.get("note"), fallback_row["note"]),
+        "why": self._first_normalized_text(row.get("why"), fallback_row["why"]),
+      }
+      for row, fallback_row in zip(
+        rows or fallback["rows"],
+        fallback["rows"],
+      )
+    ]
+
+    return {
+      "title": self._trim_text_field(
+        self._first_normalized_text(normalized_look.get("title"), fallback["title"]),
+        12,
+      ),
+      "subtitle": self._trim_text_field(
+        self._first_normalized_text(normalized_look.get("subtitle"), fallback["subtitle"]),
+        16,
+      ),
+      "description": self._first_normalized_text(
+        normalized_look.get("description"), fallback["description"],
+      ),
+      "rows": normalized_rows,
+    }
+
+  def _ensure_styling_looks(self, result: dict[str, Any]) -> dict[str, Any]:
+    looks = result.get("stylingLooks")
+    normalized_looks = looks if isinstance(looks, dict) else {}
+
+    return {
+      "natural": self._ensure_styling_look(result, normalized_looks, "natural"),
+      "glam": self._ensure_styling_look(result, normalized_looks, "glam"),
+    }
+
   def _normalize_analysis_result(self, result: dict[str, Any]) -> dict[str, Any]:
     result["toneSummary"] = self._trim_text_field(result.get("toneSummary"), 18)
     result["recommendedMood"] = self._trim_text_field(result.get("recommendedMood"), 18)
     result["baseMakeupGuide"] = self._ensure_base_makeup_guide(result)
     result["makeupGuideline"] = self._ensure_makeup_guideline(result)
     result["recommendedMakeups"] = self._ensure_recommended_makeups(result)
+    result["regionNotes"] = self._ensure_region_notes(result)
+    result["impressionNotes"] = self._ensure_impression_notes(result)
+    result["stylingLooks"] = self._ensure_styling_looks(result)
 
     return result
 
