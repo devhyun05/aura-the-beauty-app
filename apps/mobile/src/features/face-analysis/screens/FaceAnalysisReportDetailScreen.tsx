@@ -85,6 +85,9 @@ type FaceAnalysisReportDetailScreenProps = {
   onDeleteReport?: (reportId: string) => Promise<void> | void;
   onHeaderShareActionChange?: (action: FaceAnalysisReportShareAction | null) => void;
   onPressProducts?: (reportId: string) => void;
+  // 재구성 보고서 UI(docs/superpowers/plans/2026-07-16-face-report-redesign-plan.md)
+  // 미리보기 진입 링크 — 같은 보고서를 새 디자인으로 볼 수 있는 대체 화면으로 이동.
+  onPreviewRedesign?: () => void;
   // 세션 내 촬영에서 온디바이스로 진단한 퍼스널 컬러(로컬 전용).
   // 과거 보고서(id 조회)에는 없다. 판정 불가(insufficient)여도 섹션을 숨기지
   // 않고 사유 + 재촬영 안내를 표시한다 (조용한 실패 금지).
@@ -372,6 +375,7 @@ export function FaceAnalysisReportDetailScreen({
   onDeleteReport,
   onHeaderShareActionChange,
   onPressProducts,
+  onPreviewRedesign,
   verticalThirds,
 }: FaceAnalysisReportDetailScreenProps) {
   const [loadState, setLoadState] =
@@ -798,6 +802,18 @@ export function FaceAnalysisReportDetailScreen({
         feedback={shareFeedback}
         onPressShareAction={handleShareAction}
       />
+
+      {onPreviewRedesign ? (
+        <Button
+          accessibilityLabel="새 디자인으로 보고서 미리보기"
+          accessibilityRole="button"
+          onPress={onPreviewRedesign}
+          pressStyle={{opacity: 0.72}}
+          style={styles.previewRedesignLink}
+          unstyled>
+          <Text style={styles.previewRedesignLinkText}>새 디자인으로 보기 (베타)</Text>
+        </Button>
+      ) : null}
     </FaceAnalysisReportScaffold>
   );
 }
@@ -1574,6 +1590,17 @@ const styles = StyleSheet.create({
   reportDetailActionRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  previewRedesignLink: {
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
+  },
+  previewRedesignLinkText: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+    textDecorationLine: 'underline',
   },
   scrollBody: {
     backgroundColor: REPORT_BACKGROUND_COLOR,

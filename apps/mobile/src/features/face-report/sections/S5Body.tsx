@@ -1,0 +1,65 @@
+import React from 'react';
+import { Text, View } from 'react-native';
+import { color, font, radius } from '../reportTokens';
+import type { S5Data } from '../reportTypes';
+import { Card } from '../visuals/Card';
+import { Hatch } from '../visuals/Hatch';
+import { RiseIn } from '../visuals/RiseIn';
+import { SectionHeader } from '../visuals/SectionHeader';
+
+function DotItem({ text, avoid }: { text: string; avoid?: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start' }}>
+      <View style={{
+        width: 8, height: 8, borderRadius: 4, marginTop: 5,
+        backgroundColor: avoid ? 'transparent' : color.accent,
+        borderWidth: avoid ? 2 : 0, borderColor: avoid ? color.dotOutline : undefined,
+      }} />
+      <Text style={[font(13, '400', 1.55), { color: avoid ? color.muted : color.body, flex: 1 }]}>{text}</Text>
+    </View>
+  );
+}
+
+/** S5 체형 분석 — survey-based silhouette/skeleton result + do/avoid styling lists. */
+export function S5Body({ data, onResurvey }: { data: S5Data; onResurvey?: () => void }) {
+  return (
+    <RiseIn style={{ paddingTop: 30, paddingHorizontal: 20, gap: 12 }}>
+      <SectionHeader eyebrow={data.eyebrow} title={data.title} />
+      <RiseIn>
+        <Card gap={14}>
+          <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
+            <View style={{
+              width: 96, height: 128, borderRadius: radius.md, overflow: 'hidden',
+              alignItems: 'center', justifyContent: 'center', padding: 8,
+            }}>
+              <Hatch colorA={color.hatchC} colorB={color.bg} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+              <Text style={[font(9.5, '400', 1.5), { color: color.faint, textAlign: 'center' }]}>{data.silhouettePlaceholder}</Text>
+            </View>
+            <View style={{ flex: 1, gap: 9 }}>
+              <View style={{ gap: 2 }}>
+                <Text style={[font(10.5, '600'), { color: color.muted }]}>{data.silhouetteLabel}</Text>
+                <Text style={[font(16, '800'), { color: color.ink }]}>{data.silhouetteValue}</Text>
+              </View>
+              <View style={{ gap: 2 }}>
+                <Text style={[font(10.5, '600'), { color: color.muted }]}>{data.skeletonLabel}</Text>
+                <Text style={[font(16, '800'), { color: color.ink }]}>{data.skeletonValue}</Text>
+              </View>
+              <Text style={[font(11, '400'), { color: color.muted }]}>
+                {data.surveyNote}
+                <Text onPress={onResurvey} suppressHighlighting style={[font(11, '400'), { color: color.accentDeep }]}>
+                  {data.surveyLink}
+                </Text>
+              </Text>
+            </View>
+          </View>
+          <View style={{ gap: 9, borderTopWidth: 1, borderTopColor: color.divider, paddingTop: 13 }}>
+            <Text style={[font(12.5, '800'), { color: color.ink }]}>{data.doTitle}</Text>
+            {data.doItems.map((t, i) => <DotItem key={i} text={t} />)}
+            <Text style={[font(12.5, '800'), { color: color.ink, marginTop: 4 }]}>{data.avoidTitle}</Text>
+            {data.avoidItems.map((t, i) => <DotItem key={i} text={t} avoid />)}
+          </View>
+        </Card>
+      </RiseIn>
+    </RiseIn>
+  );
+}

@@ -138,6 +138,14 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '맞춤 분석 보고서',
   },
+  // FaceAnalysisReportPreviewScreen renders its own top bar (back/more
+  // buttons) via ReportScreenScaffold, so it doesn't use DetailRouteChrome.
+  FaceAnalysisReportPreview: {
+    category: 'detail-report',
+    depth: 'sub',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
   FloatingActionSettings: {
     category: 'form-edit',
     contextLabel: 'QUICK ACTION',
