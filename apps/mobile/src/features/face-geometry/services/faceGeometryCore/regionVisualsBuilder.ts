@@ -81,6 +81,14 @@ function norm(points: {x: number; y: number}[], imageW: number, imageH: number):
   return points.map(p => ({x: clamp01(p.x / imageW), y: clamp01(p.y / imageH)}));
 }
 
+// 축정렬 생존점(예: 세로 중앙선 두 점)으로 bbox의 w 또는 h가 0에 가까워지는
+// 퇴화 크롭을 걸러낸다. 카드가 찌그러진 사각형으로 렌더되는 것을 막는 최종 방어선.
+const EPS = 0.005;
+
+function nonDegenerate(rect: {x: number; y: number; w: number; h: number}): boolean {
+  return rect.w > EPS && rect.h > EPS;
+}
+
 export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number): RegionVisuals {
   if (!(imageW > 0) || !(imageH > 0)) {
     return {};
@@ -92,13 +100,16 @@ export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number)
   const brow = availablePts(map, [...BROW_CORE_RIGHT_INDICES, ...BROW_CORE_LEFT_INDICES]);
   const eyes = pts(map, [IDX.eyeOuterRight, IDX.eyeInnerRight, IDX.eyeInnerLeft, IDX.eyeOuterLeft, IDX.eyeUpperLidRight, IDX.eyeLowerLidRight, IDX.eyeUpperLidLeft, IDX.eyeLowerLidLeft]);
   if (eyes) {
-    out.upper = {
-      cropRect: bbox([...brow, ...eyes], imageW, imageH, 0.25, 0.45),
-      guide: {
-        points: norm([map.get(IDX.eyeOuterRight)!, map.get(IDX.eyeInnerRight)!, map.get(IDX.eyeInnerLeft)!, map.get(IDX.eyeOuterLeft)!], imageW, imageH),
-        label: '눈가',
-      },
-    };
+    const cropRect = bbox([...brow, ...eyes], imageW, imageH, 0.25, 0.45);
+    if (nonDegenerate(cropRect)) {
+      out.upper = {
+        cropRect,
+        guide: {
+          points: norm([map.get(IDX.eyeOuterRight)!, map.get(IDX.eyeInnerRight)!, map.get(IDX.eyeInnerLeft)!, map.get(IDX.eyeOuterLeft)!], imageW, imageH),
+          label: '눈가',
+        },
+      };
+    }
   }
 
   // 중안부: 코 능선 + 콧볼 + 볼 폭 → 크롭. 가이드 = 콧대 중심선.
@@ -106,28 +117,37 @@ export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number)
   const alae = pts(map, NOSE_ALAE_INDICES);
   const cheeks = pts(map, [IDX.faceWidthRight, IDX.faceWidthLeft]);
   if (nose && alae && cheeks) {
-    out.mid = {
-      cropRect: bbox([...nose, ...alae, ...cheeks], imageW, imageH, 0.08, 0.18),
-      guide: {points: norm(nose, imageW, imageH), label: '콧대 중심선'},
-    };
+    const cropRect = bbox([...nose, ...alae, ...cheeks], imageW, imageH, 0.08, 0.18);
+    if (nonDegenerate(cropRect)) {
+      out.mid = {
+        cropRect,
+        guide: {points: norm(nose, imageW, imageH), label: '콧대 중심선'},
+      };
+    }
   }
 
   // 하안부: 외곽 립 링(가용한 점만, 최소 2점) → 크롭 + 가이드(입술 라인).
   const lip = availablePts(map, OUTER_LIP_RING_INDICES);
   if (lip.length >= MIN_GUIDE_POINTS) {
-    out.lower = {
-      cropRect: bbox(lip, imageW, imageH, 0.4, 0.5),
-      guide: {points: norm(lip, imageW, imageH), label: '입술 라인'},
-    };
+    const cropRect = bbox(lip, imageW, imageH, 0.4, 0.5);
+    if (nonDegenerate(cropRect)) {
+      out.lower = {
+        cropRect,
+        guide: {points: norm(lip, imageW, imageH), label: '입술 라인'},
+      };
+    }
   }
 
   // 외곽: 하악 실루엣(가용한 점만, 최소 2점) → 크롭 + 가이드(턱 곡선).
   const jaw = availablePts(map, JAW_SILHOUETTE_INDICES);
   if (jaw.length >= MIN_GUIDE_POINTS) {
-    out.jaw = {
-      cropRect: bbox(jaw, imageW, imageH, 0.15, 0.15),
-      guide: {points: norm(jaw, imageW, imageH), label: '턱 곡선'},
-    };
+    const cropRect = bbox(jaw, imageW, imageH, 0.15, 0.15);
+    if (nonDegenerate(cropRect)) {
+      out.jaw = {
+        cropRect,
+        guide: {points: norm(jaw, imageW, imageH), label: '턱 곡선'},
+      };
+    }
   }
 
   return out;

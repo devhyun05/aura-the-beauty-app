@@ -59,6 +59,20 @@ function synthMap(): Map<number, {x: number; y: number}> {
 {
   assert(Object.keys(regionVisualsBuilder(synthMap(), 0, 1000)).length === 0, 'imageW<=0 -> empty');
 }
+// 립 생존점이 세로 중앙선(0/17, 같은 x)뿐 → bbox 폭이 0 → 퇴화 크롭이라 lower 생략
+{
+  const m = synthMap();
+  [61, 40, 39, 37, 267, 269, 270, 291, 375, 321, 405, 314, 84, 181, 91, 146].forEach(i => m.delete(i));
+  const rv = regionVisualsBuilder(m, 1000, 1000);
+  assert(rv.lower === undefined, 'lower omitted when surviving lip points are axis-aligned (degenerate width)');
+}
+// 하악 실루엣 생존점이 1개뿐(최소 2점 미달) → jaw 생략
+{
+  const m = synthMap();
+  [172, 148, 377, 397].forEach(i => m.delete(i));
+  const rv = regionVisualsBuilder(m, 1000, 1000);
+  assert(rv.jaw === undefined, 'jaw omitted when fewer than 2 contour points survive');
+}
 
 // eslint-disable-next-line no-console
 console.log('regionVisualsBuilder.test.ts OK');
