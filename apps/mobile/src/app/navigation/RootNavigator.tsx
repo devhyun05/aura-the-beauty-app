@@ -50,7 +50,6 @@ import {
   Face3DMeasurementRouteScreen,
   FaceAnalysisIntroRouteScreen,
   FaceAnalysisLoadingRouteScreen,
-  FaceAnalysisReportDetailRouteScreen,
   FaceAnalysisReportPreviewRouteScreen,
   FaceAnalysisReportsListRouteScreen,
   FaceCaptureRouteScreen,
@@ -128,10 +127,6 @@ export function RootNavigator() {
       />
       <Stack.Screen
         name="FaceAnalysisReportDetail"
-        component={FaceAnalysisReportDetailRouteScreen}
-      />
-      <Stack.Screen
-        name="FaceAnalysisReportPreview"
         component={FaceAnalysisReportPreviewRouteScreen}
       />
       <Stack.Screen

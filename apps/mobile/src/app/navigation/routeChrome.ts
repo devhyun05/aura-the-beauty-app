@@ -129,18 +129,9 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '얼굴 분석 결과',
   },
+  // The report screen renders its own top bar (back/more) via
+  // ReportScreenScaffold, so it doesn't use DetailRouteChrome.
   FaceAnalysisReportDetail: {
-    category: 'detail-report',
-    contextLabel: 'FACE ANALYSIS',
-    depth: 'sub',
-    kind: 'detail',
-    rightActions: ['share'],
-    statusBarStyle: 'dark',
-    title: '맞춤 분석 보고서',
-  },
-  // FaceAnalysisReportPreviewScreen renders its own top bar (back/more
-  // buttons) via ReportScreenScaffold, so it doesn't use DetailRouteChrome.
-  FaceAnalysisReportPreview: {
     category: 'detail-report',
     depth: 'sub',
     kind: 'fullscreen',

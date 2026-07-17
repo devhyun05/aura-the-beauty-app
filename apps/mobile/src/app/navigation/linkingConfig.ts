@@ -54,7 +54,6 @@ export const rootStackLinkingScreens = {
   FaceAnalysisLoading: 'face-analysis-loading',
   FaceAnalysisReportsList: 'face-analysis-reports',
   FaceAnalysisReportDetail: 'face-analysis-report/:reportId?',
-  FaceAnalysisReportPreview: 'face-analysis-report-preview/:reportId?',
   FloatingActionSettings: 'floating-action-settings',
   AppSettings: 'app-settings',
   Faq: 'faq',

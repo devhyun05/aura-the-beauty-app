@@ -787,12 +787,6 @@ export function FaceAnalysisReportDetailRouteScreen({
           onPressProducts={reportId =>
             navigation.navigate('ProductRecommendation', {reportId})
           }
-          onPreviewRedesign={() =>
-            navigation.navigate('FaceAnalysisReportPreview', {
-              reportId: route.params?.reportId,
-              returnTo: route.params?.returnTo,
-            })
-          }
           face3d={route.params?.reportId ? null : selectedFace3DProfile}
           faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
           personalColor={route.params?.reportId ? null : selectedPersonalColor}
@@ -815,14 +809,15 @@ export function FaceAnalysisReportDetailRouteScreen({
   );
 }
 
-// Redesigned S1–S7 report UI as an alternate view of the same report/session
-// measurements — mirrors FaceAnalysisReportDetailRouteScreen's session-prop
-// wiring (route.params.reportId means "past report", so session props are
-// withheld the same way) rather than duplicating the loading/measurement logic.
+// The report screen: redesigned S1–S7 UI (features/face-report). Owns the
+// canonical FaceAnalysisReportDetail route, so every entry point (post-analysis,
+// reports list, profile, home, AR back) lands here. Session props follow the
+// same rule as before — route.params.reportId means "past report", so session
+// measurements are withheld and the server-stored ones are restored instead.
 export function FaceAnalysisReportPreviewRouteScreen({
   navigation,
   route,
-}: RootScreenProps<'FaceAnalysisReportPreview'>) {
+}: RootScreenProps<'FaceAnalysisReportDetail'>) {
   const shouldReturnToProfile = route.params?.returnTo === 'profile';
   const {
     selectedFaceAnalysisReport,
