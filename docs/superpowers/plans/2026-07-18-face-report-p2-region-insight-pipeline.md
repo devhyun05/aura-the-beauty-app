@@ -25,6 +25,7 @@
 - **Create** `services/backend/tests/test_region_notes_structured.py` — 정규화 pytest.
 - **Modify** `apps/mobile/src/shared/types/faceAnalysis.ts` — `FaceAnalysisRegionNote` 구조체 타입.
 - **Modify** `apps/mobile/src/features/face-report/reportTypes.ts` — `RegionCardData`에 insight/evidence/recommendation.
+- **Modify** `apps/mobile/src/shared/services/faceAnalysisService.ts` — `BackendRegionNotes` 타입 + `parseRegionNotes`(백엔드 JSON → FaceAnalysisReport 구조체 파싱). ⚠️ 이 파서가 구조체를 못 받으면 신규 응답에서 `.trim()` 런타임 크래시 + 타입 에러.
 - **Modify** `apps/mobile/src/features/face-report/services/fromFaceAnalysisReport.ts` — `normalizeRegionNote` + buildS3(3단) + buildS6(`.insight`).
 - **Modify** `apps/mobile/src/features/face-report/sections/S3Features.tsx` — insight/evidence/recommendation 렌더.
 
@@ -292,14 +293,58 @@ Expected: FAIL — `fromFaceAnalysisReport.ts`의 buildS3(`paragraph: regionNote
 
 ---
 
-## Task 4: 모바일 — 어댑터 (normalizeRegionNote + buildS3 + buildS6)
+## Task 4: 모바일 — 백엔드 파서 + 어댑터 (parseRegionNotes + normalizeRegionNote + buildS3 + buildS6)
 
 **Files:**
+- Modify: `apps/mobile/src/shared/services/faceAnalysisService.ts` — `BackendRegionNotes`(:60), `parseRegionNotes`(:397-404)
 - Modify: `apps/mobile/src/features/face-report/services/fromFaceAnalysisReport.ts` — buildS3(:383-409), buildS6(:414-463)
 
 **Interfaces:**
 - Consumes: Task 3 타입.
-- Produces: `normalizeRegionNote(raw: unknown) → { insight; evidence; recommendation }`; buildS3 카드가 insight/evidence/recommendation을 담고; buildS6 gaze 텍스트가 `.insight` 사용.
+- Produces: `parseRegionNotes`가 구조체 `FaceAnalysisRegionNotes` 반환(문자열 legacy 흡수); `normalizeRegionNote(raw: unknown) → { insight; evidence; recommendation }`; buildS3 카드가 insight/evidence/recommendation을 담고; buildS6 gaze 텍스트가 `.insight` 사용.
+
+- [ ] **Step 0: 백엔드 응답 파서 갱신 (faceAnalysisService.ts)**
+
+Modify `apps/mobile/src/shared/services/faceAnalysisService.ts`:
+
+`BackendRegionNotes` 타입(:60)
+```ts
+type BackendRegionNotes = Partial<Record<'upper' | 'mid' | 'lower' | 'jaw', string | null>>;
+```
+을 아래로 교체(구버전 문자열 + 신버전 객체 모두 허용):
+```ts
+type BackendRegionNote = {insight?: string | null; evidence?: string | null; recommendation?: string | null};
+type BackendRegionNotes = Partial<Record<'upper' | 'mid' | 'lower' | 'jaw', BackendRegionNote | string | null>>;
+```
+
+`parseRegionNotes`(:397-404) 전체를 아래로 교체:
+```ts
+function toRegionNote(
+  raw: BackendRegionNote | string | null | undefined,
+): FaceAnalysisRegionNote | undefined {
+  if (raw && typeof raw === 'object') {
+    const insight = firstText(raw.insight);
+    if (!insight) return undefined;
+    return {
+      insight,
+      evidence: firstText(raw.evidence) ?? '',
+      recommendation: firstText(raw.recommendation) ?? '',
+    };
+  }
+  const insight = firstText(typeof raw === 'string' ? raw : undefined);
+  return insight ? {insight, evidence: '', recommendation: ''} : undefined;
+}
+
+function parseRegionNotes(value: BackendRegionNotes | null | undefined): FaceAnalysisRegionNotes | undefined {
+  const upper = toRegionNote(value?.upper);
+  const mid = toRegionNote(value?.mid);
+  const lower = toRegionNote(value?.lower);
+  const jaw = toRegionNote(value?.jaw);
+  return upper && mid && lower && jaw ? {upper, mid, lower, jaw} : undefined;
+}
+```
+
+`FaceAnalysisRegionNote` 타입 import 추가 — 파일 상단의 `faceAnalysis` 타입 import에 `FaceAnalysisRegionNote`를 포함(기존 `FaceAnalysisRegionNotes` import 옆). 정확한 import 경로는 같은 파일에서 `FaceAnalysisRegionNotes`를 import하는 줄을 찾아 거기에 추가한다.
 
 - [ ] **Step 1: normalizeRegionNote 헬퍼 추가**
 
