@@ -1,5 +1,7 @@
 # Home Makeup Recommendation Shortcut Implementation Plan
 
+**Status:** ✅ COMPLETED — commit `f3f47d1d` (`feat: open makeup recommendations from home`) is an ancestor of `origin/dev`. The integrated follow-up work must not reimplement this shortcut; it only runs home/navigation/typecheck regression gates and fixes this surface if a regression is proven.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the home screen's `헤어 분석` service shortcut with a `메이크업 추천` shortcut that opens the existing makeup recommendation flow.
@@ -30,7 +32,7 @@
 - Consumes: existing root route `MakeupRecommendation: undefined`
 - Produces: optional callback `onPressMakeupRecommendation?: () => void` and shortcut action ID `makeupRecommendation`
 
-- [ ] **Step 1: Update the contract test first**
+- [x] **Step 1: Update the contract test first**
 
 Change the expected eighth label and second row, then replace the hair-analysis handler assertion with the makeup-recommendation handler assertion:
 
@@ -59,13 +61,13 @@ const makeupRecommendationPressHandler = getHomeServiceShortcutPressHandler(
 );
 ```
 
-- [ ] **Step 2: Run typecheck to verify the contract fails**
+- [x] **Step 2: Run typecheck to verify the contract fails**
 
 Run: `npm --prefix apps/mobile run typecheck`
 
 Expected: FAIL because `HOME_SERVICE_SHORTCUT_LABELS` still contains `헤어 분석` and `makeupRecommendation`/`onPressMakeupRecommendation` do not yet exist.
 
-- [ ] **Step 3: Implement the minimal home shortcut replacement**
+- [x] **Step 3: Implement the minimal home shortcut replacement**
 
 In `HomeScreen.tsx`:
 
@@ -100,7 +102,7 @@ onPressMakeupRecommendation={() =>
 }
 ```
 
-- [ ] **Step 4: Run focused validation**
+- [x] **Step 4: Run focused validation**
 
 Run: `npm --prefix apps/mobile run typecheck`
 
@@ -110,7 +112,7 @@ Run: `git diff --check -- apps/mobile/src/features/home/screens/HomeScreen.tsx a
 
 Expected: PASS with no whitespace errors.
 
-- [ ] **Step 5: Commit the implementation files and plan**
+- [x] **Step 5: Commit the implementation files and plan**
 
 ```bash
 git add docs/superpowers/plans/2026-07-16-home-makeup-recommendation-shortcut.md \
@@ -120,10 +122,8 @@ git add docs/superpowers/plans/2026-07-16-home-makeup-recommendation-shortcut.md
 git commit -m "feat: open makeup recommendations from home"
 ```
 
-- [ ] **Step 6: Publish and open a draft PR**
+- [x] **Step 6: Publish and integrate**
 
-Run: `git push -u origin feature/makeup-recommendation`
+Historical branch: `feature/makeup-recommendation`.
 
-Expected: the current branch is updated on `origin`.
-
-Create a draft PR targeting the repository's default branch with the title `feat: open makeup recommendations from home`, describing the shortcut replacement and the typecheck result.
+Completion evidence: commit `f3f47d1d` is present in `origin/dev`. Future umbrella PRs reference this commit and run regression tests; they do not create a second shortcut implementation PR.

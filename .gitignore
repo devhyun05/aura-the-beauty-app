@@ -69,9 +69,15 @@ tools/beard-simulation-lab/.mplconfig/
 AuradinRN 2/
 newbeards/
 아카이브/
+/얼굴 분석 보고서 디자인/
 
 # Local Face3D calibration captures and reviews (may embed raw face frames)
 /artifacts/face3d/
+
+# Phase 1 face-ratio paired replay inputs (478 raw landmarks + transform matrix).
+# Local validation only; never commit or upload with product measurement payloads.
+/artifacts/face-ratio/phase1-local/
+/local-face-measurement/
 
 # Unity generated files and exports
 apps/mobile/ios/UnityBuild/

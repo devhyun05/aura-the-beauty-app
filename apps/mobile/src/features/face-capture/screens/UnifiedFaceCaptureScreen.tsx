@@ -19,11 +19,12 @@ import {
 import {deleteUnifiedFaceCaptureTempImage} from '../services/unifiedFaceCaptureTempImageCleanup';
 
 type UnifiedFaceCaptureScreenProps = {
+  onAbandonStarted?: () => void;
   onCancel: () => void;
   onCaptureCommitted: (
     result: UnifiedFaceCaptureCompletedEvent,
     upload: FaceCaptureUploadResult,
-  ) => boolean;
+  ) => boolean | Promise<boolean>;
   onFallback: (reason: string) => void;
   onRequestStarted: (requestId: string) => void;
   request?: UnifiedFaceCaptureRequest;
@@ -45,6 +46,7 @@ function getHairlineMessage(
 }
 
 export function UnifiedFaceCaptureScreen({
+  onAbandonStarted,
   onCancel,
   onCaptureCommitted,
   onFallback,
@@ -62,6 +64,7 @@ export function UnifiedFaceCaptureScreen({
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const autoUploadCaptureIdRef = React.useRef<string | null>(null);
   const callbacksRef = React.useRef({
+    onAbandonStarted,
     onCancel,
     onCaptureCommitted,
     onFallback,
@@ -74,6 +77,7 @@ export function UnifiedFaceCaptureScreen({
   const isUploadingRef = React.useRef(false);
   const uploadImageRef = React.useRef(uploadImage);
   callbacksRef.current = {
+    onAbandonStarted,
     onCancel,
     onCaptureCommitted,
     onFallback,
@@ -119,6 +123,7 @@ export function UnifiedFaceCaptureScreen({
 
     fallbackReasonRef.current = fallbackReason;
     isAbandoningRef.current = true;
+    callbacksRef.current.onAbandonStarted?.();
     void cleanupUncommittedImage(captureState.completed).finally(() => {
       callbacksRef.current.onFallback(fallbackReason);
     });
@@ -181,8 +186,14 @@ export function UnifiedFaceCaptureScreen({
       }
 
       try {
-        if (!callbacksRef.current.onCaptureCommitted(completed, upload)) {
+        if (
+          !(await callbacksRef.current.onCaptureCommitted(
+            completed,
+            upload,
+          ))
+        ) {
           isAbandoningRef.current = true;
+          callbacksRef.current.onAbandonStarted?.();
           await deleteUnifiedFaceCaptureTempImage(completed.image.uri);
           callbacksRef.current.onFallback('unified_capture_commit_rejected');
           return;
@@ -190,6 +201,7 @@ export function UnifiedFaceCaptureScreen({
         committedCaptureIdRef.current = completed.captureId;
       } catch (error) {
         isAbandoningRef.current = true;
+        callbacksRef.current.onAbandonStarted?.();
         console.info('[aura:unified-face-capture] commit:error', {
           message: error instanceof Error ? error.message : String(error),
         });
@@ -237,6 +249,7 @@ export function UnifiedFaceCaptureScreen({
             accessibilityRole="button"
             onPress={() => {
               isAbandoningRef.current = true;
+              callbacksRef.current.onAbandonStarted?.();
               captureState.cancel('user_closed');
               void cleanupUncommittedImage(captureState.completed).finally(() => {
                 callbacksRef.current.onCancel();

@@ -112,7 +112,7 @@ namespace Aura.Face3D
                 midfaceNormal,
                 faceScale,
                 out Vector3 chin,
-                out float chinProjection))
+                out _))
             {
                 return Face3DEvaluationResult.Blocked(
                     "semantic_landmark_geometry_invalid",
@@ -141,34 +141,49 @@ namespace Aura.Face3D
                 eLineDepthAxis = -eLineDepthAxis;
             }
 
-            float noseTipProjection = SignedPlaneProjection(
+            float noseTipProjectionMeters = SignedPlaneProjectionMeters(
                 noseTip,
                 midfaceOrigin,
-                midfaceNormal,
+                midfaceNormal);
+            float noseTipProjection = NormalizeMeters(
+                noseTipProjectionMeters,
                 faceScale);
             // C1/C2: chinProjection is the selected soft-tissue Pogonion's projection
             // against the face-spanning midface plane. The same selected point anchors
             // E-line above. The chin neighbor plane remains only a frame-admission guard.
-            float upperLipToELine = SignedDistanceToLine(
+            float chinProjectionMeters = SignedPlaneProjectionMeters(
+                chin,
+                midfaceOrigin,
+                midfaceNormal);
+            float chinProjection = NormalizeMeters(
+                chinProjectionMeters,
+                faceScale);
+            float upperLipToELineMeters = SignedDistanceToLineMeters(
                 upperLip,
                 noseTip,
                 eLineDirection,
-                eLineDepthAxis,
+                eLineDepthAxis);
+            float upperLipToELine = NormalizeMeters(
+                upperLipToELineMeters,
                 faceScale);
-            float lowerLipToELine = SignedDistanceToLine(
+            float lowerLipToELineMeters = SignedDistanceToLineMeters(
                 lowerLip,
                 noseTip,
                 eLineDirection,
-                eLineDepthAxis,
+                eLineDepthAxis);
+            float lowerLipToELine = NormalizeMeters(
+                lowerLipToELineMeters,
                 faceScale);
-            float centralProjectionScore = SignedPlaneProjection(
+            float centralProjectionScoreMeters = SignedPlaneProjectionMeters(
                 centralRegion,
                 midfaceOrigin,
-                midfaceNormal,
+                midfaceNormal);
+            float centralProjectionScore = NormalizeMeters(
+                centralProjectionScoreMeters,
                 faceScale);
 
             // ── Tier-2 (optional 그룹) — 부재·퇴화는 해당 지표만 null, 절대 Blocked 아님.
-            // 정규화는 각 헬퍼/SignedPlaneProjection 내부 1곳에서만 수행한다(계약 §0-2).
+            // 같은 프레임의 raw meters를 먼저 계산한 뒤 faceScale로 정규화한다.
 
             // 중선(midsagittal) 평면: origin=midfaceOrigin, normal=정규화 midfaceHorizontal.
             // 전후 기준면(midfaceNormal)과 다른, 좌/우 부호를 갖는 유일한 평면.
@@ -181,11 +196,18 @@ namespace Aura.Face3D
             float? alarWidth = null;
             float? malarProjectionLeft = null;
             float? malarProjectionRight = null;
+            float? noseLengthMeters = null;
+            float? nasalBridgeStraightnessMeters = null;
+            float? nasalAxisDeviationMeters = null;
+            float? alarWidthMeters = null;
+            float? malarProjectionLeftMeters = null;
+            float? malarProjectionRightMeters = null;
 
             bool hasNasion = TryCentroid(vertices, semanticMap.NasionIndices, out Vector3 nasion);
             if (hasNasion)
             {
-                noseLength = NormalizedDistance(nasion, noseTip, faceScale);
+                noseLengthMeters = DistanceMeters(nasion, noseTip);
+                noseLength = NormalizeMeters(noseLengthMeters, faceScale);
             }
 
             List<Vector3> bridgePoints = CollectPoints(vertices, semanticMap.NoseBridgeMidlineIndices);
@@ -195,17 +217,21 @@ namespace Aura.Face3D
                 // nasion 그룹이 없으면 축을 정의할 수 없어 straightness 도 null.
                 if (hasNasion)
                 {
-                    nasalBridgeStraightness = NormalizedResidualRmsToLine(
+                    nasalBridgeStraightnessMeters = ResidualRmsToLineMeters(
                         bridgePoints,
                         nasion,
-                        noseTip - nasion,
+                        noseTip - nasion);
+                    nasalBridgeStraightness = NormalizeMeters(
+                        nasalBridgeStraightnessMeters,
                         faceScale);
                 }
 
-                nasalAxisDeviation = MeanSignedPlaneProjection(
+                nasalAxisDeviationMeters = MeanSignedPlaneProjectionMeters(
                     bridgePoints,
                     midfaceOrigin,
-                    midsagittalNormal,
+                    midsagittalNormal);
+                nasalAxisDeviation = NormalizeMeters(
+                    nasalAxisDeviationMeters,
                     faceScale);
             }
 
@@ -229,21 +255,26 @@ namespace Aura.Face3D
                     true,
                     out Vector3 alarRight))
             {
-                alarWidth = NormalizedDistance(alarLeft, alarRight, faceScale);
+                alarWidthMeters = DistanceMeters(alarLeft, alarRight);
+                alarWidth = NormalizeMeters(alarWidthMeters, faceScale);
             }
 
             // malar 는 ROI 내 vertex 별 전후 투영의 최댓값(표면 최고점) — 좌우 평균 금지(계약 §2).
-            malarProjectionLeft = MaxSignedPlaneProjection(
+            malarProjectionLeftMeters = MaxSignedPlaneProjectionMeters(
                 vertices,
                 semanticMap.MalarApexLeftIndices,
                 midfaceOrigin,
-                midfaceNormal,
+                midfaceNormal);
+            malarProjectionLeft = NormalizeMeters(
+                malarProjectionLeftMeters,
                 faceScale);
-            malarProjectionRight = MaxSignedPlaneProjection(
+            malarProjectionRightMeters = MaxSignedPlaneProjectionMeters(
                 vertices,
                 semanticMap.MalarApexRightIndices,
                 midfaceOrigin,
-                midfaceNormal,
+                midfaceNormal);
+            malarProjectionRight = NormalizeMeters(
+                malarProjectionRightMeters,
                 faceScale);
 
             Face3DMetrics metrics = new Face3DMetrics(
@@ -257,7 +288,18 @@ namespace Aura.Face3D
                 nasalAxisDeviation,
                 alarWidth,
                 malarProjectionLeft,
-                malarProjectionRight);
+                malarProjectionRight,
+                noseTipProjectionMeters: noseTipProjectionMeters,
+                chinProjectionMeters: chinProjectionMeters,
+                upperLipToELineMeters: upperLipToELineMeters,
+                lowerLipToELineMeters: lowerLipToELineMeters,
+                centralProjectionScoreMeters: centralProjectionScoreMeters,
+                noseLengthMeters: noseLengthMeters,
+                nasalBridgeStraightnessMeters: nasalBridgeStraightnessMeters,
+                nasalAxisDeviationMeters: nasalAxisDeviationMeters,
+                alarWidthMeters: alarWidthMeters,
+                malarProjectionLeftMeters: malarProjectionLeftMeters,
+                malarProjectionRightMeters: malarProjectionRightMeters);
             if (!metrics.IsFinite)
             {
                 return Face3DEvaluationResult.Blocked("face3d_metric_not_finite", topology);
@@ -272,19 +314,28 @@ namespace Aura.Face3D
             Vector3 planeNormal,
             float faceScale)
         {
-            return Vector3.Dot(point - planeOrigin, planeNormal) / faceScale;
+            return NormalizeMeters(
+                SignedPlaneProjectionMeters(point, planeOrigin, planeNormal),
+                faceScale);
         }
 
-        private static float SignedDistanceToLine(
+        private static float SignedPlaneProjectionMeters(
+            Vector3 point,
+            Vector3 planeOrigin,
+            Vector3 planeNormal)
+        {
+            return Vector3.Dot(point - planeOrigin, planeNormal);
+        }
+
+        private static float SignedDistanceToLineMeters(
             Vector3 point,
             Vector3 lineOrigin,
             Vector3 lineDirection,
-            Vector3 depthAxis,
-            float faceScale)
+            Vector3 depthAxis)
         {
             Vector3 closestPoint = lineOrigin
                 + (Vector3.Dot(point - lineOrigin, lineDirection) * lineDirection);
-            return Vector3.Dot(point - closestPoint, depthAxis) / faceScale;
+            return Vector3.Dot(point - closestPoint, depthAxis);
         }
 
         private static bool TryCreateReferencePlane(
@@ -310,20 +361,19 @@ namespace Aura.Face3D
             return true;
         }
 
-        // ── Tier-2 헬퍼 — 나눗셈(faceScale 정규화)은 여기 내부 1곳씩만. 반환 null =
-        //    입력 퇴화(호출측은 지표 null 로 격리).
+        // ── Tier-2 헬퍼 — raw meters를 먼저 계산하고 같은 프레임의 faceScale로
+        //    normalized 값을 만든다. 두 스트림은 collector에서 각각 robust 집계된다.
 
-        private static float? NormalizedDistance(Vector3 a, Vector3 b, float faceScale)
+        private static float? DistanceMeters(Vector3 a, Vector3 b)
         {
-            float distance = (b - a).magnitude / faceScale;
+            float distance = (b - a).magnitude;
             return Face3DNumeric.IsFinite(distance) ? distance : (float?)null;
         }
 
-        private static float? NormalizedResidualRmsToLine(
+        private static float? ResidualRmsToLineMeters(
             List<Vector3> points,
             Vector3 lineOrigin,
-            Vector3 lineAxis,
-            float faceScale)
+            Vector3 lineAxis)
         {
             float axisLength = lineAxis.magnitude;
             if (!Face3DNumeric.IsFinite(axisLength) || axisLength <= GeometryEpsilon)
@@ -340,32 +390,33 @@ namespace Aura.Face3D
                 sumSquared += residual.sqrMagnitude;
             }
 
-            float rms = Mathf.Sqrt(sumSquared / points.Count) / faceScale;
+            float rms = Mathf.Sqrt(sumSquared / points.Count);
             return Face3DNumeric.IsFinite(rms) ? rms : (float?)null;
         }
 
-        private static float? MeanSignedPlaneProjection(
+        private static float? MeanSignedPlaneProjectionMeters(
             List<Vector3> points,
             Vector3 planeOrigin,
-            Vector3 planeNormal,
-            float faceScale)
+            Vector3 planeNormal)
         {
             float sum = 0.0f;
             for (int index = 0; index < points.Count; index += 1)
             {
-                sum += SignedPlaneProjection(points[index], planeOrigin, planeNormal, faceScale);
+                sum += SignedPlaneProjectionMeters(
+                    points[index],
+                    planeOrigin,
+                    planeNormal);
             }
 
             float mean = sum / points.Count;
             return Face3DNumeric.IsFinite(mean) ? mean : (float?)null;
         }
 
-        private static float? MaxSignedPlaneProjection(
+        private static float? MaxSignedPlaneProjectionMeters(
             IReadOnlyList<Vector3> vertices,
             IReadOnlyList<int> indices,
             Vector3 planeOrigin,
-            Vector3 planeNormal,
-            float faceScale)
+            Vector3 planeNormal)
         {
             List<Vector3> points = CollectPoints(vertices, indices);
             if (points == null)
@@ -376,11 +427,10 @@ namespace Aura.Face3D
             float max = float.NegativeInfinity;
             for (int index = 0; index < points.Count; index += 1)
             {
-                float projection = SignedPlaneProjection(
+                float projection = SignedPlaneProjectionMeters(
                     points[index],
                     planeOrigin,
-                    planeNormal,
-                    faceScale);
+                    planeNormal);
                 if (projection > max)
                 {
                     max = projection;
@@ -388,6 +438,22 @@ namespace Aura.Face3D
             }
 
             return Face3DNumeric.IsFinite(max) ? max : (float?)null;
+        }
+
+        private static float NormalizeMeters(float valueMeters, float faceScale)
+        {
+            return valueMeters / faceScale;
+        }
+
+        private static float? NormalizeMeters(float? valueMeters, float faceScale)
+        {
+            if (!valueMeters.HasValue)
+            {
+                return null;
+            }
+
+            float normalized = NormalizeMeters(valueMeters.Value, faceScale);
+            return Face3DNumeric.IsFinite(normalized) ? normalized : (float?)null;
         }
 
         private static bool TryMaxSignedPlaneProjectionPoint(

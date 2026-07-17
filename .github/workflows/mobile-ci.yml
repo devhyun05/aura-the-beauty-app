@@ -20,8 +20,13 @@ on:
       - dev
     paths:
       - "apps/mobile/**"
+      - "apps/unity/**"
       - "scripts/mobile/**"
       - "scripts/ios/**"
+      - "scripts/face-ratio/**"
+      - "scripts/face3d/**"
+      - "docs/face3d/FACE3D_GATE_STATUS.json"
+      - "package.json"
       - ".github/workflows/mobile-ci.yml"
   workflow_dispatch:
 
@@ -107,8 +112,9 @@ jobs:
           fi
 
           # here-string(<<<)을 써서 grep -q 조기 종료에 따른 SIGPIPE 오판을 막는다.
-          # scripts/face3d/ 는 오프라인 시맨틱 파이프라인 계약이 이 잡에서 돌므로 포함.
-          if grep -qE '^(apps/mobile/|scripts/mobile/|scripts/ios/|scripts/face3d/|\.github/workflows/mobile-ci\.yml)' <<< "$files"; then
+          # Unity source와 face-ratio/·face3d/ 오프라인 계약도 이 잡에서 실행하므로
+          # 변경 감지에 포함한다. Unity Editor 빌드는 하지 않고 아래 정적 계약만 검사한다.
+          if grep -qE '^(apps/mobile/|apps/unity/|scripts/mobile/|scripts/ios/|scripts/face-ratio/|scripts/face3d/|docs/face3d/FACE3D_GATE_STATUS\.json$|package\.json$|\.github/workflows/mobile-ci\.yml$)' <<< "$files"; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -191,6 +197,9 @@ jobs:
       - name: Contract — Face ratio distortion
         run: npm run test:face-ratio-distortion
 
+      - name: Contract — Face ratio Phase 1 replay
+        run: npm run test:face-ratio-phase1
+
       - name: Contract — Generated brow
         run: npm run test:generated-brow
 
@@ -211,6 +220,18 @@ jobs:
 
       - name: Contract — Face3D profile/metric contract
         run: npm run test:face3d
+
+      - name: Contract — Unity Face3D v3 source and runtime preflight tooling
+        working-directory: .
+        run: |
+          # CI에는 Unity 라이선스/빌드 산출물이 없으므로 소스 정적 검사와
+          # framework executable + metadata preflight의 fixture 테스트까지만 수행한다.
+          npm run face3d:check:unity-source-contract
+          npm run face3d:test:unity-runtime-preflight
+
+      - name: Contract — Face3D calibration and fail-closed registry
+        working-directory: .
+        run: npm run face3d:test:calibration
 
       - name: Contract — Face geometry 2D metrics (합성 랜드마크 기지값)
         run: npm run test:face-geometry

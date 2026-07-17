@@ -1479,6 +1479,28 @@ export type FaceLandmarkPoint = {
 
 export type FaceLandmarksStatus = 'ok' | 'no_face' | 'error';
 
+export type FaceLandmarkTransformationMatrix = {
+  layout: 'row-major';
+  values: [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+};
+
 export type FaceLandmarksResult = {
   status: FaceLandmarksStatus;
   requestId: string;
@@ -1487,6 +1509,7 @@ export type FaceLandmarksResult = {
   imageHeight: number;
   landmarks: FaceLandmarkPoint[];
   pose: {pitchDeg: number; yawDeg: number; rollDeg: number} | null;
+  transformationMatrix?: FaceLandmarkTransformationMatrix;
   error?: string;
 };
 
@@ -1513,6 +1536,31 @@ export function buildAnalyzeFaceLandmarksStillRequest(
 
 function toFiniteNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function parseFaceLandmarkTransformationMatrix(
+  value: unknown,
+): FaceLandmarkTransformationMatrix | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  if (
+    record.layout !== 'row-major' ||
+    !Array.isArray(record.values) ||
+    record.values.length !== 16 ||
+    !record.values.every(
+      entry => typeof entry === 'number' && Number.isFinite(entry),
+    )
+  ) {
+    return undefined;
+  }
+
+  return {
+    layout: 'row-major',
+    values: record.values as FaceLandmarkTransformationMatrix['values'],
+  };
 }
 
 // 순수 함수: Unity 이벤트 message(JSON 문자열)를 파싱한다(유닛테스트 대상).
@@ -1552,10 +1600,15 @@ export function parseFaceLandmarksMessage(
         i: toFiniteNumber(p.i, index),
         x: toFiniteNumber(p.x, NaN),
         y: toFiniteNumber(p.y, NaN),
-        z: toFiniteNumber(p.z, 0),
+        z: toFiniteNumber(p.z, NaN),
       };
     })
-    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+    .filter(
+      point =>
+        Number.isFinite(point.x) &&
+        Number.isFinite(point.y) &&
+        Number.isFinite(point.z),
+    );
 
   const rawPose = (parsed.pose ?? null) as Record<string, unknown> | null;
   const pose = rawPose
@@ -1565,6 +1618,9 @@ export function parseFaceLandmarksMessage(
         rollDeg: toFiniteNumber(rawPose.rollDeg, 0),
       }
     : null;
+  const transformationMatrix = parseFaceLandmarkTransformationMatrix(
+    parsed.transformationMatrix,
+  );
 
   return {
     status,
@@ -1574,6 +1630,7 @@ export function parseFaceLandmarksMessage(
     imageHeight: toFiniteNumber(parsed.imageHeight, 0),
     landmarks,
     pose,
+    ...(transformationMatrix ? {transformationMatrix} : {}),
     error: typeof parsed.error === 'string' ? parsed.error : undefined,
   };
 }

@@ -1,4 +1,5 @@
 #import <ARKit/ARKit.h>
+#import <AVFoundation/AVFoundation.h>
 #import <CoreImage/CoreImage.h>
 #import <ImageIO/ImageIO.h>
 #import <UIKit/UIKit.h>
@@ -33,6 +34,9 @@ typedef struct AuraUnifiedFaceNativeSampleInfo
     int32_t triangleIndexCount;
     int32_t textureCoordinateCount;
     int32_t projectedVertexCount;
+    int32_t trueDepthHardware;
+    int32_t depthDataObserved;
+    int32_t faceTrackingSupported;
 } AuraUnifiedFaceNativeSampleInfo;
 
 @interface AURAUnifiedFaceRetainedSample : NSObject
@@ -467,6 +471,17 @@ extern "C"
             static_cast<int32_t>(textureCoordinateCount);
         sampleInfo->projectedVertexCount =
             static_cast<int32_t>(vertexCount);
+        AVCaptureDevice *trueDepthCamera =
+            [AVCaptureDevice
+                defaultDeviceWithDeviceType:
+                    AVCaptureDeviceTypeBuiltInTrueDepthCamera
+                mediaType:AVMediaTypeVideo
+                position:AVCaptureDevicePositionFront];
+        sampleInfo->trueDepthHardware = trueDepthCamera != nil ? 1 : 0;
+        sampleInfo->depthDataObserved =
+            frame.capturedDepthData != nil ? 1 : 0;
+        sampleInfo->faceTrackingSupported =
+            [ARFaceTrackingConfiguration isSupported] ? 1 : 0;
         return 1;
     }
 

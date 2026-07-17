@@ -331,7 +331,7 @@ namespace ARMakeup.Face
             string requestId, int imageWidth, int imageHeight, FaceLandmarkerResult result)
         {
             var landmarks = result.faceLandmarks[0].landmarks;
-            var sb = new StringBuilder(landmarks.Count * 48 + 256);
+            var sb = new StringBuilder(landmarks.Count * 48 + 512);
             sb.Append("{\"type\":\"faceLandmarks\",\"requestId\":\"").Append(Escape(requestId))
               .Append("\",\"status\":\"ok\",\"faceCount\":1,\"imageWidth\":").Append(imageWidth)
               .Append(",\"imageHeight\":").Append(imageHeight)
@@ -358,6 +358,21 @@ namespace ARMakeup.Face
             if (matrixes != null && matrixes.Count > 0)
             {
                 var m = matrixes[0];
+                // Phase 1 paired replay/정면화 계약. Unity Matrix4x4의 m00..m33을
+                // 명시적인 row-major 16값으로 보존한다. RN parser는 길이·유한값을
+                // fail-closed 검증하며, 원시 행렬은 제품 measurement payload가 아니라
+                // validation-only 보정 입력으로만 소비한다.
+                sb.Append(",\"transformationMatrix\":{\"layout\":\"row-major\",\"values\":[")
+                  .Append(Num(m.m00)).Append(',').Append(Num(m.m01)).Append(',')
+                  .Append(Num(m.m02)).Append(',').Append(Num(m.m03)).Append(',')
+                  .Append(Num(m.m10)).Append(',').Append(Num(m.m11)).Append(',')
+                  .Append(Num(m.m12)).Append(',').Append(Num(m.m13)).Append(',')
+                  .Append(Num(m.m20)).Append(',').Append(Num(m.m21)).Append(',')
+                  .Append(Num(m.m22)).Append(',').Append(Num(m.m23)).Append(',')
+                  .Append(Num(m.m30)).Append(',').Append(Num(m.m31)).Append(',')
+                  .Append(Num(m.m32)).Append(',').Append(Num(m.m33))
+                  .Append("]}");
+
                 float sy = Mathf.Sqrt(m.m00 * m.m00 + m.m10 * m.m10);
                 float pitch, yaw, roll;
                 if (sy >= 1e-6f)

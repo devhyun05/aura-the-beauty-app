@@ -2,6 +2,10 @@ import {NativeModules} from 'react-native';
 
 import type {FaceRatioHairlineTuning} from '../constants';
 import type {NativeFaceRatioAnalyzeResult} from '../types';
+import type {
+  FaceRatioLandmark3D,
+  FaceRatioTransformationMatrix,
+} from './faceRatioPoseNormalization';
 
 export type FaceRatioHairlineOptions = {
   // 네이티브 tmp에 apple-hair-matte.png / apple-skin-matte.png / hairline-debug.png 생성
@@ -17,13 +21,15 @@ export type FaceRatioHairlineOptions = {
 
 // homuler(Unity IMAGE 모드)에서 검출해 넘겨주는 얼굴 랜드마크.
 // CocoaPods MediaPipe 제거 이후, 네이티브 분석기는 랜드마크를 스스로 검출하지 않고
-// 이 입력(정규화 478점 + 원본 크기 + pose)으로 키포인트/비율 계산만 수행한다.
-// pose.rollDeg 는 촬영 후 roll 좌표 보정(기획 §5.2)에 쓰인다.
+// 이 입력(정규화 478점 + 원본 크기 + pose + optional matrix)으로 네이티브
+// hair-matte 경계를 계산한다. 구조 키포인트/비율과 Phase 1 정면화는 동일 입력
+// replay를 위해 순수 TS 코어가 담당한다.
 export type FaceRatioLandmarkInput = {
-  points: {i: number; x: number; y: number; z: number}[];
+  points: FaceRatioLandmark3D[];
   imageWidth: number;
   imageHeight: number;
   pose: {pitchDeg: number; yawDeg: number; rollDeg: number} | null;
+  transformationMatrix?: FaceRatioTransformationMatrix;
 };
 
 export type FaceRatioAnalyzeOptions = {

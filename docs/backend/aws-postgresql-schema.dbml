@@ -228,6 +228,27 @@ Table analysis_reports {
   Note: 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.'
 }
 
+Table face3d_calibration_receipt_consumptions {
+  receipt_id text [pk]
+  capture_nonce text [not null, unique]
+  profile_binding_sha256 text [not null]
+  collection_policy_id text [not null]
+  gate_version text [not null]
+  signing_key_id text [not null]
+  approval_artifact_sha256 text [not null]
+  subject_context_id text [not null]
+  report_context_id text [not null]
+  issued_at timestamptz [not null]
+  expires_at timestamptz [not null]
+  consumed_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (subject_context_id, report_context_id)
+  }
+
+  Note: 'One-time replay ledger for server-verified Face3D calibration receipts. Empty while Phase 2 promotion is OFF.'
+}
+
 Table analysis_stage_runs {
   id uuid [pk, default: `gen_random_uuid()`]
   report_id uuid [not null]

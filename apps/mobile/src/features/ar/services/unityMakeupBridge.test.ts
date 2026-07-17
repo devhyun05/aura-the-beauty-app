@@ -163,8 +163,14 @@ const okLandmarks = parseFaceLandmarksMessage(
       {i: 0, x: 0.5, y: 0.42, z: -0.03},
       {i: 1, x: 0.51, y: 0.44, z: -0.02},
       {i: 2, x: 'bad', y: 0.5, z: 0}, // 비유한값 → 필터링
+      {i: 3, x: 0.52, y: 0.46, z: 'bad'}, // 깨진 z를 0으로 위장하지 않음
+      {i: 4, x: 0.53, y: 0.47}, // 누락 z도 필터링
     ],
     pose: {pitchDeg: 1.2, yawDeg: -0.4, rollDeg: 0.8},
+    transformationMatrix: {
+      layout: 'row-major',
+      values: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0.1, -0.2, 0.3, 1],
+    },
   }),
 );
 expectEqual(okLandmarks?.status, 'ok', 'landmarks status ok');
@@ -174,6 +180,33 @@ expectEqual(okLandmarks?.imageWidth, 1080, 'landmarks imageWidth');
 expectEqual(okLandmarks?.landmarks.length, 2, 'landmarks filtered count');
 expectEqual(okLandmarks?.landmarks[0].x, 0.5, 'landmarks first x');
 expectEqual(okLandmarks?.pose?.pitchDeg, 1.2, 'landmarks pose pitch');
+expectEqual(
+  okLandmarks?.transformationMatrix?.values[12],
+  0.1,
+  'landmarks transformation matrix preserved',
+);
+
+const malformedMatrixLandmarks = parseFaceLandmarksMessage(
+  JSON.stringify({
+    type: FACE_LANDMARKS_EVENT_TYPE,
+    requestId: 'pc-malformed-matrix',
+    status: 'ok',
+    faceCount: 1,
+    imageWidth: 1080,
+    imageHeight: 1440,
+    landmarks: [{i: 0, x: 0.5, y: 0.42, z: -0.03}],
+    pose: {pitchDeg: 0, yawDeg: 0, rollDeg: 0},
+    transformationMatrix: {
+      layout: 'row-major',
+      values: [1, 0, 0],
+    },
+  }),
+);
+expectEqual(
+  malformedMatrixLandmarks?.transformationMatrix,
+  undefined,
+  'malformed matrix is omitted so correction stays disabled',
+);
 
 // 다른 이벤트 타입(예: photoCaptured)은 무시(null)
 const otherEvent = parseFaceLandmarksMessage(

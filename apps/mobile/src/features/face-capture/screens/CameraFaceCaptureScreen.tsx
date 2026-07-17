@@ -106,6 +106,11 @@ type FaceCaptureUploadHandler = (
 
 export type CameraFaceCaptureMode = 'face' | 'reference';
 
+export type CameraFaceCaptureRuntimeProvenance = {
+  cameraFacing: 'front' | 'back';
+  captureImplementation: 'expo' | 'media-library' | 'native';
+};
+
 type CameraFaceCaptureScreenProps = {
   allowCameraToggle?: boolean;
   allowGallery?: boolean;
@@ -120,6 +125,7 @@ type CameraFaceCaptureScreenProps = {
   onCapture?: (
     result?: FaceCaptureUploadResult,
     greenlightReport?: FaceCaptureGreenlightReport,
+    runtimeProvenance?: CameraFaceCaptureRuntimeProvenance,
   ) => void;
   onClose?: () => void;
   onPickImage?: () => void;
@@ -1323,7 +1329,10 @@ export function CameraFaceCaptureScreen({
       }
 
       await releaseRealtimeCameraBeforeComplete();
-      onCapture?.(result, captureGreenlightReport);
+      onCapture?.(result, captureGreenlightReport, {
+        cameraFacing: cameraDirection,
+        captureImplementation: realtimeCaptureAvailable ? 'native' : 'expo',
+      });
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Photo upload failed.');
     } finally {
@@ -1394,7 +1403,10 @@ export function CameraFaceCaptureScreen({
       }
 
       await releaseRealtimeCameraBeforeComplete();
-      onCapture?.(result);
+      onCapture?.(result, undefined, {
+        cameraFacing: cameraDirection,
+        captureImplementation: 'media-library',
+      });
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Photo upload failed.');
     } finally {

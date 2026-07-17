@@ -69,7 +69,8 @@ function buildThirdsFixture(): FaceVerticalThirdsResult {
       provider: 'apple_semantic_matte',
     },
     interpretation: {dominantPart: 'middle', summary: '중안부가 긴 편', title: '중안부 우세'},
-    judgmentVersion: 'face-length-judgment/v2-provisional-20260717',
+    judgmentVersion:
+      'face-length-judgment/v3-pose-normalization-validation-20260717',
     keypoints: {
       G: {confidence: 0.9, method: 'mediapipe', provider: 'mediapipe', x: 500, y: 400},
       H: {confidence: 0.8, method: 'matte', provider: 'apple_semantic_matte', x: 500, y: 120},
@@ -288,7 +289,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   // 판정 스냅샷·버전 왕복(Phase 0-5, 1차 리뷰 반영): encode→camelize→decode
   expectEqual(
     thirds.judgmentVersion,
-    'face-length-judgment/v2-provisional-20260717',
+    'face-length-judgment/v3-pose-normalization-validation-20260717',
     'judgmentVersion roundtrip',
   );
   expectEqual(
@@ -298,6 +299,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   );
   expectEqual(thirds.faceLengthJudgment?.band.hi, 1.412, 'judgment band hi roundtrip');
   expectEqual(thirds.faceLengthJudgment?.band.lo, 1.376, 'judgment band lo roundtrip');
+  expectEqual(thirds.postCorrection?.center?.x, 540, 'postCorrection center roundtrip');
   // 오염 입력 계약(3차 셀프 리뷰): band가 비유한/문자열이거나 verdict가
   // 미지 값이면 스냅샷 전체를 폐기하고 화면 재판정 폴백에 맡긴다.
   {
@@ -396,6 +398,87 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
     (personalColor.reported as Record<string, unknown>).privacy,
     undefined,
     'privacy 재부착 금지',
+  );
+}
+
+// ── 2-1. Phase 1 validation-only 보정은 product payload 승격 금지 ─────────────
+{
+  const validationOnlyThirds: FaceVerticalThirdsResult = {
+    ...buildThirdsFixture(),
+    faceLengthJudgment: {
+      band: {hi: 1.412, lo: 1.376},
+      verdict: 'indeterminate',
+    },
+    postCorrection: {
+      applied: true,
+      center: {x: 540, y: 960},
+      method: 'mediapipe_facial_transformation_matrix',
+      poseNormalization: {
+        confidencePolicy: 'diagnostic_only_unvalidated',
+        diagnostics: {
+          correctionMaxPx: 12.5,
+          correctionRmsPx: 3.25,
+          landmarkCount: 478,
+          matrixOrthogonalityResidual: 0.002,
+          matrixRotationDeterminant: 1,
+          matrixScaleSpread: 0.004,
+          roundTripRmsPx: 0.001,
+          zSpanPx: 83.4,
+        },
+        requested: true,
+      },
+      rollCorrectionDeg: null,
+    },
+  };
+  const payload = expectDefined(
+    buildFaceAnalysisMeasurementsPayload({
+      captureId: 'cap-validation-only',
+      face3d: null,
+      faceGeometry2d: buildGeometryFixture(),
+      faceVerticalThirds: validationOnlyThirds,
+      personalColor: null,
+    }),
+    'validation-only payload keeps unrelated axes',
+  );
+  expectEqual(
+    'faceVerticalThirds' in payload,
+    false,
+    'validation-only corrected thirds omitted from product payload',
+  );
+
+  const decoded = expectDefined(
+    parseFaceAnalysisMeasurements(
+      {
+        captureId: 'cap-local-replay',
+        faceVerticalThirds: {
+          ...validationOnlyThirds,
+          artifacts: undefined,
+          sourceImage: {height: 1920, width: 1080},
+        },
+        schemaVersion: 'aura-face-analysis-measurements-v1',
+      },
+      {imageUrl: 'file:///local-replay.jpg'},
+    ),
+    'validation-only local replay decode',
+  );
+  const correction = expectDefined(
+    decoded.faceVerticalThirds?.postCorrection,
+    'pose normalization correction decode',
+  );
+  expectEqual(
+    correction.method,
+    'mediapipe_facial_transformation_matrix',
+    'matrix correction method decode',
+  );
+  expectEqual(
+    correction.poseNormalization?.diagnostics.landmarkCount,
+    478,
+    'pose normalization diagnostics decode',
+  );
+  expectEqual(
+    correction.poseNormalization?.confidencePolicy,
+    'diagnostic_only_unvalidated',
+    'pose normalization confidence policy decode',
   );
 }
 

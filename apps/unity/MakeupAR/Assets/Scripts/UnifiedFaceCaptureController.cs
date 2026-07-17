@@ -47,7 +47,11 @@ public sealed class UnifiedFaceNativeCaptureSample
         int imageHeight,
         ulong nativeSampleHandle,
         Face3DMeshSnapshot meshSnapshot,
-        IEnumerable<Vector2> projectedVertices)
+        IEnumerable<Vector2> projectedVertices,
+        bool trueDepthHardware,
+        bool depthDataObserved,
+        bool faceTrackingSupported,
+        string deviceModel)
     {
         CameraFrameToken = cameraFrameToken;
         CameraSensorTimestampMs = cameraSensorTimestampMs;
@@ -61,6 +65,12 @@ public sealed class UnifiedFaceNativeCaptureSample
         ImageHeight = imageHeight;
         NativeSampleHandle = nativeSampleHandle;
         MeshSnapshot = meshSnapshot;
+        TrueDepthHardware = trueDepthHardware;
+        DepthDataObserved = depthDataObserved;
+        FaceTrackingSupported = faceTrackingSupported;
+        DeviceModel = string.IsNullOrWhiteSpace(deviceModel)
+            ? null
+            : deviceModel.Trim();
         this.projectedVertices = projectedVertices == null
             ? Array.Empty<Vector2>()
             : new List<Vector2>(projectedVertices).ToArray();
@@ -78,6 +88,10 @@ public sealed class UnifiedFaceNativeCaptureSample
     public int ImageHeight { get; }
     public ulong NativeSampleHandle { get; }
     public Face3DMeshSnapshot MeshSnapshot { get; }
+    public bool TrueDepthHardware { get; }
+    public bool DepthDataObserved { get; }
+    public bool FaceTrackingSupported { get; }
+    public string DeviceModel { get; }
     public IReadOnlyList<Vector2> ProjectedVertices => projectedVertices;
     public string ProjectedVertexCoordinateSpace =>
         "portrait_unmirrored_normalized";
@@ -101,7 +115,11 @@ public sealed class UnifiedFaceNativeCaptureSample
             imageHeight,
             NativeSampleHandle,
             MeshSnapshot,
-            projectedVertices);
+            projectedVertices,
+            TrueDepthHardware,
+            DepthDataObserved,
+            FaceTrackingSupported,
+            DeviceModel);
     }
 }
 
@@ -192,6 +210,9 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
     private double advisoryCandidateStartedAtSeconds;
     private double advisoryStableStartedAtSeconds;
     private double nextGateRefreshAtSeconds;
+    private readonly Face3DSensorProvenanceAccumulator
+        sensorProvenanceAccumulator =
+            new Face3DSensorProvenanceAccumulator();
 
     public void Configure(
         ARFaceManager manager,
@@ -298,6 +319,7 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         collectionEndedAtSeconds = 0.0;
         finalizationDeadlineSeconds = 0.0;
         maximumObservedNativeDeltaMs = 0.0;
+        sensorProvenanceAccumulator.Reset();
         previousRequestedMaximumFaceCount =
             Math.Max(1, faceManager.requestedMaximumFaceCount);
         faceCountRestored = false;
@@ -547,6 +569,20 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
                 update.Status == Face3DCollectionAddStatus.Accepted
                 || update.Status
                     == Face3DCollectionAddStatus.AcceptedTargetReached;
+            if (acceptedEvaluation
+                && !sensorProvenanceAccumulator.TryAdd(
+                    nativeSample.TrueDepthHardware,
+                    nativeSample.DepthDataObserved,
+                    nativeSample.FaceTrackingSupported,
+                    nativeSample.DeviceModel))
+            {
+                SendBlocked(
+                    activeRequest.RequestId,
+                    "capture_failed",
+                    "face3d_sensor_provenance_inconsistent");
+                FinishSession();
+                return;
+            }
             int anchorOrdinal = Math.Min(
                 4,
                 activeRequest.Policy.TargetValidFrames);
@@ -646,8 +682,21 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
             collector.AddWarning(warning);
         }
 
+        if (!sensorProvenanceAccumulator.TryBuild(
+                out Face3DSensorProvenance sensorProvenance))
+        {
+            SendBlocked(
+                activeRequest.RequestId,
+                "capture_failed",
+                "face3d_sensor_provenance_unavailable",
+                sessionWarnings);
+            FinishSession();
+            return;
+        }
+
         if (!collector.TryBuildProfile(
                 now,
+                sensorProvenance,
                 out Face3DProfileV2 profile,
                 out string reason))
         {
@@ -1476,6 +1525,7 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         finalizationDeadlineSeconds = 0.0;
         acceptedNativeFaceTokens.Clear();
         sessionWarnings.Clear();
+        sensorProvenanceAccumulator.Reset();
         ResetHairlineAdvisoryState(
             Time.realtimeSinceStartupAsDouble);
     }

@@ -1,11 +1,331 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
-import type {FaceVerticalThirdsResult} from '../types';
+import type {
+  FaceRatioPhase1ReplayValidation,
+  FaceVerticalThirdsResult,
+  VerticalThirdsKeypoint,
+} from '../types';
 import {getFaceRatioSessionDirUri} from './faceVerticalThirdsLogger';
+import type {
+  FaceRatioLandmark3D,
+  FaceRatioTransformationMatrix,
+} from './faceRatioPoseNormalization';
+import {
+  appendFaceRatioPhase1ReplayCapture,
+  createFaceRatioPhase1ReplayArtifact,
+  createFaceRatioPhase1ReplayCapture,
+  isFaceRatioPhase1LocalCaptureUri,
+  isFaceRatioPhase1ReplayArtifactExpired,
+  validateFaceRatioPhase1ReplayArtifact,
+  validateFaceRatioPhase1ReplayValidation,
+  type FaceRatioPhase1ReplayArtifact,
+} from './faceRatioPhase1ReplayArtifact';
 
 const SOURCE_IMAGE_FILE_NAME = 'source.jpg';
 const OVERLAY_IMAGE_FILE_NAME = 'overlay.png';
 const RESULT_FILE_NAME = 'result.json';
+const PHASE1_REPLAY_ROOT_DIRECTORY_NAME =
+  'face-ratio-phase1-validation/';
+const PHASE1_REPLAY_FILE_NAME = 'phase1-replay.json';
+let phase1ReplayStoreTail: Promise<void> = Promise.resolve();
+
+function withPhase1ReplayStoreLock<T>(action: () => Promise<T>): Promise<T> {
+  const run = phase1ReplayStoreTail.then(action, action);
+  phase1ReplayStoreTail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+function getPhase1ReplayRootUri() {
+  return FileSystem.documentDirectory
+    ? `${FileSystem.documentDirectory}${PHASE1_REPLAY_ROOT_DIRECTORY_NAME}`
+    : null;
+}
+
+function getPhase1ReplaySessionDirectoryUri(
+  validation: FaceRatioPhase1ReplayValidation,
+) {
+  const rootUri = getPhase1ReplayRootUri();
+
+  return rootUri
+    ? `${rootUri}${validation.cohortId}/${validation.subjectId}/${validation.sessionId}/`
+    : null;
+}
+
+async function readDirectoryOrEmpty(directoryUri: string) {
+  const info = await FileSystem.getInfoAsync(directoryUri);
+  if (!info.exists) {
+    return [];
+  }
+  if (!info.isDirectory) {
+    throw new Error(
+      `Phase 1 replay retention path is not a directory: ${directoryUri}`,
+    );
+  }
+
+  // 존재하는 retention tree를 열거하지 못하면 정리를 성공으로 간주하지 않는다.
+  // 호출자는 이 오류를 Lab 진입 차단으로 올려 raw 보존 정책을 fail-closed한다.
+  return FileSystem.readDirectoryAsync(directoryUri);
+}
+
+// raw 얼굴 자료는 dedicated validation root 아래에만 존재한다. 만료 시각이
+// 지났거나 retention metadata를 읽을 수 없는 세션은 다음 쓰기 전에 삭제한다.
+// 손상된 파일을 무기한 보존하는 것보다 privacy fail-closed 삭제가 우선이다.
+async function pruneExpiredFaceRatioPhase1ReplayArtifactsUnlocked(
+  now = new Date(),
+) {
+  const rootUri = getPhase1ReplayRootUri();
+
+  if (!rootUri) {
+    return 0;
+  }
+
+  let deletedCount = 0;
+  const cohortNames = await readDirectoryOrEmpty(rootUri);
+
+  for (const cohortName of cohortNames.filter(name => name.startsWith('cohort_'))) {
+    const cohortUri = `${rootUri}${cohortName}/`;
+    const subjectNames = await readDirectoryOrEmpty(cohortUri);
+
+    for (const subjectName of subjectNames.filter(name => name.startsWith('subj_'))) {
+      const subjectUri = `${cohortUri}${subjectName}/`;
+      const sessionNames = await readDirectoryOrEmpty(subjectUri);
+
+      for (const sessionName of sessionNames.filter(name =>
+        name.startsWith('session_'),
+      )) {
+        const sessionUri = `${subjectUri}${sessionName}/`;
+        const artifactUri = `${sessionUri}${PHASE1_REPLAY_FILE_NAME}`;
+        let shouldDelete = false;
+
+        try {
+          const artifact = JSON.parse(
+            await FileSystem.readAsStringAsync(artifactUri),
+          ) as unknown;
+          validateFaceRatioPhase1ReplayArtifact(artifact);
+          shouldDelete = isFaceRatioPhase1ReplayArtifactExpired(
+            artifact,
+            now.toISOString(),
+          );
+        } catch {
+          shouldDelete = true;
+        }
+
+        if (shouldDelete) {
+          await FileSystem.deleteAsync(sessionUri, {idempotent: true});
+          deletedCount += 1;
+        }
+      }
+    }
+  }
+
+  return deletedCount;
+}
+
+export function pruneExpiredFaceRatioPhase1ReplayArtifacts(
+  now = new Date(),
+) {
+  return withPhase1ReplayStoreLock(() =>
+    pruneExpiredFaceRatioPhase1ReplayArtifactsUnlocked(now),
+  );
+}
+
+export function readFaceRatioPhase1ReplayArtifact(
+  validation: FaceRatioPhase1ReplayValidation,
+) {
+  validateFaceRatioPhase1ReplayValidation(validation);
+
+  return withPhase1ReplayStoreLock(async () => {
+    const directoryUri =
+      getPhase1ReplaySessionDirectoryUri(validation);
+    if (!directoryUri) {
+      throw new Error('Phase 1 replay document directory is unavailable');
+    }
+
+    const fileUri = `${directoryUri}${PHASE1_REPLAY_FILE_NAME}`;
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    if (!fileInfo.exists) {
+      return null;
+    }
+
+    const parsed = JSON.parse(
+      await FileSystem.readAsStringAsync(fileUri),
+    ) as unknown;
+    validateFaceRatioPhase1ReplayArtifact(parsed);
+    if (
+      isFaceRatioPhase1ReplayArtifactExpired(
+        parsed,
+        new Date().toISOString(),
+      )
+    ) {
+      throw new Error(
+        'Phase 1 replay reached deleteByUtc during prepared progress restore',
+      );
+    }
+
+    return parsed;
+  });
+}
+
+export function deleteFaceRatioPhase1ReplayArtifact(
+  validation: FaceRatioPhase1ReplayValidation,
+) {
+  validateFaceRatioPhase1ReplayValidation(validation);
+
+  return withPhase1ReplayStoreLock(async () => {
+    const directoryUri =
+      getPhase1ReplaySessionDirectoryUri(validation);
+    if (!directoryUri) {
+      throw new Error('Phase 1 replay document directory is unavailable');
+    }
+
+    await FileSystem.deleteAsync(directoryUri, {idempotent: true});
+  });
+}
+
+async function writePhase1ReplayArtifactAtomically(
+  fileUri: string,
+  artifact: FaceRatioPhase1ReplayArtifact,
+) {
+  validateFaceRatioPhase1ReplayArtifact(artifact);
+  // 이 앱의 Phase 1 수집 표면은 iOS 전용이다. expo-file-system legacy의 iOS
+  // writeAsStringAsync는 NSDataWritingAtomic으로 기존 파일을 교체한다. 위 store
+  // lock과 함께 사용해 concurrent read-modify-write와 부분 JSON 노출을 막는다.
+  await FileSystem.writeAsStringAsync(
+    fileUri,
+    JSON.stringify(artifact, null, 2),
+  );
+}
+
+export function saveFaceRatioPhase1ReplayArtifact({
+  capturedAtUtc,
+  hairline,
+  imageHeight,
+  imageWidth,
+  landmarks,
+  transformationMatrix,
+  validation,
+  zProxy,
+}: {
+  capturedAtUtc: string;
+  hairline: VerticalThirdsKeypoint | null;
+  imageHeight: number;
+  imageWidth: number;
+  landmarks: readonly FaceRatioLandmark3D[];
+  transformationMatrix: FaceRatioTransformationMatrix;
+  validation: FaceRatioPhase1ReplayValidation;
+  zProxy?: number;
+}) {
+  if (!__DEV__) {
+    return Promise.reject(new Error(
+      'Phase 1 raw replay artifacts are allowed only in local development builds',
+    ));
+  }
+
+  validateFaceRatioPhase1ReplayValidation(validation);
+
+  return withPhase1ReplayStoreLock(async () => {
+    const directoryUri = getPhase1ReplaySessionDirectoryUri(validation);
+
+    if (!directoryUri) {
+      throw new Error('Phase 1 replay document directory is unavailable');
+    }
+
+    const now = new Date();
+    await FileSystem.makeDirectoryAsync(getPhase1ReplayRootUri()!, {
+      intermediates: true,
+    });
+    await pruneExpiredFaceRatioPhase1ReplayArtifactsUnlocked(now);
+    await FileSystem.makeDirectoryAsync(directoryUri, {intermediates: true});
+
+    const fileUri = `${directoryUri}${PHASE1_REPLAY_FILE_NAME}`;
+    const fileInfo = await FileSystem.getInfoAsync(fileUri);
+    let artifact: FaceRatioPhase1ReplayArtifact;
+
+    if (fileInfo.exists) {
+      const parsed = JSON.parse(
+        await FileSystem.readAsStringAsync(fileUri),
+      ) as unknown;
+      validateFaceRatioPhase1ReplayArtifact(parsed);
+      artifact = parsed;
+
+      if (
+        artifact.cohortId !== validation.cohortId ||
+        artifact.sessionId !== validation.sessionId ||
+        artifact.privacy.retention.deleteAfterDays !== validation.retentionDays ||
+        artifact.captures.some(
+          capture => capture.subjectId !== validation.subjectId,
+        )
+      ) {
+        throw new Error(
+          'Phase 1 replay metadata does not match the existing local artifact',
+        );
+      }
+    } else {
+      artifact = createFaceRatioPhase1ReplayArtifact({
+        createdAtUtc: now.toISOString(),
+        validation,
+      });
+    }
+
+    const capture = createFaceRatioPhase1ReplayCapture({
+      capturedAtUtc,
+      hairline,
+      imageHeight,
+      imageWidth,
+      landmarks,
+      transformationMatrix,
+      validation,
+      zProxy,
+    });
+    const next = appendFaceRatioPhase1ReplayCapture(artifact, capture);
+
+    if (next !== artifact || !fileInfo.exists) {
+      // source image URI나 제품 payload는 저장하지 않는다. 이 파일은 raw landmark
+      // replay만을 위한 별도 로컬 artifact다.
+      await writePhase1ReplayArtifactAtomically(fileUri, next);
+    }
+
+    return fileUri;
+  });
+}
+
+/**
+ * 결과 화면이 캡처를 더 이상 참조하지 않는 retake/advance/change-mode 시점에
+ * Phase 1 네이티브 카메라의 tmp 사진만 best-effort로 삭제한다.
+ */
+export async function deleteFaceRatioPhase1LocalCapture(
+  uri: string | null | undefined,
+) {
+  if (!uri || !isFaceRatioPhase1LocalCaptureUri(uri)) {
+    return false;
+  }
+
+  try {
+    await FileSystem.deleteAsync(uri, {idempotent: true});
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function isFaceRatioPhase1ReplayShotComplete(
+  result: FaceVerticalThirdsResult,
+) {
+  return Boolean(
+    result.artifacts.poseNormalizationReplayUri &&
+      result.status === 'full_success' &&
+      result.measurementMode === 'full_vertical_thirds' &&
+      result.quality.usable &&
+      result.verticalThirds &&
+      result.faceLength &&
+      result.postCorrection?.applied &&
+      result.postCorrection.method ===
+        'mediapipe_facial_transformation_matrix',
+  );
+}
 
 async function ensureSessionDirectory(sessionId: string) {
   const directoryUri = getFaceRatioSessionDirUri(sessionId);

@@ -9,8 +9,9 @@ namespace Aura.Face3D
 {
     /// <summary>
     /// Stable names shared by the lab app and the embedded main-app integration.
-    /// Semantic indices are versioned and approval-gated. Values are face-scale-normalized
-    /// product proxies, not absolute millimeters or clinical measurements.
+    /// Semantic indices are versioned and approval-gated. Legacy v1 values remain
+    /// face-scale-normalized product proxies. Unified v2 additionally carries separately
+    /// aggregated raw-mesh millimeters for internal validation, never clinical claims.
     /// </summary>
     public static class Face3DContract
     {
@@ -133,7 +134,18 @@ namespace Aura.Face3D
             float? nasalAxisDeviation = null,
             float? alarWidth = null,
             float? malarProjectionLeft = null,
-            float? malarProjectionRight = null)
+            float? malarProjectionRight = null,
+            float? noseTipProjectionMeters = null,
+            float? chinProjectionMeters = null,
+            float? upperLipToELineMeters = null,
+            float? lowerLipToELineMeters = null,
+            float? centralProjectionScoreMeters = null,
+            float? noseLengthMeters = null,
+            float? nasalBridgeStraightnessMeters = null,
+            float? nasalAxisDeviationMeters = null,
+            float? alarWidthMeters = null,
+            float? malarProjectionLeftMeters = null,
+            float? malarProjectionRightMeters = null)
         {
             NoseTipProjection = noseTipProjection;
             ChinProjection = chinProjection;
@@ -146,6 +158,21 @@ namespace Aura.Face3D
             AlarWidth = SanitizeOptional(alarWidth);
             MalarProjectionLeft = SanitizeOptional(malarProjectionLeft);
             MalarProjectionRight = SanitizeOptional(malarProjectionRight);
+            NoseTipProjectionMeters = SanitizeOptional(noseTipProjectionMeters);
+            ChinProjectionMeters = SanitizeOptional(chinProjectionMeters);
+            UpperLipToELineMeters = SanitizeOptional(upperLipToELineMeters);
+            LowerLipToELineMeters = SanitizeOptional(lowerLipToELineMeters);
+            CentralProjectionScoreMeters = SanitizeOptional(
+                centralProjectionScoreMeters);
+            NoseLengthMeters = SanitizeOptional(noseLengthMeters);
+            NasalBridgeStraightnessMeters = SanitizeOptional(
+                nasalBridgeStraightnessMeters);
+            NasalAxisDeviationMeters = SanitizeOptional(nasalAxisDeviationMeters);
+            AlarWidthMeters = SanitizeOptional(alarWidthMeters);
+            MalarProjectionLeftMeters = SanitizeOptional(
+                malarProjectionLeftMeters);
+            MalarProjectionRightMeters = SanitizeOptional(
+                malarProjectionRightMeters);
         }
 
         public float NoseTipProjection { get; private set; }
@@ -161,6 +188,22 @@ namespace Aura.Face3D
         public float? AlarWidth { get; private set; }
         public float? MalarProjectionLeft { get; private set; }
         public float? MalarProjectionRight { get; private set; }
+
+        // ARFoundation face-mesh vertices use meters. These samples are kept
+        // alongside the normalized values so each stream can be robustly
+        // aggregated independently; multiplying an aggregate ratio by an
+        // aggregate face scale is not equivalent to aggregating raw distances.
+        public float? NoseTipProjectionMeters { get; private set; }
+        public float? ChinProjectionMeters { get; private set; }
+        public float? UpperLipToELineMeters { get; private set; }
+        public float? LowerLipToELineMeters { get; private set; }
+        public float? CentralProjectionScoreMeters { get; private set; }
+        public float? NoseLengthMeters { get; private set; }
+        public float? NasalBridgeStraightnessMeters { get; private set; }
+        public float? NasalAxisDeviationMeters { get; private set; }
+        public float? AlarWidthMeters { get; private set; }
+        public float? MalarProjectionLeftMeters { get; private set; }
+        public float? MalarProjectionRightMeters { get; private set; }
 
         // 프레임 유효성은 기본 5지표만으로 판정한다(계약 §0) — Tier-2는 지표 단위로
         // 격리되며 프레임을 Blocked로 만들 수 없다.
@@ -257,11 +300,25 @@ namespace Aura.Face3D
             float? value,
             float confidence,
             int validFrameCount,
-            float mad)
+            float mad,
+            float? valueMm = null,
+            float valueMmConfidence = 0.0f,
+            int valueMmValidFrameCount = 0,
+            float valueMmMad = 0.0f)
         {
             Value = value.HasValue && Face3DNumeric.IsFinite(value.Value)
                 ? value
                 : null;
+            ValueMm = valueMm.HasValue && Face3DNumeric.IsFinite(valueMm.Value)
+                ? valueMm
+                : null;
+            ValueMmConfidence = Face3DNumeric.IsFinite(valueMmConfidence)
+                ? Mathf.Clamp01(valueMmConfidence)
+                : 0.0f;
+            ValueMmValidFrameCount = Math.Max(0, valueMmValidFrameCount);
+            ValueMmMad = Face3DNumeric.IsFinite(valueMmMad) && valueMmMad >= 0.0f
+                ? valueMmMad
+                : 0.0f;
             Confidence = Face3DNumeric.IsFinite(confidence)
                 ? Mathf.Clamp01(confidence)
                 : 0.0f;
@@ -271,6 +328,10 @@ namespace Aura.Face3D
         }
 
         public float? Value { get; private set; }
+        public float? ValueMm { get; private set; }
+        public float ValueMmConfidence { get; private set; }
+        public int ValueMmValidFrameCount { get; private set; }
+        public float ValueMmMad { get; private set; }
         public float Confidence { get; private set; }
         public string Unit { get; private set; }
         public int ValidFrameCount { get; private set; }

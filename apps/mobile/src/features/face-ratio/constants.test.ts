@@ -117,9 +117,9 @@ export function runFaceRatioConstantsTests() {
 
   // ── 판정 버전: 상수 개정 감지용 스냅샷 문자열 존재 ──
   expect(
-    FACE_RATIO_JUDGMENT_VERSION.length > 0 &&
-      FACE_RATIO_JUDGMENT_VERSION.includes('face-length-judgment'),
-    'Judgment version tag must exist for result snapshotting.',
+    FACE_RATIO_JUDGMENT_VERSION ===
+      'face-length-judgment/v3-pose-normalization-validation-20260717',
+    'The first pose-normalized storage implementation must bump the frozen judgment version.',
   );
 }
 

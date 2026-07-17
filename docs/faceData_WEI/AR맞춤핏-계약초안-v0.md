@@ -1,9 +1,9 @@
-# AR 맞춤 핏 계약 초안 v0.1 — 얼굴 측정 기반 개인화 렌더링
+# AR 맞춤 핏 계약 v0.2 — 얼굴 측정 기반 개인화 렌더링
 
-상태: 초안(v0.1 — 2026-07-17 Codex·셀프 적대 검증 반영) — 그릇의 형태만 고정, δ값은 실험으로 확정. AR 담당자 검토 후 v1 승격.
+상태: 로컬 정적 구현 기준(v0.2 — 2026-07-17 안전 기본값 확정). 그릇과 레인 선택은 고정하고 실제 δ값·자동 적용·실기기 시각 승격은 OFF/PENDING이다.
 작성: 2026-07-16, 저장소 정찰 기반 ([보고서 재구성 계획 §5](../superpowers/plans/2026-07-16-face-report-redesign-plan.md))
 목적 예시: 미간이 넓은 사용자의 메이크업 생성 시 아이라이너 눈앞머리를 조금 길게 렌더링.
-v0→v0.1 정정: ① `eyelinerInnerLift`는 수평 연장이 아니라 **수직 리프트(dyUp)이며 제거 예정 디버그 필드** — 예시 축 교체(§4), ② measured 시트의 최하위 주입점은 기구현이 아니라 **소규모 확장 필요**(§6), ③ selector 형식을 실제 `FitEntry` 구조에 정합(§3), ④ 신설·승격 결정 2건 추가(§7 D-5·D-6).
+v0.1→v0.2 결정: 스텐실 레인만 우선 구현, 사용자 opt-in 기본 OFF, 기존 생성 계약은 변경하지 않음, `eyelinerInnerExtension`은 계약·직렬화까지 추가하되 δ=0/OFF, 라이브 레인은 후속, `eyelinerInnerLift`는 deprecated 상태로 보존하되 신규 매핑에서 사용 금지.
 
 ---
 
@@ -23,7 +23,7 @@ v0→v0.1 정정: ① `eyelinerInnerLift`는 수평 연장이 아니라 **수직
 [얼굴 분석 1회]                    [메이크업 적용 시마다]
 faceGeometry2d 16지표 ──┐
 Face3D 11지표(가용 시) ──┤→ ② 매핑 엔진 → ③ PersonalFitProfile 저장 → ④ 핏 시트 병합 → ⑤ 기존 브리지로 송신
-세로3분할·faceLength ────┘   (순수함수)      (AsyncStorage/서버)        (자동 entry 주입)    (Unity 무변경)
+세로3분할·faceLength ────┘   (순수함수)      (AsyncStorage; 서버 sync는 후속/현 범위 밖)        (자동 entry 주입)    (Unity 무변경)
 ```
 
 - ② 매핑 엔진은 **순수함수** `deriveFitDeltas(measurements) → FitEntry[]` — LLM·네트워크 무관, 결정적. 산출물은 기존 평면 `FitEntry` 형식 그대로(§3).
@@ -84,16 +84,16 @@ type PersonalFitEntry = {
 2. 핏 시트 캐스케이드는 기존 규칙 그대로(구체성 겹id > 역할 > 부위, 근접 시트 승리) — measured 자동 시트는 **가장 낮은 우선순위**(적용 체인의 main 시트 뒤)로 삽입. **v0.1 정정**: 이 주입점은 기구현이 아니다 — `applyFitToLayers`가 fitChain+main을 하드코딩하므로 `FitSheetsState`에 자동 시트 참조 필드 1개(또는 함수 파라미터 1개)를 추가하는 소규모 확장이 선행 작업(스토리지 버전 업 동반).
 3. 측정 confidence가 낮은 지표(측정 계획 §0-8 해소 전 하드코딩 값 포함)는 매핑 엔진이 해당 행을 **생략**(델타 0이 아니라 미적용 — provenance 오염 방지).
 
-## 7. AR 담당자 결정 항목 (v1 승격 조건)
+## 7. 확정 기본값과 후속 승격 조건
 
-| # | 결정 | 배경 |
+| # | v0.2 결정 | 후속 승격 조건 |
 |---|---|---|
-| D-1 | **레인 선택**: 스텐실 레인 우선 채택(권장 — 핏 시트·골드 축 기구현, Unity 무변경) vs 라이브 레인 동시 지원 | 라이브(레시피) 레인은 공간 축이 얕고 핏 시트 개념이 없음 |
-| D-2 | 라이브 레인 지원 시: **아이라이너 앞머리 길이 축 신설**(Unity 절차 라이너 파라미터) or 기존 REGION_ADJUSTMENT로 다운컴파일 | 라이브 아이라이너에 앞머리 축이 없음(coverage=전체 길이만) |
-| D-3 | 생성 계약(LipAdjustment 등)에 `provenance: 'measured'\|'manual'` 필드 추가 여부 — 스키마 버전 업 수반 | 립·눈썹 생성 계약의 adjustment는 현재 수동 슬라이더 전제 |
-| D-4 | measured 자동 시트의 사용자 노출: 무표시 자동 적용 vs "내 얼굴에 맞춤" 토글 | UX 정책 — 끄기 수단이 있어야 §6-1이 완결 |
-| D-5 | **`eyelinerInnerExtension`(수평 눈앞머리 연장) 축 신설** — Unity 절차 라이너 파라미터 + 브리지 필드 + gold 슬라이더 | 기존 `eyelinerInnerLift`는 수직(dyUp)·디버그(제거 예정)라 대용 불가(v0.1 확인) |
-| D-6 | `eyelinerInnerLift` 등 디버그 gold 필드의 처분 — Unity 상수로 굳히고 제거(주석의 원계획) vs 정식 축 승격 | 계약이 제거 예정 필드에 의존하지 않도록 명시 결정 필요 |
+| D-1 | **스텐실 레인 우선**, 라이브 레인 미지원 | 스텐실 실기기 시각 GO 뒤 별도 라이브 설계 |
+| D-2 | 라이브 레인용 다운컴파일·Unity 파라미터는 구현하지 않음 | 라이브 레인 제품 요구 승인 |
+| D-3 | 기존 Lip/Brow 생성 계약에는 provenance를 추가하지 않고 `PersonalFitEntry.provenance`만 사용 | 생성 계약과 자동 맞춤의 병합 필요성이 입증될 때 스키마 버전 업 |
+| D-4 | `"내 얼굴에 맞춤"` 사용자 opt-in 토글, 기본 OFF | 사람 UX 승인 뒤 기본값 재검토 |
+| D-5 | `eyelinerInnerExtension` 축을 스텐실 타입·클램프·직렬화에 추가하되 mapping δ=0, 자동 적용 OFF | 실기기 슬라이더 실험으로 non-zero δ 승인 |
+| D-6 | `eyelinerInnerLift`는 deprecated로 보존하고 신규 measured 매핑에서 사용 금지 | 기존 소비자 제거가 확인된 별도 cleanup PR |
 
 ## 8. 버저닝
 
