@@ -49,9 +49,13 @@ export type IlluminationCorrectionReport = {
 
 // 전부 calibration target — 실측 raw 로그로 재보정 대상.
 export const ILLUMINATION_CORRECTION = {
-  // sclera 게이트
-  scleraMinSamplesPerEye: 25,
-  scleraMinCombinedSamples: 60,
+  // sclera 게이트 — 실측 재보정(2026-07-18): 정상적으로 뜬 눈의 실제 흰자 수율이
+  // 눈당 14~17(합 31)로, 종전 25/60 은 물리적으로 도달 불가한 값이었다(specular·
+  // 노출 문제 아님, ROI 게이트 통과 픽셀 자체가 적음). 흰자 면적이 작아 해상도를
+  // 올려도 늘지 않는다. 낮은 표본은 confidence(kMinSamplesForFullConfidence=40)와
+  // scleraMinNativeConfidence 게이트가 down-weight/차단하므로 과신 위험은 없다.
+  scleraMinSamplesPerEye: 12,
+  scleraMinCombinedSamples: 24,
   scleraMinNativeConfidence: 0.25,
   scleraMinLinearLuma: 0.04, // 그늘진 흰자 제외
   scleraMaxLinearLuma: 0.92, // 날아간 흰자 제외
@@ -162,7 +166,11 @@ function estimateSclera(native: NativePersonalColorResult): ScleraEstimate {
   const c = ILLUMINATION_CORRECTION;
   const reasons: string[] = [];
   const regions = native.regions ?? {};
-  const candidates: { stats: NativeRegionStats; gains: ChannelGains }[] = [];
+  const candidates: {
+    stats: NativeRegionStats;
+    color: Rgb;
+    gains: ChannelGains;
+  }[] = [];
 
   for (const key of ['scleraLeft', 'scleraRight'] as const) {
     const stats = regions[key];
@@ -178,25 +186,28 @@ function estimateSclera(native: NativePersonalColorResult): ScleraEstimate {
       reasons.push(`${key}_low_confidence`);
       continue;
     }
+    // 흰자 대표색 = 채널별 중앙값(rgbMedian). 소수 국소 실핏줄에 강건하다.
+    // 구버전 네이티브(중앙값 미제공)면 rgbMean 으로 폴백.
+    const scleraRgb = stats.rgbMedian ?? stats.rgbMean;
     // 채널 클리핑: 255 근처로 날아간 채널은 원 정보가 소실돼 게인 추정이 무의미.
-    // (a) 채널 평균 포화 (b) 포화 픽셀 비율 — 채널마다 다른 픽셀이 포화되면 평균은
+    // (a) 채널값 포화 (b) 포화 픽셀 비율 — 채널마다 다른 픽셀이 포화되면 대표색은
     // 낮아도 데이터는 전부 클리핑이라 overexposedRatio 로 함께 잡는다(F14).
     if (
-      stats.rgbMean.r >= c.scleraChannelClipMax ||
-      stats.rgbMean.g >= c.scleraChannelClipMax ||
-      stats.rgbMean.b >= c.scleraChannelClipMax ||
+      scleraRgb.r >= c.scleraChannelClipMax ||
+      scleraRgb.g >= c.scleraChannelClipMax ||
+      scleraRgb.b >= c.scleraChannelClipMax ||
       stats.overexposedRatio >= c.scleraMaxOverexposedRatio
     ) {
       reasons.push(`${key}_channel_clipped`);
       continue;
     }
-    const lin = toLinear(stats.rgbMean);
+    const lin = toLinear(scleraRgb);
     const luma = linearLuma(lin);
     if (luma < c.scleraMinLinearLuma || luma > c.scleraMaxLinearLuma) {
       reasons.push(`${key}_luma_out_of_range`);
       continue;
     }
-    candidates.push({ stats, gains: gainsTowardReference(lin) });
+    candidates.push({ stats, color: scleraRgb, gains: gainsTowardReference(lin) });
   }
 
   // 실측 흰자 색(가중 평균) — 게이트 통과 눈이 있으면 항상 기록(진단·재보정용)
@@ -207,9 +218,9 @@ function estimateSclera(native: NativePersonalColorResult): ScleraEstimate {
     for (const e of candidates) {
       const ew = Math.max(EPS, e.stats.sampleCount * clamp(e.stats.confidence, 0, 1));
       w += ew;
-      acc.r += ew * e.stats.rgbMean.r;
-      acc.g += ew * e.stats.rgbMean.g;
-      acc.b += ew * e.stats.rgbMean.b;
+      acc.r += ew * e.color.r;
+      acc.g += ew * e.color.g;
+      acc.b += ew * e.color.b;
     }
     const rgb = { r: acc.r / w, g: acc.g / w, b: acc.b / w };
     return { rgb, lab: rgb8ToLab(rgb) };
