@@ -134,6 +134,12 @@ namespace ARMakeup.Face
         // 메인 틴트 자기 오버라인 값(경계 계산용)과 링 메시 확장량 E=max(overline,base,gloss,0).
         static readonly int LipOverlineId = Shader.PropertyToID("_LipOverline");
         static readonly int LipMeshOverlineId = Shader.PropertyToID("_LipMeshOverline");
+        // 모양 축 W4 — 립 실루엣/존 (0=현행). 메인 립 메시는 base/main/gloss, 라이너 인스턴스는
+        // liner만 세팅(서로 기본 0이라 무간섭). 링 메시가 uv.y=중앙도·uv2.y=윗입술도를 실어준다.
+        static readonly int LipBaseShapeId = Shader.PropertyToID("_LipBaseShape");
+        static readonly int LipShapeId = Shader.PropertyToID("_LipShape");
+        static readonly int LipLinerShapeId = Shader.PropertyToID("_LipLinerShape");
+        static readonly int LipGlossShapeId = Shader.PropertyToID("_LipGlossShape");
         // 제형 스튜디오(#21) — 마감 세부(0=미지정=enum 기존 동작). 립 메시 전용(라이너 무영향).
         static readonly int LipGlossLoId = Shader.PropertyToID("_LipGlossLo");
         static readonly int LipGlossGainId = Shader.PropertyToID("_LipGlossGain");
@@ -266,8 +272,11 @@ namespace ARMakeup.Face
             var tris = new int[RingFine * 6];
             for (var i = 0; i < RingFine; i++)
             {
-                uvs[2 * i] = new Vector2(0f, 0f);     // 바깥(반경 0)
-                uvs[2 * i + 1] = new Vector2(1f, 0f); // 안쪽(반경 1)
+                // uv.x=반경(0 바깥→1 안쪽). uv.y=중앙도(W4, 0 코너→1 중앙) — 링 토폴로지 고정이라
+                // 프레임 무관(Init 1회 베이크). 셰이더가 모양 축 0이면 uv.y를 안 읽어 무영향.
+                var cen = FineCenterness(i);
+                uvs[2 * i] = new Vector2(0f, cen);     // 바깥(반경 0)
+                uvs[2 * i + 1] = new Vector2(1f, cen); // 안쪽(반경 1)
             }
             for (var i = 0; i < RingFine; i++)
             {
@@ -303,10 +312,18 @@ namespace ARMakeup.Face
             _linerMesh.MarkDynamic();
             _linerVertices = new Vector3[RingFine * 2];
             _linerMesh.vertices = _linerVertices;
-            _linerMesh.uv = uvs;          // 동일 토폴로지 재사용 (Unity가 복사 보관)
-            // 라이너는 오버라인 유니폼을 안 만져(E=0·ov=0) 경계 오프셋이 0이라 k 무의미하지만,
-            // 셰이더가 uv2(TEXCOORD1)를 읽으므로 스트림 부재 경고 방지로 0 채운 uv2를 준다.
-            _linerMesh.uv2 = new Vector2[RingFine * 2];
+            _linerMesh.uv = uvs;          // 동일 토폴로지 재사용 (Unity가 복사 보관, uv.y=중앙도 포함)
+            // 라이너는 오버라인 유니폼을 안 만져(E=0·ov=0) 경계 오프셋이 0이라 uv2.x(k)는
+            // 무의미하지만, uv2.y=윗입술도(W4)는 립라이너 구간(윗입술만·입꼬리 집중)에 필요하다.
+            // 셰이더가 _LipLinerShape=0이면 uv2.y를 안 읽어 무영향(현행 라이너 룩 불변).
+            var linerUv2 = new Vector2[RingFine * 2];
+            for (var i = 0; i < RingFine; i++)
+            {
+                var up = FineUpperness(i);
+                linerUv2[2 * i] = new Vector2(0f, up);
+                linerUv2[2 * i + 1] = new Vector2(0f, up);
+            }
+            _linerMesh.uv2 = linerUv2;
             _linerMesh.triangles = tris;
             linerGO.AddComponent<MeshFilter>().sharedMesh = _linerMesh;
             _linerRenderer = linerGO.AddComponent<MeshRenderer>();
@@ -316,7 +333,7 @@ namespace ARMakeup.Face
         }
 
         public void ApplyLipParams(string colorHex, float intensity, int finish, float shimmer, float overline,
-                                   string color2Hex, float gradient, int texture)
+                                   string color2Hex, float gradient, int texture, int shape)
         {
             _intensity = Mathf.Clamp01(intensity);
             _overline = Mathf.Clamp01(overline);
@@ -342,12 +359,15 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(stopB, out var c2))
                 _material.SetColor(LipColor2Id, c2);
             _material.SetFloat(LipGradientId, Mathf.Clamp01(gradient));
+            // 모양 축 W4(메인립 실루엣) — 0=풀립=현행(하위호환). 색축 그라데(_LipGradient)와
+            // 직교한 알파 실루엣(1=그라데립 중앙 집중, 2=꼬리 뾰족 코너 강조). 라이너 인스턴스는 미설정(0).
+            _material.SetFloat(LipShapeId, shape);
         }
 
         /// <summary>베이스립 — luma 보존 커버(입술 원색을 누드/스킨톤으로 보간). 색·강도
         /// 독립(0=끔). 메인 틴트·마감·글로스의 "맨 아래" 캔버스. 립 메시 전용(라이너 무영향).
         /// 기존 ApplyLipParams 시그니처는 무변경 — 이 메서드만 추가 라우팅.</summary>
-        public void ApplyLipBase(string colorHex, float intensity, int finish, float overline, int texture)
+        public void ApplyLipBase(string colorHex, float intensity, int finish, float overline, int texture, int shape)
         {
             _baseIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -364,11 +384,13 @@ namespace ARMakeup.Face
             // 메인 틴트와 독립(자기 값 기준). 음수는 경계를 입술선 안쪽으로 이동(통일). 0=원래.
             _baseOverline = Mathf.Clamp(overline, -0.15f, 0.15f);
             _material.SetFloat(LipBaseOverlineId, _baseOverline);
+            // 모양 축 W4(베이스립 실루엣) — 0=전체=현행(하위호환). 1=중앙 그라데, 2=외곽 정리(경계 안쪽).
+            _material.SetFloat(LipBaseShapeId, shape);
         }
 
         /// <summary>립글로스 — 마감과 독립된 "맨 위" 가산 광 레이어(매트 위에도 얹힘).
         /// 색·강도 독립(0=끔), 기본 흰색=무색 광. 립 메시 전용(라이너 무영향).</summary>
-        public void ApplyLipGloss(string colorHex, float intensity, int finish, float overline, int texture)
+        public void ApplyLipGloss(string colorHex, float intensity, int finish, float overline, int texture, int shape)
         {
             _glossIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -385,6 +407,8 @@ namespace ARMakeup.Face
             // 독립. 음수는 입술선 안쪽으로 경계 이동. 0=원래.
             _glossOverline = Mathf.Clamp(overline, -0.15f, 0.15f);
             _material.SetFloat(LipGlossOverlineId, _glossOverline);
+            // 모양 축 W4(립글로스 존) — 0=전체=현행(하위호환). 1=중앙 도트(쥬시), 2=아랫입술만.
+            _material.SetFloat(LipGlossShapeId, shape);
         }
 
         /// <summary>제형 스튜디오(#21) 마감 세부 — 광 임계·게인·펄 크기·밀도·억제 + 벨벳 시(sheen).
@@ -430,7 +454,7 @@ namespace ARMakeup.Face
         }
 
         /// <summary>립라이너 — 색·강도 독립(0=끔). 외곽 곡선은 립과 공유(오버립 포함).</summary>
-        public void ApplyLinerParams(string colorHex, float intensity, int finish, float widthMult, int texture)
+        public void ApplyLinerParams(string colorHex, float intensity, int finish, float widthMult, int texture, int shape)
         {
             _linerIntensity = Mathf.Clamp01(intensity);
             // 폭 배수 핸들 — JsonUtility 생략 0은 미설정 → 1(원래).
@@ -446,6 +470,9 @@ namespace ARMakeup.Face
             // 제형(텍스처) GENERIC — 라이너 인스턴스 전용 _LipLinerTexture(메인 립 메시는 미설정
             // → 0 = 무영향). 0=크림=현행(하위호환).
             _linerMaterial.SetFloat(LipLinerTextureId, texture);
+            // 모양 축 W4(립라이너 구간) — 라이너 인스턴스 전용 _LipLinerShape(메인 립 메시는 미설정
+            // → 0 = 무영향). 0=전체 링=현행(하위호환). 1=윗입술만, 2=입꼬리 집중.
+            _linerMaterial.SetFloat(LipLinerShapeId, shape);
         }
 
         /// <summary>실제 립 메시의 윗입술 중앙 외곽과 실제 라이너 밴드 중앙
@@ -526,8 +553,10 @@ namespace ARMakeup.Face
                     var dfy = op.y - ip.y;
                     var df = Mathf.Sqrt(dfx * dfx + dfy * dfy);
                     var kf = df > 1e-6f ? (MaxOverline * _lipRad) / df : 0f;
-                    _uv2[2 * f] = new Vector2(kf, 0f);
-                    _uv2[2 * f + 1] = new Vector2(kf, 0f);
+                    // uv2.y=윗입술도(W4) — 링 토폴로지 고정이라 f로만 결정(모양 축 0이면 셰이더 무시).
+                    var up = FineUpperness(f);
+                    _uv2[2 * f] = new Vector2(kf, up);
+                    _uv2[2 * f + 1] = new Vector2(kf, up);
                     // 립라이너 — 외곽은 립 곡선 공유(오버립 포함), 내곽은 중심 쪽으로
                     // 반경 비례만큼 당긴 얇은 링.
                     var lp = Vector2.Lerp(new Vector2(op.x, op.y), _lipCenter,
@@ -727,6 +756,17 @@ namespace ARMakeup.Face
             }
             _snapPrimed = true;
         }
+
+        // 모양 축 W4 — 링 위치(f/RingFine)로 중앙도·윗입술도를 낸다. LipsOuter 순서상 코너=인덱스
+        // 0(61)·10(291) → loop 위치 0.0·0.5, 중앙=상 5(0)·하 15(17) → 0.25·0.75. 토폴로지 고정이라
+        // 프레임 무관. centerness=중앙 1·코너 0(삼각파), upperness=상반원(f<RingFine/2) 1·하 0.
+        static float FineCenterness(int f)
+        {
+            var ring = f / (float)RingFine;
+            var centerRef = ring < 0.5f ? 0.25f : 0.75f;
+            return Mathf.Clamp01(1f - Mathf.Abs(ring - centerRef) / 0.25f);
+        }
+        static float FineUpperness(int f) => f < RingFine / 2 ? 1f : 0f;
 
         static Vector2 ImgPt(Vector3[] lm, int idx) => new Vector2(lm[idx].x, lm[idx].y);
         float Depth(float z) => DistanceFromCamera * (1f + z * DepthScale);

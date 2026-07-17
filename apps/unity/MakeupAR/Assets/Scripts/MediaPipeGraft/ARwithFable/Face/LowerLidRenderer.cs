@@ -39,6 +39,11 @@ namespace ARMakeup.Face
         const int Seg = 25; // lash 아크 리샘플 밀도
 
         const float BandHeightFactor = 0.45f; // 밴드 높이 = 눈 가로폭 × 이 값
+        // 온페이스 핏 핸들 대표 vv(밴드 상단 v=0 lash → 하단 v=1). 애교살 피크(.32)와
+        // 겹치지 않게 세로로 분리한다: 아이라인(하)=lash 바로 아래, 아이섀도(하)=그 아래.
+        const float EyelinerLowerPeakV = 0.10f;  // lash 라인 바로 아래
+        const float EyeshadowLowerPeakV = 0.25f; // 섀도 밴드 대표
+        const float TriangleZonePeakV = 0.25f;   // 삼각존(눈꼬리 쪽) 대표
         // 아크 계수 시간 평활. 랜드마크가 이미 필터링돼 있어 가벼운 EMA로 충분하고,
         // 잔여 미세 흔들림만 눌러 준다(값이 낮을수록 안정·반응 느림).
         const float FitEma = 0.4f;
@@ -93,6 +98,16 @@ namespace ARMakeup.Face
         readonly Vector2[] _lash = new Vector2[Seg];
         readonly float[][] _fitEma = { new float[2], new float[2] }; // [eye][k0, k1]
         bool _fitPrimed;
+        // 신규 핏 핸들 캐시(애교살 패턴 복제) — 아이라인(하)·아이섀도(하)·삼각존.
+        readonly Vector2[] _fitEyelinerLowerVp = new Vector2[Eyes];
+        readonly int[] _fitEyelinerLowerFrame = { -1, -1 };
+        readonly bool[] _fitEyelinerLowerValid = new bool[Eyes];
+        readonly Vector2[] _fitEyeshadowLowerVp = new Vector2[Eyes];
+        readonly int[] _fitEyeshadowLowerFrame = { -1, -1 };
+        readonly bool[] _fitEyeshadowLowerValid = new bool[Eyes];
+        readonly Vector2[] _fitTriangleZoneVp = new Vector2[Eyes];
+        readonly int[] _fitTriangleZoneFrame = { -1, -1 };
+        readonly bool[] _fitTriangleZoneValid = new bool[Eyes];
 
         void Awake() => Instance = this;
 
@@ -151,6 +166,43 @@ namespace ARMakeup.Face
         public bool NeedsEyeMask =>
             _linerIntensity > 0f || _triIntensity > 0f ||
             _concealerIntensity > 0f || _lowerShadowIntensity > 0f;
+
+        /// <summary>아이라인(하) 핏 핸들 — lash 라인 바로 아래(vv≈0.10) 중앙점(뷰포트).
+        /// TryGetAegyoFitHandle과 동일한 스테일 가드(현재/직전 프레임만).</summary>
+        public bool TryGetEyelinerLowerFitHandle(int eye, out Vector2 peakVp)
+        {
+            peakVp = Vector2.zero;
+            if (eye < 0 || eye >= Eyes || _source == null || !_source.HasFace ||
+                FramePresenter.Instance == null || !_fitEyelinerLowerValid[eye]) return false;
+            var frame = _fitEyelinerLowerFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            peakVp = _fitEyelinerLowerVp[eye];
+            return true;
+        }
+
+        /// <summary>아이섀도(하) 핏 핸들 — 섀도 밴드 대표(vv≈0.25) 중앙점(뷰포트).</summary>
+        public bool TryGetEyeshadowLowerFitHandle(int eye, out Vector2 peakVp)
+        {
+            peakVp = Vector2.zero;
+            if (eye < 0 || eye >= Eyes || _source == null || !_source.HasFace ||
+                FramePresenter.Instance == null || !_fitEyeshadowLowerValid[eye]) return false;
+            var frame = _fitEyeshadowLowerFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            peakVp = _fitEyeshadowLowerVp[eye];
+            return true;
+        }
+
+        /// <summary>삼각존 핏 핸들 — 눈꼬리 쪽(along≈0.85, vv≈0.25) 밴드점(뷰포트).</summary>
+        public bool TryGetTriangleZoneFitHandle(int eye, out Vector2 peakVp)
+        {
+            peakVp = Vector2.zero;
+            if (eye < 0 || eye >= Eyes || _source == null || !_source.HasFace ||
+                FramePresenter.Instance == null || !_fitTriangleZoneValid[eye]) return false;
+            var frame = _fitTriangleZoneFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            peakVp = _fitTriangleZoneVp[eye];
+            return true;
+        }
 
         /// <summary>삼각존 — 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 하안검 밴드의
         /// 꼬리 쪽(u 바깥 1/3)에 가중된 어두운 섀도 텀. 색·강도 독립(0=끔), 애교살/아이라인
@@ -279,6 +331,7 @@ namespace ARMakeup.Face
                 var width = eyeDist * BandHeightFactor;
                 var depth = Depth(lm[lids[4]].z);
                 var b = e * Seg * 2;
+                var triIdx = Mathf.RoundToInt(0.85f * (Seg - 1)); // 삼각존(눈꼬리 쪽)
                 for (var i = 0; i < Seg; i++)
                 {
                     var a = _lash[Mathf.Max(i - 1, 0)];
@@ -289,6 +342,25 @@ namespace ARMakeup.Face
                     var bottom = _lash[i] + normal * width;
                     _vertices[b + 2 * i] = ImageToWorld(_lash[i], depth);
                     _vertices[b + 2 * i + 1] = ImageToWorld(bottom, depth);
+                    if (i == Seg / 2)
+                    {
+                        var linerImg = Vector2.Lerp(_lash[i], bottom, EyelinerLowerPeakV);
+                        _fitEyelinerLowerVp[e] = FramePresenter.Instance.ImageToViewport(linerImg);
+                        _fitEyelinerLowerFrame[e] = Time.frameCount;
+                        _fitEyelinerLowerValid[e] = true;
+
+                        var shadowImg = Vector2.Lerp(_lash[i], bottom, EyeshadowLowerPeakV);
+                        _fitEyeshadowLowerVp[e] = FramePresenter.Instance.ImageToViewport(shadowImg);
+                        _fitEyeshadowLowerFrame[e] = Time.frameCount;
+                        _fitEyeshadowLowerValid[e] = true;
+                    }
+                    if (i == triIdx)
+                    {
+                        var triImg = Vector2.Lerp(_lash[i], bottom, TriangleZonePeakV);
+                        _fitTriangleZoneVp[e] = FramePresenter.Instance.ImageToViewport(triImg);
+                        _fitTriangleZoneFrame[e] = Time.frameCount;
+                        _fitTriangleZoneValid[e] = true;
+                    }
                 }
             }
             _mesh.vertices = _vertices;

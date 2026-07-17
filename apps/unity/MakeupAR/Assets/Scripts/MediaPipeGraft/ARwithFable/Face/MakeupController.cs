@@ -105,7 +105,13 @@ namespace ARMakeup.Face
         static readonly int ConcealerFinishId = Shader.PropertyToID("_ConcealerFinish");
         // 축 개선(#19b) — 부분 커버 붉은기 자동·파우더 존 (FaceMakeup 머티리얼 float 분기).
         static readonly int ConcealerShapeId = Shader.PropertyToID("_ConcealerShape");
+        // 잡티 지우기(밀어내기) — FaceMakeup 피부 경로 outlier 억제. 0=현행 픽셀 동일.
+        static readonly int BlemishRemovalId = Shader.PropertyToID("_BlemishRemoval");
         static readonly int PowderShapeId = Shader.PropertyToID("_PowderShape");
+        // 모양 축 W3 피부 존 — 얼굴 메시(FaceMakeup 머티리얼) float 분기. 0=전체=현행.
+        static readonly int ToneShapeId = Shader.PropertyToID("_ToneShape");
+        static readonly int SkinShapeId = Shader.PropertyToID("_SkinShape");
+        static readonly int FoundationShapeId = Shader.PropertyToID("_FoundationShape");
         // 베이스 팩(#18) — 톤/파우더/윤광은 얼굴 메시(머티리얼) 전용. 파운데이션은
         // 머티리얼 + 이마·목 확장(CameraFeed 전역)이라 같은 이름을 두 곳에 세팅한다
         // (같은 프로퍼티 id로 mat.Set* + Shader.SetGlobal* — 값 동일이라 정합).
@@ -118,6 +124,13 @@ namespace ARMakeup.Face
         static readonly int FndRefLumaDbgId = Shader.PropertyToID("_FndRefLumaDbg");
         static readonly int FndLumaGainDbgId = Shader.PropertyToID("_FndLumaGainDbg");
         static readonly int FndChromaDbgId = Shader.PropertyToID("_FndChromaDbg");
+        // ── 임시 디버그(이음새 세그 게이트 튜닝) — CameraFeed 전역 유니폼(파운데 seg 게이트
+        //    임계 4종+시각화 토글). 확정 후 이 5개(및 BridgeMessages 필드·RN 슬라이더)를 걷어낸다. ──
+        static readonly int SegSeamDbgId = Shader.PropertyToID("_SegSeamDbg");
+        static readonly int FndSegLoDbgId = Shader.PropertyToID("_FndSegLoDbg");
+        static readonly int FndSegHiDbgId = Shader.PropertyToID("_FndSegHiDbg");
+        static readonly int FndCoreLoDbgId = Shader.PropertyToID("_FndCoreLoDbg");
+        static readonly int FndCoreHiDbgId = Shader.PropertyToID("_FndCoreHiDbg");
         static readonly int PowderIntensityId = Shader.PropertyToID("_PowderIntensity");
         // 컬러/펄 파우더 — ""=무색(흰색=identity)·0=새틴=기존 출력(하위호환).
         static readonly int PowderColorId = Shader.PropertyToID("_PowderColor");
@@ -188,6 +201,7 @@ namespace ARMakeup.Face
         static readonly int HairTintColorId = Shader.PropertyToID("_HairTintColor");
         static readonly int HairTintIntensityId = Shader.PropertyToID("_HairTintIntensity");
         static readonly int HairFinishId = Shader.PropertyToID("_HairFinish"); // 헤어 염색 마감(0=새틴=기존)
+        static readonly int HairShapeId = Shader.PropertyToID("_HairShape");   // 헤어 존(W6, 0=전체=현행)
 
         // 얼굴 오버레이: 투명 영역이 이보다 적으면 배경째 저장한 그림 → 얼굴 전체를
         // 덮으므로 거부(사용자에게 투명 PNG 안내).
@@ -316,6 +330,15 @@ namespace ARMakeup.Face
             Shader.SetGlobalFloat(FndRefLumaDbgId, 0.798322f);
             Shader.SetGlobalFloat(FndLumaGainDbgId, 1f);
             Shader.SetGlobalFloat(FndChromaDbgId, 0.4f);
+
+            // 임시 디버그(이음새 세그 게이트) — 임계 4종은 sentinel -1(미설정=셰이더 리터럴
+            // 폴백, LO는 0도 유효값이라 음수 sentinel)로, 시각화 토글은 0(끔)으로 1회 시딩.
+            // 첫 applyFilter 전에도 게이트가 리터럴로 동작해 현행 픽셀과 동일.
+            Shader.SetGlobalFloat(SegSeamDbgId, 0f);
+            Shader.SetGlobalFloat(FndSegLoDbgId, -1f);
+            Shader.SetGlobalFloat(FndSegHiDbgId, -1f);
+            Shader.SetGlobalFloat(FndCoreLoDbgId, -1f);
+            Shader.SetGlobalFloat(FndCoreHiDbgId, -1f);
 
             // 텍스처 MatCap(크롬) — "조명 구운 구슬" 이미지를 절차 생성해 전역 텍스처로.
             // 메탈 재질이 법선으로 이걸 샘플해 진짜 반사에 가까운 크롬을 낸다(수식 근사 대체).
@@ -923,6 +946,8 @@ namespace ARMakeup.Face
             Shader.SetGlobalFloat(HairTintIntensityId, Mathf.Clamp01(p.hairTintIntensity));
             // 헤어 염색 마감 — 전역(CameraFeed 소비). 0=새틴=기존 출력(하위호환).
             Shader.SetGlobalFloat(HairFinishId, p.hairFinish);
+            // 헤어 존(W6) — 전역(CameraFeed 소비). 0=전체=기존 출력(하위호환).
+            Shader.SetGlobalFloat(HairShapeId, p.hairShape);
             if (!string.IsNullOrEmpty(p.hairTintColor) &&
                 ColorUtility.TryParseHtmlString(p.hairTintColor, out var hairTint))
                 Shader.SetGlobalColor(HairTintColorId, hairTint);
@@ -1022,7 +1047,13 @@ namespace ARMakeup.Face
             // 축 개선(#19b) — 부분 커버 모양(0=눈밑 1=붉은기 자동)·파우더 존(0=전체 1=T존 2=볼 제외).
             // 생략(JsonUtility 0) = 기존 동작. FaceMakeup.shader가 float 분기.
             mat.SetFloat(ConcealerShapeId, p.concealerShape);
+            // 잡티 지우기(밀어내기) — 피부 경로 outlier 억제(붉은기 커버·컨실 강도와 독립). 0=현행 픽셀 동일.
+            mat.SetFloat(BlemishRemovalId, Mathf.Clamp01(p.blemishRemoval));
             mat.SetFloat(PowderShapeId, p.powderShape);
+            // 모양 축 W3 피부 존(얼굴 메시 전용) — 0=전체=현행. 존만큼 강도 곱(셰이더).
+            mat.SetFloat(ToneShapeId, p.toneShape);
+            mat.SetFloat(SkinShapeId, p.skinShape);
+            mat.SetFloat(FoundationShapeId, p.foundationShape);
             // 베이스 팩(#18) — 윤광·파우더는 머티리얼 전용.
             // 톤 보정색: ""=무색은 공유 머티리얼에 이전 룩 톤색이 남지 않도록 흰색 명시 복원
             // (SetColor는 빈 문자열에 무동작 → 스테일 유출, 적대 리뷰 confirmed).
@@ -1061,19 +1092,26 @@ namespace ARMakeup.Face
             Shader.SetGlobalFloat(FndRefLumaDbgId, p.fndRefLumaDbg);
             Shader.SetGlobalFloat(FndLumaGainDbgId, p.fndLumaGainDbg);
             Shader.SetGlobalFloat(FndChromaDbgId, p.fndChromaDbg);
+            // 임시 디버그(이음새 세그 게이트) — CameraFeed 전역 유니폼 push. RN이 항상 유효값을
+            // 실어 보내며(임계 기본=현 셰이더 리터럴, 토글=0) 안 건드리면 현재 픽셀과 동일.
+            Shader.SetGlobalFloat(SegSeamDbgId, p.segSeamDbg);
+            Shader.SetGlobalFloat(FndSegLoDbgId, p.fndSegLoDbg);
+            Shader.SetGlobalFloat(FndSegHiDbgId, p.fndSegHiDbg);
+            Shader.SetGlobalFloat(FndCoreLoDbgId, p.fndCoreLoDbg);
+            Shader.SetGlobalFloat(FndCoreHiDbgId, p.fndCoreHiDbg);
             mat.SetFloat(MakeupOverlayIntensityId, Mathf.Clamp01(p.faceOverlayIntensity));
 
             // 립·눈 오버레이는 별도 메시/머티리얼(윤곽 링·랜드마크 오버레이)이 소유한다.
             // 기동 초기(CreateMaterial)엔 아직 없을 수 있어 널가드.
             if (LipRenderer.Instance != null)
             {
-                // R2 그라데 스톱B·강도 + 제형 텍스처(①) 포함 — 시그니처 확장(립은 개별 인자 경유라 최소 침습).
+                // R2 그라데 스톱B·강도 + 제형 텍스처(①) + 모양 실루엣(W4) — 시그니처 확장(립은 개별 인자 경유라 최소 침습).
                 LipRenderer.Instance.ApplyLipParams(p.lipColor, p.lipIntensity, p.lipFinish, p.lipShimmer, p.lipOverline,
-                    p.lipColor2, p.lipGradient, p.lipTexture);
-                LipRenderer.Instance.ApplyLinerParams(p.lipLinerColor, p.lipLinerIntensity, p.lipLinerFinish, p.lipLinerWidth, p.lipLinerTexture);
-                // 베이스립(맨 아래 누드 캔버스)·립글로스(맨 위 광 톱코트) — 색·강도·마감·제형 독립(0=끔/새틴/크림).
-                LipRenderer.Instance.ApplyLipBase(p.lipBaseColor, p.lipBaseIntensity, p.lipBaseFinish, p.lipBaseOverline, p.lipBaseTexture);
-                LipRenderer.Instance.ApplyLipGloss(p.lipGlossColor, p.lipGlossIntensity, p.lipGlossFinish, p.lipGlossOverline, p.lipGlossTexture);
+                    p.lipColor2, p.lipGradient, p.lipTexture, p.lipShape);
+                LipRenderer.Instance.ApplyLinerParams(p.lipLinerColor, p.lipLinerIntensity, p.lipLinerFinish, p.lipLinerWidth, p.lipLinerTexture, p.lipLinerShape);
+                // 베이스립(맨 아래 누드 캔버스)·립글로스(맨 위 광 톱코트) — 색·강도·마감·제형·모양 독립(0=끔/새틴/크림/전체).
+                LipRenderer.Instance.ApplyLipBase(p.lipBaseColor, p.lipBaseIntensity, p.lipBaseFinish, p.lipBaseOverline, p.lipBaseTexture, p.lipBaseShape);
+                LipRenderer.Instance.ApplyLipGloss(p.lipGlossColor, p.lipGlossIntensity, p.lipGlossFinish, p.lipGlossOverline, p.lipGlossTexture, p.lipGlossShape);
                 // 제형 스튜디오(#21) — 립 마감 세부(전부 0=미지정=enum 기존 동작).
                 LipRenderer.Instance.ApplyLipFinish(p.lipGlossLo, p.lipGlossGain,
                     p.lipShimmerSize, p.lipShimmerDensity, p.lipMatte, p.lipSheen);
@@ -1154,7 +1192,7 @@ namespace ARMakeup.Face
             }
             // 치아 미백 — 내측 립 링 폴리곤(입 열림 추종, 다물면 자동 무효과).
             if (TeethRenderer.Instance != null)
-                TeethRenderer.Instance.ApplyParams(p.teethWhitenIntensity, p.teethFinish);
+                TeethRenderer.Instance.ApplyParams(p.teethWhitenIntensity, p.teethFinish, p.teethShape);
             // 눈 파라미터 일괄 라우팅(FilterParams 통째) — 홍채, 아이라이너
             // 질감(eyelinerTexture)/부분(eyelinerSegment)/마감(eyelinerFinish), 아이섀도.
             if (IrisRenderer.Instance != null) IrisRenderer.Instance.ApplyEyeParams(p);

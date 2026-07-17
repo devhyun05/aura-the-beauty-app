@@ -22,7 +22,14 @@ import type {
   OverlayLayer,
 } from '../bridge/types';
 import { PRESETS } from '../presets';
-import { REGION_GROUPS, REGION_MAP } from './regions';
+import {
+  EYELINER_STYLES,
+  FOUNDATION_FINISHES,
+  MASCARA_STYLES,
+  MASCARA_STYLES_UPPER,
+  REGION_GROUPS,
+  REGION_MAP,
+} from './regions';
 import type { RegionKey } from './regions';
 import { newLayer, seedLayers } from './model';
 import type { ComposerLayer } from './model';
@@ -196,6 +203,137 @@ const gid = () => `grp${++groupSeq}`;
 
 const SYSTEM_PRESET_IDS = ['natural', 'rosy', 'peach', 'glam', 'smoky'];
 
+// ── 세부부위(sub) 이름 유도 — 프리셋(전체룩) 이름을 물려주지 않는다 ─────────────
+// 사용자 지적: 세부부위 카드가 "글램 마스카라"처럼 전체룩 이름을 물려받았다. 세부부위
+// 룩은 자기 성격(대표색/스타일/마감)을 말하는 이름을 가져야 한다. 잎 특성에서 유도하고,
+// 같은 부위에 같은 이름이 겹치면(프리셋마다 유사한 베이스 등) 번호만 덧붙인다.
+
+/** 프리셋에 실제로 쓰인 대표색 hex → 색계열 한국어. 유도 실패 시(신규 색) HSL 폴백. */
+const COLOR_FAMILY_KO: Record<string, string> = {
+  // 립
+  '#D96C7B': '로즈', '#E04E68': '로즈', '#F2846B': '코랄', '#B01E3C': '레드', '#A65560': '모브',
+  // 블러셔
+  '#F2A0AC': '로즈', '#F08698': '핑크', '#F7A98C': '피치', '#D97386': '로즈', '#C98A93': '모브',
+  // 아이섀도(상·하)·삼각존
+  '#C29A7B': '베이지', '#D89AA0': '로즈', '#E0A183': '코랄', '#8A5A44': '브라운', '#5C4A46': '토프',
+  '#3E2C24': '딥브라운',
+  // 눈썹(결·채움·한올) — BROW_COLORS
+  '#4A3428': '브라운', '#4A3628': '브라운', '#6B5240': '브라운',
+  '#3A2A20': '다크브라운', '#2A1E16': '다크브라운',
+  // 애교살·하이라이터
+  '#FFF3E2': '아이보리', '#FFD9E0': '핑크', '#F7E7CE': '샴페인',
+  '#F5DDE2': '핑크', '#FFE9C8': '샴페인',
+  // 렌즈(레이어드 베이스 payload)
+  '#5B7B8C': '그레이블루', '#7A6A9E': '바이올렛',
+};
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return null;
+  const h = m[1];
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+/** hex → 색계열 한국어. 표에 없으면 HSL로 대략 분류(방어용 — 현재 프리셋은 표에서 해결). */
+function colorFamilyKo(hex: string): string {
+  const up = hex.toUpperCase();
+  if (COLOR_FAMILY_KO[up]) return COLOR_FAMILY_KO[up];
+  const rgb = hexToRgb(up);
+  if (!rgb) return '';
+  const [r, g, b] = rgb.map(v => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (s < 0.12) return l > 0.85 ? '아이보리' : l > 0.5 ? '그레이' : '다크';
+  let h = 0;
+  if (max === r) h = 60 * (((g - b) / d) % 6);
+  else if (max === g) h = 60 * ((b - r) / d + 2);
+  else h = 60 * ((r - g) / d + 4);
+  if (h < 0) h += 360;
+  if (h < 15 || h >= 345) return l < 0.4 ? '버건디' : '레드';
+  if (h < 40) return l > 0.6 ? '코랄' : l < 0.4 ? '브라운' : '로즈';
+  if (h < 55) return l < 0.45 ? '브라운' : '베이지';
+  if (h < 170) return '그린';
+  if (h < 255) return '블루';
+  if (h < 290) return '바이올렛';
+  return l > 0.6 ? '핑크' : '모브';
+}
+
+type SubNameStrategy = 'color' | 'style' | 'finish' | 'plain';
+
+interface SubNameSpec {
+  /** 부위 노운(카드에 보이는 짧은 성격어 — 이름 반복 회피용, 잎 label과 별개) */
+  noun: string;
+  strategy: SubNameStrategy;
+  colorKey?: keyof FilterParams;
+  styleKey?: keyof FilterParams;
+  styleOptions?: { value: number; label: string }[];
+  finishKey?: keyof FilterParams;
+}
+
+/** 프리셋 분해가 만드는 부위별 세부부위 이름 규칙. 색이 무의미한 부위(라이너·마스카라
+ *  =거의 검정)는 스타일을, 색이 없는 부위(파운데)는 마감을, 베이스 보정(톤·피부결)은
+ *  노운만 쓴다. 표에 없는 부위는 REGION_MAP.label로 폴백(전체룩 이름 미사용). */
+const SYS_SUB_NAME: Partial<Record<RegionKey, SubNameSpec>> = {
+  tone: { noun: '언더톤', strategy: 'plain' },
+  skin: { noun: '피부결', strategy: 'plain' },
+  foundation: { noun: '파운데', strategy: 'finish', finishKey: 'foundationFinish' },
+  lip: { noun: '립', strategy: 'color', colorKey: 'lipColor' },
+  blush: { noun: '블러셔', strategy: 'color', colorKey: 'blushColor' },
+  eyeshadow: { noun: '섀도', strategy: 'color', colorKey: 'eyeshadowColor' },
+  eyeshadowLower: { noun: '언더섀도', strategy: 'color', colorKey: 'eyeshadowLowerColor' },
+  triangleZone: { noun: '삼각존', strategy: 'color', colorKey: 'triangleZoneColor' },
+  eyelinerUpper: { noun: '라이너', strategy: 'style', styleKey: 'eyelinerStyle', styleOptions: EYELINER_STYLES },
+  mascara: { noun: '마스카라', strategy: 'style', styleKey: 'mascaraStyle', styleOptions: MASCARA_STYLES_UPPER },
+  lowerMascara: { noun: '언더래시', strategy: 'style', styleKey: 'lowerLashStyle', styleOptions: MASCARA_STYLES },
+  aegyo: { noun: '애교살', strategy: 'color', colorKey: 'aegyoColor' },
+  highlighter: { noun: '하이라이터', strategy: 'color', colorKey: 'highlightColor' },
+  brow: { noun: '결', strategy: 'color', colorKey: 'browColor' },
+  browPowder: { noun: '채움', strategy: 'color', colorKey: 'browPowderColor' },
+  browPencil: { noun: '한올', strategy: 'color', colorKey: 'browPencilColor' },
+  lensBase: { noun: '렌즈', strategy: 'color' }, // 색은 lens payload에서
+};
+
+function labelForValue(
+  opts: { value: number; label: string }[],
+  v: number | undefined,
+): string {
+  if (v === undefined) return '';
+  return opts.find(o => o.value === v)?.label ?? '';
+}
+
+/**
+ * 세부부위(sub) 정의의 표시 이름 — 프리셋 이름 대신 잎 자신의 특성에서 유도한다.
+ *  ① 색 부위 → 대표색 계열("브라운 섀도")  ② 라이너·마스카라 → 스타일("돌리 마스카라")
+ *  ③ 파운데 → 마감("듀이 파운데")  ④ 그 외 → 노운만("피부결"). 모두 실패하면 노운.
+ * 중복(프리셋마다 유사)은 호출부가 번호로 가른다(setSubName dedup).
+ */
+function systemSubName(
+  region: RegionKey,
+  params: Partial<FilterParams>,
+  lensColor?: string,
+): string {
+  const spec = SYS_SUB_NAME[region];
+  const noun = spec?.noun ?? REGION_MAP[region].label;
+  if (!spec) return noun;
+  let modifier = '';
+  if (spec.strategy === 'color') {
+    const hex = lensColor ?? (spec.colorKey ? (params[spec.colorKey] as string | undefined) : undefined);
+    if (typeof hex === 'string') modifier = colorFamilyKo(hex);
+  } else if (spec.strategy === 'style' && spec.styleKey && spec.styleOptions) {
+    modifier = labelForValue(spec.styleOptions, params[spec.styleKey] as number | undefined);
+  } else if (spec.strategy === 'finish' && spec.finishKey) {
+    modifier = labelForValue(FOUNDATION_FINISHES, params[spec.finishKey] as number | undefined);
+  }
+  return modifier ? `${modifier} ${noun}` : noun;
+}
+
 /**
  * 내장 프리셋(플랫 params)을 face→region→sub→잎 계층으로 분해해 시스템
  * 라이브러리를 만든다. 시각 결과는 seedLayers→compileLayers 왕복과 동일
@@ -203,6 +341,9 @@ const SYSTEM_PRESET_IDS = ['natural', 'rosy', 'peach', 'glam', 'smoky'];
  */
 export function buildSystemLibrary(): LookLibrary {
   const lib: LookLibrary = {};
+  // 부위별 세부부위 이름 중복 카운터 — 같은 카드(RegionKey)에 같은 이름이 겹치면
+  // (프리셋마다 유사한 베이스 등) 두 번째부터 번호를 붙인다(프리셋명 대신 — 규칙 5).
+  const usedSubNames = new Map<RegionKey, Map<string, number>>();
   for (const preset of PRESETS) {
     if (!SYSTEM_PRESET_IDS.includes(preset.id)) continue;
     const layers = seedLayers(
@@ -225,9 +366,16 @@ export function buildSystemLibrary(): LookLibrary {
       for (const layer of list) {
         const label = REGION_MAP[layer.region].label;
         const subId = `sys:${preset.id}:${layer.region}`;
+        // 세부부위 이름 = 잎 특성 유도(프리셋명 미사용) + 부위 내 중복 시 번호.
+        const baseName = systemSubName(layer.region, layer.params, layer.lens?.color);
+        const perRegion = usedSubNames.get(layer.region) ?? new Map<string, number>();
+        const count = (perRegion.get(baseName) ?? 0) + 1;
+        perRegion.set(baseName, count);
+        usedSubNames.set(layer.region, perRegion);
+        const subName = count === 1 ? baseName : `${baseName} ${count}`;
         lib[subId] = {
           id: subId,
-          name: `${preset.name} ${label}`,
+          name: subName,
           level: 'sub',
           slot,
           owner: 'system',

@@ -120,6 +120,13 @@ namespace ARMakeup.Face
         const float ShadowHeightMult = 1.0f;   // 눈 반경 대비 밴드 최대 높이(눈썹쪽) — 정적 마스크 커버리지에 맞춤
         const float ShadowInnerWeight = 0.45f; // 안쪽 앞머리 농도·높이 가중 (바깥=1.0)
         const float BrowBias = 0.5f;           // 확장 방향을 로컬법선↔눈썹방향 사이로 평활
+        // 꼬리 스윕(수평 스윕) — 꼬리 끝(s=0 근처)에서 밴드 상단을 수직 법선이 아니라 눈 장축
+        // (눈앞머리→꼬리)의 연장, 즉 거의 수평 방향으로 눕혀 눈꼬리에서 라인을 따라 ≈180°로 이어
+        // 빠지게 한다(사용자 요구: "눈 끝에서 180도까지"). 완전 수평은 처져 보일 수 있어 눈썹꼬리
+        // 방향을 소량 혼합해 결과각 ≈170°로 미세 상향. 전 모양 공통(형태 차이는 셰이더가 유지).
+        const float TailSweepAlong = 0.28f;    // 꼬리(s=0)에서 안쪽으로 스윕이 풀리는 along 범위
+        const float TailSweepStrength = 1.0f;  // 확장방향을 tailDir로 눕히는 정도(0=수직법선, 1=완전) — s=0에서 완전 수렴
+        const float TailUpBias = 0.18f;        // tailDir 혼합비: 눈장축(수평,0)↔눈썹꼬리(위,1) — 미세 상향(≈170°)
         const int EyeshadowShapeCount = 12;
         const int EyeshadowTailSubdiv = 6;
         const int EyeshadowPts = MainPts + EyeshadowTailSubdiv;
@@ -1264,6 +1271,13 @@ namespace ARMakeup.Face
                 if (Vector2.Dot(outerNormal, browUp) < 0f) outerNormal = -outerNormal;
                 var outerUp = Vector2.Lerp(outerNormal, browUp, BrowBias).normalized;
                 var outerHeight = eyeRadius * ShadowHeightMult * heightMult;
+                // 꼬리 스윕 기준 벡터 — eyeAxisOut=눈앞머리→꼬리 축의 연장(거의 수평),
+                // browTailDir=눈꼬리→눈썹꼬리(바깥/위). sweepDir은 수평을 기본으로 눈썹방향을
+                // 소량만 혼합 — 결과각 ≈170°. BrowLower[e][0]은 측두(바깥) 눈썹 끝이고 각
+                // 랜드마크가 눈별 파생이라 양안 미러 자동 정합. 메인 컬럼 끝 구간을 이쪽으로 눕힌다.
+                var browTailDir = (Iso(BrowLower[e][0], lm, aspect) - lash[0]).normalized;
+                var eyeAxisOut = (lash[0] - lash[MainPts - 1]).normalized; // 눈 장축 바깥(수평)
+                var sweepDir = Vector2.Lerp(eyeAxisOut, browTailDir, TailUpBias).normalized;
                 for (var j = 0; j < EyeshadowTailSubdiv; j++)
                 {
                     var tailT = (EyeshadowTailSubdiv - j) / (float)EyeshadowTailSubdiv;
@@ -1287,6 +1301,9 @@ namespace ARMakeup.Face
                     var dir = Vector2.Lerp(nrm, browUp, BrowBias).normalized;
 
                     var s = i / (float)(MainPts - 1);            // 0=바깥꼬리 → 1=안쪽앞머리
+                    // 꼬리 스윕: 끝 구간(s<TailSweepAlong)에서 상단을 sweepDir(수평≈170°)로 눕힘.
+                    var sweep = TailSweepStrength * (1f - Mathf.SmoothStep(0f, TailSweepAlong, s));
+                    if (sweep > 0f) dir = Vector2.Lerp(dir, sweepDir, sweep).normalized;
                     var weight = Mathf.Lerp(1f, ShadowInnerWeight, s);
                     var h = eyeRadius * ShadowHeightMult * weight * heightMult; // 높이 핸들(스모키)/봉투
 

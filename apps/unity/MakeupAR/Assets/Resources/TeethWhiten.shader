@@ -26,6 +26,8 @@ Shader "ARMakeup/TeethWhiten"
         _RimFeather ("Rim Feather", Range(0, 0.6)) = 0.25
         // 마감(Tier B) — 0=새틴(기본, 기존 출력) 1=매트 2=듀이(글로시 스마일). ApplyFinish 레거시 경로.
         _TeethFinish ("Teeth Finish (0 satin 1 matte 2 dewy)", Float) = 0
+        // 모양 축 W6 — 0=전체(현행) 1=앞니 6전치 집중. 스트립 가로(uv.y 코너→코너) 중앙 가중.
+        _TeethShape ("Teeth Zone (0 all 1 front6)", Float) = 0
     }
 
     SubShader
@@ -58,6 +60,10 @@ Shader "ARMakeup/TeethWhiten"
             float _BrightenAdd;
             float _RimFeather;
             float _TeethFinish; // 마감(Tier B) — 0=새틴=기존 출력(하위호환)
+            float _TeethShape;  // 존(W6) — 0=전체=기존 출력(하위호환) 1=앞니 6전치 집중
+            // 앞니 집중 — 스트립 가로 중앙(uv.y=0.5)에서 |uv.y−0.5|가 이 구간을 넘으면 감쇠.
+            #define TEETH_FRONT_LO 0.14  // 실기기 튜닝 대상: 이하 = 100% (중앙 6전치)
+            #define TEETH_FRONT_HI 0.40  // 실기기 튜닝 대상: 이상 = 완전 제외(옆니)
 
             struct appdata
             {
@@ -105,7 +111,13 @@ Shader "ARMakeup/TeethWhiten"
                 white = ApplyFinish(white, luma, i.uv, _TeethFinish, 0,
                                     0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
 
-                float amt = tooth * rim * _WhitenIntensity;
+                // 모양 축 W6 — 앞니 6전치 집중: 스트립 가로 중앙(uv.y=0.5) 가중. 0=전체면
+                // teethZone=1 → 바이트 동일(하위호환). 곱 게이트(가산 금지).
+                float teethZone = 1.0;
+                if (_TeethShape > 0.5)
+                    teethZone = 1.0 - smoothstep(TEETH_FRONT_LO, TEETH_FRONT_HI, abs(i.uv.y - 0.5));
+
+                float amt = tooth * rim * _WhitenIntensity * teethZone;
                 // §11 오클루전 — 입안 변형 게이트: 치아가 face-skin으로 분류되지 않을 수
                 // 있어 max(face-skin, 기타)로 통과(Occlusion.cginc 주석). // 실기기 튜닝 대상
                 return fixed4(white, amt * OccludeGateMouth(i.grabPos));

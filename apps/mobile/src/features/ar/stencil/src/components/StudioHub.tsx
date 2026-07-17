@@ -41,7 +41,20 @@ import type {
 } from '../composer/products';
 import { FINISHES } from '../composer/regions';
 import ParamSlider from './ParamSlider';
+import Icon from './Icon';
+import type { IconName } from './Icon';
 import { GOLD, GOLD_LIGHT, TEXT_HINT, TEXT_SUB } from '../theme';
+
+// 도구 — 우측 레일에서 이관한 분석/코치 진입점. 탭하면 허브를 닫고 해당 패널/플로우를
+// 연다(동작·상태는 상위 App 소유, 여기선 진입만 위임). 레일과 같은 아이콘·라벨.
+export type StudioTool = 'extract' | 'perfume' | 'body' | 'hair';
+
+const TOOLS: { key: StudioTool; icon: IconName; label: string }[] = [
+  { key: 'extract', icon: 'image', label: '룩 추출' },
+  { key: 'perfume', icon: 'droplet', label: '향수' },
+  { key: 'body', icon: 'user', label: '체형' },
+  { key: 'hair', icon: 'scissors', label: '헤어' },
+];
 
 // 베이스 색 스와치 — 부위 무관 중립 8색(제품군을 가리지 않는 공통 팔레트).
 const BASE_SWATCHES = [
@@ -63,6 +76,8 @@ interface Props {
   onChangeSheets: (sheets: FitSheet[], mainId: string | null) => void;
   /** 핏 조정 진입 — 스튜디오를 닫고 카메라 위 핏 패널을 그 시트로 연다(레일 버튼 폐지). */
   onAdjustFit: (sheetId: string) => void;
+  /** 도구 진입(레일 버튼 이관) — 허브를 닫고 해당 패널/플로우를 연다(동작은 상위 소유). */
+  onOpenTool: (tool: StudioTool) => void;
   /** 에셋 카탈로그 임포트 시트 열기(기존 App 상태) */
   onOpenCatalogImport: () => void;
   /** 사용자 제작 제품(§5 A12) — 상태는 상위 소유 */
@@ -77,6 +92,7 @@ export default function StudioHub({
   mainId,
   onChangeSheets,
   onAdjustFit,
+  onOpenTool,
   onOpenCatalogImport,
   userProducts,
   onChangeProducts,
@@ -207,7 +223,28 @@ export default function StudioHub({
           </Text>
 
           <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+            {/* ⓪ 도구 — 분석/코치 진입점(우측 레일에서 이관). 탭하면 허브를 닫고
+                해당 패널/플로우를 연다(동작·상태는 상위 App 소유). */}
+            <Text style={styles.sectionTitle}>도구</Text>
+            <Text style={styles.sectionNote}>
+              룩 추출·향수·체형·헤어 — 탭하면 스튜디오를 닫고 해당 도구를 엽니다.
+            </Text>
+            {TOOLS.map(t => (
+              <TouchableOpacity
+                key={t.key}
+                style={styles.row}
+                onPress={() => onOpenTool(t.key)}
+                testID={`studio-tool-${t.key}`}>
+                <Icon name={t.icon} size={18} />
+                <Text style={styles.rowName} numberOfLines={1}>
+                  {t.label}
+                </Text>
+                <Text style={styles.toolChevron}>›</Text>
+              </TouchableOpacity>
+            ))}
+
             {/* ① 내 핏 시트 관리 ─────────────────────────────────────── */}
+            <View style={styles.divider} />
             <Text style={styles.sectionTitle}>내 핏 시트</Text>
             <Text style={styles.sectionNote}>
               어떤 룩을 입어도 따라오는 나만의 배치 조정 시트. 메인 1장이 기본 적용됩니다.
@@ -602,6 +639,12 @@ const styles = StyleSheet.create({
   rowOnNeutral: {
     borderColor: 'rgba(255,255,255,0.5)',
     backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  // 도구 행 우측 진입 표시(› — 허브 닫고 해당 도구 열림).
+  toolChevron: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 18,
+    fontWeight: '600',
   },
   mainStar: {
     color: '#FFFFFF',

@@ -117,6 +117,18 @@ Shader "ARMakeup/Eyeshadow"
             int _EsLayerCount;             // >0 = 멀티밴드 경로, 0 = 레거시 단일 경로
             float _EdgeFeather;            // 세로 cutoff 페더 폭(기본 0.45 — 현 0.55~1.0 폭 ≈ 0.45)
 
+            // 리드 전체(shape 0) 연장 게이트 — 밴드 로컬 u(bandUV.x)가 눈꼬리 밖(>1)인 컬럼을
+            // shape 0만 페더로 남기고 그 외 모양은 눈꼬리에서 컷한다(IrisRenderer가 연장 컬럼을
+            // u∈(1,2]로 인코딩; u-1 = 눈꼬리 밖 거리/extLen). u≤1(정규 밴드)이면 항상 1.0 →
+            // 기존 픽셀 동일(하위호환). 실기기 튜닝 대상.
+            #define ES_LID_EXT_FEATHER 0.9  // shape 0 연장 페더 폭(u 단위, ≤1이면 far tip 완전 소멸)
+            float EsLidExtGate(float alongU, float shape)
+            {
+                float lidFade = 1.0 - smoothstep(1.0, 1.0 + ES_LID_EXT_FEATHER, alongU);
+                float otherCut = 1.0 - smoothstep(1.0, 1.02, alongU); // 그 외 모양: 눈꼬리에서 컷
+                return shape < 0.5 ? lidFade : otherCut;
+            }
+
             struct appdata
             {
                 float4 vertex : POSITION;
@@ -250,6 +262,7 @@ Shader "ARMakeup/Eyeshadow"
                         float localV = vxm / max(cutoff, 1e-4);
                         float shapeMask = EyeshadowShapeWeight(shapeB, localV, i.bandUV.x);
                         float amt = shapeMask * _EsLayerColor[b].a; // a = 밴드 강도
+                        amt *= EsLidExtGate(i.bandUV.x, shapeB); // 리드 전체 연장(눈꼬리 밖) 게이트
                         amt = TexEdge(TexCoverage(saturate(amt), esTexCoverage), esTexEdge); // 제형 커버·엣지
 
                         // 색·세로 그라데(§3.1) — 리드(uv.x=0)=스톱B 진한 색 → 위=스톱A.
@@ -278,6 +291,7 @@ Shader "ARMakeup/Eyeshadow"
                 float vx = saturate(i.uv.x); // 0 lash → 1 위(브로우 쪽)
                 float amt = EyeshadowShapeWeight(_EyeshadowShape, vx, i.bandUV.x)
                           * _EyeshadowIntensity;
+                amt *= EsLidExtGate(i.bandUV.x, _EyeshadowShape); // 리드 전체 연장(눈꼬리 밖) 게이트
 
                 // 디자이너 모양 마스크(§16) — 밴드-로컬 uv2로 존 스텐실을 샘플해 커버리지에
                 // 곱한다(디자이너 그라데/글리터 형태를 절차 밴드 위에 얹음). _HasDesign=0이면

@@ -76,12 +76,14 @@ namespace ARMakeup.Face
             new Ellipse(0.84f, 0.49f, 0.055f, 0.045f, 0.85f), // 관자 스윕 R
         };
 
-        // 넓은 면 보정 영역 (canonical UV, 블러셔 v≈0.38 기준 상대 배치 — 실기기 튜닝값).
-        // 하이라이터=가산(광채), 컨투어/섀딩=감산(그림자), 컨실러=밝힘(눈밑).
+        // 넓은 면 보정 영역 (canonical UV). 하이라이터=가산(광채), 컨투어/섀딩=감산(그림자).
+        // ★볼(C존)은 구운 블러셔 마스크 실측 애플(u 0.277/0.723, v 0.468 — blush.png 측정)을
+        // 기준으로 배치한다. 옛 좌표(0.305/0.42)는 미렌더 절차 BlushRegion(v0.38)에 상대 배치돼
+        // 애플보다 아래·안쪽(코옆 하안검)에 떠 잘못됐다. C존 = 애플 위·바깥(눈꼬리 아래) 광대뼈.
         static readonly Ellipse[] HighlightCheekRegion =
         {
-            new Ellipse(0.305f, 0.42f, 0.078f, 0.058f, 0.5f), // 광대뼈 위 L
-            new Ellipse(0.695f, 0.42f, 0.078f, 0.058f, 0.5f), // 광대뼈 위 R
+            new Ellipse(0.27f, 0.52f, 0.082f, 0.050f, 0.5f), // 광대뼈 C존 L (애플 위·바깥)
+            new Ellipse(0.73f, 0.52f, 0.082f, 0.050f, 0.5f), // 광대뼈 C존 R
         };
         static readonly Ellipse[] HighlightNoseBridgeRegion =
         {
@@ -103,8 +105,8 @@ namespace ARMakeup.Face
         // legacy 전체 마스크 + 디자이너 마스크 기본 게이트. 코끝을 포함해 5존의 합집합이다.
         static readonly Ellipse[] HighlightRegion =
         {
-            new Ellipse(0.305f, 0.42f, 0.078f, 0.058f, 0.5f),
-            new Ellipse(0.695f, 0.42f, 0.078f, 0.058f, 0.5f),
+            new Ellipse(0.27f, 0.52f, 0.082f, 0.050f, 0.5f),
+            new Ellipse(0.73f, 0.52f, 0.082f, 0.050f, 0.5f),
             new Ellipse(0.50f, 0.46f, 0.035f, 0.120f, 0.5f),
             new Ellipse(0.50f, 0.335f, 0.038f, 0.030f, 0.55f),
             new Ellipse(0.50f, 0.28f, 0.055f, 0.030f, 0.5f),

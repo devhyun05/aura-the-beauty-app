@@ -19,7 +19,7 @@ import {
   View,
 } from 'react-native';
 import ParamSlider from './ParamSlider';
-import { NEUTRAL_ACCENT } from '../theme';
+import { NEUTRAL_ACCENT, PANEL_INSET, SP } from '../theme';
 import { WARP_PRESETS, PART_PRESETS, WARP_SLIDERS } from '../composer/warpPresets';
 import type {
   WarpLane,
@@ -275,11 +275,11 @@ export default function FitSheet({
 const styles = StyleSheet.create({
   // 배경·마진·모서리는 상위 paramPanel(App)이 소유 — 본문은 패딩·gap만.
   sheet: {
-    paddingHorizontal: 12,
+    paddingHorizontal: PANEL_INSET,
     paddingTop: 0,
-    paddingBottom: 8,
+    paddingBottom: SP.sm,
     maxHeight: 420,
-    gap: 6,
+    gap: SP.sm,
   },
   header: {
     flexDirection: 'row',
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
   },
   cardGrid: {
     flexDirection: 'row',
-    gap: 8,
+    gap: SP.sm,
     alignItems: 'flex-start',
   },
   // 카드 = 5:6 썸네일 한 장(텍스트를 하단에 스크림 얹어 오버레이). 외곽 상자 없음.
@@ -411,8 +411,8 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     fontSize: 11,
     fontWeight: '700',
-    marginTop: 8,
-    marginBottom: 2,
+    marginTop: SP.sm,
+    marginBottom: SP.xs,
   },
   sliderScroll: {
     maxHeight: 240,

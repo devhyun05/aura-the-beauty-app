@@ -96,6 +96,7 @@ namespace ARMakeup.Bridge
         public string concealerColor = "#FADCC2";   // 컨실러(눈밑 밝힘)
         public float concealerIntensity = 0f;
         public int concealerFinish = 0;              // 컨실러 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머 (두 경로 공통)
+        public float blemishRemoval = 0f;            // 잡티 지우기(밀어내기) 0..1 — 넓은 이웃 대비 국소 이상치만 되밈 (0=현행 픽셀 동일)
         // ── 베이스 팩(#18) — 전부 0/""=기존 픽셀 동일 ──
         public string foundationColor = "#E8C4A8";  // 파운데이션 색(밝은 쿨~딥 웜)
         public float foundationIntensity = 0f;      // 커버리지(0=끔)
@@ -131,6 +132,14 @@ namespace ARMakeup.Bridge
         public float fndRefLumaDbg = 0.798322f;     // 기준 루마 분모(밝기). 낮을수록 밝음
         public float fndLumaGainDbg = 1f;           // shade 게인(밝기 여유)
         public float fndChromaDbg = 0.4f;           // 회색 혼합량(탁함). 낮을수록 선명
+        // ── 임시 디버그(이음새 세그 게이트 튜닝 — 값 확정 후 제거) — CameraFeed 전역 유니폼 조절.
+        //    파운데 seg 게이트 임계 4종+시각화 토글. 임계는 sentinel -1(미설정=셰이더 리터럴 폴백,
+        //    LO는 0도 유효값이라 음수 sentinel). RN이 안 건드리면 리터럴과 동일 → 현행 픽셀 동일. ──
+        public float segSeamDbg = 0f;    // 세그 시각화 토글 (0=off)
+        public float fndSegLoDbg = -1f;  // 이음새 전이대 하한 (미설정 -1 = 리터럴 폴백)
+        public float fndSegHiDbg = -1f;  // 이음새 전이대 상한
+        public float fndCoreLoDbg = -1f; // 오벌 코어 감쇠 시작
+        public float fndCoreHiDbg = -1f; // 오벌 코어 완전 제외
         public float powderIntensity = 0f;          // 파우더(유분광 억제, 세팅) — 파운데와 독립
         public string powderColor = "";             // 컬러 파우더 캐스트 ""=무색(트랜스루선트, 기존 출력)
         public int powderFinish = 0;                // 파우더 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머(펄)
@@ -313,6 +322,18 @@ namespace ARMakeup.Bridge
         public int aegyoShape = 0;           // 애교살 실루엣: 0=초승달(현행) 1=일자 2=중앙도톰 — LowerLidRenderer
         public int triangleZoneShape = 0;    // 삼각존 모양: 0=기본 1=좁게 2=넓게 — LowerLidRenderer
         public int doubleLidShape = 0;       // 쌍꺼풀 라인: 0=인라인(현행) 1=아웃라인 2=세미 — DoubleLidRenderer
+        // ── 모양 축 W3 피부 존 (FaceMakeup.shader 존 게이트, powderShape 선례) — 생략 0 = 현행 픽셀 동일 ──
+        public int toneShape = 0;        // 언더톤 존: 0=전체 1=T존 2=얼굴 중앙 — FaceMakeup(_Brightening 존 곱)
+        public int skinShape = 0;        // 피부결 존: 0=전체 1=T존 2=볼 제외 — FaceMakeup(_Smoothing 존 곱)
+        public int foundationShape = 0;  // 파운데 존: 0=전체 1=T존 집중 2=외곽 페더 — FaceMakeup 얼굴 메시(커버 존 곱)
+        // ── 모양 축 W4 립 실루엣/존 (Lip.shader, 링 메시 uv.y=중앙도·uv2.y=윗입술도) — 생략 0 = 현행 픽셀 동일 ──
+        public int lipBaseShape = 0;     // 베이스립: 0=전체 1=중앙 그라데 2=외곽 정리 — LipRenderer(메인 립 메시)
+        public int lipShape = 0;         // 메인립: 0=풀립 1=그라데립 2=꼬리 뾰족 — LipRenderer(메인 립 메시)
+        public int lipLinerShape = 0;    // 립라이너: 0=전체 링 1=윗입술만 2=입꼬리 집중 — LipRenderer(라이너 인스턴스)
+        public int lipGlossShape = 0;    // 립글로스: 0=전체 1=중앙 도트 2=아랫입술만 — LipRenderer(메인 립 메시)
+        // ── 모양 축 W6 치아·헤어 — 생략 0 = 현행 픽셀 동일 ──
+        public int teethShape = 0;       // 치아: 0=전체 1=앞니 6전치 집중(가로 중앙 가중) — TeethRenderer
+        public int hairShape = 0;        // 헤어: 0=전체 1=옴브레 2=끝만(v1 화면공간 세로 근사) — CameraFeed
     }
 
     /// <summary>

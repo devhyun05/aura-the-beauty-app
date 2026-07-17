@@ -936,6 +936,26 @@ namespace ARMakeup.Face
                     Add("aegyo" + side, aegyoVp);
                 else
                     Add("aegyo" + side, ToVp(AegyoCenterImg(lm, e)));
+
+                // 하안검 밴드 3부위 — 렌더러 실제 밴드점 우선, 비활성 시 라인 기준 v 오프셋 폴백.
+                var linerLowerVp = Vector2.zero;
+                if (lowerLidRenderer != null &&
+                    lowerLidRenderer.TryGetEyelinerLowerFitHandle(e, out linerLowerVp))
+                    Add("eyelinerLower" + side, linerLowerVp);
+                else
+                    Add("eyelinerLower" + side, ToVp(LowerBandImg(lm, e, 0.5f, 0.10f)));
+                var shadowLowerVp = Vector2.zero;
+                if (lowerLidRenderer != null &&
+                    lowerLidRenderer.TryGetEyeshadowLowerFitHandle(e, out shadowLowerVp))
+                    Add("eyeshadowLower" + side, shadowLowerVp);
+                else
+                    Add("eyeshadowLower" + side, ToVp(LowerBandImg(lm, e, 0.5f, 0.25f)));
+                var triZoneVp = Vector2.zero;
+                if (lowerLidRenderer != null &&
+                    lowerLidRenderer.TryGetTriangleZoneFitHandle(e, out triZoneVp))
+                    Add("triangleZone" + side, triZoneVp);
+                else
+                    Add("triangleZone" + side, ToVp(LowerBandImg(lm, e, 0.85f, 0.25f)));
                 var lids = UpperLids[e];
                 var np = lids.Length;
                 var lidMid = ImgPt(lm, lids[np / 2]);
@@ -968,6 +988,9 @@ namespace ARMakeup.Face
                 LipHandleVps(lm, out lipOuter, out lipLiner);
             Add("lip", lipOuter);
             Add("lipLiner", lipLiner);
+            // 립 베이스·글로스 오버라인 핸들 — 립 외곽과 같은 지점(신규 계산 없이 재사용).
+            Add("lipBase", lipOuter);
+            Add("lipGloss", lipOuter);
 
             // 데코 겹 — 오버레이 배치(캐노니컬 UV)를 그대로 투영. 겹마다 진짜 별개 핸들.
             var ovs = MakeupController.CurrentOverlayLayers;
@@ -1218,6 +1241,28 @@ namespace ARMakeup.Face
             var peak = dip + chord.magnitude * AegyoRenderBandFactor
                        * _aegyoHeightMult * AegyoHighlightPeakV;
             return (outer + inner) * 0.5f + normal * peak;
+        }
+
+        // 하안검 밴드 임의 (along,v) 점의 이미지 좌표 — 렌더러 캐시가 없을 때의 폴백.
+        // along: 0=눈앞머리 → 1=눈꼬리(LowerLidRenderer FitArc 규약), v: lash(0)→밴드하단(1).
+        // 밴드 폭 기준은 애교살과 공용(AegyoRenderBandFactor·_aegyoHeightMult).
+        Vector2 LowerBandImg(Vector3[] lm, int e, float along, float v)
+        {
+            var lids = LowerLids[e];
+            var np = lids.Length;
+            var outer = ImgPt(lm, lids[0]);       // 눈꼬리
+            var inner = ImgPt(lm, lids[np - 1]);  // 눈앞머리
+            var chord = inner - outer;
+            var chordDir = chord.normalized;
+            var brow = ImgPt(lm, EyeBrowLower[e][2]);
+            var lidMid = ImgPt(lm, lids[np / 2]);
+            var downRef = (lidMid - brow).normalized;
+            var normal = new Vector2(-chordDir.y, chordDir.x);
+            if (Vector2.Dot(normal, downRef) < 0f) normal = -normal;
+            var dip = Mathf.Max(0f, Vector2.Dot(lidMid - (outer + inner) * 0.5f, normal));
+            var basePt = Vector2.Lerp(inner, outer, along); // 눈앞머리 → 눈꼬리
+            var off = dip + chord.magnitude * AegyoRenderBandFactor * _aegyoHeightMult * v;
+            return basePt + normal * off;
         }
     }
 }

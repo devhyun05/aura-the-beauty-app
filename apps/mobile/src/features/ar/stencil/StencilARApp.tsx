@@ -79,6 +79,7 @@ import type { AssetKind, CatalogManifest } from './src/assets/assetCatalog';
 import ParamSlider from './src/components/ParamSlider';
 import ExtractDiagPanel from './src/components/ExtractDiagPanel';
 import FndColorDebugPanel from './src/components/FndColorDebugPanel';
+import SegSeamDebugPanel from './src/components/SegSeamDebugPanel';
 import ExtractSourceThumb from './src/components/ExtractSourceThumb';
 import Icon from './src/components/Icon';
 import BasicMode from './src/components/BasicMode';
@@ -184,9 +185,12 @@ import type { EditSnapshot } from './src/composer/history';
 import {
   ACCENT,
   ACCENT_LIGHT,
+  CONTROL_H,
   GOLD_CTA,
   NEUTRAL_ACCENT,
   PANEL_BG,
+  PANEL_INSET,
+  SP,
   accentAlpha,
 } from './src/theme';
 
@@ -202,6 +206,10 @@ const DEFAULT_CALIBRATION: CalibrationParams = {
 };
 
 // 튜토리얼 스텐실(#2) 기본값 — 가이드 레인 진입 시 지원하는 전체 부위를 보여준다.
+// 스텐실 기본값 — GuideMode의 첫 선택은 '전체'(selIdx=null=조감도)다. 그 선택과
+// 짝이 맞으려면 부위 boolean도 전부 켜져 있어야 한다(안 그러면 첫 진입 때 전체 카드가
+// 켜진 채로 립·눈썹만 뜨는 불일치). 룩에 없는 부위는 Unity 방출 단계에서 걸러지므로,
+// 여기서 전부 true여도 실제 표시는 available 부위로 좁혀진다.
 const DEFAULT_STENCIL: StencilParams = {
   opacity: 0.85,
   lips: true,
@@ -452,6 +460,21 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const fndChromaRef = useRef(0.4);
   const [fndLumaGain, setFndLumaGain] = useState(1); // luma 게인(밝기 여유) 0.8~1.5
   const fndLumaGainRef = useRef(1);
+  // ── 임시 디버그(이음새 세그 게이트 튜닝) — 귀·턱-목 이음새 파운데 공백의 원인 판별·값
+  //    확정용 dev 도구(FndColorDebugPanel 선례). CameraFeed 파운데 seg 게이트 임계 4종 +
+  //    세그 채널 시각화 토글을 실기기에서 눈으로 맞춘다. 기본값=현 셰이더 리터럴이라 안
+  //    건드리면 현재 픽셀과 동일. 확정값을 셰이더 리터럴로 굽고 나면 이 블록을 걷어낸다. ──
+  const [seamDebugOpen, setSeamDebugOpen] = useState(false);
+  const [segViz, setSegViz] = useState(false); // 세그 채널 시각화 오버레이 on/off
+  const segVizRef = useRef(false);
+  const [fndSegLo, setFndSegLo] = useState(0.12); // 이음새 전이대 하한 (FND_SEG_LO)
+  const fndSegLoRef = useRef(0.12);
+  const [fndSegHi, setFndSegHi] = useState(0.45); // 이음새 전이대 상한 (FND_SEG_HI)
+  const fndSegHiRef = useRef(0.45);
+  const [fndCoreLo, setFndCoreLo] = useState(0.4); // 오벌 코어 감쇠 시작 (FND_FACE_CORE_LO)
+  const fndCoreLoRef = useRef(0.4);
+  const [fndCoreHi, setFndCoreHi] = useState(0.75); // 오벌 코어 완전 제외 (FND_FACE_CORE_HI)
+  const fndCoreHiRef = useRef(0.75);
   // 추출에 쓴 원본 사진 URI(검증용) — 썸네일·확대 모달 표시. null=한 번도 추출 안 함.
   const [extractSourceUri, setExtractSourceUri] = useState<string | null>(null);
   const [opacity, setOpacityState] = useState(0.75); // 전역 메이크업 농도 슬라이더 — 기본 75%
@@ -704,6 +727,13 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       scaled.fndRefLumaDbg = fndRefLumaRef.current;
       scaled.fndChromaDbg = fndChromaRef.current;
       scaled.fndLumaGainDbg = fndLumaGainRef.current;
+      // 임시 디버그(이음새 세그 게이트) — 시각화 토글·임계 4종을 같은 관문에서 항상 주입.
+      // ref 기본값=현 셰이더 리터럴이라 안 건드리면 현재 픽셀과 동일. 확정 후 이 5줄 제거.
+      scaled.segSeamDbg = segVizRef.current ? 1 : 0;
+      scaled.fndSegLoDbg = fndSegLoRef.current;
+      scaled.fndSegHiDbg = fndSegHiRef.current;
+      scaled.fndCoreLoDbg = fndCoreLoRef.current;
+      scaled.fndCoreHiDbg = fndCoreHiRef.current;
       sendToUnity({ type: 'applyFilter', filter: scaled });
     },
     [sendToUnity],
@@ -760,6 +790,49 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     (v: number) => {
       fndLumaGainRef.current = v;
       setFndLumaGain(v);
+      sendScaled(paramsRef.current, opacityRef.current);
+    },
+    [sendScaled],
+  );
+
+  // 임시 디버그(이음새 세그 게이트) — 토글·슬라이더 변경 → ref·state 갱신 후 현재 룩을 즉시
+  // 재전송(sendScaled가 유니폼 주입). 확정값을 셰이더 리터럴로 굽고 나면 이 핸들러들을 걷어낸다.
+  const setSegVizDbg = useCallback(
+    (v: boolean) => {
+      segVizRef.current = v;
+      setSegViz(v);
+      sendScaled(paramsRef.current, opacityRef.current);
+    },
+    [sendScaled],
+  );
+  const setFndSegLoDbg = useCallback(
+    (v: number) => {
+      fndSegLoRef.current = v;
+      setFndSegLo(v);
+      sendScaled(paramsRef.current, opacityRef.current);
+    },
+    [sendScaled],
+  );
+  const setFndSegHiDbg = useCallback(
+    (v: number) => {
+      fndSegHiRef.current = v;
+      setFndSegHi(v);
+      sendScaled(paramsRef.current, opacityRef.current);
+    },
+    [sendScaled],
+  );
+  const setFndCoreLoDbg = useCallback(
+    (v: number) => {
+      fndCoreLoRef.current = v;
+      setFndCoreLo(v);
+      sendScaled(paramsRef.current, opacityRef.current);
+    },
+    [sendScaled],
+  );
+  const setFndCoreHiDbg = useCallback(
+    (v: number) => {
+      fndCoreHiRef.current = v;
+      setFndCoreHi(v);
       sendScaled(paramsRef.current, opacityRef.current);
     },
     [sendScaled],
@@ -2739,6 +2812,14 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                 파운데색 {fndDebugOpen ? 'ON' : 'off'}
               </Text>
             </TouchableOpacity>
+            {/* 임시 디버그(이음새 세그 게이트) — 걷어낼 때 이 버튼과 아래 패널·상태를 함께 제거 */}
+            <TouchableOpacity
+              style={[styles.debugBtn, seamDebugOpen && styles.debugBtnOn]}
+              onPress={() => setSeamDebugOpen(o => !o)}>
+              <Text style={styles.debugText}>
+                이음새 {seamDebugOpen ? 'ON' : 'off'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -2772,6 +2853,23 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               />
             )}
 
+            {/* 임시 디버그(이음새 세그 게이트) — 확정값을 셰이더에 굽고 나면 이 블록을 걷어낸다. */}
+            {seamDebugOpen && (
+              <SegSeamDebugPanel
+                segViz={segViz}
+                onSegVizChange={setSegVizDbg}
+                segLo={fndSegLo}
+                onSegLoChange={setFndSegLoDbg}
+                segHi={fndSegHi}
+                onSegHiChange={setFndSegHiDbg}
+                coreLo={fndCoreLo}
+                onCoreLoChange={setFndCoreLoDbg}
+                coreHi={fndCoreHi}
+                onCoreHiChange={setFndCoreHiDbg}
+                onClose={() => setSeamDebugOpen(false)}
+              />
+            )}
+
             <ExtractSourceThumb uri={extractSourceUri} topOffset={insets.top + 8} />
           </>
         )}
@@ -2799,49 +2897,14 @@ function FilterScreen({ onBack }: StencilARAppProps) {
             <Icon name="settings" size={19} />
             <Text style={styles.toolLabel}>설정</Text>
           </TouchableOpacity>
-          {/* 스튜디오(A18) — 저작·라이브러리 허브. 레일 배치는 잠정(진입점 후보 확정 전). */}
+          {/* 스튜디오(A18) — 저작·라이브러리 허브. 도구(룩 추출·향수·체형·헤어)는
+              여기 '도구' 섹션으로 이관(레일 버튼 폐지) — 진입점만 이동, 동작·상태 불변. */}
           <TouchableOpacity
             style={styles.toolBtn}
             onPress={() => setStudioOpen(true)}
           >
             <Icon name="folder" size={19} />
             <Text style={styles.toolLabel}>스튜디오</Text>
-          </TouchableOpacity>
-          {/* 룩 추출(#1) — 레퍼런스 사진에서 온디바이스로 색을 측정해 컴포저 초안으로. */}
-          <TouchableOpacity
-            style={styles.toolBtn}
-            onPress={extractLookFromPhoto}
-            testID="extract-look-btn"
-          >
-            <Icon name="image" size={19} />
-            <Text style={styles.toolLabel}>룩 추출</Text>
-          </TouchableOpacity>
-          {/* 향수 추천(#7) — 체향·환경 조건 → 계열·부향률·전개 예측. 순수 RN 계산 패널. */}
-          <TouchableOpacity
-            style={[styles.toolBtn, perfumeOpen && styles.toolBtnOn]}
-            onPress={togglePerfume}
-            testID="perfume-btn"
-          >
-            <Icon name="droplet" size={19} />
-            <Text style={styles.toolLabel}>향수</Text>
-          </TouchableOpacity>
-          {/* 체형 체크 — 7문항 체감 설문 → 실루엣·골격 진단+스타일링. 순수 RN 패널. */}
-          <TouchableOpacity
-            style={[styles.toolBtn, bodyOpen && styles.toolBtnOn]}
-            onPress={toggleBody}
-            testID="body-btn"
-          >
-            <Icon name="user" size={19} />
-            <Text style={styles.toolLabel}>체형</Text>
-          </TouchableOpacity>
-          {/* 헤어 추천 — 얼굴형·두상·모발 7문항 프로필 → 스타일 순위. 순수 RN 패널. */}
-          <TouchableOpacity
-            style={[styles.toolBtn, hairOpen && styles.toolBtnOn]}
-            onPress={toggleHair}
-            testID="hair-btn"
-          >
-            <Icon name="scissors" size={19} />
-            <Text style={styles.toolLabel}>헤어</Text>
           </TouchableOpacity>
           </View>
         )}
@@ -3306,6 +3369,15 @@ function FilterScreen({ onBack }: StencilARAppProps) {
           setFitFocus(null);
           if (!fitPanelOpenRef.current) toggleFitPanel();
         }}
+        onOpenTool={tool => {
+          // 도구 진입(레일에서 이관) — 허브를 닫고 해당 패널/플로우를 연다.
+          // 동작·상태 토글은 기존 그대로 재사용(진입점만 이동).
+          setStudioOpen(false);
+          if (tool === 'extract') extractLookFromPhoto();
+          else if (tool === 'perfume') togglePerfume();
+          else if (tool === 'body') toggleBody();
+          else if (tool === 'hair') toggleHair();
+        }}
         userProducts={userProducts}
         onChangeProducts={products => {
           userProductsRef.current = products;
@@ -3612,9 +3684,9 @@ const styles = StyleSheet.create({
   // 둘이 별도 View에 같은 배경으로 '한 덩어리처럼 보이게'만 했다(간격을 마진으로
   // 억지 조절). 이제 진짜 한 패널이라 레인↔본문 간격은 laneSeg paddingBottom 하나로.
   paramPanel: {
-    marginHorizontal: 12,
+    marginHorizontal: PANEL_INSET,
     marginTop: -3, // 헤더(undo/redo 줄)와 붙임
-    borderRadius: 16,
+    borderRadius: SP.lg,
     overflow: 'hidden',
     backgroundColor: PANEL_BG,
   },
@@ -3625,18 +3697,19 @@ const styles = StyleSheet.create({
   // 둥글게 + gap 0으로 붙여 하나의 라운드 사각형 상단이 되게. 선택 버튼만 시그니처색 틴트.
   // 레인 세그먼트 — 이제 paramPanel 안쪽 첫 줄(배경·모서리는 패널이 소유). 레인
   // 탭↔본문 간격은 paddingBottom 하나로 조절.
+  // 좌측 시작점을 본문 콘텐츠(패딩 PANEL_INSET)와 같은 선에 맞춘다(구 6 → 12).
   laneSeg: {
     flexDirection: 'row',
-    paddingHorizontal: 6,
-    paddingTop: 6,
-    paddingBottom: 5, // 레인 탭↔카테고리 탭 간격
-    gap: 3,
+    paddingHorizontal: PANEL_INSET,
+    paddingTop: SP.sm,
+    paddingBottom: SP.sm, // 레인 탭↔카테고리 탭 간격
+    gap: SP.xs,
   },
   // 반반(왼쪽/전체/오른쪽) 세그먼트와 동일 룩(사용자 요청): 선택 시 솔리드 배경
   // 채움·테두리 없음. 색만 모드별(메이크업 로즈/보정 골드/가이드 스카이).
   laneSegBtn: {
     flex: 1,
-    paddingVertical: 5,
+    height: CONTROL_H,
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3704,8 +3777,8 @@ const styles = StyleSheet.create({
   panelHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 12,
-    gap: 6,
+    marginHorizontal: PANEL_INSET, // 패널과 같은 좌측선
+    gap: SP.sm,
   },
   miniBtn: {
     width: 24,

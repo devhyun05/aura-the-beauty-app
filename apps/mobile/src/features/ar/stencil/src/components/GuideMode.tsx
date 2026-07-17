@@ -12,7 +12,7 @@ import type {StencilParams, SymmetryParams} from '../bridge/types';
 import {enableAllStencilRegions} from '../composer/stencilSelection';
 import {isolateStencilStep} from '../composer/stencilSteps';
 import type {StencilStep} from '../composer/stencilSteps';
-import {labelTextOn} from '../theme';
+import {CONTROL_H, PANEL_INSET, SP, labelTextOn} from '../theme';
 
 /**
  * 가이드 레인 본문 (#2 튜토리얼 스텐실) — 메이크업/보정과 동렬인 세 번째 레인.
@@ -179,21 +179,22 @@ export default function GuideMode({
 const styles = StyleSheet.create({
   // 배경·마진·모서리는 상위 paramPanel(App)이 소유 — 본문은 패딩·gap만.
   panel: {
-    paddingHorizontal: 12,
+    paddingHorizontal: PANEL_INSET,
     paddingTop: 0,
-    paddingBottom: 10,
-    gap: 10,
+    paddingBottom: SP.sm,
+    gap: SP.sm,
   },
   // 헤더 한 줄 — [호흡][점선][중심축][대칭쌍] 칩. 좁은 화면에선 줄바꿈 허용.
   headRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: SP.xs,
   },
   fxChip: {
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.25)',
@@ -211,7 +212,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   cardRow: {
-    gap: 8,
+    gap: SP.sm,
     paddingVertical: 2,
   },
   // 스텝 카드 — 메이크업 모드 룩 카드(BasicMode.card)와 동일 규격: 5:6 세로형.

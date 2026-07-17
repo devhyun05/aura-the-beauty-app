@@ -28,6 +28,9 @@ export const FIT_HANDLE_REGIONS: Record<string, RegionKey> = {
   eyelinerInner: 'eyelinerUpper',
   aegyo: 'aegyo',
   eyeshadow: 'eyeshadow',
+  eyeshadowLower: 'eyeshadowLower',
+  eyelinerLower: 'eyelinerLower',
+  triangleZone: 'triangleZone',
   doubleLid: 'doubleLid',
   mascara: 'mascara',
   lowerMascara: 'lowerMascara',
@@ -35,6 +38,8 @@ export const FIT_HANDLE_REGIONS: Record<string, RegionKey> = {
   browThickness: 'brow',
   lip: 'lip',
   lipLiner: 'lipLiner',
+  lipBase: 'lipBase',
+  lipGloss: 'lipGloss',
 };
 
 /** Strip Unity's L/R side suffix or a deco index without touching unsided names. */

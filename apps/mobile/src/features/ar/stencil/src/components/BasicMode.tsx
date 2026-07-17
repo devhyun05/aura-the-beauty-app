@@ -41,7 +41,14 @@ import {
   SLOT_ORDER,
 } from '../composer/lookTree';
 import type {LookLibrary, LookNode, SlotKey} from '../composer/lookTree';
-import {GOLD, NEUTRAL_ACCENT, compositeOverWhite, labelTextOn} from '../theme';
+import {
+  GOLD,
+  NEUTRAL_ACCENT,
+  PANEL_INSET,
+  SP,
+  compositeOverWhite,
+  labelTextOn,
+} from '../theme';
 
 // 카드 = 5:6 세로형 썸네일, 한 줄 가로 스크롤(캐러셀). 한 화면에 ~6장 보이게 폭 산정.
 const CARD_W = Math.floor((Dimensions.get('window').width - 48) / 6);
@@ -398,15 +405,15 @@ export default function BasicMode({
 const styles = StyleSheet.create({
   // 배경·마진·모서리는 상위 paramPanel(App)이 소유 — 본문은 패딩·gap만.
   panel: {
-    paddingHorizontal: 12,
+    paddingHorizontal: PANEL_INSET,
     paddingTop: 0,
-    paddingBottom: 8,
-    gap: 6,
+    paddingBottom: SP.sm,
+    gap: SP.sm,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SP.sm,
   },
   headerTitle: {
     flex: 1,
@@ -462,10 +469,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   // 중분류 탭 — 더 작은 밑줄 탭. 대분류와 위계 구분.
+  // 좌측 시작점을 대분류 탭(catRow)과 같은 선에 맞춘다(구 paddingLeft 2 제거).
   midRow: {
     gap: 12,
     alignItems: 'flex-end',
-    paddingLeft: 2,
   },
   midTab: {
     alignItems: 'center',
@@ -497,16 +504,16 @@ const styles = StyleSheet.create({
     height: CARD_H + 8, // 카드 한 줄 높이로 고정 — 세로 확장 막아 아래 농도 슬라이더 보장
     flexGrow: 0,
   },
-  // 카드↔농도 슬라이더 간격 축소(panel gap 6 상쇄).
+  // 카드↔농도 슬라이더 간격 축소(panel gap 상쇄).
   densityWrap: {
-    marginTop: -6,
+    marginTop: -SP.sm,
   },
   cardRow: {
     paddingVertical: 2,
   },
   cardGrid: {
     flexDirection: 'row',
-    gap: 8,
+    gap: SP.sm,
     alignItems: 'flex-start',
   },
   // 카드 = 5:6 썸네일 한 장(텍스트를 하단에 스크림 얹어 오버레이). 외곽 상자 없음.

@@ -116,6 +116,10 @@ export interface FilterParams {
   /** 컨실러 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력). 두 경로 공통
    *  (FaceMakeup 붉은기 자동 + LowerLid 눈밑존) */
   concealerFinish?: number;
+  /** 잡티 지우기(밀어내기) 0..1 (0=끔=현행 픽셀 동일) — 색을 얹지 않고 넓은 이웃 평균 대비
+   *  국소 어둡/붉은 이상치만 이웃 색으로 되민다(FaceMakeup 피부 경로, 스무딩 선례). 특징부
+   *  (눈·눈썹·콧구멍·헤어라인)는 밴드패스 상한으로 보호. 생략 시 0 */
+  blemishRemoval?: number;
   /** 애교살(하안검 밴드): 하이라이트+섀도 2줄 한 강도 0..1 (0=끔). 생략 시 0 */
   aegyoIntensity?: number;
   /** 임포트 애교살 그림(하안검 밴드 데칼) 강도. 텍스처는 setAegyoStyle로 임포트 */
@@ -363,6 +367,28 @@ export interface FilterParams {
   triangleZoneShape?: number;
   /** 쌍꺼풀 라인: 0=인라인(현행) 1=아웃라인 2=세미. DoubleLid.shader 크리스 라인 프로파일 분기. 생략 0 */
   doubleLidShape?: number;
+  /** ── 모양 축 W3 피부 존 (FaceMakeup 존 게이트, powderShape 선례) — 생략 0 = 현행 픽셀 동일 ── */
+  /** 언더톤 적용 존: 0=전체 1=T존 2=얼굴 중앙. FaceMakeup _ToneShape(_Brightening 존 곱). 생략 0 */
+  toneShape?: number;
+  /** 피부결 존: 0=전체 1=T존 2=볼 제외. FaceMakeup _SkinShape(_Smoothing 존 곱). 생략 0 */
+  skinShape?: number;
+  /** 파운데 존: 0=전체 1=T존 집중 2=외곽 페더 강화. FaceMakeup _FoundationShape(얼굴 메시 커버 존 곱). 생략 0 */
+  foundationShape?: number;
+  /** ── 모양 축 W4 립 실루엣/존 (Lip.shader, generate-masks 무재베이크) — 생략 0 = 현행 픽셀 동일 ── */
+  /** 베이스립 실루엣: 0=전체 1=중앙 그라데 2=외곽 정리(경계 안쪽). 핏 lipBaseOverline(연속)과 별개 이산. 생략 0 */
+  lipBaseShape?: number;
+  /** 메인립 실루엣: 0=풀립 1=그라데립(중앙 집중) 2=꼬리 뾰족(입꼬리 강조). 색축 lipGradient(반경 색스톱)와 직교. 생략 0 */
+  lipShape?: number;
+  /** 립라이너 구간: 0=전체 링 1=윗입술만 2=입꼬리 집중. Lip.shader _LipLinerShape(라이너 인스턴스). 생략 0 */
+  lipLinerShape?: number;
+  /** 립글로스 존: 0=전체 1=중앙 도트(쥬시) 2=아랫입술만. Lip.shader _LipGlossShape(립 메시). 생략 0 */
+  lipGlossShape?: number;
+  /** ── 모양 축 W6 치아·헤어 — 생략 0 = 현행 픽셀 동일 ── */
+  /** 치아 존: 0=전체 1=앞니 6전치 집중(가로 중앙 가중). TeethWhiten _TeethShape. 생략 0 */
+  teethShape?: number;
+  /** 헤어 존: 0=전체 1=옴브레(뿌리→끝) 2=끝만. CameraFeed _HairShape. 세그 단일채널이라 v1은
+   *  화면공간 세로 그라데 근사(뿌리/끝 매핑은 포즈·flipY 의존, 실기기 튜닝 대상). 생략 0 */
+  hairShape?: number;
   /** ── 디자이너 마스크 임포트(모양 축, §16) 세션 상태 — 1=이번 세션 커스텀 존 마스크
    *  적용됨. UI 상태 마커일 뿐이라 Unity FilterParams엔 없다(JsonUtility가 무시). 마스크
    *  픽셀 스왑은 별도 setRegionMask 브리지로 처리하고, 파일 경로는 저장 스냅샷에 안 담긴다
@@ -420,6 +446,20 @@ export interface FilterParams {
   fndLumaGainDbg?: number;
   /** 회색 혼합량(탁함, 0.0~0.5, 기본 0.4). 낮을수록 선명 */
   fndChromaDbg?: number;
+  /** ── 임시 디버그(이음새 세그 게이트 튜닝 — 값 확정 후 제거) — CameraFeed 전역 유니폼.
+   *  귀·턱-목 이음새 파운데 공백 원인 판별용. 파운데 seg 게이트 임계 4종+시각화 토글.
+   *  임계 미설정(-1)=셰이더 리터럴 폴백(LO는 0도 유효값이라 음수 sentinel). App이 안
+   *  건드리면 리터럴과 동일 → 현행 픽셀 동일. 확정값을 셰이더 리터럴로 굽고 나면 제거. ── */
+  /** 세그 시각화 토글 (0=off, 1=on). face-skin=빨강·게이트 통과=초록·body-skin=파랑 오버레이 */
+  segSeamDbg?: number;
+  /** 이음새 전이대 하한(0..1, 기본 0.12). 미설정 = 셰이더 리터럴 FND_SEG_LO */
+  fndSegLoDbg?: number;
+  /** 이음새 전이대 상한(0..1, 기본 0.45). 미설정 = 셰이더 리터럴 FND_SEG_HI */
+  fndSegHiDbg?: number;
+  /** 오벌 코어 감쇠 시작(0..1, 기본 0.40). 미설정 = 셰이더 리터럴 FND_FACE_CORE_LO */
+  fndCoreLoDbg?: number;
+  /** 오벌 코어 완전 제외(0..1, 기본 0.75). 미설정 = 셰이더 리터럴 FND_FACE_CORE_HI */
+  fndCoreHiDbg?: number;
   /** 파운데이션 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0 */
   foundationFinish?: number;
   /** 파우더(유분광 억제, 세팅) 0..1 (0=끔). 파운데이션과 독립 */

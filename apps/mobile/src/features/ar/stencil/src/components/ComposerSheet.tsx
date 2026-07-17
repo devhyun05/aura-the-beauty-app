@@ -153,8 +153,11 @@ import {
   ACCENT,
   ACCENT_LIGHT,
   ACCENT_PALE,
+  CONTROL_H,
   GOLD_CTA,
   GOLD_LIGHT,
+  PANEL_INSET,
+  SP,
   TEXT_HINT,
   accentAlpha,
 } from '../theme';
@@ -2420,16 +2423,16 @@ function LensEditor({
 const styles = StyleSheet.create({
   // 배경·마진·모서리는 상위 paramPanel(App)이 소유 — 본문은 패딩만.
   sheet: {
-    paddingHorizontal: 12,
+    paddingHorizontal: PANEL_INSET,
     paddingTop: 0,
-    paddingBottom: 12,
+    paddingBottom: SP.md,
     maxHeight: 460,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
+    gap: SP.sm,
+    marginBottom: SP.sm,
   },
   headerTitle: {
     flex: 1,
@@ -2438,8 +2441,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   headerBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
@@ -2672,9 +2677,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   swapPanel: {
-    marginLeft: 14,
-    marginBottom: 4,
-    padding: 8,
+    marginLeft: SP.md,
+    marginBottom: SP.xs,
+    padding: SP.sm,
     borderRadius: 10,
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -2689,11 +2694,12 @@ const styles = StyleSheet.create({
   swapChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 5,
+    gap: SP.xs,
   },
   swapChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.1)',
     maxWidth: 150,
@@ -2745,8 +2751,8 @@ const styles = StyleSheet.create({
   identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
+    gap: SP.xs,
+    marginBottom: SP.sm,
   },
   identityLabel: {color: 'rgba(255,255,255,0.45)', fontSize: 10, width: 26},
   // 제품 스트립 구분 — 적합 제품 ┊ 전체(다른 부위 제품 = 멀티유즈 후보).
@@ -2757,8 +2763,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   identityChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
@@ -2770,40 +2777,41 @@ const styles = StyleSheet.create({
   identityChipText: {color: 'rgba(255,255,255,0.6)', fontSize: 11},
   identityChipTextOn: {color: GOLD, fontWeight: '600'},
   axisBox: {
-    marginTop: 8,
+    marginTop: SP.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.2)',
-    paddingTop: 8,
+    paddingTop: SP.md,
   },
   axisTabs: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 6,
+    gap: SP.xs,
+    marginBottom: SP.sm,
   },
   axisTab: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   // 2단(§5) — 상위 그룹 탭 아래 축 섹션. 라벨(축 이름) + 컨트롤. 여러 축이 한 그룹에.
   axisSection: {
-    marginTop: 4,
+    marginTop: SP.sm,
   },
   axisSectionLabel: {
     color: 'rgba(255,255,255,0.42)',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 2,
+    marginBottom: SP.xs,
   },
   // 축 안 group 소제목 — 축 라벨보다 조용하게(무채색 힌트톤). 위 여백으로 묶음 경계만.
   axisGroupLabel: {
     color: TEXT_HINT,
     fontSize: 11,
     fontWeight: '600',
-    marginTop: 8,
-    marginBottom: 2,
+    marginTop: SP.sm,
+    marginBottom: SP.xs,
   },
   axisTabOn: {
     backgroundColor: accentAlpha(0.35),
@@ -2828,12 +2836,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontSize: 11,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: SP.xs,
   },
   swatchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: SP.sm,
   },
   wheelBtn: {
     padding: 2,
@@ -2856,19 +2864,21 @@ const styles = StyleSheet.create({
   },
   segRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginVertical: 6,
+    flexWrap: 'wrap',
+    gap: SP.xs,
+    marginVertical: SP.sm,
   },
   // 마감 축 — enum 버튼 + 커스텀 제형 칩(◈)이 한 줄에 섞여 줄바꿈된다.
   finishRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginVertical: 6,
+    gap: SP.xs,
+    marginVertical: SP.sm,
   },
   finishChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: accentAlpha(0.14),
     borderWidth: StyleSheet.hairlineWidth,
@@ -2890,8 +2900,9 @@ const styles = StyleSheet.create({
   // 세그 버튼 — 제품 탭 칩(identityChip)과 동일 톤으로 통일(사용자 요청):
   // 아웃라인 필 + 선택=골드 틴트. 모양·마감·렌즈 블렌드 등 enum 줄 공용.
   segBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
@@ -2912,12 +2923,13 @@ const styles = StyleSheet.create({
   spotGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginVertical: 6,
+    gap: SP.xs,
+    marginVertical: SP.sm,
   },
   spotChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: 'rgba(201,161,94,0.14)',
     borderWidth: StyleSheet.hairlineWidth,
@@ -2962,12 +2974,13 @@ const styles = StyleSheet.create({
   nudgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginVertical: 6,
+    gap: SP.xs,
+    marginVertical: SP.sm,
   },
   nudgeBtn: {
     width: 36,
-    paddingVertical: 6,
+    height: CONTROL_H,
+    justifyContent: 'center',
     borderRadius: 10,
     alignItems: 'center',
     backgroundColor: 'rgba(201,161,94,0.18)',
@@ -3118,9 +3131,9 @@ const styles = StyleSheet.create({
   },
   // 멀티유즈(Phase 2) — 대상 부위 픽커 (잎 아래 로즈 점선 패널)
   multiUsePanel: {
-    marginLeft: 14,
-    marginBottom: 4,
-    padding: 8,
+    marginLeft: SP.md,
+    marginBottom: SP.xs,
+    padding: SP.sm,
     borderRadius: 10,
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -3133,8 +3146,9 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   multiUseChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: accentAlpha(0.16),
     borderWidth: StyleSheet.hairlineWidth,

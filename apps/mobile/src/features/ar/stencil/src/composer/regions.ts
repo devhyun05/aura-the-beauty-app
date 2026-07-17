@@ -320,6 +320,68 @@ export const DOUBLE_LID_SHAPES = [
   { value: 2, label: '세미' },
 ];
 
+// ── 모양 축 W3 피부 존 (FaceMakeup.shader 존 게이트, powderShape 선례) — value 0 = 현행 픽셀 동일 ──
+// 언더톤 적용 존 — _ToneShape로 _Brightening(톤업+캐스트)을 존만큼 곱한다.
+export const TONE_ZONE_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: 'T존' },
+  { value: 2, label: '얼굴 중앙' }, // 방사 중앙 집중(코 주변)
+];
+// 피부결 존 — _SkinShape로 _Smoothing을 존만큼 곱한다. 파우더 캐노니컬 존 어휘 재사용.
+export const SKIN_ZONE_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: 'T존' },
+  { value: 2, label: '볼 제외' },
+];
+// 파운데 존 — _FoundationShape로 커버(fCov·fChroma)를 존만큼 곱한다. T존 집중=중앙 세로 스트립,
+// 외곽 페더=방사 외곽 감쇠(경계 자연 페이드).
+export const FOUNDATION_ZONE_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: 'T존 집중' },
+  { value: 2, label: '외곽 페더' },
+];
+
+// ── 모양 축 W4 립 (Lip.shader 존/실루엣, 링 메시 uv.y=중앙도·uv2.y=윗입술도) — value 0 = 현행 픽셀 동일 ──
+// 베이스립 실루엣 — 핏 lipBaseOverline(연속 오프셋)과 별개인 이산 존. 중앙 그라데=중앙 집중,
+// 외곽 정리=반경 외곽(입술선) 안쪽으로 정리.
+export const LIP_BASE_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: '중앙 그라데' },
+  { value: 2, label: '외곽 정리' },
+];
+// 메인립 실루엣 — 색축 lipGradient(반경 색스톱 혼합)와 직교한 알파 실루엣. 그라데립=중앙→코너
+// 알파 페이드, 꼬리 뾰족=코너 강조.
+export const LIP_SHAPES = [
+  { value: 0, label: '풀립' },
+  { value: 1, label: '그라데립' },
+  { value: 2, label: '꼬리 뾰족' },
+];
+// 립라이너 구간 — 라이너 인스턴스(_LipLinerShape). 윗입술만=upperness, 입꼬리 집중=코너.
+export const LIP_LINER_SHAPES = [
+  { value: 0, label: '전체 링' },
+  { value: 1, label: '윗입술만' },
+  { value: 2, label: '입꼬리 집중' },
+];
+// 립글로스 존 — 립 메시(_LipGlossShape). 중앙 도트=중앙 집중(쥬시), 아랫입술만=lowerness.
+export const LIP_GLOSS_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: '중앙 도트' },
+  { value: 2, label: '아랫입술만' },
+];
+
+// ── 모양 축 W6 치아·헤어 — value 0 = 현행 픽셀 동일 ──
+// 치아 존 — TeethWhiten 스트립 uv.y(가로 코너→코너) 중앙 가중.
+export const TEETH_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: '앞니 집중' },
+];
+// 헤어 존 — CameraFeed hair 세그. 세그 단일채널이라 v1은 화면공간 세로 그라데 근사(옴브레·끝만).
+export const HAIR_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: '옴브레' },
+  { value: 2, label: '끝만' },
+];
+
 // 파운데이션 마감 — 셰이더 분기값과 1:1 (0=새틴 기본, 1=매트, 2=듀이). 시머 없음.
 export const FOUNDATION_FINISHES = [
   { value: 0, label: '새틴' },
@@ -735,6 +797,10 @@ export const REGION_GROUPS: RegionGroup[] = [
         onKeys: ['skinBrightening'],
         defaults: { skinBrightening: 0.4 },
         axes: {
+          // 존(W3) — 전체 / T존 / 얼굴 중앙 (FaceMakeup _ToneShape가 톤 적용 존 곱)
+          shape: [
+            { type: 'segments', key: 'toneShape', options: TONE_ZONE_SHAPES },
+          ],
           texture: [
             { type: 'segments', key: 'toneTexture', options: TONE_TEXTURES },
           ],
@@ -752,6 +818,10 @@ export const REGION_GROUPS: RegionGroup[] = [
         onKeys: ['skinSmoothing', 'skinSmoothingExtended'],
         defaults: { skinSmoothing: 0.5 },
         axes: {
+          // 존(W3) — 전체 / T존 / 볼 제외 (FaceMakeup _SkinShape가 결 보정 존 곱)
+          shape: [
+            { type: 'segments', key: 'skinShape', options: SKIN_ZONE_SHAPES },
+          ],
           // 피부결은 스무딩 프리미티브(마스크·색소 없음)라 셰이더가 grain 축만 소비한다.
           // GENERIC(크림/파우더/리퀴드/젤/펜슬)를 두면 리퀴드·젤(엣지·커버 시드)이 렌더에
           // 반영 안 돼 '가짜 컨트롤'이 되므로, grain만 갖는 TONE(매끈/파우더리)로 정정
@@ -778,6 +848,10 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { foundationIntensity: 0.4, matteGrain: 0, foundationTexture: 1 },
         note: '세그 face-skin 채널로 이마·목까지 — 세그 폴백 시 얼굴 메시만',
         axes: {
+          // 존(W3) — 전체 / T존 집중 / 외곽 페더 (FaceMakeup _FoundationShape, 얼굴 메시 커버 존 곱)
+          shape: [
+            { type: 'segments', key: 'foundationShape', options: FOUNDATION_ZONE_SHAPES },
+          ],
           texture: [
             { type: 'segments', key: 'foundationTexture', options: FOUNDATION_TEXTURES },
           ],
@@ -818,6 +892,9 @@ export const REGION_GROUPS: RegionGroup[] = [
           ],
           opacity: [
             { type: 'slider', label: '컨실러', key: 'concealerIntensity' },
+            // 잡티 지우기(밀어내기) — 색을 얹지 않고 국소 이상치만 이웃 색으로 되민다
+            // (FaceMakeup 피부 경로, 스무딩 선례). 임계·반경은 셰이더 v1 상수, 슬라이더는 강도만.
+            { type: 'slider', label: '잡티 지우기', key: 'blemishRemoval' },
           ],
         },
       },
@@ -1771,6 +1848,10 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { lipBaseIntensity: 0.5 },
         note: '본래 입술색을 누드로 정리 — 발색 준비 (색과 독립으로 켜짐)',
         axes: {
+          // 실루엣(W4) — 전체 / 중앙 그라데 / 외곽 정리. 핏 오버립(연속 오프셋)과 별개 이산.
+          shape: [
+            { type: 'segments', key: 'lipBaseShape', options: LIP_BASE_SHAPES },
+          ],
           texture: [
             { type: 'segments', key: 'lipBaseTexture', options: GENERIC_TEXTURES },
           ],
@@ -1813,6 +1894,11 @@ export const REGION_GROUPS: RegionGroup[] = [
           lipParticleConfetti: 0,
         },
         axes: {
+          // 실루엣(W4) — 풀립 / 그라데립(중앙 집중) / 꼬리 뾰족(입꼬리 강조). 색축
+          // 그라데이션(lipGradient, 반경 색스톱 혼합)과 직교한 알파 실루엣.
+          shape: [
+            { type: 'segments', key: 'lipShape', options: LIP_SHAPES },
+          ],
           texture: [
             { type: 'segments', key: 'lipTexture', options: LIP_TEXTURES },
             {
@@ -1886,6 +1972,10 @@ export const REGION_GROUPS: RegionGroup[] = [
         },
         note: '외곽 링(매트) — 립보다 한 톤 딥하게 윤곽',
         axes: {
+          // 구간(W4) — 전체 링 / 윗입술만 / 입꼬리 집중 (라이너 인스턴스 _LipLinerShape)
+          shape: [
+            { type: 'segments', key: 'lipLinerShape', options: LIP_LINER_SHAPES },
+          ],
           texture: [
             { type: 'segments', key: 'lipLinerTexture', options: GENERIC_TEXTURES },
           ],
@@ -1920,6 +2010,10 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { lipGlossIntensity: 0.5 },
         note: '독립 광 톱코트 — 매트 위에도 얹힘 (색은 기본 투명)',
         axes: {
+          // 존(W4) — 전체 / 중앙 도트(쥬시) / 아랫입술만 (립 메시 _LipGlossShape)
+          shape: [
+            { type: 'segments', key: 'lipGlossShape', options: LIP_GLOSS_SHAPES },
+          ],
           texture: [
             { type: 'segments', key: 'lipGlossTexture', options: GENERIC_TEXTURES },
           ],
@@ -1950,6 +2044,10 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { teethWhitenIntensity: 0.5 },
         note: '입을 벌려야 보여요 — 밝은 치아 픽셀만 미백',
         axes: {
+          // 존(W6) — 전체 / 앞니 집중 (TeethWhiten 스트립 가로 중앙 가중)
+          shape: [
+            { type: 'segments', key: 'teethShape', options: TEETH_SHAPES },
+          ],
           // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이=글로시 스마일). 0=새틴=기존 출력(하위호환).
           finish: [
             { type: 'segments', key: 'teethFinish', options: FOUNDATION_FINISHES },
@@ -1974,6 +2072,10 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { hairTintIntensity: 0.5 },
         note: '세그멘테이션 모델 필요 — 없으면 표시되지 않아요',
         axes: {
+          // 존(W6) — 전체 / 옴브레 / 끝만 (헤어 세그 단일채널이라 v1은 화면공간 세로 근사)
+          shape: [
+            { type: 'segments', key: 'hairShape', options: HAIR_SHAPES },
+          ],
           color: [{ type: 'swatches', key: 'hairTintColor', palette: HAIR_COLORS }],
           finish: [
             { type: 'segments', key: 'hairFinish', options: FOUNDATION_FINISHES },

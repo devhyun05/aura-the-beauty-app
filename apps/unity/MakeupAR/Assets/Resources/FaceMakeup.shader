@@ -87,6 +87,9 @@ Shader "ARMakeup/FaceMakeup"
         _ConcealerFinish ("Concealer Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
         // 부분 커버 모양(#19b): 0=눈밑 존(밴드로 이관, 여기선 무효) 1=붉은기 자동
         _ConcealerShape ("Concealer Shape (0 undereye 1 redness)", Float) = 0
+        // 잡티 지우기(밀어내기) — outlier 억제. 넓은 이웃 대비 국소 어둡/붉은 이상치만
+        // 이웃 색으로 되민다(색을 얹지 않음). 0=현행 픽셀 바이트 동일(하위호환).
+        _BlemishRemoval ("Blemish Removal (push toward neighborhood)", Range(0, 1)) = 0
         // 베이스 팩(#18) — 파운데이션(루마 보존 커버+커버리지 비례 chroma 평탄화),
         // 파우더(유분광 억제), 톤 보정색(브라이트닝 캐스트), 프라이머 윤광(스펙 증폭).
         // 전부 0/흰색이면 기존 픽셀과 동일.
@@ -95,6 +98,10 @@ Shader "ARMakeup/FaceMakeup"
         _FoundationFinish ("Foundation Finish (0 satin 1 matte 2 dewy)", Float) = 0
         // 제형 텍스처(배치 A ①) — 커버 램프(게인·chroma·커버) 분기. 0=리퀴드(현행).
         _FoundationTexture ("Foundation Texture (0 liquid 1 cushion 2 skintint)", Float) = 0
+        // 모양 축 W3 피부 존 — 0=전체(현행). 존만큼 곱으로 게이트(powderShape 선례).
+        _ToneShape ("Tone Zone (0 all 1 tzone 2 center)", Float) = 0
+        _SkinShape ("Skin Zone (0 all 1 tzone 2 no-cheek)", Float) = 0
+        _FoundationShape ("Foundation Zone (0 all 1 tzone 2 outer-feather)", Float) = 0
         _PowderIntensity ("Powder (mattify)", Range(0, 1)) = 0
         // 파우더 존(#19b): 0=전체 1=T존(이마·콧등) 2=볼 제외
         _PowderShape ("Powder Zone (0 all 1 tzone 2 no-cheek)", Float) = 0
@@ -245,21 +252,40 @@ Shader "ARMakeup/FaceMakeup"
             float _ConcealerIntensity;
             float _ConcealerFinish; // 0=새틴=기존 출력(하위호환) 1 매트 2 글로시 3 시머
             float _ConcealerShape; // 0=눈밑 존(밴드로 이관, 무효) 1=붉은기 자동
+            float _BlemishRemoval; // 잡티 지우기(밀어내기) 강도 — 0=현행 픽셀 동일
             float _PowderShape;    // 0=전체 1=T존 2=볼 제외
             // 붉은기 자동 게이트(#19b) — 치아 미백 redness 게이트의 역방향(붉은 픽셀 선택).
             // R−max(G,B)가 이 구간을 넘으면 커버(홍조·트러블·콧볼). 실기기 튜닝 대상.
             #define CC_RED_LO 0.05  // 실기기 튜닝 대상
             #define CC_RED_HI 0.16  // 실기기 튜닝 대상
+            // 잡티 지우기(밀어내기) 상수 — 넓은 이웃 평균 대비 이상도 판정·밴드패스. 전부
+            // 실기기 튜닝 대상(v1). 반경(BR_RADIUS)은 잡티(수 px)를 넘겨 이웃을 피부로 채우고,
+            // 밴드패스 상한(BR_HI)은 극단 이상치(눈·눈썹·콧구멍·헤어라인=특징부)를 제외해 보호.
+            #define BR_RADIUS 6.0   // 이웃 링 반경(텍셀 배수) — 잡티 지름보다 크게
+            #define BR_LUMA_W 1.0   // 루마 결손 가중(이웃보다 어두움)
+            #define BR_RED_W  1.2   // 붉은기 초과 가중(이웃보다 붉음)
+            #define BR_LO     0.045 // 발동 임계(이 미만은 정상 피부결)
+            #define BR_HI     0.22  // 밴드패스 상한(이 초과는 특징부 — 보호)
+            #define BR_FEATHER 0.05 // 경계 페더(헤일로 방지)
             // 파우더 존 마스크 경계(캐노니컬 얼굴 UV, x 중심 0.5) — 실기기 튜닝 대상.
             #define PWD_TZONE_LO 0.10  // T존 중앙 스트립 반폭 시작
             #define PWD_TZONE_HI 0.24  // T존 페이드 끝
             #define PWD_CHEEK_LO 0.14  // 볼 제외: 볼로 판정 시작하는 중심 거리
             #define PWD_CHEEK_HI 0.30  // 볼 제외: 완전 제외 거리
+            // 모양 축 W3 존 경계 — 얼굴 중앙(방사, |uv−0.5|)·파운데 외곽 페더(방사). 실기기 튜닝 대상.
+            #define FACE_CENTER_LO 0.16  // 얼굴 중앙 존: 방사 거리 이하 = 100% 적용
+            #define FACE_CENTER_HI 0.40  // 방사 이 거리 이상 = 완전 제외
+            #define FND_FEATHER_LO 0.28  // 파운데 외곽 페더: 방사 이 거리부터 감쇠 시작
+            #define FND_FEATHER_HI 0.46  // 방사 이 거리 이상 = 완전 페더(0)
             // 베이스 팩(#18)
             fixed4 _FoundationColor;
             float _FoundationIntensity;
             float _FoundationFinish;
             float _FoundationTexture; // 제형 텍스처(①) 0=리퀴드 1=쿠션 2=스킨틴트
+            // 모양 축 W3 피부 존 — 0=전체(현행 픽셀 동일). 존만큼 곱 게이트.
+            float _ToneShape;        // 0=전체 1=T존 2=얼굴 중앙
+            float _SkinShape;        // 0=전체 1=T존 2=볼 제외
+            float _FoundationShape;  // 0=전체 1=T존 집중 2=외곽 페더 강화
             float _PowderIntensity;
             fixed4 _PowderColor;   // 흰색=무색(트랜스루선트) — 컬러 파우더 캐스트
             float _PowderFinish;   // 0 새틴=기존 1 매트 2 글로시 3 시머(펄 파우더)
@@ -381,6 +407,26 @@ Shader "ARMakeup/FaceMakeup"
                 return sum / weightSum;
             }
 
+            // 잡티 지우기용 넓은 이웃 링(8탭, 반경 BR_RADIUS) — 스무딩과 달리 엣지 보존
+            // 없는 평탄 평균이라 국소 잡티가 이웃 평균에서 희석돼 이상치로 드러난다.
+            static const float2 kBlemishTaps[8] =
+            {
+                float2( 1.0,  0.0), float2(-1.0,  0.0),
+                float2( 0.0,  1.0), float2( 0.0, -1.0),
+                float2( 0.7,  0.7), float2(-0.7,  0.7),
+                float2( 0.7, -0.7), float2(-0.7, -0.7),
+            };
+
+            fixed3 WideSkinAvg(float2 screenUV)
+            {
+                float2 texel = _CameraFeed_TexelSize.xy * BR_RADIUS;
+                float3 sum = 0.0;
+                [unroll]
+                for (int i = 0; i < 8; i++)
+                    sum += tex2D(_CameraFeed, screenUV + kBlemishTaps[i] * texel).rgb;
+                return sum / 8.0;
+            }
+
             // 마감(finish)은 Finish.cginc의 ApplyFinish 공용 함수로 이관(립·아이섀도·블러셔
             // 공유). sparkleUV는 얼굴 UV라 시머가 볼에 접착.
 
@@ -461,27 +507,60 @@ Shader "ARMakeup/FaceMakeup"
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
                 fixed3 original = tex2D(_CameraFeed, screenUV).rgb;
 
-                fixed3 smoothed = SmoothSkin(screenUV, original);
-                fixed3 col = lerp(original, smoothed, _Smoothing);
+                // 모양 축 W3 존 — 피부결/언더톤 적용 존을 기존 캐노니컬 UV 존 어휘(파우더
+                // 선례)로 곱 게이트한다. 존 0이면 zone=1 → 강도 무변 → 바이트 동일(하위호환).
+                //   skinShape: 1=T존(중앙 세로 스트립) 2=볼 제외(중간 높이 양볼 배제)
+                //   toneShape: 1=T존 2=얼굴 중앙(코 주변 방사 집중)
+                float faceDx = abs(i.uv.x - 0.5);
+                float skinZone = 1.0;
+                if (_SkinShape > 1.5)      skinZone = 1.0 - smoothstep(PWD_CHEEK_LO, PWD_CHEEK_HI, faceDx);
+                else if (_SkinShape > 0.5) skinZone = 1.0 - smoothstep(PWD_TZONE_LO, PWD_TZONE_HI, faceDx);
+                float smoothAmt = _Smoothing * skinZone;
+                float toneZone = 1.0;
+                if (_ToneShape > 1.5)      toneZone = 1.0 - smoothstep(FACE_CENTER_LO, FACE_CENTER_HI, length(i.uv - 0.5));
+                else if (_ToneShape > 0.5) toneZone = 1.0 - smoothstep(PWD_TZONE_LO, PWD_TZONE_HI, faceDx);
+                float toneAmt = _Brightening * toneZone;
 
-                // 제형(피부결) — TONE 템플릿 grain(매끈/파우더리). 결 보정(_Smoothing)만큼
+                fixed3 smoothed = SmoothSkin(screenUV, original);
+                fixed3 col = lerp(original, smoothed, smoothAmt);
+
+                // 제형(피부결) — TONE 템플릿 grain(매끈/파우더리). 결 보정(smoothAmt)만큼
                 // 스무딩된 피부에 파우더 입자를 얹는다. skinTexture=0(매끈)=grain 0 → 바이트
                 // 동일(하위호환). 피부는 마스크·색소 프리미티브가 없어 grain 축만 배선.
                 float skinTexEdge, skinTexGrain, skinTexCoverage, skinTexBody;
                 TexBundleFromEnum(1.0, _SkinTexture, skinTexEdge, skinTexGrain, skinTexCoverage, skinTexBody);
-                col = TexGrain(col, i.uv, skinTexGrain * saturate(_Smoothing));
+                col = TexGrain(col, i.uv, skinTexGrain * saturate(smoothAmt));
 
-                col = saturate(col * (1.0 + 0.18 * _Brightening) + 0.04 * _Brightening);
+                // 잡티 지우기(밀어내기) — outlier 억제. 넓은 이웃(BR_RADIUS) 평균 대비 국소적으로
+                // 어둡거나(루마) 붉은(chroma) 픽셀만, 그 정도에 비례해 이웃 색으로 되민다(색을
+                // 얹지 않고 결을 보존한 채 국소 이상치만 복원). 방향은 한쪽 — 밝은 이상치(하이라이트)는
+                // 이상도 음수라 무발동. 특징부 보호: 이상도 밴드패스 상한(BR_HI)으로 극단 이상치
+                // (눈·눈썹·콧구멍·헤어라인 = 매우 어두움/붉음)를 제외. 델타 가산이라 스무딩·톤 보정을
+                // 보존하고, 정상 피부(이웃≈중심 → 델타 0)는 무변조 → 결 유지. 강도 0 = 바이트 동일.
+                if (_BlemishRemoval > 0.001)
+                {
+                    fixed3 wide = WideSkinAvg(screenUV);
+                    float lumaDef = dot(wide, fixed3(0.299, 0.587, 0.114))
+                                  - dot(original, fixed3(0.299, 0.587, 0.114)); // >0 = 중심이 더 어두움
+                    float redEx = (original.r - max(original.g, original.b))
+                                - (wide.r - max(wide.g, wide.b));               // >0 = 중심이 더 붉음
+                    float outlier = max(lumaDef * BR_LUMA_W, redEx * BR_RED_W);
+                    float pull = smoothstep(BR_LO, BR_LO + BR_FEATHER, outlier)
+                               * (1.0 - smoothstep(BR_HI, BR_HI + BR_FEATHER, outlier)); // 밴드패스: 특징부 보호
+                    col = saturate(col + (wide - original) * (pull * _BlemishRemoval));
+                }
+
+                col = saturate(col * (1.0 + 0.18 * toneAmt) + 0.04 * toneAmt);
 
                 // 톤 조정 베이스 — 톤업 강도에 비례한 보정색 캐스트(색만 밀고 밝기는
                 // 브라이트닝 담당). 흰색(무색)이거나 강도 0이면 lerp identity = 기존 픽셀.
-                col = saturate(lerp(col, col * _ToneBaseColor.rgb, _Brightening));
+                col = saturate(lerp(col, col * _ToneBaseColor.rgb, toneAmt));
 
-                // 제형(언더톤) — TONE 템플릿 grain(매끈/파우더리). 톤 보정(_Brightening)만큼.
+                // 제형(언더톤) — TONE 템플릿 grain(매끈/파우더리). 톤 보정(toneAmt)만큼.
                 // toneTexture=0(매끈)=grain 0 → 바이트 동일. 언더톤도 전면 캐스트라 grain 축만.
                 float toneTexEdge, toneTexGrain, toneTexCoverage, toneTexBody;
                 TexBundleFromEnum(1.0, _ToneTexture, toneTexEdge, toneTexGrain, toneTexCoverage, toneTexBody);
-                col = TexGrain(col, i.uv, toneTexGrain * saturate(_Brightening));
+                col = TexGrain(col, i.uv, toneTexGrain * saturate(toneAmt));
 
                 // 프라이머 윤광 — 기존 luma 스펙 추출 재사용, 하이라이트만 증폭(0=무효과).
                 float glowSpec = smoothstep(GLOW_SPEC_LO, 1.0, dot(col, fixed3(0.299, 0.587, 0.114)));
@@ -501,6 +580,14 @@ Shader "ARMakeup/FaceMakeup"
                     float fGain = FND_LUMA_GAIN * (1.0 + fTexCushion * FND_TEX_CUSHION_GAIN - fTexSkintint * FND_TEX_SKINTINT_GAIN);
                     float fChroma = FND_CHROMA * (1.0 + fTexCushion * FND_TEX_CUSHION_CHROMA - fTexSkintint * FND_TEX_SKINTINT_CHROMA);
                     float fCov = _FoundationIntensity * (1.0 + fTexCushion * FND_TEX_CUSHION_COV - fTexSkintint * FND_TEX_SKINTINT_COV);
+                    // 모양 축 W3 — 파운데 커버 존(얼굴 메시 한정, 목 세그 확장과 무관).
+                    //   1=T존 집중(중앙 세로 스트립 강조) 2=외곽 페더 강화(방사 외곽 감쇠).
+                    // 커버(fCov)·chroma 평탄화(fChroma)를 존만큼 곱 → 존 0이면 fZone=1=바이트 동일.
+                    float fZone = 1.0;
+                    if (_FoundationShape > 1.5)      fZone = 1.0 - smoothstep(FND_FEATHER_LO, FND_FEATHER_HI, length(i.uv - 0.5));
+                    else if (_FoundationShape > 0.5) fZone = 1.0 - smoothstep(PWD_TZONE_LO, PWD_TZONE_HI, faceDx);
+                    fCov *= fZone;
+                    fChroma *= fZone;
                     fixed3 found = _FoundationColor.rgb * (fLuma * fGain + FND_LUMA_LIFT);
                     // 파운데는 제형 스튜디오 대상 아님 — 세부 0 상수로 호출(enum 기존 경로).
                     found = ApplyFinish(found, fLuma, i.uv, _FoundationFinish, 0.0,

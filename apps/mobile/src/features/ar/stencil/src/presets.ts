@@ -137,7 +137,7 @@ export const PRESETS: FilterPreset[] = [
       skinBrightening: 0.2,
       // 피부톤 — 중립 라이트, 얇은 커버로 결만 정리.
       foundationColor: '#F3D9C6',
-      foundationIntensity: 0.25,
+      foundationIntensity: 0.18,
       foundationFinish: 0, // 새틴
       lipColor: '#D96C7B',
       lipIntensity: 0.35,
@@ -170,8 +170,12 @@ export const PRESETS: FilterPreset[] = [
       highlightIntensity: 0,
       contourColor: '#9E806B',
       contourIntensity: 0,
+      // 피부 마감 채움 — 얇은 부분 커버 + 무색 세팅 파우더(새틴, 최소 매트화).
       concealerColor: '#FADCC2',
-      concealerIntensity: 0,
+      concealerIntensity: 0.15,
+      powderColor: '#FFFFFF', // 무색(트랜스루선트)
+      powderIntensity: 0.12,
+      powderFinish: 0, // 새틴
       // 세부부위 확충 — 은은한 브라운 마스카라 + 아이보리 애교살(내추럴 컨셉).
       mascaraColor: '#3A2A20',
       mascaraIntensity: 0.28,
@@ -191,7 +195,7 @@ export const PRESETS: FilterPreset[] = [
       skinBrightening: 0.3,
       // 피부톤 — 핑크 언더톤 + 듀이로 물광 로지.
       foundationColor: '#F2D2CC',
-      foundationIntensity: 0.4,
+      foundationIntensity: 0.28,
       foundationFinish: 2, // 듀이
       lipColor: '#E04E68',
       lipIntensity: 0.55,
@@ -225,8 +229,12 @@ export const PRESETS: FilterPreset[] = [
       highlightFinish: 2, // 듀이(글로시)
       contourColor: '#9E806B',
       contourIntensity: 0,
+      // 피부 마감 채움 — 부분 커버 + 무색 세팅 파우더(물광 유지 위해 매트화 최소).
       concealerColor: '#FADCC2',
-      concealerIntensity: 0,
+      concealerIntensity: 0.2,
+      powderColor: '#FFFFFF', // 무색(트랜스루선트)
+      powderIntensity: 0.1,
+      powderFinish: 0, // 새틴
       // 세부부위 확충 — 핑크 펄 애교살 + 브라운 마스카라(로지 물광 컨셉).
       aegyoColor: '#FFD9E0',
       aegyoIntensity: 0.3,
@@ -247,7 +255,7 @@ export const PRESETS: FilterPreset[] = [
       skinBrightening: 0.35,
       // 피부톤 — 웜 코랄 언더톤, 마감은 새틴 유지(립·블러셔가 이미 따뜻함).
       foundationColor: '#F5D4B8',
-      foundationIntensity: 0.4,
+      foundationIntensity: 0.28,
       foundationFinish: 0, // 새틴
       lipColor: '#F2846B',
       lipIntensity: 0.5,
@@ -281,8 +289,12 @@ export const PRESETS: FilterPreset[] = [
       highlightFinish: 2, // 듀이(글로시)
       contourColor: '#9E806B',
       contourIntensity: 0,
+      // 피부 마감 채움 — 부분 커버 + 무색 세팅 파우더(새틴).
       concealerColor: '#FADCC2',
-      concealerIntensity: 0,
+      concealerIntensity: 0.2,
+      powderColor: '#FFFFFF', // 무색(트랜스루선트)
+      powderIntensity: 0.12,
+      powderFinish: 0, // 새틴
       // 세부부위 확충 — 브라운 마스카라 + 샴페인 애교살(피치 웜 컨셉).
       mascaraColor: '#3A2A20',
       mascaraIntensity: 0.3,
@@ -303,7 +315,7 @@ export const PRESETS: FilterPreset[] = [
       skinBrightening: 0.25,
       // 피부톤 — 중립, 고커버 + 듀이(무대광 베이스).
       foundationColor: '#EFD0BC',
-      foundationIntensity: 0.65,
+      foundationIntensity: 0.38,
       foundationFinish: 2, // 듀이
       lipColor: '#B01E3C',
       lipIntensity: 0.7,
@@ -348,8 +360,12 @@ export const PRESETS: FilterPreset[] = [
       highlightFinish: 2, // 듀이(글로시)
       contourColor: '#9E806B',
       contourIntensity: 0,
+      // 피부 마감 채움 — 고커버 부분 커버 + 무색 세팅 파우더(듀이 광 유지 위해 매트화 절제).
       concealerColor: '#FADCC2',
-      concealerIntensity: 0,
+      concealerIntensity: 0.3,
+      powderColor: '#FFFFFF', // 무색(트랜스루선트)
+      powderIntensity: 0.15,
+      powderFinish: 0, // 새틴
       // 세부부위 확충 — 돌리 볼륨 마스카라 + 윙 라이너(글램 무대 컨셉, 하이라이터는 듀이).
       mascaraColor: '#141014',
       mascaraIntensity: 0.5,
@@ -370,7 +386,7 @@ export const PRESETS: FilterPreset[] = [
       skinBrightening: 0.15,
       // 피부톤 — 황갈로 한 단계 눌러 매트 마감과 방향을 맞춤.
       foundationColor: '#E8C4A8',
-      foundationIntensity: 0.55,
+      foundationIntensity: 0.3,
       foundationFinish: 1, // 매트
       lipColor: '#A65560',
       lipIntensity: 0.4,
@@ -404,8 +420,12 @@ export const PRESETS: FilterPreset[] = [
       highlightIntensity: 0,
       contourColor: '#9E806B',
       contourIntensity: 0,
+      // 피부 마감 채움 — 부분 커버 + 무색 세팅 파우더(매트 베이스 완성).
       concealerColor: '#FADCC2',
-      concealerIntensity: 0,
+      concealerIntensity: 0.25,
+      powderColor: '#FFFFFF', // 무색(트랜스루선트)
+      powderIntensity: 0.28,
+      powderFinish: 1, // 매트
       // 세부부위 확충 — 하안검 섀도 + 삼각존 + 캣아이 마스카라 + 아래 속눈썹(스모키 딥 컨셉).
       eyeshadowLowerColor: '#5C4A46',
       eyeshadowLowerIntensity: 0.3,
