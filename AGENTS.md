@@ -1,115 +1,54 @@
-﻿# Project Guidelines
+# Project Guidelines
 
 ## Source Of Truth
-- Treat `docs/spec.md` as the product spec for 룩톡, the look-first community feature.
-- Treat `docs/plan.md` as the implementation order and priority guide.
-- For mobile frontend work, read `docs/mobile/FRONTEND_WORK_GUIDE.md` first.
+- `docs/spec.md` is the 룩톡 product spec; `docs/plan.md` is its implementation order.
+- `docs/planning/MAKEUP_JOURNEY_CALENDAR_PLAN.md` is the MakeupJourney feature contract.
+- Read `docs/mobile/FRONTEND_WORK_GUIDE.md` before mobile frontend changes.
 
-## Product Direction
-- 룩톡 is not a text 게시판; it is a beauty look discovery feed.
-- Keep `HomeTab` as home and use the existing Community entry action.
-- UI copy may say `룩톡`; internal route/API/DB names should use `Community` or `community_*`.
-- Prioritize image, mood tags, product usage, save, and lightweight replies.
+## Product Boundaries
+- 룩톡 is a beauty-look discovery feed, not a text board; keep UI copy `룩톡` and internal names `Community`/`community_*`.
+- UI copy for this feature is `메이크업 성장`; internal route/API/DB names use `MakeupJourney`/`makeup_journey_*`.
+- Do not redesign existing Home, feedback, recommendation, AR, or Profile screens for the calendar feature.
+- Calendar mockup colors are illustrative only; do not introduce pink/blush styling, a feature-only accent, or copied image colors—use the current app theme tokens.
+- `makeup_feedback_reports` is the score/report source of truth; do not duplicate feedback scores into calendar tables.
+- Calendar success/failure uses the latest completed daily score against the current global goal score.
 
-## Mobile Rules
+## Mobile
 - Work in `apps/mobile/src` with Expo React Native, TypeScript, React Navigation, and Tamagui.
-- Do not add a new UI or icon library.
-- Use existing theme tokens for colors, spacing, typography, radius, shadows, and icon sizes.
-- Keep feature code under `features/community` unless a truly shared component belongs in `shared/ui`.
-- Use `requestBackendJson` for backend calls and `uploadMediaAsset` for community images.
-- Use `mediaKind: "community-thread"` for 룩톡 uploaded images.
-- Preserve loading, empty, error, refresh, keyboard, and safe-area states.
+- Do not add a UI or icon library; reuse theme tokens, shared components, and existing icon sizes.
+- Keep MakeupJourney code under `features/makeup-journey`; only truly shared code belongs in `shared`.
+- Use `requestBackendJson` for APIs and the existing makeup-feedback upload flow with `mediaKind: "makeup_feedback"`.
+- Preserve loading, empty, error, refresh, keyboard, accessibility, and safe-area states.
+- Keep dates as `YYYY-MM-DD` strings at API boundaries to avoid timezone shifts.
+- Keep day detail vertically scrollable with persistent calendar-back/graph actions; never shrink all cards into one viewport.
+- A correction reuses the feedback flow, inherits parent goal context, and clears navigation context on success/cancel/error.
+- Floating action short tap opens the menu; ~400ms long press drags; clamp and persist normalized coordinates locally.
 
-## Backend Rules
-- Use FastAPI route files under `services/backend/app/api`.
-- Use the existing `success()` envelope and camelCase response behavior.
-- Writes require auth and DB; reads should return safe empty fallback when DB is unavailable where practical.
-- Validate media ownership before attaching images to community threads.
-- Keep reply depth to one nested level.
+## Backend
+- Put FastAPI routes under `services/backend/app/api` and use `success()` plus camelCase responses.
+- Writes require auth and DB; every journey/report/mission/note query must scope by `user_id`.
+- Extend `/feedback/jobs`; do not create a second feedback-generation path for calendar entries.
+- Validate correction parent ownership, completion state, date inheritance, and feedback kind.
+- Calendar list queries must avoid N+1 and exclude failed, incomplete, or scoreless reports.
+- Build calendar digests from stored report fields only; do not re-score, call AI again, or copy full report payloads into month responses.
 
-## DB Rules
-- Update both `docs/backend/schema.sql` and `docs/backend/aws-postgresql-schema.dbml` for schema changes.
-- Keep schema SQL idempotent with existing `create table if not exists` style.
-- Add FKs, checks, indexes, and duplicate-prevention constraints for likes, saves, reports, and media order.
-- Prefer JSONB for MVP product usage, leaving room for later product DB linking.
+## Database
+- Update `docs/backend/schema.sql`, `docs/backend/aws-postgresql-schema.dbml`, `app/db/init_db.py`, and `app/db/check_schema.py` together.
+- Keep SQL idempotent; add FKs, checks, indexes, unique constraints, and safe backfills.
+- Account deletion and media deletion must keep working after feedback self-FKs are added.
 
 ## Quality
-- Prefer existing patterns and helpers over new abstractions.
-- Avoid unrelated refactors, temporary logs, broad `any`, and unused code.
-- Add focused tests for route contracts, API behavior, service mapping, validation, and navigation.
-- Run mobile typecheck when mobile code changes.
-- Do not revert user changes unless explicitly asked.
+- Prefer existing patterns over new abstractions; avoid unrelated refactors, logs, broad `any`, and unused code.
+- Add focused tests for API contracts, ownership, score aggregation, goal re-evaluation, mapping, gestures, and navigation.
+- Run backend tests for touched routes/schema and mobile typecheck/tests for mobile changes.
+- Preserve user changes and never commit local signing or incidental native dependency edits.
 
-## iOS Real-Device Build & Verify (WiFi)
-
-The user always connects the iPhone over WiFi (never USB). Follow this order to build,
-install, run, and verify a device measurement in one pass. Each step lists the failure it prevents.
-
-### Real-device only (no Simulator / Emulator testing)
-- All iOS runtime testing in this project is **physical-device only**. Never boot, create, or use
-  an iOS Simulator or emulator as a test target.
-- Xcode 26.6 bundles physical-device iOS Platform Support and the matching Simulator runtime in
-  one Components download (for example, `iOS 26.5.1 + iOS 26.5 Simulator`). When Xcode reports
-  `iOS 26.5 is not installed`, install that combined **iOS Platform Support** package from
-  `Xcode > Settings > Components`; it is required even when testing only on a physical iPhone.
-- Install only the required iOS Platform Support row. Do not install unrelated watchOS, tvOS, or
-  visionOS components, and do not launch the bundled Simulator runtime.
-- Do **not** use `xcodebuild -downloadPlatform iOS` as a substitute for the Components package.
-  That command downloads a standalone Simulator runtime and may not install/register the combined
-  physical-device Platform Support required by Xcode.
-- After the Components installation finishes, re-run `xcodebuild -showdestinations` and continue
-  only when the physical iPhone appears as an eligible destination.
-
-### Device identity
-- Get the UDID from `xctrace`, NOT `devicectl`. `xcrun devicectl list devices` prints a
-  CoreDevice UUID that expo/xcodebuild reject with "No device UDID or name matching ...".
-  Use: `xcrun xctrace list devices | grep -v Simulator | grep iPhone`
-  → real UDID like `<device-udid>`.
-- Confirm the device is reachable before building: `xcrun devicectl list devices` should
-  show `available`. Over WiFi it often shows `unavailable` when the phone is
-  locked/asleep; that also blocks `devicectl` log pulls (see Verify).
-
-### Signing (local dev)
-- The committed Debug team `G7X4226T2Q` has no account on this Mac, so signing fails with
-  "No profiles for '...' were found ... Automatic signing is disabled".
-- This Mac's only signing identity is team `<local-dev-team>`
-  (Apple Development: <local-dev-account>), bundle `<local-dev-bundle>`.
-- Before a device build, set the Debug config in
-  `apps/mobile/ios/AURA.xcodeproj/project.pbxproj` to this team + bundle. Keep it a
-  LOCAL edit — do NOT commit it. Empty entitlements (`<dict/>`) means no extra
-  capabilities are needed, so this signs cleanly.
-
-### Metro host (WiFi)
-- A dev build bakes the Mac's LAN IP at build time. If the Mac's DHCP IP later changes,
-  the app shows a red "Could not connect to development server" screen pointing at the
-  OLD IP (e.g. it wants `<old-lan-ip>` while the Mac is now `<current-lan-ip>`).
-- Prevent it: inject the CURRENT IP at build time so the baked URL is correct:
-  `REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) npm run ios:face-capture-lab -- --device <UDID>`
-- Phone and Mac must be on the same WiFi/subnet (compare against `ipconfig getifaddr en0`),
-  or the app cannot reach Metro.
-- Emergency recover WITHOUT rebuilding: if only the Mac IP changed and the old baked IP is
-  free (`ping -c1 <OLD_IP>` → no reply), re-add the old IP as an alias, then tap "Reload JS"
-  in the app. The `netmask` keyword is REQUIRED — without it macOS treats the arg as
-  broadcast and defaults the mask to /16, which breaks routing:
-  `sudo ifconfig en0 alias <OLD_IP> netmask 255.255.255.255`
-
-### Install / launch
-- "Cannot launch ... because the device is locked" (xcodebuild exit after a successful
-  build) means the app INSTALLED fine and only auto-launch failed. Unlock the phone and
-  open the app manually; do not rebuild.
-
-### Verify the measurement (arm capture BEFORE the run)
-- The app appends every Face3D event (including `face3d_analyzed` with frame counts and the
-  11 G2 metrics when available; legacy G1 profiles contain 5) to
-  `Documents/face3d-runtime-evidence/events.jsonl` when `__DEV__` is true.
-- Set up result capture BEFORE asking for a measurement, so the user only has to run it once:
-  - **WiFi (no USB) via Hermes debugger:** while the app is foregrounded and connected to
-    Metro, `curl http://localhost:8081/json/list` returns a `webSocketDebuggerUrl`. Open a
-    CDP client on it and call `Runtime.evaluate` (with `awaitPromise` + `returnByValue`) to
-    read the file from inside the app via `globalThis.expo.modules` FileSystem
-    (`documentDirectory` + `readAsStringAsync`), or capture the `[aura:face3d] analyzed`
-    console logs. The debug target only exists while the app is on screen — poll
-    `/json/list` until it appears.
-  - **USB:** `xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer --domain-identifier <bundle> --source Documents/face3d-runtime-evidence/events.jsonl --destination ./events.jsonl`
-- A screenshot of the results screen is also acceptable proof (frame count `30/30` + the
-  metric grid), but prefer the log so values are exact.
+## Physical iPhone Verification (WiFi Only)
+- Never boot or use an iOS Simulator/emulator; runtime testing is physical-device only.
+- If iOS support is missing, install only the required combined iOS Platform Support in Xcode Components; do not use `xcodebuild -downloadPlatform iOS`.
+- Get the real UDID from `xcrun xctrace list devices | grep -v Simulator | grep iPhone`; `devicectl` UUID is not an xcodebuild UDID.
+- Confirm `xcrun devicectl list devices` shows the unlocked phone as `available`.
+- Local Debug signing edits in `apps/mobile/ios/AURA.xcodeproj/project.pbxproj` must never be committed.
+- Build with the current LAN IP: `REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) npm run ios:face-capture-lab -- --device <UDID>`.
+- A locked-device launch failure after successful build means install succeeded; unlock and open manually instead of rebuilding.
+- Arm evidence capture before the user run; prefer Hermes/Metro logs over asking for a second measurement.

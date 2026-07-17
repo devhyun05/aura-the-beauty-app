@@ -32,6 +32,11 @@ expectEqual(
   'filter store floating action navigates directly',
 );
 expectEqual(
+  getFloatingActionPresentation('makeupRecommendation'),
+  'route',
+  'makeup recommendation floating action navigates directly',
+);
+expectEqual(
   getMainTabBarMinHostHeight(18),
   264,
   'main tab bar minimum host height includes footer and floating action space',

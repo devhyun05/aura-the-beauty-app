@@ -1,7 +1,10 @@
+from datetime import date, datetime
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import ConfigDict, Field, field_validator
 
+from app.core.casing import to_camel
 from app.schemas.base import CamelModel
 
 
@@ -17,12 +20,66 @@ class AnalysisJobCreate(CamelModel):
 
 
 class FeedbackJobCreate(CamelModel):
+  entry_date: date | None = Field(default=None, alias="entryDate")
+  feedback_kind: Literal["initial", "correction"] = Field(default="initial", alias="feedbackKind")
+  parent_feedback_report_id: UUID | None = Field(default=None, alias="parentFeedbackReportId")
   photo_capture_id: UUID | None = Field(default=None, alias="photoCaptureId")
   uploaded_media_id: UUID | None = Field(default=None, alias="uploadedMediaId")
   source: str = "camera"
   source_label: str | None = Field(default=None, alias="sourceLabel")
   run_immediately: bool = Field(default=False, alias="runImmediately")
   request_payload: dict = Field(default_factory=dict, alias="requestPayload")
+
+  @field_validator("entry_date", mode="before")
+  @classmethod
+  def validate_entry_date(cls, value: object) -> object:
+    if value is None:
+      return None
+    if not isinstance(value, str):
+      raise ValueError("entryDate must use YYYY-MM-DD format")
+    try:
+      parsed = date.fromisoformat(value)
+    except ValueError as exc:
+      raise ValueError("entryDate must use YYYY-MM-DD format") from exc
+    if parsed.isoformat() != value:
+      raise ValueError("entryDate must use YYYY-MM-DD format")
+    return value
+
+
+class FeedbackJobResponseModel(CamelModel):
+  model_config = ConfigDict(
+    populate_by_name=True,
+    alias_generator=to_camel,
+    extra="allow",
+  )
+
+
+class FeedbackJobRecord(FeedbackJobResponseModel):
+  id: UUID
+  user_id: UUID
+  photo_capture_id: UUID | None
+  uploaded_media_id: UUID | None
+  entry_date: date
+  feedback_kind: Literal["initial", "correction"]
+  parent_feedback_report_id: UUID | None
+  source: Literal["camera", "gallery", "seed", "generated"]
+  source_label: str | None
+  score: int | None = Field(ge=0, le=100)
+  status: Literal["pending", "processing", "completed", "failed", "cancelled"]
+  model_version: str | None
+  feedback_payload: dict[str, Any]
+  created_at: datetime
+  completed_at: datetime | None
+
+
+class FeedbackJobCreateResponseData(FeedbackJobResponseModel):
+  job: FeedbackJobRecord
+
+
+class FeedbackJobCreateResponse(FeedbackJobResponseModel):
+  data: FeedbackJobCreateResponseData
+  meta: dict[str, Any]
+  error: None
 
 
 class FeedbackConferenceMessagesCreate(CamelModel):

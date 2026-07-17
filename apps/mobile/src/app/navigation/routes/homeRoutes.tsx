@@ -33,6 +33,7 @@ import {
   likeProduct,
   unlikeProduct,
 } from '../../../shared/services/productService';
+import {getAnchorForLegacyButtonPosition} from '../../../shared/services/floatingActionAnchorStore';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {renderConsultingHome} from './consultingRoutes';
@@ -52,6 +53,7 @@ export function FloatingActionSettingsRouteScreen({
     floatingActionIds,
     floatingActionInteractionMode,
     setFloatingActionButtonPosition,
+    setFloatingActionAnchor,
     setFloatingActionIds,
     setFloatingActionInteractionMode,
   } = useNavigationFlowState();
@@ -72,7 +74,10 @@ export function FloatingActionSettingsRouteScreen({
         selectedButtonPosition={floatingActionButtonPosition}
         selectedInteractionMode={floatingActionInteractionMode}
         onChangeActionIds={setFloatingActionIds}
-        onChangeButtonPosition={setFloatingActionButtonPosition}
+        onChangeButtonPosition={position => {
+          setFloatingActionButtonPosition(position);
+          setFloatingActionAnchor(getAnchorForLegacyButtonPosition(position));
+        }}
         onChangeInteractionMode={setFloatingActionInteractionMode}
       />
     </DetailRouteChrome>
@@ -92,6 +97,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const [isExtractionSheetVisible, setIsExtractionSheetVisible] = React.useState(false);
   const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = React.useState(false);
   const {
+    beginMakeupFeedbackFlow,
     likedMakeupFilterIds,
     setMakeupFeedbackResult,
     setLikedMakeupFilterIds,
@@ -150,6 +156,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
 
   const startMakeupFeedback = React.useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
+    beginMakeupFeedbackFlow();
     setMakeupFeedbackResult(null);
     setSelectedMakeupFeedbackPhoto({photoSource});
 
@@ -163,6 +170,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     });
   }, [
     rootNavigation,
+    beginMakeupFeedbackFlow,
     setMakeupFeedbackResult,
     setSelectedMakeupFeedbackPhoto,
   ]);

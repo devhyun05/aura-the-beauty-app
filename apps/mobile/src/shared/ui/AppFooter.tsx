@@ -6,6 +6,7 @@ import {colors, iconSize, radius, shadows, spacing, typography} from '../theme';
 import {
   ConsultingFooterIcon,
   HomeFooterIcon,
+  JourneyFooterIcon,
   ProfileFooterIcon,
 } from './FooterIcons';
 import {
@@ -13,10 +14,11 @@ import {
   type FloatingActionButtonPosition,
 } from './FloatingActionMenu';
 
-export type FooterTabKey = 'home' | 'profile' | 'consulting';
+export type FooterTabKey = 'home' | 'profile' | 'consulting' | 'journey';
 export const APP_FOOTER_TAB_ORDER = [
   'home',
   'consulting',
+  'journey',
   'profile',
 ] as const satisfies readonly FooterTabKey[];
 
@@ -55,6 +57,7 @@ type AppFooterProps = {
   activeTab?: FooterTabKey;
   bottomInset?: number;
   floating?: boolean;
+  hiddenTabs?: readonly FooterTabKey[];
   onTabPress?: (tab: FooterTabKey) => void;
   showLabels?: boolean;
 };
@@ -71,6 +74,12 @@ const footerItemByKey = {
     label: '컨설팅',
     accessibilityLabel: '컨설팅으로 이동',
     icon: color => <ConsultingFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
+  },
+  journey: {
+    key: 'journey',
+    label: '성장',
+    accessibilityLabel: '메이크업 성장으로 이동',
+    icon: color => <JourneyFooterIcon color={color} size={APP_FOOTER_ICON_SIZE} />,
   },
   profile: {
     key: 'profile',
@@ -112,13 +121,24 @@ export function AppFooter({
   activeTab,
   bottomInset = 0,
   floating = false,
+  hiddenTabs = [],
   onTabPress,
   showLabels = APP_FOOTER_SHOW_LABELS_BY_DEFAULT,
 }: AppFooterProps) {
+  const visibleFooterItems = footerItems.filter(item => !hiddenTabs.includes(item.key));
   const footerBar = (
-    <XStack key="tabs" style={styles.footerBar}>
+    <XStack
+      key="tabs"
+      style={[
+        styles.footerBar,
+        {
+          width:
+            APP_FOOTER_SIDE_TAB_WIDTH * visibleFooterItems.length +
+            spacing.sm * 2,
+        },
+      ]}>
       <YStack pointerEvents="none" style={styles.footerGlassHighlight} />
-      {footerItems.map(item => {
+      {visibleFooterItems.map(item => {
         const isActive = item.key === activeTab;
         const iconColor = isActive ? colors.white : colors.textPrimary;
         const labelColor = isActive ? colors.white : colors.textPrimary;
@@ -232,7 +252,6 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: -6},
     shadowOpacity: 0.16,
     shadowRadius: 22,
-    width: APP_FOOTER_SIDE_TAB_WIDTH * footerItems.length + spacing.sm * 2,
   },
   footerGlassHighlight: {
     backgroundColor: APP_FOOTER_GLASS_HIGHLIGHT,

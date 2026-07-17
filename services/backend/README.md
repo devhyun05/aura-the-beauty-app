@@ -254,6 +254,80 @@ docker build -f services/backend/Dockerfile -t aura-backend-api .
 
 The image listens on port `8000`, runs as a non-root user, and exposes `/health` for container and ALB health checks.
 
+## Makeup Journey rollout and operations
+
+Deploy the database schema and API before exposing the mobile tab. The ECS
+workflow applies and verifies the schema before updating the service. Its smoke
+test also calls the deployed Journey settings route without credentials: an
+enabled backend must return `401/UNAUTHORIZED`, while a disabled backend must
+return `404/MAKEUP_JOURNEY_DISABLED`. Either mismatch uses the existing API
+rollback. The two rollout switches are independent:
+
+```env
+# Backend emergency kill switch. Disabled routes return 404.
+MAKEUP_JOURNEY_ENABLED=true
+
+# Mobile build-time exposure switch. Production builds default to off.
+EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED=0
+```
+
+Use this server-first rollout order:
+
+1. Apply and verify the schema, then deploy the API with
+   `MAKEUP_JOURNEY_ENABLED=true` and wait for the deployment smoke test to pass.
+2. Build with the EAS `production-makeup-journey` profile, which extends the
+   normal `production` profile and changes only
+   `EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED` to `1`.
+3. Release that binary through the store's staged rollout controls. Keep the
+   normal `production` profile at `0`; it is the fail-closed mobile build.
+
+For an emergency rollback, set the backend variable to
+`MAKEUP_JOURNEY_ENABLED=false` and redeploy first, which immediately closes all
+Journey routes. Then stop the store rollout and ship a normal `production`
+build if the exposed tab itself must be removed. The mobile switch is embedded
+at build time, so changing it requires a new binary; the backend switch is the
+immediate kill switch. Re-enable the backend only after the corrected server is
+deployed and verified, then resume a staged enabled-mobile rollout.
+
+From the repository root, configure the alarms for the four launch-critical
+signals and their dashboard with the idempotent PowerShell script below. The
+feedback signal uses separate failure-ratio and SQS oldest-message-age alarms. The
+script updates metric filters, alarms, and the dashboard in place; it does not
+deploy application code.
+
+```powershell
+./scripts/aws/configure_makeup_journey_observability.ps1 `
+  -EcsLogGroupName "/ecs/aura-dev-backend" `
+  -WorkerLogGroupName "/ecs/aura-dev-ai-worker" `
+  -AiJobQueueName "aura-dev-ai-jobs" `
+  -Environment "dev" `
+  -AlarmSnsTopicArn "arn:aws:sns:ap-northeast-2:<account-id>:<topic>"
+```
+
+Omit `WorkerLogGroupName` when the API and SQS worker write to the same log
+group. When they are separate, the script also watches the API log group for
+queue-publish failures so those attempts remain in the feedback success-rate
+denominator without double-counting shared-log deployments. Metrics use an
+environment-specific CloudWatch namespace, and
+the SQS age alarm detects a queue or worker that stops completing jobs even
+when no terminal failure log is emitted.
+
+To calculate the initial product metrics, export the application log stream as
+raw lines or CloudWatch JSONL and run the read-only aggregator from
+`services/backend`. The end date is exclusive. Weekly revisits use distinct
+local dates and include only complete Monday-through-Sunday weeks; partial
+edge weeks are listed but excluded. Correction completion pairs each actor's
+`makeup_journey_correction_started` and `makeup_journey_correction_completed`
+events one-to-one in occurred-at order inside the same local-date window;
+unmatched starts remain in the denominator and orphan completions are ignored.
+
+```powershell
+python -m app.ops.makeup_journey_success_metrics `
+  --start-date 2026-07-01 `
+  --end-date 2026-08-01 `
+  --analytics-log ./makeup-journey-analytics.jsonl
+```
+
 ## API contract export
 
 Generate a JSON OpenAPI contract for mobile/backend review:

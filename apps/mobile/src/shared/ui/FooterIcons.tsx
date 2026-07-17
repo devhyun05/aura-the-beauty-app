@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  CalendarDays,
   House,
   MessageCircle,
   Sparkles,
@@ -54,6 +55,23 @@ export function ConsultingFooterIcon({
 }: LucideProps) {
   return (
     <MessageCircle
+      color={color}
+      pointerEvents="none"
+      size={size}
+      strokeWidth={strokeWidth}
+      {...props}
+    />
+  );
+}
+
+export function JourneyFooterIcon({
+  color = colors.black,
+  size = iconSize.md,
+  strokeWidth = defaultStrokeWidth,
+  ...props
+}: LucideProps) {
+  return (
+    <CalendarDays
       color={color}
       pointerEvents="none"
       size={size}

@@ -2,8 +2,10 @@ import asyncio
 import copy
 import json
 import logging
-from typing import Any
+from datetime import date, datetime
+from typing import Any, Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 
@@ -16,17 +18,25 @@ from app.schemas.analysis import (
   FeedbackConferenceMessagesCreate,
   FeedbackConferencePreviewCreate,
   FeedbackJobCreate,
+  FeedbackJobCreateResponse,
 )
 from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.makeup_feedback_analysis import (
   MODEL_VERSION,
   build_makeup_feedback_result_for_request,
 )
+from app.services.makeup_journey_observability import (
+  build_makeup_feedback_generation_metric,
+)
 from app.services.makeup_feedback_conference import build_makeup_feedback_conference_messages
 from app.services.makeup_feedback_conference_preview import (
   build_makeup_feedback_conference_preview,
 )
-from app.services.makeup_feedback_goal_intent import normalize_feedback_goal_context_for_request
+from app.services.makeup_feedback_goal_intent import (
+  FEEDBACK_GOAL_CONTEXT_KEYS,
+  extract_feedback_goal_context,
+  normalize_feedback_goal_context_for_request,
+)
 from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
 from app.services.push_notifications import create_and_send_notification
 from app.services.users import ensure_user
@@ -34,6 +44,22 @@ from app.services.users import ensure_user
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
 logger = logging.getLogger(__name__)
+
+
+def log_feedback_generation_outcome(
+  request_payload: dict[str, Any],
+  *,
+  outcome: Literal["completed", "failed"],
+) -> None:
+  metric = build_makeup_feedback_generation_metric(
+    request_payload,
+    outcome=outcome,
+  )
+  logger.log(
+    logging.INFO if metric["outcome"] == "completed" else logging.WARNING,
+    "[aura:makeup-feedback-generation] %s",
+    json.dumps(metric, ensure_ascii=False, separators=(",", ":")),
+  )
 
 
 def decode_json_object(value: object) -> dict:
@@ -135,6 +161,9 @@ async def resolve_feedback_request_payload(
   user: dict[str, Any],
   payload: FeedbackJobCreate,
   settings: Settings,
+  *,
+  inherited_goal_context: dict[str, Any] | None = None,
+  entry_date: date,
 ) -> dict[str, Any]:
   user_id = user["id"]
   media = await resolve_owned_source_media(
@@ -148,15 +177,101 @@ async def resolve_feedback_request_payload(
   request_payload.setdefault("source", payload.source)
   request_payload.setdefault("sourceLabel", payload.source_label)
 
-  merge_profile_feedback_context(request_payload, user)
-  await normalize_feedback_goal_context_for_request(request_payload, settings)
+  if inherited_goal_context is None:
+    merge_profile_feedback_context(request_payload, user)
+    await normalize_feedback_goal_context_for_request(request_payload, settings)
+  else:
+    for key in ("feedbackContext", "feedback_context"):
+      request_payload.pop(key, None)
+    for camel_key, snake_key in FEEDBACK_GOAL_CONTEXT_KEYS:
+      request_payload.pop(camel_key, None)
+      request_payload.pop(snake_key, None)
+    request_payload["feedbackContext"] = copy.deepcopy(inherited_goal_context)
+
+  request_payload["makeupJourneyContext"] = {
+    "entryDate": entry_date.isoformat(),
+    "feedbackKind": payload.feedback_kind,
+    "parentFeedbackReportId": (
+      str(payload.parent_feedback_report_id)
+      if payload.parent_feedback_report_id is not None
+      else None
+    ),
+  }
 
   return request_payload
+
+
+def server_entry_date() -> date:
+  return datetime.now(ZoneInfo("Asia/Seoul")).date()
+
+
+async def resolve_feedback_journey_context(
+  db: Database,
+  *,
+  user_id: UUID,
+  payload: FeedbackJobCreate,
+) -> tuple[date, dict[str, Any] | None]:
+  if payload.feedback_kind == "initial":
+    if payload.parent_feedback_report_id is not None:
+      raise AppError(
+        422,
+        "FEEDBACK_PARENT_NOT_ALLOWED",
+        "Initial feedback cannot have a parent report.",
+      )
+
+    resolved_date = payload.entry_date or server_entry_date()
+    if abs((resolved_date - server_entry_date()).days) > 1:
+      raise AppError(
+        422,
+        "FEEDBACK_ENTRY_DATE_OUT_OF_RANGE",
+        "entryDate must be within one day of the server date.",
+        {"entryDate": resolved_date.isoformat()},
+      )
+    return resolved_date, None
+
+  if payload.parent_feedback_report_id is None:
+    raise AppError(
+      422,
+      "FEEDBACK_PARENT_REQUIRED",
+      "Correction feedback requires a parent report.",
+    )
+
+  parent = await db.fetchrow(
+    """
+    select id, user_id, entry_date, status, score, feedback_payload
+    from makeup_feedback_reports
+    where id = $1 and user_id = $2
+    """,
+    payload.parent_feedback_report_id,
+    user_id,
+  )
+  if parent is None:
+    raise AppError(404, "FEEDBACK_REPORT_NOT_FOUND", "Feedback report was not found.")
+  if parent.get("status") != "completed" or parent.get("score") is None:
+    raise AppError(
+      409,
+      "FEEDBACK_PARENT_NOT_COMPLETED",
+      "Correction feedback requires a completed, scored parent report.",
+    )
+
+  parent_entry_date = parent.get("entry_date")
+  if not isinstance(parent_entry_date, date):
+    raise AppError(
+      409,
+      "FEEDBACK_PARENT_DATE_MISSING",
+      "The parent feedback report does not have a journey date.",
+    )
+
+  parent_payload = decode_json_object(parent.get("feedback_payload"))
+  parent_request = decode_json_object(parent_payload.get("request"))
+  inherited_goal_context = extract_feedback_goal_context(parent_request)
+  return parent_entry_date, inherited_goal_context
 
 
 async def mark_feedback_failed(
   db: Database,
   report_id: UUID,
+  user_id: UUID,
   request_payload: dict[str, Any],
   message: str,
   details: dict[str, Any] | None = None,
@@ -166,10 +281,11 @@ async def mark_feedback_failed(
     update makeup_feedback_reports
     set status = 'failed',
         completed_at = now(),
-        feedback_payload = $2::jsonb
-    where id = $1
+        feedback_payload = $3::jsonb
+    where id = $1 and user_id = $2
     """,
     report_id,
+    user_id,
     json.dumps(
       {
         "request": request_payload,
@@ -182,6 +298,7 @@ async def mark_feedback_failed(
 
 async def run_feedback_job_background(
   report_id: UUID,
+  user_id: UUID,
   request_payload: dict[str, Any],
   settings: Settings,
   *,
@@ -189,8 +306,9 @@ async def run_feedback_job_background(
 ) -> None:
   logger.info("[aura:feedback-api] background:start reportId=%s", report_id)
   await db.execute(
-    "update makeup_feedback_reports set status = 'processing' where id = $1",
+    "update makeup_feedback_reports set status = 'processing' where id = $1 and user_id = $2",
     report_id,
+    user_id,
   )
 
   try:
@@ -205,13 +323,15 @@ async def run_feedback_job_background(
       exc.code,
       exc.details,
     )
-    await mark_feedback_failed(db, report_id, request_payload, exc.message, exc.details)
+    await mark_feedback_failed(db, report_id, user_id, request_payload, exc.message, exc.details)
+    log_feedback_generation_outcome(request_payload, outcome="failed")
     return
   except Exception as exc:
     message = "Makeup feedback analysis failed."
     details = {"reason": exc.__class__.__name__}
     logger.exception("[aura:feedback-api] background:failed reportId=%s", report_id)
-    await mark_feedback_failed(db, report_id, request_payload, message, details)
+    await mark_feedback_failed(db, report_id, user_id, request_payload, message, details)
+    log_feedback_generation_outcome(request_payload, outcome="failed")
     return
 
   score = result.get("score") if isinstance(result.get("score"), int) else None
@@ -225,14 +345,15 @@ async def run_feedback_job_background(
     """
     update makeup_feedback_reports
     set status = 'completed',
-        score = $2,
-        model_version = $3,
+        score = $3,
+        model_version = $4,
         completed_at = now(),
-        feedback_payload = $4::jsonb
-    where id = $1
+        feedback_payload = $5::jsonb
+    where id = $1 and user_id = $2
     returning *
     """,
     report_id,
+    user_id,
     score,
     result.get("modelVersion") or MODEL_VERSION,
     json.dumps(completed_payload, ensure_ascii=False),
@@ -240,6 +361,7 @@ async def run_feedback_job_background(
 
   if completed_report is None:
     logger.warning("[aura:feedback-api] background:missing-report reportId=%s", report_id)
+    log_feedback_generation_outcome(request_payload, outcome="failed")
     return
 
   logger.info(
@@ -248,6 +370,7 @@ async def run_feedback_job_background(
     analysis_status,
     score,
   )
+  log_feedback_generation_outcome(request_payload, outcome="completed")
   await create_and_send_notification(
     db,
     settings,
@@ -277,6 +400,7 @@ async def dispatch_feedback_job(
     background_tasks.add_task(
       run_feedback_job_background,
       report_id,
+      user_id,
       request_payload,
       settings,
     )
@@ -295,7 +419,8 @@ async def dispatch_feedback_job(
   try:
     result = await asyncio.to_thread(publisher.publish_feedback_job, report_id, user_id)
   except AppError as exc:
-    await mark_feedback_failed(db, report_id, request_payload, exc.message, exc.details)
+    await mark_feedback_failed(db, report_id, user_id, request_payload, exc.message, exc.details)
+    log_feedback_generation_outcome(request_payload, outcome="failed")
     raise
 
   logger.info(
@@ -305,7 +430,7 @@ async def dispatch_feedback_job(
   )
 
 
-@router.post("/jobs")
+@router.post("/jobs", response_model=FeedbackJobCreateResponse)
 async def create_feedback_job(
   payload: FeedbackJobCreate,
   background_tasks: BackgroundTasks,
@@ -324,7 +449,19 @@ async def create_feedback_job(
       {"executionMode": execution_mode},
     )
 
-  request_payload = await resolve_feedback_request_payload(db, user, payload, settings)
+  entry_date, inherited_goal_context = await resolve_feedback_journey_context(
+    db,
+    user_id=user["id"],
+    payload=payload,
+  )
+  request_payload = await resolve_feedback_request_payload(
+    db,
+    user,
+    payload,
+    settings,
+    inherited_goal_context=inherited_goal_context,
+    entry_date=entry_date,
+  )
   logger.info(
     "[aura:feedback-api] job:create-start userSub=%s runImmediately=%s source=%s executionMode=%s",
     auth.subject,
@@ -341,9 +478,12 @@ async def create_feedback_job(
       source,
       source_label,
       status,
+      entry_date,
+      feedback_kind,
+      parent_feedback_report_id,
       feedback_payload
     )
-    values ($1, $2, $3, $4, $5, 'pending', $6::jsonb)
+    values ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9::jsonb)
     returning *
     """,
     user["id"],
@@ -351,6 +491,9 @@ async def create_feedback_job(
     payload.uploaded_media_id,
     payload.source,
     payload.source_label,
+    entry_date,
+    payload.feedback_kind,
+    payload.parent_feedback_report_id,
     json.dumps(build_feedback_payload(payload, request_payload), ensure_ascii=False),
   )
 

@@ -24,6 +24,7 @@ import type {
 } from '../types';
 import {MAKEUP_FEEDBACK_TOPICS} from '../types';
 import {localizeMakeupFeedbackIntensityTerms} from './makeupFeedbackGoalIntentService';
+import {getLocalMakeupFeedbackEntryDate} from './makeupFeedbackJourneyContext';
 
 const FEEDBACK_ANALYSIS_TIMEOUT_MS = 180000;
 const FEEDBACK_REPORT_POLL_INTERVAL_MS = 2000;
@@ -73,10 +74,13 @@ type BackendFeedbackPayload = {
   result?: Record<string, unknown> | null;
 } | null;
 
-type BackendFeedbackJob = {
+export type BackendFeedbackJob = {
+  entryDate?: string | null;
   feedbackPayload?: BackendFeedbackPayload;
+  feedbackKind?: 'initial' | 'correction' | null;
   id?: string | null;
   modelVersion?: string | null;
+  parentFeedbackReportId?: string | null;
   score?: number | null;
   source?: string | null;
   sourceLabel?: string | null;
@@ -767,6 +771,55 @@ function getFeedbackContext(selection: MakeupFeedbackPhotoSelection) {
   };
 }
 
+export function buildMakeupFeedbackJobCreateBody(
+  selection: MakeupFeedbackPhotoSelection,
+  uploadedPhoto: {mediaId?: string; photoCaptureId: string},
+) {
+  const feedbackKind = selection.feedbackKind ?? 'initial';
+
+  return {
+    entryDate: selection.entryDate ?? getLocalMakeupFeedbackEntryDate(),
+    feedbackKind,
+    parentFeedbackReportId:
+      feedbackKind === 'correction'
+        ? selection.parentFeedbackReportId ?? null
+        : null,
+    photoCaptureId: uploadedPhoto.photoCaptureId,
+    uploadedMediaId: uploadedPhoto.mediaId,
+    requestPayload: {
+      feedbackContext: getFeedbackContext(selection),
+      source: selection.photoSource,
+      task: 'makeup_feedback_report_v2',
+      topics: MAKEUP_FEEDBACK_TOPICS.map(topic => ({id: topic.id, label: topic.label})),
+    },
+    runImmediately: true,
+    source: selection.photoSource,
+    sourceLabel: selection.photoTitle ?? null,
+  };
+}
+
+export function assertCreatedFeedbackJobJourneyContext(
+  job: BackendFeedbackJob,
+  expected: {
+    entryDate: string;
+    feedbackKind: 'initial' | 'correction';
+    parentFeedbackReportId: string | null;
+  },
+): void {
+  if (job.entryDate !== expected.entryDate) {
+    throw feedbackContractError('job.entryDate', '기록 날짜를 확인할 수 없습니다.');
+  }
+  if (job.feedbackKind !== expected.feedbackKind) {
+    throw feedbackContractError('job.feedbackKind', '피드백 종류를 확인할 수 없습니다.');
+  }
+  if (job.parentFeedbackReportId !== expected.parentFeedbackReportId) {
+    throw feedbackContractError(
+      'job.parentFeedbackReportId',
+      '교정 피드백의 원본 보고서를 확인할 수 없습니다.',
+    );
+  }
+}
+
 export function mapBackendJobToFeedbackOutcome(
   job: BackendFeedbackJob,
   selection: MakeupFeedbackPhotoSelection,
@@ -1097,26 +1150,16 @@ async function createBackendMakeupFeedback(
     uri: selection.imageUri,
     width: selection.imageWidth ?? undefined,
   });
-  const feedbackContext = getFeedbackContext(selection);
   const startedAt = Date.now();
 
+  const createBody = buildMakeupFeedbackJobCreateBody(selection, uploadedPhoto);
   const {job} = await requestBackendJson<CreateFeedbackJobResponse>('/feedback/jobs', {
-    body: {
-      photoCaptureId: uploadedPhoto.photoCaptureId,
-      uploadedMediaId: uploadedPhoto.mediaId,
-      requestPayload: {
-        feedbackContext,
-        source: selection.photoSource,
-        task: 'makeup_feedback_report_v2',
-        topics: MAKEUP_FEEDBACK_TOPICS.map(topic => ({id: topic.id, label: topic.label})),
-      },
-      runImmediately: true,
-      source: selection.photoSource,
-      sourceLabel: selection.photoTitle ?? null,
-    },
+    body: createBody,
     method: 'POST',
     timeoutMs: FEEDBACK_ANALYSIS_TIMEOUT_MS,
   });
+
+  assertCreatedFeedbackJobJourneyContext(job, createBody);
 
   if (!job.id) {
     throw new Error('Feedback job did not return a report id.');

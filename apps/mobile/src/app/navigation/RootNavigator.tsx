@@ -64,6 +64,10 @@ import {
   MakeupFeedbackResultsListRouteScreen,
   MakeupCorrectionTipRouteScreen,
 } from './routes/makeupFeedbackRoutes';
+import {
+  MakeupJourneyDayDetailRouteScreen,
+  MakeupJourneyTrendRouteScreen,
+} from './routes/makeupJourneyRoutes';
 import {MakeupRecommendationRouteScreen} from './routes/makeupRecommendationRoutes';
 import {
   AuradinSearchRouteScreen,
@@ -208,6 +212,8 @@ export function RootNavigator() {
       <Stack.Screen name="MakeupFeedbackLoading" component={MakeupFeedbackLoadingRouteScreen} />
       <Stack.Screen name="MakeupFeedbackResultsList" component={MakeupFeedbackResultsListRouteScreen} />
       <Stack.Screen name="MakeupFeedbackResult" component={MakeupFeedbackResultRouteScreen} />
+      <Stack.Screen name="MakeupJourneyDayDetail" component={MakeupJourneyDayDetailRouteScreen} />
+      <Stack.Screen name="MakeupJourneyTrend" component={MakeupJourneyTrendRouteScreen} />
       <Stack.Screen name="MakeupCorrectionGuide" component={MakeupCorrectionGuideRouteScreen} />
       <Stack.Screen name="MakeupCorrectionTip" component={MakeupCorrectionTipRouteScreen} />
       <Stack.Screen name="ReferenceMakeupExtractionUpload" component={ReferenceMakeupExtractionUploadRouteScreen} />

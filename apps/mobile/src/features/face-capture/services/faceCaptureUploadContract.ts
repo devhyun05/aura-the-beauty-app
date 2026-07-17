@@ -40,6 +40,16 @@ export type FaceCaptureCompleteUploadBody =
       width: number | null;
     };
 
+export function getBase64DecodedByteSize(value: string): number {
+  const normalized = value.replace(/\s/g, '');
+  if (!normalized) {
+    return 0;
+  }
+
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0;
+  return Math.floor((normalized.length * 3) / 4) - padding;
+}
+
 export function buildFaceCaptureCompleteUploadBody(
   upload: FaceCapturePresignedUpload,
   metadata: FaceCaptureCompletionMetadata,

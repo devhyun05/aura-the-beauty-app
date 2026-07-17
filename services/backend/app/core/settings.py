@@ -59,6 +59,7 @@ class Settings(BaseSettings):
   image_generation_provider: str = "openai"
   ai_job_execution_mode: str = "inline"
   sqs_ai_job_queue_url: str | None = None
+  makeup_journey_enabled: bool = True
   makeup_recommendation_v2_enabled: bool = True
   makeup_trend_keywords_enabled: bool = True
   makeup_personalized_image_enabled: bool = True

@@ -62,6 +62,9 @@ EXPECTED_TABLES = {
   "user_ar_filter_states",
   "filter_extraction_reports",
   "makeup_feedback_reports",
+  "makeup_journey_settings",
+  "makeup_journey_day_notes",
+  "makeup_journey_missions",
   "makeup_scenario_library",
   "makeup_scenario_generation_limits",
   "makeup_situations",
@@ -155,6 +158,30 @@ EXPECTED_CONSTRAINTS = {
   },
   "seasonal_pipeline_runs": {"chk_seasonal_pipeline_run_trigger"},
   "seasonal_auto_publish_audit_log": {"chk_seasonal_auto_publish_decision_refs"},
+  "makeup_feedback_reports": {
+    "fk_makeup_feedback_reports_parent",
+    "chk_makeup_feedback_kind",
+    "chk_makeup_feedback_parent_presence",
+    "chk_makeup_feedback_parent_not_self",
+  },
+  "makeup_journey_settings": {
+    "fk_makeup_journey_settings_user",
+    "chk_makeup_journey_goal_score",
+    "chk_makeup_journey_mission_level",
+    "chk_makeup_journey_timezone_name",
+  },
+  "makeup_journey_day_notes": {
+    "fk_makeup_journey_day_notes_user",
+    "uq_makeup_journey_day_notes_user_date",
+    "chk_makeup_journey_day_note_length",
+  },
+  "makeup_journey_missions": {
+    "fk_makeup_journey_missions_user",
+    "chk_makeup_journey_mission_source",
+    "chk_makeup_journey_mission_difficulty",
+    "chk_makeup_journey_mission_title",
+    "chk_makeup_journey_mission_completion",
+  },
   "makeup_recommendation_sessions": {
     "uq_makeup_recommendation_sessions_user_idempotency",
     "uq_makeup_recommendation_sessions_report",
@@ -398,6 +425,17 @@ EXPECTED_COLUMNS = {
     "attempt_count",
   },
   "user_consents": {"recorded_at"},
+  "makeup_feedback_reports": {"entry_date", "feedback_kind", "parent_feedback_report_id"},
+  "makeup_journey_settings": {
+    "user_id", "goal_score", "mission_level", "timezone_name", "created_at", "updated_at",
+  },
+  "makeup_journey_day_notes": {
+    "id", "user_id", "entry_date", "content", "created_at", "updated_at",
+  },
+  "makeup_journey_missions": {
+    "id", "user_id", "entry_date", "source", "difficulty", "title", "is_completed",
+    "completed_at", "sort_order", "generation_payload", "created_at", "updated_at",
+  },
 }
 
 EXPECTED_COLUMN_CONTRACTS = {
@@ -446,6 +484,31 @@ EXPECTED_COLUMN_CONTRACTS = {
   "auradin_events.release_manifest_id": {"is_nullable": "NO"},
   "auradin_events.occurred_at": {"is_nullable": "NO"},
   "auradin_events.received_at": {"is_nullable": "NO", "default_contains": "now"},
+  "makeup_feedback_reports.entry_date": {
+    "is_nullable": "NO",
+    "default_contains": "Asia/Seoul",
+  },
+  "makeup_feedback_reports.feedback_kind": {"is_nullable": "NO", "default_contains": "initial"},
+  "makeup_journey_settings.goal_score": {"is_nullable": "NO"},
+  "makeup_journey_settings.mission_level": {"is_nullable": "NO"},
+  "makeup_journey_settings.timezone_name": {
+    "is_nullable": "NO",
+    "default_contains": "Asia/Seoul",
+  },
+  "makeup_journey_day_notes.user_id": {"is_nullable": "NO"},
+  "makeup_journey_day_notes.entry_date": {"is_nullable": "NO"},
+  "makeup_journey_day_notes.content": {"is_nullable": "NO"},
+  "makeup_journey_missions.user_id": {"is_nullable": "NO"},
+  "makeup_journey_missions.entry_date": {"is_nullable": "NO"},
+  "makeup_journey_missions.source": {"is_nullable": "NO"},
+  "makeup_journey_missions.difficulty": {"is_nullable": "NO"},
+  "makeup_journey_missions.title": {"is_nullable": "NO"},
+  "makeup_journey_missions.is_completed": {
+    "is_nullable": "NO",
+    "default_contains": "false",
+  },
+  "makeup_journey_missions.sort_order": {"is_nullable": "NO", "default_contains": "0"},
+  "makeup_journey_missions.generation_payload": {"is_nullable": "NO", "default_contains": "{}"},
   "makeup_recommendation_sessions.user_id": {"is_nullable": "NO"},
   "makeup_recommendation_sessions.analysis_report_id": {"is_nullable": "NO"},
   "makeup_recommendation_sessions.idempotency_key": {"is_nullable": "NO"},
@@ -525,6 +588,52 @@ EXPECTED_CONSTRAINT_CONTRACTS = {
     "collection_id is not null",
     "decision = 'rolled_back'",
     "previous_collection_id is not null",
+  ),
+  "chk_makeup_feedback_parent_presence": (
+    "feedback_kind = 'initial'::text",
+    "parent_feedback_report_id is null",
+    "feedback_kind = 'correction'::text",
+    "parent_feedback_report_id is not null",
+  ),
+  "chk_makeup_feedback_parent_not_self": (
+    "parent_feedback_report_id is null",
+    "parent_feedback_report_id <> id",
+  ),
+  "chk_makeup_journey_goal_score": (
+    "goal_score >= 1",
+    "goal_score <= 100",
+  ),
+  "chk_makeup_journey_mission_level": (
+    "'beginner'",
+    "'intermediate'",
+    "'advanced'",
+  ),
+  "chk_makeup_journey_timezone_name": (
+    "char_length(btrim(timezone_name)) >= 1",
+    "char_length(btrim(timezone_name)) <= 64",
+  ),
+  "chk_makeup_journey_day_note_length": (
+    "char_length(content) <= 2000",
+  ),
+  "chk_makeup_journey_mission_source": (
+    "'curated'",
+    "'ai'",
+    "'user'",
+  ),
+  "chk_makeup_journey_mission_difficulty": (
+    "'beginner'",
+    "'intermediate'",
+    "'advanced'",
+  ),
+  "chk_makeup_journey_mission_title": (
+    "char_length(btrim(title)) >= 1",
+    "char_length(btrim(title)) <= 120",
+  ),
+  "chk_makeup_journey_mission_completion": (
+    "is_completed",
+    "completed_at is not null",
+    "not is_completed",
+    "completed_at is null",
   ),
 }
 
@@ -639,6 +748,15 @@ EXPECTED_INDEX_CONTRACTS = {
     "locale",
     "bucket_started_at",
     "region_code",
+  ),
+  "idx_makeup_feedback_reports_user_entry_status_completed": (
+    "user_id", "entry_date", "status", "completed_at", "id",
+  ),
+  "idx_makeup_journey_missions_user_date_order": (
+    "user_id", "entry_date", "sort_order",
+  ),
+  "uq_makeup_journey_missions_user_date_title_ci": (
+    "unique", "user_id", "entry_date", "lower(title)",
   ),
 }
 

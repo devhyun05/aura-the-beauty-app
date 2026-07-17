@@ -38,6 +38,7 @@ env:
   ECS_SERVICE: ${{ vars.ECS_SERVICE }}
   ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION || vars.ECS_SERVICE }}
   CHIME_ENABLED: ${{ vars.CHIME_ENABLED || 'false' }}
+  MAKEUP_JOURNEY_ENABLED: ${{ vars.MAKEUP_JOURNEY_ENABLED || 'true' }}
   CONSULTING_CALL_ENFORCE_EARLY_WINDOW: ${{ vars.CONSULTING_CALL_ENFORCE_EARLY_WINDOW || 'true' }}
   AI_WORKER_CONTAINER_NAME: ${{ vars.AI_WORKER_CONTAINER_NAME || 'aura-ai-worker' }}
   AI_WORKER_SERVICE: ${{ vars.AI_WORKER_SERVICE }}
@@ -70,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: postgres
@@ -164,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: postgres
@@ -368,6 +369,7 @@ jobs:
           image: ${{ steps.build-image.outputs.image }}
           environment-variables: |
             CHIME_ENABLED=${{ env.CHIME_ENABLED }}
+            MAKEUP_JOURNEY_ENABLED=${{ env.MAKEUP_JOURNEY_ENABLED }}
             CONSULTING_CALL_ENFORCE_EARLY_WINDOW=${{ env.CONSULTING_CALL_ENFORCE_EARLY_WINDOW }}
             ENGAGEMENT_PERSONALIZATION_V1=${{ env.ENGAGEMENT_PERSONALIZATION_V1 }}
             COHORT_RECOMMENDATIONS_V1=${{ env.COHORT_RECOMMENDATIONS_V1 }}
@@ -400,6 +402,7 @@ jobs:
             def retained_environment:
               map(select(.name as $name | [
                 "CHIME_ENABLED",
+                "MAKEUP_JOURNEY_ENABLED",
                 "CONSULTING_CALL_ENFORCE_EARLY_WINDOW",
                 "ENGAGEMENT_PERSONALIZATION_V1",
                 "COHORT_RECOMMENDATIONS_V1",
@@ -675,6 +678,45 @@ jobs:
         continue-on-error: true
         run: |
           base_url="${BACKEND_PUBLIC_BASE_URL%/}"
+
+          verify_makeup_journey_auth_boundary() {
+            local expected_code
+            local expected_status
+            local status
+
+            case "${MAKEUP_JOURNEY_ENABLED,,}" in
+              true|1)
+                expected_status="401"
+                expected_code="UNAUTHORIZED"
+                ;;
+              false|0)
+                expected_status="404"
+                expected_code="MAKEUP_JOURNEY_DISABLED"
+                ;;
+              *)
+                echo "MAKEUP_JOURNEY_ENABLED must be true/false or 1/0." >&2
+                return 1
+                ;;
+            esac
+
+            if ! status="$(
+              curl --silent --show-error --max-time 20 \
+                --output makeup-journey-auth.json \
+                --write-out '%{http_code}' \
+                "$base_url/api/makeup-journey/settings?deployment=$GITHUB_SHA"
+            )"; then
+              return 1
+            fi
+
+            if [ "$status" != "$expected_status" ]; then
+              echo "Makeup Journey auth boundary returned HTTP $status; expected $expected_status." >&2
+              return 1
+            fi
+
+            jq -e --arg code "$expected_code" '.error.code == $code' \
+              makeup-journey-auth.json > /dev/null
+          }
+
           for attempt in $(seq 1 30); do
             if curl --fail --silent --show-error --max-time 15 \
               "$base_url/health?deployment=$GITHUB_SHA" > health.json \
@@ -688,6 +730,15 @@ jobs:
                 and .paths["/api/feedback/jobs"]
                 and .paths["/api/feedback/conference-preview-messages"]
                 and .paths["/api/feedback/conference-messages"]
+                and .paths["/api/makeup-journey/analytics/events"]
+                and .paths["/api/makeup-journey/settings"]
+                and .paths["/api/makeup-journey/calendar"]
+                and .paths["/api/makeup-journey/days/{entry_date}"]
+                and .paths["/api/makeup-journey/trends"]
+                and .paths["/api/makeup-journey/days/{entry_date}/note"]
+                and .paths["/api/makeup-journey/days/{entry_date}/missions/generate"]
+                and .paths["/api/makeup-journey/days/{entry_date}/missions"]
+                and .paths["/api/makeup-journey/missions/{mission_id}"]
                 and .paths["/api/products/liked"]
                 and .paths["/api/products/features"]
                 and .paths["/api/products/recommendations/ar"]
@@ -695,6 +746,7 @@ jobs:
                 and .paths["/api/products/recommendations/personalized"]
                 and .paths["/api/products/recommendations/cohort"]
               ' openapi.json > /dev/null \
+              && verify_makeup_journey_auth_boundary \
               && curl --fail --silent --show-error --max-time 20 \
                 "$base_url/api/products/features?deployment=$GITHUB_SHA" > product-features.json \
               && curl --fail --silent --show-error --max-time 30 \

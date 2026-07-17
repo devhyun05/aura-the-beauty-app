@@ -15,12 +15,24 @@ import {
   fetchMakeupFeedbackReport,
   fetchMakeupFeedbackReports,
 } from '../../../features/makeup-feedback/services/makeupFeedbackService';
+import {
+  applyMakeupFeedbackJourneyContext,
+  type MakeupFeedbackJourneyFlowContext,
+} from '../../../features/makeup-feedback/services/makeupFeedbackJourneyContext';
+import {notifyMakeupJourneyFeedbackCompleted} from '../../../features/makeup-journey';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {RoutePlaceholder} from '../../../shared/ui';
+import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAnalytics';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
-import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {
+  getMakeupJourneyDayResetState,
+  getMakeupJourneySafeReturnResetState,
+  getMakeupJourneyTabResetState,
+  navigateMainTab,
+  type RootScreenProps,
+} from './routeUtils';
 
 type HeaderShareAction = {
   cb: () => void;
@@ -34,6 +46,12 @@ function getMakeupFeedbackPhotoSourceRoute(selection: MakeupFeedbackPhotoSelecti
 
 function getMakeupFeedbackResultList(currentResult: MakeupFeedbackResult | null) {
   return currentResult ? [currentResult] : [];
+}
+
+function getMakeupFeedbackJourneyFlowContext(
+  state: MakeupFeedbackJourneyFlowContext,
+): MakeupFeedbackJourneyFlowContext {
+  return state;
 }
 
 export function mapFaceCaptureResultToMakeupFeedbackPhotoSelection(
@@ -53,7 +71,25 @@ export function mapFaceCaptureResultToMakeupFeedbackPhotoSelection(
 export function MakeupFeedbackCaptureRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupFeedbackCapture'>) {
-  const {setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto} = useNavigationFlowState();
+  const {
+    clearMakeupFeedbackFlowContext,
+    makeupFeedbackEntryDate,
+    makeupFeedbackFlowOrigin,
+    makeupFeedbackInheritedGoalContext,
+    makeupFeedbackKind,
+    makeupFeedbackParentReportId,
+    makeupFeedbackParentScore,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  } = useNavigationFlowState();
+  const journeyContext = getMakeupFeedbackJourneyFlowContext({
+    entryDate: makeupFeedbackEntryDate,
+    feedbackKind: makeupFeedbackKind,
+    inheritedGoalContext: makeupFeedbackInheritedGoalContext,
+    origin: makeupFeedbackFlowOrigin,
+    parentFeedbackReportId: makeupFeedbackParentReportId,
+    parentScore: makeupFeedbackParentScore,
+  });
 
   const handleCapture = React.useCallback(
     (result?: FaceCaptureUploadResult) => {
@@ -62,13 +98,26 @@ export function MakeupFeedbackCaptureRouteScreen({
       }
 
       setMakeupFeedbackResult(null);
-      setSelectedMakeupFeedbackPhoto(
+      setSelectedMakeupFeedbackPhoto(applyMakeupFeedbackJourneyContext(
         mapFaceCaptureResultToMakeupFeedbackPhotoSelection(result),
-      );
+        journeyContext,
+      ));
       navigation.replace('FaceCaptureConfirmation', {target: 'makeupFeedback'});
     },
-    [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto],
+    [journeyContext, navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto],
   );
+
+  const handleClose = React.useCallback(() => {
+    const returnEntryDate = journeyContext.entryDate;
+    const shouldReturnToJourney = journeyContext.origin === 'journeyDay';
+
+    clearMakeupFeedbackFlowContext();
+    if (shouldReturnToJourney) {
+      navigation.reset(getMakeupJourneyDayResetState(returnEntryDate));
+      return;
+    }
+    navigateMainTab(navigation, 'HomeTab');
+  }, [clearMakeupFeedbackFlowContext, journeyContext, navigation]);
 
   return (
     <CameraFaceCaptureScreen
@@ -77,7 +126,7 @@ export function MakeupFeedbackCaptureRouteScreen({
       onCapture={handleCapture}
       deferUpload
       imageQuality={1}
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}
+      onClose={handleClose}
     />
   );
 }
@@ -85,21 +134,53 @@ export function MakeupFeedbackCaptureRouteScreen({
 export function MakeupFeedbackAlbumUploadRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupFeedbackAlbumUpload'>) {
-  const {setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto} = useNavigationFlowState();
+  const {
+    clearMakeupFeedbackFlowContext,
+    makeupFeedbackEntryDate,
+    makeupFeedbackFlowOrigin,
+    makeupFeedbackInheritedGoalContext,
+    makeupFeedbackKind,
+    makeupFeedbackParentReportId,
+    makeupFeedbackParentScore,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  } = useNavigationFlowState();
+  const journeyContext = getMakeupFeedbackJourneyFlowContext({
+    entryDate: makeupFeedbackEntryDate,
+    feedbackKind: makeupFeedbackKind,
+    inheritedGoalContext: makeupFeedbackInheritedGoalContext,
+    origin: makeupFeedbackFlowOrigin,
+    parentFeedbackReportId: makeupFeedbackParentReportId,
+    parentScore: makeupFeedbackParentScore,
+  });
 
   const handleStartAnalysis = React.useCallback(
     (selection: MakeupFeedbackPhotoSelection) => {
       setMakeupFeedbackResult(null);
-      setSelectedMakeupFeedbackPhoto(selection);
+      setSelectedMakeupFeedbackPhoto(
+        applyMakeupFeedbackJourneyContext(selection, journeyContext),
+      );
       navigation.replace('FaceCaptureConfirmation', {target: 'makeupFeedback'});
     },
-    [navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto],
+    [journeyContext, navigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto],
   );
+
+  const handleBack = React.useCallback(() => {
+    const returnEntryDate = journeyContext.entryDate;
+    const shouldReturnToJourney = journeyContext.origin === 'journeyDay';
+
+    clearMakeupFeedbackFlowContext();
+    if (shouldReturnToJourney) {
+      navigation.reset(getMakeupJourneyDayResetState(returnEntryDate));
+      return;
+    }
+    navigateMainTab(navigation, 'HomeTab');
+  }, [clearMakeupFeedbackFlowContext, journeyContext, navigation]);
 
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackAlbumUpload"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={handleBack}>
       <MakeupFeedbackAlbumUploadScreen onStartAnalysis={handleStartAnalysis} />
     </DetailRouteChrome>
   );
@@ -108,8 +189,31 @@ export function MakeupFeedbackAlbumUploadRouteScreen({
 export function MakeupFeedbackGoalInputRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupFeedbackGoalInput'>) {
-  const {selectedMakeupFeedbackPhoto, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto} =
-    useNavigationFlowState();
+  const {
+    clearMakeupFeedbackFlowContext,
+    makeupFeedbackEntryDate,
+    makeupFeedbackFlowOrigin,
+    selectedMakeupFeedbackPhoto,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  } = useNavigationFlowState();
+
+  const handleCancel = React.useCallback(() => {
+    const returnEntryDate = makeupFeedbackEntryDate;
+    const shouldReturnToJourney = makeupFeedbackFlowOrigin === 'journeyDay';
+
+    clearMakeupFeedbackFlowContext();
+    if (shouldReturnToJourney) {
+      navigation.reset(getMakeupJourneyDayResetState(returnEntryDate));
+      return;
+    }
+    navigateMainTab(navigation, 'HomeTab');
+  }, [
+    clearMakeupFeedbackFlowContext,
+    makeupFeedbackEntryDate,
+    makeupFeedbackFlowOrigin,
+    navigation,
+  ]);
 
   const handleStartFeedback = React.useCallback(
     (selection: MakeupFeedbackPhotoSelection) => {
@@ -124,7 +228,7 @@ export function MakeupFeedbackGoalInputRouteScreen({
     <DetailRouteChrome
       routeName="MakeupFeedbackGoalInput"
       onBack={() => navigation.replace(getMakeupFeedbackPhotoSourceRoute(selectedMakeupFeedbackPhoto))}
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}>
+      onClose={handleCancel}>
       <MakeupFeedbackGoalInputScreen
         onStartFeedback={handleStartFeedback}
         selection={selectedMakeupFeedbackPhoto}
@@ -136,37 +240,105 @@ export function MakeupFeedbackGoalInputRouteScreen({
 export function MakeupFeedbackLoadingRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupFeedbackLoading'>) {
-  const {selectedMakeupFeedbackPhoto, setMakeupFeedbackResult} = useNavigationFlowState();
+  const {
+    beginMakeupFeedbackFlow,
+    clearMakeupFeedbackFlowContext,
+    makeupFeedbackEntryDate,
+    makeupFeedbackFlowOrigin,
+    makeupFeedbackInheritedGoalContext,
+    makeupFeedbackKind,
+    makeupFeedbackParentReportId,
+    makeupFeedbackParentScore,
+    selectedMakeupFeedbackPhoto,
+    setMakeupFeedbackResult,
+  } = useNavigationFlowState();
+  const selectedMakeupFeedbackPhotoRef = React.useRef(
+    selectedMakeupFeedbackPhoto,
+  );
+  const frozenMakeupFeedbackPhoto = selectedMakeupFeedbackPhotoRef.current;
+  const flowContextRef = React.useRef<MakeupFeedbackJourneyFlowContext | null>(null);
+
+  if (!flowContextRef.current) {
+    flowContextRef.current = getMakeupFeedbackJourneyFlowContext({
+      entryDate: makeupFeedbackEntryDate,
+      feedbackKind: makeupFeedbackKind,
+      inheritedGoalContext: makeupFeedbackInheritedGoalContext,
+      origin: makeupFeedbackFlowOrigin,
+      parentFeedbackReportId: makeupFeedbackParentReportId,
+      parentScore: makeupFeedbackParentScore,
+    });
+  }
+  const flowContext = flowContextRef.current;
 
   const handleBackToHome = React.useCallback(() => {
+    clearMakeupFeedbackFlowContext();
+    if (flowContext.origin === 'journeyDay') {
+      navigation.reset(getMakeupJourneyDayResetState(flowContext.entryDate));
+      return;
+    }
     navigation.reset({
       index: 0,
       routes: [{name: 'MainTabs', params: {screen: 'HomeTab'}}],
     });
-  }, [navigation]);
+  }, [clearMakeupFeedbackFlowContext, flowContext, navigation]);
   const handleEditGoal = React.useCallback(() => {
+    if (flowContext.feedbackKind === 'correction') {
+      handleBackToHome();
+      return;
+    }
+    beginMakeupFeedbackFlow(flowContext);
     navigation.replace('MakeupFeedbackGoalInput');
-  }, [navigation]);
+  }, [beginMakeupFeedbackFlow, flowContext, handleBackToHome, navigation]);
 
   const handleComplete = React.useCallback(
     (result: MakeupFeedbackResult) => {
       setMakeupFeedbackResult(result);
+      notifyMakeupJourneyFeedbackCompleted(flowContext.entryDate);
+      if (
+        flowContext.feedbackKind === 'correction' &&
+        flowContext.parentScore !== null
+      ) {
+        trackMakeupJourneyEvent({
+          name: 'makeup_journey_correction_completed',
+          properties: {scoreDelta: result.score - flowContext.parentScore},
+        });
+      }
+      clearMakeupFeedbackFlowContext();
       if (!navigation.isFocused()) {
         return;
       }
-      navigation.replace('MakeupFeedbackResult');
+      navigation.replace(
+        'MakeupFeedbackResult',
+        flowContext.origin === 'journeyDay'
+          ? {
+              entryDate: flowContext.entryDate,
+              reportId: result.analysisId,
+              returnTo: 'makeupJourney',
+            }
+          : {reportId: result.analysisId},
+      );
     },
-    [navigation, setMakeupFeedbackResult],
+    [
+      clearMakeupFeedbackFlowContext,
+      flowContext,
+      navigation,
+      setMakeupFeedbackResult,
+    ],
   );
+  const handleError = React.useCallback(() => {
+    clearMakeupFeedbackFlowContext();
+  }, [clearMakeupFeedbackFlowContext]);
   const handleRetake = React.useCallback(() => {
+    beginMakeupFeedbackFlow(flowContext);
     setMakeupFeedbackResult(null);
     navigation.replace('MakeupFeedbackCapture');
-  }, [navigation, setMakeupFeedbackResult]);
+  }, [beginMakeupFeedbackFlow, flowContext, navigation, setMakeupFeedbackResult]);
 
   const handleChooseDifferentPhoto = React.useCallback(() => {
+    beginMakeupFeedbackFlow(flowContext);
     setMakeupFeedbackResult(null);
     navigation.replace('MakeupFeedbackAlbumUpload');
-  }, [navigation, setMakeupFeedbackResult]);
+  }, [beginMakeupFeedbackFlow, flowContext, navigation, setMakeupFeedbackResult]);
 
 
 
@@ -177,9 +349,10 @@ export function MakeupFeedbackLoadingRouteScreen({
       <MakeupFeedbackLoadingScreen
         onBack={handleEditGoal}
         onChooseDifferentPhoto={handleChooseDifferentPhoto}
+        onError={handleError}
         onRetake={handleRetake}
         onComplete={handleComplete}
-        selection={selectedMakeupFeedbackPhoto}
+        selection={frozenMakeupFeedbackPhoto}
       />
     </DetailRouteChrome>
   );
@@ -247,6 +420,7 @@ export function MakeupFeedbackResultRouteScreen({
   const {makeupFeedbackResult, setMakeupFeedbackResult} = useNavigationFlowState();
   const reportId = route.params?.reportId;
   const shouldReturnToProfile = route.params?.returnTo === 'profile';
+  const shouldReturnToJourney = route.params?.returnTo === 'makeupJourney';
   const reportIsLoaded =
     !reportId || makeupFeedbackResult?.analysisId === reportId;
   const [reportLoadError, setReportLoadError] = React.useState('');
@@ -260,7 +434,14 @@ export function MakeupFeedbackResultRouteScreen({
   const handleBackToProfile = React.useCallback(() => {
     navigateMainTab(navigation, 'ProfileTab');
   }, [navigation]);
-  const detailHeaderNavigationProps = shouldReturnToProfile
+  const handleBackToJourney = React.useCallback(() => {
+    navigation.reset(
+      getMakeupJourneySafeReturnResetState(route.params?.entryDate),
+    );
+  }, [navigation, route.params?.entryDate]);
+  const detailHeaderNavigationProps = shouldReturnToJourney
+    ? {onBack: handleBackToJourney}
+    : shouldReturnToProfile
     ? {onBack: handleBackToProfile}
     : {
         onOpenDocumentList: () =>

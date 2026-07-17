@@ -28,7 +28,7 @@ import {
   HOME_RECOMMENDED_FILTER_PREVIEW_COUNT,
   HOME_RECOMMENDED_FILTER_PREVIEW_PRIMARY_ID,
   HOME_RECOMMENDED_FILTER_PREVIEW_SECONDARY_ID,
-  HOME_FILTER_STORE_SERVICE_SHORTCUT_ICON_NAME,
+  HOME_AURADIN_SERVICE_SHORTCUT_ICON_NAME,
   HOME_SERVICE_SHORTCUT_LABEL_MIN_HEIGHT,
   HOME_SERVICE_SHORTCUT_LABEL_NUMBER_OF_LINES,
   HOME_SERVICE_SHORTCUT_LABELS,
@@ -95,7 +95,7 @@ const expectedHomeServiceShortcutLabels: readonly [
   '메이크업 필터',
   '메이크업 추출',
   '메이크업 피드백',
-  '필터 스토어',
+  '아우라딘',
   '추천 제품',
   '컨설팅',
   '메이크업 추천',
@@ -104,7 +104,7 @@ const homeServiceShortcutRowLabels = getHomeServiceShortcutRowLabels();
 const expectedHomeServiceShortcutFirstRowLabels =
   '얼굴 분석,메이크업 필터,메이크업 추출,메이크업 피드백';
 const expectedHomeServiceShortcutSecondRowLabels =
-  '필터 스토어,추천 제품,컨설팅,메이크업 추천';
+  '아우라딘,추천 제품,컨설팅,메이크업 추천';
 const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
 const makeupFeedbackActionLabels = getHomeMakeupFeedbackActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
@@ -241,9 +241,9 @@ expectEqual(
   'home service shortcut label min height is one line',
 );
 expectEqual(
-  HOME_FILTER_STORE_SERVICE_SHORTCUT_ICON_NAME,
-  'Store',
-  'home filter store service shortcut icon name',
+  HOME_AURADIN_SERVICE_SHORTCUT_ICON_NAME,
+  'WandSparkles',
+  'home Auradin service shortcut icon name',
 );
 expectEqual(
   HOME_CONSULTING_SERVICE_SHORTCUT_ICON_NAME,
@@ -425,9 +425,9 @@ expectEqual(
 
 let selectedHomeServiceShortcut:
   | 'arFilter'
+  | 'auradin'
   | 'consulting'
   | 'diagnosis'
-  | 'filterStore'
   | 'makeupRecommendation'
   | 'makeupExtraction'
   | 'makeupFeedback'
@@ -508,19 +508,19 @@ recommendationPressHandler();
 
 expectEqual(selectedHomeServiceShortcut, 'recommendation', 'product recommendation service shortcut target');
 
-const filterStorePressHandler = getHomeServiceShortcutPressHandler('filterStore', {
-  onPressRecommendedFilterMore: () => {
-    selectedHomeServiceShortcut = 'filterStore';
+const auradinPressHandler = getHomeServiceShortcutPressHandler('auradin', {
+  onPressAuradin: () => {
+    selectedHomeServiceShortcut = 'auradin';
   },
 });
 
-if (!filterStorePressHandler) {
-  throw new Error('filter store service shortcut should have a press handler');
+if (!auradinPressHandler) {
+  throw new Error('Auradin service shortcut should have a press handler');
 }
 
-filterStorePressHandler();
+auradinPressHandler();
 
-expectEqual(selectedHomeServiceShortcut, 'filterStore', 'filter store service shortcut target');
+expectEqual(selectedHomeServiceShortcut, 'auradin', 'Auradin service shortcut target');
 
 const consultingPressHandler = getHomeServiceShortcutPressHandler('consulting', {
   onPressConsulting: () => {

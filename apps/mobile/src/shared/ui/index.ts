@@ -18,6 +18,7 @@ export {
   ConsultingFooterIcon,
   FloatingActionFooterIcon,
   HomeFooterIcon,
+  JourneyFooterIcon,
   ProfileFooterIcon,
 } from './FooterIcons';
 export {
@@ -26,6 +27,7 @@ export {
   DEFAULT_FLOATING_ACTION_BUTTON_POSITION,
   FLOATING_ACTION_BUTTON_SURFACE_BACKGROUND,
   FLOATING_ACTION_HOST_EXTRA_HEIGHT,
+  FLOATING_ACTION_LONG_PRESS_MS,
   FLOATING_ACTION_ICON_LIBRARY_NAMES,
   FLOATING_ACTION_INLINE_AR_FILTER_SLOT_OFFSET,
   FLOATING_ACTION_MAIN_ICON_SIZE,
@@ -37,7 +39,10 @@ export {
   floatingActionInteractionModeOptions,
   floatingActionDefinitions,
   getFloatingActionDefinition,
+  getFloatingActionAnchorFromCenter,
+  getFloatingActionCenter,
   getFloatingActionMenuTarget,
+  getFloatingActionQuadrant,
   getFloatingActionSelectedSlotNumber,
   getFloatingActionSettingsSlotOffset,
   getFloatingActionSlotOffsetForAction,
@@ -45,8 +50,12 @@ export {
   getNextFloatingActionSelection,
   getVisibleFloatingActionIds,
   type FloatingActionButtonPosition,
+  type FloatingActionAnchor,
+  type FloatingActionCenter,
   type FloatingActionId,
   type FloatingActionInteractionMode,
+  type FloatingActionQuadrant,
+  type FloatingActionViewport,
 } from './FloatingActionMenu';
 export {
   BottomOverlayPanel,

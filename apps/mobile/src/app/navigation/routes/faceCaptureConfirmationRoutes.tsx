@@ -11,7 +11,11 @@ import {
   getUnifiedHairlineConfirmationNotice,
 } from '../../../features/face-capture/services/unifiedFaceCaptureNavigation';
 import {deleteUnifiedFaceCaptureTempImage} from '../../../features/face-capture/services/unifiedFaceCaptureTempImageCleanup';
-import type {MakeupFeedbackPhotoSelection} from '../../../features/makeup-feedback';
+import type {
+  MakeupFeedbackKind,
+  MakeupFeedbackPhotoSelection,
+} from '../../../features/makeup-feedback';
+import {applyMakeupFeedbackJourneyContext} from '../../../features/makeup-feedback/services/makeupFeedbackJourneyContext';
 import type {ReferenceMakeupPhoto} from '../../../features/reference-makeup-extraction';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -20,7 +24,11 @@ import type {
   FaceCaptureConfirmationTarget,
   RootStackParamList,
 } from '../routeTypes';
-import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {
+  getMakeupJourneyDayResetState,
+  navigateMainTab,
+  type RootScreenProps,
+} from './routeUtils';
 
 type FaceCaptureConfirmationCopy = {
   confirmLabel: string;
@@ -95,6 +103,7 @@ export function getFaceCaptureConfirmationCopy(
 
 export function getFaceCaptureConfirmationNextRouteName(
   target: FaceCaptureConfirmationTarget,
+  feedbackKind: MakeupFeedbackKind = 'initial',
 ) {
   if (target === 'faceAnalysis') {
     // 확인 뒤 ARKit 3D 자동 측정을 거쳐 로딩으로 간다(셔터 1회 UX).
@@ -103,7 +112,9 @@ export function getFaceCaptureConfirmationNextRouteName(
   }
 
   if (target === 'makeupFeedback') {
-    return 'MakeupFeedbackGoalInput';
+    return feedbackKind === 'correction'
+      ? 'MakeupFeedbackLoading'
+      : 'MakeupFeedbackGoalInput';
   }
 
   if (target === 'hairAnalysis') {
@@ -222,7 +233,14 @@ export function FaceCaptureConfirmationRouteScreen({
   route,
 }: RootScreenProps<'FaceCaptureConfirmation'>) {
   const {
+    clearMakeupFeedbackFlowContext,
     invalidateUnifiedFaceCapture,
+    makeupFeedbackEntryDate,
+    makeupFeedbackFlowOrigin,
+    makeupFeedbackInheritedGoalContext,
+    makeupFeedbackKind,
+    makeupFeedbackParentReportId,
+    makeupFeedbackParentScore,
     selectedFaceCapture,
     selectedHairCapture,
     selectedMakeupFeedbackPhoto,
@@ -236,6 +254,14 @@ export function FaceCaptureConfirmationRouteScreen({
     unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const target = route.params.target;
+  const makeupFeedbackJourneyContext = {
+    entryDate: makeupFeedbackEntryDate,
+    feedbackKind: makeupFeedbackKind,
+    inheritedGoalContext: makeupFeedbackInheritedGoalContext,
+    origin: makeupFeedbackFlowOrigin,
+    parentFeedbackReportId: makeupFeedbackParentReportId,
+    parentScore: makeupFeedbackParentScore,
+  };
   const copy = getFaceCaptureConfirmationCopy(target);
   const photoUri = getConfirmationPhotoUri({
     selectedFaceCapture,
@@ -280,7 +306,12 @@ export function FaceCaptureConfirmationRouteScreen({
 
     if (target === 'makeupFeedback') {
       setMakeupFeedbackResult(null);
-      setSelectedMakeupFeedbackPhoto({photoSource});
+      setSelectedMakeupFeedbackPhoto(
+        applyMakeupFeedbackJourneyContext(
+          {photoSource},
+          makeupFeedbackJourneyContext,
+        ),
+      );
     }
 
     if (target === 'hairAnalysis') {
@@ -323,6 +354,7 @@ export function FaceCaptureConfirmationRouteScreen({
     setSelectedMakeupFeedbackPhoto,
     setSelectedReferenceMakeupPhoto,
     target,
+    makeupFeedbackJourneyContext,
     unifiedFaceCaptureFlow.committedCapture,
   ]);
 
@@ -358,6 +390,10 @@ export function FaceCaptureConfirmationRouteScreen({
     }
 
     if (target === 'makeupFeedback') {
+      if (makeupFeedbackKind === 'correction') {
+        navigation.replace('MakeupFeedbackLoading');
+        return;
+      }
       navigation.replace('MakeupFeedbackGoalInput');
       return;
     }
@@ -382,6 +418,7 @@ export function FaceCaptureConfirmationRouteScreen({
     route.params.afterAnalysisRoute,
     selectedReferenceMakeupPhoto,
     setReferenceMakeupUploadedPhotos,
+    makeupFeedbackKind,
     target,
     unifiedFaceCaptureFlow.committedCapture,
   ]);
@@ -395,6 +432,14 @@ export function FaceCaptureConfirmationRouteScreen({
     }
 
     if (target === 'makeupFeedback') {
+      const returnEntryDate = makeupFeedbackEntryDate;
+      const shouldReturnToJourney = makeupFeedbackFlowOrigin === 'journeyDay';
+
+      clearMakeupFeedbackFlowContext();
+      if (shouldReturnToJourney) {
+        navigation.reset(getMakeupJourneyDayResetState(returnEntryDate));
+        return;
+      }
       navigateMainTab(navigation, 'HomeTab');
       return;
     }
@@ -402,6 +447,9 @@ export function FaceCaptureConfirmationRouteScreen({
     navigateMainTab(navigation, 'HomeTab');
   }, [
     invalidateUnifiedFaceCapture,
+    clearMakeupFeedbackFlowContext,
+    makeupFeedbackEntryDate,
+    makeupFeedbackFlowOrigin,
     navigation,
     target,
     unifiedFaceCaptureFlow.committedCapture,

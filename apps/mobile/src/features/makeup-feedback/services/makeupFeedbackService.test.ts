@@ -2,6 +2,8 @@ import {BackendApiError} from '../../../shared/services/backendApi';
 import type {MakeupFeedbackPhotoSelection} from '../types';
 import {MAKEUP_FEEDBACK_TOPICS} from '../types';
 import {
+  assertCreatedFeedbackJobJourneyContext,
+  buildMakeupFeedbackJobCreateBody,
   getMakeupFeedbackAnalysisErrorAction,
   getMakeupFeedbackAnalysisErrorMessage,
   mapBackendJobToFeedbackOutcome as mapBackendJobToFeedbackResult,
@@ -83,6 +85,78 @@ const selection = {
   imageUri: 'file:///makeup-feedback.jpg',
   photoSource: 'camera',
 } satisfies MakeupFeedbackPhotoSelection;
+
+const initialJobBody = buildMakeupFeedbackJobCreateBody(
+  {...selection, entryDate: '2026-07-17'},
+  {mediaId: 'media-1', photoCaptureId: 'capture-1'},
+);
+expectEqual(initialJobBody.entryDate, '2026-07-17', 'initial job entry date');
+expectEqual(initialJobBody.feedbackKind, 'initial', 'initial job kind default');
+expectEqual(initialJobBody.parentFeedbackReportId, null, 'initial job has no parent');
+assertCreatedFeedbackJobJourneyContext(
+  {
+    entryDate: initialJobBody.entryDate,
+    feedbackKind: initialJobBody.feedbackKind,
+    parentFeedbackReportId: initialJobBody.parentFeedbackReportId,
+  },
+  initialJobBody,
+);
+expectBackendError(
+  () => assertCreatedFeedbackJobJourneyContext(
+    {
+      entryDate: initialJobBody.entryDate,
+      feedbackKind: initialJobBody.feedbackKind,
+    },
+    initialJobBody,
+  ),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'initial create response requires an explicit null parent',
+  'job.parentFeedbackReportId',
+);
+
+const correctionJobBody = buildMakeupFeedbackJobCreateBody(
+  {
+    ...selection,
+    entryDate: '2026-07-12',
+    feedbackContext: {userGoalText: '차분한 데일리 메이크업'},
+    feedbackKind: 'correction',
+    parentFeedbackReportId: 'report-parent',
+  },
+  {mediaId: 'media-2', photoCaptureId: 'capture-2'},
+);
+expectEqual(correctionJobBody.entryDate, '2026-07-12', 'correction entry date');
+expectEqual(correctionJobBody.feedbackKind, 'correction', 'correction job kind');
+expectEqual(
+  correctionJobBody.parentFeedbackReportId,
+  'report-parent',
+  'correction parent report',
+);
+expectEqual(
+  correctionJobBody.requestPayload.feedbackContext.userGoalText,
+  '차분한 데일리 메이크업',
+  'correction inherited goal context',
+);
+assertCreatedFeedbackJobJourneyContext(
+  {
+    entryDate: correctionJobBody.entryDate,
+    feedbackKind: correctionJobBody.feedbackKind,
+    parentFeedbackReportId: correctionJobBody.parentFeedbackReportId,
+  },
+  correctionJobBody,
+);
+expectBackendError(
+  () => assertCreatedFeedbackJobJourneyContext(
+    {
+      entryDate: correctionJobBody.entryDate,
+      feedbackKind: 'initial',
+      parentFeedbackReportId: null,
+    },
+    correctionJobBody,
+  ),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'create response preserves journey contract',
+  'job.feedbackKind',
+);
 
 const evaluations = MAKEUP_FEEDBACK_TOPICS.map((topic, index) => ({
   actionSteps:
