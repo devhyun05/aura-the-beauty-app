@@ -454,14 +454,15 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   //    통째로 걷어낸다. 값은 매 applyFilter에 주입되므로 ref만 있으면 되나, 라벨 표시용으로
   //    state도 둔다. 기본값=옛 #define 상수라 안 건드리면 현재 픽셀과 동일. ──
   const [fndDebugOpen, setFndDebugOpen] = useState(false);
-  // 주의: fork Foundation.cginc 리터럴(0.798322/0.4/1.0)과 일치 필수 — upstream 재조정
-  // 기본값(0.45/0.15/1.05)은 upstream 재작성 수식 전용(fork 수식에선 과다 발광).
-  const [fndRefLuma, setFndRefLuma] = useState(0.798322); // 기준 루마(밝기)
-  const fndRefLumaRef = useRef(0.798322);
-  const [fndChroma, setFndChroma] = useState(0.4); // 채도 혼합(탁함)
-  const fndChromaRef = useRef(0.4);
-  const [fndLumaGain, setFndLumaGain] = useState(1); // luma 게인(밝기 여유)
-  const fndLumaGainRef = useRef(1);
+  // upstream 튜닝값(172c0be) — Foundation.cginc는 upstream HEAD와 동일하므로 주입값도
+  // upstream 쌍(0.45/0.15/1.05)을 쓴다. 셰이더 리터럴 폴백(0.798322)은 구값이라 주입이
+  // 끊기면 발색이 어두워진다(ARwithFable 대비 확인 2026-07-18).
+  const [fndRefLuma, setFndRefLuma] = useState(0.45); // 기준 루마(밝기) 0.30~0.50
+  const fndRefLumaRef = useRef(0.45);
+  const [fndChroma, setFndChroma] = useState(0.15); // 채도 혼합(탁함) 0.00~0.20
+  const fndChromaRef = useRef(0.15);
+  const [fndLumaGain, setFndLumaGain] = useState(1.05); // luma 게인(밝기 여유) 1.00~1.50
+  const fndLumaGainRef = useRef(1.05);
   // ── 임시 디버그(이음새 세그 게이트 튜닝) — 귀·턱-목 이음새 파운데 공백의 원인 판별·값
   //    확정용 dev 도구(FndColorDebugPanel 선례). CameraFeed 파운데 seg 게이트 임계 4종 +
   //    세그 채널 시각화 토글을 실기기에서 눈으로 맞춘다. 기본값=현 셰이더 리터럴이라 안

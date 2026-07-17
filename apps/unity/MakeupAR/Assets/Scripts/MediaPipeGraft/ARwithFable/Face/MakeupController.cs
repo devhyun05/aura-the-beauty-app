@@ -986,7 +986,16 @@ namespace ARMakeup.Face
             // 모양 프리셋(AXIS 02) — 마스크는 (모양, softness 버킷)별 캐시라 매 호출 비용 없음.
             // A14 재베이크(배치 A ③) — softness 0이면 버킷 0 = 기존 마스크(하위호환).
             mat.SetTexture(BlushMaskId, MaskGenerator.BlushShapeMask(p.blushShape, p.blushEdgeSoftness));
-            mat.SetFloat(HighlightIntensityId, Mathf.Clamp01(p.highlightIntensity));
+            // 하이라이트 레거시 폴백 — 존별 소비는 19660adb3(안정화)에서 걷혀 셰이더가
+            // 통짜 _HighlightIntensity만 읽는다. RN은 존별 값만 보내는 룩이 많아(레거시 0)
+            // 하이라이터가 통째로 사라지므로, 존별 최댓값을 레거시로 승격해 upstream의
+            // 모놀리식 렌더와 동일하게 유니온 마스크가 켜지게 한다. 존별 소비를 복원하면
+            // 이 승격을 걷어낸다.
+            var legacyHl = Mathf.Max(p.highlightIntensity,
+                Mathf.Max(Mathf.Max(p.highlightCheekIntensity, p.highlightNoseBridgeIntensity),
+                    Mathf.Max(Mathf.Max(p.highlightNoseTipIntensity, p.highlightBrowBoneIntensity),
+                        p.highlightCupidIntensity)));
+            mat.SetFloat(HighlightIntensityId, Mathf.Clamp01(legacyHl));
             mat.SetFloat(HighlightCheekIntensityId, Mathf.Clamp01(p.highlightCheekIntensity));
             mat.SetFloat(HighlightNoseBridgeIntensityId, Mathf.Clamp01(p.highlightNoseBridgeIntensity));
             mat.SetFloat(HighlightNoseTipIntensityId, Mathf.Clamp01(p.highlightNoseTipIntensity));
