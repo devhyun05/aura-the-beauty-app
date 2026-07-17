@@ -44,6 +44,9 @@ export type NativeRegionKey =
 
 export type NativeRegionStats = {
   rgbMean: Rgb;
+  // 채널별 중앙값 — 조명 캐스트 추정(흰자)에서 rgbMean 대신 쓴다(소수 국소 실핏줄에
+  // 강건). 구버전 네이티브 빌드엔 없어 optional; 없으면 rgbMean 으로 폴백한다.
+  rgbMedian?: Rgb;
   rgbVariance: Rgb; // 채널별 분산 (8-bit² 단위)
   dominant: Rgb;
   sampleCount: number;
