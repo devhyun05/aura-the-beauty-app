@@ -302,8 +302,8 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
     },
     axes: axesData,
     drape: {
-      title: '직접 입혀 보세요',
-      sub: '아래 색을 탭하면 드레이프처럼 둘러볼 수 있어요 · 슬라이더로 조명도 바꿔 보세요',
+      title: '어울리는 색, 나란히 대보기',
+      sub: '잘 어울리는 색과 피할 색을 얼굴 옆에 나란히 대보면 차이가 바로 보여요 · 슬라이더로 조명도 바꿔 보세요',
       photo: heroUri ? {uri: heroUri, placeholderLabel: '셀피'} : {placeholderLabel: '셀피'},
       goodTag: '잘 어울리는 색',
       badTag: '피할 색',
