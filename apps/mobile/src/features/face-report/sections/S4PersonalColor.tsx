@@ -4,7 +4,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 import { color, font, radius } from '../reportTokens';
 import type { S4Data, SwatchData } from '../reportTypes';
 import { Card } from '../visuals/Card';
-import { LightingDial } from '../visuals/LightingDial';
+import { VerticalLightSlider } from '../visuals/VerticalLightSlider';
 import { PhotoSlot } from '../visuals/PhotoSlot';
 import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
@@ -73,7 +73,7 @@ export function S4PersonalColor({ data }: { data: S4Data }) {
                 {drape.good ? d.goodCaption : d.badCaption}
               </Text>
             </Animated.View>
-            <LightingDial
+            <VerticalLightSlider
               value={light}
               heading={d.dial.heading}
               warmLabel={d.dial.warm}
