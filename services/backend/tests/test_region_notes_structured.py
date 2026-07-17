@@ -55,3 +55,20 @@ def test_missing_region_notes_get_defaults():
         assert out[key]["insight"]  # 기본 insight 존재
         assert out[key]["evidence"] == ""
         assert out[key]["recommendation"] == ""
+
+
+def test_field_guide_declares_structured_region_notes():
+    from app.services.openai_analysis import ANALYSIS_OUTPUT_FIELD_GUIDE
+
+    guide = ANALYSIS_OUTPUT_FIELD_GUIDE
+    assert "insight" in guide
+    assert "evidence" in guide
+    assert "recommendation" in guide
+
+
+def test_prompt_instructs_structured_region_notes():
+    service = _service()
+    prompt = service._build_analysis_prompt({"task": "face_makeup_recommendation_report_v1"})
+    assert "insight" in prompt
+    assert "evidence" in prompt
+    assert "recommendation" in prompt
