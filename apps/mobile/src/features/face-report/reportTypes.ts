@@ -157,18 +157,10 @@ export interface S5Data {
 }
 
 // ---------- S6 ----------
-export interface GazeRing {
-  left: number; right: number; top: number; height: number; // normalized in the 112×146 face box
-  dashed: boolean; color: string; restFill: string; activeFill: string;
-}
-export interface GazeMarker { n: number; right: number; top: number; color: string }
+export interface ImpressionAxis { key: string; leftLabel: string; rightLabel: string; value: number }
 export interface S6Data {
   eyebrow: string; title: string;
-  diagramTitle: string; playLabel: string; playingLabel: string;
-  rings: GazeRing[]; markers: GazeMarker[];
-  faceGuides: number[];            // dashed guide-line ys, normalized
-  items: { n: number; color: string; text: string }[];
-  stepMs: number[];                // hold duration per ring, in play order
+  axes: ImpressionAxis[];   // 2개 (없으면 어댑터가 중립 기본축)
   keywords: string[];
   paragraph: string;
 }

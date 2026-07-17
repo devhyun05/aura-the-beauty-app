@@ -1,7 +1,6 @@
 // fixtures.ts — demo dataset reproducing the approved HTML's visible state exactly:
 // hairline-missing S2 default, S3 mid-face 경계 유보 + lower-face 판정 보류, no legacy badge.
 import type { ReportData } from './reportTypes';
-import { color } from './reportTokens';
 
 export const demoReport: ReportData = {
   topBarTitle: '얼굴 분석 보고서',
@@ -205,22 +204,10 @@ export const demoReport: ReportData = {
   s6: {
     eyebrow: 'IMPRESSION',
     title: '모아 보면 이런 인상이에요',
-    diagramTitle: '시선이 머무는 순서',
-    playLabel: '순서 재생', playingLabel: '재생 중…',
-    rings: [
-      { left: 0.16, right: 0.16, top: 0.27, height: 0.19, dashed: true, color: color.magenta, restFill: 'rgba(255,11,131,0.09)', activeFill: 'rgba(255,11,131,0.3)' },
-      { left: 0.28, right: 0.28, top: 0.66, height: 0.15, dashed: false, color: color.accentLight, restFill: 'rgba(110,203,232,0.14)', activeFill: 'rgba(110,203,232,0.4)' },
+    axes: [
+      { key: 'softness', leftLabel: '부드러움', rightLabel: '또렷함', value: 0.3 },
+      { key: 'vividness', leftLabel: '차분함', rightLabel: '화사함', value: -0.2 },
     ],
-    markers: [
-      { n: 1, right: 0.02, top: 0.22, color: color.magenta },
-      { n: 2, right: 0.12, top: 0.63, color: color.accent },
-    ],
-    faceGuides: [0.36, 0.64],
-    items: [
-      { n: 1, color: color.magenta, text: '눈가 — 또렷한 눈매가 먼저 읽혀요' },
-      { n: 2, color: color.accent, text: '입가 — 부드러운 곡선이 이어서 보여요' },
-    ],
-    stepMs: [950, 1150],
     keywords: ['또렷한', '곡선적인', '저대비', '차분한', '온화한'],
     paragraph: '또렷한 눈매가 첫인상을 만들고, 곡선적인 윤곽과 차분한 색감이 그 인상을 부드럽게 감싸요. 대비가 낮은 편이라 강한 색보다는 은은한 색이 얼굴의 흐름을 살려줘요. 체형의 곡선도 같은 결이라, 전체적으로 하나의 무드로 이어지는 타입이에요.',
   },

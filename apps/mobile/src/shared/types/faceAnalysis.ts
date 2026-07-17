@@ -44,6 +44,7 @@ export interface FaceAnalysisImpressionNotes {
   overallMood: string;
   keywords: string[];
   paragraph: string;
+  axes?: {key: string; leftLabel: string; rightLabel: string; value: number}[];
 }
 
 export type FaceAnalysisStylingLookRowCategory =

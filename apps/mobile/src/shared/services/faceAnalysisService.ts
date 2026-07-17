@@ -64,6 +64,7 @@ type BackendImpressionNotes = {
   overallMood?: string | null;
   keywords?: string[] | null;
   paragraph?: string | null;
+  axes?: unknown;
 };
 type BackendStylingLookRow = {
   category?: string | null;
@@ -426,9 +427,20 @@ function parseImpressionNotes(
   const overallMood = firstText(value?.overallMood);
   const paragraph = firstText(value?.paragraph);
   const keywords = firstStringArray(value?.keywords ?? null, []);
+  const rawAxes = Array.isArray((value as {axes?: unknown})?.axes) ? (value as {axes: unknown[]}).axes : [];
+  const axes = rawAxes
+    .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
+    .slice(0, 2)
+    .map(a => ({
+      key: firstText(typeof a.key === 'string' ? a.key : undefined) ?? '',
+      leftLabel: firstText(typeof a.leftLabel === 'string' ? a.leftLabel : undefined) ?? '',
+      rightLabel: firstText(typeof a.rightLabel === 'string' ? a.rightLabel : undefined) ?? '',
+      value: typeof a.value === 'number' && Number.isFinite(a.value) ? Math.max(-1, Math.min(1, a.value)) : 0,
+    }))
+    .filter(a => a.leftLabel && a.rightLabel);
 
   return overallMood && paragraph && keywords.length > 0
-    ? {overallMood, paragraph, keywords}
+    ? {overallMood, paragraph, keywords, ...(axes.length === 2 ? {axes} : {})}
     : undefined;
 }
 

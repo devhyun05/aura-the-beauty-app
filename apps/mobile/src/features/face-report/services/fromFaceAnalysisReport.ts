@@ -29,8 +29,8 @@ import {TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/con
 import type {AxisName, ColorFamily, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
 import {analyzeBody} from '../../ar/stencil/src/composer/bodyProfile';
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
-import {color} from '../reportTokens';
 import type {
+  ImpressionAxis,
   LookCardData,
   ReportData,
   S1Data,
@@ -498,9 +498,14 @@ function buildS3(
   };
 }
 
-// Same 2-point gaze-order diagram geometry for every report (generic
-// illustration — real per-user gaze data doesn't exist). The wording (items,
-// keywords, paragraph) is real AI-generated content from impressionNotes.
+// axes 는 AI가 인상을 2개 축(가로/세로) 좌표로 판단한 것 — 없으면(구버전
+// 보고서) 중립 기본축으로 폴백한다. 실측 좌표가 아니라 AI 서술 인상의
+// 시각화이므로 keywords/paragraph 와 함께 impressionNotes 에서만 온다.
+const DEFAULT_S6_AXES: ImpressionAxis[] = [
+  {key: 'softness', leftLabel: '부드러움', rightLabel: '또렷함', value: 0},
+  {key: 'vividness', leftLabel: '차분함', rightLabel: '화사함', value: 0},
+];
+
 function buildS6(
   regionNotes: FaceAnalysisRegionNotes | undefined,
   impressionNotes: FaceAnalysisImpressionNotes | undefined,
@@ -508,45 +513,14 @@ function buildS6(
   if (!regionNotes || !impressionNotes) {
     return null;
   }
-
+  const axes =
+    impressionNotes.axes && impressionNotes.axes.length === 2
+      ? impressionNotes.axes
+      : DEFAULT_S6_AXES;
   return {
     eyebrow: 'IMPRESSION',
     title: '모아 보면 이런 인상이에요',
-    diagramTitle: '시선이 머무는 순서',
-    playLabel: '순서 재생',
-    playingLabel: '재생 중…',
-    rings: [
-      {
-        left: 0.16,
-        right: 0.16,
-        top: 0.27,
-        height: 0.19,
-        dashed: true,
-        color: color.magenta,
-        restFill: 'rgba(255,11,131,0.09)',
-        activeFill: 'rgba(255,11,131,0.3)',
-      },
-      {
-        left: 0.28,
-        right: 0.28,
-        top: 0.66,
-        height: 0.15,
-        dashed: false,
-        color: color.accentLight,
-        restFill: 'rgba(110,203,232,0.14)',
-        activeFill: 'rgba(110,203,232,0.4)',
-      },
-    ],
-    markers: [
-      {n: 1, right: 0.02, top: 0.22, color: color.magenta},
-      {n: 2, right: 0.12, top: 0.63, color: color.accent},
-    ],
-    faceGuides: [0.36, 0.64],
-    items: [
-      {n: 1, color: color.magenta, text: `눈가 — ${normalizeRegionNote(regionNotes.upper).insight}`},
-      {n: 2, color: color.accent, text: `입가 — ${normalizeRegionNote(regionNotes.lower).insight}`},
-    ],
-    stepMs: [950, 1150],
+    axes,
     keywords: impressionNotes.keywords,
     paragraph: impressionNotes.paragraph,
   };
