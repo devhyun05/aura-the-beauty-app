@@ -13,6 +13,7 @@ import {
 } from './userService';
 
 const PROFILE_SUMMARY_CACHE_TTL_MS = 30000;
+const PROFILE_SUMMARY_REQUEST_TIMEOUT_MS = 5000;
 
 let profileSummaryCache:
   | {createdAt: number; data: MyPageProfileSummary}
@@ -32,6 +33,27 @@ export function clearMyPageProfileSummaryCache(): void {
   profileSummaryRequest = null;
 }
 
+export const getMyPageProfileSnapshot = async (): Promise<MyPageProfileSummary> => {
+  if (profileSummaryCache) {
+    warmProfileImages(profileSummaryCache.data);
+    return profileSummaryCache.data;
+  }
+
+  const [profile, beautyProfile] = await Promise.all([
+    getUserProfileFromService({cacheOnly: true}),
+    getBeautyProfile(),
+  ]);
+
+  return {
+    profile,
+    beautyProfile,
+    faceAnalysisReport: null,
+    faceAnalysisReports: [],
+    makeupLooks: [],
+    likedProducts: [],
+  };
+};
+
 export const getMyPageProfileSummary = async (): Promise<MyPageProfileSummary> => {
   const now = Date.now();
 
@@ -47,13 +69,18 @@ export const getMyPageProfileSummary = async (): Promise<MyPageProfileSummary> =
     return profileSummaryRequest;
   }
 
-  profileSummaryRequest = getUserProfileFromService()
-    .then(async profile => {
-      const [beautyProfile, faceAnalysisReports, likedProducts] = await Promise.all([
-        getBeautyProfile(),
-        getFaceAnalysisReports({limit: 3}).catch(() => []),
-        getLikedProductPreviews(3).catch(() => []),
-      ]);
+  profileSummaryRequest = Promise.all([
+    getUserProfileFromService({timeoutMs: PROFILE_SUMMARY_REQUEST_TIMEOUT_MS}),
+    getBeautyProfile(),
+    getFaceAnalysisReports({
+      limit: 3,
+      timeoutMs: PROFILE_SUMMARY_REQUEST_TIMEOUT_MS,
+    }).catch(() => []),
+    getLikedProductPreviews(3, {
+      timeoutMs: PROFILE_SUMMARY_REQUEST_TIMEOUT_MS,
+    }).catch(() => []),
+  ])
+    .then(([profile, beautyProfile, faceAnalysisReports, likedProducts]) => {
       const summary: MyPageProfileSummary = {
         profile,
         beautyProfile,

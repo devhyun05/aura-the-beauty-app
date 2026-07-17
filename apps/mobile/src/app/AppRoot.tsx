@@ -1,17 +1,18 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {InteractionManager} from 'react-native';
+import React, {type ReactNode, useCallback, useEffect, useRef, useState} from 'react';
+import {InteractionManager, StyleSheet, View} from 'react-native';
 import {
   NavigationContainer,
   useNavigationContainerRef,
 } from '@react-navigation/native';
 import {useFonts} from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 import {StatusBar} from 'expo-status-bar';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {TamaguiProvider} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
 import {NavigationFlowStateProvider} from '../app/navigation/flowState';
-import {AuthSessionProvider} from '../features/auth';
+import {AuthSessionProvider, useAuthSession} from '../features/auth';
 import {navigationLinking} from '../app/navigation/linkingConfig';
 import {
   getStatusBarStyleForNavigationState,
@@ -31,10 +32,51 @@ import {
 } from '../features/notifications';
 import {typography} from '../shared/theme';
 
+const UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS = 5000;
+const STARTUP_SCREEN_MIN_DURATION_MS = 700;
+
+type StartupGateProps = {
+  children: ReactNode;
+  fontsLoaded: boolean;
+  hasMinimumElapsed: boolean;
+  navigationReady: boolean;
+};
+
+function StartupGate({
+  children,
+  fontsLoaded,
+  hasMinimumElapsed,
+  navigationReady,
+}: StartupGateProps) {
+  const {isRestoringSession} = useAuthSession();
+  const shouldShowStartupScreen =
+    !hasMinimumElapsed || !fontsLoaded || isRestoringSession || !navigationReady;
+
+  useEffect(() => {
+    if (shouldShowStartupScreen) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      void SplashScreen.hideAsync().catch(() => undefined);
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [shouldShowStartupScreen]);
+
+  return (
+    <View style={styles.appLayer}>
+      {children}
+    </View>
+  );
+}
+
 export function AppRoot() {
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const pendingNotificationRef = useRef<AppNotificationData | null>(null);
   const [statusBarStyle, setStatusBarStyle] = useState<'dark' | 'light'>('dark');
+  const [hasStartupMinimumElapsed, setHasStartupMinimumElapsed] = useState(false);
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
   const [fontsLoaded] = useFonts({
     [typography.fontFamily.brand]: require('../assets/fonts/NixieOne-Regular.ttf'),
     [typography.fontFamily.regular]: require('../assets/fonts/Pretendard-Regular.otf'),
@@ -90,6 +132,17 @@ export function AppRoot() {
   }, []);
 
   useEffect(() => {
+    const minimumTimer = setTimeout(
+      () => setHasStartupMinimumElapsed(true),
+      STARTUP_SCREEN_MIN_DURATION_MS,
+    );
+
+    return () => {
+      clearTimeout(minimumTimer);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!fontsLoaded) {
       return undefined;
     }
@@ -104,7 +157,7 @@ export function AppRoot() {
         // BEFORE the user ever enters the AR screen. Entry then reveals an
         // already-live scene instead of a splash/black loading flash.
         prepareUnityMakeupRuntime();
-      }, 1000);
+      }, UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS);
     });
 
     return () => {
@@ -115,21 +168,22 @@ export function AppRoot() {
     };
   }, [fontsLoaded]);
 
-  if (!fontsLoaded) {
-    return null;
-  }
-
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
         <StatusBar style={statusBarStyle} />
         <AuthSessionProvider>
-          <NavigationFlowStateProvider>
+          <StartupGate
+            fontsLoaded={fontsLoaded}
+            hasMinimumElapsed={hasStartupMinimumElapsed}
+            navigationReady={isNavigationReady}>
+            <NavigationFlowStateProvider>
             <NavigationContainer
               linking={navigationLinking}
               ref={navigationRef}
               onReady={() => {
                 syncStatusBarStyle(navigationRef.getRootState());
+                requestAnimationFrame(() => setIsNavigationReady(true));
                 requestAnimationFrame(flushPendingNotification);
               }}
               onStateChange={state => {
@@ -154,9 +208,16 @@ export function AppRoot() {
                 }}
               />
             </NavigationContainer>
-          </NavigationFlowStateProvider>
+            </NavigationFlowStateProvider>
+          </StartupGate>
         </AuthSessionProvider>
       </SafeAreaProvider>
     </TamaguiProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  appLayer: {
+    flex: 1,
+  },
+});

@@ -30,28 +30,62 @@ export const EMPTY_PROFILE_REPORT_HUB: ProfileReportHubData = {
   makeupFeedback: null,
 };
 
-export async function loadProfileReportHub(
+const PROFILE_REPORT_REQUEST_TIMEOUT_MS = 5000;
+let profileReportHubCache: ProfileReportHubData | null = null;
+
+function mapFaceAnalysisPreview(
   faceAnalysisReports: readonly FaceAnalysisReport[],
+): ProfileReportPreview | null {
+  const report = faceAnalysisReports[0];
+
+  return report
+    ? {
+        hasMore: faceAnalysisReports.length > 1,
+        id: report.id,
+        imageSource: report.imageSource,
+        title: report.title,
+      }
+    : null;
+}
+
+export function getProfileReportHubSnapshot(
+  faceAnalysisReports: readonly FaceAnalysisReport[],
+): ProfileReportHubData {
+  return {
+    ...(profileReportHubCache ?? EMPTY_PROFILE_REPORT_HUB),
+    faceAnalysis:
+      mapFaceAnalysisPreview(faceAnalysisReports) ??
+      profileReportHubCache?.faceAnalysis ??
+      null,
+  };
+}
+
+export async function loadProfileReportHub(
+  faceAnalysisReportsInput:
+    | readonly FaceAnalysisReport[]
+    | Promise<readonly FaceAnalysisReport[]>,
 ): Promise<ProfileReportHubData> {
-  const [recommendations, extractions, feedbackReports] = await Promise.all([
-    fetchGeneratedMakeupRecommendationReports({limit: 2}).catch(() => []),
-    fetchReferenceMakeupExtractionReports({limit: 2}).catch(() => []),
-    fetchMakeupFeedbackReports().catch(() => []),
-  ]);
-  const faceAnalysisReport = faceAnalysisReports[0];
+  const [faceAnalysisReports, recommendations, extractions, feedbackReports] =
+    await Promise.all([
+      Promise.resolve(faceAnalysisReportsInput),
+      fetchGeneratedMakeupRecommendationReports({
+        limit: 2,
+        timeoutMs: PROFILE_REPORT_REQUEST_TIMEOUT_MS,
+      }).catch(() => []),
+      fetchReferenceMakeupExtractionReports({
+        limit: 2,
+        timeoutMs: PROFILE_REPORT_REQUEST_TIMEOUT_MS,
+      }).catch(() => []),
+      fetchMakeupFeedbackReports({
+        timeoutMs: PROFILE_REPORT_REQUEST_TIMEOUT_MS,
+      }).catch(() => []),
+    ]);
   const recommendation = recommendations[0];
   const extraction = extractions[0];
   const feedback = feedbackReports[0];
 
-  return {
-    faceAnalysis: faceAnalysisReport
-      ? {
-          hasMore: faceAnalysisReports.length > 1,
-          id: faceAnalysisReport.id,
-          imageSource: faceAnalysisReport.imageSource,
-          title: faceAnalysisReport.title,
-        }
-      : null,
+  const reportHub: ProfileReportHubData = {
+    faceAnalysis: mapFaceAnalysisPreview(faceAnalysisReports),
     makeupRecommendation: recommendation?.results[0]
       ? {
           hasMore: recommendations.length > 1,
@@ -77,4 +111,7 @@ export async function loadProfileReportHub(
         }
       : null,
   };
+
+  profileReportHubCache = reportHub;
+  return reportHub;
 }

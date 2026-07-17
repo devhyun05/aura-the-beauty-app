@@ -146,6 +146,7 @@ type ListAnalysisReportsResponse = {
 
 type GetFaceAnalysisReportsOptions = {
   limit?: number;
+  timeoutMs?: number;
   withRecommendedMakeups?: boolean;
 };
 
@@ -665,6 +666,7 @@ export const getFaceAnalysisReports = async (
 
   const {reports} = await requestBackendJson<ListAnalysisReportsResponse>(
     buildAnalysisReportsPath(options),
+    {timeoutMs: options.timeoutMs},
   );
 
   return reports.map((report) => mapBackendJobToFaceAnalysisReport(report));
@@ -775,10 +777,12 @@ export async function createFaceAnalysisReportFromCapture(
   console.info('[aura:analysis] create-report:start', {
     hasBackendApiBaseUrl,
     hasBucket: Boolean(capture?.bucket),
+    hasFace3d: Boolean(onDeviceMeasurements?.face3d),
     hasFaceGeometry2d: Boolean(faceGeometry2d),
     hasFaceVerticalThirds: Boolean(faceVerticalThirds),
     hasMeasuredPersonalColor: Boolean(measuredPersonalColor),
     hasObjectKey: Boolean(capture?.objectKey),
+    face3dSchemaVersion: onDeviceMeasurements?.face3d?.schemaVersion ?? null,
     mediaId: capture?.mediaId ?? null,
     photoCaptureId: capture?.photoCaptureId ?? null,
   });

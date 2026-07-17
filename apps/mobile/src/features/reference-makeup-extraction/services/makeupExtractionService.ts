@@ -508,13 +508,16 @@ export async function fetchReferenceMakeupExtractionReport(
 export async function fetchReferenceMakeupExtractionReports({
   limit = 20,
   offset = 0,
+  timeoutMs,
 }: {
   limit?: number;
   offset?: number;
+  timeoutMs?: number;
 } = {}): Promise<ReferenceMakeupExtractionReportHistoryItem[]> {
   try {
     const response = await requestBackendJson<unknown>(
       `/filter-extractions?limit=${limit}&offset=${offset}`,
+      {timeoutMs},
     );
     const normalizedResponse = camelizeBackendValue(
       response,
@@ -528,6 +531,7 @@ export async function fetchReferenceMakeupExtractionReports({
     return fetchReferenceMakeupExtractionReportsFromNotifications({
       limit,
       offset,
+      timeoutMs,
     });
   }
 }
@@ -535,15 +539,18 @@ export async function fetchReferenceMakeupExtractionReports({
 async function fetchReferenceMakeupExtractionReportsFromNotifications({
   limit,
   offset,
+  timeoutMs,
 }: {
   limit: number;
   offset: number;
+  timeoutMs?: number;
 }): Promise<ReferenceMakeupExtractionReportHistoryItem[]> {
   const notificationLimit = Math.min(100, Math.max(50, limit + offset));
   const [storedReports, response] = await Promise.all([
     getStoredReferenceExtractionReports(),
     requestBackendJson<FilterExtractionNotificationListResponse>(
       `/notifications?limit=${notificationLimit}&offset=0`,
+      {timeoutMs},
     ).catch(() => ({notifications: []})),
   ]);
   const notificationReportIds = new Set<string>();
@@ -583,6 +590,7 @@ async function fetchReferenceMakeupExtractionReportsFromNotifications({
       try {
         const response = await requestBackendJson<unknown>(
           '/filter-extractions/' + encodeURIComponent(storedReport.reportId),
+          {timeoutMs},
         );
         const normalizedResponse = camelizeBackendValue(
           response,

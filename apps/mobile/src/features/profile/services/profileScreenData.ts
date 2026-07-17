@@ -1,10 +1,45 @@
-import {getMyPageProfileSummary} from '../../../shared/services/profileService';
+import {
+  getMyPageProfileSnapshot,
+  getMyPageProfileSummary,
+} from '../../../shared/services/profileService';
 import type {ProfileScreenData} from './profileLoadState';
-import {loadProfileReportHub} from './profileReportHub';
+import {
+  getProfileReportHubSnapshot,
+  loadProfileReportHub,
+} from './profileReportHub';
 
-export const loadProfileScreenData = async (): Promise<ProfileScreenData> => {
-  const summary = await getMyPageProfileSummary();
-  const reportHub = await loadProfileReportHub(summary.faceAnalysisReports);
+let profileScreenDataRequest: Promise<ProfileScreenData> | null = null;
+
+export async function loadProfileScreenSnapshot(): Promise<ProfileScreenData> {
+  const summary = await getMyPageProfileSnapshot();
+
+  return {
+    ...summary,
+    reportHub: getProfileReportHubSnapshot(summary.faceAnalysisReports),
+  };
+}
+
+async function requestProfileScreenData(): Promise<ProfileScreenData> {
+  const summaryRequest = getMyPageProfileSummary();
+  const reportHubRequest = loadProfileReportHub(
+    summaryRequest.then(summary => summary.faceAnalysisReports),
+  );
+  const [summary, reportHub] = await Promise.all([
+    summaryRequest,
+    reportHubRequest,
+  ]);
 
   return {...summary, reportHub};
+}
+
+export const loadProfileScreenData = (): Promise<ProfileScreenData> => {
+  if (profileScreenDataRequest) {
+    return profileScreenDataRequest;
+  }
+
+  profileScreenDataRequest = requestProfileScreenData().finally(() => {
+    profileScreenDataRequest = null;
+  });
+
+  return profileScreenDataRequest;
 };
