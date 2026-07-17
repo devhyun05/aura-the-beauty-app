@@ -1657,23 +1657,36 @@ class OpenAIAnalysisService:
 
     return normalized_cards
 
-  def _ensure_region_notes(self, result: dict[str, Any]) -> dict[str, str]:
+  def _ensure_region_notes(self, result: dict[str, Any]) -> dict[str, dict[str, str]]:
     notes = result.get("regionNotes")
     normalized_notes = notes if isinstance(notes, dict) else {}
     face_shape = self._first_normalized_text(result.get("faceShape"), "얼굴형")
     recommended_mood = self._first_normalized_text(result.get("recommendedMood"), "은은한 분위기")
 
-    report_based_defaults = {
+    insight_defaults = {
       "upper": f"{face_shape} 인상 안에서 눈매와 눈썹이 표정의 시작점이 돼요.",
       "mid": "코와 볼의 흐름이 완만하게 이어지는 구획이에요.",
       "lower": f"{recommended_mood} 분위기를 입술이 자연스럽게 마무리해요.",
       "jaw": "광대에서 턱끝으로 내려오는 선이 전체 윤곽을 정리해요.",
     }
 
-    return {
-      key: self._first_normalized_text(normalized_notes.get(key), fallback)
-      for key, fallback in report_based_defaults.items()
-    }
+    normalized: dict[str, dict[str, str]] = {}
+    for key, insight_fallback in insight_defaults.items():
+      raw = normalized_notes.get(key)
+      if isinstance(raw, dict):
+        normalized[key] = {
+          "insight": self._first_normalized_text(raw.get("insight"), insight_fallback),
+          "evidence": self._first_normalized_text(raw.get("evidence")),
+          "recommendation": self._first_normalized_text(raw.get("recommendation")),
+        }
+      else:
+        # 구버전(단문 string)·부재 응답은 insight로 승격하고 근거·조언은 비운다.
+        normalized[key] = {
+          "insight": self._first_normalized_text(raw, insight_fallback),
+          "evidence": "",
+          "recommendation": "",
+        }
+    return normalized
 
   def _ensure_impression_notes(self, result: dict[str, Any]) -> dict[str, Any]:
     notes = result.get("impressionNotes")
