@@ -442,7 +442,13 @@ function buildS3(
     // degenerate crops never have it). Falls back to the fixed illustrative
     // S3_REGION_META guide + full (uncropped) photo — same "조용한 생성 금지"
     // posture as the rest of this adapter.
-    const rv = regionVisuals?.[key];
+    const rvRaw = regionVisuals?.[key];
+    // Guard against a degenerate persisted cropRect (w/h === 0, e.g. from a
+    // decoder default on missing/non-numeric crop fields): dividing by a
+    // zero width/height below would produce Infinity/NaN polyline points and
+    // a broken <Polyline> render. Treat it exactly like "no regionVisuals for
+    // this key" and fall back to the fixed guide + full photo.
+    const rv = rvRaw && rvRaw.cropRect.w > 0 && rvRaw.cropRect.h > 0 ? rvRaw : undefined;
     const visual = rv
       ? {
           photo: {...photo, cropRect: rv.cropRect},
@@ -603,7 +609,7 @@ function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined): S7Data | n
 }
 
 export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterInput): ReportData {
-  const {report, bodyProfile, personalColor, verticalThirds} = input;
+  const {report, bodyProfile, personalColor, verticalThirds, regionVisuals} = input;
   const heroUri = resolveHeroUri(report, input.heroImageUri);
   const featurePhoto: S1Data['photo'] = heroUri
     ? {uri: heroUri, placeholderLabel: '얼굴 확대 컷'}
@@ -613,7 +619,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
     s1: buildS1(report, heroUri, personalColor ?? null),
     s2: buildS2(verticalThirds),
-    s3: buildS3(report.regionNotes, featurePhoto, input.regionVisuals ?? null),
+    s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null),
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile),
     s6: buildS6(report.regionNotes, report.impressionNotes),
