@@ -593,8 +593,9 @@ class FaceAnalysisPipeline:
           },
           "derived": result.derived.model_dump(by_alias=True, mode="json"),
           "perception": result.perception.model_dump(by_alias=True, mode="json"),
-          # 캐시 키에 포함시켜 다른 성별 사용자가 동일 측정으로 만든 consult
-          # 결과를 공유하지 않게 한다(성별별 방향이 다르므로).
+          # 캐시 키에 포함. 스테이지 캐시는 report_id로 스코프되므로 사용자간
+          # 공유는 원래 불가하나, 동일 report 재시도 중 계정 성별이 바뀌면
+          # 캐시 무효화가 필요해 키에 넣는다(성별별 방향이 다르므로).
           "profileGender": profile_gender,
         },
       )
