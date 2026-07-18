@@ -108,3 +108,7 @@ apps/unity/MakeupAR/Packages/local/
 data/auradin/.active_snapshot.lock
 logs/
 apps/unity/MakeupAR/Assets/StreamingAssets/selfie_multiclass_256x256.tflite
+
+# Makeup result redesign — design source & handoff assets (kept local, not committed)
+디자인 세련화 및 색감 조정/
+docs/handoff/makeup-result-redesign/*.png
