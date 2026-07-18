@@ -14,6 +14,7 @@ import {
   toPixelLandmarkMap,
 } from './faceGeometryCore/faceGeometryMath';
 import {FACE_GEOMETRY_REQUIRED_INDICES} from './faceGeometryCore/landmarkIndices';
+import {regionVisualsBuilder} from './faceGeometryCore/regionVisualsBuilder';
 
 export type FaceGeometryInput = {
   captureId: string;
@@ -146,6 +147,7 @@ export async function analyzeFaceGeometry2d(
     map: correctedMap,
     rollCorrectionApplied: rollCorrection.applied,
   });
+  const regionVisuals = regionVisualsBuilder(correctedMap, detected.imageWidth, detected.imageHeight);
 
   const nullCount = Object.values(metrics).filter(metric => metric.value === null).length;
   const status: FaceGeometryStatus = nullCount === 0 ? 'full_success' : 'partial_success';
@@ -163,6 +165,7 @@ export async function analyzeFaceGeometry2d(
     createdAt: input.createdAt,
     metrics,
     pose: detected.pose,
+    regionVisuals: Object.keys(regionVisuals).length ? regionVisuals : undefined,
     rollCorrection,
     schemaVersion: 'aura-face-geometry-v1',
     sessionId: input.sessionId,

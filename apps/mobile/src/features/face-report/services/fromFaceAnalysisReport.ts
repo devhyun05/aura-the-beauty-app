@@ -4,15 +4,15 @@
 // measurements/survey answers. S3/S6/S7 are built from `regionNotes` /
 // `impressionNotes` / `stylingLooks` — text the backend's existing Bedrock
 // analysis call now also generates alongside faceShape/recommendedMood/etc
-// (services/backend/app/services/openai_analysis.py) — combined with a FIXED,
-// non-personalized diagram template for the parts that would otherwise need
-// per-user pixel coordinates we don't have (region photo-guide markers, gaze
-// diagram geometry). The template is the same for every report, same
-// rationale as S5's generic silhouette illustration; only the wording is
-// per-user. Reports created before this field existed simply won't have
-// regionNotes/impressionNotes/stylingLooks, so those sections stay hidden for
-// them (never fabricated, but never withheld once the backend can generate
-// them either) — see reportTypes.ts's ReportData doc comment.
+// (services/backend/app/services/openai_analysis.py). S3 region crops + guide
+// lines and S6 impression-axis positions now come from real per-user
+// measurements (regionVisuals / impressionNotes.axes) when present, falling
+// back to a neutral template (fixed S3_REGION_META guide / DEFAULT_S6_AXES) —
+// same "never fabricate" rationale as S5's generic silhouette illustration.
+// Reports created before these fields existed simply won't have
+// regionNotes/impressionNotes/stylingLooks (or regionVisuals), so those
+// sections stay hidden or fall back to the neutral template (never fabricated)
+// — see reportTypes.ts's ReportData doc comment.
 
 import type {
   FaceAnalysisImpressionNotes,
@@ -24,12 +24,16 @@ import type {
 import {getFaceAnalysisReportSummaryItems} from '../../face-analysis/services/faceAnalysisReportDetailModel';
 import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceAnalysisMeasurements';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
+import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
 import {TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
+import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
+import {buildRegionFeatureAxes, describeRegionAxes} from '../reportFeatureAxes';
+import type {FaceGeometryMetrics} from '../../face-geometry/types';
 import type {AxisName, ColorFamily, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
-import {analyzeBody} from '../../ar/stencil/src/composer/bodyProfile';
+import {analyzeBody, resolveStyleGender} from '../../ar/stencil/src/composer/bodyProfile';
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
-import {color} from '../reportTokens';
 import type {
+  ImpressionAxis,
   LookCardData,
   ReportData,
   S1Data,
@@ -49,6 +53,15 @@ export type FaceReportAdapterInput = {
   verticalThirds?: FaceVerticalThirdsResult | null;
   personalColor?: MeasuredPersonalColorView | null;
   bodyProfile?: BodyProfile | null;
+  // Restored per-region crop rect + real landmark polyline guide (S3 cards).
+  // Absent/null for legacy reports — buildS3 falls back to the fixed
+  // S3_REGION_META guide + full photo, never fabricating a crop/polyline.
+  regionVisuals?: RegionVisuals | null;
+  // 사용자 프로필 성별('남성'|'여성'|'선택 안 함'|null) — 길이비 참고선(S2)·
+  // 체형 문구(S5) 성별 분기에 쓰인다. 측정이 아니라 프로필 값.
+  gender?: string | null;
+  // 2D 얼굴 기하 실측치 — S3 자기참조 축·서술의 결정론적 근거. 없으면 축은 판정 보류.
+  geometryMetrics?: FaceGeometryMetrics | null;
 };
 
 function resolveHeroUri(report: FaceAnalysisReport, heroImageUri?: string): string | undefined {
@@ -109,7 +122,10 @@ const S2_BAND_COPY = {
 // the roll-corrected source image, matched 1:1 to sourceImage.width/height — NOT
 // pre-normalized. GuidePhotoOverlay needs 0..1 fractions, so we divide by the
 // real image dimensions here rather than trusting any embedded normalization.
-function buildS2(vt: FaceVerticalThirdsResult | null | undefined): S2Data | null {
+function buildS2(
+  vt: FaceVerticalThirdsResult | null | undefined,
+  gender: string | null | undefined,
+): S2Data | null {
   if (!vt || (vt.status !== 'full_success' && vt.status !== 'partial_success')) {
     return null;
   }
@@ -121,6 +137,10 @@ function buildS2(vt: FaceVerticalThirdsResult | null | undefined): S2Data | null
   if (!G || !Sn || !Me) {
     return null;
   }
+
+  const lowConfidence = (vt.verticalThirds?.confidence ?? 1) < 0.5;
+  const faceShapeGender: FaceShapeGender =
+    gender === '남성' ? 'men' : gender === '여성' ? 'women' : 'neutral';
 
   const imgH = sourceImage.height;
   const browY = G.y / imgH;
@@ -189,19 +209,22 @@ function buildS2(vt: FaceVerticalThirdsResult | null | undefined): S2Data | null
     ],
     missingNotice: S2_HAIRLINE_MISSING_NOTICE,
     viewCardLabel: '카드 보기 ›',
-    ratioNumbers: vt.verticalThirds
-      ? {
-          upper: vt.verticalThirds.displayRatio.upper,
-          middle: vt.verticalThirds.displayRatio.middle,
-          lower: vt.verticalThirds.displayRatio.lower,
-        }
-      : undefined,
-    faceLength: {
-      ratio: vt.faceLength?.ratio ?? null,
-      band: vt.faceLengthJudgment?.band ?? null,
-      verdict: vt.faceLengthJudgment?.verdict ?? null,
-      confidence: vt.verticalThirds?.confidence ?? null,
-    },
+    ratioNumbers:
+      vt.verticalThirds && !lowConfidence
+        ? {
+            upper: vt.verticalThirds.displayRatio.upper,
+            middle: vt.verticalThirds.displayRatio.middle,
+            lower: vt.verticalThirds.displayRatio.lower,
+          }
+        : undefined,
+    // 얼굴형(성별 참고선 기준 방향 카테고리). 판정이 없거나 저신뢰도면 숨긴다 —
+    // 가짜 '평균 밴드'를 참칭하지 않는다(정직화).
+    faceShape:
+      vt.faceLengthJudgment &&
+      vt.faceLengthJudgment.verdict !== 'indeterminate' &&
+      !lowConfidence
+        ? describeFaceLength(vt.faceLength?.ratio ?? null, faceShapeGender)
+        : null,
     paragraph: vt.interpretation.summary || vt.interpretation.title || '측정 결과를 요약하지 못했어요.',
   };
 }
@@ -298,21 +321,13 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
     },
     axes: axesData,
     drape: {
-      title: '직접 입혀 보세요',
-      sub: '아래 색을 탭하면 드레이프처럼 둘러볼 수 있어요 · 다이얼로 조명도 바꿔 보세요',
+      title: '어울리는 색, 나란히 대보기',
+      sub: '잘 어울리는 색과 피할 색을 얼굴에 나란히 대보면 차이가 바로 보여요',
       photo: heroUri ? {uri: heroUri, placeholderLabel: '셀피'} : {placeholderLabel: '셀피'},
       goodTag: '잘 어울리는 색',
       badTag: '피할 색',
       goodCaption: '얼굴 주변이 정돈되고 피부 결이 고르게 살아나요',
       badCaption: '색이 얼굴보다 먼저 읽혀서 인상이 살짝 가라앉아 보여요',
-      dial: {
-        heading: '조명',
-        warm: '웜',
-        cool: '쿨',
-        warmCaption: '따뜻한 조명 — 웜하게 보여요',
-        neutralCaption: '기준 조명 (진단 기준)',
-        coolCaption: '차가운 조명 — 쿨하게 보여요',
-      },
       goodTitle: '잘 어울리는 색',
       badTitle: '피하면 좋은 색',
       goodSwatches,
@@ -323,7 +338,7 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
   };
 }
 
-function buildS5(bodyProfile: BodyProfile | null | undefined): S5Data {
+function buildS5(bodyProfile: BodyProfile | null | undefined, gender: string | null | undefined): S5Data {
   const base = {
     eyebrow: 'BODY TYPE',
     title: '체형은 설문으로 봤어요',
@@ -346,9 +361,14 @@ function buildS5(bodyProfile: BodyProfile | null | undefined): S5Data {
     };
   }
 
-  const analyzed = analyzeBody(bodyProfile);
+  const styleGender = resolveStyleGender(gender);
+  const analyzed = analyzeBody(bodyProfile, styleGender);
   return {
     ...base,
+    // 실루엣 타입 다이어그램 배선(설문 답변이 있는 분기에서만). 미답변 분기는
+    // 이 필드들을 설정하지 않아 undefined로 남고, S5Body가 빈 상태 플레이스홀더를 유지한다.
+    silhouetteKind: analyzed.silhouette,
+    styleGender,
     silhouetteValue: analyzed.silhouetteStyle.label,
     skeletonValue: analyzed.frameStyle.label,
     surveyNote: '체감 설문 기반 · ',
@@ -398,23 +418,100 @@ const S3_REGION_META: Record<
   },
 };
 
-function buildS3(regionNotes: FaceAnalysisRegionNotes | undefined, photo: S1Data['photo']): S3Data | null {
+// 구버전 보고서는 regionNotes 값이 string일 수 있고 신버전은
+// {insight, evidence, recommendation} 객체다. 어댑터 경계에서 둘을 흡수한다.
+function normalizeRegionNote(
+  raw: unknown,
+): {insight: string; evidence: string; recommendation: string} {
+  if (raw && typeof raw === 'object') {
+    const o = raw as Record<string, unknown>;
+    return {
+      insight: typeof o.insight === 'string' ? o.insight : '',
+      evidence: typeof o.evidence === 'string' ? o.evidence : '',
+      recommendation: typeof o.recommendation === 'string' ? o.recommendation : '',
+    };
+  }
+  if (typeof raw === 'string') {
+    return {insight: raw, evidence: '', recommendation: ''};
+  }
+  return {insight: '', evidence: '', recommendation: ''};
+}
+
+function buildS3(
+  regionNotes: FaceAnalysisRegionNotes | undefined,
+  photo: S1Data['photo'],
+  regionVisuals: RegionVisuals | null,
+  geometryMetrics: FaceGeometryMetrics | null,
+): S3Data | null {
   if (!regionNotes) {
     return null;
   }
 
+  // 자기참조 축(위치=실측 결정론적). 지표 없으면 null → 각 축 판정 보류/미표시.
+  const regionAxes = geometryMetrics ? buildRegionFeatureAxes(geometryMetrics) : null;
+
   const cards = (['upper', 'mid', 'lower', 'jaw'] as const).map(key => {
     const meta = S3_REGION_META[key];
+    // Real per-user crop + landmark polyline, when available (regionVisuals
+    // is only produced by an on-device geometry pass — legacy reports and
+    // degenerate crops never have it). Falls back to the fixed illustrative
+    // S3_REGION_META guide + full (uncropped) photo — same "조용한 생성 금지"
+    // posture as the rest of this adapter.
+    const rvRaw = regionVisuals?.[key];
+    // Guard against a degenerate persisted cropRect (w/h === 0, e.g. from a
+    // decoder default on missing/non-numeric crop fields): dividing by a
+    // zero width/height below would produce Infinity/NaN polyline points and
+    // a broken <Polyline> render. Treat it exactly like "no regionVisuals for
+    // this key" and fall back to the fixed guide + full photo.
+    const rv = rvRaw && rvRaw.cropRect.w > 0 && rvRaw.cropRect.h > 0 ? rvRaw : undefined;
+    const visual = rv
+      ? {
+          photo: {...photo, cropRect: rv.cropRect},
+          cropRect: rv.cropRect,
+          // Guide points are normalized to the FULL source image; the card
+          // shows only the crop sub-rect, so re-normalize each point into the
+          // crop's own 0..1 frame before GuideOverlay multiplies by its
+          // measured render size.
+          guide: {
+            kind: 'polyline' as const,
+            points: rv.guide.points.map(p => ({
+              x: (p.x - rv.cropRect.x) / rv.cropRect.w,
+              y: (p.y - rv.cropRect.y) / rv.cropRect.h,
+            })),
+          },
+          guideLabel: rv.guide.label,
+        }
+      : {
+          photo,
+          guide: meta.guide,
+          guideLabel: meta.guideLabel,
+        };
     return {
       key,
       regionChip: meta.chip,
       regionTitle: meta.title,
-      photo,
-      guide: meta.guide,
-      guideLabel: meta.guideLabel,
+      ...visual,
       guideLabelX: meta.guideLabelX,
-      axes: [],
-      paragraph: regionNotes[key],
+      ...(() => {
+        const featAxes = regionAxes ? regionAxes[key] : [];
+        // 측정된 축만 렌더(위치=실측). 지표 없는 축은 조용히 생략 — 허위 강도 대신 침묵.
+        const axes = featAxes.flatMap(a =>
+          a.position == null
+            ? []
+            : [{leftLabel: a.leftLabel, rightLabel: a.rightLabel, state: {kind: 'point' as const, position: a.position}}],
+        );
+        // 측정 기반 자기참조 서술이 있으면 insight로(정직·구체), 없으면 Bedrock insight 폴백.
+        const narrative = describeRegionAxes(featAxes);
+        const note = normalizeRegionNote(regionNotes[key]);
+        const insight = narrative || note.insight;
+        return {
+          axes,
+          insight,
+          evidence: narrative ? '' : note.evidence, // 서술 있으면 근거 중복 제거
+          recommendation: note.recommendation,
+          paragraph: insight,
+        };
+      })(),
     };
   });
 
@@ -426,9 +523,14 @@ function buildS3(regionNotes: FaceAnalysisRegionNotes | undefined, photo: S1Data
   };
 }
 
-// Same 2-point gaze-order diagram geometry for every report (generic
-// illustration — real per-user gaze data doesn't exist). The wording (items,
-// keywords, paragraph) is real AI-generated content from impressionNotes.
+// axes 는 AI가 인상을 2개 축(가로/세로) 좌표로 판단한 것 — 없으면(구버전
+// 보고서) 중립 기본축으로 폴백한다. 실측 좌표가 아니라 AI 서술 인상의
+// 시각화이므로 keywords/paragraph 와 함께 impressionNotes 에서만 온다.
+const DEFAULT_S6_AXES: ImpressionAxis[] = [
+  {key: 'softness', leftLabel: '부드러움', rightLabel: '또렷함', value: 0},
+  {key: 'vividness', leftLabel: '차분함', rightLabel: '화사함', value: 0},
+];
+
 function buildS6(
   regionNotes: FaceAnalysisRegionNotes | undefined,
   impressionNotes: FaceAnalysisImpressionNotes | undefined,
@@ -436,45 +538,14 @@ function buildS6(
   if (!regionNotes || !impressionNotes) {
     return null;
   }
-
+  const axes =
+    impressionNotes.axes && impressionNotes.axes.length === 2
+      ? impressionNotes.axes
+      : DEFAULT_S6_AXES;
   return {
     eyebrow: 'IMPRESSION',
     title: '모아 보면 이런 인상이에요',
-    diagramTitle: '시선이 머무는 순서',
-    playLabel: '순서 재생',
-    playingLabel: '재생 중…',
-    rings: [
-      {
-        left: 0.16,
-        right: 0.16,
-        top: 0.27,
-        height: 0.19,
-        dashed: true,
-        color: color.magenta,
-        restFill: 'rgba(255,11,131,0.09)',
-        activeFill: 'rgba(255,11,131,0.3)',
-      },
-      {
-        left: 0.28,
-        right: 0.28,
-        top: 0.66,
-        height: 0.15,
-        dashed: false,
-        color: color.accentLight,
-        restFill: 'rgba(110,203,232,0.14)',
-        activeFill: 'rgba(110,203,232,0.4)',
-      },
-    ],
-    markers: [
-      {n: 1, right: 0.02, top: 0.22, color: color.magenta},
-      {n: 2, right: 0.12, top: 0.63, color: color.accent},
-    ],
-    faceGuides: [0.36, 0.64],
-    items: [
-      {n: 1, color: color.magenta, text: `눈가 — ${regionNotes.upper}`},
-      {n: 2, color: color.accent, text: `입가 — ${regionNotes.lower}`},
-    ],
-    stepMs: [950, 1150],
+    axes,
     keywords: impressionNotes.keywords,
     paragraph: impressionNotes.paragraph,
   };
@@ -519,7 +590,7 @@ function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined): S7Data | n
   return {
     eyebrow: 'STYLING',
     title: '같은 얼굴, 두 가지 방향',
-    noteParts: [{text: '두 룩 모두 같은 분석 결과를 강도만 다르게 풀어낸 AI 제안이에요.'}],
+    noteParts: [{text: '분석 결과를 내추럴, 글램 두 가지 스타일에 맞추어 풀어낸 AI 제안이에요.'}],
     naturalLabel: '내추럴',
     glamLabel: '글램',
     mixZones: {
@@ -537,7 +608,7 @@ function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined): S7Data | n
 }
 
 export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterInput): ReportData {
-  const {report, bodyProfile, personalColor, verticalThirds} = input;
+  const {report, bodyProfile, personalColor, verticalThirds, regionVisuals, gender, geometryMetrics} = input;
   const heroUri = resolveHeroUri(report, input.heroImageUri);
   const featurePhoto: S1Data['photo'] = heroUri
     ? {uri: heroUri, placeholderLabel: '얼굴 확대 컷'}
@@ -546,10 +617,10 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
   return {
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
     s1: buildS1(report, heroUri, personalColor ?? null),
-    s2: buildS2(verticalThirds),
-    s3: buildS3(report.regionNotes, featurePhoto),
+    s2: buildS2(verticalThirds, gender),
+    s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null, geometryMetrics ?? null),
     s4: buildS4(personalColor, heroUri),
-    s5: buildS5(bodyProfile),
+    s5: buildS5(bodyProfile, gender),
     s6: buildS6(report.regionNotes, report.impressionNotes),
     s7: buildS7(report.stylingLooks),
     footer: {

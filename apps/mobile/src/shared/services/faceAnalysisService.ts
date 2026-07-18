@@ -18,6 +18,7 @@ import type {
   FaceAnalysisImpressionNotes,
   FaceAnalysisMakeupCard,
   FaceAnalysisMakeupGuideline,
+  FaceAnalysisRegionNote,
   FaceAnalysisRegionNotes,
   FaceAnalysisReport,
   FaceAnalysisStylingLook,
@@ -57,11 +58,13 @@ type BackendMakeupCard = {
 
 type BackendMakeupGuideline = Partial<Record<keyof FaceAnalysisMakeupGuideline, string | null>>;
 
-type BackendRegionNotes = Partial<Record<'upper' | 'mid' | 'lower' | 'jaw', string | null>>;
+type BackendRegionNote = {insight?: string | null; evidence?: string | null; recommendation?: string | null};
+type BackendRegionNotes = Partial<Record<'upper' | 'mid' | 'lower' | 'jaw', BackendRegionNote | string | null>>;
 type BackendImpressionNotes = {
   overallMood?: string | null;
   keywords?: string[] | null;
   paragraph?: string | null;
+  axes?: unknown;
 };
 type BackendStylingLookRow = {
   category?: string | null;
@@ -394,12 +397,27 @@ function isStylingLookRowCategory(value: unknown): value is FaceAnalysisStylingL
 
 // 이 필드들은 구버전 보고서에는 없다(추가 이전 생성분) — 없거나 형태가 깨지면
 // undefined 로 강등해 어댑터가 섹션을 숨기게 한다(지어내지 않음).
-function parseRegionNotes(value: BackendRegionNotes | null | undefined): FaceAnalysisRegionNotes | undefined {
-  const upper = firstText(value?.upper);
-  const mid = firstText(value?.mid);
-  const lower = firstText(value?.lower);
-  const jaw = firstText(value?.jaw);
+function toRegionNote(
+  raw: BackendRegionNote | string | null | undefined,
+): FaceAnalysisRegionNote | undefined {
+  if (raw && typeof raw === 'object') {
+    const insight = firstText(raw.insight);
+    if (!insight) return undefined;
+    return {
+      insight,
+      evidence: firstText(raw.evidence) ?? '',
+      recommendation: firstText(raw.recommendation) ?? '',
+    };
+  }
+  const insight = firstText(typeof raw === 'string' ? raw : undefined);
+  return insight ? {insight, evidence: '', recommendation: ''} : undefined;
+}
 
+function parseRegionNotes(value: BackendRegionNotes | null | undefined): FaceAnalysisRegionNotes | undefined {
+  const upper = toRegionNote(value?.upper);
+  const mid = toRegionNote(value?.mid);
+  const lower = toRegionNote(value?.lower);
+  const jaw = toRegionNote(value?.jaw);
   return upper && mid && lower && jaw ? {upper, mid, lower, jaw} : undefined;
 }
 
@@ -409,9 +427,20 @@ function parseImpressionNotes(
   const overallMood = firstText(value?.overallMood);
   const paragraph = firstText(value?.paragraph);
   const keywords = firstStringArray(value?.keywords ?? null, []);
+  const rawAxes = Array.isArray((value as {axes?: unknown})?.axes) ? (value as {axes: unknown[]}).axes : [];
+  const axes = rawAxes
+    .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
+    .slice(0, 2)
+    .map(a => ({
+      key: firstText(typeof a.key === 'string' ? a.key : undefined) ?? '',
+      leftLabel: firstText(typeof a.leftLabel === 'string' ? a.leftLabel : undefined) ?? '',
+      rightLabel: firstText(typeof a.rightLabel === 'string' ? a.rightLabel : undefined) ?? '',
+      value: typeof a.value === 'number' && Number.isFinite(a.value) ? Math.max(-1, Math.min(1, a.value)) : 0,
+    }))
+    .filter(a => a.leftLabel && a.rightLabel);
 
   return overallMood && paragraph && keywords.length > 0
-    ? {overallMood, paragraph, keywords}
+    ? {overallMood, paragraph, keywords, ...(axes.length === 2 ? {axes} : {})}
     : undefined;
 }
 

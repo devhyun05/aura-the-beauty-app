@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { Text } from 'react-native';
-import { color, font } from '../reportTokens';
 import type { BandKey, S2Data } from '../reportTypes';
 import { EmptyNotice } from '../visuals/EmptyNotice';
 import { GuidePhotoOverlay } from '../visuals/GuidePhotoOverlay';
 import { RegionLens } from '../visuals/RegionLens';
 import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
+import { ThirdsRatioReadout } from '../visuals/ThirdsRatioReadout';
 
 interface Props {
   data: S2Data;
@@ -49,9 +48,9 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
           style={{ marginTop: 10 }}
         />
       )}
-      <Text style={[font(12.5, '400', 1.7), { color: color.text, marginTop: 10, marginHorizontal: 2 }]}>
-        {data.paragraph}
-      </Text>
+      {/* 3분할 자기 서술은 ThirdsRatioReadout 안에 있고, 얼굴형은 별도 블록이다.
+          기존 하단 문단(엔진 3분할 요약)은 얼굴형 밑에 붙어 "게이지 밑에 또 3분할
+          얘기"로 혼동을 줬으므로 제거 — S2 맞춤 rich 문단은 B5(proportionInsight)가 담당. */}
     </RiseIn>
   );
 }

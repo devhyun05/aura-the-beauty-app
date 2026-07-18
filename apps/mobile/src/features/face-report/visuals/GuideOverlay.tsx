@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import Svg, { Ellipse, Line } from 'react-native-svg';
+import Svg, { Ellipse, Line, Polyline } from 'react-native-svg';
 import { color, pct } from '../reportTokens';
 import type { FeatureGuide } from '../reportTypes';
 import { Pill } from './Pill';
@@ -41,6 +41,15 @@ export function GuideOverlay({ guide, label, labelX, labelAlign = 'left' }: Prop
             <Ellipse cx={guide.cx * size.w} cy={guide.cy * size.h} rx={guide.rx * size.w} ry={guide.ry * size.h}
               stroke={guide.dashed ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.9)'} strokeWidth={1.5}
               fill="none" strokeDasharray={guide.dashed ? '6,5' : undefined} />
+          )}
+          {guide.kind === 'polyline' && guide.points.length >= 2 && (
+            <Polyline
+              points={guide.points.map(p => `${p.x * size.w},${p.y * size.h}`).join(' ')}
+              fill="none"
+              stroke={color.lineWhiteStrong}
+              strokeWidth={2}
+              strokeDasharray="5 4"
+            />
           )}
         </Svg>
       )}

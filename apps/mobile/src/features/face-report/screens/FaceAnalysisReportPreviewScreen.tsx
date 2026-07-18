@@ -115,6 +115,7 @@ export function FaceAnalysisReportPreviewScreen({
   }, [reloadBodyProfile]);
 
   const report = loadState.status === 'success' ? loadState.report : null;
+  const profileGender = loadState.status === 'success' ? loadState.profile?.gender ?? null : null;
   const measurements = report?.measurements;
   // Same "3-반영 규칙" identity check the production report screen uses: session
   // measurement props only apply to the report captured in this session — a
@@ -128,6 +129,15 @@ export function FaceAnalysisReportPreviewScreen({
     (useSessionMeasurements ? verticalThirds : null) ?? measurements?.faceVerticalThirds ?? null;
   const effectivePersonalColor =
     (useSessionMeasurements ? personalColor : null) ?? measurements?.personalColor?.reported ?? null;
+  // No session-fresh regionVisuals prop exists yet (unlike verticalThirds/
+  // personalColor, it isn't threaded through navigation flow state) — the
+  // server-restored measurements value is the only source today. Once a
+  // session path is wired, mirror the pattern above:
+  // (useSessionMeasurements ? regionVisuals : null) ?? measurements?.regionVisuals ?? null.
+  const effectiveRegionVisuals = measurements?.regionVisuals ?? null;
+  // S3 자기참조 축·서술의 결정론적 근거(저장된 2D 기하 실측치). 볼 때 계산되므로
+  // regionVisuals 크롭과 달리 재촬영 없이 리로드로 반영된다.
+  const effectiveGeometryMetrics = measurements?.faceGeometry2d?.metrics ?? null;
 
   const reportData = useMemo(() => {
     if (!report) {
@@ -139,8 +149,21 @@ export function FaceAnalysisReportPreviewScreen({
       verticalThirds: effectiveVerticalThirds,
       personalColor: effectivePersonalColor,
       bodyProfile,
+      regionVisuals: effectiveRegionVisuals,
+      gender: profileGender,
+      geometryMetrics: effectiveGeometryMetrics,
     });
-  }, [bodyProfile, capturedPhotoUri, effectivePersonalColor, effectiveVerticalThirds, report, reportId]);
+  }, [
+    bodyProfile,
+    capturedPhotoUri,
+    effectiveGeometryMetrics,
+    effectivePersonalColor,
+    effectiveRegionVisuals,
+    effectiveVerticalThirds,
+    profileGender,
+    report,
+    reportId,
+  ]);
 
   const handleCloseBodySurvey = useCallback(() => {
     setIsBodySurveyOpen(false);

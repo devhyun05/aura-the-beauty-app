@@ -1,16 +1,25 @@
-import {formatSeasonConfidence, formatThirdsRatio, resolveFaceLengthBand} from './reportFormat';
+import {describeFaceLength, describeImpressionExploration, describeThirdsInternally, formatSeasonConfidence, formatThirdsRatio} from './reportFormat';
 
 function assert(cond: boolean, label: string): void {
   if (!cond) throw new Error(`FAIL: ${label}`);
 }
 
-// formatThirdsRatio — 소수 둘째자리, 이상 기준 병기
+// formatThirdsRatio — 소수 둘째자리, 정직화된 교육 맥락 라벨('이상 기준' 아님)
 {
   const v = formatThirdsRatio({upper: 1.05, middle: 1.0, lower: 0.95});
   assert(v.upperLabel === '1.05', 'upper 1.05');
   assert(v.middleLabel === '1.00', 'middle 1.00');
   assert(v.lowerLabel === '0.95', 'lower 0.95');
-  assert(v.idealLabel.includes('1 : 1 : 1'), 'ideal label has 1:1:1');
+  assert(v.contextLabel.includes('고전') && !v.contextLabel.includes('이상 기준'), 'context label educational, not ideal-target');
+}
+// describeThirdsInternally — 자기 내부 비교(중안부 기준)로 가장 두드러진 편차 서술
+{
+  const short = describeThirdsInternally({upper: 0.75, middle: 1.0, lower: 0.98});
+  assert(short.includes('상안부') && short.includes('25%') && short.includes('짧'), 'upper 25% shorter');
+  const balanced = describeThirdsInternally({upper: 1.02, middle: 1.0, lower: 0.98});
+  assert(balanced.includes('균형'), 'all within threshold -> balanced');
+  const longLower = describeThirdsInternally({upper: null, middle: 1.0, lower: 1.15});
+  assert(longLower.includes('하안부') && longLower.includes('15%') && longLower.includes('길'), 'null upper, lower 15% longer');
 }
 // formatThirdsRatio — 상안부 결측(헤어라인 미확인)은 대시
 {
@@ -18,31 +27,33 @@ function assert(cond: boolean, label: string): void {
   assert(v.upperLabel === '—', 'upper missing -> dash');
   assert(v.lowerLabel === '0.90', 'lower 0.90');
 }
-// resolveFaceLengthBand — 평균 범위 안
+// describeFaceLength — 성별 참고선 기준 방향 카테고리('평균' 어휘 없음)
 {
-  const v = resolveFaceLengthBand({ratio: 1.4, band: {lo: 1.3, hi: 1.5}, verdict: 'average', confidence: 0.9});
-  assert(v.kind === 'band', 'average -> band');
-  if (v.kind === 'band') {
-    assert(v.inBand === true, 'inBand true');
-    assert(v.position > 0 && v.position < 1, 'position in (0,1)');
-    assert(v.loFrac < v.hiFrac, 'loFrac < hiFrac');
-    assert(v.verdictLabel === '평균 범위', 'verdict label average');
-  }
+  const wide = describeFaceLength(1.20, 'men'); // < 1.35-0.07
+  assert(!!wide && wide.categoryLabel.includes('가로형'), 'men 1.20 -> wide');
+  const long = describeFaceLength(1.50, 'men'); // > 1.35+0.07
+  assert(!!long && long.categoryLabel.includes('세로'), 'men 1.50 -> long');
+  const bal = describeFaceLength(1.35, 'men');
+  assert(!!bal && bal.categoryLabel.includes('균형'), 'men 1.35 -> balance');
+  // 성별이 경계를 바꾼다: ratio 1.40 → 남(균형) vs 여(세로)
+  const men140 = describeFaceLength(1.40, 'men');
+  const women140 = describeFaceLength(1.40, 'women');
+  assert(!!men140 && men140.categoryLabel.includes('균형'), 'men 1.40 -> balance');
+  assert(!!women140 && women140.categoryLabel.includes('세로'), 'women 1.40 -> long (gender shifts boundary)');
+  assert(describeFaceLength(null, 'men') === null, 'null ratio -> null');
+  assert(!!bal && !bal.sentence.includes('평균'), 'no 평균 wording');
+  assert(!!bal && bal.referenceNote.includes('황금비'), 'reference note mentions golden-ratio myth');
 }
-// resolveFaceLengthBand — 세로로 긴 편(밴드 밖)
+// describeImpressionExploration — 드래그 좌표를 축 라벨로 해석
 {
-  const v = resolveFaceLengthBand({ratio: 1.9, band: {lo: 1.3, hi: 1.5}, verdict: 'long', confidence: 0.9});
-  assert(v.kind === 'band' && v.inBand === false, 'long -> out of band');
-}
-// resolveFaceLengthBand — indeterminate는 보류
-{
-  const v = resolveFaceLengthBand({ratio: 1.4, band: null, verdict: 'indeterminate', confidence: 0.9});
-  assert(v.kind === 'withheld', 'indeterminate -> withheld');
-}
-// resolveFaceLengthBand — 저신뢰도는 보류
-{
-  const v = resolveFaceLengthBand({ratio: 1.4, band: {lo: 1.3, hi: 1.5}, verdict: 'average', confidence: 0.2});
-  assert(v.kind === 'withheld', 'low confidence -> withheld');
+  const AX = [
+    {leftLabel: '내추럴', rightLabel: '세련됨', value: 0, key: 'x'},
+    {leftLabel: '부드러움', rightLabel: '또렷함', value: 0, key: 'y'},
+  ];
+  assert(describeImpressionExploration(AX, 0.9, 0.1) === "이 위치라면 '세련됨 + 또렷함'에 가까운 인상", 'upper-right quadrant');
+  assert(describeImpressionExploration(AX, 0.1, 0.9) === "이 위치라면 '내추럴 + 부드러움'에 가까운 인상", 'lower-left quadrant');
+  assert(describeImpressionExploration(AX, 0.5, 0.5) === '중앙 — 어느 쪽으로도 치우치지 않은 균형 인상', 'center balanced');
+  assert(describeImpressionExploration([], 0.5, 0.5) === '', 'empty axes -> empty');
 }
 // formatSeasonConfidence — 확신도 %, 2순위 라벨
 {

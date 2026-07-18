@@ -1,9 +1,17 @@
 // reportTypes.ts — typed props/DTO model for the face-analysis report.
 // 원칙(2026-07-18 완화): 원측정(mm)·모집단 백분위·confidence %는 계속 비노출.
-// 단 세로 3분할의 정규화 비율과 얼굴 길이비의 측정된 평균 밴드는 노출을 허용한다
-// (spec 2026-07-18-face-report-content-refinement-design.md §3 영역1 · §7-4).
+// 세로 3분할의 정규화 비율은 노출 허용, 얼굴형은 성별 참고선 기준 방향 카테고리로만
+// (가짜 '평균 밴드'는 폐기 — 2026-07-18 정직화).
+import type {FaceShapeView} from './reportFormat';
+import type {Silhouette, StyleGender} from '../ar/stencil/src/composer/bodyProfile';
 
-export interface PhotoSlotData { uri?: string; placeholderLabel: string }
+export interface PhotoSlotData {
+  uri?: string;
+  placeholderLabel: string;
+  // S3 region cards: normalized (0..1) sub-rect of the full photo to crop the
+  // display to. Absent for the legacy fixed-guide fallback (full photo).
+  cropRect?: { x: number; y: number; w: number; h: number };
+}
 
 export type EvidenceKind = 'measured' | 'artist';
 
@@ -80,8 +88,8 @@ export interface S2Data {
   viewCardLabel: string;
   // 세로 3분할 정규화 비율(중안부=1.0 기준). 상안부는 헤어라인 미확인 시 null.
   ratioNumbers?: { upper: number | null; middle: number; lower: number };
-  // 얼굴 세로/가로 길이비 + 측정된 정상 구간(평균 밴드) 판정 스냅샷.
-  faceLength?: { ratio: number | null; band: { lo: number; hi: number } | null; verdict: string | null; confidence: number | null };
+  // 얼굴형 — 성별 문헌 참고선 기준 방향 카테고리(가로/균형/세로). '평균 밴드' 폐기.
+  faceShape?: FaceShapeView | null;
   paragraph: string;
 }
 
@@ -89,13 +97,20 @@ export interface S2Data {
 export type FeatureGuide =
   | { kind: 'slantLine'; from: { x: number; y: number }; length: number; angleDeg: number; marker: { x: number; y: number } }
   | { kind: 'dashedVertical'; x: number; top: number; height: number }
-  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; dashed: boolean };
+  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; dashed: boolean }
+  // Real landmark polyline (restored regionVisuals), re-normalized to the
+  // crop frame by buildS3 — points are already 0..1 in the CROPPED view, not
+  // the full original image.
+  | { kind: 'polyline'; points: { x: number; y: number }[] };
 
 export interface RegionCardData {
   key: string;
   regionChip: string;
   regionTitle: string;
   photo: PhotoSlotData;
+  // Same crop sub-rect as photo.cropRect (kept alongside photo for callers
+  // that need the rect without unpacking photo). Absent = legacy fallback.
+  cropRect?: { x: number; y: number; w: number; h: number };
   guide: FeatureGuide;
   guideLabel: string;
   guideLabelX: number;                  // normalized offset of the label pill
@@ -103,6 +118,10 @@ export interface RegionCardData {
   blend?: BlendData;                    // jaw card: rendered before the axes
   axes: SpectrumAxisData[];
   whatIf?: { axisIndex: number; config: WhatIfConfig };
+  // 부위 근거·인사이트·조언(P2). 값이 없으면 컴포넌트가 paragraph로 폴백.
+  insight?: string;
+  evidence?: string;
+  recommendation?: string;
   paragraph: string;
 }
 export interface S3Data { eyebrow: string; title: string; sub: string; cards: RegionCardData[] }
@@ -120,7 +139,6 @@ export interface S4Data {
     photo: PhotoSlotData;
     goodTag: string; badTag: string;
     goodCaption: string; badCaption: string;
-    dial: { heading: string; warm: string; cool: string; warmCaption: string; neutralCaption: string; coolCaption: string };
     goodTitle: string; badTitle: string;
     goodSwatches: SwatchData[]; badSwatches: SwatchData[];
     initialSwatch: { name: string; color: string; good: boolean };
@@ -131,7 +149,11 @@ export interface S4Data {
 // ---------- S5 ----------
 export interface S5Data {
   eyebrow: string; title: string;
-  silhouettePlaceholder: string;   // multi-line placeholder label
+  silhouettePlaceholder: string;   // multi-line placeholder label (설문 전 빈 상태에서만 사용)
+  // 실루엣 타입 다이어그램용. 설문 답변이 있을 때만 채워진다(미답변이면 undefined →
+  // S5Body가 기존 빗금 플레이스홀더를 유지). styleGender는 다이어그램 외형 분기용.
+  silhouetteKind?: Silhouette;
+  styleGender?: StyleGender;
   silhouetteLabel: string; silhouetteValue: string;
   skeletonLabel: string; skeletonValue: string;
   surveyNote: string; surveyLink: string;
@@ -140,18 +162,10 @@ export interface S5Data {
 }
 
 // ---------- S6 ----------
-export interface GazeRing {
-  left: number; right: number; top: number; height: number; // normalized in the 112×146 face box
-  dashed: boolean; color: string; restFill: string; activeFill: string;
-}
-export interface GazeMarker { n: number; right: number; top: number; color: string }
+export interface ImpressionAxis { key: string; leftLabel: string; rightLabel: string; value: number }
 export interface S6Data {
   eyebrow: string; title: string;
-  diagramTitle: string; playLabel: string; playingLabel: string;
-  rings: GazeRing[]; markers: GazeMarker[];
-  faceGuides: number[];            // dashed guide-line ys, normalized
-  items: { n: number; color: string; text: string }[];
-  stepMs: number[];                // hold duration per ring, in play order
+  axes: ImpressionAxis[];   // 2개 (없으면 어댑터가 중립 기본축)
   keywords: string[];
   paragraph: string;
 }
@@ -164,8 +178,8 @@ export interface S7Data {
   eyebrow: string; title: string;
   noteParts: NotePart[];
   naturalLabel: string; glamLabel: string;
-  mixZones: { nearNatural: string; middle: string; nearGlam: string }; // thresholds .35 / .65
-  lookSummary: { natural: { title: string; desc: string }; glam: { title: string; desc: string } }; // switches at .5
+  mixZones?: { nearNatural: string; middle: string; nearGlam: string }; // thresholds .35 / .65
+  lookSummary?: { natural: { title: string; desc: string }; glam: { title: string; desc: string } }; // switches at .5
   naturalCard: LookCardData;
   glamCard: LookCardData;
 }

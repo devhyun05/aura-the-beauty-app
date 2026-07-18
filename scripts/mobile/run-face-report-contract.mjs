@@ -14,6 +14,12 @@ const featuresDir = join(repoRoot, 'apps/mobile/src/features');
 const entries = [
   'face-report/reportFormat.ts',
   'face-report/reportFormat.test.ts',
+  'face-report/reportFeatureAxes.ts',
+  'face-report/reportFeatureAxes.test.ts',
+  'face-geometry/services/faceGeometryCore/regionVisualsBuilder.ts',
+  'face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.ts',
+  'ar/stencil/src/composer/bodyProfile.ts',
+  'ar/stencil/src/composer/bodyProfile.test.ts',
 ];
 
 function run(command, args) {
@@ -37,3 +43,6 @@ run(process.execPath, [
 ]);
 
 run(process.execPath, [join(outDir, 'face-report/reportFormat.test.js')]);
+run(process.execPath, [join(outDir, 'face-report/reportFeatureAxes.test.js')]);
+run(process.execPath, [join(outDir, 'face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.js')]);
+run(process.execPath, [join(outDir, 'ar/stencil/src/composer/bodyProfile.test.js')]);
