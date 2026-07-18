@@ -893,6 +893,26 @@ POST_SCHEMA_MIGRATIONS = {
     end $migration$;
   """,
   "schema.sql:media-upload-sessions-v1": MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL,
+  "schema.sql:analysis-report-inflight-idempotency-v1": """
+    -- 멱등성(M3): 동일 (user_id, source_media_id)로 동시에 in-flight 분석이
+    -- 여럿 생기는 연타 경쟁(SELECT-후-INSERT TOCTOU)을 DB 레벨에서 막는다.
+    -- 인덱스 생성 전, 기존 in-flight 중복은 최신 1건만 남기고 실패 처리한다.
+    update analysis_reports a
+    set status = 'failed',
+        error_message = 'Superseded by a newer in-flight analysis.'
+    where a.status in ('pending', 'processing')
+      and a.source_media_id is not null
+      and exists (
+        select 1 from analysis_reports b
+        where b.user_id = a.user_id
+          and b.source_media_id = a.source_media_id
+          and b.status in ('pending', 'processing')
+          and (b.created_at, b.id) > (a.created_at, a.id)
+      );
+    create unique index if not exists uq_analysis_reports_inflight_source
+      on analysis_reports (user_id, source_media_id)
+      where status in ('pending', 'processing') and source_media_id is not null;
+  """,
 }
 
 def get_schema_path() -> Path:

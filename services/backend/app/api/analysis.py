@@ -5,6 +5,7 @@ import logging
 import time
 from uuid import UUID
 
+import asyncpg
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
@@ -903,27 +904,53 @@ async def create_analysis_job(
     else None
   )
 
-  if receipt_verification is not None and receipt_verification.verified:
-    async def consume_and_insert(connection) -> dict | None:
+  try:
+    if receipt_verification is not None and receipt_verification.verified:
+      async def consume_and_insert(connection) -> dict | None:
+        await verify_and_consume_face3d_calibration_receipt(
+          connection,
+          settings,
+          payload.request_payload,
+          expected_report_context_id=receipt_request_context.report_context_id,
+          expected_subject_context_id=receipt_request_context.subject_context_id,
+        )
+        return await insert_report(connection)
+
+      report = await db.run_in_transaction(consume_and_insert)
+    else:
       await verify_and_consume_face3d_calibration_receipt(
-        connection,
+        db,
         settings,
         payload.request_payload,
         expected_report_context_id=receipt_request_context.report_context_id,
         expected_subject_context_id=receipt_request_context.subject_context_id,
       )
-      return await insert_report(connection)
-
-    report = await db.run_in_transaction(consume_and_insert)
-  else:
-    await verify_and_consume_face3d_calibration_receipt(
-      db,
-      settings,
-      payload.request_payload,
-      expected_report_context_id=receipt_request_context.report_context_id,
-      expected_subject_context_id=receipt_request_context.subject_context_id,
+      report = await insert_report(db)
+  except asyncpg.UniqueViolationError:
+    # 멱등성(M3): 부분 유니크 인덱스가 동일 소스의 in-flight 중복 insert를
+    # 막았다 = 이미 같은 촬영으로 분석이 진행 중. 새 잡을 또 만들지 않고
+    # 기존 in-flight 보고서를 그대로 돌려준다(연타 방지, 중복 과금 방지).
+    existing = await db.fetchrow(
+      """
+      select *
+      from analysis_reports
+      where user_id = $1 and source_media_id = $2
+        and status in ('pending', 'processing')
+        and deleted_at is null
+      order by created_at desc
+      limit 1
+      """,
+      user["id"],
+      payload.source_media_id,
     )
-    report = await insert_report(db)
+    if existing is None:
+      raise
+    logger.info(
+      "[aura:analysis-api] job:dedup-inflight userSub=%s reportId=%s",
+      auth.subject,
+      existing["id"],
+    )
+    return success({"job": normalize_analysis_report_row(dict(existing))})
 
   if payload.run_immediately:
     await dispatch_analysis_job(
@@ -1019,6 +1046,8 @@ async def retry_analysis_job_stage(
     run_immediately=True,
     request_payload=retry_payload,
   )
+  # 조건부 전이: 이미 pending/processing이면 되돌리지 않는다 — 진행 중 실행과
+  # 겹쳐 같은 행을 두 백그라운드 태스크가 경쟁 업데이트하는 것을 막는다.
   updated = await db.fetchrow(
     """
     update analysis_reports
@@ -1030,12 +1059,19 @@ async def retry_analysis_job_stage(
           to_jsonb($2::text),
           true
         )
-    where id = $1
+    where id = $1 and status in ('completed', 'failed')
     returning *
     """,
     job_id,
     retry.stage.value,
   )
+  if updated is None:
+    raise AppError(
+      409,
+      "ANALYSIS_JOB_NOT_RETRYABLE",
+      "이미 분석이 진행 중이에요. 잠시 후 다시 시도해 주세요.",
+      {"jobId": str(job_id)},
+    )
   await dispatch_analysis_job(
     db,
     background_tasks,
