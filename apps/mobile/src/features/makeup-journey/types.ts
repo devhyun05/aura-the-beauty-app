@@ -29,6 +29,7 @@ export type MakeupJourneyCalendarDay = {
   status: MakeupJourneyStatus;
   firstScore: number | null;
   latestScore: number | null;
+  representativeScore: number | null;
   scoreDelta: number | null;
   reportCount: number;
   hasNote: boolean;
@@ -66,6 +67,8 @@ export type MakeupJourneyReport = {
   completedAt: string;
   imageUrl: string | null;
   goalContext: Partial<MakeupFeedbackContext> & Record<string, unknown>;
+  feedbackDigest: MakeupJourneyFeedbackDigest | null;
+  note: MakeupJourneyNote | null;
 };
 
 export type MakeupJourneyMission = {
@@ -92,12 +95,21 @@ export type MakeupJourneyDayResponse = {
   status: MakeupJourneyStatus;
   firstScore: number | null;
   latestScore: number | null;
+  representativeReportId: string | null;
+  representativeScore: number | null;
   scoreDelta: number | null;
   reportCount: number;
   feedbackDigest: MakeupJourneyFeedbackDigest | null;
   reports: MakeupJourneyReport[];
   missions: MakeupJourneyMission[];
   note: MakeupJourneyNote | null;
+};
+
+export type MakeupJourneyScoreSelection = {
+  date: string;
+  reportId: string;
+  score: number;
+  updatedAt: string;
 };
 
 export type MakeupJourneyTrendPoint = {

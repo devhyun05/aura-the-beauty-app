@@ -61,6 +61,7 @@ const july17 = calendar.days.find(day => day.date === '2026-07-17');
 expect(calendar.days.length === 2, 'calendar drops malformed rows and groups valid report dates');
 expect(july17?.firstScore === 70, 'calendar preserves the first score of the day');
 expect(july17?.latestScore === 85, 'calendar preserves the latest score of the day');
+expect(july17?.representativeScore === 85, 'legacy calendar defaults representative score to latest');
 expect(july17?.scoreDelta === 15, 'calendar computes the daily score delta');
 expect(july17?.reportCount === 2, 'calendar counts all completed feedback reports for the day');
 expect(july17?.status === 'success', 'legacy goal score determines success consistently');
@@ -68,6 +69,8 @@ expect(july17?.status === 'success', 'legacy goal score determines success consi
 const day = buildLegacyMakeupJourneyDay('2026-07-17', reports);
 expect(day.reports.length === 2, 'day fallback includes all reports for the selected day');
 expect(day.reports[1]?.imageUrl?.endsWith('latest.jpg') === true, 'day fallback keeps report image URLs');
+expect(day.reports[0]?.feedbackDigest?.headline === '첫 기록', 'every fallback report owns its digest');
+expect(day.representativeReportId === 'latest', 'legacy day selects the latest report by default');
 expect(day.feedbackDigest?.nextAction === '블렌딩을 정리해 보세요.', 'day fallback maps digest action');
 
 const trend = buildLegacyMakeupJourneyTrend('7d', '2026-07-18', reports);

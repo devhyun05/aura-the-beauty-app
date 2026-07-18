@@ -8,6 +8,8 @@ import {
   type JourneyCalendarCell,
 } from '../utils/date';
 
+const JOURNEY_FAILURE_COLOR = '#5B78A6';
+
 type JourneyDayCellProps = {
   calendarCell: JourneyCalendarCell;
   columnIndex: number;
@@ -33,10 +35,11 @@ export function getJourneyDayCellAccessibilityLabel(
   isToday = false,
 ): string {
   const dateLabel = `${getJourneyDateAccessibilityLabel(calendarCell.date)}${isToday ? ', 오늘' : ''}`;
-  if (!day || day.latestScore === null) {
+  const score = day?.representativeScore ?? day?.latestScore ?? null;
+  if (!day || score === null) {
     return `${dateLabel}, 기록 없음`;
   }
-  return `${dateLabel}, ${day.latestScore}점, ${getStatusLabel(day.status)}, 피드백 ${day.reportCount}개`;
+  return `${dateLabel}, ${score}점, ${getStatusLabel(day.status)}, 피드백 ${day.reportCount}개`;
 }
 
 export function JourneyDayCell({
@@ -48,11 +51,7 @@ export function JourneyDayCell({
   weekIndex,
 }: JourneyDayCellProps) {
   const status = day?.status ?? 'empty';
-  const statusStyle = status === 'success'
-    ? styles.success
-    : status === 'failure'
-      ? styles.failure
-      : styles.empty;
+  const score = day?.representativeScore ?? day?.latestScore ?? null;
 
   return (
     <Pressable
@@ -61,12 +60,21 @@ export function JourneyDayCell({
       onPress={() => onPress(calendarCell.date)}
       style={({pressed}) => [
         styles.cell,
-        statusStyle,
         columnIndex < 6 ? styles.withRightDivider : null,
         weekIndex < 5 ? styles.withBottomDivider : null,
         !calendarCell.inCurrentMonth ? styles.outsideMonth : null,
         pressed ? styles.pressed : null,
       ]}>
+      {score !== null ? (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            styles.statusTint,
+            status === 'success' ? styles.successTint : styles.failureTint,
+          ]}
+        />
+      ) : null}
       <View style={[styles.dayNumberBadge, isToday ? styles.todayBadge : null]}>
         <Text style={[
           styles.dayNumber,
@@ -77,24 +85,17 @@ export function JourneyDayCell({
           {calendarCell.day}
         </Text>
       </View>
-      {day?.latestScore !== null && day?.latestScore !== undefined ? (
+      {score !== null ? (
         <View style={styles.recordBlock}>
-          <Text style={styles.score}>{day.latestScore}점</Text>
-          <View style={styles.statusRow}>
-            <View style={[
-              styles.statusDot,
-              status === 'success' ? styles.successDot : styles.failureDot,
-            ]} />
-            <Text style={[
-              styles.statusText,
-              status === 'success' ? styles.successText : styles.failureText,
-            ]}>
-              {status === 'success' ? '달성' : '미달'}
-            </Text>
-          </View>
+          <Text style={[
+            styles.score,
+            status === 'success' ? styles.successScore : styles.failureScore,
+          ]}>
+            {score}점
+          </Text>
         </View>
       ) : (
-        <View style={styles.emptyState} />
+        <View style={styles.emptyDot} />
       )}
     </Pressable>
   );
@@ -104,12 +105,14 @@ const styles = StyleSheet.create({
   cell: {
     backgroundColor: colors.white,
     borderColor: colors.divider,
+    alignItems: 'center',
     flex: 1,
     gap: spacing.xs,
     justifyContent: 'space-between',
-    minHeight: 82,
+    minHeight: 72,
+    overflow: 'hidden',
     paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
   },
   dayNumberBadge: {
     alignItems: 'center',
@@ -124,20 +127,18 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
-  empty: {
-    backgroundColor: colors.white,
+  emptyDot: {
+    backgroundColor: colors.divider,
+    borderRadius: radius.pill,
+    height: 5,
+    marginBottom: spacing.sm,
+    width: 5,
   },
-  emptyState: {
-    minHeight: 34,
+  failureScore: {
+    color: JOURNEY_FAILURE_COLOR,
   },
-  failure: {
-    backgroundColor: 'rgba(91, 120, 166, 0.14)',
-  },
-  failureDot: {
-    backgroundColor: '#5B78A6',
-  },
-  failureText: {
-    color: '#5B78A6',
+  failureTint: {
+    backgroundColor: JOURNEY_FAILURE_COLOR,
   },
   outsideMonth: {
     backgroundColor: colors.surfaceMuted,
@@ -147,23 +148,17 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   score: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 11,
+    lineHeight: 14,
   },
   recordBlock: {
-    gap: 1,
-  },
-  statusRow: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 2,
-  },
-  statusText: {
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: 10,
-    lineHeight: 12,
+    backgroundColor: colors.white,
+    borderRadius: radius.pill,
+    minWidth: 38,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
   },
   todayBadge: {
     backgroundColor: colors.black,
@@ -172,21 +167,16 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   saturdayText: {
-    color: '#5B78A6',
+    color: JOURNEY_FAILURE_COLOR,
   },
-  statusDot: {
-    borderRadius: radius.pill,
-    height: 5,
-    width: 5,
+  statusTint: {
+    opacity: 0.14,
   },
-  success: {
-    backgroundColor: 'rgba(242, 93, 97, 0.14)',
-  },
-  successDot: {
-    backgroundColor: colors.heart,
-  },
-  successText: {
+  successScore: {
     color: colors.heart,
+  },
+  successTint: {
+    backgroundColor: colors.heart,
   },
   sundayText: {
     color: colors.danger,

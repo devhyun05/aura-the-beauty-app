@@ -1,24 +1,29 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
+  PanResponder,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
 } from 'react-native';
 import {
   ChartNoAxesCombined,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Leaf,
   Settings2,
 } from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View} from 'tamagui';
 
 import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAnalytics';
-import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {colors, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
 import {JourneyCalendarGrid} from '../components/JourneyCalendarGrid';
 import {JourneyMonthPickerSheet} from '../components/JourneyMonthPickerSheet';
@@ -82,6 +87,9 @@ export function MakeupJourneyScreen({
   onOpenTrend,
 }: MakeupJourneyScreenProps) {
   const insets = useSafeAreaInsets();
+  const {width: screenWidth} = useWindowDimensions();
+  const calendarTranslateX = useRef(new Animated.Value(0)).current;
+  const isCalendarTransitioningRef = useRef(false);
   const [month, setMonth] = useState(() =>
     initialMonth && isYearMonthString(initialMonth)
       ? initialMonth
@@ -267,6 +275,73 @@ export function MakeupJourneyScreen({
     setMonthPickerVisible(false);
   };
 
+  const restoreCalendarPosition = useCallback((duration = 150) => {
+    Animated.timing(calendarTranslateX, {
+      duration,
+      easing: Easing.out(Easing.cubic),
+      toValue: 0,
+      useNativeDriver: true,
+    }).start(() => {
+      isCalendarTransitioningRef.current = false;
+    });
+  }, [calendarTranslateX]);
+
+  const changeMonthBySwipe = useCallback((direction: -1 | 1) => {
+    if (isCalendarTransitioningRef.current) {
+      return;
+    }
+    isCalendarTransitioningRef.current = true;
+    Animated.timing(calendarTranslateX, {
+      duration: 160,
+      easing: Easing.in(Easing.cubic),
+      toValue: direction > 0 ? -screenWidth : screenWidth,
+      useNativeDriver: true,
+    }).start(({finished}) => {
+      if (!finished) {
+        restoreCalendarPosition();
+        return;
+      }
+      setMonth(current => shiftMonth(current, direction));
+      calendarTranslateX.setValue(direction > 0 ? screenWidth : -screenWidth);
+      requestAnimationFrame(() => restoreCalendarPosition(210));
+    });
+  }, [calendarTranslateX, restoreCalendarPosition, screenWidth]);
+
+  const calendarSwipeResponder = useMemo(() => {
+    const shouldClaimHorizontalSwipe = (dx: number, dy: number) => (
+      !isCalendarTransitioningRef.current
+      && Math.abs(dx) >= 10
+      && Math.abs(dx) > Math.abs(dy) * 1.15
+    );
+
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_event, gesture) => (
+        shouldClaimHorizontalSwipe(gesture.dx, gesture.dy)
+      ),
+      onMoveShouldSetPanResponderCapture: (_event, gesture) => (
+        shouldClaimHorizontalSwipe(gesture.dx, gesture.dy)
+      ),
+      onPanResponderMove: (_event, gesture) => {
+        const clampedX = Math.max(-screenWidth, Math.min(screenWidth, gesture.dx));
+        calendarTranslateX.setValue(clampedX);
+      },
+      onPanResponderRelease: (_event, gesture) => {
+        const shouldMove = Math.abs(gesture.dx) >= 36 || Math.abs(gesture.vx) >= 0.28;
+        if (!shouldMove) {
+          isCalendarTransitioningRef.current = true;
+          restoreCalendarPosition(120);
+          return;
+        }
+        changeMonthBySwipe(gesture.dx < 0 ? 1 : -1);
+      },
+      onPanResponderTerminate: () => {
+        isCalendarTransitioningRef.current = true;
+        restoreCalendarPosition(120);
+      },
+      onPanResponderTerminationRequest: () => false,
+    });
+  }, [calendarTranslateX, changeMonthBySwipe, restoreCalendarPosition, screenWidth]);
+
   const refreshAll = async () => {
     await Promise.all([
       loadSettings('refresh'),
@@ -307,15 +382,19 @@ export function MakeupJourneyScreen({
         <View style={styles.header}>
           <View style={styles.headerText}>
             <Text style={styles.eyebrow}>나의 변화 기록</Text>
-            <Text accessibilityRole="header" style={styles.screenTitle}>메이크업 성장</Text>
+            <View style={styles.screenTitleRow}>
+              <Text accessibilityRole="header" style={styles.screenTitle}>메이크업 성장</Text>
+              <Leaf color={colors.heart} size={20} strokeWidth={1.8} />
+            </View>
           </View>
           <View style={styles.headerActions}>
             <Pressable
               accessibilityLabel="전체 성장 그래프 보기"
               accessibilityRole="button"
               onPress={() => onOpenTrend(getJourneyTrendEndDateForMonth(month))}
-              style={({pressed}) => [styles.iconButton, pressed ? styles.pressed : null]}>
+              style={({pressed}) => [styles.headerActionButton, pressed ? styles.pressed : null]}>
               <ChartNoAxesCombined color={colors.textPrimary} size={22} />
+              <Text style={styles.headerActionLabel}>분석</Text>
             </Pressable>
             <Pressable
               accessibilityLabel="메이크업 성장 설정 열기"
@@ -324,8 +403,9 @@ export function MakeupJourneyScreen({
                 setSettingsSaveError(null);
                 setSettingsSheetVisible(true);
               }}
-              style={({pressed}) => [styles.iconButton, pressed ? styles.pressed : null]}>
+              style={({pressed}) => [styles.headerActionButton, pressed ? styles.pressed : null]}>
               <Settings2 color={colors.textPrimary} size={22} />
+              <Text style={styles.headerActionLabel}>설정</Text>
             </Pressable>
           </View>
         </View>
@@ -335,7 +415,7 @@ export function MakeupJourneyScreen({
             accessibilityLabel="이전 달 보기"
             accessibilityRole="button"
             onPress={() => setMonth(current => shiftMonth(current, -1))}
-            style={({pressed}) => [styles.iconButton, pressed ? styles.pressed : null]}>
+            style={({pressed}) => [styles.monthArrowButton, pressed ? styles.pressed : null]}>
             <ChevronLeft color={colors.textPrimary} size={22} />
           </Pressable>
           <Pressable
@@ -352,7 +432,7 @@ export function MakeupJourneyScreen({
             accessibilityLabel="다음 달 보기"
             accessibilityRole="button"
             onPress={() => setMonth(current => shiftMonth(current, 1))}
-            style={({pressed}) => [styles.iconButton, pressed ? styles.pressed : null]}>
+            style={({pressed}) => [styles.monthArrowButton, pressed ? styles.pressed : null]}>
             <ChevronRight color={colors.textPrimary} size={22} />
           </Pressable>
         </View>
@@ -406,7 +486,10 @@ export function MakeupJourneyScreen({
             ) : null}
 
             <JourneyMonthSummary
+              days={calendarDays}
+              endDate={getJourneyTrendEndDateForMonth(month, todayDate)}
               goalScore={settings?.goalScore ?? null}
+              onOpenTrend={() => onOpenTrend(getJourneyTrendEndDateForMonth(month, todayDate))}
               summary={monthResource.data?.summary}
             />
 
@@ -417,29 +500,53 @@ export function MakeupJourneyScreen({
               </View>
             ) : null}
 
-            <View style={styles.calendarCard}>
+            <Animated.View
+              {...calendarSwipeResponder.panHandlers}
+              accessibilityActions={[
+                {name: 'decrement', label: '이전 달 보기'},
+                {name: 'increment', label: '다음 달 보기'},
+              ]}
+              accessibilityLabel="월간 달력, 좌우로 넘겨 월 이동"
+              accessibilityRole="adjustable"
+              onAccessibilityAction={event => {
+                if (event.nativeEvent.actionName === 'decrement') {
+                  changeMonthBySwipe(-1);
+                } else if (event.nativeEvent.actionName === 'increment') {
+                  changeMonthBySwipe(1);
+                }
+              }}
+              style={[
+                styles.calendarCard,
+                {
+                  transform: [{translateX: calendarTranslateX}],
+                },
+              ]}>
+              <View accessibilityLabel="달력 범례" style={styles.legend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, styles.recordSwatch]} />
+                  <Text style={styles.legendText}>기록 완료</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, styles.successSwatch]} />
+                  <Text style={styles.legendText}>목표 달성</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, styles.todaySwatch]} />
+                  <Text style={styles.legendText}>오늘</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendSwatch, styles.failureSwatch]} />
+                  <Text style={styles.legendText}>목표 미달</Text>
+                </View>
+              </View>
+
               <JourneyCalendarGrid
                 days={calendarDays}
                 month={month}
                 onPressDay={openDay}
                 todayDate={todayDate}
               />
-
-              <View accessibilityLabel="달력 범례" style={styles.legend}>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendSwatch, styles.successSwatch]} />
-                  <Text style={styles.legendText}>달성한 날</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendSwatch, styles.failureSwatch]} />
-                  <Text style={styles.legendText}>아쉬운 날</Text>
-                </View>
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendSwatch, styles.emptySwatch]} />
-                  <Text style={styles.legendText}>기록 없음</Text>
-                </View>
-              </View>
-            </View>
+            </Animated.View>
           </>
         ) : null}
       </ScrollView>
@@ -511,10 +618,10 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   calendarCard: {
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   eyebrow: {
-    color: colors.textSecondary,
+    color: colors.heart,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
@@ -531,15 +638,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  iconButton: {
+  headerActionButton: {
+    ...shadows.soft,
     alignItems: 'center',
     backgroundColor: colors.white,
-    borderColor: 'rgba(17, 17, 17, 0.08)',
-    borderRadius: radius.pill,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    height: 44,
+    gap: 3,
+    height: 64,
     justifyContent: 'center',
-    width: 44,
+    width: 52,
+  },
+  headerActionLabel: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   inlineError: {
     backgroundColor: colors.surfaceMuted,
@@ -555,44 +670,56 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   legend: {
-    borderTopColor: colors.divider,
-    borderTopWidth: 1,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.lg,
-    justifyContent: 'center',
-    paddingTop: spacing.md,
+    gap: spacing.xs,
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xs,
   },
   legendItem: {
     alignItems: 'center',
+    flex: 1,
     flexDirection: 'row',
-    gap: spacing.xs,
+    gap: 3,
+    justifyContent: 'center',
   },
   legendText: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
+    fontSize: 10,
+    lineHeight: 13,
   },
   legendSwatch: {
-    borderRadius: radius.sm,
-    height: 12,
-    width: 12,
+    borderRadius: radius.pill,
+    height: 10,
+    width: 10,
+  },
+  recordSwatch: {
+    backgroundColor: colors.textTertiary,
   },
   successSwatch: {
-    backgroundColor: 'rgba(242, 93, 97, 0.24)',
+    backgroundColor: colors.heart,
   },
   failureSwatch: {
-    backgroundColor: 'rgba(91, 120, 166, 0.24)',
+    backgroundColor: '#5B78A6',
   },
-  emptySwatch: {
-    borderColor: colors.borderStrong,
-    borderWidth: 1,
+  todaySwatch: {
+    backgroundColor: colors.black,
   },
   monthHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  monthArrowButton: {
+    ...shadows.soft,
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
   },
   monthTitle: {
     color: colors.textPrimary,
@@ -601,12 +728,16 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.lg,
   },
   monthTitleButton: {
+    ...shadows.soft,
     alignItems: 'center',
+    backgroundColor: colors.white,
+    borderColor: colors.border,
     borderRadius: radius.pill,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.xs,
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
+    minHeight: 46,
+    paddingHorizontal: spacing.xl,
   },
   onboardingBanner: {
     alignItems: 'center',
@@ -645,8 +776,13 @@ const styles = StyleSheet.create({
   screenTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xl,
-    lineHeight: typography.lineHeight.xl,
+    fontSize: typography.fontSize.xxl,
+    lineHeight: typography.lineHeight.xxl,
+  },
+  screenTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   stateCard: {
     alignItems: 'center',

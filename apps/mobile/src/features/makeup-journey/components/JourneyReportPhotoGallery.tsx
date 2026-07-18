@@ -3,9 +3,7 @@ import {
   ActivityIndicator,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
-  useWindowDimensions,
 } from 'react-native';
 import {ArrowUpRight, ImageOff} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
@@ -14,6 +12,7 @@ import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {MakeupJourneyReport} from '../types';
 
 export type JourneyReportPhotoGalleryProps = {
+  activeReportId?: string | null;
   onOpenReport: (reportId: string) => void;
   reports: MakeupJourneyReport[];
 };
@@ -27,29 +26,30 @@ function ReportPhoto({
   onOpenReport,
   report,
   total,
-  width,
 }: {
   index: number;
   onOpenReport: (reportId: string) => void;
-  report: MakeupJourneyReport & {imageUrl: string};
+  report: MakeupJourneyReport;
   total: number;
-  width: number;
 }) {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(Boolean(report.imageUrl));
   const [hasError, setHasError] = useState(false);
   const label = getReportLabel(report, index);
+  const hasImage = typeof report.imageUrl === 'string' && report.imageUrl.length > 0;
 
   return (
     <Pressable
       accessibilityLabel={`${label} 사진, ${report.score}점, 전체 보고서 보기`}
       accessibilityRole="button"
       onPress={() => onOpenReport(report.reportId)}
-      style={({pressed}) => [styles.photoItem, {width}, pressed ? styles.pressed : null]}>
+      style={({pressed}) => [styles.photoItem, pressed ? styles.pressed : null]}>
       <View style={styles.photoFrame}>
-        {hasError ? (
+        {hasError || !hasImage ? (
           <View style={styles.photoFallback}>
             <ImageOff color={colors.textTertiary} size={28} />
-            <Text style={styles.photoFallbackText}>사진을 불러오지 못했어요.</Text>
+            <Text style={styles.photoFallbackText}>
+              {hasError ? '사진을 불러오지 못했어요.' : '이 기록에는 사진이 없어요.'}
+            </Text>
           </View>
         ) : (
           <>
@@ -61,7 +61,7 @@ function ReportPhoto({
               }}
               onLoadEnd={() => setIsLoading(false)}
               resizeMode="cover"
-              source={{uri: report.imageUrl}}
+              source={{uri: report.imageUrl ?? ''}}
               style={styles.photo}
             />
             {isLoading ? (
@@ -89,17 +89,17 @@ function ReportPhoto({
 }
 
 export function JourneyReportPhotoGallery({
+  activeReportId,
   onOpenReport,
   reports,
 }: JourneyReportPhotoGalleryProps) {
-  const {width: windowWidth} = useWindowDimensions();
-  const photoWidth = Math.max(280, windowWidth - spacing.screenX * 2);
-  const reportsWithImages = reports.filter(
-    (report): report is MakeupJourneyReport & {imageUrl: string} =>
-      typeof report.imageUrl === 'string' && report.imageUrl.length > 0,
+  const activeIndex = Math.max(
+    0,
+    reports.findIndex(report => report.reportId === activeReportId),
   );
+  const report = reports[activeIndex];
 
-  if (reportsWithImages.length === 0) {
+  if (!report) {
     return null;
   }
 
@@ -108,28 +108,19 @@ export function JourneyReportPhotoGallery({
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <Text style={styles.eyebrow}>오늘의 메이크업</Text>
-          <Text style={styles.reportCount}>{reportsWithImages.length}개의 기록</Text>
+          <Text style={styles.reportCount}>{reports.length}개의 기록</Text>
         </View>
-        <Text style={styles.description}>사진을 누르면 자세한 AI 분석 보고서를 볼 수 있어요.</Text>
+        <Text style={styles.description}>
+          화면 어디서든 좌우로 밀어 이전·다음 기록을 볼 수 있어요.
+        </Text>
       </View>
-      <ScrollView
-        contentContainerStyle={styles.photoList}
-        decelerationRate="fast"
-        horizontal
-        pagingEnabled
-        snapToInterval={photoWidth + spacing.md}
-        showsHorizontalScrollIndicator={false}>
-        {reportsWithImages.map((report, index) => (
-          <ReportPhoto
-            index={index}
-            key={report.reportId}
-            onOpenReport={onOpenReport}
-            report={report}
-            total={reportsWithImages.length}
-            width={photoWidth}
-          />
-        ))}
-      </ScrollView>
+      <ReportPhoto
+        index={activeIndex}
+        key={report.reportId}
+        onOpenReport={onOpenReport}
+        report={report}
+        total={reports.length}
+      />
     </View>
   );
 }
@@ -190,16 +181,13 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   photoItem: {
-    flexShrink: 0,
+    alignSelf: 'stretch',
   },
   photoLabel: {
     color: colors.white,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
-  },
-  photoList: {
-    gap: spacing.md,
   },
   photoLoading: {
     alignItems: 'center',

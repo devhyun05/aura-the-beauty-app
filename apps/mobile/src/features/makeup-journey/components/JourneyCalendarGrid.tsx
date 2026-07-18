@@ -1,7 +1,7 @@
 import {StyleSheet} from 'react-native';
 import {Text, View} from 'tamagui';
 
-import {colors, spacing, typography} from '../../../shared/theme';
+import {colors, radius, shadows, spacing, typography} from '../../../shared/theme';
 import type {MakeupJourneyCalendarDay} from '../types';
 import {createJourneyCalendarGrid, JOURNEY_WEEKDAY_LABELS} from '../utils/date';
 import {JourneyDayCell} from './JourneyDayCell';
@@ -61,9 +61,10 @@ export function JourneyCalendarGrid({
 
 const styles = StyleSheet.create({
   container: {
+    ...shadows.soft,
     backgroundColor: colors.white,
-    borderColor: 'rgba(17, 17, 17, 0.10)',
-    borderRadius: 16,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -78,9 +79,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   weekdayCell: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.white,
+    borderBottomColor: colors.divider,
+    borderBottomWidth: 1,
     flex: 1,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
   },
   saturday: {
     color: '#5B78A6',

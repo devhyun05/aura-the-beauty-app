@@ -31,6 +31,8 @@ from app.schemas.makeup_journey import (
   MakeupJourneyMissionUpdate,
   MakeupJourneyNoteUpdate,
   MakeupJourneyNoteResponse,
+  MakeupJourneyScoreSelectionResponse,
+  MakeupJourneyScoreSelectionUpdate,
   MakeupJourneySettingsResponse,
   MakeupJourneySettingsUpdate,
   MakeupJourneyTrendResponse,
@@ -228,7 +230,7 @@ def build_feedback_digest(row: dict[str, Any] | None) -> dict[str, Any] | None:
       if isinstance(item, dict)
       if (title := _clean_text(item.get("title"), max_length=120)) is not None
     ]
-    return cleaned[:2], len(cleaned)
+    return cleaned, len(cleaned)
 
   strengths, strength_count = titles(result.get("strengths"))
   improvements, improvement_count = titles(result.get("points"))
@@ -253,6 +255,15 @@ def build_feedback_digest(row: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def _report_data(row: dict[str, Any]) -> dict[str, Any]:
+  note = None
+  if row.get("note_content") is not None:
+    note = _note_data(
+      {
+        "content": row["note_content"],
+        "created_at": row.get("note_created_at"),
+        "updated_at": row.get("note_updated_at"),
+      },
+    )
   return {
     "report_id": row["id"],
     "score": row["score"],
@@ -261,6 +272,8 @@ def _report_data(row: dict[str, Any]) -> dict[str, Any]:
     "completed_at": row.get("completed_at") or row.get("created_at"),
     "image_url": row.get("image_url"),
     "goal_context": _goal_context_from_report(row),
+    "feedback_digest": build_feedback_digest(row),
+    "note": note,
   }
 
 
@@ -352,23 +365,29 @@ async def get_makeup_journey_calendar(
   rows = await db.fetch(
     """
     with eligible_reports as (
-      select entry_date, id, score, created_at, completed_at,
+      select reports.entry_date, reports.id, reports.score,
+        reports.created_at, reports.completed_at,
+        selections.report_id as selected_report_id,
         row_number() over (
-          partition by entry_date
-          order by coalesce(completed_at, created_at), id
+          partition by reports.entry_date
+          order by coalesce(reports.completed_at, reports.created_at), reports.id
         ) as first_rank,
         row_number() over (
-          partition by entry_date
-          order by coalesce(completed_at, created_at) desc, id desc
+          partition by reports.entry_date
+          order by coalesce(reports.completed_at, reports.created_at) desc, reports.id desc
         ) as latest_rank
-      from makeup_feedback_reports
-      where user_id = $1
-        and entry_date >= $2 and entry_date < $3
-        and status = 'completed' and score is not null
+      from makeup_feedback_reports reports
+      left join makeup_journey_day_score_selections selections
+        on selections.user_id = reports.user_id
+        and selections.entry_date = reports.entry_date
+      where reports.user_id = $1
+        and reports.entry_date >= $2 and reports.entry_date < $3
+        and reports.status = 'completed' and reports.score is not null
     ), report_days as (
       select entry_date,
         max(score) filter (where first_rank = 1) as first_score,
         max(score) filter (where latest_rank = 1) as latest_score,
+        max(score) filter (where id = selected_report_id) as selected_score,
         count(*)::int as report_count
       from eligible_reports
       group by entry_date
@@ -389,6 +408,7 @@ async def get_makeup_journey_calendar(
       union select entry_date from mission_days
     )
     select keys.entry_date, reports.first_score, reports.latest_score,
+      reports.selected_score,
       coalesce(reports.report_count, 0)::int as report_count,
       coalesce(notes.has_note, false) as has_note,
       coalesce(missions.completed_missions, 0)::int as completed_missions,
@@ -433,25 +453,35 @@ async def get_makeup_journey_calendar(
 
   goal_score = int(settings_row["goal_score"])
   days: list[dict[str, Any]] = []
-  latest_scores: list[int] = []
+  representative_scores: list[int] = []
   for row in rows:
     latest_score = row.get("latest_score")
     first_score = row.get("first_score")
+    selected_score = row.get("selected_score")
     if latest_score is not None:
       latest_score = int(latest_score)
       first_score = int(first_score)
-      latest_scores.append(latest_score)
+    representative_score = (
+      int(selected_score) if selected_score is not None else latest_score
+    )
+    if representative_score is not None:
+      representative_scores.append(representative_score)
     days.append(
       {
         "date": _iso(row["entry_date"]),
         "status": (
           "empty"
-          if latest_score is None
-          else "success" if latest_score >= goal_score else "failure"
+          if representative_score is None
+          else "success" if representative_score >= goal_score else "failure"
         ),
         "first_score": first_score,
         "latest_score": latest_score,
-        "score_delta": latest_score - first_score if latest_score is not None else None,
+        "representative_score": representative_score,
+        "score_delta": (
+          representative_score - first_score
+          if representative_score is not None and first_score is not None
+          else None
+        ),
         "report_count": int(row["report_count"]),
         "has_note": bool(row["has_note"]),
         "mission_summary": {
@@ -466,8 +496,8 @@ async def get_makeup_journey_calendar(
       "month": month,
       "goal_score": goal_score,
       "summary": {
-        "average_score": _rounded_average(latest_scores),
-        "recorded_days": len(latest_scores),
+        "average_score": _rounded_average(representative_scores),
+        "recorded_days": len(representative_scores),
         "current_streak": int((streak_row or {}).get("current_streak") or 0),
       },
       "days": days,
@@ -490,10 +520,14 @@ async def get_makeup_journey_day(
       select reports.id, reports.score, reports.feedback_kind,
         reports.parent_feedback_report_id, reports.feedback_payload,
         reports.created_at, reports.completed_at,
+        notes.content as note_content,
+        notes.created_at as note_created_at,
+        notes.updated_at as note_updated_at,
         coalesce(
           nullif(media.thumbnail_cdn_url, ''),
           nullif(media.cdn_url, '')
         ) as media_image_url,
+        selections.report_id as selected_report_id,
         row_number() over (
           order by coalesce(reports.completed_at, reports.created_at) desc, reports.id desc
         ) as latest_rank
@@ -502,6 +536,13 @@ async def get_makeup_journey_day(
         on media.id = reports.uploaded_media_id
         and media.owner_user_id = reports.user_id
         and media.deleted_at is null
+      left join makeup_journey_day_score_selections selections
+        on selections.user_id = reports.user_id
+        and selections.entry_date = reports.entry_date
+      left join makeup_journey_day_notes notes
+        on notes.user_id = reports.user_id
+        and notes.entry_date = reports.entry_date
+        and notes.report_id = reports.id
       where reports.user_id = $1 and reports.entry_date = $2
         and reports.status = 'completed' and reports.score is not null
     ), request_payloads as (
@@ -568,7 +609,8 @@ async def get_makeup_journey_day(
           nullif(request_payload -> 'profile_gender', 'null'::jsonb)
         )
       )) as goal_context,
-      case when latest_rank = 1 then feedback_payload end as feedback_payload,
+      selected_report_id, feedback_payload,
+      note_content, note_created_at, note_updated_at,
       created_at, completed_at
     from projected_reports
     order by coalesce(completed_at, created_at), id
@@ -591,7 +633,7 @@ async def get_makeup_journey_day(
     """
     select content, created_at, updated_at
     from makeup_journey_day_notes
-    where user_id = $1 and entry_date = $2
+    where user_id = $1 and entry_date = $2 and report_id is null
     """,
     user["id"],
     resolved_date,
@@ -600,10 +642,17 @@ async def get_makeup_journey_day(
   goal_score = int(settings_row["goal_score"]) if settings_row else None
   first_score = int(reports[0]["score"]) if reports else None
   latest_score = int(reports[-1]["score"]) if reports else None
+  selected_report_id = reports[0].get("selected_report_id") if reports else None
+  representative_report = next(
+    (report for report in reports if report["id"] == selected_report_id),
+    reports[-1] if reports else None,
+  )
+  representative_report_id = representative_report["id"] if representative_report else None
+  representative_score = int(representative_report["score"]) if representative_report else None
   status = (
     "empty"
-    if latest_score is None or goal_score is None
-    else "success" if latest_score >= goal_score else "failure"
+    if representative_score is None or goal_score is None
+    else "success" if representative_score >= goal_score else "failure"
   )
   return success(
     {
@@ -612,16 +661,22 @@ async def get_makeup_journey_day(
       "status": status,
       "first_score": first_score,
       "latest_score": latest_score,
+      "representative_report_id": representative_report_id,
+      "representative_score": representative_score,
       "score_delta": (
-        latest_score - first_score
-        if latest_score is not None and first_score is not None and len(reports) > 1
+        representative_score - first_score
+        if representative_score is not None and first_score is not None and len(reports) > 1
         else None
       ),
       "report_count": len(reports),
-      "feedback_digest": build_feedback_digest(reports[-1] if reports else None),
+      "feedback_digest": build_feedback_digest(representative_report),
       "reports": [_report_data(report) for report in reports],
       "missions": [_mission_data(mission) for mission in missions],
-      "note": _note_data(note),
+      "note": (
+        _report_data(representative_report)["note"]
+        if representative_report is not None
+        else _note_data(note)
+      ),
     },
   )
 
@@ -658,18 +713,29 @@ async def get_makeup_journey_trends(
   rows = await db.fetch(
     """
     with ranked as (
-      select entry_date, score,
+      select reports.entry_date, reports.id, reports.score,
+        selections.report_id as selected_report_id,
         row_number() over (
-          partition by entry_date
-          order by coalesce(completed_at, created_at) desc, id desc
+          partition by reports.entry_date
+          order by coalesce(reports.completed_at, reports.created_at) desc, reports.id desc
         ) as latest_rank
-      from makeup_feedback_reports
-      where user_id = $1 and entry_date between $2 and $3
-        and status = 'completed' and score is not null
+      from makeup_feedback_reports reports
+      left join makeup_journey_day_score_selections selections
+        on selections.user_id = reports.user_id
+        and selections.entry_date = reports.entry_date
+      where reports.user_id = $1 and reports.entry_date between $2 and $3
+        and reports.status = 'completed' and reports.score is not null
+    ), daily_scores as (
+      select entry_date,
+        coalesce(
+          max(score) filter (where id = selected_report_id),
+          max(score) filter (where latest_rank = 1)
+        ) as score
+      from ranked
+      group by entry_date
     )
     select entry_date, score
-    from ranked
-    where latest_rank = 1
+    from daily_scores
     order by entry_date
     """,
     user["id"],
@@ -699,6 +765,57 @@ async def get_makeup_journey_trends(
   )
 
 
+@router.put(
+  "/days/{entry_date}/score-selection",
+  response_model=MakeupJourneyScoreSelectionResponse,
+)
+async def update_makeup_journey_score_selection(
+  entry_date: str,
+  payload: MakeupJourneyScoreSelectionUpdate,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  resolved_date = _parse_date(entry_date)
+  user = await ensure_user(db, auth)
+  row = await db.fetchrow(
+    """
+    with eligible_report as (
+      select id, score
+      from makeup_feedback_reports
+      where id = $3 and user_id = $1 and entry_date = $2
+        and status = 'completed' and score is not null
+    )
+    insert into makeup_journey_day_score_selections (
+      user_id, entry_date, report_id
+    )
+    select $1, $2, id from eligible_report
+    on conflict (user_id, entry_date) do update set
+      report_id = excluded.report_id,
+      updated_at = now()
+    returning report_id,
+      (select score from eligible_report) as score,
+      updated_at
+    """,
+    user["id"],
+    resolved_date,
+    payload.report_id,
+  )
+  if row is None:
+    raise AppError(
+      404,
+      "MAKEUP_JOURNEY_REPORT_NOT_FOUND",
+      "Completed feedback report was not found for this date.",
+    )
+  return success(
+    {
+      "date": entry_date,
+      "report_id": row["report_id"],
+      "score": int(row["score"]),
+      "updated_at": row["updated_at"],
+    },
+  )
+
+
 @router.put("/days/{entry_date}/note", response_model=MakeupJourneyNoteResponse)
 async def update_makeup_journey_note(
   entry_date: str,
@@ -710,28 +827,67 @@ async def update_makeup_journey_note(
   user = await ensure_user(db, auth)
   settings_row = _require_settings(await _get_settings(db, user["id"]))
   _ensure_writable_date(resolved_date, settings_row)
+  if payload.report_id is not None:
+    owned_report = await db.fetchrow(
+      """
+      select id
+      from makeup_feedback_reports
+      where id = $3 and user_id = $1 and entry_date = $2
+        and status = 'completed' and score is not null
+      """,
+      user["id"],
+      resolved_date,
+      payload.report_id,
+    )
+    if owned_report is None:
+      raise AppError(
+        404,
+        "MAKEUP_JOURNEY_REPORT_NOT_FOUND",
+        "Completed feedback report was not found for this date.",
+      )
   content = payload.content.strip()
   if not content:
     await db.execute(
-      "delete from makeup_journey_day_notes where user_id = $1 and entry_date = $2",
+      """
+      delete from makeup_journey_day_notes
+      where user_id = $1 and entry_date = $2
+        and report_id is not distinct from $3
+      """,
       user["id"],
       resolved_date,
+      payload.report_id,
     )
     return success({"note": None})
 
-  row = await db.fetchrow(
-    """
-    insert into makeup_journey_day_notes (user_id, entry_date, content)
-    values ($1, $2, $3)
-    on conflict (user_id, entry_date) do update set
-      content = excluded.content,
-      updated_at = now()
-    returning content, created_at, updated_at
-    """,
-    user["id"],
-    resolved_date,
-    content,
-  )
+  if payload.report_id is None:
+    row = await db.fetchrow(
+      """
+      insert into makeup_journey_day_notes (user_id, entry_date, report_id, content)
+      values ($1, $2, null, $3)
+      on conflict (user_id, entry_date) where report_id is null do update set
+        content = excluded.content,
+        updated_at = now()
+      returning content, created_at, updated_at
+      """,
+      user["id"],
+      resolved_date,
+      content,
+    )
+  else:
+    row = await db.fetchrow(
+      """
+      insert into makeup_journey_day_notes (user_id, entry_date, report_id, content)
+      values ($1, $2, $3, $4)
+      on conflict (user_id, entry_date, report_id) where report_id is not null do update set
+        content = excluded.content,
+        updated_at = now()
+      returning content, created_at, updated_at
+      """,
+      user["id"],
+      resolved_date,
+      payload.report_id,
+      content,
+    )
   return success({"note": _note_data(row)})
 
 

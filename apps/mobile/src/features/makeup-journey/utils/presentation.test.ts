@@ -1,4 +1,5 @@
 import {
+  getCappedJourneyGoalProgress,
   getJourneyDigestContent,
   getJourneyScorePresentation,
   getMakeupJourneyLandingMode,
@@ -28,6 +29,20 @@ const multiple = getJourneyScorePresentation({
 });
 expect(multiple?.label === '최초 76 → 최신 84', 'multiple reports show the score transition');
 expect(multiple?.deltaLabel === '+8', 'positive score delta includes a plus sign');
+
+expect(
+  getCappedJourneyGoalProgress(65, 60) === 100,
+  'goal progress never renders above 100 percent',
+);
+expect(
+  getCappedJourneyGoalProgress(30, 60) === 50,
+  'goal progress reflects the stored score and goal below the cap',
+);
+expect(
+  getCappedJourneyGoalProgress(null, 60) === 0 &&
+    getCappedJourneyGoalProgress(60, null) === 0,
+  'goal progress stays empty when real score or goal data is unavailable',
+);
 
 expect(
   getMakeupJourneyLandingMode({
@@ -75,8 +90,8 @@ const digest = getJourneyDigestContent({
 });
 expect(digest.headline === longText, 'large-text headline is not truncated');
 expect(digest.nextAction === longText, 'large-text action expands without truncation');
-expect(digest.strengths.length === 2, 'digest renders at most two strength titles');
-expect(digest.improvements.length === 2, 'digest renders at most two improvement titles');
+expect(digest.strengths.length === 3, 'digest renders every stored strength title');
+expect(digest.improvements.length === 3, 'digest renders every stored improvement title');
 
 const beginnerMission = getMissionDifficultyGuide('beginner');
 const intermediateMission = getMissionDifficultyGuide('intermediate');

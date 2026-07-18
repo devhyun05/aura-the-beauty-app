@@ -1,7 +1,8 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {type ReactNode, useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {
   ActivityIndicator,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -10,6 +11,7 @@ import {
   StyleSheet,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  useWindowDimensions,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -38,12 +40,15 @@ import {
   deleteMakeupJourneyMission,
   generateMakeupJourneyMissions,
   saveMakeupJourneyNote,
+  selectMakeupJourneyScore,
   updateMakeupJourneyMission,
 } from '../services/makeupJourneyService';
 import type {
   MakeupJourneyCorrectionContext,
   MakeupJourneyDayResponse,
   MakeupJourneyMission,
+  MakeupJourneyReport,
+  MakeupJourneyStatus,
 } from '../types';
 import {
   addDays,
@@ -51,7 +56,6 @@ import {
   getTodayDateString,
   isFutureJourneyDate,
 } from '../utils/date';
-import {getJourneyStatusLabel} from '../utils/presentation';
 
 const dayScrollOffsets = new Map<string, number>();
 const MAX_SAVED_DAY_OFFSETS = 20;
@@ -60,6 +64,7 @@ export type MakeupJourneyDayDetailScreenProps = {
   entryDate: string;
   onBackToCalendar: () => void;
   onChangeDate: (entryDate: string) => void;
+  onFirstReportActiveChange: (isFirstReportActive: boolean) => void;
   onOpenReport: (reportId: string) => void;
   onOpenTrend: (entryDate: string) => void;
   onStartCorrection: (context: MakeupJourneyCorrectionContext) => void;
@@ -167,14 +172,23 @@ function DetailStateCard({
 }
 
 function DayDateNavigator({
+  activeReport,
   entryDate,
+  isSelectingScore,
   onChangeDate,
+  onSelectScore,
+  representativeReportId,
 }: {
+  activeReport: MakeupJourneyReport | null;
   entryDate: string;
+  isSelectingScore: boolean;
   onChangeDate: (entryDate: string) => void;
+  onSelectScore: () => void;
+  representativeReportId: string | null;
 }) {
   const previousDate = addDays(entryDate, -1);
   const nextDate = addDays(entryDate, 1);
+  const isSelected = activeReport?.reportId === representativeReportId;
 
   return (
     <View accessibilityLabel="상세 날짜 이동" style={styles.dateNavigator}>
@@ -195,7 +209,35 @@ function DayDateNavigator({
           </Text>
         </View>
       </Pressable>
-      <View style={styles.dateNavigatorDivider} />
+      {activeReport ? (
+        <Pressable
+          accessibilityLabel={isSelected
+            ? `${activeReport.score}점이 이 날짜의 대표 점수로 선택됨`
+            : `${activeReport.score}점을 이 날짜의 대표 점수로 선택`}
+          accessibilityRole="button"
+          accessibilityState={{disabled: isSelected || isSelectingScore, selected: isSelected}}
+          disabled={isSelected || isSelectingScore}
+          onPress={onSelectScore}
+          style={({pressed}) => [
+            styles.scoreSelectionButton,
+            isSelected ? styles.scoreSelectionButtonSelected : null,
+            pressed ? styles.pressed : null,
+          ]}>
+          {isSelectingScore ? (
+            <ActivityIndicator color={colors.textPrimary} size="small" />
+          ) : isSelected ? (
+            <CheckCircle2 color={colors.danger} size={16} />
+          ) : null}
+          <Text style={[
+            styles.scoreSelectionText,
+            isSelected ? styles.scoreSelectionTextSelected : null,
+          ]}>
+            {isSelected ? `${activeReport.score}점 선택됨` : `${activeReport.score}점 선택`}
+          </Text>
+        </Pressable>
+      ) : (
+        <View style={styles.dateNavigatorDivider} />
+      )}
       <Pressable
         accessibilityLabel={`다음 날 ${formatJourneyDate(nextDate, false)} 보기`}
         accessibilityRole="button"
@@ -217,76 +259,14 @@ function DayDateNavigator({
   );
 }
 
-function DayOverview({detail}: {detail: MakeupJourneyDayResponse}) {
-  const successful = detail.status === 'success';
-  const StatusIcon = successful ? CheckCircle2 : CircleAlert;
-  const statusColor = successful
-    ? colors.danger
-    : detail.status === 'failure'
-      ? colors.textSecondary
-      : colors.textTertiary;
-  const latestScore = detail.latestScore;
-  const scoreDelta = detail.scoreDelta;
-  const goalDifference = latestScore !== null && detail.goalScore !== null
-    ? latestScore - detail.goalScore
-    : null;
-  const goalMessage = detail.goalScore === null
-    ? '목표 점수를 설정하면 달성 여부를 알려드려요.'
-    : latestScore === null
-      ? `오늘의 목표는 ${detail.goalScore}점이에요.`
-      : goalDifference === 0
-        ? `목표 ${detail.goalScore}점에 정확히 도달했어요.`
-        : goalDifference !== null && goalDifference > 0
-          ? `목표보다 ${goalDifference}점 높아요. 오늘 메이크업이 잘 맞았어요.`
-          : `목표까지 ${Math.abs(goalDifference ?? 0)}점 남았어요. 다음 피드백에서 채워봐요.`;
-
-  return (
-    <View style={[
-      styles.overviewCard,
-      detail.status === 'success'
-        ? styles.overviewSuccess
-        : detail.status === 'failure'
-          ? styles.overviewFailure
-          : styles.overviewEmpty,
-    ]}>
-      <View style={styles.overviewHeader}>
-        <Text style={styles.overviewEyebrow}>오늘의 메이크업 점수</Text>
-        <View style={styles.statusBadge}>
-          <StatusIcon color={statusColor} size={16} />
-          <Text style={[styles.statusBadgeText, {color: statusColor}]}>
-            {getJourneyStatusLabel(detail.status)}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.scoreHeroRow}>
-        <Text style={styles.scoreHero}>{latestScore ?? '—'}</Text>
-        {latestScore !== null ? <Text style={styles.scoreUnit}>점</Text> : null}
-      </View>
-      <Text style={styles.goalText}>{goalMessage}</Text>
-      <View accessibilityLabel="점수 변화" style={styles.scoreStats}>
-        <View style={styles.scoreStatItem}>
-          <Text style={styles.scoreStatLabel}>첫 피드백</Text>
-          <Text style={styles.scoreStatValue}>
-            {detail.firstScore === null ? '—' : `${detail.firstScore}점`}
-          </Text>
-        </View>
-        <View style={styles.scoreStatDivider} />
-        <View style={styles.scoreStatItem}>
-          <Text style={styles.scoreStatLabel}>최신 피드백</Text>
-          <Text style={styles.scoreStatValue}>
-            {latestScore === null ? '—' : `${latestScore}점`}
-          </Text>
-        </View>
-        <View style={styles.scoreStatDivider} />
-        <View style={styles.scoreStatItem}>
-          <Text style={styles.scoreStatLabel}>점수 변화</Text>
-          <Text style={styles.scoreStatValue}>
-            {scoreDelta === null ? '—' : scoreDelta > 0 ? `+${scoreDelta}점` : `${scoreDelta}점`}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
+function getReportStatus(
+  report: MakeupJourneyReport | null,
+  goalScore: number | null,
+): MakeupJourneyStatus {
+  if (!report || goalScore === null) {
+    return 'empty';
+  }
+  return report.score >= goalScore ? 'success' : 'failure';
 }
 
 function EmptyFeedbackCard({
@@ -332,12 +312,17 @@ function EmptyFeedbackCard({
 function CorrectionCard({onStart}: {onStart: () => void}) {
   return (
     <View style={styles.correctionCard}>
-      <View style={styles.correctionText}>
-        <Text style={styles.correctionEyebrow}>다음 성장 기록</Text>
-        <Text style={styles.correctionTitle}>피드백을 반영해 보셨나요?</Text>
-        <Text style={styles.correctionDescription}>
-          새 사진을 올리면 이전 결과와 비교해 달라진 점을 바로 보여드려요.
-        </Text>
+      <View style={styles.correctionHero}>
+        <View style={styles.correctionText}>
+          <Text style={styles.correctionEyebrow}>다음 성장 기록</Text>
+          <Text style={styles.correctionTitle}>피드백을 반영한 새 사진을 올려보세요</Text>
+          <Text style={styles.correctionDescription}>
+            이전 결과와 비교해 달라진 점을 바로 확인할 수 있어요.
+          </Text>
+        </View>
+        <View style={styles.correctionIcon}>
+          <Camera color={colors.danger} size={34} strokeWidth={1.7} />
+        </View>
       </View>
       <Pressable
         accessibilityLabel="수정 메이크업 업로드"
@@ -351,42 +336,88 @@ function CorrectionCard({onStart}: {onStart: () => void}) {
   );
 }
 
+function JourneyDayScrollPage({
+  bottomInset,
+  children,
+  onRefresh,
+  onScroll,
+  refreshing,
+  scrollRef,
+}: {
+  bottomInset: number;
+  children: ReactNode;
+  onRefresh: () => void;
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  refreshing: boolean;
+  scrollRef: (instance: ScrollView | null) => void;
+}) {
+  return (
+    <ScrollView
+      contentContainerStyle={[
+        styles.content,
+        {paddingBottom: Math.max(bottomInset, spacing.xl) + spacing.xxl},
+      ]}
+      directionalLockEnabled
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+      onScroll={onScroll}
+      ref={scrollRef}
+      refreshControl={(
+        <RefreshControl
+          onRefresh={onRefresh}
+          refreshing={refreshing}
+          tintColor={colors.textPrimary}
+        />
+      )}
+      scrollEventThrottle={16}
+      style={styles.pageScroll}
+      showsVerticalScrollIndicator={false}>
+      {children}
+    </ScrollView>
+  );
+}
+
 export function MakeupJourneyDayDetailScreen({
   entryDate,
   onBackToCalendar,
   onChangeDate,
+  onFirstReportActiveChange,
   onOpenReport,
   onOpenTrend,
   onStartCorrection,
   onStartInitial,
 }: MakeupJourneyDayDetailScreenProps) {
   const insets = useSafeAreaInsets();
+  const {width: pageWidth} = useWindowDimensions();
   const resource = useMakeupJourneyDay(entryDate);
-  const scrollRef = useRef<ScrollView>(null);
-  const didRestoreScrollRef = useRef(false);
+  const pagerRef = useRef<FlatList<MakeupJourneyReport>>(null);
+  const pageScrollRefsRef = useRef(new Map<string, ScrollView>());
+  const currentVerticalOffsetRef = useRef(dayScrollOffsets.get(entryDate) ?? 0);
   const focusCountRef = useRef(0);
   const trackedDateRef = useRef<string | null>(null);
+  const [activeReportId, setActiveReportId] = useState<string | null>(null);
   const [pendingMissionIds, setPendingMissionIds] = useState<Set<string>>(new Set());
   const [isGeneratingMissions, setIsGeneratingMissions] = useState(false);
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [isSelectingScore, setIsSelectingScore] = useState(false);
   const {showToast, toast} = useTransientToast();
   const isFuture = isFutureJourneyDate(entryDate);
   const isToday = entryDate === getTodayDateString();
 
   useEffect(() => {
-    didRestoreScrollRef.current = false;
+    pageScrollRefsRef.current.clear();
+    currentVerticalOffsetRef.current = dayScrollOffsets.get(entryDate) ?? 0;
   }, [entryDate]);
 
   useEffect(() => {
-    if (!resource.data || didRestoreScrollRef.current) {
-      return;
-    }
-    didRestoreScrollRef.current = true;
-    const savedOffset = dayScrollOffsets.get(entryDate) ?? 0;
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({animated: false, y: savedOffset});
+    const reports = resource.data?.reports ?? [];
+    setActiveReportId(current => {
+      if (current && reports.some(report => report.reportId === current)) {
+        return current;
+      }
+      return reports[0]?.reportId ?? null;
     });
-  }, [entryDate, resource.data]);
+  }, [entryDate, resource.data?.reports]);
 
   useFocusEffect(
     useCallback(() => {
@@ -415,13 +446,33 @@ export function MakeupJourneyDayDetailScreen({
   }, [entryDate, resource.data]);
 
   const saveOffset = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    dayScrollOffsets.set(entryDate, event.nativeEvent.contentOffset.y);
+    const offset = Math.max(0, event.nativeEvent.contentOffset.y);
+    currentVerticalOffsetRef.current = offset;
+    dayScrollOffsets.set(entryDate, offset);
     if (dayScrollOffsets.size > MAX_SAVED_DAY_OFFSETS) {
       const oldestKey = dayScrollOffsets.keys().next().value;
       if (typeof oldestKey === 'string') {
         dayScrollOffsets.delete(oldestKey);
       }
     }
+  };
+
+  const registerPageScrollRef = (pageKey: string, instance: ScrollView | null) => {
+    if (!instance) {
+      pageScrollRefsRef.current.delete(pageKey);
+      return;
+    }
+    pageScrollRefsRef.current.set(pageKey, instance);
+    requestAnimationFrame(() => {
+      instance.scrollTo({animated: false, y: currentVerticalOffsetRef.current});
+    });
+  };
+
+  const synchronizePageOffsets = () => {
+    const y = currentVerticalOffsetRef.current;
+    pageScrollRefsRef.current.forEach(instance => {
+      instance.scrollTo({animated: false, y});
+    });
   };
 
   const setMissionPending = (missionId: string, pending: boolean) => {
@@ -525,11 +576,21 @@ export function MakeupJourneyDayDetailScreen({
     }
   };
 
-  const saveNote = async (content: string) => {
+  const saveNote = async (content: string, reportId: string | null) => {
     setIsSavingNote(true);
     try {
-      const note = await saveMakeupJourneyNote(entryDate, content);
-      resource.setData(detail => ({...detail, note}));
+      const note = await saveMakeupJourneyNote(entryDate, content, reportId);
+      resource.setData(detail => ({
+        ...detail,
+        note: reportId === null || detail.representativeReportId === reportId
+          ? note
+          : detail.note,
+        reports: reportId === null
+          ? detail.reports
+          : detail.reports.map(report => report.reportId === reportId
+            ? {...report, note}
+            : report),
+      }));
       invalidateMakeupJourneyCache({entryDate});
       showToast(content.trim() ? '메모를 저장했어요.' : '메모를 삭제했어요.');
     } catch (error) {
@@ -557,6 +618,70 @@ export function MakeupJourneyDayDetailScreen({
   const detail = resource.data;
   const isSettingsMissing = detail?.goalScore === null;
   const writesDisabled = isFuture || isSettingsMissing;
+  const activeReport = useMemo(
+    () => detail?.reports.find(report => report.reportId === activeReportId)
+      ?? detail?.reports[0]
+      ?? null,
+    [activeReportId, detail?.reports],
+  );
+  const activeReportIndex = detail?.reports.findIndex(
+    report => report.reportId === activeReport?.reportId,
+  ) ?? -1;
+  const isFirstReportActive = activeReportIndex <= 0;
+
+  useEffect(() => {
+    onFirstReportActiveChange(isFirstReportActive);
+  }, [isFirstReportActive, onFirstReportActiveChange]);
+
+  useEffect(() => {
+    if (!detail || !activeReport || pageWidth <= 0) {
+      return;
+    }
+    const index = detail.reports.findIndex(report => report.reportId === activeReport.reportId);
+    if (index < 0) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      pagerRef.current?.scrollToOffset({animated: false, offset: index * pageWidth});
+    });
+  }, [activeReport, detail, pageWidth]);
+
+  const settleActiveReport = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!detail || pageWidth <= 0) {
+      return;
+    }
+    const rawIndex = Math.round(event.nativeEvent.contentOffset.x / pageWidth);
+    const index = Math.max(0, Math.min(detail.reports.length - 1, rawIndex));
+    const nextReport = detail.reports[index];
+    if (nextReport) {
+      setActiveReportId(nextReport.reportId);
+    }
+  };
+
+  const selectActiveScore = async () => {
+    if (!detail || !activeReport || activeReport.reportId === detail.representativeReportId) {
+      return;
+    }
+    setIsSelectingScore(true);
+    try {
+      const selection = await selectMakeupJourneyScore(entryDate, activeReport.reportId);
+      resource.setData(current => ({
+        ...current,
+        feedbackDigest: activeReport.feedbackDigest,
+        representativeReportId: selection.reportId,
+        representativeScore: selection.score,
+        scoreDelta: current.firstScore === null ? null : selection.score - current.firstScore,
+        status: getReportStatus(activeReport, current.goalScore),
+      }));
+      invalidateMakeupJourneyCache({entryDate});
+      showToast(`${selection.score}점을 이 날짜의 대표 점수로 선택했어요.`);
+      await resource.refresh();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '대표 점수를 저장하지 못했어요.');
+    } finally {
+      setIsSelectingScore(false);
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -569,85 +694,152 @@ export function MakeupJourneyDayDetailScreen({
         topInset={insets.top}
       />
       <DayDateNavigator
+        activeReport={activeReport}
         entryDate={entryDate}
+        isSelectingScore={isSelectingScore}
         onChangeDate={onChangeDate}
+        onSelectScore={() => void selectActiveScore()}
+        representativeReportId={detail?.representativeReportId ?? null}
       />
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          {paddingBottom: Math.max(insets.bottom, spacing.xl) + spacing.xxl},
-        ]}
-        keyboardShouldPersistTaps="handled"
-        onScroll={saveOffset}
-        ref={scrollRef}
-        refreshControl={(
-          <RefreshControl
-            onRefresh={() => void resource.refresh()}
-            refreshing={resource.isRefreshing}
-            tintColor={colors.textPrimary}
-          />
-        )}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}>
-        {resource.isLoading && !detail ? (
-          <DetailStateCard loading />
-        ) : resource.error && !detail ? (
-          <DetailStateCard error={resource.error} onRetry={() => void resource.refresh()} />
-        ) : detail ? (
-          <>
-            {resource.error ? (
-              <Pressable
-                accessibilityLabel="새로고침 실패, 다시 시도"
-                accessibilityRole="button"
-                onPress={() => void resource.refresh()}
-                style={styles.inlineError}>
-                <Text style={styles.inlineErrorText}>{resource.error}</Text>
-              </Pressable>
-            ) : null}
-            <JourneyReportPhotoGallery
-              onOpenReport={onOpenReport}
-              reports={detail.reports}
-            />
-            <DayOverview detail={detail} />
-            {detail.feedbackDigest && detail.latestScore !== null ? (
-              <JourneyFeedbackDigestCard
-                digest={detail.feedbackDigest}
-                goalScore={detail.goalScore}
-                latestScore={detail.latestScore}
-                onOpenReport={onOpenReport}
-                status={detail.status}
-              />
-            ) : (
+      {detail && detail.reports.length > 0 ? (
+        <FlatList
+          bounces={false}
+          data={detail.reports}
+          decelerationRate="fast"
+          directionalLockEnabled
+          getItemLayout={(_data, index) => ({
+            index,
+            length: pageWidth,
+            offset: pageWidth * index,
+          })}
+          horizontal
+          initialNumToRender={Math.min(2, detail.reports.length)}
+          key={entryDate}
+          keyExtractor={report => report.reportId}
+          keyboardShouldPersistTaps="handled"
+          maxToRenderPerBatch={3}
+          nestedScrollEnabled
+          onMomentumScrollEnd={settleActiveReport}
+          onScrollBeginDrag={synchronizePageOffsets}
+          pagingEnabled
+          ref={pagerRef}
+          removeClippedSubviews={false}
+          renderItem={({item: report}) => (
+            <View style={[styles.reportPage, {width: pageWidth}]}>
+              <JourneyDayScrollPage
+                bottomInset={insets.bottom}
+                onRefresh={() => void resource.refresh()}
+                onScroll={saveOffset}
+                refreshing={resource.isRefreshing}
+                scrollRef={instance => registerPageScrollRef(report.reportId, instance)}>
+                {resource.error ? (
+                  <Pressable
+                    accessibilityLabel="새로고침 실패, 다시 시도"
+                    accessibilityRole="button"
+                    onPress={() => void resource.refresh()}
+                    style={styles.inlineError}>
+                    <Text style={styles.inlineErrorText}>{resource.error}</Text>
+                  </Pressable>
+                ) : null}
+                <JourneyReportPhotoGallery
+                  activeReportId={report.reportId}
+                  onOpenReport={onOpenReport}
+                  reports={detail.reports}
+                />
+                {report.feedbackDigest ? (
+                  <JourneyFeedbackDigestCard
+                    digest={report.feedbackDigest}
+                    goalScore={detail.goalScore}
+                    onOpenReport={onOpenReport}
+                    score={report.score}
+                    status={getReportStatus(report, detail.goalScore)}
+                  />
+                ) : (
+                  <EmptyFeedbackCard
+                    isFuture={isFuture}
+                    isSettingsMissing={isSettingsMissing}
+                    isToday={isToday}
+                    onStart={() => onStartInitial(entryDate)}
+                  />
+                )}
+                {correctionContext && !writesDisabled ? (
+                  <CorrectionCard onStart={() => onStartCorrection(correctionContext)} />
+                ) : null}
+                <JourneyMissionCard
+                  disabled={writesDisabled}
+                  isGenerating={isGeneratingMissions}
+                  missions={detail.missions}
+                  onCreate={createMission}
+                  onDelete={deleteMission}
+                  onGenerate={generateMissions}
+                  onToggle={toggleMission}
+                  onUpdateTitle={updateMissionTitle}
+                  pendingMissionIds={pendingMissionIds}
+                />
+                <JourneyNoteCard
+                  key={`journey-note-${report.reportId}`}
+                  disabled={writesDisabled}
+                  isSaving={isSavingNote}
+                  note={report.note}
+                  onSave={content => saveNote(content, report.reportId)}
+                />
+              </JourneyDayScrollPage>
+            </View>
+          )}
+          scrollEnabled={detail.reports.length > 1}
+          showsHorizontalScrollIndicator={false}
+          style={styles.reportPager}
+          windowSize={3}
+        />
+      ) : (
+        <JourneyDayScrollPage
+          bottomInset={insets.bottom}
+          onRefresh={() => void resource.refresh()}
+          onScroll={saveOffset}
+          refreshing={resource.isRefreshing}
+          scrollRef={instance => registerPageScrollRef('empty', instance)}>
+          {resource.isLoading && !detail ? (
+            <DetailStateCard loading />
+          ) : resource.error && !detail ? (
+            <DetailStateCard error={resource.error} onRetry={() => void resource.refresh()} />
+          ) : detail ? (
+            <>
+              {resource.error ? (
+                <Pressable
+                  accessibilityLabel="새로고침 실패, 다시 시도"
+                  accessibilityRole="button"
+                  onPress={() => void resource.refresh()}
+                  style={styles.inlineError}>
+                  <Text style={styles.inlineErrorText}>{resource.error}</Text>
+                </Pressable>
+              ) : null}
               <EmptyFeedbackCard
                 isFuture={isFuture}
                 isSettingsMissing={isSettingsMissing}
                 isToday={isToday}
                 onStart={() => onStartInitial(entryDate)}
               />
-            )}
-            {correctionContext && !writesDisabled ? (
-              <CorrectionCard onStart={() => onStartCorrection(correctionContext)} />
-            ) : null}
-            <JourneyMissionCard
-              disabled={writesDisabled}
-              isGenerating={isGeneratingMissions}
-              missions={detail.missions}
-              onCreate={createMission}
-              onDelete={deleteMission}
-              onGenerate={generateMissions}
-              onToggle={toggleMission}
-              onUpdateTitle={updateMissionTitle}
-              pendingMissionIds={pendingMissionIds}
-            />
-            <JourneyNoteCard
-              disabled={writesDisabled}
-              isSaving={isSavingNote}
-              note={detail.note}
-              onSave={saveNote}
-            />
-          </>
-        ) : null}
-      </ScrollView>
+              <JourneyMissionCard
+                disabled={writesDisabled}
+                isGenerating={isGeneratingMissions}
+                missions={detail.missions}
+                onCreate={createMission}
+                onDelete={deleteMission}
+                onGenerate={generateMissions}
+                onToggle={toggleMission}
+                onUpdateTitle={updateMissionTitle}
+                pendingMissionIds={pendingMissionIds}
+              />
+              <JourneyNoteCard
+                disabled={writesDisabled}
+                isSaving={isSavingNote}
+                note={detail.note}
+                onSave={content => saveNote(content, null)}
+              />
+            </>
+          ) : null}
+        </JourneyDayScrollPage>
+      )}
       {toast}
     </KeyboardAvoidingView>
   );
@@ -678,7 +870,21 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
+  correctionHero: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  correctionIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 90, 77, 0.10)',
+    borderRadius: radius.pill,
+    height: 72,
+    justifyContent: 'center',
+    width: 72,
+  },
   correctionText: {
+    flex: 1,
     gap: spacing.xs,
   },
   correctionTitle: {
@@ -768,12 +974,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     paddingHorizontal: spacing.md,
   },
-  goalText: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
   headerDate: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
@@ -811,38 +1011,13 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  overviewCard: {
-    borderRadius: radius.lg,
-    gap: spacing.md,
-    padding: spacing.xl,
-  },
-  overviewEmpty: {
-    backgroundColor: colors.surfaceMuted,
-  },
-  overviewEyebrow: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-  },
-  overviewFailure: {
-    backgroundColor: 'rgba(17, 17, 17, 0.07)',
-  },
-  overviewHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  overviewSuccess: {
-    backgroundColor: 'rgba(255, 90, 77, 0.10)',
-  },
   pressed: {
     opacity: 0.7,
   },
   primaryButton: {
     alignItems: 'center',
     alignSelf: 'stretch',
-    backgroundColor: colors.blackSurface,
+    backgroundColor: colors.danger,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,
@@ -871,57 +1046,43 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
-  scoreHero: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: 48,
-    lineHeight: 54,
-  },
-  scoreHeroRow: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  scoreStatDivider: {
-    backgroundColor: 'rgba(17, 17, 17, 0.08)',
-    height: 32,
-    width: 1,
-  },
-  scoreStatItem: {
+  scoreSelectionButton: {
     alignItems: 'center',
-    flex: 1,
-    gap: spacing.xs,
-  },
-  scoreStatLabel: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  scoreStats: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    borderRadius: radius.md,
-    flexDirection: 'row',
-    marginTop: spacing.xs,
+    alignSelf: 'center',
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    gap: 3,
+    justifyContent: 'center',
+    minHeight: 42,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.md,
+    width: 88,
   },
-  scoreStatValue: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
+  scoreSelectionButtonSelected: {
+    backgroundColor: 'rgba(255, 90, 77, 0.10)',
+    borderColor: colors.danger,
   },
-  scoreUnit: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
-    paddingBottom: spacing.sm,
+  scoreSelectionText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 10,
+    lineHeight: 13,
+    textAlign: 'center',
+  },
+  scoreSelectionTextSelected: {
+    color: colors.danger,
   },
   screen: {
     backgroundColor: colors.background,
+    flex: 1,
+  },
+  pageScroll: {
+    flex: 1,
+  },
+  reportPage: {
+    flex: 1,
+  },
+  reportPager: {
     flex: 1,
   },
   stateCard: {
@@ -947,19 +1108,5 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.md,
     lineHeight: typography.lineHeight.md,
     textAlign: 'center',
-  },
-  statusBadge: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.68)',
-    borderRadius: radius.pill,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  statusBadgeText: {
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
   },
 });

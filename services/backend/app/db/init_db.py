@@ -133,6 +133,54 @@ POST_SCHEMA_MIGRATIONS = {
     create unique index if not exists uq_makeup_journey_missions_user_date_title_ci
       on makeup_journey_missions (user_id, entry_date, lower(title));
   """,
+  "schema.sql:makeup-journey-score-selection-v1": """
+    create table if not exists makeup_journey_day_score_selections (
+      user_id uuid not null,
+      entry_date date not null,
+      report_id uuid not null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      constraint pk_makeup_journey_day_score_selections primary key (user_id, entry_date),
+      constraint fk_makeup_journey_day_score_selections_user
+        foreign key (user_id) references users(id) on delete cascade,
+      constraint fk_makeup_journey_day_score_selections_report
+        foreign key (report_id) references makeup_feedback_reports(id) on delete cascade
+    );
+
+    create index if not exists idx_makeup_journey_day_score_selections_report
+      on makeup_journey_day_score_selections (report_id);
+  """,
+  "schema.sql:makeup-journey-report-notes-v1": """
+    alter table makeup_journey_day_notes
+      add column if not exists report_id uuid;
+
+    update makeup_journey_day_notes notes
+    set report_id = (
+      select reports.id
+      from makeup_feedback_reports reports
+      where reports.user_id = notes.user_id
+        and reports.entry_date = notes.entry_date
+        and reports.status = 'completed'
+        and reports.score is not null
+      order by coalesce(reports.completed_at, reports.created_at) desc, reports.id desc
+      limit 1
+    )
+    where notes.report_id is null;
+
+    alter table makeup_journey_day_notes
+      drop constraint if exists uq_makeup_journey_day_notes_user_date,
+      drop constraint if exists makeup_journey_day_notes_user_id_entry_date_key,
+      drop constraint if exists fk_makeup_journey_day_notes_report,
+      add constraint fk_makeup_journey_day_notes_report
+        foreign key (report_id) references makeup_feedback_reports(id) on delete cascade;
+
+    create unique index if not exists uq_makeup_journey_day_notes_report
+      on makeup_journey_day_notes (user_id, entry_date, report_id)
+      where report_id is not null;
+    create unique index if not exists uq_makeup_journey_day_notes_empty_date
+      on makeup_journey_day_notes (user_id, entry_date)
+      where report_id is null;
+  """,
   "schema.sql:external-product-like-auradin-source-v1": """
     alter table external_product_likes
       drop constraint if exists chk_external_product_likes_source,

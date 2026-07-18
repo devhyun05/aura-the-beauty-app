@@ -19,7 +19,12 @@ def test_makeup_journey_schema_contract_is_present_in_all_schema_gates() -> None
   schema = (REPO_ROOT / "docs/backend/schema.sql").read_text(encoding="utf-8").lower()
   dbml = (REPO_ROOT / "docs/backend/aws-postgresql-schema.dbml").read_text(encoding="utf-8").lower()
 
-  assert {"makeup_journey_settings", "makeup_journey_day_notes", "makeup_journey_missions"} <= EXPECTED_TABLES
+  assert {
+    "makeup_journey_settings",
+    "makeup_journey_day_notes",
+    "makeup_journey_day_score_selections",
+    "makeup_journey_missions",
+  } <= EXPECTED_TABLES
   assert {"entry_date", "feedback_kind", "parent_feedback_report_id"} <= EXPECTED_COLUMNS["makeup_feedback_reports"]
   assert EXPECTED_COLUMN_CONTRACTS["makeup_feedback_reports.entry_date"] == {
     "is_nullable": "NO",
@@ -35,6 +40,13 @@ def test_makeup_journey_schema_contract_is_present_in_all_schema_gates() -> None
   assert EXPECTED_COLUMN_CONTRACTS["makeup_journey_day_notes.entry_date"] == {
     "is_nullable": "NO",
   }
+  assert EXPECTED_COLUMN_CONTRACTS["makeup_journey_day_notes.report_id"] == {
+    "is_nullable": "YES",
+  }
+  for column in ("user_id", "entry_date", "report_id"):
+    assert EXPECTED_COLUMN_CONTRACTS[
+      f"makeup_journey_day_score_selections.{column}"
+    ] == {"is_nullable": "NO"}
   for column in ("user_id", "entry_date", "source", "difficulty", "title"):
     assert EXPECTED_COLUMN_CONTRACTS[f"makeup_journey_missions.{column}"] == {
       "is_nullable": "NO",
@@ -60,8 +72,13 @@ def test_makeup_journey_schema_contract_is_present_in_all_schema_gates() -> None
     "chk_makeup_journey_mission_completion",
   } <= EXPECTED_CONSTRAINT_CONTRACTS.keys()
   assert "uq_makeup_journey_missions_user_date_title_ci" in EXPECTED_INDEX_CONTRACTS
+  assert "idx_makeup_journey_day_score_selections_report" in EXPECTED_INDEX_CONTRACTS
+  assert "uq_makeup_journey_day_notes_report" in EXPECTED_INDEX_CONTRACTS
+  assert "uq_makeup_journey_day_notes_empty_date" in EXPECTED_INDEX_CONTRACTS
   assert SCHEMA_VERSION == "schema.sql:v8-makeup-journey"
   assert "schema.sql:makeup-journey-v1" in POST_SCHEMA_MIGRATIONS
+  assert "schema.sql:makeup-journey-score-selection-v1" in POST_SCHEMA_MIGRATIONS
+  assert "schema.sql:makeup-journey-report-notes-v1" in POST_SCHEMA_MIGRATIONS
 
   assert "at time zone 'asia/seoul'" in schema
   assert "entry_date date not null default ((now() at time zone 'asia/seoul')::date)" in schema
@@ -73,7 +90,11 @@ def test_makeup_journey_schema_contract_is_present_in_all_schema_gates() -> None
   assert "on makeup_journey_missions (user_id, entry_date, lower(title))" in schema
   assert "table makeup_journey_settings" in dbml
   assert "table makeup_journey_day_notes" in dbml
+  assert "table makeup_journey_day_score_selections" in dbml
   assert "table makeup_journey_missions" in dbml
+  assert "foreign key (report_id) references makeup_feedback_reports(id) on delete cascade" in schema
+  assert "on makeup_journey_day_notes (user_id, entry_date, report_id)" in schema
+  assert "on makeup_journey_day_score_selections (report_id)" in schema
   assert "default: `((now() at time zone 'asia/seoul')::date)`" in dbml
   migration = POST_SCHEMA_MIGRATIONS["schema.sql:makeup-journey-v1"].lower()
   assert "alter column entry_date set default ((now() at time zone 'asia/seoul')::date)" in migration
