@@ -44,6 +44,7 @@ import {
 setMakeupJourneyAnalyticsAdapter(makeupJourneyBackendAnalyticsAdapter);
 
 const UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS = 5000;
+const HOME_HERO_PREFETCH_DELAY_AFTER_STARTUP_MS = 750;
 const STARTUP_SCREEN_MIN_DURATION_MS = 700;
 
 type StartupGateProps = {
@@ -51,6 +52,7 @@ type StartupGateProps = {
   fontsLoaded: boolean;
   hasMinimumElapsed: boolean;
   navigationReady: boolean;
+  onStartupReady: () => void;
 };
 
 function StartupGate({
@@ -58,6 +60,7 @@ function StartupGate({
   fontsLoaded,
   hasMinimumElapsed,
   navigationReady,
+  onStartupReady,
 }: StartupGateProps) {
   const {isRestoringSession} = useAuthSession();
   const shouldShowStartupScreen =
@@ -69,11 +72,12 @@ function StartupGate({
     }
 
     const frame = requestAnimationFrame(() => {
+      onStartupReady();
       void SplashScreen.hideAsync().catch(() => undefined);
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [shouldShowStartupScreen]);
+  }, [onStartupReady, shouldShowStartupScreen]);
 
   return (
     <View style={styles.appLayer}>
@@ -88,7 +92,8 @@ export function AppRoot() {
   const [statusBarStyle, setStatusBarStyle] = useState<'dark' | 'light'>('dark');
   const [hasStartupMinimumElapsed, setHasStartupMinimumElapsed] = useState(false);
   const [isNavigationReady, setIsNavigationReady] = useState(false);
-  const [fontsLoaded] = useFonts({
+  const [isStartupReady, setIsStartupReady] = useState(false);
+  const [fontsLoaded, fontLoadError] = useFonts({
     [typography.fontFamily.brand]: require('../assets/fonts/NixieOne-Regular.ttf'),
     [typography.fontFamily.regular]: require('../assets/fonts/Pretendard-Regular.otf'),
     [typography.fontFamily.medium]: require('../assets/fonts/Pretendard-Medium.otf'),
@@ -97,6 +102,10 @@ export function AppRoot() {
     // AURADIN 히어로 세리프 (features/recommendation DS 전용 — auradinTokens.auType.serif)
     Lora: require('../assets/fonts/Lora-Regular.ttf'),
   });
+  const fontsReady = fontsLoaded || Boolean(fontLoadError);
+  const handleStartupReady = useCallback(() => {
+    setIsStartupReady(true);
+  }, []);
 
   const syncStatusBarStyle = useCallback(
     (state: NavigationRouteState | undefined) => {
@@ -139,8 +148,25 @@ export function AppRoot() {
   );
 
   useEffect(() => {
-    prefetchHomeHeroImages();
-  }, []);
+    if (!isStartupReady) {
+      return undefined;
+    }
+
+    let prefetchTimer: ReturnType<typeof setTimeout> | undefined;
+    const prefetchAfterStartup = InteractionManager.runAfterInteractions(() => {
+      prefetchTimer = setTimeout(
+        prefetchHomeHeroImages,
+        HOME_HERO_PREFETCH_DELAY_AFTER_STARTUP_MS,
+      );
+    });
+
+    return () => {
+      prefetchAfterStartup.cancel();
+      if (prefetchTimer) {
+        clearTimeout(prefetchTimer);
+      }
+    };
+  }, [isStartupReady]);
 
   useEffect(() => startFeaturePerformanceLogging(), []);
 
@@ -156,7 +182,7 @@ export function AppRoot() {
   }, []);
 
   useEffect(() => {
-    if (!fontsLoaded) {
+    if (!isStartupReady) {
       return undefined;
     }
 
@@ -180,7 +206,7 @@ export function AppRoot() {
         clearTimeout(preloadTimer);
       }
     };
-  }, [fontsLoaded]);
+  }, [isStartupReady]);
 
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
@@ -188,9 +214,10 @@ export function AppRoot() {
         <StatusBar style={statusBarStyle} />
         <AuthSessionProvider>
           <StartupGate
-            fontsLoaded={fontsLoaded}
+            fontsLoaded={fontsReady}
             hasMinimumElapsed={hasStartupMinimumElapsed}
-            navigationReady={isNavigationReady}>
+            navigationReady={isNavigationReady}
+            onStartupReady={handleStartupReady}>
             <NavigationFlowStateProvider>
             <NavigationContainer
               linking={navigationLinking}
