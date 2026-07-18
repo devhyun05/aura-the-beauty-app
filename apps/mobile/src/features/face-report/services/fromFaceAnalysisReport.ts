@@ -23,13 +23,15 @@ import type {
 } from '../../../shared/types/faceAnalysis';
 import {getFaceAnalysisReportSummaryItems} from '../../face-analysis/services/faceAnalysisReportDetailModel';
 import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceAnalysisMeasurements';
-import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
+import type {Face3DProfile} from '../../face-3d/types';
+import type {FaceVerticalThirdsResult, VerticalThirdsDominantPart} from '../../face-ratio/types';
 import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
-import {SEASON_LABEL_KO, TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
+import {ALL_12_TYPES, TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
+import {getColorFamilyReference} from '../../personal-color/services/personalColorCore/palette';
 import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
 import {buildRegionFeatureAxes, describeRegionAxes} from '../reportFeatureAxes';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
-import type {AxisName, ColorFamily, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
+import type {AxisName, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
 import {analyzeBody, resolveStyleGender} from '../../ar/stencil/src/composer/bodyProfile';
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import type {
@@ -45,6 +47,8 @@ import type {
   S7Data,
   SpectrumAxisData,
   SwatchData,
+  ToneMapPoint,
+  ToneProbabilityData,
 } from '../reportTypes';
 
 export type FaceReportAdapterInput = {
@@ -86,23 +90,100 @@ function buildS1(
   report: FaceAnalysisReport,
   heroUri: string | undefined,
   personalColor: MeasuredPersonalColorView | null,
+  verticalThirds: FaceVerticalThirdsResult | null,
 ): S1Data {
   return {
     photo: heroUri ? {uri: heroUri, placeholderLabel: '분석 셀피'} : {placeholderLabel: '분석 셀피'},
     dateLine: formatDateLine(report.analyzedAt),
     headline: report.recommendedMood,
-    body: report.shortSummary || report.summary,
+    // V2의 consulting.shortSummary는 AI 자유 서술이라 얼굴형과 세로 구획을
+    // 모순되게 엮은 과거 결과가 있다. 사용자 요약에는 검증 가능한 카드만 두고,
+    // 구버전 보고서에만 기존 설명을 유지한다.
+    body: report.faceAnalysisV2 ? '' : report.shortSummary || report.summary,
     legacyReport: !report.measurements,
     legacyBadge: '이 판정은 이전 기준으로 측정된 결과예요',
-    cards: getFaceAnalysisReportSummaryItems(report, personalColor),
+    cards: buildS1SummaryCards(report, personalColor, verticalThirds),
   };
+}
+
+function buildS1SummaryCards(
+  report: FaceAnalysisReport,
+  personalColor: MeasuredPersonalColorView | null,
+  verticalThirds: FaceVerticalThirdsResult | null,
+): S1Data['cards'] {
+  const baseCards = getFaceAnalysisReportSummaryItems(report, personalColor);
+  const faceShape = baseCards[1]?.value ?? '측정값 없음';
+  const ratio = summarizeVerticalThirds(verticalThirds);
+  return [
+    baseCards[0] ?? {label: '퍼스널 컬러', value: '측정값 없음'},
+    {label: '얼굴형 · 비율', value: `${faceShape} · ${ratio}`},
+    {label: '피부 타입', value: report.skinType?.trim() || '측정값 없음'},
+    baseCards[3] ?? {label: '톤 요약', value: '측정값 없음'},
+  ];
+}
+
+export function summarizeFace3DProfile(face3d: Face3DProfile | null): string {
+  if (!face3d) {
+    return '측정값 없음';
+  }
+  const validFrames = Number.isFinite(face3d.validFrameCount) ? face3d.validFrameCount : 0;
+  const targetFrames = Number.isFinite(face3d.targetFrameCount) ? face3d.targetFrameCount : 0;
+
+  if (validFrames <= 0) {
+    return '프레임 부족';
+  }
+  return targetFrames > 0 ? `완료 · ${validFrames}/${targetFrames}프레임` : `완료 · ${validFrames}프레임`;
+}
+
+function summarizeVerticalThirds(verticalThirds: FaceVerticalThirdsResult | null): string {
+  if (!verticalThirds) {
+    return '측정값 없음';
+  }
+  if (verticalThirds.status === 'blocked') {
+    return verticalThirds.statusReason ? '기준점 부족' : '측정 보류';
+  }
+  if (verticalThirds.status === 'failed') {
+    return '분석 오류';
+  }
+  return summarizeDominantPart(verticalThirds.interpretation?.dominantPart) ?? '측정 완료';
+}
+
+function summarizeDominantPart(part: VerticalThirdsDominantPart | undefined): string | null {
+  switch (part) {
+    case 'upper':
+      return '상안부 참고';
+    case 'middle':
+      return '중안부 강조';
+    case 'lower':
+      return '하안부 강조';
+    case 'balanced':
+      return '균형에 가까움';
+    case 'unknown':
+      return '판정 보류';
+    default:
+      return null;
+  }
+}
+
+export function summarizeRegionMeasurements(
+  regionVisuals: RegionVisuals | null,
+  geometryMetrics: FaceGeometryMetrics | null,
+): string {
+  const visualCount = regionVisuals ? Object.keys(regionVisuals).length : 0;
+  if (visualCount > 0) {
+    return `${visualCount}/4개 표시`;
+  }
+  if (geometryMetrics) {
+    return '수치만 있음';
+  }
+  return '측정값 없음';
 }
 
 // Mirrors FaceAnalysisReportDetailScreen.tsx's VERTICAL_THIRDS_BLOCKED_MESSAGES
 // copy (kept local — this adapter must not import from a screen component).
 const S2_HAIRLINE_MISSING_NOTICE = {
   title: '헤어라인이 확인되지 않았어요',
-  body: '앞머리에 가려 이마선을 찾지 못해, 이번 보고서는 미간·코밑·턱끝 세 지점으로만 구획했어요.',
+  body: '앞머리에 가려 헤어라인을 찾지 못해, 이번 보고서는 미간·코밑·턱끝 세 지점으로만 구획했어요.',
   cta: '이마가 보이게 다시 찍기 ›',
 };
 
@@ -112,7 +193,7 @@ const S2_BAND_COPY = {
     title: '상안부',
     desc: '이마 · 눈썹 · 눈 — 또렷한 눈매가 시작되는 구획이에요',
     descMissing:
-      '이마선 미확인으로 이번 회차에는 구획하지 못했어요 — 눈썹·눈 분석은 아래 카드에서 볼 수 있어요',
+      '헤어라인 미확인으로 이번 회차에는 구획하지 못했어요 — 눈썹·눈 분석은 아래 카드에서 볼 수 있어요',
   },
   mid: {pillLabel: '중안부', title: '중안부', desc: '코 · 인중 · 볼 — 완만한 곡선이 이어지는 구획이에요'},
   lower: {pillLabel: '하안부', title: '하안부', desc: '입술 · E라인 — 시선이 잠시 머무는 구획이에요'},
@@ -161,7 +242,7 @@ function buildS2(
   return {
     eyebrow: 'PROPORTION',
     title: '얼굴의 구획부터 볼게요',
-    sub: '사진 위 가늠선은 실제 측정 위치를 그대로 옮긴 거예요.',
+    sub: '세로 구획을 보면 얼굴에서 어느 부위가 상대적으로 강조되는지 알 수 있어요.',
     photo: {uri: sourceImage.uri, placeholderLabel: '얼굴 전체 정면 컷'},
     photoAspectRatio: sourceImage.width / sourceImage.height,
     hairlineMissing: !hairlineEligible,
@@ -169,8 +250,8 @@ function buildS2(
     browY,
     noseBaseY,
     chinY,
-    lineLabels: {hairline: '이마선', brow: '미간', noseBase: '코밑', chin: '턱끝'},
-    hairlineMissingPill: '이마선 미확인',
+    lineLabels: {hairline: '헤어라인', brow: '미간', noseBase: '코밑', chin: '턱끝'},
+    hairlineMissingPill: '헤어라인 미확인',
     hairlineHatchHeight: browY,
     upperBandOk,
     bands: [
@@ -180,7 +261,7 @@ function buildS2(
         height: browY,
         pillLabel: S2_BAND_COPY.upper.pillLabel,
         pillY: upperPillY,
-        pillCentered: false,
+        pillCentered: true,
         title: S2_BAND_COPY.upper.title,
         desc: S2_BAND_COPY.upper.desc,
         descMissing: S2_BAND_COPY.upper.descMissing,
@@ -232,10 +313,10 @@ function buildS2(
 const AXIS_META: Record<AxisName, {axisLabel: string; leftLabel: string; rightLabel: string}> = {
   // left/right follow the same low→high direction already shown in the
   // shipped PersonalColorTypeCard (AXIS_LABELS) — not re-invented here.
-  temperature: {axisLabel: '온도', leftLabel: '차가운 톤', rightLabel: '따뜻한 톤'},
-  value: {axisLabel: '명도', leftLabel: '밝은 편', rightLabel: '어두운 편'},
-  chroma: {axisLabel: '채도', leftLabel: '은은한 채도', rightLabel: '선명한 채도'},
-  clarity: {axisLabel: '청탁', leftLabel: '부드럽게 섞인', rightLabel: '맑게 트인'},
+  temperature: {axisLabel: '온도', leftLabel: '차가운 톤(쿨)', rightLabel: '따뜻한 톤(웜)'},
+  value: {axisLabel: '명도', leftLabel: '밝은 색(라이트)', rightLabel: '어두운 색(딥)'},
+  chroma: {axisLabel: '채도', leftLabel: '은은한 색(저채도)', rightLabel: '선명한 색(고채도)'},
+  clarity: {axisLabel: '청탁', leftLabel: '부드러운 색(뮤트)', rightLabel: '맑은 색(클리어)'},
   contrast: {axisLabel: '대비', leftLabel: '저대비', rightLabel: '고대비'},
 };
 const AXIS_ORDER: AxisName[] = ['temperature', 'value', 'chroma', 'clarity', 'contrast'];
@@ -247,35 +328,141 @@ function normalizeAxisPosition(value: number | null): number {
   return Math.min(1, Math.max(0, (value + 1) / 2));
 }
 
-// Deterministic categorical→hex swatch for a color family. NOT a per-user
-// color-matched value — palette.ts only carries undertone/valueBand/chromaBand
-// labels, no measured hex, so any swatch chip is necessarily a fixed reference
-// color for that category (same kind of static lookup as SILHOUETTE_STYLES).
-const UNDERTONE_HUE: Record<ColorFamily['undertone'], number> = {warm: 32, neutral: 350, cool: 220};
-const VALUE_LIGHTNESS: Record<ColorFamily['valueBand'], number> = {light: 74, mid: 56, deep: 36};
-const CHROMA_SATURATION: Record<ColorFamily['chromaBand'], number> = {soft: 28, clear: 48, vivid: 68};
-
-function hslToHex(h: number, s: number, l: number): string {
-  const sat = s / 100;
-  const light = l / 100;
-  const c = (1 - Math.abs(2 * light - 1)) * sat;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = light - c / 2;
-  const [r0, g0, b0] =
-    h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
-  const toHex = (v: number) =>
-    Math.round((v + m) * 255)
-      .toString(16)
-      .padStart(2, '0');
-  return `#${toHex(r0)}${toHex(g0)}${toHex(b0)}`;
+function hasRegion(personalColor: MeasuredPersonalColorView, region: 'skin' | 'hair' | 'lip'): boolean {
+  return personalColor.regions.some(item => item.region === region);
 }
 
-function colorFamilySwatchHex(family: ColorFamily): string {
-  return hslToHex(UNDERTONE_HUE[family.undertone], CHROMA_SATURATION[family.chromaBand], VALUE_LIGHTNESS[family.valueBand]);
+function regionConfidence(personalColor: MeasuredPersonalColorView, region: 'skin' | 'hair' | 'lip'): number | null {
+  return personalColor.regions.find(item => item.region === region)?.qEff ?? null;
+}
+
+function hasLightingWarning(personalColor: MeasuredPersonalColorView): boolean {
+  return personalColor.warnings.some(warning =>
+    warning.includes('overexposed') ||
+    warning.includes('underexposed') ||
+    warning.includes('color_cast') ||
+    warning.includes('too_bright') ||
+    warning.includes('too_dark'),
+  );
+}
+
+function withheldAxisCaption(axisName: AxisName, personalColor: MeasuredPersonalColorView): string {
+  if (axisName === 'contrast') {
+    if (!hasRegion(personalColor, 'hair') || personalColor.relations.dL_skinHair == null || personalColor.relations.dE00_skinHair == null) {
+      return '머리카락 영역이 충분히 잡히지 않아 피부와 머리카락의 명도·색 차이를 안전하게 비교하지 못했어요.';
+    }
+    const skinQ = regionConfidence(personalColor, 'skin');
+    const hairQ = regionConfidence(personalColor, 'hair');
+    if ((skinQ != null && skinQ < 0.35) || (hairQ != null && hairQ < 0.35)) {
+      return '피부나 머리카락 샘플 신뢰도가 낮아 대비값을 보류했어요.';
+    }
+    if (hasLightingWarning(personalColor)) {
+      return '노출이나 조명 영향이 커서 대비값을 보류했어요.';
+    }
+    return '피부와 머리카락의 상대 차이가 안정적으로 잡히지 않아 대비값을 보류했어요.';
+  }
+
+  if (!hasRegion(personalColor, 'skin')) {
+    return '피부 영역이 충분히 잡히지 않아 이 축의 값을 보류했어요.';
+  }
+  if (hasLightingWarning(personalColor)) {
+    return '노출이나 조명 영향이 커서 이 축의 값을 보류했어요.';
+  }
+  return '측정 신호가 기준보다 약해 이 축의 값을 보류했어요.';
 }
 
 function toSwatch(item: PaletteItem): SwatchData {
-  return {name: item.family.labelKo, color: colorFamilySwatchHex(item.family)};
+  const reference = getColorFamilyReference(item.family);
+  // 표준 27개 계열은 최신 완성표를 사용하고, 알 수 없는 과거 계열은 helper가
+  // payload의 exemplars를 보존해 돌려준다.
+  const examples = [...reference.exemplars];
+  const reasons = Array.from(new Set(
+    (Array.isArray(item.reasons) ? item.reasons : [])
+      .map(reason => reason?.noteKo?.trim())
+      .filter((reason): reason is string => Boolean(reason)),
+  ));
+
+  return {
+    color: reference.hex,
+    examples,
+    familyLabel: item.family.labelKo,
+    name: examples[0] ?? item.family.labelKo,
+    note: item.noteKo?.trim() || undefined,
+    reasons,
+  };
+}
+
+const TONE_MAP_POINTS: Record<ToneMapPoint['type'], {x: number; y: number}> = {
+  spring_light: {x: 0.62, y: 0.22},
+  spring_bright: {x: 0.78, y: 0.38},
+  spring_true: {x: 0.68, y: 0.46},
+  summer_light: {x: 0.36, y: 0.22},
+  summer_true: {x: 0.28, y: 0.44},
+  summer_muted: {x: 0.2, y: 0.54},
+  autumn_muted: {x: 0.28, y: 0.68},
+  autumn_true: {x: 0.56, y: 0.68},
+  autumn_deep: {x: 0.66, y: 0.84},
+  winter_bright: {x: 0.86, y: 0.54},
+  winter_true: {x: 0.76, y: 0.66},
+  winter_deep: {x: 0.8, y: 0.86},
+};
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+function buildToneProbabilities(tone: MeasuredPersonalColorView['tone']): ToneProbabilityData[] {
+  if (!tone) {
+    return [];
+  }
+
+  return ALL_12_TYPES
+    .map(type => ({
+      type,
+      label: TYPE_LABEL_KO[type],
+      ratio: clamp01(tone.probabilities[type] ?? 0),
+    }))
+    .sort((a, b) => b.ratio - a.ratio);
+}
+
+function buildToneMap(probabilities: ToneProbabilityData[]) {
+  const active = probabilities.slice(0, 4);
+  const activeTypes = new Set(active.map(item => item.type));
+  const points = ALL_12_TYPES.map(type => ({
+    type,
+    label: TYPE_LABEL_KO[type],
+    x: TONE_MAP_POINTS[type].x,
+    y: TONE_MAP_POINTS[type].y,
+    weight: probabilities.find(item => item.type === type)?.ratio ?? 0,
+    active: activeTypes.has(type),
+  }));
+
+  if (active.length === 0) {
+    return {
+      caption: '12타입 중 어디에 가까운지 보여주는 상대 위치예요.',
+      area: {x: 0.44, y: 0.44, w: 0.12, h: 0.12},
+      points,
+    };
+  }
+
+  const xs = active.map(item => TONE_MAP_POINTS[item.type].x);
+  const ys = active.map(item => TONE_MAP_POINTS[item.type].y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const pad = 0.08;
+
+  return {
+    caption: '12타입 prototype과의 가까움이에요. 굵은 영역이 현재 결과가 걸쳐 있는 톤 범위예요.',
+    area: {
+      x: clamp01(minX - pad),
+      y: clamp01(minY - pad),
+      w: Math.min(1, maxX - minX + pad * 2),
+      h: Math.min(1, maxY - minY + pad * 2),
+    },
+    points,
+  };
 }
 
 function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, heroUri: string | undefined): S4Data | null {
@@ -287,16 +474,25 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
   const axesData: SpectrumAxisData[] = AXIS_ORDER.map(name => {
     const axis = axes[name];
     const meta = AXIS_META[name];
+    const withheld = axis.value === null;
     return {
       leftLabel: meta.leftLabel,
       rightLabel: meta.rightLabel,
       axisLabel: meta.axisLabel,
-      state: axis.value === null ? {kind: 'withheld'} : {kind: 'point', position: normalizeAxisPosition(axis.value)},
+      state: withheld ? {kind: 'withheld'} : {kind: 'point', position: normalizeAxisPosition(axis.value)},
+      ...(withheld
+        ? {
+            statusChip: '측정 보류',
+            caption: withheldAxisCaption(name, personalColor),
+          }
+        : {}),
     };
   });
 
-  const goodSwatches = palette.best.map(toSwatch);
+  const goodSwatches = palette.best.slice(0, 4).map(toSwatch);
   const badSwatches = palette.worst.map(toSwatch);
+  const toneProbabilities = buildToneProbabilities(tone);
+  const toneMap = buildToneMap(toneProbabilities);
   const initialSwatch = goodSwatches[0]
     ? {...goodSwatches[0], good: true}
     : {name: '기준 색', color: '#C9C2B8', good: true};
@@ -304,29 +500,26 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
   return {
     eyebrow: 'PERSONAL COLOR',
     title: '색은 이렇게 어울려요',
+    sub: '피부와 이목구비의 색 관계를 보면 얼굴을 맑게 살리는 색을 찾을 수 있어요.',
     season: {
       headline: tone.secondary
         ? `${TYPE_LABEL_KO[tone.top]} 중심, ${TYPE_LABEL_KO[tone.secondary]}에 걸쳐요`
         : `${TYPE_LABEL_KO[tone.top]} 중심이에요`,
-      blend: {
-        dominantLabel: TYPE_LABEL_KO[tone.top],
-        secondaryLabel: tone.secondary ? TYPE_LABEL_KO[tone.secondary] : '단일 톤',
-        dominantRatio: Math.min(1, Math.max(0, tone.typeScore)),
-      },
     },
     seasonConfidence: {
-      // 게이지는 시즌 단위("봄 89%")로 — typeScore(12타입)는 정중앙에도 ~50%라 낮게
-      // 보인다. 타입 정체성(봄 라이트)은 위 season.headline 이 담당하므로 중복 아님.
-      topLabel: SEASON_LABEL_KO[tone.season],
-      secondaryLabel: null,
+      topLabel: TYPE_LABEL_KO[tone.top],
+      secondaryLabel: tone.secondary ? TYPE_LABEL_KO[tone.secondary] : null,
       typeScore: Math.min(1, Math.max(0, tone.typeScore)),
-      seasonScore: Math.min(1, Math.max(0, tone.seasonScore)),
     },
+    toneProbabilities,
+    toneMap,
     axes: axesData,
     drape: {
       title: '어울리는 색, 나란히 대보기',
       sub: '잘 어울리는 색과 피할 색을 얼굴에 나란히 대보면 차이가 바로 보여요',
-      photo: heroUri ? {uri: heroUri, placeholderLabel: '셀피'} : {placeholderLabel: '셀피'},
+      photo: heroUri
+        ? {uri: heroUri, placeholderLabel: '셀피', cropRect: {x: 0.29, y: 0.12, w: 0.42, h: 0.7}}
+        : {placeholderLabel: '셀피'},
       goodTag: '잘 어울리는 색',
       badTag: '피할 색',
       goodCaption: '얼굴 주변이 정돈되고 피부 결이 고르게 살아나요',
@@ -334,9 +527,9 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
       goodTitle: '잘 어울리는 색',
       badTitle: '피하면 좋은 색',
       goodSwatches,
-      badSwatches,
+      badSwatches: badSwatches.slice(0, 4),
       initialSwatch,
-      disclaimer: '이 결과는 촬영 조명 기준의 상대 진단이에요. 조명이 크게 다르면 결과가 달라질 수 있어요.',
+      disclaimer: '촬영 조명 기준 상대 진단이에요. 조명이 다르면 결과가 달라질 수 있어요.',
     },
   };
 }
@@ -345,6 +538,7 @@ function buildS5(bodyProfile: BodyProfile | null | undefined, gender: string | n
   const base = {
     eyebrow: 'BODY TYPE',
     title: '체형은 설문으로 봤어요',
+    sub: '체형 특성을 알면 옷의 핏과 비율을 더 자연스럽게 고를 수 있어요.',
     silhouettePlaceholder: '실루엣\n일러스트',
     silhouetteLabel: '실루엣 타입',
     skeletonLabel: '골격 타입',
@@ -355,7 +549,7 @@ function buildS5(bodyProfile: BodyProfile | null | undefined, gender: string | n
       ...base,
       silhouetteValue: '아직 답변하지 않았어요',
       skeletonValue: '아직 답변하지 않았어요',
-      surveyNote: '체감 설문 7문항에 답하면 바로 볼 수 있어요 · ',
+      surveyNote: '체형 설문에 답하면 바로 볼 수 있어요',
       surveyLink: '설문 시작하기',
       doTitle: '설문에 답하면 스타일링 가이드를 볼 수 있어요',
       doItems: [],
@@ -374,7 +568,7 @@ function buildS5(bodyProfile: BodyProfile | null | undefined, gender: string | n
     styleGender,
     silhouetteValue: analyzed.silhouetteStyle.label,
     skeletonValue: analyzed.frameStyle.label,
-    surveyNote: '체감 설문 기반 · ',
+    surveyNote: '체형 설문 기반 · ',
     surveyLink: '다시 답하기',
     doTitle: '이렇게 입어보세요',
     doItems: [...analyzed.silhouetteStyle.points, ...analyzed.frameStyle.points],
@@ -394,29 +588,32 @@ const S3_REGION_META: Record<
   upper: {
     chip: '상안부',
     title: '이마 · 눈썹 · 눈',
-    guide: {kind: 'ellipse', cx: 0.5, cy: 0.42, rx: 0.22, ry: 0.1, dashed: true},
-    guideLabel: '눈가',
+    guide: {kind: 'none'},
+    guideLabel: '',
     guideLabelX: 0.14,
   },
   mid: {
     chip: '중안부',
     title: '코 · 인중 · 볼',
-    guide: {kind: 'dashedVertical', x: 0.5, top: 0.2, height: 0.5},
-    guideLabel: '콧대 중심선',
+    guide: {kind: 'none'},
+    guideLabel: '',
     guideLabelX: 0.5,
   },
   lower: {
     chip: '하안부',
     title: '입술',
-    guide: {kind: 'ellipse', cx: 0.5, cy: 0.6, rx: 0.2, ry: 0.07, dashed: false},
-    guideLabel: '입술 라인',
+    guide: {kind: 'none'},
+    guideLabel: '',
     guideLabelX: 0.28,
   },
   jaw: {
     chip: '외곽 라인',
     title: '광대 · 턱',
-    guide: {kind: 'ellipse', cx: 0.5, cy: 0.85, rx: 0.3, ry: 0.5, dashed: true},
-    guideLabel: '턱 곡선 가이드',
+    // 실제 regionVisuals 턱 polyline이 없을 때는 곡선을 그리지 않는다.
+    // 고정 타원은 얼굴 크롭/포즈가 조금만 달라도 턱선이 아닌 목·배경을 감싸
+    // "AI가 턱을 잘못 인식한 선"처럼 보이므로 숨기는 편이 정직하다.
+    guide: {kind: 'none'},
+    guideLabel: '',
     guideLabelX: 0.18,
   },
 };
@@ -446,7 +643,7 @@ function buildS3(
   regionVisuals: RegionVisuals | null,
   geometryMetrics: FaceGeometryMetrics | null,
 ): S3Data | null {
-  if (!regionNotes) {
+  if (!regionNotes && !regionVisuals && !geometryMetrics) {
     return null;
   }
 
@@ -505,14 +702,14 @@ function buildS3(
         );
         // 측정 기반 자기참조 서술이 있으면 insight로(정직·구체), 없으면 Bedrock insight 폴백.
         const narrative = describeRegionAxes(featAxes);
-        const note = normalizeRegionNote(regionNotes[key]);
+        const note = normalizeRegionNote(regionNotes?.[key]);
         const insight = narrative || note.insight;
         return {
           axes,
           insight,
           evidence: narrative ? '' : note.evidence, // 서술 있으면 근거 중복 제거
           recommendation: note.recommendation,
-          paragraph: insight,
+          paragraph: insight || '사진에서 확인 가능한 얼굴 기준선을 먼저 표시했어요.',
         };
       })(),
     };
@@ -521,7 +718,7 @@ function buildS3(
   return {
     eyebrow: 'FEATURES',
     title: '이목구비, 하나씩 설명할게요',
-    sub: 'AI가 실측 지표를 근거로 부위별 인상을 풀어 설명해요.',
+    sub: '눈매·눈썹·입술·턱선의 방향을 보면 전체 인상과 어울리는 메이크업 균형을 알 수 있어요.',
     cards,
   };
 }
@@ -535,10 +732,9 @@ const DEFAULT_S6_AXES: ImpressionAxis[] = [
 ];
 
 function buildS6(
-  regionNotes: FaceAnalysisRegionNotes | undefined,
   impressionNotes: FaceAnalysisImpressionNotes | undefined,
 ): S6Data | null {
-  if (!regionNotes || !impressionNotes) {
+  if (!impressionNotes) {
     return null;
   }
   const axes =
@@ -548,6 +744,7 @@ function buildS6(
   return {
     eyebrow: 'IMPRESSION',
     title: '모아 보면 이런 인상이에요',
+    sub: '이목구비와 윤곽을 함께 보면 얼굴에서 먼저 느껴지는 분위기를 알 수 있어요.',
     axes,
     keywords: impressionNotes.keywords,
     paragraph: impressionNotes.paragraph,
@@ -572,41 +769,109 @@ function toLookCard(
     chip,
     variant,
     title: look.title,
-    sub: look.description,
     rows: look.rows.map(row => ({
       category: STYLING_ROW_CATEGORY_LABEL_KO[row.category],
-      title: row.note,
-      // AI가 실측 컨텍스트를 참고해 생성한 제안이지 특정 축의 값을 그대로
-      // 옮긴 것이 아니므로 'measured'가 아니라 'artist'로 정직하게 표기한다.
+      title: variant === 'natural'
+        ? naturalStylingNote(row.category)
+        : glamStylingNote(row.category),
       evidence: 'artist',
-      evidenceLabel: 'AI 제안',
-      why: row.why,
+      evidenceLabel: '',
+      why: '',
     })),
   };
 }
 
-function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined): S7Data | null {
-  if (!stylingLooks) {
+function nonEmptyText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function naturalStylingNote(category: FaceAnalysisStylingLookRowCategory): string {
+  switch (category) {
+    case 'base':
+      return '얇은 베이스로 피부 결만 정돈해요.';
+    case 'brow':
+      return '눈썹 결을 살리고 빈 곳만 가볍게 채워요.';
+    case 'eyeshadow':
+      return '눈두덩 전체에 은은한 음영만 얇게 깔아요.';
+    case 'eyeliner':
+      return '라인은 생략하거나 점막만 아주 얇게 채워요.';
+    case 'blush':
+      return '혈색을 넓고 연하게 번지듯 연결해요.';
+    case 'lip':
+      return '립은 경계를 풀어 자연스럽게 물들여요.';
+  }
+}
+
+function glamStylingNote(category: FaceAnalysisStylingLookRowCategory): string {
+  switch (category) {
+    case 'base':
+      return '중심부 커버와 윤광을 조금 더 또렷하게 잡아요.';
+    case 'brow':
+      return '눈썹 산과 꼬리를 정리해 인상을 선명하게 세워요.';
+    case 'eyeshadow':
+      return '눈꼬리와 삼각존에 음영을 더해 깊이를 만들어요.';
+    case 'eyeliner':
+      return '점막과 꼬리 라인을 또렷하게 연결해요.';
+    case 'blush':
+      return '볼 중앙 농도를 올려 생기와 입체감을 같이 줘요.';
+    case 'lip':
+      return '립 라인을 정리하고 색 농도를 한 단계 올려요.';
+  }
+}
+
+function buildFallbackStylingLooks(report: FaceAnalysisReport): FaceAnalysisStylingLooks | null {
+  const guide = report.makeupGuideline;
+  const base = nonEmptyText(report.baseMakeupGuide) ?? '피부 결을 얇고 균일하게 정돈해요.';
+  const rows = [
+    {category: 'base' as const, note: base},
+    {category: 'brow' as const, note: nonEmptyText(guide.brow) ?? '눈썹 결을 자연스럽게 정돈해요.'},
+    {category: 'eyeshadow' as const, note: nonEmptyText(guide.eyeshadow) ?? '눈가에 은은한 음영을 더해요.'},
+    {category: 'eyeliner' as const, note: nonEmptyText(guide.eyeliner) ?? '아이라인은 필요한 만큼만 또렷하게 잡아요.'},
+    {category: 'blush' as const, note: nonEmptyText(guide.blush) ?? '혈색은 넓고 얇게 연결해요.'},
+    {category: 'lip' as const, note: nonEmptyText(guide.lip) ?? '입술 색은 전체 분위기와 맞춰 마무리해요.'},
+  ];
+  const hasGuide = rows.some(row => row.note.trim().length > 0);
+
+  if (!hasGuide) {
+    return null;
+  }
+
+  return {
+    natural: {
+      title: '데일리 정돈',
+      subtitle: '은은한 데일리 강도',
+      description: '',
+      rows: rows.map(row => ({
+        ...row,
+        note: naturalStylingNote(row.category),
+        why: '',
+      })),
+    },
+    glam: {
+      title: '포인트 정돈',
+      subtitle: '또렷한 포인트 강도',
+      description: '',
+      rows: rows.map(row => ({
+        ...row,
+        note: glamStylingNote(row.category),
+        why: '',
+      })),
+    },
+  };
+}
+
+function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined, report: FaceAnalysisReport): S7Data | null {
+  const looks = stylingLooks ?? buildFallbackStylingLooks(report);
+  if (!looks) {
     return null;
   }
 
   return {
     eyebrow: 'STYLING',
     title: '같은 얼굴, 두 가지 방향',
-    noteParts: [{text: '분석 결과를 내추럴, 글램 두 가지 스타일에 맞추어 풀어낸 AI 제안이에요.'}],
-    naturalLabel: '내추럴',
-    glamLabel: '글램',
-    mixZones: {
-      nearNatural: '지금 보기 — 내추럴에 가까움',
-      middle: '지금 보기 — 두 무드의 중간',
-      nearGlam: '지금 보기 — 글램에 가까움',
-    },
-    lookSummary: {
-      natural: {title: stylingLooks.natural.title, desc: stylingLooks.natural.description},
-      glam: {title: stylingLooks.glam.title, desc: stylingLooks.glam.description},
-    },
-    naturalCard: toLookCard('natural', '내추럴', stylingLooks.natural),
-    glamCard: toLookCard('glam', '글램', stylingLooks.glam),
+    naturalCard: toLookCard('natural', '내추럴', looks.natural),
+    glamCard: toLookCard('glam', '글램', looks.glam),
   };
 }
 
@@ -619,13 +884,18 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
 
   return {
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
-    s1: buildS1(report, heroUri, personalColor ?? null),
+    s1: buildS1(
+      report,
+      heroUri,
+      personalColor ?? null,
+      verticalThirds ?? null,
+    ),
     s2: buildS2(verticalThirds, gender),
     s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null, geometryMetrics ?? null),
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile, gender),
-    s6: buildS6(report.regionNotes, report.impressionNotes),
-    s7: buildS7(report.stylingLooks),
+    s6: buildS6(report.impressionNotes),
+    s7: buildS7(report.stylingLooks, report),
     footer: {
       disclaimer: '분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.',
       cta: '메이크업 추천 보러가기',

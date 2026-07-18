@@ -55,6 +55,34 @@ export function navigateMainTab(
   navigation.navigate('MainTabs', {screen});
 }
 
+export function goBackToPreviousOrMainTab(
+  navigation: RootNavigation,
+  fallbackScreen: MainTabRouteName,
+) {
+  if (navigation.canGoBack()) {
+    navigation.goBack();
+    return;
+  }
+
+  navigateMainTab(navigation, fallbackScreen);
+}
+
+export function getConsultingHistoryBackAction(
+  returnTo?: NonNullable<RootStackParamList['ConsultingHistory']>['returnTo'],
+  canGoBack = true,
+):
+  | {kind: 'goBack'}
+  | {kind: 'mainTab'; screen: MainTabRouteName} {
+  if (canGoBack) {
+    return {kind: 'goBack'};
+  }
+
+  return {
+    kind: 'mainTab',
+    screen: returnTo === 'profile' ? 'ProfileTab' : 'ConsultingTab',
+  };
+}
+
 export function getMakeupJourneyTabResetState(month?: string) {
   const makeupJourneyTabParams = month
     ? {

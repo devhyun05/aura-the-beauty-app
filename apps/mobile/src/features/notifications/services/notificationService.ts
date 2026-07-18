@@ -17,6 +17,7 @@ const BACKGROUND_NOTIFICATION_PREFERENCE_KEY =
   'aura.notifications.backgroundReportsEnabled.v1';
 const notificationStateListeners = new Set<() => void>();
 let notificationsModulePromise: Promise<typeof ExpoNotifications> | null = null;
+let pushRegistrationPromise: Promise<PushRegistrationResult> | null = null;
 
 type NotificationListResponse = {
   notifications: AppNotification[];
@@ -93,7 +94,7 @@ async function requestNotificationPermission(
   return isPermissionGranted(Notifications, requestedPermission);
 }
 
-export async function registerForReportNotifications(): Promise<PushRegistrationResult> {
+async function performReportNotificationRegistration(): Promise<PushRegistrationResult> {
   const Notifications = await getExpoNotificationsModule();
   if (!Notifications) {
     return {status: 'unsupported-in-expo-go'};
@@ -132,6 +133,13 @@ export async function registerForReportNotifications(): Promise<PushRegistration
   await SecureStore.setItemAsync(PUSH_TOKEN_STORAGE_KEY, expoPushToken);
 
   return {status: 'registered', expoPushToken};
+}
+
+export function registerForReportNotifications(): Promise<PushRegistrationResult> {
+  pushRegistrationPromise ??= performReportNotificationRegistration().finally(() => {
+    pushRegistrationPromise = null;
+  });
+  return pushRegistrationPromise;
 }
 
 export async function getBackgroundReportNotificationsEnabled(): Promise<boolean> {
@@ -182,6 +190,7 @@ export async function presentRealtimeAppNotification(
       sound: 'default',
       data: {
         ...notification.data,
+        deliverySource: 'realtime-fallback',
         notificationId: notification.id,
         type: notification.notificationType,
       },

@@ -21,6 +21,7 @@ import {
   type AuradinLandingReport,
 } from './auradinLandingReport';
 import {
+  goBackToPreviousOrMainTab,
   navigateMainTab,
   type RootScreenProps,
 } from './routeUtils';
@@ -316,7 +317,7 @@ export function MakeupLookListRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupLookList"
-      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'ProfileTab')}>
       <MakeupLookListScreen
         emptyLabel={
           route.params?.kind === 'created'
@@ -336,7 +337,7 @@ export function LikedProductListRouteScreen({
   return (
     <DetailRouteChrome
       routeName="LikedProductList"
-      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'ProfileTab')}>
       <LikedProductListScreen
         onOpenProduct={(productId, shadeId) => navigation.navigate('ProductDetail', {
           productId,

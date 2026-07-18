@@ -53,7 +53,11 @@ function isStoredProfileForUser(profileEmail: string, profileId: string, user: A
 }
 
 async function hasStoredProfileForUser(user: AuthUser): Promise<boolean> {
-  const profile = await getUserProfile();
+  if (user.profileCompleted) {
+    return true;
+  }
+
+  const profile = await getUserProfile({cacheOnly: true});
 
   return isStoredProfileForUser(profile.email, profile.id, user);
 }

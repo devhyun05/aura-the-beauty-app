@@ -17,12 +17,16 @@ export function S1Summary({ data }: { data: S1Data }) {
       <View style={{ alignItems: 'center', gap: 6 }}>
         <Text style={[font(11.5, '600', undefined, 0.23), { color: color.muted }]}>{data.dateLine}</Text>
         <Text style={[font(21, '800', undefined, -0.21), { color: color.ink, textAlign: 'center' }]}>{data.headline}</Text>
-        <Text style={[font(13.5, '400', 1.65), { color: color.text, textAlign: 'center', maxWidth: 300 }]}>{data.body}</Text>
+        {data.body ? (
+          <Text style={[font(13.5, '400', 1.65), { color: color.text, textAlign: 'center', maxWidth: 300 }]}>
+            {data.body}
+          </Text>
+        ) : null}
       </View>
       {data.legacyReport && <LegacyBadge label={data.legacyBadge} />}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignSelf: 'stretch' }}>
         {data.cards.map(c => (
-          <SummaryCard key={c.label} label={c.label} value={c.value} style={{ flexBasis: '45%', flexGrow: 1 }} />
+          <SummaryCard key={c.label} label={c.label} value={c.value} style={{ flexBasis: '48.6%', flexGrow: 0 }} />
         ))}
       </View>
     </RiseIn>

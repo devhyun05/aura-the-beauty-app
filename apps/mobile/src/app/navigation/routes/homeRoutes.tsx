@@ -13,8 +13,6 @@ import type {
   HomeFeaturePressPayload,
 } from '../../../features/home/types/homeModules';
 import {getHomeFeatureNavigationTarget} from '../../../features/home/config/homeFeatureRouteMap';
-import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
-import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
 import {useAuthSession} from '../../../features/auth';
 import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
 import {openTrustedProductOffer} from '../../../features/recommendation/services/productHubService';
@@ -44,6 +42,36 @@ import {
   type RootNavigation,
   type RootScreenProps,
 } from './routeUtils';
+
+type MakeupExtractionActionSheetProps = React.ComponentProps<
+  typeof import('../../../features/home/components/MakeupExtractionActionSheet').MakeupExtractionActionSheet
+>;
+type MakeupFeedbackActionSheetProps = React.ComponentProps<
+  typeof import('../../../features/home/components/MakeupFeedbackActionSheet').MakeupFeedbackActionSheet
+>;
+
+function DeferredMakeupExtractionActionSheet(
+  props: MakeupExtractionActionSheetProps,
+) {
+  const {MakeupExtractionActionSheet} = require(
+    '../../../features/home/components/MakeupExtractionActionSheet'
+  ) as typeof import('../../../features/home/components/MakeupExtractionActionSheet');
+
+  return <MakeupExtractionActionSheet {...props} />;
+}
+
+function DeferredMakeupFeedbackActionSheet(
+  props: MakeupFeedbackActionSheetProps,
+) {
+  const {MakeupFeedbackActionSheet} = require(
+    '../../../features/home/components/MakeupFeedbackActionSheet'
+  ) as typeof import('../../../features/home/components/MakeupFeedbackActionSheet');
+
+  return <MakeupFeedbackActionSheet {...props} />;
+}
+
+const loadMakeupPhotoPicker = () =>
+  require('../../../features/home/services/makeupPhotoPicker') as typeof import('../../../features/home/services/makeupPhotoPicker');
 
 export function FloatingActionSettingsRouteScreen({
   navigation,
@@ -96,6 +124,8 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
   const rootNavigation = navigation.getParent<RootNavigation>();
   const [isExtractionSheetVisible, setIsExtractionSheetVisible] = React.useState(false);
   const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = React.useState(false);
+  const [hasMountedExtractionSheet, setHasMountedExtractionSheet] = React.useState(false);
+  const [hasMountedFeedbackSheet, setHasMountedFeedbackSheet] = React.useState(false);
   const {
     beginMakeupFeedbackFlow,
     likedMakeupFilterIds,
@@ -145,8 +175,22 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(null);
 
-    requestAnimationFrame(() => {
-      rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+    if (initialSource === 'camera') {
+      requestAnimationFrame(() => {
+        rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+      });
+      return;
+    }
+
+    const {pickReferenceMakeupPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickReferenceMakeupPhotoFromLibrary().then(photo => {
+      if (!photo) {
+        return;
+      }
+      setSelectedReferenceMakeupPhoto(photo);
+      rootNavigation?.navigate('FaceCaptureConfirmation', {
+        target: 'referenceMakeupExtraction',
+      });
     });
   }, [
     rootNavigation,
@@ -156,17 +200,28 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
 
   const startMakeupFeedback = React.useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
-    beginMakeupFeedbackFlow();
-    setMakeupFeedbackResult(null);
-    setSelectedMakeupFeedbackPhoto({photoSource});
 
-    requestAnimationFrame(() => {
-      if (photoSource === 'camera') {
+    if (photoSource === 'camera') {
+      beginMakeupFeedbackFlow();
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto({photoSource});
+      requestAnimationFrame(() => {
         rootNavigation?.navigate('MakeupFeedbackCapture');
+      });
+      return;
+    }
+
+    const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
+      if (!selection) {
         return;
       }
-
-      rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
+      beginMakeupFeedbackFlow();
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto(selection);
+      rootNavigation?.navigate('FaceCaptureConfirmation', {
+        target: 'makeupFeedback',
+      });
     });
   }, [
     rootNavigation,
@@ -177,11 +232,13 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
 
   const handleMakeupExtractionPress = React.useCallback(() => {
     setIsFeedbackSheetVisible(false);
+    setHasMountedExtractionSheet(true);
     setIsExtractionSheetVisible(true);
   }, []);
 
   const handleMakeupFeedbackPress = React.useCallback(() => {
     setIsExtractionSheetVisible(false);
+    setHasMountedFeedbackSheet(true);
     setIsFeedbackSheetVisible(true);
   }, []);
 
@@ -392,18 +449,22 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
             showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}
             onConfirmBeautyJourneyGuide={handleBeautyJourneyGuideConfirm}
           />
-          <MakeupExtractionActionSheet
-            isVisible={isExtractionSheetVisible}
-            onClose={closeExtractionSheet}
-            onPressCamera={() => startMakeupExtraction('camera')}
-            onPressUpload={() => startMakeupExtraction('gallery')}
-          />
-          <MakeupFeedbackActionSheet
-            isVisible={isFeedbackSheetVisible}
-            onClose={closeFeedbackSheet}
-            onPressCamera={() => startMakeupFeedback('camera')}
-            onPressUpload={() => startMakeupFeedback('gallery')}
-          />
+          {hasMountedExtractionSheet ? (
+            <DeferredMakeupExtractionActionSheet
+              isVisible={isExtractionSheetVisible}
+              onClose={closeExtractionSheet}
+              onPressCamera={() => startMakeupExtraction('camera')}
+              onPressUpload={() => startMakeupExtraction('gallery')}
+            />
+          ) : null}
+          {hasMountedFeedbackSheet ? (
+            <DeferredMakeupFeedbackActionSheet
+              isVisible={isFeedbackSheetVisible}
+              onClose={closeFeedbackSheet}
+              onPressCamera={() => startMakeupFeedback('camera')}
+              onPressUpload={() => startMakeupFeedback('gallery')}
+            />
+          ) : null}
         </>
       )}
     </MainTabChrome>

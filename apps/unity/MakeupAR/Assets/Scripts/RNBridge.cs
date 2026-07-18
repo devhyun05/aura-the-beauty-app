@@ -534,6 +534,7 @@ public sealed class RNBridge : MonoBehaviour
     private bool runtimeFrameBrokerWasEnabled = true;
     private bool runtimeFaceLandmarksWereEnabled = true;
     private bool runtimeSegmentationWasEnabled = true;
+    private bool firstCameraFrameReadySent;
     private int lastRuntimeModeGeneration = -1;
     private string currentRuntimeMode = "live";
 
@@ -583,9 +584,37 @@ public sealed class RNBridge : MonoBehaviour
 
     private IEnumerator Start()
     {
+        RefreshSceneReferences();
+        SubscribeFirstCameraFrameReady();
         yield return null;
         yield return new WaitForSeconds(0.25f);
         SendUnityEvent("{\"type\":\"unity_initialized\"}");
+    }
+
+    private void SubscribeFirstCameraFrameReady()
+    {
+        if (firstCameraFrameReadySent || cameraManager == null)
+        {
+            return;
+        }
+
+        cameraManager.frameReceived -= OnFirstCameraFrameReady;
+        cameraManager.frameReceived += OnFirstCameraFrameReady;
+    }
+
+    private void OnFirstCameraFrameReady(ARCameraFrameEventArgs eventArgs)
+    {
+        if (firstCameraFrameReadySent)
+        {
+            return;
+        }
+
+        firstCameraFrameReadySent = true;
+        if (cameraManager != null)
+        {
+            cameraManager.frameReceived -= OnFirstCameraFrameReady;
+        }
+        SendUnityEvent("{\"type\":\"unity_camera_frame_ready\"}", "[RuntimeLifecycle]");
     }
 
     /// <summary>
@@ -723,6 +752,10 @@ public sealed class RNBridge : MonoBehaviour
 
     private void OnDisable()
     {
+        if (cameraManager != null)
+        {
+            cameraManager.frameReceived -= OnFirstCameraFrameReady;
+        }
         UnsubscribeGeneratedLipFaceManager();
     }
 

@@ -1,4 +1,7 @@
 import {
+  createBirthDateDayOptions,
+  createBirthDateMonthOptions,
+  createBirthDateYearOptions,
   createCalendarCells,
   getProfileEditValidationMessage,
   splitEmailValue,
@@ -36,4 +39,34 @@ expectEqual(
   createCalendarCells(new Date(2026, 5, 1)).length,
   35,
   'profile edit calendar cells fill full weeks',
+);
+expectEqual(
+  createBirthDateYearOptions(2026).slice(0, 4).join('|'),
+  '2026|2025|2024|2023',
+  'profile edit birth date wheel starts with the latest year',
+);
+expectEqual(
+  createBirthDateYearOptions(2026).at(-1),
+  1900,
+  'profile edit birth date wheel reaches the minimum year',
+);
+expectEqual(
+  createBirthDateMonthOptions(2026, new Date(2026, 6, 18)).length,
+  7,
+  'profile edit birth date wheel excludes future months',
+);
+expectEqual(
+  createBirthDateMonthOptions(1995, new Date(2026, 6, 18)).length,
+  12,
+  'profile edit birth date wheel includes every month for a past year',
+);
+expectEqual(
+  createBirthDateDayOptions(2024, 2, new Date(2026, 6, 18)).length,
+  29,
+  'profile edit birth date wheel supports leap years',
+);
+expectEqual(
+  createBirthDateDayOptions(2026, 7, new Date(2026, 6, 18)).length,
+  18,
+  'profile edit birth date wheel excludes future days',
 );

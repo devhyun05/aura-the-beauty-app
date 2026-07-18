@@ -4,6 +4,7 @@
 // (가짜 '평균 밴드'는 폐기 — 2026-07-18 정직화).
 import type {FaceShapeView} from './reportFormat';
 import type {Silhouette, StyleGender} from '../ar/stencil/src/composer/bodyProfile';
+import type {PersonalColor12Type} from '../personal-color/services/personalColorCore/contracts';
 
 export interface PhotoSlotData {
   uri?: string;
@@ -95,6 +96,7 @@ export interface S2Data {
 
 // ---------- S3 ----------
 export type FeatureGuide =
+  | { kind: 'none' }
   | { kind: 'slantLine'; from: { x: number; y: number }; length: number; angleDeg: number; marker: { x: number; y: number } }
   | { kind: 'dashedVertical'; x: number; top: number; height: number }
   | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number; dashed: boolean }
@@ -127,13 +129,44 @@ export interface RegionCardData {
 export interface S3Data { eyebrow: string; title: string; sub: string; cards: RegionCardData[] }
 
 // ---------- S4 ----------
-export interface SwatchData { name: string; color: string }
+export interface SwatchData {
+  name: string;
+  color: string;
+  familyLabel?: string;
+  examples?: string[];
+  note?: string;
+  reasons?: string[];
+}
+export interface ToneProbabilityData {
+  type: PersonalColor12Type;
+  label: string;
+  ratio: number;
+}
+export interface ToneMapPoint {
+  type: PersonalColor12Type;
+  label: string;
+  x: number;
+  y: number;
+  weight: number;
+  active: boolean;
+}
+export interface ToneMapArea {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 export interface S4Data {
-  eyebrow: string; title: string;
-  season: { headline: string; blend: BlendData };
-  // 확신도 게이지 — 시즌 단위(seasonScore, "봄 89%")로 표시한다. 타입 정체성(봄 라이트)은
-  // season.headline 이 담당. typeScore(12타입)는 참고용으로 함께 싣는다.
-  seasonConfidence?: { topLabel: string; secondaryLabel: string | null; typeScore: number; seasonScore: number };
+  eyebrow: string; title: string; sub: string;
+  season: { headline: string };
+  // 봄 라이트 확신도 게이지용(typeScore 0..1).
+  seasonConfidence?: { topLabel: string; secondaryLabel: string | null; typeScore: number };
+  toneProbabilities: ToneProbabilityData[];
+  toneMap: {
+    caption: string;
+    area: ToneMapArea;
+    points: ToneMapPoint[];
+  };
   axes: SpectrumAxisData[];
   drape: {
     title: string; sub: string;
@@ -142,14 +175,14 @@ export interface S4Data {
     goodCaption: string; badCaption: string;
     goodTitle: string; badTitle: string;
     goodSwatches: SwatchData[]; badSwatches: SwatchData[];
-    initialSwatch: { name: string; color: string; good: boolean };
+    initialSwatch: SwatchData & { good: boolean };
     disclaimer: string;
   };
 }
 
 // ---------- S5 ----------
 export interface S5Data {
-  eyebrow: string; title: string;
+  eyebrow: string; title: string; sub: string;
   silhouettePlaceholder: string;   // multi-line placeholder label (설문 전 빈 상태에서만 사용)
   // 실루엣 타입 다이어그램용. 설문 답변이 있을 때만 채워진다(미답변이면 undefined →
   // S5Body가 기존 빗금 플레이스홀더를 유지). styleGender는 다이어그램 외형 분기용.
@@ -165,7 +198,7 @@ export interface S5Data {
 // ---------- S6 ----------
 export interface ImpressionAxis { key: string; leftLabel: string; rightLabel: string; value: number }
 export interface S6Data {
-  eyebrow: string; title: string;
+  eyebrow: string; title: string; sub: string;
   axes: ImpressionAxis[];   // 2개 (없으면 어댑터가 중립 기본축)
   keywords: string[];
   paragraph: string;
@@ -173,14 +206,10 @@ export interface S6Data {
 
 // ---------- S7 ----------
 export interface LookRowData { category: string; title: string; evidence: EvidenceKind; evidenceLabel: string; why: string }
-export interface LookCardData { chip: string; variant: 'natural' | 'glam'; title: string; sub: string; rows: LookRowData[] }
+export interface LookCardData { chip: string; variant: 'natural' | 'glam'; title: string; rows: LookRowData[] }
 export interface NotePart { text: string; color?: string; bold?: boolean }
 export interface S7Data {
   eyebrow: string; title: string;
-  noteParts: NotePart[];
-  naturalLabel: string; glamLabel: string;
-  mixZones?: { nearNatural: string; middle: string; nearGlam: string }; // thresholds .35 / .65
-  lookSummary?: { natural: { title: string; desc: string }; glam: { title: string; desc: string } }; // switches at .5
   naturalCard: LookCardData;
   glamCard: LookCardData;
 }
@@ -218,4 +247,7 @@ export interface ReportScreenProps {
   // Wraps the report body so the screen can capture it as an image
   // (공유/이미지 저장). Must sit inside the ScrollView to capture full content.
   captureRef?: React.Ref<any>;
+  // 개발 단계 QA용: 보고서 맨 아래에서 저장/세션 측정값 원본을 접어서 확인한다.
+  measurementDebugPayload?: unknown;
+  measurementDebugSummary?: {label: string; value: string}[];
 }

@@ -1,6 +1,6 @@
 import React from 'react';
-import { Text, View } from 'react-native';
-import { color, font, radius } from '../reportTokens';
+import { Pressable, Text, View } from 'react-native';
+import { color, font, radius, shadow } from '../reportTokens';
 import type { S5Data } from '../reportTypes';
 import { BodySilhouette } from '../visuals/BodySilhouette';
 import { Card } from '../visuals/Card';
@@ -23,9 +23,11 @@ function DotItem({ text, avoid }: { text: string; avoid?: boolean }) {
 
 /** S5 체형 분석 — survey-based silhouette/skeleton result + do/avoid styling lists. */
 export function S5Body({ data, onResurvey }: { data: S5Data; onResurvey?: () => void }) {
+  const hasSurvey = Boolean(data.silhouetteKind);
+
   return (
     <RiseIn style={{ paddingTop: 30, paddingHorizontal: 20, gap: 12 }}>
-      <SectionHeader eyebrow={data.eyebrow} title={data.title} />
+      <SectionHeader eyebrow={data.eyebrow} title={data.title} sub={data.sub} />
       <RiseIn>
         <Card gap={14}>
           <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
@@ -53,12 +55,32 @@ export function S5Body({ data, onResurvey }: { data: S5Data; onResurvey?: () => 
                 <Text style={[font(10.5, '600'), { color: color.muted }]}>{data.skeletonLabel}</Text>
                 <Text style={[font(16, '800'), { color: color.ink }]}>{data.skeletonValue}</Text>
               </View>
-              <Text style={[font(11, '400'), { color: color.muted }]}>
-                {data.surveyNote}
-                <Text onPress={onResurvey} suppressHighlighting style={[font(11, '400'), { color: color.accentDeep }]}>
-                  {data.surveyLink}
+              <View style={{ gap: 8, alignItems: 'flex-start' }}>
+                <Text style={[font(11, '400'), { color: color.muted }]}>
+                  {data.surveyNote}
+                  {hasSurvey ? ' · ' : ''}
+                  {hasSurvey ? (
+                    <Text onPress={onResurvey} suppressHighlighting style={[font(11, '700'), { color: color.accentDeep }]}>
+                      {data.surveyLink}
+                    </Text>
+                  ) : null}
                 </Text>
-              </Text>
+                {!hasSurvey ? (
+                  <Pressable
+                    accessibilityLabel={data.surveyLink}
+                    accessibilityRole="button"
+                    onPress={onResurvey}
+                    style={({ pressed }) => [{
+                      backgroundColor: color.accent,
+                      borderRadius: radius.pill,
+                      paddingHorizontal: 15,
+                      paddingVertical: 9,
+                      opacity: pressed ? 0.82 : 1,
+                    }, shadow.cta]}>
+                    <Text style={[font(12, '800'), { color: color.white }]}>{data.surveyLink}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           </View>
           <View style={{ gap: 9, borderTopWidth: 1, borderTopColor: color.divider, paddingTop: 13 }}>

@@ -1,26 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import Animated, { SharedValue, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { color, font, radius } from '../reportTokens';
-import type { PhotoSlotData, S4Data, SwatchData } from '../reportTypes';
+import { color, font, pct, radius } from '../reportTokens';
+import type { PhotoSlotData, S4Data, SwatchData, ToneMapPoint } from '../reportTypes';
 import { Card } from '../visuals/Card';
 import { PhotoSlot } from '../visuals/PhotoSlot';
 import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
 import { SpectrumRail } from '../visuals/SpectrumRail';
 import { SwatchRow } from '../visuals/SwatchRow';
-import { BlendBar } from '../visuals/BlendBar';
-import { ConfidenceGauge } from '../visuals/ConfidenceGauge';
 
 /**
  * One side of the A/B drape comparison: a header label, then a stage whose
- * backgroundColor animates to `stageColor`, holding a LARGE circular selfie so
+ * backgroundColor animates to `stageColor`, holding a LARGE oval selfie so
  * the drape color hugs the face directly (조명 시뮬레이션 제거 — 색 대비가 핵심).
  * Both sides stay pixel-identical so the only difference the eye sees is the color.
  */
-function DrapeStage({ header, headerColor, stageColor, photo, name, tag, caption }: {
+function DrapeStage({ header, headerColor, stageColor, photo, name, caption }: {
   header: string; headerColor: string; stageColor: SharedValue<string>;
-  photo: PhotoSlotData; name: string; tag: string; caption: string;
+  photo: PhotoSlotData; name: string; caption: string;
 }) {
   const stageStyle = useAnimatedStyle(() => ({ backgroundColor: stageColor.value }));
   return (
@@ -28,18 +26,18 @@ function DrapeStage({ header, headerColor, stageColor, photo, name, tag, caption
       <Text style={[font(11, '800'), { color: headerColor, textAlign: 'center' }]}>{header}</Text>
       <Animated.View style={[{
         borderRadius: radius.lg, paddingTop: 14, paddingHorizontal: 8, paddingBottom: 12,
-        alignItems: 'center', gap: 9,
+        alignItems: 'center', gap: 9, minHeight: 226, justifyContent: 'space-between',
       }, stageStyle]}>
-        {/* 큰 얼굴 — 색이 얼굴에 바로 맞닿게(얇은 흰 링만). */}
+        {/* 헤어라인~턱 중심의 세로 타원 — 색이 얼굴에 바로 맞닿게(얇은 흰 링만). */}
         <View style={{
-          width: 116, height: 116, borderRadius: 58, overflow: 'hidden',
+          width: 112, height: 142, borderRadius: 999, overflow: 'hidden',
           borderWidth: 3, borderColor: 'rgba(255,255,255,0.9)',
         }}>
-          <PhotoSlot slot={photo} shape="circle" style={{ width: 116, height: 116 }} />
+          <PhotoSlot slot={photo} shape="oval" style={{ width: 112, height: 142 }} />
         </View>
         <View style={{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 }}>
           <Text style={[font(10.5, '800'), { color: color.ink }]}>
-            {name} · {tag}
+            {name}
           </Text>
         </View>
         <Text style={[font(10.5, '400', 1.5), {
@@ -49,6 +47,239 @@ function DrapeStage({ header, headerColor, stageColor, photo, name, tag, caption
           {caption}
         </Text>
       </Animated.View>
+    </View>
+  );
+}
+
+function formatPercent(ratio: number): string {
+  return `${Math.round(ratio * 100)}%`;
+}
+
+function ToneProbabilityList({ data }: { data: S4Data['toneProbabilities'] }) {
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {data.map((item, index) => {
+          const isFirst = index === 0;
+          const isSecond = index === 1;
+          const textColor = isFirst ? color.white : isSecond ? color.accentInk : color.ink;
+          return (
+            <View
+              key={item.type}
+              style={{
+                backgroundColor: isFirst ? color.accent : isSecond ? color.accentBg : color.surface2,
+                borderColor: isSecond ? color.accentLight : 'transparent',
+                borderRadius: radius.pill,
+                borderWidth: isSecond ? 1 : 0,
+                flexDirection: 'row',
+                gap: 5,
+                paddingHorizontal: 9,
+                paddingVertical: 5,
+              }}>
+              <Text style={[font(10.5, '700'), { color: textColor }]}>{item.label}</Text>
+              <Text style={[font(10.5, '800'), { color: textColor }]}>{formatPercent(item.ratio)}</Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function ToneDot({ point }: { point: ToneMapPoint }) {
+  const size = point.active ? 10 + point.weight * 10 : 5;
+  return (
+    <View
+      style={{
+        alignItems: 'center',
+        left: pct(point.x * 100),
+        position: 'absolute',
+        top: pct(point.y * 100),
+        transform: [{ translateX: -size / 2 }, { translateY: -size / 2 }],
+      }}>
+      <View
+        style={{
+          backgroundColor: point.active ? color.accent : color.tick,
+          borderColor: point.active ? color.white : 'transparent',
+          borderRadius: 999,
+          borderWidth: point.active ? 2 : 0,
+          height: size,
+          width: size,
+        }}
+      />
+      {point.active ? (
+        <Text
+          numberOfLines={1}
+          style={[font(9, '800'), { color: color.accentInk, marginTop: 3, maxWidth: 64, textAlign: 'center' }]}>
+          {point.label}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function ToneMapChart({ data }: { data: S4Data['toneMap'] }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={[font(12.5, '800'), { color: color.ink }]}>톤 맵</Text>
+      <View
+        style={{
+          backgroundColor: color.accentWash,
+          borderColor: color.outline8,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          height: 216,
+          overflow: 'hidden',
+          position: 'relative',
+        }}>
+        {[0, 1].map(i => (
+          <View
+            key={`v-${i}`}
+            style={{
+              backgroundColor: color.outline6,
+              bottom: 0,
+              left: pct(((i + 1) * 100) / 3),
+              position: 'absolute',
+              top: 0,
+              width: 1,
+            }}
+          />
+        ))}
+        {[0, 1].map(i => (
+          <View
+            key={`h-${i}`}
+            style={{
+              backgroundColor: color.outline6,
+              height: 1,
+              left: 0,
+              position: 'absolute',
+              right: 0,
+              top: pct(((i + 1) * 100) / 3),
+            }}
+          />
+        ))}
+        <View
+          style={{
+            borderColor: color.magenta,
+            borderRadius: radius.pill,
+            borderWidth: 2,
+            height: pct(data.area.h * 100),
+            left: pct(data.area.x * 100),
+            position: 'absolute',
+            top: pct(data.area.y * 100),
+            width: pct(data.area.w * 100),
+          }}
+        />
+        <Text style={[font(9.5, '700'), { color: color.faint, left: 10, position: 'absolute', top: 8 }]}>라이트</Text>
+        <Text style={[font(9.5, '700'), { color: color.faint, bottom: 28, left: 10, position: 'absolute' }]}>딥</Text>
+        <Text style={[font(9.5, '700'), { color: color.faint, bottom: 8, position: 'absolute', right: 10 }]}>비비드</Text>
+        <Text style={[font(9.5, '700'), { color: color.faint, bottom: 8, left: 92, position: 'absolute' }]}>클리어</Text>
+        <Text style={[font(9.5, '700'), { color: color.faint, bottom: 8, left: 10, position: 'absolute' }]}>뮤트</Text>
+        {data.points.map(point => <ToneDot key={point.type} point={point} />)}
+      </View>
+      <Text style={[font(11.5, '400', 1.5), { color: color.muted }]}>{data.caption}</Text>
+    </View>
+  );
+}
+
+function AxisGlossary() {
+  const [expanded, setExpanded] = useState(true);
+  const seasonItems = [
+    {term: '봄', desc: '따뜻하고 밝거나 선명한 색감'},
+    {term: '여름', desc: '차갑고 밝거나 부드러운 색감'},
+    {term: '가을', desc: '따뜻하고 깊거나 차분한 색감'},
+    {term: '겨울', desc: '차갑고 선명하거나 대비 있는 색감'},
+  ];
+  const axisItems = [
+    {term: '온도', desc: '차가운 톤(쿨) ↔ 따뜻한 톤(웜)'},
+    {term: '명도', desc: '밝은 색(라이트) ↔ 어두운 색(딥)'},
+    {term: '채도', desc: '은은한 색(저채도) ↔ 선명한 색(고채도)'},
+    {term: '청탁', desc: '부드러운 색(뮤트) ↔ 맑은 색(클리어)'},
+    {term: '대비', desc: '피부·머리·입술 차이가 약한지 강한지'},
+    {term: '뉴트럴', desc: '따뜻함/차가움이 한쪽으로 강하지 않은 중간 톤'},
+  ];
+  const toneItems = [
+    {term: '봄 라이트', desc: '따뜻하고 밝고 가벼운 색'},
+    {term: '봄 브라이트', desc: '따뜻하고 선명하고 맑은 색'},
+    {term: '봄 트루', desc: '봄의 따뜻함과 맑음이 중심인 색'},
+    {term: '여름 라이트', desc: '차갑고 밝고 부드러운 색'},
+    {term: '여름 트루', desc: '여름의 차가움과 은은함이 중심인 색'},
+    {term: '여름 뮤트', desc: '차갑고 부드럽게 섞인 차분한 색'},
+    {term: '가을 뮤트', desc: '따뜻하고 부드럽게 눌린 차분한 색'},
+    {term: '가을 트루', desc: '가을의 따뜻함과 깊이가 중심인 색'},
+    {term: '가을 딥', desc: '따뜻하고 깊고 무게감 있는 색'},
+    {term: '겨울 브라이트', desc: '차갑고 선명하고 대비가 있는 색'},
+    {term: '겨울 트루', desc: '겨울의 차가움과 선명함이 중심인 색'},
+    {term: '겨울 딥', desc: '차갑고 깊고 또렷한 색'},
+  ];
+
+  const renderItems = (items: Array<{term: string; desc: string}>, termWidth = 50) => items.map(item => (
+    <View key={item.term} style={{ flexDirection: 'row', gap: 8 }}>
+      <Text style={[font(11, '800'), { color: color.accentInk, width: termWidth }]}>{item.term}</Text>
+      <Text style={[font(11, '400', 1.45), { color: color.text, flex: 1 }]}>{item.desc}</Text>
+    </View>
+  ));
+
+  return (
+    <View style={{ backgroundColor: color.surface2, borderRadius: radius.lg, gap: 7, paddingHorizontal: 12, paddingVertical: 11 }}>
+      <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+        <Text style={[font(12, '800'), { color: color.ink }]}>용어 읽는 법</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`용어 읽는 법 ${expanded ? '접기' : '펼치기'}`}
+          onPress={() => setExpanded(value => !value)}
+          style={{ backgroundColor: color.surface, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 5 }}>
+          <Text style={[font(10.5, '800'), { color: color.accentInk }]}>{expanded ? '접기' : '펼치기'}</Text>
+        </Pressable>
+      </View>
+      {expanded ? (
+        <>
+          <Text style={[font(10.5, '800'), { color: color.faint, marginTop: 2 }]}>계절</Text>
+          {renderItems(seasonItems)}
+          <Text style={[font(10.5, '800'), { color: color.faint, marginTop: 4 }]}>축</Text>
+          {renderItems(axisItems)}
+          <Text style={[font(10.5, '800'), { color: color.faint, marginTop: 4 }]}>세부 톤 12타입</Text>
+          {renderItems(toneItems, 68)}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+function SelectedColorDetail({swatch}: {swatch: SwatchData}) {
+  const examples = swatch.examples ?? [];
+  const reasons = swatch.reasons ?? [];
+
+  if (!swatch.familyLabel && examples.length === 0 && !swatch.note && reasons.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={{ backgroundColor: color.surface2, borderRadius: radius.md, gap: 6, padding: 11 }}>
+      <Text style={[font(11.5, '800'), { color: color.ink }]}>
+        {swatch.familyLabel ?? swatch.name}
+      </Text>
+      {examples.length > 0 ? (
+        <View style={{ flexDirection: 'row', gap: 7 }}>
+          <Text style={[font(10.5, '700'), { color: color.faint, width: 48 }]}>대표 색</Text>
+          <Text style={[font(10.5, '500', 1.45), { color: color.text, flex: 1 }]}>
+            {examples.join(' · ')}
+          </Text>
+        </View>
+      ) : null}
+      {swatch.note ? (
+        <Text style={[font(10.5, '500', 1.5), { color: color.text }]}>{swatch.note}</Text>
+      ) : null}
+      {reasons.length > 0 ? (
+        <View style={{ gap: 3 }}>
+          <Text style={[font(10.5, '700'), { color: color.faint }]}>선정 근거</Text>
+          {reasons.map(reason => (
+            <Text key={reason} style={[font(10.5, '500', 1.45), { color: color.text }]}>
+              · {reason}
+            </Text>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -83,17 +314,21 @@ export function S4PersonalColor({ data }: { data: S4Data }) {
 
   return (
     <RiseIn style={{ paddingTop: 30, paddingHorizontal: 20, gap: 12 }}>
-      <SectionHeader eyebrow={data.eyebrow} title={data.title} />
+      <SectionHeader eyebrow={data.eyebrow} title={data.title} sub={data.sub} />
       <RiseIn>
         <Card gap={14}>
-          <View style={{ gap: 7 }}>
+          <View style={{gap: 2}}>
             <Text style={[font(14, '800'), { color: color.ink }]}>{data.season.headline}</Text>
-            {data.seasonConfidence ? <ConfidenceGauge data={data.seasonConfidence} /> : null}
-            <BlendBar data={data.season.blend} />
+            <Text style={[font(11.5, '400', 1.45), { color: color.muted }]}>
+              현재 측정값이 각 타입에 얼마나 가까운지 보여줘요.
+            </Text>
           </View>
+          <ToneProbabilityList data={data.toneProbabilities} />
+          <ToneMapChart data={data.toneMap} />
           <View style={{ gap: 12 }}>
             {data.axes.map((axis, i) => <SpectrumRail key={i} axis={axis} gap={6} />)}
           </View>
+          <AxisGlossary />
         </Card>
       </RiseIn>
       <RiseIn>
@@ -102,14 +337,13 @@ export function S4PersonalColor({ data }: { data: S4Data }) {
             <Text style={[font(13, '800'), { color: color.ink }]}>{d.title}</Text>
             <Text style={[font(11.5, '400', 1.5), { color: color.muted }]}>{d.sub}</Text>
           </View>
-          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+          <View style={{ flexDirection: 'row', gap: 10, alignItems: 'stretch' }}>
             <DrapeStage
               header={d.goodTag}
               headerColor={color.accentInk}
               stageColor={bestColor}
               photo={d.photo}
               name={best.name}
-              tag={d.goodTag}
               caption={d.goodCaption}
             />
             <DrapeStage
@@ -118,14 +352,15 @@ export function S4PersonalColor({ data }: { data: S4Data }) {
               stageColor={worstColor}
               photo={d.photo}
               name={worst.name}
-              tag={d.badTag}
               caption={d.badCaption}
             />
           </View>
           <Text style={[font(13, '800'), { color: color.ink }]}>{d.goodTitle}</Text>
           <SwatchRow swatches={d.goodSwatches} selectedName={best.name} onPick={pickBest} />
+          <SelectedColorDetail swatch={best} />
           <Text style={[font(13, '800'), { color: color.ink, marginTop: 2 }]}>{d.badTitle}</Text>
-          <SwatchRow swatches={d.badSwatches} bad selectedName={worst.name} onPick={pickWorst} />
+          <SwatchRow swatches={d.badSwatches} selectedName={worst.name} onPick={pickWorst} />
+          <SelectedColorDetail swatch={worst} />
           <Text style={[font(11.5, '400', 1.6), {
             color: color.muted, borderTopWidth: 1, borderTopColor: color.divider, paddingTop: 11,
           }]}>

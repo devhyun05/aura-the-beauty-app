@@ -2,100 +2,39 @@ import React from 'react';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
 import type {RootStackParamList} from './routeTypes';
-import {MainTabNavigator} from './MainTabNavigator';
-import {LoginRouteScreen, ProfileSetupRouteScreen, TutorialRouteScreen} from './routes/authRoutes';
-import {
-  ConsultingRouteScreen,
-  CommunityRouteScreen,
-  CommunityThreadCreateRouteScreen,
-  CommunityThreadDetailRouteScreen,
-  CommunityThreadEditRouteScreen,
-  CommunityUserProfileRouteScreen,
-  FloatingActionSettingsRouteScreen,
-  HairRemovalSimulationRouteScreen,
-  HomeFilterStoreRouteScreen,
-  SavedMakeupListRouteScreen,
-} from './routes/homeRoutes';
-import {
-  MakeupFilterEditRouteScreen,
-  ARFilterRouteScreen,
-  UnityMakeupCaptureRouteScreen,
-} from './routes/arRoutes';
-import {
-  ConsultingBookingCompleteRouteScreen,
-  ConsultingBookingRouteScreen,
-  ConsultingCallRouteScreen,
-  ConsultingConversationRouteScreen,
-  ConsultingExpertListRouteScreen,
-  ConsultingExpertProfileRouteScreen,
-  ConsultingHistoryRouteScreen,
-  ConsultingMembershipRouteScreen,
-  ConsultingMessagesRouteScreen,
-  ConsultingNotificationsRouteScreen,
-  ConsultingRequestConfirmRouteScreen,
-  ConsultingReviewRouteScreen,
-  ConsultingSummaryRouteScreen,
-} from './routes/consultingRoutes';
-import {FaceCaptureConfirmationRouteScreen} from './routes/faceCaptureConfirmationRoutes';
-import {
-  HairAnalysisCaptureRouteScreen,
-  HairAnalysisIntroRouteScreen,
-  HairAnalysisLoadingRouteScreen,
-  HairAnalysisResultRouteScreen,
-  HairSimulationLoadingRouteScreen,
-  HairSimulationResultRouteScreen,
-  SavedHairSimulationsRouteScreen,
-} from './routes/hairAnalysisRoutes';
-import {
-  Face3DMeasurementRouteScreen,
-  FaceAnalysisIntroRouteScreen,
-  FaceAnalysisLoadingRouteScreen,
-  FaceAnalysisReportPreviewRouteScreen,
-  FaceAnalysisReportsListRouteScreen,
-  FaceCaptureRouteScreen,
-} from './routes/faceAnalysisRoutes';
-import {
-  MakeupFeedbackAlbumUploadRouteScreen,
-  MakeupFeedbackCaptureRouteScreen,
-  MakeupFeedbackGoalInputRouteScreen,
-  MakeupCorrectionGuideRouteScreen,
-  MakeupFeedbackLoadingRouteScreen,
-  MakeupFeedbackResultRouteScreen,
-  MakeupFeedbackResultsListRouteScreen,
-  MakeupCorrectionTipRouteScreen,
-} from './routes/makeupFeedbackRoutes';
-import {
-  MakeupJourneyDayDetailRouteScreen,
-  MakeupJourneyTrendRouteScreen,
-} from './routes/makeupJourneyRoutes';
-import {MakeupRecommendationRouteScreen} from './routes/makeupRecommendationRoutes';
-import {
-  AuradinSearchRouteScreen,
-  LikedProductListRouteScreen,
-  MakeupLookListRouteScreen,
-  ProductDetailRouteScreen,
-  ProductRecommendationRouteScreen,
-  ProductRecommendationShelfRouteScreen,
-  ProductSearchResultRouteScreen,
-} from './routes/recommendationRoutes';
-import {
-  ReferenceMakeupExtractionLoadingRouteScreen,
-  ReferenceMakeupExtractionResultRouteScreen,
-  MakeupFilterSaveCompleteRouteScreen,
-  MakeupFilterSaveRouteScreen,
-  ExtractedMakeupLookAdjustRouteScreen,
-  ReferenceMakeupExtractionUploadRouteScreen,
-  MakeupRecipeDetailRouteScreen,
-  MakeupRecipeListRouteScreen,
-  MakeupRecipeSaveCompleteRouteScreen,
-} from './routes/referenceMakeupExtractionRoutes';
-import {ProfileEditRouteScreen} from './routes/profileRoutes';
-import {
-  AccountDeletionRouteScreen,
-  AccountManagementRouteScreen,
-  AppSettingsRouteScreen,
-  FaqRouteScreen,
-} from './routes/settingsRoutes';
+
+const loadMainTabNavigator = () =>
+  require('./MainTabNavigator') as typeof import('./MainTabNavigator');
+const loadAuthRoutes = () =>
+  require('./routes/authRoutes') as typeof import('./routes/authRoutes');
+const loadHomeRoutes = () =>
+  require('./routes/homeRoutes') as typeof import('./routes/homeRoutes');
+const loadArRoutes = () =>
+  require('./routes/arRoutes') as typeof import('./routes/arRoutes');
+const loadConsultingRoutes = () =>
+  require('./routes/consultingRoutes') as typeof import('./routes/consultingRoutes');
+const loadFaceCaptureConfirmationRoutes = () =>
+  require('./routes/faceCaptureConfirmationRoutes') as typeof import('./routes/faceCaptureConfirmationRoutes');
+const loadHairAnalysisRoutes = () =>
+  require('./routes/hairAnalysisRoutes') as typeof import('./routes/hairAnalysisRoutes');
+const loadFaceAnalysisRoutes = () =>
+  require('./routes/faceAnalysisRoutes') as typeof import('./routes/faceAnalysisRoutes');
+const loadFaceAnalysisIntroRoute = () =>
+  require('./routes/faceAnalysisIntroRoute') as typeof import('./routes/faceAnalysisIntroRoute');
+const loadMakeupFeedbackRoutes = () =>
+  require('./routes/makeupFeedbackRoutes') as typeof import('./routes/makeupFeedbackRoutes');
+const loadMakeupJourneyRoutes = () =>
+  require('./routes/makeupJourneyRoutes') as typeof import('./routes/makeupJourneyRoutes');
+const loadMakeupRecommendationRoutes = () =>
+  require('./routes/makeupRecommendationRoutes') as typeof import('./routes/makeupRecommendationRoutes');
+const loadRecommendationRoutes = () =>
+  require('./routes/recommendationRoutes') as typeof import('./routes/recommendationRoutes');
+const loadReferenceMakeupExtractionRoutes = () =>
+  require('./routes/referenceMakeupExtractionRoutes') as typeof import('./routes/referenceMakeupExtractionRoutes');
+const loadProfileRoutes = () =>
+  require('./routes/profileRoutes') as typeof import('./routes/profileRoutes');
+const loadSettingsRoutes = () =>
+  require('./routes/settingsRoutes') as typeof import('./routes/settingsRoutes');
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -104,127 +43,340 @@ export function RootNavigator() {
     <Stack.Navigator
       initialRouteName="Login"
       screenOptions={{headerShown: false}}>
-      <Stack.Screen name="Login" component={LoginRouteScreen} />
-      <Stack.Screen name="ProfileSetup" component={ProfileSetupRouteScreen} />
-      <Stack.Screen name="Tutorial" component={TutorialRouteScreen} />
-      <Stack.Screen name="MainTabs" component={MainTabNavigator} />
-      <Stack.Screen name="FaceCapture" component={FaceCaptureRouteScreen} />
+      <Stack.Screen
+        name="Login"
+        getComponent={() => loadAuthRoutes().LoginRouteScreen}
+      />
+      <Stack.Screen
+        name="ProfileSetup"
+        getComponent={() => loadAuthRoutes().ProfileSetupRouteScreen}
+      />
+      <Stack.Screen
+        name="Tutorial"
+        getComponent={() => loadAuthRoutes().TutorialRouteScreen}
+      />
+      <Stack.Screen
+        name="MainTabs"
+        getComponent={() => loadMainTabNavigator().MainTabNavigator}
+      />
+      <Stack.Screen
+        name="FaceCapture"
+        getComponent={() => loadFaceAnalysisRoutes().FaceCaptureRouteScreen}
+      />
       <Stack.Screen
         name="FaceCaptureConfirmation"
-        component={FaceCaptureConfirmationRouteScreen}
+        getComponent={() =>
+          loadFaceCaptureConfirmationRoutes().FaceCaptureConfirmationRouteScreen
+        }
       />
       <Stack.Screen
         name="UnityMakeupCapture"
-        component={UnityMakeupCaptureRouteScreen}
+        getComponent={() => loadArRoutes().UnityMakeupCaptureRouteScreen}
         options={{gestureEnabled: false}}
       />
-      <Stack.Screen name="FaceAnalysisIntro" component={FaceAnalysisIntroRouteScreen} />
+      <Stack.Screen
+        name="FaceAnalysisIntro"
+        getComponent={() => loadFaceAnalysisIntroRoute().FaceAnalysisIntroRouteScreen}
+      />
       <Stack.Screen
         name="Face3DMeasurement"
-        component={Face3DMeasurementRouteScreen}
+        getComponent={() => loadFaceAnalysisRoutes().Face3DMeasurementRouteScreen}
         options={{gestureEnabled: false}}
       />
-      <Stack.Screen name="FaceAnalysisLoading" component={FaceAnalysisLoadingRouteScreen} />
+      <Stack.Screen
+        name="FaceAnalysisLoading"
+        getComponent={() => loadFaceAnalysisRoutes().FaceAnalysisLoadingRouteScreen}
+      />
       <Stack.Screen
         name="FaceAnalysisReportsList"
-        component={FaceAnalysisReportsListRouteScreen}
+        getComponent={() => loadFaceAnalysisRoutes().FaceAnalysisReportsListRouteScreen}
       />
       <Stack.Screen
         name="FaceAnalysisReportDetail"
-        component={FaceAnalysisReportPreviewRouteScreen}
+        getComponent={() => loadFaceAnalysisRoutes().FaceAnalysisReportPreviewRouteScreen}
       />
       <Stack.Screen
         name="FloatingActionSettings"
-        component={FloatingActionSettingsRouteScreen}
+        getComponent={() => loadHomeRoutes().FloatingActionSettingsRouteScreen}
       />
-      <Stack.Screen name="AppSettings" component={AppSettingsRouteScreen} />
-      <Stack.Screen name="Faq" component={FaqRouteScreen} />
-      <Stack.Screen name="AccountManagement" component={AccountManagementRouteScreen} />
-      <Stack.Screen name="AccountDeletion" component={AccountDeletionRouteScreen} />
-      <Stack.Screen name="ProfileEdit" component={ProfileEditRouteScreen} />
-      <Stack.Screen name="HomeFilterStore" component={HomeFilterStoreRouteScreen} />
+      <Stack.Screen
+        name="AppSettings"
+        getComponent={() => loadSettingsRoutes().AppSettingsRouteScreen}
+      />
+      <Stack.Screen
+        name="Faq"
+        getComponent={() => loadSettingsRoutes().FaqRouteScreen}
+      />
+      <Stack.Screen
+        name="AccountManagement"
+        getComponent={() => loadSettingsRoutes().AccountManagementRouteScreen}
+      />
+      <Stack.Screen
+        name="AccountDeletion"
+        getComponent={() => loadSettingsRoutes().AccountDeletionRouteScreen}
+      />
+      <Stack.Screen
+        name="ProfileEdit"
+        getComponent={() => loadProfileRoutes().ProfileEditRouteScreen}
+      />
+      <Stack.Screen
+        name="HomeFilterStore"
+        getComponent={() => loadHomeRoutes().HomeFilterStoreRouteScreen}
+      />
       <Stack.Screen
         name="HairRemovalSimulation"
-        component={HairRemovalSimulationRouteScreen}
+        getComponent={() => loadHomeRoutes().HairRemovalSimulationRouteScreen}
       />
-      <Stack.Screen name="HairAnalysisIntro" component={HairAnalysisIntroRouteScreen} />
-      <Stack.Screen name="HairAnalysisCapture" component={HairAnalysisCaptureRouteScreen} />
-      <Stack.Screen name="HairAnalysisLoading" component={HairAnalysisLoadingRouteScreen} />
-      <Stack.Screen name="HairAnalysisResult" component={HairAnalysisResultRouteScreen} />
-      <Stack.Screen name="HairSimulationLoading" component={HairSimulationLoadingRouteScreen} />
-      <Stack.Screen name="HairSimulationResult" component={HairSimulationResultRouteScreen} />
-      <Stack.Screen name="SavedHairSimulations" component={SavedHairSimulationsRouteScreen} />
-      <Stack.Screen name="SavedMakeupList" component={SavedMakeupListRouteScreen} />
-      <Stack.Screen name="ProductRecommendation" component={ProductRecommendationRouteScreen} />
-      <Stack.Screen name="ProductRecommendationShelf" component={ProductRecommendationShelfRouteScreen} />
-      <Stack.Screen name="ProductSearchResult" component={ProductSearchResultRouteScreen} />
-      <Stack.Screen name="ProductDetail" component={ProductDetailRouteScreen} />
-      <Stack.Screen name="MakeupRecommendation" component={MakeupRecommendationRouteScreen} />
-      <Stack.Screen name="AuradinSearch" component={AuradinSearchRouteScreen} />
-      <Stack.Screen name="Community" component={CommunityRouteScreen} />
-      <Stack.Screen name="CommunityThreadDetail" component={CommunityThreadDetailRouteScreen} />
-      <Stack.Screen name="CommunityThreadCreate" component={CommunityThreadCreateRouteScreen} />
-      <Stack.Screen name="CommunityThreadEdit" component={CommunityThreadEditRouteScreen} />
-      <Stack.Screen name="CommunityUserProfile" component={CommunityUserProfileRouteScreen} />
-      <Stack.Screen name="Consulting" component={ConsultingRouteScreen} />
+      <Stack.Screen
+        name="HairAnalysisIntro"
+        getComponent={() => loadHairAnalysisRoutes().HairAnalysisIntroRouteScreen}
+      />
+      <Stack.Screen
+        name="HairAnalysisCapture"
+        getComponent={() => loadHairAnalysisRoutes().HairAnalysisCaptureRouteScreen}
+      />
+      <Stack.Screen
+        name="HairAnalysisLoading"
+        getComponent={() => loadHairAnalysisRoutes().HairAnalysisLoadingRouteScreen}
+      />
+      <Stack.Screen
+        name="HairAnalysisResult"
+        getComponent={() => loadHairAnalysisRoutes().HairAnalysisResultRouteScreen}
+      />
+      <Stack.Screen
+        name="HairSimulationLoading"
+        getComponent={() => loadHairAnalysisRoutes().HairSimulationLoadingRouteScreen}
+      />
+      <Stack.Screen
+        name="HairSimulationResult"
+        getComponent={() => loadHairAnalysisRoutes().HairSimulationResultRouteScreen}
+      />
+      <Stack.Screen
+        name="SavedHairSimulations"
+        getComponent={() => loadHairAnalysisRoutes().SavedHairSimulationsRouteScreen}
+      />
+      <Stack.Screen
+        name="SavedMakeupList"
+        getComponent={() => loadHomeRoutes().SavedMakeupListRouteScreen}
+      />
+      <Stack.Screen
+        name="ProductRecommendation"
+        getComponent={() => loadRecommendationRoutes().ProductRecommendationRouteScreen}
+      />
+      <Stack.Screen
+        name="ProductRecommendationShelf"
+        getComponent={() =>
+          loadRecommendationRoutes().ProductRecommendationShelfRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="ProductSearchResult"
+        getComponent={() => loadRecommendationRoutes().ProductSearchResultRouteScreen}
+      />
+      <Stack.Screen
+        name="ProductDetail"
+        getComponent={() => loadRecommendationRoutes().ProductDetailRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupRecommendation"
+        getComponent={() =>
+          loadMakeupRecommendationRoutes().MakeupRecommendationRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="AuradinSearch"
+        getComponent={() => loadRecommendationRoutes().AuradinSearchRouteScreen}
+      />
+      <Stack.Screen
+        name="Community"
+        getComponent={() => loadHomeRoutes().CommunityRouteScreen}
+      />
+      <Stack.Screen
+        name="CommunityThreadDetail"
+        getComponent={() => loadHomeRoutes().CommunityThreadDetailRouteScreen}
+      />
+      <Stack.Screen
+        name="CommunityThreadCreate"
+        getComponent={() => loadHomeRoutes().CommunityThreadCreateRouteScreen}
+      />
+      <Stack.Screen
+        name="CommunityThreadEdit"
+        getComponent={() => loadHomeRoutes().CommunityThreadEditRouteScreen}
+      />
+      <Stack.Screen
+        name="CommunityUserProfile"
+        getComponent={() => loadHomeRoutes().CommunityUserProfileRouteScreen}
+      />
+      <Stack.Screen
+        name="Consulting"
+        getComponent={() => loadHomeRoutes().ConsultingRouteScreen}
+      />
       <Stack.Screen
         name="ConsultingExpertList"
-        component={ConsultingExpertListRouteScreen}
+        getComponent={() => loadConsultingRoutes().ConsultingExpertListRouteScreen}
       />
       <Stack.Screen
         name="ConsultingExpertProfile"
-        component={ConsultingExpertProfileRouteScreen}
+        getComponent={() => loadConsultingRoutes().ConsultingExpertProfileRouteScreen}
       />
-      <Stack.Screen name="ConsultingBooking" component={ConsultingBookingRouteScreen} />
+      <Stack.Screen
+        name="ConsultingBooking"
+        getComponent={() => loadConsultingRoutes().ConsultingBookingRouteScreen}
+      />
       <Stack.Screen
         name="ConsultingRequestConfirm"
-        component={ConsultingRequestConfirmRouteScreen}
+        getComponent={() => loadConsultingRoutes().ConsultingRequestConfirmRouteScreen}
       />
       <Stack.Screen
         name="ConsultingBookingComplete"
-        component={ConsultingBookingCompleteRouteScreen}
+        getComponent={() => loadConsultingRoutes().ConsultingBookingCompleteRouteScreen}
       />
       <Stack.Screen
         name="ConsultingCall"
-        component={ConsultingCallRouteScreen}
+        getComponent={() => loadConsultingRoutes().ConsultingCallRouteScreen}
         options={{gestureEnabled: false}}
       />
-      <Stack.Screen name="ConsultingSummary" component={ConsultingSummaryRouteScreen} />
-      <Stack.Screen name="ConsultingHistory" component={ConsultingHistoryRouteScreen} />
-      <Stack.Screen name="ConsultingMessages" component={ConsultingMessagesRouteScreen} />
+      <Stack.Screen
+        name="ConsultingSummary"
+        getComponent={() => loadConsultingRoutes().ConsultingSummaryRouteScreen}
+      />
+      <Stack.Screen
+        name="ConsultingHistory"
+        getComponent={() => loadConsultingRoutes().ConsultingHistoryRouteScreen}
+      />
+      <Stack.Screen
+        name="ConsultingMessages"
+        getComponent={() => loadConsultingRoutes().ConsultingMessagesRouteScreen}
+      />
       <Stack.Screen
         name="ConsultingNotifications"
-        component={ConsultingNotificationsRouteScreen}
+        getComponent={() => loadConsultingRoutes().ConsultingNotificationsRouteScreen}
       />
       <Stack.Screen
         name="ConsultingConversation"
-        component={ConsultingConversationRouteScreen}
+        getComponent={() => loadConsultingRoutes().ConsultingConversationRouteScreen}
       />
-      <Stack.Screen name="ConsultingMembership" component={ConsultingMembershipRouteScreen} />
-      <Stack.Screen name="ConsultingReview" component={ConsultingReviewRouteScreen} />
-      <Stack.Screen name="MakeupLookList" component={MakeupLookListRouteScreen} />
-      <Stack.Screen name="LikedProductList" component={LikedProductListRouteScreen} />
-      <Stack.Screen name="ARFilter" component={ARFilterRouteScreen} />
-      <Stack.Screen name="MakeupFilterEdit" component={MakeupFilterEditRouteScreen} />
-      <Stack.Screen name="MakeupFeedbackCapture" component={MakeupFeedbackCaptureRouteScreen} />
-      <Stack.Screen name="MakeupFeedbackAlbumUpload" component={MakeupFeedbackAlbumUploadRouteScreen} />
-      <Stack.Screen name="MakeupFeedbackGoalInput" component={MakeupFeedbackGoalInputRouteScreen} />
-      <Stack.Screen name="MakeupFeedbackLoading" component={MakeupFeedbackLoadingRouteScreen} />
-      <Stack.Screen name="MakeupFeedbackResultsList" component={MakeupFeedbackResultsListRouteScreen} />
-      <Stack.Screen name="MakeupFeedbackResult" component={MakeupFeedbackResultRouteScreen} />
-      <Stack.Screen name="MakeupJourneyDayDetail" component={MakeupJourneyDayDetailRouteScreen} />
-      <Stack.Screen name="MakeupJourneyTrend" component={MakeupJourneyTrendRouteScreen} />
-      <Stack.Screen name="MakeupCorrectionGuide" component={MakeupCorrectionGuideRouteScreen} />
-      <Stack.Screen name="MakeupCorrectionTip" component={MakeupCorrectionTipRouteScreen} />
-      <Stack.Screen name="ReferenceMakeupExtractionUpload" component={ReferenceMakeupExtractionUploadRouteScreen} />
-      <Stack.Screen name="ReferenceMakeupExtractionLoading" component={ReferenceMakeupExtractionLoadingRouteScreen} />
-      <Stack.Screen name="ReferenceMakeupExtractionResult" component={ReferenceMakeupExtractionResultRouteScreen} />
-      <Stack.Screen name="ExtractedMakeupLookAdjust" component={ExtractedMakeupLookAdjustRouteScreen} />
-      <Stack.Screen name="MakeupFilterSave" component={MakeupFilterSaveRouteScreen} />
-      <Stack.Screen name="MakeupFilterSaveComplete" component={MakeupFilterSaveCompleteRouteScreen} />
-      <Stack.Screen name="MakeupRecipeList" component={MakeupRecipeListRouteScreen} />
-      <Stack.Screen name="MakeupRecipeDetail" component={MakeupRecipeDetailRouteScreen} />
-      <Stack.Screen name="MakeupRecipeSaveComplete" component={MakeupRecipeSaveCompleteRouteScreen} />
+      <Stack.Screen
+        name="ConsultingMembership"
+        getComponent={() => loadConsultingRoutes().ConsultingMembershipRouteScreen}
+      />
+      <Stack.Screen
+        name="ConsultingReview"
+        getComponent={() => loadConsultingRoutes().ConsultingReviewRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupLookList"
+        getComponent={() => loadRecommendationRoutes().MakeupLookListRouteScreen}
+      />
+      <Stack.Screen
+        name="LikedProductList"
+        getComponent={() => loadRecommendationRoutes().LikedProductListRouteScreen}
+      />
+      <Stack.Screen
+        name="ARFilter"
+        getComponent={() => loadArRoutes().ARFilterRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupFilterEdit"
+        getComponent={() => loadArRoutes().MakeupFilterEditRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupFeedbackCapture"
+        getComponent={() => loadMakeupFeedbackRoutes().MakeupFeedbackCaptureRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupFeedbackAlbumUpload"
+        getComponent={() =>
+          loadMakeupFeedbackRoutes().MakeupFeedbackAlbumUploadRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="MakeupFeedbackGoalInput"
+        getComponent={() => loadMakeupFeedbackRoutes().MakeupFeedbackGoalInputRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupFeedbackLoading"
+        getComponent={() => loadMakeupFeedbackRoutes().MakeupFeedbackLoadingRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupFeedbackResultsList"
+        getComponent={() => loadMakeupFeedbackRoutes().MakeupFeedbackResultsListRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupFeedbackResult"
+        getComponent={() => loadMakeupFeedbackRoutes().MakeupFeedbackResultRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupJourneyDayDetail"
+        getComponent={() => loadMakeupJourneyRoutes().MakeupJourneyDayDetailRouteScreen}
+        options={{gestureEnabled: false}}
+      />
+      <Stack.Screen
+        name="MakeupJourneyTrend"
+        getComponent={() => loadMakeupJourneyRoutes().MakeupJourneyTrendRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupCorrectionGuide"
+        getComponent={() => loadMakeupFeedbackRoutes().MakeupCorrectionGuideRouteScreen}
+      />
+      <Stack.Screen
+        name="MakeupCorrectionTip"
+        getComponent={() => loadMakeupFeedbackRoutes().MakeupCorrectionTipRouteScreen}
+      />
+      <Stack.Screen
+        name="ReferenceMakeupExtractionUpload"
+        getComponent={() =>
+          loadReferenceMakeupExtractionRoutes().ReferenceMakeupExtractionUploadRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="ReferenceMakeupExtractionLoading"
+        getComponent={() =>
+          loadReferenceMakeupExtractionRoutes().ReferenceMakeupExtractionLoadingRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="ReferenceMakeupExtractionResult"
+        getComponent={() =>
+          loadReferenceMakeupExtractionRoutes().ReferenceMakeupExtractionResultRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="ExtractedMakeupLookAdjust"
+        getComponent={() =>
+          loadReferenceMakeupExtractionRoutes().ExtractedMakeupLookAdjustRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="MakeupFilterSave"
+        getComponent={() =>
+          loadReferenceMakeupExtractionRoutes().MakeupFilterSaveRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="MakeupFilterSaveComplete"
+        getComponent={() =>
+          loadReferenceMakeupExtractionRoutes().MakeupFilterSaveCompleteRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="MakeupRecipeList"
+        getComponent={() =>
+          loadReferenceMakeupExtractionRoutes().MakeupRecipeListRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="MakeupRecipeDetail"
+        getComponent={() =>
+          loadReferenceMakeupExtractionRoutes().MakeupRecipeDetailRouteScreen
+        }
+      />
+      <Stack.Screen
+        name="MakeupRecipeSaveComplete"
+        getComponent={() =>
+          loadReferenceMakeupExtractionRoutes().MakeupRecipeSaveCompleteRouteScreen
+        }
+      />
     </Stack.Navigator>
   );
 }

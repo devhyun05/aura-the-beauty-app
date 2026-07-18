@@ -199,6 +199,27 @@ async def test_pipeline_persists_after_every_stage_and_projects_legacy() -> None
   legacy = project_legacy_analysis_result(result)
   assert legacy["faceShape"] == result.derived.face_shape.label
   assert legacy["recommendedMakeups"][0]["title"] == "뮤트 데일리"
+  assert set(legacy["regionNotes"]) == {"upper", "mid", "lower", "jaw"}
+  assert (
+    result.perception.feature_impression.eye_impression.label
+    in legacy["regionNotes"]["upper"]["insight"]
+  )
+  assert result.perception.feature_impression.brow_impression.label in legacy["regionNotes"]["upper"]["insight"]
+  assert result.perception.lines_and_planes.nose_shadow_effect.label in legacy["regionNotes"]["mid"]["evidence"]
+  assert result.perception.volume.mouth_corner_impression.label in legacy["regionNotes"]["lower"]["evidence"]
+  assert (
+    legacy["impressionNotes"]["overallMood"]
+    == result.perception.gestalt.overall_mood.label
+  )
+  assert result.perception.gestalt.perceptual_center.label in legacy["impressionNotes"]["paragraph"]
+  assert legacy["stylingLooks"]["natural"]["description"].startswith("차분한 균형을 ")
+  assert legacy["stylingLooks"]["natural"]["rows"][0]["category"] == "base"
+  assert legacy["stylingLooks"]["glam"]["rows"][2]["category"] == "eyeliner"
+  assert (
+    legacy["stylingLooks"]["natural"]["rows"][0]["note"]
+    != legacy["stylingLooks"]["glam"]["rows"][0]["note"]
+  )
+  assert legacy["stylingLooks"]["natural"]["rows"][0]["why"] == ""
 
 
 @pytest.mark.asyncio

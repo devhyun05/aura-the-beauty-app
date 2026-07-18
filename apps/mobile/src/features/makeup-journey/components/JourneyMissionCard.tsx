@@ -50,6 +50,10 @@ export function JourneyMissionCard({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const completedCount = missions.filter(mission => mission.isCompleted).length;
+  const completionProgress = missions.length > 0
+    ? Math.round((completedCount / missions.length) * 100)
+    : 0;
 
   const createMission = async () => {
     const title = newTitle.trim();
@@ -97,9 +101,16 @@ export function JourneyMissionCard({
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text style={styles.title}>오늘의 미션</Text>
-          <Text style={styles.description}>오늘 예뻐지는 작은 습관, 하나만 해봐요.</Text>
+          <Text style={styles.description}>이날의 모든 피드백에 함께 적용되는 미션이에요.</Text>
         </View>
-        {!disabled ? (
+        {missions.length > 0 ? (
+          <View accessibilityLabel={`미션 ${missions.length}개 중 ${completedCount}개 완료`} style={styles.progressSummary}>
+            <Text style={styles.progressText}>{completedCount}/{missions.length} 완료</Text>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, {width: `${completionProgress}%`}]} />
+            </View>
+          </View>
+        ) : !disabled ? (
           <Pressable
             accessibilityLabel="데일리 미션 세 개 추천"
             accessibilityRole="button"
@@ -174,7 +185,7 @@ export function JourneyMissionCard({
                           accessibilityRole="button"
                           onPress={() => void saveEditing(mission)}
                           style={styles.iconButton}>
-                          <Check color={colors.successMuted} size={18} />
+                          <Check color={colors.danger} size={18} />
                         </Pressable>
                         <Pressable
                           accessibilityLabel="미션 수정 취소"
@@ -220,6 +231,20 @@ export function JourneyMissionCard({
         </View>
       )}
 
+      {!disabled && missions.length > 0 ? (
+        <Pressable
+          accessibilityLabel="데일리 미션 다시 추천"
+          accessibilityRole="button"
+          disabled={isGenerating}
+          onPress={() => void onGenerate()}
+          style={({pressed}) => [styles.generateInlineButton, pressed ? styles.pressed : null]}>
+          {isGenerating
+            ? <ActivityIndicator color={colors.textPrimary} size="small" />
+            : <Sparkles color={colors.textPrimary} size={16} />}
+          <Text style={styles.generateText}>{isGenerating ? '생성 중' : 'AI 미션 다시 추천'}</Text>
+        </Pressable>
+      ) : null}
+
       {!disabled ? (
         <View style={styles.createArea}>
           <TextInput
@@ -260,7 +285,7 @@ const styles = StyleSheet.create({
   addButton: {
     alignItems: 'center',
     alignSelf: 'stretch',
-    backgroundColor: colors.blackSurface,
+    backgroundColor: colors.danger,
     borderRadius: radius.md,
     justifyContent: 'center',
     minWidth: 48,
@@ -280,7 +305,7 @@ const styles = StyleSheet.create({
   },
   checkedCircle: {
     alignItems: 'center',
-    backgroundColor: colors.successMuted,
+    backgroundColor: colors.danger,
     borderRadius: radius.pill,
     height: 24,
     justifyContent: 'center',
@@ -359,6 +384,18 @@ const styles = StyleSheet.create({
     minHeight: 40,
     paddingHorizontal: spacing.md,
   },
+  generateInlineButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 38,
+    paddingHorizontal: spacing.md,
+  },
   generateText: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.semibold,
@@ -411,6 +448,30 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.7,
+  },
+  progressFill: {
+    backgroundColor: colors.danger,
+    borderRadius: radius.pill,
+    height: '100%',
+  },
+  progressSummary: {
+    alignItems: 'flex-end',
+    gap: spacing.xs,
+    paddingTop: 2,
+    width: 82,
+  },
+  progressText: {
+    color: colors.danger,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  progressTrack: {
+    backgroundColor: colors.divider,
+    borderRadius: radius.pill,
+    height: 6,
+    overflow: 'hidden',
+    width: '100%',
   },
   title: {
     color: colors.textPrimary,

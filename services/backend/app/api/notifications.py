@@ -1,6 +1,13 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+  APIRouter,
+  BackgroundTasks,
+  Depends,
+  Query,
+  WebSocket,
+  WebSocketDisconnect,
+)
 
 from app.core.errors import AppError
 from app.core.responses import success
@@ -23,6 +30,7 @@ from app.services.notification_realtime import (
 from app.services.push_notifications import (
   REPORT_NOTIFICATION_TYPES,
   is_expo_push_token,
+  retry_recent_notifications_for_user,
 )
 from app.services.users import ensure_user
 
@@ -96,8 +104,10 @@ async def notification_socket(
 @router.post("/devices")
 async def register_push_device(
   payload: PushDeviceRegistration,
+  background_tasks: BackgroundTasks,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
 ) -> dict:
   token = payload.expo_push_token.strip()
   if not is_expo_push_token(token):
@@ -127,6 +137,12 @@ async def register_push_device(
     token,
     payload.platform,
     payload.app_version,
+  )
+  background_tasks.add_task(
+    retry_recent_notifications_for_user,
+    db,
+    settings,
+    user_id=user["id"],
   )
   return success({"device": device})
 

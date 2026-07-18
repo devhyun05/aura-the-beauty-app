@@ -5,7 +5,6 @@ import {YStack} from 'tamagui';
 
 import {
   createFaceAnalysisReportFromCapture,
-  FaceAnalysisIntroScreen,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
@@ -52,7 +51,6 @@ import {
   type PersonalColorAnalysisOutcome,
 } from '../../../features/personal-color/services/personalColorService';
 import {useAuthSession} from '../../../features/auth';
-import {FaceCaptureTutorialSheet} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import {deleteFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
 import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAnalytics';
@@ -68,7 +66,15 @@ import {
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
-import {navigateMainTab, type RootNavigation, type RootScreenProps} from './routeUtils';
+import {
+  goBackToPreviousOrMainTab,
+  navigateMainTab,
+  type RootNavigation,
+  type RootScreenProps,
+} from './routeUtils';
+
+const loadMakeupPhotoPicker = () =>
+  require('../../../features/home/services/makeupPhotoPicker') as typeof import('../../../features/home/services/makeupPhotoPicker');
 
 const MAX_ANALYSIS_RETRY_COUNT = 2;
 // 온디바이스 정지영상 분석(세로비율 등)이 이 시간 안에 끝나지 않으면 해당 축 없이
@@ -99,30 +105,6 @@ export function getFaceAnalysisReportFooterHostHeight(
     windowHeight,
     getFaceAnalysisReportFooterReservedHeight(footerBottomInset) +
       FLOATING_ACTION_HOST_EXTRA_HEIGHT,
-  );
-}
-
-export function FaceAnalysisIntroRouteScreen({
-  navigation,
-}: RootScreenProps<'FaceAnalysisIntro'>) {
-  const [isGuideVisible, setIsGuideVisible] = React.useState(false);
-
-  return (
-    <>
-      <DetailRouteChrome
-        routeName="FaceAnalysisIntro"
-        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-        <FaceAnalysisIntroScreen onStartAnalysisGuide={() => setIsGuideVisible(true)} />
-      </DetailRouteChrome>
-      <FaceCaptureTutorialSheet
-        isVisible={isGuideVisible}
-        onDismiss={() => setIsGuideVisible(false)}
-        onStartCapture={() => {
-          setIsGuideVisible(false);
-          navigation.navigate('FaceCapture');
-        }}
-      />
-    </>
   );
 }
 
@@ -852,7 +834,7 @@ export function FaceAnalysisReportsListRouteScreen({
     <DetailRouteChrome
       reserveOverlayHeaderSpace={false}
       routeName="FaceAnalysisReportsList"
-      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'ProfileTab')}>
       <FaceAnalysisReportsListScreen
         onPressReport={reportId =>
           navigation.navigate('FaceAnalysisReportDetail', {reportId})
@@ -875,6 +857,8 @@ export function FaceAnalysisReportPreviewRouteScreen({
   const {
     selectedFaceAnalysisReport,
     selectedFaceCapture,
+    selectedFace3DProfile,
+    selectedFaceGeometry2d,
     selectedFaceVerticalThirds,
     selectedPersonalColor,
     setSelectedFaceAnalysisReport,
@@ -910,7 +894,9 @@ export function FaceAnalysisReportPreviewRouteScreen({
       analysisReport={selectedFaceAnalysisReport}
       capturedPhotoUri={selectedFaceCapture?.imageUri}
       onBack={() =>
-        shouldReturnToProfile ? navigateMainTab(navigation, 'ProfileTab') : navigation.goBack()
+        shouldReturnToProfile
+          ? goBackToPreviousOrMainTab(navigation, 'ProfileTab')
+          : navigation.goBack()
       }
       onCreateARFilter={() => {
         if (currentReportId) {
@@ -922,6 +908,8 @@ export function FaceAnalysisReportPreviewRouteScreen({
       onDeleteReport={handleDeleteReport}
       onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
       onRetake={() => navigation.navigate('FaceCapture')}
+      face3d={route.params?.reportId ? null : selectedFace3DProfile}
+      faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
       personalColor={route.params?.reportId ? null : selectedPersonalColor}
       reportId={route.params?.reportId ?? null}
       sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
@@ -1001,11 +989,26 @@ function FaceAnalysisReportBottomNav({
 
   const startMakeupExtraction = React.useCallback((initialSource: 'camera' | 'gallery') => {
     setIsExtractionSheetVisible(false);
-    setSelectedRecommendedMakeupFilterId(null);
-    setSelectedReferenceMakeupPhoto(null);
 
-    requestAnimationFrame(() => {
-      navigation.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+    if (initialSource === 'camera') {
+      setSelectedRecommendedMakeupFilterId(null);
+      setSelectedReferenceMakeupPhoto(null);
+      requestAnimationFrame(() => {
+        navigation.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+      });
+      return;
+    }
+
+    const {pickReferenceMakeupPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickReferenceMakeupPhotoFromLibrary().then(photo => {
+      if (!photo) {
+        return;
+      }
+      setSelectedRecommendedMakeupFilterId(null);
+      setSelectedReferenceMakeupPhoto(photo);
+      navigation.navigate('FaceCaptureConfirmation', {
+        target: 'referenceMakeupExtraction',
+      });
     });
   }, [
     navigation,
@@ -1015,17 +1018,28 @@ function FaceAnalysisReportBottomNav({
 
   const startMakeupFeedback = React.useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
-    beginMakeupFeedbackFlow();
-    setMakeupFeedbackResult(null);
-    setSelectedMakeupFeedbackPhoto({photoSource});
 
-    requestAnimationFrame(() => {
-      if (photoSource === 'camera') {
+    if (photoSource === 'camera') {
+      beginMakeupFeedbackFlow();
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto({photoSource});
+      requestAnimationFrame(() => {
         navigation.navigate('MakeupFeedbackCapture');
+      });
+      return;
+    }
+
+    const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
+      if (!selection) {
         return;
       }
-
-      navigation.navigate('MakeupFeedbackAlbumUpload');
+      beginMakeupFeedbackFlow();
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto(selection);
+      navigation.navigate('FaceCaptureConfirmation', {
+        target: 'makeupFeedback',
+      });
     });
   }, [
     beginMakeupFeedbackFlow,

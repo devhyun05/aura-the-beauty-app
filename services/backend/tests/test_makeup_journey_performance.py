@@ -84,6 +84,7 @@ def _calendar_rows(count: int) -> list[dict]:
       "entry_date": date(2026, 7, day),
       "first_score": 70,
       "latest_score": 70 + (day % 20),
+      "selected_score": None,
       "report_count": 100,
       "has_note": True,
       "completed_missions": 50,
@@ -129,9 +130,9 @@ def _reports(count: int) -> list[dict]:
       "feedback_kind": "initial" if index == 0 else "correction",
       "parent_feedback_report_id": None if index == 0 else UUID(int=1),
       "goal_context": {"userGoalText": "출근 메이크업"},
-      # Mirrors the SQL row projection: historical payloads never cross the
-      # database boundary; only the latest row carries the digest source.
-      "feedback_payload": payload if index == count - 1 else None,
+      # Every report needs its own allow-listed digest so feedback follows the
+      # photo selected in the client gallery.
+      "feedback_payload": payload,
       "created_at": started_at + timedelta(minutes=index),
       "completed_at": started_at + timedelta(minutes=index),
     }
@@ -193,6 +194,7 @@ async def test_calendar_query_count_is_constant_and_month_payload_is_allow_liste
         "status",
         "firstScore",
         "latestScore",
+        "representativeScore",
         "scoreDelta",
         "reportCount",
         "hasNote",
@@ -240,9 +242,7 @@ async def test_day_query_count_is_constant_for_large_report_and_mission_sets(
     assert data["reportCount"] == item_count
     assert len(data["reports"]) == item_count
     assert len(data["missions"]) == item_count
-    assert sum(row["feedback_payload"] is not None for row in db.reports) == 1
-    assert all(row["feedback_payload"] is None for row in db.reports[:-1])
-    assert len(db.reports[:-1]) == item_count - 1
+    assert sum(row["feedback_payload"] is not None for row in db.reports) == item_count
     assert all(
       set(row) == {
         "id",
@@ -265,6 +265,8 @@ async def test_day_query_count_is_constant_for_large_report_and_mission_sets(
           "completedAt",
           "imageUrl",
           "goalContext",
+          "feedbackDigest",
+          "note",
       }
       for report in data["reports"]
     )
@@ -278,9 +280,9 @@ async def test_day_query_count_is_constant_for_large_report_and_mission_sets(
       "nextAction",
     }
     assert data["feedbackDigest"]["strengthCount"] == 8
-    assert len(data["feedbackDigest"]["strengths"]) == 2
+    assert len(data["feedbackDigest"]["strengths"]) == 8
     assert data["feedbackDigest"]["improvementCount"] == 7
-    assert len(data["feedbackDigest"]["improvements"]) == 2
+    assert len(data["feedbackDigest"]["improvements"]) == 7
     assert len(data["feedbackDigest"]["headline"]) == 240
     assert len(data["feedbackDigest"]["nextAction"]) == 240
 
@@ -296,7 +298,8 @@ async def test_day_query_count_is_constant_for_large_report_and_mission_sets(
   ]
   report_query = databases[-1].calls[1][1]
   assert "row_number() over" in report_query
-  assert "case when latest_rank = 1 then feedback_payload end as feedback_payload" in report_query
+  assert "selected_report_id, feedback_payload" in report_query
+  assert "left join makeup_journey_day_score_selections" in report_query
   assert "jsonb_strip_nulls(jsonb_build_object" in report_query
   assert "from makeup_feedback_reports" in report_query
 
@@ -332,4 +335,5 @@ async def test_trend_query_count_is_constant_and_points_exclude_report_payload(
   ]
   trend_query = databases[-1].calls[1][1]
   assert "row_number() over" in trend_query
-  assert "where latest_rank = 1" in trend_query
+  assert "left join makeup_journey_day_score_selections" in trend_query
+  assert "coalesce(" in trend_query

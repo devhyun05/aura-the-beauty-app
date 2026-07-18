@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -59,7 +60,6 @@ import {
   getHomeFeedContent,
 } from '../services/homeFeedService';
 import {
-  getAllHomeImageSources,
   getHomeImageLoadStagesForViewport,
   homeImageScheduler,
   type HomeImageLoadStage,
@@ -177,16 +177,6 @@ export function HomeScreen({
     () => getVisibleHomeModules(audience, homeFeedContent),
     [audience, homeFeedContent],
   );
-  const allHomeImageSources = useMemo(() => getAllHomeImageSources(
-    visibleHomeModules,
-    [
-      homeData.hero.imageSource,
-      ...homeData.hero.trends.map(trend => trend.imageSource),
-      ...recommendedMakeupFilters.map(filter => filter.imageSource),
-      ...homeData.filterStore.map(item => item.imageSource),
-      ...homeData.recommendedLooks.map(look => look.imageSource),
-    ],
-  ), [homeData, recommendedMakeupFilters, visibleHomeModules]);
   const visibleHomeModulesRef = useRef(visibleHomeModules);
   visibleHomeModulesRef.current = visibleHomeModules;
   const moduleViewabilityConfig = useRef({
@@ -325,10 +315,6 @@ export function HomeScreen({
 
     return () => subscription.remove();
   }, []);
-
-  useEffect(() => {
-    void homeImageScheduler.scheduleSources(allHomeImageSources);
-  }, [allHomeImageSources]);
 
   useEffect(() => {
     if (hasTrackedHomeEnterRef.current) {
@@ -526,7 +512,6 @@ type HeroBannerCarouselProps = {
 };
 
 type HeroBannerCardProps = {
-  activeIndex: number;
   bannerHeight: number;
   bannerWidth: number;
   ctaLabel?: string;
@@ -534,8 +519,6 @@ type HeroBannerCardProps = {
   featureId?: HomeHeroFeatureId;
   filterId?: string;
   imageSource: ImageSourcePropType;
-  isActive: boolean;
-  itemCount: number;
   onPressFeature?: (featureId: HomeHeroFeatureId) => void;
   onPressFilter?: (filterId: string) => void;
   title: string;
@@ -754,7 +737,8 @@ function HeroBannerCarousel({
   const heroCarouselRef = useRef<NativeScrollView>(null);
   const snapInterval = bannerWidth;
   const [activeHeroIndex, setActiveHeroIndex] = useState(0);
-  const heroItems =
+  const activeHeroIndexRef = useRef(0);
+  const heroItems = useMemo(() => (
     trends.length > 0
       ? trends
       : [
@@ -767,13 +751,18 @@ function HeroBannerCarousel({
             title: '얼굴진단',
             tone: 'AI 얼굴 분석',
           },
-        ];
-  const heroRenderItems = getHeroCarouselRenderItems(heroItems);
+        ]
+  ), [fallbackImageSource, trends]);
+  const heroRenderItems = useMemo(
+    () => getHeroCarouselRenderItems(heroItems),
+    [heroItems],
+  );
   const initialScrollOffsetX = getHeroCarouselInitialOffset({
     itemCount: heroItems.length,
     snapInterval,
   });
   useEffect(() => {
+    activeHeroIndexRef.current = 0;
     setActiveHeroIndex(0);
     heroCarouselRef.current?.scrollTo({
       animated: false,
@@ -787,19 +776,15 @@ function HeroBannerCarousel({
     }
 
     const intervalId = setInterval(() => {
-      setActiveHeroIndex(currentIndex => {
-        const nextIndex = (currentIndex + 1) % heroItems.length;
-        const nextSnapIndex =
-          currentIndex === heroItems.length - 1
-            ? heroItems.length + 1
-            : currentIndex + 2;
+      const currentIndex = activeHeroIndexRef.current;
+      const nextSnapIndex =
+        currentIndex === heroItems.length - 1
+          ? heroItems.length + 1
+          : currentIndex + 2;
 
-        heroCarouselRef.current?.scrollTo({
-          animated: true,
-          x: nextSnapIndex * snapInterval,
-        });
-
-        return nextIndex;
+      heroCarouselRef.current?.scrollTo({
+        animated: true,
+        x: nextSnapIndex * snapInterval,
       });
     }, HOME_HERO_AUTOSCROLL_INTERVAL_MS);
 
@@ -808,31 +793,20 @@ function HeroBannerCarousel({
     };
   }, [heroItems.length, isAutoScrollEnabled, snapInterval]);
 
-  const handleHeroCarouselScroll = (
-    event: NativeSyntheticEvent<NativeScrollEvent>,
-  ) => {
-    const nextActiveIndex = getHeroCarouselActiveIndex({
-      itemCount: heroItems.length,
-      scrollOffsetX: event.nativeEvent.contentOffset.x,
-      snapInterval,
-    });
-
-    setActiveHeroIndex(current => (
-      current === nextActiveIndex ? current : nextActiveIndex
-    ));
-  };
-  const handleHeroCarouselScrollEnd = (
+  const handleHeroCarouselScrollEnd = useCallback((
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) => {
     const scrollOffsetX = event.nativeEvent.contentOffset.x;
+    const nextActiveIndex = getHeroCarouselActiveIndex({
+      itemCount: heroItems.length,
+      scrollOffsetX,
+      snapInterval,
+    });
 
-    setActiveHeroIndex(
-      getHeroCarouselActiveIndex({
-        itemCount: heroItems.length,
-        scrollOffsetX,
-        snapInterval,
-      }),
-    );
+    activeHeroIndexRef.current = nextActiveIndex;
+    setActiveHeroIndex(current => (
+      current === nextActiveIndex ? current : nextActiveIndex
+    ));
 
     const loopResetOffsetX = getHeroCarouselLoopResetOffset({
       itemCount: heroItems.length,
@@ -848,9 +822,11 @@ function HeroBannerCarousel({
       animated: false,
       x: loopResetOffsetX,
     });
-  };
-  const heroCarouselLoopResetHandlers =
-    createHeroCarouselLoopResetHandlers(handleHeroCarouselScrollEnd);
+  }, [heroItems.length, snapInterval]);
+  const heroCarouselLoopResetHandlers = useMemo(
+    () => createHeroCarouselLoopResetHandlers(handleHeroCarouselScrollEnd),
+    [handleHeroCarouselScrollEnd],
+  );
 
   return (
     <View style={[styles.heroCarouselFrame, {height: bannerHeight, width: bannerWidth}]}>
@@ -861,8 +837,6 @@ function HeroBannerCarousel({
         decelerationRate="normal"
         disableIntervalMomentum
         onMomentumScrollEnd={heroCarouselLoopResetHandlers.onMomentumScrollEnd}
-        onScroll={handleHeroCarouselScroll}
-        scrollEventThrottle={16}
         onScrollEndDrag={heroCarouselLoopResetHandlers.onScrollEndDrag}
         snapToAlignment="start"
         snapToInterval={snapInterval}
@@ -871,7 +845,6 @@ function HeroBannerCarousel({
         contentContainerStyle={styles.heroCarousel}>
         {heroRenderItems.map((item, index) => (
           <HeroBannerCard
-            activeIndex={activeHeroIndex}
             bannerHeight={bannerHeight}
             bannerWidth={bannerWidth}
             ctaLabel={item.ctaLabel}
@@ -879,8 +852,6 @@ function HeroBannerCarousel({
             featureId={item.featureId}
             filterId={item.filterId}
             imageSource={item.imageSource}
-            isActive={item.id === heroItems[activeHeroIndex]?.id}
-            itemCount={heroItems.length}
             key={`${item.id}-${index}`}
             onPressFeature={onPressFeature}
             onPressFilter={onPressFilter}
@@ -889,6 +860,10 @@ function HeroBannerCarousel({
           />
         ))}
       </NativeScrollView>
+      <HeroPaginationIndicator
+        activeIndex={activeHeroIndex}
+        count={heroItems.length}
+      />
       <HomeHeroChrome
         headerRightSlot={headerRightSlot}
         onOpenFeatureMenu={onOpenFeatureMenu}
@@ -931,8 +906,7 @@ function HomeHeroChrome({
   );
 }
 
-function HeroBannerCard({
-  activeIndex,
+const HeroBannerCard = memo(function HeroBannerCard({
   bannerHeight,
   bannerWidth,
   ctaLabel,
@@ -940,8 +914,6 @@ function HeroBannerCard({
   featureId,
   filterId,
   imageSource,
-  isActive,
-  itemCount,
   onPressFeature,
   onPressFilter,
   title,
@@ -967,7 +939,6 @@ function HeroBannerCard({
       ]}>
       <CachedImage
         contentFit="cover"
-        priority={isActive ? 'high' : 'low'}
         source={imageSource}
         style={styles.heroBackgroundImage}
       />
@@ -984,11 +955,9 @@ function HeroBannerCard({
         </YStack>
       </YStack>
 
-      <HeroPaginationIndicator activeIndex={activeIndex} count={itemCount} />
-
     </Pressable>
   );
-}
+});
 
 
 function HeroPaginationIndicator({
@@ -1006,6 +975,7 @@ function HeroPaginationIndicator({
     <XStack
       accessibilityLabel={`${activeIndex + 1} / ${count}`}
       accessibilityRole="text"
+      pointerEvents="none"
       style={styles.heroPagination}>
       {Array.from({length: count}).map((_, index) => (
         <View
@@ -1561,7 +1531,7 @@ const styles = StyleSheet.create({
     paddingTop: homeHeroLayoutMetrics.listTopPadding,
   },
   homeListHeader: {
-    gap: spacing.xxl + spacing.sm,
+    gap: spacing.lg,
     paddingBottom: spacing.xxl * 2 + spacing.sm,
   },
   homeModuleSeparator: {

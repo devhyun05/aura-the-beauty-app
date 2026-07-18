@@ -14,11 +14,11 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 }
 
 const content = getFaceAnalysisIntroContent();
-const introTitle: '얼굴 분석으로\n나에게 맞는 룩을 찾아요' = content.title;
-const primaryAction: '시작하기' = content.primaryActionLabel;
+const introTitle: '맞춤 스타일링을 위한\n얼굴 분석' = content.title;
+const primaryAction: '촬영 가이드 보기' = content.primaryActionLabel;
 
-expectEqual(introTitle, '얼굴 분석으로\n나에게 맞는 룩을 찾아요', 'face analysis intro title');
-expectEqual(primaryAction, '시작하기', 'face analysis intro primary action');
+expectEqual(introTitle, '맞춤 스타일링을 위한\n얼굴 분석', 'face analysis intro title');
+expectEqual(primaryAction, '촬영 가이드 보기', 'face analysis intro primary action');
 expectEqual(
   getFaceAnalysisCapturePlanTitles().join(','),
   '통합 얼굴 촬영',
@@ -31,8 +31,7 @@ expectEqual(
 );
 expectEqual(
   getFaceAnalysisIntroStepTitles().join(','),
-  '취향 설문,사진 촬영,맞춤 추천',
+  '자연광 아래에서 찍기,이마 보이기,귀 보이게 하기,액세서리 빼기,무표정으로 찍기,턱선까지 넣기',
   'face analysis intro step titles',
 );
-
 <FaceAnalysisIntroScreen onStartAnalysisGuide={() => undefined} />;

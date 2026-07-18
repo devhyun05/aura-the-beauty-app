@@ -14,6 +14,7 @@ from app.schemas.face_analysis_v2 import (
   ConsultingResult,
   FaceAnalysisPipelineState,
   FaceAnalysisV2,
+  Insight,
   MeasurementStageOutput,
   PerceptionResult,
   StageName,
@@ -94,6 +95,211 @@ class DatabaseStageStore:
 
 PersistCallback = Callable[[UUID, FaceAnalysisV2], Awaitable[None]]
 StageOutput = TypeVar("StageOutput", bound=BaseModel)
+
+
+def _has_hangul_final_consonant(value: str) -> bool:
+  text = value.strip()
+  if not text:
+    return False
+  code = ord(text[-1])
+  if code < 0xAC00 or code > 0xD7A3:
+    return False
+  return (code - 0xAC00) % 28 != 0
+
+
+def _object_particle(value: str) -> str:
+  return "을" if _has_hangul_final_consonant(value) else "를"
+
+
+def _natural_styling_note(category: str) -> str:
+  return {
+    "base": "얇은 베이스로 피부 결만 정돈해요.",
+    "brow": "눈썹 결을 살리고 빈 곳만 가볍게 채워요.",
+    "eyeshadow": "눈두덩 전체에 은은한 음영만 얇게 깔아요.",
+    "eyeliner": "라인은 생략하거나 점막만 아주 얇게 채워요.",
+    "blush": "혈색을 넓고 연하게 번지듯 연결해요.",
+    "lip": "립은 경계를 풀어 자연스럽게 물들여요.",
+  }.get(category, "전체 강도를 낮춰 자연스럽게 정돈해요.")
+
+
+def _glam_styling_note(category: str) -> str:
+  return {
+    "base": "중심부 커버와 윤광을 조금 더 또렷하게 잡아요.",
+    "brow": "눈썹 산과 꼬리를 정리해 인상을 선명하게 세워요.",
+    "eyeshadow": "눈꼬리와 삼각존에 음영을 더해 깊이를 만들어요.",
+    "eyeliner": "점막과 꼬리 라인을 또렷하게 연결해요.",
+    "blush": "볼 중앙 농도를 올려 생기와 입체감을 같이 줘요.",
+    "lip": "립 라인을 정리하고 색 농도를 한 단계 올려요.",
+  }.get(category, "포인트 강도를 올려 또렷하게 정돈해요.")
+
+
+def _compact_join(parts: list[str], separator: str = " · ") -> str:
+  seen: set[str] = set()
+  compacted: list[str] = []
+  for part in parts:
+    normalized = " ".join(str(part).strip().split())
+    if not normalized or normalized in seen:
+      continue
+    seen.add(normalized)
+    compacted.append(normalized)
+  return separator.join(compacted)
+
+
+def _insight_labels(*insights: Insight | None) -> str:
+  return _compact_join([insight.label for insight in insights if insight is not None])
+
+
+def _insight_evidence(*insights: Insight | None) -> str:
+  sentences: list[str] = []
+  for insight in insights:
+    if insight is None:
+      continue
+    label = insight.label.strip()
+    description = insight.description.strip()
+    if not label and not description:
+      continue
+    if label and description:
+      sentences.append(f"{label}: {description}")
+    else:
+      sentences.append(label or description)
+  return _compact_join(sentences, " ")
+
+
+def _feature_ranking_text(gestalt: Any) -> str:
+  labels = [
+    item.label
+    for item in [gestalt.feature_presence_ranking, *gestalt.standout_features[:3]]
+    if item.label
+  ]
+  return _compact_join(labels)
+
+
+def _build_region_notes(
+  feature: Any,
+  planes: Any,
+  gestalt: Any,
+  volume: Any,
+) -> dict[str, dict[str, str]]:
+  upper_insight = _insight_labels(
+    feature.eye_impression,
+    feature.brow_impression,
+    feature.eyelid_weight,
+  )
+  mid_insight = _insight_labels(
+    volume.upper_lower_distribution,
+    planes.nose_cheek_connection,
+    planes.dimensionality,
+  )
+  lower_insight = _insight_labels(
+    feature.lip_impression,
+    volume.mouth_corner_impression,
+    planes.lower_face_impression,
+  )
+  jaw_insight = _insight_labels(
+    planes.lower_face_impression,
+    planes.jawline_definition,
+    planes.contour_definition,
+  )
+
+  return {
+    "upper": {
+      "insight": upper_insight or feature.eye_impression.label,
+      "evidence": _insight_evidence(
+        feature.eye_impression,
+        feature.brow_impression,
+        feature.eyelid_weight,
+        feature.under_eye_zone,
+      ),
+      "recommendation": (
+        "눈매의 선명도와 눈썹 결을 같이 보고, 눈두덩·애교살 음영은 과하게 끊기지 않게 "
+        "얇게 쌓는 방향이 좋아요."
+      ),
+    },
+    "mid": {
+      "insight": mid_insight or planes.nose_cheek_connection.label,
+      "evidence": _insight_evidence(
+        volume.upper_lower_distribution,
+        planes.nose_cheek_connection,
+        planes.nose_shadow_effect,
+        planes.dimensionality,
+      ),
+      "recommendation": (
+        "콧대 그림자와 볼의 연결감을 먼저 맞추고, 블러셔·하이라이트는 중안부가 더 길어 "
+        "보이지 않도록 얇게 이어요."
+      ),
+    },
+    "lower": {
+      "insight": lower_insight or feature.lip_impression.label,
+      "evidence": _insight_evidence(
+        feature.lip_impression,
+        volume.mouth_corner_impression,
+        planes.lower_face_impression,
+      ),
+      "recommendation": (
+        "입술 윤곽, 입꼬리 방향, 하관의 무게감을 같이 맞춰 립 농도와 오버라인 범위를 "
+        "조절해요."
+      ),
+    },
+    "jaw": {
+      "insight": jaw_insight or planes.lower_face_impression.label,
+      "evidence": _insight_evidence(
+        planes.lower_face_impression,
+        planes.jawline_definition,
+        planes.contour_definition,
+        planes.line_shape,
+        planes.line_weight,
+      ),
+      "recommendation": (
+        "턱선은 실제 윤곽 흐름을 따라 필요한 구간만 정리하고, 광대·턱 음영이 한 덩어리로 "
+        "무거워지지 않게 끊어 줘요."
+      ),
+    },
+  }
+
+
+def _build_impression_notes(gestalt: Any, planes: Any, feature: Any, volume: Any) -> dict[str, Any]:
+  keywords = [
+    item.label
+    for item in (
+      gestalt.standout_features[:3]
+      + [
+        gestalt.overall_mood,
+        gestalt.perceptual_center,
+        gestalt.clarity_vs_softness,
+        gestalt.center_vs_outer,
+      ]
+    )
+    if item.label
+  ]
+  paragraph = _compact_join(
+    [
+      f"전체 무드는 {gestalt.overall_mood.label} 쪽으로 읽혀요. {gestalt.overall_mood.description}",
+      f"시선 중심은 {gestalt.perceptual_center.label}에 가까워요. {gestalt.perceptual_center.description}",
+      f"이목구비 존재감은 {_feature_ranking_text(gestalt)} 흐름으로 보이고, {gestalt.detail_density.description}",
+      f"선과 면은 {planes.line_shape.label}, {planes.dimensionality.label} 쪽이라 {planes.line_shape.description}",
+      f"눈·입술 포인트는 {feature.eye_impression.label}, {feature.lip_impression.label}로 읽히고 {volume.upper_lower_distribution.description}",
+    ],
+    " ",
+  )
+  return {
+    "overallMood": gestalt.overall_mood.label,
+    "keywords": keywords[:6] or [gestalt.overall_mood.label],
+    "paragraph": paragraph or gestalt.overall_mood.description,
+    "axes": [
+      {
+        "key": "softness",
+        "leftLabel": "부드러움",
+        "rightLabel": "또렷함",
+        "value": 0.35 if "또렷" in gestalt.clarity_vs_softness.label else -0.2,
+      },
+      {
+        "key": "vividness",
+        "leftLabel": "차분함",
+        "rightLabel": "화사함",
+        "value": 0.25 if "화사" in gestalt.overall_mood.label else -0.2,
+      },
+    ],
+  }
 
 
 def _now() -> str:
@@ -196,6 +402,13 @@ def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
     "recommendedMakeups": [],
     "tags": [],
   }
+  if perception is not None:
+    feature = perception.feature_impression
+    planes = perception.lines_and_planes
+    gestalt = perception.gestalt
+    volume = perception.volume
+    legacy["regionNotes"] = _build_region_notes(feature, planes, gestalt, volume)
+    legacy["impressionNotes"] = _build_impression_notes(gestalt, planes, feature, volume)
   if consulting is None:
     return legacy
 
@@ -228,6 +441,72 @@ def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
       "tags": consulting.tags,
     },
   )
+  legacy["stylingLooks"] = {
+    "natural": {
+      "title": "데일리 정돈",
+      "subtitle": "은은한 데일리 강도",
+      "description": f"{consulting.overall_mood}{_object_particle(consulting.overall_mood)} 가볍게 풀어낸 방향이에요.",
+      "rows": [
+        {
+          "category": "base",
+          "note": _natural_styling_note("base"),
+          "why": "",
+        },
+        {
+          "category": "brow",
+          "note": _natural_styling_note("brow"),
+          "why": "",
+        },
+        {
+          "category": "eyeshadow",
+          "note": _natural_styling_note("eyeshadow"),
+          "why": "",
+        },
+        {
+          "category": "blush",
+          "note": _natural_styling_note("blush"),
+          "why": "",
+        },
+        {
+          "category": "lip",
+          "note": _natural_styling_note("lip"),
+          "why": "",
+        },
+      ],
+    },
+    "glam": {
+      "title": "포인트 정돈",
+      "subtitle": "또렷한 포인트 강도",
+      "description": f"{consulting.overall_mood}{_object_particle(consulting.overall_mood)} 조금 더 선명하게 풀어낸 방향이에요.",
+      "rows": [
+        {
+          "category": "base",
+          "note": _glam_styling_note("base"),
+          "why": "",
+        },
+        {
+          "category": "brow",
+          "note": _glam_styling_note("brow"),
+          "why": "",
+        },
+        {
+          "category": "eyeliner",
+          "note": _glam_styling_note("eyeliner"),
+          "why": "",
+        },
+        {
+          "category": "blush",
+          "note": _glam_styling_note("blush"),
+          "why": "",
+        },
+        {
+          "category": "lip",
+          "note": _glam_styling_note("lip"),
+          "why": "",
+        },
+      ],
+    },
+  }
   return legacy
 
 
