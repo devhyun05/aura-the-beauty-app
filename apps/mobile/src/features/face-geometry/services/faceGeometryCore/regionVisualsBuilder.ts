@@ -6,6 +6,7 @@ import {
   BROW_CORE_LEFT_INDICES,
   BROW_CORE_RIGHT_INDICES,
   FACE_GEOMETRY_LANDMARK_INDICES as IDX,
+  FOREHEAD_INDICES,
   JAW_SILHOUETTE_INDICES,
   NOSE_ALAE_INDICES,
   NOSE_BRIDGE_MIDLINE_INDICES,
@@ -98,9 +99,12 @@ export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number)
   // 상안부: 눈 외/내안각 + 눈꺼풀(필수) + 눈썹 코어(가용한 만큼, 크롭 상단 확장용) → 크롭.
   // 가이드 = 눈 라인(외안각 연결).
   const brow = availablePts(map, [...BROW_CORE_RIGHT_INDICES, ...BROW_CORE_LEFT_INDICES]);
+  const forehead = availablePts(map, FOREHEAD_INDICES);
   const eyes = pts(map, [IDX.eyeOuterRight, IDX.eyeInnerRight, IDX.eyeInnerLeft, IDX.eyeOuterLeft, IDX.eyeUpperLidRight, IDX.eyeLowerLidRight, IDX.eyeUpperLidLeft, IDX.eyeLowerLidLeft]);
   if (eyes) {
-    const cropRect = bbox([...brow, ...eyes], imageW, imageH, 0.25, 0.45);
+    // 이마+눈썹+눈을 다 담아 "이마·눈썹·눈" 제목과 크롭을 일치시킨다(B4). 이마 점이
+    // 없으면(앞머리 가림) forehead가 비어 눈썹까지만 — 기존 동작으로 자연 폴백.
+    const cropRect = bbox([...forehead, ...brow, ...eyes], imageW, imageH, 0.2, 0.12);
     if (nonDegenerate(cropRect)) {
       out.upper = {
         cropRect,
@@ -138,10 +142,12 @@ export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number)
     }
   }
 
-  // 외곽: 하악 실루엣(가용한 점만, 최소 2점) → 크롭 + 가이드(턱 곡선).
+  // 외곽: 하악 실루엣 + 광대(faceWidth) → 크롭(가이드는 턱 곡선 그대로). 광대까지
+  // 담아 "광대·턱" 제목과 크롭을 일치시킨다(B4) — 기존엔 하악만이라 입·턱만 보였다.
   const jaw = availablePts(map, JAW_SILHOUETTE_INDICES);
+  const jawCheeks = availablePts(map, [IDX.faceWidthRight, IDX.faceWidthLeft]);
   if (jaw.length >= MIN_GUIDE_POINTS) {
-    const cropRect = bbox(jaw, imageW, imageH, 0.15, 0.15);
+    const cropRect = bbox([...jaw, ...jawCheeks], imageW, imageH, 0.1, 0.12);
     if (nonDegenerate(cropRect)) {
       out.jaw = {
         cropRect,

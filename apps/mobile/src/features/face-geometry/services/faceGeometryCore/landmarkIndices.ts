@@ -56,6 +56,9 @@ export const NOSE_ALAE_INDICES = [98, 327] as const;
 export const OUTER_LIP_RING_INDICES = [61, 40, 39, 37, 0, 267, 269, 270, 291, 375, 321, 405, 314, 17, 84, 181, 91, 146] as const;
 // 하악 실루엣(피사체 오른턱→턱끝152→왼턱) — 턱 곡선 가이드 + 외곽 크롭.
 export const JAW_SILHOUETTE_INDICES = [172, 136, 150, 149, 176, 148, 152, 377, 400, 378, 379, 365, 397] as const;
+// 이마(상안부 크롭 상단 확장, B4) — 헤어라인중앙10·상부151·글라벨라상9·이마측면67/297.
+// 필수 아님(availablePts로 있는 것만 사용) — 앞머리에 가려 없으면 눈썹까지만 확장.
+export const FOREHEAD_INDICES = [10, 151, 9, 67, 297] as const;
 
 // 서비스 입구 가드: 아래 인덱스가 전부 존재+finite 가 아니면 결과 전체를
 // blocked(required_landmarks_missing) 처리한다 (478 전수 검사가 아님).

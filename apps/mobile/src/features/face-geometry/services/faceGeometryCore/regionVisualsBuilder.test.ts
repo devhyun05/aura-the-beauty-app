@@ -13,6 +13,8 @@ function synthMap(): Map<number, {x: number; y: number}> {
    [159, 440, 380], [145, 440, 420], [386, 560, 380], [374, 560, 420]].forEach(([i,x,y]) => put(i,x,y));
   // 눈썹 코어(상) 최저 y 근사 — 몇 점만
   [[46,380,340],[300,620,340]].forEach(([i,x,y]) => put(i,x,y));
+  // 이마(상안부 상단 확장, B4) 10/151/9/67/297 — 눈썹(y340) 위
+  [[10,500,250],[151,500,290],[9,500,330],[67,400,280],[297,600,280]].forEach(([i,x,y]) => put(i,x,y));
   // 코 능선(중) 168..1
   [[168,500,410],[6,500,440],[197,500,470],[195,500,500],[5,500,530],[4,500,560],[1,500,590]].forEach(([i,x,y]) => put(i,x,y));
   [[98,470,600],[327,530,600]].forEach(([i,x,y]) => put(i,x,y)); // alae
@@ -40,6 +42,21 @@ function synthMap(): Map<number, {x: number; y: number}> {
       r.guide.points.forEach(p => assert(p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1, `${k} guide pt normalized`));
     }
   });
+}
+// B4: 상안부 크롭은 이마까지(눈썹 위로), 외곽 크롭은 광대(faceWidth)까지 포함
+{
+  const rv = regionVisualsBuilder(synthMap(), 1000, 1000);
+  // 이마 점(10=y250)이 있으니 상안부 크롭 상단이 눈썹(y340=0.34) 위로 올라간다
+  assert(rv.upper!.cropRect.y < 0.3, 'upper crop extends up to forehead');
+  // 광대 점(234/454=y500)이 있으니 외곽 크롭 상단이 하악(y650=0.65) 위 광대 레벨까지
+  assert(rv.jaw!.cropRect.y < 0.55, 'jaw crop extends up to cheekbones');
+}
+// 이마 점이 전혀 없어도(앞머리 가림) 상안부는 눈썹까지로 폴백 — 여전히 산출
+{
+  const m = synthMap();
+  [10, 151, 9, 67, 297].forEach(i => m.delete(i));
+  const rv = regionVisualsBuilder(m, 1000, 1000);
+  assert(!!rv.upper, 'upper still present without forehead points');
 }
 // mid 가이드는 콧대 중심선(세로) — 첫/끝 점의 x가 거의 같음
 {
