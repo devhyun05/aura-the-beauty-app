@@ -1,11 +1,13 @@
-import {useMemo, useState} from 'react';
-import {Image, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useCallback, useMemo, useRef, useState} from 'react';
+import {Pressable, Share, StyleSheet, Text, View} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
-import {RecommendationContextSummary} from '../components/RecommendationContextSummary';
-import {RecommendedAreaGuideSection} from '../components/RecommendedAreaGuideSection';
-import {adaptLegacyLookToV2} from '../services/makeupRecommendationMappers';
+import {APP_HEADER_BASE_HEIGHT} from '../../../shared/ui/AppHeader';
+import type {OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
+import {MAKEUP_RESULT_REDESIGN_ENABLED} from '../config/makeupResultRedesignFlag';
+import {toRecommendationResultLooks} from '../services/toRecommendationResultLooks';
 import type {
   MakeupLookRecommendation,
   MakeupRecommendationImageStatus,
@@ -13,14 +15,16 @@ import type {
   MakeupRecommendationRefinement,
   RecommendedMakeupAreaGuide,
 } from '../types';
-import {makeupRecommendationImageStatusCopy} from './makeupRecommendationViewContracts';
+import {RecommendationResultsScreen, type ImageStatus} from './RecommendationResultsScreen';
+import {RecommendationResultsViewLegacy} from './RecommendationResultsViewLegacy';
 export {makeupRecommendationResultRoleLabels, toggleExpandedLookId} from './makeupRecommendationViewContracts';
 
-type RecommendationResultsViewProps = {
+export type RecommendationResultsViewProps = {
   context?: {
     reportLabel?: string;
     situationLabel?: string;
     keywordLabel?: string;
+    personalColor?: string;
     profileGender?: MakeupRecommendationProfileGender;
   };
   onApplyAR: (look: MakeupLookRecommendation) => void;
@@ -38,23 +42,77 @@ type RecommendationResultsViewProps = {
   onRetryImages: (lookId?: string) => void;
 };
 
-export function RecommendationResultsView({
+/**
+ * Result screen entry point. Switches between the "Makeup Result v3" redesign and the
+ * previous layout via MAKEUP_RESULT_REDESIGN_ENABLED — both honor the same props contract.
+ */
+export function RecommendationResultsView(props: RecommendationResultsViewProps) {
+  return MAKEUP_RESULT_REDESIGN_ENABLED
+    ? <RecommendationResultsViewRedesign {...props} />
+    : <RecommendationResultsViewLegacy {...props} />;
+}
+
+/**
+ * Thin adapter around the redesigned RecommendationResultsScreen: maps real
+ * MakeupLookRecommendation data into the screen's Look[] view-model. Rendered under the
+ * app shell header (DetailRouteChrome overlay), so the screen's own top bar is disabled
+ * and content is inset below the shell header.
+ */
+function RecommendationResultsViewRedesign({
   context,
   onApplyAR,
   onAreaOpened,
   onRetry,
   results,
   imageStatus,
-  imageRetryError,
   onRetryImages,
 }: RecommendationResultsViewProps) {
-  const normalizedResults = useMemo(() => results.map(adaptLegacyLookToV2), [results]);
-  const [selectedArea, setSelectedArea] = useState<RecommendedMakeupAreaGuide['area']>('base');
-  const selectedLook = normalizedResults.find(look => look.role === 'anchor') ?? normalizedResults[0];
-  const guides = selectedLook?.areaGuides ?? [];
-  const selectedGuide = guides.find(guide => guide.area === selectedArea) ?? guides[0];
+  const insets = useSafeAreaInsets();
+  const shareRef = useRef<OptionalViewShotRef>(null);
 
-  if (!selectedLook) {
+  const looks = useMemo(
+    () => toRecommendationResultLooks(results, {personalColor: context?.personalColor}),
+    [results, context?.personalColor],
+  );
+  const anchorLook = useMemo(
+    () => results.find(look => look.role === 'anchor') ?? results[0],
+    [results],
+  );
+  const [activeRole, setActiveRole] = useState<string | undefined>(anchorLook?.role);
+  const selectedLook = results.find(look => look.role === activeRole) ?? anchorLook;
+
+  // Only failed looks are forced to an error state; everything else lets the
+  // <Image> onLoad/onError drive the skeleton→ok transition.
+  const screenImageStatus = useMemo(() => {
+    const map: Partial<Record<string, ImageStatus>> = {};
+    results.forEach(look => {
+      if ((look.imageStatus ?? imageStatus) === 'failed') map[look.role] = 'error';
+    });
+    return map;
+  }, [results, imageStatus]);
+
+  const traitChips = context?.personalColor ? [context.personalColor] : [];
+
+  const handleRetryImages = useCallback(
+    (roleId: string) => {
+      const realId = results.find(look => look.role === roleId)?.id;
+      onRetryImages(realId);
+    },
+    [results, onRetryImages],
+  );
+
+  const handleSaveShareCard = useCallback(async () => {
+    const uri = await shareRef.current?.capture?.();
+    if (uri) {
+      try {
+        await Share.share({url: uri});
+      } catch {
+        /* user dismissed the share sheet */
+      }
+    }
+  }, []);
+
+  if (!selectedLook || looks.length === 0) {
     return (
       <AppScreen contentGap={spacing.lg} topPadding="belowShellHeader">
         <Text style={styles.emptyTitle}>추천 결과를 준비하지 못했어요</Text>
@@ -65,87 +123,31 @@ export function RecommendationResultsView({
     );
   }
 
-  const selectedImageStatus = selectedLook.imageStatus ?? imageStatus;
   return (
-    <AppScreen contentGap={spacing.xl} topPadding="belowShellHeader">
-      <View style={styles.heroCard}>
-        <Image
-          accessibilityLabel={`${selectedLook.title} AI 생성 메이크업 이미지`}
-          resizeMode="cover"
-          source={selectedLook.imageSource}
-          style={styles.heroImage}
-        />
-        {selectedImageStatus === 'pending' || selectedImageStatus === 'processing' ? (
-          <Text accessibilityRole="alert" style={styles.imageStatus}>추천 메이크업 이미지를 만들고 있어요.</Text>
-        ) : selectedImageStatus === 'failed' || selectedImageStatus === 'partial' ? (
-          <View style={styles.imageFailure}>
-            <Text accessibilityRole="alert" style={styles.imageStatus}>
-              {selectedImageStatus === 'partial'
-                ? makeupRecommendationImageStatusCopy.partial
-                : '추천 메이크업 이미지를 준비하지 못했어요.'}
-            </Text>
-            <Pressable accessibilityRole="button" onPress={() => onRetryImages(selectedLook.id)} style={styles.inlineButton}>
-              <Text style={styles.inlineButtonLabel}>{makeupRecommendationImageStatusCopy.failedAction}</Text>
-            </Pressable>
-            {imageRetryError ? <Text accessibilityRole="alert" style={styles.imageStatus}>{imageRetryError}</Text> : null}
-          </View>
-        ) : null}
-      </View>
-
-      <RecommendationContextSummary
-        keywordLabel={context?.keywordLabel}
-        profileGender={context?.profileGender}
-        reportLabel={context?.reportLabel}
+    <View style={styles.host}>
+      <RecommendationResultsScreen
+        bottomInset={insets.bottom}
+        imageStatus={screenImageStatus}
+        looks={looks}
+        onApplyAR={() => onApplyAR(selectedLook)}
+        onLookChange={setActiveRole}
+        onPartChange={area => onAreaOpened(area, selectedLook)}
+        onRetryImages={handleRetryImages}
+        onSaveShareCard={handleSaveShareCard}
+        onShare={handleSaveShareCard}
+        shareCaptureRef={shareRef}
+        showTopBar={false}
         situationLabel={context?.situationLabel}
+        topInset={insets.top + APP_HEADER_BASE_HEIGHT}
+        traitChips={traitChips}
       />
-
-      {selectedGuide ? (
-        <View style={styles.areaSection}>
-          <Text style={styles.sectionTitle}>부위별 메이크업</Text>
-          <RecommendedAreaGuideSection
-            guide={selectedGuide}
-            guides={guides}
-            onSelectArea={area => {
-              setSelectedArea(area);
-              onAreaOpened(area, selectedLook);
-            }}
-          />
-        </View>
-      ) : null}
-
-      <Pressable accessibilityRole="button" onPress={() => onApplyAR(selectedLook)} style={styles.primaryButton}>
-        <Text style={styles.primaryLabel}>AR 적용하기</Text>
-      </Pressable>
-    </AppScreen>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  heroCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.sm,
-    overflow: 'hidden',
-  },
-  heroImage: {backgroundColor: colors.surfaceMuted, height: 420, width: '100%'},
-  imageStatus: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  imageFailure: {alignItems: 'flex-start', gap: spacing.xs, padding: spacing.md},
-  inlineButton: {alignSelf: 'flex-start', justifyContent: 'center', minHeight: 40},
-  inlineButtonLabel: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm},
-  areaSection: {gap: spacing.md},
-  sectionTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
-  },
+  host: {flex: 1},
+  emptyTitle: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xl},
   primaryButton: {
     alignItems: 'center',
     backgroundColor: colors.textPrimary,
@@ -155,5 +157,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   primaryLabel: {color: colors.white, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm},
-  emptyTitle: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xl},
 });

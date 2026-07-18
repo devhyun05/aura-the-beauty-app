@@ -1016,6 +1016,7 @@ export const MakeupRecommendationScreen = forwardRef<
     return (
       <RecommendationResultsView
         context={{
+          personalColor: session.personalColor,
           profileGender: session.profileGender,
           keywordLabel: session.keyword?.label
             ?? (session.editorialPresetId ? session.scenarioLabel : undefined),
