@@ -410,6 +410,16 @@ jobs:
                 "COHORT_RECOMMENDATIONS_V1",
                 "PRODUCT_PERSONALIZATION_EXPERIMENT_PERCENT",
                 "PRODUCT_COHORT_EXPERIMENT_PERCENT",
+                "AI_PROVIDER",
+                "IMAGE_GENERATION_PROVIDER",
+                "BEDROCK_SCENARIO_MODEL_ID",
+                "BEDROCK_QUESTION_MODEL_ID",
+                "BEDROCK_RECOMMENDATION_MODEL_ID",
+                "OPENAI_IMAGE_MODEL_ID",
+                "MAKEUP_RECOMMENDATION_V2_ENABLED",
+                "MAKEUP_TREND_KEYWORDS_ENABLED",
+                "MAKEUP_PERSONALIZED_IMAGE_ENABLED",
+                "MAKEUP_RECOMMENDATION_V1_COMPAT_ENABLED",
                 "FACE_ANALYSIS_V2_ENABLED",
                 "PRODUCT_EVENT_SIGNING_SECRET"
               ] | index($name) | not))
