@@ -199,7 +199,7 @@ export interface S5Data {
 export interface ImpressionAxis { key: string; leftLabel: string; rightLabel: string; value: number }
 export interface S6Data {
   eyebrow: string; title: string; sub: string;
-  axes: ImpressionAxis[];   // 2개 (없으면 어댑터가 중립 기본축)
+  axes: ImpressionAxis[];   // AI가 반환한 축만 사용. 없으면 빈 배열.
   keywords: string[];
   paragraph: string;
 }

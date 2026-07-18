@@ -28,18 +28,18 @@ export const faceAnalysisLoadingSteps: readonly FaceAnalysisLoadingStep[] = [
   },
   {
     id: 'tone',
-    title: '1차 보고서를 만들고 있어요',
-    description: '측정값만으로 바로 확인할 수 있는 균형 결과를 준비합니다.',
+    title: '사진에서 이목구비를 분석하고 있어요',
+    description: 'AI가 얼굴형과 부위별 특징을 확인합니다.',
   },
   {
     id: 'mood',
-    title: 'AI 분석을 연결하고 있어요',
-    description: '1차 보고서를 먼저 열고 상세 분석은 보고서에 이어서 추가합니다.',
+    title: '맞춤 제안을 정리하고 있어요',
+    description: 'AI 분석 결과를 바탕으로 메이크업 가이드를 만듭니다.',
   },
 ];
 
 export const faceAnalysisLoadingTip =
-  '카메라 측정 보고서는 먼저 볼 수 있고, AI 분석 결과는 보고서에 자동으로 추가돼요.';
+  'AI 분석이 완료된 경우에만 보고서를 보여드려요.';
 
 function clampProgress(elapsedMs: number) {
   return Math.min(Math.max(elapsedMs / FACE_ANALYSIS_LOADING_TOTAL_MS, 0), 1);

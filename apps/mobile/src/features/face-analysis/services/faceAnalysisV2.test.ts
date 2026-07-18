@@ -1,4 +1,4 @@
-import {hasRenderableCameraReport, parseFaceAnalysisV2} from './faceAnalysisV2';
+import {parseFaceAnalysisV2} from './faceAnalysisV2';
 
 function insight(label: string) {
   return {label, description: '설명', confidence: 0.8, rationaleMetricKeys: [], sensitivity: 1};
@@ -24,6 +24,4 @@ const fixture = {
 };
 
 if (!parseFaceAnalysisV2(fixture)) throw new Error('valid V2 fixture must parse');
-if (!hasRenderableCameraReport(fixture)) throw new Error('camera metric must render early report');
 if (parseFaceAnalysisV2({...fixture, schemaVersion: 'old'})) throw new Error('old schema must fail');
-if (hasRenderableCameraReport({...fixture, faceProfile: {}})) throw new Error('empty profile must not render');

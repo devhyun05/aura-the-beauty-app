@@ -32,4 +32,6 @@ async def test_list_analysis_reports_only_exposes_completed_reports(monkeypatch)
 
   normalized_query = " ".join(db.query.split()).lower()
   assert "r.status = 'completed'" in normalized_query
+  assert "'faceanalysisv2'->'perception'" in normalized_query
+  assert "'faceanalysisv2'->'consulting'" in normalized_query
   assert db.args == ("user-1", 3)

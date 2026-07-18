@@ -212,14 +212,17 @@ async def test_pipeline_persists_after_every_stage_and_projects_legacy() -> None
     == result.perception.gestalt.overall_mood.label
   )
   assert result.perception.gestalt.perceptual_center.label in legacy["impressionNotes"]["paragraph"]
-  assert legacy["stylingLooks"]["natural"]["description"].startswith("차분한 균형을 ")
-  assert legacy["stylingLooks"]["natural"]["rows"][0]["category"] == "base"
-  assert legacy["stylingLooks"]["glam"]["rows"][2]["category"] == "eyeliner"
-  assert (
-    legacy["stylingLooks"]["natural"]["rows"][0]["note"]
-    != legacy["stylingLooks"]["glam"]["rows"][0]["note"]
-  )
-  assert legacy["stylingLooks"]["natural"]["rows"][0]["why"] == ""
+  assert "axes" not in legacy["impressionNotes"]
+  assert legacy["regionNotes"]["upper"]["recommendation"] == "결 눈썹 음영 얇은 라인"
+  assert legacy["regionNotes"]["lower"]["recommendation"] == "뮤트 립"
+  assert "stylingLooks" not in legacy
+
+
+def test_legacy_projection_rejects_incomplete_ai_analysis() -> None:
+  result = initialize_face_analysis_v2(REQUEST)
+
+  with pytest.raises(ValueError, match="AI perception and consulting are required"):
+    project_legacy_analysis_result(result)
 
 
 @pytest.mark.asyncio

@@ -1840,7 +1840,113 @@ class OpenAIAnalysisService:
       "glam": self._ensure_styling_look(result, normalized_looks, "glam"),
     }
 
+  def _validate_analysis_result_before_normalization(
+    self,
+    result: dict[str, Any],
+  ) -> None:
+    missing: list[str] = []
+
+    def require_text(value: Any, path: str) -> None:
+      if not isinstance(value, str) or not value.strip():
+        missing.append(path)
+
+    for key in (
+      "faceShape",
+      "skinType",
+      "recommendedMood",
+      "summary",
+      "shortSummary",
+      "skinAnalysisSummary",
+      "baseMakeupGuide",
+    ):
+      require_text(result.get(key), key)
+
+    guideline = result.get("makeupGuideline")
+    if not isinstance(guideline, dict):
+      missing.append("makeupGuideline")
+    else:
+      for key in ("brow", "blush", "highlight", "eyeshadow", "eyeliner", "lip"):
+        require_text(guideline.get(key), f"makeupGuideline.{key}")
+
+    cards = result.get("recommendedMakeups")
+    if not isinstance(cards, list) or len(cards) != RECOMMENDED_MAKEUP_COUNT:
+      missing.append("recommendedMakeups")
+    else:
+      card = cards[0] if isinstance(cards[0], dict) else {}
+      for key in ("title", "subtitle", "description"):
+        require_text(card.get(key), f"recommendedMakeups[0].{key}")
+      tags = card.get("tags")
+      if not isinstance(tags, list) or len([tag for tag in tags if str(tag).strip()]) < 2:
+        missing.append("recommendedMakeups[0].tags")
+
+    region_notes = result.get("regionNotes")
+    if not isinstance(region_notes, dict):
+      missing.append("regionNotes")
+    else:
+      for region in ("upper", "mid", "lower", "jaw"):
+        note = region_notes.get(region)
+        if not isinstance(note, dict):
+          missing.append(f"regionNotes.{region}")
+          continue
+        for key in ("insight", "evidence", "recommendation"):
+          require_text(note.get(key), f"regionNotes.{region}.{key}")
+
+    impression = result.get("impressionNotes")
+    if not isinstance(impression, dict):
+      missing.append("impressionNotes")
+    else:
+      require_text(impression.get("overallMood"), "impressionNotes.overallMood")
+      require_text(impression.get("paragraph"), "impressionNotes.paragraph")
+      keywords = impression.get("keywords")
+      if not isinstance(keywords, list) or len([item for item in keywords if str(item).strip()]) < 3:
+        missing.append("impressionNotes.keywords")
+      axes = impression.get("axes")
+      if not isinstance(axes, list) or len(axes) != 2:
+        missing.append("impressionNotes.axes")
+      else:
+        for index, axis in enumerate(axes):
+          if not isinstance(axis, dict):
+            missing.append(f"impressionNotes.axes[{index}]")
+            continue
+          for key in ("key", "leftLabel", "rightLabel"):
+            require_text(axis.get(key), f"impressionNotes.axes[{index}].{key}")
+          if not isinstance(axis.get("value"), (int, float)):
+            missing.append(f"impressionNotes.axes[{index}].value")
+
+    styling = result.get("stylingLooks")
+    if not isinstance(styling, dict):
+      missing.append("stylingLooks")
+    else:
+      for variant in ("natural", "glam"):
+        look = styling.get(variant)
+        if not isinstance(look, dict):
+          missing.append(f"stylingLooks.{variant}")
+          continue
+        for key in ("title", "subtitle", "description"):
+          require_text(look.get(key), f"stylingLooks.{variant}.{key}")
+        rows = look.get("rows")
+        if not isinstance(rows, list) or len(rows) < 4:
+          missing.append(f"stylingLooks.{variant}.rows")
+          continue
+        for index, row in enumerate(rows):
+          if not isinstance(row, dict):
+            missing.append(f"stylingLooks.{variant}.rows[{index}]")
+            continue
+          for key in ("category", "note", "why"):
+            require_text(row.get(key), f"stylingLooks.{variant}.rows[{index}].{key}")
+
+    if missing:
+      raise AppError(
+        502,
+        "FACE_ANALYSIS_AI_INCOMPLETE",
+        "얼굴 분석을 완료하지 못했어요. 다시 촬영해 주세요.",
+        {"missingFields": sorted(set(missing))},
+      )
+
   def _normalize_analysis_result(self, result: dict[str, Any]) -> dict[str, Any]:
+    # AI가 누락한 분석을 고정 문구로 채우지 않는다. 불완전한 응답은
+    # 보고서 생성 실패로 돌려 사용자가 재촬영할 수 있게 한다.
+    self._validate_analysis_result_before_normalization(result)
     result["toneSummary"] = self._trim_text_field(result.get("toneSummary"), 18)
     result["recommendedMood"] = self._trim_text_field(result.get("recommendedMood"), 18)
     result["baseMakeupGuide"] = self._ensure_base_makeup_guide(result)
