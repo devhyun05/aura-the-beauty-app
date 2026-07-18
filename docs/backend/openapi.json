@@ -5717,6 +5717,63 @@
         }
       }
     },
+    "/api/makeup-journey/days/{entry_date}/score-selection": {
+      "put": {
+        "tags": [
+          "makeup-journey"
+        ],
+        "summary": "Update Makeup Journey Score Selection",
+        "operationId": "update_makeup_journey_score_selection_api_makeup_journey_days__entry_date__score_selection_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "entry_date",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Entry Date"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MakeupJourneyScoreSelectionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MakeupJourneyScoreSelectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/makeup-journey/days/{entry_date}/note": {
       "put": {
         "tags": [
@@ -12462,6 +12519,19 @@
             ],
             "title": "Latestscore"
           },
+          "representativeScore": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Representativescore"
+          },
           "scoreDelta": {
             "anyOf": [
               {
@@ -12495,6 +12565,7 @@
           "status",
           "firstScore",
           "latestScore",
+          "representativeScore",
           "scoreDelta",
           "reportCount",
           "hasNote",
@@ -12754,6 +12825,31 @@
             ],
             "title": "Latestscore"
           },
+          "representativeReportId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Representativereportid"
+          },
+          "representativeScore": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Representativescore"
+          },
           "scoreDelta": {
             "anyOf": [
               {
@@ -12815,6 +12911,8 @@
           "status",
           "firstScore",
           "latestScore",
+          "representativeReportId",
+          "representativeScore",
           "scoreDelta",
           "reportCount",
           "feedbackDigest",
@@ -13327,6 +13425,18 @@
             "type": "string",
             "maxLength": 2000,
             "title": "Content"
+          },
+          "reportId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reportid"
           }
         },
         "type": "object",
@@ -13426,6 +13536,26 @@
           "goalContext": {
             "type": "object",
             "title": "Goalcontext"
+          },
+          "feedbackDigest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MakeupJourneyFeedbackDigest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MakeupJourneyNote"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -13437,9 +13567,82 @@
           "parentFeedbackReportId",
           "completedAt",
           "imageUrl",
-          "goalContext"
+          "goalContext",
+          "feedbackDigest",
+          "note"
         ],
         "title": "MakeupJourneyReport"
+      },
+      "MakeupJourneyScoreSelectionResponse": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MakeupJourneyScoreSelectionResponseData"
+          },
+          "meta": {
+            "type": "object",
+            "title": "Meta"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "data",
+          "meta",
+          "error"
+        ],
+        "title": "MakeupJourneyScoreSelectionResponse"
+      },
+      "MakeupJourneyScoreSelectionResponseData": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "reportId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Reportid"
+          },
+          "score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Score"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "date",
+          "reportId",
+          "score",
+          "updatedAt"
+        ],
+        "title": "MakeupJourneyScoreSelectionResponseData"
+      },
+      "MakeupJourneyScoreSelectionUpdate": {
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Reportid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reportId"
+        ],
+        "title": "MakeupJourneyScoreSelectionUpdate"
       },
       "MakeupJourneySettings": {
         "properties": {
