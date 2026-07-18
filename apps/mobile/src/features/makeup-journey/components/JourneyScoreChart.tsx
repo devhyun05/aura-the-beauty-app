@@ -99,7 +99,7 @@ export function JourneyScoreChart({endDate, goalScore, points, startDate}: Journ
           />
         ) : null}
         {geometry.points.map(point => {
-          const pointColor = point.status === 'success' ? colors.successMuted : colors.danger;
+          const pointColor = point.status === 'success' ? colors.heart : '#5B78A6';
           return (
             <G
               accessible

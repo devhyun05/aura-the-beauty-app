@@ -307,6 +307,7 @@ export function RootNavigator() {
       <Stack.Screen
         name="MakeupJourneyDayDetail"
         getComponent={() => loadMakeupJourneyRoutes().MakeupJourneyDayDetailRouteScreen}
+        options={{gestureEnabled: false}}
       />
       <Stack.Screen
         name="MakeupJourneyTrend"

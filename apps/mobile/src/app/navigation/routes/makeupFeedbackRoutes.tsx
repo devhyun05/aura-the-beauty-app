@@ -27,6 +27,7 @@ import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAna
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {
+  goBackToPreviousOrMainTab,
   getMakeupJourneyDayResetState,
   getMakeupJourneySafeReturnResetState,
   getMakeupJourneyTabResetState,
@@ -401,7 +402,7 @@ export function MakeupFeedbackResultsListRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackResultsList"
-      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'ProfileTab')}>
       <MakeupFeedbackResultsListScreen
         error={loadError}
         isLoading={isLoading}
@@ -432,7 +433,7 @@ export function MakeupFeedbackResultRouteScreen({
     [],
   );
   const handleBackToProfile = React.useCallback(() => {
-    navigateMainTab(navigation, 'ProfileTab');
+    goBackToPreviousOrMainTab(navigation, 'ProfileTab');
   }, [navigation]);
   const handleBackToJourney = React.useCallback(() => {
     navigation.reset(

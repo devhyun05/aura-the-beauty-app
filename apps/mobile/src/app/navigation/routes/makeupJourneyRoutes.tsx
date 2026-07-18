@@ -128,9 +128,19 @@ export function MakeupJourneyDayDetailRouteScreen({
   const [pendingFeedbackContext, setPendingFeedbackContext] =
     React.useState<MakeupFeedbackJourneyFlowContext | null>(null);
   const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = React.useState(false);
+  const [isFirstReportActive, setIsFirstReportActive] = React.useState(true);
   const entryDate = route.params?.entryDate;
   const feedbackFlowOriginRef = React.useRef(makeupFeedbackFlowOrigin);
   feedbackFlowOriginRef.current = makeupFeedbackFlowOrigin;
+
+  React.useLayoutEffect(() => {
+    const swipeBackEnabled = isFirstReportActive && navigation.canGoBack();
+    navigation.setOptions({
+      animationMatchesGesture: swipeBackEnabled,
+      fullScreenGestureEnabled: swipeBackEnabled,
+      gestureEnabled: swipeBackEnabled,
+    });
+  }, [isFirstReportActive, navigation]);
 
   React.useEffect(
     () => navigation.addListener('focus', () => {
@@ -244,6 +254,7 @@ export function MakeupJourneyDayDetailRouteScreen({
         onChangeDate={nextEntryDate => {
           navigation.setParams({entryDate: nextEntryDate});
         }}
+        onFirstReportActiveChange={setIsFirstReportActive}
         onOpenReport={reportId => {
           navigation.navigate('MakeupFeedbackResult', {
             entryDate,

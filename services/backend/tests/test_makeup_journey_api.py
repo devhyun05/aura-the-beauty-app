@@ -19,6 +19,7 @@ from app.schemas.makeup_journey import (
   MakeupJourneyMissionGenerate,
   MakeupJourneyMissionUpdate,
   MakeupJourneyNoteUpdate,
+  MakeupJourneyScoreSelectionUpdate,
   MakeupJourneySettingsUpdate,
 )
 
@@ -256,6 +257,9 @@ def test_digest_uses_only_stored_allow_list_and_handles_missing_fields() -> None
             "actionSteps": ["깨끗한 브러시로 경계를 한 번 풀어보세요."],
           },
           {"title": "아이섀도"},
+          {"title": "아이라인"},
+          {"title": "립"},
+          {"title": "하이라이터"},
         ],
         "imageUrl": "https://secret.example/photo.jpg",
       },
@@ -268,9 +272,9 @@ def test_digest_uses_only_stored_allow_list_and_handles_missing_fields() -> None
     "report_id": PARENT_ID,
     "headline": "피부 표현이 자연스러워요.",
     "strength_count": 3,
-    "strengths": ["자연스러운 눈썹", "깔끔한 피부"],
-    "improvement_count": 2,
-    "improvements": ["블러셔", "아이섀도"],
+    "strengths": ["자연스러운 눈썹", "깔끔한 피부", "립 경계"],
+    "improvement_count": 5,
+    "improvements": ["블러셔", "아이섀도", "아이라인", "립", "하이라이터"],
     "next_action": "깨끗한 브러시로 경계를 한 번 풀어보세요.",
   }
   assert "image" not in json.dumps(digest, ensure_ascii=False, default=str).lower()
@@ -318,6 +322,7 @@ class CalendarDatabase:
         "entry_date": date(2026, 7, 16),
         "first_score": 76,
         "latest_score": 84,
+        "selected_score": 76,
         "report_count": 2,
         "has_note": True,
         "completed_missions": 1,
@@ -327,6 +332,7 @@ class CalendarDatabase:
         "entry_date": date(2026, 7, 17),
         "first_score": 81,
         "latest_score": 81,
+        "selected_score": None,
         "report_count": 1,
         "has_note": False,
         "completed_missions": 0,
@@ -336,19 +342,20 @@ class CalendarDatabase:
 
 
 @pytest.mark.asyncio
-async def test_calendar_uses_ranked_scored_reports_and_re_evaluates_current_goal(monkeypatch) -> None:
+async def test_calendar_uses_selected_daily_score_and_re_evaluates_current_goal(monkeypatch) -> None:
   monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
   db = CalendarDatabase(goal_score=82)
   response = await journey_api.get_makeup_journey_calendar("2026-07", auth=object(), db=db)
   data = response["data"]
 
-  assert data["summary"] == {"averageScore": 83, "recordedDays": 2, "currentStreak": 2}
+  assert data["summary"] == {"averageScore": 79, "recordedDays": 2, "currentStreak": 2}
   assert data["days"][0] == {
     "date": "2026-07-16",
-    "status": "success",
+    "status": "failure",
     "firstScore": 76,
     "latestScore": 84,
-    "scoreDelta": 8,
+    "representativeScore": 76,
+    "scoreDelta": 0,
     "reportCount": 2,
     "hasNote": True,
     "missionSummary": {"completed": 1, "total": 2},
@@ -359,12 +366,15 @@ async def test_calendar_uses_ranked_scored_reports_and_re_evaluates_current_goal
   assert "status = 'completed'" in normalized_query
   assert "score is not null" in normalized_query
   assert "user_id = $1" in normalized_query
+  assert "left join makeup_journey_day_score_selections" in normalized_query
+  assert "where id = selected_report_id" in normalized_query
 
   # Same stored scores are immediately reclassified by the current setting.
   db.goal_score = 80
   changed = await journey_api.get_makeup_journey_calendar("2026-07", auth=object(), db=db)
-  assert [day["status"] for day in changed["data"]["days"]] == ["success", "success"]
+  assert [day["status"] for day in changed["data"]["days"]] == ["failure", "success"]
   assert [day["latestScore"] for day in changed["data"]["days"]] == [84, 81]
+  assert [day["representativeScore"] for day in changed["data"]["days"]] == [76, 81]
 
 
 class DayDatabase:
@@ -393,7 +403,11 @@ class DayDatabase:
           "completed_at": datetime(2026, 7, 17, 1, tzinfo=timezone.utc),
           "image_url": "https://cdn.example/initial.jpg",
           "goal_context": {"userGoalText": "출근 메이크업"},
-          "feedback_payload": None,
+          "selected_report_id": PARENT_ID,
+          "feedback_payload": {"result": {"scoreReason": "최초 결과"}},
+          "note_content": "최초 기록 메모",
+          "note_created_at": datetime(2026, 7, 17, 1, tzinfo=timezone.utc),
+          "note_updated_at": datetime(2026, 7, 17, 1, tzinfo=timezone.utc),
         },
         {
           "id": uuid4(),
@@ -403,6 +417,10 @@ class DayDatabase:
           "created_at": datetime(2026, 7, 17, 2, tzinfo=timezone.utc),
           "completed_at": datetime(2026, 7, 17, 2, tzinfo=timezone.utc),
           "image_url": "https://cdn.example/correction.jpg",
+          "selected_report_id": PARENT_ID,
+          "note_content": "수정 기록 메모",
+          "note_created_at": datetime(2026, 7, 17, 2, tzinfo=timezone.utc),
+          "note_updated_at": datetime(2026, 7, 17, 2, tzinfo=timezone.utc),
           # A legacy root JSON string cannot be projected by PostgreSQL, so
           # the latest row falls back to its retained digest payload.
           "goal_context": {},
@@ -436,8 +454,10 @@ async def test_day_detail_returns_minimal_owned_report_chain(monkeypatch) -> Non
   data = response["data"]
   assert data["firstScore"] == 76
   assert data["latestScore"] == 84
-  assert data["scoreDelta"] == 8
-  assert data["status"] == "success"
+  assert data["representativeReportId"] == str(PARENT_ID)
+  assert data["representativeScore"] == 76
+  assert data["scoreDelta"] == 0
+  assert data["status"] == "failure"
   assert data["reports"][1]["feedbackKind"] == "correction"
   assert data["reports"][1]["parentFeedbackReportId"] == str(PARENT_ID)
   assert data["reports"][0]["imageUrl"] == "https://cdn.example/initial.jpg"
@@ -447,11 +467,18 @@ async def test_day_detail_returns_minimal_owned_report_chain(monkeypatch) -> Non
     "userGoalText": "출근 메이크업",
     "analysisGoalText": "단정한 출근 메이크업",
   }
+  assert data["reports"][0]["feedbackDigest"]["headline"] == "최초 결과"
+  assert data["reports"][1]["feedbackDigest"]["headline"] == "수정 결과"
+  assert data["reports"][0]["note"]["content"] == "최초 기록 메모"
+  assert data["reports"][1]["note"]["content"] == "수정 기록 메모"
+  assert data["note"]["content"] == "최초 기록 메모"
+  assert data["feedbackDigest"]["reportId"] == str(PARENT_ID)
   assert "feedbackPayload" not in data["reports"][1]
 
   report_query = " ".join(db.report_query.split())
   assert "row_number() over" in report_query
-  assert "case when latest_rank = 1 then feedback_payload end as feedback_payload" in report_query
+  assert "selected_report_id, feedback_payload" in report_query
+  assert "left join makeup_journey_day_score_selections" in report_query
   assert "jsonb_strip_nulls(jsonb_build_object" in report_query
   assert "feedbackContext" in report_query
   assert "feedback_context" in report_query
@@ -472,7 +499,8 @@ class TrendsDatabase:
 
   async def fetch(self, query, *args):
     assert args == (USER_ID, date(2026, 6, 18), date(2026, 7, 17))
-    assert "latest_rank = 1" in query
+    assert "left join makeup_journey_day_score_selections" in query
+    assert "coalesce(" in query
     return [
       {"entry_date": date(2026, 7, 1), "score": 76},
       {"entry_date": date(2026, 7, 17), "score": 91},
@@ -480,7 +508,7 @@ class TrendsDatabase:
 
 
 @pytest.mark.asyncio
-async def test_trends_include_only_latest_daily_scores_and_summary(monkeypatch) -> None:
+async def test_trends_include_selected_or_latest_daily_scores_and_summary(monkeypatch) -> None:
   monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
   db = TrendsDatabase()
   response = await journey_api.get_makeup_journey_trends(
@@ -573,6 +601,69 @@ async def test_trend_ranges_use_inclusive_leap_safe_boundaries(
 
   assert response["data"]["range"] == range_value
   assert response["data"]["points"] == []
+
+
+class ScoreSelectionDatabase:
+  def __init__(self, *, found: bool = True) -> None:
+    self.found = found
+    self.query = ""
+    self.args = None
+
+  async def fetchrow(self, query, *args):
+    self.query = query
+    self.args = args
+    if not self.found:
+      return None
+    return {
+      "report_id": PARENT_ID,
+      "score": 76,
+      "updated_at": datetime(2026, 7, 17, 3, tzinfo=timezone.utc),
+    }
+
+
+@pytest.mark.asyncio
+async def test_score_selection_upserts_only_an_owned_completed_report_for_the_date(
+  monkeypatch,
+) -> None:
+  monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
+  db = ScoreSelectionDatabase()
+
+  response = await journey_api.update_makeup_journey_score_selection(
+    "2026-07-17",
+    MakeupJourneyScoreSelectionUpdate(reportId=PARENT_ID),
+    auth=object(),
+    db=db,
+  )
+
+  assert response["data"] == {
+    "date": "2026-07-17",
+    "reportId": str(PARENT_ID),
+    "score": 76,
+    "updatedAt": "2026-07-17T03:00:00+00:00",
+  }
+  assert db.args == (USER_ID, date(2026, 7, 17), PARENT_ID)
+  normalized_query = " ".join(db.query.lower().split())
+  assert "where id = $3 and user_id = $1 and entry_date = $2" in normalized_query
+  assert "status = 'completed' and score is not null" in normalized_query
+  assert "on conflict (user_id, entry_date) do update" in normalized_query
+
+
+@pytest.mark.asyncio
+async def test_score_selection_rejects_foreign_wrong_date_or_incomplete_report(
+  monkeypatch,
+) -> None:
+  monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
+
+  with pytest.raises(AppError) as exc_info:
+    await journey_api.update_makeup_journey_score_selection(
+      "2026-07-17",
+      MakeupJourneyScoreSelectionUpdate(reportId=PARENT_ID),
+      auth=object(),
+      db=ScoreSelectionDatabase(found=False),
+    )
+
+  assert exc_info.value.status_code == 404
+  assert exc_info.value.code == "MAKEUP_JOURNEY_REPORT_NOT_FOUND"
 
 
 @pytest.mark.asyncio
@@ -922,7 +1013,70 @@ async def test_blank_note_deletes_only_owned_date(monkeypatch) -> None:
     db=db,
   )
   assert response["data"] == {"note": None}
-  assert db.deleted_args == (USER_ID, date(2026, 7, 17))
+  assert db.deleted_args == (USER_ID, date(2026, 7, 17), None)
+
+
+class ReportNoteDatabase:
+  def __init__(self, *, owns_report: bool = True) -> None:
+    self.owns_report = owns_report
+    self.upsert_args = None
+
+  async def fetchrow(self, query, *args):
+    if "from makeup_journey_settings" in query:
+      return _settings(80)
+    if "from makeup_feedback_reports" in query:
+      assert args == (USER_ID, date(2026, 7, 17), PARENT_ID)
+      return {"id": PARENT_ID} if self.owns_report else None
+    if "insert into makeup_journey_day_notes" in query:
+      self.upsert_args = args
+      assert "where report_id is not null" in query
+      return {
+        "content": args[3],
+        "created_at": datetime(2026, 7, 17, 1, tzinfo=timezone.utc),
+        "updated_at": datetime(2026, 7, 17, 1, tzinfo=timezone.utc),
+      }
+    raise AssertionError(query)
+
+
+@pytest.mark.asyncio
+async def test_note_is_saved_for_one_owned_report_instead_of_the_whole_date(
+  monkeypatch,
+) -> None:
+  monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
+  monkeypatch.setattr(journey_api, "_today", lambda _timezone: date(2026, 7, 17))
+  db = ReportNoteDatabase()
+
+  response = await journey_api.update_makeup_journey_note(
+    "2026-07-17",
+    MakeupJourneyNoteUpdate(content="  최초 보고서 메모  ", reportId=PARENT_ID),
+    auth=object(),
+    db=db,
+  )
+
+  assert response["data"]["note"]["content"] == "최초 보고서 메모"
+  assert db.upsert_args == (
+    USER_ID,
+    date(2026, 7, 17),
+    PARENT_ID,
+    "최초 보고서 메모",
+  )
+
+
+@pytest.mark.asyncio
+async def test_note_rejects_a_foreign_wrong_date_or_incomplete_report(monkeypatch) -> None:
+  monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
+  monkeypatch.setattr(journey_api, "_today", lambda _timezone: date(2026, 7, 17))
+
+  with pytest.raises(AppError) as exc_info:
+    await journey_api.update_makeup_journey_note(
+      "2026-07-17",
+      MakeupJourneyNoteUpdate(content="메모", reportId=PARENT_ID),
+      auth=object(),
+      db=ReportNoteDatabase(owns_report=False),
+    )
+
+  assert exc_info.value.status_code == 404
+  assert exc_info.value.code == "MAKEUP_JOURNEY_REPORT_NOT_FOUND"
 
 
 class FutureMissionDatabase:

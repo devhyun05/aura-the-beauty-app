@@ -65,7 +65,12 @@ import {
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
-import {navigateMainTab, type RootNavigation, type RootScreenProps} from './routeUtils';
+import {
+  goBackToPreviousOrMainTab,
+  navigateMainTab,
+  type RootNavigation,
+  type RootScreenProps,
+} from './routeUtils';
 
 const MAX_ANALYSIS_RETRY_COUNT = 2;
 // 온디바이스 정지영상 분석(세로비율 등)이 이 시간 안에 끝나지 않으면 해당 축 없이
@@ -839,7 +844,7 @@ export function FaceAnalysisReportsListRouteScreen({
     <DetailRouteChrome
       reserveOverlayHeaderSpace={false}
       routeName="FaceAnalysisReportsList"
-      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'ProfileTab')}>
       <FaceAnalysisReportsListScreen
         onPressReport={reportId =>
           navigation.navigate('FaceAnalysisReportDetail', {reportId})
@@ -885,7 +890,9 @@ export function FaceAnalysisReportPreviewRouteScreen({
       analysisReport={selectedFaceAnalysisReport}
       capturedPhotoUri={selectedFaceCapture?.imageUri}
       onBack={() =>
-        shouldReturnToProfile ? navigateMainTab(navigation, 'ProfileTab') : navigation.goBack()
+        shouldReturnToProfile
+          ? goBackToPreviousOrMainTab(navigation, 'ProfileTab')
+          : navigation.goBack()
       }
       onCreateARFilter={() => {
         if (currentReportId) {

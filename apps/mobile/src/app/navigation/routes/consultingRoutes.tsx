@@ -450,7 +450,7 @@ export function ConsultingSummaryRouteScreen({
     return (
       <DetailRouteChrome
         routeName="ConsultingSummary"
-        onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+        onBack={() => goBackToConsulting(navigation)}>
         <ConsultingRouteLoading />
       </DetailRouteChrome>
     );
@@ -459,7 +459,7 @@ export function ConsultingSummaryRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ConsultingSummary"
-      onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+      onBack={() => goBackToConsulting(navigation)}>
       <ConsultingSummaryScreen
         expert={expert}
         heroTitle={record ? 'AI 상담 요약' : undefined}

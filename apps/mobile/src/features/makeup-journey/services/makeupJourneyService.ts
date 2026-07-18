@@ -6,18 +6,11 @@ import type {
   MakeupJourneyMissionLevel,
   MakeupJourneyNote,
   MakeupJourneySettingsResponse,
+  MakeupJourneyScoreSelection,
   MakeupJourneyTrendRange,
   MakeupJourneyTrendResponse,
 } from '../types';
 import {isIsoDateString, isYearMonthString} from '../utils/date';
-import {
-  buildLegacyMakeupJourneyCalendar,
-  buildLegacyMakeupJourneyDay,
-  buildLegacyMakeupJourneyTrend,
-  fetchLegacyFeedbackReports,
-  isMissingMakeupJourneyRoute,
-  legacyMakeupJourneySettings,
-} from './makeupJourneyLegacyFallback';
 
 function requireIsoDate(date: string): string {
   if (!isIsoDateString(date)) {
@@ -44,17 +37,7 @@ function requireMissionTitle(title: string): string {
 export async function getMakeupJourneySettings(
   signal?: AbortSignal,
 ): Promise<MakeupJourneySettingsResponse> {
-  try {
-    return await requestBackendJson<MakeupJourneySettingsResponse>('/makeup-journey/settings', {
-      signal,
-    });
-  } catch (error) {
-    if (!isMissingMakeupJourneyRoute(error)) {
-      throw error;
-    }
-    console.info('[aura:makeup-journey] legacy-read-fallback', {resource: 'settings'});
-    return legacyMakeupJourneySettings;
-  }
+  return requestBackendJson<MakeupJourneySettingsResponse>('/makeup-journey/settings', {signal});
 }
 
 export function saveMakeupJourneySettings(input: {
@@ -82,25 +65,10 @@ export async function getMakeupJourneyCalendar(
   signal?: AbortSignal,
 ): Promise<MakeupJourneyCalendarResponse> {
   const resolvedMonth = requireMonth(month);
-  try {
-    return await requestBackendJson<MakeupJourneyCalendarResponse>(
-      `/makeup-journey/calendar?month=${encodeURIComponent(resolvedMonth)}`,
-      {signal},
-    );
-  } catch (error) {
-    if (!isMissingMakeupJourneyRoute(error)) {
-      throw error;
-    }
-    console.info('[aura:makeup-journey] legacy-read-fallback', {resource: 'calendar'});
-    const reports = await fetchLegacyFeedbackReports(signal);
-    const calendar = buildLegacyMakeupJourneyCalendar(resolvedMonth, reports);
-    console.info('[aura:makeup-journey] legacy-calendar:ready', {
-      days: calendar.days.length,
-      month: resolvedMonth,
-      reports: reports.length,
-    });
-    return calendar;
-  }
+  return requestBackendJson<MakeupJourneyCalendarResponse>(
+    `/makeup-journey/calendar?month=${encodeURIComponent(resolvedMonth)}`,
+    {signal},
+  );
 }
 
 export async function getMakeupJourneyDay(
@@ -108,21 +76,10 @@ export async function getMakeupJourneyDay(
   signal?: AbortSignal,
 ): Promise<MakeupJourneyDayResponse> {
   const resolvedDate = requireIsoDate(entryDate);
-  try {
-    return await requestBackendJson<MakeupJourneyDayResponse>(
-      `/makeup-journey/days/${encodeURIComponent(resolvedDate)}`,
-      {signal},
-    );
-  } catch (error) {
-    if (!isMissingMakeupJourneyRoute(error)) {
-      throw error;
-    }
-    console.info('[aura:makeup-journey] legacy-read-fallback', {resource: 'day'});
-    return buildLegacyMakeupJourneyDay(
-      resolvedDate,
-      await fetchLegacyFeedbackReports(signal),
-    );
-  }
+  return requestBackendJson<MakeupJourneyDayResponse>(
+    `/makeup-journey/days/${encodeURIComponent(resolvedDate)}`,
+    {signal},
+  );
 }
 
 export async function getMakeupJourneyTrend(
@@ -131,38 +88,38 @@ export async function getMakeupJourneyTrend(
   signal?: AbortSignal,
 ): Promise<MakeupJourneyTrendResponse> {
   const resolvedEndDate = requireIsoDate(endDate);
-  try {
-    return await requestBackendJson<MakeupJourneyTrendResponse>(
-      `/makeup-journey/trends?range=${encodeURIComponent(range)}&endDate=${encodeURIComponent(
-        resolvedEndDate,
-      )}`,
-      {signal},
-    );
-  } catch (error) {
-    if (!isMissingMakeupJourneyRoute(error)) {
-      throw error;
-    }
-    console.info('[aura:makeup-journey] legacy-read-fallback', {resource: 'trend'});
-    return buildLegacyMakeupJourneyTrend(
-      range,
+  return requestBackendJson<MakeupJourneyTrendResponse>(
+    `/makeup-journey/trends?range=${encodeURIComponent(range)}&endDate=${encodeURIComponent(
       resolvedEndDate,
-      await fetchLegacyFeedbackReports(signal),
-    );
-  }
+    )}`,
+    {signal},
+  );
 }
 
 export async function saveMakeupJourneyNote(
   entryDate: string,
   content: string,
+  reportId: string | null = null,
 ): Promise<MakeupJourneyNote | null> {
   if (content.length > 2000) {
     throw new Error('메모는 2,000자 이하로 입력해 주세요.');
   }
   const response = await requestBackendJson<{note: MakeupJourneyNote | null}>(
     `/makeup-journey/days/${encodeURIComponent(requireIsoDate(entryDate))}/note`,
-    {method: 'PUT', body: {content}},
+    {method: 'PUT', body: {content, reportId}},
   );
   return response.note;
+}
+
+export async function selectMakeupJourneyScore(
+  entryDate: string,
+  reportId: string,
+): Promise<MakeupJourneyScoreSelection> {
+  const response = await requestBackendJson<MakeupJourneyScoreSelection>(
+    `/makeup-journey/days/${encodeURIComponent(requireIsoDate(entryDate))}/score-selection`,
+    {method: 'PUT', body: {reportId}},
+  );
+  return response;
 }
 
 export async function generateMakeupJourneyMissions(

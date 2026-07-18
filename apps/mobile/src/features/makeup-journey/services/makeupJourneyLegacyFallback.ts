@@ -154,6 +154,7 @@ function calendarDay(date: string, reports: NormalizedLegacyReport[]): MakeupJou
     firstScore,
     hasNote: false,
     latestScore,
+    representativeScore: latestScore,
     missionSummary: {completed: 0, total: 0},
     reportCount: reports.length,
     scoreDelta: firstScore === null || latestScore === null ? null : latestScore - firstScore,
@@ -214,11 +215,11 @@ function buildDigest(report: NormalizedLegacyReport | undefined): MakeupJourneyF
     headline: textValue(summary.strengthSummary ?? summary.strength_summary)
       ?? textValue(report.result.scoreReason ?? report.result.score_reason),
     improvementCount: improvements.length,
-    improvements: improvements.slice(0, 2),
+    improvements,
     nextAction: textValue(actionSteps[0]) ?? textValue(firstPoint.description),
     reportId: report.id,
     strengthCount: strengths.length,
-    strengths: strengths.slice(0, 2),
+    strengths,
   };
 }
 
@@ -226,8 +227,10 @@ function journeyReport(report: NormalizedLegacyReport): MakeupJourneyReport {
   return {
     completedAt: report.completedAt,
     feedbackKind: report.feedbackKind,
+    feedbackDigest: buildDigest(report),
     goalContext: report.goalContext,
     imageUrl: report.imageUrl,
+    note: null,
     parentFeedbackReportId: report.parentFeedbackReportId,
     reportId: report.id,
     score: report.score,
@@ -251,6 +254,8 @@ export function buildLegacyMakeupJourneyDay(
     missions: [],
     note: null,
     reportCount: day.reportCount,
+    representativeReportId: latest?.id ?? null,
+    representativeScore: day.latestScore,
     reports: reports.map(journeyReport),
     scoreDelta: day.scoreDelta,
     status: day.status,

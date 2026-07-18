@@ -9,8 +9,8 @@ import {
 } from '../../../shared/services/makeupGuideService';
 import {useNavigationFlowState} from '../flowState';
 import {
+  goBackToPreviousOrMainTab,
   MainTabChrome,
-  navigateMainTab,
   type MainTabScreenProps,
   type RootNavigation,
   type RootScreenProps,
@@ -118,7 +118,7 @@ export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdi
 
   return (
     <ProfileEditScreen
-      onBack={() => navigateMainTab(navigation, 'ProfileTab')}
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'ProfileTab')}
       onLogout={handleLogout}
     />
   );
