@@ -55,6 +55,9 @@ output/
 playwright-report/
 test-results/
 
+# Generated build/run artifacts (face3d, unity-ar-engine — large, regenerated)
+artifacts/
+
 # Unity generated files and exports
 apps/mobile/ios/UnityBuild/
 apps/unity-builds/
@@ -69,6 +72,8 @@ apps/unity/MakeupAR/MemoryCaptures/
 apps/unity/MakeupAR/*.csproj
 apps/unity/MakeupAR/*.sln
 apps/unity/MakeupAR/*.user
+# Local Unity package tarballs (large binaries, e.g. homuler mediapipe .tgz)
+apps/unity/MakeupAR/Packages/local/
 
 # Eyeliner mask PNG dumps from the Unity editor exporter (debug only)
 tmp-debug/
