@@ -268,6 +268,28 @@ export function runIlluminationCorrectionTests() {
   const oneEyeTooFewOut = deriveIlluminationCorrection(oneEyeTooFew);
   expectTrue(!oneEyeTooFewOut.report.applied, 'one eye 9: not applied (below one-eye combined gate)');
 
+  // --- Track2: 어두운 비-흰자(눈꺼풀연/눈물언덕/그늘) 배제 ---
+  // 실기기 실측 (122,98,95)=L*44 는 흰자가 아니라 어두운 분홍조직. 종전 luma 하한
+  // 0.04(≈L*24)는 이를 통과시켜 충혈 게이트까지 흘려보냈다. 하한을 올려 luma 단계에서
+  // `too_dark`로 드롭 → 로그에서 "충혈"과 "어두운 ROI"를 구분.
+  const darkPink = faceWithCast(IDENTITY);
+  darkPink.regions!.scleraLeft = stats({ r: 122, g: 98, b: 95 }, { sampleCount: 100 });
+  darkPink.regions!.scleraRight = stats({ r: 122, g: 98, b: 95 }, { sampleCount: 100 });
+  const darkPinkOut = deriveIlluminationCorrection(darkPink);
+  expectTrue(!darkPinkOut.report.applied, 'dark non-white sclera (L*44): not applied');
+  expectTrue(
+    darkPinkOut.report.sclera.reasons.some(r => r.includes('too_dark')),
+    'dark sclera rejected as too_dark (not redness)',
+  );
+  // 드롭돼도 측정 L*을 사유에 남겨 하한(0.28) 실측 보정이 가능하게 (L*44 근방 기대)
+  expectTrue(
+    darkPinkOut.report.sclera.reasons.some(r => /_too_dark_L\d+/.test(r)),
+    'too_dark reason carries measured L* for calibration',
+  );
+  // 밝은 중립 흰자(L*76)는 여전히 통과 — 회귀 방지
+  const brightNeutral = deriveIlluminationCorrection(faceWithCast(IDENTITY));
+  expectTrue(brightNeutral.report.applied, 'bright neutral sclera still applies (no over-rejection)');
+
   // 8. 소스 없음 → 미적용
   const nothing = deriveIlluminationCorrection(noSclera);
   expectTrue(!nothing.report.applied && nothing.correctedNative == null, 'no source: not applied');

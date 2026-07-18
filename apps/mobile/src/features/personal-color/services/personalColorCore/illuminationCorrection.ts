@@ -65,7 +65,11 @@ export const ILLUMINATION_CORRECTION = {
   scleraMinCombinedSamplesTwoEyes: 16,
   scleraMinCombinedSamplesOneEye: 12,
   scleraMinNativeConfidence: 0.25,
-  scleraMinLinearLuma: 0.04, // 그늘진 흰자 제외
+  // Track2 상향(2026-07-18): 종전 0.04(≈L*24)는 사실상 아무것도 못 걸러, 눈꺼풀연·
+  // 눈물언덕·그늘 같은 어두운 분홍조직(실측 L*44, linearLuma≈0.14)을 흰자로 통과시켜
+  // 충혈 게이트까지 흘려보냈다. 진짜 흰자는 L*≈76(linear≈0.50)이라 여유가 크므로,
+  // "진짜 밝은 흰색만" 받도록 ≈L*60(0.28)로 올린다. calibration target.
+  scleraMinLinearLuma: 0.28, // 이 아래는 흰자가 아닌 어두운 조직 → too_dark 드롭
   scleraMaxLinearLuma: 0.92, // 날아간 흰자 제외
   scleraChannelClipMax: 249.5, // 채널 평균이 이 이상이면 클리핑 → 그 눈 드롭(복원 불가 정보)
   // 채널 평균만 보면, 서로 다른 픽셀이 서로 다른 채널에서 255로 포화된 경우
@@ -211,8 +215,16 @@ function estimateSclera(native: NativePersonalColorResult): ScleraEstimate {
     }
     const lin = toLinear(scleraRgb);
     const luma = linearLuma(lin);
-    if (luma < c.scleraMinLinearLuma || luma > c.scleraMaxLinearLuma) {
-      reasons.push(`${key}_luma_out_of_range`);
+    // too_dark(어두운 비-흰자: 눈꺼풀연/눈물언덕/그늘/작은눈)와 too_bright(날아간 흰자)를
+    // 구분해 로그에 남긴다 — "충혈"과 "어두운 ROI"를 현장에서 판별 가능하게. 드롭되면
+    // measured(=candidates)에서 빠져 scleraMeasuredLab이 null이 되므로, 사유에 측정 L*을
+    // 붙여 하한(scleraMinLinearLuma) 실측 재보정용 데이터를 보존한다.
+    if (luma < c.scleraMinLinearLuma) {
+      reasons.push(`${key}_too_dark_L${Math.round(rgb8ToLab(scleraRgb).L)}`);
+      continue;
+    }
+    if (luma > c.scleraMaxLinearLuma) {
+      reasons.push(`${key}_too_bright_L${Math.round(rgb8ToLab(scleraRgb).L)}`);
       continue;
     }
     candidates.push({ stats, color: scleraRgb, gains: gainsTowardReference(lin) });

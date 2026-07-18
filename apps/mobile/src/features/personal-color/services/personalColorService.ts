@@ -96,11 +96,22 @@ export async function analyzePersonalColorCapture(
   }
 
   const native = await analyzePersonalColorPhoto(input.imageUri, { landmarks });
+  // 흰자 ROI 진단: 게이트(too_dark 등) 이전의 원색을 눈별로 남긴다. 흰자라면 밝은
+  // 중립색(≈200,190,185)이어야 하고, 홍채/속눈썹/그늘을 잡으면 어두운 갈색(≈122,98,95)이
+  // 된다. 좌우가 같은 어두운 색이면 ROI가 흰자를 못 잡는 계통 문제(코너트림이 흰자를
+  // 잘라 홍채만 남는지 등)를 가리킨다 — 실측 재보정·ROI 수정용.
+  const scleraRaw = (key: 'scleraLeft' | 'scleraRight') => {
+    const s = native.regions?.[key];
+    if (!s) return null;
+    return { rgb: s.rgbMedian ?? s.rgbMean, samples: s.sampleCount, conf: s.confidence };
+  };
   logger.log('native:done', {
     status: native.status,
     regions: Object.keys(native.regions ?? {}),
     hairMatte: native.matte?.hairAvailable ?? false,
     skinMatte: native.matte?.skinAvailable ?? false,
+    scleraLeftRaw: scleraRaw('scleraLeft'),
+    scleraRightRaw: scleraRaw('scleraRight'),
   });
 
   const gate = evaluatePersonalColorQuality(native);
