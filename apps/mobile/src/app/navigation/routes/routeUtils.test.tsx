@@ -1,6 +1,8 @@
 import {
   getConsultingHistoryBackAction,
   getMainTabHeaderBorderWidth,
+  goBackToPreviousOrMainTab,
+  type RootNavigation,
 } from './routeUtils';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -38,4 +40,34 @@ expectEqual(
   JSON.stringify(getConsultingHistoryBackAction(undefined, false)),
   JSON.stringify({kind: 'mainTab', screen: 'ConsultingTab'}),
   'consulting history keeps consulting as the default fallback',
+);
+
+const stackedBackCalls: string[] = [];
+goBackToPreviousOrMainTab(
+  {
+    canGoBack: () => true,
+    goBack: () => stackedBackCalls.push('goBack'),
+    navigate: () => stackedBackCalls.push('navigate'),
+  } as unknown as RootNavigation,
+  'ProfileTab',
+);
+expectEqual(
+  stackedBackCalls.join(','),
+  'goBack',
+  'profile child pops the existing screen instead of navigating to another profile',
+);
+
+const fallbackBackCalls: string[] = [];
+goBackToPreviousOrMainTab(
+  {
+    canGoBack: () => false,
+    goBack: () => fallbackBackCalls.push('goBack'),
+    navigate: (routeName: string) => fallbackBackCalls.push(routeName),
+  } as unknown as RootNavigation,
+  'ProfileTab',
+);
+expectEqual(
+  fallbackBackCalls.join(','),
+  'MainTabs',
+  'profile child only opens the profile tab when no previous screen exists',
 );
