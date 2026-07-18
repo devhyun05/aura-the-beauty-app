@@ -1557,6 +1557,7 @@ class OpenAIAnalysisService:
   ) -> dict[str, Any]:
     provider = self.settings.analysis_provider
     schema_instruction = json.dumps(json_schema, ensure_ascii=False, separators=(",", ":"))
+    started_at = time.monotonic()
 
     # V2 스테이지도 동일 원본을 base64로 실어 보낸다 — analyze_text와 같은
     # 이유(비용·Bedrock 이미지 한도)로 전송 전에 다운스케일한다.
@@ -1614,6 +1615,11 @@ class OpenAIAnalysisService:
         response_payload,
         context="stage",
         max_tokens=max_tokens,
+      )
+      self._log_bedrock_call_metrics(
+        response_payload,
+        context="stage",
+        started_at=started_at,
       )
       if not output_text and stop_reason == "max_tokens":
         raise AppError(
@@ -2144,6 +2150,28 @@ class OpenAIAnalysisService:
       )
     return stop_reason
 
+  def _log_bedrock_call_metrics(
+    self,
+    response_payload: dict[str, Any],
+    *,
+    context: str,
+    started_at: float,
+  ) -> None:
+    """토큰·지연 계측(Stage 7). analyze_text(프로드)와 V2 스테이지(dev)를 동일
+    포맷으로 남겨, dev 트래픽만으로 라이브 vs V2 A/B(비용·지연)를 비교할 수 있게 한다.
+
+    로그 grep 키: `[aura:bedrock] <context>:metrics`.
+    """
+    usage = response_payload.get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+    logger.info(
+      "[aura:bedrock] %s:metrics durationMs=%s inputTokens=%s outputTokens=%s",
+      context,
+      round((time.monotonic() - started_at) * 1000),
+      usage.get("input_tokens"),
+      usage.get("output_tokens"),
+    )
+
   def _extract_bedrock_output_text(self, response_payload: dict[str, Any]) -> str:
     content = response_payload.get("content")
 
@@ -2223,6 +2251,11 @@ class OpenAIAnalysisService:
       response_payload,
       context="analysis",
       max_tokens=self.settings.bedrock_analysis_max_tokens,
+    )
+    self._log_bedrock_call_metrics(
+      response_payload,
+      context="analysis",
+      started_at=started_at,
     )
 
     if not output_text:

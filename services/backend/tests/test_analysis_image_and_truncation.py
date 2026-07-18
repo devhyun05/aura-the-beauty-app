@@ -136,6 +136,24 @@ def test_structured_v2_stage_empty_truncated_output_reports_stop_reason():
     assert exc_info.value.details.get("stopReason") == "max_tokens"
 
 
+def test_bedrock_call_metrics_logs_tokens_and_duration(caplog):
+    # Stage 7 계측: 양 경로가 동일 포맷으로 토큰·지연을 남겨 A/B 비교를 가능케 한다.
+    import logging
+
+    service = _service()
+    with caplog.at_level(logging.INFO):
+        service._log_bedrock_call_metrics(
+            {"usage": {"input_tokens": 1200, "output_tokens": 3400}},
+            context="stage",
+            started_at=0.0,
+        )
+
+    metric_logs = [r.getMessage() for r in caplog.records if ":metrics" in r.getMessage()]
+    assert metric_logs
+    assert "inputTokens=1200" in metric_logs[0]
+    assert "outputTokens=3400" in metric_logs[0]
+
+
 def test_bedrock_request_uses_configured_max_tokens():
     fake = _FakeBedrockClient(
         {
