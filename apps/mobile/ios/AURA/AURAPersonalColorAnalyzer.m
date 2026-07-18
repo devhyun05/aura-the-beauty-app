@@ -174,6 +174,9 @@ static CVPixelBufferRef AURAPCCopyPersonMask(UIImage *image) {
   if (cg == NULL) return NULL;
   VNGeneratePersonSegmentationRequest *request =
       [[VNGeneratePersonSegmentationRequest alloc] init];
+  // 배포 타깃 16.4에선 클래스가 항상 존재하지만, alloc 실패 등으로 nil이면 아래
+  // @[ request ] 배열 리터럴이 NSInvalidArgumentException 을 던진다 — 방어적으로 가드.
+  if (request == nil) return NULL;
   request.qualityLevel = VNGeneratePersonSegmentationRequestQualityLevelBalanced;
   request.outputPixelFormat = kCVPixelFormatType_OneComponent8;
   // uprightImage 는 이미 EXIF 정립본이라 orientation Up — 아래 정규화 좌표 샘플링과 정합.
