@@ -4,7 +4,7 @@
 import { computeAxes, effectiveConfidence, toRegionSignal } from './axisModel';
 import type { RegionSignal, RegionSignals } from './axisModel';
 import { clamp, labToLch, rgb8ToLab } from './colorMath';
-import { CLASSIFIER, FIXED_REFS_VERSION, MC_GATE } from './constants';
+import { CLASSIFIER, FIXED_REFS_VERSION, LIP_MAKEUP_CHROMA_MAX, MC_GATE } from './constants';
 import { buildPalette } from './palette';
 import { computeTone } from './toneClassifier';
 import {
@@ -59,8 +59,16 @@ export function combineSkinPatches(native: NativePersonalColorResult): NativeReg
   const weightedAvg = (get: (p: NativeRegionStats) => number): number =>
     patches.reduce((acc, p, i) => acc + (weights[i] * get(p)) / wSum, 0);
 
-  // 확률적 OR: 좋은 패치가 여러 개면 skin 신뢰도 상승
-  const confidence = clamp(1 - patches.reduce((acc, p) => acc * (1 - clamp(p.confidence, 0, 1)), 1), 0, 1);
+  // F4 수정(2026-07-18): 3 skin 패치는 같은 얼굴·같은 조명이라 강하게 상관돼 있어
+  // 독립 증거가 아니다. 종전 확률적 OR(1-Π(1-c))은 상관된 패치를 독립으로 결합해
+  // 신뢰도를 부풀렸고(각 0.5 → 0.875), 저품질 캡처가 measurementConfidence 게이트를
+  // 자신 있게 통과했다. 커버리지·신뢰 가중 평균으로 바꿔 과신을 제거한다(fail-safe:
+  // mc 하락으로 insufficient 증가 — 의도된 방향).
+  const confidence = clamp(
+    patches.reduce((acc, p, i) => acc + (weights[i] * clamp(p.confidence, 0, 1)) / wSum, 0),
+    0,
+    1,
+  );
 
   return {
     rgbMean: mean,
@@ -150,6 +158,13 @@ export function analyzePersonalColor(
   if (!skinStats) warnings.push('skin_missing');
   if (!hairStats) warnings.push('hair_missing');
   if (!lipStats) warnings.push('lip_missing');
+
+  // F9: 립 채도가 자연 입술 상한을 넘으면 립스틱 의심 → advisory 경고만(측정 불변).
+  // 소비처가 temp/chroma 오염 가능성을 판독하게 한다(비비드 winter 오검출은 감수).
+  if (lipStats) {
+    const lipC = labToLch(rgb8ToLab(lipStats.rgbMean)).C;
+    if (lipC > LIP_MAKEUP_CHROMA_MAX) warnings.push('lip_makeup_suspected');
+  }
 
   const signals: RegionSignals = {};
   const measurements: AuraRegionMeasurement[] = [];

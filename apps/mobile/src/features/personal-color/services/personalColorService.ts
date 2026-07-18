@@ -143,6 +143,13 @@ export async function analyzePersonalColorCapture(
   }
   // 보고/저장 메인 결과: 보정 성공 시 corrected, 아니면 baseline.
   const reported = corrected?.result ?? result;
+  // F3 투명화: 보정 미적용이면 온도/채도 축에 조명 캐스트가 남아 있을 수 있다
+  // (곱셈성 캐스트는 within-frame 축만으로는 제거 불가). 소비처(보고서·AI 페이로드)가
+  // 판독할 수 있도록 경고로 명시한다 — 캐스트 '완화'는 축 스케일이, '제거'는 흰자
+  // 보정이 담당하며, 보정이 꺼지면 후자가 빠졌음을 알린다.
+  if (!corrected && !reported.warnings.includes('illumination_uncorrected')) {
+    reported.warnings.push('illumination_uncorrected');
+  }
   logger.log('illumination:correction', {
     applied: correctionReport.applied,
     source: correctionReport.source,
@@ -209,6 +216,14 @@ export async function analyzePersonalColorCapture(
     top: reported.tone?.top ?? null,
     secondary: reported.tone?.secondary ?? null,
     isMixed: reported.tone?.isMixed ?? false,
+    // 표시 확신도 진단: typeScore(12타입, 정중앙도 ~50%)와 seasonScore(시즌 3타입 합,
+    // 게이지 표시값), 걸침 폭 gap. 확신도 게이지가 낮게 보이는지/시즌 확신은 높은지 판독.
+    typeScore: reported.tone?.typeScore ?? null,
+    seasonScore: reported.tone?.seasonScore ?? null,
+    gap: reported.tone?.gap ?? null,
+    // 엔진 경고: illumination_uncorrected(웜 캐스트 미제거)·lip_makeup_suspected(립스틱
+    // 의심)·hair_missing 등. 온디바이스에서 새 신호를 직접 판독하는 데 쓴다.
+    warnings: reported.warnings,
     // 오분류 진단용: 분류를 좌우하는 5축 실측값(reported)을 그대로 남긴다.
     axes: {
       temperature: reported.axes.temperature.value,

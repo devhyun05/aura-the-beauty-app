@@ -131,8 +131,9 @@ export interface SwatchData { name: string; color: string }
 export interface S4Data {
   eyebrow: string; title: string;
   season: { headline: string; blend: BlendData };
-  // 봄 라이트 확신도 게이지용(typeScore 0..1).
-  seasonConfidence?: { topLabel: string; secondaryLabel: string | null; typeScore: number };
+  // 확신도 게이지 — 시즌 단위(seasonScore, "봄 89%")로 표시한다. 타입 정체성(봄 라이트)은
+  // season.headline 이 담당. typeScore(12타입)는 참고용으로 함께 싣는다.
+  seasonConfidence?: { topLabel: string; secondaryLabel: string | null; typeScore: number; seasonScore: number };
   axes: SpectrumAxisData[];
   drape: {
     title: string; sub: string;

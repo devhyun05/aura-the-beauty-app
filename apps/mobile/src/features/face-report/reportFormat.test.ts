@@ -67,6 +67,12 @@ function assert(cond: boolean, label: string): void {
   assert(v.percentLabel === '봄 라이트 100%', 'clamp to 100');
   assert(v.gapLabel === null, 'no secondary -> null gap');
 }
+// F7: 게이지는 시즌 라벨 + seasonScore("봄 89%")로 프레이밍한다 — 12타입 typeScore는
+// 정중앙에도 ~50%라 낮게 보이지만, 시즌 확신은 높고 정직하다. 타입 정체성은 headline 담당.
+{
+  const v = formatSeasonConfidence({topLabel: '봄', secondaryLabel: null, typeScore: 0.89});
+  assert(v.percentLabel === '봄 89%', 'season-framed gauge label');
+}
 
 // eslint-disable-next-line no-console
 console.log('reportFormat.test.ts (Task 1) OK');

@@ -25,7 +25,7 @@ import {getFaceAnalysisReportSummaryItems} from '../../face-analysis/services/fa
 import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceAnalysisMeasurements';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
-import {TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
+import {SEASON_LABEL_KO, TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
 import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
 import {buildRegionFeatureAxes, describeRegionAxes} from '../reportFeatureAxes';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
@@ -315,9 +315,12 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
       },
     },
     seasonConfidence: {
-      topLabel: TYPE_LABEL_KO[tone.top],
-      secondaryLabel: tone.secondary ? TYPE_LABEL_KO[tone.secondary] : null,
+      // 게이지는 시즌 단위("봄 89%")로 — typeScore(12타입)는 정중앙에도 ~50%라 낮게
+      // 보인다. 타입 정체성(봄 라이트)은 위 season.headline 이 담당하므로 중복 아님.
+      topLabel: SEASON_LABEL_KO[tone.season],
+      secondaryLabel: null,
       typeScore: Math.min(1, Math.max(0, tone.typeScore)),
+      seasonScore: Math.min(1, Math.max(0, tone.seasonScore)),
     },
     axes: axesData,
     drape: {

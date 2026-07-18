@@ -79,6 +79,29 @@ export function runAxisModelTests() {
     'temperature in range',
   );
 
+  // --- F2 회귀: value 축 재센터링 (밝은 셀피 피부가 -1로 포화되지 않아야) ---
+  // skin 단독이면 value 축 = valueFeature(skinL) (aggregate가 단일 항이라 항등).
+  const valueAt = (L: number) =>
+    computeAxes({ skin: signal('skin', { L, a: 10, b: 12 }, 0.85) }).axes.value.value as number;
+  // 전형 셀피 피부(L*71)는 중간 밝기 근방 — 종전 -0.73(라이트 포화 직전)에서 벗어남.
+  expectTrue(valueAt(71) > -0.6 && valueAt(71) < 0.1, `value L*71 centered (${valueAt(71)})`);
+  // 밝은 피부(L*82)는 라이트지만 클램프(-1)로 포화되지 않아 개인차가 남아야.
+  expectTrue(valueAt(82) < -0.6, `value L*82 light (${valueAt(82)})`);
+  expectTrue(valueAt(76) > -1, `value L*76 NOT saturated (${valueAt(76)})`);
+  // 어두운 피부(L*52)는 딥 방향(양수).
+  expectTrue(valueAt(52) > 0.4, `value L*52 deep (${valueAt(52)})`);
+
+  // --- F3 회귀: 온도 축이 조명 캐스트 하나로 +1 포화되지 않아야 ---
+  // skin 단독이면 temperature 축 = tempFeature(skinLab) (aggregate 단일 항).
+  const tempFor = (a: number, b: number) =>
+    computeAxes({ skin: signal('skin', { L: 70, a, b }, 0.85) }).axes.temperature.value as number;
+  // 웜 캐스트 낀 피부(U=b-a≈17)는 웜(양수)이되 +1로 포화되지 않아 개인차가 남아야.
+  const warmCastTemp = tempFor(11, 28); // U = 17
+  expectTrue(warmCastTemp > 0 && warmCastTemp < 0.95, `warm-cast temp not pinned +1 (${warmCastTemp})`);
+  // 쿨 피부(U≈-4)는 쿨(음수) 신호가 보존돼야.
+  const coolTemp = tempFor(12, 8); // U = -4
+  expectTrue(coolTemp < -0.3, `cool skin temp preserved (${coolTemp})`);
+
   // hair 없으면 contrast는 null (lip 단독은 시즌을 뒤집어 신뢰 불가 → 분류에서 드롭)
   const noHair: RegionSignals = {
     skin: signal('skin', { L: 70, a: 10, b: 12 }, 0.85),

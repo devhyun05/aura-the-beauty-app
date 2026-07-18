@@ -49,7 +49,7 @@ export function computeTone(axes: Record<AxisName, AuraAxis>, options: ToneOptio
   const tau = options.tau ?? CLASSIFIER.tau0;
   const present = presentAxisValues(axes);
   const presentCount = Object.keys(present).length;
-  // 축이 2개 미만이면 분류 불가
+  // 축이 3개 미만이면 분류 불가
   if (presentCount < 3) return null;
 
   const distances = {} as Record<PersonalColor12Type, number>;
@@ -78,16 +78,25 @@ export function computeTone(axes: Record<AxisName, AuraAxis>, options: ToneOptio
   const isMixed = gap < CLASSIFIER.mixedGap;
   const showSecondary = isMixed || probabilities[secondaryCandidate] >= CLASSIFIER.secondaryMin;
 
+  const topSeason = TYPE_TO_SEASON[top];
+  // 시즌 확신 = 같은 시즌 3타입 확률 합. 세부 타입이 걸쳐도 시즌은 안정적이라는
+  // 표시용 정직한 확신도(typeScore는 12-way라 정중앙에도 ~50%로 낮게 보인다).
+  const seasonScore = ALL_12_TYPES.reduce(
+    (acc, t) => (TYPE_TO_SEASON[t] === topSeason ? acc + probabilities[t] : acc),
+    0,
+  );
+
   return {
     top,
     secondary: showSecondary ? secondaryCandidate : null,
     isMixed,
     typeScore: probabilities[top],
+    seasonScore,
     gap,
     tau,
     probabilities,
     distances,
-    season: TYPE_TO_SEASON[top],
+    season: topSeason,
   };
 }
 

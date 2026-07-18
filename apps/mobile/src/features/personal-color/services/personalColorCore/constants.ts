@@ -8,8 +8,13 @@ export const FIXED_REFS_VERSION = 'aura-pc-refs-v0.1' as const;
 // 고정 population reference (calibration target)
 export const REFS = {
   // Value: D = 1 - L*/100
-  dRefSkin: 0.45,
-  dScaleSkin: 0.22,
+  // F2 재센터(2026-07-18): 종전 dRefSkin=0.45(L*≈55 기준)는 실제 셀피 피부 분포
+  // (L*≈60~88)보다 훨씬 어두워, 중간~밝은 피부가 전부 -1(라이트)로 포화 →
+  // 헤어 매트 부재 시 "전원 봄/여름 라이트" 계통 오분류의 정량적 뿌리였다.
+  // 기준을 L*≈70(전형 셀피)로 올리고 scale을 넓혀 L*60~85가 (-1,+1)에 고르게
+  // 펴지도록 한다. 합성 프로브 기반 prior — 실측 raw L* 로그로 재보정 대상.
+  dRefSkin: 0.3,
+  dScaleSkin: 0.18,
   dRefHair: 0.75,
   dScaleHair: 0.2,
   dRefLip: 0.55,
@@ -20,10 +25,15 @@ export const REFS = {
   cRefLip: 45,
   cScaleLip: 25,
   // Undertone: U = b* - a*
+  // F3 완화(2026-07-18): 조명 캐스트는 곱셈성이라 U(=b*-a*)를 크게 흔든다 — 약한
+  // 웜광 하나로 U가 +9 이상 이동해 종전 scale(8)로는 개인 언더톤 차(±4)가 캐스트에
+  // 파묻히고 temp가 ±1로 포화됐다. scale을 넓혀 포화를 늦추고 개인차를 남긴다.
+  // 캐스트의 '제거'는 흰자 기반 조명 보정(illuminationCorrection)이 담당하며, 보정
+  // 미적용 캡처는 illumination_uncorrected 경고로 신뢰도를 낮춘다. calibration target.
   uRefSkin: 6,
-  uScaleSkin: 8,
+  uScaleSkin: 14,
   uRefLip: -17,
-  uScaleLip: 15,
+  uScaleLip: 22,
   uRefHair: 3,
   uScaleHair: 6,
   // Variance: σ(8-bit)
@@ -120,7 +130,10 @@ export const AXIS_RELIABILITY: Record<AxisName, number> = {
   value: 1.0,
   chroma: 0.6,
   clarity: 0.4,
-  contrast: 0.45,
+  // F6 축소(2026-07-18): contrast(피부↔머리 명도차)는 검은 머리 인구에서 밝은 피부일수록
+  // +1로 고정되고 value(피부 밝기)와 강하게 공선(r≈-0.78)이라 독립 정보가 거의 없다.
+  // value를 이중 계산하며 winter/bright 쪽으로 노이즈를 주입하므로 약한 tie-breaker로만.
+  contrast: 0.2,
 };
 
 // softmax + 앵커 임계값 (확률공간, 스케일 안정) — calibration target
@@ -136,6 +149,22 @@ export const MC_GATE = {
   definitive: 0.7,
   usable: 0.45,
 } as const;
+
+// F9 립 메이크업 자문 임계 — lip C*(=√(a²+b²))가 이 값을 넘으면 립스틱 의심.
+// 주의: 비비드한 입술은 winter 의 자연 특징이라(고채도 쿨 립) 채도만으로 립스틱과
+// 구분되지 않는다. 그래서 축을 조용히 바꾸지 않고(정당한 winter 를 summer 로 오분류할
+// 위험) advisory 경고(lip_makeup_suspected)만 남겨, 소비처(보고서·AI)가 temp/chroma 를
+// 신중히 해석하도록 한다. 저채도 다크 립·파운데이션은 검출 못함. calibration target.
+export const LIP_MAKEUP_CHROMA_MAX = 60;
+
+// 한국어 시즌 표시명 — F7 확신도 게이지는 타입("봄 라이트")이 아니라 시즌("봄")
+// 단위로 % 를 보여준다(seasonScore). 12타입 typeScore는 정중앙에도 ~50%라 낮게 보임.
+export const SEASON_LABEL_KO: Record<PersonalColorSeason, string> = {
+  spring: '봄',
+  summer: '여름',
+  autumn: '가을',
+  winter: '겨울',
+};
 
 // 한국어 타입 표시명
 export const TYPE_LABEL_KO: Record<PersonalColor12Type, string> = {

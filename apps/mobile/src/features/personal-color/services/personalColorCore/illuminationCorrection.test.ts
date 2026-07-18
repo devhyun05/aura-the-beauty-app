@@ -230,6 +230,44 @@ export function runIlluminationCorrectionTests() {
     'sclera with 40% overexposed pixels dropped (tightened clip gate)',
   );
 
+  // --- F5: 게이트 완화 + one-eye 경로 부활 ---
+  // 실측 흰자 수율은 눈당 14~17(합 31)이라 종전 per-eye 12·combined 24 게이트는
+  // 마진이 면도날이었고, combined 24 때문에 one-eye 경로(oneEyePenalty)는 도달 불가한
+  // 사문 코드였다. per-eye 8 / combined(2눈)16 / combined(1눈)12 로 완화.
+
+  // F5a. 두 눈 각 9표본(=18) → 적용 (종전 per-eye 12 미달로 드롭되던 케이스)
+  const lowBothEyes = faceWithCast(IDENTITY);
+  lowBothEyes.regions!.scleraLeft = stats(CLEAN_SCLERA, { sampleCount: 9 });
+  lowBothEyes.regions!.scleraRight = stats(CLEAN_SCLERA, { sampleCount: 9 });
+  const lowBothOut = deriveIlluminationCorrection(lowBothEyes);
+  expectTrue(lowBothOut.report.applied, 'two eyes 9+9 samples: applied (relaxed per-eye gate)');
+  expectTrue(lowBothOut.report.sclera.eyesUsed === 2, 'two eyes used');
+
+  // F5b. 한 눈만 14표본 → 적용 + oneEyePenalty (종전 combined 24 미달로 도달 불가했던
+  //      one-eye 경로 부활). 신뢰도가 두 눈 대비 낮아야(penalty 반영).
+  const oneEye = faceWithCast(IDENTITY);
+  oneEye.regions!.scleraLeft = stats(CLEAN_SCLERA, { sampleCount: 14 });
+  oneEye.regions!.scleraRight = stats(CLEAN_SCLERA, { sampleCount: 0 }); // 미검출
+  const oneEyeOut = deriveIlluminationCorrection(oneEye);
+  expectTrue(oneEyeOut.report.applied && oneEyeOut.report.source === 'sclera', 'one eye 14: applied (revived path)');
+  expectTrue(oneEyeOut.report.sclera.eyesUsed === 1, 'one eye used');
+  expectTrue(
+    oneEyeOut.report.sclera.reasons.includes('sclera_one_eye_only'),
+    'one-eye reason recorded',
+  );
+  const twoEyeHigh = deriveIlluminationCorrection(faceWithCast(IDENTITY));
+  expectTrue(
+    oneEyeOut.report.confidence < twoEyeHigh.report.confidence,
+    `one-eye penalty lowers confidence (one=${oneEyeOut.report.confidence.toFixed(2)} vs two=${twoEyeHigh.report.confidence.toFixed(2)})`,
+  );
+
+  // F5c. 한 눈 9표본 → 미적용 (one-eye combined 게이트 12 미달, fail-safe 유지)
+  const oneEyeTooFew = faceWithCast(IDENTITY);
+  oneEyeTooFew.regions!.scleraLeft = stats(CLEAN_SCLERA, { sampleCount: 9 });
+  oneEyeTooFew.regions!.scleraRight = stats(CLEAN_SCLERA, { sampleCount: 0 });
+  const oneEyeTooFewOut = deriveIlluminationCorrection(oneEyeTooFew);
+  expectTrue(!oneEyeTooFewOut.report.applied, 'one eye 9: not applied (below one-eye combined gate)');
+
   // 8. 소스 없음 → 미적용
   const nothing = deriveIlluminationCorrection(noSclera);
   expectTrue(!nothing.report.applied && nothing.correctedNative == null, 'no source: not applied');

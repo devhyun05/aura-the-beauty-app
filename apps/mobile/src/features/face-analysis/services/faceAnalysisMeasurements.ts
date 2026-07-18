@@ -41,7 +41,7 @@ import type {
   PersonalColorStatus,
   ToneResult,
 } from '../../personal-color/services/personalColorCore/contracts';
-import {TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
+import {TYPE_LABEL_KO, TYPE_TO_SEASON} from '../../personal-color/services/personalColorCore/constants';
 import type {
   ChannelGains,
   IlluminationCorrectionReport,
@@ -246,6 +246,7 @@ export type MeasuredPersonalColorAiPayload = {
     isMixed: boolean;
     probabilities: Record<string, number>;
     season: string;
+    seasonScore: number;
     secondary: string | null;
     top: string;
     typeScore: number;
@@ -311,6 +312,7 @@ export function buildMeasuredPersonalColorAiPayload(
           isMixed: reported.tone.isMixed,
           probabilities: reported.tone.probabilities,
           season: reported.tone.season,
+          seasonScore: reported.tone.seasonScore,
           secondary: reported.tone.secondary,
           top: reported.tone.top,
           typeScore: reported.tone.typeScore,
@@ -1026,12 +1028,24 @@ function decodeTone(value: unknown): ToneResult | null | undefined {
     return undefined;
   }
 
+  // F8: season 폴백은 top 에서 유도한다 — 종전 '?? spring' 하드코딩은 top 이 여름/가을/
+  // 겨울이어도 season 을 봄으로 날조했다(legacy 저장분 복원 시 자기모순).
+  const season = (readString(value.season) ?? TYPE_TO_SEASON[top]) as ToneResult['season'];
+  // F7: seasonScore 부재(legacy)면 probabilities 에서 유도한다(같은 시즌 확률 합). 날조 아님.
+  const seasonScore =
+    readFiniteNumber(value.seasonScore) ??
+    PERSONAL_COLOR_TYPE_KEYS.reduce(
+      (acc, t) => (TYPE_TO_SEASON[t] === season ? acc + probabilities[t] : acc),
+      0,
+    );
+
   return {
     distances,
     gap,
     isMixed: readBoolean(value.isMixed, false),
     probabilities,
-    season: (readString(value.season) ?? 'spring') as ToneResult['season'],
+    season,
+    seasonScore,
     secondary: readPersonalColorType(value.secondary) ?? null,
     tau: readFiniteNumber(value.tau) ?? 0,
     top,

@@ -54,8 +54,16 @@ export const ILLUMINATION_CORRECTION = {
   // 노출 문제 아님, ROI 게이트 통과 픽셀 자체가 적음). 흰자 면적이 작아 해상도를
   // 올려도 늘지 않는다. 낮은 표본은 confidence(kMinSamplesForFullConfidence=40)와
   // scleraMinNativeConfidence 게이트가 down-weight/차단하므로 과신 위험은 없다.
-  scleraMinSamplesPerEye: 12,
-  scleraMinCombinedSamples: 24,
+  // F5 완화(2026-07-18): 실측 흰자 수율이 눈당 14~17(합 31)이라 종전 per-eye 12·
+  // combined 24 게이트는 마진이 2~5표본으로 면도날이었고 — 살짝 감은 눈·작은 눈 하나로
+  // 보정이 꺼져 웜 캐스트가 그대로 통과했다. 게다가 combined 24 ≥ 2×(one-eye 통과 상한)
+  // 이라 한쪽 눈만 잡힌 케이스는 combined 를 절대 못 넘어 oneEyePenalty 경로가 사문화돼
+  // 있었다. per-eye 8 로 낮추고 combined 를 눈 수에 연동해 one-eye 경로를 되살린다.
+  // 낮은 표본의 과신은 아래 confidence 스케일(kMinSamplesForFullConfidence=40,
+  // scleraTrustedConfidence)이 down-weight 하므로 위험은 통제된다. calibration target.
+  scleraMinSamplesPerEye: 8,
+  scleraMinCombinedSamplesTwoEyes: 16,
+  scleraMinCombinedSamplesOneEye: 12,
   scleraMinNativeConfidence: 0.25,
   scleraMinLinearLuma: 0.04, // 그늘진 흰자 제외
   scleraMaxLinearLuma: 0.92, // 날아간 흰자 제외
@@ -241,7 +249,10 @@ function estimateSclera(native: NativePersonalColorResult): ScleraEstimate {
   }
 
   const sampleCount = candidates.reduce((a, e) => a + e.stats.sampleCount, 0);
-  if (sampleCount < c.scleraMinCombinedSamples) {
+  // 눈 수 연동 combined 게이트 — 한쪽 눈만 잡혀도(one-eye) 도달 가능하게 분리한다.
+  const combinedGate =
+    candidates.length === 2 ? c.scleraMinCombinedSamplesTwoEyes : c.scleraMinCombinedSamplesOneEye;
+  if (sampleCount < combinedGate) {
     reasons.push('sclera_combined_too_few_samples');
     return {
       available: false,
