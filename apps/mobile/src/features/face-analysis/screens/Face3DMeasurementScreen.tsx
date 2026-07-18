@@ -10,6 +10,7 @@ import {
 import {
   hideUnityMakeupView,
   setUnityMakeupPlayerPaused,
+  setUnityMakeupSessionPaused,
 } from '../../ar/services/unityMakeupBridge';
 import {useFace3DAnalysis} from '../../face-3d/hooks/useFace3DAnalysis';
 import type {Face3DProfile} from '../../face-3d/types';
@@ -87,6 +88,9 @@ export function Face3DMeasurementScreen({onFinish}: Face3DMeasurementScreenProps
       cancel();
       hideUnityMakeupView();
       setUnityMakeupPlayerPaused(true);
+      // player pause만으론 Unity ARSession이 전면 카메라를 계속 쥐고 있어(초록 LED·과열),
+      // 세션까지 명시적으로 정지해 카메라를 반납한다(unityMakeupBridge 주석 참조).
+      setUnityMakeupSessionPaused(true);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -120,6 +124,7 @@ export function Face3DMeasurementScreen({onFinish}: Face3DMeasurementScreenProps
     cancel();
     hideUnityMakeupView();
     setUnityMakeupPlayerPaused(true);
+    setUnityMakeupSessionPaused(true);
     setPreviewActive(false);
     setAttemptCount(0);
     setInstructionsAccepted(false);

@@ -342,7 +342,9 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     // to complete offscreen and freeze it as soon as ready arrives.
     _pauseWhenReadyIfHidden = YES;
   }
-  [self reconcilePlayerPauseStateForReason:@"visible-container-detached" force:NO];
+  // force:YES — a detach releases the camera; force a fresh idle send so the
+  // stale-ACK fast path can't swallow it (green LED at report).
+  [self reconcilePlayerPauseStateForReason:@"visible-container-detached" force:YES];
 }
 
 - (void)detachUnityViewForContainer:(UIView *)container
@@ -388,9 +390,11 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     _pauseWhenReadyIfHidden = YES;
   }
 
+  // force when releasing (paused) — camera-release must re-send idle past the
+  // stale-ACK fast path; acquiring (resume) has no swallow problem.
   [self reconcilePlayerPauseStateForReason:
       paused ? @"legacy-run-lease-released" : @"legacy-run-lease-acquired"
-                                      force:NO];
+                                      force:paused];
 }
 
 - (void)acquireHiddenRunLease:(NSString *)leaseId
@@ -415,7 +419,9 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
       !_hasExplicitHiddenRunLease) {
     _pauseWhenReadyIfHidden = YES;
   }
-  [self reconcilePlayerPauseStateForReason:@"hidden-analysis-lease-released" force:NO];
+  // force:YES — releasing the last lease should drop to idle and release the
+  // front camera; force the idle send past the stale-ACK fast path.
+  [self reconcilePlayerPauseStateForReason:@"hidden-analysis-lease-released" force:YES];
 }
 
 - (void)reconcilePlayerPauseStateForReason:(NSString *)reason force:(BOOL)force
@@ -461,7 +467,12 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   // Stable state fast path. In particular, foreground lifecycle callbacks may
   // ask for a forced reassert after UnityAppController changes its own pause
   // flag; do not wake the camera pipeline just to pause it again.
-  if (!_runtimeModeRequestPending &&
+  // force:YES bypasses this — the out-of-band setPaused message flips Unity's
+  // real ARSession.enabled without touching _acknowledgedRuntimeMode, so this
+  // cached mode can desync from Unity's actual camera state. A camera-release
+  // path (detach / lease-release) must be able to re-send idle even when we
+  // *think* we are already idle, or the green LED stays on at the report.
+  if (!force && !_runtimeModeRequestPending &&
       [_acknowledgedRuntimeMode isEqualToString:runtimeMode]) {
     [self applyPlayerPaused:effectivePaused];
     NSLog(@"[aura:unity-native] reconciled stable pause desired=%@ effective=%@ mode=%@ reason=%@",
@@ -495,7 +506,6 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 
 - (void)requestRuntimeMode:(NSString *)mode reason:(NSString *)reason force:(BOOL)force
 {
-  (void)force;
   if (mode.length == 0 || !_isRunning || _unityFramework == nil) {
     return;
   }
@@ -505,7 +515,12 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     return;
   }
 
-  if (!_runtimeModeRequestPending &&
+  // force:YES re-sends the mode even when we believe Unity already acknowledged
+  // it. Needed because the out-of-band setPaused message can desync
+  // _acknowledgedRuntimeMode from Unity's real ARSession state — trusting the
+  // cache here is exactly what swallows the idle transition and keeps the
+  // front camera (green LED) alive at the report screen.
+  if (!force && !_runtimeModeRequestPending &&
       [_acknowledgedRuntimeMode isEqualToString:mode]) {
     if ([mode isEqualToString:@"idle"] && _desiredPlayerPaused) {
       [self applyPlayerPaused:YES];
