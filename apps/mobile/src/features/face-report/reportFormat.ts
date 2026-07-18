@@ -57,55 +57,50 @@ export function describeThirdsInternally(r: {
   return `${top.part}가 중안부보다 ${pct}% ${shorter ? '짧아' : '길어'}, ${top.region} 구간이 상대적으로 ${shorter ? '짧게' : '길게'} 보여요`;
 }
 
-export type FaceLengthBandView =
-  | {kind: 'withheld'; label: string}
-  | {
-      kind: 'band';
-      position: number; // 내 위치 0..1
-      loFrac: number;    // 밴드 시작 0..1
-      hiFrac: number;    // 밴드 끝 0..1
-      verdictLabel: string;
-      inBand: boolean;
-    };
+// 길이비 표현 — 게이지(가짜 '평균') 폐기, 성별 문헌 참고선 기준 방향 카테고리.
+export type FaceShapeGender = 'men' | 'women' | 'neutral';
 
-const VERDICT_LABEL: Record<string, string> = {
-  wide: '가로 폭이 있는 편',
-  borderline_wide: '가로가 경계선',
-  average: '평균 범위',
-  borderline_long: '세로가 경계선',
-  long: '세로로 긴 편',
-  indeterminate: '판정 보류',
-};
+// 세로:가로 참고선 — 성형외과 문헌 이상형(남 ≈1.35 / 여 ≈1.31). 절대 기준이 아니라
+// 방향 카테고리의 '균형 중심'으로만 쓴다(중립=중간값). 황금비 1.6은 신화라 미채택.
+const FACE_SHAPE_CENTER: Record<FaceShapeGender, number> = {men: 1.35, women: 1.31, neutral: 1.33};
+const FACE_SHAPE_BAND = 0.07; // 중심 ± 이 안이면 '균형'
 
-export function resolveFaceLengthBand(input: {
-  ratio: number | null;
-  band: {lo: number; hi: number} | null;
-  verdict: string | null;
-  confidence: number | null;
-}): FaceLengthBandView {
-  const {ratio, band, verdict, confidence} = input;
-  const lowConfidence = confidence != null && confidence < 0.5;
-  if (
-    ratio == null ||
-    band == null ||
-    verdict == null ||
-    verdict === 'indeterminate' ||
-    lowConfidence
-  ) {
-    return {kind: 'withheld', label: VERDICT_LABEL.indeterminate};
+export interface FaceShapeView {
+  categoryLabel: string; // 가로형 / 균형 / 세로형
+  position: number;      // 0..1 방향 스케일 위치(0=가로, 1=세로)
+  sentence: string;      // 맞춤 한 문장(스타일링 힌트 포함)
+  referenceNote: string; // 성별 참고선·황금비 신화·절대기준 아님 고지
+}
+
+// 측정된 세로:가로 비율을 성별 참고선 기준으로 방향 카테고리화한다. 모집단 '평균'을
+// 참칭하지 않고(밴드=참고 중심±), 사용자 원측정 숫자도 노출하지 않는다(카테고리만).
+export function describeFaceLength(
+  ratio: number | null,
+  gender: FaceShapeGender,
+): FaceShapeView | null {
+  if (ratio == null || !Number.isFinite(ratio) || ratio <= 0) {
+    return null;
   }
-  const pad = (band.hi - band.lo) * 0.8 || 0.1;
-  const min = band.lo - pad;
-  const max = band.hi + pad;
-  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-  return {
-    kind: 'band',
-    position: clamp01((ratio - min) / (max - min)),
-    loFrac: clamp01((band.lo - min) / (max - min)),
-    hiFrac: clamp01((band.hi - min) / (max - min)),
-    verdictLabel: VERDICT_LABEL[verdict] ?? verdict,
-    inBand: ratio >= band.lo && ratio <= band.hi,
-  };
+  const center = FACE_SHAPE_CENTER[gender];
+  const lo = center - FACE_SHAPE_BAND;
+  const hi = center + FACE_SHAPE_BAND;
+  const span = FACE_SHAPE_BAND * 3;
+  const position = Math.max(0, Math.min(1, (ratio - (center - span)) / (2 * span)));
+  const genderKo = gender === 'men' ? '남성' : gender === 'women' ? '여성' : '일반';
+  let categoryLabel: string;
+  let sentence: string;
+  if (ratio < lo) {
+    categoryLabel = '가로형에 가까운 얼굴';
+    sentence = `${genderKo} 얼굴 참고형보다 가로가 넓은 편이라 부드럽고 안정적인 인상이에요. 세로 라인(긴 앞머리·세로 눈썹)이 균형을 더해줘요.`;
+  } else if (ratio > hi) {
+    categoryLabel = '세로로 긴 얼굴';
+    sentence = `${genderKo} 얼굴 참고형보다 세로가 긴 편이라 갸름하고 시원한 인상이에요. 가로 볼륨(사이드 헤어·수평 눈썹)이 균형을 더해줘요.`;
+  } else {
+    categoryLabel = '세로·가로가 균형';
+    sentence = `${genderKo} 얼굴 참고형에 가까워 세로·가로가 고르게 균형 잡힌 편이에요. 대부분의 헤어·메이크업 방향이 무난하게 어울려요.`;
+  }
+  const referenceNote = `기준: ${genderKo} 얼굴 참고선(성형외과 문헌) · 흔히 말하는 황금비(1.6)는 실제 얼굴 대부분이 못 미쳐 절대 기준이 아니에요`;
+  return {categoryLabel, position, sentence, referenceNote};
 }
 
 export interface SeasonConfidenceView {

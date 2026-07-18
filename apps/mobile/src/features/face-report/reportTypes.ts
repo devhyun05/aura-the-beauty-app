@@ -1,7 +1,8 @@
 // reportTypes.ts — typed props/DTO model for the face-analysis report.
 // 원칙(2026-07-18 완화): 원측정(mm)·모집단 백분위·confidence %는 계속 비노출.
-// 단 세로 3분할의 정규화 비율과 얼굴 길이비의 측정된 평균 밴드는 노출을 허용한다
-// (spec 2026-07-18-face-report-content-refinement-design.md §3 영역1 · §7-4).
+// 세로 3분할의 정규화 비율은 노출 허용, 얼굴형은 성별 참고선 기준 방향 카테고리로만
+// (가짜 '평균 밴드'는 폐기 — 2026-07-18 정직화).
+import type {FaceShapeView} from './reportFormat';
 
 export interface PhotoSlotData {
   uri?: string;
@@ -86,8 +87,8 @@ export interface S2Data {
   viewCardLabel: string;
   // 세로 3분할 정규화 비율(중안부=1.0 기준). 상안부는 헤어라인 미확인 시 null.
   ratioNumbers?: { upper: number | null; middle: number; lower: number };
-  // 얼굴 세로/가로 길이비 + 측정된 정상 구간(평균 밴드) 판정 스냅샷.
-  faceLength?: { ratio: number | null; band: { lo: number; hi: number } | null; verdict: string | null; confidence: number | null };
+  // 얼굴형 — 성별 문헌 참고선 기준 방향 카테고리(가로/균형/세로). '평균 밴드' 폐기.
+  faceShape?: FaceShapeView | null;
   paragraph: string;
 }
 

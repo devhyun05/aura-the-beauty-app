@@ -115,6 +115,7 @@ export function FaceAnalysisReportPreviewScreen({
   }, [reloadBodyProfile]);
 
   const report = loadState.status === 'success' ? loadState.report : null;
+  const profileGender = loadState.status === 'success' ? loadState.profile?.gender ?? null : null;
   const measurements = report?.measurements;
   // Same "3-반영 규칙" identity check the production report screen uses: session
   // measurement props only apply to the report captured in this session — a
@@ -146,6 +147,7 @@ export function FaceAnalysisReportPreviewScreen({
       personalColor: effectivePersonalColor,
       bodyProfile,
       regionVisuals: effectiveRegionVisuals,
+      gender: profileGender,
     });
   }, [
     bodyProfile,
@@ -153,6 +155,7 @@ export function FaceAnalysisReportPreviewScreen({
     effectivePersonalColor,
     effectiveRegionVisuals,
     effectiveVerticalThirds,
+    profileGender,
     report,
     reportId,
   ]);

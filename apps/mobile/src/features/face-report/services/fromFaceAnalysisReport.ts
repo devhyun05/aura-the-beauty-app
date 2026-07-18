@@ -26,6 +26,7 @@ import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceA
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
 import {TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
+import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
 import type {AxisName, ColorFamily, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
 import {analyzeBody} from '../../ar/stencil/src/composer/bodyProfile';
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
@@ -54,6 +55,9 @@ export type FaceReportAdapterInput = {
   // Absent/null for legacy reports — buildS3 falls back to the fixed
   // S3_REGION_META guide + full photo, never fabricating a crop/polyline.
   regionVisuals?: RegionVisuals | null;
+  // 사용자 프로필 성별('남성'|'여성'|'선택 안 함'|null) — 길이비 참고선(S2)·
+  // 체형 문구(S5) 성별 분기에 쓰인다. 측정이 아니라 프로필 값.
+  gender?: string | null;
 };
 
 function resolveHeroUri(report: FaceAnalysisReport, heroImageUri?: string): string | undefined {
@@ -114,7 +118,10 @@ const S2_BAND_COPY = {
 // the roll-corrected source image, matched 1:1 to sourceImage.width/height — NOT
 // pre-normalized. GuidePhotoOverlay needs 0..1 fractions, so we divide by the
 // real image dimensions here rather than trusting any embedded normalization.
-function buildS2(vt: FaceVerticalThirdsResult | null | undefined): S2Data | null {
+function buildS2(
+  vt: FaceVerticalThirdsResult | null | undefined,
+  gender: string | null | undefined,
+): S2Data | null {
   if (!vt || (vt.status !== 'full_success' && vt.status !== 'partial_success')) {
     return null;
   }
@@ -126,6 +133,10 @@ function buildS2(vt: FaceVerticalThirdsResult | null | undefined): S2Data | null
   if (!G || !Sn || !Me) {
     return null;
   }
+
+  const lowConfidence = (vt.verticalThirds?.confidence ?? 1) < 0.5;
+  const faceShapeGender: FaceShapeGender =
+    gender === '남성' ? 'men' : gender === '여성' ? 'women' : 'neutral';
 
   const imgH = sourceImage.height;
   const browY = G.y / imgH;
@@ -194,23 +205,22 @@ function buildS2(vt: FaceVerticalThirdsResult | null | undefined): S2Data | null
     ],
     missingNotice: S2_HAIRLINE_MISSING_NOTICE,
     viewCardLabel: '카드 보기 ›',
-    ratioNumbers: vt.verticalThirds
-      ? {
-          upper: vt.verticalThirds.displayRatio.upper,
-          middle: vt.verticalThirds.displayRatio.middle,
-          lower: vt.verticalThirds.displayRatio.lower,
-        }
-      : undefined,
-    // 길이비 판정 스냅샷이 있을 때만 밴드 섹션을 채운다 — 판정 자체가 없는
-    // 보고서에 "얼굴 길이비 · 판정 보류"가 상시 노출되는 소음을 막는다.
-    faceLength: vt.faceLengthJudgment
-      ? {
-          ratio: vt.faceLength?.ratio ?? null,
-          band: vt.faceLengthJudgment.band ?? null,
-          verdict: vt.faceLengthJudgment.verdict ?? null,
-          confidence: vt.verticalThirds?.confidence ?? null,
-        }
-      : undefined,
+    ratioNumbers:
+      vt.verticalThirds && !lowConfidence
+        ? {
+            upper: vt.verticalThirds.displayRatio.upper,
+            middle: vt.verticalThirds.displayRatio.middle,
+            lower: vt.verticalThirds.displayRatio.lower,
+          }
+        : undefined,
+    // 얼굴형(성별 참고선 기준 방향 카테고리). 판정이 없거나 저신뢰도면 숨긴다 —
+    // 가짜 '평균 밴드'를 참칭하지 않는다(정직화).
+    faceShape:
+      vt.faceLengthJudgment &&
+      vt.faceLengthJudgment.verdict !== 'indeterminate' &&
+      !lowConfidence
+        ? describeFaceLength(vt.faceLength?.ratio ?? null, faceShapeGender)
+        : null,
     paragraph: vt.interpretation.summary || vt.interpretation.title || '측정 결과를 요약하지 못했어요.',
   };
 }
@@ -583,7 +593,7 @@ function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined): S7Data | n
 }
 
 export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterInput): ReportData {
-  const {report, bodyProfile, personalColor, verticalThirds, regionVisuals} = input;
+  const {report, bodyProfile, personalColor, verticalThirds, regionVisuals, gender} = input;
   const heroUri = resolveHeroUri(report, input.heroImageUri);
   const featurePhoto: S1Data['photo'] = heroUri
     ? {uri: heroUri, placeholderLabel: '얼굴 확대 컷'}
@@ -592,7 +602,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
   return {
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
     s1: buildS1(report, heroUri, personalColor ?? null),
-    s2: buildS2(verticalThirds),
+    s2: buildS2(verticalThirds, gender),
     s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null),
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile),
