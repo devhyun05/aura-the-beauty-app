@@ -1,4 +1,4 @@
-import {describeFaceLength, describeThirdsInternally, formatSeasonConfidence, formatThirdsRatio} from './reportFormat';
+import {describeFaceLength, describeImpressionExploration, describeThirdsInternally, formatSeasonConfidence, formatThirdsRatio} from './reportFormat';
 
 function assert(cond: boolean, label: string): void {
   if (!cond) throw new Error(`FAIL: ${label}`);
@@ -43,6 +43,17 @@ function assert(cond: boolean, label: string): void {
   assert(describeFaceLength(null, 'men') === null, 'null ratio -> null');
   assert(!!bal && !bal.sentence.includes('평균'), 'no 평균 wording');
   assert(!!bal && bal.referenceNote.includes('황금비'), 'reference note mentions golden-ratio myth');
+}
+// describeImpressionExploration — 드래그 좌표를 축 라벨로 해석
+{
+  const AX = [
+    {leftLabel: '내추럴', rightLabel: '세련됨', value: 0, key: 'x'},
+    {leftLabel: '부드러움', rightLabel: '또렷함', value: 0, key: 'y'},
+  ];
+  assert(describeImpressionExploration(AX, 0.9, 0.1) === "이 위치라면 '세련됨 + 또렷함'에 가까운 인상", 'upper-right quadrant');
+  assert(describeImpressionExploration(AX, 0.1, 0.9) === "이 위치라면 '내추럴 + 부드러움'에 가까운 인상", 'lower-left quadrant');
+  assert(describeImpressionExploration(AX, 0.5, 0.5) === '중앙 — 어느 쪽으로도 치우치지 않은 균형 인상', 'center balanced');
+  assert(describeImpressionExploration([], 0.5, 0.5) === '', 'empty axes -> empty');
 }
 // formatSeasonConfidence — 확신도 %, 2순위 라벨
 {

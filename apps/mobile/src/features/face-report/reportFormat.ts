@@ -103,6 +103,29 @@ export function describeFaceLength(
   return {categoryLabel, position, sentence, referenceNote};
 }
 
+// S6 인상 맵 드래그 해석 — 정규화 좌표(0..1)를 두 축 라벨로 풀어 한 줄로.
+// 세로축은 top(y=0)=rightLabel(+1), bottom(y=1)=leftLabel(-1) 규칙(curY=(1-value)/2)과
+// 일치. 중앙 근처(양축 치우침<0.15)는 균형 문구로 폴백. 축이 없으면 빈 문자열.
+export function describeImpressionExploration(
+  axes: {leftLabel: string; rightLabel: string}[],
+  x: number,
+  y: number,
+): string {
+  const ax = axes[0];
+  const ay = axes[1];
+  if (!ax || !ay) {
+    return '';
+  }
+  const hStrength = Math.abs(x - 0.5) * 2;
+  const vStrength = Math.abs(y - 0.5) * 2;
+  if (hStrength < 0.15 && vStrength < 0.15) {
+    return '중앙 — 어느 쪽으로도 치우치지 않은 균형 인상';
+  }
+  const h = x < 0.5 ? ax.leftLabel : ax.rightLabel;
+  const v = y < 0.5 ? ay.rightLabel : ay.leftLabel;
+  return `이 위치라면 '${h} + ${v}'에 가까운 인상`;
+}
+
 export interface SeasonConfidenceView {
   percentLabel: string;
   gapLabel: string | null;

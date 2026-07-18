@@ -1,7 +1,8 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, PanResponder, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { color, font, radius } from '../reportTokens';
+import { describeImpressionExploration } from '../reportFormat';
 import type { ImpressionAxis } from '../reportTypes';
 
 /** S6 인상 좌표 맵 — axes[0]=가로, axes[1]=세로. value −1..1 → 0..1 위치.
@@ -17,6 +18,8 @@ export function ImpressionMap({ axes }: { axes: ImpressionAxis[] }) {
   const dragX = useSharedValue(curX);
   const dragY = useSharedValue(curY);
   const size = useRef(0);
+  // 드래그 위치를 JS 상태로도 추적 — 공유값은 점 렌더용(UI 스레드), 상태는 실시간 해석 텍스트용.
+  const [drag, setDrag] = useState({ x: curX, y: curY });
 
   const onLayout = (e: LayoutChangeEvent) => {
     size.current = e.nativeEvent.layout.width;
@@ -24,8 +27,18 @@ export function ImpressionMap({ axes }: { axes: ImpressionAxis[] }) {
 
   const setFromLocation = (locationX: number, locationY: number) => {
     if (size.current <= 0) return;
-    dragX.value = Math.max(0, Math.min(1, locationX / size.current));
-    dragY.value = Math.max(0, Math.min(1, locationY / size.current));
+    const nx = Math.max(0, Math.min(1, locationX / size.current));
+    const ny = Math.max(0, Math.min(1, locationY / size.current));
+    dragX.value = nx;
+    dragY.value = ny;
+    setDrag({ x: nx, y: ny });
+  };
+
+  // 기본(AI) 위치로 복귀 — 드래그 점을 부드럽게 되돌린다.
+  const reset = () => {
+    dragX.value = withTiming(curX, { duration: 260 });
+    dragY.value = withTiming(curY, { duration: 260 });
+    setDrag({ x: curX, y: curY });
   };
 
   // ScrollView·iOS swipe-back에 제스처를 뺏기지 않도록 capture + 종료 거부
@@ -49,6 +62,9 @@ export function ImpressionMap({ axes }: { axes: ImpressionAxis[] }) {
     left: `${dragX.value * 100}%`,
     top: `${dragY.value * 100}%`,
   }));
+
+  const exploreText = describeImpressionExploration(axes, drag.x, drag.y);
+  const moved = Math.abs(drag.x - curX) > 0.02 || Math.abs(drag.y - curY) > 0.02;
 
   return (
     <View style={{ gap: 8 }}>
@@ -74,6 +90,16 @@ export function ImpressionMap({ axes }: { axes: ImpressionAxis[] }) {
         <Text style={[font(10.5, '700'), { color: color.faint }]}>↑ {ay.rightLabel}</Text>
         <Text style={[font(10.5, '700'), { color: color.faint }]}>↓ {ay.leftLabel}</Text>
       </View>
+      {exploreText ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 22, marginTop: 2 }}>
+          <Text style={[font(12, '600', 1.5), { color: color.body, flex: 1 }]}>{exploreText}</Text>
+          {moved ? (
+            <Text onPress={reset} suppressHighlighting style={[font(11.5, '700'), { color: color.accentDeep }]}>
+              기본 위치로
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
