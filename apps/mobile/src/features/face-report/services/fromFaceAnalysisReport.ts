@@ -30,7 +30,7 @@ import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
 import {buildRegionFeatureAxes, describeRegionAxes} from '../reportFeatureAxes';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
 import type {AxisName, ColorFamily, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
-import {analyzeBody} from '../../ar/stencil/src/composer/bodyProfile';
+import {analyzeBody, resolveStyleGender} from '../../ar/stencil/src/composer/bodyProfile';
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import type {
   ImpressionAxis,
@@ -338,7 +338,7 @@ function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, he
   };
 }
 
-function buildS5(bodyProfile: BodyProfile | null | undefined): S5Data {
+function buildS5(bodyProfile: BodyProfile | null | undefined, gender: string | null | undefined): S5Data {
   const base = {
     eyebrow: 'BODY TYPE',
     title: '체형은 설문으로 봤어요',
@@ -361,7 +361,7 @@ function buildS5(bodyProfile: BodyProfile | null | undefined): S5Data {
     };
   }
 
-  const analyzed = analyzeBody(bodyProfile);
+  const analyzed = analyzeBody(bodyProfile, resolveStyleGender(gender));
   return {
     ...base,
     silhouetteValue: analyzed.silhouetteStyle.label,
@@ -615,7 +615,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     s2: buildS2(verticalThirds, gender),
     s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null, geometryMetrics ?? null),
     s4: buildS4(personalColor, heroUri),
-    s5: buildS5(bodyProfile),
+    s5: buildS5(bodyProfile, gender),
     s6: buildS6(report.regionNotes, report.impressionNotes),
     s7: buildS7(report.stylingLooks),
     footer: {

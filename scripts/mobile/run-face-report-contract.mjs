@@ -18,6 +18,8 @@ const entries = [
   'face-report/reportFeatureAxes.test.ts',
   'face-geometry/services/faceGeometryCore/regionVisualsBuilder.ts',
   'face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.ts',
+  'ar/stencil/src/composer/bodyProfile.ts',
+  'ar/stencil/src/composer/bodyProfile.test.ts',
 ];
 
 function run(command, args) {
@@ -43,3 +45,4 @@ run(process.execPath, [
 run(process.execPath, [join(outDir, 'face-report/reportFormat.test.js')]);
 run(process.execPath, [join(outDir, 'face-report/reportFeatureAxes.test.js')]);
 run(process.execPath, [join(outDir, 'face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.js')]);
+run(process.execPath, [join(outDir, 'ar/stencil/src/composer/bodyProfile.test.js')]);

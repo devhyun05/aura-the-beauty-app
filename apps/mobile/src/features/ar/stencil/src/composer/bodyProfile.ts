@@ -192,6 +192,16 @@ export interface TypeStyle {
   avoid: string[];
 }
 
+/**
+ * 스타일링 문구의 성별 축 — 설문은 성별을 묻지 않으므로 프로필 성별로 문구를 고른다.
+ * 여성복 편향(스커트·원피스 등)이 남성에게 노출되던 버그를 없애기 위한 분기.
+ */
+export type StyleGender = 'women' | 'men' | 'neutral';
+
+/** 프로필 성별 원문('남성'|'여성'|그 외/미상)을 스타일 성별 축으로 매핑. 미상은 중립. */
+export const resolveStyleGender = (g: string | null | undefined): StyleGender =>
+  g === '여성' ? 'women' : g === '남성' ? 'men' : 'neutral';
+
 export const SILHOUETTE_STYLES: Record<Silhouette, TypeStyle> = {
   hourglass: {
     label: '모래시계형',
@@ -278,6 +288,182 @@ export const FRAME_STYLES: Record<Frame, TypeStyle> = {
   },
 };
 
+// ── 성별별 스타일링 문구 ─────────────────────────────────────────────────────
+// 라벨·태그라인(타입명·비율 설명)은 성별과 무관하므로 여성 세트의 것을 그대로
+// 재사용하고, 조언(points)·피할 것(avoid)만 성별별로 바꾼다. 조언의 '원리'는
+// 세 세트가 등가다(예: pear=상체 시선 유도·하체 볼륨 흘리기) — 품목만 치환한다.
+type StyleAdvice = Pick<TypeStyle, 'points' | 'avoid'>;
+
+// 여성 세트의 label·tagline + 성별 세트의 points·avoid를 합쳐 TypeStyle 레코드를 만든다.
+const composeStyles = <T extends string>(
+  base: Record<T, TypeStyle>,
+  advice: Record<T, StyleAdvice>,
+): Record<T, TypeStyle> => {
+  const out = {} as Record<T, TypeStyle>;
+  (Object.keys(base) as T[]).forEach(k => {
+    out[k] = {label: base[k].label, tagline: base[k].tagline, ...advice[k]};
+  });
+  return out;
+};
+
+// 남성복 문구 — 스커트·원피스·퍼프·엠파이어·리본·셔링·프릴 등 여성복 품목을
+// 재킷·셔츠·니트·코트·팬츠(스트레이트/테이퍼드/와이드)·핏(오버/슬림/테일러드)로 치환.
+const SILHOUETTE_ADVICE_MEN: Record<Silhouette, StyleAdvice> = {
+  hourglass: {
+    points: [
+      '허리가 살짝 들어간 테일러드 재킷·정핏 셔츠가 균형 잡힌 라인을 그대로 살려줘요',
+      '몸의 두께에 맞는 정핏 상의가 곡선 비율을 자연스럽게 보여줘요',
+      '하이라이즈 스트레이트 팬츠로 다리 라인까지 길어 보여요',
+    ],
+    avoid: ['허리가 묻히는 박시한 일자 핏', '과한 오버사이즈 레이어링'],
+  },
+  inverted: {
+    points: [
+      'V넥 니트·오픈 카라 셔츠로 목선을 세로로 풀어 넓은 어깨를 부드럽게 해요',
+      '와이드·스트레이트 팬츠로 하체에 무게를 실어 상하 균형을 맞춰요',
+      '하의에 밝은 색·패턴을 두면 시선이 아래로 분산돼요',
+    ],
+    avoid: ['어깨 패드·구조적 견장 등 어깨를 키우는 디테일', '가로선을 강조해 어깨가 더 넓어 보이는 상의'],
+  },
+  pear: {
+    points: [
+      '상체에 포인트(밝은 색·소재 대비·아우터)를 두면 시선이 위로 올라와요',
+      '어깨선이 또렷한 상의(구조적 재킷·두께감 니트)로 상하 균형을 맞춰요',
+      '스트레이트·세미 와이드 팬츠가 골반·허벅지 라인을 자연스럽게 흘려보내요',
+    ],
+    avoid: ['스키니 팬츠 + 짧은 상의 조합', '골반에 걸치는 로우라이즈 팬츠'],
+  },
+  apple: {
+    points: [
+      '세로 라인(롱 코트·오픈 카디건·V넥 니트)이 몸 중심을 시원하게 나눠줘요',
+      '앞을 연 아우터로 세로 여백을 만들면 허리 대신 비율이 생겨요',
+      '팔·다리 등 슬림한 부위를 드러내면 전체가 가벼워 보여요',
+    ],
+    avoid: ['허리를 조이는 벨트 강조', '몸 중심에 달라붙는 얇은 저지 소재'],
+  },
+  rect: {
+    points: [
+      '살짝 핏이 들어간 재킷·니트로 허리 지점을 만들면 밋밋한 라인에 곡선이 생겨요',
+      '상하 대비(볼륨 상의 + 테이퍼드 하의)로 실루엣에 리듬을 줘요',
+      '레이어링이 잘 받는 몸이라 재킷·셔츠 겹쳐 입기가 유리해요',
+    ],
+    avoid: ['어깨부터 밑단까지 통짜로 떨어지는 박시 핏 단독 착장'],
+  },
+};
+
+const FRAME_ADVICE_MEN: Record<Frame, StyleAdvice> = {
+  straight: {
+    points: [
+      '군더더기 없는 베이식·클래식(셔츠·테일러드 재킷)이 가장 잘 받아요',
+      '몸의 두께를 그대로 살리는 정핏 I라인 실루엣이 세련돼 보여요',
+      '두께감 있는 고밀도 소재(울·코튼 트윌)가 몸과 어울려요',
+    ],
+    avoid: ['잔장식이 많은 디테일 상의', '목을 답답하게 덮는 하이넥'],
+  },
+  wave: {
+    points: [
+      '부드럽게 떨어지는 가벼운 소재(경량 니트·저지)가 가는 골격과 잘 어울려요',
+      '짧은 기장 상의·하이라이즈 하의로 무게중심을 위로 올리면 비율이 좋아져요',
+      '가벼운 레이어링으로 상체에 볼륨을 살짝 더하면 균형이 맞아요',
+    ],
+    avoid: ['빳빳하고 큰 오버사이즈(옷에 몸이 잡아먹혀요)', '로우라이즈 하의'],
+  },
+  natural: {
+    points: [
+      '오버사이즈·루즈핏을 소화하는 몸 — 여유 있는 실루엣이 오히려 스타일이 돼요',
+      '마·린넨·워싱 코튼 같은 자연스러운 질감의 소재가 잘 받아요',
+      '래글런·드롭숄더 등 어깨선을 흘리는 디자인이 편안하고 멋져요',
+    ],
+    avoid: ['몸에 딱 붙는 타이트 핏(뼈대가 도드라져 보여요)', '섬세한 잔무늬 소품'],
+  },
+};
+
+// 중립 문구 — 특정 품목 대신 원리(상하 대비·세로 라인·허리 지점·여유 실루엣)만
+// 말한다. 어느 성별에도 안전하고, 성별 미상 프로필의 기본값이다.
+const SILHOUETTE_ADVICE_NEUTRAL: Record<Silhouette, StyleAdvice> = {
+  hourglass: {
+    points: [
+      '허리 지점을 강조하는 핏이 균형 잡힌 곡선 비율을 그대로 살려줘요',
+      '몸의 곡선을 따라가는 실루엣이 비율을 가장 잘 보여줘요',
+      '허리 위치를 높이면 전체 비율이 길어 보여요',
+    ],
+    avoid: ['허리 지점이 묻히는 통짜 실루엣', '몸을 다 덮는 과한 볼륨'],
+  },
+  inverted: {
+    points: [
+      '세로로 트인 목선으로 시선을 풀어 넓은 어깨를 부드럽게 해요',
+      '하체 쪽에 볼륨·무게를 더해 상체와 균형을 맞춰요',
+      '하체에 밝은 색·포인트를 두면 시선이 아래로 분산돼요',
+    ],
+    avoid: ['어깨를 더 넓어 보이게 하는 가로 강조', '어깨선을 키우는 디테일'],
+  },
+  pear: {
+    points: [
+      '상체에 밝은 색·포인트를 두면 시선이 위로 올라와요',
+      '어깨선을 또렷하게 살리면 하체와 상하 균형이 맞아요',
+      '하체는 여유 있는 실루엣으로 볼륨을 자연스럽게 흘려보내요',
+    ],
+    avoid: ['하체에 딱 붙어 볼륨을 부각하는 실루엣', '허리 아래로 걸치는 로우라이즈'],
+  },
+  apple: {
+    points: [
+      '세로 라인으로 몸 중심을 시원하게 나눠주면 가벼워 보여요',
+      '앞이 트인 실루엣으로 세로 여백을 만들면 비율이 생겨요',
+      '슬림한 부위를 드러내면 전체 인상이 가벼워 보여요',
+    ],
+    avoid: ['허리를 조여 몸 중심을 부각하는 착장', '몸 중심에 달라붙는 얇은 소재'],
+  },
+  rect: {
+    points: [
+      '허리 지점을 만들어 주면 밋밋한 라인에 곡선이 생겨요',
+      '상하 대비(볼륨 + 슬림)로 실루엣에 리듬을 줘요',
+      '겹쳐 입기로 층을 더하면 밋밋함이 풀려요',
+    ],
+    avoid: ['위아래 통짜로 떨어지는 실루엣 단독 착장'],
+  },
+};
+
+const FRAME_ADVICE_NEUTRAL: Record<Frame, StyleAdvice> = {
+  straight: {
+    points: [
+      '군더더기 없는 정핏·베이식이 탄력 있는 몸을 고급스럽게 보여줘요',
+      '몸의 두께를 그대로 살리는 I라인 실루엣이 세련돼 보여요',
+      '두께감 있는 탄탄한 소재가 몸과 잘 어울려요',
+    ],
+    avoid: ['잔장식이 많은 디테일', '답답해 보이는 하이넥'],
+  },
+  wave: {
+    points: [
+      '부드럽게 떨어지는 가벼운 소재가 가는 골격의 곡선을 살려줘요',
+      '무게중심을 상체로 올리면 비율이 확 좋아져요',
+      '가벼운 곡선 디테일이 인상을 부드럽고 화사하게 해줘요',
+    ],
+    avoid: ['빳빳하고 큰 오버사이즈(옷에 몸이 잡아먹혀요)', '허리선을 낮추는 착장'],
+  },
+  natural: {
+    points: [
+      '오버사이즈·루즈핏을 소화하는 몸 — 여유 있는 실루엣이 오히려 스타일이 돼요',
+      '마·린넨·워싱 코튼 같은 자연스러운 질감의 소재가 잘 받아요',
+      '드롭숄더 등 어깨선을 흘리는 디자인이 편안하고 멋져요',
+    ],
+    avoid: ['몸에 딱 붙는 타이트 핏(뼈대가 도드라져 보여요)', '섬세한 잔무늬 소품'],
+  },
+};
+
+/** 실루엣 스타일 성별 세트 — women은 기존 문구 그대로, men/neutral은 위 규칙으로 유도. */
+export const SILHOUETTE_STYLES_BY_GENDER: Record<StyleGender, Record<Silhouette, TypeStyle>> = {
+  women: SILHOUETTE_STYLES,
+  men: composeStyles(SILHOUETTE_STYLES, SILHOUETTE_ADVICE_MEN),
+  neutral: composeStyles(SILHOUETTE_STYLES, SILHOUETTE_ADVICE_NEUTRAL),
+};
+
+/** 골격 스타일 성별 세트 — women은 기존 문구 그대로, men/neutral은 위 규칙으로 유도. */
+export const FRAME_STYLES_BY_GENDER: Record<StyleGender, Record<Frame, TypeStyle>> = {
+  women: FRAME_STYLES,
+  men: composeStyles(FRAME_STYLES, FRAME_ADVICE_MEN),
+  neutral: composeStyles(FRAME_STYLES, FRAME_ADVICE_NEUTRAL),
+};
+
 // ── 리포트 ──────────────────────────────────────────────────────────────────
 /** 진단 결과 한 벌 — 두 축의 타입·콘텐츠와 한계 고지. */
 export interface BodyReport {
@@ -291,23 +477,30 @@ export interface BodyReport {
 const CAVEAT =
   '체감 설문 기반의 참고용 진단이에요. 실제 어울림은 키·취향·상황에 따라 달라지니, 스타일링 제안은 시작점으로만 활용하세요.';
 
-/** 프로필(설문 원답)로부터 진단 리포트를 유도한다. 결정론적 순수 함수. */
-export const analyzeBody = (p: BodyProfile): BodyReport => {
+/**
+ * 프로필(설문 원답)로부터 진단 리포트를 유도한다. 결정론적 순수 함수.
+ * gender는 스타일링 문구 세트만 고른다(분류 자체는 성별 무관) — 기본 'neutral'로
+ * 무인자 기존 호출(BodyPanel 등)을 그대로 호환한다.
+ */
+export const analyzeBody = (p: BodyProfile, gender: StyleGender = 'neutral'): BodyReport => {
   const silhouette = classifySilhouette(p.frameWidth, p.waist, p.volume);
   const frame = classifyFrame(p.wrist, p.collar, p.flesh, p.balance);
   return {
     silhouette,
     frame,
-    silhouetteStyle: SILHOUETTE_STYLES[silhouette],
-    frameStyle: FRAME_STYLES[frame],
+    silhouetteStyle: SILHOUETTE_STYLES_BY_GENDER[gender][silhouette],
+    frameStyle: FRAME_STYLES_BY_GENDER[gender][frame],
     caveat: CAVEAT,
   };
 };
 
-/** 프로필을 한 줄 요약으로. 예: "모래시계형 · 웨이브 골격". */
-export const summarizeBody = (p: BodyProfile): string => {
-  const r = analyzeBody(p);
-  return `${SILHOUETTE_STYLES[r.silhouette].label} · ${FRAME_STYLES[r.frame].label}`;
+/**
+ * 프로필을 한 줄 요약으로. 예: "모래시계형 · 웨이브 골격".
+ * 라벨은 성별 무관이라 gender를 받아도 결과는 동일하다(무인자 기존 호출 호환).
+ */
+export const summarizeBody = (p: BodyProfile, gender: StyleGender = 'neutral'): string => {
+  const r = analyzeBody(p, gender);
+  return `${SILHOUETTE_STYLES_BY_GENDER[gender][r.silhouette].label} · ${FRAME_STYLES_BY_GENDER[gender][r.frame].label}`;
 };
 
 // 유니온 값 화이트리스트 — 손상 데이터 판별과 옵션 검증의 단일 출처.
