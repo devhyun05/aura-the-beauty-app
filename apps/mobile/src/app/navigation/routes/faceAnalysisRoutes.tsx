@@ -21,12 +21,16 @@ import {isFace3DProfileAnalysisEligible} from '../../../features/face-3d/service
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import {UnifiedFaceCaptureScreen} from '../../../features/face-capture/screens/UnifiedFaceCaptureScreen';
 import {buildUnifiedFaceCaptureRequest} from '../../../features/face-capture/services/unifiedFaceCaptureContract';
-import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
+import {
+  uploadFaceCaptureImage,
+  type FaceCaptureUploadResult,
+} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {isUnifiedFaceCaptureEnabled} from '../../../features/face-capture/services/unifiedFaceCaptureMode';
 import {
   mapUnifiedHairlineToVerticalThirds,
   shouldUseUnifiedFaceCaptureRoute,
 } from '../../../features/face-capture/services/unifiedFaceCaptureNavigation';
+import {deleteUnifiedFaceCaptureTempImage} from '../../../features/face-capture/services/unifiedFaceCaptureTempImageCleanup';
 import {derivePersonalColorCorrectionStatus} from '../../../features/face-analysis/services/faceAnalysisMeasurements';
 import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
@@ -182,20 +186,15 @@ export function FaceCaptureRouteScreen({
           invalidateUnifiedFaceCapture({resetRetryAttempt: true});
           navigateMainTab(navigation, 'HomeTab');
         }}
-        onCaptureCommitted={(result, upload, loadingStartedAtMs) => {
-          if (!commitUnifiedFaceCapture(result, upload)) {
-            return false;
-          }
-
-          navigation.replace(
-            'FaceAnalysisLoading',
-            route.params?.afterAnalysisRoute
-              ? {
-                  afterAnalysisRoute: route.params.afterAnalysisRoute,
-                  loadingStartedAtMs,
-                }
-              : {loadingStartedAtMs},
-          );
+        onCaptureCommitted={commitUnifiedFaceCapture}
+        onCaptureReadyForProcessing={(result, loadingStartedAtMs) => {
+          navigation.replace('FaceAnalysisLoading', {
+            ...(route.params?.afterAnalysisRoute
+              ? {afterAnalysisRoute: route.params.afterAnalysisRoute}
+              : {}),
+            loadingStartedAtMs,
+            pendingUnifiedCapture: result,
+          });
           return true;
         }}
         onFallback={() => {
@@ -206,20 +205,6 @@ export function FaceCaptureRouteScreen({
           navigateMainTab(navigation, 'HomeTab');
         }}
         onRequestStarted={beginUnifiedFaceCapture}
-        renderProcessingOverlay={overlayProps => (
-          <DetailRouteChrome
-            routeName="FaceAnalysisLoading"
-            onBack={overlayProps.onBack}>
-            <FaceAnalysisLoadingScreen
-              analysisErrorMessage={overlayProps.analysisErrorMessage}
-              capturedPhotoUri={overlayProps.capturedPhotoUri}
-              isAnalysisReady={false}
-              onBack={overlayProps.onBack}
-              onRetry={overlayProps.onRetry}
-              progressStartedAtMs={overlayProps.loadingStartedAtMs}
-            />
-          </DetailRouteChrome>
-        )}
         request={unifiedCaptureRequest}
       />
     );
@@ -317,6 +302,8 @@ export function FaceAnalysisLoadingRouteScreen({
   route,
 }: RootScreenProps<'FaceAnalysisLoading'>) {
   const {
+    commitUnifiedFaceCapture,
+    invalidateUnifiedFaceCapture,
     selectedFace3DProfile,
     selectedFaceCapture,
     setSelectedFaceAnalysisReport,
@@ -330,7 +317,10 @@ export function FaceAnalysisLoadingRouteScreen({
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
   const [analysisErrorMessage, setAnalysisErrorMessage] = React.useState<string | null>(null);
   const [analysisRequestKey, setAnalysisRequestKey] = React.useState(0);
+  const [uploadRequestKey, setUploadRequestKey] = React.useState(0);
   const analysisRetryCountRef = React.useRef(0);
+  const pendingUploadPromiseRef = React.useRef<Promise<void> | null>(null);
+  const pendingUnifiedCapture = route.params?.pendingUnifiedCapture ?? null;
   const verticalThirdsPromiseRef =
     React.useRef<Promise<FaceVerticalThirdsResult | null> | null>(null);
   // 보고서 POST 가 대기하는 2D 기하 promise — POST deps 에 state 를 넣으면
@@ -348,6 +338,73 @@ export function FaceAnalysisLoadingRouteScreen({
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
   }, [selectedFaceCapture?.mediaId, selectedFaceCapture?.photoCaptureId]);
+
+  // 통합 촬영은 실제 대기 화면으로 먼저 이동한 뒤 이 화면 안에서 업로드한다.
+  // Promise ref로 StrictMode effect 재실행과 리렌더의 중복 업로드를 막고, 업로드가
+  // 커밋되면 같은 화면 인스턴스에서 온디바이스 분석과 보고서 생성을 이어간다.
+  React.useEffect(() => {
+    if (
+      selectedFaceCapture ||
+      !pendingUnifiedCapture ||
+      pendingUploadPromiseRef.current
+    ) {
+      return;
+    }
+
+    setAnalysisErrorMessage(null);
+    let uploadPromise: Promise<void>;
+    uploadPromise = uploadFaceCaptureImage({
+      cameraMetadata: pendingUnifiedCapture.cameraMetadata
+        ? {
+            exposureDurationMs:
+              pendingUnifiedCapture.cameraMetadata.exposureDurationMs,
+            iso: pendingUnifiedCapture.cameraMetadata.iso,
+          }
+        : null,
+      captureType: 'face_analysis',
+      contentType:
+        pendingUnifiedCapture.image.format === 'png'
+          ? 'image/png'
+          : 'image/jpeg',
+      height: pendingUnifiedCapture.image.height,
+      source: 'camera',
+      uri: pendingUnifiedCapture.image.uri,
+      width: pendingUnifiedCapture.image.width,
+    })
+      .then(async upload => {
+        if (commitUnifiedFaceCapture(pendingUnifiedCapture, upload)) {
+          return;
+        }
+
+        await deleteUnifiedFaceCaptureTempImage(
+          pendingUnifiedCapture.image.uri,
+        );
+        throw new Error('unified_capture_commit_rejected');
+      })
+      .catch(error => {
+        console.info('[aura:unified-face-capture] processing-upload:error', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+        if (navigation.isFocused()) {
+          setAnalysisErrorMessage(
+            '사진 저장이 지연되고 있어요. 네트워크를 확인한 뒤 다시 시도해 주세요.',
+          );
+        }
+      })
+      .finally(() => {
+        if (pendingUploadPromiseRef.current === uploadPromise) {
+          pendingUploadPromiseRef.current = null;
+        }
+      });
+
+    pendingUploadPromiseRef.current = uploadPromise;
+  }, [
+    commitUnifiedFaceCapture,
+    navigation,
+    pendingUnifiedCapture,
+    selectedFaceCapture,
+    uploadRequestKey,
+  ]);
 
   // [Unity still-analysis lease 시작] 아래 정지영상 분석(세로비율·퍼스널컬러)은
   // Unity homuler(IMAGE 모드) 코루틴에서 돌므로 플레이어 루프가 실행 중이어야
@@ -688,8 +745,40 @@ export function FaceAnalysisLoadingRouteScreen({
     analysisRetryCountRef.current = 0;
     setAnalysisErrorMessage(null);
     setIsAnalysisReady(false);
+
+    if (pendingUnifiedCapture && !selectedFaceCapture) {
+      setUploadRequestKey(currentKey => currentKey + 1);
+      return;
+    }
+
     setAnalysisRequestKey(currentKey => currentKey + 1);
-  }, []);
+  }, [pendingUnifiedCapture, selectedFaceCapture]);
+  const handleBack = React.useCallback(() => {
+    if (pendingUnifiedCapture && !selectedFaceCapture) {
+      invalidateUnifiedFaceCapture({resetRetryAttempt: true});
+      const pendingUpload = pendingUploadPromiseRef.current;
+      if (pendingUpload) {
+        void pendingUpload
+          .finally(() =>
+            deleteUnifiedFaceCaptureTempImage(
+              pendingUnifiedCapture.image.uri,
+            ),
+          )
+          .catch(() => undefined);
+      } else {
+        void deleteUnifiedFaceCaptureTempImage(
+          pendingUnifiedCapture.image.uri,
+        ).catch(() => undefined);
+      }
+    }
+
+    navigateMainTab(navigation, 'HomeTab');
+  }, [
+    invalidateUnifiedFaceCapture,
+    navigation,
+    pendingUnifiedCapture,
+    selectedFaceCapture,
+  ]);
   const handleAnalysisComplete = React.useCallback(() => {
     if (!navigation.isFocused()) {
       return;
@@ -709,12 +798,14 @@ export function FaceAnalysisLoadingRouteScreen({
   return (
     <DetailRouteChrome
       routeName="FaceAnalysisLoading"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={handleBack}>
       <FaceAnalysisLoadingScreen
         analysisErrorMessage={analysisErrorMessage}
-        capturedPhotoUri={selectedFaceCapture?.imageUri}
+        capturedPhotoUri={
+          selectedFaceCapture?.imageUri ?? pendingUnifiedCapture?.image.uri
+        }
         isAnalysisReady={isAnalysisReady}
-        onBack={() => navigateMainTab(navigation, 'HomeTab')}
+        onBack={handleBack}
         onComplete={handleAnalysisComplete}
         onRetry={handleRetryAnalysis}
         progressStartedAtMs={route.params?.loadingStartedAtMs}

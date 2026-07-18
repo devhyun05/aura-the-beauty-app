@@ -34,17 +34,13 @@ type UnifiedFaceCaptureScreenProps = {
   onCaptureCommitted: (
     result: UnifiedFaceCaptureCompletedEvent,
     upload: FaceCaptureUploadResult,
-    loadingStartedAtMs: number,
   ) => boolean | Promise<boolean>;
+  onCaptureReadyForProcessing?: (
+    result: UnifiedFaceCaptureCompletedEvent,
+    loadingStartedAtMs: number,
+  ) => boolean;
   onFallback: (reason: string) => void;
   onRequestStarted: (requestId: string) => void;
-  renderProcessingOverlay?: (props: {
-    analysisErrorMessage: string | null;
-    capturedPhotoUri?: string;
-    loadingStartedAtMs: number;
-    onBack: () => void;
-    onRetry: () => void;
-  }) => React.ReactNode;
   request?: UnifiedFaceCaptureRequest;
   uploadImage?: (
     image: FaceCaptureImageInput,
@@ -67,9 +63,9 @@ export function UnifiedFaceCaptureScreen({
   onAbandonStarted,
   onCancel,
   onCaptureCommitted,
+  onCaptureReadyForProcessing,
   onFallback,
   onRequestStarted,
-  renderProcessingOverlay,
   request: providedRequest,
   uploadImage = uploadFaceCaptureImage,
 }: UnifiedFaceCaptureScreenProps) {
@@ -86,6 +82,7 @@ export function UnifiedFaceCaptureScreen({
     onAbandonStarted,
     onCancel,
     onCaptureCommitted,
+    onCaptureReadyForProcessing,
     onFallback,
     onRequestStarted,
   });
@@ -100,6 +97,7 @@ export function UnifiedFaceCaptureScreen({
     onAbandonStarted,
     onCancel,
     onCaptureCommitted,
+    onCaptureReadyForProcessing,
     onFallback,
     onRequestStarted,
   };
@@ -219,7 +217,6 @@ export function UnifiedFaceCaptureScreen({
           !(await callbacksRef.current.onCaptureCommitted(
             completed,
             upload,
-            loadingStartedAtMsRef.current ?? Date.now(),
           ))
         ) {
           isAbandoningRef.current = true;
@@ -252,6 +249,40 @@ export function UnifiedFaceCaptureScreen({
     }
 
     autoUploadCaptureIdRef.current = completed.captureId;
+    const handoff = callbacksRef.current.onCaptureReadyForProcessing;
+    if (handoff) {
+      try {
+        if (
+          handoff(
+            completed,
+            loadingStartedAtMsRef.current ?? Date.now(),
+          )
+        ) {
+          return;
+        }
+
+        isAbandoningRef.current = true;
+        callbacksRef.current.onAbandonStarted?.();
+        void deleteUnifiedFaceCaptureTempImage(completed.image.uri).finally(() => {
+          callbacksRef.current.onFallback(
+            'unified_capture_processing_handoff_rejected',
+          );
+        });
+      } catch (error) {
+        isAbandoningRef.current = true;
+        callbacksRef.current.onAbandonStarted?.();
+        console.info('[aura:unified-face-capture] processing-handoff:error', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+        void deleteUnifiedFaceCaptureTempImage(completed.image.uri).finally(() => {
+          callbacksRef.current.onFallback(
+            'unified_capture_processing_handoff_failed',
+          );
+        });
+      }
+      return;
+    }
+
     void attemptUpload(completed);
   }, [attemptUpload, captureState.completed]);
 
@@ -311,10 +342,6 @@ export function UnifiedFaceCaptureScreen({
   const canRetryUpload = Boolean(
     captureState.completed && uploadError && !isUploading,
   );
-  const shouldShowProcessingOverlay = Boolean(
-    renderProcessingOverlay &&
-      (captureState.isCapturing || captureState.completed),
-  );
   const cancelCaptureFlow = () => {
     isAbandoningRef.current = true;
     callbacksRef.current.onAbandonStarted?.();
@@ -322,14 +349,6 @@ export function UnifiedFaceCaptureScreen({
     void cleanupUncommittedImage(captureState.completed).finally(() => {
       callbacksRef.current.onCancel();
     });
-  };
-  const retryUpload = () => {
-    if (!captureState.completed) {
-      return;
-    }
-
-    loadingStartedAtMsRef.current = Date.now();
-    void attemptUpload(captureState.completed);
   };
 
   return (
@@ -421,19 +440,6 @@ export function UnifiedFaceCaptureScreen({
           </Text>
         </View>
       </SafeAreaView>
-      {shouldShowProcessingOverlay && renderProcessingOverlay ? (
-        <View style={styles.processingOverlay}>
-          {renderProcessingOverlay({
-            analysisErrorMessage: uploadError
-              ? '사진 저장이 지연되고 있어요. 네트워크를 확인한 뒤 다시 시도해 주세요.'
-              : null,
-            capturedPhotoUri: captureState.completed?.image.uri,
-            loadingStartedAtMs: loadingStartedAtMsRef.current ?? Date.now(),
-            onBack: cancelCaptureFlow,
-            onRetry: retryUpload,
-          })}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -498,16 +504,6 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     padding: spacing.lg,
     width: '90%',
-  },
-  processingOverlay: {
-    backgroundColor: colors.background,
-    bottom: 0,
-    elevation: 20,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    zIndex: 20,
   },
   headerRow: {
     alignItems: 'flex-end',

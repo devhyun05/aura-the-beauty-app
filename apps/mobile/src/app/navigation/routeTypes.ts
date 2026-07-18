@@ -1,4 +1,5 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
+import type {UnifiedFaceCaptureCompletedEvent} from '../../features/face-capture/services/unifiedFaceCaptureContract';
 import type {
   ConsultingBookingDraft,
   ConsultingCategoryId,
@@ -43,6 +44,7 @@ export type RootStackParamList = {
     | {
         afterAnalysisRoute?: FaceAnalysisCompletionRouteName;
         loadingStartedAtMs?: number;
+        pendingUnifiedCapture?: UnifiedFaceCaptureCompletedEvent;
       }
     | undefined;
   FaceAnalysisReportsList: undefined;
