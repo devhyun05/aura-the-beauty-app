@@ -5,8 +5,6 @@ import logging
 import time
 from uuid import UUID
 
-import asyncpg
-
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
 
@@ -621,15 +619,20 @@ async def run_analysis_job_background(
     await mark_analysis_failed(db, report_id, message, payload, details)
     return
 
-  # DB 정본은 기기 측정값 원칙: personal_color/tone_summary 컬럼은 LLM 산출이
-  # 아니라 조명 보정·정합성 게이트를 통과한 측정 퍼컬의 한국어 라벨을 쓴다.
-  # (라이브 프롬프트는 애초에 퍼컬 재판정을 금지 — LLM 값은 폴백으로도 안 쓴다.)
-  # 측정 실패면 (None, None) → coalesce가 NULL 유지 → 리스트 태그도 표시 안 함.
+  # DB 정본은 기기 측정값 원칙: personal_color/tone_summary 컬럼은 조명 보정·
+  # 정합성 게이트를 통과한 측정 퍼컬의 한국어 라벨을 **우선** 쓴다. 단 측정이
+  # 실패(insufficient·게이트 탈락)하면 NULL로 두지 않고 LLM 결과값(V2 perception)
+  # 으로 폴백한다 — 컬럼을 비우면 모바일 완결성 게이트가 리포트를 통째로 실패
+  # 처리할 수 있어서다("측정 우선, 실패 시만 LLM 폴백").
   measured_personal_color, measured_tone_summary = (
     measured_personal_color_column_values(
       payload.request_payload.get("measurements"),
     )
   )
+  result_personal_color = result.get("personalColor") if isinstance(result, dict) else None
+  result_tone_summary = result.get("toneSummary") if isinstance(result, dict) else None
+  effective_personal_color = measured_personal_color or result_personal_color
+  effective_tone_summary = measured_tone_summary or result_tone_summary
   report_status = "completed"
   report = await db.fetchrow(
     """
@@ -656,10 +659,10 @@ async def run_analysis_job_background(
     report_status,
     settings.analysis_provider,
     settings.effective_analysis_model_id,
-    measured_personal_color,
+    effective_personal_color,
     result.get("faceShape") if isinstance(result, dict) else None,
     result.get("skinType") if isinstance(result, dict) else None,
-    measured_tone_summary,
+    effective_tone_summary,
     result.get("recommendedMood") if isinstance(result, dict) else None,
     result.get("summary") if isinstance(result, dict) else None,
     result.get("shortSummary") if isinstance(result, dict) else None,
@@ -904,53 +907,30 @@ async def create_analysis_job(
     else None
   )
 
-  try:
-    if receipt_verification is not None and receipt_verification.verified:
-      async def consume_and_insert(connection) -> dict | None:
-        await verify_and_consume_face3d_calibration_receipt(
-          connection,
-          settings,
-          payload.request_payload,
-          expected_report_context_id=receipt_request_context.report_context_id,
-          expected_subject_context_id=receipt_request_context.subject_context_id,
-        )
-        return await insert_report(connection)
-
-      report = await db.run_in_transaction(consume_and_insert)
-    else:
+  # NOTE(M3 후속): 동일 촬영 연타의 멱등 dedup은 부분 유니크 인덱스(위 init_db
+  # NOTE 참조)가 전제인데, 그 인덱스는 배포 안전성 문제로 보류했다. 인덱스 없이
+  # UniqueViolation catch만 두면 무의미하므로 함께 보류한다.
+  if receipt_verification is not None and receipt_verification.verified:
+    async def consume_and_insert(connection) -> dict | None:
       await verify_and_consume_face3d_calibration_receipt(
-        db,
+        connection,
         settings,
         payload.request_payload,
         expected_report_context_id=receipt_request_context.report_context_id,
         expected_subject_context_id=receipt_request_context.subject_context_id,
       )
-      report = await insert_report(db)
-  except asyncpg.UniqueViolationError:
-    # 멱등성(M3): 부분 유니크 인덱스가 동일 소스의 in-flight 중복 insert를
-    # 막았다 = 이미 같은 촬영으로 분석이 진행 중. 새 잡을 또 만들지 않고
-    # 기존 in-flight 보고서를 그대로 돌려준다(연타 방지, 중복 과금 방지).
-    existing = await db.fetchrow(
-      """
-      select *
-      from analysis_reports
-      where user_id = $1 and source_media_id = $2
-        and status in ('pending', 'processing')
-        and deleted_at is null
-      order by created_at desc
-      limit 1
-      """,
-      user["id"],
-      payload.source_media_id,
+      return await insert_report(connection)
+
+    report = await db.run_in_transaction(consume_and_insert)
+  else:
+    await verify_and_consume_face3d_calibration_receipt(
+      db,
+      settings,
+      payload.request_payload,
+      expected_report_context_id=receipt_request_context.report_context_id,
+      expected_subject_context_id=receipt_request_context.subject_context_id,
     )
-    if existing is None:
-      raise
-    logger.info(
-      "[aura:analysis-api] job:dedup-inflight userSub=%s reportId=%s",
-      auth.subject,
-      existing["id"],
-    )
-    return success({"job": normalize_analysis_report_row(dict(existing))})
+    report = await insert_report(db)
 
   if payload.run_immediately:
     await dispatch_analysis_job(
@@ -1086,8 +1066,10 @@ async def retry_analysis_job_stage(
 @router.get("/reports")
 async def list_analysis_reports(
   with_recommended_makeups: bool = Query(False, alias="withRecommendedMakeups"),
-  # 무제한 전량 반환 방지: 미지정 시 최근 50건(무한 스크롤 전까지의 안전 상한).
-  limit: int = Query(50, ge=1, le=200),
+  # 미지정 시 무제한(기존 동작). 페이지네이션/무한스크롤 없이 기본 상한을 두면
+  # 51번째 이후 리포트가 UI에서 접근 불가해지는 회귀라, 상한 도입은 offset/커서와
+  # 함께 별건으로 한다.
+  limit: int | None = Query(None, ge=1, le=200),
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
 ) -> dict:
@@ -1130,8 +1112,9 @@ async def list_analysis_reports(
     order by r.created_at desc
   """
 
-  values.append(limit)
-  query += f" limit ${len(values)}"
+  if limit is not None:
+    values.append(limit)
+    query += f" limit ${len(values)}"
 
   reports = await db.fetch(
     query,

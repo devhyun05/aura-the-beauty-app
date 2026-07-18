@@ -50,14 +50,16 @@ def _ids(rows: list[dict[str, Any]]) -> tuple[str, ...]:
 
 
 async def find_stuck_jobs(db: Any, *, cutoff: datetime) -> CleanupResult:
-  # pending도 포함: dispatch 전 크래시·SQS publish 실패로 갇힌 보고서는 어떤
-  # 스위퍼도 회수하지 않았다(기존은 processing만). 오래된 pending은 재실행
-  # 흔적 없이 남아 있으므로 cutoff 경과 시 실패 처리한다.
+  # processing만 회수한다. pending은 SQS 모드에서 워커 dequeue 전까지 정상적으로
+  # 유지되는 상태라, cutoff로 실패 처리하면 backlog 시 대기 중 잡을 죽이고
+  # 워커가 terminal-skip(job_dispatcher TERMINAL_JOB_STATUSES)해 영구 유실된다.
+  # dispatch 전 크래시로 갇힌 pending 회수는 SQS-safe한 별도 신호(publish 시각
+  # 등)가 필요 — 후속 과제로 남긴다.
   analysis_rows = await db.fetch(
     """
     select id
     from analysis_reports
-    where status in ('pending', 'processing')
+    where status = 'processing'
       and updated_at < $1
     order by updated_at
     """,
@@ -114,7 +116,7 @@ async def cleanup_stuck_jobs(db: Any, *, cutoff: datetime) -> CleanupResult:
           || jsonb_build_object(
             'error', jsonb_build_object('message', $2::text, 'details', $3::jsonb)
           )
-    where status in ('pending', 'processing')
+    where status = 'processing'
       and updated_at < $1
     returning id
     """,

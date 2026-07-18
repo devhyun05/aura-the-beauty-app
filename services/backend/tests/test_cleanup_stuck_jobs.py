@@ -39,11 +39,11 @@ async def test_find_stuck_jobs_only_reads_old_processing_reports() -> None:
 
   result = await find_stuck_jobs(db, cutoff=cutoff)
 
-  # analysis(pending+processing) + image-stuck + feedback + filter = 4.
+  # analysis(processing) + image-stuck + feedback + filter = 4.
   assert result.total == 4
   assert result.image_stuck_report_ids == ("image-1",)
-  # analysis 잡은 pending까지 회수, feedback/filter는 processing만.
-  assert "status in ('pending', 'processing')" in db.calls[0][0]
+  # analysis·feedback·filter는 processing만 회수(pending은 SQS-safe 문제로 제외).
+  assert "status = 'processing'" in db.calls[0][0]
   # image-stuck 조회는 completed + imageGenerationStatus=processing.
   assert "status = 'completed'" in db.calls[1][0]
   assert "imageGenerationStatus" in db.calls[1][0]

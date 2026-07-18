@@ -92,6 +92,8 @@ const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
   'ANALYSIS_REPORT_TEXT_REQUIRED',
   'ANALYSIS_REPORT_TIMEOUT',
   'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
+  // 화면 이탈로 폴링을 의도적으로 중단한 경우 — 재시도 대상이 아니다.
+  'ANALYSIS_WAIT_ABORTED',
 ]);
 
 export function getFaceAnalysisReportFooterReservedHeight(

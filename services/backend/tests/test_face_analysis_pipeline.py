@@ -319,9 +319,11 @@ async def test_consulting_filters_internal_insights_and_hashes_model_visible_pay
   assert "faceShape" in model_payload["derived"]
   assert "asymmetry" not in model_payload["derived"]
   assert model_payload["perception"]["volume"]["visibleHollows"] == []
+  # consult 캐시 키는 성별별 방향 차이를 반영하려 profileGender를 포함한다
+  # (모델 user_prompt에는 없고 developer_prompt로 반영되므로 해시 입력만 확장).
   assert (
     store.started[StageName.AI_CONSULTING]["input_hash"]
-    == compute_stage_input_hash(model_payload)
+    == compute_stage_input_hash({**model_payload, "profileGender": None})
   )
 
   raw_derived = initialize_face_analysis_v2(REQUEST).derived

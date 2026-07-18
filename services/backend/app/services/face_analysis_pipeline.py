@@ -583,6 +583,8 @@ class FaceAnalysisPipeline:
           include_sensitive=False,
         ),
       )
+      raw_profile_gender = request_payload.get("profileGender")
+      profile_gender = raw_profile_gender if isinstance(raw_profile_gender, str) else None
       consulting_model_input = filter_internal_only_payload(
         {
           "faceProfile": {
@@ -591,6 +593,9 @@ class FaceAnalysisPipeline:
           },
           "derived": result.derived.model_dump(by_alias=True, mode="json"),
           "perception": result.perception.model_dump(by_alias=True, mode="json"),
+          # 캐시 키에 포함시켜 다른 성별 사용자가 동일 측정으로 만든 consult
+          # 결과를 공유하지 않게 한다(성별별 방향이 다르므로).
+          "profileGender": profile_gender,
         },
       )
       consulting_kwargs = self._stage_kwargs(
@@ -606,6 +611,7 @@ class FaceAnalysisPipeline:
           profile=consulting_model_input["faceProfile"],
           derived=consulting_model_input["derived"],
           perception=consulting_model_input["perception"],
+          profile_gender=profile_gender,
         ),
       )
       if consulting is not None:

@@ -23,8 +23,9 @@ const formatJournalDate = (dateText: string) => {
 };
 
 function getReportTags(report: FaceAnalysisReport) {
+  // 측정 실패로 personalColor 등이 NULL/미정일 수 있어 null-safe하게 다룬다.
   return [report.personalColor, report.faceShape, report.skinType]
-    .map(tag => tag.trim())
+    .map(tag => tag?.trim() ?? '')
     .filter(Boolean)
     .slice(0, 3);
 }

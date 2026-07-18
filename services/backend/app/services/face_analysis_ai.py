@@ -22,11 +22,29 @@ from app.services.face_analysis_measurements import (
 
 MEASUREMENT_PROMPT_VERSION = "s1-measurement-v1"
 PERCEPTION_PROMPT_VERSION = "s1-perception-v1"
-CONSULTING_PROMPT_VERSION = "s1-consulting-v2"
+# 성별 지시문 추가로 프롬프트 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
+CONSULTING_PROMPT_VERSION = "s1-consulting-v3"
 FORBIDDEN_INFERENCES = (
   "medical diagnosis, disease, age, ethnicity, health status, cosmetic procedures, "
   "attractiveness score"
 )
+
+# 계정 성별 → consult 방향 지시(사진 추론 금지). makeup_recommendation_context의
+# normalize_makeup_profile_gender 산출값(female|male|unspecified)과 키가 일치한다.
+_CONSULT_GENDER_DIRECTIVES = {
+  "female": (
+    "The account gender is female; use feminine makeup direction by default and never "
+    "re-infer gender from the photo."
+  ),
+  "male": (
+    "The account gender is male; use masculine grooming makeup direction by default and "
+    "never re-infer gender from the photo."
+  ),
+  "unspecified": (
+    "The account gender is unspecified; do not estimate gender from the photo and use "
+    "gender-neutral makeup direction by default."
+  ),
+}
 
 
 class StructuredAnalysisClient(Protocol):
@@ -175,6 +193,7 @@ class FaceAnalysisAI:
     profile: Mapping[str, MetricEnvelope | dict[str, Any]],
     derived: DerivedResult | dict[str, Any],
     perception: PerceptionResult | dict[str, Any],
+    profile_gender: str | None = None,
   ) -> ConsultingResult:
     model_profile = filter_metrics_for_model(profile)
     model_payload = filter_internal_only_payload(
@@ -184,11 +203,18 @@ class FaceAnalysisAI:
         "perception": _jsonable(perception),
       },
     )
+    # 계정 성별을 메이크업 방향의 기준으로 쓴다(사진 성별 추론 금지) — analyze_text
+    # 경로와 동일 원칙. 미지정/불명은 성별을 추정하지 않는 중성 표현.
+    gender_directive = _CONSULT_GENDER_DIRECTIVES.get(
+      profile_gender or "",
+      _CONSULT_GENDER_DIRECTIVES["unspecified"],
+    )
     return await self._invoke_validated(
       model_type=ConsultingResult,
       developer_prompt=(
         "You are a practical K-beauty, hair, fashion, and photography consultant. Base every "
         f"recommendation on supplied evidence. Never infer {FORBIDDEN_INFERENCES}. "
+        f"{gender_directive} "
         "Keep face shape and vertical facial thirds as separate facts. Never describe a dominant "
         "or elongated upper, middle, or lower third as balanced, and never use one as evidence that "
         "the other is balanced. Summary and shortSummary must preserve the supplied derived labels "
