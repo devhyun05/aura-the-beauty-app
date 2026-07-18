@@ -6,13 +6,9 @@
 // analysis call now also generates alongside faceShape/recommendedMood/etc
 // (services/backend/app/services/openai_analysis.py). S3 region crops + guide
 // lines and S6 impression-axis positions now come from real per-user
-// measurements (regionVisuals / impressionNotes.axes) when present, falling
-// back to a neutral template (fixed S3_REGION_META guide / DEFAULT_S6_AXES) —
-// same "never fabricate" rationale as S5's generic silhouette illustration.
-// Reports created before these fields existed simply won't have
-// regionNotes/impressionNotes/stylingLooks (or regionVisuals), so those
-// sections stay hidden or fall back to the neutral template (never fabricated)
-// — see reportTypes.ts's ReportData doc comment.
+// measurements (regionVisuals / impressionNotes.axes) when present. Missing AI
+// fields hide their sections; this adapter never invents analysis copy or
+// neutral positions.
 
 import type {
   FaceAnalysisImpressionNotes,
@@ -29,13 +25,12 @@ import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/
 import {ALL_12_TYPES, TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
 import {getColorFamilyReference} from '../../personal-color/services/personalColorCore/palette';
 import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
-import {buildRegionFeatureAxes, describeRegionAxes} from '../reportFeatureAxes';
+import {buildRegionFeatureAxes} from '../reportFeatureAxes';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
 import type {AxisName, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
 import {analyzeBody, resolveStyleGender} from '../../ar/stencil/src/composer/bodyProfile';
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import type {
-  ImpressionAxis,
   LookCardData,
   ReportData,
   S1Data,
@@ -643,7 +638,7 @@ function buildS3(
   regionVisuals: RegionVisuals | null,
   geometryMetrics: FaceGeometryMetrics | null,
 ): S3Data | null {
-  if (!regionNotes && !regionVisuals && !geometryMetrics) {
+  if (!regionNotes) {
     return null;
   }
 
@@ -700,16 +695,13 @@ function buildS3(
             ? []
             : [{leftLabel: a.leftLabel, rightLabel: a.rightLabel, state: {kind: 'point' as const, position: a.position}}],
         );
-        // 측정 기반 자기참조 서술이 있으면 insight로(정직·구체), 없으면 Bedrock insight 폴백.
-        const narrative = describeRegionAxes(featAxes);
-        const note = normalizeRegionNote(regionNotes?.[key]);
-        const insight = narrative || note.insight;
+        const note = normalizeRegionNote(regionNotes[key]);
         return {
           axes,
-          insight,
-          evidence: narrative ? '' : note.evidence, // 서술 있으면 근거 중복 제거
+          insight: note.insight,
+          evidence: note.evidence,
           recommendation: note.recommendation,
-          paragraph: insight || '사진에서 확인 가능한 얼굴 기준선을 먼저 표시했어요.',
+          paragraph: note.insight,
         };
       })(),
     };
@@ -723,29 +715,17 @@ function buildS3(
   };
 }
 
-// axes 는 AI가 인상을 2개 축(가로/세로) 좌표로 판단한 것 — 없으면(구버전
-// 보고서) 중립 기본축으로 폴백한다. 실측 좌표가 아니라 AI 서술 인상의
-// 시각화이므로 keywords/paragraph 와 함께 impressionNotes 에서만 온다.
-const DEFAULT_S6_AXES: ImpressionAxis[] = [
-  {key: 'softness', leftLabel: '부드러움', rightLabel: '또렷함', value: 0},
-  {key: 'vividness', leftLabel: '차분함', rightLabel: '화사함', value: 0},
-];
-
 function buildS6(
   impressionNotes: FaceAnalysisImpressionNotes | undefined,
 ): S6Data | null {
   if (!impressionNotes) {
     return null;
   }
-  const axes =
-    impressionNotes.axes && impressionNotes.axes.length === 2
-      ? impressionNotes.axes
-      : DEFAULT_S6_AXES;
   return {
     eyebrow: 'IMPRESSION',
     title: '모아 보면 이런 인상이에요',
     sub: '이목구비와 윤곽을 함께 보면 얼굴에서 먼저 느껴지는 분위기를 알 수 있어요.',
-    axes,
+    axes: impressionNotes.axes ?? [],
     keywords: impressionNotes.keywords,
     paragraph: impressionNotes.paragraph,
   };
@@ -771,107 +751,24 @@ function toLookCard(
     title: look.title,
     rows: look.rows.map(row => ({
       category: STYLING_ROW_CATEGORY_LABEL_KO[row.category],
-      title: variant === 'natural'
-        ? naturalStylingNote(row.category)
-        : glamStylingNote(row.category),
+      title: row.note,
       evidence: 'artist',
       evidenceLabel: '',
-      why: '',
+      why: row.why,
     })),
   };
 }
 
-function nonEmptyText(value: string | null | undefined): string | null {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
-
-function naturalStylingNote(category: FaceAnalysisStylingLookRowCategory): string {
-  switch (category) {
-    case 'base':
-      return '얇은 베이스로 피부 결만 정돈해요.';
-    case 'brow':
-      return '눈썹 결을 살리고 빈 곳만 가볍게 채워요.';
-    case 'eyeshadow':
-      return '눈두덩 전체에 은은한 음영만 얇게 깔아요.';
-    case 'eyeliner':
-      return '라인은 생략하거나 점막만 아주 얇게 채워요.';
-    case 'blush':
-      return '혈색을 넓고 연하게 번지듯 연결해요.';
-    case 'lip':
-      return '립은 경계를 풀어 자연스럽게 물들여요.';
-  }
-}
-
-function glamStylingNote(category: FaceAnalysisStylingLookRowCategory): string {
-  switch (category) {
-    case 'base':
-      return '중심부 커버와 윤광을 조금 더 또렷하게 잡아요.';
-    case 'brow':
-      return '눈썹 산과 꼬리를 정리해 인상을 선명하게 세워요.';
-    case 'eyeshadow':
-      return '눈꼬리와 삼각존에 음영을 더해 깊이를 만들어요.';
-    case 'eyeliner':
-      return '점막과 꼬리 라인을 또렷하게 연결해요.';
-    case 'blush':
-      return '볼 중앙 농도를 올려 생기와 입체감을 같이 줘요.';
-    case 'lip':
-      return '립 라인을 정리하고 색 농도를 한 단계 올려요.';
-  }
-}
-
-function buildFallbackStylingLooks(report: FaceAnalysisReport): FaceAnalysisStylingLooks | null {
-  const guide = report.makeupGuideline;
-  const base = nonEmptyText(report.baseMakeupGuide) ?? '피부 결을 얇고 균일하게 정돈해요.';
-  const rows = [
-    {category: 'base' as const, note: base},
-    {category: 'brow' as const, note: nonEmptyText(guide.brow) ?? '눈썹 결을 자연스럽게 정돈해요.'},
-    {category: 'eyeshadow' as const, note: nonEmptyText(guide.eyeshadow) ?? '눈가에 은은한 음영을 더해요.'},
-    {category: 'eyeliner' as const, note: nonEmptyText(guide.eyeliner) ?? '아이라인은 필요한 만큼만 또렷하게 잡아요.'},
-    {category: 'blush' as const, note: nonEmptyText(guide.blush) ?? '혈색은 넓고 얇게 연결해요.'},
-    {category: 'lip' as const, note: nonEmptyText(guide.lip) ?? '입술 색은 전체 분위기와 맞춰 마무리해요.'},
-  ];
-  const hasGuide = rows.some(row => row.note.trim().length > 0);
-
-  if (!hasGuide) {
-    return null;
-  }
-
-  return {
-    natural: {
-      title: '데일리 정돈',
-      subtitle: '은은한 데일리 강도',
-      description: '',
-      rows: rows.map(row => ({
-        ...row,
-        note: naturalStylingNote(row.category),
-        why: '',
-      })),
-    },
-    glam: {
-      title: '포인트 정돈',
-      subtitle: '또렷한 포인트 강도',
-      description: '',
-      rows: rows.map(row => ({
-        ...row,
-        note: glamStylingNote(row.category),
-        why: '',
-      })),
-    },
-  };
-}
-
-function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined, report: FaceAnalysisReport): S7Data | null {
-  const looks = stylingLooks ?? buildFallbackStylingLooks(report);
-  if (!looks) {
+function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined): S7Data | null {
+  if (!stylingLooks) {
     return null;
   }
 
   return {
     eyebrow: 'STYLING',
     title: '같은 얼굴, 두 가지 방향',
-    naturalCard: toLookCard('natural', '내추럴', looks.natural),
-    glamCard: toLookCard('glam', '글램', looks.glam),
+    naturalCard: toLookCard('natural', '내추럴', stylingLooks.natural),
+    glamCard: toLookCard('glam', '글램', stylingLooks.glam),
   };
 }
 
@@ -895,7 +792,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile, gender),
     s6: buildS6(report.impressionNotes),
-    s7: buildS7(report.stylingLooks, report),
+    s7: buildS7(report.stylingLooks),
     footer: {
       disclaimer: '분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.',
       cta: '메이크업 추천 보러가기',

@@ -12,6 +12,10 @@ export const FACE_ANALYSIS_REPORT_DETAIL_SERVER_ERROR_DESCRIPTION =
   '서버에서 분석 결과를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.' as const;
 export const FACE_ANALYSIS_REPORT_DETAIL_NOT_FOUND_ERROR_DESCRIPTION =
   '분석 결과를 찾지 못했어요. 목록에서 다시 선택해 주세요.' as const;
+export const FACE_ANALYSIS_REPORT_UNAVAILABLE_MESSAGE =
+  '얼굴 분석을 완료하지 못했어요' as const;
+export const FACE_ANALYSIS_REPORT_UNAVAILABLE_DESCRIPTION =
+  '사진에서 얼굴을 충분히 분석하지 못했어요. 다시 촬영해 주세요.' as const;
 
 export type FaceAnalysisReportDetailData = {
   report: FaceAnalysisReport | null;
@@ -23,28 +27,69 @@ export type FaceAnalysisReportDetailLoadState =
   | {status: 'success'; report: FaceAnalysisReport | null; profile: UserProfile}
   | {
       status: 'error';
-      message: typeof FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_MESSAGE;
+      message: string;
       description: string;
+      canRetake: boolean;
     };
 
 type FaceAnalysisReportDetailDataLoader =
   () => Promise<FaceAnalysisReportDetailData>;
 
-function resolveLoadErrorDescription(error: unknown): string {
+const ANALYSIS_UNAVAILABLE_ERROR_CODES = new Set([
+  'FACE_ANALYSIS_AI_INCOMPLETE',
+  'FACE_ANALYSIS_RESULT_INCOMPLETE',
+  'ANALYSIS_JOB_FAILED',
+  'ANALYSIS_REPORT_TEXT_REQUIRED',
+  'ANALYSIS_REPORT_TIMEOUT',
+]);
+
+function resolveLoadError(error: unknown): {
+  message: string;
+  description: string;
+  canRetake: boolean;
+} {
+  if (
+    error instanceof BackendApiError &&
+    error.code &&
+    ANALYSIS_UNAVAILABLE_ERROR_CODES.has(error.code)
+  ) {
+    return {
+      message: FACE_ANALYSIS_REPORT_UNAVAILABLE_MESSAGE,
+      description: FACE_ANALYSIS_REPORT_UNAVAILABLE_DESCRIPTION,
+      canRetake: true,
+    };
+  }
+
   if (isBackendNetworkError(error)) {
-    return FACE_ANALYSIS_REPORT_DETAIL_NETWORK_ERROR_DESCRIPTION;
+    return {
+      message: FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_MESSAGE,
+      description: FACE_ANALYSIS_REPORT_DETAIL_NETWORK_ERROR_DESCRIPTION,
+      canRetake: false,
+    };
   }
 
   if (error instanceof BackendApiError) {
     if (error.status === 404) {
-      return FACE_ANALYSIS_REPORT_DETAIL_NOT_FOUND_ERROR_DESCRIPTION;
+      return {
+        message: FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_MESSAGE,
+        description: FACE_ANALYSIS_REPORT_DETAIL_NOT_FOUND_ERROR_DESCRIPTION,
+        canRetake: false,
+      };
     }
     if (error.status >= 500) {
-      return FACE_ANALYSIS_REPORT_DETAIL_SERVER_ERROR_DESCRIPTION;
+      return {
+        message: FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_MESSAGE,
+        description: FACE_ANALYSIS_REPORT_DETAIL_SERVER_ERROR_DESCRIPTION,
+        canRetake: false,
+      };
     }
   }
 
-  return FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_DESCRIPTION;
+  return {
+    message: FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_MESSAGE,
+    description: FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_DESCRIPTION,
+    canRetake: false,
+  };
 }
 
 export const resolveFaceAnalysisReportDetailLoadState = (
@@ -67,10 +112,10 @@ export const resolveFaceAnalysisReportDetailLoadState = (
           status: error instanceof BackendApiError ? error.status : undefined,
         });
 
+        const resolvedError = resolveLoadError(error);
         return {
           status: 'error',
-          message: FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_MESSAGE,
-          description: resolveLoadErrorDescription(error),
+          ...resolvedError,
         };
       },
     );

@@ -59,11 +59,29 @@ export type FaceAnalysisReportPreviewScreenProps = {
   onPressProducts?: (reportId: string) => void;
 };
 
-function CenteredMessage({title, description}: {title: string; description?: string}) {
+function CenteredMessage({
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  description?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
     <View style={styles.centered}>
       <Text style={styles.centeredTitle}>{title}</Text>
       {description ? <Text style={styles.centeredDescription}>{description}</Text> : null}
+      {actionLabel && onAction ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onAction}
+          style={styles.centeredAction}>
+          <Text style={styles.centeredActionText}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -347,7 +365,12 @@ export function FaceAnalysisReportPreviewScreen({
 
   if (!reportData) {
     return loadState.status === 'error' ? (
-      <CenteredMessage description={loadState.description} title={loadState.message} />
+      <CenteredMessage
+        actionLabel={loadState.canRetake ? '다시 촬영' : undefined}
+        description={loadState.description}
+        onAction={loadState.canRetake ? onRetake : undefined}
+        title={loadState.message}
+      />
     ) : (
       <CenteredMessage
         description="목록에서 얼굴 분석 결과를 다시 선택해 주세요."
@@ -423,6 +446,17 @@ const styles = StyleSheet.create({
     ...font(13, '400', 1.5),
     color: color.body,
     textAlign: 'center',
+  },
+  centeredAction: {
+    backgroundColor: color.accentDeep,
+    borderRadius: 999,
+    marginTop: 12,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+  },
+  centeredActionText: {
+    ...font(14, '700'),
+    color: color.white,
   },
   centeredTitle: {
     ...font(15, '700'),

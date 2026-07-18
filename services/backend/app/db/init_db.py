@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import os
 from pathlib import Path
 
 import asyncpg
@@ -13,46 +12,16 @@ from app.services.face_measurement_schema import (
   FACE_MEASUREMENT_SCHEMA_VERSION,
 )
 from app.services.media_upload_schema import MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL
-from app.services.report_lab_schema import ANALYSIS_LAB_RUNS_SCHEMA_SQL
 from app.services.makeup_recommendation_schema import MAKEUP_RECOMMENDATION_SCHEMA_SQL
 
 
 SCHEMA_VERSION = "schema.sql:v8-makeup-journey"
-REPORT_LAB_SCHEMA_VERSION = "schema.sql:analysis-lab-runs-v3"
-REPORT_LAB_DATABASE_NAME = "aura_report_lab"
-REPORT_LAB_DATABASE_USER = "aura_report_lab"
-REPORT_LAB_ALLOWED_TABLES = {
-  "analysis_reports",
-  "analysis_lab_sessions",
-  "analysis_lab_runs",
-  "schema_migrations",
-}
-
-# The current local Report Lab is JSON-fixture-only. It deliberately creates no
-# product/user/report anchor. It creates only Lab sessions/runs; `analysis_reports`
-# remains allowlisted above only so a pre-v2 database can upgrade without a drop.
-REPORT_LAB_BOOTSTRAP_SCHEMA_SQL = """
-select 1;
-"""
-
-ANALYSIS_LAB_RUNS_MIGRATION_SQL = ANALYSIS_LAB_RUNS_SCHEMA_SQL + """
-  create or replace function set_updated_at()
-  returns trigger as $function$
-  begin
-    new.updated_at = now();
-    return new;
-  end;
-  $function$ language plpgsql;
-
-  drop trigger if exists trg_analysis_lab_runs_updated_at on analysis_lab_runs;
-  create trigger trg_analysis_lab_runs_updated_at
-  before update on analysis_lab_runs
-  for each row execute function set_updated_at();
-
-  drop trigger if exists trg_analysis_lab_sessions_updated_at on analysis_lab_sessions;
-  create trigger trg_analysis_lab_sessions_updated_at
-  before update on analysis_lab_sessions
-  for each row execute function set_updated_at();
+ANALYSIS_LAB_REMOVAL_SCHEMA_VERSION = "schema.sql:remove-analysis-lab-v1"
+ANALYSIS_LAB_REMOVAL_SQL = """
+  drop table if exists analysis_lab_runs;
+  drop table if exists analysis_lab_sessions;
+  delete from schema_migrations
+  where version = 'schema.sql:analysis-lab-runs-v3';
 """
 
 POST_SCHEMA_MIGRATIONS = {
@@ -535,7 +504,7 @@ POST_SCHEMA_MIGRATIONS = {
   """,
   "schema.sql:analysis-stage-runs-v1": FACE_ANALYSIS_STAGE_SCHEMA_SQL,
   FACE_MEASUREMENT_SCHEMA_VERSION: FACE_MEASUREMENT_MIGRATION_SQL,
-  REPORT_LAB_SCHEMA_VERSION: ANALYSIS_LAB_RUNS_MIGRATION_SQL,
+  ANALYSIS_LAB_REMOVAL_SCHEMA_VERSION: ANALYSIS_LAB_REMOVAL_SQL,
   "schema.sql:media-thumbnails-v1": """
     alter table media_assets add column if not exists thumbnail_bucket text;
     alter table media_assets add column if not exists thumbnail_object_key text;
@@ -985,73 +954,6 @@ async def apply_pending_schema_migrations(connection: asyncpg.Connection) -> lis
   return applied
 
 
-async def assert_report_lab_database(connection: asyncpg.Connection) -> None:
-  identity = await connection.fetchrow(
-    """
-    select current_database() as database_name,
-           current_user as database_user,
-           host(inet_server_addr()) as server_address
-    """,
-  )
-  if (
-    identity is None
-    or identity["database_name"] != REPORT_LAB_DATABASE_NAME
-    or identity["database_user"] != REPORT_LAB_DATABASE_USER
-    or identity["server_address"] not in {"127.0.0.1", "::1"}
-  ):
-    actual = "missing" if identity is None else (
-      f"user={identity['database_user']}, database={identity['database_name']}, "
-      f"address={identity['server_address']}"
-    )
-    raise RuntimeError(
-      "Refusing Report Lab bootstrap outside the dedicated loopback "
-      f"{REPORT_LAB_DATABASE_USER}/{REPORT_LAB_DATABASE_NAME} database ({actual}).",
-    )
-
-  rows = await connection.fetch(
-    """
-    select table_name
-    from information_schema.tables
-    where table_schema = 'public'
-      and table_type = 'BASE TABLE'
-    """,
-  )
-  unexpected_tables = sorted(
-    {str(row["table_name"]) for row in rows} - REPORT_LAB_ALLOWED_TABLES,
-  )
-  if unexpected_tables:
-    raise RuntimeError(
-      "Refusing fixture-only Report Lab bootstrap in a non-empty database; "
-      f"unexpected tables: {', '.join(unexpected_tables)}.",
-    )
-
-
-async def apply_report_lab_schema(database_url: str | None = None) -> str:
-  """Apply only the fixture-mode Report Lab schema to its dedicated local DB."""
-  # Keep this focused bootstrap usable even if unrelated product settings are
-  # incomplete. The lifecycle runner always provides this loopback-only DSN.
-  dsn = database_url or os.getenv("DATABASE_URL")
-
-  if not dsn:
-    settings = get_settings()
-    dsn = settings.database_url
-  if not dsn:
-    raise RuntimeError("DATABASE_URL is required for the isolated Report Lab schema.")
-
-  connection = await asyncpg.connect(dsn=dsn)
-  try:
-    await assert_report_lab_database(connection)
-    await ensure_migration_table(connection)
-    already_applied = await has_schema_version(connection, REPORT_LAB_SCHEMA_VERSION)
-    async with connection.transaction():
-      await connection.execute(REPORT_LAB_BOOTSTRAP_SCHEMA_SQL)
-      await connection.execute(ANALYSIS_LAB_RUNS_MIGRATION_SQL)
-      await record_schema_version(connection, REPORT_LAB_SCHEMA_VERSION)
-    action = "Refreshed" if already_applied else "Applied"
-    return f"{action} {REPORT_LAB_SCHEMA_VERSION} (fixture-only Report Lab)."
-  finally:
-    await connection.close()
-
 async def apply_schema(database_url: str | None = None, force: bool = False) -> str:
   settings = get_settings()
   dsn = database_url or settings.database_url
@@ -1088,15 +990,8 @@ async def apply_schema(database_url: str | None = None, force: bool = False) -> 
 async def main() -> None:
   parser = argparse.ArgumentParser(description="Apply backend PostgreSQL schema.")
   parser.add_argument("--force", action="store_true", help="Apply schema even when the marker exists.")
-  parser.add_argument(
-    "--report-lab",
-    action="store_true",
-    help="Apply only the fixture-mode schema to the dedicated local Report Lab database.",
-  )
   args = parser.parse_args()
-  if args.report_lab and args.force:
-    parser.error("--force cannot be combined with --report-lab; Lab bootstrap is idempotent.")
-  result = await apply_report_lab_schema() if args.report_lab else await apply_schema(force=args.force)
+  result = await apply_schema(force=args.force)
   print(result)
 
 

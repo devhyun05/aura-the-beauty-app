@@ -97,42 +97,6 @@ PersistCallback = Callable[[UUID, FaceAnalysisV2], Awaitable[None]]
 StageOutput = TypeVar("StageOutput", bound=BaseModel)
 
 
-def _has_hangul_final_consonant(value: str) -> bool:
-  text = value.strip()
-  if not text:
-    return False
-  code = ord(text[-1])
-  if code < 0xAC00 or code > 0xD7A3:
-    return False
-  return (code - 0xAC00) % 28 != 0
-
-
-def _object_particle(value: str) -> str:
-  return "을" if _has_hangul_final_consonant(value) else "를"
-
-
-def _natural_styling_note(category: str) -> str:
-  return {
-    "base": "얇은 베이스로 피부 결만 정돈해요.",
-    "brow": "눈썹 결을 살리고 빈 곳만 가볍게 채워요.",
-    "eyeshadow": "눈두덩 전체에 은은한 음영만 얇게 깔아요.",
-    "eyeliner": "라인은 생략하거나 점막만 아주 얇게 채워요.",
-    "blush": "혈색을 넓고 연하게 번지듯 연결해요.",
-    "lip": "립은 경계를 풀어 자연스럽게 물들여요.",
-  }.get(category, "전체 강도를 낮춰 자연스럽게 정돈해요.")
-
-
-def _glam_styling_note(category: str) -> str:
-  return {
-    "base": "중심부 커버와 윤광을 조금 더 또렷하게 잡아요.",
-    "brow": "눈썹 산과 꼬리를 정리해 인상을 선명하게 세워요.",
-    "eyeshadow": "눈꼬리와 삼각존에 음영을 더해 깊이를 만들어요.",
-    "eyeliner": "점막과 꼬리 라인을 또렷하게 연결해요.",
-    "blush": "볼 중앙 농도를 올려 생기와 입체감을 같이 줘요.",
-    "lip": "립 라인을 정리하고 색 농도를 한 단계 올려요.",
-  }.get(category, "포인트 강도를 올려 또렷하게 정돈해요.")
-
-
 def _compact_join(parts: list[str], separator: str = " · ") -> str:
   seen: set[str] = set()
   compacted: list[str] = []
@@ -179,6 +143,7 @@ def _build_region_notes(
   planes: Any,
   gestalt: Any,
   volume: Any,
+  makeup: Any,
 ) -> dict[str, dict[str, str]]:
   upper_insight = _insight_labels(
     feature.eye_impression,
@@ -210,9 +175,9 @@ def _build_region_notes(
         feature.eyelid_weight,
         feature.under_eye_zone,
       ),
-      "recommendation": (
-        "눈매의 선명도와 눈썹 결을 같이 보고, 눈두덩·애교살 음영은 과하게 끊기지 않게 "
-        "얇게 쌓는 방향이 좋아요."
+      "recommendation": _compact_join(
+        [makeup.brow, makeup.eyeshadow, makeup.eyeliner],
+        " ",
       ),
     },
     "mid": {
@@ -223,9 +188,9 @@ def _build_region_notes(
         planes.nose_shadow_effect,
         planes.dimensionality,
       ),
-      "recommendation": (
-        "콧대 그림자와 볼의 연결감을 먼저 맞추고, 블러셔·하이라이트는 중안부가 더 길어 "
-        "보이지 않도록 얇게 이어요."
+      "recommendation": _compact_join(
+        [makeup.blush, makeup.contour, makeup.highlight],
+        " ",
       ),
     },
     "lower": {
@@ -235,10 +200,7 @@ def _build_region_notes(
         volume.mouth_corner_impression,
         planes.lower_face_impression,
       ),
-      "recommendation": (
-        "입술 윤곽, 입꼬리 방향, 하관의 무게감을 같이 맞춰 립 농도와 오버라인 범위를 "
-        "조절해요."
-      ),
+      "recommendation": makeup.lip,
     },
     "jaw": {
       "insight": jaw_insight or planes.lower_face_impression.label,
@@ -249,10 +211,7 @@ def _build_region_notes(
         planes.line_shape,
         planes.line_weight,
       ),
-      "recommendation": (
-        "턱선은 실제 윤곽 흐름을 따라 필요한 구간만 정리하고, 광대·턱 음영이 한 덩어리로 "
-        "무거워지지 않게 끊어 줘요."
-      ),
+      "recommendation": makeup.contour,
     },
   }
 
@@ -285,20 +244,6 @@ def _build_impression_notes(gestalt: Any, planes: Any, feature: Any, volume: Any
     "overallMood": gestalt.overall_mood.label,
     "keywords": keywords[:6] or [gestalt.overall_mood.label],
     "paragraph": paragraph or gestalt.overall_mood.description,
-    "axes": [
-      {
-        "key": "softness",
-        "leftLabel": "부드러움",
-        "rightLabel": "또렷함",
-        "value": 0.35 if "또렷" in gestalt.clarity_vs_softness.label else -0.2,
-      },
-      {
-        "key": "vividness",
-        "leftLabel": "차분함",
-        "rightLabel": "화사함",
-        "value": 0.25 if "화사" in gestalt.overall_mood.label else -0.2,
-      },
-    ],
   }
 
 
@@ -374,139 +319,66 @@ async def persist_face_analysis_v2(
 def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
   perception = result.perception
   consulting = result.consulting
-  personal_color = "측정 보류"
-  skin_type = "측정 보류"
-  recommended_mood = "균형 중심"
-  skin_summary = result.derived.skin_color.description
+  if perception is None or consulting is None:
+    raise ValueError("AI perception and consulting are required for a face analysis report")
 
-  if perception is not None:
-    color = perception.personal_color
-    personal_color = " ".join(
-      value for value in (color.season, color.subtype) if value
-    ) or "측정 보류"
-    skin_type = perception.skin.sebum_dryness.label
-    recommended_mood = perception.gestalt.overall_mood.label
-    skin_summary = perception.skin.texture.description
+  color = perception.personal_color
+  personal_color = " ".join(
+    value for value in (color.season, color.subtype) if value
+  )
+  if color.status != "provisional" or not personal_color:
+    raise ValueError("AI personal color analysis is incomplete")
+  skin_type = perception.skin.sebum_dryness.label
+  skin_summary = perception.skin.texture.description
+  makeup = consulting.makeup
+  look = consulting.recommended_look
 
   legacy: dict[str, Any] = {
     "faceShape": result.derived.face_shape.label,
     "personalColor": personal_color,
     "skinType": skin_type,
     "toneSummary": result.derived.color_axes.label,
-    "recommendedMood": recommended_mood,
-    "summary": result.derived.face_shape.description,
-    "shortSummary": result.derived.vertical_balance.description,
+    "recommendedMood": consulting.overall_mood,
+    "summary": consulting.summary,
+    "shortSummary": consulting.short_summary,
     "skinAnalysisSummary": skin_summary,
-    "baseMakeupGuide": "측정 결과를 바탕으로 AI 컨설팅을 준비하고 있어요.",
-    "makeupGuideline": {},
-    "recommendedMakeups": [],
-    "tags": [],
-  }
-  if perception is not None:
-    feature = perception.feature_impression
-    planes = perception.lines_and_planes
-    gestalt = perception.gestalt
-    volume = perception.volume
-    legacy["regionNotes"] = _build_region_notes(feature, planes, gestalt, volume)
-    legacy["impressionNotes"] = _build_impression_notes(gestalt, planes, feature, volume)
-  if consulting is None:
-    return legacy
-
-  makeup = consulting.makeup
-  look = consulting.recommended_look
-  legacy.update(
-    {
-      "recommendedMood": consulting.overall_mood,
-      "summary": consulting.summary,
-      "shortSummary": consulting.short_summary,
-      "skinAnalysisSummary": skin_summary,
-      "baseMakeupGuide": makeup.base,
-      "makeupGuideline": {
-        "brow": makeup.brow,
-        "eyeshadow": makeup.eyeshadow,
-        "eyeliner": makeup.eyeliner,
-        "blush": makeup.blush,
-        "contour": makeup.contour,
-        "highlight": makeup.highlight,
-        "lip": makeup.lip,
+    "baseMakeupGuide": makeup.base,
+    "makeupGuideline": {
+      "brow": makeup.brow,
+      "eyeshadow": makeup.eyeshadow,
+      "eyeliner": makeup.eyeliner,
+      "blush": makeup.blush,
+      "contour": makeup.contour,
+      "highlight": makeup.highlight,
+      "lip": makeup.lip,
+    },
+    "recommendedMakeups": [
+      {
+        "title": look.title,
+        "subtitle": look.subtitle,
+        "description": look.description,
+        "tags": look.tags,
       },
-      "recommendedMakeups": [
-        {
-          "title": look.title,
-          "subtitle": look.subtitle,
-          "description": look.description,
-          "tags": look.tags,
-        },
-      ],
-      "tags": consulting.tags,
-    },
-  )
-  legacy["stylingLooks"] = {
-    "natural": {
-      "title": "데일리 정돈",
-      "subtitle": "은은한 데일리 강도",
-      "description": f"{consulting.overall_mood}{_object_particle(consulting.overall_mood)} 가볍게 풀어낸 방향이에요.",
-      "rows": [
-        {
-          "category": "base",
-          "note": _natural_styling_note("base"),
-          "why": "",
-        },
-        {
-          "category": "brow",
-          "note": _natural_styling_note("brow"),
-          "why": "",
-        },
-        {
-          "category": "eyeshadow",
-          "note": _natural_styling_note("eyeshadow"),
-          "why": "",
-        },
-        {
-          "category": "blush",
-          "note": _natural_styling_note("blush"),
-          "why": "",
-        },
-        {
-          "category": "lip",
-          "note": _natural_styling_note("lip"),
-          "why": "",
-        },
-      ],
-    },
-    "glam": {
-      "title": "포인트 정돈",
-      "subtitle": "또렷한 포인트 강도",
-      "description": f"{consulting.overall_mood}{_object_particle(consulting.overall_mood)} 조금 더 선명하게 풀어낸 방향이에요.",
-      "rows": [
-        {
-          "category": "base",
-          "note": _glam_styling_note("base"),
-          "why": "",
-        },
-        {
-          "category": "brow",
-          "note": _glam_styling_note("brow"),
-          "why": "",
-        },
-        {
-          "category": "eyeliner",
-          "note": _glam_styling_note("eyeliner"),
-          "why": "",
-        },
-        {
-          "category": "blush",
-          "note": _glam_styling_note("blush"),
-          "why": "",
-        },
-        {
-          "category": "lip",
-          "note": _glam_styling_note("lip"),
-          "why": "",
-        },
-      ],
-    },
+    ],
+    "tags": consulting.tags,
   }
+  feature = perception.feature_impression
+  planes = perception.lines_and_planes
+  gestalt = perception.gestalt
+  volume = perception.volume
+  legacy["regionNotes"] = _build_region_notes(
+    feature,
+    planes,
+    gestalt,
+    volume,
+    makeup,
+  )
+  legacy["impressionNotes"] = _build_impression_notes(
+    gestalt,
+    planes,
+    feature,
+    volume,
+  )
   return legacy
 
 

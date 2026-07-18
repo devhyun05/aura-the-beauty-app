@@ -303,8 +303,10 @@ def build_initial_analysis_detail_payload(
     return {"request": payload.request_payload}
 
   face_analysis_v2 = initialize_face_analysis_v2(payload.request_payload)
-  result = project_legacy_analysis_result(face_analysis_v2)
-  result["faceAnalysisV2"] = face_analysis_v2.model_dump(by_alias=True, mode="json")
+  # AI 단계가 끝나기 전에는 규칙 기반 파생값을 완성된 얼굴 분석처럼 투영하지 않는다.
+  result = {
+    "faceAnalysisV2": face_analysis_v2.model_dump(by_alias=True, mode="json"),
+  }
   return build_analysis_detail_payload(payload, result)
 
 
@@ -539,10 +541,36 @@ async def run_analysis_job_background(
         request_payload=payload.request_payload,
         source_image_bytes=source_image_bytes,
       )
-      if face_analysis_v2.consulting is None:
-        result = await analysis_service.analyze_text(payload.request_payload)
-      else:
+      missing_stages = [
+        stage
+        for stage, value in (
+          ("aiPerception", face_analysis_v2.perception),
+          ("aiConsulting", face_analysis_v2.consulting),
+        )
+        if value is None
+      ]
+      if missing_stages:
+        raise AppError(
+          502,
+          "FACE_ANALYSIS_AI_INCOMPLETE",
+          "얼굴 분석을 완료하지 못했어요. 다시 촬영해 주세요.",
+          {
+            "missingStages": missing_stages,
+            "pipeline": face_analysis_v2.pipeline.model_dump(
+              by_alias=True,
+              mode="json",
+            ),
+          },
+        )
+      try:
         result = project_legacy_analysis_result(face_analysis_v2)
+      except ValueError as exc:
+        raise AppError(
+          502,
+          "FACE_ANALYSIS_AI_INCOMPLETE",
+          "얼굴 분석을 완료하지 못했어요. 다시 촬영해 주세요.",
+          {"reason": str(exc)},
+        ) from exc
       result["faceAnalysisV2"] = face_analysis_v2.model_dump(
         by_alias=True,
         mode="json",
@@ -1003,6 +1031,20 @@ async def list_analysis_reports(
   filters = [
     "r.user_id = $1",
     "r.status = 'completed'",
+    """
+    (
+      jsonb_typeof(r.detail_payload->'result'->'faceAnalysisV2') is null
+      or (
+        jsonb_typeof(r.detail_payload->'result'->'faceAnalysisV2') = 'object'
+        and jsonb_typeof(
+          r.detail_payload->'result'->'faceAnalysisV2'->'perception'
+        ) = 'object'
+        and jsonb_typeof(
+          r.detail_payload->'result'->'faceAnalysisV2'->'consulting'
+        ) = 'object'
+      )
+    )
+    """,
   ]
   values: list[object] = [user["id"]]
 

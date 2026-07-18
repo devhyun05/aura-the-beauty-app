@@ -593,7 +593,7 @@ def test_detail_response_projection_strips_internal_face3d_mm_and_receipt_proof(
   ]["valueMm"] == 2.8
 
 
-def test_initial_v2_payload_makes_camera_report_immediately_renderable() -> None:
+def test_initial_v2_payload_does_not_project_a_report_before_ai_finishes() -> None:
   request = AnalysisJobCreate(
     requestPayload=build_worst_case_request_payload(),
   )
@@ -606,4 +606,4 @@ def test_initial_v2_payload_makes_camera_report_immediately_renderable() -> None
   result = detail["result"]
   assert result["faceAnalysisV2"]["schemaVersion"] == "aura-face-analysis-v2"
   assert result["faceAnalysisV2"]["pipeline"]["overall"] == "processing"
-  assert result["faceShape"]
+  assert set(result) == {"faceAnalysisV2"}

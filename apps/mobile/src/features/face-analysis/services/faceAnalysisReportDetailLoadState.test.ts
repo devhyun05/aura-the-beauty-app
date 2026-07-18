@@ -4,6 +4,8 @@ import {
   FACE_ANALYSIS_REPORT_DETAIL_NETWORK_ERROR_DESCRIPTION,
   FACE_ANALYSIS_REPORT_DETAIL_NOT_FOUND_ERROR_DESCRIPTION,
   FACE_ANALYSIS_REPORT_DETAIL_SERVER_ERROR_DESCRIPTION,
+  FACE_ANALYSIS_REPORT_UNAVAILABLE_DESCRIPTION,
+  FACE_ANALYSIS_REPORT_UNAVAILABLE_MESSAGE,
   resolveFaceAnalysisReportDetailLoadState,
 } from './faceAnalysisReportDetailLoadState';
 import {BackendApiError, BackendNetworkError} from '../../../shared/services/backendApi';
@@ -117,6 +119,30 @@ async function expectNotFoundErrorShowsNotFoundDescription() {
   );
 }
 
+async function expectIncompleteAiShowsRetakeState() {
+  const state = await resolveFaceAnalysisReportDetailLoadState(() =>
+    Promise.reject(
+      new BackendApiError(
+        'incomplete AI result',
+        502,
+        'FACE_ANALYSIS_AI_INCOMPLETE',
+      ),
+    ),
+  );
+
+  if (state.status !== 'error') {
+    throw new Error('incomplete AI report should return error state');
+  }
+
+  expectEqual(state.message, FACE_ANALYSIS_REPORT_UNAVAILABLE_MESSAGE, 'incomplete AI title');
+  expectEqual(
+    state.description,
+    FACE_ANALYSIS_REPORT_UNAVAILABLE_DESCRIPTION,
+    'incomplete AI description',
+  );
+  expectEqual(state.canRetake, true, 'incomplete AI retake action');
+}
+
 async function expectResolvedLoadKeepsReport() {
   const mockReport = {id: 'analysis-1'} as FaceAnalysisReport;
   const state = await resolveFaceAnalysisReportDetailLoadState(() =>
@@ -142,4 +168,5 @@ void expectRejectedLoadShowsErrorState();
 void expectNetworkErrorShowsNetworkDescription();
 void expectServerErrorShowsServerDescription();
 void expectNotFoundErrorShowsNotFoundDescription();
+void expectIncompleteAiShowsRetakeState();
 void expectResolvedLoadKeepsReport();

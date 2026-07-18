@@ -56,7 +56,7 @@ async def test_app_lifespan_ensures_media_upload_schema_at_startup(monkeypatch) 
   async def record(name: str) -> None:
     calls.append(name)
 
-  async def fake_connect() -> None:
+  async def fake_connect(_settings=None) -> None:
     await record("connect")
 
   async def fake_close() -> None:
