@@ -60,12 +60,15 @@
 |---|---|
 | 대상 저장소 | `302-group5-final-project` |
 | 기준 브랜치 | `WEI/DEV/0716` |
-| 기준 커밋 | `9f966650` (AR 코드 기준) |
-| 현재 HEAD | `47a4f2be` — **AR 코드는 `9f966650`과 동일**하여 본문 인용이 그대로 유효 |
-| 작성일 | 2026-07-16 (2026-07-16 전면 검증·개정) |
+| 직전 기준선 | `b9f9a023` (2026-07-17 핫픽스 반영본) |
+| 현재 HEAD | `661a4ea4` (2026-07-18) — b9f9a023 이후 AR 코드가 **upstream과 대규모 재동기화**(113파일, +12,895/−2,793). 결함 F1~F9의 상태는 **변화 없음**, 구조 변경은 §부록 C 참조 |
+| 작성일 | 2026-07-16 최초 작성 · **2026-07-18 재검증·개정** |
+| 재검증 방식 | 6개 서브시스템(결함 F1~F9 / 렌더러·큐 / 셰이더 / 파운데이션·목 / 얼굴추적·합성)을 병렬 정적 대조. `b9f9a023..HEAD` diff + 작업 트리 정독 |
 | 분석 방식 | CodeGraph 인덱스와 작업 트리의 TypeScript, Objective-C, C#, ShaderLab/HLSL 정적 분석 |
 | 확인 상태 | 코드 구조와 정적 호출 경로는 `CONFIRMED` — 개별 항목은 부록 B 참조 |
 | 미확인 범위 | 실제 iPhone 프레임, GPU 캡처, FPS, 메모리 피크, 육안 품질은 실행하지 않았으므로 `UNVERIFIED` |
+
+> **줄 번호 앵커 안내(2026-07-18).** 이번 재동기화로 다수 파일의 줄 번호가 이동했습니다(예: `E3RegionMaskOverlay`는 base64 방어 코드 추가로 ~560줄 아래가 +24, `RNBridge`·`MakeupController`·`UnityMakeupBridge.m`·`FaceLandmarkSource`는 재작성 수준). 본문의 핵심 인용은 HEAD `661a4ea4` 기준으로 갱신했으나, 문서 방침대로 **심볼명이 1차 앵커이고 줄 번호는 힌트**입니다 — 불일치 시 심볼명으로 찾으세요.
 
 **인용 방식.** 근거는 `파일 · 심볼명 (줄번호)` 형태로 답니다. 줄 번호는 코드가 한 줄만 바뀌어도 틀려지므로 **심볼명이 우선이고 줄 번호는 힌트**입니다. 파일의 전체 경로는 부록 A에 있습니다.
 
@@ -161,10 +164,10 @@ SmoothRegionMask.shader   선언도 제거됨 (원래부터 읽은 적 없음)
 
 > 실제 앞머리 대응은 별개로 존재합니다 — 셰이더 안의 `hairKeep`이 카메라 픽셀을 직접 보고 판단합니다. 모바일이 보낸 신호와는 무관합니다.
 
-- 근거(제거 전 선언 위치): `SmoothRegionMask.shader` — 프로퍼티 59–60, 셰이더 변수 197–198. 2026-07-17에 선언·세터를 제거했습니다(b9f9a023).
-- 근거(하드코딩): `E3RegionMaskOverlay.ApplyRecipeAppearance` — `_BrowInpaintStrength = 0.92f` (4550–4553), 소비는 셰이더 1152 / 1333.
-- 근거(모바일 계산): `browGenerateCore.ts` — `BROW_NEUTRALIZE_STRENGTH = 0.85` (166), `resolveBrowNeutralizeStrength` (694–718), `cleanupStrength: 0` (328, 423).
-- 근거(운반): `RNBridge` — `GradientAmount`/`GlossBoost` piggyback (1938, 1944) → `E3RegionMaskOverlay` (4580–4588).
+- 근거(제거 확인, 2026-07-18 재검증): `SmoothRegionMask.shader`·`E3RegionMaskOverlay.cs` 어디에도 `_BrowCleanupStrength`/`_BrowNeutralizeStrength` 선언·세터 없음 — 설명 주석만 남음(`E3RegionMaskOverlay.cs` 4606–4610).
+- 근거(하드코딩): `E3RegionMaskOverlay.ApplyRecipeAppearance` (메서드 4308) — `_BrowInpaintStrength = 0.92f` 설정 (4578), 소비는 셰이더 선언 `SmoothRegionMask.shader` 195 / 사용 1148 · 1329 (프로퍼티 기본값 64).
+- 근거(모바일 계산): `browGenerateCore.ts` — `BROW_NEUTRALIZE_STRENGTH = 0.85` (168), `resolveBrowNeutralizeStrength` (699–724), payload `neutralizeStrength` (426).
+- 근거(운반): `RNBridge.cs` — `GradientAmount`(cleanupStrength) 2178 / `GlossBoost`(neutralizeStrength) 2184 piggyback, 인접 주석 2174–2177이 *"CURRENTLY UNCONSUMED downstream"* 라고 명시.
 - 근거(실제 앞머리 대응): `SmoothRegionMask.shader` — `hairKeep` (431–449), 적용 1178 / 1349.
 
 **부수 문제:** `browGenerateCore.ts` 584–586의 코드 주석은 R 채널이 *"`_BrowNeutralizeStrength`로 게이트된다"* 고 적어 놓았습니다. 그런 게이트는 존재하지 않습니다.
@@ -181,10 +184,12 @@ SmoothRegionMask.shader   선언도 제거됨 (원래부터 읽은 적 없음)
 
 코드는 `screen` case에서 기본값과 똑같은 값을 명시적으로 다시 대입합니다. Photoshop식 `1-(1-A)(1-B)` 합성을 기대하면 안 됩니다.
 
-- 근거: `E3RegionMaskOverlay.ApplyMaterialBlendMode` (5221–5269), `screen` case는 5246–5249. `normal`은 case가 없는 기본 fall-through.
-- 근거: `fullFaceMakeupRecipe.ts` (1080–1162).
+> **현재 상태(2026-07-18 재검증):** 위는 수리 전 동작 설명입니다. 지금은 `screen` case 자체가 **삭제**됐고(주석만 남음), 계약 union에도 없으며, 레거시 payload는 `NormalizeBlendMode`가 `screen`→`normal`로 별칭 처리한 뒤 그 외 값은 예외를 던집니다. 결과 동작(=normal)은 동일합니다.
 
-**연관 사실:** 파운데이션은 `multiply`를 요청해도 일반 알파 블렌드를 유지합니다(`if (!foundationRegion)` 가드, 5239). 눈썹도 강제로 `SrcAlpha/OneMinusSrcAlpha`가 됩니다 — 어두운 자연 눈썹을 밝은 피부색으로 덮어야 하는데 multiply로는 불가능하기 때문입니다(4515–4543).
+- 근거(현재): `E3RegionMaskOverlay.ApplyMaterialBlendMode` (5243–5290) — `screen` case 제거(주석 5267–5269), `NormalizeBlendMode` `screen`→`normal` 별칭 + 그 외 예외 (7419–7438).
+- 근거(계약): `fullFaceMakeupRecipe.ts` — union `'normal' | 'multiply'` (115, 제거 주석 113–114), 레이어 파생 (1091).
+
+**연관 사실:** 파운데이션은 `multiply`를 요청해도 일반 알파 블렌드를 유지합니다(`if (!foundationRegion)` 가드, 5260–5266; `_PigmentMultiply = multiply && !foundationRegion` 5282–5286). 눈썹도 강제로 `SrcAlpha/OneMinusSrcAlpha`가 됩니다 — 어두운 자연 눈썹을 밝은 피부색으로 덮어야 하는데 multiply로는 불가능하기 때문입니다(4539–4569).
 
 ### 2.3 F3: 손 가림은 경로마다 메커니즘이 다르다
 
@@ -209,9 +214,10 @@ SmoothRegionMask.shader   선언도 제거됨 (원래부터 읽은 적 없음)
 
 ```text
 AuraStencilHost.Initialize()
-  └─ ApplyActive(false)          ← 그래프 생성 직후 곧바로 비활성화
-       └─ MakeupController.enabled = false
-            └─ OnDisable() { NativeBridge.MessageReceived -= OnMessage; }
+  └─ _stencilRequestedActive = false; ApplyState()   ← 2026-07 리팩터: 옛 ApplyActive(false)를 대체
+       └─ stencilRendering = _runtimeActive && _stencilRequestedActive  (= true && false = false)
+            └─ MakeupController.enabled = false        ← _controlled 목록이라 함께 꺼짐
+                 └─ OnDisable() { NativeBridge.MessageReceived -= OnMessage; }
                                  ← 구독 해제됨
 
 RN → applyFilter → NativeBridge.OnMessageFromRN (살아 있음)
@@ -219,6 +225,8 @@ RN → applyFilter → NativeBridge.OnMessageFromRN (살아 있음)
 ```
 
 **핵심은 `MakeupController`가 `Awake`가 아니라 `OnEnable`에서 구독한다는 점입니다.** 따라서 비활성화는 `Update()`만 멈추는 게 아니라 **핸들러 자체를 떼어냅니다.** `NativeBridge`는 `controlled` 목록에 없어 계속 살아 있으므로, 메시지는 정상 도착한 뒤 **구독자 0명에게 발사되고 사라집니다.**
+
+> ⚠️ **2026-07-18 재검증 — "오버레이 정리 코드가 생겼다 ≠ 수신자가 생겼다".** upstream 동기화로 `applyFilter` 처리 직전에 이전 레인의 오버레이를 지우는 `ClearForkRecipeOverlays()`가 추가됐지만(commit `42447790`), 이 코드는 **`OnMessage` 안에 있습니다.** `OnMessage`는 구독이 살아 있어야 호출되므로, ARFilterScreen 경로(구독 해제 상태)에서는 이 정리 코드 **자체가 실행되지 않습니다.** 즉 F4는 **여전히 죽어 있습니다.** clear 코드를 보고 "수신자가 생겼다"고 오해하지 마세요. `ApplyActive` → `ApplyState`(+ 신설 런타임 게이트 `_runtimeActive`/`SetRuntimeActive`)로 심볼이 바뀐 것도 이때입니다(commit `120fcc43`).
 
 **재활성화 경로가 없습니다.** 다음을 모두 확인했습니다.
 
@@ -228,18 +236,18 @@ RN → applyFilter → NativeBridge.OnMessageFromRN (살아 있음)
 | `ARFilterScreen`이 그 어댑터를 쓰는가 | **아니오.** `ARFilterScreen` → `ARFilterCameraPreview.tsx:90` → `UnityMakeupNativeView` 직접. 어댑터는 `StencilARApp`만 사용 |
 | 두 화면이 공존하는가 | **아니오.** `arRoutes.tsx:118-123`에서 상호 배타 분기 |
 | 다른 메시지 입구 | 없음. `SetStencilActive`가 `AuraStencilHost`의 유일한 public 진입점 |
-| `Awake`/`Start` 기본 활성 | 없음. `Initialize()`의 `ApplyActive(false)`가 유일한 초기 상태 |
+| `Awake`/`Start` 기본 활성 | 없음. `Initialize()`의 `_stencilRequestedActive=false`+`ApplyState()`(옛 `ApplyActive(false)`)가 유일한 초기 상태 |
 | 씬 직렬화 상태 | **불가능.** 그래프 전체가 `[RuntimeInitializeOnLoadMethod]`에서 `new GameObject`/`AddComponent`로 런타임 생성됨 |
 
 **그럼에도 화면이 멀쩡해 보일 수 있습니다.** E3(`E3RegionMaskOverlay`, `RNBridge`)는 `controlled` 목록 **밖**이라 계속 렌더링합니다. 즉 ARwithFable `applyFilter` 레인만 죽어 있고 E3가 그림을 그리므로, **기기에서는 이 결함이 가려질 수 있습니다.**
 
 **정적 판정 —** `applyFilter`가 `ARFilterScreen`에서 버려지는 것은 코드상 확정입니다(`CONFIRMED`). 다만 E3가 대신 그림을 그리므로, 실제 기기에서 어떻게 보이는지는 확인하지 못했습니다(`UNVERIFIED`).
 
-- 근거(비활성화): `AuraMediaPipeGraftBootstrap.cs` — `AuraStencilHost` 클래스 (202–261), `ApplyActive(false)` (219), `ApplyActive` 구현 (234–252), `MakeupController` 편입 (155).
-- 근거(구독 수명): `MakeupController.cs` — `OnEnable`/`OnDisable` (416–424).
-- 근거(발신처 유일): `StencilUnityViewAdapter.tsx` (71, 80) · public 진입점 (223).
-- 근거(화면 분기): `arRoutes.tsx` (118–123) · `ARFilterCameraPreview.tsx` (90).
-- 근거(전송): `unityMakeupBridge.ts` — `postUnityFilterParams` (481–485), target `NativeBridge`/`OnMessageFromRN`.
+- 근거(비활성화): `AuraMediaPipeGraftBootstrap.cs` — `AuraStencilHost` 클래스 (202–273), `Initialize`가 `_stencilRequestedActive=false`+`ApplyState()` (210–222), `ApplyState` 구현 (248–266), `MakeupController` 편입 `controlled.Add` (155).
+- 근거(구독 수명): `MakeupController.cs` — `OnEnable` (461–464) / `OnDisable` (466–469), `applyFilter` 처리는 `OnMessage` 안 (517–526, `ClearForkRecipeOverlays` 480–508).
+- 근거(발신처 유일): `StencilUnityViewAdapter.tsx` — `activateStencilRuntime`가 `SetStencilActive('true')` (90), unmount 시 `'false'` (81); import는 `StencilARApp.tsx` (37)만.
+- 근거(화면 분기): `arRoutes.tsx` (34–39, 118–123) — params 있는 진입점은 전부 `ARFilterScreen`.
+- 근거(전송): `unityMakeupBridge.ts` — `postUnityFilterParams` (486–494), target `NativeBridge`/`OnMessageFromRN`.
 - 근거(메시지 소멸): `NativeBridge.cs` — `OnMessageFromRN` (45), `MessageReceived?.Invoke` (61).
 
 ### 2.5 F5: 립 마스크 등록 실패가 무시된다
@@ -251,10 +259,12 @@ RN → applyFilter → NativeBridge.OnMessageFromRN (살아 있음)
 | 눈썹 | 반환값을 확인하고 예외를 던짐 | 거부됨 ✅ |
 | 립 | **반환값을 버림** | 텍스처 없이 레이어가 그대로 적용됨 ⚠️ |
 
-크기가 틀린 립 마스크는 경고만 남기고 텍스처 등록을 건너뛴 뒤, 레이어 구성과 적용은 그대로 진행됩니다.
+크기가 틀린 립 마스크는 경고만 남기고 텍스처 등록을 건너뛴 뒤, 레이어 구성과 적용은 그대로 진행됩니다. (이상은 수리 전 서술)
 
-- 근거(검증 위치): `E3RegionMaskOverlay` — 립 478–487, 눈썹 536–545. 예외가 아니라 `Debug.LogWarning` + `return false`인 **약한** 검사.
-- 근거(비대칭): `RNBridge` — 립 858은 반환값 미사용, 눈썹 982–990은 `throw new InvalidOperationException`.
+> **현재 상태(수리됨, 2026-07-18 재검증):** 립도 이제 눈썹과 **동일하게 거부**합니다 — 등록 실패 시 `throw new InvalidOperationException`, 그리고 RN이 재시도하지 않도록 **터미널 사유**를 반환합니다.
+
+- 근거(현재 거부): `RNBridge.cs` — 립 `if (!registered) throw …` (1027–1035, 주석 "Mirror the brow path" 1024–1026), 눈썹 동일 패턴 (1156–1164). 터미널 사유: 립 `generated_lip_mask_texture_registration_failed` (2875–2879), 눈썹 (2964–2967).
+- 근거(byte 검증, `width×height×4`, `LogWarning`+`return false`): `E3RegionMaskOverlay` — 립 `RegisterGeneratedLipMaskTexture` (463–531, 불일치 491–499), 눈썹 `RegisterGeneratedBrowMaskTexture` (533–606, 불일치 561–569).
 
 ### 2.6 F6: softness 슬라이더가 일부 부위에서 무효다
 
@@ -262,7 +272,7 @@ RN → applyFilter → NativeBridge.OnMessageFromRN (살아 있음)
 
 `Assets/Resources/Masks/`에는 `blush.png`, `eyeshadow.png`, `lips.png`가 실제로 존재합니다. 따라서 MediaPipe 경로에서 **클래식 블러셔와 립의 softness 슬라이더는 아무 효과가 없습니다.** 절차 경로에 도달하는 건 PNG가 없는 `blush_igari`, `blush_drape`, highlight, contour뿐입니다.
 
-- 근거: `MaskGenerator.LoadOrGenerate` (200–206) — `softnessScale`은 `Generate`에만 전달됨. 코드 주석 198–199가 이 동작을 의도로 명시.
+- 근거: `MaskGenerator.LoadOrGenerate` (173–179) — 칠해진 PNG가 있으면 그대로 반환, `softnessScale`은 절차 `Generate`(softness 적용 199–201)에만 전달. 코드 주석 171–172가 이 동작을 의도로 명시. `LipMask`(136)·클래식 블러셔(146)는 PNG가 있어 무효. PNG 인벤토리 = `blush.png`·`eyeshadow.png`·`lips.png`(`Masks/` 직속, `ios`/`android` 서브폴더는 없고 컴파일 상수만 118–122).
 
 ### 2.7 F7: semantic skin class는 "비활성"이 아니라 "미구현"이다
 
@@ -288,8 +298,8 @@ RN → applyFilter → NativeBridge.OnMessageFromRN (살아 있음)
 
 | 항목 | 상태 | 근거 |
 |---|---|---|
-| `ScreenSpaceFoundationController.UpdateHandOcclusion` | 정의만 있고 **호출자 0건** — 무조건 `SetRuntimeRequested(true)`를 하지만 실행되지 않음 | 806–817 |
-| 생성 눈썹 마스크의 **A 채널** | ⚠ 정정(2026-07-17): 셰이더는 안 읽지만 **CPU 삼각형 컬링이 G/A를 샘플**(`generated_brow_green_alpha`) — 죽은 채널 아님, 계속 기록 필요 | `E3RegionMaskOverlay.ResolveMaskCoverageSampleChannel` |
+| `ScreenSpaceFoundationController.UpdateHandOcclusion` | 정의만 있고 **호출자 0건** — 무조건 `SetRuntimeRequested(true)`를 하지만 실행되지 않음. 헤더 주석이 스스로 *"TRACKED DEFECT (F9)"* 라고 표기(806–812) | 813 (setter 824) |
+| 생성 눈썹 마스크의 **A 채널** | ⚠ 정정: 셰이더는 안 읽지만 **CPU 삼각형 컬링이 `max(R, G, A)`를 샘플**(`generated_brow_green_alpha`) — 죽은 채널 아님, 계속 기록 필요 | `E3RegionMaskOverlay.ResolveMaskCoverageSampleChannel` (3860–3864), `SampleMaskCoverageByte` (3867–3875) |
 | 렌더 큐 **3002·3003** | 어떤 상수에도 배정되지 않은 빈 번호 | `MakeupQueues.cs` |
 | `E3RegionMaskOverlay` 4521 주석 | *"레시피가 눈썹를 multiply로 보낸다"* — **낡음**. 계약은 이미 `normal`을 보냄 | vs `fullFaceMakeupRecipe.ts:1089` |
 
@@ -344,7 +354,7 @@ flowchart TD
 - `MakeupController.OnMessage()`가 `applyFilter`를 받아 `ApplyTo()`로 머티리얼 셰이더 변수과 부위별 렌더러 값을 갱신합니다.
 - 얼굴의 넓은 영역은 `FaceMakeup.shader`, 립·눈·눈썹 등은 전용 메시와 전용 셰이더로 그립니다.
 
-근거: `ARFilterScreen.tsx` (409–423) · `unityMakeupBridge.ts` (474–486) · `NativeBridge.cs` (44–62) · `MakeupController.OnMessage` (416–449) · `MakeupController.ApplyTo` (878–1140).
+근거: `ARFilterScreen.tsx` (`postUnityFilterParams` 420–421) · `unityMakeupBridge.ts` (`postUnityFilterParams` 486–494) · `NativeBridge.cs` (44–62) · `MakeupController.OnMessage` (`applyFilter` case 517–526) · `MakeupController.ApplyTo` (956–~1197). *(단, §2.4 F4 — ARFilterScreen 경로에선 이 구독이 해제돼 있어 실제로는 E3가 그림.)*
 
 ### 3.4 경로 B: 풀페이스 레시피와 개인화 UV 마스크
 
@@ -354,7 +364,7 @@ flowchart TD
 - 개인화 립/눈썹는 별도 메시지로 raw RGBA 마스크를 등록한 뒤 같은 E3 overlay에서 렌더합니다.
 - **pilot 예외:** 레시피의 립은 `LipRenderer.Instance`가 존재하면 ARwithFable 립 렌더러로 우회하고 E3 립 overlay를 숨깁니다.
 
-근거: `fullFaceMakeupRecipe.ts` — `FullFaceMakeupRecipeLayer` (65–157) · `unityMakeupBridge.ts` (1819–1909) · `RNBridge.ApplyRecipeJson` (576–720, 립 우회는 663–685) · `RNBridge.ApplyRegionLayer` (3046–3088) · `RNBridge` 생성 마스크 수신 (793–1050).
+근거: `fullFaceMakeupRecipe.ts` — `FullFaceMakeupRecipeLayer` · `unityMakeupBridge.ts` · `RNBridge.ApplyRecipeJson`(립 우회 포함) · `RNBridge.ApplyRegionLayer` · `RNBridge` 생성 마스크 수신(립 등록은 1027–1035). *(`RNBridge`는 +237줄 재작성되어 줄번호 드리프트가 큼 — 심볼명으로 탐색.)*
 
 ### 3.5 두 경로 비교
 
@@ -390,7 +400,9 @@ flowchart TD
 - 정점의 화면/월드 위치: 매 프레임 변경
 - 결과: **같은 UV 마스크 한 장을 여러 얼굴과 표정에 재사용**
 
-근거: `FaceLandmarkSource.cs` (16–44) · `CanonicalFaceMesh.cs` (254–385, 392–470).
+> **2026-07-18 변경 — 프레임 공급 방식 재작성.** `FaceLandmarkSource`가 이제 카메라 CPU 이미지를 직접 획득하지 않고, **`FaceCameraFrameBroker.FrameReceived` 이벤트**로 받습니다(한 브로커가 같은 프레임을 landmark·segmentation·ARKit provider로 팬아웃). 라이브 파이프라인만 멈추는 `SetLiveProcessingActive(bool)`, 한 프레임 화장 깜박임을 막는 얼굴상실 유예 `FaceLossGraceResults = 3`도 추가됐습니다. **478 = 468 + 10 같은 랜드마크 사실 자체는 불변**입니다.
+
+근거: `FaceLandmarkSource.cs` — `LandmarkCount = 478` (43), `MeshVertexCount = 468` (44, 주석 "469~478은 홍채"), 브로커 수신 `OnBrokerFrame` (150–158)·`CaptureAndDetect` (500–583), `SetLiveProcessingActive` (109–127), 얼굴상실 유예 (271–277) · `CanonicalFaceMesh.cs` (무변경) — `LoadTopology` (254–286), `ParseObj` (288–388), `LateUpdate` (390–472).
 
 ### 4.3 E3의 ARFace UV
 
@@ -404,7 +416,7 @@ E3는 `ARFace`가 제공하는 `vertices`, `indices`, `uvs`를 사용합니다. 
 
 **블러셔 일부는 예외입니다.** 특정 볼 마스크는 ARFace UV 대신 얼굴 local `x/y`를 정규화한 좌표를 새로 만들어 양볼 배치를 맞춥니다.
 
-근거: `E3RegionMaskOverlay.TryUpdateFullFaceUvMesh` (1731–2003) · 볼 예외 (3528–3572).
+근거: `E3RegionMaskOverlay.TryUpdateFullFaceUvMesh` (1755–2027) · 볼 예외 `BuildCheekFaceLocalUvCoordinates` (3552–3596).
 
 ### 4.4 마스크는 항상 단일 흑백 채널이 아니다
 
@@ -440,7 +452,7 @@ E3는 `ARFace`가 제공하는 `vertices`, `indices`, `uvs`를 사용합니다. 
 
 > ⚠️ **F6 참조:** softness는 절차 생성에만 적용됩니다. `blush.png`·`lips.png`가 존재하므로 해당 부위 슬라이더는 무효입니다.
 
-근거: `MaskGenerator` — `PlatformFolder` (129–135), `LoadOrGenerate` (200–206), `Generate` (210–214), MAX 커버리지 (247), Gaussian tail (233–240), `SoftnessBuckets = 5` (141), 버킷 캐시 (187–193).
+근거: `MaskGenerator` — `PlatformFolder` (118–122), `LoadOrGenerate` (173–179), `Generate` softness `e.softness × (1+softnessScale)` (199–201), MAX 커버리지·Gaussian tail·`SoftnessBuckets = 5`·버킷 캐시. *(파일 순 −27줄 — 심볼명으로 탐색.)*
 
 대략적인 메모리 크기(검증됨):
 
@@ -509,7 +521,7 @@ sequenceDiagram
 `E3RegionMaskOverlay`에서 — 실패 시 **경고 + `return false`**:
 - byte 수가 정확히 `width × height × 4`
 
-> ⚠️ **F5 참조:** 립은 이 `false`를 무시합니다.
+> ✅ **F5 (수리됨):** 예전엔 립이 이 `false`를 무시했지만, 이제 립도 눈썹처럼 예외를 던져 거부하고 RN에 터미널 사유를 반환합니다(§2.5). 또 RN측에 **`generatedMaskEventCorrelation.ts`**(신규)가 `generatedMaskId`와 revision을 비교해, 오래된 마스크 이벤트가 새 요청 상태를 덮어쓰지 못하게 막습니다(commit 계열 — 실패 마스크가 조용히 통과하던 모드 축소).
 
 텍스처 등록 방식도 부위마다 다릅니다.
 
@@ -550,12 +562,14 @@ sequenceDiagram
 | `LipRenderer` | lip color, intensity, finish, gradient, base lip, 광택 |
 | `BrowRenderer`, `PencilRenderer`, `StyleRenderer` | 눈썹 제품 스택 |
 | `IrisRenderer` | 렌즈, 아이섀도, 아이라이너 |
-| `LowerLidRenderer`, `AegyoRenderer`, `LashRenderer` | 눈 아래와 속눈썹 |
+| `LowerLidRenderer` (애교살 흡수), `LashRenderer` | 눈 아래·애교살·속눈썹 |
 | `FaceWarpField` | 눈 확대, 턱·광대 등 얼굴형 warp |
+
+> **2026-07-18 구조 변경 — 애교살(Aegyo).** 별도 `AegyoRenderer`와 `Aegyo.shader`는 **삭제**(commit `e96e273e`)되고, 애교살은 `LowerLid.shader` 안의 속성(`_Aegyo*`, 18–59)으로 흡수됐습니다. `MakeupController`의 애교 파라미터는 이제 `LowerLidRenderer.ApplyParams(...)`로 전달됩니다(1151–1157). 전용 렌더러도 전용 큐도 없습니다(LowerLid 큐 3007에서 함께 그림).
 
 **하나의 `FilterParams`가 하나의 거대한 셰이더에 전부 들어가는 게 아닙니다.** 넓은 얼굴 surface와 정밀 랜드마크 부위로 책임이 분산됩니다.
 
-근거: `MakeupController.CreateMaterial` (185–215) · `ApplyTo` (878–1140).
+근거: `MakeupController.CreateMaterial` (213) · `ApplyTo` (956–~1197, LowerLid/애교 dispatch 1151–1157) · `case "setAegyoStyle"` → `LowerLidRenderer.SetAegyoTextureFromFile` (564–566).
 
 ### 6.3 E3 머티리얼 구성
 
@@ -611,7 +625,9 @@ output.rgb ≈ destination.rgb × pigmentFilter.rgb
 
 블러셔 예시는 `tex2D(_BlushMask, buv).r × _BlushIntensity`를 커버리지로 쓰고 `TintFinish()`가 원본 luma와 마감값을 반영합니다.
 
-근거: `FaceMakeup.shader` (1–10, 155–170, 423–560).
+> **2026-07-18 신규 — "제형 스튜디오".** upstream 동기화로 이 셰이더가 +310줄 커지며 **제형(texture/formulation) 시스템**이 들어왔습니다. 위 합성 골격(GrabPass·재구성·luma 보존·alpha 1)은 그대로이고, 그 위에 세 층이 얹혔습니다 — ① 부위별 텍스처 enum(`TexBundleFromEnum` → `TexBody`/`TexGrain`/`TexEdge`/`TexCoverage`, 유니폼 `_SkinTexture`·`_ToneTexture`·`_BlushTexture` 등), ② 재질 아키타입(velvet/metal/holo, MatCap 기반 `ApplyMaterial`, `_*Material`/`_*MaterialStrength`), ③ sheen 축(`_*Sheen`)과 파티클 레이어(`ApplyParticles`, `_*Particle*`). `TintFinish`/블러셔 경로 자체의 동작은 불변(시그니처에 texEdge/texGrain 등 인자만 추가). **파운데이션은 여기로 이동한 게 아니라 원래 `Foundation.cginc`에 있었고**, `Finish.cginc`도 신규가 아닙니다(velvet-sheen·MatCap 헬퍼 +61줄).
+
+근거: `FaceMakeup.shader` (815줄) — GrabPass `_CameraFeed` (177), `frag` (537–809: foundation 604–650, blush 673, contour 706–715, highlight 719–728, concealer 733–749, powder 753–787, `return fixed4(col,1.0)` 808), `TintFinish` (468–490), state `ZWrite On`/`Cull` (183–184).
 
 ### 7.3 ARwithFable 립 셰이더
 
@@ -619,13 +635,17 @@ output.rgb ≈ destination.rgb × pigmentFilter.rgb
 
 - 바깥 경계에서만 feather를 적용합니다.
 - 카메라의 실제 입술 luma를 읽어 제품색의 명암을 보존합니다.
-- base lip, tint, finish, 광택, particle을 순서대로 내부 합성합니다.
+- base lip, tint, finish, 광택, particle을 **단일 패스 안에서 순서대로 내부 합성**합니다. 글로스도 별도 패스가 아니라 premultiplied 색에 **가산으로 더해집니다**(`premult += glossPig × glossAmt`).
 - 최종 출력은 **premultiplied** color입니다.
 - 블렌드 state는 `Blend One OneMinusSrcAlpha`입니다.
 
 이 방식은 평평한 단색 스티커보다 실제 입술 주름과 빛을 더 잘 보존하고, 글로스가 알파를 키우지 않아도 빛을 더할 수 있습니다.
 
-근거: `LipRenderer.cs` (9–27, 220–276) · `Lip.shader` (69–88, 149–227).
+> ⚠️ **립 광택은 여기서 2-패스가 아닙니다.** "GlossAdditiveHighlight라는 두 번째 가산 패스(`Blend One One`)"는 **E3 `SmoothRegionMask` 전용**(§7.4)이고, ARwithFable `Lip.shader`는 **단일 패스**입니다. 성능 서술(§14.2)의 "광택 켜면 그리기 두 배"는 E3 립 경로에만 해당합니다.
+>
+> **2026-07-18 변경 — 립 경계 픽셀 스냅핑 제거.** 예전에는 입술 외곽을 "붉은기 급락 경계"로 다시 탐색해 보정하던 포크 로직(`ComputeOuterSnap` 등)이 있었는데, 이번에 **제거**되고 순수 랜드마크 지오메트리 `ComputeOuterGeometry`로 정리됐습니다(commit `4839e08a`). 입꼬리/회전 시 과보정 흔들림이 줄고 경계 계산이 예측 가능해집니다. 또 `ApplyLipParams`에 **`shape` 인자**가 추가되어 `RNBridge`의 립 graft 호출이 이를 전달합니다(commit `cf297075`).
+
+근거: `LipRenderer.cs` (710줄) — ring 인덱스 `LipsOuter`/`LipsInner` (28–31), `Ring`/`RingFine` (32–35), 메시 `Init` (222+), `ApplyLipParams(…, int shape)` (299–300), `SetFloat(_LipShape, shape)` (328), 호출 `RNBridge.cs` (834). `Lip.shader` (393줄) — `Blend One OneMinusSrcAlpha` (113), feather (270), camera luma (245·274), premult (357), 글로스 가산 (376), `return` (386).
 
 ### 7.4 E3 `SmoothRegionMask.shader`
 
@@ -645,7 +665,7 @@ output.rgb ≈ destination.rgb × pigmentFilter.rgb
 
 **두 번째 패스** — 이름은 `GlossAdditiveHighlight`, 립 광택 전용 가산 패스, `Blend One One`. 조건이 안 맞으면 0을 반환합니다. `_LipStyleMode` 기본값이 `-1`이고 립 계열 마스크에만 실제 모드가 설정되므로, 립이 아닌 모든 region은 zero early-out으로 빠집니다.
 
-근거: `SmoothRegionMask.shader` — pass1 이름 136, state 139–142, `SampleMaskSoft` 525–548, half-face discard 730–742, pass2 1359–1367, zero early-out 1553–1556.
+근거: `SmoothRegionMask.shader` (파일은 b9f9a023 이후 무변경, 줄만 −2~6 이동) — pass1 이름 134, state 137–140, `SampleMaskSoft` 선언 521, half-face discard 729–736, pass2 이름 1357 / `Blend One One` 1360, zero early-out 1546·1551.
 
 ### 7.5 half-face에서 `discard`를 쓰는 이유
 
@@ -657,7 +677,7 @@ output.rgb ≈ destination.rgb × pigmentFilter.rgb
 
 또한 이 게이트는 `_MaskSpreadX`/`_MaskOffset` remap **이전의 raw 메시 UV**를 읽습니다 — 중심선이 x=0.5에 오려면 이게 필수입니다.
 
-근거: `SmoothRegionMask.shader` (725–742, 1530–1546).
+근거: `SmoothRegionMask.shader` (half-face discard 729–736, 광택 패스 early-out 1528·1546·1551).
 
 ### 7.6 feather가 단순 blur 슬라이더가 아닌 이유
 
@@ -740,33 +760,34 @@ E3의 feather는 텍스처 좌표의 선형 blur 한 번이 아닙니다.
 3004  Eye stencil
 3005  Eyeshadow
 3006  Double lid
-3007  Lower lid
-3008  Aegyo
-3009  Lower lash
-3010  Iris
-3011  Eyeliner
-3012  Eyeliner style
-3013  Mascara
-3014~3019  Brow stack (conceal/lightener/powder/mascara/pencil/style)
-3020  Teeth
-3021  Lip
-3022  Lip decal
-3023  Lip liner
+3007  Lower lid   ← 애교살(Aegyo)이 이 안에서 함께 그려짐 (전용 큐 없음)
+3008  Lower lash
+3009  Iris
+3010  Eyeliner
+3011  Eyeliner style
+3012  Mascara
+3013~3018  Brow stack (conceal/lightener/powder/mascara/pencil/style)
+3019  Teeth
+3020  Lip
+3021  Lip decal
+3022  Lip liner
 3100  Split mask
 3400  Lighting grade
 4000  Stencil guide
 ```
 
+> **2026-07-18 변경:** 옛 `Aegyo = 3008` 상수가 삭제되면서 그 아래(Lower lash ~ Lip liner)가 전부 **−1** 재번호됐습니다. 그 외 큐(3000~3007, 3100/3400/4000)는 불변입니다.
+
 이 순서가 겹치는 영역에서 무엇이 위에 보일지 결정합니다.
 
 | 관계 | 이유 |
 |---|---|
-| Teeth(3020) < Lip(3021) | 치아가 립 링 아래라 립·라이너 엣지가 또렷 |
-| Lip liner(3023) > Lip(3021) | 외곽 라이너가 위에서 또렷 |
+| Teeth(3019) < Lip(3020) | 치아가 립 링 아래라 립·라이너 엣지가 또렷 |
+| Lip liner(3022) > Lip(3020) | 외곽 라이너가 위에서 또렷 |
 | Split 마스크(3100) < Lighting(3400) | **복원된 맨얼굴 반쪽도 같은 lighting grade를 받게** |
 | Lighting(3400) < Stencil guide(4000) | 안내선이 grade에 물들지 않게 |
 
-근거: `MakeupQueues.cs` (27–71).
+근거: `MakeupQueues.cs` (27–70).
 
 ### 9.3 E3 렌더러 그래프
 
@@ -787,7 +808,7 @@ ARFace Transform
 
 **주의:** `SmoothRegionMaskMaterial.mat`의 직렬화된 큐는 **3000**이지만 런타임에 **5000**으로 덮어써집니다. Editor에서 asset만 보고 순서를 판단하면 틀립니다. (다만 3000은 셰이더의 `"Queue"="Transparent"` 태그 기본값이라 의도적 설정이라기보다 no-op 기본값입니다.)
 
-근거: `E3RegionMaskOverlay.ConfigureRenderer` (7177–7183, 호출 1719) · `renderQueue = 5000` (7242, 5268) · `SmoothRegionMask.shader` (140–142, 1365–1367) · `SmoothRegionMaskMaterial.mat` (19).
+근거: `E3RegionMaskOverlay.ConfigureRenderer` (호출은 `TryUpdateFullFaceUvMesh` 내부) · `renderQueue = 5000` · `SmoothRegionMask.shader` (137–140, 1357–1360) · `SmoothRegionMaskMaterial.mat` (19). *(E3 파일은 base64 방어 추가로 560줄 아래가 +24 이동 — 심볼명으로 탐색 권장.)*
 
 ---
 
@@ -807,7 +828,9 @@ ARwithFable stencil graph가 활성화되면 `AuraStencilHost`는 `ARCameraBackg
 
 `FramePresenter`는 화면 비율·회전·mirror를 반영하고 `ImageToViewport()`를 렌더러들과 공유하므로 배경과 makeup 지오메트리가 같은 좌표 변환을 씁니다.
 
-근거: `FramePresenter.cs` (85–99, 193–256, 258–338) · `AuraMediaPipeGraftBootstrap.cs` (202–246).
+> **2026-07-18 신규 — AR 밖에서 Unity 런타임 일시정지.** 예전에는 화면이 바뀌어도 숨은 Unity가 카메라·AR·MediaPipe를 계속 돌릴 수 있었는데, 이제 **"보이는 Unity 화면이 있으면 실행, 없으면 pause"** 로 소유권이 정리됐습니다(commit `120fcc43`). `AuraStencilHost`의 활성 플래그가 `_stencilRequestedActive`(라우트 요청)와 **`_runtimeActive`(호스트 수명 게이트, 신설 `SetRuntimeActive`)** 로 분리됐고, `ApplyState()`가 둘의 AND로 렌더링 여부를 결정합니다. AR을 나가면 `RNBridge.SetLiveRuntimeActive`가 `SetRuntimeActive(false)`+`SetLiveProcessingActive(false)`로 카메라·추론·`FaceCameraFrameBroker`·`ARSession`을 멈추고(모델 native 할당은 warm 유지), 복귀 시 producer→consumer 순(ARSession→broker→landmark→segmentation→stencil)으로 재개하며 readiness(`SendReady`) 핸드셰이크를 회복합니다(commit `73770297`). 렌더링 *결과*가 아니라 **"언제 렌더링이 도는가"** 를 바꾸는 변경이라 배터리·발열·카메라 점유가 안정됩니다.
+
+근거: `FramePresenter.cs` (375줄, +28은 방어 코드 — `RebuildMapping` Init 104, `EnsureMapping` 가드 ~277) · `AuraMediaPipeGraftBootstrap.cs` — `AuraStencilHost` (202–273), `ApplyState` (248–266), `SetStencilActive`/`SetRuntimeActive` (225–246) · `RNBridge.SetLiveRuntimeActive` (633–679) · RN측 lease API `unityMakeupBridge.ts`(`acquire`/`releaseUnityMakeupHiddenRunLease`, `prepareRuntimeAndPauseWhenReady`).
 
 ### 10.3 메이크업 이후 화면 효과
 
@@ -832,7 +855,7 @@ flowchart LR
 
 화면이 사라지면 container는 Unity 뷰를 분리하고 숨깁니다. **Unity player는 preload를 위해 살아 있을 수 있으므로, "렌더러는 정상인데 RN 화면은 검정"인 문제는 셰이더가 아니라 네이티브 뷰 마운트 상태에서도 발생합니다.**
 
-근거: `UnityMakeupNativeView.tsx` (12–50) · `UnityMakeupBridge.m` — `UnityMakeupContainerView` (685), `RCT_EXPORT_MODULE(AURAUnityMakeupView)` (769), 뷰 생성 (778).
+근거: `UnityMakeupNativeView.tsx` (12–50, 무변경) · `UnityMakeupBridge.m` (+470줄) — `UnityMakeupContainerView` (1122–1192, `didMoveToWindow` 1139–1147, `mountUnityViewIfNeeded` 1158–1174, `unmountUnityView` 1176–1190), `RCT_EXPORT_MODULE(AURAUnityMakeupView)` (1199), 뷰 생성 `- (UIView *)view` (1206–1209).
 
 ---
 
@@ -1082,7 +1105,7 @@ E3가 `_BrowGeneratedMode = 1`로 셰이더 분기를 선택합니다.
 
 > 주의: 전송 시점 코드에는 `fallbackMode ?? 'uvMask'`가 있습니다. 기본 control 객체는 `'off'`를 명시하므로 도달하지 않지만, `fallbackMode`를 생략한 caller는 `'uvMask'`를 받습니다.
 
-근거: `personalizedMakeupGenerateService.ts` — `fallbackMode: 'off'` (152), `mode: 'screenSpace'` (162), 전송 기본값 (423) · `E3RegionMaskOverlay` (1001).
+근거: `personalizedMakeupGenerateService.ts` — `fallbackMode: 'off'` (153), `mode: 'screenSpace'` (163), 전송 기본값 `fallbackMode ?? 'uvMask'` (424) · `E3RegionMaskOverlay` — no-fallback 게이트 (1025).
 
 #### screen-space 목 처리 순서
 
@@ -1124,7 +1147,7 @@ finalNeckMask  = neckCandidate × skinGate × lumGate × handVisibility
 | 투영된 얼굴 span이 너무 작음 (`< 0.02`) | 1278 |
 | **턱 점 부족** (`< 3`) | 1293 |
 | 턱 band가 가로로 너무 좁음 (`< 0.01`) | 1310 |
-| `baseSurfaceHullReady == false` | 1150–1198 |
+| `baseSurfaceHullReady == false` | `TryUpdateBaseSurfaceHull` 1150–1253 (소비 1074–1075) |
 
 여기에 더해 메시 마스크 실패(예: `projected_triangle_count_low`)도 `NeckExtensionReady`를 false로 만듭니다(534).
 
@@ -1151,7 +1174,7 @@ screen-space가 아니라 E3 메시 파운데이션을 쓸 때는 별도 3D neck
 
 추가로 column은 중앙 폭 `0.06 < normalizedX < 0.94`로 제한되고, 턱 곡선에 이웃 평균 smoothing이 2회 적용됩니다. 목에도 같은 live 피부 게이트를 적용하지만 **설정은 다릅니다** (`_SkinGateCenterWeight`가 목은 1.0, 얼굴은 0.30).
 
-근거: `E3RegionMaskOverlay` — 상수 (348–352), column 선택 (5449–5459), 최소 검사 (5486), smoothing (5493–5500), 길이 (5502), taper/offset (5513–5517), gradient (7043–7061), 피부 게이트 (5351, 5861).
+근거: `E3RegionMaskOverlay` — 상수 (348–352, 값 불변), column 선택 (5462–5498), 최소 검사 (5507), 길이 `× 0.38` (5523), taper/back-offset (5536–5538, 위쪽은 `jaw.z` 유지·아래 모서리만 뒤로 5534/5538), gradient 64×64 (7049–7086), 피부 게이트 `_SkinGateCenterWeight` (neck 적용 5372, 목=1.0/얼굴=0.30 5882). *(상수 348–352는 편집 지점 위라 불변, 그 아래 구현은 +21~24 이동.)*
 
 **현재 기본 설정은 fallback이 `off`이므로 screen-space가 실패해도 이 legacy neck skirt로 자동 전환되지 않습니다.**
 
@@ -1224,7 +1247,7 @@ finalMask = (ARFace + neck prior) × skinMask × confidence
 
 - 512×512 RGBA 마스크를 Base64 JSON으로 보내면 payload와 임시 복사 비용이 큽니다 (raw 1.0 MiB → Base64 1.33 MiB → 여러 단계 복사).
 - `SmoothRegionMask`의 기본 soft 마스크는 프래그먼트당 마스크 텍스처를 **13회** 샘플하고, region 분기에 따라 추가 sample을 수행합니다.
-- Lip 광택가 활성화되면 동일 메시가 additive 두 번째 패스를 한 번 더 그립니다.
+- **E3 립**(`SmoothRegionMask`) 광택이 활성화되면 동일 메시가 additive 두 번째 패스(`GlossAdditiveHighlight`)를 한 번 더 그립니다. (ARwithFable `Lip.shader`는 단일 패스라 해당 없음 — 글로스를 프리멀티 색에 내부 가산.)
 - E3는 얼굴×활성 부위별 dynamic 메시와 머티리얼 instance를 유지합니다.
 - `ZTest Always`와 높은 큐는 early depth rejection 이점을 거의 못 씁니다.
 - Screen-space 세그멘테이션/파운데이션은 전체 화면 프래그먼트 cost를 추가합니다.
@@ -1295,7 +1318,7 @@ finalMask = (ARFace + neck prior) × skinMask × confidence
 - E3 `SmoothRegionMask.shader` 하나가 파운데이션·립·볼·눈썹·아이라이너·렌즈를 모두 분기 처리하여 셰이더 배리언트가 아니라 **runtime branch 복잡도**가 높습니다.
 - 큐 5000 + `ZTest Always`는 결과를 강제로 위에 보이게 하지만 실제 3D 가림 책임을 별도 마스크에 넘깁니다.
 - Base64 텍스처 transport는 구현은 단순하지만 메모리·지연 면에서 확장성이 낮습니다.
-- **끊어진 계약이 있었습니다** — F1(강도)·F5(립 등록)는 2026-07-17 수리/무효화 완료. 남은 것은 F4(applyFilter 수신자)·F6(softness)·F9(SSF 손 가림 미배선)입니다.
+- **끊어진 계약이 있었습니다** — F1(강도)·F2(screen)·F5(립 등록)는 2026-07-17 수리/무효화 완료. 남은 것은 F4(applyFilter 수신자)·F6(softness)·F9(SSF 손 가림 미배선)입니다. **2026-07-18 upstream 재동기화(113파일) 후에도 F1~F9의 상태는 하나도 바뀌지 않았습니다** — 재동기화가 새로 고치거나 깬 결함은 없습니다(F4의 `ClearForkRecipeOverlays`는 구독 게이트 안이라 수신자를 만들지 못함).
 - **주석이 코드보다 먼저 썩었습니다** (F8). 낡은 주석은 없는 주석보다 위험합니다.
 
 ### 16.3 권장 방향
@@ -1354,7 +1377,9 @@ finalMask = (ARFace + neck prior) × skinMask × confidence
 
 ## 부록 B. 검증 상태
 
-### B.1 정적 코드 검증 (2026-07-16)
+> **2026-07-18 재검증.** 아래 항목은 upstream 재동기화(HEAD `661a4ea4`) 이후 6개 서브시스템 병렬 대조로 **전부 재확인**했습니다. 결함 F1~F9의 판정은 무변화(F2·F5 `수리 CONFIRMED` 유지). 구조 변경(Aegyo 삭제·큐 −1·제형 스튜디오·립 스냅핑 제거·런타임 pause)은 §부록 C 참조.
+
+### B.1 정적 코드 검증 (2026-07-16 최초 · 2026-07-18 재확인)
 
 | 항목 | 상태 |
 |---|---|
@@ -1397,6 +1422,29 @@ finalMask = (ARFace + neck prior) × skinMask × confidence
 ---
 
 ## 부록 C. 개정 이력
+
+### 2026-07-18 upstream 재동기화 재검증
+
+`b9f9a023`(2026-07-17) 이후 WEI 포크가 upstream AR 시스템과 **대규모 재동기화**됐습니다(HEAD `661a4ea4`, 113파일 +12,895/−2,793). 6개 서브시스템을 병렬 정적 대조했습니다.
+
+**큰 그림:** 색/셰이더 **연산 구조는 안정**. 이번 변화의 본질은 렌더가 **언제·어떤 계약으로·어떤 상태에서** 타는지 — lifecycle·계약·실패처리·upstream 정합의 정리입니다.
+
+**결함 상태 — 변화 없음.** F1~F9 모두 2026-07-18 시점에도 doc이 서술한 상태 그대로였습니다(F2·F5 수리 유지, F1·F3·F4·F6·F7·F8·F9 그대로). 재동기화가 새로 고치거나 깬 결함은 없습니다.
+
+| 구분 | 내용 |
+|---|---|
+| 애교살(Aegyo) | `AegyoRenderer`·`Aegyo.shader` **삭제** → `LowerLid.shader`/`LowerLidRenderer`로 흡수(전용 큐 없음, 3007에서 함께). 큐 표가 Aegyo=3008 삭제로 그 아래 **−1 재번호**(§6.2·§9.2) |
+| F4 심볼 | `AuraStencilHost.ApplyActive(bool)` **삭제/개명** → `Initialize`가 `_stencilRequestedActive=false`+`ApplyState()`, 신설 런타임 게이트 `_runtimeActive`/`SetRuntimeActive`. F4 자체는 **여전히 죽음** — `ClearForkRecipeOverlays`는 `OnMessage`(구독 게이트) 안이라 수신자가 아님(§2.4) |
+| FaceMakeup | +310줄 신규 "제형 스튜디오"(부위별 텍스처 enum·재질 아키타입·sheen·파티클). 파운데이션 이동 아님(원래 `Foundation.cginc`)(§7.2) |
+| ARwithFable 립 | 픽셀 경계 스냅핑 제거→순수 랜드마크 `ComputeOuterGeometry`, `ApplyLipParams`에 `shape` 인자 추가(§7.3). 립 광택은 단일 패스(2-패스는 E3 전용) |
+| Unity 런타임 | AR 밖에서 **hidden-pause**(카메라·추론 정지, 모델 warm), 복귀 시 producer→consumer 재개 + readiness 회복(§10.2) |
+| FaceLandmarkSource | 카메라 프레임을 `FaceCameraFrameBroker` 이벤트로 수신하도록 재작성(478=468+10 사실은 불변)(§4.2) |
+| 파운데이션·목 | 상수·수식 **값 변화 0**. upstream 동기화는 다른 파운데 경로(FaceMakeup 등)만 건드림. 줄번호만 이동 |
+| 줄번호 | 다수 파일 드리프트(E3 +24, RNBridge/MakeupController/ObjC/FaceLandmarkSource 재작성 수준). 본문 핵심 인용 갱신, 심볼명이 1차 앵커 |
+
+**정정:** F8(b) 생성눈썹 A 채널은 CPU 컬링이 "G/A"가 아니라 **`max(R,G,A)`** 를 샘플(표현 정밀화, "죽은 칸 아님"은 유지).
+
+---
 
 ### 2026-07-16 전면 검증·개정
 
