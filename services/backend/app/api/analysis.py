@@ -37,7 +37,11 @@ from app.services.media_deletion import (
   ensure_media_deletion_schema,
   process_media_deletion_outbox_items,
 )
-from app.services.openai_analysis import OpenAIAnalysisService
+from app.services.makeup_recommendation_context import normalize_makeup_profile_gender
+from app.services.openai_analysis import (
+  OpenAIAnalysisService,
+  measured_personal_color_column_values,
+)
 from app.services.owned_media import (
   require_owned_media,
   resolve_owned_source_media,
@@ -614,6 +618,15 @@ async def run_analysis_job_background(
     await mark_analysis_failed(db, report_id, message, payload, details)
     return
 
+  # DB 정본은 기기 측정값 원칙: personal_color/tone_summary 컬럼은 LLM 산출이
+  # 아니라 조명 보정·정합성 게이트를 통과한 측정 퍼컬의 한국어 라벨을 쓴다.
+  # (라이브 프롬프트는 애초에 퍼컬 재판정을 금지 — LLM 값은 폴백으로도 안 쓴다.)
+  # 측정 실패면 (None, None) → coalesce가 NULL 유지 → 리스트 태그도 표시 안 함.
+  measured_personal_color, measured_tone_summary = (
+    measured_personal_color_column_values(
+      payload.request_payload.get("measurements"),
+    )
+  )
   report_status = "completed"
   report = await db.fetchrow(
     """
@@ -640,10 +653,10 @@ async def run_analysis_job_background(
     report_status,
     settings.analysis_provider,
     settings.effective_analysis_model_id,
-    result.get("personalColor") if isinstance(result, dict) else None,
+    measured_personal_color,
     result.get("faceShape") if isinstance(result, dict) else None,
     result.get("skinType") if isinstance(result, dict) else None,
-    result.get("toneSummary") if isinstance(result, dict) else None,
+    measured_tone_summary,
     result.get("recommendedMood") if isinstance(result, dict) else None,
     result.get("summary") if isinstance(result, dict) else None,
     result.get("shortSummary") if isinstance(result, dict) else None,
@@ -780,6 +793,12 @@ async def create_analysis_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  # 계정 성별을 서버가 주입한다(클라이언트 값은 신뢰하지 않고 덮어씀).
+  # 분석 프롬프트가 사진으로 성별을 추론하는 대신 이 값을 쓰게 하는 근거 —
+  # 메이크업 추천 V2의 "성별 재추론 금지" 원칙과 정합.
+  payload.request_payload["profileGender"] = normalize_makeup_profile_gender(
+    user.get("gender"),
+  )
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if payload.run_immediately and execution_mode not in {"inline", "sqs"}:

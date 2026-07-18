@@ -57,6 +57,8 @@ _AUTHORITATIVE_HAIRLINE_PROVIDERS = {
 _AUTHORITATIVE_HAIRLINE_MIN_CONFIDENCE = 0.7
 _ANALYSIS_PROMPT_TASKS = {"face_makeup_recommendation_report_v1"}
 _ANALYSIS_PROMPT_SOURCES = {"camera", "gallery"}
+# makeup_recommendation_context.normalize_makeup_profile_gender 산출값과 일치.
+_ANALYSIS_PROFILE_GENDERS = {"female", "male", "unspecified"}
 _FACE_VERTICAL_THIRDS_STATUSES = {
   "full_success",
   "partial_success",
@@ -604,6 +606,71 @@ def _safe_personal_color_prompt_payload(value: Any) -> dict[str, Any] | None:
   return safe or None
 
 
+# 모바일 TYPE_LABEL_KO(personalColorCore/constants.ts)와 문자열이 일치해야 한다 —
+# 상세 화면 요약 칩과 DB 컬럼(리스트 태그·추천 스냅샷)이 같은 정본을 보게 하는 계약.
+PERSONAL_COLOR_TONE_LABEL_KO: dict[str, str] = {
+  "spring_light": "봄 라이트",
+  "spring_bright": "봄 브라이트",
+  "spring_true": "봄 트루",
+  "summer_light": "여름 라이트",
+  "summer_true": "여름 트루",
+  "summer_muted": "여름 뮤트",
+  "autumn_muted": "가을 뮤트",
+  "autumn_true": "가을 트루",
+  "autumn_deep": "가을 딥",
+  "winter_bright": "겨울 브라이트",
+  "winter_true": "겨울 트루",
+  "winter_deep": "겨울 딥",
+}
+
+# 모바일 AXIS_BANDS(presentation.ts)의 (low, mid, high) 라벨. 밴드 경계도 동일(±1/3).
+_PERSONAL_COLOR_AXIS_BAND_LABELS_KO: dict[str, tuple[str, str, str]] = {
+  "temperature": ("쿨", "뉴트럴", "웜"),
+  "value": ("밝은 색", "중간 밝기", "깊은 색"),
+  "chroma": ("부드러운 색", "맑은 색", "선명한 색"),
+}
+
+
+def measured_personal_color_column_values(
+  measurements: Any,
+) -> tuple[str | None, str | None]:
+  """기기 측정 퍼컬 → analysis_reports.personal_color/tone_summary 컬럼값.
+
+  DB 정본은 기기 측정값 원칙: LLM 재판정 대신, 조명 보정·12톤/계절 정합성
+  게이트(_safe_personal_color_prompt_payload)를 통과한 tone.top의 한국어
+  라벨을 기록한다. 측정 실패(insufficient·게이트 탈락)는 (None, None) →
+  coalesce로 컬럼 NULL 유지.
+  """
+  safe = _safe_personal_color_prompt_payload(
+    _prompt_record(measurements).get("personalColor"),
+  )
+  if not safe:
+    return None, None
+  tone = safe.get("tone")
+  if not isinstance(tone, dict):
+    return None, None
+  label = PERSONAL_COLOR_TONE_LABEL_KO.get(str(tone.get("top") or ""))
+  if label is None:
+    return None, None
+
+  axes = safe.get("axes")
+  axes = axes if isinstance(axes, dict) else {}
+
+  def _band_label(axis_name: str) -> str:
+    low, mid, high = _PERSONAL_COLOR_AXIS_BAND_LABELS_KO[axis_name]
+    axis = axes.get(axis_name)
+    value = axis.get("value") if isinstance(axis, dict) else None
+    # 모바일 getAxisBandPresentation과 동일: null 또는 중간 밴드(±1/3)는 mid.
+    if value is None or -1 / 3 <= value <= 1 / 3:
+      return mid
+    return low if value < -1 / 3 else high
+
+  tone_summary = " · ".join(
+    _band_label(axis_name) for axis_name in ("temperature", "value", "chroma")
+  )
+  return label, tone_summary
+
+
 def _safe_face3d_prompt_payload(value: Any) -> dict[str, Any] | None:
   raw = _prompt_record(value)
   if not raw:
@@ -668,6 +735,13 @@ def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
   source = _prompt_enum(payload.get("source"), _ANALYSIS_PROMPT_SOURCES)
   if source is not None:
     metadata["source"] = source
+  # 계정 성별(서버가 create_analysis_job에서 주입). 사진 성별 추론 대신 사용.
+  profile_gender = _prompt_enum(
+    payload.get("profileGender"),
+    _ANALYSIS_PROFILE_GENDERS,
+  )
+  if profile_gender is not None:
+    metadata["profileGender"] = profile_gender
 
   raw_measurements = payload.get("measurements")
   measurements = _prompt_record(raw_measurements)
@@ -1349,8 +1423,10 @@ class OpenAIAnalysisService:
       "피부 톤, 언더톤, 대비감, 눈동자와 머리 색, 얼굴형, 눈매, 광대/볼 구조, 눈썹, 입술, 전체 분위기를 함께 판단해. "
       "전문 퍼스널 컬러 컨설턴트와 메이크업 아티스트가 실제 고객을 상담하듯, 사진 속 실제 얼굴 특징과 컬러링을 근거로 판단해. "
       "사진 조명이나 안경/그림자 때문에 확정이 어려운 내용은 과하게 단정하지 말고 가장 가능성 높은 방향으로 표현해. "
-      "사진 속 사용자의 성별 표현과 스타일을 반드시 보존해. 남성으로 보이는 사용자는 남성 그루밍 메이크업 중심으로, 여성으로 보이는 사용자는 여성 메이크업 중심으로 추천해. "
-      "메이크업 추천이 사용자의 성별 표현을 바꾸거나 다른 성별처럼 보이게 만들면 안 돼. "
+      "요청 메타데이터의 profileGender는 계정에 저장된 성별이다. 사진으로 성별을 추정하지 말고 이 값을 따라. "
+      "female이면 여성 메이크업 중심으로, male이면 남성 그루밍 메이크업 중심으로 추천하고, "
+      "unspecified거나 값이 없으면 성별을 추정하지 않는 중성적인 표현을 기본 방향으로 사용해. "
+      "사진 속 사용자의 스타일은 보존하고, 메이크업 추천이 사용자의 성별 표현을 바꾸거나 다른 성별처럼 보이게 만들면 안 돼. "
       "반드시 한국어 JSON 객체 하나만 반환해. "
       "앱 상단 요약에 바로 쓰이도록 faceShape와 recommendedMood를 정확하고 짧게 채워. "
       "퍼스널 컬러와 톤 요약은 절대 새로 판정하거나 출력하지 마. 기기 측정값은 메이크업 색 선택의 근거로만 사용해. "
