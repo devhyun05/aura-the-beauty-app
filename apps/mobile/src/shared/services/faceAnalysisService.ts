@@ -453,8 +453,8 @@ function parseStylingLook(value: BackendStylingLook | null | undefined): FaceAna
       const category = row?.category;
       const note = firstText(row?.note);
       const why = firstText(row?.why);
-      return isStylingLookRowCategory(category) && note && why
-        ? {category, note, why}
+      return isStylingLookRowCategory(category) && note
+        ? {category, note, why: why ?? ''}
         : null;
     })
     .filter((row): row is NonNullable<typeof row> => row !== null);

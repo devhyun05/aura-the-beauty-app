@@ -3,12 +3,11 @@ import {useFocusEffect} from '@react-navigation/native';
 import {Alert, Pressable, StyleSheet, View as RNView} from 'react-native';
 import {
   Bell,
-  ChevronRight,
   MessageSquareText,
   ScanFace,
   Sparkles,
-  Trash2,
   WandSparkles,
+  X,
 } from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
@@ -163,19 +162,6 @@ export function NotificationsScreen({
 
   return (
     <ConsultingScreenScaffold contentGap={spacing.xl}>
-      <View style={styles.hero}>
-        <RNView style={styles.heroIcon}>
-          <Bell color={consultingColors.roseStrong} size={22} />
-        </RNView>
-        <RNView style={styles.heroBody}>
-          <Text style={styles.heroTitle}>알림</Text>
-          <Text style={styles.heroText}>
-            얼굴 분석, 메이크업 추천·추출·피드백 보고서의 완료 소식을 모아
-            보여드려요.
-          </Text>
-        </RNView>
-      </View>
-
       {notifications.length > 0 ? (
         <View style={styles.list}>
           {notifications.map(notification => (
@@ -219,9 +205,8 @@ export function NotificationsScreen({
                   styles.deleteButton,
                   pressed ? styles.pressed : null,
                 ]}>
-                <Trash2 color={consultingColors.textSoft} size={18} />
+                <X color={consultingColors.textSoft} size={18} />
               </Pressable>
-              <ChevronRight color={consultingColors.textSoft} size={18} />
             </Pressable>
           ))}
         </View>
@@ -282,40 +267,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.semibold,
-  },
-  hero: {
-    alignItems: 'flex-start',
-    backgroundColor: consultingColors.surface,
-    borderColor: consultingColors.borderSoft,
-    borderRadius: consultingRadius.card,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.md,
-    padding: 16,
-  },
-  heroBody: {
-    flex: 1,
-  },
-  heroIcon: {
-    alignItems: 'center',
-    backgroundColor: consultingColors.roseSoft,
-    borderRadius: consultingRadius.pill,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
-  },
-  heroText: {
-    color: consultingColors.textMuted,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
-    marginTop: 4,
-  },
-  heroTitle: {
-    color: consultingColors.text,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
   },
   list: {
     gap: spacing.md,

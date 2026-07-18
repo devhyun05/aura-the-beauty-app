@@ -1561,7 +1561,7 @@ const styles = StyleSheet.create({
     paddingTop: homeHeroLayoutMetrics.listTopPadding,
   },
   homeListHeader: {
-    gap: spacing.xxl + spacing.sm,
+    gap: spacing.lg,
     paddingBottom: spacing.xxl * 2 + spacing.sm,
   },
   homeModuleSeparator: {

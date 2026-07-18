@@ -7,16 +7,16 @@ import { Hatch } from './Hatch';
 
 interface Props {
   slot: PhotoSlotData;
-  shape?: 'rect' | 'circle';
+  shape?: 'rect' | 'circle' | 'oval';
   radius?: number;
   style?: StyleProp<ViewStyle>;
 }
 
 /** Photo slot: renders the image when `uri` is present, otherwise the design's hatched placeholder. */
 export function PhotoSlot({ slot, shape = 'rect', radius = 0, style }: Props) {
-  const br = shape === 'circle' ? 999 : radius;
+  const br = shape === 'circle' || shape === 'oval' ? 999 : radius;
   const c = slot.cropRect;
-  const hasCrop = shape !== 'circle' && !!c && c.w > 0 && c.h > 0;
+  const hasCrop = !!c && c.w > 0 && c.h > 0;
   return (
     <View style={[{ borderRadius: br, overflow: 'hidden', backgroundColor: color.hatchB }, style]}>
       {slot.uri && hasCrop && c ? (

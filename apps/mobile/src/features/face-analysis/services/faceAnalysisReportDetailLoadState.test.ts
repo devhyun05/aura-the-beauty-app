@@ -1,8 +1,12 @@
 import {
   FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_DESCRIPTION,
   FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_MESSAGE,
+  FACE_ANALYSIS_REPORT_DETAIL_NETWORK_ERROR_DESCRIPTION,
+  FACE_ANALYSIS_REPORT_DETAIL_NOT_FOUND_ERROR_DESCRIPTION,
+  FACE_ANALYSIS_REPORT_DETAIL_SERVER_ERROR_DESCRIPTION,
   resolveFaceAnalysisReportDetailLoadState,
 } from './faceAnalysisReportDetailLoadState';
+import {BackendApiError, BackendNetworkError} from '../../../shared/services/backendApi';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import type {UserProfile} from '../../../shared/types/profile';
 
@@ -44,7 +48,7 @@ async function expectResolvedLoadKeepsNullReport() {
 
 async function expectRejectedLoadShowsErrorState() {
   const state = await resolveFaceAnalysisReportDetailLoadState(() =>
-    Promise.reject(new Error('network unavailable')),
+    Promise.reject(new Error('unexpected mapper failure')),
   );
 
   expectEqual(state.status, 'error', 'rejected report detail load state');
@@ -62,6 +66,54 @@ async function expectRejectedLoadShowsErrorState() {
     state.description,
     FACE_ANALYSIS_REPORT_DETAIL_LOAD_ERROR_DESCRIPTION,
     'report detail load error description',
+  );
+}
+
+async function expectNetworkErrorShowsNetworkDescription() {
+  const state = await resolveFaceAnalysisReportDetailLoadState(() =>
+    Promise.reject(new BackendNetworkError()),
+  );
+
+  if (state.status !== 'error') {
+    throw new Error('network report detail load should return error state');
+  }
+
+  expectEqual(
+    state.description,
+    FACE_ANALYSIS_REPORT_DETAIL_NETWORK_ERROR_DESCRIPTION,
+    'report detail load network error description',
+  );
+}
+
+async function expectServerErrorShowsServerDescription() {
+  const state = await resolveFaceAnalysisReportDetailLoadState(() =>
+    Promise.reject(new BackendApiError('internal server error', 500)),
+  );
+
+  if (state.status !== 'error') {
+    throw new Error('server report detail load should return error state');
+  }
+
+  expectEqual(
+    state.description,
+    FACE_ANALYSIS_REPORT_DETAIL_SERVER_ERROR_DESCRIPTION,
+    'report detail load server error description',
+  );
+}
+
+async function expectNotFoundErrorShowsNotFoundDescription() {
+  const state = await resolveFaceAnalysisReportDetailLoadState(() =>
+    Promise.reject(new BackendApiError('not found', 404)),
+  );
+
+  if (state.status !== 'error') {
+    throw new Error('not found report detail load should return error state');
+  }
+
+  expectEqual(
+    state.description,
+    FACE_ANALYSIS_REPORT_DETAIL_NOT_FOUND_ERROR_DESCRIPTION,
+    'report detail load not found error description',
   );
 }
 
@@ -87,4 +139,7 @@ async function expectResolvedLoadKeepsReport() {
 
 void expectResolvedLoadKeepsNullReport();
 void expectRejectedLoadShowsErrorState();
+void expectNetworkErrorShowsNetworkDescription();
+void expectServerErrorShowsServerDescription();
+void expectNotFoundErrorShowsNotFoundDescription();
 void expectResolvedLoadKeepsReport();

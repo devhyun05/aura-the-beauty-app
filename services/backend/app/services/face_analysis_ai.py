@@ -22,7 +22,7 @@ from app.services.face_analysis_measurements import (
 
 MEASUREMENT_PROMPT_VERSION = "s1-measurement-v1"
 PERCEPTION_PROMPT_VERSION = "s1-perception-v1"
-CONSULTING_PROMPT_VERSION = "s1-consulting-v1"
+CONSULTING_PROMPT_VERSION = "s1-consulting-v2"
 FORBIDDEN_INFERENCES = (
   "medical diagnosis, disease, age, ethnicity, health status, cosmetic procedures, "
   "attractiveness score"
@@ -188,7 +188,11 @@ class FaceAnalysisAI:
       model_type=ConsultingResult,
       developer_prompt=(
         "You are a practical K-beauty, hair, fashion, and photography consultant. Base every "
-        f"recommendation on supplied evidence. Never infer {FORBIDDEN_INFERENCES}. Return JSON only."
+        f"recommendation on supplied evidence. Never infer {FORBIDDEN_INFERENCES}. "
+        "Keep face shape and vertical facial thirds as separate facts. Never describe a dominant "
+        "or elongated upper, middle, or lower third as balanced, and never use one as evidence that "
+        "the other is balanced. Summary and shortSummary must preserve the supplied derived labels "
+        "without combining contradictory traits. Return JSON only."
       ),
       user_prompt=json.dumps(
         model_payload,

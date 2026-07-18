@@ -2,7 +2,6 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { color, font, radius } from '../reportTokens';
 import type { LookCardData, S7Data } from '../reportTypes';
-import { EvidenceBadge } from '../visuals/Badge';
 import { Card } from '../visuals/Card';
 import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
@@ -20,7 +19,6 @@ function LookCard({ card }: { card: LookCardData }) {
             <Text style={[font(11.5, '800'), { color: natural ? color.accentInk : color.white }]}>{card.chip}</Text>
           </View>
           <Text style={[font(14, '700'), { color: color.ink, marginTop: 3 }]}>{card.title}</Text>
-          <Text style={[font(12.5, '400', 1.55), { color: color.muted }]}>{card.sub}</Text>
         </View>
         {card.rows.map((r, i) => (
           <View key={r.category} style={{
@@ -30,11 +28,10 @@ function LookCard({ card }: { card: LookCardData }) {
           }}>
             <Text style={[font(12, '800'), { color: color.ink, width: 52, paddingTop: 2 }]}>{r.category}</Text>
             <View style={{ flex: 1, gap: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                <Text style={[font(13, '700'), { color: color.body }]}>{r.title}</Text>
-                <EvidenceBadge kind={r.evidence} label={r.evidenceLabel} />
-              </View>
-              <Text style={[font(12, '400', 1.55), { color: color.muted }]}>{r.why}</Text>
+              <Text style={[font(13, '400', 1.55), { color: color.body }]}>{r.title}</Text>
+              {r.why.trim() ? (
+                <Text style={[font(12, '400', 1.55), { color: color.muted }]}>{r.why}</Text>
+              ) : null}
             </View>
           </View>
         ))}
@@ -47,13 +44,7 @@ function LookCard({ card }: { card: LookCardData }) {
 export function S7Styling({ data }: { data: S7Data }) {
   return (
     <RiseIn style={{ paddingTop: 30, paddingHorizontal: 20, gap: 12 }}>
-      <SectionHeader eyebrow={data.eyebrow} title={data.title} subParts={data.noteParts} />
-      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 2 }}>
-        <Text style={[font(12, '800'), { color: color.accentInk }]}>{data.naturalLabel}</Text>
-        <Text style={[font(12, '400'), { color: color.muted }]}>·</Text>
-        <Text style={[font(12, '800'), { color: color.ink }]}>{data.glamLabel}</Text>
-        <Text style={[font(11.5, '400'), { color: color.muted, flex: 1, textAlign: 'right' }]}>두 스타일 제안</Text>
-      </View>
+      <SectionHeader eyebrow={data.eyebrow} title={data.title} />
       <LookCard card={data.naturalCard} />
       <LookCard card={data.glamCard} />
     </RiseIn>

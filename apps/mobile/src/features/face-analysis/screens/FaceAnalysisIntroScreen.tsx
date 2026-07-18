@@ -1,9 +1,8 @@
 import React from 'react';
-import {Pressable, StyleSheet} from 'react-native';
-import {ClipboardList, ScanFace, Sparkles} from 'lucide-react-native';
+import {ImageBackground, Pressable, StyleSheet} from 'react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
-import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {colors, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 import {
   FACE_ANALYSIS_CAPTURE_DURATION_COPY,
@@ -14,35 +13,44 @@ type FaceAnalysisIntroScreenProps = {
   onStartAnalysisGuide?: () => void;
 };
 
+const faceAnalysisHeroImage = require('../../../assets/images/face-analysis-intro.png');
+
 const faceAnalysisIntroContent = {
-  eyebrow: 'FACE ANALYSIS',
-  title: '얼굴 분석으로\n나에게 맞는 룩을 찾아요',
-  description:
-    '톤, 윤곽, 분위기를 함께 확인해 추천 필터와 제품을 더 정확하게 맞춰드려요.',
+  title: '맞춤 스타일링을 위한\n얼굴 분석',
   captureDuration: FACE_ANALYSIS_CAPTURE_DURATION_COPY,
-  primaryActionLabel: '시작하기',
+  primaryActionLabel: '촬영 가이드 보기',
 } as const;
 
 const faceAnalysisIntroSteps = [
   {
-    id: 'survey',
-    title: '취향 설문',
-    description: '선호 무드와 평소 메이크업 습관을 반영해요.',
-    icon: (color: string) => (
-      <ClipboardList color={color} size={iconSize.md} strokeWidth={1.9} />
-    ),
+    id: 'light',
+    title: '자연광 아래에서 찍기',
+    description: '얼굴에 큰 그림자나 색 번짐이 생기지 않게 찍어 주세요.',
   },
   {
-    id: 'capture',
-    title: '사진 촬영',
-    description: '가이드에 맞춰 촬영하면 분석 정확도가 높아져요.',
-    icon: (color: string) => <ScanFace color={color} size={iconSize.md} strokeWidth={1.9} />,
+    id: 'hair',
+    title: '이마 보이기',
+    description: '헤어라인이 가려지면 상안부 비율을 계산하기 어려워요.',
   },
   {
-    id: 'recommendation',
-    title: '맞춤 추천',
-    description: '분석 결과를 바탕으로 필터와 제품을 제안해요.',
-    icon: (color: string) => <Sparkles color={color} size={iconSize.md} strokeWidth={1.9} />,
+    id: 'ears',
+    title: '귀 보이게 하기',
+    description: '옆머리를 넘기면 얼굴 폭과 윤곽 기준을 더 잘 잡을 수 있어요.',
+  },
+  {
+    id: 'accessory',
+    title: '액세서리 빼기',
+    description: '안경, 모자, 큰 귀걸이는 얼굴 경계와 색 측정을 방해할 수 있어요.',
+  },
+  {
+    id: 'expression',
+    title: '무표정으로 찍기',
+    description: '웃거나 입을 벌리면 눈·입·턱 비율이 달라질 수 있어요.',
+  },
+  {
+    id: 'jaw',
+    title: '턱선까지 넣기',
+    description: '턱끝이 잘리면 얼굴 길이와 하관 비율이 보류돼요.',
   },
 ] as const;
 
@@ -63,50 +71,43 @@ export function FaceAnalysisIntroScreen({
 }: FaceAnalysisIntroScreenProps) {
   return (
     <AppScreen
+      backgroundColor={colors.background}
       bottomPadding="safeArea"
-      contentGap={spacing.xxl}
+      contentGap={spacing.xl}
       topPadding="belowShellHeader">
-      <YStack style={styles.hero}>
-        <View style={styles.heroIcon}>
-          <ScanFace color={colors.white} size={iconSize.xl} strokeWidth={1.8} />
-        </View>
+      <ImageBackground
+        imageStyle={styles.heroImage}
+        resizeMode="cover"
+        source={faceAnalysisHeroImage}
+        style={styles.hero}>
         <YStack style={styles.heroCopy}>
-          <Text style={styles.eyebrow}>{faceAnalysisIntroContent.eyebrow}</Text>
           <Text style={styles.title}>{faceAnalysisIntroContent.title}</Text>
-          <Text style={styles.description}>{faceAnalysisIntroContent.description}</Text>
         </YStack>
-      </YStack>
 
-      <YStack style={styles.capturePlan}>
-        <Text style={styles.capturePlanTitle}>촬영은 한 번만 진행돼요</Text>
-        <YStack style={styles.capturePlanList}>
-          {FACE_ANALYSIS_CAPTURE_PLAN.map((step, index) => (
-            <XStack key={step.id} style={styles.capturePlanRow}>
-              <View style={styles.capturePlanNumber}>
-                <Text style={styles.capturePlanNumberText}>{index + 1}</Text>
-              </View>
-              <YStack style={styles.capturePlanCopy}>
-                <Text style={styles.capturePlanStepTitle}>{step.title}</Text>
-                <Text style={styles.capturePlanDescription}>{step.description}</Text>
+        <XStack style={styles.heroMeta}>
+          <Text style={styles.heroMetaLabel}>1회 촬영</Text>
+          <View style={styles.heroMetaDivider} />
+          <Text style={styles.heroMetaValue}>{faceAnalysisIntroContent.captureDuration}</Text>
+        </XStack>
+      </ImageBackground>
+
+      <YStack style={styles.content}>
+        <YStack style={styles.checkHeader}>
+          <Text style={styles.sectionEyebrow}>READY</Text>
+          <Text style={styles.sectionTitle}>촬영 전 체크리스트</Text>
+        </YStack>
+
+        <YStack style={styles.checkList}>
+          {faceAnalysisIntroSteps.map((step, index) => (
+            <XStack key={step.id} style={styles.checkRow}>
+              <Text style={styles.checkIndex}>{String(index + 1).padStart(2, '0')}</Text>
+              <YStack style={styles.checkCopy}>
+                <Text style={styles.checkTitle}>{step.title}</Text>
+                <Text style={styles.checkDescription}>{step.description}</Text>
               </YStack>
             </XStack>
           ))}
         </YStack>
-        <Text style={styles.captureDuration}>
-          {faceAnalysisIntroContent.captureDuration}
-        </Text>
-      </YStack>
-
-      <YStack style={styles.stepList}>
-        {faceAnalysisIntroSteps.map(step => (
-          <XStack key={step.id} style={styles.stepRow}>
-            <View style={styles.stepIcon}>{step.icon(colors.textPrimary)}</View>
-            <YStack style={styles.stepCopy}>
-              <Text style={styles.stepTitle}>{step.title}</Text>
-              <Text style={styles.stepDescription}>{step.description}</Text>
-            </YStack>
-          </XStack>
-        ))}
       </YStack>
 
       <View style={styles.footerSpacer} />
@@ -125,178 +126,144 @@ export function FaceAnalysisIntroScreen({
 }
 
 const styles = StyleSheet.create({
-  captureDuration: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-  },
-  capturePlan: {
-    gap: spacing.md,
-  },
-  capturePlanCopy: {
+  checkCopy: {
     flex: 1,
-    gap: spacing.xs,
+    gap: 4,
     minWidth: 0,
   },
-  capturePlanDescription: {
+  checkDescription: {
     color: colors.textSecondary,
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
-  capturePlanList: {
-    borderBottomColor: colors.border,
-    borderBottomWidth: 1,
-    borderTopColor: colors.border,
-    borderTopWidth: 1,
+  checkHeader: {
+    gap: spacing.xs,
   },
-  capturePlanNumber: {
-    alignItems: 'center',
-    backgroundColor: colors.blackSurface,
-    borderRadius: radius.pill,
-    height: 32,
-    justifyContent: 'center',
-    width: 32,
-  },
-  capturePlanNumberText: {
-    color: colors.white,
+  checkIndex: {
+    color: colors.textTertiary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0.8,
     lineHeight: typography.lineHeight.sm,
+    width: 40,
   },
-  capturePlanRow: {
-    alignItems: 'center',
+  checkList: {
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+  },
+  checkRow: {
+    alignItems: 'flex-start',
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
     gap: spacing.md,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
   },
-  capturePlanStepTitle: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.md,
-  },
-  capturePlanTitle: {
+  checkTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
   },
-  description: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
-  },
-  eyebrow: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
+  content: {
+    gap: spacing.lg,
+    paddingHorizontal: spacing.screenX,
   },
   footerSpacer: {
     flex: 1,
   },
   hero: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.xl,
-    padding: spacing.xl,
-    shadowColor: shadows.soft.shadowColor,
-    shadowOffset: shadows.soft.shadowOffset,
-    shadowOpacity: 0.08,
-    shadowRadius: shadows.soft.shadowRadius,
+    borderRadius: 28,
+    height: 480,
+    justifyContent: 'space-between',
+    overflow: 'hidden',
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.screenX,
+    paddingTop: spacing.xl,
   },
   heroCopy: {
     gap: spacing.sm,
   },
-  heroIcon: {
+  heroImage: {
+    borderRadius: 28,
+  },
+  heroMeta: {
     alignItems: 'center',
-    backgroundColor: colors.blackSurface,
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    borderColor: 'rgba(255, 255, 255, 0.92)',
     borderRadius: radius.pill,
-    height: 64,
-    justifyContent: 'center',
-    width: 64,
+    borderWidth: 1,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  heroMetaDivider: {
+    backgroundColor: colors.border,
+    height: 14,
+    width: 1,
+  },
+  heroMetaLabel: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  heroMetaValue: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.xs,
   },
   pressed: {
     opacity: 0.78,
+    transform: [{scale: 0.99}],
   },
   primaryButton: {
     alignItems: 'center',
     backgroundColor: colors.blackSurface,
     borderRadius: radius.pill,
-    flexDirection: 'row',
-    gap: spacing.sm,
     justifyContent: 'center',
     minHeight: 58,
     paddingHorizontal: spacing.xl,
+    shadowColor: shadows.soft.shadowColor,
+    shadowOffset: shadows.soft.shadowOffset,
+    shadowOpacity: 0.12,
+    shadowRadius: shadows.soft.shadowRadius,
   },
   primaryButtonText: {
     color: colors.white,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
   },
-  stepCopy: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0,
+  sectionEyebrow: {
+    color: colors.textTertiary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 1,
+    lineHeight: typography.lineHeight.xs,
   },
-  stepDescription: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.sm,
-  },
-  stepIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: 'center',
-    width: 48,
-  },
-  stepList: {
-    gap: spacing.md,
-  },
-  stepRow: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    gap: spacing.md,
-    padding: spacing.lg,
-  },
-  stepTitle: {
+  sectionTitle: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
+    fontSize: typography.fontSize.xl,
     fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.md,
+    lineHeight: typography.lineHeight.xl,
   },
   title: {
     color: colors.textPrimary,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xxl,
+    fontSize: 34,
     fontWeight: typography.fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xxl,
+    letterSpacing: -0.8,
+    lineHeight: 40,
   },
 });
