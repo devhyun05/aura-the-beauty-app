@@ -80,6 +80,29 @@ export function runToneClassifierTests() {
   const g60 = (computeTone(axesFrom(PROTOTYPES.winter_bright), { tau: 0.6 }) as { gap: number }).gap;
   expectTrue(g15 > g30 && g30 > g60, `gap decreases with τ: ${g15} > ${g30} > ${g60}`);
 
+  // --- F6 회귀: contrast는 value(피부 밝기)와 공선이라 밝은 피부에서 +1로 고정된다.
+  //     쿨·라이트 얼굴(value<0)에서 부풀려진 contrast(+0.95)가 winter로 견인하면 밝기를
+  //     이중 계산하는 것 — down-weight(0.2)로 value가 가리키는 summer가 유지돼야 한다.
+  //     (가중치 0.45에서는 winter로 flip; 이 벡터가 F6의 실증 케이스.) ---
+  const seasonOf = (top: string) => TYPE_TO_SEASON[top as PersonalColor12Type];
+  const coolLightClear = axesFrom([-0.8, -0.3, 0.4, -0.2, 0.95]);
+  expectTrue(
+    seasonOf((computeTone(coolLightClear) as { top: string }).top) === 'summer',
+    'inflated contrast does not drag cool-light face into winter',
+  );
+
+  // --- F7: seasonScore — 12타입 softmax는 프로토타입 정중앙에도 typeScore가 ~50%라
+  //     "확신도 게이지"가 낮게 보인다. 시즌 단위 확신(top 시즌 3타입 확률 합)을 병기한다. ---
+  const wb = computeTone(axesFrom(PROTOTYPES.winter_bright)) as {
+    top: string; typeScore: number; seasonScore: number; probabilities: Record<string, number>;
+  };
+  expectTrue(wb.seasonScore >= wb.typeScore, 'seasonScore >= typeScore');
+  expectTrue(wb.seasonScore >= 0.6, `seasonScore substantial at prototype center (${wb.seasonScore})`);
+  const winterSum = ALL_12_TYPES
+    .filter(t => TYPE_TO_SEASON[t] === 'winter')
+    .reduce((a, t) => a + wb.probabilities[t], 0);
+  expectClose(wb.seasonScore, winterSum, 1e-9, 'seasonScore = sum of same-season probabilities');
+
   // 축 3개 미만 → null
   const sparse = axesFrom([0.5, 0.5, 0.5, 0.5, 0.5]);
   sparse.chroma = { value: null, confidence: 0, floored: true, basis: 'within-frame-relative' };
