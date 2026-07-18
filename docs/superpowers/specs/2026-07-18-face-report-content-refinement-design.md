@@ -41,7 +41,7 @@
 
 **비목표 (이번 범위 밖 — 명시):**
 - `FaceAnalysisV2` 파이프라인 제품 활성화(`FACE_ANALYSIS_V2_ENABLED`는 OFF 유지).
-- Report Lab(`apps/report-lab`), AR 맞춤 핏(v2 계획 §5), body profile 프롬프트 유입.
+- AR 맞춤 핏(v2 계획 §5), body profile 프롬프트 유입.
 - 네이티브/Unity 변경(478점 메시는 이미 접근 가능하므로 불필요).
 - 새 face3d/geometry **지표 자체**의 신설(기존 지표로 충분 — §2.2). 지표의 모집단 백분위·mm 노출은 금지.
 

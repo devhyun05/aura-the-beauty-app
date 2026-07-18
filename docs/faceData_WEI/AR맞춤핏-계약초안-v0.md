@@ -66,7 +66,7 @@ type PersonalFitEntry = {
 |---|---|---|---|---|---|---|
 | M-1 | `interCanthalRatio` | 상위 밴드(넓은 미간)* | `{region:'eyelinerUpper'}` | `{ eyelinerInnerExtension: +δ₁ }` — **신설 축**(v0.1 정정: 기존 `eyelinerInnerLift`는 수직 리프트+디버그 필드라 부적합, §7 D-5) | C(업계 관행) | 잠정 — 축 신설 후 δ 확정 |
 
-δ 확정 실험 도구: Report Lab(텍스트 실험)이 아니라 **스텐실 컴포저의 기존 디버그 슬라이더 패널**(실기기 렌더 실험 — regions.ts의 gold 축 슬라이더가 이미 이 용도)로 진행. 사람 육안 비교로 밴드별 δ 후보를 좁힌다.
+δ 확정 실험 도구는 **스텐실 컴포저의 기존 디버그 슬라이더 패널**(실기기 렌더 실험 — regions.ts의 gold 축 슬라이더가 이미 이 용도)로 진행한다. 사람 육안 비교로 밴드별 δ 후보를 좁힌다.
 
 \* 밴드 경계는 측정 트랙 Phase 4의 자체 분포(mean±SD) 확정 전까지 잠정값 — 매핑 테이블에 `mappingVersion`으로 버전 명시.
 

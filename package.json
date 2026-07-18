@@ -4,13 +4,6 @@
   "private": true,
   "scripts": {
     "commitlint": "commitlint --last --verbose",
-    "report-lab:setup": "node scripts/report-lab/manage.mjs setup",
-    "report-lab:dev": "node scripts/report-lab/manage.mjs dev",
-    "report-lab:test": "node scripts/report-lab/manage.mjs test",
-    "report-lab:stop": "node scripts/report-lab/manage.mjs stop",
-    "report-lab:down": "node scripts/report-lab/manage.mjs down",
-    "report-lab:status": "node scripts/report-lab/manage.mjs status",
-    "report-lab:tool-manifest": "node scripts/report-lab/generate-tool-manifest.mjs",
     "mobile:start": "npm --prefix apps/mobile run start",
     "mobile:start:face-measurement-validation-lab": "npm --prefix apps/mobile run start:face-measurement-validation-lab",
     "mobile:start:face-measurement-prepared-lab": "node scripts/face3d/run-face-measurement-validation-lab.mjs --target start",
