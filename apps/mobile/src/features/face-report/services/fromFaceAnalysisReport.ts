@@ -565,7 +565,7 @@ function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined): S7Data | n
   return {
     eyebrow: 'STYLING',
     title: '같은 얼굴, 두 가지 방향',
-    noteParts: [{text: '두 룩 모두 같은 분석 결과를 강도만 다르게 풀어낸 AI 제안이에요.'}],
+    noteParts: [{text: '분석 결과를 내추럴, 글램 두 가지 스타일에 맞추어 풀어낸 AI 제안이에요.'}],
     naturalLabel: '내추럴',
     glamLabel: '글램',
     mixZones: {

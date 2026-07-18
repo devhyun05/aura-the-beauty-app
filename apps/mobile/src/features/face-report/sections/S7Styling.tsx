@@ -52,7 +52,7 @@ export function S7Styling({ data }: { data: S7Data }) {
         <Text style={[font(12, '800'), { color: color.accentInk }]}>{data.naturalLabel}</Text>
         <Text style={[font(12, '400'), { color: color.muted }]}>·</Text>
         <Text style={[font(12, '800'), { color: color.ink }]}>{data.glamLabel}</Text>
-        <Text style={[font(11.5, '400'), { color: color.muted, flex: 1, textAlign: 'right' }]}>강도만 다른 두 방향</Text>
+        <Text style={[font(11.5, '400'), { color: color.muted, flex: 1, textAlign: 'right' }]}>두 스타일 제안</Text>
       </View>
       <LookCard card={data.naturalCard} />
       <LookCard card={data.glamCard} />
