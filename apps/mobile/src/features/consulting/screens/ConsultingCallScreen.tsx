@@ -192,7 +192,7 @@ export function ConsultingCallScreen({
     return () => {
       isMounted = false;
       void stopNativeChimeMeeting();
-      setUnityMakeupPlayerPaused(false);
+      setUnityMakeupPlayerPaused(true);
     };
   }, [bookingId]);
 
@@ -263,7 +263,7 @@ export function ConsultingCallScreen({
   }, [joinStatus]);
   const handleEndCall = useCallback(() => {
     void stopNativeChimeMeeting();
-    setUnityMakeupPlayerPaused(false);
+    setUnityMakeupPlayerPaused(true);
     onEndCall();
   }, [onEndCall]);
 

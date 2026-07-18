@@ -135,6 +135,27 @@ namespace ARMakeup.Face
             UnsubscribeFrameBroker();
         }
 
+        /// <summary>
+        /// Stops live segmentation submissions without closing the prepared
+        /// model. This keeps AR re-entry fast while guaranteeing that hidden
+        /// screens do not keep consuming camera frames.
+        /// </summary>
+        public void SetLiveProcessingActive(bool active)
+        {
+            if (active)
+            {
+                enabled = true;
+                TrySubscribeFrameBroker();
+                return;
+            }
+
+#if MEDIAPIPE
+            OnTrackingReset();
+#endif
+            Shader.SetGlobalFloat(SegOnId, 0f);
+            enabled = false;
+        }
+
         /// <summary>세그 채널 컬러 오버레이 토글(setCalibration.debugSeg) — CameraFeed.shader가 소비.</summary>
         public void SetDebug(bool on)
         {
