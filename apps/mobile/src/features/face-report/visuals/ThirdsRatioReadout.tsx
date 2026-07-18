@@ -44,6 +44,12 @@ export function ThirdsRatioReadout({ratio, faceLength}: Props) {
       )}
       {band && band.kind === 'band' && (
         <View style={{gap: 6}}>
+          {/* '나' 표식 — 아래 마젠타 눈금이 '내 위치'임을 명시 */}
+          <View style={{height: 12}}>
+            <View style={{position: 'absolute', left: pct(band.position * 100), marginLeft: -9, width: 18, alignItems: 'center'}}>
+              <Text style={[font(9.5, '800'), {color: color.magenta}]}>나</Text>
+            </View>
+          </View>
           <View
             style={{
               height: 10,
@@ -77,6 +83,10 @@ export function ThirdsRatioReadout({ratio, faceLength}: Props) {
           <Text style={[font(11.5, '700'), {color: band.inBand ? color.accentInk : color.body}]}>
             얼굴 길이비 · {band.verdictLabel}
             {band.inBand ? '' : ' (평균 범위 밖)'}
+          </Text>
+          {/* 범례 — 마젠타 표식과 청록 띠의 의미를 한 줄로 */}
+          <Text style={[font(10, '400', 1.4), {color: color.faint}]}>
+            청록 띠 = 사람들 평균 범위 · 표식 = 내 얼굴 길이비 위치
           </Text>
         </View>
       )}
