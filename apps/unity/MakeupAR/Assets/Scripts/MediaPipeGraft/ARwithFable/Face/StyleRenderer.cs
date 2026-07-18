@@ -53,6 +53,8 @@ namespace ARMakeup.Face
         static readonly int BrowColorId = Shader.PropertyToID("_BrowColor");
         static readonly int BrowIntensityId = Shader.PropertyToID("_BrowIntensity");
         static readonly int LumaKeyId = Shader.PropertyToID("_LumaKey");
+        static readonly int StyleFinishId = Shader.PropertyToID("_StyleFinish"); // 마감(Tier B, 0=새틴=기존)
+        static readonly int StyleTextureId = Shader.PropertyToID("_StyleTexture"); // 제형(텍스처) GENERIC(0=크림=현행)
 
         // 투명 픽셀 비율이 이보다 낮으면 알파 없는 그림(흰 배경/JPG)으로 보고 luma-key.
         const float AlphaCutoutThreshold = 0.02f;
@@ -119,7 +121,7 @@ namespace ARMakeup.Face
             _renderer.enabled = false;
         }
 
-        public void ApplyStyleParams(string colorHex, float intensity, float thickness, float arch, int shape)
+        public void ApplyStyleParams(string colorHex, float intensity, float thickness, float arch, int shape, int finish, int texture)
         {
             _intensity = Mathf.Clamp01(intensity);
             // R7 두께/아치 이식(섹션 12 정정 1) — BrowRenderer와 동일 클램프·워프.
@@ -131,6 +133,10 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(BrowColorId, c);
             _material.SetFloat(BrowIntensityId, _intensity);
+            // 마감(Tier B) — 0=새틴=기존 출력(하위호환).
+            _material.SetFloat(StyleFinishId, finish);
+            // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). _BrowStyleTex(모양)과 별개 축.
+            _material.SetFloat(StyleTextureId, texture);
         }
 
         /// <summary>

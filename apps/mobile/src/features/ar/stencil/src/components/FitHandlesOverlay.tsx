@@ -2,7 +2,8 @@ import React, {useRef, useState} from 'react';
 import {PanResponder, StyleSheet, Text, View} from 'react-native';
 
 /**
- * 온페이스 핏 핸들(A17) — Unity가 방출한 부위 앵커 좌표 위에 골드 점을 그리고,
+ * 온페이스 핏 핸들(A17) — Unity가 방출한 부위 앵커 좌표 위에 무채색 점(흰 코어+
+ * 어두운 테두리 — 피부 위 가시성)을 그리고,
  * 드래그를 뷰포트 델타로 환산해 App에 올린다. App이 현재 룩의 겹 수만큼 점을
  * 펼쳐 주므로("겹마다 점") 이 컴포넌트는 받은 점을 그대로 그린다.
  * 역할 분담: Unity=좌표만 / 터치·핏 시트 기록=전부 RN(App).
@@ -121,8 +122,6 @@ export default function FitHandlesOverlay({handles, onDelta}: Props) {
   );
 }
 
-const GOLD = '#C9A15E';
-
 const styles = StyleSheet.create({
   dot: {
     position: 'absolute',
@@ -130,26 +129,29 @@ const styles = StyleSheet.create({
     height: DOT,
     borderRadius: DOT / 2,
     borderWidth: 2,
-    borderColor: GOLD,
-    backgroundColor: 'rgba(201,161,94,0.18)',
+    borderColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   dotDragging: {
-    backgroundColor: 'rgba(201,161,94,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.45)',
     transform: [{scale: 1.15}],
   },
   dotCore: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: GOLD,
+    backgroundColor: '#FFFFFF',
   },
   dotLabel: {
     position: 'absolute',
     top: -13,
-    color: GOLD,
+    color: '#FFFFFF',
     fontSize: 9,
     fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowRadius: 2,
+    textShadowOffset: {width: 0, height: 1},
   },
 });

@@ -680,7 +680,8 @@ public sealed class RNBridge : MonoBehaviour
                             0f,
                             layer.ColorHex,
                             0f,
-                            0);
+                            0,
+                            0); // shape 0 = 기존 립 실루엣(W4 확장 전 동작 유지)
                         if (regionMaskOverlay != null)
                         {
                             regionMaskOverlay.HideRegionOverlay("lip");

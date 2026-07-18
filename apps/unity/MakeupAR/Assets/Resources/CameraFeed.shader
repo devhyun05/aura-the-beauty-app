@@ -64,6 +64,8 @@ Shader "ARMakeup/CameraFeed"
             float _SkinSmoothExt;      // 이마·목 스무딩 확장 강도(skinSmoothingExtended, 0=끔)
             fixed4 _HairTintColor;     // 헤어 염색 색(hairTintColor)
             float _HairTintIntensity;  // 헤어 염색 강도(hairTintIntensity, 0=끔)
+            float _HairFinish;         // 헤어 염색 마감(0=새틴=기존 출력, 1 매트 2 글로시 3 시머)
+            float _HairShape;          // 헤어 존(W6): 0=전체(현행) 1=옴브레(뿌리→끝) 2=끝만
             // ── 베이스 팩(#18) 파운데이션 이마·목 확장 — FaceMakeup 머티리얼과 같은 값을
             //    전역으로도 세팅(MakeupController.ApplyTo). face-skin(R)+body-skin(B: 목)
             //    게이트로 얼굴 메시 밖까지 같은 틴트. _SegOn=0(폴백)이면 완전 무효과.
@@ -71,6 +73,28 @@ Shader "ARMakeup/CameraFeed"
             float _FoundationIntensity; // 커버리지(0=끔)
             float _FoundationFinish;    // 0=새틴 1=매트 2=듀이
             float _FoundationTexture;   // 제형 텍스처(①) 0=리퀴드 1=쿠션 2=스킨틴트 — 이마·목 일치
+
+            // ── 임시 디버그(이음새 세그 게이트 튜닝 — 값 확정 후 제거) — 파운데 seg 게이트
+            //    임계 4종(전이 2 + 타원 2)을 전역 유니폼으로 승격해 실기기 슬라이더로 맞춘다.
+            //    sentinel -1 = 미설정(아래 #define 리터럴 폴백): 전이 LO는 0이 유효값이라
+            //    Foundation.cginc의 `> 1e-4` 선례가 아닌 `>= 0` 가드를 쓴다(타원 크기·페더는
+            //    항상 양수라 같은 가드로 안전). _SegSeamDbg=0(기본)=시각화 끔. MakeupController가
+            //    Init에서 -1(임계)/0(토글) 시딩. 확정 후 이 5개·viz 블록 제거.
+            float _SegSeamDbg;        // 세그 시각화 토글 (0=off)
+            float _FndSegLoDbg;       // 이음새 전이대 하한 (미설정 -1 → FND_SEG_LO)
+            float _FndSegHiDbg;       // 이음새 전이대 상한 (미설정 -1 → FND_SEG_HI)
+            float _FndOvalSizeDbg;    // 얼굴 오벌 반경 배수 (미설정 -1 → FND_OVAL_SIZE)
+            float _FndOvalFeatherDbg; // 얼굴 오벌 경계 페더 (미설정 -1 → FND_OVAL_FEATHER)
+
+            // 얼굴 오벌 게이트(랜드마크 타원, 07-17 세그 코어 제외 대체) — StencilGuideRenderer가
+            // 매 프레임 얼굴 오벌 랜드마크에서 이미지 UV 공간 타원(중심·반경·주축)을 계산해
+            // 기록한다. seg.r 램프 코어 제외는 실측상 "메시 담당 얼굴"과 "목·귀"를 못 가른다
+            // (코어를 낮추면 목까지 죽고, 풀면 세그가 얼굴 전체를 칠해 이중 도포 — 슬라이더
+            // 실험 확정). 대신 얼굴 메시가 소유한 오벌 안쪽을 기하로 제외하고 밖(목·귀)만
+            // 채운다. 이미지 재탐색 없는 정적 기하. _FndOvalAxis.z=0(얼굴 소실·미설정)=타원
+            // 무효 → seg 파운데 전체 off(코어 제외 불가 프레임의 이중 도포 방지 우선).
+            float4 _FndOval;      // (cx, cy, rx, ry) 이미지 UV
+            float4 _FndOvalAxis;  // (cosθ, sinθ, active, 0)
 
             // 세그 확장 GPU 예산 상수 — 배경 전체 화면 패스라 프래그먼트당 예산이 빠듯하다.
             // 스무딩이 켜지면 전화면 8탭(유니폼 분기 — frag의 divergent gradient 주석 참조)
@@ -81,8 +105,24 @@ Shader "ARMakeup/CameraFeed"
             #define SEG_SMOOTH_LUMA_KEEP 0.35  // luma 보존 비율(0=순수 블러, 1=크로마만 스무딩) // 실기기 튜닝 대상
             #define SEG_SMOOTH_SKIN_LO 0.35    // 피부(face+body) 확률 페더 하한 // 실기기 튜닝 대상
             #define SEG_SMOOTH_SKIN_HI 0.75    // 페더 상한 // 실기기 튜닝 대상
+            // 파운데이션 이음새(귀·턱선·목) 게이트 — 스무딩과 별도 임계. body-skin(B)+face-skin(R)
+            // 전이대(skin=max(R,B))를 채우되, 얼굴 메시가 소유·재적용하는 오벌 코어는 seg.r 램프가
+            // 아니라 랜드마크 타원 게이트(_FndOval)로 제외한다 — seg.r로는 목까지 죽거나(코어↓)
+            // 세그가 얼굴 전체를 칠해(코어↑) 이중 도포가 나 "메시 담당 얼굴"과 "목·귀"를 분리
+            // 불가함이 실측 확정(07-17). 목 확신 실측 ~0.19가 전이대 중앙에 오게 LO/HI를 잡고,
+            // 타원 페더 바깥이 메시 경계 페더와 만나 이음새 단차가 생기지 않는다.
+            #define FND_SEG_LO 0.10        // 이음새 전이대 하한(목 확신 ~0.19가 중앙에 오게) // 실기기 튜닝 대상
+            #define FND_SEG_HI 0.25        // 이음새 전이대 상한(넘으면 완전 커버) // 실기기 튜닝 대상
+            #define FND_OVAL_SIZE 1.10     // 얼굴 오벌 반경 배수(메시 오벌보다 살짝 넉넉히) // 실기기 튜닝 대상
+            #define FND_OVAL_FEATHER 0.15  // 오벌 경계 페더 밴드(메시 페더와 만남) // 실기기 튜닝 대상
             #define HAIR_TINT_LUMA_GAIN 1.5    // 루마 보존 틴트 게인(FaceMakeup.TintFinish와 동일 공식) // 실기기 튜닝 대상
             #define HAIR_TINT_LUMA_LIFT 0.15   // 루마 하한 리프트(암부에서 색 완전 소실 방지) // 실기기 튜닝 대상
+            // 헤어 존(W6) — 세그 마스크가 단일 hair 확률(G) 평면이라 가닥의 뿌리/끝 정보가
+            // 없다. v1은 이미지 세로축(src.y)으로 근사한다(끝=하단 가정) — 실제 뿌리↔끝 매핑은
+            // 포즈·flipY에 의존하므로 근사이며 실기기 튜닝(방향 뒤집힘 확인) 대상. // 실기기 튜닝 대상
+            #define HAIR_TIP_LO 0.25   // 끝 존 하한(이미지 세로, 근사): 이하 src.y = 끝(틴트↑)
+            #define HAIR_TIP_HI 0.75   // 상한: 이상 src.y = 뿌리(틴트↓)
+            #define HAIR_OMBRE_ROOT 0.25 // 옴브레 뿌리 쪽 최소 틴트 비율(끝만은 0까지 감쇠)
 
             static const float2 kSegSmoothTaps[SEG_SMOOTH_TAPS] =
             {
@@ -192,6 +232,21 @@ Shader "ARMakeup/CameraFeed"
                 return saturate(blurred + lumaDiff * SEG_SMOOTH_LUMA_KEEP);
             }
 
+            // 얼굴 오벌(랜드마크 타원) 내부 판정 — src(이미지 UV, 워프 시 역샘플)를 타원 로컬
+            // 축으로 회전해 정규화 거리 t를 재고, 경계(sizeMul)±feather smoothstep로 페더한다.
+            // 안(t<sizeMul−feather)=1, 밖=0. 타원 무효(_FndOvalAxis.z=0)면 0을 반환하되 호출측이
+            // 별도로 seg 파운데를 off한다(코어 제외 불가 프레임의 전면 도포 방지).
+            float OvalInside(float2 src, float sizeMul, float feather)
+            {
+                if (_FndOvalAxis.z < 0.5) return 0.0;
+                float2 d = src - _FndOval.xy;
+                float2 dl = float2( d.x * _FndOvalAxis.x + d.y * _FndOvalAxis.y,
+                                   -d.x * _FndOvalAxis.y + d.y * _FndOvalAxis.x);
+                float2 rr = max(_FndOval.zw, 1e-4);
+                float t = length(float2(dl.x / rr.x, dl.y / rr.y));
+                return 1.0 - smoothstep(sizeMul - feather, sizeMul + feather, t);
+            }
+
             fixed4 frag(v2f i) : SV_Target
             {
                 float2 src = i.uv;
@@ -238,15 +293,33 @@ Shader "ARMakeup/CameraFeed"
                         float hairLuma = dot(col, fixed3(0.299, 0.587, 0.114));
                         fixed3 dyed = _HairTintColor.rgb *
                             (hairLuma * HAIR_TINT_LUMA_GAIN + HAIR_TINT_LUMA_LIFT);
-                        col = lerp(col, saturate(dyed), seg.g * _HairTintIntensity);
+                        // 헤어 염색 마감 — 0=새틴=무변형(하위호환). 파운데 확장과 동일하게
+                        // sparkleUV·screenUV로 src(워프 역샘플)를 넘긴다.
+                        dyed = ApplyFinish(dyed, hairLuma, src, _HairFinish, 0.0,
+                                           0.0, 0.0, 0.0, 0.0, 0.0, 0.0, src, _PearlLightGain);
+                        // 헤어 존(W6) — 화면공간 세로 근사(근사, 위 상수 주석). 0=전체면
+                        // hairZone=1 → 바이트 동일(하위호환). 곱 게이트(가산 금지).
+                        float hairZone = 1.0;
+                        if (_HairShape > 0.5)
+                        {
+                            float tip = 1.0 - smoothstep(HAIR_TIP_LO, HAIR_TIP_HI, src.y); // 끝(하단)↑
+                            hairZone = (_HairShape > 1.5) ? tip : lerp(HAIR_OMBRE_ROOT, 1.0, tip);
+                        }
+                        col = lerp(col, saturate(dyed), seg.g * _HairTintIntensity * hairZone);
                     }
 
-                    // ③ 파운데이션 확장 — body-skin(B: 목·귀)만. 얼굴·이마는 FaceMakeup
+                    // ③ 파운데이션 확장 — 얼굴 메시(FaceMakeup) 밖 피부. 얼굴·이마 오벌은
                     //    메시(+이마 연장 밴드)가 소유해 거기서 파운데를 바르므로, 배경에서
-                    //    face-skin(R)까지 바르면 얼굴 오벌이 파운데 2회 적용돼 세그 유무로
-                    //    얼굴 커버리지가 달라지고 메시 경계에 단차가 생긴다(적대 리뷰 confirmed).
-                    //    파운데는 루마를 능동 리프트해 멱등이 아니므로 스무딩과 달리 중첩 불가.
-                    //    폴백(_SegOn=0)이면 이 블록을 건너뛰어 목은 원본.
+                    //    그 오벌 코어까지 바르면 파운데가 2회 적용돼 메시 경계에 단차가 생긴다
+                    //    (적대 리뷰 confirmed; 파운데는 루마를 능동 리프트해 비멱등이라 스무딩과
+                    //    달리 중첩 불가). 그러나 body-skin(B)만 0.35로 게이트하면 귀·턱-목
+                    //    이음새(메시 밖 + 아직 낮은 body-skin 확신, 혹은 face-skin으로 분류된
+                    //    전이대)가 통째로 빠져 파운데가 안 닿는다(사용자 보고). → skin=max(R,B)로
+                    //    전이대까지 채우되, 메시가 소유한 오벌 코어는 랜드마크 타원 게이트
+                    //    (_FndOval, StencilGuideRenderer 계산)로 제외해 이중 적용을 막는다
+                    //    (타원 페더 ↔ 메시 fade가 페더로 만나 단차 없음). seg.r 램프로는 목까지
+                    //    죽거나 얼굴 전체 도포가 나 분리 불가함이 실측 확정(07-17).
+                    //    폴백(_SegOn=0 또는 타원 무효)이면 seg 파운데 off → 목은 원본.
                     if (_FoundationIntensity > 0.001)
                     {
                         float fLuma = dot(col, fixed3(0.299, 0.587, 0.114));
@@ -255,7 +328,20 @@ Shader "ARMakeup/CameraFeed"
                         float fCov;
                         FoundationTextureParams(_FoundationTexture, _FoundationIntensity,
                                                 fGain, fChroma, fCov);
-                        fCov *= smoothstep(SEG_SMOOTH_SKIN_LO, SEG_SMOOTH_SKIN_HI, seg.b);
+                        // 전이대(귀·턱-목 이음새)까지 채우고 메시 소유 오벌 코어는 랜드마크 타원
+                        // 게이트(_FndOval)로 제외한다. 임계는 디버그 유니폼 우선(미설정 -1이면
+                        // #define 리터럴) — 슬라이더가 실제 커버 게이트를 바꿔 값을 실기기에서
+                        // 확정한다. 확정 후 리터럴 복귀.
+                        float segLo  = _FndSegLoDbg  >= 0.0 ? _FndSegLoDbg  : FND_SEG_LO;
+                        float segHi  = _FndSegHiDbg  >= 0.0 ? _FndSegHiDbg  : FND_SEG_HI;
+                        float ovalSize    = _FndOvalSizeDbg    >= 0.0 ? _FndOvalSizeDbg    : FND_OVAL_SIZE;
+                        float ovalFeather = _FndOvalFeatherDbg >= 0.0 ? _FndOvalFeatherDbg : FND_OVAL_FEATHER;
+                        float fndSkin = max(seg.r, seg.b);
+                        float insideOval = OvalInside(src, ovalSize, ovalFeather);
+                        // _FndOvalAxis.z(0=얼굴 소실·미설정)를 곱해 타원 무효 프레임엔 seg 파운데
+                        // 전체 off — 코어를 못 가르는 프레임에 전면 도포하면 이중 도포가 나므로
+                        // 안 바르는 쪽이 안전(설계 폴백).
+                        fCov *= smoothstep(segLo, segHi, fndSkin) * (1.0 - insideOval) * _FndOvalAxis.z;
                         fixed3 found = FoundationTarget(_FoundationColor.rgb, fLuma, fGain);
                         found = FoundationSoftClip(found);
                         found = ApplyFinish(found, fLuma, src, _FoundationFinish, 0.0,
@@ -284,6 +370,32 @@ Shader "ARMakeup/CameraFeed"
                                 + seg.b * fixed3(1.0, 0.9, 0.0) + seg.a * fixed3(1.0, 0.0, 1.0);
                     float amt = saturate(seg.r + seg.g + seg.b + seg.a);
                     col = lerp(col, saturate(tint), 0.45 * amt); // 0.45 = 오버레이 불투명도(검증용 고정)
+                }
+
+                // ── 임시 디버그(이음새 세그 게이트 시각화 — 값 확정 후 제거) — 파운데 seg
+                //    게이트 진단 오버레이. face-skin(seg.r)=빨강, body-skin(seg.b)=파랑,
+                //    파운데 게이트 통과량(위 ③ 블록과 동일 공식)=초록. 임계 슬라이더를 실시간
+                //    반영하므로 얼굴 오벌 코어 제외·이음새 전이대가 어디서 끊기는지 눈으로
+                //    보인다(빨강/파랑인데 초록이 안 뜨는 곳 = 파운데 미도달 = 공백 원인).
+                //    _SegSeamDbg=0(기본)이면 완전 스킵 → 현행 픽셀 동일. 위 _SegDebug와 별도
+                //    시각화(그건 4채널 총람, 이건 게이트 진단). 확정 후 이 블록·유니폼 제거.
+                if (_SegSeamDbg > 0.5 && _SegOn > 0.5)
+                {
+                    float2 m = float2(dot(_SegImgToMaskX.xy, src) + _SegImgToMaskX.z,
+                                      dot(_SegImgToMaskY.xy, src) + _SegImgToMaskY.z);
+                    half4 seg = tex2D(_SegMask, m);
+                    float segLo  = _FndSegLoDbg  >= 0.0 ? _FndSegLoDbg  : FND_SEG_LO;
+                    float segHi  = _FndSegHiDbg  >= 0.0 ? _FndSegHiDbg  : FND_SEG_HI;
+                    float ovalSize    = _FndOvalSizeDbg    >= 0.0 ? _FndOvalSizeDbg    : FND_OVAL_SIZE;
+                    float ovalFeather = _FndOvalFeatherDbg >= 0.0 ? _FndOvalFeatherDbg : FND_OVAL_FEATHER;
+                    float fndSkin = max(seg.r, seg.b);
+                    float insideOval = OvalInside(src, ovalSize, ovalFeather);
+                    // 파운데 블록과 동일 공식(타원 무효 프레임은 _FndOvalAxis.z=0으로 게이트 0).
+                    float gate = smoothstep(segLo, segHi, fndSkin) * (1.0 - insideOval) * _FndOvalAxis.z;
+                    // 빨강=face-skin, 초록=게이트 통과, 파랑=body-skin.
+                    fixed3 tint = fixed3(seg.r, gate, seg.b);
+                    float amt = saturate(max(max(seg.r, seg.b), gate));
+                    col = lerp(col, saturate(tint), 0.5 * amt); // 0.5 = 오버레이 불투명도(진단용 고정)
                 }
 
                 return fixed4(col, 1.0);

@@ -16,8 +16,7 @@ import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-nativ
 import ParamSlider from './ParamSlider';
 import { FINISH_STUDIO_SLIDERS, isCustomFinish } from '../composer/regions';
 import type { FinishBundle } from '../composer/regions';
-
-const ROSE = '#FF7E9D';
+import { ACCENT, ACCENT_PALE, accentAlpha } from '../theme';
 
 interface Props {
   /** 현재 잎의 세부값(커스텀이면 실제값, 아니면 enum 시드) */
@@ -105,8 +104,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,126,157,0.5)',
-    backgroundColor: 'rgba(255,126,157,0.05)',
+    borderColor: accentAlpha(0.5),
+    backgroundColor: accentAlpha(0.05),
   },
   titleRow: {
     flexDirection: 'row',
@@ -129,8 +128,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   badgeOn: {
-    color: '#FFCFDD',
-    backgroundColor: 'rgba(255,126,157,0.22)',
+    color: ACCENT_PALE,
+    backgroundColor: accentAlpha(0.22),
   },
   badgeOff: {
     color: 'rgba(255,255,255,0.55)',
@@ -160,7 +159,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: ROSE,
+    backgroundColor: ACCENT,
   },
   saveBtnOff: {
     opacity: 0.4,

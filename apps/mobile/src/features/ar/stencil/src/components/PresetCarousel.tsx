@@ -2,6 +2,7 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { FilterPreset } from '../presets';
 import type { UserStyle } from '../storage/styleStore';
+import { ACCENT, ACCENT_LIGHT, GOLD_CTA, accentAlpha } from '../theme';
 
 interface Props {
   presets: FilterPreset[];
@@ -99,7 +100,7 @@ const styles = StyleSheet.create({
     maxWidth: 140,
   },
   chipSelected: {
-    backgroundColor: '#FF7E9D',
+    backgroundColor: ACCENT,
   },
   chipText: {
     color: 'rgba(255,255,255,0.85)',
@@ -119,19 +120,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(201,161,94,0.9)',
   },
-  // 만들기: 로즈 아웃라인 — 제품·색 조작 색 규약 (골드=저장/워프와 구분)
+  // 만들기: 강조색 아웃라인 — 제품·색 조작 (골드=저장/워프와 구분)
   composeChip: {
-    backgroundColor: 'rgba(255,126,157,0.18)',
+    backgroundColor: accentAlpha(0.18),
     borderWidth: 1,
-    borderColor: 'rgba(255,126,157,0.9)',
+    borderColor: accentAlpha(0.9),
   },
   composeChipText: {
-    color: '#FF9EB5',
+    color: ACCENT_LIGHT,
     fontSize: 13,
     fontWeight: '700',
   },
   saveChipText: {
-    color: '#E6C687',
+    color: GOLD_CTA,
     fontSize: 13,
     fontWeight: '700',
   },

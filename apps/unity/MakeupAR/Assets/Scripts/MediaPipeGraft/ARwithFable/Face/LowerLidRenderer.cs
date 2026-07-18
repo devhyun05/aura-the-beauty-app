@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using ARMakeup.Bridge;
 using UnityEngine;
 
@@ -5,7 +6,7 @@ namespace ARMakeup.Face
 {
     /// <summary>
     /// 하안검 밴드 렌더러 (설계 섹션 12 step 2 정식판) — 하안검 lash 라인에서 아래로
-    /// 확장한 밴드 메시 하나로 아이라인(하)·아이섀도 하·삼각존·컨실러를 그린다.
+    /// 확장한 밴드 메시 하나로 아이라인(하)·애교살 2줄(하이라이트+섀도)을 그린다.
     ///
     /// 밴드 상단(v=0) = 하안검 lash 라인, 하단(v=1) = 아래로 오프셋 — 상안검 밴드
     /// (EyelinerStyleRenderer)와 법선 부호만 반대("아래쪽 법선 규약"). "아래" 기준은
@@ -39,6 +40,14 @@ namespace ARMakeup.Face
         const int Seg = 25; // lash 아크 리샘플 밀도
 
         const float BandHeightFactor = 0.45f; // 밴드 높이 = 눈 가로폭 × 이 값
+        // LowerLid.shader 능선(하이라이트) 피크의 대표 raw v — 재설계로 롤이 얇아지고
+        // lash 라인 쪽으로 붙어 피크가 위로 올라왔다(aegyoV 0.32 × AEGYO_BAND 0.50 ≈ 0.16).
+        const float AegyoHighlightPeakV = 0.16f;
+        // 온페이스 핏 핸들 대표 vv(밴드 상단 v=0 lash → 하단 v=1). 애교살 피크(.32)와
+        // 겹치지 않게 세로로 분리한다: 아이라인(하)=lash 바로 아래, 아이섀도(하)=그 아래.
+        const float EyelinerLowerPeakV = 0.10f;  // lash 라인 바로 아래
+        const float EyeshadowLowerPeakV = 0.25f; // 섀도 밴드 대표
+        const float TriangleZonePeakV = 0.25f;   // 삼각존(눈꼬리 쪽) 대표
         // 아크 계수 시간 평활. 랜드마크가 이미 필터링돼 있어 가벼운 EMA로 충분하고,
         // 잔여 미세 흔들림만 눌러 준다(값이 낮을수록 안정·반응 느림).
         const float FitEma = 0.4f;
@@ -46,44 +55,101 @@ namespace ARMakeup.Face
         const float DistanceFromCamera = 0.5f;
         const float DepthScale = 1.0f;
 
+        // 임포트 애교살 그림은 립/블러셔처럼 밴드 채움성이라 데칼 가드를 건다.
+        // 투명 배경 미달(불투명 JPG/배경째 PNG)이면 밴드 전체가 사각형으로 덮이므로 거부.
+        const float DecalMinTransparent = 0.05f;
+
         Camera _camera;
         FaceLandmarkSource _source;
         Mesh _mesh;
         MeshRenderer _renderer;
         Material _material;
         Vector3[] _vertices;
+        float _aegyoIntensity;
         float _linerIntensity;
+        float _aegyoStyleIntensity; // 임포트 애교살 그림(데칼) 강도
         float _triIntensity; // 삼각존(눈꼬리 아래 삼각 음영) 강도 — 애교살과 독립 (0=끔)
         float _concealerIntensity; // 눈밑 컨실러(언더아이 홀로우 브라이튼) 강도 — 독립 (0=끔)
         float _lowerShadowIntensity; // A3 아이섀도 하(하안검 아래 섀도) 강도 — 애교살보다 아래 깔림 (0=끔)
         float _cornerLift; // 눈꼬리 띄우기(R7 워프) — 상안검 코너와 접점 유지용 동일 리프트
+        float _heightMult = 1f; // 밴드 높이 배수 핸들(애교살 두께, 1=원래)
+        Texture2D _importedAegyo;
 
         static readonly int LinerColorId = Shader.PropertyToID("_LinerColor");
         static readonly int LinerIntensityId = Shader.PropertyToID("_LinerIntensity");
-        static readonly int LowerLinerStyleId = Shader.PropertyToID("_LowerLinerStyle");
-        static readonly int LowerLinerFinishId = Shader.PropertyToID("_LowerLinerFinish");
-        static readonly int LowerLinerShimmerId = Shader.PropertyToID("_LowerLinerShimmer");
+        static readonly int AegyoHiColorId = Shader.PropertyToID("_AegyoHiColor");
+        static readonly int AegyoShColorId = Shader.PropertyToID("_AegyoShColor");
+        static readonly int AegyoIntensityId = Shader.PropertyToID("_AegyoIntensity");
+        static readonly int AegyoTexId = Shader.PropertyToID("_AegyoTex");
+        static readonly int AegyoStyleIntensityId = Shader.PropertyToID("_AegyoStyleIntensity");
         static readonly int TriColorId = Shader.PropertyToID("_TriColor");
         static readonly int TriIntensityId = Shader.PropertyToID("_TriIntensity");
         static readonly int ConcealerColorId = Shader.PropertyToID("_ConcealerColor");
         static readonly int ConcealerIntensityId = Shader.PropertyToID("_ConcealerIntensity");
         static readonly int LowerShadowColorId = Shader.PropertyToID("_LowerShadowColor");
         static readonly int LowerShadowIntensityId = Shader.PropertyToID("_LowerShadowIntensity");
-        static readonly int LowerShadowShapeId = Shader.PropertyToID("_LowerShadowShape");
-        // 마감 — 아이섀도 하. 블러셔와 동일 enum(0=새틴=기존 출력).
+        // 마감 — 애교살(하이라이트 밴드)·아이섀도 하. 블러셔와 동일 enum(0=새틴=기존 출력).
+        static readonly int AegyoFinishId = Shader.PropertyToID("_AegyoFinish");
+        static readonly int AegyoShimmerId = Shader.PropertyToID("_AegyoShimmer");
         static readonly int LowerShadowFinishId = Shader.PropertyToID("_LowerShadowFinish");
         static readonly int LowerShadowShimmerId = Shader.PropertyToID("_LowerShadowShimmer");
+        // 아이라인(하)·삼각존·컨실러 마감 — 0=새틴=기존 출력(하위호환).
+        static readonly int LinerFinishId = Shader.PropertyToID("_LinerFinish");
+        static readonly int TriFinishId = Shader.PropertyToID("_TriFinish");
+        static readonly int ConcealerFinishId = Shader.PropertyToID("_ConcealerFinish");
+        // 핏(개인 공간 델타) 배수 — 자기 제품 세로 프로파일 폭만 스케일(1=원래).
+        static readonly int LinerThicknessId = Shader.PropertyToID("_LinerThickness");
+        static readonly int TriHeightId = Shader.PropertyToID("_TriHeight");
+        static readonly int LowerShadowHeightId = Shader.PropertyToID("_LowerShadowHeight");
+        // 제형(텍스처) GENERIC — 애교살·삼각존·아이섀도 하·눈밑 컨실러(컨실러는 FaceMakeup
+        // 붉은기 경로와 같은 concealerTexture 값 공유). 0=크림=현행(하위호환).
+        static readonly int AegyoTextureId = Shader.PropertyToID("_AegyoTexture");
+        static readonly int TriTextureId = Shader.PropertyToID("_TriTexture");
+        static readonly int LowerShadowTextureId = Shader.PropertyToID("_LowerShadowTexture");
+        static readonly int ConcealerTextureId = Shader.PropertyToID("_ConcealerTexture");
+        // 모양 축(W1+W2) — 부위별 실루엣 프리셋 enum. 0=현행 프로파일과 바이트 동일(하위호환).
+        static readonly int AegyoShapeId = Shader.PropertyToID("_AegyoShape");
+        static readonly int LinerSegmentId = Shader.PropertyToID("_LinerSegment");
+        static readonly int TriShapeId = Shader.PropertyToID("_TriShape");
+        static readonly int LowerShadowShapeId = Shader.PropertyToID("_LowerShadowShape");
+
+        // 애교살 기본 색(LowerLid.shader Properties와 동치) — aegyoColor 빈 값일 때 되돌림.
+        static readonly Color AegyoHiDefault = new Color(1.0f, 0.95f, 0.88f);
+        static readonly Color AegyoShDefault = new Color(0.69f, 0.54f, 0.41f);
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _lash = new Vector2[Seg];
         readonly float[][] _fitEma = { new float[2], new float[2] }; // [eye][k0, k1]
         bool _fitPrimed;
+        // 애교살 SDF — FitArc가 이번 눈에 쓴 기준 프레임(밴드 로컬 좌표계 정의용). 곡선
+        // 피팅을 재사용하되, 셰이더가 픽셀당 거리장을 계산할 수 있게 프레임·계수를 정점에
+        // 실어 보낸다. FitArc(e) 직후 같은 e에서만 참조하는 스크래치라 눈당 한 벌로 충분.
+        Vector2 _arcInner, _arcXAxis, _arcYAxis;
+        float _arcL, _arcK0, _arcK1;
+        // 정점당 밴드 로컬 좌표(uv1)와 눈당 곡선 계수(uv2, k0/k1/L/bandWidth). SetUVs로
+        // 매 프레임 갱신(BrowRenderer concealSkinPos 선례와 동일 List 재사용 패턴).
+        List<Vector2> _sdfLocalXY;
+        List<Vector4> _sdfCurve;
+        readonly Vector2[] _fitAegyoPeakVp = new Vector2[Eyes];
+        readonly int[] _fitAegyoPeakFrame = { -1, -1 };
+        readonly bool[] _fitAegyoPeakValid = new bool[Eyes];
+        // 신규 핏 핸들 캐시(애교살 패턴 복제) — 아이라인(하)·아이섀도(하)·삼각존.
+        readonly Vector2[] _fitEyelinerLowerVp = new Vector2[Eyes];
+        readonly int[] _fitEyelinerLowerFrame = { -1, -1 };
+        readonly bool[] _fitEyelinerLowerValid = new bool[Eyes];
+        readonly Vector2[] _fitEyeshadowLowerVp = new Vector2[Eyes];
+        readonly int[] _fitEyeshadowLowerFrame = { -1, -1 };
+        readonly bool[] _fitEyeshadowLowerValid = new bool[Eyes];
+        readonly Vector2[] _fitTriangleZoneVp = new Vector2[Eyes];
+        readonly int[] _fitTriangleZoneFrame = { -1, -1 };
+        readonly bool[] _fitTriangleZoneValid = new bool[Eyes];
 
         void Awake() => Instance = this;
 
         void OnDestroy()
         {
             if (Instance == this) Instance = null;
+            if (_importedAegyo != null) Destroy(_importedAegyo);
         }
 
         public void Init(Camera cam, FaceLandmarkSource source)
@@ -95,6 +161,8 @@ namespace ARMakeup.Face
             if (shader == null) shader = Shader.Find("ARMakeup/LowerLid");
             _material = new Material(shader);
             _material.renderQueue = MakeupQueues.LowerLid; // 부위별 고유 큐(섀도 위·스텐실 아래)
+            // 임포트 전엔 투명 — 그림 없이 강도만 올라가도 아무것도 안 그려지게.
+            _material.SetTexture(AegyoTexId, ImageFileLoader.ClearTexture);
 
             _mesh = new Mesh { name = "LowerLid" };
             _mesh.MarkDynamic();
@@ -124,6 +192,12 @@ namespace ARMakeup.Face
             _mesh.vertices = _vertices;
             _mesh.uv = uvs;
             _mesh.triangles = tris;
+            // 애교살 SDF 정점 채널 — 초기값은 0(애교살 강도 0이면 미사용). LateUpdate가 매
+            // 프레임 실제 밴드 로컬 좌표·곡선 계수로 덮어쓴다.
+            _sdfLocalXY = new List<Vector2>(new Vector2[vc]);
+            _sdfCurve = new List<Vector4>(new Vector4[vc]);
+            _mesh.SetUVs(1, _sdfLocalXY);
+            _mesh.SetUVs(2, _sdfCurve);
 
             gameObject.AddComponent<MeshFilter>().sharedMesh = _mesh;
             _renderer = gameObject.AddComponent<MeshRenderer>();
@@ -134,13 +208,63 @@ namespace ARMakeup.Face
 
         /// <summary>밴드가 살아있어 눈 열림 스텐실이 필요한가 (IrisRenderer가 조회).</summary>
         public bool NeedsEyeMask =>
-            _linerIntensity > 0f || _triIntensity > 0f ||
-            _concealerIntensity > 0f || _lowerShadowIntensity > 0f;
+            _aegyoIntensity > 0f || _linerIntensity > 0f || _aegyoStyleIntensity > 0f ||
+            _triIntensity > 0f || _concealerIntensity > 0f || _lowerShadowIntensity > 0f;
+
+        /// <summary>실제 하안검 메시에서 셰이더 하이라이트 피크(vv=0.32)에 해당하는
+        /// 중앙점(뷰포트 좌표). 현재/직전 프레임만 허용하고 얼굴 소실 시 거부한다.</summary>
+        public bool TryGetAegyoFitHandle(int eye, out Vector2 peakVp)
+        {
+            peakVp = Vector2.zero;
+            if (eye < 0 || eye >= Eyes || _source == null || !_source.HasFace ||
+                FramePresenter.Instance == null || !_fitAegyoPeakValid[eye]) return false;
+            var frame = _fitAegyoPeakFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            peakVp = _fitAegyoPeakVp[eye];
+            return true;
+        }
+
+        /// <summary>아이라인(하) 핏 핸들 — lash 라인 바로 아래(vv≈0.10) 중앙점(뷰포트).
+        /// TryGetAegyoFitHandle과 동일한 스테일 가드(현재/직전 프레임만).</summary>
+        public bool TryGetEyelinerLowerFitHandle(int eye, out Vector2 peakVp)
+        {
+            peakVp = Vector2.zero;
+            if (eye < 0 || eye >= Eyes || _source == null || !_source.HasFace ||
+                FramePresenter.Instance == null || !_fitEyelinerLowerValid[eye]) return false;
+            var frame = _fitEyelinerLowerFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            peakVp = _fitEyelinerLowerVp[eye];
+            return true;
+        }
+
+        /// <summary>아이섀도(하) 핏 핸들 — 섀도 밴드 대표(vv≈0.25) 중앙점(뷰포트).</summary>
+        public bool TryGetEyeshadowLowerFitHandle(int eye, out Vector2 peakVp)
+        {
+            peakVp = Vector2.zero;
+            if (eye < 0 || eye >= Eyes || _source == null || !_source.HasFace ||
+                FramePresenter.Instance == null || !_fitEyeshadowLowerValid[eye]) return false;
+            var frame = _fitEyeshadowLowerFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            peakVp = _fitEyeshadowLowerVp[eye];
+            return true;
+        }
+
+        /// <summary>삼각존 핏 핸들 — 눈꼬리 쪽(along≈0.85, vv≈0.25) 밴드점(뷰포트).</summary>
+        public bool TryGetTriangleZoneFitHandle(int eye, out Vector2 peakVp)
+        {
+            peakVp = Vector2.zero;
+            if (eye < 0 || eye >= Eyes || _source == null || !_source.HasFace ||
+                FramePresenter.Instance == null || !_fitTriangleZoneValid[eye]) return false;
+            var frame = _fitTriangleZoneFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            peakVp = _fitTriangleZoneVp[eye];
+            return true;
+        }
 
         /// <summary>삼각존 — 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 하안검 밴드의
         /// 꼬리 쪽(u 바깥 1/3)에 가중된 어두운 섀도 텀. 색·강도 독립(0=끔), 애교살/아이라인
         /// (하)과 같은 밴드에서 블렌드. 기본 딥브라운(#4A342A 계열)은 셰이더 기본값.</summary>
-        public void ApplyTriangleZone(string colorHex, float intensity)
+        public void ApplyTriangleZone(string colorHex, float intensity, int finish, float heightMult, int texture, int shape)
         {
             _triIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -148,6 +272,14 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(TriColorId, c);
             _material.SetFloat(TriIntensityId, _triIntensity);
+            // 마감 — 애교살과 동일 enum. 생략(0)=새틴=기존 출력(하위호환).
+            _material.SetFloat(TriFinishId, finish);
+            // 밴드 높이 배수(핏) — 생략 0은 미설정 → 1(원래). eyeshadowHeight 선례 클램프(0.3~2).
+            _material.SetFloat(TriHeightId, heightMult <= 0f ? 1f : Mathf.Clamp(heightMult, 0.3f, 2f));
+            // 제형(텍스처) GENERIC — 0=크림=현행(하위호환).
+            _material.SetFloat(TriTextureId, texture);
+            // 모양(triangleZoneShape) — 0=기본=현행 바이트 동일 1=좁게 2=넓게.
+            _material.SetFloat(TriShapeId, shape);
         }
 
         /// <summary>눈밑 컨실러(§08) — 언더아이 홀로우(눈물고랑)를 밝히는 넓고 부드러운
@@ -156,7 +288,7 @@ namespace ARMakeup.Face
         /// concealerIntensity 강도. 애교살과 독립(둘 다 켜도 밴드에서 자연 합성). 색은 밝은
         /// 톤이라 색 반전 없음(FaceMakeup 눈밑 존 마스크 경로의 밴드 정식판). 0=끔.
         /// shape=1(붉은기 자동)은 FaceMakeup 전담이라 여기 강도는 0으로 들어온다.</summary>
-        public void ApplyConcealer(string colorHex, float intensity)
+        public void ApplyConcealer(string colorHex, float intensity, int finish, int texture)
         {
             _concealerIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -164,13 +296,16 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(ConcealerColorId, c);
             _material.SetFloat(ConcealerIntensityId, _concealerIntensity);
+            // 마감 — FaceMakeup 붉은기 자동 경로와 같은 필드(concealerFinish) 공용. 0=새틴=기존.
+            _material.SetFloat(ConcealerFinishId, finish);
+            // 제형(텍스처) GENERIC — FaceMakeup 붉은기 경로와 같은 concealerTexture 값 공유.
+            _material.SetFloat(ConcealerTextureId, texture);
         }
 
         /// <summary>A3 아이섀도 하 — 하안검 lash 라인 아래로 부드럽게 페이드하는 섀도 밴드.
         /// 애교살/아이라인보다 아래(먼저)에 곱 블렌드로 깔려 위 제품이 섀도 위로 뜬다. 색·강도
         /// 독립(0=끔, 기존 룩 불변). ApplyConcealer와 동일 패턴.</summary>
-        public void ApplyLowerShadow(
-            string colorHex, float intensity, int shape, int finish, float shimmer)
+        public void ApplyLowerShadow(string colorHex, float intensity, int finish, float shimmer, float heightMult, int texture, int shape)
         {
             _lowerShadowIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -178,34 +313,94 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(LowerShadowColorId, c);
             _material.SetFloat(LowerShadowIntensityId, _lowerShadowIntensity);
-            _material.SetFloat(LowerShadowShapeId, Mathf.Clamp(shape, 0, 4));
             // 마감 — 블러셔와 동일 enum. 생략(0)=새틴=기존 출력(하위호환).
             _material.SetFloat(LowerShadowFinishId, finish);
             _material.SetFloat(LowerShadowShimmerId, Mathf.Clamp01(shimmer));
+            // 밴드 높이 배수(핏) — 생략 0은 미설정 → 1(원래). eyeshadowHeight 선례 클램프(0.3~2).
+            _material.SetFloat(LowerShadowHeightId, heightMult <= 0f ? 1f : Mathf.Clamp(heightMult, 0.3f, 2f));
+            // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). eyeshadowLowerTexture 값.
+            _material.SetFloat(LowerShadowTextureId, texture);
+            // 모양(eyeshadowLowerShape) — 0=기본밴드=현행 바이트 동일 1=넓게 2=꼬리집중.
+            _material.SetFloat(LowerShadowShapeId, shape);
         }
 
-        /// <summary>아이라인(하) 색은 전용 색을 사용하며 legacy payload는 컨트롤러에서 폴백한다.</summary>
+        /// <summary>아이라인(하) 색은 상안검 아이라이너와 공용(eyelinerColor). aegyoColor는
+        /// 애교살 틴트 — 빈 값이면 기본 상수로 되돌리고(룩 전환 시 이전 색 누수 방지), 값이
+        /// 있으면 하이라이트=그 색·섀도=파생(톤다운).</summary>
         public void ApplyParams(
-            string linerColorHex, float linerIntensity, float cornerLift, float linerStyle,
-            float linerFinish, float linerShimmer)
+            float aegyoIntensity, string linerColorHex, float linerIntensity, float cornerLift,
+            float heightMult, float aegyoStyleIntensity, string aegyoColor,
+            int aegyoFinish, float aegyoShimmer, float linerThickness, int linerFinish, int aegyoTexture,
+            int aegyoShape, int linerSegment)
         {
+            _aegyoIntensity = Mathf.Clamp01(aegyoIntensity);
             _linerIntensity = Mathf.Clamp01(linerIntensity);
+            _aegyoStyleIntensity = Mathf.Clamp01(aegyoStyleIntensity);
             _cornerLift = Mathf.Clamp01(cornerLift);
+            // 밴드 높이 배수 핸들(애교살 두께) — JsonUtility 생략 0은 미설정 → 1(원래).
+            // 하한 0.25 = "아주 얇은 애교살"까지 허용 (RN 슬라이더 하한 0.3보다 여유).
+            _heightMult = heightMult <= 0f ? 1f : Mathf.Clamp(heightMult, 0.25f, 2f);
             if (_material == null) return;
             if (!string.IsNullOrEmpty(linerColorHex) &&
                 ColorUtility.TryParseHtmlString(linerColorHex, out var c))
                 _material.SetColor(LinerColorId, c);
+            // 애교살 틴트(린너색 파싱 패턴 재사용). 값이 있고 파싱되면 하이라이트=그 색·
+            // 섀도=파생, 아니면(빈 값/파싱 실패) 기본 상수로 복원(룩 전환 시 이전 색 누수 방지).
+            if (!string.IsNullOrEmpty(aegyoColor) &&
+                ColorUtility.TryParseHtmlString(aegyoColor, out var ac))
+            {
+                // 섀도 = 파싱색을 감광(×0.62)한 뒤 기본 브라운으로 35% 러프 — 볼록 정의용
+                // 톤다운. (수식 튜닝 대상: 0.62 감광 계수 / 0.35 브라운 러프 비율)
+                var sh = Color.Lerp(ac * 0.62f, new Color(0.69f, 0.54f, 0.41f), 0.35f);
+                _material.SetColor(AegyoHiColorId, ac);
+                _material.SetColor(AegyoShColorId, sh);
+            }
+            else
+            {
+                _material.SetColor(AegyoHiColorId, AegyoHiDefault);
+                _material.SetColor(AegyoShColorId, AegyoShDefault);
+            }
+            _material.SetFloat(AegyoIntensityId, _aegyoIntensity);
             _material.SetFloat(LinerIntensityId, _linerIntensity);
-            _material.SetFloat(LowerLinerStyleId, Mathf.Clamp(Mathf.RoundToInt(linerStyle), 0, 2));
-            _material.SetFloat(LowerLinerFinishId, Mathf.Clamp(Mathf.RoundToInt(linerFinish), 0, 3));
-            _material.SetFloat(LowerLinerShimmerId, Mathf.Clamp01(linerShimmer));
+            _material.SetFloat(AegyoStyleIntensityId, _aegyoStyleIntensity);
+            // 마감 — 애교살 하이라이트 밴드(시머=펄 애교살). 0=새틴=기존 출력(하위호환).
+            _material.SetFloat(AegyoFinishId, aegyoFinish);
+            _material.SetFloat(AegyoShimmerId, Mathf.Clamp01(aegyoShimmer));
+            // 아이라이너(하) 두께 배수(핏) — 생략 0은 미설정 → 1(원래). eyelinerThickness 선례 클램프(0.3~2.5).
+            _material.SetFloat(LinerThicknessId, linerThickness <= 0f ? 1f : Mathf.Clamp(linerThickness, 0.3f, 2.5f));
+            // 아이라인(하) 마감 — 0=새틴=기존 출력(하위호환). 리본이라 시머 없음(0/1/2).
+            _material.SetFloat(LinerFinishId, linerFinish);
+            // 제형(텍스처, 애교살) GENERIC — 0=크림=현행(하위호환).
+            _material.SetFloat(AegyoTextureId, aegyoTexture);
+            // 모양 — 애교살 실루엣(0=초승달=현행 바이트 동일 1=일자 2=중앙도톰) + 하안검
+            // 라이너 구간(0=전체=현행 바이트 동일 1=꼬리만 2=앞+꼬리).
+            _material.SetFloat(AegyoShapeId, aegyoShape);
+            _material.SetFloat(LinerSegmentId, linerSegment);
+        }
+
+        /// <summary>사용자 임포트 애교살 그림 — 밴드 (가로×세로) UV에 워프. 투명 배경 PNG
+        /// 필수(알파=그린 영역), 불투명이면 거부(밴드 채움이라 립/블러셔와 동일 데칼 가드).
+        /// 색은 그린 그대로(스티커) — 애교살은 밝은 펄이라 색 반전 없음.</summary>
+        public void SetAegyoTextureFromFile(string path)
+        {
+            if (_material == null) return;
+            if (!ImageFileLoader.TryLoadDecal(path, DecalMinTransparent, out var tex, out var error))
+            {
+                NativeBridge.Send(new UnityToRNMessage
+                { type = "error", message = $"애교살 그림 임포트 실패: {error}" });
+                return;
+            }
+            if (_importedAegyo != null) Destroy(_importedAegyo);
+            _importedAegyo = tex;
+            _material.SetTexture(AegyoTexId, tex);
         }
 
         void LateUpdate()
         {
             var visible = _source != null && _source.HasFace &&
                           FramePresenter.Instance != null &&
-                          (_linerIntensity > 0f || _triIntensity > 0f ||
+                          (_aegyoIntensity > 0f || _linerIntensity > 0f ||
+                           _aegyoStyleIntensity > 0f || _triIntensity > 0f ||
                            _concealerIntensity > 0f || _lowerShadowIntensity > 0f);
             if (_renderer.enabled != visible) _renderer.enabled = visible;
             if (!visible)
@@ -240,9 +435,12 @@ namespace ARMakeup.Face
 
                 FitArc(e, down); // _ctrl → 매끈한 lash 아크 _lash
 
-                var width = eyeDist * BandHeightFactor;
+                var width = eyeDist * BandHeightFactor * _heightMult; // 높이 핸들
                 var depth = Depth(lm[lids[4]].z);
                 var b = e * Seg * 2;
+                var triIdx = Mathf.RoundToInt(0.85f * (Seg - 1)); // 삼각존(눈꼬리 쪽)
+                // 애교살 SDF 곡선 계수(눈당 상수) — bandWidth = 이번 눈의 밴드 세로 폭(width).
+                var curveVec = new Vector4(_arcK0, _arcK1, _arcL, width);
                 for (var i = 0; i < Seg; i++)
                 {
                     var a = _lash[Mathf.Max(i - 1, 0)];
@@ -253,9 +451,46 @@ namespace ARMakeup.Face
                     var bottom = _lash[i] + normal * width;
                     _vertices[b + 2 * i] = ImageToWorld(_lash[i], depth);
                     _vertices[b + 2 * i + 1] = ImageToWorld(bottom, depth);
+                    // 애교살 SDF 정점 채널 — 밴드 로컬 좌표(현축 X, 아래축 Y)를 이미지 공간에서
+                    // 실어 보낸다. X/Y는 위치의 아핀 함수라 프래그 보간이 픽셀 실좌표와 정확히
+                    // 일치 → 곡선까지 수직거리를 각 없이 잰다. 곡선 계수는 눈당 상수로 동봉.
+                    var topRel = _lash[i] - _arcInner;
+                    var botRel = bottom - _arcInner;
+                    _sdfLocalXY[b + 2 * i] = new Vector2(
+                        Vector2.Dot(topRel, _arcXAxis), Vector2.Dot(topRel, _arcYAxis));
+                    _sdfLocalXY[b + 2 * i + 1] = new Vector2(
+                        Vector2.Dot(botRel, _arcXAxis), Vector2.Dot(botRel, _arcYAxis));
+                    _sdfCurve[b + 2 * i] = curveVec;
+                    _sdfCurve[b + 2 * i + 1] = curveVec;
+                    if (i == Seg / 2)
+                    {
+                        var peakImg = Vector2.Lerp(_lash[i], bottom, AegyoHighlightPeakV);
+                        _fitAegyoPeakVp[e] = FramePresenter.Instance.ImageToViewport(peakImg);
+                        _fitAegyoPeakFrame[e] = Time.frameCount;
+                        _fitAegyoPeakValid[e] = true;
+
+                        var linerImg = Vector2.Lerp(_lash[i], bottom, EyelinerLowerPeakV);
+                        _fitEyelinerLowerVp[e] = FramePresenter.Instance.ImageToViewport(linerImg);
+                        _fitEyelinerLowerFrame[e] = Time.frameCount;
+                        _fitEyelinerLowerValid[e] = true;
+
+                        var shadowImg = Vector2.Lerp(_lash[i], bottom, EyeshadowLowerPeakV);
+                        _fitEyeshadowLowerVp[e] = FramePresenter.Instance.ImageToViewport(shadowImg);
+                        _fitEyeshadowLowerFrame[e] = Time.frameCount;
+                        _fitEyeshadowLowerValid[e] = true;
+                    }
+                    if (i == triIdx)
+                    {
+                        var triImg = Vector2.Lerp(_lash[i], bottom, TriangleZonePeakV);
+                        _fitTriangleZoneVp[e] = FramePresenter.Instance.ImageToViewport(triImg);
+                        _fitTriangleZoneFrame[e] = Time.frameCount;
+                        _fitTriangleZoneValid[e] = true;
+                    }
                 }
             }
             _mesh.vertices = _vertices;
+            _mesh.SetUVs(1, _sdfLocalXY); // 애교살 SDF 밴드 로컬 좌표
+            _mesh.SetUVs(2, _sdfCurve);   // 애교살 SDF 곡선 계수(눈당)
             _mesh.RecalculateBounds();
             _fitPrimed = true;
         }
@@ -276,6 +511,9 @@ namespace ARMakeup.Face
             if (L < 1e-6f)
             {
                 for (var i = 0; i < Seg; i++) _lash[i] = inner;
+                // 애교살 SDF 기준 프레임 — 축퇴 폴백(셰이더에서 Lc·Troll 클램프로 무해).
+                _arcInner = inner; _arcXAxis = Vector2.right; _arcYAxis = down;
+                _arcL = 1e-5f; _arcK0 = 0f; _arcK1 = 0f;
                 return;
             }
             var xAxis = chord / L;
@@ -321,6 +559,11 @@ namespace ARMakeup.Face
                 var v = k0 * u * (1f - u) + k1 * u * u * (1f - u);
                 _lash[i] = inner + xAxis * (u * L) + yAxis * v;
             }
+
+            // 애교살 SDF 기준 프레임을 이 눈의 값으로 확정 — 셰이더가 정점 로컬 좌표에서
+            // 같은 곡선 v(u)=k0·u(1−u)+k1·u²(1−u)을 재구성해 픽셀당 수직거리를 잰다.
+            _arcInner = inner; _arcXAxis = xAxis; _arcYAxis = yAxis;
+            _arcL = L; _arcK0 = k0; _arcK1 = k1;
         }
 
         static Vector2 ImgPt(Vector3[] lm, int idx) => new Vector2(lm[idx].x, lm[idx].y);

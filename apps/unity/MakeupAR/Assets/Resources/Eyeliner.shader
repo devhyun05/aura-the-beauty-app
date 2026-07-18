@@ -27,6 +27,13 @@ Shader "ARMakeup/Eyeliner"
         _EyelinerTexture ("Texture (0 liquid 1 gel 2 pencil)", Float) = 0
         _EyelinerSegment ("Segment (0 full 1 tail 2 front+tail 3 pupil)", Float) = 0
         _EyelinerFinish ("Finish (0 satin 1 matte 2 gloss 3 pearl)", Float) = 0
+        // ── 제형 스튜디오(#21·W2) — 위 제형 enum(_EyelinerTexture 리퀴드/젤/펜슬)의 레거시
+        // 분기는 그대로 두고, 이 4축 세부 델타가 오면 TexBundle 함수로 얹어 재해석한다.
+        // 전부 0 = 미지정 = 레거시 enum 동작(하위호환·픽셀 동일).
+        _EyelinerTexEdge ("Eyeliner Tex Edge (studio)", Range(-1, 1)) = 0
+        _EyelinerTexGrain ("Eyeliner Tex Grain (studio)", Range(0, 1)) = 0
+        _EyelinerTexCoverage ("Eyeliner Tex Coverage (studio)", Range(-1, 1)) = 0
+        _EyelinerTexBody ("Eyeliner Tex Body (studio)", Range(-1, 1)) = 0
     }
 
     SubShader
@@ -47,13 +54,19 @@ Shader "ARMakeup/Eyeliner"
             #pragma fragment frag
             #include "UnityCG.cginc"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
+            #include "Finish.cginc"    // 제형(TexBundle) 공용 — _CameraFeed도 여기서 선언
 
-            sampler2D _CameraFeed;
+            // _CameraFeed 는 Finish.cginc(1곳)에서 선언 — 로컬 중복 선언 제거(Lip/BrowPowder 선례).
             fixed4 _EyelinerColor;
             float _EyelinerIntensity;
             float _EyelinerTexture;
             float _EyelinerSegment;
             float _EyelinerFinish;
+            // 제형 스튜디오(#21·W2) 세부 델타 — 0 = 미지정 = 레거시 enum 동작(하위호환).
+            float _EyelinerTexEdge;
+            float _EyelinerTexGrain;
+            float _EyelinerTexCoverage;
+            float _EyelinerTexBody;
 
             // ── 세그먼트 구간 (t = uv.y, 앞머리 0 → 코너 1 → 윙 팁 1+α) ──
             // C# IrisRenderer.WingTExtent(0.3)와 같은 축 — 값 일치 필수. // 실기기 튜닝 대상
@@ -187,6 +200,22 @@ Shader "ARMakeup/Eyeliner"
                     float luma = dot(tex2D(_CameraFeed, screenUV).rgb,
                                      fixed3(0.299, 0.587, 0.114));
                     pigment = ApplyFinish(pigment, luma, i.uv, _EyelinerFinish);
+                }
+
+                // ── 제형 스튜디오(#21·W2) — 위 제형 enum(리퀴드/젤/펜슬) 레거시 profile 분기는
+                // 그대로 유지됐다. 커스텀 세부가 오면 TexBundle 4축을 색소·알파에 얹어 재해석한다.
+                // 픽셀 동일 논증: 네 오버라이드가 모두 0이면 texCustom=0 → 블록 스킵 → pigment·a는
+                // 레거시 값 그대로다(리퀴드·젤·펜슬 전 enum 바이트 동일). i.uv 는 리본 로컬 좌표
+                // (x 두께·y t)라 그레인·엣지 좌표계가 라이너에 접착. (Finish.cginc 12-arg ApplyFinish는
+                // 로컬 4-arg와 인자 수로 오버로드 분리 — 위 finish 호출은 로컬로 해소.)
+                float texCustom = abs(_EyelinerTexEdge) + abs(_EyelinerTexGrain)
+                                + abs(_EyelinerTexCoverage) + abs(_EyelinerTexBody);
+                if (texCustom > 1e-5)
+                {
+                    // luma 인자는 TexBody 예약(미사용)이라 0 전달 — 위 finish용 luma는 if 스코프 안.
+                    pigment = TexBody(pigment, 0.0, _EyelinerTexBody);
+                    pigment = TexGrain(pigment, i.uv, _EyelinerTexGrain);
+                    a = TexEdge(TexCoverage(a, _EyelinerTexCoverage), _EyelinerTexEdge);
                 }
 
                 // §11 오클루전 — 손·머리카락이 앞이면 그 픽셀 색소 제외(세그 없으면 1).

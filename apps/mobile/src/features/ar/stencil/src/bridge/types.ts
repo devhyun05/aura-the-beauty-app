@@ -17,6 +17,8 @@ export interface FilterParams {
   /** 립라이너(외곽 얇은 링, 매트) — 립 색과 독립. 생략 시 0(끔) */
   lipLinerColor?: string;
   lipLinerIntensity?: number;
+  /** 립라이너 마감: 0=새틴 1=매트(기본, 연필 질감) 2=글로시. 생략 시 매트(현행 렌더 유지) */
+  lipLinerFinish?: number;
   /** 립 마감: 0=새틴(기본, 현재 룩) 1=매트 2=글로시 3=시머. 생략 시 0(새틴) */
   lipFinish?: number;
   /** 립 재질: 0=없음(기본) 1=벨벳 2=메탈 3=홀로그램. 생략 시 0(없음) */
@@ -79,7 +81,7 @@ export interface FilterParams {
   /** 넓은 면 보정 (얼굴 셰이더, 가·감산 블렌드) */
   highlightColor: string;
   highlightIntensity: number;
-  /** 부위별 하이라이터 강도. 하나라도 >0이면 legacy highlightIntensity 대신 5존 경로 사용. */
+  /** AURA 존별 입력은 Unity에서 최댓값을 정본의 단일 하이라이터 강도로 승격한다. */
   highlightCheekIntensity?: number;
   highlightNoseBridgeIntensity?: number;
   highlightNoseTipIntensity?: number;
@@ -111,6 +113,13 @@ export interface FilterParams {
   contourSheen?: number;
   concealerColor: string;
   concealerIntensity: number;
+  /** 컨실러 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력). 두 경로 공통
+   *  (FaceMakeup 붉은기 자동 + LowerLid 눈밑존) */
+  concealerFinish?: number;
+  /** 잡티 지우기(밀어내기) 0..1 (0=끔=현행 픽셀 동일) — 색을 얹지 않고 넓은 이웃 평균 대비
+   *  국소 어둡/붉은 이상치만 이웃 색으로 되민다(FaceMakeup 피부 경로, 스무딩 선례). 특징부
+   *  (눈·눈썹·콧구멍·헤어라인)는 밴드패스 상한으로 보호. 생략 시 0 */
+  blemishRemoval?: number;
   /** 애교살(하안검 밴드): 하이라이트+섀도 2줄 한 강도 0..1 (0=끔). 생략 시 0 */
   aegyoIntensity?: number;
   /** 임포트 애교살 그림(하안검 밴드 데칼) 강도. 텍스처는 setAegyoStyle로 임포트 */
@@ -121,18 +130,11 @@ export interface FilterParams {
   aegyoFinish?: number;
   /** 시머 게인 0..1 (aegyoFinish=3일 때). 생략 시 Unity 기본 0.5 */
   aegyoShimmer?: number;
-  /** 애교살 전용 렌더 모드: 0=자연 볼륨, 1=펄 포인트 */
-  aegyoMode?: number;
-  /** 볼륨광 바로 아래의 부드러운 음영 강도 0..1 */
-  aegyoShadowIntensity?: number;
-  /** 새 애교살 렌더 계약 존재 마커. 1=mode 0도 명시값, 0/생략=legacy finish로 이관 */
-  aegyoRendererVersion?: number;
   eyeshadowColor: string;
   eyeshadowIntensity: number;
   /** 아이섀도 하(A3, 하안검 아래 섀도 밴드) — 곱 블렌드. 생략 시 0(끔) */
   eyeshadowLowerColor?: string;
   eyeshadowLowerIntensity?: number;
-  eyeshadowLowerShape?: number;
   /** 아이섀도 하 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
   eyeshadowLowerFinish?: number;
   /** 시머 게인 0..1 (eyeshadowLowerFinish=3일 때). 생략 시 Unity 기본 0.5 */
@@ -171,23 +173,22 @@ export interface FilterParams {
   eyelinerFinish?: number;
   /** 임포트 아이라인 텍스처(밴드 워프) 강도. 색은 eyelinerColor 공용 */
   eyelinerStyleIntensity: number;
-  /** 아이라인(하) — 하안검 밴드. 생략 시 0(끔) */
-  eyelinerLowerColor?: string;
+  /** 아이라인(하) — 하안검 밴드. 색은 eyelinerColor 공용. 생략 시 0(끔) */
   eyelinerLowerIntensity?: number;
-  /** 아이라인(하) 모양: 0=전체 소프트, 1=점막 밀착, 2=바깥 1/3 */
-  eyelinerLowerStyle?: number;
-  /** 아이라인(하) 마감: 0=새틴, 1=매트, 2=글로시, 3=펄 */
+  /** 아이라인(하) 마감: 0=새틴(기본) 1=매트 2=글로시 (시머 없음 — 리본에 과함). 생략 시 0 */
   eyelinerLowerFinish?: number;
-  /** 아이라인(하) 펄 강도 0..1 */
-  eyelinerLowerShimmer?: number;
   /** 눈꼬리 띄우기(R7 워프): 바깥 눈꼬리 리프트 0..1 (0=원래). 골드=워프 조작 */
   eyeCornerLift?: number;
   /** 마스카라(속눈썹 스트로크). 생략 시 0(끔) */
   mascaraColor?: string;
   mascaraIntensity?: number;
+  /** 마스카라(속눈썹 상) 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
+  mascaraFinish?: number;
   /** 눈썹 제품 스택 (겹쳐 쓰기). browColor/Intensity = 마스카라/젤(결 보존) */
   browColor: string;
   browIntensity: number;
+  /** 눈썹 결(마스카라/젤) 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
+  browFinish?: number;
   /** 파우더(빈 곳 채움) */
   browPowderColor: string;
   browPowderIntensity: number;
@@ -199,24 +200,36 @@ export interface FilterParams {
   browPowderShimmer?: number;
   /** 라이트너(옅은 눈썹, 피부톤 커버 — 색 없음) */
   browLightenerIntensity: number;
+  /** 라이트너 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
+  browLightenerFinish?: number;
   /** 펜슬(개별 털 스트로크, 한올한올) */
   browPencilColor: string;
   browPencilIntensity: number;
+  /** 펜슬(한올) 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
+  browPencilFinish?: number;
   /** 스타일(텍스처 워프 — 기본/임포트 눈썹 텍스처) */
   browStyleColor: string;
   browStyleIntensity: number;
+  /** 스타일(텍스처 눈썹) 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
+  browStyleFinish?: number;
   /** 눈썹 두께 배수 (1 = 원래), 아치 올림 (0 = 원래) */
   browThickness: number;
   browArch: number;
   /** ── 부위 확장(컨실·치아·아래 속눈썹) — 생략 시 0=끔 ── */
   /** 눈썹 지우기(스킨톤 컨실, 제품 스택 밑작업) 0..1 */
   browConcealIntensity?: number;
+  /** 눈썹 지우기 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
+  browConcealFinish?: number;
   /** 치아 미백(내측 립 링 안, 입 다물면 자동 무효과) 0..1 */
   teethWhitenIntensity?: number;
+  /** 치아 미백 마감: 0=새틴(기본) 1=매트 2=듀이(글로시 스마일). 생략 시 0(기존 출력) */
+  teethFinish?: number;
   /** 아래 속눈썹 강도 0..1 — 색은 mascaraColor 공용 */
   lowerLashIntensity?: number;
   /** 아래 속눈썹 길이 배수 (1=원래, 생략 0은 Unity가 1 보정) */
   lowerLashLength?: number;
+  /** 속눈썹 하 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
+  lowerMascaraFinish?: number;
   /** ── 세그 확장 — 세그 폴백(모델 부재 등, _SegOn=0)이면 Unity가 자동 무효과 ── */
   /** 이마·목 스무딩 확장(배경 세그 face+body-skin) 0..1 — skinSmoothing과 독립. 생략=0=끔 */
   skinSmoothingExtended?: number;
@@ -224,17 +237,23 @@ export interface FilterParams {
   hairTintColor?: string;
   /** 헤어 염색 강도 0..1. 생략=0=끔 */
   hairTintIntensity?: number;
+  /** 헤어 염색 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
+  hairFinish?: number;
   /** 얼굴 룩 오버레이(UV 템플릿에 그린 메이크업 데칼) 강도. 텍스처는 setFaceOverlay로 임포트 */
   faceOverlayIntensity: number;
   /** ── 명명 핸들(핏/배치, 골드) — 배수는 1=원래, 오프셋은 0=원래. 전역 농도 스케일 제외 ── */
   /** 아이라이너 리본 두께 배수 */
   eyelinerThickness?: number;
+  /** 아이라이너(하) 리본 두께 배수 — 상라이너 eyelinerThickness와 독립. 생략 시 1 */
+  eyelinerLowerThickness?: number;
   /** 윙(꼬리) 길이 배수 — 스타일(윙업/퍼피/롱) 위 미세조정 */
   eyelinerWingLength?: number;
   /** (임시 디버그) 앞머리 끝 리프트 오버라이드 — 미설정=Unity 상수(0.055) 사용 */
   eyelinerInnerLift?: number;
   /** 아이섀도 밴드 높이 배수 (스모키 정도) */
   eyeshadowHeight?: number;
+  /** 아이섀도 하(하안검 아래 섀도) 밴드 높이 배수. 생략 시 1 */
+  eyeshadowLowerHeight?: number;
   /** 속눈썹 길이 배수 */
   mascaraLength?: number;
   /** 속눈썹 모양: 0=내추럴 1=돌리 2=캣아이 3=오픈아이 4=위스피 */
@@ -243,8 +262,14 @@ export interface FilterParams {
   lowerLashStyle?: number;
   /** 하안검 밴드 높이 배수 (애교살 두께) */
   aegyoHeight?: number;
+  /** 삼각존(눈꼬리 아래 삼각 음영) 밴드 높이 배수. 생략 시 1 */
+  triangleZoneHeight?: number;
   /** 립라이너 폭 배수 */
   lipLinerWidth?: number;
+  /** 베이스립 마스크 확장(±, 캐노니컬 UV) — 메인립 lipOverline과 독립. 생략 시 0 */
+  lipBaseOverline?: number;
+  /** 립글로스 마스크 확장(±, 캐노니컬 UV) — 메인립 lipOverline과 독립. 생략 시 0 */
+  lipGlossOverline?: number;
   /** 블러셔 위/아래 (캐노니컬 UV 오프셋, + = 위) */
   blushLift?: number;
   /** 블러셔 바깥/안쪽 (+ = 바깥, 좌우 미러) */
@@ -291,20 +316,28 @@ export interface FilterParams {
   triangleZoneColor?: string;
   /** 삼각존 음영 강도 0..1 (0=끔). 하안검 밴드 렌더러(LowerLidRenderer) */
   triangleZoneIntensity?: number;
+  /** 삼각존 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
+  triangleZoneFinish?: number;
   /** 쌍꺼풀(크리스 라인) 강도 0..1 (0=끔). 색은 자연 음영 고정 */
   doubleLidIntensity?: number;
   /** 쌍꺼풀 크리스 높이 배수 (1=기본, 생략 0은 Unity가 1 보정). 골드=핏 */
   doubleLidHeight?: number;
+  /** 쌍꺼풀 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
+  doubleLidFinish?: number;
   /** 베이스립(입술 원색 정리) 색 "#RRGGBB". 생략 = Unity 기본 누드 #D9A896 */
   lipBaseColor?: string;
   /** 베이스립 커버 강도 0..1 (0=끔). 립 색과 독립으로 켜짐 */
   lipBaseIntensity?: number;
+  /** 베이스립 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
+  lipBaseFinish?: number;
   /** 립글로스(독립 광 톱코트) 틴트 "#RRGGBB". 생략 = 흰색(무색 광) */
   lipGlossColor?: string;
   /** 립글로스 광량 0..1 (0=끔). 마감과 독립(매트 위에도 얹힘) */
   lipGlossIntensity?: number;
+  /** 립글로스 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
+  lipGlossFinish?: number;
   /** ── 축 개선 5건 #19b (모양 축) — 생략 0 = 기존 동작 ── */
-  /** 아이섀도 모양: 0..11=베이스/메인/포인트 위치+크리스/스모키/와이드. 생략 0 */
+  /** 아이섀도 모양: 0=리드 전체 1=크리스 집중 2=스모키 3=꼬리 포인트. 생략 0 */
   eyeshadowShape?: number;
   /** 눈썹 모양(슬롯 공통): 0=내추럴 1=일자 2=아치 3=각진. 생략 0 */
   browShape?: number;
@@ -312,6 +345,39 @@ export interface FilterParams {
   concealerShape?: number;
   /** 파우더 존: 0=전체 1=T존 2=볼 제외. 생략 0 */
   powderShape?: number;
+  /** ── 모양 축 W1+W2 (하안검 밴드 4부위 + 쌍꺼풀) — 생략 0 = 현행 픽셀 동일 ── */
+  /** 하안검 섀도 실루엣: 0=기본밴드 1=넓게 2=꼬리집중. LowerLid.shader esBand 프로파일 분기. 생략 0 */
+  eyeshadowLowerShape?: number;
+  /** 하안검 라이너 구간: 0=전체 1=꼬리만 2=앞+꼬리(중앙 비움). LowerLid.shader lnAmt 구간 게이트. 생략 0 */
+  eyelinerLowerSegment?: number;
+  /** 애교살 실루엣: 0=초승달(현행) 1=일자 2=중앙도톰. LowerLid.shader pigHi 밴드 프로파일 분기. 생략 0 */
+  aegyoShape?: number;
+  /** 삼각존 모양: 0=기본 1=좁게 2=넓게. LowerLid.shader triV 폭 분기. 생략 0 */
+  triangleZoneShape?: number;
+  /** 쌍꺼풀 라인: 0=인라인(현행) 1=아웃라인 2=세미. DoubleLid.shader 크리스 라인 프로파일 분기. 생략 0 */
+  doubleLidShape?: number;
+  /** ── 모양 축 W3 피부 존 (FaceMakeup 존 게이트, powderShape 선례) — 생략 0 = 현행 픽셀 동일 ── */
+  /** 언더톤 적용 존: 0=전체 1=T존 2=얼굴 중앙. FaceMakeup _ToneShape(_Brightening 존 곱). 생략 0 */
+  toneShape?: number;
+  /** 피부결 존: 0=전체 1=T존 2=볼 제외. FaceMakeup _SkinShape(_Smoothing 존 곱). 생략 0 */
+  skinShape?: number;
+  /** 파운데 존: 0=전체 1=T존 집중 2=외곽 페더 강화. FaceMakeup _FoundationShape(얼굴 메시 커버 존 곱). 생략 0 */
+  foundationShape?: number;
+  /** ── 모양 축 W4 립 실루엣/존 (Lip.shader, generate-masks 무재베이크) — 생략 0 = 현행 픽셀 동일 ── */
+  /** 베이스립 실루엣: 0=전체 1=중앙 그라데 2=외곽 정리(경계 안쪽). 핏 lipBaseOverline(연속)과 별개 이산. 생략 0 */
+  lipBaseShape?: number;
+  /** 메인립 실루엣: 0=풀립 1=그라데립(중앙 집중) 2=꼬리 뾰족(입꼬리 강조). 색축 lipGradient(반경 색스톱)와 직교. 생략 0 */
+  lipShape?: number;
+  /** 립라이너 구간: 0=전체 링 1=윗입술만 2=입꼬리 집중. Lip.shader _LipLinerShape(라이너 인스턴스). 생략 0 */
+  lipLinerShape?: number;
+  /** 립글로스 존: 0=전체 1=중앙 도트(쥬시) 2=아랫입술만. Lip.shader _LipGlossShape(립 메시). 생략 0 */
+  lipGlossShape?: number;
+  /** ── 모양 축 W6 치아·헤어 — 생략 0 = 현행 픽셀 동일 ── */
+  /** 치아 존: 0=전체 1=앞니 6전치 집중(가로 중앙 가중). TeethWhiten _TeethShape. 생략 0 */
+  teethShape?: number;
+  /** 헤어 존: 0=전체 1=옴브레(뿌리→끝) 2=끝만. CameraFeed _HairShape. 세그 단일채널이라 v1은
+   *  화면공간 세로 그라데 근사(뿌리/끝 매핑은 포즈·flipY 의존, 실기기 튜닝 대상). 생략 0 */
+  hairShape?: number;
   /** ── 디자이너 마스크 임포트(모양 축, §16) 세션 상태 — 1=이번 세션 커스텀 존 마스크
    *  적용됨. UI 상태 마커일 뿐이라 Unity FilterParams엔 없다(JsonUtility가 무시). 마스크
    *  픽셀 스왑은 별도 setRegionMask 브리지로 처리하고, 파일 경로는 저장 스냅샷에 안 담긴다
@@ -338,6 +404,52 @@ export interface FilterParams {
   foundationIntensity?: number;
   /** 파운데 제형: 0=리퀴드(기본) 1=쿠션(커버↑) 2=스킨틴트(커버↓). 생략 0 */
   foundationTexture?: number;
+  // ── 제형(텍스처) 공통 축(W1) — 부위군 템플릿 enum. value 0=ZERO=현행 픽셀 바이트 동일.
+  //    셰이더가 TexBundleFromEnum(Finish.cginc)으로 시드 번들을 미러링(regions.ts 정본).
+  //    tone=TONE_TEX(0 매끈/1 파우더리), teeth는 젤 단일이라 컨트롤·필드 없음. 나머지=GENERIC.
+  toneTexture?: number;
+  skinTexture?: number;
+  concealerTexture?: number;
+  powderTexture?: number;
+  blushTexture?: number;
+  highlightTexture?: number;
+  contourTexture?: number;
+  eyeshadowTexture?: number;
+  eyeshadowLowerTexture?: number;
+  aegyoTexture?: number;
+  triangleZoneTexture?: number;
+  browConcealTexture?: number;
+  browTexture?: number;
+  browPencilTexture?: number;
+  browLightenerTexture?: number;
+  browStyleTexture?: number;
+  lipBaseTexture?: number;
+  lipLinerTexture?: number;
+  lipGlossTexture?: number;
+  /** ── 임시 디버그(파운데 색 튜닝) — Foundation.cginc 전역 유니폼 조절용 dev 슬라이더 3종.
+   *  확정값을 셰이더 리터럴로 굽고 나면 이 3필드(및 셰이더 유니폼·개발 패널)를 걷어낸다.
+   *  App이 항상 유효값(기본=옛 #define 상수)을 실어 보내 안 건드리면 현재 픽셀과 동일. ── */
+  /** 기준 루마 분모(밝기, 0.45~0.90, 기본 0.798). 낮을수록 밝음 */
+  fndRefLumaDbg?: number;
+  /** shade 게인(밝기 여유, 0.8~1.5, 기본 1.0) */
+  fndLumaGainDbg?: number;
+  /** 회색 혼합량(탁함, 0.0~0.5, 기본 0.4). 낮을수록 선명 */
+  fndChromaDbg?: number;
+  /** ── 임시 디버그(이음새 세그 게이트 튜닝 — 값 확정 후 제거) — CameraFeed 전역 유니폼.
+   *  귀·턱-목 이음새 파운데 공백 원인 판별용. 파운데 seg 게이트 임계 4종(전이 2 + 얼굴
+   *  오벌 크기·페더)+시각화 토글. 미설정(-1)=셰이더 리터럴 폴백(전이 LO는 0도 유효값이라
+   *  음수 sentinel; 타원 크기·페더도 양수라 같은 가드). App이 안 건드리면 리터럴과 동일 →
+   *  현행 픽셀 동일. 07-17 코어 제외(seg.r 램프)를 랜드마크 타원 게이트로 교체. ── */
+  /** 세그 시각화 토글 (0=off, 1=on). face-skin=빨강·게이트 통과=초록·body-skin=파랑 오버레이 */
+  segSeamDbg?: number;
+  /** 이음새 전이대 하한(0..1, 기본 0.10). 미설정 = 셰이더 리터럴 FND_SEG_LO */
+  fndSegLoDbg?: number;
+  /** 이음새 전이대 상한(0..1, 기본 0.25). 미설정 = 셰이더 리터럴 FND_SEG_HI */
+  fndSegHiDbg?: number;
+  /** 얼굴 오벌 반경 배수(0.9~1.4, 기본 1.10). 미설정 = 셰이더 리터럴 FND_OVAL_SIZE */
+  fndOvalSizeDbg?: number;
+  /** 얼굴 오벌 경계 페더(0~0.3, 기본 0.15). 미설정 = 셰이더 리터럴 FND_OVAL_FEATHER */
+  fndOvalFeatherDbg?: number;
   /** 파운데이션 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0 */
   foundationFinish?: number;
   /** 파우더(유분광 억제, 세팅) 0..1 (0=끔). 파운데이션과 독립 */
@@ -424,6 +536,9 @@ export interface LensLayer {
   outer: number;
   /** 방사 디자인 텍스처 경로(꽃무늬·별·헤이즐 등, file:// 허용). 생략 = 절차 방사 그라데 */
   designPath?: string;
+  /** 겹 마감: 0=새틴(기본) 1=매트 2=듀이. 세 겹(베이스/내부/림)이 각자 독립 소유.
+   *  생략/0 = 새틴 = 현행 픽셀 동일(구 저장물 필드 부재 하위호환). Iris.shader ApplyFinish 소비 */
+  finish?: number;
 }
 
 /**
@@ -477,6 +592,9 @@ export interface OverlayLayer {
   /** 데코 세부부위(중분류) 종류 — 'deco'(점)|'decoTattoo'|'decoGem'|'decoPaint'|'decoEtc'.
    *  렌더에는 영향 없고(공통 오버레이 엔진), 저장·왕복 시 세부부위 복원용. Unity는 무시. */
   kind?: string;
+  /** 마감: 0=새틴(기본) 1=매트 2=듀이. 젬(젬스톤 광)에 특히 유효. 생략/0 = 새틴 = 현행
+   *  픽셀 동일(구 저장물 필드 부재 하위호환). FaceMakeup.shader ApplyOverlay가 ApplyFinish로 소비 */
+  finish?: number;
 }
 
 /**

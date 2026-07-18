@@ -31,6 +31,7 @@ import {
   AXIS_LABELS,
   FINISHES,
   FINISH_ENUM_SEED,
+  FOUNDATION_FINISHES,
   finishBundleToPatch,
   GOLD,
   isCustomFinish,
@@ -38,7 +39,6 @@ import {
   isLensRegion,
   LENS_BLEND_MODES,
   readFinishBundle,
-  pickerVisibleRegionDefs,
   REGION_GROUPS,
   REGION_MAP,
 } from '../composer/regions';
@@ -148,8 +148,18 @@ import type {
   TreeChild,
 } from '../composer/lookTree';
 import { multiUseRegionNode, multiUseTargets } from '../composer/multiUse';
-
-const ROSE = '#FF7E9D';
+import {
+  ACCENT,
+  ACCENT_LIGHT,
+  ACCENT_PALE,
+  CONTROL_H,
+  GOLD_CTA,
+  GOLD_LIGHT,
+  PANEL_INSET,
+  SP,
+  TEXT_HINT,
+  accentAlpha,
+} from '../theme';
 
 // 컬러휠 버튼 썸네일 — 스와치 맨 앞 "직접 고르기" 어포던스(무지개 원).
 const WHEEL_THUMB = require('../assets/color-wheel.png');
@@ -247,18 +257,6 @@ function decoLeafCount(tree: LookNode | null): number {
 
 const dn = (node: LookNode) => `${node.name}${node.dirty ? '*' : ''}`;
 
-/** 피부결은 skinGlow 값이 곧 프라이머 종류다. 프리셋의 일반 '피부결' 라벨보다
- * 실제 선택된 제품명을 우선해 상세 트리와 경로가 같은 정체성을 말하게 한다. */
-function leafDisplayName(leaf: ProductLeaf): string {
-  if (leaf.region === 'skin') {
-    return ((leaf.params.skinGlow as number | undefined) ?? 0) > 0
-      ? '윤광 프라이머'
-      : '모공 프라이머';
-  }
-  const rdef = REGION_MAP[leaf.region];
-  return leaf.label === rdef.label ? rdef.productName ?? '커스텀' : leaf.label;
-}
-
 /** 잎까지의 경로 표시줄 — `루트* › 부위룩* › 세부룩* › 제품` */
 function pathToLeaf(root: LookNode, leafId: string): string | null {
   const segs: string[] = [];
@@ -267,7 +265,7 @@ function pathToLeaf(root: LookNode, leafId: string): string | null {
     for (const kid of node.kids) {
       if (isLeaf(kid)) {
         if (kid.id === leafId) {
-          segs.push(leafDisplayName(kid) + (kid.dirty ? '*' : ''));
+          segs.push(kid.label + (kid.dirty ? '*' : ''));
           return true;
         }
       } else if (walk(kid)) {
@@ -469,6 +467,7 @@ export default function ComposerSheet({
     total: number,
   ) => {
     const isSel = leaf.id === selectedLeafId;
+    const rdef = REGION_MAP[leaf.region];
     // 유일 겹은 sub.visible도 함께 봐야 유령 행(켜 보이는데 렌더 안 됨) 방지.
     const shown = soleLeaf ? leaf.visible && sub.visible : leaf.visible;
     return (
@@ -484,7 +483,7 @@ export default function ComposerSheet({
       >
         <Text style={styles.rowName} numberOfLines={1}>
           {/* 겹 이름 = 제형/제품명(부위는 헤더 칩이 말함). 라벨=부위명이면 폴백. */}
-          {leafDisplayName(leaf)}
+          {leaf.label === rdef.label ? rdef.productName ?? '커스텀' : leaf.label}
           {leaf.dirty && <Text style={styles.dirtyStar}>*</Text>}
           {total > 1 && <Text style={styles.rowSub}>  {li + 1}/{total}겹</Text>}
         </Text>
@@ -816,6 +815,12 @@ export default function ComposerSheet({
                   {leaves.length > 1 && (
                     <Text style={styles.countBadge}>×{leaves.length}겹</Text>
                   )}
+                  <TouchableOpacity
+                    style={styles.rowBtn}
+                    onPress={() => tree && onChangeTree(stackLeaf(tree, sub.id))}
+                  >
+                    <Text style={styles.rowBtnText}>＋겹</Text>
+                  </TouchableOpacity>
                   {onSetFitRef && (fitSheets?.length ?? 0) > 0 && (
                     <TouchableOpacity
                       style={styles.rowBtn}
@@ -834,12 +839,6 @@ export default function ComposerSheet({
                       </Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity
-                    style={styles.rowBtn}
-                    onPress={() => tree && onChangeTree(stackLeaf(tree, sub.id))}
-                  >
-                    <Text style={styles.rowBtnText}>＋겹</Text>
-                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.rowBtn}
                     onPress={() =>
@@ -1082,7 +1081,7 @@ export default function ComposerSheet({
             <View key={group.title}>
               <Text style={styles.groupTitle}>{group.title}</Text>
               <View style={styles.regionGrid}>
-                {pickerVisibleRegionDefs(group.regions).map(def => {
+                {group.regions.map(def => {
                   const full = isDecoRegion(def.key) && decoFull;
                   return (
                     <TouchableOpacity
@@ -1418,25 +1417,34 @@ function AxisEditor({
     controls.length === 0 ? null : (
       <View key={a} style={styles.axisSection}>
         <Text style={styles.axisSectionLabel}>{AXIS_LABELS[a]}</Text>
-        {controls.map((control, i) => (
-          <ControlView
-            key={i}
-            control={control}
-            params={leaf.params}
-            onPatch={onPatch}
-            onPickTexture={onPickTexture}
-            onPickMask={onPickMask}
-            onPickTextureMap={onPickTextureMap}
-            catalog={catalog}
-            onApplyTexture={onApplyTexture}
-            onApplyMask={onApplyMask}
-            onApplyTextureMap={onApplyTextureMap}
-            onOpenCatalogImport={onOpenCatalogImport}
-            onRemoveCatalogEntry={onRemoveCatalogEntry}
-            userFinishes={userFinishes}
-            onSaveFinish={onSaveFinish}
-          />
-        ))}
+        {controls.map((control, i) => {
+          // 연속된 동일 group 묶음 앞에만 소제목 한 줄. group 미지정은 현행(소제목 없음).
+          const showGroup =
+            control.group != null && control.group !== controls[i - 1]?.group;
+          return (
+            <React.Fragment key={i}>
+              {showGroup && (
+                <Text style={styles.axisGroupLabel}>{control.group}</Text>
+              )}
+              <ControlView
+                control={control}
+                params={leaf.params}
+                onPatch={onPatch}
+                onPickTexture={onPickTexture}
+                onPickMask={onPickMask}
+                onPickTextureMap={onPickTextureMap}
+                catalog={catalog}
+                onApplyTexture={onApplyTexture}
+                onApplyMask={onApplyMask}
+                onApplyTextureMap={onApplyTextureMap}
+                onOpenCatalogImport={onOpenCatalogImport}
+                onRemoveCatalogEntry={onRemoveCatalogEntry}
+                userFinishes={userFinishes}
+                onSaveFinish={onSaveFinish}
+              />
+            </React.Fragment>
+          );
+        })}
       </View>
     );
   return (
@@ -2019,6 +2027,7 @@ function DecoEditor({
   onRemoveCatalogEntry?: (id: string) => void;
 }) {
   const full = decoCount >= MAX_OVERLAY_LAYERS;
+  const [wheelOpen, setWheelOpen] = useState(false);
   return (
     <View style={styles.axisBox}>
       <ScrollView style={styles.axisScroll}>
@@ -2158,18 +2167,76 @@ function DecoEditor({
         {/* 색 스와치 — 틴트·발광일 때. 내장 점은 흰 텍스처 × 색이라 항상 노출 */}
         {(overlay.blendMode === 1 ||
           overlay.blendMode === 2 ||
-          overlay.path === BUILTIN_DOT) && (
-          <ColorSwatches
-            colors={BLUSH_COLORS}
-            selected={overlay.color ?? BLUSH_COLORS[0]}
-            onSelect={color => onPatch({ color })}
-          />
-        )}
+          overlay.path === BUILTIN_DOT) &&
+          (() => {
+            const decoColor = overlay.color ?? BLUSH_COLORS[0];
+            const inPalette = BLUSH_COLORS.some(
+              c => c.toLowerCase() === decoColor.toLowerCase(),
+            );
+            return (
+              <View>
+                <View style={styles.swatchRow}>
+                  {/* 맨 앞 컬러휠 버튼 — 표준 swatches 컨트롤과 동일 패턴 */}
+                  <TouchableOpacity
+                    onPress={() => setWheelOpen(true)}
+                    style={[styles.wheelBtn, !inPalette && styles.wheelBtnSelected]}
+                  >
+                    {inPalette ? (
+                      <Image source={WHEEL_THUMB} style={styles.wheelBtnImg} />
+                    ) : (
+                      <View
+                        style={[styles.wheelBtnFill, { backgroundColor: decoColor }]}
+                      />
+                    )}
+                  </TouchableOpacity>
+                  <ColorSwatches
+                    colors={BLUSH_COLORS}
+                    selected={decoColor}
+                    onSelect={color => onPatch({ color })}
+                  />
+                </View>
+                <ColorWheel
+                  visible={wheelOpen}
+                  initial={decoColor}
+                  onCancel={() => setWheelOpen(false)}
+                  onDone={hex => {
+                    setWheelOpen(false);
+                    onPatch({ color: hex });
+                  }}
+                />
+              </View>
+            );
+          })()}
         <ParamSlider
           label="강도"
           value={overlay.intensity}
           onChange={v => onPatch({ intensity: v })}
         />
+
+        {/* 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 젬(젬스톤 광)에 특히 유효.
+            0=새틴=기존 출력(하위호환) */}
+        <Text style={styles.swatchLabel}>마감</Text>
+        <View style={styles.segRow}>
+          {FOUNDATION_FINISHES.map(f => (
+            <TouchableOpacity
+              key={f.value}
+              style={[
+                styles.segBtn,
+                (overlay.finish ?? 0) === f.value && styles.segBtnOn,
+              ]}
+              onPress={() => onPatch({ finish: f.value })}
+            >
+              <Text
+                style={[
+                  styles.segText,
+                  (overlay.finish ?? 0) === f.value && styles.segTextOn,
+                ]}
+              >
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <TouchableOpacity style={styles.importBtn} onPress={onPickImage}>
           <Text style={styles.importBtnText}>내 그림 불러오기 (파일에서 · 투명 PNG)</Text>
         </TouchableOpacity>
@@ -2207,16 +2274,42 @@ function LensEditor({
 }) {
   const partLabel =
     lens.part === 2 ? '테두리 림' : lens.part === 1 ? '내부 디테일' : '베이스 컬러';
+  const [wheelOpen, setWheelOpen] = useState(false);
+  const inPalette = IRIS_COLORS.some(
+    c => c.toLowerCase() === lens.color.toLowerCase(),
+  );
   return (
     <View style={styles.axisBox}>
       <ScrollView style={styles.axisScroll}>
         <Text style={styles.swatchLabel}>세부 — {partLabel}</Text>
 
         <Text style={styles.swatchLabel}>색</Text>
-        <ColorSwatches
-          colors={IRIS_COLORS}
-          selected={lens.color}
-          onSelect={color => onPatch({ color })}
+        <View style={styles.swatchRow}>
+          {/* 맨 앞 컬러휠 버튼 — 표준 swatches 컨트롤과 동일 패턴 */}
+          <TouchableOpacity
+            onPress={() => setWheelOpen(true)}
+            style={[styles.wheelBtn, !inPalette && styles.wheelBtnSelected]}
+          >
+            {inPalette ? (
+              <Image source={WHEEL_THUMB} style={styles.wheelBtnImg} />
+            ) : (
+              <View style={[styles.wheelBtnFill, { backgroundColor: lens.color }]} />
+            )}
+          </TouchableOpacity>
+          <ColorSwatches
+            colors={IRIS_COLORS}
+            selected={lens.color}
+            onSelect={color => onPatch({ color })}
+          />
+        </View>
+        <ColorWheel
+          visible={wheelOpen}
+          initial={lens.color}
+          onCancel={() => setWheelOpen(false)}
+          onDone={hex => {
+            setWheelOpen(false);
+            onPatch({ color: hex });
+          }}
         />
 
         {/* 블렌드 10종(0~9) — Iris.shader LensBlend와 1:1 */}
@@ -2245,6 +2338,30 @@ function LensEditor({
           value={lens.intensity}
           onChange={v => onPatch({ intensity: v })}
         />
+
+        {/* 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환). 겹별 독립 */}
+        <Text style={styles.swatchLabel}>마감</Text>
+        <View style={styles.segRow}>
+          {FOUNDATION_FINISHES.map(f => (
+            <TouchableOpacity
+              key={f.value}
+              style={[
+                styles.segBtn,
+                (lens.finish ?? 0) === f.value && styles.segBtnOn,
+              ]}
+              onPress={() => onPatch({ finish: f.value })}
+            >
+              <Text
+                style={[
+                  styles.segText,
+                  (lens.finish ?? 0) === f.value && styles.segTextOn,
+                ]}
+              >
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {/* 방사 존(직경/두께) — 세부별 의미 분기. smoothstep 경계는 셰이더가 처리 */}
         {lens.part === 2 ? (
@@ -2294,16 +2411,16 @@ function LensEditor({
 const styles = StyleSheet.create({
   // 배경·마진·모서리는 상위 paramPanel(App)이 소유 — 본문은 패딩만.
   sheet: {
-    paddingHorizontal: 12,
+    paddingHorizontal: PANEL_INSET,
     paddingTop: 0,
-    paddingBottom: 12,
+    paddingBottom: SP.md,
     maxHeight: 460,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 8,
+    gap: SP.sm,
+    marginBottom: SP.sm,
   },
   headerTitle: {
     flex: 1,
@@ -2312,8 +2429,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   headerBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
@@ -2337,7 +2456,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   saveBtn: {
-    backgroundColor: ROSE,
+    backgroundColor: ACCENT,
   },
   saveBtnText: {
     color: '#FFFFFF',
@@ -2435,7 +2554,7 @@ const styles = StyleSheet.create({
     marginLeft: 28,
     backgroundColor: 'rgba(255,255,255,0.02)',
     borderLeftWidth: 2,
-    borderLeftColor: 'rgba(255,126,157,0.35)',
+    borderLeftColor: accentAlpha(0.35),
     borderTopLeftRadius: 0,
     borderBottomLeftRadius: 0,
     paddingVertical: 5,
@@ -2453,13 +2572,13 @@ const styles = StyleSheet.create({
     maxWidth: 110,
   },
   regionChipText: {
-    color: '#E4CF9E',
+    color: GOLD_LIGHT,
     fontSize: 10,
     fontWeight: '700',
   },
   countBadge: {
-    color: '#FFCFDD',
-    backgroundColor: 'rgba(255,126,157,0.18)',
+    color: ACCENT_PALE,
+    backgroundColor: accentAlpha(0.18),
     fontSize: 9,
     fontWeight: '700',
     paddingHorizontal: 5,
@@ -2468,9 +2587,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   rowSel: {
-    backgroundColor: 'rgba(255,126,157,0.16)',
+    backgroundColor: accentAlpha(0.16),
     borderWidth: 1,
-    borderColor: 'rgba(255,126,157,0.6)',
+    borderColor: accentAlpha(0.6),
   },
   rowDim: {
     opacity: 0.45,
@@ -2512,11 +2631,11 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   dirtyStar: {
-    color: ROSE,
+    color: ACCENT,
     fontWeight: '800',
   },
   ownBadge: {
-    color: '#E4CF9E',
+    color: GOLD_LIGHT,
     backgroundColor: 'rgba(201,161,94,0.16)',
     fontSize: 8,
     paddingHorizontal: 5,
@@ -2539,21 +2658,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   swapOn: {
-    color: ROSE,
+    color: ACCENT,
   },
   eyeText: {
     color: GOLD,
     fontSize: 12,
   },
   swapPanel: {
-    marginLeft: 14,
-    marginBottom: 4,
-    padding: 8,
+    marginLeft: SP.md,
+    marginBottom: SP.xs,
+    padding: SP.sm,
     borderRadius: 10,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,126,157,0.5)',
-    backgroundColor: 'rgba(255,126,157,0.05)',
+    borderColor: accentAlpha(0.5),
+    backgroundColor: accentAlpha(0.05),
   },
   swapTitle: {
     color: 'rgba(255,255,255,0.65)',
@@ -2563,11 +2682,12 @@ const styles = StyleSheet.create({
   swapChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 5,
+    gap: SP.xs,
   },
   swapChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.1)',
     maxWidth: 150,
@@ -2578,7 +2698,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(201,161,94,0.7)',
   },
   swapChipOn: {
-    backgroundColor: ROSE,
+    backgroundColor: ACCENT,
   },
   swapChipText: {
     color: 'rgba(255,255,255,0.85)',
@@ -2594,12 +2714,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,126,157,0.6)',
-    backgroundColor: 'rgba(255,126,157,0.05)',
+    borderColor: accentAlpha(0.6),
+    backgroundColor: accentAlpha(0.05),
     alignItems: 'center',
   },
   addRowText: {
-    color: '#FF9EB5',
+    color: ACCENT_LIGHT,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -2619,8 +2739,8 @@ const styles = StyleSheet.create({
   identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
+    gap: SP.xs,
+    marginBottom: SP.sm,
   },
   identityLabel: {color: 'rgba(255,255,255,0.45)', fontSize: 10, width: 26},
   // 제품 스트립 구분 — 적합 제품 ┊ 전체(다른 부위 제품 = 멀티유즈 후보).
@@ -2631,8 +2751,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   identityChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
@@ -2644,35 +2765,44 @@ const styles = StyleSheet.create({
   identityChipText: {color: 'rgba(255,255,255,0.6)', fontSize: 11},
   identityChipTextOn: {color: GOLD, fontWeight: '600'},
   axisBox: {
-    marginTop: 8,
+    marginTop: SP.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.2)',
-    paddingTop: 8,
+    paddingTop: SP.md,
   },
   axisTabs: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 6,
+    gap: SP.xs,
+    marginBottom: SP.sm,
   },
   axisTab: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   // 2단(§5) — 상위 그룹 탭 아래 축 섹션. 라벨(축 이름) + 컨트롤. 여러 축이 한 그룹에.
   axisSection: {
-    marginTop: 4,
+    marginTop: SP.sm,
   },
   axisSectionLabel: {
     color: 'rgba(255,255,255,0.42)',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 2,
+    marginBottom: SP.xs,
+  },
+  // 축 안 group 소제목 — 축 라벨보다 조용하게(무채색 힌트톤). 위 여백으로 묶음 경계만.
+  axisGroupLabel: {
+    color: TEXT_HINT,
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: SP.sm,
+    marginBottom: SP.xs,
   },
   axisTabOn: {
-    backgroundColor: 'rgba(255,126,157,0.35)',
+    backgroundColor: accentAlpha(0.35),
   },
   axisTabText: {
     color: 'rgba(255,255,255,0.75)',
@@ -2694,12 +2824,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontSize: 11,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: SP.xs,
   },
   swatchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: SP.sm,
   },
   wheelBtn: {
     padding: 2,
@@ -2722,31 +2852,33 @@ const styles = StyleSheet.create({
   },
   segRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginVertical: 6,
+    flexWrap: 'wrap',
+    gap: SP.xs,
+    marginVertical: SP.sm,
   },
   // 마감 축 — enum 버튼 + 커스텀 제형 칩(◈)이 한 줄에 섞여 줄바꿈된다.
   finishRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginVertical: 6,
+    gap: SP.xs,
+    marginVertical: SP.sm,
   },
   finishChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,126,157,0.14)',
+    backgroundColor: accentAlpha(0.14),
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,126,157,0.6)',
+    borderColor: accentAlpha(0.6),
     maxWidth: 130,
   },
   finishChipOn: {
-    backgroundColor: ROSE,
-    borderColor: ROSE,
+    backgroundColor: ACCENT,
+    borderColor: ACCENT,
   },
   finishChipText: {
-    color: '#FFCFDD',
+    color: ACCENT_PALE,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -2756,8 +2888,9 @@ const styles = StyleSheet.create({
   // 세그 버튼 — 제품 탭 칩(identityChip)과 동일 톤으로 통일(사용자 요청):
   // 아웃라인 필 + 선택=골드 틴트. 모양·마감·렌즈 블렌드 등 enum 줄 공용.
   segBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
@@ -2778,12 +2911,13 @@ const styles = StyleSheet.create({
   spotGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginVertical: 6,
+    gap: SP.xs,
+    marginVertical: SP.sm,
   },
   spotChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
     backgroundColor: 'rgba(201,161,94,0.14)',
     borderWidth: StyleSheet.hairlineWidth,
@@ -2793,7 +2927,7 @@ const styles = StyleSheet.create({
     backgroundColor: GOLD,
   },
   spotChipText: {
-    color: '#E6C687',
+    color: GOLD_CTA,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -2815,7 +2949,7 @@ const styles = StyleSheet.create({
     opacity: 0.35,
   },
   mirrorBtnText: {
-    color: '#E6C687',
+    color: GOLD_CTA,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -2828,18 +2962,19 @@ const styles = StyleSheet.create({
   nudgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginVertical: 6,
+    gap: SP.xs,
+    marginVertical: SP.sm,
   },
   nudgeBtn: {
     width: 36,
-    paddingVertical: 6,
+    height: CONTROL_H,
+    justifyContent: 'center',
     borderRadius: 10,
     alignItems: 'center',
     backgroundColor: 'rgba(201,161,94,0.18)',
   },
   nudgeText: {
-    color: '#E6C687',
+    color: GOLD_CTA,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -2879,7 +3014,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   catalogImportLink: {
-    color: '#FFCFDD',
+    color: ACCENT_PALE,
     fontSize: 10,
     fontWeight: '700',
   },
@@ -2980,18 +3115,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   headerBtnOn: {
-    backgroundColor: 'rgba(255,126,157,0.4)',
+    backgroundColor: accentAlpha(0.4),
   },
   // 멀티유즈(Phase 2) — 대상 부위 픽커 (잎 아래 로즈 점선 패널)
   multiUsePanel: {
-    marginLeft: 14,
-    marginBottom: 4,
-    padding: 8,
+    marginLeft: SP.md,
+    marginBottom: SP.xs,
+    padding: SP.sm,
     borderRadius: 10,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: 'rgba(255,126,157,0.5)',
-    backgroundColor: 'rgba(255,126,157,0.05)',
+    borderColor: accentAlpha(0.5),
+    backgroundColor: accentAlpha(0.05),
   },
   multiUseTitle: {
     color: 'rgba(255,255,255,0.7)',
@@ -2999,16 +3134,17 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   multiUseChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: CONTROL_H,
+    justifyContent: 'center',
+    paddingHorizontal: SP.sm,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,126,157,0.16)',
+    backgroundColor: accentAlpha(0.16),
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,126,157,0.5)',
+    borderColor: accentAlpha(0.5),
     maxWidth: 130,
   },
   multiUseChipText: {
-    color: '#FFCFDD',
+    color: ACCENT_PALE,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -3027,7 +3163,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   checkTextOn: {
-    color: ROSE,
+    color: ACCENT,
   },
   groupBar: {
     flexDirection: 'row',
@@ -3036,7 +3172,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     padding: 6,
     borderRadius: 10,
-    backgroundColor: 'rgba(255,126,157,0.1)',
+    backgroundColor: accentAlpha(0.1),
   },
   groupBarInput: {
     flex: 1,
@@ -3045,13 +3181,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(46,44,42,0.35)',
   },
   groupMakeBtn: {
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
-    backgroundColor: ROSE,
+    backgroundColor: ACCENT,
   },
   groupMakeBtnOff: {
     opacity: 0.4,
@@ -3065,8 +3201,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255,126,157,0.35)',
-    backgroundColor: 'rgba(255,126,157,0.04)',
+    borderColor: accentAlpha(0.35),
+    backgroundColor: accentAlpha(0.04),
     paddingBottom: 4,
   },
   groupHeader: {
@@ -3077,7 +3213,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderTopLeftRadius: 10,
     borderTopRightRadius: 10,
-    backgroundColor: 'rgba(255,126,157,0.12)',
+    backgroundColor: accentAlpha(0.12),
   },
   groupNameBtn: {
     flex: 1,
@@ -3086,7 +3222,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   groupName: {
-    color: '#FFCFDD',
+    color: ACCENT_PALE,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -3102,6 +3238,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(46,44,42,0.3)',
   },
 });

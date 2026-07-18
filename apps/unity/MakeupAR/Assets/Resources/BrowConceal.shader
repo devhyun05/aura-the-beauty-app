@@ -32,6 +32,10 @@ Shader "ARMakeup/BrowConceal"
         // 눈썹 제품 최대 강도(CPU: max(마스카라, 파우더, 펜슬, 스타일)) — 전역 근사
         // protect. 진한 제품일수록 그 아래 컨실을 감쇠(계수는 PROTECT_DAMP).
         _BrowProductMax ("Brow Product Max", Range(0, 1)) = 0.0
+        // 마감(Tier B) — 0=새틴(기본, 기존 출력) 1=매트 2=듀이. ApplyFinish 레거시 경로.
+        _ConcealFinish ("Conceal Finish (0 satin 1 matte 2 dewy)", Float) = 0
+        // 제형(텍스처) — GENERIC 템플릿 enum(0=크림=현행). Finish.cginc TexBundleFromEnum 미러.
+        _ConcealTexture ("Conceal Texture (generic enum)", Float) = 0
     }
 
     SubShader
@@ -53,6 +57,7 @@ Shader "ARMakeup/BrowConceal"
             #pragma fragment frag
             #include "UnityCG.cginc"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
+            #include "Finish.cginc"    // 마감(ApplyFinish) 공용 — _CameraFeed도 여기서 선언
 
             // 칠하는 피부색에 원래 명암을 살짝 반영 — 완전 평면 페인트 방지
             // (BrowLightener의 0.85 + 0.3·luma 패턴). // 실기기 튜닝 대상
@@ -62,13 +67,14 @@ Shader "ARMakeup/BrowConceal"
             // 1이면 제품 최대 강도 1에서 컨실 완전 소거. // 실기기 튜닝 대상
             #define PROTECT_DAMP 0.6
 
-            sampler2D _CameraFeed;
             float _BrowIntensity;
             float _HairLo;
             float _HairHi;
             float _FeatherV;
             float _FeatherH;
             float _BrowProductMax;
+            float _ConcealFinish; // 마감(Tier B) — 0=새틴=기존 출력(하위호환)
+            float _ConcealTexture; // 제형(텍스처) GENERIC 템플릿(0=크림=현행)
 
             struct appdata
             {
@@ -114,15 +120,26 @@ Shader "ARMakeup/BrowConceal"
                 float hEdge = smoothstep(0.0, _FeatherH, i.uv.y)
                             * (1.0 - smoothstep(1.0 - _FeatherH, 1.0, i.uv.y));
 
+                // 제형(텍스처) — GENERIC 시드 번들. body/grain=피부색소, coverage/edge=커버 amt.
+                // enum 0(크림)=ZERO → 조기 반환 = 바이트 동일(하위호환).
+                float ccTexE, ccTexG, ccTexC, ccTexB;
+                TexBundleFromEnum(0.0, _ConcealTexture, ccTexE, ccTexG, ccTexC, ccTexB);
                 float amt = hair * vEdge * hEdge * _BrowIntensity;
                 // 전역 근사 protect — 위에 얹을 제품이 진할수록 컨실을 약화해
                 // "피부 덮고 반투명 제품" 이중 처리(워시드아웃)를 완화. 제품 0이면
                 // 감쇠 0 = 완전 지우개.
                 amt *= 1.0 - _BrowProductMax * PROTECT_DAMP;
+                amt = TexEdge(TexCoverage(saturate(amt), ccTexC), ccTexE); // 제형 커버·엣지
 
+                fixed3 pig = skin * (SHADE_BASE + SHADE_LUMA_GAIN * luma);
+                pig = TexBody(pig, luma, ccTexB); // 제형 발색 body
+                // 마감 — 0=새틴=무변형(ApplyFinish 레거시 경로, 세부 6값 0). 스킨톤
+                // 컨실이라 시머 게인 0. sparkleUV=밴드 uv.
+                pig = ApplyFinish(pig, luma, i.uv, _ConcealFinish, 0,
+                                  0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
+                pig = TexGrain(pig, i.uv, ccTexG); // 제형 그레인
                 // §11 오클루전 — 앞머리/손 위에 피부색 컨실을 칠하지 않는다.
-                return fixed4(skin * (SHADE_BASE + SHADE_LUMA_GAIN * luma),
-                              amt * OccludeGate(i.grabPos));
+                return fixed4(pig, amt * OccludeGate(i.grabPos));
             }
             ENDCG
         }
