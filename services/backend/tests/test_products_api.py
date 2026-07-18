@@ -159,7 +159,7 @@ async def test_authenticated_search_response_is_private_and_not_cacheable(monkey
     limit=20,
     auth=object(),  # type: ignore[arg-type]
     db=_SearchDatabase(),  # type: ignore[arg-type]
-    settings=Settings(),
+    settings=Settings(engagement_personalization_v1=False),
   )
   assert response.headers["Cache-Control"] == "private, no-store"
   assert result["data"]["status"] == "ready"
