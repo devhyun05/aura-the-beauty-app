@@ -178,7 +178,11 @@ export function AuradinSearchRouteScreen({navigation, route}: RootScreenProps<'A
     getFaceAnalysisReportById(fetchReportId)
       .then(report => {
         if (alive && report?.personalColor) {
-          setFetchedReport({id: report.id, personalColor: report.personalColor});
+          setFetchedReport({
+            id: report.id,
+            personalColor: report.personalColor,
+            ...(report.skinType ? {skinType: report.skinType} : {}),
+          });
         }
       })
       .catch(() => {

@@ -66,12 +66,13 @@ function savedProductKey(
   return `${product.externalSource ?? 'internal'}:${product.id}`;
 }
 
-export type AuradinAvailableReport = {id?: string; personalColor: string};
+export type AuradinAvailableReport = {id?: string; personalColor: string; skinType?: string};
 
 export type AuradinDriveParams = {
   prompt?: string; // 딥링크 검색 자동 시작 (예: 리포트 화면 → aiarmakeup://auradin-search?prompt=…)
   reportId?: string; // 첨부: 얼굴분석 리포트 id
   personalColor?: string; // 첨부: 리포트 톤 (client-relay)
+  skinType?: string; // 첨부: 리포트 피부타입 (C4 finish soft 선호)
   open?: string; // QA·데모: results에서 role(anchor|diverse|discovery) 카드 상세 열기
   dial?: string; // QA·데모: refine 다이얼 (more_similar|more_diverse)
   ts?: string; // 같은 명령 반복용 nonce
@@ -103,6 +104,7 @@ export function AuradinSearchScreen({
           kind: 'report',
           id: drive?.reportId ?? availableReport?.id,
           personalColor: (drive?.personalColor ?? availableReport?.personalColor) as string,
+          skinType: drive?.skinType ?? availableReport?.skinType,
         }
       : null;
   const [attachments, setAttachments] = useState<AuradinAttachment[]>(seededReport ? [seededReport] : []);
@@ -233,12 +235,20 @@ export function AuradinSearchScreen({
     setQuery(seed); // 승격된 예시(또는 사용자가 친 것)를 입력창에 반영 — 첨부는 칩으로 별도 표시
     setAnswering(false);
     setSelected(null);
-    const context = parts.context.personalColor ? {personalColor: parts.context.personalColor} : undefined;
+    // 백엔드는 personalColor/skinType(+각 confidence)만 허용 — 있는 것만 실어 보낸다.
+    const context =
+      parts.context.personalColor || parts.context.skinType
+        ? {
+            ...(parts.context.personalColor ? {personalColor: parts.context.personalColor} : {}),
+            ...(parts.context.skinType ? {skinType: parts.context.skinType} : {}),
+          }
+        : undefined;
     // A9: 같은 논리적 submit(동일 fingerprint)의 재시도는 같은 clientRequestId를 재사용.
     const fingerprint = JSON.stringify({
       prompt,
       reportId: parts.reportId ?? null,
       personalColor: context?.personalColor ?? null,
+      skinType: context?.skinType ?? null,
     });
     if (submitKeyRef.current?.fingerprint !== fingerprint) {
       submitKeyRef.current = {fingerprint, id: makeClientRequestId(), status: 'in_flight'};
