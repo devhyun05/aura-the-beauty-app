@@ -35,6 +35,10 @@ type UnifiedFaceCaptureScreenProps = {
     result: UnifiedFaceCaptureCompletedEvent,
     upload: FaceCaptureUploadResult,
   ) => boolean | Promise<boolean>;
+  onCaptureReadyForProcessing?: (
+    result: UnifiedFaceCaptureCompletedEvent,
+    loadingStartedAtMs: number,
+  ) => boolean;
   onFallback: (reason: string) => void;
   onRequestStarted: (requestId: string) => void;
   request?: UnifiedFaceCaptureRequest;
@@ -59,6 +63,7 @@ export function UnifiedFaceCaptureScreen({
   onAbandonStarted,
   onCancel,
   onCaptureCommitted,
+  onCaptureReadyForProcessing,
   onFallback,
   onRequestStarted,
   request: providedRequest,
@@ -77,6 +82,7 @@ export function UnifiedFaceCaptureScreen({
     onAbandonStarted,
     onCancel,
     onCaptureCommitted,
+    onCaptureReadyForProcessing,
     onFallback,
     onRequestStarted,
   });
@@ -85,11 +91,13 @@ export function UnifiedFaceCaptureScreen({
   const isAbandoningRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
   const isUploadingRef = React.useRef(false);
+  const loadingStartedAtMsRef = React.useRef<number | null>(null);
   const uploadImageRef = React.useRef(uploadImage);
   callbacksRef.current = {
     onAbandonStarted,
     onCancel,
     onCaptureCommitted,
+    onCaptureReadyForProcessing,
     onFallback,
     onRequestStarted,
   };
@@ -241,6 +249,40 @@ export function UnifiedFaceCaptureScreen({
     }
 
     autoUploadCaptureIdRef.current = completed.captureId;
+    const handoff = callbacksRef.current.onCaptureReadyForProcessing;
+    if (handoff) {
+      try {
+        if (
+          handoff(
+            completed,
+            loadingStartedAtMsRef.current ?? Date.now(),
+          )
+        ) {
+          return;
+        }
+
+        isAbandoningRef.current = true;
+        callbacksRef.current.onAbandonStarted?.();
+        void deleteUnifiedFaceCaptureTempImage(completed.image.uri).finally(() => {
+          callbacksRef.current.onFallback(
+            'unified_capture_processing_handoff_rejected',
+          );
+        });
+      } catch (error) {
+        isAbandoningRef.current = true;
+        callbacksRef.current.onAbandonStarted?.();
+        console.info('[aura:unified-face-capture] processing-handoff:error', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+        void deleteUnifiedFaceCaptureTempImage(completed.image.uri).finally(() => {
+          callbacksRef.current.onFallback(
+            'unified_capture_processing_handoff_failed',
+          );
+        });
+      }
+      return;
+    }
+
     void attemptUpload(completed);
   }, [attemptUpload, captureState.completed]);
 
@@ -300,6 +342,14 @@ export function UnifiedFaceCaptureScreen({
   const canRetryUpload = Boolean(
     captureState.completed && uploadError && !isUploading,
   );
+  const cancelCaptureFlow = () => {
+    isAbandoningRef.current = true;
+    callbacksRef.current.onAbandonStarted?.();
+    captureState.cancel('user_closed');
+    void cleanupUncommittedImage(captureState.completed).finally(() => {
+      callbacksRef.current.onCancel();
+    });
+  };
 
   return (
     <View style={styles.container} onLayout={onPreviewLayout}>
@@ -318,14 +368,7 @@ export function UnifiedFaceCaptureScreen({
           <Pressable
             accessibilityLabel="통합 얼굴 촬영 닫기"
             accessibilityRole="button"
-            onPress={() => {
-              isAbandoningRef.current = true;
-              callbacksRef.current.onAbandonStarted?.();
-              captureState.cancel('user_closed');
-              void cleanupUncommittedImage(captureState.completed).finally(() => {
-                callbacksRef.current.onCancel();
-              });
-            }}
+            onPress={cancelCaptureFlow}
             style={styles.closeButton}>
             <Text style={styles.closeText}>닫기</Text>
           </Pressable>
@@ -373,7 +416,10 @@ export function UnifiedFaceCaptureScreen({
               accessibilityLabel="통합 얼굴 촬영"
               accessibilityRole="button"
               disabled={!canCapture}
-              onPress={captureState.capture}
+              onPress={() => {
+                loadingStartedAtMsRef.current = Date.now();
+                captureState.capture();
+              }}
               style={[
                 styles.shutterOuter,
                 !canCapture && styles.shutterDisabled,

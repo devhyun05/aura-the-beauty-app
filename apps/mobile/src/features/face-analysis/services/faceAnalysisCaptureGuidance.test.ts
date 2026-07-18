@@ -19,9 +19,8 @@ function expect(condition: boolean, label: string) {
   }
 }
 
-expectEqual(FACE_ANALYSIS_CAPTURE_PLAN.length, 2, 'two camera stages');
-expectEqual(FACE_ANALYSIS_CAPTURE_PLAN[0].title, '정면 사진 촬영', 'S1 title');
-expectEqual(FACE_ANALYSIS_CAPTURE_PLAN[1].title, '3D 얼굴 측정', '3D title');
+expectEqual(FACE_ANALYSIS_CAPTURE_PLAN.length, 1, 'one unified camera stage');
+expectEqual(FACE_ANALYSIS_CAPTURE_PLAN[0].title, '통합 얼굴 촬영', 'unified title');
 expect(
   FACE_3D_PREFLIGHT_COPY.description.includes('약 3초'),
   '3D preflight discloses the hold duration',

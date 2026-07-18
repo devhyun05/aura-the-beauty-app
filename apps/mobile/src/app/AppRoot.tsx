@@ -20,7 +20,7 @@ import {
 } from '../app/navigation/navigationState';
 import {RootNavigator} from '../app/navigation/RootNavigator';
 import type {RootStackParamList} from '../app/navigation/routeTypes';
-import {prepareUnityMakeupRuntime} from '../features/ar/services/unityMakeupBridge';
+import {prewarmUnityMakeupRuntime} from '../features/ar/services/unityMakeupBridge';
 import {IncomingConsultingCallGate} from '../features/consulting/components/IncomingConsultingCallGate';
 import {prefetchHomeHeroImages} from '../features/home/config/homeHeroAssets';
 import {
@@ -164,13 +164,12 @@ export function AppRoot() {
 
     const preloadAfterInitialRender = InteractionManager.runAfterInteractions(() => {
       preloadTimer = setTimeout(() => {
-        // Full offscreen boot at app start (not just the dylib load): this runs
-        // Unity runEmbeddedWithArgc while concealed so the scene loads, the
-        // Unity splash plays offscreen, and the first AR frame is produced
-        // BEFORE the user ever enters the AR screen. Entry then reveals an
-        // already-live scene instead of a splash/black loading flash.
+        // Fully boot Unity once offscreen so the scene and models stay warm,
+        // then pause its render loop, ARSession, camera and MediaPipe until an
+        // on-screen Unity container resumes it. This keeps fast AR entry without
+        // continuously heating the device on Home/Login/report screens.
         recordFeaturePerformanceMarker('unity-preload-start');
-        const started = prepareUnityMakeupRuntime();
+        const started = prewarmUnityMakeupRuntime();
         recordFeaturePerformanceMarker('unity-preload-dispatched', {started});
       }, UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS);
     });

@@ -253,6 +253,10 @@ expectEqual(screenSource.includes('editorialPresetPrompt: trend.seedPrompt'), tr
 expectEqual(screenSource.includes('customSituationText: trend.seedPrompt'), false, 'editorial trend never masquerades as free-form user input');
 expectEqual(screenSource.includes('keyword: trend.keyword'), true, 'overlapping trend keeps the original situation keyword');
 expectEqual(screenSource.includes('situation: trend.situation'), true, 'overlapping trend keeps its parent situation');
+expectEqual(screenSource.includes("forceFixture: discovery.catalog?.source === 'fixture'"), false, 'fixture catalog changes request provenance without forcing mock recommendation results');
+expectEqual(screenSource.includes('discoverySource: discovery.catalog?.source'), true, 'selection requests carry explicit discovery provenance');
+expectEqual(screenSource.includes('getMakeupRecommendationErrorDiagnostic'), false, 'backend validation codes are not rendered in user error copy');
+expectEqual(screenSource.includes('providerCode'), false, 'provider diagnostics are not rendered in user error copy');
 expectEqual(screenSource.includes('const isFinalQuestion = session.currentQuestionIndex >= session.questions.length - 1'), true, 'question flow detects the final answer');
 expectEqual(screenSource.includes('if (isFinalQuestion) {'), true, 'intermediate answers do not replace the question with the full loading screen');
 expectEqual(screenSource.includes('answerRequestInFlight.current'), true, 'question answers are guarded against duplicate taps');

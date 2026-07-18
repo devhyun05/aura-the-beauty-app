@@ -15,6 +15,8 @@ from pydantic import ValidationError
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.schemas.makeup_recommendation import (
+  AI_PICK_OPTION_ID,
+  AI_PICK_OPTION_LABEL,
   GeneratedMakeupRecommendation,
   GeneratedMakeupRecommendationV2,
   GeneratedQuestions,
@@ -65,7 +67,7 @@ QUESTION_SYSTEM_PROMPT = """너는 사용자가 직접 메이크업을 설계하
 - '어떤 톤이 좋아요?', '어디를 강조할까요?' 같은 예측 가능한 메이크업 설문을 금지한다.
 - 성별, 나이, 외모 결점, 피부색의 우열을 추정하거나 암시하지 않는다.
 - 질문은 짧고 자연스러운 한국어 존댓말로 쓴다.
-- 선택지는 질문당 정확히 4개다. 서로 배타적인 서사 선택지 3개 다음, 마지막은 반드시 {\"id\":\"ai_pick\",\"label\":\"AI가 골라줘\"}다.
+- 선택지는 질문당 정확히 4개다. id와 label이 중복되지 않는 서로 배타적인 서사 선택지 3개 다음, 마지막은 반드시 {\"id\":\"ai_pick\",\"label\":\"AI가 골라줘\"} 하나뿐이어야 한다.
 - id는 고유한 영문 snake_case로 쓴다.
 
 좋은 질문 예시:
@@ -650,10 +652,11 @@ async def generate_questions(
       f"카드가 담은 내부 의도 또는 사용자 입력: {scenario_text}\n"
       f"태그: {', '.join(tags) or '(없음)'}\n\n"
       "카드 문구와 내부 의도를 질문 생성의 출발점으로 함께 고려하라. 내부 의도에 적힌 색이나 테크닉을 사용자에게 되묻지 말고, AI가 나중에 알아서 구현해야 할 정보로 취급하라. "
-      "Return {\"questions\":[{\"id\":\"string\",\"title\":\"string\",\"options\":[{\"id\":\"string\",\"label\":\"string\"}]}]} with 1 to 3 questions and exactly 4 options each: 3 mutually exclusive story choices plus ai_pick last.",
+      "Return {\"questions\":[{\"id\":\"string\",\"title\":\"string\",\"options\":[{\"id\":\"string\",\"label\":\"string\"}]}]} with 1 to 3 questions and exactly 4 options each: 3 mutually exclusive story choices with unique ids and labels, plus exactly one ai_pick last.",
     )
     try:
-      return GeneratedQuestions.model_validate(response).model_dump(by_alias=True)
+      normalized = normalize_generated_questions_response(response)
+      return GeneratedQuestions.model_validate(normalized).model_dump(by_alias=True)
     except ValidationError as exc:
       logger.warning(
         "[aura:makeup-recommendation] questions:validation-failed modelId=%s errors=%s",
@@ -801,6 +804,64 @@ def deterministic_questions_v2(context_snapshot: dict[str, Any]) -> list[dict[st
   return GeneratedQuestions.model_validate({"questions": questions}).model_dump(by_alias=True)["questions"]
 
 
+def _normalized_generated_text(value: Any) -> str:
+  return " ".join(value.split()) if isinstance(value, str) else ""
+
+
+def normalize_generated_questions_response(response: Any) -> Any:
+  """Repair harmless provider shape drift before strict schema validation.
+
+  Collapse only AI delegation variants into one canonical final choice. Normal
+  choices, including duplicates or surplus choices, remain present so strict
+  Pydantic validation can reject ambiguous model output. Missing choices are
+  never padded. Copy is only whitespace-normalized; forbidden question axes are
+  still rejected by ``GeneratedQuestion`` after this step.
+  """
+  if not isinstance(response, dict):
+    return response
+  raw_questions = response.get("questions")
+  if not isinstance(raw_questions, list):
+    return response
+
+  normalized_questions: list[Any] = []
+  for raw_question in raw_questions:
+    if not isinstance(raw_question, dict):
+      normalized_questions.append(raw_question)
+      continue
+
+    question = dict(raw_question)
+    question_id = _normalized_generated_text(question.get("id"))
+    question_title = _normalized_generated_text(question.get("title"))
+    if question_id:
+      question["id"] = question_id
+    if question_title:
+      question["title"] = question_title
+
+    raw_options = question.get("options")
+    if isinstance(raw_options, list):
+      ordinary_options: list[Any] = []
+      for raw_option in raw_options:
+        if not isinstance(raw_option, dict):
+          ordinary_options.append(raw_option)
+          continue
+        option_id = _normalized_generated_text(raw_option.get("id"))
+        option_label = _normalized_generated_text(raw_option.get("label"))
+        if (
+          option_id.casefold() == AI_PICK_OPTION_ID.casefold()
+          or option_label.casefold() == AI_PICK_OPTION_LABEL.casefold()
+        ):
+          continue
+        ordinary_options.append({**raw_option, "id": option_id, "label": option_label})
+
+      question["options"] = [
+        *ordinary_options,
+        {"id": AI_PICK_OPTION_ID, "label": AI_PICK_OPTION_LABEL},
+      ]
+    normalized_questions.append(question)
+
+  return {**response, "questions": normalized_questions}
+
+
 PREP_TIME_OPTION_LABELS = (
   "15분 안에 빠르게",
   "30분 정도 여유 있게",
@@ -848,8 +909,10 @@ async def generate_questions_v2_with_fallback(
         build_question_prompt(context_snapshot),
         max_tokens=1800,
       )
-      questions = GeneratedQuestions.model_validate(response).model_dump(by_alias=True)["questions"]
+      normalized = normalize_generated_questions_response(response)
+      questions = GeneratedQuestions.model_validate(normalized).model_dump(by_alias=True)["questions"]
       questions = normalize_prep_time_question_options(questions)
+      questions = GeneratedQuestions.model_validate({"questions": questions}).model_dump(by_alias=True)["questions"]
       return {"questions": questions, "source": "claude", "version": "makeup-questions-v2"}
     except ValidationError as exc:
       validation_errors = exc.errors(include_input=False)

@@ -10,6 +10,14 @@ import type {
   MakeupJourneyTrendResponse,
 } from '../types';
 import {isIsoDateString, isYearMonthString} from '../utils/date';
+import {
+  buildLegacyMakeupJourneyCalendar,
+  buildLegacyMakeupJourneyDay,
+  buildLegacyMakeupJourneyTrend,
+  fetchLegacyFeedbackReports,
+  isMissingMakeupJourneyRoute,
+  legacyMakeupJourneySettings,
+} from './makeupJourneyLegacyFallback';
 
 function requireIsoDate(date: string): string {
   if (!isIsoDateString(date)) {
@@ -33,12 +41,20 @@ function requireMissionTitle(title: string): string {
   return normalized;
 }
 
-export function getMakeupJourneySettings(
+export async function getMakeupJourneySettings(
   signal?: AbortSignal,
 ): Promise<MakeupJourneySettingsResponse> {
-  return requestBackendJson<MakeupJourneySettingsResponse>('/makeup-journey/settings', {
-    signal,
-  });
+  try {
+    return await requestBackendJson<MakeupJourneySettingsResponse>('/makeup-journey/settings', {
+      signal,
+    });
+  } catch (error) {
+    if (!isMissingMakeupJourneyRoute(error)) {
+      throw error;
+    }
+    console.info('[aura:makeup-journey] legacy-read-fallback', {resource: 'settings'});
+    return legacyMakeupJourneySettings;
+  }
 }
 
 export function saveMakeupJourneySettings(input: {
@@ -61,37 +77,78 @@ export function saveMakeupJourneySettings(input: {
   });
 }
 
-export function getMakeupJourneyCalendar(
+export async function getMakeupJourneyCalendar(
   month: string,
   signal?: AbortSignal,
 ): Promise<MakeupJourneyCalendarResponse> {
-  return requestBackendJson<MakeupJourneyCalendarResponse>(
-    `/makeup-journey/calendar?month=${encodeURIComponent(requireMonth(month))}`,
-    {signal},
-  );
+  const resolvedMonth = requireMonth(month);
+  try {
+    return await requestBackendJson<MakeupJourneyCalendarResponse>(
+      `/makeup-journey/calendar?month=${encodeURIComponent(resolvedMonth)}`,
+      {signal},
+    );
+  } catch (error) {
+    if (!isMissingMakeupJourneyRoute(error)) {
+      throw error;
+    }
+    console.info('[aura:makeup-journey] legacy-read-fallback', {resource: 'calendar'});
+    const reports = await fetchLegacyFeedbackReports(signal);
+    const calendar = buildLegacyMakeupJourneyCalendar(resolvedMonth, reports);
+    console.info('[aura:makeup-journey] legacy-calendar:ready', {
+      days: calendar.days.length,
+      month: resolvedMonth,
+      reports: reports.length,
+    });
+    return calendar;
+  }
 }
 
-export function getMakeupJourneyDay(
+export async function getMakeupJourneyDay(
   entryDate: string,
   signal?: AbortSignal,
 ): Promise<MakeupJourneyDayResponse> {
-  return requestBackendJson<MakeupJourneyDayResponse>(
-    `/makeup-journey/days/${encodeURIComponent(requireIsoDate(entryDate))}`,
-    {signal},
-  );
+  const resolvedDate = requireIsoDate(entryDate);
+  try {
+    return await requestBackendJson<MakeupJourneyDayResponse>(
+      `/makeup-journey/days/${encodeURIComponent(resolvedDate)}`,
+      {signal},
+    );
+  } catch (error) {
+    if (!isMissingMakeupJourneyRoute(error)) {
+      throw error;
+    }
+    console.info('[aura:makeup-journey] legacy-read-fallback', {resource: 'day'});
+    return buildLegacyMakeupJourneyDay(
+      resolvedDate,
+      await fetchLegacyFeedbackReports(signal),
+    );
+  }
 }
 
-export function getMakeupJourneyTrend(
+export async function getMakeupJourneyTrend(
   range: MakeupJourneyTrendRange,
   endDate: string,
   signal?: AbortSignal,
 ): Promise<MakeupJourneyTrendResponse> {
-  return requestBackendJson<MakeupJourneyTrendResponse>(
-    `/makeup-journey/trends?range=${encodeURIComponent(range)}&endDate=${encodeURIComponent(
-      requireIsoDate(endDate),
-    )}`,
-    {signal},
-  );
+  const resolvedEndDate = requireIsoDate(endDate);
+  try {
+    return await requestBackendJson<MakeupJourneyTrendResponse>(
+      `/makeup-journey/trends?range=${encodeURIComponent(range)}&endDate=${encodeURIComponent(
+        resolvedEndDate,
+      )}`,
+      {signal},
+    );
+  } catch (error) {
+    if (!isMissingMakeupJourneyRoute(error)) {
+      throw error;
+    }
+    console.info('[aura:makeup-journey] legacy-read-fallback', {resource: 'trend'});
+    return buildLegacyMakeupJourneyTrend(
+      range,
+      resolvedEndDate,
+      await fetchLegacyFeedbackReports(signal),
+    );
+  }
 }
 
 export async function saveMakeupJourneyNote(

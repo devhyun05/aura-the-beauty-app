@@ -140,8 +140,13 @@ assert.match(
 );
 assert.match(
   makeupControllerSource,
-  /void ClearForkRecipeOverlays\(\)[\s\S]*FindFirstObjectByType<global::E3RegionMaskOverlay>\(\)[\s\S]*ClearRecipesAndHideOverlays\(\)/,
+  /void ClearForkRecipeOverlays\(\)[\s\S]*Type\.GetType\("E3RegionMaskOverlay, Assembly-CSharp"\)[\s\S]*GetMethod\("ClearRecipesAndHideOverlays"\)[\s\S]*clearMethod\.Invoke/,
   '스크린스페이스 파운데이션과 비전 립 경계는 flat 정본 필터 경로에 남아 있으면 안 된다',
+);
+assert.doesNotMatch(
+  makeupControllerSource,
+  /global::E3RegionMaskOverlay/,
+  'MediaPipe graft asmdef는 기본 Assembly-CSharp 타입을 직접 참조하면 안 된다',
 );
 
 function bodyBetween(source, startPattern, endPattern) {

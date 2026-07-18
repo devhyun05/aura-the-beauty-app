@@ -10,7 +10,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Pressable, StyleSheet, Text} from 'react-native';
 
-import {BackendApiError, getBackendApiBaseUrl, isRequestAbortedError} from '../../../shared/services/backendApi';
+import {BackendApiError, isRequestAbortedError} from '../../../shared/services/backendApi';
 import {
   getFaceAnalysisReportById,
   getFaceAnalysisReports,
@@ -25,6 +25,7 @@ import {
   fetchGeneratedMakeupRecommendationSessionV2,
   fetchMakeupRecommendationDiscovery,
   generateMakeupRecommendationV2,
+  MakeupRecommendationRetryableError,
   refineGeneratedMakeupRecommendation,
   refineMakeupRecommendation,
   refreshGeneratedMakeupRecommendation,
@@ -161,10 +162,13 @@ function isMakeupRecommendationGeneratingConflict(error: unknown): boolean {
     );
 }
 
-function getMakeupRecommendationErrorDiagnostic(error: unknown): string {
-  if (!__DEV__ || !(error instanceof BackendApiError) || !error.code) return '';
-  const providerCode = typeof error.details?.providerCode === 'string' ? error.details.providerCode : '';
-  return ` (${[error.code, providerCode].filter(Boolean).join(' / ')})`;
+function getMakeupRecommendationWorkflowErrorMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  return error instanceof MakeupRecommendationRetryableError
+    ? error.message
+    : fallback;
 }
 
 
@@ -494,7 +498,10 @@ export const MakeupRecommendationScreen = forwardRef<
           setCustomSituationServerError(customSituationError);
           return;
         }
-        setErrorMessage(`추천 질문을 만들지 못했어요. 잠시 후 다시 시도해주세요.${getMakeupRecommendationErrorDiagnostic(error)}`);
+        setErrorMessage(getMakeupRecommendationWorkflowErrorMessage(
+          error,
+          '추천 질문을 만들지 못했어요. 잠시 후 다시 시도해주세요.',
+        ));
         setPhase('error');
       } finally {
         if (workflowRequest.current?.id === operation.id) setIsStarting(false);
@@ -512,8 +519,8 @@ export const MakeupRecommendationScreen = forwardRef<
     dispatchDiscovery({type: 'keyword/selected', keywordId: keyword.id});
     runStart({
       analysisReportId: selectedReport.id,
+      discoverySource: discovery.catalog?.source,
       idempotencyKey: createMakeupRecommendationIdempotencyKey(),
-      forceFixture: discovery.catalog?.source === 'fixture' && !getBackendApiBaseUrl(),
       imageMode: 'personalized',
       keyword,
       personalColor: selectedReport.personalColor || personalColor,
@@ -533,8 +540,8 @@ export const MakeupRecommendationScreen = forwardRef<
       dispatchDiscovery({type: 'keyword/selected', keywordId: trend.keyword.id});
       runStart({
         analysisReportId: selectedReport.id,
+        discoverySource: discovery.catalog?.source,
         idempotencyKey: createMakeupRecommendationIdempotencyKey(),
-        forceFixture: discovery.catalog?.source === 'fixture' && !getBackendApiBaseUrl(),
         imageMode: 'personalized',
         keyword: trend.keyword,
         personalColor: selectedReport.personalColor || personalColor,
@@ -544,11 +551,11 @@ export const MakeupRecommendationScreen = forwardRef<
     }
     runStart({
       analysisReportId: selectedReport.id,
+      discoverySource: discovery.catalog?.source,
       idempotencyKey: createMakeupRecommendationIdempotencyKey(),
       editorialPresetId: trend.id,
       editorialPresetLabel: trend.displayText,
       editorialPresetPrompt: trend.seedPrompt,
-      forceFixture: discovery.catalog?.source === 'fixture' && !getBackendApiBaseUrl(),
       imageMode: 'personalized',
       personalColor: selectedReport.personalColor || personalColor,
     });
@@ -565,9 +572,9 @@ export const MakeupRecommendationScreen = forwardRef<
     });
     runStart({
       analysisReportId: selectedReport.id,
+      discoverySource: discovery.catalog?.source,
       idempotencyKey: createMakeupRecommendationIdempotencyKey(),
       customSituationText,
-      forceFixture: discovery.catalog?.source === 'fixture' && !getBackendApiBaseUrl(),
       imageMode: 'personalized',
       personalColor: selectedReport.personalColor || personalColor,
     });
@@ -612,7 +619,10 @@ export const MakeupRecommendationScreen = forwardRef<
         setPhase(nextSession.phase === 'ready' ? 'loading' : nextSession.phase);
       } catch (error) {
         if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
-        setErrorMessage(`AI 추천을 만들지 못했어요. 응답은 저장되어 있으니 다시 시도해주세요.${getMakeupRecommendationErrorDiagnostic(error)}`);
+        setErrorMessage(getMakeupRecommendationWorkflowErrorMessage(
+          error,
+          'AI 추천을 만들지 못했어요. 응답은 저장되어 있으니 다시 시도해주세요.',
+        ));
         setPhase('error');
       } finally {
         answerRequestInFlight.current = false;
@@ -913,7 +923,10 @@ export const MakeupRecommendationScreen = forwardRef<
         })
         .catch(error => {
           if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
-          setErrorMessage(`AI 추천을 만들지 못했어요. 답변은 유지했으니 다시 시도해주세요.${getMakeupRecommendationErrorDiagnostic(error)}`);
+          setErrorMessage(getMakeupRecommendationWorkflowErrorMessage(
+            error,
+            'AI 추천을 만들지 못했어요. 답변은 유지했으니 다시 시도해주세요.',
+          ));
           setPhase('error');
         });
       return;

@@ -21,7 +21,7 @@ expectEqual(introTitle, '얼굴 분석으로\n나에게 맞는 룩을 찾아요'
 expectEqual(primaryAction, '시작하기', 'face analysis intro primary action');
 expectEqual(
   getFaceAnalysisCapturePlanTitles().join(','),
-  '정면 사진 촬영,3D 얼굴 측정',
+  '통합 얼굴 촬영',
   'face analysis capture plan titles',
 );
 expectEqual(

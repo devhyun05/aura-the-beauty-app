@@ -12,6 +12,13 @@ using UnityEngine.XR.ARSubsystems;
 
 public sealed class RNBridge : MonoBehaviour
 {
+    [Serializable]
+    private sealed class RuntimeModeRequest
+    {
+        public string mode;
+        public int generation;
+    }
+
     private static readonly string[] FeatureSnapshotRegions =
         { "foundation", "lip", "cheek", "eye", "blush", "brow", "eyeliner" };
 
@@ -511,6 +518,25 @@ public sealed class RNBridge : MonoBehaviour
     [SerializeField] private FaceCameraFrameBroker faceCameraFrameBroker;
     [SerializeField] private UnifiedFaceCaptureController unifiedFaceCaptureController;
 
+    private ARSession runtimeArSession;
+    private ARCameraBackground runtimeCameraBackground;
+    private AROcclusionManager runtimeOcclusionManager;
+    private FaceLandmarkSource runtimeFaceLandmarkSource;
+    private SegmentationSource runtimeSegmentationSource;
+    private AuraStencilHost runtimeStencilHost;
+    private bool liveRuntimeSuspended;
+    private bool runtimeSnapshotCaptured;
+    private bool runtimeArSessionWasEnabled = true;
+    private bool runtimeCameraManagerWasEnabled = true;
+    private bool runtimeFaceManagerWasEnabled = true;
+    private bool runtimeCameraBackgroundWasEnabled = true;
+    private bool runtimeOcclusionManagerWasEnabled = true;
+    private bool runtimeFrameBrokerWasEnabled = true;
+    private bool runtimeFaceLandmarksWereEnabled = true;
+    private bool runtimeSegmentationWasEnabled = true;
+    private int lastRuntimeModeGeneration = -1;
+    private string currentRuntimeMode = "live";
+
     private E3RegionMaskOverlay regionMaskOverlay;
     private readonly Dictionary<Renderer, bool> suppressedFaceRendererStates =
         new Dictionary<Renderer, bool>();
@@ -560,6 +586,139 @@ public sealed class RNBridge : MonoBehaviour
         yield return null;
         yield return new WaitForSeconds(0.25f);
         SendUnityEvent("{\"type\":\"unity_initialized\"}");
+    }
+
+    /// <summary>
+    /// Host lifecycle entry point. The native container uses three modes:
+    /// live = visible AR/camera, still = IMAGE-mode analysis only, and idle =
+    /// no consumer. Both still and idle suspend every live camera producer,
+    /// but keep prepared models and scene objects resident for a fast resume.
+    /// </summary>
+    public void SetRuntimeModeJson(string json)
+    {
+        RuntimeModeRequest request;
+        try
+        {
+            request = JsonUtility.FromJson<RuntimeModeRequest>(json ?? string.Empty);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning("[RuntimeLifecycle] invalid request: " + exception.Message);
+            return;
+        }
+
+        if (request == null || request.generation < lastRuntimeModeGeneration)
+        {
+            return;
+        }
+
+        string mode = request.mode == "live"
+            ? "live"
+            : request.mode == "still" ? "still" : "idle";
+        lastRuntimeModeGeneration = request.generation;
+        SetLiveRuntimeActive(mode == "live");
+        currentRuntimeMode = mode;
+
+        SendUnityEvent(
+            "{\"type\":\"unity_runtime_mode_ack\",\"mode\":\""
+            + mode
+            + "\",\"generation\":"
+            + request.generation.ToString(CultureInfo.InvariantCulture)
+            + ",\"liveArActive\":"
+            + (mode == "live" ? "true" : "false")
+            + "}",
+            "[RuntimeLifecycle]");
+    }
+
+    private void SetLiveRuntimeActive(bool active)
+    {
+        RefreshRuntimeLifecycleReferences();
+
+        if (!active)
+        {
+            if (!liveRuntimeSuspended)
+            {
+                CaptureRuntimeEnabledSnapshot();
+            }
+
+            // Stop the expensive live consumers first, then pause only the
+            // ARSession. ARCameraManager/ARFaceManager must stay enabled: their
+            // OnDisable paths stop the camera subsystem and destroy swap-chain
+            // textures, which can leave ARKit at 0 fps after player resume.
+            // ARSession-only suspension is also the existing, proven contract
+            // used by MakeupController.SetPaused.
+            runtimeStencilHost?.SetRuntimeActive(false);
+            runtimeFaceLandmarkSource?.SetLiveProcessingActive(false);
+            runtimeSegmentationSource?.SetLiveProcessingActive(false);
+            if (faceCameraFrameBroker != null) faceCameraFrameBroker.enabled = false;
+            if (runtimeArSession != null) runtimeArSession.enabled = false;
+            liveRuntimeSuspended = true;
+            return;
+        }
+
+        // Resume the required live path in producer-to-consumer order. Do not
+        // restore the ARSession from the startup snapshot: the first idle
+        // request can arrive while ARFoundation is still initializing and a
+        // transient disabled snapshot would otherwise keep the session off
+        // forever. The live AR contract always requires these components.
+        if (runtimeArSession != null)
+            runtimeArSession.enabled = true;
+        if (faceCameraFrameBroker != null)
+            faceCameraFrameBroker.enabled = true;
+        if (runtimeFaceLandmarkSource != null)
+            runtimeFaceLandmarkSource.SetLiveProcessingActive(true);
+        if (runtimeSegmentationSource != null)
+            runtimeSegmentationSource.SetLiveProcessingActive(true);
+        runtimeStencilHost?.SetRuntimeActive(true);
+
+        Debug.Log(
+            "[RuntimeLifecycle] live resumed arSessionEnabled="
+            + (runtimeArSession != null && runtimeArSession.enabled)
+            + " arState="
+            + ARSession.state
+            + " cameraManagerEnabled="
+            + (cameraManager != null && cameraManager.enabled)
+            + " brokerEnabled="
+            + (faceCameraFrameBroker != null && faceCameraFrameBroker.enabled));
+
+        liveRuntimeSuspended = false;
+        runtimeSnapshotCaptured = false;
+    }
+
+    private void RefreshRuntimeLifecycleReferences()
+    {
+        RefreshSceneReferences();
+        EnsureFaceCameraFrameBroker();
+        if (runtimeArSession == null)
+            runtimeArSession = FindFirstObjectByType<ARSession>();
+        if (runtimeCameraBackground == null)
+            runtimeCameraBackground = FindFirstObjectByType<ARCameraBackground>();
+        if (runtimeOcclusionManager == null)
+            runtimeOcclusionManager = FindFirstObjectByType<AROcclusionManager>();
+        if (runtimeFaceLandmarkSource == null)
+            runtimeFaceLandmarkSource = FindFirstObjectByType<FaceLandmarkSource>();
+        if (runtimeSegmentationSource == null)
+            runtimeSegmentationSource = FindFirstObjectByType<SegmentationSource>();
+        if (runtimeStencilHost == null)
+            runtimeStencilHost = FindFirstObjectByType<AuraStencilHost>();
+    }
+
+    private void CaptureRuntimeEnabledSnapshot()
+    {
+        runtimeArSessionWasEnabled = runtimeArSession == null || runtimeArSession.enabled;
+        runtimeCameraManagerWasEnabled = cameraManager == null || cameraManager.enabled;
+        runtimeFaceManagerWasEnabled = faceManager == null || faceManager.enabled;
+        runtimeCameraBackgroundWasEnabled =
+            runtimeCameraBackground == null || runtimeCameraBackground.enabled;
+        runtimeOcclusionManagerWasEnabled =
+            runtimeOcclusionManager == null || runtimeOcclusionManager.enabled;
+        runtimeFrameBrokerWasEnabled =
+            faceCameraFrameBroker == null || faceCameraFrameBroker.enabled;
+        runtimeFaceLandmarksWereEnabled =
+            runtimeFaceLandmarkSource == null || runtimeFaceLandmarkSource.enabled;
+        runtimeSegmentationWasEnabled =
+            runtimeSegmentationSource == null || runtimeSegmentationSource.enabled;
+        runtimeSnapshotCaptured = true;
     }
 
     private void OnDisable()

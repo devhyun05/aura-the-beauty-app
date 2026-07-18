@@ -483,10 +483,27 @@ namespace ARMakeup.Face
             // pipeline. Unity is kept warm across screens, so clear any latched
             // screen-space foundation / vision-boundary state before the
             // canonical filter is applied.
-            var forkOverlay = FindFirstObjectByType<global::E3RegionMaskOverlay>();
-            if (forkOverlay != null)
+            // This graft has its own asmdef and therefore cannot reference the
+            // default Assembly-CSharp type directly. Resolve the optional host
+            // overlay at runtime instead of creating an invalid assembly edge.
+            try
             {
-                forkOverlay.ClearRecipesAndHideOverlays();
+                var overlayType = Type.GetType("E3RegionMaskOverlay, Assembly-CSharp");
+                var clearMethod = overlayType?.GetMethod("ClearRecipesAndHideOverlays");
+                if (overlayType == null || clearMethod == null) return;
+
+                foreach (UnityEngine.Object candidate in Resources.FindObjectsOfTypeAll(overlayType))
+                {
+                    if (candidate is Component component && component.gameObject.scene.IsValid())
+                    {
+                        clearMethod.Invoke(candidate, null);
+                        return;
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("[MakeupController] Failed to clear host recipe overlays: " + exception.Message);
             }
         }
 

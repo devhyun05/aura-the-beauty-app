@@ -9,11 +9,11 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
   }
 }
 
-expectEqual(isUnifiedFaceCaptureEnabled(undefined), false, 'product flag defaults off');
-expectEqual(isUnifiedFaceCaptureEnabled('unknown'), false, 'unknown product flag stays off');
-expectEqual(isUnifiedFaceCaptureEnabled('1'), true, 'product flag accepts one');
-expectEqual(isUnifiedFaceCaptureEnabled('true'), true, 'product flag accepts true');
-expectEqual(isUnifiedFaceCaptureEnabled('off'), false, 'product flag accepts off');
+expectEqual(isUnifiedFaceCaptureEnabled(undefined), true, 'product flag defaults on');
+expectEqual(isUnifiedFaceCaptureEnabled('unknown'), true, 'unknown product flag stays on');
+expectEqual(isUnifiedFaceCaptureEnabled('1'), true, 'enabled product flag stays on');
+expectEqual(isUnifiedFaceCaptureEnabled('true'), true, 'true product flag stays on');
+expectEqual(isUnifiedFaceCaptureEnabled('off'), true, 'disabled product flag cannot turn it off');
 
 expectEqual(
   isUnifiedFaceCaptureDiagnosticsEnabled(undefined),

@@ -37,6 +37,8 @@ import * as MediaLibrary from 'expo-media-library/legacy';
 import UnityView from './StencilUnityViewAdapter';
 import { launchImageLibrary } from 'react-native-image-picker';
 
+import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
+
 import { parseUnityMessage } from './src/bridge/types';
 import type {
   CalibrationParams,
@@ -399,6 +401,7 @@ function App({ onBack }: StencilARAppProps) {
 
 function FilterScreen({ onBack }: StencilARAppProps) {
   const insets = useSafeAreaInsets();
+  const cameraSessionActive = useCameraSessionActive();
   const unityRef = useRef<UnityView | null>(null);
   const paramsRef = useRef<FilterParams>(BARE);
   const opacityRef = useRef(0.75); // 전역 메이크업 농도 (0~1) — 기본 75%
@@ -2597,12 +2600,14 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" translucent />
 
-      <UnityView
-        ref={unityRef}
-        style={StyleSheet.absoluteFill}
-        androidKeepPlayerMounted
-        onUnityMessage={onUnityMessage}
-      />
+      {cameraSessionActive && (
+        <UnityView
+          ref={unityRef}
+          style={StyleSheet.absoluteFill}
+          androidKeepPlayerMounted
+          onUnityMessage={onUnityMessage}
+        />
+      )}
 
       {onBack && (
         <TouchableOpacity
