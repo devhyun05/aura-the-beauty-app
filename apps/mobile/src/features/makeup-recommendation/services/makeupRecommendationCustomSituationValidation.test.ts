@@ -119,6 +119,17 @@ expectEqual(
 );
 expectEqual(
   getMakeupRecommendationCustomSituationServerError(
+    new BackendApiError(
+      'Personally identifying information is not allowed.',
+      422,
+      'MAKEUP_CUSTOM_SITUATION_PII',
+    ),
+  ),
+  '연락처나 개인정보는 빼고 메이크업 상황만 적어주세요.',
+  'custom validation never exposes raw backend English',
+);
+expectEqual(
+  getMakeupRecommendationCustomSituationServerError(
     new BackendApiError('일반 요청 오류', 422, 'OTHER_VALIDATION_ERROR'),
   ),
   null,

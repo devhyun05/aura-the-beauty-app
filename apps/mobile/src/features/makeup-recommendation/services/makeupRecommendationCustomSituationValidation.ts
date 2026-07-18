@@ -256,5 +256,13 @@ export function getMakeupRecommendationCustomSituationServerError(error: unknown
   if (!(error instanceof BackendApiError)) return null;
   if (error.status !== 400 && error.status !== 422) return null;
   if (!error.code?.startsWith('MAKEUP_CUSTOM_SITUATION_')) return null;
-  return error.message.trim() || '입력한 상황을 확인해 주세요.';
+  return {
+    MAKEUP_CUSTOM_SITUATION_EMPTY: '언제 또는 어디에서 사용할 메이크업인지 적어주세요.',
+    MAKEUP_CUSTOM_SITUATION_INVALID: '입력한 상황을 확인하고 다시 적어주세요.',
+    MAKEUP_CUSTOM_SITUATION_NEEDS_DETAIL: '어디에서 또는 언제 사용할 메이크업인지 조금만 더 적어주세요.',
+    MAKEUP_CUSTOM_SITUATION_PII: '연락처나 개인정보는 빼고 메이크업 상황만 적어주세요.',
+    MAKEUP_CUSTOM_SITUATION_MEDICAL: '의료 상담 대신 메이크업 상황과 원하는 분위기만 적어주세요.',
+    MAKEUP_CUSTOM_SITUATION_UNSAFE: '메이크업 상황과 원하는 분위기만 안전하게 적어주세요.',
+    MAKEUP_CUSTOM_SITUATION_OUT_OF_SCOPE: '메이크업이 필요한 상황을 중심으로 다시 적어주세요.',
+  }[error.code] ?? '입력한 상황을 확인하고 다시 적어주세요.';
 }

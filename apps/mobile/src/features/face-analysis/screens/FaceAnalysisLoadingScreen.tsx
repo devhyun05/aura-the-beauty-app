@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Image, Pressable, StyleSheet} from 'react-native';
 import {CheckCircle2, Circle} from 'lucide-react-native';
 import Svg, {Circle as SvgCircle} from 'react-native-svg';
@@ -22,6 +22,7 @@ type FaceAnalysisLoadingScreenProps = {
   onBack?: () => void;
   onComplete?: () => void;
   onRetry?: () => void;
+  progressStartedAtMs?: number;
 };
 
 const PROGRESS_TICK_MS = 320;
@@ -41,8 +42,15 @@ export function FaceAnalysisLoadingScreen({
   onBack,
   onComplete,
   onRetry,
+  progressStartedAtMs,
 }: FaceAnalysisLoadingScreenProps) {
-  const [elapsedMs, setElapsedMs] = useState(0);
+  const progressStartedAtMsRef = useRef(progressStartedAtMs ?? Date.now());
+  const [elapsedMs, setElapsedMs] = useState(() =>
+    Math.min(
+      FACE_ANALYSIS_LOADING_TOTAL_MS,
+      Math.max(0, Date.now() - progressStartedAtMsRef.current),
+    ),
+  );
   const progressState = useMemo(
     () => getFaceAnalysisProgressState(elapsedMs),
     [elapsedMs],
@@ -76,8 +84,11 @@ export function FaceAnalysisLoadingScreen({
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      setElapsedMs(currentElapsedMs =>
-        Math.min(currentElapsedMs + PROGRESS_TICK_MS, FACE_ANALYSIS_LOADING_TOTAL_MS),
+      setElapsedMs(
+        Math.min(
+          Math.max(0, Date.now() - progressStartedAtMsRef.current),
+          FACE_ANALYSIS_LOADING_TOTAL_MS,
+        ),
       );
     }, PROGRESS_TICK_MS);
 

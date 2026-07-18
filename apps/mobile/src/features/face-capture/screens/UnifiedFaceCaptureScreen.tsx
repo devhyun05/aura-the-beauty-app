@@ -34,9 +34,17 @@ type UnifiedFaceCaptureScreenProps = {
   onCaptureCommitted: (
     result: UnifiedFaceCaptureCompletedEvent,
     upload: FaceCaptureUploadResult,
+    loadingStartedAtMs: number,
   ) => boolean | Promise<boolean>;
   onFallback: (reason: string) => void;
   onRequestStarted: (requestId: string) => void;
+  renderProcessingOverlay?: (props: {
+    analysisErrorMessage: string | null;
+    capturedPhotoUri?: string;
+    loadingStartedAtMs: number;
+    onBack: () => void;
+    onRetry: () => void;
+  }) => React.ReactNode;
   request?: UnifiedFaceCaptureRequest;
   uploadImage?: (
     image: FaceCaptureImageInput,
@@ -61,6 +69,7 @@ export function UnifiedFaceCaptureScreen({
   onCaptureCommitted,
   onFallback,
   onRequestStarted,
+  renderProcessingOverlay,
   request: providedRequest,
   uploadImage = uploadFaceCaptureImage,
 }: UnifiedFaceCaptureScreenProps) {
@@ -85,6 +94,7 @@ export function UnifiedFaceCaptureScreen({
   const isAbandoningRef = React.useRef(false);
   const isMountedRef = React.useRef(true);
   const isUploadingRef = React.useRef(false);
+  const loadingStartedAtMsRef = React.useRef<number | null>(null);
   const uploadImageRef = React.useRef(uploadImage);
   callbacksRef.current = {
     onAbandonStarted,
@@ -209,6 +219,7 @@ export function UnifiedFaceCaptureScreen({
           !(await callbacksRef.current.onCaptureCommitted(
             completed,
             upload,
+            loadingStartedAtMsRef.current ?? Date.now(),
           ))
         ) {
           isAbandoningRef.current = true;
@@ -300,6 +311,26 @@ export function UnifiedFaceCaptureScreen({
   const canRetryUpload = Boolean(
     captureState.completed && uploadError && !isUploading,
   );
+  const shouldShowProcessingOverlay = Boolean(
+    renderProcessingOverlay &&
+      (captureState.isCapturing || captureState.completed),
+  );
+  const cancelCaptureFlow = () => {
+    isAbandoningRef.current = true;
+    callbacksRef.current.onAbandonStarted?.();
+    captureState.cancel('user_closed');
+    void cleanupUncommittedImage(captureState.completed).finally(() => {
+      callbacksRef.current.onCancel();
+    });
+  };
+  const retryUpload = () => {
+    if (!captureState.completed) {
+      return;
+    }
+
+    loadingStartedAtMsRef.current = Date.now();
+    void attemptUpload(captureState.completed);
+  };
 
   return (
     <View style={styles.container} onLayout={onPreviewLayout}>
@@ -318,14 +349,7 @@ export function UnifiedFaceCaptureScreen({
           <Pressable
             accessibilityLabel="통합 얼굴 촬영 닫기"
             accessibilityRole="button"
-            onPress={() => {
-              isAbandoningRef.current = true;
-              callbacksRef.current.onAbandonStarted?.();
-              captureState.cancel('user_closed');
-              void cleanupUncommittedImage(captureState.completed).finally(() => {
-                callbacksRef.current.onCancel();
-              });
-            }}
+            onPress={cancelCaptureFlow}
             style={styles.closeButton}>
             <Text style={styles.closeText}>닫기</Text>
           </Pressable>
@@ -373,7 +397,10 @@ export function UnifiedFaceCaptureScreen({
               accessibilityLabel="통합 얼굴 촬영"
               accessibilityRole="button"
               disabled={!canCapture}
-              onPress={captureState.capture}
+              onPress={() => {
+                loadingStartedAtMsRef.current = Date.now();
+                captureState.capture();
+              }}
               style={[
                 styles.shutterOuter,
                 !canCapture && styles.shutterDisabled,
@@ -394,6 +421,19 @@ export function UnifiedFaceCaptureScreen({
           </Text>
         </View>
       </SafeAreaView>
+      {shouldShowProcessingOverlay && renderProcessingOverlay ? (
+        <View style={styles.processingOverlay}>
+          {renderProcessingOverlay({
+            analysisErrorMessage: uploadError
+              ? '사진 저장이 지연되고 있어요. 네트워크를 확인한 뒤 다시 시도해 주세요.'
+              : null,
+            capturedPhotoUri: captureState.completed?.image.uri,
+            loadingStartedAtMs: loadingStartedAtMsRef.current ?? Date.now(),
+            onBack: cancelCaptureFlow,
+            onRetry: retryUpload,
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -458,6 +498,16 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     padding: spacing.lg,
     width: '90%',
+  },
+  processingOverlay: {
+    backgroundColor: colors.background,
+    bottom: 0,
+    elevation: 20,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 20,
   },
   headerRow: {
     alignItems: 'flex-end',

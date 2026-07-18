@@ -7,18 +7,21 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "1"
+        "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "1",
+        "EXPO_PUBLIC_UNIFIED_FACE_CAPTURE": "1"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "0"
+        "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "0",
+        "EXPO_PUBLIC_UNIFIED_FACE_CAPTURE": "1"
       }
     },
     "production-makeup-journey": {
       "extends": "production",
       "env": {
-        "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "1"
+        "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "1",
+        "EXPO_PUBLIC_UNIFIED_FACE_CAPTURE": "1"
       }
     }
   }

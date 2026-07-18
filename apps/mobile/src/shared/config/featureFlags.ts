@@ -7,7 +7,9 @@
 // 켜기: EXPO_PUBLIC_AURADIN_PRIMARY_SURFACE=1 (또는 true/on/yes).
 
 const AURADIN_PRIMARY_SURFACE_DEFAULT = false;
-const MAKEUP_JOURNEY_DEFAULT = false;
+// The calendar is part of the normal mobile navigation after the feature merge.
+// Production can still explicitly disable it through the EAS profile (`0`).
+const MAKEUP_JOURNEY_DEFAULT = true;
 
 const TRUTHY_FLAG_VALUES = new Set(['1', 'true', 'on', 'yes']);
 const FALSY_FLAG_VALUES = new Set(['0', 'false', 'off', 'no']);
@@ -42,8 +44,8 @@ export function isAuradinPrimarySurfaceEnabled(): boolean {
 }
 
 /**
- * 서버 선배포 뒤 앱 표면만 즉시 되돌릴 수 있는 메이크업 성장 롤아웃 스위치다.
- * 환경값이 없거나 잘못되면 숨겨져, 배포 경로가 달라도 롤아웃이 fail-closed다.
+ * 메이크업 성장 캘린더의 표시 스위치다.
+ * 병합 이후에는 일반 개발 실행에서 기본 노출하고, 긴급 롤백이나 별도 배포는 0/false로 명시해 숨긴다.
  */
 export function isMakeupJourneyEnabled(): boolean {
   return parseFeatureFlagValue(

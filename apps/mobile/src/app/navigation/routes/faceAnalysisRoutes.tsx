@@ -182,19 +182,19 @@ export function FaceCaptureRouteScreen({
           invalidateUnifiedFaceCapture({resetRetryAttempt: true});
           navigateMainTab(navigation, 'HomeTab');
         }}
-        onCaptureCommitted={(result, upload) => {
+        onCaptureCommitted={(result, upload, loadingStartedAtMs) => {
           if (!commitUnifiedFaceCapture(result, upload)) {
             return false;
           }
 
           navigation.replace(
-            'FaceCaptureConfirmation',
+            'FaceAnalysisLoading',
             route.params?.afterAnalysisRoute
               ? {
                   afterAnalysisRoute: route.params.afterAnalysisRoute,
-                  target: 'faceAnalysis',
+                  loadingStartedAtMs,
                 }
-              : {target: 'faceAnalysis'},
+              : {loadingStartedAtMs},
           );
           return true;
         }}
@@ -206,6 +206,20 @@ export function FaceCaptureRouteScreen({
           navigateMainTab(navigation, 'HomeTab');
         }}
         onRequestStarted={beginUnifiedFaceCapture}
+        renderProcessingOverlay={overlayProps => (
+          <DetailRouteChrome
+            routeName="FaceAnalysisLoading"
+            onBack={overlayProps.onBack}>
+            <FaceAnalysisLoadingScreen
+              analysisErrorMessage={overlayProps.analysisErrorMessage}
+              capturedPhotoUri={overlayProps.capturedPhotoUri}
+              isAnalysisReady={false}
+              onBack={overlayProps.onBack}
+              onRetry={overlayProps.onRetry}
+              progressStartedAtMs={overlayProps.loadingStartedAtMs}
+            />
+          </DetailRouteChrome>
+        )}
         request={unifiedCaptureRequest}
       />
     );
@@ -703,6 +717,7 @@ export function FaceAnalysisLoadingRouteScreen({
         onBack={() => navigateMainTab(navigation, 'HomeTab')}
         onComplete={handleAnalysisComplete}
         onRetry={handleRetryAnalysis}
+        progressStartedAtMs={route.params?.loadingStartedAtMs}
       />
     </DetailRouteChrome>
   );
