@@ -19,7 +19,7 @@ export function SwatchRow({ swatches, bad = false, selectedName, onPick }: Props
       {swatches.map(s => {
         const selected = selectedName === s.name;
         return (
-          <Pressable key={s.name} onPress={() => { Haptics.selectionAsync(); onPick(s); }}
+          <Pressable key={`${s.familyLabel ?? ''}-${s.name}`} onPress={() => { Haptics.selectionAsync(); onPick(s); }}
             style={{ flexBasis: '22%', flexGrow: 1, gap: 5 }}>
             <View style={{ height: 42, borderRadius: radius.sm, backgroundColor: s.color, overflow: 'hidden' }}>
               {bad && <BadSlash />}
@@ -36,7 +36,16 @@ export function SwatchRow({ swatches, bad = false, selectedName, onPick }: Props
                 }} />
               </>
             )}
-            <Text style={[font(10, '600'), { color: color.muted, textAlign: 'center' }]}>{s.name}</Text>
+            <View style={{ alignItems: 'center', minHeight: 34 }}>
+              <Text numberOfLines={1} style={[font(10, '700'), { color: color.ink, textAlign: 'center' }]}>
+                {s.name}
+              </Text>
+              {s.familyLabel ? (
+                <Text numberOfLines={1} style={[font(9, '500'), { color: color.faint, textAlign: 'center' }]}>
+                  {s.familyLabel}
+                </Text>
+              ) : null}
+            </View>
           </Pressable>
         );
       })}

@@ -11,7 +11,7 @@ import { SectionHeader } from '../visuals/SectionHeader';
 export function S6Impression({ data }: { data: S6Data }) {
   return (
     <RiseIn style={{ paddingTop: 30, paddingHorizontal: 20, gap: 12 }}>
-      <SectionHeader eyebrow={data.eyebrow} title={data.title} />
+      <SectionHeader eyebrow={data.eyebrow} title={data.title} sub={data.sub} />
       <RiseIn>
         <Card gap={15}>
           <ImpressionMap axes={data.axes} />

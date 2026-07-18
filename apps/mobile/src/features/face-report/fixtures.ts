@@ -23,12 +23,12 @@ export const demoReport: ReportData = {
   s2: {
     eyebrow: 'PROPORTION',
     title: '얼굴의 구획부터 볼게요',
-    sub: '사진 위 가늠선은 실제 측정 위치를 그대로 옮긴 거예요.',
+    sub: '세로 구획을 보면 얼굴에서 어느 부위가 상대적으로 강조되는지 알 수 있어요.',
     photo: { placeholderLabel: '얼굴 전체 정면 컷' },
     hairlineMissing: true,
     hairlineY: 0.16, browY: 0.38, noseBaseY: 0.64, chinY: 0.88,
-    lineLabels: { hairline: '이마선', brow: '미간', noseBase: '코밑', chin: '턱끝' },
-    hairlineMissingPill: '이마선 미확인',
+    lineLabels: { hairline: '헤어라인', brow: '미간', noseBase: '코밑', chin: '턱끝' },
+    hairlineMissingPill: '헤어라인 미확인',
     hairlineHatchHeight: 0.38,
     upperBandOk: { top: 0.16, height: 0.22 },
     bands: [
@@ -36,7 +36,7 @@ export const demoReport: ReportData = {
         key: 'upper', top: 0, height: 0.38, pillLabel: '상안부', pillY: 0.27, pillCentered: false,
         title: '상안부',
         desc: '이마 · 눈썹 · 눈 — 또렷한 눈매가 시작되는 구획이에요',
-        descMissing: '이마선 미확인으로 이번 회차에는 구획하지 못했어요 — 눈썹·눈 분석은 아래 카드에서 볼 수 있어요',
+        descMissing: '헤어라인 미확인으로 이번 회차에는 구획하지 못했어요 — 눈썹·눈 분석은 아래 카드에서 볼 수 있어요',
       },
       {
         key: 'mid', top: 0.38, height: 0.26, pillLabel: '중안부', pillY: 0.51, pillCentered: true, restingTint: true,
@@ -49,7 +49,7 @@ export const demoReport: ReportData = {
     ],
     missingNotice: {
       title: '헤어라인이 확인되지 않았어요',
-      body: '앞머리에 가려 이마선을 찾지 못해, 이번 보고서는 미간·코밑·턱끝 세 지점으로만 구획했어요.',
+      body: '앞머리에 가려 헤어라인을 찾지 못해, 이번 보고서는 미간·코밑·턱끝 세 지점으로만 구획했어요.',
       cta: '이마가 보이게 다시 찍기 ›',
     },
     viewCardLabel: '카드 보기 ›',
@@ -59,7 +59,7 @@ export const demoReport: ReportData = {
   s3: {
     eyebrow: 'FEATURES',
     title: '이목구비, 하나씩 설명할게요',
-    sub: '확대 사진과 스펙트럼의 마커는 실제 측정 결과가 정한 위치예요.',
+    sub: '눈매·눈썹·입술·턱선의 방향을 보면 전체 인상과 어울리는 메이크업 균형을 알 수 있어요.',
     cards: [
       {
         key: 'upper', regionChip: '상안부', regionTitle: '이마 · 눈썹 · 눈',
@@ -134,9 +134,41 @@ export const demoReport: ReportData = {
   s4: {
     eyebrow: 'PERSONAL COLOR',
     title: '색은 이렇게 어울려요',
+    sub: '피부와 이목구비의 색 관계를 보면 얼굴을 맑게 살리는 색을 찾을 수 있어요.',
     season: {
       headline: '여름 뮤트 중심, 겨울 브라이트에 걸쳐요',
-      blend: { dominantLabel: '여름 뮤트', secondaryLabel: '겨울 브라이트', dominantRatio: 0.75 },
+    },
+    toneProbabilities: [
+      {type: 'summer_muted', label: '여름 뮤트', ratio: 0.28},
+      {type: 'winter_bright', label: '겨울 브라이트', ratio: 0.2},
+      {type: 'summer_true', label: '여름 트루', ratio: 0.12},
+      {type: 'winter_true', label: '겨울 트루', ratio: 0.1},
+      {type: 'summer_light', label: '여름 라이트', ratio: 0.08},
+      {type: 'winter_deep', label: '겨울 딥', ratio: 0.06},
+      {type: 'spring_bright', label: '봄 브라이트', ratio: 0.05},
+      {type: 'autumn_muted', label: '가을 뮤트', ratio: 0.04},
+      {type: 'spring_light', label: '봄 라이트', ratio: 0.03},
+      {type: 'autumn_true', label: '가을 트루', ratio: 0.02},
+      {type: 'spring_true', label: '봄 트루', ratio: 0.01},
+      {type: 'autumn_deep', label: '가을 딥', ratio: 0.01},
+    ],
+    toneMap: {
+      caption: '12타입 prototype과의 가까움이에요. 굵은 영역이 현재 결과가 걸쳐 있는 톤 범위예요.',
+      area: {x: 0.12, y: 0.36, w: 0.82, h: 0.26},
+      points: [
+        {type: 'spring_light', label: '봄 라이트', x: 0.62, y: 0.22, weight: 0.03, active: false},
+        {type: 'spring_bright', label: '봄 브라이트', x: 0.78, y: 0.38, weight: 0.05, active: false},
+        {type: 'spring_true', label: '봄 트루', x: 0.68, y: 0.46, weight: 0.01, active: false},
+        {type: 'summer_light', label: '여름 라이트', x: 0.36, y: 0.22, weight: 0.08, active: false},
+        {type: 'summer_true', label: '여름 트루', x: 0.28, y: 0.44, weight: 0.12, active: true},
+        {type: 'summer_muted', label: '여름 뮤트', x: 0.2, y: 0.54, weight: 0.28, active: true},
+        {type: 'autumn_muted', label: '가을 뮤트', x: 0.28, y: 0.68, weight: 0.04, active: false},
+        {type: 'autumn_true', label: '가을 트루', x: 0.56, y: 0.68, weight: 0.02, active: false},
+        {type: 'autumn_deep', label: '가을 딥', x: 0.66, y: 0.84, weight: 0.01, active: false},
+        {type: 'winter_bright', label: '겨울 브라이트', x: 0.86, y: 0.54, weight: 0.2, active: true},
+        {type: 'winter_true', label: '겨울 트루', x: 0.76, y: 0.66, weight: 0.1, active: true},
+        {type: 'winter_deep', label: '겨울 딥', x: 0.8, y: 0.86, weight: 0.06, active: false},
+      ],
     },
     axes: [
       { leftLabel: '따뜻한 톤', rightLabel: '차가운 톤', axisLabel: '온도', state: { kind: 'point', position: 0.66 } },
@@ -171,17 +203,18 @@ export const demoReport: ReportData = {
         { name: '토마토 레드', color: '#D2472E' },
       ],
       initialSwatch: { name: '더스티 로즈', color: '#C98A9B', good: true },
-      disclaimer: '이 결과는 촬영 조명 기준의 상대 진단이에요. 조명이 크게 다르면 결과가 달라질 수 있어요.',
+      disclaimer: '촬영 조명 기준 상대 진단이에요. 조명이 다르면 결과가 달라질 수 있어요.',
     },
   },
 
   s5: {
     eyebrow: 'BODY TYPE',
     title: '체형은 설문으로 봤어요',
+    sub: '체형 특성을 알면 옷의 핏과 비율을 더 자연스럽게 고를 수 있어요.',
     silhouettePlaceholder: '실루엣\n일러스트\n(모래시계형)',
     silhouetteLabel: '실루엣 타입', silhouetteValue: '모래시계형',
     skeletonLabel: '골격 타입', skeletonValue: '웨이브',
-    surveyNote: '설문 기반 분석 · ', surveyLink: '다시 답하기',
+    surveyNote: '체형 설문 기반 · ', surveyLink: '다시 답하기',
     doTitle: '이렇게 입어보세요',
     doItems: [
       '허리선이 살아 있는 상의 — 실루엣의 곡선을 그대로 살려요',
@@ -198,6 +231,7 @@ export const demoReport: ReportData = {
   s6: {
     eyebrow: 'IMPRESSION',
     title: '모아 보면 이런 인상이에요',
+    sub: '이목구비와 윤곽을 함께 보면 얼굴에서 먼저 느껴지는 분위기를 알 수 있어요.',
     axes: [
       { key: 'softness', leftLabel: '부드러움', rightLabel: '또렷함', value: 0.3 },
       { key: 'vividness', leftLabel: '차분함', rightLabel: '화사함', value: -0.2 },
@@ -209,27 +243,9 @@ export const demoReport: ReportData = {
   s7: {
     eyebrow: 'STYLING',
     title: '같은 얼굴, 두 가지 방향',
-    noteParts: [
-      { text: '칩이 ' },
-      { text: '측정 근거', color: '#0E7DA8', bold: true },
-      { text: '면 내 측정 결과에서 나온 제안, ' },
-      { text: '아티스트 제안', color: '#5C7480', bold: true },
-      { text: '이면 업계 관행 기반이에요.' },
-    ],
-    naturalLabel: '내추럴', glamLabel: '글램',
-    mixZones: {
-      nearNatural: '지금 보기 — 내추럴에 가까움',
-      middle: '지금 보기 — 두 무드의 중간',
-      nearGlam: '지금 보기 — 글램에 가까움',
-    },
-    lookSummary: {
-      natural: { title: '결을 살린 은은한 정돈', desc: '블러셔는 볼 중앙에 둥글게, 아이 포인트는 거의 없이 — 슬라이더를 당기면 포인트가 이동해요' },
-      glam: { title: '대비를 한 단계 끌어올리는 무드', desc: '블러셔가 광대 위쪽으로 올라가고, 눈꼬리에 포인트가 실려요 — 립도 베리 쪽으로 깊어져요' },
-    },
     naturalCard: {
       chip: '내추럴', variant: 'natural',
       title: '결을 살린 은은한 정돈',
-      sub: '가진 곡선과 저대비 톤을 그대로 살리는 방향이에요.',
       rows: [
         { category: '베이스', title: '얇게 여러 번, 세미매트 피니시', evidence: 'measured', evidenceLabel: '측정 근거', why: '왜 나에게 — 은은한 저대비 톤이라 두꺼운 커버보다 결이 보이는 베이스가 어울려요' },
         { category: '눈썹', title: '결 정리 후 빈 곳만 채우기', evidence: 'measured', evidenceLabel: '측정 근거', why: '왜 나에게 — 눈썹 산이 완만해서 각을 만들지 않는 편이 자연스러워요' },
@@ -241,7 +257,6 @@ export const demoReport: ReportData = {
     glamCard: {
       chip: '글램', variant: 'glam',
       title: '대비를 한 단계 끌어올리는 무드',
-      sub: '저대비 얼굴에 포인트를 더해 또렷함을 키우는 방향이에요.',
       rows: [
         { category: '베이스', title: '광 피니시, 컨투어는 최소로', evidence: 'artist', evidenceLabel: '아티스트 제안', why: '아티스트들은 대비를 색 대신 광으로 올리는 방식을 권해요' },
         { category: '눈썹', title: '꼬리를 살짝 길게', evidence: 'measured', evidenceLabel: '측정 근거', why: '왜 나에게 — 눈꼬리 방향과 나란해져 시선이 눈가에 모여요' },

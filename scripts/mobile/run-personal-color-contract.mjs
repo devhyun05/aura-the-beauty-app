@@ -31,6 +31,7 @@ const tests = [
   'colorMath.test.ts',
   'axisModel.test.ts',
   'toneClassifier.test.ts',
+  'palette.test.ts',
   'engine.test.ts',
   'colorLightingGreenlight.test.ts',
   'illuminationCorrection.test.ts',

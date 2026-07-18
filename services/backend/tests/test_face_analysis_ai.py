@@ -297,6 +297,9 @@ async def test_consulting_never_sends_image() -> None:
   await FaceAnalysisAI(client).consult(profile={}, derived={}, perception={})
 
   assert client.calls[0]["source_image_bytes"] is None
+  developer_prompt = client.calls[0]["developer_prompt"]
+  assert "Keep face shape and vertical facial thirds as separate facts" in developer_prompt
+  assert "Never describe a dominant or elongated" in developer_prompt
 
 
 @pytest.mark.asyncio

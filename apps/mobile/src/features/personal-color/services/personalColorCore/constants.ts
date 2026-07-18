@@ -141,14 +141,14 @@ export const MC_GATE = {
 export const TYPE_LABEL_KO: Record<PersonalColor12Type, string> = {
   spring_light: '봄 라이트',
   spring_bright: '봄 브라이트',
-  spring_true: '봄 웜 트루',
+  spring_true: '봄 트루',
   summer_light: '여름 라이트',
-  summer_true: '여름 쿨 트루',
+  summer_true: '여름 트루',
   summer_muted: '여름 뮤트',
   autumn_muted: '가을 뮤트',
-  autumn_true: '가을 웜 트루',
+  autumn_true: '가을 트루',
   autumn_deep: '가을 딥',
   winter_bright: '겨울 브라이트',
-  winter_true: '겨울 쿨 트루',
+  winter_true: '겨울 트루',
   winter_deep: '겨울 딥',
 };

@@ -348,8 +348,7 @@ export function FaceCaptureTutorialScreen({
           rightSlot={
             <IconButton
               accessibilityLabel={closeButtonAccessibilityLabel}
-              onPress={handleClosePress}
-              variant="outlined">
+              onPress={handleClosePress}>
               <XIcon color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
             </IconButton>
           }

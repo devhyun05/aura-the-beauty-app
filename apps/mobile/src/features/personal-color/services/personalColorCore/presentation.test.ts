@@ -30,8 +30,8 @@ const coolLightClear = {
 
 expectEqual(
   getMeasuredPersonalColorSummary(summerTrue).personalColor,
-  '여름 쿨 트루',
-  'true label has no parentheses',
+  '여름 트루',
+  'true label stays season-consistent',
 );
 expectEqual(
   getMeasuredPersonalColorSummary(summerTrue).toneSummary,

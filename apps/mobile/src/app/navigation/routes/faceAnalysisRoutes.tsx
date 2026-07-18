@@ -844,6 +844,8 @@ export function FaceAnalysisReportPreviewRouteScreen({
   const {
     selectedFaceAnalysisReport,
     selectedFaceCapture,
+    selectedFace3DProfile,
+    selectedFaceGeometry2d,
     selectedFaceVerticalThirds,
     selectedPersonalColor,
     setSelectedFaceAnalysisReport,
@@ -881,6 +883,8 @@ export function FaceAnalysisReportPreviewRouteScreen({
       onDeleteReport={handleDeleteReport}
       onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
       onRetake={() => navigation.navigate('FaceCapture')}
+      face3d={route.params?.reportId ? null : selectedFace3DProfile}
+      faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
       personalColor={route.params?.reportId ? null : selectedPersonalColor}
       reportId={route.params?.reportId ?? null}
       sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}

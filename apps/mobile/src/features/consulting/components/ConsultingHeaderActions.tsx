@@ -165,7 +165,6 @@ function ConsultingHeaderActionButton({
       onPress={onPress}
       style={({pressed}) => [
         styles.actionButton,
-        variant === 'hero' ? styles.heroActionButton : null,
         pressed ? styles.pressed : null,
       ]}>
       <Icon
@@ -185,10 +184,6 @@ function ConsultingHeaderActionButton({
 const styles = StyleSheet.create({
   actionButton: {
     alignItems: 'center',
-    backgroundColor: consultingColors.surface,
-    borderColor: consultingColors.borderSoft,
-    borderRadius: consultingRadius.pill,
-    borderWidth: 1,
     height: 40,
     justifyContent: 'center',
     position: 'relative',
@@ -216,10 +211,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 15,
     textAlign: 'center',
-  },
-  heroActionButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.58)',
-    borderColor: 'rgba(255, 255, 255, 0.78)',
   },
   pressed: {
     opacity: 0.82,
