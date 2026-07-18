@@ -18,6 +18,7 @@ export function isAppNotificationType(
 }
 
 export type AppNotificationData = {
+  deliverySource?: string;
   notificationId?: string;
   reportId?: string;
   route?: string;
@@ -63,6 +64,7 @@ export function normalizeAppNotificationData(
   };
 
   return {
+    deliverySource: readString('deliverySource', 'delivery_source'),
     notificationId: readString('notificationId', 'notification_id'),
     reportId: readString('reportId', 'report_id'),
     route: readString('route'),
