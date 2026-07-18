@@ -5,6 +5,7 @@ import {useAuthSession} from '../../../features/auth';
 import {
   AccountDeletionScreen,
   AccountManagementScreen,
+  APP_SETTINGS_BACKGROUND_COLOR,
   AppSettingsScreen,
   type AccountDeletionReasonId,
   clearLocalAccountData,
@@ -20,6 +21,9 @@ export function AppSettingsRouteScreen({
 }: RootScreenProps<'AppSettings'>) {
   return (
     <DetailRouteChrome
+      backgroundColor={APP_SETTINGS_BACKGROUND_COLOR}
+      headerBackgroundColor="rgba(248, 245, 239, 0.94)"
+      headerBorderColor="rgba(100, 116, 99, 0.06)"
       routeName="AppSettings"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       <AppSettingsScreen

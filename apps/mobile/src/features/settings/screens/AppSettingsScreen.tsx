@@ -8,8 +8,23 @@ import {
 } from 'lucide-react-native';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 
-import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, spacing, typography} from '../../../shared/theme';
 import {AppScreen, ChevronRightIcon} from '../../../shared/ui';
+
+export const APP_SETTINGS_BACKGROUND_COLOR = '#F8F5EF';
+
+const settingsPalette = {
+  card: 'rgba(255, 255, 255, 0.96)',
+  cardBorder: 'rgba(100, 116, 99, 0.08)',
+  chevron: '#C5BEB3',
+  description: '#8A8278',
+  divider: '#EEEAE4',
+  icon: '#667B66',
+  iconSurface: '#EAF0E7',
+  pressed: 'rgba(102, 123, 102, 0.06)',
+  sectionLabel: '#9A9186',
+  shadow: '#786D5F',
+} as const;
 
 type AppSettingsScreenProps = {
   onPressAccountManagement: () => void;
@@ -47,17 +62,17 @@ function SettingsItem({
       onPress={onPress}
       style={({pressed}) => [
         styles.item,
-        !isLast ? styles.itemDivider : null,
         pressed ? styles.itemPressed : null,
       ]}>
       <View style={styles.iconFrame}>
-        <Icon color={colors.textPrimary} size={iconSize.sm} strokeWidth={1.8} />
+        <Icon color={settingsPalette.icon} size={iconSize.md} strokeWidth={1.8} />
       </View>
       <View style={styles.itemCopy}>
         <Text style={styles.itemLabel}>{label}</Text>
         <Text style={styles.itemDescription}>{description}</Text>
       </View>
-      <ChevronRightIcon color={colors.textTertiary} size={iconSize.sm} />
+      <ChevronRightIcon color={settingsPalette.chevron} size={iconSize.sm} />
+      {!isLast ? <View pointerEvents="none" style={styles.itemDivider} /> : null}
     </Pressable>
   );
 }
@@ -70,51 +85,57 @@ export function AppSettingsScreen({
 }: AppSettingsScreenProps) {
   return (
     <AppScreen
+      backgroundColor={APP_SETTINGS_BACKGROUND_COLOR}
       bottomPadding="safeArea"
-      contentGap={spacing.xxl}
+      contentGap={spacing.xl}
+      horizontalPadding={spacing.lg}
       topPadding="belowShellHeader">
       <View style={styles.intro}>
-        <Text style={styles.introTitle}>계정과 앱 설정을 관리해요</Text>
+        <Text style={styles.introTitle}>나에게 맞는 AURA</Text>
         <Text style={styles.introDescription}>
-          프로필, 빠른 실행, 계정과 고객 지원 메뉴를 확인할 수 있어요.
+          프로필과 앱 사용 환경을 한곳에서 편하게 관리해요.
         </Text>
       </View>
 
-      <View>
-        <Text style={styles.sectionLabel}>일반</Text>
-        <View style={styles.list}>
-          <SettingsItem
-            description="이름과 프로필 정보"
-            icon={UserRound}
-            label={APP_SETTINGS_LABELS.profile}
-            onPress={onPressProfile}
-          />
-          <SettingsItem
-            description="홈 화면의 빠른 실행 버튼"
-            icon={Settings2}
-            label={APP_SETTINGS_LABELS.quickActions}
-            onPress={onPressQuickActions}
-          />
-          <SettingsItem
-            description="자주 묻는 질문과 앱 사용 안내"
-            icon={CircleHelp}
-            isLast
-            label={APP_SETTINGS_LABELS.faq}
-            onPress={onPressFaq}
-          />
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>개인 설정</Text>
+        <View style={styles.cardShadow}>
+          <View style={styles.list}>
+            <SettingsItem
+              description="이름과 프로필 정보를 편집해요."
+              icon={UserRound}
+              label={APP_SETTINGS_LABELS.profile}
+              onPress={onPressProfile}
+            />
+            <SettingsItem
+              description="자주 쓰는 기능을 홈에서 더 빠르게 열어요."
+              icon={Settings2}
+              isLast
+              label={APP_SETTINGS_LABELS.quickActions}
+              onPress={onPressQuickActions}
+            />
+          </View>
         </View>
       </View>
 
-      <View>
-        <Text style={styles.sectionLabel}>계정</Text>
-        <View style={styles.list}>
-          <SettingsItem
-            description="로그아웃과 회원 탈퇴"
-            icon={UserCog}
-            isLast
-            label={APP_SETTINGS_LABELS.accountManagement}
-            onPress={onPressAccountManagement}
-          />
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>계정 및 도움말</Text>
+        <View style={styles.cardShadow}>
+          <View style={styles.list}>
+            <SettingsItem
+              description="로그아웃과 회원 탈퇴를 관리해요."
+              icon={UserCog}
+              label={APP_SETTINGS_LABELS.accountManagement}
+              onPress={onPressAccountManagement}
+            />
+            <SettingsItem
+              description="자주 묻는 질문과 앱 사용 안내를 확인해요."
+              icon={CircleHelp}
+              isLast
+              label={APP_SETTINGS_LABELS.faq}
+              onPress={onPressFaq}
+            />
+          </View>
         </View>
       </View>
     </AppScreen>
@@ -122,72 +143,93 @@ export function AppSettingsScreen({
 }
 
 const styles = StyleSheet.create({
+  cardShadow: {
+    backgroundColor: settingsPalette.card,
+    borderRadius: 26,
+    elevation: 3,
+    shadowColor: settingsPalette.shadow,
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 0.07,
+    shadowRadius: 20,
+  },
   iconFrame: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.sm,
-    height: 38,
+    backgroundColor: settingsPalette.iconSurface,
+    borderRadius: 16,
+    height: 52,
     justifyContent: 'center',
-    width: 38,
+    width: 52,
   },
   intro: {
-    gap: spacing.xs,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   introDescription: {
-    color: colors.textSecondary,
+    color: settingsPalette.description,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
   },
   introTitle: {
     color: colors.textPrimary,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.xl,
   },
   item: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: spacing.md,
-    minHeight: 74,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    gap: spacing.lg,
+    minHeight: 86,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   itemCopy: {
     flex: 1,
-    gap: 2,
+    gap: spacing.xs,
     minWidth: 0,
   },
   itemDescription: {
-    color: colors.textSecondary,
+    color: settingsPalette.description,
     fontFamily: typography.fontFamily.regular,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
+    fontSize: 13,
+    lineHeight: 18,
   },
   itemDivider: {
-    borderBottomColor: colors.divider,
-    borderBottomWidth: 1,
+    backgroundColor: settingsPalette.divider,
+    bottom: 0,
+    height: StyleSheet.hairlineWidth,
+    left: 84,
+    position: 'absolute',
+    right: 0,
   },
   itemLabel: {
     color: colors.textPrimary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.md,
-    lineHeight: typography.lineHeight.md,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 17,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: 22,
   },
   itemPressed: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: settingsPalette.pressed,
   },
   list: {
-    borderColor: colors.borderStrong,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: settingsPalette.card,
+    borderColor: settingsPalette.cardBorder,
+    borderRadius: 26,
+    borderWidth: 1,
     overflow: 'hidden',
   },
+  section: {
+    gap: spacing.sm,
+  },
   sectionLabel: {
-    color: colors.textSecondary,
+    color: settingsPalette.sectionLabel,
     fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-    marginBottom: spacing.sm,
+    fontSize: 13,
+    letterSpacing: 0.2,
+    lineHeight: 18,
+    paddingHorizontal: spacing.xs,
   },
 });
