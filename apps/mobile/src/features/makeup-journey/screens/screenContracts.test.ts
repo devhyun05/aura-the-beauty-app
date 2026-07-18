@@ -192,11 +192,17 @@ expect(
   monthScreen.includes('nextMidnight.setHours(24, 0, 0, 100)') &&
     monthScreen.includes('syncTodayDate();') &&
     monthPickerSheet.includes('날짜로 빠르게 이동') &&
-    monthPickerSheet.includes('const YEARS_PER_PAGE = 10') &&
-    monthPickerSheet.includes('MONTHS.map') &&
+    monthPickerSheet.includes("JOURNEY_MONTH_PICKER_MODE = 'wheel'") &&
+    monthPickerSheet.includes("JOURNEY_MONTH_PICKER_COLUMNS = ['year', 'month']") &&
+    monthPickerSheet.includes('accessibilityLabel="달력 연도 선택"') &&
+    monthPickerSheet.includes('accessibilityLabel="달력 월 선택"') &&
+    monthPickerSheet.includes('suffix="년"') &&
+    monthPickerSheet.includes('suffix="월"') &&
+    !monthPickerSheet.includes('suffix="일"') &&
+    monthPickerSheet.includes('onPress={confirmSelection}') &&
     monthPickerSheet.includes('이번 달로 이동') &&
     monthScreen.includes('setMonthPickerVisible(true)'),
-  'calendar refreshes its real local today marker and opens a direct year-month picker',
+  'calendar refreshes its real local today marker and opens a year-month wheel picker without a day column',
 );
 expect(
   monthSummary.includes('이번 달 성장 리포트') &&

@@ -26,6 +26,45 @@ export const editableProfileFieldIds: EditableProfileFieldId[] = [
 ];
 
 export const profileEditWeekLabels = ['일', '월', '화', '수', '목', '금', '토'];
+export const profileBirthDateMinimumYear = 1900;
+
+export function createBirthDateYearOptions(
+  maximumYear = new Date().getFullYear(),
+) {
+  if (maximumYear < profileBirthDateMinimumYear) {
+    return [];
+  }
+
+  return Array.from(
+    {length: maximumYear - profileBirthDateMinimumYear + 1},
+    (_, index) => maximumYear - index,
+  );
+}
+
+export function createBirthDateMonthOptions(
+  year: number,
+  maximumDate = new Date(),
+) {
+  const monthCount =
+    year === maximumDate.getFullYear() ? maximumDate.getMonth() + 1 : 12;
+
+  return Array.from({length: monthCount}, (_, index) => index + 1);
+}
+
+export function createBirthDateDayOptions(
+  year: number,
+  month: number,
+  maximumDate = new Date(),
+) {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const dayCount =
+    year === maximumDate.getFullYear() &&
+    month === maximumDate.getMonth() + 1
+      ? Math.min(daysInMonth, maximumDate.getDate())
+      : daysInMonth;
+
+  return Array.from({length: dayCount}, (_, index) => index + 1);
+}
 
 export function isEditableProfileFieldId(id: string): id is EditableProfileFieldId {
   return editableProfileFieldIds.includes(id as EditableProfileFieldId);

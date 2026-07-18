@@ -40,6 +40,7 @@ import {DetailRouteChrome} from '../detailHeaderChrome';
 import type {AppScreenTopPadding} from '../../../shared/ui/AppScreen';
 import {colors, iconSize} from '../../../shared/theme';
 import {
+  getConsultingHistoryBackAction,
   navigateMainTab,
   type RootNavigation,
   type RootScreenProps,
@@ -481,13 +482,27 @@ export function ConsultingSummaryRouteScreen({
 
 export function ConsultingHistoryRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'ConsultingHistory'>) {
   const {getAuthToken} = useAuthSession();
+  const handleBack = () => {
+    const action = getConsultingHistoryBackAction(
+      route.params?.returnTo,
+      navigation.canGoBack(),
+    );
+
+    if (action.kind === 'goBack') {
+      navigation.goBack();
+      return;
+    }
+
+    navigateMainTab(navigation, action.screen);
+  };
 
   return (
     <DetailRouteChrome
       routeName="ConsultingHistory"
-      onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+      onBack={handleBack}>
       <ConsultingHistoryScreen
         authToken={getAuthToken()}
         onPressBookAgain={record =>

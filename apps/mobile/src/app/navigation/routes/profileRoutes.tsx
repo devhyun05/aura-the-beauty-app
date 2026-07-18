@@ -65,35 +65,14 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
       routeName="ProfileTab"
       wrapContentInScreen={false}>
       <ProfileScreen
-        onPressFaceAnalysisReport={reportId =>
-          rootNavigation?.navigate('FaceAnalysisReportDetail', {
-            reportId,
-            returnTo: 'profile',
-          })
-        }
         onPressFaceAnalysisReportsList={() =>
           rootNavigation?.navigate('FaceAnalysisReportsList')
-        }
-        onPressMakeupRecommendationReport={reportId =>
-          rootNavigation?.navigate('MakeupRecommendation', {reportId})
         }
         onPressMakeupRecommendationReportsList={() =>
           rootNavigation?.navigate('MakeupRecommendation', {view: 'history'})
         }
-        onPressMakeupExtractionReport={reportId =>
-          rootNavigation?.navigate('ReferenceMakeupExtractionResult', {
-            reportId,
-            returnTo: 'profile',
-          })
-        }
         onPressMakeupExtractionReportsList={() =>
           rootNavigation?.navigate('MakeupRecipeList')
-        }
-        onPressMakeupFeedbackReport={reportId =>
-          rootNavigation?.navigate('MakeupFeedbackResult', {
-            reportId,
-            returnTo: 'profile',
-          })
         }
         onPressMakeupFeedbackReportsList={() =>
           rootNavigation?.navigate('MakeupFeedbackResultsList')
@@ -108,7 +87,7 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
         }
         onPressProfileEdit={() => rootNavigation?.navigate('ProfileEdit')}
         onPressConsultingHistory={() =>
-          rootNavigation?.navigate('ConsultingHistory')
+          rootNavigation?.navigate('ConsultingHistory', {returnTo: 'profile'})
         }
         onPressConsultingReview={record =>
           rootNavigation?.navigate('ConsultingReview', {
