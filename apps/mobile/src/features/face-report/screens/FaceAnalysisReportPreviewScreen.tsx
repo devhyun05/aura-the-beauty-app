@@ -135,6 +135,9 @@ export function FaceAnalysisReportPreviewScreen({
   // session path is wired, mirror the pattern above:
   // (useSessionMeasurements ? regionVisuals : null) ?? measurements?.regionVisuals ?? null.
   const effectiveRegionVisuals = measurements?.regionVisuals ?? null;
+  // S3 자기참조 축·서술의 결정론적 근거(저장된 2D 기하 실측치). 볼 때 계산되므로
+  // regionVisuals 크롭과 달리 재촬영 없이 리로드로 반영된다.
+  const effectiveGeometryMetrics = measurements?.faceGeometry2d?.metrics ?? null;
 
   const reportData = useMemo(() => {
     if (!report) {
@@ -148,10 +151,12 @@ export function FaceAnalysisReportPreviewScreen({
       bodyProfile,
       regionVisuals: effectiveRegionVisuals,
       gender: profileGender,
+      geometryMetrics: effectiveGeometryMetrics,
     });
   }, [
     bodyProfile,
     capturedPhotoUri,
+    effectiveGeometryMetrics,
     effectivePersonalColor,
     effectiveRegionVisuals,
     effectiveVerticalThirds,

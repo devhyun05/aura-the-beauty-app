@@ -52,6 +52,43 @@ function ratioPosition(r: number | null): number | null {
  * mid/jaw는 현재 자기참조-비교로 정직하게 세울 축이 마땅치 않아 비운다(내러티브가 담당).
  * 절대강도(큰 눈/긴 코)는 기준이 없어 만들지 않는다.
  */
+// 축 하나를 자기참조 서술 구절로. 중앙 근처(±0.08)는 '균형/비슷'으로, 치우치면 방향.
+// 절대강도('많이')는 쓰지 않는다 — '수평보다 올라간', 'A가 B보다 도톰'까지만.
+function axisPhrase(a: FeatureAxis): string | null {
+  if (a.position == null) return null;
+  const p = a.position;
+  const hi = p > 0.58;
+  const lo = p < 0.42;
+  switch (a.key) {
+    case 'canthalTilt':
+      return hi ? '눈꼬리가 수평보다 올라가 또렷한 인상이에요.'
+        : lo ? '눈꼬리가 수평보다 내려가 부드러운 인상이에요.'
+        : '눈꼬리가 수평에 가까워 균형 잡혀 있어요.';
+    case 'browSlope':
+      return hi ? '눈썹은 꼬리가 올라간 흐름이에요.'
+        : lo ? '눈썹은 완만하게 내려온 흐름이에요.'
+        : '눈썹은 수평에 가까운 흐름이에요.';
+    case 'lipThickness':
+      return hi ? '아랫입술이 윗입술보다 도톰해요.'
+        : lo ? '윗입술이 아랫입술보다 도톰해요.'
+        : '위아래 입술 두께가 비슷해요.';
+    default:
+      return null;
+  }
+}
+
+// 부위 축들을 자기참조 서술(최대 2문장)로. 판정 보류 축은 건너뛴다. 없으면 빈 문자열.
+export function describeRegionAxes(axes: FeatureAxis[]): string {
+  const phrases: string[] = [];
+  for (const a of axes) {
+    const phrase = axisPhrase(a);
+    if (phrase) {
+      phrases.push(phrase);
+    }
+  }
+  return phrases.slice(0, 2).join(' ');
+}
+
 export function buildRegionFeatureAxes(m: FaceGeometryMetrics): RegionFeatureAxes {
   const canthal = meanOrNull(metricValue(m, 'canthalTiltLeftDeg'), metricValue(m, 'canthalTiltRightDeg'));
   const brow = meanOrNull(metricValue(m, 'browSlopeLeftDeg'), metricValue(m, 'browSlopeRightDeg'));

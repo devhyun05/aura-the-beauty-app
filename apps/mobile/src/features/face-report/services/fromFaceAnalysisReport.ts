@@ -27,6 +27,8 @@ import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
 import {TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
 import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
+import {buildRegionFeatureAxes, describeRegionAxes} from '../reportFeatureAxes';
+import type {FaceGeometryMetrics} from '../../face-geometry/types';
 import type {AxisName, ColorFamily, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
 import {analyzeBody} from '../../ar/stencil/src/composer/bodyProfile';
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
@@ -58,6 +60,8 @@ export type FaceReportAdapterInput = {
   // 사용자 프로필 성별('남성'|'여성'|'선택 안 함'|null) — 길이비 참고선(S2)·
   // 체형 문구(S5) 성별 분기에 쓰인다. 측정이 아니라 프로필 값.
   gender?: string | null;
+  // 2D 얼굴 기하 실측치 — S3 자기참조 축·서술의 결정론적 근거. 없으면 축은 판정 보류.
+  geometryMetrics?: FaceGeometryMetrics | null;
 };
 
 function resolveHeroUri(report: FaceAnalysisReport, heroImageUri?: string): string | undefined {
@@ -432,10 +436,14 @@ function buildS3(
   regionNotes: FaceAnalysisRegionNotes | undefined,
   photo: S1Data['photo'],
   regionVisuals: RegionVisuals | null,
+  geometryMetrics: FaceGeometryMetrics | null,
 ): S3Data | null {
   if (!regionNotes) {
     return null;
   }
+
+  // 자기참조 축(위치=실측 결정론적). 지표 없으면 null → 각 축 판정 보류/미표시.
+  const regionAxes = geometryMetrics ? buildRegionFeatureAxes(geometryMetrics) : null;
 
   const cards = (['upper', 'mid', 'lower', 'jaw'] as const).map(key => {
     const meta = S3_REGION_META[key];
@@ -479,14 +487,24 @@ function buildS3(
       regionTitle: meta.title,
       ...visual,
       guideLabelX: meta.guideLabelX,
-      axes: [],
       ...(() => {
+        const featAxes = regionAxes ? regionAxes[key] : [];
+        // 측정된 축만 렌더(위치=실측). 지표 없는 축은 조용히 생략 — 허위 강도 대신 침묵.
+        const axes = featAxes.flatMap(a =>
+          a.position == null
+            ? []
+            : [{leftLabel: a.leftLabel, rightLabel: a.rightLabel, state: {kind: 'point' as const, position: a.position}}],
+        );
+        // 측정 기반 자기참조 서술이 있으면 insight로(정직·구체), 없으면 Bedrock insight 폴백.
+        const narrative = describeRegionAxes(featAxes);
         const note = normalizeRegionNote(regionNotes[key]);
+        const insight = narrative || note.insight;
         return {
-          insight: note.insight,
-          evidence: note.evidence,
+          axes,
+          insight,
+          evidence: narrative ? '' : note.evidence, // 서술 있으면 근거 중복 제거
           recommendation: note.recommendation,
-          paragraph: note.insight, // 폴백/구컨슈머 호환
+          paragraph: insight,
         };
       })(),
     };
@@ -585,7 +603,7 @@ function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined): S7Data | n
 }
 
 export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterInput): ReportData {
-  const {report, bodyProfile, personalColor, verticalThirds, regionVisuals, gender} = input;
+  const {report, bodyProfile, personalColor, verticalThirds, regionVisuals, gender, geometryMetrics} = input;
   const heroUri = resolveHeroUri(report, input.heroImageUri);
   const featurePhoto: S1Data['photo'] = heroUri
     ? {uri: heroUri, placeholderLabel: '얼굴 확대 컷'}
@@ -595,7 +613,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
     s1: buildS1(report, heroUri, personalColor ?? null),
     s2: buildS2(verticalThirds, gender),
-    s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null),
+    s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null, geometryMetrics ?? null),
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile),
     s6: buildS6(report.regionNotes, report.impressionNotes),

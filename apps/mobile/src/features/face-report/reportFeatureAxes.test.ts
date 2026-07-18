@@ -1,4 +1,4 @@
-import {buildRegionFeatureAxes} from './reportFeatureAxes';
+import {buildRegionFeatureAxes, describeRegionAxes} from './reportFeatureAxes';
 import {FACE_GEOMETRY_METRIC_KEYS} from '../face-geometry/types';
 import type {FaceGeometryMetrics} from '../face-geometry/types';
 
@@ -51,6 +51,19 @@ function metrics(overrides: Record<string, number>): FaceGeometryMetrics {
   const a = buildRegionFeatureAxes(metrics({canthalTiltLeftDeg: 18}));
   const c = a.upper.find(x => x.key === 'canthalTilt')!;
   assert(c.position != null && c.position >= 0.99, 'one-side +18deg -> ~1.0');
+}
+
+// describeRegionAxes — 자기참조 서술('남들 대비'·'많이' 없음), 보류 축은 건너뜀
+{
+  const upper = buildRegionFeatureAxes(metrics({canthalTiltLeftDeg: 12, canthalTiltRightDeg: 12})).upper;
+  const s = describeRegionAxes(upper);
+  assert(s.includes('눈꼬리') && s.includes('올라'), 'raised canthal narrated');
+  assert(!s.includes('평균') && !s.includes('많이'), 'no population/intensity wording');
+  // 모두 보류면 빈 문자열
+  assert(describeRegionAxes(buildRegionFeatureAxes(metrics({})).upper) === '', 'all withheld -> empty narrative');
+  // 입술: 아랫입술 도톰(ratio 0.5) 서술
+  const lower = buildRegionFeatureAxes(metrics({lipThicknessRatio: 0.5})).lower;
+  assert(describeRegionAxes(lower).includes('아랫입술이 윗입술보다 도톰'), 'lower lip thicker narrated');
 }
 
 // eslint-disable-next-line no-console
