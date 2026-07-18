@@ -102,6 +102,8 @@ ANALYSIS_MEDIA_LIST_SELECT = (
   " #- '{result,faceAnalysisV2,perception}'"
   " #- '{result,faceAnalysisV2,consulting}') as detail_payload"
 )
+# NOTE(M5): result.stylingLooks/beautyGuide 추가 제거는 getFaceAnalysisReports
+# 소비자 8곳이 목록 리포트에서 이 필드를 읽지 않음을 전수 확인한 뒤에만 한다.
 
 
 def decode_json_object(value: object) -> dict:
@@ -1048,7 +1050,8 @@ async def retry_analysis_job_stage(
 @router.get("/reports")
 async def list_analysis_reports(
   with_recommended_makeups: bool = Query(False, alias="withRecommendedMakeups"),
-  limit: int | None = Query(None, ge=1, le=200),
+  # 무제한 전량 반환 방지: 미지정 시 최근 50건(무한 스크롤 전까지의 안전 상한).
+  limit: int = Query(50, ge=1, le=200),
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
 ) -> dict:
@@ -1091,9 +1094,8 @@ async def list_analysis_reports(
     order by r.created_at desc
   """
 
-  if limit is not None:
-    values.append(limit)
-    query += f" limit ${len(values)}"
+  values.append(limit)
+  query += f" limit ${len(values)}"
 
   reports = await db.fetch(
     query,

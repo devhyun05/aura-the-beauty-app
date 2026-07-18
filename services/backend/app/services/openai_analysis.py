@@ -925,6 +925,10 @@ MAKEUP_RECOMMENDATION_OUTPUT_SCHEMA = {
 class OpenAIAnalysisService:
   def __init__(self, settings: Settings) -> None:
     self.settings = settings
+    # boto3 client는 생성 비용(서비스 모델 로딩·엔드포인트 리졸브)이 커서
+    # 인스턴스 수명 동안 재사용한다(설정 불변 전제, boto3 client는 thread-safe).
+    self._s3_client_cache: Any = None
+    self._bedrock_runtime_client_cache: Any = None
 
   def _client(self):
     if OpenAI is None:
@@ -946,6 +950,9 @@ class OpenAIAnalysisService:
     )
 
   def _s3_client(self):
+    if self._s3_client_cache is not None:
+      return self._s3_client_cache
+
     client_kwargs = {
       "region_name": self.settings.aws_region,
       "config": Config(
@@ -963,9 +970,13 @@ class OpenAIAnalysisService:
         },
       )
 
-    return boto3.client("s3", **client_kwargs)
+    self._s3_client_cache = boto3.client("s3", **client_kwargs)
+    return self._s3_client_cache
 
   def _bedrock_runtime_client(self):
+    if self._bedrock_runtime_client_cache is not None:
+      return self._bedrock_runtime_client_cache
+
     client_kwargs = {
       "region_name": self.settings.effective_bedrock_analysis_region,
       "config": Config(
@@ -983,7 +994,11 @@ class OpenAIAnalysisService:
         },
       )
 
-    return boto3.client("bedrock-runtime", **client_kwargs)
+    self._bedrock_runtime_client_cache = boto3.client(
+      "bedrock-runtime",
+      **client_kwargs,
+    )
+    return self._bedrock_runtime_client_cache
   def _extract_remote_image_url(self, payload: dict[str, Any]) -> str | None:
     bucket = payload.get("bucket")
     object_key = payload.get("objectKey") or payload.get("object_key")

@@ -181,7 +181,8 @@ type GetFaceAnalysisReportsOptions = {
 
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ANALYSIS_REPORT_POLL_INTERVAL_MS = 5000;
+// 고정 5초 대신 5→8→13초 백오프: 서버 분석이 길어질수록 폴링 밀도를 낮춘다.
+const ANALYSIS_REPORT_POLL_INTERVALS_MS = [5000, 8000, 13000];
 const ANALYSIS_REPORT_POLL_TIMEOUT_MS = 240000;
 
 function isUuid(value: string | null | undefined): value is string {
@@ -563,20 +564,47 @@ function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
   );
 }
 
-function delay(ms: number): Promise<void> {
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise(resolve => {
-    setTimeout(resolve, ms);
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      resolve();
+    };
+    const timeoutId = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, {once: true});
   });
+}
+
+function abortedAnalysisWait(job: BackendAnalysisJob): BackendApiError {
+  return new BackendApiError(
+    '얼굴 분석 대기를 중단했어요.',
+    499,
+    'ANALYSIS_WAIT_ABORTED',
+    {jobId: job.id ?? null},
+  );
 }
 
 async function waitForCompleteAnalysisReport(
   initialJob: BackendAnalysisJob,
   capture: FaceAnalysisCaptureInput | null | undefined,
   startedAt: number,
+  // 화면 이탈 시 최대 240초짜리 폴링이 백그라운드에 매달리지 않게 하는 중단 신호.
+  signal?: AbortSignal,
 ): Promise<FaceAnalysisReport> {
   let currentJob = initialJob;
+  let pollAttempt = 0;
 
   while (true) {
+    if (signal?.aborted) {
+      throw abortedAnalysisWait(currentJob);
+    }
     const generatedImageCount = getGeneratedMakeupImageCount(currentJob);
     const imageGenerationStatus = getImageGenerationStatus(currentJob);
     const recommendedCount = getRecommendedMakeupCount(currentJob);
@@ -628,17 +656,30 @@ async function waitForCompleteAnalysisReport(
       );
     }
 
+    const nextPollMs =
+      ANALYSIS_REPORT_POLL_INTERVALS_MS[
+        Math.min(pollAttempt, ANALYSIS_REPORT_POLL_INTERVALS_MS.length - 1)
+      ];
+    pollAttempt += 1;
+
     console.info('[aura:analysis] analysis-report:wait-images', {
       elapsedMs,
       generatedImageCount,
       imageGenerationStatus,
       jobId: currentJob.id,
-      nextPollMs: ANALYSIS_REPORT_POLL_INTERVAL_MS,
+      nextPollMs,
       recommendedCount,
       status: currentJob.status ?? null,
     });
 
-    await delay(Math.min(ANALYSIS_REPORT_POLL_INTERVAL_MS, ANALYSIS_REPORT_POLL_TIMEOUT_MS - elapsedMs));
+    await delay(
+      Math.min(nextPollMs, ANALYSIS_REPORT_POLL_TIMEOUT_MS - elapsedMs),
+      signal,
+    );
+
+    if (signal?.aborted) {
+      throw abortedAnalysisWait(currentJob);
+    }
 
     const {report: nextJob} = await requestBackendJson<GetAnalysisReportResponse>(
       '/analysis/reports/' + currentJob.id,
@@ -892,6 +933,8 @@ export async function createFaceAnalysisReportFromCapture(
   faceGeometry2d?: FaceGeometryAnalysisPayload,
   onDeviceMeasurements?: FaceAnalysisOnDeviceMeasurementsInput,
   callbacks?: FaceAnalysisReportCallbacks,
+  // 호출 화면 이탈 시 폴링을 중단하기 위한 신호(없으면 기존 동작 유지).
+  signal?: AbortSignal,
 ): Promise<FaceAnalysisReport> {
   const startedAt = Date.now();
   const hasBackendApiBaseUrl = Boolean(getBackendApiBaseUrl());
@@ -992,5 +1035,5 @@ export async function createFaceAnalysisReportFromCapture(
     status: job.status ?? null,
   });
 
-  return waitForCompleteAnalysisReport(job, capture, startedAt);
+  return waitForCompleteAnalysisReport(job, capture, startedAt, signal);
 }
