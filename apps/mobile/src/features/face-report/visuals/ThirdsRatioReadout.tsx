@@ -2,7 +2,7 @@ import React from 'react';
 import {Text, View} from 'react-native';
 import {color, font, pct, radius} from '../reportTokens';
 import type {S2Data} from '../reportTypes';
-import {formatThirdsRatio, resolveFaceLengthBand} from '../reportFormat';
+import {describeThirdsInternally, formatThirdsRatio, resolveFaceLengthBand} from '../reportFormat';
 
 interface Props {
   ratio: NonNullable<S2Data['ratioNumbers']> | undefined;
@@ -15,6 +15,7 @@ export function ThirdsRatioReadout({ratio, faceLength}: Props) {
   // 길이비 밴드는 resolveFaceLengthBand가 같은 임계로 이미 '판정 보류' 처리한다.
   const lowConfidence = faceLength?.confidence != null && faceLength.confidence < 0.5;
   const r = ratio && !lowConfidence ? formatThirdsRatio(ratio) : null;
+  const selfDesc = ratio && !lowConfidence ? describeThirdsInternally(ratio) : null;
   const band = faceLength ? resolveFaceLengthBand(faceLength) : null;
 
   if (!r && !band) {
@@ -39,7 +40,10 @@ export function ThirdsRatioReadout({ratio, faceLength}: Props) {
               </View>
             ))}
           </View>
-          <Text style={[font(11, '400'), {color: color.faint, textAlign: 'center'}]}>{r.idealLabel}</Text>
+          {selfDesc && (
+            <Text style={[font(12.5, '600', 1.5), {color: color.body, textAlign: 'center'}]}>{selfDesc}</Text>
+          )}
+          <Text style={[font(10.5, '400', 1.4), {color: color.faint, textAlign: 'center'}]}>{r.contextLabel}</Text>
         </View>
       )}
       {band && band.kind === 'band' && (

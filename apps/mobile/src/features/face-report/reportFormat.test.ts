@@ -1,16 +1,25 @@
-import {formatSeasonConfidence, formatThirdsRatio, resolveFaceLengthBand} from './reportFormat';
+import {describeThirdsInternally, formatSeasonConfidence, formatThirdsRatio, resolveFaceLengthBand} from './reportFormat';
 
 function assert(cond: boolean, label: string): void {
   if (!cond) throw new Error(`FAIL: ${label}`);
 }
 
-// formatThirdsRatio — 소수 둘째자리, 이상 기준 병기
+// formatThirdsRatio — 소수 둘째자리, 정직화된 교육 맥락 라벨('이상 기준' 아님)
 {
   const v = formatThirdsRatio({upper: 1.05, middle: 1.0, lower: 0.95});
   assert(v.upperLabel === '1.05', 'upper 1.05');
   assert(v.middleLabel === '1.00', 'middle 1.00');
   assert(v.lowerLabel === '0.95', 'lower 0.95');
-  assert(v.idealLabel.includes('1 : 1 : 1'), 'ideal label has 1:1:1');
+  assert(v.contextLabel.includes('고전') && !v.contextLabel.includes('이상 기준'), 'context label educational, not ideal-target');
+}
+// describeThirdsInternally — 자기 내부 비교(중안부 기준)로 가장 두드러진 편차 서술
+{
+  const short = describeThirdsInternally({upper: 0.75, middle: 1.0, lower: 0.98});
+  assert(short.includes('상안부') && short.includes('25%') && short.includes('짧'), 'upper 25% shorter');
+  const balanced = describeThirdsInternally({upper: 1.02, middle: 1.0, lower: 0.98});
+  assert(balanced.includes('균형'), 'all within threshold -> balanced');
+  const longLower = describeThirdsInternally({upper: null, middle: 1.0, lower: 1.15});
+  assert(longLower.includes('하안부') && longLower.includes('15%') && longLower.includes('길'), 'null upper, lower 15% longer');
 }
 // formatThirdsRatio — 상안부 결측(헤어라인 미확인)은 대시
 {
