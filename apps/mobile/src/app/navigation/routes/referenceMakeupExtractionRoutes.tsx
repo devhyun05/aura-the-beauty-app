@@ -193,7 +193,10 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
         routeName="ReferenceMakeupExtractionUpload"
         onBack={handleClose}
         onClose={handleClose}>
-        <ReferenceMakeupExtractionAlbumUploadScreen onSelectPhoto={handleSelectAlbumPhoto} />
+        <ReferenceMakeupExtractionAlbumUploadScreen
+          onCancel={handleClose}
+          onSelectPhoto={handleSelectAlbumPhoto}
+        />
       </DetailRouteChrome>
     );
   }

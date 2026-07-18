@@ -27,6 +27,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 - (void)prepareHidden;
 - (void)prepareHiddenAndPauseWhenReady;
 - (void)handleUnityMessage:(NSString *)message;
+- (void)completeWarmupForReason:(NSString *)reason;
 - (UIView *)unityView;
 - (UIView *)unityViewForContainer:(UIView *)container;
 - (void)detachUnityView;
@@ -59,6 +60,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   __weak UIViewController *_reactRootViewController;
   BOOL _isReady;
   BOOL _hasCompletedWarmup;
+  BOOL _didScheduleWarmupDeadline;
   BOOL _isRunning;
   BOOL _isPresentingUnityView;
   BOOL _hasExplicitHiddenRunLease;
@@ -209,10 +211,13 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 - (void)handleUnityMessage:(NSString *)message
 {
   NSString *safeMessage = message ?: @"";
-  BOOL didCompleteWarmup =
+  BOOL didInitializeScene =
       [safeMessage containsString:@"\"type\":\"unity_initialized\""] ||
       [safeMessage containsString:@"unity_initialized"];
-  BOOL didBecomeReady = didCompleteWarmup ||
+  BOOL didReceiveFirstCameraFrame =
+      [safeMessage containsString:@"\"type\":\"unity_camera_frame_ready\""] ||
+      [safeMessage containsString:@"unity_camera_frame_ready"];
+  BOOL didBecomeReady = didInitializeScene || didReceiveFirstCameraFrame ||
       [safeMessage containsString:@"\"type\":\"ready\""];
 
   NSString *runtimeMode = nil;
@@ -236,10 +241,20 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
       self->_isReady = YES;
     }
 
-    if (didCompleteWarmup) {
-      self->_hasCompletedWarmup = YES;
-      self->_pauseWhenReadyIfHidden = NO;
-      [self reconcilePlayerPauseStateForReason:@"unity-warmup-complete" force:NO];
+    if (didReceiveFirstCameraFrame) {
+      [self completeWarmupForReason:@"unity-first-camera-frame"];
+    } else if (didInitializeScene && !self->_hasCompletedWarmup &&
+               !self->_didScheduleWarmupDeadline) {
+      // Do not pause at the old scene-only ready event. Give ARKit enough time
+      // to deliver a real camera frame so Release capture entry is genuinely
+      // warm. Permission/session failures are still bounded so a hidden Unity
+      // player can never run indefinitely.
+      self->_didScheduleWarmupDeadline = YES;
+      dispatch_after(
+          dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)),
+          dispatch_get_main_queue(), ^{
+            [self completeWarmupForReason:@"unity-camera-warmup-deadline"];
+          });
     }
 
     if (runtimeMode != nil && runtimeGeneration >= 0) {
@@ -265,6 +280,17 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
                                                         object:self
                                                       userInfo:@{@"message": safeMessage}];
   });
+}
+
+- (void)completeWarmupForReason:(NSString *)reason
+{
+  if (_hasCompletedWarmup) {
+    return;
+  }
+
+  _hasCompletedWarmup = YES;
+  _pauseWhenReadyIfHidden = NO;
+  [self reconcilePlayerPauseStateForReason:reason force:NO];
 }
 
 - (UIView *)unityView
@@ -935,8 +961,10 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     return;
   }
 
-  // 노티피케이션 콜백 안에서 윈도우 계층을 바로 바꾸지 않고 다음 runloop 틱에서
-  // 숨긴다 (UIKit 재진입 안전).
+  // Hide immediately so an offscreen Release warm-up cannot put even one
+  // Unity splash/black frame above React Native. Restoring the React window and
+  // view hierarchy remains deferred to avoid UIKit re-entrancy.
+  window.hidden = YES;
   dispatch_async(dispatch_get_main_queue(), ^{
     if (self->_isPresentingUnityView) {
       return;
