@@ -219,7 +219,7 @@ async def _deliver_notification(
     if is_expo_push_token(str(device.get("expo_push_token") or ""))
   ]
 
-  if not settings.push_notifications_enabled or not tokens:
+  if not settings.push_notifications_enabled:
     await db.execute(
       """
       update notification_outbox
@@ -230,7 +230,25 @@ async def _deliver_notification(
       where notification_id = $1
       """,
       notification_id,
-      "push-disabled" if not settings.push_notifications_enabled else "no-active-devices",
+      "push-disabled",
+    )
+    return
+
+  if not tokens:
+    # A development reinstall or APNs token rotation can temporarily leave a
+    # user without an active Expo token. Keep this item retryable so registering
+    # the refreshed token can deliver a recently completed report.
+    await db.execute(
+      """
+      update notification_outbox
+      set status = 'failed',
+          completed_at = null,
+          last_error = 'no-active-devices',
+          next_attempt_at = now() + interval '5 minutes',
+          updated_at = now()
+      where notification_id = $1
+      """,
+      notification_id,
     )
     return
 
@@ -300,6 +318,48 @@ async def _deliver_notification(
     status,
     "\n".join(errors)[:1000] if errors else None,
   )
+
+
+async def retry_recent_notifications_for_user(
+  db: Database,
+  settings: Settings,
+  *,
+  user_id: UUID,
+) -> None:
+  """Retry unread report pushes that previously had no registered device."""
+
+  if not settings.push_notifications_enabled:
+    return
+
+  try:
+    retryable = await db.fetch(
+      """
+      update notification_outbox outbox
+      set status = 'failed',
+          next_attempt_at = now(),
+          completed_at = null,
+          updated_at = now()
+      from app_notifications notification
+      where outbox.notification_id = notification.id
+        and notification.user_id = $1
+        and notification.read_at is null
+        and notification.created_at >= now() - interval '30 minutes'
+        and outbox.attempts < $2
+        and outbox.last_error = 'no-active-devices'
+        and outbox.status in ('completed', 'failed')
+      returning outbox.notification_id
+      """,
+      user_id,
+      MAX_PUSH_ATTEMPTS,
+    )
+    for row in retryable:
+      await _deliver_notification(db, settings, row["notification_id"])
+  except Exception:  # noqa: BLE001 - registration must remain successful.
+    logger.warning(
+      "[aura:notifications] recent-push-retry-failed userId=%s",
+      user_id,
+      exc_info=True,
+    )
 
 
 async def create_and_send_notification(

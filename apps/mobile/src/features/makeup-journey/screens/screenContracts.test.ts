@@ -195,7 +195,9 @@ expect(
 );
 expect(
   rootNavigator.includes('name="MakeupJourneyDayDetail"') &&
-    rootNavigator.includes('component={MakeupJourneyDayDetailRouteScreen}') &&
+    rootNavigator.includes(
+      'getComponent={() => loadMakeupJourneyRoutes().MakeupJourneyDayDetailRouteScreen}',
+    ) &&
     rootNavigator.includes('options={{gestureEnabled: false}}') &&
     detailScreen.includes('onFirstReportActiveChange(isFirstReportActive)') &&
     journeyRoutes.includes('onFirstReportActiveChange={setIsFirstReportActive}') &&

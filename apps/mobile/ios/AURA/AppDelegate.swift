@@ -78,7 +78,7 @@ class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
     let accent = splashView.viewWithTag(4102)
 
     UIView.animate(
-      withDuration: 0.62,
+      withDuration: 0.36,
       delay: 0,
       options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
     ) {
@@ -86,8 +86,8 @@ class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
     }
 
     UIView.animate(
-      withDuration: 0.5,
-      delay: 0.12,
+      withDuration: 0.28,
+      delay: 0.08,
       options: [.curveEaseOut, .beginFromCurrentState, .allowUserInteraction]
     ) {
       tagline?.alpha = 1
