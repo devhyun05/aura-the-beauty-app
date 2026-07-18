@@ -43,12 +43,20 @@
 - Run backend tests for touched routes/schema and mobile typecheck/tests for mobile changes.
 - Preserve user changes and never commit local signing or incidental native dependency edits.
 
+## Build Prerequisites (실기기 빌드 전 매번 확인)
+- `.env`는 gitignore라 브랜치 전환·재생성 시 사라진다. 빌드 전 `apps/mobile/.env`에 Cognito 블록이 있는지 확인할 것 — 없으면 로그인 화면에 `Missing Cognito domain. Set EXPO_PUBLIC_COGNITO_DOMAIN` 에러가 뜬다.
+- 필수 Cognito 키: `EXPO_PUBLIC_COGNITO_CLIENT_ID`, `EXPO_PUBLIC_COGNITO_DOMAIN`(`https://...auth.ap-northeast-2.amazoncognito.com`), `EXPO_PUBLIC_COGNITO_REGION`, `EXPO_PUBLIC_COGNITO_REDIRECT_URI=aiarmakeup://auth/callback`, `_SCOPES`, `_PROMPT`, `_GOOGLE_IDP`/`_KAKAO_IDP`/`_NAVER_IDP`. 값은 비밀이라 문서에 적지 않는다.
+- `EXPO_PUBLIC_API_BASE_URL`은 로컬 개발이면 현재 LAN IP(`http://<ip>:8000/api`), 배포 백엔드면 cloudfront. 둘을 섞지 말 것.
+- 빌드가 `The sandbox is not in sync with the Podfile.lock`로 실패하면 `npm run pods`(=`pod install`)를 먼저 돌려 샌드박스를 재동기화한 뒤 재빌드한다.
+- 디스크 여유가 부족하면(`No space left on device`) `~/Library/Developer/Xcode/DerivedData` 정리 후 재빌드. iOS 빌드는 DerivedData에 수 GB를 쓴다.
+- `.env`(`EXPO_PUBLIC_*`)를 바꾸면 네이티브 재빌드는 불필요하지만 실행 중인 Metro가 옛 값을 캐시하므로, 기존 Metro를 종료하고 `npm run start -- --clear`로 재시작해야 반영된다.
+
 ## Physical iPhone Verification (WiFi Only)
 - Never boot or use an iOS Simulator/emulator; runtime testing is physical-device only.
 - If iOS support is missing, install only the required combined iOS Platform Support in Xcode Components; do not use `xcodebuild -downloadPlatform iOS`.
 - Get the real UDID from `xcrun xctrace list devices | grep -v Simulator | grep iPhone`; `devicectl` UUID is not an xcodebuild UDID.
 - Confirm `xcrun devicectl list devices` shows the unlocked phone as `available`.
-- Local Debug signing edits in `apps/mobile/ios/AURA.xcodeproj/project.pbxproj` must never be committed.
+- Local Debug signing edits in `apps/mobile/ios/AURA.xcodeproj/project.pbxproj` must never be committed. This includes the local `DEVELOPMENT_TEAM` and the local `PRODUCT_BUNDLE_IDENTIFIER` (e.g. the personal-team `com.aurathebeautyapp.wei.mobile`) — never commit the bundle ID change. Also keep local-signing side effects out of commits: `AURA/AURA.entitlements` (applesignin/aps-environment removal), `Info.plist` key reordering, and `Podfile.lock` local Hermes checksum changes.
 - Build with the current LAN IP: `REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) npm run ios:face-capture-lab -- --device <UDID>`.
 - A locked-device launch failure after successful build means install succeeded; unlock and open manually instead of rebuilding.
 - Arm evidence capture before the user run; prefer Hermes/Metro logs over asking for a second measurement.

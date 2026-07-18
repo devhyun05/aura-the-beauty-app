@@ -121,6 +121,11 @@ class MakeupJourneySettingsUpdate(CamelModel):
 
 class MakeupJourneyNoteUpdate(CamelModel):
   content: str = Field(max_length=2000)
+  report_id: UUID | None = Field(default=None, alias="reportId")
+
+
+class MakeupJourneyScoreSelectionUpdate(CamelModel):
+  report_id: UUID = Field(alias="reportId")
 
 
 class MakeupJourneyMissionGenerate(CamelModel):
@@ -221,6 +226,7 @@ class MakeupJourneyCalendarDay(MakeupJourneyResponseModel):
   status: JourneyStatus
   first_score: int | None = Field(ge=0, le=100)
   latest_score: int | None = Field(ge=0, le=100)
+  representative_score: int | None = Field(ge=0, le=100)
   score_delta: int | None = Field(ge=-100, le=100)
   report_count: int = Field(ge=0)
   has_note: bool
@@ -250,6 +256,12 @@ class MakeupJourneyFeedbackDigest(MakeupJourneyResponseModel):
   next_action: str | None
 
 
+class MakeupJourneyNote(MakeupJourneyResponseModel):
+  content: str = Field(max_length=2000)
+  created_at: datetime
+  updated_at: datetime
+
+
 class MakeupJourneyReport(MakeupJourneyResponseModel):
   report_id: UUID
   score: int = Field(ge=0, le=100)
@@ -258,6 +270,8 @@ class MakeupJourneyReport(MakeupJourneyResponseModel):
   completed_at: datetime
   image_url: str | None
   goal_context: dict[str, Any]
+  feedback_digest: MakeupJourneyFeedbackDigest | None
+  note: MakeupJourneyNote | None
 
 
 class MakeupJourneyMission(MakeupJourneyResponseModel):
@@ -272,18 +286,14 @@ class MakeupJourneyMission(MakeupJourneyResponseModel):
   updated_at: datetime
 
 
-class MakeupJourneyNote(MakeupJourneyResponseModel):
-  content: str = Field(max_length=2000)
-  created_at: datetime
-  updated_at: datetime
-
-
 class MakeupJourneyDayResponseData(MakeupJourneyResponseModel):
   date: date
   goal_score: int | None = Field(ge=1, le=100)
   status: JourneyStatus
   first_score: int | None = Field(ge=0, le=100)
   latest_score: int | None = Field(ge=0, le=100)
+  representative_report_id: UUID | None
+  representative_score: int | None = Field(ge=0, le=100)
   score_delta: int | None = Field(ge=-100, le=100)
   report_count: int = Field(ge=0)
   feedback_digest: MakeupJourneyFeedbackDigest | None
@@ -314,6 +324,13 @@ class MakeupJourneyTrendResponseData(MakeupJourneyResponseModel):
 
 class MakeupJourneyNoteResponseData(MakeupJourneyResponseModel):
   note: MakeupJourneyNote | None
+
+
+class MakeupJourneyScoreSelectionResponseData(MakeupJourneyResponseModel):
+  date: date
+  report_id: UUID
+  score: int = Field(ge=0, le=100)
+  updated_at: datetime
 
 
 class MakeupJourneyMissionResponseData(MakeupJourneyResponseModel):
@@ -361,6 +378,12 @@ class MakeupJourneyTrendResponse(
 
 class MakeupJourneyNoteResponse(
   MakeupJourneySuccessResponse[MakeupJourneyNoteResponseData],
+):
+  pass
+
+
+class MakeupJourneyScoreSelectionResponse(
+  MakeupJourneySuccessResponse[MakeupJourneyScoreSelectionResponseData],
 ):
   pass
 

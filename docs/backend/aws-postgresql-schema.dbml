@@ -1369,12 +1369,27 @@ Table makeup_journey_day_notes {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
   entry_date date [not null]
+  report_id uuid [note: 'Nullable only for a date that has no feedback report; populated rows are report-specific']
   content text [not null, note: 'Maximum 2,000 characters']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (user_id, entry_date) [unique]
+    (user_id, entry_date, report_id) [unique, name: 'uq_makeup_journey_day_notes_report', note: 'PostgreSQL partial unique index where report_id is not null']
+    (user_id, entry_date) [unique, name: 'uq_makeup_journey_day_notes_empty_date', note: 'PostgreSQL partial unique index where report_id is null']
+  }
+}
+
+Table makeup_journey_day_score_selections {
+  user_id uuid [not null]
+  entry_date date [not null]
+  report_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, entry_date) [pk, name: 'pk_makeup_journey_day_score_selections']
+    report_id [name: 'idx_makeup_journey_day_score_selections_report']
   }
 }
 
@@ -2173,6 +2188,9 @@ Ref: makeup_feedback_reports.uploaded_media_id > media_assets.id
 Ref: makeup_feedback_reports.parent_feedback_report_id > makeup_feedback_reports.id [delete: cascade]
 Ref: makeup_journey_settings.user_id > users.id [delete: cascade]
 Ref: makeup_journey_day_notes.user_id > users.id [delete: cascade]
+Ref: makeup_journey_day_notes.report_id > makeup_feedback_reports.id [delete: cascade]
+Ref: makeup_journey_day_score_selections.user_id > users.id [delete: cascade]
+Ref: makeup_journey_day_score_selections.report_id > makeup_feedback_reports.id [delete: cascade]
 Ref: makeup_journey_missions.user_id > users.id [delete: cascade]
 
 Ref: user_push_devices.user_id > users.id

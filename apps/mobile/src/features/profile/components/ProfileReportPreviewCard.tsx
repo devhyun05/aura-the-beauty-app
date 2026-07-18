@@ -10,7 +10,7 @@ import type {ProfileReportPreview} from '../services/profileReportHub';
 type ProfileReportPreviewCardProps = {
   description: string;
   label: string;
-  onPressLatest?: () => void;
+  onPress?: () => void;
   preview: ProfileReportPreview | null;
   style?: StyleProp<ViewStyle>;
 };
@@ -18,7 +18,7 @@ type ProfileReportPreviewCardProps = {
 export function ProfileReportPreviewCard({
   description,
   label,
-  onPressLatest,
+  onPress,
   preview,
   style,
 }: ProfileReportPreviewCardProps) {
@@ -34,12 +34,11 @@ export function ProfileReportPreviewCard({
       </View>
 
       <Pressable
-        accessibilityLabel={
-          preview ? `${label} 최신 보고서 ${preview.title} 열기` : `${label} 보고서 없음`
-        }
-        accessibilityRole={preview ? 'button' : undefined}
-        disabled={!preview}
-        onPress={onPressLatest}
+        accessibilityHint="해당 종류의 보고서 목록으로 이동해요."
+        accessibilityLabel={`${label} 전체 목록 열기`}
+        accessibilityRole="button"
+        disabled={!onPress}
+        onPress={onPress}
         style={({pressed}) => [styles.preview, pressed && styles.pressed]}>
         <View style={styles.imageStack}>
           {preview?.hasMore ? (

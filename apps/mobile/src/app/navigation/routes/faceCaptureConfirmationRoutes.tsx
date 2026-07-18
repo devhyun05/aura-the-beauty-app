@@ -30,6 +30,9 @@ import {
   type RootScreenProps,
 } from './routeUtils';
 
+const loadMakeupPhotoPicker = () =>
+  require('../../../features/home/services/makeupPhotoPicker') as typeof import('../../../features/home/services/makeupPhotoPicker');
+
 type FaceCaptureConfirmationCopy = {
   confirmLabel: string;
   description: string;
@@ -285,6 +288,32 @@ export function FaceCaptureConfirmationRouteScreen({
       : null;
 
   const handleRetake = React.useCallback(async () => {
+    if (photoSource === 'gallery' && target === 'makeupFeedback') {
+      const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+      const selection = await pickMakeupFeedbackPhotoFromLibrary();
+      if (!selection) {
+        return;
+      }
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto(
+        applyMakeupFeedbackJourneyContext(
+          selection,
+          makeupFeedbackJourneyContext,
+        ),
+      );
+      return;
+    }
+
+    if (photoSource === 'gallery' && target === 'referenceMakeupExtraction') {
+      const {pickReferenceMakeupPhotoFromLibrary} = loadMakeupPhotoPicker();
+      const photo = await pickReferenceMakeupPhotoFromLibrary();
+      if (!photo) {
+        return;
+      }
+      setSelectedReferenceMakeupPhoto(photo);
+      return;
+    }
+
     const retakeRoute = getFaceCaptureConfirmationRetakeRoute({
       afterAnalysisRoute: route.params.afterAnalysisRoute,
       source: photoSource,

@@ -1378,11 +1378,20 @@ create table if not exists makeup_journey_day_notes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
   entry_date date not null,
+  report_id uuid,
   content text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint uq_makeup_journey_day_notes_user_date unique (user_id, entry_date),
   constraint chk_makeup_journey_day_note_length check (char_length(content) <= 2000)
+);
+
+create table if not exists makeup_journey_day_score_selections (
+  user_id uuid not null,
+  entry_date date not null,
+  report_id uuid not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint pk_makeup_journey_day_score_selections primary key (user_id, entry_date)
 );
 
 create table if not exists makeup_journey_missions (
@@ -2171,7 +2180,18 @@ alter table makeup_journey_settings
 alter table makeup_journey_day_notes
   drop constraint if exists fk_makeup_journey_day_notes_user,
   add constraint fk_makeup_journey_day_notes_user
-  foreign key (user_id) references users(id) on delete cascade;
+  foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_makeup_journey_day_notes_report,
+  add constraint fk_makeup_journey_day_notes_report
+  foreign key (report_id) references makeup_feedback_reports(id) on delete cascade;
+
+alter table makeup_journey_day_score_selections
+  drop constraint if exists fk_makeup_journey_day_score_selections_user,
+  add constraint fk_makeup_journey_day_score_selections_user
+  foreign key (user_id) references users(id) on delete cascade,
+  drop constraint if exists fk_makeup_journey_day_score_selections_report,
+  add constraint fk_makeup_journey_day_score_selections_report
+  foreign key (report_id) references makeup_feedback_reports(id) on delete cascade;
 
 alter table makeup_journey_missions
   drop constraint if exists fk_makeup_journey_missions_user,
@@ -2452,10 +2472,18 @@ create index if not exists idx_makeup_feedback_reports_user_entry_status_complet
 create index if not exists idx_makeup_feedback_reports_parent
   on makeup_feedback_reports (parent_feedback_report_id)
   where parent_feedback_report_id is not null;
+create unique index if not exists uq_makeup_journey_day_notes_report
+  on makeup_journey_day_notes (user_id, entry_date, report_id)
+  where report_id is not null;
+create unique index if not exists uq_makeup_journey_day_notes_empty_date
+  on makeup_journey_day_notes (user_id, entry_date)
+  where report_id is null;
 create index if not exists idx_makeup_journey_missions_user_date_order
   on makeup_journey_missions (user_id, entry_date, sort_order);
 create unique index if not exists uq_makeup_journey_missions_user_date_title_ci
   on makeup_journey_missions (user_id, entry_date, lower(title));
+create index if not exists idx_makeup_journey_day_score_selections_report
+  on makeup_journey_day_score_selections (report_id);
 create index if not exists idx_user_push_devices_user_enabled on user_push_devices (user_id, enabled, last_seen_at desc);
 create index if not exists idx_app_notifications_user_created on app_notifications (user_id, created_at desc);
 create index if not exists idx_app_notifications_user_unread on app_notifications (user_id, created_at desc) where read_at is null;

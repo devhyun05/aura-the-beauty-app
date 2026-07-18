@@ -115,7 +115,7 @@ export type RootStackParamList = {
   };
   ConsultingCall: {bookingId?: string; expertId: string; durationId: string};
   ConsultingSummary: {expertId: string; recordId?: string};
-  ConsultingHistory: undefined;
+  ConsultingHistory: {returnTo?: 'profile'} | undefined;
   ConsultingMessages: undefined;
   ConsultingNotifications: undefined;
   ConsultingConversation: {

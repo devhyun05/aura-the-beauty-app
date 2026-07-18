@@ -31,7 +31,11 @@ import type {MakeupLookPreview} from '../../../shared/types/profile';
 import type {MakeupArea} from '../../../shared/types/makeupGuide';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
-import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {
+  goBackToPreviousOrMainTab,
+  navigateMainTab,
+  type RootScreenProps,
+} from './routeUtils';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {
   buildMakeupFilterSavedLooks,
@@ -193,7 +197,10 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
         routeName="ReferenceMakeupExtractionUpload"
         onBack={handleClose}
         onClose={handleClose}>
-        <ReferenceMakeupExtractionAlbumUploadScreen onSelectPhoto={handleSelectAlbumPhoto} />
+        <ReferenceMakeupExtractionAlbumUploadScreen
+          onCancel={handleClose}
+          onSelectPhoto={handleSelectAlbumPhoto}
+        />
       </DetailRouteChrome>
     );
   }
@@ -315,7 +322,7 @@ export function ReferenceMakeupExtractionResultRouteScreen({
 
   const handleBack = () => {
     if (shouldReturnToProfile) {
-      navigateMainTab(navigation, 'ProfileTab');
+      goBackToPreviousOrMainTab(navigation, 'ProfileTab');
       return;
     }
 
@@ -594,7 +601,7 @@ export function MakeupRecipeListRouteScreen({
   return (
     <DetailRouteChrome
       routeName="MakeupRecipeList"
-      onBack={() => navigateMainTab(navigation, 'ProfileTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'ProfileTab')}>
       <MakeupRecipeListScreen
         error={loadError}
         isLoading={isLoading}

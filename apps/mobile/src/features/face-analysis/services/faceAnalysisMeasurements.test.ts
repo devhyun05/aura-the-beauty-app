@@ -200,6 +200,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
       isMixed: false,
       probabilities,
       season: 'autumn',
+      seasonScore: 0.51, // autumn_muted 0.41 + autumn_true 0.05 + autumn_deep 0.05
       secondary: 'autumn_true',
       tau: 0.4,
       top: 'autumn_muted',
@@ -386,6 +387,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
     1.1,
     'distances 12톤 키 역매핑',
   );
+  expectEqual(personalColor.reported.tone?.seasonScore, 0.51, 'F7: seasonScore roundtrip');
   expectEqual(personalColor.reported.regions[0]?.lab.L, 62.1, 'region lab roundtrip');
   expectEqual(personalColor.correctionStatus.applied, true, 'correction status');
   expectEqual(
@@ -399,6 +401,32 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
     undefined,
     'privacy 재부착 금지',
   );
+}
+
+// ── 2-0. F7/F8: legacy 저장분(season·seasonScore 부재) 폴백 ───────────────────
+// season 은 top 에서, seasonScore 는 probabilities 에서 유도해야 한다 — 종전 season
+// 폴백 'spring' 하드코딩은 top 이 autumn 이어도 season 을 봄으로 날조했다(F8).
+{
+  const payload = buildFaceAnalysisMeasurementsPayload({
+    captureId: 'cap-legacy',
+    face3d: null,
+    faceGeometry2d: null,
+    faceVerticalThirds: null,
+    personalColor: buildPersonalColorFixture(),
+  });
+  const camelized = simulateBackendCamelize(payload) as Record<string, unknown>;
+  const tone = ((camelized.personalColor as Record<string, unknown>).reported as Record<string, unknown>)
+    .tone as Record<string, unknown>;
+  delete tone.season;
+  delete tone.seasonScore;
+  const decoded = expectDefined(
+    parseFaceAnalysisMeasurements(camelized, {imageUrl: 'https://cdn/x.jpg'}),
+    'legacy fallback decode',
+  );
+  const legacyTone = expectDefined(decoded.personalColor?.reported.tone, 'legacy tone');
+  expectEqual(legacyTone.season, 'autumn', 'F8: season derived from top (not fabricated spring)');
+  const ss = legacyTone.seasonScore;
+  expectEqual(ss > 0.5 && ss < 0.52, true, `F7: seasonScore derived from probabilities (got ${ss})`);
 }
 
 // ── 2-1. Phase 1 validation-only 보정은 product payload 승격 금지 ─────────────

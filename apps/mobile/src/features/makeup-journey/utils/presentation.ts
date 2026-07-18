@@ -77,6 +77,17 @@ export function getJourneyStatusLabel(status: MakeupJourneyDayResponse['status']
   return '기록 없음';
 }
 
+export function getCappedJourneyGoalProgress(
+  score: number | null,
+  goalScore: number | null,
+): number {
+  if (score === null || goalScore === null || goalScore <= 0) {
+    return 0;
+  }
+
+  return Math.min(100, Math.max(0, Math.round((score / goalScore) * 100)));
+}
+
 export type JourneyDigestContent = {
   headline: string | null;
   strengths: string[];
@@ -89,8 +100,8 @@ export function getJourneyDigestContent(
 ): JourneyDigestContent {
   return {
     headline: digest.headline?.trim() || null,
-    strengths: digest.strengths.filter(Boolean).slice(0, 2),
-    improvements: digest.improvements.filter(Boolean).slice(0, 2),
+    strengths: digest.strengths.filter(Boolean),
+    improvements: digest.improvements.filter(Boolean),
     nextAction: digest.nextAction?.trim() || null,
   };
 }

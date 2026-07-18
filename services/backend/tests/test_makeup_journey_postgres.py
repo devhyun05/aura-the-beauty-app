@@ -17,6 +17,7 @@ from app.schemas.makeup_journey import (
   MakeupJourneyMissionCreate,
   MakeupJourneyMissionUpdate,
   MakeupJourneyNoteUpdate,
+  MakeupJourneyScoreSelectionUpdate,
 )
 
 
@@ -119,6 +120,22 @@ async def test_postgres_legacy_feedback_date_backfill_uses_kst_boundary(
     )
 
     await connection.execute(POST_SCHEMA_MIGRATIONS["schema.sql:makeup-journey-v1"])
+
+    note_id = await connection.fetchval(
+      """
+      insert into makeup_journey_day_notes (user_id, entry_date, report_id, content)
+      values ($1, '2026-07-18', null, '이관할 기존 메모')
+      returning id
+      """,
+      user_id,
+    )
+    await connection.execute(
+      POST_SCHEMA_MIGRATIONS["schema.sql:makeup-journey-report-notes-v1"],
+    )
+    assert await connection.fetchval(
+      "select report_id from makeup_journey_day_notes where id = $1",
+      note_id,
+    ) == midnight_report_id
 
     boundary_rows = await connection.fetch(
       "select id, entry_date from makeup_feedback_reports where id = any($1::uuid[]) order by id",
@@ -269,6 +286,7 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
         "status": "success",
         "firstScore": 70,
         "latestScore": 85,
+        "representativeScore": 85,
         "scoreDelta": 15,
         "reportCount": 2,
         "hasNote": False,
@@ -292,7 +310,44 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
       str(first_report_id),
       str(correction_report_id),
     ]
+    assert [report["feedbackDigest"]["reportId"] for report in day["data"]["reports"]] == [
+      str(first_report_id),
+      str(correction_report_id),
+    ]
     assert day["data"]["feedbackDigest"]["nextAction"] == "경계를 한 번 풀어보세요."
+
+    selection = await journey_api.update_makeup_journey_score_selection(
+      "2026-07-17",
+      MakeupJourneyScoreSelectionUpdate(reportId=first_report_id),
+      auth=object(),
+      db=db,
+    )
+    assert selection["data"]["reportId"] == str(first_report_id)
+    assert selection["data"]["score"] == 70
+    selected_calendar = await journey_api.get_makeup_journey_calendar(
+      "2026-07",
+      auth=object(),
+      db=db,
+    )
+    assert selected_calendar["data"]["days"][0]["latestScore"] == 85
+    assert selected_calendar["data"]["days"][0]["representativeScore"] == 70
+    assert selected_calendar["data"]["days"][0]["status"] == "failure"
+    selected_trend = await journey_api.get_makeup_journey_trends(
+      range_value="7d",
+      end_date="2026-07-17",
+      auth=object(),
+      db=db,
+    )
+    assert selected_trend["data"]["points"] == [
+      {"date": "2026-07-17", "score": 70, "status": "failure"},
+    ]
+    selected_day = await journey_api.get_makeup_journey_day(
+      "2026-07-17",
+      auth=object(),
+      db=db,
+    )
+    assert selected_day["data"]["representativeReportId"] == str(first_report_id)
+    assert selected_day["data"]["representativeScore"] == 70
 
     await connection.execute(
       "update makeup_journey_settings set goal_score = 90 where user_id = $1",
@@ -301,6 +356,7 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
     changed = await journey_api.get_makeup_journey_calendar("2026-07", auth=object(), db=db)
     assert changed["data"]["days"][0]["status"] == "failure"
     assert changed["data"]["days"][0]["latestScore"] == 85
+    assert changed["data"]["days"][0]["representativeScore"] == 70
     changed_trend = await journey_api.get_makeup_journey_trends(
       range_value="7d",
       end_date="2026-07-17",
@@ -308,19 +364,35 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
       db=db,
     )
     assert changed_trend["data"]["points"] == [
-      {"date": "2026-07-17", "score": 85, "status": "failure"},
+      {"date": "2026-07-17", "score": 70, "status": "failure"},
     ]
 
     note = await journey_api.update_makeup_journey_note(
       "2026-07-17",
-      MakeupJourneyNoteUpdate(content="  오늘의 기록  "),
+      MakeupJourneyNoteUpdate(content="  최초 기록 메모  ", reportId=first_report_id),
       auth=object(),
       db=db,
     )
-    assert note["data"]["note"]["content"] == "오늘의 기록"
+    assert note["data"]["note"]["content"] == "최초 기록 메모"
+    correction_note = await journey_api.update_makeup_journey_note(
+      "2026-07-17",
+      MakeupJourneyNoteUpdate(content="수정 기록 메모", reportId=correction_report_id),
+      auth=object(),
+      db=db,
+    )
+    assert correction_note["data"]["note"]["content"] == "수정 기록 메모"
+    day_with_notes = await journey_api.get_makeup_journey_day(
+      "2026-07-17",
+      auth=object(),
+      db=db,
+    )
+    assert [report["note"]["content"] for report in day_with_notes["data"]["reports"]] == [
+      "최초 기록 메모",
+      "수정 기록 메모",
+    ]
     deleted_note = await journey_api.update_makeup_journey_note(
       "2026-07-17",
-      MakeupJourneyNoteUpdate(content="  "),
+      MakeupJourneyNoteUpdate(content="  ", reportId=first_report_id),
       auth=object(),
       db=db,
     )
@@ -328,7 +400,11 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
     assert await connection.fetchval(
       "select count(*) from makeup_journey_day_notes where user_id = $1",
       user_id,
-    ) == 0
+    ) == 1
+    assert await connection.fetchval(
+      "select content from makeup_journey_day_notes where user_id = $1",
+      user_id,
+    ) == "수정 기록 메모"
 
     with pytest.raises(AppError) as foreign_update:
       await journey_api.update_makeup_journey_mission(
@@ -403,6 +479,10 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
     ) == 0
     assert await connection.fetchval(
       "select count(*) from makeup_journey_missions where user_id = $1",
+      user_id,
+    ) == 0
+    assert await connection.fetchval(
+      "select count(*) from makeup_journey_day_score_selections where user_id = $1",
       user_id,
     ) == 0
   finally:
@@ -528,9 +608,8 @@ async def test_postgres_day_detail_projects_historical_payloads_at_database_boun
       legacy_report_id,
       latest_report_id,
     ]
-    assert [row["feedback_payload"] for row in db.day_report_rows[:2]] == [None, None]
-    assert sum(row["feedback_payload"] is not None for row in db.day_report_rows) == 1
-    assert len(db.day_report_rows[-1]["feedback_payload"]) > len(private_blob)
+    assert all(row["feedback_payload"] is not None for row in db.day_report_rows)
+    assert all(len(row["feedback_payload"]) > len(private_blob) for row in db.day_report_rows)
 
     projected_contexts = [
       json.loads(row["goal_context"])
@@ -560,6 +639,11 @@ async def test_postgres_day_detail_projects_historical_payloads_at_database_boun
         "userGoalText": "레거시 최신 메이크업",
         "analysisGoalText": "또렷한 레거시 최신 메이크업",
       },
+    ]
+    assert [report["feedbackDigest"]["headline"] for report in day["data"]["reports"]] == [
+      "과거 결과는 digest 대상이 아니에요.",
+      "두 번째 과거 결과",
+      "최신 리포트만 한눈 요약합니다.",
     ]
     assert day["data"]["feedbackDigest"] == {
       "reportId": str(latest_report_id),
@@ -635,6 +719,7 @@ async def test_postgres_daily_score_tie_break_uses_report_uuid(
         "status": "success",
         "firstScore": 61,
         "latestScore": 89,
+        "representativeScore": 89,
         "scoreDelta": 28,
         "reportCount": 2,
         "hasNote": False,

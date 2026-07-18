@@ -1,7 +1,16 @@
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import {CalendarDays} from 'lucide-react-native';
-import {Modal, Pressable, StyleSheet, TextInput} from 'react-native';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View} from 'tamagui';
 
 import {
@@ -16,8 +25,6 @@ import {
   AppCard,
   AppHeader,
   AppScreen,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   IconButton,
   ImagePlaceholder,
   PencilIcon,
@@ -25,13 +32,15 @@ import {
 } from '../../../shared/ui';
 import {profileGenderOptions} from '../constants/profileEditOptions';
 import {
-  createCalendarCells,
+  createBirthDateDayOptions,
+  createBirthDateMonthOptions,
+  createBirthDateYearOptions,
+  formatDateValue,
   getProfileEditValidationMessage,
   getProfileFieldValue,
   isEditableProfileFieldId,
   parseDateValue,
-  profileEditWeekLabels,
-  startOfMonth,
+  profileBirthDateMinimumYear,
   type EditableProfileFieldId,
 } from '../services/profileEditModel';
 
@@ -57,6 +66,133 @@ const profileEditHeaderPresentation = {
 } as const;
 
 const PROFILE_AVATAR_IMAGE_QUALITY = 0.78;
+const BIRTH_DATE_WHEEL_ITEM_HEIGHT = 44;
+const BIRTH_DATE_WHEEL_VISIBLE_ITEM_COUNT = 5;
+const BIRTH_DATE_WHEEL_VERTICAL_PADDING =
+  (BIRTH_DATE_WHEEL_ITEM_HEIGHT * (BIRTH_DATE_WHEEL_VISIBLE_ITEM_COUNT - 1)) /
+  2;
+
+export const PROFILE_BIRTH_DATE_PICKER_MODE = 'wheel';
+
+type BirthDateWheelColumnProps = {
+  accessibilityLabel: string;
+  onChange: (value: number) => void;
+  options: readonly number[];
+  suffix: string;
+  value: number;
+};
+
+function BirthDateWheelColumn({
+  accessibilityLabel,
+  onChange,
+  options,
+  suffix,
+  value,
+}: BirthDateWheelColumnProps) {
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const scrollToValue = (nextValue: number, animated: boolean) => {
+    const nextIndex = options.indexOf(nextValue);
+
+    if (nextIndex >= 0) {
+      scrollViewRef.current?.scrollTo({
+        animated,
+        y: nextIndex * BIRTH_DATE_WHEEL_ITEM_HEIGHT,
+      });
+    }
+  };
+
+  useEffect(() => {
+    const animationFrame = requestAnimationFrame(() => {
+      scrollToValue(value, false);
+    });
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [options, value]);
+
+  const selectNearestValue = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    const nextIndex = Math.max(
+      0,
+      Math.min(
+        options.length - 1,
+        Math.round(
+          event.nativeEvent.contentOffset.y / BIRTH_DATE_WHEEL_ITEM_HEIGHT,
+        ),
+      ),
+    );
+    const nextValue = options[nextIndex];
+
+    if (nextValue !== undefined) {
+      if (nextValue !== value) {
+        onChange(nextValue);
+      }
+
+      const nextOffset = nextIndex * BIRTH_DATE_WHEEL_ITEM_HEIGHT;
+
+      if (Math.abs(event.nativeEvent.contentOffset.y - nextOffset) > 0.5) {
+        scrollViewRef.current?.scrollTo({animated: true, y: nextOffset});
+      }
+    }
+  };
+
+  const selectAfterDrag = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    const verticalVelocity = Math.abs(event.nativeEvent.velocity?.y ?? 0);
+
+    if (verticalVelocity < 0.05) {
+      selectNearestValue(event);
+    }
+  };
+
+  return (
+    <ScrollView
+      accessibilityLabel={accessibilityLabel}
+      bounces={false}
+      contentContainerStyle={styles.birthDateWheelColumnContent}
+      decelerationRate="fast"
+      disableIntervalMomentum
+      nestedScrollEnabled
+      onMomentumScrollEnd={selectNearestValue}
+      onScrollEndDrag={selectAfterDrag}
+      ref={scrollViewRef}
+      showsVerticalScrollIndicator={false}
+      snapToAlignment="start"
+      snapToInterval={BIRTH_DATE_WHEEL_ITEM_HEIGHT}
+      style={styles.birthDateWheelColumn}
+    >
+      {options.map((option) => {
+        const selected = option === value;
+
+        return (
+          <Pressable
+            accessibilityLabel={`${option}${suffix}`}
+            accessibilityRole="button"
+            accessibilityState={{selected}}
+            key={option}
+            onPress={() => {
+              onChange(option);
+              scrollToValue(option, true);
+            }}
+            style={styles.birthDateWheelItem}
+          >
+            <Text
+              style={[
+                styles.birthDateWheelItemText,
+                selected ? styles.birthDateWheelItemTextSelected : null,
+              ]}
+            >
+              {option}
+              {suffix}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
 
 export function getProfileEditHeaderPresentation() {
   return profileEditHeaderPresentation;
@@ -88,6 +224,7 @@ export function ProfileEditScreen({
   onBack,
   onLogout,
 }: ProfileEditScreenProps) {
+  const safeAreaInsets = useSafeAreaInsets();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [fields, setFields] = useState<ProfileEditField[]>([]);
   const [notice, setNotice] = useState('');
@@ -95,10 +232,44 @@ export function ProfileEditScreen({
   const [draftProfile, setDraftProfile] = useState<UserProfile | null>(null);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(() =>
-    startOfMonth(new Date()),
+  const today = useMemo(() => new Date(), []);
+  const maximumBirthYear = today.getFullYear();
+  const [isBirthDatePickerOpen, setIsBirthDatePickerOpen] = useState(false);
+  const [birthDatePickerYear, setBirthDatePickerYear] =
+    useState(maximumBirthYear);
+  const [birthDatePickerMonth, setBirthDatePickerMonth] = useState(
+    today.getMonth() + 1,
   );
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [birthDatePickerDay, setBirthDatePickerDay] = useState(today.getDate());
+  const birthDateYearOptions = useMemo(
+    () => createBirthDateYearOptions(maximumBirthYear),
+    [maximumBirthYear],
+  );
+  const birthDateMonthOptions = useMemo(
+    () => createBirthDateMonthOptions(birthDatePickerYear, today),
+    [birthDatePickerYear, today],
+  );
+  const birthDateDayOptions = useMemo(
+    () =>
+      createBirthDateDayOptions(
+        birthDatePickerYear,
+        birthDatePickerMonth,
+        today,
+      ),
+    [birthDatePickerMonth, birthDatePickerYear, today],
+  );
+
+  useEffect(() => {
+    if (!birthDateMonthOptions.includes(birthDatePickerMonth)) {
+      setBirthDatePickerMonth(birthDateMonthOptions.at(-1) ?? 1);
+    }
+  }, [birthDateMonthOptions, birthDatePickerMonth]);
+
+  useEffect(() => {
+    if (!birthDateDayOptions.includes(birthDatePickerDay)) {
+      setBirthDatePickerDay(birthDateDayOptions.at(-1) ?? 1);
+    }
+  }, [birthDateDayOptions, birthDatePickerDay]);
 
   useEffect(() => {
     let isMounted = true;
@@ -120,10 +291,6 @@ export function ProfileEditScreen({
   const editableFields = useMemo(
     () => fields.filter(isVisibleProfileEditField),
     [fields],
-  );
-  const calendarCells = useMemo(
-    () => createCalendarCells(calendarMonth),
-    [calendarMonth],
   );
   const validationMessages = useMemo(() => {
     if (!draftProfile) {
@@ -151,7 +318,6 @@ export function ProfileEditScreen({
     }
 
     setDraftProfile(profile);
-    setCalendarMonth(startOfMonth(parseDateValue(profile.birthDate)));
     setIsEditing(true);
     setNotice('');
   };
@@ -159,7 +325,7 @@ export function ProfileEditScreen({
   const cancelEditing = () => {
     setDraftProfile(null);
     setIsEditing(false);
-    setIsCalendarOpen(false);
+    setIsBirthDatePickerOpen(false);
     setNotice('');
   };
 
@@ -196,7 +362,7 @@ export function ProfileEditScreen({
     setFields(nextFields);
     setDraftProfile(null);
     setIsEditing(false);
-    setIsCalendarOpen(false);
+    setIsBirthDatePickerOpen(false);
 
     try {
       const savedProfile = await updateUserProfile(nextProfile);
@@ -269,27 +435,6 @@ export function ProfileEditScreen({
     }
   };
 
-  const moveCalendarMonth = (offset: number) => {
-    setCalendarMonth(
-      (currentMonth) =>
-        new Date(
-          currentMonth.getFullYear(),
-          currentMonth.getMonth() + offset,
-          1,
-        ),
-    );
-  };
-
-  const moveCalendarYear = (offset: number) => {
-    setCalendarMonth(
-      (currentMonth) =>
-        new Date(
-          currentMonth.getFullYear() + offset,
-          currentMonth.getMonth(),
-          1,
-        ),
-    );
-  };
   const getDisplayedFieldValue = (fieldId: VisibleEditableProfileFieldId) =>
     activeProfile ? getProfileFieldValue(activeProfile, fieldId) : '';
 
@@ -312,22 +457,53 @@ export function ProfileEditScreen({
   };
 
 
-  const openBirthDateCalendar = () => {
+  const openBirthDatePicker = () => {
     if (!draftProfile) {
       return;
     }
 
-    setCalendarMonth(startOfMonth(parseDateValue(draftProfile.birthDate)));
-    setIsCalendarOpen(true);
+    const parsedBirthDate = parseDateValue(draftProfile.birthDate);
+    const nextYear = Math.max(
+      profileBirthDateMinimumYear,
+      Math.min(maximumBirthYear, parsedBirthDate.getFullYear()),
+    );
+    const nextMonthOptions = createBirthDateMonthOptions(nextYear, today);
+    const nextMonth = Math.min(
+      parsedBirthDate.getMonth() + 1,
+      nextMonthOptions.at(-1) ?? 1,
+    );
+    const nextDayOptions = createBirthDateDayOptions(
+      nextYear,
+      nextMonth,
+      today,
+    );
+    const nextDay = Math.min(
+      parsedBirthDate.getDate(),
+      nextDayOptions.at(-1) ?? 1,
+    );
+
+    setBirthDatePickerYear(nextYear);
+    setBirthDatePickerMonth(nextMonth);
+    setBirthDatePickerDay(nextDay);
+    setIsBirthDatePickerOpen(true);
   };
 
-  const closeBirthDateCalendar = () => {
-    setIsCalendarOpen(false);
+  const closeBirthDatePicker = () => {
+    setIsBirthDatePickerOpen(false);
   };
 
-  const selectBirthDate = (nextValue: string) => {
-    updateDraftField('birthDate', nextValue);
-    setIsCalendarOpen(false);
+  const confirmBirthDatePicker = () => {
+    updateDraftField(
+      'birthDate',
+      formatDateValue(
+        new Date(
+          birthDatePickerYear,
+          birthDatePickerMonth - 1,
+          birthDatePickerDay,
+        ),
+      ),
+    );
+    closeBirthDatePicker();
   };
   const renderEditor = (fieldId: VisibleEditableProfileFieldId) => {
     const value = draftProfile ? getProfileFieldValue(draftProfile, fieldId) : '';
@@ -346,7 +522,7 @@ export function ProfileEditScreen({
         <Pressable
           accessibilityLabel="생년월일 선택"
           accessibilityRole="button"
-          onPress={openBirthDateCalendar}
+          onPress={openBirthDatePicker}
           style={styles.dateButton}
         >
           <Text
@@ -532,103 +708,90 @@ export function ProfileEditScreen({
           </View>
         </AppCard>
         <Modal
-          animationType="fade"
-          onRequestClose={closeBirthDateCalendar}
+          animationType="slide"
+          onRequestClose={closeBirthDatePicker}
           transparent
-          visible={isCalendarOpen}
+          visible={isBirthDatePickerOpen}
         >
-          <Pressable style={styles.calendarBackdrop} onPress={closeBirthDateCalendar}>
+          <View style={styles.birthDatePickerBackdrop}>
+            <Pressable
+              accessibilityLabel="생년월일 선택 취소"
+              accessibilityRole="button"
+              onPress={closeBirthDatePicker}
+              style={styles.birthDatePickerBackdropDismiss}
+            />
             <View
-              onStartShouldSetResponder={() => true}
-              style={styles.calendarModal}
+              style={[
+                styles.birthDatePickerSheet,
+                {
+                  paddingBottom: Math.max(
+                    spacing.xxl,
+                    safeAreaInsets.bottom + spacing.sm,
+                  ),
+                },
+              ]}
             >
-              <View style={styles.calendarModalHeader}>
-                <Text style={styles.calendarModalTitle}>생년월일 선택</Text>
+              <View style={styles.birthDatePickerHeader}>
                 <Pressable
-                  accessibilityLabel="생년월일 선택 닫기"
+                  accessibilityLabel="생년월일 선택 취소"
                   accessibilityRole="button"
-                  onPress={closeBirthDateCalendar}
-                  style={styles.closeCalendarButton}
+                  onPress={closeBirthDatePicker}
+                  style={styles.birthDatePickerHeaderAction}
                 >
-                  <Text style={styles.closeCalendarText}>닫기</Text>
+                  <Text style={styles.birthDatePickerCancelText}>취소</Text>
+                </Pressable>
+                <Text style={styles.birthDatePickerTitle}>생년월일 선택</Text>
+                <Pressable
+                  accessibilityLabel="생년월일 선택 완료"
+                  accessibilityRole="button"
+                  onPress={confirmBirthDatePicker}
+                  style={styles.birthDatePickerHeaderAction}
+                >
+                  <Text style={styles.birthDatePickerConfirmText}>완료</Text>
                 </Pressable>
               </View>
 
-              <View style={styles.calendarYearRow}>
-                <Pressable
-                  accessibilityLabel="이전 연도로 이동"
-                  accessibilityRole="button"
-                  onPress={() => moveCalendarYear(-1)}
-                  style={styles.yearButton}
-                >
-                  <Text style={styles.yearButtonText}>이전 해</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="다음 연도로 이동"
-                  accessibilityRole="button"
-                  onPress={() => moveCalendarYear(1)}
-                  style={styles.yearButton}
-                >
-                  <Text style={styles.yearButtonText}>다음 해</Text>
-                </Pressable>
+              <Text
+                accessibilityLiveRegion="polite"
+                style={styles.birthDatePickerSelectionText}
+              >
+                {birthDatePickerYear}년 {birthDatePickerMonth}월{' '}
+                {birthDatePickerDay}일
+              </Text>
+
+              <View style={styles.birthDateWheel}>
+                <View
+                  pointerEvents="none"
+                  style={styles.birthDateWheelSelectionIndicator}
+                />
+                <BirthDateWheelColumn
+                  accessibilityLabel="태어난 연도 선택"
+                  onChange={setBirthDatePickerYear}
+                  options={birthDateYearOptions}
+                  suffix="년"
+                  value={birthDatePickerYear}
+                />
+                <BirthDateWheelColumn
+                  accessibilityLabel="태어난 월 선택"
+                  onChange={setBirthDatePickerMonth}
+                  options={birthDateMonthOptions}
+                  suffix="월"
+                  value={birthDatePickerMonth}
+                />
+                <BirthDateWheelColumn
+                  accessibilityLabel="태어난 일 선택"
+                  onChange={setBirthDatePickerDay}
+                  options={birthDateDayOptions}
+                  suffix="일"
+                  value={birthDatePickerDay}
+                />
               </View>
 
-              <View style={styles.calendarHeader}>
-                <IconButton
-                  accessibilityLabel="이전 달"
-                  onPress={() => moveCalendarMonth(-1)}
-                  size={34}
-                >
-                  <ChevronLeftIcon />
-                </IconButton>
-                <Text style={styles.calendarTitle}>
-                  {calendarMonth.getFullYear()}년 {calendarMonth.getMonth() + 1}월
-                </Text>
-                <IconButton
-                  accessibilityLabel="다음 달"
-                  onPress={() => moveCalendarMonth(1)}
-                  size={34}
-                >
-                  <ChevronRightIcon />
-                </IconButton>
-              </View>
-
-              <View style={styles.weekRow}>
-                {profileEditWeekLabels.map((label) => (
-                  <Text key={label} style={styles.weekLabel}>
-                    {label}
-                  </Text>
-                ))}
-              </View>
-
-              <View style={styles.dayGrid}>
-                {calendarCells.map((cell) => {
-                  const selected = cell.value === (draftProfile?.birthDate ?? '');
-
-                  return (
-                    <Pressable
-                      accessibilityLabel={cell.day ? `${cell.value} 선택` : '빈 날짜'}
-                      accessibilityRole="button"
-                      disabled={!cell.day}
-                      key={cell.key}
-                      onPress={() => selectBirthDate(cell.value)}
-                      style={[styles.dayCell, selected ? styles.dayCellSelected : null]}
-                    >
-                      <Text
-                        style={[
-                          styles.dayText,
-                          !cell.day ? styles.dayTextMuted : null,
-                          selected ? styles.dayTextSelected : null,
-                        ]}
-                      >
-                        {cell.day ?? ''}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <Text style={styles.birthDatePickerGuide}>
+                각 항목을 위아래로 스크롤해 선택해 주세요.
+              </Text>
             </View>
-          </Pressable>
+          </View>
         </Modal>
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
       </AppScreen>
@@ -659,49 +822,112 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: 124,
   },
-  calendarHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  calendarBackdrop: {
-    alignItems: 'center',
+  birthDatePickerBackdrop: {
     backgroundColor: 'rgba(17, 17, 17, 0.34)',
     flex: 1,
-    justifyContent: 'center',
-    padding: spacing.xl,
+    justifyContent: 'flex-end',
   },
-  calendarModal: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    gap: spacing.md,
-    maxWidth: 360,
-    padding: spacing.lg,
-    width: '100%',
+  birthDatePickerBackdropDismiss: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
-  calendarModalHeader: {
+  birthDatePickerCancelText: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: typography.lineHeight.sm,
+  },
+  birthDatePickerConfirmText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  birthDatePickerGuide: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.regular,
+    lineHeight: typography.lineHeight.xs,
+    textAlign: 'center',
+  },
+  birthDatePickerHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  calendarModalTitle: {
+  birthDatePickerHeaderAction: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 52,
+  },
+  birthDatePickerSelectionText: {
+    color: colors.textPrimary,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.lg,
+    textAlign: 'center',
+  },
+  birthDatePickerSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    gap: spacing.md,
+    paddingBottom: spacing.xxl,
+    paddingHorizontal: spacing.screenX,
+    paddingTop: spacing.md,
+    width: '100%',
+  },
+  birthDatePickerTitle: {
     color: colors.textPrimary,
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.md,
   },
-  calendarTitle: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.semibold,
-    lineHeight: typography.lineHeight.md,
-  },
-  calendarYearRow: {
+  birthDateWheel: {
+    height: BIRTH_DATE_WHEEL_ITEM_HEIGHT * BIRTH_DATE_WHEEL_VISIBLE_ITEM_COUNT,
     flexDirection: 'row',
     gap: spacing.sm,
-    justifyContent: 'space-between',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  birthDateWheelColumn: {
+    flex: 1,
+    zIndex: 1,
+  },
+  birthDateWheelColumnContent: {
+    paddingVertical: BIRTH_DATE_WHEEL_VERTICAL_PADDING,
+  },
+  birthDateWheelItem: {
+    alignItems: 'center',
+    height: BIRTH_DATE_WHEEL_ITEM_HEIGHT,
+    justifyContent: 'center',
+  },
+  birthDateWheelItemText: {
+    color: colors.textTertiary,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.regular,
+    lineHeight: typography.lineHeight.md,
+  },
+  birthDateWheelItemTextSelected: {
+    color: colors.textPrimary,
+    fontWeight: typography.fontWeight.bold,
+  },
+  birthDateWheelSelectionIndicator: {
+    backgroundColor: colors.surfaceMuted,
+    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    borderRadius: radius.md,
+    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    height: BIRTH_DATE_WHEEL_ITEM_HEIGHT,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: BIRTH_DATE_WHEEL_VERTICAL_PADDING,
   },
   cancelButton: {
     alignItems: 'center',
@@ -717,32 +943,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
-  },
-  dayCell: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    height: 34,
-    justifyContent: 'center',
-    width: '14.285%',
-  },
-  dayCellSelected: {
-    backgroundColor: colors.blackSurface,
-  },
-  dayGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayText: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.sm,
-  },
-  dayTextMuted: {
-    color: colors.textTertiary,
-  },
-  dayTextSelected: {
-    color: colors.white,
   },
   dateButton: {
     alignItems: 'center',
@@ -779,21 +979,6 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.md,
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.md,
-  },
-  closeCalendarButton: {
-    alignItems: 'center',
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 34,
-    paddingHorizontal: spacing.md,
-  },
-  closeCalendarText: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.sm,
   },
   editorActionRow: {
     flexDirection: 'row',
@@ -972,32 +1157,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.regular,
-    lineHeight: typography.lineHeight.sm,
-  },
-  weekLabel: {
-    color: colors.textSecondary,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'center',
-    width: '14.285%',
-  },
-  weekRow: {
-    flexDirection: 'row',
-  },
-  yearButton: {
-    alignItems: 'center',
-    borderColor: colors.borderStrong,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 34,
-    paddingHorizontal: spacing.md,
-  },
-  yearButtonText: {
-    color: colors.textPrimary,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
 });

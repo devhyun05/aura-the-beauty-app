@@ -10,6 +10,7 @@ import {AppScreen} from '../../../shared/ui';
 import type {ReferenceMakeupPhoto} from '../types';
 
 type ReferenceMakeupExtractionAlbumUploadScreenProps = {
+  onCancel: () => void;
   onSelectPhoto: (photo: ReferenceMakeupPhoto) => void;
 };
 
@@ -37,17 +38,20 @@ function buildReferenceMakeupPhoto(asset: ImagePicker.ImagePickerAsset): Referen
 }
 
 export function ReferenceMakeupExtractionAlbumUploadScreen({
+  onCancel,
   onSelectPhoto,
 }: ReferenceMakeupExtractionAlbumUploadScreenProps) {
   const insets = useSafeAreaInsets();
   const hasAutoOpenedPickerRef = useRef(false);
   const isPickerOpenRef = useRef(false);
+  const onCancelRef = useRef(onCancel);
   const onSelectPhotoRef = useRef(onSelectPhoto);
   const [pickerState, setPickerState] = useState<PickerState>('opening');
 
   useEffect(() => {
+    onCancelRef.current = onCancel;
     onSelectPhotoRef.current = onSelectPhoto;
-  }, [onSelectPhoto]);
+  }, [onCancel, onSelectPhoto]);
 
   const openImagePicker = useCallback(async () => {
     if (isPickerOpenRef.current) {
@@ -70,7 +74,12 @@ export function ReferenceMakeupExtractionAlbumUploadScreen({
         mediaTypes: ['images'],
         quality: REFERENCE_MAKEUP_IMAGE_QUALITY,
       });
-      const pickedAsset = pickerResult.canceled ? null : pickerResult.assets[0];
+      if (pickerResult.canceled) {
+        onCancelRef.current();
+        return;
+      }
+
+      const pickedAsset = pickerResult.assets[0];
 
       if (!pickedAsset?.uri) {
         setPickerState('cancelled');

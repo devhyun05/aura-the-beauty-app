@@ -17,6 +17,10 @@ EXPECTED_RESPONSE_MODELS = {
   ("get", "/api/makeup-journey/calendar"): "MakeupJourneyCalendarResponse",
   ("get", "/api/makeup-journey/days/{entry_date}"): "MakeupJourneyDayResponse",
   ("get", "/api/makeup-journey/trends"): "MakeupJourneyTrendResponse",
+  (
+    "put",
+    "/api/makeup-journey/days/{entry_date}/score-selection",
+  ): "MakeupJourneyScoreSelectionResponse",
   ("put", "/api/makeup-journey/days/{entry_date}/note"): "MakeupJourneyNoteResponse",
   ("post", "/api/makeup-journey/days/{entry_date}/missions"): "MakeupJourneyMissionResponse",
   (
@@ -54,9 +58,18 @@ def test_openapi_response_components_are_required_nullable_and_camel_case() -> N
   assert "requiresOnboarding" in settings_data["properties"]
   assert "requires_onboarding" not in settings_data["properties"]
   assert "firstScore" in calendar_day["required"]
-  assert {"goalScore", "feedbackDigest", "scoreDelta"}.issubset(day_data["required"])
+  assert {"firstScore", "representativeScore"}.issubset(calendar_day["required"])
+  assert {
+    "goalScore",
+    "feedbackDigest",
+    "scoreDelta",
+    "representativeReportId",
+    "representativeScore",
+  }.issubset(day_data["required"])
   report_schema = components["MakeupJourneyReport"]
-  assert "imageUrl" in report_schema["required"]
+  assert {"imageUrl", "feedbackDigest", "note"}.issubset(report_schema["required"])
+  assert "reportId" in components["MakeupJourneyNoteUpdate"]["properties"]
+  assert "reportId" in components["MakeupJourneyScoreSelectionUpdate"]["required"]
   assert "missionId" in delete_data["properties"]
   assert "mission_id" not in delete_data["properties"]
   assert {"entryDate", "feedbackKind", "parentFeedbackReportId"}.issubset(
@@ -102,6 +115,7 @@ def test_response_models_validate_the_success_envelope_wire_shape() -> None:
           "status": "success",
           "first_score": 84,
           "latest_score": 84,
+          "representative_score": 84,
           "score_delta": 0,
           "report_count": 1,
           "has_note": False,

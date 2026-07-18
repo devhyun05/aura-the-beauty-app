@@ -20,6 +20,7 @@ const monthScreen = source('screens/MakeupJourneyScreen.tsx');
 const detailScreen = source('screens/MakeupJourneyDayDetailScreen.tsx');
 const trendScreen = source('screens/MakeupJourneyTrendScreen.tsx');
 const digestCard = source('components/JourneyFeedbackDigestCard.tsx');
+const missionCard = source('components/JourneyMissionCard.tsx');
 const reportPhotoGallery = source('components/JourneyReportPhotoGallery.tsx');
 const dayCell = source('components/JourneyDayCell.tsx');
 const calendarGrid = source('components/JourneyCalendarGrid.tsx');
@@ -27,6 +28,7 @@ const scoreChart = source('components/JourneyScoreChart.tsx');
 const settingsSheet = source('components/JourneySettingsSheet.tsx');
 const monthPickerSheet = source('components/JourneyMonthPickerSheet.tsx');
 const monthSummary = source('components/JourneyMonthSummary.tsx');
+const journeyService = source('services/makeupJourneyService.ts');
 const authSessionContext = readFileSync(
   join(
     process.cwd(),
@@ -53,6 +55,10 @@ const journeyRoutes = readFileSync(
     process.cwd(),
     'apps/mobile/src/app/navigation/routes/makeupJourneyRoutes.tsx',
   ),
+  'utf8',
+);
+const rootNavigator = readFileSync(
+  join(process.cwd(), 'apps/mobile/src/app/navigation/RootNavigator.tsx'),
   'utf8',
 );
 
@@ -127,15 +133,17 @@ expect(
 );
 
 const headerIndex = detailScreen.indexOf('\n      <DetailHeader');
-const scrollIndex = detailScreen.indexOf('\n      <ScrollView');
-expect(headerIndex >= 0 && scrollIndex > headerIndex, 'fixed detail header is outside and before ScrollView');
+const pagerIndex = detailScreen.indexOf('\n        <FlatList');
+expect(headerIndex >= 0 && pagerIndex > headerIndex, 'fixed detail header is outside and before the report pager');
 expect(
   detailScreen.match(/\n\s*<ScrollView\n/g)?.length === 1,
-  'day detail uses one vertical ScrollView',
+  'each report page reuses one vertical ScrollView implementation',
 );
 expect(
-  detailScreen.includes('dayScrollOffsets') && detailScreen.includes('scrollTo({animated: false'),
-  'day detail restores the session scroll offset',
+  detailScreen.includes('dayScrollOffsets') &&
+    detailScreen.includes('synchronizePageOffsets') &&
+    detailScreen.includes('instance.scrollTo({animated: false, y'),
+  'day detail restores and synchronizes the vertical offset across report pages',
 );
 expect(
   detailScreen.includes('keyboardShouldPersistTaps="handled"') &&
@@ -153,18 +161,50 @@ expect(
   'day detail moves one day backward or forward in place without a today boundary',
 );
 expect(
-  detailScreen.indexOf('<JourneyReportPhotoGallery') < detailScreen.indexOf('<DayOverview') &&
-    detailScreen.indexOf('<DayOverview') < detailScreen.indexOf('<JourneyFeedbackDigestCard') &&
+  detailScreen.indexOf('<JourneyReportPhotoGallery') < detailScreen.indexOf('<JourneyFeedbackDigestCard') &&
     detailScreen.indexOf('<JourneyFeedbackDigestCard') < detailScreen.indexOf('<CorrectionCard') &&
     detailScreen.indexOf('<CorrectionCard') < detailScreen.indexOf('<JourneyMissionCard') &&
     detailScreen.indexOf('<JourneyMissionCard') < detailScreen.indexOf('<JourneyNoteCard'),
   'day detail keeps the photo-first summary and correction-first action order',
 );
 expect(
-  reportPhotoGallery.includes('source={{uri: report.imageUrl}}') &&
+  reportPhotoGallery.includes('source={{uri: report.imageUrl') &&
     reportPhotoGallery.includes('onOpenReport(report.reportId)') &&
+    reportPhotoGallery.includes('화면 어디서든 좌우로 밀어 이전·다음 기록을 볼 수 있어요.') &&
+    !reportPhotoGallery.includes('<ScrollView') &&
     reportPhotoGallery.includes('사진을 불러오지 못했어요.'),
-  'day detail renders every owned report image with loading failure and report navigation',
+  'the photo card renders only the active report while the parent page owns horizontal paging',
+);
+expect(
+  detailScreen.includes('<FlatList') &&
+    detailScreen.includes('horizontal') &&
+    detailScreen.includes('pagingEnabled') &&
+    detailScreen.includes('onMomentumScrollEnd={settleActiveReport}') &&
+    detailScreen.includes('renderItem={({item: report})') &&
+    detailScreen.includes('digest={report.feedbackDigest}') &&
+    detailScreen.includes('score={report.score}') &&
+    detailScreen.includes('representativeReportId={detail?.representativeReportId ?? null}') &&
+    detailScreen.includes('await selectMakeupJourneyScore(entryDate, activeReport.reportId)') &&
+    detailScreen.includes('missions={detail.missions}') &&
+    detailScreen.includes('note={report.note}') &&
+    detailScreen.includes('saveNote(content, report.reportId)') &&
+    journeyService.includes('/score-selection') &&
+    journeyService.includes('{method: \'PUT\', body: {reportId}}') &&
+    journeyService.includes('{method: \'PUT\', body: {content, reportId}}'),
+  'the whole detail page pages smoothly, missions stay date-shared, and notes persist per report',
+);
+expect(
+  rootNavigator.includes('name="MakeupJourneyDayDetail"') &&
+    rootNavigator.includes(
+      'getComponent={() => loadMakeupJourneyRoutes().MakeupJourneyDayDetailRouteScreen}',
+    ) &&
+    rootNavigator.includes('options={{gestureEnabled: false}}') &&
+    detailScreen.includes('onFirstReportActiveChange(isFirstReportActive)') &&
+    journeyRoutes.includes('onFirstReportActiveChange={setIsFirstReportActive}') &&
+    journeyRoutes.includes('const swipeBackEnabled = isFirstReportActive && navigation.canGoBack();') &&
+    journeyRoutes.includes('fullScreenGestureEnabled: swipeBackEnabled') &&
+    journeyRoutes.includes('gestureEnabled: swipeBackEnabled'),
+  'native swipe-back is disabled by default and enabled only while the first report is active',
 );
 expect(
   monthScreen.includes('accessibilityLabel="전체 성장 그래프 보기"') &&
@@ -173,40 +213,110 @@ expect(
   'calendar header exposes the full growth graph route',
 );
 expect(
-  !digestCard.includes('numberOfLines=') && digestCard.includes('...shadows.soft'),
-  'digest copy grows vertically without line truncation',
+  !digestCard.includes('numberOfLines=') &&
+    digestCard.includes('AI 피드백 요약') &&
+    digestCard.includes('현재 선택한 사진의 실제 분석 결과를 정리했어요.') &&
+    digestCard.includes('styles.heroCard') &&
+    digestCard.includes('styles.lists') &&
+    digestCard.includes('먼저 해볼 것') &&
+    digestCard.includes('전체 AI 보고서 보기'),
+  'digest copy grows vertically in the reference summary, two-column findings, next action, and report hierarchy',
+);
+expect(
+  !journeyService.includes('legacy-read-fallback') &&
+    !journeyService.includes('legacyMakeupJourneySettings') &&
+    journeyService.includes('/makeup-journey/calendar') &&
+    journeyService.includes('/makeup-journey/days/'),
+  'calendar and record screens display only authenticated backend data instead of legacy placeholder values',
 );
 expect(
   dayCell.includes('columnIndex < 6 ? styles.withRightDivider : null') &&
     dayCell.includes('weekIndex < 5 ? styles.withBottomDivider : null') &&
-    dayCell.includes("backgroundColor: 'rgba(242, 93, 97, 0.14)'") &&
-    dayCell.includes("backgroundColor: 'rgba(91, 120, 166, 0.14)'") &&
-    dayCell.includes("status === 'success' ? '달성' : '미달'") &&
+    dayCell.includes('status === \'success\' ? styles.successTint : styles.failureTint') &&
+    dayCell.includes('backgroundColor: colors.heart') &&
+    dayCell.includes("const JOURNEY_FAILURE_COLOR = '#5B78A6';") &&
+    monthScreen.includes('backgroundColor: colors.heart') &&
+    monthScreen.includes("backgroundColor: '#5B78A6'") &&
+    dayCell.includes('styles.emptyDot') &&
     dayCell.includes('isToday ? styles.todayBadge : null') &&
     monthScreen.includes('todayDate={todayDate}') &&
-    calendarGrid.includes("borderColor: 'rgba(17, 17, 17, 0.10)'") &&
+    calendarGrid.includes('...shadows.soft') &&
+    calendarGrid.includes('borderColor: colors.border') &&
     calendarGrid.includes("overflow: 'hidden'"),
-  'calendar uses one flat divided grid with pink success, blue failure, explicit labels, and a real today marker',
+  'calendar keeps the established red success and blue failure fills with compact score pills and a real today marker',
 );
 expect(
   monthScreen.includes('nextMidnight.setHours(24, 0, 0, 100)') &&
     monthScreen.includes('syncTodayDate();') &&
     monthPickerSheet.includes('날짜로 빠르게 이동') &&
-    monthPickerSheet.includes('const YEARS_PER_PAGE = 10') &&
-    monthPickerSheet.includes('MONTHS.map') &&
+    monthPickerSheet.includes("JOURNEY_MONTH_PICKER_MODE = 'wheel'") &&
+    monthPickerSheet.includes("JOURNEY_MONTH_PICKER_COLUMNS = ['year', 'month']") &&
+    monthPickerSheet.includes('accessibilityLabel="달력 연도 선택"') &&
+    monthPickerSheet.includes('accessibilityLabel="달력 월 선택"') &&
+    monthPickerSheet.includes('suffix="년"') &&
+    monthPickerSheet.includes('suffix="월"') &&
+    !monthPickerSheet.includes('suffix="일"') &&
+    monthPickerSheet.includes('onPress={confirmSelection}') &&
     monthPickerSheet.includes('이번 달로 이동') &&
     monthScreen.includes('setMonthPickerVisible(true)'),
-  'calendar refreshes its real local today marker and opens a direct year-month picker',
+  'calendar refreshes its real local today marker and opens a year-month wheel picker without a day column',
+);
+expect(
+  monthScreen.includes('PanResponder.create({') &&
+    monthScreen.includes('Math.abs(dx) > Math.abs(dy) * 1.15') &&
+    monthScreen.includes('Math.abs(gesture.dx) >= 36') &&
+    monthScreen.includes('changeMonthBySwipe(gesture.dx < 0 ? 1 : -1)') &&
+    monthScreen.includes('setMonth(current => shiftMonth(current, direction))') &&
+    monthScreen.includes('requestAnimationFrame(() => restoreCalendarPosition(210))') &&
+    !monthScreen.includes('Animated.spring(calendarTranslateX') &&
+    monthScreen.includes('transform: [{translateX: calendarTranslateX}]') &&
+    monthScreen.includes('accessibilityLabel="월간 달력, 좌우로 넘겨 월 이동"') &&
+    monthScreen.includes("event.nativeEvent.actionName === 'decrement'") &&
+    monthScreen.includes("event.nativeEvent.actionName === 'increment'"),
+  'calendar horizontal swipes animate to the previous or next month without stealing vertical scroll',
 );
 expect(
   monthSummary.includes('이번 달 성장 리포트') &&
+    monthSummary.includes('<GoalProgressRing') &&
+    monthSummary.includes('<WeeklyScoreMiniChart') &&
     monthSummary.includes('styles.progressTrack') &&
+    monthSummary.includes('getCappedJourneyGoalProgress(averageScore, goalScore)') &&
+    monthSummary.includes("const JOURNEY_BRIGHT_YELLOW = '#FFD84D'") &&
+    monthSummary.includes('backgroundColor: JOURNEY_BRIGHT_YELLOW') &&
+    monthSummary.includes('stroke={JOURNEY_BRIGHT_YELLOW}') &&
+    monthSummary.includes('color: JOURNEY_BRIGHT_YELLOW') &&
+    monthSummary.includes('accessibilityLabel="주간 점수 추이 분석 보기"') &&
+    monthSummary.includes('onPress={onOpenTrend}') &&
     monthSummary.includes('목표까지 ${Math.abs(goalDifference ?? 0)}점 남았어요.') &&
     monthSummary.includes('CalendarDays') &&
     monthSummary.includes('Flame') &&
+    monthSummary.includes('Trophy') &&
+    monthScreen.includes('days={calendarDays}') &&
+    monthScreen.includes('endDate={getJourneyTrendEndDateForMonth(month, todayDate)}') &&
+    monthScreen.includes('onOpenTrend={() => onOpenTrend(getJourneyTrendEndDateForMonth(month, todayDate))}') &&
+    monthScreen.includes('<Text style={styles.headerActionLabel}>분석</Text>') &&
+    monthScreen.includes('<Text style={styles.headerActionLabel}>설정</Text>') &&
+    monthScreen.indexOf('accessibilityLabel="달력 범례"') <
+      monthScreen.indexOf('<JourneyCalendarGrid') &&
     !monthSummary.includes('MY GROWTH') &&
+    !monthSummary.includes('colors.successMuted') &&
+    !monthSummary.includes('colors.brandMuted') &&
     !monthSummary.includes('backgroundColor: colors.black,'),
-  'month summary uses a readable light report hierarchy instead of the oversized black panel',
+  'month screen uses real score history, capped yellow progress highlights, and a tappable weekly analysis card',
+);
+expect(
+  digestCard.includes("const JOURNEY_IMPROVEMENT_BLUE = '#5B78A6'") &&
+    digestCard.includes("const JOURNEY_BLUE_TINT = 'rgba(91, 120, 166, 0.10)'") &&
+    digestCard.includes("const JOURNEY_RED_TINT = 'rgba(255, 90, 77, 0.10)'") &&
+    digestCard.includes('const iconColor = isStrength ? colors.danger : JOURNEY_IMPROVEMENT_BLUE') &&
+    !digestCard.includes('JOURNEY_GOLD') &&
+    detailScreen.includes('borderColor: colors.danger') &&
+    missionCard.includes('backgroundColor: colors.danger'),
+  'record detail uses red for positive accents and blue for improvement findings',
+);
+expect(
+  dayCell.includes('day?.representativeScore ?? day?.latestScore ?? null'),
+  'calendar cells show the user-selected representative score with a latest-score fallback',
 );
 expect(
   trendScreen.includes("{label: '7일', value: '7d'}") &&
@@ -226,9 +336,19 @@ expect(
   'trend graph supports month navigation and date-proportional range boundaries',
 );
 expect(
-  detailScreen.includes("detail.goalScore === null") &&
+  detailScreen.includes('goalScore={detail.goalScore}') &&
+    digestCard.includes("const hasGoal = goalScore !== null") &&
+    digestCard.includes("? `${getJourneyStatusLabel(status)} · 목표 ${goalScore}점`") &&
+    digestCard.includes(": '목표 미설정'") &&
     trendScreen.includes("resource.data.goalScore === null"),
   'pre-onboarding detail and trend use a neutral missing-goal state',
+);
+expect(
+  digestCard.includes("status === 'success'") &&
+    digestCard.includes('? colors.danger') &&
+    digestCard.includes(': JOURNEY_IMPROVEMENT_BLUE') &&
+    digestCard.includes('<JourneySparkleIcon color={feedbackAccent}'),
+  'detail sparkle uses the stored report goal result: red when achieved and blue when missed',
 );
 expect(
   authSessionContext.includes('invalidateMakeupJourneyCache();') &&

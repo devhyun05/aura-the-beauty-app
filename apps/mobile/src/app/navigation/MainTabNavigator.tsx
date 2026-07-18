@@ -16,14 +16,45 @@ import {
   type FooterTabKey,
 } from '../../shared/ui';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../shared/ui/AppFooter';
-import {MakeupExtractionActionSheet} from '../../features/home/components/MakeupExtractionActionSheet';
-import {MakeupFeedbackActionSheet} from '../../features/home/components/MakeupFeedbackActionSheet';
 import {useNavigationFlowState} from './flowState';
 import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
-import {ConsultingTabRouteScreen, HomeRouteScreen} from './routes/homeRoutes';
-import {ProfileRouteScreen} from './routes/profileRoutes';
-import {MakeupJourneyTabRouteScreen} from './routes/makeupJourneyRoutes';
+
+const loadHomeRoutes = () =>
+  require('./routes/homeRoutes') as typeof import('./routes/homeRoutes');
+const loadProfileRoutes = () =>
+  require('./routes/profileRoutes') as typeof import('./routes/profileRoutes');
+const loadMakeupJourneyRoutes = () =>
+  require('./routes/makeupJourneyRoutes') as typeof import('./routes/makeupJourneyRoutes');
+const loadMakeupPhotoPicker = () =>
+  require('../../features/home/services/makeupPhotoPicker') as typeof import('../../features/home/services/makeupPhotoPicker');
+
+type MakeupExtractionActionSheetProps = React.ComponentProps<
+  typeof import('../../features/home/components/MakeupExtractionActionSheet').MakeupExtractionActionSheet
+>;
+type MakeupFeedbackActionSheetProps = React.ComponentProps<
+  typeof import('../../features/home/components/MakeupFeedbackActionSheet').MakeupFeedbackActionSheet
+>;
+
+function DeferredMakeupExtractionActionSheet(
+  props: MakeupExtractionActionSheetProps,
+) {
+  const {MakeupExtractionActionSheet} = require(
+    '../../features/home/components/MakeupExtractionActionSheet'
+  ) as typeof import('../../features/home/components/MakeupExtractionActionSheet');
+
+  return <MakeupExtractionActionSheet {...props} />;
+}
+
+function DeferredMakeupFeedbackActionSheet(
+  props: MakeupFeedbackActionSheetProps,
+) {
+  const {MakeupFeedbackActionSheet} = require(
+    '../../features/home/components/MakeupFeedbackActionSheet'
+  ) as typeof import('../../features/home/components/MakeupFeedbackActionSheet');
+
+  return <MakeupFeedbackActionSheet {...props} />;
+}
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -71,10 +102,22 @@ export function MainTabNavigator() {
       initialRouteName="HomeTab"
       screenOptions={{headerShown: false}}
       tabBar={props => <MainTabBar {...props} />}>
-      <Tab.Screen name="HomeTab" component={HomeRouteScreen} />
-      <Tab.Screen name="ConsultingTab" component={ConsultingTabRouteScreen} />
-      <Tab.Screen name="MakeupJourneyTab" component={MakeupJourneyTabRouteScreen} />
-      <Tab.Screen name="ProfileTab" component={ProfileRouteScreen} />
+      <Tab.Screen
+        name="HomeTab"
+        getComponent={() => loadHomeRoutes().HomeRouteScreen}
+      />
+      <Tab.Screen
+        name="ConsultingTab"
+        getComponent={() => loadHomeRoutes().ConsultingTabRouteScreen}
+      />
+      <Tab.Screen
+        name="MakeupJourneyTab"
+        getComponent={() => loadMakeupJourneyRoutes().MakeupJourneyTabRouteScreen}
+      />
+      <Tab.Screen
+        name="ProfileTab"
+        getComponent={() => loadProfileRoutes().ProfileRouteScreen}
+      />
     </Tab.Navigator>
   );
 }
@@ -89,6 +132,8 @@ function MainTabBar({
   const {height: windowHeight, width: windowWidth} = useWindowDimensions();
   const [isExtractionSheetVisible, setIsExtractionSheetVisible] = useState(false);
   const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = useState(false);
+  const [hasMountedExtractionSheet, setHasMountedExtractionSheet] = useState(false);
+  const [hasMountedFeedbackSheet, setHasMountedFeedbackSheet] = useState(false);
   const [isFloatingActionMenuExpanded, setIsFloatingActionMenuExpanded] = useState(false);
   const activeRouteName = state.routes[state.index]?.name as MainTabRouteName | undefined;
   const activeTab = activeRouteName ? getMainTabFooterState(activeRouteName) : undefined;
@@ -131,8 +176,22 @@ function MainTabBar({
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(null);
 
-    requestAnimationFrame(() => {
-      rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+    if (initialSource === 'camera') {
+      requestAnimationFrame(() => {
+        rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+      });
+      return;
+    }
+
+    const {pickReferenceMakeupPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickReferenceMakeupPhotoFromLibrary().then(photo => {
+      if (!photo) {
+        return;
+      }
+      setSelectedReferenceMakeupPhoto(photo);
+      rootNavigation?.navigate('FaceCaptureConfirmation', {
+        target: 'referenceMakeupExtraction',
+      });
     });
   }, [
     rootNavigation,
@@ -142,17 +201,28 @@ function MainTabBar({
 
   const startMakeupFeedback = useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
-    beginMakeupFeedbackFlow();
-    setMakeupFeedbackResult(null);
-    setSelectedMakeupFeedbackPhoto({photoSource});
 
-    requestAnimationFrame(() => {
-      if (photoSource === 'camera') {
+    if (photoSource === 'camera') {
+      beginMakeupFeedbackFlow();
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto({photoSource});
+      requestAnimationFrame(() => {
         rootNavigation?.navigate('MakeupFeedbackCapture');
+      });
+      return;
+    }
+
+    const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
+      if (!selection) {
         return;
       }
-
-      rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
+      beginMakeupFeedbackFlow();
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto(selection);
+      rootNavigation?.navigate('FaceCaptureConfirmation', {
+        target: 'makeupFeedback',
+      });
     });
   }, [
     beginMakeupFeedbackFlow,
@@ -177,12 +247,14 @@ function MainTabBar({
 
       if (presentation === 'makeupExtractionSheet') {
         setIsFeedbackSheetVisible(false);
+        setHasMountedExtractionSheet(true);
         setIsExtractionSheetVisible(true);
         return;
       }
 
       if (presentation === 'makeupFeedbackSheet') {
         setIsExtractionSheetVisible(false);
+        setHasMountedFeedbackSheet(true);
         setIsFeedbackSheetVisible(true);
         return;
       }
@@ -270,18 +342,22 @@ function MainTabBar({
         hiddenTabs={makeupJourneyEnabled ? undefined : ['journey']}
         onTabPress={handleTabPress}
       />
-      <MakeupExtractionActionSheet
-        isVisible={isExtractionSheetVisible}
-        onClose={closeExtractionSheet}
-        onPressCamera={() => startMakeupExtraction('camera')}
-        onPressUpload={() => startMakeupExtraction('gallery')}
-      />
-      <MakeupFeedbackActionSheet
-        isVisible={isFeedbackSheetVisible}
-        onClose={closeFeedbackSheet}
-        onPressCamera={() => startMakeupFeedback('camera')}
-        onPressUpload={() => startMakeupFeedback('gallery')}
-      />
+      {hasMountedExtractionSheet ? (
+        <DeferredMakeupExtractionActionSheet
+          isVisible={isExtractionSheetVisible}
+          onClose={closeExtractionSheet}
+          onPressCamera={() => startMakeupExtraction('camera')}
+          onPressUpload={() => startMakeupExtraction('gallery')}
+        />
+      ) : null}
+      {hasMountedFeedbackSheet ? (
+        <DeferredMakeupFeedbackActionSheet
+          isVisible={isFeedbackSheetVisible}
+          onClose={closeFeedbackSheet}
+          onPressCamera={() => startMakeupFeedback('camera')}
+          onPressUpload={() => startMakeupFeedback('gallery')}
+        />
+      ) : null}
     </YStack>
   );
 }

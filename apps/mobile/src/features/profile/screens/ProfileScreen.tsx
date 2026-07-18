@@ -11,7 +11,10 @@ import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {subscribeNotificationStateChange} from '../../notifications';
-import {clearMyPageProfileSummaryCache} from '../../../shared/services/profileService';
+import {
+  clearMyPageProfileSummaryCache,
+  MY_PAGE_LIKED_PRODUCT_PREVIEW_LIMIT,
+} from '../../../shared/services/profileService';
 import type {MakeupLookPreview} from '../../../shared/types/profile';
 import {AppScreen, SectionHeader} from '../../../shared/ui';
 import {getConsultingBookings} from '../../consulting/services/consultingService';
@@ -34,13 +37,9 @@ import {
 
 type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
-  onPressFaceAnalysisReport?: (reportId: string) => void;
   onPressFaceAnalysisReportsList?: () => void;
-  onPressMakeupRecommendationReport?: (reportId: string) => void;
   onPressMakeupRecommendationReportsList?: () => void;
-  onPressMakeupExtractionReport?: (reportId: string) => void;
   onPressMakeupExtractionReportsList?: () => void;
-  onPressMakeupFeedbackReport?: (reportId: string) => void;
   onPressMakeupFeedbackReportsList?: () => void;
   onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
   onPressCreatedMakeupLookList?: () => void;
@@ -57,16 +56,16 @@ export const PROFILE_SCREEN_LAYOUT_MODE = 'dashboard';
 export const PROFILE_SCREEN_PREVIEW_COLUMN_COUNT = 2;
 export const PROFILE_SCREEN_REPORT_COLUMN_COUNT = 2;
 export const PROFILE_SCREEN_REPORT_SCROLL_AXIS = 'horizontal';
+export const PROFILE_SCREEN_REPORT_PREVIEW_DESTINATION = 'matching-report-list';
+export const PROFILE_SCREEN_LIKED_PRODUCT_PREVIEW_LIMIT =
+  MY_PAGE_LIKED_PRODUCT_PREVIEW_LIMIT;
+export const PROFILE_SCREEN_LIKED_PRODUCT_SCROLL_AXIS = 'horizontal';
 
 export function ProfileScreen({
   onPressProfileEdit,
-  onPressFaceAnalysisReport,
   onPressFaceAnalysisReportsList,
-  onPressMakeupRecommendationReport,
   onPressMakeupRecommendationReportsList,
-  onPressMakeupExtractionReport,
   onPressMakeupExtractionReportsList,
-  onPressMakeupFeedbackReport,
   onPressMakeupFeedbackReportsList,
   onPressMakeupLook,
   onPressCreatedMakeupLookList,
@@ -90,6 +89,10 @@ export function ProfileScreen({
   >([]);
   const [isConsultingLoading, setIsConsultingLoading] = useState(false);
   const [isReportListSheetVisible, setIsReportListSheetVisible] = useState(false);
+  const openReportListSheet = useCallback(
+    () => setIsReportListSheetVisible(true),
+    [],
+  );
   const contentWidth = width - spacing.screenX * 2;
   const previewGap =
     spacing.md * (PROFILE_SCREEN_PREVIEW_COLUMN_COUNT - 1);
@@ -177,6 +180,7 @@ export function ProfileScreen({
   useFocusEffect(
     useCallback(() => {
       isMountedRef.current = true;
+      clearMyPageProfileSummaryCache();
       loadProfile({silent: hasLoadedProfileRef.current});
       const cancelConsultingLoad = loadConsultingRecords();
       const unsubscribeNotificationState = subscribeNotificationStateChange(() => {
@@ -231,7 +235,10 @@ export function ProfileScreen({
   const data = loadState.data;
   const previewCreatedMakeupLooks = createdMakeupLooks.slice(0, 4);
   const previewLikedMakeupLooks = likedMakeupLooks.slice(0, 4);
-  const previewProducts = data.likedProducts.slice(0, 4);
+  const previewProducts = data.likedProducts.slice(
+    0,
+    PROFILE_SCREEN_LIKED_PRODUCT_PREVIEW_LIMIT,
+  );
 
   return (
     <AppScreen
@@ -249,7 +256,7 @@ export function ProfileScreen({
       <View style={styles.section}>
         <SectionHeader
           actionLabel="더보기"
-          onPressAction={() => setIsReportListSheetVisible(true)}
+          onPressAction={openReportListSheet}
           title="내 보고서 목록"
         />
         <NativeScrollView
@@ -259,53 +266,28 @@ export function ProfileScreen({
           <ProfileReportPreviewCard
             description="얼굴형·피부톤 분석"
             label="얼굴 분석"
-            onPressLatest={
-              data.reportHub.faceAnalysis
-                ? () => onPressFaceAnalysisReport?.(data.reportHub.faceAnalysis!.id)
-                : undefined
-            }
+            onPress={onPressFaceAnalysisReportsList}
             preview={data.reportHub.faceAnalysis}
             style={reportCardLayout}
           />
           <ProfileReportPreviewCard
             description="나에게 어울리는 룩"
             label="메이크업 추천"
-            onPressLatest={
-              data.reportHub.makeupRecommendation
-                ? () =>
-                    onPressMakeupRecommendationReport?.(
-                      data.reportHub.makeupRecommendation!.id,
-                    )
-                : undefined
-            }
+            onPress={onPressMakeupRecommendationReportsList}
             preview={data.reportHub.makeupRecommendation}
             style={reportCardLayout}
           />
           <ProfileReportPreviewCard
             description="사진 속 메이크업 분석"
             label="메이크업 추출"
-            onPressLatest={
-              data.reportHub.makeupExtraction
-                ? () =>
-                    onPressMakeupExtractionReport?.(
-                      data.reportHub.makeupExtraction!.id,
-                    )
-                : undefined
-            }
+            onPress={onPressMakeupExtractionReportsList}
             preview={data.reportHub.makeupExtraction}
             style={reportCardLayout}
           />
           <ProfileReportPreviewCard
             description="평가와 보완 포인트"
             label="메이크업 피드백"
-            onPressLatest={
-              data.reportHub.makeupFeedback
-                ? () =>
-                    onPressMakeupFeedbackReport?.(
-                      data.reportHub.makeupFeedback!.id,
-                    )
-                : undefined
-            }
+            onPress={onPressMakeupFeedbackReportsList}
             preview={data.reportHub.makeupFeedback}
             style={reportCardLayout}
           />
@@ -363,7 +345,11 @@ export function ProfileScreen({
           title="좋아요한 제품"
         />
         {previewProducts.length > 0 ? (
-          <View style={styles.previewGrid}>
+          <NativeScrollView
+            accessibilityLabel="좋아요한 제품 미리보기"
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.productPreviewRail}>
             {previewProducts.map((product) => (
               <ProductCard
                 key={product.id}
@@ -371,7 +357,7 @@ export function ProfileScreen({
                 style={previewCardLayout}
               />
             ))}
-          </View>
+          </NativeScrollView>
         ) : (
           <EmptySection label="좋아요한 제품이 없어요." />
         )}
@@ -696,6 +682,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.md,
+  },
+  productPreviewRail: {
+    gap: spacing.md,
+    paddingRight: spacing.screenX,
   },
   reportHub: {
     gap: spacing.md,

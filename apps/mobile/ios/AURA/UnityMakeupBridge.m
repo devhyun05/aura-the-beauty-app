@@ -27,6 +27,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 - (void)prepareHidden;
 - (void)prepareHiddenAndPauseWhenReady;
 - (void)handleUnityMessage:(NSString *)message;
+- (void)completeWarmupForReason:(NSString *)reason;
 - (UIView *)unityView;
 - (UIView *)unityViewForContainer:(UIView *)container;
 - (void)detachUnityView;
@@ -59,6 +60,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   __weak UIViewController *_reactRootViewController;
   BOOL _isReady;
   BOOL _hasCompletedWarmup;
+  BOOL _didScheduleWarmupDeadline;
   BOOL _isRunning;
   BOOL _isPresentingUnityView;
   BOOL _hasExplicitHiddenRunLease;
@@ -209,10 +211,13 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 - (void)handleUnityMessage:(NSString *)message
 {
   NSString *safeMessage = message ?: @"";
-  BOOL didCompleteWarmup =
+  BOOL didInitializeScene =
       [safeMessage containsString:@"\"type\":\"unity_initialized\""] ||
       [safeMessage containsString:@"unity_initialized"];
-  BOOL didBecomeReady = didCompleteWarmup ||
+  BOOL didReceiveFirstCameraFrame =
+      [safeMessage containsString:@"\"type\":\"unity_camera_frame_ready\""] ||
+      [safeMessage containsString:@"unity_camera_frame_ready"];
+  BOOL didBecomeReady = didInitializeScene || didReceiveFirstCameraFrame ||
       [safeMessage containsString:@"\"type\":\"ready\""];
 
   NSString *runtimeMode = nil;
@@ -236,10 +241,20 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
       self->_isReady = YES;
     }
 
-    if (didCompleteWarmup) {
-      self->_hasCompletedWarmup = YES;
-      self->_pauseWhenReadyIfHidden = NO;
-      [self reconcilePlayerPauseStateForReason:@"unity-warmup-complete" force:NO];
+    if (didReceiveFirstCameraFrame) {
+      [self completeWarmupForReason:@"unity-first-camera-frame"];
+    } else if (didInitializeScene && !self->_hasCompletedWarmup &&
+               !self->_didScheduleWarmupDeadline) {
+      // Do not pause at the old scene-only ready event. Give ARKit enough time
+      // to deliver a real camera frame so Release capture entry is genuinely
+      // warm. Permission/session failures are still bounded so a hidden Unity
+      // player can never run indefinitely.
+      self->_didScheduleWarmupDeadline = YES;
+      dispatch_after(
+          dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)),
+          dispatch_get_main_queue(), ^{
+            [self completeWarmupForReason:@"unity-camera-warmup-deadline"];
+          });
     }
 
     if (runtimeMode != nil && runtimeGeneration >= 0) {
@@ -265,6 +280,17 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
                                                         object:self
                                                       userInfo:@{@"message": safeMessage}];
   });
+}
+
+- (void)completeWarmupForReason:(NSString *)reason
+{
+  if (_hasCompletedWarmup) {
+    return;
+  }
+
+  _hasCompletedWarmup = YES;
+  _pauseWhenReadyIfHidden = NO;
+  [self reconcilePlayerPauseStateForReason:reason force:NO];
 }
 
 - (UIView *)unityView
@@ -342,7 +368,9 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     // to complete offscreen and freeze it as soon as ready arrives.
     _pauseWhenReadyIfHidden = YES;
   }
-  [self reconcilePlayerPauseStateForReason:@"visible-container-detached" force:NO];
+  // force:YES — a detach releases the camera; force a fresh idle send so the
+  // stale-ACK fast path can't swallow it (green LED at report).
+  [self reconcilePlayerPauseStateForReason:@"visible-container-detached" force:YES];
 }
 
 - (void)detachUnityViewForContainer:(UIView *)container
@@ -388,9 +416,11 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     _pauseWhenReadyIfHidden = YES;
   }
 
+  // force when releasing (paused) — camera-release must re-send idle past the
+  // stale-ACK fast path; acquiring (resume) has no swallow problem.
   [self reconcilePlayerPauseStateForReason:
       paused ? @"legacy-run-lease-released" : @"legacy-run-lease-acquired"
-                                      force:NO];
+                                      force:paused];
 }
 
 - (void)acquireHiddenRunLease:(NSString *)leaseId
@@ -415,7 +445,9 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
       !_hasExplicitHiddenRunLease) {
     _pauseWhenReadyIfHidden = YES;
   }
-  [self reconcilePlayerPauseStateForReason:@"hidden-analysis-lease-released" force:NO];
+  // force:YES — releasing the last lease should drop to idle and release the
+  // front camera; force the idle send past the stale-ACK fast path.
+  [self reconcilePlayerPauseStateForReason:@"hidden-analysis-lease-released" force:YES];
 }
 
 - (void)reconcilePlayerPauseStateForReason:(NSString *)reason force:(BOOL)force
@@ -461,7 +493,12 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   // Stable state fast path. In particular, foreground lifecycle callbacks may
   // ask for a forced reassert after UnityAppController changes its own pause
   // flag; do not wake the camera pipeline just to pause it again.
-  if (!_runtimeModeRequestPending &&
+  // force:YES bypasses this — the out-of-band setPaused message flips Unity's
+  // real ARSession.enabled without touching _acknowledgedRuntimeMode, so this
+  // cached mode can desync from Unity's actual camera state. A camera-release
+  // path (detach / lease-release) must be able to re-send idle even when we
+  // *think* we are already idle, or the green LED stays on at the report.
+  if (!force && !_runtimeModeRequestPending &&
       [_acknowledgedRuntimeMode isEqualToString:runtimeMode]) {
     [self applyPlayerPaused:effectivePaused];
     NSLog(@"[aura:unity-native] reconciled stable pause desired=%@ effective=%@ mode=%@ reason=%@",
@@ -495,7 +532,6 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 
 - (void)requestRuntimeMode:(NSString *)mode reason:(NSString *)reason force:(BOOL)force
 {
-  (void)force;
   if (mode.length == 0 || !_isRunning || _unityFramework == nil) {
     return;
   }
@@ -505,7 +541,12 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     return;
   }
 
-  if (!_runtimeModeRequestPending &&
+  // force:YES re-sends the mode even when we believe Unity already acknowledged
+  // it. Needed because the out-of-band setPaused message can desync
+  // _acknowledgedRuntimeMode from Unity's real ARSession state — trusting the
+  // cache here is exactly what swallows the idle transition and keeps the
+  // front camera (green LED) alive at the report screen.
+  if (!force && !_runtimeModeRequestPending &&
       [_acknowledgedRuntimeMode isEqualToString:mode]) {
     if ([mode isEqualToString:@"idle"] && _desiredPlayerPaused) {
       [self applyPlayerPaused:YES];
@@ -935,8 +976,10 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     return;
   }
 
-  // 노티피케이션 콜백 안에서 윈도우 계층을 바로 바꾸지 않고 다음 runloop 틱에서
-  // 숨긴다 (UIKit 재진입 안전).
+  // Hide immediately so an offscreen Release warm-up cannot put even one
+  // Unity splash/black frame above React Native. Restoring the React window and
+  // view hierarchy remains deferred to avoid UIKit re-entrancy.
+  window.hidden = YES;
   dispatch_async(dispatch_get_main_queue(), ^{
     if (self->_isPresentingUnityView) {
       return;

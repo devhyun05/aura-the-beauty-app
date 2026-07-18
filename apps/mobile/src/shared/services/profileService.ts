@@ -14,6 +14,7 @@ import {
 
 const PROFILE_SUMMARY_CACHE_TTL_MS = 30000;
 const PROFILE_SUMMARY_REQUEST_TIMEOUT_MS = 5000;
+export const MY_PAGE_LIKED_PRODUCT_PREVIEW_LIMIT = 4;
 
 let profileSummaryCache:
   | {createdAt: number; data: MyPageProfileSummary}
@@ -76,7 +77,7 @@ export const getMyPageProfileSummary = async (): Promise<MyPageProfileSummary> =
       limit: 3,
       timeoutMs: PROFILE_SUMMARY_REQUEST_TIMEOUT_MS,
     }).catch(() => []),
-    getLikedProductPreviews(3, {
+    getLikedProductPreviews(MY_PAGE_LIKED_PRODUCT_PREVIEW_LIMIT, {
       timeoutMs: PROFILE_SUMMARY_REQUEST_TIMEOUT_MS,
     }).catch(() => []),
   ])

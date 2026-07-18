@@ -32,6 +32,9 @@ import {
   type RootScreenProps,
 } from './routeUtils';
 
+const loadMakeupPhotoPicker = () =>
+  require('../../../features/home/services/makeupPhotoPicker') as typeof import('../../../features/home/services/makeupPhotoPicker');
+
 export function getMakeupJourneyDayBackBehavior(
   canGoBack: boolean,
 ): 'goBack' | 'MakeupJourneyTab' {
@@ -128,9 +131,19 @@ export function MakeupJourneyDayDetailRouteScreen({
   const [pendingFeedbackContext, setPendingFeedbackContext] =
     React.useState<MakeupFeedbackJourneyFlowContext | null>(null);
   const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = React.useState(false);
+  const [isFirstReportActive, setIsFirstReportActive] = React.useState(true);
   const entryDate = route.params?.entryDate;
   const feedbackFlowOriginRef = React.useRef(makeupFeedbackFlowOrigin);
   feedbackFlowOriginRef.current = makeupFeedbackFlowOrigin;
+
+  React.useLayoutEffect(() => {
+    const swipeBackEnabled = isFirstReportActive && navigation.canGoBack();
+    navigation.setOptions({
+      animationMatchesGesture: swipeBackEnabled,
+      fullScreenGestureEnabled: swipeBackEnabled,
+      gestureEnabled: swipeBackEnabled,
+    });
+  }, [isFirstReportActive, navigation]);
 
   React.useEffect(
     () => navigation.addListener('focus', () => {
@@ -201,20 +214,45 @@ export function MakeupJourneyDayDetailRouteScreen({
     }
 
     setIsFeedbackSheetVisible(false);
-    setSelectedMakeupFeedbackPhoto(
-      applyMakeupFeedbackJourneyContext(
-        {photoSource},
-        pendingFeedbackContext,
-      ),
-    );
     setPendingFeedbackContext(null);
 
-    requestAnimationFrame(() => {
-      navigation.navigate(
-        getMakeupJourneyFeedbackPhotoRoute(photoSource),
+    if (photoSource === 'camera') {
+      beginMakeupFeedbackFlow(pendingFeedbackContext);
+      setSelectedMakeupFeedbackPhoto(
+        applyMakeupFeedbackJourneyContext(
+          {photoSource},
+          pendingFeedbackContext,
+        ),
       );
+      requestAnimationFrame(() => {
+        navigation.navigate('MakeupFeedbackCapture');
+      });
+      return;
+    }
+
+    const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
+      if (!selection) {
+        return;
+      }
+      beginMakeupFeedbackFlow(pendingFeedbackContext);
+      setSelectedMakeupFeedbackPhoto(
+        applyMakeupFeedbackJourneyContext(
+          selection,
+          pendingFeedbackContext,
+        ),
+      );
+      navigation.navigate('FaceCaptureConfirmation', {
+        target: 'makeupFeedback',
+      });
     });
-  }, [closeFeedbackSheet, navigation, pendingFeedbackContext, setSelectedMakeupFeedbackPhoto]);
+  }, [
+    beginMakeupFeedbackFlow,
+    closeFeedbackSheet,
+    navigation,
+    pendingFeedbackContext,
+    setSelectedMakeupFeedbackPhoto,
+  ]);
 
   if (!isMakeupJourneyEntryDateRouteParam(entryDate)) {
     return (
@@ -244,6 +282,7 @@ export function MakeupJourneyDayDetailRouteScreen({
         onChangeDate={nextEntryDate => {
           navigation.setParams({entryDate: nextEntryDate});
         }}
+        onFirstReportActiveChange={setIsFirstReportActive}
         onOpenReport={reportId => {
           navigation.navigate('MakeupFeedbackResult', {
             entryDate,

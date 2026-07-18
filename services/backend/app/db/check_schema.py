@@ -59,6 +59,7 @@ EXPECTED_TABLES = {
   "makeup_feedback_reports",
   "makeup_journey_settings",
   "makeup_journey_day_notes",
+  "makeup_journey_day_score_selections",
   "makeup_journey_missions",
   "makeup_scenario_library",
   "makeup_scenario_generation_limits",
@@ -154,8 +155,13 @@ EXPECTED_CONSTRAINTS = {
   },
   "makeup_journey_day_notes": {
     "fk_makeup_journey_day_notes_user",
-    "uq_makeup_journey_day_notes_user_date",
+    "fk_makeup_journey_day_notes_report",
     "chk_makeup_journey_day_note_length",
+  },
+  "makeup_journey_day_score_selections": {
+    "pk_makeup_journey_day_score_selections",
+    "fk_makeup_journey_day_score_selections_user",
+    "fk_makeup_journey_day_score_selections_report",
   },
   "makeup_journey_missions": {
     "fk_makeup_journey_missions_user",
@@ -374,7 +380,10 @@ EXPECTED_COLUMNS = {
     "user_id", "goal_score", "mission_level", "timezone_name", "created_at", "updated_at",
   },
   "makeup_journey_day_notes": {
-    "id", "user_id", "entry_date", "content", "created_at", "updated_at",
+    "id", "user_id", "entry_date", "report_id", "content", "created_at", "updated_at",
+  },
+  "makeup_journey_day_score_selections": {
+    "user_id", "entry_date", "report_id", "created_at", "updated_at",
   },
   "makeup_journey_missions": {
     "id", "user_id", "entry_date", "source", "difficulty", "title", "is_completed",
@@ -429,7 +438,11 @@ EXPECTED_COLUMN_CONTRACTS = {
   },
   "makeup_journey_day_notes.user_id": {"is_nullable": "NO"},
   "makeup_journey_day_notes.entry_date": {"is_nullable": "NO"},
+  "makeup_journey_day_notes.report_id": {"is_nullable": "YES"},
   "makeup_journey_day_notes.content": {"is_nullable": "NO"},
+  "makeup_journey_day_score_selections.user_id": {"is_nullable": "NO"},
+  "makeup_journey_day_score_selections.entry_date": {"is_nullable": "NO"},
+  "makeup_journey_day_score_selections.report_id": {"is_nullable": "NO"},
   "makeup_journey_missions.user_id": {"is_nullable": "NO"},
   "makeup_journey_missions.entry_date": {"is_nullable": "NO"},
   "makeup_journey_missions.source": {"is_nullable": "NO"},
@@ -668,6 +681,15 @@ EXPECTED_INDEX_CONTRACTS = {
   ),
   "uq_makeup_journey_missions_user_date_title_ci": (
     "unique", "user_id", "entry_date", "lower(title)",
+  ),
+  "idx_makeup_journey_day_score_selections_report": (
+    "report_id",
+  ),
+  "uq_makeup_journey_day_notes_report": (
+    "unique", "user_id", "entry_date", "report_id", "where (report_id is not null)",
+  ),
+  "uq_makeup_journey_day_notes_empty_date": (
+    "unique", "user_id", "entry_date", "where (report_id is null)",
   ),
 }
 

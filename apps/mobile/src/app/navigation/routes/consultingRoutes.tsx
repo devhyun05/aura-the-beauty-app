@@ -40,6 +40,7 @@ import {DetailRouteChrome} from '../detailHeaderChrome';
 import type {AppScreenTopPadding} from '../../../shared/ui/AppScreen';
 import {colors, iconSize} from '../../../shared/theme';
 import {
+  getConsultingHistoryBackAction,
   navigateMainTab,
   type RootNavigation,
   type RootScreenProps,
@@ -449,7 +450,7 @@ export function ConsultingSummaryRouteScreen({
     return (
       <DetailRouteChrome
         routeName="ConsultingSummary"
-        onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+        onBack={() => goBackToConsulting(navigation)}>
         <ConsultingRouteLoading />
       </DetailRouteChrome>
     );
@@ -458,7 +459,7 @@ export function ConsultingSummaryRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ConsultingSummary"
-      onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+      onBack={() => goBackToConsulting(navigation)}>
       <ConsultingSummaryScreen
         expert={expert}
         heroTitle={record ? 'AI 상담 요약' : undefined}
@@ -481,13 +482,27 @@ export function ConsultingSummaryRouteScreen({
 
 export function ConsultingHistoryRouteScreen({
   navigation,
+  route,
 }: RootScreenProps<'ConsultingHistory'>) {
   const {getAuthToken} = useAuthSession();
+  const handleBack = () => {
+    const action = getConsultingHistoryBackAction(
+      route.params?.returnTo,
+      navigation.canGoBack(),
+    );
+
+    if (action.kind === 'goBack') {
+      navigation.goBack();
+      return;
+    }
+
+    navigateMainTab(navigation, action.screen);
+  };
 
   return (
     <DetailRouteChrome
       routeName="ConsultingHistory"
-      onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+      onBack={handleBack}>
       <ConsultingHistoryScreen
         authToken={getAuthToken()}
         onPressBookAgain={record =>
