@@ -22,7 +22,12 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.aurathebeautyapp.mobile",
       "appleTeamId": "BRA7W3G4QS",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize"

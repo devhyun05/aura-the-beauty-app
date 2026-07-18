@@ -5,7 +5,7 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "start:perf": "EXPO_PUBLIC_PERFORMANCE_LOGGING=true expo start --dev-client --clear",
+    "start:perf": "EXPO_PUBLIC_PERFORMANCE_LOGGING=true expo start --dev-client",
     "pods": "cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install",
     "ios": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios",
     "ios:device": "LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 expo run:ios --device",

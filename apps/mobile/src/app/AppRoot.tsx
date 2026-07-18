@@ -12,7 +12,10 @@ import {TamaguiProvider} from 'tamagui';
 
 import {tamaguiConfig} from '../../tamagui.config';
 import {NavigationFlowStateProvider} from '../app/navigation/flowState';
-import {AuthSessionProvider, useAuthSession} from '../features/auth';
+import {
+  AuthSessionProvider,
+  useAuthSession,
+} from '../features/auth/services/authSessionContext';
 import {navigationLinking} from '../app/navigation/linkingConfig';
 import {
   getStatusBarStyleForNavigationState,
@@ -20,16 +23,16 @@ import {
 } from '../app/navigation/navigationState';
 import {RootNavigator} from '../app/navigation/RootNavigator';
 import type {RootStackParamList} from '../app/navigation/routeTypes';
-import {prewarmUnityMakeupRuntime} from '../features/ar/services/unityMakeupBridge';
-import {IncomingConsultingCallGate} from '../features/consulting/components/IncomingConsultingCallGate';
+import type {ConsultingRecord} from '../features/consulting/types';
 import {prefetchHomeHeroImages} from '../features/home/config/homeHeroAssets';
 import {
-  NotificationCoordinator,
   navigateToAppNotification,
   shouldSuppressRealtimeAppNotification,
-  type AppNotification,
-  type AppNotificationData,
-} from '../features/notifications';
+} from '../features/notifications/services/notificationNavigation';
+import type {
+  AppNotification,
+  AppNotificationData,
+} from '../features/notifications/types';
 import {
   recordFeaturePerformanceMarker,
   recordFeaturePerformanceRoute,
@@ -44,13 +47,45 @@ import {
 setMakeupJourneyAnalyticsAdapter(makeupJourneyBackendAnalyticsAdapter);
 
 const UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS = 5000;
-const STARTUP_SCREEN_MIN_DURATION_MS = 700;
+const HOME_HERO_PREFETCH_DELAY_AFTER_STARTUP_MS = 750;
+const DEFERRED_APP_SERVICES_DELAY_AFTER_STARTUP_MS = 1200;
+const STARTUP_SCREEN_MIN_DURATION_MS = 360;
+
+type DeferredAppServicesProps = {
+  onAnswerConsultingCall: (record: ConsultingRecord) => void;
+  onOpenNotification: (data: AppNotificationData) => void;
+  shouldSuppressRealtimeNotification: (notification: AppNotification) => boolean;
+};
+
+function DeferredAppServices({
+  onAnswerConsultingCall,
+  onOpenNotification,
+  shouldSuppressRealtimeNotification,
+}: DeferredAppServicesProps) {
+  const {NotificationCoordinator} = require(
+    '../features/notifications/components/NotificationCoordinator'
+  ) as typeof import('../features/notifications/components/NotificationCoordinator');
+  const {IncomingConsultingCallGate} = require(
+    '../features/consulting/components/IncomingConsultingCallGate'
+  ) as typeof import('../features/consulting/components/IncomingConsultingCallGate');
+
+  return (
+    <>
+      <NotificationCoordinator
+        onOpenNotification={onOpenNotification}
+        shouldSuppressRealtimeNotification={shouldSuppressRealtimeNotification}
+      />
+      <IncomingConsultingCallGate onAnswer={onAnswerConsultingCall} />
+    </>
+  );
+}
 
 type StartupGateProps = {
   children: ReactNode;
   fontsLoaded: boolean;
   hasMinimumElapsed: boolean;
   navigationReady: boolean;
+  onStartupReady: () => void;
 };
 
 function StartupGate({
@@ -58,6 +93,7 @@ function StartupGate({
   fontsLoaded,
   hasMinimumElapsed,
   navigationReady,
+  onStartupReady,
 }: StartupGateProps) {
   const {isRestoringSession} = useAuthSession();
   const shouldShowStartupScreen =
@@ -69,11 +105,12 @@ function StartupGate({
     }
 
     const frame = requestAnimationFrame(() => {
+      onStartupReady();
       void SplashScreen.hideAsync().catch(() => undefined);
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [shouldShowStartupScreen]);
+  }, [onStartupReady, shouldShowStartupScreen]);
 
   return (
     <View style={styles.appLayer}>
@@ -88,7 +125,10 @@ export function AppRoot() {
   const [statusBarStyle, setStatusBarStyle] = useState<'dark' | 'light'>('dark');
   const [hasStartupMinimumElapsed, setHasStartupMinimumElapsed] = useState(false);
   const [isNavigationReady, setIsNavigationReady] = useState(false);
-  const [fontsLoaded] = useFonts({
+  const [isStartupReady, setIsStartupReady] = useState(false);
+  const [areDeferredAppServicesReady, setAreDeferredAppServicesReady] =
+    useState(false);
+  const [fontsLoaded, fontLoadError] = useFonts({
     [typography.fontFamily.brand]: require('../assets/fonts/NixieOne-Regular.ttf'),
     [typography.fontFamily.regular]: require('../assets/fonts/Pretendard-Regular.otf'),
     [typography.fontFamily.medium]: require('../assets/fonts/Pretendard-Medium.otf'),
@@ -97,6 +137,10 @@ export function AppRoot() {
     // AURADIN 히어로 세리프 (features/recommendation DS 전용 — auradinTokens.auType.serif)
     Lora: require('../assets/fonts/Lora-Regular.ttf'),
   });
+  const fontsReady = fontsLoaded || Boolean(fontLoadError);
+  const handleStartupReady = useCallback(() => {
+    setIsStartupReady(true);
+  }, []);
 
   const syncStatusBarStyle = useCallback(
     (state: NavigationRouteState | undefined) => {
@@ -137,10 +181,59 @@ export function AppRoot() {
     },
     [flushPendingNotification],
   );
+  const handleAnswerConsultingCall = useCallback((record: ConsultingRecord) => {
+    if (!navigationRef.isReady()) {
+      return;
+    }
+
+    navigationRef.navigate('ConsultingCall', {
+      bookingId: record.id,
+      durationId: record.durationId ?? 'd30',
+      expertId: record.expertId,
+    });
+  }, [navigationRef]);
 
   useEffect(() => {
-    prefetchHomeHeroImages();
-  }, []);
+    if (!isStartupReady) {
+      return undefined;
+    }
+
+    let serviceTimer: ReturnType<typeof setTimeout> | undefined;
+    const mountServicesAfterStartup = InteractionManager.runAfterInteractions(() => {
+      serviceTimer = setTimeout(
+        () => setAreDeferredAppServicesReady(true),
+        DEFERRED_APP_SERVICES_DELAY_AFTER_STARTUP_MS,
+      );
+    });
+
+    return () => {
+      mountServicesAfterStartup.cancel();
+      if (serviceTimer) {
+        clearTimeout(serviceTimer);
+      }
+    };
+  }, [isStartupReady]);
+
+  useEffect(() => {
+    if (!isStartupReady) {
+      return undefined;
+    }
+
+    let prefetchTimer: ReturnType<typeof setTimeout> | undefined;
+    const prefetchAfterStartup = InteractionManager.runAfterInteractions(() => {
+      prefetchTimer = setTimeout(
+        prefetchHomeHeroImages,
+        HOME_HERO_PREFETCH_DELAY_AFTER_STARTUP_MS,
+      );
+    });
+
+    return () => {
+      prefetchAfterStartup.cancel();
+      if (prefetchTimer) {
+        clearTimeout(prefetchTimer);
+      }
+    };
+  }, [isStartupReady]);
 
   useEffect(() => startFeaturePerformanceLogging(), []);
 
@@ -156,7 +249,7 @@ export function AppRoot() {
   }, []);
 
   useEffect(() => {
-    if (!fontsLoaded) {
+    if (!isStartupReady) {
       return undefined;
     }
 
@@ -169,6 +262,9 @@ export function AppRoot() {
         // on-screen Unity container resumes it. This keeps fast AR entry without
         // continuously heating the device on Home/Login/report screens.
         recordFeaturePerformanceMarker('unity-preload-start');
+        const {prewarmUnityMakeupRuntime} = require(
+          '../features/ar/services/unityMakeupBridge'
+        ) as typeof import('../features/ar/services/unityMakeupBridge');
         const started = prewarmUnityMakeupRuntime();
         recordFeaturePerformanceMarker('unity-preload-dispatched', {started});
       }, UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS);
@@ -180,7 +276,7 @@ export function AppRoot() {
         clearTimeout(preloadTimer);
       }
     };
-  }, [fontsLoaded]);
+  }, [isStartupReady]);
 
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
@@ -188,9 +284,10 @@ export function AppRoot() {
         <StatusBar style={statusBarStyle} />
         <AuthSessionProvider>
           <StartupGate
-            fontsLoaded={fontsLoaded}
+            fontsLoaded={fontsReady}
             hasMinimumElapsed={hasStartupMinimumElapsed}
-            navigationReady={isNavigationReady}>
+            navigationReady={isNavigationReady}
+            onStartupReady={handleStartupReady}>
             <NavigationFlowStateProvider>
             <NavigationContainer
               linking={navigationLinking}
@@ -207,22 +304,15 @@ export function AppRoot() {
                 requestAnimationFrame(flushPendingNotification);
               }}>
               <RootNavigator />
-              <NotificationCoordinator
-                onOpenNotification={handleOpenNotification}
-                shouldSuppressRealtimeNotification={
-                  shouldSuppressRealtimeNotification
-                }
-              />
-              <IncomingConsultingCallGate
-                onAnswer={record => {
-                  if (!navigationRef.isReady()) return;
-                  navigationRef.navigate('ConsultingCall', {
-                    bookingId: record.id,
-                    durationId: record.durationId ?? 'd30',
-                    expertId: record.expertId,
-                  });
-                }}
-              />
+              {areDeferredAppServicesReady ? (
+                <DeferredAppServices
+                  onAnswerConsultingCall={handleAnswerConsultingCall}
+                  onOpenNotification={handleOpenNotification}
+                  shouldSuppressRealtimeNotification={
+                    shouldSuppressRealtimeNotification
+                  }
+                />
+              ) : null}
             </NavigationContainer>
             </NavigationFlowStateProvider>
           </StartupGate>

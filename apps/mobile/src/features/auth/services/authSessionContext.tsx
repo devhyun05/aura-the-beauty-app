@@ -208,10 +208,12 @@ export function AuthSessionProvider({
       try {
         const storedValue = await SecureStore.getItemAsync(AUTH_SESSION_STORAGE_KEY);
         const storedSession = parseStoredSession(storedValue);
-        const restoredSession =
-          storedSession && !getUsableTokenFromSession(storedSession)
-            ? await refreshAuthSession(storedSession)
-            : storedSession;
+        const shouldRefreshStoredSession = Boolean(
+          storedSession && !getUsableTokenFromSession(storedSession),
+        );
+        const restoredSession = shouldRefreshStoredSession && storedSession
+          ? await refreshAuthSession(storedSession)
+          : storedSession;
 
         if (!isMounted) {
           return;
@@ -223,7 +225,7 @@ export function AuthSessionProvider({
 
         sessionRef.current = restoredSession;
         setSessionState(restoredSession);
-        if (restoredSession) {
+        if (restoredSession && shouldRefreshStoredSession) {
           await saveSessionToSecureStore(restoredSession);
         }
       } finally {

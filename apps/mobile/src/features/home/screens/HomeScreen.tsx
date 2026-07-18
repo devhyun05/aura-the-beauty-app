@@ -60,7 +60,6 @@ import {
   getHomeFeedContent,
 } from '../services/homeFeedService';
 import {
-  getAllHomeImageSources,
   getHomeImageLoadStagesForViewport,
   homeImageScheduler,
   type HomeImageLoadStage,
@@ -178,16 +177,6 @@ export function HomeScreen({
     () => getVisibleHomeModules(audience, homeFeedContent),
     [audience, homeFeedContent],
   );
-  const allHomeImageSources = useMemo(() => getAllHomeImageSources(
-    visibleHomeModules,
-    [
-      homeData.hero.imageSource,
-      ...homeData.hero.trends.map(trend => trend.imageSource),
-      ...recommendedMakeupFilters.map(filter => filter.imageSource),
-      ...homeData.filterStore.map(item => item.imageSource),
-      ...homeData.recommendedLooks.map(look => look.imageSource),
-    ],
-  ), [homeData, recommendedMakeupFilters, visibleHomeModules]);
   const visibleHomeModulesRef = useRef(visibleHomeModules);
   visibleHomeModulesRef.current = visibleHomeModules;
   const moduleViewabilityConfig = useRef({
@@ -326,10 +315,6 @@ export function HomeScreen({
 
     return () => subscription.remove();
   }, []);
-
-  useEffect(() => {
-    void homeImageScheduler.scheduleSources(allHomeImageSources);
-  }, [allHomeImageSources]);
 
   useEffect(() => {
     if (hasTrackedHomeEnterRef.current) {
