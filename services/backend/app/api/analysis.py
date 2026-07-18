@@ -680,7 +680,13 @@ async def run_analysis_job_background(
     dedupe_key=f"analysis-report:{report_id}:completed",
   )
 
-  await update_analysis_report_embedding(db, report)
+  # 임베딩 실패는 보고서 완료를 막지 않지만, 조용히 삼키면 벡터 검색에서
+  # 해당 보고서가 소리 없이 빠진다 — 최소한 로그로 드러낸다.
+  if not await update_analysis_report_embedding(db, report):
+    logger.warning(
+      "[aura:analysis-api] embedding:failed reportId=%s",
+      report_id,
+    )
 
   if generates_images:
     prepared_source: tuple[bytes, str] | None = None

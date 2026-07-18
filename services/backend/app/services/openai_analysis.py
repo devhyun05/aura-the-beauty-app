@@ -1083,6 +1083,43 @@ class OpenAIAnalysisService:
       context="source-input",
     )
 
+  # Bedrock Claude 이미지 상한(약 5MB) 여유치. 최적화 후에도 초과하면
+  # 조용한 invoke 실패 대신 명시적 오류로 돌린다.
+  _ANALYSIS_IMAGE_MAX_BYTES = 4_500_000
+
+  def _prepare_source_image_for_analysis(
+    self,
+    image_bytes: bytes,
+    source_content_type: str,
+  ) -> tuple[bytes, str]:
+    """분석용 사진을 모델 전송 전에 다운스케일한다.
+
+    기존에는 이미지 생성 경로만 최적화하고 분석 경로는 S3 원본을 그대로
+    base64로 보냈다 — 대형 사진이면 비용·지연을 넘어 Bedrock 이미지 한도
+    초과로 분석 자체가 실패한다. 생성 경로와 동일한 변환기를 재사용한다.
+    """
+    optimized_bytes, optimized_content_type = self._convert_image_for_speed(
+      image_bytes,
+      source_content_type=source_content_type,
+      output_format="jpeg",
+      max_edge=self.settings.openai_image_input_max_edge,
+      quality=self.settings.openai_image_input_quality,
+      context="analysis-input",
+    )
+
+    if len(optimized_bytes) > self._ANALYSIS_IMAGE_MAX_BYTES:
+      raise AppError(
+        413,
+        "SOURCE_IMAGE_TOO_LARGE",
+        "분석용 사진이 너무 커요. 다시 촬영해 주세요.",
+        {
+          "bytes": len(optimized_bytes),
+          "maxBytes": self._ANALYSIS_IMAGE_MAX_BYTES,
+        },
+      )
+
+    return optimized_bytes, optimized_content_type
+
   def _optimize_generated_image_for_upload(self, image_bytes: bytes) -> bytes:
     output_format, output_compression, _, content_type = self._resolve_makeup_image_output()
     optimized_bytes, _ = self._convert_image_for_speed(
@@ -1426,6 +1463,14 @@ class OpenAIAnalysisService:
   ) -> dict[str, Any]:
     provider = self.settings.analysis_provider
     schema_instruction = json.dumps(json_schema, ensure_ascii=False, separators=(",", ":"))
+
+    # V2 스테이지도 동일 원본을 base64로 실어 보낸다 — analyze_text와 같은
+    # 이유(비용·Bedrock 이미지 한도)로 전송 전에 다운스케일한다.
+    if source_image_bytes is not None:
+      source_image_bytes, _ = self._prepare_source_image_for_analysis(
+        source_image_bytes,
+        self._structured_image_content_type(source_image_bytes),
+      )
 
     if provider == "bedrock":
       model_id = self.settings.effective_analysis_model_id
@@ -1991,6 +2036,10 @@ class OpenAIAnalysisService:
       )
 
     content_type = self._infer_content_type(payload)
+    source_image_bytes, content_type = self._prepare_source_image_for_analysis(
+      source_image_bytes,
+      content_type,
+    )
     source_image_base64 = base64.b64encode(source_image_bytes).decode("utf-8")
     logger.info(
       "[aura:bedrock] analysis:start model=%s region=%s",
@@ -2002,7 +2051,7 @@ class OpenAIAnalysisService:
       body=json.dumps(
         {
           "anthropic_version": "bedrock-2023-05-31",
-          "max_tokens": 2400,
+          "max_tokens": self.settings.bedrock_analysis_max_tokens,
           "temperature": 0.2,
           "system": "You are a concise, practical K-beauty makeup analyst. Return JSON only.",
           "messages": [
@@ -2029,6 +2078,15 @@ class OpenAIAnalysisService:
     )
     response_payload = json.loads(response["body"].read())
     output_text = self._extract_bedrock_output_text(response_payload)
+    # 절단 관측: max_tokens 도달로 잘린 출력은 파싱/검증 실패로 이어지는데,
+    # stop_reason을 남기지 않으면 "왜 실패했는지"가 로그에서 사라진다.
+    stop_reason = str(response_payload.get("stop_reason") or "")
+    if stop_reason == "max_tokens":
+      logger.warning(
+        "[aura:bedrock] analysis:truncated maxTokens=%s outputChars=%s",
+        self.settings.bedrock_analysis_max_tokens,
+        len(output_text),
+      )
 
     if not output_text:
       raise AppError(
@@ -2037,10 +2095,21 @@ class OpenAIAnalysisService:
         "Bedrock Claude analysis returned an empty response.",
       )
 
-    parsed = self._normalize_analysis_result(self._parse_json_output(output_text))
+    try:
+      parsed = self._normalize_analysis_result(self._parse_json_output(output_text))
+    except AppError as exc:
+      if stop_reason == "max_tokens":
+        raise AppError(
+          exc.status_code,
+          exc.code,
+          exc.message,
+          {**exc.details, "stopReason": "max_tokens"},
+        ) from exc
+      raise
     logger.info(
-      "[aura:bedrock] analysis:success durationMs=%s",
+      "[aura:bedrock] analysis:success durationMs=%s stopReason=%s",
       round((time.monotonic() - started_at) * 1000),
+      stop_reason or "end_turn",
     )
 
     return parsed
@@ -2062,6 +2131,10 @@ class OpenAIAnalysisService:
 
     started_at = time.monotonic()
     content_type = self._infer_content_type(payload)
+    source_image_bytes, content_type = self._prepare_source_image_for_analysis(
+      source_image_bytes,
+      content_type,
+    )
     source_image_base64 = base64.b64encode(source_image_bytes).decode("utf-8")
     logger.info(
       "[aura:openai] analysis:start model=%s",

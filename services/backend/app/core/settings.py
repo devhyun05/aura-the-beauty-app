@@ -89,6 +89,10 @@ class Settings(BaseSettings):
   bedrock_question_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_recommendation_model_id: str | None = "global.anthropic.claude-sonnet-4-6"
   bedrock_analysis_region: str | None = None
+  # analyze_text 단일 호출의 출력 상한. 하드 검증(FACE_ANALYSIS_AI_INCOMPLETE)이
+  # 누락 필드를 실패로 돌리므로, 상한이 낮으면 절단→검증 실패가 사용자 재촬영
+  # 요구로 이어진다. 요구 출력(~90값)의 한국어 문장 기준 여유치로 4000.
+  bedrock_analysis_max_tokens: int = Field(default=4000, ge=1200, le=8192)
   bedrock_guardrail_id: str | None = None
   bedrock_guardrail_version: str | None = None
   bedrock_guardrail_region: str | None = None
