@@ -96,6 +96,46 @@ def test_bedrock_truncation_attaches_stop_reason_to_failure():
     assert exc_info.value.details.get("stopReason") == "max_tokens"
 
 
+def test_structured_v2_stage_truncation_attaches_stop_reason():
+    # dev 라이브 경로(V2 스테이지)도 절단 시 stopReason을 관측·전파해야 한다.
+    fake = _FakeBedrockClient(
+        {
+            "stop_reason": "max_tokens",
+            # 절단된 부분 JSON — 파싱 불가.
+            "content": [{"type": "text", "text": '{"metrics": {"skin.text'}],
+        }
+    )
+    service = _bedrock_service(fake)
+
+    with pytest.raises(AppError) as exc_info:
+        service._analyze_structured_json_sync(
+            developer_prompt="dev",
+            user_prompt="user",
+            json_schema={"type": "object"},
+            source_image_bytes=None,
+            max_tokens=2800,
+        )
+
+    assert exc_info.value.details.get("stopReason") == "max_tokens"
+
+
+def test_structured_v2_stage_empty_truncated_output_reports_stop_reason():
+    fake = _FakeBedrockClient({"stop_reason": "max_tokens", "content": []})
+    service = _bedrock_service(fake)
+
+    with pytest.raises(AppError) as exc_info:
+        service._analyze_structured_json_sync(
+            developer_prompt="dev",
+            user_prompt="user",
+            json_schema={"type": "object"},
+            source_image_bytes=None,
+            max_tokens=2800,
+        )
+
+    assert exc_info.value.code == "AI_EMPTY_OUTPUT"
+    assert exc_info.value.details.get("stopReason") == "max_tokens"
+
+
 def test_bedrock_request_uses_configured_max_tokens():
     fake = _FakeBedrockClient(
         {

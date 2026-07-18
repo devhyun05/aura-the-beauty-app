@@ -1605,6 +1605,20 @@ class OpenAIAnalysisService:
       )
       response_payload = json.loads(response["body"].read())
       output_text = self._extract_bedrock_output_text(response_payload)
+      # V2 스테이지도 절단을 관측한다(dev 라이브 경로). 절단이면 이후 빈 출력·
+      # 파싱 실패·상위 Pydantic 검증 실패로 이어지므로 stopReason을 붙여 진단.
+      stop_reason = self._observe_bedrock_stop_reason(
+        response_payload,
+        context="stage",
+        max_tokens=max_tokens,
+      )
+      if not output_text and stop_reason == "max_tokens":
+        raise AppError(
+          502,
+          "AI_EMPTY_OUTPUT",
+          "AI structured analysis returned an empty response.",
+          {"stopReason": "max_tokens"},
+        )
     elif provider == "openai":
       content = [{"type": "input_text", "text": user_prompt}]
       if source_image_bytes is not None:
@@ -1634,12 +1648,24 @@ class OpenAIAnalysisService:
         },
       )
       output_text = getattr(response, "output_text", "")
+      stop_reason = ""
     else:
       raise AppError(503, "AI_PROVIDER_UNSUPPORTED", f"Unsupported AI_PROVIDER: {provider}")
 
     if not output_text:
       raise AppError(502, "AI_EMPTY_OUTPUT", "AI structured analysis returned an empty response.")
-    return self._parse_json_output(output_text)
+    try:
+      return self._parse_json_output(output_text)
+    except AppError as exc:
+      # 절단된 부분 JSON이 파싱 불가일 때 원인(max_tokens)을 details에 남긴다.
+      if stop_reason == "max_tokens":
+        raise AppError(
+          exc.status_code,
+          exc.code,
+          exc.message,
+          {**exc.details, "stopReason": "max_tokens"},
+        ) from exc
+      raise
 
   async def read_source_image_bytes(self, payload: dict[str, Any]) -> bytes:
     return await asyncio.to_thread(self._read_source_image_bytes, payload)
@@ -2094,6 +2120,27 @@ class OpenAIAnalysisService:
 
     return result
 
+  def _observe_bedrock_stop_reason(
+    self,
+    response_payload: dict[str, Any],
+    *,
+    context: str,
+    max_tokens: int,
+  ) -> str:
+    """양 경로 공유 절단 관측. dev=V2 라이브·프로드=analyze_text 모두 커버한다.
+
+    max_tokens 절단은 파싱/스키마 검증 실패로 이어지는데, stop_reason을 남기지
+    않으면 "왜 실패했는지"가 로그에서 사라진다. 새 방어가 아니라 관측성 목적.
+    """
+    stop_reason = str(response_payload.get("stop_reason") or "")
+    if stop_reason == "max_tokens":
+      logger.warning(
+        "[aura:bedrock] %s:truncated maxTokens=%s",
+        context,
+        max_tokens,
+      )
+    return stop_reason
+
   def _extract_bedrock_output_text(self, response_payload: dict[str, Any]) -> str:
     content = response_payload.get("content")
 
@@ -2169,15 +2216,11 @@ class OpenAIAnalysisService:
     )
     response_payload = json.loads(response["body"].read())
     output_text = self._extract_bedrock_output_text(response_payload)
-    # 절단 관측: max_tokens 도달로 잘린 출력은 파싱/검증 실패로 이어지는데,
-    # stop_reason을 남기지 않으면 "왜 실패했는지"가 로그에서 사라진다.
-    stop_reason = str(response_payload.get("stop_reason") or "")
-    if stop_reason == "max_tokens":
-      logger.warning(
-        "[aura:bedrock] analysis:truncated maxTokens=%s outputChars=%s",
-        self.settings.bedrock_analysis_max_tokens,
-        len(output_text),
-      )
+    stop_reason = self._observe_bedrock_stop_reason(
+      response_payload,
+      context="analysis",
+      max_tokens=self.settings.bedrock_analysis_max_tokens,
+    )
 
     if not output_text:
       raise AppError(
