@@ -138,7 +138,6 @@ export interface S4Data {
     photo: PhotoSlotData;
     goodTag: string; badTag: string;
     goodCaption: string; badCaption: string;
-    dial: { heading: string; warm: string; cool: string; warmCaption: string; neutralCaption: string; coolCaption: string };
     goodTitle: string; badTitle: string;
     goodSwatches: SwatchData[]; badSwatches: SwatchData[];
     initialSwatch: { name: string; color: string; good: boolean };

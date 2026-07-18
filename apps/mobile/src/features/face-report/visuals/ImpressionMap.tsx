@@ -7,7 +7,7 @@ import type { ImpressionAxis } from '../reportTypes';
 
 /** S6 인상 좌표 맵 — axes[0]=가로, axes[1]=세로. value −1..1 → 0..1 위치.
  *  현재 위치(AI 판단) 점 + 드래그 탐색 점. 정직성: 위치는 AI가 본 인상, 숫자 미노출.
- *  드래그는 PanResponder(gesture-handler 미의존) — VerticalLightSlider/WhatIfRail과
+ *  드래그는 PanResponder(gesture-handler 미의존) — WhatIfRail과
  *  같은 캡처+종료거부 계약으로 리포트 ScrollView가 제스처를 가로채지 않게 한다. */
 export function ImpressionMap({ axes }: { axes: ImpressionAxis[] }) {
   const ax = axes[0] ?? { leftLabel: '', rightLabel: '', value: 0, key: 'x' };
@@ -42,7 +42,7 @@ export function ImpressionMap({ axes }: { axes: ImpressionAxis[] }) {
   };
 
   // ScrollView·iOS swipe-back에 제스처를 뺏기지 않도록 capture + 종료 거부
-  // (VerticalLightSlider/WhatIfRail 주석 참조).
+  // (WhatIfRail 주석 참조).
   const pan = useMemo(
     () =>
       PanResponder.create({

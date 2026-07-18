@@ -147,17 +147,11 @@ export const demoReport: ReportData = {
     ],
     drape: {
       title: '직접 입혀 보세요',
-      sub: '아래 색을 탭하면 드레이프처럼 둘러볼 수 있어요 · 다이얼로 조명도 바꿔 보세요',
+      sub: '아래 색을 탭하면 드레이프처럼 얼굴에 대볼 수 있어요',
       photo: { placeholderLabel: '셀피' },
       goodTag: '잘 어울리는 색', badTag: '피할 색',
       goodCaption: '얼굴 주변이 정돈되고 피부 결이 고르게 살아나요',
       badCaption: '색이 얼굴보다 먼저 읽혀서 인상이 살짝 가라앉아 보여요',
-      dial: {
-        heading: '조명', warm: '웜', cool: '쿨',
-        warmCaption: '따뜻한 조명 — 웜하게 보여요',
-        neutralCaption: '기준 조명 (진단 기준)',
-        coolCaption: '차가운 조명 — 쿨하게 보여요',
-      },
       goodTitle: '잘 어울리는 색',
       badTitle: '피하면 좋은 색',
       goodSwatches: [
