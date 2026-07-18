@@ -92,6 +92,14 @@ namespace ARMakeup.Face
         static readonly int BrowPowderTextureId = Shader.PropertyToID("_BrowPowderTexture");
         static readonly int BrowPowderFinishId = Shader.PropertyToID("_BrowPowderFinish");
         static readonly int BrowPowderShimmerId = Shader.PropertyToID("_BrowPowderShimmer");
+        // 마감(Tier B) — 결/지우개/라이트너. 0=새틴=기존 출력(하위호환). 세 머티리얼 독립.
+        static readonly int BrowFinishId = Shader.PropertyToID("_BrowFinish");
+        static readonly int ConcealFinishId = Shader.PropertyToID("_ConcealFinish");
+        static readonly int LightenerFinishId = Shader.PropertyToID("_LightenerFinish");
+        // 제형(텍스처) GENERIC — 결 틴트·눈썹 지우기·라이트너(세 머티리얼 독립). 0=크림=현행.
+        static readonly int BrowTextureId = Shader.PropertyToID("_BrowTexture");
+        static readonly int ConcealTextureId = Shader.PropertyToID("_ConcealTexture");
+        static readonly int LightenerTextureId = Shader.PropertyToID("_LightenerTexture");
 
         readonly Vector2[] _up = new Vector2[Seg];
         readonly Vector2[] _lo = new Vector2[Seg];
@@ -214,6 +222,10 @@ namespace ARMakeup.Face
             _arch = Mathf.Clamp(p.browArch, 0f, 1f);
             _shape = Mathf.Clamp(p.browShape, 0, 5);
             SetProduct(ref _mascara, p.browColor, p.browIntensity);
+            // 결(마스카라/젤) 마감 — 0=새틴=기존 출력(하위호환).
+            _mascara.material.SetFloat(BrowFinishId, p.browFinish);
+            // 제형(텍스처) 결 틴트 — GENERIC(0=크림=현행, 하위호환).
+            _mascara.material.SetFloat(BrowTextureId, p.browTexture);
             SetProduct(ref _powder, p.browPowderColor, p.browPowderIntensity);
             // 채움 제형(파우더/포마드/젤)·마감 — 생략(0)=기존 출력(하위호환).
             _powder.material.SetFloat(BrowPowderTextureId, p.browPowderTexture);
@@ -222,9 +234,15 @@ namespace ARMakeup.Face
             // 라이트너는 색이 아니라 피부톤을 쓰므로 강도만.
             _lightener.intensity = Mathf.Clamp01(p.browLightenerIntensity);
             _lightener.material.SetFloat(BrowIntensityId, _lightener.intensity);
+            _lightener.material.SetFloat(LightenerFinishId, p.browLightenerFinish);
+            // 제형(텍스처) 라이트너 — GENERIC(0=크림=현행, 하위호환).
+            _lightener.material.SetFloat(LightenerTextureId, p.browLightenerTexture);
             // 컨실(눈썹 지우기)도 색 없음 — 피부색은 셰이더가 GrabPass 오프셋 UV에서 직접 샘플.
             _conceal.intensity = Mathf.Clamp01(p.browConcealIntensity);
             _conceal.material.SetFloat(BrowIntensityId, _conceal.intensity);
+            _conceal.material.SetFloat(ConcealFinishId, p.browConcealFinish);
+            // 제형(텍스처) 눈썹 지우기 — GENERIC(0=크림=현행, 하위호환).
+            _conceal.material.SetFloat(ConcealTextureId, p.browConcealTexture);
             // 워시드아웃 완화(전역 근사 protect) — 제품을 진하게 그릴수록 그 아래
             // 컨실을 약화해 "피부 덮고 반투명 제품 얹기" 이중 처리를 완화한다. 감쇠
             // 계수는 셰이더 PROTECT_DAMP. 컨실 단독(제품 0)일 땐 감쇠 0 = 완전 지우개.

@@ -141,15 +141,24 @@ type ApiSituation = Partial<Omit<MakeupSituation, 'keywords' | 'key'>> & {
   keywords?: ApiKeyword[];
 };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isMakeupRecommendationUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_PATTERN.test(value.trim());
+}
+
 const SITUATION_KEYS = new Set<MakeupSituationKey>([
   'daily', 'work', 'date', 'social', 'formal_event', 'travel_outdoor', 'camera_content', 'festival_performance',
+]);
+const REQUIRED_DISCOVERY_KEYS = new Set<MakeupSituationKey>([
+  'daily', 'formal_event', 'camera_content', 'festival_performance',
 ]);
 const BADGES = new Set<MakeupTrendBadge>([
   'TREND_K_BEAUTY_2026', 'TREND_GLOBAL_SS26', 'STEADY', 'CURATED',
 ]);
 
 function normalizeKeyword(value: ApiKeyword): MakeupTrendKeyword | null {
-  if (!value.id?.trim() || !value.label?.trim()) return null;
+  if (!isMakeupRecommendationUuid(value.id) || !value.label?.trim()) return null;
   const requestedBadge = BADGES.has(value.badge as MakeupTrendBadge) ? value.badge as MakeupTrendBadge : 'CURATED';
   const hasTrendEvidence = Boolean(value.sourceName?.trim() && value.sourcePublishedAt && value.asOf && value.expiresAt);
   const badge = requestedBadge.startsWith('TREND_') && !hasTrendEvidence ? 'CURATED' : requestedBadge;
@@ -174,11 +183,15 @@ function normalizeKeyword(value: ApiKeyword): MakeupTrendKeyword | null {
 export function normalizeMakeupRecommendationDiscovery(value: unknown): MakeupRecommendationDiscovery | null {
   if (!value || typeof value !== 'object') return null;
   const payload = value as {generatedAt?: string; situations?: ApiSituation[]; sourceReports?: Array<{id?: string}>};
-  if (!Array.isArray(payload.situations)) return null;
+  if (!Array.isArray(payload.situations) || payload.situations.length !== REQUIRED_DISCOVERY_KEYS.size) return null;
   const situations = payload.situations.flatMap(item => {
-    if (!SITUATION_KEYS.has(item.key as MakeupSituationKey) || !item.id?.trim() || !item.label?.trim()) return [];
-    const keywords = (item.keywords ?? []).map(normalizeKeyword).filter((keyword): keyword is MakeupTrendKeyword => Boolean(keyword));
-    if (keywords.length === 0) return [];
+    if (!SITUATION_KEYS.has(item.key as MakeupSituationKey) || !isMakeupRecommendationUuid(item.id) || !item.label?.trim()) return [];
+    if (!Array.isArray(item.keywords) || item.keywords.length === 0) return [];
+    const keywords = item.keywords.map(normalizeKeyword).filter((keyword): keyword is MakeupTrendKeyword => Boolean(keyword));
+    if (
+      keywords.length !== item.keywords.length
+      || new Set(keywords.map(keyword => keyword.id)).size !== keywords.length
+    ) return [];
     const key = item.key as MakeupSituationKey;
     return [{
       id: item.id.trim(),
@@ -190,12 +203,22 @@ export function normalizeMakeupRecommendationDiscovery(value: unknown): MakeupRe
       keywords,
     }];
   }).sort((a, b) => a.sortOrder - b.sortOrder);
-  return situations.length > 0 ? {
+  const situationIds = situations.map(situation => situation.id);
+  const situationKeys = situations.map(situation => situation.key);
+  const sourceReports = payload.sourceReports ?? [];
+  if (
+    situations.length !== REQUIRED_DISCOVERY_KEYS.size
+    || new Set(situationIds).size !== situations.length
+    || new Set(situationKeys).size !== situations.length
+    || situationKeys.some(key => !REQUIRED_DISCOVERY_KEYS.has(key))
+    || sourceReports.some(report => !isMakeupRecommendationUuid(report.id))
+  ) return null;
+  return {
     generatedAt: payload.generatedAt ?? new Date().toISOString(),
     situations,
     source: 'api',
-    sourceReportIds: (payload.sourceReports ?? []).flatMap(report => report.id?.trim() ? [report.id.trim()] : []),
-  } : null;
+    sourceReportIds: sourceReports.map(report => report.id?.trim() ?? ''),
+  };
 }
 
 export function isValidGuideArea(value: string | undefined): value is MakeupGuideArea {

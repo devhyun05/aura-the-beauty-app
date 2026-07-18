@@ -38,7 +38,7 @@ def test_schema_path_exists() -> None:
 
   assert path.name == "schema.sql"
   assert path.exists()
-  assert SCHEMA_VERSION == "schema.sql:v7-trend-now-health"
+  assert SCHEMA_VERSION == "schema.sql:v8-makeup-journey"
 
 
 def test_seed_path_exists() -> None:

@@ -8,7 +8,9 @@ import {YStack} from 'tamagui';
 
 import {colors, spacing} from '../../../shared/theme';
 import {AppHeader, AppScreen, AuraLogo} from '../../../shared/ui';
+import {isIsoDateString} from '../../../features/makeup-journey/utils/date';
 import {AppFeatureMenuSheet} from '../AppFeatureMenuSheet';
+import {useNavigationFlowState} from '../flowState';
 import type {
   AppFeatureMenuItem,
   AppFeatureMenuRootRouteName,
@@ -53,6 +55,56 @@ export function navigateMainTab(
   navigation.navigate('MainTabs', {screen});
 }
 
+export function getMakeupJourneyTabResetState(month?: string) {
+  const makeupJourneyTabParams = month
+    ? {
+        screen: 'MakeupJourneyTab' as const,
+        params: {month},
+      }
+    : {screen: 'MakeupJourneyTab' as const};
+
+  return {
+    index: 0,
+    routes: [
+      {
+        name: 'MainTabs' as const,
+        params: makeupJourneyTabParams,
+      },
+    ],
+  };
+}
+
+export function getHomeTabResetState() {
+  return {
+    index: 0,
+    routes: [
+      {
+        name: 'MainTabs' as const,
+        params: {screen: 'HomeTab' as const},
+      },
+    ],
+  };
+}
+
+export function getMakeupJourneyDayResetState(entryDate: string) {
+  return {
+    index: 1,
+    routes: [
+      ...getMakeupJourneyTabResetState(entryDate.slice(0, 7)).routes,
+      {
+        name: 'MakeupJourneyDayDetail' as const,
+        params: {entryDate},
+      },
+    ],
+  };
+}
+
+export function getMakeupJourneySafeReturnResetState(entryDate: unknown) {
+  return typeof entryDate === 'string' && isIsoDateString(entryDate)
+    ? getMakeupJourneyDayResetState(entryDate)
+    : getMakeupJourneyTabResetState();
+}
+
 export function navigateARBack(navigation: RootNavigation, backRoute?: ARFilterBackRouteName) {
   if (backRoute === 'FaceAnalysisReportDetail') {
     navigation.navigate('FaceAnalysisReportDetail');
@@ -67,6 +119,7 @@ export function getMainTabHeaderBorderWidth(
 ): 0 | undefined {
   return routeName === 'HomeTab' ||
     routeName === 'ConsultingTab' ||
+    routeName === 'MakeupJourneyTab' ||
     routeName === 'ProfileTab'
     ? 0
     : undefined;
@@ -147,6 +200,11 @@ export function MainTabChrome({
   wrapContentInScreen = true,
 }: MainTabChromeProps) {
   const insets = useSafeAreaInsets();
+  const {
+    beginMakeupFeedbackFlow,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  } = useNavigationFlowState();
   const [isFeatureMenuVisible, setIsFeatureMenuVisible] = React.useState(false);
   const headerCopy = getMainHeaderCopy(routeName);
   const isHomeTab = routeName === 'HomeTab';
@@ -162,6 +220,15 @@ export function MainTabChrome({
     (item: AppFeatureMenuItem) => {
       setIsFeatureMenuVisible(false);
 
+      if (
+        item.target.kind === 'root' &&
+        item.target.routeName === 'MakeupFeedbackAlbumUpload'
+      ) {
+        beginMakeupFeedbackFlow();
+        setMakeupFeedbackResult(null);
+        setSelectedMakeupFeedbackPhoto({photoSource: 'gallery'});
+      }
+
       requestAnimationFrame(() => {
         if (item.target.kind === 'mainTab') {
           navigation.navigate(item.target.routeName);
@@ -175,7 +242,12 @@ export function MainTabChrome({
         }
       });
     },
-    [navigation],
+    [
+      beginMakeupFeedbackFlow,
+      navigation,
+      setMakeupFeedbackResult,
+      setSelectedMakeupFeedbackPhoto,
+    ],
   );
   const renderedChildren = typeof children === 'function'
     ? children({openFeatureMenu: handleOpenFeatureMenu})

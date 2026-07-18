@@ -179,6 +179,9 @@ jobs:
       - name: Contract — Makeup feedback cross-layer response
         run: npm run test:makeup-feedback-cross-layer
 
+      - name: Contract — Makeup journey calendar
+        run: npm run test:makeup-journey
+
       - name: Contract — Realtime face quality native bridge
         run: npm run test:realtime-face-quality-native
 

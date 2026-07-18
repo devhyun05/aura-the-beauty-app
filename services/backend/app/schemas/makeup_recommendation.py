@@ -21,6 +21,9 @@ FORBIDDEN_QUESTION_AXES = (
   "어두운톤",
 )
 
+AI_PICK_OPTION_ID = "ai_pick"
+AI_PICK_OPTION_LABEL = "AI가 골라줘"
+
 
 MAKEUP_RECOMMENDATION_EVENT_NAMES = (
   "makeup_recommendation_opened",
@@ -210,7 +213,7 @@ class GeneratedQuestion(CamelModel):
     if len({option.label.casefold() for option in self.options}) != len(self.options):
       raise ValueError("Question option labels must be unique.")
     delegate = self.options[-1]
-    if delegate.id != "ai_pick" or delegate.label != "AI가 골라줘":
+    if delegate.id != AI_PICK_OPTION_ID or delegate.label != AI_PICK_OPTION_LABEL:
       raise ValueError("The last option must be the exact AI delegation option.")
     content = "".join([self.title, *[option.label for option in self.options]]).replace(" ", "").casefold()
     if any(axis in content for axis in FORBIDDEN_QUESTION_AXES):

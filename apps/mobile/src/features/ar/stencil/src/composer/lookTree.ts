@@ -22,7 +22,14 @@ import type {
   OverlayLayer,
 } from '../bridge/types';
 import { PRESETS } from '../presets';
-import { REGION_GROUPS, REGION_MAP } from './regions';
+import {
+  EYELINER_STYLES,
+  FOUNDATION_FINISHES,
+  MASCARA_STYLES,
+  MASCARA_STYLES_UPPER,
+  REGION_GROUPS,
+  REGION_MAP,
+} from './regions';
 import type { RegionKey } from './regions';
 import { newLayer, seedLayers } from './model';
 import type { ComposerLayer } from './model';
@@ -153,9 +160,6 @@ export interface LeafDef {
   technique?: { strength: number };
 }
 
-/** 세부부위 선택기 노출 범위. internal은 상위 룩 조립 전용, standalone만 직접 선택. */
-export type SubPickerScope = 'internal' | 'standalone';
-
 export interface LookDef {
   id: string;
   name: string;
@@ -167,8 +171,12 @@ export interface LookDef {
    *  인스턴스화된다(instantiateGroup). 미지정=일반 룩 정의. 하위호환: 옛 라이브러리엔
    *  이 필드가 없어 undefined로 로드되며 일반 정의로 동작한다. */
   kind?: 'group';
-  /** sub 정의 전용. 옛 사용자 정의(undefined)는 하위호환상 standalone으로 취급한다. */
-  pickerScope?: SubPickerScope;
+  /** 내부 구성 요소(sub 레벨 전용) — 여러 파트로 이뤄진 상위 부위 룩의 조각이라
+   *  단독으로는 의미가 없다("파운데이션"만 떼면 어느 룩의 것인지 알 수 없다).
+   *  세부부위 ⇄ 픽커(subDefsForRegion)에 노출하지 않는다. 라이브러리에는 그대로
+   *  남아 상위 룩 인스턴스화·기존 스냅샷 revive에 쓰인다. 미지정=standalone
+   *  (하위호환: 옛 저장본엔 이 필드가 없어 undefined로 로드되고 노출된다). */
+  internal?: boolean;
   /** face/region 레벨: 하위 정의 id 배열 · sub 레벨: 잎 정의 배열 */
   kids: string[] | LeafDef[];
 }
@@ -193,6 +201,137 @@ const gid = () => `grp${++groupSeq}`;
 
 const SYSTEM_PRESET_IDS = ['natural', 'rosy', 'peach', 'glam', 'smoky'];
 
+// ── 세부부위(sub) 이름 유도 — 프리셋(전체룩) 이름을 물려주지 않는다 ─────────────
+// 사용자 지적: 세부부위 카드가 "글램 마스카라"처럼 전체룩 이름을 물려받았다. 세부부위
+// 룩은 자기 성격(대표색/스타일/마감)을 말하는 이름을 가져야 한다. 잎 특성에서 유도하고,
+// 같은 부위에 같은 이름이 겹치면(프리셋마다 유사한 베이스 등) 번호만 덧붙인다.
+
+/** 프리셋에 실제로 쓰인 대표색 hex → 색계열 한국어. 유도 실패 시(신규 색) HSL 폴백. */
+const COLOR_FAMILY_KO: Record<string, string> = {
+  // 립
+  '#D96C7B': '로즈', '#E04E68': '로즈', '#F2846B': '코랄', '#B01E3C': '레드', '#A65560': '모브',
+  // 블러셔
+  '#F2A0AC': '로즈', '#F08698': '핑크', '#F7A98C': '피치', '#D97386': '로즈', '#C98A93': '모브',
+  // 아이섀도(상·하)·삼각존
+  '#C29A7B': '베이지', '#D89AA0': '로즈', '#E0A183': '코랄', '#8A5A44': '브라운', '#5C4A46': '토프',
+  '#3E2C24': '딥브라운',
+  // 눈썹(결·채움·한올) — BROW_COLORS
+  '#4A3428': '브라운', '#4A3628': '브라운', '#6B5240': '브라운',
+  '#3A2A20': '다크브라운', '#2A1E16': '다크브라운',
+  // 애교살·하이라이터
+  '#FFF3E2': '아이보리', '#FFD9E0': '핑크', '#F7E7CE': '샴페인',
+  '#F5DDE2': '핑크', '#FFE9C8': '샴페인',
+  // 렌즈(레이어드 베이스 payload)
+  '#5B7B8C': '그레이블루', '#7A6A9E': '바이올렛',
+};
+
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return null;
+  const h = m[1];
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+/** hex → 색계열 한국어. 표에 없으면 HSL로 대략 분류(방어용 — 현재 프리셋은 표에서 해결). */
+function colorFamilyKo(hex: string): string {
+  const up = hex.toUpperCase();
+  if (COLOR_FAMILY_KO[up]) return COLOR_FAMILY_KO[up];
+  const rgb = hexToRgb(up);
+  if (!rgb) return '';
+  const [r, g, b] = rgb.map(v => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  if (s < 0.12) return l > 0.85 ? '아이보리' : l > 0.5 ? '그레이' : '다크';
+  let h = 0;
+  if (max === r) h = 60 * (((g - b) / d) % 6);
+  else if (max === g) h = 60 * ((b - r) / d + 2);
+  else h = 60 * ((r - g) / d + 4);
+  if (h < 0) h += 360;
+  if (h < 15 || h >= 345) return l < 0.4 ? '버건디' : '레드';
+  if (h < 40) return l > 0.6 ? '코랄' : l < 0.4 ? '브라운' : '로즈';
+  if (h < 55) return l < 0.45 ? '브라운' : '베이지';
+  if (h < 170) return '그린';
+  if (h < 255) return '블루';
+  if (h < 290) return '바이올렛';
+  return l > 0.6 ? '핑크' : '모브';
+}
+
+type SubNameStrategy = 'color' | 'style' | 'finish' | 'plain';
+
+interface SubNameSpec {
+  /** 부위 노운(카드에 보이는 짧은 성격어 — 이름 반복 회피용, 잎 label과 별개) */
+  noun: string;
+  strategy: SubNameStrategy;
+  colorKey?: keyof FilterParams;
+  styleKey?: keyof FilterParams;
+  styleOptions?: { value: number; label: string }[];
+  finishKey?: keyof FilterParams;
+}
+
+/** 프리셋 분해가 만드는 부위별 세부부위 이름 규칙. 색이 무의미한 부위(라이너·마스카라
+ *  =거의 검정)는 스타일을, 색이 없는 부위(파운데)는 마감을, 베이스 보정(톤·피부결)은
+ *  노운만 쓴다. 표에 없는 부위는 REGION_MAP.label로 폴백(전체룩 이름 미사용). */
+const SYS_SUB_NAME: Partial<Record<RegionKey, SubNameSpec>> = {
+  tone: { noun: '언더톤', strategy: 'plain' },
+  skin: { noun: '피부결', strategy: 'plain' },
+  foundation: { noun: '파운데', strategy: 'finish', finishKey: 'foundationFinish' },
+  lip: { noun: '립', strategy: 'color', colorKey: 'lipColor' },
+  blush: { noun: '블러셔', strategy: 'color', colorKey: 'blushColor' },
+  eyeshadow: { noun: '섀도', strategy: 'color', colorKey: 'eyeshadowColor' },
+  eyeshadowLower: { noun: '언더섀도', strategy: 'color', colorKey: 'eyeshadowLowerColor' },
+  triangleZone: { noun: '삼각존', strategy: 'color', colorKey: 'triangleZoneColor' },
+  eyelinerUpper: { noun: '라이너', strategy: 'style', styleKey: 'eyelinerStyle', styleOptions: EYELINER_STYLES },
+  mascara: { noun: '마스카라', strategy: 'style', styleKey: 'mascaraStyle', styleOptions: MASCARA_STYLES_UPPER },
+  lowerMascara: { noun: '언더래시', strategy: 'style', styleKey: 'lowerLashStyle', styleOptions: MASCARA_STYLES },
+  aegyo: { noun: '애교살', strategy: 'color', colorKey: 'aegyoColor' },
+  highlighter: { noun: '하이라이터', strategy: 'color', colorKey: 'highlightColor' },
+  brow: { noun: '결', strategy: 'color', colorKey: 'browColor' },
+  browPowder: { noun: '채움', strategy: 'color', colorKey: 'browPowderColor' },
+  browPencil: { noun: '한올', strategy: 'color', colorKey: 'browPencilColor' },
+  lensBase: { noun: '렌즈', strategy: 'color' }, // 색은 lens payload에서
+};
+
+function labelForValue(
+  opts: { value: number; label: string }[],
+  v: number | undefined,
+): string {
+  if (v === undefined) return '';
+  return opts.find(o => o.value === v)?.label ?? '';
+}
+
+/**
+ * 세부부위(sub) 정의의 표시 이름 — 프리셋 이름 대신 잎 자신의 특성에서 유도한다.
+ *  ① 색 부위 → 대표색 계열("브라운 섀도")  ② 라이너·마스카라 → 스타일("돌리 마스카라")
+ *  ③ 파운데 → 마감("듀이 파운데")  ④ 그 외 → 노운만("피부결"). 모두 실패하면 노운.
+ * 중복(프리셋마다 유사)은 호출부가 번호로 가른다(setSubName dedup).
+ */
+function systemSubName(
+  region: RegionKey,
+  params: Partial<FilterParams>,
+  lensColor?: string,
+): string {
+  const spec = SYS_SUB_NAME[region];
+  const noun = spec?.noun ?? REGION_MAP[region].label;
+  if (!spec) return noun;
+  let modifier = '';
+  if (spec.strategy === 'color') {
+    const hex = lensColor ?? (spec.colorKey ? (params[spec.colorKey] as string | undefined) : undefined);
+    if (typeof hex === 'string') modifier = colorFamilyKo(hex);
+  } else if (spec.strategy === 'style' && spec.styleKey && spec.styleOptions) {
+    modifier = labelForValue(spec.styleOptions, params[spec.styleKey] as number | undefined);
+  } else if (spec.strategy === 'finish' && spec.finishKey) {
+    modifier = labelForValue(FOUNDATION_FINISHES, params[spec.finishKey] as number | undefined);
+  }
+  return modifier ? `${modifier} ${noun}` : noun;
+}
+
 /**
  * 내장 프리셋(플랫 params)을 face→region→sub→잎 계층으로 분해해 시스템
  * 라이브러리를 만든다. 시각 결과는 seedLayers→compileLayers 왕복과 동일
@@ -200,6 +339,9 @@ const SYSTEM_PRESET_IDS = ['natural', 'rosy', 'peach', 'glam', 'smoky'];
  */
 export function buildSystemLibrary(): LookLibrary {
   const lib: LookLibrary = {};
+  // 부위별 세부부위 이름 중복 카운터 — 같은 카드(RegionKey)에 같은 이름이 겹치면
+  // (프리셋마다 유사한 베이스 등) 두 번째부터 번호를 붙인다(프리셋명 대신 — 규칙 5).
+  const usedSubNames = new Map<RegionKey, Map<string, number>>();
   for (const preset of PRESETS) {
     if (!SYSTEM_PRESET_IDS.includes(preset.id)) continue;
     const layers = seedLayers(
@@ -222,13 +364,19 @@ export function buildSystemLibrary(): LookLibrary {
       for (const layer of list) {
         const label = REGION_MAP[layer.region].label;
         const subId = `sys:${preset.id}:${layer.region}`;
+        // 세부부위 이름 = 잎 특성 유도(프리셋명 미사용) + 부위 내 중복 시 번호.
+        const baseName = systemSubName(layer.region, layer.params, layer.lens?.color);
+        const perRegion = usedSubNames.get(layer.region) ?? new Map<string, number>();
+        const count = (perRegion.get(baseName) ?? 0) + 1;
+        perRegion.set(baseName, count);
+        usedSubNames.set(layer.region, perRegion);
+        const subName = count === 1 ? baseName : `${baseName} ${count}`;
         lib[subId] = {
           id: subId,
-          name: `${preset.name} ${label}`,
+          name: subName,
           level: 'sub',
           slot,
           owner: 'system',
-          pickerScope: 'internal',
           kids: [
             {
               label,
@@ -571,15 +719,15 @@ export function swapSubNode(
   return { ...root, kids, dirty: true };
 }
 
-/** 이 세부부위(잎 region)로 구성된 라이브러리 sub 룩 정의 전부 — 세부부위 ⇄ 교체
- *  픽커용(시스템 먼저, 이름순). */
+/** 이 세부부위(잎 region)로 구성된 standalone 라이브러리 sub 룩 정의 전부 —
+ *  세부부위 ⇄ 교체 픽커용(시스템 먼저, 이름순). internal(상위 룩의 내부 파트)은
+ *  제외한다 — 같은 "파운데이션" 라벨로 여러 상위 룩의 조각이 섞여 뜨던 계약 버그. */
 export function subDefsForRegion(lib: LookLibrary, region: RegionKey): LookDef[] {
   return Object.values(lib)
     .filter(
       d =>
         d.level === 'sub' &&
-        (d.pickerScope === 'standalone' ||
-          (d.pickerScope == null && d.owner === 'user')) &&
+        !d.internal &&
         (d.kids as LeafDef[]).some(leaf => leaf.region === region),
     )
     .sort((a, b) =>
@@ -1553,7 +1701,6 @@ function materializeSub(node: LookNode, lib: LookLibrary): string {
     level: 'sub',
     slot: node.slot,
     owner: 'user',
-    pickerScope: 'internal',
     kids: node.kids.filter(isLeaf).map(lf => ({
       label: lf.label,
       region: lf.region,
@@ -1810,4 +1957,205 @@ export function applySaveDecisions(
   }
 
   return { root: nextRoot, lib: nextLib, appliedNotes: notes };
+}
+
+// ── 저장 스코프 판정 — 실제 편집 범위를 따라 등록 레벨을 자동 결정 ───────────
+// 사용자 지적: 세부부위 하나(아이라인)만 편집해도 저장이 '전체 룩'으로 굳었다.
+// 저장 단위는 내용 범위를 따라야 한다 — 세부부위 1개=sub, 한 슬롯 여러 세부=region,
+// 여러 슬롯=face. 판정은 기본값이고 사용자는 시트에서 상위 레벨로 올릴 수 있다.
+
+export type SaveLevel = 'sub' | 'region' | 'face';
+
+interface ContentSub {
+  sub: LookNode;
+  slot: SlotKey;
+  /** 세부부위 표시 라벨(첫 잎 region의 REGION_MAP.label) */
+  regionLabel: string;
+}
+
+/** leaf를 하나라도 가진 sub 노드 전부 = '내용 있는 세부부위'. 스코프 판정의 원재료. */
+function contentSubs(root: LookNode | null): ContentSub[] {
+  const out: ContentSub[] = [];
+  if (!root) return out;
+  const walk = (node: LookNode) => {
+    for (const c of node.kids) {
+      if (isLeaf(c)) continue;
+      if (c.level === 'sub') {
+        const leaves = c.kids.filter(isLeaf);
+        if (leaves.length > 0) {
+          out.push({
+            sub: c,
+            slot: c.slot,
+            regionLabel: REGION_MAP[leaves[0].region]?.label ?? c.name,
+          });
+          continue; // sub 아래는 잎뿐 — 더 내려가지 않는다
+        }
+      }
+      walk(c);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+export interface SaveScope {
+  /** 내용에 맞는 최소(가장 좁은) 등록 레벨 — 저장 시트 기본 선택값 */
+  level: SaveLevel;
+  /** 내용 있는 세부부위 수 */
+  subCount: number;
+  /** 내용 있는 슬롯 수 */
+  slotCount: number;
+  /** 내용 슬롯 표시 라벨(SLOT_LABEL) */
+  slotLabels: string[];
+  /** 내용 세부부위 표시 라벨(REGION_MAP.label) */
+  subLabels: string[];
+}
+
+/**
+ * 작업본 트리의 내용을 스캔해 기본 저장 레벨을 판정한다.
+ *  ① 세부부위 1개 → 'sub'  ② 한 슬롯 안 여러 세부부위 → 'region'  ③ 여러 슬롯 → 'face'.
+ * 내용이 없으면 'face'로 폴백(빈 저장은 시트가 '변경 없음'으로 별도 안내).
+ */
+export function analyzeSaveScope(root: LookNode | null): SaveScope {
+  const subs = contentSubs(root);
+  const slots = [...new Set(subs.map(s => s.slot))];
+  let level: SaveLevel;
+  if (subs.length === 0) level = 'face';
+  else if (subs.length === 1) level = 'sub';
+  else if (slots.length === 1) level = 'region';
+  else level = 'face';
+  return {
+    level,
+    subCount: subs.length,
+    slotCount: slots.length,
+    slotLabels: slots.map(s => SLOT_LABEL[s]),
+    subLabels: subs.map(s => s.regionLabel),
+  };
+}
+
+/** 이 스코프에서 선택 가능한 레벨(판정 레벨 이상만 — 좁히기는 불가, 넓히기만 허용). */
+export function selectableLevels(scope: SaveScope): SaveLevel[] {
+  if (scope.subCount === 0) return ['face'];
+  if (scope.level === 'sub') return ['sub', 'region', 'face'];
+  if (scope.level === 'region') return ['region', 'face'];
+  return ['face'];
+}
+
+// ── 스코프 저장 실행 — 세부부위/부위 레벨은 라이브러리 정의로 등록 ──────────
+
+function leafDefFromLeaf(lf: ProductLeaf): LeafDef {
+  return {
+    label: lf.label,
+    region: lf.region,
+    params: { ...lf.params },
+    ...(lf.overlay ? { overlay: { ...lf.overlay } } : {}),
+    ...(lf.lens ? { lens: { ...lf.lens } } : {}),
+    ...(lf.role ? { role: lf.role } : {}),
+    ...(lf.productId ? { productId: lf.productId } : {}),
+    ...(lf.technique ? { technique: { ...lf.technique } } : {}),
+  };
+}
+
+/** 트리 전체 dirty 해제 + 지정 노드를 새 정의로 re-ref(스코프 저장 후 작업본 정리). */
+function cleanReref(node: LookNode, targetId: string | null, defId: string): LookNode {
+  const kids = node.kids.map(c =>
+    isLeaf(c) ? (c.dirty ? { ...c, dirty: false } : c) : cleanReref(c, targetId, defId),
+  );
+  return {
+    ...node,
+    dirty: false,
+    ...(targetId != null && node.id === targetId ? { ref: defId } : {}),
+    kids,
+  };
+}
+
+export interface ScopedSaveResult {
+  lib: LookLibrary;
+  root: LookNode;
+  defId: string;
+  level: 'sub' | 'region';
+  /** 등록된 정의 이름(충돌 회피 반영 후) */
+  name: string;
+}
+
+/**
+ * 세부부위/부위 레벨 저장 — 편집한 범위만 사용자 라이브러리 정의로 등록한다
+ * (전체 룩 카드로 굳지 않게 — 사용자 지적 대응). 등록 후 작업본은 dirty 해제하고
+ * 해당 노드를 새 정의에 re-ref한다. 'face'는 이 경로를 타지 않는다(호출부가 카드로 저장).
+ *  - 'sub'   : 내용 세부부위 1개 → 사용자 sub 정의(subDefsForRegion 픽커 노출).
+ *  - 'region': 한 슬롯의 세부부위 전부 → 사용자 region 정의(regionDefsForSlot 픽커).
+ *     region의 멤버 sub은 internal로 등록해 세부부위 픽커를 어지럽히지 않는다(계약).
+ * 이름 충돌은 같은 레벨 사용자 정의와 자동 번호로 피한다. 내용 없으면 null.
+ */
+export function registerScopedLook(
+  root: LookNode,
+  lib: LookLibrary,
+  level: 'sub' | 'region',
+  name: string,
+): ScopedSaveResult | null {
+  const subs = contentSubs(root);
+  if (subs.length === 0) return null;
+  const nextLib: LookLibrary = { ...lib };
+  const slot = subs[0].slot;
+
+  // 이름 충돌 회피 — 같은 레벨의 사용자(비-internal·비-group) 정의 이름과 비교.
+  const taken = new Set(
+    Object.values(lib)
+      .filter(
+        d => d.owner === 'user' && d.level === level && !d.internal && d.kind !== 'group',
+      )
+      .map(d => d.name),
+  );
+  let clean = name.trim() || (level === 'sub' ? '내 세부룩' : '내 부위룩');
+  if (taken.has(clean)) {
+    let n = 2;
+    while (taken.has(`${clean} ${n}`)) n += 1;
+    clean = `${clean} ${n}`;
+  }
+
+  if (level === 'sub') {
+    const sub = subs[0].sub;
+    const defId = newDefId();
+    nextLib[defId] = {
+      id: defId,
+      name: clean,
+      level: 'sub',
+      slot,
+      owner: 'user',
+      kids: sub.kids.filter(isLeaf).map(leafDefFromLeaf),
+    };
+    return { lib: nextLib, root: cleanReref(root, sub.id, defId), defId, level, name: clean };
+  }
+
+  // region — 그 슬롯의 내용 세부부위 전부를 하나의 사용자 region 정의로 묶는다
+  // (슬롯에 region 노드가 여럿이어도 견고하게: 노드 수와 무관하게 잎을 모은다).
+  const slotSubs = subs.filter(s => s.slot === slot).map(s => s.sub);
+  const subIds = slotSubs.map(sub => {
+    const sid = newDefId();
+    nextLib[sid] = {
+      id: sid,
+      name: sub.name,
+      level: 'sub',
+      slot,
+      owner: 'user',
+      internal: true, // 상위 부위 룩의 조각 — 세부부위 픽커에 개별 노출 안 함
+      kids: sub.kids.filter(isLeaf).map(leafDefFromLeaf),
+    };
+    return sid;
+  });
+  const defId = newDefId();
+  nextLib[defId] = {
+    id: defId,
+    name: clean,
+    level: 'region',
+    slot,
+    owner: 'user',
+    kids: subIds,
+  };
+  // 슬롯에 region 노드가 정확히 하나면 그것을 re-ref, 아니면 dirty만 정리.
+  const regionNodes = root.kids.filter(
+    (c): c is LookNode => !isLeaf(c) && c.slot === slot,
+  );
+  const targetId = regionNodes.length === 1 ? regionNodes[0].id : null;
+  return { lib: nextLib, root: cleanReref(root, targetId, defId), defId, level, name: clean };
 }

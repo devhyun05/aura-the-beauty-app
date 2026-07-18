@@ -1,3 +1,5 @@
+import json
+import logging
 from typing import Any
 
 from fastapi import Request
@@ -6,6 +8,12 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.responses import failure
+from app.services.makeup_journey_observability import (
+  build_makeup_journey_correction_parent_metric,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 class AppError(Exception):
@@ -27,6 +35,16 @@ def get_request_id(request: Request) -> str | None:
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+  if request.url.path.endswith("/feedback/jobs"):
+    metric = build_makeup_journey_correction_parent_metric(
+      error_code=exc.code,
+      status_code=exc.status_code,
+    )
+    if metric is not None:
+      logger.warning(
+        "[aura:makeup-journey-health] %s",
+        json.dumps(metric, ensure_ascii=False, separators=(",", ":")),
+      )
   return JSONResponse(
     status_code=exc.status_code,
     content=failure(exc.code, exc.message, exc.details, get_request_id(request)),

@@ -51,11 +51,12 @@ Shader "ARMakeup/Iris"
             #include "UnityCG.cginc"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
             #include "Ambient.cginc"   // 저조도 색소 바닥(PigmentBase) — 어둠 렌즈 발광 방지
+            #include "Finish.cginc"    // 겹 마감(ApplyFinish)·_CameraFeed 공용 선언(RegionDecal 선례)
 
             // 렌즈 레이어드(#25) 슬롯 상한 — IrisRenderer.MaxLensLayers와 일치.
             #define LENS_MAX 6
 
-            sampler2D _CameraFeed;
+            // _CameraFeed·헤드포즈·MatCap 유니폼은 Finish.cginc가 선언(로컬 중복 제거).
             fixed4 _IrisColor;
             float _IrisIntensity;
             float _PupilFrac;
@@ -64,6 +65,8 @@ Shader "ARMakeup/Iris"
             // 레이어드 유니폼 — 슬롯당 색(rgb)+강도(a), 존(inner,outer,blendMode,hasDesign).
             float4 _LensColor[LENS_MAX];
             float4 _LensZone[LENS_MAX];
+            // 겹 마감 — .x = finish enum(0새틴/1매트/2듀이), yzw 예약. 겹별 독립(FOUNDATION_FINISHES).
+            float4 _LensFinish[LENS_MAX];
             float _LensCount;
             sampler2D _LensDesign0;
             sampler2D _LensDesign1;
@@ -191,6 +194,11 @@ Shader "ARMakeup/Iris"
                         float grad = 0.92 + 0.16 * r;
                         float3 dsn = lz.w > 0.5 ? LENS_DSN(si, dsnUV).rgb : float3(grad, grad, grad);
                         float3 src = lc.rgb * dsn;
+                        // 겹 마감(FOUNDATION_FINISHES 0새틴/1매트/2듀이) — ApplyFinish 레거시 enum
+                        // 경로(세부 0). finish=0이면 항등이라 현행 픽셀 동일(하위호환). 듀이(2)는
+                        // 레거시 글로시 분기로 젖은 광. 방사 UV(dsnUV)를 sparkleUV로 넘긴다.
+                        src = ApplyFinish(src, luma, dsnUV, _LensFinish[si].x, 0.0,
+                                          0.0, 0.0, 0.0, 0.0, 0.0, 0.0, screenUV, 0.0);
                         float3 blended = LensBlend(lz.z, col, src, luma);
                         float amt = saturate(lc.a * zone * pupil * i.gate);
                         col = lerp(col, blended, amt);

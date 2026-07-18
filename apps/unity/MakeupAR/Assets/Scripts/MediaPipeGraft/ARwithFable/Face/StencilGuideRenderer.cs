@@ -71,6 +71,15 @@ namespace ARMakeup.Face
         // 눈 바깥꼬리(전역 스케일 = 안쪽 눈간 거리 기준).
         const int EyeOuterR = 33, EyeOuterL = 263;
 
+        // 얼굴 오벌 실루엣(MediaPipe FACEMESH_FACE_OVAL 36점, 이마~턱) — 파운데 seg 게이트용
+        // 방향 타원(공분산 PCA) 계산 소스. 랜드마크 기반 정적 기하(이미지 재탐색 없음).
+        static readonly int[] FaceOval =
+        {
+            10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
+            397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+            172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
+        };
+
         // ── 부위 라인 색(고정 팔레트 — 서로 구분되는 코치 색) ──
         static readonly Color ColLips = new Color(1.00f, 0.35f, 0.55f);   // 로즈
         static readonly Color ColBrows = new Color(0.62f, 0.44f, 0.30f);  // 브라운
@@ -85,12 +94,15 @@ namespace ARMakeup.Face
         // 동기화. (cx, cy, rx, ry) 캐노니컬 UV. UV 리졸버로 마스크와 동일하게 화면 투영.
         static readonly Vector4[] HighlightZones =
         {
-            new Vector4(0.305f, 0.42f, 0.078f, 0.058f), // 광대뼈 L
-            new Vector4(0.695f, 0.42f, 0.078f, 0.058f), // 광대뼈 R
-            new Vector4(0.50f,  0.46f, 0.035f, 0.120f), // 콧대
-            new Vector4(0.50f,  0.28f, 0.055f, 0.030f), // 큐피드보우
-            new Vector4(0.35f,  0.55f, 0.058f, 0.040f), // 눈썹뼈 L
-            new Vector4(0.65f,  0.55f, 0.058f, 0.040f), // 눈썹뼈 R
+            new Vector4(0.27f, 0.52f, 0.082f, 0.050f), // 광대뼈 C존 L
+            new Vector4(0.73f, 0.52f, 0.082f, 0.050f), // 광대뼈 C존 R
+            new Vector4(0.50f, 0.55f, 0.032f, 0.070f), // 콧대(축소)
+            new Vector4(0.50f, 0.45f, 0.028f, 0.030f), // 코끝
+            new Vector4(0.47f, 0.36f, 0.024f, 0.016f), // 큐피드보우 L
+            new Vector4(0.53f, 0.36f, 0.024f, 0.016f), // 큐피드보우 R
+            new Vector4(0.36f, 0.68f, 0.060f, 0.030f), // 눈썹뼈 L(재배치)
+            new Vector4(0.64f, 0.68f, 0.060f, 0.030f), // 눈썹뼈 R
+            new Vector4(0.50f, 0.11f, 0.048f, 0.048f), // 턱끝(신설)
         };
         static readonly Vector4[] ContourZones = // MaskGenerator.ContourRegion
         {
@@ -123,7 +135,7 @@ namespace ARMakeup.Face
             new Vector4(0.25f, 0.42f, 0.085f, 0.055f), new Vector4(0.75f, 0.42f, 0.085f, 0.055f),
             new Vector4(0.16f, 0.49f, 0.055f, 0.045f), new Vector4(0.84f, 0.49f, 0.055f, 0.045f),
         };
-        const int HlZones = 6;
+        const int HlZones = 9;
         const int CtZones = 8;
         const int BlMaxZones = 4;
         const int ZoneTotal = HlZones + CtZones + BlMaxZones; // 캐시 크기
@@ -132,10 +144,10 @@ namespace ARMakeup.Face
 
         // ── 슬롯 배치(고정 순서) ──
         // 0=립, 1·2=눈썹, 3·4=아이섀도, 5·6=블러셔(랜드마크·미사용), 7·8=컨투어(랜드마크·미사용),
-        // 9·10=아이라인, 11·12=애교살, 13~18=하이라이터, 19~26=컨투어 UV, 27~30=블러셔 UV
-        const int MaxStrokes = 31;
+        // 9·10=아이라인, 11·12=애교살, 13~21=하이라이터(9존), 22~29=컨투어 UV, 30~33=블러셔 UV
+        const int MaxStrokes = 34;
         const int S_LIP = 0, S_BROW = 1, S_SHADOW = 3, S_BLUSH = 5, S_CONTOUR = 7,
-                  S_LINER = 9, S_AEGYO = 11, S_HL = 13, S_CTZ = 19, S_BLZ = 27;
+                  S_LINER = 9, S_AEGYO = 11, S_HL = 13, S_CTZ = 22, S_BLZ = 30;
         const int Pts = 40;      // 스트로크당 리샘플 컬럼 수(외곽 매끈)
 
         const float RibbonWidthFactor = 0.007f; // 리본 반폭 = 눈간거리 × 이 값 (가이드라인 얇게 — 0.013→0.007)
@@ -296,6 +308,12 @@ namespace ARMakeup.Face
         static readonly int PulseId = Shader.PropertyToID("_Pulse");
         static readonly int DashId = Shader.PropertyToID("_Dash");
 
+        // 얼굴 오벌 게이트(파운데 seg 코어 제외 대체) — CameraFeed.shader가 소비하는 전역.
+        // 가이드 슬롯 on/off와 독립: 트래킹 중이면 매 프레임 기록, 소실 시 무효(z=0)로 폴백.
+        static readonly int FndOvalId = Shader.PropertyToID("_FndOval");
+        static readonly int FndOvalAxisId = Shader.PropertyToID("_FndOvalAxis");
+        static readonly Vector4 OvalInactive = Vector4.zero; // z=0 = 타원 무효 → seg 파운데 off
+
         // ── A17 온페이스 핏 핸들 (좌표 방출; 터치는 RN 소관) ──
         // 가이드(setStencil) on/off와 독립. 켜져 있으면 트래킹 중 FitHandleInterval 프레임마다
         // 각 메이크업 부위의 모양 결정점 뷰포트 좌표 + 눈꼬리간 거리(eyeVp)를 방출.
@@ -354,6 +372,9 @@ namespace ARMakeup.Face
             _renderer.sharedMaterial = _material;
             _renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _renderer.enabled = false;
+
+            // 얼굴 오벌 게이트 초기값 = 무효(첫 LateUpdate 전·얼굴 소실 시 seg 파운데 off).
+            Shader.SetGlobalVector(FndOvalAxisId, OvalInactive);
         }
 
         /// <summary>
@@ -461,8 +482,49 @@ namespace ARMakeup.Face
             var visible = tracking && _opacity > 0f && AnyOn();
             if (_renderer.enabled != visible) _renderer.enabled = visible;
             if (visible) DrawGuides();
+            // 얼굴 오벌 게이트(파운데 seg 코어 제외) — 가이드 슬롯 on/off와 독립. 트래킹 중이면
+            // 매 프레임 타원을 기록하고, 소실 시 무효(z=0)로 폴백해 seg 파운데를 끈다.
+            if (tracking) WriteFaceOval(_source.Landmarks);
+            else Shader.SetGlobalVector(FndOvalAxisId, OvalInactive);
             // A17 온페이스 핏 핸들 — 가이드 슬롯 on/off와 독립. 트래킹 중이면 6프레임마다 좌표 방출.
             if (_fitHandlesEnabled && tracking) EmitFitHandles(_source.Landmarks);
+        }
+
+        /// <summary>
+        /// 얼굴 오벌 랜드마크의 이미지 UV 무게중심·공분산으로 방향 타원(중심·반경·주축)을
+        /// 만들어 CameraFeed 파운데 seg 게이트에 전역으로 넘긴다. 이미지 UV 공간은 표시 회전
+        /// 전이라 얼굴이 눕고 기울 수 있어 축정렬 대신 2×2 공분산 주축(PCA)으로 타원을
+        /// 회전시킨다. 셰이더의 src(워프 역샘플 이미지 UV)와 같은 공간이라 그대로 비교된다.
+        /// 랜드마크 기반 정적 기하 — 이미지 재탐색(엣지 스냅) 없음(울렁임 방지 원칙).
+        /// </summary>
+        void WriteFaceOval(Vector3[] lm)
+        {
+            var n = FaceOval.Length;
+            var c = Vector2.zero;
+            for (var i = 0; i < n; i++) c += ImgPt(lm, FaceOval[i]);
+            c /= n;
+            float cxx = 0f, cxy = 0f, cyy = 0f;
+            for (var i = 0; i < n; i++)
+            {
+                var d = ImgPt(lm, FaceOval[i]) - c;
+                cxx += d.x * d.x; cxy += d.x * d.y; cyy += d.y * d.y;
+            }
+            // 주축 각도 = 2×2 공분산 고유벡터 방향. cxy≈0·cxx≈cyy(원형)면 θ=0이라 안전.
+            var theta = 0.5f * Mathf.Atan2(2f * cxy, cxx - cyy);
+            var cos = Mathf.Cos(theta);
+            var sin = Mathf.Sin(theta);
+            // 반경 = 주축·부축 방향 최대 투영(오벌 경계점을 감싸는 타원). 셰이더 sizeMul(기본
+            // 1.1)이 이 위에 여유를 더해 메시 오벌보다 살짝 넉넉히 덮는다.
+            float rx = 0f, ry = 0f;
+            for (var i = 0; i < n; i++)
+            {
+                var d = ImgPt(lm, FaceOval[i]) - c;
+                rx = Mathf.Max(rx, Mathf.Abs(d.x * cos + d.y * sin));
+                ry = Mathf.Max(ry, Mathf.Abs(-d.x * sin + d.y * cos));
+            }
+            Shader.SetGlobalVector(FndOvalId,
+                new Vector4(c.x, c.y, Mathf.Max(rx, 1e-4f), Mathf.Max(ry, 1e-4f)));
+            Shader.SetGlobalVector(FndOvalAxisId, new Vector4(cos, sin, 1f, 0f)); // z=1 = active
         }
 
         /// <summary>setStencil로 켜진 슬롯의 가이드 스트로크/존을 매 프레임 재구성해 리본
@@ -915,7 +977,7 @@ namespace ARMakeup.Face
 
             // 눈 부위 앵커 — e=1(EyeOuterL=263)=L, e=0(EyeOuterR=33)=R (const 규약).
             var irisRenderer = IrisRenderer.Instance;
-            var aegyoRenderer = AegyoRenderer.Instance;
+            var lowerLidRenderer = LowerLidRenderer.Instance;
             for (var e = 0; e < 2; e++)
             {
                 var side = e == 1 ? "L" : "R";
@@ -931,11 +993,31 @@ namespace ARMakeup.Face
                     haveEyeliner ? innerVp : EyelinerInnerHandleVp(lm, e));
 
                 var aegyoVp = Vector2.zero;
-                if (aegyoRenderer != null &&
-                    aegyoRenderer.TryGetAegyoFitHandle(e, out aegyoVp))
+                if (lowerLidRenderer != null &&
+                    lowerLidRenderer.TryGetAegyoFitHandle(e, out aegyoVp))
                     Add("aegyo" + side, aegyoVp);
                 else
                     Add("aegyo" + side, ToVp(AegyoCenterImg(lm, e)));
+
+                // 하안검 밴드 3부위 — 렌더러 실제 밴드점 우선, 비활성 시 라인 기준 v 오프셋 폴백.
+                var linerLowerVp = Vector2.zero;
+                if (lowerLidRenderer != null &&
+                    lowerLidRenderer.TryGetEyelinerLowerFitHandle(e, out linerLowerVp))
+                    Add("eyelinerLower" + side, linerLowerVp);
+                else
+                    Add("eyelinerLower" + side, ToVp(LowerBandImg(lm, e, 0.5f, 0.10f)));
+                var shadowLowerVp = Vector2.zero;
+                if (lowerLidRenderer != null &&
+                    lowerLidRenderer.TryGetEyeshadowLowerFitHandle(e, out shadowLowerVp))
+                    Add("eyeshadowLower" + side, shadowLowerVp);
+                else
+                    Add("eyeshadowLower" + side, ToVp(LowerBandImg(lm, e, 0.5f, 0.25f)));
+                var triZoneVp = Vector2.zero;
+                if (lowerLidRenderer != null &&
+                    lowerLidRenderer.TryGetTriangleZoneFitHandle(e, out triZoneVp))
+                    Add("triangleZone" + side, triZoneVp);
+                else
+                    Add("triangleZone" + side, ToVp(LowerBandImg(lm, e, 0.85f, 0.25f)));
                 var lids = UpperLids[e];
                 var np = lids.Length;
                 var lidMid = ImgPt(lm, lids[np / 2]);
@@ -968,6 +1050,9 @@ namespace ARMakeup.Face
                 LipHandleVps(lm, out lipOuter, out lipLiner);
             Add("lip", lipOuter);
             Add("lipLiner", lipLiner);
+            // 립 베이스·글로스 오버라인 핸들 — 립 외곽과 같은 지점(신규 계산 없이 재사용).
+            Add("lipBase", lipOuter);
+            Add("lipGloss", lipOuter);
 
             // 데코 겹 — 오버레이 배치(캐노니컬 UV)를 그대로 투영. 겹마다 진짜 별개 핸들.
             var ovs = MakeupController.CurrentOverlayLayers;
@@ -1218,6 +1303,28 @@ namespace ARMakeup.Face
             var peak = dip + chord.magnitude * AegyoRenderBandFactor
                        * _aegyoHeightMult * AegyoHighlightPeakV;
             return (outer + inner) * 0.5f + normal * peak;
+        }
+
+        // 하안검 밴드 임의 (along,v) 점의 이미지 좌표 — 렌더러 캐시가 없을 때의 폴백.
+        // along: 0=눈앞머리 → 1=눈꼬리(LowerLidRenderer FitArc 규약), v: lash(0)→밴드하단(1).
+        // 밴드 폭 기준은 애교살과 공용(AegyoRenderBandFactor·_aegyoHeightMult).
+        Vector2 LowerBandImg(Vector3[] lm, int e, float along, float v)
+        {
+            var lids = LowerLids[e];
+            var np = lids.Length;
+            var outer = ImgPt(lm, lids[0]);       // 눈꼬리
+            var inner = ImgPt(lm, lids[np - 1]);  // 눈앞머리
+            var chord = inner - outer;
+            var chordDir = chord.normalized;
+            var brow = ImgPt(lm, EyeBrowLower[e][2]);
+            var lidMid = ImgPt(lm, lids[np / 2]);
+            var downRef = (lidMid - brow).normalized;
+            var normal = new Vector2(-chordDir.y, chordDir.x);
+            if (Vector2.Dot(normal, downRef) < 0f) normal = -normal;
+            var dip = Mathf.Max(0f, Vector2.Dot(lidMid - (outer + inner) * 0.5f, normal));
+            var basePt = Vector2.Lerp(inner, outer, along); // 눈앞머리 → 눈꼬리
+            var off = dip + chord.magnitude * AegyoRenderBandFactor * _aegyoHeightMult * v;
+            return basePt + normal * off;
         }
     }
 }

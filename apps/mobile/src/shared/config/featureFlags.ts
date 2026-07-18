@@ -7,6 +7,9 @@
 // 켜기: EXPO_PUBLIC_AURADIN_PRIMARY_SURFACE=1 (또는 true/on/yes).
 
 const AURADIN_PRIMARY_SURFACE_DEFAULT = false;
+// The calendar is part of the normal mobile navigation after the feature merge.
+// Production can still explicitly disable it through the EAS profile (`0`).
+const MAKEUP_JOURNEY_DEFAULT = true;
 
 const TRUTHY_FLAG_VALUES = new Set(['1', 'true', 'on', 'yes']);
 const FALSY_FLAG_VALUES = new Set(['0', 'false', 'off', 'no']);
@@ -37,5 +40,16 @@ export function isAuradinPrimarySurfaceEnabled(): boolean {
   return parseFeatureFlagValue(
     process.env.EXPO_PUBLIC_AURADIN_PRIMARY_SURFACE,
     AURADIN_PRIMARY_SURFACE_DEFAULT,
+  );
+}
+
+/**
+ * 메이크업 성장 캘린더의 표시 스위치다.
+ * 병합 이후에는 일반 개발 실행에서 기본 노출하고, 긴급 롤백이나 별도 배포는 0/false로 명시해 숨긴다.
+ */
+export function isMakeupJourneyEnabled(): boolean {
+  return parseFeatureFlagValue(
+    process.env.EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED,
+    MAKEUP_JOURNEY_DEFAULT,
   );
 }

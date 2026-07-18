@@ -1,6 +1,7 @@
 import {
   buildFaceAnalysisRequestPayload,
   buildFaceCaptureCompleteUploadBody,
+  getBase64DecodedByteSize,
 } from './faceCaptureUploadContract';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
@@ -8,6 +9,12 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
     throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
   }
 }
+
+expectEqual(getBase64DecodedByteSize(''), 0, 'empty base64 byte size');
+expectEqual(getBase64DecodedByteSize('Zg=='), 1, 'one-byte base64 size');
+expectEqual(getBase64DecodedByteSize('Zm8='), 2, 'two-byte base64 size');
+expectEqual(getBase64DecodedByteSize('Zm9v'), 3, 'unpadded base64 size');
+expectEqual(getBase64DecodedByteSize('Zm9v\nYmFy'), 6, 'base64 whitespace is ignored');
 
 const uploadIdBody = buildFaceCaptureCompleteUploadBody(
   {

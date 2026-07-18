@@ -1390,6 +1390,9 @@ Table makeup_feedback_reports {
   user_id uuid [not null]
   photo_capture_id uuid
   uploaded_media_id uuid
+  entry_date date [not null, default: `((now() at time zone 'Asia/Seoul')::date)`, note: 'KST today fallback keeps rolling deploys and legacy API inserts compatible']
+  feedback_kind text [not null, default: 'initial', note: 'initial or correction; correction requires parent_feedback_report_id']
+  parent_feedback_report_id uuid [note: 'Self FK; same-user completed ownership is also validated by API']
   source media_source_type [not null]
   source_label text
   score integer
@@ -1401,9 +1404,53 @@ Table makeup_feedback_reports {
 
   indexes {
     (user_id, created_at)
+    (user_id, entry_date, status, completed_at, id)
+    parent_feedback_report_id
   }
 
   Note: 'FeedbackResult/Guide/Tip. summaryBadges, callouts, points, strengths live in feedback_payload.'
+}
+
+Table makeup_journey_settings {
+  user_id uuid [pk]
+  goal_score smallint [not null, note: '1 through 100']
+  mission_level text [not null, note: 'beginner, intermediate, or advanced']
+  timezone_name text [not null, default: 'Asia/Seoul']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table makeup_journey_day_notes {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  entry_date date [not null]
+  content text [not null, note: 'Maximum 2,000 characters']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, entry_date) [unique]
+  }
+}
+
+Table makeup_journey_missions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  entry_date date [not null]
+  source text [not null, note: 'curated, ai, or user']
+  difficulty text [not null, note: 'beginner, intermediate, or advanced']
+  title text [not null, note: '1 through 120 characters; case-insensitive unique per user and date']
+  is_completed boolean [not null, default: false]
+  completed_at timestamptz
+  sort_order smallint [not null, default: 0]
+  generation_payload jsonb [not null, default: '{}', note: 'Minimal generation metadata; excludes photos, URLs, and notes']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (user_id, entry_date, sort_order)
+    (user_id, entry_date, `lower(title)`) [unique, name: 'uq_makeup_journey_missions_user_date_title_ci']
+  }
 }
 
 Table user_push_devices {
@@ -2179,6 +2226,10 @@ Ref: filter_extraction_reports.result_media_id > media_assets.id
 Ref: makeup_feedback_reports.user_id > users.id
 Ref: makeup_feedback_reports.photo_capture_id > photo_captures.id
 Ref: makeup_feedback_reports.uploaded_media_id > media_assets.id
+Ref: makeup_feedback_reports.parent_feedback_report_id > makeup_feedback_reports.id [delete: cascade]
+Ref: makeup_journey_settings.user_id > users.id [delete: cascade]
+Ref: makeup_journey_day_notes.user_id > users.id [delete: cascade]
+Ref: makeup_journey_missions.user_id > users.id [delete: cascade]
 
 Ref: user_push_devices.user_id > users.id
 Ref: app_notifications.user_id > users.id

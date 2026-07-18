@@ -1,4 +1,7 @@
 import React from 'react';
+import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {YStack} from 'tamagui';
 
 import {
   createFaceAnalysisReportFromCapture,
@@ -11,19 +14,23 @@ import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/F
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
 import {
   ensureUnityMakeupRunningForStillAnalysis,
-  setUnityMakeupPlayerPaused,
+  releaseUnityMakeupHiddenRunLease,
 } from '../../../features/ar/services/unityMakeupBridge';
 import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services/face3DEntryEligibility';
 import {isFace3DProfileAnalysisEligible} from '../../../features/face-3d/services/face3DContract';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import {UnifiedFaceCaptureScreen} from '../../../features/face-capture/screens/UnifiedFaceCaptureScreen';
 import {buildUnifiedFaceCaptureRequest} from '../../../features/face-capture/services/unifiedFaceCaptureContract';
-import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
+import {
+  uploadFaceCaptureImage,
+  type FaceCaptureUploadResult,
+} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {isUnifiedFaceCaptureEnabled} from '../../../features/face-capture/services/unifiedFaceCaptureMode';
 import {
   mapUnifiedHairlineToVerticalThirds,
   shouldUseUnifiedFaceCaptureRoute,
 } from '../../../features/face-capture/services/unifiedFaceCaptureNavigation';
+import {deleteUnifiedFaceCaptureTempImage} from '../../../features/face-capture/services/unifiedFaceCaptureTempImageCleanup';
 import {derivePersonalColorCorrectionStatus} from '../../../features/face-analysis/services/faceAnalysisMeasurements';
 import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
@@ -35,6 +42,8 @@ import type {
   FaceVerticalThirdsInput,
   FaceVerticalThirdsResult,
 } from '../../../features/face-ratio/types';
+import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
+import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
 import {
   analyzePersonalColorCapture,
   type PersonalColorAnalysisOutcome,
@@ -43,8 +52,16 @@ import {useAuthSession} from '../../../features/auth';
 import {FaceCaptureTutorialSheet} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import {deleteFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
-import {colors} from '../../../shared/theme';
-import {FLOATING_ACTION_HOST_EXTRA_HEIGHT} from '../../../shared/ui';
+import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAnalytics';
+import {colors, spacing} from '../../../shared/theme';
+import {isMakeupJourneyEnabled} from '../../../shared/config/featureFlags';
+import {
+  AppFooter,
+  FLOATING_ACTION_HOST_EXTRA_HEIGHT,
+  FloatingActionMenu,
+  type FloatingActionId,
+  type FooterTabKey,
+} from '../../../shared/ui';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../../shared/ui/AppFooter';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
@@ -169,20 +186,15 @@ export function FaceCaptureRouteScreen({
           invalidateUnifiedFaceCapture({resetRetryAttempt: true});
           navigateMainTab(navigation, 'HomeTab');
         }}
-        onCaptureCommitted={(result, upload) => {
-          if (!commitUnifiedFaceCapture(result, upload)) {
-            return false;
-          }
-
-          navigation.replace(
-            'FaceCaptureConfirmation',
-            route.params?.afterAnalysisRoute
-              ? {
-                  afterAnalysisRoute: route.params.afterAnalysisRoute,
-                  target: 'faceAnalysis',
-                }
-              : {target: 'faceAnalysis'},
-          );
+        onCaptureCommitted={commitUnifiedFaceCapture}
+        onCaptureReadyForProcessing={(result, loadingStartedAtMs) => {
+          navigation.replace('FaceAnalysisLoading', {
+            ...(route.params?.afterAnalysisRoute
+              ? {afterAnalysisRoute: route.params.afterAnalysisRoute}
+              : {}),
+            loadingStartedAtMs,
+            pendingUnifiedCapture: result,
+          });
           return true;
         }}
         onFallback={() => {
@@ -290,6 +302,8 @@ export function FaceAnalysisLoadingRouteScreen({
   route,
 }: RootScreenProps<'FaceAnalysisLoading'>) {
   const {
+    commitUnifiedFaceCapture,
+    invalidateUnifiedFaceCapture,
     selectedFace3DProfile,
     selectedFaceCapture,
     setSelectedFaceAnalysisReport,
@@ -303,7 +317,10 @@ export function FaceAnalysisLoadingRouteScreen({
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
   const [analysisErrorMessage, setAnalysisErrorMessage] = React.useState<string | null>(null);
   const [analysisRequestKey, setAnalysisRequestKey] = React.useState(0);
+  const [uploadRequestKey, setUploadRequestKey] = React.useState(0);
   const analysisRetryCountRef = React.useRef(0);
+  const pendingUploadPromiseRef = React.useRef<Promise<void> | null>(null);
+  const pendingUnifiedCapture = route.params?.pendingUnifiedCapture ?? null;
   const verticalThirdsPromiseRef =
     React.useRef<Promise<FaceVerticalThirdsResult | null> | null>(null);
   // 보고서 POST 가 대기하는 2D 기하 promise — POST deps 에 state 를 넣으면
@@ -313,6 +330,7 @@ export function FaceAnalysisLoadingRouteScreen({
   // Unity still-analysis lease: 진입 시 resume+ready 를 보장하는 promise.
   // 아래 정지영상 분석 효과들이 이 promise 를 체인해 시작 순서를 보장한다.
   const stillAnalysisReadyPromiseRef = React.useRef<Promise<boolean> | null>(null);
+  const stillAnalysisLeaseIdRef = React.useRef<string | null>(null);
   // 퍼스널 컬러 outcome 전달 + end-lease 게이트 겸용. 보고서 POST 가 이 ref 로
   // outcome(보정 후 결과 포함)을 받아 measurements·measuredPersonalColor 를 싣는다.
   const personalColorOutcomePromiseRef =
@@ -321,6 +339,73 @@ export function FaceAnalysisLoadingRouteScreen({
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
   }, [selectedFaceCapture?.mediaId, selectedFaceCapture?.photoCaptureId]);
+
+  // 통합 촬영은 실제 대기 화면으로 먼저 이동한 뒤 이 화면 안에서 업로드한다.
+  // Promise ref로 StrictMode effect 재실행과 리렌더의 중복 업로드를 막고, 업로드가
+  // 커밋되면 같은 화면 인스턴스에서 온디바이스 분석과 보고서 생성을 이어간다.
+  React.useEffect(() => {
+    if (
+      selectedFaceCapture ||
+      !pendingUnifiedCapture ||
+      pendingUploadPromiseRef.current
+    ) {
+      return;
+    }
+
+    setAnalysisErrorMessage(null);
+    let uploadPromise: Promise<void>;
+    uploadPromise = uploadFaceCaptureImage({
+      cameraMetadata: pendingUnifiedCapture.cameraMetadata
+        ? {
+            exposureDurationMs:
+              pendingUnifiedCapture.cameraMetadata.exposureDurationMs,
+            iso: pendingUnifiedCapture.cameraMetadata.iso,
+          }
+        : null,
+      captureType: 'face_analysis',
+      contentType:
+        pendingUnifiedCapture.image.format === 'png'
+          ? 'image/png'
+          : 'image/jpeg',
+      height: pendingUnifiedCapture.image.height,
+      source: 'camera',
+      uri: pendingUnifiedCapture.image.uri,
+      width: pendingUnifiedCapture.image.width,
+    })
+      .then(async upload => {
+        if (commitUnifiedFaceCapture(pendingUnifiedCapture, upload)) {
+          return;
+        }
+
+        await deleteUnifiedFaceCaptureTempImage(
+          pendingUnifiedCapture.image.uri,
+        );
+        throw new Error('unified_capture_commit_rejected');
+      })
+      .catch(error => {
+        console.info('[aura:unified-face-capture] processing-upload:error', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+        if (navigation.isFocused()) {
+          setAnalysisErrorMessage(
+            '사진 저장이 지연되고 있어요. 네트워크를 확인한 뒤 다시 시도해 주세요.',
+          );
+        }
+      })
+      .finally(() => {
+        if (pendingUploadPromiseRef.current === uploadPromise) {
+          pendingUploadPromiseRef.current = null;
+        }
+      });
+
+    pendingUploadPromiseRef.current = uploadPromise;
+  }, [
+    commitUnifiedFaceCapture,
+    navigation,
+    pendingUnifiedCapture,
+    selectedFaceCapture,
+    uploadRequestKey,
+  ]);
 
   // [Unity still-analysis lease 시작] 아래 정지영상 분석(세로비율·퍼스널컬러)은
   // Unity homuler(IMAGE 모드) 코루틴에서 돌므로 플레이어 루프가 실행 중이어야
@@ -331,14 +416,30 @@ export function FaceAnalysisLoadingRouteScreen({
   // 남을 수 있는데, 그 인스턴스가 촬영 화면 밑에서 Unity 를 resume 하면 안 된다.
   React.useEffect(() => {
     stillAnalysisReadyPromiseRef.current = null;
+    stillAnalysisLeaseIdRef.current = null;
 
     if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
-      return;
+      return undefined;
     }
 
-    stillAnalysisReadyPromiseRef.current = navigation.isFocused()
-      ? ensureUnityMakeupRunningForStillAnalysis()
-      : Promise.resolve(false);
+    const leaseId = `face-analysis:${selectedFaceCapture.photoCaptureId}:${Date.now()}:${Math.random()
+      .toString(36)
+      .slice(2)}`;
+
+    if (navigation.isFocused()) {
+      stillAnalysisLeaseIdRef.current = leaseId;
+      stillAnalysisReadyPromiseRef.current =
+        ensureUnityMakeupRunningForStillAnalysis({leaseId});
+    } else {
+      stillAnalysisReadyPromiseRef.current = Promise.resolve(false);
+    }
+
+    return () => {
+      releaseUnityMakeupHiddenRunLease(leaseId);
+      if (stillAnalysisLeaseIdRef.current === leaseId) {
+        stillAnalysisLeaseIdRef.current = null;
+      }
+    };
   }, [navigation, selectedFaceCapture]);
 
   // 얼굴 세로 비율은 캡처당 1회만 온디바이스로 계산한다.
@@ -631,38 +732,71 @@ export function FaceAnalysisLoadingRouteScreen({
     setSelectedFaceAnalysisReport,
   ]);
 
-  // [Unity still-analysis lease 반납] 정지영상 분석이 모두 settle 하면 플레이어를
-  // pause 해 자원(카메라 포함)을 반납한다. unmount 후에는 pause 하지 않는다 —
-  // stale 인스턴스의 뒤늦은 pause 가 다음 Unity 소유 화면(AR 필터·3D 측정)을
-  // 얼리는 것을 막기 위해서다(그 화면들이 자기 생명주기로 관리).
+  // [Unity still-analysis lease 반납] 정지영상 분석이 모두 settle 하면 이 화면의
+  // 고유 lease만 반납한다. 화면 이탈 cleanup에서도 같은 ID를 반납하므로 홈으로
+  // 일찍 나가도 Unity가 계속 돌지 않고, 늦은 cleanup이 새 AR 화면이나 새 분석을
+  // 멈추지도 않는다.
   React.useEffect(() => {
     if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
       return undefined;
     }
 
-    let cancelled = false;
+    const leaseId = stillAnalysisLeaseIdRef.current;
 
     void Promise.allSettled([
       verticalThirdsPromiseRef.current ?? Promise.resolve(null),
       faceGeometry2dPromiseRef.current ?? Promise.resolve(null),
       personalColorOutcomePromiseRef.current ?? Promise.resolve(null),
     ]).then(() => {
-      if (!cancelled && navigation.isFocused()) {
-        setUnityMakeupPlayerPaused(true);
+      if (leaseId) {
+        releaseUnityMakeupHiddenRunLease(leaseId);
+        if (stillAnalysisLeaseIdRef.current === leaseId) {
+          stillAnalysisLeaseIdRef.current = null;
+        }
       }
     });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [navigation, selectedFaceCapture]);
+    return undefined;
+  }, [selectedFaceCapture]);
 
   const handleRetryAnalysis = React.useCallback(() => {
     analysisRetryCountRef.current = 0;
     setAnalysisErrorMessage(null);
     setIsAnalysisReady(false);
+
+    if (pendingUnifiedCapture && !selectedFaceCapture) {
+      setUploadRequestKey(currentKey => currentKey + 1);
+      return;
+    }
+
     setAnalysisRequestKey(currentKey => currentKey + 1);
-  }, []);
+  }, [pendingUnifiedCapture, selectedFaceCapture]);
+  const handleBack = React.useCallback(() => {
+    if (pendingUnifiedCapture && !selectedFaceCapture) {
+      invalidateUnifiedFaceCapture({resetRetryAttempt: true});
+      const pendingUpload = pendingUploadPromiseRef.current;
+      if (pendingUpload) {
+        void pendingUpload
+          .finally(() =>
+            deleteUnifiedFaceCaptureTempImage(
+              pendingUnifiedCapture.image.uri,
+            ),
+          )
+          .catch(() => undefined);
+      } else {
+        void deleteUnifiedFaceCaptureTempImage(
+          pendingUnifiedCapture.image.uri,
+        ).catch(() => undefined);
+      }
+    }
+
+    navigateMainTab(navigation, 'HomeTab');
+  }, [
+    invalidateUnifiedFaceCapture,
+    navigation,
+    pendingUnifiedCapture,
+    selectedFaceCapture,
+  ]);
   const handleAnalysisComplete = React.useCallback(() => {
     if (!navigation.isFocused()) {
       return;
@@ -682,14 +816,17 @@ export function FaceAnalysisLoadingRouteScreen({
   return (
     <DetailRouteChrome
       routeName="FaceAnalysisLoading"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={handleBack}>
       <FaceAnalysisLoadingScreen
         analysisErrorMessage={analysisErrorMessage}
-        capturedPhotoUri={selectedFaceCapture?.imageUri}
+        capturedPhotoUri={
+          selectedFaceCapture?.imageUri ?? pendingUnifiedCapture?.image.uri
+        }
         isAnalysisReady={isAnalysisReady}
-        onBack={() => navigateMainTab(navigation, 'HomeTab')}
+        onBack={handleBack}
         onComplete={handleAnalysisComplete}
         onRetry={handleRetryAnalysis}
+        progressStartedAtMs={route.params?.loadingStartedAtMs}
       />
     </DetailRouteChrome>
   );
@@ -729,6 +866,8 @@ export function FaceAnalysisReportPreviewRouteScreen({
     selectedPersonalColor,
     setSelectedFaceAnalysisReport,
   } = useNavigationFlowState();
+  const currentReportId =
+    route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
 
   const handleDeleteReport = React.useCallback(
     async (reportId: string) => {
@@ -748,7 +887,13 @@ export function FaceAnalysisReportPreviewRouteScreen({
       onBack={() =>
         shouldReturnToProfile ? navigateMainTab(navigation, 'ProfileTab') : navigation.goBack()
       }
-      onCreateARFilter={() => navigation.navigate('MakeupRecommendation')}
+      onCreateARFilter={() => {
+        if (currentReportId) {
+          navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
+          return;
+        }
+        navigation.navigate('MakeupRecommendation');
+      }}
       onDeleteReport={handleDeleteReport}
       onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
       onRetake={() => navigation.navigate('FaceCapture')}
@@ -759,3 +904,245 @@ export function FaceAnalysisReportPreviewRouteScreen({
     />
   );
 }
+
+function FaceAnalysisReportBottomNav({
+  currentReportId,
+  navigation,
+}: {
+  currentReportId: string | null;
+  navigation: RootNavigation;
+}) {
+  const insets = useSafeAreaInsets();
+  const {height: windowHeight, width: windowWidth} = useWindowDimensions();
+  const [isExtractionSheetVisible, setIsExtractionSheetVisible] = React.useState(false);
+  const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = React.useState(false);
+  const [isFloatingActionMenuExpanded, setIsFloatingActionMenuExpanded] =
+    React.useState(false);
+  const {
+    beginMakeupFeedbackFlow,
+    floatingActionAnchor,
+    floatingActionButtonPosition,
+    floatingActionIds,
+    floatingActionInteractionMode,
+    setMakeupFeedbackResult,
+    setFloatingActionAnchor,
+    setFloatingActionButtonPosition,
+    setSelectedMakeupFeedbackPhoto,
+    setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
+  } = useNavigationFlowState();
+  const footerBottomInset = Math.max(insets.bottom, spacing.md);
+  const floatingActionViewport = React.useMemo(() => ({
+    bottomInset: insets.bottom,
+    bottomReserved: APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + spacing.md,
+    height: windowHeight,
+    leftInset: insets.left,
+    rightInset: insets.right,
+    topInset: insets.top,
+    width: windowWidth,
+  }), [insets, windowHeight, windowWidth]);
+
+  const handleFooterTabPress = React.useCallback(
+    (tab: FooterTabKey) => {
+      setIsFloatingActionMenuExpanded(false);
+
+      if (tab === 'home') {
+        navigateMainTab(navigation, 'HomeTab');
+        return;
+      }
+
+      if (tab === 'consulting') {
+        navigateMainTab(navigation, 'ConsultingTab');
+        return;
+      }
+
+      if (tab === 'journey') {
+        navigateMainTab(navigation, 'MakeupJourneyTab');
+        return;
+      }
+
+      navigateMainTab(navigation, 'ProfileTab');
+    },
+    [navigation],
+  );
+
+  const closeExtractionSheet = React.useCallback(() => {
+    setIsExtractionSheetVisible(false);
+  }, []);
+
+  const closeFeedbackSheet = React.useCallback(() => {
+    setIsFeedbackSheetVisible(false);
+  }, []);
+
+  const startMakeupExtraction = React.useCallback((initialSource: 'camera' | 'gallery') => {
+    setIsExtractionSheetVisible(false);
+    setSelectedRecommendedMakeupFilterId(null);
+    setSelectedReferenceMakeupPhoto(null);
+
+    requestAnimationFrame(() => {
+      navigation.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+    });
+  }, [
+    navigation,
+    setSelectedRecommendedMakeupFilterId,
+    setSelectedReferenceMakeupPhoto,
+  ]);
+
+  const startMakeupFeedback = React.useCallback((photoSource: 'camera' | 'gallery') => {
+    setIsFeedbackSheetVisible(false);
+    beginMakeupFeedbackFlow();
+    setMakeupFeedbackResult(null);
+    setSelectedMakeupFeedbackPhoto({photoSource});
+
+    requestAnimationFrame(() => {
+      if (photoSource === 'camera') {
+        navigation.navigate('MakeupFeedbackCapture');
+        return;
+      }
+
+      navigation.navigate('MakeupFeedbackAlbumUpload');
+    });
+  }, [
+    beginMakeupFeedbackFlow,
+    navigation,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  ]);
+
+  const handleSelectFloatingAction = React.useCallback(
+    (actionId: FloatingActionId) => {
+      if (actionId === 'makeupExtraction') {
+        setIsFeedbackSheetVisible(false);
+        setIsExtractionSheetVisible(true);
+        return;
+      }
+
+      if (actionId === 'makeupFeedback') {
+        setIsExtractionSheetVisible(false);
+        setIsFeedbackSheetVisible(true);
+        return;
+      }
+
+      if (actionId === 'arFilter') {
+        setSelectedRecommendedMakeupFilterId(null);
+        navigation.navigate('ARFilter');
+        return;
+      }
+
+      if (actionId === 'faceAnalysis') {
+        navigation.navigate('FaceAnalysisIntro');
+        return;
+      }
+
+      if (actionId === 'filterStore') {
+        navigation.navigate('HomeFilterStore');
+        return;
+      }
+
+      if (actionId === 'makeupRecommendation') {
+        if (currentReportId) {
+          navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
+          return;
+        }
+        navigation.navigate('MakeupRecommendation');
+        return;
+      }
+
+      navigation.navigate(
+        'ProductRecommendation',
+        currentReportId ? {reportId: currentReportId} : undefined,
+      );
+    },
+    [currentReportId, navigation, setSelectedRecommendedMakeupFilterId],
+  );
+
+  const handleFloatingActionSettingsPress = React.useCallback(() => {
+    navigation.navigate('FloatingActionSettings');
+  }, [navigation]);
+  const handleFloatingActionAnchorChange = React.useCallback((anchor: {
+    xRatio: number;
+    yRatio: number;
+  }) => {
+    setFloatingActionAnchor(anchor);
+    setFloatingActionButtonPosition(anchor.xRatio <= 0.5 ? 'left' : 'right');
+  }, [setFloatingActionAnchor, setFloatingActionButtonPosition]);
+
+  return (
+    <>
+      <YStack
+        pointerEvents="box-none"
+        style={[
+          styles.reportFooterHost,
+          {
+            height: getFaceAnalysisReportFooterHostHeight(windowHeight, footerBottomInset),
+          },
+        ]}>
+        {isFloatingActionMenuExpanded ? (
+          <Pressable
+            accessibilityLabel="빠른 실행 메뉴 닫기"
+            accessibilityRole="button"
+            onPress={() => setIsFloatingActionMenuExpanded(false)}
+            style={styles.reportFooterDismissLayer}
+          />
+        ) : null}
+        <FloatingActionMenu
+          actionIds={floatingActionIds}
+          anchor={floatingActionAnchor}
+          buttonPosition={floatingActionButtonPosition}
+          interactionMode={floatingActionInteractionMode}
+          isExpanded={isFloatingActionMenuExpanded}
+          onAnchorChange={handleFloatingActionAnchorChange}
+          onExpandedChange={setIsFloatingActionMenuExpanded}
+          onPressSettings={handleFloatingActionSettingsPress}
+          onReposition={quadrant => {
+            trackMakeupJourneyEvent({
+              name: 'floating_action_repositioned',
+              properties: {quadrant},
+            });
+          }}
+          onSelectAction={handleSelectFloatingAction}
+          placement="free"
+          viewport={floatingActionViewport}
+        />
+        <AppFooter
+          activeTab="profile"
+          bottomInset={insets.bottom}
+          floating
+          hiddenTabs={isMakeupJourneyEnabled() ? undefined : ['journey']}
+          onTabPress={handleFooterTabPress}
+        />
+      </YStack>
+      <MakeupExtractionActionSheet
+        isVisible={isExtractionSheetVisible}
+        onClose={closeExtractionSheet}
+        onPressCamera={() => startMakeupExtraction('camera')}
+        onPressUpload={() => startMakeupExtraction('gallery')}
+      />
+      <MakeupFeedbackActionSheet
+        isVisible={isFeedbackSheetVisible}
+        onClose={closeFeedbackSheet}
+        onPressCamera={() => startMakeupFeedback('camera')}
+        onPressUpload={() => startMakeupFeedback('gallery')}
+      />
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  reportFooterDismissLayer: {
+    backgroundColor: 'transparent',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 10,
+  },
+  reportFooterHost: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    zIndex: 24,
+  },
+});

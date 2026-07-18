@@ -28,8 +28,8 @@ import {
 } from '../presets';
 import type { SlotKey } from './lookTree';
 
-/** 워프/핏·배치 조작 색 (설계 색 규약: 제품=로즈, 워프·배치=골드) */
-export const GOLD = '#C9A15E';
+/** 워프/핏·배치 조작 색 (설계 색 규약: 워프·배치=골드). 정본은 theme.ts. */
+export { GOLD } from '../theme';
 
 // 마감(finish) — 부위 공통. value는 셰이더 분기값과 1:1(0=새틴이 기본=현재 룩).
 // 버튼은 광택 사다리 순서(매트→새틴→글로시→시머)로 보이고 value는 순서와 무관하다.
@@ -176,20 +176,6 @@ export const EYELINER_STYLES = [
   { value: 0, label: '윙업' },
   { value: 1, label: '퍼피' },
   { value: 2, label: '롱' },
-  { value: 3, label: '캣' },
-  { value: 4, label: '스트레이트' },
-  { value: 5, label: '소프트 드롭' },
-];
-
-export const EYELINER_LOWER_STYLES = [
-  { value: 0, label: '전체 소프트' },
-  { value: 1, label: '점막 밀착' },
-  { value: 2, label: '바깥 1/3' },
-];
-
-export const AEGYO_MODES = [
-  {value: 0, label: '자연 볼륨'},
-  {value: 1, label: '펄 포인트'},
 ];
 
 // 아이라이너 부분 모양 — 리본의 눈꺼풀 구간 마스크 (Eyeliner.shader SEG_* 동기)
@@ -235,27 +221,10 @@ export const MATERIAL_OPTIONS = [
 
 // 아이섀도 모양 (#19b) — Iris/Eyeshadow 밴드 세로·가로 프로파일 분기
 export const EYESHADOW_SHAPES = [
-  { value: 0, label: '베이스 전체' },
-  { value: 1, label: '베이스 앞쪽' },
-  { value: 2, label: '베이스 뒤쪽' },
-  { value: 3, label: '메인 앞쪽' },
-  { value: 4, label: '메인 중앙' },
-  { value: 5, label: '메인 뒤쪽' },
-  { value: 6, label: '포인트 앞머리' },
-  { value: 7, label: '포인트 눈동자 위' },
-  { value: 8, label: '포인트 눈꼬리' },
-  { value: 9, label: '크리스' },
-  { value: 10, label: '스모키' },
-  { value: 11, label: '와이드 그라데' },
-];
-
-// 하단 아이섀도 위치 — LowerLid 영역 프로파일 분기
-export const EYESHADOW_LOWER_SHAPES = [
-  {value: 0, label: '전체'},
-  {value: 1, label: '앞쪽'},
-  {value: 2, label: '중앙'},
-  {value: 3, label: '뒤쪽'},
-  {value: 4, label: '스모키'},
+  { value: 0, label: '리드 전체' },
+  { value: 1, label: '크리스 집중' },
+  { value: 2, label: '스모키' },
+  { value: 3, label: '꼬리 포인트' },
 ];
 
 // 눈썹 모양 (#19b, 슬롯 공통) — BrowWarp 밴드 형태 분기(일자화 파라미터)
@@ -296,18 +265,106 @@ export const POWDER_SHAPES = [
   { value: 2, label: '볼 제외' },
 ];
 
+// ── 모양 축 W1+W2 (하안검 밴드 4부위 + 쌍꺼풀) — value 0 = 현행 프로파일과 픽셀 동일 ──
+// 아이섀도 하(하안검 아래 섀도) 실루엣 — LowerLid.shader esBand 가로·세로 프로파일 분기.
+export const EYESHADOW_LOWER_SHAPES = [
+  { value: 0, label: '기본밴드' },
+  { value: 1, label: '넓게' },
+  { value: 2, label: '꼬리집중' },
+];
+// 하안검 라이너 구간 — LowerLid.shader lnAmt along 구간 게이트. 라벨은 상라이너
+// EYELINER_SEGMENTS와 일관(전체/꼬리만/앞+꼬리) — 하안검엔 '눈동자 위' 구간 없음.
+export const LOWER_EYELINER_SEGMENTS = [
+  { value: 0, label: '전체' },
+  { value: 1, label: '꼬리만' },
+  { value: 2, label: '앞+꼬리' },
+];
+// 애교살 실루엣 — LowerLid.shader pigHi 밴드 thick 프로파일 분기.
+export const AEGYO_SHAPES = [
+  { value: 0, label: '초승달' },
+  { value: 1, label: '일자' },
+  { value: 2, label: '중앙도톰' },
+];
+// 삼각존 모양 — LowerLid.shader triV 폭 분기.
+export const TRIANGLE_ZONE_SHAPES = [
+  { value: 0, label: '기본' },
+  { value: 1, label: '좁게' },
+  { value: 2, label: '넓게' },
+];
+// 쌍꺼풀 라인 (§3 ★A7) — DoubleLid.shader 크리스 라인 프로파일 분기.
+export const DOUBLE_LID_SHAPES = [
+  { value: 0, label: '인라인' },
+  { value: 1, label: '아웃라인' },
+  { value: 2, label: '세미' },
+];
+
+// ── 모양 축 W3 피부 존 (FaceMakeup.shader 존 게이트, powderShape 선례) — value 0 = 현행 픽셀 동일 ──
+// 언더톤 적용 존 — _ToneShape로 _Brightening(톤업+캐스트)을 존만큼 곱한다.
+export const TONE_ZONE_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: 'T존' },
+  { value: 2, label: '얼굴 중앙' }, // 방사 중앙 집중(코 주변)
+];
+// 피부결 존 — _SkinShape로 _Smoothing을 존만큼 곱한다. 파우더 캐노니컬 존 어휘 재사용.
+export const SKIN_ZONE_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: 'T존' },
+  { value: 2, label: '볼 제외' },
+];
+// 파운데 존 — _FoundationShape로 커버(fCov·fChroma)를 존만큼 곱한다. T존 집중=중앙 세로 스트립,
+// 외곽 페더=방사 외곽 감쇠(경계 자연 페이드).
+export const FOUNDATION_ZONE_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: 'T존 집중' },
+  { value: 2, label: '외곽 페더' },
+];
+
+// ── 모양 축 W4 립 (Lip.shader 존/실루엣, 링 메시 uv.y=중앙도·uv2.y=윗입술도) — value 0 = 현행 픽셀 동일 ──
+// 베이스립 실루엣 — 핏 lipBaseOverline(연속 오프셋)과 별개인 이산 존. 중앙 그라데=중앙 집중,
+// 외곽 정리=반경 외곽(입술선) 안쪽으로 정리.
+export const LIP_BASE_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: '중앙 그라데' },
+  { value: 2, label: '외곽 정리' },
+];
+// 메인립 실루엣 — 색축 lipGradient(반경 색스톱 혼합)와 직교한 알파 실루엣. 그라데립=중앙→코너
+// 알파 페이드, 꼬리 뾰족=코너 강조.
+export const LIP_SHAPES = [
+  { value: 0, label: '풀립' },
+  { value: 1, label: '그라데립' },
+  { value: 2, label: '꼬리 뾰족' },
+];
+// 립라이너 구간 — 라이너 인스턴스(_LipLinerShape). 윗입술만=upperness, 입꼬리 집중=코너.
+export const LIP_LINER_SHAPES = [
+  { value: 0, label: '전체 링' },
+  { value: 1, label: '윗입술만' },
+  { value: 2, label: '입꼬리 집중' },
+];
+// 립글로스 존 — 립 메시(_LipGlossShape). 중앙 도트=중앙 집중(쥬시), 아랫입술만=lowerness.
+export const LIP_GLOSS_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: '중앙 도트' },
+  { value: 2, label: '아랫입술만' },
+];
+
+// ── 모양 축 W6 치아·헤어 — value 0 = 현행 픽셀 동일 ──
+// 치아 존 — TeethWhiten 스트립 uv.y(가로 코너→코너) 중앙 가중.
+export const TEETH_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: '앞니 집중' },
+];
+// 헤어 존 — CameraFeed hair 세그. 세그 단일채널이라 v1은 화면공간 세로 그라데 근사(옴브레·끝만).
+export const HAIR_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: '옴브레' },
+  { value: 2, label: '끝만' },
+];
+
 // 파운데이션 마감 — 셰이더 분기값과 1:1 (0=새틴 기본, 1=매트, 2=듀이). 시머 없음.
 export const FOUNDATION_FINISHES = [
   { value: 0, label: '새틴' },
   { value: 1, label: '매트' },
   { value: 2, label: '듀이' },
-];
-
-// 피부결 제품은 "모공 프라이머에 윤광을 추가"하는 슬라이더가 아니라 서로 다른
-// 프라이머 선택이다. skinGlow는 기존 Unity 브리지 값을 그대로 선택 id로 재사용한다.
-export const SKIN_PRIMER_OPTIONS = [
-  { value: 0, label: '모공 프라이머' },
-  { value: 0.5, label: '윤광 프라이머' },
 ];
 
 // 제형 텍스처(§5 테크닉) — 커버리지 곡선·엣지 하드니스를 갈아끼운다(마감=빛반응과 별개).
@@ -322,6 +379,76 @@ export const LIP_TEXTURES = [
   { value: 1, label: '벨벳틴트' },
   { value: 2, label: '워터틴트' },
 ];
+
+// ── 제형(텍스처) 공통 어휘(W1) — 부위군 템플릿 enum이 TextureBundle 시드로 번역된다 ──
+// 마감(빛 반응)과 별개 축: 엣지 하드니스·입자감(그레인)·커버리지 곡선·발색 body를
+// 갈아끼운다. enum 값 0의 시드 = 전부 0(ZERO) = 현행 픽셀 바이트 동일(마감 0=새틴 선례).
+// 필드 구조: 부위당 enum 1필드(`<region>Texture`)만 브리지에 보내고, enum→번들 시드는
+// 셰이더가 TexBundleFromEnum(Finish.cginc)으로 미러링해 적용한다 — 기존 텍스처 축
+// 선례(foundationTexture·lipTexture·eyelinerTexture·browPowderTexture: 전부 enum 1필드 +
+// Unity 파생) 및 마감 enum 버튼(ApplyFinish 레거시 경로)과 정합. 세부 번들은 RN이 설계
+// 정본(TEXTURE_ENUM_SEED)으로 소유하고, W2(제형 스튜디오 세부 슬라이더)는 마감 세부
+// (FinishBundle)와 동일하게 부위별 오버라이드 필드를 뒤에 얹어 연다(필드 폭증 회피).
+export type TextureAxis = 'edgeSoft' | 'grain' | 'coverage' | 'body';
+export type TextureBundle = Record<TextureAxis, number>;
+
+const TEX_ZERO: TextureBundle = { edgeSoft: 0, grain: 0, coverage: 0, body: 0 };
+
+/** 부위군 텍스처 템플릿 id — 셰이더 TexBundleFromEnum templateId(0/1/2)와 1:1. */
+export type TextureTemplateId = 'generic' | 'tone' | 'teeth';
+export const TEXTURE_TEMPLATE_INDEX: Record<TextureTemplateId, number> = {
+  generic: 0,
+  tone: 1,
+  teeth: 2,
+};
+
+// UI 세그먼트(라벨 "제형"). value는 셰이더 분기값과 1:1(0=ZERO=현행).
+export const GENERIC_TEXTURES = [
+  { value: 0, label: '크림' },
+  { value: 1, label: '파우더' },
+  { value: 2, label: '리퀴드' },
+  { value: 3, label: '젤' },
+  { value: 4, label: '펜슬' },
+];
+// 언더톤 축소판 — grain 축만 의미(매끈/파우더리).
+export const TONE_TEXTURES = [
+  { value: 0, label: '매끈' },
+  { value: 1, label: '파우더리' },
+];
+// 치아(퇴화) — 젤 단일. 세그먼트가 1개면 선택지가 없어 UI 노출을 생략한다(teeth 부위엔
+// 제형 컨트롤을 달지 않음). 템플릿은 장래 미백/글로시 스마일 등 확장 대비 정의만 유지.
+export const TEETH_TEXTURES = [{ value: 0, label: '젤' }];
+
+/** enum value → TextureBundle 시드(부위군 템플릿). 셰이더 TexBundleFromEnum의 RN 정본
+ *  미러(마감의 FINISH_ENUM_SEED↔ApplyFinish 레거시 경로 선례). value 0=ZERO=무변조. */
+export const TEXTURE_ENUM_SEED: Record<
+  TextureTemplateId,
+  Record<number, TextureBundle>
+> = {
+  generic: {
+    0: TEX_ZERO, // 크림 = 무변조
+    1: { edgeSoft: 0.2, grain: 0.4, coverage: 0, body: -0.1 }, // 파우더
+    2: { edgeSoft: 0.3, grain: 0, coverage: -0.1, body: 0 }, // 리퀴드
+    3: { edgeSoft: 0.15, grain: 0, coverage: 0, body: 0 }, // 젤
+    4: { edgeSoft: -0.2, grain: 0.5, coverage: 0, body: 0.3 }, // 펜슬
+  },
+  tone: {
+    0: TEX_ZERO, // 매끈 = 무변조
+    1: { edgeSoft: 0, grain: 0.4, coverage: 0, body: 0 }, // 파우더리(grain 축만)
+  },
+  teeth: {
+    0: TEX_ZERO, // 젤 = 무변조
+  },
+};
+
+/** 부위 제형 enum → TextureBundle(미지정=ZERO). W2 세부 오버라이드의 시드 진입점
+ *  (마감 readFinishBundle 선례). */
+export function readTextureBundle(
+  templateId: TextureTemplateId,
+  texEnum: number | undefined,
+): TextureBundle {
+  return TEXTURE_ENUM_SEED[templateId][texEnum ?? 0] ?? TEX_ZERO;
+}
 
 // ── 렌즈 레이어드(#25) ── 3세부(베이스/내부/림)를 payload(LensLayer)로 캐리(deco 선례).
 // FilterParams 무소유라 axes는 비우고, ComposerSheet의 LensControls가 payload를 직접 편집.
@@ -394,11 +521,6 @@ export type RegionKey =
   // 컨투어
   | 'blush'
   | 'highlighter'
-  | 'highlightCheek'
-  | 'highlightNoseBridge'
-  | 'highlightNoseTip'
-  | 'highlightBrowBone'
-  | 'highlightCupid'
   | 'contour'
   // 눈
   | 'eyeshadow'
@@ -474,7 +596,7 @@ export const AXIS_ORDER: AxisKey[] = [
   'fit',
 ];
 
-export type ComposerControl =
+export type ComposerControl = (
   /** min..max 선형 매핑 슬라이더. 생략 시 0..1, 값 없으면 fallback(기본 0) */
   | {
       type: 'slider';
@@ -526,7 +648,11 @@ export type ComposerControl =
       label: string;
       region: TextureMapRegion;
       appliedKey: keyof FilterParams;
-    };
+    }
+) & {
+  /** 같은 축 탭 안에서 연속된 동일 group 컨트롤을 소제목으로 묶어 렌더(ComposerSheet). 미지정 = 그룹 없음(현행). */
+  group?: string;
+};
 
 export interface RegionDef {
   key: RegionKey;
@@ -542,8 +668,6 @@ export interface RegionDef {
   axes: Partial<Record<AxisKey, ComposerControl[]>>;
   /** 공유 필드 등 사용자 안내 한 줄 */
   note?: string;
-  /** 저장물 호환을 위해 REGION_MAP에는 남기되 새 추가/교체 UI에서 숨기는 legacy 부위 */
-  pickerHidden?: boolean;
 }
 
 export interface RegionGroup {
@@ -565,59 +689,6 @@ const BROW_FIT_AXIS: ComposerControl[] = [
 ];
 const BROW_NOTE = '모양·핏은 눈썹 전체 공통 — 어느 눈썹 부위에서 조정해도 함께 반영돼요';
 
-function highlightAxes(
-  intensityKey: keyof FilterParams,
-  intensityLabel: string,
-): RegionDef['axes'] {
-  return {
-    shape: [
-      {
-        type: 'maskImport',
-        label: '광채 존 마스크',
-        region: 'highlighter',
-        appliedKey: 'highlightMaskImported',
-      },
-    ],
-    color: [
-      {type: 'swatches', key: 'highlightColor', palette: HIGHLIGHT_COLORS},
-    ],
-    finish: [
-      {
-        type: 'finish',
-        finishKey: 'highlightFinish',
-        shimmerKey: 'highlightShimmer',
-        detail: highlightFinishDetail,
-      },
-    ],
-    opacity: [{type: 'slider', label: intensityLabel, key: intensityKey}],
-    fit: [
-      {
-        type: 'slider',
-        label: '광채 높이',
-        key: 'highlightLift',
-        min: -0.08,
-        max: 0.08,
-        gold: true,
-      },
-      {
-        type: 'slider',
-        label: '광채 퍼짐',
-        key: 'highlightSpread',
-        min: -0.08,
-        max: 0.08,
-        gold: true,
-      },
-      {
-        type: 'slider',
-        label: '가장자리 흐림',
-        key: 'highlightEdgeSoftness',
-        min: 0,
-        max: 1,
-      },
-    ],
-  };
-}
-
 export const REGION_GROUPS: RegionGroup[] = [
   {
     title: '피부·베이스',
@@ -634,6 +705,13 @@ export const REGION_GROUPS: RegionGroup[] = [
         onKeys: ['skinBrightening'],
         defaults: { skinBrightening: 0.4 },
         axes: {
+          // 존(W3) — 전체 / T존 / 얼굴 중앙 (FaceMakeup _ToneShape가 톤 적용 존 곱)
+          shape: [
+            { type: 'segments', key: 'toneShape', options: TONE_ZONE_SHAPES },
+          ],
+          texture: [
+            { type: 'segments', key: 'toneTexture', options: TONE_TEXTURES },
+          ],
           color: [
             { type: 'swatches', key: 'toneBaseColor', palette: TONE_BASE_COLORS },
           ],
@@ -648,13 +726,22 @@ export const REGION_GROUPS: RegionGroup[] = [
         onKeys: ['skinSmoothing', 'skinSmoothingExtended'],
         defaults: { skinSmoothing: 0.5 },
         axes: {
+          // 존(W3) — 전체 / T존 / 볼 제외 (FaceMakeup _SkinShape가 결 보정 존 곱)
+          shape: [
+            { type: 'segments', key: 'skinShape', options: SKIN_ZONE_SHAPES },
+          ],
+          // 피부결은 스무딩 프리미티브(마스크·색소 없음)라 셰이더가 grain 축만 소비한다.
+          // GENERIC(크림/파우더/리퀴드/젤/펜슬)를 두면 리퀴드·젤(엣지·커버 시드)이 렌더에
+          // 반영 안 돼 '가짜 컨트롤'이 되므로, grain만 갖는 TONE(매끈/파우더리)로 정정
+          // (FaceMakeup.shader가 skinTexture를 TONE 템플릿으로 미러링).
+          texture: [
+            { type: 'segments', key: 'skinTexture', options: TONE_TEXTURES },
+          ],
           opacity: [
             { type: 'slider', label: '결 보정', key: 'skinSmoothing' },
             { type: 'slider', label: '이마·목 확장 (세그)', key: 'skinSmoothingExtended' },
           ],
-          finish: [
-            { type: 'segments', key: 'skinGlow', options: SKIN_PRIMER_OPTIONS },
-          ],
+          finish: [{ type: 'slider', label: '윤광', key: 'skinGlow' }],
         },
       },
       {
@@ -663,9 +750,14 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🫙',
         productName: '쿠션 파운데이션',
         onKeys: ['foundationIntensity'],
-        defaults: { foundationIntensity: 0.4, matteGrain: 0 },
+        // 제형=쿠션(1) — 제품 정체성('쿠션 파운데이션')과 세그 일치(신규 잎 기본).
+        defaults: { foundationIntensity: 0.4, matteGrain: 0, foundationTexture: 1 },
         note: '세그 face-skin 채널로 이마·목까지 — 세그 폴백 시 얼굴 메시만',
         axes: {
+          // 존(W3) — 전체 / T존 집중 / 외곽 페더 (FaceMakeup _FoundationShape, 얼굴 메시 커버 존 곱)
+          shape: [
+            { type: 'segments', key: 'foundationShape', options: FOUNDATION_ZONE_SHAPES },
+          ],
           texture: [
             { type: 'segments', key: 'foundationTexture', options: FOUNDATION_TEXTURES },
           ],
@@ -695,11 +787,20 @@ export const REGION_GROUPS: RegionGroup[] = [
           shape: [
             { type: 'segments', key: 'concealerShape', options: CONCEALER_SHAPES },
           ],
+          texture: [
+            { type: 'segments', key: 'concealerTexture', options: GENERIC_TEXTURES },
+          ],
           color: [
             { type: 'swatches', key: 'concealerColor', palette: CONCEALER_COLORS },
           ],
+          finish: [
+            { type: 'segments', key: 'concealerFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [
             { type: 'slider', label: '컨실러', key: 'concealerIntensity' },
+            // 잡티 지우기(밀어내기) — 색을 얹지 않고 국소 이상치만 이웃 색으로 되민다
+            // (FaceMakeup 피부 경로, 스무딩 선례). 임계·반경은 셰이더 v1 상수, 슬라이더는 강도만.
+            { type: 'slider', label: '잡티 지우기', key: 'blemishRemoval' },
           ],
         },
       },
@@ -709,11 +810,15 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🧂',
         productName: '세팅 파우더',
         onKeys: ['powderIntensity'],
-        defaults: { powderIntensity: 0.5 },
+        // 제형=파우더(1) — 제품 정체성('세팅 파우더')과 세그 일치(신규 잎 기본).
+        defaults: { powderIntensity: 0.5, powderTexture: 1 },
         axes: {
           // 존(#19b) — 전체 / T존 / 볼 제외 (캐노니컬 존 마스크)
           shape: [
             { type: 'segments', key: 'powderShape', options: POWDER_SHAPES },
+          ],
+          texture: [
+            { type: 'segments', key: 'powderTexture', options: GENERIC_TEXTURES },
           ],
           // 컬러 파우더 — 무색(트랜스루선트)=기존, 핑크 톤업·라벤더·그린 등 옅은 캐스트.
           color: [
@@ -773,11 +878,20 @@ export const REGION_GROUPS: RegionGroup[] = [
             },
           ],
           texture: [
+            { type: 'segments', key: 'blushTexture', options: GENERIC_TEXTURES },
             {
               type: 'import',
               label: '볼 그림',
               action: 'blush',
               intensityKey: 'blushStyleIntensity',
+            },
+            {
+              type: 'slider',
+              label: '스파클 명멸',
+              key: 'blushStyleSparkle',
+              min: 0,
+              max: 1,
+              fallback: 0,
             },
           ],
           color: [{ type: 'swatches', key: 'blushColor', palette: BLUSH_COLORS }],
@@ -787,26 +901,28 @@ export const REGION_GROUPS: RegionGroup[] = [
               finishKey: 'blushFinish',
               shimmerKey: 'blushShimmer',
               detail: blushFinishDetail,
+              group: '기본',
             },
             {
               type: 'textureMap',
               label: '질감 맵 (광 지도)',
               region: 'blush',
               appliedKey: 'blushFinishMapImported',
+              group: '제형 스튜디오',
             },
             // 재질 아키타입 — 없음/벨벳/메탈/홀로 + 강도(0=없음일 때 무영향).
-            { type: 'segments', key: 'blushMaterial', options: MATERIAL_OPTIONS },
-            { type: 'slider', label: '재질 강도', key: 'blushMaterialStrength' },
+            { type: 'segments', key: 'blushMaterial', options: MATERIAL_OPTIONS, group: '재질' },
+            { type: 'slider', label: '재질 강도', key: 'blushMaterialStrength', group: '재질' },
             // 입자 레이어(글리터) 8축 — 밀도 0 = 끔. feather=부드러움(펄쪽)↔또렷(글리터).
-            { type: 'swatches', label: '글리터 색', key: 'blushParticleColor', palette: HIGHLIGHT_COLORS },
-            { type: 'slider', label: '글리터 밀도', key: 'blushParticleDensity' },
-            { type: 'slider', label: '글리터 크기', key: 'blushParticleSize' },
-            { type: 'slider', label: '글리터 밝기', key: 'blushParticleBrightness' },
-            { type: 'slider', label: '글리터 부드러움', key: 'blushParticleFeather' },
-            { type: 'slider', label: '글리터 명멸', key: 'blushParticleTwinkle' },
-            { type: 'slider', label: '글리터 모양(별)', key: 'blushParticleShape' },
-            { type: 'slider', label: '글리터 시차', key: 'blushParticleParallax' },
-            { type: 'slider', label: '글리터 컨페티(다색)', key: 'blushParticleConfetti' },
+            { type: 'swatches', label: '글리터 색', key: 'blushParticleColor', palette: HIGHLIGHT_COLORS, group: '글리터' },
+            { type: 'slider', label: '글리터 밀도', key: 'blushParticleDensity', group: '글리터' },
+            { type: 'slider', label: '글리터 크기', key: 'blushParticleSize', group: '글리터' },
+            { type: 'slider', label: '글리터 밝기', key: 'blushParticleBrightness', group: '글리터' },
+            { type: 'slider', label: '글리터 부드러움', key: 'blushParticleFeather', group: '글리터' },
+            { type: 'slider', label: '글리터 명멸', key: 'blushParticleTwinkle', group: '글리터' },
+            { type: 'slider', label: '글리터 모양(별)', key: 'blushParticleShape', group: '글리터' },
+            { type: 'slider', label: '글리터 시차', key: 'blushParticleParallax', group: '글리터' },
+            { type: 'slider', label: '글리터 컨페티(다색)', key: 'blushParticleConfetti', group: '글리터' },
           ],
           opacity: [{ type: 'slider', label: '블러셔', key: 'blushIntensity' }],
           fit: [
@@ -839,58 +955,66 @@ export const REGION_GROUPS: RegionGroup[] = [
       },
       {
         key: 'highlighter',
-        label: '하이라이터 전체(기존)',
+        label: '하이라이터',
         emoji: '💫',
         productName: '스틱 하이라이터',
         onKeys: ['highlightIntensity'],
         defaults: { highlightIntensity: 0.5 },
-        axes: highlightAxes('highlightIntensity', '하이라이터'),
-        pickerHidden: true,
-      },
-      {
-        key: 'highlightCheek',
-        label: '광대 하이라이터',
-        emoji: '✨',
-        productName: '스틱 하이라이터',
-        onKeys: ['highlightCheekIntensity'],
-        defaults: {highlightCheekIntensity: 0.45},
-        axes: highlightAxes('highlightCheekIntensity', '광대 광채'),
-      },
-      {
-        key: 'highlightNoseBridge',
-        label: '콧대 하이라이터',
-        emoji: '✨',
-        productName: '스틱 하이라이터',
-        onKeys: ['highlightNoseBridgeIntensity'],
-        defaults: {highlightNoseBridgeIntensity: 0.36},
-        axes: highlightAxes('highlightNoseBridgeIntensity', '콧대 광채'),
-      },
-      {
-        key: 'highlightNoseTip',
-        label: '코끝 하이라이터',
-        emoji: '✨',
-        productName: '스틱 하이라이터',
-        onKeys: ['highlightNoseTipIntensity'],
-        defaults: {highlightNoseTipIntensity: 0.36},
-        axes: highlightAxes('highlightNoseTipIntensity', '코끝 광채'),
-      },
-      {
-        key: 'highlightBrowBone',
-        label: '눈썹뼈 하이라이터',
-        emoji: '✨',
-        productName: '스틱 하이라이터',
-        onKeys: ['highlightBrowBoneIntensity'],
-        defaults: {highlightBrowBoneIntensity: 0.34},
-        axes: highlightAxes('highlightBrowBoneIntensity', '눈썹뼈 광채'),
-      },
-      {
-        key: 'highlightCupid',
-        label: '입술산 하이라이터',
-        emoji: '✨',
-        productName: '스틱 하이라이터',
-        onKeys: ['highlightCupidIntensity'],
-        defaults: {highlightCupidIntensity: 0.32},
-        axes: highlightAxes('highlightCupidIntensity', '입술산 광채'),
+        axes: {
+          shape: [
+            {
+              type: 'maskImport',
+              label: '광채 존 마스크',
+              region: 'highlighter',
+              appliedKey: 'highlightMaskImported',
+            },
+          ],
+          texture: [
+            { type: 'segments', key: 'highlightTexture', options: GENERIC_TEXTURES },
+          ],
+          color: [
+            { type: 'swatches', key: 'highlightColor', palette: HIGHLIGHT_COLORS },
+          ],
+          // 마감 — 블러셔와 동일 enum(새틴/매트/글로시/시머 + 시머 게인) + 제형
+          // 스튜디오 세부(#21: 광·펄 입자 크기/밀도·매트·시). 0=새틴=기존 출력.
+          finish: [
+            {
+              type: 'finish',
+              finishKey: 'highlightFinish',
+              shimmerKey: 'highlightShimmer',
+              detail: highlightFinishDetail,
+            },
+          ],
+          opacity: [
+            { type: 'slider', label: '하이라이터', key: 'highlightIntensity' },
+          ],
+          fit: [
+            // 마스크 부위 핏 아핀(A17 확장) — 블러셔 lift/spread 일반화.
+            {
+              type: 'slider',
+              label: '광채 높이',
+              key: 'highlightLift',
+              min: -0.08,
+              max: 0.08,
+              gold: true,
+            },
+            {
+              type: 'slider',
+              label: '광채 퍼짐',
+              key: 'highlightSpread',
+              min: -0.08,
+              max: 0.08,
+              gold: true,
+            },
+            {
+              type: 'slider',
+              label: '가장자리 흐림',
+              key: 'highlightEdgeSoftness',
+              min: 0,
+              max: 1,
+            },
+          ],
+        },
       },
       {
         key: 'contour',
@@ -898,7 +1022,8 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🖌️',
         productName: '섀딩 파우더',
         onKeys: ['contourIntensity'],
-        defaults: { contourIntensity: 0.4 },
+        // 제형=파우더(1) — 제품 정체성('섀딩 파우더')과 세그 일치(신규 잎 기본).
+        defaults: { contourIntensity: 0.4, contourTexture: 1 },
         axes: {
           shape: [
             {
@@ -907,6 +1032,9 @@ export const REGION_GROUPS: RegionGroup[] = [
               region: 'contour',
               appliedKey: 'contourMaskImported',
             },
+          ],
+          texture: [
+            { type: 'segments', key: 'contourTexture', options: GENERIC_TEXTURES },
           ],
           color: [
             { type: 'swatches', key: 'contourColor', palette: CONTOUR_COLORS },
@@ -965,6 +1093,8 @@ export const REGION_GROUPS: RegionGroup[] = [
         onKeys: ['eyeshadowIntensity'],
         defaults: {
           eyeshadowIntensity: 0.5,
+          // 제형=파우더(1) — 제품 정체성('파우더 섀도')과 세그 일치(신규 잎 기본).
+          eyeshadowTexture: 1,
           eyeshadowMaterial: 0,
           eyeshadowMaterialStrength: 0.85,
           eyeshadowParticleSize: 0.4,
@@ -988,6 +1118,9 @@ export const REGION_GROUPS: RegionGroup[] = [
               appliedKey: 'eyeshadowMaskImported',
             },
           ],
+          texture: [
+            { type: 'segments', key: 'eyeshadowTexture', options: GENERIC_TEXTURES },
+          ],
           color: [
             { type: 'swatches', key: 'eyeshadowColor', palette: EYESHADOW_COLORS },
             {
@@ -1004,25 +1137,27 @@ export const REGION_GROUPS: RegionGroup[] = [
               finishKey: 'eyeshadowFinish',
               shimmerKey: 'eyeshadowShimmer',
               detail: eyeshadowFinishDetail,
+              group: '기본',
             },
             {
               type: 'textureMap',
               label: '질감 맵 (광 지도)',
               region: 'eyeshadow',
               appliedKey: 'eyeshadowFinishMapImported',
+              group: '제형 스튜디오',
             },
             // 재질 + 입자(글리터) — 블러셔와 동일.
-            { type: 'segments', key: 'eyeshadowMaterial', options: MATERIAL_OPTIONS },
-            { type: 'slider', label: '재질 강도', key: 'eyeshadowMaterialStrength' },
-            { type: 'swatches', label: '글리터 색', key: 'eyeshadowParticleColor', palette: HIGHLIGHT_COLORS },
-            { type: 'slider', label: '글리터 밀도', key: 'eyeshadowParticleDensity' },
-            { type: 'slider', label: '글리터 크기', key: 'eyeshadowParticleSize' },
-            { type: 'slider', label: '글리터 밝기', key: 'eyeshadowParticleBrightness' },
-            { type: 'slider', label: '글리터 부드러움', key: 'eyeshadowParticleFeather' },
-            { type: 'slider', label: '글리터 명멸', key: 'eyeshadowParticleTwinkle' },
-            { type: 'slider', label: '글리터 모양(별)', key: 'eyeshadowParticleShape' },
-            { type: 'slider', label: '글리터 시차', key: 'eyeshadowParticleParallax' },
-            { type: 'slider', label: '글리터 컨페티(다색)', key: 'eyeshadowParticleConfetti' },
+            { type: 'segments', key: 'eyeshadowMaterial', options: MATERIAL_OPTIONS, group: '재질' },
+            { type: 'slider', label: '재질 강도', key: 'eyeshadowMaterialStrength', group: '재질' },
+            { type: 'swatches', label: '글리터 색', key: 'eyeshadowParticleColor', palette: HIGHLIGHT_COLORS, group: '글리터' },
+            { type: 'slider', label: '글리터 밀도', key: 'eyeshadowParticleDensity', group: '글리터' },
+            { type: 'slider', label: '글리터 크기', key: 'eyeshadowParticleSize', group: '글리터' },
+            { type: 'slider', label: '글리터 밝기', key: 'eyeshadowParticleBrightness', group: '글리터' },
+            { type: 'slider', label: '글리터 부드러움', key: 'eyeshadowParticleFeather', group: '글리터' },
+            { type: 'slider', label: '글리터 명멸', key: 'eyeshadowParticleTwinkle', group: '글리터' },
+            { type: 'slider', label: '글리터 모양(별)', key: 'eyeshadowParticleShape', group: '글리터' },
+            { type: 'slider', label: '글리터 시차', key: 'eyeshadowParticleParallax', group: '글리터' },
+            { type: 'slider', label: '글리터 컨페티(다색)', key: 'eyeshadowParticleConfetti', group: '글리터' },
           ],
           opacity: [
             { type: 'slider', label: '아이섀도', key: 'eyeshadowIntensity' },
@@ -1048,15 +1183,16 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🌘',
         productName: '파우더 섀도',
         onKeys: ['eyeshadowLowerIntensity'],
-        defaults: { eyeshadowLowerIntensity: 0.3 },
+        // 제형=파우더(1) — 제품 정체성('파우더 섀도')과 세그 일치(신규 잎 기본).
+        defaults: { eyeshadowLowerIntensity: 0.3, eyeshadowLowerTexture: 1 },
         note: '하안검 아래 섀도(곱 블렌드) — 언더 스모키·그늘. 애교살 아래 깔림',
         axes: {
+          // 모양(W1) — 기본밴드 / 넓게 / 꼬리집중 (esBand 프로파일 분기)
           shape: [
-            {
-              type: 'segments',
-              key: 'eyeshadowLowerShape',
-              options: EYESHADOW_LOWER_SHAPES,
-            },
+            { type: 'segments', key: 'eyeshadowLowerShape', options: EYESHADOW_LOWER_SHAPES },
+          ],
+          texture: [
+            { type: 'segments', key: 'eyeshadowLowerTexture', options: GENERIC_TEXTURES },
           ],
           color: [
             {
@@ -1075,6 +1211,17 @@ export const REGION_GROUPS: RegionGroup[] = [
           ],
           opacity: [
             { type: 'slider', label: '아이섀도 하', key: 'eyeshadowLowerIntensity' },
+          ],
+          fit: [
+            {
+              type: 'slider',
+              label: '섀도 높이',
+              key: 'eyeshadowLowerHeight',
+              min: 0.3,
+              max: 2,
+              fallback: 1,
+              gold: true,
+            },
           ],
         },
       },
@@ -1155,30 +1302,32 @@ export const REGION_GROUPS: RegionGroup[] = [
         productName: '펜슬 라이너',
         onKeys: ['eyelinerLowerIntensity'],
         defaults: { eyelinerLowerIntensity: 0.4 },
+        note: '색은 아이라인 상과 공용 — 여기서 바꾸면 함께 반영',
         axes: {
+          // 구간(W1) — 전체 / 꼬리만 / 앞+꼬리(중앙 비움). lnAmt along 게이트(상라이너 관례).
           shape: [
-            {
-              type: 'segments',
-              key: 'eyelinerLowerStyle',
-              options: EYELINER_LOWER_STYLES,
-            },
+            { type: 'segments', key: 'eyelinerLowerSegment', options: LOWER_EYELINER_SEGMENTS },
           ],
+          // 공유색 재노출(눈썹 BROW_SHAPE_AXIS 선례) — 하 부위에서도 색을 만질 수 있게.
           color: [
-            {
-              type: 'swatches',
-              key: 'eyelinerLowerColor',
-              palette: EYELINER_COLORS,
-            },
+            { type: 'swatches', key: 'eyelinerColor', palette: EYELINER_COLORS },
           ],
           finish: [
-            {
-              type: 'finish',
-              finishKey: 'eyelinerLowerFinish',
-              shimmerKey: 'eyelinerLowerShimmer',
-            },
+            { type: 'segments', key: 'eyelinerLowerFinish', options: FOUNDATION_FINISHES },
           ],
           opacity: [
             { type: 'slider', label: '라인 (아래)', key: 'eyelinerLowerIntensity' },
+          ],
+          fit: [
+            {
+              type: 'slider',
+              label: '라이너 두께',
+              key: 'eyelinerLowerThickness',
+              min: 0.3,
+              max: 2.5,
+              fallback: 1,
+              gold: true,
+            },
           ],
         },
       },
@@ -1187,29 +1336,36 @@ export const REGION_GROUPS: RegionGroup[] = [
         label: '애교살',
         emoji: '🥺',
         productName: '펄 스틱',
-        onKeys: ['aegyoIntensity'],
-        defaults: {aegyoIntensity: 0.5, aegyoRendererVersion: 1},
+        onKeys: ['aegyoIntensity', 'aegyoStyleIntensity'],
+        defaults: { aegyoIntensity: 0.5 },
         axes: {
+          // 모양(W1) — 초승달(현행) / 일자 / 중앙도톰 (pigHi thick 프로파일 분기)
           shape: [
-            {type: 'segments', key: 'aegyoMode', options: AEGYO_MODES},
+            { type: 'segments', key: 'aegyoShape', options: AEGYO_SHAPES },
           ],
           // 색(07-11 aegyoColor 신설 — 부위 축 감사의 (b) 해소): 하이라이트 펄 톤,
           // 섀도는 Unity가 파생. 빈 값=기본 톤이라 스와치 선택 전 룩은 불변.
           color: [
             { type: 'swatches', key: 'aegyoColor', palette: AEGYO_COLORS },
           ],
-          // 새 전용 렌더러는 마감 enum 대신 모드+펄 강도를 사용한다.
+          // 마감 — 하이라이트 밴드에 적용(시머=펄 애교살). 0=새틴=기존 출력.
           finish: [
             {
-              type: 'slider',
-              label: '펄 강도',
-              key: 'aegyoShimmer',
+              type: 'finish',
+              finishKey: 'aegyoFinish',
+              shimmerKey: 'aegyoShimmer',
             },
           ],
-          opacity: [
-            {type: 'slider', label: '애교살', key: 'aegyoIntensity'},
-            {type: 'slider', label: '볼륨 음영', key: 'aegyoShadowIntensity'},
+          texture: [
+            { type: 'segments', key: 'aegyoTexture', options: GENERIC_TEXTURES },
+            {
+              type: 'import',
+              label: '애교살 그림',
+              action: 'aegyo',
+              intensityKey: 'aegyoStyleIntensity',
+            },
           ],
+          opacity: [{ type: 'slider', label: '애교살', key: 'aegyoIntensity' }],
           fit: [
             {
               type: 'slider',
@@ -1229,14 +1385,36 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🔺',
         productName: '파우더 섀도',
         onKeys: ['triangleZoneIntensity'],
-        defaults: { triangleZoneIntensity: 0.4 },
+        // 제형=파우더(1) — 제품 정체성('파우더 섀도')과 세그 일치(신규 잎 기본).
+        defaults: { triangleZoneIntensity: 0.4, triangleZoneTexture: 1 },
         note: '눈꼬리 바로 아래 좁은 삼각 음영 — 눈매 깊게, 눈꼬리 리프트 자동 추종',
         axes: {
+          // 모양(W1) — 기본 / 좁게 / 넓게 (triV 세로 폭 분기)
+          shape: [
+            { type: 'segments', key: 'triangleZoneShape', options: TRIANGLE_ZONE_SHAPES },
+          ],
+          texture: [
+            { type: 'segments', key: 'triangleZoneTexture', options: GENERIC_TEXTURES },
+          ],
           color: [
             { type: 'swatches', key: 'triangleZoneColor', palette: TRIANGLE_COLORS },
           ],
+          finish: [
+            { type: 'segments', key: 'triangleZoneFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [
             { type: 'slider', label: '음영 강도', key: 'triangleZoneIntensity' },
+          ],
+          fit: [
+            {
+              type: 'slider',
+              label: '삼각존 높이',
+              key: 'triangleZoneHeight',
+              min: 0.3,
+              max: 2,
+              fallback: 1,
+              gold: true,
+            },
           ],
         },
       },
@@ -1253,6 +1431,10 @@ export const REGION_GROUPS: RegionGroup[] = [
           ],
           color: [
             { type: 'swatches', key: 'mascaraColor', palette: EYELINER_COLORS },
+          ],
+          // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환).
+          finish: [
+            { type: 'segments', key: 'mascaraFinish', options: FOUNDATION_FINISHES },
           ],
           opacity: [
             { type: 'slider', label: '마스카라', key: 'mascaraIntensity' },
@@ -1287,6 +1469,10 @@ export const REGION_GROUPS: RegionGroup[] = [
           color: [
             { type: 'swatches', key: 'mascaraColor', palette: EYELINER_COLORS },
           ],
+          // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환).
+          finish: [
+            { type: 'segments', key: 'lowerMascaraFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [
             { type: 'slider', label: '아래 속눈썹', key: 'lowerLashIntensity' },
           ],
@@ -1312,6 +1498,14 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { doubleLidIntensity: 0.35 },
         note: '접힘선 중심 위 또렷·아래 소프트 음영 (색은 자연 음영 고정)',
         axes: {
+          // 모양(W2, §3 ★A7) — 인라인(현행) / 아웃라인 / 세미 (크리스 라인 프로파일 분기)
+          shape: [
+            { type: 'segments', key: 'doubleLidShape', options: DOUBLE_LID_SHAPES },
+          ],
+          // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환).
+          finish: [
+            { type: 'segments', key: 'doubleLidFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [
             { type: 'slider', label: '라인 진하기', key: 'doubleLidIntensity' },
           ],
@@ -1389,6 +1583,13 @@ export const REGION_GROUPS: RegionGroup[] = [
         note: BROW_NOTE,
         axes: {
           shape: BROW_SHAPE_AXIS,
+          texture: [
+            { type: 'segments', key: 'browConcealTexture', options: GENERIC_TEXTURES },
+          ],
+          // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환).
+          finish: [
+            { type: 'segments', key: 'browConcealFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [
             { type: 'slider', label: '지우기 (컨실)', key: 'browConcealIntensity' },
           ],
@@ -1405,7 +1606,14 @@ export const REGION_GROUPS: RegionGroup[] = [
         note: BROW_NOTE,
         axes: {
           shape: BROW_SHAPE_AXIS,
+          texture: [
+            { type: 'segments', key: 'browTexture', options: GENERIC_TEXTURES },
+          ],
           color: [{ type: 'swatches', key: 'browColor', palette: BROW_COLORS }],
+          // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환).
+          finish: [
+            { type: 'segments', key: 'browFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [
             { type: 'slider', label: '결 (틴트)', key: 'browIntensity' },
           ],
@@ -1455,11 +1663,19 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🖊️',
         productName: '브로우 펜슬',
         onKeys: ['browPencilIntensity'],
-        defaults: { browPencilIntensity: 0.5 },
+        // 제형=펜슬(4) — 제품 정체성('브로우 펜슬')과 세그 일치(신규 잎 기본).
+        defaults: { browPencilIntensity: 0.5, browPencilTexture: 4 },
         note: BROW_NOTE,
         axes: {
           shape: BROW_SHAPE_AXIS,
+          texture: [
+            { type: 'segments', key: 'browPencilTexture', options: GENERIC_TEXTURES },
+          ],
           color: [{ type: 'swatches', key: 'browPencilColor', palette: BROW_COLORS }],
+          // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환).
+          finish: [
+            { type: 'segments', key: 'browPencilFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [
             { type: 'slider', label: '한올한올', key: 'browPencilIntensity' },
           ],
@@ -1476,6 +1692,13 @@ export const REGION_GROUPS: RegionGroup[] = [
         note: BROW_NOTE,
         axes: {
           shape: BROW_SHAPE_AXIS,
+          texture: [
+            { type: 'segments', key: 'browLightenerTexture', options: GENERIC_TEXTURES },
+          ],
+          // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환).
+          finish: [
+            { type: 'segments', key: 'browLightenerFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [
             { type: 'slider', label: '옅게 (라이트너)', key: 'browLightenerIntensity' },
           ],
@@ -1493,6 +1716,7 @@ export const REGION_GROUPS: RegionGroup[] = [
         axes: {
           shape: BROW_SHAPE_AXIS,
           texture: [
+            { type: 'segments', key: 'browStyleTexture', options: GENERIC_TEXTURES },
             {
               type: 'import',
               label: '눈썹 스타일',
@@ -1500,6 +1724,10 @@ export const REGION_GROUPS: RegionGroup[] = [
               intensityKey: 'browStyleIntensity',
             },
             { type: 'swatches', label: '스타일 색', key: 'browStyleColor', palette: BROW_COLORS },
+          ],
+          // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이). 0=새틴=기존 출력(하위호환).
+          finish: [
+            { type: 'segments', key: 'browStyleFinish', options: FOUNDATION_FINISHES },
           ],
           opacity: [
             { type: 'slider', label: '스타일 강도', key: 'browStyleIntensity' },
@@ -1523,8 +1751,29 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { lipBaseIntensity: 0.5 },
         note: '본래 입술색을 누드로 정리 — 발색 준비 (색과 독립으로 켜짐)',
         axes: {
+          // 실루엣(W4) — 전체 / 중앙 그라데 / 외곽 정리. 핏 오버립(연속 오프셋)과 별개 이산.
+          shape: [
+            { type: 'segments', key: 'lipBaseShape', options: LIP_BASE_SHAPES },
+          ],
+          texture: [
+            { type: 'segments', key: 'lipBaseTexture', options: GENERIC_TEXTURES },
+          ],
           color: [{ type: 'swatches', key: 'lipBaseColor', palette: LIP_BASE_COLORS }],
+          finish: [
+            { type: 'segments', key: 'lipBaseFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [{ type: 'slider', label: '커버', key: 'lipBaseIntensity' }],
+          fit: [
+            {
+              type: 'slider',
+              label: '오버립 (워프)',
+              key: 'lipBaseOverline',
+              min: -0.15,
+              max: 0.15,
+              fallback: 0,
+              gold: true,
+            },
+          ],
         },
       },
       {
@@ -1548,6 +1797,11 @@ export const REGION_GROUPS: RegionGroup[] = [
           lipParticleConfetti: 0,
         },
         axes: {
+          // 실루엣(W4) — 풀립 / 그라데립(중앙 집중) / 꼬리 뾰족(입꼬리 강조). 색축
+          // 그라데이션(lipGradient, 반경 색스톱 혼합)과 직교한 알파 실루엣.
+          shape: [
+            { type: 'segments', key: 'lipShape', options: LIP_SHAPES },
+          ],
           texture: [
             { type: 'segments', key: 'lipTexture', options: LIP_TEXTURES },
             {
@@ -1555,6 +1809,14 @@ export const REGION_GROUPS: RegionGroup[] = [
               label: '립 그림',
               action: 'lip',
               intensityKey: 'lipStyleIntensity',
+            },
+            {
+              type: 'slider',
+              label: '스파클 명멸',
+              key: 'lipStyleSparkle',
+              min: 0,
+              max: 1,
+              fallback: 0,
             },
           ],
           color: [
@@ -1568,25 +1830,27 @@ export const REGION_GROUPS: RegionGroup[] = [
               finishKey: 'lipFinish',
               shimmerKey: 'lipShimmer',
               detail: lipFinishDetail,
+              group: '기본',
             },
             {
               type: 'textureMap',
               label: '질감 맵 (광 지도)',
               region: 'lip',
               appliedKey: 'lipFinishMapImported',
+              group: '제형 스튜디오',
             },
             // 재질 + 입자(글리터) — 블러셔와 동일.
-            { type: 'segments', key: 'lipMaterial', options: MATERIAL_OPTIONS },
-            { type: 'slider', label: '재질 강도', key: 'lipMaterialStrength' },
-            { type: 'swatches', label: '글리터 색', key: 'lipParticleColor', palette: HIGHLIGHT_COLORS },
-            { type: 'slider', label: '글리터 밀도', key: 'lipParticleDensity' },
-            { type: 'slider', label: '글리터 크기', key: 'lipParticleSize' },
-            { type: 'slider', label: '글리터 밝기', key: 'lipParticleBrightness' },
-            { type: 'slider', label: '글리터 부드러움', key: 'lipParticleFeather' },
-            { type: 'slider', label: '글리터 명멸', key: 'lipParticleTwinkle' },
-            { type: 'slider', label: '글리터 모양(별)', key: 'lipParticleShape' },
-            { type: 'slider', label: '글리터 시차', key: 'lipParticleParallax' },
-            { type: 'slider', label: '글리터 컨페티(다색)', key: 'lipParticleConfetti' },
+            { type: 'segments', key: 'lipMaterial', options: MATERIAL_OPTIONS, group: '재질' },
+            { type: 'slider', label: '재질 강도', key: 'lipMaterialStrength', group: '재질' },
+            { type: 'swatches', label: '글리터 색', key: 'lipParticleColor', palette: HIGHLIGHT_COLORS, group: '글리터' },
+            { type: 'slider', label: '글리터 밀도', key: 'lipParticleDensity', group: '글리터' },
+            { type: 'slider', label: '글리터 크기', key: 'lipParticleSize', group: '글리터' },
+            { type: 'slider', label: '글리터 밝기', key: 'lipParticleBrightness', group: '글리터' },
+            { type: 'slider', label: '글리터 부드러움', key: 'lipParticleFeather', group: '글리터' },
+            { type: 'slider', label: '글리터 명멸', key: 'lipParticleTwinkle', group: '글리터' },
+            { type: 'slider', label: '글리터 모양(별)', key: 'lipParticleShape', group: '글리터' },
+            { type: 'slider', label: '글리터 시차', key: 'lipParticleParallax', group: '글리터' },
+            { type: 'slider', label: '글리터 컨페티(다색)', key: 'lipParticleConfetti', group: '글리터' },
           ],
           opacity: [
             { type: 'slider', label: '립', key: 'lipIntensity' },
@@ -1602,11 +1866,27 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🖍️',
         productName: '립 펜슬',
         onKeys: ['lipLinerIntensity'],
-        defaults: { lipLinerIntensity: 0.4 },
+        defaults: {
+          lipLinerIntensity: 0.4,
+          // 현행 렌더와 Unity 기본값이 매트(1)라, 0이면 기존 룩의 연필 질감이 바뀐다.
+          lipLinerFinish: 1,
+          // 제형=펜슬(4) — 제품 정체성('립 펜슬')과 세그 일치(신규 잎 기본).
+          lipLinerTexture: 4,
+        },
         note: '외곽 링(매트) — 립보다 한 톤 딥하게 윤곽',
         axes: {
+          // 구간(W4) — 전체 링 / 윗입술만 / 입꼬리 집중 (라이너 인스턴스 _LipLinerShape)
+          shape: [
+            { type: 'segments', key: 'lipLinerShape', options: LIP_LINER_SHAPES },
+          ],
+          texture: [
+            { type: 'segments', key: 'lipLinerTexture', options: GENERIC_TEXTURES },
+          ],
           color: [
             { type: 'swatches', key: 'lipLinerColor', palette: LIP_COLORS },
+          ],
+          finish: [
+            { type: 'segments', key: 'lipLinerFinish', options: FOUNDATION_FINISHES },
           ],
           opacity: [
             { type: 'slider', label: '라이너 진하기', key: 'lipLinerIntensity' },
@@ -1633,8 +1913,29 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { lipGlossIntensity: 0.5 },
         note: '독립 광 톱코트 — 매트 위에도 얹힘 (색은 기본 투명)',
         axes: {
+          // 존(W4) — 전체 / 중앙 도트(쥬시) / 아랫입술만 (립 메시 _LipGlossShape)
+          shape: [
+            { type: 'segments', key: 'lipGlossShape', options: LIP_GLOSS_SHAPES },
+          ],
+          texture: [
+            { type: 'segments', key: 'lipGlossTexture', options: GENERIC_TEXTURES },
+          ],
           color: [{ type: 'swatches', key: 'lipGlossColor', palette: LIP_GLOSS_COLORS }],
+          finish: [
+            { type: 'segments', key: 'lipGlossFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [{ type: 'slider', label: '광량', key: 'lipGlossIntensity' }],
+          fit: [
+            {
+              type: 'slider',
+              label: '오버립 (워프)',
+              key: 'lipGlossOverline',
+              min: -0.15,
+              max: 0.15,
+              fallback: 0,
+              gold: true,
+            },
+          ],
         },
       },
       {
@@ -1646,6 +1947,14 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { teethWhitenIntensity: 0.5 },
         note: '입을 벌려야 보여요 — 밝은 치아 픽셀만 미백',
         axes: {
+          // 존(W6) — 전체 / 앞니 집중 (TeethWhiten 스트립 가로 중앙 가중)
+          shape: [
+            { type: 'segments', key: 'teethShape', options: TEETH_SHAPES },
+          ],
+          // 마감 — FOUNDATION_FINISHES(새틴/매트/듀이=글로시 스마일). 0=새틴=기존 출력(하위호환).
+          finish: [
+            { type: 'segments', key: 'teethFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [
             { type: 'slider', label: '미백', key: 'teethWhitenIntensity' },
           ],
@@ -1666,7 +1975,14 @@ export const REGION_GROUPS: RegionGroup[] = [
         defaults: { hairTintIntensity: 0.5 },
         note: '세그멘테이션 모델 필요 — 없으면 표시되지 않아요',
         axes: {
+          // 존(W6) — 전체 / 옴브레 / 끝만 (헤어 세그 단일채널이라 v1은 화면공간 세로 근사)
+          shape: [
+            { type: 'segments', key: 'hairShape', options: HAIR_SHAPES },
+          ],
           color: [{ type: 'swatches', key: 'hairTintColor', palette: HAIR_COLORS }],
+          finish: [
+            { type: 'segments', key: 'hairFinish', options: FOUNDATION_FINISHES },
+          ],
           opacity: [{ type: 'slider', label: '염색 농도', key: 'hairTintIntensity' }],
         },
       },
@@ -1728,13 +2044,6 @@ export const REGION_DEFS: RegionDef[] = REGION_GROUPS.flatMap(g => g.regions);
 export const REGION_MAP: Record<RegionKey, RegionDef> = Object.fromEntries(
   REGION_DEFS.map(d => [d.key, d]),
 ) as Record<RegionKey, RegionDef>;
-
-/** 새 부위 추가/교체 UI에 노출 가능한 정의. legacy 저장물 해석용 정의는 제외한다. */
-export function pickerVisibleRegionDefs(
-  defs: readonly RegionDef[] = REGION_DEFS,
-): RegionDef[] {
-  return defs.filter(def => !def.pickerHidden);
-}
 
 /** 부위가 소유한 FilterParams 필드 전부 — 축 컨트롤 선언에서 유도한다(드리프트 방지) */
 export function regionOwnKeys(def: RegionDef): (keyof FilterParams)[] {

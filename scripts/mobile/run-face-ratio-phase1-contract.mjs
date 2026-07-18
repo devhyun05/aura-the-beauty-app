@@ -89,7 +89,11 @@ if (
   );
 }
 const closeHandlerStart = unifiedCaptureScreenSource.indexOf(
-  'accessibilityLabel="통합 얼굴 촬영 닫기"',
+  'const cancelCaptureFlow = () => {',
+);
+const closeHandlerEnd = unifiedCaptureScreenSource.indexOf(
+  '\n  };',
+  closeHandlerStart,
 );
 const closeAbandonIndex = unifiedCaptureScreenSource.indexOf(
   'callbacksRef.current.onAbandonStarted?.()',
@@ -103,11 +107,28 @@ const closeCleanupIndex = unifiedCaptureScreenSource.indexOf(
   'cleanupUncommittedImage(captureState.completed)',
   closeHandlerStart,
 );
+const closeButtonStart = unifiedCaptureScreenSource.indexOf(
+  'accessibilityLabel="통합 얼굴 촬영 닫기"',
+);
+const closeButtonEnd = unifiedCaptureScreenSource.indexOf(
+  '</Pressable>',
+  closeButtonStart,
+);
+const closeButtonHandlerIndex = unifiedCaptureScreenSource.indexOf(
+  'onPress={cancelCaptureFlow}',
+  closeButtonStart,
+);
 if (
   closeHandlerStart < 0 ||
+  closeHandlerEnd < closeHandlerStart ||
   closeAbandonIndex < closeHandlerStart ||
   closeCancelIndex < closeAbandonIndex ||
-  closeCleanupIndex < closeCancelIndex
+  closeCleanupIndex < closeCancelIndex ||
+  closeCleanupIndex > closeHandlerEnd ||
+  closeButtonStart < 0 ||
+  closeButtonEnd < closeButtonStart ||
+  closeButtonHandlerIndex < closeButtonStart ||
+  closeButtonHandlerIndex > closeButtonEnd
 ) {
   throw new Error(
     'Unified capture close must invalidate a prepared commit before cancel and async cleanup',

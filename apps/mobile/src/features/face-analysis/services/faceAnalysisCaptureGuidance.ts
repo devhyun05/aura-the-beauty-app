@@ -3,14 +3,9 @@ import type {Face3DStatus} from '../../face-3d/types';
 
 export const FACE_ANALYSIS_CAPTURE_PLAN = [
   {
-    description: '가이드에 맞추면 사진을 한 번 촬영해요.',
+    description: '촬영 한 번으로 정면 사진과 3D 얼굴 정보를 함께 측정해요.',
     id: 's1',
-    title: '정면 사진 촬영',
-  },
-  {
-    description: '셔터 없이 약 3초 동안 자동으로 측정해요.',
-    id: 'face3d',
-    title: '3D 얼굴 측정',
+    title: '통합 얼굴 촬영',
   },
 ] as const;
 

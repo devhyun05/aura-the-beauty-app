@@ -8,6 +8,7 @@ import {
 } from '../composer/bodyProfile';
 import type {BodyAnswerKey, BodyProfile, BodyQuestion, TypeStyle} from '../composer/bodyProfile';
 import {loadBodyProfile, saveBodyProfile} from '../storage/bodyProfileStore';
+import {ACCENT, PANEL_BG, accentAlpha} from '../theme';
 
 /**
  * 체형 체크 패널 — 거울 앞에서 스스로 관찰 가능한 7문항(비율 3 + 골격 질감 4)을
@@ -27,7 +28,6 @@ interface Props {
 }
 
 // 결과 강조 색 — 유리 UI 위에서 라이너 톤(따뜻한 앰버)과 맞춘다(PerfumePanel과 동일).
-const ACCENT = '#FFD27F';
 
 // 설문 답 — 질문 key별 선택 옵션 id(문자열). 일곱 칸이 다 차야 프로필로 저장한다.
 type Answers = Partial<Record<BodyAnswerKey, string>>;
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     padding: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: PANEL_BG,
     gap: 8,
     maxHeight: 460,
   },
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   // 설문 안내 문구·섹션 라벨
   intro: {color: 'rgba(255,255,255,0.75)', fontSize: 11, lineHeight: 16},
   groupHead: {
-    color: 'rgba(255,210,127,0.9)',
+    color: accentAlpha(0.9),
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -295,7 +295,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.2)',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  chipOn: {backgroundColor: 'rgba(255,210,127,0.35)', borderColor: ACCENT},
+  chipOn: {backgroundColor: accentAlpha(0.35), borderColor: ACCENT},
   chipText: {color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600'},
   chipTextOn: {color: '#FFFFFF'},
 
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 14,
     alignItems: 'center',
-    backgroundColor: 'rgba(255,210,127,0.9)',
+    backgroundColor: accentAlpha(0.9),
   },
   saveBtnOff: {backgroundColor: 'rgba(255,255,255,0.12)'},
   saveText: {color: '#3A2A12', fontSize: 13, fontWeight: '700'},
@@ -347,13 +347,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,210,127,0.08)',
+    backgroundColor: accentAlpha(0.08),
   },
   typeAxis: {color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '700', letterSpacing: 0.5},
   typeLabel: {color: '#FFE6B8', fontSize: 16, fontWeight: '700'},
   typeTagline: {color: 'rgba(255,255,255,0.7)', fontSize: 11, lineHeight: 15},
   tipBlock: {gap: 2, marginTop: 4},
-  tipHead: {color: 'rgba(255,210,127,0.85)', fontSize: 10, fontWeight: '700'},
+  tipHead: {color: accentAlpha(0.85), fontSize: 10, fontWeight: '700'},
   tipHeadAvoid: {color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: '700'},
   tip: {color: 'rgba(255,255,255,0.78)', fontSize: 11, lineHeight: 16},
   tipAvoid: {color: 'rgba(255,255,255,0.55)', fontSize: 11, lineHeight: 16},

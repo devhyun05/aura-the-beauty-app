@@ -94,6 +94,7 @@ namespace ARMakeup.Face
 
         static readonly int ColorId = Shader.PropertyToID("_BrowColor");
         static readonly int IntensityId = Shader.PropertyToID("_BrowIntensity");
+        static readonly int FinishId = Shader.PropertyToID("_PencilFinish"); // 마감(Tier B) — 위·아래 머티리얼 독립
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _lash = new Vector2[Seg];
@@ -163,7 +164,7 @@ namespace ARMakeup.Face
         /// 없이 마스카라만 켜져도 ComputeLidSnaps를 유지하는 수요 게이트.</summary>
         public bool WantsLidSnaps => _intensity > 0f;
 
-        public void ApplyParams(string colorHex, float intensity, float cornerLift, float lengthMult, int style)
+        public void ApplyParams(string colorHex, float intensity, float cornerLift, float lengthMult, int style, int finish)
         {
             _intensity = Mathf.Clamp01(intensity);
             _cornerLift = Mathf.Clamp01(cornerLift);
@@ -175,11 +176,13 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(ColorId, c);
             _material.SetFloat(IntensityId, _intensity);
+            // 마감(Tier B) — 위 속눈썹 머티리얼 전용(하 속눈썹과 독립). 0=새틴=기존 출력.
+            _material.SetFloat(FinishId, finish);
         }
 
         /// <summary>아래 속눈썹 — 색은 mascaraColor 공용, 길이 배수는 mascaraLength와
         /// 독립(lowerLashLength). 눈꼬리 리프트는 ApplyParams가 공유 필드로 설정.</summary>
-        public void ApplyLowerParams(string colorHex, float intensity, float lengthMult, int style)
+        public void ApplyLowerParams(string colorHex, float intensity, float lengthMult, int style, int finish)
         {
             _lowerIntensity = Mathf.Clamp01(intensity);
             // 길이 배수 핸들 — JsonUtility 생략 0은 미설정 → 1(원래).
@@ -190,6 +193,8 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _lowerMaterial.SetColor(ColorId, c);
             _lowerMaterial.SetFloat(IntensityId, _lowerIntensity);
+            // 마감(Tier B) — 아래 속눈썹 머티리얼 전용(위 속눈썹과 독립). 0=새틴=기존 출력.
+            _lowerMaterial.SetFloat(FinishId, finish);
         }
 
         void LateUpdate()
@@ -234,9 +239,13 @@ namespace ARMakeup.Face
                 // 눈 감김 — 감을수록 속눈썹이 눈꺼풀을 따라 아래(뺨쪽)로 접힌다.
                 // 뜬 눈과 같은 위 부챗살이 감은 눈 위에 그려지면 부자연(실기기).
                 // 개방도 = 상·하안검 중앙 거리 / 눈폭(스케일 불변 정규화).
+                // 창은 낮게(0.04~0.12): 셀피 하방 카메라는 세로 개구부를 단축시켜
+                // 뜬 눈도 openRatio가 0.13~0.18까지 떨어지는데, 이전 창(0.06~0.2)은
+                // 그 구간에서 closedT를 0.4~1로 띄워 뜬 눈 속눈썹을 아래로 뒤집었다
+                // (43efc61 회귀: 상 속눈썹만 '반대로 자람'. 하 속눈썹은 폴드 없음).
                 var openRatio = Vector2.Distance(lidMid, ImgPt(lm, LowerLids[e][4])) /
                                 Mathf.Max(eyeDist, 1e-6f);
-                var closedT = 1f - Mathf.SmoothStep(0.06f, 0.2f, openRatio);
+                var closedT = 1f - Mathf.SmoothStep(0.04f, 0.12f, openRatio);
 
                 // 눈꼬리 띄우기 — 라이너·섀도·하안검과 동일 리프트로 속눈썹도 추종.
                 if (_cornerLift > 0f)
@@ -272,7 +281,10 @@ namespace ARMakeup.Face
                     // 감김 블렌드 — 법선을 아래(-1)로 연속 회전(처짐 스타일 -0.65도
                     // 감으면 -1로 수렴), 스윕은 완만하게. 중간값에서 방향이 접선에
                     // 가까워지는 것도 깜빡임 중간 모습으로 자연스럽다.
-                    nrmScale = Mathf.Lerp(nrmScale, -1f, closedT);
+                    // 반전(nrmScale<0)은 확실히 감긴 뒤에만 — 블렌드를 제곱해 뒤집힘을
+                    // 폐구 직전(closedT→1)으로 미룬다. 뜬~반쯤 뜬 눈에서는 법선을
+                    // 눕히기만 하고(≥0) 아래로 뒤집지 않아 '반대로 자람'을 차단.
+                    nrmScale = Mathf.Lerp(nrmScale, -1f, closedT * closedT);
                     var dirV = lnrm * nrmScale + along * (sweep * Mathf.Lerp(1f, 0.7f, closedT));
                     var dir = dirV.sqrMagnitude < 1e-10f ? along : dirV.normalized;
 

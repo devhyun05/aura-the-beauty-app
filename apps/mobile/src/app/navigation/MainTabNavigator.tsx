@@ -1,4 +1,4 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
 import {createBottomTabNavigator, type BottomTabBarProps} from '@react-navigation/bottom-tabs';
 import type {NavigationProp} from '@react-navigation/native';
@@ -6,6 +6,8 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {YStack} from 'tamagui';
 
 import {spacing} from '../../shared/theme';
+import {isMakeupJourneyEnabled} from '../../shared/config/featureFlags';
+import {trackMakeupJourneyEvent} from '../../shared/services/makeupJourneyAnalytics';
 import {
   AppFooter,
   FLOATING_ACTION_HOST_EXTRA_HEIGHT,
@@ -21,6 +23,7 @@ import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
 import {ConsultingTabRouteScreen, HomeRouteScreen} from './routes/homeRoutes';
 import {ProfileRouteScreen} from './routes/profileRoutes';
+import {MakeupJourneyTabRouteScreen} from './routes/makeupJourneyRoutes';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -69,8 +72,9 @@ export function MainTabNavigator() {
       screenOptions={{headerShown: false}}
       tabBar={props => <MainTabBar {...props} />}>
       <Tab.Screen name="HomeTab" component={HomeRouteScreen} />
-      <Tab.Screen name="ProfileTab" component={ProfileRouteScreen} />
       <Tab.Screen name="ConsultingTab" component={ConsultingTabRouteScreen} />
+      <Tab.Screen name="MakeupJourneyTab" component={MakeupJourneyTabRouteScreen} />
+      <Tab.Screen name="ProfileTab" component={ProfileRouteScreen} />
     </Tab.Navigator>
   );
 }
@@ -82,23 +86,37 @@ function MainTabBar({
   state,
 }: MainTabBarProps) {
   const insets = useSafeAreaInsets();
-  const {height: windowHeight} = useWindowDimensions();
+  const {height: windowHeight, width: windowWidth} = useWindowDimensions();
   const [isExtractionSheetVisible, setIsExtractionSheetVisible] = useState(false);
   const [isFeedbackSheetVisible, setIsFeedbackSheetVisible] = useState(false);
   const [isFloatingActionMenuExpanded, setIsFloatingActionMenuExpanded] = useState(false);
   const activeRouteName = state.routes[state.index]?.name as MainTabRouteName | undefined;
   const activeTab = activeRouteName ? getMainTabFooterState(activeRouteName) : undefined;
   const {
+    beginMakeupFeedbackFlow,
+    floatingActionAnchor,
     floatingActionButtonPosition,
     floatingActionIds,
     floatingActionInteractionMode,
     setMakeupFeedbackResult,
+    setFloatingActionAnchor,
+    setFloatingActionButtonPosition,
     setSelectedMakeupFeedbackPhoto,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
   const rootNavigation = navigation.getParent<NavigationProp<RootStackParamList>>();
   const footerBottomInset = Math.max(insets.bottom, spacing.md);
+  const makeupJourneyEnabled = isMakeupJourneyEnabled();
+  const floatingActionViewport = useMemo(() => ({
+    bottomInset: insets.bottom,
+    bottomReserved: APP_FOOTER_FLOATING_HOST_BASE_HEIGHT + spacing.md,
+    height: windowHeight,
+    leftInset: insets.left,
+    rightInset: insets.right,
+    topInset: insets.top,
+    width: windowWidth,
+  }), [insets, windowHeight, windowWidth]);
 
   const closeExtractionSheet = useCallback(() => {
     setIsExtractionSheetVisible(false);
@@ -124,6 +142,7 @@ function MainTabBar({
 
   const startMakeupFeedback = useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
+    beginMakeupFeedbackFlow();
     setMakeupFeedbackResult(null);
     setSelectedMakeupFeedbackPhoto({photoSource});
 
@@ -135,7 +154,12 @@ function MainTabBar({
 
       rootNavigation?.navigate('MakeupFeedbackAlbumUpload');
     });
-  }, [rootNavigation, setMakeupFeedbackResult, setSelectedMakeupFeedbackPhoto]);
+  }, [
+    beginMakeupFeedbackFlow,
+    rootNavigation,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  ]);
 
   const handleTabPress = useCallback(
     (tab: FooterTabKey) => {
@@ -179,6 +203,11 @@ function MainTabBar({
         return;
       }
 
+      if (actionId === 'makeupRecommendation') {
+        rootNavigation?.navigate('MakeupRecommendation');
+        return;
+      }
+
       rootNavigation?.navigate('ProductRecommendation');
     },
     [
@@ -190,6 +219,13 @@ function MainTabBar({
   const handleFloatingActionSettingsPress = useCallback(() => {
     rootNavigation?.navigate('FloatingActionSettings');
   }, [rootNavigation]);
+  const handleFloatingActionAnchorChange = useCallback((anchor: {
+    xRatio: number;
+    yRatio: number;
+  }) => {
+    setFloatingActionAnchor(anchor);
+    setFloatingActionButtonPosition(anchor.xRatio <= 0.5 ? 'left' : 'right');
+  }, [setFloatingActionAnchor, setFloatingActionButtonPosition]);
 
   return (
     <YStack
@@ -208,23 +244,30 @@ function MainTabBar({
           style={styles.floatingActionDismissLayer}
         />
       ) : null}
+      <FloatingActionMenu
+        actionIds={floatingActionIds}
+        anchor={floatingActionAnchor}
+        buttonPosition={floatingActionButtonPosition}
+        interactionMode={floatingActionInteractionMode}
+        isExpanded={isFloatingActionMenuExpanded}
+        onAnchorChange={handleFloatingActionAnchorChange}
+        onExpandedChange={setIsFloatingActionMenuExpanded}
+        onPressSettings={handleFloatingActionSettingsPress}
+        onReposition={quadrant => {
+          trackMakeupJourneyEvent({
+            name: 'floating_action_repositioned',
+            properties: {quadrant},
+          });
+        }}
+        onSelectAction={handleFloatingActionPress}
+        placement="free"
+        viewport={floatingActionViewport}
+      />
       <AppFooter
-        actionSlotPosition={floatingActionButtonPosition}
-        actionSlot={
-          <FloatingActionMenu
-            actionIds={floatingActionIds}
-            buttonPosition={floatingActionButtonPosition}
-            interactionMode={floatingActionInteractionMode}
-            isExpanded={isFloatingActionMenuExpanded}
-            onExpandedChange={setIsFloatingActionMenuExpanded}
-            onPressSettings={handleFloatingActionSettingsPress}
-            onSelectAction={handleFloatingActionPress}
-            placement="inline"
-          />
-        }
         activeTab={activeTab}
         bottomInset={insets.bottom}
         floating
+        hiddenTabs={makeupJourneyEnabled ? undefined : ['journey']}
         onTabPress={handleTabPress}
       />
       <MakeupExtractionActionSheet

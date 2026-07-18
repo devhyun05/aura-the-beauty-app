@@ -2,6 +2,8 @@ import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import Slider from '@react-native-community/slider';
 
+import {ACCENT} from '../theme';
+
 interface Props {
   label: string;
   value: number;
@@ -13,7 +15,7 @@ export default function ParamSlider({
   label,
   value,
   onChange,
-  accent = '#FF7E9D',
+  accent = ACCENT,
 }: Props) {
   return (
     <View style={styles.row}>

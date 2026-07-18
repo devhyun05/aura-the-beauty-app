@@ -98,6 +98,7 @@ type MakeupFeedbackLoadingScreenProps = {
   selection: MakeupFeedbackPhotoSelection;
   onBack?: () => void;
   onComplete: (result: MakeupFeedbackResult) => void;
+  onError?: (error: unknown) => void;
   onChooseDifferentPhoto: () => void;
   onRetake: () => void;
 };
@@ -202,6 +203,7 @@ export function MakeupFeedbackLoadingScreen({
   selection,
   onBack,
   onComplete,
+  onError,
   onChooseDifferentPhoto,
   onRetake,
 }: MakeupFeedbackLoadingScreenProps) {
@@ -212,6 +214,7 @@ export function MakeupFeedbackLoadingScreen({
   const lastMessageShownAtRef = useRef(0);
   const hasCompletedRef = useRef(false);
   const retryRequestedRef = useRef(false);
+  const onErrorRef = useRef(onError);
   const [analysisResult, setAnalysisResult] = useState<MakeupFeedbackResult | null>(null);
   const [retakeOutcome, setRetakeOutcome] = useState<MakeupFeedbackRetakeOutcome | null>(null);
   const [analysisErrorMessage, setAnalysisErrorMessage] = useState<string | null>(null);
@@ -237,6 +240,10 @@ export function MakeupFeedbackLoadingScreen({
   const [analysisAttempt, setAnalysisAttempt] = useState(0);
   const [preResultProgress, setPreResultProgress] = useState(PRE_RESULT_PROGRESS_INITIAL);
   const selectionTitle = getSelectionTitle(selection);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const typingAgentId = useMemo(
     () =>
@@ -463,6 +470,7 @@ export function MakeupFeedbackLoadingScreen({
         });
 
         if (isCurrentRun()) {
+          onErrorRef.current?.(error);
           previewController.abort();
           settlePreviewForTerminalState();
           retryRequestedRef.current = false;

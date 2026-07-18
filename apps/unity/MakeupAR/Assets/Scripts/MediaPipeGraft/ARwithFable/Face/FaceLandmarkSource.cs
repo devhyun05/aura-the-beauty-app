@@ -105,6 +105,29 @@ namespace ARMakeup.Face
             UnsubscribeFrameBroker();
         }
 
+        /// <summary>
+        /// Stops only the live camera pipeline while preserving the prepared
+        /// MediaPipe model and its native allocations for a fast AR resume.
+        /// Still-image analysis uses a separate IMAGE-mode service and is not
+        /// affected by this switch.
+        /// </summary>
+        public void SetLiveProcessingActive(bool active)
+        {
+            if (active)
+            {
+                enabled = true;
+                TrySubscribeFrameBroker();
+                return;
+            }
+
+#if MEDIAPIPE
+            ResetTrackingState();
+#else
+            HasFace = false;
+#endif
+            enabled = false;
+        }
+
         void TrySubscribeFrameBroker()
         {
             FaceCameraFrameBroker broker = FaceCameraFrameBroker.Instance;

@@ -13,6 +13,7 @@ import type {PerfumeContext} from '../composer/perfume';
 import {PROFILE_QUESTIONS, summarizeProfile} from '../composer/scentProfile';
 import type {ProfileQuestion, ScentProfile} from '../composer/scentProfile';
 import {loadScentProfile, saveScentProfile} from '../storage/scentProfileStore';
+import {ACCENT, PANEL_BG, accentAlpha} from '../theme';
 
 /**
  * 향수 추천 패널 (#7) — 환경(계절·습도)·상황·선호 강도를 칩으로 고르면 조건에 맞는
@@ -33,7 +34,6 @@ interface Props {
 }
 
 // 확산/지속 막대 색 — 유리 UI 위에서 라이너 톤(따뜻한 앰버)과 맞춘다.
-const BAR_ON = '#FFD27F';
 
 // 설문 답 — 질문 key별 선택 옵션 id(문자열). 세 칸이 다 차야 프로필로 저장한다.
 type Answers = Partial<Record<ProfileQuestion['key'], string>>;
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     padding: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: PANEL_BG,
     gap: 8,
     maxHeight: 460,
   },
@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.2)',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  chipOn: {backgroundColor: 'rgba(255,210,127,0.35)', borderColor: BAR_ON},
+  chipOn: {backgroundColor: accentAlpha(0.35), borderColor: ACCENT},
   chipText: {color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600'},
   chipTextOn: {color: '#FFFFFF'},
 
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 14,
     alignItems: 'center',
-    backgroundColor: 'rgba(255,210,127,0.9)',
+    backgroundColor: accentAlpha(0.9),
   },
   saveBtnOff: {backgroundColor: 'rgba(255,255,255,0.12)'},
   saveText: {color: '#3A2A12', fontSize: 13, fontWeight: '700'},
@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.15)',
     overflow: 'hidden',
   },
-  meterFill: {height: 6, borderRadius: 3, backgroundColor: BAR_ON},
+  meterFill: {height: 6, borderRadius: 3, backgroundColor: ACCENT},
   meterValue: {
     width: 96,
     textAlign: 'right',
@@ -445,13 +445,13 @@ const styles = StyleSheet.create({
   },
 
   famRow: {gap: 2, paddingVertical: 5, paddingHorizontal: 8, borderRadius: 10},
-  famRowTop: {backgroundColor: 'rgba(255,210,127,0.12)'},
+  famRowTop: {backgroundColor: accentAlpha(0.12)},
   famHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},
   famName: {color: 'rgba(255,255,255,0.9)', fontSize: 13, fontWeight: '600'},
   famNameTop: {color: '#FFE6B8'},
   famScore: {color: 'rgba(255,255,255,0.55)', fontSize: 11, fontVariant: ['tabular-nums']},
   famNotes: {color: 'rgba(255,255,255,0.6)', fontSize: 11},
-  famReason: {color: 'rgba(255,210,127,0.85)', fontSize: 10},
+  famReason: {color: accentAlpha(0.85), fontSize: 10},
 
   phaseRow: {gap: 4, paddingVertical: 3},
   phaseHead: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'},

@@ -95,7 +95,6 @@ import {
   hideUnityMakeupView,
   postUnityFilterParams,
   postUnityMakeupRecipe,
-  setUnityMakeupPlayerPaused,
 } from '../services/unityMakeupBridge';
 
 type ARFilterScreenProps = {
@@ -264,9 +263,9 @@ export function ARFilterScreen({
     editSourceImageSource ?? arFilterSelectionState.selectedMakeupFilter.imageSource;
 
   useEffect(() => {
-    // 보고서/얼굴촬영 화면이 Unity 플레이어를 pause했을 수 있으니 AR 필터 진입 시
-    // 재개한다. 네이티브 pause:0은 idempotent(이미 실행 중이면 no-op)라 안전.
-    setUnityMakeupPlayerPaused(false);
+    // Live Unity preview resumes when its native container mounts. Photo edit
+    // mode has no Unity container, so resuming here would leave AR/camera/
+    // MediaPipe running invisibly behind a still image.
     return () => hideUnityMakeupView();
   }, []);
 

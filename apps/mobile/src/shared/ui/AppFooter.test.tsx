@@ -42,7 +42,7 @@ const footerIconSize: 20 = APP_FOOTER_ICON_SIZE;
 const footerActionIconSize: 28 = APP_FOOTER_ACTION_ICON_SIZE;
 const footerFloatingHostBaseHeight: 68 = APP_FOOTER_FLOATING_HOST_BASE_HEIGHT;
 const footerSideTabWidth: 58 = APP_FOOTER_SIDE_TAB_WIDTH;
-const footerTabOrder: readonly ['home', 'consulting', 'profile'] =
+const footerTabOrder: readonly ['home', 'consulting', 'journey', 'profile'] =
   APP_FOOTER_TAB_ORDER;
 const footerBarOverflow: 'visible' = APP_FOOTER_BAR_OVERFLOW;
 const footerGlassBackground: 'rgba(255, 255, 255, 0.74)' =

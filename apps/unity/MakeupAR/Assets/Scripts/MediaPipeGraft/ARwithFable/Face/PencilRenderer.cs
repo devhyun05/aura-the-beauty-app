@@ -59,6 +59,8 @@ namespace ARMakeup.Face
 
         static readonly int BrowColorId = Shader.PropertyToID("_BrowColor");
         static readonly int BrowIntensityId = Shader.PropertyToID("_BrowIntensity");
+        static readonly int PencilFinishId = Shader.PropertyToID("_PencilFinish"); // 마감(Tier B, 0=새틴=기존)
+        static readonly int PencilTextureId = Shader.PropertyToID("_PencilTexture"); // 제형(텍스처) GENERIC(0=크림=현행)
 
         readonly Vector2[] _up = new Vector2[Seg];
         readonly Vector2[] _lo = new Vector2[Seg];
@@ -105,7 +107,7 @@ namespace ARMakeup.Face
             _renderer.enabled = false;
         }
 
-        public void ApplyPencilParams(string colorHex, float intensity, float thickness, float arch, int shape)
+        public void ApplyPencilParams(string colorHex, float intensity, float thickness, float arch, int shape, int finish, int texture)
         {
             _intensity = Mathf.Clamp01(intensity);
             // R7 두께/아치 — BrowRenderer와 동일 클램프. 밴드가 워프되면 스트로크도 따라간다.
@@ -117,6 +119,10 @@ namespace ARMakeup.Face
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _material.SetColor(BrowColorId, c);
             _material.SetFloat(BrowIntensityId, _intensity);
+            // 마감(Tier B) — Pencil.shader 인스턴스별 독립(펜슬 전용). 0=새틴=기존 출력.
+            _material.SetFloat(PencilFinishId, finish);
+            // 제형(텍스처) GENERIC — 펜슬 인스턴스 전용(마스카라 인스턴스는 미설정 0=무영향).
+            _material.SetFloat(PencilTextureId, texture);
         }
 
         void LateUpdate()

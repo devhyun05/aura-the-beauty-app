@@ -14,6 +14,9 @@ export type MakeupFeedbackContext = {
   userGoalText: string;
 };
 
+export type MakeupFeedbackKind = 'initial' | 'correction';
+export type MakeupFeedbackFlowOrigin = 'general' | 'journeyDay';
+
 export type MakeupFeedbackPhotoSelection = {
   photoSource: MakeupFeedbackPhotoSource;
   cameraMetadata?: FaceCaptureCameraMetadata | null;
@@ -24,6 +27,9 @@ export type MakeupFeedbackPhotoSelection = {
   imageHeight?: number | null;
   photoTitle?: string;
   feedbackContext?: MakeupFeedbackContext;
+  entryDate?: string;
+  feedbackKind?: MakeupFeedbackKind;
+  parentFeedbackReportId?: string | null;
 };
 
 export type MakeupFeedbackSummaryBadge = {

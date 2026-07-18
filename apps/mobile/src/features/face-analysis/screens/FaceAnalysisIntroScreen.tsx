@@ -78,7 +78,7 @@ export function FaceAnalysisIntroScreen({
       </YStack>
 
       <YStack style={styles.capturePlan}>
-        <Text style={styles.capturePlanTitle}>카메라는 두 단계로 진행돼요</Text>
+        <Text style={styles.capturePlanTitle}>촬영은 한 번만 진행돼요</Text>
         <YStack style={styles.capturePlanList}>
           {FACE_ANALYSIS_CAPTURE_PLAN.map((step, index) => (
             <XStack key={step.id} style={styles.capturePlanRow}>

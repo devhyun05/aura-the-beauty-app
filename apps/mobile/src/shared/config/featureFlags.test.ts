@@ -1,7 +1,11 @@
 // feature flag 파싱 단위 검증 (프로젝트 관례: expectEqual + tsc --noEmit 게이트).
 // R1 게이트 3 — auradinPrimarySurface는 env 미설정 시 반드시 false(레거시 유지)여야 한다.
 
-import {isAuradinPrimarySurfaceEnabled, parseFeatureFlagValue} from './featureFlags';
+import {
+  isAuradinPrimarySurfaceEnabled,
+  isMakeupJourneyEnabled,
+  parseFeatureFlagValue,
+} from './featureFlags';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -37,3 +41,15 @@ if (!process.env.EXPO_PUBLIC_AURADIN_PRIMARY_SURFACE) {
 }
 
 console.log('featureFlags contract assertions passed');
+
+if (typeof isMakeupJourneyEnabled() !== 'boolean') {
+  throw new Error('makeup journey feature flag must resolve to a boolean');
+}
+
+if (!process.env.EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED) {
+  expectEqual(
+    isMakeupJourneyEnabled(),
+    true,
+    'makeup journey defaults to visible after rollout',
+  );
+}

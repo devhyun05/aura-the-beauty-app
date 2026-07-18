@@ -188,6 +188,7 @@ async def test_pass_fixture_normalizes_and_worker_persists_completed_payload(
 
   await feedback_api.run_feedback_job_background(
     report_id,
+    user_id,
     request_payload,
     settings,
     db=fake_db,
@@ -195,13 +196,15 @@ async def test_pass_fixture_normalizes_and_worker_persists_completed_payload(
 
   assert len(fake_db.executed) == 1
   assert "status = 'processing'" in fake_db.executed[0][0]
+  assert "user_id = $2" in fake_db.executed[0][0]
   assert len(fake_db.fetchrow_calls) == 1
   completed_call = fake_db.fetchrow_calls[0]
   assert "status = 'completed'" in completed_call[0]
   assert completed_call[1] == report_id
-  assert completed_call[2] == normalized_result["score"] == 89
-  assert completed_call[3] == MODEL_VERSION
-  completed_payload = json.loads(completed_call[4])
+  assert completed_call[2] == user_id
+  assert completed_call[3] == normalized_result["score"] == 89
+  assert completed_call[4] == MODEL_VERSION
+  completed_payload = json.loads(completed_call[5])
   assert completed_payload["request"] == request_payload
   assert completed_payload["result"] == normalized_result
   assert completed_payload["analysisStatus"] == "bedrock_completed"

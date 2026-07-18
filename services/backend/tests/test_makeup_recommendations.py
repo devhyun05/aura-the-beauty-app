@@ -1286,7 +1286,9 @@ async def test_shared_scenarios_reject_partial_fresh_generation(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_questions_reject_malformed_option_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_questions_reject_four_story_options_without_delegate(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
   async def fake_generate_json(*_args, **_kwargs):
     return {
       "questions": [
@@ -1312,7 +1314,9 @@ async def test_questions_reject_malformed_option_counts(monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
-async def test_questions_reject_more_than_four_options(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_questions_reject_more_than_four_options(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
   async def fake_generate_json(*_args, **_kwargs):
     return {
       "questions": [

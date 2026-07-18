@@ -40,6 +40,11 @@ expectEqual(
   'makeup feedback confirmation next route',
 );
 expectEqual(
+  getFaceCaptureConfirmationNextRouteName('makeupFeedback', 'correction'),
+  'MakeupFeedbackLoading',
+  'correction feedback skips goal input',
+);
+expectEqual(
   getFaceCaptureConfirmationNextRouteName('referenceMakeupExtraction'),
   'ReferenceMakeupExtractionLoading',
   'reference extraction confirmation next route',

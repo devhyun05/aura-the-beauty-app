@@ -269,8 +269,9 @@ async def test_dispatch_feedback_job_inline_adds_background_task() -> None:
   assert len(background_tasks.tasks) == 1
   assert background_tasks.tasks[0].func is feedback_api.run_feedback_job_background
   assert background_tasks.tasks[0].args[0] == REPORT_ID
-  assert background_tasks.tasks[0].args[1] == request_payload
-  assert isinstance(background_tasks.tasks[0].args[2], Settings)
+  assert background_tasks.tasks[0].args[1] == USER_ID
+  assert background_tasks.tasks[0].args[2] == request_payload
+  assert isinstance(background_tasks.tasks[0].args[3], Settings)
 
 
 @pytest.mark.asyncio
@@ -339,7 +340,9 @@ async def test_dispatch_feedback_job_sqs_failure_marks_report_failed(
 
   assert exc_info.value.code == "AI_JOB_QUEUE_NOT_CONFIGURED"
   assert "update makeup_feedback_reports" in fake_db.executed[0][0]
-  failed_payload = json.loads(fake_db.executed[0][2])
+  assert "where id = $1 and user_id = $2" in fake_db.executed[0][0]
+  assert fake_db.executed[0][1:3] == (REPORT_ID, USER_ID)
+  failed_payload = json.loads(fake_db.executed[0][3])
   assert failed_payload["error"]["message"] == "Queue missing."
 
 
@@ -386,15 +389,19 @@ async def test_run_feedback_job_background_completes_report(
 
   await feedback_api.run_feedback_job_background(
     REPORT_ID,
+    USER_ID,
     request_payload,
     settings,
     db=fake_db,
   )
 
   assert "status = 'processing'" in fake_db.executed[0][0]
+  assert fake_db.executed[0][1:3] == (REPORT_ID, USER_ID)
   assert "status = 'completed'" in fake_db.fetchrow_calls[0][0]
-  assert fake_db.fetchrow_calls[0][2] == 87
-  completed_payload = json.loads(fake_db.fetchrow_calls[0][4])
+  assert "where id = $1 and user_id = $2" in fake_db.fetchrow_calls[0][0]
+  assert fake_db.fetchrow_calls[0][1:3] == (REPORT_ID, USER_ID)
+  assert fake_db.fetchrow_calls[0][3] == 87
+  completed_payload = json.loads(fake_db.fetchrow_calls[0][5])
   assert completed_payload["request"] == request_payload
   assert completed_payload["analysisStatus"] == "bedrock_completed"
   assert calls["request_payload"] == request_payload

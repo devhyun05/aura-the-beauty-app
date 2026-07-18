@@ -91,6 +91,10 @@ export interface ProductDef {
   glitter?: ChannelGlitter[];
   neon?: ChannelNeon;
   form: ProductForm;
+  /** 제형(§5 — 제품이 품는 속성) — 대상 부위 `<region>Texture` enum 값. 부재=부위
+   *  기본(0=크림/baseline). 값 규약은 대상 부위 제형 세그(regions.ts)를 따르므로
+   *  제품군의 주 부위 템플릿에 맞춰 지정한다(예: 립=LIP_TEXTURES 벨벳틴트=1). */
+  texture?: number;
   owner: 'system' | 'user';
 }
 
@@ -320,6 +324,15 @@ function finishDetailOf(def: RegionDef): FinishDetailKeys | undefined {
   return undefined;
 }
 
+/** 부위 제형(텍스처) enum 필드 = axes.texture 첫 segments 컨트롤 (예: eyeshadowTexture).
+ *  카탈로그가 단일 출처(categoryKeys 색·마감 유도 선례). 제형 축 없는 부위는 undefined. */
+function textureKeyOf(def: RegionDef): keyof FilterParams | undefined {
+  for (const c of def.axes.texture ?? []) {
+    if (c.type === 'segments') return c.key;
+  }
+  return undefined;
+}
+
 /**
  * 제품×테크닉 강도를 대상 부위의 브리지 필드로 번역한다(부위 소유 필드만 반환).
  * 담지 않는 것: blendability(마스크 베이킹 A14) · neon(발광 A15) · pearl.shift(듀오크롬 A15) ·
@@ -343,6 +356,13 @@ export function translateProduct(
     if (ck.intensityKey) {
       put(ck.intensityKey, buildOpacity(p.base.coverage, t.strength, p.form.buildability));
     }
+  }
+
+  // 제형(§5) — 제품이 품는 속성을 대상 부위 제형 enum 필드로. 부위에 제형 축이 있을
+  // 때만(textureKey), 제품이 제형을 명시할 때만(부재=0 클로버링 방지) 전달한다.
+  const textureKey = textureKeyOf(def);
+  if (p.texture !== undefined && textureKey) {
+    put(textureKey, p.texture);
   }
 
   // 마감 — FINISHES 사다리 부위(립·블러셔·아이섀도)만. 0=새틴=baseline이라, 베이스가
@@ -402,6 +422,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     family: 'foundation',
     base: { color: '#E0B49A', coverage: 0.5, response: 'soft' },
     form: form(0.4, 0, 0.6),
+    texture: 1, // 쿠션 (FOUNDATION_TEXTURES)
     owner: 'system',
   },
   {
@@ -440,6 +461,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     family: 'lip',
     base: { color: '#B5322B', coverage: 0.7, response: 'linear' },
     form: form(0.45, 1),
+    texture: 1, // 벨벳틴트 (LIP_TEXTURES)
     owner: 'system',
   },
   {
@@ -469,6 +491,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     family: 'lipTint',
     base: { color: '#D24B54', coverage: 0.35, response: 'soft' },
     form: form(0.7, 2),
+    texture: 2, // 워터틴트 (LIP_TEXTURES)
     owner: 'system',
   },
   {
@@ -478,6 +501,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     family: 'lipTint',
     base: { color: '#B5555F', coverage: 0.4, response: 'soft' },
     form: form(0.6, 1),
+    texture: 1, // 벨벳틴트 (LIP_TEXTURES)
     owner: 'system',
   },
   // 블러셔
@@ -573,6 +597,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     base: { color: '#F0E0D0', coverage: 0.5, response: 'soft' },
     pearl: { color: '#FBF2E4', gain: 0.5 },
     form: form(0.4, 3),
+    texture: 2, // 리퀴드 (GENERIC_TEXTURES — highlight/aegyo 공용)
     owner: 'system',
   },
   // 컨투어
@@ -640,6 +665,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     family: 'lipLiner',
     base: { color: '#9E3B54', coverage: 0.6, response: 'hard' },
     form: form(0.4, 1),
+    texture: 4, // 펜슬 (GENERIC_TEXTURES)
     owner: 'system',
   },
   {
@@ -649,6 +675,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     family: 'lipLiner',
     base: { color: '#B56C6A', coverage: 0.55, response: 'hard' },
     form: form(0.45, 1),
+    texture: 4, // 펜슬 (GENERIC_TEXTURES)
     owner: 'system',
   },
   // 립글로스
@@ -736,6 +763,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     family: 'eyeliner',
     base: { color: '#4A3526', coverage: 0.5, response: 'soft' },
     form: form(0.5, 0),
+    texture: 1, // 젤 (EYELINER_TEXTURES — eyelinerUpper만 제형 축, lower는 무시됨)
     owner: 'system',
   },
   // 네온 페인트 (neon 채널 — 렌더 대기 A15)

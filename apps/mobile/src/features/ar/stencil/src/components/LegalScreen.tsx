@@ -23,6 +23,7 @@ import {
   OSS_LICENSE_HISTOGRAM,
   OSS_PACKAGES,
 } from '../legal/ossLicenses';
+import { GOLD, TEXT_SUB } from '../theme';
 
 export type LegalKind = 'privacy' | 'oss';
 
@@ -30,8 +31,6 @@ interface Props {
   kind: LegalKind;
   onClose: () => void;
 }
-
-const GOLD = '#C9A15E';
 
 const TITLES: Record<LegalKind, string> = {
   privacy: '개인정보처리방침',
@@ -208,7 +207,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   closeText: {
-    color: '#C9BFC6',
+    color: TEXT_SUB,
     fontSize: 16,
   },
   body: {

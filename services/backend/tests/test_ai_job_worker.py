@@ -306,8 +306,9 @@ async def test_dispatcher_feedback_handler_runs_feedback_job(
 ) -> None:
   calls: dict[str, object] = {}
 
-  async def fake_run_feedback_job_background(report_id, request_payload, settings, *, db):
+  async def fake_run_feedback_job_background(report_id, user_id, request_payload, settings, *, db):
     calls["report_id"] = report_id
+    calls["user_id"] = user_id
     calls["request_payload"] = request_payload
     calls["settings"] = settings
     calls["db"] = db
@@ -324,6 +325,7 @@ async def test_dispatcher_feedback_handler_runs_feedback_job(
 
   assert fake_db.fetchrow_calls[0][1:] == (REPORT_ID, USER_ID)
   assert calls["report_id"] == REPORT_ID
+  assert calls["user_id"] == USER_ID
   assert calls["request_payload"] == {"source": "worker-feedback-test"}
   assert calls["settings"] is settings
   assert calls["db"] is fake_db

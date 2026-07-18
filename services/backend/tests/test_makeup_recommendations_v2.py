@@ -14,6 +14,7 @@ from app.core.settings import Settings
 from app.db.session import require_database
 from app.main import create_app
 from app.schemas.makeup_recommendation import (
+  GeneratedQuestions,
   MakeupRecommendationSessionAnswer,
   MakeupRecommendationSessionCreate,
 )
@@ -223,6 +224,31 @@ def test_session_input_requires_exactly_one_keyword_or_custom() -> None:
     )
 
 
+def test_session_api_rejects_multiple_selection_kinds_with_422() -> None:
+  app = create_app(Settings(database_url=None))
+  app.dependency_overrides[get_current_user] = auth_context
+  app.dependency_overrides[require_database] = lambda: object()
+  request_body = {
+    "analysisReportId": str(ANALYSIS_REPORT_ID),
+    "situationId": str(SITUATION_ID),
+    "keywordId": str(KEYWORD_ID),
+    "editorialPresetId": "baseball-camera",
+    "imageMode": "generic",
+  }
+
+  response = TestClient(app).post(
+    "/api/makeup-recommendations/sessions",
+    json=request_body,
+  )
+
+  assert response.status_code == 422
+  error = response.json()["error"]
+  assert error["code"] == "VALIDATION_ERROR"
+  assert error["message"] == "Request validation failed."
+  assert error["details"]["errors"][0]["loc"] == ["body"]
+  assert "Exactly one of keywordId" in error["details"]["errors"][0]["msg"]
+
+
 def test_editorial_preset_is_a_third_exclusive_selection() -> None:
   payload = MakeupRecommendationSessionCreate.model_validate(
     {
@@ -305,11 +331,162 @@ def test_generated_prep_time_options_use_realistic_intervals() -> None:
     "AI가 골라줘",
   ]
 
+
+def test_generated_question_normalizer_appends_missing_delegate() -> None:
+  normalized = makeup_service.normalize_generated_questions_response(
+    {
+      "questions": [
+        {
+          "id": " story_direction ",
+          "title": " 오늘의 반전은 어느 쪽이에요? ",
+          "options": [
+            {"id": "quiet", "label": "조용히 시선 끌기"},
+            {"id": "entrance", "label": "등장부터 장면 만들기"},
+            {"id": "afterimage", "label": "돌아선 뒤 여운 남기기"},
+          ],
+        },
+      ],
+    },
+  )
+
+  validated = GeneratedQuestions.model_validate(normalized).model_dump(by_alias=True)
+  assert validated["questions"][0] == {
+    "id": "story_direction",
+    "title": "오늘의 반전은 어느 쪽이에요?",
+    "options": [
+      {"id": "quiet", "label": "조용히 시선 끌기"},
+      {"id": "entrance", "label": "등장부터 장면 만들기"},
+      {"id": "afterimage", "label": "돌아선 뒤 여운 남기기"},
+      {"id": "ai_pick", "label": "AI가 골라줘"},
+    ],
+  }
+
+
+def test_generated_question_normalizer_preserves_valid_four_options() -> None:
+  payload = {"questions": _questions()}
+
+  normalized = makeup_service.normalize_generated_questions_response(payload)
+
+  assert GeneratedQuestions.model_validate(normalized).model_dump(by_alias=True) == payload
+
+
+def test_generated_question_normalizer_collapses_duplicate_delegate_only() -> None:
+  raw_options = [
+    {"id": "quiet", "label": "조용히 시선 끌기"},
+    {"id": "entrance", "label": "등장부터 장면 만들기"},
+    {"id": "afterimage", "label": "돌아선 뒤 여운 남기기"},
+    {"id": "ai_pick", "label": "마음대로"},
+    {"id": "delegate_again", "label": "AI가 골라줘"},
+  ]
+
+  normalized = makeup_service.normalize_generated_questions_response(
+    {"questions": [{"id": "story_direction", "title": "오늘의 반전은 어느 쪽이에요?", "options": raw_options}]},
+  )
+
+  validated = GeneratedQuestions.model_validate(normalized).model_dump(by_alias=True)
+  assert validated["questions"][0]["options"] == [
+    *raw_options[:3],
+    {"id": "ai_pick", "label": "AI가 골라줘"},
+  ]
+
+
+def test_generated_question_normalizer_keeps_ordinary_collisions_for_strict_rejection() -> None:
+  duplicate_option_question = _questions()[0]
+  duplicate_option_question["options"][1] = dict(duplicate_option_question["options"][0])
+  duplicate_question_ids = [*_questions(), *_questions()]
+
+  with pytest.raises(ValidationError):
+    GeneratedQuestions.model_validate(
+      makeup_service.normalize_generated_questions_response(
+        {"questions": [duplicate_option_question]},
+      ),
+    )
+  with pytest.raises(ValidationError):
+    GeneratedQuestions.model_validate(
+      makeup_service.normalize_generated_questions_response(
+        {"questions": duplicate_question_ids},
+      ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_question_two_options_retry_twice_then_use_fallback(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls = 0
+
+  async def too_few_choices(*_args, **_kwargs):
+    nonlocal calls
+    calls += 1
+    return {
+      "questions": [
+        {
+          "id": "mood",
+          "title": "어떤 분위기가 끌리나요?",
+          "options": [
+            {"id": "quiet", "label": "조용한 장면"},
+            {"id": "ai_pick", "label": "AI가 골라줘"},
+          ],
+        },
+      ],
+    }
+
+  monkeypatch.setattr(makeup_service, "generate_json", too_few_choices)
+  result = await makeup_service.generate_questions_v2_with_fallback(
+    Settings(),
+    {"selection": {"situation": {"key": "daily"}}},
+  )
+
+  assert calls == 2
+  assert result["source"] == "deterministic_fallback"
+  assert result["version"] == "makeup-questions-fallback-v1"
+  GeneratedQuestions.model_validate({"questions": result["questions"]})
+
+
+@pytest.mark.asyncio
+async def test_question_surplus_choices_retry_twice_then_use_fallback(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls = 0
+
+  async def too_many_choices(*_args, **_kwargs):
+    nonlocal calls
+    calls += 1
+    return {
+      "questions": [
+        {
+          "id": "mood",
+          "title": "어떤 분위기가 끌리나요?",
+          "options": [
+            {"id": "quiet", "label": "조용한 장면"},
+            {"id": "bold", "label": "선명한 장면"},
+            {"id": "warm", "label": "따뜻한 장면"},
+            {"id": "afterimage", "label": "여운 있는 장면"},
+            {"id": "ai_pick", "label": "AI가 골라줘"},
+          ],
+        },
+      ],
+    }
+
+  monkeypatch.setattr(makeup_service, "generate_json", too_many_choices)
+  result = await makeup_service.generate_questions_v2_with_fallback(
+    Settings(),
+    {"selection": {"situation": {"key": "daily"}}},
+  )
+
+  assert calls == 2
+  assert result["source"] == "deterministic_fallback"
+  GeneratedQuestions.model_validate({"questions": result["questions"]})
+
 @pytest.mark.asyncio
 async def test_question_provider_failure_uses_vetted_deterministic_fallback(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+  calls = 0
+
   async def fail_provider(*_args, **_kwargs):
+    nonlocal calls
+    calls += 1
     raise AppError(503, "BEDROCK_ACCESS_DENIED", "not configured")
 
   monkeypatch.setattr(makeup_service, "generate_json", fail_provider)
@@ -319,6 +496,7 @@ async def test_question_provider_failure_uses_vetted_deterministic_fallback(
   )
 
   assert result["source"] == "deterministic_fallback"
+  assert calls == 1
   assert result["version"] == "makeup-questions-fallback-v1"
   assert 1 <= len(result["questions"]) <= 3
   assert result["questions"][1]["id"] == "camera_priority"
@@ -907,6 +1085,112 @@ async def test_session_creation_compiles_immutable_context_and_questions(
   assert captured["context"]["profile"]["presentation"] == "masculine"
   assert captured["context"]["questioning"]["source"] == "reviewed_keyword_template"
   assert "on conflict (user_id, idempotency_key)" in captured["query"]
+
+
+@pytest.mark.asyncio
+async def test_session_api_returns_questions_fallback_after_two_invalid_model_outputs(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  captured: dict = {}
+  model_calls = 0
+  custom_text = "야외 발표에서 오래 유지되는 자연스러운 인상"
+
+  class DB:
+    async def fetchrow(self, query: str, *args):
+      if "where user_id = $1 and idempotency_key = $2" in query:
+        return None
+      if "insert into makeup_recommendation_sessions" in query:
+        context = json.loads(args[5])
+        questions = json.loads(args[6])
+        captured.update(context=context, questions=questions)
+        return {
+          "id": SESSION_ID,
+          "analysis_report_id": ANALYSIS_REPORT_ID,
+          "situation_id": None,
+          "keyword_id": None,
+          "custom_situation_text": custom_text,
+          "context_snapshot": context,
+          "questions": questions,
+          "answers": [],
+          "current_question_index": 0,
+          "status": args[7],
+          "report_id": None,
+          "image_mode": args[9],
+          "idempotency_key": "fallback-session-v2",
+          "expires_at": "2026-07-19T00:00:00Z",
+        }
+      raise AssertionError(query)
+
+  async def fake_report(_db, user_id, report_id):
+    assert (user_id, report_id) == (USER_ID, ANALYSIS_REPORT_ID)
+    return {
+      "id": ANALYSIS_REPORT_ID,
+      "status": "completed",
+      "report_title": "최근 분석",
+      "valid_source_media_id": UUID("77777777-7777-7777-7777-777777777777"),
+      "detail_payload": {},
+    }
+
+  async def fake_validate_custom(value, _settings):
+    assert value == custom_text
+    return value
+
+  async def fake_normalize_custom(_settings, value):
+    assert value == custom_text
+    return {
+      "situationIntent": "야외 발표",
+      "desiredImpression": "자연스러운 인상",
+      "constraints": ["오래 유지"],
+      "normalizationSource": "test",
+    }
+
+  async def invalid_questions(*_args, **_kwargs):
+    nonlocal model_calls
+    model_calls += 1
+    return {
+      "questions": [
+        {
+          "id": "mood",
+          "title": "어떤 분위기가 끌리나요?",
+          "options": [
+            {"id": "quiet", "label": "조용한 장면"},
+            {"id": "ai_pick", "label": "AI가 골라줘"},
+          ],
+        },
+      ],
+    }
+
+  async def fake_ensure_user(_db, _auth):
+    return {"id": USER_ID, "gender": "unspecified"}
+
+  monkeypatch.setattr(session_service, "fetch_owned_completed_analysis_report", fake_report)
+  monkeypatch.setattr(session_service, "validate_custom_situation_for_request", fake_validate_custom)
+  monkeypatch.setattr(session_service, "normalize_custom_situation_v2", fake_normalize_custom)
+  monkeypatch.setattr(makeup_service, "generate_json", invalid_questions)
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+
+  app = create_app(Settings(database_url=None))
+  app.dependency_overrides[get_current_user] = auth_context
+  app.dependency_overrides[require_database] = lambda: DB()
+  response = TestClient(app).post(
+    "/api/makeup-recommendations/sessions",
+    headers={"Idempotency-Key": "fallback-session-v2"},
+    json={
+      "analysisReportId": str(ANALYSIS_REPORT_ID),
+      "customSituationText": custom_text,
+      "imageMode": "generic",
+    },
+  )
+  assert response.status_code == 200
+  result = response.json()["data"]
+  assert model_calls == 2
+  assert result["status"] == "questioning"
+  assert result["questions"] == captured["questions"]
+  assert captured["context"]["questioning"] == {
+    "source": "deterministic_fallback",
+    "version": "makeup-questions-fallback-v1",
+  }
+  GeneratedQuestions.model_validate({"questions": result["questions"]})
 
 
 @pytest.mark.asyncio
