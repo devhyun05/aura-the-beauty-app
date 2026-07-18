@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, PanResponder, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { color, font, radius } from '../reportTokens';
@@ -20,6 +20,14 @@ export function ImpressionMap({ axes }: { axes: ImpressionAxis[] }) {
   const size = useRef(0);
   // 드래그 위치를 JS 상태로도 추적 — 공유값은 점 렌더용(UI 스레드), 상태는 실시간 해석 텍스트용.
   const [drag, setDrag] = useState({ x: curX, y: curY });
+
+  // axes 프롭이 바뀌면(다른 보고서로 전환) 현재(AI) 위치로 재동기화 — mount 초기값이
+  // stale하게 남아 이전 보고서 드래그 위치가 유지되는 것을 막는다(Gemini 리뷰).
+  useEffect(() => {
+    dragX.value = curX;
+    dragY.value = curY;
+    setDrag({ x: curX, y: curY });
+  }, [curX, curY, dragX, dragY]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     size.current = e.nativeEvent.layout.width;
