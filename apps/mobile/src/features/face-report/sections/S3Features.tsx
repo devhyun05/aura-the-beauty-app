@@ -102,9 +102,9 @@ export function S3Features({ data, onCardLayout }: Props) {
           data={data.cards}
           keyExtractor={card => card.key}
           horizontal
-          pagingEnabled
           showsHorizontalScrollIndicator={false}
           snapToInterval={CARD_W + CARD_GAP}
+          disableIntervalMomentum
           decelerationRate="fast"
           contentContainerStyle={{ gap: CARD_GAP, paddingHorizontal: 20 }}
           onMomentumScrollEnd={handleMomentumScrollEnd}
