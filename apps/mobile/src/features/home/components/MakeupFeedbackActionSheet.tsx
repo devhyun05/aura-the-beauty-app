@@ -39,21 +39,37 @@ export function MakeupFeedbackActionSheet({
   onPressCamera,
   onPressUpload,
 }: MakeupFeedbackActionSheetProps) {
+  const pendingActionRef = React.useRef<(() => void) | null>(null);
   const actionHandlers = {
     camera: onPressCamera,
     upload: onPressUpload,
   } as const;
 
+  const closeWithoutAction = () => {
+    pendingActionRef.current = null;
+    onClose();
+  };
+
+  const queueActionAfterDismiss = (action: () => void) => {
+    pendingActionRef.current = action;
+    onClose();
+  };
+
   return (
     <Modal
       animationType="fade"
-      onRequestClose={onClose}
+      onDismiss={() => {
+        const pendingAction = pendingActionRef.current;
+        pendingActionRef.current = null;
+        pendingAction?.();
+      }}
+      onRequestClose={closeWithoutAction}
       transparent
       visible={isVisible}>
       <Pressable
         accessibilityLabel="메이크업 피드백 선택 닫기"
         accessibilityRole="button"
-        onPress={onClose}
+        onPress={closeWithoutAction}
         style={styles.sheetBackdrop}>
         <Pressable
           accessibilityRole="menu"
@@ -73,7 +89,7 @@ export function MakeupFeedbackActionSheet({
                 accessibilityLabel={action.accessibilityLabel}
                 accessibilityRole="menuitem"
                 key={action.id}
-                onPress={actionHandlers[action.id]}
+                onPress={() => queueActionAfterDismiss(actionHandlers[action.id])}
                 style={({pressed}) => [
                   styles.sheetActionButton,
                   pressed && styles.pressed,
@@ -99,7 +115,7 @@ export function MakeupFeedbackActionSheet({
           <Pressable
             accessibilityLabel="메이크업 피드백 선택 취소"
             accessibilityRole="button"
-            onPress={onClose}
+            onPress={closeWithoutAction}
             style={({pressed}) => [styles.sheetCancelButton, pressed && styles.pressed]}>
             <Text style={styles.sheetCancelText}>취소</Text>
           </Pressable>
