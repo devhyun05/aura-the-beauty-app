@@ -13,8 +13,6 @@ import type {
   HomeFeaturePressPayload,
 } from '../../../features/home/types/homeModules';
 import {getHomeFeatureNavigationTarget} from '../../../features/home/config/homeFeatureRouteMap';
-import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
-import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
 import {useAuthSession} from '../../../features/auth';
 import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
 import {openTrustedProductOffer} from '../../../features/recommendation/services/productHubService';
@@ -44,6 +42,33 @@ import {
   type RootNavigation,
   type RootScreenProps,
 } from './routeUtils';
+
+type MakeupExtractionActionSheetProps = React.ComponentProps<
+  typeof import('../../../features/home/components/MakeupExtractionActionSheet').MakeupExtractionActionSheet
+>;
+type MakeupFeedbackActionSheetProps = React.ComponentProps<
+  typeof import('../../../features/home/components/MakeupFeedbackActionSheet').MakeupFeedbackActionSheet
+>;
+
+function DeferredMakeupExtractionActionSheet(
+  props: MakeupExtractionActionSheetProps,
+) {
+  const {MakeupExtractionActionSheet} = require(
+    '../../../features/home/components/MakeupExtractionActionSheet'
+  ) as typeof import('../../../features/home/components/MakeupExtractionActionSheet');
+
+  return <MakeupExtractionActionSheet {...props} />;
+}
+
+function DeferredMakeupFeedbackActionSheet(
+  props: MakeupFeedbackActionSheetProps,
+) {
+  const {MakeupFeedbackActionSheet} = require(
+    '../../../features/home/components/MakeupFeedbackActionSheet'
+  ) as typeof import('../../../features/home/components/MakeupFeedbackActionSheet');
+
+  return <MakeupFeedbackActionSheet {...props} />;
+}
 
 export function FloatingActionSettingsRouteScreen({
   navigation,
@@ -392,18 +417,22 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
             showBeautyJourneyGuide={shouldShowBeautyJourneyGuide}
             onConfirmBeautyJourneyGuide={handleBeautyJourneyGuideConfirm}
           />
-          <MakeupExtractionActionSheet
-            isVisible={isExtractionSheetVisible}
-            onClose={closeExtractionSheet}
-            onPressCamera={() => startMakeupExtraction('camera')}
-            onPressUpload={() => startMakeupExtraction('gallery')}
-          />
-          <MakeupFeedbackActionSheet
-            isVisible={isFeedbackSheetVisible}
-            onClose={closeFeedbackSheet}
-            onPressCamera={() => startMakeupFeedback('camera')}
-            onPressUpload={() => startMakeupFeedback('gallery')}
-          />
+          {isExtractionSheetVisible ? (
+            <DeferredMakeupExtractionActionSheet
+              isVisible
+              onClose={closeExtractionSheet}
+              onPressCamera={() => startMakeupExtraction('camera')}
+              onPressUpload={() => startMakeupExtraction('gallery')}
+            />
+          ) : null}
+          {isFeedbackSheetVisible ? (
+            <DeferredMakeupFeedbackActionSheet
+              isVisible
+              onClose={closeFeedbackSheet}
+              onPressCamera={() => startMakeupFeedback('camera')}
+              onPressUpload={() => startMakeupFeedback('gallery')}
+            />
+          ) : null}
         </>
       )}
     </MainTabChrome>

@@ -16,14 +16,43 @@ import {
   type FooterTabKey,
 } from '../../shared/ui';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../shared/ui/AppFooter';
-import {MakeupExtractionActionSheet} from '../../features/home/components/MakeupExtractionActionSheet';
-import {MakeupFeedbackActionSheet} from '../../features/home/components/MakeupFeedbackActionSheet';
 import {useNavigationFlowState} from './flowState';
 import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
-import {ConsultingTabRouteScreen, HomeRouteScreen} from './routes/homeRoutes';
-import {ProfileRouteScreen} from './routes/profileRoutes';
-import {MakeupJourneyTabRouteScreen} from './routes/makeupJourneyRoutes';
+
+const loadHomeRoutes = () =>
+  require('./routes/homeRoutes') as typeof import('./routes/homeRoutes');
+const loadProfileRoutes = () =>
+  require('./routes/profileRoutes') as typeof import('./routes/profileRoutes');
+const loadMakeupJourneyRoutes = () =>
+  require('./routes/makeupJourneyRoutes') as typeof import('./routes/makeupJourneyRoutes');
+
+type MakeupExtractionActionSheetProps = React.ComponentProps<
+  typeof import('../../features/home/components/MakeupExtractionActionSheet').MakeupExtractionActionSheet
+>;
+type MakeupFeedbackActionSheetProps = React.ComponentProps<
+  typeof import('../../features/home/components/MakeupFeedbackActionSheet').MakeupFeedbackActionSheet
+>;
+
+function DeferredMakeupExtractionActionSheet(
+  props: MakeupExtractionActionSheetProps,
+) {
+  const {MakeupExtractionActionSheet} = require(
+    '../../features/home/components/MakeupExtractionActionSheet'
+  ) as typeof import('../../features/home/components/MakeupExtractionActionSheet');
+
+  return <MakeupExtractionActionSheet {...props} />;
+}
+
+function DeferredMakeupFeedbackActionSheet(
+  props: MakeupFeedbackActionSheetProps,
+) {
+  const {MakeupFeedbackActionSheet} = require(
+    '../../features/home/components/MakeupFeedbackActionSheet'
+  ) as typeof import('../../features/home/components/MakeupFeedbackActionSheet');
+
+  return <MakeupFeedbackActionSheet {...props} />;
+}
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -71,10 +100,22 @@ export function MainTabNavigator() {
       initialRouteName="HomeTab"
       screenOptions={{headerShown: false}}
       tabBar={props => <MainTabBar {...props} />}>
-      <Tab.Screen name="HomeTab" component={HomeRouteScreen} />
-      <Tab.Screen name="ConsultingTab" component={ConsultingTabRouteScreen} />
-      <Tab.Screen name="MakeupJourneyTab" component={MakeupJourneyTabRouteScreen} />
-      <Tab.Screen name="ProfileTab" component={ProfileRouteScreen} />
+      <Tab.Screen
+        name="HomeTab"
+        getComponent={() => loadHomeRoutes().HomeRouteScreen}
+      />
+      <Tab.Screen
+        name="ConsultingTab"
+        getComponent={() => loadHomeRoutes().ConsultingTabRouteScreen}
+      />
+      <Tab.Screen
+        name="MakeupJourneyTab"
+        getComponent={() => loadMakeupJourneyRoutes().MakeupJourneyTabRouteScreen}
+      />
+      <Tab.Screen
+        name="ProfileTab"
+        getComponent={() => loadProfileRoutes().ProfileRouteScreen}
+      />
     </Tab.Navigator>
   );
 }
@@ -270,18 +311,22 @@ function MainTabBar({
         hiddenTabs={makeupJourneyEnabled ? undefined : ['journey']}
         onTabPress={handleTabPress}
       />
-      <MakeupExtractionActionSheet
-        isVisible={isExtractionSheetVisible}
-        onClose={closeExtractionSheet}
-        onPressCamera={() => startMakeupExtraction('camera')}
-        onPressUpload={() => startMakeupExtraction('gallery')}
-      />
-      <MakeupFeedbackActionSheet
-        isVisible={isFeedbackSheetVisible}
-        onClose={closeFeedbackSheet}
-        onPressCamera={() => startMakeupFeedback('camera')}
-        onPressUpload={() => startMakeupFeedback('gallery')}
-      />
+      {isExtractionSheetVisible ? (
+        <DeferredMakeupExtractionActionSheet
+          isVisible
+          onClose={closeExtractionSheet}
+          onPressCamera={() => startMakeupExtraction('camera')}
+          onPressUpload={() => startMakeupExtraction('gallery')}
+        />
+      ) : null}
+      {isFeedbackSheetVisible ? (
+        <DeferredMakeupFeedbackActionSheet
+          isVisible
+          onClose={closeFeedbackSheet}
+          onPressCamera={() => startMakeupFeedback('camera')}
+          onPressUpload={() => startMakeupFeedback('gallery')}
+        />
+      ) : null}
     </YStack>
   );
 }
