@@ -77,7 +77,7 @@ export function FaceAnalysisIntroScreen({
       topPadding="belowShellHeader">
       <ImageBackground
         imageStyle={styles.heroImage}
-        resizeMode="cover"
+        resizeMode="contain"
         source={faceAnalysisHeroImage}
         style={styles.hero}>
         <YStack style={styles.heroCopy}>
