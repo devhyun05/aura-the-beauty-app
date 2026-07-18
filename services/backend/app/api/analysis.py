@@ -619,20 +619,25 @@ async def run_analysis_job_background(
     await mark_analysis_failed(db, report_id, message, payload, details)
     return
 
-  # DB 정본은 기기 측정값 원칙: personal_color/tone_summary 컬럼은 조명 보정·
-  # 정합성 게이트를 통과한 측정 퍼컬의 한국어 라벨을 **우선** 쓴다. 단 측정이
-  # 실패(insufficient·게이트 탈락)하면 NULL로 두지 않고 LLM 결과값(V2 perception)
-  # 으로 폴백한다 — 컬럼을 비우면 모바일 완결성 게이트가 리포트를 통째로 실패
-  # 처리할 수 있어서다("측정 우선, 실패 시만 LLM 폴백").
+  # DB 정본은 기기 측정값 원칙: 조명 보정·정합성 게이트를 통과한 측정 퍼컬의
+  # 한국어 라벨을 result에 **주입**해 정본화한다(측정 성공 시). result에 직접
+  # 넣어야 (a) DB 컬럼, (b) detail_payload, (c) 모바일 완결성 게이트가 읽는
+  # result.personalColor/toneSummary가 모두 같은 정본을 보게 된다 — 컬럼만
+  # 채우면 게이트(result.personalColor 요구)가 프로드 경로에서 여전히 실패한다.
+  # 측정 실패면 주입하지 않아 기존 값(V2 perception 등)을 그대로 둔다("측정
+  # 우선, 실패 시만 기존/LLM 값").
   measured_personal_color, measured_tone_summary = (
     measured_personal_color_column_values(
       payload.request_payload.get("measurements"),
     )
   )
-  result_personal_color = result.get("personalColor") if isinstance(result, dict) else None
-  result_tone_summary = result.get("toneSummary") if isinstance(result, dict) else None
-  effective_personal_color = measured_personal_color or result_personal_color
-  effective_tone_summary = measured_tone_summary or result_tone_summary
+  if isinstance(result, dict):
+    if measured_personal_color:
+      result["personalColor"] = measured_personal_color
+    if measured_tone_summary:
+      result["toneSummary"] = measured_tone_summary
+  effective_personal_color = result.get("personalColor") if isinstance(result, dict) else None
+  effective_tone_summary = result.get("toneSummary") if isinstance(result, dict) else None
   report_status = "completed"
   report = await db.fetchrow(
     """
