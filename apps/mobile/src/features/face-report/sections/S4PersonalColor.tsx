@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import Animated, { SharedValue, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { color, font, radius } from '../reportTokens';
@@ -61,6 +61,16 @@ export function S4PersonalColor({ data }: { data: S4Data }) {
   const worstInit: SwatchData = d.badSwatches[0] ?? { name: '기준 색', color: '#8FA6B2' };
   const [worst, setWorst] = useState<SwatchData>(worstInit);
   const worstColor = useSharedValue(worstInit.color);
+
+  // data(드레이프) 프롭이 바뀌면(다른 보고서로 전환) 선택 상태를 새 데이터로 재동기화한다
+  // — mount 초기값이 stale하게 남는 것을 막는다(Gemini 리뷰).
+  useEffect(() => {
+    setBest({ ...d.initialSwatch });
+    bestColor.value = d.initialSwatch.color;
+    const wInit = d.badSwatches[0] ?? { name: '기준 색', color: '#8FA6B2' };
+    setWorst(wInit);
+    worstColor.value = wInit.color;
+  }, [d.initialSwatch, d.badSwatches, bestColor, worstColor]);
 
   const pickBest = (s: SwatchData) => {
     setBest(s);
