@@ -313,9 +313,12 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
   )
 
   if full_eligible:
+    # 프롬프트 지시("원본 H 제외, 검증된 비율만")와 코드를 일치시킨다:
+    # 픽셀 원본(heightPx/widthPx/*Px)은 데이터 최소화 원칙상 모델에 보내지
+    # 않고, 무차원 비율/정규화 요약만 전달한다.
     face_length = _safe_numeric_record(
       raw.get("faceLength"),
-      ("heightPx", "ratio", "widthPx"),
+      ("ratio",),
     )
     dominant_part = _prompt_enum(
       raw.get("dominantPart"),
@@ -325,12 +328,8 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
       raw.get("ratioDetail"),
       (
         "lowerNormalized",
-        "lowerPx",
         "middleNormalized",
-        "middlePx",
-        "totalPx",
         "upperNormalized",
-        "upperPx",
       ),
     )
     return {
@@ -351,8 +350,6 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
   middle_lower = _prompt_record(raw.get("middleLowerRatio"))
   safe_lower = _prompt_number(middle_lower.get("lower"))
   safe_middle = _prompt_number(middle_lower.get("middle"))
-  safe_lower_px = _prompt_number(middle_lower.get("lowerPx"))
-  safe_middle_px = _prompt_number(middle_lower.get("middlePx"))
   if safe_lower is None:
     safe_lower = lower
   if safe_middle is None:
@@ -360,13 +357,12 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
   if safe_lower is None or safe_middle is None:
     return None
 
+  # 픽셀 원본(lowerPx/middlePx) 제외 — 무차원 비율만 전달(위 주석과 동일 원칙).
   return {
     **common,
     "middleLowerRatio": {
       "lower": safe_lower,
-      "lowerPx": safe_lower_px,
       "middle": safe_middle,
-      "middlePx": safe_middle_px,
     },
   }
 
@@ -391,10 +387,16 @@ def _safe_face_geometry_prompt_payload(value: Any) -> dict[str, Any] | None:
     metric_value = None if raw_value is None else _prompt_number(raw_value)
     if raw_value is not None and metric_value is None:
       continue
-    safe_metrics[key] = {
+    safe_metric: dict[str, Any] = {
       "unit": "deg" if key.endswith("Deg") else "ratio",
       "value": metric_value,
     }
+    # per-metric confidence 전달 — LLM이 저신뢰 지표(눈꼬리 각도 등)를 확정
+    # 사실로 서술하지 않도록. personalColor·face3d는 이미 전달, geometry만 누락이었음.
+    confidence = _prompt_number(metric.get("confidence"))
+    if confidence is not None and 0 <= confidence <= 1:
+      safe_metric["confidence"] = confidence
+    safe_metrics[key] = safe_metric
   if not safe_metrics:
     return None
 
@@ -1485,6 +1487,7 @@ class OpenAIAnalysisService:
       "요청 메타데이터에 faceGeometry2d(정면 사진에서 실측한 2D 기하 지표: 눈 폭·눈 개방도·미간 비율·눈꼬리 기울기 canthalTilt(도)·"
       "눈-눈썹 간격·눈썹 기울기 browSlope(도)·입 폭·윗입술/아랫입술 두께비·하관 폭 비율·입꼬리 비대칭 — 비율은 무차원, 각도는 도 단위, "
       "Left/Right는 피사체 기준, value가 null이면 미측정)가 있으면 눈매/눈썹/입술 판단과 makeupGuideline의 아이라이너·눈썹·립 배치에 근거로 반영해. "
+      "각 지표의 confidence가 낮으면(예: 0.5 미만) 그 지표만으로 인상을 단정하지 말고 사진 관찰을 우선하거나 표현을 완화해. "
       "요청 메타데이터에 measuredPersonalColor(기기에서 조명 보정 후 실측한 퍼스널 컬러: tone.top/secondary 12톤 코드, "
       "axes 5축 -1..1(temperature 쿨→웜, value 라이트→딥, chroma 뮤트→비비드, clarity 소프트→클리어, contrast 저→고대비), "
       "부위별 평균 Lab 색값 regions, 부위 간 명도·색차 relations, measurementConfidence 0..1, correction.applied 조명 보정 여부)가 있으면 "
