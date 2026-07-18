@@ -361,9 +361,14 @@ function buildS5(bodyProfile: BodyProfile | null | undefined, gender: string | n
     };
   }
 
-  const analyzed = analyzeBody(bodyProfile, resolveStyleGender(gender));
+  const styleGender = resolveStyleGender(gender);
+  const analyzed = analyzeBody(bodyProfile, styleGender);
   return {
     ...base,
+    // 실루엣 타입 다이어그램 배선(설문 답변이 있는 분기에서만). 미답변 분기는
+    // 이 필드들을 설정하지 않아 undefined로 남고, S5Body가 빈 상태 플레이스홀더를 유지한다.
+    silhouetteKind: analyzed.silhouette,
+    styleGender,
     silhouetteValue: analyzed.silhouetteStyle.label,
     skeletonValue: analyzed.frameStyle.label,
     surveyNote: '체감 설문 기반 · ',

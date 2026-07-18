@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { color, font, radius } from '../reportTokens';
 import type { S5Data } from '../reportTypes';
+import { BodySilhouette } from '../visuals/BodySilhouette';
 import { Card } from '../visuals/Card';
 import { Hatch } from '../visuals/Hatch';
 import { RiseIn } from '../visuals/RiseIn';
@@ -28,13 +29,21 @@ export function S5Body({ data, onResurvey }: { data: S5Data; onResurvey?: () => 
       <RiseIn>
         <Card gap={14}>
           <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-            <View style={{
-              width: 96, height: 128, borderRadius: radius.md, overflow: 'hidden',
-              alignItems: 'center', justifyContent: 'center', padding: 8,
-            }}>
-              <Hatch colorA={color.hatchC} colorB={color.bg} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
-              <Text style={[font(9.5, '400', 1.5), { color: color.faint, textAlign: 'center' }]}>{data.silhouettePlaceholder}</Text>
-            </View>
+            {data.silhouetteKind ? (
+              // 설문 답변이 있으면 타입별 실루엣 다이어그램(개인 몸이 아닌 타입 그림).
+              <View style={{ width: 96, height: 128, alignItems: 'center', justifyContent: 'center' }}>
+                <BodySilhouette kind={data.silhouetteKind} gender={data.styleGender ?? 'neutral'} />
+              </View>
+            ) : (
+              // 미답변(설문 전) 빈 상태 — 기존 빗금 플레이스홀더 유지.
+              <View style={{
+                width: 96, height: 128, borderRadius: radius.md, overflow: 'hidden',
+                alignItems: 'center', justifyContent: 'center', padding: 8,
+              }}>
+                <Hatch colorA={color.hatchC} colorB={color.bg} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+                <Text style={[font(9.5, '400', 1.5), { color: color.faint, textAlign: 'center' }]}>{data.silhouettePlaceholder}</Text>
+              </View>
+            )}
             <View style={{ flex: 1, gap: 9 }}>
               <View style={{ gap: 2 }}>
                 <Text style={[font(10.5, '600'), { color: color.muted }]}>{data.silhouetteLabel}</Text>

@@ -3,6 +3,7 @@
 // 세로 3분할의 정규화 비율은 노출 허용, 얼굴형은 성별 참고선 기준 방향 카테고리로만
 // (가짜 '평균 밴드'는 폐기 — 2026-07-18 정직화).
 import type {FaceShapeView} from './reportFormat';
+import type {Silhouette, StyleGender} from '../ar/stencil/src/composer/bodyProfile';
 
 export interface PhotoSlotData {
   uri?: string;
@@ -148,7 +149,11 @@ export interface S4Data {
 // ---------- S5 ----------
 export interface S5Data {
   eyebrow: string; title: string;
-  silhouettePlaceholder: string;   // multi-line placeholder label
+  silhouettePlaceholder: string;   // multi-line placeholder label (설문 전 빈 상태에서만 사용)
+  // 실루엣 타입 다이어그램용. 설문 답변이 있을 때만 채워진다(미답변이면 undefined →
+  // S5Body가 기존 빗금 플레이스홀더를 유지). styleGender는 다이어그램 외형 분기용.
+  silhouetteKind?: Silhouette;
+  styleGender?: StyleGender;
   silhouetteLabel: string; silhouetteValue: string;
   skeletonLabel: string; skeletonValue: string;
   surveyNote: string; surveyLink: string;
