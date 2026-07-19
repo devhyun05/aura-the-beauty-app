@@ -273,6 +273,13 @@ def preference_deltas(
     source = _clean(preference.get("source"))
     values = [_clean(value) for value in _as_list(preference.get("values")) if _clean(value)]
     avoid_values = [_clean(value) for value in _as_list(preference.get("avoidValues")) if _clean(value)]
+    # categoryScope가 있는 선호는 해당 카테고리 제품에만 적용한다(예: skin-type→
+    # finish는 베이스/파우더에만). 범위 밖 제품은 이 선호를 건너뛴다.
+    category_scope = [
+      _clean(value) for value in _as_list(preference.get("categoryScope")) if _clean(value)
+    ]
+    if category_scope and _clean(item.get("category")) not in category_scope:
+      continue
     sign = 0
     matched_value = ""
     if values and _matches(item, attribute, values):

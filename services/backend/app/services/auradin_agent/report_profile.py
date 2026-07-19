@@ -34,6 +34,11 @@ SKIN_TYPE_FINISH_VALUES: dict[str, tuple[str, ...]] = {
   "combination": ("matte", "velvet"),
 }
 
+# skin-type→finish는 피부에 얹는 베이스/파우더 마감에만 뷰티적으로 유효하다.
+# 립·아이·치크 같은 색조 제품의 glossy/matte는 피부타입과 무관하므로, 이 넛지는
+# 아래 카테고리에만 적용하고 그 밖에는 랭킹이 무시한다(categoryScope 계약).
+SKIN_TYPE_FINISH_CATEGORY_SCOPE: tuple[str, ...] = ("base", "powder")
+
 
 def infer_undertone(personal_color: str) -> str | None:
   """퍼스널컬러 문자열 → 'cool' | 'warm' | 'neutral' | None (불명은 None → 넛지 안 함)."""
@@ -128,6 +133,8 @@ def skin_type_to_soft_preferences(
       "source": "report",
       "confidence": resolved_confidence,
       "weight": 0.4,
+      # 베이스/파우더 제품에만 적용 — 립·아이 등 색조엔 finish 넛지 무의미.
+      "categoryScope": list(SKIN_TYPE_FINISH_CATEGORY_SCOPE),
     },
   ]
 
