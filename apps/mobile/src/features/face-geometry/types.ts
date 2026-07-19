@@ -60,6 +60,15 @@ export type FaceGeometryPose = {
   yawDeg: number;
 };
 
+// 오버레이 검증 전용(로컬). 측정에 실제 쓴 점을 정규화(0..1)로 담는다.
+// ⚠ buildFaceAnalysisMeasurementsPayload(서버 wire)에 절대 포함하지 않는다.
+export type FaceGeometryDebugAnchor = {
+  label: string;
+  kind: 'segment' | 'polyline';
+  points: {x: number; y: number}[];
+};
+export type FaceGeometryDebugAnchors = FaceGeometryDebugAnchor[];
+
 export type FaceGeometryResult = {
   captureId: string;
   createdAt: string;
@@ -69,6 +78,8 @@ export type FaceGeometryResult = {
   // 코덱(faceAnalysisMeasurements)이 top-level로 lift 하므로 여기서는 전달용.
   regionVisuals?: RegionVisuals;
   rollCorrection: FaceGeometryRollCorrection;
+  // 로컬 전용 검증 앵커(직렬화 금지). 없을 수 있음.
+  debugAnchors?: FaceGeometryDebugAnchors;
   schemaVersion: 'aura-face-geometry-v1';
   sessionId: string;
   sourceImage: {height: number; uri: string; width: number};

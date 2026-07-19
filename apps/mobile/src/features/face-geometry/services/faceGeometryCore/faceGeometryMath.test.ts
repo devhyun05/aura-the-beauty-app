@@ -1,6 +1,7 @@
 // 실행: scripts/mobile/run-face-geometry-contract.mjs (tsc → node)
 // 합성 랜드마크 기지값 검증 — personalColorCore 계약 테스트와 같은 plain-script.
 import {
+  collectFaceGeometryDebugAnchors,
   collectMissingIndices,
   computeFaceGeometryMetrics,
   createUnavailableFaceGeometryMetrics,
@@ -366,6 +367,20 @@ function buildBaseMap(): PixelLandmarkMap {
   // roll 미보정이면 null
   const m2 = computeFaceGeometryMetrics({map, rollCorrectionApplied: false});
   expectEqual(m2.browApexRatioRight.value, null, 'brow apex null without roll');
+}
+
+// ── 15. debugAnchors: tilt/수렴각 앵커가 정규화 좌표로 담긴다 ────────────────
+{
+  const anchors = collectFaceGeometryDebugAnchors(buildBaseMap(), 1000, 1000);
+  const tiltR = anchors.find(a => a.label === 'canthalTiltRight');
+  if (!tiltR) fail('debugAnchors', 'canthalTiltRight anchor missing');
+  expectEqual(tiltR.kind, 'segment', 'tilt kind');
+  // seg(label, IDX.eyeInnerRight, IDX.eyeOuterRight) → points[0]=내안각(460,400),
+  // points[1]=외안각(380,400) → 정규화(1000×1000).
+  expectClose(tiltR.points[0].x, 0.46, 'tilt p0 x (inner)');
+  expectClose(tiltR.points[0].y, 0.40, 'tilt p0 y');
+  expectClose(tiltR.points[1].x, 0.38, 'tilt p1 x (outer)');
+  expectClose(tiltR.points[1].y, 0.40, 'tilt p1 y');
 }
 
 console.log('faceGeometryMath.test.ts passed');

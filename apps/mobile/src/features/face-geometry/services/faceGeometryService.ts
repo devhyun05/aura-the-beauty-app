@@ -7,6 +7,7 @@ import type {
   FaceGeometryStatus,
 } from '../types';
 import {
+  collectFaceGeometryDebugAnchors,
   collectMissingIndices,
   computeFaceGeometryMetrics,
   createUnavailableFaceGeometryMetrics,
@@ -152,6 +153,11 @@ export async function analyzeFaceGeometry2d(
     rollCorrectionApplied: rollCorrection.applied,
   });
   const regionVisuals = regionVisualsBuilder(correctedMap, detected.imageWidth, detected.imageHeight);
+  const debugAnchors = collectFaceGeometryDebugAnchors(
+    correctedMap,
+    detected.imageWidth,
+    detected.imageHeight,
+  );
 
   const nullCount = Object.values(metrics).filter(metric => metric.value === null).length;
   const status: FaceGeometryStatus = nullCount === 0 ? 'full_success' : 'partial_success';
@@ -171,6 +177,7 @@ export async function analyzeFaceGeometry2d(
     pose: detected.pose,
     regionVisuals: Object.keys(regionVisuals).length ? regionVisuals : undefined,
     rollCorrection,
+    ...(debugAnchors.length ? {debugAnchors} : {}),
     schemaVersion: 'aura-face-geometry-v1',
     sessionId: input.sessionId,
     sourceImage,

@@ -3,6 +3,8 @@
 // 호출측(faceGeometryService)이 이 모듈의 순수 함수로 끝낸 뒤 넘긴다.
 
 import type {
+  FaceGeometryDebugAnchor,
+  FaceGeometryDebugAnchors,
   FaceGeometryMetric,
   FaceGeometryMetricKey,
   FaceGeometryMetricUnit,
@@ -404,4 +406,48 @@ export function computeFaceGeometryMetrics({
   }
 
   return metrics;
+}
+
+// 오버레이 검증 전용(로컬) — 지표 계산에 실제 쓴 랜드마크 점을 정규화(0..1)
+// 좌표로 담는다. computeFaceGeometryMetrics 와 같은 인덱스를 재사용해 지표와
+// 시각화가 어긋나지 않게 한다. ⚠ 서버 wire payload 에는 절대 포함하지 않는다
+// (faceAnalysisMeasurements.encodeFaceGeometry 가 명시적으로 제외).
+export function collectFaceGeometryDebugAnchors(
+  map: PixelLandmarkMap,
+  imageWidth: number,
+  imageHeight: number,
+): FaceGeometryDebugAnchors {
+  if (!(imageWidth > 0) || !(imageHeight > 0)) {
+    return [];
+  }
+  const anchors: FaceGeometryDebugAnchor[] = [];
+  const norm = (p: PixelPoint) => ({x: p.x / imageWidth, y: p.y / imageHeight});
+  const seg = (label: string, a: number, b: number): void => {
+    const pa = map.get(a);
+    const pb = map.get(b);
+    if (pa && pb) {
+      anchors.push({label, kind: 'segment', points: [norm(pa), norm(pb)]});
+    }
+  };
+  seg('canthalTiltRight', IDX.eyeInnerRight, IDX.eyeOuterRight);
+  seg('canthalTiltLeft', IDX.eyeInnerLeft, IDX.eyeOuterLeft);
+  seg('eyeOpennessRight', IDX.eyeUpperLidRight, IDX.eyeLowerLidRight);
+  seg('eyeOpennessLeft', IDX.eyeUpperLidLeft, IDX.eyeLowerLidLeft);
+  // 수렴각: 외안각→상접선, 외안각→하접선 (2 segment)
+  seg('canthalUpperRight', IDX.eyeOuterRight, CANTHAL_TANGENT_INDICES.upperRight);
+  seg('canthalLowerRight', IDX.eyeOuterRight, CANTHAL_TANGENT_INDICES.lowerRight);
+  seg('canthalUpperLeft', IDX.eyeOuterLeft, CANTHAL_TANGENT_INDICES.upperLeft);
+  seg('canthalLowerLeft', IDX.eyeOuterLeft, CANTHAL_TANGENT_INDICES.lowerLeft);
+  // 눈썹 상연 edge polyline
+  const browEdge = (label: string, indices: readonly number[]): void => {
+    const pts: {x: number; y: number}[] = [];
+    for (const i of indices) {
+      const p = map.get(i);
+      if (p) pts.push(norm(p));
+    }
+    if (pts.length >= 2) anchors.push({label, kind: 'polyline', points: pts});
+  };
+  browEdge('browEdgeRight', BROW_UPPER_EDGE_RIGHT_INDICES);
+  browEdge('browEdgeLeft', BROW_UPPER_EDGE_LEFT_INDICES);
+  return anchors;
 }

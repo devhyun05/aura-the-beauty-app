@@ -890,4 +890,21 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(Boolean(invalid.regionVisuals?.lower), true, 'valid sibling retained');
 }
 
+// ── 12. debugAnchors 는 로컬 전용 — buildFaceAnalysisMeasurementsPayload 가
+//        만드는 서버 wire payload 에 절대 직렬화되면 안 된다 ────────────────
+{
+  const payload = buildFaceAnalysisMeasurementsPayload({
+    captureId: 'c1',
+    face3d: null,
+    faceGeometry2d: {
+      ...buildGeometryFixture(),
+      debugAnchors: [{label: 'x', kind: 'segment', points: [{x: 0, y: 0}, {x: 1, y: 1}]}],
+    } as any,
+    faceVerticalThirds: null,
+    personalColor: null,
+  });
+  const json = JSON.stringify(payload ?? {});
+  expectEqual(json.includes('debugAnchors'), false, 'debugAnchors must NOT serialize');
+}
+
 console.log('faceAnalysisMeasurements.test.ts passed');
