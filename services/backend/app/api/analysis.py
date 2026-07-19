@@ -39,6 +39,7 @@ from app.services.media_deletion import (
 from app.services.makeup_recommendation_context import normalize_makeup_profile_gender
 from app.services.openai_analysis import (
   OpenAIAnalysisService,
+  append_analysis_metric,
   measured_personal_color_column_values,
 )
 from app.services.owned_media import (
@@ -506,6 +507,21 @@ async def run_analysis_job_background(
   await_image_generation: bool = False,
 ) -> None:
   started_at = time.monotonic()
+
+  def record_outcome(success: bool, error_code: str | None) -> None:
+    # 실험 지표: 리포트 단위 성공/실패 + 방식(단일 vs V2) + 총 지연.
+    append_analysis_metric(
+      settings.analysis_metrics_path,
+      {
+        "kind": "outcome",
+        "reportId": str(report_id),
+        "method": "v2" if settings.face_analysis_v2_enabled else "single",
+        "success": success,
+        "errorCode": error_code,
+        "durationMs": round((time.monotonic() - started_at) * 1000),
+      },
+    )
+
   logger.info(
     "[aura:analysis-api] background:start reportId=%s",
     report_id,
@@ -599,6 +615,7 @@ async def run_analysis_job_background(
       settings.effective_analysis_model_id,
       round((time.monotonic() - started_at) * 1000),
     )
+    record_outcome(success=True, error_code=None)
   except AppError as exc:
     if prepare_source_task is not None:
       prepare_source_task.cancel()
@@ -608,6 +625,7 @@ async def run_analysis_job_background(
       exc.code,
       exc.details,
     )
+    record_outcome(success=False, error_code=exc.code)
     await mark_analysis_failed(db, report_id, exc.message, payload, exc.details)
     return
   except Exception as exc:
@@ -616,6 +634,7 @@ async def run_analysis_job_background(
     message = "AI analysis invocation failed."
     details = {"reason": exc.__class__.__name__}
     logger.exception("[aura:analysis-api] text:failed reportId=%s", report_id)
+    record_outcome(success=False, error_code=exc.__class__.__name__)
     await mark_analysis_failed(db, report_id, message, payload, details)
     return
 
@@ -1134,6 +1153,11 @@ async def get_analysis_report(
   report_id: UUID,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+  # 실험 계측(로컬 전용): 클라이언트가 실제로 기다린 벽시계 시간(업로드 후 분석 시작~
+  # 보고서 준비). 서버 분석 시간엔 안 잡히는 폴링 감지 지연까지 포함한 "체감 시간".
+  # ANALYSIS_METRICS_PATH 미설정(프로드 기본)이면 append는 no-op.
+  client_elapsed_ms: int | None = Query(default=None, alias="clientElapsedMs", ge=0),
 ) -> dict:
   user = await ensure_user(db, auth)
   report = await db.fetchrow(
@@ -1150,6 +1174,17 @@ async def get_analysis_report(
 
   if not report:
     raise AppError(404, "ANALYSIS_REPORT_NOT_FOUND", "Analysis report was not found.")
+
+  if client_elapsed_ms is not None:
+    append_analysis_metric(
+      settings.analysis_metrics_path,
+      {
+        "kind": "perceived",
+        "reportId": str(report_id),
+        "method": "v2" if settings.face_analysis_v2_enabled else "single",
+        "clientElapsedMs": client_elapsed_ms,
+      },
+    )
 
   return success({"report": normalize_analysis_report_row(report)})
 

@@ -98,6 +98,9 @@ class Settings(BaseSettings):
   # AI_INCOMPLETE로 실패하던 문제의 근본 대응. tool_use 블록이 없으면 기존 텍스트
   # 파싱으로 폴백. 실DB/실Bedrock 검증 전 끌 수 있도록 플래그(기본 ON).
   bedrock_analysis_tool_enforcement: bool = True
+  # 최적화 실험용 지표 sink. 경로가 설정되면 분석 호출/결과 지표를 JSONL로 append
+  # (로그 레벨과 무관). 미설정(None)이면 수집 off. scripts/analysis_metrics_report.py로 집계.
+  analysis_metrics_path: str | None = None
   bedrock_guardrail_id: str | None = None
   bedrock_guardrail_version: str | None = None
   bedrock_guardrail_region: str | None = None

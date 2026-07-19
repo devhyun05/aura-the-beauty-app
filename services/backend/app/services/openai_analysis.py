@@ -800,6 +800,21 @@ def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
   if not face3d_from_measurements and safe_face3d is not None:
     metadata["face3d"] = safe_face3d
   return metadata
+
+
+def append_analysis_metric(metrics_path: str | None, record: dict[str, Any]) -> None:
+  """최적화 실험 지표를 JSONL 한 줄로 append. 경로 없으면 no-op. 실패해도 요청을
+  깨지 않는다(수집은 부가 기능). append 모드라 로컬 다중 요청에도 안전.
+  """
+  if not metrics_path:
+    return
+  try:
+    with open(metrics_path, "a", encoding="utf-8") as sink:
+      sink.write(json.dumps({"ts": time.time(), **record}, ensure_ascii=False) + "\n")
+  except OSError as exc:  # noqa: BLE001 - 지표 기록 실패는 서빙을 깨지 않는다.
+    logger.warning("[aura:metrics] append failed reason=%s", exc.__class__.__name__)
+
+
 RECOMMENDED_MAKEUP_COUNT = 1
 
 # Bedrock forced tool use로 단일호출 출력을 강제하는 스키마. required 목록은
@@ -1651,6 +1666,7 @@ class OpenAIAnalysisService:
     json_schema: dict[str, Any],
     source_image_bytes: bytes | None,
     max_tokens: int,
+    stage: str | None = None,
   ) -> dict[str, Any]:
     provider = self.settings.analysis_provider
     schema_instruction = json.dumps(json_schema, ensure_ascii=False, separators=(",", ":"))
@@ -1664,6 +1680,7 @@ class OpenAIAnalysisService:
         self._structured_image_content_type(source_image_bytes),
       )
 
+    tool_result: dict[str, Any] | None = None
     if provider == "bedrock":
       model_id = self.settings.effective_analysis_model_id
       if not model_id:
@@ -1672,12 +1689,15 @@ class OpenAIAnalysisService:
           "BEDROCK_ANALYSIS_NOT_CONFIGURED",
           "A Bedrock Claude model ID or inference profile ID is required for AI analysis.",
         )
-      content: list[dict[str, Any]] = [
-        {
-          "type": "text",
-          "text": f"{user_prompt}\nRequired JSON schema: {schema_instruction}",
-        },
-      ]
+      tool_enforced = self.settings.bedrock_analysis_tool_enforcement
+      # 스키마 강제 시엔 프롬프트에 스키마 텍스트를 중복으로 싣지 않는다(도구가
+      # 강제하므로) — 거대한 입력 토큰(5천대)도 줄인다.
+      prompt_text = (
+        user_prompt
+        if tool_enforced
+        else f"{user_prompt}\nRequired JSON schema: {schema_instruction}"
+      )
+      content: list[dict[str, Any]] = [{"type": "text", "text": prompt_text}]
       if source_image_bytes is not None:
         content.append(
           {
@@ -1689,25 +1709,32 @@ class OpenAIAnalysisService:
             },
           },
         )
+      request_body: dict[str, Any] = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "temperature": 0.1,
+        "system": developer_prompt,
+        "messages": [{"role": "user", "content": content}],
+      }
+      if tool_enforced:
+        # 각 스테이지 스키마(measure/perceive/consult)를 도구로 강제 — 필드 누락·
+        # 장황한 출력으로 인한 파싱/검증 실패를 근본 차단.
+        request_body["tools"] = [
+          {
+            "name": "return_structured_output",
+            "description": "Return the structured analysis stage output.",
+            "input_schema": json_schema,
+          },
+        ]
+        request_body["tool_choice"] = {"type": "tool", "name": "return_structured_output"}
+
       response = self._bedrock_runtime_client().invoke_model(
         modelId=model_id,
-        body=json.dumps(
-          {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "temperature": 0.1,
-            "system": developer_prompt,
-            "messages": [{"role": "user", "content": content}],
-          },
-          ensure_ascii=False,
-        ),
+        body=json.dumps(request_body, ensure_ascii=False),
         accept="application/json",
         contentType="application/json",
       )
       response_payload = json.loads(response["body"].read())
-      output_text = self._extract_bedrock_output_text(response_payload)
-      # V2 스테이지도 절단을 관측한다(dev 라이브 경로). 절단이면 이후 빈 출력·
-      # 파싱 실패·상위 Pydantic 검증 실패로 이어지므로 stopReason을 붙여 진단.
       stop_reason = self._observe_bedrock_stop_reason(
         response_payload,
         context="stage",
@@ -1717,14 +1744,30 @@ class OpenAIAnalysisService:
         response_payload,
         context="stage",
         started_at=started_at,
+        stage=stage,
       )
-      if not output_text and stop_reason == "max_tokens":
-        raise AppError(
-          502,
-          "AI_EMPTY_OUTPUT",
-          "AI structured analysis returned an empty response.",
-          {"stopReason": "max_tokens"},
+      if tool_enforced:
+        # 조용한 fallback 없음 — 도구 응답이 없으면 명시적으로 실패.
+        tool_result = self._extract_bedrock_tool_input(
+          response_payload, "return_structured_output",
         )
+        if tool_result is None:
+          raise AppError(
+            502,
+            "BEDROCK_TOOL_USE_MISSING",
+            "AI structured analysis did not return the enforced tool output.",
+            {"stopReason": stop_reason or "unknown"},
+          )
+        output_text = ""
+      else:
+        output_text = self._extract_bedrock_output_text(response_payload)
+        if not output_text and stop_reason == "max_tokens":
+          raise AppError(
+            502,
+            "AI_EMPTY_OUTPUT",
+            "AI structured analysis returned an empty response.",
+            {"stopReason": "max_tokens"},
+          )
     elif provider == "openai":
       content = [{"type": "input_text", "text": user_prompt}]
       if source_image_bytes is not None:
@@ -1758,6 +1801,9 @@ class OpenAIAnalysisService:
     else:
       raise AppError(503, "AI_PROVIDER_UNSUPPORTED", f"Unsupported AI_PROVIDER: {provider}")
 
+    # tool use(강제)면 구조화 input을 바로 반환, 아니면 텍스트를 파싱.
+    if tool_result is not None:
+      return tool_result
     if not output_text:
       raise AppError(502, "AI_EMPTY_OUTPUT", "AI structured analysis returned an empty response.")
     try:
@@ -1784,6 +1830,7 @@ class OpenAIAnalysisService:
     json_schema: dict[str, Any],
     source_image_bytes: bytes | None,
     max_tokens: int,
+    stage: str | None = None,
   ) -> dict[str, Any]:
     try:
       return await asyncio.to_thread(
@@ -1793,6 +1840,7 @@ class OpenAIAnalysisService:
         json_schema,
         source_image_bytes,
         max_tokens,
+        stage,
       )
     except AppError:
       raise
@@ -2253,20 +2301,39 @@ class OpenAIAnalysisService:
     *,
     context: str,
     started_at: float,
+    stage: str | None = None,
   ) -> None:
     """토큰·지연 계측(Stage 7). analyze_text(프로드)와 V2 스테이지(dev)를 동일
     포맷으로 남겨, dev 트래픽만으로 라이브 vs V2 A/B(비용·지연)를 비교할 수 있게 한다.
 
+    stage(measure|perceive|consult)를 함께 남겨 스테이지별 지연·재시도(같은 stage가
+    2줄이면 1회 재검증)를 토큰 순서 추정 없이 정확히 집계한다.
     로그 grep 키: `[aura:bedrock] <context>:metrics`.
     """
     usage = response_payload.get("usage")
     usage = usage if isinstance(usage, dict) else {}
+    duration_ms = round((time.monotonic() - started_at) * 1000)
+    stop_reason = str(response_payload.get("stop_reason") or "")
     logger.info(
-      "[aura:bedrock] %s:metrics durationMs=%s inputTokens=%s outputTokens=%s",
+      "[aura:bedrock] %s:metrics stage=%s durationMs=%s inputTokens=%s outputTokens=%s",
       context,
-      round((time.monotonic() - started_at) * 1000),
+      stage or "-",
+      duration_ms,
       usage.get("input_tokens"),
       usage.get("output_tokens"),
+    )
+    # 실험 지표 sink(로그 레벨 무관). context: analysis=단일호출, stage=V2 스테이지.
+    append_analysis_metric(
+      self.settings.analysis_metrics_path,
+      {
+        "kind": "call",
+        "context": context,
+        "stage": stage,
+        "durationMs": duration_ms,
+        "inputTokens": usage.get("input_tokens"),
+        "outputTokens": usage.get("output_tokens"),
+        "stopReason": stop_reason or "end_turn",
+      },
     )
 
   def _extract_bedrock_tool_input(

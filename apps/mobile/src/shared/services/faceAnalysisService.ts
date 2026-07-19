@@ -619,14 +619,23 @@ async function waitForCompleteAnalysisReport(
     const recommendedCount = getRecommendedMakeupCount(currentJob);
 
     if (hasCompleteBackendReportText(currentJob)) {
+      const perceivedMs = Date.now() - startedAt;
       console.info('[aura:analysis] analysis-report:ready', {
-        durationMs: Date.now() - startedAt,
+        durationMs: perceivedMs,
         generatedImageCount,
         imageGenerationStatus,
         jobId: currentJob.id ?? null,
         recommendedCount,
         status: currentJob.status ?? null,
       });
+
+      // 실험 계측(로컬 전용): 사용자가 실제로 기다린 벽시계 시간을 서버 지표 파일에
+      // 남긴다. fire-and-forget — 실패해도 보고서 반환을 막지 않는다.
+      if (currentJob.id) {
+        void requestBackendJson(
+          `/analysis/reports/${currentJob.id}?clientElapsedMs=${perceivedMs}`,
+        ).catch(() => undefined);
+      }
 
       return mapBackendJobToFaceAnalysisReport(currentJob, capture);
     }
