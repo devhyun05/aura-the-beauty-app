@@ -49,6 +49,9 @@ const likedService = source('apps/mobile/src/shared/services/productService.ts')
 const eventService = source('apps/mobile/src/features/recommendation/services/productEventService.ts');
 const productRail = source('apps/mobile/src/features/recommendation/components/ProductRail.tsx');
 const hubContent = source('apps/mobile/src/features/recommendation/components/ProductRecommendationHubContent.tsx');
+const makeupReportShelf = source('apps/mobile/src/features/recommendation/components/MakeupReportProductRecommendationShelf.tsx');
+const makeupReportService = source('apps/mobile/src/features/recommendation/services/makeupReportProductRecommendationService.ts');
+const makeupReportTypes = source('apps/mobile/src/features/recommendation/services/makeupReportProductRecommendationTypes.ts');
 const rootNavigator = source('apps/mobile/src/app/navigation/RootNavigator.tsx');
 const arSave = source('apps/mobile/src/features/ar/services/savedArLookService.ts');
 const auradinService = source('apps/mobile/src/features/recommendation/services/auradinSearchService.ts');
@@ -315,8 +318,14 @@ requireContract(
   'Home 추천 제품 must open ProductRecommendation.',
 );
 requireContract(
-  routeTypes.includes("arStyleId?: string") && routeTypes.includes("initialSection?: 'ar' | 'seasonal' | 'personalized' | 'cohort'"),
-  'ProductRecommendation route must carry only saved style identity and initial section.',
+  routeTypes.includes('reportId?: string') &&
+    routeTypes.includes('makeupRecommendationReportId?: string') &&
+    recommendationScreen.includes('preferredMakeupReportId?: string | null;') &&
+    recommendationRoutes.includes('sourceReportId={sourceReportId}') &&
+    recommendationRoutes.includes('preferredMakeupReportId={route.params?.makeupRecommendationReportId}') &&
+    !recommendationRoutes.includes('preferredMakeupReportId={sourceReportId}') &&
+    !recommendationRoutes.includes('preferredMakeupReportId={route.params?.reportId}'),
+  'face-analysis sourceReportId and the optional preferred makeup-report identity must remain separate.',
 );
 requireContract(
   legacyService.includes("__DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1'") &&
@@ -415,18 +424,44 @@ requireContract(
   'legacy AURADIN draft fixtures must also be impossible to display in production.',
 );
 requireContract(
-    auradinOrb.includes("AccessibilityInfo.isReduceMotionEnabled()") &&
+  auradinOrb.includes('const ORB_SIZE = 52;') &&
+    auradinOrb.includes('AURADIN_DRAG_CLAIM_DISTANCE = 4') &&
+    auradinOrb.includes('Math.hypot(gesture.dx, gesture.dy) >= AURADIN_DRAG_CLAIM_DISTANCE') &&
+    auradinOrb.includes('onStartShouldSetPanResponder: () => false') &&
+    !auradinOrb.includes('onLongPress') &&
+    !auradinOrb.includes('delayLongPress') &&
+    !auradinOrb.includes('compact?: boolean') &&
+    !auradinOrb.includes('hidden?: boolean') &&
+    !auradinOrb.includes('compact = false') &&
+    !auradinOrb.includes('hidden = false') &&
+    !recommendationScreen.includes('orbScrollState') &&
+    !recommendationScreen.includes('onScrollActivityChange') &&
+    auradinOrb.includes('AccessibilityInfo.isReduceMotionEnabled()') &&
+    auradinOrb.includes("AccessibilityInfo.addEventListener('reduceMotionChanged'") &&
+    auradinOrb.includes('Animated.loop(') &&
+    auradinOrb.includes('jellyTranslateY') &&
+    auradinOrb.includes('jellyScaleX') &&
+    auradinOrb.includes('jellyScaleY') &&
+    auradinOrb.includes('jellyRotate') &&
+    (auradinOrb.match(/isInteraction: false/g) ?? []).length === 2 &&
+    auradinOrb.includes('loop.stop();') &&
+    auradinOrb.includes('jelly.stopAnimation();') &&
+    auradinOrb.includes("height: ORB_SIZE") &&
+    auradinOrb.includes("width: ORB_SIZE") &&
     auradinOrb.includes('BOTTOM_NAV_GUARD') &&
     auradinOrb.includes('AURADIN_ORB_CONTENT_CLEARANCE') &&
     auradinOrb.includes('onSideChange?.(side)') &&
-    auradinOrb.includes("pointerEvents={hidden ? 'none' : 'box-none'}") &&
-    recommendationScreen.includes("fast ? 'hidden' : 'compact'") &&
-    recommendationScreen.includes("hidden={orbScrollState === 'hidden'}") &&
+    auradinOrb.includes('position.addListener(value =>') &&
+    auradinOrb.includes('position.stopAnimation();') &&
+    auradinOrb.includes('dragStartRef.current = {...renderedPositionRef.current}') &&
+    auradinOrb.includes('if (!isActive || !motionPreferenceLoaded || reduceMotion) return;') &&
+    recommendationScreen.includes('useIsFocused') &&
+    (recommendationScreen.match(/isActive={isScreenFocused}/g) ?? []).length === 2 &&
     recommendationScreen.includes('horizontalPaddingLeft={spacing.screenX}') &&
     recommendationScreen.includes('horizontalPaddingRight={spacing.screenX}') &&
     appScreen.includes('horizontalPaddingLeft = horizontalPadding') &&
     appScreen.includes('horizontalPaddingRight = horizontalPadding'),
-  'AURADIN orb must respect Reduce Motion, reserve card-safe edge space, avoid bottom navigation, compact while scrolling, and hide during fast scroll.',
+  'AURADIN orb must claim a four-point move immediately, stay 52pt, animate a non-blocking Reduce-Motion-aware jelly loop, and clean up without scroll compact/hidden states.',
 );
 requireContract(
   backendApi.includes("code = 'NETWORK_UNAVAILABLE'") &&
@@ -489,6 +524,105 @@ requireContract(
 );
 if (previousProductApiBaseUrl === undefined) delete process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL;
 else process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_API_BASE_URL = previousProductApiBaseUrl;
+
+const makeupReportApiRequests = [];
+const reportLook = {
+  lookId: 'look-latest',
+  role: 'anchor',
+  title: '출근 룩',
+  summary: '차분한 로즈 메이크업',
+  imageUrl: null,
+  palette: ['#AA6677'],
+  targets: ['lip'],
+};
+const makeupReportOptions = [
+  {
+    reportId: 'older-report',
+    scenarioText: '주말 약속',
+    createdAt: '2026-06-01T00:00:00.000Z',
+    imageStatus: 'ready',
+    looks: [{...reportLook, lookId: 'look-older'}],
+  },
+  {
+    reportId: 'latest-report',
+    scenarioText: '출근',
+    createdAt: '2026-07-01T00:00:00.000Z',
+    imageStatus: 'ready',
+    looks: [reportLook],
+  },
+  {
+    reportId: 'incomplete-report',
+    scenarioText: '미완료',
+    createdAt: '2026-08-01T00:00:00.000Z',
+    imageStatus: 'pending',
+    looks: [],
+  },
+];
+const makeupReportServiceModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/makeupReportProductRecommendationService.ts',
+  {
+    '../../../shared/services/productBackendApi': {
+      requestProductBackendJson: async (path, init = {}) => {
+        makeupReportApiRequests.push({method: init.method ?? 'GET', path});
+        if (path === '/products/recommendations/makeup-reports') {
+          return {reports: makeupReportOptions};
+        }
+        if (path.includes('/unsupported/refresh')) {
+          const error = new Error('not found');
+          error.status = 404;
+          throw error;
+        }
+        if (path.endsWith('/refresh?lookId=look+one')) {
+          return {snapshot: {status: 'pending', revision: 1}, status: 'pending'};
+        }
+        return {
+          report: makeupReportOptions[1],
+          selectedLook: reportLook,
+          groups: [],
+          ranking: {strategy: 'hybrid', embeddingApplied: true},
+        };
+      },
+    },
+  },
+);
+const orderedMakeupReports = await makeupReportServiceModule.getMakeupReportRecommendationReports();
+const makeupReportDetail = await makeupReportServiceModule.getMakeupReportProductRecommendations(
+  'report/id',
+  'look one',
+  99,
+);
+const pendingMakeupReportRefresh = await makeupReportServiceModule.refreshMakeupReportProductRecommendations(
+  'report/id',
+  'look one',
+);
+const fallbackMakeupReportRefresh = await makeupReportServiceModule.refreshMakeupReportProductRecommendations(
+  'unsupported',
+  'look one',
+);
+requireContract(
+  makeupReportApiRequests[0].path === '/products/recommendations/makeup-reports' &&
+    makeupReportApiRequests[0].method === 'GET' &&
+    makeupReportApiRequests[1].path === '/products/recommendations/makeup-reports/report%2Fid?lookId=look+one&perCategoryLimit=8' &&
+    makeupReportApiRequests[2].path === '/products/recommendations/makeup-reports/report%2Fid/refresh?lookId=look+one' &&
+    makeupReportApiRequests[2].method === 'POST' &&
+    makeupReportApiRequests[3].path === '/products/recommendations/makeup-reports/unsupported/refresh?lookId=look+one' &&
+    makeupReportApiRequests[3].method === 'POST' &&
+    makeupReportApiRequests[4].path === '/products/recommendations/makeup-reports/unsupported?lookId=look+one&perCategoryLimit=6' &&
+    makeupReportApiRequests[4].method === 'GET' &&
+    makeupReportServiceModule.buildMakeupReportProductsPath('report', null, 0).endsWith('perCategoryLimit=1') &&
+    makeupReportServiceModule.buildMakeupReportProductsRefreshPath('report', null).endsWith('/refresh') &&
+    orderedMakeupReports.map(report => report.reportId).join(',') === 'latest-report,older-report' &&
+    makeupReportServiceModule.resolveMakeupReportSelection(orderedMakeupReports)?.reportId === 'latest-report' &&
+    makeupReportServiceModule.resolveMakeupReportSelection(orderedMakeupReports, 'older-report', 'latest-report')?.reportId === 'older-report' &&
+    makeupReportServiceModule.resolveMakeupReportSelection(orderedMakeupReports, 'missing', 'older-report')?.reportId === 'older-report' &&
+    makeupReportDetail.status === 'ready' &&
+    makeupReportDetail.snapshot.status === 'ready' &&
+    makeupReportDetail.ranking.embeddingApplied === true &&
+    pendingMakeupReportRefresh.snapshot.status === 'pending' &&
+    fallbackMakeupReportRefresh.snapshot.status === 'ready',
+  'makeup-report requests must execute encoded authenticated snapshot paths, normalize legacy responses, refresh by POST with GET fallback, sort latest first, and honor selection.',
+);
+
 requireContract(
   productHubService.includes("params.set('shade_id', shadeId)") &&
     recommendationRoutes.includes('shadeId={route.params.shadeId}') &&
@@ -496,12 +630,71 @@ requireContract(
   'product detail navigation must preserve the recommended shade and public sponsorship disclosure.',
 );
 requireContract(
-  productHubService.includes("stylePayload?.schemaVersion === 'saved_ar_look_v1'") &&
-    hubContent.includes('getSavedArLookOptions()') &&
-    hubContent.includes('onPress={openLookPicker}') &&
-    !hubContent.includes('최근 분석으로 추천 보기') &&
-    !hubContent.includes('fallbackPersonalizedData'),
-  'AR section must change saved looks without routing the shopping hub into report-based legacy recommendations.',
+  makeupReportService.includes("requestProductBackendJson") &&
+    makeupReportService.includes('MAX_PER_CATEGORY_LIMIT = 8') &&
+    makeupReportService.includes("'/products/recommendations/makeup-reports'") &&
+    makeupReportService.includes('/products/recommendations/makeup-reports/${encodeURIComponent(normalizedReportId)}') &&
+    makeupReportService.includes("params.set('lookId', normalizedLookId)") &&
+    makeupReportService.includes("'perCategoryLimit'") &&
+    makeupReportService.includes("{method: 'POST', signal: options.signal}") &&
+    makeupReportService.includes('isRefreshEndpointUnavailable(error)') &&
+    makeupReportService.includes("status === 404 || status === 405 || status === 501") &&
+    !makeupReportService.includes('__DEV__') &&
+    !makeupReportService.includes('fixture') &&
+    !makeupReportService.includes('mock') &&
+    hubContent.includes('MakeupReportProductRecommendationShelf') &&
+    !hubContent.includes('getArRecommendations') &&
+    !hubContent.includes('getSavedArLookOptions') &&
+    !hubContent.includes("onOpenShelf('ar'"),
+  'the first hub shelf must use only the authenticated makeup-report recommendation API and must not reopen the retired AR saved-look shelf.',
+);
+requireContract(
+  makeupReportShelf.includes('메이크업 추천 보고서 기반 추천제품') &&
+    makeupReportShelf.includes('보고서 선택') &&
+    makeupReportShelf.includes('preferredMakeupReportId') &&
+    makeupReportShelf.includes('resolveMakeupReportSelection(') &&
+    makeupReportShelf.includes('selectedLookId') &&
+    makeupReportShelf.includes('selectLook(look.lookId)') &&
+    makeupReportShelf.includes("setActiveCategory('all')") &&
+    makeupReportShelf.includes('MAKEUP_REPORT_CATEGORY_TABS = PRODUCT_SHELF_CATEGORY_TABS') &&
+    makeupReportShelf.includes("'base'") &&
+    makeupReportShelf.includes("'shadow'") &&
+    makeupReportShelf.includes("'brow'") &&
+    makeupReportShelf.includes("'cheek'") &&
+    makeupReportShelf.includes("'lip'") &&
+    makeupReportShelf.includes("'liner'") &&
+    makeupReportShelf.includes('SNAPSHOT_POLL_DELAYS_MS') &&
+    makeupReportShelf.includes("data.snapshot.status === 'pending'") &&
+    makeupReportShelf.includes("data.snapshot.status === 'processing'") &&
+    makeupReportShelf.includes('clearTimeout(recommendationPollTimerRef.current)') &&
+    makeupReportShelf.includes('recommendationAbortRef.current?.abort()') &&
+    makeupReportShelf.includes("recommendations.data?.snapshot.status === 'failed'") &&
+    makeupReportShelf.includes('refreshMakeupReportProductRecommendations') &&
+    makeupReportShelf.includes('추천 다시 만들기') &&
+    makeupReportShelf.includes('requestRefs.current.recommendations !== requestId') &&
+    makeupReportShelf.includes('selectedReportIdRef.current !== reportId') &&
+    makeupReportShelf.includes('selectedLookIdRef.current !== lookId') &&
+    makeupReportShelf.includes('const selectionChanged = selectedReportIdRef.current !== report.reportId') &&
+    makeupReportShelf.includes('if (!selectionChanged) return;') &&
+    makeupReportShelf.includes('appliedPreferredReportIdRef.current !== preferredMakeupReportId') &&
+    makeupReportShelf.includes('revalidateRecommendationsOnFocusRef.current') &&
+    makeupReportShelf.includes('{preserveData: recommendationsRef.current.status === \'ready\'}') &&
+    makeupReportShelf.includes('if (!options.preserveData) setRecommendations') &&
+    makeupReportShelf.includes('if (!isActive) {') &&
+    hubContent.includes('isActive={isActive}') &&
+    makeupReportShelf.includes('disabled={!canOpenReportPicker}') &&
+    makeupReportShelf.includes('showReason') &&
+    makeupReportShelf.includes("source: 'makeup_report'") &&
+    makeupReportShelf.includes("queueReportProductEvent('impression'") &&
+    makeupReportShelf.includes("queueReportProductEvent('product_open'") &&
+    makeupReportShelf.includes('onImpression={(product, position)') &&
+    productRail.includes('showReason={showReason}') &&
+    productRail.includes('scrollToOffset({animated: false, offset: 0})') &&
+    makeupReportTypes.includes("'all'") &&
+    makeupReportTypes.includes("| 'noEligibleProducts'") &&
+    makeupReportTypes.includes('MakeupReportProductSnapshot') &&
+    !makeupReportShelf.includes('productRecommendationMock'),
+  'the report shelf must select a preferred/latest report and look, expose six report-target filters, poll only in-flight snapshots boundedly, refresh failures, reject stale responses, and preserve product reasons and analytics.',
 );
 requireContract(
   hubContent.includes('seasonal.data.collection?.isStale') &&
@@ -510,18 +703,18 @@ requireContract(
   'stale seasonal sources must be disclosed instead of appearing current.',
 );
 requireContract(
-  hubContent.includes('title="AR 필터 기반 추천제품"') &&
-    hubContent.includes('부위별 인기 제품을 먼저 보여드려요.') &&
+  makeupReportShelf.includes('메이크업 추천 보고서 기반 추천제품') &&
+    makeupReportShelf.includes('색상·피니시 조건으로 후보를 고른 뒤 제품 유형·질감 유사도로 정렬했어요.') &&
     hubContent.includes('title={personalizedTitle}') &&
     hubContent.includes('title="요즘 트렌드 제품"') &&
     hubContent.includes('title={cohortTitle}') &&
     hubContent.includes('function Section') &&
     !hubContent.includes('<LegacyRecommendationRail') &&
+    makeupReportShelf.includes('<ProductRail') &&
     hubContent.includes('<ProductRail') &&
-    hubContent.includes('requestRefs.current.ar === requestId') &&
     hubContent.includes('requestRefs.current.seasonal === requestId') &&
     hubContent.includes('getSeasonalRecommendations(refreshKey, 12, undefined, regionCode)'),
-  'hub must expose four purpose-specific shopping shelves, horizontal product rails, more actions, and stale-response protection.',
+  'hub must expose the report, personalized, seasonal, and cohort shopping shelves with horizontal product rails and stale-response protection.',
 );
 const nationwideSeasonalLoadStart = hubContent.indexOf(
   'void loadSeasonal(DEFAULT_TREND_REGION_CODE).then(() => {',
@@ -554,7 +747,7 @@ requireContract(
   routeTypes.includes('ProductRecommendationShelf:') &&
     rootNavigator.includes('name="ProductRecommendationShelf"') &&
     recommendationRoutes.includes("navigation.navigate('ProductRecommendationShelf'") &&
-    hubContent.includes("onOpenShelf('ar'") &&
+    !hubContent.includes("onOpenShelf('ar'") &&
     hubContent.includes("onOpenShelf('personalized'") &&
     hubContent.includes("onOpenShelf('seasonal'") &&
     hubContent.includes("onOpenShelf('cohort'") &&
@@ -562,7 +755,7 @@ requireContract(
     recommendationShelfScreen.includes('PRODUCT_SHELF_CATEGORY_TABS') &&
     recommendationShelfScreen.includes('numColumns={2}') &&
     recommendationShelfScreen.includes('showReason'),
-  'each shelf more action must open a dedicated two-column category page while preserving recommendation reasons.',
+  'remaining shelf more actions must open dedicated category pages while the report shelf keeps its action scoped to report selection.',
 );
 requireContract(
   hubContent.includes("setSeasonal(current => current.data ? current : {status: 'loading'})") &&
@@ -590,7 +783,7 @@ requireContract(
     recommendationShelfScreen.includes('content: {flexGrow: 1, gap: spacing.xl, paddingHorizontal: spacing.screenX, paddingTop: spacing.sm}') &&
     recommendationShelfScreen.includes('initialNumToRender={6}') &&
     recommendationShelfScreen.includes('windowSize={5}') &&
-    hubContent.includes("chipActive: {backgroundColor: colors.black, borderRadius: radius.pill, justifyContent: 'center', minHeight: 44"),
+    makeupReportShelf.includes("chipActive: {backgroundColor: colors.black, borderRadius: radius.pill, justifyContent: 'center', minHeight: 44"),
   'category controls must stay above the lazily rendered grid with a 44pt target and explicit content clearance.',
 );
 

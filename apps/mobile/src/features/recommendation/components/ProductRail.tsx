@@ -11,18 +11,22 @@ export function ProductRail({
   onImpression,
   onOpen,
   onToggleLike,
+  showReason = false,
 }: {
   impressionScopeKey?: string | null;
   items: CatalogProduct[];
   onImpression?: (product: CatalogProduct, position: number) => void;
   onOpen: (product: CatalogProduct, position: number) => void;
   onToggleLike: (product: CatalogProduct) => void;
+  showReason?: boolean;
 }) {
+  const listRef = useRef<FlatList<CatalogProduct> | null>(null);
   const impressed = useRef(new Set<string>());
   const onImpressionRef = useRef(onImpression);
   onImpressionRef.current = onImpression;
   useEffect(() => {
     impressed.current.clear();
+    listRef.current?.scrollToOffset({animated: false, offset: 0});
   }, [impressionScopeKey]);
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
@@ -42,6 +46,7 @@ export function ProductRail({
 
   return (
     <FlatList
+      ref={listRef}
       contentContainerStyle={styles.content}
       data={items}
       getItemLayout={(_, index) => ({index, length: RECOMMENDATION_RAIL_CARD_WIDTH + spacing.sm, offset: (RECOMMENDATION_RAIL_CARD_WIDTH + spacing.sm) * index})}
@@ -49,7 +54,7 @@ export function ProductRail({
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       keyExtractor={item => `${item.productId}:${item.shadeId ?? 'family'}`}
       onViewableItemsChanged={onViewableItemsChanged}
-      renderItem={({item, index}) => <RecommendationProductCard product={item} onOpen={() => onOpen(item, index)} onToggleLike={() => onToggleLike(item)} />}
+      renderItem={({item, index}) => <RecommendationProductCard product={item} showReason={showReason} onOpen={() => onOpen(item, index)} onToggleLike={() => onToggleLike(item)} />}
       showsHorizontalScrollIndicator={false}
       viewabilityConfig={viewabilityConfig}
     />

@@ -621,6 +621,8 @@ create table if not exists product_recommendation_runs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
   source_analysis_report_id uuid,
+  source_makeup_report_id uuid,
+  source_look_id text,
   user_nickname text,
   look_title text,
   look_description text,
@@ -628,15 +630,66 @@ create table if not exists product_recommendation_runs (
   source_style_id uuid,
   strategy text not null default 'legacy_v1',
   algorithm_version text,
+  recipe_hash text,
+  catalog_version text,
+  status text not null default 'ready',
+  revision integer not null default 1,
   consent_snapshot jsonb not null default '{}'::jsonb,
   product_ids uuid[],
   recommendation_payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
+  started_at timestamptz,
+  completed_at timestamptz,
+  error_code text,
   expires_at timestamptz not null default (now() + interval '30 days'),
-  constraint chk_product_recommendation_runs_strategy check (strategy in ('legacy_v1', 'ar_v1', 'seasonal_v1', 'personalized_v1', 'cohort_v1'))
+  constraint chk_product_recommendation_runs_strategy check (
+    strategy in ('legacy_v1', 'ar_v1', 'seasonal_v1', 'personalized_v1', 'cohort_v1', 'makeup_report_v1')
+  ),
+  constraint chk_product_recommendation_runs_status check (
+    status in ('pending', 'processing', 'ready', 'partial', 'failed')
+  ),
+  constraint chk_product_recommendation_runs_revision check (revision >= 1),
+  constraint chk_product_recommendation_runs_makeup_snapshot check (
+    (
+      strategy = 'makeup_report_v1'
+      and source_makeup_report_id is not null
+      and source_look_id is not null
+      and char_length(btrim(source_look_id)) between 1 and 128
+      and recipe_hash is not null
+      and recipe_hash ~ '^[0-9a-f]{64}$'
+      and algorithm_version is not null
+      and char_length(btrim(algorithm_version)) between 1 and 128
+      and catalog_version is not null
+      and char_length(btrim(catalog_version)) between 1 and 128
+    )
+    or (
+      strategy <> 'makeup_report_v1'
+      and source_makeup_report_id is null
+    )
+  ),
+  constraint chk_product_recommendation_runs_makeup_completion check (
+    strategy <> 'makeup_report_v1'
+    or (status = 'pending' and started_at is null and completed_at is null and error_code is null)
+    or (status = 'processing' and started_at is not null and completed_at is null and error_code is null)
+    or (
+      status in ('ready', 'partial')
+      and started_at is not null
+      and completed_at is not null
+      and completed_at >= started_at
+      and error_code is null
+    )
+    or (
+      status = 'failed'
+      and started_at is not null
+      and completed_at is not null
+      and completed_at >= started_at
+      and error_code is not null
+      and char_length(btrim(error_code)) between 1 and 128
+    )
+  )
 );
 
-comment on table product_recommendation_runs is 'ProductRecommendationData. tabs, products, sets, matchRate, reason are kept in recommendation_payload for v1 API flexibility.';
+comment on table product_recommendation_runs is 'ProductRecommendationData. makeup_report_v1 rows are immutable report/look recommendation snapshot revisions; recommendation_payload stores the ranked snapshot while live offer fields are revalidated at read time.';
 
 create table if not exists product_shades (
   id uuid primary key default gen_random_uuid(),
@@ -666,7 +719,7 @@ create table if not exists product_shades (
   updated_at timestamptz not null default now(),
   constraint uq_product_shades_product_key unique (product_id, external_shade_key),
   constraint uq_product_shades_id_product unique (id, product_id),
-  constraint chk_product_shades_region check (product_region in ('lip', 'cheek', 'liner', 'base', 'brow')),
+  constraint chk_product_shades_region check (product_region in ('lip', 'cheek', 'shadow', 'liner', 'base', 'brow')),
   constraint chk_product_shades_hex check (srgb_hex is null or srgb_hex ~ '^#[0-9A-Fa-f]{6}$'),
   constraint chk_product_shades_lab check (
     (lab_l is null and lab_a is null and lab_b is null)
@@ -678,6 +731,13 @@ create table if not exists product_shades (
   constraint chk_product_shades_license_status check (license_status in ('unverified', 'valid', 'expired', 'blocked')),
   constraint chk_product_shades_license_window check (license_valid_until is null or license_valid_from is null or license_valid_until > license_valid_from)
 );
+
+-- Existing databases need the expanded region contract as well; CREATE TABLE
+-- alone does not replace a previously installed check constraint.
+alter table product_shades
+  drop constraint if exists chk_product_shades_region,
+  add constraint chk_product_shades_region
+    check (product_region in ('lip', 'cheek', 'shadow', 'liner', 'base', 'brow'));
 
 create table if not exists product_assets (
   id uuid primary key default gen_random_uuid(),
@@ -1745,13 +1805,73 @@ alter table products add column if not exists catalog_version text not null defa
 alter table user_product_likes add column if not exists source_shade_id uuid;
 
 alter table product_recommendation_runs add column if not exists source_style_id uuid;
+alter table product_recommendation_runs add column if not exists source_makeup_report_id uuid;
+alter table product_recommendation_runs add column if not exists source_look_id text;
 alter table product_recommendation_runs add column if not exists strategy text not null default 'legacy_v1';
 alter table product_recommendation_runs add column if not exists algorithm_version text;
+alter table product_recommendation_runs add column if not exists recipe_hash text;
+alter table product_recommendation_runs add column if not exists catalog_version text;
+alter table product_recommendation_runs add column if not exists status text not null default 'ready';
+alter table product_recommendation_runs add column if not exists revision integer not null default 1;
 alter table product_recommendation_runs add column if not exists consent_snapshot jsonb not null default '{}'::jsonb;
+alter table product_recommendation_runs add column if not exists started_at timestamptz;
+alter table product_recommendation_runs add column if not exists completed_at timestamptz;
+alter table product_recommendation_runs add column if not exists error_code text;
 alter table product_recommendation_runs add column if not exists expires_at timestamptz;
 update product_recommendation_runs set expires_at = created_at + interval '30 days' where expires_at is null;
 alter table product_recommendation_runs alter column expires_at set default (now() + interval '30 days');
 alter table product_recommendation_runs alter column expires_at set not null;
+alter table product_recommendation_runs
+  drop constraint if exists chk_product_recommendation_runs_strategy,
+  add constraint chk_product_recommendation_runs_strategy check (
+    strategy in ('legacy_v1', 'ar_v1', 'seasonal_v1', 'personalized_v1', 'cohort_v1', 'makeup_report_v1')
+  ),
+  drop constraint if exists chk_product_recommendation_runs_status,
+  add constraint chk_product_recommendation_runs_status check (
+    status in ('pending', 'processing', 'ready', 'partial', 'failed')
+  ),
+  drop constraint if exists chk_product_recommendation_runs_revision,
+  add constraint chk_product_recommendation_runs_revision check (revision >= 1),
+  drop constraint if exists chk_product_recommendation_runs_makeup_snapshot,
+  add constraint chk_product_recommendation_runs_makeup_snapshot check (
+    (
+      strategy = 'makeup_report_v1'
+      and source_makeup_report_id is not null
+      and source_look_id is not null
+      and char_length(btrim(source_look_id)) between 1 and 128
+      and recipe_hash is not null
+      and recipe_hash ~ '^[0-9a-f]{64}$'
+      and algorithm_version is not null
+      and char_length(btrim(algorithm_version)) between 1 and 128
+      and catalog_version is not null
+      and char_length(btrim(catalog_version)) between 1 and 128
+    )
+    or (
+      strategy <> 'makeup_report_v1'
+      and source_makeup_report_id is null
+    )
+  ),
+  drop constraint if exists chk_product_recommendation_runs_makeup_completion,
+  add constraint chk_product_recommendation_runs_makeup_completion check (
+    strategy <> 'makeup_report_v1'
+    or (status = 'pending' and started_at is null and completed_at is null and error_code is null)
+    or (status = 'processing' and started_at is not null and completed_at is null and error_code is null)
+    or (
+      status in ('ready', 'partial')
+      and started_at is not null
+      and completed_at is not null
+      and completed_at >= started_at
+      and error_code is null
+    )
+    or (
+      status = 'failed'
+      and started_at is not null
+      and completed_at is not null
+      and completed_at >= started_at
+      and error_code is not null
+      and char_length(btrim(error_code)) between 1 and 128
+    )
+  );
 
 -- Foreign keys
 -- -----------------------------------------------------------------------------
@@ -2463,6 +2583,24 @@ create index if not exists idx_auradin_search_sessions_expires_at on auradin_sea
 create index if not exists idx_product_recommendation_runs_user_created on product_recommendation_runs (user_id, created_at desc);
 create index if not exists idx_product_recommendation_runs_source_analysis on product_recommendation_runs (source_analysis_report_id);
 create index if not exists idx_product_recommendation_runs_expires on product_recommendation_runs (expires_at);
+create index if not exists idx_product_recommendation_runs_source_makeup_report
+  on product_recommendation_runs (source_makeup_report_id)
+  where source_makeup_report_id is not null;
+create unique index if not exists uq_product_recommendation_runs_makeup_snapshot_revision
+  on product_recommendation_runs (
+    source_makeup_report_id, source_look_id, recipe_hash,
+    algorithm_version, catalog_version, revision
+  )
+  where strategy = 'makeup_report_v1';
+create unique index if not exists uq_product_recommendation_runs_makeup_look_revision
+  on product_recommendation_runs (source_makeup_report_id, source_look_id, revision)
+  where strategy = 'makeup_report_v1';
+create index if not exists idx_product_recommendation_runs_makeup_ready_revision
+  on product_recommendation_runs (user_id, source_makeup_report_id, source_look_id, revision desc)
+  where strategy = 'makeup_report_v1' and status in ('ready', 'partial');
+create index if not exists idx_product_recommendation_runs_makeup_work_queue
+  on product_recommendation_runs (status, started_at, created_at)
+  where strategy = 'makeup_report_v1' and status in ('pending', 'processing');
 create index if not exists idx_ar_filters_category_public on ar_filters (category, is_public);
 create index if not exists idx_user_ar_filter_states_user_created on user_ar_filter_states (user_id, created_at desc);
 create index if not exists idx_filter_extraction_reports_user_created on filter_extraction_reports (user_id, created_at desc);
@@ -3649,6 +3787,12 @@ alter table makeup_recommendation_reports add constraint chk_makeup_recommendati
 alter table makeup_recommendation_reports drop constraint if exists chk_makeup_recommendation_reports_context_snapshot;
 alter table makeup_recommendation_reports add constraint chk_makeup_recommendation_reports_context_snapshot
   check (jsonb_typeof(context_snapshot) = 'object');
+
+alter table product_recommendation_runs
+  drop constraint if exists fk_product_recommendation_runs_source_makeup_report,
+  add constraint fk_product_recommendation_runs_source_makeup_report
+    foreign key (source_makeup_report_id)
+    references makeup_recommendation_reports(id) on delete cascade;
 
 create table if not exists makeup_recommendation_sessions (
   id uuid primary key default gen_random_uuid(),
