@@ -349,28 +349,28 @@ async def test_local_precheck_blocks_unsafe_goal_even_when_aws_would_allow(
 
 
 @pytest.mark.parametrize(
-  ("goal", "expected_analysis_goal_text"),
+  "goal",
   [
-    ("홍대 여행", "여행"),
-    ("제주도 게스트하우스", "여행"),
-    ("망원동 산책", "외출 상황"),
-    ("암스테르담 여행", "여행"),
-    ("게이트웨이 행사", "외출 상황"),
-    ("정보 보안 세미나", "행사"),
-    ("닌텐도 스위치 모임", "모임"),
-    ("연금술 전시", "행사"),
-    ("여행 메이크업: 전체 평가", "여행"),
-    ("립을 몇 번 덧발랐는지 봐줘", "립"),
-    ("메이크업 몇 가지 포인트 봐줘", "메이크업 피드백"),
-    ("메이크업 괜찮니", "메이크업 피드백"),
-    ("피부 들뜬 곳 있나", "피부"),
+    "홍대 여행",
+    "제주도 게스트하우스",
+    "망원동 산책",
+    "암스테르담 여행",
+    "게이트웨이 행사",
+    "정보 보안 세미나",
+    "닌텐도 스위치 모임",
+    "연금술 전시",
+    "여행 메이크업: 전체 평가",
+    "립을 몇 번 덧발랐는지 봐줘",
+    "메이크업 몇 가지 포인트 봐줘",
+    "메이크업 괜찮니",
+    "피부 들뜬 곳 있나",
+    "립 컬러가 너무 쨍하고 진한지, 얼굴 전체와 조화로운지 봐줘",
   ],
 )
 @pytest.mark.asyncio
-async def test_normalize_request_canonicalizes_safe_context_when_aws_allows(
+async def test_normalize_request_preserves_complete_safe_context_when_aws_allows(
   monkeypatch: pytest.MonkeyPatch,
   goal: str,
-  expected_analysis_goal_text: str,
 ) -> None:
   async def fake_guardrail_allow(*_args, **_kwargs) -> None:
     return None
@@ -381,7 +381,7 @@ async def test_normalize_request_canonicalizes_safe_context_when_aws_allows(
   )
   payload = {"feedbackContext": {"userGoalText": goal}}
   await normalize_feedback_goal_context_for_request(payload, Settings())
-  assert payload["feedbackContext"]["analysisGoalText"] == expected_analysis_goal_text
+  assert payload["feedbackContext"]["analysisGoalText"] == goal
 
 
 @pytest.mark.parametrize(

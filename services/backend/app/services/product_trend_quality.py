@@ -124,6 +124,7 @@ def collection_input_fingerprint(
         "temperatureC",
         "humidityPercent",
         "precipitationProbabilityPercent",
+        "precipitationMm",
         "weatherCode",
         "windSpeedMps",
         "forecastAt",
@@ -166,6 +167,10 @@ def weather_changed_meaningfully(
     left, right = number(current, key), number(previous, key)
     if left is not None and right is not None and abs(left - right) >= threshold:
       return True
+  current_precipitation = number(current, "precipitationMm") or 0.0
+  previous_precipitation = number(previous, "precipitationMm") or 0.0
+  if (current_precipitation > 0) != (previous_precipitation > 0):
+    return True
   current_code = current.get("weatherCode") or current.get("precipitationType") or "none"
   previous_code = previous.get("weatherCode") or previous.get("precipitationType") or "none"
   return str(current_code) != str(previous_code)

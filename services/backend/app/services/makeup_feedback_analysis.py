@@ -27,7 +27,7 @@ from app.services.makeup_feedback_vision import (
 
 logger = logging.getLogger(__name__)
 
-MODEL_VERSION = "makeup-feedback:bedrock-v7-korean-goal-copy"
+MODEL_VERSION = "makeup-feedback:bedrock-v9-explainable-coaching"
 
 BEDROCK_GUARDRAIL_TAG_PREFIX = "amazon-bedrock-guardrails-guardContent"
 BEDROCK_GUARDRAIL_TAG_SUFFIX_BYTES = 10
@@ -69,6 +69,8 @@ FEEDBACK_TOPICS: list[dict[str, str]] = [
 TOPIC_BY_ID = {topic["id"]: topic for topic in FEEDBACK_TOPICS}
 VALID_ANALYSIS_DECISIONS = {"completed", "retake_required"}
 VALID_COLOR_CONFIDENCES = {"low", "medium", "high"}
+COLOR_CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
+LIGHTING_SENSITIVE_SCORE_CONFIDENCE_CAP = 0.74
 VALID_STATUSES = {
   "strength",
   "improvement",
@@ -82,6 +84,71 @@ VALID_VISIBILITIES = {"clear", "partial", "not_visible"}
 ASSESSABLE_STATUSES = {"strength", "improvement", "optional"}
 NON_ACTIONABLE_STATUSES = {"not_assessable", "not_applicable"}
 SCORE_EVIDENCE_STATUSES = {"strength", "improvement"}
+SCORE_BREAKDOWN_MAX_SCORE = 100
+SCORE_AXIS_CONTRACT = (
+  {
+    "id": "application-finish",
+    "label": "적용 완성도",
+    "maxScore": 30,
+  },
+  {
+    "id": "placement-balance",
+    "label": "배치·형태 균형",
+    "maxScore": 25,
+  },
+  {
+    "id": "color-value-harmony",
+    "label": "색·명암 조화",
+    "maxScore": 20,
+  },
+  {
+    "id": "overall-goal-fit",
+    "label": "전체 조화·목표 적합도",
+    "maxScore": 25,
+  },
+)
+CORRECTION_GUIDE_FIELD_LIMITS = {
+  "tool": 80,
+  "amount": 120,
+  "targetArea": 180,
+  "coverage": 180,
+  "stopCondition": 220,
+  "why": 260,
+}
+CORRECTION_GUIDE_STEP_MAX_CHARS = 180
+VAGUE_CORRECTION_AMOUNT_PATTERN = re.compile(
+  r"^(?:(?:아주)?소량|조금|적당량|적당히|알맞게|필요한만큼)(?:씩)?$",
+)
+PROHIBITED_APPEARANCE_JUDGMENT_PATTERNS = (
+  re.compile(r"못\s*생(?:김|겼|겨|긴)"),
+  re.compile(r"(?:안\s*예쁨|안\s*예쁘|예쁘지\s*않)"),
+  re.compile(r"(?:잘생기지\s*않|안\s*잘생)"),
+  re.compile(r"매력(?:이)?\s*(?:없|부족)"),
+  re.compile(r"(?:이목구비|얼굴형)(?:\s*자체)?[^.!?。！？]{0,24}(?:나쁘|나빠|별로|부족|이상하|못생)"),
+  re.compile(
+    r"(?:퍼스널\s*컬러|(?:봄|여름|가을|겨울)(?:\s*(?:웜|쿨))?\s*톤)"
+    r"[^.!?。！？]{0,36}(?:불일치|맞지\s*않|안\s*맞)"
+    r"[^.!?。！？]{0,36}(?:감점|점수[^.!?。！？]{0,12}(?:낮|삭감))",
+  ),
+  re.compile(
+    r"(?:감점|점수[^.!?。！？]{0,12}(?:낮|삭감))"
+    r"[^.!?。！？]{0,36}(?:퍼스널\s*컬러|(?:봄|여름|가을|겨울)(?:\s*(?:웜|쿨))?\s*톤)",
+  ),
+)
+# These two criteria are owned by the server prompt rather than inferred from
+# user prose. They keep application craftsmanship and full-face coherence in
+# every analysis while user-specific criteria still have to be traceable to the
+# trusted goal text.
+COMMON_BASELINE_CRITERIA = {
+  "baseline-application": {
+    "criterion": "경계·균일도·적용 위치 등 관찰 가능한 적용 완성도가 정돈되었는가",
+    "derivedFrom": "공통 기준: 적용 완성도",
+  },
+  "baseline-coherence": {
+    "criterion": "얼굴 전체에서 부위 간 색·마감·시각적 비중이 내부적으로 조화를 이루는가",
+    "derivedFrom": "공통 기준: 전체 조화",
+  },
+}
 REQUEST_METADATA_FIELDS = (
   "source",
   "sourceLabel",
@@ -159,6 +226,64 @@ def _clean_text(value: Any, fallback: str = "") -> str:
     return normalized or fallback
 
   return fallback
+
+
+def _validate_generated_feedback_text(value: str, field: str) -> str:
+  for pattern in PROHIBITED_APPEARANCE_JUDGMENT_PATTERNS:
+    if pattern.search(value):
+      raise _invalid_live_result(
+        field,
+        "must not judge innate attractiveness, ideal facial proportions, or personal-color mismatch",
+      )
+  return value
+
+
+def _require_bounded_generated_text(
+  mapping: dict[str, Any],
+  key: str,
+  field: str,
+  *,
+  max_chars: int,
+) -> str:
+  value = _validate_generated_feedback_text(
+    _require_text(mapping, key, field),
+    field,
+  )
+  if len(value) > max_chars:
+    raise _invalid_live_result(
+      field,
+      f"must contain at most {max_chars} characters",
+    )
+  return value
+
+
+def _more_conservative_color_confidence(*values: Any) -> str:
+  valid_values = [
+    value
+    for value in values
+    if isinstance(value, str) and value in COLOR_CONFIDENCE_RANK
+  ]
+  if not valid_values:
+    return "low"
+  return min(valid_values, key=COLOR_CONFIDENCE_RANK.__getitem__)
+
+
+def _has_lighting_sensitive_observation(result: dict[str, Any]) -> bool:
+  evaluations = result.get("evaluations")
+  if not isinstance(evaluations, list):
+    return False
+
+  return any(
+    observation.get("lightingSensitive") is True
+    for evaluation in evaluations
+    if isinstance(evaluation, dict)
+    for observation in (
+      evaluation.get("observations")
+      if isinstance(evaluation.get("observations"), list)
+      else []
+    )
+    if isinstance(observation, dict)
+  )
 
 
 def _prompt_template_error(
@@ -364,6 +489,22 @@ def _capture_quality_for_model_result(
   vision_result: MakeupFeedbackVisionResult,
 ) -> dict[str, Any]:
   capture_quality = _vision_capture_quality(vision_result)
+  model_capture_quality = parsed.get("captureQuality")
+  model_color_confidence = (
+    model_capture_quality.get("colorConfidence")
+    if isinstance(model_capture_quality, dict)
+    else None
+  )
+  capture_quality["colorConfidence"] = _more_conservative_color_confidence(
+    capture_quality["colorConfidence"],
+    model_color_confidence,
+  )
+
+  if _has_lighting_sensitive_observation(parsed):
+    capture_quality["colorConfidence"] = _more_conservative_color_confidence(
+      capture_quality["colorConfidence"],
+      "medium",
+    )
 
   if parsed.get("analysisDecision") != "retake_required":
     return capture_quality
@@ -491,7 +632,11 @@ def _evidence_region_ids_for_topic(
     "cheek": ("left_cheek", "right_cheek"),
     "lip": ("lips",),
   }.get(kind, ())
-  region_ids = [region_id for region_id in candidates if region_id in available_region_ids]
+  region_ids = [
+    region_id
+    for region_id in candidates
+    if region_id in available_region_ids
+  ]
 
   if region_ids:
     return region_ids
@@ -499,7 +644,7 @@ def _evidence_region_ids_for_topic(
   if "full" in available_region_ids:
     return ["full"]
 
-  return [next(iter(available_region_ids))] if available_region_ids else []
+  return [sorted(available_region_ids)[0]] if available_region_ids else []
 
 
 def _attach_vision_evidence(
@@ -551,6 +696,7 @@ def _build_vision_retake_result(
     "analysisDecision": "retake_required",
     "captureQuality": _vision_capture_quality(vision_result),
     "score": None,
+    "scoreBreakdown": None,
     "scoreRange": None,
     "scoreConfidence": 0.0,
     "scoreEvidenceIds": [],
@@ -689,7 +835,10 @@ def _require_score_range(mapping: dict[str, Any]) -> list[int] | None:
 
 
 def _require_score_reason(mapping: dict[str, Any]) -> str:
-  score_reason = _require_text(mapping, "scoreReason", "scoreReason")
+  score_reason = _validate_generated_feedback_text(
+    _require_text(mapping, "scoreReason", "scoreReason"),
+    "scoreReason",
+  )
   sentences = [part.strip() for part in re.split(r"[.!?。！？]+", score_reason) if part.strip()]
 
   if not 1 <= len(sentences) <= 2:
@@ -714,7 +863,10 @@ def _require_action_steps(value: Any, field: str, status: str) -> list[str]:
   if not isinstance(value, list):
     raise _invalid_live_result(field, "must be an array")
 
-  steps = [_clean_text(item) for item in value]
+  steps = [
+    _validate_generated_feedback_text(_clean_text(item), f"{field}[{index}]")
+    for index, item in enumerate(value)
+  ]
 
   if any(not step for step in steps):
     raise _invalid_live_result(field, "must contain only non-empty strings")
@@ -728,6 +880,88 @@ def _require_action_steps(value: Any, field: str, status: str) -> list[str]:
   return steps
 
 
+def _normalize_correction_guide(
+  value: Any,
+  field: str,
+  status: str,
+) -> dict[str, Any] | None:
+  if status not in {"improvement", "optional"}:
+    if value is not None:
+      raise _invalid_live_result(
+        field,
+        f"must be null when status is {status}",
+      )
+    return None
+
+  if value is None and status == "optional":
+    return None
+
+  guide = _require_mapping(value, field)
+  amount = _require_bounded_generated_text(
+    guide,
+    "amount",
+    f"{field}.amount",
+    max_chars=CORRECTION_GUIDE_FIELD_LIMITS["amount"],
+  )
+  normalized_amount = re.sub(r"[\s.,!?。！？]+", "", amount.casefold())
+  if VAGUE_CORRECTION_AMOUNT_PATTERN.fullmatch(normalized_amount):
+    raise _invalid_live_result(
+      f"{field}.amount",
+      "must describe an actionable amount rather than a vague quantity",
+    )
+
+  steps = _require_text_list(
+    guide.get("steps"),
+    f"{field}.steps",
+    min_items=2,
+    max_items=4,
+    unique=True,
+  )
+  for index, step in enumerate(steps):
+    step_field = f"{field}.steps[{index}]"
+    _validate_generated_feedback_text(step, step_field)
+    if len(step) > CORRECTION_GUIDE_STEP_MAX_CHARS:
+      raise _invalid_live_result(
+        step_field,
+        f"must contain at most {CORRECTION_GUIDE_STEP_MAX_CHARS} characters",
+      )
+
+  return {
+    "tool": _require_bounded_generated_text(
+      guide,
+      "tool",
+      f"{field}.tool",
+      max_chars=CORRECTION_GUIDE_FIELD_LIMITS["tool"],
+    ),
+    "amount": amount,
+    "targetArea": _require_bounded_generated_text(
+      guide,
+      "targetArea",
+      f"{field}.targetArea",
+      max_chars=CORRECTION_GUIDE_FIELD_LIMITS["targetArea"],
+    ),
+    "coverage": _require_bounded_generated_text(
+      guide,
+      "coverage",
+      f"{field}.coverage",
+      max_chars=CORRECTION_GUIDE_FIELD_LIMITS["coverage"],
+    ),
+    "steps": steps,
+    "stopCondition": _require_bounded_generated_text(
+      guide,
+      "stopCondition",
+      f"{field}.stopCondition",
+      max_chars=CORRECTION_GUIDE_FIELD_LIMITS["stopCondition"],
+    ),
+    "why": _require_bounded_generated_text(
+      guide,
+      "why",
+      f"{field}.why",
+      max_chars=CORRECTION_GUIDE_FIELD_LIMITS["why"],
+    ),
+  }
+
+
 def _build_points(evaluations: list[dict[str, Any]]) -> list[dict[str, Any]]:
   return [
     {
@@ -737,6 +971,7 @@ def _build_points(evaluations: list[dict[str, Any]]) -> list[dict[str, Any]]:
       "title": item["title"],
       "description": item["description"],
       "actionSteps": item["actionSteps"],
+      "correctionGuide": item["correctionGuide"],
       "actionLabel": "보완 포인트",
       "kind": item["kind"],
     }
@@ -787,10 +1022,16 @@ def _normalize_observations(value: Any, field: str) -> list[dict[str, Any]]:
     observations.append(
       {
         "id": observation_id,
-        "claim": _require_text(item, "claim", f"{item_field}.claim"),
-        "evidenceLocation": _require_text(
-          item,
-          "evidenceLocation",
+        "claim": _validate_generated_feedback_text(
+          _require_text(item, "claim", f"{item_field}.claim"),
+          f"{item_field}.claim",
+        ),
+        "evidenceLocation": _validate_generated_feedback_text(
+          _require_text(
+            item,
+            "evidenceLocation",
+            f"{item_field}.evidenceLocation",
+          ),
           f"{item_field}.evidenceLocation",
         ),
         "lightingSensitive": _require_bool(
@@ -804,10 +1045,10 @@ def _normalize_observations(value: Any, field: str) -> list[dict[str, Any]]:
 
 
 def _normalize_dynamic_criteria(value: Any) -> list[dict[str, str]]:
-  if not isinstance(value, list) or not 1 <= len(value) <= 6:
+  if not isinstance(value, list) or not 3 <= len(value) <= 6:
     raise _invalid_live_result(
       "interpretedGoal.dynamicCriteria",
-      "must contain 1 to 6 items",
+      "must contain the two common baselines and 1 to 4 user criteria",
     )
 
   criteria: list[dict[str, str]] = []
@@ -828,6 +1069,18 @@ def _normalize_dynamic_criteria(value: Any) -> list[dict[str, str]]:
         "criterion": _require_text(item, "criterion", f"{field}.criterion"),
         "derivedFrom": _require_text(item, "derivedFrom", f"{field}.derivedFrom"),
       },
+    )
+
+  missing_baseline_ids = [
+    criterion_id
+    for criterion_id in COMMON_BASELINE_CRITERIA
+    if criterion_id not in seen_ids
+  ]
+  if missing_baseline_ids:
+    raise _invalid_live_result(
+      "interpretedGoal.dynamicCriteria",
+      "must include every server-owned common baseline criterion",
+      {"missingBaselineIds": missing_baseline_ids},
     )
 
   return criteria
@@ -996,6 +1249,16 @@ def _normalize_evaluations(
       f"{field_prefix}.actionSteps",
       status,
     )
+    if "correctionGuide" not in raw_item:
+      raise _invalid_live_result(
+        f"{field_prefix}.correctionGuide",
+        "is required",
+      )
+    correction_guide = _normalize_correction_guide(
+      raw_item.get("correctionGuide"),
+      f"{field_prefix}.correctionGuide",
+      status,
+    )
 
     if visibility == "clear" and visibility_reason is not None:
       raise _invalid_live_result(
@@ -1083,9 +1346,16 @@ def _normalize_evaluations(
       "visibilityReason": visibility_reason,
       "observations": observations,
       "goalCriterionIds": goal_criterion_ids,
-      "title": _require_text(raw_item, "title", f"{field_prefix}.title"),
-      "description": _require_text(raw_item, "description", f"{field_prefix}.description"),
+      "title": _validate_generated_feedback_text(
+        _require_text(raw_item, "title", f"{field_prefix}.title"),
+        f"{field_prefix}.title",
+      ),
+      "description": _validate_generated_feedback_text(
+        _require_text(raw_item, "description", f"{field_prefix}.description"),
+        f"{field_prefix}.description",
+      ),
       "actionSteps": action_steps,
+      "correctionGuide": correction_guide,
       "scoreImpact": score_impact,
       "kind": topic["kind"],
       "confidence": _require_confidence(raw_item.get("confidence"), f"{field_prefix}.confidence"),
@@ -1124,6 +1394,28 @@ def _normalize_interpreted_goal(raw_goal: Any, payload: dict[str, Any]) -> dict[
     normalized_derived_from = " ".join(
       criterion["derivedFrom"].casefold().split(),
     )
+
+    baseline_contract = COMMON_BASELINE_CRITERIA.get(criterion["id"])
+    if baseline_contract is not None:
+      if criterion["criterion"] != baseline_contract["criterion"]:
+        raise _invalid_live_result(
+          f"interpretedGoal.dynamicCriteria[{index}].criterion",
+          "must match the server-owned common baseline criterion",
+        )
+      if criterion["derivedFrom"] != baseline_contract["derivedFrom"]:
+        raise _invalid_live_result(
+          f"interpretedGoal.dynamicCriteria[{index}].derivedFrom",
+          "must match the server-owned common baseline source",
+        )
+      continue
+
+    if criterion["derivedFrom"] in {
+      item["derivedFrom"] for item in COMMON_BASELINE_CRITERIA.values()
+    }:
+      raise _invalid_live_result(
+        f"interpretedGoal.dynamicCriteria[{index}].id",
+        "must use the matching server-owned common baseline id",
+      )
 
     if normalized_derived_from not in normalized_trusted_goal:
       raise _invalid_live_result(
@@ -1165,9 +1457,33 @@ def _normalize_summary(raw_summary: Any) -> dict[str, str]:
   summary = _require_mapping(raw_summary, "summary")
 
   return {
-    "strengthSummary": _require_text(summary, "strengthSummary", "summary.strengthSummary"),
-    "improvementSummary": _require_text(summary, "improvementSummary", "summary.improvementSummary"),
+    "strengthSummary": _validate_generated_feedback_text(
+      _require_text(summary, "strengthSummary", "summary.strengthSummary"),
+      "summary.strengthSummary",
+    ),
+    "improvementSummary": _validate_generated_feedback_text(
+      _require_text(summary, "improvementSummary", "summary.improvementSummary"),
+      "summary.improvementSummary",
+    ),
   }
+
+
+def _require_live_integer_score(
+  value: Any,
+  field: str,
+  *,
+  max_score: int = 100,
+) -> int:
+  if isinstance(value, bool) or not isinstance(value, int):
+    raise _invalid_live_result(field, "must be an integer")
+
+  if not 0 <= value <= max_score:
+    raise _invalid_live_result(
+      field,
+      f"must be between 0 and {max_score}",
+    )
+
+  return value
 
 
 def _repair_score_evidence_ids(
@@ -1222,6 +1538,196 @@ def _repair_score_evidence_ids(
   return repaired_ids, unresolved_ids
 
 
+def _normalize_score_axis_reason(mapping: dict[str, Any], field: str) -> str:
+  reason = _validate_generated_feedback_text(
+    _require_text(mapping, "reason", field),
+    field,
+  )
+  sentences = [part.strip() for part in re.split(r"[.!?。！？]+", reason) if part.strip()]
+  if not 1 <= len(sentences) <= 2:
+    raise _invalid_live_result(field, "must contain 1 or 2 sentences")
+  return reason
+
+
+def _normalize_score_breakdown(
+  value: Any,
+  analysis_decision: str,
+  evaluations: list[dict[str, Any]],
+  evaluation_by_observation_id: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+  if analysis_decision == "retake_required":
+    if value is not None:
+      raise _invalid_live_result(
+        "scoreBreakdown",
+        "must be null when a retake is required",
+      )
+    return None
+
+  breakdown = _require_mapping(value, "scoreBreakdown")
+  if breakdown.get("maxScore") != SCORE_BREAKDOWN_MAX_SCORE:
+    raise _invalid_live_result(
+      "scoreBreakdown.maxScore",
+      f"must be exactly {SCORE_BREAKDOWN_MAX_SCORE}",
+    )
+
+  raw_formula = _require_text(
+    breakdown,
+    "formula",
+    "scoreBreakdown.formula",
+  )
+  raw_axes = breakdown.get("axes")
+  if not isinstance(raw_axes, list) or len(raw_axes) != len(SCORE_AXIS_CONTRACT):
+    raise _invalid_live_result(
+      "scoreBreakdown.axes",
+      f"must contain exactly {len(SCORE_AXIS_CONTRACT)} items",
+    )
+
+  axes: list[dict[str, Any]] = []
+  for index, contract in enumerate(SCORE_AXIS_CONTRACT):
+    field = f"scoreBreakdown.axes[{index}]"
+    axis = _require_mapping(raw_axes[index], field)
+    axis_id = _require_text(axis, "id", f"{field}.id")
+    if axis_id != contract["id"]:
+      raise _invalid_live_result(
+        f"{field}.id",
+        "must match the configured score axis order",
+        {"expected": contract["id"]},
+      )
+    label = _require_text(axis, "label", f"{field}.label")
+    if label != contract["label"]:
+      raise _invalid_live_result(
+        f"{field}.label",
+        "must match the configured score axis label",
+        {"expected": contract["label"]},
+      )
+    if axis.get("maxScore") != contract["maxScore"]:
+      raise _invalid_live_result(
+        f"{field}.maxScore",
+        "must match the configured score axis maximum",
+        {"expected": contract["maxScore"]},
+      )
+
+    evidence_ids = _require_text_list(
+      axis.get("evidenceIds"),
+      f"{field}.evidenceIds",
+      min_items=1,
+      max_items=8,
+      unique=True,
+    )
+    evidence_ids, unresolved_evidence_ids = _repair_score_evidence_ids(
+      evidence_ids,
+      evaluations,
+      evaluation_by_observation_id,
+    )
+    evidence_ids = list(dict.fromkeys(evidence_ids))
+    if unresolved_evidence_ids:
+      raise _invalid_live_result(
+        f"{field}.evidenceIds",
+        "references unknown observation ids",
+        {"unknownIds": unresolved_evidence_ids},
+      )
+    if not evidence_ids:
+      raise _invalid_live_result(
+        f"{field}.evidenceIds",
+        "must retain at least one scoreable observation after repair",
+      )
+
+    disallowed_evidence_ids = [
+      evidence_id
+      for evidence_id in evidence_ids
+      if evaluation_by_observation_id[evidence_id]["status"]
+      not in SCORE_EVIDENCE_STATUSES
+    ]
+    if disallowed_evidence_ids:
+      raise _invalid_live_result(
+        f"{field}.evidenceIds",
+        "must reference only strength or improvement observations",
+        {"disallowedIds": disallowed_evidence_ids},
+      )
+
+    axes.append(
+      {
+        "id": axis_id,
+        "label": label,
+        "score": _require_live_integer_score(
+          axis.get("score"),
+          f"{field}.score",
+          max_score=contract["maxScore"],
+        ),
+        "maxScore": contract["maxScore"],
+        "reason": _normalize_score_axis_reason(axis, f"{field}.reason"),
+        "evidenceIds": evidence_ids,
+      },
+    )
+
+  score = sum(axis["score"] for axis in axes)
+  formula = " + ".join(
+    f"{axis['label']} {axis['score']}/{axis['maxScore']}"
+    for axis in axes
+  ) + f" = {score}/{SCORE_BREAKDOWN_MAX_SCORE}"
+  if raw_formula != formula:
+    logger.warning(
+      "[aura:feedback-bedrock] output:repaired field=scoreBreakdown.formula from=%s to=%s",
+      raw_formula,
+      formula,
+    )
+
+  return {
+    "maxScore": SCORE_BREAKDOWN_MAX_SCORE,
+    "formula": formula,
+    "axes": axes,
+  }
+
+
+def _score_breakdown_evidence_ids(score_breakdown: dict[str, Any]) -> list[str]:
+  return list(
+    dict.fromkeys(
+      evidence_id
+      for axis in score_breakdown["axes"]
+      for evidence_id in axis["evidenceIds"]
+    ),
+  )
+
+
+def _build_score_breakdown_reason(score_breakdown: dict[str, Any]) -> str:
+  axes = score_breakdown["axes"]
+  score = sum(axis["score"] for axis in axes)
+  axis_scores = ", ".join(
+    f"{axis['label']} {axis['score']}/{axis['maxScore']}"
+    for axis in axes
+  )
+  focus_axis = min(
+    axes,
+    key=lambda axis: axis["score"] / axis["maxScore"],
+  )
+  focus_reason = re.sub(r"[.!?。！？]+$", "", focus_axis["reason"]).strip()
+  return (
+    f"{axis_scores}를 합산해 {score}점이에요. "
+    f"{focus_axis['label']}은 {focus_reason}을 반영했어요."
+  )
+
+
+def _ensure_score_range_contains(
+  score_range: list[int],
+  score: int,
+) -> list[int]:
+  if score_range[0] <= score <= score_range[1]:
+    return score_range
+
+  width = max(4, score_range[1] - score_range[0])
+  lower = max(0, score - width // 2)
+  upper = min(100, lower + width)
+  lower = max(0, upper - width)
+  repaired = [lower, upper]
+  logger.warning(
+    "[aura:feedback-bedrock] output:repaired field=scoreRange from=%s to=%s canonicalScore=%s",
+    score_range,
+    repaired,
+    score,
+  )
+  return repaired
+
+
 def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dict[str, Any]) -> dict[str, Any]:
   raw_result = _require_mapping(result, "result")
   source = _clean_text(payload.get("source"), "camera")
@@ -1241,15 +1747,24 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
     raw_result.get("evaluations"),
     criterion_ids,
   )
+  if "scoreBreakdown" not in raw_result:
+    raise _invalid_live_result("scoreBreakdown", "is required")
+  score_breakdown = _normalize_score_breakdown(
+    raw_result.get("scoreBreakdown"),
+    analysis_decision,
+    evaluations,
+    evaluation_by_observation_id,
+  )
   score_range = _require_score_range(raw_result)
   score_confidence = _require_confidence(raw_result.get("scoreConfidence"), "scoreConfidence")
   score_evidence_ids = _require_text_list(
     raw_result.get("scoreEvidenceIds"),
     "scoreEvidenceIds",
-    min_items=1 if analysis_decision == "completed" else 0,
+    min_items=0,
     max_items=16,
     unique=True,
   )
+  score_reason = _require_score_reason(raw_result)
 
   if "score" not in raw_result:
     raise _invalid_live_result("score", "is required")
@@ -1263,7 +1778,20 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
         "must be true when analysisDecision is completed",
       )
 
-    score = _require_score(raw_score)
+    raw_live_score = _require_live_integer_score(raw_score, "score")
+
+    if score_breakdown is None:
+      raise _invalid_live_result(
+        "scoreBreakdown",
+        "must be an object when analysisDecision is completed",
+      )
+    score = sum(axis["score"] for axis in score_breakdown["axes"])
+    if raw_live_score != score:
+      logger.warning(
+        "[aura:feedback-bedrock] output:repaired field=score from=%s to=%s source=scoreBreakdown",
+        raw_live_score,
+        score,
+      )
 
     if score_range is None:
       raise _invalid_live_result(
@@ -1271,12 +1799,7 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
         "must be a two-item array when analysisDecision is completed",
       )
 
-    if not score_range[0] <= score <= score_range[1]:
-      raise _invalid_live_result(
-        "scoreRange",
-        "must include score",
-        {"score": score},
-      )
+    score_range = _ensure_score_range_contains(score_range, score)
   else:
     if capture_quality["usable"]:
       raise _invalid_live_result(
@@ -1298,35 +1821,40 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
 
     score = None
 
-  score_evidence_ids, unknown_score_evidence_ids = _repair_score_evidence_ids(
-    score_evidence_ids,
-    evaluations,
-    evaluation_by_observation_id,
+  if analysis_decision == "completed" and score_breakdown is not None:
+    breakdown_evidence_ids = _score_breakdown_evidence_ids(score_breakdown)
+    if score_evidence_ids != breakdown_evidence_ids:
+      logger.warning(
+        "[aura:feedback-bedrock] output:repaired field=scoreEvidenceIds from=%s to=%s source=scoreBreakdown",
+        score_evidence_ids,
+        breakdown_evidence_ids,
+      )
+    score_evidence_ids = breakdown_evidence_ids
+
+  lighting_sensitive_observation_ids = {
+    observation["id"]
+    for evaluation in evaluations
+    for observation in evaluation["observations"]
+    if observation["lightingSensitive"]
+  }
+  lighting_sensitive_score_evidence_ids = sorted(
+    set(score_evidence_ids) & lighting_sensitive_observation_ids,
   )
-
-  if unknown_score_evidence_ids:
-    raise _invalid_live_result(
-      "scoreEvidenceIds",
-      "references unknown observation ids",
-      {"unknownIds": unknown_score_evidence_ids},
+  if (
+    lighting_sensitive_score_evidence_ids
+    and score_confidence > LIGHTING_SENSITIVE_SCORE_CONFIDENCE_CAP
+  ):
+    logger.warning(
+      "[aura:feedback-bedrock] output:repaired field=scoreConfidence "
+      "reason=lighting-sensitive-evidence from=%s to=%s evidenceIds=%s",
+      score_confidence,
+      LIGHTING_SENSITIVE_SCORE_CONFIDENCE_CAP,
+      lighting_sensitive_score_evidence_ids,
     )
+    score_confidence = LIGHTING_SENSITIVE_SCORE_CONFIDENCE_CAP
 
-  disallowed_score_evidence_ids = [
-    observation_id
-    for observation_id in score_evidence_ids
-    if evaluation_by_observation_id[observation_id]["status"]
-    not in SCORE_EVIDENCE_STATUSES
-  ]
-
-  if disallowed_score_evidence_ids:
-    raise _invalid_live_result(
-      "scoreEvidenceIds",
-      "must reference only strength or improvement observations",
-      {
-        "disallowedIds": disallowed_score_evidence_ids,
-        "allowedStatuses": sorted(SCORE_EVIDENCE_STATUSES),
-      },
-    )
+  if analysis_decision == "completed" and score_breakdown is not None:
+    score_reason = _build_score_breakdown_reason(score_breakdown)
 
   points = _build_points(evaluations)
   strengths = _build_strengths(evaluations)
@@ -1338,8 +1866,9 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
     "scoreConfidence": score_confidence,
     "scoreEvidenceIds": score_evidence_ids,
     "score": score,
+    "scoreBreakdown": score_breakdown,
     "scoreLabel": _require_text(raw_result, "scoreLabel", "scoreLabel"),
-    "scoreReason": _require_score_reason(raw_result),
+    "scoreReason": score_reason,
     "interpretedGoal": interpreted_goal,
     "summary": _normalize_summary(raw_result.get("summary")),
     "photoSourceLabel": "앨범에서 선택한 사진" if source == "gallery" else "카메라로 촬영한 사진",
@@ -1372,6 +1901,44 @@ def _build_output_contract() -> dict[str, Any]:
       ],
     },
     "score": 0,
+    "scoreBreakdown": {
+      "maxScore": 100,
+      "formula": "적용 완성도 0/30 + 배치·형태 균형 0/25 + 색·명암 조화 0/20 + 전체 조화·목표 적합도 0/25 = 0/100",
+      "axes": [
+        {
+          "id": "application-finish",
+          "label": "적용 완성도",
+          "score": 0,
+          "maxScore": 30,
+          "reason": "경계·균일도·블렌딩처럼 사용자가 바꿀 수 있는 적용 결과의 근거 1~2문장",
+          "evidenceIds": ["brow-obs-1"],
+        },
+        {
+          "id": "placement-balance",
+          "label": "배치·형태 균형",
+          "score": 0,
+          "maxScore": 25,
+          "reason": "현재 얼굴 랜드마크에 대한 배치·형태의 근거 1~2문장",
+          "evidenceIds": ["brow-obs-1"],
+        },
+        {
+          "id": "color-value-harmony",
+          "label": "색·명암 조화",
+          "score": 0,
+          "maxScore": 20,
+          "reason": "사진 안에서 관찰되는 부위 간 색·명암 관계의 근거 1~2문장",
+          "evidenceIds": ["brow-obs-1"],
+        },
+        {
+          "id": "overall-goal-fit",
+          "label": "전체 조화·목표 적합도",
+          "score": 0,
+          "maxScore": 25,
+          "reason": "전체 시각적 중심과 사용자가 명시한 목표 적합성의 근거 1~2문장",
+          "evidenceIds": ["brow-obs-1"],
+        },
+      ],
+    },
     "scoreRange": [0, 0],
     "scoreConfidence": 0.0,
     "scoreEvidenceIds": ["brow-obs-1"],
@@ -1385,6 +1952,16 @@ def _build_output_contract() -> dict[str, Any]:
       "unknowns": [],
       "assumptions": [],
       "dynamicCriteria": [
+        {
+          "id": "baseline-application",
+          "criterion": "경계·균일도·적용 위치 등 관찰 가능한 적용 완성도가 정돈되었는가",
+          "derivedFrom": "공통 기준: 적용 완성도",
+        },
+        {
+          "id": "baseline-coherence",
+          "criterion": "얼굴 전체에서 부위 간 색·마감·시각적 비중이 내부적으로 조화를 이루는가",
+          "derivedFrom": "공통 기준: 전체 조화",
+        },
         {
           "id": "goal-1",
           "criterion": "이번 요청에만 적용되는 동적 평가 기준",
@@ -1413,6 +1990,18 @@ def _build_output_contract() -> dict[str, Any]:
         "actionSteps": [
           "관찰한 상태를 개선하거나 유지하기 위한 구체적인 실행 단계",
         ],
+        "correctionGuide": {
+          "tool": "브랜드·제품명 없이 동작에 맞춘 일반 도구",
+          "amount": "도구에 한 번 덜어 쓸 수 있는 구체적인 근사량",
+          "targetArea": "현재 얼굴 랜드마크 기준의 시작점과 끝점",
+          "coverage": "수정할 폭·구간·범위와 넘지 않을 경계",
+          "steps": [
+            "한 번에 하나의 행동으로 작성한 첫 단계",
+            "변화를 확인할 수 있는 두 번째 단계",
+          ],
+          "stopCondition": "과수정하지 않도록 멈출 수 있는 시각적 조건",
+          "why": "현재 observation과 이 수정 방법이 연결되는 이유",
+        },
         "scoreImpact": "high | medium | low",
         "confidence": 0.0,
       },
@@ -1619,7 +2208,7 @@ class MakeupFeedbackBedrockService:
 
     request_payload = {
       "anthropic_version": "bedrock-2023-05-31",
-      "max_tokens": 6400,
+      "max_tokens": 8192,
       "temperature": 0.2,
       "system": self._build_system_prompt(),
       "messages": [{"role": "user", "content": content}],

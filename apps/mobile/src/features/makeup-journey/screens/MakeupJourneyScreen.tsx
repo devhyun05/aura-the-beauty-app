@@ -32,6 +32,10 @@ import {JourneySettingsSheet} from '../components/JourneySettingsSheet';
 import {useMakeupJourneyMonth} from '../hooks/useMakeupJourneyMonth';
 import {invalidateMakeupJourneyCache} from '../services/makeupJourneyCache';
 import {
+  prefetchMakeupJourneyCalendarThumbnails,
+  prefetchMakeupJourneyMonth,
+} from '../services/makeupJourneyPrefetch';
+import {
   getMakeupJourneySettings,
   saveMakeupJourneySettings,
 } from '../services/makeupJourneyService';
@@ -112,6 +116,18 @@ export function MakeupJourneyScreen({
   const settingsMutationActiveRef = useRef(false);
   const todayDateRef = useRef(todayDate);
   const monthResource = useMakeupJourneyMonth(month, Boolean(settings));
+
+  useEffect(() => {
+    const currentMonthData = monthResource.data;
+    if (!settings || !currentMonthData || currentMonthData.month !== month) {
+      return;
+    }
+
+    void prefetchMakeupJourneyCalendarThumbnails(currentMonthData);
+    [shiftMonth(month, -1), shiftMonth(month, 1)].forEach(adjacentMonth => {
+      void prefetchMakeupJourneyMonth(adjacentMonth).catch(() => undefined);
+    });
+  }, [month, monthResource.data, settings]);
 
   const syncTodayDate = useCallback(() => {
     const nextToday = getTodayDateString();
@@ -524,19 +540,19 @@ export function MakeupJourneyScreen({
               <View accessibilityLabel="달력 범례" style={styles.legend}>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendSwatch, styles.recordSwatch]} />
-                  <Text style={styles.legendText}>기록 완료</Text>
+                  <Text style={styles.legendText}>사진 기록</Text>
                 </View>
                 <View style={styles.legendItem}>
-                  <View style={[styles.legendSwatch, styles.successSwatch]} />
-                  <Text style={styles.legendText}>목표 달성</Text>
+                  <View style={[styles.legendSwatch, styles.scoreSwatch]} />
+                  <Text style={styles.legendText}>점수·달성 여부</Text>
                 </View>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendSwatch, styles.todaySwatch]} />
                   <Text style={styles.legendText}>오늘</Text>
                 </View>
                 <View style={styles.legendItem}>
-                  <View style={[styles.legendSwatch, styles.failureSwatch]} />
-                  <Text style={styles.legendText}>목표 미달</Text>
+                  <View style={[styles.legendSwatch, styles.emptySwatch]} />
+                  <Text style={styles.legendText}>기록 없음</Text>
                 </View>
               </View>
 
@@ -696,11 +712,11 @@ const styles = StyleSheet.create({
   recordSwatch: {
     backgroundColor: colors.textTertiary,
   },
-  successSwatch: {
-    backgroundColor: colors.heart,
+  scoreSwatch: {
+    backgroundColor: colors.blackSurface,
   },
-  failureSwatch: {
-    backgroundColor: '#5B78A6',
+  emptySwatch: {
+    backgroundColor: colors.divider,
   },
   todaySwatch: {
     backgroundColor: colors.black,

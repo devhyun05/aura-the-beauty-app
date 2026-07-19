@@ -32,13 +32,14 @@ def main() -> int:
   ]
   for evaluation in result["evaluations"]:
     topic_id = evaluation["topicId"]
-    region_ids = (
+    regional_ids = (
       ["lips"]
       if topic_id == "lip"
       else ["left_cheek", "right_cheek"]
       if topic_id in {"foundation", "blush", "highlight", "shading"}
       else ["left_eye", "right_eye"]
     )
+    region_ids = ["full", *regional_ids]
     for observation in evaluation["observations"]:
       observation["evidenceRegionIds"] = region_ids
   job = {

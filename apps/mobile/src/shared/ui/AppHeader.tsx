@@ -109,10 +109,10 @@ export function AppHeader({
                 <Text
                   color={colors.textPrimary}
                   fontSize={typography.title.fontSize}
-                  fontWeight={typography.title.fontWeight}
                   letterSpacing={0}
                   lineHeight={typography.title.lineHeight}
-                  numberOfLines={1}>
+                  numberOfLines={1}
+                  style={styles.inlineTitleText}>
                   {title}
                 </Text>
               )}
@@ -176,8 +176,8 @@ const styles = StyleSheet.create({
   centerTitle: {
     color: colors.textPrimary,
     flex: 1,
+    fontFamily: typography.fontFamily.bold,
     fontSize: APP_HEADER_CENTER_TITLE_FONT_SIZE,
-    fontWeight: typography.fontWeight.bold,
     lineHeight: typography.title.lineHeight,
     textAlign: 'center',
   },
@@ -191,6 +191,9 @@ const styles = StyleSheet.create({
   },
   immersiveCenterTitle: {
     color: colors.white,
+  },
+  inlineTitleText: {
+    fontFamily: typography.fontFamily.bold,
   },
   container: {
     alignItems: 'center',

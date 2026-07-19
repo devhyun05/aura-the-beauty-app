@@ -14,7 +14,9 @@ import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
 import {clearMyPageProfileSummaryCache} from '../../../shared/services/profileService';
 import {clearCachedUserProfile} from '../../../shared/services/userService';
 import {invalidateMakeupJourneyCache} from '../../makeup-journey/services/makeupJourneyCache';
+import {clearMakeupJourneyPrivateImageMemoryCache} from '../../makeup-journey/services/makeupJourneyPrivateImage';
 import {resetProductEventCollection} from '../../recommendation/services/productEventService';
+import {clearProductHubRecommendationCache} from '../../recommendation/services/productHubService';
 import {unregisterCurrentPushDevice} from '../../notifications/services/notificationService';
 import {refreshAuthSession} from './authService';
 import type {AuthSession} from '../types';
@@ -145,6 +147,7 @@ export function AuthSessionProvider({
 
     if (userChanged) {
       resetProductEventCollection();
+      clearProductHubRecommendationCache();
       clearMyPageProfileSummaryCache();
       await clearCachedUserProfile();
     }
@@ -193,6 +196,8 @@ export function AuthSessionProvider({
   useEffect(() => {
     // Optional product events must never cross an account switch or logout.
     resetProductEventCollection();
+    clearProductHubRecommendationCache();
+    clearMakeupJourneyPrivateImageMemoryCache();
   }, [session?.user.id]);
 
   useEffect(() => {

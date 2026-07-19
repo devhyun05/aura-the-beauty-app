@@ -3,7 +3,7 @@ import {ActivityIndicator, Pressable, StyleSheet, TextInput} from 'react-native'
 import {BookOpenText} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
-import {colors, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {MakeupJourneyNote} from '../types';
 
 type JourneyNoteCardProps = {
@@ -83,11 +83,16 @@ const styles = StyleSheet.create({
     opacity: 0.42,
   },
   card: {
-    ...shadows.soft,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radius.lg,
+    borderWidth: 1,
     gap: spacing.lg,
-    padding: spacing.xl,
+    padding: spacing.lg,
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 5},
+    shadowOpacity: 0.025,
+    shadowRadius: 10,
   },
   count: {
     color: colors.textTertiary,
@@ -133,10 +138,12 @@ const styles = StyleSheet.create({
   iconCircle: {
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
-    borderRadius: radius.pill,
-    height: 42,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    height: 38,
     justifyContent: 'center',
-    width: 42,
+    width: 38,
   },
   input: {
     backgroundColor: colors.surfaceMuted,

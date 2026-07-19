@@ -322,8 +322,8 @@ const styles = StyleSheet.create({
   },
   doneText: {
     color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.sm,
   },
   iconButton: {

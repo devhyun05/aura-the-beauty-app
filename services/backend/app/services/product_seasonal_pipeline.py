@@ -221,6 +221,7 @@ def _weather_attribute_score(candidate: dict[str, Any], weather: dict[str, Any] 
     temperature = float(weather.get("temperatureC")) if weather.get("temperatureC") is not None else None
     humidity = float(weather.get("humidityPercent")) if weather.get("humidityPercent") is not None else None
     precipitation = float(weather.get("precipitationProbabilityPercent") or 0)
+    precipitation_mm = float(weather.get("precipitationMm") or 0)
   except (TypeError, ValueError):
     return 0.0
   conditions: list[bool] = []
@@ -230,7 +231,12 @@ def _weather_attribute_score(candidate: dict[str, Any], weather: dict[str, Any] 
     conditions.append(_truthy_attribute(attributes, "oil_control", "longwear", "transfer_resistant"))
   if humidity is not None and humidity <= 40:
     conditions.append(_truthy_attribute(attributes, "hydrating", "moisturizing"))
-  if precipitation >= 50 or str(weather.get("weatherCode") or "").casefold() in {"rain", "snow", "shower"}:
+  if (
+    precipitation >= 50
+    or precipitation_mm > 0
+    or str(weather.get("weatherCode") or "").casefold()
+    in {"rain", "rain_snow", "snow", "shower"}
+  ):
     conditions.append(_truthy_attribute(attributes, "waterproof", "longwear", "transfer_resistant"))
   return sum(1.0 for matched in conditions if matched) / len(conditions) if conditions else 0.0
 
@@ -388,8 +394,11 @@ def match_trends_to_products(
   fused = _rrf_scores(component_values)
   matched = [
     (fused.get(product_id, 0.0), candidate, reasons)
-    for product_id, candidate, reasons, _values in scored
-    if any(code.startswith("TREND_") for code in reasons)
+    for product_id, candidate, reasons, values in scored
+    if (
+      any(code.startswith("TREND_") for code in reasons)
+      or values["weather"] > 0
+    )
   ]
   matched.sort(key=lambda row: (-row[0], _text(row[1].get("product_id") or row[1].get("productId"))))
   selected = _diversify(matched, limit=limit)

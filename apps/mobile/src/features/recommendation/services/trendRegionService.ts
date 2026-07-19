@@ -148,6 +148,14 @@ export function readCachedTrendRegionCode(
   }
 }
 
+export async function getCachedTrendRegionCode(): Promise<TrendRegionCode | null> {
+  try {
+    return readCachedTrendRegionCode(await AsyncStorage.getItem(STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
 async function persistRegionCode(
   dependencies: TrendRegionResolverDependencies,
   regionCode: TrendRegionCode,

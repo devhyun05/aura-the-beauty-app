@@ -157,7 +157,10 @@ export type RootStackParamList = {
         returnTo?: 'profile' | 'makeupJourney';
       }
     | undefined;
-  MakeupJourneyDayDetail: {entryDate: string};
+  MakeupJourneyDayDetail: {
+    entryDate: string;
+    initialReportId?: string;
+  };
   MakeupJourneyTrend: {
     entryDate: string;
     range?: '7d' | '30d' | '90d';

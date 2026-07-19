@@ -90,6 +90,8 @@ def test_collection_fingerprint_is_deterministic_and_weather_sensitive() -> None
   assert collection_input_fingerprint(**arguments) == collection_input_fingerprint(**arguments)
   changed = {**arguments, "weather": {**arguments["weather"], "temperatureC": 22}}
   assert collection_input_fingerprint(**arguments) != collection_input_fingerprint(**changed)
+  observed_rain = {**arguments, "weather": {**arguments["weather"], "precipitationMm": 0.1}}
+  assert collection_input_fingerprint(**arguments) != collection_input_fingerprint(**observed_rain)
 
 
 def test_weather_change_thresholds_are_explicit() -> None:
@@ -97,6 +99,11 @@ def test_weather_change_thresholds_are_explicit() -> None:
   assert weather_changed_meaningfully({**previous, "temperatureC": 26}, previous) is False
   assert weather_changed_meaningfully({**previous, "humidityPercent": 72}, previous) is True
   assert weather_changed_meaningfully({**previous, "precipitationType": "rain"}, previous) is True
+  assert weather_changed_meaningfully({**previous, "precipitationMm": 0.1}, previous) is True
+  assert weather_changed_meaningfully(
+    {**previous, "precipitationMm": 0.3},
+    {**previous, "precipitationMm": 0.1},
+  ) is False
 
 
 def test_stored_collection_freshness_reuses_publish_slas_and_rejects_future_values() -> None:

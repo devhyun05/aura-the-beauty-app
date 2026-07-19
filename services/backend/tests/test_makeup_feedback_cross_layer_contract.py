@@ -130,7 +130,9 @@ def test_mocked_bedrock_response_normalizes_to_mobile_completed_contract() -> No
   assert result["modelVersion"] == MODEL_VERSION
   assert result["score"] == 89
   assert result["scoreRange"] == [86, 92]
-  assert result["scoreEvidenceIds"] == ["brow-observation-1"]
+  assert result["scoreConfidence"] == 0.84
+  assert result["scoreEvidenceIds"] == ["brow-observation-1", "lash-observation-1"]
+  assert result["scoreBreakdown"]["formula"].endswith("= 89/100")
   assert [item["topicId"] for item in result["evaluations"]] == [
     topic["id"] for topic in FEEDBACK_TOPICS
   ]

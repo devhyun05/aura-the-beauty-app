@@ -51,6 +51,7 @@ def test_openapi_response_components_are_required_nullable_and_camel_case() -> N
   settings_data = components["MakeupJourneySettingsResponseData"]
   calendar_day = components["MakeupJourneyCalendarDay"]
   day_data = components["MakeupJourneyDayResponseData"]
+  score_selection_data = components["MakeupJourneyScoreSelectionResponseData"]
   delete_data = components["MakeupJourneyDeleteMissionResponseData"]
   feedback_job = components["FeedbackJobRecord"]
 
@@ -58,7 +59,12 @@ def test_openapi_response_components_are_required_nullable_and_camel_case() -> N
   assert "requiresOnboarding" in settings_data["properties"]
   assert "requires_onboarding" not in settings_data["properties"]
   assert "firstScore" in calendar_day["required"]
-  assert {"firstScore", "representativeScore"}.issubset(calendar_day["required"])
+  assert {
+    "firstScore",
+    "representativeReportId",
+    "representativeScore",
+    "representativeThumbnailUrl",
+  }.issubset(calendar_day["required"])
   assert {
     "goalScore",
     "feedbackDigest",
@@ -70,6 +76,9 @@ def test_openapi_response_components_are_required_nullable_and_camel_case() -> N
   assert {"imageUrl", "feedbackDigest", "note"}.issubset(report_schema["required"])
   assert "reportId" in components["MakeupJourneyNoteUpdate"]["properties"]
   assert "reportId" in components["MakeupJourneyScoreSelectionUpdate"]["required"]
+  assert "representativeThumbnailUrl" in score_selection_data["required"]
+  thumbnail_schema = score_selection_data["properties"]["representativeThumbnailUrl"]
+  assert {item.get("type") for item in thumbnail_schema["anyOf"]} == {"string", "null"}
   assert "missionId" in delete_data["properties"]
   assert "mission_id" not in delete_data["properties"]
   assert {"entryDate", "feedbackKind", "parentFeedbackReportId"}.issubset(
@@ -115,7 +124,11 @@ def test_response_models_validate_the_success_envelope_wire_shape() -> None:
           "status": "success",
           "first_score": 84,
           "latest_score": 84,
+          "representative_report_id": "22222222-2222-2222-2222-222222222222",
           "representative_score": 84,
+          "representative_thumbnail_url": (
+            "/makeup-journey/reports/22222222-2222-2222-2222-222222222222/thumbnail"
+          ),
           "score_delta": 0,
           "report_count": 1,
           "has_note": False,

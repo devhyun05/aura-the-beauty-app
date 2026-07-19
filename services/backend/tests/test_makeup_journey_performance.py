@@ -85,6 +85,8 @@ def _calendar_rows(count: int) -> list[dict]:
       "first_score": 70,
       "latest_score": 70 + (day % 20),
       "selected_score": None,
+      "representative_report_id": UUID(int=day),
+      "representative_thumbnail_available": True,
       "report_count": 100,
       "has_note": True,
       "completed_missions": 50,
@@ -194,7 +196,9 @@ async def test_calendar_query_count_is_constant_and_month_payload_is_allow_liste
         "status",
         "firstScore",
         "latestScore",
+        "representativeReportId",
         "representativeScore",
+        "representativeThumbnailUrl",
         "scoreDelta",
         "reportCount",
         "hasNote",
@@ -214,7 +218,13 @@ async def test_calendar_query_count_is_constant_and_month_payload_is_allow_liste
   ]
   aggregate_query = databases[-1].calls[1][1]
   assert "from makeup_feedback_reports" in aggregate_query
+  assert "left join media_assets" in aggregate_query
+  assert "thumbnail_cdn_url" not in aggregate_query
+  assert "thumbnail_bucket is not null" in aggregate_query
+  assert "thumbnail_object_key is not null" in aggregate_query
+  assert "distinct on (entry_date)" in aggregate_query
   assert "from makeup_journey_day_notes" in aggregate_query
+  assert "select entry_date, bool_or(true) as has_note" in aggregate_query
   assert "from makeup_journey_missions" in aggregate_query
   assert "group by entry_date" in aggregate_query
 

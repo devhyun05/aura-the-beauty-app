@@ -35,6 +35,7 @@ import {
 } from '../services/productHubService';
 import {
   cohortRecommendationTitle,
+  cohortSizeEvidenceCopy,
   personalizedRecommendationTitle,
 } from '../services/productRecommendationPresentation';
 import {
@@ -95,7 +96,7 @@ const SHELF_DEFAULTS: Record<ProductRecommendationShelf, {title: string; descrip
   },
   cohort: {
     title: '나와 비슷한 분들이 많이 좋아해요',
-    description: '개인정보 기준을 충족한 익명 컬러 취향 집계에서 많이 좋아한 상품이에요.',
+    description: '나와 퍼스널컬러·제품 취향이 비슷한 사용자들이 좋아한 상품이에요.',
   },
 };
 
@@ -193,6 +194,11 @@ export function ProductRecommendationShelfScreen({
   const {showToast, toast} = useTransientToast(2600);
   const [activeCategory, setActiveCategory] = useState<ProductRecommendationCategory>('all');
   const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
+  const likedProductIdsRef = useRef<Set<string>>(new Set());
+  const confirmedLikedProductIdsRef = useRef<Set<string>>(new Set());
+  const productLikeIntentVersionsRef = useRef(new Map<string, number>());
+  const likedProductsRequestRef = useRef(0);
+  const hasFocusedRef = useRef(false);
   const [categoryStates, setCategoryStates] = useState<ShelfCategoryStates>({});
   const categoryStatesRef = useRef<ShelfCategoryStates>({});
   const activeCategoryRef = useRef<ProductRecommendationCategory>('all');
@@ -205,6 +211,27 @@ export function ProductRecommendationShelfScreen({
   const impressed = useRef(new Set<string>());
   const viewabilityConfig = useRef({itemVisiblePercentThreshold: 60, minimumViewTime: 700}).current;
   const impressionRef = useRef<(product: CatalogProduct, position: number) => void>(() => undefined);
+
+  const applyServerLikedProductIds = useCallback((nextIds: Set<string>) => {
+    confirmedLikedProductIdsRef.current = new Set(nextIds);
+    likedProductIdsRef.current = nextIds;
+    setLikedProductIds(nextIds);
+  }, []);
+
+  const applyLikedIntent = useCallback((productId: string, liked: boolean) => {
+    const nextIds = new Set(likedProductIdsRef.current);
+    if (liked) nextIds.add(productId);
+    else nextIds.delete(productId);
+    likedProductIdsRef.current = nextIds;
+    setLikedProductIds(nextIds);
+  }, []);
+
+  const recordConfirmedLike = useCallback((productId: string, liked: boolean) => {
+    const nextIds = new Set(confirmedLikedProductIdsRef.current);
+    if (liked) nextIds.add(productId);
+    else nextIds.delete(productId);
+    confirmedLikedProductIdsRef.current = nextIds;
+  }, []);
 
   const updateCategoryState = useCallback((category: ProductRecommendationCategory, next: ShelfLoadState) => {
     categoryStatesRef.current = {...categoryStatesRef.current, [category]: next};
@@ -262,6 +289,7 @@ export function ProductRecommendationShelfScreen({
   }, [loadCategory, shelf]);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -304,11 +332,24 @@ export function ProductRecommendationShelfScreen({
 
   useFocusEffect(useCallback(() => {
     let active = true;
+    const requestId = ++likedProductsRequestRef.current;
     getLikedProducts().then(products => {
-      if (active) setLikedProductIds(new Set(products.map(product => product.id)));
+      if (active && likedProductsRequestRef.current === requestId) {
+        applyServerLikedProductIds(new Set(products.map(product => product.id)));
+      }
     }).catch(() => undefined);
-    return () => {active = false;};
-  }, []));
+    if (hasFocusedRef.current && (shelf === 'personalized' || shelf === 'cohort')) {
+      loadCategory(activeCategoryRef.current, seasonalRegionCodeRef.current, true);
+    } else {
+      hasFocusedRef.current = true;
+    }
+    return () => {
+      active = false;
+      if (likedProductsRequestRef.current === requestId) {
+        likedProductsRequestRef.current += 1;
+      }
+    };
+  }, [applyServerLikedProductIds, loadCategory, shelf]));
 
   useEffect(() => {
     impressed.current.clear();
@@ -345,7 +386,9 @@ export function ProductRecommendationShelfScreen({
     : shelf === 'cohort'
       ? cohortRecommendationTitle(recommendationData, initialNickname, initialTitle?.trim() || defaults.title)
       : suppliedTitle;
-  const description = state.data?.description?.trim() || defaults.description;
+  const description = shelf === 'cohort' && state.data?.cohortSizeBand
+    ? SHELF_DEFAULTS.cohort.description
+    : state.data?.description?.trim() || defaults.description;
 
   const queueShelfEvent = useCallback((eventType: 'impression' | 'product_open', product: CatalogProduct, position: number) => {
     const data = state.data;
@@ -393,23 +436,45 @@ export function ProductRecommendationShelfScreen({
 
   const toggleLike = async (product: CatalogProduct) => {
     if (product.canLike === false) return;
-    const wasLiked = likedProductIds.has(product.productId);
-    const next = new Set(likedProductIds);
-    if (wasLiked) next.delete(product.productId);
-    else next.add(product.productId);
-    setLikedProductIds(next);
+    const productKey = `${product.externalSource ?? 'catalog'}:${product.productId}`;
+    const wasLiked = likedProductIdsRef.current.has(product.productId);
+    const nextLiked = !wasLiked;
+    const intentVersion = (productLikeIntentVersionsRef.current.get(productKey) ?? 0) + 1;
+    productLikeIntentVersionsRef.current.set(productKey, intentVersion);
+    likedProductsRequestRef.current += 1;
+    applyLikedIntent(product.productId, nextLiked);
     try {
       if (wasLiked) await unlikeProduct(product.productId, product.externalSource);
       else {
         if (product.externalSource) await likeExternalProduct(product.productId, product.externalSource);
         else await likeProduct(product.productId, product.shadeId);
+      }
+      recordConfirmedLike(product.productId, nextLiked);
+      if (!mountedRef.current) return;
+      if (productLikeIntentVersionsRef.current.get(productKey) !== intentVersion) return;
+      if (nextLiked) {
         showToast('좋아요한 제품에 저장했어요', onOpenLikedProducts
           ? {label: '보기', onPress: onOpenLikedProducts}
           : undefined);
       }
+      if (shelf === 'personalized' || shelf === 'cohort') {
+        loadCategory(activeCategoryRef.current, seasonalRegionCodeRef.current, true);
+      }
     } catch {
-      setLikedProductIds(likedProductIds);
+      if (!mountedRef.current) return;
+      if (productLikeIntentVersionsRef.current.get(productKey) !== intentVersion) return;
+      applyLikedIntent(
+        product.productId,
+        confirmedLikedProductIdsRef.current.has(product.productId),
+      );
+      if (shelf === 'personalized' || shelf === 'cohort') {
+        loadCategory(activeCategoryRef.current, seasonalRegionCodeRef.current, true);
+      }
       showToast('좋아요를 변경하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      if (productLikeIntentVersionsRef.current.get(productKey) === intentVersion) {
+        productLikeIntentVersionsRef.current.delete(productKey);
+      }
     }
   };
 
@@ -450,7 +515,7 @@ export function ProductRecommendationShelfScreen({
         <Text style={styles.description}>{description}</Text>
         {shelf === 'seasonal' && (state.data?.regionLabel || state.data?.weatherSummary) ? <Text style={styles.evidence}>{[state.data.regionLabel, state.data.weatherSummary].filter(Boolean).join(' · ')}</Text> : null}
         {shelf === 'seasonal' && state.data?.freshnessStatus === 'stale' ? <Text accessibilityLiveRegion="polite" style={styles.evidence}>최근 확인된 트렌드 제품이에요. 새 신호를 확인하고 있어요.</Text> : null}
-        {shelf === 'cohort' && state.data?.cohortSizeBand ? <Text style={styles.evidence}>익명 집계 모수 {state.data.cohortSizeBand}</Text> : null}
+        {shelf === 'cohort' && state.data?.cohortSizeBand ? <Text style={styles.evidence}>{cohortSizeEvidenceCopy(state.data.cohortSizeBand)}</Text> : null}
       </View>
       <ScrollView
         contentContainerStyle={styles.tabs}
@@ -473,7 +538,7 @@ export function ProductRecommendationShelfScreen({
         })}
       </ScrollView>
       <View style={styles.countRow}>
-        <Text style={styles.count}>{`${activeCategoryLabel} · ${visibleItems.length}개`}</Text>
+        <Text style={styles.count}>{state.status === 'ready' ? `${activeCategoryLabel} · ${visibleItems.length}개` : activeCategoryLabel}</Text>
       </View>
       <FlatList
         columnWrapperStyle={visibleItems.length ? styles.grid : undefined}
@@ -482,7 +547,7 @@ export function ProductRecommendationShelfScreen({
         initialNumToRender={6}
         keyExtractor={item => `${item.externalSource ?? 'catalog'}:${item.productId}:${item.shadeId ?? 'family'}`}
         ListEmptyComponent={state.status === 'loading'
-          ? <RecommendationSectionState kind="loading" message={shelf === 'seasonal' ? '요즘 트렌드 제품을 불러오는 중이에요.' : '추천 제품을 불러오는 중이에요.'} />
+          ? <RecommendationGridPlaceholder />
           : state.status === 'error'
             ? <RecommendationSectionState kind="error" message={state.message ?? (shelf === 'seasonal' ? '요즘 트렌드 제품을 불러오지 못했어요.' : '추천 제품을 불러오지 못했어요.')} actionLabel="다시 시도" onAction={load} />
             : <RecommendationSectionState kind="empty" message={empty} />}
@@ -509,6 +574,24 @@ export function ProductRecommendationShelfScreen({
   );
 }
 
+function RecommendationGridPlaceholder() {
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={styles.placeholderGrid}>
+      {[0, 1, 2, 3].map(index => (
+        <View key={index} style={styles.placeholderCard}>
+          <View style={styles.placeholderImage} />
+          <View style={styles.placeholderBrand} />
+          <View style={styles.placeholderName} />
+          <View style={styles.placeholderPrice} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {backgroundColor: colors.background, flex: 1, minHeight: 0},
   intro: {gap: spacing.xs, paddingBottom: spacing.md, paddingHorizontal: spacing.screenX, paddingTop: spacing.lg},
@@ -523,6 +606,12 @@ const styles = StyleSheet.create({
   tabTextSelected: {color: colors.white, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm},
   countRow: {gap: spacing.xs, paddingHorizontal: spacing.screenX, paddingVertical: spacing.md},
   count: {...typography.caption, color: colors.textSecondary},
+  placeholderGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg, width: '100%'},
+  placeholderCard: {gap: spacing.xs, width: '46%'},
+  placeholderImage: {aspectRatio: 1, backgroundColor: colors.surfaceMuted, borderRadius: radius.md, width: '100%'},
+  placeholderBrand: {backgroundColor: colors.surfaceMuted, borderRadius: radius.pill, height: 10, width: 64},
+  placeholderName: {backgroundColor: colors.surfaceMuted, borderRadius: radius.pill, height: 14, width: '88%'},
+  placeholderPrice: {backgroundColor: colors.surfaceMuted, borderRadius: radius.pill, height: 12, width: 88},
   content: {flexGrow: 1, gap: spacing.xl, paddingHorizontal: spacing.screenX, paddingTop: spacing.sm},
   grid: {gap: spacing.md},
   list: {flex: 1, minHeight: 0},

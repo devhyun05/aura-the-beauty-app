@@ -43,6 +43,44 @@ const result = {
   score: 72,
   scoreLabel: '종합 점수',
   scoreReason: '목적 기준 세 가지 중 두 가지가 사진 근거와 연결됐어요.',
+  scoreBreakdown: {
+    maxScore: 100,
+    formula: '적용 완성도 23/30 + 배치·형태 균형 18/25 + 색·명암 조화 13/20 + 전체 조화·목표 적합도 18/25 = 72/100',
+    axes: [
+      {
+        id: 'application-finish',
+        label: '적용 완성도',
+        score: 23,
+        maxScore: 30,
+        reason: '립 경계는 안정적이고 치크 경계는 한 번 더 풀 여지가 있어요.',
+        evidenceIds: ['obs-lip-boundary', 'obs-blush-boundary'],
+      },
+      {
+        id: 'placement-balance',
+        label: '배치·형태 균형',
+        score: 18,
+        maxScore: 25,
+        reason: '치크 바깥 배치를 조금 더 정리할 수 있어요.',
+        evidenceIds: ['obs-blush-boundary'],
+      },
+      {
+        id: 'color-value-harmony',
+        label: '색·명암 조화',
+        score: 13,
+        maxScore: 20,
+        reason: '조명 영향을 감안해 발색 관계를 보수적으로 봤어요.',
+        evidenceIds: ['obs-blush-boundary'],
+      },
+      {
+        id: 'overall-goal-fit',
+        label: '전체 조화·목표 적합도',
+        score: 18,
+        maxScore: 25,
+        reason: '야외 촬영 목적에 대체로 맞아요.',
+        evidenceIds: ['obs-lip-boundary', 'obs-blush-boundary'],
+      },
+    ],
+  },
   interpretedGoal: {
     intensity: 'light',
     label: '봄 야외 촬영 메이크업',
@@ -104,6 +142,7 @@ const result = {
       description: '볼 바깥쪽 경계를 한 번 더 블렌딩하면 목적에 가까워져요.',
       actionSteps: ['깨끗한 브러시로 바깥 경계를 한 번 쓸어주세요.'],
       kind: 'cheek',
+      scoreImpact: 'low',
       visibility: 'partial',
       visibilityReason: '오른쪽 볼은 그림자 영향을 일부 받아요.',
       goalCriterionIds: ['goal-boundary'],
@@ -125,6 +164,7 @@ const result = {
       description: '숨겨야 하는 선택 항목',
       actionSteps: ['숨겨야 하는 단계'],
       kind: 'eye',
+      scoreImpact: 'high',
       visibility: 'partial',
       visibilityReason: '오른쪽 눈꼬리가 머리카락에 일부 가려졌어요.',
       goalCriterionIds: ['goal-boundary'],
@@ -178,6 +218,18 @@ const result = {
       title: 'Visible improvement',
       description: 'Blend the blush boundary once more.',
       actionSteps: ['Blend once more.'],
+      correctionGuide: {
+        tool: '깨끗한 중간 크기 블러셔 브러시',
+        amount: '제품을 새로 묻히지 않은 상태',
+        targetArea: '오른쪽 광대 바깥쪽 경계',
+        coverage: '광대 바깥 경계부터 관자 방향의 한 브러시 폭',
+        steps: [
+          '브러시를 피부와 평행하게 눕혀 경계 위에 올려주세요.',
+          '관자 방향으로 짧게 한 번 쓸어주세요.',
+        ],
+        stopCondition: '경계선은 흐려지고 중심 발색은 유지될 때',
+        why: '중심 색을 지우지 않고 바깥 경계만 연결하기 위해서예요.',
+      },
       actionLabel: '보완 방법',
       kind: 'cheek',
     },
@@ -199,6 +251,8 @@ const serializedPayload = JSON.stringify(payload);
 
 expectEqual(payload.score, 72, 'score');
 expectEqual(payload.scoreReason, result.scoreReason, 'score reason');
+expectEqual(payload.scoreBreakdown?.axes.length, 4, 'score axes preserved');
+expectEqual(payload.scoreBreakdown?.maxScore, 100, 'score max preserved');
 expectEqual(payload.interpretedGoal?.label, '봄 야외 촬영 메이크업', 'goal label');
 expectEqual(payload.interpretedGoal?.dynamicCriteria.length, 1, 'dynamic criteria count');
 expectEqual(payload.captureQuality?.issues[0]?.code, 'warm-light', 'capture issue');
@@ -234,6 +288,11 @@ expectEqual(
 );
 expectEqual(payload.strengths[0]?.actionSteps[0], 'Keep the current boundary.', 'strength action');
 expectEqual(payload.points[0]?.actionSteps[0], 'Blend once more.', 'point action');
+expectEqual(
+  payload.points[0]?.correctionGuide?.tool,
+  '깨끗한 중간 크기 블러셔 브러시',
+  'point correction guide preserved',
+);
 expectEqual(payload.points.length, 2, 'all user-visible points remain');
 expectEqual(Object.prototype.hasOwnProperty.call(payload, 'summary'), false, 'summary omitted');
 expectOmits(serializedPayload, 'HIDDEN_OPTIONAL', 'optional raw item omitted');
@@ -660,9 +719,17 @@ expectEqual(
   'strength:lip-strength,point:blush-point,point:eyeliner-promoted-point',
   'combined detail evidence refs',
 );
-expectEqual(fallbackRefs[3], 'action:blush:1', 'action evidence follows backend catalog');
-expectEqual(fallbackRefs[4], 'score-reason', 'score evidence follows backend catalog');
-expectEqual(fallbackRefs[5], '', 'final invitation has no factual evidence');
+expectEqual(
+  fallbackRefs[3],
+  'correction:blush-point:setup,correction:blush-point:steps',
+  'procedural correction evidence follows backend catalog',
+);
+expectEqual(fallbackRefs[4], 'score-formula', 'score formula evidence follows backend catalog');
+expectEqual(
+  fallbackRefs[5],
+  'correction:blush-point:check',
+  'stop condition evidence follows backend catalog',
+);
 expectIncludes(fallbackMessages[1]?.text ?? '', '루미', 'goal reacts to photo');
 expectEqual(
   fallbackMessages[2]?.text,
@@ -671,12 +738,15 @@ expectEqual(
 );
 expectOmits(fallbackMessages[2]?.text ?? '', 'The lip boundary is even.', 'detail omits descriptions');
 expectIncludes(fallbackMessages[3]?.text ?? '', '루페', 'coach reacts to detail');
-expectIncludes(fallbackMessages[4]?.text ?? '', '종합', 'goal synthesizes prior discussion');
+expectIncludes(fallbackMessages[3]?.text ?? '', '블러셔 브러시', 'coach names the supplied tool');
+expectIncludes(fallbackMessages[3]?.text ?? '', '제품을 새로 묻히지 않은 상태', 'coach names the supplied amount');
+expectIncludes(fallbackMessages[4]?.text ?? '', '네 점수 기준', 'goal explains the score formula');
 expectIncludes(fallbackMessages[5]?.text ?? '', '결과', 'coach invites result reveal');
+expectIncludes(fallbackMessages[5]?.text ?? '', '멈춤 기준', 'coach keeps the correction stop condition');
 expectIncludes(fallbackText, 'Visible strength', 'fallback uses visible strength');
 expectIncludes(fallbackText, 'Visible improvement', 'fallback uses visible point');
-expectIncludes(fallbackText, 'Blend once more.', 'fallback uses provided action step');
-expectIncludes(fallbackText, result.scoreReason, 'fallback uses score reason');
+expectIncludes(fallbackText, '브러시를 피부와 평행하게', 'fallback uses provided correction step');
+expectIncludes(fallbackText, '= 72/100', 'fallback uses exact score formula');
 expectOmits(fallbackText, 'HIDDEN_OPTIONAL', 'fallback omits optional evaluation');
 expectOmits(fallbackText, 'HIDDEN_NOT_ASSESSABLE', 'fallback omits visibility limitation');
 expectOmits(fallbackText, 'HIDDEN_NOT_APPLICABLE', 'fallback omits non-applicable item');
@@ -759,8 +829,8 @@ expectEqual(
 );
 expectEqual(
   pointOnlyMessages[2]?.evidenceRefs?.[0],
-  'action:blush:1',
-  'point action ref',
+  'correction:blush-point:setup',
+  'point correction setup ref',
 );
 expectIncludes(pointOnlyText, 'Visible improvement', 'point-only keeps visible point');
 expectOmits(pointOnlyText, 'Visible strength', 'point-only does not invent strength');
@@ -771,6 +841,7 @@ const sparseResult = {
   evaluations: [],
   interpretedGoal: undefined,
   points: [],
+  scoreBreakdown: undefined,
   strengths: [],
 } as MakeupFeedbackResult;
 const sparseMessages = buildMakeupFeedbackClosingConferenceMessages(sparseResult);

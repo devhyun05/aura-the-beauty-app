@@ -140,8 +140,8 @@ export function LikedProductListScreen({onOpenProduct}: LikedProductListScreenPr
 const styles = StyleSheet.create({
   brand: {
     color: colors.textSecondary,
+    fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,
   },
   card: {
@@ -181,15 +181,15 @@ const styles = StyleSheet.create({
   },
   name: {
     color: colors.textPrimary,
+    fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
     minHeight: typography.lineHeight.sm * 2,
   },
   price: {
     color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.lg,
   },
   screen: {

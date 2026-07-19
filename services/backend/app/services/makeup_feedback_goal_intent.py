@@ -1263,13 +1263,12 @@ async def normalize_feedback_goal_context_for_request(
     )
     raise local_error
 
-  if classification["intentType"] == "generic_default":
-    analysis_goal_text = GENERIC_DEFAULT_ANALYSIS_GOAL_TEXT
-  else:
-    analysis_goal_text = (
-      _select_safe_analysis_goal_text(raw_goal_text)
-      or GENERIC_ANALYSIS_GOAL_TEXT
-    )
+  # Preserve the complete normalized request after both the local policy check
+  # above and the Bedrock input guardrail below approve it.  Reducing every
+  # valid request to one allow-listed token (for example, "립") discards
+  # qualifiers such as desired intensity and whole-face harmony that the
+  # feedback model needs in order to judge the user's actual goal.
+  analysis_goal_text = classification["normalizedGoalText"]
   try:
     await assert_bedrock_guardrail_input_allowed(
       raw_goal_text,

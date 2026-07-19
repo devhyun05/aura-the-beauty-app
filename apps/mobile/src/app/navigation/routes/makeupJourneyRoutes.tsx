@@ -278,9 +278,10 @@ export function MakeupJourneyDayDetailRouteScreen({
     <>
       <MakeupJourneyDayDetailScreen
         entryDate={entryDate}
+        initialReportId={route.params?.initialReportId}
         onBackToCalendar={returnToCalendar}
         onChangeDate={nextEntryDate => {
-          navigation.setParams({entryDate: nextEntryDate});
+          navigation.setParams({entryDate: nextEntryDate, initialReportId: undefined});
         }}
         onFirstReportActiveChange={setIsFirstReportActive}
         onOpenReport={reportId => {

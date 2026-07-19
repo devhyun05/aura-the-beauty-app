@@ -2,6 +2,7 @@ import type {ImageSourcePropType} from 'react-native';
 
 import {productsMock} from '../mocks/products.mock';
 import type {Product} from '../types/profile';
+import {getBackendAuthToken} from './backendApi';
 import {
   getProductBackendApiBaseUrl,
   requestProductBackendJson,
@@ -25,6 +26,38 @@ type BackendProduct = {
 type BackendLikedProductsResponse = {
   products?: BackendProduct[] | null;
 };
+
+type ProductPreferenceMutation = () => Promise<void>;
+
+const productPreferenceMutationQueues = new Map<string, Promise<void>>();
+let productPreferenceMutationRevision = 0;
+
+export function getProductPreferenceMutationRevision(): number {
+  return productPreferenceMutationRevision;
+}
+
+function recordProductPreferenceMutation(): void {
+  productPreferenceMutationRevision += 1;
+}
+
+async function runProductPreferenceMutation(
+  key: string,
+  mutation: ProductPreferenceMutation,
+): Promise<boolean> {
+  const previous = productPreferenceMutationQueues.get(key) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(mutation);
+  productPreferenceMutationQueues.set(key, current);
+
+  try {
+    await current;
+    recordProductPreferenceMutation();
+    return true;
+  } finally {
+    if (productPreferenceMutationQueues.get(key) === current) {
+      productPreferenceMutationQueues.delete(key);
+    }
+  }
+}
 
 function firstText(...values: Array<string | null | undefined>): string | undefined {
   return values.find((value) => Boolean(value?.trim()))?.trim();
@@ -115,19 +148,27 @@ export const likeProduct = async (
   sourceShadeId?: string | null,
 ): Promise<boolean> => {
   if (!getProductBackendApiBaseUrl()) {
-    if (__DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1') return true;
+    if (__DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1') {
+      recordProductPreferenceMutation();
+      return true;
+    }
     throw new Error('좋아요를 저장할 서버가 연결되지 않았어요.');
   }
+  const authToken = getBackendAuthToken();
 
-  await requestProductBackendJson<{liked: boolean; productId: string}>(
-    `/products/${encodeURIComponent(productId)}/like`,
-    {
-      method: 'POST',
-      body: sourceShadeId ? {sourceShadeId} : {},
+  return runProductPreferenceMutation(
+    `catalog:${productId}`,
+    async () => {
+      await requestProductBackendJson<{liked: boolean; productId: string}>(
+        `/products/${encodeURIComponent(productId)}/like`,
+        {
+          authToken,
+          method: 'POST',
+          body: sourceShadeId ? {sourceShadeId} : {},
+        },
+      );
     },
   );
-
-  return true;
 };
 
 export const likeExternalProduct = async (
@@ -135,26 +176,41 @@ export const likeExternalProduct = async (
   externalSource: string,
 ): Promise<boolean> => {
   if (!getProductBackendApiBaseUrl()) throw new Error('좋아요를 저장할 서버가 연결되지 않았어요.');
-  await requestProductBackendJson<{liked: boolean; productId: string}>(
-    `/products/external/${encodeURIComponent(externalSource)}/${encodeURIComponent(productId)}/like`,
-    {method: 'POST'},
+  const authToken = getBackendAuthToken();
+  return runProductPreferenceMutation(
+    `external:${externalSource}:${productId}`,
+    async () => {
+      await requestProductBackendJson<{liked: boolean; productId: string}>(
+        `/products/external/${encodeURIComponent(externalSource)}/${encodeURIComponent(productId)}/like`,
+        {authToken, method: 'POST'},
+      );
+    },
   );
-  return true;
 };
 
 export const unlikeProduct = async (productId: string, externalSource?: string | null): Promise<boolean> => {
   if (!getProductBackendApiBaseUrl()) {
-    if (__DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1') return true;
+    if (__DEV__ && process.env.EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1') {
+      recordProductPreferenceMutation();
+      return true;
+    }
     throw new Error('좋아요를 취소할 서버가 연결되지 않았어요.');
   }
 
   const path = externalSource
     ? `/products/external/${encodeURIComponent(externalSource)}/${encodeURIComponent(productId)}/like`
     : `/products/${encodeURIComponent(productId)}/like`;
-  await requestProductBackendJson<{liked: boolean; productId: string}>(
-    path,
-    {method: 'DELETE'},
+  const mutationKey = externalSource
+    ? `external:${externalSource}:${productId}`
+    : `catalog:${productId}`;
+  const authToken = getBackendAuthToken();
+  return runProductPreferenceMutation(
+    mutationKey,
+    async () => {
+      await requestProductBackendJson<{liked: boolean; productId: string}>(
+        path,
+        {authToken, method: 'DELETE'},
+      );
+    },
   );
-
-  return true;
 };

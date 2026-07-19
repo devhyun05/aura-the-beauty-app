@@ -4,6 +4,7 @@ import {
   getJourneyScorePresentation,
   getMakeupJourneyLandingMode,
   getMissionDifficultyGuide,
+  resolveMakeupJourneyActiveReportId,
 } from './presentation';
 
 function expect(condition: boolean, message: string): void {
@@ -99,5 +100,44 @@ const advancedMission = getMissionDifficultyGuide('advanced');
 expect(beginnerMission.duration === '1~5분', 'beginner mission is an immediately accessible habit');
 expect(intermediateMission.shortDescription.includes('루틴'), 'intermediate mission is one beauty routine');
 expect(advancedMission.shortDescription.includes('도전'), 'advanced mission leaves a result or record');
+
+const sameDayReports = [{reportId: 'first'}, {reportId: 'second'}];
+expect(
+  resolveMakeupJourneyActiveReportId({
+    currentReportId: 'first',
+    preserveCurrent: false,
+    reports: sameDayReports,
+    representativeReportId: 'second',
+  }) === 'second',
+  'a freshly opened day shows the latest or explicitly selected representative report',
+);
+expect(
+  resolveMakeupJourneyActiveReportId({
+    currentReportId: 'first',
+    preserveCurrent: true,
+    reports: sameDayReports,
+    representativeReportId: 'second',
+  }) === 'first',
+  'a user-swiped report remains active during background refreshes',
+);
+expect(
+  resolveMakeupJourneyActiveReportId({
+    currentReportId: null,
+    initialReportId: 'first',
+    preserveCurrent: false,
+    reports: sameDayReports,
+    representativeReportId: 'second',
+  }) === 'first',
+  'an explicit report deep link wins over the default representative report',
+);
+expect(
+  resolveMakeupJourneyActiveReportId({
+    currentReportId: 'missing',
+    preserveCurrent: true,
+    reports: sameDayReports,
+    representativeReportId: null,
+  }) === 'second',
+  'a missing current report safely falls back to the newest completed report',
+);
 
 console.log('makeup journey presentation contract passed');

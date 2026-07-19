@@ -1,7 +1,6 @@
 import {useState} from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   StyleSheet,
 } from 'react-native';
@@ -9,6 +8,7 @@ import {ArrowUpRight, ImageOff} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {CachedImage} from '../../../shared/ui/CachedImage';
 import type {MakeupJourneyReport} from '../types';
 
 export type JourneyReportPhotoGalleryProps = {
@@ -53,16 +53,18 @@ function ReportPhoto({
           </View>
         ) : (
           <>
-            <Image
-              accessibilityIgnoresInvertColors
+            <CachedImage
               onError={() => {
                 setHasError(true);
                 setIsLoading(false);
               }}
-              onLoadEnd={() => setIsLoading(false)}
-              resizeMode="cover"
+              onLoad={() => setIsLoading(false)}
+              contentFit="cover"
+              priority="high"
+              recyclingKey={report.reportId}
               source={{uri: report.imageUrl ?? ''}}
               style={styles.photo}
+              transition={160}
             />
             {isLoading ? (
               <View style={styles.photoLoading}>
@@ -107,7 +109,7 @@ export function JourneyReportPhotoGallery({
     <View style={styles.section}>
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.eyebrow}>오늘의 메이크업</Text>
+          <Text style={styles.eyebrow}>오늘의 기록</Text>
           <Text style={styles.reportCount}>{reports.length}개의 기록</Text>
         </View>
         <Text style={styles.description}>
@@ -176,8 +178,10 @@ const styles = StyleSheet.create({
   },
   photoFrame: {
     backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
     borderRadius: radius.lg,
-    height: 438,
+    borderWidth: 1,
+    aspectRatio: 0.82,
     overflow: 'hidden',
   },
   photoItem: {
@@ -186,8 +190,8 @@ const styles = StyleSheet.create({
   photoLabel: {
     color: colors.white,
     fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
-    lineHeight: typography.lineHeight.sm,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   photoLoading: {
     alignItems: 'center',
@@ -207,7 +211,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     left: 0,
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     position: 'absolute',
     right: 0,
   },
@@ -225,9 +229,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.36)',
     borderRadius: radius.pill,
     borderWidth: 1,
-    height: 40,
+    height: 36,
     justifyContent: 'center',
-    width: 40,
+    width: 36,
   },
   pressed: {
     opacity: 0.72,

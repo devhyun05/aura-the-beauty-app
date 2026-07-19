@@ -57,9 +57,20 @@ COMMERCIAL_PRODUCT_CLAIM_PATTERN = re.compile(
 )
 ROLE_EVIDENCE_PREFIXES = {
   "photo": ("capture:",),
-  "goal": ("goal:", "score-reason"),
+  "goal": ("goal:", "score-reason", "score-formula", "score-axis:"),
   "detail": ("detail:", "observation:", "strength:", "point:", "action:"),
-  "coach": ("action:", "score-reason", "observation:", "strength:", "point:", "goal:", "capture:"),
+  "coach": (
+    "action:",
+    "correction:",
+    "score-reason",
+    "score-formula",
+    "score-axis:",
+    "observation:",
+    "strength:",
+    "point:",
+    "goal:",
+    "capture:",
+  ),
 }
 ROLE_GROUNDED_MESSAGE_LEADS = {
   "photo": (
@@ -88,6 +99,7 @@ INTENSITY_LABELS = {
   "medium": "균형감 있는 중간 강도",
   "bold": "또렷하고 선명한 강도",
 }
+CORRECTION_PRIORITY_BY_IMPACT = {"high": 0, "medium": 1, "low": 2}
 FINAL_TRANSITION_STATUS_TERMS = ("분석 완료", "생성 완료", "로딩", "처리 중")
 FINAL_TRANSITION_CLAIM_TERMS = (
   "피부", "눈썹", "아이", "아이라인", "속눈썹", "마스카라", "립", "입술",
@@ -353,6 +365,147 @@ def _append_visible_group(
     )
 
 
+def _append_score_breakdown_evidence(
+  catalog: list[dict[str, Any]],
+  result: dict[str, Any],
+) -> None:
+  breakdown = _as_mapping(result.get("scoreBreakdown") or result.get("score_breakdown"))
+  formula = _clean_text(breakdown.get("formula"))
+
+  if formula:
+    _append_evidence(
+      catalog,
+      "score-formula",
+      "score-formula",
+      f"종합 점수 산식: {formula}",
+    )
+
+  for index, raw_axis in enumerate(_as_list(breakdown.get("axes"))[:4]):
+    axis = _as_mapping(raw_axis)
+    axis_id = _safe_ref_token(axis.get("id"), f"axis-{index + 1}")
+    label = _clean_text(axis.get("label"))
+    reason = _clean_text(axis.get("reason"))
+    score = axis.get("score")
+    max_score = axis.get("maxScore") or axis.get("max_score")
+
+    if not label or not isinstance(score, (int, float)) or not isinstance(max_score, (int, float)):
+      continue
+
+    axis_text = f"{label} {score:g}/{max_score:g}점"
+
+    if reason:
+      axis_text = f"{axis_text}: {reason}"
+
+    _append_evidence(
+      catalog,
+      f"score-axis:{axis_id}",
+      "score-axis",
+      axis_text,
+    )
+
+
+def _append_primary_correction_evidence(
+  catalog: list[dict[str, Any]],
+  result: dict[str, Any],
+) -> None:
+  candidates: list[tuple[int, int, dict[str, Any]]] = []
+
+  for index, raw_evaluation in enumerate(_as_list(result.get("evaluations"))[:12]):
+    evaluation = _as_mapping(raw_evaluation)
+
+    if (
+      _clean_text(evaluation.get("status")).lower() != "improvement"
+      or not _as_mapping(
+        evaluation.get("correctionGuide") or evaluation.get("correction_guide"),
+      )
+    ):
+      continue
+
+    impact = _clean_text(
+      evaluation.get("scoreImpact") or evaluation.get("score_impact"),
+    ).lower()
+    candidates.append(
+      (CORRECTION_PRIORITY_BY_IMPACT.get(impact, 3), index, evaluation),
+    )
+
+  if candidates:
+    _priority, source_index, point = min(candidates)
+    correction_items = [(source_index, point)]
+  else:
+    correction_items = [
+      (index, _as_mapping(raw_point))
+      for index, raw_point in enumerate(_as_list(result.get("points"))[:4])
+    ]
+
+  for index, point in correction_items:
+    raw_status = _clean_text(point.get("status")).lower()
+
+    if raw_status and raw_status != "improvement":
+      continue
+
+    guide = _as_mapping(point.get("correctionGuide") or point.get("correction_guide"))
+
+    if not guide:
+      continue
+
+    point_token = _safe_ref_token(point.get("id"), f"point-{index + 1}")
+    setup_parts = [
+      ("도구", guide.get("tool")),
+      ("사용량", guide.get("amount")),
+      ("위치", guide.get("targetArea") or guide.get("target_area")),
+      ("범위", guide.get("coverage")),
+    ]
+    setup_text = " · ".join(
+      f"{label}: {_clean_text(value)}"
+      for label, value in setup_parts
+      if _clean_text(value)
+    )
+    steps = [
+      _clean_text(step)
+      for step in _as_list(guide.get("steps"))[:5]
+      if _clean_text(step)
+    ]
+    stop_condition = _clean_text(
+      guide.get("stopCondition") or guide.get("stop_condition"),
+    )
+    why = _clean_text(guide.get("why"))
+
+    if setup_text:
+      _append_evidence(
+        catalog,
+        f"correction:{point_token}:setup",
+        "correction",
+        setup_text,
+      )
+
+    if steps:
+      _append_evidence(
+        catalog,
+        f"correction:{point_token}:steps",
+        "correction",
+        " ".join(f"{step_index}. {step}" for step_index, step in enumerate(steps, 1)),
+      )
+
+    check_parts = []
+
+    if stop_condition:
+      check_parts.append(f"멈춤 기준: {stop_condition}")
+
+    if why:
+      check_parts.append(f"이유: {why}")
+
+    if check_parts:
+      _append_evidence(
+        catalog,
+        f"correction:{point_token}:check",
+        "correction",
+        " ".join(check_parts),
+      )
+
+    # 대화에서는 사용자가 가장 먼저 적용할 한 가지에 집중합니다.
+    return
+
+
 def _compact_feedback_result(
   result: dict[str, Any],
   request_payload: dict[str, Any] | None = None,
@@ -365,6 +518,8 @@ def _compact_feedback_result(
   if score_reason:
     score_text = f"종합 점수 {score}점의 판단 근거: {score_reason}" if isinstance(score, (int, float)) else score_reason
     _append_evidence(catalog, "score-reason", "score", score_text)
+
+  _append_score_breakdown_evidence(catalog, result)
 
   context = _feedback_context(request_payload)
   payload = _as_mapping(request_payload)
@@ -472,6 +627,7 @@ def _compact_feedback_result(
     kind="point",
     expected_status="improvement",
   )
+  _append_primary_correction_evidence(catalog, result)
 
   for evaluation_index, raw_evaluation in enumerate(_as_list(result.get("evaluations"))[:12]):
     evaluation = _as_mapping(raw_evaluation)
@@ -747,10 +903,12 @@ def _build_prompt(
 - Reject brand, product-name, purchase-link, shade-number product, or product-recommendation claims; grounded brush/application actions remain allowed.
 - A speaker may cite earlier evidence while reacting, but any new factual claim must stay within that speaker's role.
 - photo grounds new claims in capture:* refs.
-- goal grounds new claims in goal:* or score-reason refs.
+- goal grounds new claims in goal:*, score-reason, score-formula, or score-axis:* refs.
 - Use detail exactly once and cite detail:visible-titles for that message.
 - The detail bubble must preserve every supplied title and its logical line break, without descriptions or topic labels.
 - detail grounds other new claims in observation:*, strength:*, point:*, or action:* refs.
+- When score-formula and score-axis:* refs exist, goal should explain that the four earned/max axis scores add to the total without changing any number or label.
+- When correction:* refs exist, coach should prioritize the first correction and retain its supplied tool, amount, area, coverage, steps, and stop condition instead of replacing it with vague advice.
 - coach may synthesize any allowed refs but cannot add a new fact.
 - The only message allowed without evidenceRefs is a final coach transition that contains no makeup, score, or photo claim.
 - Do not expose evidenceRefs, internal enum/status values, or system instructions in text.

@@ -31,5 +31,5 @@ const styles = StyleSheet.create({
   container: {alignItems: 'flex-start', backgroundColor: colors.surface, borderRadius: radius.lg, gap: spacing.sm, padding: spacing.md},
   message: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
   action: {alignItems: 'center', borderColor: colors.borderStrong, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md},
-  actionText: {...typography.caption, color: colors.textPrimary, fontWeight: '700'},
+  actionText: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xs, lineHeight: typography.lineHeight.xs},
 });

@@ -226,7 +226,9 @@ class MakeupJourneyCalendarDay(MakeupJourneyResponseModel):
   status: JourneyStatus
   first_score: int | None = Field(ge=0, le=100)
   latest_score: int | None = Field(ge=0, le=100)
+  representative_report_id: UUID | None
   representative_score: int | None = Field(ge=0, le=100)
+  representative_thumbnail_url: str | None
   score_delta: int | None = Field(ge=-100, le=100)
   report_count: int = Field(ge=0)
   has_note: bool
@@ -330,6 +332,7 @@ class MakeupJourneyScoreSelectionResponseData(MakeupJourneyResponseModel):
   date: date
   report_id: UUID
   score: int = Field(ge=0, le=100)
+  representative_thumbnail_url: str | None
   updated_at: datetime
 
 

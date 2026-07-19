@@ -61,20 +61,20 @@ class S3Service:
       "region_name": region,
     }
 
-    if self.settings.aws_profile_name:
-      return boto3.Session(profile_name=self.settings.aws_profile_name).client("s3", **client_kwargs)
+    if self.settings.aws_use_iam_role:
+      return boto3.client("s3", **client_kwargs)
 
-    if (
-      self.settings.aws_access_key_id
-      and self.settings.aws_secret_access_key
-      and not self.settings.aws_use_iam_role
-    ):
+    if self.settings.aws_access_key_id and self.settings.aws_secret_access_key:
       client_kwargs.update(
         {
           "aws_access_key_id": self.settings.aws_access_key_id,
           "aws_secret_access_key": self.settings.aws_secret_access_key,
         },
       )
+      return boto3.client("s3", **client_kwargs)
+
+    if self.settings.aws_profile_name:
+      return boto3.Session(profile_name=self.settings.aws_profile_name).client("s3", **client_kwargs)
 
     return boto3.client("s3", **client_kwargs)
 

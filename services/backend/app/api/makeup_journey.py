@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -11,7 +12,8 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import asyncpg
-from fastapi import APIRouter, Depends, Query
+from botocore.exceptions import ClientError
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.core.errors import AppError
 from app.core.responses import success
@@ -41,6 +43,7 @@ from app.services.makeup_journey_missions import (
   curated_daily_missions,
 )
 from app.services.makeup_feedback_goal_intent import extract_feedback_goal_context
+from app.services.s3 import S3Service
 from app.services.users import ensure_user
 
 
@@ -48,6 +51,8 @@ logger = logging.getLogger(__name__)
 MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 DATE_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
 RANGE_DAYS = {"7d": 7, "30d": 30, "90d": 90}
+MAKEUP_JOURNEY_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024
+MAKEUP_JOURNEY_THUMBNAIL_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 
 def require_makeup_journey_enabled(
@@ -367,6 +372,10 @@ async def get_makeup_journey_calendar(
     with eligible_reports as (
       select reports.entry_date, reports.id, reports.score,
         reports.created_at, reports.completed_at,
+        (
+          media.thumbnail_bucket is not null
+          and media.thumbnail_object_key is not null
+        ) as has_thumbnail,
         selections.report_id as selected_report_id,
         row_number() over (
           partition by reports.entry_date
@@ -377,6 +386,11 @@ async def get_makeup_journey_calendar(
           order by coalesce(reports.completed_at, reports.created_at) desc, reports.id desc
         ) as latest_rank
       from makeup_feedback_reports reports
+      left join media_assets media
+        on media.id = reports.uploaded_media_id
+        and media.owner_user_id = reports.user_id
+        and media.status = 'active'
+        and media.deleted_at is null
       left join makeup_journey_day_score_selections selections
         on selections.user_id = reports.user_id
         and selections.entry_date = reports.entry_date
@@ -391,10 +405,21 @@ async def get_makeup_journey_calendar(
         count(*)::int as report_count
       from eligible_reports
       group by entry_date
+    ), representative_reports as (
+      select distinct on (entry_date)
+        entry_date,
+        id as representative_report_id,
+        has_thumbnail as representative_thumbnail_available
+      from eligible_reports
+      order by entry_date,
+        coalesce(id = selected_report_id, false) desc,
+        coalesce(completed_at, created_at) desc,
+        id desc
     ), note_days as (
-      select entry_date, true as has_note
+      select entry_date, bool_or(true) as has_note
       from makeup_journey_day_notes
       where user_id = $1 and entry_date >= $2 and entry_date < $3
+      group by entry_date
     ), mission_days as (
       select entry_date,
         count(*) filter (where is_completed)::int as completed_missions,
@@ -409,12 +434,15 @@ async def get_makeup_journey_calendar(
     )
     select keys.entry_date, reports.first_score, reports.latest_score,
       reports.selected_score,
+      representatives.representative_report_id,
+      representatives.representative_thumbnail_available,
       coalesce(reports.report_count, 0)::int as report_count,
       coalesce(notes.has_note, false) as has_note,
       coalesce(missions.completed_missions, 0)::int as completed_missions,
       coalesce(missions.total_missions, 0)::int as total_missions
     from date_keys keys
     left join report_days reports using (entry_date)
+    left join representative_reports representatives using (entry_date)
     left join note_days notes using (entry_date)
     left join mission_days missions using (entry_date)
     order by keys.entry_date
@@ -464,6 +492,13 @@ async def get_makeup_journey_calendar(
     representative_score = (
       int(selected_score) if selected_score is not None else latest_score
     )
+    representative_report_id = row.get("representative_report_id")
+    representative_thumbnail_url = (
+      f"/makeup-journey/reports/{representative_report_id}/thumbnail"
+      if representative_report_id is not None
+      and bool(row.get("representative_thumbnail_available"))
+      else None
+    )
     if representative_score is not None:
       representative_scores.append(representative_score)
     days.append(
@@ -476,7 +511,9 @@ async def get_makeup_journey_calendar(
         ),
         "first_score": first_score,
         "latest_score": latest_score,
+        "representative_report_id": representative_report_id,
         "representative_score": representative_score,
+        "representative_thumbnail_url": representative_thumbnail_url,
         "score_delta": (
           representative_score - first_score
           if representative_score is not None and first_score is not None
@@ -501,6 +538,93 @@ async def get_makeup_journey_calendar(
         "current_streak": int((streak_row or {}).get("current_streak") or 0),
       },
       "days": days,
+    },
+  )
+
+
+@router.get("/reports/{report_id}/thumbnail")
+async def get_makeup_journey_report_thumbnail(
+  report_id: UUID,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> Response:
+  user = await ensure_user(db, auth)
+  media = await db.fetchrow(
+    """
+    select media.thumbnail_bucket, media.thumbnail_object_key
+    from makeup_feedback_reports reports
+    join media_assets media
+      on media.id = reports.uploaded_media_id
+      and media.owner_user_id = reports.user_id
+      and media.status = 'active'
+      and media.deleted_at is null
+    where reports.id = $1
+      and reports.user_id = $2
+      and reports.status = 'completed'
+      and reports.score is not null
+      and media.thumbnail_bucket is not null
+      and media.thumbnail_object_key is not null
+    limit 1
+    """,
+    report_id,
+    user["id"],
+  )
+  if media is None:
+    raise AppError(
+      404,
+      "MAKEUP_JOURNEY_THUMBNAIL_NOT_FOUND",
+      "Feedback thumbnail was not found.",
+    )
+
+  bucket = str(media["thumbnail_bucket"])
+  object_key = str(media["thumbnail_object_key"])
+  s3 = S3Service(settings)
+  try:
+    s3.assert_managed_media_location(bucket=bucket, object_key=object_key)
+    content, content_type = await asyncio.to_thread(
+      s3.get_object_bytes,
+      bucket=bucket,
+      object_key=object_key,
+      max_bytes=MAKEUP_JOURNEY_THUMBNAIL_MAX_BYTES,
+    )
+  except AppError:
+    raise
+  except ClientError as exc:
+    error_code = str(exc.response.get("Error", {}).get("Code") or "")
+    if error_code in {"404", "NoSuchKey", "NotFound"}:
+      raise AppError(
+        404,
+        "MAKEUP_JOURNEY_THUMBNAIL_NOT_FOUND",
+        "Feedback thumbnail was not found.",
+      ) from exc
+    raise AppError(
+      503,
+      "MAKEUP_JOURNEY_THUMBNAIL_UNAVAILABLE",
+      "Feedback thumbnail is temporarily unavailable.",
+    ) from exc
+  except Exception as exc:
+    raise AppError(
+      503,
+      "MAKEUP_JOURNEY_THUMBNAIL_UNAVAILABLE",
+      "Feedback thumbnail is temporarily unavailable.",
+    ) from exc
+
+  resolved_content_type = content_type.split(";", 1)[0].strip().lower()
+  if resolved_content_type not in MAKEUP_JOURNEY_THUMBNAIL_CONTENT_TYPES:
+    raise AppError(
+      415,
+      "MAKEUP_JOURNEY_THUMBNAIL_TYPE_INVALID",
+      "Feedback thumbnail has an unsupported media type.",
+    )
+  return Response(
+    content=content,
+    media_type=resolved_content_type,
+    headers={
+      "Cache-Control": "private, no-store",
+      "Pragma": "no-cache",
+      "Vary": "Authorization",
+      "X-Content-Type-Options": "nosniff",
     },
   )
 
@@ -780,10 +904,19 @@ async def update_makeup_journey_score_selection(
   row = await db.fetchrow(
     """
     with eligible_report as (
-      select id, score
-      from makeup_feedback_reports
-      where id = $3 and user_id = $1 and entry_date = $2
-        and status = 'completed' and score is not null
+      select reports.id, reports.score,
+        (
+          media.thumbnail_bucket is not null
+          and media.thumbnail_object_key is not null
+        ) as has_thumbnail
+      from makeup_feedback_reports reports
+      left join media_assets media
+        on media.id = reports.uploaded_media_id
+        and media.owner_user_id = reports.user_id
+        and media.status = 'active'
+        and media.deleted_at is null
+      where reports.id = $3 and reports.user_id = $1 and reports.entry_date = $2
+        and reports.status = 'completed' and reports.score is not null
     )
     insert into makeup_journey_day_score_selections (
       user_id, entry_date, report_id
@@ -794,6 +927,7 @@ async def update_makeup_journey_score_selection(
       updated_at = now()
     returning report_id,
       (select score from eligible_report) as score,
+      (select has_thumbnail from eligible_report) as has_thumbnail,
       updated_at
     """,
     user["id"],
@@ -811,6 +945,11 @@ async def update_makeup_journey_score_selection(
       "date": entry_date,
       "report_id": row["report_id"],
       "score": int(row["score"]),
+      "representative_thumbnail_url": (
+        f"/makeup-journey/reports/{row['report_id']}/thumbnail"
+        if bool(row.get("has_thumbnail"))
+        else None
+      ),
       "updated_at": row["updated_at"],
     },
   )

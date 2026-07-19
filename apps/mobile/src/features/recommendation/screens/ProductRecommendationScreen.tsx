@@ -25,6 +25,7 @@ type ProductListScrollAxis = 'horizontal' | 'vertical';
 
 export const productCategoryTabWidthMode: ProductCategoryTabWidthMode = 'labelContent';
 export const productListScrollAxis: ProductListScrollAxis = 'vertical';
+export const PRODUCT_PREFERENCE_REFRESH_DEBOUNCE_MS = 280;
 
 type ProductRecommendationHeaderCopy = {
   productSectionEyebrow?: undefined;
@@ -79,55 +80,139 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
   const productScrollRef = useRef<ScrollView | null>(null);
   const didScrollToInitialSectionRef = useRef(false);
   const hasFocusedHubRef = useRef(false);
+  const preferenceRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const likedProductsRequestRef = useRef(0);
+  const likedProductIdsRef = useRef<Set<string>>(new Set());
+  const confirmedLikedProductIdsRef = useRef<Set<string>>(new Set());
+  const productLikeIntentVersionsRef = useRef(new Map<string, number>());
+  const mountedRef = useRef(true);
   const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
   const [likedProducts, setLikedProducts] = useState<Product[]>([]);
   const [hubRefreshKey, setHubRefreshKey] = useState(0);
+  const [preferenceMutationRefreshKey, setPreferenceMutationRefreshKey] = useState(0);
   const [orbScrollState, setOrbScrollState] = useState<'idle' | 'compact' | 'hidden'>('idle');
+
+  const applyServerLikedProducts = useCallback((products: Product[]) => {
+    const nextIds = new Set(products.map(product => product.id));
+    confirmedLikedProductIdsRef.current = new Set(nextIds);
+    likedProductIdsRef.current = nextIds;
+    setLikedProducts(products);
+    setLikedProductIds(nextIds);
+  }, []);
+
+  const applyLikedIntent = useCallback((productId: string, liked: boolean) => {
+    const nextIds = new Set(likedProductIdsRef.current);
+    if (liked) nextIds.add(productId);
+    else nextIds.delete(productId);
+    likedProductIdsRef.current = nextIds;
+    setLikedProductIds(nextIds);
+  }, []);
+
+  const recordConfirmedLike = useCallback((productId: string, liked: boolean) => {
+    const nextIds = new Set(confirmedLikedProductIdsRef.current);
+    if (liked) nextIds.add(productId);
+    else nextIds.delete(productId);
+    confirmedLikedProductIdsRef.current = nextIds;
+  }, []);
 
   useEffect(() => {
     didScrollToInitialSectionRef.current = false;
   }, [props.arStyleId, props.initialSection]);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (preferenceRefreshTimerRef.current) {
+        clearTimeout(preferenceRefreshTimerRef.current);
+        preferenceRefreshTimerRef.current = null;
+      }
+      likedProductsRequestRef.current += 1;
+    };
+  }, []);
+
   useFocusEffect(useCallback(() => {
     let active = true;
     if (hasFocusedHubRef.current) setHubRefreshKey(current => current + 1);
     else hasFocusedHubRef.current = true;
+    const requestId = ++likedProductsRequestRef.current;
     getLikedProducts()
       .then(products => {
-        if (!active) return;
-        setLikedProducts(products);
-        setLikedProductIds(new Set(products.map(product => product.id)));
+        if (!active || likedProductsRequestRef.current !== requestId) return;
+        applyServerLikedProducts(products);
       })
       .catch(error => {
         console.info('[aura:products] likes:load-failed', {
           message: error instanceof Error ? error.message : String(error),
         });
       });
-    return () => {active = false;};
-  }, []));
+    return () => {
+      active = false;
+      if (likedProductsRequestRef.current === requestId) {
+        likedProductsRequestRef.current += 1;
+      }
+    };
+  }, [applyServerLikedProducts]));
+
+  const schedulePreferenceRefresh = useCallback(() => {
+    if (!mountedRef.current) return;
+    if (preferenceRefreshTimerRef.current) {
+      clearTimeout(preferenceRefreshTimerRef.current);
+    }
+    preferenceRefreshTimerRef.current = setTimeout(() => {
+      preferenceRefreshTimerRef.current = null;
+      if (!mountedRef.current) return;
+      setPreferenceMutationRefreshKey(current => current + 1);
+      const requestId = ++likedProductsRequestRef.current;
+      void getLikedProducts()
+        .then(products => {
+          if (!mountedRef.current || likedProductsRequestRef.current !== requestId) return;
+          applyServerLikedProducts(products);
+        })
+        .catch(() => undefined);
+    }, PRODUCT_PREFERENCE_REFRESH_DEBOUNCE_MS);
+  }, [applyServerLikedProducts]);
 
   const handleToggleLike = useCallback(async (product: CatalogProduct) => {
     if (product.canLike === false) return;
-    const wasLiked = likedProductIds.has(product.productId);
-    const next = new Set(likedProductIds);
-    if (wasLiked) next.delete(product.productId);
-    else next.add(product.productId);
-    setLikedProductIds(next);
+    const productKey = `${product.externalSource ?? 'catalog'}:${product.productId}`;
+    const wasLiked = likedProductIdsRef.current.has(product.productId);
+    const nextLiked = !wasLiked;
+    const intentVersion = (productLikeIntentVersionsRef.current.get(productKey) ?? 0) + 1;
+    productLikeIntentVersionsRef.current.set(productKey, intentVersion);
+    likedProductsRequestRef.current += 1;
+    applyLikedIntent(product.productId, nextLiked);
     try {
       if (wasLiked) {
         await unlikeProduct(product.productId, product.externalSource);
       } else {
         if (product.externalSource) await likeExternalProduct(product.productId, product.externalSource);
         else await likeProduct(product.productId, product.shadeId);
+      }
+      recordConfirmedLike(product.productId, nextLiked);
+      if (!mountedRef.current) return;
+      if (productLikeIntentVersionsRef.current.get(productKey) !== intentVersion) return;
+      if (nextLiked) {
         showToast('좋아요한 제품에 저장했어요', props.onOpenLikedProducts
           ? {label: '보기', onPress: props.onOpenLikedProducts}
           : undefined);
       }
+      schedulePreferenceRefresh();
     } catch {
-      setLikedProductIds(likedProductIds);
+      if (!mountedRef.current) return;
+      if (productLikeIntentVersionsRef.current.get(productKey) !== intentVersion) return;
+      applyLikedIntent(
+        product.productId,
+        confirmedLikedProductIdsRef.current.has(product.productId),
+      );
+      schedulePreferenceRefresh();
       showToast('좋아요를 변경하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      if (productLikeIntentVersionsRef.current.get(productKey) === intentVersion) {
+        productLikeIntentVersionsRef.current.delete(productKey);
+      }
     }
-  }, [likedProductIds, props.onOpenLikedProducts, showToast]);
+  }, [applyLikedIntent, props.onOpenLikedProducts, recordConfirmedLike, schedulePreferenceRefresh, showToast]);
 
   const handleOpenProduct = useCallback(async (product: CatalogProduct) => {
     if (product.externalSource) {
@@ -182,6 +267,7 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
             }));
           }}
           onToggleLike={handleToggleLike}
+          preferenceRefreshKey={hubRefreshKey + preferenceMutationRefreshKey}
           refreshKey={hubRefreshKey}
         />
       </AppScreen>

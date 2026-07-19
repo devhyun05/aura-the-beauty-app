@@ -42,6 +42,7 @@ function executeTypeScriptModule(path, dependencies) {
 }
 
 const homeRoutes = source('apps/mobile/src/app/navigation/routes/homeRoutes.tsx');
+const homeFeedService = source('apps/mobile/src/features/home/services/homeFeedService.ts');
 const routeTypes = source('apps/mobile/src/app/navigation/routeTypes.ts');
 const legacyService = source('apps/mobile/src/features/recommendation/services/productRecommendationService.ts');
 const likedService = source('apps/mobile/src/shared/services/productService.ts');
@@ -69,6 +70,12 @@ const arRoutes = source('apps/mobile/src/app/navigation/routes/arRoutes.tsx');
 const searchScreen = source('apps/mobile/src/features/recommendation/screens/ProductSearchResultScreen.tsx');
 const likedScreen = source('apps/mobile/src/features/recommendation/screens/LikedProductListScreen.tsx');
 const detailScreen = source('apps/mobile/src/features/recommendation/screens/ProductDetailScreen.tsx');
+const appHeader = source('apps/mobile/src/shared/ui/AppHeader.tsx');
+const detailHeaderChrome = source('apps/mobile/src/app/navigation/detailHeaderChrome.tsx');
+const recommendationProductCard = source('apps/mobile/src/features/recommendation/components/RecommendationProductCard.tsx');
+const productSearchBar = source('apps/mobile/src/features/recommendation/components/ProductSearchBar.tsx');
+const recommendationSectionState = source('apps/mobile/src/features/recommendation/components/RecommendationSectionState.tsx');
+const authSessionContext = source('apps/mobile/src/features/auth/services/authSessionContext.tsx');
 const transientToast = source('apps/mobile/src/shared/ui/TransientToast.tsx');
 const loginScreen = source('apps/mobile/src/features/auth/screens/LoginScreen.tsx');
 const iosAppDelegate = source('apps/mobile/ios/AURA/AppDelegate.swift');
@@ -262,15 +269,40 @@ requireContract(
     hubContent.includes('likedFallbackItems') &&
     hubContent.includes('최근 좋아요한 제품을 보여드려요.') &&
     recommendationScreen.includes('hasFocusedHubRef') &&
-    recommendationScreen.includes('setLikedProducts(products)') &&
+    recommendationScreen.includes('applyServerLikedProducts(products)') &&
     recommendationScreen.includes('getLikedProducts()') &&
-    recommendationScreen.includes('setLikedProductIds(new Set(products.map(product => product.id)))') &&
+    recommendationScreen.includes('likedProductsRequestRef.current !== requestId') &&
     recommendationScreen.includes('setHubRefreshKey(current => current + 1)') &&
+    recommendationScreen.includes('setPreferenceMutationRefreshKey(current => current + 1)') &&
+    recommendationScreen.includes('PRODUCT_PREFERENCE_REFRESH_DEBOUNCE_MS = 280') &&
+    likedService.includes('getProductPreferenceMutationRevision') &&
+    likedService.includes('runProductPreferenceMutation') &&
+    recommendationScreen.includes('preferenceRefreshKey={hubRefreshKey + preferenceMutationRefreshKey}') &&
+    recommendationScreen.includes('refreshKey={hubRefreshKey}') &&
     hubContent.includes('InteractionManager.runAfterInteractions') &&
     hubContent.includes('}, [refreshKey]);') &&
     loginScreen.includes('제품 추천 개인화를 위한 좋아요·검색·클릭 데이터 활용') &&
     loginScreen.includes('익명 컬러 취향 추천에 동의하게 됩니다.'),
   'modular shelves must load shared likes, defer secondary requests, move consent disclosure to signup, and refresh after re-entry or like changes.',
+);
+requireContract(
+  recommendationScreen.includes('productLikeIntentVersionsRef') &&
+    recommendationScreen.includes('confirmedLikedProductIdsRef') &&
+    recommendationScreen.includes('applyLikedIntent(product.productId, nextLiked)') &&
+    recommendationShelfScreen.includes('productLikeIntentVersionsRef') &&
+    hubContent.includes("if (state.status === 'loading') return <RecommendationRailPlaceholder />") &&
+    hubContent.includes('importantForAccessibility="no-hide-descendants"') &&
+    !hubContent.includes('저장한 AR 룩과 실제 색상을 비교하고 있어요.') &&
+    !hubContent.includes('요즘 주목받는 트렌드 제품을 불러오고 있어요.'),
+  'like changes must keep latest intent, roll back from confirmed state, and reserve stable entry shelf space without loading copy.',
+);
+requireContract(
+  homeFeedService.includes('HOME_PRODUCT_PREFETCH_LIMIT = 12') &&
+    homeFeedService.includes('getPersonalizedRecommendations(HOME_PRODUCT_PREFETCH_LIMIT)') &&
+    homeFeedService.includes('const seasonalPromise = getSeasonalRecommendations(') &&
+    homeFeedService.includes('HOME_PRODUCT_PREFETCH_LIMIT,') &&
+    homeFeedService.includes(".catch(() => null)"),
+  'Home must warm the same twelve-product cache keys used by the product hub while rendering only its smaller rail.',
 );
 requireContract(
   hubContent.includes('state.data?.minimumCohortSize ?? 5') &&
@@ -294,9 +326,57 @@ requireContract(
 requireContract(
   likedService.includes("body: sourceShadeId ? {sourceShadeId} : {}") &&
     !likedService.includes('purchaseUrl,') &&
-    likedService.includes("throw new Error('좋아요를 저장할 서버가 연결되지 않았어요.')"),
+    likedService.includes("throw new Error('좋아요를 저장할 서버가 연결되지 않았어요.')") &&
+    likedService.includes('productPreferenceMutationQueues'),
   'likes must submit only the internal product URL identity and optional shade context.',
 );
+const serializedProductMutationCalls = [];
+const serializedProductMutationResolvers = [];
+let productServiceAuthToken = 'account-a-token';
+const productServiceDevFlag = globalThis.__DEV__;
+globalThis.__DEV__ = false;
+const productServiceModule = executeTypeScriptModule(
+  'apps/mobile/src/shared/services/productService.ts',
+  {
+    '../mocks/products.mock': {productsMock: []},
+    './backendApi': {getBackendAuthToken: () => productServiceAuthToken},
+    './productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'https://api.example.com',
+      requestProductBackendJson: (path, options) => {
+        serializedProductMutationCalls.push({path, options});
+        return new Promise(resolve => {
+          serializedProductMutationResolvers.push(() => resolve({liked: options.method === 'POST'}));
+        });
+      },
+    },
+  },
+);
+const queuedLike = productServiceModule.likeProduct('serial-product');
+productServiceAuthToken = 'account-b-token';
+const queuedUnlike = productServiceModule.unlikeProduct('serial-product');
+await new Promise(resolve => setImmediate(resolve));
+requireContract(
+  serializedProductMutationCalls.length === 1 &&
+    serializedProductMutationCalls[0].options.method === 'POST',
+  'same-product like mutations must start in user intent order instead of racing.',
+);
+serializedProductMutationResolvers.shift()?.();
+await new Promise(resolve => setImmediate(resolve));
+requireContract(
+  serializedProductMutationCalls.length === 2 &&
+    serializedProductMutationCalls[1].options.method === 'DELETE' &&
+    serializedProductMutationCalls[0].options.authToken === 'account-a-token' &&
+    serializedProductMutationCalls[1].options.authToken === 'account-b-token',
+  'same-product unlike must wait for the prior like request to settle.',
+);
+serializedProductMutationResolvers.shift()?.();
+await Promise.all([queuedLike, queuedUnlike]);
+requireContract(
+  productServiceModule.getProductPreferenceMutationRevision() === 2,
+  'each successful shared preference mutation must advance the cache revision exactly once.',
+);
+if (productServiceDevFlag === undefined) delete globalThis.__DEV__;
+else globalThis.__DEV__ = productServiceDevFlag;
 requireContract(
   productRail.includes('itemVisiblePercentThreshold: 60') && productRail.includes('minimumViewTime: 700'),
   'rail impressions must use the viewport threshold.',
@@ -486,7 +566,11 @@ requireContract(
 );
 requireContract(
   hubContent.includes("setSeasonal(current => current.data ? current : {status: 'loading'})") &&
-    hubContent.includes("setPersonalized(current => current.data ? current : {status: 'loading'})") &&
+    hubContent.includes('setPersonalized(current => current.data ? current : initialSectionLoad(cached))') &&
+    hubContent.includes('setCohort(current => current.data ? current : initialSectionLoad(cached))') &&
+    hubContent.includes('getCachedTrendRegionCode()') &&
+    hubContent.includes('peekPersonalizedRecommendations()') &&
+    hubContent.includes('peekCohortRecommendations()') &&
     searchScreen.includes('const requestIdRef = useRef(0)') &&
     searchScreen.includes('if (requestIdRef.current === requestId)') &&
     detailScreen.includes('if (requestIdRef.current !== requestId) return;'),
@@ -603,18 +687,43 @@ requireContract(
       status: 'ready',
       cohortSizeBand: '5+',
       items: [fallbackProduct],
-    }, '서진') === '서진님과 비슷한 분들이 많이 좋아해요',
+    }, '서진') === '서진님과 비슷한 분들이 많이 좋아해요' &&
+    presentationModule.cohortSizeEvidenceCopy('5+') === '비슷한 취향 사용자 5명 이상의 좋아요를 반영했어요.' &&
+    recommendationShelfScreen.includes('나와 퍼스널컬러·제품 취향이 비슷한 사용자들이 좋아한 상품이에요.') &&
+    !recommendationShelfScreen.includes('익명 집계 모수') &&
+    !hubContent.includes('익명 집계 모수'),
   'recommendation headings must describe popular, report-tone, and privacy-thresholded cohort evidence honestly.',
 );
 
+requireContract(
+  appHeader.includes('fontFamily: typography.fontFamily.bold') &&
+    detailHeaderChrome.includes('fontFamily: typography.fontFamily.bold') &&
+    likedScreen.includes('fontFamily: typography.fontFamily.medium') &&
+    likedScreen.includes('fontFamily: typography.fontFamily.semibold') &&
+    recommendationProductCard.includes('fontFamily: typography.fontFamily.bold') &&
+    productSearchBar.includes('fontFamily: typography.fontFamily.bold') &&
+    recommendationSectionState.includes('fontFamily: typography.fontFamily.bold'),
+  'recommendation chrome, cards, search, and liked-product copy must use the shared Pretendard family tokens.',
+);
+requireContract(
+  authSessionContext.includes('clearProductHubRecommendationCache()') &&
+    authSessionContext.includes('[session?.user.id]') &&
+    productHubService.includes('clearProductHubRecommendationCache') &&
+    productHubService.includes('invalidatePreferenceRecommendationCache'),
+  'in-memory recommendation caches must be cleared across account changes and logout.',
+);
+
 const nativeTrendRegionStorage = [];
+let nativeTrendRegionCachedValue = null;
 const trendRegionModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/trendRegionService.ts',
   {
     '@react-native-async-storage/async-storage': {
+      __esModule: true,
       default: {
-        getItem: async () => null,
+        getItem: async () => nativeTrendRegionCachedValue,
         setItem: async (_key, value) => {
+          nativeTrendRegionCachedValue = value;
           nativeTrendRegionStorage.push(value);
         },
       },
@@ -629,6 +738,12 @@ const trendRegionModule = executeTypeScriptModule(
     },
   },
 );
+nativeTrendRegionCachedValue = JSON.stringify({regionCode: 'KR-26', resolvedAt: Date.now()});
+requireContract(
+  await trendRegionModule.getCachedTrendRegionCode() === 'KR-26',
+  'the hub must be able to synchronously reuse a fresh coarse region cache before its first seasonal request.',
+);
+nativeTrendRegionCachedValue = null;
 const trendNow = Date.UTC(2026, 6, 16, 12, 0, 0);
 const trendRegionFixtures = [
   {code: 'KR-11', korean: '서울특별시', english: 'Seoul'},
@@ -720,6 +835,7 @@ requireContract(
 );
 
 const productHubApiRequests = [];
+let productPreferenceMutationRevision = 0;
 const productHubServiceModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productHubService.ts',
   {
@@ -731,6 +847,9 @@ const productHubServiceModule = executeTypeScriptModule(
         if (path.includes('/recommendations/seasonal?')) return {status: 'ready', collection: null, items: []};
         return {status: 'ready', items: []};
       },
+    },
+    '../../../shared/services/productService': {
+      getProductPreferenceMutationRevision: () => productPreferenceMutationRevision,
     },
     './trendRegionService': {
       DEFAULT_TREND_REGION_CODE: 'KR-00',
@@ -783,6 +902,102 @@ requireContract(
     !repeatedSeasonalRequests[0].includes('entry='),
   'more shelves must execute category/region-scoped requests, isolate region cache keys, and never send coordinates.',
 );
+productHubServiceModule.clearProductHubRecommendationCache();
+await Promise.all([
+  productHubServiceModule.getArRecommendations('cache-style', 4, 'lip'),
+  productHubServiceModule.getArRecommendations('cache-style', 4, 'lip'),
+]);
+await Promise.all([
+  productHubServiceModule.getPersonalizedRecommendations(7, 'lip'),
+  productHubServiceModule.getPersonalizedRecommendations(7, 'lip'),
+]);
+await Promise.all([
+  productHubServiceModule.getCohortRecommendations(7, 'lip'),
+  productHubServiceModule.getCohortRecommendations(7, 'lip'),
+]);
+const cacheArRequests = productHubApiRequests.filter(
+  path => path.includes('/recommendations/ar?') && path.includes('style_id=cache-style') && path.includes('per_region_limit=4'),
+);
+const cachePersonalizedRequests = productHubApiRequests.filter(
+  path => path.includes('/recommendations/personalized?') && path.includes('limit=7') && path.includes('category=lip'),
+);
+const cacheCohortRequests = productHubApiRequests.filter(
+  path => path.includes('/recommendations/cohort?') && path.includes('limit=7') && path.includes('category=lip'),
+);
+requireContract(
+  cacheArRequests.length === 1 &&
+    cachePersonalizedRequests.length === 1 &&
+    cacheCohortRequests.length === 1 &&
+    productHubServiceModule.peekArRecommendations('cache-style', 4, 'lip')?.status === 'ready' &&
+    productHubServiceModule.peekPersonalizedRecommendations(7, 'lip')?.status === 'ready' &&
+    productHubServiceModule.peekCohortRecommendations(7, 'lip')?.status === 'ready',
+  'AR, personalized, and cohort recommendation requests must deduplicate pending work and expose cached data for instant paint.',
+);
+productPreferenceMutationRevision += 1;
+requireContract(
+  productHubServiceModule.peekArRecommendations('cache-style', 4, 'lip')?.status === 'ready' &&
+    productHubServiceModule.peekPersonalizedRecommendations(7, 'lip') === null &&
+    productHubServiceModule.peekCohortRecommendations(7, 'lip') === null,
+  'a shared product preference mutation must invalidate personalized and cohort data without forcing AR or seasonal reloads.',
+);
+await productHubServiceModule.getPersonalizedRecommendations(7, 'lip');
+requireContract(
+  productHubApiRequests.filter(
+    path => path.includes('/recommendations/personalized?') && path.includes('limit=7') && path.includes('category=lip'),
+  ).length === 2,
+  'the next personalized request after a like mutation must bypass the invalidated cache.',
+);
+const seasonalRaceCalls = [];
+const seasonalRaceResolvers = [];
+const seasonalRaceModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/productHubService.ts',
+  {
+    '../../../shared/services/productBackendApi': {
+      getProductBackendApiBaseUrl: () => 'https://api.example.com',
+      requestProductBackendJson: path => {
+        seasonalRaceCalls.push(path);
+        return new Promise(resolve => seasonalRaceResolvers.push(resolve));
+      },
+    },
+    '../../../shared/services/productService': {
+      getProductPreferenceMutationRevision: () => 0,
+    },
+    './trendRegionService': {
+      DEFAULT_TREND_REGION_CODE: 'KR-00',
+      normalizeTrendRegionCode: value => value || 'KR-00',
+    },
+  },
+);
+const oldAccountSeasonal = seasonalRaceModule.getSeasonalRecommendations(undefined, 12, undefined, 'KR-00');
+await new Promise(resolve => setImmediate(resolve));
+seasonalRaceModule.clearProductHubRecommendationCache();
+const newAccountSeasonal = seasonalRaceModule.getSeasonalRecommendations(undefined, 12, undefined, 'KR-00');
+await new Promise(resolve => setImmediate(resolve));
+seasonalRaceResolvers.shift()?.({
+  status: 'ready',
+  collection: null,
+  items: [{...fallbackProduct, productId: 'old-account-product', viewerState: {liked: true}}],
+});
+await oldAccountSeasonal;
+const whileNewAccountPending = seasonalRaceModule.getSeasonalRecommendations(undefined, 12, undefined, 'KR-00');
+await new Promise(resolve => setImmediate(resolve));
+requireContract(
+  seasonalRaceCalls.length === 2,
+  'an old-account seasonal completion must neither refill cache nor delete the new account pending request.',
+);
+seasonalRaceResolvers.shift()?.({
+  status: 'ready',
+  collection: null,
+  items: [{...fallbackProduct, productId: 'new-account-product', viewerState: {liked: false}}],
+});
+const [, newSeasonal] = await Promise.all([whileNewAccountPending, newAccountSeasonal]);
+const cachedNewSeasonal = await seasonalRaceModule.getSeasonalRecommendations(undefined, 12, undefined, 'KR-00');
+requireContract(
+  seasonalRaceCalls.length === 2 &&
+    newSeasonal.items[0]?.productId === 'new-account-product' &&
+    cachedNewSeasonal.items[0]?.productId === 'new-account-product',
+  'only the current account generation may populate the seasonal response cache.',
+);
 const productHubFallbackModule = executeTypeScriptModule(
   'apps/mobile/src/features/recommendation/services/productHubService.ts',
   {
@@ -794,6 +1009,9 @@ const productHubFallbackModule = executeTypeScriptModule(
         }
         throw {code: 'DATABASE_NOT_CONFIGURED'};
       },
+    },
+    '../../../shared/services/productService': {
+      getProductPreferenceMutationRevision: () => 0,
     },
     './trendRegionService': {
       DEFAULT_TREND_REGION_CODE: 'KR-00',

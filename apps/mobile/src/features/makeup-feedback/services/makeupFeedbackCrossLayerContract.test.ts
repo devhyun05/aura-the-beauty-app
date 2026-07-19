@@ -137,16 +137,31 @@ if (completed.analysisDecision !== 'completed') {
 
 expectEqual(completed.analysisSource, 'ai', 'mobile analysis source');
 expectEqual(completed.analysisStatus, 'bedrock_completed', 'mobile analysis status');
-expectEqual(completed.modelVersion, 'makeup-feedback:bedrock-v7-korean-goal-copy', 'model version');
+expectEqual(
+  completed.modelVersion,
+  'makeup-feedback:bedrock-v9-explainable-coaching',
+  'model version',
+);
 expectEqual(completed.analysisId, 'makeup-feedback-cross-layer-job', 'canonical analysis id');
 expectEqual(completed.analysisImageSize?.width, 1080, 'analysis image width');
 expectEqual(completed.evidenceRegions?.length, 6, 'selected evidence region count');
 expectEqual(
   completed.evaluations[0]?.observations?.[0]?.evidenceRegionIds?.join(','),
-  'left_eye,right_eye',
+  'full,left_eye,right_eye',
   'eye observation evidence regions',
 );
 expectEqual(completed.score, 89, 'mobile score');
+expectEqual(completed.scoreBreakdown?.axes.length, 4, 'four score axes');
+expectEqual(
+  completed.scoreBreakdown?.formula.endsWith('= 89/100'),
+  true,
+  'explainable score formula',
+);
+expectEqual(
+  completed.points[0]?.correctionGuide?.tool,
+  'Clean spoolie',
+  'first improvement correction guide',
+);
 expectEqual(completed.captureQuality.usable, true, 'mobile capture quality');
 expectEqual(completed.evaluations.length, MAKEUP_FEEDBACK_TOPICS.length, 'mobile topic count');
 expectEqual(completed.evaluations.length, 11, '11-topic result count');
@@ -194,13 +209,17 @@ expect(
   'result screen exposes raw model version',
 );
 expect(
-  resultScreenSource.includes('<Text style={styles.overallJudgmentLabel}>종합 판단</Text>'),
-  'score reason is missing its single overall judgment label',
+  resultScreenSource.includes('이것만 먼저 보세요') &&
+    resultScreenSource.includes('!result.scoreBreakdown ? (') &&
+    resultScreenSource.includes('AI 종합 판단 보기'),
+  'result screen must keep the concise takeaway and hide duplicate judgment for explainable reports',
 );
 expect(
-  resultScreenSource.includes('AI가 함께 확인한 영역') &&
-    resultScreenSource.includes('<EvidenceRegionStrip'),
-  'result screen is missing the evidence region crop UI',
+  resultScreenSource.includes('<MakeupFeedbackEvidencePreview') &&
+    resultScreenSource.includes('variant="strength"') &&
+    resultScreenSource.includes('variant="improvement"') &&
+    resultScreenSource.match(/\{isOpen \? \(\s*<View style=\{styles\.accordionPreview\}>/g)?.length === 2,
+  'result screen must lazy-render both focused evidence previews after accordion expansion',
 );
 expect(
   resultScreenSource.includes('{result.scoreReason}'),
@@ -208,8 +227,6 @@ expect(
 );
 for (const hiddenSummarySource of [
   'AI 요약',
-  'result.summary.strengthSummary',
-  'result.summary.improvementSummary',
   'result.interpretedGoal.reason',
   'criterion.derivedFrom',
 ]) {

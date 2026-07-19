@@ -2,7 +2,36 @@ import type {
   MakeupJourneyDayResponse,
   MakeupJourneyFeedbackDigest,
   MakeupJourneyMissionLevel,
+  MakeupJourneyReport,
 } from '../types';
+
+export function resolveMakeupJourneyActiveReportId(input: {
+  currentReportId: string | null;
+  initialReportId?: string;
+  preserveCurrent: boolean;
+  reports: Pick<MakeupJourneyReport, 'reportId'>[];
+  representativeReportId: string | null;
+}): string | null {
+  const reportIds = new Set(input.reports.map(report => report.reportId));
+
+  if (input.initialReportId && reportIds.has(input.initialReportId)) {
+    return input.initialReportId;
+  }
+  if (
+    input.preserveCurrent &&
+    input.currentReportId &&
+    reportIds.has(input.currentReportId)
+  ) {
+    return input.currentReportId;
+  }
+  if (
+    input.representativeReportId &&
+    reportIds.has(input.representativeReportId)
+  ) {
+    return input.representativeReportId;
+  }
+  return input.reports.at(-1)?.reportId ?? null;
+}
 
 export type MissionDifficultyGuide = {
   description: string;
