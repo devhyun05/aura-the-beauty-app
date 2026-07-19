@@ -31,7 +31,7 @@ expectEqual(
 );
 expectEqual(
   getFaceAnalysisIntroStepTitles().join(','),
-  '자연광 아래에서 찍기,이마 보이기,귀 보이게 하기,액세서리 빼기,무표정으로 찍기,턱선까지 넣기',
+  '밝고 고른 빛에서,이마가 보이게,양쪽 귀가 보이게,액세서리 없이,표정은 편안하게,턱끝까지 화면 안에',
   'face analysis intro step titles',
 );
 <FaceAnalysisIntroScreen onStartAnalysisGuide={() => undefined} />;

@@ -90,12 +90,16 @@ class Settings(BaseSettings):
   bedrock_scenario_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_question_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_recommendation_model_id: str | None = "global.anthropic.claude-sonnet-4-6"
+  makeup_recommendation_fast_mode: bool = False
+  makeup_recommendation_provider_timeout_seconds: float = Field(default=25.0, ge=5.0, le=120.0)
+  makeup_recommendation_max_tokens: int = Field(default=6000, ge=2000, le=9000)
   bedrock_credential_readiness_timeout_seconds: float = Field(default=5.0, ge=1.0, le=15.0)
   bedrock_analysis_region: str | None = None
   # analyze_text 단일 호출의 출력 상한. 하드 검증(FACE_ANALYSIS_AI_INCOMPLETE)이
   # 누락 필드를 실패로 돌리므로, 상한이 낮으면 절단→검증 실패가 사용자 재촬영
   # 요구로 이어진다. 요구 출력(~90값)의 한국어 문장 기준 여유치로 4000.
-  bedrock_analysis_max_tokens: int = Field(default=4000, ge=1200, le=8192)
+  # Live forced-tool output can exceed 4000 tokens before stylingLooks.
+  bedrock_analysis_max_tokens: int = Field(default=8192, ge=1200, le=8192)
   # 단일 호출(analyze_text)의 Bedrock 출력을 강제 tool use로 스키마 강제한다.
   # 프롬프트 부탁만으로는 claude-3-5-sonnet이 무거운 필드를 생략해 FACE_ANALYSIS_
   # AI_INCOMPLETE로 실패하던 문제의 근본 대응. tool_use 블록이 없으면 기존 텍스트
@@ -175,12 +179,12 @@ class Settings(BaseSettings):
   openai_analysis_model_id: str = "gpt-5.5"
   openai_image_model_id: str = "gpt-image-2"
   openai_image_quality: Literal["low", "medium", "high", "auto"] = "low"
-  openai_image_size: str = "768x1024"
+  openai_image_size: str = "1024x1536"
   openai_image_output_format: Literal["jpeg", "jpg", "png", "webp"] = "jpeg"
-  openai_image_output_compression: int = Field(default=80, ge=0, le=100)
+  openai_image_output_compression: int = Field(default=90, ge=0, le=100)
   openai_image_input_max_edge: int = Field(default=1024, ge=256, le=4096)
   openai_image_input_quality: int = Field(default=82, ge=40, le=100)
-  openai_image_output_max_edge: int = Field(default=1024, ge=256, le=4096)
+  openai_image_output_max_edge: int = Field(default=1536, ge=256, le=4096)
   makeup_recommendation_source_hosts: str = "d3t1pbvtir1lj.cloudfront.net"
   makeup_private_asset_prefix: str = "private/generated-makeup-recommendations"
   makeup_private_url_ttl_seconds: int = Field(default=900, ge=60, le=3600)
@@ -492,6 +496,10 @@ class Settings(BaseSettings):
   @property
   def effective_recommendation_model_id(self) -> str:
     return (self.bedrock_recommendation_model_id or self.effective_analysis_model_id).strip()
+
+  @property
+  def makeup_recommendation_fast_mode_enabled(self) -> bool:
+    return self.makeup_recommendation_fast_mode
 
   @property
   def effective_embedding_model_id(self) -> str:

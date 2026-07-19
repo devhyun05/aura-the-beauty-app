@@ -47,6 +47,50 @@ _STEP_TEXT_FIELDS = (
 )
 
 
+def _allocate_area_minutes(total_minutes: int, areas: list[str]) -> dict[str, int]:
+  """Allocate an integer total without independent-rounding drift."""
+  requested_areas = set(areas)
+  ordered_areas = [area for area in AREA_APPLICATION_ORDER if area in requested_areas]
+  if not ordered_areas:
+    return {}
+
+  safe_total = max(len(ordered_areas), min(120, total_minutes))
+  weight_total = sum(AREA_TIME_WEIGHTS[area] for area in ordered_areas)
+  raw_allocations = {
+    area: safe_total * AREA_TIME_WEIGHTS[area] / weight_total
+    for area in ordered_areas
+  }
+  allocations = {
+    area: max(1, int(raw_allocations[area]))
+    for area in ordered_areas
+  }
+
+  while sum(allocations.values()) > safe_total:
+    reducible = [area for area in ordered_areas if allocations[area] > 1]
+    if not reducible:
+      break
+    selected = max(
+      reducible,
+      key=lambda area: (
+        allocations[area] - raw_allocations[area],
+        -AREA_APPLICATION_ORDER[area],
+      ),
+    )
+    allocations[selected] -= 1
+
+  remainder_priority = sorted(
+    ordered_areas,
+    key=lambda area: (
+      -(raw_allocations[area] - int(raw_allocations[area])),
+      AREA_APPLICATION_ORDER[area],
+    ),
+  )
+  remaining = safe_total - sum(allocations.values())
+  for index in range(remaining):
+    allocations[remainder_priority[index % len(remainder_priority)]] += 1
+  return allocations
+
+
 def _mix_hex(value: str, target: tuple[int, int, int], ratio: float) -> str:
   if not _HEX_PATTERN.fullmatch(value):
     value = "#8B756A"
@@ -495,8 +539,12 @@ def _normalize_complete_plan(plan: dict[str, Any]) -> dict[str, Any]:
   return normalized
 
 
-def enrich_makeup_application_plans(recommendation: dict[str, Any]) -> dict[str, Any]:
-  """Return a non-mutating projection with complete, ordered plans for five required areas."""
+def enrich_makeup_application_plans(
+  recommendation: dict[str, Any],
+  *,
+  max_total_minutes: int | None = None,
+) -> dict[str, Any]:
+  """Return complete plans whose required-area minutes fit the look and user budget."""
   enriched = deepcopy(recommendation)
   looks = enriched.get("looks")
   if not isinstance(looks, list):
@@ -512,6 +560,22 @@ def enrich_makeup_application_plans(recommendation: dict[str, Any]) -> dict[str,
       continue
     raw_duration = look.get("durationMinutes", look.get("duration_minutes"))
     duration = raw_duration if isinstance(raw_duration, int) and not isinstance(raw_duration, bool) else 25
+    if (
+      isinstance(max_total_minutes, int)
+      and not isinstance(max_total_minutes, bool)
+      and max_total_minutes >= 5
+    ):
+      duration = min(duration, max_total_minutes)
+    look["durationMinutes"] = duration
+    look.pop("duration_minutes", None)
+    minute_allocations = _allocate_area_minutes(
+      duration,
+      [
+        str(guide.get("area") or "")
+        for guide in guides
+        if isinstance(guide, dict)
+      ],
+    )
     for guide in guides:
       if not isinstance(guide, dict):
         continue
@@ -523,9 +587,11 @@ def enrich_makeup_application_plans(recommendation: dict[str, Any]) -> dict[str,
       guide.pop("application_plan", None)
       guide.pop("application_order", None)
       if _plan_is_complete(area, existing_plan):
-        guide["applicationPlan"] = _normalize_complete_plan(existing_plan)
+        normalized_plan = _normalize_complete_plan(existing_plan)
+        normalized_plan["estimatedMinutes"] = minute_allocations[area]
+        guide["applicationPlan"] = normalized_plan
         continue
-      estimated_minutes = max(2, min(60, round(duration * AREA_TIME_WEIGHTS[area])))
+      estimated_minutes = minute_allocations[area]
       guide["applicationPlan"] = _default_plan(area, guide, estimated_minutes)
     indexed_guides = list(enumerate(guides))
     indexed_guides.sort(

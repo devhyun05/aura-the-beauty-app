@@ -390,26 +390,39 @@ def _validate_and_normalize_output(
       elif rendered.mode not in {"RGB", "RGBA"}:
         rendered = rendered.convert("RGBA" if has_alpha else "RGB")
 
-      normalized = BytesIO()
-      if output_format == "jpeg":
-        rendered.save(
-          normalized,
-          format="JPEG",
-          quality=max(1, settings.openai_image_output_compression),
-          optimize=True,
-        )
-      elif output_format == "webp":
-        rendered.save(
-          normalized,
-          format="WEBP",
-          quality=max(1, settings.openai_image_output_compression),
-          method=6,
-        )
-      else:
-        rendered.save(normalized, format="PNG", optimize=True)
       width, height = rendered.size
+      can_reuse_provider_bytes = (
+        output_format == "jpeg"
+        and source_format == "jpeg"
+        and not resized
+        and opened.mode == "RGB"
+        and not opened.getexif()
+      )
+      if can_reuse_provider_bytes:
+        # The provider already encoded the requested JPEG quality. Re-encoding an
+        # unchanged image would only add a second lossy pass, which is especially
+        # visible when eye and brow regions are enlarged in the mobile guide.
+        normalized_content = content
+      else:
+        normalized = BytesIO()
+        if output_format == "jpeg":
+          rendered.save(
+            normalized,
+            format="JPEG",
+            quality=max(1, settings.openai_image_output_compression),
+            optimize=True,
+          )
+        elif output_format == "webp":
+          rendered.save(
+            normalized,
+            format="WEBP",
+            quality=max(1, settings.openai_image_output_compression),
+            method=6,
+          )
+        else:
+          rendered.save(normalized, format="PNG", optimize=True)
+        normalized_content = normalized.getvalue()
 
-    normalized_content = normalized.getvalue()
     with Image.open(BytesIO(normalized_content)) as verified:
       actual_format = PROVIDER_OUTPUT_FORMATS.get(str(verified.format or "").upper())
       if actual_format != output_format or verified.size != (width, height):

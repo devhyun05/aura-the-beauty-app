@@ -4,6 +4,7 @@ from hashlib import sha256
 import json
 import logging
 import re
+import threading
 import time
 from typing import Any
 
@@ -36,6 +37,9 @@ from app.services.makeup_recommendation_prompt import (
   sanitize_recommendation_context,
 )
 from app.services.makeup_recommendation_recipe import enrich_makeup_application_plans
+from app.services.makeup_recommendation_timing import (
+  resolve_prep_time_budget_minutes,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -223,25 +227,102 @@ def apply_refinement_contract(
     )
   return {**generated, "looks": merged}
 
-def _converse(settings: Settings, model_id: str, system: str, prompt: str, *, max_tokens: int = 3500) -> dict[str, Any]:
-  client_kwargs = {"region_name": settings.aws_region, "config": BEDROCK_CONVERSE_CONFIG}
+def _bedrock_generation_timeout_error(timeout_seconds: float) -> AppError:
+  return AppError(
+    504,
+    "BEDROCK_GENERATION_TIMEOUT",
+    "Bedrock recommendation generation exceeded its time budget.",
+    {"timeoutSeconds": timeout_seconds},
+  )
+
+
+def _converse(
+  settings: Settings,
+  model_id: str,
+  system: str,
+  prompt: str,
+  *,
+  max_tokens: int = 3500,
+  timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+  client_config = BEDROCK_CONVERSE_CONFIG
+  started_at = time.perf_counter()
+  if timeout_seconds is not None:
+    client_config = Config(
+      read_timeout=min(float(BEDROCK_CONVERSE_CONFIG.read_timeout), timeout_seconds),
+      connect_timeout=min(float(BEDROCK_CONVERSE_CONFIG.connect_timeout), timeout_seconds),
+      retries={"max_attempts": 1, "mode": "standard"},
+    )
+  client_kwargs = {"region_name": settings.aws_region, "config": client_config}
   if settings.aws_profile_name:
     client = boto3.Session(profile_name=settings.aws_profile_name).client("bedrock-runtime", **client_kwargs)
   else:
     client = boto3.client("bedrock-runtime", **client_kwargs)
-  response = client.converse_stream(
-    modelId=model_id,
-    system=[{"text": system}],
-    messages=[{"role": "user", "content": [{"text": prompt}]}],
-    inferenceConfig={"maxTokens": max_tokens, "temperature": 0.35},
-  )
-  text = "".join(
-    str(delta.get("text") or "")
-    for event in response.get("stream", [])
-    if isinstance(event, dict)
-    if isinstance((content_delta := event.get("contentBlockDelta")), dict)
-    if isinstance((delta := content_delta.get("delta")), dict)
-  ).strip()
+  stream: Any = None
+  deadline_exceeded = threading.Event()
+  deadline_timer: threading.Timer | None = None
+  text_parts: list[str] = []
+
+  def close_for_deadline() -> None:
+    deadline_exceeded.set()
+    for resource in (stream, client):
+      close_resource = getattr(resource, "close", None)
+      if callable(close_resource):
+        try:
+          close_resource()
+        except Exception:
+          pass
+
+  if timeout_seconds is not None:
+    remaining_seconds = timeout_seconds - (time.perf_counter() - started_at)
+    if remaining_seconds <= 0:
+      close_for_deadline()
+      raise _bedrock_generation_timeout_error(timeout_seconds)
+    deadline_timer = threading.Timer(remaining_seconds, close_for_deadline)
+    deadline_timer.daemon = True
+    deadline_timer.start()
+  try:
+    response = client.converse_stream(
+      modelId=model_id,
+      system=[{"text": system}],
+      messages=[{"role": "user", "content": [{"text": prompt}]}],
+      inferenceConfig={"maxTokens": max_tokens, "temperature": 0.35},
+    )
+    stream = response.get("stream", [])
+    if deadline_exceeded.is_set() and timeout_seconds is not None:
+      close_for_deadline()
+      raise _bedrock_generation_timeout_error(timeout_seconds)
+    for event in stream:
+      if deadline_exceeded.is_set() or (
+        timeout_seconds is not None
+        and time.perf_counter() - started_at >= timeout_seconds
+      ):
+        raise _bedrock_generation_timeout_error(timeout_seconds)
+      if not isinstance(event, dict):
+        continue
+      content_delta = event.get("contentBlockDelta")
+      if not isinstance(content_delta, dict):
+        continue
+      delta = content_delta.get("delta")
+      if isinstance(delta, dict):
+        text_parts.append(str(delta.get("text") or ""))
+  except Exception as exc:
+    if deadline_exceeded.is_set() and timeout_seconds is not None:
+      raise _bedrock_generation_timeout_error(timeout_seconds) from exc
+    raise
+  finally:
+    if deadline_timer is not None:
+      deadline_timer.cancel()
+    for resource in (stream, client):
+      close_resource = getattr(resource, "close", None)
+      if callable(close_resource):
+        try:
+          close_resource()
+        except Exception:
+          pass
+  if deadline_exceeded.is_set() and timeout_seconds is not None:
+    raise _bedrock_generation_timeout_error(timeout_seconds)
+  text = "".join(text_parts).strip()
   if not text:
     output = response.get("output", {})
     message = output.get("message", {}) if isinstance(output, dict) else {}
@@ -273,12 +354,34 @@ async def generate_json(
   prompt: str,
   *,
   max_tokens: int = 3500,
+  timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
   started_at = time.perf_counter()
   try:
     if not model_id:
       raise AppError(503, "BEDROCK_MODEL_NOT_CONFIGURED", "The Bedrock model is not configured.")
-    result = await asyncio.to_thread(_converse, settings, model_id, system, prompt, max_tokens=max_tokens)
+    request = asyncio.to_thread(
+      _converse,
+      settings,
+      model_id,
+      system,
+      prompt,
+      max_tokens=max_tokens,
+      timeout_seconds=timeout_seconds,
+    )
+    result = (
+      await asyncio.wait_for(request, timeout=timeout_seconds)
+      if timeout_seconds is not None
+      else await request
+    )
+  except TimeoutError as exc:
+    error = _bedrock_generation_timeout_error(timeout_seconds or 0.0)
+    emit_ai_metric(
+      provider="bedrock", operation="generate_json", model_id=model_id,
+      status="error", latency_ms=(time.perf_counter() - started_at) * 1000,
+      error_code=error.code,
+    )
+    raise error from exc
   except AppError as exc:
     emit_ai_metric(
       provider="bedrock", operation="generate_json", model_id=model_id,
@@ -1099,10 +1202,14 @@ def deterministic_recommendation_v2(
       ),
     })
 
-  detailed = enrich_makeup_application_plans({
-    "contextSummary": context_summary[:8] or [scenario],
-    "looks": looks,
-  })
+  time_budget_minutes = resolve_prep_time_budget_minutes(questions, answers)
+  detailed = enrich_makeup_application_plans(
+    {
+      "contextSummary": context_summary[:8] or [scenario],
+      "looks": looks,
+    },
+    max_total_minutes=time_budget_minutes,
+  )
   finalized = finalize_recommendation_metadata(
     detailed,
     context_snapshot,
@@ -1120,15 +1227,23 @@ async def generate_recommendation_v2(
   answers: list[dict[str, Any]],
 ) -> dict[str, Any]:
   context_snapshot = sanitize_recommendation_context(context_snapshot)
+  time_budget_minutes = resolve_prep_time_budget_minutes(questions, answers)
+  if settings.makeup_recommendation_fast_mode_enabled:
+    logger.info(
+      "[aura:makeup-recommendation] recommendation-v2:fast-fallback environment=%s",
+      settings.environment,
+    )
+    return deterministic_recommendation_v2(context_snapshot, answers, questions)
   validation_errors: list[dict[str, Any]] = []
-  for _attempt in range(2):
+  for _attempt in range(1):
     try:
       response = await generate_json(
         settings,
         settings.effective_recommendation_model_id,
         RECOMMENDATION_V2_SYSTEM_PROMPT,
         build_recommendation_prompt(context_snapshot, questions, answers),
-        max_tokens=9000,
+        max_tokens=settings.makeup_recommendation_max_tokens,
+        timeout_seconds=settings.makeup_recommendation_provider_timeout_seconds,
       )
     except Exception:
       logger.warning(
@@ -1139,7 +1254,10 @@ async def generate_recommendation_v2(
       )
       return deterministic_recommendation_v2(context_snapshot, answers, questions)
     try:
-      enriched = enrich_makeup_application_plans(response)
+      enriched = enrich_makeup_application_plans(
+        response,
+        max_total_minutes=time_budget_minutes,
+      )
       finalized = finalize_recommendation_metadata(
         enriched,
         context_snapshot,

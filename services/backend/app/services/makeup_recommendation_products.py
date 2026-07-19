@@ -346,7 +346,14 @@ def _build_product_profile(
   }
 
 
-def _map_product(product: dict[str, Any], area: str, guide: dict[str, Any]) -> dict[str, Any] | None:
+def _map_product(
+  product: dict[str, Any],
+  area: str,
+  expected_category: str,
+  guide: dict[str, Any],
+) -> dict[str, Any] | None:
+  if _clean_text(product.get("category")).casefold() != expected_category.casefold():
+    return None
   product_id = _clean_text(product.get("id"))
   product_name = _clean_text(product.get("productName"))
   image_url = _clean_https_url(product.get("imageUrl"))
@@ -368,6 +375,26 @@ def _map_product(product: dict[str, Any], area: str, guide: dict[str, Any]) -> d
     "matchRate": max(0, min(100, int(match_rate))) if isinstance(match_rate, int | float) else None,
   }
 
+def _map_products(
+  raw_products: Any,
+  area: str,
+  expected_category: str,
+  guide: dict[str, Any],
+) -> list[dict[str, Any]]:
+  if not isinstance(raw_products, list):
+    return []
+  products: list[dict[str, Any]] = []
+  for raw in raw_products:
+    if not isinstance(raw, dict):
+      continue
+    mapped = _map_product(raw, area, expected_category, guide)
+    if mapped is None:
+      continue
+    products.append(mapped)
+    if len(products) >= MAX_PRODUCTS_PER_AREA:
+      break
+  return products
+
 
 async def enrich_makeup_recommendation_products(
   db: Database,
@@ -380,7 +407,7 @@ async def enrich_makeup_recommendation_products(
   """Match each generated area guide to verified catalog records without inventing products."""
   enriched = deepcopy(recommendation)
   looks = enriched.get("looks") if isinstance(enriched.get("looks"), list) else []
-  jobs: list[tuple[dict[str, Any], dict[str, Any], str, Any]] = []
+  jobs: list[tuple[dict[str, Any], dict[str, Any], str, str, Any]] = []
 
   # Deterministic catalog scoring consumes the generated profile. Disabling per-product
   # embeddings avoids dozens of extra Bedrock calls for a single recommendation.
@@ -419,14 +446,14 @@ async def enrich_makeup_recommendation_products(
         profile_override=profile,
         query_override=query or None,
       )
-      jobs.append((look, guide, area, job))
+      jobs.append((look, guide, area, category, job))
 
   if not jobs:
     return GeneratedMakeupRecommendationV2.model_validate(enriched).model_dump(by_alias=True)
 
   results = await asyncio.gather(*(job for *_metadata, job in jobs), return_exceptions=True)
   sources: set[str] = set()
-  for (look, guide, area, _job), result in zip(jobs, results):
+  for (look, guide, area, category, _job), result in zip(jobs, results):
     products: list[dict[str, Any]] = []
     if isinstance(result, Exception):
       logger.warning(
@@ -439,13 +466,7 @@ async def enrich_makeup_recommendation_products(
       if _is_trusted_product_source(source):
         sources.add(source)
         raw_products = recommendation_data.get("products") if isinstance(recommendation_data, dict) else []
-        if isinstance(raw_products, list):
-          products = [
-            mapped
-            for raw in raw_products[:MAX_PRODUCTS_PER_AREA]
-            if isinstance(raw, dict)
-            if (mapped := _map_product(raw, area, guide)) is not None
-          ]
+        products = _map_products(raw_products, area, category, guide)
       else:
         logger.warning(
           "[aura:makeup-recommendation] product-enrichment:untrusted-source area=%s source=%s",

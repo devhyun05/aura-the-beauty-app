@@ -2,6 +2,9 @@ import json
 from typing import Any
 
 from app.schemas.makeup_recommendation import GeneratedMakeupAreaGuide
+from app.services.makeup_recommendation_timing import (
+  resolve_prep_time_budget_minutes,
+)
 
 
 INPUT_PRIORITY = (
@@ -131,14 +134,23 @@ def build_recommendation_prompt(
       },
     ],
   }
+  time_budget_minutes = resolve_prep_time_budget_minutes(questions, answers)
   payload = {
     "inputPriority": list(INPUT_PRIORITY),
     "context": sanitize_recommendation_context(context_snapshot),
     "questions": questions,
     "answers": answers,
+    "timeBudgetMinutes": time_budget_minutes,
   }
+  time_budget_instruction = (
+    f"선택한 준비 시간 {time_budget_minutes}분은 강제 상한이다. 세 룩 모두 durationMinutes를 "
+    f"{time_budget_minutes} 이하로 두고, 5개 부위의 방법을 합쳐 그 시간 안에 실행 가능하게 설계하라. "
+    if time_budget_minutes is not None
+    else ""
+  )
   return (
     "아래 출력 예시와 동일한 키를 사용하고, looks를 anchor→bold→discovery 순서로 정확히 3개 반환하라. "
+    f"{time_budget_instruction}"
     "각 룩의 areaGuides에는 필수 5개 부위를 정확히 한 번씩 넣어라. 각 guide는 color 단일 객체, avoid 문자열 배열, steps의 order/instruction 객체 배열을 정확히 사용하라. "
     "Do not copy or infer the analysis report\'s prior mood, base/area makeup guides, or recommendedMakeups. Generate every areaGuides entry freshly from situation, answers, personalColor, faceStructure, and skin evidence. "
     "제품은 별도 검증 카탈로그가 연결하므로 모든 products를 빈 배열로 둬라. 서버가 상세 시술 절차를 보강할 수 있도록 color, texture, placement, technique를 룩마다 구체적으로 구분하라. "

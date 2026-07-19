@@ -1,6 +1,6 @@
 import {StyleSheet, Text, View} from 'react-native';
 
-import {colors, radius, type as typography} from '../../theme/makeupResultTokens';
+import {colors, radius} from '../../theme/makeupResultTokens';
 import type {FinalRecipeStep} from './finalAreaGuideRecipe';
 
 export interface FinalMakeupRecipeStepCardProps {
@@ -54,9 +54,6 @@ export function FinalMakeupRecipeStepCard({
                   {color.role ? <Text style={styles.colorRole}>{color.role}</Text> : null}
                   <Text style={styles.colorName}>{color.name}</Text>
                 </View>
-                {HEX_COLOR.test(color.hex) ? (
-                  <Text style={typography.mono}>{color.hex.toUpperCase()}</Text>
-                ) : null}
               </View>
             ))}
           </View>

@@ -602,6 +602,13 @@ class GeneratedMakeupLookV2(CamelModel):
         raise ValueError(
           "Detailed application plans must cover base, brow, eye, cheek, and lip in order 1 through 5.",
         )
+      total_estimated_minutes = sum(
+        guide.application_plan.estimated_minutes
+        for guide in required_guides
+        if guide.application_plan is not None
+      )
+      if total_estimated_minutes > self.duration_minutes:
+        raise ValueError("Area application time cannot exceed the look duration.")
       self.area_guides = sorted(
         self.area_guides,
         key=lambda guide: guide.application_order if guide.application_order is not None else 99,

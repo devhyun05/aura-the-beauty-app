@@ -13,7 +13,7 @@ from app.schemas.makeup_recommendation import GeneratedQuestions
 from app.services.makeup_keyword_question_templates import PREP_TIME_QUESTION
 
 
-EDITORIAL_PRESET_VERSION = "makeup-editorial-questions-reviewed-v1"
+EDITORIAL_PRESET_VERSION = "makeup-editorial-questions-reviewed-v2"
 
 
 def _option(option_id: str, label: str) -> dict[str, str]:
@@ -100,14 +100,14 @@ EDITORIAL_QUESTION_PRESETS: dict[str, dict[str, Any]] = {
     ),
   ),
   "saved-look": _preset(
-    "숏폼으로만 저장해 둔 메이크업",
-    "온라인에서 저장한 트렌디한 메이크업을 현실적으로 적용한 메이크업",
+    "음악프로그램 무대 접수 아이돌 메이크업",
+    "음악프로그램 무대 조명과 카메라에서 또렷하게 살아나는 아이돌 메이크업",
     _question(
       "saved_look_focus",
-      "저장한 룩에서 꼭 가져오고 싶은 포인트는 무엇인가요?",
-      ("color", "눈과 입술의 색 조합"),
-      ("texture", "피부와 광택의 질감"),
-      ("mood", "전체적인 분위기"),
+      "음악프로그램 무대에서 가장 살리고 싶은 포인트는 무엇인가요?",
+      ("color", "조명에서도 또렷한 눈과 입술"),
+      ("texture", "카메라에 살아나는 피부 광"),
+      ("mood", "아이돌처럼 선명한 전체 무드"),
     ),
   ),
   "hip-point": _preset(

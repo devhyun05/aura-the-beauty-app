@@ -54,6 +54,7 @@ async def test_product_enrichment_attaches_verified_products_to_every_area(
     return ({
       "products": [{
         "id": f"catalog-{category}",
+        "category": category,
         "brandName": "Verified Brand",
         "productName": f"Verified {category}",
         "shadeName": "Rose",
@@ -64,6 +65,7 @@ async def test_product_enrichment_attaches_verified_products_to_every_area(
         "reason": "Generated area profile match",
       }, {
         "id": f"catalog-{category}-second",
+        "category": category,
         "brandName": "Second Brand",
         "productName": f"Second {category}",
         "reason": "Should be capped",
@@ -131,13 +133,14 @@ def test_makeup_product_mapping_requires_https_image_and_purchase_urls(
 ) -> None:
   product = {
     "id": "catalog-lip",
+    "category": "lip",
     "brandName": "Verified Brand",
     "productName": "Verified Lip",
     "imageUrl": "https://cdn.example.com/lip.png",
     "purchaseUrl": "https://shop.example.com/lip",
   }
   product[field] = value
-  assert product_service._map_product(product, "lip", {}) is None
+  assert product_service._map_product(product, "lip", "lip", {}) is None
 
 
 @pytest.mark.asyncio

@@ -86,19 +86,34 @@ def session_response(row: dict[str, Any]) -> dict[str, Any]:
     if isinstance(selection.get("editorialPreset"), dict)
     else {}
   )
+  current_editorial_preset = resolve_reviewed_editorial_preset(
+    str(editorial_preset.get("id") or ""),
+  )
   return {
     "id": str(row["id"]),
     **({"profileGender": profile_gender} if profile_gender in {"female", "male", "unspecified"} else {}),
     "status": str(row.get("status") or "questioning"),
-    "questions": _json_value(row.get("questions"), []),
+    "questions": (
+      current_editorial_preset["questions"]
+      if current_editorial_preset is not None
+      else _json_value(row.get("questions"), [])
+    ),
     "currentQuestionIndex": int(row.get("current_question_index") or 0),
     "answers": _json_value(row.get("answers"), []),
     "sourceAnalysisReportId": str(row.get("analysis_report_id") or "") or None,
     "situation": selection.get("situation"),
     "keyword": selection.get("keyword"),
     "editorialPresetId": editorial_preset.get("id"),
-    "customSituationText": selection.get("customSituationText"),
-    "customSituationLabel": selection.get("customSituationLabel"),
+    "customSituationText": (
+      current_editorial_preset["seedPrompt"]
+      if current_editorial_preset is not None
+      else selection.get("customSituationText")
+    ),
+    "customSituationLabel": (
+      current_editorial_preset["displayText"]
+      if current_editorial_preset is not None
+      else selection.get("customSituationLabel")
+    ),
     "imageMode": str(row.get("image_mode") or context.get("image", {}).get("effectiveMode") or "generic"),
     "reportId": str(row.get("report_id") or "") or None,
     "expiresAt": str(row.get("expires_at") or "") or None,
