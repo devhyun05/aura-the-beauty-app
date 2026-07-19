@@ -184,6 +184,11 @@ const uuidPattern =
 // 고정 5초 대신 5→8→13초 백오프: 서버 분석이 길어질수록 폴링 밀도를 낮춘다.
 const ANALYSIS_REPORT_POLL_INTERVALS_MS = [5000, 8000, 13000];
 const ANALYSIS_REPORT_POLL_TIMEOUT_MS = 240000;
+// 예상 완료 구간(팬아웃 ~24s·현행 단일 ~42s 모두 포함) 진입 후엔 폴 간격을 조여
+// "생성 직후" 감지지연을 최소화한다 — 백오프가 만드는 최대 ~9s 낭비 제거. WS push
+// (Phase 2, 가속기)와 무관하게 폴링 자체의 감지지연을 낮추는 baseline.
+const ANALYSIS_REPORT_POLL_ETA_MS = 18000;
+const ANALYSIS_REPORT_POLL_TIGHT_MS = 2000;
 
 function isUuid(value: string | null | undefined): value is string {
   return Boolean(value && uuidPattern.test(value));
@@ -674,10 +679,15 @@ async function waitForCompleteAnalysisReport(
       );
     }
 
-    const nextPollMs =
+    const backoffMs =
       ANALYSIS_REPORT_POLL_INTERVALS_MS[
         Math.min(pollAttempt, ANALYSIS_REPORT_POLL_INTERVALS_MS.length - 1)
       ];
+    // 예상 완료 구간 진입 후엔 조밀 폴링으로 감지지연을 ≤2s로 낮춘다.
+    const nextPollMs =
+      elapsedMs >= ANALYSIS_REPORT_POLL_ETA_MS
+        ? Math.min(backoffMs, ANALYSIS_REPORT_POLL_TIGHT_MS)
+        : backoffMs;
     pollAttempt += 1;
 
     console.info('[aura:analysis] analysis-report:wait-images', {
