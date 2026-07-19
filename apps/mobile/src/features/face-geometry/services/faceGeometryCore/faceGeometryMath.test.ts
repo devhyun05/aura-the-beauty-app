@@ -186,6 +186,8 @@ function buildBaseMap(): PixelLandmarkMap {
   });
 
   const rollSensitive = [
+    'browApexRatioLeft',
+    'browApexRatioRight',
     'browSlopeLeftDeg',
     'browSlopeRightDeg',
     'canthalTiltLeftDeg',

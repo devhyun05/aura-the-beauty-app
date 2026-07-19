@@ -220,7 +220,7 @@ function eyeBrowGapMetric(
 export type ComputeFaceGeometryMetricsInput = {
   map: PixelLandmarkMap;
   // roll 보정이 적용되지 않은 좌표에서는 기울기·수직거리 계열(canthalTilt,
-  // browSlope, eyeBrowGap, mouthCornerAsymmetry)을 계산하지 않는다 —
+  // browSlope, browApexRatio, eyeBrowGap, mouthCornerAsymmetry)을 계산하지 않는다 —
   // 카메라 기울기를 얼굴 특징으로 오인하기 때문. 해당 지표만 null 이 된다.
   rollCorrectionApplied: boolean;
 };

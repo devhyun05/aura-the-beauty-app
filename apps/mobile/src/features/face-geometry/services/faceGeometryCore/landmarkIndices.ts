@@ -79,5 +79,6 @@ export const CANTHAL_TANGENT_INDICES = {
 
 // ⚠ 후보 — 눈썹 상연 edge (medial→lateral 순). apex(최고점) 탐색·호길이 비율용.
 // BROW_CORE 의 상연 5점을 medial→lateral 로 재배열한 것.
+// 참고: 이 점들은 BROW_CORE 부분집합이라 이미 REQUIRED다(캔살-탄젠트와 달리 '후보'는 의미 검증 대상일 뿐 존재는 필수).
 export const BROW_UPPER_EDGE_RIGHT_INDICES = [107, 66, 105, 63, 70] as const;
 export const BROW_UPPER_EDGE_LEFT_INDICES = [336, 296, 334, 293, 300] as const;

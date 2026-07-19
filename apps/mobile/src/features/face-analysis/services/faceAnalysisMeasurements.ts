@@ -1018,7 +1018,7 @@ function decodeFaceGeometry(value: unknown): FaceGeometryResult | undefined {
   const metricsRecord = isRecord(value.metrics) ? value.metrics : {};
   const metrics = {} as FaceGeometryResult['metrics'];
 
-  // 화면이 metrics[key].value 를 직접 dereference 하므로 16키를 항상 채운다 —
+  // 화면이 metrics[key].value 를 직접 dereference 하므로 20키를 항상 채운다 —
   // 누락 키는 측정 불가로 간주(구버전·부분 손상 응답 방어).
   for (const key of FACE_GEOMETRY_METRIC_KEYS) {
     const metricRecord = isRecord(metricsRecord[key]) ? metricsRecord[key] : undefined;

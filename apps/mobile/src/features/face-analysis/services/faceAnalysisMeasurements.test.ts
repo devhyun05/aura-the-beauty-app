@@ -596,7 +596,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   );
 }
 
-// ── 4. blocked 축·geometry 16키 채움·구버전 방어 ─────────────────────────────
+// ── 4. blocked 축·geometry 20키 채움·구버전 방어 ─────────────────────────────
 {
   const blockedThirds: FaceVerticalThirdsResult = {
     ...buildThirdsFixture(),
@@ -623,7 +623,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   );
   expectEqual(decoded.face3d, undefined, 'absent face3d');
 
-  // metrics 가 일부 누락된(부분 손상) 응답도 16키 전부 채워져야 화면이 안 죽는다.
+  // metrics 가 일부 누락된(부분 손상) 응답도 20키 전부 채워져야 화면이 안 죽는다.
   const decodedPartial = expectDefined(
     parseFaceAnalysisMeasurements(
       {
@@ -644,7 +644,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(partialGeometry.metrics.mouthWidthRatio.value, 0.35, 'present metric');
   expectEqual(partialGeometry.metrics.canthalTiltLeftDeg.value, null, 'missing metric filled');
   expectEqual(partialGeometry.metrics.canthalTiltLeftDeg.unit, 'deg', 'unit inferred');
-  expectEqual(FACE_GEOMETRY_METRIC_KEYS.every(key => key in partialGeometry.metrics), true, '16키 전부');
+  expectEqual(FACE_GEOMETRY_METRIC_KEYS.every(key => key in partialGeometry.metrics), true, '20키 전부');
 }
 
 // ── 5. insufficient PC(tone null) 왕복 ───────────────────────────────────────
@@ -741,7 +741,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
 // ── 9. P0-1: 업로드 계약 == DB 저장 원본 == 복원 ──────────────────────────────
 // 모바일은 저장 원본 measurements를 그대로 요청에 싣는다. 백엔드는 DB에는 이 원본을
 // 보존하되 AI 프롬프트를 만들 때 analysis-ineligible H만 별도 안전 투영한다.
-// 백엔드 camelize 왕복 후에도 16개 geometry 키가 값까지 그대로 복원돼야 한다.
+// 백엔드 camelize 왕복 후에도 20개 geometry 키가 값까지 그대로 복원돼야 한다.
 {
   const geometry = buildGeometryFixture();
   const dbMeasurements = expectDefined(
@@ -770,7 +770,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
     'AI 입력과 DB 저장이 동일 measurements 출처',
   );
 
-  // DB → 백엔드 camelize → 복원: 16 geometry 키가 값까지 보존.
+  // DB → 백엔드 camelize → 복원: 20 geometry 키가 값까지 보존.
   const restored = expectDefined(
     parseFaceAnalysisMeasurements(simulateBackendCamelize(dbMeasurements), {
       imageUrl: 'https://cdn/y.jpg',
@@ -788,7 +788,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(
     Object.keys(restoredGeometry.metrics).length,
     FACE_GEOMETRY_METRIC_KEYS.length,
-    '복원 geometry 키 개수 == 16',
+    '복원 geometry 키 개수 == 20',
   );
   expectDefined(restored.face3d, '복원 face3d 축');
   expectDefined(restored.faceVerticalThirds, '복원 thirds 축');
