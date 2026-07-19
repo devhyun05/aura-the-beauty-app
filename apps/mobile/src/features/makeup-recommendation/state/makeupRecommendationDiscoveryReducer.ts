@@ -18,6 +18,7 @@ export type MakeupRecommendationDiscoveryState = {
 export type MakeupRecommendationDiscoveryAction =
   | {type: 'reports/loading'}
   | {type: 'reports/loaded'; reports: FaceAnalysisReport[]; preferredReportId?: string}
+  | {type: 'report/detailLoaded'; report: FaceAnalysisReport}
   | {type: 'reports/failed'; message: string}
   | {type: 'catalog/loading'}
   | {type: 'catalog/loaded'; catalog: MakeupRecommendationDiscovery}
@@ -62,6 +63,15 @@ export function makeupRecommendationDiscoveryReducer(
         selectedReportId: preferred?.id ?? (selectedStillExists ? state.selectedReportId : action.reports[0]?.id ?? null),
       };
     }
+    case 'report/detailLoaded':
+      if (!state.reports.some(report => report.id === action.report.id)) {
+        return state;
+      }
+      return {
+        ...state,
+        reports: state.reports.map(report =>
+          report.id === action.report.id ? action.report : report),
+      };
     case 'reports/failed':
       return {...state, reportStatus: 'error', reportError: action.message};
     case 'catalog/loading':

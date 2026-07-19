@@ -1,9 +1,5 @@
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
-import type {
-  MakeupLookRole,
-  MakeupRecommendationDiscovery,
-  MakeupRecommendationProfileGender,
-} from '../types';
+import type {MakeupRecommendationDiscovery} from '../types';
 
 type ReportVisibilityDiscovery = Pick<MakeupRecommendationDiscovery, 'source' | 'sourceReportIds'>;
 
@@ -56,35 +52,4 @@ export function getQuestionActionMode({currentQuestionIndex, questionCount}: {cu
 }
 export function getQuestionProgressSegments({currentQuestionIndex, questionCount}: {currentQuestionIndex: number; questionCount: number}): Array<'complete' | 'pending'> {
   return Array.from({length: questionCount}, (_, index) => index <= currentQuestionIndex ? 'complete' : 'pending');
-}
-
-export const makeupRecommendationResultRoleLabels: Record<MakeupLookRole, string> = {
-  anchor: '가장 잘 어울리는 메이크업',
-  bold: '조금 더 과감한 메이크업',
-  discovery: '예상 밖의 발견',
-};
-export const makeupRecommendationImageStatusCopy = {
-  failedAction: '이미지 다시 만들기',
-  partial: '일부 룩 이미지는 준비 중이거나 실패했어요. 완성된 추천과 부위별 가이드는 바로 볼 수 있어요.',
-} as const;
-export const makeupRecommendationReportStatusCopy = {
-  saved: '보고서 저장됨',
-} as const;
-
-export const neutralGenderRecommendationNote =
-  '성별을 선택하지 않아 중성적인 표현을 기준으로 추천했어요.';
-
-export function getNeutralGenderRecommendationNote(
-  profileGender?: MakeupRecommendationProfileGender,
-): string | undefined {
-  return profileGender === 'unspecified'
-    ? neutralGenderRecommendationNote
-    : undefined;
-}
-
-export function toggleExpandedLookId(previous: Set<string>, lookId: string): Set<string> {
-  const next = new Set(previous);
-  if (next.has(lookId)) next.delete(lookId);
-  else next.add(lookId);
-  return next;
 }

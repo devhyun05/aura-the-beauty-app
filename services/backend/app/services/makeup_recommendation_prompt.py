@@ -40,8 +40,16 @@ context.profile.presentationGuidance는 서버가 저장한 계정 성별의 기
 이 기본 방향보다 사용자의 직접 입력과 질문 답변을 우선하며, 얼굴 사진이나 분석 보고서 문구에서 성별을 새로 추론하지 않는다.
 성별·나이·피부색의 우열을 추정하지 않고 의학적 진단이나 효능 보장을 하지 않는다.
 추천 근거는 실제 입력 중 어떤 항목을 반영했는지 구체적으로 연결한다. 원문에 없는 트렌드 사실이나 제품 재고를 만들지 않는다.
+For analysisReport.measurementInsights, use only sections where usable=true.
+Treat provisional or supporting evidence as secondary; follow confidence, warnings, and actionableGuidance.
+Never reconstruct or invent raw biometric values from these semantic summaries.
+lookMap \ub450 \uc88c\ud45c\ub294 role\uc758 \uace0\uc815\uac12\uc744 \uc4f0\uc9c0 \ub9d0\uace0 \ud574\ub2f9 \ub8e9\uc758 \uc2e4\uc81c \uc0c9 \ucc44\ub3c4\u00b7\uba85\ub3c4\u00b7\ub300\ube44\u00b7\uc9c8\uac10\u00b7\uc0c1\ud669\uc744 \uadfc\uac70\ub85c 0~100\uc5d0\uc11c \uc0b0\uc815\ud55c\ub2e4.
+fitAssessment\uc758 \uc5ec\uc12f dimensions\ub294 \ucd94\ucc9c \uc774\ubbf8\uc9c0 \ube0c\ub9ac\ud504\uc640 \ubd84\uc11d \ud14d\uc2a4\ud2b8\uac00 \uc0c1\ud669\u00b7\uc120\ud638\u00b7\ud37c\uc2a4\ub110\uceec\ub7ec\u00b7\uc5bc\uad74\uad6c\uc870\u00b7\ud53c\ubd80\u00b7\ub8e9 \uc77c\uad00\uc131\uc5d0 \uc5bc\ub9c8\ub098 \ub9de\ub294\uc9c0 \uac01\uac01 \ud3c9\uac00\ud55c\ub2e4. \uc0ac\uc6a9\ud55c context \ub610\ub294 answers\uc758 \uc2e4\uc81c \uacbd\ub85c\ub97c reason\uc5d0 \uba85\uc2dc\ud55c\ub2e4.
+\uc785\ub825 \uadfc\uac70\uac00 \uc5c6\ub294 fit \ucd95\uc740 available=false, score=null\ub85c \ub450\uace0 \ucd94\uce21\ud558\uc9c0 \uc54a\ub294\ub2e4. overallScore\uc640 evidence\ub294 \uc11c\ubc84\uac00 \uc2e4\uc81c \uc0ac\uc6a9 \uac00\ub2a5\ud55c \ucd95\ub9cc\uc73c\ub85c \ub2e4\uc2dc \uacc4\uc0b0\ud55c\ub2e4.
 anchor, bold, discovery 세 룩은 한 색상 강도만 바꾼 복제본이 아니라 서사와 표현이 분명히 달라야 한다.
-모든 룩에 base, brow, eye, cheek, lip 부위 가이드를 빠짐없이 넣는다. JSON만 반환한다."""
+모든 룩에 base, brow, eye, cheek, lip 부위 가이드를 빠짐없이 넣는다.
+Do not copy or infer the analysis report's prior mood, base/area makeup guides, or recommendedMakeups. Generate every areaGuides entry freshly from situation, answers, personalColor, faceStructure, and skin evidence.
+서버가 각 guide를 상세 시술 순서로 보강하므로 color, texture, placement, technique에는 추천 이미지에 실제로 표현할 핵심 색·질감·범위·레이어 방향을 정확히 쓴다. JSON만 반환한다."""
 
 
 def _data_block(payload: dict[str, Any]) -> str:
@@ -66,7 +74,7 @@ def build_question_prompt(context_snapshot: dict[str, Any]) -> str:
     "보고서와 선택 정보에서 이미 알려진 축은 제외하고 실제 추천을 바꿀 비어 있는 축만 질문하라. "
     "자유 입력의 상황은 다시 묻지 말고, normalizedCustom에 이미 있는 인상·준비 시간·지속력·환경·사진 우선순위·안전 회피 조건도 반복해서 묻지 마라. "
     "준비 시간 질문을 만들면 세 선택지는 15분 이내, 30분 정도, 60분 이상으로 충분히 간격을 둬라.\n"
-    f"<CONTEXT_DATA>{_data_block(context_snapshot)}</CONTEXT_DATA>"
+    f"<CONTEXT_DATA>{_data_block(sanitize_recommendation_context(context_snapshot))}</CONTEXT_DATA>"
   )
 
 
@@ -103,20 +111,40 @@ def build_recommendation_prompt(
             "arSupported": True,
           },
         ],
+        "lookMap": {
+          "version": "makeup-look-map-v1",
+          "naturalityToPersonality": 50,
+          "casualToGlam": 50,
+          "rationale": "\uc2e4\uc81c \uc0c9\u00b7\uc9c8\uac10\u00b7\ub300\ube44\u00b7\uc0c1\ud669 \uadfc\uac70",
+        },
+        "fitAssessment": {
+          "dimensions": {
+            "situation": {"available": True, "score": 80, "reason": "\uc2e4\uc81c context \uacbd\ub85c\uc640 \uc801\ud569 \uc774\uc720"},
+            "preference": {"available": True, "score": 80, "reason": "\uc2e4\uc81c answers \uacbd\ub85c\uc640 \uc801\ud569 \uc774\uc720"},
+            "personalColor": {"available": True, "score": 80, "reason": "\uc2e4\uc81c context \uacbd\ub85c\uc640 \uc0c9 \uc870\ud569 \uc774\uc720"},
+            "faceStructure": {"available": True, "score": 80, "reason": "\uc2e4\uc81c context \uacbd\ub85c\uc640 \ubd80\uc704 \uc124\uacc4 \uc774\uc720"},
+            "skinCompatibility": {"available": True, "score": 80, "reason": "\uc2e4\uc81c context \uacbd\ub85c\uc640 \uc81c\ud615 \uc774\uc720"},
+            "lookCoherence": {"available": True, "score": 80, "reason": "imageBrief\uc640 \uc0c9\u00b7\uc9c8\uac10 \uc77c\uad00\uc131 \uc774\uc720"},
+          },
+        },
         "imageBrief": "메이크업만 설명하는 안전한 이미지 생성 브리프",
       },
     ],
   }
   payload = {
     "inputPriority": list(INPUT_PRIORITY),
-    "context": context_snapshot,
+    "context": sanitize_recommendation_context(context_snapshot),
     "questions": questions,
     "answers": answers,
   }
   return (
     "아래 출력 예시와 동일한 키를 사용하고, looks를 anchor→bold→discovery 순서로 정확히 3개 반환하라. "
     "각 룩의 areaGuides에는 필수 5개 부위를 정확히 한 번씩 넣어라. 각 guide는 color 단일 객체, avoid 문자열 배열, steps의 order/instruction 객체 배열을 정확히 사용하라. "
-    "제품은 별도 검증 카탈로그가 연결하므로 모든 products를 빈 배열로 둬라. 각 설명은 한 문장으로 간결하게 쓰고, guide마다 steps 1개와 avoid 1개만 반환하라. "
+    "Do not copy or infer the analysis report\'s prior mood, base/area makeup guides, or recommendedMakeups. Generate every areaGuides entry freshly from situation, answers, personalColor, faceStructure, and skin evidence. "
+    "제품은 별도 검증 카탈로그가 연결하므로 모든 products를 빈 배열로 둬라. 서버가 상세 시술 절차를 보강할 수 있도록 color, texture, placement, technique를 룩마다 구체적으로 구분하라. "
+    "각 설명은 한 문장으로 간결하게 쓰고, guide마다 steps 1개와 avoid 1개만 반환하라. "
+    "\uac01 \ub8e9\uc5d0 lookMap\uacfc fitAssessment.dimensions \uc5ec\uc12f \ucd95\uc744 \ube60\uc9d0\uc5c6\uc774 \ub123\uace0, lookMap \uc88c\ud45c\ub97c role \uc774\ub984\uc73c\ub85c \uace0\uc815\ud558\uc9c0 \ub9c8\ub77c. "
+    "fit \ucd95\uc758 score\ub294 0~100 \uc815\uc218\uc774\uba70 \uc2e4\uc81c \uc785\ub825 \uadfc\uac70\uac00 \uc5c6\uc73c\uba74 available=false\uc640 score=null\uc744 \uc0ac\uc6a9\ud558\ub77c. "
     "contextSummary는 3개, reasons는 룩마다 2개, appliedConditions는 룩마다 최대 4개로 제한하라.\n"
     f"<OUTPUT_CONTRACT>{_data_block(contract)}</OUTPUT_CONTRACT>\n"
     f"<RECOMMENDATION_DATA>{_data_block(payload)}</RECOMMENDATION_DATA>"
@@ -135,7 +163,7 @@ def adapt_v1_recommendation(recommendation: dict[str, Any]) -> dict[str, Any]:
         {
           **look,
           "areaGuides": [
-            GeneratedMakeupAreaGuide.model_validate(guide).model_dump(by_alias=True)
+            GeneratedMakeupAreaGuide.model_validate(guide).model_dump(by_alias=True, exclude_none=True)
             for guide in look.get("areaGuides", [])
             if isinstance(guide, dict)
           ],
@@ -189,3 +217,34 @@ def adapt_v1_recommendation(recommendation: dict[str, Any]) -> dict[str, Any]:
   if not isinstance(context_summary, list):
     context_summary = []
   return {**recommendation, "contextSummary": context_summary, "looks": projected_looks, "legacyAdapted": True}
+
+PRECOMPUTED_ANALYSIS_ADVICE_FIELDS = (
+  "baseMakeupGuide",
+  "makeupGuideline",
+  "recommendedMood",
+  "recommendedMakeups",
+  "facePointGuide",
+  "summary",
+  "shortSummary",
+  "tags",
+)
+
+
+def sanitize_recommendation_context(context_snapshot: dict[str, Any]) -> dict[str, Any]:
+  """Remove retired face-report advice from both new and previously saved contexts."""
+  context = dict(context_snapshot) if isinstance(context_snapshot, dict) else {}
+  analysis_value = context.get("analysisReport")
+  if not isinstance(analysis_value, dict):
+    return context
+
+  analysis = dict(analysis_value)
+  for field in PRECOMPUTED_ANALYSIS_ADVICE_FIELDS:
+    analysis.pop(field, None)
+  detail_value = analysis.get("detail")
+  if isinstance(detail_value, dict):
+    detail = dict(detail_value)
+    for field in PRECOMPUTED_ANALYSIS_ADVICE_FIELDS:
+      detail.pop(field, None)
+    analysis["detail"] = detail
+  context["analysisReport"] = analysis
+  return context

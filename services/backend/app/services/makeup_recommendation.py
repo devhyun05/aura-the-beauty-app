@@ -23,6 +23,9 @@ from app.schemas.makeup_recommendation import (
   NormalizedCustomSituation,
 )
 from app.services.makeup_ai_observability import emit_ai_metric
+from app.services.makeup_recommendation_fit import (
+  finalize_recommendation_metadata,
+)
 from app.services.makeup_recommendation_prompt import (
   CUSTOM_NORMALIZATION_SYSTEM_PROMPT,
   QUESTION_V2_SYSTEM_PROMPT,
@@ -30,7 +33,9 @@ from app.services.makeup_recommendation_prompt import (
   build_custom_normalization_prompt,
   build_question_prompt,
   build_recommendation_prompt,
+  sanitize_recommendation_context,
 )
+from app.services.makeup_recommendation_recipe import enrich_makeup_application_plans
 
 
 logger = logging.getLogger(__name__)
@@ -939,7 +944,9 @@ async def generate_questions_v2_with_fallback(
 def deterministic_recommendation_v2(
   context_snapshot: dict[str, Any],
   answers: list[dict[str, Any]],
+  questions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+  context_snapshot = sanitize_recommendation_context(context_snapshot)
   analysis = context_snapshot.get("analysisReport")
   if not isinstance(analysis, dict):
     analysis = {}
@@ -1092,10 +1099,18 @@ def deterministic_recommendation_v2(
       ),
     })
 
-  return GeneratedMakeupRecommendationV2.model_validate({
+  detailed = enrich_makeup_application_plans({
     "contextSummary": context_summary[:8] or [scenario],
     "looks": looks,
-  }).model_dump(by_alias=True)
+  })
+  finalized = finalize_recommendation_metadata(
+    detailed,
+    context_snapshot,
+    answers,
+    questions,
+    generation_source="deterministic_fallback",
+  )
+  return GeneratedMakeupRecommendationV2.model_validate(finalized).model_dump(by_alias=True)
 
 
 async def generate_recommendation_v2(
@@ -1104,6 +1119,7 @@ async def generate_recommendation_v2(
   questions: list[dict[str, Any]],
   answers: list[dict[str, Any]],
 ) -> dict[str, Any]:
+  context_snapshot = sanitize_recommendation_context(context_snapshot)
   validation_errors: list[dict[str, Any]] = []
   for _attempt in range(2):
     try:
@@ -1121,9 +1137,17 @@ async def generate_recommendation_v2(
         settings.effective_recommendation_model_id,
         exc_info=True,
       )
-      return deterministic_recommendation_v2(context_snapshot, answers)
+      return deterministic_recommendation_v2(context_snapshot, answers, questions)
     try:
-      return GeneratedMakeupRecommendationV2.model_validate(response).model_dump(by_alias=True)
+      enriched = enrich_makeup_application_plans(response)
+      finalized = finalize_recommendation_metadata(
+        enriched,
+        context_snapshot,
+        answers,
+        questions,
+        generation_source="claude",
+      )
+      return GeneratedMakeupRecommendationV2.model_validate(finalized).model_dump(by_alias=True)
     except ValidationError as exc:
       validation_errors = exc.errors(include_input=False)
       logger.warning(
@@ -1138,4 +1162,4 @@ async def generate_recommendation_v2(
     settings.effective_recommendation_model_id,
     validation_errors[:16],
   )
-  return deterministic_recommendation_v2(context_snapshot, answers)
+  return deterministic_recommendation_v2(context_snapshot, answers, questions)

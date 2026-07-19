@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import io
+import json
 from dataclasses import replace
 
 import numpy as np
 import pytest
 from PIL import Image
 
+from app.services import makeup_feedback_vision as vision_module
 from app.services.makeup_feedback_vision import (
   BEDROCK_REGION_MAX_BYTES,
   BEDROCK_REGION_MAX_EDGE,
   DETECTOR_MAX_EDGE,
+  MAKEUP_ALIGNMENT_METADATA_VERSION,
+  MAKEUP_CROP_METADATA_VERSION,
   REGION_NAMES,
   FaceDetectorResult,
   FaceObservation,
@@ -18,6 +22,8 @@ from app.services.makeup_feedback_vision import (
   MakeupFeedbackVisionError,
   NormalizedBox,
   NormalizedPoint,
+  extract_makeup_face_crop_metadata,
+  extract_personalized_makeup_face_metadata,
   prepare_makeup_feedback_vision,
 )
 
@@ -69,25 +75,52 @@ def _face(
       "nose_tip": NormalizedPoint(0.50, 0.56),
       "face_right": NormalizedPoint(0.22, 0.54),
       "face_left": NormalizedPoint(0.78, 0.54),
-      "left_eye_outer": NormalizedPoint(0.69, 0.38),
-      "left_eye_inner": NormalizedPoint(0.55, 0.39),
-      "left_eye_top": NormalizedPoint(0.62, 0.36),
-      "left_eye_bottom": NormalizedPoint(0.62, 0.41),
-      "right_eye_outer": NormalizedPoint(0.31, 0.38),
-      "right_eye_inner": NormalizedPoint(0.45, 0.39),
-      "right_eye_top": NormalizedPoint(0.38, 0.36),
-      "right_eye_bottom": NormalizedPoint(0.38, 0.41),
-      "left_cheek": NormalizedPoint(0.67, 0.62),
-      "right_cheek": NormalizedPoint(0.33, 0.62),
-      "lip_left": NormalizedPoint(0.59, 0.72),
-      "lip_right": NormalizedPoint(0.41, 0.72),
+      "left_eye_outer": NormalizedPoint(0.31, 0.38),
+      "left_eye_inner": NormalizedPoint(0.45, 0.39),
+      "left_eye_top": NormalizedPoint(0.38, 0.36),
+      "left_eye_bottom": NormalizedPoint(0.38, 0.41),
+      "right_eye_outer": NormalizedPoint(0.69, 0.38),
+      "right_eye_inner": NormalizedPoint(0.55, 0.39),
+      "right_eye_top": NormalizedPoint(0.62, 0.36),
+      "right_eye_bottom": NormalizedPoint(0.62, 0.41),
+      "left_cheek": NormalizedPoint(0.33, 0.62),
+      "right_cheek": NormalizedPoint(0.67, 0.62),
+      "lip_left": NormalizedPoint(0.41, 0.72),
+      "lip_right": NormalizedPoint(0.59, 0.72),
       "lip_top": NormalizedPoint(0.50, 0.69),
       "lip_bottom": NormalizedPoint(0.50, 0.75),
     },
     pose=pose or FacePose(yaw_deg=0, pitch_deg=0, roll_deg=0),
     confidence=0.98,
+    region_points={
+      "left_eye": (
+        NormalizedPoint(0.31, 0.38),
+        NormalizedPoint(0.45, 0.39),
+        NormalizedPoint(0.38, 0.36),
+        NormalizedPoint(0.38, 0.41),
+      ),
+      "right_eye": (
+        NormalizedPoint(0.69, 0.38),
+        NormalizedPoint(0.55, 0.39),
+        NormalizedPoint(0.62, 0.36),
+        NormalizedPoint(0.62, 0.41),
+      ),
+      "left_brow": (
+        NormalizedPoint(0.29, 0.31),
+        NormalizedPoint(0.33, 0.29),
+        NormalizedPoint(0.37, 0.28),
+        NormalizedPoint(0.41, 0.29),
+        NormalizedPoint(0.45, 0.31),
+      ),
+      "right_brow": (
+        NormalizedPoint(0.55, 0.31),
+        NormalizedPoint(0.59, 0.29),
+        NormalizedPoint(0.63, 0.28),
+        NormalizedPoint(0.67, 0.29),
+        NormalizedPoint(0.71, 0.31),
+      ),
+    },
   )
-
 
 def _detector_result(*faces: FaceObservation) -> FaceDetectorResult:
   return FaceDetectorResult(available=True, faces=tuple(faces))
@@ -111,8 +144,8 @@ def test_prepares_full_and_landmark_regions_for_one_good_face() -> None:
   assert result.hard_retake is False
   assert result.quality_issues == ()
   assert set(result.regions) == set(REGION_NAMES)
-  assert result.regions["left_eye"].source_box[0] > result.regions["right_eye"].source_box[0]
-  assert result.regions["left_cheek"].source_box[0] > result.regions["right_cheek"].source_box[0]
+  assert result.regions["left_eye"].source_box[0] < result.regions["right_eye"].source_box[0]
+  assert result.regions["left_cheek"].source_box[0] < result.regions["right_cheek"].source_box[0]
 
   for region in result.regions.values():
     assert region.content_type == "image/jpeg"
@@ -128,6 +161,114 @@ def test_prepares_full_and_landmark_regions_for_one_good_face() -> None:
   assert set(metadata["regions"]) == set(REGION_NAMES)
   assert metadata["regions"]["lips"]["byteSize"] == len(result.regions["lips"].body)
 
+
+def test_official_screen_relative_eye_and_brow_indices_are_stable() -> None:
+  assert vision_module._MEDIAPIPE_SCREEN_REGION_INDICES == {
+    "left_eye": (33, 7, 163, 144, 145, 153, 154, 155, 133, 246, 161, 160, 159, 158, 157, 173),
+    "right_eye": (263, 249, 390, 373, 374, 380, 381, 382, 362, 466, 388, 387, 386, 385, 384, 398),
+    "left_brow": (46, 53, 52, 65, 55, 70, 63, 105, 66, 107),
+    "right_brow": (276, 283, 282, 295, 285, 300, 293, 334, 296, 336),
+  }
+
+
+def test_extracts_normalized_recommendation_crops_without_raw_landmarks() -> None:
+  metadata = extract_makeup_face_crop_metadata(
+    _pattern_image_bytes(),
+    detector=lambda _image: _detector_result(_face()),
+  )
+
+  assert metadata is not None
+  assert metadata["version"] == MAKEUP_CROP_METADATA_VERSION
+  assert metadata["imageSize"] == {"width": 900, "height": 1100}
+  assert list(metadata["areas"]) == ["base", "brow", "eye", "cheek", "lip"]
+  assert [region["regionId"] for region in metadata["areas"]["base"]] == ["face"]
+  expected_ids = {
+    "brow": ["left_brow", "right_brow"],
+    "eye": ["left_eye", "right_eye"],
+    "cheek": ["left_cheek", "right_cheek"],
+  }
+  for area, region_ids in expected_ids.items():
+    regions = metadata["areas"][area]
+    assert [region["regionId"] for region in regions] == region_ids
+    assert regions[0]["box"]["left"] < regions[1]["box"]["left"]
+
+  assert metadata["areas"]["brow"] != metadata["areas"]["eye"]
+  for brow, eye in zip(
+    metadata["areas"]["brow"],
+    metadata["areas"]["eye"],
+    strict=True,
+  ):
+    assert brow["box"]["bottom"] < eye["box"]["top"]
+    assert brow["box"]["top"] > metadata["areas"]["base"][0]["box"]["top"]
+  assert metadata["areas"]["lip"] == [
+    {
+      "regionId": "lips",
+      "box": {"left": 0.3605, "top": 0.644, "right": 0.6395, "bottom": 0.796},
+    },
+  ]
+  assert "landmark" not in json.dumps(metadata).lower()
+
+
+def test_extracts_personalized_alignment_with_screen_ordered_eye_centers() -> None:
+  detector_calls: list[tuple[int, int]] = []
+  detections = iter((_detector_result(_face()), _detector_result(_face())))
+
+  def detector(image: Image.Image) -> FaceDetectorResult:
+    detector_calls.append(image.size)
+    return next(detections)
+
+  metadata = extract_personalized_makeup_face_metadata(
+    _pattern_image_bytes(width=900, height=1100),
+    _pattern_image_bytes(width=600, height=800),
+    detector=detector,
+  )
+
+  assert detector_calls == [(900, 1100), (600, 800)]
+  assert metadata["cropMetadata"]["imageSize"] == {"width": 600, "height": 800}
+  alignment = metadata["alignmentMetadata"]
+  assert alignment["version"] == MAKEUP_ALIGNMENT_METADATA_VERSION
+  assert set(alignment) == {"version", "source", "generated"}
+  assert alignment["source"] == {
+    "imageSize": {"width": 900, "height": 1100},
+    "faceBox": {"left": 0.2, "top": 0.1, "right": 0.8, "bottom": 0.9},
+    "eyeCenters": {
+      "imageLeft": {"x": 0.38, "y": 0.385},
+      "imageRight": {"x": 0.62, "y": 0.385},
+    },
+    "rollDeg": 0.0,
+  }
+  assert alignment["generated"] == {
+    **alignment["source"],
+    "imageSize": {"width": 600, "height": 800},
+  }
+  for frame in ("source", "generated"):
+    eye_centers = alignment[frame]["eyeCenters"]
+    assert eye_centers["imageLeft"]["x"] < eye_centers["imageRight"]["x"]
+    assert all(
+      0 <= coordinate <= 1
+      for center in eye_centers.values()
+      for coordinate in center.values()
+    )
+  assert "landmark" not in json.dumps(metadata).lower()
+
+
+@pytest.mark.parametrize(
+  "detector_result",
+  [
+    FaceDetectorResult(available=False, error="mediapipe_unavailable"),
+    FaceDetectorResult(available=True, faces=()),
+    _detector_result(_face(), _face()),
+  ],
+)
+def test_recommendation_crop_metadata_is_optional_without_exactly_one_face(
+  detector_result: FaceDetectorResult,
+) -> None:
+  metadata = extract_makeup_face_crop_metadata(
+    _pattern_image_bytes(),
+    detector=lambda _image: detector_result,
+  )
+
+  assert metadata is None
 
 
 def test_detector_receives_resized_copy_while_regions_keep_original_coordinates() -> None:

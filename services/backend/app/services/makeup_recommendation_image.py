@@ -24,6 +24,13 @@ except ImportError:  # pragma: no cover
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.services.makeup_ai_observability import emit_ai_metric
+from app.services.makeup_feedback_vision import (
+  extract_makeup_face_crop_metadata,
+  extract_personalized_makeup_face_metadata,
+)
+from app.services.makeup_recommendation_semantic import (
+  build_semantic_makeup_color_metadata,
+)
 
 
 IMAGE_PROMPT_VERSION = "makeup-image-v2"
@@ -103,6 +110,35 @@ def _prompt_text(value: Any, max_chars: int) -> str:
   return " ".join(str(value or "").split())[:max_chars]
 
 
+def _application_plan_contract(guide: dict[str, Any]) -> str:
+  plan = guide.get("applicationPlan")
+  if not isinstance(plan, dict) or not isinstance(plan.get("steps"), list):
+    return ""
+  contracts: list[str] = []
+  for step in plan["steps"][:8]:
+    if not isinstance(step, dict):
+      continue
+    colors = step.get("colors") if isinstance(step.get("colors"), list) else []
+    color_copy = "/".join(
+      " ".join(
+        part for part in (
+          _prompt_text(color.get("role"), 12),
+          _prompt_text(color.get("name"), 20),
+          _prompt_text(color.get("hex"), 7),
+        ) if part
+      )
+      for color in colors[:4]
+      if isinstance(color, dict)
+    )
+    contracts.append(
+      f"#{step.get('order')} {_prompt_text(step.get('title'), 24)}"
+      f"[{color_copy}]@{_prompt_text(step.get('placement'), 36)}>"
+      f"{_prompt_text(step.get('technique'), 36)};"
+      f"finish:{_prompt_text(step.get('finishCheck'), 30)}"
+    )
+  return " | ".join(contracts)[:820]
+
+
 def _area_color_texture_contract(recommendation: dict[str, Any]) -> str:
   area_guides = recommendation.get("areaGuides")
   if not isinstance(area_guides, list):
@@ -128,6 +164,9 @@ def _area_color_texture_contract(recommendation: dict[str, Any]) -> str:
       details.append(f"color {color_name} {color_hex}".strip())
     if texture:
       details.append(f"texture {texture}")
+    application_plan = _application_plan_contract(item)
+    if application_plan:
+      details.append(f"layers {application_plan}")
     if area and details:
       contracts.append(f"{area}: {', '.join(details)}")
   return "; ".join(contracts)
@@ -172,7 +211,9 @@ def _prompt(
   color_texture = _area_color_texture_contract(recommendation)
   mode_instruction = (
     "Edit only the makeup. Preserve the same adult person's identity, facial geometry, "
-    "skin texture, hair, expression, pose, clothing, lighting, camera angle, and background."
+    "skin texture, hair, expression, pose, clothing, lighting, camera angle, and background. "
+    "Preserve the exact crop and framing, head size, face center and pixel position; "
+      "do not zoom, reframe, recrop, rotate, or translate the subject."
     if personalized
     else (
       "Show a fictional, non-identifiable adult model in a clean head-and-shoulders beauty "
@@ -189,11 +230,11 @@ def _prompt(
     f"Situation: {_prompt_text(scenario_text, 300)}.",
     f"Makeup direction: {title}. {summary}.",
   ]
+  if color_texture:
+    parts.append(f"Required area colors, textures, and application layers: {color_texture}.")
   if image_brief:
     parts.append(f"Claude image brief: {image_brief}.")
-  if color_texture:
-    parts.append(f"Required area colors and textures: {color_texture}.")
-  return " ".join(parts)[:3000]
+  return " ".join(parts)[:7000]
 
 
 def _output_contract(settings: Settings) -> tuple[str, str, str]:
@@ -396,6 +437,39 @@ def _validate_and_normalize_output(
     ) from exc
 
 
+def _put_recommendation_image(
+  settings: Settings,
+  put_args: dict[str, Any],
+) -> None:
+  try:
+    client_kwargs: dict[str, Any] = {'region_name': settings.aws_region}
+    if settings.aws_profile_name:
+      client = boto3.Session(profile_name=settings.aws_profile_name).client(
+        's3',
+        **client_kwargs,
+      )
+    elif (
+      settings.aws_access_key_id
+      and settings.aws_secret_access_key
+      and not settings.aws_use_iam_role
+    ):
+      client = boto3.client(
+        's3',
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        **client_kwargs,
+      )
+    else:
+      client = boto3.client('s3', **client_kwargs)
+    client.put_object(**put_args)
+  except Exception as exc:
+    raise AppError(
+      503,
+      'MAKEUP_IMAGE_STORAGE_FAILED',
+      '생성된 추천 이미지를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.',
+    ) from exc
+
+
 def _generate_asset_sync(
   settings: Settings,
   report_id: UUID,
@@ -441,8 +515,10 @@ def _generate_asset_sync(
   }
 
   input_media_id: UUID | None = None
+  personalized_source: PersonalizedImageInput | None = None
   if image_mode == "personalized":
     source = _validate_personalized_input(settings, source_image)
+    personalized_source = source
     input_media_id = source.media_id
     normalized = _normalize_source_image(settings, source)
     response = client.images.edit(image=normalized, **common_args)
@@ -455,6 +531,33 @@ def _generate_asset_sync(
     output_format,
   )
   image_bytes = validated_output.content
+  face_metadata: dict[str, dict[str, Any]] = {}
+  try:
+    if personalized_source is not None:
+      face_metadata = extract_personalized_makeup_face_metadata(
+        personalized_source.content,
+        image_bytes,
+      )
+    else:
+      crop_metadata = extract_makeup_face_crop_metadata(image_bytes)
+      if crop_metadata is not None:
+        face_metadata["cropMetadata"] = crop_metadata
+    crop_metadata = face_metadata.get("cropMetadata")
+    if isinstance(crop_metadata, dict):
+      semantic_color_metadata = build_semantic_makeup_color_metadata(
+        image_bytes,
+        crop_metadata=crop_metadata,
+        look=recommendation,
+      )
+      if semantic_color_metadata is not None:
+        face_metadata["semanticColorMetadata"] = semantic_color_metadata
+  except Exception:  # noqa: BLE001 - optional face metadata must never fail image delivery.
+    logger.warning(
+      "[aura:makeup-recommendation] face-metadata:skipped reportId=%s imageKey=%s",
+      report_id,
+      image_key,
+      exc_info=True,
+    )
   is_private = image_mode == "personalized"
   consent_status = "explicit" if is_private else "not-required"
   rights_status = "source-owner-verified" if is_private else "synthetic-reference"
@@ -471,6 +574,10 @@ def _generate_asset_sync(
     "height": validated_output.height,
     "resized": validated_output.resized,
   }
+  for metadata_key in ("cropMetadata", "alignmentMetadata", "semanticColorMetadata"):
+    metadata_value = face_metadata.get(metadata_key)
+    if isinstance(metadata_value, dict):
+      provenance[metadata_key] = metadata_value
   if generation_attempt is not None:
     provenance["generationAttempt"] = generation_attempt
   prefix = (
@@ -514,19 +621,7 @@ def _generate_asset_sync(
     put_args["CacheControl"] = "public, max-age=31536000, immutable"
   if generation_attempt is not None:
     metadata["generation-attempt"] = str(generation_attempt)
-  s3_client_kwargs: dict[str, Any] = {"region_name": settings.aws_region}
-  if settings.aws_profile_name:
-    s3_client = boto3.Session(profile_name=settings.aws_profile_name).client("s3", **s3_client_kwargs)
-  elif settings.aws_access_key_id and settings.aws_secret_access_key and not settings.aws_use_iam_role:
-    s3_client = boto3.client(
-      "s3",
-      aws_access_key_id=settings.aws_access_key_id,
-      aws_secret_access_key=settings.aws_secret_access_key,
-      **s3_client_kwargs,
-    )
-  else:
-    s3_client = boto3.client("s3", **s3_client_kwargs)
-  s3_client.put_object(**put_args)
+  _put_recommendation_image(settings, put_args)
 
   image_url: str | None = None
   if not is_private:

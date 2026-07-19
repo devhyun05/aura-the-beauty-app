@@ -19,11 +19,26 @@ import {
   type ApiAreaGuide,
 } from './makeupRecommendationMappers';
 import type {
+  MakeupArea,
   MakeupLookRecommendation,
+  MakeupRecommendationApplicationStep,
   MakeupQuestionDimension,
   MakeupRecommendationDiscovery,
   MakeupRecommendationAnswer,
+  MakeupRecommendationCropBox,
+  MakeupRecommendationCropRegions,
+  MakeupRecommendationFitAssessment,
+  MakeupRecommendationFitDimension,
+  MakeupRecommendationFitDimensionKey,
+  MakeupRecommendationFitEvidenceSource,
+  MakeupRecommendationMatchAssessment,
+  MakeupRecommendationMatchComponentKey,
+  MakeupRecommendationGenerationSource,
+  MakeupRecommendationImageAlignmentFrame,
+  MakeupRecommendationImageAlignmentMetadata,
+  MakeupRecommendationImageAlignmentPoint,
   MakeupRecommendationImageStatus,
+  MakeupRecommendationLookMap,
   MakeupRecommendationProduct,
   MakeupRecommendationProfileGender,
   MakeupRecommendationQuestion,
@@ -121,24 +136,189 @@ type BackendLook = {
   imageStatus?: MakeupRecommendationImageStatus;
   imageError?: string;
   imageUrl?: string;
+  lookMap?: unknown;
+  fitAssessment?: unknown;
+  imageAsset?: {
+    provenance?: {
+      alignmentMetadata?: unknown;
+      cropMetadata?: unknown;
+    };
+  };
 };
 type BackendRecommendation = {
   looks?: BackendLook[];
+  generationSource?: unknown;
+  matchAssessment?: unknown;
 } | string;
-type BackendRecommendationContextSnapshot = {
-  profile?: {
-    gender?: unknown;
+
+const MAKEUP_CROP_AREAS: readonly MakeupArea[] = ['base', 'brow', 'eye', 'cheek', 'lip'];
+
+function mapBackendCropBox(value: unknown): MakeupRecommendationCropBox | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const box = value as Record<string, unknown>;
+  const {left, top, right, bottom} = box;
+  if (
+    typeof left !== 'number'
+    || typeof top !== 'number'
+    || typeof right !== 'number'
+    || typeof bottom !== 'number'
+    || ![left, top, right, bottom].every(Number.isFinite)
+    || left < 0
+    || top < 0
+    || right > 1
+    || bottom > 1
+    || right <= left
+    || bottom <= top
+  ) return null;
+  return {left, top, right, bottom};
+}
+
+export function mapBackendCropRegions(value: unknown): MakeupRecommendationCropRegions | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const metadata = value as Record<string, unknown>;
+  if (metadata.version !== 'makeup-face-crops-v1') return undefined;
+  const source = metadata.areas;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return undefined;
+  const areas = source as Record<string, unknown>;
+  const result: MakeupRecommendationCropRegions = {};
+  for (const area of MAKEUP_CROP_AREAS) {
+    const boxes = Array.isArray(areas[area])
+      ? areas[area]
+        .map(region => (
+          region && typeof region === 'object' && !Array.isArray(region)
+            ? mapBackendCropBox((region as Record<string, unknown>).box)
+            : null
+        ))
+        .filter((box): box is MakeupRecommendationCropBox => Boolean(box))
+      : [];
+    if (boxes.length > 0) {
+      result[area] = boxes.slice(0, area === 'base' || area === 'lip' ? 1 : 2);
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function mapBackendAlignmentPoint(
+  value: unknown,
+): MakeupRecommendationImageAlignmentPoint | null {
+  if (!isBackendRecord(value)) return null;
+  const {x, y} = value;
+  if (
+    typeof x !== 'number'
+    || typeof y !== 'number'
+    || !Number.isFinite(x)
+    || !Number.isFinite(y)
+    || x < 0
+    || x > 1
+    || y < 0
+    || y > 1
+  ) return null;
+  return {x, y};
+}
+
+function mapBackendAlignmentFrame(
+  value: unknown,
+): MakeupRecommendationImageAlignmentFrame | null {
+  if (!isBackendRecord(value) || !isBackendRecord(value.imageSize)) return null;
+  const {width, height} = value.imageSize;
+  const faceBox = mapBackendCropBox(value.faceBox);
+  if (
+    typeof width !== 'number'
+    || typeof height !== 'number'
+    || !Number.isFinite(width)
+    || !Number.isFinite(height)
+    || width <= 0
+    || height <= 0
+    || !faceBox
+  ) return null;
+
+  const eyeCenters = isBackendRecord(value.eyeCenters) ? value.eyeCenters : undefined;
+  const imageLeft = mapBackendAlignmentPoint(eyeCenters?.imageLeft);
+  const imageRight = mapBackendAlignmentPoint(eyeCenters?.imageRight);
+  const hasOrderedEyePair = Boolean(imageLeft && imageRight && imageRight.x > imageLeft.x);
+  const rollDeg = typeof value.rollDeg === 'number' && Number.isFinite(value.rollDeg)
+    ? value.rollDeg
+    : undefined;
+
+  return {
+    imageSize: {width, height},
+    faceBox,
+    ...(hasOrderedEyePair && imageLeft && imageRight
+      ? {eyeCenters: {imageLeft, imageRight}}
+      : {}),
+    ...(rollDeg !== undefined ? {rollDeg} : {}),
   };
+}
+
+export function mapBackendImageAlignmentMetadata(
+  value: unknown,
+): MakeupRecommendationImageAlignmentMetadata | undefined {
+  if (!isBackendRecord(value) || value.version !== 'makeup-face-alignment-v1') return undefined;
+  const source = mapBackendAlignmentFrame(value.source);
+  const generated = mapBackendAlignmentFrame(value.generated);
+  if (!source || !generated) return undefined;
+  return {version: 'makeup-face-alignment-v1', source, generated};
+}
+function cloneCropRegions(
+  regions: MakeupRecommendationCropRegions | undefined,
+): MakeupRecommendationCropRegions | undefined {
+  if (!regions) return undefined;
+  return Object.fromEntries(
+    MAKEUP_CROP_AREAS.flatMap(area => (
+      regions[area]?.length ? [[area, regions[area].map(box => ({...box}))]] : []
+    )),
+  ) as MakeupRecommendationCropRegions;
+}
+
+function cloneImageAlignmentMetadata(
+  metadata: MakeupRecommendationImageAlignmentMetadata | undefined,
+): MakeupRecommendationImageAlignmentMetadata | undefined {
+  if (!metadata) return undefined;
+  const cloneFrame = (
+    frame: MakeupRecommendationImageAlignmentFrame,
+  ): MakeupRecommendationImageAlignmentFrame => ({
+    imageSize: {...frame.imageSize},
+    faceBox: {...frame.faceBox},
+    ...(frame.eyeCenters
+      ? {
+        eyeCenters: {
+          imageLeft: {...frame.eyeCenters.imageLeft},
+          imageRight: {...frame.eyeCenters.imageRight},
+        },
+      }
+      : {}),
+    ...(frame.rollDeg !== undefined ? {rollDeg: frame.rollDeg} : {}),
+  });
+  return {
+    version: 'makeup-face-alignment-v1',
+    source: cloneFrame(metadata.source),
+    generated: cloneFrame(metadata.generated),
+  };
+}
+type BackendRecommendationContextSnapshot = {
+  analysisReport?: unknown;
+  profile?: unknown;
+  selection?: unknown;
 };
 type BackendRecommendationReport = {
   id: string;
-  scenarioText?: string;
+  scenarioText?: unknown;
+  scenarioLabel?: unknown;
   recommendation: BackendRecommendation;
+  questions?: unknown;
+  answers?: unknown;
   imageStatus: MakeupRecommendationImageStatus;
   imageUrl?: string;
   profileGender?: unknown;
+  personalColor?: unknown;
   imageError?: string;
   sourceAnalysisReportId?: string;
+  additionalConstraints?: unknown;
+  situation?: unknown;
+  keyword?: unknown;
+  editorialPresetId?: unknown;
+  customSituationText?: unknown;
+  customSituationLabel?: unknown;
   createdAt?: string;
   contextSnapshot?: BackendRecommendationContextSnapshot | string;
 };
@@ -166,12 +346,614 @@ function parseBackendReportContextSnapshot(
   }
 }
 
+function normalizeOptionalBackendText(value: unknown): string | undefined {
+  return typeof value === 'string' ? value.trim() || undefined : undefined;
+}
+
+function isBackendRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+const FIT_DIMENSION_KEYS: readonly MakeupRecommendationFitDimensionKey[] = [
+  'situation',
+  'preference',
+  'personalColor',
+  'faceStructure',
+  'skinCompatibility',
+  'lookCoherence',
+];
+const FIT_EVIDENCE_SOURCES = new Set<MakeupRecommendationFitEvidenceSource>([
+  'situation',
+  'preference',
+  'personal_color',
+  'face_structure',
+  'skin_type',
+  'look_coherence',
+]);
+
+function mapBackendGenerationSource(
+  value: unknown,
+): MakeupRecommendationGenerationSource | undefined {
+  return value === 'claude' || value === 'deterministic_fallback'
+    ? value
+    : undefined;
+}
+
+function isBoundedFitScore(value: unknown): value is number {
+  return typeof value === 'number'
+    && Number.isInteger(value)
+    && value >= 0
+    && value <= 100;
+}
+
+function mapBackendLookMap(value: unknown): MakeupRecommendationLookMap | undefined {
+  if (!isBackendRecord(value) || value.version !== 'makeup-look-map-v1') return undefined;
+  if (
+    !isBoundedFitScore(value.naturalityToPersonality)
+    || !isBoundedFitScore(value.casualToGlam)
+  ) return undefined;
+  const rationale = normalizeOptionalBackendText(value.rationale);
+  if (!rationale) return undefined;
+  return {
+    version: 'makeup-look-map-v1',
+    naturalityToPersonality: value.naturalityToPersonality,
+    casualToGlam: value.casualToGlam,
+    rationale,
+  };
+}
+
+function mapBackendFitDimension(value: unknown): MakeupRecommendationFitDimension | null {
+  if (!isBackendRecord(value) || typeof value.available !== 'boolean') return null;
+  const reason = normalizeOptionalBackendText(value.reason);
+  if (!reason) return null;
+  if (value.available) {
+    return isBoundedFitScore(value.score)
+      ? {available: true, score: value.score, reason}
+      : null;
+  }
+  return value.score === null || value.score === undefined
+    ? {available: false, reason}
+    : null;
+}
+
+function mapBackendFitAssessment(
+  value: unknown,
+): MakeupRecommendationFitAssessment | undefined {
+  if (
+    !isBackendRecord(value)
+    || value.scoringVersion !== 'makeup-fit-v1'
+    || !isBoundedFitScore(value.overallScore)
+    || !Array.isArray(value.evidence)
+  ) return undefined;
+  const rawDimensions = value.dimensions;
+  if (!isBackendRecord(rawDimensions)) return undefined;
+
+  const dimensionEntries = FIT_DIMENSION_KEYS.map(key => {
+    const dimension = mapBackendFitDimension(rawDimensions[key]);
+    return dimension ? ([key, dimension] as const) : null;
+  });
+  if (dimensionEntries.some(entry => entry === null)) return undefined;
+  const dimensions = Object.fromEntries(
+    dimensionEntries.filter(
+      (entry): entry is readonly [MakeupRecommendationFitDimensionKey, MakeupRecommendationFitDimension] => (
+        entry !== null
+      ),
+    ),
+  ) as Record<MakeupRecommendationFitDimensionKey, MakeupRecommendationFitDimension>;
+
+  const evidence = value.evidence.flatMap(item => {
+    if (!isBackendRecord(item) || !FIT_EVIDENCE_SOURCES.has(item.source as MakeupRecommendationFitEvidenceSource)) {
+      return [];
+    }
+    const label = normalizeOptionalBackendText(item.label);
+    const reason = normalizeOptionalBackendText(item.reason);
+    if (!label || !reason) return [];
+    return [{
+      source: item.source as MakeupRecommendationFitEvidenceSource,
+      label,
+      reason,
+    }];
+  });
+  if (evidence.length === 0 || evidence.length !== value.evidence.length) return undefined;
+
+  return {
+    scoringVersion: 'makeup-fit-v1',
+    overallScore: value.overallScore,
+    dimensions,
+    evidence,
+  };
+}
+
+const MATCH_COMPONENT_KEYS = [
+  'preference',
+  'situation',
+  'colorHarmony',
+  'skinFinish',
+] as const satisfies readonly MakeupRecommendationMatchComponentKey[];
+const MATCH_COMPONENT_WEIGHTS: Record<MakeupRecommendationMatchComponentKey, number> = {
+  preference: 35,
+  situation: 25,
+  colorHarmony: 25,
+  skinFinish: 15,
+};
+
+function mapBackendMatchAssessment(
+  value: unknown,
+): MakeupRecommendationMatchAssessment | undefined {
+  if (
+    !isBackendRecord(value)
+    || value.version !== 'makeup-match-v1'
+    || !isBoundedFitScore(value.evaluatedWeight)
+    || !Array.isArray(value.components)
+    || !Array.isArray(value.reflectedInputs)
+  ) return undefined;
+  const generationSource = mapBackendGenerationSource(value.generationSource);
+  const hasScore = isBoundedFitScore(value.score);
+  if (!generationSource || (value.score !== null && !hasScore)) return undefined;
+
+  const components = value.components.flatMap<MakeupRecommendationMatchAssessment['components'][number]>(item => {
+    if (
+      !isBackendRecord(item)
+      || !MATCH_COMPONENT_KEYS.includes(item.key as MakeupRecommendationMatchComponentKey)
+      || typeof item.evaluated !== 'boolean'
+      || !isBoundedFitScore(item.weight)
+      || !Array.isArray(item.evidence)
+    ) return [];
+    const key = item.key as MakeupRecommendationMatchComponentKey;
+    if (item.weight !== MATCH_COMPONENT_WEIGHTS[key]) return [];
+    const reason = normalizeOptionalBackendText(item.reason);
+    const evidence = item.evidence.flatMap(entry => {
+      const normalized = normalizeOptionalBackendText(entry);
+      return normalized ? [normalized] : [];
+    });
+    if (!reason || evidence.length !== item.evidence.length) return [];
+    if (item.evaluated ? !isBoundedFitScore(item.score) : item.score !== null) return [];
+    return [{
+      key,
+      weight: item.weight,
+      score: item.evaluated ? item.score as number : null,
+      evaluated: item.evaluated,
+      reason,
+      evidence,
+    }];
+  });
+  if (
+    components.length !== MATCH_COMPONENT_KEYS.length
+    || components.some((component, index) => component.key !== MATCH_COMPONENT_KEYS[index])
+  ) return undefined;
+
+  const evaluatedWeight = components
+    .filter(component => component.evaluated)
+    .reduce((total, component) => total + component.weight, 0);
+  const evaluatedCount = components.filter(component => component.evaluated).length;
+  const enoughEvidence = (
+    evaluatedWeight >= 60
+    && evaluatedCount >= 2
+    && components.some(component => (
+      component.evaluated
+      && (component.key === 'preference' || component.key === 'situation')
+    ))
+  );
+  if (
+    evaluatedWeight !== value.evaluatedWeight
+    || enoughEvidence !== hasScore
+  ) return undefined;
+
+  const reflectedInputs = value.reflectedInputs.flatMap<MakeupRecommendationMatchAssessment['reflectedInputs'][number]>(item => {
+    if (!isBackendRecord(item)) return [];
+    const sourceType = normalizeOptionalBackendText(item.sourceType);
+    const sourceId = normalizeOptionalBackendText(item.sourceId);
+    const inputLabel = normalizeOptionalBackendText(item.inputLabel);
+    const decisionPath = normalizeOptionalBackendText(item.decisionPath);
+    const reflectedValue = normalizeOptionalBackendText(item.reflectedValue);
+    return sourceType && sourceId && inputLabel && decisionPath && reflectedValue
+      ? [{sourceType, sourceId, inputLabel, decisionPath, reflectedValue}]
+      : [];
+  });
+  if (reflectedInputs.length !== value.reflectedInputs.length) return undefined;
+
+  return {
+    version: 'makeup-match-v1',
+    score: hasScore ? value.score as number : null,
+    evaluatedWeight,
+    components,
+    reflectedInputs,
+    generationSource,
+  };
+}
+
+function parseBackendReportArray(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [];
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeBackendStringArray(value: unknown): string[] {
+  return parseBackendReportArray(value).filter((item): item is string => typeof item === 'string');
+}
+
+function mapBackendQuestion(value: unknown): BackendQuestion | null {
+  if (!isBackendRecord(value)) return null;
+  if (typeof value.id !== 'string' || typeof value.title !== 'string') return null;
+  const options = parseBackendReportArray(value.options).flatMap(option => {
+    if (!isBackendRecord(option)) return [];
+    if (typeof option.id !== 'string' || typeof option.label !== 'string') return [];
+    return [{id: option.id, label: option.label}];
+  });
+  return {id: value.id, title: value.title, options};
+}
+
+function mapBackendAnswers(value: unknown): MakeupRecommendationAnswer[] {
+  return parseBackendReportArray(value).flatMap(answer => {
+    if (!isBackendRecord(answer) || typeof answer.questionId !== 'string' || !answer.questionId.trim()) {
+      return [];
+    }
+    if (answer.optionId !== undefined && typeof answer.optionId !== 'string') return [];
+    if (answer.freeText !== undefined && typeof answer.freeText !== 'string') return [];
+    if (answer.additionalConstraints !== undefined && typeof answer.additionalConstraints !== 'string') return [];
+    return [{
+      questionId: answer.questionId,
+      ...(typeof answer.optionId === 'string' ? {optionId: answer.optionId} : {}),
+      ...(typeof answer.freeText === 'string' ? {freeText: answer.freeText} : {}),
+      ...(typeof answer.additionalConstraints === 'string'
+        ? {additionalConstraints: answer.additionalConstraints}
+        : {}),
+    }];
+  });
+}
+
+const BACKEND_SITUATION_KEYS = new Set<MakeupSituation['key']>([
+  'daily',
+  'work',
+  'date',
+  'social',
+  'formal_event',
+  'travel_outdoor',
+  'camera_content',
+  'festival_performance',
+]);
+
+function mapBackendSituationSummary(
+  value: unknown,
+): Pick<MakeupSituation, 'id' | 'key' | 'label' | 'description'> | undefined {
+  if (!isBackendRecord(value)) return undefined;
+  if (
+    typeof value.id !== 'string'
+    || typeof value.key !== 'string'
+    || !BACKEND_SITUATION_KEYS.has(value.key as MakeupSituation['key'])
+    || typeof value.label !== 'string'
+    || typeof value.description !== 'string'
+  ) return undefined;
+  return {
+    id: value.id,
+    key: value.key as MakeupSituation['key'],
+    label: value.label,
+    description: value.description,
+  };
+}
+
+function mapBackendKeyword(value: unknown): MakeupTrendKeyword | undefined {
+  if (!isBackendRecord(value)) return undefined;
+  if (
+    typeof value.id !== 'string'
+    || typeof value.label !== 'string'
+    || (value.kind !== 'curated' && value.kind !== 'steady' && value.kind !== 'trend')
+    || (
+      value.badge !== 'TREND_K_BEAUTY_2026'
+      && value.badge !== 'TREND_GLOBAL_SS26'
+      && value.badge !== 'STEADY'
+      && value.badge !== 'CURATED'
+    )
+    || typeof value.seedPrompt !== 'string'
+  ) return undefined;
+  const marketScope = normalizeOptionalBackendText(value.marketScope);
+  const sourceName = normalizeOptionalBackendText(value.sourceName);
+  const sourceUrl = normalizeOptionalBackendText(value.sourceUrl);
+  const sourcePublishedAt = normalizeOptionalBackendText(value.sourcePublishedAt);
+  const asOf = normalizeOptionalBackendText(value.asOf);
+  const expiresAt = normalizeOptionalBackendText(value.expiresAt);
+  return {
+    id: value.id,
+    label: value.label,
+    kind: value.kind,
+    badge: value.badge,
+    seedPrompt: value.seedPrompt,
+    tags: normalizeBackendStringArray(value.tags),
+    ...(marketScope ? {marketScope} : {}),
+    ...(sourceName ? {sourceName} : {}),
+    ...(sourceUrl ? {sourceUrl} : {}),
+    ...(sourcePublishedAt ? {sourcePublishedAt} : {}),
+    ...(asOf ? {asOf} : {}),
+    ...(expiresAt ? {expiresAt} : {}),
+    ...(value.confidence === 'A' || value.confidence === 'B' ? {confidence: value.confidence} : {}),
+  };
+}
+
+function mapBackendLookSteps(value: unknown): NonNullable<BackendLook['steps']> {
+  return parseBackendReportArray(value).flatMap(step => {
+    if (!isBackendRecord(step)) return [];
+    if (step.instruction !== undefined && typeof step.instruction !== 'string') return [];
+    if (step.area !== undefined && typeof step.area !== 'string') return [];
+    if (step.order !== undefined && (typeof step.order !== 'number' || !Number.isFinite(step.order))) return [];
+    return [{
+      ...(typeof step.order === 'number' ? {order: step.order} : {}),
+      ...(typeof step.area === 'string' ? {area: step.area} : {}),
+      ...(typeof step.instruction === 'string' ? {instruction: step.instruction} : {}),
+    }];
+  });
+}
+
+function mapBackendLookProducts(value: unknown): NonNullable<BackendLook['products']> {
+  return parseBackendReportArray(value).flatMap(product => {
+    if (!isBackendRecord(product)) return [];
+    const stringKeys = [
+      'id',
+      'area',
+      'brandName',
+      'productName',
+      'shadeName',
+      'reason',
+      'imageUrl',
+      'purchaseUrl',
+    ] as const;
+    if (stringKeys.some(key => product[key] !== undefined && typeof product[key] !== 'string')) return [];
+    if (product.price !== undefined && (typeof product.price !== 'number' || !Number.isFinite(product.price))) return [];
+    if (product.matchRate !== undefined && (typeof product.matchRate !== 'number' || !Number.isFinite(product.matchRate))) return [];
+    return [{
+      ...(typeof product.id === 'string' ? {id: product.id} : {}),
+      ...(typeof product.area === 'string' ? {area: product.area} : {}),
+      ...(typeof product.brandName === 'string' ? {brandName: product.brandName} : {}),
+      ...(typeof product.productName === 'string' ? {productName: product.productName} : {}),
+      ...(typeof product.shadeName === 'string' ? {shadeName: product.shadeName} : {}),
+      ...(typeof product.reason === 'string' ? {reason: product.reason} : {}),
+      ...(typeof product.price === 'number' ? {price: product.price} : {}),
+      ...(typeof product.imageUrl === 'string' ? {imageUrl: product.imageUrl} : {}),
+      ...(typeof product.purchaseUrl === 'string' ? {purchaseUrl: product.purchaseUrl} : {}),
+      ...(typeof product.matchRate === 'number' ? {matchRate: product.matchRate} : {}),
+    }];
+  });
+}
+
+function mapBackendGuideColor(value: unknown): {name?: string; hex?: string} | undefined {
+  if (!isBackendRecord(value)) return undefined;
+  if (value.name !== undefined && typeof value.name !== 'string') return undefined;
+  if (value.hex !== undefined && typeof value.hex !== 'string') return undefined;
+  return {
+    ...(typeof value.name === 'string' ? {name: value.name} : {}),
+    ...(typeof value.hex === 'string' ? {hex: value.hex} : {}),
+  };
+}
+
+function getBackendRecipeField(
+  record: Record<string, unknown>,
+  camelCaseKey: string,
+  snakeCaseKey: string,
+): unknown {
+  return record[camelCaseKey] ?? record[snakeCaseKey];
+}
+
+function mapBackendApplicationPlan(
+  value: unknown,
+): NonNullable<ApiAreaGuide['applicationPlan']> | undefined {
+  if (!isBackendRecord(value)) return undefined;
+  const recipeVersion = normalizeOptionalBackendText(
+    getBackendRecipeField(value, 'recipeVersion', 'recipe_version'),
+  );
+  const estimatedMinutes = getBackendRecipeField(
+    value,
+    'estimatedMinutes',
+    'estimated_minutes',
+  );
+  const rawCompletionCriteria = parseBackendReportArray(
+    getBackendRecipeField(value, 'completionCriteria', 'completion_criteria'),
+  );
+  const rawSteps = parseBackendReportArray(value.steps);
+  if (
+    recipeVersion !== 'makeup-application-v1'
+    || typeof estimatedMinutes !== 'number'
+    || !Number.isInteger(estimatedMinutes)
+    || estimatedMinutes < 1
+    || estimatedMinutes > 60
+    || rawCompletionCriteria.length === 0
+    || rawCompletionCriteria.length > 4
+    || rawCompletionCriteria.some(item => typeof item !== 'string' || !item.trim())
+    || new Set(rawCompletionCriteria.map(item => (item as string).trim())).size !== rawCompletionCriteria.length
+    || rawSteps.length < 2
+    || rawSteps.length > 8
+  ) return undefined;
+
+  const completionCriteria = rawCompletionCriteria.map(item => (item as string).trim());
+  const seenOrders = new Set<number>();
+  const steps: MakeupRecommendationApplicationStep[] = [];
+  for (const rawStep of rawSteps) {
+    if (!isBackendRecord(rawStep)) return undefined;
+    const order = rawStep.order;
+    const title = normalizeOptionalBackendText(rawStep.title);
+    const productType = normalizeOptionalBackendText(
+      getBackendRecipeField(rawStep, 'productType', 'product_type'),
+    );
+    const tool = normalizeOptionalBackendText(rawStep.tool);
+    const amount = normalizeOptionalBackendText(rawStep.amount);
+    const placement = normalizeOptionalBackendText(rawStep.placement);
+    const technique = normalizeOptionalBackendText(rawStep.technique);
+    const blending = normalizeOptionalBackendText(rawStep.blending);
+    const finishCheck = normalizeOptionalBackendText(
+      getBackendRecipeField(rawStep, 'finishCheck', 'finish_check'),
+    );
+    const rawColors = parseBackendReportArray(rawStep.colors);
+    if (
+      typeof order !== 'number'
+      || !Number.isInteger(order)
+      || order < 1
+      || seenOrders.has(order)
+      || !title
+      || !productType
+      || !tool
+      || !amount
+      || !placement
+      || !technique
+      || !blending
+      || !finishCheck
+      || rawColors.length === 0
+      || rawColors.length > 4
+    ) return undefined;
+
+    const colors: MakeupRecommendationApplicationStep['colors'] = [];
+    for (const rawColor of rawColors) {
+      if (!isBackendRecord(rawColor)) return undefined;
+      const role = normalizeOptionalBackendText(rawColor.role);
+      const name = normalizeOptionalBackendText(rawColor.name);
+      const hex = normalizeOptionalBackendText(rawColor.hex)?.toUpperCase();
+      if (!role || !name || !hex || !/^#[0-9A-F]{6}$/.test(hex)) return undefined;
+      colors.push({role, name, hex});
+    }
+
+    seenOrders.add(order);
+    steps.push({
+      order,
+      title,
+      productType,
+      tool,
+      colors,
+      amount,
+      placement,
+      technique,
+      blending,
+      finishCheck,
+    });
+  }
+
+  const sortedSteps = steps.sort((left, right) => left.order - right.order);
+  if (sortedSteps.some((step, index) => step.order !== index + 1)) return undefined;
+
+  return {
+    recipeVersion: 'makeup-application-v1',
+    estimatedMinutes,
+    completionCriteria,
+    steps: sortedSteps,
+  };
+}
+function mapBackendAreaGuides(value: unknown): ApiAreaGuide[] {
+  return parseBackendReportArray(value).flatMap(guide => {
+    if (!isBackendRecord(guide)) return [];
+    const area = normalizeOptionalBackendText(guide.area);
+    const applicationOrderValue = getBackendRecipeField(
+      guide,
+      'applicationOrder',
+      'application_order',
+    );
+    const applicationOrder = typeof applicationOrderValue === 'number'
+      && Number.isInteger(applicationOrderValue)
+      && applicationOrderValue >= 1
+      && applicationOrderValue <= 5
+      ? applicationOrderValue
+      : undefined;
+    const applicationPlan = mapBackendApplicationPlan(
+      getBackendRecipeField(guide, 'applicationPlan', 'application_plan'),
+    );
+    const label = normalizeOptionalBackendText(guide.label);
+    const goal = normalizeOptionalBackendText(guide.goal);
+    const texture = normalizeOptionalBackendText(guide.texture);
+    const placement = normalizeOptionalBackendText(guide.placement);
+    const technique = normalizeOptionalBackendText(guide.technique);
+    const reason = normalizeOptionalBackendText(guide.reason);
+    const color = mapBackendGuideColor(guide.color);
+    const colors = parseBackendReportArray(guide.colors).flatMap(item => {
+      const mapped = mapBackendGuideColor(item);
+      return mapped ? [mapped] : [];
+    });
+    const steps = parseBackendReportArray(guide.steps).flatMap<NonNullable<ApiAreaGuide['steps']>[number]>((step, index) => {
+      if (typeof step === 'string') return [step];
+      if (!isBackendRecord(step)) return [];
+      if (step.instruction !== undefined && typeof step.instruction !== 'string') return [];
+      if (step.order !== undefined && (typeof step.order !== 'number' || !Number.isFinite(step.order))) return [];
+      return [{
+        ...(typeof step.order === 'number' ? {order: step.order} : {order: index + 1}),
+        ...(typeof step.instruction === 'string' ? {instruction: step.instruction} : {}),
+      }];
+    });
+    const avoid = typeof guide.avoid === 'string'
+      ? guide.avoid
+      : normalizeBackendStringArray(guide.avoid);
+    const products: NonNullable<ApiAreaGuide['products']> = mapBackendLookProducts(guide.products).map(product => {
+      const {area: productArea, ...rest} = product;
+      return {
+        ...rest,
+        ...(typeof productArea === 'string' ? {area: normalizedArea(productArea)} : {}),
+      };
+    });
+    return [{
+      ...(area ? {area} : {}),
+      ...(applicationOrder && applicationPlan ? {applicationOrder, applicationPlan} : {}),
+      ...(label ? {label} : {}),
+      ...(goal ? {goal} : {}),
+      ...(color ? {color} : {}),
+      ...(guide.colors !== undefined ? {colors} : {}),
+      ...(texture ? {texture} : {}),
+      ...(placement ? {placement} : {}),
+      ...(technique ? {technique} : {}),
+      ...(reason ? {reason} : {}),
+      ...(guide.avoid !== undefined ? {avoid} : {}),
+      ...(guide.steps !== undefined ? {steps} : {}),
+      ...(guide.products !== undefined ? {products} : {}),
+      ...(typeof guide.arSupported === 'boolean' ? {arSupported: guide.arSupported} : {}),
+    }];
+  });
+}
+
+function isBackendLook(value: unknown): value is BackendLook {
+  if (!isBackendRecord(value)) return false;
+  const stringKeys = ['id', 'role', 'title', 'summary', 'difficulty', 'imageError', 'imageUrl'] as const;
+  if (stringKeys.some(key => value[key] !== undefined && typeof value[key] !== 'string')) return false;
+  if (
+    value.durationMinutes !== undefined
+    && (typeof value.durationMinutes !== 'number' || !Number.isFinite(value.durationMinutes))
+  ) return false;
+  if (
+    value.imageStatus !== undefined
+    && value.imageStatus !== 'pending'
+    && value.imageStatus !== 'processing'
+    && value.imageStatus !== 'partial'
+    && value.imageStatus !== 'completed'
+    && value.imageStatus !== 'failed'
+  ) return false;
+  if (value.imageAsset !== undefined && !isBackendRecord(value.imageAsset)) return false;
+  const imageAsset = isBackendRecord(value.imageAsset) ? value.imageAsset : undefined;
+  if (imageAsset?.provenance !== undefined && !isBackendRecord(imageAsset.provenance)) return false;
+  return true;
+}
+
+function getBackendLookCropMetadata(look: BackendLook): unknown {
+  return look.imageAsset?.provenance?.cropMetadata;
+}
+
+function getBackendLookAlignmentMetadata(look: BackendLook): unknown {
+  return look.imageAsset?.provenance?.alignmentMetadata;
+}
+
+function isBackendRecommendationReport(value: unknown): value is BackendRecommendationReport {
+  if (!isBackendRecord(value) || typeof value.id !== 'string') return false;
+  if (typeof value.recommendation !== 'string' && !isBackendRecord(value.recommendation)) return false;
+  return value.imageStatus === 'pending'
+    || value.imageStatus === 'processing'
+    || value.imageStatus === 'partial'
+    || value.imageStatus === 'completed'
+    || value.imageStatus === 'failed';
+}
+
 function getBackendReportProfileGender(
   report: BackendRecommendationReport,
 ): MakeupRecommendationProfileGender | undefined {
   const contextSnapshot = parseBackendReportContextSnapshot(report.contextSnapshot);
+  const profile = isBackendRecord(contextSnapshot?.profile) ? contextSnapshot.profile : undefined;
   return normalizeBackendProfileGender(report.profileGender)
-    ?? normalizeBackendProfileGender(contextSnapshot?.profile?.gender);
+    ?? normalizeBackendProfileGender(profile?.gender);
 }
 
 function ensureToneCoverage(scenarios: MakeupScenarioPrompt[]): MakeupScenarioPrompt[] {
@@ -293,10 +1075,35 @@ function cloneLook(look: MakeupLookRecommendation): MakeupLookRecommendation {
     ...look,
     reasons: [...look.reasons],
     appliedConditions: [...look.appliedConditions],
+    imageCropRegions: cloneCropRegions(look.imageCropRegions),
+    imageAlignmentMetadata: cloneImageAlignmentMetadata(look.imageAlignmentMetadata),
+    lookMap: look.lookMap ? {...look.lookMap} : undefined,
+    fitAssessment: look.fitAssessment ? {
+      ...look.fitAssessment,
+      dimensions: Object.fromEntries(
+        FIT_DIMENSION_KEYS.map(key => [key, {...look.fitAssessment?.dimensions[key]}]),
+      ) as MakeupRecommendationFitAssessment['dimensions'],
+      evidence: look.fitAssessment.evidence.map(item => ({...item})),
+    } : undefined,
+    matchAssessment: look.matchAssessment ? {
+      ...look.matchAssessment,
+      components: look.matchAssessment.components.map(component => ({...component, evidence: [...component.evidence]})),
+      reflectedInputs: look.matchAssessment.reflectedInputs.map(item => ({...item})),
+    } : undefined,
     steps: look.steps.map(step => ({...step})),
     products: look.products.map(product => ({...product})),
     areaGuides: look.areaGuides?.map(guide => ({
       ...guide,
+      ...(guide.applicationPlan ? {
+        applicationPlan: {
+          ...guide.applicationPlan,
+          completionCriteria: [...guide.applicationPlan.completionCriteria],
+          steps: guide.applicationPlan.steps.map(step => ({
+            ...step,
+            colors: step.colors.map(color => ({...color})),
+          })),
+        },
+      } : {}),
       color: {...guide.color},
       avoid: [...guide.avoid],
       steps: guide.steps.map(step => ({...step})),
@@ -428,7 +1235,11 @@ export function refineMakeupRecommendation(
   return {...session, results: applyFixtureRefinement(session.results, refinement)};
 }
 
-function mapBackendQuestions(questions: readonly BackendQuestion[]): MakeupRecommendationQuestion[] {
+function mapBackendQuestions(value: unknown): MakeupRecommendationQuestion[] {
+  const questions = parseBackendReportArray(value).flatMap(question => {
+    const mapped = mapBackendQuestion(question);
+    return mapped ? [mapped] : [];
+  });
   return questions
     .filter(question => {
       const delegateOption = question.options?.[3];
@@ -464,14 +1275,20 @@ export function mapBackendRecommendationLooks({
   prompt,
   questions,
   answers,
+  imageStatus,
+  imageError,
 }: {
   reportId: string;
   recommendation: BackendRecommendation;
   prompt: string;
   questions: MakeupRecommendationQuestion[];
   answers: MakeupRecommendationAnswer[];
+  imageStatus?: MakeupRecommendationImageStatus;
+  imageError?: string;
 }): MakeupLookRecommendation[] {
   const parsedRecommendation = parseBackendRecommendation(recommendation);
+  const generationSource = parsedRecommendation.generationSource;
+  const matchAssessment = parsedRecommendation.matchAssessment;
   const conditions = [prompt, ...selectedAnswerLabels(questions, answers)];
   const validRoles: MakeupLookRecommendation['role'][] = ['anchor', 'bold', 'discovery'];
   return (parsedRecommendation.looks ?? []).flatMap((look, index) => {
@@ -480,26 +1297,37 @@ export function mapBackendRecommendationLooks({
       : undefined;
     if (!role) return [];
     const fixture = MAKEUP_LOOK_FIXTURES.find(item => item.role === role) ?? MAKEUP_LOOK_FIXTURES[index % MAKEUP_LOOK_FIXTURES.length];
+    const imageUrl = look.imageUrl?.trim();
+    const resolvedImageStatus = look.imageStatus ?? imageStatus;
+    const completedImageMissing = resolvedImageStatus === 'completed' && !imageUrl;
+    const resolvedImageError = completedImageMissing
+      ? '서버에서 생성된 이미지 주소를 받지 못했어요. 다시 시도해 주세요.'
+      : look.imageError?.trim() || imageError?.trim() || undefined;
     const difficulty = look.difficulty === 'easy' || look.difficulty === 'medium' || look.difficulty === 'advanced'
       ? look.difficulty
       : 'medium';
+    const reasons = normalizeBackendStringArray(look.reasons).filter(Boolean);
+    const appliedConditions = normalizeBackendStringArray(look.appliedConditions).filter(Boolean);
+    const steps = mapBackendLookSteps(look.steps);
+    const products = mapBackendLookProducts(look.products);
+    const areaGuides = mapBackendAreaGuides(look.areaGuides);
     const mappedLook: MakeupLookRecommendation = {
       id: look.id?.trim() || `${reportId}-${role}`,
       arFilterId: fixture.arFilterId,
       role,
       title: look.title?.trim() || fixture.title,
       summary: look.summary?.trim() || fixture.summary,
-      imageSource: look.imageUrl ? {uri: look.imageUrl} : fixture.imageSource,
-      reasons: look.reasons?.filter(Boolean) ?? [look.summary?.trim() || '선택한 상황과 답변을 함께 반영했어요.'],
-      appliedConditions: [...new Set((look.appliedConditions?.length ? look.appliedConditions : conditions).filter(Boolean))],
+      imageSource: imageUrl ? {uri: imageUrl} : fixture.imageSource,
+      reasons: look.reasons === undefined ? [look.summary?.trim() || '선택한 상황과 답변을 함께 반영했어요.'] : reasons,
+      appliedConditions: [...new Set(appliedConditions.length > 0 ? appliedConditions : conditions)],
       durationMinutes: look.durationMinutes ?? fixture.durationMinutes,
       difficulty,
-      steps: (look.steps ?? []).filter(step => step.instruction?.trim()).map((step, stepIndex) => ({
+      steps: steps.filter(step => step.instruction?.trim()).map((step, stepIndex) => ({
         area: normalizedArea(step.area),
         instruction: step.instruction?.trim() ?? '',
         order: step.order ?? stepIndex + 1,
       })),
-      products: (look.products ?? []).filter(product => product.productName?.trim()).map((product, productIndex) => ({
+      products: products.filter(product => product.productName?.trim()).map((product, productIndex) => ({
         id: product.id?.trim() || `${reportId}-${role}-product-${productIndex + 1}`,
         area: normalizedArea(product.area),
         brandName: product.brandName?.trim() || '추천 제품',
@@ -511,65 +1339,152 @@ export function mapBackendRecommendationLooks({
         purchaseUrl: product.purchaseUrl?.trim() || undefined,
         matchRate: product.matchRate,
       })),
-      imageStatus: look.imageStatus,
-      imageError: look.imageError,
+      imageStatus: completedImageMissing ? 'failed' : resolvedImageStatus,
+      imageError: resolvedImageError,
+      imageCropRegions: mapBackendCropRegions(getBackendLookCropMetadata(look)),
+      imageAlignmentMetadata: mapBackendImageAlignmentMetadata(getBackendLookAlignmentMetadata(look)),
+      generationSource,
+      lookMap: mapBackendLookMap(look.lookMap),
+      fitAssessment: mapBackendFitAssessment(look.fitAssessment),
+      matchAssessment: role === 'anchor' ? matchAssessment : undefined,
     };
     return [{
       ...mappedLook,
-      areaGuides: buildRecommendedAreaGuides({directGuides: look.areaGuides, look: mappedLook}),
+      areaGuides: buildRecommendedAreaGuides({directGuides: areaGuides, look: mappedLook}),
     }];
   });
 }
 
-function parseBackendRecommendation(recommendation: BackendRecommendation | null | undefined): {looks?: BackendLook[]} {
-  if (!recommendation) return {};
-  if (typeof recommendation !== 'string') return recommendation;
-  try {
-    const parsed = JSON.parse(recommendation) as unknown;
-    return parsed && typeof parsed === 'object' ? parsed as {looks?: BackendLook[]} : {};
-  } catch {
-    return {};
+function parseBackendRecommendation(
+  recommendation: BackendRecommendation | null | undefined,
+): {
+  looks: BackendLook[];
+  generationSource?: MakeupRecommendationGenerationSource;
+  matchAssessment?: MakeupRecommendationMatchAssessment;
+} {
+  if (!recommendation) return {looks: []};
+  let parsed: unknown = recommendation;
+  if (typeof recommendation === 'string') {
+    try {
+      parsed = JSON.parse(recommendation) as unknown;
+    } catch {
+      return {looks: []};
+    }
   }
+  if (!isBackendRecord(parsed)) return {looks: []};
+  return {
+    looks: parseBackendReportArray(parsed.looks).filter(isBackendLook),
+    generationSource: mapBackendGenerationSource(parsed.generationSource),
+    matchAssessment: mapBackendMatchAssessment(parsed.matchAssessment),
+  };
 }
 
 export function mapBackendRecommendationReports(
-  reports: readonly BackendRecommendationReport[],
+  reports: unknown,
 ): MakeupRecommendationReportHistoryItem[] {
-  return reports.flatMap(report => {
-    const scenarioText = report.scenarioText?.trim() || '저장된 메이크업 추천';
-    const results = mapBackendRecommendationLooks({
-      reportId: report.id,
-      recommendation: report.recommendation ?? {},
-      prompt: scenarioText,
-      questions: [],
-      answers: [],
-    });
-    if (!report.id?.trim() || results.length === 0) return [];
-    return [{
-      reportId: report.id,
-      scenarioText,
-      createdAt: report.createdAt ?? '',
-      imageStatus: report.imageStatus,
-      imageError: report.imageError,
-      profileGender: getBackendReportProfileGender(report),
-      results,
-    }];
+  return parseBackendReportArray(reports).flatMap(value => {
+    if (!isBackendRecommendationReport(value)) return [];
+    const report = value;
+    try {
+      const scenarioText = normalizeOptionalBackendText(report.scenarioText) || '저장된 메이크업 추천';
+      const contextSnapshot = parseBackendReportContextSnapshot(report.contextSnapshot);
+      const selection = isBackendRecord(contextSnapshot?.selection) ? contextSnapshot.selection : undefined;
+      const analysisReport = isBackendRecord(contextSnapshot?.analysisReport)
+        ? contextSnapshot.analysisReport
+        : undefined;
+      const editorialPreset = isBackendRecord(selection?.editorialPreset)
+        ? selection.editorialPreset
+        : undefined;
+      const questions = mapBackendQuestions(report.questions);
+      const answers = mapBackendAnswers(report.answers);
+      const situation = mapBackendSituationSummary(report.situation)
+        ?? mapBackendSituationSummary(selection?.situation);
+      const keyword = mapBackendKeyword(report.keyword)
+        ?? mapBackendKeyword(selection?.keyword);
+      const customSituationText = normalizeOptionalBackendText(report.customSituationText)
+        ?? normalizeOptionalBackendText(selection?.customSituationText);
+      const editorialPresetId = normalizeOptionalBackendText(report.editorialPresetId)
+        ?? normalizeOptionalBackendText(editorialPreset?.id);
+      const scenarioLabel = normalizeOptionalBackendText(report.scenarioLabel)
+        ?? normalizeOptionalBackendText(keyword?.label)
+        ?? normalizeOptionalBackendText(report.customSituationLabel)
+        ?? normalizeOptionalBackendText(selection?.customSituationLabel)
+        ?? normalizeOptionalBackendText(editorialPreset?.displayText)
+        ?? normalizeOptionalBackendText(situation?.label);
+      const additionalConstraints = normalizeOptionalBackendText(report.additionalConstraints)
+        ?? [...answers]
+          .reverse()
+          .map(answer => normalizeOptionalBackendText(answer.additionalConstraints))
+          .find((value): value is string => Boolean(value));
+      const personalColor = normalizeOptionalBackendText(report.personalColor)
+        ?? normalizeOptionalBackendText(analysisReport?.personalColor);
+      const sourceAnalysisReportId = normalizeOptionalBackendText(report.sourceAnalysisReportId)
+        ?? normalizeOptionalBackendText(analysisReport?.id);
+      const results = mapBackendRecommendationLooks({
+        reportId: report.id,
+        recommendation: report.recommendation ?? {},
+        prompt: scenarioText,
+        questions,
+        answers,
+        imageStatus: report.imageStatus,
+        imageError: report.imageError,
+      });
+      if (!report.id?.trim() || results.length === 0) return [];
+      return [{
+        reportId: report.id,
+        scenarioText,
+        scenarioLabel,
+        createdAt: report.createdAt ?? '',
+        imageStatus: report.imageStatus,
+        imageError: report.imageError,
+        profileGender: getBackendReportProfileGender(report),
+        personalColor,
+        sourceAnalysisReportId,
+        questions: report.questions == null ? undefined : questions,
+        answers: report.answers == null ? undefined : answers,
+        additionalConstraints,
+        situation,
+        keyword,
+        editorialPresetId,
+        customSituationText,
+        results,
+      }];
+    } catch {
+      return [];
+    }
   });
 }
 
 export function restoreMakeupRecommendationReport(
   report: MakeupRecommendationReportHistoryItem,
 ): MakeupRecommendationSession {
+  const questions = (report.questions ?? []).map(question => ({
+    ...question,
+    options: question.options.map(option => ({...option})),
+  }));
+  const answers = (report.answers ?? []).map(answer => ({...answer}));
+  const situation = report.situation ? {...report.situation} : undefined;
+  const keyword = report.keyword ? {...report.keyword, tags: normalizeBackendStringArray(report.keyword.tags)} : undefined;
   return {
     id: report.reportId,
     reportId: report.reportId,
     phase: 'results',
-    prompt: report.scenarioText,
-    questions: [],
-    currentQuestionIndex: 0,
-    answers: [],
+    prompt: report.customSituationText?.trim()
+      || keyword?.seedPrompt?.trim()
+      || report.scenarioText,
+    scenarioLabel: report.scenarioLabel,
+    questions,
+    currentQuestionIndex: questions.length,
+    answers,
+    additionalConstraints: report.additionalConstraints,
     results: report.results.map(cloneLook),
-    useProfile: false,
+    useProfile: Boolean(report.sourceAnalysisReportId || report.personalColor),
+    personalColor: report.personalColor,
+    sourceAnalysisReportId: report.sourceAnalysisReportId,
+    situation,
+    keyword,
+    editorialPresetId: report.editorialPresetId,
+    customSituationText: report.customSituationText,
     imageStatus: report.imageStatus,
     imageError: report.imageError,
     profileGender: report.profileGender,
@@ -586,7 +1501,7 @@ export async function fetchGeneratedMakeupRecommendationReports({
   offset?: number;
   timeoutMs?: number;
 } = {}): Promise<MakeupRecommendationReportHistoryItem[]> {
-  const response = await requestBackendJson<{reports: BackendRecommendationReport[]}>(
+  const response = await requestBackendJson<{reports?: unknown}>(
     `/makeup-recommendations?limit=${limit}&offset=${offset}`,
     {timeoutMs},
   );
@@ -597,12 +1512,12 @@ type BackendRecommendationSessionV2 = {
   id: string;
   status: 'questioning' | 'ready' | 'generating' | 'completed' | 'failed';
   profileGender?: unknown;
-  questions?: BackendQuestion[];
+  questions?: unknown;
   currentQuestionIndex?: number;
-  answers?: MakeupRecommendationAnswer[];
+  answers?: unknown;
   sourceAnalysisReportId?: string;
-  situation?: Pick<MakeupSituation, 'id' | 'key' | 'label' | 'description'>;
-  keyword?: MakeupTrendKeyword;
+  situation?: unknown;
+  keyword?: unknown;
   editorialPresetId?: string;
   customSituationText?: string;
   customSituationLabel?: string;
@@ -812,12 +1727,14 @@ function validateBackendV2Session(response: BackendRecommendationSessionV2): voi
       '완료된 추천 보고서 정보를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
     );
   }
-  if (response.situation?.id && !isMakeupRecommendationUuid(response.situation.id)) {
+  const situation = mapBackendSituationSummary(response.situation);
+  if (situation?.id && !isMakeupRecommendationUuid(situation.id)) {
     throw new MakeupRecommendationRetryableError(
       '추천에 연결된 상황 정보를 확인하지 못했어요. 다시 선택해 주세요.',
     );
   }
-  if (response.keyword?.id && !isMakeupRecommendationUuid(response.keyword.id)) {
+  const keyword = mapBackendKeyword(response.keyword);
+  if (keyword?.id && !isMakeupRecommendationUuid(keyword.id)) {
     throw new MakeupRecommendationRetryableError(
       '추천에 연결된 키워드 정보를 확인하지 못했어요. 다시 선택해 주세요.',
     );
@@ -843,14 +1760,14 @@ function mapBackendV2Session({
 }): MakeupRecommendationSession {
   validateBackendV2Session(response);
   const questions = mapBackendQuestions(response.questions ?? previous?.questions ?? []);
-  const answers = response.answers ?? previous?.answers ?? [];
-  const situation = response.situation ?? (input?.situation ? {
+  const answers = mapBackendAnswers(response.answers ?? previous?.answers ?? []);
+  const situation = mapBackendSituationSummary(response.situation) ?? (input?.situation ? {
     id: input.situation.id,
     key: input.situation.key,
     label: input.situation.label,
     description: input.situation.description,
   } : previous?.situation);
-  const keyword = response.keyword ?? input?.keyword ?? previous?.keyword;
+  const keyword = mapBackendKeyword(response.keyword) ?? input?.keyword ?? previous?.keyword;
   const editorialPresetId = response.editorialPresetId
     ?? input?.editorialPresetId
     ?? previous?.editorialPresetId;
@@ -1132,6 +2049,7 @@ export async function generateMakeupRecommendationV2(
     prompt: session.prompt,
     questions: session.questions,
     answers: session.answers,
+    imageStatus: response.imageStatus,
   });
   if (results.length === 0) throw new Error('추천 결과 형식을 확인하지 못했어요. 다시 시도해 주세요.');
   return {
@@ -1169,7 +2087,7 @@ export async function startGeneratedMakeupRecommendation(
   backendRequest: typeof requestBackendJson = requestBackendJson,
   signal?: AbortSignal,
 ): Promise<MakeupRecommendationSession> {
-  const response = await backendRequest<{questions: BackendQuestion[]}>(
+  const response = await backendRequest<{questions?: unknown}>(
     '/makeup-recommendations/questions',
     {
       method: 'POST',
@@ -1235,6 +2153,7 @@ export async function answerGeneratedMakeupRecommendationQuestion(
       prompt: session.prompt,
       questions: session.questions,
       answers,
+      imageStatus: response.imageStatus,
     }),
     reportId: response.reportId,
     imageStatus: response.imageStatus,
@@ -1260,6 +2179,8 @@ export async function refreshGeneratedMakeupRecommendation(
     prompt: session.prompt,
     questions: session.questions,
     answers: session.answers,
+    imageStatus: report.imageStatus,
+    imageError: report.imageError,
   });
   return {
     ...session,
@@ -1320,6 +2241,7 @@ export async function refineGeneratedMakeupRecommendation(
       prompt: session.prompt,
       questions: session.questions,
       answers: session.answers,
+      imageStatus: response.imageStatus,
     }),
   };
 }

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 import pytest
 
+from app.api import health as health_api
 from app.core.settings import Settings
 from app.main import create_app
 from app.services import bedrock_credential_readiness as bedrock_readiness
@@ -143,6 +144,32 @@ def test_health_ready_returns_non_sensitive_503_for_bedrock_credential_failure()
   assert "secret" not in response.text.lower()
 
 
+def test_health_ready_uses_configured_bedrock_credential_timeout(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  configured_timeouts: list[float] = []
+
+  class CapturingProbe:
+    def __init__(self, *, timeout_seconds: float) -> None:
+      configured_timeouts.append(timeout_seconds)
+
+    async def check(self, _settings: Settings) -> BedrockCredentialReadiness:
+      return BedrockCredentialReadiness(status="ready", credential_source="profile")
+
+  monkeypatch.setattr(health_api, "BedrockCredentialReadinessProbe", CapturingProbe)
+  app = create_app(
+    Settings(
+      makeup_recommendation_v2_enabled=True,
+      bedrock_credential_readiness_timeout_seconds=7.5,
+    ),
+  )
+
+  response = TestClient(app).get("/health/ready")
+
+  assert response.status_code == 200
+  assert configured_timeouts == [7.5]
+
+
 class _FakeFrozenCredentials:
   access_key = "test-access-key"
   secret_key = "test-secret-key"
@@ -238,4 +265,22 @@ def test_bedrock_readiness_probe_times_out_without_blocking_endpoint(
   assert result.public_status() == {
     "status": "not_ready",
     "reason": "credential_resolution_timeout",
+  }
+
+
+def test_bedrock_readiness_probe_allows_slow_resolution_within_configured_timeout(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  def slow_resolve(_settings: Settings) -> BedrockCredentialReadiness:
+    time.sleep(0.03)
+    return BedrockCredentialReadiness(status="ready", credential_source="profile")
+
+  monkeypatch.setattr(bedrock_readiness, "_resolve_credentials", slow_resolve)
+  probe = bedrock_readiness.BedrockCredentialReadinessProbe(timeout_seconds=0.1)
+
+  result = asyncio.run(probe.check(Settings()))
+
+  assert result.public_status() == {
+    "status": "ready",
+    "credential_source": "profile",
   }

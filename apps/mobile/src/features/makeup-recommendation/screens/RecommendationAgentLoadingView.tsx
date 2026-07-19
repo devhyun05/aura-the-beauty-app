@@ -21,7 +21,7 @@ import {
 } from '../services/makeupRecommendationAgentConversation';
 
 const FIRST_MESSAGE_DELAY_MS = 420;
-const MESSAGE_INTERVAL_MS = 3600;
+const MESSAGE_INTERVAL_MS = 3000;
 const MAX_VISIBLE_MESSAGES = 24;
 
 type AgentIcon = ComponentType<{

@@ -840,4 +840,54 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(upper.guide.points.length, 2, 'guide points 개수 보존');
 }
 
+// ── 11. legacy guides[] decode + strict normalized-coordinate validation ──
+{
+  const decoded = expectDefined(
+    parseFaceAnalysisMeasurements({
+      captureId: 'cap-regions',
+      regionVisuals: {
+        upper: {
+          cropRect: {x: 0.29, y: 0.3, w: 0.42, h: 0.14},
+          guide: {
+            label: 'eye line',
+            points: [{x: 0.38, y: 0.4}, {x: 0.62, y: 0.4}],
+          },
+        },
+        mid: {
+          cropRect: {x: 0.3, y: 0.39, w: 0.4, h: 0.14},
+          guides: [{
+            label: 'nose center',
+            points: [{x: 0.5, y: 0.4}, {x: 0.5, y: 0.49}],
+          }],
+        },
+      },
+      schemaVersion: 'aura-face-analysis-measurements-v1',
+    }),
+    'region visuals decode',
+  );
+  const regions = expectDefined(decoded.regionVisuals, 'region visuals present');
+  expectEqual(regions.upper?.guide.points.length, 2, 'singular guide accepted');
+  expectEqual(regions.mid?.guide.label, 'nose center', 'legacy guides array accepted');
+
+  const invalid = expectDefined(
+    parseFaceAnalysisMeasurements({
+      captureId: 'cap-invalid-regions',
+      regionVisuals: {
+        upper: {
+          cropRect: {x: 0.8, y: 0.2, w: 0.3, h: 0.2},
+          guide: {label: 'invalid', points: [{x: 0.8, y: 0.3}, {x: 0.9, y: 0.3}]},
+        },
+        lower: {
+          cropRect: {x: 0.3, y: 0.5, w: 0.2, h: 0.1},
+          guide: {label: 'lip line', points: [{x: 0.35, y: 0.55}, {x: 0.45, y: 0.55}]},
+        },
+      },
+      schemaVersion: 'aura-face-analysis-measurements-v1',
+    }),
+    'partially valid region visuals',
+  );
+  expectEqual(invalid.regionVisuals?.upper, undefined, 'out-of-range rect rejected');
+  expectEqual(Boolean(invalid.regionVisuals?.lower), true, 'valid sibling retained');
+}
+
 console.log('faceAnalysisMeasurements.test.ts passed');

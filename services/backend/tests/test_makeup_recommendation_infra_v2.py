@@ -147,6 +147,11 @@ async def test_generic_gpt_image_2_generation_uses_matching_format_and_public_ca
 ) -> None:
   calls: dict[str, dict] = {}
   uploaded: dict = {}
+  crop_metadata = {
+    "version": "makeup-face-crops-v1",
+    "imageSize": {"width": 256, "height": 128},
+    "areas": {"lip": [{"regionId": "lips", "box": {"left": 0.3, "top": 0.6, "right": 0.7, "bottom": 0.8}}]},
+  }
 
   class FakeImages:
     def generate(self, **kwargs):
@@ -170,6 +175,10 @@ async def test_generic_gpt_image_2_generation_uses_matching_format_and_public_ca
       uploaded.update(kwargs)
 
   monkeypatch.setattr("app.services.makeup_recommendation_image.OpenAI", FakeOpenAI)
+  monkeypatch.setattr(
+    "app.services.makeup_recommendation_image.extract_makeup_face_crop_metadata",
+    lambda _image_bytes: crop_metadata,
+  )
   monkeypatch.setattr("app.services.makeup_recommendation_image.boto3.client", lambda *_args, **_kwargs: FakeS3())
 
   asset = await generate_recommendation_asset(
@@ -224,6 +233,7 @@ async def test_generic_gpt_image_2_generation_uses_matching_format_and_public_ca
     "width": 256,
     "height": 128,
     "resized": True,
+    "cropMetadata": crop_metadata,
   }
   assert uploaded["Metadata"] == {
     "image-model": "gpt-image-2",
@@ -238,11 +248,94 @@ async def test_generic_gpt_image_2_generation_uses_matching_format_and_public_ca
 
 
 @pytest.mark.asyncio
+async def test_openai_success_with_s3_failure_is_classified_as_storage_error(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  class FakeImages:
+    def generate(self, **_kwargs):
+      return type(
+        'Response',
+        (),
+        {'data': [type('Image', (), {'b64_json': _encoded_test_image()})()]},
+      )()
+
+  class FakeOpenAI:
+    def __init__(self, **_kwargs):
+      self.images = FakeImages()
+
+  class FailingS3:
+    def put_object(self, **_kwargs):
+      raise RuntimeError('ExpiredToken: cached SSO credentials are stale')
+
+  monkeypatch.setattr(
+    'app.services.makeup_recommendation_image.OpenAI',
+    FakeOpenAI,
+  )
+  monkeypatch.setattr(
+    'app.services.makeup_recommendation_image.extract_makeup_face_crop_metadata',
+    lambda _image_bytes: None,
+  )
+  monkeypatch.setattr(
+    'app.services.makeup_recommendation_image.boto3.client',
+    lambda *_args, **_kwargs: FailingS3(),
+  )
+
+  with pytest.raises(AppError) as exc_info:
+    await generate_recommendation_asset(
+      Settings(
+        openai_api_key='test',
+        s3_bucket_name='bucket',
+        cdn_base_url='https://cdn.example.com',
+      ),
+      REPORT_ID,
+      '데이트',
+      {'title': 'anchor'},
+      '1-anchor',
+    )
+
+  error = exc_info.value
+  assert error.status_code == 503
+  assert error.code == 'MAKEUP_IMAGE_STORAGE_FAILED'
+  assert 'ExpiredToken' not in error.message
+  assert 'SSO' not in error.message
+
+
+@pytest.mark.asyncio
 async def test_personalized_edit_requires_owned_consented_media_and_stays_private(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   calls: dict[str, dict] = {}
   uploaded: dict = {}
+  face_metadata = {
+    "cropMetadata": {
+      "version": "makeup-face-crops-v1",
+      "imageSize": {"width": 128, "height": 128},
+      "areas": {},
+    },
+    "alignmentMetadata": {
+      "version": "makeup-face-alignment-v1",
+      "source": {
+        "imageSize": {"width": 900, "height": 1100},
+        "faceBox": {"left": 0.2, "top": 0.1, "right": 0.8, "bottom": 0.9},
+        "eyeCenters": {
+          "imageLeft": {"x": 0.38, "y": 0.385},
+          "imageRight": {"x": 0.62, "y": 0.385},
+        },
+        "rollDeg": 0.0,
+      },
+      "generated": {
+        "imageSize": {"width": 128, "height": 128},
+        "faceBox": {"left": 0.21, "top": 0.11, "right": 0.79, "bottom": 0.89},
+        "eyeCenters": {
+          "imageLeft": {"x": 0.39, "y": 0.39},
+          "imageRight": {"x": 0.61, "y": 0.39},
+        },
+        "rollDeg": 0.0,
+      },
+    },
+  }
+  face_metadata_calls: dict[str, bytes] = {}
+
 
   class FakeImages:
     def generate(self, **_kwargs):
@@ -266,7 +359,17 @@ async def test_personalized_edit_requires_owned_consented_media_and_stays_privat
 
   normalized = BytesIO(b"normalized")
   normalized.name = "owned-source.jpg"
+
+  def fake_personalized_face_metadata(source_bytes: bytes, generated_bytes: bytes):
+    face_metadata_calls["source"] = source_bytes
+    face_metadata_calls["generated"] = generated_bytes
+    return face_metadata
+
   monkeypatch.setattr("app.services.makeup_recommendation_image.OpenAI", FakeOpenAI)
+  monkeypatch.setattr(
+    "app.services.makeup_recommendation_image.extract_personalized_makeup_face_metadata",
+    fake_personalized_face_metadata,
+  )
   monkeypatch.setattr("app.services.makeup_recommendation_image.boto3.client", lambda *_args, **_kwargs: FakeS3())
   monkeypatch.setattr(
     "app.services.makeup_recommendation_image._normalize_source_image",
@@ -311,6 +414,8 @@ async def test_personalized_edit_requires_owned_consented_media_and_stays_privat
   assert "masculine makeup presentation" in calls["edit"]["prompt"]
   assert "do not infer gender" in calls["edit"]["prompt"]
   assert "Dusty Rose #B76E79" in calls["edit"]["prompt"]
+  assert "Preserve the exact crop and framing" in calls["edit"]["prompt"]
+  assert "do not zoom, reframe, recrop, rotate, or translate" in calls["edit"]["prompt"]
   assert asset.image_url is None
   assert asset.is_private is True
   assert asset.input_media_id == MEDIA_ID
@@ -324,6 +429,11 @@ async def test_personalized_edit_requires_owned_consented_media_and_stays_privat
   assert asset.provenance["sourceMediaId"] == str(MEDIA_ID)
   assert asset.provenance["sourceFormat"] == "png"
   assert asset.provenance["outputFormat"] == "jpeg"
+  assert asset.provenance["cropMetadata"] == face_metadata["cropMetadata"]
+  assert asset.provenance["alignmentMetadata"] == face_metadata["alignmentMetadata"]
+  assert face_metadata_calls["source"] == b"owned"
+  assert face_metadata_calls["generated"].startswith(b"\xff\xd8")
+  assert "landmark" not in json.dumps(asset.provenance).lower()
 
   with pytest.raises(AppError, match="Explicit consent"):
     await generate_recommendation_asset(

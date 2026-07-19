@@ -287,6 +287,74 @@ class GeneratedMakeupAreaGuideStep(CamelModel):
   order: int = Field(ge=1, le=10)
   instruction: str = Field(min_length=1, max_length=400)
 
+
+class GeneratedMakeupApplicationColor(CamelModel):
+  role: str = Field(min_length=1, max_length=80)
+  name: str = Field(min_length=1, max_length=80)
+  hex: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+
+  @field_validator("role", "name")
+  @classmethod
+  def strips_nonempty_color_text(cls, value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+      raise ValueError("application color text must not be blank.")
+    return normalized
+
+
+class GeneratedMakeupApplicationStep(CamelModel):
+  order: int = Field(ge=1, le=10)
+  title: str = Field(min_length=1, max_length=120)
+  product_type: str = Field(alias="productType", min_length=1, max_length=120)
+  tool: str = Field(min_length=1, max_length=180)
+  colors: list[GeneratedMakeupApplicationColor] = Field(min_length=1, max_length=4)
+  amount: str = Field(min_length=1, max_length=180)
+  placement: str = Field(min_length=1, max_length=320)
+  technique: str = Field(min_length=1, max_length=320)
+  blending: str = Field(min_length=1, max_length=260)
+  finish_check: str = Field(alias="finishCheck", min_length=1, max_length=260)
+
+  @field_validator(
+    "title",
+    "product_type",
+    "tool",
+    "amount",
+    "placement",
+    "technique",
+    "blending",
+    "finish_check",
+  )
+  @classmethod
+  def strips_nonempty_step_text(cls, value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+      raise ValueError("application step text must not be blank.")
+    return normalized
+
+
+class GeneratedMakeupApplicationPlan(CamelModel):
+  recipe_version: Literal["makeup-application-v1"] = Field(alias="recipeVersion")
+  estimated_minutes: int = Field(alias="estimatedMinutes", ge=1, le=60)
+  steps: list[GeneratedMakeupApplicationStep] = Field(min_length=2, max_length=8)
+  completion_criteria: list[str] = Field(alias="completionCriteria", min_length=1, max_length=4)
+
+  @field_validator("completion_criteria")
+  @classmethod
+  def validates_completion_criteria(cls, value: list[str]) -> list[str]:
+    normalized = [item.strip() for item in value]
+    if any(not item or len(item) > 260 for item in normalized):
+      raise ValueError("completionCriteria items must contain 1 to 260 characters.")
+    if len({item.casefold() for item in normalized}) != len(normalized):
+      raise ValueError("completionCriteria items must be unique.")
+    return normalized
+
+  @model_validator(mode="after")
+  def uses_contiguous_step_order(self):
+    if [step.order for step in self.steps] != list(range(1, len(self.steps) + 1)):
+      raise ValueError("applicationPlan steps must use contiguous order starting at 1.")
+    return self
+
+
 class GeneratedMakeupAreaGuide(CamelModel):
   area: Literal["base", "brow", "eye", "cheek", "lip", "contour"]
   label: str = Field(min_length=1, max_length=80)
@@ -300,6 +368,33 @@ class GeneratedMakeupAreaGuide(CamelModel):
   avoid: list[str] = Field(default_factory=list, max_length=6)
   products: list[GeneratedMakeupProduct] = Field(default_factory=list, max_length=4)
   ar_supported: bool = Field(alias="arSupported")
+  application_order: int | None = Field(default=None, alias="applicationOrder", ge=1, le=5)
+  application_plan: GeneratedMakeupApplicationPlan | None = Field(default=None, alias="applicationPlan")
+
+  @model_validator(mode="after")
+  def keeps_detailed_application_fields_paired(self):
+    if (self.application_order is None) != (self.application_plan is None):
+      raise ValueError("applicationOrder and applicationPlan must be provided together.")
+    if self.application_plan is not None:
+      minimum_steps = {"base": 4, "brow": 3, "eye": 5, "cheek": 3, "lip": 3}.get(self.area, 2)
+      if len(self.application_plan.steps) < minimum_steps:
+        raise ValueError(f"{self.area} applicationPlan requires at least {minimum_steps} steps.")
+      distinct_color_names = {
+        color.name.casefold()
+        for step in self.application_plan.steps
+        for color in step.colors
+      }
+      distinct_color_hexes = {
+        color.hex.upper()
+        for step in self.application_plan.steps
+        for color in step.colors
+      }
+      if self.area == "eye" and (len(distinct_color_names) < 3 or len(distinct_color_hexes) < 3):
+        raise ValueError("eye applicationPlan requires at least three distinct colors.")
+      if self.area == "lip" and (len(distinct_color_names) < 2 or len(distinct_color_hexes) < 2):
+        raise ValueError("lip applicationPlan requires at least two distinct colors.")
+    return self
+
   @model_validator(mode="before")
   @classmethod
   def normalizes_early_v2_shape(cls, value):
@@ -338,6 +433,141 @@ class GeneratedMakeupAreaGuide(CamelModel):
     return normalized
 
 
+class GeneratedMakeupLookMap(CamelModel):
+  version: Literal["makeup-look-map-v1"]
+  naturality_to_personality: int = Field(alias="naturalityToPersonality", ge=0, le=100)
+  casual_to_glam: int = Field(alias="casualToGlam", ge=0, le=100)
+  rationale: str = Field(min_length=1, max_length=300)
+
+
+class GeneratedMakeupFitDimension(CamelModel):
+  available: bool
+  score: int | None = Field(default=None, ge=0, le=100)
+  reason: str = Field(min_length=1, max_length=400)
+
+  @model_validator(mode="after")
+  def score_matches_availability(self):
+    if self.available and self.score is None:
+      raise ValueError("An available fit dimension must include a score.")
+    if not self.available and self.score is not None:
+      raise ValueError("An unavailable fit dimension must not include a score.")
+    return self
+
+
+class GeneratedMakeupFitDimensions(CamelModel):
+  situation: GeneratedMakeupFitDimension
+  preference: GeneratedMakeupFitDimension
+  personal_color: GeneratedMakeupFitDimension = Field(alias="personalColor")
+  face_structure: GeneratedMakeupFitDimension = Field(alias="faceStructure")
+  skin_compatibility: GeneratedMakeupFitDimension = Field(alias="skinCompatibility")
+  look_coherence: GeneratedMakeupFitDimension = Field(alias="lookCoherence")
+
+
+class GeneratedMakeupFitEvidence(CamelModel):
+  source: Literal[
+    "situation",
+    "preference",
+    "personal_color",
+    "face_structure",
+    "skin_type",
+    "look_coherence",
+  ]
+  label: str = Field(min_length=1, max_length=160)
+  reason: str = Field(min_length=1, max_length=500)
+
+
+class GeneratedMakeupFitAssessment(CamelModel):
+  scoring_version: Literal["makeup-fit-v1"] = Field(alias="scoringVersion")
+  overall_score: int = Field(alias="overallScore", ge=0, le=100)
+  dimensions: GeneratedMakeupFitDimensions
+  evidence: list[GeneratedMakeupFitEvidence] = Field(min_length=1, max_length=6)
+
+  @model_validator(mode="after")
+  def evidence_covers_only_available_dimensions(self):
+    availability = {
+      "situation": self.dimensions.situation.available,
+      "preference": self.dimensions.preference.available,
+      "personal_color": self.dimensions.personal_color.available,
+      "face_structure": self.dimensions.face_structure.available,
+      "skin_type": self.dimensions.skin_compatibility.available,
+      "look_coherence": self.dimensions.look_coherence.available,
+    }
+    evidence_sources = [item.source for item in self.evidence]
+    if len(evidence_sources) != len(set(evidence_sources)):
+      raise ValueError("Fit evidence sources must be unique.")
+    if any(not availability[source] for source in evidence_sources):
+      raise ValueError("Fit evidence cannot reference an unavailable dimension.")
+    if any(available and source not in evidence_sources for source, available in availability.items()):
+      raise ValueError("Every available fit dimension must include evidence.")
+    return self
+
+
+class GeneratedMakeupMatchComponent(CamelModel):
+  key: Literal["preference", "situation", "colorHarmony", "skinFinish"]
+  weight: int = Field(ge=1, le=100)
+  score: int | None = Field(default=None, ge=0, le=100)
+  evaluated: bool
+  reason: str = Field(min_length=1, max_length=400)
+  evidence: list[str] = Field(default_factory=list, max_length=10)
+
+  @model_validator(mode="after")
+  def score_matches_evaluation(self):
+    if self.evaluated and self.score is None:
+      raise ValueError("An evaluated match component must include a score.")
+    if not self.evaluated and self.score is not None:
+      raise ValueError("An unevaluated match component must not include a score.")
+    if any(not item.strip() or len(item) > 300 for item in self.evidence):
+      raise ValueError("Match evidence items must contain 1 to 300 characters.")
+    return self
+
+
+class GeneratedMakeupReflectedInput(CamelModel):
+  source_type: str = Field(alias="sourceType", min_length=1, max_length=80)
+  source_id: str = Field(alias="sourceId", min_length=1, max_length=160)
+  input_label: str = Field(alias="inputLabel", min_length=1, max_length=300)
+  decision_path: str = Field(alias="decisionPath", min_length=1, max_length=300)
+  reflected_value: str = Field(alias="reflectedValue", min_length=1, max_length=300)
+
+
+class GeneratedMakeupMatchAssessment(CamelModel):
+  version: Literal["makeup-match-v1"]
+  score: int | None = Field(default=None, ge=0, le=100)
+  evaluated_weight: int = Field(alias="evaluatedWeight", ge=0, le=100)
+  components: list[GeneratedMakeupMatchComponent] = Field(min_length=4, max_length=4)
+  reflected_inputs: list[GeneratedMakeupReflectedInput] = Field(
+    default_factory=list,
+    alias="reflectedInputs",
+    max_length=20,
+  )
+  generation_source: Literal["claude", "deterministic_fallback"] = Field(
+    alias="generationSource",
+  )
+
+  @model_validator(mode="after")
+  def validates_deterministic_match_contract(self):
+    expected_weights = {
+      "preference": 35,
+      "situation": 25,
+      "colorHarmony": 25,
+      "skinFinish": 15,
+    }
+    if [component.key for component in self.components] != list(expected_weights):
+      raise ValueError("Match components must use the canonical order.")
+    if any(component.weight != expected_weights[component.key] for component in self.components):
+      raise ValueError("Match component weights must use makeup-match-v1 weights.")
+    evaluated = [component for component in self.components if component.evaluated]
+    if self.evaluated_weight != sum(component.weight for component in evaluated):
+      raise ValueError("evaluatedWeight must equal the available component weights.")
+    enough_evidence = (
+      self.evaluated_weight >= 60
+      and len(evaluated) >= 2
+      and any(component.key in {"preference", "situation"} for component in evaluated)
+    )
+    if enough_evidence != (self.score is not None):
+      raise ValueError("Match score availability does not satisfy the evidence threshold.")
+    return self
+
+
 class GeneratedMakeupLookV2(CamelModel):
   id: str = Field(min_length=1, max_length=80)
   role: Literal["anchor", "bold", "discovery"]
@@ -351,12 +581,31 @@ class GeneratedMakeupLookV2(CamelModel):
   steps: list[GeneratedMakeupStep] = Field(default_factory=list, max_length=10)
   products: list[GeneratedMakeupProduct] = Field(default_factory=list, max_length=12)
   image_brief: str | None = Field(default=None, alias="imageBrief", max_length=800)
+  look_map: GeneratedMakeupLookMap = Field(alias="lookMap")
+  fit_assessment: GeneratedMakeupFitAssessment = Field(alias="fitAssessment")
 
   @model_validator(mode="after")
   def includes_areas_and_legacy_projection(self):
     required = {"base", "brow", "eye", "cheek", "lip"}
-    if not required.issubset({guide.area for guide in self.area_guides}):
+    required_areas = [guide.area for guide in self.area_guides if guide.area in required]
+    if len(required_areas) != 5 or set(required_areas) != required:
       raise ValueError("Each v2 look must include base, brow, eye, cheek, and lip area guides.")
+    required_guides = [guide for guide in self.area_guides if guide.area in required]
+    has_detailed_plan = any(guide.application_plan is not None for guide in required_guides)
+    if has_detailed_plan:
+      expected_orders = {"base": 1, "brow": 2, "eye": 3, "cheek": 4, "lip": 5}
+      if any(
+        guide.application_plan is None
+        or guide.application_order != expected_orders[guide.area]
+        for guide in required_guides
+      ):
+        raise ValueError(
+          "Detailed application plans must cover base, brow, eye, cheek, and lip in order 1 through 5.",
+        )
+      self.area_guides = sorted(
+        self.area_guides,
+        key=lambda guide: guide.application_order if guide.application_order is not None else 99,
+      )
     if not self.steps:
       self.steps = [
         GeneratedMakeupStep(
@@ -375,8 +624,15 @@ class GeneratedMakeupLookV2(CamelModel):
 
 
 class GeneratedMakeupRecommendationV2(CamelModel):
+  generation_source: Literal["claude", "deterministic_fallback"] = Field(
+    alias="generationSource",
+  )
   context_summary: list[str] = Field(alias="contextSummary", min_length=1, max_length=8)
   looks: list[GeneratedMakeupLookV2] = Field(min_length=3, max_length=3)
+  match_assessment: GeneratedMakeupMatchAssessment | None = Field(
+    default=None,
+    alias="matchAssessment",
+  )
 
   @model_validator(mode="after")
   def includes_three_distinct_roles(self):

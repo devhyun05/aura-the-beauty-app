@@ -32,7 +32,7 @@ function getProfileSetupUser(session: AuthSession): AuthUser {
   return {
     ...session.user,
     email: tokenUser.email ?? session.user.email,
-    id: tokenUser.id ?? session.user.id,
+    id: session.user.id,
     name: tokenUser.name ?? session.user.name,
     nickname: tokenUser.nickname ?? session.user.nickname,
   };
@@ -154,9 +154,13 @@ export function LoginRouteScreen({navigation}: RootScreenProps<'Login'>) {
     isRoutingAfterLoginRef.current = true;
     void (async () => {
       const normalizedSession = getProfileSetupSession(nextSession);
+
+      // Install the freshly authenticated token before profile hydration.
+      // Otherwise getUserProfile() runs as the optional Local Dev user and a
+      // completed account is incorrectly routed back to ProfileSetup.
+      await setSession(normalizedSession);
       const nextRoute = await getPostLoginRoute(normalizedSession);
 
-      await setSession(normalizedSession);
       setShouldShowBeautyJourneyGuide(nextRoute.shouldShowBeautyJourneyGuide);
       replacePostLoginRoute(navigation, nextRoute.routeName);
     })();

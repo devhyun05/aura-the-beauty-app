@@ -107,7 +107,7 @@ class BedrockCredentialReadinessProbe:
   def __init__(
     self,
     *,
-    timeout_seconds: float = 2.0,
+    timeout_seconds: float = 5.0,
     success_cache_seconds: float = 30.0,
     failure_cache_seconds: float = 5.0,
   ) -> None:

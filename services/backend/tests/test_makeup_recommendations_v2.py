@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
@@ -14,6 +15,7 @@ from app.core.settings import Settings
 from app.db.session import require_database
 from app.main import create_app
 from app.schemas.makeup_recommendation import (
+  GeneratedMakeupRecommendationV2,
   GeneratedQuestions,
   MakeupRecommendationSessionAnswer,
   MakeupRecommendationSessionCreate,
@@ -28,6 +30,7 @@ from app.services.makeup_recommendation_context import (
   fetch_owned_completed_analysis_report,
   normalize_makeup_profile_gender,
 )
+from app.services.makeup_recommendation_fit import finalize_recommendation_metadata
 from app.services.makeup_recommendation_prompt import (
   CUSTOM_NORMALIZATION_SYSTEM_PROMPT,
   INPUT_PRIORITY,
@@ -197,11 +200,66 @@ def _v2_recommendation() -> dict:
           }
           for area in areas
         ],
+        "lookMap": {
+          "version": "makeup-look-map-v1",
+          "naturalityToPersonality": {"anchor": 35, "bold": 78, "discovery": 61}[role],
+          "casualToGlam": {"anchor": 48, "bold": 82, "discovery": 57}[role],
+          "rationale": "fixture color, texture, and situation evidence",
+        },
+        "fitAssessment": {
+          "dimensions": {
+            "situation": {"available": True, "score": 86, "reason": "context.selection.situation.label"},
+            "preference": {"available": True, "score": 81, "reason": "answers[0].optionId"},
+            "personalColor": {"available": False, "score": None, "reason": "not available"},
+            "faceStructure": {"available": True, "score": 75, "reason": "context.analysisReport.faceShape"},
+            "skinCompatibility": {"available": False, "score": None, "reason": "not available"},
+            "lookCoherence": {"available": True, "score": 88, "reason": "look.imageBrief and areaGuides"},
+          },
+        },
         "imageBrief": "얼굴 비율을 바꾸지 않고 메이크업만 적용",
       }
       for role in roles
     ],
   }
+
+
+def test_finalized_match_score_is_generation_source_independent() -> None:
+  context = {"selection": {"situation": {"label": "데이트"}}}
+  answers = [{"questionId": "change_level", "optionId": "balanced"}]
+  claude = finalize_recommendation_metadata(
+    _v2_recommendation(),
+    context,
+    answers,
+    _questions(),
+    generation_source="claude",
+  )
+  fallback = finalize_recommendation_metadata(
+    _v2_recommendation(),
+    context,
+    answers,
+    _questions(),
+    generation_source="deterministic_fallback",
+  )
+
+  assert claude["matchAssessment"]["score"] == fallback["matchAssessment"]["score"]
+  assert claude["matchAssessment"]["components"] == fallback["matchAssessment"]["components"]
+  assert claude["matchAssessment"]["generationSource"] == "claude"
+  assert fallback["matchAssessment"]["generationSource"] == "deterministic_fallback"
+
+
+def test_v2_schema_accepts_saved_payload_without_match_assessment() -> None:
+  current = makeup_service.deterministic_recommendation_v2(
+    {"selection": {"situation": {"label": "데이트"}}},
+    [{"questionId": "change_level", "optionId": "balanced"}],
+    _questions(),
+  )
+  current.pop("matchAssessment")
+
+  parsed = GeneratedMakeupRecommendationV2.model_validate(current)
+  serialized = parsed.model_dump(by_alias=True, exclude_none=True)
+
+  assert parsed.match_assessment is None
+  assert "matchAssessment" not in serialized
 
 
 def test_session_input_requires_exactly_one_keyword_or_custom() -> None:
@@ -526,9 +584,27 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
   assert calls[0]["modelId"] == "global.anthropic.claude-sonnet-4-6"
   assert calls[0]["max_tokens"] == 9000
   assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
+  assert result["generationSource"] == "claude"
+  assert result["matchAssessment"]["version"] == "makeup-match-v1"
+  assert result["matchAssessment"]["generationSource"] == "claude"
+  assert result["matchAssessment"]["evaluatedWeight"] == 60
+  assert result["matchAssessment"]["score"] is not None
+  assert result["looks"][0]["lookMap"]["naturalityToPersonality"] == 35
+  fit = result["looks"][0]["fitAssessment"]
+  assert fit["scoringVersion"] == "makeup-fit-v1"
+  assert fit["overallScore"] == 82
+  assert fit["dimensions"]["personalColor"]["available"] is False
+  assert fit["dimensions"]["personalColor"]["score"] is None
+  assert [item["source"] for item in fit["evidence"]] == [
+    "situation", "preference", "face_structure", "look_coherence",
+  ]
   assert {step["area"] for step in result["looks"][0]["steps"]} == {"base", "brow", "eye", "cheek", "lip"}
   guide = result["looks"][0]["areaGuides"][0]
-  assert set(guide) == {"area", "label", "goal", "color", "texture", "placement", "technique", "steps", "reason", "avoid", "products", "arSupported"}
+  assert set(guide) == {
+    "area", "label", "goal", "color", "texture", "placement", "technique",
+    "steps", "reason", "avoid", "products", "arSupported", "applicationOrder",
+    "applicationPlan",
+  }
   assert guide["color"] == {"name": "로즈", "hex": "#B76E79"}
   assert guide["avoid"] == ["한 번에 두껍게 올리지 않기"]
   assert guide["steps"] == [{"order": 1, "instruction": "소량부터 얇게 쌓기"}]
@@ -581,6 +657,19 @@ async def test_v2_recommendation_provider_failure_uses_report_and_answers_fallba
   assert any("익숙한 선에서 자연스럽게" in item for item in result["contextSummary"])
   assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
   assert all({guide["area"] for guide in look["areaGuides"]} == {"base", "brow", "eye", "cheek", "lip"} for look in result["looks"])
+  assert result["generationSource"] == "deterministic_fallback"
+  assert result["matchAssessment"]["version"] == "makeup-match-v1"
+  assert result["matchAssessment"]["generationSource"] == "deterministic_fallback"
+  assert result["matchAssessment"]["evaluatedWeight"] == 85
+  assert result["matchAssessment"]["score"] is not None
+  for look in result["looks"]:
+    assert look["lookMap"]["version"] == "makeup-look-map-v1"
+    assert 0 <= look["lookMap"]["naturalityToPersonality"] <= 100
+    assert 0 <= look["lookMap"]["casualToGlam"] <= 100
+    assert look["fitAssessment"]["scoringVersion"] == "makeup-fit-v1"
+    assert look["fitAssessment"]["overallScore"] <= 74
+  anchor_map = result["looks"][0]["lookMap"]
+  assert (anchor_map["naturalityToPersonality"], anchor_map["casualToGlam"]) != (28, 56)
 
 @pytest.mark.asyncio
 async def test_analysis_context_requires_owned_completed_non_deleted_report() -> None:
@@ -609,6 +698,7 @@ def test_context_snapshot_whitelists_report_fields_and_effective_image_mode() ->
     "skin_type": "combination",
     "tone_summary": "soft",
     "recommended_mood": "calm",
+    "short_summary": "OLD_SHORT_SUMMARY",
     "summary": "균형 잡힌 인상",
     "tags": ["soft"],
     "valid_source_media_id": UUID("77777777-7777-7777-7777-777777777777"),
@@ -617,6 +707,7 @@ def test_context_snapshot_whitelists_report_fields_and_effective_image_mode() ->
       "result": {
         "makeupGuideline": {"brow": "결을 살린다"},
         "recommendedMakeups": [{"title": "뮤트 데일리"}],
+        "facePointGuide": {"eye": "OLD_POINT_GUIDE"},
         "secretProviderPayload": "must-not-copy",
       },
     },
@@ -637,6 +728,7 @@ def test_context_snapshot_whitelists_report_fields_and_effective_image_mode() ->
     "personalizedConsent": True,
   }
   assert snapshot["inputPriority"] == list(INPUT_PRIORITY)
+  assert snapshot["analysisInputPolicyVersion"] == "objective-analysis-v1"
   disabled_snapshot = compile_context_snapshot(
     report,
     situation={"id": str(SITUATION_ID), "key": "date", "label": "데이트"},
@@ -653,8 +745,66 @@ def test_context_snapshot_whitelists_report_fields_and_effective_image_mode() ->
     "personalizedConsent": True,
   }
   serialized = json.dumps(snapshot, ensure_ascii=False)
-  assert "makeupGuideline" in serialized
+  assert "makeupGuideline" not in serialized
+  assert "baseMakeupGuide" not in serialized
+  assert "recommendedMood" not in serialized
+  assert "recommendedMakeups" not in serialized
+  assert "facePointGuide" not in serialized
+  assert snapshot["analysisReport"]["detail"] == {}
+  assert "summary" not in snapshot["analysisReport"]
+  assert "shortSummary" not in snapshot["analysisReport"]
+  assert "tags" not in snapshot["analysisReport"]
+  assert "OLD_SHORT_SUMMARY" not in serialized
   assert "must-not-copy" not in serialized
+
+
+def test_recommendation_prompt_generates_fresh_area_guides_without_report_advice() -> None:
+  prompt = build_recommendation_prompt(
+    {
+      "analysisReport": {
+        "personalColor": "summer mute",
+        "faceShape": "oval",
+        "skinType": "combination",
+        "summary": "OLD_SUMMARY_SENTINEL",
+        "shortSummary": "OLD_SHORT_SENTINEL",
+        "tags": ["OLD_TAG_SENTINEL"],
+        "baseMakeupGuide": "OLD_BASE_SENTINEL",
+        "makeupGuideline": {"brow": "OLD_ROOT_BROW_SENTINEL"},
+        "recommendedMood": "OLD_MOOD_SENTINEL",
+        "recommendedMakeups": [{"title": "OLD_LOOK_SENTINEL"}],
+        "facePointGuide": {"eye": "OLD_POINT_SENTINEL"},
+        "detail": {
+          "baseMakeupGuide": "OLD_DETAIL_BASE_SENTINEL",
+          "recommendedMood": "OLD_DETAIL_MOOD_SENTINEL",
+          "summary": "OLD_DETAIL_SUMMARY_SENTINEL",
+          "makeupGuideline": {"brow": "OLD_BROW_SENTINEL"},
+          "recommendedMakeups": [{"title": "OLD_DETAIL_LOOK_SENTINEL"}],
+        },
+      },
+      "selection": {"situation": {"label": "interview"}},
+    },
+    [{"id": "finish", "title": "finish", "options": []}],
+    [{"questionId": "finish", "optionLabel": "polished"}],
+  )
+
+  for sentinel in (
+    "OLD_SUMMARY_SENTINEL",
+    "OLD_SHORT_SENTINEL",
+    "OLD_TAG_SENTINEL",
+    "OLD_BASE_SENTINEL",
+    "OLD_ROOT_BROW_SENTINEL",
+    "OLD_DETAIL_BASE_SENTINEL",
+    "OLD_DETAIL_MOOD_SENTINEL",
+    "OLD_DETAIL_SUMMARY_SENTINEL",
+    "OLD_MOOD_SENTINEL",
+    "OLD_LOOK_SENTINEL",
+    "OLD_POINT_SENTINEL",
+    "OLD_BROW_SENTINEL",
+    "OLD_DETAIL_LOOK_SENTINEL",
+  ):
+    assert sentinel not in prompt
+  assert '"areaGuides"' in prompt
+  assert "Generate every areaGuides entry freshly" in prompt
 
 
 def test_custom_situation_label_round_trips_and_participates_in_idempotency() -> None:
@@ -937,7 +1087,9 @@ def test_report_api_serializes_early_v2_area_guide_to_canonical_json(
   response = TestClient(app).get(f"/api/makeup-recommendations/{RECOMMENDATION_REPORT_ID}")
 
   assert response.status_code == 200
-  guide = response.json()["data"]["recommendation"]["looks"][0]["areaGuides"][0]
+  recommendation = response.json()["data"]["recommendation"]
+  assert "matchAssessment" not in recommendation
+  guide = recommendation["looks"][0]["areaGuides"][0]
   assert set(guide) == {
     "area", "label", "goal", "color", "texture", "placement", "technique",
     "steps", "reason", "avoid", "products", "arSupported",
@@ -1328,6 +1480,8 @@ async def test_session_creation_persists_custom_situation_label(
 
 @pytest.mark.asyncio
 async def test_complete_generation_uses_session_unique_idempotency() -> None:
+  persisted_recommendation: dict = {}
+
   class DB:
     async def fetchrow(self, query: str, *args):
       assert "on conflict (session_id)" in query
@@ -1338,9 +1492,10 @@ async def test_complete_generation_uses_session_unique_idempotency() -> None:
       assert "synthetic-reference" in query
       assert args[0] == USER_ID
       assert args[11] == SESSION_ID
+      persisted_recommendation.update(json.loads(args[5]))
       return {
         "id": RECOMMENDATION_REPORT_ID,
-        "recommendation": _v2_recommendation(),
+        "recommendation": json.loads(args[5]),
         "image_status": "pending",
       }
 
@@ -1359,10 +1514,19 @@ async def test_complete_generation_uses_session_unique_idempotency() -> None:
     "answers": [{"questionId": "change_level", "optionId": "balanced"}],
     "image_mode": "generic",
   }
-  result = await complete_generation(DB(), Settings(), USER_ID, session, _v2_recommendation())
+  recommendation = makeup_service.deterministic_recommendation_v2(
+    session["context_snapshot"],
+    session["answers"],
+    session["questions"],
+  )
+  expected_match = recommendation["matchAssessment"]
+  result = await complete_generation(DB(), Settings(), USER_ID, session, recommendation)
 
   assert result["reportId"] == RECOMMENDATION_REPORT_ID
   assert result["reused"] is False
+  assert persisted_recommendation["matchAssessment"] == expected_match
+  assert result["recommendation"]["matchAssessment"] == expected_match
+  assert result["recommendation"]["matchAssessment"]["score"] == expected_match["score"]
   assert all(look["imageStatus"] == "pending" for look in result["recommendation"]["looks"])
 
 
@@ -1436,6 +1600,412 @@ def test_partial_image_aggregate_is_not_reported_as_total_failure() -> None:
   assert error == "provider failed"
 
 
+def _legacy_crop_asset(
+  *,
+  look_id: str = "anchor",
+  role: str | None = None,
+  provenance: dict | None = None,
+) -> dict:
+  return {
+    "look_id": look_id,
+    "role": role or look_id,
+    "status": "completed",
+    "image_url": f"https://cdn.example.com/legacy-{look_id}.webp",
+    "storage_bucket": "assets",
+    "object_key": f"uploads/generated-makeup-recommendations/legacy/{look_id}.webp",
+    "content_type": "image/webp",
+    "is_private": False,
+    "input_media_id": None,
+    "model_id": "gpt-image-2",
+    "prompt_version": "makeup-image-v2",
+    "provenance": dict(provenance or {}),
+  }
+
+
+def _saved_v2_report(*, looks: list[dict] | None = None) -> dict:
+  return {
+    "id": RECOMMENDATION_REPORT_ID,
+    "schema_version": "makeup-recommendation-v2",
+    "recommendation": {
+      "contextSummary": ["condition"],
+      "looks": looks or [{"id": "anchor", "role": "anchor"}],
+    },
+    "context_snapshot": {},
+  }
+
+
+class _CropBackfillDB:
+  def __init__(self, assets: list[dict]) -> None:
+    self.assets = [dict(asset) for asset in assets]
+    self.provenance_by_look = {
+      str(asset["look_id"]): dict(asset.get("provenance") or {})
+      for asset in assets
+    }
+    self.persisted: list[tuple[str, tuple]] = []
+
+  async def fetch(self, query: str, *args):
+    assert "makeup_recommendation_assets" in query
+    assert args == (RECOMMENDATION_REPORT_ID,)
+    return [
+      {
+        **asset,
+        "provenance": dict(self.provenance_by_look[str(asset["look_id"])]),
+      }
+      for asset in self.assets
+    ]
+
+  async def fetchrow(self, query: str, *args):
+    self.persisted.append((query, args))
+    look_id = str(args[1])
+    marker_key = str(args[2])
+    provenance = self.provenance_by_look[look_id]
+
+    if len(args) == 5:
+      claim_marker = json.loads(args[3])
+      expected_marker_json = args[4]
+      if expected_marker_json is None:
+        if marker_key in provenance:
+          return None
+      elif provenance.get(marker_key) != json.loads(expected_marker_json):
+        return None
+      provenance[marker_key] = claim_marker
+      return {"provenance": dict(provenance)}
+
+    assert len(args) == 6
+    result_marker = json.loads(args[3])
+    crop_metadata_json = args[4]
+    claim_marker = json.loads(args[5])
+    if provenance.get(marker_key) != claim_marker:
+      return None
+    provenance[marker_key] = result_marker
+    if crop_metadata_json is not None:
+      provenance["cropMetadata"] = json.loads(crop_metadata_json)
+    return {"provenance": dict(provenance)}
+
+
+@pytest.mark.asyncio
+async def test_completed_legacy_asset_lazily_backfills_crop_metadata(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  crop_metadata = {
+    "version": "makeup-face-crops-v1",
+    "imageSize": {"width": 768, "height": 1024},
+    "areas": {
+      "lip": [
+        {
+          "regionId": "lips",
+          "box": {"left": 0.36, "top": 0.64, "right": 0.64, "bottom": 0.8},
+        },
+      ],
+    },
+  }
+  fixed_now = datetime(2026, 7, 18, 0, 0, tzinfo=timezone.utc)
+  original_provenance = {"modelId": "gpt-image-2"}
+  db = _CropBackfillDB([
+    _legacy_crop_asset(provenance=original_provenance),
+  ])
+  reads: list[tuple[str, str, int | None]] = []
+
+  def fake_get_object_bytes(self, *, bucket, object_key, max_bytes=None):
+    reads.append((bucket, object_key, max_bytes))
+    return b"legacy-generated-image", "image/webp"
+
+  monkeypatch.setattr(makeup_api, "_crop_backfill_now", lambda: fixed_now)
+  monkeypatch.setattr(makeup_api.S3Service, "get_object_bytes", fake_get_object_bytes)
+  monkeypatch.setattr(
+    makeup_api,
+    "extract_makeup_face_crop_metadata",
+    lambda image_bytes: crop_metadata if image_bytes == b"legacy-generated-image" else None,
+  )
+
+  response = await makeup_api._recommendation_report_response(
+    _saved_v2_report(),
+    db=db,
+    settings=Settings(s3_bucket_name="assets"),
+  )
+
+  assert reads == [
+    (
+      "assets",
+      "uploads/generated-makeup-recommendations/legacy/anchor.webp",
+      makeup_api.MAKEUP_CROP_BACKFILL_MAX_BYTES,
+    ),
+  ]
+  assert len(db.persisted) == 2
+  claim_query, claim_args = db.persisted[0]
+  assert "not (coalesce(provenance, '{}'::jsonb) ? $3::text)" in claim_query
+  assert claim_args[:3] == (
+    RECOMMENDATION_REPORT_ID,
+    "anchor",
+    makeup_api.MAKEUP_CROP_BACKFILL_MARKER_KEY,
+  )
+  assert json.loads(claim_args[3])["status"] == "processing"
+  assert claim_args[4] is None
+
+  update_query, update_args = db.persisted[1]
+  assert "jsonb_build_object('cropMetadata'" in update_query
+  assert "-> $3::text = $6::jsonb" in update_query
+  assert json.loads(update_args[3])["status"] == "completed"
+  assert json.loads(update_args[4]) == crop_metadata
+  response_provenance = response["recommendation"]["looks"][0]["imageAsset"]["provenance"]
+  assert response_provenance["cropMetadata"] == crop_metadata
+  assert response_provenance[makeup_api.MAKEUP_CROP_BACKFILL_MARKER_KEY] == {
+    "version": makeup_api.MAKEUP_CROP_BACKFILL_MARKER_VERSION,
+    "status": "completed",
+    "attemptedAt": "2026-07-18T00:00:00Z",
+  }
+  assert response_provenance["modelId"] == "gpt-image-2"
+  assert "landmark" not in json.dumps(response_provenance).lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("failure_mode", "expected_status", "expected_retry_after"),
+  [
+    ("s3", "failed", "2026-07-18T00:15:00Z"),
+    ("no-face", "no-face", "2026-07-19T00:00:00Z"),
+  ],
+)
+async def test_legacy_crop_backfill_terminal_marker_avoids_repeated_detail_work(
+  monkeypatch: pytest.MonkeyPatch,
+  failure_mode: str,
+  expected_status: str,
+  expected_retry_after: str,
+) -> None:
+  fixed_now = datetime(2026, 7, 18, 0, 0, tzinfo=timezone.utc)
+  original_provenance = {"modelId": "gpt-image-2"}
+  db = _CropBackfillDB([
+    _legacy_crop_asset(provenance=original_provenance),
+  ])
+  calls = {"read": 0, "detect": 0}
+
+  def fake_get_object_bytes(self, *, bucket, object_key, max_bytes=None):
+    calls["read"] += 1
+    if failure_mode == "s3":
+      raise RuntimeError("storage unavailable")
+    return b"legacy-generated-image", "image/webp"
+
+  def fake_extract(image_bytes):
+    calls["detect"] += 1
+    assert image_bytes == b"legacy-generated-image"
+    return None
+
+  monkeypatch.setattr(makeup_api, "_crop_backfill_now", lambda: fixed_now)
+  monkeypatch.setattr(makeup_api.S3Service, "get_object_bytes", fake_get_object_bytes)
+  monkeypatch.setattr(makeup_api, "extract_makeup_face_crop_metadata", fake_extract)
+
+  first_response = await makeup_api._recommendation_report_response(
+    _saved_v2_report(),
+    db=db,
+    settings=Settings(s3_bucket_name="assets"),
+  )
+  second_response = await makeup_api._recommendation_report_response(
+    _saved_v2_report(),
+    db=db,
+    settings=Settings(s3_bucket_name="assets"),
+  )
+
+  expected_calls = {"read": 1, "detect": 0 if failure_mode == "s3" else 1}
+  assert calls == expected_calls
+  assert len(db.persisted) == 2
+  for response in (first_response, second_response):
+    look = response["recommendation"]["looks"][0]
+    assert look["imageUrl"] == "https://cdn.example.com/legacy-anchor.webp"
+    provenance = look["imageAsset"]["provenance"]
+    assert provenance["modelId"] == "gpt-image-2"
+    marker = provenance[makeup_api.MAKEUP_CROP_BACKFILL_MARKER_KEY]
+    assert marker == {
+      "version": makeup_api.MAKEUP_CROP_BACKFILL_MARKER_VERSION,
+      "status": expected_status,
+      "attemptedAt": "2026-07-18T00:00:00Z",
+      "retryAfter": expected_retry_after,
+    }
+    assert "cropMetadata" not in provenance
+    assert "landmark" not in json.dumps(provenance).lower()
+
+
+@pytest.mark.asyncio
+async def test_legacy_crop_backfill_stale_terminal_marker_is_retried(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  fixed_now = datetime(2026, 7, 18, 0, 0, tzinfo=timezone.utc)
+  stale_marker = {
+    "version": makeup_api.MAKEUP_CROP_BACKFILL_MARKER_VERSION,
+    "status": "no-face",
+    "attemptedAt": "2026-07-01T00:00:00Z",
+    "retryAfter": "2026-07-08T00:00:00Z",
+  }
+  crop_metadata = {
+    "version": "makeup-face-crops-v1",
+    "imageSize": {"width": 768, "height": 1024},
+    "areas": {},
+  }
+  db = _CropBackfillDB([
+    _legacy_crop_asset(
+      provenance={
+        "modelId": "gpt-image-2",
+        makeup_api.MAKEUP_CROP_BACKFILL_MARKER_KEY: stale_marker,
+      },
+    ),
+  ])
+  calls = {"read": 0, "detect": 0}
+
+  def fake_get_object_bytes(self, *, bucket, object_key, max_bytes=None):
+    calls["read"] += 1
+    return b"legacy-generated-image", "image/webp"
+
+  def fake_extract(image_bytes):
+    calls["detect"] += 1
+    assert image_bytes == b"legacy-generated-image"
+    return crop_metadata
+
+  monkeypatch.setattr(makeup_api, "_crop_backfill_now", lambda: fixed_now)
+  monkeypatch.setattr(makeup_api.S3Service, "get_object_bytes", fake_get_object_bytes)
+  monkeypatch.setattr(makeup_api, "extract_makeup_face_crop_metadata", fake_extract)
+
+  response = await makeup_api._recommendation_report_response(
+    _saved_v2_report(),
+    db=db,
+    settings=Settings(s3_bucket_name="assets"),
+  )
+
+  assert calls == {"read": 1, "detect": 1}
+  assert len(db.persisted) == 2
+  assert json.loads(db.persisted[0][1][4]) == stale_marker
+  provenance = response["recommendation"]["looks"][0]["imageAsset"]["provenance"]
+  assert provenance["cropMetadata"] == crop_metadata
+  assert provenance[makeup_api.MAKEUP_CROP_BACKFILL_MARKER_KEY]["status"] == "completed"
+  assert "landmark" not in json.dumps(provenance).lower()
+
+
+@pytest.mark.asyncio
+async def test_detail_get_only_backfills_anchor_asset(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  fixed_now = datetime(2026, 7, 18, 0, 0, tzinfo=timezone.utc)
+  db = _CropBackfillDB([
+    _legacy_crop_asset(look_id="bold", provenance={"modelId": "gpt-image-2"}),
+    _legacy_crop_asset(look_id="anchor", provenance={"modelId": "gpt-image-2"}),
+  ])
+  reads: list[str] = []
+
+  def fake_get_object_bytes(self, *, bucket, object_key, max_bytes=None):
+    reads.append(object_key)
+    return b"legacy-generated-image", "image/webp"
+
+  monkeypatch.setattr(makeup_api, "_crop_backfill_now", lambda: fixed_now)
+  monkeypatch.setattr(makeup_api.S3Service, "get_object_bytes", fake_get_object_bytes)
+  monkeypatch.setattr(makeup_api, "extract_makeup_face_crop_metadata", lambda _bytes: None)
+
+  response = await makeup_api._recommendation_report_response(
+    _saved_v2_report(
+      looks=[
+        {"id": "bold", "role": "bold"},
+        {"id": "anchor", "role": "anchor"},
+      ],
+    ),
+    db=db,
+    settings=Settings(s3_bucket_name="assets"),
+  )
+
+  assert reads == ["uploads/generated-makeup-recommendations/legacy/anchor.webp"]
+  assert [args[1] for _query, args in db.persisted] == ["anchor", "anchor"]
+  looks = {look["id"]: look for look in response["recommendation"]["looks"]}
+  assert makeup_api.MAKEUP_CROP_BACKFILL_MARKER_KEY not in (
+    looks["bold"]["imageAsset"]["provenance"]
+  )
+  assert looks["anchor"]["imageAsset"]["provenance"][
+    makeup_api.MAKEUP_CROP_BACKFILL_MARKER_KEY
+  ]["status"] == "no-face"
+
+
+@pytest.mark.asyncio
+async def test_detail_get_backfills_first_result_when_anchor_is_missing(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  fixed_now = datetime(2026, 7, 18, 0, 0, tzinfo=timezone.utc)
+  db = _CropBackfillDB([
+    _legacy_crop_asset(look_id="bold", provenance={"modelId": "gpt-image-2"}),
+    _legacy_crop_asset(look_id="discovery", provenance={"modelId": "gpt-image-2"}),
+  ])
+  reads: list[str] = []
+
+  def fake_get_object_bytes(self, *, bucket, object_key, max_bytes=None):
+    reads.append(object_key)
+    return b"legacy-generated-image", "image/webp"
+
+  monkeypatch.setattr(makeup_api, "_crop_backfill_now", lambda: fixed_now)
+  monkeypatch.setattr(makeup_api.S3Service, "get_object_bytes", fake_get_object_bytes)
+  monkeypatch.setattr(makeup_api, "extract_makeup_face_crop_metadata", lambda _bytes: None)
+
+  await makeup_api._recommendation_report_response(
+    _saved_v2_report(
+      looks=[
+        {"id": "discovery", "role": "discovery"},
+        {"id": "bold", "role": "bold"},
+      ],
+    ),
+    db=db,
+    settings=Settings(s3_bucket_name="assets"),
+  )
+
+  assert reads == ["uploads/generated-makeup-recommendations/legacy/discovery.webp"]
+  assert [args[1] for _query, args in db.persisted] == [
+    "discovery",
+    "discovery",
+  ]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_detail_gets_share_single_crop_backfill_claim(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  fixed_now = datetime(2026, 7, 18, 0, 0, tzinfo=timezone.utc)
+  db = _CropBackfillDB([
+    _legacy_crop_asset(provenance={"modelId": "gpt-image-2"}),
+  ])
+  calls = {"read": 0, "detect": 0}
+
+  def fake_get_object_bytes(self, *, bucket, object_key, max_bytes=None):
+    calls["read"] += 1
+    return b"legacy-generated-image", "image/webp"
+
+  def fake_extract(image_bytes):
+    calls["detect"] += 1
+    assert image_bytes == b"legacy-generated-image"
+    return None
+
+  monkeypatch.setattr(makeup_api, "_crop_backfill_now", lambda: fixed_now)
+  monkeypatch.setattr(makeup_api.S3Service, "get_object_bytes", fake_get_object_bytes)
+  monkeypatch.setattr(makeup_api, "extract_makeup_face_crop_metadata", fake_extract)
+
+  responses = await asyncio.gather(
+    makeup_api._recommendation_report_response(
+      _saved_v2_report(),
+      db=db,
+      settings=Settings(s3_bucket_name="assets"),
+    ),
+    makeup_api._recommendation_report_response(
+      _saved_v2_report(),
+      db=db,
+      settings=Settings(s3_bucket_name="assets"),
+    ),
+  )
+
+  assert calls == {"read": 1, "detect": 1}
+  assert len(db.persisted) == 2
+  assert db.provenance_by_look["anchor"][
+    makeup_api.MAKEUP_CROP_BACKFILL_MARKER_KEY
+  ]["status"] == "no-face"
+  for response in responses:
+    look = response["recommendation"]["looks"][0]
+    assert look["imageUrl"] == "https://cdn.example.com/legacy-anchor.webp"
+    assert look["imageAsset"]["provenance"]["modelId"] == "gpt-image-2"
+    assert "landmark" not in json.dumps(
+      look["imageAsset"]["provenance"],
+    ).lower()
+
+
 @pytest.mark.asyncio
 async def test_private_v2_report_uses_fresh_signed_delivery_url(
   monkeypatch: pytest.MonkeyPatch,
@@ -1478,12 +2048,31 @@ async def test_private_v2_report_uses_fresh_signed_delivery_url(
     "schema_version": "makeup-recommendation-v2",
     "recommendation": {
       "contextSummary": ["조건"],
+      "generationSource": "claude",
       "looks": [{"id": "anchor", "role": "anchor"}],
     },
     "context_snapshot": {
       "analysisReport": {
         "id": str(ANALYSIS_REPORT_ID),
         "sourceMediaId": "must-not-leak",
+        "recommendedMood": "retired mood",
+        "baseMakeupGuide": "retired base guide",
+        "makeupGuideline": {"brow": "retired root brow"},
+        "summary": "retired summary",
+        "shortSummary": "retired short summary",
+        "tags": ["retired tag"],
+        "recommendedMakeups": [{"title": "retired look"}],
+        "facePointGuide": {"eye": "retired point"},
+        "detail": {
+          "baseMakeupGuide": "retired detail base",
+          "recommendedMood": "retired detail mood",
+          "summary": "retired detail summary",
+          "shortSummary": "retired detail short",
+          "tags": ["retired detail tag"],
+          "makeupGuideline": {"brow": "retired brow", "base": "retired alias"},
+          "recommendedMakeups": [{"title": "retired detail look"}],
+          "facePointGuide": {"lip": "retired detail point"},
+        },
       },
     },
   }
@@ -1502,6 +2091,24 @@ async def test_private_v2_report_uses_fresh_signed_delivery_url(
     "rightsStatus": "source-owner-verified",
   }
   assert response["context_snapshot"]["analysisReport"].get("sourceMediaId") is None
+  assert response["generationSource"] == "claude"
+  sanitized_analysis = response["context_snapshot"]["analysisReport"]
+  assert "recommendedMood" not in sanitized_analysis
+  assert "baseMakeupGuide" not in sanitized_analysis
+  assert "makeupGuideline" not in sanitized_analysis
+  assert "recommendedMakeups" not in sanitized_analysis
+  assert "facePointGuide" not in sanitized_analysis
+  assert "summary" not in sanitized_analysis
+  assert "shortSummary" not in sanitized_analysis
+  assert "tags" not in sanitized_analysis
+  assert "makeupGuideline" not in sanitized_analysis["detail"]
+  assert "recommendedMakeups" not in sanitized_analysis["detail"]
+  assert "facePointGuide" not in sanitized_analysis["detail"]
+  assert "baseMakeupGuide" not in sanitized_analysis["detail"]
+  assert "recommendedMood" not in sanitized_analysis["detail"]
+  assert "summary" not in sanitized_analysis["detail"]
+  assert "shortSummary" not in sanitized_analysis["detail"]
+  assert "tags" not in sanitized_analysis["detail"]
   assert saved["recommendation"]["looks"][0].get("imageUrl") is None
   assert captured == {
     "bucket": "private-bucket",
@@ -1509,6 +2116,56 @@ async def test_private_v2_report_uses_fresh_signed_delivery_url(
     "expiresIn": 900,
   }
 
+
+@pytest.mark.asyncio
+async def test_private_v2_presign_failure_returns_delivery_unavailable(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  class DB:
+    async def fetch(self, _query: str, *_args):
+      return [
+        {
+          "look_id": "anchor",
+          "role": "anchor",
+          "status": "completed",
+          "image_url": None,
+          "storage_bucket": "private-bucket",
+          "object_key": "private/makeup/anchor.webp",
+          "content_type": "image/webp",
+          "is_private": True,
+          "input_media_id": None,
+          "model_id": "gpt-image-2",
+          "prompt_version": "makeup-image-v2",
+          "provenance": {},
+        },
+      ]
+
+  def failed_signed_url(self, *, bucket, object_key, expires_in):
+    raise RuntimeError("expired storage credentials")
+
+  monkeypatch.setattr(
+    "app.services.s3.S3Service.create_presigned_download",
+    failed_signed_url,
+  )
+  saved = {
+    "id": RECOMMENDATION_REPORT_ID,
+    "schema_version": "makeup-recommendation-v2",
+    "recommendation": {
+      "contextSummary": ["조건"],
+      "looks": [{"id": "anchor", "role": "anchor"}],
+    },
+    "context_snapshot": {},
+  }
+
+  with pytest.raises(AppError) as exc_info:
+    await makeup_api._recommendation_report_response(
+      saved,
+      db=DB(),
+      settings=Settings(makeup_private_url_ttl_seconds=900),
+    )
+
+  assert exc_info.value.status_code == 503
+  assert exc_info.value.code == "MAKEUP_IMAGE_DELIVERY_UNAVAILABLE"
 
 def test_single_look_retry_claims_and_dispatches_only_that_look(
   monkeypatch: pytest.MonkeyPatch,
@@ -1633,11 +2290,15 @@ def test_v2_refinement_initializes_pending_assets(monkeypatch: pytest.MonkeyPatc
   async def fake_generate(*_args, **_kwargs):
     return _v2_recommendation()
 
+  async def fake_enrich(_db, _settings, recommendation, *_args):
+    return recommendation
+
   async def fake_dispatch(**_kwargs):
     return "pending"
 
   monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
   monkeypatch.setattr(makeup_api, "generate_recommendation_v2", fake_generate)
+  monkeypatch.setattr(makeup_api, "enrich_makeup_recommendation_products", fake_enrich)
   monkeypatch.setattr(makeup_api, "dispatch_recommendation_image_job", fake_dispatch)
 
   response = TestClient(app).post(
@@ -1758,6 +2419,26 @@ def test_disabled_trend_flag_returns_only_curated_fallback(
   assert not any("makeup_situations" in query for query in db.queries)
 
 
+def test_failed_generic_image_report_recovers_personalized_request_from_context() -> None:
+  source_media_id = '44444444-4444-4444-4444-444444444444'
+  report = {
+    'image_mode': 'generic',
+    'context_snapshot': {
+      'image': {
+        'requestedMode': 'personalized',
+        'effectiveMode': 'personalized',
+        'personalizedConsent': True,
+      },
+      'analysisReport': {'sourceMediaId': source_media_id},
+    },
+  }
+
+  assert makeup_api._personalized_retry_context(report) == (True, source_media_id)
+
+  report['context_snapshot']['image']['personalizedConsent'] = False
+  assert makeup_api._personalized_retry_context(report) == (False, source_media_id)
+
+
 @pytest.mark.asyncio
 async def test_v2_image_job_persists_anchor_first_parallelizes_remaining_and_avoids_stale_json(
   monkeypatch: pytest.MonkeyPatch,
@@ -1781,7 +2462,7 @@ async def test_v2_image_job_persists_anchor_first_parallelizes_remaining_and_avo
         for role in ("anchor", "bold", "discovery")
       }
       self.executed: list[tuple[str, tuple]] = []
-      self.fell_back_to_generic = False
+      self.persisted_image_modes: list[str] = []
       self.report_states: list[str] = []
 
     async def fetchrow(self, query: str, *args):
@@ -1831,8 +2512,9 @@ async def test_v2_image_job_persists_anchor_first_parallelizes_remaining_and_avo
 
     async def execute(self, query: str, *args):
       self.executed.append((query, args))
-      if "set image_mode = 'generic'" in query:
-        self.fell_back_to_generic = True
+      if "set image_mode = $3" in query:
+        self.persisted_image_modes.append(str(args[2]))
+        events.append(f"mode:{args[2]}")
       elif "image_status = case" in query:
         self.report_states.append(str(args[1]))
       return "UPDATE 1"
@@ -1887,11 +2569,12 @@ async def test_v2_image_job_persists_anchor_first_parallelizes_remaining_and_avo
     db=db,
   )
 
-  assert db.fell_back_to_generic is True
+  assert db.persisted_image_modes == ["personalized", "generic", "generic", "generic"]
   assert modes == ["generic", "generic", "generic"]
   assert attempts == [1, 1, 1]
   assert all(asset["attempt_count"] == 1 for asset in db.assets.values())
   assert events.index("persist:anchor") < events.index("start:bold")
+  assert events.index("persist:anchor") < events.index("mode:generic")
   assert events.index("start:bold") < events.index("finish:discovery")
   assert events.index("start:discovery") < events.index("finish:bold")
   assert db.report_states[-1] == "completed"
@@ -1991,7 +2674,11 @@ async def test_stale_retry_worker_cannot_overwrite_latest_attempt(
 
     async def execute(self, query: str, *args):
       self.queries.append(query)
-      if "set image_status = 'processing'" in query or "image_status = case" in query:
+      if (
+        "set image_status = 'processing'" in query
+        or "image_status = case" in query
+        or "set image_mode = $3" in query
+      ):
         return "UPDATE 1"
       raise AssertionError(query)
 

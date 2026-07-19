@@ -3,14 +3,17 @@ from typing import Any, Literal
 from uuid import UUID
 
 from app.core.errors import AppError
+from app.services.makeup_recommendation_measurements import (
+  compile_makeup_measurement_insights,
+)
 from app.services.makeup_recommendation_prompt import INPUT_PRIORITY
 
 
-SAFE_DETAIL_FIELDS = (
-  "makeupGuideline",
-  "recommendedMakeups",
-  "facePointGuide",
-)
+# Precomputed makeup advice from a face-analysis report must not steer a new
+# situation-specific recommendation. Structural/color/skin facts are projected
+# explicitly below; no free-form report detail is allowlisted here.
+SAFE_DETAIL_FIELDS: tuple[str, ...] = ()
+ANALYSIS_INPUT_POLICY_VERSION = "objective-analysis-v1"
 
 
 MakeupProfileGender = Literal["female", "male", "unspecified"]
@@ -117,8 +120,7 @@ async def fetch_owned_completed_analysis_report(
     """
     select r.id, r.user_id, r.status, r.source_media_id, r.analyzed_at, r.created_at,
            r.title, r.report_title, r.personal_color, r.face_shape, r.skin_type,
-           r.tone_summary, r.recommended_mood, r.summary, r.short_summary,
-           r.skin_analysis_summary, r.base_makeup_guide, r.tags, r.detail_payload,
+           r.tone_summary, r.skin_analysis_summary, r.detail_payload,
            source_media.id as valid_source_media_id
     from analysis_reports r
     left join media_assets source_media
@@ -144,13 +146,14 @@ async def fetch_owned_completed_analysis_report(
 
 def compile_analysis_snapshot(report: dict[str, Any]) -> dict[str, Any]:
   detail_payload = _json_object(report.get("detail_payload"))
+  request = _json_object(detail_payload.get("request"))
   result = _json_object(detail_payload.get("result")) or detail_payload
   detail = {
     field: bounded
     for field in SAFE_DETAIL_FIELDS
     if (bounded := _bounded_detail(result.get(field))) not in (None, {}, [])
   }
-  return {
+  snapshot = {
     "id": str(report["id"]),
     "title": _clean_text(report.get("report_title") or report.get("title"), 160),
     "analyzedAt": str(report.get("analyzed_at") or report.get("created_at") or "") or None,
@@ -158,15 +161,14 @@ def compile_analysis_snapshot(report: dict[str, Any]) -> dict[str, Any]:
     "faceShape": _clean_text(report.get("face_shape"), 120),
     "skinType": _clean_text(report.get("skin_type"), 120),
     "toneSummary": _clean_text(report.get("tone_summary"), 240),
-    "recommendedMood": _clean_text(report.get("recommended_mood"), 160),
-    "summary": _clean_text(report.get("summary"), 500),
-    "shortSummary": _clean_text(report.get("short_summary"), 300),
     "skinAnalysisSummary": _clean_text(report.get("skin_analysis_summary"), 400),
-    "baseMakeupGuide": _clean_text(report.get("base_makeup_guide"), 400),
-    "tags": _clean_string_list(report.get("tags")),
     "detail": detail,
     "sourceMediaId": str(report.get("valid_source_media_id") or "") or None,
   }
+  measurement_insights = compile_makeup_measurement_insights(request.get("measurements"))
+  if measurement_insights:
+    snapshot["measurementInsights"] = measurement_insights
+  return snapshot
 
 
 def compile_context_snapshot(
@@ -198,6 +200,7 @@ def compile_context_snapshot(
   }
   return {
     "schemaVersion": "makeup-recommendation-context-v2",
+    "analysisInputPolicyVersion": ANALYSIS_INPUT_POLICY_VERSION,
     "analysisReport": analysis,
     "profile": compile_profile_snapshot(profile_gender),
     "selection": selection,
