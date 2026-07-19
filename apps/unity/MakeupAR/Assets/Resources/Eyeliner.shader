@@ -24,7 +24,7 @@ Shader "ARMakeup/Eyeliner"
     {
         _EyelinerColor ("Eyeliner Color", Color) = (0.1, 0.09, 0.11, 1)
         _EyelinerIntensity ("Eyeliner Intensity", Range(0, 1)) = 0.0
-        _EyelinerTexture ("Texture (0 liquid 1 gel 2 pencil)", Float) = 0
+        _EyelinerTexture ("Texture (0 liquid 1 gel 2 pencil 3 brush pen)", Float) = 0
         _EyelinerSegment ("Segment (0 full 1 tail 2 front+tail 3 pupil)", Float) = 0
         _EyelinerFinish ("Finish (0 satin 1 matte 2 gloss 3 pearl)", Float) = 0
         // ── 제형 스튜디오(#21·W2) — 위 제형 enum(_EyelinerTexture 리퀴드/젤/펜슬)의 레거시
@@ -164,7 +164,7 @@ Shader "ARMakeup/Eyeliner"
                     // 젤 = 가장자리 소프트(지수 완화) + 피크 낮춤(소프트매트 질감)
                     profile = pow(lineA, GEL_EDGE_POW) * GEL_PEAK;
                 }
-                else
+                else if (_EyelinerTexture < 2.5)
                 {
                     // 펜슬 = 리본 공간 셀 해시 그레인. 같은 노이즈로 (1) 가장자리
                     // 컷오프를 흔들어 경계를 부스러뜨리고 (2) 몸통 알파를 깎아 입자감.
@@ -172,6 +172,16 @@ Shader "ARMakeup/Eyeliner"
                                                   lineA * PENCIL_GRAIN_ACROSS)));
                     float rough = saturate(lineA - PENCIL_EDGE_ROUGH * g * (1.0 - lineA));
                     profile = rough * PENCIL_PEAK * lerp(1.0 - PENCIL_GRAIN_DEPTH, 1.0, g);
+                }
+                else
+                {
+                    // 붓펜 = 리퀴드 알파 기반 + 약한(0.15) 붓결 + 윙 팁 테이퍼 강화.
+                    float brushGrain = Hash21(floor(float2(t * PENCIL_GRAIN_ALONG,
+                                                           lineA * PENCIL_GRAIN_ACROSS)));
+                    float brushRoughness = 0.15;
+                    float brushEdge = saturate(lineA - brushRoughness * brushGrain * (1.0 - lineA));
+                    float tipTaper = 1.0 - smoothstep(1.05, 1.30, t);
+                    profile = brushEdge * tipTaper;
                 }
 
                 // ── 부분 모양: t 구간 마스크 (0=전체는 마스크 1) ──

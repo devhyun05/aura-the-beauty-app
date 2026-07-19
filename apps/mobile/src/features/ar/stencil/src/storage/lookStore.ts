@@ -17,10 +17,20 @@ import type {
   LensLayer,
   OverlayLayer,
 } from '../bridge/types';
+import {
+  migrateLegacyLowerEyeshadowShape,
+  normalizeEyeshadowShape,
+} from '../bridge/eyeshadowShape';
 import type { LookLibrary, LookSnapshot } from '../composer/lookTree';
 import type { UserWarpFilter, WarpParams } from '../composer/warpPresets';
 import type { FitSheet } from '../composer/fitSheets';
+import {
+  AUTO_FIT_METRIC_KEYS,
+  AUTO_FIT_OUTPUT_RULES,
+} from '../composer/autoFit';
+import type {AutoFitMetricKey} from '../composer/autoFit';
 import type { ProductDef } from '../composer/products';
+import { prepareProductsForSave } from '../composer/products';
 import { extractWarp } from '../composer/warpPresets';
 
 const STYLES_KEY = 'armakeup.userStyles.v2';
@@ -28,6 +38,7 @@ const LEGACY_STYLES_KEY = 'armakeup.userStyles.v1';
 const LIBRARY_KEY = 'armakeup.lookLibrary.v1';
 const WARP_KEY = 'armakeup.fitFilters.v1';
 const FIT_SHEETS_KEY = 'armakeup.fitSheets.v1';
+const AUTO_FIT_KEY = 'armakeup.autoFit.v1';
 const USER_PRODUCTS_KEY = 'armakeup.userProducts.v1';
 
 /** 내 룩 저장물 — 메이크업 레인 단독(레인 분리 저장). 타입명 V2는 스토리지 스키마 호환용. */
@@ -64,14 +75,124 @@ let libMirror: LookLibrary | null = null;
 let warpMirror: UserWarpFilter[] | null = null;
 
 function isStyleV2(v: any): v is UserStyleV2 {
+  const compiled = v?.compiled;
+  const params = compiled?.params;
+  const eyeshadowLayers = compiled?.eyeshadowLayers;
   return (
     !!v &&
     typeof v.id === 'string' &&
     typeof v.name === 'string' &&
-    !!v.compiled &&
-    typeof v.compiled === 'object' &&
-    Array.isArray(v.compiled.overlayLayers)
+    !!compiled &&
+    typeof compiled === 'object' &&
+    !!params &&
+    typeof params === 'object' &&
+    !Array.isArray(params) &&
+    Array.isArray(compiled.overlayLayers) &&
+    (eyeshadowLayers === undefined ||
+      (Array.isArray(eyeshadowLayers) &&
+        eyeshadowLayers.every(
+          (layer: unknown) => !!layer && typeof layer === 'object' && !Array.isArray(layer),
+        )))
   );
+}
+
+/** 트리 없는 저장 룩의 compiled fast-path가 브리지로 직행하기 전 모양 ID를 정규화한다. */
+function normalizeStyleEyeshadowShapes(style: UserStyleV2): UserStyleV2 {
+  const params = style.compiled.params;
+  const stored = style.compiled.eyeshadowLayers;
+  const legacyLayers: EyeshadowLayer[] = [];
+  if (!Array.isArray(stored) || stored.length === 0) {
+    if ((params.eyeshadowIntensity ?? 0) > 0) {
+      const profile = normalizeEyeshadowShape(params.eyeshadowShape);
+      legacyLayers.push({
+        surface: 0, profile, shape: profile,
+        color: params.eyeshadowColor, color2: params.eyeshadowColor2 ?? params.eyeshadowColor,
+        intensity: Math.min(1.5, Math.max(0, params.eyeshadowIntensity)),
+        finish: params.eyeshadowFinish ?? 0, gradient: params.eyeshadowGradient ?? 0,
+        height: params.eyeshadowHeight ?? 1, shimmer: params.eyeshadowShimmer ?? .5,
+        texture: params.eyeshadowTexture ?? -1, glossLo: params.eyeshadowGlossLo ?? 0,
+        glossGain: params.eyeshadowGlossGain ?? 0, shimmerSize: params.eyeshadowShimmerSize ?? 0,
+        shimmerDensity: params.eyeshadowShimmerDensity ?? 0, matte: params.eyeshadowMatte ?? 0,
+        sheen: params.eyeshadowSheen ?? 0, particleSize: params.eyeshadowParticleSize ?? 0,
+        particleDensity: params.eyeshadowParticleDensity ?? 0,
+        material: params.eyeshadowMaterial ?? 0,
+        materialStrength: params.eyeshadowMaterialStrength ?? .85,
+        particleBrightness: params.eyeshadowParticleBrightness ?? .7,
+        particleColor: params.eyeshadowParticleColor ?? '#FFF2D9',
+        particleTwinkle: params.eyeshadowParticleTwinkle ?? 1,
+        particleShape: params.eyeshadowParticleShape ?? 0,
+        particleFeather: params.eyeshadowParticleFeather ?? 0,
+        particleParallax: params.eyeshadowParticleParallax ?? 0,
+        particleConfetti: params.eyeshadowParticleConfetti ?? 0,
+      });
+    }
+  }
+  let eyeshadowLayers = (Array.isArray(stored) && stored.length > 0 ? stored : legacyLayers)
+    .slice(0, 8)
+    .map<EyeshadowLayer>(layer => ({
+      ...layer,
+      surface: layer.surface === 1 || layer.surface === 2 ? layer.surface : 0,
+      profile: normalizeEyeshadowShape(layer.profile ?? layer.shape),
+      shape: normalizeEyeshadowShape(layer.profile ?? layer.shape),
+      intensity: Math.min(1.5, Math.max(0, Number.isFinite(layer.intensity) ? layer.intensity : 0)),
+      material: Number.isFinite(layer.material) ? Math.min(4, Math.max(0, layer.material!)) : 0,
+      materialStrength: Number.isFinite(layer.materialStrength) ? layer.materialStrength : .85,
+      particleSize: Number.isFinite(layer.particleSize) ? layer.particleSize : 0,
+      particleDensity: Number.isFinite(layer.particleDensity) ? layer.particleDensity : 0,
+      particleBrightness: Number.isFinite(layer.particleBrightness) ? layer.particleBrightness : .7,
+      particleColor:
+        typeof layer.particleColor === 'string' && layer.particleColor.length > 0
+          ? layer.particleColor
+          : '#FFF2D9',
+      particleTwinkle: Number.isFinite(layer.particleTwinkle) ? layer.particleTwinkle : 1,
+      particleShape: Number.isFinite(layer.particleShape) ? layer.particleShape : 0,
+      particleFeather: Number.isFinite(layer.particleFeather) ? layer.particleFeather : 0,
+      particleParallax: Number.isFinite(layer.particleParallax) ? layer.particleParallax : 0,
+      particleConfetti: Number.isFinite(layer.particleConfetti) ? layer.particleConfetti : 0,
+    }));
+  if ((params.eyeshadowLowerIntensity ?? 0) > 0 &&
+      !eyeshadowLayers.some(layer => layer.surface === 1 || layer.surface === 2)) {
+    const profile = migrateLegacyLowerEyeshadowShape(params.eyeshadowLowerShape);
+    const lowerLayer: EyeshadowLayer = {
+      surface: 1, profile, shape: profile,
+      color: params.eyeshadowLowerColor ?? '#7A5A4E',
+      color2: params.eyeshadowLowerColor ?? '#7A5A4E',
+      intensity: Math.min(1.5, Math.max(0, params.eyeshadowLowerIntensity ?? 0)),
+      finish: params.eyeshadowLowerFinish ?? 0, gradient: 0,
+      height: params.eyeshadowLowerHeight ?? 1, shimmer: params.eyeshadowLowerShimmer ?? .5,
+      texture: params.eyeshadowLowerTexture ?? -1, glossLo: 0, glossGain: 0,
+      shimmerSize: 0, shimmerDensity: 0, matte: 0, sheen: 0,
+      particleSize: 0, particleDensity: 0,
+      material: 0, materialStrength: .85,
+      particleBrightness: .7, particleColor: '#FFF2D9', particleTwinkle: 1,
+      particleShape: 0, particleFeather: 0, particleParallax: 0,
+      particleConfetti: 0,
+    };
+    if (eyeshadowLayers.length >= 8) eyeshadowLayers = eyeshadowLayers.slice(0, 7);
+    eyeshadowLayers.push(lowerLayer);
+  }
+  const hasExplicitEyelinerProfiles =
+    Object.prototype.hasOwnProperty.call(params, 'eyelinerThicknessProfile') ||
+    Object.prototype.hasOwnProperty.call(params, 'eyelinerTailProfile');
+  const eyelinerHasGeometryProfiles = params.eyelinerHasGeometryProfiles === undefined
+    ? (hasExplicitEyelinerProfiles ? 1 : 0)
+    : (params.eyelinerHasGeometryProfiles > 0 ? 1 : 0);
+  return {
+    ...style,
+    compiled: {
+      ...style.compiled,
+      params: {
+        ...style.compiled.params,
+        eyeshadowShape: normalizeEyeshadowShape(style.compiled.params.eyeshadowShape),
+        eyelinerHasGeometryProfiles,
+      },
+      ...(eyeshadowLayers.length > 0
+        ? {
+            eyeshadowLayers,
+          }
+        : {}),
+    },
+  };
 }
 
 async function readJson(key: string): Promise<any> {
@@ -155,13 +276,16 @@ export async function loadUserStylesV2(): Promise<UserStyleV2[]> {
   if (styleMirror) return styleMirror;
   const v2 = await readJson(STYLES_KEY);
   if (Array.isArray(v2)) {
-    styleMirror = await splitWarpLane(v2.filter(isStyleV2));
+    styleMirror = await splitWarpLane(
+      v2.filter(isStyleV2).map(normalizeStyleEyeshadowShapes),
+    );
     return styleMirror;
   }
   // v1 마이그레이션 — 성공 시 v2 키로 다시 쓰고 v1은 남겨둔다(롤백 안전).
   const v1 = await readJson(LEGACY_STYLES_KEY);
   const migrated = Array.isArray(v1)
     ? (v1.map(migrateV1).filter(Boolean) as UserStyleV2[])
+        .map(normalizeStyleEyeshadowShapes)
     : [];
   if (migrated.length > 0) await writeJson(STYLES_KEY, migrated);
   styleMirror = await splitWarpLane(migrated);
@@ -169,8 +293,8 @@ export async function loadUserStylesV2(): Promise<UserStyleV2[]> {
 }
 
 export async function saveUserStylesV2(styles: UserStyleV2[]): Promise<void> {
-  styleMirror = styles;
-  await writeJson(STYLES_KEY, styles);
+  styleMirror = styles.map(normalizeStyleEyeshadowShapes);
+  await writeJson(STYLES_KEY, styleMirror);
 }
 
 /** 사용자 룩 라이브러리(승격·원본반영된 정의). 시스템 정의와 합쳐 쓴다. */
@@ -218,12 +342,53 @@ export interface FitSheetsStore {
 }
 
 let fitSheetsMirror: FitSheetsStore | null = null;
+let fitSheetsRevision = 0;
+let fitSheetsWriteQueue: Promise<void> = Promise.resolve();
+
+/**
+ * 구 핏시트의 대칭 굵기 델타를 상·하 엣지 델타로 무손실 이관한다.
+ * applyFitToLayers에서 browThickness는 기준 1에 가산되므로 d만큼 늘어난 전체 폭은
+ * 위/아래 각각 d/2씩 확장한 것과 같다. 신규 값이 이미 있으면 그것을 우선하고,
+ * legacy 키만 제거해 재실행해도 결과가 바뀌지 않는다.
+ */
+function migrateBrowCoverageFitSheets(sheets: FitSheet[]): FitSheet[] {
+  let changed = false;
+  const next = sheets.map(sheet => {
+    let sheetChanged = false;
+    const entries = sheet.entries.map(entry => {
+      const rules = entry.rules;
+      const legacy = rules?.browThickness;
+      if (
+        !entry.region.startsWith('brow') ||
+        typeof legacy !== 'number' ||
+        !Number.isFinite(legacy)
+      ) {
+        return entry;
+      }
+      const edge = Math.max(-0.25, Math.min(0.75, legacy / 2));
+      const migrated = {...rules};
+      delete migrated.browThickness;
+      if (migrated.browExpandLower === undefined) migrated.browExpandLower = edge;
+      if (migrated.browExpandUpper === undefined) migrated.browExpandUpper = edge;
+      sheetChanged = true;
+      return {...entry, rules: migrated};
+    });
+    if (!sheetChanged) return sheet;
+    changed = true;
+    return {...sheet, entries};
+  });
+  return changed ? next : sheets;
+}
 
 /** 내 핏 시트 목록 + 메인 지정. */
 export async function loadFitSheets(): Promise<FitSheetsStore> {
   if (fitSheetsMirror) return fitSheetsMirror;
+  const revision = fitSheetsRevision;
   const raw = await readJson(FIT_SHEETS_KEY);
-  const sheets: FitSheet[] = Array.isArray(raw?.sheets)
+  if (revision !== fitSheetsRevision) {
+    return fitSheetsMirror ?? {sheets: [], mainId: null};
+  }
+  const loaded: FitSheet[] = Array.isArray(raw?.sheets)
     ? raw.sheets.filter(
         (s: any) =>
           !!s &&
@@ -232,23 +397,148 @@ export async function loadFitSheets(): Promise<FitSheetsStore> {
           Array.isArray(s.entries),
       )
     : [];
+  const sheets = migrateBrowCoverageFitSheets(loaded);
   const mainId =
     typeof raw?.mainId === 'string' && sheets.some(s => s.id === raw.mainId)
       ? raw.mainId
       : null;
-  fitSheetsMirror = { sheets, mainId };
-  return fitSheetsMirror;
+  const store = {sheets, mainId};
+  fitSheetsMirror = store;
+  if (sheets !== loaded) {
+    await saveFitSheets(store);
+    return fitSheetsMirror ?? store;
+  }
+  return store;
 }
 
 export async function saveFitSheets(store: FitSheetsStore): Promise<void> {
-  fitSheetsMirror = store;
-  await writeJson(FIT_SHEETS_KEY, store);
+  const prepared = {...store, sheets: migrateBrowCoverageFitSheets(store.sheets)};
+  fitSheetsRevision++;
+  fitSheetsMirror = prepared;
+  const write = fitSheetsWriteQueue
+    .catch(() => undefined)
+    .then(() => writeJson(FIT_SHEETS_KEY, prepared));
+  fitSheetsWriteQueue = write;
+  await write;
+}
+
+/** 테스트 격리용 — 이전 테스트/렌더가 시작한 핏시트 쓰기를 모두 기다린다. */
+export async function __flushFitSheetsWrites(): Promise<void> {
+  await fitSheetsWriteQueue.catch(() => undefined);
+}
+
+// ── 자동 핏(W6) — 측정 입력과 수락된 기저 델타 ─────────────────────────────
+
+export interface StoredAutoFitInput {
+  value: number;
+  confidence: number;
+}
+
+export interface AutoFitStore {
+  measuredAt: number;
+  accepted: boolean;
+  inputs: Partial<Record<AutoFitMetricKey, StoredAutoFitInput>>;
+  deltas: FitSheet['entries'];
+}
+
+let autoFitMirror: AutoFitStore | null | undefined;
+let autoFitRevision = 0;
+let autoFitWriteQueue: Promise<void> = Promise.resolve();
+
+function normalizeAutoFit(raw: any): AutoFitStore | null {
+  if (
+    !raw ||
+    typeof raw !== 'object' ||
+    Array.isArray(raw) ||
+    typeof raw.measuredAt !== 'number' ||
+    !Number.isFinite(raw.measuredAt) ||
+    typeof raw.accepted !== 'boolean' ||
+    !raw.inputs ||
+    typeof raw.inputs !== 'object' ||
+    Array.isArray(raw.inputs) ||
+    !Array.isArray(raw.deltas)
+  ) {
+    return null;
+  }
+  const metricKeys = new Set<string>(AUTO_FIT_METRIC_KEYS);
+  const inputs: AutoFitStore['inputs'] = {};
+  for (const [key, value] of Object.entries(raw.inputs)) {
+    const input = value as any;
+    if (
+      !metricKeys.has(key) ||
+      !input ||
+      typeof input !== 'object' ||
+      Array.isArray(input) ||
+      typeof input.value !== 'number' ||
+      !Number.isFinite(input.value) ||
+      typeof input.confidence !== 'number' ||
+      !Number.isFinite(input.confidence) ||
+      input.confidence < 0 ||
+      input.confidence > 1
+    ) {
+      return null;
+    }
+    inputs[key as AutoFitMetricKey] = {
+      value: input.value,
+      confidence: input.confidence,
+    };
+  }
+  const deltas: FitSheet['entries'] = [];
+  for (const item of raw.deltas) {
+    const allowed = item && AUTO_FIT_OUTPUT_RULES[item.region as keyof typeof AUTO_FIT_OUTPUT_RULES];
+    if (
+      !allowed ||
+      item.role !== undefined ||
+      item.leafId !== undefined ||
+      !item.rules ||
+      typeof item.rules !== 'object' ||
+      Array.isArray(item.rules)
+    ) {
+      return null;
+    }
+    const rules: Record<string, number> = {};
+    for (const [key, value] of Object.entries(item.rules)) {
+      if (!allowed.includes(key) || typeof value !== 'number' || !Number.isFinite(value)) {
+        return null;
+      }
+      rules[key] = value;
+    }
+    deltas.push({region: item.region, rules});
+  }
+  return {measuredAt: raw.measuredAt, accepted: raw.accepted, inputs, deltas};
+}
+
+export async function loadAutoFit(): Promise<AutoFitStore | null> {
+  if (autoFitMirror !== undefined) return autoFitMirror;
+  const revision = autoFitRevision;
+  const loaded = normalizeAutoFit(await readJson(AUTO_FIT_KEY));
+  if (revision === autoFitRevision && autoFitMirror === undefined) {
+    autoFitMirror = loaded;
+  }
+  return autoFitMirror === undefined ? loaded : autoFitMirror;
+}
+
+export async function saveAutoFit(store: AutoFitStore): Promise<void> {
+  const prepared = normalizeAutoFit(store);
+  if (!prepared) return;
+  autoFitRevision++;
+  autoFitMirror = prepared;
+  const write = autoFitWriteQueue
+    .catch(() => undefined)
+    .then(() => writeJson(AUTO_FIT_KEY, prepared));
+  autoFitWriteQueue = write;
+  await write;
+}
+
+export async function __flushAutoFitWrites(): Promise<void> {
+  await autoFitWriteQueue.catch(() => undefined);
 }
 
 // ── 사용자 제품(§5 A12) — 채널 편집으로 저작한 커스텀 제품 라이브러리 ──────────
 // ⚠ 시중품 프리셋(SYSTEM_PRODUCTS)은 코드에서 재생성되므로 사용자 소유만 영속화한다.
 
 let userProductsMirror: ProductDef[] | null = null;
+let userProductsWriteQueue: Promise<void> = Promise.resolve();
 
 /** 내가 만든 제품 목록. 불량 항목(id·name·family 비문자열, owner≠user)은 배제. */
 export async function loadUserProducts(): Promise<ProductDef[]> {
@@ -268,8 +558,13 @@ export async function loadUserProducts(): Promise<ProductDef[]> {
 }
 
 export async function saveUserProducts(products: ProductDef[]): Promise<void> {
-  userProductsMirror = products;
-  await writeJson(USER_PRODUCTS_KEY, products);
+  const prepared = prepareProductsForSave(products);
+  userProductsMirror = prepared;
+  const write = userProductsWriteQueue
+    .catch(() => undefined)
+    .then(() => writeJson(USER_PRODUCTS_KEY, prepared));
+  userProductsWriteQueue = write;
+  await write;
 }
 
 /** 테스트용 — 미러 초기화 */
@@ -278,5 +573,11 @@ export function __resetLookStoreMirrors(): void {
   libMirror = null;
   warpMirror = null;
   fitSheetsMirror = null;
+  fitSheetsRevision++;
+  fitSheetsWriteQueue = Promise.resolve();
+  autoFitMirror = undefined;
+  autoFitRevision++;
+  autoFitWriteQueue = Promise.resolve();
   userProductsMirror = null;
+  userProductsWriteQueue = Promise.resolve();
 }

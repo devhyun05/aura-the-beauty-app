@@ -24,6 +24,8 @@ Shader "ARMakeup/BrowPowder"
         _BrowPowderTexGrain ("Fill Tex Grain (studio)", Range(0, 1)) = 0
         _BrowPowderTexCoverage ("Fill Tex Coverage (studio)", Range(-1, 1)) = 0
         _BrowPowderTexBody ("Fill Tex Body (studio)", Range(-1, 1)) = 0
+        _BrowCoverageMode ("Coverage Mode (0 legacy 1 coverage)", Float) = 0
+        _BrowCoverageDown ("Lower Coverage Expansion", Range(-0.25, 0.75)) = 0
     }
 
     SubShader
@@ -47,6 +49,8 @@ Shader "ARMakeup/BrowPowder"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
             #include "Ambient.cginc"   // 저조도 색소 바닥(BROW_KNEE) — 어둠 눈썹 발광 방지
             #include "Finish.cginc"    // 마감(ApplyFinish) 공용 — _CameraFeed도 여기서 선언
+            #include "BrowCoverage.cginc"
+            #include "BrowResponse.cginc"
 
             fixed4 _BrowColor;
             float _BrowIntensity;
@@ -61,9 +65,11 @@ Shader "ARMakeup/BrowPowder"
             float _BrowPowderTexGrain;
             float _BrowPowderTexCoverage;
             float _BrowPowderTexBody;
+            float _BrowCoverageMode;
+            float _BrowCoverageDown;
 
-            struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
-            struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 grabPos : TEXCOORD1; };
+            struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; float browSide : TEXCOORD3; };
+            struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 grabPos : TEXCOORD1; float browSide : TEXCOORD2; };
 
             v2f vert(appdata v)
             {
@@ -71,6 +77,7 @@ Shader "ARMakeup/BrowPowder"
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.uv = v.uv;
                 o.grabPos = ComputeGrabScreenPos(o.pos);
+                o.browSide = v.browSide;
                 return o;
             }
 
@@ -78,8 +85,9 @@ Shader "ARMakeup/BrowPowder"
             {
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
                 fixed3 feed = tex2D(_CameraFeed, screenUV).rgb;
-
-                float luma = dot(feed, fixed3(0.299, 0.587, 0.114));
+                float3 exposure = BrowResponseExposure(i.browSide);
+                fixed3 normalizedFeed = BrowResponseNormalizeFeed(feed, exposure);
+                float normalizedLuma = BrowResponseLuma(normalizedFeed);
                 // 제형 분기 — 채움 바닥·페더 폭·게인이 물성. 0=파우더(기존 값 그대로).
                 // 포마드: 갭까지 꽉 채우고 엣지 또렷(왁스 고정), 살짝 진함.
                 // 젤: 중간 채움 + 매끈한 중간 페더. (수치 실기기 튜닝 대상)
@@ -88,19 +96,20 @@ Shader "ARMakeup/BrowPowder"
                 if (_BrowPowderTexture > 1.5)      { fillFloor = 0.65; vFe = 0.16; hFe = 0.10; }
                 else if (_BrowPowderTexture > 0.5) { fillFloor = 0.85; vFe = 0.10; hFe = 0.07; gain = 1.1; }
                 // 털엔 100%, 피부 갭엔 fillFloor만큼 → 뿌옇게 채우되 털이 살짝 진함.
-                float hair = 1.0 - smoothstep(_HairLo, _HairHi, luma);
+                float hair = BrowResponseHair(normalizedLuma, _HairLo, _HairHi);
                 float fill = lerp(fillFloor, 1.0, hair);
 
                 // 밴드 가장자리 소프트 페더 (제형이 폭을 정함)
-                float vEdge = smoothstep(0.0, vFe, i.uv.x) * (1.0 - smoothstep(1.0 - vFe, 1.0, i.uv.x));
+                float vEdge = BrowVerticalEdge(
+                    i.uv.x, vFe, vFe, _BrowCoverageMode, _BrowCoverageDown);
                 float hEdge = smoothstep(0.0, hFe, i.uv.y) * (1.0 - smoothstep(1.0 - hFe, 1.0, i.uv.y));
 
                 float amt = saturate(fill * vEdge * hEdge * _BrowIntensity * gain);
 
-                fixed3 pigment = _BrowColor.rgb * PigmentBaseKnee(luma, 0.9, 0.4, BROW_KNEE);
+                fixed3 pigment = _BrowColor.rgb * PigmentBaseKnee(normalizedLuma, 0.9, 0.4, BROW_KNEE);
                 // 마감 — 시머(펄 브로우)·매트 등. 0=새틴=무변형(하위호환).
                 // 스파클 UV는 밴드 로컬 uv라 눈썹에 접착.
-                pigment = ApplyFinish(pigment, luma, i.uv, _BrowPowderFinish, _BrowPowderShimmer,
+                pigment = ApplyFinish(pigment, normalizedLuma, i.uv, _BrowPowderFinish, _BrowPowderShimmer,
                                       0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
 
                 // ── 제형 스튜디오(#21·W2) — 위 제형 enum(파우더/포마드/젤) 레거시 분기는 그대로
@@ -112,10 +121,11 @@ Shader "ARMakeup/BrowPowder"
                                 + abs(_BrowPowderTexCoverage) + abs(_BrowPowderTexBody);
                 if (texCustom > 1e-5)
                 {
-                    pigment = TexBody(pigment, luma, _BrowPowderTexBody);   // 발색 두께
+                    pigment = TexBody(pigment, normalizedLuma, _BrowPowderTexBody);   // 발색 두께
                     pigment = TexGrain(pigment, i.uv, _BrowPowderTexGrain); // 입자감
                     amt = TexEdge(TexCoverage(amt, _BrowPowderTexCoverage), _BrowPowderTexEdge);
                 }
+                pigment = BrowResponseReapplyExposure(pigment, exposure);
                 // §11 오클루전 — face-skin 양성 게이트(§14 화이트리스트 불필요, Occlusion.cginc 주석).
                 return fixed4(pigment, amt * OccludeGate(i.grabPos));
             }

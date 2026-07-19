@@ -33,6 +33,8 @@ namespace ARMakeup.Face
         static readonly int BlushShimmerId = Shader.PropertyToID("_BlushShimmer");
         static readonly int BlushLiftId = Shader.PropertyToID("_BlushLift");
         static readonly int BlushSpreadId = Shader.PropertyToID("_BlushSpread");
+        static readonly int BlushAffineId = Shader.PropertyToID("_BlushAffine");
+        static readonly int BlushAffineRotId = Shader.PropertyToID("_BlushAffineRot");
         // 제형 스튜디오(#21) — 블러셔 마감 세부(0=미지정=enum 기존 동작).
         static readonly int BlushGlossLoId = Shader.PropertyToID("_BlushGlossLo");
         static readonly int BlushGlossGainId = Shader.PropertyToID("_BlushGlossGain");
@@ -57,6 +59,12 @@ namespace ARMakeup.Face
         static readonly int BlushFinishMapId = Shader.PropertyToID("_BlushFinishMap");
         static readonly int BlushHasFinishMapId = Shader.PropertyToID("_BlushHasFinishMap");
         static readonly int HighlightMaskId = Shader.PropertyToID("_HighlightMask");
+        static readonly int HighlightZoneAtlas0Id = Shader.PropertyToID("_HighlightZoneAtlas0");
+        static readonly int HighlightZoneAtlas1Id = Shader.PropertyToID("_HighlightZoneAtlas1");
+        static readonly int HighlightZoneWeights0Id = Shader.PropertyToID("_HighlightZoneWeights0");
+        static readonly int HighlightZoneWeights1Id = Shader.PropertyToID("_HighlightZoneWeights1");
+        static readonly int HighlightHasZoneAtlasId = Shader.PropertyToID("_HighlightHasZoneAtlas");
+        static readonly int HighlightEdgeSoftnessId = Shader.PropertyToID("_HighlightEdgeSoftness");
         static readonly int HighlightColorId = Shader.PropertyToID("_HighlightColor");
         static readonly int HighlightIntensityId = Shader.PropertyToID("_HighlightIntensity");
         // 하이라이터/컨투어 마감 — 블러셔와 동일 enum(0 새틴=기존 출력, 하위호환).
@@ -85,6 +93,10 @@ namespace ARMakeup.Face
         static readonly int HighlightSpreadId = Shader.PropertyToID("_HighlightSpread");
         static readonly int ContourLiftId = Shader.PropertyToID("_ContourLift");
         static readonly int ContourSpreadId = Shader.PropertyToID("_ContourSpread");
+        static readonly int HighlightAffineId = Shader.PropertyToID("_HighlightAffine");
+        static readonly int HighlightAffineRotId = Shader.PropertyToID("_HighlightAffineRot");
+        static readonly int ContourAffineId = Shader.PropertyToID("_ContourAffine");
+        static readonly int ContourAffineRotId = Shader.PropertyToID("_ContourAffineRot");
         // 눈밑 존 컨실러(shape=0)는 하안검 밴드(LowerLidRenderer)로 이관(§08) —
         // 캐노니컬 _ConcealerMask 슬롯 삭제. FaceMakeup의 Color/Intensity는 붉은기
         // 자동(shape=1) 경로에서만 소비된다.
@@ -121,6 +133,8 @@ namespace ARMakeup.Face
         static readonly int FndSegHiDbgId = Shader.PropertyToID("_FndSegHiDbg");
         static readonly int FndOvalSizeDbgId = Shader.PropertyToID("_FndOvalSizeDbg");
         static readonly int FndOvalFeatherDbgId = Shader.PropertyToID("_FndOvalFeatherDbg");
+        static readonly int BlurRadiusId = Shader.PropertyToID("_BlurRadius");
+        static readonly int FndTexGrainId = Shader.PropertyToID("_FndTexGrain");
         static readonly int PowderIntensityId = Shader.PropertyToID("_PowderIntensity");
         // 컬러/펄 파우더 — ""=무색(흰색=identity)·0=새틴=기존 출력(하위호환).
         static readonly int PowderColorId = Shader.PropertyToID("_PowderColor");
@@ -209,6 +223,16 @@ namespace ARMakeup.Face
         // 질감 맵(#22) — 블러셔 광 지도(FaceMakeup 머티리얼 슬롯). 립·아이섀도 맵은 각
         // 렌더러(LipRenderer/IrisRenderer)가 소유. null=맵 없음. 소유(교체·해제 시 파기).
         Texture2D _blushFinishMap;
+        readonly RegionWarpState _regionWarpState = new RegionWarpState();
+        readonly RegionWarpRebakeQueue _blushWarpQueue = new RegionWarpRebakeQueue();
+        Texture2D _blushWarpTexture;
+        int _blushWarpShape;
+        float _blushWarpSoftness;
+        Vector4 _highlightZoneWeights0 = MaskGenerator.HighlightDefaultZoneWeights0;
+        Vector4 _highlightZoneWeights1 = MaskGenerator.HighlightDefaultZoneWeights1;
+        bool _highlightCustomMaskActive;
+        public EyeshadowLayerParams[] PendingLowerEyeshadowLayers { get; private set; } =
+            Array.Empty<EyeshadowLayerParams>();
 
         public static Material CreateMaterial()
         {
@@ -225,6 +249,7 @@ namespace ARMakeup.Face
             mat.renderQueue = MakeupQueues.Face;
             mat.SetTexture(BlushMaskId, MaskGenerator.BlushMask);
             mat.SetTexture(HighlightMaskId, MaskGenerator.HighlightMask);
+            BindHighlighterZoneAtlas(mat);
             mat.SetTexture(ContourMaskId, MaskGenerator.ContourMask);
             // 임포트 전엔 투명 텍스처라 오버레이가 얼굴을 덮지 않는다. 슬롯0 강도만 1 —
             // 단일 임포트(setFaceOverlay) 경로가 마스터 강도만으로 기존과 동일하게 돌게.
@@ -234,8 +259,58 @@ namespace ARMakeup.Face
                 mat.SetVector(OverlayTransformIds[slot], OverlayIdentity);
                 mat.SetFloat(OverlayIntensityIds[slot], slot == 0 ? 1f : 0f);
             }
-            ApplyTo(mat, new FilterParams());
+            ApplyTo(mat, FilterParams.CreateBare());
             return mat;
+        }
+
+        static void BindHighlighterZoneAtlas(Material mat)
+        {
+            if (mat == null) return;
+            mat.SetTexture(HighlightZoneAtlas0Id, MaskGenerator.HighlightZoneAtlas0);
+            mat.SetTexture(HighlightZoneAtlas1Id, MaskGenerator.HighlightZoneAtlas1);
+            mat.SetVector(HighlightZoneWeights0Id, MaskGenerator.HighlightDefaultZoneWeights0);
+            mat.SetVector(HighlightZoneWeights1Id, MaskGenerator.HighlightDefaultZoneWeights1);
+            mat.SetFloat(HighlightHasZoneAtlasId, 1f);
+        }
+
+        /// <summary>Phase B가 RN 상태를 배선할 때 사용하는 실제 6-zone material API.</summary>
+        public void SetHighlighterZoneWeights(Vector4 atlas0, Vector2 atlas1)
+        {
+            _highlightZoneWeights0 = new Vector4(
+                Mathf.Clamp01(atlas0.x), Mathf.Clamp01(atlas0.y),
+                Mathf.Clamp01(atlas0.z), Mathf.Clamp01(atlas0.w));
+            _highlightZoneWeights1 = new Vector4(
+                Mathf.Clamp01(atlas1.x), Mathf.Clamp01(atlas1.y), 0f, 0f);
+            if (_highlightCustomMaskActive) return;
+            ApplyStoredHighlighterZoneWeights();
+        }
+
+        public void ResetHighlighterZoneWeights()
+        {
+            SetHighlighterZoneWeights(
+                MaskGenerator.HighlightDefaultZoneWeights0,
+                new Vector2(MaskGenerator.HighlightDefaultZoneWeights1.x,
+                    MaskGenerator.HighlightDefaultZoneWeights1.y));
+        }
+
+        void ApplyStoredHighlighterZoneWeights()
+        {
+            if (_material == null) return;
+            _material.SetVector(HighlightZoneWeights0Id, _highlightZoneWeights0);
+            _material.SetVector(HighlightZoneWeights1Id, _highlightZoneWeights1);
+            _material.SetFloat(HighlightHasZoneAtlasId, _highlightCustomMaskActive ? 0f : 1f);
+        }
+
+        /// <summary>커스텀 마스크 중에는 weights를 상태에만 보존하고, 해제 시 그대로 복원한다.</summary>
+        public void SetHighlighterMaskOverrideActive(bool active)
+        {
+            _highlightCustomMaskActive = active;
+            if (!active && _material != null)
+            {
+                _material.SetTexture(HighlightZoneAtlas0Id, MaskGenerator.HighlightZoneAtlas0);
+                _material.SetTexture(HighlightZoneAtlas1Id, MaskGenerator.HighlightZoneAtlas1);
+            }
+            ApplyStoredHighlighterZoneWeights();
         }
 
         public void Init(Material material, ARCameraManager cameraManager, Func<bool> isTracked)
@@ -243,6 +318,10 @@ namespace ARMakeup.Face
             _material = material;
             _cameraManager = cameraManager;
             _isTracked = isTracked;
+            BindHighlighterZoneAtlas(_material);
+            _highlightZoneWeights0 = MaskGenerator.HighlightDefaultZoneWeights0;
+            _highlightZoneWeights1 = MaskGenerator.HighlightDefaultZoneWeights1;
+            _highlightCustomMaskActive = false;
 
             // 치아 미백 렌더러 부트스트랩 — 씬 구성(ARBootstrap)은 타 트랙이 사용 중이라
             // 동결. 컨트롤러는 랜드마크 렌더러들보다 나중에 생성되므로 이 시점엔
@@ -519,6 +598,14 @@ namespace ARMakeup.Face
                     {
                         ClearForkRecipeOverlays();
                         ApplyTo(_material, msg.filter);
+                        ApplyRegionWarps(msg.filter);
+                        if (msg.filter.highlightHasZoneWeights > 0)
+                            SetHighlighterZoneWeights(
+                                new Vector4(msg.filter.highlightZoneCheek, msg.filter.highlightZoneBridge,
+                                    msg.filter.highlightZoneTip, msg.filter.highlightZoneBrow),
+                                new Vector2(msg.filter.highlightZoneCupid, msg.filter.highlightZoneChin));
+                        else
+                            ResetHighlighterZoneWeights();
                         // ApplyTo가 블러셔 shape 절차 마스크를 매번 다시 세팅하므로,
                         // 임포트 마스크가 있으면 그 뒤에 재적용해 덮어쓰기를 되돌린다.
                         ReassertMaskOverrides();
@@ -584,9 +671,11 @@ namespace ARMakeup.Face
                         IrisRenderer.Instance.SetLensLayers(msg.lensLayers);
                     break;
                 case "setEyeshadowLayers":
-                    // 아이섀도 멀티밴드(A14 ①) — 아이섀도 밴드 소유자(IrisRenderer)로 라우팅.
-                    // 빈 배열은 멀티밴드 끄고 legacy 단일 밴드 스칼라 경로로 복귀.
-                    IrisRenderer.Instance?.SetEyeshadowLayers(msg.eyeshadowLayers);
+                    // 입력 전체의 첫 8장을 계약 상한으로 고정한 뒤 surface별 consumer로 분기한다.
+                    // lower consumer는 LowerLidRenderer 변경 트랙이 이어받도록 명시적 상태 훅에 둔다.
+                    var upperEyeshadow = BuildUpperEyeshadowLayerSubset(msg.eyeshadowLayers);
+                    PendingLowerEyeshadowLayers = BuildLowerEyeshadowLayerSubset(msg.eyeshadowLayers);
+                    IrisRenderer.Instance?.SetEyeshadowLayers(upperEyeshadow);
                     break;
                 case "setStencil":
                     // 튜토리얼 가이드(#2) — 부위 라인 스텐실 렌더러로 라우팅.
@@ -595,7 +684,7 @@ namespace ARMakeup.Face
                     break;
                 case "setFitHandles":
                     // 온페이스 핏 핸들(A17) — 좌표 방출 토글(터치는 RN 소관).
-                    StencilGuideRenderer.Instance?.SetFitHandlesEnabled(msg.fitHandles);
+                    StencilGuideRenderer.Instance?.SetFitHandlesEnabled(msg.fitHandles, msg.sessionId);
                     break;
                 case "setSymmetry":
                     // 좌우 대칭 가이드(#6) — 대칭 렌더러로 라우팅.
@@ -723,6 +812,8 @@ namespace ARMakeup.Face
             if (_maskOverrides[slot] != null) Destroy(_maskOverrides[slot]);
             _maskOverrides[slot] = mask;
             _material.SetTexture(MaskSlotIds[slot], mask);
+            if ((MaskRegion)slot == MaskRegion.Highlight)
+                SetHighlighterMaskOverrideActive(true);
             // 튜토리얼 가이드(#2 C) — 커스텀 마스크 경계를 추적하도록 통지.
             if (StencilGuideRenderer.Instance != null)
                 StencilGuideRenderer.Instance.SetCustomMask(slot, mask);
@@ -734,6 +825,8 @@ namespace ARMakeup.Face
         {
             if (_maskOverrides[slot] != null) { Destroy(_maskOverrides[slot]); _maskOverrides[slot] = null; }
             _material.SetTexture(MaskSlotIds[slot], DefaultMask(slot));
+            if ((MaskRegion)slot == MaskRegion.Highlight)
+                SetHighlighterMaskOverrideActive(false);
             // 캐노니컬로 복귀 — 가이드도 캐노니컬 존(B)으로 되돌린다.
             if (StencilGuideRenderer.Instance != null)
                 StencilGuideRenderer.Instance.SetCustomMask(slot, null);
@@ -745,7 +838,11 @@ namespace ARMakeup.Face
         {
             for (var slot = 0; slot < _maskOverrides.Length; slot++)
                 if (_maskOverrides[slot] != null)
+                {
                     _material.SetTexture(MaskSlotIds[slot], _maskOverrides[slot]);
+                    if ((MaskRegion)slot == MaskRegion.Highlight)
+                        SetHighlighterMaskOverrideActive(true);
+                }
         }
 
         /// <summary>
@@ -912,10 +1009,53 @@ namespace ARMakeup.Face
         void OnDestroy()
         {
             for (var slot = 0; slot < MaxOverlayLayers; slot++)
-                if (_overlayTexes[slot] != null) Destroy(_overlayTexes[slot]);
+            {
+                var texture = _overlayTexes[slot];
+                _overlayTexes[slot] = null;
+                DestroyOwned(texture);
+            }
             for (var slot = 0; slot < _maskOverrides.Length; slot++)
-                if (_maskOverrides[slot] != null) Destroy(_maskOverrides[slot]);
-            if (_blushFinishMap != null) Destroy(_blushFinishMap);
+            {
+                var texture = _maskOverrides[slot];
+                _maskOverrides[slot] = null;
+                DestroyOwned(texture);
+            }
+            var blushFinishMap = _blushFinishMap;
+            _blushFinishMap = null;
+            DestroyOwned(blushFinishMap);
+            var blushWarpTexture = _blushWarpTexture;
+            _blushWarpTexture = null;
+            DestroyOwned(blushWarpTexture);
+
+            ReleaseGlobalMatCap(MatCapChromeId, ref _matcapChrome);
+            ReleaseGlobalMatCap(MatCapHoloId, ref _matcapHolo);
+            ReleaseGlobalMatCap(MatCapMultiId, ref _matcapMulti);
+            ResetExpertGlobalsToBaseline();
+        }
+
+        static void ReleaseGlobalMatCap(int propertyId, ref Texture2D owned)
+        {
+            var texture = owned;
+            owned = null;
+            if (texture != null && Shader.GetGlobalTexture(propertyId) == texture)
+                Shader.SetGlobalTexture(propertyId, null);
+            DestroyOwned(texture);
+        }
+
+        static void ResetExpertGlobalsToBaseline()
+        {
+            Shader.SetGlobalFloat(FndTexGrainId, 0f);
+            Shader.SetGlobalFloat(FndSegLoDbgId, 0.1f);
+            Shader.SetGlobalFloat(FndSegHiDbgId, 0.25f);
+            Shader.SetGlobalFloat(FndOvalSizeDbgId, 1.1f);
+            Shader.SetGlobalFloat(FndOvalFeatherDbgId, 0.15f);
+        }
+
+        static void DestroyOwned(UnityEngine.Object owned)
+        {
+            if (owned == null) return;
+            if (Application.isPlaying) Destroy(owned);
+            else DestroyImmediate(owned);
         }
 
         void ApplyCalibration(CalibrationParams p)
@@ -951,6 +1091,53 @@ namespace ARMakeup.Face
             if (RegionMaskSource.Instance != null)
                 RegionMaskSource.Instance.SetEnabled(p.debugSeg);
 
+        }
+
+        void ApplyRegionWarps(FilterParams p)
+        {
+            var shape = Mathf.Clamp(p.blushShape, 0, 2);
+            var softness = Mathf.Clamp01(p.blushEdgeSoftness);
+            var geometryChanged = shape != _blushWarpShape ||
+                                  !Mathf.Approximately(softness, _blushWarpSoftness);
+            _blushWarpShape = shape;
+            _blushWarpSoftness = softness;
+
+            var entries = p.regionWarps;
+            _regionWarpState.ApplySparse(entries);
+            var submittedBlush = false;
+            if (entries != null)
+            {
+                foreach (var source in entries)
+                {
+                    if (source == null) continue;
+                    var warp = RegionWarpUtility.Sanitize(source);
+                    if (warp.region == "eyeshadow") IrisRenderer.Instance?.SetRegionWarp(warp);
+                    if (warp.region == "blush")
+                    {
+                        _blushWarpQueue.Submit(warp, Time.realtimeSinceStartup);
+                        submittedBlush = true;
+                    }
+                    StencilGuideRenderer.Instance?.SetRegionWarp(warp);
+                }
+            }
+            if (geometryChanged && !submittedBlush && !RegionWarpUtility.IsZero(_regionWarpState.Blush))
+                _blushWarpQueue.Submit(_regionWarpState.Blush, Time.realtimeSinceStartup);
+
+            ConsumeBlushWarpIfDue(Time.realtimeSinceStartup);
+            if (_blushWarpTexture != null)
+                _material.SetTexture(BlushMaskId, _blushWarpTexture);
+        }
+
+        void ConsumeBlushWarpIfDue(float now)
+        {
+            if (_material == null || !_blushWarpQueue.TryConsume(now, out var warp)) return;
+            var old = _blushWarpTexture;
+            _blushWarpTexture = null;
+            DestroyOwned(old);
+            var texture = MaskGenerator.BlushWarpMask(
+                _blushWarpShape, _blushWarpSoftness, warp);
+            if (!RegionWarpUtility.IsZero(warp)) _blushWarpTexture = texture;
+            _material.SetTexture(BlushMaskId, texture);
         }
 
         static void ApplyTo(Material mat, FilterParams p)
@@ -1015,6 +1202,7 @@ namespace ARMakeup.Face
             // 마감 — 블러셔와 동일 enum. 생략(0)=새틴=기존 출력(하위호환).
             mat.SetFloat(HighlightFinishId, p.highlightFinish);
             mat.SetFloat(HighlightShimmerId, Mathf.Clamp01(p.highlightShimmer));
+            mat.SetFloat(HighlightEdgeSoftnessId, Mathf.Clamp01(p.highlightEdgeSoftness));
             // 제형 스튜디오(#21) 세부 — 전부 0 = enum 기존 동작.
             mat.SetFloat(HighlightGlossLoId, Mathf.Clamp01(p.highlightGlossLo));
             mat.SetFloat(HighlightGlossGainId, Mathf.Clamp01(p.highlightGlossGain));
@@ -1137,13 +1325,17 @@ namespace ARMakeup.Face
                 BlushStyleRenderer.Instance.ApplyParams(p.blushStyleIntensity, p.blushStyleSparkle);
             if (BrowRenderer.Instance != null)
                 BrowRenderer.Instance.ApplyBrowParams(p);
-            // R7 두께/아치 + 모양(#19b)은 세 눈썹 제품(마스카라 밴드·펜슬·스타일)이 공유(제품 동조).
+            // 모양·굵기 프로파일·상하 커버·아치는 세 눈썹 제품이 공유(제품 동조).
             if (PencilRenderer.Instance != null)
                 PencilRenderer.Instance.ApplyPencilParams(
-                    p.browPencilColor, p.browPencilIntensity, p.browThickness, p.browArch, p.browShape, p.browPencilFinish, p.browPencilTexture);
+                    p.browPencilColor, p.browPencilIntensity, p.browThickness, p.browArch,
+                    p.browShape, p.browPencilFinish, p.browPencilTexture,
+                    p.browThicknessProfile, p.browExpandUpper, p.browExpandLower);
             if (StyleRenderer.Instance != null)
                 StyleRenderer.Instance.ApplyStyleParams(
-                    p.browStyleColor, p.browStyleIntensity, p.browThickness, p.browArch, p.browShape, p.browStyleFinish, p.browStyleTexture);
+                    p.browStyleColor, p.browStyleIntensity, p.browThickness, p.browArch,
+                    p.browShape, p.browStyleFinish, p.browStyleTexture,
+                    p.browThicknessProfile, p.browExpandUpper, p.browExpandLower);
             if (EyelinerStyleRenderer.Instance != null)
                 EyelinerStyleRenderer.Instance.ApplyParams(
                     p.eyelinerColor, p.eyelinerStyleIntensity, p.eyeCornerLift);
@@ -1151,13 +1343,17 @@ namespace ARMakeup.Face
             if (LowerLidRenderer.Instance != null)
             {
                 LowerLidRenderer.Instance.ApplyParams(
-                    p.aegyoIntensity, p.eyelinerColor, p.eyelinerLowerIntensity, p.eyeCornerLift,
+                    p.aegyoIntensity,
+                    string.IsNullOrEmpty(p.eyelinerLowerColor) ? p.eyelinerColor : p.eyelinerLowerColor,
+                    p.eyelinerLowerIntensity, p.eyeCornerLift,
                     p.aegyoHeight, p.aegyoStyleIntensity, p.aegyoColor,
-                    p.aegyoFinish, p.aegyoShimmer, p.eyelinerLowerThickness, p.eyelinerLowerFinish, p.aegyoTexture,
+                    p.aegyoFinish, p.aegyoShimmer, p.eyelinerLowerThickness,
+                    p.eyelinerLowerFinish, p.eyelinerLowerShimmer, p.eyelinerLowerTexture, p.aegyoTexture,
                     p.aegyoShape, p.eyelinerLowerSegment);
                 // 삼각존(#19b) — 같은 하안검 밴드의 꼬리 쪽 삼각 음영(색·강도·마감·제형·모양 독립, 0=끔/새틴/크림/기본).
                 LowerLidRenderer.Instance.ApplyTriangleZone(
-                    p.triangleZoneColor, p.triangleZoneIntensity, p.triangleZoneFinish, p.triangleZoneHeight, p.triangleZoneTexture, p.triangleZoneShape);
+                    p.triangleZoneColor, p.triangleZoneIntensity, p.triangleZoneFinish,
+                    p.triangleZoneShimmer, p.triangleZoneHeight, p.triangleZoneTexture, p.triangleZoneShape);
                 // 눈밑 컨실러(§08) — shape=0만 밴드로 브라이튼(언더아이 홀로우). shape=1
                 // (붉은기 자동)은 FaceMakeup 전담이라 밴드 강도 0으로 눌러 이중 적용 방지.
                 var ccBand = p.concealerShape < 0.5f ? p.concealerIntensity : 0f;
@@ -1190,11 +1386,236 @@ namespace ARMakeup.Face
                 TeethRenderer.Instance.ApplyParams(p.teethWhitenIntensity, p.teethFinish, p.teethShape);
             // 눈 파라미터 일괄 라우팅(FilterParams 통째) — 홍채, 아이라이너
             // 질감(eyelinerTexture)/부분(eyelinerSegment)/마감(eyelinerFinish), 아이섀도.
-            if (IrisRenderer.Instance != null) IrisRenderer.Instance.ApplyEyeParams(p);
+            if (IrisRenderer.Instance != null)
+            {
+                IrisRenderer.Instance.ApplyEyeParams(p);
+                if (p.eyelinerHasGeometryProfiles > 0)
+                    IrisRenderer.Instance.SetEyelinerGeometryProfiles(
+                        p.eyelinerThicknessProfile, p.eyelinerTailProfile);
+                else
+                    IrisRenderer.Instance.ClearEyelinerGeometryProfileOverride();
+            }
             // 얼굴형 보정 워프 — 눈확대 + 턱 5종(끝/너비/길이/하관/사각턱) 공유 필드.
             if (FaceWarpField.Instance != null)
                 FaceWarpField.Instance.ApplyParams(p);
+            ApplyExpertOverrides(mat, p.expertOverrides, LipRenderer.Instance,
+                BrowRenderer.Instance, TeethRenderer.Instance);
+            ApplyRegionAffines(mat, p.regionAffines, LowerLidRenderer.Instance,
+                DoubleLidRenderer.Instance, StencilGuideRenderer.Instance);
         }
+
+        /// <summary>
+        /// RN full-state에서 실제로 실린 부위만 갱신한다. null/빈 배열 및 배열에 없는 부위는
+        /// 직전 값을 유지하고, 명시적인 전량 0 항목만 해당 부위 W4 델타를 해제한다.
+        /// </summary>
+        public static void ApplyRegionAffines(Material faceMaterial,
+                                              RegionAffine[] regionAffines,
+                                              LowerLidRenderer lowerLidRenderer,
+                                              DoubleLidRenderer doubleLidRenderer,
+                                              StencilGuideRenderer guideRenderer = null)
+        {
+            if (regionAffines == null || regionAffines.Length == 0) return;
+            foreach (var source in regionAffines)
+            {
+                if (source == null || string.IsNullOrEmpty(source.region)) continue;
+                var affine = RegionAffineUtility.Sanitize(source);
+                guideRenderer?.SetRegionAffine(affine);
+                switch (affine.region)
+                {
+                    case "blush":
+                        if (faceMaterial != null)
+                        {
+                            faceMaterial.SetVector(BlushAffineId, RegionAffineUtility.ToShaderVector(affine));
+                            faceMaterial.SetFloat(BlushAffineRotId, affine.rot);
+                        }
+                        break;
+                    case "highlighter":
+                        if (faceMaterial != null)
+                        {
+                            faceMaterial.SetVector(HighlightAffineId, RegionAffineUtility.ToShaderVector(affine));
+                            faceMaterial.SetFloat(HighlightAffineRotId, affine.rot);
+                        }
+                        break;
+                    case "contour":
+                        if (faceMaterial != null)
+                        {
+                            faceMaterial.SetVector(ContourAffineId, RegionAffineUtility.ToShaderVector(affine));
+                            faceMaterial.SetFloat(ContourAffineRotId, affine.rot);
+                        }
+                        break;
+                    case "eyelinerLower":
+                    case "aegyo":
+                    case "triangleZone":
+                        lowerLidRenderer?.SetRegionAffine(affine);
+                        break;
+                    case "doubleLid":
+                        doubleLidRenderer?.SetRegionAffine(affine);
+                        break;
+                    // lip/lipBase/lipLiner/lipGloss와 알 수 없는 키는 W4 N/A: 절대 변형하지 않는다.
+                }
+            }
+        }
+
+        /// <summary>
+        /// RN이 컴파일한 sparse 전문가 KV를 렌더 타깃에 적용한다. payload마다 먼저 현재
+        /// 셰이더 리터럴과 동일한 23개 baseline으로 복원하므로 키 삭제가 즉시 기본 복원이 된다.
+        /// </summary>
+        public static void ApplyExpertOverrides(Material faceMaterial,
+                                                ExpertOverrideEntry[] overrides,
+                                                LipRenderer lipRenderer,
+                                                BrowRenderer browRenderer,
+                                                TeethRenderer teethRenderer)
+        {
+            var blurRadius = 2.5f;
+            var foundationTexGrain = 0f;
+            var glossLumaLo = 0.6f;
+            var browHairLo = 0.3f;
+            var browHairHi = 0.62f;
+            var browPowderFillFloor = 0.45f;
+            var browLightenerHairLo = 0.32f;
+            var browLightenerHairHi = 0.7f;
+            var browConcealHairLo = 0.32f;
+            var browConcealHairHi = 0.7f;
+            var browConcealFeatherV = 0.2f;
+            var browConcealFeatherH = 0.12f;
+            var toothLumaLo = 0.4f;
+            var toothLumaHi = 0.62f;
+            var gumRedLo = 0.06f;
+            var gumRedHi = 0.16f;
+            var maxDesaturation = 0.8f;
+            var brightenAdd = 0.07f;
+            var rimFeather = 0.25f;
+            var foundationSeamLo = 0.1f;
+            var foundationSeamHi = 0.25f;
+            var foundationOvalSize = 1.1f;
+            var foundationOvalFeather = 0.15f;
+
+            if (overrides != null)
+            {
+                foreach (var entry in overrides)
+                {
+                    if (entry == null || string.IsNullOrEmpty(entry.key) ||
+                        float.IsNaN(entry.value) || float.IsInfinity(entry.value)) continue;
+                    switch (entry.key)
+                    {
+                        case "skin.blurRadius":
+                            blurRadius = Mathf.Clamp(entry.value, 0f, 6f); break;
+                        case "foundation.texGrain":
+                            foundationTexGrain = Mathf.Clamp01(entry.value); break;
+                        case "lipGloss.glossLumaLo":
+                            glossLumaLo = Mathf.Clamp01(entry.value); break;
+                        case "brow.hairLo":
+                            browHairLo = Mathf.Clamp01(entry.value); break;
+                        case "brow.hairHi":
+                            browHairHi = Mathf.Clamp01(entry.value); break;
+                        case "browPowder.fillFloor":
+                            browPowderFillFloor = Mathf.Clamp01(entry.value); break;
+                        case "browLightener.hairLo":
+                            browLightenerHairLo = Mathf.Clamp01(entry.value); break;
+                        case "browLightener.hairHi":
+                            browLightenerHairHi = Mathf.Clamp01(entry.value); break;
+                        case "browConceal.hairLo":
+                            browConcealHairLo = Mathf.Clamp01(entry.value); break;
+                        case "browConceal.hairHi":
+                            browConcealHairHi = Mathf.Clamp01(entry.value); break;
+                        case "browConceal.featherV":
+                            browConcealFeatherV = Mathf.Clamp(entry.value, 0f, 0.4f); break;
+                        case "browConceal.featherH":
+                            browConcealFeatherH = Mathf.Clamp(entry.value, 0f, 0.4f); break;
+                        case "teeth.toothLumaLo":
+                            toothLumaLo = Mathf.Clamp01(entry.value); break;
+                        case "teeth.toothLumaHi":
+                            toothLumaHi = Mathf.Clamp01(entry.value); break;
+                        case "teeth.gumRedLo":
+                            gumRedLo = Mathf.Clamp(entry.value, 0f, 0.5f); break;
+                        case "teeth.gumRedHi":
+                            gumRedHi = Mathf.Clamp(entry.value, 0f, 0.5f); break;
+                        case "teeth.maxDesaturation":
+                            maxDesaturation = Mathf.Clamp01(entry.value); break;
+                        case "teeth.brightenAdd":
+                            brightenAdd = Mathf.Clamp(entry.value, 0f, 0.3f); break;
+                        case "teeth.rimFeather":
+                            rimFeather = Mathf.Clamp(entry.value, 0f, 0.6f); break;
+                        case "global.foundationSeamLo":
+                            foundationSeamLo = Mathf.Clamp01(entry.value); break;
+                        case "global.foundationSeamHi":
+                            foundationSeamHi = Mathf.Clamp01(entry.value); break;
+                        case "global.foundationOvalSize":
+                            foundationOvalSize = Mathf.Clamp(entry.value, 0.9f, 1.4f); break;
+                        case "global.foundationOvalFeather":
+                            foundationOvalFeather = Mathf.Clamp(entry.value, 0f, 0.3f); break;
+                    }
+                }
+            }
+
+            if (browHairLo >= browHairHi) { browHairLo = 0.3f; browHairHi = 0.62f; }
+            if (browLightenerHairLo >= browLightenerHairHi)
+            { browLightenerHairLo = 0.32f; browLightenerHairHi = 0.7f; }
+            if (browConcealHairLo >= browConcealHairHi)
+            { browConcealHairLo = 0.32f; browConcealHairHi = 0.7f; }
+            if (toothLumaLo >= toothLumaHi) { toothLumaLo = 0.4f; toothLumaHi = 0.62f; }
+            if (gumRedLo >= gumRedHi) { gumRedLo = 0.06f; gumRedHi = 0.16f; }
+            if (foundationSeamLo >= foundationSeamHi)
+            { foundationSeamLo = 0.1f; foundationSeamHi = 0.25f; }
+
+            if (faceMaterial != null) faceMaterial.SetFloat(BlurRadiusId, blurRadius);
+            Shader.SetGlobalFloat(FndTexGrainId, foundationTexGrain);
+            Shader.SetGlobalFloat(FndSegLoDbgId, foundationSeamLo);
+            Shader.SetGlobalFloat(FndSegHiDbgId, foundationSeamHi);
+            Shader.SetGlobalFloat(FndOvalSizeDbgId, foundationOvalSize);
+            Shader.SetGlobalFloat(FndOvalFeatherDbgId, foundationOvalFeather);
+            lipRenderer?.ApplyExpertGlossLumaLo(glossLumaLo);
+            browRenderer?.ApplyExpertParams(browHairLo, browHairHi, browPowderFillFloor,
+                browLightenerHairLo, browLightenerHairHi, browConcealHairLo, browConcealHairHi,
+                browConcealFeatherV, browConcealFeatherH);
+            teethRenderer?.ApplyExpertParams(toothLumaLo, toothLumaHi, gumRedLo, gumRedHi,
+                maxDesaturation, brightenAdd, rimFeather);
+        }
+
+        const int MaxEyeshadowLayersV2 = 8;
+
+        static EyeshadowLayerParams[] BuildEyeshadowLayerSubset(
+            EyeshadowLayerParams[] source, bool lower)
+        {
+            if (source == null || source.Length == 0) return Array.Empty<EyeshadowLayerParams>();
+            var result = new List<EyeshadowLayerParams>();
+            var count = Mathf.Min(source.Length, MaxEyeshadowLayersV2);
+            for (var index = 0; index < count; index++)
+            {
+                var item = source[index];
+                if (item == null) continue;
+                var surface = Mathf.Clamp(item.surface, 0, 2);
+                if (lower ? surface == 0 : surface == 1) continue;
+                var profile = item.profile == 0 && item.shape != 0
+                    ? Mathf.Clamp(item.shape, 0, 11)
+                    : Mathf.Clamp(item.profile, 0, 11);
+                var intensity = float.IsNaN(item.intensity) || float.IsInfinity(item.intensity)
+                    ? 0f : Mathf.Clamp(item.intensity, 0f, 1.5f);
+                result.Add(new EyeshadowLayerParams
+                {
+                    surface = surface, profile = profile, shape = profile,
+                    color = item.color, color2 = item.color2, intensity = intensity,
+                    finish = item.finish, gradient = item.gradient, height = item.height,
+                    shimmer = item.shimmer, texture = item.texture,
+                    glossLo = item.glossLo, glossGain = item.glossGain,
+                    shimmerSize = item.shimmerSize, shimmerDensity = item.shimmerDensity,
+                    matte = item.matte, sheen = item.sheen,
+                    particleSize = item.particleSize, particleDensity = item.particleDensity,
+                    material = item.material, materialStrength = item.materialStrength,
+                    particleBrightness = item.particleBrightness, particleColor = item.particleColor,
+                    particleTwinkle = item.particleTwinkle, particleShape = item.particleShape,
+                    particleFeather = item.particleFeather, particleParallax = item.particleParallax,
+                    particleConfetti = item.particleConfetti,
+                });
+            }
+            return result.ToArray();
+        }
+
+        public static EyeshadowLayerParams[] BuildUpperEyeshadowLayerSubset(
+            EyeshadowLayerParams[] source) => BuildEyeshadowLayerSubset(source, false);
+
+        public static EyeshadowLayerParams[] BuildLowerEyeshadowLayerSubset(
+            EyeshadowLayerParams[] source) => BuildEyeshadowLayerSubset(source, true);
 
         static void SetColor(Material mat, int propertyId, string hex)
         {
@@ -1234,6 +1655,7 @@ namespace ARMakeup.Face
 
         void Update()
         {
+            ConsumeBlushWarpIfDue(Time.realtimeSinceStartup);
             if (_isTracked == null) return;
 
             var tracked = _isTracked();

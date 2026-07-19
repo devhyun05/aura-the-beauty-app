@@ -1,3 +1,4 @@
+using ARMakeup.Bridge;
 using UnityEngine;
 
 namespace ARMakeup.Face
@@ -65,6 +66,7 @@ namespace ARMakeup.Face
         Vector3[] _vertices;
         float _intensity;
         float _creaseMult = 1f; // 크리스 높이 배수 핸들(1=기본 위치)
+        RegionAffine _regionAffine = new RegionAffine { region = "doubleLid" };
 
         static readonly int IntensityId = Shader.PropertyToID("_DoubleLidIntensity");
         static readonly int FinishId = Shader.PropertyToID("_DoubleLidFinish"); // 마감(Tier B, 0=새틴=기존)
@@ -72,9 +74,26 @@ namespace ARMakeup.Face
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _crease = new Vector2[Seg]; // 세분된 크리스 접힘선(이미지 좌표)
+        readonly Vector2[] _fitHandleVp = new Vector2[Eyes];
+        readonly int[] _fitHandleFrame = { -1, -1 };
+        readonly bool[] _fitHandleValid = new bool[Eyes];
 
         void Awake() => Instance = this;
-        void OnDestroy() { if (Instance == this) Instance = null; }
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+            ReleaseOwned(_material);
+            ReleaseOwned(_mesh);
+            _material = null;
+            _mesh = null;
+        }
+
+        static void ReleaseOwned(Object owned)
+        {
+            if (owned == null) return;
+            if (Application.isPlaying) Destroy(owned);
+            else DestroyImmediate(owned);
+        }
 
         public void Init(Camera cam, FaceLandmarkSource source)
         {
@@ -137,6 +156,23 @@ namespace ARMakeup.Face
             _material.SetFloat(ShapeId, shape);
         }
 
+        public void SetRegionAffine(RegionAffine source)
+        {
+            if (source == null || source.region != "doubleLid") return;
+            _regionAffine = RegionAffineUtility.Sanitize(source);
+        }
+
+        public bool TryGetFitHandle(int eye, out Vector2 viewportPoint)
+        {
+            viewportPoint = Vector2.zero;
+            if (eye < 0 || eye >= Eyes || _source == null || !_source.HasFace ||
+                FramePresenter.Instance == null || !_fitHandleValid[eye]) return false;
+            var frame = _fitHandleFrame[eye];
+            if (frame < Time.frameCount - 1 || frame > Time.frameCount) return false;
+            viewportPoint = _fitHandleVp[eye];
+            return true;
+        }
+
         void LateUpdate()
         {
             var visible = _source != null && _source.HasFace &&
@@ -168,6 +204,14 @@ namespace ARMakeup.Face
 
                 var depth = Depth(lm[lids[4]].z);
                 var b = e * Seg * 2;
+                var eyeXAxis = (_crease[Seg - 1] - _crease[0]).normalized;
+                var affineCenter = _crease[Seg / 2];
+                var eyeWidth = (_crease[Seg - 1] - _crease[0]).magnitude;
+                var transformedCenter = RegionAffineUtility.TransformEyePoint(
+                    affineCenter, affineCenter, eyeXAxis, up, eyeWidth, _regionAffine);
+                _fitHandleVp[e] = FramePresenter.Instance.ImageToViewport(transformedCenter);
+                _fitHandleFrame[e] = Time.frameCount;
+                _fitHandleValid[e] = true;
                 for (var i = 0; i < Seg; i++)
                 {
                     var a = _crease[Mathf.Max(i - 1, 0)];
@@ -176,8 +220,16 @@ namespace ARMakeup.Face
                     var normal = new Vector2(-tangent.y, tangent.x);
                     if (Vector2.Dot(normal, up) < 0f) normal = -normal; // 위쪽 법선 규약
                     // 접힘선(_crease)을 밴드 세로 중심으로: 위 정점=+법선(브로우), 아래=-법선(속눈썹).
-                    _vertices[b + 2 * i] = ImageToWorld(_crease[i] + normal * halfThick, depth);
-                    _vertices[b + 2 * i + 1] = ImageToWorld(_crease[i] - normal * halfThick, depth);
+                    var upperPoint = _crease[i] + normal * halfThick;
+                    var lowerPoint = _crease[i] - normal * halfThick;
+                    // 눈머리→눈꼬리/브로우 방향 로컬 프레임. affine 0은 utility가 입력점을
+                    // 즉시 반환하므로 기존 정점과 바이트 동일하다.
+                    upperPoint = RegionAffineUtility.TransformEyePoint(
+                        upperPoint, affineCenter, eyeXAxis, up, eyeWidth, _regionAffine);
+                    lowerPoint = RegionAffineUtility.TransformEyePoint(
+                        lowerPoint, affineCenter, eyeXAxis, up, eyeWidth, _regionAffine);
+                    _vertices[b + 2 * i] = ImageToWorld(upperPoint, depth);
+                    _vertices[b + 2 * i + 1] = ImageToWorld(lowerPoint, depth);
                 }
             }
             _mesh.vertices = _vertices;

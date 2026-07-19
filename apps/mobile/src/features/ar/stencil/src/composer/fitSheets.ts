@@ -21,7 +21,7 @@
  * ⚠ 이름 주의: warpPresets.ts의 WarpPreset/applyFitToParams는 보정 레인(얼굴형
  * 워프)이다 — 이 모듈과 별개 개념(§6 용어 규약 '핏' 행, 장래 '워프' 리네임 후보).
  */
-import type { FilterParams } from '../bridge/types';
+import type { FilterParams, RegionAffine, RegionWarp } from '../bridge/types';
 import type { ComposerLayer } from './model';
 import { isDecoRegion, REGION_DEFS, REGION_MAP } from './regions';
 import type { RegionKey } from './regions';
@@ -35,10 +35,14 @@ export interface FitDelta {
   dy?: number;
   /** 크기 배수 델타(0=기준) — 오버레이 scale ×(1+sx) */
   sx?: number;
+  /** 세로 크기 배수 델타(0=기준) — 비-데코 아핀 소비자 전용 */
+  sy?: number;
   /** 회전 델타(도) — 오버레이 rotation 가산 */
   rot?: number;
   /** 부위 룰 델타 — 키는 그 부위 골드 슬라이더의 FilterParams 필드(가산·클램프) */
   rules?: Record<string, number>;
+  /** 부위 로컬 윤곽 제어점 오프셋(고정 8점, 부위 크기 비율). */
+  warp?: number[];
 }
 
 /** 시트 항목 = 셀렉터(region[+role|+leafId]) + 델타. */
@@ -129,13 +133,52 @@ export function fitFieldsOfRegion(region: RegionKey): FitFieldDef[] {
 /** 핏을 걸 수 있는 부위 전부 — 골드 필드 보유 또는 데코(배치 아핀). UI 칩 재료. */
 export function fitCapableRegions(): RegionKey[] {
   return REGION_DEFS.filter(
-    d => isDecoRegion(d.key) || fitFieldsOfRegion(d.key).length > 0,
+    d => d.fitTraits !== undefined,
   ).map(d => d.key);
 }
 
 // ── 해석(캐스케이드) ─────────────────────────────────────────────────────────
 
-const AFFINE_FIELDS = ['dx', 'dy', 'sx', 'rot'] as const;
+const AFFINE_FIELDS = ['dx', 'dy', 'sx', 'sy', 'rot'] as const;
+type AffineField = typeof AFFINE_FIELDS[number];
+
+const AFFINE_LIMITS: Record<AffineField, readonly [number, number]> = {
+  dx: [-0.15, 0.15],
+  dy: [-0.15, 0.15],
+  sx: [-0.5, 0.5],
+  sy: [-0.5, 0.5],
+  rot: [-45, 45],
+};
+
+export const FIT_WARP_POINT_COUNT = 8;
+export const FIT_WARP_RATIO_LIMIT = 0.2;
+
+/** wire/storage 입력을 파일럿 8점 계약으로 고정하고 폭주·non-finite를 막는다. */
+export function normalizeFitWarp(warp: readonly number[]): number[] {
+  return Array.from({length: FIT_WARP_POINT_COUNT}, (_, index) => {
+    const value = warp[index];
+    if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+    return Math.max(-FIT_WARP_RATIO_LIMIT, Math.min(FIT_WARP_RATIO_LIMIT, value));
+  });
+}
+
+/** 좌우 대칭 부위는 동일 로컬 법선값을 반대 순서의 제어점에 적용한다. */
+export function mirrorFitWarp(warp: readonly number[]): number[] {
+  return normalizeFitWarp(warp).reverse();
+}
+
+function boundedAffine(field: AffineField, value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return 0;
+  const [min, max] = AFFINE_LIMITS[field];
+  return Math.max(min, Math.min(max, value));
+}
+
+function affineFieldsOfRegion(region: RegionKey): Set<AffineField> {
+  const backends = new Set(Object.values(REGION_MAP[region].fitTraits ?? {}));
+  return new Set(
+    AFFINE_FIELDS.filter(field => backends.has(`affine.${field}`)),
+  );
+}
 
 /** 셀렉터 구체성 — 0=겹id, 1=역할, 2=부위. -1=불일치. */
 function matchTier(
@@ -183,10 +226,128 @@ export function resolveLeafFit(
             }
           }
         }
+        if (e.warp && !taken.has('warp')) {
+          out ??= {};
+          out.warp = normalizeFitWarp(e.warp);
+          taken.add('warp');
+        }
       }
     }
   }
   return out;
+}
+
+function activeSheetsForLayer(
+  layer: ComposerLayer,
+  byId: Map<string, FitSheet>,
+  main: FitSheet | undefined,
+): FitSheet[] {
+  const active: FitSheet[] = [];
+  for (const id of layer.fitChain ?? []) {
+    const sheet = byId.get(id);
+    if (sheet && !active.includes(sheet)) active.push(sheet);
+  }
+  if (main && !active.includes(main)) active.push(main);
+  return active;
+}
+
+/**
+ * 비-데코 잎의 computed 아핀을 부위별 브리지 배열로 컴파일한다.
+ * 전량 0/미지정 부위는 싣지 않아 legacy 렌더를 유지하고, 같은 부위의 여러 잎은
+ * compileLayers와 같은 순서로 마지막 보이는 잎이 이긴다.
+ */
+export function assembleRegionAffines(
+  layers: ComposerLayer[],
+  state: FitSheetsState,
+): RegionAffine[] {
+  if (state.sheets.length === 0) return [];
+  const byId = new Map(state.sheets.map(sheet => [sheet.id, sheet]));
+  const main = state.mainId ? byId.get(state.mainId) : undefined;
+  const byRegion = new Map<RegionKey, RegionAffine>();
+  for (const layer of layers) {
+    if (!layer.visible || isDecoRegion(layer.region) || !REGION_MAP[layer.region].fitTraits) {
+      continue;
+    }
+    // compileLayers의 마지막 보이는 잎 승리와 동일: 뒤 잎이 baseline이어도 앞 후보 삭제.
+    byRegion.delete(layer.region);
+    const active = activeSheetsForLayer(layer, byId, main);
+    if (active.length === 0) continue;
+    const delta = resolveLeafFit(layer.region, layer.role, layer.id, active);
+    const allowed = affineFieldsOfRegion(layer.region);
+    const valueOf = (field: AffineField) =>
+      allowed.has(field) ? boundedAffine(field, delta?.[field]) : 0;
+    const dx = valueOf('dx');
+    const dy = valueOf('dy');
+    const sx = valueOf('sx');
+    const sy = valueOf('sy');
+    const rot = valueOf('rot');
+    if (dx === 0 && dy === 0 && sx === 0 && sy === 0 && rot === 0) {
+      byRegion.delete(layer.region);
+      continue;
+    }
+    byRegion.set(layer.region, {region: layer.region, dx, dy, sx, sy, rot});
+  }
+  return [...byRegion.values()];
+}
+
+/** 다음 full-state에서 사라진, 실제 전송 이력이 있는 부위만 0 reset 항목을 보탠다. */
+export function regionAffinesForEmit(
+  next: RegionAffine[],
+  previous: RegionAffine[],
+): RegionAffine[] {
+  const active = new Set(next.map(affine => affine.region));
+  const resets = previous
+    .filter(affine => !active.has(affine.region))
+    .map(affine => ({
+      region: affine.region,
+      dx: 0,
+      dy: 0,
+      sx: 0,
+      sy: 0,
+      rot: 0,
+    }));
+  return resets.length > 0 ? [...next, ...resets] : next;
+}
+
+const WARP_PILOT_REGIONS = new Set<RegionKey>(['eyeshadow', 'blush']);
+
+/** 마지막 보이는 파일럿 잎의 computed warp를 부위별 wire 배열로 컴파일한다. */
+export function assembleRegionWarps(
+  layers: ComposerLayer[],
+  state: FitSheetsState,
+): RegionWarp[] {
+  if (state.sheets.length === 0) return [];
+  const byId = new Map(state.sheets.map(sheet => [sheet.id, sheet]));
+  const main = state.mainId ? byId.get(state.mainId) : undefined;
+  const byRegion = new Map<RegionKey, RegionWarp>();
+  for (const layer of layers) {
+    if (!layer.visible || !WARP_PILOT_REGIONS.has(layer.region)) continue;
+    byRegion.delete(layer.region);
+    const active = activeSheetsForLayer(layer, byId, main);
+    if (active.length === 0) continue;
+    const warp = resolveLeafFit(layer.region, layer.role, layer.id, active)?.warp;
+    if (!warp?.some(value => value !== 0)) continue;
+    byRegion.set(layer.region, {region: layer.region, warp: normalizeFitWarp(warp)});
+  }
+  return [...byRegion.values()];
+}
+
+/** 다음 full-state에서 사라진, 실제 전송 이력이 있는 warp 부위만 명시적으로 reset한다. */
+export function regionWarpsForEmit(
+  next: RegionWarp[],
+  previous: RegionWarp[],
+): RegionWarp[] {
+  const active = new Set(next.map(item => item.region));
+  const previousByRegion = new Map(previous.map(item => [item.region, item.warp]));
+  const changed = next.filter(item => {
+    const before = previousByRegion.get(item.region);
+    return !before || before.length !== item.warp.length ||
+      item.warp.some((value, index) => value !== before[index]);
+  });
+  const resets = previous
+    .filter(item => !active.has(item.region))
+    .map(item => ({region: item.region, warp: Array(FIT_WARP_POINT_COUNT).fill(0)}));
+  return resets.length > 0 ? [...changed, ...resets] : changed;
 }
 
 // ── 적용(단일 지점) — flattenTree 결과 → 핏 얹은 사본 ────────────────────────
@@ -201,31 +362,37 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 export function applyFitToLayers(
   layers: ComposerLayer[],
   state: FitSheetsState,
+  baseDeltas: FitEntry[] = [],
 ): ComposerLayer[] {
-  if (state.sheets.length === 0) return layers;
+  if (state.sheets.length === 0 && baseDeltas.length === 0) return layers;
   const byId = new Map(state.sheets.map(s => [s.id, s]));
   const main = state.mainId ? byId.get(state.mainId) : undefined;
+  const baseByRegion = new Map<RegionKey, Record<string, number>>();
+  for (const entry of baseDeltas) {
+    if (entry.role || entry.leafId || !entry.rules) continue;
+    const rules = baseByRegion.get(entry.region) ?? {};
+    for (const [key, value] of Object.entries(entry.rules)) {
+      if (Number.isFinite(value)) rules[key] = (rules[key] ?? 0) + value;
+    }
+    baseByRegion.set(entry.region, rules);
+  }
   let changed = false;
   const out = layers.map(layer => {
     // 잎의 시트 사슬(가까운 순) + 메인 폴백 — 중복 제거.
-    const active: FitSheet[] = [];
-    for (const id of layer.fitChain ?? []) {
-      const s = byId.get(id);
-      if (s && !active.includes(s)) active.push(s);
-    }
-    if (main && !active.includes(main)) active.push(main);
-    if (active.length === 0) return layer;
-
-    const d = resolveLeafFit(layer.region, layer.role, layer.id, active);
-    if (!d) return layer;
+    const active = activeSheetsForLayer(layer, byId, main);
+    const d = active.length > 0
+      ? resolveLeafFit(layer.region, layer.role, layer.id, active)
+      : null;
+    const baseRules = baseByRegion.get(layer.region);
+    if (!d && !baseRules) return layer;
 
     if (isDecoRegion(layer.region)) {
-      if (!layer.overlay) return layer;
+      if (!layer.overlay || !d) return layer;
       const o = layer.overlay;
-      const x = clamp01(o.x + (d.dx ?? 0));
-      const y = clamp01(o.y + (d.dy ?? 0));
-      const scale = Math.max(0.02, o.scale * (1 + (d.sx ?? 0)));
-      const rotation = o.rotation + (d.rot ?? 0);
+      const x = clamp01(o.x + boundedAffine('dx', d.dx));
+      const y = clamp01(o.y + boundedAffine('dy', d.dy));
+      const scale = Math.max(0.02, o.scale * (1 + boundedAffine('sx', d.sx)));
+      const rotation = o.rotation + boundedAffine('rot', d.rot);
       if (x === o.x && y === o.y && scale === o.scale && rotation === o.rotation) {
         return layer;
       }
@@ -233,15 +400,19 @@ export function applyFitToLayers(
       return { ...layer, overlay: { ...o, x, y, scale, rotation } };
     }
 
-    if (!d.rules) return layer;
     const fields = fitFieldsOfRegion(layer.region);
     if (fields.length === 0) return layer;
     let params: Partial<FilterParams> | null = null;
     for (const f of fields) {
-      const delta = d.rules[f.key as string];
-      if (delta === undefined || delta === 0) continue;
+      const baseDelta = baseRules?.[f.key as string];
+      const userDelta = d?.rules?.[f.key as string];
+      const delta =
+        (Number.isFinite(baseDelta) ? baseDelta! : 0) +
+        (Number.isFinite(userDelta) ? userDelta! : 0);
+      if (delta === 0) continue;
       const raw = layer.params[f.key];
-      const base = typeof raw === 'number' ? raw : f.fallback;
+      const base = typeof raw === 'number' && Number.isFinite(raw) ? raw : f.fallback;
+      // 자동 기저+사용자 델타를 델타 도메인에서 먼저 합산하고 최종 범위를 한 번만 적용.
       const next = Math.min(f.max, Math.max(f.min, base + delta));
       if (next === base && raw !== undefined) continue;
       (params ??= { ...layer.params })[f.key] = next as never;
@@ -305,8 +476,13 @@ export function upsertEntry(
     else rules[k] = v;
   }
   if (Object.keys(rules).length > 0) merged.rules = rules;
+  const warpSource = patch.warp !== undefined ? patch.warp : prev?.warp;
+  if (warpSource) {
+    const warp = normalizeFitWarp(warpSource);
+    if (warp.some(value => value !== 0)) merged.warp = warp;
+  }
   const empty =
-    AFFINE_FIELDS.every(f => merged[f] === undefined) && !merged.rules;
+    AFFINE_FIELDS.every(f => merged[f] === undefined) && !merged.rules && !merged.warp;
   const rest = sheet.entries.filter(e => !sameSel(e, sel));
   return { ...sheet, entries: empty ? rest : [...rest, merged] };
 }

@@ -15,9 +15,12 @@ Shader "ARMakeup/BrowStyle"
         _LumaKey ("Luma Key (0=alpha 1=dark)", Float) = 0.0
         // 마감(Tier B) — 0=새틴(기본, 기존 출력) 1=매트 2=듀이. ApplyFinish 레거시 경로.
         _StyleFinish ("Style Finish (0 satin 1 matte 2 dewy)", Float) = 0
-        // 제형(텍스처) — GENERIC 템플릿 enum(0=크림=현행). Finish.cginc TexBundleFromEnum 미러.
-        // 명명 주의: _BrowStyleTex(모양 텍스처)와 별개 축(제형 enum).
-        _StyleTexture ("Style Texture (generic enum)", Float) = 0
+        // W1에서 제품 제형 축 폐지. _BrowStyleTex(모양 텍스처)가 스타일을 전담한다.
+        _StyleTexture ("Deprecated Style Texture", Float) = -1
+        _BrowCoverageMode ("Coverage Mode (0 legacy 1 coverage)", Float) = 0
+        _BrowCoverageDown ("Lower Coverage Expansion", Range(-0.25, 0.75)) = 0
+        _BrowStyleVMin ("Style Alpha Crop Min V", Range(0, 1)) = 0
+        _BrowStyleVMax ("Style Alpha Crop Max V", Range(0, 1)) = 1
     }
 
     SubShader
@@ -40,16 +43,29 @@ Shader "ARMakeup/BrowStyle"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
             #include "Ambient.cginc"   // 저조도 색소 바닥(BROW_KNEE) — 어둠 눈썹 발광 방지
             #include "Finish.cginc"    // 마감(ApplyFinish) 공용 — _CameraFeed도 여기서 선언
+            #include "BrowCoverage.cginc"
+            #include "BrowResponse.cginc"
 
             sampler2D _BrowStyleTex;
             fixed4 _BrowColor;
             float _BrowIntensity;
             float _LumaKey;
             float _StyleFinish; // 마감(Tier B) — 0=새틴=기존 출력(하위호환)
-            float _StyleTexture; // 제형(텍스처) GENERIC 템플릿(0=크림=현행)
+            float _StyleTexture; // 폐기된 구 payload 호환 자리(항상 무변조)
+            float _BrowCoverageMode;
+            float _BrowCoverageDown;
+            float _BrowStyleVMin;
+            float _BrowStyleVMax;
 
-            struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
-            struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 grabPos : TEXCOORD1; };
+            inline float2 BrowStyleSampleUV(float2 bandUv)
+            {
+                float active = BrowCoverageActive(_BrowCoverageMode);
+                float croppedV = lerp(_BrowStyleVMin, _BrowStyleVMax, bandUv.y);
+                return float2(bandUv.x, lerp(bandUv.y, croppedV, active));
+            }
+
+            struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; float browSide : TEXCOORD3; };
+            struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 grabPos : TEXCOORD1; float browSide : TEXCOORD2; };
 
             v2f vert(appdata v)
             {
@@ -57,6 +73,7 @@ Shader "ARMakeup/BrowStyle"
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.uv = v.uv;
                 o.grabPos = ComputeGrabScreenPos(o.pos);
+                o.browSide = v.browSide;
                 return o;
             }
 
@@ -64,26 +81,31 @@ Shader "ARMakeup/BrowStyle"
             {
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
                 fixed3 feed = tex2D(_CameraFeed, screenUV).rgb;
-                fixed4 tex = tex2D(_BrowStyleTex, i.uv);
-
-                float luma = dot(feed, fixed3(0.299, 0.587, 0.114));
+                float3 exposure = BrowResponseExposure(i.browSide);
+                fixed3 normalizedFeed = BrowResponseNormalizeFeed(feed, exposure);
+                float normalizedLuma = BrowResponseLuma(normalizedFeed);
+                fixed4 tex = tex2D(_BrowStyleTex, BrowStyleSampleUV(i.uv));
                 // 털 모양 = 알파(투명 PNG) 또는 1-밝기(흰 배경 그림). 색은 선택색으로,
                 // 카메라 루마 살짝 반영해 자연스럽게.
                 float texLuma = dot(tex.rgb, fixed3(0.299, 0.587, 0.114));
                 float shape = lerp(tex.a, 1.0 - texLuma, saturate(_LumaKey));
-                // 제형(텍스처) — GENERIC 시드 번들. body/grain=색소, coverage/edge=모양 amt.
-                // enum 0(크림)=ZERO → 조기 반환 = 바이트 동일(하위호환).
+                // 스타일 제형 축은 W1에서 폐지됐다. 아래 invalid template -1은 구 payload 값과
+                // 무관하게 ZERO 번들을 반환해 body/grain/coverage/edge를 모두 무변조로 둔다.
                 float stTexE, stTexG, stTexC, stTexB;
-                TexBundleFromEnum(0.0, _StyleTexture, stTexE, stTexG, stTexC, stTexB);
-                float amt = shape * _BrowIntensity;
+                // W1에서 스타일 제형 축은 폐지됐다. 유효 templateId가 아닌 -1로 항상 무변조한다.
+                TexBundleFromEnum(-1.0, _StyleTexture, stTexE, stTexG, stTexC, stTexB);
+                float amt = shape
+                    * BrowStyleCoverageEdge(i.uv.y, _BrowCoverageMode, _BrowCoverageDown)
+                    * _BrowIntensity;
                 amt = TexEdge(TexCoverage(saturate(amt), stTexC), stTexE); // 제형 커버·엣지
-                fixed3 pigment = _BrowColor.rgb * PigmentBaseKnee(luma, 0.7, 0.45, BROW_KNEE);
-                pigment = TexBody(pigment, luma, stTexB); // 제형 발색 body
+                fixed3 pigment = _BrowColor.rgb * PigmentBaseKnee(normalizedLuma, 0.7, 0.45, BROW_KNEE);
+                pigment = TexBody(pigment, normalizedLuma, stTexB); // 제형 발색 body
                 // 마감 — 0=새틴=무변형(ApplyFinish 레거시 경로, 세부 6값 0). 텍스처
                 // 눈썹이라 시머 게인 0. sparkleUV=밴드 uv.
-                pigment = ApplyFinish(pigment, luma, i.uv, _StyleFinish, 0,
+                pigment = ApplyFinish(pigment, normalizedLuma, i.uv, _StyleFinish, 0,
                                       0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
                 pigment = TexGrain(pigment, i.uv, stTexG); // 제형 그레인
+                pigment = BrowResponseReapplyExposure(pigment, exposure);
                 // §11 오클루전 — face-skin 양성 게이트(§14 화이트리스트 불필요, Occlusion.cginc 주석).
                 return fixed4(pigment, amt * OccludeGate(i.grabPos));
             }

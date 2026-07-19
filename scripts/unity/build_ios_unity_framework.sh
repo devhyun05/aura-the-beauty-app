@@ -16,6 +16,16 @@ if [[ ! -x "${UNITY_BIN}" ]]; then
   exit 1
 fi
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  LOGIN_HOME="$(dscl . -read "/Users/$(id -un)" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true)"
+  if [[ -n "${LOGIN_HOME}" && -d "${LOGIN_HOME}" && "${HOME}" != "${LOGIN_HOME}" ]]; then
+    if [[ ! -d "${HOME}/Library/Application Support/UnityHub" && -d "${LOGIN_HOME}/Library/Application Support/UnityHub" ]]; then
+      echo "[aura:unity] Using login HOME for Unity licensing: ${LOGIN_HOME}"
+      export HOME="${LOGIN_HOME}"
+    fi
+  fi
+fi
+
 echo "[aura:unity] Exporting Unity iOS project..."
 "${UNITY_BIN}" \
   -batchmode \

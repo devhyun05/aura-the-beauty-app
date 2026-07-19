@@ -122,6 +122,7 @@ namespace ARMakeup.Face
         static readonly int LipShapeId = Shader.PropertyToID("_LipShape");
         static readonly int LipLinerShapeId = Shader.PropertyToID("_LipLinerShape");
         static readonly int LipGlossShapeId = Shader.PropertyToID("_LipGlossShape");
+        static readonly int GlossLumaLoId = Shader.PropertyToID("_GlossLumaLo");
         // 제형 스튜디오(#21) — 마감 세부(0=미지정=enum 기존 동작). 립 메시 전용(라이너 무영향).
         static readonly int LipGlossLoId = Shader.PropertyToID("_LipGlossLo");
         static readonly int LipGlossGainId = Shader.PropertyToID("_LipGlossGain");
@@ -189,8 +190,34 @@ namespace ARMakeup.Face
         void Awake() => Instance = this;
         void OnDestroy()
         {
-            if (_finishMap != null) Destroy(_finishMap);
             if (Instance == this) Instance = null;
+            var finishMap = _finishMap;
+            var lipMaterial = _material;
+            var lipMesh = _mesh;
+            var linerMaterial = _linerMaterial;
+            var linerMesh = _linerMesh;
+            _finishMap = null;
+            _material = null;
+            _mesh = null;
+            _linerMaterial = null;
+            _linerMesh = null;
+            if (lipMaterial != null)
+            {
+                lipMaterial.SetTexture(LipFinishMapId, Texture2D.whiteTexture);
+                lipMaterial.SetFloat(LipHasFinishMapId, 0f);
+            }
+            DestroyOwned(finishMap);
+            DestroyOwned(lipMaterial);
+            DestroyOwned(lipMesh);
+            DestroyOwned(linerMaterial);
+            DestroyOwned(linerMesh);
+        }
+
+        static void DestroyOwned(UnityEngine.Object owned)
+        {
+            if (owned == null) return;
+            if (Application.isPlaying) Destroy(owned);
+            else DestroyImmediate(owned);
         }
 
         /// <summary>질감 맵 임포트(#22) — 픽셀별 광 지도(R 광게인·G 시머밀도)를 립 마감에
@@ -206,7 +233,9 @@ namespace ARMakeup.Face
                 { type = "error", message = $"립 질감 맵 임포트 실패: {error}" });
                 return;
             }
-            if (_finishMap != null) Destroy(_finishMap);
+            var previousFinishMap = _finishMap;
+            _finishMap = null;
+            DestroyOwned(previousFinishMap);
             _finishMap = tex;
             _material.SetTexture(LipFinishMapId, tex);
             _material.SetFloat(LipHasFinishMapId, 1f);
@@ -214,7 +243,10 @@ namespace ARMakeup.Face
 
         void ClearFinishMap()
         {
-            if (_finishMap != null) { Destroy(_finishMap); _finishMap = null; }
+            var finishMap = _finishMap;
+            _finishMap = null;
+            DestroyOwned(finishMap);
+            if (_material == null) return;
             _material.SetTexture(LipFinishMapId, Texture2D.whiteTexture);
             _material.SetFloat(LipHasFinishMapId, 0f);
         }
@@ -373,6 +405,11 @@ namespace ARMakeup.Face
             _material.SetFloat(LipGlossOverlineId, _glossOverline);
             // 모양 축 W4(립글로스 존) — 0=전체=현행(하위호환). 1=중앙 도트(쥬시), 2=아랫입술만.
             _material.SetFloat(LipGlossShapeId, shape);
+        }
+
+        public void ApplyExpertGlossLumaLo(float value)
+        {
+            if (_material != null) _material.SetFloat(GlossLumaLoId, value);
         }
 
         /// <summary>제형 스튜디오(#21) 마감 세부 — 광 임계·게인·펄 크기·밀도·억제 + 벨벳 시(sheen).

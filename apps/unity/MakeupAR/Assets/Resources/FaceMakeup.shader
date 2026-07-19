@@ -16,8 +16,8 @@ Shader "ARMakeup/FaceMakeup"
         _BlushMask ("Blush Mask", 2D) = "black" {}
         _BlushColor ("Blush Color", Color) = (0.94, 0.56, 0.63, 1)
         _BlushIntensity ("Blush Intensity", Range(0, 1)) = 0.35
-        // 제형(텍스처) W1 — GENERIC 템플릿 enum(0 크림/1 파우더/2 리퀴드/3 젤/4 펜슬). 0=현행.
-        _BlushTexture ("Blush Texture (generic enum)", Float) = 0
+        // 블러셔 제형 template(4): -1=부재/레거시, 0=파우더 1=크림 2=리퀴드 3=틴트.
+        _BlushTexture ("Blush Texture (domain enum)", Float) = -1
         // 블러셔 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 피드 luma만(신규의존0).
         _BlushFinish ("Blush Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
         _BlushShimmer ("Blush Shimmer Gain", Range(0, 1)) = 0.5
@@ -47,8 +47,16 @@ Shader "ARMakeup/FaceMakeup"
         // 블러셔 배치(R4) — 캐노니컬 UV 오프셋. Lift +=위, Spread +=바깥(좌우 미러).
         _BlushLift ("Blush Lift (+ up)", Range(-0.15, 0.15)) = 0
         _BlushSpread ("Blush Spread (+ outward)", Range(-0.15, 0.15)) = 0
+        _BlushAffine ("Blush W4 Affine (dx dy sx sy)", Vector) = (0, 0, 0, 0)
+        _BlushAffineRot ("Blush W4 Affine Rotation", Range(-45, 45)) = 0
         // 넓은 면 보정: 하이라이터/컨실러=가산(스크린), 컨투어=감산(곱).
         _HighlightMask ("Highlight Mask", 2D) = "black" {}
+        _HighlightZoneAtlas0 ("Highlight Zone Atlas 0 (RGBA cheek bridge tip brow)", 2D) = "black" {}
+        _HighlightZoneAtlas1 ("Highlight Zone Atlas 1 (RG cupid chin)", 2D) = "black" {}
+        _HighlightZoneWeights0 ("Highlight Zone Weights 0", Vector) = (0.20, 0.10, 0.075, 0)
+        _HighlightZoneWeights1 ("Highlight Zone Weights 1", Vector) = (0, 0, 0, 0)
+        _HighlightHasZoneAtlas ("Highlight Has Zone Atlas", Float) = 0
+        _HighlightEdgeSoftness ("Highlight Atlas Edge Softness", Range(0, 1)) = 0
         _HighlightColor ("Highlight Color", Color) = (1.0, 0.95, 0.86, 1)
         _HighlightIntensity ("Highlight Intensity", Range(0, 1)) = 0
         // 하이라이터/컨투어 마감 — 블러셔와 동일 enum(0 새틴 1 매트 2 글로시 3 시머).
@@ -78,6 +86,10 @@ Shader "ARMakeup/FaceMakeup"
         _HighlightSpread ("Highlight Spread (+ outward)", Range(-0.15, 0.15)) = 0
         _ContourLift ("Contour Lift (+ up)", Range(-0.15, 0.15)) = 0
         _ContourSpread ("Contour Spread (+ outward)", Range(-0.15, 0.15)) = 0
+        _HighlightAffine ("Highlight W4 Affine (dx dy sx sy)", Vector) = (0, 0, 0, 0)
+        _HighlightAffineRot ("Highlight W4 Affine Rotation", Range(-45, 45)) = 0
+        _ContourAffine ("Contour W4 Affine (dx dy sx sy)", Vector) = (0, 0, 0, 0)
+        _ContourAffineRot ("Contour W4 Affine Rotation", Range(-45, 45)) = 0
         // 컨실러 색·강도는 붉은기 자동(shape=1) 경로에서만 쓴다 — 눈밑 존(shape=0)은
         // 하안검 밴드(LowerLidRenderer)로 이관(§08). 캐노니컬 _ConcealerMask 삭제.
         _ConcealerColor ("Concealer Color", Color) = (0.98, 0.86, 0.76, 1)
@@ -97,7 +109,7 @@ Shader "ARMakeup/FaceMakeup"
         _FoundationIntensity ("Foundation Coverage", Range(0, 1)) = 0
         _FoundationFinish ("Foundation Finish (0 satin 1 matte 2 dewy)", Float) = 0
         // 제형 텍스처(배치 A ①) — 커버 램프(게인·chroma·커버) 분기. 0=리퀴드(현행).
-        _FoundationTexture ("Foundation Texture (0 liquid 1 cushion 2 skintint)", Float) = 0
+        _FoundationTexture ("Foundation Texture (0 liquid 1 cushion 2 stick 3 twincake 4 skintint)", Float) = 0
         // 모양 축 W3 피부 존 — 0=전체(현행). 존만큼 곱으로 게이트(powderShape 선례).
         _ToneShape ("Tone Zone (0 all 1 tzone 2 center)", Float) = 0
         _SkinShape ("Skin Zone (0 all 1 tzone 2 no-cheek)", Float) = 0
@@ -152,15 +164,13 @@ Shader "ARMakeup/FaceMakeup"
         _Overlay3Color ("Overlay 3 Color", Color) = (1, 1, 1, 1)
         _Overlay3Finish ("Overlay 3 Finish (0 satin 1 matte 2 dewy)", Float) = 0
         // 립은 LipRenderer(윤곽 링 메시)로, 아이섀도우는 IrisRenderer 동적 밴드로 분리됨.
-        // 제형(텍스처) 배선 — 얼굴 메시 6부위 enum(0=현행=무변조). 블러셔(_BlushTexture) 선례.
-        // Finish.cginc TexBundleFromEnum이 시드 번들로 번역. tone/skin=TONE 템플릿(grain 축만),
-        // 나머지=GENERIC 템플릿(엣지·커버·그레인·body). 0 = ZERO = 바이트 동일(하위호환).
-        _ToneTexture ("Tone Texture (tone enum)", Float) = 0
-        _SkinTexture ("Skin Texture (tone enum)", Float) = 0
-        _HighlightTexture ("Highlight Texture (generic enum)", Float) = 0
-        _ContourTexture ("Contour Texture (generic enum)", Float) = 0
-        _ConcealerTexture ("Concealer Texture (generic enum)", Float) = 0
-        _PowderTexture ("Powder Texture (generic enum)", Float) = 0
+        // 제형(텍스처) 배선 — RN 부위별 template. -1=필드 부재/레거시 무변조.
+        _ToneTexture ("Tone Texture (domain enum)", Float) = -1
+        _SkinTexture ("Skin Texture (domain enum)", Float) = -1
+        _HighlightTexture ("Highlight Texture (domain enum)", Float) = -1
+        _ContourTexture ("Contour Texture (domain enum)", Float) = -1
+        _ConcealerTexture ("Concealer Texture (domain enum)", Float) = -1
+        _PowderTexture ("Powder Texture (domain enum)", Float) = -1
         _Smoothing ("Skin Smoothing", Range(0, 1)) = 0.5
         _Brightening ("Skin Brightening", Range(0, 1)) = 0.2
         _BlurRadius ("Blur Radius (px)", Range(0, 6)) = 2.5
@@ -189,6 +199,7 @@ Shader "ARMakeup/FaceMakeup"
             #include "UnityCG.cginc"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
             #include "Finish.cginc"    // 마감(ApplyFinish) 공용 — 제형 스튜디오 세부 파라미터
+            #include "HighlighterMicroShimmer.cginc" // 하이라이터 전용 원형 미세 펄
             #include "Ambient.cginc"   // 저조도 색소 바닥(PigmentBase) — 어둠 발광 방지
             #include "Foundation.cginc" // 얼굴·목 파운데이션 색 파이프라인 공용
 
@@ -196,7 +207,7 @@ Shader "ARMakeup/FaceMakeup"
             sampler2D _BlushMask;
             fixed4 _BlushColor;
             float _BlushIntensity;
-            float _BlushTexture;   // 제형(텍스처) W1 — GENERIC 템플릿 enum(0=크림=현행)
+            float _BlushTexture;   // 블러셔 template(4), -1=레거시 무변조
             float _BlushFinish;
             float _BlushShimmer;
             // 제형 스튜디오(#21) 블러셔 마감 세부 — 0 = enum 기존 동작(하위호환).
@@ -221,7 +232,15 @@ Shader "ARMakeup/FaceMakeup"
             float _BlushHasFinishMap;    // 0 = 맵 없음(스칼라 그대로, 하위호환)
             float _BlushLift;
             float _BlushSpread;
+            float4 _BlushAffine;
+            float _BlushAffineRot;
             sampler2D _HighlightMask;
+            sampler2D _HighlightZoneAtlas0;
+            sampler2D _HighlightZoneAtlas1;
+            float4 _HighlightZoneWeights0;
+            float4 _HighlightZoneWeights1;
+            float _HighlightHasZoneAtlas;
+            float _HighlightEdgeSoftness;
             fixed4 _HighlightColor;
             float _HighlightIntensity;
             float _HighlightFinish;   // 0 새틴(기존) 1 매트 2 글로시 3 시머
@@ -249,6 +268,10 @@ Shader "ARMakeup/FaceMakeup"
             float _HighlightSpread;
             float _ContourLift;
             float _ContourSpread;
+            float4 _HighlightAffine;
+            float _HighlightAffineRot;
+            float4 _ContourAffine;
+            float _ContourAffineRot;
             fixed4 _ConcealerColor;
             float _ConcealerIntensity;
             float _ConcealerFinish; // 0=새틴=기존 출력(하위호환) 1 매트 2 글로시 3 시머
@@ -321,7 +344,7 @@ Shader "ARMakeup/FaceMakeup"
             fixed4 _FoundationColor;
             float _FoundationIntensity;
             float _FoundationFinish;
-            float _FoundationTexture; // 제형 텍스처(①) 0=리퀴드 1=쿠션 2=스킨틴트
+            float _FoundationTexture; // 제형 텍스처(①) 0=리퀴드 1=쿠션 2=스틱 3=트윈케익 4=스킨틴트
             // 모양 축 W3 피부 존 — 0=전체(현행 픽셀 동일). 존만큼 곱 게이트.
             float _ToneShape;        // 0=전체 1=T존 2=얼굴 중앙
             float _SkinShape;        // 0=전체 1=T존 2=볼 제외
@@ -366,13 +389,13 @@ Shader "ARMakeup/FaceMakeup"
             float _Overlay3Blend;
             fixed4 _Overlay3Color;
             float _Overlay3Finish;
-            // 제형(텍스처) 배선 — 얼굴 메시 6부위 enum(0=ZERO=현행). TexBundleFromEnum 미러.
-            float _ToneTexture;      // TONE 템플릿(1) — grain 축만
-            float _SkinTexture;      // TONE 템플릿(1) — grain 축만
-            float _HighlightTexture; // GENERIC 템플릿(0)
-            float _ContourTexture;   // GENERIC 템플릿(0)
-            float _ConcealerTexture; // GENERIC 템플릿(0) — 붉은기 경로. 밴드(눈밑존)와 값 공유.
-            float _PowderTexture;    // GENERIC 템플릿(0)
+            // 제형(텍스처) 배선 — RN template index. -1=필드 부재/레거시 무변조.
+            float _ToneTexture;      // tone(0)
+            float _SkinTexture;      // skin(1)
+            float _HighlightTexture; // highlighter(5)
+            float _ContourTexture;   // contour(6)
+            float _ConcealerTexture; // concealer(2) — 붉은기 경로. 밴드(눈밑존)와 값 공유.
+            float _PowderTexture;    // powder(3)
             float _Smoothing;
             float _Brightening;
             float _BlurRadius;
@@ -489,6 +512,47 @@ Shader "ARMakeup/FaceMakeup"
                 return lerp(baseColor, pigment, saturate(m));
             }
 
+            // Atlas softness is channel-local. Applying pow after semantic weights would inflate
+            // .20/.10/.075 non-linearly and change their ratios. The tail gate also suppresses
+            // the RGBA8 1/255→0 quantization step before pow can turn it into a visible outline.
+            float HighlightSoftZoneChannel(float channel, float softness)
+            {
+                float maskValue = saturate(channel);
+                float exponent = lerp(1.0, 0.45, saturate(softness));
+                float tailGate = smoothstep(0.0, 8.0 / 255.0, maskValue);
+                return pow(max(maskValue, 1e-6), exponent) * tailGate;
+            }
+
+            float4 HighlightSoftZoneSample(float4 channels, float softness)
+            {
+                return float4(
+                    HighlightSoftZoneChannel(channels.r, softness),
+                    HighlightSoftZoneChannel(channels.g, softness),
+                    HighlightSoftZoneChannel(channels.b, softness),
+                    HighlightSoftZoneChannel(channels.a, softness));
+            }
+
+            // W4 존 마스크 역아핀. 기존 lift/spread로 만든 sampleUV에만 별도 적용하며,
+            // 전량 0이면 즉시 반환해 baseline lift/spread가 0이 아닌 룩도 기존 수식과 동일하다.
+            // dx는 spread와 같은 좌우 미러·센터 감쇠를 써 정중앙 존의 찢어짐을 막는다.
+            float2 ZoneAffineUV(float2 sampleUV, float2 faceUV, float spreadWeight,
+                                float4 affine, float rotationDegrees)
+            {
+                if (all(affine == 0.0) && rotationDegrees == 0.0) return sampleUV;
+                float2 centered = sampleUV - 0.5;
+                // 역아핀 순서: q-t → R^-1 → S^-1. dx는 legacy spread와 같은 미러·W.
+                centered.y -= affine.y;
+                centered.x += (faceUV.x < 0.5 ? affine.x : -affine.x) * spreadWeight;
+                float angleRadians = -rotationDegrees * 0.01745329252;
+                float sineValue = sin(angleRadians);
+                float cosineValue = cos(angleRadians);
+                centered = float2(cosineValue * centered.x - sineValue * centered.y,
+                                  sineValue * centered.x + cosineValue * centered.y);
+                float2 scaleValue = max(float2(0.5, 0.5), 1.0 + affine.zw);
+                centered /= scaleValue;
+                return centered + 0.5;
+            }
+
             // 오버레이 슬롯 transform(중심cx,cy·크기·회전rad)으로 얼굴 UV → 레이어 UV.
             // 중심 기준 역회전·역스케일이라 크기1·중심0.5·회전0 = UV 그대로.
             float2 OverlayUV(float2 uv, float4 tr)
@@ -591,7 +655,7 @@ Shader "ARMakeup/FaceMakeup"
                 // 제형(언더톤) — TONE 템플릿 grain(매끈/파우더리). 톤 보정(toneAmt)만큼.
                 // toneTexture=0(매끈)=grain 0 → 바이트 동일. 언더톤도 전면 캐스트라 grain 축만.
                 float toneTexEdge, toneTexGrain, toneTexCoverage, toneTexBody;
-                TexBundleFromEnum(1.0, _ToneTexture, toneTexEdge, toneTexGrain, toneTexCoverage, toneTexBody);
+                TexBundleFromEnum(0.0, _ToneTexture, toneTexEdge, toneTexGrain, toneTexCoverage, toneTexBody);
                 col = TexGrain(col, i.uv, toneTexGrain * saturate(toneAmt));
 
                 // 프라이머 윤광 — 기존 luma 스펙 추출 재사용, 하이라이트만 증폭(0=무효과).
@@ -646,7 +710,7 @@ Shader "ARMakeup/FaceMakeup"
                     // 불필요하게 두 번 압축한다(FoundationSoftClip은 멱등이 아님).
                     if (_FoundationFinish > 1.5 && _FoundationFinish < 2.5)
                         found = FoundationSoftClip(found);
-                    col = FoundationBlend(col, found, fLuma, fChroma, fCov);
+                    col = FoundationBlend(col, found, fLuma, fChroma, fCov, i.uv);
                 }
 
                 // 립은 LipRenderer(윤곽 링 메시)로 분리됨. 얼굴 메시엔 블러셔 + 넓은면 보정.
@@ -660,15 +724,16 @@ Shader "ARMakeup/FaceMakeup"
                 // spread를 0으로 수렴시킨다(좌우 미러 시프트의 불연속 제거).
                 float spreadW = smoothstep(0.04, 0.22, abs(i.uv.x - 0.5));
                 buv.x += (i.uv.x < 0.5 ? _BlushSpread : -_BlushSpread) * spreadW;
+                buv = ZoneAffineUV(buv, i.uv, spreadW, _BlushAffine, _BlushAffineRot);
                 // 질감 맵(#22) — 얼굴 메시 uv로 광 게인·시머 밀도를 픽셀별 변조(볼 접착).
                 // 맵 없으면(_HasFinishMap=0) 계수 1.0 → 스칼라 그대로(하위호환).
                 fixed4 blushFinishMap = tex2D(_BlushFinishMap, i.uv);
                 float blushGlossGain = _BlushGlossGain;
                 float blushShimmerDensity = _BlushShimmerDensity;
                 ModulateFinishByMap(blushFinishMap, _BlushHasFinishMap, blushGlossGain, blushShimmerDensity);
-                // 제형(텍스처) W1 — GENERIC 템플릿(0) enum → 시드 번들. 0=크림=ZERO(무변조).
+                // 블러셔 template(4) 시드 번들. -1만 무변조이며 enum 0=파우더 시드를 적용한다.
                 float blushTexEdge, blushTexGrain, blushTexCoverage, blushTexBody;
-                TexBundleFromEnum(0.0, _BlushTexture,
+                TexBundleFromEnum(4.0, _BlushTexture,
                                   blushTexEdge, blushTexGrain, blushTexCoverage, blushTexBody);
                 col = TintFinish(col, _BlushColor.rgb, tex2D(_BlushMask, buv).r * _BlushIntensity,
                                  i.uv, _BlushFinish, _BlushShimmer,
@@ -692,17 +757,19 @@ Shader "ARMakeup/FaceMakeup"
                 float2 cuv = i.uv;
                 cuv.y -= _ContourLift;
                 cuv.x += (i.uv.x < 0.5 ? _ContourSpread : -_ContourSpread) * spreadW;
+                cuv = ZoneAffineUV(cuv, i.uv, spreadW, _ContourAffine, _ContourAffineRot);
                 float2 huv = i.uv;
                 huv.y -= _HighlightLift;
                 huv.x += (i.uv.x < 0.5 ? _HighlightSpread : -_HighlightSpread) * spreadW;
+                huv = ZoneAffineUV(huv, i.uv, spreadW, _HighlightAffine, _HighlightAffineRot);
                 // 마감 — 블렌드 결과색에 ApplyFinish(레거시 enum 경로: 세부 0 상수).
                 // 0=새틴이면 결과색 무변형이라 기존 출력과 바이트 동일(하위호환).
                 // 시머 스파클 UV는 얼굴 UV(i.uv)라 존에 접착(블러셔와 동일 규약).
                 float wideLuma = dot(col, fixed3(0.299, 0.587, 0.114));
-                // 제형(컨투어) — GENERIC 템플릿. body/grain=타겟색, coverage/edge=마스크 amt.
-                // enum 0(크림)=번들 ZERO → 네 헬퍼 조기 반환 = 바이트 동일(하위호환).
+                // 컨투어 template(6). body/grain=타겟색, coverage/edge=마스크 amt.
+                // -1=레거시 무변조, enum 0=파우더 시드부터 명시 적용한다.
                 float coTexEdge, coTexGrain, coTexCoverage, coTexBody;
-                TexBundleFromEnum(0.0, _ContourTexture, coTexEdge, coTexGrain, coTexCoverage, coTexBody);
+                TexBundleFromEnum(6.0, _ContourTexture, coTexEdge, coTexGrain, coTexCoverage, coTexBody);
                 float shAmt = tex2D(_ContourMask, cuv).r * _ContourIntensity;
                 shAmt = TexEdge(TexCoverage(saturate(shAmt), coTexCoverage), coTexEdge);
                 fixed3 shTarget = col * _ContourColor.rgb;
@@ -713,17 +780,32 @@ Shader "ARMakeup/FaceMakeup"
                                        screenUV, _PearlLightGain);
                 shTarget = TexGrain(shTarget, i.uv, coTexGrain);
                 col = lerp(col, shTarget, shAmt);
-                // 제형(하이라이터) — GENERIC 템플릿. 컨투어와 동형(스크린 타겟에 body/grain·mask cov/edge).
+                // 하이라이터 template(5). 컨투어와 동형(스크린 타겟에 body/grain·mask cov/edge), -1=무변조.
                 float hiTexEdge, hiTexGrain, hiTexCoverage, hiTexBody;
-                TexBundleFromEnum(0.0, _HighlightTexture, hiTexEdge, hiTexGrain, hiTexCoverage, hiTexBody);
-                float hlAmt = tex2D(_HighlightMask, huv).r * _HighlightIntensity;
+                TexBundleFromEnum(5.0, _HighlightTexture, hiTexEdge, hiTexGrain, hiTexCoverage, hiTexBody);
+                float hlLegacyMask = tex2D(_HighlightMask, huv).r;
+                float4 hlZone0 = HighlightSoftZoneSample(
+                    tex2D(_HighlightZoneAtlas0, huv), _HighlightEdgeSoftness);
+                float4 hlZone1 = HighlightSoftZoneSample(
+                    tex2D(_HighlightZoneAtlas1, huv), _HighlightEdgeSoftness);
+                float hlZoneMask = dot(hlZone0, _HighlightZoneWeights0)
+                                 + dot(hlZone1, _HighlightZoneWeights1);
+                float hlMask = lerp(hlLegacyMask, saturate(hlZoneMask),
+                                    step(0.5, _HighlightHasZoneAtlas));
+                float hlAmt = hlMask * _HighlightIntensity;
                 hlAmt = TexEdge(TexCoverage(saturate(hlAmt), hiTexCoverage), hiTexEdge);
                 fixed3 hlTarget = 1.0 - (1.0 - col) * (1.0 - _HighlightColor.rgb);
                 hlTarget = TexBody(hlTarget, wideLuma, hiTexBody);
-                hlTarget = ApplyFinish(hlTarget, wideLuma, i.uv, _HighlightFinish, _HighlightShimmer,
-                                       _HighlightGlossLo, _HighlightGlossGain, _HighlightShimmerSize,
-                                       _HighlightShimmerDensity, _HighlightMatte, _HighlightSheen,
+                // 공용 Finish의 사각 셀 시머는 하이라이터에서만 끄고 전용 미세 펄로 대체한다.
+                float hlFinishWithoutLegacyShimmer = _HighlightFinish > 2.5 ? 0.0 : _HighlightFinish;
+                hlTarget = ApplyFinish(hlTarget, wideLuma, i.uv, hlFinishWithoutLegacyShimmer, 0.0,
+                                       _HighlightGlossLo, _HighlightGlossGain, 0.0,
+                                       0.0, _HighlightMatte, _HighlightSheen,
                                        screenUV, _PearlLightGain);
+                hlTarget = ApplyHighlighterMicroShimmer(hlTarget, wideLuma, i.uv, screenUV,
+                                                        _HighlightFinish, _HighlightShimmer,
+                                                        _HighlightShimmerSize, _HighlightShimmerDensity,
+                                                        _PearlLightGain);
                 hlTarget = TexGrain(hlTarget, i.uv, hiTexGrain);
                 col = lerp(col, hlTarget, hlAmt);
                 // 부분 커버 모양(#19b) — 1=붉은기 자동(원본 피드에서 붉은 픽셀만 선택
@@ -733,10 +815,10 @@ Shader "ARMakeup/FaceMakeup"
                 float ccRedness = original.r - max(original.g, original.b);
                 float ccRedSel = smoothstep(CC_RED_LO, CC_RED_HI, ccRedness);
                 float ccMask = ccRedSel * step(0.5, _ConcealerShape);
-                // 제형(컨실러 붉은기 경로) — GENERIC 템플릿. 하안검 밴드(눈밑존)와 같은
-                // concealerTexture 값을 공유(부위 1개, 셰이더 2곳). enum 0=ZERO=바이트 동일.
+                // 컨실러 template(2) 붉은기 경로. 하안검 밴드(눈밑존)와 같은
+                // concealerTexture 값을 공유(부위 1개, 셰이더 2곳). -1=무변조, 0=리퀴드.
                 float ccTexEdge, ccTexGrain, ccTexCoverage, ccTexBody;
-                TexBundleFromEnum(0.0, _ConcealerTexture, ccTexEdge, ccTexGrain, ccTexCoverage, ccTexBody);
+                TexBundleFromEnum(2.0, _ConcealerTexture, ccTexEdge, ccTexGrain, ccTexCoverage, ccTexBody);
                 float ccAmt = ccMask * _ConcealerIntensity;
                 ccAmt = TexEdge(TexCoverage(saturate(ccAmt), ccTexCoverage), ccTexEdge);
                 // 컨실러 마감 — 스크린(가산) 결과색에만 ApplyFinish(0=새틴=무변형, 하위호환).
@@ -760,11 +842,10 @@ Shader "ARMakeup/FaceMakeup"
                         pZone = 1.0 - smoothstep(PWD_CHEEK_LO, PWD_CHEEK_HI, dx);
                     else if (_PowderShape > 0.5) // T존
                         pZone = 1.0 - smoothstep(PWD_TZONE_LO, PWD_TZONE_HI, dx);
-                    // 제형(파우더) — GENERIC 템플릿. 매트화 프리미티브(색소·body 없음)라
-                    // coverage/edge=존 amt, grain=세팅 후 col에만 배선(body 축 제외). enum
-                    // 0(크림)=ZERO → 조기 반환 = 바이트 동일(하위호환).
+                    // 파우더 template(3). 매트화 프리미티브(색소·body 없음)라 coverage/edge=존
+                    // amt, grain=세팅 후 col에만 배선(body 축 제외). -1=무변조, 0=루스 파우더.
                     float pwTexEdge, pwTexGrain, pwTexCoverage, pwTexBody;
-                    TexBundleFromEnum(0.0, _PowderTexture, pwTexEdge, pwTexGrain, pwTexCoverage, pwTexBody);
+                    TexBundleFromEnum(3.0, _PowderTexture, pwTexEdge, pwTexGrain, pwTexCoverage, pwTexBody);
                     float pAmt = _PowderIntensity * pZone;
                     pAmt = TexEdge(TexCoverage(saturate(pAmt), pwTexCoverage), pwTexEdge);
 

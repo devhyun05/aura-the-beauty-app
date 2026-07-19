@@ -2,9 +2,35 @@ using System;
 
 namespace ARMakeup.Bridge
 {
+    [Serializable]
+    public class ExpertOverrideEntry
+    {
+        public string key;
+        public float value;
+    }
+
+    [Serializable]
+    public class RegionAffine
+    {
+        public string region;
+        public float dx;
+        public float dy;
+        public float sx;
+        public float sy;
+        public float rot;
+    }
+
+    [Serializable]
+    public class RegionWarp
+    {
+        public string region;
+        public float[] warp;
+    }
+
     /// <summary>
     /// Filter parameters shared between RN and Unity.
-    /// Colors are "#RRGGBB" hex strings, intensities are 0..1.
+    /// Colors are "#RRGGBB" hex strings. Most intensities are 0..1;
+    /// EyeshadowLayerParams.intensity alone supports 0..1.5.
     /// Keep this JsonUtility-compatible: public fields, no dictionaries.
     /// </summary>
     [Serializable]
@@ -33,7 +59,7 @@ namespace ARMakeup.Bridge
         public float lipParticleParallax = 0f;
         public float lipParticleConfetti = 0f;
         // 제형 텍스처(배치 A ①) — 립 엣지 하드니스/커버로 제형감. 0=바이트 동일(하위호환).
-        public int lipTexture = 0;               // 0=립스틱(기본) 1=벨벳틴트(엣지 소프트) 2=워터틴트(더 소프트+커버↓)
+        public int lipTexture = 0;               // 0=크림 립스틱 1=벨벳 2=워터 3=새틴 립스틱(legacy) 4=오일
         public float lipOverline = 0f;           // 오버립(R7 워프): 외곽 확장 0..1 (0=원래)
         public float lipStyleIntensity = 0f;    // 임포트 립 그림(데칼) 강도
         public float lipStyleSparkle = 0f;      // 립 데칼 글리터 명멸 0..1 (0=끔)
@@ -73,6 +99,14 @@ namespace ARMakeup.Bridge
         public float highlightShimmerDensity = 0f;
         public float highlightMatte = 0f;
         public float highlightSheen = 0f;
+        // 6-zone atlas weights. has=0 keeps controller defaults/legacy behavior.
+        public int highlightHasZoneWeights = 0;
+        public float highlightZoneCheek = 0f;
+        public float highlightZoneBridge = 0f;
+        public float highlightZoneTip = 0f;
+        public float highlightZoneBrow = 0f;
+        public float highlightZoneCupid = 0f;
+        public float highlightZoneChin = 0f;
         public string contourColor = "#9E806B";     // 컨투어/섀딩(감산/그림자)
         public float contourIntensity = 0f;
         public int contourFinish = 0;               // 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
@@ -102,30 +136,30 @@ namespace ARMakeup.Bridge
         public string foundationColor = "#E8C4A8";  // 파운데이션 색(밝은 쿨~딥 웜)
         public float foundationIntensity = 0f;      // 커버리지(0=끔)
         public int foundationFinish = 0;            // 0=새틴(기본) 1=매트 2=듀이
-        // 제형 텍스처(배치 A ①) — 커버 램프(게인·chroma·커버) 분기. 0=바이트 동일(하위호환).
-        public int foundationTexture = 0;           // 0=리퀴드(기본) 1=쿠션(커버↑) 2=스킨틴트(커버↓)
-        // 제형(텍스처) 공통 축(W1) — 부위군 템플릿 enum. 0=ZERO=현행 픽셀 바이트 동일.
-        // 셰이더가 TexBundleFromEnum으로 시드 미러링(RN regions.ts 정본). W1 셰이더 소비는
-        // 블러셔(TintFinish)만 배선 — 나머지는 저장·왕복만(각 셰이더 배선은 후속 웨이브).
-        public int toneTexture = 0;
-        public int skinTexture = 0;
-        public int concealerTexture = 0;
-        public int powderTexture = 0;
-        public int blushTexture = 0;
-        public int highlightTexture = 0;
-        public int contourTexture = 0;
-        public int eyeshadowTexture = 0;
-        public int eyeshadowLowerTexture = 0;
-        public int aegyoTexture = 0;
-        public int triangleZoneTexture = 0;
-        public int browConcealTexture = 0;
-        public int browTexture = 0;
-        public int browPencilTexture = 0;
-        public int browLightenerTexture = 0;
-        public int browStyleTexture = 0;
-        public int lipBaseTexture = 0;
-        public int lipLinerTexture = 0;
-        public int lipGlossTexture = 0;
+        // 제형 텍스처(배치 A ①) — 전용 커버 램프. 0=리퀴드(레거시와 동일),
+        // 1=쿠션 2=스틱 3=트윈케익 4=스킨틴트.
+        public int foundationTexture = 0;
+        // 제형(텍스처) 공통 축(W1) — RN TEXTURE_TEMPLATE_INDEX/TEXTURE_ENUM_SEED 수동 미러.
+        // -1은 JsonUtility 필드 부재 sentinel=레거시 무변조, 명시 0부터 각 부위 첫 제품 시드다.
+        public int toneTexture = -1;
+        public int skinTexture = -1;
+        public int concealerTexture = -1;
+        public int powderTexture = -1;
+        public int blushTexture = -1;
+        public int highlightTexture = -1;
+        public int contourTexture = -1;
+        public int eyeshadowTexture = -1;
+        public int eyeshadowLowerTexture = -1;
+        public int aegyoTexture = -1;
+        public int triangleZoneTexture = -1;
+        public int browConcealTexture = -1;
+        public int browTexture = -1;
+        public int browPencilTexture = -1;
+        public int browLightenerTexture = -1;
+        public int browStyleTexture = -1; // 도메인 축 폐지; 구 payload는 셰이더에서 무변조 처리
+        public int lipBaseTexture = -1;
+        public int lipLinerTexture = -1;
+        public int lipGlossTexture = -1;
         // ── 임시 디버그(파운데 색 튜닝) — Foundation.cginc 전역 유니폼 조절. 확정값을 리터럴로
         //    굽고 나면 이 3필드(및 셰이더 유니폼·RN 슬라이더)를 걷어낸다. 초기값=옛 #define 상수라
         //    RN이 안 건드리면 현재 픽셀과 동일. refLuma/gain은 0이 비정상값이라 리터럴 폴백,
@@ -143,6 +177,9 @@ namespace ARMakeup.Bridge
         public float fndSegHiDbg = -1f;      // 이음새 전이대 상한
         public float fndOvalSizeDbg = -1f;   // 얼굴 오벌 반경 배수 (미설정 -1 = 리터럴 폴백)
         public float fndOvalFeatherDbg = -1f; // 얼굴 오벌 경계 페더
+        public ExpertOverrideEntry[] expertOverrides; // sparse KV; null/empty = 23개 baseline
+        public RegionAffine[] regionAffines; // sparse 부위 델타; null/empty/미전송 부위는 현재값 유지
+        public RegionWarp[] regionWarps; // eyeshadow/blush W5 sparse 8점; 미전송 부위는 현재값 유지
         public float powderIntensity = 0f;          // 파우더(유분광 억제, 세팅) — 파운데와 독립
         public string powderColor = "";             // 컬러 파우더 캐스트 ""=무색(트랜스루선트, 기존 출력)
         public int powderFinish = 0;                // 파우더 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머(펄)
@@ -180,12 +217,18 @@ namespace ARMakeup.Bridge
         public string eyelinerColor = "#181418";  // 아이라이너 색
         public float eyelinerIntensity = 0f;
         public int eyelinerStyle = 0;              // 0=윙업 1=다운턴 2=가로롱
-        public int eyelinerTexture = 0;            // 아이라이너 질감: 0=리퀴드(기본) 1=젤 2=펜슬
+        public int eyelinerTexture = 0;            // 아이라이너 질감: 0=리퀴드 1=젤 2=펜슬 3=붓펜
         public int eyelinerSegment = 0;            // 아이라이너 부분: 0=전체(기본) 1=꼬리만 2=앞머리+꼬리 3=눈동자 위만
         public int eyelinerFinish = 0;             // 아이라이너 마감: 0=새틴(기본) 1=매트 2=글로시 (시머는 리본에 과해 제외)
+        public int eyelinerThicknessProfile = 0;   // 0..5 해부학적 두께 프로파일
+        public int eyelinerTailProfile = 0;        // 0..5 꼬리 geometry 프로파일
+        public int eyelinerHasGeometryProfiles = 0;// 1=명시 override, 0=legacy style 복원
         public float eyelinerStyleIntensity = 0f;  // 임포트 아이라인 텍스처 강도(색은 eyelinerColor 공용)
+        public string eyelinerLowerColor = "";     // 빈 값은 legacy eyelinerColor 폴백
         public float eyelinerLowerIntensity = 0f;  // 아이라인(하) — 하안검 밴드, 색은 eyelinerColor 공용 (0=끔)
-        public int eyelinerLowerFinish = 0;        // 아이라인(하) 마감: 0=새틴 1=매트 2=글로시 (시머 없음 — 리본에 과함)
+        public int eyelinerLowerFinish = 0;        // 아이라인(하) 마감: 0=새틴 1=매트 2=글로시 3=시머
+        public float eyelinerLowerShimmer = 0f;   // 시머 게인 0..1 (finish=3일 때만 사용)
+        public int eyelinerLowerTexture = -1;     // -1=필드 부재/레거시, 0=펜슬 1=스머지 파우더 2=글리터 리퀴드
         public float eyeCornerLift = 0f;           // 눈꼬리 띄우기(R7 명명 워프): 바깥 눈꼬리 리프트 0..1 (0=원래)
         public string mascaraColor = "#181418";    // 마스카라(속눈썹 스트로크) 색
         public float mascaraIntensity = 0f;        // 0 = 끔
@@ -208,6 +251,9 @@ namespace ARMakeup.Bridge
         public float browStyleIntensity = 0f;      // 임포트/기본 눈썹 텍스처 강도
         public int browStyleFinish = 0;            // 스타일(텍스처 눈썹) 마감: 0=새틴(기본) 1=매트 2=듀이
         public float browThickness = 1f;           // 눈썹 두께 배수 (1 = 원래)
+        public int browThicknessProfile = 0;       // 0=legacy 1=slim 2=regular 3=full 4=bold 5=headFull 6=bodyFull
+        public float browExpandUpper = 0f;         // 실측 눈썹 높이 배수의 위쪽 개인 커버 델타
+        public float browExpandLower = 0f;         // 실측 눈썹 높이 배수의 아래쪽 개인 커버 델타
         public float browArch = 0f;                // 아치 올림 (0 = 원래)
         // 사용자가 UV 템플릿 위에 그린 메이크업 룩(얼굴 UV 데칼) 강도. 텍스처는
         // setFaceOverlay 메시지로 임포트, 이 값으로 세기 조절 (0 = 끔).
@@ -272,6 +318,7 @@ namespace ARMakeup.Bridge
         public string triangleZoneColor = "#4A342A"; // 삼각존(눈꼬리 아래 음영) 딥브라운
         public float triangleZoneIntensity = 0f;     // 삼각존 강도 (0=끔) — LowerLidRenderer
         public int triangleZoneFinish = 0;           // 삼각존 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
+        public float triangleZoneShimmer = 0f;       // 시머 게인 0..1 (finish=3일 때만 사용)
         public float doubleLidIntensity = 0f;        // 쌍꺼풀 크리스 강도 (0=끔) — DoubleLidRenderer
         public float doubleLidHeight = 1f;           // 쌍꺼풀 크리스 높이 배수 (생략 0은 렌더러가 1 보정)
         public int doubleLidFinish = 0;              // 쌍꺼풀 마감: 0=새틴(기본) 1=매트 2=듀이
@@ -282,7 +329,9 @@ namespace ARMakeup.Bridge
         public float lipGlossIntensity = 0f;         // 립글로스 광량 (0=끔) — LipRenderer.ApplyLipGloss
         public int lipGlossFinish = 0;               // 립글로스 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         // ── 축 개선 5건 (모양 축) — 생략 0 = 기존 동작 ──
-        public int eyeshadowShape = 0;   // 0=리드 전체 1=크리스 집중 2=스모키 3=꼬리 포인트
+        // 0리드 전체 1크리스 2스모키 3꼬리 포인트 4안쪽 5중앙 6바깥
+        // 7베이스 8메인 9포인트 10와이드 11꼬리 연장.
+        public int eyeshadowShape = 0;
         public int browShape = 0;        // 눈썹 모양(슬롯 공통): 0=내추럴 1=일자 2=아치 3=각진
         public int concealerShape = 0;   // 0=눈밑 존 1=붉은기 자동(붉은 픽셀 커버)
         public int powderShape = 0;      // 0=전체 1=T존 2=볼 제외
@@ -330,6 +379,118 @@ namespace ARMakeup.Bridge
         // ── 모양 축 W6 치아·헤어 — 생략 0 = 현행 픽셀 동일 ──
         public int teethShape = 0;       // 치아: 0=전체 1=앞니 6전치 집중(가로 중앙 가중) — TeethRenderer
         public int hairShape = 0;        // 헤어: 0=전체 1=옴브레 2=끝만(v1 화면공간 세로 근사) — CameraFeed
+
+        /// <summary>JsonUtility overwrite 전 사용하는 wire 0/null 및 texture sentinel 기본값.</summary>
+        public static FilterParams CreateWireDefaults()
+        {
+            // Unity 6의 FromJson/FromJsonOverwrite는 필드 initializer를 유지한다. 실제 wire에서
+            // 생략된 필드는 0/null이어야 하므로 모든 비영 initializer를 명시적으로 중화한다.
+            return new FilterParams
+            {
+                skinSmoothing = 0f,
+                skinBrightening = 0f,
+                lipColor = null,
+                lipIntensity = 0f,
+                lipLinerColor = null,
+                lipLinerFinish = 0,
+                lipShimmer = 0f,
+                lipMaterialStrength = 0f,
+                lipParticleSize = 0f,
+                lipParticleBrightness = 0f,
+                lipParticleColor = null,
+                lipParticleTwinkle = 0f,
+                blushColor = null,
+                blushIntensity = 0f,
+                blushShimmer = 0f,
+                blushMaterialStrength = 0f,
+                blushParticleBrightness = 0f,
+                blushParticleColor = null,
+                blushParticleTwinkle = 0f,
+                highlightColor = null,
+                highlightShimmer = 0f,
+                contourColor = null,
+                contourShimmer = 0f,
+                concealerColor = null,
+                foundationColor = null,
+                toneTexture = -1,
+                skinTexture = -1,
+                concealerTexture = -1,
+                powderTexture = -1,
+                blushTexture = -1,
+                highlightTexture = -1,
+                contourTexture = -1,
+                eyeshadowTexture = -1,
+                eyeshadowLowerTexture = -1,
+                aegyoTexture = -1,
+                triangleZoneTexture = -1,
+                browConcealTexture = -1,
+                browTexture = -1,
+                browPencilTexture = -1,
+                browLightenerTexture = -1,
+                browStyleTexture = -1,
+                lipBaseTexture = -1,
+                lipLinerTexture = -1,
+                lipGlossTexture = -1,
+                fndRefLumaDbg = 0f,
+                fndLumaGainDbg = 0f,
+                fndChromaDbg = 0f,
+                fndSegLoDbg = 0f,
+                fndSegHiDbg = 0f,
+                fndOvalSizeDbg = 0f,
+                fndOvalFeatherDbg = 0f,
+                powderShimmer = 0f,
+                aegyoShimmer = 0f,
+                eyeshadowColor = null,
+                eyeshadowIntensity = 0f,
+                eyeshadowShimmer = 0f,
+                eyeshadowMaterialStrength = 0f,
+                eyeshadowParticleSize = 0f,
+                eyeshadowParticleBrightness = 0f,
+                eyeshadowParticleColor = null,
+                eyeshadowParticleTwinkle = 0f,
+                eyeshadowLowerShimmer = 0f,
+                irisColor = null,
+                eyelinerColor = null,
+                eyelinerLowerTexture = -1,
+                mascaraColor = null,
+                browColor = null,
+                browPowderColor = null,
+                browPowderShimmer = 0f,
+                browPencilColor = null,
+                browStyleColor = null,
+                browThickness = 0f,
+                eyelinerThickness = 0f,
+                eyelinerLowerThickness = 0f,
+                eyelinerWingLength = 0f,
+                eyelinerInnerLift = 0f,
+                eyeshadowHeight = 0f,
+                eyeshadowLowerHeight = 0f,
+                mascaraLength = 0f,
+                aegyoHeight = 0f,
+                triangleZoneHeight = 0f,
+                lipLinerWidth = 0f,
+                lowerLashLength = 0f,
+                hairTintColor = null,
+                triangleZoneColor = null,
+                doubleLidHeight = 0f,
+                lipBaseColor = null,
+                lipGlossColor = null,
+            };
+        }
+
+        /// <summary>첫 RN applyFilter 전 렌더러들이 공유하는 완전 비활성 부트 payload.</summary>
+        public static FilterParams CreateBare()
+        {
+            // initializer의 비영 강도는 편집 UI/레거시 샘플값이며 부트 렌더 상태가 아니다.
+            return new FilterParams
+            {
+                skinSmoothing = 0f,
+                skinBrightening = 0f,
+                lipIntensity = 0f,
+                blushIntensity = 0f,
+                eyeshadowIntensity = 0f,
+            };
+        }
     }
 
     /// <summary>
@@ -360,14 +521,31 @@ namespace ARMakeup.Bridge
     [Serializable]
     public class EyeshadowLayerParams
     {
+        public int surface;          // 0=upper 1=lower 2=both
+        public int profile;          // 정본 12종 profile 0..11
         public string color = "";   // "#RRGGBB" 틴트 (빈 값 = 흰색)
         public string color2 = "";  // 그라데 스톱B (빈 값 = color와 동일 = 단색)
-        public float intensity;     // 0..1
+        public float intensity;     // 0..1.5
         public int finish;          // 0=새틴(기본) 1=매트 2=글로시 3=시머
-        public int shape;           // 0=리드 전체 1=크리스 집중 2=스모키 3=꼬리 포인트
+        // 0리드 전체 1크리스 2스모키 3꼬리 포인트 4안쪽 5중앙 6바깥
+        // 7베이스 8메인 9포인트 10와이드 11꼬리 연장.
+        public int shape;
         public float gradient;      // 세로 그라데 강도 0..1 (0=단색)
         public float height = 1f;   // 밴드 세로 높이 (전 밴드 max로 정규화 → cutoff)
         public float shimmer;       // 시머 게인 (v1 미사용 — 밴드 공통 예약)
+        public int texture = -1;
+        public float glossLo, glossGain, shimmerSize, shimmerDensity;
+        public float matte, sheen;
+        public float particleSize, particleDensity;
+        public int material = 0;
+        public float materialStrength = 0.85f;
+        public float particleBrightness = 0.7f;
+        public string particleColor = "#FFF2D9";
+        public float particleTwinkle = 1f;
+        public float particleShape;
+        public float particleFeather;
+        public float particleParallax;
+        public float particleConfetti;
     }
 
     /// <summary>
@@ -474,7 +652,7 @@ namespace ARMakeup.Bridge
         //  "exitEdit"              — 편집 모드 종료(라이브 카메라 복귀)
         //  "extractLook" (path)    — 사진→룩 추출(#1): 레퍼런스 사진 1회 색 측정 → lookExtracted
         //  "setExtractDebug" (disableWhiteBalance) — 개발용: 추출 그레이월드 WB 끄기(다음 추출부터 raw 색)
-        public string type; // "applyFilter" | "capture" | "startRecording" | "stopRecording" | "setSaveOptions" | "setPaused" | "setCamera" | "setCalibration" | "exportUVTemplate" | "setBrowStyle" | "setFaceOverlay" | "setOverlayLayers" | "setLensLayers" | "setEyeshadowLayers" | "setEyelinerStyle" | "setLipStyle" | "setBlushStyle" | "setAegyoStyle" | "setRegionMask" | "setTextureMap" | "setStencil" | "setSymmetry" | "setLighting" | "setSplit" | "setFitHandles" | "enterPhotoEdit" | "enterVideoEdit" | "saveEditedPhoto" | "applyVideoEdit" | "exitEdit" | "extractLook" | "setExtractDebug"
+        public string type; // "requestReady" | "applyFilter" | "capture" | "startRecording" | "stopRecording" | "setSaveOptions" | "setPaused" | "setCamera" | "setCalibration" | "exportUVTemplate" | "setBrowStyle" | "setFaceOverlay" | "setOverlayLayers" | "setLensLayers" | "setEyeshadowLayers" | "setEyelinerStyle" | "setLipStyle" | "setBlushStyle" | "setAegyoStyle" | "setRegionMask" | "setTextureMap" | "setStencil" | "setSymmetry" | "setLighting" | "setSplit" | "setFitHandles" | "enterPhotoEdit" | "enterVideoEdit" | "saveEditedPhoto" | "applyVideoEdit" | "exitEdit" | "extractLook" | "setExtractDebug"
         public FilterParams filter;
         public bool paused;
         public string facing; // setCamera: "front" | "rear"
@@ -490,12 +668,17 @@ namespace ARMakeup.Bridge
         public SplitParams split; // setSplit: 반반 모드 상태
         public bool saveUnmirror; // setSaveOptions: 좌우 반전 없이 저장(전면 셀피를 실제 방향으로). 생략 시 false
         public bool fitHandles; // setFitHandles: 온페이스 핏 핸들(A17) 좌표 방출 토글
+        public int sessionId; // setFitHandles 세션 토큰 — Unity 응답 echo로 late packet 폐기
         public bool disableWhiteBalance; // setExtractDebug: 추출 그레이월드 WB 끄기(개발용). 생략 시 false
     }
 
     /// <summary>온페이스 핏 핸들 한 개 (fitHandles 방출, A17) — 뷰포트 좌표 + 부위 키.</summary>
     [Serializable]
     public class FitHandle { public string key; public float x; public float y; }
+
+    /// <summary>W5 외곽선. points는 [x0,y0,x1,y1,...]이고 wire 직렬화에서 [x,y][]로 변환.</summary>
+    [Serializable]
+    public class FitOutline { public string region; public float[] points; }
 
     /// <summary>Envelope for Unity → RN messages.</summary>
     [Serializable]
@@ -508,13 +691,19 @@ namespace ARMakeup.Bridge
         //  "videoEditDone" (path)      — 영상 편집본 저장 완료
         //  "editExited"                — 편집 모드 종료(라이브 복귀)
         //  "lookExtracted" (lookMeasurement) — 사진→룩 추출(#1) 부위별 색 측정 완료
-        public string type; // "ready" | "faceTracked" | "photoCaptured" | "recordingStarted" | "videoCaptured" | "uvTemplateExported" | "error" | "editReady" | "editPhotoSaved" | "videoEditProgress" | "videoEditDone" | "editExited" | "fitHandles" | "lookExtracted"
+        public string type; // "booting" | "ready" | "faceTracked" | "photoCaptured" | "recordingStarted" | "videoCaptured" | "uvTemplateExported" | "error" | "editReady" | "editPhotoSaved" | "videoEditProgress" | "videoEditDone" | "editExited" | "fitHandles" | "lookExtracted"
         public bool tracked;
         public string path;
         public string message;
+        public string generation;  // ready/booting/치명 boot error: 같은 Unity 부트 동안 고정 토큰
+        public bool fatal;         // true면 재시도 불가 초기화 실패, false면 일반 요청 오류
+        public string code;        // 기계 판별 오류 코드(예: unity_boot_failed)
+        public string stage;       // Unity 초기화 실패 단계
         public float progress; // videoEditProgress: 0..1
         public FitHandle[] handles; // fitHandles 메시지 — 뷰포트(0..1, Unity 규약 y=아래→위) 좌표
         public float eyeVp;         // 눈꼬리간 뷰포트 거리 — RN 드래그 정규화 스케일
+        public FitOutline[] outlines; // fitHandles W5 부위 외곽선(부위당 8~12 viewport 점)
+        public int sessionId;       // setFitHandles 요청 세션 echo
         public LookMeasurement lookMeasurement; // lookExtracted 메시지 — 부위별 색 측정치(#1)
     }
 

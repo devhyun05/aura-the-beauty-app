@@ -1,6 +1,121 @@
 import type { FilterParams } from '../bridge/types';
-import { fitFieldsOfRegion } from './fitSheets';
-import type { RegionKey } from './regions';
+import {FIT_WARP_POINT_COUNT, fitFieldsOfRegion} from './fitSheets';
+import type {FitDelta} from './fitSheets';
+import {REGION_MAP} from './regions';
+import type { FitTraitBackend, RegionKey } from './regions';
+
+export interface FitHandleOutline {
+  region: string;
+  points: [number, number][];
+}
+
+/** Unity cyclic j/8 순서를 보존한다. blush L/R은 같은 winding/order라 뒤집지 않는다. */
+export function fitWarpStorageIndex(
+  region: RegionKey,
+  rawRegion: string,
+  pointIndex: number,
+): number {
+  return region === 'eyeshadow' && rawRegion.endsWith('L')
+    ? FIT_WARP_POINT_COUNT - 1 - pointIndex
+    : pointIndex;
+}
+
+export const FIT_HANDLES_INTERVAL_MS = 100;
+export const FIT_OUTLINE_MIN_POINTS = 8;
+export const FIT_OUTLINE_MAX_POINTS = 12;
+export const FIT_OUTLINE_MAX_TOTAL_POINTS = 96;
+
+export function shouldConsumeFitHandles(
+  lastConsumedAt: number | null,
+  now: number,
+): boolean {
+  return lastConsumedAt === null || now - lastConsumedAt >= FIT_HANDLES_INTERVAL_MS;
+}
+
+/** 외곽선 wire 입력을 유한 viewport 좌표와 8~12점 상한으로 정규화한다. */
+export function sanitizeFitHandleOutlines(
+  outlines: readonly FitHandleOutline[] | undefined,
+): FitHandleOutline[] {
+  if (!outlines) return [];
+  const result: FitHandleOutline[] = [];
+  let totalPoints = 0;
+  for (const outline of outlines) {
+    if (FIT_OUTLINE_MAX_TOTAL_POINTS - totalPoints < FIT_OUTLINE_MIN_POINTS) break;
+    if (!outline.region || !Array.isArray(outline.points)) continue;
+    const finite = outline.points.filter(
+      point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite),
+    );
+    if (finite.length < FIT_OUTLINE_MIN_POINTS) continue;
+    const count = Math.min(
+      FIT_OUTLINE_MAX_POINTS,
+      finite.length,
+      FIT_OUTLINE_MAX_TOTAL_POINTS - totalPoints,
+    );
+    const points = Array.from({length: count}, (_, index) => {
+      const source = finite[Math.floor(index * finite.length / count)];
+      return [
+        Math.max(0, Math.min(1, source[0])),
+        Math.max(0, Math.min(1, source[1])),
+      ] as [number, number];
+    });
+    result.push({region: outline.region, points});
+    totalPoints += points.length;
+  }
+  return result;
+}
+
+export interface FitTraitGesture {
+  dxVp: number;
+  dyVpUp: number;
+  scale: number;
+  rotation: number;
+  width: number;
+}
+
+const FIT_TRAIT_AFFINE_LIMITS: Record<string, readonly [number, number]> = {
+  dx: [-0.15, 0.15], dy: [-0.15, 0.15], sx: [-0.5, 0.5], sy: [-0.5, 0.5], rot: [-45, 45],
+};
+
+const finite = (value: number): number => Number.isFinite(value) ? value : 0;
+const precise = (value: number): number => Math.round(value * 1e6) / 1e6;
+
+/** 외곽선 제스처를 W4 공통 어휘가 가리키는 실제 FitDelta 백엔드로 컴파일한다. */
+export function fitTraitGesturePatch(
+  region: RegionKey,
+  gesture: FitTraitGesture,
+  start: FitDelta,
+  baseParams: Partial<FilterParams>,
+): FitDelta {
+  const traits = REGION_MAP[region].fitTraits ?? {};
+  const patch: FitDelta = {};
+  const rules: Record<string, number> = {};
+  const values: [FitTraitBackend | undefined, number][] = [
+    [traits.positionX, gesture.dxVp],
+    [traits.positionY, gesture.dyVpUp],
+    [traits.size, gesture.scale - 1],
+    [traits.angle, gesture.rotation],
+    [traits.width, gesture.width],
+  ];
+  for (const [backend, rawDelta] of values) {
+    if (!backend) continue;
+    const delta = finite(rawDelta);
+    if (backend.startsWith('affine.')) {
+      const field = backend.slice('affine.'.length) as 'dx' | 'dy' | 'sx' | 'sy' | 'rot';
+      const [min, max] = FIT_TRAIT_AFFINE_LIMITS[field];
+      patch[field] = precise(Math.max(min, Math.min(max, (start[field] ?? 0) + delta)));
+      continue;
+    }
+    const field = backend as FitHandleField;
+    rules[field] = clampFitHandleStoredDelta(
+      region,
+      field,
+      (start.rules?.[field] ?? 0) + delta,
+      baseParams[field],
+    );
+  }
+  if (Object.keys(rules).length > 0) patch.rules = rules;
+  return patch;
+}
 
 type FitHandleField = keyof FilterParams & string;
 
@@ -28,7 +143,7 @@ export const FIT_HANDLE_REGIONS: Record<string, RegionKey> = {
   eyelinerInner: 'eyelinerUpper',
   aegyo: 'aegyo',
   eyeshadow: 'eyeshadow',
-  eyeshadowLower: 'eyeshadowLower',
+  eyeshadowLower: 'eyeshadow',
   eyelinerLower: 'eyelinerLower',
   triangleZone: 'triangleZone',
   doubleLid: 'doubleLid',
@@ -97,8 +212,8 @@ export const FIT_HANDLE_RULES: Record<string, FitHandleRule> = {
     dyUp: { field: 'eyeshadowHeight', k: 1.2 },
   },
   eyeshadowLower: {
-    region: 'eyeshadowLower',
-    dyUp: { field: 'eyeshadowLowerHeight', k: 1.2 },
+    region: 'eyeshadow',
+    dyUp: { field: 'eyeshadowHeight', k: 1.2 },
   },
   eyelinerLower: {
     region: 'eyelinerLower',
@@ -125,7 +240,9 @@ export const FIT_HANDLE_RULES: Record<string, FitHandleRule> = {
     broadcastBrow: true,
   },
   browThickness: {
-    dyUp: { field: 'browThickness', k: 1 },
+    // 구 anchor 이름은 Unity wire 호환을 위해 유지하되 개인 핏에서는 아래 털
+    // 커버를 조정한다. 룩 자체의 browThickness는 모양 탭 소유라 핏에 기록하지 않는다.
+    dyUp: { field: 'browExpandLower', k: 1 },
     broadcastBrow: true,
   },
   lip: {
@@ -151,6 +268,7 @@ export const PANEL_ONLY_FIT_FIELDS = [
   'blushEdgeSoftness',
   'highlightEdgeSoftness',
   'contourEdgeSoftness',
+  'browExpandUpper',
 ] as const;
 
 const fitField = (region: RegionKey, field: string) =>

@@ -48,6 +48,8 @@ import type {
   LightingParams,
   LookMeasurement,
   OverlayLayer,
+  RegionAffine,
+  RegionWarp,
   RNToUnityMessage,
   StencilParams,
   SymmetryParams,
@@ -55,18 +57,20 @@ import type {
 import { BARE, PRESETS } from './src/presets';
 import { suggestStyleName } from './src/storage/styleStore';
 import {
+  loadAutoFit,
   loadFitSheets,
   loadUserProducts,
   loadUserWarpFilters,
   loadUserLibrary,
   loadUserStylesV2,
+  saveAutoFit,
   saveFitSheets,
   saveUserProducts,
   saveUserWarpFilters,
   saveUserLibrary,
   saveUserStylesV2,
 } from './src/storage/lookStore';
-import type { UserStyleV2 } from './src/storage/lookStore';
+import type {AutoFitStore, UserStyleV2} from './src/storage/lookStore';
 import { loadUserFinishes, saveUserFinishes } from './src/storage/finishStore';
 import type { UserFinish } from './src/storage/finishStore';
 import {
@@ -81,7 +85,6 @@ import type { AssetKind, CatalogManifest } from './src/assets/assetCatalog';
 import ParamSlider from './src/components/ParamSlider';
 import ExtractDiagPanel from './src/components/ExtractDiagPanel';
 import FndColorDebugPanel from './src/components/FndColorDebugPanel';
-import SegSeamDebugPanel from './src/components/SegSeamDebugPanel';
 import ExtractSourceThumb from './src/components/ExtractSourceThumb';
 import Icon from './src/components/Icon';
 import BasicMode from './src/components/BasicMode';
@@ -100,24 +103,44 @@ import SettingsPanel, {
 import WarpSheet from './src/components/WarpSheet';
 import FitSheetPanel from './src/components/FitSheetPanel';
 import FitHandlesOverlay from './src/components/FitHandlesOverlay';
-import type { FitHandlePoint } from './src/components/FitHandlesOverlay';
+import type {FitHandlePoint, FitOutlineGesture} from './src/components/FitHandlesOverlay';
 import StudioHub from './src/components/StudioHub';
 import {
   applyFitToLayers,
+  assembleRegionAffines,
+  assembleRegionWarps,
   entryOf,
   newFitSheet,
+  regionAffinesForEmit,
+  regionWarpsForEmit,
   upsertEntry,
 } from './src/composer/fitSheets';
+import type {FitDelta} from './src/composer/fitSheets';
 import {
   FIT_HANDLE_REGIONS,
   FIT_HANDLE_RULES,
   fitHandleDragStartValues,
   fitHandleDragRules,
   fitHandleTargetLeaves,
+  fitTraitGesturePatch,
+  fitWarpStorageIndex,
   normalizeFitHandleAnchor,
   rebaseFitHandleRules,
+  sanitizeFitHandleOutlines,
+  shouldConsumeFitHandles,
 } from './src/composer/fitHandleContract';
-import { applyProductsToLayers } from './src/composer/products';
+import type {FitHandleOutline} from './src/composer/fitHandleContract';
+import {
+  AUTO_FIT_METRIC_KEYS,
+  AUTO_FIT_REFS,
+  acceptedAutoFitDeltas,
+  computeAutoFit,
+} from './src/composer/autoFit';
+import type {AutoFitMetricKey, AutoFitMetrics} from './src/composer/autoFit';
+import {
+  applyProductsToLayers,
+  prepareProductsForSave,
+} from './src/composer/products';
 import type { ProductDef } from './src/composer/products';
 import type { FitSheet as FitSheetData } from './src/composer/fitSheets';
 import SaveSheetV2 from './src/components/SaveSheetV2';
@@ -166,6 +189,15 @@ import type {
   TreeChild,
 } from './src/composer/lookTree';
 import { buildVariantLibrary } from './src/composer/lookVariants';
+import {
+  resetExpertOverride,
+  serializeExpertOverrides,
+  setExpertOverride,
+} from './src/composer/expertParams';
+import type {
+  ExpertOverrides,
+  ExpertParamKey,
+} from './src/composer/expertParams';
 import {
   WARP_PRESETS,
   WARP_SLIDERS,
@@ -254,6 +286,38 @@ const CULL_LABELS: Record<number, string> = {
 // 편집 히스토리 코얼레스 창(ms) — 같은 tag의 연속 변경(슬라이더 드래그 등)은 이 시간
 // 내면 첫 기록만 남겨 undo 한 번이 드래그 전체를 되돌리게 한다.
 const HIST_COALESCE_MS = 500;
+
+const AUTO_FIT_SLIDERS: ReadonlyArray<{
+  key: AutoFitMetricKey;
+  label: string;
+  min: number;
+  max: number;
+}> = [
+  {key: 'eyeCornerAngle', label: '눈꼬리 각도', min: -15, max: 15},
+  {key: 'eyeAspectRatio', label: '눈 세로/가로', min: 0.15, max: 0.55},
+  {key: 'eyeDistance', label: '눈 사이 거리', min: 0.7, max: 1.3},
+  {key: 'eyeBrowDistance', label: '눈-눈썹 거리', min: 0.6, max: 1.4},
+  {key: 'lipThicknessRatio', label: '입술 두께비', min: 0.4, max: 1.2},
+  {key: 'faceWidthLengthRatio', label: '얼굴 폭/길이', min: 0.55, max: 0.95},
+  {key: 'lipWidth', label: '입술 가로 폭', min: 0.7, max: 1.3},
+];
+
+const defaultAutoFitMetrics = (): AutoFitMetrics =>
+  Object.fromEntries(AUTO_FIT_METRIC_KEYS.map(key => [key, {
+    value: AUTO_FIT_REFS[key],
+    confidence: 1,
+    source: 'landmark' as const,
+  }])) as AutoFitMetrics;
+
+const storedAutoFitInputs = (metrics: AutoFitMetrics): AutoFitStore['inputs'] =>
+  Object.fromEntries(AUTO_FIT_METRIC_KEYS.flatMap(key => {
+    const metric = metrics[key];
+    return metric
+      ? [[key, {value: metric.value, confidence: metric.confidence}]]
+      : [];
+  })) as AutoFitStore['inputs'];
+
+export const DEFAULT_MAKEUP_OPACITY = 0.75;
 
 const ROTATION_STEPS = [-1, 0, 90, 180, 270];
 // 시간 동기 표시 경로에서 행렬 버튼은 표시 회전(0/90/180/270°)으로 동작한다
@@ -348,6 +412,22 @@ function scaleParams(
   return out;
 }
 
+// 아이섀도 멀티밴드도 legacy 스칼라와 같은 전역 농도 × 눈 슬롯 게인을 적용한다.
+// 컴파일 결과/룩 트리는 원본 강도를 보존하고, 브리지로 보낼 배열 사본만 스케일한다.
+export function scaleEyeshadowLayers(
+  layers: EyeshadowLayer[],
+  opacity: number,
+  slotGain: SlotGain = {},
+): EyeshadowLayer[] {
+  const slot = FIELD_SLOT.eyeshadowIntensity;
+  const gain = opacity * (slot ? slotGain[slot] ?? 1 : 1);
+  return layers.map(layer => ({
+    ...layer,
+    intensity: Math.max(0, Math.min(1.5,
+      gain < 1 ? layer.intensity * gain : layer.intensity)),
+  }));
+}
+
 // 시스템 라이브러리 — 내장 프리셋(PRESETS) 분해 + 부위 룩 변형(다양성 확충) 병합.
 // 변형은 전부 region 레벨이라 ⇄ 교체 패널(regionDefsForSlot)에 자동 노출된다.
 const SYSTEM_LIBRARY = { ...buildSystemLibrary(), ...buildVariantLibrary() };
@@ -404,9 +484,22 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const cameraSessionActive = useCameraSessionActive();
   const unityRef = useRef<UnityView | null>(null);
   const paramsRef = useRef<FilterParams>(BARE);
-  const opacityRef = useRef(0.75); // 전역 메이크업 농도 (0~1) — 기본 75%
+  const opacityRef = useRef(DEFAULT_MAKEUP_OPACITY); // 전역 메이크업 농도 (0~1) — 기본 75%
 
   const [unityReady, setUnityReady] = useState(false);
+  const unityReadyRef = useRef(false);
+  const lastReadyGenerationRef = useRef<string | number | null>(null);
+  const currentBootTokenRef = useRef<string | number | null>(null);
+  const legacyBootingActiveRef = useRef(false);
+  const unityBootFatalRef = useRef(false);
+  const readyRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readyDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readyRequestInFlightRef = useRef(false);
+  const requestReadyNowRef = useRef<((restartFast?: boolean) => void) | null>(null);
+  const stopReadyHandshakeRef = useRef<(() => void) | null>(null);
+  const unityErrorAlertsRef = useRef<Set<string>>(new Set());
+  const [unityBootStatus, setUnityBootStatus] = useState<'loading' | 'delayed' | 'error'>('loading');
+  const [, setFaceTracked] = useState(false);
   const [params, setParams] = useState<FilterParams>(BARE);
   // photoUri = 전체화면 미리보기(개발용 UV 템플릿 export 전용). 실제 촬영은
   // 미리보기 대신 화면 깜빡임(flashOpacity)만 준다.
@@ -479,9 +572,20 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const fndOvalSizeRef = useRef(1.1);
   const [fndOvalFeather, setFndOvalFeather] = useState(0.15); // 얼굴 오벌 경계 페더 (FND_OVAL_FEATHER)
   const fndOvalFeatherRef = useRef(0.15);
+  // 자동 핏(W6) DEV 스텁 — 얼굴분석 구현 전 측정값을 수동 주입해 계수를 튜닝한다.
+  const [autoFitOpen, setAutoFitOpen] = useState(false);
+  const [autoFitMetrics, setAutoFitMetrics] = useState<AutoFitMetrics>(defaultAutoFitMetrics);
+  const [autoFitRecord, setAutoFitRecord] = useState<AutoFitStore | null>(null);
+  const autoFitRecordRef = useRef<AutoFitStore | null>(null);
+  const [autoFitPreviewAfter, setAutoFitPreviewAfter] = useState(false);
+  const autoFitPreviewAfterRef = useRef(false);
+  const autoFitPreviewActiveRef = useRef(false);
+  const [autoFitDirty, setAutoFitDirty] = useState(false);
+  const autoFitDirtyRef = useRef(false);
+  const autoFitLocalGenerationRef = useRef(0);
   // 추출에 쓴 원본 사진 URI(검증용) — 썸네일·확대 모달 표시. null=한 번도 추출 안 함.
   const [extractSourceUri, setExtractSourceUri] = useState<string | null>(null);
-  const [opacity, setOpacityState] = useState(0.75); // 전역 메이크업 농도 슬라이더 — 기본 75%
+  const [opacity, setOpacityState] = useState(DEFAULT_MAKEUP_OPACITY); // 전역 메이크업 농도 슬라이더 — 기본 75%
   // 슬롯별 농도 게인(0..1, 없으면 1) — '전체' 외 카테고리 선택 시 그 슬롯만 조절.
   const [slotGain, setSlotGainState] = useState<SlotGain>({});
   const slotGainRef = useRef<SlotGain>({});
@@ -561,21 +665,29 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     overlayLayers: OverlayLayer[];
     lensLayers: LensLayer[];
     eyeshadowLayers: EyeshadowLayer[];
+    regionAffines: RegionAffine[];
+    regionWarps: RegionWarp[];
   }>({
     params: BARE,
     overlayLayers: [],
     lensLayers: [],
     eyeshadowLayers: [],
+    regionAffines: [],
+    regionWarps: [],
   });
+  const regionAffinesSentRef = useRef<RegionAffine[]>([]);
+  const regionWarpsSentRef = useRef<RegionWarp[]>([]);
 
   // ── 하단 파라미터 창의 2축 — 레인 × 깊이 ────────────────────────────────
   // 레인: 메이크업(색소)↔보정(FIT, 지오메트리 워프)↔가이드(#2 코치 스텝) — 최상위
   // 분리축(분류체계 정의 §2, 구 'domain'). 하단 세그먼트가 전환. 농도 슬라이더·본문이
   // 레인 따라 라우팅(메이크업=opacity/보정=wpGain/가이드=stencil.opacity).
   const [lane, setLane] = useState<'makeup' | 'warp' | 'guide'>('makeup');
-  // 깊이: 기본(초보자, 부위 칩)↔상세(컴포저/보정 시트). 파라미터창 우상단 버튼이 전환.
-  // 두 깊이가 같은 lookTree/fitLane을 공유해 전환해도 상태 연속(#24). UI 로컬 상태.
-  const [mode, setMode] = useState<'basic' | 'detail'>('basic');
+  // 깊이: 기본↔상세↔전문가. 세 모드가 같은 트리와 전문가 override 세션 상태를 공유한다.
+  const [mode, setMode] = useState<'basic' | 'detail' | 'expert'>('basic');
+  const [expertOverrides, setExpertOverrides] = useState<ExpertOverrides>({});
+  const expertOverridesRef = useRef<ExpertOverrides>({});
+  const [expertError, setExpertError] = useState<string | null>(null);
   // 파라미터 창 최소화(⌄/⌃) — App이 단일 소유(각 편집기 자체 최소화 대신 통합 헤더).
   const [panelMin, setPanelMin] = useState(false);
   // 설정(⚙️) 캘리브레이션·디버그 시트 — ⚙️ 토글로 좌측 스트립 여닫음(개발용).
@@ -645,14 +757,19 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   // 온페이스 핏 핸들(A17) — Unity가 방출한 핸들 좌표(핏 패널 열림 동안 ~10Hz).
   const [fitHandlesMsg, setFitHandlesMsg] = useState<{
     handles: { key: string; x: number; y: number }[];
+    outlines: FitHandleOutline[];
     eyeVp: number;
   } | null>(null);
   const fitHandlesEyeVpRef = useRef(0.12);
+  const fitHandlesConsumedAtRef = useRef<number | null>(null);
+  const fitHandlesSessionRef = useRef(0);
   // 내 제품(A12 후반) — 스튜디오에서 저작한 커스텀 ProductDef. 번역기·제품 칩이 소비.
   const [userProducts, setUserProducts] = useState<ProductDef[]>([]);
   const userProductsRef = useRef<ProductDef[]>([]);
   // 드래그 시작 시점의 룰 값(필드별) — WYSIWYG: 최종값 = 시작값 + 총델타.
   const handleDragStartRef = useRef<Record<string, number>>({});
+  const outlineGestureStartRef = useRef<FitDelta>({});
+  const outlineWarpStartRef = useRef<number[]>([]);
   // 핏 프리즈("사진 찍고 그 위에서 수정") 상태 기계 — capture→enterPhotoEdit→frozen.
   // editMode(갤러리 편집)와 별개: UI는 평소대로, Unity만 정지 스틸 위에서 돈다.
   const fitFreezeRef = useRef<'off' | 'capturing' | 'entering' | 'frozen'>('off');
@@ -682,6 +799,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   // 앱 시작 시 저장물 로드 (실패해도 빈 목록으로 무해). v1 스타일은 lookStore가
   // 자동 마이그레이션한다(트리 없음 → 컴파일 fast-path).
   useEffect(() => {
+    const autoFitLoadGeneration = autoFitLocalGenerationRef.current;
     loadUserStylesV2().then(styles => {
       userStylesV2Ref.current = styles;
       setUserStylesV2(styles);
@@ -701,6 +819,22 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       mainFitIdRef.current = store.mainId;
       setFitSheets(store.sheets);
       setMainFitId(store.mainId);
+    });
+    loadAutoFit().then(record => {
+      if (autoFitLocalGenerationRef.current !== autoFitLoadGeneration) return;
+      autoFitRecordRef.current = record;
+      setAutoFitRecord(record);
+      autoFitDirtyRef.current = false;
+      setAutoFitDirty(false);
+      if (record) {
+        setAutoFitMetrics(current => ({
+          ...current,
+          ...Object.fromEntries(Object.entries(record.inputs).map(([key, input]) => [key, {
+            ...input,
+            source: 'landmark' as const,
+          }])),
+        }));
+      }
     });
     loadUserLibrary().then(userLib => {
       const merged = { ...SYSTEM_LIBRARY, ...userLib };
@@ -723,6 +857,91 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     );
   }, []);
 
+  // UaaL은 RN 핸들러가 붙기 전에 ready를 먼저 방출할 수 있다. 처음 20회는 빠르게
+  // 확인하고 이후에는 느린 부트를 놓치지 않도록 5초 저빈도로 전환한다. ready/fatal/
+  // unmount에서 멈추며, foreground 복귀·booting은 빠른 확인을 새로 시작한다.
+  useEffect(() => {
+    let attempts = 0;
+    let disposed = false;
+
+    const clearRetry = () => {
+      if (readyRetryTimerRef.current) clearTimeout(readyRetryTimerRef.current);
+      readyRetryTimerRef.current = null;
+    };
+    const clearDelay = () => {
+      if (readyDelayTimerRef.current) clearTimeout(readyDelayTimerRef.current);
+      readyDelayTimerRef.current = null;
+    };
+    const stopHandshake = () => {
+      clearRetry();
+      clearDelay();
+    };
+    const requestReady = (restartFast = false) => {
+      if (disposed || unityReadyRef.current || unityBootFatalRef.current) return;
+      if (restartFast) {
+        attempts = 0;
+        clearDelay();
+        setUnityBootStatus('loading');
+        readyDelayTimerRef.current = setTimeout(() => {
+          if (!disposed && !unityReadyRef.current && !unityBootFatalRef.current) {
+            setUnityBootStatus('delayed');
+          }
+        }, 8000);
+      }
+      // postMessage의 동기 mock/브리지 echo가 booting을 즉시 되보내면 중첩 send 대신
+      // 바깥 요청이 예약할 다음 timer tick을 사용한다.
+      if (readyRequestInFlightRef.current) return;
+      clearRetry();
+      readyRequestInFlightRef.current = true;
+      try {
+        sendToUnity({type: 'requestReady'});
+      } finally {
+        readyRequestInFlightRef.current = false;
+      }
+      if (disposed || unityReadyRef.current || unityBootFatalRef.current) return;
+      attempts += 1;
+      readyRetryTimerRef.current = setTimeout(
+        () => requestReady(false),
+        attempts < 20 ? 750 : 5000,
+      );
+    };
+
+    requestReadyNowRef.current = requestReady;
+    stopReadyHandshakeRef.current = stopHandshake;
+    requestReady(true);
+    const appStateSub = AppState.addEventListener('change', state => {
+      if (state === 'active' && !unityReadyRef.current && !unityBootFatalRef.current) {
+        requestReady(true);
+      }
+    });
+
+    return () => {
+      disposed = true;
+      stopHandshake();
+      appStateSub?.remove();
+      requestReadyNowRef.current = null;
+      stopReadyHandshakeRef.current = null;
+      readyRequestInFlightRef.current = false;
+    };
+  }, [sendToUnity]);
+
+  // 아이섀도 멀티밴드(A14) 재전송 — 겹 2+면 배열, 1 이하면 빈 배열(Unity legacy 스칼라).
+  // ref에는 풀강도 원본을 보존하고 브리지 payload에만 전역×눈 슬롯 농도를 적용한다.
+  const applyEyeshadowLayers = useCallback(
+    (
+      layers: EyeshadowLayer[],
+      op: number = opacityRef.current,
+      sg: SlotGain = slotGainRef.current,
+    ) => {
+      eyeshadowLayersRef.current = layers;
+      sendToUnity({
+        type: 'setEyeshadowLayers',
+        eyeshadowLayers: scaleEyeshadowLayers(layers, op, sg),
+      });
+    },
+    [sendToUnity],
+  );
+
   // base(풀강도 룩)에 전역 농도 × 슬롯 게인을 곱해 Unity로 전송. base는 표시·조정용 그대로.
   const sendScaled = useCallback(
     (base: FilterParams, op: number, sg: SlotGain = slotGainRef.current) => {
@@ -733,23 +952,53 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       scaled.fndRefLumaDbg = fndRefLumaRef.current;
       scaled.fndChromaDbg = fndChromaRef.current;
       scaled.fndLumaGainDbg = fndLumaGainRef.current;
-      // 임시 디버그(이음새 세그 게이트) — 시각화 토글·임계 4종을 같은 관문에서 항상 주입.
-      // ref 기본값=현 셰이더 리터럴이라 안 건드리면 현재 픽셀과 동일. 확정 후 이 5줄 제거.
-      scaled.segSeamDbg = segVizRef.current ? 1 : 0;
-      scaled.fndSegLoDbg = fndSegLoRef.current;
-      scaled.fndSegHiDbg = fndSegHiRef.current;
-      scaled.fndOvalSizeDbg = fndOvalSizeRef.current;
-      scaled.fndOvalFeatherDbg = fndOvalFeatherRef.current;
+      // 전문가 상태는 RN 세션에만 두고, 브리지에는 매번 컴파일된 전체 KV 배열을 보낸다.
+      // 빈 배열도 이전 Unity override를 baseline으로 되돌리는 명시적 reset이다.
+      scaled.expertOverrides = serializeExpertOverrides(expertOverridesRef.current);
       sendToUnity({ type: 'applyFilter', filter: scaled });
     },
     [sendToUnity],
   );
 
   const applyParams = useCallback(
-    (next: FilterParams) => {
+    (next: FilterParams, bridgeValue: FilterParams = next) => {
       paramsRef.current = next;
       setParams(next);
-      sendScaled(next, opacityRef.current);
+      sendScaled(bridgeValue, opacityRef.current);
+    },
+    [sendScaled],
+  );
+
+  const changeExpertOverride = useCallback(
+    (key: ExpertParamKey, value: number) => {
+      try {
+        const next = setExpertOverride(expertOverridesRef.current, key, value);
+        expertOverridesRef.current = next;
+        setExpertOverrides(next);
+        setExpertError(null);
+        sendScaled(paramsRef.current, opacityRef.current);
+      } catch (error) {
+        setExpertError(
+          `적용할 수 없습니다: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    },
+    [sendScaled],
+  );
+
+  const restoreExpertOverride = useCallback(
+    (key: ExpertParamKey) => {
+      try {
+        const next = resetExpertOverride(expertOverridesRef.current, key);
+        expertOverridesRef.current = next;
+        setExpertOverrides(next);
+        setExpertError(null);
+        sendScaled(paramsRef.current, opacityRef.current);
+      } catch (error) {
+        setExpertError(
+          `복원할 수 없습니다: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
     },
     [sendScaled],
   );
@@ -759,8 +1008,9 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       opacityRef.current = v;
       setOpacityState(v);
       sendScaled(paramsRef.current, v);
+      applyEyeshadowLayers(eyeshadowLayersRef.current, v);
     },
-    [sendScaled],
+    [sendScaled, applyEyeshadowLayers],
   );
 
   // 슬롯별 농도 — 그 슬롯 부위만 재스케일해 전송(전역 opacity와 곱). 카테고리 선택 시.
@@ -770,8 +1020,9 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       slotGainRef.current = next;
       setSlotGainState(next);
       sendScaled(paramsRef.current, opacityRef.current, next);
+      applyEyeshadowLayers(eyeshadowLayersRef.current, opacityRef.current, next);
     },
-    [sendScaled],
+    [sendScaled, applyEyeshadowLayers],
   );
 
   // 임시 디버그(파운데 색 튜닝) — 3종 슬라이더 변경 → ref·state 갱신 후 현재 룩을 즉시 재전송
@@ -801,49 +1052,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     [sendScaled],
   );
 
-  // 임시 디버그(이음새 세그 게이트) — 토글·슬라이더 변경 → ref·state 갱신 후 현재 룩을 즉시
-  // 재전송(sendScaled가 유니폼 주입). 확정값을 셰이더 리터럴로 굽고 나면 이 핸들러들을 걷어낸다.
-  const setSegVizDbg = useCallback(
-    (v: boolean) => {
-      segVizRef.current = v;
-      setSegViz(v);
-      sendScaled(paramsRef.current, opacityRef.current);
-    },
-    [sendScaled],
-  );
-  const setFndSegLoDbg = useCallback(
-    (v: number) => {
-      fndSegLoRef.current = v;
-      setFndSegLo(v);
-      sendScaled(paramsRef.current, opacityRef.current);
-    },
-    [sendScaled],
-  );
-  const setFndSegHiDbg = useCallback(
-    (v: number) => {
-      fndSegHiRef.current = v;
-      setFndSegHi(v);
-      sendScaled(paramsRef.current, opacityRef.current);
-    },
-    [sendScaled],
-  );
-  const setFndOvalSizeDbg = useCallback(
-    (v: number) => {
-      fndOvalSizeRef.current = v;
-      setFndOvalSize(v);
-      sendScaled(paramsRef.current, opacityRef.current);
-    },
-    [sendScaled],
-  );
-  const setFndOvalFeatherDbg = useCallback(
-    (v: number) => {
-      fndOvalFeatherRef.current = v;
-      setFndOvalFeather(v);
-      sendScaled(paramsRef.current, opacityRef.current);
-    },
-    [sendScaled],
-  );
-
   const applyOverlayLayers = useCallback(
     (layers: OverlayLayer[]) => {
       overlayLayersRef.current = layers;
@@ -858,15 +1066,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     (layers: LensLayer[]) => {
       lensLayersRef.current = layers;
       sendToUnity({ type: 'setLensLayers', lensLayers: layers });
-    },
-    [sendToUnity],
-  );
-
-  // 아이섀도 멀티밴드(A14) 재전송 — 겹 2+면 배열, 1 이하면 빈 배열(Unity legacy 스칼라).
-  const applyEyeshadowLayers = useCallback(
-    (layers: EyeshadowLayer[]) => {
-      eyeshadowLayersRef.current = layers;
-      sendToUnity({ type: 'setEyeshadowLayers', eyeshadowLayers: layers });
     },
     [sendToUnity],
   );
@@ -891,14 +1090,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       pushStencil(next, stencilEnabledRef.current);
     },
     [pushStencil],
-  );
-
-  // 가이드 농도 — 공용 헤더 슬라이더의 가이드 레인 라우팅(메이크업 opacity와 동렬).
-  const setStencilOpacity = useCallback(
-    (v: number) => {
-      applyStencil({ ...stencilRef.current, opacity: v });
-    },
-    [applyStencil],
   );
 
   // 좌우 대칭 가이드(#6) — 스텐실 전송과 동형. active=가이드 레인 활성(stencilEnabledRef)
@@ -947,7 +1138,22 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     if (!fitPanelOpenRef.current) return;
     fitPanelOpenRef.current = false;
     setFitPanelOpen(false);
-  }, []);
+    sendToUnity({
+      type: 'setFitHandles',
+      fitHandles: false,
+      sessionId: fitHandlesSessionRef.current,
+    });
+    setFitHandlesMsg(null);
+    fitHandlesConsumedAtRef.current = null;
+    fitHandlesEyeVpRef.current = 0.12;
+    handleDragStartRef.current = {};
+    outlineGestureStartRef.current = {};
+    outlineWarpStartRef.current = [];
+    if (fitFreezeRef.current !== 'off') {
+      sendToUnity({ type: 'exitEdit' });
+    }
+    fitFreezeRef.current = 'off';
+  }, [sendToUnity]);
   const closePerfumeIfOpen = useCallback(() => {
     if (!perfumeOpenRef.current) return;
     perfumeOpenRef.current = false;
@@ -1035,29 +1241,32 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   // 열림 = 온페이스 핸들 모드(A17)도 함께 — Unity에 좌표 방출을 켜고 끈다.
   const toggleFitPanel = useCallback(() => {
     const open = !fitPanelOpenRef.current;
-    fitPanelOpenRef.current = open;
-    setFitPanelOpen(open);
-    if (open) {
-      closeLightingIfOpen();
-      closeSettingsIfOpen();
-      closePerfumeIfOpen();
-      closeBodyIfOpen();
-      closeHairIfOpen();
-      // 프리즈 진입("사진 찍고 그 위에서 수정") — 라이브면 촬영→정지 편집으로.
-      // 이미 사진/영상 편집 중이면 그 스틸이 곧 정지 화면이라 핸들만 켠다.
-      if (editModeRef.current === 'none') {
-        fitFreezeRef.current = 'capturing';
-        sendToUnity({ type: 'capture' });
-      } else {
-        sendToUnity({ type: 'setFitHandles', fitHandles: true });
-      }
-    } else {
-      sendToUnity({ type: 'setFitHandles', fitHandles: false });
-      setFitHandlesMsg(null);
-      if (fitFreezeRef.current === 'frozen') sendToUnity({ type: 'exitEdit' });
-      fitFreezeRef.current = 'off';
+    if (!open) {
+      closeFitPanelIfOpen();
+      return;
     }
-  }, [sendToUnity, closeLightingIfOpen, closeSettingsIfOpen, closePerfumeIfOpen, closeBodyIfOpen, closeHairIfOpen]);
+    fitPanelOpenRef.current = true;
+    setFitPanelOpen(true);
+    fitHandlesSessionRef.current += 1;
+    fitHandlesConsumedAtRef.current = null;
+    closeLightingIfOpen();
+    closeSettingsIfOpen();
+    closePerfumeIfOpen();
+    closeBodyIfOpen();
+    closeHairIfOpen();
+    // 프리즈 진입("사진 찍고 그 위에서 수정") — 라이브면 촬영→정지 편집으로.
+    // 이미 사진/영상 편집 중이면 그 스틸이 곧 정지 화면이라 핸들만 켠다.
+    if (editModeRef.current === 'none') {
+      fitFreezeRef.current = 'capturing';
+      sendToUnity({ type: 'capture' });
+    } else {
+      sendToUnity({
+        type: 'setFitHandles',
+        fitHandles: true,
+        sessionId: fitHandlesSessionRef.current,
+      });
+    }
+  }, [sendToUnity, closeFitPanelIfOpen, closeLightingIfOpen, closeSettingsIfOpen, closePerfumeIfOpen, closeBodyIfOpen, closeHairIfOpen]);
 
 
   // 반반 모드 — 전체/왼쪽/오른쪽. Unity가 전역 분할선으로 복원 쿼드·가이드를 함께 몬다.
@@ -1117,6 +1326,8 @@ function FilterScreen({ onBack }: StencilARAppProps) {
         overlayLayers: OverlayLayer[];
         lensLayers: LensLayer[];
         eyeshadowLayers?: EyeshadowLayer[];
+        regionAffines?: RegionAffine[];
+        regionWarps?: RegionWarp[];
       },
       warp: WarpLane,
       gain: number,
@@ -1124,13 +1335,33 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       compiledRef.current = {
         ...compiled,
         eyeshadowLayers: compiled.eyeshadowLayers ?? [],
+        regionAffines: compiled.regionAffines ?? [],
+        regionWarps: compiled.regionWarps ?? [],
       };
-      applyParams(applyWarpToParams(compiled.params, warp, gain));
+      // count를 먼저 전환해야 multi→single에서 뒤따르는 scalar apply가 스킵되지 않는다.
+      applyEyeshadowLayers(compiled.eyeshadowLayers ?? []);
+      const warped = applyWarpToParams(compiled.params, warp, gain);
+      const activeAffines = compiled.regionAffines ?? [];
+      const affinePayload = regionAffinesForEmit(
+        activeAffines,
+        regionAffinesSentRef.current,
+      );
+      regionAffinesSentRef.current = activeAffines;
+      const activeWarps = compiled.regionWarps ?? [];
+      const warpPayload = regionWarpsForEmit(activeWarps, regionWarpsSentRef.current);
+      regionWarpsSentRef.current = activeWarps;
+      const bridgeFilter = {
+        ...warped,
+        ...(affinePayload.length > 0 ? {regionAffines: affinePayload} : {}),
+        ...(warpPayload.length > 0 ? {regionWarps: warpPayload} : {}),
+      };
+      applyParams(
+        warped,
+        affinePayload.length > 0 || warpPayload.length > 0 ? bridgeFilter : warped,
+      );
       applyOverlayLayers(compiled.overlayLayers);
       // 렌즈 레이어드(#25) — 전 슬롯 교체. 빈 배열이면 legacy 어댑터 복귀(룩 전환 누수 방지).
       applyLensLayers(compiled.lensLayers);
-      // 아이섀도 멀티밴드(A14) — 겹 2+면 배열, 아니면 빈 배열로 스칼라 경로 복귀.
-      applyEyeshadowLayers(compiled.eyeshadowLayers ?? []);
       // 마스크는 워프 대상이 아니라 마커만 보면 되므로 컴파일 결과(워프 전)로 화해.
       reconcileMasks(compiled.params);
       // 질감 맵(#22)도 마커 기반 화해(마스크와 동일 경로 — 룩 전환 누수 방지).
@@ -1141,16 +1372,117 @@ function FilterScreen({ onBack }: StencilARAppProps) {
 
   // 트리 → 컴파일. §5 단일 적용점 사슬: 제품 번역(A12 — productId 잎에 색·마감·
   // 농도 깔기) → 핏 델타(A13 — 개인 공간 조정) → 컴파일. 전부 잎 사본, 트리 무변경.
-  const compileWithFit = useCallback(
-    (root: LookNode | null) =>
-      compileLayers(
-        applyFitToLayers(applyProductsToLayers(flattenTree(root), userProductsRef.current), {
-          sheets: fitSheetsRef.current,
-          mainId: mainFitIdRef.current,
-        }),
-      ),
-    [],
-  );
+  const compileWithFit = useCallback((root: LookNode | null) => {
+    const layers = applyProductsToLayers(flattenTree(root), userProductsRef.current);
+    const fitState = {
+      sheets: fitSheetsRef.current,
+      mainId: mainFitIdRef.current,
+    };
+    const autoFit = autoFitRecordRef.current;
+    const applyAutoFit = autoFitPreviewActiveRef.current
+      ? autoFitPreviewAfterRef.current
+      : autoFit?.accepted === true;
+    const baseDeltas = autoFitPreviewActiveRef.current
+      ? (applyAutoFit ? autoFit?.deltas ?? [] : [])
+      : acceptedAutoFitDeltas(autoFit);
+    return {
+      ...compileLayers(applyFitToLayers(layers, fitState, baseDeltas)),
+      regionAffines: assembleRegionAffines(layers, fitState),
+      regionWarps: assembleRegionWarps(layers, fitState),
+    };
+  }, []);
+
+  const emitAutoFitPreview = useCallback(() => {
+    emitCompiled(
+      compileWithFit(lookTreeRef.current),
+      warpLaneRef.current,
+      wpGainRef.current,
+    );
+  }, [compileWithFit, emitCompiled]);
+
+  const toggleAutoFitDev = useCallback(() => {
+    const next = !autoFitOpen;
+    setAutoFitOpen(next);
+    autoFitPreviewActiveRef.current = next;
+    const after = next && autoFitRecordRef.current?.accepted === true;
+    autoFitPreviewAfterRef.current = after;
+    setAutoFitPreviewAfter(after);
+    emitAutoFitPreview();
+  }, [autoFitOpen, emitAutoFitPreview]);
+
+  const setAutoFitPreview = useCallback((after: boolean) => {
+    if (after && autoFitDirtyRef.current) return;
+    autoFitPreviewActiveRef.current = true;
+    autoFitPreviewAfterRef.current = after;
+    setAutoFitPreviewAfter(after);
+    emitAutoFitPreview();
+  }, [emitAutoFitPreview]);
+
+  const changeAutoFitMetric = useCallback((key: AutoFitMetricKey, value: number) => {
+    const nextMetrics: AutoFitMetrics = {
+      ...autoFitMetrics,
+      [key]: {
+        value,
+        confidence: autoFitMetrics[key]?.confidence ?? 1,
+        source: autoFitMetrics[key]?.source ?? 'landmark',
+      },
+    };
+    autoFitLocalGenerationRef.current++;
+    setAutoFitMetrics(nextMetrics);
+    autoFitDirtyRef.current = true;
+    setAutoFitDirty(true);
+    autoFitPreviewActiveRef.current = true;
+    autoFitPreviewAfterRef.current = false;
+    setAutoFitPreviewAfter(false);
+    const current = autoFitRecordRef.current;
+    const invalidated: AutoFitStore = {
+      measuredAt: current?.measuredAt ?? Date.now(),
+      accepted: false,
+      inputs: storedAutoFitInputs(nextMetrics),
+      deltas: [],
+    };
+    autoFitRecordRef.current = invalidated;
+    setAutoFitRecord(invalidated);
+    saveAutoFit(invalidated);
+    emitAutoFitPreview();
+  }, [autoFitMetrics, emitAutoFitPreview]);
+
+  const recalculateAutoFit = useCallback(() => {
+    autoFitLocalGenerationRef.current++;
+    const deltas = computeAutoFit(autoFitMetrics);
+    const record: AutoFitStore = {
+      measuredAt: Date.now(),
+      accepted: false,
+      inputs: storedAutoFitInputs(autoFitMetrics),
+      deltas,
+    };
+    autoFitRecordRef.current = record;
+    setAutoFitRecord(record);
+    autoFitPreviewActiveRef.current = true;
+    autoFitPreviewAfterRef.current = true;
+    setAutoFitPreviewAfter(true);
+    autoFitDirtyRef.current = false;
+    setAutoFitDirty(false);
+    saveAutoFit(record);
+    emitAutoFitPreview();
+  }, [autoFitMetrics, emitAutoFitPreview]);
+
+  const acceptAutoFit = useCallback(() => {
+    const current = autoFitRecordRef.current;
+    if (!current || autoFitDirtyRef.current) return;
+    autoFitLocalGenerationRef.current++;
+    const accepted = {...current, accepted: true};
+    autoFitRecordRef.current = accepted;
+    setAutoFitRecord(accepted);
+    autoFitPreviewAfterRef.current = true;
+    setAutoFitPreviewAfter(true);
+    saveAutoFit(accepted);
+  }, []);
+
+  // 저장된 수락 기저는 AsyncStorage 로드가 초기 룩 컴파일보다 늦어도 한 번 재방출한다.
+  useEffect(() => {
+    if (autoFitRecord?.accepted) emitAutoFitPreview();
+  }, [autoFitRecord, emitAutoFitPreview]);
 
   // 트리 변경 → flattenTree(+핏) → compileLayers → 방출 (라이브 반영)
   const changeTree = useCallback(
@@ -1274,6 +1606,83 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     [changeFitSheets, compileWithFit],
   );
 
+  const resolveOutlineRegion = useCallback((rawRegion: string): RegionKey | null => {
+    const {anchor} = normalizeFitHandleAnchor(rawRegion);
+    const mapped = FIT_HANDLE_REGIONS[anchor];
+    if (mapped) return mapped;
+    return REGION_DEFS.some(def => def.key === rawRegion) ? rawRegion as RegionKey : null;
+  }, []);
+
+  const onOutlineGesture = useCallback((
+    rawRegion: string,
+    gesture: FitOutlineGesture,
+    phase: 'start' | 'move' | 'end',
+  ) => {
+    const region = resolveOutlineRegion(rawRegion);
+    if (!region) return;
+    const leaf = flattenTree(lookTreeRef.current).find(item => item.region === region);
+    if (!leaf) return;
+    let sheets = fitSheetsRef.current;
+    let mainId = mainFitIdRef.current;
+    let sheet = sheets.find(item => item.id === mainId) ?? sheets[0];
+    if (!sheet) {
+      sheet = newFitSheet('내 핏 1');
+      sheets = [sheet];
+      mainId = sheet.id;
+    }
+    const sel = {region};
+    if (phase === 'start') {
+      const entry = entryOf(sheet, sel);
+      outlineGestureStartRef.current = {
+        dx: entry?.dx, dy: entry?.dy, sx: entry?.sx, sy: entry?.sy,
+        rot: entry?.rot, rules: entry?.rules ? {...entry.rules} : undefined,
+      };
+      if (sheets !== fitSheetsRef.current) changeFitSheets(sheets, mainId);
+      return;
+    }
+    const nextSheet = upsertEntry(
+      sheet,
+      sel,
+      fitTraitGesturePatch(region, gesture, outlineGestureStartRef.current, leaf.params),
+    );
+    changeFitSheets(
+      sheets.map(item => item.id === nextSheet.id ? nextSheet : item),
+      mainId,
+    );
+  }, [changeFitSheets, resolveOutlineRegion]);
+
+  const onOutlineWarpDelta = useCallback((
+    rawRegion: string,
+    pointIndex: number,
+    delta: number,
+    phase: 'start' | 'move' | 'end',
+  ) => {
+    const region = resolveOutlineRegion(rawRegion);
+    if (region !== 'eyeshadow' && region !== 'blush') return;
+    let sheets = fitSheetsRef.current;
+    let mainId = mainFitIdRef.current;
+    let sheet = sheets.find(item => item.id === mainId) ?? sheets[0];
+    if (!sheet) {
+      sheet = newFitSheet('내 핏 1');
+      sheets = [sheet];
+      mainId = sheet.id;
+    }
+    const sel = {region};
+    if (phase === 'start') {
+      outlineWarpStartRef.current = entryOf(sheet, sel)?.warp?.slice() ?? Array(8).fill(0);
+      if (sheets !== fitSheetsRef.current) changeFitSheets(sheets, mainId);
+      return;
+    }
+    const index = fitWarpStorageIndex(region, rawRegion, pointIndex);
+    const warp = outlineWarpStartRef.current.slice();
+    warp[index] = (warp[index] ?? 0) + delta;
+    const nextSheet = upsertEntry(sheet, sel, {warp});
+    changeFitSheets(
+      sheets.map(item => item.id === nextSheet.id ? nextSheet : item),
+      mainId,
+    );
+  }, [changeFitSheets, resolveOutlineRegion]);
+
   // 핸들 팬아웃(A17 v2) — Unity 부위 앵커 × 현재 룩의 보이는 겹 = 점("겹마다 점").
   // 룩에 없는 부위 앵커는 자동 필터, 같은 부위 다겹은 부채꼴+번호. 데코는 겹별
   // 앵커가 이미 따로 옴(deco0..3 = 컴파일 순서의 보이는 데코 겹).
@@ -1331,6 +1740,15 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     }
     return out;
   }, [fitHandlesMsg, lookTree]);
+
+  const expandedOutlines = useMemo<FitHandleOutline[]>(() => {
+    if (!fitHandlesMsg) return [];
+    const visible = new Set(flattenTree(lookTree).filter(layer => layer.visible).map(layer => layer.region));
+    return fitHandlesMsg.outlines.filter(outline => {
+      const region = resolveOutlineRegion(outline.region);
+      return region !== null && visible.has(region);
+    });
+  }, [fitHandlesMsg, lookTree, resolveOutlineRegion]);
 
 
   // ── 편집 히스토리(undo/redo) ─────────────────────────────────────────────
@@ -1492,6 +1910,34 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       });
     },
     [commitEdit, treeEditTag, changeTree],
+  );
+
+  // 제품 저장은 라이브러리와 잎 참조를 한 번에 교체한다. prepared 배열 하나를
+  // state/ref/disk가 공유하고, 새 제품 ref가 든 트리만 정확히 한 번 컴파일한다.
+  const commitProductsAndTree = useCallback(
+    (products: ProductDef[], nextTree: LookNode) => {
+      const prepared = prepareProductsForSave(products);
+      userProductsRef.current = prepared;
+      setUserProducts(prepared);
+      saveUserProducts(prepared);
+      changeTreeUser(nextTree);
+    },
+    [changeTreeUser],
+  );
+
+  const changeProducts = useCallback(
+    (products: ProductDef[]) => {
+      const prepared = prepareProductsForSave(products);
+      userProductsRef.current = prepared;
+      setUserProducts(prepared);
+      saveUserProducts(prepared);
+      emitCompiled(
+        compileWithFit(lookTreeRef.current),
+        warpLaneRef.current,
+        wpGainRef.current,
+      );
+    },
+    [emitCompiled, compileWithFit],
   );
 
   // 그룹 통째 라이브러리 승격(#23 Phase 3) — 재사용 번들 등록 + 작업본 그룹에 ref 링크.
@@ -1712,10 +2158,10 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     }
   }, [lookSel, changeTree]);
 
-  // 깊이 버튼(파라미터창 우상단) — 현재 레인 내에서 기본↔상세 전환.
+  // 깊이 버튼(파라미터창 우상단) — 상세·전문가 진입 모두 같은 트리를 보장한다.
   const setDepth = useCallback(
-    (next: 'basic' | 'detail') => {
-      if (next === 'detail' && lane === 'makeup') ensureTreeForDetail();
+    (next: 'basic' | 'detail' | 'expert') => {
+      if (next !== 'basic' && lane === 'makeup') ensureTreeForDetail();
       setMode(next);
     },
     [lane, ensureTreeForDetail],
@@ -1725,7 +2171,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   // 가이드 레인은 진입=오버레이 켬 / 이탈=끔 (별도 ON/OFF 버튼 없음 — 탭이 곧 스위치).
   const switchDomain = useCallback(
     (next: 'makeup' | 'warp' | 'guide') => {
-      if (next === 'makeup' && mode === 'detail') ensureTreeForDetail();
+      if (next === 'makeup' && mode !== 'basic') ensureTreeForDetail();
       // 가이드 레인 진입=가이드·대칭 오버레이 켬 / 이탈=끔. 대칭 칩(중심축·대칭쌍)
       // 조합은 상태로 유지 — 재진입 시 켜둔 그대로 복원(첫 진입 기본 둘 다 OFF).
       const active = next === 'guide';
@@ -2342,6 +2788,16 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     sendToUnity({ type: 'setCamera', facing: facingRef.current });
     // 개발자 캘리브레이션.
     sendToUnity({ type: 'setCalibration', calibration: calibRef.current });
+    // 열린 핏 세션은 새 Unity 인스턴스에 새 generation으로 다시 enable한다.
+    if (fitPanelOpenRef.current) {
+      fitHandlesSessionRef.current += 1;
+      fitHandlesConsumedAtRef.current = null;
+      sendToUnity({
+        type: 'setFitHandles',
+        fitHandles: true,
+        sessionId: fitHandlesSessionRef.current,
+      });
+    }
   }, [emitCompiled, pushStencil, pushSymmetry, sendToUnity]);
 
   const onUnityMessage = useCallback(
@@ -2351,16 +2807,63 @@ function FilterScreen({ onBack }: StencilARAppProps) {
         return;
       }
       switch (msg.type) {
+        case 'booting':
+          if (typeof msg.generation === 'string' || typeof msg.generation === 'number') {
+            if (currentBootTokenRef.current === msg.generation) break;
+            currentBootTokenRef.current = msg.generation;
+            legacyBootingActiveRef.current = false;
+          } else {
+            if (legacyBootingActiveRef.current) break;
+            legacyBootingActiveRef.current = true;
+            currentBootTokenRef.current = null;
+          }
+          unityReadyRef.current = false;
+          unityBootFatalRef.current = false;
+          setUnityReady(false);
+          setFaceTracked(false);
+          setUnityBootStatus('loading');
+          requestReadyNowRef.current?.(true);
+          break;
         case 'ready':
+          if (typeof msg.generation === 'string' || typeof msg.generation === 'number') {
+            if (lastReadyGenerationRef.current === msg.generation) break;
+            lastReadyGenerationRef.current = msg.generation;
+            currentBootTokenRef.current = msg.generation;
+            legacyBootingActiveRef.current = false;
+          } else if (unityReadyRef.current) {
+            break;
+          } else {
+            legacyBootingActiveRef.current = false;
+            currentBootTokenRef.current = null;
+          }
+          unityReadyRef.current = true;
+          unityBootFatalRef.current = false;
+          stopReadyHandshakeRef.current?.();
+          unityErrorAlertsRef.current.clear();
           setUnityReady(true);
+          setUnityBootStatus('loading');
+          setFitHandlesMsg(null);
+          fitHandlesConsumedAtRef.current = null;
+          fitHandlesEyeVpRef.current = 0.12;
+          handleDragStartRef.current = {};
+          outlineGestureStartRef.current = {};
+          outlineWarpStartRef.current = [];
+          regionWarpsSentRef.current = [];
           // Unity 기동/재마운트(백그라운드 복귀·컨텍스트 로스) 완료 — 베이스 필터만이
           // 아니라 전 편집 상태를 재방출해 재동기화(전역 농도·레이어·가이드·조명 등).
           resyncAll();
           break;
         case 'fitHandles':
           // 온페이스 핏 핸들(A17) — 핏 패널 열림 동안 ~10Hz. eyeVp는 드래그 정규화용.
+          if (!fitPanelOpenRef.current || msg.sessionId !== fitHandlesSessionRef.current) break;
+          if (!shouldConsumeFitHandles(fitHandlesConsumedAtRef.current, Date.now())) break;
+          fitHandlesConsumedAtRef.current = Date.now();
           fitHandlesEyeVpRef.current = msg.eyeVp || fitHandlesEyeVpRef.current;
-          setFitHandlesMsg({ handles: msg.handles ?? [], eyeVp: msg.eyeVp });
+          setFitHandlesMsg({
+            handles: msg.handles ?? [],
+            outlines: sanitizeFitHandleOutlines(msg.outlines),
+            eyeVp: msg.eyeVp,
+          });
           break;
         case 'photoCaptured': {
           const uri = msg.path.startsWith('file://')
@@ -2408,7 +2911,11 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                 '라이브 화면에서 핏을 조정합니다.',
               );
             }
-            sendToUnity({ type: 'setFitHandles', fitHandles: true });
+            sendToUnity({
+              type: 'setFitHandles',
+              fitHandles: true,
+              sessionId: fitHandlesSessionRef.current,
+            });
             break;
           }
           if (!msg.tracked) {
@@ -2474,11 +2981,28 @@ function FilterScreen({ onBack }: StencilARAppProps) {
           setEditProgress(null);
           // 녹화 실패 시 녹화 상태를 풀어 셔터가 멈추지 않게 한다.
           setRecording(false);
+          const fatalBootFailure = msg.fatal === true && msg.code === 'unity_boot_failed';
+          if (fatalBootFailure || (!unityReadyRef.current && msg.fatal === true)) {
+            if (typeof msg.generation === 'string' || typeof msg.generation === 'number') {
+              currentBootTokenRef.current = msg.generation;
+              legacyBootingActiveRef.current = false;
+            }
+            unityReadyRef.current = false;
+            unityBootFatalRef.current = true;
+            stopReadyHandshakeRef.current?.();
+            setUnityReady(false);
+            setFaceTracked(false);
+            setUnityBootStatus('error');
+          }
           console.warn('[Unity error]', msg.message);
           // 사용자에게 실패를 알린다 — 룩 추출·미디어 편집 등 Unity 실패가 무반응으로
           // 묻히지 않게. (상태 리셋은 위에서, 성공 케이스는 각자 전용 Alert를 가지므로
           // 이 Alert는 error 경로에만 떠 중복되지 않는다.)
-          Alert.alert('오류', msg.message ?? '알 수 없는 오류가 발생했어요.');
+          const errorAlertKey = `${msg.code ?? ''}|${msg.stage ?? ''}|${msg.message ?? ''}`;
+          if (!unityErrorAlertsRef.current.has(errorAlertKey)) {
+            unityErrorAlertsRef.current.add(errorAlertKey);
+            Alert.alert('오류', msg.message ?? '알 수 없는 오류가 발생했어요.');
+          }
           break;
       }
     },
@@ -2517,7 +3041,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     const sub = AppState.addEventListener('change', s => {
       if (s === 'active') refreshLatestPhoto();
     });
-    return () => sub.remove();
+    return () => sub?.remove();
   }, [refreshLatestPhoto]);
 
   const flipCamera = useCallback(() => {
@@ -2624,7 +3148,10 @@ function FilterScreen({ onBack }: StencilARAppProps) {
           레이어라(오버레이 box-none) 빈 화면 터치만 잡고 슬라이더/버튼은 방해 안 함. */}
       <Pressable
         style={StyleSheet.absoluteFill}
-        onPressIn={() => sendToUnity({ type: 'applyFilter', filter: BARE })}
+        onPressIn={() => sendToUnity({
+          type: 'applyFilter',
+          filter: {...BARE, expertOverrides: []},
+        })}
         onPressOut={() => sendScaled(paramsRef.current, opacityRef.current)}
       />
 
@@ -2754,7 +3281,13 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               ]}
               pointerEvents="none"
             >
-              <Text style={styles.statusText}>Unity 로딩 중…</Text>
+              <Text style={styles.statusText}>
+                {unityBootStatus === 'error'
+                  ? '카메라 시작에 실패했어요 · 앱을 다시 열어주세요'
+                  : unityBootStatus === 'delayed'
+                    ? '카메라 연결 확인 중…'
+                    : 'Unity 로딩 중…'}
+              </Text>
             </View>
           </View>
         )}
@@ -2827,12 +3360,11 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                 파운데색 {fndDebugOpen ? 'ON' : 'off'}
               </Text>
             </TouchableOpacity>
-            {/* 임시 디버그(이음새 세그 게이트) — 걷어낼 때 이 버튼과 아래 패널·상태를 함께 제거 */}
             <TouchableOpacity
-              style={[styles.debugBtn, seamDebugOpen && styles.debugBtnOn]}
-              onPress={() => setSeamDebugOpen(o => !o)}>
+              style={[styles.debugBtn, autoFitOpen && styles.debugBtnOn]}
+              onPress={toggleAutoFitDev}>
               <Text style={styles.debugText}>
-                이음새 {seamDebugOpen ? 'ON' : 'off'}
+                자동핏 {autoFitOpen ? 'ON' : 'off'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2868,21 +3400,65 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               />
             )}
 
-            {/* 임시 디버그(이음새 세그 게이트) — 확정값을 셰이더에 굽고 나면 이 블록을 걷어낸다. */}
-            {seamDebugOpen && (
-              <SegSeamDebugPanel
-                segViz={segViz}
-                onSegVizChange={setSegVizDbg}
-                segLo={fndSegLo}
-                onSegLoChange={setFndSegLoDbg}
-                segHi={fndSegHi}
-                onSegHiChange={setFndSegHiDbg}
-                ovalSize={fndOvalSize}
-                onOvalSizeChange={setFndOvalSizeDbg}
-                ovalFeather={fndOvalFeather}
-                onOvalFeatherChange={setFndOvalFeatherDbg}
-                onClose={() => setSeamDebugOpen(false)}
-              />
+            {autoFitOpen && (
+              <View style={styles.autoFitDevPanel} testID="auto-fit-dev-panel">
+                <View style={styles.autoFitDevHeader}>
+                  <Text style={styles.autoFitDevTitle}>자동 핏 측정 스텁</Text>
+                  <Text style={styles.autoFitDevStatus}>
+                    {autoFitDirty
+                      ? '재계산 필요'
+                      : autoFitRecord?.accepted
+                        ? '수락됨'
+                        : autoFitRecord ? '미수락' : '미계산'}
+                  </Text>
+                </View>
+                {AUTO_FIT_SLIDERS.map(slider => {
+                  const value = autoFitMetrics[slider.key]?.value ?? AUTO_FIT_REFS[slider.key];
+                  return (
+                    <ParamSlider
+                      key={slider.key}
+                      label={slider.label}
+                      value={(value - slider.min) / (slider.max - slider.min)}
+                      displayValue={value}
+                      step={0.01}
+                      accent={GOLD_CTA}
+                      accessibilityLabel={`자동 핏 ${slider.label}`}
+                      accessibilityValue={{
+                        min: slider.min,
+                        max: slider.max,
+                        now: value,
+                        text: value.toFixed(2),
+                      }}
+                      onChange={normalized => changeAutoFitMetric(
+                        slider.key,
+                        slider.min + normalized * (slider.max - slider.min),
+                      )}
+                    />
+                  );
+                })}
+                <View style={styles.autoFitDevActions}>
+                  <TouchableOpacity
+                    style={[styles.debugBtn, !autoFitPreviewAfter && styles.debugBtnOn]}
+                    onPress={() => setAutoFitPreview(false)}>
+                    <Text style={styles.debugText}>적용 전</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.debugBtn, !autoFitDirty && autoFitPreviewAfter && styles.debugBtnOn]}
+                    disabled={autoFitDirty || !autoFitRecord}
+                    onPress={() => setAutoFitPreview(true)}>
+                    <Text style={styles.debugText}>적용 후</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.debugBtn} onPress={recalculateAutoFit}>
+                    <Text style={styles.debugText}>다시 계산</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.debugBtn, autoFitRecord?.accepted && styles.debugBtnOn]}
+                    disabled={autoFitDirty || !autoFitRecord}
+                    onPress={acceptAutoFit}>
+                    <Text style={styles.debugText}>수락</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             )}
 
             <ExtractSourceThumb uri={extractSourceUri} topOffset={insets.top + 8} />
@@ -2926,8 +3502,14 @@ function FilterScreen({ onBack }: StencilARAppProps) {
 
         {/* 온페이스 핏 핸들(A17) — 핏 패널 열림 동안 골드 점을 얼굴 위에 드래그.
             Unity=좌표만, 터치·기록=RN. 하단 패널보다 아래(z) 두어 패널이 가리게. */}
-        {fitPanelOpen && expandedHandles.length > 0 && (
-          <FitHandlesOverlay handles={expandedHandles} onDelta={onHandleDelta} />
+        {fitPanelOpen && (expandedHandles.length > 0 || expandedOutlines.length > 0) && (
+          <FitHandlesOverlay
+            handles={expandedHandles}
+            outlines={expandedOutlines}
+            onDelta={onHandleDelta}
+            onGesture={onOutlineGesture}
+            onWarpDelta={onOutlineWarpDelta}
+          />
         )}
 
         {/* 하단 컨트롤 */}
@@ -2947,6 +3529,10 @@ function FilterScreen({ onBack }: StencilARAppProps) {
             <FitSheetPanel
               sheets={fitSheets}
               mainId={mainFitId}
+              autoFit={autoFitRecord}
+              onOpenAutoFit={() => {
+                if (!autoFitOpen) toggleAutoFitDev();
+              }}
               onChange={changeFitSheets}
               onClose={toggleFitPanel}
               onOpenStudio={() => setStudioOpen(true)}
@@ -2969,12 +3555,52 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                   onSelect: () => setGridOn(g => !g),
                 },
                 {
-                  key: 'hide',
-                  label: 'UI 가리기',
-                  hint: '셔터만 남기고 화면을 깔끔하게 (숨김 화면 탭하면 복귀)',
+                  key: 'guide-pulse',
+                  label: '가이드 호흡',
+                  hint: '가이드 라인이 천천히 숨 쉬듯 강조돼요',
                   kind: 'toggle',
-                  value: uiHidden,
-                  onSelect: () => setUiHidden(h => !h),
+                  value: stencil.pulse,
+                  onSelect: () =>
+                    applyStencil({
+                      ...stencilRef.current,
+                      pulse: !stencilRef.current.pulse,
+                    }),
+                },
+                {
+                  key: 'guide-dash',
+                  label: '가이드 점선',
+                  hint: '가이드 라인을 점선 흐름으로 보여줘요',
+                  kind: 'toggle',
+                  value: stencil.dash,
+                  onSelect: () =>
+                    applyStencil({
+                      ...stencilRef.current,
+                      dash: !stencilRef.current.dash,
+                    }),
+                },
+                {
+                  key: 'guide-midline',
+                  label: '중심축',
+                  hint: '얼굴 중심선을 표시해 좌우 균형을 봐요',
+                  kind: 'toggle',
+                  value: symmetry.midline,
+                  onSelect: () =>
+                    applySymmetry({
+                      ...symmetryRef.current,
+                      midline: !symmetryRef.current.midline,
+                    }),
+                },
+                {
+                  key: 'guide-pairs',
+                  label: '대칭쌍',
+                  hint: '좌우 짝 위치를 선으로 이어 비교해요',
+                  kind: 'toggle',
+                  value: symmetry.pairs,
+                  onSelect: () =>
+                    applySymmetry({
+                      ...symmetryRef.current,
+                      pairs: !symmetryRef.current.pairs,
+                    }),
                 },
                 {
                   key: 'lighting',
@@ -2986,6 +3612,15 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                     setUserSettingsOpen(false);
                     toggleLighting();
                   },
+                },
+                {
+                  key: 'hide',
+                  label: 'UI 가리기',
+                  hint: '셔터만 남기고 화면을 깔끔하게 (숨김 화면 탭하면 복귀)',
+                  kind: 'toggle',
+                  value: uiHidden,
+                  dividerBefore: true,
+                  onSelect: () => setUiHidden(h => !h),
                 },
               ]}
             />
@@ -3003,16 +3638,22 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                 color="rgba(255,255,255,0.9)"
               />
             </TouchableOpacity>
-            {/* 보정은 상세만 — 기본/상세 깊이 버튼은 메이크업에서만 노출. */}
+            {/* 보정은 상세만 — 기본/상세/전문가 버튼은 메이크업에서만 노출. */}
             {lane === 'makeup' && (
-              <TouchableOpacity
-                style={styles.depthBtn}
-                onPress={() => setDepth(mode === 'basic' ? 'detail' : 'basic')}
-              >
-                <Text style={styles.depthBtnText}>
-                  {mode === 'basic' ? '기본' : '상세'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.depthModes}>
+                {(['basic', 'detail', 'expert'] as const).map(depth => (
+                  <TouchableOpacity
+                    key={depth}
+                    testID={`mode-${depth}`}
+                    style={[styles.depthBtn, mode === depth && styles.depthBtnOn]}
+                    onPress={() => setDepth(depth)}
+                  >
+                    <Text style={styles.depthBtnText}>
+                      {depth === 'basic' ? '기본' : depth === 'detail' ? '상세' : '전문가'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             )}
             <TouchableOpacity
               style={[styles.histBtn, !canUndo && styles.histBtnOff]}
@@ -3042,32 +3683,17 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               <View style={styles.headerSpacer} />
             ) : (
               <>
-                {/* 메이크업 기본 모드는 농도 슬라이더가 룩카드 아래로 이동(카테고리별
-                    라우팅) — 헤더엔 spacer. 그 외(상세/보정/가이드)는 헤더 슬라이더 유지. */}
-                {lane === 'makeup' && mode === 'basic' ? (
+                {/* 메이크업 기본/보정/가이드는 본문 쪽에서 제어한다. 헤더 슬라이더는
+                    메이크업 상세·전문가처럼 좁은 편집면에서만 유지. */}
+                {lane !== 'makeup' || mode === 'basic' ? (
                   <View style={styles.headerSpacer} />
                 ) : (
                 <View style={styles.densityInline} testID="density-slider">
                   <ParamSlider
                     label=""
-                    value={
-                      lane === 'makeup'
-                        ? opacity
-                        : lane === 'warp'
-                          ? wpGain
-                          : stencil.opacity
-                    }
-                    // 이 분기는 항상 mode==='detail'이거나 warp/guide 레인이다(기본
-                    // 모드는 위에서 spacer로 걸러짐) — 메이크업=상세모드(ACCENT
-                    // 예외 유지), 보정·가이드=세 모드 스코프라 무채색.
-                    accent={lane === 'makeup' ? undefined : NEUTRAL_ACCENT}
-                    onChange={
-                      lane === 'makeup'
-                        ? setOpacityUser
-                        : lane === 'warp'
-                          ? setWpGainUser
-                          : setStencilOpacity
-                    }
+                    value={opacity}
+                    // 메이크업 상세/전문가 모드의 전역 농도만 헤더에 둔다.
+                    onChange={setOpacityUser}
                   />
                 </View>
                 )}
@@ -3194,8 +3820,9 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               onSlotGain={setSlotGainUser}
             />
           )}
-          {lane === 'makeup' && mode === 'detail' && (
+          {lane === 'makeup' && mode !== 'basic' && (
             <ComposerSheet
+              mode={mode}
               tree={lookTree}
               library={lookLibrary}
               currentParams={params}
@@ -3220,7 +3847,9 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               onSaveFinish={saveFinish}
               onPromoteGroup={promoteGroupToLibrary}
               userProducts={userProducts}
+              onCommitProductsAndTree={commitProductsAndTree}
               fitSheets={fitSheets}
+              mainFitId={mainFitId}
               onSetFitRef={(nodeId, sheetId) => {
                 if (!lookTreeRef.current) return;
                 const next = setNodeFitRef(lookTreeRef.current, nodeId, sheetId);
@@ -3231,20 +3860,34 @@ function FilterScreen({ onBack }: StencilARAppProps) {
                 setFitFocus({ region, leafId });
                 if (!fitPanelOpenRef.current) toggleFitPanel();
               }}
+              expertOverrides={expertOverrides}
+              onChangeExpertOverride={changeExpertOverride}
+              onResetExpertOverride={restoreExpertOverride}
+              expertError={expertError}
             />
           )}
           {/* 보정은 기본 모드 없이 상세(FitSheet)만 — 프리셋 칩+슬라이더 한 벌. */}
           {lane === 'warp' && (
-            <WarpSheet
-              lane={warpLane}
-              userFilters={userWarpFilters}
-              onSelectRef={selectWarpUser}
-              onChangeParam={changeWarpParamUser}
-              onApplyPart={applyWarpPartUser}
-              onReset={resetWarpUser}
-              onClose={() => {}}
-              hideChrome
-            />
+            <>
+              <WarpSheet
+                lane={warpLane}
+                userFilters={userWarpFilters}
+                onSelectRef={selectWarpUser}
+                onChangeParam={changeWarpParamUser}
+                onApplyPart={applyWarpPartUser}
+                onReset={resetWarpUser}
+                onClose={() => {}}
+                hideChrome
+              />
+              <View style={styles.panelDensityBlock} testID="warp-density-slider">
+                <ParamSlider
+                  label="전체 농도"
+                  value={wpGain}
+                  accent={NEUTRAL_ACCENT}
+                  onChange={setWpGainUser}
+                />
+              </View>
+            </>
           )}
           {/* 가이드 레인(#2) — 룩의 바르는 순서를 스텝 카드로. 카드=한 단계(제품×부위).
               레인 진입=가이드 켬/이탈=끔(switchDomain) — 본문엔 ON/OFF 없음. */}
@@ -3254,8 +3897,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
               onChange={applyStencil}
               steps={stencilSteps}
               available={availableStencilKeys}
-              symValue={symmetry}
-              onSymChange={applySymmetry}
             />
           )}
             </View>
@@ -3395,17 +4036,11 @@ function FilterScreen({ onBack }: StencilARAppProps) {
           else if (tool === 'hair') toggleHair();
         }}
         userProducts={userProducts}
-        onChangeProducts={products => {
-          userProductsRef.current = products;
-          setUserProducts(products);
-          saveUserProducts(products);
-          // 편집 중 제품을 쓰는 잎이 있으면 즉시 반영.
-          emitCompiled(
-            compileWithFit(lookTreeRef.current),
-            warpLaneRef.current,
-            wpGainRef.current,
-          );
-        }}
+        onChangeProducts={changeProducts}
+        expertOverrides={expertOverrides}
+        onChangeExpertOverride={changeExpertOverride}
+        onResetExpertOverride={restoreExpertOverride}
+        expertError={expertError}
         onOpenCatalogImport={() => {
           setStudioOpen(false);
           setCatalogImportOpen(true);
@@ -3717,15 +4352,15 @@ const styles = StyleSheet.create({
   laneSeg: {
     flexDirection: 'row',
     paddingHorizontal: PANEL_INSET,
-    paddingTop: SP.sm,
-    paddingBottom: SP.sm, // 레인 탭↔카테고리 탭 간격
+    paddingTop: SP.xs,
+    paddingBottom: SP.xs, // 레인 탭↔카테고리 탭 간격
     gap: SP.xs,
   },
   // 반반(왼쪽/전체/오른쪽) 세그먼트와 동일 룩(사용자 요청): 선택 시 솔리드 배경
   // 채움·테두리 없음. 색만 모드별(메이크업 로즈/보정 골드/가이드 스카이).
   laneSegBtn: {
     flex: 1,
-    height: CONTROL_H,
+    height: 24,
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
@@ -3757,6 +4392,11 @@ const styles = StyleSheet.create({
   densityInline: {
     flex: 1,
     marginHorizontal: 8,
+  },
+  panelDensityBlock: {
+    paddingHorizontal: PANEL_INSET,
+    paddingTop: 0,
+    paddingBottom: SP.sm,
   },
   // 필터로 저장 — 농도 슬라이더 오른쪽에 붙는 컴팩트 로즈 알약.
   headerSaveBtn: {
@@ -3821,12 +4461,20 @@ const styles = StyleSheet.create({
   // 기본/상세 깊이 토글 — 상세모드(ComposerSheet) 진입점이라 ACCENT 유지(세 모드
   // 무채색화 대상 아님, lane==='makeup'에서만 노출).
   depthBtn: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 13,
-    backgroundColor: accentAlpha(0.22),
+    backgroundColor: 'rgba(0,0,0,0.38)',
     borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  depthBtnOn: {
+    backgroundColor: accentAlpha(0.22),
     borderColor: accentAlpha(0.9),
+  },
+  depthModes: {
+    flexDirection: 'row',
+    gap: 2,
   },
   depthBtnText: {
     color: ACCENT_LIGHT,
@@ -3936,6 +4584,40 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.85)',
     fontSize: 10,
     fontWeight: '600',
+  },
+  autoFitDevPanel: {
+    position: 'absolute',
+    left: 72,
+    right: 72,
+    bottom: 154,
+    zIndex: 45,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(18,18,18,0.92)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(212,175,55,0.6)',
+  },
+  autoFitDevHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  autoFitDevTitle: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  autoFitDevStatus: {
+    color: GOLD_CTA,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  autoFitDevActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 4,
+    marginTop: 4,
   },
   actionRow: {
     flexDirection: 'row',

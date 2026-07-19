@@ -20,6 +20,8 @@ import { isDecoRegion, REGION_DEFS, REGION_MAP } from './regions';
 import type { RegionDef, RegionKey } from './regions';
 import { newRegionNode } from './lookTree';
 import type { LookNode, ProductLeaf } from './lookTree';
+import {findProduct, translateProduct} from './products';
+import type {ProductDef} from './products';
 
 /** 부위의 색/마감/농도 대표 필드 — axes 선언에서 유도(드리프트 방지). */
 export interface CategoryKeys {
@@ -81,30 +83,43 @@ export function multiUseTargets(source: RegionKey): RegionKey[] {
 export function translateLeafParams(
   leaf: ProductLeaf,
   target: RegionKey,
+  userProducts: ProductDef[] = [],
 ): Partial<FilterParams> {
   const src = categoryKeys(REGION_MAP[leaf.region]);
   const tgt = categoryKeys(REGION_MAP[target]);
+  const product = leaf.productId ? findProduct(leaf.productId, userProducts) : undefined;
+  const sourceParams = product
+    ? {
+        ...translateProduct(
+          product,
+          leaf.technique ?? {strength: 1},
+          leaf.region,
+          leaf.colorwayId,
+        ),
+        ...leaf.params,
+      }
+    : leaf.params;
   const patch: Partial<FilterParams> = {};
   const put = (k: keyof FilterParams, v: unknown) => {
     (patch as Record<string, unknown>)[k] = v;
   };
   // 색 — 소스 값(없으면 BARE 기본)을 타깃 색 필드로
   if (src.colorKey && tgt.colorKey) {
-    const c = leaf.params[src.colorKey] ?? BARE[src.colorKey];
+    const c = sourceParams[src.colorKey] ?? BARE[src.colorKey];
     if (typeof c === 'string') put(tgt.colorKey, c);
   }
   // 마감 — FINISHES 사다리끼리만 (0=새틴…3=시머 공용 규약)
   if (src.finishKey && tgt.finishKey && src.finishIsLadder && tgt.finishIsLadder) {
-    const f = leaf.params[src.finishKey];
+    const f = sourceParams[src.finishKey];
     if (typeof f === 'number') put(tgt.finishKey, f);
     if (src.shimmerKey && tgt.shimmerKey) {
-      const s = leaf.params[src.shimmerKey];
+      const s = sourceParams[src.shimmerKey];
       if (typeof s === 'number') put(tgt.shimmerKey, s);
     }
   }
   // 농도 — 0..1 정규화 공용, 그대로 이식
   if (src.intensityKey && tgt.intensityKey) {
-    const v = leaf.params[src.intensityKey];
+    const v = sourceParams[src.intensityKey];
     if (typeof v === 'number') put(tgt.intensityKey, v);
   }
   return patch;
@@ -119,6 +134,7 @@ export function multiUseRegionNode(
   leaf: ProductLeaf,
   target: RegionKey,
   current: FilterParams,
+  userProducts: ProductDef[] = [],
 ): LookNode | null {
   if (!canMultiUse(leaf.region, target)) return null;
   const region = newRegionNode(target, current);
@@ -126,7 +142,7 @@ export function multiUseRegionNode(
   if (!sub || sub.kind !== 'look') return region;
   const inner = sub.kids[0];
   if (!inner || inner.kind !== 'app') return region;
-  const patch = translateLeafParams(leaf, target);
+  const patch = translateLeafParams(leaf, target, userProducts);
   const srcLabel = REGION_MAP[leaf.region].label;
   const newLeaf: ProductLeaf = {
     ...inner,

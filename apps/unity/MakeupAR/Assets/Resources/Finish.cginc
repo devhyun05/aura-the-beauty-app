@@ -338,8 +338,10 @@ fixed3 ApplyGrain(fixed3 c, float2 uv)
 float TexEdge(float baseEdge, float edgeSoft)
 {
     if (abs(edgeSoft) <= 1e-5) return baseEdge;
-    if (edgeSoft > 0.0) return lerp(baseEdge, smoothstep(0.0, 1.0, baseEdge), saturate(edgeSoft));
-    return lerp(baseEdge, saturate((baseEdge - 0.5) * 2.0 + 0.5), saturate(-edgeSoft)); // 대비↑
+    if (baseEdge <= 0.0 || baseEdge >= 1.0) return baseEdge;
+    if (edgeSoft > 0.0) return saturate(baseEdge + 2.0 * saturate(edgeSoft)
+        * baseEdge * (1.0 - baseEdge) * (1.0 - 2.0 * baseEdge));
+    return lerp(baseEdge, smoothstep(0.0, 1.0, baseEdge), saturate(-edgeSoft));
 }
 
 // 커버리지 — 발색 마스크 세기 스케일(리퀴드=얇게 등). coverage>0=더 덮음, <0=얇게. 0=그대로.
@@ -368,24 +370,88 @@ fixed3 TexBody(fixed3 pig, float luma, float body)
     return pow(saturate(pig), max(k, 0.2));
 }
 
-// enum → TextureBundle 시드(RN TEXTURE_ENUM_SEED 미러). templateId: 0 generic/1 tone/2 teeth.
-// texEnum≈0 = 각 템플릿 ZERO(무변조). 하위호환: 미설정(0) = 전부 0 → 위 4함수 조기 반환.
+// enum → TextureBundle 시드(RN TEXTURE_TEMPLATE_INDEX/TEXTURE_ENUM_SEED 정확 미러).
+// texEnum=-1은 JsonUtility 필드 부재 sentinel=레거시 무변조. 명시 0부터 각 부위 첫 제품이다.
 void TexBundleFromEnum(float templateId, float texEnum,
                        out float edgeSoft, out float grain, out float coverage, out float body)
 {
     edgeSoft = 0.0; grain = 0.0; coverage = 0.0; body = 0.0;
-    if (templateId < 0.5)            // generic (크림/파우더/리퀴드/젤/펜슬)
-    {
-        if (texEnum > 3.5)      { edgeSoft = -0.2; grain = 0.5; body = 0.3; }   // 펜슬
-        else if (texEnum > 2.5) { edgeSoft = 0.15; }                            // 젤
-        else if (texEnum > 1.5) { edgeSoft = 0.3;  coverage = -0.1; }           // 리퀴드
-        else if (texEnum > 0.5) { edgeSoft = 0.2;  grain = 0.4; body = -0.1; }  // 파우더
-    }
-    else if (templateId < 1.5)       // tone (매끈/파우더리 — grain 축만)
-    {
-        if (texEnum > 0.5) grain = 0.4;
-    }
-    // teeth(templateId≈2) = 젤 단일 = ZERO
+
+    #define TEX_SEED(TEMPLATE_ID, ENUM_VALUE, EDGE_VALUE, GRAIN_VALUE, COVERAGE_VALUE, BODY_VALUE) \
+        if (abs(templateId - (TEMPLATE_ID)) < 0.25 && abs(texEnum - (ENUM_VALUE)) < 0.25) \
+        { edgeSoft = (EDGE_VALUE); grain = (GRAIN_VALUE); coverage = (COVERAGE_VALUE); body = (BODY_VALUE); return; }
+
+    // 0 tone
+    TEX_SEED(0, 0, 0, 0, 0, 0);
+    TEX_SEED(0, 1, 0, 0.4, 0, 0);
+    // 1 skin
+    TEX_SEED(1, 0, 0, 0, 0, 0);
+    TEX_SEED(1, 1, 0, 0.4, 0, 0);
+    // 2 concealer
+    TEX_SEED(2, 0, 0.3, 0, -0.1, 0);
+    TEX_SEED(2, 1, 0, 0, 0, 0);
+    TEX_SEED(2, 2, -0.1, 0.1, 0.15, 0.25);
+    // 3 powder
+    TEX_SEED(3, 0, 0.25, 0.45, -0.1, -0.1);
+    TEX_SEED(3, 1, 0.1, 0.25, 0.15, 0);
+    TEX_SEED(3, 2, 0.2, 0, -0.15, -0.15);
+    // 4 blush
+    TEX_SEED(4, 0, 0.2, 0.4, 0, -0.1);
+    TEX_SEED(4, 1, 0.1, 0, 0, 0.1);
+    TEX_SEED(4, 2, 0.3, 0, -0.1, 0);
+    TEX_SEED(4, 3, 0.35, 0, -0.2, -0.15);
+    // 5 highlighter
+    TEX_SEED(5, 0, 0.2, 0.35, 0, -0.1);
+    TEX_SEED(5, 1, 0.1, 0, 0.1, 0);
+    TEX_SEED(5, 2, 0.25, 0, -0.1, -0.1);
+    // 6 contour
+    TEX_SEED(6, 0, 0.2, 0.4, 0, -0.1);
+    TEX_SEED(6, 1, 0.15, 0, 0, 0.1);
+    TEX_SEED(6, 2, -0.05, 0, 0.1, 0.2);
+    // 7 triangleZone
+    TEX_SEED(7, 0, 0.2, 0.4, 0, -0.1);
+    TEX_SEED(7, 1, 0.15, 0, 0, 0.1);
+    // 8 eyeshadow
+    TEX_SEED(8, 0, 0.2, 0.4, 0, -0.1);
+    TEX_SEED(8, 1, 0.1, 0, 0.1, 0.15);
+    TEX_SEED(8, 2, 0.3, 0, -0.15, 0);
+    // 9 eyeshadowLower
+    TEX_SEED(9, 0, 0.2, 0.4, 0, -0.1);
+    TEX_SEED(9, 1, 0.1, 0, 0.1, 0.15);
+    TEX_SEED(9, 2, 0.3, 0, -0.15, 0);
+    // 10 aegyo
+    TEX_SEED(10, 0, -0.2, 0.5, 0, 0.3);
+    TEX_SEED(10, 1, 0.2, 0.4, 0, -0.1);
+    TEX_SEED(10, 2, 0.1, 0.2, 0, 0);
+    // 11 eyelinerLower
+    TEX_SEED(11, 0, -0.2, 0.5, 0, 0.3);
+    TEX_SEED(11, 1, 0.35, 0.3, -0.1, 0);
+    TEX_SEED(11, 2, 0.1, 0.15, -0.1, 0);
+    // 12 brow
+    TEX_SEED(12, 0, 0, 0, 0, 0);
+    TEX_SEED(12, 1, 0.1, 0, -0.15, -0.1);
+    // 13 browPencil
+    TEX_SEED(13, 0, -0.2, 0.5, 0, 0.3);
+    TEX_SEED(13, 1, 0, 0.3, 0, 0.1);
+    TEX_SEED(13, 2, 0.2, 0, -0.1, -0.1);
+    // 14 browConceal
+    TEX_SEED(14, 0, 0, 0, 0, 0);
+    // 15 browLightener
+    TEX_SEED(15, 0, 0, 0, 0, 0);
+    // 16 lipBase
+    TEX_SEED(16, 0, 0, 0, 0, 0);
+    TEX_SEED(16, 1, -0.05, 0, 0.15, 0.2);
+    // 17 lipLiner
+    TEX_SEED(17, 0, -0.2, 0.5, 0, 0.3);
+    TEX_SEED(17, 1, 0, 0.2, 0, 0.1);
+    // 18 lipGloss
+    TEX_SEED(18, 0, 0, 0, 0, 0);
+    TEX_SEED(18, 1, 0.2, 0, -0.15, -0.15);
+    TEX_SEED(18, 2, 0.15, 0, 0.1, 0);
+    // 19 teeth
+    TEX_SEED(19, 0, 0, 0, 0, 0);
+
+    #undef TEX_SEED
 }
 
 #endif // ARMAKEUP_FINISH_INCLUDED

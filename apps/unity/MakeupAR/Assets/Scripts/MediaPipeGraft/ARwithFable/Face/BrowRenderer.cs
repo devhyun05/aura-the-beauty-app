@@ -58,6 +58,9 @@ namespace ARMakeup.Face
         // 확장량은 로컬 밴드 두께(상·하 아크 거리, "눈썹폭") 대비 비율.
         const float ConcealExpandUp = 0.45f;    // 위(이마)쪽 확장 비율 // 실기기 튜닝 대상
         const float ConcealExpandDown = 0.35f;  // 아래(눈꺼풀)쪽 확장 비율 // 실기기 튜닝 대상
+        // 새 커버 프로필의 하단 안전 상한. 0.55h보다 넓히면 짙은 쌍꺼풀/아이라인을
+        // 털로 오인할 위험이 커진다. 바깥 경계는 셰이더의 기존 0.20 페더를 유지한다.
+        const float ConcealExpandDownCoverage = 0.55f;
         // 피부색 샘플 오프셋 — 확장된 밴드 상단에서 위(이마)로 눈썹폭 × 이 값만큼 떨어진
         // 지점을 그 세로줄이 칠할 피부색으로 쓴다(눈썹 털 밖 보장, 조명 그라데이션 추종).
         const float ConcealSkinSampleUp = 0.8f; // 실기기 튜닝 대상
@@ -66,6 +69,10 @@ namespace ARMakeup.Face
         float _thickness = 1f;
         float _arch = 0f;
         int _shape = 0; // 눈썹 모양(#19b, 슬롯 공통): 0내추럴 1일자 2아치 3각진
+        int _thicknessProfile;
+        float _expandUpper;
+        float _expandLower;
+        float _coverageMode;
 
         Camera _camera;
         FaceLandmarkSource _source;
@@ -83,11 +90,23 @@ namespace ARMakeup.Face
         Mesh _concealMesh;
         Vector3[] _concealVertices;
         List<Vector3> _concealSkinPos;
+        // uv2/TEXCOORD2: 확장 컨실 밴드 안에서 새 눈썹 제품이 차지하는 하·상 범위.
+        // 컨실 셰이더가 이 구간을 보호해 "지우고 다시 그리기"의 백탁을 막는다.
+        List<Vector2> _concealProtectRange;
 
         static readonly int BrowColorId = Shader.PropertyToID("_BrowColor");
         static readonly int BrowIntensityId = Shader.PropertyToID("_BrowIntensity");
         static readonly int SkinColorId = Shader.PropertyToID("_SkinColor");
         static readonly int BrowProductMaxId = Shader.PropertyToID("_BrowProductMax");
+        static readonly int BrowCoverageModeId = Shader.PropertyToID("_BrowCoverageMode");
+        static readonly int BrowCoverageDownId = Shader.PropertyToID("_BrowCoverageDown");
+        static readonly int BrowProtectStyleTexId = Shader.PropertyToID("_BrowProtectStyleTex");
+        static readonly int BrowProtectStyleVMinId = Shader.PropertyToID("_BrowProtectStyleVMin");
+        static readonly int BrowProtectStyleVMaxId = Shader.PropertyToID("_BrowProtectStyleVMax");
+        static readonly int BrowProtectStyleLumaKeyId = Shader.PropertyToID("_BrowProtectStyleLumaKey");
+        static readonly int BrowProtectStyleWeightId = Shader.PropertyToID("_BrowProtectStyleWeight");
+        static readonly int BrowProtectPowderWeightId = Shader.PropertyToID("_BrowProtectPowderWeight");
+        static readonly int BrowProtectPencilWeightId = Shader.PropertyToID("_BrowProtectPencilWeight");
         // 채움(파우더) 제형·마감 — 0=파우더/새틴=기존 출력(하위호환).
         static readonly int BrowPowderTextureId = Shader.PropertyToID("_BrowPowderTexture");
         static readonly int BrowPowderFinishId = Shader.PropertyToID("_BrowPowderFinish");
@@ -100,15 +119,49 @@ namespace ARMakeup.Face
         static readonly int BrowTextureId = Shader.PropertyToID("_BrowTexture");
         static readonly int ConcealTextureId = Shader.PropertyToID("_ConcealTexture");
         static readonly int LightenerTextureId = Shader.PropertyToID("_LightenerTexture");
+        static readonly int HairLoId = Shader.PropertyToID("_HairLo");
+        static readonly int HairHiId = Shader.PropertyToID("_HairHi");
+        static readonly int FillFloorId = Shader.PropertyToID("_FillFloor");
+        static readonly int FeatherVId = Shader.PropertyToID("_FeatherV");
+        static readonly int FeatherHId = Shader.PropertyToID("_FeatherH");
 
         readonly Vector2[] _up = new Vector2[Seg];
         readonly Vector2[] _lo = new Vector2[Seg];
         // 워프+꼬리 클램프된 아크(그리는 제품용) — 원시 _up/_lo는 컨실이 사용.
         readonly Vector2[] _upW = new Vector2[Seg];
         readonly Vector2[] _loW = new Vector2[Seg];
+        readonly Vector2[] _coverageLo = new Vector2[Seg];
 
         void Awake() => Instance = this;
-        void OnDestroy() { if (Instance == this) Instance = null; }
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+            var mesh = _mesh;
+            var concealMesh = _concealMesh;
+            var lightenerMaterial = _lightener.material;
+            var powderMaterial = _powder.material;
+            var mascaraMaterial = _mascara.material;
+            var concealMaterial = _conceal.material;
+            _mesh = null;
+            _concealMesh = null;
+            _lightener.material = null;
+            _powder.material = null;
+            _mascara.material = null;
+            _conceal.material = null;
+            DestroyOwned(mesh);
+            DestroyOwned(concealMesh);
+            DestroyOwned(lightenerMaterial);
+            DestroyOwned(powderMaterial);
+            DestroyOwned(mascaraMaterial);
+            DestroyOwned(concealMaterial);
+        }
+
+        static void DestroyOwned(UnityEngine.Object owned)
+        {
+            if (owned == null) return;
+            if (Application.isPlaying) Destroy(owned);
+            else DestroyImmediate(owned);
+        }
 
         public void Init(Camera cam, FaceLandmarkSource source)
         {
@@ -135,6 +188,7 @@ namespace ARMakeup.Face
             _lightener.material.renderQueue = MakeupQueues.BrowLightener;
             _powder.material.renderQueue = MakeupQueues.BrowPowder;
             _mascara.material.renderQueue = MakeupQueues.BrowMascara;
+            _conceal.material.SetTexture(BrowProtectStyleTexId, Texture2D.blackTexture);
         }
 
         Product MakeProduct(string goName, string shaderName, Mesh mesh)
@@ -160,6 +214,7 @@ namespace ARMakeup.Face
         {
             var vc = Brows * Seg * 2;
             var uvs = new Vector2[vc];
+            var sideIds = new Vector4[vc];
             var tris = new int[Brows * (Seg - 1) * 6];
             for (var e = 0; e < Brows; e++)
             {
@@ -169,6 +224,8 @@ namespace ARMakeup.Face
                     var along = i / (float)(Seg - 1);
                     uvs[b + 2 * i] = new Vector2(0f, along);
                     uvs[b + 2 * i + 1] = new Vector2(1f, along);
+                    sideIds[b + 2 * i] = new Vector4(e, 0f, 0f, 0f);
+                    sideIds[b + 2 * i + 1] = new Vector4(e, 0f, 0f, 0f);
                 }
                 for (var i = 0; i < Seg - 1; i++)
                 {
@@ -181,9 +238,12 @@ namespace ARMakeup.Face
             }
             _concealVertices = new Vector3[vc];
             _concealSkinPos = new List<Vector3>(new Vector3[vc]);
+            _concealProtectRange = new List<Vector2>(new Vector2[vc]);
             _concealMesh.vertices = _concealVertices;
             _concealMesh.uv = uvs;
             _concealMesh.SetUVs(1, _concealSkinPos);
+            _concealMesh.SetUVs(2, _concealProtectRange);
+            _concealMesh.SetUVs(3, new List<Vector4>(sideIds));
             _concealMesh.triangles = tris;
         }
 
@@ -191,6 +251,7 @@ namespace ARMakeup.Face
         {
             var vc = Brows * Seg * 2;
             var uvs = new Vector2[vc];
+            var sideIds = new Vector4[vc];
             var tris = new int[Brows * (Seg - 1) * 6];
             for (var e = 0; e < Brows; e++)
             {
@@ -200,6 +261,8 @@ namespace ARMakeup.Face
                     var along = i / (float)(Seg - 1);
                     uvs[b + 2 * i] = new Vector2(0f, along);
                     uvs[b + 2 * i + 1] = new Vector2(1f, along);
+                    sideIds[b + 2 * i] = new Vector4(e, 0f, 0f, 0f);
+                    sideIds[b + 2 * i + 1] = new Vector4(e, 0f, 0f, 0f);
                 }
                 for (var i = 0; i < Seg - 1; i++)
                 {
@@ -213,6 +276,7 @@ namespace ARMakeup.Face
             _vertices = new Vector3[vc];
             _mesh.vertices = _vertices;
             _mesh.uv = uvs;
+            _mesh.SetUVs(3, new List<Vector4>(sideIds));
             _mesh.triangles = tris;
         }
 
@@ -221,6 +285,7 @@ namespace ARMakeup.Face
             _thickness = Mathf.Clamp(p.browThickness, 0.4f, 2f);
             _arch = Mathf.Clamp(p.browArch, 0f, 1f);
             _shape = Mathf.Clamp(p.browShape, 0, 5);
+            ApplyBrowCoverage(p.browThicknessProfile, p.browExpandUpper, p.browExpandLower);
             SetProduct(ref _mascara, p.browColor, p.browIntensity);
             // 결(마스카라/젤) 마감 — 0=새틴=기존 출력(하위호환).
             _mascara.material.SetFloat(BrowFinishId, p.browFinish);
@@ -252,6 +317,70 @@ namespace ARMakeup.Face
                 Mathf.Max(Mathf.Clamp01(p.browIntensity), Mathf.Clamp01(p.browPowderIntensity)),
                 Mathf.Max(Mathf.Clamp01(p.browPencilIntensity), Mathf.Clamp01(p.browStyleIntensity)));
             _conceal.material.SetFloat(BrowProductMaxId, maxProduct);
+            // 커버 모드에서는 제품별 실제/보수적 실루엣만 보호한다. 스타일은 같은
+            // 알파 텍스처, 파우더는 채움 밴드, 펜슬은 성긴 결 근사를 사용한다.
+            // profile0은 모두 0이라 기존 전역 감쇠 출력이 정확히 유지된다.
+            _conceal.material.SetFloat(BrowProtectStyleWeightId,
+                Mathf.Clamp01(p.browStyleIntensity) * _coverageMode);
+            _conceal.material.SetFloat(BrowProtectPowderWeightId,
+                Mathf.Max(Mathf.Clamp01(p.browIntensity), Mathf.Clamp01(p.browPowderIntensity))
+                * _coverageMode);
+            _conceal.material.SetFloat(BrowProtectPencilWeightId,
+                Mathf.Clamp01(p.browPencilIntensity) * _coverageMode);
+        }
+
+        public void ApplyExpertParams(float hairLo, float hairHi, float powderFillFloor,
+                                      float lightenerHairLo, float lightenerHairHi,
+                                      float concealHairLo, float concealHairHi,
+                                      float concealFeatherV, float concealFeatherH)
+        {
+            _mascara.material.SetFloat(HairLoId, hairLo);
+            _mascara.material.SetFloat(HairHiId, hairHi);
+            _powder.material.SetFloat(FillFloorId, powderFillFloor);
+            _lightener.material.SetFloat(HairLoId, lightenerHairLo);
+            _lightener.material.SetFloat(HairHiId, lightenerHairHi);
+            _conceal.material.SetFloat(HairLoId, concealHairLo);
+            _conceal.material.SetFloat(HairHiId, concealHairHi);
+            _conceal.material.SetFloat(FeatherVId, concealFeatherV);
+            _conceal.material.SetFloat(FeatherHId, concealFeatherH);
+        }
+
+        /// <summary>StyleRenderer가 실제 표시 텍스처와 동일한 알파 계약을 명시 전달한다.</summary>
+        public void SetStyleProtectMask(Texture styleTexture, float cropVMin, float cropVMax, bool lumaKey)
+        {
+            if (_conceal.material == null) return;
+            _conceal.material.SetTexture(BrowProtectStyleTexId,
+                styleTexture != null ? styleTexture : Texture2D.blackTexture);
+            _conceal.material.SetFloat(BrowProtectStyleVMinId, Mathf.Clamp01(cropVMin));
+            _conceal.material.SetFloat(BrowProtectStyleVMaxId,
+                Mathf.Clamp(Mathf.Max(cropVMin, cropVMax), 0f, 1f));
+            _conceal.material.SetFloat(BrowProtectStyleLumaKeyId, lumaKey ? 1f : 0f);
+        }
+
+        /// <summary>
+        /// 공유 브리지의 두께 프로필/개인 상·하 커버 값을 제품 스택에 적용한다.
+        /// profile 0 + delta 0은 기존 머티리얼 출력과 컨실 지오메트리를 정확히 유지한다.
+        /// </summary>
+        public void ApplyBrowCoverage(int thicknessProfile, float expandUpper, float expandLower)
+        {
+            _thicknessProfile = Mathf.Clamp(thicknessProfile, 0, 6);
+            _expandUpper = Mathf.Clamp(expandUpper, -0.25f, 0.75f);
+            _expandLower = Mathf.Clamp(expandLower, -0.25f, 0.75f);
+            // 새 프로필은 즉시 정규 모드, profile0의 작은 개인 델타는 5% 구간에서
+            // 페더/컨실 폭을 연속 전환해 슬라이더 첫 움직임의 팝을 없앤다.
+            var manualCoverage = Mathf.Max(Mathf.Abs(_expandUpper), Mathf.Abs(_expandLower));
+            _coverageMode = _thicknessProfile > 0 ? 1f : Mathf.Clamp01(manualCoverage / 0.05f);
+            SetCoverageMaterial(_mascara.material);
+            SetCoverageMaterial(_powder.material);
+            SetCoverageMaterial(_lightener.material);
+            SetCoverageMaterial(_conceal.material);
+        }
+
+        void SetCoverageMaterial(Material material)
+        {
+            material.SetFloat(BrowCoverageModeId, _coverageMode);
+            material.SetFloat(BrowCoverageDownId,
+                BrowWarp.EffectiveLowerCoverage(_thicknessProfile, _expandLower));
         }
 
         static void SetProduct(ref Product prod, string hex, float intensity)
@@ -275,6 +404,10 @@ namespace ARMakeup.Face
             if (!anyOn) return;
 
             var lm = _source.Landmarks;
+            BrowResponseReference.Apply(_conceal.material, lm);
+            BrowResponseReference.Apply(_lightener.material, lm);
+            BrowResponseReference.Apply(_powder.material, lm);
+            BrowResponseReference.Apply(_mascara.material, lm);
 
             // 라이트너용 피부색 (이마 평균) — 프레임 있을 때만 갱신.
             if (_lightener.intensity > 0f && _source.HasPresentedFrame)
@@ -297,8 +430,8 @@ namespace ARMakeup.Face
             // 밴드 정점 갱신 (모든 제품이 공유)
             for (var e = 0; e < Brows; e++)
             {
-                SubdivideArc(lm, BrowUpper[e], _up);
-                SubdivideArc(lm, BrowLower[e], _lo);
+                BrowWarp.SubdivideArc(lm, BrowUpper[e], _up);
+                BrowWarp.SubdivideArc(lm, BrowLower[e], _lo);
                 // R7 두께/아치 + 모양 + 꼬리 처짐 클램프 — 그리는 제품은 워프·클램프된
                 // 아크(_loW/_upW), 컨실은 원시 아크(_lo/_up) 유지. 클램프까지 별도
                 // 배열인 이유: 컨실은 사용자의 실제(처진) 털 위치를 덮어야 하므로
@@ -307,13 +440,23 @@ namespace ARMakeup.Face
                 {
                     _loW[i] = _lo[i];
                     _upW[i] = _up[i];
+                    var rawLo = _loW[i];
+                    var rawUp = _upW[i];
                     var along = i / (float)(Seg - 1);
                     BrowWarp.ShapeBand(
-                        ref _loW[i], ref _upW[i], along, _thickness, _arch, _shape);
-                    BrowWarp.TaperTail(ref _loW[i], ref _upW[i], along);
+                        ref _loW[i], ref _upW[i], along, _thickness, _arch, _shape,
+                        _thicknessProfile, _expandUpper, _expandLower);
+                    BrowWarp.TaperTail(ref _loW[i], ref _upW[i], along, _thicknessProfile,
+                        BrowWarp.IsCoverageActive(_thicknessProfile, _expandUpper, _expandLower));
+                    if (BrowWarp.IsCoverageActive(_thicknessProfile, _expandUpper, _expandLower))
+                        BrowWarp.EnsureMinimumFinalBandSpan(ref _loW[i], ref _upW[i], rawLo, rawUp);
+                    _coverageLo[i] = _loW[i];
                 }
                 var browWarped = BrowWarp.WarpAndLiftDroopingTail(
                     _loW, _upW, Seg, lm, FramePresenter.Instance.ImageAspect);
+                if (BrowWarp.IsCoverageActive(_thicknessProfile, _expandUpper, _expandLower))
+                    for (var i = 0; i < Seg; i++)
+                        BrowWarp.RestoreCoverageLowerFloor(ref _loW[i], ref _upW[i], _coverageLo[i], _lo[i], _up[i], browWarped);
                 var depth = Depth(lm[BrowUpper[e][2]].z);
                 var b = e * Seg * 2;
                 for (var i = 0; i < Seg; i++)
@@ -328,7 +471,9 @@ namespace ARMakeup.Face
                     {
                         var lo = _lo[i];
                         var thick = _up[i] - lo; // 아래→위 로컬 두께 벡터
-                        var loC = lo - thick * ConcealExpandDown;
+                        var concealExpandDown = Mathf.Lerp(
+                            ConcealExpandDown, ConcealExpandDownCoverage, _coverageMode);
+                        var loC = lo - thick * concealExpandDown;
                         var upC = _up[i] + thick * ConcealExpandUp;
                         var skinWorld = ImageToWorld(upC + thick * ConcealSkinSampleUp, depth);
                         _concealVertices[b + 2 * i] = ImageToWorld(loC, depth);
@@ -337,6 +482,17 @@ namespace ARMakeup.Face
                         // 이마 조명 그라데이션을 따라간다.
                         _concealSkinPos[b + 2 * i] = skinWorld;
                         _concealSkinPos[b + 2 * i + 1] = skinWorld;
+
+                        // 새 제품 밴드와 컨실 밴드를 최종 표시(FaceWarp) 공간으로 맞춘 뒤
+                        // 컨실 세로 uv상의 target 범위를 구한다. 꼬리 안티-드룹까지 끝난
+                        // _loW/_upW를 쓰므로 꼬리 제품 아래가 다시 하얘지지 않는다.
+                        var loTarget = browWarped ? _loW[i] : DisplayedImagePoint(_loW[i]);
+                        var upTarget = browWarped ? _upW[i] : DisplayedImagePoint(_upW[i]);
+                        var protectRange = ProjectProtectRange(
+                            DisplayedImagePoint(loC), DisplayedImagePoint(upC),
+                            loTarget, upTarget, FramePresenter.Instance.ImageAspect);
+                        _concealProtectRange[b + 2 * i] = protectRange;
+                        _concealProtectRange[b + 2 * i + 1] = protectRange;
                     }
                 }
             }
@@ -346,9 +502,49 @@ namespace ARMakeup.Face
             {
                 _concealMesh.vertices = _concealVertices;
                 _concealMesh.SetUVs(1, _concealSkinPos);
+                _concealMesh.SetUVs(2, _concealProtectRange);
                 _concealMesh.RecalculateBounds();
             }
         }
+
+        static Vector2 DisplayedImagePoint(Vector2 point)
+        {
+            var warp = FaceWarpField.Instance;
+            if (warp == null) return point;
+            var warped = warp.Forward(point);
+            return IsFinite(warped) ? warped : point;
+        }
+
+        static Vector2 ProjectProtectRange(
+            Vector2 concealLo, Vector2 concealUp,
+            Vector2 targetLo, Vector2 targetUp, float imageAspect)
+        {
+            if (!IsFinite(concealLo) || !IsFinite(concealUp) ||
+                !IsFinite(targetLo) || !IsFinite(targetUp) ||
+                !IsFinite(imageAspect) || imageAspect <= 1e-6f)
+                return Vector2.zero;
+
+            var basePoint = new Vector2(concealLo.x * imageAspect, concealLo.y);
+            var axis = new Vector2(
+                (concealUp.x - concealLo.x) * imageAspect,
+                concealUp.y - concealLo.y);
+            var axisSq = axis.sqrMagnitude;
+            if (!IsFinite(axisSq) || axisSq <= 1e-12f) return Vector2.zero;
+
+            var targetLoMetric = new Vector2(targetLo.x * imageAspect, targetLo.y) - basePoint;
+            var targetUpMetric = new Vector2(targetUp.x * imageAspect, targetUp.y) - basePoint;
+            var loUv = Vector2.Dot(targetLoMetric, axis) / axisSq;
+            var upUv = Vector2.Dot(targetUpMetric, axis) / axisSq;
+            if (!IsFinite(loUv) || !IsFinite(upUv)) return Vector2.zero;
+            var minUv = Mathf.Clamp01(Mathf.Min(loUv, upUv));
+            var maxUv = Mathf.Clamp01(Mathf.Max(loUv, upUv));
+            return maxUv - minUv > 1e-4f ? new Vector2(minUv, maxUv) : Vector2.zero;
+        }
+
+        static bool IsFinite(float value) =>
+            !float.IsNaN(value) && !float.IsInfinity(value);
+
+        static bool IsFinite(Vector2 value) => IsFinite(value.x) && IsFinite(value.y);
 
         static void SetEnabled(ref Product prod, bool on)
         {

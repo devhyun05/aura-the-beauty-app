@@ -239,13 +239,12 @@ namespace ARMakeup.Face
                 // 눈 감김 — 감을수록 속눈썹이 눈꺼풀을 따라 아래(뺨쪽)로 접힌다.
                 // 뜬 눈과 같은 위 부챗살이 감은 눈 위에 그려지면 부자연(실기기).
                 // 개방도 = 상·하안검 중앙 거리 / 눈폭(스케일 불변 정규화).
-                // 창은 낮게(0.04~0.12): 셀피 하방 카메라는 세로 개구부를 단축시켜
-                // 뜬 눈도 openRatio가 0.13~0.18까지 떨어지는데, 이전 창(0.06~0.2)은
-                // 그 구간에서 closedT를 0.4~1로 띄워 뜬 눈 속눈썹을 아래로 뒤집었다
-                // (43efc61 회귀: 상 속눈썹만 '반대로 자람'. 하 속눈썹은 폴드 없음).
+                // 창은 아주 낮게(0.02~0.06): 반쯤 뜬 눈/셀피 하방 카메라에서도 기본
+                // 마스카라가 아래로 뒤집히지 않게 한다. 아래로 누운 모양은 style 5
+                // (처짐)로 별도 노출하므로 기본은 열린 눈 방향을 강하게 보존.
                 var openRatio = Vector2.Distance(lidMid, ImgPt(lm, LowerLids[e][4])) /
                                 Mathf.Max(eyeDist, 1e-6f);
-                var closedT = 1f - Mathf.SmoothStep(0.04f, 0.12f, openRatio);
+                var closedT = 1f - Mathf.SmoothStep(0.02f, 0.06f, openRatio);
 
                 // 눈꼬리 띄우기 — 라이너·섀도·하안검과 동일 리프트로 속눈썹도 추종.
                 if (_cornerLift > 0f)

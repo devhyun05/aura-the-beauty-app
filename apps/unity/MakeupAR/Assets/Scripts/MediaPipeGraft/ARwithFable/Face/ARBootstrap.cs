@@ -24,6 +24,14 @@ namespace ARMakeup.Face
         {
             if (UnityEngine.Object.FindAnyObjectByType<ARSession>() != null) return;
 
+            // 브리지는 카메라/렌더러보다 먼저 살린다. 이후 초기화가 실패해도 RN이
+            // requestReady로 실패 원인을 다시 받을 수 있어 카메라만 뜬 채 멈추지 않는다.
+            var bridgeGO = new GameObject("NativeBridge");
+            var bridge = bridgeGO.AddComponent<NativeBridge>();
+            var stage = "bootstrap";
+
+            try
+            {
             // 익스포트마다 바뀌는 GUID — 기기에 어떤 빌드가 깔렸는지 syslog로 확인용
             Debug.Log($"[ARBootstrap] Unity build {Application.buildGUID}");
 
@@ -31,8 +39,10 @@ namespace ARMakeup.Face
             // 매 프레임 캡처·표시하려면 디스플레이 레이트로 돌아야 한다.
             Application.targetFrameRate = 60;
 
+            stage = "AR session";
             new GameObject("AR Session", typeof(ARSession), typeof(ARInputManager));
 
+            stage = "AR camera";
             var originGO = new GameObject("XR Origin");
             var origin = originGO.AddComponent<XROrigin>();
 
@@ -52,6 +62,7 @@ namespace ARMakeup.Face
             Func<bool> isTracked;
 
 #if MEDIAPIPE
+            stage = "MediaPipe renderers";
             // 시간 동기 합성: ARCameraBackground(최신 프레임) 대신 FramePresenter가
             // 랜드마크가 계산된 그 프레임을 배경으로 그린다 → 메이크업 고정.
             var presenterGO = new GameObject("Frame Presenter");
@@ -111,6 +122,7 @@ namespace ARMakeup.Face
 
             isTracked = () => landmarkSource.HasFace;
 #else
+            stage = "ARFoundation face renderer";
             camGO.AddComponent<ARCameraBackground>();
             Debug.LogWarning("[ARBootstrap] MediaPipe 패키지 미설치 — ARKit/ARCore 얼굴 트래킹 폴백 사용. " +
                              "전/후면 통합 트래킹은 scripts/setup-mediapipe.sh 실행 후 재익스포트.");
@@ -130,6 +142,7 @@ namespace ARMakeup.Face
             isTracked = () => AnyTrackedFace(faceManager);
 #endif
 
+            stage = "ARKit auxiliary sources";
             // ── ARKit 보조 소스 (양 경로 공통 — 각자 런타임 가드로 자활) ──
             //  - ARKitDepthSource: 인물 스텐실을 _ARKitStencil/_ARKitOccOn 전역으로 노출.
             //    A12+/iOS13+ 아닌 기기·Android·에디터에선 디스크립터 사전 점검으로 즉시
@@ -141,9 +154,9 @@ namespace ARMakeup.Face
             arkitAuxGO.AddComponent<ARKitDepthSource>().Init(camManager);
             arkitAuxGO.AddComponent<ARKitBlendshapeSource>();
 
-            var bridgeGO = new GameObject("NativeBridge");
-            bridgeGO.AddComponent<NativeBridge>();
+            stage = "MakeupController";
             bridgeGO.AddComponent<MakeupController>().Init(material, camManager, isTracked);
+            stage = "capture and media controllers";
             bridgeGO.AddComponent<PhotoCapture>();
             bridgeGO.AddComponent<VideoRecorder>();
             bridgeGO.AddComponent<UVTemplateExporter>();
@@ -155,6 +168,17 @@ namespace ARMakeup.Face
             // 온디바이스 색 샘플링 → lookMeasurement 방출. NativeBridge 자체 구독(무배선).
             // MediaPipe 경로에서만 실질 동작, 그 외엔 error로 응답(자체 가드).
             bridgeGO.AddComponent<LookExtractController>();
+
+            // 모든 메시지 소비자가 살아난 뒤에만 ready. RN이 첫 이벤트를 놓쳐도
+            // requestReady가 같은 상태를 재전송한다.
+            bridge.MarkReady();
+            }
+            catch (Exception exception)
+            {
+                bridge.ReportBootFailure(stage, exception);
+                Debug.LogException(exception);
+                throw;
+            }
         }
 
 #if !MEDIAPIPE

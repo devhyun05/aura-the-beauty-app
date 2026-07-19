@@ -108,9 +108,21 @@ namespace ARMakeup.Face
         const float EyeClosedSnapFloor = 0.25f; // 눈폭 대비 스냅 스케일 하한
         const float InnerCornerLiftImg = 0.055f; // 앞머리 끝 리프트(눈 높이 대비) — 눈구석 접합점보다 살짝 위에서 끝나게(0.05→0.055 실기기 튜닝)
         float _innerLiftOverride = -1f;          // (임시 디버그) 브리지 오버라이드 — 음수=미설정
-        // 스타일 0=윙업(캣아이), 1=다운턴(퍼피), 2=가로롱. 각도>0 = 위로(눈썹 방향).
-        static readonly float[] StyleAngleDeg = { 28f, -22f, 0f };
-        static readonly float[] StyleTailLen = { 0.45f, 0.4f, 0.7f }; // eyeRadius 배수
+        // 꼬리 0..2는 기존 픽셀 골든. 3=롱 스트레이트, 4=롱 업, 5=롱 다운.
+        // 각도>0 = 위로(눈썹 방향), 길이 = eyeRadius 배수.
+        static readonly float[] StyleAngleDeg = { 28f, -22f, 0f, 0f, 24f, -18f };
+        static readonly float[] StyleTailLen = { 0.45f, 0.4f, 0.7f, 1.4f, 1.2f, 1.1f };
+        // 두께 프로파일: [바깥 눈꼬리, 중앙, 안쪽 앞머리]. 0번은 기존 1→0.3 선형식과
+        // 완전히 같은 값이 되도록 SampleEyelinerThicknessProfile에서 별도 처리한다.
+        static readonly Vector3[] EyelinerThicknessProfiles =
+        {
+            new Vector3(1f, 0.65f, 0.30f),
+            new Vector3(0.42f, 0.30f, 0.16f),
+            new Vector3(0.68f, 0.48f, 0.22f),
+            new Vector3(1.55f, 1.10f, 0.50f),
+            new Vector3(1.45f, 0.75f, 0.14f),
+            new Vector3(0.72f, 1.35f, 0.20f),
+        };
 
         // ── 아이섀도우 밴드 (동적) ──
         // 안쪽 경계=lash 라인(감아도 경계까지·아래로 안 샘), 위로만 눈썹 방향 확장.
@@ -123,12 +135,12 @@ namespace ARMakeup.Face
         // 꼬리 끝(s=0 근처)에서 밴드 상단을 수직 법선이 아니라 눈 장축(눈앞머리→꼬리)의 연장,
         // 즉 거의 수평 방향으로 눕혀 눈꼬리에서 라인을 따라 ≈180°로 이어 빠지게 한다(사용자 요구:
         // "눈 끝에서 180도까지"). 완전 수평은 처져 보일 수 있어 눈썹꼬리 방향을 소량 혼합해
-        // 결과각 ≈170°로 미세 상향. 전 모양 4종 공통(형태 차이는 셰이더 프로파일이 유지).
+        // 결과각 ≈170°로 미세 상향. 전 모양 12종 공통(형태 차이는 셰이더 프로파일이 유지).
         const float TailSweepAlong = 0.28f;    // 꼬리(s=0)에서 안쪽으로 스윕이 풀리는 along 범위
         const float TailSweepStrength = 1.0f;  // 확장방향을 tailDir로 눕히는 정도(0=수직법선, 1=완전) — s=0에서 완전 수렴
         const float TailUpBias = 0.18f;        // tailDir 혼합비: 눈장축(수평,0)↔눈썹꼬리(위,1) — 미세 상향(≈170°)
-        // 리드 전체(shape 0)만: 밴드를 눈꼬리 밖으로 눈폭의 이만큼 연장하고 끝을 페더로 소멸.
-        // 연장 컬럼은 전 모양 공통으로 생성하되(봉투 공유), 셰이더가 shape 0만 남기고 컷.
+        // shape 0/11만: 밴드를 눈꼬리 밖으로 눈폭의 이만큼 연장하고 끝을 페더로 소멸.
+        // 연장 컬럼은 전 모양 공통 봉투이며 셰이더 allowlist가 0/11만 남긴다.
         const int LidExtendPts = 4;            // 연장 컬럼 수(테셀레이션)
         const float LidExtendFrac = 0.18f;     // 연장 길이(눈폭 배수) — 눈꼬리 밖(수평 스윕이라 더 길게)
         const float LidExtendHeightTaper = 0.45f; // 연장 far end 높이 비율(지오메트리 소멸감)
@@ -143,7 +155,10 @@ namespace ARMakeup.Face
         Overlay _stencil, _iris, _eyeliner, _eyeshadow;
         Color32[] _irisColors; // 홍채 정점색(알파 = 눈 열림 게이트)
         float _irisIntensity, _eyelinerIntensity, _eyeshadowIntensity;
-        int _eyelinerStyle;
+        int _eyelinerThicknessProfile;
+        int _eyelinerTailProfile;
+        int _legacyEyelinerTailProfile;
+        bool _eyelinerGeometryProfileOverride;
         float _eyeCornerLift; // 눈꼬리 띄우기(R7 워프) — lash 라인 공유라 리본·섀도 동시 리프트
         // 명명 핸들 배수(1=원래) — 상수(EyelinerThickness·StyleTailLen·ShadowHeightMult)에 곱.
         float _linerThickness = 1f;
@@ -160,11 +175,36 @@ namespace ARMakeup.Face
         void Awake() => Instance = this;
         void OnDestroy()
         {
+            ReleaseOwnedOverlay(_stencil);
+            ReleaseOwnedOverlay(_iris);
+            ReleaseOwnedOverlay(_eyeliner);
+            ReleaseOwnedOverlay(_eyeshadow);
             if (_eyeshadowFinishMap != null) Destroy(_eyeshadowFinishMap);
             if (_eyeshadowDesign != null) Destroy(_eyeshadowDesign);
             for (var slot = 0; slot < MaxLensLayers; slot++)
                 if (_lensDesignTex[slot] != null) Destroy(_lensDesignTex[slot]);
             if (Instance == this) Instance = null;
+        }
+
+        // BuildOverlay가 런타임에 new한 자원만 해제한다. Resources.Load가 반환한 Shader나
+        // 외부 공유 asset은 소유하지 않으므로 건드리지 않는다.
+        static void ReleaseOwnedOverlay(Overlay overlay)
+        {
+            ReleaseOwnedObject(overlay.mesh);
+            ReleaseOwnedObject(overlay.renderer != null ? overlay.renderer.sharedMaterial : null);
+        }
+
+        static void ReleaseOwnedObject(Object owned)
+        {
+            if (owned == null) return;
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                DestroyImmediate(owned);
+                return;
+            }
+#endif
+            Destroy(owned);
         }
 
         /// <summary>질감 맵 임포트(#22) — 픽셀별 광 지도(R 광게인·G 시머밀도)를 아이섀도
@@ -296,13 +336,13 @@ namespace ARMakeup.Face
             mat.SetTexture(LensDesignIds[slot], Texture2D.whiteTexture);
         }
 
-        /// <summary>아이섀도 멀티밴드(A14 ①) — 밴드 배열(≤4)을 셰이더 유니폼에 기록한다
+        /// <summary>아이섀도 멀티밴드(A14 ①) — upper/both 밴드 배열(≤8)을 셰이더 유니폼에 기록한다
         /// (SetLensLayers 패턴). 각 밴드: 색·강도·색2(그라데 스톱B)·finish·shape·gradient·height.
         /// 밴드 순서 = 그리는 순서(index 0 먼저=아래 lash 쪽, 뒤 밴드가 위). 최대높이 메시
         /// 1장을 밴드별 세로 cutoff(자기높이/최대높이)로 나눠 over 합성한다. 빈 배열/null =
         /// count 0 → legacy 단일 경로 복귀(_EyeshadowColor/_EyeshadowIntensity 스칼라, 픽셀
-        /// 동일). 제형 세부(GlossLo 등)·질감맵·디자인 마스크는 v1에서 밴드 공통(ApplyEyeParams
-        /// 스칼라) — 배열화는 후속. Init 전 도착해도 sharedMaterial 널가드.</summary>
+        /// 동일). 제형·재질·입자 축은 밴드별 배열이며 질감맵·디자인 마스크만 밴드 공통이다.
+        /// Init 전 도착해도 sharedMaterial 널가드.</summary>
         public void SetEyeshadowLayers(EyeshadowLayerParams[] layers)
         {
             var esMat = _eyeshadow.renderer != null ? _eyeshadow.renderer.sharedMaterial : null;
@@ -315,6 +355,11 @@ namespace ARMakeup.Face
                 { type = "error", message = $"아이섀도 밴드는 최대 {MaxEyeshadowLayers}장까지입니다 (초과분 무시)." });
                 count = MaxEyeshadowLayers;
             }
+
+            // Wire 숫자는 clamp/최대높이/material 계산 전에 먼저 유한값으로 정규화한다.
+            // height는 geometry 봉투 배수이므로 비유한값=legacy 1, 유한 범위는 scalar와 같은 ≤2.
+            for (var slot = 0; slot < count; slot++)
+                if (layers[slot] != null) NormalizeEyeshadowLayerPayload(layers[slot]);
 
             // 최대높이 = 전 밴드 height의 max(최소 1). 메시 봉투 높이 겸 cutoff 정규화 분모.
             // cutoff_b = height_b / maxHeight ∈ [0,1] — 최대높이 밴드가 봉투를 꽉 채운다(1.0).
@@ -330,11 +375,18 @@ namespace ARMakeup.Face
                     _esLayerColors[slot] = Vector4.zero;
                     _esLayerColor2s[slot] = Vector4.zero;
                     _esLayerParams[slot] = Vector4.zero;
+                    _esLayerPhysical[slot] = new Vector4(-1f, 0f, 0f, 0f);
+                    _esLayerParticle[slot] = Vector4.zero;
+                    _esLayerFinish[slot] = Vector4.zero;
+                    _esLayerMaterial[slot] = Vector4.zero;
+                    _esLayerParticleStyle[slot] = Vector4.zero;
+                    _esLayerParticleColor[slot] = Vector4.zero;
                     continue;
                 }
                 var c = Color.white;
                 if (!string.IsNullOrEmpty(layer.color)) ColorUtility.TryParseHtmlString(layer.color, out c);
-                _esLayerColors[slot] = new Vector4(c.r, c.g, c.b, Mathf.Clamp01(layer.intensity));
+                _esLayerColors[slot] = new Vector4(
+                    c.r, c.g, c.b, Mathf.Clamp(layer.intensity, 0f, 1.5f));
                 // 그라데 스톱B — 빈 값이면 스톱A와 동일 취급(단색). ApplyEyeParams esStopB 규약과 정합.
                 var c2 = c;
                 if (!string.IsNullOrEmpty(layer.color2)) ColorUtility.TryParseHtmlString(layer.color2, out c2);
@@ -343,16 +395,83 @@ namespace ARMakeup.Face
                 _esLayerParams[slot] = new Vector4(
                     cutoff,
                     Mathf.Clamp(layer.finish, 0, 3),
-                    Mathf.Clamp(layer.shape, 0, 3),
+                    Mathf.Clamp(layer.shape, 0, 11),
                     Mathf.Clamp01(layer.gradient));
+                _esLayerPhysical[slot] = new Vector4(
+                    Mathf.Clamp(layer.texture, -1, 2), Mathf.Clamp01(layer.shimmer),
+                    Mathf.Clamp01(layer.glossLo), Mathf.Clamp01(layer.glossGain));
+                _esLayerParticle[slot] = new Vector4(
+                    Mathf.Clamp01(layer.shimmerSize), Mathf.Clamp01(layer.shimmerDensity),
+                    Mathf.Clamp01(layer.particleSize), Mathf.Clamp01(layer.particleDensity));
+                _esLayerFinish[slot] = new Vector4(
+                    Mathf.Clamp01(layer.matte), Mathf.Clamp01(layer.sheen), 0f, 0f);
+                _esLayerMaterial[slot] = new Vector4(
+                    Mathf.Clamp(layer.material, 0, 4), Mathf.Clamp01(layer.materialStrength),
+                    Mathf.Clamp01(layer.particleBrightness), Mathf.Clamp01(layer.particleTwinkle));
+                _esLayerParticleStyle[slot] = new Vector4(
+                    Mathf.Clamp01(layer.particleShape), Mathf.Clamp01(layer.particleFeather),
+                    Mathf.Clamp01(layer.particleParallax), Mathf.Clamp01(layer.particleConfetti));
+                Color particleColor = new Color32(255, 242, 217, 255);
+                if (!string.IsNullOrEmpty(layer.particleColor) &&
+                    ColorUtility.TryParseHtmlString(layer.particleColor, out var parsedParticleColor))
+                    particleColor = parsedParticleColor;
+                _esLayerParticleColor[slot] = new Vector4(
+                    particleColor.r, particleColor.g, particleColor.b, particleColor.a);
             }
             _eyeshadowLayerCount = count;
             _eyeshadowMaxHeight = maxHeight;
             esMat.SetVectorArray(EsLayerColorId, _esLayerColors);
             esMat.SetVectorArray(EsLayerColor2Id, _esLayerColor2s);
             esMat.SetVectorArray(EsLayerParamId, _esLayerParams);
+            esMat.SetVectorArray(EsLayerPhysicalId, _esLayerPhysical);
+            esMat.SetVectorArray(EsLayerParticleId, _esLayerParticle);
+            esMat.SetVectorArray(EsLayerFinishId, _esLayerFinish);
+            esMat.SetVectorArray(EsLayerMaterialId, _esLayerMaterial);
+            esMat.SetVectorArray(EsLayerParticleStyleId, _esLayerParticleStyle);
+            esMat.SetVectorArray(EsLayerParticleColorId, _esLayerParticleColor);
             esMat.SetInt(EsLayerCountId, count);
             esMat.SetFloat(EdgeFeatherId, EyeshadowEdgeFeather);
+            if (count > 0) ResetEyeshadowMultibandGlobals(esMat);
+        }
+
+        static void NormalizeEyeshadowLayerPayload(EyeshadowLayerParams layer)
+        {
+            layer.intensity = FiniteOr(layer.intensity, 0f);
+            layer.gradient = FiniteOr(layer.gradient, 0f);
+            layer.height = Mathf.Clamp(FiniteOr(layer.height, 1f), 0f, 2f);
+            layer.shimmer = FiniteOr(layer.shimmer, 0f);
+            layer.glossLo = FiniteOr(layer.glossLo, 0f);
+            layer.glossGain = FiniteOr(layer.glossGain, 0f);
+            layer.shimmerSize = FiniteOr(layer.shimmerSize, 0f);
+            layer.shimmerDensity = FiniteOr(layer.shimmerDensity, 0f);
+            layer.matte = FiniteOr(layer.matte, 0f);
+            layer.sheen = FiniteOr(layer.sheen, 0f);
+            layer.particleSize = FiniteOr(layer.particleSize, 0f);
+            layer.particleDensity = FiniteOr(layer.particleDensity, 0f);
+            layer.materialStrength = FiniteOr(layer.materialStrength, 0f);
+            layer.particleBrightness = FiniteOr(layer.particleBrightness, 0f);
+            layer.particleTwinkle = FiniteOr(layer.particleTwinkle, 0f);
+            layer.particleShape = FiniteOr(layer.particleShape, 0f);
+            layer.particleFeather = FiniteOr(layer.particleFeather, 0f);
+            layer.particleParallax = FiniteOr(layer.particleParallax, 0f);
+            layer.particleConfetti = FiniteOr(layer.particleConfetti, 0f);
+        }
+
+        // 멀티밴드 payload가 소유하지 않는 공통 축은 직전 단일 룩의 material property를
+        // 물려받지 않도록 매 적용마다 브리지/컴포저 기준값으로 되돌린다.
+        static void ResetEyeshadowMultibandGlobals(Material esMat)
+        {
+            esMat.SetFloat(EyeshadowMatteId, 0f);
+            esMat.SetFloat(EyeshadowSheenId, 0f);
+            esMat.SetFloat(EyeshadowMaterialId, 0f);
+            esMat.SetFloat(EyeshadowMaterialStrengthId, 0.85f);
+            esMat.SetFloat(EsParticleBrightnessId, 0.7f);
+            esMat.SetColor(EsParticleColorId, new Color32(255, 242, 217, 255));
+            esMat.SetFloat(EsParticleTwinkleId, 1f);
+            esMat.SetFloat(EsParticleShapeId, 0f);
+            esMat.SetFloat(EsParticleFeatherId, 0f);
+            esMat.SetFloat(EsParticleParallaxId, 0f);
+            esMat.SetFloat(EsParticleConfettiId, 0f);
         }
 
         public void Init(Camera cam, FaceLandmarkSource source)
@@ -385,7 +504,7 @@ namespace ARMakeup.Face
             for (var i = 0; i < iv; i++) _irisColors[i] = new Color32(255, 255, 255, 255);
             _iris.mesh.colors32 = _irisColors;
 
-            ApplyEyeParams(new FilterParams());
+            ApplyEyeParams(FilterParams.CreateBare());
         }
 
         /// <summary>눈 geometry가 등방 좌표에 쓰는 실제 카메라 aspect.</summary>
@@ -482,25 +601,68 @@ namespace ARMakeup.Face
         // ── 멀티밴드(A14 ①) — Eyeshadow.shader ES_MAX와 일치. 밴드당 색(rgb)+강도(a),
         // 색2(그라데 스톱B), param(cutoff·finish·shape·gradient). 배열은 SetVectorArray로,
         // count는 SetInt로 한 번에 기록. count=0 = 레거시 단일 경로(픽셀 동일). ──
-        const int MaxEyeshadowLayers = 4;
+        const int MaxEyeshadowLayers = 8;
         const float EyeshadowEdgeFeather = 0.45f; // 세로 cutoff 페더 폭(현 0.55~1.0 폭 ≈ 0.45)
         static readonly int EsLayerColorId = Shader.PropertyToID("_EsLayerColor");
         static readonly int EsLayerColor2Id = Shader.PropertyToID("_EsLayerColor2");
         static readonly int EsLayerParamId = Shader.PropertyToID("_EsLayerParam");
+        static readonly int EsLayerPhysicalId = Shader.PropertyToID("_EsLayerPhysical");
+        static readonly int EsLayerParticleId = Shader.PropertyToID("_EsLayerParticle");
+        static readonly int EsLayerFinishId = Shader.PropertyToID("_EsLayerFinish");
+        static readonly int EsLayerMaterialId = Shader.PropertyToID("_EsLayerMaterial");
+        static readonly int EsLayerParticleStyleId = Shader.PropertyToID("_EsLayerParticleStyle");
+        static readonly int EsLayerParticleColorId = Shader.PropertyToID("_EsLayerParticleColor");
         static readonly int EsLayerCountId = Shader.PropertyToID("_EsLayerCount");
         static readonly int EdgeFeatherId = Shader.PropertyToID("_EdgeFeather");
         readonly Vector4[] _esLayerColors = new Vector4[MaxEyeshadowLayers];
         readonly Vector4[] _esLayerColor2s = new Vector4[MaxEyeshadowLayers];
         readonly Vector4[] _esLayerParams = new Vector4[MaxEyeshadowLayers];
+        readonly Vector4[] _esLayerPhysical = new Vector4[MaxEyeshadowLayers];
+        readonly Vector4[] _esLayerParticle = new Vector4[MaxEyeshadowLayers];
+        readonly Vector4[] _esLayerFinish = new Vector4[MaxEyeshadowLayers];
+        readonly Vector4[] _esLayerMaterial = new Vector4[MaxEyeshadowLayers];
+        readonly Vector4[] _esLayerParticleStyle = new Vector4[MaxEyeshadowLayers];
+        readonly Vector4[] _esLayerParticleColor = new Vector4[MaxEyeshadowLayers];
         int _eyeshadowLayerCount;         // >0 = 멀티밴드 경로, 0 = 레거시 단일
         float _eyeshadowMaxHeight = 1f;   // 밴드 최대 height (메시 봉투 높이 겸 cutoff 정규화 분모)
+        RegionWarpProfile _eyeshadowWarp = RegionWarpUtility.SanitizeProfile(
+            new RegionWarp { region = "eyeshadow" });
+        readonly Vector2[] _eyeshadowOutlineBase = new Vector2[MainPts];
+        readonly Vector2[] _eyeshadowOutlineDir = new Vector2[MainPts];
+        readonly float[] _eyeshadowOutlineHeight = new float[MainPts];
+        readonly float[] _fitEyeshadowOutlineVp = new float[2 * RegionWarpUtility.PointCount * 2];
+        readonly int[] _fitEyeshadowOutlineFrame = { -1000, -1000 };
+
+        public void SetRegionWarp(RegionWarp source)
+        {
+            if (source == null || source.region != "eyeshadow") return;
+            _eyeshadowWarp = RegionWarpUtility.SanitizeProfile(source);
+        }
+
+        public bool TryCopyEyeshadowCreaseOutline(int eye, float[] destination)
+        {
+            if (eye < 0 || eye >= 2 || destination == null || destination.Length < 16 ||
+                Time.frameCount - _fitEyeshadowOutlineFrame[eye] > 1) return false;
+            System.Array.Copy(_fitEyeshadowOutlineVp, eye * 16, destination, 0, 16);
+            return true;
+        }
 
         /// <summary>RN applyFilter에서 온 눈 파라미터를 머티리얼/스타일에 반영한다.</summary>
         public void ApplyEyeParams(FilterParams p)
         {
+            // Scalar eyeshadow wire도 다른 clamp/material/geometry 계산보다 먼저 정규화한다.
+            NormalizeEyeshadowScalarPayload(p);
+
             _irisIntensity = Mathf.Clamp01(p.irisIntensity);
             _eyelinerIntensity = Mathf.Clamp01(p.eyelinerIntensity);
-            _eyelinerStyle = Mathf.Clamp(p.eyelinerStyle, 0, StyleAngleDeg.Length - 1);
+            // 기존 payload는 항상 기억하되, Phase B의 명시 프로파일 override가 활성인 동안은
+            // 렌더 상태를 덮지 않는다. ClearEyelinerGeometryProfileOverride가 최신 legacy 값으로 복원한다.
+            _legacyEyelinerTailProfile = Mathf.Clamp(p.eyelinerStyle, 0, StyleAngleDeg.Length - 1);
+            if (!_eyelinerGeometryProfileOverride)
+            {
+                _eyelinerThicknessProfile = 0;
+                _eyelinerTailProfile = _legacyEyelinerTailProfile;
+            }
             _eyeCornerLift = Mathf.Clamp01(p.eyeCornerLift);
             // 배수 핸들 — JsonUtility 생략 필드는 0이므로 0 이하 = 미설정 → 1(원래).
             _linerThickness = p.eyelinerThickness <= 0f ? 1f : Mathf.Clamp(p.eyelinerThickness, 0.3f, 2.5f);
@@ -518,7 +680,7 @@ namespace ARMakeup.Face
             elMat.SetFloat(EyelinerIntensityId, _eyelinerIntensity);
             // 질감/부분/마감 — int 필드를 셰이더 float 분기로. 값 의미(0=기본=기존 룩)는
             // BridgeMessages.FilterParams·Eyeliner.shader 주석과 일치(JsonUtility 생략 = 0).
-            elMat.SetFloat(EyelinerTextureId, Mathf.Clamp(p.eyelinerTexture, 0, 2));
+            elMat.SetFloat(EyelinerTextureId, Mathf.Clamp(p.eyelinerTexture, 0, 3));
             elMat.SetFloat(EyelinerSegmentId, Mathf.Clamp(p.eyelinerSegment, 0, 3));
             // 마감 0=새틴 1=매트 2=글로시 3=펄(#19b, 셀 스파클) — Eyeliner.shader 4분기.
             elMat.SetFloat(EyelinerFinishId, Mathf.Clamp(p.eyelinerFinish, 0, 3));
@@ -544,9 +706,8 @@ namespace ARMakeup.Face
                 if (!string.IsNullOrEmpty(esStopB) && ColorUtility.TryParseHtmlString(esStopB, out var esc2))
                     esMat.SetColor(EyeshadowColor2Id, esc2);
                 esMat.SetFloat(EyeshadowGradientId, Mathf.Clamp01(p.eyeshadowGradient));
-                // 모양(#19b) — 0=리드 전체(기존) 1=크리스 집중 2=스모키 3=꼬리 포인트.
-                // Eyeshadow.shader가 세로·가로 프로파일을 분기(생략 0 = 기존 출력).
-                esMat.SetFloat(EyeshadowShapeId, Mathf.Clamp(p.eyeshadowShape, 0, 3));
+                // 모양 0..11 — EyeshadowShape.cginc의 scalar/multi 공용 프로파일.
+                esMat.SetFloat(EyeshadowShapeId, Mathf.Clamp(p.eyeshadowShape, 0, 11));
                 // 제형 스튜디오(#21) — 마감 세부(전부 0=미지정=enum 기존 동작). Finish.cginc가
                 // 다섯 값 합이 0이면 레거시 enum 경로로 분기(하위호환 대수 검증).
                 esMat.SetFloat(EyeshadowGlossLoId, Mathf.Clamp01(p.eyeshadowGlossLo));
@@ -557,8 +718,8 @@ namespace ARMakeup.Face
                 // 벨벳 시(④) — sheen도 마감 세부 합 게이트(customAmt)에 포함되나 항이 sheen에
                 // 선형이라 0=무효=바이트 동일.
                 esMat.SetFloat(EyeshadowSheenId, Mathf.Clamp01(p.eyeshadowSheen));
-                // 재질 아키타입(벨벳/메탈/홀로) — 0=없음(무변조 하위호환).
-                esMat.SetFloat(EyeshadowMaterialId, Mathf.Clamp(p.eyeshadowMaterial, 0, 3));
+                // 재질 아키타입(벨벳/메탈/홀로/멀티크롬) — 0=없음(무변조 하위호환).
+                esMat.SetFloat(EyeshadowMaterialId, Mathf.Clamp(p.eyeshadowMaterial, 0, 4));
                 esMat.SetFloat(EyeshadowMaterialStrengthId, Mathf.Clamp01(p.eyeshadowMaterialStrength));
                 // 입자 레이어(글리터) — density 0=끔(생략 필드와 정합).
                 esMat.SetFloat(EsParticleSizeId, Mathf.Clamp01(p.eyeshadowParticleSize));
@@ -573,6 +734,106 @@ namespace ARMakeup.Face
                 esMat.SetFloat(EsParticleParallaxId, Mathf.Clamp01(p.eyeshadowParticleParallax));
                 esMat.SetFloat(EsParticleConfettiId, Mathf.Clamp01(p.eyeshadowParticleConfetti));
             }
+        }
+
+        /// <summary>
+        /// Phase B bridge wiring point. thicknessProfile/tailProfile은 각각 0..5이며,
+        /// 생략 시 필드 기본값 0이 기존 classic/wing-up 출력을 그대로 보존한다.
+        /// </summary>
+        public void SetEyelinerGeometryProfiles(int thicknessProfile, int tailProfile)
+        {
+            _eyelinerGeometryProfileOverride = true;
+            _eyelinerThicknessProfile = Mathf.Clamp(
+                thicknessProfile, 0, EyelinerThicknessProfiles.Length - 1);
+            _eyelinerTailProfile = Mathf.Clamp(tailProfile, 0, StyleAngleDeg.Length - 1);
+        }
+
+        /// <summary>Phase B override를 해제하고 최신 legacy eyelinerStyle/default thickness로 복원한다.</summary>
+        public void ClearEyelinerGeometryProfileOverride()
+        {
+            _eyelinerGeometryProfileOverride = false;
+            _eyelinerThicknessProfile = 0;
+            _eyelinerTailProfile = _legacyEyelinerTailProfile;
+        }
+
+        static float SampleEyelinerThicknessProfile(int profile, float along)
+        {
+            profile = Mathf.Clamp(profile, 0, EyelinerThicknessProfiles.Length - 1);
+            along = Mathf.Clamp01(FiniteOr(along, 0f));
+            // 기존 taper의 모든 샘플을 그대로 보존한다(anchors 1/.65/.30).
+            if (profile == 0) return Mathf.Lerp(1f, 0.3f, along);
+
+            var anchors = EyelinerThicknessProfiles[profile];
+            return along <= 0.5f
+                ? Mathf.Lerp(anchors.x, anchors.y, along * 2f)
+                : Mathf.Lerp(anchors.y, anchors.z, (along - 0.5f) * 2f);
+        }
+
+        static float ResolveEyelinerRibbonThickness(int profile, float along, float baseThickness)
+        {
+            along = Mathf.Clamp01(FiniteOr(along, 0f));
+            baseThickness = Mathf.Max(0f, FiniteOr(baseThickness, 0f));
+            var endpointFade = Mathf.Clamp01((1f - along) / 0.15f);
+            // profile 0은 Phase A 이전 `cornerThick * (taper *= fade)`의 float 평가 순서까지
+            // 보존해야 한다. 괄호를 풀면 (base * sample) * fade가 되어 실제 MainPts에서 1 ULP 변한다.
+            return baseThickness * (SampleEyelinerThicknessProfile(profile, along) * endpointFade);
+        }
+
+        static Vector2 ResolveEyelinerTailOffset(
+            Vector2 axis, Vector2 browUp, Vector2 anatomicalOutward, int eye,
+            float eyeRadius, int profile, float lengthMultiplier)
+        {
+            eye = Mathf.Clamp(eye, 0, 1);
+            if (!IsFinite(axis) || axis.sqrMagnitude < 1e-12f)
+                axis = IsFinite(anatomicalOutward) && anatomicalOutward.sqrMagnitude >= 1e-12f
+                    ? anatomicalOutward
+                    : eye == 0 ? Vector2.left : Vector2.right;
+            axis.Normalize();
+            var up = IsFinite(browUp)
+                ? browUp - Vector2.Dot(browUp, axis) * axis
+                : Vector2.zero;
+            if (up.sqrMagnitude < 1e-12f) up = eye == 0 ? -Perp(axis) : Perp(axis);
+            up.Normalize();
+
+            profile = Mathf.Clamp(profile, 0, StyleAngleDeg.Length - 1);
+            var theta = StyleAngleDeg[profile] * Mathf.Deg2Rad;
+            var direction = (Mathf.Cos(theta) * axis + Mathf.Sin(theta) * up).normalized;
+            var radius = Mathf.Max(0f, FiniteOr(eyeRadius, 0f));
+            var multiplier = Mathf.Max(0f, FiniteOr(lengthMultiplier, 1f));
+            var length = StyleTailLen[profile] * radius * multiplier;
+            return direction * length;
+        }
+
+        static bool IsFinite(Vector2 value) =>
+            !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+            !float.IsNaN(value.y) && !float.IsInfinity(value.y);
+
+        static void NormalizeEyeshadowScalarPayload(FilterParams p)
+        {
+            p.eyeshadowIntensity = FiniteOr(p.eyeshadowIntensity, 0f);
+            p.eyeshadowHeight = FiniteOr(p.eyeshadowHeight, 1f);
+            p.eyeshadowShimmer = FiniteOr(p.eyeshadowShimmer, 0f);
+            p.eyeshadowGradient = FiniteOr(p.eyeshadowGradient, 0f);
+            p.eyeshadowGlossLo = FiniteOr(p.eyeshadowGlossLo, 0f);
+            p.eyeshadowGlossGain = FiniteOr(p.eyeshadowGlossGain, 0f);
+            p.eyeshadowShimmerSize = FiniteOr(p.eyeshadowShimmerSize, 0f);
+            p.eyeshadowShimmerDensity = FiniteOr(p.eyeshadowShimmerDensity, 0f);
+            p.eyeshadowMatte = FiniteOr(p.eyeshadowMatte, 0f);
+            p.eyeshadowSheen = FiniteOr(p.eyeshadowSheen, 0f);
+            p.eyeshadowMaterialStrength = FiniteOr(p.eyeshadowMaterialStrength, 0.85f);
+            p.eyeshadowParticleSize = FiniteOr(p.eyeshadowParticleSize, 0.4f);
+            p.eyeshadowParticleDensity = FiniteOr(p.eyeshadowParticleDensity, 0f);
+            p.eyeshadowParticleBrightness = FiniteOr(p.eyeshadowParticleBrightness, 0.7f);
+            p.eyeshadowParticleTwinkle = FiniteOr(p.eyeshadowParticleTwinkle, 1f);
+            p.eyeshadowParticleShape = FiniteOr(p.eyeshadowParticleShape, 0f);
+            p.eyeshadowParticleFeather = FiniteOr(p.eyeshadowParticleFeather, 0f);
+            p.eyeshadowParticleParallax = FiniteOr(p.eyeshadowParticleParallax, 0f);
+            p.eyeshadowParticleConfetti = FiniteOr(p.eyeshadowParticleConfetti, 0f);
+        }
+
+        static float FiniteOr(float value, float fallback)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value) ? value : fallback;
         }
 
         void LateUpdate()
@@ -1098,7 +1359,9 @@ namespace ARMakeup.Face
                 foreach (var b in BrowLower[e]) browIso += Iso(b, lm, aspect);
                 browIso /= BrowLower[e].Length;
                 var browUp = (browIso - centroidIso).normalized;
-                var cornerThick = EyelinerThickness * eyeRadius * _linerThickness; // 두께 핸들
+                var baseThickness = EyelinerThickness * eyeRadius * _linerThickness; // 핏 배수
+                var cornerThick = ResolveEyelinerRibbonThickness(
+                    _eyelinerThicknessProfile, 0f, baseThickness);
                 // 속눈썹 밀착은 E1(ComputeLidSnaps)이 이미지 공간에서 처리 —
                 // 여기선 스냅된 라인 위에 두께만 얹는다.
 
@@ -1134,12 +1397,12 @@ namespace ARMakeup.Face
                         if (Vector2.Dot(nrm, browUp) < 0f) nrm = -nrm;
                         var mi = j - TailSubdiv;
                         var s = mi / (float)(MainPts - 1); // 0=바깥꼬리 → 1=안쪽(앞머리)
-                        var taper = Mathf.Lerp(1f, 0.3f, s);
                         // 안쪽 끝(앞머리)에서 래시라인이 커미셔로 급히 떨어져 접선이 수직→법선이
                         // 수평이 되면 리본이 코너를 지나 피부로 뾰족하게 삐진다. 마지막 15%를
                         // 두께 0으로 수렴시켜 깔끔한 점으로 끝나게 한다(스파이크 제거).
-                        taper *= Mathf.Clamp01((1f - s) / 0.15f);
-                        outer = p + nrm * (cornerThick * taper);
+                        var thickness = ResolveEyelinerRibbonThickness(
+                            _eyelinerThicknessProfile, s, baseThickness);
+                        outer = p + nrm * thickness;
                     }
 
                     if (j == TailSubdiv + MainPts / 2) middleBoundary = outer;
@@ -1207,16 +1470,35 @@ namespace ARMakeup.Face
             browIso /= BrowLower[e].Length;
             var browUp = (browIso - centroidIso).normalized;
             var axis = (corner - Iso(lid[lid.Length - 1], lm, aspect)).normalized; // 바깥 방향
-            var u = (browUp - Vector2.Dot(browUp, axis) * axis).normalized;         // axis 수직 "위"
-            var theta = StyleAngleDeg[_eyelinerStyle] * Mathf.Deg2Rad;
-            var wingDir = (Mathf.Cos(theta) * axis + Mathf.Sin(theta) * u).normalized;
-            var len = StyleTailLen[_eyelinerStyle] * eyeRadius * _wingLength; // 윙 길이 핸들
 
             var chain = _chainTmp; // 프리할당 스크래치(UpdateEyeliner가 눈당 즉시 소비)
-            for (var j = 0; j < TailSubdiv; j++)
+            var projectedUp = browUp - Vector2.Dot(browUp, axis) * axis;
+            var legacyFrameValid = IsFinite(axis) && axis.sqrMagnitude >= 1e-12f &&
+                                   IsFinite(projectedUp) && projectedUp.sqrMagnitude >= 1e-12f;
+            if (_eyelinerTailProfile <= 2 && legacyFrameValid)
             {
-                var m = TailSubdiv - j; // tip(j=0,m=6) → 코너 근처(j=5,m=1)
-                chain[j] = corner + wingDir * (len * m / TailSubdiv);
+                // IDs 0..2 픽셀 골든: Phase A 이전 코드의 산술식과 연산 순서를 그대로 둔다.
+                var u = projectedUp.normalized;
+                var theta = StyleAngleDeg[_eyelinerTailProfile] * Mathf.Deg2Rad;
+                var wingDir = (Mathf.Cos(theta) * axis + Mathf.Sin(theta) * u).normalized;
+                var len = StyleTailLen[_eyelinerTailProfile] * eyeRadius * _wingLength;
+                for (var j = 0; j < TailSubdiv; j++)
+                {
+                    var m = TailSubdiv - j; // tip(j=0,m=6) → 코너 근처(j=5,m=1)
+                    chain[j] = corner + wingDir * (len * m / TailSubdiv);
+                }
+            }
+            else
+            {
+                // 신규 long tail 및 퇴화 입력은 눈별 해부학 바깥 방향 fallback을 사용한다.
+                var anatomicalOutward = corner - Iso(168, lm, aspect);
+                var tailOffset = ResolveEyelinerTailOffset(
+                    axis, browUp, anatomicalOutward, e, eyeRadius, _eyelinerTailProfile, _wingLength);
+                for (var j = 0; j < TailSubdiv; j++)
+                {
+                    var m = TailSubdiv - j;
+                    chain[j] = corner + tailOffset * (m / (float)TailSubdiv);
+                }
             }
             for (var k = 0; k < MainPts; k++) chain[TailSubdiv + k] = main[k];
             return chain;
@@ -1310,9 +1592,44 @@ namespace ARMakeup.Face
                             * Mathf.Lerp(1f, LidExtendHeightTaper, tt); // far end 소멸
                     }
 
+                    if (c >= LidExtendPts)
+                    {
+                        var outlineIndex = c - LidExtendPts;
+                        _eyeshadowOutlineBase[outlineIndex] = p;
+                        _eyeshadowOutlineDir[outlineIndex] = dir;
+                        _eyeshadowOutlineHeight[outlineIndex] = h;
+                    }
+
+                    // W5는 랜드마크/기존 FitArc 뒤, 밴드 로컬 법선에 가산한다. 왼눈은
+                    // 제어점 순서를 뒤집어 같은 저장 프로파일이 해부학적으로 미러된다.
+                    if (!RegionWarpUtility.IsZero(_eyeshadowWarp))
+                    {
+                        var profileT = c < LidExtendPts
+                            ? 0f : (c - LidExtendPts) / (float)(MainPts - 1);
+                        h = Mathf.Max(0f, h + eyeWidth * RegionWarpUtility.SampleOpenProfile(
+                            _eyeshadowWarp, profileT, e == 1));
+                    }
                     v[vi++] = IsoToWorld(p, aspect, depth);           // 안쪽(lash, uv.x=0)
                     v[vi++] = IsoToWorld(p + dir * h, aspect, depth); // 바깥(위, uv.x=1)
                 }
+                for (var j = 0; j < RegionWarpUtility.PointCount; j++)
+                {
+                    var t = j / (float)(RegionWarpUtility.PointCount - 1);
+                    var pos = t * (MainPts - 1);
+                    var lo = Mathf.FloorToInt(pos);
+                    var hi = Mathf.Min(lo + 1, MainPts - 1);
+                    var frac = pos - lo;
+                    var p = Vector2.Lerp(_eyeshadowOutlineBase[lo], _eyeshadowOutlineBase[hi], frac);
+                    var dir = Vector2.Lerp(_eyeshadowOutlineDir[lo], _eyeshadowOutlineDir[hi], frac).normalized;
+                    var h = Mathf.Lerp(_eyeshadowOutlineHeight[lo], _eyeshadowOutlineHeight[hi], frac);
+                    h = Mathf.Max(0f, h + eyeWidth *
+                        RegionWarpUtility.SampleOpenProfile(_eyeshadowWarp, t, e == 1));
+                    var vp = IsoToViewport(p + dir * h, aspect);
+                    var offset = e * 16 + j * 2;
+                    _fitEyeshadowOutlineVp[offset] = Mathf.Clamp01(vp.x);
+                    _fitEyeshadowOutlineVp[offset + 1] = Mathf.Clamp01(vp.y);
+                }
+                _fitEyeshadowOutlineFrame[e] = Time.frameCount;
             }
             Commit(_eyeshadow);
             _eyeshadow.mesh.RecalculateNormals(); // 재질이 눈두덩 굴곡에 반응하도록(홍채/라이너는 불필요)
@@ -1436,7 +1753,7 @@ namespace ARMakeup.Face
         // 순회 — 반드시 일치해야 셰이더가 같은 정점에 같은 (u,v)를 읽는다.
         //  u = 밴드 따라: 눈앞(inner) 0 → 눈꼬리(outer) 1 → 연장(눈꼬리 밖) (1, 2]. lash[0]=
         //      바깥꼬리라 정규 i=0이 outer(u=1), 연장 컬럼이 u>1 (양 눈 모두 anatomically
-        //      outer=1 = 대칭, 미러 불필요). 셰이더 EsLidExtGate가 u>1을 모양별로 처리.
+        //      outer=1 = 대칭, 미러 불필요). 셰이더 EsExtensionGate가 u>1을 모양별로 처리.
         //  v = 밴드 가로질러: 안검연(lash) 0 → 눈썹쪽(위) 1. inner쌍=0, outer쌍=1.
         //  Unity 텍스처 규약(0,0=좌하)과 정합: 마스크 하단=lash, 상단=눈썹, 좌=눈앞, 우=눈꼬리.
         //  밴드는 열린 스트립(각도 랩 없음)이라 IrisRenderer 링 시임(uv.y=1 중복정점) 불필요 —
@@ -1450,8 +1767,8 @@ namespace ARMakeup.Face
                 var b = e * perEye;
                 for (var c = 0; c < EsBandCols; c++)
                 {
-                    // 눈앞 0 → 눈꼬리 1 → 연장(눈꼬리 밖) (1, 2]. 셰이더 EsLidExtGate가 u>1을
-                    // shape 0만 페더로 남기고 컷. u는 눈꼬리 밖 거리에 선형(u-1 = 거리/extLen).
+                    // 눈앞 0 → 눈꼬리 1 → 연장(눈꼬리 밖) (1, 2]. EsExtensionGate가 shape
+                    // 0/11만 페더로 남긴다. u-1 = 눈꼬리 밖 거리/extLen.
                     float u = c < LidExtendPts
                         ? 1f + (LidExtendPts - c) / (float)LidExtendPts // (1,2], far=2
                         : 1f - (c - LidExtendPts) / (float)(MainPts - 1); // 눈앞 0 → 눈꼬리 1
