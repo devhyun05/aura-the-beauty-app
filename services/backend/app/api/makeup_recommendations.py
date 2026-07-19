@@ -1,6 +1,8 @@
 import json
 import asyncio
 import logging
+import math
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query
@@ -33,8 +35,19 @@ from app.services.makeup_recommendation_image import (
   PersonalizedImageInput,
   generate_recommendation_images,
 )
+from app.services.makeup_feedback_vision import (
+  extract_makeup_face_crop_metadata,
+  extract_personalized_makeup_face_metadata,
+)
 from app.services.ai_job_queue import AIJobQueuePublisher
-from app.services.makeup_recommendation_prompt import adapt_v1_recommendation
+from app.services.makeup_recommendation_prompt import (
+  adapt_v1_recommendation,
+  sanitize_recommendation_context,
+)
+from app.services.makeup_recommendation_fit import (
+  build_post_image_fit_assessment,
+)
+from app.services.makeup_recommendation_match import attach_match_assessment
 from app.services.makeup_recommendation_products import enrich_makeup_recommendation_products
 from app.services.makeup_recommendation_session import (
   answer_session,
@@ -53,6 +66,19 @@ from app.services.users import ensure_user
 
 router = APIRouter(prefix="/makeup-recommendations", tags=["makeup-recommendations"])
 logger = logging.getLogger(__name__)
+MAKEUP_CROP_BACKFILL_MAX_BYTES = 20 * 1024 * 1024
+MAKEUP_CROP_BACKFILL_MARKER_KEY = "cropMetadataBackfill"
+MAKEUP_CROP_BACKFILL_MARKER_VERSION = "makeup-face-crop-backfill-v1"
+MAKEUP_CROP_BACKFILL_PROCESSING_TTL = timedelta(minutes=5)
+MAKEUP_CROP_BACKFILL_FAILURE_TTL = timedelta(minutes=15)
+MAKEUP_CROP_BACKFILL_NO_FACE_TTL = timedelta(hours=24)
+MAKEUP_ALIGNMENT_BACKFILL_MAX_BYTES = MAKEUP_CROP_BACKFILL_MAX_BYTES
+MAKEUP_ALIGNMENT_BACKFILL_MARKER_KEY = "alignmentMetadataBackfill"
+MAKEUP_ALIGNMENT_BACKFILL_MARKER_VERSION = "makeup-face-alignment-backfill-v1"
+MAKEUP_ALIGNMENT_METADATA_VERSION = "makeup-face-alignment-v1"
+MAKEUP_ALIGNMENT_BACKFILL_PROCESSING_TTL = timedelta(minutes=5)
+MAKEUP_ALIGNMENT_BACKFILL_FAILURE_TTL = timedelta(minutes=15)
+MAKEUP_ALIGNMENT_BACKFILL_NO_FACE_TTL = timedelta(hours=24)
 
 
 def _require_makeup_v2(settings: Settings) -> None:
@@ -85,6 +111,706 @@ def _json_value(value, fallback):
   return value if isinstance(value, type(fallback)) else fallback
 
 
+def _crop_backfill_now() -> datetime:
+  return datetime.now(timezone.utc)
+
+
+def _crop_backfill_timestamp(value: object) -> datetime | None:
+  if not isinstance(value, str) or not value.strip():
+    return None
+  try:
+    parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+  except ValueError:
+    return None
+  if parsed.tzinfo is None:
+    parsed = parsed.replace(tzinfo=timezone.utc)
+  return parsed.astimezone(timezone.utc)
+
+
+def _crop_backfill_marker_is_fresh(marker: object, *, now: datetime) -> bool:
+  if not isinstance(marker, dict) or marker.get("version") != MAKEUP_CROP_BACKFILL_MARKER_VERSION:
+    return False
+  retry_after = _crop_backfill_timestamp(marker.get("retryAfter"))
+  if retry_after is not None:
+    return retry_after > now
+  attempted_at = _crop_backfill_timestamp(marker.get("attemptedAt"))
+  if attempted_at is None:
+    return False
+  retry_ttl = {
+    "processing": MAKEUP_CROP_BACKFILL_PROCESSING_TTL,
+    "failed": MAKEUP_CROP_BACKFILL_FAILURE_TTL,
+    "no-face": MAKEUP_CROP_BACKFILL_NO_FACE_TTL,
+  }.get(str(marker.get("status") or ""))
+  return retry_ttl is not None and attempted_at + retry_ttl > now
+
+
+def _crop_backfill_marker(
+  *,
+  status: str,
+  attempted_at: datetime,
+  retry_ttl: timedelta | None,
+) -> dict:
+  marker = {
+    "version": MAKEUP_CROP_BACKFILL_MARKER_VERSION,
+    "status": status,
+    "attemptedAt": attempted_at.isoformat().replace("+00:00", "Z"),
+  }
+  if retry_ttl is not None:
+    marker["retryAfter"] = (
+      attempted_at + retry_ttl
+    ).isoformat().replace("+00:00", "Z")
+  return marker
+
+
+async def _persist_crop_backfill_result(
+  *,
+  report_id: UUID,
+  look_id: str,
+  db: Database,
+  claim_marker: dict,
+  result_marker: dict,
+  crop_metadata: dict | None,
+) -> dict | None:
+  return await db.fetchrow(
+    """
+    update makeup_recommendation_assets
+    set provenance = coalesce(provenance, '{}'::jsonb)
+          || jsonb_build_object($3::text, $4::jsonb)
+          || case
+               when $5::jsonb is null then '{}'::jsonb
+               else jsonb_build_object('cropMetadata', $5::jsonb)
+             end,
+        updated_at = now()
+    where report_id = $1 and look_id = $2 and status = 'completed'
+      and not (coalesce(provenance, '{}'::jsonb) ? 'cropMetadata')
+      and coalesce(provenance, '{}'::jsonb) -> $3::text = $6::jsonb
+    returning provenance
+    """,
+    report_id,
+    look_id,
+    MAKEUP_CROP_BACKFILL_MARKER_KEY,
+    json.dumps(result_marker),
+    json.dumps(crop_metadata) if crop_metadata is not None else None,
+    json.dumps(claim_marker),
+  )
+
+
+async def _lazy_backfill_recommendation_crop_metadata(
+  *,
+  report_id: UUID,
+  look_id: str,
+  asset: dict,
+  db: Database,
+  settings: Settings,
+) -> dict:
+  provenance = _json_value(asset.get("provenance"), {})
+  if (
+    asset.get("status") != "completed"
+    or isinstance(provenance.get("cropMetadata"), dict)
+    or not asset.get("storage_bucket")
+    or not asset.get("object_key")
+  ):
+    return provenance
+
+  now = _crop_backfill_now()
+  previous_marker = provenance.get(MAKEUP_CROP_BACKFILL_MARKER_KEY)
+  if _crop_backfill_marker_is_fresh(previous_marker, now=now):
+    return provenance
+
+  claim_marker = _crop_backfill_marker(
+    status="processing",
+    attempted_at=now,
+    retry_ttl=MAKEUP_CROP_BACKFILL_PROCESSING_TTL,
+  )
+  has_previous_marker = MAKEUP_CROP_BACKFILL_MARKER_KEY in provenance
+  try:
+    claimed = await db.fetchrow(
+      """
+      update makeup_recommendation_assets
+      set provenance = coalesce(provenance, '{}'::jsonb)
+            || jsonb_build_object($3::text, $4::jsonb),
+          updated_at = now()
+      where report_id = $1 and look_id = $2 and status = 'completed'
+        and not (coalesce(provenance, '{}'::jsonb) ? 'cropMetadata')
+        and (
+          ($5::jsonb is null and not (coalesce(provenance, '{}'::jsonb) ? $3::text))
+          or coalesce(provenance, '{}'::jsonb) -> $3::text = $5::jsonb
+        )
+      returning provenance
+      """,
+      report_id,
+      look_id,
+      MAKEUP_CROP_BACKFILL_MARKER_KEY,
+      json.dumps(claim_marker),
+      json.dumps(previous_marker) if has_previous_marker else None,
+    )
+  except Exception:  # noqa: BLE001 - legacy crop metadata must stay a soft enhancement.
+    logger.warning(
+      "[aura:makeup-recommendation] crop-backfill:claim-failed reportId=%s lookId=%s",
+      report_id,
+      look_id,
+      exc_info=True,
+    )
+    return provenance
+  if claimed is None:
+    return provenance
+
+  claimed_provenance = _json_value(
+    claimed.get("provenance"),
+    {
+      **provenance,
+      MAKEUP_CROP_BACKFILL_MARKER_KEY: claim_marker,
+    },
+  )
+  bucket = str(asset["storage_bucket"])
+  object_key = str(asset["object_key"])
+  crop_metadata: dict | None = None
+  result_status = "failed"
+  retry_ttl: timedelta | None = MAKEUP_CROP_BACKFILL_FAILURE_TTL
+  try:
+    s3 = S3Service(settings)
+    s3.assert_managed_media_location(bucket=bucket, object_key=object_key)
+    image_bytes, _content_type = await asyncio.to_thread(
+      s3.get_object_bytes,
+      bucket=bucket,
+      object_key=object_key,
+      max_bytes=MAKEUP_CROP_BACKFILL_MAX_BYTES,
+    )
+    detected_metadata = await asyncio.to_thread(
+      extract_makeup_face_crop_metadata,
+      image_bytes,
+    )
+  except Exception:  # noqa: BLE001 - legacy crop metadata must stay a soft enhancement.
+    logger.warning(
+      "[aura:makeup-recommendation] crop-backfill:skipped reportId=%s lookId=%s",
+      report_id,
+      look_id,
+      exc_info=True,
+    )
+  else:
+    if isinstance(detected_metadata, dict):
+      crop_metadata = detected_metadata
+      result_status = "completed"
+      retry_ttl = None
+    else:
+      result_status = "no-face"
+      retry_ttl = MAKEUP_CROP_BACKFILL_NO_FACE_TTL
+      logger.info(
+        "[aura:makeup-recommendation] crop-backfill:face-unavailable reportId=%s lookId=%s",
+        report_id,
+        look_id,
+      )
+
+  result_marker = _crop_backfill_marker(
+    status=result_status,
+    attempted_at=now,
+    retry_ttl=retry_ttl,
+  )
+  updated_provenance = {
+    **claimed_provenance,
+    MAKEUP_CROP_BACKFILL_MARKER_KEY: result_marker,
+  }
+  if crop_metadata is not None:
+    updated_provenance["cropMetadata"] = crop_metadata
+
+  try:
+    persisted = await _persist_crop_backfill_result(
+      report_id=report_id,
+      look_id=look_id,
+      db=db,
+      claim_marker=claim_marker,
+      result_marker=result_marker,
+      crop_metadata=crop_metadata,
+    )
+  except Exception:  # noqa: BLE001 - the image response must stay available.
+    logger.warning(
+      "[aura:makeup-recommendation] crop-backfill:persist-failed reportId=%s lookId=%s",
+      report_id,
+      look_id,
+      exc_info=True,
+    )
+    return updated_provenance
+
+  if persisted is None:
+    return updated_provenance
+  return _json_value(persisted.get("provenance"), updated_provenance)
+
+
+def _alignment_backfill_now() -> datetime:
+  return datetime.now(timezone.utc)
+
+
+def _alignment_backfill_marker_is_fresh(marker: object, *, now: datetime) -> bool:
+  if not isinstance(marker, dict) or marker.get("version") != MAKEUP_ALIGNMENT_BACKFILL_MARKER_VERSION:
+    return False
+  retry_after = _crop_backfill_timestamp(marker.get("retryAfter"))
+  if retry_after is not None:
+    return retry_after > now
+  attempted_at = _crop_backfill_timestamp(marker.get("attemptedAt"))
+  if attempted_at is None:
+    return False
+  retry_ttl = {
+    "processing": MAKEUP_ALIGNMENT_BACKFILL_PROCESSING_TTL,
+    "failed": MAKEUP_ALIGNMENT_BACKFILL_FAILURE_TTL,
+    "no-face": MAKEUP_ALIGNMENT_BACKFILL_NO_FACE_TTL,
+  }.get(str(marker.get("status") or ""))
+  return retry_ttl is not None and attempted_at + retry_ttl > now
+
+
+def _alignment_backfill_marker(
+  *,
+  status: str,
+  attempted_at: datetime,
+  retry_ttl: timedelta | None,
+) -> dict:
+  marker = {
+    "version": MAKEUP_ALIGNMENT_BACKFILL_MARKER_VERSION,
+    "status": status,
+    "attemptedAt": attempted_at.isoformat().replace("+00:00", "Z"),
+  }
+  if retry_ttl is not None:
+    marker["retryAfter"] = (
+      attempted_at + retry_ttl
+    ).isoformat().replace("+00:00", "Z")
+  return marker
+
+
+def _alignment_number(value: object) -> float | None:
+  if isinstance(value, bool) or not isinstance(value, (int, float)):
+    return None
+  number = float(value)
+  return number if math.isfinite(number) else None
+
+
+def _minimal_alignment_point(value: object) -> dict[str, float] | None:
+  if not isinstance(value, dict):
+    return None
+  x = _alignment_number(value.get("x"))
+  y = _alignment_number(value.get("y"))
+  if x is None or y is None or not (0 <= x <= 1 and 0 <= y <= 1):
+    return None
+  return {"x": x, "y": y}
+
+
+def _minimal_alignment_box(value: object) -> dict[str, float] | None:
+  if not isinstance(value, dict):
+    return None
+  coordinates = {
+    key: _alignment_number(value.get(key))
+    for key in ("left", "top", "right", "bottom")
+  }
+  if any(number is None or not 0 <= number <= 1 for number in coordinates.values()):
+    return None
+  left = float(coordinates["left"])
+  top = float(coordinates["top"])
+  right = float(coordinates["right"])
+  bottom = float(coordinates["bottom"])
+  if left >= right or top >= bottom:
+    return None
+  return {
+    "left": left,
+    "top": top,
+    "right": right,
+    "bottom": bottom,
+  }
+
+
+def _minimal_alignment_frame(value: object) -> dict | None:
+  if not isinstance(value, dict):
+    return None
+  image_size = value.get("imageSize")
+  eye_centers = value.get("eyeCenters")
+  if not isinstance(image_size, dict) or not isinstance(eye_centers, dict):
+    return None
+  width_number = _alignment_number(image_size.get("width"))
+  height_number = _alignment_number(image_size.get("height"))
+  if (
+    width_number is None
+    or height_number is None
+    or not width_number.is_integer()
+    or not height_number.is_integer()
+    or width_number <= 0
+    or height_number <= 0
+  ):
+    return None
+  face_box = _minimal_alignment_box(value.get("faceBox"))
+  image_left = _minimal_alignment_point(eye_centers.get("imageLeft"))
+  image_right = _minimal_alignment_point(eye_centers.get("imageRight"))
+  roll_deg = _alignment_number(value.get("rollDeg"))
+  if (
+    face_box is None
+    or image_left is None
+    or image_right is None
+    or roll_deg is None
+    or not -180 <= roll_deg <= 180
+    or image_left["x"] >= image_right["x"]
+  ):
+    return None
+  return {
+    "imageSize": {
+      "width": int(width_number),
+      "height": int(height_number),
+    },
+    "faceBox": face_box,
+    "eyeCenters": {
+      "imageLeft": image_left,
+      "imageRight": image_right,
+    },
+    "rollDeg": roll_deg,
+  }
+
+
+def _minimal_alignment_metadata(value: object) -> dict | None:
+  if not isinstance(value, dict) or value.get("version") != MAKEUP_ALIGNMENT_METADATA_VERSION:
+    return None
+  source = _minimal_alignment_frame(value.get("source"))
+  generated = _minimal_alignment_frame(value.get("generated"))
+  if source is None or generated is None:
+    return None
+  return {
+    "version": MAKEUP_ALIGNMENT_METADATA_VERSION,
+    "source": source,
+    "generated": generated,
+  }
+
+
+async def _persist_alignment_backfill_result(
+  *,
+  report_id: UUID,
+  look_id: str,
+  db: Database,
+  claim_marker: dict,
+  result_marker: dict,
+  alignment_metadata: dict | None,
+) -> dict | None:
+  return await db.fetchrow(
+    """
+    update makeup_recommendation_assets as asset
+    set provenance = coalesce(asset.provenance, '{}'::jsonb)
+          || jsonb_build_object($3::text, $4::jsonb)
+          || case
+               when $5::jsonb is null then '{}'::jsonb
+               else jsonb_build_object('alignmentMetadata', $5::jsonb)
+             end,
+        updated_at = now()
+    where asset.report_id = $1 and asset.look_id = $2
+      and asset.role = 'anchor'
+      and asset.status = 'completed'
+      and asset.is_private
+      and asset.input_media_id is not null
+      and asset.storage_bucket is not null
+      and asset.object_key is not null
+      and not (coalesce(asset.provenance, '{}'::jsonb) ? 'alignmentMetadata')
+      and coalesce(asset.provenance, '{}'::jsonb) -> $3::text = $6::jsonb
+      and exists (
+        select 1
+        from makeup_recommendation_reports as report
+        join media_assets as source
+          on source.id = asset.input_media_id
+         and source.owner_user_id = report.user_id
+         and source.status = 'active'
+         and source.deleted_at is null
+        where report.id = asset.report_id
+          and report.image_mode = 'personalized'
+          and source.bucket is not null
+          and source.object_key is not null
+      )
+    returning asset.provenance
+    """,
+    report_id,
+    look_id,
+    MAKEUP_ALIGNMENT_BACKFILL_MARKER_KEY,
+    json.dumps(result_marker),
+    json.dumps(alignment_metadata) if alignment_metadata is not None else None,
+    json.dumps(claim_marker),
+  )
+
+
+async def _lazy_backfill_recommendation_alignment_metadata(
+  *,
+  report_id: UUID,
+  look_id: str,
+  asset: dict,
+  db: Database,
+  settings: Settings,
+) -> dict:
+  provenance = _json_value(asset.get("provenance"), {})
+  if (
+    asset.get("role") != "anchor"
+    or asset.get("status") != "completed"
+    or not asset.get("is_private")
+    or not asset.get("input_media_id")
+    or isinstance(provenance.get("alignmentMetadata"), dict)
+    or not asset.get("storage_bucket")
+    or not asset.get("object_key")
+  ):
+    return provenance
+
+  now = _alignment_backfill_now()
+  previous_marker = provenance.get(MAKEUP_ALIGNMENT_BACKFILL_MARKER_KEY)
+  if _alignment_backfill_marker_is_fresh(previous_marker, now=now):
+    return provenance
+
+  claim_marker = _alignment_backfill_marker(
+    status="processing",
+    attempted_at=now,
+    retry_ttl=MAKEUP_ALIGNMENT_BACKFILL_PROCESSING_TTL,
+  )
+  has_previous_marker = MAKEUP_ALIGNMENT_BACKFILL_MARKER_KEY in provenance
+  try:
+    claimed = await db.fetchrow(
+      """
+      update makeup_recommendation_assets as asset
+      set provenance = coalesce(asset.provenance, '{}'::jsonb)
+            || jsonb_build_object($3::text, $4::jsonb),
+          updated_at = now()
+      from makeup_recommendation_reports as report,
+           media_assets as source
+      where asset.report_id = $1 and asset.look_id = $2
+        and asset.role = 'anchor'
+        and asset.status = 'completed'
+        and asset.is_private
+        and asset.input_media_id is not null
+        and asset.storage_bucket is not null
+        and asset.object_key is not null
+        and report.id = asset.report_id
+        and report.image_mode = 'personalized'
+        and source.id = asset.input_media_id
+        and source.owner_user_id = report.user_id
+        and source.status = 'active'
+        and source.deleted_at is null
+        and source.bucket is not null
+        and source.object_key is not null
+        and not (coalesce(asset.provenance, '{}'::jsonb) ? 'alignmentMetadata')
+        and (
+          ($5::jsonb is null and not (coalesce(asset.provenance, '{}'::jsonb) ? $3::text))
+          or coalesce(asset.provenance, '{}'::jsonb) -> $3::text = $5::jsonb
+        )
+      returning asset.provenance,
+                asset.storage_bucket as generated_bucket,
+                asset.object_key as generated_object_key,
+                source.bucket as source_bucket,
+                source.object_key as source_object_key
+      """,
+      report_id,
+      look_id,
+      MAKEUP_ALIGNMENT_BACKFILL_MARKER_KEY,
+      json.dumps(claim_marker),
+      json.dumps(previous_marker) if has_previous_marker else None,
+    )
+  except Exception:  # noqa: BLE001 - legacy alignment metadata must stay a soft enhancement.
+    logger.warning(
+      "[aura:makeup-recommendation] alignment-backfill:claim-failed reportId=%s lookId=%s",
+      report_id,
+      look_id,
+      exc_info=True,
+    )
+    return provenance
+  if claimed is None:
+    return provenance
+
+  claimed_provenance = _json_value(
+    claimed.get("provenance"),
+    {
+      **provenance,
+      MAKEUP_ALIGNMENT_BACKFILL_MARKER_KEY: claim_marker,
+    },
+  )
+  source_bucket = str(claimed.get("source_bucket") or "")
+  source_object_key = str(claimed.get("source_object_key") or "")
+  generated_bucket = str(claimed.get("generated_bucket") or "")
+  generated_object_key = str(claimed.get("generated_object_key") or "")
+  alignment_metadata: dict | None = None
+  result_status = "failed"
+  retry_ttl: timedelta | None = MAKEUP_ALIGNMENT_BACKFILL_FAILURE_TTL
+  try:
+    if not all((
+      source_bucket,
+      source_object_key,
+      generated_bucket,
+      generated_object_key,
+    )):
+      raise ValueError("The claimed alignment backfill media locations are incomplete.")
+    s3 = S3Service(settings)
+    s3.assert_managed_media_location(
+      bucket=source_bucket,
+      object_key=source_object_key,
+    )
+    s3.assert_managed_media_location(
+      bucket=generated_bucket,
+      object_key=generated_object_key,
+    )
+    source_bytes, _source_content_type = await asyncio.to_thread(
+      s3.get_object_bytes,
+      bucket=source_bucket,
+      object_key=source_object_key,
+      max_bytes=MAKEUP_ALIGNMENT_BACKFILL_MAX_BYTES,
+    )
+    generated_bytes, _generated_content_type = await asyncio.to_thread(
+      s3.get_object_bytes,
+      bucket=generated_bucket,
+      object_key=generated_object_key,
+      max_bytes=MAKEUP_ALIGNMENT_BACKFILL_MAX_BYTES,
+    )
+    detected_metadata = await asyncio.to_thread(
+      extract_personalized_makeup_face_metadata,
+      source_bytes,
+      generated_bytes,
+    )
+  except Exception:  # noqa: BLE001 - the generated image response must stay available.
+    logger.warning(
+      "[aura:makeup-recommendation] alignment-backfill:skipped reportId=%s lookId=%s",
+      report_id,
+      look_id,
+      exc_info=True,
+    )
+  else:
+    detected_alignment = (
+      detected_metadata.get("alignmentMetadata")
+      if isinstance(detected_metadata, dict)
+      else None
+    )
+    alignment_metadata = _minimal_alignment_metadata(detected_alignment)
+    if alignment_metadata is not None:
+      result_status = "completed"
+      retry_ttl = None
+    else:
+      result_status = "no-face"
+      retry_ttl = MAKEUP_ALIGNMENT_BACKFILL_NO_FACE_TTL
+      logger.info(
+        "[aura:makeup-recommendation] alignment-backfill:face-unavailable reportId=%s lookId=%s",
+        report_id,
+        look_id,
+      )
+
+  result_marker = _alignment_backfill_marker(
+    status=result_status,
+    attempted_at=now,
+    retry_ttl=retry_ttl,
+  )
+  updated_provenance = {
+    **claimed_provenance,
+    MAKEUP_ALIGNMENT_BACKFILL_MARKER_KEY: result_marker,
+  }
+  if alignment_metadata is not None:
+    updated_provenance["alignmentMetadata"] = alignment_metadata
+
+  try:
+    persisted = await _persist_alignment_backfill_result(
+      report_id=report_id,
+      look_id=look_id,
+      db=db,
+      claim_marker=claim_marker,
+      result_marker=result_marker,
+      alignment_metadata=alignment_metadata,
+    )
+  except Exception:  # noqa: BLE001 - the generated image response must stay available.
+    logger.warning(
+      "[aura:makeup-recommendation] alignment-backfill:persist-failed reportId=%s lookId=%s",
+      report_id,
+      look_id,
+      exc_info=True,
+    )
+    return updated_provenance
+
+  if persisted is None:
+    return updated_provenance
+  return _json_value(persisted.get("provenance"), updated_provenance)
+
+
+_POST_IMAGE_VALIDATION_SOURCE_RANK = {
+  "generated_asset": 1,
+  "generated_face_metadata": 2,
+  "source_generated_alignment": 3,
+}
+
+
+def _post_image_fit_should_update(current: object, candidate: object) -> bool:
+  current_assessment = current if isinstance(current, dict) else {}
+  candidate_assessment = candidate if isinstance(candidate, dict) else {}
+  current_validation = current_assessment.get("imageValidation")
+  candidate_validation = candidate_assessment.get("imageValidation")
+  if not isinstance(candidate_validation, dict):
+    return False
+  if not isinstance(current_validation, dict) or current_validation.get("stage") != "post_image":
+    return True
+  current_source_rank = _POST_IMAGE_VALIDATION_SOURCE_RANK.get(
+    str(current_validation.get("validationSource") or ""),
+    0,
+  )
+  candidate_source_rank = _POST_IMAGE_VALIDATION_SOURCE_RANK.get(
+    str(candidate_validation.get("validationSource") or ""),
+    0,
+  )
+  if candidate_source_rank > current_source_rank:
+    return True
+  current_attempt = current_validation.get("generationAttempt")
+  candidate_attempt = candidate_validation.get("generationAttempt")
+  if (
+    isinstance(candidate_attempt, int)
+    and not isinstance(candidate_attempt, bool)
+    and (
+      not isinstance(current_attempt, int)
+      or isinstance(current_attempt, bool)
+      or candidate_attempt > current_attempt
+    )
+  ):
+    return True
+  return int(candidate_validation.get("validCropAreaCount") or 0) > int(
+    current_validation.get("validCropAreaCount") or 0,
+  )
+
+
+async def _persist_existing_post_image_fit(
+  *,
+  report_id: UUID,
+  look_id: str,
+  generation_attempt: int | None,
+  fit_assessment: dict,
+  db: Database,
+) -> dict | None:
+  return await db.fetchrow(
+    """
+    update makeup_recommendation_reports as report
+    set recommendation = jsonb_set(
+          report.recommendation,
+          '{looks}',
+          coalesce(
+            (
+              select jsonb_agg(
+                case
+                  when coalesce(nullif(item.look->>'id', ''), item.look->>'role') = $2
+                    then jsonb_set(item.look, '{fitAssessment}', $4::jsonb, true)
+                  else item.look
+                end
+                order by item.ordinality
+              )
+              from jsonb_array_elements(coalesce(report.recommendation->'looks', '[]'::jsonb))
+                with ordinality as item(look, ordinality)
+            ),
+            '[]'::jsonb
+          ),
+          true
+        ),
+        updated_at = now()
+    where report.id = $1
+      and exists (
+        select 1
+        from makeup_recommendation_assets as asset
+        where asset.report_id = report.id
+          and asset.look_id = $2
+          and asset.status = 'completed'
+          and ($3::integer is null or asset.attempt_count = $3)
+      )
+    returning report.id
+    """,
+    report_id,
+    look_id,
+    generation_attempt,
+    json.dumps(fit_assessment, ensure_ascii=False),
+  )
+
+
 async def _recommendation_report_response(
   report: dict,
   *,
@@ -100,7 +826,7 @@ async def _recommendation_report_response(
     assets = await db.fetch(
       """
       select look_id, role, status, image_url, image_error, storage_bucket,
-             object_key, content_type, is_private, input_media_id, model_id, prompt_version,
+             object_key, content_type, is_private, input_media_id, model_id, prompt_version, attempt_count,
              provenance
       from makeup_recommendation_assets
       where report_id = $1
@@ -109,8 +835,39 @@ async def _recommendation_report_response(
       report["id"],
     )
     assets_by_look = {str(asset.get("look_id") or ""): dict(asset) for asset in assets}
+    recommendation_looks = [
+      look
+      for look in recommendation.get("looks", [])
+      if isinstance(look, dict)
+    ]
+    anchor_asset_ids = {
+      str(asset.get("look_id") or "")
+      for asset in assets
+      if str(asset.get("role") or "") == "anchor"
+    }
+    crop_backfill_look_id = next(
+      (
+        str(look.get("id") or look.get("role") or "")
+        for look in recommendation_looks
+        if (
+          str(look.get("role") or "") == "anchor"
+          or str(look.get("id") or "") in anchor_asset_ids
+        )
+        and str(look.get("id") or look.get("role") or "") in assets_by_look
+      ),
+      "",
+    )
+    if not crop_backfill_look_id:
+      crop_backfill_look_id = next(
+        (
+          str(look.get("id") or look.get("role") or "")
+          for look in recommendation_looks
+          if str(look.get("id") or look.get("role") or "") in assets_by_look
+        ),
+        "",
+      )
     response_looks: list[dict] = []
-    for look in recommendation.get("looks", []):
+    for look in recommendation_looks:
       if not isinstance(look, dict):
         continue
       look_id = str(look.get("id") or look.get("role") or "")
@@ -118,6 +875,67 @@ async def _recommendation_report_response(
       if asset is None:
         response_looks.append(look)
         continue
+      provenance = _json_value(asset.get("provenance"), {})
+      if settings is not None and look_id == crop_backfill_look_id:
+        provenance = await _lazy_backfill_recommendation_crop_metadata(
+          report_id=report["id"],
+          look_id=look_id,
+          asset=asset,
+          db=db,
+          settings=settings,
+        )
+      if (
+        settings is not None
+        and str(report.get("image_mode") or "generic") == "personalized"
+        and look_id == crop_backfill_look_id
+        and str(asset.get("role") or "") == "anchor"
+      ):
+        provenance = await _lazy_backfill_recommendation_alignment_metadata(
+          report_id=report["id"],
+          look_id=look_id,
+          asset={**asset, "provenance": provenance},
+          db=db,
+          settings=settings,
+        )
+      asset_attempt = asset.get("attempt_count")
+      generation_attempt = (
+        asset_attempt
+        if isinstance(asset_attempt, int) and not isinstance(asset_attempt, bool) and asset_attempt > 0
+        else None
+      )
+      fit_provenance = dict(provenance)
+      if generation_attempt is not None and not isinstance(fit_provenance.get("generationAttempt"), int):
+        fit_provenance["generationAttempt"] = generation_attempt
+      generation_source = (
+        "claude"
+        if recommendation.get("generationSource") == "claude"
+        else "deterministic_fallback"
+      )
+      post_image_fit = build_post_image_fit_assessment(
+        look,
+        generation_source=generation_source,
+        image_status=str(asset.get("status") or "pending"),
+        provenance=fit_provenance,
+      )
+      if _post_image_fit_should_update(look.get("fitAssessment"), post_image_fit):
+        try:
+          persisted_fit = await _persist_existing_post_image_fit(
+            report_id=report["id"],
+            look_id=look_id,
+            generation_attempt=generation_attempt,
+            fit_assessment=post_image_fit,
+            db=db,
+          )
+        except Exception:  # noqa: BLE001 - fit backfill must not block image delivery.
+          logger.warning(
+            "[aura:makeup-recommendation] post-image-fit-backfill:failed reportId=%s lookId=%s",
+            report["id"],
+            look_id,
+            exc_info=True,
+          )
+        else:
+          if persisted_fit is not None:
+            look = {**look, "fitAssessment": post_image_fit}
       delivery_url = str(asset.get("image_url") or "") or None
       if (
         asset.get("is_private")
@@ -126,11 +944,23 @@ async def _recommendation_report_response(
         and asset.get("object_key")
         and settings is not None
       ):
-        delivery_url = S3Service(settings).create_presigned_download(
-          bucket=str(asset["storage_bucket"]),
-          object_key=str(asset["object_key"]),
-          expires_in=settings.makeup_private_url_ttl_seconds,
-        )
+        try:
+          delivery_url = S3Service(settings).create_presigned_download(
+            bucket=str(asset["storage_bucket"]),
+            object_key=str(asset["object_key"]),
+            expires_in=settings.makeup_private_url_ttl_seconds,
+          )
+        except Exception as exc:
+          logger.exception(
+            "[aura:makeup-recommendation] image-delivery:presign-failed reportId=%s lookId=%s",
+            report["id"],
+            look_id,
+          )
+          raise AppError(
+            503,
+            "MAKEUP_IMAGE_DELIVERY_UNAVAILABLE",
+            "The generated recommendation image is temporarily unavailable.",
+          ) from exc
       image_asset = {
         "imageUrl": delivery_url,
         "contentType": asset.get("content_type"),
@@ -138,7 +968,7 @@ async def _recommendation_report_response(
         "inputMediaId": str(asset.get("input_media_id") or "") or None,
         "modelId": asset.get("model_id"),
         "promptVersion": asset.get("prompt_version"),
-        "provenance": _json_value(asset.get("provenance"), {}),
+        "provenance": provenance,
       }
       response_look = {
         **look,
@@ -169,6 +999,7 @@ async def _recommendation_report_response(
         if key != "sourceMediaId"
       },
     }
+  context_snapshot = sanitize_recommendation_context(context_snapshot)
   return {
     **report,
     "schema_version": schema_version,
@@ -177,6 +1008,7 @@ async def _recommendation_report_response(
     "answers": _json_value(report.get("answers"), []),
     "context_snapshot": context_snapshot,
     "recommendation": recommendation,
+    "generationSource": str(recommendation.get("generationSource") or "") or None,
     "recommendation_v2": adapt_v1_recommendation(recommendation),
     "assets": [
       {
@@ -189,11 +1021,33 @@ async def _recommendation_report_response(
     ],
   }
 
+def _personalized_retry_context(report: dict) -> tuple[bool, str | None]:
+  context = _json_value(report.get('context_snapshot'), {})
+  image_context = context.get('image') if isinstance(context.get('image'), dict) else {}
+  analysis_context = (
+    context.get('analysisReport')
+    if isinstance(context.get('analysisReport'), dict)
+    else {}
+  )
+  source_media_id = image_context.get('sourceMediaId') or analysis_context.get('sourceMediaId')
+  should_retry_personalized = (
+    str(image_context.get('requestedMode') or '').strip().lower() == 'personalized'
+    and str(image_context.get('effectiveMode') or '').strip().lower() == 'personalized'
+    and image_context.get('personalizedConsent') is True
+    and bool(str(source_media_id or '').strip())
+  )
+  return should_retry_personalized, (
+    str(source_media_id).strip() if source_media_id is not None else None
+  )
+
+
 async def _personalized_source_input(
   db: Database,
   settings: Settings,
   report: dict,
   user_id: UUID,
+  *,
+  expected_source_media_id: str | None = None,
 ) -> PersonalizedImageInput | None:
   context = _json_value(report.get("context_snapshot"), {})
   image_context = context.get("image") if isinstance(context.get("image"), dict) else {}
@@ -219,6 +1073,16 @@ async def _personalized_source_input(
     user_id,
   )
   if media is None or not media.get("bucket") or not media.get("object_key"):
+    return None
+  if (
+    expected_source_media_id
+    and str(media.get("id") or "").strip().lower()
+    != expected_source_media_id.strip().lower()
+  ):
+    logger.warning(
+      "[aura:makeup-recommendation] personalized-source:context-mismatch reportId=%s",
+      report.get("id"),
+    )
     return None
   try:
     s3 = S3Service(settings)
@@ -275,9 +1139,12 @@ async def _persist_v2_image_assets(
       continue
     asset = look.get("imageAsset") if isinstance(look.get("imageAsset"), dict) else {}
     status = str(look.get("imageStatus") or "pending")
+    fit_assessment = look.get("fitAssessment")
+    persisted_fit = fit_assessment if status == "completed" and isinstance(fit_assessment, dict) and isinstance(fit_assessment.get("imageValidation"), dict) else None
     persisted = await db.fetchrow(
       """
-      update makeup_recommendation_assets
+      with persisted_asset as (
+      update makeup_recommendation_assets as asset
       set role = $3,
         status = $4,
         image_url = $5,
@@ -298,7 +1165,36 @@ async def _persist_v2_image_assets(
       where report_id = $1 and look_id = $2
         and attempt_count = $15
         and status = 'processing'
-      returning look_id
+      returning asset.report_id, asset.look_id
+      ), updated_report as (
+        update makeup_recommendation_reports as report
+        set recommendation = jsonb_set(
+              report.recommendation,
+              '{looks}',
+              coalesce(
+                (
+                  select jsonb_agg(
+                    case
+                      when coalesce(nullif(item.look->>'id', ''), item.look->>'role') = $2
+                        then jsonb_set(item.look, '{fitAssessment}', $16::jsonb, true)
+                      else item.look
+                    end
+                    order by item.ordinality
+                  )
+                  from jsonb_array_elements(coalesce(report.recommendation->'looks', '[]'::jsonb))
+                    with ordinality as item(look, ordinality)
+                ),
+                '[]'::jsonb
+              ),
+              true
+            ),
+            updated_at = now()
+        from persisted_asset
+        where report.id = persisted_asset.report_id
+          and $16::jsonb is not null
+        returning persisted_asset.look_id
+      )
+      select look_id from persisted_asset
       """,
       report_id,
       look_id,
@@ -315,6 +1211,7 @@ async def _persist_v2_image_assets(
       asset.get("promptVersion"),
       json.dumps(asset.get("provenance") if isinstance(asset.get("provenance"), dict) else {}),
       generation_attempt,
+      json.dumps(persisted_fit, ensure_ascii=False) if persisted_fit is not None else None,
     )
     if persisted is not None:
       persisted_any = True
@@ -595,22 +1492,38 @@ async def run_recommendation_image_job(
         return
 
     requested_image_mode = str(report.get("image_mode") or "generic")
+    persisted_image_mode = requested_image_mode
+    recover_personalized, expected_source_media_id = _personalized_retry_context(report)
+    requested_image_mode = (
+      'personalized'
+      if persisted_image_mode == 'personalized' or recover_personalized
+      else 'generic'
+    )
     image_mode = requested_image_mode
     source_image = None
     if requested_image_mode == "personalized":
       if settings.makeup_personalized_image_enabled:
-        source_image = await _personalized_source_input(db, settings, report, user_id)
+        source_image = await _personalized_source_input(
+          db,
+          settings,
+          report,
+          user_id,
+          expected_source_media_id=expected_source_media_id,
+        )
       if source_image is None:
         image_mode = "generic"
         logger.warning(
           "[aura:makeup-recommendation] personalized-source:fallback-generic reportId=%s",
           report_id,
         )
-        await db.execute(
-          "update makeup_recommendation_reports set image_mode = 'generic', updated_at = now() where id = $1 and user_id = $2",
-          report_id,
-          user_id,
-        )
+
+    if requested_image_mode == 'personalized':
+      await db.execute(
+        'update makeup_recommendation_reports set image_mode = $3, updated_at = now() where id = $1 and user_id = $2',
+        report_id,
+        user_id,
+        'personalized',
+      )
 
     ordered_looks = sorted(
       [
@@ -658,12 +1571,42 @@ async def run_recommendation_image_job(
             },
           },
         ]
-      await _persist_v2_image_assets(
+      generated_items = [item for item in generated if isinstance(item, dict)]
+      generation_source = (
+        'claude'
+        if recommendation.get('generationSource') == 'claude'
+        else 'deterministic_fallback'
+      )
+      for generated_item in generated_items:
+        image_asset = generated_item.get('imageAsset') if isinstance(generated_item.get('imageAsset'), dict) else {}
+        post_image_fit = build_post_image_fit_assessment(
+          generated_item,
+          generation_source=generation_source,
+          image_status=str(generated_item.get('imageStatus') or 'pending'),
+          provenance=image_asset.get('provenance'),
+        )
+        if post_image_fit is not None:
+          generated_item['fitAssessment'] = post_image_fit
+      persisted = await _persist_v2_image_assets(
         db,
         report_id,
-        generated,
+        generated_items,
         generation_attempt=generation_attempt,
       )
+      if (
+        persisted
+        and generated_items
+        and all(
+          str(item.get('imageStatus') or '') == 'completed'
+          for item in generated_items
+        )
+      ):
+        await db.execute(
+          'update makeup_recommendation_reports set image_mode = $3, updated_at = now() where id = $1 and user_id = $2',
+          report_id,
+          user_id,
+          image_mode,
+        )
       await _refresh_v2_report_image_state(db, report_id)
 
     if look_id is not None:
@@ -914,6 +1857,7 @@ async def generate_makeup_recommendation_session(
       recommendation,
       context,
       answers,
+      questions,
     )
     result = await complete_generation(db, settings, user["id"], session, recommendation)
   except Exception:
@@ -989,8 +1933,10 @@ async def list_recommendation_reports(
   user = await ensure_user(db, auth)
   reports = await db.fetch(
     """
-    select id, scenario_text, recommendation, image_status, image_url, image_error,
-           schema_version, image_mode,
+    select id, scenario_text, recommendation, questions, answers,
+           image_status, image_url, image_error, schema_version, image_mode,
+           source_analysis_report_id,
+           context_snapshot #- '{analysisReport,sourceMediaId}' as context_snapshot,
            context_snapshot #>> '{profile,gender}' as profile_gender,
            created_at, updated_at
     from makeup_recommendation_reports
@@ -1002,7 +1948,18 @@ async def list_recommendation_reports(
     limit,
     offset,
   )
-  return success({"reports": reports, "limit": limit, "offset": offset})
+  response_reports: list[dict] = []
+  for report in reports:
+    item = dict(report)
+    recommendation = _json_value(item.get("recommendation"), {})
+    item["recommendation"] = recommendation
+    item["generationSource"] = str(recommendation.get("generationSource") or "") or None
+    item["context_snapshot"] = sanitize_recommendation_context(
+      _json_value(item.get("context_snapshot"), {}),
+    )
+    response_reports.append(item)
+  return success({"reports": response_reports, "limit": limit, "offset": offset})
+
 
 
 @router.post("/{report_id}/image/retry")
@@ -1141,6 +2098,9 @@ async def refine_recommendation_report(
   questions = _json_value(source.get("questions"), [])
   answers = _json_value(source.get("answers"), [])
   previous_recommendation = _json_value(source.get("recommendation"), {})
+  sanitized_context = sanitize_recommendation_context(
+    _json_value(source.get("context_snapshot"), {}),
+  )
   refinement_instructions = {
     "natural": "Keep the three roles but make color, texture, and lines one step more natural.",
     "hip": "Keep the three roles but add a more current, expressive texture or focal point.",
@@ -1162,7 +2122,7 @@ async def refine_recommendation_report(
     _require_makeup_v1_compat(settings)
   if schema_version == "makeup-recommendation-v2":
     refinement_context = {
-      **_json_value(source.get("context_snapshot"), {}),
+      **sanitized_context,
       "refinement": {
         "type": payload.refinement,
         "instruction": refinement_instructions[payload.refinement],
@@ -1190,6 +2150,30 @@ async def refine_recommendation_report(
       refined_answers,
     )
   recommendation = apply_refinement_contract(previous_recommendation, recommendation, payload.refinement)
+  if schema_version == "makeup-recommendation-v2":
+    generation_source = (
+      "claude"
+      if recommendation.get("generationSource") == "claude"
+      else "deterministic_fallback"
+    )
+    recommendation = attach_match_assessment(
+      recommendation,
+      sanitized_context,
+      refined_answers,
+      questions,
+      generation_source=generation_source,
+    )
+    # Resolve the refinement contract before product matching. In particular,
+    # replaceProducts keeps the previous makeup recipe, then refreshes catalog
+    # matches against that preserved recipe instead of trusting model products.
+    recommendation = await enrich_makeup_recommendation_products(
+      db,
+      settings,
+      recommendation,
+      sanitized_context,
+      refined_answers,
+      questions,
+    )
   row = await db.fetchrow(
     """
     insert into makeup_recommendation_reports
@@ -1217,7 +2201,11 @@ async def refine_recommendation_report(
     source.get("source_analysis_report_id"),
     source.get("situation_id"),
     source.get("keyword_id"),
-    json.dumps(_json_value(source.get("context_snapshot"), {}), ensure_ascii=False, default=str),
+    json.dumps(
+      sanitized_context,
+      ensure_ascii=False,
+      default=str,
+    ),
     schema_version,
     str(source.get("image_mode") or "generic"),
   )
@@ -1250,6 +2238,7 @@ async def refine_recommendation_report(
     {
       "reportId": row["id"],
       "recommendation": response_recommendation,
+      "generationSource": str(response_recommendation.get("generationSource") or "") or None,
       "imageStatus": image_status or "pending",
     },
   )

@@ -378,9 +378,11 @@ async def _existing_report(db: Any, user_id: UUID, report_id: UUID) -> dict[str,
   )
   if row is None:
     raise AppError(404, "MAKEUP_RECOMMENDATION_NOT_FOUND", "The makeup recommendation report was not found.")
+  recommendation = _json_value(row.get("recommendation"), {})
   return {
     "reportId": row["id"],
-    "recommendation": _json_value(row.get("recommendation"), {}),
+    "recommendation": recommendation,
+    "generationSource": str(recommendation.get("generationSource") or "") or None,
     "imageStatus": str(row.get("image_status") or "pending"),
     "reused": True,
   }
@@ -502,6 +504,7 @@ async def complete_generation(
   response_recommendation = {**saved_recommendation, "looks": response_looks}
   return {
     "reportId": row["id"],
+    "generationSource": str(response_recommendation.get("generationSource") or "") or None,
     "recommendation": response_recommendation,
     "imageStatus": str(row.get("image_status") or "pending"),
     "reused": False,

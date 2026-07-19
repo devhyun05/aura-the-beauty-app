@@ -18,41 +18,14 @@ import {
   isMakeupRecommendationReportAllowedByDiscovery,
   getQuestionActionMode,
   getQuestionProgressSegments,
-  getNeutralGenderRecommendationNote,
   makeupRecommendationDiscoveryCopy,
-  neutralGenderRecommendationNote,
   makeupRecommendationHistoryCopy,
-  makeupRecommendationImageStatusCopy,
-  makeupRecommendationReportStatusCopy,
-  makeupRecommendationResultRoleLabels,
   shouldHandleMakeupRecommendationBack,
-  toggleExpandedLookId,
 } from './makeupRecommendationViewContracts';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
 }
-
-expectEqual(
-  getNeutralGenderRecommendationNote('unspecified'),
-  neutralGenderRecommendationNote,
-  'unspecified gender shows neutral recommendation note',
-);
-expectEqual(
-  getNeutralGenderRecommendationNote('female'),
-  undefined,
-  'female gender does not show neutral note',
-);
-expectEqual(
-  getNeutralGenderRecommendationNote('male'),
-  undefined,
-  'male gender does not show neutral note',
-);
-expectEqual(
-  getNeutralGenderRecommendationNote(undefined),
-  undefined,
-  'legacy report without gender does not show neutral note',
-);
 
 expectEqual(makeupRecommendationDiscoveryCopy.title, '어떤 상황을 위한 메이크업인가요?', 'v2 discovery title');
 expectEqual(makeupRecommendationDiscoveryCopy.eyebrow, 'AI MAKEUP RECOMMENDATION', 'v2 discovery eyebrow');
@@ -101,6 +74,34 @@ const reportsState = makeupRecommendationDiscoveryReducer(
   {type: 'reports/loaded', reports, preferredReportId: 'route-report'},
 );
 expectEqual(reportsState.selectedReportId, 'route-report', 'route report has selection priority');
+const detailedRouteReport = {
+  id: 'route-report',
+  measurements: {
+    captureId: 'capture-route',
+    regionVisuals: {
+      upper: {
+        cropRect: {x: 0.3, y: 0.3, w: 0.4, h: 0.15},
+        guide: {
+          label: 'eye line',
+          points: [{x: 0.4, y: 0.4}, {x: 0.6, y: 0.4}],
+        },
+      },
+    },
+    schemaVersion: 'aura-face-analysis-measurements-v1',
+  },
+} as FaceAnalysisReport;
+const detailHydratedReportsState = makeupRecommendationDiscoveryReducer(
+  reportsState,
+  {type: 'report/detailLoaded', report: detailedRouteReport},
+);
+expectEqual(detailHydratedReportsState.reports[0]?.id, 'latest', 'detail hydration keeps list order');
+expectEqual(detailHydratedReportsState.reports[1], detailedRouteReport, 'list item replaced by detail');
+expectEqual(detailHydratedReportsState.selectedReportId, 'route-report', 'detail hydration keeps selection');
+expectEqual(
+  detailHydratedReportsState.reports[1]?.measurements?.regionVisuals?.upper?.guide.points.length,
+  2,
+  'list-to-detail hydration exposes region visuals',
+);
 const discoveryIndependentReports = [{id: 'report-a'}, {id: 'report-b'}] as FaceAnalysisReport[];
 expectEqual(
   filterMakeupRecommendationReportsByDiscovery(discoveryIndependentReports).length,
@@ -142,20 +143,12 @@ expectEqual(customState.selectedKeywordId, null, 'custom and keyword are mutuall
 expectEqual(getQuestionActionMode({currentQuestionIndex: 0, questionCount: 2}), 'advance', 'early question advances');
 expectEqual(getQuestionActionMode({currentQuestionIndex: 1, questionCount: 2}), 'complete', 'last question completes');
 expectEqual(getQuestionProgressSegments({currentQuestionIndex: 1, questionCount: 3}).join(','), 'complete,complete,pending', 'question progress');
-expectEqual(makeupRecommendationResultRoleLabels.anchor, '가장 잘 어울리는 메이크업', 'anchor label');
-expectEqual(makeupRecommendationResultRoleLabels.bold, '조금 더 과감한 메이크업', 'bold label');
-expectEqual(makeupRecommendationResultRoleLabels.discovery, '예상 밖의 발견', 'discovery label');
-expectEqual(makeupRecommendationImageStatusCopy.failedAction, '이미지 다시 만들기', 'image retry copy');
 expectEqual(makeupRecommendationHistoryCopy.title, '지난 추천', 'history title');
-expectEqual(makeupRecommendationReportStatusCopy.saved, '보고서 저장됨', 'saved report copy');
 expectEqual(formatMakeupRecommendationHistoryDate('2026-07-14T12:34:56Z'), '2026. 07. 14.', 'history date');
 expectEqual(shouldHandleMakeupRecommendationBack('discovery'), false, 'discovery back exits route');
 expectEqual(shouldHandleMakeupRecommendationBack('question'), true, 'question back is handled');
 expectEqual(shouldHandleMakeupRecommendationBack('results'), true, 'results back is handled');
 expectEqual(shouldHandleMakeupRecommendationBack('history'), true, 'history back is handled');
-const opened = toggleExpandedLookId(new Set<string>(), 'look-a');
-expectEqual(opened.has('look-a'), true, 'legacy detail helper opens');
-expectEqual(toggleExpandedLookId(opened, 'look-a').has('look-a'), false, 'legacy detail helper closes');
 
 const loadingContext = {
   answerKeywords: [
@@ -271,7 +264,10 @@ expectEqual(customSituationComposerSource.includes('backgroundColor: colors.back
 expectEqual(customSituationComposerSource.includes("rgba(17, 17, 17, 0.08)"), false, 'custom sheet has no dim backdrop');
 expectEqual(analysisReportPickerSource.includes("rgba(17,17,17,0.42)"), false, 'report picker has no dim backdrop');
 expectEqual(customSituationComposerSource.includes('autoFocus'), true, 'custom sheet focuses its visible input');
-expectEqual(loadingViewSource.includes('const MESSAGE_INTERVAL_MS = 3600;'), true, 'final generation messages advance at a readable pace');
+expectEqual(loadingViewSource.includes('const MESSAGE_INTERVAL_MS = 3000;'), true, 'final generation messages advance at a readable pace');
+expectEqual(screenSource.includes('export const MIN_AGENT_CONVERSATION_MS = 20_000;'), true, 'agent conversation remains visible long enough to show all specialists');
+expectEqual(screenSource.includes('await waitForMinimumAgentConversation(loadingStartedAt, signal);'), true, 'result navigation waits for the minimum agent conversation');
+expectEqual(screenSource.includes("imageStatus: 'failed', imageError: '이미지 상태 확인 실패'"), false, 'transient polling errors do not become terminal image failures');
 expectEqual(loadingViewSource.includes('<Text style={styles.liveStatusText}>AURA 메이크업 크루</Text>'), false, 'final generation removes the status subtitle');
 expectEqual(loadingViewSource.includes('선택한 답변과 얼굴 분석 사진을 함께 보며'), false, 'final generation removes the explanatory subtitle');
 expectEqual(recommendationServiceSource.includes('timeoutMs: 180000'), true, 'Claude generation allows enough time for streaming and product matching');
@@ -279,14 +275,13 @@ expectEqual(recommendationServiceSource.includes('timeoutMs: 90000'), false, 'ob
 expectEqual(screenSource.includes('Promise.allSettled(['), true, 'catalog and reports load independently');
 expectEqual(screenSource.includes('fetchMakeupRecommendationDiscovery(),'), true, 'catalog request participates in independent loading');
 expectEqual(screenSource.includes('getFaceAnalysisReports({limit: 50}),'), true, 'report request always participates in independent loading');
+expectEqual(screenSource.includes('getFaceAnalysisReportById(reportIdToHydrate)'), true, 'selected list report hydrates from detail API');
+expectEqual(screenSource.includes("type: 'report/detailLoaded'"), true, 'hydrated detail replaces list summary');
+expectEqual(screenSource.includes('reportRegionVisuals: sourceReport?.measurements?.regionVisuals'), true, 'result context receives region visuals');
 expectEqual(screenSource.includes('completedReportIds'), false, 'catalog failure cannot mark reports unavailable');
 expectEqual(screenSource.includes('.then(loadReports)'), false, 'reports are not chained after catalog loading');
 const resultsSource = readFileSync(
-  'apps/mobile/src/features/makeup-recommendation/screens/RecommendationResultsView.tsx',
-  'utf8',
-);
-const areaGuideSource = readFileSync(
-  'apps/mobile/src/features/makeup-recommendation/components/RecommendedAreaGuideSection.tsx',
+  'apps/mobile/src/features/makeup-recommendation/screens/RecommendationResultsFinalScreen.tsx',
   'utf8',
 );
 const persistenceSource = readFileSync(
@@ -311,10 +306,11 @@ expectEqual(
   true,
   'image completion and failure transitions are wired through the dedupe helper',
 );
-expectEqual(resultsSource.includes('onAreaOpened(area, selectedLook)'), true, 'area opening is wired from the result tabs');
-expectEqual(areaGuideSource.includes('pagingEnabled'), true, 'area guides swipe one full page at a time');
-expectEqual(areaGuideSource.includes('onMomentumScrollEnd={handleMomentumEnd}'), true, 'area guide swipe synchronizes the active tab');
-expectEqual(areaGuideSource.includes('tabRailRef.current?.scrollTo'), true, 'active area tab follows the swiped guide');
+expectEqual(
+  resultsSource.includes('onAreaOpened={area => onAreaOpened(area, model.sourceLook)}'),
+  true,
+  'area opening is wired from the final result guide',
+);
 [
   'readCurrentMakeupRecommendationSessionId',
   'fetchGeneratedMakeupRecommendationSessionV2',

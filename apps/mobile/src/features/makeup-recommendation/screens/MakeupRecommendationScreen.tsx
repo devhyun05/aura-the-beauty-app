@@ -106,8 +106,9 @@ const HISTORY_PAGE_SIZE = 20;
 const IMAGE_POLL_MAX_FAILURES = 3;
 const SESSION_RESTORE_POLL_MS = 2500;
 const SESSION_RESTORE_MAX_POLLS = 72;
+export const MIN_AGENT_CONVERSATION_MS = 20_000;
 
-function waitForSessionRestorePoll(signal: AbortSignal): Promise<void> {
+function waitForAbortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       const error = new Error('Request aborted');
@@ -126,10 +127,22 @@ function waitForSessionRestorePoll(signal: AbortSignal): Promise<void> {
     timer = setTimeout(() => {
       signal.removeEventListener('abort', onAbort);
       resolve();
-    }, SESSION_RESTORE_POLL_MS);
+    }, delayMs);
     signal.addEventListener('abort', onAbort, {once: true});
     if (signal.aborted) onAbort();
   });
+}
+
+function waitForSessionRestorePoll(signal: AbortSignal): Promise<void> {
+  return waitForAbortableDelay(SESSION_RESTORE_POLL_MS, signal);
+}
+
+async function waitForMinimumAgentConversation(
+  startedAt: number,
+  signal: AbortSignal,
+): Promise<void> {
+  const remainingMs = MIN_AGENT_CONVERSATION_MS - (Date.now() - startedAt);
+  if (remainingMs > 0) await waitForAbortableDelay(remainingMs, signal);
 }
 
 async function pollGeneratingSession(
@@ -248,6 +261,7 @@ export const MakeupRecommendationScreen = forwardRef<
   const emittedImageTelemetryKeys = useRef(new Set<string>());
   const loadedReportId = useRef<string | null>(null);
   const loadedInitialView = useRef(false);
+  const hydratedReportDetailIds = useRef(new Set<string>());
 
   const beginOperation = useCallback((slot: typeof workflowRequest) => {
     slot.current?.controller.abort();
@@ -322,10 +336,39 @@ export const MakeupRecommendationScreen = forwardRef<
   const selectedSituation = getSelectedMakeupSituation(discovery);
   const selectedFaceImageUri = faceImageUri ?? imageUriFromSource(selectedReport?.imageSource);
 
+  useEffect(() => {
+    const reportIdToHydrate = selectedReport?.id;
+    if (
+      !reportIdToHydrate
+      || selectedReport.measurements?.regionVisuals
+      || hydratedReportDetailIds.current.has(reportIdToHydrate)
+    ) {
+      return undefined;
+    }
+
+    hydratedReportDetailIds.current.add(reportIdToHydrate);
+    let active = true;
+    void getFaceAnalysisReportById(reportIdToHydrate)
+      .then(detailReport => {
+        if (active && detailReport) {
+          dispatchDiscovery({type: 'report/detailLoaded', report: detailReport});
+        }
+      })
+      .catch(() => {
+        if (active) hydratedReportDetailIds.current.delete(reportIdToHydrate);
+      });
+
+    return () => {
+      active = false;
+      hydratedReportDetailIds.current.delete(reportIdToHydrate);
+    };
+  }, [selectedReport?.id, selectedReport?.measurements?.regionVisuals]);
+
   const resolveReadySession = useCallback(async (
     nextSession: MakeupRecommendationSession,
     signal: AbortSignal,
   ) => {
+    const loadingStartedAt = Date.now();
     const hydrateCompletedSession = async (completedSession: MakeupRecommendationSession) => {
       if (!completedSession.reportId) throw new Error('완료된 추천 보고서를 찾지 못했어요.');
       const hydrated = await refreshGeneratedMakeupRecommendation(completedSession, signal);
@@ -342,7 +385,9 @@ export const MakeupRecommendationScreen = forwardRef<
       }
     }
     if (activeSession.generationMode === 'v2' && activeSession.status === 'completed') {
-      return hydrateCompletedSession(activeSession);
+      const hydrated = await hydrateCompletedSession(activeSession);
+      await waitForMinimumAgentConversation(loadingStartedAt, signal);
+      return hydrated;
     }
     if (activeSession.phase !== 'ready') return activeSession;
 
@@ -371,6 +416,7 @@ export const MakeupRecommendationScreen = forwardRef<
         throw error;
       }
     }
+    await waitForMinimumAgentConversation(loadingStartedAt, signal);
     await clearCurrentMakeupRecommendationSessionId(AsyncStorage, activeSession.id);
     if (generated.reportId) imageTelemetryReportIds.current.add(generated.reportId);
     trackMakeupRecommendationEvent('recommendation_text_completed', {
@@ -665,18 +711,43 @@ export const MakeupRecommendationScreen = forwardRef<
     setLoadingContext(buildLoadingContextFromSession(restored));
     setSession(restored);
     setPhase('loading');
-    void refreshGeneratedMakeupRecommendation(restored, operation.controller.signal)
-      .then(nextSession => {
-        if (workflowRequest.current?.id !== operation.id) return;
-        setSession(nextSession);
-        setPhase('results');
-      })
-      .catch(error => {
-        if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
+
+    const cachedSourceReport = restored.sourceAnalysisReportId
+      ? discovery.reports.find(item => item.id === restored.sourceAnalysisReportId)
+      : undefined;
+    const sourceReportRequest = restored.sourceAnalysisReportId
+      ? cachedSourceReport?.measurements?.regionVisuals
+        ? Promise.resolve(cachedSourceReport)
+        : getFaceAnalysisReportById(restored.sourceAnalysisReportId)
+      : Promise.resolve(null);
+
+    void Promise.allSettled([
+      refreshGeneratedMakeupRecommendation(restored, operation.controller.signal),
+      sourceReportRequest,
+    ]).then(([refreshResult, sourceReportResult]) => {
+      if (workflowRequest.current?.id !== operation.id) return;
+
+      if (sourceReportResult.status === 'fulfilled' && sourceReportResult.value) {
+        if (cachedSourceReport) {
+          dispatchDiscovery({type: 'report/detailLoaded', report: sourceReportResult.value});
+        } else {
+          dispatchDiscovery({
+            type: 'reports/loaded',
+            reports: [sourceReportResult.value, ...discovery.reports],
+            preferredReportId: discovery.selectedReportId ?? undefined,
+          });
+        }
+      }
+
+      if (refreshResult.status === 'fulfilled') {
+        setSession(refreshResult.value);
+      } else {
+        if (isRequestAbortedError(refreshResult.reason)) return;
         setImageRetryError('상세 이미지 상태를 불러오지 못했어요. 저장된 추천 내용은 그대로 보여드려요.');
-        setPhase('results');
-      });
-  }, [beginOperation]);
+      }
+      setPhase('results');
+    });
+  }, [beginOperation, discovery.reports, discovery.selectedReportId]);
 
   useEffect(() => {
     const requestedReportId = reportId?.trim();
@@ -837,6 +908,7 @@ export const MakeupRecommendationScreen = forwardRef<
         .then(nextSession => {
           if (!cancelled) {
             imagePollFailureCount.current = 0;
+            setImageRetryError('');
             setSession(nextSession);
           }
         })
@@ -845,8 +917,6 @@ export const MakeupRecommendationScreen = forwardRef<
           imagePollFailureCount.current += 1;
           if (imagePollFailureCount.current >= IMAGE_POLL_MAX_FAILURES) {
             setImageRetryError('이미지 상태를 확인하지 못했어요. 추천 내용은 그대로 볼 수 있어요.');
-            setSession(current => current ? {...current, imageStatus: 'failed', imageError: '이미지 상태 확인 실패'} : current);
-            return;
           }
           retryTimer = setTimeout(poll, 5000);
         });
@@ -1026,18 +1096,41 @@ export const MakeupRecommendationScreen = forwardRef<
   }
 
   if (phase === 'results' && session) {
+    const sourceReport = session.sourceAnalysisReportId
+      ? discovery.reports.find(report => report.id === session.sourceAnalysisReportId)
+      : selectedReport;
+    const selectedReportMatchesSource = !session.sourceAnalysisReportId
+      || selectedReport?.id === session.sourceAnalysisReportId;
+    const reportImageUri = imageUriFromSource(sourceReport?.imageSource)
+      ?? (selectedReportMatchesSource ? selectedFaceImageUri : undefined);
+
     return (
       <RecommendationResultsView
         context={{
+          personalColor: session.personalColor,
           profileGender: session.profileGender,
           keywordLabel: session.keyword?.label
             ?? (session.editorialPresetId ? session.scenarioLabel : undefined),
-          reportLabel: discovery.reports.find(report => report.id === session.sourceAnalysisReportId)?.reportTitle,
-          situationLabel: session.editorialPresetId
-            ? undefined
-            : session.customSituationText
-              ? '직접 입력'
-              : session.situation?.label,
+          reportLabel: sourceReport?.reportTitle,
+          reportAnalyzedAt: sourceReport?.analyzedAt,
+          reportImageUri,
+          reportRegionVisuals: sourceReport?.measurements?.regionVisuals,
+          reportSummary: sourceReport
+            ? {
+                environmentLabel: sourceReport.environmentLabel,
+                faceShape: sourceReport.faceShape,
+                personalColor: sourceReport.personalColor,
+                shortSummary: sourceReport.shortSummary,
+                skinType: sourceReport.skinType,
+                title: sourceReport.title,
+              }
+            : undefined,
+          situationLabel: session.customSituationText?.trim()
+            || session.situation?.label
+            || (session.editorialPresetId ? session.scenarioLabel : undefined),
+          questions: session.questions,
+          answers: session.answers,
+          additionalConstraints: session.additionalConstraints,
         }}
         imageRetryError={imageRetryError}
         imageStatus={session.imageStatus}

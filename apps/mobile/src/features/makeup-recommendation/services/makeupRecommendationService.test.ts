@@ -8,6 +8,7 @@ import {
   answerMakeupRecommendationQuestion,
   getMakeupScenarioSet,
   getPopularMakeupScenarios,
+  mapBackendCropRegions,
   mapBackendRecommendationReports,
   mapBackendRecommendationLooks,
   MakeupRecommendationRetryableError,
@@ -106,12 +107,118 @@ expectEqual(
   'new seed reshuffles general scenarios',
 );
 
+const MEDIA_PIPE_CROP_METADATA = {
+  version: 'makeup-face-crops-v1',
+  imageSize: {width: 900, height: 1100},
+  areas: {
+    base: [{regionId: 'face', box: {left: 0.2, top: 0.1, right: 0.8, bottom: 0.9}}],
+    brow: [
+      {regionId: 'left_eye', box: {left: 0.5, top: 0.28, right: 0.75, bottom: 0.46}},
+      {regionId: 'right_eye', box: {left: 0.25, top: 0.28, right: 0.5, bottom: 0.46}},
+    ],
+    eye: [
+      {regionId: 'left_eye', box: {left: 0.5, top: 0.28, right: 0.75, bottom: 0.46}},
+      {regionId: 'right_eye', box: {left: 0.25, top: 0.28, right: 0.5, bottom: 0.46}},
+    ],
+    cheek: [
+      {regionId: 'left_cheek', box: {left: 0.52, top: 0.46, right: 0.78, bottom: 0.7}},
+      {regionId: 'right_cheek', box: {left: 0.22, top: 0.46, right: 0.48, bottom: 0.7}},
+    ],
+    lip: [{regionId: 'lips', box: {left: 0.3605, top: 0.644, right: 0.6395, bottom: 0.796}}],
+  },
+} as const;
+
+const mappedCropRegions = mapBackendCropRegions(MEDIA_PIPE_CROP_METADATA);
+expectEqual(mappedCropRegions?.brow?.length, 2, 'MediaPipe brow keeps paired landmark boxes');
+expectEqual(mappedCropRegions?.lip?.[0]?.top, 0.644, 'MediaPipe lip box is preserved');
+expectEqual(
+  mapBackendCropRegions({version: 'makeup-face-crops-v1', areas: {lip: [{box: {left: 0, top: 0, right: 1.2, bottom: 1}}]}}),
+  undefined,
+  'out-of-range crop metadata is rejected',
+);
+
+const BACKEND_LOOK_MAP = {
+  version: 'makeup-look-map-v1',
+  naturalityToPersonality: 61,
+  casualToGlam: 74,
+  rationale: '추천 팔레트의 채도와 질감, 선택한 상황을 계산했어요.',
+} as const;
+const BACKEND_FIT_ASSESSMENT = {
+  scoringVersion: 'makeup-fit-v1',
+  overallScore: 87,
+  dimensions: {
+    situation: {available: true, score: 91, reason: '상황과 어울려요.'},
+    preference: {available: true, score: 84, reason: '답변과 어울려요.'},
+    personalColor: {available: true, score: 88, reason: '퍼스널 컬러와 어울려요.'},
+    faceStructure: {available: true, score: 85, reason: '얼굴 구조와 어울려요.'},
+    skinCompatibility: {available: true, score: 82, reason: '피부 표현과 어울려요.'},
+    lookCoherence: {available: true, score: 90, reason: '이미지와 가이드가 일관돼요.'},
+  },
+  evidence: [
+    {source: 'situation', label: '면접', reason: '상황 근거'},
+    {source: 'preference', label: '자연스럽게', reason: '답변 근거'},
+    {source: 'personal_color', label: '여름 쿨', reason: '컬러 근거'},
+    {source: 'face_structure', label: '얼굴 구조', reason: '구조 근거'},
+    {source: 'skin_type', label: '건성', reason: '피부 근거'},
+    {source: 'look_coherence', label: '추천 이미지 일관성', reason: '일관성 근거'},
+  ],
+} as const;
+const BACKEND_MATCH_ASSESSMENT = {
+  version: 'makeup-match-v1',
+  score: 99,
+  evaluatedWeight: 100,
+  components: [
+    {
+      key: 'preference',
+      weight: 35,
+      score: 97,
+      evaluated: true,
+      reason: 'The recommendation reflects explicit answers.',
+      evidence: ['answer.optionLabel', 'answer.additionalConstraints'],
+    },
+    {
+      key: 'situation',
+      weight: 25,
+      score: 96,
+      evaluated: true,
+      reason: 'The recommendation fits the selected situation.',
+      evidence: ['selection.situation.label'],
+    },
+    {
+      key: 'colorHarmony',
+      weight: 25,
+      score: 94,
+      evaluated: true,
+      reason: 'The color palette is harmonious.',
+      evidence: ['analysisReport.personalColor'],
+    },
+    {
+      key: 'skinFinish',
+      weight: 15,
+      score: 92,
+      evaluated: true,
+      reason: 'The finish is compatible with the skin profile.',
+      evidence: ['analysisReport.skinType'],
+    },
+  ],
+  reflectedInputs: [{
+    sourceType: 'answer',
+    sourceId: 'finish',
+    inputLabel: 'soft finish',
+    decisionPath: 'looks.anchor.areaGuides.base.applicationPlan.steps',
+    reflectedValue: 'soft matte base',
+  }],
+  generationSource: 'claude',
+} as const;
+
 const generatedLooks = mapBackendRecommendationLooks({
   reportId: 'report-1',
   prompt: '퇴근 후 약속',
   questions: [],
   answers: [],
   recommendation: {
+    generationSource: 'claude',
+    matchAssessment: BACKEND_MATCH_ASSESSMENT,
     looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
       id: `look-${index + 1}`,
       role,
@@ -123,11 +230,32 @@ const generatedLooks = mapBackendRecommendationLooks({
       difficulty: 'medium',
       steps: [{order: 1, area: 'base', instruction: '얇게 바르기'}],
       products: [{area: 'base', brandName: '브랜드', productName: '쿠션', reason: '얇은 표현'}],
+      lookMap: BACKEND_LOOK_MAP,
+      fitAssessment: BACKEND_FIT_ASSESSMENT,
+      ...(index === 0
+        ? {imageAsset: {provenance: {cropMetadata: MEDIA_PIPE_CROP_METADATA}}}
+        : {}),
     })),
   },
 });
 expectEqual(generatedLooks.length, 3, 'three backend looks are mapped');
 expectEqual(generatedLooks.map(look => look.role).join(','), 'anchor,bold,discovery', 'backend look roles are preserved');
+expectEqual(generatedLooks[0].generationSource, 'claude', 'generation source is mapped onto each look');
+expectEqual(generatedLooks[0].matchAssessment?.score, 99, 'server match score is preserved exactly');
+expectEqual(
+  generatedLooks[0].matchAssessment?.reflectedInputs[0]?.decisionPath,
+  'looks.anchor.areaGuides.base.applicationPlan.steps',
+  'server match reflected input path is preserved',
+);
+expectEqual(generatedLooks[1].matchAssessment, undefined, 'match assessment is attached only to the anchor look');
+expectEqual(generatedLooks[0].fitAssessment?.overallScore, 87, 'server fit assessment is mapped');
+expectEqual(
+  generatedLooks[0].fitAssessment?.dimensions.lookCoherence.score,
+  90,
+  'fit dimension breakdown is preserved',
+);
+expectEqual(generatedLooks[0].lookMap?.casualToGlam, 74, 'server LOOK MAP coordinate is mapped');
+expectEqual(generatedLooks[0].imageCropRegions?.lip?.[0]?.bottom, 0.796, 'landmark crop metadata is mapped onto the generated look');
 expectEqual(
   generatedLooks[0].areaGuides?.find(guide => guide.area === 'base')?.products[0]?.brandName,
   '브랜드',
@@ -137,6 +265,78 @@ expectEqual(
   generatedLooks[0].areaGuides?.find(guide => guide.area === 'eye')?.products.length,
   0,
   'missing backend area products stay empty instead of using fixture brands',
+);
+
+const legacyWithoutMatch = mapBackendRecommendationLooks({
+  reportId: 'legacy-report-without-match',
+  prompt: 'legacy result',
+  questions: [],
+  answers: [],
+  recommendation: {
+    generationSource: 'claude',
+    looks: [{id: 'legacy-anchor', role: 'anchor', title: 'legacy anchor'}],
+  },
+})[0];
+expectEqual(
+  legacyWithoutMatch.matchAssessment,
+  undefined,
+  'legacy result without matchAssessment does not invent a score',
+);
+
+const corruptMatch = mapBackendRecommendationLooks({
+  reportId: 'report-with-corrupt-match',
+  prompt: 'corrupt match result',
+  questions: [],
+  answers: [],
+  recommendation: {
+    generationSource: 'claude',
+    matchAssessment: {...BACKEND_MATCH_ASSESSMENT, score: 101},
+    looks: [{id: 'corrupt-match-anchor', role: 'anchor', title: 'corrupt match anchor'}],
+  },
+})[0];
+expectEqual(corruptMatch.matchAssessment, undefined, 'corrupt matchAssessment is ignored without a fallback score');
+
+const completedWithoutImageUrl = mapBackendRecommendationLooks({
+  reportId: 'report-missing-completed-image',
+  prompt: '면접',
+  questions: [],
+  answers: [],
+  imageStatus: 'completed',
+  recommendation: {
+    looks: [{id: 'missing-image-anchor', role: 'anchor', title: '완료됐지만 URL 없는 룩'}],
+  },
+})[0];
+expectEqual(
+  completedWithoutImageUrl.imageStatus,
+  'failed',
+  'aggregate completed status without an image URL is downgraded to failed',
+);
+expectEqual(
+  completedWithoutImageUrl.imageError,
+  '서버에서 생성된 이미지 주소를 받지 못했어요. 다시 시도해 주세요.',
+  'missing completed image URL exposes an actionable error instead of fixture success',
+);
+
+const completedWithImageUrl = mapBackendRecommendationLooks({
+  reportId: 'report-with-completed-image',
+  prompt: '면접',
+  questions: [],
+  answers: [],
+  imageStatus: 'completed',
+  recommendation: {
+    looks: [{
+      id: 'completed-image-anchor',
+      role: 'anchor',
+      title: 'URL이 있는 완료 룩',
+      imageUrl: ' https://cdn.example.com/generated-look.jpg ',
+    }],
+  },
+})[0];
+expectEqual(completedWithImageUrl.imageStatus, 'completed', 'completed image URL keeps completed status');
+expectEqual(
+  JSON.stringify(completedWithImageUrl.imageSource),
+  JSON.stringify({uri: 'https://cdn.example.com/generated-look.jpg'}),
+  'completed generated image URL is trimmed and preserved',
 );
 
 const legacyGuide = buildRecommendedAreaGuides({
@@ -185,6 +385,12 @@ const reportHistory = mapBackendRecommendationReports([
     id: 'report-1',
     scenarioText: '퇴근 후 약속',
     recommendation: {
+      generationSource: 'deterministic_fallback',
+      matchAssessment: {
+        ...BACKEND_MATCH_ASSESSMENT,
+        score: 99,
+        generationSource: 'deterministic_fallback',
+      },
       looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
         id: `saved-look-${index + 1}`,
         role,
@@ -196,12 +402,58 @@ const reportHistory = mapBackendRecommendationReports([
         difficulty: 'medium',
         steps: [{order: 1, area: 'base', instruction: '얇게 바르기'}],
         products: [{area: 'base', brandName: '브랜드', productName: '쿠션', reason: '얇은 표현'}],
+        lookMap: BACKEND_LOOK_MAP,
+        fitAssessment: {...BACKEND_FIT_ASSESSMENT, overallScore: 74},
       })),
     },
     imageStatus: 'completed',
     createdAt: '2026-07-14T12:34:56Z',
     profileGender: 'unspecified',
-    contextSnapshot: JSON.stringify({profile: {gender: 'male'}}),
+    sourceAnalysisReportId: '11111111-1111-4111-8111-111111111111',
+    questions: [{
+      id: 'history-finish',
+      title: '마무리 분위기',
+      options: [
+        {id: 'soft', label: '차분하게'},
+        {id: 'clear', label: '또렷하게'},
+        {id: 'bold', label: '과감하게'},
+        {id: 'ai_pick', label: 'AI가 골라줘'},
+      ],
+    }],
+    answers: [{
+      questionId: 'history-finish',
+      optionId: 'soft',
+      additionalConstraints: '글리터 제외',
+    }],
+    contextSnapshot: JSON.stringify({
+      analysisReport: {
+        id: '11111111-1111-4111-8111-111111111111',
+        personalColor: 'summer-cool',
+      },
+      profile: {gender: 'male'},
+      selection: {
+        situation: {
+          id: 'situation-history',
+          key: 'date',
+          label: 'date situation',
+          description: 'date situation description',
+        },
+        keyword: {
+          id: 'keyword-history',
+          label: 'keyword label',
+          kind: 'curated',
+          badge: 'CURATED',
+          seedPrompt: 'keyword seed prompt',
+          tags: ['clean'],
+        },
+        customSituationText: 'custom situation prompt',
+        customSituationLabel: 'custom situation label',
+        editorialPreset: {
+          id: 'baseball-camera',
+          displayText: 'editorial display text',
+        },
+      },
+    }),
   },
 ]);
 expectEqual(reportHistory.length, 1, 'saved report history count');
@@ -210,12 +462,119 @@ expectEqual(reportHistory[0].scenarioText, '퇴근 후 약속', 'saved report sc
 expectEqual(reportHistory[0].profileGender, 'unspecified', 'history prefers scalar profile gender');
 expectEqual(reportHistory[0].results.length, 3, 'saved report restores three looks');
 expectEqual(reportHistory[0].results[0].title, 'anchor title', 'saved report restores look copy');
+expectEqual(
+  reportHistory[0].results[0].generationSource,
+  'deterministic_fallback',
+  'saved report restores fallback generation source',
+);
+expectEqual(reportHistory[0].results[0].fitAssessment?.overallScore, 74, 'saved report restores fit score');
+expectEqual(
+  reportHistory[0].results[0].matchAssessment?.score,
+  99,
+  'saved fallback report restores the exact uncapped server match score',
+);
+expectEqual(
+  reportHistory[0].results[0].matchAssessment?.generationSource,
+  'deterministic_fallback',
+  'saved report restores match generation metadata without changing the score',
+);
+expectEqual(reportHistory[0].results[1].matchAssessment, undefined, 'saved match remains anchor-only');
 const restoredReport = restoreMakeupRecommendationReport(reportHistory[0]);
 expectEqual(restoredReport.phase, 'results', 'saved report opens in results phase');
 expectEqual(restoredReport.reportId, 'report-1', 'restored session keeps report id');
 expectEqual(restoredReport.profileGender, 'unspecified', 'restored report keeps snapshot gender');
 expectEqual(restoredReport.generationMode, 'backend', 'restored report is server-backed');
 expectEqual(restoredReport.results.length, 3, 'restored session keeps all looks');
+expectEqual(
+  restoredReport.results[0].generationSource,
+  'deterministic_fallback',
+  'restored session keeps generation source',
+);
+expectEqual(
+  restoredReport.results[0].matchAssessment?.score,
+  99,
+  'opening saved history preserves the same match score as the saved payload',
+);
+expectEqual(restoredReport.results[0].lookMap?.naturalityToPersonality, 61, 'restored session keeps LOOK MAP');
+expectEqual(restoredReport.sourceAnalysisReportId, '11111111-1111-4111-8111-111111111111', 'history keeps source analysis report');
+expectEqual(restoredReport.questions[0]?.id, 'history-finish', 'history keeps backend questions');
+expectEqual(restoredReport.answers[0]?.optionId, 'soft', 'history keeps backend answers');
+expectEqual(restoredReport.additionalConstraints, '글리터 제외', 'history derives the latest answer constraint');
+expectEqual(restoredReport.situation?.id, 'situation-history', 'history keeps selected situation');
+expectEqual(restoredReport.keyword?.id, 'keyword-history', 'history keeps selected keyword');
+expectEqual(restoredReport.scenarioLabel, 'keyword label', 'history restores the selected scenario label');
+expectEqual(restoredReport.editorialPresetId, 'baseball-camera', 'history keeps editorial preset id when present');
+expectEqual(restoredReport.customSituationText, 'custom situation prompt', 'history keeps custom situation text when present');
+expectEqual(restoredReport.personalColor, 'summer-cool', 'history keeps analysis personal color');
+expectEqual(restoredReport.prompt, 'custom situation prompt', 'history restores the original custom prompt');
+
+const mixedRuntimeArrayHistory = mapBackendRecommendationReports([
+  {
+    id: 'report-mixed-runtime-arrays',
+    scenarioText: 'mixed runtime arrays',
+    recommendation: {
+      looks: [{
+        id: 'mixed-look',
+        role: 'anchor',
+        title: 'mixed look',
+        summary: 'mixed summary',
+        reasons: ['valid reason'],
+        appliedConditions: ['mixed runtime arrays'],
+        durationMinutes: 15,
+        difficulty: 'medium',
+        steps: [{order: 1, area: 'base', instruction: 'apply lightly'}],
+        products: [],
+      }],
+    },
+    imageStatus: 'completed',
+    questions: JSON.stringify([
+      {
+        id: 'mixed-question',
+        title: 'finish preference',
+        options: [
+          {id: 'soft', label: 'soft'},
+          null,
+          {id: 'clear', label: 'clear'},
+          17,
+          {id: 'bold', label: 'bold'},
+          {id: 'ai_pick', label: 'AI가 골라줘'},
+        ],
+      },
+      null,
+      'invalid question',
+    ]),
+    answers: JSON.stringify([
+      {questionId: 'mixed-question', optionId: 'soft', additionalConstraints: 'no glitter'},
+      null,
+      {questionId: 17, optionId: 'clear'},
+      'invalid answer',
+    ]),
+    contextSnapshot: JSON.stringify({
+      selection: {
+        keyword: {
+          id: 'mixed-keyword',
+          label: 'mixed keyword',
+          kind: 'curated',
+          badge: 'CURATED',
+          seedPrompt: 'mixed seed prompt',
+          tags: ['clean', null, 17, 'date', {bad: true}],
+        },
+      },
+    }),
+  },
+  {
+    id: 'report-unusable-runtime-row',
+    scenarioText: 17,
+    recommendation: JSON.stringify({looks: [null]}),
+    imageStatus: 'completed',
+  },
+]);
+expectEqual(mixedRuntimeArrayHistory.length, 1, 'one malformed row does not break the full history mapping');
+expectEqual(mixedRuntimeArrayHistory[0].questions?.length, 1, 'invalid question elements are skipped');
+expectEqual(mixedRuntimeArrayHistory[0].questions?.[0]?.options.length, 4, 'invalid option elements are skipped');
+expectEqual(mixedRuntimeArrayHistory[0].answers?.length, 1, 'invalid answer elements are skipped');
+expectEqual(mixedRuntimeArrayHistory[0].answers?.[0]?.optionId, 'soft', 'valid answer mapping is preserved');
+expectEqual(mixedRuntimeArrayHistory[0].keyword?.tags.join(','), 'clean,date', 'invalid tag elements are skipped');
 
 const started = startMakeupRecommendation({
   prompt: scenarios[0].seedPrompt,

@@ -3,6 +3,7 @@ import type {
   MakeupArea,
   MakeupGuideArea,
   MakeupLookRecommendation,
+  MakeupRecommendationApplicationPlan,
   MakeupRecommendationDiscovery,
   MakeupRecommendationProduct,
   MakeupRecommendationStep,
@@ -13,8 +14,17 @@ import type {
   RecommendedMakeupAreaGuide,
 } from '../types';
 
-export type ApiAreaGuide = Partial<Omit<RecommendedMakeupAreaGuide, 'area' | 'color' | 'avoid' | 'products' | 'steps'>> & {
+type ApiApplicationPlan = Partial<Omit<MakeupRecommendationApplicationPlan, 'completionCriteria' | 'steps'>> & {
+  completionCriteria?: string[];
+  steps?: Array<Partial<Omit<MakeupRecommendationApplicationPlan['steps'][number], 'colors'>> & {
+    colors?: Array<Partial<MakeupRecommendationApplicationPlan['steps'][number]['colors'][number]>>;
+  }>;
+};
+
+export type ApiAreaGuide = Partial<Omit<RecommendedMakeupAreaGuide, 'area' | 'applicationPlan' | 'color' | 'avoid' | 'products' | 'steps'>> & {
   area?: string;
+  applicationOrder?: number;
+  applicationPlan?: ApiApplicationPlan;
   color?: {name?: string; hex?: string};
   colors?: Array<{name?: string; hex?: string}>;
   avoid?: string[] | string;
@@ -68,6 +78,147 @@ function fallbackProducts(
     .map(product => ({...product}));
 }
 
+const APPLICATION_COLOR_HEX = /^#[0-9a-f]{6}$/i;
+const APPLICATION_MIN_STEPS: Record<MakeupGuideArea, number> = {
+  base: 4,
+  brow: 3,
+  eye: 5,
+  cheek: 3,
+  lip: 3,
+  contour: 2,
+};
+
+function normalizeApplicationPlan(
+  value: ApiApplicationPlan | undefined,
+  area: MakeupGuideArea,
+): MakeupRecommendationApplicationPlan | undefined {
+  const estimatedMinutes = value?.estimatedMinutes;
+  const completionCriteria = value?.completionCriteria?.map(item => item.trim()) ?? [];
+  const rawSteps = value?.steps;
+  if (
+    value?.recipeVersion !== 'makeup-application-v1'
+    || typeof estimatedMinutes !== 'number'
+    || !Number.isInteger(estimatedMinutes)
+    || estimatedMinutes < 1
+    || estimatedMinutes > 60
+    || completionCriteria.length === 0
+    || completionCriteria.length > 4
+    || completionCriteria.some(item => !item)
+    || new Set(completionCriteria).size !== completionCriteria.length
+    || !rawSteps
+    || rawSteps.length < APPLICATION_MIN_STEPS[area]
+    || rawSteps.length > 8
+  ) return undefined;
+
+  const seenOrders = new Set<number>();
+  const steps: MakeupRecommendationApplicationPlan['steps'] = [];
+  for (const step of rawSteps) {
+    const order = step.order;
+    const title = step.title?.trim();
+    const productType = step.productType?.trim();
+    const tool = step.tool?.trim();
+    const amount = step.amount?.trim();
+    const placement = step.placement?.trim();
+    const technique = step.technique?.trim();
+    const blending = step.blending?.trim();
+    const finishCheck = step.finishCheck?.trim();
+    if (
+      typeof order !== 'number'
+      || !Number.isInteger(order)
+      || order < 1
+      || seenOrders.has(order)
+      || !title
+      || !productType
+      || !tool
+      || !amount
+      || !placement
+      || !technique
+      || !blending
+      || !finishCheck
+      || !step.colors
+      || step.colors.length === 0
+      || step.colors.length > 4
+    ) return undefined;
+
+    const colors = step.colors.map(color => ({
+      role: color.role?.trim() ?? '',
+      name: color.name?.trim() ?? '',
+      hex: color.hex?.trim().toUpperCase() ?? '',
+    }));
+    if (colors.some(color => !color.role || !color.name || !APPLICATION_COLOR_HEX.test(color.hex))) {
+      return undefined;
+    }
+
+    seenOrders.add(order);
+    steps.push({
+      order,
+      title,
+      productType,
+      tool,
+      colors,
+      amount,
+      placement,
+      technique,
+      blending,
+      finishCheck,
+    });
+  }
+
+  const sortedSteps = steps.sort((left, right) => left.order - right.order);
+  if (sortedSteps.some((step, index) => step.order !== index + 1)) return undefined;
+
+  const searchable = sortedSteps.flatMap(step => [
+    step.title,
+    step.productType,
+    step.tool,
+    step.amount,
+    step.placement,
+    step.technique,
+    step.blending,
+    step.finishCheck,
+    ...step.colors.flatMap(color => [color.role, color.name]),
+  ]).join(' ');
+  const distinctColors = new Set(
+    sortedSteps.flatMap(step => step.colors.map(color => (
+      color.name.toLocaleLowerCase() + '\u0000' + color.hex.toUpperCase()
+    ))),
+  );
+  if (
+    area === 'base'
+    && !(
+      searchable.includes('파우더')
+      && (searchable.includes('광') || searchable.includes('글로우'))
+      && (
+        searchable.includes('올리지')
+        || searchable.includes('비움')
+        || searchable.includes('제외')
+      )
+    )
+  ) return undefined;
+  if (
+    area === 'eye'
+    && !(
+      distinctColors.size >= 3
+      && searchable.includes('섀도')
+      && (searchable.includes('아이라이너') || searchable.includes('라이너'))
+    )
+  ) return undefined;
+  if (
+    area === 'lip'
+    && !(
+      distinctColors.size >= 2
+      && (searchable.includes('안쪽') || searchable.includes('그라데이션'))
+      && (searchable.includes('글로') || searchable.includes('광'))
+    )
+  ) return undefined;
+
+  return {
+    recipeVersion: 'makeup-application-v1',
+    estimatedMinutes,
+    completionCriteria,
+    steps: sortedSteps,
+  };
+}
 export function buildRecommendedAreaGuides({
   directGuides = [],
   look,
@@ -83,6 +234,17 @@ export function buildRecommendedAreaGuides({
   return requestedAreas.map(area => {
     const direct = directGuides.find(guide => guide.area === area);
     const defaults = AREA_DEFAULTS[area];
+    const requestedApplicationOrder = direct?.applicationOrder;
+    const hasValidApplicationOrder = typeof requestedApplicationOrder === 'number'
+      && Number.isInteger(requestedApplicationOrder)
+      && requestedApplicationOrder >= 1
+      && requestedApplicationOrder <= 5;
+    const applicationPlan = hasValidApplicationOrder
+      ? normalizeApplicationPlan(direct?.applicationPlan, area)
+      : undefined;
+    const applicationOrder = applicationPlan && hasValidApplicationOrder
+      ? requestedApplicationOrder
+      : requestedAreas.indexOf(area) + 1;
     const directSteps = (direct?.steps ?? []).flatMap((step, index) => {
       const instruction = typeof step === 'string' ? step.trim() : step.instruction?.trim();
       if (!instruction) return [];
@@ -108,6 +270,7 @@ export function buildRecommendedAreaGuides({
       .filter(Boolean);
     return {
       area,
+      ...(applicationPlan ? {applicationOrder, applicationPlan} : {}),
       label: direct?.label?.trim() || AREA_LABELS[area],
       goal: direct?.goal?.trim() || `${look.title}의 분위기를 ${AREA_LABELS[area]}에 자연스럽게 연결해요.`,
       color: {

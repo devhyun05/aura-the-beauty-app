@@ -50,7 +50,9 @@ async def health_ready(
   if settings.makeup_recommendation_v2_enabled:
     probe = getattr(request.app.state, "makeup_recommendation_bedrock_credential_probe", None)
     if probe is None:
-      probe = BedrockCredentialReadinessProbe()
+      probe = BedrockCredentialReadinessProbe(
+        timeout_seconds=settings.bedrock_credential_readiness_timeout_seconds,
+      )
       request.app.state.makeup_recommendation_bedrock_credential_probe = probe
 
     bedrock = await probe.check(settings)

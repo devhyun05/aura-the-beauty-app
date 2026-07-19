@@ -26,9 +26,22 @@ PRODUCT_CATEGORIES = ("base", "shadow", "brow", "cheek", "lip", "liner")
 # 여기서 유실되면 안 된다. dev Shelf 추천 fan-out도 brow 포함 6종을 쓴다(별칭 유지).
 STORED_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES
 SEMANTIC_MATCH_WEIGHT = 0.35
+STRUCTURED_SEMANTIC_MATCH_WEIGHT = 0.10
 MAX_EMBEDDING_TEXT_LENGTH = 6000
 COLOR_MATCH_BONUS = 10
 COLOR_MISMATCH_PENALTY = 12
+MAKEUP_AREA_MATCH_BASE = 25
+MAKEUP_AREA_MATCH_WEIGHTS = {
+  # Generated recipe evidence is dominant because it describes the actual product
+  # needed to reproduce the recommended area result.
+  "recipeColors": 22,
+  "recipeProductType": 16,
+  "recipeFinish": 12,
+  # Report/context evidence refines a recipe match; it must not overrule it.
+  "personalColor": 8,
+  "skinType": 6,
+  "situationAnswers": 6,
+}
 
 
 def _safe_naver_result_url(value: Any) -> str | None:
@@ -165,6 +178,54 @@ FEATURE_TERMS = [
   "밀착",
 ]
 CONTAINER_TERMS = ["뚜껑형", "스틱", "튜브", "팔레트", "쿠션", "펜슬", "리퀴드", "팟"]
+PRODUCT_TYPE_ALIASES = {
+  "foundation": "파운데이션",
+  "cushion": "쿠션",
+  "concealer": "컨실러",
+  "powder": "파우더",
+  "primer": "프라이머",
+  "브로우 펜슬": "브로우펜슬",
+  "브로우 마스카라": "브로우마스카라",
+  "아이 섀도우": "아이섀도우",
+  "립 틴트": "립틴트",
+  "립 글로스": "립글로스",
+  "brow pencil": "브로우펜슬",
+  "eyebrow pencil": "브로우펜슬",
+  "brow mascara": "브로우마스카라",
+  "eyeshadow": "아이섀도우",
+  "eye shadow": "아이섀도우",
+  "palette": "팔레트",
+  "eyeliner": "아이라이너",
+  "mascara": "마스카라",
+  "blusher": "블러셔",
+  "blush": "블러셔",
+  "lip tint": "립틴트",
+  "tint": "립틴트",
+  "lipstick": "립스틱",
+  "lip gloss": "립글로스",
+  "gloss": "립글로스",
+}
+PRODUCT_TYPE_TERMS = [
+  "파운데이션",
+  "쿠션",
+  "컨실러",
+  "파우더",
+  "프라이머",
+  "브로우펜슬",
+  "브로우마스카라",
+  "아이브로우",
+  "아이섀도우",
+  "섀도우",
+  "팔레트",
+  "아이라이너",
+  "마스카라",
+  "블러셔",
+  "치크",
+  "립틴트",
+  "틴트",
+  "립스틱",
+  "립글로스",
+]
 CATEGORY_GUIDE_KEYS = {
   "base": ("baseMakeupGuide",),
   "cheek": ("makeupGuideline.blush",),
@@ -336,6 +397,31 @@ def _contains_any(text: str, values: list[str]) -> list[str]:
     for value in values
     if value.lower() in normalized_text
   ]
+
+
+def _product_type_terms(text: str) -> list[str]:
+  normalized_text = text.lower()
+  aliases = [
+    canonical
+    for alias, canonical in PRODUCT_TYPE_ALIASES.items()
+    if alias in normalized_text
+  ]
+  return _dedupe([*_contains_any(text, PRODUCT_TYPE_TERMS), *aliases])
+
+
+def _context_feature_terms(text: str) -> list[str]:
+  normalized_text = text.lower()
+  aliases = [
+    ("지속력", ("오래 지속", "오래가", "오래 유지", "무너지지", "long lasting", "long-lasting")),
+    ("수분", ("건조하지", "촉촉하게", "hydrating")),
+    ("보송", ("번들거리지", "보송하게", "oil control")),
+  ]
+  inferred = [
+    canonical
+    for canonical, phrases in aliases
+    if any(phrase in normalized_text for phrase in phrases)
+  ]
+  return _dedupe([*_contains_any(text, FEATURE_TERMS), *inferred])
 
 
 def _text_has_any(text: str, values: tuple[str, ...]) -> bool:
@@ -710,6 +796,7 @@ def _extract_product_specs(
     [f"{tone}용" for tone in tones if tone in {"웜톤", "쿨톤"}],
   )
   containers = _dedupe(_contains_any(searchable_text, CONTAINER_TERMS))
+  product_types = _product_type_terms(searchable_text)
 
   if category == "base" and not skin_types:
     skin_types = ["모든피부용"]
@@ -723,9 +810,112 @@ def _extract_product_specs(
     "maker": maker,
     "origin": origin,
     "productNumber": product_id,
+    "productTypes": product_types,
     "skinTypes": skin_types,
     "tones": tones,
   }
+
+
+def _score_makeup_area_product_match(
+  specs: dict[str, Any],
+  signals: dict[str, Any],
+) -> tuple[int, list[str]]:
+  """Score a verified catalog item against explicit generated-area evidence."""
+  recipe = signals.get("recipe") if isinstance(signals.get("recipe"), dict) else {}
+  personal_color = (
+    signals.get("personalColor")
+    if isinstance(signals.get("personalColor"), dict)
+    else {}
+  )
+  context = signals.get("context") if isinstance(signals.get("context"), dict) else {}
+
+  recipe_color_text = " ".join(_as_list(recipe.get("colors")))
+  recipe_finish_text = " ".join(_as_list(recipe.get("finishes")))
+  recipe_type_text = " ".join(_as_list(recipe.get("productTypes")))
+  target_colors = set(_contains_any(recipe_color_text, COLOR_TERMS))
+  target_finishes = set(_contains_any(recipe_finish_text, FINISH_TERMS))
+  target_product_types = set(_product_type_terms(recipe_type_text))
+
+  personal_text = (
+    " ".join(_as_list(personal_color.get("terms")))
+    if personal_color.get("usable") is True
+    else ""
+  )
+  personal_normalized = personal_text.lower()
+  personal_colors = set(_contains_any(personal_text, COLOR_TERMS))
+  personal_tones = set(_contains_any(personal_text, TONE_TERMS))
+  if any(term in personal_normalized for term in ("봄", "가을", "warm", "웜")):
+    personal_tones.add("웜톤")
+  if any(term in personal_normalized for term in ("여름", "겨울", "cool", "쿨")):
+    personal_tones.add("쿨톤")
+
+  target_skin_types = set(_contains_any(_clean_text(signals.get("skinType")), SKIN_TYPE_TERMS))
+  context_text = " ".join([
+    *_as_list(context.get("situation")),
+    *_as_list(context.get("answers")),
+  ])
+  context_features = set(_context_feature_terms(context_text))
+
+  product_colors = set(_as_list(specs.get("colors")))
+  product_finishes = set(_as_list(specs.get("effects")))
+  product_types = set(_as_list(specs.get("productTypes")))
+  product_tones = set(_as_list(specs.get("tones")))
+  product_skin_types = set(_as_list(specs.get("skinTypes")))
+  product_features = set(_as_list(specs.get("features")))
+
+  score = MAKEUP_AREA_MATCH_BASE
+  matched_terms: list[str] = []
+
+  color_matches = sorted(product_colors & target_colors)
+  if color_matches:
+    color_weight = MAKEUP_AREA_MATCH_WEIGHTS["recipeColors"]
+    score += color_weight if len(target_colors) <= 1 else min(color_weight, 18 + 2 * (len(color_matches) - 1))
+    matched_terms.extend(f"\ub808\uc2dc\ud53c \uc0c9\uc0c1: {term}" for term in color_matches)
+  elif product_colors and target_colors:
+    score -= 10
+
+  type_matches = sorted(product_types & target_product_types)
+  if type_matches:
+    score += MAKEUP_AREA_MATCH_WEIGHTS["recipeProductType"]
+    matched_terms.extend(f"\uc81c\ud488 \uc720\ud615: {term}" for term in type_matches)
+  elif product_types and target_product_types:
+    score -= 8
+
+  finish_matches = sorted(product_finishes & target_finishes)
+  if finish_matches:
+    score += MAKEUP_AREA_MATCH_WEIGHTS["recipeFinish"]
+    matched_terms.extend(f"\ub808\uc2dc\ud53c \uc9c8\uac10: {term}" for term in finish_matches)
+  elif product_finishes and target_finishes:
+    score -= 6
+
+  if personal_color.get("usable") is True:
+    tone_matches = sorted(product_tones & personal_tones)
+    palette_matches = sorted(product_colors & personal_colors)
+    if tone_matches:
+      score += 5
+      matched_terms.extend(f"\ud37c\uc2a4\ub110\uceec\ub7ec \ud1a4: {term}" for term in tone_matches)
+    if palette_matches:
+      score += 3
+      matched_terms.extend(f"\ud37c\uc2a4\ub110\uceec\ub7ec \ud314\ub808\ud2b8: {term}" for term in palette_matches)
+    if ("웜톤" in product_tones and "쿨톤" in personal_tones) or (
+      "쿨톤" in product_tones and "웜톤" in personal_tones
+    ):
+      score -= 6
+
+  skin_matches = sorted(product_skin_types & target_skin_types)
+  if skin_matches:
+    score += MAKEUP_AREA_MATCH_WEIGHTS["skinType"]
+    matched_terms.extend(f"\ud53c\ubd80 \ud0c0\uc785: {term}" for term in skin_matches)
+  elif target_skin_types and "모든피부용" in product_skin_types:
+    score += MAKEUP_AREA_MATCH_WEIGHTS["skinType"] // 2
+    matched_terms.append("모든피부용")
+
+  feature_matches = sorted(product_features & context_features)
+  if feature_matches:
+    score += MAKEUP_AREA_MATCH_WEIGHTS["situationAnswers"]
+    matched_terms.extend(f"\uc0c1\ud669\u00b7\ub2f5\ubcc0: {term}" for term in feature_matches)
+
+  return min(95, max(20, score)), _dedupe(matched_terms)
 
 
 def _score_product_match(
@@ -739,6 +929,10 @@ def _score_product_match(
     # 근거 없는 82~96%를 "매치율"로 표시하는 과잉 확신이었다. 순위 기반임을 나타내는
     # 보수적 값(프로필 기본치 74 미만에서 시작, 순위당 -2, 전역 하한 62)으로 낮춘다.
     return max(62, 70 - index * 2), []
+
+  match_signals = profile.get("matchSignals")
+  if isinstance(match_signals, dict):
+    return _score_makeup_area_product_match(specs, match_signals)
 
   targets = _target_terms(profile, category)
   matched_terms: list[str] = []
@@ -797,6 +991,9 @@ def _match_reason(
     profile.get("recommendedMood"),
   )
   matched_label = ", ".join(matched_terms[:4])
+
+  if isinstance(profile.get("matchSignals"), dict):
+    return f"\ucd94\ucc9c \ub808\uc2dc\ud53c \uae30\uc900\uc73c\ub85c {matched_label} \uadfc\uac70\uac00 \ub9de\ub294 \uac80\uc99d\ub41c \uc81c\ud488\uc774\uc5d0\uc694."
 
   if profile_label:
     return f"{profile_label} 보고서에서 강조된 {matched_label} 조건과 상품 특징이 맞아 추천해요."
@@ -925,13 +1122,19 @@ def _semantic_match_rate(similarity: float) -> int:
   return min(100, max(0, round(max(0.0, similarity) * 100)))
 
 
-def _combine_match_rate(rule_score: int, semantic_rate: int) -> int:
+def _combine_match_rate(
+  rule_score: int,
+  semantic_rate: int,
+  *,
+  semantic_weight: float = SEMANTIC_MATCH_WEIGHT,
+  minimum: int = 62,
+) -> int:
   weighted_score = (
-    rule_score * (1 - SEMANTIC_MATCH_WEIGHT) +
-    semantic_rate * SEMANTIC_MATCH_WEIGHT
+    rule_score * (1 - semantic_weight) +
+    semantic_rate * semantic_weight
   )
 
-  return min(99, max(62, round(weighted_score)))
+  return min(99, max(minimum, round(weighted_score)))
 
 
 def _semantic_profile_text(profile: dict[str, Any], category: str) -> str:
@@ -1008,7 +1211,7 @@ def _semantic_reason(
   if semantic_rate < 72:
     return reason
 
-  semantic_copy = "보고서 특징 벡터와 상품 정보 유사도도 높게 나왔어요."
+  semantic_copy = "\ucd94\ucc9c \ub808\uc2dc\ud53c\uc640 \uc0c1\ud488 \uc815\ubcf4\uc758 \uc758\ubbf8 \uc720\uc0ac\ub3c4\ub3c4 \ub192\uac8c \ub098\uc654\uc5b4\uc694."
 
   if not reason:
     return semantic_copy
@@ -1065,6 +1268,13 @@ async def _apply_semantic_product_scores(
 
   ranked_products: list[dict[str, Any]] = []
   has_semantic_score = False
+  has_structured_signals = isinstance(profile.get("matchSignals"), dict)
+  semantic_weight = (
+    STRUCTURED_SEMANTIC_MATCH_WEIGHT
+    if has_structured_signals
+    else SEMANTIC_MATCH_WEIGHT
+  )
+  minimum_match_rate = 20 if has_structured_signals else 62
 
   for product, product_embedding in zip(products, product_embeddings):
     category = _normalize_category(product.get("category"))
@@ -1083,7 +1293,12 @@ async def _apply_semantic_product_scores(
       **product,
       # F7: 색상 가산·감산은 rule 단계(_score_product_match)에서 이미 반영됐다 —
       # 시맨틱 결합 뒤 _color_match_adjustment로 재가산하던 이중 가산은 제거.
-      "matchRate": _combine_match_rate(rule_score or 74, semantic_rate),
+      "matchRate": _combine_match_rate(
+        rule_score or 74,
+        semantic_rate,
+        semantic_weight=semantic_weight,
+        minimum=minimum_match_rate,
+      ),
       "semanticScore": round(similarity, 4),
       "semanticMatchRate": semantic_rate,
       "reason": _semantic_reason(product, semantic_rate),
@@ -1471,6 +1686,10 @@ def _map_db_product(
     source=payload,
   )
   match_rate, matched_terms = _score_product_match(specs, category, index, profile)
+  has_structured_signals = bool(
+    profile and isinstance(profile.get("matchSignals"), dict)
+  )
+  match_reason = _match_reason(category, matched_terms, profile)
 
   return {
     "id": str(row.get("id") or _stable_external_id("db", purchase_url)),
@@ -1478,14 +1697,14 @@ def _map_db_product(
     "productName": _localized_product_name(product_name, category),
     "shadeName": shade_name,
     "category": category,
-    "matchRate": _parse_price(payload.get("matchRate")) or match_rate,
+    "matchRate": match_rate if has_structured_signals else (_parse_price(payload.get("matchRate")) or match_rate),
     "price": _parse_price(row.get("price_krw")),
     "tags": _product_tags(row.get("tags") or [], specs, matched_terms, [config["label"]]),
     "imageUrl": image_url,
     "purchaseUrl": purchase_url,
     "palette": row.get("palette") or config["palette"],
     "productInfo": specs,
-    "reason": payload.get("reason") or _match_reason(category, matched_terms, profile),
+    "reason": match_reason if has_structured_signals else (payload.get("reason") or match_reason),
   }
 
 

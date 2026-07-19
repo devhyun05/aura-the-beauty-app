@@ -169,10 +169,10 @@ VISION_REGION_ORDER = (
 )
 VISION_REGION_LABELS = {
   "full": "full face overview",
-  "left_eye": "subject's left eye",
-  "right_eye": "subject's right eye",
-  "left_cheek": "subject's left cheek",
-  "right_cheek": "subject's right cheek",
+  "left_eye": "image-left eye area",
+  "right_eye": "image-right eye area",
+  "left_cheek": "image-left cheek area",
+  "right_cheek": "image-right cheek area",
   "lips": "lip detail",
 }
 VISION_QUALITY_ISSUE_MESSAGES = {

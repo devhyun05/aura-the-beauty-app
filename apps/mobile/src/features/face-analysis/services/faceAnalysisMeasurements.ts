@@ -18,7 +18,12 @@ import type {
   FaceGeometryStatus,
 } from '../../face-geometry/types';
 import {FACE_GEOMETRY_METRIC_KEYS} from '../../face-geometry/types';
-import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
+import type {
+  NormPoint,
+  RegionKey,
+  RegionVisual,
+  RegionVisuals,
+} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
 import type {
   FaceVerticalThirdsHairlineAnalysis,
   FaceVerticalThirdsMeasurementMode,
@@ -61,6 +66,17 @@ export type FaceAnalysisMeasurementsPersonalColor = {
   reported: MeasuredPersonalColorView;
 };
 
+export const FACE_ANALYSIS_REGION_KEYS = ['upper', 'mid', 'lower', 'jaw'] as const;
+
+// Persist the face-geometry builder's singular-guide contract. Recommendation
+// UI consumers normalize that guide to an array only at their display boundary.
+export type FaceAnalysisRegionKey = RegionKey;
+export type FaceAnalysisRegionPoint = NormPoint;
+export type FaceAnalysisRegionCropRect = RegionVisual['cropRect'];
+export type FaceAnalysisRegionGuide = RegionVisual['guide'];
+export type FaceAnalysisRegionVisual = RegionVisual;
+export type FaceAnalysisRegionVisuals = RegionVisuals;
+
 export type FaceAnalysisReportMeasurements = {
   captureId: string;
   face3d?: Face3DProfile;
@@ -69,7 +85,7 @@ export type FaceAnalysisReportMeasurements = {
   personalColor?: FaceAnalysisMeasurementsPersonalColor;
   // faceGeometry2d.regionVisuals 에서 lift 된 top-level 사본(중복 저장 방지 —
   // encode 가 nested 에서는 제거한다). 구버전 저장분엔 없으므로 optional.
-  regionVisuals?: RegionVisuals;
+  regionVisuals?: FaceAnalysisRegionVisuals;
   schemaVersion: typeof FACE_ANALYSIS_MEASUREMENTS_SCHEMA_VERSION;
 };
 
@@ -125,7 +141,13 @@ export function buildFaceAnalysisMeasurementsPayload(
   // encodeFaceGeometry 가 nested 사본은 이미 제거했으므로 중복 저장 없음.
   const regionVisuals = encodeRegionVisuals(input.faceGeometry2d?.regionVisuals);
 
-  if (!faceVerticalThirds && !faceGeometry2d && !personalColor && !input.face3d) {
+  if (
+    !faceVerticalThirds
+    && !faceGeometry2d
+    && !personalColor
+    && !input.face3d
+    && !regionVisuals
+  ) {
     return undefined;
   }
 
@@ -409,6 +431,97 @@ function readStringArray(value: unknown): string[] {
   }
 
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+const NORMALIZED_COORDINATE_EPSILON = 1e-6;
+const MAX_REGION_GUIDE_POINTS = 64;
+
+function readNormalizedCoordinate(value: unknown): number | undefined {
+  const coordinate = readFiniteNumber(value);
+  if (
+    coordinate === undefined
+    || coordinate < -NORMALIZED_COORDINATE_EPSILON
+    || coordinate > 1 + NORMALIZED_COORDINATE_EPSILON
+  ) {
+    return undefined;
+  }
+  return Math.min(1, Math.max(0, coordinate));
+}
+
+function parseRegionPoint(value: unknown): FaceAnalysisRegionPoint | null {
+  if (!isRecord(value)) return null;
+  const x = readNormalizedCoordinate(value.x);
+  const y = readNormalizedCoordinate(value.y);
+  return x === undefined || y === undefined ? null : {x, y};
+}
+
+function parseRegionCropRect(value: unknown): FaceAnalysisRegionCropRect | null {
+  if (!isRecord(value)) return null;
+  const x = readNormalizedCoordinate(value.x);
+  const y = readNormalizedCoordinate(value.y);
+  const w = readFiniteNumber(value.w);
+  const h = readFiniteNumber(value.h);
+  if (
+    x === undefined
+    || y === undefined
+    || w === undefined
+    || h === undefined
+    || w <= 0
+    || h <= 0
+    || x + w > 1 + NORMALIZED_COORDINATE_EPSILON
+    || y + h > 1 + NORMALIZED_COORDINATE_EPSILON
+  ) {
+    return null;
+  }
+  return {
+    x,
+    y,
+    w: Math.min(w, 1 - x),
+    h: Math.min(h, 1 - y),
+  };
+}
+
+function parseRegionGuide(value: unknown): FaceAnalysisRegionGuide | null {
+  if (!isRecord(value) || !Array.isArray(value.points)) return null;
+  const label = readString(value.label)?.trim().slice(0, 80) ?? '';
+  const points = value.points
+    .slice(0, MAX_REGION_GUIDE_POINTS)
+    .map(parseRegionPoint)
+    .filter((point): point is FaceAnalysisRegionPoint => point !== null);
+  if (!label || points.length < 2) return null;
+  return {label, points};
+}
+
+/**
+ * Accepts both the shipped `guide` object and the forward-compatible `guides`
+ * array, while exposing one normalized shape to report/recommendation screens.
+ */
+export function parseFaceAnalysisRegionVisuals(
+  value: unknown,
+): FaceAnalysisRegionVisuals | undefined {
+  if (!isRecord(value)) return undefined;
+  const parsed: FaceAnalysisRegionVisuals = {};
+
+  for (const key of FACE_ANALYSIS_REGION_KEYS) {
+    const rawRegion = value[key];
+    if (!isRecord(rawRegion)) continue;
+    const cropRect = parseRegionCropRect(rawRegion.cropRect);
+    if (!cropRect) continue;
+
+    const rawGuides = Array.isArray(rawRegion.guides)
+      ? rawRegion.guides
+      : rawRegion.guide === undefined
+        ? []
+        : [rawRegion.guide];
+    const guide = rawGuides
+      .map(parseRegionGuide)
+      .find((candidate): candidate is FaceAnalysisRegionGuide => candidate !== null);
+    if (!guide) continue;
+
+    parsed[key] = {cropRect, guide};
+  }
+
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
 }
 
 const VERTICAL_THIRDS_POST_CORRECTION_METHODS = new Set<
@@ -956,50 +1069,6 @@ function decodeFaceGeometry(value: unknown): FaceGeometryResult | undefined {
   };
 }
 
-// ── decode: 부위별 시각 가이드(top-level lift) ───────────────────────────────
-
-const REGION_VISUAL_KEYS = ['upper', 'mid', 'lower', 'jaw'] as const;
-
-function decodeRegionVisuals(value: unknown): RegionVisuals | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const out: RegionVisuals = {};
-
-  for (const key of REGION_VISUAL_KEYS) {
-    const r = value[key];
-    if (!isRecord(r) || !isRecord(r.cropRect) || !isRecord(r.guide)) {
-      continue;
-    }
-
-    const cr = r.cropRect;
-    const g = r.guide;
-    const rawPoints = Array.isArray(g.points) ? g.points : [];
-    const points = rawPoints
-      .filter(isRecord)
-      .map(p => ({x: readFiniteNumber(p.x), y: readFiniteNumber(p.y)}))
-      .filter((p): p is {x: number; y: number} => p.x !== undefined && p.y !== undefined);
-
-    // 가이드 선/박스를 구성할 최소치(2점) 미만이면 그 부위는 통째로 drop.
-    if (points.length < 2) {
-      continue;
-    }
-
-    out[key] = {
-      cropRect: {
-        x: readFiniteNumber(cr.x) ?? 0,
-        y: readFiniteNumber(cr.y) ?? 0,
-        w: readFiniteNumber(cr.w) ?? 0,
-        h: readFiniteNumber(cr.h) ?? 0,
-      },
-      guide: {points, label: typeof g.label === 'string' ? g.label : ''},
-    };
-  }
-
-  return Object.keys(out).length ? out : undefined;
-}
-
 // ── decode: 퍼스널 컬러 ──────────────────────────────────────────────────────
 
 const PERSONAL_COLOR_STATUSES: readonly PersonalColorStatus[] = [
@@ -1313,7 +1382,7 @@ export function parseFaceAnalysisMeasurements(
   const face3d = parseTrustedServerFace3DProfile(value.face3d) ?? undefined;
   const faceGeometry2d = decodeFaceGeometry(value.faceGeometry2d);
   const personalColor = decodePersonalColor(value.personalColor);
-  const regionVisuals = decodeRegionVisuals(value.regionVisuals);
+  const regionVisuals = parseFaceAnalysisRegionVisuals(value.regionVisuals);
 
   return {
     captureId,
