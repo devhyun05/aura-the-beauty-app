@@ -23,6 +23,8 @@ class FakeDB:
   async def fetch(self, query: str, *args: object) -> list[dict[str, str]]:
     normalized = " ".join(query.split())
     self.calls.append((normalized, args))
+    if "imageGenerationStatus" in query:
+      return [{"id": "image-1"}]
     if "analysis_reports" in query:
       return [{"id": "analysis-1"}]
     if "makeup_feedback_reports" in query:
@@ -37,11 +39,14 @@ async def test_find_stuck_jobs_only_reads_old_processing_reports() -> None:
 
   result = await find_stuck_jobs(db, cutoff=cutoff)
 
-  assert result.total == 3
-  assert all("status = 'processing'" in query for query, _ in db.calls)
-  assert "updated_at < $1" in db.calls[0][0]
-  assert "created_at < $1" in db.calls[1][0]
-  assert "created_at < $1" in db.calls[2][0]
+  # analysis(processing) + image-stuck + feedback + filter = 4.
+  assert result.total == 4
+  assert result.image_stuck_report_ids == ("image-1",)
+  # analysis·feedback·filter는 processing만 회수(pending은 SQS-safe 문제로 제외).
+  assert "status = 'processing'" in db.calls[0][0]
+  # image-stuck 조회는 completed + imageGenerationStatus=processing.
+  assert "status = 'completed'" in db.calls[1][0]
+  assert "imageGenerationStatus" in db.calls[1][0]
   assert all(args == (cutoff,) for _, args in db.calls)
   assert all(not query.startswith("update") for query, _ in db.calls)
 
@@ -56,12 +61,21 @@ async def test_cleanup_is_conditional_and_preserves_existing_payload() -> None:
   assert result.analysis_report_ids == ("analysis-1",)
   assert result.feedback_report_ids == ("feedback-1",)
   assert result.filter_extraction_report_ids == ("filter-1",)
+  assert result.image_stuck_report_ids == ("image-1",)
   assert all(query.startswith("update") for query, _ in db.calls)
-  assert all("where status = 'processing'" in query for query, _ in db.calls)
-  assert all("coalesce(" in query and "- 'error'" in query for query, _ in db.calls)
   assert all("returning id" in query for query, _ in db.calls)
   assert all(args[0] == cutoff for _, args in db.calls)
-  assert all(json.loads(str(args[2]))["code"] == ERROR_CODE for _, args in db.calls)
+  # 실패 전이 쿼리(analysis/feedback/filter)만 error payload를 쓴다.
+  failure_calls = [
+    (query, args) for query, args in db.calls if "'failed'" in query
+  ]
+  assert len(failure_calls) == 3
+  assert all("coalesce(" in query and "- 'error'" in query for query, _ in failure_calls)
+  assert all(json.loads(str(args[2]))["code"] == ERROR_CODE for _, args in failure_calls)
+  # image-stuck 회수는 상태를 바꾸지 않고 imageGenerationStatus만 내린다.
+  image_calls = [query for query, _ in db.calls if "imageGenerationStatus" in query]
+  assert len(image_calls) == 1
+  assert "'failed'" not in image_calls[0]
 
 
 def test_parse_args_uses_two_hour_default_and_supports_dry_run() -> None:

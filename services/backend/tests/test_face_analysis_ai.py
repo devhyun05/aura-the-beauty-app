@@ -303,6 +303,41 @@ async def test_consulting_never_sends_image() -> None:
 
 
 @pytest.mark.asyncio
+async def test_consulting_uses_account_gender_directive() -> None:
+  # V2 라이브(dev) 경로도 계정 성별을 consult 방향에 반영한다(사진 추론 금지).
+  def _response() -> dict:
+    return {
+      "makeup": {
+        "base": "b", "brow": "b", "eyeshadow": "s", "eyeliner": "l",
+        "blush": "b", "contour": "c", "highlight": "h", "lip": "l",
+      },
+      "colorAndProduct": {"summary": "c", "items": ["i"], "rationaleMetricKeys": []},
+      "hair": {"summary": "h", "items": ["i"], "rationaleMetricKeys": []},
+      "fashion": {"summary": "f", "items": ["i"], "rationaleMetricKeys": []},
+      "photography": {"summary": "p", "items": ["i"], "rationaleMetricKeys": []},
+      "recommendedLook": {
+        "title": "데일리", "subtitle": "차분한 룩", "description": "균형을 살린 룩",
+        "tags": ["차분", "데일리"],
+      },
+      "overallMood": "차분한 균형", "summary": "s", "shortSummary": "s", "tags": ["t"],
+    }
+
+  male_client = FakeStructuredClient([_response()])
+  await FaceAnalysisAI(male_client).consult(
+    profile={}, derived={}, perception={}, profile_gender="male",
+  )
+  assert "account gender is male" in male_client.calls[0]["developer_prompt"]
+
+  unspecified_client = FakeStructuredClient([_response()])
+  await FaceAnalysisAI(unspecified_client).consult(
+    profile={}, derived={}, perception={}, profile_gender=None,
+  )
+  prompt = unspecified_client.calls[0]["developer_prompt"]
+  assert "account gender is unspecified" in prompt
+  assert "do not estimate gender from the photo" in prompt
+
+
+@pytest.mark.asyncio
 async def test_consulting_uses_sanitized_model_filter_for_all_metrics() -> None:
   ai = CapturingFaceAnalysisAI()
   general = MetricEnvelope.model_validate(

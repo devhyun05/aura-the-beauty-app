@@ -583,6 +583,8 @@ class FaceAnalysisPipeline:
           include_sensitive=False,
         ),
       )
+      raw_profile_gender = request_payload.get("profileGender")
+      profile_gender = raw_profile_gender if isinstance(raw_profile_gender, str) else None
       consulting_model_input = filter_internal_only_payload(
         {
           "faceProfile": {
@@ -591,6 +593,10 @@ class FaceAnalysisPipeline:
           },
           "derived": result.derived.model_dump(by_alias=True, mode="json"),
           "perception": result.perception.model_dump(by_alias=True, mode="json"),
+          # 캐시 키에 포함. 스테이지 캐시는 report_id로 스코프되므로 사용자간
+          # 공유는 원래 불가하나, 동일 report 재시도 중 계정 성별이 바뀌면
+          # 캐시 무효화가 필요해 키에 넣는다(성별별 방향이 다르므로).
+          "profileGender": profile_gender,
         },
       )
       consulting_kwargs = self._stage_kwargs(
@@ -606,6 +612,7 @@ class FaceAnalysisPipeline:
           profile=consulting_model_input["faceProfile"],
           derived=consulting_model_input["derived"],
           perception=consulting_model_input["perception"],
+          profile_gender=profile_gender,
         ),
       )
       if consulting is not None:

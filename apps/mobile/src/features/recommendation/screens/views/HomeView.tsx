@@ -46,7 +46,7 @@ export type HomeViewProps = {
   onOpenSaved?: () => void;
   // Change C: 확장형 첨부 트레이 (리포트·필터, 향후 자료).
   attachments: AuradinAttachment[];
-  availableReport?: {id?: string; personalColor: string} | null;
+  availableReport?: {id?: string; personalColor: string; skinType?: string} | null;
   onAddAttachment: (attachment: AuradinAttachment) => void;
   onRemoveAttachment: (index: number) => void;
 };
@@ -206,6 +206,7 @@ export function HomeView({
                     kind: 'report',
                     id: availableReport.id,
                     personalColor: availableReport.personalColor,
+                    skinType: availableReport.skinType,
                   });
                   setMenu(null);
                   setReportHint(false);

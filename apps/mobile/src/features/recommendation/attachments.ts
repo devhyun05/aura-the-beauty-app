@@ -3,19 +3,20 @@
 // 입력 자료(리포트·필터·향후 사진 등)를 kind 판별 유니온으로 표현하고, 레지스트리가
 // 각 종류의 칩 라벨/글리프 + create 요청 기여(contribute)를 담는다. **새 자료 = 여기 1엔트리**.
 // contribute는 검색 요청에 누적 기여한다:
-//   - report → context.personalColor (+ reportId)
+//   - report → context.personalColor + skinType (+ reportId)
 //   - filter → promptSuffix에 parse_intent가 이해하는 표준구 합성(백엔드 무변경)
 //   - photo(향후) → context.lookPhotoUri 등
 
 export type AuradinAttachment =
-  | {kind: 'report'; id?: string; personalColor: string}
+  | {kind: 'report'; id?: string; personalColor: string; skinType?: string}
   | {kind: 'filter'; attribute: 'category' | 'priceKrw' | 'channel'; value: string; label: string};
 
 // 검색 요청에 누적되는 기여분.
 export type AttachmentRequestParts = {
   promptSuffix: string;
   reportId?: string;
-  context: {personalColor?: string};
+  // skinType은 백엔드 report_profile의 C4 finish(건성→글로시 등) soft 선호를 살린다.
+  context: {personalColor?: string; skinType?: string};
 };
 
 type AttachmentKindSpec<A extends AuradinAttachment> = {
@@ -36,6 +37,9 @@ const REPORT_SPEC: AttachmentKindSpec<Extract<AuradinAttachment, {kind: 'report'
   contribute: (a, parts) => {
     if (a.personalColor) {
       parts.context.personalColor = a.personalColor;
+    }
+    if (a.skinType) {
+      parts.context.skinType = a.skinType;
     }
     if (a.id) {
       parts.reportId = a.id;

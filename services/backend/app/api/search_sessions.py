@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, Request, Response
 
@@ -59,17 +59,44 @@ MAX_SEARCH_PROMPT_LENGTH = 500
 MAX_SEARCH_CONTEXT_VALUE_LENGTH = 80
 
 
-def _validated_search_context(value: Any) -> dict[str, str]:
+# 리포트 → soft 선호 릴레이 허용 키. personalColor에 더해 skinType(C4 finish
+# 경로)과 신호별 confidence를 받는다. 그 외 키(faceLandmarks 등 민감 컨텍스트)는
+# 여전히 422로 거부하는 보안 allowlist다.
+_SEARCH_CONTEXT_TEXT_KEYS = ("personalColor", "skinType")
+_SEARCH_CONTEXT_CONFIDENCE_KEYS = ("personalColorConfidence", "skinTypeConfidence")
+_SEARCH_CONTEXT_ALLOWED_KEYS = frozenset(
+  _SEARCH_CONTEXT_TEXT_KEYS + _SEARCH_CONTEXT_CONFIDENCE_KEYS,
+)
+
+
+def _validated_search_context(value: Any) -> dict[str, Any]:
   if value is None:
     return {}
-  if not isinstance(value, dict) or any(key != "personalColor" for key in value):
-    raise AppError(422, "INVALID_SEARCH_CONTEXT", "Search context only accepts personalColor.")
-  if "personalColor" not in value:
-    return {}
-  personal_color = value["personalColor"]
-  if not isinstance(personal_color, str) or len(personal_color.strip()) > MAX_SEARCH_CONTEXT_VALUE_LENGTH:
-    raise AppError(422, "INVALID_SEARCH_CONTEXT", "personalColor must be a short string.")
-  return {"personalColor": personal_color.strip()} if personal_color.strip() else {}
+  if not isinstance(value, dict) or any(
+    key not in _SEARCH_CONTEXT_ALLOWED_KEYS for key in value
+  ):
+    raise AppError(
+      422,
+      "INVALID_SEARCH_CONTEXT",
+      "Search context only accepts personalColor, skinType, and their confidences.",
+    )
+  validated: dict[str, Any] = {}
+  for key in _SEARCH_CONTEXT_TEXT_KEYS:
+    raw = value.get(key)
+    if raw is None:
+      continue
+    if not isinstance(raw, str) or len(raw.strip()) > MAX_SEARCH_CONTEXT_VALUE_LENGTH:
+      raise AppError(422, "INVALID_SEARCH_CONTEXT", f"{key} must be a short string.")
+    if raw.strip():
+      validated[key] = raw.strip()
+  for key in _SEARCH_CONTEXT_CONFIDENCE_KEYS:
+    raw = value.get(key)
+    if raw is None:
+      continue
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not 0 <= raw <= 1:
+      raise AppError(422, "INVALID_SEARCH_CONTEXT", f"{key} must be a number in [0, 1].")
+    validated[key] = float(raw)
+  return validated
 
 
 def _bounded_optional_text(value: Any, *, field: str, max_length: int) -> str | None:
@@ -109,14 +136,16 @@ async def create_search_session(
   if len(prompt) > MAX_SEARCH_PROMPT_LENGTH:
     raise AppError(422, "SEARCH_PROMPT_TOO_LONG", "Search prompt is too long.")
 
-  # dev 보안 검증 유지: personalColor 외 키(faceLandmarks 등 민감 컨텍스트)는 422로 거부.
+  # dev 보안 검증 유지: 허용 키(personalColor/skinType/*Confidence) 외는 422로 거부.
   context = _validated_search_context(payload.context if isinstance(payload.context, dict) else None)
-  # §3: 리포트 톤은 client-relay context.personalColor로 받는다 (로컬/무DB에서도 동작).
-  report_context = (
-    {"personalColor": str(context.get("personalColor") or "").strip()}
-    if context.get("personalColor")
-    else None
-  )
+  # §3/C4: 리포트 신호는 client-relay context로 받는다(로컬/무DB에서도 동작).
+  # personalColor→undertone에 더해 skinType→finish(C4) 경로가 살아나고, 신호별
+  # confidence가 전달되면 report_profile의 conf<0.5 게이트가 실동작한다.
+  report_context = {
+    key: context[key]
+    for key in _SEARCH_CONTEXT_ALLOWED_KEYS
+    if context.get(key) is not None
+  } or None
   try:
     state = await create_session_persisted(
       prompt=prompt,

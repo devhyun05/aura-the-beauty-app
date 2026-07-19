@@ -5,7 +5,6 @@ import logging
 import time
 from uuid import UUID
 
-
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
 
@@ -37,7 +36,12 @@ from app.services.media_deletion import (
   ensure_media_deletion_schema,
   process_media_deletion_outbox_items,
 )
-from app.services.openai_analysis import OpenAIAnalysisService
+from app.services.makeup_recommendation_context import normalize_makeup_profile_gender
+from app.services.openai_analysis import (
+  OpenAIAnalysisService,
+  append_analysis_metric,
+  measured_personal_color_column_values,
+)
 from app.services.owned_media import (
   require_owned_media,
   resolve_owned_source_media,
@@ -98,6 +102,8 @@ ANALYSIS_MEDIA_LIST_SELECT = (
   " #- '{result,faceAnalysisV2,perception}'"
   " #- '{result,faceAnalysisV2,consulting}') as detail_payload"
 )
+# NOTE(M5): result.stylingLooks/beautyGuide 추가 제거는 getFaceAnalysisReports
+# 소비자 8곳이 목록 리포트에서 이 필드를 읽지 않음을 전수 확인한 뒤에만 한다.
 
 
 def decode_json_object(value: object) -> dict:
@@ -501,6 +507,21 @@ async def run_analysis_job_background(
   await_image_generation: bool = False,
 ) -> None:
   started_at = time.monotonic()
+
+  def record_outcome(success: bool, error_code: str | None) -> None:
+    # 실험 지표: 리포트 단위 성공/실패 + 방식(단일 vs V2) + 총 지연.
+    append_analysis_metric(
+      settings.analysis_metrics_path,
+      {
+        "kind": "outcome",
+        "reportId": str(report_id),
+        "method": "v2" if settings.face_analysis_v2_enabled else "single",
+        "success": success,
+        "errorCode": error_code,
+        "durationMs": round((time.monotonic() - started_at) * 1000),
+      },
+    )
+
   logger.info(
     "[aura:analysis-api] background:start reportId=%s",
     report_id,
@@ -594,6 +615,7 @@ async def run_analysis_job_background(
       settings.effective_analysis_model_id,
       round((time.monotonic() - started_at) * 1000),
     )
+    record_outcome(success=True, error_code=None)
   except AppError as exc:
     if prepare_source_task is not None:
       prepare_source_task.cancel()
@@ -603,6 +625,7 @@ async def run_analysis_job_background(
       exc.code,
       exc.details,
     )
+    record_outcome(success=False, error_code=exc.code)
     await mark_analysis_failed(db, report_id, exc.message, payload, exc.details)
     return
   except Exception as exc:
@@ -611,9 +634,29 @@ async def run_analysis_job_background(
     message = "AI analysis invocation failed."
     details = {"reason": exc.__class__.__name__}
     logger.exception("[aura:analysis-api] text:failed reportId=%s", report_id)
+    record_outcome(success=False, error_code=exc.__class__.__name__)
     await mark_analysis_failed(db, report_id, message, payload, details)
     return
 
+  # DB 정본은 기기 측정값 원칙: 조명 보정·정합성 게이트를 통과한 측정 퍼컬의
+  # 한국어 라벨을 result에 **주입**해 정본화한다(측정 성공 시). result에 직접
+  # 넣어야 (a) DB 컬럼, (b) detail_payload, (c) 모바일 완결성 게이트가 읽는
+  # result.personalColor/toneSummary가 모두 같은 정본을 보게 된다 — 컬럼만
+  # 채우면 게이트(result.personalColor 요구)가 프로드 경로에서 여전히 실패한다.
+  # 측정 실패면 주입하지 않아 기존 값(V2 perception 등)을 그대로 둔다("측정
+  # 우선, 실패 시만 기존/LLM 값").
+  measured_personal_color, measured_tone_summary = (
+    measured_personal_color_column_values(
+      payload.request_payload.get("measurements"),
+    )
+  )
+  if isinstance(result, dict):
+    if measured_personal_color:
+      result["personalColor"] = measured_personal_color
+    if measured_tone_summary:
+      result["toneSummary"] = measured_tone_summary
+  effective_personal_color = result.get("personalColor") if isinstance(result, dict) else None
+  effective_tone_summary = result.get("toneSummary") if isinstance(result, dict) else None
   report_status = "completed"
   report = await db.fetchrow(
     """
@@ -640,10 +683,10 @@ async def run_analysis_job_background(
     report_status,
     settings.analysis_provider,
     settings.effective_analysis_model_id,
-    result.get("personalColor") if isinstance(result, dict) else None,
+    effective_personal_color,
     result.get("faceShape") if isinstance(result, dict) else None,
     result.get("skinType") if isinstance(result, dict) else None,
-    result.get("toneSummary") if isinstance(result, dict) else None,
+    effective_tone_summary,
     result.get("recommendedMood") if isinstance(result, dict) else None,
     result.get("summary") if isinstance(result, dict) else None,
     result.get("shortSummary") if isinstance(result, dict) else None,
@@ -680,7 +723,13 @@ async def run_analysis_job_background(
     dedupe_key=f"analysis-report:{report_id}:completed",
   )
 
-  await update_analysis_report_embedding(db, report)
+  # 임베딩 실패는 보고서 완료를 막지 않지만, 조용히 삼키면 벡터 검색에서
+  # 해당 보고서가 소리 없이 빠진다 — 최소한 로그로 드러낸다.
+  if not await update_analysis_report_embedding(db, report):
+    logger.warning(
+      "[aura:analysis-api] embedding:failed reportId=%s",
+      report_id,
+    )
 
   if generates_images:
     prepared_source: tuple[bytes, str] | None = None
@@ -774,6 +823,12 @@ async def create_analysis_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  # 계정 성별을 서버가 주입한다(클라이언트 값은 신뢰하지 않고 덮어씀).
+  # 분석 프롬프트가 사진으로 성별을 추론하는 대신 이 값을 쓰게 하는 근거 —
+  # 메이크업 추천 V2의 "성별 재추론 금지" 원칙과 정합.
+  payload.request_payload["profileGender"] = normalize_makeup_profile_gender(
+    user.get("gender"),
+  )
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if payload.run_immediately and execution_mode not in {"inline", "sqs"}:
@@ -876,6 +931,9 @@ async def create_analysis_job(
     else None
   )
 
+  # NOTE(M3 후속): 동일 촬영 연타의 멱등 dedup은 부분 유니크 인덱스(위 init_db
+  # NOTE 참조)가 전제인데, 그 인덱스는 배포 안전성 문제로 보류했다. 인덱스 없이
+  # UniqueViolation catch만 두면 무의미하므로 함께 보류한다.
   if receipt_verification is not None and receipt_verification.verified:
     async def consume_and_insert(connection) -> dict | None:
       await verify_and_consume_face3d_calibration_receipt(
@@ -992,6 +1050,8 @@ async def retry_analysis_job_stage(
     run_immediately=True,
     request_payload=retry_payload,
   )
+  # 조건부 전이: 이미 pending/processing이면 되돌리지 않는다 — 진행 중 실행과
+  # 겹쳐 같은 행을 두 백그라운드 태스크가 경쟁 업데이트하는 것을 막는다.
   updated = await db.fetchrow(
     """
     update analysis_reports
@@ -1003,12 +1063,19 @@ async def retry_analysis_job_stage(
           to_jsonb($2::text),
           true
         )
-    where id = $1
+    where id = $1 and status in ('completed', 'failed')
     returning *
     """,
     job_id,
     retry.stage.value,
   )
+  if updated is None:
+    raise AppError(
+      409,
+      "ANALYSIS_JOB_NOT_RETRYABLE",
+      "이미 분석이 진행 중이에요. 잠시 후 다시 시도해 주세요.",
+      {"jobId": str(job_id)},
+    )
   await dispatch_analysis_job(
     db,
     background_tasks,
@@ -1023,6 +1090,9 @@ async def retry_analysis_job_stage(
 @router.get("/reports")
 async def list_analysis_reports(
   with_recommended_makeups: bool = Query(False, alias="withRecommendedMakeups"),
+  # 미지정 시 무제한(기존 동작). 페이지네이션/무한스크롤 없이 기본 상한을 두면
+  # 51번째 이후 리포트가 UI에서 접근 불가해지는 회귀라, 상한 도입은 offset/커서와
+  # 함께 별건으로 한다.
   limit: int | None = Query(None, ge=1, le=200),
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
@@ -1083,6 +1153,11 @@ async def get_analysis_report(
   report_id: UUID,
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+  # 실험 계측(로컬 전용): 클라이언트가 실제로 기다린 벽시계 시간(업로드 후 분석 시작~
+  # 보고서 준비). 서버 분석 시간엔 안 잡히는 폴링 감지 지연까지 포함한 "체감 시간".
+  # ANALYSIS_METRICS_PATH 미설정(프로드 기본)이면 append는 no-op.
+  client_elapsed_ms: int | None = Query(default=None, alias="clientElapsedMs", ge=0),
 ) -> dict:
   user = await ensure_user(db, auth)
   report = await db.fetchrow(
@@ -1099,6 +1174,17 @@ async def get_analysis_report(
 
   if not report:
     raise AppError(404, "ANALYSIS_REPORT_NOT_FOUND", "Analysis report was not found.")
+
+  if client_elapsed_ms is not None:
+    append_analysis_metric(
+      settings.analysis_metrics_path,
+      {
+        "kind": "perceived",
+        "reportId": str(report_id),
+        "method": "v2" if settings.face_analysis_v2_enabled else "single",
+        "clientElapsedMs": client_elapsed_ms,
+      },
+    )
 
   return success({"report": normalize_analysis_report_row(report)})
 

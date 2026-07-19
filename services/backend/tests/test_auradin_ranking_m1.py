@@ -110,6 +110,33 @@ def test_missing_source_does_not_gain_explicit_authority() -> None:
   assert evaluate_explicit_preference_match(item, resolution)["matchedExplicitPref"] is False
 
 
+def test_category_scoped_finish_applies_only_to_base_products() -> None:
+  # skin-type→finish는 베이스/파우더에만 — 립 등 색조 제품엔 넛지가 걸리지 않는다.
+  finish_pref = {
+    "attribute": "finish",
+    "values": ["glossy"],
+    "source": "report",
+    "confidence": 0.55,
+    "weight": 0.4,
+    "categoryScope": ["base", "powder"],
+  }
+  resolution = resolve_preferences([finish_pref])
+  assert resolution["resolvedPreferences"][0]["categoryScope"] == ["base", "powder"]
+
+  base_item = _item(
+    "base-glossy", category="base",
+    attributes={"finish": "glossy"}, confidence={"finish": 1.0},
+  )
+  lip_item = _item(
+    "lip-glossy", category="lip",
+    attributes={"finish": "glossy"}, confidence={"finish": 1.0},
+  )
+
+  # 베이스 제품엔 report 넛지가 걸리고, 립 제품엔 카테고리 밖이라 0.
+  assert preference_deltas(base_item, resolution)["reportPreferenceDelta"] > 0
+  assert preference_deltas(lip_item, resolution)["reportPreferenceDelta"] == 0.0
+
+
 def test_r2a_caps_prompt_and_report_in_final_score_units() -> None:
   item = _item(
     "caps",

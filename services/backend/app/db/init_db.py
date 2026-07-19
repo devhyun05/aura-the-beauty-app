@@ -894,6 +894,10 @@ POST_SCHEMA_MIGRATIONS = {
   """,
   "schema.sql:media-upload-sessions-v1": MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL,
 }
+# NOTE(M3 후속): 동일 (user_id, source_media_id) in-flight 중복을 막는 부분 유니크
+# 인덱스는 이 POST_SCHEMA_MIGRATIONS(단일 트랜잭션)로는 CONCURRENTLY 불가 →
+# 대용량 테이블 잠금·롤링배포 중 동시 insert로 빌드 실패 위험이 있어 제외한다.
+# 도입 시 CREATE INDEX CONCURRENTLY 별도 ops 마이그레이션 + 실DB 리허설 필요.
 
 def get_schema_path() -> Path:
   current_file = Path(__file__).resolve()
