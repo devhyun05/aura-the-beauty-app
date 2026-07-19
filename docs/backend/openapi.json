@@ -2262,6 +2262,23 @@
               "format": "uuid",
               "title": "Report Id"
             }
+          },
+          {
+            "name": "clientElapsedMs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Clientelapsedms"
+            }
           }
         ],
         "responses": {
@@ -5590,6 +5607,52 @@
                 "schema": {
                   "$ref": "#/components/schemas/MakeupJourneyCalendarResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/makeup-journey/reports/{report_id}/thumbnail": {
+      "get": {
+        "tags": [
+          "makeup-journey"
+        ],
+        "summary": "Get Makeup Journey Report Thumbnail",
+        "operationId": "get_makeup_journey_report_thumbnail_api_makeup_journey_reports__report_id__thumbnail_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -12519,6 +12582,18 @@
             ],
             "title": "Latestscore"
           },
+          "representativeReportId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Representativereportid"
+          },
           "representativeScore": {
             "anyOf": [
               {
@@ -12531,6 +12606,17 @@
               }
             ],
             "title": "Representativescore"
+          },
+          "representativeThumbnailUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Representativethumbnailurl"
           },
           "scoreDelta": {
             "anyOf": [
@@ -12565,7 +12651,9 @@
           "status",
           "firstScore",
           "latestScore",
+          "representativeReportId",
           "representativeScore",
+          "representativeThumbnailUrl",
           "scoreDelta",
           "reportCount",
           "hasNote",
@@ -13614,6 +13702,17 @@
             "minimum": 0.0,
             "title": "Score"
           },
+          "representativeThumbnailUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Representativethumbnailurl"
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time",
@@ -13626,6 +13725,7 @@
           "date",
           "reportId",
           "score",
+          "representativeThumbnailUrl",
           "updatedAt"
         ],
         "title": "MakeupJourneyScoreSelectionResponseData"
