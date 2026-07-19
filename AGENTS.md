@@ -1,62 +1,40 @@
 # Project Guidelines
 
 ## Source Of Truth
-- `docs/spec.md` is the 룩톡 product spec; `docs/plan.md` is its implementation order.
-- `docs/planning/MAKEUP_JOURNEY_CALENDAR_PLAN.md` is the MakeupJourney feature contract.
-- Read `docs/mobile/FRONTEND_WORK_GUIDE.md` before mobile frontend changes.
+- Product spec `docs/spec.md`, build order `docs/plan.md`, MakeupJourney contract `docs/planning/MAKEUP_JOURNEY_CALENDAR_PLAN.md`.
+- Read `docs/mobile/FRONTEND_WORK_GUIDE.md` before mobile frontend work.
 
 ## Product Boundaries
-- 룩톡 is a beauty-look discovery feed, not a text board; keep UI copy `룩톡` and internal names `Community`/`community_*`.
-- UI copy for this feature is `메이크업 성장`; internal route/API/DB names use `MakeupJourney`/`makeup_journey_*`.
-- Do not redesign existing Home, feedback, recommendation, AR, or Profile screens for the calendar feature.
-- Calendar mockup colors are illustrative only; do not introduce pink/blush styling, a feature-only accent, or copied image colors—use the current app theme tokens.
-- `makeup_feedback_reports` is the score/report source of truth; do not duplicate feedback scores into calendar tables.
-- Calendar success/failure uses the latest completed daily score against the current global goal score.
+- 룩톡 = discovery feed (not text board): UI `룩톡`, internal `Community`/`community_*`. Calendar: UI `메이크업 성장`, internal `MakeupJourney`/`makeup_journey_*`.
+- Don't redesign Home/feedback/recommendation/AR/Profile for the calendar. Theme tokens only — no pink/blush or mockup-copied colors.
+- `makeup_feedback_reports` is the score source of truth (never duplicate into calendar tables); success/failure = latest completed daily score vs current global goal.
 
 ## Mobile
-- Work in `apps/mobile/src` with Expo React Native, TypeScript, React Navigation, and Tamagui.
-- Do not add a UI or icon library; reuse theme tokens, shared components, and existing icon sizes.
-- Keep MakeupJourney code under `features/makeup-journey`; only truly shared code belongs in `shared`.
-- Use `requestBackendJson` for APIs and the existing makeup-feedback upload flow with `mediaKind: "makeup_feedback"`.
-- Preserve loading, empty, error, refresh, keyboard, accessibility, and safe-area states.
-- Keep dates as `YYYY-MM-DD` strings at API boundaries to avoid timezone shifts.
-- Keep day detail vertically scrollable with persistent calendar-back/graph actions; never shrink all cards into one viewport.
-- A correction reuses the feedback flow, inherits parent goal context, and clears navigation context on success/cancel/error.
-- Floating action short tap opens the menu; ~400ms long press drags; clamp and persist normalized coordinates locally.
+- `apps/mobile/src`: Expo RN, TS, React Navigation, Tamagui. No new UI/icon libs — reuse tokens/shared components/icon sizes. MakeupJourney under `features/makeup-journey`; only truly shared code in `shared`.
+- APIs via `requestBackendJson`; uploads via makeup-feedback flow (`mediaKind: "makeup_feedback"`). Dates as `YYYY-MM-DD` at API boundaries. Preserve loading/empty/error/refresh/keyboard/a11y/safe-area states.
+- Day detail vertically scrollable with persistent back/graph actions (never one viewport). Correction reuses feedback flow, inherits parent goal, clears nav context on success/cancel/error.
+- Floating action: short tap = menu, ~400ms long press = drag; clamp + persist normalized coords locally.
 
 ## Backend
-- Put FastAPI routes under `services/backend/app/api` and use `success()` plus camelCase responses.
-- Writes require auth and DB; every journey/report/mission/note query must scope by `user_id`.
-- Extend `/feedback/jobs`; do not create a second feedback-generation path for calendar entries.
-- Validate correction parent ownership, completion state, date inheritance, and feedback kind.
-- Calendar list queries must avoid N+1 and exclude failed, incomplete, or scoreless reports.
-- Build calendar digests from stored report fields only; do not re-score, call AI again, or copy full report payloads into month responses.
+- FastAPI routes under `services/backend/app/api`; `success()` + camelCase. Writes need auth + DB; scope every query by `user_id`.
+- Extend `/feedback/jobs` — no second feedback path. Validate correction parent ownership, completion, date inheritance, feedback kind.
+- Calendar list queries: no N+1, exclude failed/incomplete/scoreless. Month digests from stored fields only — no re-score/AI re-call/full-payload copy.
 
 ## Database
-- Update `docs/backend/schema.sql`, `docs/backend/aws-postgresql-schema.dbml`, `app/db/init_db.py`, and `app/db/check_schema.py` together.
-- Keep SQL idempotent; add FKs, checks, indexes, unique constraints, and safe backfills.
-- Account deletion and media deletion must keep working after feedback self-FKs are added.
+- Update together: `docs/backend/schema.sql`, `aws-postgresql-schema.dbml`, `app/db/init_db.py`, `app/db/check_schema.py`. Idempotent SQL; FKs/checks/indexes/unique/safe backfills.
+- Account + media deletion must keep working after feedback self-FKs.
 
 ## Quality
-- Prefer existing patterns over new abstractions; avoid unrelated refactors, logs, broad `any`, and unused code.
-- Add focused tests for API contracts, ownership, score aggregation, goal re-evaluation, mapping, gestures, and navigation.
-- Run backend tests for touched routes/schema and mobile typecheck/tests for mobile changes.
-- Preserve user changes and never commit local signing or incidental native dependency edits.
+- Prefer existing patterns; no unrelated refactors, stray logs, broad `any`, unused code. Never commit local signing or incidental native dep edits.
+- Focused tests: API contracts, ownership, score aggregation, goal re-eval, mapping, gestures, navigation. Run backend tests for touched routes/schema; mobile typecheck/tests for mobile changes.
 
-## Build Prerequisites (실기기 빌드 전 매번 확인)
-- `.env`는 gitignore라 브랜치 전환·재생성 시 사라진다. 빌드 전 `apps/mobile/.env`에 Cognito 블록이 있는지 확인할 것 — 없으면 로그인 화면에 `Missing Cognito domain. Set EXPO_PUBLIC_COGNITO_DOMAIN` 에러가 뜬다.
-- 필수 Cognito 키: `EXPO_PUBLIC_COGNITO_CLIENT_ID`, `EXPO_PUBLIC_COGNITO_DOMAIN`(`https://...auth.ap-northeast-2.amazoncognito.com`), `EXPO_PUBLIC_COGNITO_REGION`, `EXPO_PUBLIC_COGNITO_REDIRECT_URI=aiarmakeup://auth/callback`, `_SCOPES`, `_PROMPT`, `_GOOGLE_IDP`/`_KAKAO_IDP`/`_NAVER_IDP`. 값은 비밀이라 문서에 적지 않는다.
-- `EXPO_PUBLIC_API_BASE_URL`은 로컬 개발이면 현재 LAN IP(`http://<ip>:8000/api`), 배포 백엔드면 cloudfront. 둘을 섞지 말 것.
-- 빌드가 `The sandbox is not in sync with the Podfile.lock`로 실패하면 `npm run pods`(=`pod install`)를 먼저 돌려 샌드박스를 재동기화한 뒤 재빌드한다.
-- 디스크 여유가 부족하면(`No space left on device`) `~/Library/Developer/Xcode/DerivedData` 정리 후 재빌드. iOS 빌드는 DerivedData에 수 GB를 쓴다.
-- `.env`(`EXPO_PUBLIC_*`)를 바꾸면 네이티브 재빌드는 불필요하지만 실행 중인 Metro가 옛 값을 캐시하므로, 기존 Metro를 종료하고 `npm run start -- --clear`로 재시작해야 반영된다.
+## Build Prerequisites (실기기 빌드 전)
+- `.env` gitignored — verify `apps/mobile/.env` has the Cognito block or login shows `Missing Cognito domain`. Keys: `EXPO_PUBLIC_COGNITO_CLIENT_ID`/`_DOMAIN`/`_REGION`/`_REDIRECT_URI`/`_SCOPES`/`_PROMPT`/`_GOOGLE_IDP`/`_KAKAO_IDP`/`_NAVER_IDP` (values secret). `EXPO_PUBLIC_API_BASE_URL`: local LAN `http://<ip>:8000/api` OR cloudfront, don't mix.
+- `sandbox not in sync with Podfile.lock` → `npm run pods`. `No space left` → clear `~/Library/Developer/Xcode/DerivedData`. After `.env` change → restart Metro `npm run start -- --clear`.
 
 ## Physical iPhone Verification (WiFi Only)
-- Never boot or use an iOS Simulator/emulator; runtime testing is physical-device only.
-- If iOS support is missing, install only the required combined iOS Platform Support in Xcode Components; do not use `xcodebuild -downloadPlatform iOS`.
-- Get the real UDID from `xcrun xctrace list devices | grep -v Simulator | grep iPhone`; `devicectl` UUID is not an xcodebuild UDID.
-- Confirm `xcrun devicectl list devices` shows the unlocked phone as `available`.
-- Local Debug signing edits in `apps/mobile/ios/AURA.xcodeproj/project.pbxproj` must never be committed. This includes the local `DEVELOPMENT_TEAM` and the local `PRODUCT_BUNDLE_IDENTIFIER` (e.g. the personal-team `com.aurathebeautyapp.wei.mobile`) — never commit the bundle ID change. Also keep local-signing side effects out of commits: `AURA/AURA.entitlements` (applesignin/aps-environment removal), `Info.plist` key reordering, and `Podfile.lock` local Hermes checksum changes.
-- Build with the current LAN IP: `REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) npm run ios:face-capture-lab -- --device <UDID>`.
-- A locked-device launch failure after successful build means install succeeded; unlock and open manually instead of rebuilding.
-- Arm evidence capture before the user run; prefer Hermes/Metro logs over asking for a second measurement.
+- Physical device only — never boot a Simulator. Missing iOS support: install combined iOS Platform Support via Xcode Components, not `xcodebuild -downloadPlatform iOS`.
+- Real UDID: `xcrun xctrace list devices | grep -v Simulator | grep iPhone` (devicectl UUID ≠ xcodebuild UDID); confirm `available` via `xcrun devicectl list devices`.
+- Build: `REACT_NATIVE_PACKAGER_HOSTNAME=$(ipconfig getifaddr en0) npm run ios:face-capture-lab -- --device <UDID>`.
+- Never commit local signing: `project.pbxproj` (`DEVELOPMENT_TEAM`, `PRODUCT_BUNDLE_IDENTIFIER` e.g. `com.aurathebeautyapp.wei.mobile`), `AURA.entitlements`, `Info.plist` reorders, `Podfile.lock` Hermes checksum. Backup at `apps/mobile/ios/.local-signing.patch` (`git apply` to restore).
+- Locked-device launch failure after a successful build = install OK; unlock and open manually. Arm evidence capture before the user run; prefer Hermes/Metro logs over a second measurement.

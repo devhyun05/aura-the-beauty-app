@@ -1,0 +1,3 @@
+
+# 로컬 실기기 서명 백업 (절대 커밋 금지, git apply로 재적용)
+.local-signing.patch
