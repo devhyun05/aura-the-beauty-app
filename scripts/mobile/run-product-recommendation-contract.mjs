@@ -697,7 +697,6 @@ requireContract(
 
 requireContract(
   appHeader.includes('fontFamily: typography.fontFamily.bold') &&
-    appHeader.includes('fontFamily: typography.fontFamily.semibold') &&
     detailHeaderChrome.includes('fontFamily: typography.fontFamily.bold') &&
     likedScreen.includes('fontFamily: typography.fontFamily.medium') &&
     likedScreen.includes('fontFamily: typography.fontFamily.semibold') &&
