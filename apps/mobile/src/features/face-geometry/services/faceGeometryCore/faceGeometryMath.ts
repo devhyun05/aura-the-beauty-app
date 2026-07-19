@@ -12,6 +12,7 @@ import {FACE_GEOMETRY_METRIC_KEYS} from '../../types';
 import {
   BROW_CORE_LEFT_INDICES,
   BROW_CORE_RIGHT_INDICES,
+  CANTHAL_TANGENT_INDICES,
   FACE_GEOMETRY_LANDMARK_INDICES,
 } from './landmarkIndices';
 
@@ -121,6 +122,26 @@ function canthalTiltDeg(inner: PixelPoint, outer: PixelPoint): FaceGeometryMetri
     return unavailable('deg', 'canthal_axis_degenerate');
   }
   const deg = (Math.atan2(-(outer.y - inner.y), dx) * 180) / Math.PI;
+  return metric('deg', round(deg, 2));
+}
+
+// 외안각 수렴각(도): 외안각에서 상·하 눈꺼풀 접선 벡터의 사잇각. atan2(|cross|,dot)로
+// [0,180]. 두 상대벡터의 각이라 전역 회전에 불변 → roll 보정과 무관하게 산출한다.
+function outerCanthalAngleDeg(
+  outer: PixelPoint,
+  upper: PixelPoint,
+  lower: PixelPoint,
+): FaceGeometryMetric {
+  const ux = upper.x - outer.x;
+  const uy = upper.y - outer.y;
+  const lx = lower.x - outer.x;
+  const ly = lower.y - outer.y;
+  if (!(Math.hypot(ux, uy) > GEOMETRY_EPSILON) || !(Math.hypot(lx, ly) > GEOMETRY_EPSILON)) {
+    return unavailable('deg', 'canthal_tangent_degenerate');
+  }
+  const cross = ux * ly - uy * lx;
+  const dot = ux * lx + uy * ly;
+  const deg = (Math.atan2(Math.abs(cross), dot) * 180) / Math.PI;
   return metric('deg', round(deg, 2));
 }
 
@@ -276,6 +297,18 @@ export function computeFaceGeometryMetrics({
       distance(upperLipTop, upperLipBottom),
       distance(lowerLipTop, lowerLipBottom),
     );
+  }
+
+  // 눈꼬리 수렴각(회전 불변, roll 게이트 무관)
+  const canthalUpperR = get(CANTHAL_TANGENT_INDICES.upperRight);
+  const canthalLowerR = get(CANTHAL_TANGENT_INDICES.lowerRight);
+  if (eyeOuterR && canthalUpperR && canthalLowerR) {
+    metrics.outerCanthalAngleRightDeg = outerCanthalAngleDeg(eyeOuterR, canthalUpperR, canthalLowerR);
+  }
+  const canthalUpperL = get(CANTHAL_TANGENT_INDICES.upperLeft);
+  const canthalLowerL = get(CANTHAL_TANGENT_INDICES.lowerLeft);
+  if (eyeOuterL && canthalUpperL && canthalLowerL) {
+    metrics.outerCanthalAngleLeftDeg = outerCanthalAngleDeg(eyeOuterL, canthalUpperL, canthalLowerL);
   }
 
   // 하악 폭 / 얼굴 폭, 아래턱 윤곽 폭 / 얼굴 폭

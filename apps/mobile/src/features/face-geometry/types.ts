@@ -38,6 +38,8 @@ export const FACE_GEOMETRY_METRIC_KEYS = [
   'lowerJawWidthRatio',
   'mouthCornerAsymmetry',
   'mouthWidthRatio',
+  'outerCanthalAngleLeftDeg',
+  'outerCanthalAngleRightDeg',
 ] as const;
 
 export type FaceGeometryMetricKey = (typeof FACE_GEOMETRY_METRIC_KEYS)[number];

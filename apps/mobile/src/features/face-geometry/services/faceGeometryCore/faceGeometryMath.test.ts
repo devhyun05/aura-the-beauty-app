@@ -73,6 +73,12 @@ function buildBaseMap(): PixelLandmarkMap {
   map.set(IDX.eyeUpperLidLeft, {x: 580, y: 390});
   map.set(IDX.eyeLowerLidLeft, {x: 580, y: 410});
 
+  // 외안각 상/하 접선점(수렴각용) — 외안각과 상연/하연 점 사이 좁은 눈꼬리 타입.
+  map.set(CANTHAL_TANGENT_INDICES.upperRight, {x: 400, y: 393});
+  map.set(CANTHAL_TANGENT_INDICES.lowerRight, {x: 400, y: 407});
+  map.set(CANTHAL_TANGENT_INDICES.upperLeft, {x: 600, y: 393});
+  map.set(CANTHAL_TANGENT_INDICES.lowerLeft, {x: 600, y: 407});
+
   map.set(IDX.mouthCornerRight, {x: 430, y: 600});
   map.set(IDX.mouthCornerLeft, {x: 570, y: 600});
 
@@ -323,6 +329,25 @@ function buildBaseMap(): PixelLandmarkMap {
   for (const i of BROW_UPPER_EDGE_LEFT_INDICES) {
     expectEqual(BROW_CORE_LEFT_INDICES.includes(i), true, `L edge ${i} in core`);
   }
+}
+
+// ── 13. 수렴각: 상/하 접선 사잇각. 대칭 예각/둔각 케이스 + 회전 불변 ───────────
+{
+  const map = buildBaseMap();
+  // 외안각(우) 33=(380,400): 상접선점 161 위-안쪽, 하접선점 163 아래-안쪽 → 90° 코너
+  map.set(CANTHAL_TANGENT_INDICES.upperRight, {x: 420, y: 360}); // (+40,-40)
+  map.set(CANTHAL_TANGENT_INDICES.lowerRight, {x: 420, y: 440}); // (+40,+40)
+  const m = computeFaceGeometryMetrics({map, rollCorrectionApplied: true});
+  expectClose(m.outerCanthalAngleRightDeg.value, 90, 'convergence 90deg', 0.01);
+
+  // 회전 불변: 전체를 33° 돌려도 같은 값
+  const rotated = rotatePixelLandmarkMap(map, 33, {x: 500, y: 500});
+  const m2 = computeFaceGeometryMetrics({map: rotated, rollCorrectionApplied: true});
+  expectClose(m2.outerCanthalAngleRightDeg.value, 90, 'convergence rot-invariant', 0.01);
+
+  // roll 미보정에서도 산출됨(회전 불변 → 게이트 무관)
+  const m3 = computeFaceGeometryMetrics({map, rollCorrectionApplied: false});
+  expectClose(m3.outerCanthalAngleRightDeg.value, 90, 'convergence without roll gate', 0.01);
 }
 
 console.log('faceGeometryMath.test.ts passed');
