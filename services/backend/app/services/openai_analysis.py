@@ -830,6 +830,21 @@ def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
   return {"type": "object", "properties": properties, "required": required}
 
 
+# 구조화 피부 상세(#5) — 각 관찰 부면을 {label, description}로. V2 SkinPerception의
+# 사용자 노출 축(내부 confidence/sensitivity 제외)에 대응.
+SKIN_PERCEPTION_ASPECTS = (
+  "texture",
+  "pores",
+  "sebumDryness",
+  "shineDistribution",
+  "shineType",
+  "pigmentation",
+  "redness",
+  "darkCircles",
+  "toneUniformity",
+)
+
+
 def _build_face_analysis_tool_schema() -> dict[str, Any]:
   guideline_keys = ["brow", "blush", "highlight", "eyeshadow", "eyeliner", "lip"]
   region_note = _obj(
@@ -853,6 +868,11 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
     {"key": _STR, "leftLabel": _STR, "rightLabel": _STR, "value": {"type": "number"}},
     ["key", "leftLabel", "rightLabel", "value"],
   )
+  skin_aspect = _obj({"label": _STR, "description": _STR}, ["label", "description"])
+  skin_perception = _obj(
+    {aspect: skin_aspect for aspect in SKIN_PERCEPTION_ASPECTS},
+    list(SKIN_PERCEPTION_ASPECTS),
+  )
   return _obj(
     {
       "faceShape": _STR,
@@ -861,6 +881,7 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "summary": _STR,
       "shortSummary": _STR,
       "skinAnalysisSummary": _STR,
+      "skinPerception": skin_perception,
       "baseMakeupGuide": _STR,
       "makeupGuideline": _obj({key: _STR for key in guideline_keys}, guideline_keys),
       "recommendedMakeups": {
@@ -902,6 +923,7 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "summary",
       "shortSummary",
       "skinAnalysisSummary",
+      "skinPerception",
       "baseMakeupGuide",
       "makeupGuideline",
       "recommendedMakeups",
@@ -933,6 +955,9 @@ PRESCRIPTION_FIELD_KEYS = (
   "recommendedMakeups",
   "stylingLooks",
 )
+# 구조화 피부(#5)는 독립 병렬 레그로 둔다 — perception/prescription이 이미 ~23s라
+# 어느 쪽에 붙이면 30s를 넘긴다. 별도 레그면 max(A,B,skin)에 흡수돼 지연 flat.
+SKIN_FIELD_KEYS = ("skinPerception",)
 
 
 def _subset_face_analysis_schema(keys: tuple[str, ...]) -> dict[str, Any]:
@@ -943,10 +968,13 @@ def _subset_face_analysis_schema(keys: tuple[str, ...]) -> dict[str, Any]:
 ANCHOR_TOOL_SCHEMA = _subset_face_analysis_schema(ANCHOR_FIELD_KEYS)
 PERCEPTION_TOOL_SCHEMA = _subset_face_analysis_schema(PERCEPTION_FIELD_KEYS)
 PRESCRIPTION_TOOL_SCHEMA = _subset_face_analysis_schema(PRESCRIPTION_FIELD_KEYS)
+SKIN_TOOL_SCHEMA = _subset_face_analysis_schema(SKIN_FIELD_KEYS)
 
-# 드리프트 가드(임포트 시 즉시 실패): 3그룹 키가 서로 겹치지 않고 합집합이 전체 required와
+# 드리프트 가드(임포트 시 즉시 실패): 그룹 키가 서로 겹치지 않고 합집합이 전체 required와
 # 정확히 일치해야 한다. 전체 스키마에 필드를 추가하고 그룹 배정을 빠뜨리면 여기서 잡힌다.
-_FANOUT_GROUP_KEYS = ANCHOR_FIELD_KEYS + PERCEPTION_FIELD_KEYS + PRESCRIPTION_FIELD_KEYS
+_FANOUT_GROUP_KEYS = (
+  ANCHOR_FIELD_KEYS + PERCEPTION_FIELD_KEYS + PRESCRIPTION_FIELD_KEYS + SKIN_FIELD_KEYS
+)
 if len(_FANOUT_GROUP_KEYS) != len(set(_FANOUT_GROUP_KEYS)):
   raise RuntimeError("fan-out 스키마 그룹 키가 겹칩니다(anchor/perception/prescription).")
 if set(_FANOUT_GROUP_KEYS) != set(FACE_ANALYSIS_TOOL_SCHEMA["required"]):
@@ -969,6 +997,10 @@ _FANOUT_PRESCRIPTION_DIRECTIVE = (
   "이번 호출에서는 baseMakeupGuide, makeupGuideline, recommendedMakeups, "
   "stylingLooks만 작성해. 얼굴형·피부타입·무드·요약·부위노트·인상노트는 만들지 마."
 )
+_FANOUT_SKIN_DIRECTIVE = (
+  "이번 호출에서는 skinPerception 하나만 작성해. 사진에서 관찰 가능한 피부 부면을 "
+  "각각 {label(짧은 상태명), description(한 문장 관찰 설명)}으로. 의학적 진단은 하지 마."
+)
 
 DEFAULT_IMPRESSION_AXES = (
   {"key": "softness", "leftLabel": "부드러움", "rightLabel": "또렷함", "value": 0.0},
@@ -986,6 +1018,10 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "beautyGuide is optional but recommended. beautyGuide keys: bestColors, "
   "bestNeutrals, bestAccentColors, avoidColors, hairColorDirection, "
   "hairstyleDirection, finalFormula. "
+  "skinPerception keys: texture, pores, sebumDryness, shineDistribution, "
+  "shineType, pigmentation, redness, darkCircles, toneUniformity. Each value "
+  "is an object with keys label (short Korean status name) and description "
+  "(one short Korean observation sentence, no medical diagnosis). "
   "regionNotes keys: upper, mid, lower, jaw. Each value is an object with "
   "keys insight, evidence, recommendation (all short Korean sentences): "
   "insight = the impression conclusion for that region, evidence = which "
@@ -1633,6 +1669,10 @@ class OpenAIAnalysisService:
       "summary는 컬러/메이크업/헤어 방향을 한 번에 이해할 수 있게 두 문장 이내로 작성해. "
       "shortSummary와 skinAnalysisSummary도 각각 두 문장 이내로 제한해. "
       "skinAnalysisSummary는 피부 결, 광, 붉은기, 톤 균일감처럼 사진에서 관찰 가능한 표현만 다루고 의학적 진단은 하지 마. "
+      "skinPerception은 top-level 필드로 texture(피부결), pores(모공), sebumDryness(유수분), "
+      "shineDistribution(유분 분포), shineType(광 타입), pigmentation(색소), redness(붉은기), "
+      "darkCircles(다크서클), toneUniformity(톤 균일감) 9개 부면 각각을 {label(짧은 상태명), "
+      "description(사진에서 관찰 가능한 한 문장, 의학적 진단 금지)}로 채워. "
       "baseMakeupGuide는 top-level 필드로 작성하고, makeupGuideline 안에는 brow, eyeshadow, lip, highlight, eyeliner, blush만 작성해. "
       "makeupGuideline의 각 항목은 촬영 사진과 보고서 판단을 바탕으로 한 문장으로 짧게 작성해. "
       "makeupGuideline에는 단순 색상 추천뿐 아니라 배치 가이드도 포함해. "
@@ -2245,6 +2285,18 @@ class OpenAIAnalysisService:
     ):
       require_text(result.get(key), key)
 
+    skin_perception = result.get("skinPerception")
+    if not isinstance(skin_perception, dict):
+      missing.append("skinPerception")
+    else:
+      for aspect in SKIN_PERCEPTION_ASPECTS:
+        entry = skin_perception.get(aspect)
+        if not isinstance(entry, dict):
+          missing.append(f"skinPerception.{aspect}")
+          continue
+        for key in ("label", "description"):
+          require_text(entry.get(key), f"skinPerception.{aspect}.{key}")
+
     guideline = result.get("makeupGuideline")
     if not isinstance(guideline, dict):
       missing.append("makeupGuideline")
@@ -2683,7 +2735,8 @@ class OpenAIAnalysisService:
     )
     anchor_values = {key: anchor_raw.get(key) for key in ANCHOR_FIELD_KEYS}
 
-    # 2) A(perception) ∥ B(prescription) — 앵커 주입, 동시 실행.
+    # 2) A(perception) ∥ B(prescription) ∥ skin — 앵커 주입, 동시 실행.
+    #    skin은 독립 병렬 레그라 지연은 여전히 max(A,B,skin)에 흡수(내용↑·지연 flat).
     results = await asyncio.gather(
       asyncio.to_thread(
         self._bedrock_invoke_tool_sync,
@@ -2713,13 +2766,27 @@ class OpenAIAnalysisService:
         max_tokens=max_tokens,
         stage="prescription",
       ),
+      asyncio.to_thread(
+        self._bedrock_invoke_tool_sync,
+        prompt_text=self._fanout_group_prompt(
+          payload,
+          directive=_FANOUT_SKIN_DIRECTIVE,
+          anchor_values=anchor_values,
+        ),
+        image_base64=image_base64,
+        content_type=content_type,
+        tool_name="return_face_analysis_skin",
+        tool_schema=SKIN_TOOL_SCHEMA,
+        max_tokens=max_tokens,
+        stage="skin",
+      ),
       return_exceptions=True,
     )
     # fail-closed: 한쪽이라도 실패하면 전체 실패(현행 all-or-nothing 시맨틱 보존).
     for result in results:
       if isinstance(result, BaseException):
         raise result
-    perception_raw, prescription_raw = results
+    perception_raw, prescription_raw, skin_raw = results
 
     merged: dict[str, Any] = {}
     for key in ANCHOR_FIELD_KEYS:
@@ -2728,6 +2795,8 @@ class OpenAIAnalysisService:
       merged[key] = perception_raw.get(key)
     for key in PRESCRIPTION_FIELD_KEYS:
       merged[key] = prescription_raw.get(key)
+    for key in SKIN_FIELD_KEYS:
+      merged[key] = skin_raw.get(key)
 
     parsed = self._normalize_analysis_result(merged)
     logger.info(
