@@ -32,8 +32,9 @@ CONSULTING_PROMPT_VERSION = "s1-consulting-v4"
 # enum status 코드·metric 키만 영문 유지. perceive/consult 두 스테이지가 리포트의
 # 자유 텍스트(피부 라벨·부위 노트·요약·메이크업 가이드)를 전부 생성하므로 여기에 건다.
 _KOREAN_OUTPUT_DIRECTIVE = (
-  "Write every label, description, summary, recommendation, and look title/subtitle in "
-  "natural Korean (한국어). Keep only enum status codes and metric keys in English."
+  "Write every label, description, summary, recommendation, and look title/subtitle as "
+  "concise natural Korean (한국어) — short phrases, no filler. Keep only enum status codes "
+  "and metric keys in English."
 )
 FORBIDDEN_INFERENCES = (
   "medical diagnosis, disease, age, ethnicity, health status, cosmetic procedures, "
@@ -162,7 +163,8 @@ class FaceAnalysisAI:
         + json.dumps(prompt_payload, ensure_ascii=False, separators=(",", ":"))
       ),
       source_image_bytes=source_image_bytes,
-      max_tokens=2800,
+      # 성공 런도 출력이 2700~2800(상한 2800)에 붙어 절단 위험 → 헤드룸 확보.
+      max_tokens=3200,
       stage="measure",
     )
     authoritative = set(coverage.authoritative_keys)
@@ -207,7 +209,9 @@ class FaceAnalysisAI:
         separators=(",", ":"),
       ),
       source_image_bytes=source_image_bytes,
-      max_tokens=3200,
+      # perceive는 인사이트 다수를 출력해 영문에서도 ~2600 토큰(상한 3200에 근접).
+      # 한국어는 토큰이 더 무거워 상한을 넘겨 절단됐다 → 헤드룸 크게 확보.
+      max_tokens=4800,
       stage="perceive",
     )
 
@@ -251,6 +255,7 @@ class FaceAnalysisAI:
         separators=(",", ":"),
       ),
       source_image_bytes=None,
-      max_tokens=2800,
+      # 한국어 + 1회 재검증(룩 title 길이 등) 대비 헤드룸.
+      max_tokens=3200,
       stage="consult",
     )
