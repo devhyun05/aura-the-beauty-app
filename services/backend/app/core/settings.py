@@ -100,6 +100,10 @@ class Settings(BaseSettings):
   # AI_INCOMPLETE로 실패하던 문제의 근본 대응. tool_use 블록이 없으면 기존 텍스트
   # 파싱으로 폴백. 실DB/실Bedrock 검증 전 끌 수 있도록 플래그(기본 ON).
   bedrock_analysis_tool_enforcement: bool = True
+  # 팬아웃(Phase 4): 단일 Bedrock 콜을 앵커→A(인식/인상)∥B(처방/스타일링) 3콜로 쪼개
+  # 출력 decode를 병렬화(서버 ~42s→~24s). 앵커가 공유값(faceShape/skinType/
+  # recommendedMood)을 단독 저작해 A/B 정합성 보장. 실Bedrock 검증 전 기본 off.
+  bedrock_analysis_fanout_enabled: bool = False
   # 최적화 실험용 지표 sink. 경로가 설정되면 분석 호출/결과 지표를 JSONL로 append
   # (로그 레벨과 무관). 미설정(None)이면 수집 off. scripts/analysis_metrics_report.py로 집계.
   analysis_metrics_path: str | None = None

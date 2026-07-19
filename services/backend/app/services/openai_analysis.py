@@ -955,6 +955,21 @@ if set(_FANOUT_GROUP_KEYS) != set(FACE_ANALYSIS_TOOL_SCHEMA["required"]):
     "전체 스키마에 필드를 추가했다면 anchor/perception/prescription 중 하나에 배정하세요.",
   )
 
+# 그룹별 스코프 지시문 — forced tool use가 출력 형태를 강제하지만, 지시문으로 어떤
+# 파트를 쓸지 명시해 모델 혼선을 줄인다(A/B는 앵커값 재판정 금지도 함께).
+_FANOUT_ANCHOR_DIRECTIVE = (
+  "이번 호출에서는 faceShape, skinType, recommendedMood 세 값만 판정해서 반환해. "
+  "다른 필드는 만들지 마."
+)
+_FANOUT_PERCEPTION_DIRECTIVE = (
+  "이번 호출에서는 summary, shortSummary, skinAnalysisSummary, regionNotes, "
+  "impressionNotes만 작성해. 메이크업 가이드·추천·스타일링은 만들지 마."
+)
+_FANOUT_PRESCRIPTION_DIRECTIVE = (
+  "이번 호출에서는 baseMakeupGuide, makeupGuideline, recommendedMakeups, "
+  "stylingLooks만 작성해. 얼굴형·피부타입·무드·요약·부위노트·인상노트는 만들지 마."
+)
+
 DEFAULT_IMPRESSION_AXES = (
   {"key": "softness", "leftLabel": "부드러움", "rightLabel": "또렷함", "value": 0.0},
   {"key": "vividness", "leftLabel": "차분함", "rightLabel": "화사함", "value": 0.0},
@@ -2544,6 +2559,183 @@ class OpenAIAnalysisService:
     )
 
     return parsed
+
+  # ── 팬아웃(Phase 4): 앵커 → A(perception) ∥ B(prescription) ──────────────
+  def _bedrock_invoke_tool_sync(
+    self,
+    *,
+    prompt_text: str,
+    image_base64: str | None,
+    content_type: str,
+    tool_name: str,
+    tool_schema: dict[str, Any],
+    max_tokens: int,
+    stage: str,
+  ) -> dict[str, Any]:
+    """강제 tool use로 부분 스키마 하나를 채워 raw tool_input(dict)을 반환한다.
+    정규화·검증은 하지 않는다(merge 후 1회). 스테이지 지표를 남긴다."""
+    started_at = time.monotonic()
+    model_id = self.settings.effective_analysis_model_id
+    if not model_id:
+      raise AppError(
+        503,
+        "BEDROCK_ANALYSIS_NOT_CONFIGURED",
+        "A Bedrock Claude model ID or inference profile ID is required for AI analysis.",
+      )
+    content: list[dict[str, Any]] = [{"type": "text", "text": prompt_text}]
+    if image_base64 is not None:
+      content.append(
+        {
+          "type": "image",
+          "source": {"type": "base64", "media_type": content_type, "data": image_base64},
+        },
+      )
+    request_body: dict[str, Any] = {
+      "anthropic_version": "bedrock-2023-05-31",
+      "max_tokens": max_tokens,
+      "temperature": 0.2,
+      "system": "You are a concise, practical K-beauty makeup analyst. Return JSON only.",
+      "messages": [{"role": "user", "content": content}],
+      "tools": [
+        {
+          "name": tool_name,
+          "description": "Return the requested K-beauty analysis fields.",
+          "input_schema": tool_schema,
+        },
+      ],
+      "tool_choice": {"type": "tool", "name": tool_name},
+    }
+    response = self._bedrock_runtime_client().invoke_model(
+      modelId=model_id,
+      body=json.dumps(request_body, ensure_ascii=False),
+      accept="application/json",
+      contentType="application/json",
+    )
+    response_payload = json.loads(response["body"].read())
+    stop_reason = self._observe_bedrock_stop_reason(
+      response_payload,
+      context="analysis",
+      max_tokens=max_tokens,
+    )
+    self._log_bedrock_call_metrics(
+      response_payload,
+      context="analysis",
+      started_at=started_at,
+      stage=stage,
+    )
+    tool_input = self._extract_bedrock_tool_input(response_payload, tool_name)
+    if tool_input is None:
+      raise AppError(
+        502,
+        "BEDROCK_TOOL_USE_MISSING",
+        "Bedrock analysis did not return the enforced tool output.",
+        {"stopReason": stop_reason or "unknown", "stage": stage},
+      )
+    return tool_input
+
+  def _fanout_group_prompt(
+    self,
+    payload: dict[str, Any],
+    *,
+    directive: str,
+    anchor_values: dict[str, Any] | None = None,
+  ) -> str:
+    # 정적 접두부(캐시 대상) + 그룹 스코프 지시문 + 앵커 확정값 주입 + 동적 메타데이터.
+    static = self._analysis_static_instructions()
+    dynamic = self._analysis_dynamic_metadata(payload)
+    anchor_block = ""
+    if anchor_values:
+      anchor_block = (
+        "다음 값은 이미 확정됐으니 다시 판정하지 말고 근거로만 사용해: "
+        f"faceShape={anchor_values.get('faceShape')}, "
+        f"skinType={anchor_values.get('skinType')}, "
+        f"recommendedMood={anchor_values.get('recommendedMood')}. "
+      )
+    return f"{static}{directive} {anchor_block}{dynamic}"
+
+  async def _analyze_image_bedrock_fanout(
+    self,
+    payload: dict[str, Any],
+    source_image_bytes: bytes,
+  ) -> dict[str, Any]:
+    """앵커 콜로 공유값을 확정한 뒤 A(인식/인상)·B(처방/스타일링)를 병렬 실행하고,
+    disjoint 키를 merge해 기존 정규화/검증을 1회 적용한다."""
+    started = time.monotonic()
+    content_type = self._infer_content_type(payload)
+    prepared_bytes, content_type = await asyncio.to_thread(
+      self._prepare_source_image_for_analysis,
+      source_image_bytes,
+      content_type,
+    )
+    image_base64 = base64.b64encode(prepared_bytes).decode("utf-8")
+    max_tokens = self.settings.bedrock_analysis_max_tokens
+
+    # 1) 앵커: 공유값(faceShape/skinType/recommendedMood) 단독 확정 → 발산 원천 차단.
+    anchor_raw = await asyncio.to_thread(
+      self._bedrock_invoke_tool_sync,
+      prompt_text=self._fanout_group_prompt(payload, directive=_FANOUT_ANCHOR_DIRECTIVE),
+      image_base64=image_base64,
+      content_type=content_type,
+      tool_name="return_face_analysis_anchor",
+      tool_schema=ANCHOR_TOOL_SCHEMA,
+      max_tokens=512,
+      stage="anchor",
+    )
+    anchor_values = {key: anchor_raw.get(key) for key in ANCHOR_FIELD_KEYS}
+
+    # 2) A(perception) ∥ B(prescription) — 앵커 주입, 동시 실행.
+    results = await asyncio.gather(
+      asyncio.to_thread(
+        self._bedrock_invoke_tool_sync,
+        prompt_text=self._fanout_group_prompt(
+          payload,
+          directive=_FANOUT_PERCEPTION_DIRECTIVE,
+          anchor_values=anchor_values,
+        ),
+        image_base64=image_base64,
+        content_type=content_type,
+        tool_name="return_face_analysis_perception",
+        tool_schema=PERCEPTION_TOOL_SCHEMA,
+        max_tokens=max_tokens,
+        stage="perception",
+      ),
+      asyncio.to_thread(
+        self._bedrock_invoke_tool_sync,
+        prompt_text=self._fanout_group_prompt(
+          payload,
+          directive=_FANOUT_PRESCRIPTION_DIRECTIVE,
+          anchor_values=anchor_values,
+        ),
+        image_base64=image_base64,
+        content_type=content_type,
+        tool_name="return_face_analysis_prescription",
+        tool_schema=PRESCRIPTION_TOOL_SCHEMA,
+        max_tokens=max_tokens,
+        stage="prescription",
+      ),
+      return_exceptions=True,
+    )
+    # fail-closed: 한쪽이라도 실패하면 전체 실패(현행 all-or-nothing 시맨틱 보존).
+    for result in results:
+      if isinstance(result, BaseException):
+        raise result
+    perception_raw, prescription_raw = results
+
+    merged: dict[str, Any] = {}
+    for key in ANCHOR_FIELD_KEYS:
+      merged[key] = anchor_values.get(key)
+    for key in PERCEPTION_FIELD_KEYS:
+      merged[key] = perception_raw.get(key)
+    for key in PRESCRIPTION_FIELD_KEYS:
+      merged[key] = prescription_raw.get(key)
+
+    parsed = self._normalize_analysis_result(merged)
+    logger.info(
+      "[aura:bedrock] analysis:fanout-success durationMs=%s",
+      round((time.monotonic() - started) * 1000),
+    )
+    return parsed
+
   def _analyze_image_sync(
     self,
     payload: dict[str, Any],
@@ -2948,11 +3140,21 @@ class OpenAIAnalysisService:
       source_image_read_ms = round((time.monotonic() - source_read_started_at) * 1000)
 
       text_analysis_started_at = time.monotonic()
-      analysis_result = await asyncio.to_thread(
-        self._analyze_image_sync,
-        payload,
-        source_image_bytes,
-      )
+      if (
+        self.settings.analysis_provider == "bedrock"
+        and self.settings.bedrock_analysis_fanout_enabled
+      ):
+        # 팬아웃: 앵커∥A∥B로 출력 decode 병렬화(async gather는 여기서).
+        analysis_result = await self._analyze_image_bedrock_fanout(
+          payload,
+          source_image_bytes,
+        )
+      else:
+        analysis_result = await asyncio.to_thread(
+          self._analyze_image_sync,
+          payload,
+          source_image_bytes,
+        )
       text_analysis_ms = round((time.monotonic() - text_analysis_started_at) * 1000)
       analysis_result["analysisProvider"] = self.settings.analysis_provider
       analysis_result["analysisModel"] = self.settings.effective_analysis_model_id
