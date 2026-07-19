@@ -51,6 +51,7 @@ def test_openapi_response_components_are_required_nullable_and_camel_case() -> N
   settings_data = components["MakeupJourneySettingsResponseData"]
   calendar_day = components["MakeupJourneyCalendarDay"]
   day_data = components["MakeupJourneyDayResponseData"]
+  score_selection_data = components["MakeupJourneyScoreSelectionResponseData"]
   delete_data = components["MakeupJourneyDeleteMissionResponseData"]
   feedback_job = components["FeedbackJobRecord"]
 
@@ -75,6 +76,9 @@ def test_openapi_response_components_are_required_nullable_and_camel_case() -> N
   assert {"imageUrl", "feedbackDigest", "note"}.issubset(report_schema["required"])
   assert "reportId" in components["MakeupJourneyNoteUpdate"]["properties"]
   assert "reportId" in components["MakeupJourneyScoreSelectionUpdate"]["required"]
+  assert "representativeThumbnailUrl" in score_selection_data["required"]
+  thumbnail_schema = score_selection_data["properties"]["representativeThumbnailUrl"]
+  assert {item.get("type") for item in thumbnail_schema["anyOf"]} == {"string", "null"}
   assert "missionId" in delete_data["properties"]
   assert "mission_id" not in delete_data["properties"]
   assert {"entryDate", "feedbackKind", "parentFeedbackReportId"}.issubset(

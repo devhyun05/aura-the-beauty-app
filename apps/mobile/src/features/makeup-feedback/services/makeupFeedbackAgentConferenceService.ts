@@ -1,13 +1,14 @@
 import {getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 import type {MakeupFeedbackPhotoSelection, MakeupFeedbackResult} from '../types';
+import {getPriorityMakeupFeedbackPoint} from './makeupFeedbackResultPresentation';
 
 export type MakeupFeedbackAgentId = 'photo' | 'goal' | 'detail' | 'coach';
 
 export const MAKEUP_FEEDBACK_REVIEW_CREW_LABELS = {
   photo: {name: '루미', role: '사진 상태'},
-  goal: {name: '모아', role: '목적 해석'},
-  detail: {name: '루페', role: '부위별 관찰'},
-  coach: {name: '다듬', role: '실행 코칭'},
+  goal: {name: '모아', role: '목적·점수'},
+  detail: {name: '루페', role: '관찰 근거'},
+  coach: {name: '다듬', role: '수정 코칭'},
 } as const satisfies Record<MakeupFeedbackAgentId, {name: string; role: string}>;
 
 export type MakeupFeedbackAgentConferenceMessage = {
@@ -146,7 +147,7 @@ export function buildMakeupFeedbackSafeConferenceMessages(
       message(
         'safe-coach-context-a',
         'coach',
-        '두 기준이 잡히면 잘한 점과 보완할 점을 실행하기 쉬운 순서로 묶어드릴게요.',
+        '두 기준이 잡히면 점수의 합산 근거와 첫 수정에 필요한 도구·양·범위를 실행 순서로 묶어드릴게요.',
       ),
     ],
     [
@@ -163,7 +164,7 @@ export function buildMakeupFeedbackSafeConferenceMessages(
       message(
         'safe-coach-context-b',
         'coach',
-        '확인 범위가 정리되면 유지할 점과 바꿀 점을 바로 적용하기 쉬운 순서로 이어볼게요.',
+        '확인 범위가 정리되면 네 점수 기준과 가장 먼저 바꿀 한 가지를 바로 적용할 수 있게 이어볼게요.',
       ),
     ],
     [
@@ -180,7 +181,7 @@ export function buildMakeupFeedbackSafeConferenceMessages(
       message(
         'safe-coach-context-c',
         'coach',
-        '그 흐름대로 확인이 끝나면 핵심 변화부터 짧고 분명하게 정리해드릴게요.',
+        '그 흐름대로 확인이 끝나면 왜 이 점수인지와 핵심 수정 절차를 짧고 분명하게 정리해드릴게요.',
       ),
     ],
   ] as const;
@@ -227,7 +228,7 @@ export function buildMakeupFeedbackWaitingConferenceMessages(
     message(
       'waiting-coach-order',
       'coach',
-      '저는 정리된 관찰을 바로 실행할 수 있는 순서로 미리 묶어두고 있어요.',
+      '저는 정리된 관찰을 도구·사용량·수정 범위·멈춤 기준 순서로 미리 묶어두고 있어요.',
       'waiting',
     ),
     message(
@@ -353,7 +354,9 @@ export function buildMakeupFeedbackClosingConferenceMessages(
   const captureQuality = result.captureQuality;
   const captureIssue = captureQuality?.issues[0];
   const strength = result.strengths[0];
-  const point = result.points[0];
+  const point =
+    getPriorityMakeupFeedbackPoint(result.evaluations, result.points) ?? result.points[0];
+  const correctionGuide = point?.correctionGuide;
   const strengthTitles = result.strengths
     .map(item => trimText(item.title))
     .filter((title): title is string => Boolean(title));
@@ -446,7 +449,25 @@ export function buildMakeupFeedbackClosingConferenceMessages(
 
   let actionOwner: FallbackVisibleItem | undefined;
 
-  if (point?.actionSteps.some(action => Boolean(normalizeEvidenceText(action)))) {
+  if (correctionGuide) {
+    const pointToken = toEvidenceToken(point.id, toEvidenceToken(point.topicId, 'point-1'));
+    const firstStep = correctionGuide.steps.find(step => Boolean(normalizeEvidenceText(step)));
+    const setup = `도구는 ${correctionGuide.tool}, 사용량은 ${correctionGuide.amount}예요. ${correctionGuide.targetArea}에서 ${correctionGuide.coverage}만 조정하세요.`;
+    const stepText = firstStep ? ` ${firstStep}` : '';
+
+    messages.push(
+      message(
+        'closing-coach-correction',
+        'coach',
+        `루페가 짚은 첫 수정이에요. ${shorten(`${setup}${stepText}`, 132)}`,
+        'closing',
+        [
+          `correction:${pointToken}:setup`,
+          ...(firstStep ? [`correction:${pointToken}:steps`] : []),
+        ],
+      ),
+    );
+  } else if (point?.actionSteps.some(action => Boolean(normalizeEvidenceText(action)))) {
     actionOwner = point;
   } else if (strength?.actionSteps.some(action => Boolean(normalizeEvidenceText(action)))) {
     actionOwner = strength;
@@ -469,28 +490,40 @@ export function buildMakeupFeedbackClosingConferenceMessages(
   }
 
   const scoreReason = trimText(result.scoreReason);
+  const scoreFormula = trimText(result.scoreBreakdown?.formula);
 
-  if (scoreReason) {
+  if (scoreFormula || scoreReason) {
     messages.push(
       message(
         'closing-goal-score',
         'goal',
-        Number.isFinite(result.score)
-          ? `앞의 목적 기준과 관찰을 종합하면 ${Math.round(result.score)}점이에요. ${shorten(scoreReason, 116)}`
-          : `앞의 목적 기준과 관찰을 종합하면 ${shorten(scoreReason, 136)}`,
+        scoreFormula
+          ? `네 점수 기준을 합치면 ${shorten(scoreFormula, 138)}`
+          : Number.isFinite(result.score)
+            ? `앞의 목적 기준과 관찰을 종합하면 ${Math.round(result.score)}점이에요. ${shorten(scoreReason ?? '', 116)}`
+            : `앞의 목적 기준과 관찰을 종합하면 ${shorten(scoreReason ?? '', 136)}`,
         'closing',
-        ['score-reason'],
+        scoreFormula ? ['score-formula'] : ['score-reason'],
       ),
     );
   }
+
+  const correctionCheck = correctionGuide
+    ? `멈춤 기준은 “${shorten(correctionGuide.stopCondition, 78)}”이에요. ${shorten(correctionGuide.why, 72)}`
+    : undefined;
+  const correctionPointToken = point
+    ? toEvidenceToken(point.id, toEvidenceToken(point.topicId, 'point-1'))
+    : undefined;
 
   messages.push(
     message(
       'closing-coach-ready',
       'coach',
-      '좋아요. 이제 결과에서 근거와 실행 순서를 함께 확인해볼까요?',
+      correctionCheck
+        ? `${correctionCheck} 이제 결과에서 전체 순서를 확인해볼까요?`
+        : '좋아요. 이제 결과에서 근거와 실행 순서를 함께 확인해볼까요?',
       'closing',
-      [],
+      correctionPointToken ? [`correction:${correctionPointToken}:check`] : [],
     ),
   );
 
@@ -748,6 +781,7 @@ export function buildMakeupFeedbackConferenceResultPayload(
 
     return [{
       actionSteps: presentation.actionSteps,
+      correctionGuide: presentation.correctionGuide ?? null,
       description: presentation.description,
       goalCriterionIds: item.goalCriterionIds ?? [],
       id: presentation.id,
@@ -758,6 +792,7 @@ export function buildMakeupFeedbackConferenceResultPayload(
         lightingSensitive: observation.lightingSensitive,
       })),
       status: item.status === 'strength' ? 'strength' : 'improvement',
+      scoreImpact: item.scoreImpact ?? null,
       title: presentation.title,
       topicId: presentation.topicId,
       topicLabel: presentation.topicLabel,
@@ -770,6 +805,7 @@ export function buildMakeupFeedbackConferenceResultPayload(
     score: result.score,
     scoreLabel: result.scoreLabel,
     scoreReason: result.scoreReason,
+    scoreBreakdown: result.scoreBreakdown ?? null,
     interpretedGoal,
     captureQuality,
     evaluations: conferenceEvaluations,
@@ -784,6 +820,7 @@ export function buildMakeupFeedbackConferenceResultPayload(
     })),
     points: result.points.map(item => ({
       actionSteps: item.actionSteps,
+      correctionGuide: item.correctionGuide ?? null,
       description: item.description,
       id: item.id,
       title: item.title,

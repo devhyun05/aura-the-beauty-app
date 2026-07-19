@@ -24,6 +24,7 @@ const testFiles = [
   'features/makeup-journey/services/makeupJourneyCache.test.ts',
   'features/makeup-journey/services/makeupJourneyPrivateImage.test.ts',
   'features/makeup-journey/services/makeupJourneyLegacyFallback.test.ts',
+  'features/makeup-journey/hooks/useMakeupJourneyResource.test.ts',
   'features/makeup-journey/screens/screenContracts.test.ts',
   'app/navigation/MainTabNavigator.test.ts',
   'app/navigation/flowState.test.tsx',

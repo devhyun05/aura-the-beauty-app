@@ -19,8 +19,12 @@ function normalizedPrivateImagePath(path: string): string | null {
   return normalized.replace(/^\/+/, '').replace(/^api\/+/, '');
 }
 
-function privateImageKey(path: string, cacheRevision: number): string {
-  return `${privateImageGeneration}:${cacheRevision}:${path}`;
+function privateImageKey(path: string): string {
+  // A report thumbnail is immutable. General journey data changes (notes,
+  // missions, representative selection) must not cold-start every face image;
+  // the report path changes when the selected photo changes and the generation
+  // changes at account boundaries.
+  return `${privateImageGeneration}:${path}`;
 }
 
 function privateImageUri(path: string, cacheRevision: number): string {
@@ -38,7 +42,7 @@ export function getMakeupJourneyPrivateImageSource(
   if (!path || !authToken) {
     return null;
   }
-  const key = privateImageKey(path, cacheRevision);
+  const key = privateImageKey(path);
   return {
     cacheKey: `makeup-journey-private:${key}`,
     headers: {Authorization: `Bearer ${authToken}`},

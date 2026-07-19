@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  type ImageSourcePropType,
   Pressable,
   ScrollView,
   Share,
@@ -39,17 +38,25 @@ import {
   typography,
 } from '../../../shared/theme';
 import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
+import {
+  MakeupFeedbackCorrectionGuideDetails,
+  MakeupFeedbackPriorityCorrectionCard,
+} from '../components/MakeupFeedbackCorrectionGuideCard';
+import {
+  MakeupFeedbackEvidencePreview,
+  type MakeupFeedbackEvidenceMedia,
+} from '../components/MakeupFeedbackEvidencePreview';
+import {MakeupFeedbackScoreBreakdownCard} from '../components/MakeupFeedbackScoreBreakdownCard';
 import {MakeupFeedbackScreenScaffold} from '../components/MakeupFeedbackScreenScaffold';
 import {
   getMakeupFeedbackAnalysisSourceLabel,
   getMakeupFeedbackEvidenceRows,
+  getPriorityMakeupFeedbackPoint,
 } from '../services/makeupFeedbackResultPresentation';
 import type {
   MakeupFeedbackCorrectionPoint,
   MakeupFeedbackConfidenceLevel,
   MakeupFeedbackIntensity,
-  MakeupFeedbackAnalysisImageSize,
-  MakeupFeedbackEvidenceRegion,
   MakeupFeedbackEvaluation,
   MakeupFeedbackResult,
   MakeupFeedbackStrength,
@@ -61,11 +68,6 @@ type MakeupFeedbackResultScreenProps = {
   result: MakeupFeedbackResult;
 };
 
-type MakeupFeedbackEvidenceMedia = {
-  imageSize: MakeupFeedbackAnalysisImageSize;
-  regions: MakeupFeedbackEvidenceRegion[];
-  source: ImageSourcePropType;
-};
 type MakeupFeedbackHeaderShareAction = () => void;
 type MakeupFeedbackShareTarget = 'save-image' | 'share-report';
 type MakeupFeedbackShareFeedback = {
@@ -215,6 +217,7 @@ export function MakeupFeedbackResultScreen({
   const [openStrengthIds, setOpenStrengthIds] = useState<Set<string>>(
     () => new Set<string>(),
   );
+  const [isOverallJudgmentExpanded, setIsOverallJudgmentExpanded] = useState(false);
   const [activeShareTarget, setActiveShareTarget] = useState<MakeupFeedbackShareTarget | null>(null);
   const [shareFeedback, setShareFeedback] = useState<MakeupFeedbackShareFeedback | null>(null);
   const analysisSourceLabel = getMakeupFeedbackAnalysisSourceLabel(result.analysisSource);
@@ -233,6 +236,9 @@ export function MakeupFeedbackResultScreen({
     captureQuality &&
       (captureQuality.issues.length > 0 || captureQuality.colorConfidence !== 'high'),
   );
+  const priorityPoint = getPriorityMakeupFeedbackPoint(result.evaluations, result.points);
+  const strengthTakeaway = result.summary?.strengthSummary ?? result.strengths[0]?.title;
+  const improvementTakeaway = priorityPoint?.title ?? result.summary?.improvementSummary;
 
 
   const handleShareAction = useCallback(async (target: MakeupFeedbackShareTarget) => {
@@ -296,6 +302,7 @@ export function MakeupFeedbackResultScreen({
   useEffect(() => {
     setOpenPointIds(new Set<string>());
     setOpenStrengthIds(new Set<string>());
+    setIsOverallJudgmentExpanded(false);
     setActiveShareTarget(null);
     setShareFeedback(null);
   }, [result.id]);
@@ -338,19 +345,77 @@ export function MakeupFeedbackResultScreen({
                     <Text style={styles.analysisSourceText}>{analysisSourceLabel}</Text>
                   </View>
                   <View style={styles.scoreBox}>
-                    <Text style={styles.scoreLabel}>참고 점수</Text>
+                    <Text style={styles.scoreLabel}>오늘의 메이크업</Text>
                     <Text style={styles.scoreNumber}>
                       {result.score}
                       <Text style={styles.scoreUnit}>/100</Text>
                     </Text>
                   </View>
                 </View>
-                <View style={styles.overallJudgment}>
-                  <Text style={styles.overallJudgmentLabel}>종합 판단</Text>
-                  <Text style={styles.scoreReason}>{result.scoreReason}</Text>
+
+                <View style={styles.takeawayCard}>
+                  <Text style={styles.takeawayTitle}>이것만 먼저 보세요</Text>
+                  {strengthTakeaway ? (
+                    <View style={styles.takeawayRow}>
+                      <Text style={styles.takeawayLabel}>잘된 점</Text>
+                      <Text numberOfLines={2} style={styles.takeawayText}>
+                        {strengthTakeaway}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {improvementTakeaway ? (
+                    <View style={styles.takeawayRow}>
+                      <Text style={[styles.takeawayLabel, styles.takeawayLabelPriority]}>
+                        먼저 고칠 점
+                      </Text>
+                      <Text numberOfLines={2} style={styles.takeawayText}>
+                        {improvementTakeaway}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
+
+                {!result.scoreBreakdown ? (
+                  <>
+                    <Pressable
+                      accessibilityLabel={`AI 종합 판단 ${isOverallJudgmentExpanded ? '접기' : '보기'}`}
+                      accessibilityRole="button"
+                      accessibilityState={{expanded: isOverallJudgmentExpanded}}
+                      onPress={() => setIsOverallJudgmentExpanded(current => !current)}
+                      style={({pressed}) => [
+                        styles.judgmentToggle,
+                        pressed ? styles.judgmentTogglePressed : undefined,
+                      ]}>
+                      <Text style={styles.judgmentToggleText}>
+                        {isOverallJudgmentExpanded ? 'AI 종합 판단 접기' : 'AI 종합 판단 보기'}
+                      </Text>
+                      {isOverallJudgmentExpanded ? (
+                        <ChevronUp color={feedbackColors.textMuted} size={iconSize.xs} strokeWidth={2} />
+                      ) : (
+                        <ChevronDown color={feedbackColors.textMuted} size={iconSize.xs} strokeWidth={2} />
+                      )}
+                    </Pressable>
+                    {isOverallJudgmentExpanded ? (
+                      <View style={styles.overallJudgment}>
+                        <Text style={styles.overallJudgmentLabel}>판단 근거</Text>
+                        <Text style={styles.scoreReason}>{result.scoreReason}</Text>
+                      </View>
+                    ) : null}
+                  </>
+                ) : null}
               </View>
             </View>
+
+            {priorityPoint ? (
+              <MakeupFeedbackPriorityCorrectionCard point={priorityPoint} />
+            ) : null}
+
+            {result.scoreBreakdown ? (
+              <MakeupFeedbackScoreBreakdownCard
+                breakdown={result.scoreBreakdown}
+                evaluations={result.evaluations}
+              />
+            ) : null}
 
             {shouldShowCaptureQualityNotice && captureQuality ? (
               <View style={styles.captureQualityCard}>
@@ -370,44 +435,20 @@ export function MakeupFeedbackResultScreen({
 
             {result.interpretedGoal ? (
               <View style={styles.analysisCriteriaCard}>
-                <View style={styles.analysisCriteriaHeader}>
-                  <View style={styles.analysisCriteriaHeading}>
-                    <View style={styles.analysisCriteriaIcon}>
-                      <Sparkles color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
-                    </View>
-                    <View style={styles.analysisCriteriaHeadingText}>
-                      <Text style={styles.analysisCriteriaLabel}>분석 기준</Text>
-                      <Text style={styles.analysisCriteriaTitle}>
-                        사진과 목적을 함께 확인했어요
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.goalIntensityChip}>
-                    <Text style={styles.goalIntensityText}>
-                      {getGoalIntensityLabel(result.interpretedGoal.intensity)}
-                    </Text>
-                  </View>
+                <View style={styles.analysisCriteriaIcon}>
+                  <Sparkles color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
                 </View>
-                <View style={styles.goalContextCard}>
-                  <Text style={styles.goalContextLabel}>분석한 상황·목적</Text>
-                  <Text style={styles.goalContextText}>{result.interpretedGoal.label}</Text>
+                <View style={styles.analysisCriteriaHeadingText}>
+                  <Text style={styles.analysisCriteriaLabel}>분석한 목표</Text>
+                  <Text numberOfLines={2} style={styles.analysisCriteriaTitle}>
+                    {result.interpretedGoal.label}
+                  </Text>
                 </View>
-                {result.interpretedGoal.dynamicCriteria &&
-                result.interpretedGoal.dynamicCriteria.length > 0 ? (
-                  <View style={styles.criteriaSection}>
-                    <Text style={styles.criteriaSectionLabel}>핵심 기준</Text>
-                    <View style={styles.criteriaList}>
-                      {result.interpretedGoal.dynamicCriteria.map((criterion, index) => (
-                        <View key={criterion.id} style={styles.criterionItem}>
-                          <View style={styles.criterionIndexBadge}>
-                            <Text style={styles.criterionIndexText}>{index + 1}</Text>
-                          </View>
-                          <Text style={styles.criterionText}>{criterion.criterion}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ) : null}
+                <View style={styles.goalIntensityChip}>
+                  <Text style={styles.goalIntensityText}>
+                    {getGoalIntensityLabel(result.interpretedGoal.intensity)}
+                  </Text>
+                </View>
               </View>
             ) : null}
 
@@ -553,7 +594,7 @@ function PointAccordionItem({
   return (
     <View style={styles.accordionItem}>
       <Pressable
-        accessibilityLabel={`${point.topicLabel} 상세 보기`}
+        accessibilityLabel={`${point.topicLabel}, ${point.title} 상세 보기`}
         accessibilityRole="button"
         accessibilityState={{expanded: isOpen}}
         onPress={onPress}
@@ -567,13 +608,26 @@ function PointAccordionItem({
           <View style={styles.pointIcon}>
             <Icon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
           </View>
-          <Text numberOfLines={1} style={styles.accordionTitle}>{point.topicLabel}</Text>
+          <View style={styles.accordionTitleCopy}>
+            <Text style={styles.accordionTopic}>{point.topicLabel}</Text>
+            <Text numberOfLines={2} style={styles.accordionTitle}>{point.title}</Text>
+          </View>
         </View>
         <ToggleIcon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
       </Pressable>
       {isOpen ? (
+        <View style={styles.accordionPreview}>
+          <MakeupFeedbackEvidencePreview
+            evaluation={evaluation}
+            guide={point.correctionGuide}
+            media={evidenceMedia}
+            variant="improvement"
+          />
+        </View>
+      ) : null}
+      {isOpen ? (
         <View style={styles.accordionDetail}>
-          <EvaluationEvidence evaluation={evaluation} evidenceMedia={evidenceMedia} />
+          <EvaluationEvidence evaluation={evaluation} />
           <View style={styles.coachingInterpretation}>
             <Text style={styles.coachingInterpretationLabel}>왜 보완하면 좋은가</Text>
             {point.title !== point.topicLabel ? (
@@ -590,9 +644,12 @@ function PointAccordionItem({
             ) : null}
           </View>
           <EvaluationActionSteps
-            actionSteps={point.actionSteps}
+            actionSteps={point.correctionGuide ? [] : point.actionSteps}
             label="이렇게 해보세요"
           />
+          {point.correctionGuide ? (
+            <MakeupFeedbackCorrectionGuideDetails guide={point.correctionGuide} />
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -620,7 +677,7 @@ function StrengthAccordionItem({
   return (
     <View style={styles.accordionItem}>
       <Pressable
-        accessibilityLabel={`${strength.topicLabel} 상세 보기`}
+        accessibilityLabel={`${strength.topicLabel}, ${strength.title} 상세 보기`}
         accessibilityRole="button"
         accessibilityState={{expanded: isOpen}}
         onPress={onPress}
@@ -634,13 +691,25 @@ function StrengthAccordionItem({
           <View style={styles.strengthIcon}>
             <Icon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
           </View>
-          <Text numberOfLines={1} style={styles.accordionTitle}>{strength.topicLabel}</Text>
+          <View style={styles.accordionTitleCopy}>
+            <Text style={styles.accordionTopic}>{strength.topicLabel}</Text>
+            <Text numberOfLines={2} style={styles.accordionTitle}>{strength.title}</Text>
+          </View>
         </View>
         <ToggleIcon color={feedbackColors.text} size={iconSize.sm} strokeWidth={2} />
       </Pressable>
       {isOpen ? (
+        <View style={styles.accordionPreview}>
+          <MakeupFeedbackEvidencePreview
+            evaluation={evaluation}
+            media={evidenceMedia}
+            variant="strength"
+          />
+        </View>
+      ) : null}
+      {isOpen ? (
         <View style={styles.accordionDetail}>
-          <EvaluationEvidence evaluation={evaluation} evidenceMedia={evidenceMedia} />
+          <EvaluationEvidence evaluation={evaluation} />
           <View style={styles.coachingInterpretation}>
             <Text style={styles.coachingInterpretationLabel}>왜 좋은가</Text>
             {strength.title !== strength.topicLabel ? (
@@ -668,32 +737,21 @@ function StrengthAccordionItem({
 
 function EvaluationEvidence({
   evaluation,
-  evidenceMedia,
 }: {
   evaluation?: MakeupFeedbackEvaluation;
-  evidenceMedia?: MakeupFeedbackEvidenceMedia;
 }) {
   if (!evaluation) {
     return null;
   }
 
   const evidenceRows = getMakeupFeedbackEvidenceRows(evaluation);
-  const requestedRegionIds = new Set(
-    (evaluation.observations ?? []).flatMap(observation => observation.evidenceRegionIds ?? []),
-  );
-  const visibleRegions = evidenceMedia?.regions.filter(region =>
-    requestedRegionIds.has(region.id),
-  ) ?? [];
 
-  if (!evaluation.visibilityReason && evidenceRows.length === 0 && visibleRegions.length === 0) {
+  if (!evaluation.visibilityReason && evidenceRows.length === 0) {
     return null;
   }
 
   return (
     <>
-      {evidenceMedia && visibleRegions.length > 0 ? (
-        <EvidenceRegionStrip media={evidenceMedia} regions={visibleRegions} />
-      ) : null}
       {evidenceRows.length > 0 ? (
         <View style={styles.evidenceBlock}>
           <Text style={styles.evidenceLabel}>사진에서 확인한 점</Text>
@@ -709,84 +767,6 @@ function EvaluationEvidence({
         </View>
       ) : null}
     </>
-  );
-}
-
-const EVIDENCE_REGION_FRAME_WIDTH = 126;
-const EVIDENCE_REGION_FRAME_HEIGHT = 88;
-
-function getEvidenceRegionLabel(regionId: MakeupFeedbackEvidenceRegion['id']) {
-  switch (regionId) {
-    case 'left_eye':
-      return '눈 주변 1';
-    case 'right_eye':
-      return '눈 주변 2';
-    case 'left_cheek':
-      return '볼 주변 1';
-    case 'right_cheek':
-      return '볼 주변 2';
-    case 'lips':
-      return '입술';
-    default:
-      return '전체 얼굴';
-  }
-}
-
-function EvidenceRegionStrip({
-  media,
-  regions,
-}: {
-  media: MakeupFeedbackEvidenceMedia;
-  regions: MakeupFeedbackEvidenceRegion[];
-}) {
-  return (
-    <View style={styles.evidenceRegionBlock}>
-      <Text style={styles.evidenceLabel}>AI가 함께 확인한 영역</Text>
-      <ScrollView
-        contentContainerStyle={styles.evidenceRegionRow}
-        horizontal
-        showsHorizontalScrollIndicator={false}>
-        {regions.map(region => {
-          const cropWidth = (region.box.right - region.box.left) * media.imageSize.width;
-          const cropHeight = (region.box.bottom - region.box.top) * media.imageSize.height;
-          const scale = Math.max(
-            EVIDENCE_REGION_FRAME_WIDTH / cropWidth,
-            EVIDENCE_REGION_FRAME_HEIGHT / cropHeight,
-          );
-          const renderedWidth = media.imageSize.width * scale;
-          const renderedHeight = media.imageSize.height * scale;
-          const cropRenderedWidth = cropWidth * scale;
-          const cropRenderedHeight = cropHeight * scale;
-
-          return (
-            <View key={region.id} style={styles.evidenceRegionItem}>
-              <View
-                accessibilityLabel={getEvidenceRegionLabel(region.id) + ' 분석 사진'}
-                style={styles.evidenceRegionFrame}>
-                <Image
-                  resizeMode="stretch"
-                  source={media.source}
-                  style={{
-                    height: renderedHeight,
-                    left:
-                      (EVIDENCE_REGION_FRAME_WIDTH - cropRenderedWidth) / 2
-                      - region.box.left * media.imageSize.width * scale,
-                    position: 'absolute',
-                    top:
-                      (EVIDENCE_REGION_FRAME_HEIGHT - cropRenderedHeight) / 2
-                      - region.box.top * media.imageSize.height * scale,
-                    width: renderedWidth,
-                  }}
-                />
-              </View>
-              <Text style={styles.evidenceRegionCaption}>
-                {getEvidenceRegionLabel(region.id)}
-              </Text>
-            </View>
-          );
-        })}
-      </ScrollView>
-    </View>
   );
 }
 
@@ -991,6 +971,10 @@ const styles = StyleSheet.create({
   accordionList: {
     gap: spacing.sm,
   },
+  accordionPreview: {
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+  },
   coachingCriteria: {
     gap: spacing.xs,
     marginTop: spacing.sm,
@@ -1045,38 +1029,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     padding: spacing.md,
   },
-  evidenceRegionBlock: {
-    backgroundColor: feedbackColors.accentSoft,
-    borderRadius: radius.sm,
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-    padding: spacing.md,
-  },
-  evidenceRegionCaption: {
-    color: feedbackColors.textMuted,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.medium,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'center',
-  },
-  evidenceRegionFrame: {
-    backgroundColor: feedbackColors.surface,
-    borderColor: feedbackColors.borderSoft,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    height: EVIDENCE_REGION_FRAME_HEIGHT,
-    overflow: 'hidden',
-    width: EVIDENCE_REGION_FRAME_WIDTH,
-  },
-  evidenceRegionItem: {
-    gap: spacing.xs,
-    width: EVIDENCE_REGION_FRAME_WIDTH,
-  },
-  evidenceRegionRow: {
-    gap: spacing.sm,
-    paddingRight: spacing.xs,
-  },  evidenceLabel: {
+  evidenceLabel: {
     color: feedbackColors.text,
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.xs,
@@ -1133,12 +1086,24 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.sm,
   },
+  accordionTitleCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
   accordionTitleGroup: {
     alignItems: 'center',
     flex: 1,
     flexDirection: 'row',
     gap: spacing.sm,
     minWidth: 0,
+  },
+  accordionTopic: {
+    color: feedbackColors.textSoft,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 10,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: 14,
   },
   analysisSourceBadge: {
     backgroundColor: feedbackColors.accentSoft,
@@ -1193,26 +1158,15 @@ const styles = StyleSheet.create({
   },
 
   analysisCriteriaCard: {
+    alignItems: 'center',
     backgroundColor: feedbackColors.surface,
     borderColor: feedbackColors.borderSoft,
     borderRadius: feedbackRadius.card,
     borderWidth: 1,
+    flexDirection: 'row',
     gap: spacing.md,
     padding: spacing.lg,
     ...sharedCardShadow,
-  },
-  analysisCriteriaHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
-  },
-  analysisCriteriaHeading: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    minWidth: 0,
   },
   analysisCriteriaHeadingText: {
     flex: 1,
@@ -1239,72 +1193,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.sm,
     fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.sm,
-  },
-  criteriaList: {
-    gap: spacing.sm,
-  },
-  criteriaSection: {
-    gap: spacing.sm,
-  },
-  criteriaSectionLabel: {
-    color: feedbackColors.textSoft,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.xs,
-  },
-  criterionIndexBadge: {
-    alignItems: 'center',
-    backgroundColor: feedbackColors.text,
-    borderRadius: radius.pill,
-    height: 22,
-    justifyContent: 'center',
-    width: 22,
-  },
-  criterionIndexText: {
-    color: colors.white,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: 10,
-    fontWeight: typography.fontWeight.bold,
-    lineHeight: 12,
-  },
-  criterionItem: {
-    alignItems: 'flex-start',
-    backgroundColor: feedbackColors.accentSoft,
-    borderColor: feedbackColors.borderSoft,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    padding: spacing.md,
-  },
-  criterionText: {
-    color: feedbackColors.text,
-    flex: 1,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
-    lineHeight: typography.lineHeight.sm,
-  },
-  goalContextCard: {
-    backgroundColor: feedbackColors.accentSoft,
-    borderRadius: radius.sm,
-    gap: spacing.xs,
-    padding: spacing.md,
-  },
-  goalContextLabel: {
-    color: feedbackColors.textSoft,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.bold,
-    lineHeight: typography.lineHeight.xs,
-  },
-  goalContextText: {
-    color: feedbackColors.text,
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.sm,
   },
   goalIntensityChip: {
@@ -1370,6 +1258,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 38,
   },
+  judgmentToggle: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: spacing.sm,
+  },
+  judgmentTogglePressed: {
+    opacity: 0.58,
+  },
+  judgmentToggleText: {
+    color: feedbackColors.textMuted,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+  },
   overallJudgment: {
     alignItems: 'flex-start',
     borderTopColor: feedbackColors.borderSoft,
@@ -1395,6 +1301,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.md,
+    justifyContent: 'space-between',
   },
   scoreBox: {
     alignItems: 'baseline',
@@ -1418,13 +1325,13 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.lg,
   },
   scorePanel: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     backgroundColor: feedbackColors.surface,
     gap: spacing.md,
-    justifyContent: 'center',
     marginTop: 0,
     paddingHorizontal: feedbackSpacing.screenX,
-    paddingVertical: spacing.md,
+    paddingBottom: spacing.lg,
+    paddingTop: spacing.md,
   },
   scoreReason: {
     alignSelf: 'stretch',
@@ -1442,6 +1349,44 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  takeawayCard: {
+    backgroundColor: feedbackColors.accentSoft,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+    padding: spacing.md,
+  },
+  takeawayLabel: {
+    color: feedbackColors.textMuted,
+    flexShrink: 0,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: 10,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: 14,
+    width: 68,
+  },
+  takeawayLabelPriority: {
+    color: colors.heart,
+  },
+  takeawayRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  takeawayText: {
+    color: feedbackColors.text,
+    flex: 1,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
+  },
+  takeawayTitle: {
+    color: feedbackColors.text,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
     lineHeight: typography.lineHeight.xs,
   },
   screen: {

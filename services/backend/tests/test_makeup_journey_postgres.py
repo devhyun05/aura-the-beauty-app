@@ -342,6 +342,9 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
     )
     assert selection["data"]["reportId"] == str(first_report_id)
     assert selection["data"]["score"] == 70
+    assert selection["data"]["representativeThumbnailUrl"] == (
+      f"/makeup-journey/reports/{first_report_id}/thumbnail"
+    )
     selected_calendar = await journey_api.get_makeup_journey_calendar(
       "2026-07",
       auth=object(),

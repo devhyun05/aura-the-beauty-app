@@ -110,6 +110,7 @@ export type MakeupJourneyDayResponse = {
 export type MakeupJourneyScoreSelection = {
   date: string;
   reportId: string;
+  representativeThumbnailUrl: string | null;
   score: number;
   updatedAt: string;
 };

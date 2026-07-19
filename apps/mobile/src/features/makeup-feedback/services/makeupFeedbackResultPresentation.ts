@@ -1,5 +1,6 @@
 import type {
   MakeupFeedbackAnalysisSource,
+  MakeupFeedbackCorrectionPoint,
   MakeupFeedbackEvaluation,
   MakeupFeedbackPhotoSource,
 } from '../types';
@@ -44,6 +45,54 @@ export function getMakeupFeedbackEvidenceRows(
     id: observation.id,
     text: `${observation.claim} (${observation.evidenceLocation})`,
   }));
+}
+
+const scoreImpactPriority = {
+  high: 0,
+  medium: 1,
+  low: 2,
+} as const;
+
+export function getPriorityMakeupFeedbackEvaluation(
+  evaluations: readonly MakeupFeedbackEvaluation[],
+): MakeupFeedbackEvaluation | undefined {
+  return evaluations
+    .map((evaluation, index) => ({evaluation, index}))
+    .filter(
+      ({evaluation}) =>
+        evaluation.status === 'improvement' || evaluation.status === 'optional',
+    )
+    .sort((left, right) => {
+      if (left.evaluation.status !== right.evaluation.status) {
+        return left.evaluation.status === 'improvement' ? -1 : 1;
+      }
+
+      const impactDifference =
+        scoreImpactPriority[left.evaluation.scoreImpact ?? 'low'] -
+        scoreImpactPriority[right.evaluation.scoreImpact ?? 'low'];
+
+      if (impactDifference !== 0) {
+        return impactDifference;
+      }
+
+      return left.index - right.index;
+    })[0]?.evaluation;
+}
+
+export function getPriorityMakeupFeedbackPoint(
+  evaluations: readonly MakeupFeedbackEvaluation[],
+  points: readonly MakeupFeedbackCorrectionPoint[],
+): MakeupFeedbackCorrectionPoint | undefined {
+  const evaluation = getPriorityMakeupFeedbackEvaluation(evaluations);
+
+  if (!evaluation) {
+    return undefined;
+  }
+
+  return (
+    points.find(point => point.evaluationId === evaluation.id) ??
+    points.find(point => point.topicId === evaluation.topicId)
+  );
 }
 
 

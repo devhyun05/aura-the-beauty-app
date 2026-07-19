@@ -81,6 +81,37 @@ export type MakeupFeedbackVisibility = 'clear' | 'partial' | 'not_visible';
 export type MakeupFeedbackScoreImpact = 'high' | 'medium' | 'low';
 export type MakeupFeedbackIntensity = 'light' | 'medium' | 'bold';
 
+export type MakeupFeedbackScoreAxisId =
+  | 'application-finish'
+  | 'placement-balance'
+  | 'color-value-harmony'
+  | 'overall-goal-fit';
+
+export type MakeupFeedbackScoreAxis = {
+  evidenceIds: string[];
+  id: MakeupFeedbackScoreAxisId;
+  label: string;
+  maxScore: number;
+  reason: string;
+  score: number;
+};
+
+export type MakeupFeedbackScoreBreakdown = {
+  axes: MakeupFeedbackScoreAxis[];
+  formula: string;
+  maxScore: 100;
+};
+
+export type MakeupFeedbackCorrectionGuide = {
+  amount: string;
+  coverage: string;
+  steps: string[];
+  stopCondition: string;
+  targetArea: string;
+  tool: string;
+  why: string;
+};
+
 export type MakeupFeedbackCaptureQualityIssue = {
   code: string;
   message: string;
@@ -159,6 +190,7 @@ export type MakeupFeedbackEvaluation = {
   title: string;
   description: string;
   actionSteps: string[];
+  correctionGuide?: MakeupFeedbackCorrectionGuide;
   kind: MakeupFeedbackCorrectionPointKind;
   confidence?: number;
   scoreImpact?: MakeupFeedbackScoreImpact;
@@ -170,11 +202,13 @@ export type MakeupFeedbackEvaluation = {
 
 export type MakeupFeedbackCorrectionPoint = {
   id: string;
+  evaluationId?: string;
   topicId: MakeupFeedbackTopicId;
   topicLabel: string;
   title: string;
   description: string;
   actionSteps: string[];
+  correctionGuide?: MakeupFeedbackCorrectionGuide;
   actionLabel: string;
   kind: MakeupFeedbackCorrectionPointKind;
 };
@@ -218,6 +252,7 @@ export type MakeupFeedbackResult = {
   score: number;
   scoreLabel?: string;
   scoreReason: string;
+  scoreBreakdown?: MakeupFeedbackScoreBreakdown;
   interpretedGoal?: MakeupFeedbackInterpretedGoal;
   summary?: MakeupFeedbackSummary;
   summaryBadges: MakeupFeedbackSummaryBadge[];

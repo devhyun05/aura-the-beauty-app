@@ -904,10 +904,19 @@ async def update_makeup_journey_score_selection(
   row = await db.fetchrow(
     """
     with eligible_report as (
-      select id, score
-      from makeup_feedback_reports
-      where id = $3 and user_id = $1 and entry_date = $2
-        and status = 'completed' and score is not null
+      select reports.id, reports.score,
+        (
+          media.thumbnail_bucket is not null
+          and media.thumbnail_object_key is not null
+        ) as has_thumbnail
+      from makeup_feedback_reports reports
+      left join media_assets media
+        on media.id = reports.uploaded_media_id
+        and media.owner_user_id = reports.user_id
+        and media.status = 'active'
+        and media.deleted_at is null
+      where reports.id = $3 and reports.user_id = $1 and reports.entry_date = $2
+        and reports.status = 'completed' and reports.score is not null
     )
     insert into makeup_journey_day_score_selections (
       user_id, entry_date, report_id
@@ -918,6 +927,7 @@ async def update_makeup_journey_score_selection(
       updated_at = now()
     returning report_id,
       (select score from eligible_report) as score,
+      (select has_thumbnail from eligible_report) as has_thumbnail,
       updated_at
     """,
     user["id"],
@@ -935,6 +945,11 @@ async def update_makeup_journey_score_selection(
       "date": entry_date,
       "report_id": row["report_id"],
       "score": int(row["score"]),
+      "representative_thumbnail_url": (
+        f"/makeup-journey/reports/{row['report_id']}/thumbnail"
+        if bool(row.get("has_thumbnail"))
+        else None
+      ),
       "updated_at": row["updated_at"],
     },
   )

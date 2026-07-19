@@ -1,11 +1,18 @@
+import {readFileSync} from 'node:fs';
+
 import {BackendApiError} from '../../../shared/services/backendApi';
 import type {MakeupFeedbackPhotoSelection} from '../types';
 import {MAKEUP_FEEDBACK_TOPICS} from '../types';
+import {
+  getPriorityMakeupFeedbackEvaluation,
+  getPriorityMakeupFeedbackPoint,
+} from './makeupFeedbackResultPresentation';
 import {
   assertCreatedFeedbackJobJourneyContext,
   buildMakeupFeedbackJobCreateBody,
   getMakeupFeedbackAnalysisErrorAction,
   getMakeupFeedbackAnalysisErrorMessage,
+  mapBackendReportsToFeedbackResults,
   mapBackendJobToFeedbackOutcome as mapBackendJobToFeedbackResult,
 } from './makeupFeedbackService';
 
@@ -234,6 +241,27 @@ if (mappedResult.analysisDecision !== 'completed') {
   throw new Error('valid completed result was mapped as retake');
 }
 
+expectEqual(
+  getPriorityMakeupFeedbackEvaluation(mappedResult.evaluations)?.topicId,
+  'brow',
+  'first high-impact improvement is the immediate correction',
+);
+expectEqual(
+  getPriorityMakeupFeedbackEvaluation(
+    mappedResult.evaluations.map(evaluation => ({
+      ...evaluation,
+      scoreImpact: evaluation.topicId === 'lens' ? 'high' : 'low',
+    })),
+  )?.topicId,
+  'lens',
+  'higher-impact item wins within the improvement group',
+);
+expectEqual(
+  getPriorityMakeupFeedbackPoint(mappedResult.evaluations, mappedResult.points)?.evaluationId,
+  mappedResult.evaluations[0]?.id,
+  'priority point uses the exact evaluation id',
+);
+
 
 expectEqual(mappedResult.analysisSource, 'ai', 'analysis source');
 expectEqual(mappedResult.analysisStatus, 'bedrock_completed', 'analysis status');
@@ -254,6 +282,17 @@ expectEqual(mappedResult.evaluations[7]?.actionSteps.length, 0, 'empty action st
 expectEqual(mappedResult.scoreConfidence, 'high', '0.75 confidence maps to high');
 expectEqual(mappedResult.points.length, 6, 'improvements and optional refinements merge into points');
 expectEqual(
+  mappedResult.points[0]?.evaluationId,
+  mappedResult.evaluations[0]?.id,
+  'coaching point preserves its evaluation id for exact priority matching',
+);
+expectEqual(mappedResult.scoreBreakdown, undefined, 'legacy result omits score breakdown');
+expectEqual(
+  mappedResult.points[0]?.correctionGuide,
+  undefined,
+  'legacy coaching point omits correction guide',
+);
+expectEqual(
   mappedResult.points.some(point => point.topicId === 'lip'),
   true,
   'optional topic is exposed through coaching points',
@@ -265,6 +304,247 @@ expectEqual(
   ),
   false,
   'internal statuses are omitted from user-facing badges',
+);
+
+const correctionGuide = {
+  amount: '브러시 끝에 한 번 가볍게 묻힌 양',
+  coverage: '눈꼬리에서 바깥쪽 3분의 1 범위',
+  steps: ['브러시에 남은 양을 손등에 한 번 덜어냅니다.', '눈꼬리부터 짧게 연결합니다.'],
+  stopCondition: '정면에서 라인 끝이 속눈썹 방향과 자연스럽게 이어질 때 멈춥니다.',
+  targetArea: '오른쪽 눈꼬리와 왼쪽 눈꼬리 끝',
+  tool: '납작한 아이라인 브러시',
+  why: '양쪽 라인의 끝 방향을 맞추면 얼굴 전체의 시선 흐름이 정돈됩니다.',
+};
+const v2Evaluations = evaluations.map(evaluation =>
+  evaluation.status === 'improvement' || evaluation.status === 'optional'
+    ? {...evaluation, correctionGuide}
+    : evaluation,
+);
+const v2ScoreBreakdown = {
+  axes: [
+    {
+      evidenceIds: ['foundation-observation-1'],
+      id: 'application-finish',
+      label: '적용 완성도',
+      maxScore: 30,
+      reason: '경계와 피부 표현이 대부분 정돈됐어요.',
+      score: 28,
+    },
+    {
+      evidenceIds: ['brow-observation-1'],
+      id: 'placement-balance',
+      label: '배치·형태 균형',
+      maxScore: 25,
+      reason: '주요 선과 면의 위치가 얼굴 구조에 안정적으로 놓였어요.',
+      score: 23,
+    },
+    {
+      evidenceIds: ['eyeliner-observation-1'],
+      id: 'color-value-harmony',
+      label: '색·명암 조화',
+      maxScore: 20,
+      reason: '색과 명암의 연결이 자연스러워요.',
+      score: 18,
+    },
+    {
+      evidenceIds: ['eyeshadow-observation-1'],
+      id: 'overall-goal-fit',
+      label: '전체 조화·목표 적합도',
+      maxScore: 25,
+      reason: '요청한 분위기와 전체 인상이 잘 맞아요.',
+      score: 22,
+    },
+  ],
+  formula: '적용 완성도 28/30 + 배치·형태 균형 23/25 + 색·명암 조화 18/20 + 전체 조화·목표 적합도 22/25 = 91/100',
+  maxScore: 100,
+};
+
+const v2Outcome = mapBackendJobToFeedbackResult(
+  {
+    ...validJob,
+    feedbackPayload: {
+      ...validJob.feedbackPayload,
+      result: {
+        ...validJob.feedbackPayload.result,
+        evaluations: v2Evaluations,
+        scoreBreakdown: v2ScoreBreakdown,
+      },
+    },
+  },
+  selection,
+);
+if (v2Outcome.analysisDecision !== 'completed') {
+  throw new Error('v2 result unexpectedly requested a retake');
+}
+expectEqual(v2Outcome.scoreBreakdown?.axes.length, 4, 'v2 score axis count');
+expectEqual(v2Outcome.scoreBreakdown?.axes[0]?.score, 28, 'v2 axis earned score');
+expectEqual(v2Outcome.scoreBreakdown?.axes[0]?.maxScore, 30, 'v2 axis max score');
+expectEqual(v2Outcome.scoreBreakdown?.formula, v2ScoreBreakdown.formula, 'v2 formula');
+expectEqual(
+  v2Outcome.points[0]?.correctionGuide?.tool,
+  correctionGuide.tool,
+  'v2 correction guide is copied to coaching point',
+);
+
+const explainableModelVersion = 'makeup-feedback:bedrock-v9-explainable-coaching';
+const v9Job = {
+  ...validJob,
+  feedbackPayload: {
+    ...validJob.feedbackPayload,
+    result: {
+      ...validJob.feedbackPayload.result,
+      evaluations: v2Evaluations,
+      modelVersion: explainableModelVersion,
+      scoreBreakdown: v2ScoreBreakdown,
+    },
+  },
+};
+const v9Outcome = mapBackendJobToFeedbackResult(v9Job, selection);
+if (v9Outcome.analysisDecision !== 'completed') {
+  throw new Error('v9 result unexpectedly requested a retake');
+}
+expectEqual(v9Outcome.modelVersion, explainableModelVersion, 'v9 model version');
+expectEqual(v9Outcome.scoreBreakdown?.axes.length, 4, 'stored v9 score breakdown');
+expectEqual(
+  v9Outcome.points[0]?.correctionGuide?.stopCondition,
+  correctionGuide.stopCondition,
+  'stored v9 correction guide survives detail mapping',
+);
+
+expectBackendError(
+  () =>
+    mapBackendJobToFeedbackResult(
+      {
+        ...v9Job,
+        feedbackPayload: {
+          ...v9Job.feedbackPayload,
+          result: {
+            ...v9Job.feedbackPayload.result,
+            scoreBreakdown: undefined,
+          },
+        },
+      },
+      selection,
+    ),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'v9 requires score breakdown',
+  'scoreBreakdown',
+);
+
+expectBackendError(
+  () =>
+    mapBackendJobToFeedbackResult(
+      {
+        ...v9Job,
+        feedbackPayload: {
+          ...v9Job.feedbackPayload,
+          result: {
+            ...v9Job.feedbackPayload.result,
+            evaluations: v2Evaluations.map((evaluation, index) =>
+              index === 0 ? {...evaluation, correctionGuide: undefined} : evaluation,
+            ),
+          },
+        },
+      },
+      selection,
+    ),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'v9 improvement requires correction guide',
+  'evaluations[0].correctionGuide',
+);
+
+const storedV9Job = {
+  ...v9Job,
+  feedbackPayload: {
+    ...v9Job.feedbackPayload,
+    request: {sourceUrl: 'https://example.com/makeup-feedback.jpg'},
+  },
+};
+const storedV9Results = mapBackendReportsToFeedbackResults([storedV9Job]);
+expectEqual(storedV9Results.length, 1, 'stored v9 report remains in list mapping');
+expectEqual(
+  storedV9Results[0]?.points[0]?.correctionGuide?.tool,
+  correctionGuide.tool,
+  'stored list and detail use the same correction guide mapping',
+);
+expectEqual(
+  mapBackendReportsToFeedbackResults([
+    {
+      ...validJob,
+      feedbackPayload: {
+        ...validJob.feedbackPayload,
+        request: {sourceUrl: 'https://example.com/legacy.jpg'},
+        result: {...validJob.feedbackPayload.result, score: undefined},
+      },
+    },
+  ]).length,
+  0,
+  'legacy malformed stored report keeps the existing filtered-list policy',
+);
+expectBackendError(
+  () =>
+    mapBackendReportsToFeedbackResults([
+      {
+        ...storedV9Job,
+        feedbackPayload: {
+          ...storedV9Job.feedbackPayload,
+          result: {...storedV9Job.feedbackPayload.result, scoreBreakdown: undefined},
+        },
+      },
+    ]),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'malformed stored v9 report is surfaced from list mapping',
+  'scoreBreakdown',
+);
+
+expectBackendError(
+  () =>
+    mapBackendJobToFeedbackResult(
+      {
+        ...validJob,
+        feedbackPayload: {
+          ...validJob.feedbackPayload,
+          result: {
+            ...validJob.feedbackPayload.result,
+            evaluations: v2Evaluations,
+            scoreBreakdown: {
+              ...v2ScoreBreakdown,
+              axes: v2ScoreBreakdown.axes.map((axis, index) =>
+                index === 0 ? {...axis, score: 27} : axis,
+              ),
+            },
+          },
+        },
+      },
+      selection,
+    ),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'v2 score axis sum must match total score',
+  'scoreBreakdown.axes',
+);
+
+expectBackendError(
+  () =>
+    mapBackendJobToFeedbackResult(
+      {
+        ...validJob,
+        feedbackPayload: {
+          ...validJob.feedbackPayload,
+          result: {
+            ...validJob.feedbackPayload.result,
+            evaluations: v2Evaluations.map((evaluation, index) =>
+              index === 0
+                ? {...evaluation, correctionGuide: {...correctionGuide, stopCondition: ''}}
+                : evaluation,
+            ),
+          },
+        },
+      },
+      selection,
+    ),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'incomplete correction guide is rejected',
+  'evaluations[0].correctionGuide.stopCondition',
 );
 
 
@@ -483,6 +763,80 @@ expectEqual(
   fiveStatusOutcome.points.some(point => point.topicId === 'highlight'),
   true,
   'remaining optional refinement stays visible as a point',
+);
+
+const resultScreenSource = readFileSync(
+  'apps/mobile/src/features/makeup-feedback/screens/MakeupFeedbackResultScreen.tsx',
+  'utf8',
+);
+const scoreCardSource = readFileSync(
+  'apps/mobile/src/features/makeup-feedback/components/MakeupFeedbackScoreBreakdownCard.tsx',
+  'utf8',
+);
+const correctionCardSource = readFileSync(
+  'apps/mobile/src/features/makeup-feedback/components/MakeupFeedbackCorrectionGuideCard.tsx',
+  'utf8',
+);
+const evidencePreviewSource = readFileSync(
+  'apps/mobile/src/features/makeup-feedback/components/MakeupFeedbackEvidencePreview.tsx',
+  'utf8',
+);
+expectEqual(
+  resultScreenSource.includes('{result.scoreBreakdown ? ('),
+  true,
+  'legacy result keeps the existing score panel when breakdown is absent',
+);
+expectEqual(
+  scoreCardSource.includes('점수 계산') &&
+    scoreCardSource.includes('.map(axis =>') &&
+    scoreCardSource.includes('useState<MakeupFeedbackScoreAxisId | null>(\n    null,') &&
+    scoreCardSource.includes('setActiveAxisId(null)') &&
+    scoreCardSource.includes('accessibilityRole="progressbar"') &&
+    scoreCardSource.includes('이 점수가 나온 이유') &&
+    scoreCardSource.includes('사진에서 확인한 사실') &&
+    scoreCardSource.includes('axis.evidenceIds') &&
+    scoreCardSource.includes('evaluation.observations'),
+  true,
+  'score breakdown connects each axis to written reasons, photo observations, and accessible progress values',
+);
+expectEqual(
+  correctionCardSource.includes('가장 먼저 할 것') &&
+    correctionCardSource.includes('바를 위치') &&
+    correctionCardSource.includes('칠할 범위') &&
+    correctionCardSource.includes('여기서 멈추세요') &&
+    correctionCardSource.includes('accessibilityState={{expanded: isExpanded}}'),
+  true,
+  'priority correction exposes immediate details and accessible progressive disclosure',
+);
+expectEqual(
+  evidencePreviewSource.includes("region.id !== 'full'") &&
+    evidencePreviewSource.includes('visibleRegions.map(region => (') &&
+    evidencePreviewSource.includes('<EvidenceRegionTile') &&
+    evidencePreviewSource.includes("regionId.startsWith('left_') ? '왼쪽' : '오른쪽'") &&
+    evidencePreviewSource.includes("right_cheek: '오른쪽 볼'") &&
+    evidencePreviewSource.includes('getTopicFocusBox') &&
+    evidencePreviewSource.includes("topicId === 'lash'") &&
+    evidencePreviewSource.includes("topicId === 'eyeliner'") &&
+    evidencePreviewSource.includes("topicId === 'eyeshadow'") &&
+    evidencePreviewSource.includes("topicId === 'brow'") &&
+    evidencePreviewSource.includes('filterRegionsForGuide') &&
+    evidencePreviewSource.includes("lash: `${side} 속눈썹`") &&
+    !evidencePreviewSource.includes('react-native-svg') &&
+    !evidencePreviewSource.includes('CorrectionGuideOverlay') &&
+    evidencePreviewSource.includes('어디에') &&
+    evidencePreviewSource.includes('사용량'),
+  true,
+  'evidence preview renders separate topic-aligned crops without drawing unreliable photo overlays',
+);
+const feedbackServiceSource = readFileSync(
+  'apps/mobile/src/features/makeup-feedback/services/makeupFeedbackService.ts',
+  'utf8',
+);
+expectEqual(
+  feedbackServiceSource.includes('if (isExplainableCoachingReport(report))') &&
+    feedbackServiceSource.includes('throw error;'),
+  true,
+  'v9 list mapping surfaces contract errors instead of silently dropping reports',
 );
 
 

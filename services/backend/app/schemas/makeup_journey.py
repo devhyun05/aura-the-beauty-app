@@ -332,6 +332,7 @@ class MakeupJourneyScoreSelectionResponseData(MakeupJourneyResponseModel):
   date: date
   report_id: UUID
   score: int = Field(ge=0, le=100)
+  representative_thumbnail_url: str | None
   updated_at: datetime
 
 

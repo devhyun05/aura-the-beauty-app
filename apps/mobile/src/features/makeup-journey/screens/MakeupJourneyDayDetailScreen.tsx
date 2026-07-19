@@ -37,7 +37,11 @@ import {JourneyNoteCard} from '../components/JourneyNoteCard';
 import {JourneyPromptCard} from '../components/JourneyPromptCard';
 import {JourneyReportPhotoGallery} from '../components/JourneyReportPhotoGallery';
 import {useMakeupJourneyDay} from '../hooks/useMakeupJourneyDay';
-import {invalidateMakeupJourneyCache} from '../services/makeupJourneyCache';
+import {
+  getMakeupJourneyCacheRevision,
+  invalidateMakeupJourneyCache,
+} from '../services/makeupJourneyCache';
+import {prefetchMakeupJourneyPrivateImage} from '../services/makeupJourneyPrivateImage';
 import {
   createMakeupJourneyMission,
   deleteMakeupJourneyMission,
@@ -59,6 +63,7 @@ import {
   getTodayDateString,
   isFutureJourneyDate,
 } from '../utils/date';
+import {resolveMakeupJourneyActiveReportId} from '../utils/presentation';
 import {getMakeupJourneyReportPrompt} from '../utils/reportPrompt';
 
 const dayScrollOffsets = new Map<string, number>();
@@ -393,6 +398,9 @@ export function MakeupJourneyDayDetailScreen({
   const pageScrollRefsRef = useRef(new Map<string, ScrollView>());
   const currentVerticalOffsetRef = useRef(dayScrollOffsets.get(entryDate) ?? 0);
   const focusCountRef = useRef(0);
+  const hasUserPagedReportsRef = useRef(false);
+  const initialReportFocusConsumedRef = useRef(false);
+  const reportIdsSignatureRef = useRef('');
   const trackedDateRef = useRef<string | null>(null);
   const [activeReportId, setActiveReportId] = useState<string | null>(
     initialReportId ?? null,
@@ -408,20 +416,34 @@ export function MakeupJourneyDayDetailScreen({
   useEffect(() => {
     pageScrollRefsRef.current.clear();
     currentVerticalOffsetRef.current = dayScrollOffsets.get(entryDate) ?? 0;
-  }, [entryDate]);
+    hasUserPagedReportsRef.current = false;
+    initialReportFocusConsumedRef.current = false;
+    reportIdsSignatureRef.current = '';
+    setActiveReportId(initialReportId ?? null);
+  }, [entryDate, initialReportId]);
 
   useEffect(() => {
     const reports = resource.data?.reports ?? [];
-    setActiveReportId(current => {
-      if (current && reports.some(report => report.reportId === current)) {
-        return current;
-      }
-      if (initialReportId && reports.some(report => report.reportId === initialReportId)) {
-        return initialReportId;
-      }
-      return reports[0]?.reportId ?? null;
-    });
-  }, [entryDate, initialReportId, resource.data?.reports]);
+    const reportIdsSignature = reports.map(report => report.reportId).join('|');
+    const reportSetIsUnchanged = reportIdsSignatureRef.current === reportIdsSignature;
+    const pendingInitialReportId = !initialReportFocusConsumedRef.current &&
+      initialReportId &&
+      reports.some(report => report.reportId === initialReportId)
+      ? initialReportId
+      : undefined;
+    if (pendingInitialReportId) {
+      initialReportFocusConsumedRef.current = true;
+      hasUserPagedReportsRef.current = true;
+    }
+    reportIdsSignatureRef.current = reportIdsSignature;
+    setActiveReportId(current => resolveMakeupJourneyActiveReportId({
+      currentReportId: current,
+      initialReportId: pendingInitialReportId,
+      preserveCurrent: hasUserPagedReportsRef.current && reportSetIsUnchanged,
+      reports,
+      representativeReportId: resource.data?.representativeReportId ?? null,
+    }));
+  }, [initialReportId, resource.data?.reports, resource.data?.representativeReportId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -624,9 +646,10 @@ export function MakeupJourneyDayDetailScreen({
   const writesDisabled = isFuture || isSettingsMissing;
   const activeReport = useMemo(
     () => detail?.reports.find(report => report.reportId === activeReportId)
-      ?? detail?.reports[0]
+      ?? detail?.reports.find(report => report.reportId === detail.representativeReportId)
+      ?? detail?.reports.at(-1)
       ?? null,
-    [activeReportId, detail?.reports],
+    [activeReportId, detail?.reports, detail?.representativeReportId],
   );
   const activeReportIndex = detail?.reports.findIndex(
     report => report.reportId === activeReport?.reportId,
@@ -677,9 +700,13 @@ export function MakeupJourneyDayDetailScreen({
         scoreDelta: current.firstScore === null ? null : selection.score - current.firstScore,
         status: getReportStatus(activeReport, current.goalScore),
       }));
-      invalidateMakeupJourneyCache({entryDate});
+      if (selection.representativeThumbnailUrl) {
+        void prefetchMakeupJourneyPrivateImage(
+          selection.representativeThumbnailUrl,
+          getMakeupJourneyCacheRevision(),
+        );
+      }
       showToast(`${selection.score}점을 이 날짜의 대표 점수로 선택했어요.`);
-      await resource.refresh();
     } catch (error) {
       showToast(error instanceof Error ? error.message : '대표 점수를 저장하지 못했어요.');
     } finally {
@@ -724,7 +751,13 @@ export function MakeupJourneyDayDetailScreen({
           maxToRenderPerBatch={3}
           nestedScrollEnabled
           onMomentumScrollEnd={settleActiveReport}
-          onScrollBeginDrag={synchronizePageOffsets}
+          onScrollBeginDrag={() => {
+            // A direct user gesture wins over a report id that may arrive in a
+            // later response after this screen was opened.
+            initialReportFocusConsumedRef.current = true;
+            hasUserPagedReportsRef.current = true;
+            synchronizePageOffsets();
+          }}
           pagingEnabled
           ref={pagerRef}
           removeClippedSubviews={false}

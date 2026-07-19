@@ -633,6 +633,45 @@ async def test_day_detail_returns_minimal_owned_report_chain(monkeypatch) -> Non
   assert "media.deleted_at is null" in report_query
 
 
+class RepeatedInitialDayDatabase(DayDatabase):
+  async def fetch(self, query, *args):
+    rows = await super().fetch(query, *args)
+    if "from makeup_feedback_reports" not in query:
+      return rows
+    return [
+      {
+        **row,
+        "feedback_kind": "initial",
+        "parent_feedback_report_id": None,
+        "selected_report_id": None,
+      }
+      for row in rows
+    ]
+
+
+@pytest.mark.asyncio
+async def test_day_detail_keeps_two_independent_home_feedback_reports(monkeypatch) -> None:
+  monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
+  db = RepeatedInitialDayDatabase()
+
+  response = await journey_api.get_makeup_journey_day(
+    "2026-07-17",
+    auth=object(),
+    db=db,
+  )
+
+  data = response["data"]
+  assert data["reportCount"] == 2
+  assert [report["feedbackKind"] for report in data["reports"]] == ["initial", "initial"]
+  assert [report["parentFeedbackReportId"] for report in data["reports"]] == [None, None]
+  assert [report["score"] for report in data["reports"]] == [76, 84]
+  assert data["representativeReportId"] == data["reports"][1]["reportId"]
+  assert data["representativeScore"] == 84
+  normalized_query = " ".join(db.report_query.lower().split())
+  assert "reports.feedback_kind =" not in normalized_query
+  assert "reports.parent_feedback_report_id is not null" not in normalized_query
+
+
 class TrendsDatabase:
   def __init__(self, goal_score: int = 80) -> None:
     self.goal_score = goal_score
@@ -748,8 +787,9 @@ async def test_trend_ranges_use_inclusive_leap_safe_boundaries(
 
 
 class ScoreSelectionDatabase:
-  def __init__(self, *, found: bool = True) -> None:
+  def __init__(self, *, found: bool = True, has_thumbnail: bool = True) -> None:
     self.found = found
+    self.has_thumbnail = has_thumbnail
     self.query = ""
     self.args = None
 
@@ -761,6 +801,7 @@ class ScoreSelectionDatabase:
     return {
       "report_id": PARENT_ID,
       "score": 76,
+      "has_thumbnail": self.has_thumbnail,
       "updated_at": datetime(2026, 7, 17, 3, tzinfo=timezone.utc),
     }
 
@@ -783,13 +824,41 @@ async def test_score_selection_upserts_only_an_owned_completed_report_for_the_da
     "date": "2026-07-17",
     "reportId": str(PARENT_ID),
     "score": 76,
+    "representativeThumbnailUrl": (
+      f"/makeup-journey/reports/{PARENT_ID}/thumbnail"
+    ),
     "updatedAt": "2026-07-17T03:00:00+00:00",
   }
   assert db.args == (USER_ID, date(2026, 7, 17), PARENT_ID)
   normalized_query = " ".join(db.query.lower().split())
-  assert "where id = $3 and user_id = $1 and entry_date = $2" in normalized_query
-  assert "status = 'completed' and score is not null" in normalized_query
+  assert (
+    "where reports.id = $3 and reports.user_id = $1 and reports.entry_date = $2"
+    in normalized_query
+  )
+  assert "reports.status = 'completed' and reports.score is not null" in normalized_query
+  assert "left join media_assets" in normalized_query
+  assert "media.owner_user_id = reports.user_id" in normalized_query
+  assert "media.status = 'active'" in normalized_query
+  assert "media.deleted_at is null" in normalized_query
+  assert "media.thumbnail_bucket is not null" in normalized_query
+  assert "media.thumbnail_object_key is not null" in normalized_query
   assert "on conflict (user_id, entry_date) do update" in normalized_query
+
+
+@pytest.mark.asyncio
+async def test_score_selection_returns_null_thumbnail_when_owned_thumbnail_is_unavailable(
+  monkeypatch,
+) -> None:
+  monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
+
+  response = await journey_api.update_makeup_journey_score_selection(
+    "2026-07-17",
+    MakeupJourneyScoreSelectionUpdate(reportId=PARENT_ID),
+    auth=object(),
+    db=ScoreSelectionDatabase(has_thumbnail=False),
+  )
+
+  assert response["data"]["representativeThumbnailUrl"] is None
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 import {requestBackendJson} from '../../../shared/services/backendApi';
+import {commitMakeupJourneyScoreSelection} from './makeupJourneyCache';
 import type {
   MakeupJourneyCalendarResponse,
   MakeupJourneyDayResponse,
@@ -119,6 +120,7 @@ export async function selectMakeupJourneyScore(
     `/makeup-journey/days/${encodeURIComponent(requireIsoDate(entryDate))}/score-selection`,
     {method: 'PUT', body: {reportId}},
   );
+  commitMakeupJourneyScoreSelection(response);
   return response;
 }
 

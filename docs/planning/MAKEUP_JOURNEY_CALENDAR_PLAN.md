@@ -373,7 +373,7 @@ Content-Type: application/json
 {"reportId":"uuid"}
 ```
 
-응답은 `date`, `reportId`, `score`, `updatedAt`을 포함한다. 해당 사용자의 같은 날짜에 속한 완료·점수 보유 리포트만 선택할 수 있으며, 존재하지 않거나 소유하지 않은 리포트는 404로 숨긴다.
+응답은 `date`, `reportId`, `score`, nullable `representativeThumbnailUrl`, `updatedAt`을 포함한다. 썸네일 경로는 월간 조회와 같은 미디어 소유권·활성·미삭제·후처리 썸네일 조건을 통과할 때만 반환한다. 해당 사용자의 같은 날짜에 속한 완료·점수 보유 리포트만 선택할 수 있으며, 존재하지 않거나 소유하지 않은 리포트는 404로 숨긴다.
 
 ### 성장 그래프
 

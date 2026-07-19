@@ -42,6 +42,9 @@ DETECTOR_MAX_EDGE = 1600
 BEDROCK_REGION_MAX_EDGE = 1568
 BEDROCK_REGION_MAX_BYTES = 3_500_000
 REGION_JPEG_QUALITIES = (90, 84, 76, 68, 60, 52, 44)
+LOCAL_FACE_LANDMARKER_MODEL_PATH = (
+  Path(__file__).resolve().parents[2] / "models" / "face_landmarker.task"
+)
 
 REGION_NAMES = (
   "full",
@@ -317,7 +320,12 @@ def _default_face_detector(image: Image.Image) -> FaceDetectorResult:
 
   from app.core.settings import get_settings
 
-  model_path = Path(get_settings().face_landmarker_model_path)
+  configured_model_path = Path(get_settings().face_landmarker_model_path)
+  model_path = (
+    configured_model_path
+    if configured_model_path.exists()
+    else LOCAL_FACE_LANDMARKER_MODEL_PATH
+  )
   if not model_path.exists():
     return FaceDetectorResult(available=False, error="face_landmarker_model_missing")
 

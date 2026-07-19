@@ -135,7 +135,35 @@ def _service_with_bedrock_result(
 
 
 
-def _valid_result(score: int | float = 87.6) -> dict:
+def _axis_scores_for_total(score: object) -> list[int]:
+  safe_score = score if isinstance(score, int) and not isinstance(score, bool) and 0 <= score <= 100 else 88
+  maximums = [30, 25, 20, 25]
+  scores = [safe_score * maximum // 100 for maximum in maximums]
+  index = 0
+  while sum(scores) < safe_score:
+    if scores[index] < maximums[index]:
+      scores[index] += 1
+    index = (index + 1) % len(scores)
+  return scores
+
+
+def _correction_guide(topic_label: str) -> dict:
+  return {
+    "tool": "깨끗한 작은 블렌딩 브러시",
+    "amount": "브러시 한쪽 면의 약 1/3만 묻힌 양",
+    "targetArea": f"정면에서 보이는 {topic_label} 영역의 중심부터 바깥 경계까지",
+    "coverage": f"현재 {topic_label} 경계 안쪽 한 겹과 바깥쪽 전환 구간",
+    "steps": [
+      "브러시 한쪽 면에 사용할 양을 한 번 덜어내세요.",
+      f"{topic_label} 중심에 먼저 놓고 바깥 경계 방향으로 짧게 펴세요.",
+      "정면에서 양쪽의 경계 강도가 비슷한지 확인하세요.",
+    ],
+    "stopCondition": "뚜렷한 경계선이 사라지고 바깥쪽으로 한 단계 옅어질 때 멈추세요.",
+    "why": f"사진에서 확인된 {topic_label} 경계의 전환을 더 안정적으로 연결하기 위한 방법입니다.",
+  }
+
+
+def _valid_result(score: object = 88) -> dict:
   evaluations = []
 
   for index, topic in enumerate(FEEDBACK_TOPICS):
@@ -163,10 +191,24 @@ def _valid_result(score: int | float = 87.6) -> dict:
           f"현재 사진의 {topic['label']} 범위를 기준으로 양을 조절하세요.",
           f"사용자 목적에 맞게 {topic['label']} 경계를 부드럽게 정리하세요.",
         ],
+        "correctionGuide": (
+          _correction_guide(topic["label"])
+          if status == "improvement"
+          else None
+        ),
         "scoreImpact": "low" if status == "optional" else "medium",
         "confidence": 0.8,
       },
     )
+
+  axis_scores = _axis_scores_for_total(score)
+  score_formula = (
+    f"적용 완성도 {axis_scores[0]}/30 + "
+    f"배치·형태 균형 {axis_scores[1]}/25 + "
+    f"색·명암 조화 {axis_scores[2]}/20 + "
+    f"전체 조화·목표 적합도 {axis_scores[3]}/25 = {sum(axis_scores)}/100"
+  )
+  axis_evidence_ids = ["brow-obs-1", "lash-obs-1"]
 
   return {
     "analysisDecision": "completed",
@@ -177,9 +219,47 @@ def _valid_result(score: int | float = 87.6) -> dict:
       "issues": [],
     },
     "score": score,
+    "scoreBreakdown": {
+      "maxScore": 100,
+      "formula": score_formula,
+      "axes": [
+        {
+          "id": "application-finish",
+          "label": "적용 완성도",
+          "score": axis_scores[0],
+          "maxScore": 30,
+          "reason": "눈썹 경계가 정돈되었고 속눈썹 경계에는 다듬을 부분이 보입니다.",
+          "evidenceIds": axis_evidence_ids,
+        },
+        {
+          "id": "placement-balance",
+          "label": "배치·형태 균형",
+          "score": axis_scores[1],
+          "maxScore": 25,
+          "reason": "눈썹과 속눈썹의 배치가 얼굴 안에서 비교적 안정적으로 연결됩니다.",
+          "evidenceIds": axis_evidence_ids,
+        },
+        {
+          "id": "color-value-harmony",
+          "label": "색·명암 조화",
+          "score": axis_scores[2],
+          "maxScore": 20,
+          "reason": "사진 안에서 눈썹과 속눈썹의 상대 명암이 과도하게 분리되지 않습니다.",
+          "evidenceIds": axis_evidence_ids,
+        },
+        {
+          "id": "overall-goal-fit",
+          "label": "전체 조화·목표 적합도",
+          "score": axis_scores[3],
+          "maxScore": 25,
+          "reason": "관찰된 표현이 사용자가 요청한 인상과 전반적으로 연결됩니다.",
+          "evidenceIds": axis_evidence_ids,
+        },
+      ],
+    },
     "scoreRange": [0, 100],
     "scoreConfidence": 0.82,
-    "scoreEvidenceIds": ["brow-obs-1"],
+    "scoreEvidenceIds": axis_evidence_ids,
     "scoreLabel": "종합 점수",
     "scoreReason": "사진에서 피부 표현과 색조 경계가 안정적으로 보입니다. 자연스러운 데이트 메이크업 목적과 잘 맞습니다.",
     "interpretedGoal": {
@@ -233,6 +313,7 @@ def _retake_result() -> dict:
         ],
       },
       "score": None,
+      "scoreBreakdown": None,
       "scoreRange": None,
       "scoreConfidence": 0.0,
       "scoreEvidenceIds": [],
@@ -249,6 +330,7 @@ def _retake_result() -> dict:
         "observations": [],
         "goalCriterionIds": [],
         "actionSteps": [],
+        "correctionGuide": None,
         "scoreImpact": "low",
         "confidence": 0.0,
       },
@@ -257,154 +339,71 @@ def _retake_result() -> dict:
   return result
 
 
-def _result_with_evidence_distribution(
-  *,
-  strength_count: int,
-  improvement_count: int,
-  score: int,
-  score_range: list[int],
-  high_impact_improvement: bool = False,
-  remainder_status: str = "not_applicable",
-) -> dict:
-  result = _valid_result(score)
-  result["scoreRange"] = score_range
+def test_score_breakdown_is_canonical_explainable_total() -> None:
+  result = normalize_makeup_feedback_result(_valid_result(92), _request_payload())
 
-  for index, evaluation in enumerate(result["evaluations"]):
-    if index < strength_count:
-      status = "strength"
-    elif index < strength_count + improvement_count:
-      status = "improvement"
-    else:
-      status = remainder_status
-
-    evaluation["status"] = status
-    evaluation["scoreImpact"] = (
-      "high"
-      if high_impact_improvement and status == "improvement"
-      else "medium" if status in {"strength", "improvement"} else "low"
-    )
-    if status in {"not_applicable", "not_assessable"}:
-      evaluation["observations"] = []
-      evaluation["goalCriterionIds"] = []
-      evaluation["actionSteps"] = []
-    if status == "not_assessable":
-      evaluation["visibility"] = "partial"
-      evaluation["visibilityReason"] = "촬영 각도로 세부 표현을 확인하기 어렵습니다."
-
-  first_score_evaluation = next(
-    evaluation
-    for evaluation in result["evaluations"]
-    if evaluation["status"] in {"strength", "improvement"}
+  assert result["score"] == 92
+  assert result["scoreBreakdown"]["maxScore"] == 100
+  assert result["scoreBreakdown"]["formula"] == (
+    "적용 완성도 28/30 + 배치·형태 균형 23/25 + "
+    "색·명암 조화 18/20 + 전체 조화·목표 적합도 23/25 = 92/100"
   )
-  result["scoreEvidenceIds"] = [first_score_evaluation["observations"][0]["id"]]
-  return result
+  assert [axis["maxScore"] for axis in result["scoreBreakdown"]["axes"]] == [30, 25, 20, 25]
+  assert "적용 완성도 28/30" in result["scoreReason"]
 
 
-def test_score_calibration_distinguishes_evidence_distributions_with_same_model_score() -> None:
-  improvement_heavy = normalize_makeup_feedback_result(
-    _result_with_evidence_distribution(
-      strength_count=2,
-      improvement_count=4,
-      score=65,
-      score_range=[60, 70],
-    ),
-    _request_payload(),
-  )
-  strength_heavy = normalize_makeup_feedback_result(
-    _result_with_evidence_distribution(
-      strength_count=3,
-      improvement_count=1,
-      score=65,
-      score_range=[60, 70],
-    ),
-    _request_payload(),
-  )
+def test_score_breakdown_repairs_model_arithmetic_formula_evidence_and_range() -> None:
+  raw_result = _valid_result(92)
+  raw_result["score"] = 65
+  raw_result["scoreBreakdown"]["formula"] = "잘못 계산한 식"
+  raw_result["scoreEvidenceIds"] = ["unknown-extra", "lash-obs-1"]
+  raw_result["scoreRange"] = [60, 70]
 
-  assert improvement_heavy["score"] == 57
-  assert improvement_heavy["scoreRange"] == [47, 57]
-  assert (
-    improvement_heavy["scoreConfidence"]
-    == analysis_module.EVIDENCE_CALIBRATION_SCORE_CONFIDENCE_CAP
-  )
-  assert "4개 보완 근거" in improvement_heavy["scoreReason"]
-  assert "점수를 보수적으로 계산했어요" in improvement_heavy["scoreReason"]
-  assert strength_heavy["score"] == 65
-  assert strength_heavy["scoreRange"] == [60, 70]
-  assert strength_heavy["scoreReason"] == _valid_result()["scoreReason"]
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
 
-
-def test_score_calibration_never_raises_a_cautious_model_score() -> None:
-  result = normalize_makeup_feedback_result(
-    _result_with_evidence_distribution(
-      strength_count=2,
-      improvement_count=4,
-      score=20,
-      score_range=[15, 25],
-    ),
-    _request_payload(),
-  )
-
-  assert result["score"] == 20
-  assert result["scoreRange"] == [15, 25]
+  assert result["score"] == 92
+  assert result["scoreBreakdown"]["formula"].endswith("= 92/100")
+  assert result["scoreEvidenceIds"] == ["brow-obs-1", "lash-obs-1"]
+  assert result["scoreRange"] == [87, 97]
   assert result["scoreRange"][0] <= result["score"] <= result["scoreRange"][1]
 
 
-def test_single_assessable_focus_skips_distribution_calibration() -> None:
-  result = normalize_makeup_feedback_result(
-    _result_with_evidence_distribution(
-      strength_count=1,
-      improvement_count=0,
-      score=92,
-      score_range=[88, 95],
-    ),
-    _request_payload(),
+def test_full_score_is_reachable_without_global_ninety_point_ceiling() -> None:
+  result = normalize_makeup_feedback_result(_valid_result(100), _request_payload())
+
+  assert result["score"] == 100
+  assert [axis["score"] for axis in result["scoreBreakdown"]["axes"]] == [30, 25, 20, 25]
+  assert result["scoreBreakdown"]["formula"].endswith("= 100/100")
+
+
+@pytest.mark.parametrize("axis_score", [-1, 31, 12.5, True])
+def test_score_breakdown_rejects_invalid_axis_score(axis_score: object) -> None:
+  raw_result = _valid_result()
+  raw_result["scoreBreakdown"]["axes"][0]["score"] = axis_score
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == "scoreBreakdown.axes[0].score"
+
+
+def test_score_breakdown_rejects_changed_axis_contract_or_order() -> None:
+  raw_result = _valid_result()
+  raw_result["scoreBreakdown"]["axes"][0], raw_result["scoreBreakdown"]["axes"][1] = (
+    raw_result["scoreBreakdown"]["axes"][1],
+    raw_result["scoreBreakdown"]["axes"][0],
   )
 
-  assert result["score"] == 92
-  assert result["scoreRange"] == [88, 95]
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == "scoreBreakdown.axes[0].id"
+  assert exc_info.value.details["expected"] == "application-finish"
 
 
-@pytest.mark.parametrize("remainder_status", ["optional", "not_assessable"])
-def test_optional_and_unassessable_topics_do_not_change_calibration(
-  remainder_status: str,
-) -> None:
-  baseline = normalize_makeup_feedback_result(
-    _result_with_evidence_distribution(
-      strength_count=2,
-      improvement_count=2,
-      score=80,
-      score_range=[75, 85],
-    ),
-    _request_payload(),
-  )
-  with_non_scoring_topics = normalize_makeup_feedback_result(
-    _result_with_evidence_distribution(
-      strength_count=2,
-      improvement_count=2,
-      score=80,
-      score_range=[75, 85],
-      remainder_status=remainder_status,
-    ),
-    _request_payload(),
-  )
-
-  assert with_non_scoring_topics["score"] == baseline["score"]
-  assert with_non_scoring_topics["scoreRange"] == baseline["scoreRange"]
-
-
-def test_makeup_intensity_does_not_change_same_evidence_calibration() -> None:
-  light_raw = _result_with_evidence_distribution(
-    strength_count=2,
-    improvement_count=3,
-    score=85,
-    score_range=[80, 90],
-  )
-  bold_raw = _result_with_evidence_distribution(
-    strength_count=2,
-    improvement_count=3,
-    score=85,
-    score_range=[80, 90],
-  )
+def test_makeup_intensity_does_not_change_same_axis_scores() -> None:
+  light_raw = _valid_result(85)
+  bold_raw = _valid_result(85)
   light_raw["interpretedGoal"]["intensity"] = "light"
   bold_raw["interpretedGoal"]["intensity"] = "bold"
 
@@ -412,24 +411,8 @@ def test_makeup_intensity_does_not_change_same_evidence_calibration() -> None:
   bold_result = normalize_makeup_feedback_result(bold_raw, _request_payload())
 
   assert bold_result["score"] == light_result["score"]
+  assert bold_result["scoreBreakdown"] == light_result["scoreBreakdown"]
   assert bold_result["scoreRange"] == light_result["scoreRange"]
-
-
-def test_high_impact_improvement_prevents_overstated_score() -> None:
-  result = normalize_makeup_feedback_result(
-    _result_with_evidence_distribution(
-      strength_count=10,
-      improvement_count=1,
-      score=95,
-      score_range=[90, 98],
-      high_impact_improvement=True,
-    ),
-    _request_payload(),
-  )
-
-  assert result["score"] == analysis_module.HIGH_IMPACT_IMPROVEMENT_SCORE_CEILING
-  assert result["scoreRange"] == [82, 90]
-  assert result["scoreRange"][0] <= result["score"] <= result["scoreRange"][1]
 
 
 def test_live_result_localizes_user_facing_intensity_without_changing_enum() -> None:
@@ -466,6 +449,8 @@ def test_external_prompts_render_context_contract_and_lip_without_recursive_subs
   assert '"dynamicCriteria"' in user_prompt
   assert '"observations"' in user_prompt
   assert '"actionSteps"' in user_prompt
+  assert '"scoreBreakdown"' in user_prompt
+  assert '"correctionGuide"' in user_prompt
   assert "JSON 객체만 반환" in system_prompt
   assert system_prompt.index("사진의 촬영 품질") < system_prompt.index("사용자 원문")
   assert system_prompt.index("사용자 원문") < system_prompt.index("모든 요청에 공통")
@@ -478,6 +463,10 @@ def test_external_prompts_render_context_contract_and_lip_without_recursive_subs
   assert "촌스럽다" in user_prompt
   assert "채도·명도 대비가 다른 부위보다 높아" in system_prompt
   assert "피부·치크·아이 메이크업과 비교한 색 강도" in system_prompt
+  assert "적용 완성도 30점" in system_prompt
+  assert "전역 90점 상한은 없습니다" in system_prompt
+  assert "계절형 퍼스널컬러" in user_prompt
+  assert "타고난 얼굴이 예쁘거나 잘생겼는지" in user_prompt
   assert "편집 안내" not in user_prompt
   assert "편집 안내" not in system_prompt
 
@@ -664,13 +653,14 @@ def test_require_score_rounds_and_clamps_model_number(
 def test_live_result_preserves_summary_topic_and_coaching_contract() -> None:
   result = normalize_makeup_feedback_result(_valid_result(), _request_payload())
 
-  assert result["scoreReason"].startswith("사진에서")
+  assert result["scoreReason"].startswith("적용 완성도")
   assert result["summaryBadges"][2]["label"] == "11개 항목 분석"
   assert result["evaluations"][-1]["topicId"] == "lip"
   assert result["evaluations"][-1]["kind"] == "lip"
   assert result["evaluations"][0]["actionSteps"]
   assert result["strengths"][0]["actionSteps"]
   assert result["points"][0]["actionSteps"]
+  assert result["points"][0]["correctionGuide"]["tool"] == "깨끗한 작은 블렌딩 브러시"
 
 
 @pytest.mark.parametrize(
@@ -679,6 +669,7 @@ def test_live_result_preserves_summary_topic_and_coaching_contract() -> None:
     "analysisDecision",
     "captureQuality",
     "score",
+    "scoreBreakdown",
     "scoreRange",
     "scoreConfidence",
     "scoreEvidenceIds",
@@ -713,6 +704,7 @@ def test_live_result_rejects_missing_top_level_fields(field: str) -> None:
     "title",
     "description",
     "actionSteps",
+    "correctionGuide",
     "scoreImpact",
     "confidence",
   ],
@@ -754,7 +746,10 @@ def test_live_result_repairs_missing_reason_for_limited_visibility(
         "scoreImpact": "low",
       },
     )
-    raw_result["scoreEvidenceIds"] = [raw_result["evaluations"][1]["observations"][0]["id"]]
+    fallback_evidence_id = raw_result["evaluations"][1]["observations"][0]["id"]
+    raw_result["scoreEvidenceIds"] = [fallback_evidence_id]
+    for axis in raw_result["scoreBreakdown"]["axes"]:
+      axis["evidenceIds"] = [fallback_evidence_id]
 
   result = normalize_makeup_feedback_result(raw_result, _request_payload())
 
@@ -773,6 +768,130 @@ def test_live_result_rejects_invalid_action_steps(action_steps: object) -> None:
     normalize_makeup_feedback_result(raw_result, _request_payload())
 
   assert exc_info.value.details["field"] == "evaluations[0].actionSteps"
+
+
+@pytest.mark.parametrize(
+  "field",
+  ["tool", "amount", "targetArea", "coverage", "steps", "stopCondition", "why"],
+)
+def test_live_result_rejects_incomplete_improvement_correction_guide(field: str) -> None:
+  raw_result = _valid_result()
+  raw_result["evaluations"][1]["correctionGuide"].pop(field)
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == f"evaluations[1].correctionGuide.{field}"
+
+
+@pytest.mark.parametrize(
+  "steps",
+  [[], ["한 단계"], ["같은 단계", "같은 단계"], ["1", "2", "3", "4", "5"]],
+)
+def test_live_result_rejects_non_actionable_correction_guide_steps(steps: list[str]) -> None:
+  raw_result = _valid_result()
+  raw_result["evaluations"][1]["correctionGuide"]["steps"] = steps
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == "evaluations[1].correctionGuide.steps"
+
+
+def test_live_result_rejects_vague_correction_amount() -> None:
+  raw_result = _valid_result()
+  raw_result["evaluations"][1]["correctionGuide"]["amount"] = "소량"
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == "evaluations[1].correctionGuide.amount"
+
+
+@pytest.mark.parametrize("amount", ["소량", "아주 소량", "적당히", "필요한 만큼"])
+def test_live_result_rejects_vague_correction_amount_variants(amount: str) -> None:
+  raw_result = _valid_result()
+  raw_result["evaluations"][1]["correctionGuide"]["amount"] = amount
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == "evaluations[1].correctionGuide.amount"
+
+
+@pytest.mark.parametrize(
+  ("field", "max_chars"),
+  list(analysis_module.CORRECTION_GUIDE_FIELD_LIMITS.items()),
+)
+def test_live_result_bounds_each_correction_guide_text_field(
+  field: str,
+  max_chars: int,
+) -> None:
+  raw_result = _valid_result()
+  raw_result["evaluations"][1]["correctionGuide"][field] = "가" * (max_chars + 1)
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == f"evaluations[1].correctionGuide.{field}"
+
+
+def test_live_result_bounds_correction_guide_step_length() -> None:
+  raw_result = _valid_result()
+  raw_result["evaluations"][1]["correctionGuide"]["steps"][0] = (
+    "가" * (analysis_module.CORRECTION_GUIDE_STEP_MAX_CHARS + 1)
+  )
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == "evaluations[1].correctionGuide.steps[0]"
+
+
+@pytest.mark.parametrize(
+  ("target", "contaminated_text", "expected_field"),
+  [
+    ("axis", "얼굴형 자체가 나빠 배치 점수를 낮췄습니다.", "scoreBreakdown.axes[0].reason"),
+    ("scoreReason", "퍼스널컬러와 맞지 않아 감점했습니다.", "scoreReason"),
+    ("title", "안 예쁨이 드러나는 눈썹", "evaluations[0].title"),
+    ("description", "현재 얼굴은 매력 없음으로 보입니다.", "evaluations[0].description"),
+    ("observation", "이목구비 자체가 나쁘게 보입니다.", "evaluations[0].observations[0].claim"),
+    ("guide", "잘생기지 않음이 보여 이 수정을 권합니다.", "evaluations[1].correctionGuide.why"),
+  ],
+)
+def test_live_result_rejects_innate_appearance_scoring_contamination(
+  target: str,
+  contaminated_text: str,
+  expected_field: str,
+) -> None:
+  raw_result = _valid_result()
+  if target == "axis":
+    raw_result["scoreBreakdown"]["axes"][0]["reason"] = contaminated_text
+  elif target == "scoreReason":
+    raw_result["scoreReason"] = contaminated_text
+  elif target == "title":
+    raw_result["evaluations"][0]["title"] = contaminated_text
+  elif target == "description":
+    raw_result["evaluations"][0]["description"] = contaminated_text
+  elif target == "observation":
+    raw_result["evaluations"][0]["observations"][0]["claim"] = contaminated_text
+  else:
+    raw_result["evaluations"][1]["correctionGuide"]["why"] = contaminated_text
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == expected_field
+  assert "innate attractiveness" in exc_info.value.details["reason"]
+
+
+def test_user_explicit_fact_is_not_rejected_by_generated_text_validator() -> None:
+  raw_result = _valid_result()
+  raw_result["interpretedGoal"]["explicitFacts"] = ["사용자가 못생겨 보일까 걱정된다고 말함"]
+
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert result["interpretedGoal"]["explicitFacts"] == ["사용자가 못생겨 보일까 걱정된다고 말함"]
 
 
 @pytest.mark.parametrize("score", [True, "87", None, float("nan")])
@@ -880,11 +999,13 @@ def test_live_result_accepts_nullable_score_for_retake_required() -> None:
   assert result["captureQuality"]["detectorAvailable"] is True
   assert result["captureQuality"]["colorConfidence"] == "low"
   assert result["score"] is None
+  assert result["scoreBreakdown"] is None
   assert result["scoreRange"] is None
   assert result["scoreConfidence"] == 0.0
   assert result["scoreEvidenceIds"] == []
   assert all(item["status"] == "not_assessable" for item in result["evaluations"])
   assert all(item["actionSteps"] == [] for item in result["evaluations"])
+  assert all(item["correctionGuide"] is None for item in result["evaluations"])
   assert result["points"] == []
   assert result["strengths"] == []
 
@@ -954,6 +1075,7 @@ def test_material_optional_is_promoted_to_improvement() -> None:
   raw_result = _valid_result()
   optional_evaluation = raw_result["evaluations"][2]
   optional_evaluation["scoreImpact"] = "medium"
+  optional_evaluation["correctionGuide"] = _correction_guide(optional_evaluation["topicLabel"])
 
   result = normalize_makeup_feedback_result(raw_result, _request_payload())
   normalized_by_topic = {item["topicId"]: item for item in result["evaluations"]}
@@ -966,24 +1088,23 @@ def test_optional_observation_cannot_be_score_evidence() -> None:
   raw_result = _valid_result()
   optional_evaluation = raw_result["evaluations"][2]
   observation_id = optional_evaluation["observations"][0]["id"]
-  raw_result["scoreEvidenceIds"] = [observation_id]
+  raw_result["scoreBreakdown"]["axes"][0]["evidenceIds"] = [observation_id]
 
   with pytest.raises(AppError) as exc_info:
     normalize_makeup_feedback_result(raw_result, _request_payload())
 
-  assert exc_info.value.details["field"] == "scoreEvidenceIds"
+  assert exc_info.value.details["field"] == "scoreBreakdown.axes[0].evidenceIds"
   assert exc_info.value.details["disallowedIds"] == [observation_id]
-  assert exc_info.value.details["allowedStatuses"] == ["improvement", "strength"]
 
 
 def test_live_result_rejects_unknown_score_evidence_reference() -> None:
   raw_result = _valid_result()
-  raw_result["scoreEvidenceIds"] = ["missing-observation"]
+  raw_result["scoreBreakdown"]["axes"][0]["evidenceIds"] = ["missing-observation"]
 
   with pytest.raises(AppError) as exc_info:
     normalize_makeup_feedback_result(raw_result, _request_payload())
 
-  assert exc_info.value.details["field"] == "scoreEvidenceIds"
+  assert exc_info.value.details["field"] == "scoreBreakdown.axes[0].evidenceIds"
   assert exc_info.value.details["unknownIds"] == ["missing-observation"]
 
 
@@ -994,18 +1115,17 @@ def test_live_result_repairs_topic_prefixed_score_evidence_reference() -> None:
 
   result = normalize_makeup_feedback_result(raw_result, _request_payload())
 
-  assert result["scoreEvidenceIds"] == ["brow-observation-primary"]
+  assert result["scoreEvidenceIds"] == ["brow-observation-primary", "lash-obs-1"]
 
 
-def test_live_result_rejects_score_range_that_does_not_include_score() -> None:
+def test_live_result_repairs_score_range_that_does_not_include_axis_total() -> None:
   raw_result = _valid_result()
   raw_result["scoreRange"] = [0, 80]
 
-  with pytest.raises(AppError) as exc_info:
-    normalize_makeup_feedback_result(raw_result, _request_payload())
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
 
-  assert exc_info.value.details["field"] == "scoreRange"
-  assert exc_info.value.details["reason"] == "must include score"
+  assert result["scoreRange"] == [20, 100]
+  assert result["scoreRange"][0] <= result["score"] <= result["scoreRange"][1]
 
 
 @pytest.mark.parametrize(
@@ -1255,7 +1375,7 @@ def test_bedrock_invoke_uses_external_system_and_user_prompts(
   request_body = json.loads(calls["body"])
 
   assert request_body["system"] == service._build_system_prompt()
-  assert request_body["max_tokens"] == 6400
+  assert request_body["max_tokens"] == 8192
   assert request_body["messages"][0]["content"][0]["text"] == service._build_prompt(_request_payload())
   assert "amazon-bedrock-guardrailConfig" not in request_body
   assert all(
@@ -1263,7 +1383,7 @@ def test_bedrock_invoke_uses_external_system_and_user_prompts(
     for part in request_body["messages"][0]["content"]
     if isinstance(part, dict)
   )
-  assert result["score"] == 70
+  assert result["score"] == 88
   assert result["evaluations"][-1]["topicId"] == "lip"
 
 def test_bedrock_invoke_uses_fresh_server_controlled_guardrail_tags(
@@ -1495,12 +1615,10 @@ def test_normal_vision_sends_canonical_labeled_region_pairs_and_safe_context(
     "bottom": 240 / 1440,
   }
   assert result["evaluations"][0]["observations"][0]["evidenceRegionIds"] == [
-    "full",
     "left_eye",
     "right_eye",
   ]
   assert result["evaluations"][-1]["observations"][0]["evidenceRegionIds"] == [
-    "full",
     "lips",
   ]
 
@@ -1527,6 +1645,9 @@ def test_detector_unavailable_is_soft_and_still_invokes_bedrock(
       "message": "얼굴 랜드마크 검사를 사용할 수 없어 일부 품질 판단이 제한됩니다.",
       "affectedTopicIds": [topic["id"] for topic in FEEDBACK_TOPICS],
     },
+  ]
+  assert result["evaluations"][0]["observations"][0]["evidenceRegionIds"] == [
+    "full",
   ]
 
 

@@ -26,7 +26,16 @@ expect(
 );
 expect(
   firstSource?.uri?.includes('cacheRevision=4') === true,
-  'private thumbnail URL includes the account cache revision',
+  'private thumbnail URL includes the data revision for transport revalidation',
+);
+const sameAccountNewDataRevision = getMakeupJourneyPrivateImageSource(endpointPath, 5);
+expect(
+  firstSource?.cacheKey === sameAccountNewDataRevision?.cacheKey,
+  'unrelated journey data revisions keep an immutable report thumbnail warm',
+);
+expect(
+  firstSource?.uri !== sameAccountNewDataRevision?.uri,
+  'transport URLs can revalidate without changing the report image cache identity',
 );
 expect(
   getMakeupJourneyPrivateImageSource('https://public.example/face.jpg', 4) === null,
@@ -35,7 +44,7 @@ expect(
 
 const generationBeforeClear = getMakeupJourneyPrivateImageGeneration();
 clearMakeupJourneyPrivateImageMemoryCache();
-const secondSource = getMakeupJourneyPrivateImageSource(endpointPath, 5);
+const secondSource = getMakeupJourneyPrivateImageSource(endpointPath, 6);
 expect(
   getMakeupJourneyPrivateImageGeneration() === generationBeforeClear + 1,
   'account changes advance the private image generation',
@@ -47,7 +56,7 @@ expect(
 
 setBackendAuthTokenProvider(null);
 expect(
-  getMakeupJourneyPrivateImageSource(endpointPath, 5) === null,
+  getMakeupJourneyPrivateImageSource(endpointPath, 6) === null,
   'private thumbnail source is unavailable without authentication',
 );
 

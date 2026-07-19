@@ -43,6 +43,44 @@ def _full_result() -> dict:
     "score": 72,
     "scoreLabel": "종합 점수",
     "scoreReason": "립 경계는 안정적이지만 치크 경계는 목적에 맞게 한 번 더 정리할 여지가 있습니다.",
+    "scoreBreakdown": {
+      "maxScore": 100,
+      "formula": "적용 완성도 23/30 + 배치·형태 균형 18/25 + 색·명암 조화 13/20 + 전체 조화·목표 적합도 18/25 = 72/100",
+      "axes": [
+        {
+          "id": "application-finish",
+          "label": "적용 완성도",
+          "score": 23,
+          "maxScore": 30,
+          "reason": "립 경계는 안정적이고 치크 외곽은 한 번 더 풀 여지가 있어요.",
+          "evidenceIds": ["lip-obs-1", "blush-obs-1"],
+        },
+        {
+          "id": "placement-balance",
+          "label": "배치·형태 균형",
+          "score": 18,
+          "maxScore": 25,
+          "reason": "치크 바깥 경계의 위치를 조금 더 정리할 수 있어요.",
+          "evidenceIds": ["blush-obs-1"],
+        },
+        {
+          "id": "color-value-harmony",
+          "label": "색·명암 조화",
+          "score": 13,
+          "maxScore": 20,
+          "reason": "조명 영향을 감안하면 치크 발색 경계를 보수적으로 봐야 해요.",
+          "evidenceIds": ["blush-obs-1"],
+        },
+        {
+          "id": "overall-goal-fit",
+          "label": "전체 조화·목표 적합도",
+          "score": 18,
+          "maxScore": 25,
+          "reason": "여행용 목적에는 대체로 맞고 치크 경계가 남아 있어요.",
+          "evidenceIds": ["lip-obs-1", "blush-obs-1"],
+        },
+      ],
+    },
     "interpretedGoal": {
       "label": "여행용 내추럴 메이크업",
       "intensity": "light",
@@ -80,6 +118,18 @@ def _full_result() -> dict:
         "title": "바깥 경계를 한 번 더 풀어주세요",
         "description": "볼 바깥쪽 경계가 목적에 비해 조금 또렷하게 보여요.",
         "actionSteps": ["남은 양이 거의 없는 브러시로 바깥 경계를 한 번 쓸어주세요."],
+        "correctionGuide": {
+          "tool": "깨끗한 중간 크기 블러셔 브러시",
+          "amount": "제품을 새로 묻히지 않은 상태",
+          "targetArea": "오른쪽 광대 바깥쪽 경계",
+          "coverage": "광대 바깥 경계부터 관자 방향의 한 브러시 폭",
+          "steps": [
+            "브러시를 피부와 평행하게 눕혀 경계 위에 올려주세요.",
+            "관자 방향으로 짧게 한 번 쓸고 안쪽을 한 번 눌러 연결하세요.",
+          ],
+          "stopCondition": "경계선은 흐려지고 치크 중심 발색은 유지될 때",
+          "why": "중심 색을 지우지 않고 바깥 경계만 부드럽게 연결하기 위해서예요.",
+        },
       },
     ],
     "evaluations": [
@@ -221,6 +271,14 @@ def test_compact_feedback_result_builds_bounded_visible_evidence_catalog():
     "point:blush-improvement",
     "action:lip:1",
     "action:blush:1",
+    "score-formula",
+    "score-axis:application-finish",
+    "score-axis:placement-balance",
+    "score-axis:color-value-harmony",
+    "score-axis:overall-goal-fit",
+    "correction:blush-improvement:setup",
+    "correction:blush-improvement:steps",
+    "correction:blush-improvement:check",
     "observation:lip-obs-1",
     "observation:blush-obs-1",
   } <= set(evidence_by_ref)
@@ -267,6 +325,65 @@ def test_compact_feedback_result_prefers_server_analysis_goal():
 
   assert "외출 상황" in goal_evidence["text"]
   assert "처음 가는 야시장" not in serialized
+
+
+def test_compact_feedback_result_exposes_score_formula_and_procedural_correction():
+  compact = _compact_feedback_result(_full_result(), _request_payload())
+  evidence_by_ref = _evidence_text_by_ref(compact)
+
+  assert evidence_by_ref["score-formula"].endswith("= 72/100")
+  assert evidence_by_ref["score-axis:application-finish"].startswith(
+    "적용 완성도 23/30점:",
+  )
+  assert "도구: 깨끗한 중간 크기 블러셔 브러시" in evidence_by_ref[
+    "correction:blush-improvement:setup"
+  ]
+  assert "사용량: 제품을 새로 묻히지 않은 상태" in evidence_by_ref[
+    "correction:blush-improvement:setup"
+  ]
+  assert "1. 브러시를 피부와 평행하게" in evidence_by_ref[
+    "correction:blush-improvement:steps"
+  ]
+  assert "멈춤 기준:" in evidence_by_ref[
+    "correction:blush-improvement:check"
+  ]
+  allowed_refs = _allowed_evidence_refs(compact)
+  assert _grounding_context_supports_roundtable(allowed_refs) is True
+
+
+def test_compact_feedback_result_prioritizes_high_impact_improvement_correction():
+  result = json.loads(json.dumps(_full_result()))
+  result["evaluations"][1]["scoreImpact"] = "low"
+  result["evaluations"][1]["correctionGuide"] = result["points"][0]["correctionGuide"]
+  result["evaluations"].append(
+    {
+      "id": "liner-high-impact",
+      "topicId": "eyeliner",
+      "topicLabel": "아이라인",
+      "status": "improvement",
+      "scoreImpact": "high",
+      "correctionGuide": {
+        "tool": "끝이 가는 아이라인 브러시",
+        "amount": "브러시 끝에 한 번 찍고 손등에서 덜어낸 양",
+        "targetArea": "눈꼬리 바깥선",
+        "coverage": "속눈썹 끝선에서 눈꼬리까지",
+        "steps": ["속눈썹 끝선을 따라 짧게 연결하세요.", "눈꼬리에서 선을 멈추세요."],
+        "stopCondition": "정면에서 선의 끝이 한 줄로 이어질 때",
+        "why": "눈꼬리 경계만 정리해 전체 선의 연결을 맞추기 위해서예요.",
+      },
+      "actionSteps": ["눈꼬리 선을 짧게 연결하세요."],
+      "observations": [],
+    },
+  )
+
+  compact = _compact_feedback_result(result, _request_payload())
+  evidence_by_ref = _evidence_text_by_ref(compact)
+
+  assert "correction:liner-high-impact:setup" in evidence_by_ref
+  assert "끝이 가는 아이라인 브러시" in evidence_by_ref[
+    "correction:liner-high-impact:setup"
+  ]
+  assert "correction:blush-improvement:setup" not in evidence_by_ref
 
 
 def _many_title_result() -> dict:
@@ -404,11 +521,15 @@ def test_external_prompt_loads_utf8_and_keeps_server_contract():
   assert "Every factual message must list one or more exact evidenceCatalog ref values" in prompt
   assert "가시성·조명 제한을 관찰보다 먼저 말하고" in prompt
   assert "visibilityReason or lightingSensitive=true" in prompt
+  assert "goal should explain that the four earned/max axis scores" in prompt
+  assert "coach should prioritize the first correction" in prompt
   assert "{{EVIDENCE_CONTEXT_JSON}}" not in prompt
   assert "{{PREVIEW_HANDOFF_JSON}}" not in prompt
   assert "{{OUTPUT_CONTRACT_JSON}}" not in prompt
   assert "HIDDEN_OPTIONAL" not in prompt
   assert '"ref": "goal:goal-1"' in prompt
+  assert '"ref": "score-axis:application-finish"' in prompt
+  assert '"ref": "correction:blush-improvement:setup"' in prompt
 
 
 def test_prompt_template_placeholders_are_validated(tmp_path):

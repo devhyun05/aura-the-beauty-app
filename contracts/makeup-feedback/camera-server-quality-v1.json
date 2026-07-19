@@ -204,9 +204,47 @@
       "issues": []
     },
     "score": 89,
+    "scoreBreakdown": {
+      "maxScore": 100,
+      "formula": "적용 완성도 27/30 + 배치·형태 균형 22/25 + 색·명암 조화 18/20 + 전체 조화·목표 적합도 22/25 = 89/100",
+      "axes": [
+        {
+          "id": "application-finish",
+          "label": "적용 완성도",
+          "score": 27,
+          "maxScore": 30,
+          "reason": "The visible brow edges are controlled, while the outer lashes need a small separation adjustment.",
+          "evidenceIds": ["brow-observation-1", "lash-observation-1"]
+        },
+        {
+          "id": "placement-balance",
+          "label": "배치·형태 균형",
+          "score": 22,
+          "maxScore": 25,
+          "reason": "The brow and lash placement remains balanced around both eyes.",
+          "evidenceIds": ["brow-observation-1", "lash-observation-1"]
+        },
+        {
+          "id": "color-value-harmony",
+          "label": "색·명암 조화",
+          "score": 18,
+          "maxScore": 20,
+          "reason": "The visible eye-area contrast stays connected to the rest of the makeup.",
+          "evidenceIds": ["brow-observation-1", "lash-observation-1"]
+        },
+        {
+          "id": "overall-goal-fit",
+          "label": "전체 조화·목표 적합도",
+          "score": 22,
+          "maxScore": 25,
+          "reason": "The visible finish supports the requested balanced everyday look with one local lash adjustment.",
+          "evidenceIds": ["brow-observation-1", "lash-observation-1"]
+        }
+      ]
+    },
     "scoreRange": [86, 92],
     "scoreConfidence": 0.84,
-    "scoreEvidenceIds": ["brow-observation-1"],
+    "scoreEvidenceIds": ["brow-observation-1", "lash-observation-1"],
     "scoreLabel": "Overall score",
     "scoreReason": "The visible makeup is balanced and supports the requested natural everyday finish.",
     "interpretedGoal": {
@@ -246,6 +284,7 @@
         "title": "Balanced brow shape",
         "description": "The brow edges support the requested natural finish.",
         "actionSteps": ["Keep the current brow edge softness."],
+        "correctionGuide": null,
         "scoreImpact": "medium",
         "confidence": 0.9
       },
@@ -260,6 +299,19 @@
         "title": "Soften lash definition",
         "description": "A slightly softer lash edge would better match the everyday goal.",
         "actionSteps": ["Separate the outer lashes with a clean spoolie."],
+        "correctionGuide": {
+          "tool": "Clean spoolie",
+          "amount": "No added product; use only the clean spoolie bristles",
+          "targetArea": "Upper lashes from the outer edge of the pupil to the outer corner",
+          "coverage": "The outer one-third of the upper lash line without touching the inner lashes",
+          "steps": [
+            "Place the clean spoolie beneath the outer upper lashes.",
+            "Comb upward once from the outer pupil line toward the outer corner.",
+            "Check from the front that individual lash tips no longer overlap."
+          ],
+          "stopCondition": "Stop when the outer lash tips appear separated while the curl direction stays intact.",
+          "why": "The photo shows locally concentrated outer lash definition, so separating only that section preserves the overall balance."
+        },
         "scoreImpact": "medium",
         "confidence": 0.88
       },
@@ -274,6 +326,7 @@
         "title": "Keep lens contrast subtle",
         "description": "The visible eye contrast remains compatible with a natural finish.",
         "actionSteps": ["If using lenses, keep the graphic diameter subtle."],
+        "correctionGuide": null,
         "scoreImpact": "low",
         "confidence": 0.82
       },
@@ -288,6 +341,7 @@
         "title": "Maintain a fine liner edge",
         "description": "The liner width is consistent with the requested light intensity.",
         "actionSteps": ["Keep the outer liner extension short."],
+        "correctionGuide": null,
         "scoreImpact": "low",
         "confidence": 0.87
       },
@@ -302,6 +356,7 @@
         "title": "Preserve the soft shadow gradient",
         "description": "The visible gradient supports an everyday natural finish.",
         "actionSteps": ["Blend the upper edge with a clean brush."],
+        "correctionGuide": null,
         "scoreImpact": "low",
         "confidence": 0.85
       },
@@ -316,6 +371,7 @@
         "title": "Keep lower-eye detail light",
         "description": "The lower-eye detail remains subtle enough for the goal.",
         "actionSteps": ["Use a small amount of product at the center only."],
+        "correctionGuide": null,
         "scoreImpact": "low",
         "confidence": 0.81
       },
@@ -330,7 +386,8 @@
         "title": "Maintain an even base",
         "description": "The visible base coverage is balanced for everyday wear.",
         "actionSteps": ["Press a thin layer only where coverage is needed."],
-        "scoreImpact": "medium",
+        "correctionGuide": null,
+        "scoreImpact": "low",
         "confidence": 0.9
       },
       {
@@ -344,6 +401,7 @@
         "title": "Keep cheek color diffused",
         "description": "The cheek color placement supports the balanced goal.",
         "actionSteps": ["Diffuse the outer edge with the remaining brush product."],
+        "correctionGuide": null,
         "scoreImpact": "low",
         "confidence": 0.86
       },
@@ -358,6 +416,7 @@
         "title": "Keep highlight controlled",
         "description": "The visible sheen remains subtle for an everyday finish.",
         "actionSteps": ["Limit highlight to the highest cheekbone point."],
+        "correctionGuide": null,
         "scoreImpact": "low",
         "confidence": 0.8
       },
@@ -372,6 +431,7 @@
         "title": "Preserve a soft contour transition",
         "description": "The contour intensity remains compatible with the natural goal.",
         "actionSteps": ["Blend the contour edge toward the hairline."],
+        "correctionGuide": null,
         "scoreImpact": "low",
         "confidence": 0.83
       },
@@ -386,7 +446,8 @@
         "title": "Keep the lip edge softly defined",
         "description": "The lip finish supports the requested balanced everyday look.",
         "actionSteps": ["Tap the outer edge once to soften the boundary."],
-        "scoreImpact": "medium",
+        "correctionGuide": null,
+        "scoreImpact": "low",
         "confidence": 0.89
       }
     ],

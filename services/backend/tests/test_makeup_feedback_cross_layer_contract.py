@@ -128,10 +128,11 @@ def test_mocked_bedrock_response_normalizes_to_mobile_completed_contract() -> No
     "issues": [],
   }
   assert result["modelVersion"] == MODEL_VERSION
-  assert result["score"] == 50
-  assert result["scoreRange"] == [11, 50]
-  assert result["scoreConfidence"] == 0.65
-  assert result["scoreEvidenceIds"] == ["brow-observation-1"]
+  assert result["score"] == 89
+  assert result["scoreRange"] == [86, 92]
+  assert result["scoreConfidence"] == 0.84
+  assert result["scoreEvidenceIds"] == ["brow-observation-1", "lash-observation-1"]
+  assert result["scoreBreakdown"]["formula"].endswith("= 89/100")
   assert [item["topicId"] for item in result["evaluations"]] == [
     topic["id"] for topic in FEEDBACK_TOPICS
   ]
@@ -203,7 +204,7 @@ async def test_pass_fixture_normalizes_and_worker_persists_completed_payload(
   assert "status = 'completed'" in completed_call[0]
   assert completed_call[1] == report_id
   assert completed_call[2] == user_id
-  assert completed_call[3] == normalized_result["score"] == 50
+  assert completed_call[3] == normalized_result["score"] == 89
   assert completed_call[4] == MODEL_VERSION
   completed_payload = json.loads(completed_call[5])
   assert completed_payload["request"] == request_payload

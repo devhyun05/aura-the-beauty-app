@@ -53,6 +53,15 @@ export function resolveMakeupJourneyVisibleState<T>(
   };
 }
 
+export function resolveMakeupJourneyRefreshData<T>(
+  current: Pick<ResourceState<T>, 'data' | 'key'>,
+  cached: T | null,
+  key: string,
+  preserveCurrent: boolean,
+): T | null {
+  return cached ?? (preserveCurrent && current.key === key ? current.data : null);
+}
+
 export function useMakeupJourneyResource<T>({
   cacheTarget,
   enabled,
@@ -73,7 +82,7 @@ export function useMakeupJourneyResource<T>({
     key,
   });
 
-  const runLoad = useCallback(async (force: boolean) => {
+  const runLoad = useCallback(async (force: boolean, preserveCurrent = true) => {
     if (!enabled) {
       abortRef.current?.abort();
       gateRef.current.begin(`disabled:${key}`);
@@ -106,14 +115,25 @@ export function useMakeupJourneyResource<T>({
     abortRef.current = controller;
     const token = gateRef.current.begin(key);
 
-    setState(current => ({
-      data: current.key === key ? current.data : cached,
-      enabled: true,
-      error: null,
-      isLoading: !(current.key === key ? current.data : cached),
-      isRefreshing: Boolean(current.key === key ? current.data : cached),
-      key,
-    }));
+    setState(current => {
+      // A mutation may have atomically patched the shared cache while this
+      // resource still holds the prior value. Show that accepted value before
+      // the background revalidation response arrives.
+      const visibleData = resolveMakeupJourneyRefreshData(
+        current,
+        cached,
+        key,
+        preserveCurrent,
+      );
+      return {
+        data: visibleData,
+        enabled: true,
+        error: null,
+        isLoading: !visibleData,
+        isRefreshing: Boolean(visibleData),
+        key,
+      };
+    });
 
     try {
       const data = await load(key, controller.signal);
@@ -153,7 +173,9 @@ export function useMakeupJourneyResource<T>({
 
   useEffect(() => subscribeMakeupJourneyCacheInvalidation(target => {
     if (enabled && matchesMakeupJourneyCacheTarget(target, cacheTarget)) {
-      void runLoad(true);
+      // A global invalidation is an account boundary. Never retain the prior
+      // account's visible data while the next session loads or fails.
+      void runLoad(true, target !== null);
     }
   }), [cacheTarget.entryDate, cacheTarget.month, enabled, runLoad]);
 

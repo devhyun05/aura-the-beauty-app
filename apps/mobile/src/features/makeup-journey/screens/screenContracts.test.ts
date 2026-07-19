@@ -1,7 +1,10 @@
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
-import {resolveMakeupJourneyVisibleState} from '../hooks/useMakeupJourneyResource';
+import {
+  resolveMakeupJourneyRefreshData,
+  resolveMakeupJourneyVisibleState,
+} from '../hooks/useMakeupJourneyResource';
 
 function expect(condition: boolean, message: string): void {
   if (!condition) {
@@ -136,6 +139,22 @@ expect(
   !newlyEnabledCachedState.isLoading && newlyEnabledCachedState.data === cachedResource,
   'enabling a cached resource renders cache data without a loading flash',
 );
+const priorResource = {data: {month: 'prior'}, key: '2026-07'};
+const patchedResource = {month: 'patched'};
+expect(
+  resolveMakeupJourneyRefreshData(priorResource, patchedResource, '2026-07', true)
+    === patchedResource,
+  'mounted resources display an accepted shared-cache patch before revalidation completes',
+);
+expect(
+  resolveMakeupJourneyRefreshData(priorResource, null, '2026-07', true)
+    === priorResource.data,
+  'ordinary invalidation keeps visible data while its replacement is loading',
+);
+expect(
+  resolveMakeupJourneyRefreshData(priorResource, null, '2026-07', false) === null,
+  'account-boundary invalidation clears the prior user before revalidation',
+);
 expect(
   settingsSheet.includes('useSafeAreaInsets') &&
     settingsSheet.includes('paddingBottom: Math.max(insets.bottom, spacing.xxl)'),
@@ -207,6 +226,7 @@ expect(
     detailScreen.includes('saveNote(content, report.reportId)') &&
     journeyService.includes('/score-selection') &&
     journeyService.includes('{method: \'PUT\', body: {reportId}}') &&
+    journeyService.includes('commitMakeupJourneyScoreSelection(response)') &&
     journeyService.includes('{method: \'PUT\', body: {content, reportId}}'),
   'the whole detail page pages smoothly with each report prompt and note while missions stay date-shared',
 );
@@ -444,12 +464,14 @@ expect(
 expect(
   feedbackService.includes('entryDate: firstText(job.entryDate)') &&
     journeyRoutes.includes('initialReportId={route.params?.initialReportId}') &&
-    detailScreen.includes('initialReportId && reports.some') &&
-    detailScreen.includes('return initialReportId;') &&
+    detailScreen.includes('resolveMakeupJourneyActiveReportId({') &&
+    detailScreen.includes('representativeReportId: resource.data?.representativeReportId ?? null') &&
+    detailScreen.includes('initialReportFocusConsumedRef.current = true;') &&
+    detailScreen.includes('hasUserPagedReportsRef.current = true;') &&
     detailScreen.includes(
       'pagerRef.current?.scrollToOffset({animated: false, offset: index * pageWidth})',
     ),
-  'feedback result date and report id focus the matching horizontal journey page',
+  'feedback result focus, selected representative, and manual swipes resolve the horizontal journey page',
 );
 expect(
   feedbackRoutes.includes('entryDate: flowContext.entryDate,') &&

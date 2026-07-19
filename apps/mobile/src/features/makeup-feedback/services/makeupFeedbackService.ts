@@ -6,6 +6,7 @@ import type {
   MakeupFeedbackCaptureQuality,
   MakeupFeedbackCompletedResult,
   MakeupFeedbackConfidenceLevel,
+  MakeupFeedbackCorrectionGuide,
   MakeupFeedbackCorrectionPoint,
   MakeupFeedbackDynamicCriterion,
   MakeupFeedbackEvidenceRegion,
@@ -15,6 +16,8 @@ import type {
   MakeupFeedbackObservation,
   MakeupFeedbackPhotoSelection,
   MakeupFeedbackRetakeOutcome,
+  MakeupFeedbackScoreAxisId,
+  MakeupFeedbackScoreBreakdown,
   MakeupFeedbackScoreImpact,
   MakeupFeedbackStrength,
   MakeupFeedbackSummary,
@@ -28,6 +31,8 @@ import {getLocalMakeupFeedbackEntryDate} from './makeupFeedbackJourneyContext';
 
 const FEEDBACK_ANALYSIS_TIMEOUT_MS = 180000;
 const FEEDBACK_REPORT_POLL_INTERVAL_MS = 2000;
+const EXPLAINABLE_COACHING_MODEL_VERSION =
+  'makeup-feedback:bedrock-v9-explainable-coaching';
 const FEEDBACK_GOAL_VALIDATION_ERROR_CODES = new Set([
   'FEEDBACK_GOAL_INVALID',
   'FEEDBACK_GOAL_NEEDS_DETAIL',
@@ -357,6 +362,190 @@ function mapActionSteps(value: unknown, index: number): string[] {
   });
 }
 
+function mapCorrectionGuide(
+  value: unknown,
+  field: string,
+): MakeupFeedbackCorrectionGuide | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  if (!isObject(value)) {
+    throw feedbackContractError(field, '수정 가이드 형식이 잘못되었습니다.');
+  }
+
+  return {
+    amount: requireText(value.amount, `${field}.amount`),
+    coverage: requireText(value.coverage, `${field}.coverage`),
+    steps: requireTextList(value.steps, `${field}.steps`, {
+      maxItems: 4,
+      minItems: 2,
+    }),
+    stopCondition: requireText(value.stopCondition, `${field}.stopCondition`),
+    targetArea: requireText(value.targetArea, `${field}.targetArea`),
+    tool: requireText(value.tool, `${field}.tool`),
+    why: requireText(value.why, `${field}.why`),
+  };
+}
+
+const scoreAxisOrder: readonly MakeupFeedbackScoreAxisId[] = [
+  'application-finish',
+  'placement-balance',
+  'color-value-harmony',
+  'overall-goal-fit',
+];
+const scoreAxisIds = new Set<MakeupFeedbackScoreAxisId>(scoreAxisOrder);
+
+const scoreAxisContract: Record<
+  MakeupFeedbackScoreAxisId,
+  {label: string; maxScore: number}
+> = {
+  'application-finish': {label: '적용 완성도', maxScore: 30},
+  'placement-balance': {label: '배치·형태 균형', maxScore: 25},
+  'color-value-harmony': {label: '색·명암 조화', maxScore: 20},
+  'overall-goal-fit': {label: '전체 조화·목표 적합도', maxScore: 25},
+};
+
+function isScoreAxisId(value: unknown): value is MakeupFeedbackScoreAxisId {
+  return typeof value === 'string' && scoreAxisIds.has(value as MakeupFeedbackScoreAxisId);
+}
+
+function mapScoreBreakdown(
+  value: unknown,
+  expectedScore: number,
+  evaluationStatusByObservationId: ReadonlyMap<
+    string,
+    MakeupFeedbackEvaluationStatus
+  >,
+): MakeupFeedbackScoreBreakdown | undefined {
+  if (value == null) {
+    return undefined;
+  }
+
+  if (!isObject(value) || value.maxScore !== 100 || !Array.isArray(value.axes)) {
+    throw feedbackContractError(
+      'scoreBreakdown',
+      '점수 설명은 합계 100점인 네 가지 기준으로 제공되어야 합니다.',
+    );
+  }
+
+  if (value.axes.length !== scoreAxisIds.size) {
+    throw feedbackContractError(
+      'scoreBreakdown.axes',
+      '점수 기준 네 가지가 정확히 필요합니다.',
+    );
+  }
+
+  const seenAxisIds = new Set<MakeupFeedbackScoreAxisId>();
+  const axes = value.axes.map((rawAxis, index) => {
+    const field = `scoreBreakdown.axes[${index}]`;
+
+    if (!isObject(rawAxis) || !isScoreAxisId(rawAxis.id)) {
+      throw feedbackContractError(`${field}.id`, '알 수 없는 점수 기준입니다.');
+    }
+
+    if (rawAxis.id !== scoreAxisOrder[index]) {
+      throw feedbackContractError(
+        `${field}.id`,
+        '점수 기준의 순서가 앱 계약과 일치하지 않습니다.',
+      );
+    }
+
+    if (seenAxisIds.has(rawAxis.id)) {
+      throw feedbackContractError(`${field}.id`, '점수 기준 id가 중복되었습니다.');
+    }
+    seenAxisIds.add(rawAxis.id);
+    const axisContract = scoreAxisContract[rawAxis.id];
+
+    if (
+      typeof rawAxis.maxScore !== 'number' ||
+      !Number.isInteger(rawAxis.maxScore) ||
+      rawAxis.maxScore !== axisContract.maxScore
+    ) {
+      throw feedbackContractError(
+        `${field}.maxScore`,
+        `${axisContract.label} 배점은 ${axisContract.maxScore}점이어야 합니다.`,
+      );
+    }
+
+    if (rawAxis.label !== axisContract.label) {
+      throw feedbackContractError(
+        `${field}.label`,
+        `점수 기준 이름은 ${axisContract.label}이어야 합니다.`,
+      );
+    }
+
+    if (
+      typeof rawAxis.score !== 'number' ||
+      !Number.isInteger(rawAxis.score) ||
+      rawAxis.score < 0 ||
+      rawAxis.score > rawAxis.maxScore
+    ) {
+      throw feedbackContractError(
+        `${field}.score`,
+        '받은 점수는 0점 이상이고 해당 기준 배점 이하여야 합니다.',
+      );
+    }
+
+    const evidenceIds = requireTextList(rawAxis.evidenceIds, `${field}.evidenceIds`, {
+      maxItems: 8,
+      minItems: 1,
+      unique: true,
+    });
+    const unknownEvidenceIds = evidenceIds.filter(
+      id => !evaluationStatusByObservationId.has(id),
+    );
+
+    if (unknownEvidenceIds.length > 0) {
+      throw feedbackContractError(
+        `${field}.evidenceIds`,
+        `알 수 없는 관찰 근거 id입니다: ${unknownEvidenceIds.join(', ')}`,
+      );
+    }
+    const disallowedEvidenceIds = evidenceIds.filter(id => {
+      const status = evaluationStatusByObservationId.get(id);
+
+      return status !== 'strength' && status !== 'improvement';
+    });
+
+    if (disallowedEvidenceIds.length > 0) {
+      throw feedbackContractError(
+        `${field}.evidenceIds`,
+        '점수 기준 근거는 잘한 점 또는 보완할 점의 관찰만 참조할 수 있습니다.',
+      );
+    }
+
+    return {
+      evidenceIds,
+      id: rawAxis.id,
+      label: axisContract.label,
+      maxScore: rawAxis.maxScore,
+      reason: requireText(rawAxis.reason, `${field}.reason`),
+      score: rawAxis.score,
+    };
+  });
+
+  if (seenAxisIds.size !== scoreAxisIds.size) {
+    throw feedbackContractError('scoreBreakdown.axes', '점수 기준이 누락되었습니다.');
+  }
+
+  const totalMaxScore = axes.reduce((total, axis) => total + axis.maxScore, 0);
+  const totalScore = axes.reduce((total, axis) => total + axis.score, 0);
+
+  if (totalMaxScore !== 100 || totalScore !== expectedScore) {
+    throw feedbackContractError(
+      'scoreBreakdown.axes',
+      '기준별 배점과 받은 점수의 합이 종합 점수와 일치해야 합니다.',
+    );
+  }
+
+  return {
+    axes,
+    formula: requireText(value.formula, 'scoreBreakdown.formula'),
+    maxScore: 100,
+  };
+}
+
 function mapInterpretedGoal(
   value: unknown,
 ): MakeupFeedbackCompletedResult['interpretedGoal'] {
@@ -622,6 +811,21 @@ function mapEvaluations(
       item.status === 'strength' ||
       item.status === 'improvement' ||
       item.status === 'optional';
+    const correctionGuide = mapCorrectionGuide(
+      item.correctionGuide,
+      `${field}.correctionGuide`,
+    );
+
+    if (
+      correctionGuide &&
+      item.status !== 'improvement' &&
+      item.status !== 'optional'
+    ) {
+      throw feedbackContractError(
+        `${field}.correctionGuide`,
+        '수정 가이드는 보완 또는 선택 조정 항목에만 사용할 수 있습니다.',
+      );
+    }
 
     if (item.visibility === 'clear' && visibilityReason !== null) {
       throw feedbackContractError(
@@ -654,7 +858,8 @@ function mapEvaluations(
     } else if (
       observations.length > 0 ||
       goalCriterionIds.length > 0 ||
-      actionSteps.length > 0
+      actionSteps.length > 0 ||
+      correctionGuide
     ) {
       throw feedbackContractError(
         field,
@@ -692,6 +897,7 @@ function mapEvaluations(
     seenTopicIds.add(rawTopicId);
     mappedByTopic.set(rawTopicId, {
       actionSteps,
+      correctionGuide,
       confidence: requireConfidence(item.confidence, `${field}.confidence`),
       description: requireText(item.description, `${field}.description`),
       goalCriterionIds,
@@ -732,11 +938,13 @@ function buildPointsFromEvaluations(evaluations: MakeupFeedbackEvaluation[]): Ma
     )
     .map(evaluation => ({
       id: `${evaluation.topicId}-point`,
+      evaluationId: evaluation.id,
       topicId: evaluation.topicId,
       topicLabel: evaluation.topicLabel,
       title: evaluation.title,
       description: evaluation.description,
       actionSteps: evaluation.actionSteps,
+      correctionGuide: evaluation.correctionGuide,
       actionLabel: '보완 포인트',
       kind: evaluation.kind,
     }));
@@ -917,6 +1125,15 @@ export function mapBackendJobToFeedbackOutcome(
 
   const completedAnalysisStatus = analysisStatus;
   const completedModelVersion = requireText(modelVersion, 'modelVersion');
+  const requiresExplainableCoachingContract =
+    completedModelVersion === EXPLAINABLE_COACHING_MODEL_VERSION;
+
+  if (requiresExplainableCoachingContract && backendResult.scoreBreakdown == null) {
+    throw feedbackContractError(
+      'scoreBreakdown',
+      '새 AI 보고서에는 네 가지 기준의 점수 설명이 필요합니다.',
+    );
+  }
 
   if (
     typeof backendResult.score !== 'number' ||
@@ -977,6 +1194,20 @@ export function mapBackendJobToFeedbackOutcome(
     interpretedGoal.dynamicCriteria.map(criterion => criterion.id),
   );
   const evaluations = mapEvaluations(backendResult.evaluations, criterionIds);
+  const missingCorrectionGuide = requiresExplainableCoachingContract
+    ? evaluations.find(
+        evaluation =>
+          evaluation.status === 'improvement' && !evaluation.correctionGuide,
+      )
+    : undefined;
+
+  if (missingCorrectionGuide) {
+    const evaluationIndex = evaluations.indexOf(missingCorrectionGuide);
+    throw feedbackContractError(
+      `evaluations[${evaluationIndex}].correctionGuide`,
+      '새 AI 보고서의 보완 항목에는 구체적인 수정 가이드가 필요합니다.',
+    );
+  }
   const evaluationStatusByObservationId = new Map<string, MakeupFeedbackEvaluationStatus>(
     evaluations.flatMap(evaluation =>
       (evaluation.observations ?? []).map(
@@ -985,6 +1216,11 @@ export function mapBackendJobToFeedbackOutcome(
     ),
   );
   const observationIds = new Set(evaluationStatusByObservationId.keys());
+  const scoreBreakdown = mapScoreBreakdown(
+    backendResult.scoreBreakdown,
+    backendResult.score,
+    evaluationStatusByObservationId,
+  );
   const unknownObservationRegionIds = evaluations.flatMap(evaluation =>
     (evaluation.observations ?? []).flatMap(observation =>
       (observation.evidenceRegionIds ?? []).filter(
@@ -1046,6 +1282,7 @@ export function mapBackendJobToFeedbackOutcome(
     modelVersion: completedModelVersion,
     points,
     score: backendResult.score,
+    scoreBreakdown,
     scoreConfidence,
     scoreEvidenceIds,
     scoreLabel:
@@ -1232,6 +1469,32 @@ function mapStoredMakeupFeedbackReport(
   return outcome;
 }
 
+function isExplainableCoachingReport(report: BackendFeedbackJob): boolean {
+  const result = report.feedbackPayload?.result;
+  const resultModelVersion = isObject(result) ? stringValue(result.modelVersion) : undefined;
+
+  return (
+    resultModelVersion === EXPLAINABLE_COACHING_MODEL_VERSION ||
+    report.modelVersion === EXPLAINABLE_COACHING_MODEL_VERSION
+  );
+}
+
+export function mapBackendReportsToFeedbackResults(
+  reports: readonly BackendFeedbackJob[],
+): MakeupFeedbackCompletedResult[] {
+  return (reports ?? []).flatMap(report => {
+    try {
+      return [mapStoredMakeupFeedbackReport(report)];
+    } catch (error) {
+      if (isExplainableCoachingReport(report)) {
+        throw error;
+      }
+
+      return [];
+    }
+  });
+}
+
 export async function fetchMakeupFeedbackReports(
   {timeoutMs}: {timeoutMs?: number} = {},
 ): Promise<MakeupFeedbackCompletedResult[]> {
@@ -1240,11 +1503,5 @@ export async function fetchMakeupFeedbackReports(
     {timeoutMs},
   );
 
-  return (reports ?? []).flatMap(report => {
-    try {
-      return [mapStoredMakeupFeedbackReport(report)];
-    } catch {
-      return [];
-    }
-  });
+  return mapBackendReportsToFeedbackResults(reports ?? []);
 }

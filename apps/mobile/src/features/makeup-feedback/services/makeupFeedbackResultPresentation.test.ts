@@ -3,6 +3,8 @@ import {MAKEUP_FEEDBACK_TOPICS} from '../types';
 import {
   getMakeupFeedbackAnalysisSourceLabel,
   getMakeupFeedbackEvidenceRows,
+  getPriorityMakeupFeedbackEvaluation,
+  getPriorityMakeupFeedbackPoint,
   getMakeupFeedbackRecommendationLabel,
   getMakeupFeedbackRetakeActionLabels,
   groupMakeupFeedbackEvaluations,
@@ -60,6 +62,42 @@ expectEqual(
 );
 expectEqual(groups.optional.length, 1, 'optional count');
 expectEqual(groups.notAssessable.length, 2, 'not assessable count');
+expectEqual(
+  getPriorityMakeupFeedbackEvaluation(evaluations)?.topicId,
+  'brow',
+  'first improvement wins when impacts tie',
+);
+expectEqual(
+  getPriorityMakeupFeedbackEvaluation(
+    evaluations.map(evaluation => ({
+      ...evaluation,
+      scoreImpact: evaluation.topicId === 'lens' ? 'high' : 'low',
+    })),
+  )?.topicId,
+  'lens',
+  'higher-impact item is prioritized within the improvement group',
+);
+const priorityEvaluation = getPriorityMakeupFeedbackEvaluation(evaluations)!;
+const topicFallbackPoint = {
+  actionLabel: '보완 포인트',
+  actionSteps: priorityEvaluation.actionSteps,
+  description: priorityEvaluation.description,
+  id: 'topic-fallback',
+  kind: priorityEvaluation.kind,
+  title: priorityEvaluation.title,
+  topicId: priorityEvaluation.topicId,
+  topicLabel: priorityEvaluation.topicLabel,
+};
+const exactPoint = {
+  ...topicFallbackPoint,
+  evaluationId: priorityEvaluation.id,
+  id: 'exact-evaluation-point',
+};
+expectEqual(
+  getPriorityMakeupFeedbackPoint(evaluations, [topicFallbackPoint, exactPoint])?.id,
+  'exact-evaluation-point',
+  'exact evaluation id wins before same-topic fallback',
+);
 const improvementEvidence = getMakeupFeedbackEvidenceRows(groups.improvements[0]!);
 const strengthEvidence = getMakeupFeedbackEvidenceRows(groups.strengths[0]!);
 expectEqual(
