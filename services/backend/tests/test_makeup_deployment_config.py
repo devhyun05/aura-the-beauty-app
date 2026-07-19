@@ -77,14 +77,14 @@ def test_makeup_journey_eas_profiles_keep_production_closed_by_default() -> None
   }
 
 
-def test_dev_deploy_enables_face_analysis_v2_for_api_and_worker() -> None:
+def test_deploy_defaults_face_analysis_v2_off_for_api_and_worker() -> None:
   workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
     encoding="utf-8",
   )
 
   assert (
-    "FACE_ANALYSIS_V2_ENABLED: ${{ vars.FACE_ANALYSIS_V2_ENABLED "
-    "|| (github.ref_name == 'dev' && 'true') || 'false' }}"
+    "FACE_ANALYSIS_V2_ENABLED: "
+    "${{ vars.FACE_ANALYSIS_V2_ENABLED || 'false' }}"
   ) in workflow
   assert workflow.count("FACE_ANALYSIS_V2_ENABLED=${{ env.FACE_ANALYSIS_V2_ENABLED }}") == 2
 
