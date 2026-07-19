@@ -182,6 +182,9 @@ jobs:
       - name: Contract — Makeup recommendation result
         run: npm run test:makeup-recommendation
 
+      - name: Contract — Product recommendation
+        run: npm run test:product-recommendation
+
       - name: Contract — Makeup journey calendar
         run: npm run test:makeup-journey
 

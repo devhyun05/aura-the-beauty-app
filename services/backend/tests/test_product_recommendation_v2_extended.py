@@ -457,6 +457,17 @@ def test_catalog_manifest_accepts_brow_as_a_first_class_product_category() -> No
   assert normalized["products"][0]["shades"][0]["productRegion"] == "brow"
 
 
+def test_catalog_manifest_accepts_shadow_as_an_official_shade_region() -> None:
+  manifest = _catalog_manifest()
+  manifest["products"][0]["externalKey"] = "partner:shadow:1"
+  manifest["products"][0]["productName"] = "Reviewed Shadow"
+  manifest["products"][0]["category"] = "shadow"
+  manifest["products"][0]["shades"][0]["productRegion"] = "shadow"
+  normalized = validate_catalog_manifest(manifest, _catalog_settings())
+  assert normalized["products"][0]["category"] == "shadow"
+  assert normalized["products"][0]["shades"][0]["productRegion"] == "shadow"
+
+
 def test_brow_can_be_a_privacy_safe_broad_preference_bucket() -> None:
   assert broad_preference_bucket({"category:brow": 3}) == "category-brow"
 

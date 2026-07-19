@@ -1,8 +1,19 @@
 # 제품 추천 V2 기획 패키지
 
 작성일: 2026-07-12  
-상태: 구현 전 의사결정안  
+상태: 역사 기획 패키지 + 현재 구현 정본 링크
 대상: iOS 우선 Expo React Native 앱 + FastAPI 백엔드
+
+## 현재 구현 기준 (2026-07-20)
+
+추천제품 허브의 첫 번째 shelf는 저장 AR 룩이 아니라 사용자가 선택한 상황별 메이크업 추천
+보고서와 `anchor/bold/discovery` 룩을 기준으로 한다. 제품은 hard eligibility, 비-base
+Lab/ΔE·피니시 규칙, 제한된 Bedrock Titan embedding 재정렬을 거친 verified catalog에서만
+표시한다. 계산은 보고서 저장 시 룩별 versioned snapshot으로 고정되며 일반 화면 조회는 순위를
+다시 계산하지 않는다. `eye`는 구조화 단계에 따라 shadow와 liner를 분리한다. 이 범위의 최신 source of truth는
+[13. 메이크업 추천 보고서 기반 제품 추천 정본](13-makeup-report-product-recommendations.md)이며,
+아래 초기 AR 중심 기획과 충돌하면 13번 문서를 우선한다. 기존 AR API와 저장 룩 흐름은
+호환성을 위해 유지한다.
 
 ## 한 줄 결론
 
@@ -48,6 +59,7 @@ AR 기반 추천은 가능하다. 다만 현재 저장 플로우가 최종 색�
 | [08. 조사 출처](08-research-sources.md) | 공식 문서와 법령 링크 |
 | [09. 역할별 반박과 결정 기록](09-decision-log-and-red-team.md) | UX·기술·보안·법무 관점의 논쟁과 채택/기각 이유 |
 | [10. 담당 구현 문서](10-owner-product-recommendation-page-spec.md) | 담당 변경 후 제품 추천 페이지 구현 범위와 기능 명세 |
+| [13. 메이크업 추천 보고서 기반 제품 추천 정본](13-makeup-report-product-recommendations.md) | 현재 첫 shelf, 하이브리드 랭킹, API·fallback·소유권 계약 |
 
 ## 우선순위
 

@@ -69,6 +69,7 @@ export type RootStackParamList = {
   SavedMakeupList: undefined;
   ProductRecommendation: {
     reportId?: string;
+    makeupRecommendationReportId?: string;
     arStyleId?: string;
     initialSection?: 'ar' | 'seasonal' | 'personalized' | 'cohort';
   } | undefined;

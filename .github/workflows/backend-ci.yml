@@ -42,6 +42,7 @@ jobs:
 
       - name: Run backend tests
         env:
+          AURA_PRODUCT_RECOMMENDATION_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
           AURA_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
         working-directory: services/backend
         run: python -m pytest -q

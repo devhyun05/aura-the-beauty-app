@@ -49,6 +49,12 @@ from app.services.makeup_recommendation_fit import (
 )
 from app.services.makeup_recommendation_match import attach_match_assessment
 from app.services.makeup_recommendation_products import enrich_makeup_recommendation_products
+from app.services.makeup_report_product_snapshots import (
+  dispatch_makeup_report_product_snapshot_jobs,
+  ensure_makeup_report_product_snapshots,
+  run_makeup_report_product_snapshot_jobs,
+  snapshot_job_is_schedulable,
+)
 from app.services.makeup_recommendation_session import (
   answer_session,
   begin_generation,
@@ -1731,6 +1737,112 @@ async def dispatch_recommendation_image_job(
     return "failed"
 
 
+async def dispatch_makeup_product_snapshot_job(
+  *,
+  db: Database,
+  background_tasks: BackgroundTasks,
+  report_id: UUID,
+  user_id: UUID,
+  settings: Settings,
+) -> None:
+  """Persist pending look mappings now; GET provides a durable retry backstop."""
+
+  try:
+    await dispatch_makeup_report_product_snapshot_jobs(
+      db=db,
+      background_tasks=background_tasks,
+      report_id=report_id,
+      user_id=user_id,
+      settings=settings,
+      all_looks=True,
+    )
+  except Exception:  # noqa: BLE001 - product matching must not discard a completed report.
+    logger.exception(
+      "[aura:makeup-recommendation] product-snapshot-dispatch-failed report=%s",
+      report_id,
+    )
+
+
+async def run_makeup_post_generation_jobs(
+  *,
+  db: Database,
+  report_id: UUID,
+  user_id: UUID,
+  settings: Settings,
+  product_run_ids: list[UUID],
+) -> None:
+  """Run independent image and product jobs concurrently on inline workers."""
+
+  jobs = [run_recommendation_image_job(report_id, user_id, settings, db=db)]
+  if product_run_ids:
+    jobs.append(run_makeup_report_product_snapshot_jobs(product_run_ids, settings, db=db))
+  results = await asyncio.gather(*jobs, return_exceptions=True)
+  for error in results:
+    if isinstance(error, BaseException):
+      logger.error(
+        "[aura:makeup-recommendation] post-generation-background-job-failed report=%s type=%s",
+        report_id,
+        type(error).__name__,
+      )
+
+
+async def dispatch_makeup_post_generation_jobs(
+  *,
+  db: Database,
+  background_tasks: BackgroundTasks,
+  report_id: UUID,
+  user_id: UUID,
+  settings: Settings,
+) -> str:
+  """Create durable product rows and avoid serializing them ahead of image work."""
+
+  product_run_ids: list[UUID] = []
+  try:
+    runs = await ensure_makeup_report_product_snapshots(
+      db,
+      settings,
+      report_id=report_id,
+      user_id=user_id,
+      all_looks=True,
+    )
+    product_run_ids = [
+      UUID(str(run["id"]))
+      for run in runs
+      if snapshot_job_is_schedulable(run)
+    ]
+  except Exception:  # noqa: BLE001 - image generation remains independent.
+    logger.exception(
+      "[aura:makeup-recommendation] product-snapshot-ensure-failed report=%s",
+      report_id,
+    )
+
+  if settings.ai_job_execution_mode_normalized == "inline":
+    background_tasks.add_task(
+      run_makeup_post_generation_jobs,
+      db=db,
+      report_id=report_id,
+      user_id=user_id,
+      settings=settings,
+      product_run_ids=product_run_ids,
+    )
+    return "pending"
+
+  if product_run_ids:
+    background_tasks.add_task(
+      run_makeup_report_product_snapshot_jobs,
+      product_run_ids,
+      settings,
+      db=db,
+    )
+  return await dispatch_recommendation_image_job(
+    db=db,
+    background_tasks=background_tasks,
+    report_id=report_id,
+    user_id=user_id,
+    settings=settings,
+  )
+
+
 @router.post("/scenarios")
 async def create_scenarios(
   payload: MakeupScenarioRequest,
@@ -1842,6 +1954,13 @@ async def generate_makeup_recommendation_session(
   user = await ensure_user(db, auth)
   generation = await begin_generation(db, user["id"], session_id)
   if generation.get("reused"):
+    await dispatch_makeup_product_snapshot_job(
+      db=db,
+      background_tasks=background_tasks,
+      report_id=UUID(str(generation["reportId"])),
+      user_id=user["id"],
+      settings=settings,
+    )
     generation.pop("reused", None)
     return success(generation)
 
@@ -1864,10 +1983,10 @@ async def generate_makeup_recommendation_session(
     await fail_generation(db, user["id"], session_id)
     raise
 
-  image_status = await dispatch_recommendation_image_job(
+  image_status = await dispatch_makeup_post_generation_jobs(
     db=db,
     background_tasks=background_tasks,
-    report_id=result["reportId"],
+    report_id=UUID(str(result["reportId"])),
     user_id=user["id"],
     settings=settings,
   )
@@ -2217,12 +2336,22 @@ async def refine_recommendation_report(
       settings.openai_image_model_id,
       str(source.get("image_mode") or "generic"),
     )
-  image_status = await dispatch_recommendation_image_job(
-    db=db,
-    background_tasks=background_tasks,
-    report_id=row["id"],
-    user_id=user["id"],
-    settings=settings,
+  image_status = (
+    await dispatch_makeup_post_generation_jobs(
+      db=db,
+      background_tasks=background_tasks,
+      report_id=UUID(str(row["id"])),
+      user_id=user["id"],
+      settings=settings,
+    )
+    if schema_version == "makeup-recommendation-v2"
+    else await dispatch_recommendation_image_job(
+      db=db,
+      background_tasks=background_tasks,
+      report_id=row["id"],
+      user_id=user["id"],
+      settings=settings,
+    )
   )
   response_recommendation = recommendation
   if schema_version == "makeup-recommendation-v2":

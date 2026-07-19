@@ -1,14 +1,18 @@
 """PostgreSQL contract coverage for Product Recommendation V2.
 
-The test data lives inside one rolled-back transaction.  It can therefore
-exercise the production schema without ever becoming displayable catalog data.
+The production schema is installed into a disposable database and the test
+data lives inside one rolled-back transaction. It can therefore exercise the
+real schema without ever becoming displayable catalog data.
 """
 
+import asyncio
+from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import json
 import os
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -30,6 +34,8 @@ from app.api.products import (
 from app.core.errors import AppError
 from app.core.security import AuthContext
 from app.core.settings import Settings
+from app.db.check_schema import check_schema, format_schema_report
+from app.db.init_db import apply_schema
 from app.schemas.makeup import MakeupStyleCreate, MakeupStyleUpdate
 from app.schemas.product_recommendation import ProductEvent, ProductLikeRequest
 from app.services.product_catalog import (
@@ -58,6 +64,51 @@ from app.services.shopping_products import build_product_recommendation_data
 
 
 TEST_DATABASE_URL = os.getenv("AURA_PRODUCT_RECOMMENDATION_TEST_DATABASE_URL")
+
+
+def _replace_database_name(database_url: str, database_name: str) -> str:
+  parsed = urlsplit(database_url)
+  if parsed.scheme not in {"postgres", "postgresql"} or not parsed.netloc:
+    raise ValueError(
+      "AURA_PRODUCT_RECOMMENDATION_TEST_DATABASE_URL must be a PostgreSQL URL with a host",
+    )
+  return urlunsplit((parsed.scheme, parsed.netloc, f"/{database_name}", parsed.query, ""))
+
+
+async def _create_database(admin_url: str, database_name: str) -> None:
+  connection = await asyncpg.connect(admin_url)
+  try:
+    await connection.execute(f'create database "{database_name}"')
+  finally:
+    await connection.close()
+
+
+async def _drop_database(admin_url: str, database_name: str) -> None:
+  connection = await asyncpg.connect(admin_url)
+  try:
+    await connection.execute(
+      "select pg_terminate_backend(pid) from pg_stat_activity "
+      "where datname = $1 and pid <> pg_backend_pid()",
+      database_name,
+    )
+    await connection.execute(f'drop database if exists "{database_name}"')
+  finally:
+    await connection.close()
+
+
+@pytest.fixture(scope="module")
+def isolated_database_url() -> Iterator[str]:
+  assert TEST_DATABASE_URL is not None
+  database_name = f"product_recommendation_test_{uuid4().hex}"
+  isolated_url = _replace_database_name(TEST_DATABASE_URL, database_name)
+  asyncio.run(_create_database(TEST_DATABASE_URL, database_name))
+  try:
+    asyncio.run(apply_schema(isolated_url))
+    report = asyncio.run(check_schema(isolated_url))
+    assert report["ok"], format_schema_report(report)
+    yield isolated_url
+  finally:
+    asyncio.run(_drop_database(TEST_DATABASE_URL, database_name))
 
 
 class ConnectionDatabase:
@@ -131,9 +182,10 @@ def saved_ar_payload() -> dict:
 )
 @pytest.mark.asyncio
 async def test_product_recommendation_v2_contracts_in_postgres(
+  isolated_database_url: str,
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-  connection = await asyncpg.connect(TEST_DATABASE_URL)
+  connection = await asyncpg.connect(isolated_database_url)
   transaction = connection.transaction()
   await transaction.start()
   try:

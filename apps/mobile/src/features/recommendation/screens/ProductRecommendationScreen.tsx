@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Linking, ScrollView, StyleSheet, View} from 'react-native';
-import {useFocusEffect} from '@react-navigation/native';
+import {useFocusEffect, useIsFocused} from '@react-navigation/native';
 
 import {
   getLikedProducts,
@@ -54,9 +54,8 @@ export function getProductRecommendationReportLabel(
 }
 
 type ProductRecommendationScreenProps = {
-  arStyleId?: string | null;
-  onCapturePhoto?: () => void;
-  onCreateArLook?: () => void;
+  preferredMakeupReportId?: string | null;
+  onCreateMakeupRecommendation?: () => void;
   onOpenAuradin?: () => void;
   onOpenLikedProducts?: () => void;
   onOpenProduct?: (
@@ -69,13 +68,15 @@ type ProductRecommendationScreenProps = {
     title: string,
     arStyleId?: string | null,
   ) => void;
-  onPickGalleryPhoto?: () => void;
   onSearch?: (query: string) => void;
+  // Kept distinct from preferredMakeupReportId: this is face-analysis context
+  // for Auradin, never a MakeupRecommendation report identity.
   sourceReportId?: string | null;
   initialSection?: ProductRecommendationShelf;
 };
 
 export function ProductRecommendationScreen(props: ProductRecommendationScreenProps = {}) {
+  const isScreenFocused = useIsFocused();
   const {showToast, toast} = useTransientToast(2600);
   const productScrollRef = useRef<ScrollView | null>(null);
   const didScrollToInitialSectionRef = useRef(false);
@@ -90,7 +91,6 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
   const [likedProducts, setLikedProducts] = useState<Product[]>([]);
   const [hubRefreshKey, setHubRefreshKey] = useState(0);
   const [preferenceMutationRefreshKey, setPreferenceMutationRefreshKey] = useState(0);
-  const [orbScrollState, setOrbScrollState] = useState<'idle' | 'compact' | 'hidden'>('idle');
 
   const applyServerLikedProducts = useCallback((products: Product[]) => {
     const nextIds = new Set(products.map(product => product.id));
@@ -117,7 +117,7 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
 
   useEffect(() => {
     didScrollToInitialSectionRef.current = false;
-  }, [props.arStyleId, props.initialSection]);
+  }, [props.initialSection, props.preferredMakeupReportId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -244,17 +244,15 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
         contentGap={spacing.xxl}
         horizontalPaddingLeft={spacing.screenX}
         horizontalPaddingRight={spacing.screenX}
-        onScrollActivityChange={(active, fast) => {
-          setOrbScrollState(!active ? 'idle' : fast ? 'hidden' : 'compact');
-        }}
         scroll
         scrollViewRef={productScrollRef}
         topPadding="none">
         <ProductRecommendationHubContent
-          arStyleId={props.arStyleId}
+          isActive={isScreenFocused}
+          preferredMakeupReportId={props.preferredMakeupReportId}
           likedProductIds={likedProductIds}
           likedProducts={likedProducts}
-          onCreateArLook={props.onCreateArLook ?? props.onCapturePhoto ?? (() => undefined)}
+          onCreateMakeupRecommendation={props.onCreateMakeupRecommendation}
           onOpenProduct={handleOpenProduct}
           onOpenShelf={props.onOpenShelf ?? (() => undefined)}
           onSearch={props.onSearch ?? (() => undefined)}
@@ -272,8 +270,7 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
         />
       </AppScreen>
       <AuradinFloatingOrb
-        compact={orbScrollState !== 'idle'}
-        hidden={orbScrollState === 'hidden'}
+        isActive={isScreenFocused}
         onOpen={props.onOpenAuradin ?? (() => undefined)}
       />
       {toast}

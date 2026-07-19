@@ -212,6 +212,12 @@ POST_SCHEMA_MIGRATIONS = {
   "schema.sql:product-category-brow-v1": """
     alter type product_category add value if not exists 'brow';
   """,
+  "schema.sql:product-shades-shadow-region-v1": """
+    alter table product_shades
+      drop constraint if exists chk_product_shades_region,
+      add constraint chk_product_shades_region
+        check (product_region in ('lip','cheek','shadow','liner','base','brow'));
+  """,
   "schema.sql:product-event-query-minimization-v1": """
     update product_engagement_events
     set context = context - 'query'
@@ -871,6 +877,97 @@ POST_SCHEMA_MIGRATIONS = {
       on account_deletion_tombstones (deleted_at);
   """,
   "schema.sql:makeup-recommendation-v2": MAKEUP_RECOMMENDATION_SCHEMA_SQL,
+  "schema.sql:makeup-report-product-snapshots-v1": """
+    alter table product_recommendation_runs
+      add column if not exists source_makeup_report_id uuid,
+      add column if not exists source_look_id text,
+      add column if not exists strategy text not null default 'legacy_v1',
+      add column if not exists algorithm_version text,
+      add column if not exists recipe_hash text,
+      add column if not exists catalog_version text,
+      add column if not exists status text not null default 'ready',
+      add column if not exists revision integer not null default 1,
+      add column if not exists started_at timestamptz,
+      add column if not exists completed_at timestamptz,
+      add column if not exists error_code text;
+
+    alter table product_recommendation_runs
+      drop constraint if exists chk_product_recommendation_runs_strategy,
+      add constraint chk_product_recommendation_runs_strategy check (
+        strategy in (
+          'legacy_v1','ar_v1','seasonal_v1','personalized_v1','cohort_v1','makeup_report_v1'
+        )
+      ),
+      drop constraint if exists chk_product_recommendation_runs_status,
+      add constraint chk_product_recommendation_runs_status check (
+        status in ('pending','processing','ready','partial','failed')
+      ),
+      drop constraint if exists chk_product_recommendation_runs_revision,
+      add constraint chk_product_recommendation_runs_revision check (revision >= 1),
+      drop constraint if exists chk_product_recommendation_runs_makeup_snapshot,
+      add constraint chk_product_recommendation_runs_makeup_snapshot check (
+        (
+          strategy = 'makeup_report_v1'
+          and source_makeup_report_id is not null
+          and source_look_id is not null
+          and char_length(btrim(source_look_id)) between 1 and 128
+          and recipe_hash is not null
+          and recipe_hash ~ '^[0-9a-f]{64}$'
+          and algorithm_version is not null
+          and char_length(btrim(algorithm_version)) between 1 and 128
+          and catalog_version is not null
+          and char_length(btrim(catalog_version)) between 1 and 128
+        )
+        or (
+          strategy <> 'makeup_report_v1'
+          and source_makeup_report_id is null
+        )
+      ),
+      drop constraint if exists chk_product_recommendation_runs_makeup_completion,
+      add constraint chk_product_recommendation_runs_makeup_completion check (
+        strategy <> 'makeup_report_v1'
+        or (status = 'pending' and started_at is null and completed_at is null and error_code is null)
+        or (status = 'processing' and started_at is not null and completed_at is null and error_code is null)
+        or (
+          status in ('ready','partial')
+          and started_at is not null
+          and completed_at is not null
+          and completed_at >= started_at
+          and error_code is null
+        )
+        or (
+          status = 'failed'
+          and started_at is not null
+          and completed_at is not null
+          and completed_at >= started_at
+          and error_code is not null
+          and char_length(btrim(error_code)) between 1 and 128
+        )
+      ),
+      drop constraint if exists fk_product_recommendation_runs_source_makeup_report,
+      add constraint fk_product_recommendation_runs_source_makeup_report
+        foreign key (source_makeup_report_id)
+        references makeup_recommendation_reports(id) on delete cascade;
+
+    create index if not exists idx_product_recommendation_runs_source_makeup_report
+      on product_recommendation_runs (source_makeup_report_id)
+      where source_makeup_report_id is not null;
+    create unique index if not exists uq_product_recommendation_runs_makeup_snapshot_revision
+      on product_recommendation_runs (
+        source_makeup_report_id, source_look_id, recipe_hash,
+        algorithm_version, catalog_version, revision
+      )
+      where strategy = 'makeup_report_v1';
+    create unique index if not exists uq_product_recommendation_runs_makeup_look_revision
+      on product_recommendation_runs (source_makeup_report_id, source_look_id, revision)
+      where strategy = 'makeup_report_v1';
+    create index if not exists idx_product_recommendation_runs_makeup_ready_revision
+      on product_recommendation_runs (user_id, source_makeup_report_id, source_look_id, revision desc)
+      where strategy = 'makeup_report_v1' and status in ('ready','partial');
+    create index if not exists idx_product_recommendation_runs_makeup_work_queue
+      on product_recommendation_runs (status, started_at, created_at)
+      where strategy = 'makeup_report_v1' and status in ('pending','processing');
+  """,
   "schema.sql:makeup-trend-draft-evidence-v1": """
     do $migration$
     begin

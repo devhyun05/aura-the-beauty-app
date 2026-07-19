@@ -43,18 +43,9 @@ export function ProductRecommendationRouteScreen({
       routeName="ProductRecommendation"
       onBack={() => navigateMainTab(navigation, 'HomeTab')}>
       <ProductRecommendationScreen
-        arStyleId={route.params?.arStyleId}
         initialSection={route.params?.initialSection}
-        onCapturePhoto={() =>
-          navigation.navigate('FaceCapture', {afterAnalysisRoute: 'ProductRecommendation'})
-        }
-        onPickGalleryPhoto={() =>
-          navigation.navigate('FaceCapture', {
-            afterAnalysisRoute: 'ProductRecommendation',
-            initialSource: 'gallery',
-          })
-        }
-        onCreateArLook={() => navigation.navigate('UnityMakeupCapture')}
+        preferredMakeupReportId={route.params?.makeupRecommendationReportId}
+        onCreateMakeupRecommendation={() => navigation.navigate('MakeupRecommendation')}
         onOpenAuradin={() =>
           navigation.navigate(
             'AuradinSearch',

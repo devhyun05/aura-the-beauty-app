@@ -163,3 +163,22 @@ def test_makeup_journey_postgres_contract_runs_in_ci_with_an_isolated_database()
   assert 'drop database if exists "{database_name}"' in postgres_test
   assert "apply_schema(isolated_url)" in postgres_test
   assert "check_schema(isolated_url)" in postgres_test
+
+
+def test_product_recommendation_postgres_contract_runs_in_ci_with_an_isolated_database() -> None:
+  backend_ci_workflow = (PROJECT_ROOT / ".github/workflows/backend-ci.yml").read_text(
+    encoding="utf-8",
+  )
+  postgres_test = (
+    PROJECT_ROOT / "services/backend/tests/test_product_recommendation_postgres.py"
+  ).read_text(encoding="utf-8")
+
+  assert backend_ci_workflow.count(
+    "AURA_PRODUCT_RECOMMENDATION_TEST_DATABASE_URL: "
+    "postgresql://postgres:postgres@127.0.0.1:5432/postgres",
+  ) == 1
+  assert 'os.getenv("AURA_PRODUCT_RECOMMENDATION_TEST_DATABASE_URL")' in postgres_test
+  assert 'create database "{database_name}"' in postgres_test
+  assert 'drop database if exists "{database_name}"' in postgres_test
+  assert "apply_schema(isolated_url)" in postgres_test
+  assert "check_schema(isolated_url)" in postgres_test
