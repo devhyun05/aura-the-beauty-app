@@ -12,6 +12,9 @@ import {
 import {
   BROW_CORE_LEFT_INDICES,
   BROW_CORE_RIGHT_INDICES,
+  BROW_UPPER_EDGE_LEFT_INDICES,
+  BROW_UPPER_EDGE_RIGHT_INDICES,
+  CANTHAL_TANGENT_INDICES,
   FACE_GEOMETRY_LANDMARK_INDICES,
   FACE_GEOMETRY_REQUIRED_INDICES,
 } from './landmarkIndices';
@@ -308,6 +311,18 @@ function buildBaseMap(): PixelLandmarkMap {
   const cor = computeFaceGeometryMetrics({map: corrected, rollCorrectionApplied: true});
   expectClose(cor.canthalTiltRightDeg.value, 0, 'corrected tilt R ~0 (−rollDeg removes +R roll)', 0.01);
   expectClose(cor.canthalTiltLeftDeg.value, 0, 'corrected tilt L ~0 (−rollDeg removes +R roll)', 0.01);
+}
+
+// ── 12. 신규 후보 인덱스: 눈썹 상연 edge 는 좌우 5점, 기존 brow core 부분집합 ──
+{
+  expectEqual(BROW_UPPER_EDGE_RIGHT_INDICES.length, 5, 'brow upper edge R len');
+  expectEqual(BROW_UPPER_EDGE_LEFT_INDICES.length, 5, 'brow upper edge L len');
+  for (const i of BROW_UPPER_EDGE_RIGHT_INDICES) {
+    expectEqual(BROW_CORE_RIGHT_INDICES.includes(i), true, `R edge ${i} in core`);
+  }
+  for (const i of BROW_UPPER_EDGE_LEFT_INDICES) {
+    expectEqual(BROW_CORE_LEFT_INDICES.includes(i), true, `L edge ${i} in core`);
+  }
 }
 
 console.log('faceGeometryMath.test.ts passed');
