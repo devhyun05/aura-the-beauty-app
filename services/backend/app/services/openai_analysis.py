@@ -802,6 +802,103 @@ def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
   return metadata
 RECOMMENDED_MAKEUP_COUNT = 1
 
+# Bedrock forced tool use로 단일호출 출력을 강제하는 스키마. required 목록은
+# _validate_analysis_result_before_normalization의 필수 필드와 일치해야 하며,
+# test_analysis_tool_schema_matches_validator가 드리프트를 막는다. additionalProperties는
+# 열어둔다 — 모델이 beautyGuide 등 선택 필드를 함께 채울 수 있게.
+FACE_ANALYSIS_TOOL_NAME = "return_face_analysis_report"
+
+_STR = {"type": "string", "minLength": 1}
+
+
+def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
+  return {"type": "object", "properties": properties, "required": required}
+
+
+def _build_face_analysis_tool_schema() -> dict[str, Any]:
+  guideline_keys = ["brow", "blush", "highlight", "eyeshadow", "eyeliner", "lip"]
+  region_note = _obj(
+    {"insight": _STR, "evidence": _STR, "recommendation": _STR},
+    ["insight", "evidence", "recommendation"],
+  )
+  styling_row = _obj(
+    {"category": _STR, "note": _STR, "why": _STR},
+    ["category", "note", "why"],
+  )
+  styling_look = _obj(
+    {
+      "title": _STR,
+      "subtitle": _STR,
+      "description": _STR,
+      "rows": {"type": "array", "minItems": 4, "items": styling_row},
+    },
+    ["title", "subtitle", "description", "rows"],
+  )
+  axis = _obj(
+    {"key": _STR, "leftLabel": _STR, "rightLabel": _STR, "value": {"type": "number"}},
+    ["key", "leftLabel", "rightLabel", "value"],
+  )
+  return _obj(
+    {
+      "faceShape": _STR,
+      "skinType": _STR,
+      "recommendedMood": _STR,
+      "summary": _STR,
+      "shortSummary": _STR,
+      "skinAnalysisSummary": _STR,
+      "baseMakeupGuide": _STR,
+      "makeupGuideline": _obj({key: _STR for key in guideline_keys}, guideline_keys),
+      "recommendedMakeups": {
+        "type": "array",
+        "minItems": RECOMMENDED_MAKEUP_COUNT,
+        "maxItems": RECOMMENDED_MAKEUP_COUNT,
+        "items": _obj(
+          {
+            "title": _STR,
+            "subtitle": _STR,
+            "description": _STR,
+            "tags": {"type": "array", "minItems": 2, "items": _STR},
+          },
+          ["title", "subtitle", "description", "tags"],
+        ),
+      },
+      "regionNotes": _obj(
+        {region: region_note for region in ("upper", "mid", "lower", "jaw")},
+        ["upper", "mid", "lower", "jaw"],
+      ),
+      "impressionNotes": _obj(
+        {
+          "overallMood": _STR,
+          "paragraph": _STR,
+          "keywords": {"type": "array", "minItems": 3, "items": _STR},
+          "axes": {"type": "array", "minItems": 2, "maxItems": 2, "items": axis},
+        },
+        ["overallMood", "paragraph", "keywords", "axes"],
+      ),
+      "stylingLooks": _obj(
+        {"natural": styling_look, "glam": styling_look},
+        ["natural", "glam"],
+      ),
+    },
+    [
+      "faceShape",
+      "skinType",
+      "recommendedMood",
+      "summary",
+      "shortSummary",
+      "skinAnalysisSummary",
+      "baseMakeupGuide",
+      "makeupGuideline",
+      "recommendedMakeups",
+      "regionNotes",
+      "impressionNotes",
+      "stylingLooks",
+    ],
+  )
+
+
+FACE_ANALYSIS_TOOL_SCHEMA = _build_face_analysis_tool_schema()
+
 DEFAULT_IMPRESSION_AXES = (
   {"key": "softness", "leftLabel": "부드러움", "rightLabel": "또렷함", "value": 0.0},
   {"key": "vividness", "leftLabel": "차분함", "rightLabel": "화사함", "value": 0.0},
@@ -2172,6 +2269,25 @@ class OpenAIAnalysisService:
       usage.get("output_tokens"),
     )
 
+  def _extract_bedrock_tool_input(
+    self,
+    response_payload: dict[str, Any],
+    tool_name: str,
+  ) -> dict[str, Any] | None:
+    """forced tool use 응답에서 구조화 input(dict)을 꺼낸다. 없으면 None."""
+    content = response_payload.get("content")
+    if not isinstance(content, list):
+      return None
+    for part in content:
+      if (
+        isinstance(part, dict)
+        and part.get("type") == "tool_use"
+        and part.get("name") == tool_name
+        and isinstance(part.get("input"), dict)
+      ):
+        return part["input"]
+    return None
+
   def _extract_bedrock_output_text(self, response_payload: dict[str, Any]) -> str:
     content = response_payload.get("content")
 
@@ -2210,43 +2326,53 @@ class OpenAIAnalysisService:
       content_type,
     )
     source_image_base64 = base64.b64encode(source_image_bytes).decode("utf-8")
+    tool_enforced = self.settings.bedrock_analysis_tool_enforcement
     logger.info(
-      "[aura:bedrock] analysis:start model=%s region=%s",
+      "[aura:bedrock] analysis:start model=%s region=%s toolEnforced=%s",
       model_id,
       self.settings.effective_bedrock_analysis_region,
+      tool_enforced,
     )
-    response = self._bedrock_runtime_client().invoke_model(
-      modelId=model_id,
-      body=json.dumps(
+    request_body: dict[str, Any] = {
+      "anthropic_version": "bedrock-2023-05-31",
+      "max_tokens": self.settings.bedrock_analysis_max_tokens,
+      "temperature": 0.2,
+      "system": "You are a concise, practical K-beauty makeup analyst. Return JSON only.",
+      "messages": [
         {
-          "anthropic_version": "bedrock-2023-05-31",
-          "max_tokens": self.settings.bedrock_analysis_max_tokens,
-          "temperature": 0.2,
-          "system": "You are a concise, practical K-beauty makeup analyst. Return JSON only.",
-          "messages": [
+          "role": "user",
+          "content": [
+            {"type": "text", "text": self._build_analysis_prompt(payload)},
             {
-              "role": "user",
-              "content": [
-                {"type": "text", "text": self._build_analysis_prompt(payload)},
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": content_type,
-                    "data": source_image_base64,
-                  },
-                },
-              ],
+              "type": "image",
+              "source": {
+                "type": "base64",
+                "media_type": content_type,
+                "data": source_image_base64,
+              },
             },
           ],
         },
-        ensure_ascii=False,
-      ),
+      ],
+    }
+    if tool_enforced:
+      # 강제 tool use — 모델이 스키마의 required 필드를 모두 채우게 강제한다.
+      request_body["tools"] = [
+        {
+          "name": FACE_ANALYSIS_TOOL_NAME,
+          "description": "Return the complete K-beauty face analysis report.",
+          "input_schema": FACE_ANALYSIS_TOOL_SCHEMA,
+        },
+      ]
+      request_body["tool_choice"] = {"type": "tool", "name": FACE_ANALYSIS_TOOL_NAME}
+
+    response = self._bedrock_runtime_client().invoke_model(
+      modelId=model_id,
+      body=json.dumps(request_body, ensure_ascii=False),
       accept="application/json",
       contentType="application/json",
     )
     response_payload = json.loads(response["body"].read())
-    output_text = self._extract_bedrock_output_text(response_payload)
     stop_reason = self._observe_bedrock_stop_reason(
       response_payload,
       context="analysis",
@@ -2258,15 +2384,30 @@ class OpenAIAnalysisService:
       started_at=started_at,
     )
 
-    if not output_text:
-      raise AppError(
-        502,
-        "BEDROCK_EMPTY_OUTPUT",
-        "Bedrock Claude analysis returned an empty response.",
-      )
+    if tool_enforced:
+      # 강제 tool use — 도구 응답이 없으면 조용히 텍스트로 넘어가지 않고 명시적으로
+      # 실패시킨다(스키마 강제가 안 걸린 걸 숨기지 않음).
+      tool_input = self._extract_bedrock_tool_input(response_payload, FACE_ANALYSIS_TOOL_NAME)
+      if tool_input is None:
+        raise AppError(
+          502,
+          "BEDROCK_TOOL_USE_MISSING",
+          "Bedrock analysis did not return the enforced tool output.",
+          {"stopReason": stop_reason or "unknown"},
+        )
+      raw_result = tool_input
+    else:
+      output_text = self._extract_bedrock_output_text(response_payload)
+      if not output_text:
+        raise AppError(
+          502,
+          "BEDROCK_EMPTY_OUTPUT",
+          "Bedrock Claude analysis returned an empty response.",
+        )
+      raw_result = self._parse_json_output(output_text)
 
     try:
-      parsed = self._normalize_analysis_result(self._parse_json_output(output_text))
+      parsed = self._normalize_analysis_result(raw_result)
     except AppError as exc:
       if stop_reason == "max_tokens":
         raise AppError(

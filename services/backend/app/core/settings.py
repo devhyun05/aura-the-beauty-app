@@ -93,6 +93,11 @@ class Settings(BaseSettings):
   # 누락 필드를 실패로 돌리므로, 상한이 낮으면 절단→검증 실패가 사용자 재촬영
   # 요구로 이어진다. 요구 출력(~90값)의 한국어 문장 기준 여유치로 4000.
   bedrock_analysis_max_tokens: int = Field(default=4000, ge=1200, le=8192)
+  # 단일 호출(analyze_text)의 Bedrock 출력을 강제 tool use로 스키마 강제한다.
+  # 프롬프트 부탁만으로는 claude-3-5-sonnet이 무거운 필드를 생략해 FACE_ANALYSIS_
+  # AI_INCOMPLETE로 실패하던 문제의 근본 대응. tool_use 블록이 없으면 기존 텍스트
+  # 파싱으로 폴백. 실DB/실Bedrock 검증 전 끌 수 있도록 플래그(기본 ON).
+  bedrock_analysis_tool_enforcement: bool = True
   bedrock_guardrail_id: str | None = None
   bedrock_guardrail_version: str | None = None
   bedrock_guardrail_region: str | None = None
