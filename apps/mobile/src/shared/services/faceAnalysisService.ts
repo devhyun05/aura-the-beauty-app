@@ -720,6 +720,11 @@ async function waitForCompleteAnalysisReport(
       const anchorPreview = getAnchorPreview(currentJob);
       if (anchorPreview) {
         anchorPreviewSent = true;
+        console.info('[aura:analysis] anchor-preview', {
+          elapsedMs: Date.now() - startedAt,
+          faceShape: anchorPreview.faceShape,
+          jobId: currentJob.id ?? null,
+        });
         onAnchorPreview?.(anchorPreview);
       }
     }

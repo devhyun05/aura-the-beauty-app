@@ -2739,6 +2739,11 @@ class OpenAIAnalysisService:
       stage="anchor",
     )
     anchor_values = {key: anchor_raw.get(key) for key in ANCHOR_FIELD_KEYS}
+    logger.info(
+      "[aura:bedrock] analysis:anchor-ready durationMs=%s faceShape=%s",
+      round((time.monotonic() - started) * 1000),
+      anchor_values.get("faceShape"),
+    )
 
     # 앵커 확정 즉시 콜백(로딩 프리뷰용) — 실패해도 본 분석은 계속.
     if on_anchor is not None:
