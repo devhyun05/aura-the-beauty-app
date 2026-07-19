@@ -153,8 +153,10 @@ export async function analyzeFaceGeometry2d(
     rollCorrectionApplied: rollCorrection.applied,
   });
   const regionVisuals = regionVisualsBuilder(correctedMap, detected.imageWidth, detected.imageHeight);
+  // 오버레이 정합: 앵커는 원본(비회전) 좌표로 수집해 촬영 사진 위에 정확히 얹는다.
+  // (지표값은 correctedMap 기준으로 이미 계산됨 — 앵커는 위치 검증용, 값은 라벨로 표시)
   const debugAnchors = collectFaceGeometryDebugAnchors(
-    correctedMap,
+    pixelMap,
     detected.imageWidth,
     detected.imageHeight,
   );
