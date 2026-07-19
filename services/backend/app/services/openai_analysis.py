@@ -1,5 +1,6 @@
 import asyncio
 import base64
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from ipaddress import ip_address
@@ -830,6 +831,21 @@ def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
   return {"type": "object", "properties": properties, "required": required}
 
 
+# 구조화 피부 상세(#5) — 각 관찰 부면을 {label, description}로. V2 SkinPerception의
+# 사용자 노출 축(내부 confidence/sensitivity 제외)에 대응.
+SKIN_PERCEPTION_ASPECTS = (
+  "texture",
+  "pores",
+  "sebumDryness",
+  "shineDistribution",
+  "shineType",
+  "pigmentation",
+  "redness",
+  "darkCircles",
+  "toneUniformity",
+)
+
+
 def _build_face_analysis_tool_schema() -> dict[str, Any]:
   guideline_keys = ["brow", "blush", "highlight", "eyeshadow", "eyeliner", "lip"]
   region_note = _obj(
@@ -853,6 +869,11 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
     {"key": _STR, "leftLabel": _STR, "rightLabel": _STR, "value": {"type": "number"}},
     ["key", "leftLabel", "rightLabel", "value"],
   )
+  skin_aspect = _obj({"label": _STR, "description": _STR}, ["label", "description"])
+  skin_perception = _obj(
+    {aspect: skin_aspect for aspect in SKIN_PERCEPTION_ASPECTS},
+    list(SKIN_PERCEPTION_ASPECTS),
+  )
   return _obj(
     {
       "faceShape": _STR,
@@ -861,6 +882,7 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "summary": _STR,
       "shortSummary": _STR,
       "skinAnalysisSummary": _STR,
+      "skinPerception": skin_perception,
       "baseMakeupGuide": _STR,
       "makeupGuideline": _obj({key: _STR for key in guideline_keys}, guideline_keys),
       "recommendedMakeups": {
@@ -902,6 +924,7 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "summary",
       "shortSummary",
       "skinAnalysisSummary",
+      "skinPerception",
       "baseMakeupGuide",
       "makeupGuideline",
       "recommendedMakeups",
@@ -913,6 +936,82 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
 
 
 FACE_ANALYSIS_TOOL_SCHEMA = _build_face_analysis_tool_schema()
+
+# ── 팬아웃(Phase 4) 스키마 스캐폴딩 ─────────────────────────────────────────
+# 단일 소스(FACE_ANALYSIS_TOOL_SCHEMA)에서 부분집합으로 파생해 드리프트를 원천 차단.
+# 앵커 콜이 공유값(faceShape/skinType/recommendedMood)을 단독 저작하고, A/B는 그 3필드를
+# 빼서 top-level 키가 disjoint → merge는 shallow update로 자명. 검증은 merge 후 전체
+# 결과에 기존 _validate_analysis_result_before_normalization 1회로 재사용한다.
+ANCHOR_FIELD_KEYS = ("faceShape", "skinType", "recommendedMood")
+PERCEPTION_FIELD_KEYS = (
+  "summary",
+  "shortSummary",
+  "skinAnalysisSummary",
+  "regionNotes",
+  "impressionNotes",
+)
+# prescription을 처방(makeup)과 스타일링으로 분할해 병목 레그를 낮춘다(5분할).
+PRESCRIPTION_FIELD_KEYS = (
+  "baseMakeupGuide",
+  "makeupGuideline",
+  "recommendedMakeups",
+)
+STYLING_FIELD_KEYS = ("stylingLooks",)
+# 구조화 피부(#5)는 독립 병렬 레그로 둔다 — perception/prescription이 이미 ~23s라
+# 어느 쪽에 붙이면 30s를 넘긴다. 별도 레그면 max(레그)에 흡수돼 지연 flat.
+SKIN_FIELD_KEYS = ("skinPerception",)
+
+
+def _subset_face_analysis_schema(keys: tuple[str, ...]) -> dict[str, Any]:
+  properties = FACE_ANALYSIS_TOOL_SCHEMA["properties"]
+  return _obj({key: properties[key] for key in keys}, list(keys))
+
+
+ANCHOR_TOOL_SCHEMA = _subset_face_analysis_schema(ANCHOR_FIELD_KEYS)
+PERCEPTION_TOOL_SCHEMA = _subset_face_analysis_schema(PERCEPTION_FIELD_KEYS)
+PRESCRIPTION_TOOL_SCHEMA = _subset_face_analysis_schema(PRESCRIPTION_FIELD_KEYS)
+STYLING_TOOL_SCHEMA = _subset_face_analysis_schema(STYLING_FIELD_KEYS)
+SKIN_TOOL_SCHEMA = _subset_face_analysis_schema(SKIN_FIELD_KEYS)
+
+# 드리프트 가드(임포트 시 즉시 실패): 그룹 키가 서로 겹치지 않고 합집합이 전체 required와
+# 정확히 일치해야 한다. 전체 스키마에 필드를 추가하고 그룹 배정을 빠뜨리면 여기서 잡힌다.
+_FANOUT_GROUP_KEYS = (
+  ANCHOR_FIELD_KEYS
+  + PERCEPTION_FIELD_KEYS
+  + PRESCRIPTION_FIELD_KEYS
+  + STYLING_FIELD_KEYS
+  + SKIN_FIELD_KEYS
+)
+if len(_FANOUT_GROUP_KEYS) != len(set(_FANOUT_GROUP_KEYS)):
+  raise RuntimeError("fan-out 스키마 그룹 키가 겹칩니다(anchor/perception/prescription).")
+if set(_FANOUT_GROUP_KEYS) != set(FACE_ANALYSIS_TOOL_SCHEMA["required"]):
+  raise RuntimeError(
+    "fan-out 스키마 그룹의 합집합이 FACE_ANALYSIS_TOOL_SCHEMA required와 불일치합니다. "
+    "전체 스키마에 필드를 추가했다면 anchor/perception/prescription 중 하나에 배정하세요.",
+  )
+
+# 그룹별 스코프 지시문 — forced tool use가 출력 형태를 강제하지만, 지시문으로 어떤
+# 파트를 쓸지 명시해 모델 혼선을 줄인다(A/B는 앵커값 재판정 금지도 함께).
+_FANOUT_ANCHOR_DIRECTIVE = (
+  "이번 호출에서는 faceShape, skinType, recommendedMood 세 값만 판정해서 반환해. "
+  "다른 필드는 만들지 마."
+)
+_FANOUT_PERCEPTION_DIRECTIVE = (
+  "이번 호출에서는 summary, shortSummary, skinAnalysisSummary, regionNotes, "
+  "impressionNotes만 작성해. 메이크업 가이드·추천·스타일링은 만들지 마."
+)
+_FANOUT_PRESCRIPTION_DIRECTIVE = (
+  "이번 호출에서는 baseMakeupGuide, makeupGuideline, recommendedMakeups만 작성해. "
+  "스타일링 룩·얼굴형·피부타입·무드·요약·부위노트·인상노트는 만들지 마."
+)
+_FANOUT_STYLING_DIRECTIVE = (
+  "이번 호출에서는 stylingLooks 하나만 작성해(natural·glam). 얼굴형·피부타입·무드·"
+  "요약·부위노트·인상노트·메이크업 가이드는 만들지 마."
+)
+_FANOUT_SKIN_DIRECTIVE = (
+  "이번 호출에서는 skinPerception 하나만 작성해. 사진에서 관찰 가능한 피부 부면을 "
+  "각각 {label(짧은 상태명), description(한 문장 관찰 설명)}으로. 의학적 진단은 하지 마."
+)
 
 DEFAULT_IMPRESSION_AXES = (
   {"key": "softness", "leftLabel": "부드러움", "rightLabel": "또렷함", "value": 0.0},
@@ -930,6 +1029,10 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "beautyGuide is optional but recommended. beautyGuide keys: bestColors, "
   "bestNeutrals, bestAccentColors, avoidColors, hairColorDirection, "
   "hairstyleDirection, finalFormula. "
+  "skinPerception keys: texture, pores, sebumDryness, shineDistribution, "
+  "shineType, pigmentation, redness, darkCircles, toneUniformity. Each value "
+  "is an object with keys label (short Korean status name) and description "
+  "(one short Korean observation sentence, no medical diagnosis). "
   "regionNotes keys: upper, mid, lower, jaw. Each value is an object with "
   "keys insight, evidence, recommendation (all short Korean sentences): "
   "insight = the impression conclusion for that region, evidence = which "
@@ -947,6 +1050,114 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "intensity — natural is a light daily version, glam is a stronger, more "
   "defined version."
 )
+
+# ── 지시문 모듈화 (레그별 슬림 프롬프트용) ────────────────────────────────────
+# 모든 레그가 공유하는 코어(성별·측정 해석·한국어·중복금지)와 섹션별 지시문으로
+# 분리. 단일 경로는 코어+전 섹션+필드가이드를 합쳐 쓰고(동일 내용), 팬아웃은 각
+# 레그가 코어+자기 섹션만 받아 입력 토큰을 줄인다(사진·측정값은 전 레그 유지).
+_ANALYSIS_CORE_INSTRUCTIONS = (
+  "Act as a professional personal color analyst, makeup artist, hairstylist, and image consultant. "
+  "사용자의 얼굴 사진을 분석해서 개인 맞춤 뷰티 분석 보고서를 만들어줘. "
+  "피부 톤, 언더톤, 대비감, 눈동자와 머리 색, 얼굴형, 눈매, 광대/볼 구조, 눈썹, 입술, 전체 분위기를 함께 판단해. "
+  "전문 퍼스널 컬러 컨설턴트와 메이크업 아티스트가 실제 고객을 상담하듯, 사진 속 실제 얼굴 특징과 컬러링을 근거로 판단해. "
+  "사진 조명이나 안경/그림자 때문에 확정이 어려운 내용은 과하게 단정하지 말고 가장 가능성 높은 방향으로 표현해. "
+  "요청 메타데이터의 profileGender는 계정에 저장된 성별이다. 사진으로 성별을 추정하지 말고 이 값을 따라. "
+  "female이면 여성 메이크업 중심으로, male이면 남성 그루밍 메이크업 중심으로 추천하고, "
+  "unspecified거나 값이 없으면 성별을 추정하지 않는 중성적인 표현을 기본 방향으로 사용해. "
+  "사진 속 사용자의 스타일은 보존하고, 메이크업 추천이 사용자의 성별 표현을 바꾸거나 다른 성별처럼 보이게 만들면 안 돼. "
+  "반드시 한국어 JSON 객체 하나만 반환해. "
+  "퍼스널 컬러와 톤 요약은 절대 새로 판정하거나 출력하지 마. 기기 측정값은 메이크업 색 선택의 근거로만 사용해. "
+  "간결하게 써 — 같은 내용을 필드 간·문장 간 반복하지 말고, 라벨(label)을 설명(description)에서 그대로 재서술하지 마. "
+  "요청 메타데이터의 faceVerticalThirds.measurementMode가 full_vertical_thirds이면 검증된 상안부/중안부/하안부 실측값을 "
+  "faceShape 판단과 summary, makeupGuideline의 음영/블러셔/눈썹 배치에 자연스럽게 반영해. "
+  "faceVerticalThirds.faceLengthJudgment가 있으면 얼굴 가로/세로 길이 분류는 그 verdict를 그대로 따라 "
+  "(wide=가로 폭이 있는 편, average=평균 범위, long=세로로 긴 편, borderline_wide/borderline_long=경계라 단정 금지, "
+  "indeterminate=판정 보류) 비율 숫자나 사진으로 재판정하지 마. "
+  "measurementMode가 middle_lower_only이면 중안부와 하안부의 상대 길이만 사용할 수 있고, 헤어라인·이마·상안부·전체 얼굴 길이·3분할 우세를 사진이나 평균값으로 추론하지 마. "
+  "요청 메타데이터에 face3d(기기 ARKit 얼굴 메시로 실측한 정규화 3D 지표)가 있으면 얼굴 입체감 표현과 "
+  "makeupGuideline의 음영/하이라이트 배치에 근거로 반영해. 기본 지표는 noseTipProjection 코끝 돌출, "
+  "chinProjection 턱 전방 볼록면(Pogonion) 돌출, upperLipToELine/lowerLipToELine 입술-E라인 signed 거리 "
+  "(양수는 앞, 음수는 뒤), centralProjectionScore 얼굴 중앙부 입체감이야. Tier-2 지표는 noseLength 코뿌리-코끝 길이, "
+  "nasalBridgeStraightness 코뿌리-코끝 선에 대한 콧대 RMS 이탈량(작을수록 기준선에 가까움), nasalAxisDeviation 코축 좌우 편위 "
+  "(피사체 기준 음수=Left, 양수=Right), alarWidth alare-alare 콧볼 폭, malarProjectionLeft/Right 좌우 앞광대의 전방 돌출이야. "
+  "face3d 각 metric의 value는 얼굴 크기로 나눈 무차원 상대값이야. 사용자 출력은 절대 mm·임상 진단·모집단 백분위가 아니고 "
+  "숫자로 노출하면 안 되며, value가 null이면 미측정이야. "
+  "요청 메타데이터에 faceGeometry2d(정면 사진에서 실측한 2D 기하 지표: 눈 폭·눈 개방도·미간 비율·눈꼬리 기울기 canthalTilt(도)·"
+  "눈-눈썹 간격·눈썹 기울기 browSlope(도)·입 폭·윗입술/아랫입술 두께비·하관 폭 비율·입꼬리 비대칭 — 비율은 무차원, 각도는 도 단위, "
+  "Left/Right는 피사체 기준, value가 null이면 미측정)가 있으면 눈매/눈썹/입술 판단과 makeupGuideline의 아이라이너·눈썹·립 배치에 근거로 반영해. "
+  "각 지표의 confidence가 낮으면(예: 0.5 미만) 그 지표만으로 인상을 단정하지 말고 사진 관찰을 우선하거나 표현을 완화해. "
+  "요청 메타데이터에 measuredPersonalColor(기기에서 조명 보정 후 실측한 퍼스널 컬러: tone.top/secondary 12톤 코드, "
+  "axes 5축 -1..1(temperature 쿨→웜, value 라이트→딥, chroma 뮤트→비비드, clarity 소프트→클리어, contrast 저→고대비), "
+  "부위별 평균 Lab 색값 regions, 부위 간 명도·색차 relations, measurementConfidence 0..1, correction.applied 조명 보정 여부)가 있으면 "
+  "makeupGuideline과 색 선택의 근거로 사진 관찰과 함께 사용하고, 실측과 사진이 다르면 실측 축을 우선해. "
+  "단 status가 insufficient이거나 measurementConfidence가 낮으면 사진 관찰을 우선하고, 영문 톤 코드(autumn_muted 등)는 그대로 쓰지 말고 한국어로 풀어 써. "
+  "요청 메타데이터의 measurements는 위 실측 지표들의 저장 기록이지만, faceVerticalThirds 원본 H는 AI 입력에서 제외돼 있어. 세로 비율은 검증된 요약 필드만 사용해. "
+  "실측 지표(faceVerticalThirds, face3d, faceGeometry2d, measuredPersonalColor)가 사진 관찰과 다르면 실측 지표를 우선하되, "
+  "수치를 그대로 나열하지 말고 해석해서 문장에 녹여 써. "
+  "단일 지표 하나만으로 성격이나 인상을 단정하지 마. 예를 들어 중안부 길이만으로 '온화한 인상'이라고 쓰지 말고, "
+  "눈꼬리 방향·입꼬리 곡선·볼륨·윤곽 흐름처럼 둘 이상의 관찰이 함께 있을 때만 인상어를 연결해. "
+)
+_ANALYSIS_SEC_ANCHOR = (
+  "앱 상단 요약에 바로 쓰이도록 faceShape와 recommendedMood를 정확하고 짧게 채워. "
+  "faceShape는 얼굴형과 인상 특징을 짧게 작성해. "
+  "skinType은 사진에서 관찰한 피부 타입을 짧은 한국어(예: 중성, 복합성, 건성 등)로 작성해. "
+  "recommendedMood는 18자 이내의 짧은 무드명으로 작성하고, 긴 설명 문장이나 이유, 쉼표로 이어지는 긴 문구를 쓰지 마. "
+)
+_ANALYSIS_SEC_PERCEPTION = (
+  "summary는 컬러/메이크업/헤어 방향을 한 번에 이해할 수 있게 두 문장 이내로 작성해. "
+  "shortSummary와 skinAnalysisSummary도 각각 두 문장 이내로 제한해. "
+  "skinAnalysisSummary는 피부 결, 광, 붉은기, 톤 균일감처럼 사진에서 관찰 가능한 표현만 다루고 의학적 진단은 하지 마. "
+  "regionNotes는 top-level 필드로 상안부(upper: 이마·눈썹·눈)·중안부(mid: 코·인중·볼)·하안부(lower: 입술)·"
+  "광대와 턱(jaw) 4개 부위 각각을 {insight, evidence, recommendation} 객체로 채워. "
+  "insight는 그 부위의 인상 결론을 한 문장, evidence는 위에서 설명한 실측 지표 중 무엇 때문에 그렇게 보이는지를 "
+  "숫자 없이 해석해서 한 문장(지표가 없으면 사진 관찰 근거), recommendation은 그래서 어떤 메이크업을 어떻게 하면 "
+  "좋은지 한 문장으로 써. 세 문장 모두 숫자·mm·백분위를 노출하지 마. "
+  "impressionNotes는 top-level 필드로 overallMood(전체 인상을 18자 이내로), keywords(전체 인상 키워드 3~5개 배열), "
+  "paragraph(전체 인상을 종합하는 두 문장 이내 설명)를 포함해. impressionNotes는 전체 결론만 쓰고, "
+  "regionNotes는 그 결론의 부위별 근거와 실행 가이드만 써서 같은 문장을 반복하지 마. "
+  "axes는 인상을 2개 축으로 배치: 각 {key, leftLabel, rightLabel, value(-1..1)}. "
+  "예: 부드러움↔또렷함, 차분함↔화사함. 숫자는 사용자에게 노출되지 않으니 인상 위치만 정직하게. "
+)
+_ANALYSIS_SEC_SKIN = (
+  "skinPerception은 top-level 필드로 texture(피부결), pores(모공), sebumDryness(유수분), "
+  "shineDistribution(유분 분포), shineType(광 타입), pigmentation(색소), redness(붉은기), "
+  "darkCircles(다크서클), toneUniformity(톤 균일감) 9개 부면 각각을 {label(짧은 상태명), "
+  "description(사진에서 관찰 가능한 한 문장, 의학적 진단 금지)}로 채워. "
+)
+_ANALYSIS_SEC_PRESCRIPTION = (
+  "baseMakeupGuide는 top-level 필드로 작성하고, makeupGuideline 안에는 brow, eyeshadow, lip, highlight, eyeliner, blush만 작성해. "
+  "makeupGuideline의 각 항목은 촬영 사진과 보고서 판단을 바탕으로 한 문장으로 짧게 작성해. "
+  "makeupGuideline에는 단순 색상 추천뿐 아니라 배치 가이드도 포함해. "
+  "brow는 눈썹 모양/결/두께 방향, eyeshadow는 색과 눈두덩이 배치, lip은 립 컬러와 립라인 방향, "
+  "highlight는 T존/눈밑/광대 등 위치, eyeliner는 점막/꼬리/두께, blush는 광대/볼 위치와 확산 방향을 설명해. "
+  "추천 메이크업은 위 보고서에서 판단한 퍼스널 컬러, 얼굴형, 톤 요약, 추천 무드, 눈매, 입술 톤, 헤어 방향에 근거해서 정확히 1개만 작성해. "
+  "recommendedMakeups는 단순 텍스트 추천이 아니라, 이후 같은 사용자 얼굴 사진에 적용할 데일리 메이크업 이미지 1장의 콘셉트가 되어야 해. "
+  "recommendedMakeups 항목은 보고서의 어떤 판단 때문에 그 데일리 룩이 어울리는지 description에 명확히 반영해. "
+  "추천은 민낯이나 기본 보정 사진처럼 보이면 안 되지만, 사용자의 성별 표현과 일상 스타일에 맞는 자연스러운 데일리 강도여야 해. "
+  "남성 사용자라면 피부 톤 보정, 눈썹 결 정리, 자연스러운 음영, 립밤/톤 보정, 유분 정돈처럼 남성 그루밍에 어울리는 방식으로 작성해. "
+  "여성 사용자라면 퍼스널 컬러에 맞춘 베이스, 아이, 블러셔, 립 포인트를 자연스럽게 제안해. "
+  "다른 사람이나 일반 모델 기준이 아니라 업로드된 사용자 얼굴에 어울리는 추천으로만 작성해. "
+  "추천명은 클리어 & 글로시, 과즙상, 깔끔한 또렷함 같은 고정 예시를 반복하지 말고 사진 분석 결과에 맞춰 새롭게 판단해. "
+  "비추천 메이크업, 피해야 할 메이크업, avoidedMakeups는 절대 생성하지 마. "
+  "각 추천은 앱 카드에 들어갈 수 있게 title은 12자 이내, subtitle은 16자 이내, description은 두 줄 이내, tags는 2개만 포함해. "
+  "텍스트는 짧고 실용적으로 작성하고, 일반론이나 누구에게나 맞는 조언을 쓰지 마. "
+)
+_ANALYSIS_SEC_STYLING = (
+  "stylingLooks는 top-level 필드로 natural과 glam 두 키를 포함해. 같은 사용자 얼굴 특징과 퍼스널 컬러에 근거하되, "
+  "natural과 glam은 강도가 아니라 전략을 다르게 해 — natural은 본연의 결을 살려 은은하게 정돈하는 방향, "
+  "glam은 눈·입 등 한두 곳에 포인트를 집중해 대비를 끌어올리는 방향으로, 무엇을 강조하고 무엇을 덜어낼지가 서로 달라야 해. "
+  "각각 title, subtitle, description과 rows(4~6개, category는 base/brow/eyeshadow/eyeliner/blush/lip 중 하나, "
+  "note는 그 부위를 구체적으로 어떻게 표현하는지 제품 질감·기법까지, "
+  "why는 이 사용자의 실측 특징(눈꼬리 방향·입술 두께·퍼스널컬러 등)과 연결해 왜 어울리는지 한 문장)을 채워. "
+)
+# 팬아웃 레그별 섹션 매핑 — stage → 지시문 섹션.
+_ANALYSIS_STAGE_SECTIONS = {
+  "anchor": _ANALYSIS_SEC_ANCHOR,
+  "perception": _ANALYSIS_SEC_PERCEPTION,
+  "skin": _ANALYSIS_SEC_SKIN,
+  "prescription": _ANALYSIS_SEC_PRESCRIPTION,
+  "styling": _ANALYSIS_SEC_STYLING,
+}
 
 MAKEUP_RECOMMENDATION_ROLES = ("anchor",)
 MAKEUP_RECOMMENDATION_AR_FILTERS = {
@@ -1544,91 +1755,30 @@ class OpenAIAnalysisService:
     return [dict(by_role[role]) for role in MAKEUP_RECOMMENDATION_ROLES]
 
   def _build_analysis_prompt(self, payload: dict[str, Any]) -> str:
-    metadata = _safe_analysis_prompt_metadata(payload)
-
+    # 정적 지시문 + 동적 메타데이터를 이어붙인 최종 프롬프트(바이트 동일 유지).
+    # 캐싱(Phase 3)·팬아웃(Phase 4)이 두 조각을 각각 재사용할 수 있게 분리했다.
     return (
-      "Act as a professional personal color analyst, makeup artist, hairstylist, and image consultant. "
-      "사용자의 얼굴 사진을 분석해서 개인 맞춤 뷰티 분석 보고서를 만들어줘. "
-      "피부 톤, 언더톤, 대비감, 눈동자와 머리 색, 얼굴형, 눈매, 광대/볼 구조, 눈썹, 입술, 전체 분위기를 함께 판단해. "
-      "전문 퍼스널 컬러 컨설턴트와 메이크업 아티스트가 실제 고객을 상담하듯, 사진 속 실제 얼굴 특징과 컬러링을 근거로 판단해. "
-      "사진 조명이나 안경/그림자 때문에 확정이 어려운 내용은 과하게 단정하지 말고 가장 가능성 높은 방향으로 표현해. "
-      "요청 메타데이터의 profileGender는 계정에 저장된 성별이다. 사진으로 성별을 추정하지 말고 이 값을 따라. "
-      "female이면 여성 메이크업 중심으로, male이면 남성 그루밍 메이크업 중심으로 추천하고, "
-      "unspecified거나 값이 없으면 성별을 추정하지 않는 중성적인 표현을 기본 방향으로 사용해. "
-      "사진 속 사용자의 스타일은 보존하고, 메이크업 추천이 사용자의 성별 표현을 바꾸거나 다른 성별처럼 보이게 만들면 안 돼. "
-      "반드시 한국어 JSON 객체 하나만 반환해. "
-      "앱 상단 요약에 바로 쓰이도록 faceShape와 recommendedMood를 정확하고 짧게 채워. "
-      "퍼스널 컬러와 톤 요약은 절대 새로 판정하거나 출력하지 마. 기기 측정값은 메이크업 색 선택의 근거로만 사용해. "
-      "faceShape는 얼굴형과 인상 특징을 짧게 작성해. "
-      "recommendedMood는 18자 이내의 짧은 무드명으로 작성하고, 긴 설명 문장이나 이유, 쉼표로 이어지는 긴 문구를 쓰지 마. "
-      "summary는 컬러/메이크업/헤어 방향을 한 번에 이해할 수 있게 두 문장 이내로 작성해. "
-      "shortSummary와 skinAnalysisSummary도 각각 두 문장 이내로 제한해. "
-      "skinAnalysisSummary는 피부 결, 광, 붉은기, 톤 균일감처럼 사진에서 관찰 가능한 표현만 다루고 의학적 진단은 하지 마. "
-      "baseMakeupGuide는 top-level 필드로 작성하고, makeupGuideline 안에는 brow, eyeshadow, lip, highlight, eyeliner, blush만 작성해. "
-      "makeupGuideline의 각 항목은 촬영 사진과 보고서 판단을 바탕으로 한 문장으로 짧게 작성해. "
-      "makeupGuideline에는 단순 색상 추천뿐 아니라 배치 가이드도 포함해. "
-      "brow는 눈썹 모양/결/두께 방향, eyeshadow는 색과 눈두덩이 배치, lip은 립 컬러와 립라인 방향, "
-      "highlight는 T존/눈밑/광대 등 위치, eyeliner는 점막/꼬리/두께, blush는 광대/볼 위치와 확산 방향을 설명해. "
-      "beautyGuide에는 bestColors, bestNeutrals, bestAccentColors, avoidColors, hairColorDirection, hairstyleDirection, finalFormula를 포함해. "
-      "각 beautyGuide 값은 앱이나 문서에서 시각화하기 쉬운 짧은 배열 또는 짧은 문장으로 작성해. "
-      "추천 메이크업은 위 보고서에서 판단한 퍼스널 컬러, 얼굴형, 톤 요약, 추천 무드, 눈매, 입술 톤, 헤어 방향에 근거해서 정확히 1개만 작성해. "
-      "recommendedMakeups는 단순 텍스트 추천이 아니라, 이후 같은 사용자 얼굴 사진에 적용할 데일리 메이크업 이미지 1장의 콘셉트가 되어야 해. "
-      "recommendedMakeups 항목은 보고서의 어떤 판단 때문에 그 데일리 룩이 어울리는지 description에 명확히 반영해. "
-      "추천은 민낯이나 기본 보정 사진처럼 보이면 안 되지만, 사용자의 성별 표현과 일상 스타일에 맞는 자연스러운 데일리 강도여야 해. "
-      "남성 사용자라면 피부 톤 보정, 눈썹 결 정리, 자연스러운 음영, 립밤/톤 보정, 유분 정돈처럼 남성 그루밍에 어울리는 방식으로 작성해. "
-      "여성 사용자라면 퍼스널 컬러에 맞춘 베이스, 아이, 블러셔, 립 포인트를 자연스럽게 제안해. "
-      "다른 사람이나 일반 모델 기준이 아니라 업로드된 사용자 얼굴에 어울리는 추천으로만 작성해. "
-      "추천명은 클리어 & 글로시, 과즙상, 깔끔한 또렷함 같은 고정 예시를 반복하지 말고 사진 분석 결과에 맞춰 새롭게 판단해. "
-      "비추천 메이크업, 피해야 할 메이크업, avoidedMakeups는 절대 생성하지 마. "
-      "각 추천은 앱 카드에 들어갈 수 있게 title은 12자 이내, subtitle은 16자 이내, description은 두 줄 이내, tags는 2개만 포함해. "
-      "텍스트는 짧고 실용적으로 작성하고, 일반론이나 누구에게나 맞는 조언을 쓰지 마. "
-      "요청 메타데이터의 faceVerticalThirds.measurementMode가 full_vertical_thirds이면 검증된 상안부/중안부/하안부 실측값을 "
-      "faceShape 판단과 summary, makeupGuideline의 음영/블러셔/눈썹 배치에 자연스럽게 반영해. "
-      "faceVerticalThirds.faceLengthJudgment가 있으면 얼굴 가로/세로 길이 분류는 그 verdict를 그대로 따라 "
-      "(wide=가로 폭이 있는 편, average=평균 범위, long=세로로 긴 편, borderline_wide/borderline_long=경계라 단정 금지, "
-      "indeterminate=판정 보류) 비율 숫자나 사진으로 재판정하지 마. "
-      "measurementMode가 middle_lower_only이면 중안부와 하안부의 상대 길이만 사용할 수 있고, 헤어라인·이마·상안부·전체 얼굴 길이·3분할 우세를 사진이나 평균값으로 추론하지 마. "
-      "요청 메타데이터에 face3d(기기 ARKit 얼굴 메시로 실측한 정규화 3D 지표)가 있으면 얼굴 입체감 표현과 "
-      "makeupGuideline의 음영/하이라이트 배치에 근거로 반영해. 기본 지표는 noseTipProjection 코끝 돌출, "
-      "chinProjection 턱 전방 볼록면(Pogonion) 돌출, upperLipToELine/lowerLipToELine 입술-E라인 signed 거리 "
-      "(양수는 앞, 음수는 뒤), centralProjectionScore 얼굴 중앙부 입체감이야. Tier-2 지표는 noseLength 코뿌리-코끝 길이, "
-      "nasalBridgeStraightness 코뿌리-코끝 선에 대한 콧대 RMS 이탈량(작을수록 기준선에 가까움), nasalAxisDeviation 코축 좌우 편위 "
-      "(피사체 기준 음수=Left, 양수=Right), alarWidth alare-alare 콧볼 폭, malarProjectionLeft/Right 좌우 앞광대의 전방 돌출이야. "
-      "face3d 각 metric의 value는 얼굴 크기로 나눈 무차원 상대값이야. 사용자 출력은 절대 mm·임상 진단·모집단 백분위가 아니고 "
-      "숫자로 노출하면 안 되며, value가 null이면 미측정이야. "
-      "요청 메타데이터에 faceGeometry2d(정면 사진에서 실측한 2D 기하 지표: 눈 폭·눈 개방도·미간 비율·눈꼬리 기울기 canthalTilt(도)·"
-      "눈-눈썹 간격·눈썹 기울기 browSlope(도)·입 폭·윗입술/아랫입술 두께비·하관 폭 비율·입꼬리 비대칭 — 비율은 무차원, 각도는 도 단위, "
-      "Left/Right는 피사체 기준, value가 null이면 미측정)가 있으면 눈매/눈썹/입술 판단과 makeupGuideline의 아이라이너·눈썹·립 배치에 근거로 반영해. "
-      "각 지표의 confidence가 낮으면(예: 0.5 미만) 그 지표만으로 인상을 단정하지 말고 사진 관찰을 우선하거나 표현을 완화해. "
-      "요청 메타데이터에 measuredPersonalColor(기기에서 조명 보정 후 실측한 퍼스널 컬러: tone.top/secondary 12톤 코드, "
-      "axes 5축 -1..1(temperature 쿨→웜, value 라이트→딥, chroma 뮤트→비비드, clarity 소프트→클리어, contrast 저→고대비), "
-      "부위별 평균 Lab 색값 regions, 부위 간 명도·색차 relations, measurementConfidence 0..1, correction.applied 조명 보정 여부)가 있으면 "
-      "makeupGuideline과 색 선택의 근거로 사진 관찰과 함께 사용하고, 실측과 사진이 다르면 실측 축을 우선해. "
-      "단 status가 insufficient이거나 measurementConfidence가 낮으면 사진 관찰을 우선하고, 영문 톤 코드(autumn_muted 등)는 그대로 쓰지 말고 한국어로 풀어 써. "
-      "요청 메타데이터의 measurements는 위 실측 지표들의 저장 기록이지만, faceVerticalThirds 원본 H는 AI 입력에서 제외돼 있어. 세로 비율은 검증된 요약 필드만 사용해. "
-      "실측 지표(faceVerticalThirds, face3d, faceGeometry2d, measuredPersonalColor)가 사진 관찰과 다르면 실측 지표를 우선하되, "
-      "수치를 그대로 나열하지 말고 해석해서 문장에 녹여 써. "
-      "regionNotes는 top-level 필드로 상안부(upper: 이마·눈썹·눈)·중안부(mid: 코·인중·볼)·하안부(lower: 입술)·"
-      "광대와 턱(jaw) 4개 부위 각각을 {insight, evidence, recommendation} 객체로 채워. "
-      "insight는 그 부위의 인상 결론을 한 문장, evidence는 위에서 설명한 실측 지표 중 무엇 때문에 그렇게 보이는지를 "
-      "숫자 없이 해석해서 한 문장(지표가 없으면 사진 관찰 근거), recommendation은 그래서 어떤 메이크업을 어떻게 하면 "
-      "좋은지 한 문장으로 써. 세 문장 모두 숫자·mm·백분위를 노출하지 마. "
-      "단일 지표 하나만으로 성격이나 인상을 단정하지 마. 예를 들어 중안부 길이만으로 '온화한 인상'이라고 쓰지 말고, "
-      "눈꼬리 방향·입꼬리 곡선·볼륨·윤곽 흐름처럼 둘 이상의 관찰이 함께 있을 때만 인상어를 연결해. "
-      "impressionNotes는 top-level 필드로 overallMood(전체 인상을 18자 이내로), keywords(전체 인상 키워드 3~5개 배열), "
-      "paragraph(전체 인상을 종합하는 두 문장 이내 설명)를 포함해. impressionNotes는 전체 결론만 쓰고, "
-      "regionNotes는 그 결론의 부위별 근거와 실행 가이드만 써서 같은 문장을 반복하지 마. "
-      "axes는 인상을 2개 축으로 배치: 각 {key, leftLabel, rightLabel, value(-1..1)}. "
-      "예: 부드러움↔또렷함, 차분함↔화사함. 숫자는 사용자에게 노출되지 않으니 인상 위치만 정직하게. "
-      "stylingLooks는 top-level 필드로 natural과 glam 두 키를 포함해. 같은 사용자 얼굴 특징과 퍼스널 컬러에 근거하되, "
-      "natural과 glam은 강도가 아니라 전략을 다르게 해 — natural은 본연의 결을 살려 은은하게 정돈하는 방향, "
-      "glam은 눈·입 등 한두 곳에 포인트를 집중해 대비를 끌어올리는 방향으로, 무엇을 강조하고 무엇을 덜어낼지가 서로 달라야 해. "
-      "각각 title, subtitle, description과 rows(4~6개, category는 base/brow/eyeshadow/eyeliner/blush/lip 중 하나, "
-      "note는 그 부위를 구체적으로 어떻게 표현하는지 제품 질감·기법까지, "
-      "why는 이 사용자의 실측 특징(눈꼬리 방향·입술 두께·퍼스널컬러 등)과 연결해 왜 어울리는지 한 문장)을 채워. "
+      f"{self._analysis_static_instructions()}"
+      f"{self._analysis_dynamic_metadata(payload)}"
+    )
+
+  def _analysis_dynamic_metadata(self, payload: dict[str, Any]) -> str:
+    # 요청별로 바뀌는 측정 메타데이터(사진 축소본은 별도 이미지 블록). 캐시 불가 서픽스.
+    metadata = _safe_analysis_prompt_metadata(payload)
+    return f"요청 메타데이터: {json.dumps(metadata, ensure_ascii=False)}"
+
+  def _analysis_static_instructions(self) -> str:
+    # 단일 경로(전체 스키마)용 — 코어 + 전 섹션 + 필드 가이드를 모듈에서 조립.
+    # 팬아웃은 _fanout_group_prompt가 코어 + 해당 레그 섹션만 쓴다(입력 토큰 절감).
+    return (
+      f"{_ANALYSIS_CORE_INSTRUCTIONS}"
+      f"{_ANALYSIS_SEC_ANCHOR}"
+      f"{_ANALYSIS_SEC_PERCEPTION}"
+      f"{_ANALYSIS_SEC_SKIN}"
+      f"{_ANALYSIS_SEC_PRESCRIPTION}"
+      f"{_ANALYSIS_SEC_STYLING}"
       "아래는 값 예시가 아니라 필드 구조 설명이야. 설명 문구를 복사하지 말고, 반드시 사진을 분석해서 실제 값으로 채워:\n"
       f"{ANALYSIS_OUTPUT_FIELD_GUIDE}\n"
-      f"요청 메타데이터: {json.dumps(metadata, ensure_ascii=False)}"
     )
 
   def _parse_json_output(self, output_text: str) -> dict[str, Any]:
@@ -2177,6 +2327,18 @@ class OpenAIAnalysisService:
     ):
       require_text(result.get(key), key)
 
+    skin_perception = result.get("skinPerception")
+    if not isinstance(skin_perception, dict):
+      missing.append("skinPerception")
+    else:
+      for aspect in SKIN_PERCEPTION_ASPECTS:
+        entry = skin_perception.get(aspect)
+        if not isinstance(entry, dict):
+          missing.append(f"skinPerception.{aspect}")
+          continue
+        for key in ("label", "description"):
+          require_text(entry.get(key), f"skinPerception.{aspect}.{key}")
+
     guideline = result.get("makeupGuideline")
     if not isinstance(guideline, dict):
       missing.append("makeupGuideline")
@@ -2491,6 +2653,200 @@ class OpenAIAnalysisService:
     )
 
     return parsed
+
+  # ── 팬아웃(Phase 4): 앵커 → A(perception) ∥ B(prescription) ──────────────
+  def _bedrock_invoke_tool_sync(
+    self,
+    *,
+    prompt_text: str,
+    image_base64: str | None,
+    content_type: str,
+    tool_name: str,
+    tool_schema: dict[str, Any],
+    max_tokens: int,
+    stage: str,
+  ) -> dict[str, Any]:
+    """강제 tool use로 부분 스키마 하나를 채워 raw tool_input(dict)을 반환한다.
+    정규화·검증은 하지 않는다(merge 후 1회). 스테이지 지표를 남긴다."""
+    started_at = time.monotonic()
+    model_id = self.settings.effective_analysis_model_id
+    if not model_id:
+      raise AppError(
+        503,
+        "BEDROCK_ANALYSIS_NOT_CONFIGURED",
+        "A Bedrock Claude model ID or inference profile ID is required for AI analysis.",
+      )
+    content: list[dict[str, Any]] = [{"type": "text", "text": prompt_text}]
+    if image_base64 is not None:
+      content.append(
+        {
+          "type": "image",
+          "source": {"type": "base64", "media_type": content_type, "data": image_base64},
+        },
+      )
+    request_body: dict[str, Any] = {
+      "anthropic_version": "bedrock-2023-05-31",
+      "max_tokens": max_tokens,
+      "temperature": 0.2,
+      "system": "You are a concise, practical K-beauty makeup analyst. Return JSON only.",
+      "messages": [{"role": "user", "content": content}],
+      "tools": [
+        {
+          "name": tool_name,
+          "description": "Return the requested K-beauty analysis fields.",
+          "input_schema": tool_schema,
+        },
+      ],
+      "tool_choice": {"type": "tool", "name": tool_name},
+    }
+    response = self._bedrock_runtime_client().invoke_model(
+      modelId=model_id,
+      body=json.dumps(request_body, ensure_ascii=False),
+      accept="application/json",
+      contentType="application/json",
+    )
+    response_payload = json.loads(response["body"].read())
+    stop_reason = self._observe_bedrock_stop_reason(
+      response_payload,
+      context="analysis",
+      max_tokens=max_tokens,
+    )
+    self._log_bedrock_call_metrics(
+      response_payload,
+      context="analysis",
+      started_at=started_at,
+      stage=stage,
+    )
+    tool_input = self._extract_bedrock_tool_input(response_payload, tool_name)
+    if tool_input is None:
+      raise AppError(
+        502,
+        "BEDROCK_TOOL_USE_MISSING",
+        "Bedrock analysis did not return the enforced tool output.",
+        {"stopReason": stop_reason or "unknown", "stage": stage},
+      )
+    return tool_input
+
+  def _fanout_group_prompt(
+    self,
+    payload: dict[str, Any],
+    *,
+    stage: str,
+    directive: str,
+    anchor_values: dict[str, Any] | None = None,
+  ) -> str:
+    # 레그별 슬림 프롬프트: 공유 코어 + 이 레그 섹션 지시문 + 스코프 지시문 + 앵커
+    # 확정값 주입 + 동적 메타데이터. 전체 필드 가이드는 싣지 않는다(도구 스키마가
+    # 구조를 강제하므로) — 입력 토큰을 크게 줄인다. 사진·측정값은 그대로 유지.
+    section = _ANALYSIS_STAGE_SECTIONS.get(stage, "")
+    dynamic = self._analysis_dynamic_metadata(payload)
+    anchor_block = ""
+    if anchor_values:
+      anchor_block = (
+        "다음 값은 이미 확정됐으니 다시 판정하지 말고 근거로만 사용해: "
+        f"faceShape={anchor_values.get('faceShape')}, "
+        f"skinType={anchor_values.get('skinType')}, "
+        f"recommendedMood={anchor_values.get('recommendedMood')}. "
+      )
+    return f"{_ANALYSIS_CORE_INSTRUCTIONS}{section}{directive} {anchor_block}{dynamic}"
+
+  async def _analyze_image_bedrock_fanout(
+    self,
+    payload: dict[str, Any],
+    source_image_bytes: bytes,
+    on_anchor: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+  ) -> dict[str, Any]:
+    """앵커 콜로 공유값을 확정한 뒤 A(인식/인상)·B(처방/스타일링)를 병렬 실행하고,
+    disjoint 키를 merge해 기존 정규화/검증을 1회 적용한다.
+
+    on_anchor: 앵커 확정 직후(~4s) 호출 — 잡이 컬럼을 조기 기록해 로딩 화면이
+    핵심 프리뷰를 먼저 보여줄 수 있게 한다(Phase 5). 실패해도 본 분석은 안 깨진다."""
+    started = time.monotonic()
+    content_type = self._infer_content_type(payload)
+    prepared_bytes, content_type = await asyncio.to_thread(
+      self._prepare_source_image_for_analysis,
+      source_image_bytes,
+      content_type,
+    )
+    image_base64 = base64.b64encode(prepared_bytes).decode("utf-8")
+    max_tokens = self.settings.bedrock_analysis_max_tokens
+
+    # 1) 앵커: 공유값(faceShape/skinType/recommendedMood) 단독 확정 → 발산 원천 차단.
+    anchor_raw = await asyncio.to_thread(
+      self._bedrock_invoke_tool_sync,
+      prompt_text=self._fanout_group_prompt(
+        payload, stage="anchor", directive=_FANOUT_ANCHOR_DIRECTIVE,
+      ),
+      image_base64=image_base64,
+      content_type=content_type,
+      tool_name="return_face_analysis_anchor",
+      tool_schema=ANCHOR_TOOL_SCHEMA,
+      max_tokens=512,
+      stage="anchor",
+    )
+    anchor_values = {key: anchor_raw.get(key) for key in ANCHOR_FIELD_KEYS}
+    logger.info(
+      "[aura:bedrock] analysis:anchor-ready durationMs=%s faceShape=%s",
+      round((time.monotonic() - started) * 1000),
+      anchor_values.get("faceShape"),
+    )
+
+    # 앵커 확정 즉시 콜백(로딩 프리뷰용) — 실패해도 본 분석은 계속.
+    if on_anchor is not None:
+      try:
+        await on_anchor(anchor_values)
+      except Exception as exc:  # noqa: BLE001 - 프리뷰 부가기능은 분석을 깨지 않는다.
+        logger.warning("[aura:bedrock] anchor-callback failed: %s", exc.__class__.__name__)
+
+    # 2) perception ∥ prescription ∥ styling ∥ skin — 앵커 주입, 동시 실행(5분할).
+    #    독립 병렬 레그라 지연은 max(레그)에 흡수. prescription에서 스타일링을 떼어
+    #    병목 레그를 낮췄다.
+    def leg(stage: str, directive: str, schema: dict[str, Any]):
+      return asyncio.to_thread(
+        self._bedrock_invoke_tool_sync,
+        prompt_text=self._fanout_group_prompt(
+          payload, stage=stage, directive=directive, anchor_values=anchor_values,
+        ),
+        image_base64=image_base64,
+        content_type=content_type,
+        tool_name=f"return_face_analysis_{stage}",
+        tool_schema=schema,
+        max_tokens=max_tokens,
+        stage=stage,
+      )
+
+    results = await asyncio.gather(
+      leg("perception", _FANOUT_PERCEPTION_DIRECTIVE, PERCEPTION_TOOL_SCHEMA),
+      leg("prescription", _FANOUT_PRESCRIPTION_DIRECTIVE, PRESCRIPTION_TOOL_SCHEMA),
+      leg("styling", _FANOUT_STYLING_DIRECTIVE, STYLING_TOOL_SCHEMA),
+      leg("skin", _FANOUT_SKIN_DIRECTIVE, SKIN_TOOL_SCHEMA),
+      return_exceptions=True,
+    )
+    # fail-closed: 한쪽이라도 실패하면 전체 실패(현행 all-or-nothing 시맨틱 보존).
+    for result in results:
+      if isinstance(result, BaseException):
+        raise result
+    perception_raw, prescription_raw, styling_raw, skin_raw = results
+
+    merged: dict[str, Any] = {}
+    for key in ANCHOR_FIELD_KEYS:
+      merged[key] = anchor_values.get(key)
+    for key in PERCEPTION_FIELD_KEYS:
+      merged[key] = perception_raw.get(key)
+    for key in PRESCRIPTION_FIELD_KEYS:
+      merged[key] = prescription_raw.get(key)
+    for key in STYLING_FIELD_KEYS:
+      merged[key] = styling_raw.get(key)
+    for key in SKIN_FIELD_KEYS:
+      merged[key] = skin_raw.get(key)
+
+    parsed = self._normalize_analysis_result(merged)
+    logger.info(
+      "[aura:bedrock] analysis:fanout-success durationMs=%s",
+      round((time.monotonic() - started) * 1000),
+    )
+    return parsed
+
   def _analyze_image_sync(
     self,
     payload: dict[str, Any],
@@ -2888,18 +3244,33 @@ class OpenAIAnalysisService:
         details={"missingIndexes": missing_image_indexes},
       )
 
-  async def analyze_text(self, payload: dict[str, Any]) -> dict[str, Any]:
+  async def analyze_text(
+    self,
+    payload: dict[str, Any],
+    on_anchor: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+  ) -> dict[str, Any]:
     try:
       source_read_started_at = time.monotonic()
       source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
       source_image_read_ms = round((time.monotonic() - source_read_started_at) * 1000)
 
       text_analysis_started_at = time.monotonic()
-      analysis_result = await asyncio.to_thread(
-        self._analyze_image_sync,
-        payload,
-        source_image_bytes,
-      )
+      if (
+        self.settings.analysis_provider == "bedrock"
+        and self.settings.bedrock_analysis_fanout_enabled
+      ):
+        # 팬아웃: 앵커∥A∥B로 출력 decode 병렬화(async gather는 여기서).
+        analysis_result = await self._analyze_image_bedrock_fanout(
+          payload,
+          source_image_bytes,
+          on_anchor=on_anchor,
+        )
+      else:
+        analysis_result = await asyncio.to_thread(
+          self._analyze_image_sync,
+          payload,
+          source_image_bytes,
+        )
       text_analysis_ms = round((time.monotonic() - text_analysis_started_at) * 1000)
       analysis_result["analysisProvider"] = self.settings.analysis_provider
       analysis_result["analysisModel"] = self.settings.effective_analysis_model_id

@@ -17,6 +17,8 @@ import type {
   FaceAnalysisRegionNote,
   FaceAnalysisRegionNotes,
   FaceAnalysisReport,
+  FaceAnalysisSkinPerception,
+  FaceAnalysisSkinPerceptionAspect,
   FaceAnalysisStylingLook,
   FaceAnalysisStylingLookRowCategory,
   FaceAnalysisStylingLooks,
@@ -24,6 +26,7 @@ import type {
 import {
   buildFaceAnalysisRequestPayload,
 } from '../../features/face-capture/services/faceCaptureUploadContract';
+import {subscribeAnalysisReportReady} from './analysisReportReadySignal';
 import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from './backendApi';
 
 type FaceAnalysisCaptureInput = {
@@ -77,6 +80,10 @@ type BackendStylingLooks = {
   natural?: BackendStylingLook | null;
   glam?: BackendStylingLook | null;
 };
+type BackendSkinAspect = {label?: string | null; description?: string | null};
+type BackendSkinPerception = Partial<
+  Record<FaceAnalysisSkinPerceptionAspect, BackendSkinAspect | null>
+>;
 
 type BackendAnalysisResult = {
   avoidedMakeups?: BackendMakeupCard[] | null;
@@ -91,6 +98,7 @@ type BackendAnalysisResult = {
   regionNotes?: BackendRegionNotes | null;
   impressionNotes?: BackendImpressionNotes | null;
   stylingLooks?: BackendStylingLooks | null;
+  skinPerception?: BackendSkinPerception | null;
   shortSummary?: string | null;
   skinAnalysisSummary?: string | null;
   skinType?: string | null;
@@ -184,6 +192,11 @@ const uuidPattern =
 // 고정 5초 대신 5→8→13초 백오프: 서버 분석이 길어질수록 폴링 밀도를 낮춘다.
 const ANALYSIS_REPORT_POLL_INTERVALS_MS = [5000, 8000, 13000];
 const ANALYSIS_REPORT_POLL_TIMEOUT_MS = 240000;
+// 예상 완료 구간(팬아웃 ~24s·현행 단일 ~42s 모두 포함) 진입 후엔 폴 간격을 조여
+// "생성 직후" 감지지연을 최소화한다 — 백오프가 만드는 최대 ~9s 낭비 제거. WS push
+// (Phase 2, 가속기)와 무관하게 폴링 자체의 감지지연을 낮추는 baseline.
+const ANALYSIS_REPORT_POLL_ETA_MS = 18000;
+const ANALYSIS_REPORT_POLL_TIGHT_MS = 2000;
 
 function isUuid(value: string | null | undefined): value is string {
   return Boolean(value && uuidPattern.test(value));
@@ -465,6 +478,38 @@ function parseStylingLooks(value: BackendStylingLooks | null | undefined): FaceA
   return natural && glam ? {natural, glam} : undefined;
 }
 
+const SKIN_PERCEPTION_ASPECTS: readonly FaceAnalysisSkinPerceptionAspect[] = [
+  'texture',
+  'pores',
+  'sebumDryness',
+  'shineDistribution',
+  'shineType',
+  'pigmentation',
+  'redness',
+  'darkCircles',
+  'toneUniformity',
+];
+
+// 9부면 중 하나라도 빠지거나 label이 비면 undefined 로 강등해 섹션을 숨긴다
+// (구버전 보고서·부분 응답을 지어내지 않음).
+function parseSkinPerception(
+  value: BackendSkinPerception | null | undefined,
+): FaceAnalysisSkinPerception | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const parsed = {} as FaceAnalysisSkinPerception;
+  for (const aspect of SKIN_PERCEPTION_ASPECTS) {
+    const entry = value[aspect];
+    const label = firstText(entry?.label);
+    if (!label) {
+      return undefined;
+    }
+    parsed[aspect] = {label, description: firstText(entry?.description) ?? ''};
+  }
+  return parsed;
+}
+
 function resolveMakeupImageStatus(
   card: BackendMakeupCard | null | undefined,
   generatedImageUrl: string | undefined,
@@ -573,21 +618,31 @@ function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
   );
 }
 
-function delay(ms: number, signal?: AbortSignal): Promise<void> {
+// wakeReportId를 주면 해당 리포트의 WS 완료 이벤트(analysis_report_completed)에도
+// 조기 resolve한다 — 다음 폴을 기다리지 않고 즉시 재조회(감지지연 ≈0). abort와 달리
+// 에러를 던지지 않으므로, resolve 후 루프가 완료를 재확인해 정상 반환한다.
+function delay(
+  ms: number,
+  signal?: AbortSignal,
+  wakeReportId?: string,
+): Promise<void> {
   return new Promise(resolve => {
     if (signal?.aborted) {
       resolve();
       return;
     }
-    const onAbort = () => {
+    const finish = () => {
       clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', onAbort);
+      unsubscribeWake?.();
       resolve();
     };
-    const timeoutId = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
+    const onAbort = () => finish();
+    const timeoutId = setTimeout(finish, ms);
     signal?.addEventListener('abort', onAbort, {once: true});
+    const unsubscribeWake = wakeReportId
+      ? subscribeAnalysisReportReady(wakeReportId, finish)
+      : undefined;
   });
 }
 
@@ -600,15 +655,35 @@ function abortedAnalysisWait(job: BackendAnalysisJob): BackendApiError {
   );
 }
 
+// 팬아웃 앵커(~4s)가 컬럼을 조기 기록하면 완결 전에 얼굴형·피부·무드를 먼저 노출한다.
+// 잡 최상위 컬럼(result가 아님)을 읽어 프리뷰를 만든다.
+export type FaceAnalysisAnchorPreview = {
+  faceShape: string;
+  recommendedMood: string;
+  skinType: string;
+};
+
+function getAnchorPreview(job: BackendAnalysisJob): FaceAnalysisAnchorPreview | undefined {
+  const faceShape = firstText(job.faceShape);
+  const skinType = firstText(job.skinType);
+  const recommendedMood = firstText(job.recommendedMood);
+  return faceShape && skinType && recommendedMood
+    ? {faceShape, recommendedMood, skinType}
+    : undefined;
+}
+
 async function waitForCompleteAnalysisReport(
   initialJob: BackendAnalysisJob,
   capture: FaceAnalysisCaptureInput | null | undefined,
   startedAt: number,
   // 화면 이탈 시 최대 240초짜리 폴링이 백그라운드에 매달리지 않게 하는 중단 신호.
   signal?: AbortSignal,
+  // 앵커 프리뷰(~4s)를 1회 알린다 — 로딩 화면 조기 노출용.
+  onAnchorPreview?: (preview: FaceAnalysisAnchorPreview) => void,
 ): Promise<FaceAnalysisReport> {
   let currentJob = initialJob;
   let pollAttempt = 0;
+  let anchorPreviewSent = false;
 
   while (true) {
     if (signal?.aborted) {
@@ -638,6 +713,20 @@ async function waitForCompleteAnalysisReport(
       }
 
       return mapBackendJobToFaceAnalysisReport(currentJob, capture);
+    }
+
+    // 완결 전 앵커 프리뷰 1회 노출(~4s): 얼굴형·피부·무드가 컬럼에 채워지면 알린다.
+    if (!anchorPreviewSent) {
+      const anchorPreview = getAnchorPreview(currentJob);
+      if (anchorPreview) {
+        anchorPreviewSent = true;
+        console.info('[aura:analysis] anchor-preview', {
+          elapsedMs: Date.now() - startedAt,
+          faceShape: anchorPreview.faceShape,
+          jobId: currentJob.id ?? null,
+        });
+        onAnchorPreview?.(anchorPreview);
+      }
     }
 
     if (currentJob.status === 'failed') {
@@ -674,10 +763,15 @@ async function waitForCompleteAnalysisReport(
       );
     }
 
-    const nextPollMs =
+    const backoffMs =
       ANALYSIS_REPORT_POLL_INTERVALS_MS[
         Math.min(pollAttempt, ANALYSIS_REPORT_POLL_INTERVALS_MS.length - 1)
       ];
+    // 예상 완료 구간 진입 후엔 조밀 폴링으로 감지지연을 ≤2s로 낮춘다.
+    const nextPollMs =
+      elapsedMs >= ANALYSIS_REPORT_POLL_ETA_MS
+        ? Math.min(backoffMs, ANALYSIS_REPORT_POLL_TIGHT_MS)
+        : backoffMs;
     pollAttempt += 1;
 
     console.info('[aura:analysis] analysis-report:wait-images', {
@@ -693,6 +787,7 @@ async function waitForCompleteAnalysisReport(
     await delay(
       Math.min(nextPollMs, ANALYSIS_REPORT_POLL_TIMEOUT_MS - elapsedMs),
       signal,
+      currentJob.id,
     );
 
     if (signal?.aborted) {
@@ -782,6 +877,7 @@ function mapBackendJobToFaceAnalysisReport(
     regionNotes: parseRegionNotes(result.regionNotes),
     impressionNotes: parseImpressionNotes(result.impressionNotes),
     stylingLooks: parseStylingLooks(result.stylingLooks),
+    skinPerception: parseSkinPerception(result.skinPerception),
     recommendedMakeups: mapMakeupCards(
       reportId,
       result.recommendedMakeups,
@@ -940,6 +1036,8 @@ export type FaceAnalysisOnDeviceMeasurementsInput = {
 
 export type FaceAnalysisReportCallbacks = {
   onAnalysisCreated?: (reportId: string) => Promise<void> | void;
+  // 앵커 프리뷰(~4s) — 얼굴형·피부·무드가 준비되면 1회 호출(로딩 화면 조기 노출).
+  onAnchorPreview?: (preview: FaceAnalysisAnchorPreview) => void;
 };
 
 export async function createFaceAnalysisReportFromCapture(
@@ -1053,5 +1151,11 @@ export async function createFaceAnalysisReportFromCapture(
     status: job.status ?? null,
   });
 
-  return waitForCompleteAnalysisReport(job, capture, startedAt, signal);
+  return waitForCompleteAnalysisReport(
+    job,
+    capture,
+    startedAt,
+    signal,
+    callbacks?.onAnchorPreview,
+  );
 }

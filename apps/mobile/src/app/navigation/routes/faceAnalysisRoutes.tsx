@@ -7,6 +7,7 @@ import {
   createFaceAnalysisReportFromCapture,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
+import type {FaceAnalysisAnchorPreview} from '../../../shared/services/faceAnalysisService';
 import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
@@ -305,6 +306,8 @@ export function FaceAnalysisLoadingRouteScreen({
   } = useNavigationFlowState();
   const {clearSession} = useAuthSession();
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
+  const [anchorPreview, setAnchorPreview] =
+    React.useState<FaceAnalysisAnchorPreview | null>(null);
   const [analysisErrorMessage, setAnalysisErrorMessage] = React.useState<string | null>(null);
   const [analysisRequestKey, setAnalysisRequestKey] = React.useState(0);
   const [uploadRequestKey, setUploadRequestKey] = React.useState(0);
@@ -594,6 +597,7 @@ export function FaceAnalysisLoadingRouteScreen({
 
   React.useEffect(() => {
     setIsAnalysisReady(false);
+    setAnchorPreview(null);
     setAnalysisErrorMessage(null);
     setSelectedFaceAnalysisReport(null);
 
@@ -648,7 +652,8 @@ export function FaceAnalysisLoadingRouteScreen({
             faceVerticalThirds: verticalThirds,
             personalColor: personalColorOutcome,
           },
-          undefined,
+          // 앵커(~4s) 확정 시 얼굴형·피부·무드를 로딩 화면에 먼저 노출.
+          {onAnchorPreview: setAnchorPreview},
           // 화면 이탈 시 폴링 중단 — 최대 240초 백그라운드 매달림 방지.
           analysisAbortController.signal,
         );
@@ -826,6 +831,7 @@ export function FaceAnalysisLoadingRouteScreen({
       onBack={handleBack}>
       <FaceAnalysisLoadingScreen
         analysisErrorMessage={analysisErrorMessage}
+        anchorPreview={anchorPreview}
         capturedPhotoUri={
           selectedFaceCapture?.imageUri ?? pendingUnifiedCapture?.image.uri
         }

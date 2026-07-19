@@ -14,6 +14,8 @@ import type {
   FaceAnalysisImpressionNotes,
   FaceAnalysisReport,
   FaceAnalysisRegionNotes,
+  FaceAnalysisSkinPerception,
+  FaceAnalysisSkinPerceptionAspect,
   FaceAnalysisStylingLookRowCategory,
   FaceAnalysisStylingLooks,
 } from '../../../shared/types/faceAnalysis';
@@ -40,6 +42,7 @@ import type {
   S5Data,
   S6Data,
   S7Data,
+  S8Data,
   SpectrumAxisData,
   SwatchData,
   ToneMapPoint,
@@ -772,6 +775,40 @@ function buildS7(stylingLooks: FaceAnalysisStylingLooks | undefined): S7Data | n
   };
 }
 
+const SKIN_ASPECT_HEADING_KO: Record<FaceAnalysisSkinPerceptionAspect, string> = {
+  texture: '피부결',
+  pores: '모공',
+  sebumDryness: '유수분',
+  shineDistribution: '유분 분포',
+  shineType: '광 타입',
+  pigmentation: '색소',
+  redness: '붉은기',
+  darkCircles: '다크서클',
+  toneUniformity: '톤 균일감',
+};
+
+const SKIN_ASPECT_ORDER: readonly FaceAnalysisSkinPerceptionAspect[] = [
+  'texture', 'pores', 'sebumDryness', 'shineDistribution', 'shineType',
+  'pigmentation', 'redness', 'darkCircles', 'toneUniformity',
+];
+
+function buildS8(skinPerception: FaceAnalysisSkinPerception | undefined): S8Data | null {
+  if (!skinPerception) {
+    return null;
+  }
+  return {
+    eyebrow: 'SKIN',
+    title: '피부는 이렇게 보여요',
+    sub: '사진에서 관찰 가능한 피부 부면을 항목별로 정리했어요.',
+    aspects: SKIN_ASPECT_ORDER.map(key => ({
+      key,
+      heading: SKIN_ASPECT_HEADING_KO[key],
+      label: skinPerception[key].label,
+      description: skinPerception[key].description,
+    })),
+  };
+}
+
 export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterInput): ReportData {
   const {report, bodyProfile, personalColor, verticalThirds, regionVisuals, gender, geometryMetrics} = input;
   const heroUri = resolveHeroUri(report, input.heroImageUri);
@@ -793,6 +830,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     s5: buildS5(bodyProfile, gender),
     s6: buildS6(report.impressionNotes),
     s7: buildS7(report.stylingLooks),
+    s8: buildS8(report.skinPerception),
     footer: {
       disclaimer: '분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.',
       cta: '메이크업 추천 보러가기',

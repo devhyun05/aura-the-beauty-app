@@ -21,6 +21,7 @@ import { S4PersonalColor } from './sections/S4PersonalColor';
 import { S5Body } from './sections/S5Body';
 import { S6Impression } from './sections/S6Impression';
 import { S7Styling } from './sections/S7Styling';
+import { S8Skin } from './sections/S8Skin';
 
 /**
  * Report screen: top bar + S1..S7 in fixed order + footer CTA.
@@ -126,6 +127,11 @@ export function ReportScreenScaffold({
           {data.s7 ? (
             <View onLayout={e => { sectionY.current.s7 = e.nativeEvent.layout.y; }}>
               <S7Styling data={data.s7} />
+            </View>
+          ) : null}
+          {data.s8 ? (
+            <View onLayout={e => { sectionY.current.s8 = e.nativeEvent.layout.y; }}>
+              <S8Skin data={data.s8} />
             </View>
           ) : null}
           </OptionalViewShot>

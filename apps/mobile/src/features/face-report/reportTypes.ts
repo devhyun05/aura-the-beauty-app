@@ -214,6 +214,13 @@ export interface S7Data {
   glamCard: LookCardData;
 }
 
+// ---------- S8 (구조화 피부 9부면) ----------
+export interface SkinAspectData { label: string; description: string }
+export interface S8Data {
+  eyebrow: string; title: string; sub: string;
+  aspects: { key: string; heading: string; label: string; description: string }[];
+}
+
 // ---------- screen ----------
 // Only s1 (built from fields every successfully-created report already has)
 // and s5 (has its own internal "설문 전" empty state — no coordinates/guides to
@@ -229,7 +236,7 @@ export interface S7Data {
 export interface ReportData {
   topBarTitle: string;
   s1: S1Data; s2: S2Data | null; s3: S3Data | null; s4: S4Data | null; s5: S5Data;
-  s6: S6Data | null; s7: S7Data | null;
+  s6: S6Data | null; s7: S7Data | null; s8: S8Data | null;
   footer: { disclaimer: string; cta: string };
 }
 

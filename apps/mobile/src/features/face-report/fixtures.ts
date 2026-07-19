@@ -267,6 +267,23 @@ export const demoReport: ReportData = {
     },
   },
 
+  s8: {
+    eyebrow: 'SKIN',
+    title: '피부는 이렇게 보여요',
+    sub: '사진에서 관찰 가능한 피부 부면을 항목별로 정리했어요.',
+    aspects: [
+      { key: 'texture', heading: '피부결', label: '매끄러운 편', description: '전반적으로 매끄럽고 미세한 요철이 적어요.' },
+      { key: 'pores', heading: '모공', label: '미세모공', description: 'T존에 미세한 모공이 관찰돼요.' },
+      { key: 'sebumDryness', heading: '유수분', label: '복합성', description: 'T존은 약간 유분기, 볼은 중성에 가까워요.' },
+      { key: 'shineDistribution', heading: '유분 분포', label: 'T존 중심', description: '이마와 코 부위에 광이 집중돼요.' },
+      { key: 'shineType', heading: '광 타입', label: '자연광', description: '번들거림보다 은은한 윤기에 가까워요.' },
+      { key: 'pigmentation', heading: '색소', label: '옅은 편', description: '두드러진 색소 침착은 관찰되지 않아요.' },
+      { key: 'redness', heading: '붉은기', label: '약한 붉은기', description: '볼과 코 주변에 자연스러운 혈색이 있어요.' },
+      { key: 'darkCircles', heading: '다크서클', label: '옅은 그림자', description: '눈 아래 경미한 그림자가 관찰돼요.' },
+      { key: 'toneUniformity', heading: '톤 균일감', label: '고른 편', description: '부위 간 톤 차이가 크지 않아요.' },
+    ],
+  },
+
   footer: {
     disclaimer: '이 보고서는 이번 촬영 사진 기준의 상대 분석이에요. 조명과 각도가 달라지면 결과도 함께 달라질 수 있어요.',
     cta: '다시 촬영하고 업데이트',
