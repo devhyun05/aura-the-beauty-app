@@ -17,6 +17,8 @@ import type {
   FaceAnalysisRegionNote,
   FaceAnalysisRegionNotes,
   FaceAnalysisReport,
+  FaceAnalysisSkinPerception,
+  FaceAnalysisSkinPerceptionAspect,
   FaceAnalysisStylingLook,
   FaceAnalysisStylingLookRowCategory,
   FaceAnalysisStylingLooks,
@@ -78,6 +80,10 @@ type BackendStylingLooks = {
   natural?: BackendStylingLook | null;
   glam?: BackendStylingLook | null;
 };
+type BackendSkinAspect = {label?: string | null; description?: string | null};
+type BackendSkinPerception = Partial<
+  Record<FaceAnalysisSkinPerceptionAspect, BackendSkinAspect | null>
+>;
 
 type BackendAnalysisResult = {
   avoidedMakeups?: BackendMakeupCard[] | null;
@@ -92,6 +98,7 @@ type BackendAnalysisResult = {
   regionNotes?: BackendRegionNotes | null;
   impressionNotes?: BackendImpressionNotes | null;
   stylingLooks?: BackendStylingLooks | null;
+  skinPerception?: BackendSkinPerception | null;
   shortSummary?: string | null;
   skinAnalysisSummary?: string | null;
   skinType?: string | null;
@@ -471,6 +478,38 @@ function parseStylingLooks(value: BackendStylingLooks | null | undefined): FaceA
   return natural && glam ? {natural, glam} : undefined;
 }
 
+const SKIN_PERCEPTION_ASPECTS: readonly FaceAnalysisSkinPerceptionAspect[] = [
+  'texture',
+  'pores',
+  'sebumDryness',
+  'shineDistribution',
+  'shineType',
+  'pigmentation',
+  'redness',
+  'darkCircles',
+  'toneUniformity',
+];
+
+// 9부면 중 하나라도 빠지거나 label이 비면 undefined 로 강등해 섹션을 숨긴다
+// (구버전 보고서·부분 응답을 지어내지 않음).
+function parseSkinPerception(
+  value: BackendSkinPerception | null | undefined,
+): FaceAnalysisSkinPerception | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const parsed = {} as FaceAnalysisSkinPerception;
+  for (const aspect of SKIN_PERCEPTION_ASPECTS) {
+    const entry = value[aspect];
+    const label = firstText(entry?.label);
+    if (!label) {
+      return undefined;
+    }
+    parsed[aspect] = {label, description: firstText(entry?.description) ?? ''};
+  }
+  return parsed;
+}
+
 function resolveMakeupImageStatus(
   card: BackendMakeupCard | null | undefined,
   generatedImageUrl: string | undefined,
@@ -804,6 +843,7 @@ function mapBackendJobToFaceAnalysisReport(
     regionNotes: parseRegionNotes(result.regionNotes),
     impressionNotes: parseImpressionNotes(result.impressionNotes),
     stylingLooks: parseStylingLooks(result.stylingLooks),
+    skinPerception: parseSkinPerception(result.skinPerception),
     recommendedMakeups: mapMakeupCards(
       reportId,
       result.recommendedMakeups,

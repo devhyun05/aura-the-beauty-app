@@ -73,6 +73,28 @@ export interface FaceAnalysisStylingLooks {
   glam: FaceAnalysisStylingLook;
 }
 
+export interface FaceAnalysisSkinAspect {
+  label: string;
+  description: string;
+}
+
+// 구조화 피부 상세 9부면 — 서버 skinPerception 대응.
+export type FaceAnalysisSkinPerceptionAspect =
+  | 'texture'
+  | 'pores'
+  | 'sebumDryness'
+  | 'shineDistribution'
+  | 'shineType'
+  | 'pigmentation'
+  | 'redness'
+  | 'darkCircles'
+  | 'toneUniformity';
+
+export type FaceAnalysisSkinPerception = Record<
+  FaceAnalysisSkinPerceptionAspect,
+  FaceAnalysisSkinAspect
+>;
+
 export interface FaceAnalysisReport {
   id: string;
   title: string;
@@ -102,4 +124,5 @@ export interface FaceAnalysisReport {
   regionNotes?: FaceAnalysisRegionNotes;
   impressionNotes?: FaceAnalysisImpressionNotes;
   stylingLooks?: FaceAnalysisStylingLooks;
+  skinPerception?: FaceAnalysisSkinPerception;
 }
