@@ -1,5 +1,6 @@
 import asyncio
 import base64
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from ipaddress import ip_address
@@ -2709,9 +2710,13 @@ class OpenAIAnalysisService:
     self,
     payload: dict[str, Any],
     source_image_bytes: bytes,
+    on_anchor: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
   ) -> dict[str, Any]:
     """앵커 콜로 공유값을 확정한 뒤 A(인식/인상)·B(처방/스타일링)를 병렬 실행하고,
-    disjoint 키를 merge해 기존 정규화/검증을 1회 적용한다."""
+    disjoint 키를 merge해 기존 정규화/검증을 1회 적용한다.
+
+    on_anchor: 앵커 확정 직후(~4s) 호출 — 잡이 컬럼을 조기 기록해 로딩 화면이
+    핵심 프리뷰를 먼저 보여줄 수 있게 한다(Phase 5). 실패해도 본 분석은 안 깨진다."""
     started = time.monotonic()
     content_type = self._infer_content_type(payload)
     prepared_bytes, content_type = await asyncio.to_thread(
@@ -2734,6 +2739,13 @@ class OpenAIAnalysisService:
       stage="anchor",
     )
     anchor_values = {key: anchor_raw.get(key) for key in ANCHOR_FIELD_KEYS}
+
+    # 앵커 확정 즉시 콜백(로딩 프리뷰용) — 실패해도 본 분석은 계속.
+    if on_anchor is not None:
+      try:
+        await on_anchor(anchor_values)
+      except Exception as exc:  # noqa: BLE001 - 프리뷰 부가기능은 분석을 깨지 않는다.
+        logger.warning("[aura:bedrock] anchor-callback failed: %s", exc.__class__.__name__)
 
     # 2) A(perception) ∥ B(prescription) ∥ skin — 앵커 주입, 동시 실행.
     #    skin은 독립 병렬 레그라 지연은 여전히 max(A,B,skin)에 흡수(내용↑·지연 flat).
@@ -3202,7 +3214,11 @@ class OpenAIAnalysisService:
         details={"missingIndexes": missing_image_indexes},
       )
 
-  async def analyze_text(self, payload: dict[str, Any]) -> dict[str, Any]:
+  async def analyze_text(
+    self,
+    payload: dict[str, Any],
+    on_anchor: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+  ) -> dict[str, Any]:
     try:
       source_read_started_at = time.monotonic()
       source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
@@ -3217,6 +3233,7 @@ class OpenAIAnalysisService:
         analysis_result = await self._analyze_image_bedrock_fanout(
           payload,
           source_image_bytes,
+          on_anchor=on_anchor,
         )
       else:
         analysis_result = await asyncio.to_thread(

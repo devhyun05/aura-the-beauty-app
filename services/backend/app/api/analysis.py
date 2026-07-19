@@ -597,7 +597,27 @@ async def run_analysis_job_background(
         mode="json",
       )
     else:
-      result = await analysis_service.analyze_text(payload.request_payload)
+      async def persist_anchor(anchor: dict) -> None:
+        # 앵커(~4s) 확정 즉시 컬럼을 조기 기록 → 로딩 화면이 핵심 프리뷰를 먼저
+        # 보여준다(Phase 5). 폴이 곧 이 컬럼을 읽는다. status는 processing 유지.
+        await db.execute(
+          """
+          update analysis_reports
+          set face_shape = coalesce($2, face_shape),
+              skin_type = coalesce($3, skin_type),
+              recommended_mood = coalesce($4, recommended_mood)
+          where id = $1 and status = 'processing'
+          """,
+          report_id,
+          anchor.get("faceShape"),
+          anchor.get("skinType"),
+          anchor.get("recommendedMood"),
+        )
+
+      result = await analysis_service.analyze_text(
+        payload.request_payload,
+        on_anchor=persist_anchor,
+      )
     image_generation_status = (
       "processing"
       if generates_images

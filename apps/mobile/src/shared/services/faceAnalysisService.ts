@@ -655,15 +655,35 @@ function abortedAnalysisWait(job: BackendAnalysisJob): BackendApiError {
   );
 }
 
+// 팬아웃 앵커(~4s)가 컬럼을 조기 기록하면 완결 전에 얼굴형·피부·무드를 먼저 노출한다.
+// 잡 최상위 컬럼(result가 아님)을 읽어 프리뷰를 만든다.
+export type FaceAnalysisAnchorPreview = {
+  faceShape: string;
+  recommendedMood: string;
+  skinType: string;
+};
+
+function getAnchorPreview(job: BackendAnalysisJob): FaceAnalysisAnchorPreview | undefined {
+  const faceShape = firstText(job.faceShape);
+  const skinType = firstText(job.skinType);
+  const recommendedMood = firstText(job.recommendedMood);
+  return faceShape && skinType && recommendedMood
+    ? {faceShape, recommendedMood, skinType}
+    : undefined;
+}
+
 async function waitForCompleteAnalysisReport(
   initialJob: BackendAnalysisJob,
   capture: FaceAnalysisCaptureInput | null | undefined,
   startedAt: number,
   // 화면 이탈 시 최대 240초짜리 폴링이 백그라운드에 매달리지 않게 하는 중단 신호.
   signal?: AbortSignal,
+  // 앵커 프리뷰(~4s)를 1회 알린다 — 로딩 화면 조기 노출용.
+  onAnchorPreview?: (preview: FaceAnalysisAnchorPreview) => void,
 ): Promise<FaceAnalysisReport> {
   let currentJob = initialJob;
   let pollAttempt = 0;
+  let anchorPreviewSent = false;
 
   while (true) {
     if (signal?.aborted) {
@@ -693,6 +713,15 @@ async function waitForCompleteAnalysisReport(
       }
 
       return mapBackendJobToFaceAnalysisReport(currentJob, capture);
+    }
+
+    // 완결 전 앵커 프리뷰 1회 노출(~4s): 얼굴형·피부·무드가 컬럼에 채워지면 알린다.
+    if (!anchorPreviewSent) {
+      const anchorPreview = getAnchorPreview(currentJob);
+      if (anchorPreview) {
+        anchorPreviewSent = true;
+        onAnchorPreview?.(anchorPreview);
+      }
     }
 
     if (currentJob.status === 'failed') {
@@ -1002,6 +1031,8 @@ export type FaceAnalysisOnDeviceMeasurementsInput = {
 
 export type FaceAnalysisReportCallbacks = {
   onAnalysisCreated?: (reportId: string) => Promise<void> | void;
+  // 앵커 프리뷰(~4s) — 얼굴형·피부·무드가 준비되면 1회 호출(로딩 화면 조기 노출).
+  onAnchorPreview?: (preview: FaceAnalysisAnchorPreview) => void;
 };
 
 export async function createFaceAnalysisReportFromCapture(
@@ -1115,5 +1146,11 @@ export async function createFaceAnalysisReportFromCapture(
     status: job.status ?? null,
   });
 
-  return waitForCompleteAnalysisReport(job, capture, startedAt, signal);
+  return waitForCompleteAnalysisReport(
+    job,
+    capture,
+    startedAt,
+    signal,
+    callbacks?.onAnchorPreview,
+  );
 }

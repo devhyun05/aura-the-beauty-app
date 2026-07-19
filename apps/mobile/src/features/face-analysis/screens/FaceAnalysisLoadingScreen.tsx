@@ -14,8 +14,15 @@ import {
   faceAnalysisLoadingSteps,
 } from '../services/faceAnalysisLoadingService';
 
+type AnchorPreview = {
+  faceShape: string;
+  recommendedMood: string;
+  skinType: string;
+};
+
 type FaceAnalysisLoadingScreenProps = {
   analysisErrorMessage?: string | null;
+  anchorPreview?: AnchorPreview | null;
   capturedPhotoUri?: string;
   headerTitle?: string;
   isAnalysisReady?: boolean;
@@ -37,6 +44,7 @@ export function resolveFaceAnalysisLoadingPreviewSource(capturedPhotoUri?: strin
 
 export function FaceAnalysisLoadingScreen({
   analysisErrorMessage = null,
+  anchorPreview = null,
   capturedPhotoUri,
   isAnalysisReady = true,
   onBack,
@@ -187,6 +195,28 @@ export function FaceAnalysisLoadingScreen({
           </XStack>
         </YStack>
 
+        {anchorPreview && !hasAnalysisError && !isAnalysisReady ? (
+          <YStack style={styles.anchorCard}>
+            <Text style={styles.anchorHeaderText}>
+              핵심 분석 완료 · 상세 리포트를 생성하고 있어요
+            </Text>
+            <XStack style={styles.anchorRow}>
+              {(
+                [
+                  ['얼굴형', anchorPreview.faceShape],
+                  ['피부', anchorPreview.skinType],
+                  ['무드', anchorPreview.recommendedMood],
+                ] as const
+              ).map(([label, value]) => (
+                <YStack key={label} style={styles.anchorItem}>
+                  <Text style={styles.anchorLabel}>{label}</Text>
+                  <Text numberOfLines={2} style={styles.anchorValue}>{value}</Text>
+                </YStack>
+              ))}
+            </XStack>
+          </YStack>
+        ) : null}
+
         {hasAnalysisError ? (
           <YStack style={styles.errorCard}>
             <Text style={styles.errorTitle}>얼굴 분석을 완료하지 못했어요</Text>
@@ -264,6 +294,48 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.xxl,
+  },
+  anchorCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  anchorHeaderText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
+  },
+  anchorRow: {
+    gap: spacing.sm,
+  },
+  anchorItem: {
+    backgroundColor: colors.surfaceMuted,
+    borderRadius: radius.md,
+    flex: 1,
+    gap: spacing.xs,
+    padding: spacing.md,
+  },
+  anchorLabel: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.regular,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.xs,
+  },
+  anchorValue: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: typography.lineHeight.sm,
   },
   errorActionRow: {
     gap: spacing.sm,
