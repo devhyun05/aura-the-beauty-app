@@ -62,6 +62,9 @@ def test_skin_type_expands_to_finish_soft_preference() -> None:
   assert oily[0]["values"] == ["matte", "velvet"]  # 매트 + 세미매트(벨벳) 소프트 선호
   assert skin_type_to_soft_preferences("복합성")[0]["values"] == ["matte", "velvet"]
   assert skin_type_to_soft_preferences("") == []
+
+  # finish 넛지는 베이스/파우더 카테고리에만 적용된다(립·아이 등 색조 제외).
+  assert dry[0]["categoryScope"] == ["base", "powder"]
   assert skin_type_to_soft_preferences("알 수 없음") == []
 
 

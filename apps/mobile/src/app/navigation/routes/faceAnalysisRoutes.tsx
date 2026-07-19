@@ -92,6 +92,8 @@ const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
   'ANALYSIS_REPORT_TEXT_REQUIRED',
   'ANALYSIS_REPORT_TIMEOUT',
   'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
+  // 화면 이탈로 폴링을 의도적으로 중단한 경우 — 재시도 대상이 아니다.
+  'ANALYSIS_WAIT_ABORTED',
 ]);
 
 export function getFaceAnalysisReportFooterReservedHeight(
@@ -601,6 +603,8 @@ export function FaceAnalysisLoadingRouteScreen({
 
     let isMounted = true;
     let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    // 화면 이탈 시 최대 240초짜리 분석 폴링이 백그라운드에 매달리지 않게 중단한다.
+    const analysisAbortController = new AbortController();
 
     // 축마다 "개별" null 타임아웃 — 공유 race 는 한 축 타임아웃이 이미 해소된
     // 다른 축 값까지 버리므로 raceWithNullTimeout 으로 독립 강등한다.
@@ -644,6 +648,9 @@ export function FaceAnalysisLoadingRouteScreen({
             faceVerticalThirds: verticalThirds,
             personalColor: personalColorOutcome,
           },
+          undefined,
+          // 화면 이탈 시 폴링 중단 — 최대 240초 백그라운드 매달림 방지.
+          analysisAbortController.signal,
         );
       })
       .then(report => {
@@ -706,6 +713,8 @@ export function FaceAnalysisLoadingRouteScreen({
 
     return () => {
       isMounted = false;
+      // 진행 중인 분석 폴링을 즉시 중단(화면 이탈·재요청 시 자원 매달림 방지).
+      analysisAbortController.abort();
 
       if (retryTimeoutId) {
         clearTimeout(retryTimeoutId);

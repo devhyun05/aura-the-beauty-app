@@ -61,6 +61,10 @@ def _signal_candidates(preferences: list[dict[str, Any]]) -> list[dict[str, Any]
     request_confidence = _number(preference.get("confidence"), default=0.5)
     positive_values = _values(preference.get("values"))
     avoid_values = _values(preference.get("avoidValues"))
+    # categoryScope는 선호를 특정 제품 카테고리에만 적용하는 메타데이터(예:
+    # skin-type→finish는 base/powder에만). 해석은 랭킹이 하고, 여기선 신호에
+    # 보존만 한다 — 재구성 과정에서 유실되지 않도록.
+    category_scope = _values(preference.get("categoryScope"))
     group_payload = {
       "attribute": attribute,
       "source": source,
@@ -68,6 +72,7 @@ def _signal_candidates(preferences: list[dict[str, Any]]) -> list[dict[str, Any]
       "confidence": request_confidence,
       "values": positive_values,
       "avoidValues": avoid_values,
+      "categoryScope": category_scope,
     }
     group_id = hashlib.sha256(
       json.dumps(
@@ -85,6 +90,8 @@ def _signal_candidates(preferences: list[dict[str, Any]]) -> list[dict[str, Any]
       "groupId": group_id,
       "inputIndex": input_index,
     }
+    if category_scope:
+      common["categoryScope"] = category_scope
     for value in positive_values:
       signals.append({**common, "value": value, "polarity": "positive"})
     for value in avoid_values:
@@ -190,6 +197,8 @@ def resolve_preferences(preferences: list[dict[str, Any]] | None) -> dict[str, A
       resolved["values"] = [signal["value"]]
     else:
       resolved["avoidValues"] = [signal["value"]]
+    if signal.get("categoryScope"):
+      resolved["categoryScope"] = signal["categoryScope"]
     resolved_preferences.append(resolved)
     provenance[preference_id] = {
       "attribute": signal["attribute"],

@@ -141,7 +141,9 @@ export function ReportScreenScaffold({
             }, shadow.cta]}>
               <Text style={[font(14.5, '800'), { color: color.white }]}>{data.footer.cta}</Text>
             </Pressable>
-            <MeasurementDebugPanel payload={measurementDebugPayload} summary={measurementDebugSummary} />
+            {__DEV__ ? (
+              <MeasurementDebugPanel payload={measurementDebugPayload} summary={measurementDebugSummary} />
+            ) : null}
           </View>
         </Animated.ScrollView>
       </View>

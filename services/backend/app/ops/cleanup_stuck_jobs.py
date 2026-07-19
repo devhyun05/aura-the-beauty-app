@@ -31,6 +31,9 @@ class CleanupResult:
   analysis_report_ids: tuple[str, ...]
   feedback_report_ids: tuple[str, ...]
   filter_extraction_report_ids: tuple[str, ...]
+  # 이미지 생성이 completed 이후 detach 태스크에서 고착된 보고서(상태는
+  # completed지만 imageGenerationStatus=processing). 기본값으로 하위호환.
+  image_stuck_report_ids: tuple[str, ...] = ()
 
   @property
   def total(self) -> int:
@@ -38,6 +41,7 @@ class CleanupResult:
       len(self.analysis_report_ids)
       + len(self.feedback_report_ids)
       + len(self.filter_extraction_report_ids)
+      + len(self.image_stuck_report_ids)
     )
 
 
@@ -46,12 +50,28 @@ def _ids(rows: list[dict[str, Any]]) -> tuple[str, ...]:
 
 
 async def find_stuck_jobs(db: Any, *, cutoff: datetime) -> CleanupResult:
+  # processing만 회수한다. pending은 SQS 모드에서 워커 dequeue 전까지 정상적으로
+  # 유지되는 상태라, cutoff로 실패 처리하면 backlog 시 대기 중 잡을 죽이고
+  # 워커가 terminal-skip(job_dispatcher TERMINAL_JOB_STATUSES)해 영구 유실된다.
+  # dispatch 전 크래시로 갇힌 pending 회수는 SQS-safe한 별도 신호(publish 시각
+  # 등)가 필요 — 후속 과제로 남긴다.
   analysis_rows = await db.fetch(
     """
     select id
     from analysis_reports
     where status = 'processing'
       and updated_at < $1
+    order by updated_at
+    """,
+    cutoff,
+  )
+  image_stuck_rows = await db.fetch(
+    """
+    select id
+    from analysis_reports
+    where status = 'completed'
+      and detail_payload->'result'->>'imageGenerationStatus' = 'processing'
+      and coalesce(analyzed_at, updated_at) < $1
     order by updated_at
     """,
     cutoff,
@@ -80,6 +100,7 @@ async def find_stuck_jobs(db: Any, *, cutoff: datetime) -> CleanupResult:
     analysis_report_ids=_ids(analysis_rows),
     feedback_report_ids=_ids(feedback_rows),
     filter_extraction_report_ids=_ids(filter_rows),
+    image_stuck_report_ids=_ids(image_stuck_rows),
   )
 
 
@@ -102,6 +123,24 @@ async def cleanup_stuck_jobs(db: Any, *, cutoff: datetime) -> CleanupResult:
     cutoff,
     ERROR_MESSAGE,
     json.dumps(error_details),
+  )
+  # 이미지 고착: 보고서 본문은 이미 completed라 상태는 유지하고, 무한 대기하는
+  # imageGenerationStatus만 failed로 내려 클라이언트가 이미지 대기를 멈추게 한다.
+  image_stuck_rows = await db.fetch(
+    """
+    update analysis_reports
+    set detail_payload = jsonb_set(
+          detail_payload,
+          '{result,imageGenerationStatus}',
+          '"failed"'::jsonb,
+          true
+        )
+    where status = 'completed'
+      and detail_payload->'result'->>'imageGenerationStatus' = 'processing'
+      and coalesce(analyzed_at, updated_at) < $1
+    returning id
+    """,
+    cutoff,
   )
   feedback_rows = await db.fetch(
     """
@@ -141,6 +180,7 @@ async def cleanup_stuck_jobs(db: Any, *, cutoff: datetime) -> CleanupResult:
     analysis_report_ids=_ids(analysis_rows),
     feedback_report_ids=_ids(feedback_rows),
     filter_extraction_report_ids=_ids(filter_rows),
+    image_stuck_report_ids=_ids(image_stuck_rows),
   )
 
 
@@ -151,12 +191,14 @@ def print_result(result: CleanupResult, *, dry_run: bool, cutoff: datetime) -> N
     f"analysis={len(result.analysis_report_ids)} "
     f"feedback={len(result.feedback_report_ids)} "
     f"filter_extraction={len(result.filter_extraction_report_ids)} "
+    f"image_stuck={len(result.image_stuck_report_ids)} "
     f"total={result.total}",
   )
   for job_type, report_ids in (
     ("analysis", result.analysis_report_ids),
     ("feedback", result.feedback_report_ids),
     ("filter_extraction", result.filter_extraction_report_ids),
+    ("image_stuck", result.image_stuck_report_ids),
   ):
     for report_id in report_ids:
       print(f"[aura:stuck-cleanup] {mode} type={job_type} report_id={report_id}")

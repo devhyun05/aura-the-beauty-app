@@ -57,6 +57,8 @@ _AUTHORITATIVE_HAIRLINE_PROVIDERS = {
 _AUTHORITATIVE_HAIRLINE_MIN_CONFIDENCE = 0.7
 _ANALYSIS_PROMPT_TASKS = {"face_makeup_recommendation_report_v1"}
 _ANALYSIS_PROMPT_SOURCES = {"camera", "gallery"}
+# makeup_recommendation_context.normalize_makeup_profile_gender 산출값과 일치.
+_ANALYSIS_PROFILE_GENDERS = {"female", "male", "unspecified"}
 _FACE_VERTICAL_THIRDS_STATUSES = {
   "full_success",
   "partial_success",
@@ -311,9 +313,12 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
   )
 
   if full_eligible:
+    # 프롬프트 지시("원본 H 제외, 검증된 비율만")와 코드를 일치시킨다:
+    # 픽셀 원본(heightPx/widthPx/*Px)은 데이터 최소화 원칙상 모델에 보내지
+    # 않고, 무차원 비율/정규화 요약만 전달한다.
     face_length = _safe_numeric_record(
       raw.get("faceLength"),
-      ("heightPx", "ratio", "widthPx"),
+      ("ratio",),
     )
     dominant_part = _prompt_enum(
       raw.get("dominantPart"),
@@ -323,12 +328,8 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
       raw.get("ratioDetail"),
       (
         "lowerNormalized",
-        "lowerPx",
         "middleNormalized",
-        "middlePx",
-        "totalPx",
         "upperNormalized",
-        "upperPx",
       ),
     )
     return {
@@ -349,8 +350,6 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
   middle_lower = _prompt_record(raw.get("middleLowerRatio"))
   safe_lower = _prompt_number(middle_lower.get("lower"))
   safe_middle = _prompt_number(middle_lower.get("middle"))
-  safe_lower_px = _prompt_number(middle_lower.get("lowerPx"))
-  safe_middle_px = _prompt_number(middle_lower.get("middlePx"))
   if safe_lower is None:
     safe_lower = lower
   if safe_middle is None:
@@ -358,13 +357,12 @@ def _safe_face_vertical_thirds_prompt_payload(value: Any) -> dict[str, Any] | No
   if safe_lower is None or safe_middle is None:
     return None
 
+  # 픽셀 원본(lowerPx/middlePx) 제외 — 무차원 비율만 전달(위 주석과 동일 원칙).
   return {
     **common,
     "middleLowerRatio": {
       "lower": safe_lower,
-      "lowerPx": safe_lower_px,
       "middle": safe_middle,
-      "middlePx": safe_middle_px,
     },
   }
 
@@ -389,10 +387,16 @@ def _safe_face_geometry_prompt_payload(value: Any) -> dict[str, Any] | None:
     metric_value = None if raw_value is None else _prompt_number(raw_value)
     if raw_value is not None and metric_value is None:
       continue
-    safe_metrics[key] = {
+    safe_metric: dict[str, Any] = {
       "unit": "deg" if key.endswith("Deg") else "ratio",
       "value": metric_value,
     }
+    # per-metric confidence 전달 — LLM이 저신뢰 지표(눈꼬리 각도 등)를 확정
+    # 사실로 서술하지 않도록. personalColor·face3d는 이미 전달, geometry만 누락이었음.
+    confidence = _prompt_number(metric.get("confidence"))
+    if confidence is not None and 0 <= confidence <= 1:
+      safe_metric["confidence"] = confidence
+    safe_metrics[key] = safe_metric
   if not safe_metrics:
     return None
 
@@ -604,6 +608,71 @@ def _safe_personal_color_prompt_payload(value: Any) -> dict[str, Any] | None:
   return safe or None
 
 
+# 모바일 TYPE_LABEL_KO(personalColorCore/constants.ts)와 문자열이 일치해야 한다 —
+# 상세 화면 요약 칩과 DB 컬럼(리스트 태그·추천 스냅샷)이 같은 정본을 보게 하는 계약.
+PERSONAL_COLOR_TONE_LABEL_KO: dict[str, str] = {
+  "spring_light": "봄 라이트",
+  "spring_bright": "봄 브라이트",
+  "spring_true": "봄 트루",
+  "summer_light": "여름 라이트",
+  "summer_true": "여름 트루",
+  "summer_muted": "여름 뮤트",
+  "autumn_muted": "가을 뮤트",
+  "autumn_true": "가을 트루",
+  "autumn_deep": "가을 딥",
+  "winter_bright": "겨울 브라이트",
+  "winter_true": "겨울 트루",
+  "winter_deep": "겨울 딥",
+}
+
+# 모바일 AXIS_BANDS(presentation.ts)의 (low, mid, high) 라벨. 밴드 경계도 동일(±1/3).
+_PERSONAL_COLOR_AXIS_BAND_LABELS_KO: dict[str, tuple[str, str, str]] = {
+  "temperature": ("쿨", "뉴트럴", "웜"),
+  "value": ("밝은 색", "중간 밝기", "깊은 색"),
+  "chroma": ("부드러운 색", "맑은 색", "선명한 색"),
+}
+
+
+def measured_personal_color_column_values(
+  measurements: Any,
+) -> tuple[str | None, str | None]:
+  """기기 측정 퍼컬 → analysis_reports.personal_color/tone_summary 컬럼값.
+
+  DB 정본은 기기 측정값 원칙: LLM 재판정 대신, 조명 보정·12톤/계절 정합성
+  게이트(_safe_personal_color_prompt_payload)를 통과한 tone.top의 한국어
+  라벨을 기록한다. 측정 실패(insufficient·게이트 탈락)는 (None, None) →
+  coalesce로 컬럼 NULL 유지.
+  """
+  safe = _safe_personal_color_prompt_payload(
+    _prompt_record(measurements).get("personalColor"),
+  )
+  if not safe:
+    return None, None
+  tone = safe.get("tone")
+  if not isinstance(tone, dict):
+    return None, None
+  label = PERSONAL_COLOR_TONE_LABEL_KO.get(str(tone.get("top") or ""))
+  if label is None:
+    return None, None
+
+  axes = safe.get("axes")
+  axes = axes if isinstance(axes, dict) else {}
+
+  def _band_label(axis_name: str) -> str:
+    low, mid, high = _PERSONAL_COLOR_AXIS_BAND_LABELS_KO[axis_name]
+    axis = axes.get(axis_name)
+    value = axis.get("value") if isinstance(axis, dict) else None
+    # 모바일 getAxisBandPresentation과 동일: null 또는 중간 밴드(±1/3)는 mid.
+    if value is None or -1 / 3 <= value <= 1 / 3:
+      return mid
+    return low if value < -1 / 3 else high
+
+  tone_summary = " · ".join(
+    _band_label(axis_name) for axis_name in ("temperature", "value", "chroma")
+  )
+  return label, tone_summary
+
+
 def _safe_face3d_prompt_payload(value: Any) -> dict[str, Any] | None:
   raw = _prompt_record(value)
   if not raw:
@@ -668,6 +737,13 @@ def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
   source = _prompt_enum(payload.get("source"), _ANALYSIS_PROMPT_SOURCES)
   if source is not None:
     metadata["source"] = source
+  # 계정 성별(서버가 create_analysis_job에서 주입). 사진 성별 추론 대신 사용.
+  profile_gender = _prompt_enum(
+    payload.get("profileGender"),
+    _ANALYSIS_PROFILE_GENDERS,
+  )
+  if profile_gender is not None:
+    metadata["profileGender"] = profile_gender
 
   raw_measurements = payload.get("measurements")
   measurements = _prompt_record(raw_measurements)
@@ -724,7 +800,119 @@ def _safe_analysis_prompt_metadata(payload: dict[str, Any]) -> dict[str, Any]:
   if not face3d_from_measurements and safe_face3d is not None:
     metadata["face3d"] = safe_face3d
   return metadata
+
+
+def append_analysis_metric(metrics_path: str | None, record: dict[str, Any]) -> None:
+  """최적화 실험 지표를 JSONL 한 줄로 append. 경로 없으면 no-op. 실패해도 요청을
+  깨지 않는다(수집은 부가 기능). append 모드라 로컬 다중 요청에도 안전.
+  """
+  if not metrics_path:
+    return
+  try:
+    with open(metrics_path, "a", encoding="utf-8") as sink:
+      sink.write(json.dumps({"ts": time.time(), **record}, ensure_ascii=False) + "\n")
+  except OSError as exc:  # noqa: BLE001 - 지표 기록 실패는 서빙을 깨지 않는다.
+    logger.warning("[aura:metrics] append failed reason=%s", exc.__class__.__name__)
+
+
 RECOMMENDED_MAKEUP_COUNT = 1
+
+# Bedrock forced tool use로 단일호출 출력을 강제하는 스키마. required 목록은
+# _validate_analysis_result_before_normalization의 필수 필드와 일치해야 하며,
+# test_analysis_tool_schema_matches_validator가 드리프트를 막는다. additionalProperties는
+# 열어둔다 — 모델이 beautyGuide 등 선택 필드를 함께 채울 수 있게.
+FACE_ANALYSIS_TOOL_NAME = "return_face_analysis_report"
+
+_STR = {"type": "string", "minLength": 1}
+
+
+def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
+  return {"type": "object", "properties": properties, "required": required}
+
+
+def _build_face_analysis_tool_schema() -> dict[str, Any]:
+  guideline_keys = ["brow", "blush", "highlight", "eyeshadow", "eyeliner", "lip"]
+  region_note = _obj(
+    {"insight": _STR, "evidence": _STR, "recommendation": _STR},
+    ["insight", "evidence", "recommendation"],
+  )
+  styling_row = _obj(
+    {"category": _STR, "note": _STR, "why": _STR},
+    ["category", "note", "why"],
+  )
+  styling_look = _obj(
+    {
+      "title": _STR,
+      "subtitle": _STR,
+      "description": _STR,
+      "rows": {"type": "array", "minItems": 4, "items": styling_row},
+    },
+    ["title", "subtitle", "description", "rows"],
+  )
+  axis = _obj(
+    {"key": _STR, "leftLabel": _STR, "rightLabel": _STR, "value": {"type": "number"}},
+    ["key", "leftLabel", "rightLabel", "value"],
+  )
+  return _obj(
+    {
+      "faceShape": _STR,
+      "skinType": _STR,
+      "recommendedMood": _STR,
+      "summary": _STR,
+      "shortSummary": _STR,
+      "skinAnalysisSummary": _STR,
+      "baseMakeupGuide": _STR,
+      "makeupGuideline": _obj({key: _STR for key in guideline_keys}, guideline_keys),
+      "recommendedMakeups": {
+        "type": "array",
+        "minItems": RECOMMENDED_MAKEUP_COUNT,
+        "maxItems": RECOMMENDED_MAKEUP_COUNT,
+        "items": _obj(
+          {
+            "title": _STR,
+            "subtitle": _STR,
+            "description": _STR,
+            "tags": {"type": "array", "minItems": 2, "items": _STR},
+          },
+          ["title", "subtitle", "description", "tags"],
+        ),
+      },
+      "regionNotes": _obj(
+        {region: region_note for region in ("upper", "mid", "lower", "jaw")},
+        ["upper", "mid", "lower", "jaw"],
+      ),
+      "impressionNotes": _obj(
+        {
+          "overallMood": _STR,
+          "paragraph": _STR,
+          "keywords": {"type": "array", "minItems": 3, "items": _STR},
+          "axes": {"type": "array", "minItems": 2, "maxItems": 2, "items": axis},
+        },
+        ["overallMood", "paragraph", "keywords", "axes"],
+      ),
+      "stylingLooks": _obj(
+        {"natural": styling_look, "glam": styling_look},
+        ["natural", "glam"],
+      ),
+    },
+    [
+      "faceShape",
+      "skinType",
+      "recommendedMood",
+      "summary",
+      "shortSummary",
+      "skinAnalysisSummary",
+      "baseMakeupGuide",
+      "makeupGuideline",
+      "recommendedMakeups",
+      "regionNotes",
+      "impressionNotes",
+      "stylingLooks",
+    ],
+  )
+
+
+FACE_ANALYSIS_TOOL_SCHEMA = _build_face_analysis_tool_schema()
 
 DEFAULT_IMPRESSION_AXES = (
   {"key": "softness", "leftLabel": "부드러움", "rightLabel": "또렷함", "value": 0.0},
@@ -851,6 +1039,10 @@ MAKEUP_RECOMMENDATION_OUTPUT_SCHEMA = {
 class OpenAIAnalysisService:
   def __init__(self, settings: Settings) -> None:
     self.settings = settings
+    # boto3 client는 생성 비용(서비스 모델 로딩·엔드포인트 리졸브)이 커서
+    # 인스턴스 수명 동안 재사용한다(설정 불변 전제, boto3 client는 thread-safe).
+    self._s3_client_cache: Any = None
+    self._bedrock_runtime_client_cache: Any = None
 
   def _client(self):
     if OpenAI is None:
@@ -872,6 +1064,9 @@ class OpenAIAnalysisService:
     )
 
   def _s3_client(self):
+    if self._s3_client_cache is not None:
+      return self._s3_client_cache
+
     client_kwargs = {
       "region_name": self.settings.aws_region,
       "config": Config(
@@ -889,9 +1084,13 @@ class OpenAIAnalysisService:
         },
       )
 
-    return boto3.client("s3", **client_kwargs)
+    self._s3_client_cache = boto3.client("s3", **client_kwargs)
+    return self._s3_client_cache
 
   def _bedrock_runtime_client(self):
+    if self._bedrock_runtime_client_cache is not None:
+      return self._bedrock_runtime_client_cache
+
     client_kwargs = {
       "region_name": self.settings.effective_bedrock_analysis_region,
       "config": Config(
@@ -909,7 +1108,11 @@ class OpenAIAnalysisService:
         },
       )
 
-    return boto3.client("bedrock-runtime", **client_kwargs)
+    self._bedrock_runtime_client_cache = boto3.client(
+      "bedrock-runtime",
+      **client_kwargs,
+    )
+    return self._bedrock_runtime_client_cache
   def _extract_remote_image_url(self, payload: dict[str, Any]) -> str | None:
     bucket = payload.get("bucket")
     object_key = payload.get("objectKey") or payload.get("object_key")
@@ -1082,6 +1285,43 @@ class OpenAIAnalysisService:
       quality=self.settings.openai_image_input_quality,
       context="source-input",
     )
+
+  # Bedrock Claude 이미지 상한(약 5MB) 여유치. 최적화 후에도 초과하면
+  # 조용한 invoke 실패 대신 명시적 오류로 돌린다.
+  _ANALYSIS_IMAGE_MAX_BYTES = 4_500_000
+
+  def _prepare_source_image_for_analysis(
+    self,
+    image_bytes: bytes,
+    source_content_type: str,
+  ) -> tuple[bytes, str]:
+    """분석용 사진을 모델 전송 전에 다운스케일한다.
+
+    기존에는 이미지 생성 경로만 최적화하고 분석 경로는 S3 원본을 그대로
+    base64로 보냈다 — 대형 사진이면 비용·지연을 넘어 Bedrock 이미지 한도
+    초과로 분석 자체가 실패한다. 생성 경로와 동일한 변환기를 재사용한다.
+    """
+    optimized_bytes, optimized_content_type = self._convert_image_for_speed(
+      image_bytes,
+      source_content_type=source_content_type,
+      output_format="jpeg",
+      max_edge=self.settings.openai_image_input_max_edge,
+      quality=self.settings.openai_image_input_quality,
+      context="analysis-input",
+    )
+
+    if len(optimized_bytes) > self._ANALYSIS_IMAGE_MAX_BYTES:
+      raise AppError(
+        413,
+        "SOURCE_IMAGE_TOO_LARGE",
+        "분석용 사진이 너무 커요. 다시 촬영해 주세요.",
+        {
+          "bytes": len(optimized_bytes),
+          "maxBytes": self._ANALYSIS_IMAGE_MAX_BYTES,
+        },
+      )
+
+    return optimized_bytes, optimized_content_type
 
   def _optimize_generated_image_for_upload(self, image_bytes: bytes) -> bytes:
     output_format, output_compression, _, content_type = self._resolve_makeup_image_output()
@@ -1312,8 +1552,10 @@ class OpenAIAnalysisService:
       "피부 톤, 언더톤, 대비감, 눈동자와 머리 색, 얼굴형, 눈매, 광대/볼 구조, 눈썹, 입술, 전체 분위기를 함께 판단해. "
       "전문 퍼스널 컬러 컨설턴트와 메이크업 아티스트가 실제 고객을 상담하듯, 사진 속 실제 얼굴 특징과 컬러링을 근거로 판단해. "
       "사진 조명이나 안경/그림자 때문에 확정이 어려운 내용은 과하게 단정하지 말고 가장 가능성 높은 방향으로 표현해. "
-      "사진 속 사용자의 성별 표현과 스타일을 반드시 보존해. 남성으로 보이는 사용자는 남성 그루밍 메이크업 중심으로, 여성으로 보이는 사용자는 여성 메이크업 중심으로 추천해. "
-      "메이크업 추천이 사용자의 성별 표현을 바꾸거나 다른 성별처럼 보이게 만들면 안 돼. "
+      "요청 메타데이터의 profileGender는 계정에 저장된 성별이다. 사진으로 성별을 추정하지 말고 이 값을 따라. "
+      "female이면 여성 메이크업 중심으로, male이면 남성 그루밍 메이크업 중심으로 추천하고, "
+      "unspecified거나 값이 없으면 성별을 추정하지 않는 중성적인 표현을 기본 방향으로 사용해. "
+      "사진 속 사용자의 스타일은 보존하고, 메이크업 추천이 사용자의 성별 표현을 바꾸거나 다른 성별처럼 보이게 만들면 안 돼. "
       "반드시 한국어 JSON 객체 하나만 반환해. "
       "앱 상단 요약에 바로 쓰이도록 faceShape와 recommendedMood를 정확하고 짧게 채워. "
       "퍼스널 컬러와 톤 요약은 절대 새로 판정하거나 출력하지 마. 기기 측정값은 메이크업 색 선택의 근거로만 사용해. "
@@ -1357,6 +1599,7 @@ class OpenAIAnalysisService:
       "요청 메타데이터에 faceGeometry2d(정면 사진에서 실측한 2D 기하 지표: 눈 폭·눈 개방도·미간 비율·눈꼬리 기울기 canthalTilt(도)·"
       "눈-눈썹 간격·눈썹 기울기 browSlope(도)·입 폭·윗입술/아랫입술 두께비·하관 폭 비율·입꼬리 비대칭 — 비율은 무차원, 각도는 도 단위, "
       "Left/Right는 피사체 기준, value가 null이면 미측정)가 있으면 눈매/눈썹/입술 판단과 makeupGuideline의 아이라이너·눈썹·립 배치에 근거로 반영해. "
+      "각 지표의 confidence가 낮으면(예: 0.5 미만) 그 지표만으로 인상을 단정하지 말고 사진 관찰을 우선하거나 표현을 완화해. "
       "요청 메타데이터에 measuredPersonalColor(기기에서 조명 보정 후 실측한 퍼스널 컬러: tone.top/secondary 12톤 코드, "
       "axes 5축 -1..1(temperature 쿨→웜, value 라이트→딥, chroma 뮤트→비비드, clarity 소프트→클리어, contrast 저→고대비), "
       "부위별 평균 Lab 색값 regions, 부위 간 명도·색차 relations, measurementConfidence 0..1, correction.applied 조명 보정 여부)가 있으면 "
@@ -1423,10 +1666,21 @@ class OpenAIAnalysisService:
     json_schema: dict[str, Any],
     source_image_bytes: bytes | None,
     max_tokens: int,
+    stage: str | None = None,
   ) -> dict[str, Any]:
     provider = self.settings.analysis_provider
     schema_instruction = json.dumps(json_schema, ensure_ascii=False, separators=(",", ":"))
+    started_at = time.monotonic()
 
+    # V2 스테이지도 동일 원본을 base64로 실어 보낸다 — analyze_text와 같은
+    # 이유(비용·Bedrock 이미지 한도)로 전송 전에 다운스케일한다.
+    if source_image_bytes is not None:
+      source_image_bytes, _ = self._prepare_source_image_for_analysis(
+        source_image_bytes,
+        self._structured_image_content_type(source_image_bytes),
+      )
+
+    tool_result: dict[str, Any] | None = None
     if provider == "bedrock":
       model_id = self.settings.effective_analysis_model_id
       if not model_id:
@@ -1435,12 +1689,15 @@ class OpenAIAnalysisService:
           "BEDROCK_ANALYSIS_NOT_CONFIGURED",
           "A Bedrock Claude model ID or inference profile ID is required for AI analysis.",
         )
-      content: list[dict[str, Any]] = [
-        {
-          "type": "text",
-          "text": f"{user_prompt}\nRequired JSON schema: {schema_instruction}",
-        },
-      ]
+      tool_enforced = self.settings.bedrock_analysis_tool_enforcement
+      # 스키마 강제 시엔 프롬프트에 스키마 텍스트를 중복으로 싣지 않는다(도구가
+      # 강제하므로) — 거대한 입력 토큰(5천대)도 줄인다.
+      prompt_text = (
+        user_prompt
+        if tool_enforced
+        else f"{user_prompt}\nRequired JSON schema: {schema_instruction}"
+      )
+      content: list[dict[str, Any]] = [{"type": "text", "text": prompt_text}]
       if source_image_bytes is not None:
         content.append(
           {
@@ -1452,23 +1709,65 @@ class OpenAIAnalysisService:
             },
           },
         )
+      request_body: dict[str, Any] = {
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "temperature": 0.1,
+        "system": developer_prompt,
+        "messages": [{"role": "user", "content": content}],
+      }
+      if tool_enforced:
+        # 각 스테이지 스키마(measure/perceive/consult)를 도구로 강제 — 필드 누락·
+        # 장황한 출력으로 인한 파싱/검증 실패를 근본 차단.
+        request_body["tools"] = [
+          {
+            "name": "return_structured_output",
+            "description": "Return the structured analysis stage output.",
+            "input_schema": json_schema,
+          },
+        ]
+        request_body["tool_choice"] = {"type": "tool", "name": "return_structured_output"}
+
       response = self._bedrock_runtime_client().invoke_model(
         modelId=model_id,
-        body=json.dumps(
-          {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "temperature": 0.1,
-            "system": developer_prompt,
-            "messages": [{"role": "user", "content": content}],
-          },
-          ensure_ascii=False,
-        ),
+        body=json.dumps(request_body, ensure_ascii=False),
         accept="application/json",
         contentType="application/json",
       )
       response_payload = json.loads(response["body"].read())
-      output_text = self._extract_bedrock_output_text(response_payload)
+      stop_reason = self._observe_bedrock_stop_reason(
+        response_payload,
+        context="stage",
+        max_tokens=max_tokens,
+      )
+      self._log_bedrock_call_metrics(
+        response_payload,
+        context="stage",
+        started_at=started_at,
+        stage=stage,
+      )
+      if tool_enforced:
+        # 조용한 fallback 없음 — 도구 응답이 없으면 명시적으로 실패.
+        tool_result = self._extract_bedrock_tool_input(
+          response_payload, "return_structured_output",
+        )
+        if tool_result is None:
+          raise AppError(
+            502,
+            "BEDROCK_TOOL_USE_MISSING",
+            "AI structured analysis did not return the enforced tool output.",
+            {"stopReason": stop_reason or "unknown"},
+          )
+        output_text = ""
+      else:
+        output_text = self._extract_bedrock_output_text(response_payload)
+        if not output_text and stop_reason == "max_tokens":
+          raise AppError(
+            502,
+            "AI_EMPTY_OUTPUT",
+            "AI structured analysis returned an empty response.",
+            {"stopReason": "max_tokens"},
+          )
     elif provider == "openai":
       content = [{"type": "input_text", "text": user_prompt}]
       if source_image_bytes is not None:
@@ -1498,12 +1797,27 @@ class OpenAIAnalysisService:
         },
       )
       output_text = getattr(response, "output_text", "")
+      stop_reason = ""
     else:
       raise AppError(503, "AI_PROVIDER_UNSUPPORTED", f"Unsupported AI_PROVIDER: {provider}")
 
+    # tool use(강제)면 구조화 input을 바로 반환, 아니면 텍스트를 파싱.
+    if tool_result is not None:
+      return tool_result
     if not output_text:
       raise AppError(502, "AI_EMPTY_OUTPUT", "AI structured analysis returned an empty response.")
-    return self._parse_json_output(output_text)
+    try:
+      return self._parse_json_output(output_text)
+    except AppError as exc:
+      # 절단된 부분 JSON이 파싱 불가일 때 원인(max_tokens)을 details에 남긴다.
+      if stop_reason == "max_tokens":
+        raise AppError(
+          exc.status_code,
+          exc.code,
+          exc.message,
+          {**exc.details, "stopReason": "max_tokens"},
+        ) from exc
+      raise
 
   async def read_source_image_bytes(self, payload: dict[str, Any]) -> bytes:
     return await asyncio.to_thread(self._read_source_image_bytes, payload)
@@ -1516,6 +1830,7 @@ class OpenAIAnalysisService:
     json_schema: dict[str, Any],
     source_image_bytes: bytes | None,
     max_tokens: int,
+    stage: str | None = None,
   ) -> dict[str, Any]:
     try:
       return await asyncio.to_thread(
@@ -1525,6 +1840,7 @@ class OpenAIAnalysisService:
         json_schema,
         source_image_bytes,
         max_tokens,
+        stage,
       )
     except AppError:
       raise
@@ -1958,6 +2274,87 @@ class OpenAIAnalysisService:
 
     return result
 
+  def _observe_bedrock_stop_reason(
+    self,
+    response_payload: dict[str, Any],
+    *,
+    context: str,
+    max_tokens: int,
+  ) -> str:
+    """양 경로 공유 절단 관측. dev=V2 라이브·프로드=analyze_text 모두 커버한다.
+
+    max_tokens 절단은 파싱/스키마 검증 실패로 이어지는데, stop_reason을 남기지
+    않으면 "왜 실패했는지"가 로그에서 사라진다. 새 방어가 아니라 관측성 목적.
+    """
+    stop_reason = str(response_payload.get("stop_reason") or "")
+    if stop_reason == "max_tokens":
+      logger.warning(
+        "[aura:bedrock] %s:truncated maxTokens=%s",
+        context,
+        max_tokens,
+      )
+    return stop_reason
+
+  def _log_bedrock_call_metrics(
+    self,
+    response_payload: dict[str, Any],
+    *,
+    context: str,
+    started_at: float,
+    stage: str | None = None,
+  ) -> None:
+    """토큰·지연 계측(Stage 7). analyze_text(프로드)와 V2 스테이지(dev)를 동일
+    포맷으로 남겨, dev 트래픽만으로 라이브 vs V2 A/B(비용·지연)를 비교할 수 있게 한다.
+
+    stage(measure|perceive|consult)를 함께 남겨 스테이지별 지연·재시도(같은 stage가
+    2줄이면 1회 재검증)를 토큰 순서 추정 없이 정확히 집계한다.
+    로그 grep 키: `[aura:bedrock] <context>:metrics`.
+    """
+    usage = response_payload.get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+    duration_ms = round((time.monotonic() - started_at) * 1000)
+    stop_reason = str(response_payload.get("stop_reason") or "")
+    logger.info(
+      "[aura:bedrock] %s:metrics stage=%s durationMs=%s inputTokens=%s outputTokens=%s",
+      context,
+      stage or "-",
+      duration_ms,
+      usage.get("input_tokens"),
+      usage.get("output_tokens"),
+    )
+    # 실험 지표 sink(로그 레벨 무관). context: analysis=단일호출, stage=V2 스테이지.
+    append_analysis_metric(
+      self.settings.analysis_metrics_path,
+      {
+        "kind": "call",
+        "context": context,
+        "stage": stage,
+        "durationMs": duration_ms,
+        "inputTokens": usage.get("input_tokens"),
+        "outputTokens": usage.get("output_tokens"),
+        "stopReason": stop_reason or "end_turn",
+      },
+    )
+
+  def _extract_bedrock_tool_input(
+    self,
+    response_payload: dict[str, Any],
+    tool_name: str,
+  ) -> dict[str, Any] | None:
+    """forced tool use 응답에서 구조화 input(dict)을 꺼낸다. 없으면 None."""
+    content = response_payload.get("content")
+    if not isinstance(content, list):
+      return None
+    for part in content:
+      if (
+        isinstance(part, dict)
+        and part.get("type") == "tool_use"
+        and part.get("name") == tool_name
+        and isinstance(part.get("input"), dict)
+      ):
+        return part["input"]
+    return None
+
   def _extract_bedrock_output_text(self, response_payload: dict[str, Any]) -> str:
     content = response_payload.get("content")
 
@@ -1991,56 +2388,106 @@ class OpenAIAnalysisService:
       )
 
     content_type = self._infer_content_type(payload)
+    source_image_bytes, content_type = self._prepare_source_image_for_analysis(
+      source_image_bytes,
+      content_type,
+    )
     source_image_base64 = base64.b64encode(source_image_bytes).decode("utf-8")
+    tool_enforced = self.settings.bedrock_analysis_tool_enforcement
     logger.info(
-      "[aura:bedrock] analysis:start model=%s region=%s",
+      "[aura:bedrock] analysis:start model=%s region=%s toolEnforced=%s",
       model_id,
       self.settings.effective_bedrock_analysis_region,
+      tool_enforced,
     )
-    response = self._bedrock_runtime_client().invoke_model(
-      modelId=model_id,
-      body=json.dumps(
+    request_body: dict[str, Any] = {
+      "anthropic_version": "bedrock-2023-05-31",
+      "max_tokens": self.settings.bedrock_analysis_max_tokens,
+      "temperature": 0.2,
+      "system": "You are a concise, practical K-beauty makeup analyst. Return JSON only.",
+      "messages": [
         {
-          "anthropic_version": "bedrock-2023-05-31",
-          "max_tokens": 2400,
-          "temperature": 0.2,
-          "system": "You are a concise, practical K-beauty makeup analyst. Return JSON only.",
-          "messages": [
+          "role": "user",
+          "content": [
+            {"type": "text", "text": self._build_analysis_prompt(payload)},
             {
-              "role": "user",
-              "content": [
-                {"type": "text", "text": self._build_analysis_prompt(payload)},
-                {
-                  "type": "image",
-                  "source": {
-                    "type": "base64",
-                    "media_type": content_type,
-                    "data": source_image_base64,
-                  },
-                },
-              ],
+              "type": "image",
+              "source": {
+                "type": "base64",
+                "media_type": content_type,
+                "data": source_image_base64,
+              },
             },
           ],
         },
-        ensure_ascii=False,
-      ),
+      ],
+    }
+    if tool_enforced:
+      # 강제 tool use — 모델이 스키마의 required 필드를 모두 채우게 강제한다.
+      request_body["tools"] = [
+        {
+          "name": FACE_ANALYSIS_TOOL_NAME,
+          "description": "Return the complete K-beauty face analysis report.",
+          "input_schema": FACE_ANALYSIS_TOOL_SCHEMA,
+        },
+      ]
+      request_body["tool_choice"] = {"type": "tool", "name": FACE_ANALYSIS_TOOL_NAME}
+
+    response = self._bedrock_runtime_client().invoke_model(
+      modelId=model_id,
+      body=json.dumps(request_body, ensure_ascii=False),
       accept="application/json",
       contentType="application/json",
     )
     response_payload = json.loads(response["body"].read())
-    output_text = self._extract_bedrock_output_text(response_payload)
+    stop_reason = self._observe_bedrock_stop_reason(
+      response_payload,
+      context="analysis",
+      max_tokens=self.settings.bedrock_analysis_max_tokens,
+    )
+    self._log_bedrock_call_metrics(
+      response_payload,
+      context="analysis",
+      started_at=started_at,
+    )
 
-    if not output_text:
-      raise AppError(
-        502,
-        "BEDROCK_EMPTY_OUTPUT",
-        "Bedrock Claude analysis returned an empty response.",
-      )
+    if tool_enforced:
+      # 강제 tool use — 도구 응답이 없으면 조용히 텍스트로 넘어가지 않고 명시적으로
+      # 실패시킨다(스키마 강제가 안 걸린 걸 숨기지 않음).
+      tool_input = self._extract_bedrock_tool_input(response_payload, FACE_ANALYSIS_TOOL_NAME)
+      if tool_input is None:
+        raise AppError(
+          502,
+          "BEDROCK_TOOL_USE_MISSING",
+          "Bedrock analysis did not return the enforced tool output.",
+          {"stopReason": stop_reason or "unknown"},
+        )
+      raw_result = tool_input
+    else:
+      output_text = self._extract_bedrock_output_text(response_payload)
+      if not output_text:
+        raise AppError(
+          502,
+          "BEDROCK_EMPTY_OUTPUT",
+          "Bedrock Claude analysis returned an empty response.",
+        )
+      raw_result = self._parse_json_output(output_text)
 
-    parsed = self._normalize_analysis_result(self._parse_json_output(output_text))
+    try:
+      parsed = self._normalize_analysis_result(raw_result)
+    except AppError as exc:
+      if stop_reason == "max_tokens":
+        raise AppError(
+          exc.status_code,
+          exc.code,
+          exc.message,
+          {**exc.details, "stopReason": "max_tokens"},
+        ) from exc
+      raise
     logger.info(
-      "[aura:bedrock] analysis:success durationMs=%s",
+      "[aura:bedrock] analysis:success durationMs=%s stopReason=%s",
       round((time.monotonic() - started_at) * 1000),
+      stop_reason or "end_turn",
     )
 
     return parsed
@@ -2062,6 +2509,10 @@ class OpenAIAnalysisService:
 
     started_at = time.monotonic()
     content_type = self._infer_content_type(payload)
+    source_image_bytes, content_type = self._prepare_source_image_for_analysis(
+      source_image_bytes,
+      content_type,
+    )
     source_image_base64 = base64.b64encode(source_image_bytes).decode("utf-8")
     logger.info(
       "[aura:openai] analysis:start model=%s",

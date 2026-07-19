@@ -63,7 +63,9 @@ class Settings(BaseSettings):
   makeup_personalized_image_enabled: bool = True
   makeup_recommendation_v1_compat_enabled: bool = True
   face_analysis_v2_enabled: bool = False
-  face_analysis_stage_timeout_seconds: float = Field(default=45.0, ge=5.0, le=180.0)
+  # perceive는 영문에서도 ~40s(상한 45s에 근접)라 마진이 없었고, 한국어 출력으로
+  # 더 길어져 타임아웃했다 → 스테이지별 여유를 준다(멈춘 잡은 상위 폴링 타임아웃이 방어).
+  face_analysis_stage_timeout_seconds: float = Field(default=100.0, ge=5.0, le=180.0)
   face_analysis_stage_max_attempts: int = Field(default=2, ge=1, le=3)
   # Phase 4 population norms remain fail-closed. Turning the flag on is not
   # sufficient: the resolver also verifies an approved registry bundle and the
@@ -89,6 +91,18 @@ class Settings(BaseSettings):
   bedrock_question_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_recommendation_model_id: str | None = "global.anthropic.claude-sonnet-4-6"
   bedrock_analysis_region: str | None = None
+  # analyze_text 단일 호출의 출력 상한. 하드 검증(FACE_ANALYSIS_AI_INCOMPLETE)이
+  # 누락 필드를 실패로 돌리므로, 상한이 낮으면 절단→검증 실패가 사용자 재촬영
+  # 요구로 이어진다. 요구 출력(~90값)의 한국어 문장 기준 여유치로 4000.
+  bedrock_analysis_max_tokens: int = Field(default=4000, ge=1200, le=8192)
+  # 단일 호출(analyze_text)의 Bedrock 출력을 강제 tool use로 스키마 강제한다.
+  # 프롬프트 부탁만으로는 claude-3-5-sonnet이 무거운 필드를 생략해 FACE_ANALYSIS_
+  # AI_INCOMPLETE로 실패하던 문제의 근본 대응. tool_use 블록이 없으면 기존 텍스트
+  # 파싱으로 폴백. 실DB/실Bedrock 검증 전 끌 수 있도록 플래그(기본 ON).
+  bedrock_analysis_tool_enforcement: bool = True
+  # 최적화 실험용 지표 sink. 경로가 설정되면 분석 호출/결과 지표를 JSONL로 append
+  # (로그 레벨과 무관). 미설정(None)이면 수집 off. scripts/analysis_metrics_report.py로 집계.
+  analysis_metrics_path: str | None = None
   bedrock_guardrail_id: str | None = None
   bedrock_guardrail_version: str | None = None
   bedrock_guardrail_region: str | None = None
