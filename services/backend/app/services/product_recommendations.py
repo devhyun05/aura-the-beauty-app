@@ -504,12 +504,16 @@ def _json(value: Any) -> dict[str, Any]:
   return {}
 
 
-def _is_local_demo_seasonal_collection(collection: dict[str, Any] | None) -> bool:
+def _is_local_demo_seasonal_collection(collection: Any) -> bool:
   """Keep local QA fixtures from being presented as current trend evidence."""
 
   if not collection:
     return False
-  return _json(collection.get("source_payload")).get("source") == LOCAL_DEMO_SEASONAL_SOURCE
+  # Database.fetchrow normalizes asyncpg.Record to dict today. Keep this
+  # boundary defensive for direct connection adapters that may return the raw
+  # Record instead.
+  normalized_collection = dict(collection)
+  return _json(normalized_collection.get("source_payload")).get("source") == LOCAL_DEMO_SEASONAL_SOURCE
 
 
 def _is_seasonal_source_stale(

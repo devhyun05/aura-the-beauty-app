@@ -1,4 +1,8 @@
-import {Image as ExpoImage, type ImageSource} from 'expo-image';
+import {
+  Image as ExpoImage,
+  type ImagePrefetchOptions,
+  type ImageSource,
+} from 'expo-image';
 
 import {
   buildBackendApiUrl,
@@ -68,10 +72,11 @@ export function prefetchMakeupJourneyPrivateImage(
     return pending;
   }
 
-  const task = ExpoImage.prefetch(source.uri, {
+  const prefetchOptions: ImagePrefetchOptions = {
     cachePolicy: 'memory',
     headers: source.headers,
-  })
+  };
+  const task = ExpoImage.prefetch(source.uri, prefetchOptions)
     .then(success => {
       if (success && generationAtStart === privateImageGeneration) {
         prefetchedPrivateImageKeys.add(key);

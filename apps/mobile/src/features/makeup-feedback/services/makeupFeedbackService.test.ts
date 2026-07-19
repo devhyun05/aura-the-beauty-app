@@ -821,6 +821,9 @@ expectEqual(
     evidencePreviewSource.includes("topicId === 'brow'") &&
     evidencePreviewSource.includes('filterRegionsForGuide') &&
     evidencePreviewSource.includes("lash: `${side} 속눈썹`") &&
+    evidencePreviewSource.includes('Math.max(1, focusWidth * imageWidth)') &&
+    evidencePreviewSource.includes('Math.max(1, focusHeight * imageHeight)') &&
+    evidencePreviewSource.includes('Number.isFinite(value)') &&
     !evidencePreviewSource.includes('react-native-svg') &&
     !evidencePreviewSource.includes('CorrectionGuideOverlay') &&
     evidencePreviewSource.includes('어디에') &&

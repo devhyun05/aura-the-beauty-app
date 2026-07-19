@@ -1,3 +1,6 @@
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+
 import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
 import {
   clearMakeupJourneyPrivateImageMemoryCache,
@@ -23,6 +26,28 @@ expect(
 expect(
   firstSource?.headers?.Authorization === 'Bearer private-token',
   'private thumbnail source includes the current backend authorization header',
+);
+
+const privateImageServiceSource = readFileSync(
+  join(
+    process.cwd(),
+    'apps/mobile/src/features/makeup-journey/services/makeupJourneyPrivateImage.ts',
+  ),
+  'utf8',
+);
+expect(
+  privateImageServiceSource.includes(
+    'const prefetchOptions: ImagePrefetchOptions = {',
+  ) &&
+    privateImageServiceSource.includes('headers: source.headers') &&
+    privateImageServiceSource.includes(
+      'ExpoImage.prefetch(source.uri, prefetchOptions)',
+    ),
+  'private thumbnail prefetch uses the expo-image options overload so Authorization headers reach the native request',
+);
+expect(
+  !privateImageServiceSource.includes("ExpoImage.prefetch(source, 'memory')"),
+  'private thumbnail prefetch does not use the unsupported ImageSource overload',
 );
 expect(
   firstSource?.uri?.includes('cacheRevision=4') === true,

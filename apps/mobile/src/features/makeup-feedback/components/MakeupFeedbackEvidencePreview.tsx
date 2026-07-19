@@ -131,19 +131,25 @@ function EvidenceRegionTile({
   const [frameWidth, setFrameWidth] = useState(FALLBACK_FRAME_WIDTH / 2);
   const topicBox = getTopicFocusBox(region.box, evaluation.topicId, region.id);
   const focusBox = addFocusPadding(topicBox);
-  const cropWidth = (focusBox.right - focusBox.left) * media.imageSize.width;
-  const cropHeight = (focusBox.bottom - focusBox.top) * media.imageSize.height;
+  const imageWidth = positiveFiniteOrFallback(media.imageSize.width);
+  const imageHeight = positiveFiniteOrFallback(media.imageSize.height);
+  const focusWidth = finiteOrFallback(focusBox.right - focusBox.left, 1);
+  const focusHeight = finiteOrFallback(focusBox.bottom - focusBox.top, 1);
+  const focusLeft = finiteOrFallback(focusBox.left, 0);
+  const focusTop = finiteOrFallback(focusBox.top, 0);
+  const cropWidth = Math.max(1, focusWidth * imageWidth);
+  const cropHeight = Math.max(1, focusHeight * imageHeight);
   const scale = Math.min(frameWidth / cropWidth, FRAME_HEIGHT / cropHeight);
-  const renderedWidth = media.imageSize.width * scale;
-  const renderedHeight = media.imageSize.height * scale;
+  const renderedWidth = imageWidth * scale;
+  const renderedHeight = imageHeight * scale;
   const cropRenderedWidth = cropWidth * scale;
   const cropRenderedHeight = cropHeight * scale;
   const imageLeft =
     (frameWidth - cropRenderedWidth) / 2
-    - focusBox.left * media.imageSize.width * scale;
+    - focusLeft * imageWidth * scale;
   const imageTop =
     (FRAME_HEIGHT - cropRenderedHeight) / 2
-    - focusBox.top * media.imageSize.height * scale;
+    - focusTop * imageHeight * scale;
   const regionLabel = getRegionLabel(region.id, evaluation.topicId);
 
   const handleLayout = (event: LayoutChangeEvent) => {
@@ -180,6 +186,14 @@ function EvidenceRegionTile({
       </View>
     </View>
   );
+}
+
+function finiteOrFallback(value: number, fallback: number) {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function positiveFiniteOrFallback(value: number, fallback = 1) {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function resolveVisibleRegions(

@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 import json
 from uuid import UUID, uuid4
 
+import asyncpg
+from asyncpg.protocol.protocol import _create_record
 import pytest
 
 from app.core.errors import AppError
@@ -9,6 +11,8 @@ from app.core.settings import Settings
 from app.schemas.product_recommendation import ProductEvent
 from app.services.product_color import delta_e_ciede2000, srgb_hex_to_lab
 from app.services.product_recommendations import (
+  LOCAL_DEMO_SEASONAL_SOURCE,
+  _is_local_demo_seasonal_collection,
   clear_seasonal_recommendation_cache,
   get_ar_recommendations,
   get_cohort_recommendations,
@@ -212,6 +216,27 @@ class _LocalDemoSeasonalDatabase(_PopularFallbackDatabase):
         "source_payload": {"source": "local_product_recommendation_demo_v1"},
       }
     return await super().fetchrow(query, *_args)
+
+
+def test_local_demo_collection_guard_accepts_database_dict_row() -> None:
+  assert _is_local_demo_seasonal_collection(
+    {"source_payload": {"source": LOCAL_DEMO_SEASONAL_SOURCE}}
+  )
+  assert not _is_local_demo_seasonal_collection(
+    {"source_payload": {"source": "editorial_pipeline"}}
+  )
+
+
+def test_local_demo_collection_guard_accepts_raw_asyncpg_record() -> None:
+  # asyncpg.Record has no public constructor. The pinned asyncpg package uses
+  # this helper to create the actual C-extension Record without a live DB.
+  collection = _create_record(
+    {"source_payload": 0},
+    ({"source": LOCAL_DEMO_SEASONAL_SOURCE},),
+  )
+
+  assert isinstance(collection, asyncpg.Record)
+  assert _is_local_demo_seasonal_collection(collection)
 
 
 class _ExternalArDatabase:
