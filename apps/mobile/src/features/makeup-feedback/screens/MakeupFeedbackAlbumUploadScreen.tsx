@@ -10,6 +10,7 @@ import {AppScreen} from '../../../shared/ui';
 import type {MakeupFeedbackPhotoSelection} from '../types';
 
 type MakeupFeedbackAlbumUploadScreenProps = {
+  onCancel: () => void;
   onStartAnalysis: (selection: MakeupFeedbackPhotoSelection) => void;
 };
 
@@ -25,17 +26,20 @@ const copy = {
 const MAKEUP_FEEDBACK_IMAGE_QUALITY = 1;
 
 export function MakeupFeedbackAlbumUploadScreen({
+  onCancel,
   onStartAnalysis,
 }: MakeupFeedbackAlbumUploadScreenProps) {
   const insets = useSafeAreaInsets();
   const hasAutoOpenedPickerRef = useRef(false);
   const isPickerOpenRef = useRef(false);
+  const onCancelRef = useRef(onCancel);
   const onStartAnalysisRef = useRef(onStartAnalysis);
   const [pickerState, setPickerState] = useState<PickerState>('opening');
 
   useEffect(() => {
+    onCancelRef.current = onCancel;
     onStartAnalysisRef.current = onStartAnalysis;
-  }, [onStartAnalysis]);
+  }, [onCancel, onStartAnalysis]);
 
   const openImagePicker = useCallback(async () => {
     if (isPickerOpenRef.current) {
@@ -58,7 +62,12 @@ export function MakeupFeedbackAlbumUploadScreen({
         mediaTypes: ['images'],
         quality: MAKEUP_FEEDBACK_IMAGE_QUALITY,
       });
-      const pickedAsset = pickerResult.canceled ? null : pickerResult.assets[0];
+      if (pickerResult.canceled) {
+        onCancelRef.current();
+        return;
+      }
+
+      const pickedAsset = pickerResult.assets[0];
 
       if (!pickedAsset?.uri) {
         setPickerState('cancelled');

@@ -37,10 +37,12 @@ export function RailTrack({ state, height = RAIL_H, markerSize = MARKER }: {
 export function SpectrumRail({ axis, gap = 7 }: { axis: SpectrumAxisData; gap?: number }) {
   return (
     <View style={{ gap }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <Text style={[font(12, '600'), { color: color.text }]}>{axis.leftLabel}</Text>
-        {axis.axisLabel ? <Text style={[font(11, '700', undefined, 0.66), { color: color.muted }]}>{axis.axisLabel}</Text> : null}
-        <Text style={[font(12, '600'), { color: color.text }]}>{axis.rightLabel}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+        <Text style={[font(12, '600'), { color: color.text, flex: 1 }]}>{axis.leftLabel}</Text>
+        <Text style={[font(11, '700', undefined, 0.66), { color: color.muted, textAlign: 'center', width: 42 }]}>
+          {axis.axisLabel ?? ''}
+        </Text>
+        <Text style={[font(12, '600'), { color: color.text, flex: 1, textAlign: 'right' }]}>{axis.rightLabel}</Text>
       </View>
       <RailTrack state={axis.state} />
       {axis.caption != null && (

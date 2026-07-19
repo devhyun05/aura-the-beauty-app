@@ -199,6 +199,30 @@ async def test_pipeline_persists_after_every_stage_and_projects_legacy() -> None
   legacy = project_legacy_analysis_result(result)
   assert legacy["faceShape"] == result.derived.face_shape.label
   assert legacy["recommendedMakeups"][0]["title"] == "뮤트 데일리"
+  assert set(legacy["regionNotes"]) == {"upper", "mid", "lower", "jaw"}
+  assert (
+    result.perception.feature_impression.eye_impression.label
+    in legacy["regionNotes"]["upper"]["insight"]
+  )
+  assert result.perception.feature_impression.brow_impression.label in legacy["regionNotes"]["upper"]["insight"]
+  assert result.perception.lines_and_planes.nose_shadow_effect.label in legacy["regionNotes"]["mid"]["evidence"]
+  assert result.perception.volume.mouth_corner_impression.label in legacy["regionNotes"]["lower"]["evidence"]
+  assert (
+    legacy["impressionNotes"]["overallMood"]
+    == result.perception.gestalt.overall_mood.label
+  )
+  assert result.perception.gestalt.perceptual_center.label in legacy["impressionNotes"]["paragraph"]
+  assert "axes" not in legacy["impressionNotes"]
+  assert legacy["regionNotes"]["upper"]["recommendation"] == "결 눈썹 음영 얇은 라인"
+  assert legacy["regionNotes"]["lower"]["recommendation"] == "뮤트 립"
+  assert "stylingLooks" not in legacy
+
+
+def test_legacy_projection_rejects_incomplete_ai_analysis() -> None:
+  result = initialize_face_analysis_v2(REQUEST)
+
+  with pytest.raises(ValueError, match="AI perception and consulting are required"):
+    project_legacy_analysis_result(result)
 
 
 @pytest.mark.asyncio

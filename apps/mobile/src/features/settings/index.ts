@@ -1,4 +1,8 @@
-export {AppSettingsScreen, APP_SETTINGS_LABELS} from './screens/AppSettingsScreen';
+export {
+  APP_SETTINGS_BACKGROUND_COLOR,
+  APP_SETTINGS_LABELS,
+  AppSettingsScreen,
+} from './screens/AppSettingsScreen';
 export {AccountManagementScreen} from './screens/AccountManagementScreen';
 export {
   AccountDeletionScreen,

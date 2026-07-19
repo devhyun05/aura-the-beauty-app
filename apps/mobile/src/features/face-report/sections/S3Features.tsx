@@ -23,6 +23,25 @@ function RegionCard({ card }: { card: RegionCardData }) {
       <View style={{ borderRadius: radius.md, overflow: 'hidden', aspectRatio: 16 / 9 }}>
         <PhotoSlot slot={card.photo} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
         <GuideOverlay guide={card.guide} label={card.guideLabel} labelX={card.guideLabelX} labelAlign={card.guideLabelAlign} />
+        {card.guide.kind === 'none' ? (
+          <View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              left: 12,
+              right: 12,
+              bottom: 12,
+              backgroundColor: 'rgba(22,48,59,0.68)',
+              borderRadius: radius.md,
+              paddingHorizontal: 12,
+              paddingVertical: 9,
+            }}>
+            <Text style={[font(12, '800'), { color: color.white }]}>기준선 측정 보류</Text>
+            <Text style={[font(11, '400', 1.45), { color: 'rgba(255,255,255,0.9)', marginTop: 2 }]}>
+              사진에서 이 부위 기준선을 안전하게 표시하지 못했어요.
+            </Text>
+          </View>
+        ) : null}
       </View>
       {card.blend && <BlendBar data={card.blend} />}
       {card.axes.map((axis, i) =>

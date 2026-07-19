@@ -230,6 +230,66 @@ export function runIlluminationCorrectionTests() {
     'sclera with 40% overexposed pixels dropped (tightened clip gate)',
   );
 
+  // --- F5: 게이트 완화 + one-eye 경로 부활 ---
+  // 실측 흰자 수율은 눈당 14~17(합 31)이라 종전 per-eye 12·combined 24 게이트는
+  // 마진이 면도날이었고, combined 24 때문에 one-eye 경로(oneEyePenalty)는 도달 불가한
+  // 사문 코드였다. per-eye 8 / combined(2눈)16 / combined(1눈)12 로 완화.
+
+  // F5a. 두 눈 각 9표본(=18) → 적용 (종전 per-eye 12 미달로 드롭되던 케이스)
+  const lowBothEyes = faceWithCast(IDENTITY);
+  lowBothEyes.regions!.scleraLeft = stats(CLEAN_SCLERA, { sampleCount: 9 });
+  lowBothEyes.regions!.scleraRight = stats(CLEAN_SCLERA, { sampleCount: 9 });
+  const lowBothOut = deriveIlluminationCorrection(lowBothEyes);
+  expectTrue(lowBothOut.report.applied, 'two eyes 9+9 samples: applied (relaxed per-eye gate)');
+  expectTrue(lowBothOut.report.sclera.eyesUsed === 2, 'two eyes used');
+
+  // F5b. 한 눈만 14표본 → 적용 + oneEyePenalty (종전 combined 24 미달로 도달 불가했던
+  //      one-eye 경로 부활). 신뢰도가 두 눈 대비 낮아야(penalty 반영).
+  const oneEye = faceWithCast(IDENTITY);
+  oneEye.regions!.scleraLeft = stats(CLEAN_SCLERA, { sampleCount: 14 });
+  oneEye.regions!.scleraRight = stats(CLEAN_SCLERA, { sampleCount: 0 }); // 미검출
+  const oneEyeOut = deriveIlluminationCorrection(oneEye);
+  expectTrue(oneEyeOut.report.applied && oneEyeOut.report.source === 'sclera', 'one eye 14: applied (revived path)');
+  expectTrue(oneEyeOut.report.sclera.eyesUsed === 1, 'one eye used');
+  expectTrue(
+    oneEyeOut.report.sclera.reasons.includes('sclera_one_eye_only'),
+    'one-eye reason recorded',
+  );
+  const twoEyeHigh = deriveIlluminationCorrection(faceWithCast(IDENTITY));
+  expectTrue(
+    oneEyeOut.report.confidence < twoEyeHigh.report.confidence,
+    `one-eye penalty lowers confidence (one=${oneEyeOut.report.confidence.toFixed(2)} vs two=${twoEyeHigh.report.confidence.toFixed(2)})`,
+  );
+
+  // F5c. 한 눈 9표본 → 미적용 (one-eye combined 게이트 12 미달, fail-safe 유지)
+  const oneEyeTooFew = faceWithCast(IDENTITY);
+  oneEyeTooFew.regions!.scleraLeft = stats(CLEAN_SCLERA, { sampleCount: 9 });
+  oneEyeTooFew.regions!.scleraRight = stats(CLEAN_SCLERA, { sampleCount: 0 });
+  const oneEyeTooFewOut = deriveIlluminationCorrection(oneEyeTooFew);
+  expectTrue(!oneEyeTooFewOut.report.applied, 'one eye 9: not applied (below one-eye combined gate)');
+
+  // --- Track2: 어두운 비-흰자(눈꺼풀연/눈물언덕/그늘) 배제 ---
+  // 실기기 실측 (122,98,95)=L*44 는 흰자가 아니라 어두운 분홍조직. 종전 luma 하한
+  // 0.04(≈L*24)는 이를 통과시켜 충혈 게이트까지 흘려보냈다. 하한을 올려 luma 단계에서
+  // `too_dark`로 드롭 → 로그에서 "충혈"과 "어두운 ROI"를 구분.
+  const darkPink = faceWithCast(IDENTITY);
+  darkPink.regions!.scleraLeft = stats({ r: 122, g: 98, b: 95 }, { sampleCount: 100 });
+  darkPink.regions!.scleraRight = stats({ r: 122, g: 98, b: 95 }, { sampleCount: 100 });
+  const darkPinkOut = deriveIlluminationCorrection(darkPink);
+  expectTrue(!darkPinkOut.report.applied, 'dark non-white sclera (L*44): not applied');
+  expectTrue(
+    darkPinkOut.report.sclera.reasons.some(r => r.includes('too_dark')),
+    'dark sclera rejected as too_dark (not redness)',
+  );
+  // 드롭돼도 측정 L*을 사유에 남겨 하한(0.28) 실측 보정이 가능하게 (L*44 근방 기대)
+  expectTrue(
+    darkPinkOut.report.sclera.reasons.some(r => /_too_dark_L\d+/.test(r)),
+    'too_dark reason carries measured L* for calibration',
+  );
+  // 밝은 중립 흰자(L*76)는 여전히 통과 — 회귀 방지
+  const brightNeutral = deriveIlluminationCorrection(faceWithCast(IDENTITY));
+  expectTrue(brightNeutral.report.applied, 'bright neutral sclera still applies (no over-rejection)');
+
   // 8. 소스 없음 → 미적용
   const nothing = deriveIlluminationCorrection(noSclera);
   expectTrue(!nothing.report.applied && nothing.correctedNative == null, 'no source: not applied');

@@ -101,22 +101,25 @@ def test_makeup_image_prompt_requests_visible_idol_makeup() -> None:
   assert "After" not in prompt
 
 
-def test_analysis_normalization_keeps_one_daily_recommended_makeup() -> None:
-  result = OpenAIAnalysisService(Settings())._normalize_analysis_result(
-    {
-      "personalColor": "봄웜",
-      "faceShape": "계란형",
-      "toneSummary": "맑은 코랄",
-      "recommendedMood": "데일리 코랄",
-      "recommendedMakeups": [
-        {"title": "데일리 코랄", "subtitle": "맑은 생기", "description": "첫 룩", "tags": ["코랄"]},
-        {"title": "두 번째", "subtitle": "로지", "description": "두 번째 룩", "tags": ["로즈"]},
-      ],
-    },
-  )
+def test_analysis_normalization_rejects_incomplete_ai_result() -> None:
+  with pytest.raises(AppError) as exc_info:
+    OpenAIAnalysisService(Settings())._normalize_analysis_result(
+      {
+        "faceShape": "계란형",
+        "recommendedMood": "데일리 코랄",
+        "recommendedMakeups": [
+          {
+            "title": "데일리 코랄",
+            "subtitle": "맑은 생기",
+            "description": "첫 룩",
+            "tags": ["코랄", "데일리"],
+          },
+        ],
+      },
+    )
 
-  assert len(result["recommendedMakeups"]) == 1
-  assert result["recommendedMakeups"][0]["title"] == "데일리 코랄"
+  assert exc_info.value.code == "FACE_ANALYSIS_AI_INCOMPLETE"
+  assert "regionNotes" in exc_info.value.details["missingFields"]
 
 
 def test_makeup_image_size_uses_auto_to_preserve_source_composition() -> None:

@@ -8,6 +8,8 @@ import {
 } from '../../../shared/services/faceAnalysisService';
 import {getUserProfile} from '../../../shared/services/userService';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
+import type {Face3DProfile} from '../../face-3d/types';
+import type {FaceGeometryResult} from '../../face-geometry/types';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import type {AuraPersonalColorResult} from '../../personal-color/types';
 import {shouldUseSessionMeasurements} from '../../face-analysis/services/faceAnalysisMeasurements';
@@ -21,7 +23,11 @@ import BodyPanel from '../../ar/stencil/src/components/BodyPanel';
 import type {OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 import {ReportScreenScaffold} from '../ReportScreenScaffold';
 import {color, font} from '../reportTokens';
-import {buildReportDataFromFaceAnalysisReport} from '../services/fromFaceAnalysisReport';
+import {
+  buildReportDataFromFaceAnalysisReport,
+  summarizeFace3DProfile,
+  summarizeRegionMeasurements,
+} from '../services/fromFaceAnalysisReport';
 import {
   captureReportImage,
   getReportCaptureTitle,
@@ -39,6 +45,8 @@ export type FaceAnalysisReportPreviewScreenProps = {
   // redesigned S1–S7 UI instead of the current production layout.
   analysisReport?: FaceAnalysisReport | null;
   capturedPhotoUri?: string;
+  face3d?: Face3DProfile | null;
+  faceGeometry2d?: FaceGeometryResult | null;
   personalColor?: AuraPersonalColorResult | null;
   reportId?: string | null;
   sessionCaptureId?: string | null;
@@ -51,11 +59,29 @@ export type FaceAnalysisReportPreviewScreenProps = {
   onPressProducts?: (reportId: string) => void;
 };
 
-function CenteredMessage({title, description}: {title: string; description?: string}) {
+function CenteredMessage({
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  description?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
     <View style={styles.centered}>
       <Text style={styles.centeredTitle}>{title}</Text>
       {description ? <Text style={styles.centeredDescription}>{description}</Text> : null}
+      {actionLabel && onAction ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onAction}
+          style={styles.centeredAction}>
+          <Text style={styles.centeredActionText}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -63,6 +89,8 @@ function CenteredMessage({title, description}: {title: string; description?: str
 export function FaceAnalysisReportPreviewScreen({
   analysisReport,
   capturedPhotoUri,
+  face3d,
+  faceGeometry2d,
   personalColor,
   reportId,
   sessionCaptureId,
@@ -129,15 +157,17 @@ export function FaceAnalysisReportPreviewScreen({
     (useSessionMeasurements ? verticalThirds : null) ?? measurements?.faceVerticalThirds ?? null;
   const effectivePersonalColor =
     (useSessionMeasurements ? personalColor : null) ?? measurements?.personalColor?.reported ?? null;
-  // No session-fresh regionVisuals prop exists yet (unlike verticalThirds/
-  // personalColor, it isn't threaded through navigation flow state) — the
-  // server-restored measurements value is the only source today. Once a
-  // session path is wired, mirror the pattern above:
-  // (useSessionMeasurements ? regionVisuals : null) ?? measurements?.regionVisuals ?? null.
-  const effectiveRegionVisuals = measurements?.regionVisuals ?? null;
-  // S3 자기참조 축·서술의 결정론적 근거(저장된 2D 기하 실측치). 볼 때 계산되므로
-  // regionVisuals 크롭과 달리 재촬영 없이 리로드로 반영된다.
-  const effectiveGeometryMetrics = measurements?.faceGeometry2d?.metrics ?? null;
+  const effectiveFace3d = (useSessionMeasurements ? face3d : null) ?? measurements?.face3d ?? null;
+  const sessionRegionVisuals = useSessionMeasurements ? faceGeometry2d?.regionVisuals : undefined;
+  const sessionGeometryMetrics = useSessionMeasurements ? faceGeometry2d?.metrics : undefined;
+  const effectiveRegionVisuals =
+    sessionRegionVisuals ??
+    measurements?.regionVisuals ??
+    null;
+  const effectiveGeometryMetrics =
+    sessionGeometryMetrics ??
+    measurements?.faceGeometry2d?.metrics ??
+    null;
 
   const reportData = useMemo(() => {
     if (!report) {
@@ -156,6 +186,7 @@ export function FaceAnalysisReportPreviewScreen({
   }, [
     bodyProfile,
     capturedPhotoUri,
+    faceGeometry2d,
     effectiveGeometryMetrics,
     effectivePersonalColor,
     effectiveRegionVisuals,
@@ -164,6 +195,60 @@ export function FaceAnalysisReportPreviewScreen({
     report,
     reportId,
   ]);
+
+  const measurementDebugPayload = useMemo(() => {
+    if (!report) {
+      return null;
+    }
+
+    return {
+      reportId: report.id,
+      explicitReportId: reportId ?? null,
+      reportCaptureId: measurements?.captureId ?? null,
+      sessionCaptureId: sessionCaptureId ?? null,
+      useSessionMeasurements,
+      storedMeasurements: measurements ?? null,
+      sessionMeasurements: {
+        face3d: face3d ?? null,
+        faceGeometry2d: faceGeometry2d ?? null,
+        faceVerticalThirds: verticalThirds ?? null,
+        personalColor: personalColor ?? null,
+      },
+      effectiveForReportRendering: {
+        face3d: effectiveFace3d,
+        faceGeometryMetrics: effectiveGeometryMetrics,
+        faceRegionVisuals: effectiveRegionVisuals,
+        faceVerticalThirds: effectiveVerticalThirds,
+        personalColor: effectivePersonalColor,
+      },
+    };
+  }, [
+    effectiveFace3d,
+    effectiveGeometryMetrics,
+    effectivePersonalColor,
+    effectiveRegionVisuals,
+    effectiveVerticalThirds,
+    face3d,
+    faceGeometry2d,
+    measurements,
+    personalColor,
+    report,
+    reportId,
+    sessionCaptureId,
+    useSessionMeasurements,
+    verticalThirds,
+  ]);
+
+  const measurementDebugSummary = useMemo(
+    () => [
+      {label: '3D 측정', value: summarizeFace3DProfile(effectiveFace3d)},
+      {
+        label: '부위 기준선',
+        value: summarizeRegionMeasurements(effectiveRegionVisuals, effectiveGeometryMetrics),
+      },
+    ],
+    [effectiveFace3d, effectiveGeometryMetrics, effectiveRegionVisuals],
+  );
 
   const handleCloseBodySurvey = useCallback(() => {
     setIsBodySurveyOpen(false);
@@ -280,7 +365,12 @@ export function FaceAnalysisReportPreviewScreen({
 
   if (!reportData) {
     return loadState.status === 'error' ? (
-      <CenteredMessage description={loadState.description} title={loadState.message} />
+      <CenteredMessage
+        actionLabel={loadState.canRetake ? '다시 촬영' : undefined}
+        description={loadState.description}
+        onAction={loadState.canRetake ? onRetake : undefined}
+        title={loadState.message}
+      />
     ) : (
       <CenteredMessage
         description="목록에서 얼굴 분석 결과를 다시 선택해 주세요."
@@ -301,6 +391,8 @@ export function FaceAnalysisReportPreviewScreen({
         onPressCta={onCreateARFilter}
         onResurvey={() => setIsBodySurveyOpen(true)}
         onRetake={onRetake}
+        measurementDebugPayload={measurementDebugPayload}
+        measurementDebugSummary={measurementDebugSummary}
       />
       {/*
         BodyPanel is the AR stencil's overlay card (maxHeight 460, dark glass) —
@@ -354,6 +446,17 @@ const styles = StyleSheet.create({
     ...font(13, '400', 1.5),
     color: color.body,
     textAlign: 'center',
+  },
+  centeredAction: {
+    backgroundColor: color.accentDeep,
+    borderRadius: 999,
+    marginTop: 12,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+  },
+  centeredActionText: {
+    ...font(14, '700'),
+    color: color.white,
   },
   centeredTitle: {
     ...font(15, '700'),

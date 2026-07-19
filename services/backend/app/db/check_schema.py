@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 import json
-import os
 import re
 
 import asyncpg
@@ -10,9 +9,7 @@ from app.core.settings import get_settings
 from app.db.connection_config import DatabaseConfigurationError, connect_database
 from app.db.init_db import (
   POST_SCHEMA_MIGRATIONS,
-  REPORT_LAB_SCHEMA_VERSION,
   SCHEMA_VERSION,
-  assert_report_lab_database,
 )
 from app.db.seed_db import SEED_VERSION
 
@@ -24,8 +21,6 @@ EXPECTED_TABLES = {
   "photo_captures",
   "analysis_reports",
   "analysis_stage_runs",
-  "analysis_lab_sessions",
-  "analysis_lab_runs",
   "face_measurement_preferences",
   "face_length_measurement_snapshots",
   "saved_makeup_styles",
@@ -124,19 +119,6 @@ EXPECTED_CONSTRAINTS = {
     "chk_face_length_snapshot_band",
     "chk_face_length_snapshot_client_observed_only",
   },
-  "analysis_lab_runs": {
-    "analysis_lab_runs_session_id_fkey",
-    "analysis_lab_runs_external_provider_runs_check",
-    "analysis_lab_runs_status_check",
-    "chk_analysis_lab_runs_batch_ordinal",
-    "chk_analysis_lab_runs_cache_provenance",
-    "chk_analysis_lab_runs_fixture_id",
-    "chk_analysis_lab_runs_json_shapes",
-  },
-  "analysis_lab_sessions": {
-    "analysis_lab_sessions_pkey",
-    "analysis_lab_sessions_status_check",
-  },
   "product_recommendation_operators": {
     "fk_product_recommendation_operator_user",
     "fk_product_recommendation_operator_granted_by",
@@ -223,44 +205,6 @@ EXPECTED_COLUMNS = {
     "norm_training_eligible",
     "norm_attestation_id",
     "created_at",
-  },
-  "analysis_lab_runs": {
-    "id",
-    "session_id",
-    "client_request_id",
-    "batch_ordinal",
-    "fixture_id",
-    "principal_id",
-    "stage",
-    "status",
-    "schema_version",
-    "prompt_version",
-    "provider",
-    "model",
-    "input_hash",
-    "overrides",
-    "normalized_output",
-    "raw_response",
-    "validation_errors",
-    "error_payload",
-    "latency_ms",
-    "token_usage",
-    "external_provider_runs",
-    "cache_hit",
-    "cached_from_run_id",
-    "started_at",
-    "completed_at",
-    "expires_at",
-    "created_at",
-    "updated_at",
-  },
-  "analysis_lab_sessions": {
-    "id",
-    "principal_id",
-    "status",
-    "expires_at",
-    "created_at",
-    "updated_at",
   },
   "community_threads": {"embedding"},
   "auradin_search_sessions": {
@@ -470,18 +414,6 @@ EXPECTED_COLUMN_CONTRACTS = {
     "default_contains": "false",
   },
   "face_length_measurement_snapshots.norm_attestation_id": {"is_nullable": "YES"},
-  "analysis_lab_runs.fixture_id": {"is_nullable": "NO"},
-  "analysis_lab_runs.client_request_id": {"is_nullable": "NO"},
-  "analysis_lab_runs.batch_ordinal": {"is_nullable": "NO"},
-  "analysis_lab_runs.cache_hit": {"is_nullable": "NO", "default_contains": "false"},
-  "analysis_lab_runs.cached_from_run_id": {"is_nullable": "YES"},
-  "analysis_lab_runs.provider": {"is_nullable": "NO", "default_contains": "disabled"},
-  "analysis_lab_runs.model": {"is_nullable": "NO", "default_contains": "disabled"},
-  "analysis_lab_runs.external_provider_runs": {"is_nullable": "NO", "default_contains": "0"},
-  "analysis_lab_runs.expires_at": {"is_nullable": "NO", "default_contains": "7 days"},
-  "analysis_lab_sessions.principal_id": {"is_nullable": "NO"},
-  "analysis_lab_sessions.status": {"is_nullable": "NO", "default_contains": "active"},
-  "analysis_lab_sessions.expires_at": {"is_nullable": "NO", "default_contains": "7 days"},
   "auradin_search_sessions.owner_subject": {"is_nullable": "NO"},
   "auradin_search_sessions.version": {"is_nullable": "NO", "default_contains": "0"},
   # A5 — MVP 필수 계약 필드(멱등성·귀속·시간)는 소급 추가 불가라 NOT NULL을 검증한다.
@@ -678,27 +610,6 @@ EXPECTED_INDEX_CONTRACTS = {
     "captured_at",
     "report_id",
   ),
-  "idx_analysis_lab_runs_session_created": ("session_id", "created_at"),
-  "idx_analysis_lab_runs_fixture_stage_created": ("fixture_id", "stage", "created_at"),
-  "idx_analysis_lab_runs_completed_cache": (
-    "fixture_id",
-    "principal_id",
-    "stage",
-    "schema_version",
-    "input_hash",
-    "completed_at",
-    "where",
-    "status = 'completed'",
-    "external_provider_runs = 0",
-  ),
-  "idx_analysis_lab_runs_expires": ("expires_at",),
-  "uq_analysis_lab_runs_batch_ordinal": (
-    "unique",
-    "session_id",
-    "client_request_id",
-    "batch_ordinal",
-  ),
-  "idx_analysis_lab_sessions_expires": ("expires_at",),
   "idx_analysis_reports_user_active_analyzed": (
     "user_id",
     "analyzed_at",
@@ -780,30 +691,6 @@ EXPECTED_INDEX_CONTRACTS = {
   "uq_makeup_journey_day_notes_empty_date": (
     "unique", "user_id", "entry_date", "where (report_id is null)",
   ),
-}
-
-REPORT_LAB_EXPECTED_TABLES = {
-  "analysis_lab_sessions",
-  "analysis_lab_runs",
-  "schema_migrations",
-}
-REPORT_LAB_EXPECTED_COLUMNS = {
-  "analysis_lab_sessions": EXPECTED_COLUMNS["analysis_lab_sessions"],
-  "analysis_lab_runs": EXPECTED_COLUMNS["analysis_lab_runs"],
-}
-REPORT_LAB_EXPECTED_COLUMN_CONTRACTS = {
-  name: contract
-  for name, contract in EXPECTED_COLUMN_CONTRACTS.items()
-  if name.startswith(("analysis_lab_runs.", "analysis_lab_sessions."))
-}
-REPORT_LAB_EXPECTED_INDEX_CONTRACTS = {
-  name: fragments
-  for name, fragments in EXPECTED_INDEX_CONTRACTS.items()
-  if name.startswith((
-    "idx_analysis_lab_runs_",
-    "idx_analysis_lab_sessions_",
-    "uq_analysis_lab_runs_",
-  ))
 }
 
 def _is_legacy_global_keyword_unique_index(definition: str) -> bool:
@@ -1063,82 +950,6 @@ def build_schema_report(
   }
 
 
-def build_report_lab_schema_report(
-  table_names: set[str],
-  applied_versions: set[str],
-  table_columns: dict[str, set[str]],
-  column_contracts: dict[str, dict[str, str | None]],
-  indexes: dict[str, str],
-  table_constraints: dict[str, set[str]],
-) -> dict[str, object]:
-  missing_tables = sorted(REPORT_LAB_EXPECTED_TABLES - table_names)
-  missing_versions = (
-    [] if REPORT_LAB_SCHEMA_VERSION in applied_versions else [REPORT_LAB_SCHEMA_VERSION]
-  )
-  missing_columns = {
-    table: sorted(expected - table_columns.get(table, set()))
-    for table, expected in REPORT_LAB_EXPECTED_COLUMNS.items()
-    if expected - table_columns.get(table, set())
-  }
-  invalid_column_contracts = []
-  for column, expected in REPORT_LAB_EXPECTED_COLUMN_CONTRACTS.items():
-    actual = column_contracts.get(column, {})
-    nullable = expected.get("is_nullable")
-    default_contains = expected.get("default_contains")
-    if nullable and actual.get("is_nullable") != nullable:
-      invalid_column_contracts.append(f"{column}.nullability")
-    if default_contains and default_contains not in str(actual.get("column_default") or ""):
-      invalid_column_contracts.append(f"{column}.default")
-
-  invalid_indexes = []
-  for name, fragments in REPORT_LAB_EXPECTED_INDEX_CONTRACTS.items():
-    definition = indexes.get(name, "")
-    if not definition or any(fragment not in definition for fragment in fragments):
-      invalid_indexes.append(name)
-
-  expected_constraints = {
-    table: EXPECTED_CONSTRAINTS[table]
-    for table in ("analysis_lab_sessions", "analysis_lab_runs")
-  }
-  missing_table_constraints = {
-    table: sorted(expected - table_constraints.get(table, set()))
-    for table, expected in expected_constraints.items()
-    if expected - table_constraints.get(table, set())
-  }
-
-  return {
-    "ok": not any((
-      missing_tables,
-      missing_versions,
-      missing_columns,
-      invalid_column_contracts,
-      invalid_indexes,
-      missing_table_constraints,
-    )),
-    "mode": "fixture-only-report-lab",
-    "expectedTables": sorted(REPORT_LAB_EXPECTED_TABLES),
-    "missingTables": missing_tables,
-    "expectedExtensions": [],
-    "missingExtensions": [],
-    "expectedColumns": {
-      table: sorted(columns) for table, columns in REPORT_LAB_EXPECTED_COLUMNS.items()
-    },
-    "missingColumns": missing_columns,
-    "expectedEnumValues": {},
-    "missingEnumValues": {},
-    "invalidColumnContracts": sorted(invalid_column_contracts),
-    "missingConstraints": [],
-    "invalidConstraints": [],
-    "invalidIndexes": sorted(invalid_indexes),
-    "expectedConstraints": {
-      table: sorted(constraints) for table, constraints in expected_constraints.items()
-    },
-    "missingTableConstraints": missing_table_constraints,
-    "appliedVersions": sorted(applied_versions),
-    "missingVersions": missing_versions,
-  }
-
-
 async def check_schema(database_url: str | None = None, require_seed: bool = False) -> dict[str, object]:
   settings = get_settings()
   dsn = database_url or settings.database_url
@@ -1177,36 +988,6 @@ async def check_schema(database_url: str | None = None, require_seed: bool = Fal
     triggers=triggers,
     enum_values=enum_values,
     table_constraints=table_constraints,
-  )
-
-
-async def check_report_lab_schema(database_url: str | None = None) -> dict[str, object]:
-  dsn = database_url or os.getenv("DATABASE_URL")
-  if not dsn:
-    settings = get_settings()
-    dsn = settings.database_url
-  if not dsn:
-    raise RuntimeError("DATABASE_URL is required for the isolated Report Lab schema check.")
-
-  connection = await asyncpg.connect(dsn=dsn)
-  try:
-    await assert_report_lab_database(connection)
-    table_names = await fetch_table_names(connection)
-    table_columns = await fetch_table_columns(connection)
-    column_contracts = await fetch_column_contracts(connection)
-    indexes = await fetch_indexes(connection)
-    table_constraints = await fetch_table_constraints(connection)
-    applied_versions = await fetch_applied_versions(connection)
-  finally:
-    await connection.close()
-
-  return build_report_lab_schema_report(
-    table_names,
-    applied_versions,
-    table_columns,
-    column_contracts,
-    indexes,
-    table_constraints,
   )
 
 
@@ -1299,21 +1080,10 @@ def format_schema_report(report: dict[str, object]) -> str:
 async def main() -> None:
   parser = argparse.ArgumentParser(description="Check backend PostgreSQL schema readiness.")
   parser.add_argument("--require-seed", action="store_true", help="Require the seed.sql marker too.")
-  parser.add_argument(
-    "--report-lab",
-    action="store_true",
-    help="Check only the fixture-mode schema in the dedicated local Report Lab database.",
-  )
   parser.add_argument("--json", action="store_true", help="Print the full report as JSON.")
   args = parser.parse_args()
 
-  if args.report_lab and args.require_seed:
-    parser.error("--require-seed cannot be combined with --report-lab.")
-  report = (
-    await check_report_lab_schema()
-    if args.report_lab
-    else await check_schema(require_seed=args.require_seed)
-  )
+  report = await check_schema(require_seed=args.require_seed)
 
   if args.json:
     print(json.dumps(report, indent=2))

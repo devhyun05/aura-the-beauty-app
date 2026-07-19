@@ -2,6 +2,7 @@
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <Vision/Vision.h>
 #import <CoreVideo/CoreVideo.h>
 #import <ImageIO/ImageIO.h>
 #import <CoreGraphics/CoreGraphics.h>
@@ -59,9 +60,17 @@ static const int kScleraRightEyeIndices[] = {263, 249, 390, 373, 374, 380, 381, 
 static const int kScleraEyeIndexCount = 16;
 // 그리드 밀도 — 코너/하단 trim·코호트 게이트로 잃는 표본을 보상(실기기 자리 촬영
 // too_few_samples 해결). 중복 픽셀은 bbox 픽셀 클램프가 방지.
-static const int kScleraGridStepsX = 36;
-static const int kScleraGridStepsY = 22;
-static const uint8_t kScleraDarkMin = 60; // 절대 하한 floor (홍채/동공/속눈썹)
+// 조밀화(2026-07-19): 흰자는 좁은 눈에서 개구부의 얇은 띠라 36x22로는 색-게이트 통과
+// 픽셀이 눈당 8개(≥8 게이트 경계)로 아슬했다. 64x32로 올려 실사진 2장 모두 눈당 13~46px
+// 확보(중복은 bbox 픽셀 클램프가 방지). calibration target.
+static const int kScleraGridStepsX = 64;
+static const int kScleraGridStepsY = 32;
+// 색-기반 흰자 선택 하한(2026-07-19): 흰자는 '모든 채널이 밝은' 픽셀이다.
+// min(r,g,b) 하한이라 적색만 높은 분홍조직(waterline·눈물언덕·충혈 실핏줄)은 통과
+// 불가 — max 채널 하한(구 kScleraDarkMin=60)은 붉은 픽셀을 빨강 채널만으로 통과시켰다.
+// 실패 실사진 2장 스윕: 140이면 진짜 흰자(L*70~77)만 잡히고 홍채 그늘(L*40)은 전멸,
+// 150은 좁은 눈에서 수율이 4~5px로 붕괴. 140 채택. calibration target.
+static const uint8_t kScleraMinChannel = 140;
 // 실측 실험(2026-07-18): 20%로 조였더니 표본이 눈당 34/46→4/5로 88% 급감.
 // 흰자 픽셀 대부분이 20~28% 채도(분홍빛)에 분포 = 확산성 충혈로, 중립 백색은
 // 눈당 4-5개뿐이었다. 즉 붉음은 ROI 오염이 아니라 실제 충혈이며(충혈 게이트가
@@ -70,10 +79,10 @@ static const int kScleraSatRelPctMax = 28; // (mx-mn) ≤ mx의 28% — 상대 �
 // 오염 방어(실기기에서 붉은기 오염 → 전역 red-cut 편향 확인):
 static const double kScleraMinOpenRatio = 0.2;  // 픽셀 공간 세로/가로 비 이 미만 = 감은/가는 눈 → 스킵
 static const double kScleraCornerTrim = 0.2;    // bbox 좌우 각 20% 제외 — 눈물언덕(분홍) 등 코너 조직 배제
-static const double kScleraLowerTrim = 0.18;    // bbox 하단 18% 제외 — 아래 눈꺼풀 waterline(밝고 분홍·글로시)이
-                                                // 밝기 코호트를 통과해 red 오염을 만드는 것을 차단(실기기 눈 사진 확인)
-static const double kScleraBrightQuantile = 0.90; // 1차 스캔 밝기 상위 분위 (calibration target)
-static const double kScleraBrightFraction = 0.75; // p90의 75% 이상만 채택 — 상위 코호트(진짜 흰자)만
+// (2026-07-19 폐지) kScleraLowerTrim·kScleraBrightQuantile·kScleraBrightFraction·kScleraDarkMin:
+// 하단 위치 트림은 좁게 뜬 눈에서 가장 밝은 진짜 흰자 띠(개구부 하단)를 통째로 잘랐고,
+// 상대 밝기 코호트는 홍채가 밴드를 지배하면 "어두운 것들 중 상위 10%"를 흰자로 오인했다.
+// 실패 실사진 재현으로 확인 후 색-기반 선택(kScleraMinChannel)으로 대체.
 
 #pragma mark - 기본 헬퍼
 
@@ -152,6 +161,39 @@ static double AURAPCSampleMatte(CVPixelBufferRef buffer, double nx, double ny) {
     return AURAPCClamp01(floatRow[x]);
   }
   return 0.0;
+}
+
+// Apple Vision person(전경) 세그멘테이션 마스크. main 앱은 Unity/ARKit로 촬영해 사진에
+// AVFoundation 시맨틱 매트(머리/피부)를 임베드하지 않으므로, 헤어 매트가 없을 때 이 전경
+// 마스크로 머리 영역(이마 위 박스)의 배경을 걸러낸다 — Unity의 E7VisionFaceParsing이 쓰는
+// 것과 동일한 person-seg 방식. 반환 버퍼는 lock+retain 되어 오며 호출측이 unlock+release.
+// 실패 시 NULL. AURAPCSampleMatte 가 OneComponent8 을 그대로 소화한다(0..255→0..1).
+static CVPixelBufferRef AURAPCCopyPersonMask(UIImage *image) {
+  if (image == nil) return NULL;
+  CGImageRef cg = image.CGImage;
+  if (cg == NULL) return NULL;
+  VNGeneratePersonSegmentationRequest *request =
+      [[VNGeneratePersonSegmentationRequest alloc] init];
+  // 배포 타깃 16.4에선 클래스가 항상 존재하지만, alloc 실패 등으로 nil이면 아래
+  // @[ request ] 배열 리터럴이 NSInvalidArgumentException 을 던진다 — 방어적으로 가드.
+  if (request == nil) return NULL;
+  request.qualityLevel = VNGeneratePersonSegmentationRequestQualityLevelBalanced;
+  request.outputPixelFormat = kCVPixelFormatType_OneComponent8;
+  // uprightImage 는 이미 EXIF 정립본이라 orientation Up — 아래 정규화 좌표 샘플링과 정합.
+  VNImageRequestHandler *handler =
+      [[VNImageRequestHandler alloc] initWithCGImage:cg
+                                         orientation:kCGImagePropertyOrientationUp
+                                             options:@{}];
+  NSError *error = nil;
+  if (![handler performRequests:@[ request ] error:&error] || error != nil) {
+    return NULL;
+  }
+  VNPixelBufferObservation *observation = request.results.firstObject;
+  CVPixelBufferRef mask = observation.pixelBuffer;
+  if (mask == NULL) return NULL;
+  CVPixelBufferRetain(mask);
+  CVPixelBufferLockBaseAddress(mask, kCVPixelBufferLock_ReadOnly);
+  return mask;
 }
 
 // 스틸을 명시적 sRGB RGBA8 비트맵으로 1회 rasterize (DeviceRGB 아님 — P3 오염 방지)
@@ -484,6 +526,14 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
   NSMutableArray<NSString *> *warnings = [NSMutableArray array];
   NSMutableDictionary *regions = [NSMutableDictionary dictionary];
 
+  // 헤어 게이트 소스: AVFoundation 헤어 매트가 있으면 그것, 없으면(Unity/ARKit 촬영)
+  // Apple Vision person 세그멘테이션으로 대체. 머리 박스는 이마 위에 기하로 놓여 있어,
+  // '전경(=사람)' 픽셀만 누적하면 배경을 걸러낸 머리색이 나온다.
+  CVPixelBufferRef personMaskBuf = hairBuf ? NULL : AURAPCCopyPersonMask(uprightImage);
+  CVPixelBufferRef hairGateBuf = hairBuf ? hairBuf : personMaskBuf;
+  double hairGate = hairBuf ? kHairAlphaGate : 0.5; // person 마스크는 전경 임계(≈0/1)
+  if (personMaskBuf) [warnings addObject:@"hair_from_person_segmentation"];
+
   // 랜드마크 정규화 좌표는 EXIF 적용된 upright 프레임 기준이어야 한다(아래 샘플링이
   // uprightImage 를 쓰기 때문). Unity 가 다른 방향으로 디코드했다면 종횡비가 어긋나므로
   // 계측 가능한 경고로 남긴다 — 조용히 틀린 색을 뽑는 것보다 낫다.
@@ -551,8 +601,8 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
     }
   }
 
-  // ---- Hair (matte 주도) ----
-  if (hairBuf) {
+  // ---- Hair (AVFoundation 매트 또는 Vision person-seg 게이트 주도) ----
+  if (hairGateBuf) {
     AURAPCPoint foreheadTop = AURAPCLandmark(landmarks, 10);
     if (foreheadTop.valid && left.valid && right.valid) {
       double cx = (left.x + right.x) / 2.0;
@@ -569,8 +619,8 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
           double ny = y0 + (y1 - y0) * ((double)gy + 0.5) / kHairGridStepsY;
           if (ny < 0.0 || ny > 1.0) continue;
           gridSampled += 1;
-          double alpha = AURAPCSampleMatte(hairBuf, nx, ny);
-          if (alpha < kHairAlphaGate) continue;
+          double alpha = AURAPCSampleMatte(hairGateBuf, nx, ny);
+          if (alpha < hairGate) continue;
           gridGated += 1;
           uint8_t r, g, b;
           AURAPCPixel(colorBuf, nx, ny, &r, &g, &b);
@@ -663,40 +713,23 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
       double ringHpx = bboxH * (double)imgH;
       if (ringHpx < ringWpx * kScleraMinOpenRatio) continue;
       anyValid = YES;
-      // 눈 코너(눈물언덕 등 분홍 조직) 제외 — 중앙 밴드만 샘플
+      // 눈 코너(눈물언덕 등 분홍 조직) 제외 — 좌우 코너만 트림. 하단 트림은 폐지:
+      // 실기기 실사진 검증(2026-07-19)에서 좁게 뜬 눈은 중앙 밴드가 거의 홍채로 채워지고,
+      // 가장 밝은 진짜 흰자 띠가 개구부 '하단'에 있어 kScleraLowerTrim(0.18)이 그걸
+      // 통째로 잘라냈다(→ 상위 코호트조차 홍채 그늘 L*≈40). waterline 분홍은 아래
+      // 색-기반 게이트(min채널+저채도)가 배제하므로 위치 트림이 불필요하다.
       double bandMinX = minX + bboxW * kScleraCornerTrim;
       double bandMaxX = maxX - bboxW * kScleraCornerTrim;
-      // 아래 눈꺼풀 waterline(밝은 분홍) 제외 — bbox 하단 밴드 차단
-      double bandMaxY = maxY - bboxH * kScleraLowerTrim;
       // 작은 눈에서 같은 픽셀 중복 샘플로 sampleCount가 부풀지 않게 그리드를 bbox 픽셀 크기로 클램프
       int stepsX = (int)fmax(1.0, fmin((double)kScleraGridStepsX, floor(ringWpx)));
       int stepsY = (int)fmax(1.0, fmin((double)kScleraGridStepsY, floor(ringHpx)));
-      // 1차 스캔: 폴리곤 내부 밝기 히스토그램 → 상위 코호트(진짜 흰자) 임계 산출.
-      // 캐스트는 흰자·홍채를 함께 스케일하므로 상대 임계는 캐스트 불변.
-      int lumaHist[256] = {0};
-      long lumaCount = 0;
-      for (int gy = 0; gy < stepsY; gy++) {
-        for (int gx = 0; gx < stepsX; gx++) {
-          double nx = minX + bboxW * ((double)gx + 0.5) / stepsX;
-          double ny = minY + bboxH * ((double)gy + 0.5) / stepsY;
-          if (nx < bandMinX || nx > bandMaxX || ny > bandMaxY) continue;
-          if (!AURAPCInsidePolygon(ringX, ringY, kScleraEyeIndexCount, nx, ny)) continue;
-          uint8_t r, g, b;
-          AURAPCPixel(colorBuf, nx, ny, &r, &g, &b);
-          uint8_t mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
-          lumaHist[mx] += 1;
-          lumaCount += 1;
-        }
-      }
-      if (lumaCount == 0) continue;
-      long remaining = (long)ceil((double)lumaCount * (1.0 - kScleraBrightQuantile));
-      int p90 = 255;
-      for (int v = 255; v >= 0; v--) {
-        remaining -= lumaHist[v];
-        if (remaining <= 0) { p90 = v; break; }
-      }
-      uint8_t brightMin = (uint8_t)fmax((double)kScleraDarkMin, kScleraBrightFraction * (double)p90);
-      // 2차 스캔: 게이트 통과 픽셀만 집계
+      // 색-기반 흰자 선택(2026-07-19, 실사진 시뮬레이션 검증): 종전 상대 밝기 코호트
+      // (p90×0.75)는 "어두운 영역의 상위 10%도 어둡다"는 함정이 있었다 — 홍채가 밴드를
+      // 지배하면 코호트가 홍채 그늘을 흰자로 오인(실측 L*44, 충혈 게이트가 결국 거부).
+      // 흰자는 '모든 채널이 밝고(min≥kScleraMinChannel) 색기가 적은(상대채도≤28%)'
+      // 픽셀이라는 절대 색 기준으로 직접 선별한다. 홍채/속눈썹/그늘(어두움)·눈물언덕/
+      // waterline(분홍=적색만 높음)은 자동 탈락. 같은 사진 시뮬 결과: 종전 (107,90,87)
+      // L*40 → 색규칙 (207~214,170~186,164~177) L*73~78(진짜 흰자).
       AURAPCAcc acc;
       AURAPCAccInit(&acc);
       long gridSampled = 0, gridGated = 0;
@@ -705,13 +738,13 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
           double nx = minX + bboxW * ((double)gx + 0.5) / stepsX;
           double ny = minY + bboxH * ((double)gy + 0.5) / stepsY;
           gridSampled += 1;
-          if (nx < bandMinX || nx > bandMaxX || ny > bandMaxY) continue;
+          if (nx < bandMinX || nx > bandMaxX) continue;
           if (!AURAPCInsidePolygon(ringX, ringY, kScleraEyeIndexCount, nx, ny)) continue;
           uint8_t r, g, b;
           AURAPCPixel(colorBuf, nx, ny, &r, &g, &b);
           uint8_t mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
           uint8_t mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
-          if (mx < brightMin) continue; // 홍채/속눈썹/그늘 — 상위 밝기 코호트만
+          if (mn < kScleraMinChannel) continue; // 홍채/속눈썹/그늘/분홍조직 — 흰자는 전 채널이 밝다
           if ((int)(mx - mn) * 100 > kScleraSatRelPctMax * (int)mx) continue; // 상대 채도: 홍채색/메이크업
           gridGated += 1;
           AURAPCAccAdd(&acc, r, g, b, 1.0); // 내장 specular 게이트가 글린트 제거
@@ -733,6 +766,10 @@ RCT_EXPORT_METHOD(analyze:(NSString *)imageUri
 
   if (hairBuf) CVPixelBufferUnlockBaseAddress(hairBuf, kCVPixelBufferLock_ReadOnly);
   if (skinBuf) CVPixelBufferUnlockBaseAddress(skinBuf, kCVPixelBufferLock_ReadOnly);
+  if (personMaskBuf) {
+    CVPixelBufferUnlockBaseAddress(personMaskBuf, kCVPixelBufferLock_ReadOnly);
+    CVPixelBufferRelease(personMaskBuf);
+  }
   free(colorBuf.data);
   AURAPCLandmarkSetFree(&landmarks);
 

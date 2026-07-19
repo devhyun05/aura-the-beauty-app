@@ -1,4 +1,3 @@
-import { faceAnalysisReportsMock } from '../mocks/faceAnalysis.mock';
 import type {Face3DProfile} from '../../features/face-3d/types';
 import {
   buildFaceAnalysisMeasurementsPayload,
@@ -6,10 +5,7 @@ import {
   parseFaceAnalysisMeasurements,
   type PersonalColorMeasurementInput,
 } from '../../features/face-analysis/services/faceAnalysisMeasurements';
-import {
-  hasRenderableCameraReport as hasRenderableFaceAnalysisV2,
-  parseFaceAnalysisV2,
-} from '../../features/face-analysis/services/faceAnalysisV2';
+import {parseFaceAnalysisV2} from '../../features/face-analysis/services/faceAnalysisV2';
 import type {FaceGeometryAnalysisPayload} from '../../features/face-geometry/services/faceGeometryAiPayload';
 import type {FaceGeometryResult} from '../../features/face-geometry/types';
 import type {FaceVerticalThirdsAnalysisPayload} from '../../features/face-ratio/services/faceVerticalThirdsAiPayload';
@@ -363,19 +359,16 @@ function firstStringArray(
   return normalized.length > 0 ? normalized.slice(0, 4) : fallback;
 }
 
-function mergeMakeupGuideline(
+function parseMakeupGuideline(
   aiGuideline: BackendMakeupGuideline | null | undefined,
-  fallback: FaceAnalysisMakeupGuideline,
 ): FaceAnalysisMakeupGuideline {
   return {
-    brow: firstText(aiGuideline?.brow, fallback.brow) ?? '',
-    blush: firstText(aiGuideline?.blush, fallback.blush) ?? '',
-    highlight: firstText(aiGuideline?.highlight, fallback.highlight) ?? '',
-    eyeshadow:
-      firstText(aiGuideline?.eyeshadow, fallback.eyeshadow) ?? '',
-    eyeliner:
-      firstText(aiGuideline?.eyeliner, fallback.eyeliner) ?? '',
-    lip: firstText(aiGuideline?.lip, fallback.lip) ?? '',
+    brow: firstText(aiGuideline?.brow) ?? '',
+    blush: firstText(aiGuideline?.blush) ?? '',
+    highlight: firstText(aiGuideline?.highlight) ?? '',
+    eyeshadow: firstText(aiGuideline?.eyeshadow) ?? '',
+    eyeliner: firstText(aiGuideline?.eyeliner) ?? '',
+    lip: firstText(aiGuideline?.lip) ?? '',
   };
 }
 
@@ -453,8 +446,8 @@ function parseStylingLook(value: BackendStylingLook | null | undefined): FaceAna
       const category = row?.category;
       const note = firstText(row?.note);
       const why = firstText(row?.why);
-      return isStylingLookRowCategory(category) && note && why
-        ? {category, note, why}
+      return isStylingLookRowCategory(category) && note
+        ? {category, note, why: why ?? ''}
         : null;
     })
     .filter((row): row is NonNullable<typeof row> => row !== null);
@@ -482,56 +475,28 @@ function resolveMakeupImageStatus(
   return card?.imageStatus === 'failed' ? 'failed' : 'pending';
 }
 
-function mergeMakeupCards(
+function mapMakeupCards(
   reportId: string,
   aiCards: BackendMakeupCard[] | null | undefined,
-  fallbackCards: FaceAnalysisMakeupCard[],
-  useFallback: boolean,
+  reportImageSource: FaceAnalysisReport['imageSource'],
 ): FaceAnalysisMakeupCard[] {
   const normalizedAiCards = Array.isArray(aiCards)
     ? aiCards.filter((card): card is BackendMakeupCard => Boolean(card))
     : [];
 
-  if (!useFallback) {
-    return [0].map((index) => {
-      const aiCard = normalizedAiCards[index];
-      const fallbackCard = fallbackCards[index] ?? fallbackCards[0];
-      const generatedImageUrl = resolveMakeupImageUrl(aiCard);
-
-      return {
-        ...fallbackCard,
-        id: `${reportId}-ai-makeup-${index + 1}`,
-        title: firstText(aiCard?.title, fallbackCard.title) ?? fallbackCard.title,
-        subtitle: firstText(aiCard?.subtitle, fallbackCard.subtitle) ?? fallbackCard.subtitle,
-        description:
-          firstText(aiCard?.description, fallbackCard.description) ?? fallbackCard.description,
-        imageSource: generatedImageUrl
-          ? {uri: generatedImageUrl}
-          : fallbackCard.imageSource,
-        imageStatus: resolveMakeupImageStatus(aiCard, generatedImageUrl),
-        tags: firstStringArray(aiCard?.tags, fallbackCard.tags),
-      };
-    });
-  }
-
-  const cards = fallbackCards.slice(0, 1);
-
-  return cards.map((fallbackCard, index) => {
-    const aiCard = normalizedAiCards[index];
+  return normalizedAiCards.slice(0, 1).map((aiCard, index) => {
     const generatedImageUrl = resolveMakeupImageUrl(aiCard);
 
     return {
-      ...fallbackCard,
-      id: `${reportId}-${fallbackCard.id}`,
-      title: firstText(aiCard?.title, fallbackCard.title) ?? fallbackCard.title,
-      subtitle: firstText(aiCard?.subtitle, fallbackCard.subtitle) ?? fallbackCard.subtitle,
-      description:
-        firstText(aiCard?.description, fallbackCard.description) ?? fallbackCard.description,
+      id: `${reportId}-ai-makeup-${index + 1}`,
+      title: firstText(aiCard.title) ?? '',
+      subtitle: firstText(aiCard.subtitle) ?? '',
+      description: firstText(aiCard.description) ?? '',
       imageSource: generatedImageUrl
         ? {uri: generatedImageUrl}
-        : fallbackCard.imageSource,
-      imageStatus: generatedImageUrl ? 'ready' : fallbackCard.imageStatus,
-      tags: firstStringArray(aiCard?.tags, fallbackCard.tags),
+        : reportImageSource,
+      imageStatus: resolveMakeupImageStatus(aiCard, generatedImageUrl),
+      tags: firstStringArray(aiCard.tags, []),
     };
   });
 }
@@ -560,21 +525,42 @@ function getImageGenerationStatus(job: BackendAnalysisJob): string | undefined {
 
 function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
   const result = job.detailPayload?.result;
+  const faceAnalysisV2 = parseFaceAnalysisV2(result?.faceAnalysisV2);
+  const guideline = parseMakeupGuideline(result?.makeupGuideline);
+  const recommendedMakeup = result?.recommendedMakeups?.[0];
+  const regionNotes = parseRegionNotes(result?.regionNotes);
+  const impressionNotes = parseImpressionNotes(result?.impressionNotes);
+  const hasGuideline = Object.values(guideline).every(value => value.length > 0);
+  const hasRegionNotes = Boolean(
+    regionNotes &&
+      Object.values(regionNotes).every(
+        note => note.insight && note.evidence && note.recommendation,
+      ),
+  );
+  const hasV2AiResult = result?.faceAnalysisV2 == null
+    ? true
+    : Boolean(faceAnalysisV2?.perception && faceAnalysisV2.consulting);
 
   return Boolean(
     result &&
+      hasV2AiResult &&
       getRecommendedMakeupCount(job) === 1 &&
-      firstText(
-        result.shortSummary,
-        result.summary,
-        job.shortSummary,
-        job.summary,
-      ),
+      firstText(result.faceShape, job.faceShape) &&
+      firstText(result.personalColor, job.personalColor) &&
+      firstText(result.recommendedMood, job.recommendedMood) &&
+      firstText(result.baseMakeupGuide, job.baseMakeupGuide) &&
+      firstText(result.shortSummary, job.shortSummary) &&
+      firstText(result.summary, job.summary) &&
+      firstText(result.skinAnalysisSummary, job.skinAnalysisSummary) &&
+      firstText(result.skinType, job.skinType) &&
+      firstText(result.toneSummary, job.toneSummary) &&
+      firstText(recommendedMakeup?.title) &&
+      firstText(recommendedMakeup?.subtitle) &&
+      firstText(recommendedMakeup?.description) &&
+      hasGuideline &&
+      hasRegionNotes &&
+      impressionNotes,
   );
-}
-
-function hasRenderableCameraReport(job: BackendAnalysisJob): boolean {
-  return hasRenderableFaceAnalysisV2(job.detailPayload?.result?.faceAnalysisV2);
 }
 
 function delay(ms: number): Promise<void> {
@@ -591,7 +577,6 @@ async function waitForCompleteAnalysisReport(
   let currentJob = initialJob;
 
   while (true) {
-    const report = mapBackendJobToFaceAnalysisReport(currentJob, capture);
     const generatedImageCount = getGeneratedMakeupImageCount(currentJob);
     const imageGenerationStatus = getImageGenerationStatus(currentJob);
     const recommendedCount = getRecommendedMakeupCount(currentJob);
@@ -606,7 +591,7 @@ async function waitForCompleteAnalysisReport(
         status: currentJob.status ?? null,
       });
 
-      return report;
+      return mapBackendJobToFaceAnalysisReport(currentJob, capture);
     }
 
     if (currentJob.status === 'failed') {
@@ -619,17 +604,7 @@ async function waitForCompleteAnalysisReport(
     }
 
     if (currentJob.status === 'completed') {
-      throw new BackendApiError(
-        '분석 보고서 내용을 아직 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
-        502,
-        'ANALYSIS_REPORT_TEXT_REQUIRED',
-        {
-          generatedImageCount,
-          imageGenerationStatus,
-          jobId: currentJob.id ?? null,
-          recommendedCount,
-        },
-      );
+      throw incompleteAnalysisResult(currentJob, 'completeAiResult');
     }
 
     if (!currentJob.id) {
@@ -640,7 +615,7 @@ async function waitForCompleteAnalysisReport(
 
     if (elapsedMs >= ANALYSIS_REPORT_POLL_TIMEOUT_MS) {
       throw new BackendApiError(
-        '\ucd94\ucc9c \uba54\uc774\ud06c\uc5c5 \uc774\ubbf8\uc9c0 \uc0dd\uc131\uc774 \uc544\uc9c1 \uc644\ub8cc\ub418\uc9c0 \uc54a\uc558\uc5b4\uc694. \uc7a0\uc2dc \ud6c4 \ub2e4\uc2dc \uc2dc\ub3c4\ud574 \uc8fc\uc138\uc694.',
+        '얼굴 분석을 완료하지 못했어요. 다시 촬영해 주세요.',
         504,
         'ANALYSIS_REPORT_TIMEOUT',
         {
@@ -673,96 +648,112 @@ async function waitForCompleteAnalysisReport(
   }
 }
 
-function buildFallbackReportFromCapture(
-  capture?: FaceAnalysisCaptureInput | null,
-): FaceAnalysisReport {
-  const fallback = faceAnalysisReportsMock[0];
-  const capturedImageSource = capture?.imageUri ? {uri: capture.imageUri} : fallback.imageSource;
+function incompleteAnalysisResult(
+  job: BackendAnalysisJob,
+  missingField: string,
+): BackendApiError {
+  return new BackendApiError(
+    '얼굴 분석을 완료하지 못했어요. 다시 촬영해 주세요.',
+    502,
+    'FACE_ANALYSIS_RESULT_INCOMPLETE',
+    {jobId: job.id ?? null, missingField},
+  );
+}
 
-  return {
-    ...fallback,
-    id: `capture-analysis-${Date.now()}`,
-    analyzedAt: new Date().toISOString(),
-    environmentLabel: '촬영 이미지',
-    imageSource: capturedImageSource,
-    reportTitle: '맞춤 분석 보고서',
-  };
+function requireAnalysisText(
+  job: BackendAnalysisJob,
+  field: string,
+  ...values: Array<string | null | undefined>
+): string {
+  const value = firstText(...values);
+  if (!value) {
+    throw incompleteAnalysisResult(job, field);
+  }
+  return value;
 }
 
 function mapBackendJobToFaceAnalysisReport(
   job: BackendAnalysisJob,
   capture?: FaceAnalysisCaptureInput | null,
 ): FaceAnalysisReport {
-  const fallback = buildFallbackReportFromCapture(capture);
   const result = job.detailPayload?.result ?? {};
   const faceAnalysisV2 = parseFaceAnalysisV2(result.faceAnalysisV2);
-  const reportId = firstText(job.id, fallback.id) ?? fallback.id;
+  if (!hasCompleteBackendReportText(job)) {
+    throw incompleteAnalysisResult(job, 'completeAiResult');
+  }
+
+  const reportId = requireAnalysisText(job, 'id', job.id);
   const reportImageSource = resolveFaceAnalysisReportImageSource(job, capture);
-  const personalColor =
-    firstText(result.personalColor, job.personalColor, fallback.personalColor) ??
-    fallback.personalColor;
-  const skinType =
-    firstText(result.skinType, job.skinType, fallback.skinType) ?? fallback.skinType;
-  const recommendedMood =
-    firstText(result.recommendedMood, job.recommendedMood, fallback.recommendedMood) ??
-    fallback.recommendedMood;
+  if (!reportImageSource) {
+    throw incompleteAnalysisResult(job, 'imageSource');
+  }
+  const personalColor = requireAnalysisText(
+    job,
+    'personalColor',
+    result.personalColor,
+    job.personalColor,
+  );
+  const skinType = requireAnalysisText(job, 'skinType', result.skinType, job.skinType);
+  const recommendedMood = requireAnalysisText(
+    job,
+    'recommendedMood',
+    result.recommendedMood,
+    job.recommendedMood,
+  );
+  const makeupGuideline = parseMakeupGuideline(result.makeupGuideline);
 
   return {
-    ...fallback,
     id: reportId,
-    analyzedAt:
-      firstText(job.analyzedAt, fallback.analyzedAt) ?? fallback.analyzedAt,
+    analyzedAt: requireAnalysisText(job, 'analyzedAt', job.analyzedAt),
     // 과거 보고서 복원용 측정 원본 — 서버 사진 URL 을 오버레이 이미지로 주입한다.
     measurements: parseFaceAnalysisMeasurements(job.detailPayload?.request?.measurements, {
       imageUrl: resolveFaceAnalysisReportImageUrl(job, capture),
     }),
     faceAnalysisV2,
-    baseMakeupGuide:
-      firstText(result.baseMakeupGuide, job.baseMakeupGuide, fallback.baseMakeupGuide) ??
-      fallback.baseMakeupGuide,
-    faceShape:
-      firstText(result.faceShape, job.faceShape, fallback.faceShape) ?? fallback.faceShape,
-    imageSource: reportImageSource ?? fallback.imageSource,
-    makeupGuideline: mergeMakeupGuideline(
-      result.makeupGuideline,
-      fallback.makeupGuideline,
+    baseMakeupGuide: requireAnalysisText(
+      job,
+      'baseMakeupGuide',
+      result.baseMakeupGuide,
+      job.baseMakeupGuide,
     ),
+    faceShape: requireAnalysisText(job, 'faceShape', result.faceShape, job.faceShape),
+    imageSource: reportImageSource,
+    makeupGuideline,
     personalColor,
     regionNotes: parseRegionNotes(result.regionNotes),
     impressionNotes: parseImpressionNotes(result.impressionNotes),
     stylingLooks: parseStylingLooks(result.stylingLooks),
-    recommendedMakeups:
-      faceAnalysisV2 && !faceAnalysisV2.consulting && !result.recommendedMakeups?.length
-        ? []
-        : mergeMakeupCards(
-            reportId,
-            result.recommendedMakeups,
-            fallback.recommendedMakeups,
-            false,
-          ),
+    recommendedMakeups: mapMakeupCards(
+      reportId,
+      result.recommendedMakeups,
+      reportImageSource,
+    ),
     recommendedMood,
     avoidedMakeups: [],
-    reportTitle:
-      firstText(job.reportTitle, fallback.reportTitle) ?? fallback.reportTitle,
-    shortSummary:
-      firstText(result.shortSummary, job.shortSummary, fallback.shortSummary) ??
-      fallback.shortSummary,
-    skinAnalysisSummary:
-      firstText(
-        result.skinAnalysisSummary,
-        job.skinAnalysisSummary,
-        fallback.skinAnalysisSummary,
-      ) ?? fallback.skinAnalysisSummary,
+    reportTitle: requireAnalysisText(job, 'reportTitle', job.reportTitle),
+    shortSummary: requireAnalysisText(
+      job,
+      'shortSummary',
+      result.shortSummary,
+      job.shortSummary,
+    ),
+    skinAnalysisSummary: requireAnalysisText(
+      job,
+      'skinAnalysisSummary',
+      result.skinAnalysisSummary,
+      job.skinAnalysisSummary,
+    ),
     skinType,
-    summary:
-      firstText(result.summary, job.summary, fallback.summary) ?? fallback.summary,
-    tags: firstStringArray(result.tags ?? job.tags, fallback.tags),
-    title:
-      firstText(job.title, `${personalColor}, ${skinType}`, fallback.title) ??
-      fallback.title,
-    toneSummary:
-      firstText(result.toneSummary, job.toneSummary, fallback.toneSummary) ??
-      fallback.toneSummary,
+    summary: requireAnalysisText(job, 'summary', result.summary, job.summary),
+    tags: firstStringArray(result.tags ?? job.tags, []),
+    title: requireAnalysisText(job, 'title', job.title),
+    toneSummary: requireAnalysisText(
+      job,
+      'toneSummary',
+      result.toneSummary,
+      job.toneSummary,
+    ),
+    environmentLabel: requireAnalysisText(job, 'environmentLabel', job.environmentLabel),
   };
 }
 
@@ -789,7 +780,7 @@ export const getFaceAnalysisReports = async (
   options: GetFaceAnalysisReportsOptions = {},
 ): Promise<FaceAnalysisReport[]> => {
   if (!getBackendApiBaseUrl()) {
-    return Promise.resolve(faceAnalysisReportsMock);
+    return [];
   }
 
   const {reports} = await requestBackendJson<ListAnalysisReportsResponse>(
@@ -797,13 +788,25 @@ export const getFaceAnalysisReports = async (
     {timeoutMs: options.timeoutMs},
   );
 
-  return reports.map((report) => mapBackendJobToFaceAnalysisReport(report));
+  return reports.flatMap(report => {
+    try {
+      return [mapBackendJobToFaceAnalysisReport(report)];
+    } catch (error) {
+      if (
+        error instanceof BackendApiError &&
+        error.code === 'FACE_ANALYSIS_RESULT_INCOMPLETE'
+      ) {
+        return [];
+      }
+      throw error;
+    }
+  });
 };
 
 export const getLatestFaceAnalysisReport =
   async (): Promise<FaceAnalysisReport | null> => {
     if (!getBackendApiBaseUrl()) {
-      return Promise.resolve(faceAnalysisReportsMock[0] ?? null);
+      return null;
     }
 
     // 목록 응답은 measurements 를 제외해 경량화되므로(백엔드 #- 처리),
@@ -815,20 +818,14 @@ export const getLatestFaceAnalysisReport =
       return null;
     }
 
-    try {
-      return (await getFaceAnalysisReportById(latest.id)) ?? latest;
-    } catch {
-      return latest;
-    }
+    return (await getFaceAnalysisReportById(latest.id)) ?? latest;
   };
 
 export const getFaceAnalysisReportById = async (
   reportId: string,
 ): Promise<FaceAnalysisReport | null> => {
   if (!getBackendApiBaseUrl()) {
-    const report = faceAnalysisReportsMock.find((item) => item.id === reportId);
-
-    return Promise.resolve(report ?? null);
+    return null;
   }
 
   const {report} = await requestBackendJson<GetAnalysisReportResponse>(
@@ -916,8 +913,11 @@ export async function createFaceAnalysisReportFromCapture(
   });
 
   if (!hasBackendApiBaseUrl) {
-    console.info('[aura:analysis] create-report:fallback-no-api-base');
-    return buildFallbackReportFromCapture(capture);
+    throw new BackendApiError(
+      '얼굴 분석 서버에 연결할 수 없어요. 연결 상태를 확인한 뒤 다시 시도해 주세요.',
+      503,
+      'ANALYSIS_API_UNAVAILABLE',
+    );
   }
 
   if (!isUuid(capture?.photoCaptureId) || !isUuid(capture?.mediaId)) {
@@ -991,14 +991,6 @@ export async function createFaceAnalysisReportFromCapture(
     jobId: job.id ?? null,
     status: job.status ?? null,
   });
-
-  if (hasRenderableCameraReport(job)) {
-    console.info('[aura:analysis] analysis-report:camera-ready', {
-      durationMs: Date.now() - startedAt,
-      jobId: job.id ?? null,
-    });
-    return mapBackendJobToFaceAnalysisReport(job, capture);
-  }
 
   return waitForCompleteAnalysisReport(job, capture, startedAt);
 }

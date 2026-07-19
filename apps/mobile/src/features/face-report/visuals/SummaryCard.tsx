@@ -7,10 +7,11 @@ export function SummaryCard({ label, value, style }: { label: string; value: str
   return (
     <View style={[{
       backgroundColor: color.surface, borderWidth: 1, borderColor: color.outline,
-      borderRadius: radius.md, paddingVertical: 11, paddingHorizontal: 13, gap: 3,
+      borderRadius: radius.md, gap: 3, height: 78, justifyContent: 'center',
+      paddingHorizontal: 13, paddingVertical: 10,
     }, style]}>
       <Text style={[font(10.5, '600'), { color: color.muted }]}>{label}</Text>
-      <Text style={[font(13, '700'), { color: color.ink }]}>{value}</Text>
+      <Text numberOfLines={2} style={[font(13, '700', 1.28), { color: color.ink }]}>{value}</Text>
     </View>
   );
 }

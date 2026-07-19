@@ -121,9 +121,9 @@ export function FaceAnalysisLoadingScreen({
     >
       <YStack style={styles.content}>
         <YStack style={styles.heroCopy}>
-          <Text style={styles.heroTitle}>1차 얼굴 보고서를 만들고 있어요</Text>
+          <Text style={styles.heroTitle}>얼굴을 분석하고 있어요</Text>
           <Text style={styles.heroDescription}>
-            정면 사진과 3D 측정값을 먼저 정리하고, AI 분석은 보고서에 이어서 추가합니다.
+            사진과 측정값을 함께 확인해 얼굴형·이목구비·스타일 제안을 만들고 있어요.
           </Text>
         </YStack>
 
@@ -189,7 +189,7 @@ export function FaceAnalysisLoadingScreen({
 
         {hasAnalysisError ? (
           <YStack style={styles.errorCard}>
-            <Text style={styles.errorTitle}>분석을 완료하지 못했어요</Text>
+            <Text style={styles.errorTitle}>얼굴 분석을 완료하지 못했어요</Text>
             <Text style={styles.errorDescription}>{analysisErrorMessage}</Text>
             <XStack style={styles.errorActionRow}>
               <Pressable

@@ -14,6 +14,7 @@ from app.schemas.face_analysis_v2 import (
   ConsultingResult,
   FaceAnalysisPipelineState,
   FaceAnalysisV2,
+  Insight,
   MeasurementStageOutput,
   PerceptionResult,
   StageName,
@@ -96,6 +97,156 @@ PersistCallback = Callable[[UUID, FaceAnalysisV2], Awaitable[None]]
 StageOutput = TypeVar("StageOutput", bound=BaseModel)
 
 
+def _compact_join(parts: list[str], separator: str = " · ") -> str:
+  seen: set[str] = set()
+  compacted: list[str] = []
+  for part in parts:
+    normalized = " ".join(str(part).strip().split())
+    if not normalized or normalized in seen:
+      continue
+    seen.add(normalized)
+    compacted.append(normalized)
+  return separator.join(compacted)
+
+
+def _insight_labels(*insights: Insight | None) -> str:
+  return _compact_join([insight.label for insight in insights if insight is not None])
+
+
+def _insight_evidence(*insights: Insight | None) -> str:
+  sentences: list[str] = []
+  for insight in insights:
+    if insight is None:
+      continue
+    label = insight.label.strip()
+    description = insight.description.strip()
+    if not label and not description:
+      continue
+    if label and description:
+      sentences.append(f"{label}: {description}")
+    else:
+      sentences.append(label or description)
+  return _compact_join(sentences, " ")
+
+
+def _feature_ranking_text(gestalt: Any) -> str:
+  labels = [
+    item.label
+    for item in [gestalt.feature_presence_ranking, *gestalt.standout_features[:3]]
+    if item.label
+  ]
+  return _compact_join(labels)
+
+
+def _build_region_notes(
+  feature: Any,
+  planes: Any,
+  gestalt: Any,
+  volume: Any,
+  makeup: Any,
+) -> dict[str, dict[str, str]]:
+  upper_insight = _insight_labels(
+    feature.eye_impression,
+    feature.brow_impression,
+    feature.eyelid_weight,
+  )
+  mid_insight = _insight_labels(
+    volume.upper_lower_distribution,
+    planes.nose_cheek_connection,
+    planes.dimensionality,
+  )
+  lower_insight = _insight_labels(
+    feature.lip_impression,
+    volume.mouth_corner_impression,
+    planes.lower_face_impression,
+  )
+  jaw_insight = _insight_labels(
+    planes.lower_face_impression,
+    planes.jawline_definition,
+    planes.contour_definition,
+  )
+
+  return {
+    "upper": {
+      "insight": upper_insight or feature.eye_impression.label,
+      "evidence": _insight_evidence(
+        feature.eye_impression,
+        feature.brow_impression,
+        feature.eyelid_weight,
+        feature.under_eye_zone,
+      ),
+      "recommendation": _compact_join(
+        [makeup.brow, makeup.eyeshadow, makeup.eyeliner],
+        " ",
+      ),
+    },
+    "mid": {
+      "insight": mid_insight or planes.nose_cheek_connection.label,
+      "evidence": _insight_evidence(
+        volume.upper_lower_distribution,
+        planes.nose_cheek_connection,
+        planes.nose_shadow_effect,
+        planes.dimensionality,
+      ),
+      "recommendation": _compact_join(
+        [makeup.blush, makeup.contour, makeup.highlight],
+        " ",
+      ),
+    },
+    "lower": {
+      "insight": lower_insight or feature.lip_impression.label,
+      "evidence": _insight_evidence(
+        feature.lip_impression,
+        volume.mouth_corner_impression,
+        planes.lower_face_impression,
+      ),
+      "recommendation": makeup.lip,
+    },
+    "jaw": {
+      "insight": jaw_insight or planes.lower_face_impression.label,
+      "evidence": _insight_evidence(
+        planes.lower_face_impression,
+        planes.jawline_definition,
+        planes.contour_definition,
+        planes.line_shape,
+        planes.line_weight,
+      ),
+      "recommendation": makeup.contour,
+    },
+  }
+
+
+def _build_impression_notes(gestalt: Any, planes: Any, feature: Any, volume: Any) -> dict[str, Any]:
+  keywords = [
+    item.label
+    for item in (
+      gestalt.standout_features[:3]
+      + [
+        gestalt.overall_mood,
+        gestalt.perceptual_center,
+        gestalt.clarity_vs_softness,
+        gestalt.center_vs_outer,
+      ]
+    )
+    if item.label
+  ]
+  paragraph = _compact_join(
+    [
+      f"전체 무드는 {gestalt.overall_mood.label} 쪽으로 읽혀요. {gestalt.overall_mood.description}",
+      f"시선 중심은 {gestalt.perceptual_center.label}에 가까워요. {gestalt.perceptual_center.description}",
+      f"이목구비 존재감은 {_feature_ranking_text(gestalt)} 흐름으로 보이고, {gestalt.detail_density.description}",
+      f"선과 면은 {planes.line_shape.label}, {planes.dimensionality.label} 쪽이라 {planes.line_shape.description}",
+      f"눈·입술 포인트는 {feature.eye_impression.label}, {feature.lip_impression.label}로 읽히고 {volume.upper_lower_distribution.description}",
+    ],
+    " ",
+  )
+  return {
+    "overallMood": gestalt.overall_mood.label,
+    "keywords": keywords[:6] or [gestalt.overall_mood.label],
+    "paragraph": paragraph or gestalt.overall_mood.description,
+  }
+
+
 def _now() -> str:
   return datetime.now(UTC).isoformat()
 
@@ -168,65 +319,65 @@ async def persist_face_analysis_v2(
 def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
   perception = result.perception
   consulting = result.consulting
-  personal_color = "측정 보류"
-  skin_type = "측정 보류"
-  recommended_mood = "균형 중심"
-  skin_summary = result.derived.skin_color.description
+  if perception is None or consulting is None:
+    raise ValueError("AI perception and consulting are required for a face analysis report")
 
-  if perception is not None:
-    color = perception.personal_color
-    personal_color = " ".join(
-      value for value in (color.season, color.subtype) if value
-    ) or "측정 보류"
-    skin_type = perception.skin.sebum_dryness.label
-    recommended_mood = perception.gestalt.overall_mood.label
-    skin_summary = perception.skin.texture.description
+  color = perception.personal_color
+  personal_color = " ".join(
+    value for value in (color.season, color.subtype) if value
+  )
+  if color.status != "provisional" or not personal_color:
+    raise ValueError("AI personal color analysis is incomplete")
+  skin_type = perception.skin.sebum_dryness.label
+  skin_summary = perception.skin.texture.description
+  makeup = consulting.makeup
+  look = consulting.recommended_look
 
   legacy: dict[str, Any] = {
     "faceShape": result.derived.face_shape.label,
     "personalColor": personal_color,
     "skinType": skin_type,
     "toneSummary": result.derived.color_axes.label,
-    "recommendedMood": recommended_mood,
-    "summary": result.derived.face_shape.description,
-    "shortSummary": result.derived.vertical_balance.description,
+    "recommendedMood": consulting.overall_mood,
+    "summary": consulting.summary,
+    "shortSummary": consulting.short_summary,
     "skinAnalysisSummary": skin_summary,
-    "baseMakeupGuide": "측정 결과를 바탕으로 AI 컨설팅을 준비하고 있어요.",
-    "makeupGuideline": {},
-    "recommendedMakeups": [],
-    "tags": [],
-  }
-  if consulting is None:
-    return legacy
-
-  makeup = consulting.makeup
-  look = consulting.recommended_look
-  legacy.update(
-    {
-      "recommendedMood": consulting.overall_mood,
-      "summary": consulting.summary,
-      "shortSummary": consulting.short_summary,
-      "skinAnalysisSummary": skin_summary,
-      "baseMakeupGuide": makeup.base,
-      "makeupGuideline": {
-        "brow": makeup.brow,
-        "eyeshadow": makeup.eyeshadow,
-        "eyeliner": makeup.eyeliner,
-        "blush": makeup.blush,
-        "contour": makeup.contour,
-        "highlight": makeup.highlight,
-        "lip": makeup.lip,
-      },
-      "recommendedMakeups": [
-        {
-          "title": look.title,
-          "subtitle": look.subtitle,
-          "description": look.description,
-          "tags": look.tags,
-        },
-      ],
-      "tags": consulting.tags,
+    "baseMakeupGuide": makeup.base,
+    "makeupGuideline": {
+      "brow": makeup.brow,
+      "eyeshadow": makeup.eyeshadow,
+      "eyeliner": makeup.eyeliner,
+      "blush": makeup.blush,
+      "contour": makeup.contour,
+      "highlight": makeup.highlight,
+      "lip": makeup.lip,
     },
+    "recommendedMakeups": [
+      {
+        "title": look.title,
+        "subtitle": look.subtitle,
+        "description": look.description,
+        "tags": look.tags,
+      },
+    ],
+    "tags": consulting.tags,
+  }
+  feature = perception.feature_impression
+  planes = perception.lines_and_planes
+  gestalt = perception.gestalt
+  volume = perception.volume
+  legacy["regionNotes"] = _build_region_notes(
+    feature,
+    planes,
+    gestalt,
+    volume,
+    makeup,
+  )
+  legacy["impressionNotes"] = _build_impression_notes(
+    gestalt,
+    planes,
+    feature,
+    volume,
   )
   return legacy
 

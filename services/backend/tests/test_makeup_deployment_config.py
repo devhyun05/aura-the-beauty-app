@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import re
 
 from app.core.settings import Settings
 
@@ -70,7 +71,50 @@ def test_makeup_journey_eas_profiles_keep_production_closed_by_default() -> None
   assert eas["build"]["production"]["env"]["EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED"] == "0"
   rollout = eas["build"]["production-makeup-journey"]
   assert rollout["extends"] == "production"
-  assert rollout["env"] == {"EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "1"}
+  assert rollout["env"] == {
+    "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "1",
+    "EXPO_PUBLIC_UNIFIED_FACE_CAPTURE": "1",
+  }
+
+
+def test_dev_deploy_enables_face_analysis_v2_for_api_and_worker() -> None:
+  workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
+    encoding="utf-8",
+  )
+
+  assert (
+    "FACE_ANALYSIS_V2_ENABLED: ${{ vars.FACE_ANALYSIS_V2_ENABLED "
+    "|| (github.ref_name == 'dev' && 'true') || 'false' }}"
+  ) in workflow
+  assert workflow.count("FACE_ANALYSIS_V2_ENABLED=${{ env.FACE_ANALYSIS_V2_ENABLED }}") == 2
+
+
+def test_api_task_validation_allows_every_workflow_managed_environment_variable() -> None:
+  workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
+    encoding="utf-8",
+  )
+  render_block = workflow.split(
+    "      - name: Render ECS task definition",
+    maxsplit=1,
+  )[1].split("      - name: Validate and register ECS task definition", maxsplit=1)[0]
+  validation_block = workflow.split(
+    "      - name: Validate and register ECS task definition",
+    maxsplit=1,
+  )[1].split("      - name: Apply and verify production database schema", maxsplit=1)[0]
+
+  rendered_names = set(
+    re.findall(
+      r"^\s+([A-Z0-9_]+)=\$\{\{ env\.\1 \}\}$",
+      render_block,
+      flags=re.MULTILINE,
+    ),
+  )
+  validation_names = set(
+    re.findall(r'^\s+"([A-Z0-9_]+)",?$', validation_block, flags=re.MULTILINE),
+  )
+
+  assert rendered_names
+  assert rendered_names <= validation_names
 
 
 def test_backend_ci_is_a_path_scoped_pull_request_gate() -> None:

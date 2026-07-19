@@ -50,7 +50,7 @@ export type NativeRegionStats = {
   rgbVariance: Rgb; // 채널별 분산 (8-bit² 단위)
   dominant: Rgb;
   sampleCount: number;
-  areaRatio: number; // ROI 픽셀 / 이미지 픽셀
+  areaRatio: number; // matte-gated coverage 비율 (0..1): gated 픽셀 / 샘플 픽셀
   matteCoverage: number; // 0..1, matte 게이트 통과 비율 (lip은 1)
   overexposedRatio: number;
   underexposedRatio: number;
@@ -107,6 +107,9 @@ export type ToneResult = {
   secondary: PersonalColor12Type | null;
   isMixed: boolean;
   typeScore: number; // p_top
+  // 시즌 단위 확신 = top 과 같은 시즌인 3타입 확률의 합(≥ typeScore). 12타입 softmax는
+  // 프로토타입 정중앙에도 typeScore가 ~50%라, 표시용 "확신도"는 seasonScore가 정직하다.
+  seasonScore: number;
   gap: number; // p_top - p_second
   tau: number;
   probabilities: Record<PersonalColor12Type, number>;

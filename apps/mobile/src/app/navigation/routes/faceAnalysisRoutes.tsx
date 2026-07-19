@@ -5,7 +5,6 @@ import {YStack} from 'tamagui';
 
 import {
   createFaceAnalysisReportFromCapture,
-  FaceAnalysisIntroScreen,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
@@ -14,7 +13,10 @@ import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/F
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
 import {
   ensureUnityMakeupRunningForStillAnalysis,
+  hideUnityMakeupView,
   releaseUnityMakeupHiddenRunLease,
+  setUnityMakeupPlayerPaused,
+  setUnityMakeupSessionPaused,
 } from '../../../features/ar/services/unityMakeupBridge';
 import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services/face3DEntryEligibility';
 import {isFace3DProfileAnalysisEligible} from '../../../features/face-3d/services/face3DContract';
@@ -49,7 +51,6 @@ import {
   type PersonalColorAnalysisOutcome,
 } from '../../../features/personal-color/services/personalColorService';
 import {useAuthSession} from '../../../features/auth';
-import {FaceCaptureTutorialSheet} from '../../../features/onboarding';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import {deleteFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
 import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAnalytics';
@@ -72,6 +73,9 @@ import {
   type RootScreenProps,
 } from './routeUtils';
 
+const loadMakeupPhotoPicker = () =>
+  require('../../../features/home/services/makeupPhotoPicker') as typeof import('../../../features/home/services/makeupPhotoPicker');
+
 const MAX_ANALYSIS_RETRY_COUNT = 2;
 // 온디바이스 정지영상 분석(세로비율 등)이 이 시간 안에 끝나지 않으면 해당 축 없이
 // 보고서 생성을 진행한다. ⚠️ 예산 연동: ensureUnityMakeupRunningForStillAnalysis
@@ -81,6 +85,9 @@ const STILL_ANALYSIS_WAIT_TIMEOUT_MS = 8000;
 const FACE_ANALYSIS_LOADING_ERROR_MESSAGE =
   '분석 결과를 만드는 데 시간이 오래 걸리고 있어요. 잠시 후 다시 시도해 주세요.';
 const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
+  'FACE_ANALYSIS_AI_INCOMPLETE',
+  'FACE_ANALYSIS_RESULT_INCOMPLETE',
+  'ANALYSIS_API_UNAVAILABLE',
   'ANALYSIS_JOB_FAILED',
   'ANALYSIS_REPORT_TEXT_REQUIRED',
   'ANALYSIS_REPORT_TIMEOUT',
@@ -101,30 +108,6 @@ export function getFaceAnalysisReportFooterHostHeight(
     windowHeight,
     getFaceAnalysisReportFooterReservedHeight(footerBottomInset) +
       FLOATING_ACTION_HOST_EXTRA_HEIGHT,
-  );
-}
-
-export function FaceAnalysisIntroRouteScreen({
-  navigation,
-}: RootScreenProps<'FaceAnalysisIntro'>) {
-  const [isGuideVisible, setIsGuideVisible] = React.useState(false);
-
-  return (
-    <>
-      <DetailRouteChrome
-        routeName="FaceAnalysisIntro"
-        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
-        <FaceAnalysisIntroScreen onStartAnalysisGuide={() => setIsGuideVisible(true)} />
-      </DetailRouteChrome>
-      <FaceCaptureTutorialSheet
-        isVisible={isGuideVisible}
-        onDismiss={() => setIsGuideVisible(false)}
-        onStartCapture={() => {
-          setIsGuideVisible(false);
-          navigation.navigate('FaceCapture');
-        }}
-      />
-    </>
   );
 }
 
@@ -807,6 +790,16 @@ export function FaceAnalysisLoadingRouteScreen({
       return;
     }
 
+    // 카메라-off의 필요조건: still 분석 hidden-run lease를 replace '이전에' 동기 해제한다.
+    // lease가 _hiddenRunLeaseIds에 남으면 네이티브 런타임 모드가 계속 'still'이라 전면
+    // 카메라(ARSession)가 유지된다(초록 LED). 언마운트 cleanup 순서에 의존하면 보고서의
+    // pause 효과와 레이스가 나므로 여기서 명시적으로 푼다.
+    const leaseId = stillAnalysisLeaseIdRef.current;
+    if (leaseId) {
+      releaseUnityMakeupHiddenRunLease(leaseId);
+      stillAnalysisLeaseIdRef.current = null;
+    }
+
     // replace: 로딩을 스택에서 제거한다. navigate로 남겨두면 다음 분석 세션에서
     // 캡처 교체 시 이 화면의 효과들이 백그라운드로 재실행돼 보고서 POST가 중복되고,
     // 완료 자동 이동이 새 흐름(3D 측정 등) 위를 덮는 문제가 있었다.
@@ -867,12 +860,26 @@ export function FaceAnalysisReportPreviewRouteScreen({
   const {
     selectedFaceAnalysisReport,
     selectedFaceCapture,
+    selectedFace3DProfile,
+    selectedFaceGeometry2d,
     selectedFaceVerticalThirds,
     selectedPersonalColor,
     setSelectedFaceAnalysisReport,
   } = useNavigationFlowState();
   const currentReportId =
     route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
+
+  // 안전망: 보고서는 카메라가 필요 없다. 상류에서 lease 해제가 누락돼도 여기서
+  // run-consumer(가시 소유자·explicit lease)를 0으로 만들어 런타임 모드가 idle로 가게 한다
+  // — idle이어야 네이티브가 ARSession을 끄고 전면 카메라를 반납한다(초록 LED·과열 방지).
+  // 순서 중요: hideUnityMakeupView(소유자 nil + explicit lease 해제 + reconcile) →
+  // playerPause → setPaused(out-of-band belt-and-suspenders). setPaused만으론 lease/모드가
+  // 살아 있으면 덮어써져 소용없다.
+  React.useEffect(() => {
+    hideUnityMakeupView();
+    setUnityMakeupPlayerPaused(true);
+    setUnityMakeupSessionPaused(true);
+  }, []);
 
   const handleDeleteReport = React.useCallback(
     async (reportId: string) => {
@@ -904,6 +911,8 @@ export function FaceAnalysisReportPreviewRouteScreen({
       onDeleteReport={handleDeleteReport}
       onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
       onRetake={() => navigation.navigate('FaceCapture')}
+      face3d={route.params?.reportId ? null : selectedFace3DProfile}
+      faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
       personalColor={route.params?.reportId ? null : selectedPersonalColor}
       reportId={route.params?.reportId ?? null}
       sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
@@ -983,11 +992,26 @@ function FaceAnalysisReportBottomNav({
 
   const startMakeupExtraction = React.useCallback((initialSource: 'camera' | 'gallery') => {
     setIsExtractionSheetVisible(false);
-    setSelectedRecommendedMakeupFilterId(null);
-    setSelectedReferenceMakeupPhoto(null);
 
-    requestAnimationFrame(() => {
-      navigation.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+    if (initialSource === 'camera') {
+      setSelectedRecommendedMakeupFilterId(null);
+      setSelectedReferenceMakeupPhoto(null);
+      requestAnimationFrame(() => {
+        navigation.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+      });
+      return;
+    }
+
+    const {pickReferenceMakeupPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickReferenceMakeupPhotoFromLibrary().then(photo => {
+      if (!photo) {
+        return;
+      }
+      setSelectedRecommendedMakeupFilterId(null);
+      setSelectedReferenceMakeupPhoto(photo);
+      navigation.navigate('FaceCaptureConfirmation', {
+        target: 'referenceMakeupExtraction',
+      });
     });
   }, [
     navigation,
@@ -997,17 +1021,28 @@ function FaceAnalysisReportBottomNav({
 
   const startMakeupFeedback = React.useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
-    beginMakeupFeedbackFlow();
-    setMakeupFeedbackResult(null);
-    setSelectedMakeupFeedbackPhoto({photoSource});
 
-    requestAnimationFrame(() => {
-      if (photoSource === 'camera') {
+    if (photoSource === 'camera') {
+      beginMakeupFeedbackFlow();
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto({photoSource});
+      requestAnimationFrame(() => {
         navigation.navigate('MakeupFeedbackCapture');
+      });
+      return;
+    }
+
+    const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
+      if (!selection) {
         return;
       }
-
-      navigation.navigate('MakeupFeedbackAlbumUpload');
+      beginMakeupFeedbackFlow();
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto(selection);
+      navigation.navigate('FaceCaptureConfirmation', {
+        target: 'makeupFeedback',
+      });
     });
   }, [
     beginMakeupFeedbackFlow,

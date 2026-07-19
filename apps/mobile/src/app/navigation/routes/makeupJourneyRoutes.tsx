@@ -32,6 +32,9 @@ import {
   type RootScreenProps,
 } from './routeUtils';
 
+const loadMakeupPhotoPicker = () =>
+  require('../../../features/home/services/makeupPhotoPicker') as typeof import('../../../features/home/services/makeupPhotoPicker');
+
 export function getMakeupJourneyDayBackBehavior(
   canGoBack: boolean,
 ): 'goBack' | 'MakeupJourneyTab' {
@@ -211,20 +214,45 @@ export function MakeupJourneyDayDetailRouteScreen({
     }
 
     setIsFeedbackSheetVisible(false);
-    setSelectedMakeupFeedbackPhoto(
-      applyMakeupFeedbackJourneyContext(
-        {photoSource},
-        pendingFeedbackContext,
-      ),
-    );
     setPendingFeedbackContext(null);
 
-    requestAnimationFrame(() => {
-      navigation.navigate(
-        getMakeupJourneyFeedbackPhotoRoute(photoSource),
+    if (photoSource === 'camera') {
+      beginMakeupFeedbackFlow(pendingFeedbackContext);
+      setSelectedMakeupFeedbackPhoto(
+        applyMakeupFeedbackJourneyContext(
+          {photoSource},
+          pendingFeedbackContext,
+        ),
       );
+      requestAnimationFrame(() => {
+        navigation.navigate('MakeupFeedbackCapture');
+      });
+      return;
+    }
+
+    const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
+      if (!selection) {
+        return;
+      }
+      beginMakeupFeedbackFlow(pendingFeedbackContext);
+      setSelectedMakeupFeedbackPhoto(
+        applyMakeupFeedbackJourneyContext(
+          selection,
+          pendingFeedbackContext,
+        ),
+      );
+      navigation.navigate('FaceCaptureConfirmation', {
+        target: 'makeupFeedback',
+      });
     });
-  }, [closeFeedbackSheet, navigation, pendingFeedbackContext, setSelectedMakeupFeedbackPhoto]);
+  }, [
+    beginMakeupFeedbackFlow,
+    closeFeedbackSheet,
+    navigation,
+    pendingFeedbackContext,
+    setSelectedMakeupFeedbackPhoto,
+  ]);
 
   if (!isMakeupJourneyEntryDateRouteParam(entryDate)) {
     return (

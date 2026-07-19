@@ -176,8 +176,3 @@ export function parseFaceAnalysisV2(value: unknown): FaceAnalysisV2 | undefined 
   }
   return value as FaceAnalysisV2;
 }
-
-export function hasRenderableCameraReport(value: unknown): boolean {
-  const result = parseFaceAnalysisV2(value);
-  return Boolean(result && Object.keys(result.faceProfile).length > 0);
-}

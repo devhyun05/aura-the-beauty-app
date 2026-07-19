@@ -4,11 +4,23 @@ import { color, font, radius } from '../reportTokens';
 import type { BlendData } from '../reportTypes';
 import { Hatch } from './Hatch';
 
-/** Blend bar: dominant axis as a solid fill, secondary axis as a hatch — no numbers. */
-export function BlendBar({ data }: { data: BlendData }) {
+/** Blend bar: dominant axis as a solid fill, secondary axis as a hatch. */
+export function BlendBar({ data, showPercentHeader = false }: { data: BlendData; showPercentHeader?: boolean }) {
+  const dominantPercent = Math.round(Math.max(0, Math.min(1, data.dominantRatio)) * 100);
   return (
     <View style={{ gap: 7 }}>
-      {data.label ? <Text style={[font(12, '600'), { color: color.text }]}>{data.label}</Text> : null}
+      {showPercentHeader ? (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <Text style={[font(13, '800'), { color: color.accentInk }]}>
+            {data.dominantLabel} {dominantPercent}%
+          </Text>
+          <Text style={[font(11, '600'), { color: color.muted }]}>
+            2순위 {data.secondaryLabel}
+          </Text>
+        </View>
+      ) : data.label ? (
+        <Text style={[font(12, '600'), { color: color.text }]}>{data.label}</Text>
+      ) : null}
       <View style={{
         flexDirection: 'row', height: 26, borderRadius: radius.pill, overflow: 'hidden',
         borderWidth: 1, borderColor: color.outline8,

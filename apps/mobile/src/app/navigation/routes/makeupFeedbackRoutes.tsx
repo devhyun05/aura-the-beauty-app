@@ -35,6 +35,9 @@ import {
   type RootScreenProps,
 } from './routeUtils';
 
+const loadMakeupPhotoPicker = () =>
+  require('../../../features/home/services/makeupPhotoPicker') as typeof import('../../../features/home/services/makeupPhotoPicker');
+
 type HeaderShareAction = {
   cb: () => void;
 };
@@ -182,7 +185,10 @@ export function MakeupFeedbackAlbumUploadRouteScreen({
     <DetailRouteChrome
       routeName="MakeupFeedbackAlbumUpload"
       onBack={handleBack}>
-      <MakeupFeedbackAlbumUploadScreen onStartAnalysis={handleStartAnalysis} />
+      <MakeupFeedbackAlbumUploadScreen
+        onCancel={handleBack}
+        onStartAnalysis={handleStartAnalysis}
+      />
     </DetailRouteChrome>
   );
 }
@@ -252,6 +258,7 @@ export function MakeupFeedbackLoadingRouteScreen({
     makeupFeedbackParentScore,
     selectedMakeupFeedbackPhoto,
     setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
   } = useNavigationFlowState();
   const selectedMakeupFeedbackPhotoRef = React.useRef(
     selectedMakeupFeedbackPhoto,
@@ -339,10 +346,27 @@ export function MakeupFeedbackLoadingRouteScreen({
   }, [beginMakeupFeedbackFlow, flowContext, navigation, setMakeupFeedbackResult]);
 
   const handleChooseDifferentPhoto = React.useCallback(() => {
-    beginMakeupFeedbackFlow(flowContext);
-    setMakeupFeedbackResult(null);
-    navigation.replace('MakeupFeedbackAlbumUpload');
-  }, [beginMakeupFeedbackFlow, flowContext, navigation, setMakeupFeedbackResult]);
+    const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+    void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
+      if (!selection) {
+        return;
+      }
+      beginMakeupFeedbackFlow(flowContext);
+      setMakeupFeedbackResult(null);
+      setSelectedMakeupFeedbackPhoto(
+        applyMakeupFeedbackJourneyContext(selection, flowContext),
+      );
+      navigation.replace('FaceCaptureConfirmation', {
+        target: 'makeupFeedback',
+      });
+    });
+  }, [
+    beginMakeupFeedbackFlow,
+    flowContext,
+    navigation,
+    setMakeupFeedbackResult,
+    setSelectedMakeupFeedbackPhoto,
+  ]);
 
 
 

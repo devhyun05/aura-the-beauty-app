@@ -12,7 +12,7 @@ interface Props {
   labelAlign?: 'left' | 'right';
 }
 
-/** S3 photo-crop guide overlay: slanted eye-tail line + dot / dashed nose axis / lip & jaw ellipses. */
+/** S3 photo-crop guide overlay: slanted eye-tail line + dot / dashed nose axis / lip ellipse / real polylines. */
 export function GuideOverlay({ guide, label, labelX, labelAlign = 'left' }: Props) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   return (
@@ -60,12 +60,14 @@ export function GuideOverlay({ guide, label, labelX, labelAlign = 'left' }: Prop
           borderWidth: 2, borderColor: color.white,
         }} />
       )}
-      <View style={{
-        position: 'absolute', bottom: 10, flexDirection: 'row',
-        ...(labelAlign === 'left' ? { left: pct(labelX * 100) } : { right: pct(labelX * 100) }),
-      }}>
-        <Pill variant="dark" label={label} />
-      </View>
+      {guide.kind !== 'none' && label ? (
+        <View style={{
+          position: 'absolute', bottom: 10, flexDirection: 'row',
+          ...(labelAlign === 'left' ? { left: pct(labelX * 100) } : { right: pct(labelX * 100) }),
+        }}>
+          <Pill variant="dark" label={label} />
+        </View>
+      ) : null}
     </View>
   );
 }

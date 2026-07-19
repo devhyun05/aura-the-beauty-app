@@ -390,6 +390,16 @@ def test_face_analysis_stage_run_migration_is_registered() -> None:
   assert "uq_analysis_stage_runs_one_processing" in migration_sql
 
 
+def test_obsolete_analysis_lab_tables_are_removed() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:remove-analysis-lab-v1"]
+
+  assert "drop table if exists analysis_lab_runs" in migration_sql
+  assert "drop table if exists analysis_lab_sessions" in migration_sql
+  assert "schema.sql:analysis-lab-runs-v3" in migration_sql
+  assert "analysis_lab_runs" not in EXPECTED_TABLES
+  assert "analysis_lab_sessions" not in EXPECTED_TABLES
+
+
 def test_pending_search_migration_is_registered() -> None:
   migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:community-search-v1"]
 

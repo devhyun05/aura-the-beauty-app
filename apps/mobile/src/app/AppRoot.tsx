@@ -34,7 +34,6 @@ import type {
   AppNotificationData,
 } from '../features/notifications/types';
 import {
-  recordFeaturePerformanceMarker,
   recordFeaturePerformanceRoute,
   startFeaturePerformanceLogging,
 } from '../shared/performance/featurePerformanceLogger';
@@ -46,7 +45,6 @@ import {
 
 setMakeupJourneyAnalyticsAdapter(makeupJourneyBackendAnalyticsAdapter);
 
-const UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS = 5000;
 const HOME_HERO_PREFETCH_DELAY_AFTER_STARTUP_MS = 750;
 const DEFERRED_APP_SERVICES_DELAY_AFTER_STARTUP_MS = 1200;
 const STARTUP_SCREEN_MIN_DURATION_MS = 360;
@@ -247,36 +245,6 @@ export function AppRoot() {
       clearTimeout(minimumTimer);
     };
   }, []);
-
-  useEffect(() => {
-    if (!isStartupReady) {
-      return undefined;
-    }
-
-    let preloadTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const preloadAfterInitialRender = InteractionManager.runAfterInteractions(() => {
-      preloadTimer = setTimeout(() => {
-        // Fully boot Unity once offscreen so the scene and models stay warm,
-        // then pause its render loop, ARSession, camera and MediaPipe until an
-        // on-screen Unity container resumes it. This keeps fast AR entry without
-        // continuously heating the device on Home/Login/report screens.
-        recordFeaturePerformanceMarker('unity-preload-start');
-        const {prewarmUnityMakeupRuntime} = require(
-          '../features/ar/services/unityMakeupBridge'
-        ) as typeof import('../features/ar/services/unityMakeupBridge');
-        const started = prewarmUnityMakeupRuntime();
-        recordFeaturePerformanceMarker('unity-preload-dispatched', {started});
-      }, UNITY_PRELOAD_DELAY_AFTER_FIRST_RENDER_MS);
-    });
-
-    return () => {
-      preloadAfterInitialRender.cancel();
-      if (preloadTimer) {
-        clearTimeout(preloadTimer);
-      }
-    };
-  }, [isStartupReady]);
 
   return (
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">

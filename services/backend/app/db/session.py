@@ -5,7 +5,7 @@ import asyncpg
 from fastapi import Depends
 
 from app.core.errors import AppError
-from app.core.settings import get_settings
+from app.core.settings import Settings, get_settings
 from app.db.connection_config import (
   DatabaseConnectionConfig,
   resolve_database_connection_config,
@@ -24,8 +24,8 @@ class Database:
   def is_connected(self) -> bool:
     return self.pool is not None
 
-  async def connect(self) -> None:
-    settings = get_settings()
+  async def connect(self, settings: Settings | None = None) -> None:
+    settings = settings or get_settings()
     config = resolve_database_connection_config(settings)
 
     if config is None:
