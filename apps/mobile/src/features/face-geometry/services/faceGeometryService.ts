@@ -132,6 +132,10 @@ export async function analyzeFaceGeometry2d(
   } else if (Math.abs(rollDeg) > ROLL_CORRECTION_MAX_ABS_DEG) {
     rollCorrection = {...SKIPPED_ROLL_CORRECTION, skippedReason: 'roll_out_of_range'};
   } else {
+    // 부호 규약(TS pin: faceGeometryMath.test.ts §10-11): rollDeg>0 = 머리가 이미지에서
+    // 시계방향으로 기운 상태여야 하며, angleDeg=-rollDeg 로 되돌린다. rollDeg의 네이티브
+    // 의미(StillFaceLandmarkService.cs: roll=atan2(m.m10,m.m00))는 TS로 검증 불가이므로,
+    // 실기기에서 "머리를 시계방향으로 기울여 촬영 → canthalTilt 부호가 올바른지" 1회 검증할 것.
     const angleDeg = -rollDeg;
     correctedMap = rotatePixelLandmarkMap(pixelMap, angleDeg, {
       x: detected.imageWidth / 2,

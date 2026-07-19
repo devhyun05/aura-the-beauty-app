@@ -284,4 +284,24 @@ function buildBaseMap(): PixelLandmarkMap {
   }
 }
 
+// ── 10. 회전 부호 규약 pin: +90°는 이미지 좌표계 시계방향(오른쪽 점→아래) ────
+{
+  const center: PixelPoint = {x: 500, y: 500};
+  const map: PixelLandmarkMap = new Map([[0, {x: 600, y: 500}]]); // 중심 오른쪽 100px
+  const rotated = rotatePixelLandmarkMap(map, 90, center).get(0)!;
+  expectClose(rotated.x, 500, 'rot+90 x'); // 오른쪽 점이
+  expectClose(rotated.y, 600, 'rot+90 y'); // 아래로 (이미지 y는 아래로 증가)
+}
+
+// ── 11. roll 보정 왕복: +R 회전한 얼굴을 -R로 보정하면 원래 tilt 복원 ────────
+{
+  const R = 8;
+  const center: PixelPoint = {x: 500, y: 500};
+  const rolled = rotatePixelLandmarkMap(buildBaseMap(), R, center);   // 카메라/머리 +R 기울임 모사
+  const corrected = rotatePixelLandmarkMap(rolled, -R, center);       // service의 angleDeg=-rollDeg
+  const metrics = computeFaceGeometryMetrics({map: corrected, rollCorrectionApplied: true});
+  expectClose(metrics.canthalTiltLeftDeg.value, 0, 'roll round-trip L', 0.01);
+  expectClose(metrics.canthalTiltRightDeg.value, 0, 'roll round-trip R', 0.01);
+}
+
 console.log('faceGeometryMath.test.ts passed');
