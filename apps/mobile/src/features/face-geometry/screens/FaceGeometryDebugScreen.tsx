@@ -26,8 +26,8 @@ const FAMILIES: {
   {
     color: '#ff4d9d',
     key: 'converge',
-    label: '수렴각',
-    match: l => l.startsWith('canthalUpper') || l.startsWith('canthalLower'),
+    label: '눈꼬리 위각',
+    match: l => l.startsWith('canthalUpper'),
   },
   {color: '#22d3ee', key: 'brow', label: '눈썹', match: l => l.startsWith('browEdge')},
   {color: '#34d399', key: 'openness', label: '개방도', match: l => l.startsWith('eyeOpenness')},

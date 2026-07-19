@@ -334,23 +334,19 @@ function buildBaseMap(): PixelLandmarkMap {
   }
 }
 
-// ── 13. 수렴각: 상/하 접선 사잇각. 대칭 예각/둔각 케이스 + 회전 불변 ───────────
+// ── 13. 눈꼬리 위쪽 각도: 윗꺼풀선(상접선점→외안각)이 수평보다 아래로 떨어진 각. roll 게이트 안. ──
 {
   const map = buildBaseMap();
-  // 외안각(우) 33=(380,400): 상접선점 161 위-안쪽, 하접선점 163 아래-안쪽 → 90° 코너
-  map.set(CANTHAL_TANGENT_INDICES.upperRight, {x: 420, y: 360}); // (+40,-40)
-  map.set(CANTHAL_TANGENT_INDICES.lowerRight, {x: 420, y: 440}); // (+40,+40)
+  // 외안각(우) 33=(380,400), 상접선점 161=(420,360): 외안각이 상접선보다 +40 아래,
+  //   가로 40 → atan2(40,40)=45° (양수=아래로 처짐)
+  map.set(IDX.eyeOuterRight, {x: 380, y: 400});
+  map.set(CANTHAL_TANGENT_INDICES.upperRight, {x: 420, y: 360});
   const m = computeFaceGeometryMetrics({map, rollCorrectionApplied: true});
-  expectClose(m.outerCanthalAngleRightDeg.value, 90, 'convergence 90deg', 0.01);
+  expectClose(m.eyeTailUpperAngleRightDeg.value, 45, 'eye-tail upper 45deg', 0.01);
 
-  // 회전 불변: 전체를 33° 돌려도 같은 값
-  const rotated = rotatePixelLandmarkMap(map, 33, {x: 500, y: 500});
-  const m2 = computeFaceGeometryMetrics({map: rotated, rollCorrectionApplied: true});
-  expectClose(m2.outerCanthalAngleRightDeg.value, 90, 'convergence rot-invariant', 0.01);
-
-  // roll 미보정에서도 산출됨(회전 불변 → 게이트 무관)
-  const m3 = computeFaceGeometryMetrics({map, rollCorrectionApplied: false});
-  expectClose(m3.outerCanthalAngleRightDeg.value, 90, 'convergence without roll gate', 0.01);
+  // roll 미보정이면 null(수평 대비라 roll 민감)
+  const m2 = computeFaceGeometryMetrics({map, rollCorrectionApplied: false});
+  expectEqual(m2.eyeTailUpperAngleRightDeg.value, null, 'eye-tail upper null without roll');
 }
 
 // ── 14. 눈썹 봉우리 비율: 중앙(3/5 지점)이 최고점이면 호길이 비율 0.5 ───────────
@@ -383,6 +379,27 @@ function buildBaseMap(): PixelLandmarkMap {
   expectClose(tiltR.points[0].y, 0.40, 'tilt p0 y');
   expectClose(tiltR.points[1].x, 0.38, 'tilt p1 x (outer)');
   expectClose(tiltR.points[1].y, 0.40, 'tilt p1 y');
+}
+
+// ── 16. 눈썹 봉우리 sub-sample: 이웃 y 비대칭이면 최고점 샘플에서 그쪽으로 이동 ──
+{
+  const map = buildBaseMap();
+  const edgeR = BROW_UPPER_EDGE_RIGHT_INDICES;
+  const xsR = [460, 440, 420, 400, 380]; // medial→lateral
+  const ysR = [360, 352, 340, 344, 360]; // 최고점 idx2, 오른(lateral) 이웃이 더 높음(y=344)
+  edgeR.forEach((idx, i) => map.set(idx, {x: xsR[i], y: ysR[i]}));
+  const m = computeFaceGeometryMetrics({map, rollCorrectionApplied: true});
+  const v = m.browApexRatioRight.value;
+  if (v === null) {
+    fail('brow apex subsample', 'expected value, got null');
+  }
+  // 정점이 중앙(0.5)에서 lateral(arc 증가) 쪽으로 이동: 0.5 < v < 0.65
+  if (!(v > 0.5)) {
+    fail('brow apex subsample', `expected >0.5, got ${v}`);
+  }
+  if (!(v < 0.65)) {
+    fail('brow apex subsample', `expected <0.65, got ${v}`);
+  }
 }
 
 console.log('faceGeometryMath.test.ts passed');

@@ -4,7 +4,7 @@ import Svg, {Circle, G, Line, Polyline} from 'react-native-svg';
 
 import type {FaceGeometryResult} from '../types';
 
-// 지표 계열별 색 — 라벨 접두사로 매핑. (magenta=눈꼬리 수렴각, blue=tilt, green=개방도, cyan=눈썹)
+// 지표 계열별 색 — 라벨 접두사로 매핑. (magenta=눈꼬리 위쪽선, blue=tilt, green=개방도, cyan=눈썹)
 const FAMILY_COLOR: ReadonlyArray<readonly [string, string]> = [
   ['canthalTilt', '#3b82f6'],
   ['canthalUpper', '#ff4d9d'],
@@ -100,6 +100,27 @@ export function FaceGeometryDebugOverlay({
                 r={dotRadius}
               />
             ))}
+            {anchor.label.startsWith('browEdge') && points.length > 0
+              ? (() => {
+                  let apexIndex = 0;
+                  for (let i = 1; i < points.length; i++) {
+                    if (points[i].y < points[apexIndex].y) {
+                      apexIndex = i;
+                    }
+                  }
+                  // 봉우리로 고른 점을 빈 링으로 강조(진짜 봉우리가 이 근처인지 육안 확인).
+                  return (
+                    <Circle
+                      cx={points[apexIndex].x}
+                      cy={points[apexIndex].y}
+                      fill="none"
+                      r={dotRadius * 2.6}
+                      stroke={color}
+                      strokeWidth={stroke}
+                    />
+                  );
+                })()
+              : null}
           </G>
         );
       })}

@@ -129,23 +129,15 @@ function canthalTiltDeg(inner: PixelPoint, outer: PixelPoint): FaceGeometryMetri
   return metric('deg', round(deg, 2));
 }
 
-// 외안각 수렴각(도): 외안각에서 상·하 눈꺼풀 접선 벡터의 사잇각. atan2(|cross|,dot)로
-// [0,180]. 두 상대벡터의 각이라 전역 회전에 불변 → roll 보정과 무관하게 산출한다.
-function outerCanthalAngleDeg(
-  outer: PixelPoint,
-  upper: PixelPoint,
-  lower: PixelPoint,
-): FaceGeometryMetric {
-  const ux = upper.x - outer.x;
-  const uy = upper.y - outer.y;
-  const lx = lower.x - outer.x;
-  const ly = lower.y - outer.y;
-  if (!(Math.hypot(ux, uy) > GEOMETRY_EPSILON) || !(Math.hypot(lx, ly) > GEOMETRY_EPSILON)) {
-    return unavailable('deg', 'canthal_tangent_degenerate');
+// 눈꼬리 위쪽 각도(도): 외안각으로 내려오는 윗꺼풀선(상접선점→외안각)이 수평보다
+// 얼마나 아래로 떨어지는지. 양수 = 아래로 처짐(후드/답답형 위꼬리), 클수록 가파름.
+// 수평 대비라 roll 민감(게이트 안에서 산출). canthalTilt(내→외안각)와는 별개 지표.
+function eyeTailUpperAngleDeg(upper: PixelPoint, outer: PixelPoint): FaceGeometryMetric {
+  const dx = Math.abs(outer.x - upper.x);
+  if (!(dx > GEOMETRY_EPSILON)) {
+    return unavailable('deg', 'eye_tail_axis_degenerate');
   }
-  const cross = ux * ly - uy * lx;
-  const dot = ux * lx + uy * ly;
-  const deg = (Math.atan2(Math.abs(cross), dot) * 180) / Math.PI;
+  const deg = (Math.atan2(outer.y - upper.y, dx) * 180) / Math.PI;
   return metric('deg', round(deg, 2));
 }
 
@@ -179,6 +171,10 @@ function browSlopeDeg(
 
 // 눈썹 상연 edge(medial→lateral)에서 최고점(y 최소)을 apex 로, 그 지점의 호길이 비율
 // (0=medial, 1=lateral)을 반환. slope 한 개보다 형태(어디서 솟는가)를 보존한다.
+//
+// MediaPipe 상연 샘플이 5점뿐(드문드문)이라 진짜 봉우리가 두 샘플 사이에 있으면
+// 최근접 샘플로 스냅돼 미묘하게 어긋난다. 최고점 샘플과 양옆 2점에 포물선을 맞춰
+// 정점(vertex)을 호길이 상에서 sub-sample 추정한다(양 끝점이면 그대로 사용).
 function browApexRatioMetric(edge: PixelPoint[]): FaceGeometryMetric {
   if (edge.length < 3) {
     return unavailable('ratio', 'brow_edge_insufficient');
@@ -197,7 +193,29 @@ function browApexRatioMetric(edge: PixelPoint[]): FaceGeometryMetric {
       apex = i;
     }
   }
-  return metric('ratio', round(cum[apex] / total, 4));
+
+  let apexArc = cum[apex];
+  if (apex > 0 && apex < edge.length - 1) {
+    // 호길이 s 를 파라미터로 (s, y) 3점에 포물선 y = a·s² + b·s + c 를 맞춘다.
+    const s0 = cum[apex - 1];
+    const s1 = cum[apex];
+    const s2 = cum[apex + 1];
+    const y0 = edge[apex - 1].y;
+    const y1 = edge[apex].y;
+    const y2 = edge[apex + 1].y;
+    const denom = (s0 - s1) * (s0 - s2) * (s1 - s2);
+    if (Math.abs(denom) > GEOMETRY_EPSILON) {
+      const a = (s2 * (y1 - y0) + s1 * (y0 - y2) + s0 * (y2 - y1)) / denom;
+      const b =
+        (s2 * s2 * (y0 - y1) + s1 * s1 * (y2 - y0) + s0 * s0 * (y1 - y2)) / denom;
+      // a>0 이라야 아래로 볼록(=y 최소=봉우리)이 유효. 정점은 이웃 구간으로 clamp.
+      if (a > GEOMETRY_EPSILON) {
+        apexArc = Math.min(s2, Math.max(s0, -b / (2 * a)));
+      }
+    }
+  }
+
+  return metric('ratio', round(apexArc / total, 4));
 }
 
 // 상꺼풀 ↔ 눈썹 하연 최저점(링에서 y 최대 = 눈에 가장 가까운 점)의 수직거리.
@@ -234,6 +252,8 @@ const ROLL_SENSITIVE_KEYS: readonly FaceGeometryMetricKey[] = [
   'canthalTiltRightDeg',
   'eyeBrowGapLeft',
   'eyeBrowGapRight',
+  'eyeTailUpperAngleLeftDeg',
+  'eyeTailUpperAngleRightDeg',
   'mouthCornerAsymmetry',
 ];
 
@@ -328,17 +348,10 @@ export function computeFaceGeometryMetrics({
     );
   }
 
-  // 눈꼬리 수렴각(회전 불변, roll 게이트 무관)
+  // 눈꼬리 위쪽 접선점(윗꺼풀선 at 꼬리). eyeTailUpperAngle 은 수평 대비라
+  // roll 게이트 안에서 산출한다.
   const canthalUpperR = get(CANTHAL_TANGENT_INDICES.upperRight);
-  const canthalLowerR = get(CANTHAL_TANGENT_INDICES.lowerRight);
-  if (eyeOuterR && canthalUpperR && canthalLowerR) {
-    metrics.outerCanthalAngleRightDeg = outerCanthalAngleDeg(eyeOuterR, canthalUpperR, canthalLowerR);
-  }
   const canthalUpperL = get(CANTHAL_TANGENT_INDICES.upperLeft);
-  const canthalLowerL = get(CANTHAL_TANGENT_INDICES.lowerLeft);
-  if (eyeOuterL && canthalUpperL && canthalLowerL) {
-    metrics.outerCanthalAngleLeftDeg = outerCanthalAngleDeg(eyeOuterL, canthalUpperL, canthalLowerL);
-  }
 
   // 하악 폭 / 얼굴 폭, 아래턱 윤곽 폭 / 얼굴 폭
   const jawR = get(IDX.jawRight);
@@ -384,6 +397,14 @@ export function computeFaceGeometryMetrics({
   const browEdgeLeft = getRing(BROW_UPPER_EDGE_LEFT_INDICES);
   if (browEdgeLeft) {
     metrics.browApexRatioLeft = browApexRatioMetric(browEdgeLeft);
+  }
+
+  // 눈꼬리 위쪽 각도(윗꺼풀선이 수평보다 아래로 떨어진 각). 수평 대비라 roll 민감.
+  if (eyeOuterR && canthalUpperR) {
+    metrics.eyeTailUpperAngleRightDeg = eyeTailUpperAngleDeg(canthalUpperR, eyeOuterR);
+  }
+  if (eyeOuterL && canthalUpperL) {
+    metrics.eyeTailUpperAngleLeftDeg = eyeTailUpperAngleDeg(canthalUpperL, eyeOuterL);
   }
 
   if (upperLidL && browRingLeft && eyeWidthLeftPx !== null) {
@@ -433,11 +454,9 @@ export function collectFaceGeometryDebugAnchors(
   seg('canthalTiltLeft', IDX.eyeInnerLeft, IDX.eyeOuterLeft);
   seg('eyeOpennessRight', IDX.eyeUpperLidRight, IDX.eyeLowerLidRight);
   seg('eyeOpennessLeft', IDX.eyeUpperLidLeft, IDX.eyeLowerLidLeft);
-  // 수렴각: 외안각→상접선, 외안각→하접선 (2 segment)
+  // 눈꼬리 위쪽선: 외안각→상접선 (eyeTailUpperAngle 이 재는 그 선)
   seg('canthalUpperRight', IDX.eyeOuterRight, CANTHAL_TANGENT_INDICES.upperRight);
-  seg('canthalLowerRight', IDX.eyeOuterRight, CANTHAL_TANGENT_INDICES.lowerRight);
   seg('canthalUpperLeft', IDX.eyeOuterLeft, CANTHAL_TANGENT_INDICES.upperLeft);
-  seg('canthalLowerLeft', IDX.eyeOuterLeft, CANTHAL_TANGENT_INDICES.lowerLeft);
   // 눈썹 상연 edge polyline
   const browEdge = (label: string, indices: readonly number[]): void => {
     const pts: {x: number; y: number}[] = [];
