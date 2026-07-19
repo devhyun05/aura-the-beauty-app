@@ -42,17 +42,19 @@ export type FaceAnalysisInsight = {
   sensitivity: 0 | 1 | 2 | 3;
 };
 
+// 서버 상세 응답 투영은 sensitivity>=3 insight(예: asymmetry)를 통째로 제거한다
+// (analysis.py _project_internal_only_records) — 각 insight 는 부재할 수 있다.
 export type FaceAnalysisDerivedResult = {
-  asymmetry: FaceAnalysisInsight;
-  cheekboneAndEline: FaceAnalysisInsight;
-  colorAxes: FaceAnalysisInsight;
-  eyeBrow: FaceAnalysisInsight;
-  faceShape: FaceAnalysisInsight;
-  irisExposure: FaceAnalysisInsight;
-  nosePhiltrumLips: FaceAnalysisInsight;
+  asymmetry?: FaceAnalysisInsight;
+  cheekboneAndEline?: FaceAnalysisInsight;
+  colorAxes?: FaceAnalysisInsight;
+  eyeBrow?: FaceAnalysisInsight;
+  faceShape?: FaceAnalysisInsight;
+  irisExposure?: FaceAnalysisInsight;
+  nosePhiltrumLips?: FaceAnalysisInsight;
   rulesVersion: string;
-  skinColor: FaceAnalysisInsight;
-  verticalBalance: FaceAnalysisInsight;
+  skinColor?: FaceAnalysisInsight;
+  verticalBalance?: FaceAnalysisInsight;
 };
 
 export type FaceAnalysisV2 = {
@@ -157,7 +159,7 @@ export function parseFaceAnalysisV2(value: unknown): FaceAnalysisV2 | undefined 
     !Array.isArray(coverage.blockedKeys) ||
     !isRecord(derived) ||
     typeof derived.rulesVersion !== 'string' ||
-    !derivedInsightKeys.every(key => isInsight(derived[key])) ||
+    !derivedInsightKeys.every(key => derived[key] == null || isInsight(derived[key])) ||
     !isRecord(pipeline) ||
     !isStageState(pipeline.aiMeasurement) ||
     !isStageState(pipeline.aiPerception) ||

@@ -103,6 +103,9 @@ export function FaceAnalysisV2ReportSections({analysis}: {analysis: FaceAnalysis
         <View style={styles.grid}>
           {derivedLabels.map(([label, key]) => {
             const insight = analysis.derived[key];
+            if (!insight) {
+              return null;
+            }
             return (
               <View key={key} style={styles.insightCard}>
                 <Text style={styles.metricKey}>{label}</Text>

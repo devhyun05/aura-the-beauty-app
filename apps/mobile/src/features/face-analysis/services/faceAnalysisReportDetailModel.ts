@@ -42,11 +42,11 @@ function compactSummaryLabel(value: string | null | undefined): string {
 }
 
 function resolveCompactFaceShape(report: FaceAnalysisReport): string {
-  return compactSummaryLabel(report.faceAnalysisV2?.derived.faceShape.label ?? report.faceShape);
+  return compactSummaryLabel(report.faceAnalysisV2?.derived.faceShape?.label ?? report.faceShape);
 }
 
 function resolveCompactBalance(report: FaceAnalysisReport): string {
-  return compactSummaryLabel(report.faceAnalysisV2?.derived.verticalBalance.label);
+  return compactSummaryLabel(report.faceAnalysisV2?.derived.verticalBalance?.label);
 }
 
 export function getFaceAnalysisReportSummaryItems(

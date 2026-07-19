@@ -538,7 +538,16 @@ function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
         note => note.insight && note.evidence && note.recommendation,
       ),
   );
-  const hasV2AiResult = result?.faceAnalysisV2 == null
+  // 목록 응답은 SQL(#-)이 faceAnalysisV2 의 perception/consulting 키 자체를 제거한
+  // 경량 투영이다 — 키 부재는 "상세 GET 에서 받는 필드"이지 AI 결과 누락이 아니다.
+  const rawFaceAnalysisV2 = result?.faceAnalysisV2;
+  const isListProjectedV2 =
+    typeof rawFaceAnalysisV2 === 'object' &&
+    rawFaceAnalysisV2 !== null &&
+    !Array.isArray(rawFaceAnalysisV2) &&
+    !('perception' in rawFaceAnalysisV2) &&
+    !('consulting' in rawFaceAnalysisV2);
+  const hasV2AiResult = rawFaceAnalysisV2 == null || isListProjectedV2
     ? true
     : Boolean(faceAnalysisV2?.perception && faceAnalysisV2.consulting);
 
