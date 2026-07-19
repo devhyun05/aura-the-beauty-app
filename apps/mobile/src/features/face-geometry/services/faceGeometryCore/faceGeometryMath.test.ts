@@ -293,15 +293,21 @@ function buildBaseMap(): PixelLandmarkMap {
   expectClose(rotated.y, 600, 'rot+90 y'); // 아래로 (이미지 y는 아래로 증가)
 }
 
-// ── 11. roll 보정 왕복: +R 회전한 얼굴을 -R로 보정하면 원래 tilt 복원 ────────
+// ── 11. roll 부호 독립 검증: +R 카메라 roll 은 좌우 canthalTilt 를 반대로(우 +R, 좌 −R)
+//        벌리고, 서비스 규약 angleDeg=−rollDeg(즉 −R 회전)이 그 왜곡을 0 으로 되돌린다.
+//        회전 부호가 뒤집히면 observed 부호가 반대가 되어 여기서 FAIL — 왕복 항등이 아님.
 {
-  const R = 8;
+  const R = 6;
   const center: PixelPoint = {x: 500, y: 500};
-  const rolled = rotatePixelLandmarkMap(buildBaseMap(), R, center);   // 카메라/머리 +R 기울임 모사
-  const corrected = rotatePixelLandmarkMap(rolled, -R, center);       // service의 angleDeg=-rollDeg
-  const metrics = computeFaceGeometryMetrics({map: corrected, rollCorrectionApplied: true});
-  expectClose(metrics.canthalTiltLeftDeg.value, 0, 'roll round-trip L', 0.01);
-  expectClose(metrics.canthalTiltRightDeg.value, 0, 'roll round-trip R', 0.01);
+  const observed = rotatePixelLandmarkMap(buildBaseMap(), R, center);
+  const obs = computeFaceGeometryMetrics({map: observed, rollCorrectionApplied: true});
+  expectClose(obs.canthalTiltRightDeg.value, R, 'observed tilt R = +R after +R roll', 0.1);
+  expectClose(obs.canthalTiltLeftDeg.value, -R, 'observed tilt L = -R after +R roll', 0.1);
+
+  const corrected = rotatePixelLandmarkMap(observed, -R, center); // service: angleDeg = -rollDeg
+  const cor = computeFaceGeometryMetrics({map: corrected, rollCorrectionApplied: true});
+  expectClose(cor.canthalTiltRightDeg.value, 0, 'corrected tilt R ~0 (−rollDeg removes +R roll)', 0.01);
+  expectClose(cor.canthalTiltLeftDeg.value, 0, 'corrected tilt L ~0 (−rollDeg removes +R roll)', 0.01);
 }
 
 console.log('faceGeometryMath.test.ts passed');
