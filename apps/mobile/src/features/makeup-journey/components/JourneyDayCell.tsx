@@ -2,6 +2,9 @@ import {Pressable, StyleSheet} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {CachedImage} from '../../../shared/ui/CachedImage';
+import {getMakeupJourneyCacheRevision} from '../services/makeupJourneyCache';
+import {getMakeupJourneyPrivateImageSource} from '../services/makeupJourneyPrivateImage';
 import type {MakeupJourneyCalendarDay, MakeupJourneyStatus} from '../types';
 import {
   getJourneyDateAccessibilityLabel,
@@ -52,6 +55,11 @@ export function JourneyDayCell({
 }: JourneyDayCellProps) {
   const status = day?.status ?? 'empty';
   const score = day?.representativeScore ?? day?.latestScore ?? null;
+  const thumbnailUrl = day?.representativeThumbnailUrl?.trim() || null;
+  const thumbnailSource = getMakeupJourneyPrivateImageSource(
+    thumbnailUrl,
+    getMakeupJourneyCacheRevision(),
+  );
 
   return (
     <Pressable
@@ -65,17 +73,24 @@ export function JourneyDayCell({
         !calendarCell.inCurrentMonth ? styles.outsideMonth : null,
         pressed ? styles.pressed : null,
       ]}>
-      {score !== null ? (
-        <View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            styles.statusTint,
-            status === 'success' ? styles.successTint : styles.failureTint,
-          ]}
+      {score !== null && thumbnailSource ? (
+        <CachedImage
+          accessible={false}
+          cachePolicy="memory"
+          contentFit="cover"
+          recyclingKey={thumbnailSource.cacheKey ?? `${calendarCell.date}:${day?.representativeReportId}`}
+          source={thumbnailSource}
+          style={styles.thumbnail}
+          transition={0}
         />
+      ) : score !== null ? (
+        <View pointerEvents="none" style={styles.thumbnailPlaceholder} />
       ) : null}
-      <View style={[styles.dayNumberBadge, isToday ? styles.todayBadge : null]}>
+      <View style={[
+        styles.dayNumberBadge,
+        score !== null ? styles.recordDayBadge : null,
+        isToday ? styles.todayBadge : null,
+      ]}>
         <Text style={[
           styles.dayNumber,
           calendarCell.dayOfWeek === 0 ? styles.sundayText : null,
@@ -86,13 +101,9 @@ export function JourneyDayCell({
         </Text>
       </View>
       {score !== null ? (
-        <View style={styles.recordBlock}>
-          <Text style={[
-            styles.score,
-            status === 'success' ? styles.successScore : styles.failureScore,
-          ]}>
-            {score}점
-          </Text>
+        <View pointerEvents="none" style={styles.recordOverlay}>
+          <Text style={styles.score}>{score}점</Text>
+          <Text style={styles.statusLabel}>{getStatusLabel(status)}</Text>
         </View>
       ) : (
         <View style={styles.emptyDot} />
@@ -105,21 +116,20 @@ const styles = StyleSheet.create({
   cell: {
     backgroundColor: colors.white,
     borderColor: colors.divider,
-    alignItems: 'center',
     flex: 1,
-    gap: spacing.xs,
-    justifyContent: 'space-between',
     minHeight: 72,
     overflow: 'hidden',
-    paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.sm,
+    padding: spacing.xs,
+    position: 'relative',
   },
   dayNumberBadge: {
     alignItems: 'center',
+    alignSelf: 'flex-start',
     borderRadius: radius.pill,
     height: 24,
     justifyContent: 'center',
     width: 24,
+    zIndex: 2,
   },
   dayNumber: {
     color: colors.textPrimary,
@@ -129,16 +139,13 @@ const styles = StyleSheet.create({
   },
   emptyDot: {
     backgroundColor: colors.divider,
+    bottom: spacing.md,
     borderRadius: radius.pill,
     height: 5,
-    marginBottom: spacing.sm,
+    left: '50%',
+    marginLeft: -2.5,
+    position: 'absolute',
     width: 5,
-  },
-  failureScore: {
-    color: JOURNEY_FAILURE_COLOR,
-  },
-  failureTint: {
-    backgroundColor: JOURNEY_FAILURE_COLOR,
   },
   outsideMonth: {
     backgroundColor: colors.surfaceMuted,
@@ -147,18 +154,30 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },
-  score: {
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: 11,
-    lineHeight: 14,
+  recordDayBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.86)',
   },
-  recordBlock: {
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: radius.pill,
-    minWidth: 38,
+  recordOverlay: {
+    backgroundColor: 'rgba(17, 17, 17, 0.62)',
+    bottom: 0,
+    gap: 1,
+    left: 0,
     paddingHorizontal: 5,
-    paddingVertical: 3,
+    paddingVertical: 4,
+    position: 'absolute',
+    right: 0,
+  },
+  score: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 10,
+    lineHeight: 12,
+  },
+  statusLabel: {
+    color: 'rgba(255, 255, 255, 0.82)',
+    fontFamily: typography.fontFamily.medium,
+    fontSize: 8,
+    lineHeight: 10,
   },
   todayBadge: {
     backgroundColor: colors.black,
@@ -169,14 +188,20 @@ const styles = StyleSheet.create({
   saturdayText: {
     color: JOURNEY_FAILURE_COLOR,
   },
-  statusTint: {
-    opacity: 0.14,
+  thumbnail: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
-  successScore: {
-    color: colors.heart,
-  },
-  successTint: {
-    backgroundColor: colors.heart,
+  thumbnailPlaceholder: {
+    backgroundColor: colors.surfaceMuted,
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   sundayText: {
     color: colors.danger,

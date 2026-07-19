@@ -1128,6 +1128,7 @@ async def _execute_pipeline(
           "temperatureC",
           "humidityPercent",
           "precipitationProbabilityPercent",
+          "precipitationMm",
           "windSpeedMps",
           "weatherCode",
         )

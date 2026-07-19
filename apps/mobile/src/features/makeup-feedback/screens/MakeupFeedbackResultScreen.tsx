@@ -10,7 +10,17 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import {ChevronDown, ChevronUp, Download, Eye, Heart, Share2, Sparkles} from 'lucide-react-native';
+import {
+  ArrowRight,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Eye,
+  Heart,
+  Share2,
+  Sparkles,
+} from 'lucide-react-native';
 import {Button, Text, View} from 'tamagui';
 
 import {
@@ -47,6 +57,7 @@ import type {
 
 type MakeupFeedbackResultScreenProps = {
   onHeaderShareActionChange?: (action: MakeupFeedbackHeaderShareAction | null) => void;
+  onOpenMakeupJourney: () => void;
   result: MakeupFeedbackResult;
 };
 
@@ -184,6 +195,7 @@ function getGoalIntensityLabel(intensity: MakeupFeedbackIntensity) {
 
 export function MakeupFeedbackResultScreen({
   onHeaderShareActionChange,
+  onOpenMakeupJourney,
   result,
 }: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
@@ -356,7 +368,6 @@ export function MakeupFeedbackResultScreen({
               </View>
             ) : null}
 
-
             {result.interpretedGoal ? (
               <View style={styles.analysisCriteriaCard}>
                 <View style={styles.analysisCriteriaHeader}>
@@ -504,6 +515,17 @@ export function MakeupFeedbackResultScreen({
             feedback={shareFeedback}
             onPressShareAction={handleShareAction}
           />
+          <Button
+            accessibilityLabel="메이크업 기록에서 보기"
+            accessibilityRole="button"
+            onPress={onOpenMakeupJourney}
+            pressStyle={{opacity: 0.78}}
+            style={styles.makeupJourneyButton}
+            unstyled>
+            <CalendarDays color={colors.white} size={iconSize.sm} strokeWidth={2} />
+            <Text style={styles.makeupJourneyButtonText}>메이크업 기록에서 보기</Text>
+            <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2} />
+          </Button>
         </ScrollView>
       </View>
     </MakeupFeedbackScreenScaffold>
@@ -1298,6 +1320,27 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
     lineHeight: typography.lineHeight.xs,
+  },
+
+  makeupJourneyButton: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    backgroundColor: colors.black,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    minHeight: 54,
+    paddingHorizontal: spacing.lg,
+  },
+  makeupJourneyButtonText: {
+    color: colors.white,
+    flex: 1,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+    textAlign: 'center',
   },
 
   captureArea: {

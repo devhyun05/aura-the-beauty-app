@@ -308,6 +308,36 @@ def test_s3_client_uses_explicit_access_key_credentials(monkeypatch: pytest.Monk
   assert captured["kwargs"]["config"].signature_version == "s3v4"
 
 
+def test_s3_client_prefers_explicit_access_key_over_named_profile(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  captured = {}
+
+  def fake_boto3_client(service_name: str, **kwargs):
+    captured["service_name"] = service_name
+    captured["kwargs"] = kwargs
+    return object()
+
+  def unexpected_profile_session(*_args, **_kwargs):
+    raise AssertionError("named profile must not override an explicit access key pair")
+
+  monkeypatch.setattr("app.services.s3.boto3.client", fake_boto3_client)
+  monkeypatch.setattr("app.services.s3.boto3.Session", unexpected_profile_session)
+
+  settings = Settings(
+    aws_access_key_id="AKIAEXAMPLE",
+    aws_secret_access_key="secret",
+    aws_profile_name="expired-local-sso",
+    aws_region="ap-northeast-2",
+  )
+  S3Service(settings)._client()
+
+  assert settings.aws_credential_source == "access_key"
+  assert captured["service_name"] == "s3"
+  assert captured["kwargs"]["aws_access_key_id"] == "AKIAEXAMPLE"
+  assert captured["kwargs"]["aws_secret_access_key"] == "secret"
+
+
 def test_s3_client_omits_credentials_for_iam_role_chain(monkeypatch: pytest.MonkeyPatch) -> None:
   captured = {}
 
@@ -326,6 +356,37 @@ def test_s3_client_omits_credentials_for_iam_role_chain(monkeypatch: pytest.Monk
   assert "aws_access_key_id" not in captured["kwargs"]
   assert "aws_secret_access_key" not in captured["kwargs"]
   assert captured["kwargs"]["config"].signature_version == "s3v4"
+
+
+def test_s3_client_iam_role_mode_ignores_other_configured_credentials(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  captured = {}
+
+  def fake_boto3_client(service_name: str, **kwargs):
+    captured["service_name"] = service_name
+    captured["kwargs"] = kwargs
+    return object()
+
+  def unexpected_profile_session(*_args, **_kwargs):
+    raise AssertionError("IAM role mode must use the provider chain")
+
+  monkeypatch.setattr("app.services.s3.boto3.client", fake_boto3_client)
+  monkeypatch.setattr("app.services.s3.boto3.Session", unexpected_profile_session)
+
+  settings = Settings(
+    aws_access_key_id="AKIAEXAMPLE",
+    aws_secret_access_key="secret",
+    aws_profile_name="local-profile",
+    aws_region="ap-northeast-2",
+    aws_use_iam_role=True,
+  )
+  S3Service(settings)._client()
+
+  assert settings.aws_credential_source == "iam_role"
+  assert captured["service_name"] == "s3"
+  assert "aws_access_key_id" not in captured["kwargs"]
+  assert "aws_secret_access_key" not in captured["kwargs"]
 
 
 def test_s3_client_uses_named_aws_profile(monkeypatch: pytest.MonkeyPatch) -> None:

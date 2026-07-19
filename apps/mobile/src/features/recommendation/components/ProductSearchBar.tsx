@@ -45,5 +45,5 @@ const styles = StyleSheet.create({
   },
   input: {color: colors.textPrimary, flex: 1, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.md, minHeight: 48},
   button: {alignItems: 'center', justifyContent: 'center', minHeight: 44, minWidth: 44},
-  buttonText: {...typography.caption, color: colors.textPrimary, fontWeight: '700'},
+  buttonText: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xs, lineHeight: typography.lineHeight.xs},
 });

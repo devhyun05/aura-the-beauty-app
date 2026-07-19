@@ -488,7 +488,7 @@ function mapObservations(value: unknown, index: number): MakeupFeedbackObservati
       : requireTextList(
           observation.evidenceRegionIds,
           `${observationField}.evidenceRegionIds`,
-          {maxItems: 2, minItems: 1, unique: true},
+          {maxItems: 3, minItems: 1, unique: true},
         );
 
     regionIds.forEach((regionId, regionIndex) => {
@@ -866,6 +866,7 @@ export function mapBackendJobToFeedbackOutcome(
     analysisId,
     analysisStatus,
     captureQuality,
+    entryDate: firstText(job.entryDate),
     id: analysisId,
     modelVersion,
     photoSource: selection.photoSource,

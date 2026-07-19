@@ -7,7 +7,10 @@ import {likeProduct, unlikeProduct} from '../../../shared/services/productServic
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen, useTransientToast} from '../../../shared/ui';
 import {RecommendationSectionState} from '../components/RecommendationSectionState';
-import {getTrustedProductDetail, openTrustedProductOffer} from '../services/productHubService';
+import {
+  getTrustedProductDetail,
+  openTrustedProductOffer,
+} from '../services/productHubService';
 import type {CatalogProduct, ProductDetailRecommendationContext} from '../types';
 
 export function ProductDetailScreen({

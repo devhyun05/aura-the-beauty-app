@@ -114,22 +114,30 @@ export function getHomeTabResetState() {
   };
 }
 
-export function getMakeupJourneyDayResetState(entryDate: string) {
+export function getMakeupJourneyDayResetState(
+  entryDate: string,
+  initialReportId?: string,
+) {
   return {
     index: 1,
     routes: [
       ...getMakeupJourneyTabResetState(entryDate.slice(0, 7)).routes,
       {
         name: 'MakeupJourneyDayDetail' as const,
-        params: {entryDate},
+        params: initialReportId
+          ? {entryDate, initialReportId}
+          : {entryDate},
       },
     ],
   };
 }
 
-export function getMakeupJourneySafeReturnResetState(entryDate: unknown) {
+export function getMakeupJourneySafeReturnResetState(
+  entryDate: unknown,
+  initialReportId?: string,
+) {
   return typeof entryDate === 'string' && isIsoDateString(entryDate)
-    ? getMakeupJourneyDayResetState(entryDate)
+    ? getMakeupJourneyDayResetState(entryDate, initialReportId)
     : getMakeupJourneyTabResetState();
 }
 

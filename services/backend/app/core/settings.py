@@ -235,11 +235,12 @@ class Settings(BaseSettings):
   naver_trend_news_endpoint: str | None = None
   naver_trend_blog_endpoint: str | None = None
   naver_trend_cafe_endpoint: str | None = None
-  naver_trend_content_interval_hours: int = Field(default=6, ge=1, le=24)
+  naver_trend_content_interval_hours: int = Field(default=3, ge=1, le=24)
   naver_trend_validation_interval_hours: int = Field(default=12, ge=1, le=48)
-  # Four seeds keep 6-hour news/blog/cafe collection plus retry reservations
-  # below the default 3,000-call monthly ceiling.
-  naver_trend_content_max_seed_queries: int = Field(default=4, ge=1, le=10)
+  # One seed keeps 31 days of 3-hour news/blog/cafe collection plus the full
+  # 12-hour, 24-keyword DataLab validation budget (including worst-case retry
+  # reservations) below the shared 3,000-call monthly ceiling.
+  naver_trend_content_max_seed_queries: int = Field(default=1, ge=1, le=10)
   naver_trend_monthly_call_limit: int = Field(default=3000, ge=1, le=100000)
   naver_trend_http_timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0)
   naver_trend_http_max_attempts: int = Field(default=2, ge=1, le=4)
@@ -604,14 +605,14 @@ class Settings(BaseSettings):
 
   @property
   def aws_credential_source(self) -> str:
-    if self.aws_profile_name:
-      return "profile"
-
     if self.aws_use_iam_role:
       return "iam_role"
 
     if self.aws_access_key_id and self.aws_secret_access_key:
       return "access_key"
+
+    if self.aws_profile_name:
+      return "profile"
 
     return "missing"
 

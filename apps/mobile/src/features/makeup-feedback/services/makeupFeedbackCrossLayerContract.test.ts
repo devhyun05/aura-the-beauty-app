@@ -137,16 +137,16 @@ if (completed.analysisDecision !== 'completed') {
 
 expectEqual(completed.analysisSource, 'ai', 'mobile analysis source');
 expectEqual(completed.analysisStatus, 'bedrock_completed', 'mobile analysis status');
-expectEqual(completed.modelVersion, 'makeup-feedback:bedrock-v7-korean-goal-copy', 'model version');
+expectEqual(completed.modelVersion, 'makeup-feedback:bedrock-v8-whole-face-harmony', 'model version');
 expectEqual(completed.analysisId, 'makeup-feedback-cross-layer-job', 'canonical analysis id');
 expectEqual(completed.analysisImageSize?.width, 1080, 'analysis image width');
 expectEqual(completed.evidenceRegions?.length, 6, 'selected evidence region count');
 expectEqual(
   completed.evaluations[0]?.observations?.[0]?.evidenceRegionIds?.join(','),
-  'left_eye,right_eye',
+  'full,left_eye,right_eye',
   'eye observation evidence regions',
 );
-expectEqual(completed.score, 89, 'mobile score');
+expectEqual(completed.score, 50, 'mobile score');
 expectEqual(completed.captureQuality.usable, true, 'mobile capture quality');
 expectEqual(completed.evaluations.length, MAKEUP_FEEDBACK_TOPICS.length, 'mobile topic count');
 expectEqual(completed.evaluations.length, 11, '11-topic result count');

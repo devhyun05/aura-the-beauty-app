@@ -2,6 +2,7 @@ import {
   Image as ExpoImage,
   type ImageErrorEventData,
   type ImageLoadEventData,
+  type ImageSource,
 } from 'expo-image';
 import type {ImageSourcePropType, ImageStyle, StyleProp} from 'react-native';
 
@@ -19,7 +20,7 @@ export type CachedImageProps = {
   onLoad?: (event: ImageLoadEventData) => void;
   priority?: 'low' | 'normal' | 'high';
   recyclingKey?: string | null;
-  source: ImageSourcePropType;
+  source: ImageSource | ImageSourcePropType;
   style?: StyleProp<ImageStyle>;
   transition?: number;
 };

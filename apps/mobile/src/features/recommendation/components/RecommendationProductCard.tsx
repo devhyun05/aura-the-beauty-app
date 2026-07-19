@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
   noImage: {...typography.caption, color: colors.textTertiary},
   heart: {alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.pill, height: 44, justifyContent: 'center', position: 'absolute', right: 4, top: 4, width: 44},
   external: {alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.pill, height: 36, justifyContent: 'center', position: 'absolute', right: 6, top: 6, width: 36},
-  brand: {...typography.caption, color: colors.textSecondary, fontWeight: '700'},
+  brand: {color: colors.textSecondary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xs, lineHeight: typography.lineHeight.xs},
   name: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm, minHeight: 40},
   shade: {...typography.caption, color: colors.textSecondary},
   reason: {...typography.caption, color: colors.textSecondary, minHeight: typography.lineHeight.xs * 2},

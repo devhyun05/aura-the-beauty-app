@@ -21,6 +21,7 @@ const detailScreen = source('screens/MakeupJourneyDayDetailScreen.tsx');
 const trendScreen = source('screens/MakeupJourneyTrendScreen.tsx');
 const digestCard = source('components/JourneyFeedbackDigestCard.tsx');
 const missionCard = source('components/JourneyMissionCard.tsx');
+const promptCard = source('components/JourneyPromptCard.tsx');
 const reportPhotoGallery = source('components/JourneyReportPhotoGallery.tsx');
 const dayCell = source('components/JourneyDayCell.tsx');
 const calendarGrid = source('components/JourneyCalendarGrid.tsx');
@@ -29,6 +30,8 @@ const settingsSheet = source('components/JourneySettingsSheet.tsx');
 const monthPickerSheet = source('components/JourneyMonthPickerSheet.tsx');
 const monthSummary = source('components/JourneyMonthSummary.tsx');
 const journeyService = source('services/makeupJourneyService.ts');
+const journeyPrefetch = source('services/makeupJourneyPrefetch.ts');
+const journeyPrivateImage = source('services/makeupJourneyPrivateImage.ts');
 const authSessionContext = readFileSync(
   join(
     process.cwd(),
@@ -47,6 +50,13 @@ const feedbackService = readFileSync(
   join(
     process.cwd(),
     'apps/mobile/src/features/makeup-feedback/services/makeupFeedbackService.ts',
+  ),
+  'utf8',
+);
+const feedbackResultScreen = readFileSync(
+  join(
+    process.cwd(),
+    'apps/mobile/src/features/makeup-feedback/screens/MakeupFeedbackResultScreen.tsx',
   ),
   'utf8',
 );
@@ -157,15 +167,19 @@ expect(
     detailScreen.includes('accessibilityLabel={`이전 날 ${formatJourneyDate(previousDate, false)} 보기`}') &&
     detailScreen.includes('accessibilityLabel={`다음 날 ${formatJourneyDate(nextDate, false)} 보기`}') &&
     !detailScreen.includes('nextDate <= getTodayDateString()') &&
-    journeyRoutes.includes('navigation.setParams({entryDate: nextEntryDate});'),
+    journeyRoutes.includes(
+      'navigation.setParams({entryDate: nextEntryDate, initialReportId: undefined});',
+    ),
   'day detail moves one day backward or forward in place without a today boundary',
 );
 expect(
   detailScreen.indexOf('<JourneyReportPhotoGallery') < detailScreen.indexOf('<JourneyFeedbackDigestCard') &&
+    detailScreen.indexOf('<JourneyReportPhotoGallery') < detailScreen.indexOf('<JourneyPromptCard') &&
+    detailScreen.indexOf('<JourneyPromptCard') < detailScreen.indexOf('<JourneyFeedbackDigestCard') &&
     detailScreen.indexOf('<JourneyFeedbackDigestCard') < detailScreen.indexOf('<CorrectionCard') &&
     detailScreen.indexOf('<CorrectionCard') < detailScreen.indexOf('<JourneyMissionCard') &&
     detailScreen.indexOf('<JourneyMissionCard') < detailScreen.indexOf('<JourneyNoteCard'),
-  'day detail keeps the photo-first summary and correction-first action order',
+  'day detail keeps the photo, original prompt, report summary, and correction action order',
 );
 expect(
   reportPhotoGallery.includes('source={{uri: report.imageUrl') &&
@@ -181,6 +195,9 @@ expect(
     detailScreen.includes('pagingEnabled') &&
     detailScreen.includes('onMomentumScrollEnd={settleActiveReport}') &&
     detailScreen.includes('renderItem={({item: report})') &&
+    detailScreen.includes('getMakeupJourneyReportPrompt(') &&
+    detailScreen.includes('report.goalContext') &&
+    detailScreen.includes('report.feedbackKind') &&
     detailScreen.includes('digest={report.feedbackDigest}') &&
     detailScreen.includes('score={report.score}') &&
     detailScreen.includes('representativeReportId={detail?.representativeReportId ?? null}') &&
@@ -191,7 +208,7 @@ expect(
     journeyService.includes('/score-selection') &&
     journeyService.includes('{method: \'PUT\', body: {reportId}}') &&
     journeyService.includes('{method: \'PUT\', body: {content, reportId}}'),
-  'the whole detail page pages smoothly, missions stay date-shared, and notes persist per report',
+  'the whole detail page pages smoothly with each report prompt and note while missions stay date-shared',
 );
 expect(
   rootNavigator.includes('name="MakeupJourneyDayDetail"') &&
@@ -214,13 +231,20 @@ expect(
 );
 expect(
   !digestCard.includes('numberOfLines=') &&
-    digestCard.includes('AI 피드백 요약') &&
-    digestCard.includes('현재 선택한 사진의 실제 분석 결과를 정리했어요.') &&
-    digestCard.includes('styles.heroCard') &&
-    digestCard.includes('styles.lists') &&
+    digestCard.includes('AI 피드백') &&
+    digestCard.includes('현재 선택한 사진의 실제 분석 결과예요.') &&
+    digestCard.includes('styles.card') &&
+    digestCard.includes('styles.findings') &&
     digestCard.includes('먼저 해볼 것') &&
     digestCard.includes('전체 AI 보고서 보기'),
-  'digest copy grows vertically in the reference summary, two-column findings, next action, and report hierarchy',
+  'digest copy grows vertically in one restrained surface with findings, next action, and report hierarchy',
+);
+expect(
+  promptCard.includes('내가 요청한 내용') &&
+    promptCard.includes('이전 피드백의 요청을 이어받아 분석했어요.') &&
+    promptCard.includes('numberOfLines={expanded ? undefined : 3}') &&
+    promptCard.includes("accessibilityRole=\"button\""),
+  'the report-specific original prompt is readable, collapsible, and labels correction inheritance',
 );
 expect(
   !journeyService.includes('legacy-read-fallback') &&
@@ -232,18 +256,39 @@ expect(
 expect(
   dayCell.includes('columnIndex < 6 ? styles.withRightDivider : null') &&
     dayCell.includes('weekIndex < 5 ? styles.withBottomDivider : null') &&
-    dayCell.includes('status === \'success\' ? styles.successTint : styles.failureTint') &&
-    dayCell.includes('backgroundColor: colors.heart') &&
+    dayCell.includes('<CachedImage') &&
+    dayCell.includes('day?.representativeThumbnailUrl?.trim()') &&
+    dayCell.includes('cachePolicy="memory"') &&
+    dayCell.includes('getMakeupJourneyPrivateImageSource(') &&
+    dayCell.includes('styles.recordOverlay') &&
+    dayCell.includes("backgroundColor: 'rgba(17, 17, 17, 0.62)'") &&
+    dayCell.includes("alignSelf: 'flex-start'") &&
+    dayCell.includes('{getStatusLabel(status)}') &&
     dayCell.includes("const JOURNEY_FAILURE_COLOR = '#5B78A6';") &&
-    monthScreen.includes('backgroundColor: colors.heart') &&
-    monthScreen.includes("backgroundColor: '#5B78A6'") &&
+    !dayCell.includes('styles.successTint') &&
+    !dayCell.includes('styles.failureTint') &&
     dayCell.includes('styles.emptyDot') &&
     dayCell.includes('isToday ? styles.todayBadge : null') &&
     monthScreen.includes('todayDate={todayDate}') &&
+    monthScreen.includes('<Text style={styles.legendText}>사진 기록</Text>') &&
+    monthScreen.includes('<Text style={styles.legendText}>점수·달성 여부</Text>') &&
     calendarGrid.includes('...shadows.soft') &&
     calendarGrid.includes('borderColor: colors.border') &&
     calendarGrid.includes("overflow: 'hidden'"),
-  'calendar keeps the established red success and blue failure fills with compact score pills and a real today marker',
+  'calendar uses cached face thumbnails, top-left dates, compact status overlays, neutral fallbacks, and a real today marker',
+);
+expect(
+  monthScreen.includes('prefetchMakeupJourneyCalendarThumbnails(currentMonthData)') &&
+    monthScreen.includes('[shiftMonth(month, -1), shiftMonth(month, 1)]') &&
+    monthScreen.includes('prefetchMakeupJourneyMonth(adjacentMonth)') &&
+    journeyPrefetch.includes('MAKEUP_JOURNEY_THUMBNAIL_PREFETCH_CONCURRENCY = 4') &&
+    journeyPrefetch.includes('cacheRevision !== getMakeupJourneyCacheRevision()') &&
+    journeyPrefetch.includes('representativeThumbnailUrl?.trim()') &&
+    journeyPrefetch.includes('prefetchMakeupJourneyPrivateImage(queued.uri, queued.cacheRevision)') &&
+    journeyPrivateImage.includes("cachePolicy: 'memory'") &&
+    journeyPrivateImage.includes('headers: {Authorization: `Bearer ${authToken}`}') &&
+    journeyPrivateImage.includes('ExpoImage.clearMemoryCache()'),
+  'calendar warms current and adjacent thumbnail caches with bounded concurrency and account-safe revisions',
 );
 expect(
   monthScreen.includes('nextMidnight.setHours(24, 0, 0, 100)') &&
@@ -306,13 +351,13 @@ expect(
 );
 expect(
   digestCard.includes("const JOURNEY_IMPROVEMENT_BLUE = '#5B78A6'") &&
-    digestCard.includes("const JOURNEY_BLUE_TINT = 'rgba(91, 120, 166, 0.10)'") &&
-    digestCard.includes("const JOURNEY_RED_TINT = 'rgba(255, 90, 77, 0.10)'") &&
-    digestCard.includes('const iconColor = isStrength ? colors.danger : JOURNEY_IMPROVEMENT_BLUE') &&
+    digestCard.includes("const JOURNEY_BLUE_TINT = 'rgba(91, 120, 166, 0.09)'") &&
+    digestCard.includes("const JOURNEY_RED_TINT = 'rgba(255, 90, 77, 0.08)'") &&
+    digestCard.includes('const accent = isStrength ? colors.danger : JOURNEY_IMPROVEMENT_BLUE') &&
     !digestCard.includes('JOURNEY_GOLD') &&
-    detailScreen.includes('borderColor: colors.danger') &&
-    missionCard.includes('backgroundColor: colors.danger'),
-  'record detail uses red for positive accents and blue for improvement findings',
+    detailScreen.includes('backgroundColor: colors.black') &&
+    missionCard.includes('backgroundColor: colors.black'),
+  'record detail reserves red and blue for feedback meaning while controls use the shared neutral action color',
 );
 expect(
   dayCell.includes('day?.representativeScore ?? day?.latestScore ?? null'),
@@ -338,8 +383,8 @@ expect(
 expect(
   detailScreen.includes('goalScore={detail.goalScore}') &&
     digestCard.includes("const hasGoal = goalScore !== null") &&
-    digestCard.includes("? `${getJourneyStatusLabel(status)} · 목표 ${goalScore}점`") &&
-    digestCard.includes(": '목표 미설정'") &&
+    digestCard.includes("hasGoal ? getJourneyStatusLabel(status) : '목표 미설정'") &&
+    digestCard.includes('목표 {goalScore}점 기준') &&
     trendScreen.includes("resource.data.goalScore === null"),
   'pre-onboarding detail and trend use a neutral missing-goal state',
 );
@@ -347,11 +392,13 @@ expect(
   digestCard.includes("status === 'success'") &&
     digestCard.includes('? colors.danger') &&
     digestCard.includes(': JOURNEY_IMPROVEMENT_BLUE') &&
-    digestCard.includes('<JourneySparkleIcon color={feedbackAccent}'),
+    digestCard.includes('<Sparkles color={statusAccent}'),
   'detail sparkle uses the stored report goal result: red when achieved and blue when missed',
 );
 expect(
   authSessionContext.includes('invalidateMakeupJourneyCache();') &&
+    authSessionContext.includes('clearMakeupJourneyPrivateImageMemoryCache();') &&
+    authSessionContext.includes('}, [session?.user.id]);') &&
     authSessionContext.includes('const userChanged = previousUserId !== nextUserId;'),
   'account changes invalidate user-scoped makeup journey caches',
 );
@@ -384,6 +431,33 @@ expect(
   feedbackRoutes.includes('void fetchMakeupFeedbackReport(reportId)') &&
     feedbackService.includes('return mapStoredMakeupFeedbackReport(report, reportId);'),
   'stored journey reports reuse the existing feedback report endpoint and result mapper',
+);
+expect(
+  feedbackResultScreen.includes('메이크업 기록에서 보기') &&
+    feedbackResultScreen.includes('onPress={onOpenMakeupJourney}') &&
+    feedbackRoutes.includes('notifyMakeupJourneyFeedbackCompleted(resultEntryDate)') &&
+    feedbackRoutes.includes(
+      'getMakeupJourneySafeReturnResetState(resultEntryDate, resultReportId)',
+    ),
+  'feedback result exposes a bottom journey CTA that resets to the report date',
+);
+expect(
+  feedbackService.includes('entryDate: firstText(job.entryDate)') &&
+    journeyRoutes.includes('initialReportId={route.params?.initialReportId}') &&
+    detailScreen.includes('initialReportId && reports.some') &&
+    detailScreen.includes('return initialReportId;') &&
+    detailScreen.includes(
+      'pagerRef.current?.scrollToOffset({animated: false, offset: index * pageWidth})',
+    ),
+  'feedback result date and report id focus the matching horizontal journey page',
+);
+expect(
+  feedbackRoutes.includes('entryDate: flowContext.entryDate,') &&
+    feedbackRoutes.includes(': {\n              entryDate: flowContext.entryDate,') &&
+    journeyRoutes.includes(
+      'navigation.setParams({entryDate: nextEntryDate, initialReportId: undefined})',
+    ),
+  'general feedback result keeps its date and manual day navigation clears one-time report focus',
 );
 
 console.log('makeup journey screen source contract passed');

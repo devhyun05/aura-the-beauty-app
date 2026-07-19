@@ -185,6 +185,7 @@ const evaluations = MAKEUP_FEEDBACK_TOPICS.map((topic, index) => ({
 }));
 
 const validJob = {
+  entryDate: '2026-07-17',
   feedbackPayload: {
     analysisStatus: 'bedrock_completed',
     result: {
@@ -236,6 +237,7 @@ if (mappedResult.analysisDecision !== 'completed') {
 
 expectEqual(mappedResult.analysisSource, 'ai', 'analysis source');
 expectEqual(mappedResult.analysisStatus, 'bedrock_completed', 'analysis status');
+expectEqual(mappedResult.entryDate, '2026-07-17', 'completed result preserves its journey date');
 expectEqual(mappedResult.modelVersion, 'bedrock:model-v1', 'model version');
 expectEqual(mappedResult.score, 91, 'score');
 expectEqual(mappedResult.interpretedGoal.intensity, 'medium', 'intensity enum remains unchanged');

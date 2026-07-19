@@ -12,6 +12,9 @@ import {
   getPersonalizedRecommendations,
   getSavedArLookOptions,
   getSeasonalRecommendations,
+  peekArRecommendations,
+  peekCohortRecommendations,
+  peekPersonalizedRecommendations,
   type SavedArLookOption,
 } from '../services/productHubService';
 import {
@@ -21,11 +24,13 @@ import {
 } from '../services/productEventService';
 import {
   cohortRecommendationTitle,
+  cohortSizeEvidenceCopy,
   personalizedRecommendationTitle,
   recommendationNickname,
 } from '../services/productRecommendationPresentation';
 import {
   DEFAULT_TREND_REGION_CODE,
+  getCachedTrendRegionCode,
   resolveTrendRegionCode,
   type TrendRegionCode,
 } from '../services/trendRegionService';
@@ -38,10 +43,15 @@ import type {
   SeasonalRecommendationData,
 } from '../types';
 import {ProductRail} from './ProductRail';
+import {RECOMMENDATION_RAIL_CARD_WIDTH} from './RecommendationProductCard';
 import {ProductSearchBar} from './ProductSearchBar';
 import {RecommendationSectionState} from './RecommendationSectionState';
 
 type SectionLoad<T> = {status: 'loading' | 'ready' | 'error'; data?: T; message?: string};
+
+function initialSectionLoad<T>(cached: T | null): SectionLoad<T> {
+  return cached ? {status: 'ready', data: cached} : {status: 'loading'};
+}
 
 export function ProductRecommendationHubContent({
   arStyleId,
@@ -54,6 +64,7 @@ export function ProductRecommendationHubContent({
   onToggleLike,
   onSectionLayout,
   refreshKey = 0,
+  preferenceRefreshKey = refreshKey,
 }: {
   arStyleId?: string | null;
   likedProducts: Product[];
@@ -64,12 +75,19 @@ export function ProductRecommendationHubContent({
   onSearch: (query: string) => void;
   onToggleLike: (product: CatalogProduct) => void;
   onSectionLayout?: (section: ProductRecommendationShelf, y: number) => void;
+  preferenceRefreshKey?: number;
   refreshKey?: number;
 }) {
-  const [ar, setAr] = useState<SectionLoad<ArRecommendationData>>({status: 'loading'});
+  const [ar, setAr] = useState<SectionLoad<ArRecommendationData>>(() =>
+    initialSectionLoad(peekArRecommendations(arStyleId)),
+  );
   const [seasonal, setSeasonal] = useState<SectionLoad<SeasonalRecommendationData>>({status: 'loading'});
-  const [personalized, setPersonalized] = useState<SectionLoad<PersonalizedRecommendationData>>({status: 'loading'});
-  const [cohort, setCohort] = useState<SectionLoad<PersonalizedRecommendationData>>({status: 'loading'});
+  const [personalized, setPersonalized] = useState<SectionLoad<PersonalizedRecommendationData>>(() =>
+    initialSectionLoad(peekPersonalizedRecommendations()),
+  );
+  const [cohort, setCohort] = useState<SectionLoad<PersonalizedRecommendationData>>(() =>
+    initialSectionLoad(peekCohortRecommendations()),
+  );
   const [activeRegion, setActiveRegion] = useState<Exclude<ProductRecommendationCategory, 'all'>>('lip');
   const [selectedArStyleId, setSelectedArStyleId] = useState<string | null>(arStyleId ?? null);
   const [lookPickerVisible, setLookPickerVisible] = useState(false);
@@ -81,7 +99,8 @@ export function ProductRecommendationHubContent({
 
   const loadAr = useCallback(() => {
     const requestId = ++requestRefs.current.ar;
-    setAr(current => current.data ? current : {status: 'loading'});
+    const cached = peekArRecommendations(selectedArStyleId);
+    setAr(cached ? {status: 'ready', data: cached} : {status: 'loading'});
     getArRecommendations(selectedArStyleId)
       .then(data => {if (requestRefs.current.ar === requestId) setAr({status: 'ready', data});})
       .catch(error => {if (requestRefs.current.ar === requestId) setAr(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : 'AR 추천을 불러오지 못했어요.'});});
@@ -99,18 +118,20 @@ export function ProductRecommendationHubContent({
   }, [loadSeasonal]);
   const loadPersonalized = useCallback(() => {
     const requestId = ++requestRefs.current.personalized;
-    setPersonalized(current => current.data ? current : {status: 'loading'});
+    const cached = peekPersonalizedRecommendations();
+    setPersonalized(current => current.data ? current : initialSectionLoad(cached));
     getPersonalizedRecommendations()
       .then(data => {if (requestRefs.current.personalized === requestId) setPersonalized({status: 'ready', data});})
       .catch(error => {if (requestRefs.current.personalized === requestId) setPersonalized(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : '개인화 추천을 불러오지 못했어요.'});});
-  }, [refreshKey]);
+  }, [preferenceRefreshKey]);
   const loadCohort = useCallback(() => {
     const requestId = ++requestRefs.current.cohort;
-    setCohort(current => current.data ? current : {status: 'loading'});
+    const cached = peekCohortRecommendations();
+    setCohort(current => current.data ? current : initialSectionLoad(cached));
     getCohortRecommendations()
       .then(data => {if (requestRefs.current.cohort === requestId) setCohort({status: 'ready', data});})
       .catch(error => {if (requestRefs.current.cohort === requestId) setCohort(current => current.data ? current : {status: 'error', message: error instanceof Error ? error.message : '컬러 취향 추천을 불러오지 못했어요.'});});
-  }, [refreshKey]);
+  }, [preferenceRefreshKey]);
   const openLookPicker = useCallback(() => {
     const requestId = ++requestRefs.current.looks;
     setLookPickerVisible(true);
@@ -133,26 +154,37 @@ export function ProductRecommendationHubContent({
 
   useEffect(() => {
     loadAr();
+  }, [loadAr]);
+
+  useEffect(() => {
     const deferred = InteractionManager.runAfterInteractions(() => {
       loadPersonalized();
       loadCohort();
     });
     return () => deferred.cancel();
-  }, [loadAr, loadCohort, loadPersonalized]);
+  }, [loadCohort, loadPersonalized]);
 
   useEffect(() => {
     let active = true;
     let deferred: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
-    seasonalRegionCodeRef.current = DEFAULT_TREND_REGION_CODE;
-    void loadSeasonal(DEFAULT_TREND_REGION_CODE).then(() => {
+    void getCachedTrendRegionCode().then(cachedRegionCode => {
       if (!active) return;
-      // Paint the nationwide shelf before a first-run location permission sheet
-      // can appear. Region resolution is an enhancement, never an initial gate.
-      deferred = InteractionManager.runAfterInteractions(() => {
-        void resolveTrendRegionCode().then(regionCode => {
-          if (active && regionCode !== DEFAULT_TREND_REGION_CODE) {
-            void loadSeasonal(regionCode);
-          }
+      if (cachedRegionCode) {
+        seasonalRegionCodeRef.current = cachedRegionCode;
+        void loadSeasonal(cachedRegionCode);
+        return;
+      }
+      seasonalRegionCodeRef.current = DEFAULT_TREND_REGION_CODE;
+      void loadSeasonal(DEFAULT_TREND_REGION_CODE).then(() => {
+        if (!active) return;
+        // Paint the nationwide shelf before a first-run location permission sheet
+        // can appear. Region resolution is an enhancement, never an initial gate.
+        deferred = InteractionManager.runAfterInteractions(() => {
+          void resolveTrendRegionCode().then(regionCode => {
+            if (active && regionCode !== DEFAULT_TREND_REGION_CODE) {
+              void loadSeasonal(regionCode);
+            }
+          });
         });
       });
     });
@@ -223,7 +255,7 @@ export function ProductRecommendationHubContent({
 
       <View onLayout={event => onSectionLayout?.('ar', event.nativeEvent.layout.y)}>
         <Section title="AR 필터 기반 추천제품" onAction={() => onOpenShelf('ar', 'AR 필터 기반 추천제품', selectedArStyleId)}>
-          {ar.status === 'loading' ? <RecommendationSectionState kind="loading" message="저장한 AR 룩과 실제 색상을 비교하고 있어요." /> : null}
+          {ar.status === 'loading' ? <RecommendationRailPlaceholder /> : null}
           {ar.status === 'error' ? <RecommendationSectionState kind="error" message={ar.message ?? 'AR 추천을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={loadAr} /> : null}
           {ar.status === 'ready' && ['noArStyle', 'unavailable'].includes(ar.data?.status ?? '') ? <RecommendationSectionState kind="empty" message="저장한 AR 룩이 아직 없어요. 룩을 저장하면 색상과 피니시가 가까운 제품을 보여드려요." actionLabel="AR 룩 만들기" onAction={onCreateArLook} /> : null}
           {ar.status === 'ready' && ar.data?.status === 'unsupportedRecipe' ? <RecommendationSectionState kind="empty" message="이 룩은 이전 저장 형식이에요. AR에서 한 번만 다시 저장해 주세요." actionLabel="AR 룩 다시 저장" onAction={onCreateArLook} /> : null}
@@ -244,7 +276,7 @@ export function ProductRecommendationHubContent({
 
       <View onLayout={event => onSectionLayout?.('seasonal', event.nativeEvent.layout.y)}>
         <Section title="요즘 트렌드 제품" onAction={() => onOpenShelf('seasonal', '요즘 트렌드 제품')}>
-          {seasonal.status === 'loading' ? <RecommendationSectionState kind="loading" message="요즘 주목받는 트렌드 제품을 불러오고 있어요." /> : null}
+          {seasonal.status === 'loading' ? <RecommendationRailPlaceholder /> : null}
           {seasonal.status === 'error' ? <RecommendationSectionState kind="error" message={seasonal.message ?? '요즘 트렌드 제품을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={retrySeasonal} /> : null}
           {seasonal.status === 'ready' && (seasonal.data?.status !== 'ready' || !seasonal.data?.items.length) ? <RecommendationSectionState kind="empty" message="확인 가능한 요즘 트렌드 제품을 준비하고 있어요." actionLabel="새로고침" onAction={retrySeasonal} /> : null}
           {seasonal.status === 'ready' && seasonal.data?.status === 'ready' && seasonal.data.items.length > 0 ? <View style={styles.stack}>
@@ -291,21 +323,42 @@ function PersonalizedBody({section, state, fallbackItems = [], onRetry, likedPro
   const basisStatus = section === 'personalized'
     ? state.data?.personalizationStatus ?? state.data?.status
     : state.data?.cohortStatus ?? state.data?.status;
-  if (state.status === 'loading') return <RecommendationSectionState kind="loading" message={section === 'cohort' ? '익명 컬러 취향 모수를 확인하고 있어요.' : '동의한 활동에서 취향을 정리하고 있어요.'} />;
+  if (state.status === 'loading') return <RecommendationRailPlaceholder />;
   if (state.status === 'error') return <RecommendationSectionState kind="error" message={state.message ?? '추천을 불러오지 못했어요.'} actionLabel="다시 시도" onAction={onRetry} />;
   if (!hasRecommendationItems && basisStatus === 'personalizationOff') return <RecommendationSectionState kind="off" message="가입 동의 정보를 확인하지 못해 인기 상품을 준비하고 있어요." />;
   if (!hasRecommendationItems && basisStatus === 'control') return <RecommendationSectionState kind="off" message="추천 품질을 검증하는 비교 그룹이에요." />;
   if (section === 'personalized' && !hasRecommendationItems && fallbackItems.length > 0) return <View style={styles.stack}><Text style={styles.meta}>새 추천을 준비하는 동안 최근 좋아요한 제품을 보여드려요.</Text><ProductRail items={fallbackItems} onOpen={(product) => onOpenProduct(product)} onToggleLike={onToggleLike} /></View>;
-  if (state.data?.status !== 'ready') return <RecommendationSectionState kind="empty" message={section === 'cohort' ? `같은 컬러 취향의 동의 사용자가 ${minimumCohortSize}명 이상 모이면 추천을 시작해요.` : '좋아요·검색·클릭 기록이 더 쌓이면 취향에 맞는 상품을 보여드려요.'} />;
-  if (!hasRecommendationItems) return <RecommendationSectionState kind="empty" message={section === 'cohort' ? '비슷한 컬러 취향의 인기 상품을 준비하고 있어요.' : '취향에 맞는 인기 상품을 준비하고 있어요.'} actionLabel="다시 시도" onAction={onRetry} />;
+  if (state.data?.status !== 'ready') return <RecommendationSectionState kind="empty" message={section === 'cohort' ? `퍼스널컬러와 제품 취향이 비슷한 사용자가 ${minimumCohortSize}명 이상 모이면 추천을 시작해요.` : '좋아요·검색·클릭 기록이 더 쌓이면 취향에 맞는 상품을 보여드려요.'} />;
+  if (!hasRecommendationItems) return <RecommendationSectionState kind="empty" message={section === 'cohort' ? '나와 취향이 비슷한 사용자들이 좋아한 상품을 준비하고 있어요.' : '취향에 맞는 인기 상품을 준비하고 있어요.'} actionLabel="다시 시도" onAction={onRetry} />;
   const items = state.data.items.map(item => ({...item, viewerState: {liked: item.canLike === false ? false : likedProductIds.has(item.productId)}}));
   const impressionScopeKey = state.data.runId
     || `${section}:${state.data.cohortSizeBand ?? state.data.fallback?.reason ?? state.data.algorithmVersion ?? 'ready'}`;
-  return <View style={styles.stack}>{state.data.description ? <Text style={styles.meta}>{state.data.description}</Text> : null}{section === 'cohort' && state.data.cohortSizeBand ? <Text style={styles.meta}>익명 집계 모수 {state.data.cohortSizeBand}</Text> : null}<ProductRail impressionScopeKey={impressionScopeKey} items={items} onImpression={(product, position) => queuePreferenceEvent(section, state.data, 'impression', product, position)} onOpen={(product, position) => {queuePreferenceEvent(section, state.data, 'product_open', product, position); onOpenProduct(product);}} onToggleLike={onToggleLike} /></View>;
+  const description = section === 'cohort' && state.data.cohortSizeBand
+    ? '나와 퍼스널컬러·제품 취향이 비슷한 사용자들이 좋아한 상품이에요.'
+    : state.data.description;
+  return <View style={styles.stack}>{description ? <Text style={styles.meta}>{description}</Text> : null}{section === 'cohort' && state.data.cohortSizeBand ? <Text style={styles.meta}>{cohortSizeEvidenceCopy(state.data.cohortSizeBand)}</Text> : null}<ProductRail impressionScopeKey={impressionScopeKey} items={items} onImpression={(product, position) => queuePreferenceEvent(section, state.data, 'impression', product, position)} onOpen={(product, position) => {queuePreferenceEvent(section, state.data, 'product_open', product, position); onOpenProduct(product);}} onToggleLike={onToggleLike} /></View>;
 }
 
 function Section({title, onAction, children}: {title: string; onAction: () => void; children: ReactNode}) {
   return <View style={styles.section}><View style={styles.header}><Text accessibilityRole="header" numberOfLines={2} style={styles.title}>{title}</Text><Pressable accessibilityRole="button" onPress={onAction} style={styles.headerAction}><Text style={styles.actionText}>더보기</Text><ChevronRight color={colors.textPrimary} size={iconSize.xs} /></Pressable></View>{children}</View>;
+}
+
+function RecommendationRailPlaceholder() {
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={styles.placeholderRail}>
+      {[0, 1, 2].map(index => (
+        <View key={index} style={styles.placeholderCard}>
+          <View style={styles.placeholderImage} />
+          <View style={styles.placeholderBrand} />
+          <View style={styles.placeholderName} />
+          <View style={styles.placeholderPrice} />
+        </View>
+      ))}
+    </View>
+  );
 }
 
 function formatDate(value: string): string {
@@ -324,7 +377,7 @@ const styles = StyleSheet.create({
   metaRow: {alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between'},
   meta: {...typography.caption, color: colors.textSecondary, flexShrink: 1},
   inlineAction: {alignItems: 'center', justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.xs},
-  inlineActionText: {...typography.caption, color: colors.textPrimary, fontWeight: '700', textDecorationLine: 'underline'},
+  inlineActionText: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xs, lineHeight: typography.lineHeight.xs, textDecorationLine: 'underline'},
   collectionTitle: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.md, lineHeight: typography.lineHeight.md},
   summary: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
   source: {...typography.caption, color: colors.textTertiary},
@@ -341,4 +394,10 @@ const styles = StyleSheet.create({
   lookList: {gap: spacing.sm},
   lookOption: {borderColor: colors.border, borderRadius: radius.lg, borderWidth: 1, gap: spacing.xs, minHeight: 64, padding: spacing.md},
   lookOptionSelected: {backgroundColor: colors.surfaceMuted, borderColor: colors.textPrimary, borderRadius: radius.lg, borderWidth: 1, gap: spacing.xs, minHeight: 64, padding: spacing.md},
+  placeholderRail: {flexDirection: 'row', gap: spacing.sm, height: 236, overflow: 'hidden'},
+  placeholderCard: {gap: spacing.xs, width: RECOMMENDATION_RAIL_CARD_WIDTH},
+  placeholderImage: {backgroundColor: colors.surfaceMuted, borderRadius: radius.md, height: 148, width: RECOMMENDATION_RAIL_CARD_WIDTH},
+  placeholderBrand: {backgroundColor: colors.surfaceMuted, borderRadius: radius.pill, height: 10, width: 64},
+  placeholderName: {backgroundColor: colors.surfaceMuted, borderRadius: radius.pill, height: 14, width: 128},
+  placeholderPrice: {backgroundColor: colors.surfaceMuted, borderRadius: radius.pill, height: 12, width: 88},
 });

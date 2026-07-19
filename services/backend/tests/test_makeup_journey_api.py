@@ -323,6 +323,8 @@ class CalendarDatabase:
         "first_score": 76,
         "latest_score": 84,
         "selected_score": 76,
+        "representative_report_id": PARENT_ID,
+        "representative_thumbnail_available": True,
         "report_count": 2,
         "has_note": True,
         "completed_missions": 1,
@@ -333,6 +335,8 @@ class CalendarDatabase:
         "first_score": 81,
         "latest_score": 81,
         "selected_score": None,
+        "representative_report_id": UUID("33333333-3333-3333-3333-333333333333"),
+        "representative_thumbnail_available": True,
         "report_count": 1,
         "has_note": False,
         "completed_missions": 0,
@@ -354,7 +358,11 @@ async def test_calendar_uses_selected_daily_score_and_re_evaluates_current_goal(
     "status": "failure",
     "firstScore": 76,
     "latestScore": 84,
+    "representativeReportId": str(PARENT_ID),
     "representativeScore": 76,
+    "representativeThumbnailUrl": (
+      f"/makeup-journey/reports/{PARENT_ID}/thumbnail"
+    ),
     "scoreDelta": 0,
     "reportCount": 2,
     "hasNote": True,
@@ -367,6 +375,14 @@ async def test_calendar_uses_selected_daily_score_and_re_evaluates_current_goal(
   assert "score is not null" in normalized_query
   assert "user_id = $1" in normalized_query
   assert "left join makeup_journey_day_score_selections" in normalized_query
+  assert "left join media_assets" in normalized_query
+  assert "distinct on (entry_date)" in normalized_query
+  assert "thumbnail_cdn_url" not in normalized_query
+  assert "thumbnail_bucket is not null" in normalized_query
+  assert "thumbnail_object_key is not null" in normalized_query
+  assert "select entry_date, bool_or(true) as has_note" in normalized_query
+  assert "from makeup_journey_day_notes" in normalized_query
+  assert "group by entry_date" in normalized_query
   assert "where id = selected_report_id" in normalized_query
 
   # Same stored scores are immediately reclassified by the current setting.
@@ -375,6 +391,134 @@ async def test_calendar_uses_selected_daily_score_and_re_evaluates_current_goal(
   assert [day["status"] for day in changed["data"]["days"]] == ["failure", "success"]
   assert [day["latestScore"] for day in changed["data"]["days"]] == [84, 81]
   assert [day["representativeScore"] for day in changed["data"]["days"]] == [76, 81]
+
+
+class ThumbnailDatabase:
+  def __init__(self, media: dict | None) -> None:
+    self.media = media
+    self.query = ""
+    self.args = ()
+
+  async def fetchrow(self, query, *args):
+    self.query = " ".join(query.lower().split())
+    self.args = args
+    return self.media
+
+
+@pytest.mark.asyncio
+async def test_private_thumbnail_delivery_checks_ownership_and_returns_no_store(
+  monkeypatch,
+) -> None:
+  monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
+  calls: dict[str, object] = {}
+
+  class FakeS3Service:
+    def __init__(self, _settings) -> None:
+      pass
+
+    def assert_managed_media_location(self, *, bucket: str, object_key: str) -> None:
+      calls["managed"] = (bucket, object_key)
+
+    def get_object_bytes(self, *, bucket: str, object_key: str, max_bytes: int):
+      calls["read"] = (bucket, object_key, max_bytes)
+      return b"private-thumbnail", "image/jpeg"
+
+  async def run_in_thread(function, **kwargs):
+    calls["threaded"] = True
+    return function(**kwargs)
+
+  monkeypatch.setattr(journey_api, "S3Service", FakeS3Service)
+  monkeypatch.setattr(journey_api.asyncio, "to_thread", run_in_thread)
+  db = ThumbnailDatabase(
+    {
+      "thumbnail_bucket": "managed-bucket",
+      "thumbnail_object_key": "uploads/makeup_feedback/thumbnails/private.jpg",
+    }
+  )
+
+  response = await journey_api.get_makeup_journey_report_thumbnail(
+    PARENT_ID,
+    auth=object(),
+    db=db,
+    settings=Settings(s3_bucket_name="managed-bucket"),
+  )
+
+  assert response.body == b"private-thumbnail"
+  assert response.media_type == "image/jpeg"
+  assert response.headers["cache-control"] == "private, no-store"
+  assert response.headers["vary"] == "Authorization"
+  assert response.headers["x-content-type-options"] == "nosniff"
+  assert calls["threaded"] is True
+  assert calls["managed"] == (
+    "managed-bucket",
+    "uploads/makeup_feedback/thumbnails/private.jpg",
+  )
+  assert calls["read"] == (
+    "managed-bucket",
+    "uploads/makeup_feedback/thumbnails/private.jpg",
+    journey_api.MAKEUP_JOURNEY_THUMBNAIL_MAX_BYTES,
+  )
+  assert db.args == (PARENT_ID, USER_ID)
+  assert "reports.user_id = $2" in db.query
+  assert "media.owner_user_id = reports.user_id" in db.query
+  assert "reports.status = 'completed'" in db.query
+  assert "media.deleted_at is null" in db.query
+  assert "thumbnail_cdn_url" not in db.query
+  assert "cdn_url" not in db.query
+
+
+@pytest.mark.asyncio
+async def test_private_thumbnail_delivery_hides_missing_or_unowned_report(monkeypatch) -> None:
+  monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
+  db = ThumbnailDatabase(None)
+
+  with pytest.raises(AppError) as exc_info:
+    await journey_api.get_makeup_journey_report_thumbnail(
+      PARENT_ID,
+      auth=object(),
+      db=db,
+      settings=Settings(),
+    )
+
+  assert exc_info.value.status_code == 404
+  assert exc_info.value.code == "MAKEUP_JOURNEY_THUMBNAIL_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_private_thumbnail_delivery_enforces_maximum_bytes(monkeypatch) -> None:
+  monkeypatch.setattr(journey_api, "ensure_user", _ensure_user)
+
+  class OversizedS3Service:
+    def __init__(self, _settings) -> None:
+      pass
+
+    def assert_managed_media_location(self, **_kwargs) -> None:
+      pass
+
+    def get_object_bytes(self, **_kwargs):
+      raise AppError(413, "S3_OBJECT_TOO_LARGE", "too large")
+
+  async def run_in_thread(function, **kwargs):
+    return function(**kwargs)
+
+  monkeypatch.setattr(journey_api, "S3Service", OversizedS3Service)
+  monkeypatch.setattr(journey_api.asyncio, "to_thread", run_in_thread)
+  db = ThumbnailDatabase(
+    {
+      "thumbnail_bucket": "managed-bucket",
+      "thumbnail_object_key": "uploads/makeup_feedback/thumbnails/large.jpg",
+    }
+  )
+
+  with pytest.raises(AppError) as exc_info:
+    await journey_api.get_makeup_journey_report_thumbnail(
+      PARENT_ID,
+      auth=object(),
+      db=db,
+      settings=Settings(),
+    )
+
+  assert exc_info.value.status_code == 413
 
 
 class DayDatabase:

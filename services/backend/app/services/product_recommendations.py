@@ -60,6 +60,14 @@ PRODUCT_CATEGORY_LABELS = {
 }
 POPULAR_FALLBACK_REASON_CODE = "POPULAR_FALLBACK"
 POPULAR_FALLBACK_REASON_LABEL = "추천 데이터가 쌓이는 동안 인기 상품을 보여드려요"
+CATALOG_FALLBACK_REASON_CODE = "CATALOG_FALLBACK"
+CATALOG_FALLBACK_REASON_LABEL = "트렌드 추천을 준비하는 동안 검증된 기본 상품을 보여드려요"
+_FALLBACK_EVIDENCE_KEY = "_fallbackEvidence"
+_FALLBACK_EVIDENCE_UPDATED_AT_KEY = "_fallbackEvidenceUpdatedAt"
+LOCAL_DEMO_SEASONAL_SOURCE = "local_product_recommendation_demo_v1"
+COHORT_PRIVACY_DESCRIPTION = (
+  "비슷한 컬러·제품 취향 사용자의 좋아요를 개인정보가 드러나지 않게 모아 반영했어요."
+)
 CONSENT_VERSION_DEFAULT = "product-personalization-v1"
 CONSENT_TYPES = {"engagement_personalization", "color_cohort"}
 _SEASONAL_RESPONSE_CACHE_MAX_ENTRIES = 512
@@ -82,15 +90,115 @@ def _fallback_category_values(categories: Iterable[str] | None) -> list[str]:
   return [value for value in requested if value in PRODUCT_CATEGORY_LABELS] or list(PRODUCT_CATEGORY_LABELS)
 
 
-def _mark_popular_fallback(item: dict[str, Any]) -> dict[str, Any]:
+def _fallback_timestamp(value: Any) -> datetime | None:
+  if isinstance(value, datetime):
+    parsed = value
+  elif isinstance(value, str) and value.strip():
+    try:
+      parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+      return None
+  else:
+    return None
+  if parsed.tzinfo is None:
+    parsed = parsed.replace(tzinfo=timezone.utc)
+  return parsed.astimezone(timezone.utc)
+
+
+def _latest_fallback_timestamp(*values: Any) -> datetime | None:
+  parsed = [timestamp for value in values if (timestamp := _fallback_timestamp(value))]
+  return max(parsed, default=None)
+
+
+def _fallback_item_source_updated_at(item: dict[str, Any]) -> datetime | None:
+  price = item.get("price") if isinstance(item.get("price"), dict) else {}
+  return _latest_fallback_timestamp(
+    item.get(_FALLBACK_EVIDENCE_UPDATED_AT_KEY),
+    item.get("sourceUpdatedAt"),
+    price.get("updatedAt"),
+  )
+
+
+def _mark_popular_fallback(
+  item: dict[str, Any],
+  *,
+  engagement_count: int = 0,
+  evidence_updated_at: Any = None,
+) -> dict[str, Any]:
+  has_engagement = engagement_count > 0
+  evidence_timestamp = _fallback_timestamp(evidence_updated_at) if has_engagement else None
+  source_timestamp = _fallback_item_source_updated_at(item)
   item.update(
     {
-      "reasonCodes": [POPULAR_FALLBACK_REASON_CODE],
-      "reasonLabels": [POPULAR_FALLBACK_REASON_LABEL],
-      "recommendationBasis": "popularFallback",
+      "reasonCodes": [
+        POPULAR_FALLBACK_REASON_CODE if has_engagement else CATALOG_FALLBACK_REASON_CODE
+      ],
+      "reasonLabels": [
+        POPULAR_FALLBACK_REASON_LABEL if has_engagement else CATALOG_FALLBACK_REASON_LABEL
+      ],
+      "recommendationBasis": "popularFallback" if has_engagement else "catalogFallback",
+      _FALLBACK_EVIDENCE_KEY: "engagement" if has_engagement else "catalog",
+      _FALLBACK_EVIDENCE_UPDATED_AT_KEY: evidence_timestamp or source_timestamp,
     }
   )
   return item
+
+
+def _finalize_fallback_items(
+  items: list[dict[str, Any]],
+  *,
+  include_fallback_evidence: bool,
+) -> list[dict[str, Any]]:
+  if include_fallback_evidence:
+    return items
+  return [
+    {
+      key: value
+      for key, value in item.items()
+      if key not in {_FALLBACK_EVIDENCE_KEY, _FALLBACK_EVIDENCE_UPDATED_AT_KEY}
+    }
+    for item in items
+  ]
+
+
+async def _mark_packaged_catalog_fallbacks(
+  db: Database,
+  items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+  product_ids = [
+    str(item.get("productId") or "")
+    for item in items
+    if str(item.get("externalSource") or "") == AURADIN_CATALOG_SOURCE
+      and str(item.get("productId") or "")
+  ]
+  popularity: dict[str, dict[str, Any]] = {}
+  if db.is_connected and product_ids:
+    rows = await db.fetch(
+      """
+      select external_product_id,count(distinct user_id)::int as popularity_count,
+        max(liked_at) as popularity_updated_at
+      from external_product_likes
+      where external_product_id=any($1::text[]) and (
+        external_source=$2
+        or (external_source='auradin_search' and external_product_id like 'auradin-seed-%')
+      )
+      group by external_product_id
+      """,
+      product_ids,
+      AURADIN_CATALOG_SOURCE,
+    )
+    popularity = {str(row["external_product_id"]): dict(row) for row in rows}
+  marked_items: list[dict[str, Any]] = []
+  for item in items:
+    evidence = popularity.get(str(item.get("productId") or ""), {})
+    marked_items.append(
+      _mark_popular_fallback(
+        item,
+        engagement_count=int(evidence.get("popularity_count") or 0),
+        evidence_updated_at=evidence.get("popularity_updated_at"),
+      )
+    )
+  return marked_items
 
 
 async def get_popular_fallback_products(
@@ -100,14 +208,16 @@ async def get_popular_fallback_products(
   user_id: UUID | None,
   limit: int,
   categories: Iterable[str] | None = None,
+  include_fallback_evidence: bool = False,
 ) -> list[dict[str, Any]]:
   """Return display-safe popular products without claiming personal relevance.
 
   Licensed catalog rows are preferred. When that catalog has not been loaded yet,
   the helper uses server-verified external-like snapshots and the packaged
   Auradin external catalog. It never waits for an external provider here.
-  Every external URL is re-validated and every item is labelled as a generic
-  popularity fallback.
+  Every external URL is re-validated. Items with observed likes or engagement
+  are labelled as popularity fallbacks; packaged-only rows are explicitly
+  labelled as verified catalog fallbacks instead of implying app popularity.
   """
 
   if limit <= 0:
@@ -121,7 +231,10 @@ async def get_popular_fallback_products(
       categories=category_values,
       strategy="popular",
     )
-    return packaged
+    return _finalize_fallback_items(
+      await _mark_packaged_catalog_fallbacks(db, packaged),
+      include_fallback_evidence=include_fallback_evidence,
+    )
   rows = await db.fetch(
     f"""
     with candidates as (
@@ -130,13 +243,17 @@ async def get_popular_fallback_products(
         and a.id is not null and o.id is not null
         and p.category::text=any($2::text[])
     )
-    select candidates.*,(viewer_like.product_id is not null) as liked
+    select candidates.*,(viewer_like.product_id is not null) as liked,
+      coalesce(popularity_likes.like_count,0)::int as popularity_like_count,
+      popularity_likes.popularity_updated_at,
+      coalesce(popularity_events.engagement_score,0)::int as popularity_engagement_score,
+      popularity_events.engagement_updated_at
     from candidates
     left join user_product_likes viewer_like
       on $1::uuid is not null and viewer_like.user_id=$1
         and viewer_like.product_id=candidates.product_id
     left join lateral (
-      select count(*)::int as like_count
+      select count(*)::int as like_count,max(liked_at) as popularity_updated_at
       from user_product_likes popularity_like
       where popularity_like.product_id=candidates.product_id
         and popularity_like.liked_at>=now()-interval '180 days'
@@ -145,7 +262,10 @@ async def get_popular_fallback_products(
       select coalesce(sum(case
         when popularity_event.event_type='seller_outbound' then 3
         when popularity_event.event_type in ('product_open','search_result_open') then 1
-        else 0 end),0)::int as engagement_score
+        else 0 end),0)::int as engagement_score,
+        max(popularity_event.occurred_at) filter (
+          where popularity_event.event_type in ('seller_outbound','product_open','search_result_open')
+        ) as engagement_updated_at
       from product_engagement_events popularity_event
       where popularity_event.product_id=candidates.product_id
         and popularity_event.occurred_at>=now()-interval '90 days'
@@ -162,12 +282,25 @@ async def get_popular_fallback_products(
     settings.product_offer_max_age_hours,
   )
   items = [
-    _mark_popular_fallback(map_catalog_product(row, liked=bool(row.get("liked"))))
+    _mark_popular_fallback(
+      map_catalog_product(row, liked=bool(row.get("liked"))),
+      engagement_count=(
+        int(row.get("popularity_like_count") or 0)
+        + int(row.get("popularity_engagement_score") or 0)
+      ),
+      evidence_updated_at=_latest_fallback_timestamp(
+        row.get("popularity_updated_at"),
+        row.get("engagement_updated_at"),
+      ),
+    )
     for row in rows
   ]
   remaining = limit - len(items)
   if remaining <= 0:
-    return items
+    return _finalize_fallback_items(
+      items,
+      include_fallback_evidence=include_fallback_evidence,
+    )
 
   external_rows = await db.fetch(
     """
@@ -195,6 +328,7 @@ async def get_popular_fallback_products(
     select ranked.external_source,ranked.external_product_id,ranked.brand_name,
       ranked.product_name,ranked.category,ranked.image_url,ranked.purchase_url,
       ranked.price_amount,ranked.price_currency,ranked.source_updated_at,
+      ranked.popularity_count,ranked.liked_at as popularity_updated_at,
       exists(
         select 1 from external_product_likes viewer_like
         where $1::uuid is not null and viewer_like.user_id=$1
@@ -241,27 +375,34 @@ async def get_popular_fallback_products(
           "canUnlike": True,
           "externalSource": str(row["external_source"]),
           "sponsored": False,
-        }
+        },
+        engagement_count=int(row.get("popularity_count") or 0),
+        evidence_updated_at=row.get("popularity_updated_at"),
       )
     )
   remaining = limit - len(items)
   if remaining <= 0:
-    return items
+    return _finalize_fallback_items(
+      items,
+      include_fallback_evidence=include_fallback_evidence,
+    )
   existing_identities = {
     (str(item.get("externalSource") or "catalog"), str(item.get("productId") or ""))
     for item in items
   }
-  items.extend(
-    await get_auradin_catalog_products(
-      db,
-      user_id=user_id,
-      limit=remaining,
-      categories=category_values,
-      strategy="popular",
-      exclude_identities=existing_identities,
-    )
+  packaged = await get_auradin_catalog_products(
+    db,
+    user_id=user_id,
+    limit=remaining,
+    categories=category_values,
+    strategy="popular",
+    exclude_identities=existing_identities,
   )
-  return items
+  items.extend(await _mark_packaged_catalog_fallbacks(db, packaged))
+  return _finalize_fallback_items(
+    items,
+    include_fallback_evidence=include_fallback_evidence,
+  )
 
 
 async def _section_popular_fallback_products(
@@ -272,6 +413,7 @@ async def _section_popular_fallback_products(
   limit: int,
   variant: str,
   categories: Iterable[str] | None = None,
+  include_fallback_evidence: bool = False,
 ) -> list[dict[str, Any]]:
   """Return a stable section-specific slice so generic shelves are not clones."""
 
@@ -285,6 +427,7 @@ async def _section_popular_fallback_products(
     user_id=user_id,
     limit=limit * 8,
     categories=categories,
+    include_fallback_evidence=include_fallback_evidence,
   )
   if variant in {"personalized", "cohort"}:
     pool = [item for item in pool if not bool((item.get("viewerState") or {}).get("liked"))]
@@ -359,6 +502,14 @@ def _json(value: Any) -> dict[str, Any]:
     except json.JSONDecodeError:
       return {}
   return {}
+
+
+def _is_local_demo_seasonal_collection(collection: dict[str, Any] | None) -> bool:
+  """Keep local QA fixtures from being presented as current trend evidence."""
+
+  if not collection:
+    return False
+  return _json(collection.get("source_payload")).get("source") == LOCAL_DEMO_SEASONAL_SOURCE
 
 
 def _is_seasonal_source_stale(
@@ -907,7 +1058,8 @@ async def _build_seasonal_recommendations(
   category_values = [category_filter] if category_filter else list(PRODUCT_CATEGORY_LABELS)
   if not settings.seasonal_recommendations_v1:
     items = await _section_popular_fallback_products(
-      db, settings, user_id=user_id, limit=limit, variant="seasonal", categories=category_values
+      db, settings, user_id=user_id, limit=limit, variant="seasonal",
+      categories=category_values, include_fallback_evidence=True,
     )
     return _seasonal_fallback_response(
       items,
@@ -928,6 +1080,7 @@ async def _build_seasonal_recommendations(
         """
         select * from product_seasonal_collections
         where locale = $1 and region_code = $2 and status = 'published'
+          and coalesce(source_payload->>'source','') <> $3
           and valid_from <= now() and valid_until > now()
           and reviewed_at is not null and published_at is not null
           and coalesce(freshness_status,'fresh') = 'fresh'
@@ -936,7 +1089,10 @@ async def _build_seasonal_recommendations(
         """,
         locale,
         preferred_region,
+        LOCAL_DEMO_SEASONAL_SOURCE,
       )
+      if _is_local_demo_seasonal_collection(collection):
+        collection = None
       if collection:
         break
     if not collection:
@@ -944,6 +1100,7 @@ async def _build_seasonal_recommendations(
         """
         select * from product_seasonal_collections
         where locale = $1 and region_code = any($2::text[])
+          and coalesce(source_payload->>'source','') <> $4
           and published_at >= now()-interval '7 days'
           and (
             status = 'published'
@@ -956,11 +1113,15 @@ async def _build_seasonal_recommendations(
         locale,
         preferred_regions,
         region_code,
+        LOCAL_DEMO_SEASONAL_SOURCE,
       )
+      if _is_local_demo_seasonal_collection(collection):
+        collection = None
       served_stale = bool(collection)
   if not collection:
     items = await _section_popular_fallback_products(
-      db, settings, user_id=user_id, limit=limit, variant="seasonal", categories=category_values
+      db, settings, user_id=user_id, limit=limit, variant="seasonal",
+      categories=category_values, include_fallback_evidence=True,
     )
     return _seasonal_fallback_response(
       items,
@@ -1080,7 +1241,8 @@ async def _build_seasonal_recommendations(
     items.extend(generic_coverage_items)
   if not items:
     fallback_items = await _section_popular_fallback_products(
-      db, settings, user_id=user_id, limit=limit, variant="seasonal", categories=category_values
+      db, settings, user_id=user_id, limit=limit, variant="seasonal",
+      categories=category_values, include_fallback_evidence=True,
     )
     return _seasonal_fallback_response(
       fallback_items,
@@ -1152,46 +1314,73 @@ def _seasonal_fallback_response(
       "collection": None,
       "items": [],
       "nextCursor": None,
-      "fallback": {"type": "popular", "reason": reason},
+      "fallback": {"type": "catalog", "reason": reason},
     }
   now = datetime.now(timezone.utc)
+  has_engagement = any(item.get(_FALLBACK_EVIDENCE_KEY) == "engagement" for item in items)
+  evidence_type = "engagement" if has_engagement else "catalog"
+  source_updated_at = max(
+    (
+      timestamp
+      for item in items
+      if item.get(_FALLBACK_EVIDENCE_KEY) == evidence_type
+      if (timestamp := _fallback_item_source_updated_at(item)) is not None
+    ),
+    default=None,
+  )
+  response_items = _finalize_fallback_items(items, include_fallback_evidence=False)
+  collection_id = "popular-fallback" if has_engagement else "catalog-fallback"
+  collection_slug = "popular-now" if has_engagement else "verified-catalog"
+  title = "지금 많이 저장한 제품" if has_engagement else "검증된 기본 상품"
+  summary = (
+    "최신 시즌 컬렉션을 준비하는 동안 앱에서 많이 저장한 인기 상품을 보여드려요."
+    if has_engagement
+    else "최신 트렌드 추천을 준비하는 동안 상품 정보와 판매 링크가 검증된 기본 상품을 보여드려요."
+  )
+  source_labels = ["앱 내 인기"] if has_engagement else ["검증된 상품 카탈로그"]
+  source_name = "app_popularity" if has_engagement else "verified_catalog"
+  trend_window = "최근 180일" if has_engagement else "검증된 상품 카탈로그"
+  reason_code = POPULAR_FALLBACK_REASON_CODE if has_engagement else CATALOG_FALLBACK_REASON_CODE
+  provider_status = "popularFallback" if has_engagement else "catalogFallback"
+  algorithm_version = "popular_fallback_v1" if has_engagement else "catalog_fallback_v1"
+  fallback_type = "popular" if has_engagement else "catalog"
   return {
     "status": "ready",
     "collection": {
-      "id": "popular-fallback",
-      "slug": "popular-now",
-      "title": "지금 많이 저장한 제품",
-      "summary": "최신 시즌 컬렉션을 준비하는 동안 앱에서 많이 저장한 인기 상품을 보여드려요.",
+      "id": collection_id,
+      "slug": collection_slug,
+      "title": title,
+      "summary": summary,
       "validFrom": now,
       "validUntil": now + timedelta(minutes=5),
-      "reviewedAt": now,
-      "sourceLabels": ["앱 내 인기"],
-      "sourceName": "app_popularity",
-      "sourceUpdatedAt": now,
-      "trendWindow": "최근 180일",
+      "reviewedAt": source_updated_at,
+      "sourceLabels": source_labels,
+      "sourceName": source_name,
+      "sourceUpdatedAt": source_updated_at,
+      "trendWindow": trend_window,
       "trendKeywords": [],
-      "reasonCodes": ["POPULAR_FALLBACK"],
+      "reasonCodes": [reason_code],
       "confidenceScore": 0.5,
       "status": "published",
       "revision": 1,
       "isStale": False,
-      "isLive": True,
-      "providerStatus": "popularFallback",
+      "isLive": False,
+      "providerStatus": provider_status,
       "refreshAfterSeconds": 300,
       "regionCode": normalize_trend_region_code(region_code),
       "regionLabel": TREND_REGION_LABELS[normalize_trend_region_code(region_code)],
       "weatherSummary": None,
       "weatherUpdatedAt": None,
-      "trendUpdatedAt": now,
+      "trendUpdatedAt": source_updated_at,
       "generatedAt": now,
-      "algorithmVersion": "popular_fallback_v1",
+      "algorithmVersion": algorithm_version,
       "freshnessStatus": "fallback",
       "bedrockUsed": False,
       "nextEvaluationAt": now + timedelta(hours=3),
     },
-    "items": items,
+    "items": response_items,
     "nextCursor": None,
-    "fallback": {"type": "popular", "reason": reason},
+    "fallback": {"type": fallback_type, "reason": reason},
   }
 
 
@@ -2053,7 +2242,7 @@ async def _tone_then_popular_cohort_response(
       if tone_count and len(items) > tone_count
       else "분석 리포트의 넓은 톤 범주와 맞는 상품을 보여드려요."
       if tone_count
-      else "익명 집계 추천을 준비하는 동안 앱에서 많이 저장한 인기 상품을 보여드려요."
+      else "비슷한 취향 추천을 준비하는 동안 앱에서 많이 저장한 인기 상품을 보여드려요."
       if items
       else None
     ),
@@ -2367,19 +2556,19 @@ async def get_cohort_recommendations(
       else "지금 많이 저장한 추천제품"
     ),
     "description": (
-      "익명 컬러 취향 집계 결과와 리포트 톤, 인기 상품을 함께 보여드려요"
+      f"{COHORT_PRIVACY_DESCRIPTION} 리포트 톤과 인기 상품도 함께 보여드려요."
       if fallback_added and tone_added and cohort_item_count
-      else "익명 컬러 취향 집계 결과와 리포트 톤 상품을 함께 보여드려요"
+      else f"{COHORT_PRIVACY_DESCRIPTION} 리포트 톤 상품도 함께 보여드려요."
       if tone_added and cohort_item_count
       else "리포트의 넓은 톤 범주와 인기 상품을 함께 보여드려요"
       if tone_added and fallback_added
       else "분석 리포트의 넓은 톤 범주와 맞는 상품을 보여드려요"
       if tone_added
-      else "익명 컬러 취향 집계 결과와 인기 상품을 함께 보여드려요"
+      else f"{COHORT_PRIVACY_DESCRIPTION} 부족한 자리는 인기 상품으로 채웠어요."
       if fallback_added and cohort_item_count
-      else "익명 집계 추천을 준비하는 동안 인기 상품을 보여드려요"
+      else "비슷한 취향 추천을 준비하는 동안 인기 상품을 보여드려요."
       if fallback_added
-      else "별도 동의한 넓은 컬러·제품 취향 집계에서 많이 저장한 제품이에요"
+      else COHORT_PRIVACY_DESCRIPTION
     ),
     "cohortSizeBand": f"{settings.product_cohort_min_size}+",
     "minimumCohortSize": settings.product_cohort_min_size,
@@ -2408,7 +2597,7 @@ def _popular_cohort_response(
     "status": "ready" if items else original_status,
     "title": "지금 많이 저장한 추천제품",
     "description": (
-      "익명 집계 추천을 준비하는 동안 앱에서 많이 저장한 인기 상품을 보여드려요."
+      "비슷한 취향 추천을 준비하는 동안 앱에서 많이 저장한 인기 상품을 보여드려요."
       if items else None
     ),
     "cohortSizeBand": None,

@@ -17,6 +17,7 @@ export const emptyHomeFeedContent: HomeFeedContent = {
 };
 
 const HOME_PRODUCT_LIMIT = 8;
+const HOME_PRODUCT_PREFETCH_LIMIT = 12;
 
 export async function getHomeFeedContent({
   isAuthenticated,
@@ -81,9 +82,14 @@ async function loadHomeProducts(isAuthenticated: boolean): Promise<{
   products: CatalogProduct[];
   shelf: HomeProductShelf;
 }> {
+  const seasonalPromise = getSeasonalRecommendations(
+    undefined,
+    HOME_PRODUCT_PREFETCH_LIMIT,
+  ).catch(() => null);
+
   if (isAuthenticated) {
     try {
-      const personalized = await getPersonalizedRecommendations(HOME_PRODUCT_LIMIT);
+      const personalized = await getPersonalizedRecommendations(HOME_PRODUCT_PREFETCH_LIMIT);
       const products = getEligibleProducts(personalized.items);
 
       if (products.length > 0) {
@@ -94,13 +100,12 @@ async function loadHomeProducts(isAuthenticated: boolean): Promise<{
     }
   }
 
-  try {
-    const seasonal = await getSeasonalRecommendations(undefined, HOME_PRODUCT_LIMIT);
+  const seasonal = await seasonalPromise;
+  if (seasonal) {
     return {
       products: getEligibleProducts(seasonal.items),
       shelf: 'seasonal',
     };
-  } catch {
-    return {products: [], shelf: 'seasonal'};
   }
+  return {products: [], shelf: 'seasonal'};
 }

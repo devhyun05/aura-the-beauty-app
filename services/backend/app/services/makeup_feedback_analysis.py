@@ -27,7 +27,7 @@ from app.services.makeup_feedback_vision import (
 
 logger = logging.getLogger(__name__)
 
-MODEL_VERSION = "makeup-feedback:bedrock-v7-korean-goal-copy"
+MODEL_VERSION = "makeup-feedback:bedrock-v8-whole-face-harmony"
 
 BEDROCK_GUARDRAIL_TAG_PREFIX = "amazon-bedrock-guardrails-guardContent"
 BEDROCK_GUARDRAIL_TAG_SUFFIX_BYTES = 10
@@ -69,6 +69,11 @@ FEEDBACK_TOPICS: list[dict[str, str]] = [
 TOPIC_BY_ID = {topic["id"]: topic for topic in FEEDBACK_TOPICS}
 VALID_ANALYSIS_DECISIONS = {"completed", "retake_required"}
 VALID_COLOR_CONFIDENCES = {"low", "medium", "high"}
+COLOR_CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
+LIGHTING_SENSITIVE_SCORE_CONFIDENCE_CAP = 0.74
+SCORE_IMPACT_WEIGHTS = {"low": 1.0, "medium": 2.0, "high": 3.0}
+HIGH_IMPACT_IMPROVEMENT_SCORE_CEILING = 90
+EVIDENCE_CALIBRATION_SCORE_CONFIDENCE_CAP = 0.65
 VALID_STATUSES = {
   "strength",
   "improvement",
@@ -82,6 +87,20 @@ VALID_VISIBILITIES = {"clear", "partial", "not_visible"}
 ASSESSABLE_STATUSES = {"strength", "improvement", "optional"}
 NON_ACTIONABLE_STATUSES = {"not_assessable", "not_applicable"}
 SCORE_EVIDENCE_STATUSES = {"strength", "improvement"}
+# These two criteria are owned by the server prompt rather than inferred from
+# user prose. They keep application craftsmanship and full-face coherence in
+# every analysis while user-specific criteria still have to be traceable to the
+# trusted goal text.
+COMMON_BASELINE_CRITERIA = {
+  "baseline-application": {
+    "criterion": "경계·균일도·적용 위치 등 관찰 가능한 적용 완성도가 정돈되었는가",
+    "derivedFrom": "공통 기준: 적용 완성도",
+  },
+  "baseline-coherence": {
+    "criterion": "얼굴 전체에서 부위 간 색·마감·시각적 비중이 내부적으로 조화를 이루는가",
+    "derivedFrom": "공통 기준: 전체 조화",
+  },
+}
 REQUEST_METADATA_FIELDS = (
   "source",
   "sourceLabel",
@@ -159,6 +178,35 @@ def _clean_text(value: Any, fallback: str = "") -> str:
     return normalized or fallback
 
   return fallback
+
+
+def _more_conservative_color_confidence(*values: Any) -> str:
+  valid_values = [
+    value
+    for value in values
+    if isinstance(value, str) and value in COLOR_CONFIDENCE_RANK
+  ]
+  if not valid_values:
+    return "low"
+  return min(valid_values, key=COLOR_CONFIDENCE_RANK.__getitem__)
+
+
+def _has_lighting_sensitive_observation(result: dict[str, Any]) -> bool:
+  evaluations = result.get("evaluations")
+  if not isinstance(evaluations, list):
+    return False
+
+  return any(
+    observation.get("lightingSensitive") is True
+    for evaluation in evaluations
+    if isinstance(evaluation, dict)
+    for observation in (
+      evaluation.get("observations")
+      if isinstance(evaluation.get("observations"), list)
+      else []
+    )
+    if isinstance(observation, dict)
+  )
 
 
 def _prompt_template_error(
@@ -364,6 +412,22 @@ def _capture_quality_for_model_result(
   vision_result: MakeupFeedbackVisionResult,
 ) -> dict[str, Any]:
   capture_quality = _vision_capture_quality(vision_result)
+  model_capture_quality = parsed.get("captureQuality")
+  model_color_confidence = (
+    model_capture_quality.get("colorConfidence")
+    if isinstance(model_capture_quality, dict)
+    else None
+  )
+  capture_quality["colorConfidence"] = _more_conservative_color_confidence(
+    capture_quality["colorConfidence"],
+    model_color_confidence,
+  )
+
+  if _has_lighting_sensitive_observation(parsed):
+    capture_quality["colorConfidence"] = _more_conservative_color_confidence(
+      capture_quality["colorConfidence"],
+      "medium",
+    )
 
   if parsed.get("analysisDecision") != "retake_required":
     return capture_quality
@@ -491,15 +555,17 @@ def _evidence_region_ids_for_topic(
     "cheek": ("left_cheek", "right_cheek"),
     "lip": ("lips",),
   }.get(kind, ())
-  region_ids = [region_id for region_id in candidates if region_id in available_region_ids]
+  region_ids = ["full"] if "full" in available_region_ids else []
+  region_ids.extend(
+    region_id
+    for region_id in candidates
+    if region_id in available_region_ids
+  )
 
   if region_ids:
     return region_ids
 
-  if "full" in available_region_ids:
-    return ["full"]
-
-  return [next(iter(available_region_ids))] if available_region_ids else []
+  return [sorted(available_region_ids)[0]] if available_region_ids else []
 
 
 def _attach_vision_evidence(
@@ -804,10 +870,10 @@ def _normalize_observations(value: Any, field: str) -> list[dict[str, Any]]:
 
 
 def _normalize_dynamic_criteria(value: Any) -> list[dict[str, str]]:
-  if not isinstance(value, list) or not 1 <= len(value) <= 6:
+  if not isinstance(value, list) or not 3 <= len(value) <= 6:
     raise _invalid_live_result(
       "interpretedGoal.dynamicCriteria",
-      "must contain 1 to 6 items",
+      "must contain the two common baselines and 1 to 4 user criteria",
     )
 
   criteria: list[dict[str, str]] = []
@@ -828,6 +894,18 @@ def _normalize_dynamic_criteria(value: Any) -> list[dict[str, str]]:
         "criterion": _require_text(item, "criterion", f"{field}.criterion"),
         "derivedFrom": _require_text(item, "derivedFrom", f"{field}.derivedFrom"),
       },
+    )
+
+  missing_baseline_ids = [
+    criterion_id
+    for criterion_id in COMMON_BASELINE_CRITERIA
+    if criterion_id not in seen_ids
+  ]
+  if missing_baseline_ids:
+    raise _invalid_live_result(
+      "interpretedGoal.dynamicCriteria",
+      "must include every server-owned common baseline criterion",
+      {"missingBaselineIds": missing_baseline_ids},
     )
 
   return criteria
@@ -1125,6 +1203,28 @@ def _normalize_interpreted_goal(raw_goal: Any, payload: dict[str, Any]) -> dict[
       criterion["derivedFrom"].casefold().split(),
     )
 
+    baseline_contract = COMMON_BASELINE_CRITERIA.get(criterion["id"])
+    if baseline_contract is not None:
+      if criterion["criterion"] != baseline_contract["criterion"]:
+        raise _invalid_live_result(
+          f"interpretedGoal.dynamicCriteria[{index}].criterion",
+          "must match the server-owned common baseline criterion",
+        )
+      if criterion["derivedFrom"] != baseline_contract["derivedFrom"]:
+        raise _invalid_live_result(
+          f"interpretedGoal.dynamicCriteria[{index}].derivedFrom",
+          "must match the server-owned common baseline source",
+        )
+      continue
+
+    if criterion["derivedFrom"] in {
+      item["derivedFrom"] for item in COMMON_BASELINE_CRITERIA.values()
+    }:
+      raise _invalid_live_result(
+        f"interpretedGoal.dynamicCriteria[{index}].id",
+        "must use the matching server-owned common baseline id",
+      )
+
     if normalized_derived_from not in normalized_trusted_goal:
       raise _invalid_live_result(
         f"interpretedGoal.dynamicCriteria[{index}].derivedFrom",
@@ -1168,6 +1268,148 @@ def _normalize_summary(raw_summary: Any) -> dict[str, str]:
     "strengthSummary": _require_text(summary, "strengthSummary", "summary.strengthSummary"),
     "improvementSummary": _require_text(summary, "improvementSummary", "summary.improvementSummary"),
   }
+
+
+def _evidence_score_calibration_band(
+  evaluations: list[dict[str, Any]],
+) -> tuple[int, int] | None:
+  """Return a broad coherence band without replacing the model's judgment.
+
+  The model still chooses the score after considering the image and goal.  This
+  guard only catches scores that contradict the same response's assessable
+  evidence distribution. Optional advice and unassessable/non-applicable areas
+  never move the band. Confidence widens the band instead of becoming a score
+  penalty, and makeup intensity itself is deliberately not an input.
+  """
+  assessable = [
+    evaluation
+    for evaluation in evaluations
+    if evaluation["status"] in SCORE_EVIDENCE_STATUSES
+  ]
+  # A single focused area (for example, "립만 봐줘") has no distribution from
+  # which to infer a reliable consistency ceiling. Keep the model score intact.
+  if len(assessable) < 2:
+    return None
+
+  weighted_total = 0.0
+  weighted_strength = 0.0
+  impact_total = 0.0
+  confidence_total = 0.0
+
+  for evaluation in assessable:
+    impact_weight = SCORE_IMPACT_WEIGHTS[evaluation["scoreImpact"]]
+    confidence = float(evaluation["confidence"])
+    # Keep very uncertain evidence from disappearing entirely while allowing
+    # its uncertainty to widen the accepted range below.
+    evidence_weight = impact_weight * max(0.25, confidence)
+    weighted_total += evidence_weight
+    impact_total += impact_weight
+    confidence_total += impact_weight * confidence
+    if evaluation["status"] == "strength":
+      weighted_strength += evidence_weight
+
+  if weighted_total <= 0 or impact_total <= 0:
+    return None
+
+  fulfillment_ratio = weighted_strength / weighted_total
+  average_confidence = confidence_total / impact_total
+  center = round(20 + 75 * fulfillment_ratio)
+  half_width = round(10 + 10 * (1 - average_confidence))
+  lower = max(0, center - half_width)
+  upper = min(100, center + half_width)
+
+  has_confident_high_impact_improvement = any(
+    evaluation["status"] == "improvement"
+    and evaluation["scoreImpact"] == "high"
+    and evaluation["confidence"] >= 0.5
+    for evaluation in assessable
+  )
+  if has_confident_high_impact_improvement:
+    upper = min(upper, HIGH_IMPACT_IMPROVEMENT_SCORE_CEILING)
+    lower = min(lower, upper)
+
+  return lower, upper
+
+
+def _calibrate_score_and_range(
+  score: int,
+  score_range: list[int],
+  evaluations: list[dict[str, Any]],
+) -> tuple[int, list[int]]:
+  calibration_band = _evidence_score_calibration_band(evaluations)
+  if calibration_band is None:
+    return score, score_range
+
+  _band_lower, band_upper = calibration_band
+  # The evidence distribution is a one-way overstatement guard.  It can cap a
+  # score that is inconsistent with its own improvement evidence, but it must
+  # never raise a cautious model score because the contract has no explicit
+  # partial-fulfillment value from which to justify that increase.
+  if score <= band_upper:
+    return score, score_range
+
+  calibrated_score = band_upper
+  original_lower, original_upper = score_range
+  range_width = max(
+    original_upper - original_lower,
+    score - calibrated_score,
+    5,
+  )
+  calibrated_range = [
+    max(0, calibrated_score - range_width),
+    calibrated_score,
+  ]
+
+  if calibrated_score != score or calibrated_range != score_range:
+    logger.warning(
+      "[aura:feedback-bedrock] output:repaired field=scoreCalibration "
+      "score=%s->%s scoreRange=%s->%s band=%s",
+      score,
+      calibrated_score,
+      score_range,
+      calibrated_range,
+      calibration_band,
+    )
+
+  return calibrated_score, calibrated_range
+
+
+def _build_calibrated_score_reason(
+  evaluations: list[dict[str, Any]],
+) -> str:
+  strengths = [
+    evaluation
+    for evaluation in evaluations
+    if evaluation["status"] == "strength"
+  ]
+  improvements = sorted(
+    (
+      evaluation
+      for evaluation in evaluations
+      if evaluation["status"] == "improvement"
+    ),
+    key=lambda evaluation: (
+      SCORE_IMPACT_WEIGHTS[evaluation["scoreImpact"]],
+      float(evaluation["confidence"]),
+    ),
+    reverse=True,
+  )
+  if not improvements:
+    return "사진에서 확인된 근거 분포에 맞춰 종합 점수를 보수적으로 계산했어요."
+
+  primary_title = _clean_text(
+    re.sub(r"[.!?。！？]+", " ", improvements[0]["title"]),
+    improvements[0]["topicLabel"],
+  )
+  strength_prefix = (
+    f"사진에서 {len(strengths)}개 강점이 확인됐지만, "
+    if strengths
+    else "사진에서 "
+  )
+  return (
+    f"{strength_prefix}{primary_title} 등 {len(improvements)}개 보완 근거의 "
+    "영향도를 반영해 점수를 보수적으로 계산했어요."
+  )
 
 
 def _repair_score_evidence_ids(
@@ -1250,6 +1492,7 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
     max_items=16,
     unique=True,
   )
+  score_reason = _require_score_reason(raw_result)
 
   if "score" not in raw_result:
     raise _invalid_live_result("score", "is required")
@@ -1328,6 +1571,49 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
       },
     )
 
+  lighting_sensitive_observation_ids = {
+    observation["id"]
+    for evaluation in evaluations
+    for observation in evaluation["observations"]
+    if observation["lightingSensitive"]
+  }
+  lighting_sensitive_score_evidence_ids = sorted(
+    set(score_evidence_ids) & lighting_sensitive_observation_ids,
+  )
+  if (
+    lighting_sensitive_score_evidence_ids
+    and score_confidence > LIGHTING_SENSITIVE_SCORE_CONFIDENCE_CAP
+  ):
+    logger.warning(
+      "[aura:feedback-bedrock] output:repaired field=scoreConfidence "
+      "reason=lighting-sensitive-evidence from=%s to=%s evidenceIds=%s",
+      score_confidence,
+      LIGHTING_SENSITIVE_SCORE_CONFIDENCE_CAP,
+      lighting_sensitive_score_evidence_ids,
+    )
+    score_confidence = LIGHTING_SENSITIVE_SCORE_CONFIDENCE_CAP
+
+  if analysis_decision == "completed" and score is not None and score_range is not None:
+    uncalibrated_score = score
+    score, score_range = _calibrate_score_and_range(
+      score,
+      score_range,
+      evaluations,
+    )
+    if (
+      score < uncalibrated_score
+      and score_confidence > EVIDENCE_CALIBRATION_SCORE_CONFIDENCE_CAP
+    ):
+      logger.warning(
+        "[aura:feedback-bedrock] output:repaired field=scoreConfidence "
+        "reason=evidence-score-disagreement from=%s to=%s",
+        score_confidence,
+        EVIDENCE_CALIBRATION_SCORE_CONFIDENCE_CAP,
+      )
+      score_confidence = EVIDENCE_CALIBRATION_SCORE_CONFIDENCE_CAP
+    if score < uncalibrated_score:
+      score_reason = _build_calibrated_score_reason(evaluations)
+
   points = _build_points(evaluations)
   strengths = _build_strengths(evaluations)
 
@@ -1339,7 +1625,7 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
     "scoreEvidenceIds": score_evidence_ids,
     "score": score,
     "scoreLabel": _require_text(raw_result, "scoreLabel", "scoreLabel"),
-    "scoreReason": _require_score_reason(raw_result),
+    "scoreReason": score_reason,
     "interpretedGoal": interpreted_goal,
     "summary": _normalize_summary(raw_result.get("summary")),
     "photoSourceLabel": "앨범에서 선택한 사진" if source == "gallery" else "카메라로 촬영한 사진",
@@ -1385,6 +1671,16 @@ def _build_output_contract() -> dict[str, Any]:
       "unknowns": [],
       "assumptions": [],
       "dynamicCriteria": [
+        {
+          "id": "baseline-application",
+          "criterion": "경계·균일도·적용 위치 등 관찰 가능한 적용 완성도가 정돈되었는가",
+          "derivedFrom": "공통 기준: 적용 완성도",
+        },
+        {
+          "id": "baseline-coherence",
+          "criterion": "얼굴 전체에서 부위 간 색·마감·시각적 비중이 내부적으로 조화를 이루는가",
+          "derivedFrom": "공통 기준: 전체 조화",
+        },
         {
           "id": "goal-1",
           "criterion": "이번 요청에만 적용되는 동적 평가 기준",

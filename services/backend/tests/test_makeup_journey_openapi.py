@@ -58,7 +58,12 @@ def test_openapi_response_components_are_required_nullable_and_camel_case() -> N
   assert "requiresOnboarding" in settings_data["properties"]
   assert "requires_onboarding" not in settings_data["properties"]
   assert "firstScore" in calendar_day["required"]
-  assert {"firstScore", "representativeScore"}.issubset(calendar_day["required"])
+  assert {
+    "firstScore",
+    "representativeReportId",
+    "representativeScore",
+    "representativeThumbnailUrl",
+  }.issubset(calendar_day["required"])
   assert {
     "goalScore",
     "feedbackDigest",
@@ -115,7 +120,11 @@ def test_response_models_validate_the_success_envelope_wire_shape() -> None:
           "status": "success",
           "first_score": 84,
           "latest_score": 84,
+          "representative_report_id": "22222222-2222-2222-2222-222222222222",
           "representative_score": 84,
+          "representative_thumbnail_url": (
+            "/makeup-journey/reports/22222222-2222-2222-2222-222222222222/thumbnail"
+          ),
           "score_delta": 0,
           "report_count": 1,
           "has_note": False,

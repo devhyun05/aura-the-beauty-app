@@ -127,9 +127,22 @@ expectEqual(
   'MainTabs,MakeupJourneyDayDetail',
   'day fallback cannot cycle back into trend or feedback result',
 );
+const focusedDayReset = getMakeupJourneyDayResetState(
+  '2026-07-17',
+  'feedback-report-2',
+);
+const focusedDayResetParams = focusedDayReset.routes[1]?.params;
+expectEqual(
+  focusedDayResetParams && 'initialReportId' in focusedDayResetParams
+    ? focusedDayResetParams.initialReportId
+    : undefined,
+  'feedback-report-2',
+  'day reset can focus the report that opened the journey',
+);
 
 const validFeedbackResultReturn = getMakeupJourneySafeReturnResetState(
   '2026-07-17',
+  'feedback-report-2',
 );
 expectEqual(
   validFeedbackResultReturn.routes[1]?.name,
@@ -143,6 +156,13 @@ expectEqual(
     : undefined,
   '2026-07-17',
   'a completed correction preserves its journey entry date',
+);
+expectEqual(
+  validFeedbackResultReturnParams && 'initialReportId' in validFeedbackResultReturnParams
+    ? validFeedbackResultReturnParams.initialReportId
+    : undefined,
+  'feedback-report-2',
+  'a feedback result return preserves the active report slide',
 );
 
 const invalidFeedbackResultReturn = getMakeupJourneySafeReturnResetState(

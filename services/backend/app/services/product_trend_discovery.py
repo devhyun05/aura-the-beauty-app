@@ -135,7 +135,7 @@ def trend_collection_due(
   now: datetime,
   interval_hours: int,
 ) -> bool:
-  """Scheduler helper shared by 6h content and 12h validation stages."""
+  """Return whether an independently scheduled trend collection stage is due."""
 
   if last_completed_at is None:
     return True

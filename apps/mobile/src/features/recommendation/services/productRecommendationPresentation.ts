@@ -32,3 +32,10 @@ export function cohortRecommendationTitle(
   }
   return fallbackTitle?.trim() || `${nickname}님과 비슷한 분들이 많이 좋아해요`;
 }
+
+export function cohortSizeEvidenceCopy(cohortSizeBand: string): string {
+  const minimumSize = cohortSizeBand.trim().replace(/\+$/, '');
+  return minimumSize
+    ? `비슷한 취향 사용자 ${minimumSize}명 이상의 좋아요를 반영했어요.`
+    : '충분한 사용자들의 좋아요가 모인 상품만 보여드려요.';
+}

@@ -65,6 +65,10 @@ export function setBackendAuthTokenProvider(provider: AuthTokenProvider | null):
   authTokenProvider = provider;
 }
 
+export function getBackendAuthToken(): string | null {
+  return authTokenProvider?.() ?? null;
+}
+
 export function getBackendApiBaseUrl(): string | null {
   const rawUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 

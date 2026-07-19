@@ -218,6 +218,16 @@
       "assumptions": [],
       "dynamicCriteria": [
         {
+          "id": "baseline-application",
+          "criterion": "경계·균일도·적용 위치 등 관찰 가능한 적용 완성도가 정돈되었는가",
+          "derivedFrom": "공통 기준: 적용 완성도"
+        },
+        {
+          "id": "baseline-coherence",
+          "criterion": "얼굴 전체에서 부위 간 색·마감·시각적 비중이 내부적으로 조화를 이루는가",
+          "derivedFrom": "공통 기준: 전체 조화"
+        },
+        {
           "id": "goal-1",
           "criterion": "Keep visible color and edge intensity balanced for an everyday natural finish.",
           "derivedFrom": "Balanced everyday makeup"

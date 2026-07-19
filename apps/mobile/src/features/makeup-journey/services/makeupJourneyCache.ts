@@ -13,6 +13,8 @@ const monthCache = new Map<string, MakeupJourneyCalendarResponse>();
 const dayCache = new Map<string, MakeupJourneyDayResponse>();
 const trendCache = new Map<string, MakeupJourneyTrendResponse>();
 const listeners = new Set<CacheInvalidationListener>();
+export const MAX_CACHED_MAKEUP_JOURNEY_MONTHS = 8;
+let cacheRevision = 0;
 
 function getTrendKey(range: MakeupJourneyTrendRange, endDate: string): string {
   return `${range}:${endDate}`;
@@ -27,7 +29,19 @@ export function setCachedMakeupJourneyMonth(
   month: string,
   data: MakeupJourneyCalendarResponse,
 ): void {
+  monthCache.delete(month);
   monthCache.set(month, data);
+  while (monthCache.size > MAX_CACHED_MAKEUP_JOURNEY_MONTHS) {
+    const oldestMonth = monthCache.keys().next().value;
+    if (typeof oldestMonth !== 'string') {
+      break;
+    }
+    monthCache.delete(oldestMonth);
+  }
+}
+
+export function getMakeupJourneyCacheRevision(): number {
+  return cacheRevision;
 }
 
 export function getCachedMakeupJourneyDay(entryDate: string): MakeupJourneyDayResponse | null {
@@ -80,6 +94,7 @@ export function matchesMakeupJourneyCacheTarget(
 
 export function invalidateMakeupJourneyCache(target?: MakeupJourneyCacheTarget): void {
   const normalizedTarget = target && (target.entryDate || target.month) ? target : null;
+  cacheRevision += 1;
 
   if (!normalizedTarget) {
     monthCache.clear();

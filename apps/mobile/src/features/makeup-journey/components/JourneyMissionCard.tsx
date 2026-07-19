@@ -6,10 +6,10 @@ import {
   StyleSheet,
   TextInput,
 } from 'react-native';
-import {Check, Circle, Pencil, Plus, Sparkles, Trash2, X} from 'lucide-react-native';
+import {Check, Circle, ListChecks, MoreHorizontal, Plus, Sparkles, X} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
-import {colors, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {MakeupJourneyMission} from '../types';
 import {getMissionDifficultyGuide} from '../utils/presentation';
 
@@ -96,11 +96,32 @@ export function JourneyMissionCard({
     ]);
   };
 
+  const openMissionActions = (mission: MakeupJourneyMission) => {
+    Alert.alert('미션 관리', mission.title, [
+      {
+        text: '수정',
+        onPress: () => {
+          setEditingId(mission.id);
+          setEditingTitle(mission.title);
+        },
+      },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => confirmDelete(mission),
+      },
+      {text: '취소', style: 'cancel'},
+    ]);
+  };
+
   return (
     <View accessibilityLabel="오늘의 미션" style={styles.card}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <Text style={styles.title}>오늘의 미션</Text>
+          <View style={styles.titleRow}>
+            <ListChecks color={colors.textPrimary} size={20} strokeWidth={1.9} />
+            <Text style={styles.title}>오늘의 미션</Text>
+          </View>
           <Text style={styles.description}>이날의 모든 피드백에 함께 적용되는 미션이에요.</Text>
         </View>
         {missions.length > 0 ? (
@@ -196,25 +217,13 @@ export function JourneyMissionCard({
                         </Pressable>
                       </>
                     ) : (
-                      <>
-                        <Pressable
-                          accessibilityLabel="미션 제목 수정"
-                          accessibilityRole="button"
-                          onPress={() => {
-                            setEditingId(mission.id);
-                            setEditingTitle(mission.title);
-                          }}
-                          style={styles.iconButton}>
-                          <Pencil color={colors.textSecondary} size={17} />
-                        </Pressable>
-                        <Pressable
-                          accessibilityLabel="미션 삭제"
-                          accessibilityRole="button"
-                          onPress={() => confirmDelete(mission)}
-                          style={styles.iconButton}>
-                          <Trash2 color={colors.danger} size={17} />
-                        </Pressable>
-                      </>
+                      <Pressable
+                        accessibilityLabel="미션 관리"
+                        accessibilityRole="button"
+                        onPress={() => openMissionActions(mission)}
+                        style={styles.iconButton}>
+                        <MoreHorizontal color={colors.textSecondary} size={20} />
+                      </Pressable>
                     )}
                   </View>
                 ) : null}
@@ -285,17 +294,22 @@ const styles = StyleSheet.create({
   addButton: {
     alignItems: 'center',
     alignSelf: 'stretch',
-    backgroundColor: colors.danger,
+    backgroundColor: colors.black,
     borderRadius: radius.md,
     justifyContent: 'center',
     minWidth: 48,
   },
   card: {
-    ...shadows.soft,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radius.lg,
+    borderWidth: 1,
     gap: spacing.lg,
-    padding: spacing.xl,
+    padding: spacing.lg,
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 5},
+    shadowOpacity: 0.025,
+    shadowRadius: 10,
   },
   checkButton: {
     alignItems: 'center',
@@ -305,7 +319,7 @@ const styles = StyleSheet.create({
   },
   checkedCircle: {
     alignItems: 'center',
-    backgroundColor: colors.danger,
+    backgroundColor: colors.black,
     borderRadius: radius.pill,
     height: 24,
     justifyContent: 'center',
@@ -450,7 +464,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   progressFill: {
-    backgroundColor: colors.danger,
+    backgroundColor: colors.black,
     borderRadius: radius.pill,
     height: '100%',
   },
@@ -461,7 +475,7 @@ const styles = StyleSheet.create({
     width: 82,
   },
   progressText: {
-    color: colors.danger,
+    color: colors.textPrimary,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
@@ -478,5 +492,10 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.lg,
     lineHeight: typography.lineHeight.lg,
+  },
+  titleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
 });

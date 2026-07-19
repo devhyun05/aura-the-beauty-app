@@ -29,7 +29,9 @@ export type MakeupJourneyCalendarDay = {
   status: MakeupJourneyStatus;
   firstScore: number | null;
   latestScore: number | null;
+  representativeReportId: string | null;
   representativeScore: number | null;
+  representativeThumbnailUrl: string | null;
   scoreDelta: number | null;
   reportCount: number;
   hasNote: boolean;

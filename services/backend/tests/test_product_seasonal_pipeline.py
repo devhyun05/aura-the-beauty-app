@@ -218,6 +218,80 @@ def test_rrf_records_independent_weather_and_app_components() -> None:
   assert items[0]["rankingModelVersion"] == "rrf_v1"
 
 
+@pytest.mark.parametrize(
+  ("weather", "attribute_key"),
+  [
+    ({"precipitationProbabilityPercent": 0, "precipitationMm": 0, "weatherCode": "rain"}, "waterproof"),
+    ({"precipitationProbabilityPercent": 0, "precipitationMm": 0, "weatherCode": "rain_snow"}, "waterproof"),
+    ({"precipitationProbabilityPercent": 0, "precipitationMm": 0.1, "weatherCode": "cloudy"}, "longwear"),
+  ],
+)
+def test_observed_rain_prioritizes_verified_waterproof_or_longwear(
+  weather: dict,
+  attribute_key: str,
+) -> None:
+  snapshot = _snapshot(TrendSignal(
+    keyword="글로시 립",
+    categories=("lip",),
+    color_families=(),
+    finishes=(),
+    tags=(),
+    reason_codes=("NAVER_CONTENT_BURST",),
+    confidence_score=0.9,
+  ))
+  items = match_trends_to_products(
+    snapshot,
+    [
+      {
+        "product_id": "a-popular-without-rain-evidence",
+        "brand_name": "Popular Brand",
+        "product_name": "인기 아이브로우",
+        "category": "brow",
+        "liked_count": 100,
+      },
+      {
+        "product_id": "z-verified-rain-product",
+        "brand_name": "Rain Brand",
+        "product_name": "검증된 지속력 아이라이너",
+        "category": "liner",
+        "attribute_evidence": [{
+          "attributeKey": attribute_key,
+          "attributeValue": True,
+          "confidenceScore": 0.92,
+          "status": "verified",
+        }],
+      },
+      {
+        "product_id": "b-unverified-rain-claim",
+        "brand_name": "Claim Brand",
+        "product_name": "검수 전 워터프루프 아이브로우",
+        "category": "brow",
+        "attribute_evidence": [{
+          "attributeKey": "waterproof",
+          "attributeValue": True,
+          "confidenceScore": 0.99,
+          "status": "draft",
+        }],
+      },
+    ],
+    limit=3,
+    weather=weather,
+  )
+
+  by_id = {item["productId"]: item for item in items}
+  assert items[0]["productId"] == "z-verified-rain-product"
+  assert by_id["z-verified-rain-product"]["scoreComponents"]["weather"] == 1.0
+  assert "WEATHER_ATTRIBUTE_MATCH" in by_id["z-verified-rain-product"]["reasonCodes"]
+  assert not any(
+    code.startswith("TREND_")
+    for code in by_id["z-verified-rain-product"]["reasonCodes"]
+  )
+  assert by_id["a-popular-without-rain-evidence"]["scoreComponents"]["weather"] == 0.0
+  assert "WEATHER_ATTRIBUTE_MATCH" not in by_id["a-popular-without-rain-evidence"]["reasonCodes"]
+  assert by_id["b-unverified-rain-claim"]["scoreComponents"]["weather"] == 0.0
+  assert "WEATHER_ATTRIBUTE_MATCH" not in by_id["b-unverified-rain-claim"]["reasonCodes"]
+
+
 def test_rrf_keeps_content_datalab_weather_app_and_evidence_as_independent_ranks() -> None:
   snapshot = _snapshot(TrendSignal(
     keyword="물광 워터프루프 베이스",

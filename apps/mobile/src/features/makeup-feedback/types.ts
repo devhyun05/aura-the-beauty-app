@@ -210,6 +210,7 @@ export type MakeupFeedbackResult = {
   analysisSource: MakeupFeedbackAnalysisSource;
   analysisId?: string;
   analysisStatus?: string;
+  entryDate?: string;
   modelVersion?: string;
   uploadedImage: ImageSourcePropType;
   photoSource: MakeupFeedbackPhotoSource;

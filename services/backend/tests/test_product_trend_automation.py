@@ -52,11 +52,43 @@ def _document(index: int, *, source: str, title: str | None = None) -> NaverCont
   )
 
 
-def test_scheduler_due_supports_independent_six_and_twelve_hour_stages() -> None:
-  assert trend_collection_due(None, now=NOW, interval_hours=6)
-  assert not trend_collection_due(NOW - timedelta(hours=5, minutes=59), now=NOW, interval_hours=6)
-  assert trend_collection_due(NOW - timedelta(hours=6), now=NOW, interval_hours=6)
+def test_scheduler_defaults_align_content_and_weather_with_three_hour_refresh() -> None:
+  settings = Settings()
+  assert settings.naver_trend_content_interval_hours == 3
+  assert settings.naver_trend_content_max_seed_queries == 1
+  assert settings.kma_weather_interval_hours == 3
+  assert trend_collection_due(None, now=NOW, interval_hours=3)
+  assert not trend_collection_due(NOW - timedelta(hours=2, minutes=59), now=NOW, interval_hours=3)
+  assert trend_collection_due(NOW - timedelta(hours=3), now=NOW, interval_hours=3)
   assert not trend_collection_due(NOW - timedelta(hours=11), now=NOW, interval_hours=12)
+
+
+@pytest.mark.parametrize("days_in_month", (30, 31))
+def test_three_hour_content_worst_case_reservations_fit_shared_monthly_quota(
+  days_in_month: int,
+) -> None:
+  settings = Settings()
+  runs_per_day = 24 // settings.naver_trend_content_interval_hours
+  content_reservations = (
+    days_in_month
+    * runs_per_day
+    * settings.naver_trend_content_max_seed_queries
+    * 3  # news, blog, cafe
+    * settings.naver_trend_http_max_attempts
+  )
+  datalab_keyword_limit = 24
+  datalab_batches = (datalab_keyword_limit + 5 - 1) // 5
+  datalab_runs_per_day = 24 // settings.naver_trend_validation_interval_hours
+  datalab_reservations = (
+    days_in_month
+    * datalab_runs_per_day
+    * datalab_batches
+    * 2  # Naver Search DataLab and Shopping Insight
+    * settings.naver_trend_http_max_attempts
+  )
+
+  assert content_reservations + datalab_reservations <= settings.naver_trend_monthly_call_limit
+  assert settings.naver_trend_monthly_call_limit - content_reservations >= datalab_reservations
 
 
 @pytest.mark.asyncio
@@ -213,7 +245,7 @@ async def test_naver_content_provider_uses_dynamic_seeds_and_shared_monthly_quot
   assert {call[2]["query"] for call in calls} == {"카탈로그에서 온 립"}
   assert len(documents) == 3
   assert all(call[1]["X-NCP-APIGW-API-KEY-ID"] == "id" for call in calls)
-  assert quota_providers == ["naver"] * 4
+  assert quota_providers == ["naver"] * 3
 
 
 def test_keyword_batching_and_momentum_compare_each_keyword_to_itself() -> None:

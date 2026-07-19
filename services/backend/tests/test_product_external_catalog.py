@@ -203,8 +203,11 @@ async def test_missing_published_seasonal_uses_diverse_local_fallback() -> None:
   assert len(result["items"]) == 18
   assert len(_identities(result["items"])) == 18
   assert len({item["category"] for item in result["items"]}) >= 4
-  assert result["collection"]["providerStatus"] == "popularFallback"
-  assert all(item["reasonCodes"] == ["POPULAR_FALLBACK"] for item in result["items"])
+  assert result["collection"]["providerStatus"] == "catalogFallback"
+  assert result["collection"]["title"] == "검증된 기본 상품"
+  assert result["collection"]["sourceName"] == "verified_catalog"
+  assert result["fallback"]["type"] == "catalog"
+  assert all(item["reasonCodes"] == ["CATALOG_FALLBACK"] for item in result["items"])
 
 
 @pytest.mark.asyncio

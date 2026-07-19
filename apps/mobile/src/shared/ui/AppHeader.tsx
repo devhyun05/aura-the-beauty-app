@@ -127,19 +127,19 @@ export function AppHeader({
                   <Text
                     color={colors.textSecondary}
                     fontSize={typography.caption.fontSize}
-                    fontWeight={typography.caption.fontWeight}
                     letterSpacing={1.2}
                     lineHeight={typography.caption.lineHeight}
-                    numberOfLines={1}>
+                    numberOfLines={1}
+                    style={styles.inlineLabelText}>
                     {labelText}
                   </Text>
                   <Text
                     color={colors.textPrimary}
                     fontSize={typography.title.fontSize}
-                    fontWeight={typography.title.fontWeight}
                     letterSpacing={0}
                     lineHeight={typography.title.lineHeight}
-                    numberOfLines={1}>
+                    numberOfLines={1}
+                    style={styles.inlineTitleText}>
                     {title}
                   </Text>
                 </>
@@ -212,8 +212,8 @@ const styles = StyleSheet.create({
   centerTitle: {
     color: colors.textPrimary,
     flex: 1,
+    fontFamily: typography.fontFamily.bold,
     fontSize: APP_HEADER_CENTER_TITLE_FONT_SIZE,
-    fontWeight: typography.fontWeight.bold,
     lineHeight: typography.title.lineHeight,
     textAlign: 'center',
   },
@@ -223,15 +223,15 @@ const styles = StyleSheet.create({
   },
   contextLabel: {
     color: colors.textSecondary,
+    fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
     letterSpacing: 1.2,
     lineHeight: typography.lineHeight.xs,
   },
   contextTitle: {
     color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
     fontSize: typography.fontSize.lg,
-    fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.lg,
   },
@@ -254,6 +254,12 @@ const styles = StyleSheet.create({
   },
   immersiveContextTitle: {
     color: colors.white,
+  },
+  inlineLabelText: {
+    fontFamily: typography.fontFamily.semibold,
+  },
+  inlineTitleText: {
+    fontFamily: typography.fontFamily.bold,
   },
   container: {
     alignItems: 'center',

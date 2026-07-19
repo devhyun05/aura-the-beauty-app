@@ -9,6 +9,7 @@ from app.core.settings import Settings
 from app.schemas.product_recommendation import ProductEvent
 from app.services.product_color import delta_e_ciede2000, srgb_hex_to_lab
 from app.services.product_recommendations import (
+  clear_seasonal_recommendation_cache,
   get_ar_recommendations,
   get_cohort_recommendations,
   get_personalized_recommendations,
@@ -145,6 +146,7 @@ def test_private_event_requires_a_run_and_exposure_token() -> None:
 
 
 def _external_popular_row(category: str = "lip") -> dict:
+  updated_at = datetime.now(timezone.utc)
   return {
     "external_source": "naver_shopping_search",
     "external_product_id": f"popular-{category}",
@@ -155,7 +157,9 @@ def _external_popular_row(category: str = "lip") -> dict:
     "purchase_url": f"https://shop.example.com/{category}",
     "price_amount": 18000,
     "price_currency": "KRW",
-    "source_updated_at": datetime.now(timezone.utc),
+    "source_updated_at": updated_at,
+    "popularity_count": 3,
+    "popularity_updated_at": updated_at,
     "liked": True,
   }
 
@@ -185,6 +189,29 @@ class _PopularFallbackDatabase:
     if "count(distinct user_id)" in query and "from external_product_likes" in query:
       return []
     raise AssertionError(f"unexpected fetch: {query}")
+
+
+class _LocalDemoSeasonalDatabase(_PopularFallbackDatabase):
+  def __init__(self, *, external_categories: set[str] | None = None) -> None:
+    super().__init__(
+      external_categories=(
+        {"base", "shadow", "brow", "cheek", "lip", "liner"}
+        if external_categories is None
+        else external_categories
+      )
+    )
+    self.collection_queries: list[str] = []
+
+  async def fetchrow(self, query: str, *_args):
+    if "from product_seasonal_collections" in query:
+      self.collection_queries.append(" ".join(query.split()))
+      # Return the legacy row even though a real PostgreSQL query now excludes it.
+      # The service-level check is a second guard for stale test/local databases.
+      return {
+        "id": uuid4(),
+        "source_payload": {"source": "local_product_recommendation_demo_v1"},
+      }
+    return await super().fetchrow(query, *_args)
 
 
 class _ExternalArDatabase:
@@ -306,6 +333,9 @@ async def test_popular_fallback_uses_packaged_catalog_when_database_sources_are_
   assert len(items) == 6
   assert {item["category"] for item in items} == {"base", "shadow", "brow", "cheek", "lip", "liner"}
   assert {item["externalSource"] for item in items} == {"auradin_catalog"}
+  assert all(item["reasonCodes"] == ["CATALOG_FALLBACK"] for item in items)
+  assert all(item["recommendationBasis"] == "catalogFallback" for item in items)
+  assert all(not any(key.startswith("_fallback") for key in item) for item in items)
 
 
 @pytest.mark.asyncio
@@ -370,7 +400,7 @@ async def test_each_recommendation_section_returns_popular_items_when_its_basis_
     limit=12,
   )
   assert seasonal["status"] == "ready"
-  assert seasonal["collection"]["providerStatus"] == "popularFallback"
+  assert seasonal["collection"]["providerStatus"] == "catalogFallback"
   assert seasonal["items"]
 
   cohort = await get_cohort_recommendations(
@@ -382,6 +412,73 @@ async def test_each_recommendation_section_returns_popular_items_when_its_basis_
   assert cohort["status"] == "ready"
   assert cohort["cohortStatus"] == "unavailable"
   assert cohort["items"]
+
+
+@pytest.mark.asyncio
+async def test_local_demo_seasonal_collection_is_replaced_by_honest_catalog_fallback() -> None:
+  clear_seasonal_recommendation_cache()
+  db = _LocalDemoSeasonalDatabase(external_categories=set())
+
+  seasonal = await get_seasonal_recommendations(
+    db,  # type: ignore[arg-type]
+    Settings(),
+    user_id=uuid4(),
+    locale="ko-KR",
+    region_code="KR-11",
+    limit=12,
+  )
+
+  assert seasonal["status"] == "ready"
+  assert seasonal["collection"]["id"] == "catalog-fallback"
+  assert seasonal["collection"]["title"] == "검증된 기본 상품"
+  assert seasonal["collection"]["sourceName"] == "verified_catalog"
+  assert seasonal["collection"]["providerStatus"] == "catalogFallback"
+  assert seasonal["collection"]["isLive"] is False
+  assert seasonal["collection"]["weatherSummary"] is None
+  assert seasonal["fallback"] == {
+    "type": "catalog",
+    "reason": "NO_PUBLISHED_SEASONAL_COLLECTION",
+  }
+  assert seasonal["items"]
+  assert all(item["reasonCodes"] == ["CATALOG_FALLBACK"] for item in seasonal["items"])
+  assert all(item["recommendationBasis"] == "catalogFallback" for item in seasonal["items"])
+  assert all(not any(key.startswith("_fallback") for key in item) for item in seasonal["items"])
+  item_source_updates = [item["sourceUpdatedAt"] for item in seasonal["items"]]
+  assert all(isinstance(value, datetime) for value in item_source_updates)
+  assert seasonal["collection"]["sourceUpdatedAt"] == max(item_source_updates)
+  assert seasonal["collection"]["trendUpdatedAt"] == max(item_source_updates)
+  assert len(db.collection_queries) == 3
+  assert all("local_product_recommendation_demo_v1" not in query for query in db.collection_queries)
+  assert all("source_payload->>'source'" in query for query in db.collection_queries)
+
+
+@pytest.mark.asyncio
+async def test_observed_engagement_keeps_honest_app_popularity_fallback_metadata() -> None:
+  clear_seasonal_recommendation_cache()
+  db = _LocalDemoSeasonalDatabase(
+    external_categories={"base", "shadow", "brow", "cheek", "lip", "liner"},
+  )
+
+  seasonal = await get_seasonal_recommendations(
+    db,  # type: ignore[arg-type]
+    Settings(),
+    user_id=uuid4(),
+    locale="ko-KR",
+    region_code="KR-11",
+    limit=5,
+  )
+
+  assert seasonal["collection"]["id"] == "popular-fallback"
+  assert seasonal["collection"]["title"] == "지금 많이 저장한 제품"
+  assert seasonal["collection"]["sourceName"] == "app_popularity"
+  assert seasonal["collection"]["providerStatus"] == "popularFallback"
+  assert seasonal["fallback"] == {
+    "type": "popular",
+    "reason": "NO_PUBLISHED_SEASONAL_COLLECTION",
+  }
+  assert seasonal["collection"]["sourceUpdatedAt"] is not None
+  assert any(item["reasonCodes"] == ["POPULAR_FALLBACK"] for item in seasonal["items"])
+  assert all(not any(key.startswith("_fallback") for key in item) for item in seasonal["items"])
 
 
 @pytest.mark.asyncio
@@ -505,6 +602,9 @@ async def test_external_cohort_aggregates_support_by_identity_before_latest_snap
   assert len(result["items"]) == 1
   assert result["items"][0]["externalSource"] == "auradin_catalog"
   assert result["items"][0]["reasonCodes"] == ["SIMILAR_PREFERENCE_COHORT"]
+  assert result["description"] == (
+    "비슷한 컬러·제품 취향 사용자의 좋아요를 개인정보가 드러나지 않게 모아 반영했어요."
+  )
   normalized_query = " ".join(db.external_query.split())
   assert "group by external_source,external_product_id" in normalized_query
   assert "order by eligible_likes.liked_at desc" in normalized_query

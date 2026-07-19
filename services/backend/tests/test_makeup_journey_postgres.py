@@ -190,7 +190,8 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
   first_report_id = UUID("20000000-0000-0000-0000-000000000001")
   failed_report_id = UUID("20000000-0000-0000-0000-000000000002")
   correction_report_id = UUID("20000000-0000-0000-0000-000000000003")
-  media_id = UUID("30000000-0000-0000-0000-000000000001")
+  first_media_id = UUID("30000000-0000-0000-0000-000000000001")
+  correction_media_id = UUID("30000000-0000-0000-0000-000000000002")
   other_mission_id = UUID("40000000-0000-0000-0000-000000000001")
   try:
     await connection.execute(
@@ -206,8 +207,20 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
       user_id,
     )
     await connection.execute(
-      "insert into media_assets (id, owner_user_id, media_kind, source) values ($1, $2, 'makeup_feedback', 'camera')",
-      media_id,
+      """
+      insert into media_assets (
+        id, owner_user_id, media_kind, source,
+        thumbnail_bucket, thumbnail_object_key, thumbnail_cdn_url
+      ) values
+        ($1, $3, 'makeup_feedback', 'camera', 'private-bucket',
+          'uploads/makeup_feedback/thumbnail-first.jpg',
+          'https://cdn.example/thumbnails/first.jpg'),
+        ($2, $3, 'makeup_feedback', 'camera', 'private-bucket',
+          'uploads/makeup_feedback/thumbnail-correction.jpg',
+          'https://cdn.example/thumbnails/correction.jpg')
+      """,
+      first_media_id,
+      correction_media_id,
       user_id,
     )
     feedback_payload = json.dumps(
@@ -229,9 +242,9 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
       ) values
         ($1, $4, '2026-07-17', 'initial', null, $7, 'camera', 70, 'completed', $6::jsonb,
           '2026-07-17 01:00:00+00', '2026-07-17 01:00:00+00'),
-        ($2, $4, '2026-07-17', 'initial', null, $7, 'camera', 99, 'failed', $6::jsonb,
+        ($2, $4, '2026-07-17', 'initial', null, $8, 'camera', 99, 'failed', $6::jsonb,
           '2026-07-17 02:00:00+00', '2026-07-17 02:00:00+00'),
-        ($3, $4, '2026-07-17', 'correction', $1, $7, 'camera', 85, 'completed', $6::jsonb,
+        ($3, $4, '2026-07-17', 'correction', $1, $8, 'camera', 85, 'completed', $6::jsonb,
           '2026-07-17 03:00:00+00', '2026-07-17 03:00:00+00'),
         ('20000000-0000-0000-0000-000000000004', $5, '2026-07-17', 'initial', null, null,
           'camera', 100, 'completed', $6::jsonb,
@@ -243,7 +256,8 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
       user_id,
       other_user_id,
       feedback_payload,
-      media_id,
+      first_media_id,
+      correction_media_id,
     )
     await connection.execute(
       """
@@ -286,7 +300,11 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
         "status": "success",
         "firstScore": 70,
         "latestScore": 85,
+        "representativeReportId": str(correction_report_id),
         "representativeScore": 85,
+        "representativeThumbnailUrl": (
+          f"/makeup-journey/reports/{correction_report_id}/thumbnail"
+        ),
         "scoreDelta": 15,
         "reportCount": 2,
         "hasNote": False,
@@ -330,7 +348,11 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
       db=db,
     )
     assert selected_calendar["data"]["days"][0]["latestScore"] == 85
+    assert selected_calendar["data"]["days"][0]["representativeReportId"] == str(first_report_id)
     assert selected_calendar["data"]["days"][0]["representativeScore"] == 70
+    assert selected_calendar["data"]["days"][0]["representativeThumbnailUrl"] == (
+      f"/makeup-journey/reports/{first_report_id}/thumbnail"
+    )
     assert selected_calendar["data"]["days"][0]["status"] == "failure"
     selected_trend = await journey_api.get_makeup_journey_trends(
       range_value="7d",
@@ -390,6 +412,14 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
       "최초 기록 메모",
       "수정 기록 메모",
     ]
+    calendar_with_report_notes = await journey_api.get_makeup_journey_calendar(
+      "2026-07",
+      auth=object(),
+      db=db,
+    )
+    assert len(calendar_with_report_notes["data"]["days"]) == 1
+    assert calendar_with_report_notes["data"]["days"][0]["hasNote"] is True
+    assert calendar_with_report_notes["data"]["summary"]["recordedDays"] == 1
     deleted_note = await journey_api.update_makeup_journey_note(
       "2026-07-17",
       MakeupJourneyNoteUpdate(content="  ", reportId=first_report_id),
@@ -457,7 +487,10 @@ async def test_postgres_journey_aggregation_ownership_crud_and_account_cascade(
     }
 
     # Media deletion SET NULL does not disturb the parent/correction chain.
-    await connection.execute("delete from media_assets where id = $1", media_id)
+    await connection.execute(
+      "delete from media_assets where id = any($1::uuid[])",
+      [first_media_id, correction_media_id],
+    )
     assert await connection.fetchval(
       "select count(*) from makeup_feedback_reports where user_id = $1",
       user_id,
@@ -719,7 +752,9 @@ async def test_postgres_daily_score_tie_break_uses_report_uuid(
         "status": "success",
         "firstScore": 61,
         "latestScore": 89,
+        "representativeReportId": str(higher_report_id),
         "representativeScore": 89,
+        "representativeThumbnailUrl": None,
         "scoreDelta": 28,
         "reportCount": 2,
         "hasNote": False,

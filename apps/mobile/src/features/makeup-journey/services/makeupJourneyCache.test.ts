@@ -3,7 +3,9 @@ import {
   getCachedMakeupJourneyDay,
   getCachedMakeupJourneyMonth,
   getCachedMakeupJourneyTrend,
+  getMakeupJourneyCacheRevision,
   invalidateMakeupJourneyCache,
+  MAX_CACHED_MAKEUP_JOURNEY_MONTHS,
   matchesMakeupJourneyCacheTarget,
   setCachedMakeupJourneyDay,
   setCachedMakeupJourneyMonth,
@@ -57,5 +59,23 @@ expect(
   getCachedMakeupJourneyTrend('30d', '2026-07-17') === null,
   'account boundary clears trend cache',
 );
+
+const revisionBeforeTargetedInvalidation = getMakeupJourneyCacheRevision();
+invalidateMakeupJourneyCache({month: '2026-07'});
+expect(
+  getMakeupJourneyCacheRevision() === revisionBeforeTargetedInvalidation + 1,
+  'every invalidation advances the revision so stale background prefetches cannot refill cache',
+);
+
+for (let index = 0; index <= MAX_CACHED_MAKEUP_JOURNEY_MONTHS; index += 1) {
+  const year = 2020 + Math.floor(index / 12);
+  const month = String((index % 12) + 1).padStart(2, '0');
+  setCachedMakeupJourneyMonth(`${year}-${month}`, monthData);
+}
+expect(
+  getCachedMakeupJourneyMonth('2020-01') === null,
+  'background neighbor prefetch keeps the month cache bounded',
+);
+invalidateMakeupJourneyCache();
 
 console.log('makeup journey cache contract passed');

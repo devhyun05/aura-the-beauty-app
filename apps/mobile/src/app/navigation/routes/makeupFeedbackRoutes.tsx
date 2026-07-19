@@ -316,7 +316,10 @@ export function MakeupFeedbackLoadingRouteScreen({
               reportId: result.analysisId,
               returnTo: 'makeupJourney',
             }
-          : {reportId: result.analysisId},
+          : {
+              entryDate: flowContext.entryDate,
+              reportId: result.analysisId,
+            },
       );
     },
     [
@@ -424,6 +427,9 @@ export function MakeupFeedbackResultRouteScreen({
   const shouldReturnToJourney = route.params?.returnTo === 'makeupJourney';
   const reportIsLoaded =
     !reportId || makeupFeedbackResult?.analysisId === reportId;
+  const resultEntryDate = makeupFeedbackResult?.entryDate ?? route.params?.entryDate;
+  const resultReportId =
+    makeupFeedbackResult?.analysisId ?? reportId ?? makeupFeedbackResult?.id;
   const [reportLoadError, setReportLoadError] = React.useState('');
   const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const handleHeaderShareActionChange = React.useCallback(
@@ -440,6 +446,12 @@ export function MakeupFeedbackResultRouteScreen({
       getMakeupJourneySafeReturnResetState(route.params?.entryDate),
     );
   }, [navigation, route.params?.entryDate]);
+  const handleOpenMakeupJourney = React.useCallback(() => {
+    notifyMakeupJourneyFeedbackCompleted(resultEntryDate);
+    navigation.reset(
+      getMakeupJourneySafeReturnResetState(resultEntryDate, resultReportId),
+    );
+  }, [navigation, resultEntryDate, resultReportId]);
   const detailHeaderNavigationProps = shouldReturnToJourney
     ? {onBack: handleBackToJourney}
     : shouldReturnToProfile
@@ -519,6 +531,7 @@ export function MakeupFeedbackResultRouteScreen({
       shareDisabled={!shareAction}>
       <MakeupFeedbackResultScreen
         onHeaderShareActionChange={handleHeaderShareActionChange}
+        onOpenMakeupJourney={handleOpenMakeupJourney}
         result={makeupFeedbackResult}
       />
     </DetailRouteChrome>

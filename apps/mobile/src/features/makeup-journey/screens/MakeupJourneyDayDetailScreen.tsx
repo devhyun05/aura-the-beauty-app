@@ -14,11 +14,12 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {
-  ArrowLeft,
   ArrowRight,
   Camera,
   ChartNoAxesCombined,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   RefreshCw,
 } from 'lucide-react-native';
@@ -26,12 +27,14 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View} from 'tamagui';
 
 import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAnalytics';
-import {colors, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {AppHeader} from '../../../shared/ui/AppHeader';
 import {useTransientToast} from '../../../shared/ui/TransientToast';
 import type {MakeupFeedbackContext} from '../../makeup-feedback/types';
 import {JourneyFeedbackDigestCard} from '../components/JourneyFeedbackDigestCard';
 import {JourneyMissionCard} from '../components/JourneyMissionCard';
 import {JourneyNoteCard} from '../components/JourneyNoteCard';
+import {JourneyPromptCard} from '../components/JourneyPromptCard';
 import {JourneyReportPhotoGallery} from '../components/JourneyReportPhotoGallery';
 import {useMakeupJourneyDay} from '../hooks/useMakeupJourneyDay';
 import {invalidateMakeupJourneyCache} from '../services/makeupJourneyCache';
@@ -56,12 +59,14 @@ import {
   getTodayDateString,
   isFutureJourneyDate,
 } from '../utils/date';
+import {getMakeupJourneyReportPrompt} from '../utils/reportPrompt';
 
 const dayScrollOffsets = new Map<string, number>();
 const MAX_SAVED_DAY_OFFSETS = 20;
 
 export type MakeupJourneyDayDetailScreenProps = {
   entryDate: string;
+  initialReportId?: string;
   onBackToCalendar: () => void;
   onChangeDate: (entryDate: string) => void;
   onFirstReportActiveChange: (isFirstReportActive: boolean) => void;
@@ -116,28 +121,21 @@ function DetailHeader({
   topInset: number;
 }) {
   return (
-    <View style={[styles.fixedHeader, {paddingTop: topInset}]}>
-      <Pressable
-        accessibilityLabel="달력으로"
-        accessibilityRole="button"
-        onPress={onBack}
-        style={({pressed}) => [styles.headerIconButton, pressed ? styles.pressed : null]}>
-        <ArrowLeft color={colors.textPrimary} size={22} />
-      </Pressable>
-      <View style={styles.headerTitleGroup}>
-        <Text style={styles.headerEyebrow}>메이크업 기록</Text>
-        <Text accessibilityRole="header" style={styles.headerDate}>
-          {formatJourneyDate(entryDate, false)}
-        </Text>
-      </View>
-      <Pressable
-        accessibilityLabel="성장 그래프 보기"
-        accessibilityRole="button"
-        onPress={onOpenTrend}
-        style={({pressed}) => [styles.headerIconButton, pressed ? styles.pressed : null]}>
-        <ChartNoAxesCombined color={colors.textPrimary} size={22} />
-      </Pressable>
-    </View>
+    <AppHeader
+      contextLabel="메이크업 기록"
+      onBack={onBack}
+      rightSlot={(
+        <Pressable
+          accessibilityLabel="성장 그래프 보기"
+          accessibilityRole="button"
+          onPress={onOpenTrend}
+          style={({pressed}) => [styles.headerIconButton, pressed ? styles.pressed : null]}>
+          <ChartNoAxesCombined color={colors.textPrimary} size={20} strokeWidth={1.9} />
+        </Pressable>
+      )}
+      title={formatJourneyDate(entryDate, false)}
+      topInset={topInset}
+    />
   );
 }
 
@@ -201,7 +199,7 @@ function DayDateNavigator({
           styles.dateNavigatorButtonPrevious,
           pressed ? styles.pressed : null,
         ]}>
-        <ArrowLeft color={colors.textPrimary} size={18} />
+        <ChevronLeft color={colors.textPrimary} size={19} />
         <View style={styles.dateNavigatorTextGroup}>
           <Text style={styles.dateNavigatorLabel}>이전 날</Text>
           <Text style={styles.dateNavigatorDate}>
@@ -224,9 +222,9 @@ function DayDateNavigator({
             pressed ? styles.pressed : null,
           ]}>
           {isSelectingScore ? (
-            <ActivityIndicator color={colors.textPrimary} size="small" />
+            <ActivityIndicator color={isSelected ? colors.white : colors.textPrimary} size="small" />
           ) : isSelected ? (
-            <CheckCircle2 color={colors.danger} size={16} />
+            <CheckCircle2 color={colors.white} size={15} />
           ) : null}
           <Text style={[
             styles.scoreSelectionText,
@@ -253,7 +251,7 @@ function DayDateNavigator({
             {formatJourneyDate(nextDate, false)}
           </Text>
         </View>
-        <ArrowRight color={colors.textPrimary} size={18} />
+        <ChevronRight color={colors.textPrimary} size={19} />
       </Pressable>
     </View>
   );
@@ -321,7 +319,7 @@ function CorrectionCard({onStart}: {onStart: () => void}) {
           </Text>
         </View>
         <View style={styles.correctionIcon}>
-          <Camera color={colors.danger} size={34} strokeWidth={1.7} />
+          <Camera color={colors.textPrimary} size={22} strokeWidth={1.8} />
         </View>
       </View>
       <Pressable
@@ -379,6 +377,7 @@ function JourneyDayScrollPage({
 
 export function MakeupJourneyDayDetailScreen({
   entryDate,
+  initialReportId,
   onBackToCalendar,
   onChangeDate,
   onFirstReportActiveChange,
@@ -395,7 +394,9 @@ export function MakeupJourneyDayDetailScreen({
   const currentVerticalOffsetRef = useRef(dayScrollOffsets.get(entryDate) ?? 0);
   const focusCountRef = useRef(0);
   const trackedDateRef = useRef<string | null>(null);
-  const [activeReportId, setActiveReportId] = useState<string | null>(null);
+  const [activeReportId, setActiveReportId] = useState<string | null>(
+    initialReportId ?? null,
+  );
   const [pendingMissionIds, setPendingMissionIds] = useState<Set<string>>(new Set());
   const [isGeneratingMissions, setIsGeneratingMissions] = useState(false);
   const [isSavingNote, setIsSavingNote] = useState(false);
@@ -415,9 +416,12 @@ export function MakeupJourneyDayDetailScreen({
       if (current && reports.some(report => report.reportId === current)) {
         return current;
       }
+      if (initialReportId && reports.some(report => report.reportId === initialReportId)) {
+        return initialReportId;
+      }
       return reports[0]?.reportId ?? null;
     });
-  }, [entryDate, resource.data?.reports]);
+  }, [entryDate, initialReportId, resource.data?.reports]);
 
   useFocusEffect(
     useCallback(() => {
@@ -724,9 +728,15 @@ export function MakeupJourneyDayDetailScreen({
           pagingEnabled
           ref={pagerRef}
           removeClippedSubviews={false}
-          renderItem={({item: report}) => (
-            <View style={[styles.reportPage, {width: pageWidth}]}>
-              <JourneyDayScrollPage
+          renderItem={({item: report}) => {
+            const prompt = getMakeupJourneyReportPrompt(
+              report.goalContext,
+              report.feedbackKind,
+            );
+
+            return (
+              <View style={[styles.reportPage, {width: pageWidth}]}>
+                <JourneyDayScrollPage
                 bottomInset={insets.bottom}
                 onRefresh={() => void resource.refresh()}
                 onScroll={saveOffset}
@@ -746,6 +756,7 @@ export function MakeupJourneyDayDetailScreen({
                   onOpenReport={onOpenReport}
                   reports={detail.reports}
                 />
+                {prompt ? <JourneyPromptCard prompt={prompt} /> : null}
                 {report.feedbackDigest ? (
                   <JourneyFeedbackDigestCard
                     digest={report.feedbackDigest}
@@ -783,9 +794,10 @@ export function MakeupJourneyDayDetailScreen({
                   note={report.note}
                   onSave={content => saveNote(content, report.reportId)}
                 />
-              </JourneyDayScrollPage>
-            </View>
-          )}
+                </JourneyDayScrollPage>
+              </View>
+            );
+          }}
           scrollEnabled={detail.reports.length > 1}
           showsHorizontalScrollIndicator={false}
           style={styles.reportPager}
@@ -847,16 +859,21 @@ export function MakeupJourneyDayDetailScreen({
 
 const styles = StyleSheet.create({
   content: {
-    gap: spacing.lg,
-    paddingHorizontal: spacing.screenX,
-    paddingTop: spacing.lg,
+    gap: spacing.xxl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
   },
   correctionCard: {
-    ...shadows.soft,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radius.lg,
+    borderWidth: 1,
     gap: spacing.lg,
-    padding: spacing.xl,
+    padding: spacing.lg,
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 5},
+    shadowOpacity: 0.025,
+    shadowRadius: 10,
   },
   correctionDescription: {
     color: colors.textSecondary,
@@ -865,7 +882,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.sm,
   },
   correctionEyebrow: {
-    color: colors.danger,
+    color: colors.textSecondary,
     fontFamily: typography.fontFamily.semibold,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
@@ -877,11 +894,13 @@ const styles = StyleSheet.create({
   },
   correctionIcon: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 90, 77, 0.10)',
-    borderRadius: radius.pill,
-    height: 72,
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    height: 46,
     justifyContent: 'center',
-    width: 72,
+    width: 46,
   },
   correctionText: {
     flex: 1,
@@ -895,7 +914,7 @@ const styles = StyleSheet.create({
   },
   dateNavigator: {
     alignItems: 'stretch',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderBottomColor: colors.divider,
     borderBottomWidth: 1,
     flexDirection: 'row',
@@ -941,10 +960,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   emptyFeedbackCard: {
-    ...shadows.soft,
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radius.lg,
+    borderWidth: 1,
     gap: spacing.sm,
     justifyContent: 'center',
     minHeight: 230,
@@ -963,42 +983,19 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.md,
     lineHeight: typography.lineHeight.md,
   },
-  fixedHeader: {
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderBottomColor: colors.divider,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 62,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.md,
-  },
-  headerDate: {
-    color: colors.textPrimary,
-    fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.md,
-    lineHeight: typography.lineHeight.md,
-    textAlign: 'center',
-  },
-  headerEyebrow: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.medium,
-    fontSize: typography.fontSize.xs,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'center',
-  },
   headerIconButton: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: colors.headerControlSurface,
+    borderColor: colors.headerControlBorder,
     borderRadius: radius.pill,
-    height: 44,
+    borderWidth: 1,
+    height: 40,
     justifyContent: 'center',
-    width: 44,
-  },
-  headerTitleGroup: {
-    alignItems: 'center',
-    gap: 1,
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 5},
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    width: 40,
   },
   inlineError: {
     backgroundColor: 'rgba(255, 90, 77, 0.08)',
@@ -1017,7 +1014,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     alignItems: 'center',
     alignSelf: 'stretch',
-    backgroundColor: colors.danger,
+    backgroundColor: colors.black,
     borderRadius: radius.pill,
     flexDirection: 'row',
     gap: spacing.sm,
@@ -1059,8 +1056,8 @@ const styles = StyleSheet.create({
     width: 88,
   },
   scoreSelectionButtonSelected: {
-    backgroundColor: 'rgba(255, 90, 77, 0.10)',
-    borderColor: colors.danger,
+    backgroundColor: colors.black,
+    borderColor: colors.black,
   },
   scoreSelectionText: {
     color: colors.textSecondary,
@@ -1070,7 +1067,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scoreSelectionTextSelected: {
-    color: colors.danger,
+    color: colors.white,
   },
   screen: {
     backgroundColor: colors.background,
@@ -1086,10 +1083,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stateCard: {
-    ...shadows.soft,
     alignItems: 'center',
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
     borderRadius: radius.lg,
+    borderWidth: 1,
     gap: spacing.md,
     justifyContent: 'center',
     minHeight: 280,
