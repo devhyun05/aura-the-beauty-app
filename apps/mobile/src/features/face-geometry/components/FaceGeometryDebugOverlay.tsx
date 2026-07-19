@@ -22,10 +22,17 @@ function colorFor(label: string): string {
   return '#f59e0b';
 }
 
-export function FaceGeometryDebugOverlay({result}: {result: FaceGeometryResult}) {
+export function FaceGeometryDebugOverlay({
+  familyFilter,
+  result,
+}: {
+  familyFilter?: (label: string) => boolean;
+  result: FaceGeometryResult;
+}) {
   const width = result.sourceImage.width;
   const height = result.sourceImage.height;
-  const anchors = result.debugAnchors ?? [];
+  const all = result.debugAnchors ?? [];
+  const anchors = familyFilter ? all.filter(anchor => familyFilter(anchor.label)) : all;
 
   if (width <= 0 || height <= 0 || anchors.length === 0) {
     return null;
