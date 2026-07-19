@@ -935,15 +935,9 @@ export function FaceAnalysisReportPreviewRouteScreen({
         sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
         verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
       />
-      {__DEV__ && selectedFaceCapture ? (
+      {__DEV__ && selectedFaceGeometry2d ? (
         <Pressable
-          onPress={() =>
-            navigation.navigate('FaceGeometryDebug', {
-              captureId: selectedFaceCapture.photoCaptureId,
-              imageUri: selectedFaceCapture.imageUri,
-              sessionId: selectedFaceCapture.photoCaptureId,
-            })
-          }
+          onPress={() => navigation.navigate('FaceGeometryDebug')}
           style={styles.devFaceGeometryDebugButton}>
           <Text style={styles.devFaceGeometryDebugButtonLabel}>▷ 기하검증</Text>
         </Pressable>
@@ -953,17 +947,9 @@ export function FaceAnalysisReportPreviewRouteScreen({
 }
 
 // __DEV__ 전용: Face 2D 지오메트리(눈꼬리·눈썹선·roll) 오버레이 검증 화면.
-export function FaceGeometryDebugRouteScreen({
-  route,
-}: RootScreenProps<'FaceGeometryDebug'>) {
-  const {captureId, imageUri, sessionId} = route.params;
-  return (
-    <FaceGeometryDebugScreen
-      captureId={captureId}
-      imageUri={imageUri}
-      sessionId={sessionId}
-    />
-  );
+// 결과는 화면이 flow state(selectedFaceGeometry2d)에서 직접 읽으므로 param 불필요.
+export function FaceGeometryDebugRouteScreen() {
+  return <FaceGeometryDebugScreen />;
 }
 
 function FaceAnalysisReportBottomNav({
