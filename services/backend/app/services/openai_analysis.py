@@ -914,6 +914,47 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
 
 FACE_ANALYSIS_TOOL_SCHEMA = _build_face_analysis_tool_schema()
 
+# ── 팬아웃(Phase 4) 스키마 스캐폴딩 ─────────────────────────────────────────
+# 단일 소스(FACE_ANALYSIS_TOOL_SCHEMA)에서 부분집합으로 파생해 드리프트를 원천 차단.
+# 앵커 콜이 공유값(faceShape/skinType/recommendedMood)을 단독 저작하고, A/B는 그 3필드를
+# 빼서 top-level 키가 disjoint → merge는 shallow update로 자명. 검증은 merge 후 전체
+# 결과에 기존 _validate_analysis_result_before_normalization 1회로 재사용한다.
+ANCHOR_FIELD_KEYS = ("faceShape", "skinType", "recommendedMood")
+PERCEPTION_FIELD_KEYS = (
+  "summary",
+  "shortSummary",
+  "skinAnalysisSummary",
+  "regionNotes",
+  "impressionNotes",
+)
+PRESCRIPTION_FIELD_KEYS = (
+  "baseMakeupGuide",
+  "makeupGuideline",
+  "recommendedMakeups",
+  "stylingLooks",
+)
+
+
+def _subset_face_analysis_schema(keys: tuple[str, ...]) -> dict[str, Any]:
+  properties = FACE_ANALYSIS_TOOL_SCHEMA["properties"]
+  return _obj({key: properties[key] for key in keys}, list(keys))
+
+
+ANCHOR_TOOL_SCHEMA = _subset_face_analysis_schema(ANCHOR_FIELD_KEYS)
+PERCEPTION_TOOL_SCHEMA = _subset_face_analysis_schema(PERCEPTION_FIELD_KEYS)
+PRESCRIPTION_TOOL_SCHEMA = _subset_face_analysis_schema(PRESCRIPTION_FIELD_KEYS)
+
+# 드리프트 가드(임포트 시 즉시 실패): 3그룹 키가 서로 겹치지 않고 합집합이 전체 required와
+# 정확히 일치해야 한다. 전체 스키마에 필드를 추가하고 그룹 배정을 빠뜨리면 여기서 잡힌다.
+_FANOUT_GROUP_KEYS = ANCHOR_FIELD_KEYS + PERCEPTION_FIELD_KEYS + PRESCRIPTION_FIELD_KEYS
+if len(_FANOUT_GROUP_KEYS) != len(set(_FANOUT_GROUP_KEYS)):
+  raise RuntimeError("fan-out 스키마 그룹 키가 겹칩니다(anchor/perception/prescription).")
+if set(_FANOUT_GROUP_KEYS) != set(FACE_ANALYSIS_TOOL_SCHEMA["required"]):
+  raise RuntimeError(
+    "fan-out 스키마 그룹의 합집합이 FACE_ANALYSIS_TOOL_SCHEMA required와 불일치합니다. "
+    "전체 스키마에 필드를 추가했다면 anchor/perception/prescription 중 하나에 배정하세요.",
+  )
+
 DEFAULT_IMPRESSION_AXES = (
   {"key": "softness", "leftLabel": "부드러움", "rightLabel": "또렷함", "value": 0.0},
   {"key": "vividness", "leftLabel": "차분함", "rightLabel": "화사함", "value": 0.0},
