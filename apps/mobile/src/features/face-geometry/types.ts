@@ -22,6 +22,8 @@ export type FaceGeometryMetric = {
 // 명명 기준: 피사체(anatomical) 기준 — Left/Right 는 피사체 자신의 좌/우.
 // 각도(deg) 지표의 부호는 좌우 mirror 정규화되어 있다(양수 = 꼬리/외측이 올라감).
 export const FACE_GEOMETRY_METRIC_KEYS = [
+  'browApexRatioLeft',
+  'browApexRatioRight',
   'browSlopeLeftDeg',
   'browSlopeRightDeg',
   'canthalTiltLeftDeg',

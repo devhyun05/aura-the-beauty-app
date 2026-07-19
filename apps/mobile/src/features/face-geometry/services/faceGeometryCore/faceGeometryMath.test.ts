@@ -350,4 +350,22 @@ function buildBaseMap(): PixelLandmarkMap {
   expectClose(m3.outerCanthalAngleRightDeg.value, 90, 'convergence without roll gate', 0.01);
 }
 
+// ── 14. 눈썹 봉우리 비율: 중앙(3/5 지점)이 최고점이면 호길이 비율 0.5 ───────────
+{
+  const map = buildBaseMap();
+  // 상연 edge medial→lateral 5점을 등간격 x + 가운데가 최고(min y)로 세팅
+  // 우: medial 107 x=460 → lateral 70 x=380 (medial x 큼). 가운데(105)만 y 낮게.
+  const edgeR = BROW_UPPER_EDGE_RIGHT_INDICES; // [107,66,105,63,70]
+  const xsR = [460, 440, 420, 400, 380];       // medial→lateral 등간격 20px
+  const ysR = [360, 355, 340, 355, 360];       // 가운데 최고점
+  edgeR.forEach((idx, i) => map.set(idx, {x: xsR[i], y: ysR[i]}));
+  const m = computeFaceGeometryMetrics({map, rollCorrectionApplied: true});
+  // 등간격이므로 가운데(index 2)의 호길이 비율 = 2/4 = 0.5 (y 편차는 x 간격 대비 작아 근사)
+  expectClose(m.browApexRatioRight.value, 0.5, 'brow apex ratio center', 0.02);
+
+  // roll 미보정이면 null
+  const m2 = computeFaceGeometryMetrics({map, rollCorrectionApplied: false});
+  expectEqual(m2.browApexRatioRight.value, null, 'brow apex null without roll');
+}
+
 console.log('faceGeometryMath.test.ts passed');

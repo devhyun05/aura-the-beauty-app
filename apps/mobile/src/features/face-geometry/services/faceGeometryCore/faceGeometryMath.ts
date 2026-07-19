@@ -12,6 +12,8 @@ import {FACE_GEOMETRY_METRIC_KEYS} from '../../types';
 import {
   BROW_CORE_LEFT_INDICES,
   BROW_CORE_RIGHT_INDICES,
+  BROW_UPPER_EDGE_LEFT_INDICES,
+  BROW_UPPER_EDGE_RIGHT_INDICES,
   CANTHAL_TANGENT_INDICES,
   FACE_GEOMETRY_LANDMARK_INDICES,
 } from './landmarkIndices';
@@ -173,6 +175,29 @@ function browSlopeDeg(
   return metric('deg', round(deg, 2));
 }
 
+// 눈썹 상연 edge(medial→lateral)에서 최고점(y 최소)을 apex 로, 그 지점의 호길이 비율
+// (0=medial, 1=lateral)을 반환. slope 한 개보다 형태(어디서 솟는가)를 보존한다.
+function browApexRatioMetric(edge: PixelPoint[]): FaceGeometryMetric {
+  if (edge.length < 3) {
+    return unavailable('ratio', 'brow_edge_insufficient');
+  }
+  const cum: number[] = [0];
+  for (let i = 1; i < edge.length; i++) {
+    cum.push(cum[i - 1] + distance(edge[i - 1], edge[i]));
+  }
+  const total = cum[cum.length - 1];
+  if (!(total > GEOMETRY_EPSILON)) {
+    return unavailable('ratio', 'brow_length_degenerate');
+  }
+  let apex = 0;
+  for (let i = 1; i < edge.length; i++) {
+    if (edge[i].y < edge[apex].y) {
+      apex = i;
+    }
+  }
+  return metric('ratio', round(cum[apex] / total, 4));
+}
+
 // 상꺼풀 ↔ 눈썹 하연 최저점(링에서 y 최대 = 눈에 가장 가까운 점)의 수직거리.
 function eyeBrowGapMetric(
   upperLid: PixelPoint,
@@ -199,6 +224,8 @@ export type ComputeFaceGeometryMetricsInput = {
 };
 
 const ROLL_SENSITIVE_KEYS: readonly FaceGeometryMetricKey[] = [
+  'browApexRatioLeft',
+  'browApexRatioRight',
   'browSlopeLeftDeg',
   'browSlopeRightDeg',
   'canthalTiltLeftDeg',
@@ -346,6 +373,15 @@ export function computeFaceGeometryMetrics({
   }
   if (browRingRight) {
     metrics.browSlopeRightDeg = browSlopeDeg(browRingRight, 'right');
+  }
+
+  const browEdgeRight = getRing(BROW_UPPER_EDGE_RIGHT_INDICES);
+  if (browEdgeRight) {
+    metrics.browApexRatioRight = browApexRatioMetric(browEdgeRight);
+  }
+  const browEdgeLeft = getRing(BROW_UPPER_EDGE_LEFT_INDICES);
+  if (browEdgeLeft) {
+    metrics.browApexRatioLeft = browApexRatioMetric(browEdgeLeft);
   }
 
   if (upperLidL && browRingLeft && eyeWidthLeftPx !== null) {
