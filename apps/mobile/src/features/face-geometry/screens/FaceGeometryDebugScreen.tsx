@@ -47,7 +47,7 @@ export function FaceGeometryDebugScreen({
       : 3 / 4;
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView contentContainerStyle={styles.content} style={styles.screen}>
       <Text style={styles.status}>
         status={result.status} · roll={result.rollCorrection.applied ? `보정 ${result.rollCorrection.rollCorrectionDeg}°` : `미적용(${result.rollCorrection.skippedReason ?? '-'})`}
       </Text>
@@ -67,10 +67,11 @@ export function FaceGeometryDebugScreen({
 }
 
 const styles = StyleSheet.create({
-  center: {alignItems: 'center', flex: 1, justifyContent: 'center'},
+  center: {alignItems: 'center', backgroundColor: '#0f172a', flex: 1, justifyContent: 'center'},
   content: {padding: 16},
   metricRow: {color: '#cbd5e1', fontFamily: 'Menlo', fontSize: 12, paddingVertical: 2},
   metrics: {marginTop: 16},
+  screen: {backgroundColor: '#0f172a', flex: 1},
   stage: {borderRadius: 12, overflow: 'hidden', width: '100%'},
   status: {color: '#e2e8f0', fontSize: 13, marginBottom: 10},
 });
