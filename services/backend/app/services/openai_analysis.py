@@ -1544,8 +1544,21 @@ class OpenAIAnalysisService:
     return [dict(by_role[role]) for role in MAKEUP_RECOMMENDATION_ROLES]
 
   def _build_analysis_prompt(self, payload: dict[str, Any]) -> str:
-    metadata = _safe_analysis_prompt_metadata(payload)
+    # 정적 지시문 + 동적 메타데이터를 이어붙인 최종 프롬프트(바이트 동일 유지).
+    # 캐싱(Phase 3)·팬아웃(Phase 4)이 두 조각을 각각 재사용할 수 있게 분리했다.
+    return (
+      f"{self._analysis_static_instructions()}"
+      f"{self._analysis_dynamic_metadata(payload)}"
+    )
 
+  def _analysis_dynamic_metadata(self, payload: dict[str, Any]) -> str:
+    # 요청별로 바뀌는 측정 메타데이터(사진 축소본은 별도 이미지 블록). 캐시 불가 서픽스.
+    metadata = _safe_analysis_prompt_metadata(payload)
+    return f"요청 메타데이터: {json.dumps(metadata, ensure_ascii=False)}"
+
+  def _analysis_static_instructions(self) -> str:
+    # 매 요청 동일한 정적 접두부(지시문 + 출력 필드 가이드). Phase 3에서 이 블록에
+    # cache_control을 부착해 prefill 비용을 절감한다.
     return (
       "Act as a professional personal color analyst, makeup artist, hairstylist, and image consultant. "
       "사용자의 얼굴 사진을 분석해서 개인 맞춤 뷰티 분석 보고서를 만들어줘. "
@@ -1628,7 +1641,6 @@ class OpenAIAnalysisService:
       "why는 이 사용자의 실측 특징(눈꼬리 방향·입술 두께·퍼스널컬러 등)과 연결해 왜 어울리는지 한 문장)을 채워. "
       "아래는 값 예시가 아니라 필드 구조 설명이야. 설명 문구를 복사하지 말고, 반드시 사진을 분석해서 실제 값으로 채워:\n"
       f"{ANALYSIS_OUTPUT_FIELD_GUIDE}\n"
-      f"요청 메타데이터: {json.dumps(metadata, ensure_ascii=False)}"
     )
 
   def _parse_json_output(self, output_text: str) -> dict[str, Any]:
