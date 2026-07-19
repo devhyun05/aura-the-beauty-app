@@ -182,7 +182,7 @@ async def test_analysis_completion_notification_precedes_slow_post_processing(
     def __init__(self, _settings: Settings) -> None:
       pass
 
-    async def analyze_text(self, _request_payload):
+    async def analyze_text(self, _request_payload, on_anchor=None):
       return {
         "recommendedMakeups": [{"title": "Daily look"}],
         "shortSummary": "Report ready",
