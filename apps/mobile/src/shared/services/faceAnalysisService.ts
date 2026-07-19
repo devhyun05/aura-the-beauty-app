@@ -24,6 +24,7 @@ import type {
 import {
   buildFaceAnalysisRequestPayload,
 } from '../../features/face-capture/services/faceCaptureUploadContract';
+import {subscribeAnalysisReportReady} from './analysisReportReadySignal';
 import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from './backendApi';
 
 type FaceAnalysisCaptureInput = {
@@ -578,21 +579,31 @@ function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
   );
 }
 
-function delay(ms: number, signal?: AbortSignal): Promise<void> {
+// wakeReportId를 주면 해당 리포트의 WS 완료 이벤트(analysis_report_completed)에도
+// 조기 resolve한다 — 다음 폴을 기다리지 않고 즉시 재조회(감지지연 ≈0). abort와 달리
+// 에러를 던지지 않으므로, resolve 후 루프가 완료를 재확인해 정상 반환한다.
+function delay(
+  ms: number,
+  signal?: AbortSignal,
+  wakeReportId?: string,
+): Promise<void> {
   return new Promise(resolve => {
     if (signal?.aborted) {
       resolve();
       return;
     }
-    const onAbort = () => {
+    const finish = () => {
       clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', onAbort);
+      unsubscribeWake?.();
       resolve();
     };
-    const timeoutId = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
+    const onAbort = () => finish();
+    const timeoutId = setTimeout(finish, ms);
     signal?.addEventListener('abort', onAbort, {once: true});
+    const unsubscribeWake = wakeReportId
+      ? subscribeAnalysisReportReady(wakeReportId, finish)
+      : undefined;
   });
 }
 
@@ -703,6 +714,7 @@ async function waitForCompleteAnalysisReport(
     await delay(
       Math.min(nextPollMs, ANALYSIS_REPORT_POLL_TIMEOUT_MS - elapsedMs),
       signal,
+      currentJob.id,
     );
 
     if (signal?.aborted) {

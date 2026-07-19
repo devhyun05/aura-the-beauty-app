@@ -3,6 +3,7 @@ import type {NotificationResponse} from 'expo-notifications';
 import {AppState} from 'react-native';
 
 import {useAuthSession} from '../../auth';
+import {notifyAnalysisReportReady} from '../../../shared/services/analysisReportReadySignal';
 import {
   deleteAppNotification,
   getBackgroundReportNotificationsEnabled,
@@ -176,6 +177,16 @@ export function NotificationCoordinator({
         }
 
         const {notification} = event;
+
+        // 얼굴 분석 완료 이벤트는 대기 중인 폴링 루프를 즉시 깨워 다음 폴을 건너뛰게
+        // 한다(감지지연 ≈0). 배너/뱃지 처리와 독립적으로, 중복 가드 이전에 신호.
+        // data는 WS에서 정규화 전 형태(snake_case·문자열 가능)라 normalize 후 읽는다.
+        if (notification.notificationType === 'analysis_report_completed') {
+          const {reportId} = normalizeAppNotificationData(notification.data);
+          if (reportId) {
+            notifyAnalysisReportReady(reportId);
+          }
+        }
 
         if (realtimeNotificationIds.current.has(notification.id)) {
           return;
