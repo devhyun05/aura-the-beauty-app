@@ -11,6 +11,7 @@ import React, { useCallback, useState } from 'react';
 import {
   Alert,
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +28,14 @@ import ParamSlider from './ParamSlider';
 import ColorSwatches from './ColorSwatches';
 import ColorWheel from './ColorWheel';
 import FinishStudio from './FinishStudio';
+import ExpertParamControls from './ExpertParamControls';
+import {
+  paramsForRegion,
+} from '../composer/expertParams';
+import type {
+  ExpertOverrides,
+  ExpertParamKey,
+} from '../composer/expertParams';
 import {
   AXIS_LABELS,
   FINISHES,
@@ -44,7 +53,9 @@ import {
 } from '../composer/regions';
 import type {
   AxisKey,
+  AxisPresentation,
   ComposerControl,
+  DomainOption,
   RegionDef,
   FinishBundle,
   FinishDetailKeys,
@@ -54,23 +65,31 @@ import type {
   TextureMapRegion,
 } from '../composer/regions';
 import type { UserFinish } from '../storage/finishStore';
-import { fitFieldsOfRegion } from '../composer/fitSheets';
+import type {FitSheet} from '../composer/fitSheets';
 import {
   FAMILY_TEMPLATES,
   familiesRankedForRegion,
   findProduct,
+  addProductColorway,
+  normalizeProduct,
+  physicalKeysForRegion,
+  physicalOverridesForRoundTrip,
+  productFromLeafPhysicals,
   productsOfFamily,
+  resolveColorway,
+  translateProduct,
 } from '../composer/products';
 import type { ProductDef, ProductFamily } from '../composer/products';
 
 /** 상위 편집 탭(§5 개념 계층) — 제품(물감)·테크닉(붓질)·핏(맞춤). 6축은 이 3그룹
  *  아래 섹션으로 들어간다(분류체계 §5). UI 전용 그룹 — 데이터 모델(축) 무변경. */
-type TabKey = 'product' | 'technique' | 'fit';
+type TabKey = 'product' | 'technique' | 'fit' | 'expert';
 
 const GROUP_LABEL: Record<TabKey, string> = {
   product: '제품',
   technique: '테크닉',
   fit: '핏',
+  expert: '전문가',
 };
 /** 그룹별 하위 축(§5): 제품=색·텍스처(제형)·마감 / 테크닉=모양·농도(+가장자리 프로파일). */
 const PRODUCT_AXES: AxisKey[] = ['color', 'texture', 'finish'];
@@ -165,9 +184,17 @@ import {
 const WHEEL_THUMB = require('../assets/color-wheel.png');
 
 // 눈썹 슬롯 공통 축 — 편집 시 트리의 모든 눈썹 잎에 브로드캐스트(형제 잎 덮어쓰기 회귀 방지).
-const BROW_SHARED_KEYS: (keyof FilterParams)[] = ['browShape', 'browThickness', 'browArch'];
+const BROW_SHARED_KEYS: (keyof FilterParams)[] = [
+  'browShape',
+  'browThicknessProfile',
+  'browThickness',
+  'browExpandLower',
+  'browExpandUpper',
+  'browArch',
+];
 
 interface Props {
+  mode?: 'detail' | 'expert';
   /** 작업본 룩 트리 — null이면 빈 조합(원본에서 시작) */
   tree: LookNode | null;
   /** 시스템+사용자 병합 라이브러리 — ⇄ 교체 후보 */
@@ -212,10 +239,18 @@ interface Props {
   onLeafFit?: (leafId: string, region: RegionKey) => void;
   /** 내 제품(A12 후반) — 스튜디오 저작 커스텀 제품(제품 칩에 시중품과 함께 노출) */
   userProducts?: ProductDef[];
+  /** 제품 라이브러리+현재 트리를 한 트랜잭션으로 교체 — App가 정규화·영속·방출한다. */
+  onCommitProductsAndTree?: (products: ProductDef[], tree: LookNode) => void;
   /** 핏 시트 목록(§5 A13) — 룩 노드에 핏 지정 배지용(이름만) */
-  fitSheets?: { id: string; name: string }[];
+  fitSheets?: FitSheet[];
+  /** 기존 mainId의 표면명은 "내 얼굴 프로필". 이 id와 다른 유효 fitRef만 룩 예외다. */
+  mainFitId?: string | null;
   /** 룩 노드에 핏 시트 지정/해제 — node.fitRef 설정(하위룩>룩>메인 캐스케이드) */
   onSetFitRef?: (nodeId: string, sheetId: string | null) => void;
+  expertOverrides?: ExpertOverrides;
+  onChangeExpertOverride?: (key: ExpertParamKey, value: number) => void;
+  onResetExpertOverride?: (key: ExpertParamKey) => void;
+  expertError?: string | null;
 }
 
 // ── 표시용 헬퍼 ──────────────────────────────────────────────────────────────
@@ -227,6 +262,30 @@ function firstLeafOf(node: TreeChild): ProductLeaf | null {
     if (found) return found;
   }
   return null;
+}
+
+function selectLeafProduct(
+  node: LookNode,
+  leafId: string,
+  identity: Pick<ProductLeaf, 'productId' | 'colorwayId' | 'technique'>,
+  clearKeys: readonly (keyof FilterParams)[],
+  retainedParams: Partial<FilterParams> = {},
+): LookNode {
+  let changed = false;
+  const kids = node.kids.map(child => {
+    if (isLeaf(child)) {
+      if (child.id !== leafId) return child;
+      changed = true;
+      const params = {...child.params};
+      clearKeys.forEach(key => delete params[key]);
+      Object.assign(params, retainedParams);
+      return {...child, ...identity, params, dirty: true};
+    }
+    const next = selectLeafProduct(child, leafId, identity, clearKeys, retainedParams);
+    if (next !== child) changed = true;
+    return next;
+  });
+  return changed ? {...node, kids, dirty: true} : node;
 }
 
 /** 잎의 대표 농도(%) — 부위 onKeys 중 최대값 */
@@ -278,7 +337,27 @@ function pathToLeaf(root: LookNode, leafId: string): string | null {
   return walk(root) ? segs.join(' › ') : null;
 }
 
+interface FitExceptionSource {
+  nodeId: string;
+}
+
+/** 표시 노드에서 root 방향으로 올라가며 실제 캐스케이드가 참조하는 가장 가까운
+ * 유효 non-main 시트를 찾는다. main/유실 ref는 예외가 아니므로 건너뛴다. */
+function fitExceptionSource(
+  nearestFirst: LookNode[],
+  sheets: FitSheet[] | undefined,
+  mainId: string | null,
+): FitExceptionSource | null {
+  const validIds = new Set((sheets ?? []).map(sheet => sheet.id));
+  for (const node of nearestFirst) {
+    const ref = node.fitRef;
+    if (ref && ref !== mainId && validIds.has(ref)) return {nodeId: node.id};
+  }
+  return null;
+}
+
 export default function ComposerSheet({
+  mode = 'detail',
   tree,
   library,
   currentParams,
@@ -304,15 +383,25 @@ export default function ComposerSheet({
   onPromoteGroup,
   onLeafFit,
   userProducts,
+  onCommitProductsAndTree,
   fitSheets,
+  mainFitId = null,
   onSetFitRef,
+  expertOverrides = {},
+  onChangeExpertOverride,
+  onResetExpertOverride,
+  expertError,
 }: Props) {
+  const [saveProductDraft, setSaveProductDraft] = useState<{
+    leafId: string;
+    family: ProductFamily;
+    sourceId?: string;
+  } | null>(null);
   // UI 상태 — 트리는 불변 재구성돼도 노드 id가 유지되므로 id 기반으로 기억한다
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [swapId, setSwapId] = useState<string | null>(null);
   // 세부부위 룩 ⇄ — 열린 sub id ("아이라인룩만 갈아끼우기" 픽커)
   const [subSwapId, setSubSwapId] = useState<string | null>(null);
-  const [fitPickId, setFitPickId] = useState<string | null>(null);
   const [selectedLeafId, setSelectedLeafId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [axis, setAxis] = useState<TabKey | null>(null);
@@ -453,6 +542,27 @@ export default function ComposerSheet({
     const node = findNode(tree, selectedLeafId);
     return node && isLeaf(node) ? node : null;
   })();
+  const saveLeaf = (() => {
+    if (!tree || !saveProductDraft) return null;
+    const node = findNode(tree, saveProductDraft.leafId);
+    return node && isLeaf(node) ? node : null;
+  })();
+  const saveSource = saveLeaf?.productId
+    ? findProduct(saveLeaf.productId, userProducts)
+    : undefined;
+  const saveResolved = saveLeaf
+    ? saveSource
+      ? {
+          ...translateProduct(
+            saveSource,
+            saveLeaf.technique ?? {strength: 1},
+            saveLeaf.region,
+            saveLeaf.colorwayId,
+          ),
+          ...saveLeaf.params,
+        }
+      : saveLeaf.params
+    : {};
 
   const decoFull = decoLeafCount(tree) >= MAX_OVERLAY_LAYERS;
 
@@ -500,11 +610,8 @@ export default function ComposerSheet({
             </Text>
           </TouchableOpacity>
         )}
-        {/* 이 겹 핏 조정(§5 A13) — 겹id 셀렉터 편집으로 승격(골드=공간 조작 규약).
-            핏이 걸릴 수 있는 잎만(골드 필드 보유 또는 데코=오버레이 배치). */}
-        {onLeafFit &&
-          (isDecoRegion(leaf.region) ||
-            fitFieldsOfRegion(leaf.region).length > 0) && (
+        {/* 이 겹 핏 조정(§5 A13) — fitTraits가 선언한 부위만 겹id 셀렉터로 승격. */}
+        {onLeafFit && rdef.fitTraits && (
           <TouchableOpacity
             style={styles.rowBtn}
             onPress={() => onLeafFit(leaf.id, leaf.region)}
@@ -615,10 +722,36 @@ export default function ComposerSheet({
     );
   };
 
+  const renderFitException = (
+    displayNodeId: string,
+    source: FitExceptionSource | null,
+  ) => {
+    if (!source || !onSetFitRef) return null;
+    const inherited = source.nodeId !== displayNodeId;
+    return (
+      <View style={styles.exceptionPill}>
+        <Text style={styles.fitBadge}>이 룩 예외</Text>
+        <TouchableOpacity
+          accessibilityLabel={inherited ? '공통 룩 예외 해제' : '룩 예외 해제'}
+          accessibilityHint={inherited
+            ? '상위 룩을 함께 쓰는 다른 부위에도 적용됩니다'
+            : undefined}
+          onPress={() => onSetFitRef(source.nodeId, null)}>
+          <Text style={styles.exceptionClear}>{inherited ? '공통 해제' : '해제'}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   // 부위룩 섹션 — 그룹 안/밖 어디서든 같은 렌더(그룹은 표시 래퍼일 뿐).
   const renderRegion = (region: LookNode) => {
     const collapsed = expanded.has(`sec:${region.id}`);
     const checked = selected.has(region.id);
+    const regionException = fitExceptionSource(
+      tree ? [region, tree] : [region],
+      fitSheets,
+      mainFitId,
+    );
     // 이미 다른 그룹에 속한 region은 새 그룹 다중선택 대상에서 제외(다중 소속 금지).
     const alreadyGrouped = !!tree && !!groupOfRegion(tree, region.id);
     return (
@@ -651,30 +784,8 @@ export default function ComposerSheet({
               {region.dirty && <Text style={styles.dirtyStar}>*</Text>}
             </Text>
             {region.owner === 'user' && <Text style={styles.ownBadge}>내 룩</Text>}
-            {region.fitRef && (
-              <Text style={styles.fitBadge}>
-                핏·{fitSheets?.find(f => f.id === region.fitRef)?.name ?? '?'}
-              </Text>
-            )}
           </TouchableOpacity>
-          {onSetFitRef && (fitSheets?.length ?? 0) > 0 && (
-            <TouchableOpacity
-              style={styles.rowBtn}
-              onPress={() =>
-                setFitPickId(prev => (prev === region.id ? null : region.id))
-              }
-            >
-              <Text
-                style={[
-                  styles.rowBtnText,
-                  { color: GOLD },
-                  (fitPickId === region.id || region.fitRef) && styles.swapOn,
-                ]}
-              >
-                핏
-              </Text>
-            </TouchableOpacity>
-          )}
+          {renderFitException(region.id, regionException)}
           {/* ＋겹은 그룹(슬롯) 헤더에서 제거(사용자 결정) — 겹은 각 세부부위 행의
               ＋겹으로 쌓는다(층위 명확). */}
           <TouchableOpacity
@@ -734,54 +845,6 @@ export default function ComposerSheet({
           </View>
         )}
 
-        {/* 핏 지정 패널(§5 A13) — 이 룩에 붙일 핏 시트 선택. 하위룩>룩>메인 캐스케이드,
-            공유 시 벗겨짐. 골드=공간 조작 시각 규약. */}
-        {fitPickId === region.id && onSetFitRef && (
-          <View style={styles.swapPanel}>
-            <Text style={styles.swapTitle}>
-              "{region.name}"에 붙일 핏 — 이 룩 입을 때 우선 적용
-            </Text>
-            <View style={styles.swapChips}>
-              <TouchableOpacity
-                style={[styles.swapChip, !region.fitRef && styles.swapChipOn]}
-                onPress={() => {
-                  onSetFitRef(region.id, null);
-                  setFitPickId(null);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.swapChipText,
-                    !region.fitRef && styles.swapChipTextOn,
-                  ]}
-                >
-                  없음(메인 핏)
-                </Text>
-              </TouchableOpacity>
-              {(fitSheets ?? []).map(fs => {
-                const on = fs.id === region.fitRef;
-                return (
-                  <TouchableOpacity
-                    key={fs.id}
-                    style={[styles.swapChip, on && styles.swapChipOn]}
-                    onPress={() => {
-                      onSetFitRef(region.id, fs.id);
-                      setFitPickId(null);
-                    }}
-                  >
-                    <Text
-                      style={[styles.swapChipText, on && styles.swapChipTextOn]}
-                      numberOfLines={1}
-                    >
-                      {fs.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
         {/* 세부부위 룩(sub) 3단 — 슬롯 그룹 > 세부부위 룩 > 겹(분류체계 4층과 1:1).
             겹 개수와 무관하게 항상 [세부부위 헤더] + [레이어 행(들여쓰기)] — 1겹도
             레이어층을 표현(사용자 결정). 헤더가 세부부위 관리(＋겹·⇄·삭제), 레이어
@@ -792,6 +855,11 @@ export default function ComposerSheet({
             const leaves = sub.kids.filter(isLeaf);
             if (leaves.length === 0) return null;
             const rdef = REGION_MAP[leaves[0].region];
+            const subException = fitExceptionSource(
+              tree ? [sub, region, tree] : [sub, region],
+              fitSheets,
+              mainFitId,
+            );
             return (
               <View key={sub.id}>
                 <View
@@ -807,11 +875,7 @@ export default function ComposerSheet({
                     {subDisplayName(sub, rdef)}
                     {sub.dirty && <Text style={styles.dirtyStar}>*</Text>}
                   </Text>
-                  {sub.fitRef && (
-                    <Text style={styles.fitBadge}>
-                      핏·{fitSheets?.find(f => f.id === sub.fitRef)?.name ?? '?'}
-                    </Text>
-                  )}
+                  {renderFitException(sub.id, subException)}
                   {leaves.length > 1 && (
                     <Text style={styles.countBadge}>×{leaves.length}겹</Text>
                   )}
@@ -821,24 +885,6 @@ export default function ComposerSheet({
                   >
                     <Text style={styles.rowBtnText}>＋겹</Text>
                   </TouchableOpacity>
-                  {onSetFitRef && (fitSheets?.length ?? 0) > 0 && (
-                    <TouchableOpacity
-                      style={styles.rowBtn}
-                      onPress={() =>
-                        setFitPickId(prev => (prev === sub.id ? null : sub.id))
-                      }
-                    >
-                      <Text
-                        style={[
-                          styles.rowBtnText,
-                          { color: GOLD },
-                          (fitPickId === sub.id || sub.fitRef) && styles.swapOn,
-                        ]}
-                      >
-                        핏
-                      </Text>
-                    </TouchableOpacity>
-                  )}
                   <TouchableOpacity
                     style={styles.rowBtn}
                     onPress={() =>
@@ -867,53 +913,6 @@ export default function ComposerSheet({
                   </TouchableOpacity>
                 </View>
                 {renderSubSwap(sub, rdef.key)}
-                {/* 세부룩 핏 지정 패널(§5 A13) — 세부룩>부위룩>메인 캐스케이드.
-                    null로 지우면 부위룩(있으면)→메인 순으로 폴스루. */}
-                {fitPickId === sub.id && onSetFitRef && (
-                  <View style={styles.swapPanel}>
-                    <Text style={styles.swapTitle}>
-                      "{subDisplayName(sub, rdef)}"에 붙일 핏 — 이 세부부위에 우선 적용
-                    </Text>
-                    <View style={styles.swapChips}>
-                      <TouchableOpacity
-                        style={[styles.swapChip, !sub.fitRef && styles.swapChipOn]}
-                        onPress={() => {
-                          onSetFitRef(sub.id, null);
-                          setFitPickId(null);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.swapChipText,
-                            !sub.fitRef && styles.swapChipTextOn,
-                          ]}
-                        >
-                          없음(상위 룩 따름)
-                        </Text>
-                      </TouchableOpacity>
-                      {(fitSheets ?? []).map(fs => {
-                        const on = fs.id === sub.fitRef;
-                        return (
-                          <TouchableOpacity
-                            key={fs.id}
-                            style={[styles.swapChip, on && styles.swapChipOn]}
-                            onPress={() => {
-                              onSetFitRef(sub.id, fs.id);
-                              setFitPickId(null);
-                            }}
-                          >
-                            <Text
-                              style={[styles.swapChipText, on && styles.swapChipTextOn]}
-                              numberOfLines={1}
-                            >
-                              {fs.name}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                )}
                 {/* 겹 번호(li)는 바르는 순서 기준 유지 — 표시만 역순(1겹이 맨 아래) */}
                 {[...leaves].reverse().map((leaf, ri) => (
                   <View key={leaf.id}>
@@ -1161,13 +1160,19 @@ export default function ComposerSheet({
               })()
             )}
 
-            <TouchableOpacity style={styles.addRow} onPress={() => setPickerOpen(true)}>
-              <Text style={styles.addRowText}>＋ 부위 룩 추가</Text>
-            </TouchableOpacity>
             <Text style={styles.hint}>
               아래=먼저 바른 층 · 행 탭=펼치기 · ⇄=교체 · ⋯=다른 부위에 쓰기 · 그룹=여러 부위 묶기
             </Text>
           </ScrollView>
+
+          {/* ＋부위 룩 추가 — 트리 스크롤 밖 고정 행(플로팅). 트리를 스크롤해도
+              항상 스크롤 영역 바로 아래 같은 위치에 뜬다(flexShrink:0로 축소 방지). */}
+          <TouchableOpacity
+            style={[styles.addRow, styles.addRowFloating]}
+            onPress={() => setPickerOpen(true)}
+          >
+            <Text style={styles.addRowText}>＋ 부위 룩 추가</Text>
+          </TouchableOpacity>
 
           {/* 축 편집기 — 잎(제품 적용 1회)의 6축. 경로 표시줄이 겹 위치를 보여준다 */}
           {selectedLeaf &&
@@ -1175,12 +1180,13 @@ export default function ComposerSheet({
             !isDecoRegion(selectedLeaf.region) &&
             !isLensRegion(selectedLeaf.region) && (
             <AxisEditor
+              mode={mode}
               leaf={selectedLeaf}
               path={pathToLeaf(tree, selectedLeaf.id)}
               axis={axis}
               onAxis={setAxis}
               onPatch={patch => {
-                // 눈썹 슬롯 공통 축(모양·두께·아치)은 전 눈썹 잎에 브로드캐스트,
+                // 눈썹 슬롯 공통 축(모양·굵기 프로파일·상하 커버·아치)은 전 눈썹 잎에 브로드캐스트,
                 // 나머지(색·농도 등 제품 고유)는 선택된 잎에만. 비눈썹 부위는 shared 빔.
                 const shared: Partial<FilterParams> = {};
                 const own: Partial<FilterParams> = {};
@@ -1203,6 +1209,19 @@ export default function ComposerSheet({
               onIdentity={patch =>
                 onChangeTree(updateLeaf(tree, selectedLeaf.id, patch))
               }
+              onSelectProduct={(product, colorwayId, clearKeys) =>
+                onChangeTree(selectLeafProduct(tree, selectedLeaf.id, {
+                  productId: product?.id,
+                  colorwayId,
+                  technique: selectedLeaf.technique ?? {strength: 0.8},
+                }, clearKeys))
+              }
+              onOpenSaveProduct={(family, source) => setSaveProductDraft({
+                leafId: selectedLeaf.id,
+                family,
+                sourceId: source?.id,
+              })}
+              canSaveProduct={!!onCommitProductsAndTree}
               userProducts={userProducts}
               onPickTexture={action => onPickTexture(action, selectedLeaf.id)}
               onPickMask={region => onPickMask(region, selectedLeaf.id)}
@@ -1219,6 +1238,10 @@ export default function ComposerSheet({
               onRemoveCatalogEntry={onRemoveCatalogEntry}
               userFinishes={userFinishes}
               onSaveFinish={onSaveFinish}
+              expertOverrides={expertOverrides}
+              onChangeExpertOverride={onChangeExpertOverride}
+              onResetExpertOverride={onResetExpertOverride}
+              expertError={expertError}
             />
           )}
           {selectedLeaf && tree && isDecoRegion(selectedLeaf.region) && selectedLeaf.overlay && (
@@ -1268,9 +1291,275 @@ export default function ComposerSheet({
                 />
               </View>
             )}
+          {saveProductDraft && saveLeaf && tree && onCommitProductsAndTree && (
+            <SaveAsProductSheet
+              leaf={saveLeaf}
+              initialFamily={saveProductDraft.family}
+              userProducts={userProducts ?? []}
+              compiledParams={saveResolved}
+              source={saveSource}
+              onCancel={() => setSaveProductDraft(null)}
+              onSave={({mode: saveMode, name, family, targetProductId, shadeName}) => {
+                const currentSource = saveSource;
+                const resolved = saveResolved;
+                if (saveMode === 'add') {
+                  const target = (userProducts ?? []).find(product =>
+                    product.id === targetProductId && product.family === family);
+                  const colorControl = (REGION_MAP[saveLeaf.region].axes.color ?? [])
+                    .find(control => control.type === 'swatches');
+                  if (!target || !colorControl || colorControl.type !== 'swatches') return;
+                  const color = resolved[colorControl.key];
+                  if (typeof color !== 'string') return;
+                  const updated = addProductColorway(target, {name: shadeName, color});
+                  const colorwayId = updated.colorways?.at(-1)?.id;
+                  const products = (userProducts ?? []).map(product =>
+                    product.id === updated.id ? updated : product);
+                  const retained = physicalOverridesForRoundTrip(
+                    saveLeaf,
+                    resolved,
+                    updated,
+                    colorwayId,
+                  );
+                  const nextTree = selectLeafProduct(tree, saveLeaf.id, {
+                    productId: updated.id,
+                    colorwayId,
+                    technique: saveLeaf.technique ?? {strength: 1},
+                  }, physicalKeysForRegion(saveLeaf.region), retained);
+                  onCommitProductsAndTree(products, nextTree);
+                } else {
+                  const product = productFromLeafPhysicals(
+                    saveLeaf,
+                    resolved,
+                    family,
+                    name,
+                    currentSource,
+                  );
+                  const retained = physicalOverridesForRoundTrip(saveLeaf, resolved, product);
+                  const nextTree = selectLeafProduct(tree, saveLeaf.id, {
+                    productId: product.id,
+                    colorwayId: product.defaultColorwayId,
+                    technique: saveLeaf.technique ?? {strength: 1},
+                  }, physicalKeysForRegion(saveLeaf.region), retained);
+                  onCommitProductsAndTree([...(userProducts ?? []), product], nextTree);
+                }
+                setSaveProductDraft(null);
+              }}
+            />
+          )}
         </>
       )}
     </View>
+  );
+}
+
+type SaveProductMode = 'new' | 'add';
+
+/** 정본 §3.2 — 이름·제품군·신규/컬렉션 추가를 확정한 뒤에만 원자 저장한다. */
+function SaveAsProductSheet({
+  leaf,
+  initialFamily,
+  userProducts,
+  compiledParams,
+  source,
+  onCancel,
+  onSave,
+}: {
+  leaf: ProductLeaf;
+  initialFamily: ProductFamily;
+  userProducts: ProductDef[];
+  compiledParams: Partial<FilterParams>;
+  source?: ProductDef;
+  onCancel: () => void;
+  onSave: (draft: {
+    mode: SaveProductMode;
+    name: string;
+    family: ProductFamily;
+    targetProductId?: string;
+    shadeName: string;
+  }) => void;
+}) {
+  const ranked = familiesRankedForRegion(leaf.region);
+  const inferred: ProductFamily = leaf.region === 'lip' && leaf.params.lipTexture === 2
+    ? 'lipTint'
+    : initialFamily;
+  const [name, setName] = useState(`${REGION_MAP[leaf.region].label} 제품`);
+  const [family, setFamily] = useState<ProductFamily>(inferred);
+  const [mode, setMode] = useState<SaveProductMode>('new');
+  const targets = userProducts.filter(product => product.family === family && product.base);
+  const [targetProductId, setTargetProductId] = useState<string | undefined>(
+    targets[0]?.id,
+  );
+  const [shadeName, setShadeName] = useState('새 색상');
+  const families = [...ranked.fit, ...ranked.others];
+  const colorCollectionApplicable = FAMILY_TEMPLATES[family].base != null;
+  const canSave = mode === 'new'
+    ? name.trim().length > 0
+    : colorCollectionApplicable
+      && !!targets.find(product => product.id === targetProductId)
+      && shadeName.trim().length > 0;
+  const preview = productFromLeafPhysicals(
+    leaf,
+    compiledParams,
+    family,
+    name || '미리보기',
+    source,
+    'usr:prod:preview',
+  );
+  const hasFinishLadder = (REGION_MAP[leaf.region].axes.finish ?? [])
+    .some(control => control.type === 'finish');
+  const hasSegmentsFinish = (REGION_MAP[leaf.region].axes.finish ?? [])
+    .some(control => control.type === 'segments');
+  const capturedChannels = [
+    preview.base && '색·농도',
+    preview.pearl && '펄',
+    preview.glitter?.length && '글리터',
+    preview.neon && '네온',
+    preview.texture !== undefined && '제형',
+    hasFinishLadder && '마감',
+    preview.finishDetail && '마감 세부',
+    preview.material && '재질',
+    preview.particleLayer && '입자',
+  ].filter(Boolean).join(', ');
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onCancel}>
+      <View style={styles.saveProductBackdrop}>
+        <View style={styles.saveProductSheet}>
+          <Text style={styles.axisSectionLabel}>현재 조합을 제품으로 저장</Text>
+          <TextInput
+            testID="save-product-name"
+            style={styles.saveProductInput}
+            value={name}
+            maxLength={24}
+            onChangeText={setName}
+            placeholder="제품 이름"
+            placeholderTextColor={TEXT_HINT}
+          />
+          <Text style={styles.noteText}>제품군 · {FAMILY_TEMPLATES[family].label}</Text>
+          {mode === 'new' ? (
+            <>
+              <Text style={styles.noteText}>
+                담기는 채널 · {capturedChannels || '없음'}
+              </Text>
+              {hasSegmentsFinish && (
+                <Text style={styles.noteText}>
+                  이 부위의 segments형 마감은 제품에 담기지 않습니다.
+                </Text>
+              )}
+            </>
+          ) : (
+            <Text style={styles.noteText}>추가되는 항목 · 색상, 셰이드 이름</Text>
+          )}
+          {!colorCollectionApplicable && (
+            <Text style={styles.noteText}>
+              이 제품군은 색상 컬렉션을 사용하지 않아 색상 추가 모드를 선택할 수 없습니다.
+            </Text>
+          )}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.identityRow}>
+              {families.map(candidate => (
+                <TouchableOpacity
+                  key={candidate}
+                  testID={`save-family-${candidate}`}
+                  accessibilityRole="button"
+                  accessibilityState={{selected: family === candidate}}
+                  style={[styles.identityChip, family === candidate && styles.identityChipOn]}
+                  onPress={() => {
+                    setFamily(candidate);
+                    if (!FAMILY_TEMPLATES[candidate].base) setMode('new');
+                    setTargetProductId(userProducts.find(
+                      p => p.family === candidate && p.base,
+                    )?.id);
+                  }}
+                >
+                  <Text style={styles.identityChipText}>{FAMILY_TEMPLATES[candidate].label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+          <View style={styles.identityRow}>
+            <TouchableOpacity
+              testID="save-mode-new"
+              accessibilityRole="button"
+              accessibilityState={{selected: mode === 'new'}}
+              style={[styles.identityChip, mode === 'new' && styles.identityChipOn]}
+              onPress={() => setMode('new')}
+            >
+              <Text style={styles.identityChipText}>새 제품</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID="save-mode-add"
+              accessibilityRole="button"
+              accessibilityState={{
+                selected: mode === 'add',
+                disabled: !colorCollectionApplicable,
+              }}
+              disabled={!colorCollectionApplicable}
+              style={[styles.identityChip, mode === 'add' && styles.identityChipOn]}
+              onPress={() => setMode('add')}
+            >
+              <Text style={styles.identityChipText}>기존 내 컬렉션에 색상으로 추가</Text>
+            </TouchableOpacity>
+          </View>
+          {mode === 'add' && (
+            <>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.identityRow}>
+                  {targets.map(product => (
+                    <TouchableOpacity
+                      key={product.id}
+                      testID={`save-target-${product.id}`}
+                      accessibilityRole="button"
+                      accessibilityState={{selected: targetProductId === product.id}}
+                      style={[
+                        styles.identityChip,
+                        targetProductId === product.id && styles.identityChipOn,
+                      ]}
+                      onPress={() => setTargetProductId(product.id)}
+                    >
+                      <Text style={styles.identityChipText}>{product.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+              <TextInput
+                testID="save-shade-name"
+                style={styles.saveProductInput}
+                value={shadeName}
+                maxLength={24}
+                onChangeText={setShadeName}
+                placeholder="셰이드 이름"
+                placeholderTextColor={TEXT_HINT}
+              />
+            </>
+          )}
+          <View style={styles.identityRow}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={styles.identityChip}
+              onPress={onCancel}
+            >
+              <Text style={styles.identityChipText}>취소</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID="save-product-confirm"
+              accessibilityRole="button"
+              accessibilityState={{disabled: !canSave}}
+              style={[styles.identityChip, canSave && styles.identityChipOn]}
+              disabled={!canSave}
+              onPress={() => onSave({
+                mode,
+                name: name.trim(),
+                family,
+                targetProductId,
+                shadeName: shadeName.trim(),
+              })}
+            >
+              <Text style={styles.identityChipText}>저장</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -1358,12 +1647,16 @@ function CatalogStrip({
 }
 
 function AxisEditor({
+  mode,
   leaf,
   path,
   axis,
   onAxis,
   onPatch,
   onIdentity,
+  onSelectProduct,
+  onOpenSaveProduct,
+  canSaveProduct,
   userProducts,
   onPickTexture,
   onPickMask,
@@ -1376,7 +1669,12 @@ function AxisEditor({
   onRemoveCatalogEntry,
   userFinishes,
   onSaveFinish,
+  expertOverrides,
+  onChangeExpertOverride,
+  onResetExpertOverride,
+  expertError,
 }: {
+  mode: 'detail' | 'expert';
   leaf: ProductLeaf;
   path: string | null;
   axis: TabKey | null;
@@ -1386,8 +1684,16 @@ function AxisEditor({
   onIdentity: (patch: {
     role?: string | null;
     productId?: string | null;
+    colorwayId?: string | null;
     technique?: { strength: number };
   }) => void;
+  onSelectProduct: (
+    product: ProductDef | undefined,
+    colorwayId: string | undefined,
+    clearKeys: readonly (keyof FilterParams)[],
+  ) => void;
+  onOpenSaveProduct: (family: ProductFamily, source?: ProductDef) => void;
+  canSaveProduct: boolean;
   userProducts?: ProductDef[];
   onPickTexture: (action: TextureAction) => void;
   onPickMask: (region: MaskRegion) => void;
@@ -1400,21 +1706,57 @@ function AxisEditor({
   onRemoveCatalogEntry?: (id: string) => void;
   userFinishes: UserFinish[];
   onSaveFinish: (name: string, bundle: FinishBundle) => void;
+  expertOverrides: ExpertOverrides;
+  onChangeExpertOverride?: (key: ExpertParamKey, value: number) => void;
+  onResetExpertOverride?: (key: ExpertParamKey) => void;
+  expertError?: string | null;
 }) {
   const def = REGION_MAP[leaf.region];
   // 상위 탭 = 제품·테크닉·핏(§5). 각 그룹 아래 축 섹션이 세로로 들어간다.
-  const available = groupsForRegion(leaf.region);
+  const regionParams = paramsForRegion(leaf.region);
+  const detailParams = regionParams.filter(param => param.tier === 'detail');
+  const available: TabKey[] = [
+    ...groupsForRegion(leaf.region),
+    ...(mode === 'expert' && regionParams.length > 0
+      ? ['expert' as const]
+      : []),
+  ];
   const active = axis && available.includes(axis) ? axis : available[0];
   // 제품 탭의 제품군 선택 — 기본: 현재 제품의 제품군 → 없으면 첫 적합 제품군.
   // 잎이 바뀌면 리셋(leafId 짝으로 저장).
   const [famSel, setFamSel] = useState<{leafId: string; fam: ProductFamily} | null>(
     null,
   );
+  const [detailOpen, setDetailOpen] = useState<{leafId: string; open: boolean} | null>(null);
+  const detailsExpanded = detailOpen?.leafId === leaf.id
+    ? detailOpen.open
+    : false;
+  const referencedProduct = leaf.productId ? findProduct(leaf.productId, userProducts) : undefined;
+  const referencedPhysicals = referencedProduct
+    ? translateProduct(
+        referencedProduct,
+        leaf.technique ?? {strength: 1},
+        leaf.region,
+        leaf.colorwayId,
+      )
+    : {};
+  const physicalModified = physicalKeysForRegion(leaf.region).some(key => {
+    const override = leaf.params[key];
+    if (override === undefined) return false;
+    if (!referencedProduct) return true;
+    const baseline = referencedPhysicals[key];
+    return typeof override === 'number' && typeof baseline === 'number'
+      ? Math.abs(override - baseline) > 1e-8
+      : override !== baseline;
+  });
   if (!active) return null;
 
   // 축 컨트롤 섹션 — 라벨(축 이름) + 그 축의 컨트롤들. 그룹 본문 조립에 공용.
-  const axisSection = (a: AxisKey, controls: ComposerControl[]) =>
-    controls.length === 0 ? null : (
+  const axisSection = (a: AxisKey, controls: ComposerControl[]) => {
+    const presentation =
+      a === 'texture' || a === 'finish' ? def.axisPresentation[a] : undefined;
+    if (controls.length === 0 || presentation === 'hidden') return null;
+    return (
       <View key={a} style={styles.axisSection}>
         <Text style={styles.axisSectionLabel}>{AXIS_LABELS[a]}</Text>
         {controls.map((control, i) => {
@@ -1428,6 +1770,8 @@ function AxisEditor({
               )}
               <ControlView
                 control={control}
+                presentation={presentation}
+                axisLabel={AXIS_LABELS[a]}
                 params={leaf.params}
                 onPatch={onPatch}
                 onPickTexture={onPickTexture}
@@ -1447,6 +1791,7 @@ function AxisEditor({
         })}
       </View>
     );
+  };
   return (
     <View style={styles.axisBox}>
       {path != null && (
@@ -1482,6 +1827,17 @@ function AxisEditor({
             const ranked = familiesRankedForRegion(leaf.region);
             const curProd = leaf.productId
               ? findProduct(leaf.productId, userProducts)
+              : undefined;
+            const colorControl = (def.axes.color ?? []).find(
+              control => control.type === 'swatches',
+            );
+            const colorKey = colorControl?.type === 'swatches'
+              ? colorControl.key
+              : undefined;
+            const colorways = curProd ? normalizeProduct(curProd).colorways : [];
+            const customColor = colorKey != null && leaf.params[colorKey] !== undefined;
+            const selectedColorway = !customColor && curProd
+              ? resolveColorway(curProd, leaf.colorwayId)
               : undefined;
             const fam =
               (famSel?.leafId === leaf.id ? famSel.fam : undefined) ??
@@ -1526,7 +1882,7 @@ function AxisEditor({
                         styles.identityChip,
                         !leaf.productId && styles.identityChipOn,
                       ]}
-                      onPress={() => onIdentity({ productId: null })}
+                      onPress={() => onSelectProduct(undefined, undefined, [])}
                     >
                       <Text
                         style={[
@@ -1540,15 +1896,17 @@ function AxisEditor({
                     {(fam ? productsOfFamily(fam, userProducts) : []).map(p => (
                       <TouchableOpacity
                         key={p.id}
+                        testID={`product-${p.id}`}
                         style={[
                           styles.identityChip,
                           leaf.productId === p.id && styles.identityChipOn,
                         ]}
                         onPress={() =>
-                          onIdentity({
-                            productId: p.id,
-                            technique: leaf.technique ?? { strength: 0.8 },
-                          })
+                          onSelectProduct(
+                            p,
+                            resolveColorway(p)?.id,
+                            physicalKeysForRegion(leaf.region),
+                          )
                         }
                       >
                         <Text
@@ -1563,6 +1921,37 @@ function AxisEditor({
                     ))}
                   </View>
                 </ScrollView>
+                {curProd?.base && curProd.colorways && curProd.colorways.length > 1 && (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.identityRow}>
+                      <Text style={styles.identityLabel}>색상</Text>
+                      {colorways.map(colorway => (
+                        <TouchableOpacity
+                          key={colorway.id}
+                          testID={`colorway-${curProd.id}-${colorway.id}`}
+                          style={[
+                            styles.identityChip,
+                            selectedColorway?.id === colorway.id && styles.identityChipOn,
+                          ]}
+                          onPress={() => onSelectProduct(
+                            curProd,
+                            colorway.id,
+                            colorKey ? [colorKey] : [],
+                          )}
+                        >
+                          <View style={[styles.colorwayDot, {backgroundColor: colorway.color}]} />
+                          <Text style={[
+                            styles.identityChipText,
+                            selectedColorway?.id === colorway.id && styles.identityChipTextOn,
+                          ]}>
+                            {colorway.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                      {customColor && <Text style={styles.identityDivider}>커스텀 색</Text>}
+                    </View>
+                  </ScrollView>
+                )}
                 {curProd && (
                   <Text style={styles.noteText}>
                     {FAMILY_TEMPLATES[curProd.family].label} · {curProd.name}
@@ -1570,10 +1959,55 @@ function AxisEditor({
                     제품에서 유도되고, 축에서 만진 값이 오버라이드로 이깁니다.
                   </Text>
                 )}
+                {canSaveProduct && fam && physicalModified && (
+                  <View style={styles.identityRow}>
+                    <TouchableOpacity
+                      style={styles.identityChip}
+                      onPress={() => onOpenSaveProduct(fam, curProd)}
+                    >
+                      <Text style={styles.identityChipText}>제품으로 저장</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             );
           })()}
           {PRODUCT_AXES.map(a => axisSection(a, def.axes[a] ?? []))}
+          <TouchableOpacity
+            style={styles.identityChip}
+            onPress={() => setDetailOpen({
+              leafId: leaf.id,
+              open: !detailsExpanded,
+            })}
+          >
+            <Text style={styles.identityChipText}>
+              세부 조정
+              {physicalModified ? ' · 수정됨' : ''}
+              {' '}{detailsExpanded ? '⌃' : '⌄'}
+            </Text>
+          </TouchableOpacity>
+          {detailsExpanded && (() => {
+            const product = leaf.productId ? findProduct(leaf.productId, userProducts) : undefined;
+            const shade = product ? resolveColorway(product, leaf.colorwayId) : undefined;
+            const colorControl = (def.axes.color ?? []).find(
+              control => control.type === 'swatches',
+            );
+            const hasCustomColor = colorControl?.type === 'swatches'
+              && leaf.params[colorControl.key] !== undefined;
+            return (
+              <View style={styles.axisSection}>
+                <Text style={styles.noteText}>
+                  {product
+                    ? `현재 참조 · ${product.name} · ${shade?.name ?? '기본 색상'}`
+                      + (hasCustomColor ? ' · 커스텀 색' : '')
+                    : '현재 참조 · 커스텀'}
+                </Text>
+                <Text style={styles.noteText}>
+                  제형·마감 편집은 위의 기존 조정면을 그대로 사용합니다.
+                </Text>
+              </View>
+            );
+          })()}
           </>
         )}
 
@@ -1666,6 +2100,30 @@ function AxisEditor({
                 onSaveFinish={onSaveFinish}
               />
             ))}
+        {active !== 'expert' && detailParams.length > 0 && (
+          <View style={styles.axisSection}>
+            <Text style={styles.axisSectionLabel}>세부 파라미터</Text>
+            <ExpertParamControls
+              params={detailParams}
+              overrides={expertOverrides}
+              onChange={onChangeExpertOverride ?? (() => {})}
+              onReset={onResetExpertOverride ?? (() => {})}
+              error={expertError}
+            />
+          </View>
+        )}
+        {active === 'expert' && (
+          <View style={styles.axisSection}>
+            <Text style={styles.axisSectionLabel}>전문가 파라미터</Text>
+            <ExpertParamControls
+              params={regionParams}
+              overrides={expertOverrides}
+              onChange={onChangeExpertOverride ?? (() => {})}
+              onReset={onResetExpertOverride ?? (() => {})}
+              error={expertError}
+            />
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -1673,6 +2131,8 @@ function AxisEditor({
 
 function ControlView({
   control,
+  presentation,
+  axisLabel,
   params,
   onPatch,
   onPickTexture,
@@ -1688,6 +2148,8 @@ function ControlView({
   onSaveFinish,
 }: {
   control: ComposerControl;
+  presentation?: AxisPresentation;
+  axisLabel?: string;
   params: Partial<FilterParams>;
   onPatch: (patch: Partial<FilterParams>) => void;
   onPickTexture: (action: TextureAction) => void;
@@ -1713,6 +2175,8 @@ function ControlView({
         <ParamSlider
           label={control.label}
           value={(raw - min) / (max - min)}
+          displayValue={control.step == null ? undefined : raw}
+          step={control.step == null ? undefined : control.step / (max - min)}
           accent={control.gold ? GOLD : undefined}
           onChange={v => onPatch({ [control.key]: min + v * (max - min) })}
         />
@@ -1766,34 +2230,114 @@ function ControlView({
       );
     }
     case 'segments': {
-      const value = (params[control.key] as number) ?? 0;
+      const value = params[control.key] as number | undefined;
+      const resolved = control.options.find(option => option.value === value);
+      if (presentation === 'badge') {
+        const fallback = axisLabel === AXIS_LABELS.texture
+          ? control.options[0]?.label ?? '레거시 제형'
+          : '레거시 새틴';
+        return (
+          <Text style={styles.noteText}>
+            {axisLabel}: {resolved?.label ?? fallback}
+          </Text>
+        );
+      }
+      if (presentation === 'toggle' && control.options.length === 2) {
+        return (
+          <DomainToggle
+            field={control.key}
+            options={control.options}
+            value={resolved?.value}
+            userLabel={control.key === 'toneTexture' || control.key === 'skinTexture'
+              ? '파우더 피니시'
+              : undefined}
+            onPatch={onPatch}
+          />
+        );
+      }
       return (
-        <View style={styles.segRow}>
-          {control.options.map(o => (
-            <TouchableOpacity
-              key={o.value}
-              style={[styles.segBtn, value === o.value && styles.segBtnOn]}
-              onPress={() => onPatch({ [control.key]: o.value })}
-            >
-              <Text style={[styles.segText, value === o.value && styles.segTextOn]}>
-                {o.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+        <View>
+          {control.label && <Text style={styles.noteText}>{control.label}</Text>}
+          <View style={styles.segRow}>
+            {control.options.map(o => (
+              <TouchableOpacity
+                key={o.value}
+                style={[styles.segBtn, resolved?.value === o.value && styles.segBtnOn]}
+                onPress={() =>
+                  onPatch({
+                    [control.key]: o.value,
+                    ...((control.key === 'eyelinerThicknessProfile' ||
+                    control.key === 'eyelinerTailProfile')
+                      ? {eyelinerHasGeometryProfiles: 1}
+                      : control.key === 'eyelinerStyle'
+                        ? {eyelinerHasGeometryProfiles: 0}
+                        : {}),
+                    ...(o.patch ?? {}),
+                  })
+                }
+              >
+                <Text
+                  style={[
+                    styles.segText,
+                    resolved?.value === o.value && styles.segTextOn,
+                  ]}
+                >
+                  {o.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       );
     }
-    case 'finish':
+    case 'finish': {
+      const options = control.options ?? FINISHES;
+      const raw = params[control.finishKey] as number | undefined;
+      const resolved = options.find(option => option.value === raw);
+      if (presentation === 'badge') {
+        return (
+          <Text style={styles.noteText}>
+            {axisLabel}: {resolved?.label ?? '레거시 새틴'}
+          </Text>
+        );
+      }
+      if (presentation === 'toggle' && options.length === 2) {
+        return (
+          <View>
+            <DomainToggle
+              field={control.finishKey}
+              options={options}
+              value={resolved?.value}
+              onPatch={onPatch}
+            />
+            {resolved?.value === 3 && (
+              <ParamSlider
+                label="시머 게인"
+                value={(params[control.shimmerKey] as number) ?? 0.5}
+                onChange={v => onPatch({[control.shimmerKey]: v})}
+              />
+            )}
+          </View>
+        );
+      }
       return (
         <FinishControl
           finishKey={control.finishKey}
           shimmerKey={control.shimmerKey}
           detail={control.detail}
+          options={options}
           params={params}
           onPatch={onPatch}
           userFinishes={userFinishes}
           onSaveFinish={onSaveFinish}
         />
+      );
+    }
+    case 'caption':
+      return (
+        <Text style={styles.noteText}>
+          {control.label}: {control.value}
+        </Text>
       );
     case 'import':
       return (
@@ -1878,6 +2422,40 @@ function ControlView({
   }
 }
 
+/** 두 enum 선택지를 한 개의 boolean-style 스위치로 낮춘다. 실제 저장값과 물성 patch는
+ * DomainOption 계약 그대로 한 번의 onPatch에 담는다. */
+function DomainToggle({
+  field,
+  options,
+  value,
+  userLabel,
+  onPatch,
+}: {
+  field: keyof FilterParams;
+  options: [DomainOption, DomainOption] | DomainOption[];
+  value?: number;
+  userLabel?: string;
+  onPatch: (patch: Partial<FilterParams>) => void;
+}) {
+  const off = options[0];
+  const on = options[1];
+  if (!off || !on) return null;
+  const checked = value === on.value;
+  const target = checked ? off : on;
+  return (
+    <View style={styles.segRow}>
+      <TouchableOpacity
+        accessibilityRole="switch"
+        accessibilityState={{checked}}
+        style={[styles.segBtn, checked && styles.segBtnOn]}
+        onPress={() => onPatch({[field]: target.value, ...(target.patch ?? {})})}
+      >
+        <Text style={[styles.segText, checked && styles.segTextOn]}>{userLabel ?? on.label}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // 제형 스튜디오(#21) — 마감 세부 0 번들(초기화·enum 리셋용).
 const ZERO_BUNDLE: FinishBundle = {
   glossLo: 0,
@@ -1907,6 +2485,7 @@ function FinishControl({
   finishKey,
   shimmerKey,
   detail,
+  options,
   params,
   onPatch,
   userFinishes,
@@ -1915,6 +2494,7 @@ function FinishControl({
   finishKey: keyof FilterParams;
   shimmerKey: keyof FilterParams;
   detail?: FinishDetailKeys;
+  options: DomainOption[];
   params: Partial<FilterParams>;
   onPatch: (patch: Partial<FilterParams>) => void;
   userFinishes: UserFinish[];
@@ -1929,13 +2509,19 @@ function FinishControl({
     <View>
       <View style={styles.finishRow}>
         {/* enum 마감 — 선택 시 세부 0 리셋(레거시 경로). 커스텀 활성 중엔 미선택 표시. */}
-        {FINISHES.map(f => {
+        {options.map(f => {
           const on = !custom && enumValue === f.value;
           return (
             <TouchableOpacity
               key={f.value}
               style={[styles.segBtn, on && styles.segBtnOn]}
-              onPress={() => onPatch({ [finishKey]: f.value, ...zeroDetail })}
+              onPress={() =>
+                onPatch({
+                  [finishKey]: f.value,
+                  ...zeroDetail,
+                  ...(f.patch ?? {}),
+                })
+              }
             >
               <Text style={[styles.segText, on && styles.segTextOn]}>{f.label}</Text>
             </TouchableOpacity>
@@ -2647,8 +3233,14 @@ const styles = StyleSheet.create({
     color: GOLD,
     fontSize: 10,
     fontWeight: '700',
+  },
+  exceptionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     marginLeft: 6,
   },
+  exceptionClear: {color: 'rgba(255,255,255,0.55)', fontSize: 10, textDecorationLine: 'underline'},
   rowBtn: {
     paddingHorizontal: 5,
     paddingVertical: 4,
@@ -2718,6 +3310,11 @@ const styles = StyleSheet.create({
     backgroundColor: accentAlpha(0.05),
     alignItems: 'center',
   },
+  // 트리 스크롤 밖 고정 행 — 스크롤과 형제로 두어 트리를 밀어도 위치 불변.
+  addRowFloating: {
+    marginTop: SP.sm,
+    flexShrink: 0,
+  },
   addRowText: {
     color: ACCENT_LIGHT,
     fontSize: 12,
@@ -2752,6 +3349,9 @@ const styles = StyleSheet.create({
   },
   identityChip: {
     height: CONTROL_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SP.xs,
     justifyContent: 'center',
     paddingHorizontal: SP.sm,
     borderRadius: 10,
@@ -2764,6 +3364,33 @@ const styles = StyleSheet.create({
   },
   identityChipText: {color: 'rgba(255,255,255,0.6)', fontSize: 11},
   identityChipTextOn: {color: GOLD, fontWeight: '600'},
+  colorwayDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  saveProductBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.58)',
+  },
+  saveProductSheet: {
+    padding: PANEL_INSET,
+    gap: SP.sm,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: '#1c1c1e',
+  },
+  saveProductInput: {
+    height: 38,
+    paddingHorizontal: SP.sm,
+    borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.24)',
+    color: '#FFFFFF',
+  },
   axisBox: {
     marginTop: SP.md,
     borderTopWidth: StyleSheet.hairlineWidth,

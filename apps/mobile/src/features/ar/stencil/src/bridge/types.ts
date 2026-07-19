@@ -4,6 +4,58 @@
  * (Unity는 JsonUtility로 파싱하므로 필드 구조를 바꾸면 양쪽을 함께 수정할 것)
  */
 
+/** 아이섀도 모양 ID. 멀티밴드 최대 4겹과 독립된 12종 계약. */
+export type EyeshadowShape =
+  | 0 // 리드 전체
+  | 1 // 크리스 집중
+  | 2 // 스모키
+  | 3 // 꼬리 포인트
+  | 4 // 안쪽 집중
+  | 5 // 중앙 집중
+  | 6 // 바깥 집중
+  | 7 // 베이스 프로파일(레이어 role tag와 별개)
+  | 8 // 메인 프로파일(레이어 role tag와 별개)
+  | 9 // 포인트 프로파일(레이어 role tag와 별개)
+  | 10 // 와이드
+  | 11; // 테일 익스텐드
+
+/** 아이섀도 한 겹의 해부학적 적용 위치: 0=상안검, 1=하안검, 2=양쪽. */
+export type EyeshadowSurface = 0 | 1 | 2;
+
+/** 눈썹 굵기 분포. 0은 구 저장물의 기존 대칭 밴드를 픽셀 그대로 유지한다. */
+export type BrowThicknessProfile =
+  | 0 // legacy
+  | 1 // slim
+  | 2 // regular
+  | 3 // full
+  | 4 // bold
+  | 5 // headFull
+  | 6; // bodyFull
+
+/** Unity JsonUtility가 파싱하는 전문가 파라미터 sparse KV 한 항목. */
+export interface ExpertOverrideEntry {
+  key: string;
+  value: number;
+}
+
+/** RN 핏 상태를 컴파일한 부위별 아핀 델타. 전량 0은 기존 렌더 baseline. */
+export interface RegionAffine {
+  region: string;
+  dx: number;
+  dy: number;
+  sx: number;
+  sy: number;
+  rot: number;
+}
+
+/** RN 핏 상태를 컴파일한 파일럿 부위 로컬 윤곽 워프(고정 8점). */
+export const REGION_WARP_REBAKE_THROTTLE_MS = 120;
+
+export interface RegionWarp {
+  region: string;
+  warp: number[];
+}
+
 export interface FilterParams {
   /** 피부 스무딩 강도 0..1 */
   skinSmoothing: number;
@@ -87,6 +139,16 @@ export interface FilterParams {
   highlightNoseTipIntensity?: number;
   highlightBrowBoneIntensity?: number;
   highlightCupidIntensity?: number;
+  /** 동일 제품을 부위별로 겹치는 highlighter zone compile 계약. */
+  highlightZone?: number;
+  highlightZoneWeight?: number;
+  highlightHasZoneWeights?: number;
+  highlightZoneCheek?: number;
+  highlightZoneBridge?: number;
+  highlightZoneTip?: number;
+  highlightZoneBrow?: number;
+  highlightZoneCupid?: number;
+  highlightZoneChin?: number;
   /** 하이라이터 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
   highlightFinish?: number;
   /** 시머 게인 0..1 (highlightFinish=3일 때). 생략 시 Unity 기본 0.5 */
@@ -173,10 +235,16 @@ export interface FilterParams {
   eyelinerFinish?: number;
   /** 임포트 아이라인 텍스처(밴드 워프) 강도. 색은 eyelinerColor 공용 */
   eyelinerStyleIntensity: number;
-  /** 아이라인(하) — 하안검 밴드. 색은 eyelinerColor 공용. 생략 시 0(끔) */
+  /** 아이라인(하) 독립 색. 생략/빈 값은 legacy eyelinerColor 폴백. */
+  eyelinerLowerColor?: string;
+  /** 아이라인(하) — 하안검 밴드. 생략 시 0(끔) */
   eyelinerLowerIntensity?: number;
-  /** 아이라인(하) 마감: 0=새틴(기본) 1=매트 2=글로시 (시머 없음 — 리본에 과함). 생략 시 0 */
+  /** 아이라인(하) 마감: 0=새틴(레거시) 1=매트 2=글로시 3=시머. 생략 시 0 */
   eyelinerLowerFinish?: number;
+  /** 아이라인(하) 시머 게인 0..1 (마감=3일 때). 생략 시 0 */
+  eyelinerLowerShimmer?: number;
+  /** 부재=레거시 무변조, 명시 0=펜슬 1=스머지 파우더 2=글리터 리퀴드 */
+  eyelinerLowerTexture?: number;
   /** 눈꼬리 띄우기(R7 워프): 바깥 눈꼬리 리프트 0..1 (0=원래). 골드=워프 조작 */
   eyeCornerLift?: number;
   /** 마스카라(속눈썹 스트로크). 생략 시 0(끔) */
@@ -212,8 +280,14 @@ export interface FilterParams {
   browStyleIntensity: number;
   /** 스타일(텍스처 눈썹) 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
   browStyleFinish?: number;
-  /** 눈썹 두께 배수 (1 = 원래), 아치 올림 (0 = 원래) */
+  /** 눈썹 룩의 전체 굵기 배수 (1=프로파일 기본). */
   browThickness: number;
+  /** 굵기 분포 0=legacy 1=slim 2=regular 3=full 4=bold 5=headFull 6=bodyFull. 생략=0 */
+  browThicknessProfile?: BrowThicknessProfile;
+  /** 실측 상·하단에서 H(원 눈썹 높이) 배수로 더 덮는 개인 공간 델타. 생략/0=무변조. */
+  browExpandUpper?: number;
+  browExpandLower?: number;
+  /** 아치 올림 (0=원래). */
   browArch: number;
   /** ── 부위 확장(컨실·치아·아래 속눈썹) — 생략 시 0=끔 ── */
   /** 눈썹 지우기(스킨톤 컨실, 제품 스택 밑작업) 0..1 */
@@ -244,6 +318,11 @@ export interface FilterParams {
   /** ── 명명 핸들(핏/배치, 골드) — 배수는 1=원래, 오프셋은 0=원래. 전역 농도 스케일 제외 ── */
   /** 아이라이너 리본 두께 배수 */
   eyelinerThickness?: number;
+  /** Phase B 기하 프로파일: 두께 0..5, 꼬리 0..5. */
+  eyelinerThicknessProfile?: number;
+  eyelinerTailProfile?: number;
+  /** 1이면 새 6x6 프로파일을 명시 적용, 0이면 legacy eyelinerStyle로 복원. */
+  eyelinerHasGeometryProfiles?: number;
   /** 아이라이너(하) 리본 두께 배수 — 상라이너 eyelinerThickness와 독립. 생략 시 1 */
   eyelinerLowerThickness?: number;
   /** 윙(꼬리) 길이 배수 — 스타일(윙업/퍼피/롱) 위 미세조정 */
@@ -252,6 +331,8 @@ export interface FilterParams {
   eyelinerInnerLift?: number;
   /** 아이섀도 밴드 높이 배수 (스모키 정도) */
   eyeshadowHeight?: number;
+  /** 단일 eyeshadow region의 겹별 적용 위치. 0=상 1=하 2=양쪽. */
+  eyeshadowSurface?: EyeshadowSurface;
   /** 아이섀도 하(하안검 아래 섀도) 밴드 높이 배수. 생략 시 1 */
   eyeshadowLowerHeight?: number;
   /** 속눈썹 길이 배수 */
@@ -318,6 +399,8 @@ export interface FilterParams {
   triangleZoneIntensity?: number;
   /** 삼각존 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
   triangleZoneFinish?: number;
+  /** 삼각존 시머 게인 0..1 (마감=3일 때). 생략 시 0 */
+  triangleZoneShimmer?: number;
   /** 쌍꺼풀(크리스 라인) 강도 0..1 (0=끔). 색은 자연 음영 고정 */
   doubleLidIntensity?: number;
   /** 쌍꺼풀 크리스 높이 배수 (1=기본, 생략 0은 Unity가 1 보정). 골드=핏 */
@@ -337,9 +420,9 @@ export interface FilterParams {
   /** 립글로스 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(기존 출력) */
   lipGlossFinish?: number;
   /** ── 축 개선 5건 #19b (모양 축) — 생략 0 = 기존 동작 ── */
-  /** 아이섀도 모양: 0=리드 전체 1=크리스 집중 2=스모키 3=꼬리 포인트. 생략 0 */
-  eyeshadowShape?: number;
-  /** 눈썹 모양(슬롯 공통): 0=내추럴 1=일자 2=아치 3=각진. 생략 0 */
+  /** 아이섀도 모양 0..11. 생략 0=리드 전체. EyeshadowShape 매핑 참조. */
+  eyeshadowShape?: EyeshadowShape;
+  /** 눈썹 모양(슬롯 공통): 0=내추럴 1=일자 2=아치 3=각진 4=상승 5=반달. 생략 0 */
   browShape?: number;
   /** 부분 커버 모양: 0=눈밑 존 1=붉은기 자동(붉은 픽셀 선택 커버). 생략 0 */
   concealerShape?: number;
@@ -402,11 +485,11 @@ export interface FilterParams {
   foundationColor?: string;
   /** 파운데이션 커버리지 0..1 (0=끔). 높을수록 잡티·색편차 감쇠 */
   foundationIntensity?: number;
-  /** 파운데 제형: 0=리퀴드(기본) 1=쿠션(커버↑) 2=스킨틴트(커버↓). 생략 0 */
+  /** 파운데 제형: 0=리퀴드 1=쿠션 2=스틱 3=트윈케익 4=스킨틴트. 생략 시 레거시 */
   foundationTexture?: number;
-  // ── 제형(텍스처) 공통 축(W1) — 부위군 템플릿 enum. value 0=ZERO=현행 픽셀 바이트 동일.
+  // ── 제형(텍스처) 공통 축(W1) — 부위별 enum. 필드 부재=레거시 무변조.
   //    셰이더가 TexBundleFromEnum(Finish.cginc)으로 시드 번들을 미러링(regions.ts 정본).
-  //    tone=TONE_TEX(0 매끈/1 파우더리), teeth는 젤 단일이라 컨트롤·필드 없음. 나머지=GENERIC.
+  //    tone/skin=0 매끈·1 파우더리, teeth는 젤 단일이라 브리지 필드 없음.
   toneTexture?: number;
   skinTexture?: number;
   concealerTexture?: number;
@@ -450,6 +533,12 @@ export interface FilterParams {
   fndOvalSizeDbg?: number;
   /** 얼굴 오벌 경계 페더(0~0.3, 기본 0.15). 미설정 = 셰이더 리터럴 FND_OVAL_FEATHER */
   fndOvalFeatherDbg?: number;
+  /** RN 상태를 컴파일한 전문가 파라미터 sparse KV. 생략/null/빈 배열은 baseline. */
+  expertOverrides?: ExpertOverrideEntry[];
+  /** RN 핏 상태를 컴파일한 비-데코 부위 아핀. 미전송 부위는 Unity 현행값 유지. */
+  regionAffines?: RegionAffine[];
+  /** eyeshadow·blush 파일럿 윤곽 워프. 사라진 부위는 전량 0 reset 항목으로 방출. */
+  regionWarps?: RegionWarp[];
   /** 파운데이션 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0 */
   foundationFinish?: number;
   /** 파우더(유분광 억제, 세팅) 0..1 (0=끔). 파운데이션과 독립 */
@@ -542,29 +631,55 @@ export interface LensLayer {
 }
 
 /**
- * 아이섀도 밴드 한 겹 (setEyeshadowLayers — A14 멀티밴드). 같은 부위 N겹(≤4)을
+ * 아이섀도 밴드 한 겹 (setEyeshadowLayers — V2 멀티밴드). 같은 부위 N겹(≤8)을
  * 실제로 겹쳐 렌더한다: 배열 순서 = 아래→위(index 0이 lash에 가장 가까움, 뒤가 위).
  * 겹별 색·강도·마감·모양·그라데·높이가 다르게 실린다. 밴드 높이는 세로 cutoff로
  * 표현(최대 높이 메시 1장 위에서 각 밴드가 자기 높이까지만 그림 — Unity 처리).
- * Unity JsonUtility 규약: 생략=0이라 모든 필드를 채워 보낸다. 겹 1개 이하면
- * 이 배열 대신 legacy 스칼라(params) 경로를 쓴다(하위호환).
+ * Unity JsonUtility 규약: 신규 컴파일은 단일 겹도 배열로 보내 surface/profile을 보존한다.
  */
-export interface EyeshadowLayer {
+export interface EyeshadowLayerV2 {
+  surface: EyeshadowSurface;
+  /** 12종 shape/profile 0..11. */
+  profile: EyeshadowShape;
   color: string;
   /** 그라데 스톱B(리드 진한 색). 생략=color와 동일 취급 */
   color2: string;
   intensity: number;
   /** 마감 enum 0=새틴 1=매트 2=글로시 3=시머 */
   finish: number;
-  /** 모양 enum 0=리드 전체 1=크리스 집중 2=스모키 3=꼬리 포인트 */
-  shape: number;
+  /** v1 저장물/Unity 상안검 어댑터용 alias. 신규 wire는 profile이 정본. */
+  shape: EyeshadowShape;
   /** 그라데 강도 0..1 (0=단색) */
   gradient: number;
   /** 밴드 높이 배수 (1=기본) — 세로 cutoff로 번역 */
   height: number;
   /** 시머 게인 0..1 (finish=3일 때) */
   shimmer: number;
+  texture: number;
+  glossLo: number;
+  glossGain: number;
+  shimmerSize: number;
+  shimmerDensity: number;
+  matte: number;
+  sheen: number;
+  particleSize: number;
+  particleDensity: number;
+  material?: number;
+  materialStrength?: number;
+  particleBrightness?: number;
+  particleColor?: string;
+  particleTwinkle?: number;
+  particleShape?: number;
+  particleFeather?: number;
+  particleParallax?: number;
+  particleConfetti?: number;
 }
+
+/** 저장 호환용 v1 이름. 신규 컴파일 결과는 EyeshadowLayerV2를 사용한다. */
+export type EyeshadowLayer = Omit<EyeshadowLayerV2, 'surface' | 'profile'> & {
+  surface?: EyeshadowSurface;
+  profile?: EyeshadowShape;
+};
 
 /**
  * 캐노니컬 오버레이 레이어 한 장 (setOverlayLayers — 얼굴 캔버스 N장 합성).
@@ -717,6 +832,7 @@ export interface LookMeasurement {
 }
 
 export type RNToUnityMessage =
+  | { type: 'requestReady' }
   | { type: 'applyFilter'; filter: FilterParams }
   | { type: 'capture' }
   /** 영상 녹화 시작 — 오프스크린 합성(카메라+메이크업, UI 없음)을 H.264 .mov로.
@@ -772,7 +888,7 @@ export type RNToUnityMessage =
   /** 반반 모드 — 완성본 절반 vs 맨얼굴 절반 비교. SplitMaskRenderer 소비(가이드 추종) */
   | { type: 'setSplit'; split: SplitParams }
   /** 온페이스 핏 핸들(A17) 좌표 방출 토글 — 켜면 Unity가 fitHandles를 ~10Hz 방출 */
-  | { type: 'setFitHandles'; fitHandles: boolean }
+  | { type: 'setFitHandles'; fitHandles: boolean; sessionId?: number }
   /** ── 사전 촬영 미디어 보정(사진/영상) ── MediaEditController 소비. iOS·MediaPipe 전용 */
   /** 갤러리 사진을 편집 스틸로 로드 — EXIF 정립 정규화 + 얼굴 검출 1회 → editReady */
   | { type: 'enterPhotoEdit'; path: string }
@@ -793,7 +909,8 @@ export type RNToUnityMessage =
   | { type: 'setExtractDebug'; disableWhiteBalance: boolean };
 
 export type UnityToRNMessage =
-  | { type: 'ready' }
+  | { type: 'ready'; generation?: string | number }
+  | { type: 'booting'; generation?: string | number }
   | { type: 'faceTracked'; tracked: boolean }
   /** 온페이스 핏 핸들(A17) 좌표 — 뷰포트 0..1(Unity 규약, y=아래→위). ~10Hz,
    *  setFitHandles로 켠 동안만. eyeVp=눈꼬리간 뷰포트 거리(드래그 정규화 스케일) */
@@ -801,6 +918,10 @@ export type UnityToRNMessage =
       type: 'fitHandles';
       handles: { key: string; x: number; y: number }[];
       eyeVp: number;
+      /** setFitHandles enable의 세션 ID echo. RN은 현재 열린 세션과 일치할 때만 소비한다. */
+      sessionId?: number;
+      /** 부위 외곽선 — viewport 좌표, 부위당 8~12점, handles와 같은 10Hz 채널. */
+      outlines?: {region: string; points: [number, number][]}[];
     }
   | { type: 'photoCaptured'; path: string }
   /** 영상 녹화가 시작됨 (UI에서 녹화 표시등 켜기용) */
@@ -821,7 +942,14 @@ export type UnityToRNMessage =
   | { type: 'editExited' }
   /** 사진→룩 추출(#1) 측정 완료 — 부위별 색 측정치. RN이 measurementToLook로 번역 */
   | { type: 'lookExtracted'; lookMeasurement: LookMeasurement }
-  | { type: 'error'; message: string };
+  | {
+      type: 'error';
+      message: string;
+      fatal?: boolean;
+      code?: string;
+      stage?: string;
+      generation?: string | number;
+    };
 
 export function parseUnityMessage(raw: string): UnityToRNMessage | null {
   try {

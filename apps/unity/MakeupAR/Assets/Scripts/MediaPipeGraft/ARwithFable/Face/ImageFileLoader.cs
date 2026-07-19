@@ -243,7 +243,7 @@ namespace ARMakeup.Face
                 byte zone = hasAlpha ? p.a : (byte)((p.r * 77 + p.g * 150 + p.b * 29) >> 8);
                 outPx[i] = new Color32(zone, zone, zone, 255);
             }
-            var tex = new Texture2D(src.width, src.height, TextureFormat.R8, false)
+            var tex = new Texture2D(src.width, src.height, TextureFormat.R8, false, true)
             {
                 wrapMode = TextureWrapMode.Clamp,
                 filterMode = FilterMode.Bilinear,

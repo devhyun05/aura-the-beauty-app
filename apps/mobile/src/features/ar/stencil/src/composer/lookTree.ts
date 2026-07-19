@@ -31,7 +31,7 @@ import {
   REGION_MAP,
 } from './regions';
 import type { RegionKey } from './regions';
-import { newLayer, seedLayers } from './model';
+import { migrateLegacyEyeshadowLayer, newLayer, seedLayers } from './model';
 import type { ComposerLayer } from './model';
 
 // 카탈로그 8슬롯 (FIT은 별도 레인이라 제외): 피부·컨투어·렌즈·눈·눈썹·립·헤어·데코.
@@ -97,6 +97,7 @@ export interface ProductLeaf {
   role?: string;
   /** 제품 참조(§5 A12) — products.ts ProductDef id. null/부재=커스텀 */
   productId?: string | null;
+  colorwayId?: string;
   /** 테크닉(§5) — Phase A는 강도만(제품 coverage와 곱연산) */
   technique?: { strength: number };
 }
@@ -157,6 +158,7 @@ export interface LeafDef {
   role?: string;
   /** 제품 참조(§5 A12) — 정의가 특정 제품을 쓰는 룩일 때 */
   productId?: string | null;
+  colorwayId?: string;
   technique?: { strength: number };
 }
 
@@ -285,7 +287,6 @@ const SYS_SUB_NAME: Partial<Record<RegionKey, SubNameSpec>> = {
   lip: { noun: '립', strategy: 'color', colorKey: 'lipColor' },
   blush: { noun: '블러셔', strategy: 'color', colorKey: 'blushColor' },
   eyeshadow: { noun: '섀도', strategy: 'color', colorKey: 'eyeshadowColor' },
-  eyeshadowLower: { noun: '언더섀도', strategy: 'color', colorKey: 'eyeshadowLowerColor' },
   triangleZone: { noun: '삼각존', strategy: 'color', colorKey: 'triangleZoneColor' },
   eyelinerUpper: { noun: '라이너', strategy: 'style', styleKey: 'eyelinerStyle', styleOptions: EYELINER_STYLES },
   mascara: { noun: '마스카라', strategy: 'style', styleKey: 'mascaraStyle', styleOptions: MASCARA_STYLES_UPPER },
@@ -318,7 +319,9 @@ function systemSubName(
   lensColor?: string,
 ): string {
   const spec = SYS_SUB_NAME[region];
-  const noun = spec?.noun ?? REGION_MAP[region].label;
+  const noun = region === 'eyeshadow' && params.eyeshadowSurface === 1
+    ? '언더섀도'
+    : spec?.noun ?? REGION_MAP[region].label;
   if (!spec) return noun;
   let modifier = '';
   if (spec.strategy === 'color') {
@@ -449,18 +452,20 @@ export function regionKeysOfDef(lib: LookLibrary, defId: string): Set<RegionKey>
 // ── 인스턴스화 / 분해 ────────────────────────────────────────────────────────
 
 function leafFromDef(def: LeafDef): ProductLeaf {
+  const migrated = migrateLegacyEyeshadowLayer(def.region as RegionKey | 'eyeshadowLower', def.params);
   return {
     kind: 'app',
     id: nid('lf'),
     label: def.label,
-    region: def.region,
+    region: migrated.region,
     visible: true,
     dirty: false,
-    params: { ...def.params },
+    params: migrated.params,
     ...(def.overlay ? { overlay: { ...def.overlay } } : {}),
     ...(def.lens ? { lens: { ...def.lens } } : {}),
     ...(def.role ? { role: def.role } : {}),
     ...(def.productId ? { productId: def.productId } : {}),
+    ...(def.colorwayId ? { colorwayId: def.colorwayId } : {}),
     ...(def.technique ? { technique: { ...def.technique } } : {}),
   };
 }
@@ -763,6 +768,7 @@ export function flattenTree(root: LookNode | null): ComposerLayer[] {
           ...(child.role ? { role: child.role } : {}),
           ...(chain.length > 0 ? { fitChain: chain } : {}),
           ...(child.productId ? { productId: child.productId } : {}),
+          ...(child.colorwayId ? { colorwayId: child.colorwayId } : {}),
           ...(child.technique ? { technique: child.technique } : {}),
         });
       } else {
@@ -827,6 +833,7 @@ export function updateLeaf(
     role?: string | null;
     /** 제품 참조(§5 A12) — null=커스텀 전환 */
     productId?: string | null;
+    colorwayId?: string | null;
     technique?: { strength: number };
   },
 ): LookNode {
@@ -851,6 +858,9 @@ export function updateLeaf(
         ...(patch.role !== undefined ? { role: patch.role ?? undefined } : {}),
         ...(patch.productId !== undefined
           ? { productId: patch.productId ?? undefined }
+          : {}),
+        ...(patch.colorwayId !== undefined
+          ? { colorwayId: patch.colorwayId ?? undefined }
           : {}),
         ...(patch.technique !== undefined ? { technique: patch.technique } : {}),
       };
@@ -1380,6 +1390,7 @@ export interface LeafSnapshot {
   id?: string;
   /** 제품 참조(§5 A12) — 부재=커스텀(옛 스냅샷과 바이트 동일 유지) */
   productId?: string;
+  colorwayId?: string;
   technique?: { strength: number };
 }
 
@@ -1426,6 +1437,7 @@ export function snapshotTree(root: LookNode): LookSnapshot {
           ...(c.lens ? { lens: { ...c.lens } } : {}),
           ...(c.role ? { role: c.role } : {}),
           ...(c.productId ? { productId: c.productId } : {}),
+          ...(c.colorwayId ? { colorwayId: c.colorwayId } : {}),
           ...(c.technique ? { technique: { ...c.technique } } : {}),
         }
       : {
@@ -1533,24 +1545,27 @@ export function reviveTree(snap: LookSnapshot, lib: LookLibrary): LookNode {
       return live;
     }
   }
-  const kids: TreeChild[] = snap.kids.map(k =>
-    k.kind === 'app'
-      ? ({
+  const kids: TreeChild[] = snap.kids.map(k => {
+    if (k.kind === 'app') {
+      const migrated = migrateLegacyEyeshadowLayer(k.region as RegionKey | 'eyeshadowLower', k.params);
+      return ({
           kind: 'app',
           id: k.id ? claimId(k.id) : nid('lf'),
           label: k.label,
-          region: k.region,
+          region: migrated.region,
           visible: k.visible,
           dirty: k.dirty ?? false,
-          params: { ...k.params },
+          params: migrated.params,
           ...(k.overlay ? { overlay: { ...k.overlay } } : {}),
           ...(k.lens ? { lens: { ...k.lens } } : {}),
           ...(k.role ? { role: k.role } : {}),
           ...(k.productId ? { productId: k.productId } : {}),
+          ...(k.colorwayId ? { colorwayId: k.colorwayId } : {}),
           ...(k.technique ? { technique: { ...k.technique } } : {}),
-        } as ProductLeaf)
-      : reviveTree(k, lib),
-  );
+        } as ProductLeaf);
+    }
+    return reviveTree(k, lib);
+  });
   const node: LookNode = {
     kind: 'look',
     id: nid('lk'),
@@ -1709,6 +1724,7 @@ function materializeSub(node: LookNode, lib: LookLibrary): string {
       ...(lf.lens ? { lens: { ...lf.lens } } : {}),
       ...(lf.role ? { role: lf.role } : {}),
       ...(lf.productId ? { productId: lf.productId } : {}),
+      ...(lf.colorwayId ? { colorwayId: lf.colorwayId } : {}),
       ...(lf.technique ? { technique: { ...lf.technique } } : {}),
     })),
   };
@@ -2052,6 +2068,7 @@ function leafDefFromLeaf(lf: ProductLeaf): LeafDef {
     ...(lf.lens ? { lens: { ...lf.lens } } : {}),
     ...(lf.role ? { role: lf.role } : {}),
     ...(lf.productId ? { productId: lf.productId } : {}),
+    ...(lf.colorwayId ? { colorwayId: lf.colorwayId } : {}),
     ...(lf.technique ? { technique: { ...lf.technique } } : {}),
   };
 }

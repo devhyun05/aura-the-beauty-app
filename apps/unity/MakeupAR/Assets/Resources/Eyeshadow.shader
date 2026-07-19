@@ -18,8 +18,8 @@ Shader "ARMakeup/Eyeshadow"
         // 마감(finish): 0=새틴(기본) 1=매트 2=글로시 3=시머. 피드 luma만(신규의존0).
         _EyeshadowFinish ("Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
         _EyeshadowShimmer ("Shimmer Gain", Range(0, 1)) = 0.5
-        // 제형(텍스처) — GENERIC 템플릿 enum(0=크림=현행). Finish.cginc TexBundleFromEnum 미러.
-        _EyeshadowTexture ("Eyeshadow Texture (generic enum)", Float) = 0
+        // 제형(텍스처) — eyeshadow template(8). -1=부재/레거시, 0=파우더.
+        _EyeshadowTexture ("Eyeshadow Texture (domain enum)", Float) = -1
         // ── 제형 스튜디오(#21) — 마감 세부 파라미터. 전부 0 = enum 기존 동작(하위호환). ──
         _EyeshadowGlossLo ("Eyeshadow Finish Gloss Lo", Range(0, 1)) = 0
         _EyeshadowGlossGain ("Eyeshadow Finish Gloss Gain", Range(0, 1)) = 0
@@ -47,8 +47,9 @@ Shader "ARMakeup/Eyeshadow"
         // _EyeshadowGradient 기본 0 = 끔 = 기존 출력.
         _EyeshadowColor2 ("Eyeshadow Gradient Stop B (lid)", Color) = (0.69, 0.42, 0.31, 1)
         _EyeshadowGradient ("Eyeshadow Gradient", Range(0, 1)) = 0
-        // 모양(#19b): 0=리드 전체(기존) 1=크리스 집중 2=스모키(위 확장) 3=꼬리 포인트
-        _EyeshadowShape ("Shape (0 lid 1 crease 2 smoky 3 tail)", Float) = 0
+        // 모양 12종: 0리드 1크리스 2스모키 3꼬리 4안쪽 5중앙 6바깥
+        // 7베이스 8메인 9포인트 10와이드 11꼬리연장.
+        _EyeshadowShape ("Shape (0..11)", Float) = 0
         // 디자이너 모양 마스크(§16) — 밴드-로컬 UV(uv2: u=눈앞0→눈꼬리1, v=안검연0→눈썹1)로
         // 샘플하는 흑백/알파 존 스텐실. .r = 존 세기 → 커버리지(amt)에 곱해 절차 밴드 위에
         // 디자이너 그라데/글리터 형태를 얹는다. 기본 white + _HasDesign 0 = 변조 없음
@@ -77,6 +78,8 @@ Shader "ARMakeup/Eyeshadow"
             #include "UnityCG.cginc"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
             #include "Finish.cginc"    // 마감(ApplyFinish) 공용 — 제형 스튜디오 세부 파라미터
+            #include "EyeshadowVisibility.cginc" // upper/lower 공통 저알파 발색 리프트
+            #include "EyeshadowShape.cginc" // scalar/multi 공용 12종 해부학 프로파일
             #include "Ambient.cginc"   // 저조도 색소 바닥(PigmentBase) — 어둠 발광 방지
 
             // _CameraFeed / _CameraFeed_TexelSize 는 Finish.cginc(1곳)에서 선언 — A15 방향 게인이 공유.
@@ -84,7 +87,7 @@ Shader "ARMakeup/Eyeshadow"
             float _EyeshadowIntensity;
             float _EyeshadowFinish;
             float _EyeshadowShimmer;
-            float _EyeshadowTexture; // 제형(텍스처) GENERIC 템플릿(0=크림=현행)
+            float _EyeshadowTexture; // 제형(텍스처) eyeshadow template(8), -1=레거시 무변조
             // 제형 스튜디오(#21) 마감 세부 — 0 = enum 기존 동작(하위호환).
             float _EyeshadowGlossLo;
             float _EyeshadowGlossGain;
@@ -101,33 +104,27 @@ Shader "ARMakeup/Eyeshadow"
             float _EyeshadowHasFinishMap;    // 0 = 맵 없음(스칼라 그대로, 하위호환)
             fixed4 _EyeshadowColor2;   // R2 그라데 스톱B (리드=속눈썹 라인 진한 색)
             float _EyeshadowGradient;  // R2 그라데 강도 0..1 (0=끔=기존)
-            float _EyeshadowShape;     // 모양(#19b): 0리드 1크리스 2스모키 3꼬리
+            float _EyeshadowShape;     // 모양 ID 0..11 (EyeshadowShape.cginc 정본)
             sampler2D _EyeshadowDesign; // 디자이너 모양 마스크(§16) — 밴드-로컬 uv2로 샘플
             float _EyeshadowHasDesign;  // 0 = 마스크 없음(절차 밴드 그대로, 하위호환)
 
-            // ── 멀티밴드(A14 ①) — 최대높이 메시 1장에 밴드별 세로 cutoff로 N밴드(≤4)를
+            // ── 멀티밴드(A14 ①) — 최대높이 메시 1장에 밴드별 세로 cutoff로 N밴드(≤8)를
             // over 합성한다(드로우콜 1, 큐 재번호 불필요). Properties 없이 유니폼만
             // (SetVectorArray/SetInt로 세팅). _EsLayerCount==0 이면 이하 단일 경로 그대로
-            // (레거시 저장물·스칼라 — 픽셀 동일). 제형 세부(GlossLo 등)·질감맵·디자인 마스크는
-            // v1에서 밴드 공통(스칼라 유니폼) — 배열화는 후속.
-            #define ES_MAX 4
+            // (레거시 저장물·스칼라 — 픽셀 동일). 제형·재질·입자는 밴드별 배열이며
+            // 질감맵·디자인 마스크만 밴드 공통이다.
+            #define ES_MAX 8
             float4 _EsLayerColor[ES_MAX];  // rgb=색, a=밴드 강도
             float4 _EsLayerColor2[ES_MAX]; // 그라데 스톱B (리드=속눈썹 라인 진한 색)
             float4 _EsLayerParam[ES_MAX];  // x=세로 cutoff(자기높이/최대높이) y=finish z=shape w=gradient
+            float4 _EsLayerPhysical[ES_MAX]; // x=texture y=shimmer z=glossLo w=glossGain
+            float4 _EsLayerParticle[ES_MAX]; // x=shimmerSize y=shimmerDensity z=particleSize w=particleDensity
+            float4 _EsLayerFinish[ES_MAX];   // x=matte y=sheen (z/w reserved)
+            float4 _EsLayerMaterial[ES_MAX]; // x=material y=strength z=particleBrightness w=particleTwinkle
+            float4 _EsLayerParticleStyle[ES_MAX]; // x=shape y=feather z=parallax w=confetti
+            float4 _EsLayerParticleColor[ES_MAX]; // rgb=particle tint
             int _EsLayerCount;             // >0 = 멀티밴드 경로, 0 = 레거시 단일 경로
             float _EdgeFeather;            // 세로 cutoff 페더 폭(기본 0.45 — 현 0.55~1.0 폭 ≈ 0.45)
-
-            // 리드 전체(shape 0) 연장 게이트 — 밴드 로컬 u(bandUV.x)가 눈꼬리 밖(>1)인 컬럼을
-            // shape 0만 페더로 남기고 그 외 모양은 눈꼬리에서 컷한다(IrisRenderer가 연장 컬럼을
-            // u∈(1,2]로 인코딩; u-1 = 눈꼬리 밖 거리/extLen). u≤1(정규 밴드)이면 항상 1.0 →
-            // 기존 픽셀 동일(하위호환). 실기기 튜닝 대상.
-            #define ES_LID_EXT_FEATHER 0.9  // shape 0 연장 페더 폭(u 단위, ≤1이면 far tip 완전 소멸)
-            float EsLidExtGate(float alongU, float shape)
-            {
-                float lidFade = 1.0 - smoothstep(1.0, 1.0 + ES_LID_EXT_FEATHER, alongU);
-                float otherCut = 1.0 - smoothstep(1.0, 1.02, alongU); // 그 외 모양: 눈꼬리에서 컷
-                return shape < 0.5 ? lidFade : otherCut;
-            }
 
             struct appdata
             {
@@ -166,11 +163,10 @@ Shader "ARMakeup/Eyeshadow"
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
                 fixed3 feed = tex2D(_CameraFeed, screenUV).rgb;
 
-                // 제형(텍스처) — GENERIC 템플릿 시드 번들(밴드 공통). body/grain=색소,
-                // coverage/edge=커버리지 amt. enum 0(크림)=ZERO → 네 헬퍼 조기 반환 =
-                // 바이트 동일(하위호환). 멀티밴드·단일 두 경로가 공유.
+                // 제형(텍스처) — eyeshadow template 시드 번들(밴드 공통). -1=레거시 무변조.
+                // body/grain=색소, coverage/edge=커버리지 amt. 멀티밴드·단일 두 경로가 공유.
                 float esTexEdge, esTexGrain, esTexCoverage, esTexBody;
-                TexBundleFromEnum(0.0, _EyeshadowTexture, esTexEdge, esTexGrain, esTexCoverage, esTexBody);
+                TexBundleFromEnum(8.0, _EyeshadowTexture, esTexEdge, esTexGrain, esTexCoverage, esTexBody);
 
                 // ── 멀티밴드(A14 ①) — 아래(uv.x=0 lash)에서 위로 N밴드 over 합성. 배열
                 // 순서 = 그리는 순서(뒤 밴드가 위). _EsLayerCount==0이면 이 블록을 건너뛰어
@@ -183,9 +179,6 @@ Shader "ARMakeup/Eyeshadow"
 
                     // 질감 맵(#22)·디자인 마스크(§16) — 밴드 공통(단일 경로와 동일 계산).
                     fixed4 esFinishMapM = tex2D(_EyeshadowFinishMap, i.uv);
-                    float esGlossGainM = _EyeshadowGlossGain;
-                    float esShimmerDensityM = _EyeshadowShimmerDensity;
-                    ModulateFinishByMap(esFinishMapM, _EyeshadowHasFinishMap, esGlossGainM, esShimmerDensityM);
                     // 연장 컬럼(bandUV.x>1)은 디자인 마스크 밖 — u를 눈꼬리 열(1.0)로 클램프해
                     // 마스크 꼬리 엣지를 이어 샘플(랩 모드 무관 안전). u≤1이면 무변화(하위호환).
                     float designGate = _EyeshadowHasDesign > 0.5
@@ -199,42 +192,59 @@ Shader "ARMakeup/Eyeshadow"
                         if (b >= _EsLayerCount) break;
                         float cutoff = _EsLayerParam[b].x;  // 세로 cutoff = 자기높이/최대높이
                         float finishB = _EsLayerParam[b].y; // 마감 enum(0새틴..3시머)
-                        float shapeB = _EsLayerParam[b].z;  // 모양 enum(0리드..3꼬리)
+                        float shapeB = _EsLayerParam[b].z;  // 모양 ID 0..11
                         float gradB = _EsLayerParam[b].w;   // 그라데 강도
+                        float textureB = _EsLayerPhysical[b].x;
+                        float shimmerB = _EsLayerPhysical[b].y;
+                        float glossLoB = _EsLayerPhysical[b].z;
+                        float glossGainB = _EsLayerPhysical[b].w;
+                        float shimmerSizeB = _EsLayerParticle[b].x;
+                        float shimmerDensityB = _EsLayerParticle[b].y;
+                        ModulateFinishByMap(esFinishMapM, _EyeshadowHasFinishMap,
+                                            glossGainB, shimmerDensityB);
+                        float particleSizeB = _EsLayerParticle[b].z;
+                        float particleDensityB = _EsLayerParticle[b].w;
+                        float matteB = _EsLayerFinish[b].x;
+                        float sheenB = _EsLayerFinish[b].y;
+                        float materialB = _EsLayerMaterial[b].x;
+                        float materialStrengthB = _EsLayerMaterial[b].y;
+                        float particleBrightnessB = _EsLayerMaterial[b].z;
+                        float particleTwinkleB = _EsLayerMaterial[b].w;
+                        float particleShapeB = _EsLayerParticleStyle[b].x;
+                        float particleFeatherB = _EsLayerParticleStyle[b].y;
+                        float particleParallaxB = _EsLayerParticleStyle[b].z;
+                        float particleConfettiB = _EsLayerParticleStyle[b].w;
+                        fixed3 particleColorB = _EsLayerParticleColor[b].rgb;
+                        float edgeB, grainB, coverageB, bodyB;
+                        TexBundleFromEnum(8.0, textureB, edgeB, grainB, coverageB, bodyB);
 
-                        // 세로 프로파일 — shape 0 = cutoff+페더 일반화(현 smoothstep(0.55,1,vx)),
-                        // 1/2/3 = 밴드 cutoff에 비례 스케일한 크리스/스모키/꼬리 분기(:129-140 일반화).
-                        float vfall = 1.0 - smoothstep(cutoff - _EdgeFeather, cutoff, vxm);
-                        float hweight = hbase;
-                        if (shapeB > 2.5)        // 3 = 꼬리 포인트 (바깥 가중 강조)
-                        {
-                            hweight = pow(hweight, 2.4);
-                        }
-                        else if (shapeB > 1.5)   // 2 = 스모키 (위로 확장)
-                        {
-                            vfall = 1.0 - smoothstep(0.78 * cutoff, 1.12 * cutoff, vxm);
-                        }
-                        else if (shapeB > 0.5)   // 1 = 크리스 집중 (중상단 밴드)
-                        {
-                            vfall = smoothstep(0.28 * cutoff, 0.5 * cutoff, vxm)
-                                  * (1.0 - smoothstep(0.62 * cutoff, 0.95 * cutoff, vxm));
-                        }
-                        float amt = vfall * hweight * _EsLayerColor[b].a; // a = 밴드 강도
-                        amt *= EsLidExtGate(i.bandUV.x, shapeB); // 리드 전체 연장(눈꼬리 밖) 게이트
-                        amt = TexEdge(TexCoverage(saturate(amt), esTexCoverage), esTexEdge); // 제형 커버·엣지
+                        float vfall, hweight;
+                        EsEvalShape(vxm, hbase, i.bandUV.x, cutoff, _EdgeFeather,
+                                    shapeB, vfall, hweight);
+                        float liftedIntensityB = EyeshadowVisibilityLift(_EsLayerColor[b].a);
+                        float amt = vfall * hweight * liftedIntensityB; // a 리프트 후 surface profile 적용
+                        amt *= EsExtensionGate(i.bandUV.x, shapeB);
+                        // scalar와 동일하게 디자인 마스크를 비선형 coverage/edge보다 먼저 적용.
+                        amt *= designGate;
+                        amt = TexEdge(TexCoverage(saturate(amt), coverageB), edgeB);
 
                         // 색·세로 그라데(§3.1) — 리드(uv.x=0)=스톱B 진한 색 → 위=스톱A.
                         // gradB=0이면 lerp 항등 → 단색.
                         fixed3 shadowBase = lerp(_EsLayerColor[b].rgb, _EsLayerColor2[b].rgb,
                                                  (1.0 - vxm) * gradB);
                         fixed3 pigment = shadowBase * PigmentBase(lumaM, 1.5, 0.15);
-                        pigment = TexBody(pigment, lumaM, esTexBody); // 제형 발색 body
-                        pigment = ApplyFinish(pigment, lumaM, i.uv, finishB, _EyeshadowShimmer,
-                                              _EyeshadowGlossLo, esGlossGainM, _EyeshadowShimmerSize,
-                                              esShimmerDensityM, _EyeshadowMatte, _EyeshadowSheen,
+                        pigment = TexBody(pigment, lumaM, bodyB);
+                        pigment = ApplyFinish(pigment, lumaM, i.uv, finishB, shimmerB,
+                                              glossLoB, glossGainB, shimmerSizeB,
+                                              shimmerDensityB, matteB, sheenB,
                                               screenUV, _PearlLightGain); // A15 방향 게인
-                        pigment = ApplyMaterial(pigment, lumaM, screenUV, i.vnormal, _EyeshadowMaterial, _EyeshadowMaterialStrength);
-                        pigment = TexGrain(pigment, i.uv, esTexGrain); // 제형 그레인
+                        pigment = ApplyMaterial(pigment, lumaM, screenUV, i.vnormal,
+                                                materialB, materialStrengthB);
+                        pigment = TexGrain(pigment, i.uv, grainB);
+                        pigment = ApplyParticles(pigment, lumaM, i.uv, screenUV,
+                                                 particleSizeB, particleDensityB, particleBrightnessB,
+                                                 particleColorB, particleTwinkleB, particleShapeB,
+                                                 particleFeatherB, particleParallaxB, particleConfettiB, 1.0);
 
                         // over — 밴드 b를 누적 위에 얹는다(배열 뒤=위). 프리멀티 누적 후
                         // 최종에서 언프리멀티 → 알파 블렌드(SrcAlpha)가 N밴드 스택을 재현.
@@ -242,41 +252,26 @@ Shader "ARMakeup/Eyeshadow"
                         accumA = amt + accumA * (1.0 - amt);
                     }
                     fixed3 outColor = accumA > 1e-5 ? accum / accumA : accum;
-                    // §11 오클루전 + 디자인 커버리지 게이트(공통) — 단일 경로와 동일.
-                    return fixed4(outColor, accumA * designGate * OccludeGate(i.grabPos));
+                    // §11 오클루전 — 디자인 게이트는 각 밴드의 texture 변환 전에 이미 적용.
+                    return fixed4(outColor, accumA * OccludeGate(i.grabPos));
                 }
 
-                // 세로 프로파일: 눈두덩 대부분(lash~55%)을 꽉 채우고 눈썹쪽 상단만 페이드.
-                // 좁게 집중시키면 영역이 작아 보이므로(실기기) 넓게 채운다. lash 근처
-                // 진한 부분은 얇은 라이너 위로 드러난다. (모양 0=리드 전체=기존 기준선)
-                float vx = saturate(i.uv.x); // 0 lash → 1 위(브로우 쪽)
-                float vfall = 1.0 - smoothstep(0.55, 1.0, vx);
-                float hweight = saturate(i.uv.y); // 바깥 꼬리 1 → 안쪽 앞머리 0.45
-
-                // 모양(#19b) — 세로·가로 프로파일 분기. 실기기 튜닝 대상.
-                if (_EyeshadowShape > 2.5)        // 3 = 꼬리 포인트 (바깥 가중 강조)
-                {
-                    hweight = pow(hweight, 2.4);
-                }
-                else if (_EyeshadowShape > 1.5)   // 2 = 스모키 (위로 확장)
-                {
-                    vfall = 1.0 - smoothstep(0.78, 1.12, vx);
-                }
-                else if (_EyeshadowShape > 0.5)   // 1 = 크리스 집중 (중상단 밴드)
-                {
-                    vfall = smoothstep(0.28, 0.5, vx) * (1.0 - smoothstep(0.62, 0.95, vx));
-                }
+                // scalar도 multi와 같은 evaluator를 사용한다. cutoff/feather 1/.45는
+                // 기존 shape 0..3의 픽셀 수식과 동일하다.
+                float vfall, hweight;
+                EsEvalShape(i.uv.x, i.uv.y, i.bandUV.x, 1.0, 0.45,
+                            _EyeshadowShape, vfall, hweight);
                 float amt = vfall * hweight * _EyeshadowIntensity;
-                amt *= EsLidExtGate(i.bandUV.x, _EyeshadowShape); // 리드 전체 연장(눈꼬리 밖) 게이트
+                amt *= EsExtensionGate(i.bandUV.x, _EyeshadowShape);
 
                 // 디자이너 모양 마스크(§16) — 밴드-로컬 uv2로 존 스텐실을 샘플해 커버리지에
                 // 곱한다(디자이너 그라데/글리터 형태를 절차 밴드 위에 얹음). _HasDesign=0이면
                 // 분기 스킵 → 절차 밴드 그대로(하위호환, 미임포트 시 바이트 동일).
-                if (_EyeshadowHasDesign > 0.5)
-                {
-                    // 연장 컬럼(bandUV.x>1)은 u를 눈꼬리 열(1.0)로 클램프(랩 모드 무관 안전).
-                    amt *= tex2D(_EyeshadowDesign, float2(min(i.bandUV.x, 1.0), i.bandUV.y)).r;
-                }
+                // 연장 컬럼(bandUV.x>1)은 u를 눈꼬리 열(1.0)로 클램프(랩 모드 무관 안전).
+                float designGate = _EyeshadowHasDesign > 0.5
+                    ? tex2D(_EyeshadowDesign, float2(min(i.bandUV.x, 1.0), i.bandUV.y)).r : 1.0;
+                amt *= designGate;
+                amt = EyeshadowVisibilityLift(amt);
                 // 제형 커버·엣지 — 최종 커버리지 amt에 배선(enum 0=무변조).
                 amt = TexEdge(TexCoverage(saturate(amt), esTexCoverage), esTexEdge);
 

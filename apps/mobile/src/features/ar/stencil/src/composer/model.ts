@@ -7,13 +7,20 @@
  */
 import type {
   EyeshadowLayer,
+  EyeshadowLayerV2,
+  EyeshadowSurface,
   FilterParams,
   LensLayer,
   OverlayLayer,
 } from '../bridge/types';
+import {
+  migrateLegacyLowerEyeshadowShape,
+  normalizeEyeshadowShape,
+} from '../bridge/eyeshadowShape';
 import { BARE } from '../presets';
 import {
   decoRegionFromKind,
+  FINISHES,
   isDecoRegion,
   isLensRegion,
   LENS_DEFAULTS,
@@ -30,19 +37,79 @@ export const MAX_OVERLAY_LAYERS = 4;
 export const MAX_LENS_LAYERS = 6;
 
 // 아이섀도 멀티밴드(A14) 상한 — Unity IrisRenderer.MaxEyeshadowLayers와 일치.
-export const MAX_EYESHADOW_LAYERS = 4;
+export const MAX_EYESHADOW_LAYERS_V2 = 8;
+/** @deprecated 신규 코드는 V2 이름을 사용한다. */
+export const MAX_EYESHADOW_LAYERS = MAX_EYESHADOW_LAYERS_V2;
+
+const clamp = (value: number | undefined, lo: number, hi: number, fallback: number) =>
+  Number.isFinite(value) ? Math.max(lo, Math.min(hi, value as number)) : fallback;
+
+const normalizeSurface = (value: unknown, fallback: EyeshadowSurface): EyeshadowSurface =>
+  value === 0 || value === 1 || value === 2 ? value : fallback;
+
+/** 구 eyeshadowLower 잎을 같은 잎의 단일 eyeshadow+surface=lower로 바꾼다. */
+export function migrateLegacyEyeshadowLayer(
+  region: RegionKey | 'eyeshadowLower',
+  source: Partial<FilterParams>,
+): {region: RegionKey; params: Partial<FilterParams>} {
+  if (region !== 'eyeshadowLower') return {region, params: {...source}};
+  const params: Partial<FilterParams> = {...source, eyeshadowSurface: 1};
+  const mapping: [keyof FilterParams, keyof FilterParams][] = [
+    ['eyeshadowLowerColor', 'eyeshadowColor'],
+    ['eyeshadowLowerIntensity', 'eyeshadowIntensity'],
+    ['eyeshadowLowerFinish', 'eyeshadowFinish'],
+    ['eyeshadowLowerShimmer', 'eyeshadowShimmer'],
+    ['eyeshadowLowerHeight', 'eyeshadowHeight'],
+    ['eyeshadowLowerTexture', 'eyeshadowTexture'],
+    ['eyeshadowLowerShape', 'eyeshadowShape'],
+  ];
+  for (const [legacy, current] of mapping) {
+    if (source[legacy] !== undefined) {
+      (params as any)[current] = legacy === 'eyeshadowLowerShape'
+        ? migrateLegacyLowerEyeshadowShape(source[legacy])
+        : source[legacy];
+    }
+    delete (params as any)[legacy];
+  }
+  return {region: 'eyeshadow', params};
+}
 
 /** 아이섀도 잎 params → 밴드 페이로드. 생략 필드는 Unity 규약(0/기본)으로 채운다. */
-function eyeshadowLayerFromParams(p: Partial<FilterParams>): EyeshadowLayer {
+function eyeshadowLayerFromParams(
+  p: Partial<FilterParams>,
+  role?: string,
+): EyeshadowLayerV2 {
+  const surface = normalizeSurface(p.eyeshadowSurface, role === 'base' ? 2 : 0);
+  const profile = normalizeEyeshadowShape(p.eyeshadowShape);
   return {
+    surface,
+    profile,
+    shape: profile,
     color: p.eyeshadowColor ?? '#C9A0A0',
     color2: p.eyeshadowColor2 ?? p.eyeshadowColor ?? '#C9A0A0',
-    intensity: p.eyeshadowIntensity ?? 0,
+    intensity: clamp(p.eyeshadowIntensity, 0, 1.5, 0),
     finish: p.eyeshadowFinish ?? 0,
-    shape: p.eyeshadowShape ?? 0,
     gradient: p.eyeshadowGradient ?? 0,
     height: p.eyeshadowHeight ?? 1,
     shimmer: p.eyeshadowShimmer ?? 0.5,
+    texture: p.eyeshadowTexture ?? -1,
+    glossLo: p.eyeshadowGlossLo ?? 0,
+    glossGain: p.eyeshadowGlossGain ?? 0,
+    shimmerSize: p.eyeshadowShimmerSize ?? 0,
+    shimmerDensity: p.eyeshadowShimmerDensity ?? 0,
+    matte: p.eyeshadowMatte ?? 0,
+    sheen: p.eyeshadowSheen ?? 0,
+    particleSize: p.eyeshadowParticleSize ?? 0,
+    particleDensity: p.eyeshadowParticleDensity ?? 0,
+    material: p.eyeshadowMaterial ?? 0,
+    materialStrength: p.eyeshadowMaterialStrength ?? 0.85,
+    particleBrightness: p.eyeshadowParticleBrightness ?? 0.7,
+    particleColor: p.eyeshadowParticleColor ?? '#FFF2D9',
+    particleTwinkle: p.eyeshadowParticleTwinkle ?? 1,
+    particleShape: p.eyeshadowParticleShape ?? 0,
+    particleFeather: p.eyeshadowParticleFeather ?? 0,
+    particleParallax: p.eyeshadowParticleParallax ?? 0,
+    particleConfetti: p.eyeshadowParticleConfetti ?? 0,
   };
 }
 
@@ -69,6 +136,8 @@ export interface ComposerLayer {
   /** 제품 참조(§5 A12) — 색·마감·농도의 출처. null/부재=커스텀(잎 params가 전부).
    *  applyProductsToLayers가 컴파일 직전 번역값을 깐다(leaf.params가 이김). */
   productId?: string | null;
+  /** 제품 컬렉션의 선택 색상. 부재/고아는 제품 기본 colorway로 폴백한다. */
+  colorwayId?: string;
   /** 테크닉(§5) — Phase A는 강도만. coverage⊗강도가 부위 intensity로 번역된다 */
   technique?: { strength: number };
 }
@@ -76,8 +145,22 @@ export interface ComposerLayer {
 let seq = 0;
 
 /** 부위를 골라 새 레이어를 만든다. 데코는 내장 점으로 시작(그림은 텍스처 탭에서 교체). */
-export function newLayer(region: RegionKey, current: FilterParams): ComposerLayer {
+export function newLayer(region: RegionKey | 'eyeshadowLower', current: FilterParams): ComposerLayer {
   const id = `c${++seq}`;
+  // 저장된 구 카탈로그가 legacy lower 키로 새 잎을 요구해도 UI 정의를 다시 노출하지 않고
+  // 동일 eyeshadow 잎의 surface=lower로 즉시 승격한다.
+  if (region === 'eyeshadowLower') {
+    const migrated = migrateLegacyEyeshadowLayer(region, {
+      ...REGION_MAP.eyeshadow.defaults,
+      eyeshadowLowerColor: current.eyeshadowLowerColor,
+      eyeshadowLowerIntensity: .3,
+      eyeshadowLowerFinish: current.eyeshadowLowerFinish,
+      eyeshadowLowerShimmer: current.eyeshadowLowerShimmer,
+      eyeshadowLowerTexture: current.eyeshadowLowerTexture,
+      eyeshadowLowerShape: current.eyeshadowLowerShape,
+    });
+    return {id, region: migrated.region, visible: true, params: migrated.params};
+  }
   if (isDecoRegion(region)) {
     // 데코 세부부위 5종 — 전부 자유 배치 오버레이. 점(deco)=색소 틴트, 나머지(타투·젬·
     // 페인팅·기타)=그림 데칼(스티커, 원본색)로 시작. kind=region으로 왕복 보존.
@@ -120,6 +203,50 @@ const PASSTHROUGH_KEYS = (Object.keys(BARE) as (keyof FilterParams)[]).filter(
 );
 
 /**
+ * 저장물/구 시스템 seed의 texture·finish enum을 현재 부위 로컬 도메인으로 제한한다.
+ * 입력과 저장 JSON은 변경하지 않으며, 필드 부재는 그대로 둔다(특히 하라이너 texture).
+ */
+function normalizeRegionEnums(
+  region: RegionKey,
+  source: Partial<FilterParams>,
+): Partial<FilterParams> {
+  const result = {...source};
+  if (region === 'eyeshadow') {
+    result.eyeshadowShape = normalizeEyeshadowShape(result.eyeshadowShape);
+  }
+  const def = REGION_MAP[region];
+  for (const axis of ['texture', 'finish'] as const) {
+    for (const control of def.axes[axis] ?? []) {
+      const contract =
+        control.type === 'segments'
+          ? {key: control.key, options: control.options}
+          : control.type === 'finish'
+            ? {key: control.finishKey, options: control.options ?? FINISHES}
+            : null;
+      if (!contract) continue;
+      const raw = result[contract.key];
+      if (raw === undefined) continue;
+      if (axis === 'texture' && raw === -1) continue; // W1 필드 부재 sentinel=레거시 무변조
+      if (contract.options.some(option => option.value === raw)) continue;
+      // 제한된 부위 UI가 일부 버튼을 숨겨도 범용 finish enum(특히 legacy 0=새틴)은
+      // 렌더러가 여전히 이해한다. 현재 옵션 subset 밖이라는 이유만으로 룩을 바꾸지 않는다.
+      // texture는 부위마다 값 의미가 달라 반드시 현재 region options로만 판정한다.
+      if (axis === 'finish' && FINISHES.some(option => option.value === raw)) continue;
+      const configuredDefault = def.defaults[contract.key];
+      const safeDefault = contract.options.some(
+        option => option.value === configuredDefault,
+      )
+        ? configuredDefault
+        : contract.options[0]?.value;
+      if (safeDefault !== undefined) {
+        (result as Record<string, unknown>)[contract.key] = safeDefault;
+      }
+    }
+  }
+  return result;
+}
+
+/**
  * 레이어 스택 → 브리지 재료로 컴파일. BARE에서 시작해 보이는 레이어를 순서대로
  * 병합한다(부위 필드가 겹치면 위 레이어가 이긴다). 데코 레이어는 오버레이 배열로
  * 빠지고, 한 장이라도 있으면 마스터 강도를 켠다(레이어별 강도는 overlay.intensity).
@@ -132,7 +259,7 @@ export function compileLayers(
   params: FilterParams;
   overlayLayers: OverlayLayer[];
   lensLayers: LensLayer[];
-  eyeshadowLayers: EyeshadowLayer[];
+  eyeshadowLayers: EyeshadowLayerV2[];
 } {
   const params: FilterParams = { ...BARE };
   if (carry) {
@@ -144,7 +271,8 @@ export function compileLayers(
   const overlayLayers: OverlayLayer[] = [];
   const lensLeaves: LensLayer[] = [];
   // 아이섀도 잎은 모아뒀다가(A14) 겹 수로 분기 — 1개는 legacy 스칼라, 2+는 멀티밴드.
-  const eyeshadowLeaves: Partial<FilterParams>[] = [];
+  const eyeshadowLeaves: {params: Partial<FilterParams>; role?: string}[] = [];
+  const highlighterZoneLeaves: Partial<FilterParams>[] = [];
   for (const layer of layers) {
     if (!layer.visible) continue;
     if (isDecoRegion(layer.region)) {
@@ -159,19 +287,66 @@ export function compileLayers(
       if (layer.lens) lensLeaves.push(layer.lens);
       continue;
     }
-    if (layer.region === 'eyeshadow') {
-      eyeshadowLeaves.push(layer.params);
+    const migrated = migrateLegacyEyeshadowLayer(layer.region, layer.params);
+    const normalizedParams = normalizeRegionEnums(migrated.region, migrated.params);
+    if (migrated.region === 'eyeshadow') {
+      eyeshadowLeaves.push({params: normalizedParams, role: layer.role});
       continue; // params 병합은 아래에서 겹 수로 분기
     }
-    Object.assign(params, layer.params);
+    if (migrated.region === 'highlighter' && normalizedParams.highlightZone !== undefined) {
+      highlighterZoneLeaves.push(normalizedParams);
+      continue;
+    }
+    Object.assign(params, normalizedParams);
   }
-  // 아이섀도 겹 수 분기(A14): 1개 이하 = legacy(params 스칼라·배열 빈값 → Unity 스칼라
-  // 경로), 2개 이상 = 멀티밴드 배열(params엔 안 실어 Unity가 배열 경로로 감).
-  const eyeshadowLayers: EyeshadowLayer[] =
-    eyeshadowLeaves.length >= 2
-      ? eyeshadowLeaves.slice(0, MAX_EYESHADOW_LAYERS).map(eyeshadowLayerFromParams)
-      : [];
-  if (eyeshadowLeaves.length === 1) Object.assign(params, eyeshadowLeaves[0]);
+  // V2는 단 한 겹도 배열로 보내 surface/profile 의미를 잃지 않는다. 최대 8, 자동 병합 없음.
+  const retainedEyeshadowLeaves = eyeshadowLeaves.slice(0, MAX_EYESHADOW_LAYERS_V2);
+  const eyeshadowLayers: EyeshadowLayerV2[] = retainedEyeshadowLeaves.map(leaf =>
+    eyeshadowLayerFromParams(leaf.params, leaf.role));
+  if (retainedEyeshadowLeaves.length > 0) {
+    // 마스크·마감맵은 밴드별 payload가 아니라 region-global Unity 리소스다. 배열 경로에서도
+    // 보이는 잎 중 하나라도 요청하면 compiled.params에 마커를 남겨 App reconcile이 set/clear한다.
+    for (const key of [
+      'eyeshadowMaskImported',
+      'eyeshadowFinishMapImported',
+    ] as const) {
+      if (retainedEyeshadowLeaves.some(
+        leaf => ((leaf.params[key] as number | undefined) ?? 0) > 0,
+      )) {
+        params[key] = 1;
+      }
+    }
+  }
+  if (highlighterZoneLeaves.length > 0) {
+    // 존 잎의 공통 색/마감은 가장 낮은 zone 잎을 canonical style로 사용한다. 배열 순서를
+    // 바꿔도 결과가 같고, Pink Pearl처럼 동일 제품을 부위별로 나눈 룩은 한 스타일을 유지한다.
+    const canonicalStyle = [...highlighterZoneLeaves].sort(
+      (a, b) => Math.trunc(Number(a.highlightZone)) - Math.trunc(Number(b.highlightZone)),
+    )[0];
+    Object.assign(params, canonicalStyle);
+
+    // Unity는 global intensity × zone weight로 렌더한다. 잎별 intensity×weight를 먼저 만든 뒤
+    // 하나의 global scale로 정규화해야 한 부위 농도 편집이 다른 부위 출력에 번지지 않는다.
+    const effectiveWeights = [0, 0, 0, 0, 0, 0];
+    let globalIntensity = 0;
+    for (const leaf of highlighterZoneLeaves) {
+      const zone = Math.trunc(Number(leaf.highlightZone));
+      if (zone >= 0 && zone < effectiveWeights.length) {
+        const intensity = clamp(leaf.highlightIntensity, 0, 1, 0);
+        effectiveWeights[zone] += intensity * clamp(leaf.highlightZoneWeight, 0, 1, 0);
+        globalIntensity = Math.max(globalIntensity, intensity);
+      }
+    }
+    globalIntensity = clamp(Math.max(globalIntensity, ...effectiveWeights), 0, 1, 0);
+    const weights = effectiveWeights.map(value =>
+      globalIntensity > 0 ? clamp(value / globalIntensity, 0, 1, 0) : 0);
+    params.highlightIntensity = globalIntensity;
+    params.highlightHasZoneWeights = 1;
+    [params.highlightZoneCheek, params.highlightZoneBridge, params.highlightZoneTip,
+      params.highlightZoneBrow, params.highlightZoneCupid, params.highlightZoneChin] = weights;
+    delete params.highlightZone;
+    delete params.highlightZoneWeight;
+  }
   if (overlayLayers.length > 0 && params.faceOverlayIntensity === 0) {
     params.faceOverlayIntensity = 0.85;
   }
@@ -194,22 +369,41 @@ export function seedLayers(
   params: FilterParams,
   overlayLayers: OverlayLayer[],
   lensLayers: LensLayer[] = [],
-  eyeshadowLayers: EyeshadowLayer[] = [],
+  eyeshadowLayers: (EyeshadowLayerV2 | EyeshadowLayer)[] = [],
 ): ComposerLayer[] {
   const layers: ComposerLayer[] = [];
+  const retainedEyeshadowLayers = eyeshadowLayers.slice(0, MAX_EYESHADOW_LAYERS_V2);
   for (const def of REGION_DEFS) {
     if (isDecoRegion(def.key) || isLensRegion(def.key)) continue;
-    // 아이섀도 멀티밴드(A14)가 있으면 여기서 단일 잎 복원을 건너뛴다(배열로 복원).
-    if (def.key === 'eyeshadow' && eyeshadowLayers.length >= 2) continue;
+    // V2 배열이 있으면 스칼라 legacy 잎 복원을 건너뛴다.
+    if (def.key === 'eyeshadow' && retainedEyeshadowLayers.length >= 1) continue;
     const on = def.onKeys.some(k => ((params[k] as number) ?? 0) > 0);
     if (!on) continue;
+    const normalized = normalizeRegionEnums(def.key, params);
     const own: Partial<FilterParams> = {};
     for (const k of regionOwnKeys(def)) {
-      if (params[k] !== undefined) {
-        (own as Record<string, unknown>)[k] = params[k];
+      if (normalized[k] !== undefined) {
+        (own as Record<string, unknown>)[k] = normalized[k];
       }
     }
     layers.push({ id: `c${++seq}`, region: def.key, visible: true, params: own });
+  }
+  // tree-less v1 preset/storage adapter: 구 lower 스칼라는 upper 잎과 합치지 않고 별도
+  // eyeshadow(surface=lower) 잎으로 승격한다.
+  if (retainedEyeshadowLayers.length === 0 && (params.eyeshadowLowerIntensity ?? 0) > 0) {
+    const migrated = migrateLegacyEyeshadowLayer('eyeshadowLower', {
+      eyeshadowLowerColor: params.eyeshadowLowerColor,
+      eyeshadowLowerIntensity: params.eyeshadowLowerIntensity,
+      eyeshadowLowerFinish: params.eyeshadowLowerFinish,
+      eyeshadowLowerShimmer: params.eyeshadowLowerShimmer,
+      eyeshadowLowerHeight: params.eyeshadowLowerHeight,
+      eyeshadowLowerTexture: params.eyeshadowLowerTexture,
+      eyeshadowLowerShape: params.eyeshadowLowerShape,
+    });
+    layers.push({
+      id: `c${++seq}`, region: 'eyeshadow', visible: true,
+      params: normalizeRegionEnums('eyeshadow', migrated.params), role: 'point',
+    });
   }
   for (const overlay of overlayLayers) {
     // 데코 세부부위 역매핑 — overlay.kind로 5종 중 하나 복원(미상·legacy는 '점'=deco).
@@ -228,24 +422,51 @@ export function seedLayers(
     layers.push({ id: `c${++seq}`, region, visible: true, params: {}, lens: { ...lens } });
   }
   // 아이섀도 멀티밴드(A14) — 밴드 배열을 eyeshadow 잎 여럿으로 역복원(배열 순서=겹 순서).
-  if (eyeshadowLayers.length >= 2) {
-    for (const band of eyeshadowLayers) {
+  if (retainedEyeshadowLayers.length >= 1) {
+    const importedMarkers: Partial<FilterParams> = {};
+    for (const key of [
+      'eyeshadowMaskImported',
+      'eyeshadowFinishMapImported',
+    ] as const) {
+      if (((params[key] as number | undefined) ?? 0) > 0) importedMarkers[key] = 1;
+    }
+    retainedEyeshadowLayers.forEach((band, bandIndex) => {
       layers.push({
         id: `c${++seq}`,
         region: 'eyeshadow',
         visible: true,
-        params: {
+        params: normalizeRegionEnums('eyeshadow', {
           eyeshadowColor: band.color,
           eyeshadowColor2: band.color2,
           eyeshadowIntensity: band.intensity,
           eyeshadowFinish: band.finish,
-          eyeshadowShape: band.shape,
+          eyeshadowSurface: normalizeSurface(band.surface, 0),
+          eyeshadowShape: normalizeEyeshadowShape(band.profile ?? band.shape),
           eyeshadowGradient: band.gradient,
           eyeshadowHeight: band.height,
           eyeshadowShimmer: band.shimmer,
-        },
+          eyeshadowTexture: band.texture ?? -1,
+          eyeshadowGlossLo: band.glossLo,
+          eyeshadowGlossGain: band.glossGain,
+          eyeshadowShimmerSize: band.shimmerSize,
+          eyeshadowShimmerDensity: band.shimmerDensity,
+          eyeshadowMatte: band.matte,
+          eyeshadowSheen: band.sheen,
+          eyeshadowParticleSize: band.particleSize,
+          eyeshadowParticleDensity: band.particleDensity,
+          eyeshadowMaterial: band.material,
+          eyeshadowMaterialStrength: band.materialStrength,
+          eyeshadowParticleBrightness: band.particleBrightness,
+          eyeshadowParticleColor: band.particleColor,
+          eyeshadowParticleTwinkle: band.particleTwinkle,
+          eyeshadowParticleShape: band.particleShape,
+          eyeshadowParticleFeather: band.particleFeather,
+          eyeshadowParticleParallax: band.particleParallax,
+          eyeshadowParticleConfetti: band.particleConfetti,
+          ...(bandIndex === 0 ? importedMarkers : {}),
+        }),
       });
-    }
+    });
   }
   return layers;
 }

@@ -351,7 +351,7 @@ Shader "ARMakeup/CameraFeed"
                         // softclip이 얼굴/목 파운데이션을 불필요하게 한 번 더 압축한다.
                         if (_FoundationFinish > 1.5 && _FoundationFinish < 2.5)
                             found = FoundationSoftClip(found);
-                        col = FoundationBlend(col, found, fLuma, fChroma, fCov);
+                        col = FoundationBlend(col, found, fLuma, fChroma, fCov, src);
                     }
                 }
 

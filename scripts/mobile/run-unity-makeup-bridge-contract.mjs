@@ -54,6 +54,10 @@ const eyeshadowShaderSource = readFileSync(
   join(unityResourcesRoot, 'Eyeshadow.shader'),
   'utf8',
 );
+const eyeshadowShapeSource = readFileSync(
+  join(unityResourcesRoot, 'EyeshadowShape.cginc'),
+  'utf8',
+);
 const stencilGuideRendererSource = readFileSync(
   join(graftFaceRoot, 'StencilGuideRenderer.cs'),
   'utf8',
@@ -105,13 +109,23 @@ assert.match(
 assert.doesNotMatch(makeupQueuesSource, /\bAegyo\s*=/, '별도 애교살 렌더 큐가 있으면 안 된다');
 assert.match(
   irisRendererSource,
-  /StyleAngleDeg\s*=\s*\{\s*28f,\s*-22f,\s*0f\s*\}[\s\S]*Mathf\.Clamp\(p\.eyeshadowShape,\s*0,\s*3\)/,
-  '아이라이너 3종·아이쉐도 4종 범위는 ARwithFable 정본과 같아야 한다',
+  /StyleAngleDeg\s*=\s*\{\s*28f,\s*-22f,\s*0f,\s*0f,\s*24f,\s*-18f\s*\}[\s\S]*StyleTailLen\s*=\s*\{\s*0\.45f,\s*0\.4f,\s*0\.7f,\s*1\.4f,\s*1\.2f,\s*1\.1f\s*\}/,
+  '아이라이너 6종 각도·꼬리 길이 범위는 ARwithFable 정본과 같아야 한다',
 );
-assert.doesNotMatch(
-  irisRendererSource + eyeshadowShaderSource,
-  /EyelinerStyleCount|EyeshadowShapeCount|EyeshadowBell|EyeshadowShapeWeight|EyeshadowTailAnatomicalX/,
-  '정본에 없는 아이라이너·아이쉐도 확장 렌더 분기가 남아 있으면 안 된다',
+assert.match(
+  irisRendererSource,
+  /Mathf\.Clamp\(layer\.shape,\s*0,\s*11\)[\s\S]*Mathf\.Clamp\(p\.eyeshadowShape,\s*0,\s*11\)/,
+  '멀티밴드와 단일 아이쉐도 모두 12종 shape 범위를 사용해야 한다',
+);
+assert.match(
+  eyeshadowShaderSource,
+  /#include "EyeshadowShape\.cginc"[\s\S]*EsEvalShape\([\s\S]*EsExtensionGate\(/,
+  '아이쉐도 셰이더는 공용 12종 shape 프로파일과 확장 게이트를 사용해야 한다',
+);
+assert.match(
+  eyeshadowShapeSource,
+  /void\s+EsEvalShape\([\s\S]*float\s+EsExtensionGate\(/,
+  '공용 아이쉐도 12종 shape 구현이 누락되면 안 된다',
 );
 assert.match(
   lowerLidRendererSource,
@@ -172,11 +186,18 @@ const tsFilterFields = new Set(
   [...tsFilterBody.matchAll(/^\s{2}([A-Za-z_]\w*)\??:/gm)].map(match => match[1]),
 );
 const csFilterFields = new Set(
-  [...csFilterBody.matchAll(/^\s*public\s+(?:string|float|int|bool)\s+([A-Za-z_]\w*)\b/gm)]
+  [...csFilterBody.matchAll(/^[ \t]*public[ \t]+(?!static\b)[A-Za-z_]\w*(?:\[\])?[ \t]+([A-Za-z_]\w*)\b[^\n;]*;/gm)]
     .map(match => match[1]),
 );
+const compileOnlyTsFilterFields = new Set([
+  'eyeshadowSurface',
+  'highlightZone',
+  'highlightZoneWeight',
+]);
 const serializedTsFilterFields = new Set(
-  [...tsFilterFields].filter(field => !field.endsWith('Imported')),
+  [...tsFilterFields].filter(
+    field => !field.endsWith('Imported') && !compileOnlyTsFilterFields.has(field),
+  ),
 );
 assert.deepEqual(
   [...serializedTsFilterFields].sort(),
@@ -188,9 +209,7 @@ for (const forkOnlyField of [
   'aegyoShadowIntensity',
   'aegyoRendererVersion',
   'highlightZoneVersion',
-  'eyelinerLowerColor',
   'eyelinerLowerStyle',
-  'eyelinerLowerShimmer',
 ]) {
   assert.equal(
     tsFilterFields.has(forkOnlyField) || csFilterFields.has(forkOnlyField),

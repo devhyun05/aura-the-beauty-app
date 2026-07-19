@@ -19,43 +19,62 @@ float _FndLumaGainDbg;  // shade 게인 (기본 1.0). 미설정(≤1e-4)이면 �
 float _FndChromaDbg;    // 회색 혼합량(채도 평탄화, 기본 0.4). 0도 유효값이라 음수 sentinel로 판정.
 // ──────────────────────────────────────────────────────────────────────────
 
-// 제형별 상대 조정. 0=리퀴드, 1=쿠션, 2=스킨틴트.
+// 제형별 상대 조정. 0=리퀴드, 1=쿠션, 2=스틱, 3=트윈케익, 4=스킨틴트.
 #define FND_CUSHION_GAIN 0.12
-#define FND_SKINTINT_GAIN 0.15
 #define FND_CUSHION_CHROMA 0.20
-#define FND_SKINTINT_CHROMA 0.30
 #define FND_CUSHION_COVERAGE 0.15
-#define FND_SKINTINT_COVERAGE 0.30
+#define FND_STICK_GAIN -0.05
+#define FND_STICK_CHROMA 0.10
+#define FND_STICK_COVERAGE 0.25
+#define FND_TWINCAKE_GAIN -0.10
+#define FND_TWINCAKE_CHROMA 0.25
+#define FND_TWINCAKE_COVERAGE 0.20
+#define FND_SKINTINT_GAIN -0.15
+#define FND_SKINTINT_CHROMA -0.30
+#define FND_SKINTINT_COVERAGE -0.30
 
 // ── 제형 스튜디오(#21·W2) 진입점 — 향후 오버라이드 유니폼 ────────────────────────
-// 위 제형 enum(0 리퀴드/1 쿠션/2 스킨틴트)은 레거시 축이고, 여기 두 축은 제형 스튜디오가
+// 위 제형 enum(0 리퀴드/1 쿠션/2 스틱/3 트윈케익/4 스킨틴트)은 레거시 축이고, 여기 세 축은 제형 스튜디오가
 // 시드 위에 얹을 세부 델타다(TexBundle 4축 중 파운데에 매핑되는 것만). 파운데는 전면 스킨
-// 블렌드라 마스크 edge/grain 축은 해당 없음(픽셀 마스크 패스가 없어 적용 지점이 없다) →
-// coverage(발색 세기)·body(발색 두께=gain) 두 축만 연다. 전역 유니폼(_FndRefLumaDbg 선례) —
+// 블렌드라 마스크 edge 축은 해당 없음(픽셀 마스크 패스가 없어 적용 지점이 없다). 대신
+// coverage(발색 세기)·body(발색 두께=gain)·grain(최종 블렌드 입자) 세 축을 연다.
+// 전역 유니폼(_FndRefLumaDbg 선례) —
 // MakeupController가 세팅하지 않으면 0(미지정=레거시)이고, 현 웨이브는 항상 0이다.
 float _FndTexCoverage;  // 발색 세기 델타(0=레거시). TexCoverage 미러: cov*(1+delta).
 float _FndTexBody;      // 발색 두께 델타(0=레거시). TexBody 게인 미러: gain*(1+0.35·clamp).
+float _FndTexGrain;     // 파운데 블렌드 결과 그레인(0=레거시 무변조).
 
 void FoundationTextureParams(float textureMode, float intensity,
                              out float gain, out float chroma, out float coverage)
 {
     float cushionAmount = saturate(1.0 - abs(textureMode - 1.0));
-    float skinTintAmount = saturate(textureMode - 1.0);
+    float stickAmount = saturate(1.0 - abs(textureMode - 2.0));
+    float twinCakeAmount = saturate(1.0 - abs(textureMode - 3.0));
+    float skinTintAmount = saturate(1.0 - abs(textureMode - 4.0));
     // (임시 디버그: 파운데 색 튜닝) 유니폼 미설정(0) 프레임 폴백 — 리터럴은 옛 #define 값.
     float lumaGain = _FndLumaGainDbg > 1e-4 ? _FndLumaGainDbg : 1.0;
     // 미설정 방어는 하지 않는다: 미설정 전역 float은 0(=선명, 유효값)으로 읽혀 센티널로 구분
     // 불가하고, MakeupController.Init()이 0.4를 선시딩하므로 미설정 프레임 자체가 없다.
     float baseChroma = _FndChromaDbg;
-    gain = lumaGain *
-        (1.0 + cushionAmount * FND_CUSHION_GAIN - skinTintAmount * FND_SKINTINT_GAIN);
-    chroma = baseChroma *
-        (1.0 + cushionAmount * FND_CUSHION_CHROMA - skinTintAmount * FND_SKINTINT_CHROMA);
-    coverage = intensity *
-        (1.0 + cushionAmount * FND_CUSHION_COVERAGE - skinTintAmount * FND_SKINTINT_COVERAGE);
+    gain = lumaGain * (1.0
+        + cushionAmount * FND_CUSHION_GAIN
+        + stickAmount * FND_STICK_GAIN
+        + twinCakeAmount * FND_TWINCAKE_GAIN
+        + skinTintAmount * FND_SKINTINT_GAIN);
+    chroma = baseChroma * (1.0
+        + cushionAmount * FND_CUSHION_CHROMA
+        + stickAmount * FND_STICK_CHROMA
+        + twinCakeAmount * FND_TWINCAKE_CHROMA
+        + skinTintAmount * FND_SKINTINT_CHROMA);
+    coverage = intensity * (1.0
+        + cushionAmount * FND_CUSHION_COVERAGE
+        + stickAmount * FND_STICK_COVERAGE
+        + twinCakeAmount * FND_TWINCAKE_COVERAGE
+        + skinTintAmount * FND_SKINTINT_COVERAGE);
 
     // ── 제형 스튜디오(#21·W2) — 커스텀 세부가 오면 번들 축을 위 레거시 출력에 얹는다.
     // 픽셀 동일 논증: 두 오버라이드가 모두 0이면 fndTexCustom=0 → 아래 분기 전체가 실행되지
-    // 않아 gain·chroma·coverage는 레거시 값 그대로다(리퀴드/쿠션/스킨틴트 전 enum에서 바이트
+// 않아 gain·chroma·coverage는 레거시 값 그대로다(리퀴드/쿠션/스틱/트윈케익/스킨틴트 전 enum에서 바이트
     // 동일). 활성 시 cov·gain에 선형 델타만 얹으므로 delta=0 극한도 항등(TexCoverage/TexBody
     // 인라인 미러 — Foundation.cginc를 Finish.cginc에 의존시키지 않으려 소식을 인라인).
     float fndTexCustom = abs(_FndTexCoverage) + abs(_FndTexBody);
@@ -88,11 +107,12 @@ fixed3 FoundationSoftClip(fixed3 targetColor)
 }
 
 fixed3 FoundationBlend(fixed3 baseColor, fixed3 targetColor, float sourceLuma,
-                       float chroma, float coverage)
+                       float chroma, float coverage, float2 grainUV)
 {
     float blendAmount = saturate(coverage);
     fixed3 desaturated = lerp(baseColor, sourceLuma.xxx, chroma * blendAmount);
-    return lerp(desaturated, targetColor, blendAmount);
+    fixed3 blended = lerp(desaturated, targetColor, blendAmount);
+    return TexGrain(blended, grainUV, _FndTexGrain * blendAmount);
 }
 
 #endif // ARMAKEUP_FOUNDATION_INCLUDED

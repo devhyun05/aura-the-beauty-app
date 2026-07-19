@@ -14,6 +14,9 @@ namespace ARMakeup.Face
     /// </summary>
     public static class BrowWarp
     {
+        public const int BandArcPoints = 5;
+        public const int BandSubdivisions = 3;
+        public const int BandSegments = (BandArcPoints - 1) * (BandSubdivisions + 1) + 1;
         // ── 모양 프리셋 강도(밴드 높이 h 배수, 실기기 튜닝 대상) ────────────────
         // 진단(섹션 12): 구버전은 상단 엣지만 0.18~0.35h 이동해 6종이 육안 구분 불가
         // (아치 0.22 텐트 vs 반달 0.20 sin ≈ 0.4px 차 = 사실상 중복)였다. 강화판은
@@ -36,6 +39,8 @@ namespace ARMakeup.Face
         // ── 과변형·퇴화 가드 ────────────────────────────────────────────────
         const float MaxEdgeShift = 0.55f;      // 엣지별 이동 상한(밴드 높이 배수)
         const float GeometryEpsilon = 1e-6f;   // 정규화/나눗셈 가능한 최소 길이
+        const float MinimumFinalBandSpan = 0.15f;
+        const float MaximumLowerCoverage = 0.55f;
 
         // ── 꼬리 안티-드룹(전역, 모든 shape 공통) ─────────────────────────────
         // 미용 규칙: 눈썹 꼬리 끝(바깥·along 0)은 앞머리(안쪽·along 1) 높이 이상에서
@@ -51,6 +56,12 @@ namespace ARMakeup.Face
         const float TailTaperRegion = 0.50f;
         const float TailTaperStrength = 1.25f;
         const float TailTipMinimumWidth = 0.08f;
+        public const int LegacyProfile = 0;
+
+        // 0 is deliberately absent from these tables: profile 0 takes the byte-compatible
+        // legacy path.  The other profiles are anatomical coverage choices, not face warps.
+        // Values are measured-band multiples and are clamped below before use.
+        static readonly float[] TailTipMinimumWidths = { 0.08f, 0.16f, 0.26f, 0.34f, 0.38f, 0.32f, 0.30f };
 
         /// <summary>along: 가로 0(꼬리)→1(앞머리). shape(#19b, 슬롯 공통):
         /// 0=내추럴(무변경) 1=일자(중앙 평탄) 2=아치(중앙 뾰족 텐트) 3=각진(앞 1/3 꺾임)
@@ -130,6 +141,214 @@ namespace ARMakeup.Face
             up = shapedCenter + halfBand;
         }
 
+        /// <summary>All brow renderers use this exact Catmull-Rom landmark subdivision.
+        /// Keeping it here prevents the guide from drifting onto a five-point approximation.</summary>
+        public static void SubdivideArc(Vector3[] landmarks, int[] arc, Vector2[] output)
+        {
+            if (landmarks == null || arc == null || output == null || arc.Length != BandArcPoints ||
+                output.Length < BandSegments) return;
+            var mi = 0;
+            for (var i = 0; i < arc.Length - 1; i++)
+            {
+                var p1 = LandmarkPoint(landmarks, arc[i]);
+                var p2 = LandmarkPoint(landmarks, arc[i + 1]);
+                var p0 = i == 0 ? p1 : LandmarkPoint(landmarks, arc[i - 1]);
+                var p3 = i + 2 > arc.Length - 1 ? p2 : LandmarkPoint(landmarks, arc[i + 2]);
+                output[mi++] = p1;
+                for (var k = 1; k <= BandSubdivisions; k++)
+                    output[mi++] = CatmullRom(p0, p1, p2, p3, k / (float)(BandSubdivisions + 1));
+            }
+            output[mi] = LandmarkPoint(landmarks, arc[arc.Length - 1]);
+        }
+
+        /// <summary>
+        /// Anatomical thickness profiles. Profile 0 is intentionally the legacy entry point:
+        /// omitted fields in saved looks retain exactly the former center-expanded band.
+        /// Other profiles use the measured lower edge as a stable reference, then add an
+        /// independently bounded lower cover. This is what lets the makeup cover real hairs
+        /// below a conservative landmark band without moving the whole brow upward.
+        /// </summary>
+        public static void ShapeBand(
+            ref Vector2 lo, ref Vector2 up, float along, float thickness, float arch, int shape,
+            int thicknessProfile, float expandUpper, float expandLower)
+        {
+            if (thicknessProfile == LegacyProfile && expandUpper == 0f && expandLower == 0f)
+            {
+                ShapeBand(ref lo, ref up, along, thickness, arch, shape);
+                return;
+            }
+
+            var measuredBand = up - lo;
+            var measuredH = measuredBand.magnitude;
+            var rawLower = lo;
+            var rawUpper = up;
+            if (!IsFinite(lo) || !IsFinite(up) || !IsFinite(along) || !IsFinite(thickness) ||
+                !IsFinite(arch) || !IsFinite(expandUpper) || !IsFinite(expandLower) || !IsFinite(measuredH) ||
+                measuredH < GeometryEpsilon)
+                return;
+
+            if (thicknessProfile == LegacyProfile)
+            {
+                ShapeBand(ref lo, ref up, along, thickness, arch, shape);
+                var legacyNormal = measuredBand / measuredH;
+                lo -= legacyNormal * (measuredH * Mathf.Clamp(expandLower, -0.25f, MaximumLowerCoverage));
+                up += legacyNormal * (measuredH * Mathf.Clamp(expandUpper, -0.25f, 0.75f));
+                ClampLowerCoverageEdge(ref lo, ref up, rawLower, rawUpper);
+                EnsureMinimumSignedBand(ref lo, ref up, legacyNormal, measuredH);
+                return;
+            }
+
+            // First calculate the old silhouette at a neutral width. This keeps the six
+            // shape/arch rules identical; profile changes only the anatomical envelope.
+            ShapeBand(ref lo, ref up, along, 1f, arch, shape);
+            var center = 0.5f * (lo + up);
+            var normal = measuredBand / measuredH;
+            ResolveCoverageProfile(thicknessProfile, Mathf.Clamp01(along), out var widthK,
+                out var upperK, out var lowerK);
+            lowerK = Mathf.Clamp(lowerK + expandLower, -0.25f, MaximumLowerCoverage);
+            upperK = Mathf.Clamp(upperK + expandUpper, -0.25f, 0.75f);
+            var finalWidth = Mathf.Max(0.15f, thickness * widthK);
+
+            // Width is intentionally asymmetric. `lowerK` is extra coverage below the
+            // shaped lower edge; the remaining width grows toward the upper edge.
+            var shapedLo = center - normal * (measuredH * 0.5f);
+            lo = shapedLo - normal * (measuredH * lowerK);
+            up = lo + normal * (measuredH * (finalWidth + lowerK + upperK));
+            ClampLowerCoverageEdge(ref lo, ref up, rawLower, rawUpper);
+            EnsureMinimumSignedBand(ref lo, ref up, normal, measuredH);
+        }
+
+        /// <summary>Caps the actual lower edge at rawLower−0.55H. If shape/profile shifts
+        /// made it lower, translate the whole band upward so its intended span is retained.</summary>
+        public static void ClampLowerCoverageEdge(ref Vector2 lo, ref Vector2 up,
+                                                  Vector2 rawLower, Vector2 rawUpper)
+        {
+            var rawBand = rawUpper - rawLower;
+            var rawH = rawBand.magnitude;
+            if (!IsFinite(lo) || !IsFinite(up) || !IsFinite(rawLower) || !IsFinite(rawUpper) ||
+                !IsFinite(rawH) || rawH < GeometryEpsilon) return;
+            var normal = rawBand / rawH;
+            var cap = rawLower - normal * (rawH * MaximumLowerCoverage);
+            var belowCap = Vector2.Dot(lo - cap, normal);
+            if (belowCap >= 0f) return;
+            var correction = normal * -belowCap;
+            lo += correction;
+            up += correction;
+        }
+
+        /// <summary>Shader feather needs the same logical lower coverage as geometry.
+        /// A uniform cannot vary along the brow, so it uses the canonical mid-band sample.</summary>
+        public static float EffectiveLowerCoverage(int thicknessProfile, float expandLower)
+        {
+            var lower = expandLower;
+            if (thicknessProfile != LegacyProfile)
+            {
+                ResolveCoverageProfile(thicknessProfile, 0.5f, out _, out _, out var profileLower);
+                lower += profileLower;
+            }
+            return Mathf.Clamp(lower, -0.25f, MaximumLowerCoverage);
+        }
+
+        public static bool IsCoverageActive(int thicknessProfile, float expandUpper, float expandLower) =>
+            thicknessProfile != LegacyProfile || expandUpper != 0f || expandLower != 0f;
+
+        static void ResolveCoverageProfile(int profile, float along, out float widthK,
+                                           out float upperK, out float lowerK)
+        {
+            // along: tail 0 -> head 1. Deliberately analytic/no allocation in LateUpdate.
+            var tail = 1f - along;
+            var center = 1f - Mathf.Abs(2f * along - 1f);
+            switch (Mathf.Clamp(profile, 1, 6))
+            {
+                case 1: // slim
+                    widthK = 0.86f; upperK = 0.03f; lowerK = 0.10f; break;
+                case 2: // regular
+                    widthK = 1.12f; upperK = 0.08f; lowerK = 0.22f; break;
+                case 3: // full
+                    widthK = 1.30f + center * 0.10f; upperK = 0.12f; lowerK = 0.32f; break;
+                case 4: // bold
+                    widthK = 1.52f; upperK = 0.10f; lowerK = 0.42f; break;
+                case 5: // headFull: front/inner head (along=1) gets the body mass
+                    widthK = 1.04f + along * 0.40f; upperK = 0.08f + along * 0.12f;
+                    lowerK = 0.18f + along * 0.22f; break;
+                default: // bodyFull: central belly is full while the tail/head remain clean
+                    widthK = 1.16f + center * 0.42f; upperK = 0.12f + center * 0.10f;
+                    lowerK = 0.24f + center * 0.20f; break;
+            }
+        }
+
+        static void EnsureMinimumSignedBand(ref Vector2 lo, ref Vector2 up, Vector2 normal, float measuredH)
+        {
+            var span = Vector2.Dot(up - lo, normal);
+            var minimum = measuredH * MinimumFinalBandSpan;
+            if (!IsFinite(span) || !IsFinite(minimum) || span >= minimum) return;
+            // Preserve the anatomical lower-cover edge; only lift/extend the upper edge.
+            up = lo + normal * minimum;
+        }
+
+        /// <summary>Call after tail taper. The raw landmark pair supplies the anatomical
+        /// normal/height so the final visible band cannot collapse below 0.15H.</summary>
+        public static void EnsureMinimumFinalBandSpan(ref Vector2 lo, ref Vector2 up,
+                                                      Vector2 rawLo, Vector2 rawUp)
+        {
+            var rawBand = rawUp - rawLo;
+            var rawH = rawBand.magnitude;
+            if (!IsFinite(rawLo) || !IsFinite(rawUp) || !IsFinite(rawH) || rawH < GeometryEpsilon)
+                return;
+            EnsureMinimumSignedBand(ref lo, ref up, rawBand / rawH, rawH);
+        }
+
+        /// <summary>Anti-droop may lift a coverage tail. Restore its promised lower edge
+        /// along the anatomical band normal, translating the upper edge with it.</summary>
+        public static void RestoreCoverageLowerFloor(ref Vector2 lo, ref Vector2 up,
+                                                     Vector2 targetLower, Vector2 rawLo, Vector2 rawUp,
+                                                     bool alreadyWarped)
+        {
+            if (alreadyWarped)
+            {
+                var warp = FaceWarpField.Instance;
+                targetLower = ForwardWarp(targetLower, warp);
+                rawLo = ForwardWarp(rawLo, warp);
+                rawUp = ForwardWarp(rawUp, warp);
+            }
+            RestoreCoverageLowerFloorInSpace(ref lo, ref up, targetLower, rawLo, rawUp);
+        }
+
+        /// <summary>Restores the promised lower cover when every argument is already in
+        /// one coordinate space. Kept separate so the production warp boundary cannot
+        /// accidentally mix raw anatomical points with final display-space geometry.</summary>
+        public static void RestoreCoverageLowerFloorInSpace(ref Vector2 lo, ref Vector2 up,
+                                                            Vector2 targetLower, Vector2 rawLo,
+                                                            Vector2 rawUp)
+        {
+            var rawBand = rawUp - rawLo;
+            var rawH = rawBand.magnitude;
+            if (!IsFinite(lo) || !IsFinite(up) || !IsFinite(targetLower) ||
+                !IsFinite(rawH) || rawH < GeometryEpsilon) return;
+            var normal = rawBand / rawH;
+            var lifted = Vector2.Dot(lo - targetLower, normal);
+            if (lifted <= 0f) return;
+            var correction = normal * lifted;
+            lo -= correction;
+            up -= correction;
+        }
+
+        static Vector2 LandmarkPoint(Vector3[] landmarks, int index)
+        {
+            if (index < 0 || index >= landmarks.Length) return Vector2.zero;
+            var point = landmarks[index];
+            return new Vector2(point.x, point.y);
+        }
+
+        static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
+        {
+            var t2 = t * t;
+            var t3 = t2 * t;
+            return 0.5f * (2f * p1 + (p2 - p0) * t
+                + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2
+                + (3f * p1 - p0 - 3f * p2 + p3) * t3);
+        }
+
         /// <summary>꼬리 폭 테이퍼 — 중심선은 유지하고 along 0(꼬리)에서 최소 폭으로
         /// 좁힌 뒤 along 0.5까지 원래 폭으로 복원한다. 최소 폭이 양수라 strip 삼각형과
         /// 텍스처 UV가 꼬리 끝에서 퇴화하지 않는다.</summary>
@@ -139,6 +358,56 @@ namespace ARMakeup.Face
             var t = Mathf.Clamp01(clampedAlong / TailTaperRegion);
             var eased = Mathf.SmoothStep(0f, 1f, Mathf.Pow(t, TailTaperStrength));
             var widthScale = Mathf.Lerp(TailTipMinimumWidth, 1f, eased);
+            var center = 0.5f * (lo + up);
+            var halfBand = 0.5f * (up - lo) * widthScale;
+            lo = center - halfBand;
+            up = center + halfBand;
+        }
+
+        /// <summary>Profile-aware tail taper. Legacy profile keeps the exact prior formula.
+        /// Coverage profiles retain enough physical band at the tail to hide lower stray hair.</summary>
+        public static void TaperTail(ref Vector2 lo, ref Vector2 up, float along, int thicknessProfile)
+        {
+            if (thicknessProfile == LegacyProfile)
+            {
+                TaperTail(ref lo, ref up, along);
+                return;
+            }
+            var clampedAlong = Mathf.Clamp01(along);
+            var t = Mathf.Clamp01(clampedAlong / TailTaperRegion);
+            var eased = Mathf.SmoothStep(0f, 1f, Mathf.Pow(t, TailTaperStrength));
+            var minIndex = Mathf.Clamp(thicknessProfile, 1, TailTipMinimumWidths.Length - 1);
+            var widthScale = Mathf.Lerp(TailTipMinimumWidths[minIndex], 1f, eased);
+            var center = 0.5f * (lo + up);
+            var halfBand = 0.5f * (up - lo) * widthScale;
+            lo = center - halfBand;
+            up = center + halfBand;
+        }
+
+        /// <summary>Explicit coverage is also allowed on profile 0. It keeps the legacy
+        /// taper only when both expand deltas are zero; otherwise the physical lower cover
+        /// must not collapse to the old 8% tail point.</summary>
+        public static void TaperTail(ref Vector2 lo, ref Vector2 up, float along, int thicknessProfile,
+                                     bool coverageActive)
+        {
+            if (thicknessProfile == LegacyProfile && !coverageActive)
+            {
+                TaperTail(ref lo, ref up, along);
+                return;
+            }
+            var t = Mathf.Clamp01(Mathf.Clamp01(along) / TailTaperRegion);
+            var eased = Mathf.SmoothStep(0f, 1f, Mathf.Pow(t, TailTaperStrength));
+            var minWidth = thicknessProfile == LegacyProfile
+                ? 0.20f
+                : TailTipMinimumWidths[Mathf.Clamp(thicknessProfile, 1, TailTipMinimumWidths.Length - 1)];
+            var widthScale = Mathf.Lerp(minWidth, 1f, eased);
+            if (coverageActive)
+            {
+                // The lower edge is the anatomical coverage promise. Narrow only toward
+                // the upper edge so a tail never exposes the user's lower hairs again.
+                up = lo + (up - lo) * widthScale;
+                return;
+            }
             var center = 0.5f * (lo + up);
             var halfBand = 0.5f * (up - lo) * widthScale;
             lo = center - halfBand;

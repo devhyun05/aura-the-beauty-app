@@ -57,6 +57,13 @@ namespace ARMakeup.Face
         static readonly int WhitenIntensityId = Shader.PropertyToID("_WhitenIntensity");
         static readonly int FinishId = Shader.PropertyToID("_TeethFinish"); // 마감(Tier B, 0=새틴=기존)
         static readonly int ShapeId = Shader.PropertyToID("_TeethShape");   // 존(W6, 0=전체=현행)
+        static readonly int ToothLumaLoId = Shader.PropertyToID("_ToothLumaLo");
+        static readonly int ToothLumaHiId = Shader.PropertyToID("_ToothLumaHi");
+        static readonly int GumRedLoId = Shader.PropertyToID("_GumRedLo");
+        static readonly int GumRedHiId = Shader.PropertyToID("_GumRedHi");
+        static readonly int MaxDesaturationId = Shader.PropertyToID("_MaxDesat");
+        static readonly int BrightenAddId = Shader.PropertyToID("_BrightenAdd");
+        static readonly int RimFeatherId = Shader.PropertyToID("_RimFeather");
 
         readonly Vector2[] _ctrl = new Vector2[Ring];
         readonly float[] _ctrlDepth = new float[Ring];
@@ -64,7 +71,23 @@ namespace ARMakeup.Face
         readonly float[] _fineDepth = new float[RingFine];
 
         void Awake() => Instance = this;
-        void OnDestroy() { if (Instance == this) Instance = null; }
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+            var material = _material;
+            var mesh = _mesh;
+            _material = null;
+            _mesh = null;
+            DestroyOwned(material);
+            DestroyOwned(mesh);
+        }
+
+        static void DestroyOwned(UnityEngine.Object owned)
+        {
+            if (owned == null) return;
+            if (Application.isPlaying) Destroy(owned);
+            else DestroyImmediate(owned);
+        }
 
         public void Init(Camera cam, FaceLandmarkSource source)
         {
@@ -119,6 +142,21 @@ namespace ARMakeup.Face
             _material.SetFloat(FinishId, finish);
             // 존(W6) — 0=전체=기존 출력(하위호환). 1=앞니 6전치 집중(스트립 가로 중앙 가중).
             _material.SetFloat(ShapeId, shape);
+        }
+
+        public void ApplyExpertParams(float toothLumaLo, float toothLumaHi,
+                                      float gumRedLo, float gumRedHi,
+                                      float maxDesaturation, float brightenAdd,
+                                      float rimFeather)
+        {
+            if (_material == null) return;
+            _material.SetFloat(ToothLumaLoId, toothLumaLo);
+            _material.SetFloat(ToothLumaHiId, toothLumaHi);
+            _material.SetFloat(GumRedLoId, gumRedLo);
+            _material.SetFloat(GumRedHiId, gumRedHi);
+            _material.SetFloat(MaxDesaturationId, maxDesaturation);
+            _material.SetFloat(BrightenAddId, brightenAdd);
+            _material.SetFloat(RimFeatherId, rimFeather);
         }
 
         void LateUpdate()

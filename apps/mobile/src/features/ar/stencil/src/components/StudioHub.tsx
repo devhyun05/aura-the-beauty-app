@@ -17,7 +17,7 @@
  * 상태 모델은 상위(App)가 소유하고 여기서는 순수 편집만 위임한다(onChangeSheets·
  * onChangeProducts).
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -30,7 +30,13 @@ import {
 } from 'react-native';
 import { newFitSheet } from '../composer/fitSheets';
 import type { FitSheet } from '../composer/fitSheets';
-import { FAMILY_TEMPLATES } from '../composer/products';
+import {
+  FAMILY_TEMPLATES,
+  addProductColorway,
+  deleteProductColorway,
+  resolveColorway,
+  setDefaultProductColorway,
+} from '../composer/products';
 import type {
   ChannelBase,
   ChannelGlitter,
@@ -41,9 +47,16 @@ import type {
 } from '../composer/products';
 import { FINISHES } from '../composer/regions';
 import ParamSlider from './ParamSlider';
+import ColorWheel from './ColorWheel';
+import ExpertParamControls from './ExpertParamControls';
 import Icon from './Icon';
 import type { IconName } from './Icon';
 import { GOLD, GOLD_LIGHT, TEXT_HINT, TEXT_SUB } from '../theme';
+import {globalExpertParams} from '../composer/expertParams';
+import type {
+  ExpertOverrides,
+  ExpertParamKey,
+} from '../composer/expertParams';
 
 // 도구 — 우측 레일에서 이관한 분석/코치 진입점. 탭하면 허브를 닫고 해당 패널/플로우를
 // 연다(동작·상태는 상위 App 소유, 여기선 진입만 위임). 레일과 같은 아이콘·라벨.
@@ -56,17 +69,15 @@ const TOOLS: { key: StudioTool; icon: IconName; label: string }[] = [
   { key: 'hair', icon: 'scissors', label: '헤어' },
 ];
 
-// 베이스 색 스와치 — 부위 무관 중립 8색(제품군을 가리지 않는 공통 팔레트).
-const BASE_SWATCHES = [
-  '#1A1A1A',
-  '#8A6B54',
-  '#E0B49A',
-  '#C0392B',
-  '#E88CA0',
-  '#D98BA0',
-  '#D9C48A',
-  '#F3E3C8',
-];
+/** 편집 확정 경계: 완성된 #RGB/#RRGGBB만 6자리 대문자로 제품 상태에 넣는다. */
+function canonicalHex(value: string): string | undefined {
+  const short = /^#([0-9a-f]{3})$/i.exec(value.trim());
+  if (short) {
+    return `#${short[1].split('').map(ch => ch + ch).join('')}`.toUpperCase();
+  }
+  const long = /^#([0-9a-f]{6})$/i.exec(value.trim());
+  return long ? `#${long[1]}`.toUpperCase() : undefined;
+}
 
 interface Props {
   visible: boolean;
@@ -83,6 +94,10 @@ interface Props {
   /** 사용자 제작 제품(§5 A12) — 상태는 상위 소유 */
   userProducts: ProductDef[];
   onChangeProducts: (products: ProductDef[]) => void;
+  expertOverrides?: ExpertOverrides;
+  onChangeExpertOverride?: (key: ExpertParamKey, value: number) => void;
+  onResetExpertOverride?: (key: ExpertParamKey) => void;
+  expertError?: string | null;
 }
 
 export default function StudioHub({
@@ -96,6 +111,10 @@ export default function StudioHub({
   onOpenCatalogImport,
   userProducts,
   onChangeProducts,
+  expertOverrides = {},
+  onChangeExpertOverride,
+  onResetExpertOverride,
+  expertError,
 }: Props) {
   // 접기 — 헤더만 남기고 본문을 감춰 뒤(카메라)를 확인. 닫기와 달리 상태 유지.
   const [collapsed, setCollapsed] = useState(false);
@@ -106,6 +125,33 @@ export default function StudioHub({
   // 제품 편집 — 선택 제품 1개만 폼을 펼친다. picking=제품군 픽커 노출.
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [colorWheelTarget, setColorWheelTarget] = useState<{
+    kind: 'base' | 'colorway' | 'add';
+    productId: string;
+    colorwayId?: string;
+  } | null>(null);
+  const [hexDrafts, setHexDrafts] = useState<Record<
+    string,
+    {value: string; baseColor: string}
+  >>({});
+
+  // 외부 저장/동기화로 canonical 색이 바뀌거나 colorway가 삭제되면 stale draft 폐기.
+  useEffect(() => {
+    setHexDrafts(current => {
+      let changed = false;
+      const next: typeof current = {};
+      for (const [key, draft] of Object.entries(current)) {
+        const separator = key.lastIndexOf(':');
+        const productId = key.slice(0, separator);
+        const colorwayId = key.slice(separator + 1);
+        const colorway = userProducts.find(p => p.id === productId)
+          ?.colorways?.find(c => c.id === colorwayId);
+        if (colorway?.color === draft.baseColor) next[key] = draft;
+        else changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [userProducts]);
 
   // ── 시트 CRUD — 상태는 상위 소유, 여기서는 불변 변형만 위임 ──────────────
   const rename = (id: string, name: string) =>
@@ -173,10 +219,20 @@ export default function StudioHub({
   };
 
   // 채널 패치 — 슬롯이 없으면 중립 기본값에서 시작(제형은 항상 존재).
-  const patchBase = (p: ProductDef, b: Partial<ChannelBase>) =>
-    patchProduct(p.id, {
-      base: { ...(p.base ?? { color: '#E0B49A', coverage: 0.5 }), ...b },
-    });
+  const patchBase = (p: ProductDef, b: Partial<ChannelBase>) => {
+    const base = {...(p.base ?? {color: '#E0B49A', coverage: 0.5}), ...b};
+    if (b.color && p.colorways?.length) {
+      const defaultId = resolveColorway(p)?.id ?? p.colorways[0].id;
+      patchProduct(p.id, {
+        base,
+        defaultColorwayId: defaultId,
+        colorways: p.colorways.map(colorway =>
+          colorway.id === defaultId ? {...colorway, color: b.color!} : colorway),
+      });
+      return;
+    }
+    patchProduct(p.id, {base});
+  };
   const patchPearl = (p: ProductDef, x: Partial<ChannelPearl>) =>
     patchProduct(p.id, {
       pearl: { ...(p.pearl ?? { color: '#FFFFFF', gain: 0.4 }), ...x },
@@ -195,8 +251,75 @@ export default function StudioHub({
   };
   const patchForm = (p: ProductDef, f: Partial<ProductDef['form']>) =>
     patchProduct(p.id, { form: { ...p.form, ...f } });
+  const replaceProduct = (next: ProductDef) =>
+    onChangeProducts(userProducts.map(p => p.id === next.id ? next : p));
+  const clearHexDraft = (productId: string, colorwayId: string) => {
+    const key = `${productId}:${colorwayId}`;
+    setHexDrafts(current => {
+      if (!(key in current)) return current;
+      const next = {...current};
+      delete next[key];
+      return next;
+    });
+  };
+  const addColorway = (p: ProductDef, nextColor: string) => {
+    replaceProduct(addProductColorway(p, {
+      name: `색상 ${(p.colorways?.length ?? 1) + 1}`,
+      color: nextColor,
+    }));
+  };
+  const patchColorway = (
+    p: ProductDef,
+    colorwayId: string,
+    patch: Partial<{name: string; color: string}>,
+  ) => {
+    if (patch.color) clearHexDraft(p.id, colorwayId);
+    const colorways = (p.colorways ?? []).map(colorway =>
+      colorway.id === colorwayId ? {...colorway, ...patch} : colorway);
+    let next: ProductDef = {...p, colorways};
+    const effectiveDefaultId = resolveColorway(p)?.id;
+    if (effectiveDefaultId === colorwayId && patch.color && p.base) {
+      next = {
+        ...next,
+        defaultColorwayId: colorwayId,
+        base: {...p.base, color: patch.color},
+      };
+    }
+    replaceProduct(next);
+  };
+  const commitHexDraft = (p: ProductDef, colorwayId: string, fallback: string) => {
+    const key = `${p.id}:${colorwayId}`;
+    const canonical = canonicalHex(hexDrafts[key]?.value ?? fallback);
+    if (!canonical) {
+      clearHexDraft(p.id, colorwayId);
+      return;
+    }
+    patchColorway(p, colorwayId, {color: canonical});
+  };
+  const wheelProduct = colorWheelTarget
+    ? userProducts.find(product => product.id === colorWheelTarget.productId)
+    : undefined;
+  const wheelInitial = colorWheelTarget?.kind === 'colorway' && wheelProduct
+    ? wheelProduct.colorways?.find(c => c.id === colorWheelTarget.colorwayId)?.color
+      ?? wheelProduct.base?.color
+      ?? '#FFFFFF'
+    : wheelProduct?.base?.color ?? '#FFFFFF';
+  const applyWheelColor = (color: string) => {
+    if (!colorWheelTarget || !wheelProduct) return;
+    if (colorWheelTarget.kind === 'base') {
+      const defaultId = resolveColorway(wheelProduct)?.id;
+      if (defaultId) clearHexDraft(wheelProduct.id, defaultId);
+      patchBase(wheelProduct, {color});
+    }
+    else if (colorWheelTarget.kind === 'add') addColorway(wheelProduct, color);
+    else if (colorWheelTarget.colorwayId) {
+      patchColorway(wheelProduct, colorWheelTarget.colorwayId, {color});
+    }
+    setColorWheelTarget(null);
+  };
 
   return (
+    <>
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         {/* 시트 자체 탭은 배경 닫힘으로 전파되지 않게 흡수 */}
@@ -335,6 +458,19 @@ export default function StudioHub({
               <Text style={styles.catalogText}>에셋 카탈로그 열기</Text>
             </TouchableOpacity>
 
+            <View style={styles.divider} />
+            <Text style={styles.sectionTitle}>전역 파라미터</Text>
+            <Text style={styles.sectionNote}>
+              모든 부위에 공통으로 적용되는 렌더 기준값입니다.
+            </Text>
+            <ExpertParamControls
+              params={globalExpertParams()}
+              overrides={expertOverrides}
+              onChange={onChangeExpertOverride ?? (() => {})}
+              onReset={onResetExpertOverride ?? (() => {})}
+              error={expertError}
+            />
+
             {/* ③ 제품 만들기(A12) — 채널 4종 세부 편집 ────────────────── */}
             <View style={styles.divider} />
             <Text style={[styles.sectionTitle, styles.sectionTitleGold]}>제품 만들기</Text>
@@ -387,28 +523,92 @@ export default function StudioHub({
                           returnKeyType="done"
                         />
 
-                        {/* base — 색 스와치 + 농도 */}
+                        {slots.includes('base') && (
+                          <View style={styles.channelBlock}>
+                            <Text style={styles.channelLabel}>색상 컬렉션</Text>
+                            {(p.colorways ?? []).map(colorway => (
+                              <View key={colorway.id} style={styles.colorwayEditRow}>
+                                <TouchableOpacity
+                                  testID={`colorway-wheel-${colorway.id}`}
+                                  style={[styles.colorwayPreview, {backgroundColor: colorway.color}]}
+                                  onPress={() => setColorWheelTarget({
+                                    kind: 'colorway', productId: p.id, colorwayId: colorway.id,
+                                  })}
+                                />
+                                <TextInput
+                                  style={[styles.nameInput, styles.colorwayNameInput]}
+                                  value={colorway.name}
+                                  maxLength={24}
+                                  onChangeText={name => patchColorway(p, colorway.id, {name})}
+                                />
+                                <TextInput
+                                  testID={`colorway-hex-${colorway.id}`}
+                                  style={[styles.nameInput, styles.colorwayHexInput]}
+                                  value={
+                                    hexDrafts[`${p.id}:${colorway.id}`]?.baseColor === colorway.color
+                                      ? hexDrafts[`${p.id}:${colorway.id}`].value
+                                      : colorway.color
+                                  }
+                                  autoCapitalize="characters"
+                                  onChangeText={color => setHexDrafts(current => ({
+                                    ...current,
+                                    [`${p.id}:${colorway.id}`]: {
+                                      value: color,
+                                      baseColor: current[`${p.id}:${colorway.id}`]?.baseColor
+                                        ?? colorway.color,
+                                    },
+                                  }))}
+                                  onEndEditing={() => commitHexDraft(p, colorway.id, colorway.color)}
+                                  onSubmitEditing={() => commitHexDraft(p, colorway.id, colorway.color)}
+                                />
+                                <TouchableOpacity
+                                  testID={`colorway-default-${colorway.id}`}
+                                  style={styles.seg}
+                                  onPress={() => {
+                                    clearHexDraft(p.id, colorway.id);
+                                    replaceProduct(setDefaultProductColorway(p, colorway.id));
+                                  }}
+                                >
+                                  <Text style={styles.segText}>
+                                    {resolveColorway(p)?.id === colorway.id ? '기본' : '기본 지정'}
+                                  </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  testID={`colorway-delete-${colorway.id}`}
+                                  onPress={() => {
+                                    clearHexDraft(p.id, colorway.id);
+                                    replaceProduct(deleteProductColorway(p, colorway.id));
+                                  }}
+                                >
+                                  <Text style={styles.deleteText}>삭제</Text>
+                                </TouchableOpacity>
+                              </View>
+                            ))}
+                            <TouchableOpacity
+                              testID="add-colorway-wheel"
+                              style={styles.addBtn}
+                              onPress={() => setColorWheelTarget({kind: 'add', productId: p.id})}
+                            >
+                              <Text style={styles.addText}>＋ 색상 추가</Text>
+                            </TouchableOpacity>
+                          </View>
+                        )}
+
+                        {/* base — 자유 컬러휠 + 농도 */}
                         {slots.includes('base') && (
                           <View style={styles.channelBlock}>
                             <Text style={styles.channelLabel}>베이스 — 색·농도</Text>
-                            <View style={styles.swatchRow}>
-                              {BASE_SWATCHES.map(c => {
-                                const on =
-                                  (p.base?.color ?? '').toLowerCase() ===
-                                  c.toLowerCase();
-                                return (
-                                  <TouchableOpacity
-                                    key={c}
-                                    style={[
-                                      styles.swatch,
-                                      { backgroundColor: c },
-                                      on && styles.swatchOn,
-                                    ]}
-                                    onPress={() => patchBase(p, { color: c })}
-                                  />
-                                );
-                              })}
-                            </View>
+                            <TouchableOpacity
+                              testID="base-color-wheel"
+                              style={styles.colorWheelButton}
+                              onPress={() => setColorWheelTarget({kind: 'base', productId: p.id})}
+                            >
+                              <View style={[
+                                styles.colorwayPreview,
+                                {backgroundColor: p.base?.color ?? '#FFFFFF'},
+                              ]} />
+                              <Text style={styles.addText}>색 직접 고르기</Text>
+                            </TouchableOpacity>
                             <ParamSlider
                               label="농도"
                               value={p.base?.coverage ?? 0.5}
@@ -548,6 +748,13 @@ export default function StudioHub({
         </Pressable>
       </Pressable>
     </Modal>
+    <ColorWheel
+      visible={colorWheelTarget != null}
+      initial={wheelInitial}
+      onCancel={() => setColorWheelTarget(null)}
+      onDone={applyWheelColor}
+    />
+    </>
   );
 }
 
@@ -801,6 +1008,33 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  colorwayEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginVertical: 3,
+  },
+  colorwayPreview: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  colorWheelButton: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    marginVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(201,161,94,0.5)',
+  },
+  colorwayNameInput: {flex: 1, minWidth: 72},
+  colorwayHexInput: {width: 86},
   swatchRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

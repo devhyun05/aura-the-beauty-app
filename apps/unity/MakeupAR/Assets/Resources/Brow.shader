@@ -19,8 +19,10 @@ Shader "ARMakeup/Brow"
         _HairHi ("Hair Luma Hi", Range(0, 1)) = 0.62
         // 마감(Tier B) — 0=새틴(기본, 기존 출력) 1=매트 2=듀이. ApplyFinish 레거시 경로.
         _BrowFinish ("Brow Finish (0 satin 1 matte 2 dewy)", Float) = 0
-        // 제형(텍스처) — GENERIC 템플릿 enum(0=크림=현행). Finish.cginc TexBundleFromEnum 미러.
-        _BrowTexture ("Brow Texture (generic enum)", Float) = 0
+        // 제형(텍스처) — brow template(12). -1=필드 부재/레거시 무변조.
+        _BrowTexture ("Brow Texture (domain enum)", Float) = -1
+        _BrowCoverageMode ("Coverage Mode (0 legacy 1 coverage)", Float) = 0
+        _BrowCoverageDown ("Lower Coverage Expansion", Range(-0.25, 0.75)) = 0
     }
 
     SubShader
@@ -44,18 +46,23 @@ Shader "ARMakeup/Brow"
             #include "Occlusion.cginc" // §11 세그 오클루전 게이트 (전역 유니폼)
             #include "Ambient.cginc"   // 저조도 색소 바닥(BROW_KNEE) — 어둠 눈썹 발광 방지
             #include "Finish.cginc"    // 마감(ApplyFinish) 공용 — _CameraFeed도 여기서 선언
+            #include "BrowCoverage.cginc"
+            #include "BrowResponse.cginc"
 
             fixed4 _BrowColor;
             float _BrowIntensity;
             float _HairLo;
             float _HairHi;
             float _BrowFinish; // 마감(Tier B) — 0=새틴=기존 출력(하위호환)
-            float _BrowTexture; // 제형(텍스처) GENERIC 템플릿(0=크림=현행)
+            float _BrowTexture; // 눈썹 template(12): -1=레거시 무변조, 0=마스카라 1=틴트
+            float _BrowCoverageMode;
+            float _BrowCoverageDown;
 
             struct appdata
             {
                 float4 vertex : POSITION;
                 float2 uv : TEXCOORD0; // x=세로(0하→1상), y=가로(0바깥→1안)
+                float browSide : TEXCOORD3;
             };
 
             struct v2f
@@ -63,6 +70,7 @@ Shader "ARMakeup/Brow"
                 float4 pos : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float4 grabPos : TEXCOORD1;
+                float browSide : TEXCOORD2;
             };
 
             v2f vert(appdata v)
@@ -71,6 +79,7 @@ Shader "ARMakeup/Brow"
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.uv = v.uv;
                 o.grabPos = ComputeGrabScreenPos(o.pos);
+                o.browSide = v.browSide;
                 return o;
             }
 
@@ -78,32 +87,35 @@ Shader "ARMakeup/Brow"
             {
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
                 fixed3 feed = tex2D(_CameraFeed, screenUV).rgb;
-
-                float luma = dot(feed, fixed3(0.299, 0.587, 0.114));
+                float3 exposure = BrowResponseExposure(i.browSide);
+                fixed3 normalizedFeed = BrowResponseNormalizeFeed(feed, exposure);
+                float normalizedLuma = BrowResponseLuma(normalizedFeed);
                 // 결 보존: 어두운 털에만 색, 밝은 피부는 제외.
-                float hair = 1.0 - smoothstep(_HairLo, _HairHi, luma);
+                float hair = BrowResponseHair(normalizedLuma, _HairLo, _HairHi);
 
                 // 밴드 가장자리 소프트 페더(위/아래/양끝) — 하드 경계 방지.
-                float vEdge = smoothstep(0.0, 0.18, i.uv.x) * (1.0 - smoothstep(0.82, 1.0, i.uv.x));
+                float vEdge = BrowVerticalEdge(
+                    i.uv.x, 0.18, 0.18, _BrowCoverageMode, _BrowCoverageDown);
                 float hEdge = smoothstep(0.0, 0.12, i.uv.y) * (1.0 - smoothstep(0.88, 1.0, i.uv.y));
 
-                // 제형(텍스처) — GENERIC 시드 번들. body/grain=색소, coverage/edge=커버 amt.
-                // enum 0(크림)=ZERO → 네 헬퍼 조기 반환 = 바이트 동일(하위호환).
+                // 눈썹 template(12) 시드 번들. body/grain=색소, coverage/edge=커버 amt.
+                // -1=레거시 무변조, enum 0=마스카라 시드를 명시 적용한다.
                 float browTexE, browTexG, browTexC, browTexB;
-                TexBundleFromEnum(0.0, _BrowTexture, browTexE, browTexG, browTexC, browTexB);
+                TexBundleFromEnum(12.0, _BrowTexture, browTexE, browTexG, browTexC, browTexB);
                 float amt = hair * vEdge * hEdge * _BrowIntensity;
                 amt = TexEdge(TexCoverage(saturate(amt), browTexC), browTexE); // 제형 커버·엣지
 
                 // 색소 — 어두운 털에서도 선택한 색이 보이도록 base를 올린다.
                 // (base 0.1이면 luma 낮은 털에서 색이 검정으로 뭉개짐). luma 항으로
                 // 털 사이 명암(결)은 유지하되 색은 살린다.
-                fixed3 pigment = _BrowColor.rgb * PigmentBaseKnee(luma, 1.0, 0.35, BROW_KNEE);
-                pigment = TexBody(pigment, luma, browTexB); // 제형 발색 body
+                fixed3 pigment = _BrowColor.rgb * PigmentBaseKnee(normalizedLuma, 1.0, 0.35, BROW_KNEE);
+                pigment = TexBody(pigment, normalizedLuma, browTexB); // 제형 발색 body
                 // 마감 — 0=새틴=무변형(ApplyFinish 레거시 경로, 세부 6값 0). 결 틴트라
                 // 시머 게인 0. sparkleUV=밴드 uv.
-                pigment = ApplyFinish(pigment, luma, i.uv, _BrowFinish, 0,
+                pigment = ApplyFinish(pigment, normalizedLuma, i.uv, _BrowFinish, 0,
                                       0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
                 pigment = TexGrain(pigment, i.uv, browTexG); // 제형 그레인
+                pigment = BrowResponseReapplyExposure(pigment, exposure);
 
                 // §11 오클루전 — face-skin 양성 게이트라 §14 눈썹 화이트리스트 함정 없음
                 // (hair 지우개 미사용 — Occlusion.cginc 검증 주석). 앞머리가 눈썹을 덮으면

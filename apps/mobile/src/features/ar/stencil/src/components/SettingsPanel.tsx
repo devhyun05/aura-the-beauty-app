@@ -1,6 +1,5 @@
-import React, {useState} from 'react';
+import React from 'react';
 import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
-import LegalScreen, {type LegalKind} from './LegalScreen';
 import {ACCENT, PANEL_BG} from '../theme';
 
 /**
@@ -30,6 +29,7 @@ export interface SettingsAction {
   value?: boolean;
   onSelect: () => void;
   disabled?: boolean;
+  dividerBefore?: boolean;
 }
 
 interface Props {
@@ -53,29 +53,12 @@ const ROWS: {key: keyof UserSettings; label: string; hint: string}[] = [
   },
 ];
 
-/** 정책·고지 진입(출시 필수) — 탭하면 전문 리더(LegalScreen)를 연다. */
-const LEGAL_ROWS: {key: LegalKind; label: string; hint: string}[] = [
-  {
-    key: 'privacy',
-    label: '개인정보처리방침',
-    hint: '카메라·얼굴 데이터는 기기 안에서만 처리돼요',
-  },
-  {
-    key: 'oss',
-    label: '오픈소스 라이선스',
-    hint: '앱이 사용하는 오픈소스 소프트웨어 고지',
-  },
-];
-
 export default function SettingsPanel({
   value,
   onChange,
   onClose,
   extraRows = [],
 }: Props) {
-  // 정책 문서 리더(출시 필수) — App 상태를 건드리지 않게 패널 안에서 자체 완결.
-  const [legal, setLegal] = useState<LegalKind | null>(null);
-
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
@@ -108,47 +91,30 @@ export default function SettingsPanel({
       {/* 화면 토글/액션 — 도구 레일에서 이관된 격자·조명·UI 가리기 등 */}
       {extraRows.length > 0 && <View style={styles.divider} />}
       {extraRows.map(r => (
-        <TouchableOpacity
-          key={r.key}
-          style={styles.row}
-          activeOpacity={0.8}
-          disabled={r.disabled}
-          testID={`setting-action-${r.key}`}
-          onPress={r.onSelect}>
-          <View style={styles.rowText}>
-            <Text style={[styles.rowLabel, r.disabled && styles.rowDim]}>
-              {r.label}
-            </Text>
-            <Text style={styles.rowHint}>{r.hint}</Text>
-          </View>
-          {r.kind === 'toggle' ? (
-            <View style={[styles.track, r.value && styles.trackOn]}>
-              <View style={[styles.knob, r.value && styles.knobOn]} />
+        <React.Fragment key={r.key}>
+          {r.dividerBefore && <View style={styles.divider} />}
+          <TouchableOpacity
+            style={styles.row}
+            activeOpacity={0.8}
+            disabled={r.disabled}
+            testID={`setting-action-${r.key}`}
+            onPress={r.onSelect}>
+            <View style={styles.rowText}>
+              <Text style={[styles.rowLabel, r.disabled && styles.rowDim]}>
+                {r.label}
+              </Text>
+              <Text style={styles.rowHint}>{r.hint}</Text>
             </View>
-          ) : (
-            <Text style={styles.actionArrow}>▸</Text>
-          )}
-        </TouchableOpacity>
+            {r.kind === 'toggle' ? (
+              <View style={[styles.track, r.value && styles.trackOn]}>
+                <View style={[styles.knob, r.value && styles.knobOn]} />
+              </View>
+            ) : (
+              <Text style={styles.actionArrow}>▸</Text>
+            )}
+          </TouchableOpacity>
+        </React.Fragment>
       ))}
-
-      {/* 정책·고지(출시 필수) — 전문은 풀시트 리더로 연다. */}
-      <View style={styles.divider} />
-      {LEGAL_ROWS.map(r => (
-        <TouchableOpacity
-          key={r.key}
-          style={styles.row}
-          activeOpacity={0.8}
-          testID={`setting-legal-${r.key}`}
-          onPress={() => setLegal(r.key)}>
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>{r.label}</Text>
-            <Text style={styles.rowHint}>{r.hint}</Text>
-          </View>
-          <Text style={styles.actionArrow}>▸</Text>
-        </TouchableOpacity>
-      ))}
-
-      {legal && <LegalScreen kind={legal} onClose={() => setLegal(null)} />}
     </View>
   );
 }

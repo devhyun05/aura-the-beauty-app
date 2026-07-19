@@ -188,6 +188,9 @@ namespace ARMakeup.Face
         float _browThickness = 1f;     // 눈썹 두께 (browThickness)
         float _browArch = 0f;          // 눈썹 아치 (browArch)
         int _browShape;                // 눈썹 모양 프리셋 (browShape)
+        int _browThicknessProfile;
+        float _browExpandUpper;
+        float _browExpandLower;
         float _lipOverline;            // 립 오버라인 0..1 (lipOverline)
         float _lipLinerWidth = 1f;      // 립라이너 폭 (lipLinerWidth)
         int _eyelinerStyle;            // 아이라인 스타일 프리셋 (eyelinerStyle)
@@ -195,6 +198,16 @@ namespace ARMakeup.Face
         float _blushSpread;            // 블러셔 퍼짐 (blushSpread, UV 워프)
         float _highlightLift, _highlightSpread; // 하이라이터 UV 워프
         float _contourLift, _contourSpread;     // 컨투어 UV 워프
+        RegionAffine _blushAffine = new RegionAffine { region = "blush" };
+        RegionAffine _highlightAffine = new RegionAffine { region = "highlighter" };
+        RegionAffine _contourAffine = new RegionAffine { region = "contour" };
+        RegionAffine _linerLowerAffine = new RegionAffine { region = "eyelinerLower" };
+        RegionAffine _aegyoAffine = new RegionAffine { region = "aegyo" };
+        RegionAffine _triangleAffine = new RegionAffine { region = "triangleZone" };
+        RegionAffine _doubleLidAffine = new RegionAffine { region = "doubleLid" };
+        RegionWarpProfile _eyeshadowWarp = RegionWarpUtility.SanitizeProfile(
+            new RegionWarp { region = "eyeshadow" });
+        RegionWarpProfile _blushWarp = RegionWarpUtility.SanitizeProfile(new RegionWarp { region = "blush" });
         int _blushShape;               // 블러셔 모양 프리셋 (blushShape: 클래식/이가리/드레이핑)
         int _blushCount;               // 현재 프리셋 존 개수(2~4)
         bool _blushDirty = true;       // 프리셋/리프트/퍼짐 변경 시 재해석 플래그
@@ -210,12 +223,19 @@ namespace ARMakeup.Face
         static readonly float[] StyleTailLen = { 0.45f, 0.4f, 0.7f };
 
         // 재사용 버퍼.
-        readonly Vector2[] _ctrl = new Vector2[24]; // 최대 컨트롤 점(립 20·아이섀도 18)
+        readonly Vector2[] _ctrl = new Vector2[40]; // 눈썹 밴드 링 34(17×2) 포함
         readonly Vector2[] _fine = new Vector2[Pts];
+        readonly Vector2[] _outlineScratch = new Vector2[Pts];
+        readonly FitOutline[] _outlineBySlot = new FitOutline[MaxStrokes];
+        readonly bool[] _outlineValid = new bool[MaxStrokes];
+        bool _captureFitOutlinesThisFrame;
         // 눈썹 밴드 스크래치 — 안티-드룹(BrowWarp.WarpAndLiftDroopingTail)을 링 조립 전에
         // 적용하려면 상·하단을 배열로 잡아야 한다(제품 렌더러와 동일 처리 → 가이드 일치).
-        readonly Vector2[] _browUp = new Vector2[BrowUpper[0].Length];
-        readonly Vector2[] _browLo = new Vector2[BrowUpper[0].Length];
+        readonly Vector2[] _browUp = new Vector2[BrowWarp.BandSegments];
+        readonly Vector2[] _browLo = new Vector2[BrowWarp.BandSegments];
+        readonly Vector2[] _browRawUp = new Vector2[BrowWarp.BandSegments];
+        readonly Vector2[] _browRawLo = new Vector2[BrowWarp.BandSegments];
+        readonly Vector2[] _browCoverageLo = new Vector2[BrowWarp.BandSegments];
 
         // 마스크 존 경계점 UV→메시정점 캐시(정적 UV라 1회 해석). 매 프레임 뷰포트 보간.
         // 0..HlZones-1=하이라이터, HlZones..=컨투어(플랫, 존×HlPts 인덱스).
@@ -320,6 +340,14 @@ namespace ARMakeup.Face
         const int FitHandleInterval = 6;
         bool _fitHandlesEnabled;
         int _fhFrame;
+        int _fitHandlesSessionId;
+        float _lastFitHandlesAt = float.NegativeInfinity;
+        static readonly int[] OutlinePrioritySlots =
+        {
+            S_SHADOW, S_SHADOW + 1, S_BLZ, S_BLZ + 1,
+            S_LIP, S_HL, S_HL + 1, S_CTZ, S_CTZ + 1,
+            S_BROW, S_BROW + 1, S_AEGYO,
+        };
 
         void Awake() => Instance = this;
         void OnDestroy() { if (Instance == this) Instance = null; }
@@ -362,6 +390,12 @@ namespace ARMakeup.Face
             }
             _vertices = new Vector3[vc];
             _colors = new Color32[vc]; // 초기 전부 알파 0(안 보임)
+            for (var slot = 0; slot < MaxStrokes; slot++)
+            {
+                var region = OutlineRegionForSlot(slot);
+                if (region != null)
+                    _outlineBySlot[slot] = new FitOutline { region = region, points = new float[16] };
+            }
             _mesh.vertices = _vertices;
             _mesh.uv = uvs;
             _mesh.colors32 = _colors;
@@ -436,6 +470,9 @@ namespace ARMakeup.Face
             _browThickness = Mathf.Clamp(p.browThickness, 0.4f, 2f);
             _browArch = Mathf.Clamp(p.browArch, 0f, 1f);
             _browShape = Mathf.Clamp(p.browShape, 0, 5);
+            _browThicknessProfile = Mathf.Clamp(p.browThicknessProfile, 0, 6);
+            _browExpandUpper = Mathf.Clamp(p.browExpandUpper, -0.25f, 0.75f);
+            _browExpandLower = Mathf.Clamp(p.browExpandLower, -0.25f, 0.75f);
             _lipOverline = Mathf.Clamp01(p.lipOverline);
             _lipLinerWidth = p.lipLinerWidth <= 0f
                 ? 1f : Mathf.Clamp(p.lipLinerWidth, 0.4f, 2.5f);
@@ -462,6 +499,32 @@ namespace ARMakeup.Face
             _blushShape = shape; _blushLift = lift; _blushSpread = spread;
         }
 
+        /// <summary>RN sparse W4 아핀 중 명시된 부위만 갱신한다.</summary>
+        public void SetRegionAffine(RegionAffine source)
+        {
+            if (source == null) return;
+            var affine = RegionAffineUtility.Sanitize(source);
+            switch (affine.region)
+            {
+                case "blush": _blushAffine = affine; _blushDirty = true; break;
+                case "highlighter": _highlightAffine = affine; _hlDirty = true; break;
+                case "contour": _contourAffine = affine; _ctDirty = true; break;
+                case "eyelinerLower": _linerLowerAffine = affine; break;
+                case "aegyo": _aegyoAffine = affine; break;
+                case "triangleZone": _triangleAffine = affine; break;
+                case "doubleLid": _doubleLidAffine = affine; break;
+            }
+        }
+
+        /// <summary>RN sparse W5 파일럿 중 명시된 부위만 교체한다.</summary>
+        public void SetRegionWarp(RegionWarp source)
+        {
+            if (source == null) return;
+            var warp = RegionWarpUtility.SanitizeProfile(source);
+            if (source.region == "eyeshadow") _eyeshadowWarp = warp;
+            else if (source.region == "blush") { _blushWarp = warp; _blushDirty = true; }
+        }
+
         void WriteSlotColor(int slot, Color rgb)
         {
             var a = (byte)(_slotOn[slot] ? 255 : 0);
@@ -481,13 +544,18 @@ namespace ARMakeup.Face
             var tracking = _source != null && _source.HasFace && FramePresenter.Instance != null;
             var visible = tracking && _opacity > 0f && AnyOn();
             if (_renderer.enabled != visible) _renderer.enabled = visible;
-            if (visible) DrawGuides();
+            var now = Time.realtimeSinceStartup;
+            _captureFitOutlinesThisFrame = tracking && _fitHandlesEnabled &&
+                ShouldCaptureFitOutlines(_fhFrame++, _lastFitHandlesAt, now);
+            // 보이는 가이드는 60Hz, 숨은 fit geometry와 outline 캡처는 방출 프레임에만 계산한다.
+            if (visible || _captureFitOutlinesThisFrame) DrawGuides();
             // 얼굴 오벌 게이트(파운데 seg 코어 제외) — 가이드 슬롯 on/off와 독립. 트래킹 중이면
             // 매 프레임 타원을 기록하고, 소실 시 무효(z=0)로 폴백해 seg 파운데를 끈다.
             if (tracking) WriteFaceOval(_source.Landmarks);
             else Shader.SetGlobalVector(FndOvalAxisId, OvalInactive);
             // A17 온페이스 핏 핸들 — 가이드 슬롯 on/off와 독립. 트래킹 중이면 6프레임마다 좌표 방출.
-            if (_fitHandlesEnabled && tracking) EmitFitHandles(_source.Landmarks);
+            if (_captureFitOutlinesThisFrame) EmitFitHandles(_source.Landmarks, now);
+            _captureFitOutlinesThisFrame = false;
         }
 
         /// <summary>
@@ -537,7 +605,7 @@ namespace ARMakeup.Face
 
             // 립 — 외곽 닫힌 링. 오버라인(overline)이면 중심에서 바깥으로 확장(LipRenderer와
             // 동일 계수 MaxOverline) → 오버립 그린 모양 일치.
-            if (_slotOn[S_LIP])
+            if (_slotOn[S_LIP] || _captureFitOutlinesThisFrame)
             {
                 var nlip = LipsOuter.Length;
                 var lipC = Vector2.zero;
@@ -559,25 +627,38 @@ namespace ARMakeup.Face
             // 두 엣지를 BrowRenderer와 동일한 BrowWarp.ShapeBand로 변형해 실제 눈썹 일치.
             for (var e = 0; e < 2; e++)
             {
-                if (!_slotOn[S_BROW + e]) continue;
+                if (!_slotOn[S_BROW + e] && !_captureFitOutlinesThisFrame) continue;
                 var up = BrowUpper[e];
-                var lowr = BrowLower[e];
-                var m = up.Length;
+                const int m = BrowWarp.BandSegments;
+                BrowWarp.SubdivideArc(lm, BrowLower[e], _browLo);
+                BrowWarp.SubdivideArc(lm, up, _browUp);
                 // 상·하단 쌍을 함께 셰이핑하고 꼬리 폭 테이퍼 후 안티-드룹 적용 → 링 정점으로
                 // 조립. 제품 렌더러(BrowRenderer 등)와 동일 순서라 가이드 일치.
                 for (var i = 0; i < m; i++)
                 {
-                    var loP = ImgPt(lm, lowr[i]);
-                    var upP = ImgPt(lm, up[i]);
+                    var loP = _browLo[i];
+                    var upP = _browUp[i];
+                    var rawLo = loP;
+                    var rawUp = upP;
+                    _browRawLo[i] = rawLo;
+                    _browRawUp[i] = rawUp;
                     var along = i / (float)(m - 1);
                     BrowWarp.ShapeBand(
-                        ref loP, ref upP, along, _browThickness, _browArch, _browShape);
-                    BrowWarp.TaperTail(ref loP, ref upP, along);
+                        ref loP, ref upP, along, _browThickness, _browArch, _browShape,
+                        _browThicknessProfile, _browExpandUpper, _browExpandLower);
+                    BrowWarp.TaperTail(ref loP, ref upP, along, _browThicknessProfile,
+                        BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower));
+                    if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
+                        BrowWarp.EnsureMinimumFinalBandSpan(ref loP, ref upP, rawLo, rawUp);
+                    _browCoverageLo[i] = loP;
                     _browLo[i] = loP;
                     _browUp[i] = upP;
                 }
                 var browWarped = BrowWarp.WarpAndLiftDroopingTail(
                     _browLo, _browUp, m, lm, FramePresenter.Instance.ImageAspect); // 제품과 동일 안티-드룹
+                if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
+                    for (var i = 0; i < m; i++)
+                        BrowWarp.RestoreCoverageLowerFloor(ref _browLo[i], ref _browUp[i], _browCoverageLo[i], _browRawLo[i], _browRawUp[i], browWarped);
                 // 상단 정순 [0..m-1] + 하단 역순 [2m-1..m] = 닫힌 외곽 링.
                 for (var i = 0; i < m; i++)
                 {
@@ -592,7 +673,7 @@ namespace ARMakeup.Face
             // 아이섀도 존 — lash 라인 + 그 위(눈→눈썹 방향)로 밀어올린 크리스 = 닫힌 밴드.
             for (var e = 0; e < 2; e++)
             {
-                if (!_slotOn[S_SHADOW + e]) continue;
+                if (!_slotOn[S_SHADOW + e] && !_captureFitOutlinesThisFrame) continue;
                 var lids = UpperLids[e];
                 var np = lids.Length;
                 var eyeW = (ImgPt(lm, lids[0]) - ImgPt(lm, lids[np - 1])).magnitude;
@@ -601,8 +682,44 @@ namespace ARMakeup.Face
                 var creaseH = eyeW * ShadowCreaseFactor * _shadowHeightMult; // 핏(높이) 추종
                 var n = 0;
                 for (var i = 0; i < np; i++) _ctrl[n++] = ImgPt(lm, lids[i]);                // 바깥→안쪽(lash)
-                for (var i = np - 1; i >= 0; i--) _ctrl[n++] = ImgPt(lm, lids[i]) + up * creaseH; // 안쪽→바깥(크리스)
+                for (var i = np - 1; i >= 0; i--)
+                {
+                    var warpedHeight = creaseH;
+                    if (!RegionWarpUtility.IsZero(_eyeshadowWarp))
+                        warpedHeight = Mathf.Max(0f, warpedHeight + eyeW *
+                            RegionWarpUtility.SampleOpenProfile(
+                                _eyeshadowWarp, i / (float)(np - 1), e == 1));
+                    _ctrl[n++] = ImgPt(lm, lids[i]) + up * warpedHeight; // 안쪽→바깥(크리스)
+                }
                 BuildRing(n, true, halfW, DepthOfIndices(lm, lids), S_SHADOW + e);
+                if (_captureFitOutlinesThisFrame)
+                {
+                    // lash+crease 닫힌 링을 downsample하지 않고 실제 open warp 제어 t=j/7의
+                    // crease만 직접 산출한다.
+                    var iris = IrisRenderer.Instance;
+                    if (iris != null && iris.TryCopyEyeshadowCreaseOutline(
+                            e, _outlineBySlot[S_SHADOW + e].points))
+                    {
+                        _outlineValid[S_SHADOW + e] = true;
+                    }
+                    else
+                    {
+                        for (var j = 0; j < RegionWarpUtility.PointCount; j++)
+                        {
+                            var t = j / (float)(RegionWarpUtility.PointCount - 1);
+                            var pos = t * (np - 1);
+                            var lo = Mathf.FloorToInt(pos);
+                            var hi = Mathf.Min(lo + 1, np - 1);
+                            var basePoint = Vector2.Lerp(ImgPt(lm, lids[lo]), ImgPt(lm, lids[hi]), pos - lo);
+                            var height = Mathf.Max(0f, creaseH + eyeW *
+                                RegionWarpUtility.SampleOpenProfile(_eyeshadowWarp, t, e == 1));
+                            _outlineScratch[j] = FramePresenter.Instance.ImageToViewport(basePoint + up * height);
+                        }
+                        FillExactOpenCreaseOutline(_outlineScratch, RegionWarpUtility.PointCount,
+                            _outlineBySlot[S_SHADOW + e].points);
+                        _outlineValid[S_SHADOW + e] = true;
+                    }
+                }
             }
 
             // (블러셔·컨투어는 아래 마스크 UV 존 투영으로 그린다 — 랜드마크 근사 미사용)
@@ -612,7 +729,7 @@ namespace ARMakeup.Face
             // (EyelinerStyleRenderer)와 동일하게 바깥 접선을 위로 꺾어 연장한다.
             for (var e = 0; e < 2; e++)
             {
-                if (!_slotOn[S_LINER + e]) continue;
+                if (!_slotOn[S_LINER + e] && !_captureFitOutlinesThisFrame) continue;
                 var lids = UpperLids[e];
                 var np = lids.Length;
                 // 안쪽 눈머리 → 바깥 꼬리 순으로 채우고 끝에 윙 1점 추가.
@@ -639,7 +756,7 @@ namespace ARMakeup.Face
             const int AegyoArc = 11; // 밑 아크 샘플 수(BuildRing가 다시 매끈하게 리샘플)
             for (var e = 0; e < 2; e++)
             {
-                if (!_slotOn[S_AEGYO + e]) continue;
+                if (!_slotOn[S_AEGYO + e] && !_captureFitOutlinesThisFrame) continue;
                 var lids = LowerLids[e];
                 var np = lids.Length;
                 var outer = ImgPt(lm, lids[0]);       // 눈꼬리
@@ -661,22 +778,30 @@ namespace ARMakeup.Face
                     var t = j / (float)(AegyoArc - 1);
                     _ctrl[n++] = outer + chord * t + normal * (4f * sag * t * (1f - t));
                 }
+                var bandHeight = chord.magnitude * AegyoRenderBandFactor;
+                var affineCenter = (outer + inner) * 0.5f +
+                                   normal * (dip + bandHeight * 0.5f);
+                var eyeXAxis = -chordDir; // 안쪽 → 바깥쪽: LowerLidRenderer와 같은 로컬 +X
+                for (var i = 0; i < n; i++)
+                    _ctrl[i] = RegionAffineUtility.TransformBandPoint(
+                        _ctrl[i], affineCenter, eyeXAxis, -normal,
+                        chord.magnitude, bandHeight, _aegyoAffine);
                 BuildRing(n, true, halfW, DepthOfIndices(lm, lids), S_AEGYO + e);
             }
 
             // 마스크 UV 존 가이드(하이라이터·컨투어) — 캐노니컬 UV 존을 UV 리졸버로 화면
             // 투영(마스크와 동일 좌표). UV 토폴로지 정적 → 존 경계점의 (메시정점3·bary)를
             // 1회 해석 캐시하고, 매 프레임 메시 뷰포트로 보간해 싸게 그린다.
-            if (AnyZoneOn())
+            if (AnyZoneOn() || _captureFitOutlinesThisFrame)
             {
                 var mesh = CanonicalFaceMesh.Instance;
                 if (mesh != null && mesh.TopologyReady)
                 {
                     // 그룹별 dirty일 때만 재해석(정적 UV·커스텀 마스크 교체 시).
                     if (_hlDirty) { ResolveGroup(mesh, HighlightZones, HlZones, 0, _customHl,
-                        _highlightLift, _highlightSpread); _hlDirty = false; }
+                        _highlightLift, _highlightSpread, _highlightAffine); _hlDirty = false; }
                     if (_ctDirty) { ResolveGroup(mesh, ContourZones, CtZones, HlZones, _customCt,
-                        _contourLift, _contourSpread); _ctDirty = false; }
+                        _contourLift, _contourSpread, _contourAffine); _ctDirty = false; }
                     if (_blushDirty) ResolveBlush(mesh); // 프리셋/리프트/퍼짐/커스텀 변경 시만
                     var eyeVp = (mesh.ViewportOfVertex(EyeOuterL) - mesh.ViewportOfVertex(EyeOuterR)).magnitude;
                     var halfWVp = eyeVp * RibbonWidthFactor;
@@ -726,20 +851,19 @@ namespace ARMakeup.Face
                     }
                     else
                     {
-                        var uvx = zn.x + Mathf.Cos(ang) * zn.z;
-                        var uvy = zn.y + Mathf.Sin(ang) * zn.w;
-                        // 셰이더 워프 역: 리프트=+y, 퍼짐=바깥(x<0.5 왼쪽/그 외 오른쪽) · 중앙 페이드.
-                        // spreadW = HLSL smoothstep(0.04, 0.22, |x-0.5|)를 수동 계산(Mathf.SmoothStep은 시그니처 다름).
-                        var st = Mathf.Clamp01((Mathf.Abs(uvx - 0.5f) - 0.04f) / (0.22f - 0.04f));
-                        var spreadW = st * st * (3f - 2f * st);
-                        uvy += _blushLift;
-                        uvx += (uvx < 0.5f ? -_blushSpread : _blushSpread) * spreadW;
-                        edge = new Vector2(uvx, uvy) - center;
+                        edge = new Vector2(
+                            Mathf.Cos(ang) * zn.z, Mathf.Sin(ang) * zn.w);
                     }
                     var got = false;
                     for (var s = 0; s < 5 && !got; s++)
                     {
-                        var uv = center + edge * (1f - s * 0.2f);
+                        var contractedEdge = edge * (1f - s * 0.2f);
+                        // 실제 마스크와 동일한 닫힌 링 winding. 좌우 모두 동일 t를 쓴다.
+                        var sourceUv = RegionWarpUtility.WarpClosedBoundaryPoint(
+                            center, contractedEdge, i / (float)HlPts,
+                            center.x < 0.5f, _blushWarp);
+                        var uv = RegionAffineUtility.SolveZoneDisplayUv(
+                            sourceUv, _blushLift, _blushSpread, _blushAffine);
                         got = mesh.TryResolveUv(uv, out _zA[idx], out _zB[idx], out _zC[idx], out _zBary[idx]);
                     }
                     _zOk[idx] = got;
@@ -753,7 +877,7 @@ namespace ARMakeup.Face
         {
             for (var z = 0; z < count; z++)
             {
-                if (!_slotOn[slotBase + z]) continue;
+                if (!_slotOn[slotBase + z] && !_captureFitOutlinesThisFrame) continue;
                 var ok = true;
                 for (var i = 0; i < HlPts; i++)
                 {
@@ -763,16 +887,80 @@ namespace ARMakeup.Face
                              + _zBary[idx].y * mesh.ViewportOfVertex(_zB[idx])
                              + _zBary[idx].z * mesh.ViewportOfVertex(_zC[idx]);
                 }
-                if (ok) BuildRing(HlPts, true, halfWVp, depth, slotBase + z, vp: true);
+                if (ok)
+                {
+                    BuildRing(HlPts, true, halfWVp, depth, slotBase + z, vp: true);
+                    if (_captureFitOutlinesThisFrame && slotBase == S_BLZ)
+                    {
+                        // 시각 가이드는 40점 Catmull-Rom을 유지하되, 상호작용 outline은
+                        // ResolveBlush의 i=0,2,...14 즉 t=j/8 제어점을 정확히 방출한다.
+                        FillExactCyclicControlOutline(_ctrl, HlPts,
+                            slotBase + z == S_BLZ, _outlineBySlot[slotBase + z].points);
+                        _outlineValid[slotBase + z] = true;
+                    }
+                }
                 else CollapseSlot(slotBase + z);
             }
+        }
+
+        /// <summary>
+        /// 닫힌 sourceCount 링에서 cyclic 8점 t=j/8을 직접 선택한다. BuildRing의
+        /// 16→40 Catmull-Rom 리샘플을 거치지 않아 warp 제어점 인덱스가 드리프트하지 않는다.
+        /// </summary>
+        public static float[] ExactCyclicControlOutline(Vector2[] source, int sourceCount,
+                                                        bool anatomicalLeft)
+        {
+            var result = new float[RegionWarpUtility.PointCount * 2];
+            if (!FillExactCyclicControlOutline(source, sourceCount, anatomicalLeft, result))
+                return System.Array.Empty<float>();
+            return result;
+        }
+
+        static bool FillExactCyclicControlOutline(Vector2[] source, int sourceCount,
+                                                  bool anatomicalLeft, float[] result)
+        {
+            if (source == null || result == null || result.Length < 16 ||
+                sourceCount < RegionWarpUtility.PointCount || sourceCount > source.Length ||
+                sourceCount % RegionWarpUtility.PointCount != 0) return false;
+            var stride = sourceCount / RegionWarpUtility.PointCount;
+            for (var j = 0; j < RegionWarpUtility.PointCount; j++)
+            {
+                var control = anatomicalLeft ? RegionWarpUtility.PointCount - 1 - j : j;
+                var point = source[control * stride];
+                var x = float.IsNaN(point.x) || float.IsInfinity(point.x) ? 0f : point.x;
+                var y = float.IsNaN(point.y) || float.IsInfinity(point.y) ? 0f : point.y;
+                result[j * 2] = Mathf.Clamp01(x);
+                result[j * 2 + 1] = Mathf.Clamp01(y);
+            }
+            return true;
+        }
+
+        public static float[] ExactOpenCreaseOutline(Vector2[] source, int sourceCount)
+        {
+            var result = new float[16];
+            if (!FillExactOpenCreaseOutline(source, sourceCount, result))
+                return System.Array.Empty<float>();
+            return result;
+        }
+
+        static bool FillExactOpenCreaseOutline(Vector2[] source, int sourceCount, float[] result)
+        {
+            if (source == null || result == null || result.Length < 16 || sourceCount != 8 ||
+                sourceCount > source.Length) return false;
+            for (var j = 0; j < 8; j++)
+            {
+                var point = source[j];
+                result[j * 2] = Mathf.Clamp01(float.IsNaN(point.x) || float.IsInfinity(point.x) ? 0f : point.x);
+                result[j * 2 + 1] = Mathf.Clamp01(float.IsNaN(point.y) || float.IsInfinity(point.y) ? 0f : point.y);
+            }
+            return true;
         }
 
         // 마스크 존 경계점 UV → (메시정점3, bary) 해석. 하이라이터·컨투어 플랫 캐시.
         // customMask!=null(디자이너 임포트, #2 C)이면 캐노니컬 타원 대신 이 마스크의
         // 실제 경계를 존 중심에서 레이캐스트로 추적한다(마칭스퀘어 없이 B 인프라 재사용).
         void ResolveGroup(CanonicalFaceMesh mesh, Vector4[] zones, int count, int cacheZ0,
-                          Texture2D customMask, float lift, float spread)
+                          Texture2D customMask, float lift, float spread, RegionAffine affine)
         {
             for (var z = 0; z < count; z++)
             {
@@ -794,7 +982,8 @@ namespace ARMakeup.Face
                     for (var s = 0; s < 5 && !got; s++)
                     {
                         var sourceUv = center + edge * (1f - s * 0.2f);
-                        var uv = SourceMaskUvToDisplayUv(sourceUv, lift, spread);
+                        var uv = RegionAffineUtility.SolveZoneDisplayUv(
+                            sourceUv, lift, spread, affine);
                         got = mesh.TryResolveUv(uv, out _zA[idx], out _zB[idx], out _zC[idx], out _zBary[idx]);
                     }
                     _zOk[idx] = got;
@@ -880,12 +1069,82 @@ namespace ARMakeup.Face
                         _fine[i] - normal * halfW, depth, warpedImage);
                 }
             }
+
+            if (_captureFitOutlinesThisFrame)
+            {
+                var region = OutlineRegionForSlot(slot);
+                if (region != null)
+                {
+                    for (var i = 0; i < Pts; i++)
+                        _outlineScratch[i] = vp
+                            ? _fine[i]
+                            : (warpedImage
+                                ? FramePresenter.Instance.WarpedImageToViewport(_fine[i])
+                                : FramePresenter.Instance.ImageToViewport(_fine[i]));
+                    FillDownsampleViewportOutline(_outlineScratch, 8, _outlineBySlot[slot].points);
+                    _outlineValid[slot] = true;
+                }
+            }
         }
 
         void CollapseSlot(int slot)
         {
             var b = slot * Pts * 2;
             for (var i = 0; i < Pts * 2; i++) _vertices[b + i] = Vector3.zero;
+            if (_captureFitOutlinesThisFrame) _outlineValid[slot] = false;
+        }
+
+        /// <summary>BuildRing 중심선을 균등 8~12점 viewport tuple용 flat 배열로 제한한다.</summary>
+        public static float[] DownsampleViewportOutline(Vector2[] source, int requestedCount)
+        {
+            if (source == null || source.Length == 0) return System.Array.Empty<float>();
+            var count = Mathf.Clamp(requestedCount, 8, 12);
+            count = Mathf.Min(count, source.Length);
+            if (count < 8) return System.Array.Empty<float>();
+            var result = new float[count * 2];
+            for (var i = 0; i < count; i++)
+            {
+                var point = source[Mathf.FloorToInt(i * source.Length / (float)count)];
+                var x = float.IsNaN(point.x) || float.IsInfinity(point.x) ? 0f : point.x;
+                var y = float.IsNaN(point.y) || float.IsInfinity(point.y) ? 0f : point.y;
+                result[i * 2] = Mathf.Clamp01(x);
+                result[i * 2 + 1] = Mathf.Clamp01(y);
+            }
+            return result;
+        }
+
+        static bool FillDownsampleViewportOutline(Vector2[] source, int requestedCount, float[] result)
+        {
+            if (source == null || source.Length == 0 || result == null) return false;
+            var count = Mathf.Min(Mathf.Clamp(requestedCount, 8, 12), source.Length);
+            if (count < 8 || result.Length < count * 2) return false;
+            for (var i = 0; i < count; i++)
+            {
+                var point = source[Mathf.FloorToInt(i * source.Length / (float)count)];
+                result[i * 2] = Mathf.Clamp01(float.IsNaN(point.x) || float.IsInfinity(point.x) ? 0f : point.x);
+                result[i * 2 + 1] = Mathf.Clamp01(float.IsNaN(point.y) || float.IsInfinity(point.y) ? 0f : point.y);
+            }
+            return true;
+        }
+
+        static string OutlineRegionForSlot(int slot)
+        {
+            if (slot == S_LIP) return "lip";
+            if (slot == S_BROW) return "browR";
+            if (slot == S_BROW + 1) return "browL";
+            if (slot == S_SHADOW) return "eyeshadowR";
+            if (slot == S_SHADOW + 1) return "eyeshadowL";
+            if (slot == S_LINER) return "eyelinerUpperR";
+            if (slot == S_LINER + 1) return "eyelinerUpperL";
+            if (slot == S_AEGYO) return "aegyoR";
+            if (slot == S_AEGYO + 1) return "aegyoL";
+            if (slot == S_HL) return "highlighterL";
+            if (slot == S_HL + 1) return "highlighterR";
+            if (slot == S_CTZ) return "contourL";
+            if (slot == S_CTZ + 1) return "contourR";
+            if (slot == S_BLZ) return "blushL";
+            if (slot == S_BLZ + 1) return "blushR";
+            return null;
         }
 
         float DepthOfIndices(Vector3[] lm, int[] idx)
@@ -918,18 +1177,38 @@ namespace ARMakeup.Face
         // ── A17 온페이스 핏 핸들 ──
 
         /// <summary>온페이스 핏 핸들(A17) 좌표 방출 on/off. 가이드(setStencil)와 독립.</summary>
-        public void SetFitHandlesEnabled(bool on)
+        public void SetFitHandlesEnabled(bool on, int sessionId = 0)
         {
+            if (on && (!_fitHandlesEnabled || sessionId != _fitHandlesSessionId))
+            {
+                _lastFitHandlesAt = float.NegativeInfinity;
+                _fhFrame = 0;
+            }
+            _fitHandlesSessionId = sessionId;
             _fitHandlesEnabled = on;
-            if (!on) _fhFrame = 0;
+            if (!on)
+            {
+                _fhFrame = 0;
+                System.Array.Clear(_outlineValid, 0, _outlineValid.Length);
+            }
         }
+
+        public bool IsFitHandlesSessionCurrent(int sessionId) =>
+            _fitHandlesEnabled && sessionId == _fitHandlesSessionId;
+
+        public static bool FitHandleEmissionDue(float lastEmittedAt, float now) =>
+            now - lastEmittedAt + 1e-6f >= 0.100f;
+
+        public static bool ShouldCaptureFitOutlines(int frame, float lastEmittedAt, float now) =>
+            frame % FitHandleInterval == 0 && FitHandleEmissionDue(lastEmittedAt, now);
 
         /// <summary>A17 — FitHandleInterval 프레임마다 모든 모양 결정 핸들의 뷰포트 좌표와
         /// 눈꼬리간 거리(eyeVp)를 RN으로 방출한다. 가이드 슬롯 on/off와 무관하게 좌표를
         /// 독립 계산(핸들만 켜도 나와야 함). 마스크 존은 현재 핏 값을 매번 적용해 해석한다.</summary>
-        void EmitFitHandles(Vector3[] lm)
+        void EmitFitHandles(Vector3[] lm, float now)
         {
-            if (_fhFrame++ % FitHandleInterval != 0) return;
+            if (!_fitHandlesEnabled) return;
+            var capturedSessionId = _fitHandlesSessionId;
 
             var mesh = CanonicalFaceMesh.Instance;
             if (mesh == null || !mesh.TopologyReady) return;
@@ -948,31 +1227,31 @@ namespace ARMakeup.Face
             // 마스크 존 L/R — 셰이더의 역샘플 워프와 같은 +lift/+outward 표시 좌표.
             // 프리셋이 바뀌는 블러셔도 현재 첫 두 볼 존을 매 방출 시 resolve해 stale 캐시 없음.
             var blushZones = _blushShape == 1 ? BlushIgari : _blushShape == 2 ? BlushDrape : BlushClassic;
-            Add("blushL", MaskZoneHandleVp(mesh, blushZones[0], _blushLift, _blushSpread));
-            Add("blushR", MaskZoneHandleVp(mesh, blushZones[1], _blushLift, _blushSpread));
+            Add("blushL", MaskZoneHandleVp(mesh, blushZones[0], _blushLift, _blushSpread, _blushAffine));
+            Add("blushR", MaskZoneHandleVp(mesh, blushZones[1], _blushLift, _blushSpread, _blushAffine));
             if (_customHl == null)
             {
-                Add("highlightL", MaskZoneHandleVp(mesh, HighlightZones[0], _highlightLift, _highlightSpread));
-                Add("highlightR", MaskZoneHandleVp(mesh, HighlightZones[1], _highlightLift, _highlightSpread));
+                Add("highlightL", MaskZoneHandleVp(mesh, HighlightZones[0], _highlightLift, _highlightSpread, _highlightAffine));
+                Add("highlightR", MaskZoneHandleVp(mesh, HighlightZones[1], _highlightLift, _highlightSpread, _highlightAffine));
             }
             else
             {
                 if (_customHlHasL) Add("highlightL",
-                    MaskZoneHandleVp(mesh, _customHlCenterL, _highlightLift, _highlightSpread));
+                    MaskZoneHandleVp(mesh, _customHlCenterL, _highlightLift, _highlightSpread, _highlightAffine));
                 if (_customHlHasR) Add("highlightR",
-                    MaskZoneHandleVp(mesh, _customHlCenterR, _highlightLift, _highlightSpread));
+                    MaskZoneHandleVp(mesh, _customHlCenterR, _highlightLift, _highlightSpread, _highlightAffine));
             }
             if (_customCt == null)
             {
-                Add("contourL", MaskZoneHandleVp(mesh, ContourZones[0], _contourLift, _contourSpread));
-                Add("contourR", MaskZoneHandleVp(mesh, ContourZones[1], _contourLift, _contourSpread));
+                Add("contourL", MaskZoneHandleVp(mesh, ContourZones[0], _contourLift, _contourSpread, _contourAffine));
+                Add("contourR", MaskZoneHandleVp(mesh, ContourZones[1], _contourLift, _contourSpread, _contourAffine));
             }
             else
             {
                 if (_customCtHasL) Add("contourL",
-                    MaskZoneHandleVp(mesh, _customCtCenterL, _contourLift, _contourSpread));
+                    MaskZoneHandleVp(mesh, _customCtCenterL, _contourLift, _contourSpread, _contourAffine));
                 if (_customCtHasR) Add("contourR",
-                    MaskZoneHandleVp(mesh, _customCtCenterR, _contourLift, _contourSpread));
+                    MaskZoneHandleVp(mesh, _customCtCenterR, _contourLift, _contourSpread, _contourAffine));
             }
 
             // 눈 부위 앵커 — e=1(EyeOuterL=263)=L, e=0(EyeOuterR=33)=R (const 규약).
@@ -997,7 +1276,8 @@ namespace ARMakeup.Face
                     lowerLidRenderer.TryGetAegyoFitHandle(e, out aegyoVp))
                     Add("aegyo" + side, aegyoVp);
                 else
-                    Add("aegyo" + side, ToVp(AegyoCenterImg(lm, e)));
+                    Add("aegyo" + side, ToVp(ApplyLowerBandAffine(
+                        lm, e, AegyoCenterImg(lm, e), _aegyoAffine)));
 
                 // 하안검 밴드 3부위 — 렌더러 실제 밴드점 우선, 비활성 시 라인 기준 v 오프셋 폴백.
                 var linerLowerVp = Vector2.zero;
@@ -1005,7 +1285,8 @@ namespace ARMakeup.Face
                     lowerLidRenderer.TryGetEyelinerLowerFitHandle(e, out linerLowerVp))
                     Add("eyelinerLower" + side, linerLowerVp);
                 else
-                    Add("eyelinerLower" + side, ToVp(LowerBandImg(lm, e, 0.5f, 0.10f)));
+                    Add("eyelinerLower" + side, ToVp(ApplyLowerBandAffine(
+                        lm, e, LowerBandImg(lm, e, 0.5f, 0.10f), _linerLowerAffine)));
                 var shadowLowerVp = Vector2.zero;
                 if (lowerLidRenderer != null &&
                     lowerLidRenderer.TryGetEyeshadowLowerFitHandle(e, out shadowLowerVp))
@@ -1017,7 +1298,8 @@ namespace ARMakeup.Face
                     lowerLidRenderer.TryGetTriangleZoneFitHandle(e, out triZoneVp))
                     Add("triangleZone" + side, triZoneVp);
                 else
-                    Add("triangleZone" + side, ToVp(LowerBandImg(lm, e, 0.85f, 0.25f)));
+                    Add("triangleZone" + side, ToVp(ApplyLowerBandAffine(
+                        lm, e, LowerBandImg(lm, e, 0.85f, 0.25f), _triangleAffine)));
                 var lids = UpperLids[e];
                 var np = lids.Length;
                 var lidMid = ImgPt(lm, lids[np / 2]);
@@ -1031,7 +1313,19 @@ namespace ARMakeup.Face
                 Add("eyeshadow" + side, haveShadow
                     ? shadowVp
                     : ToVp(lidMid + up * (eyeW * ShadowCreaseFactor * 0.55f)));
-                Add("doubleLid" + side, ToVp(lidMid + up * (eyeW * 0.16f)));
+                var doubleLidVp = Vector2.zero;
+                var doubleLidRenderer = DoubleLidRenderer.Instance;
+                if (doubleLidRenderer != null && doubleLidRenderer.TryGetFitHandle(e, out doubleLidVp))
+                    Add("doubleLid" + side, doubleLidVp);
+                else
+                {
+                    var doubleLidImg = lidMid + up * (eyeW * 0.16f);
+                    doubleLidImg = RegionAffineUtility.TransformEyePoint(
+                        doubleLidImg, doubleLidImg,
+                        (ImgPt(lm, lids[0]) - ImgPt(lm, lids[np - 1])).normalized,
+                        up, eyeW, _doubleLidAffine);
+                    Add("doubleLid" + side, ToVp(doubleLidImg));
+                }
                 Add("mascara" + side, ToVp(lidMid + up * (eyeW * 0.06f)));
                 var low = LowerLids[e];
                 var lowMid = ImgPt(lm, low[low.Length / 2]);
@@ -1071,47 +1365,36 @@ namespace ARMakeup.Face
             }
 
             var eyeVp = (mesh.ViewportOfVertex(EyeOuterL) - mesh.ViewportOfVertex(EyeOuterR)).magnitude;
-            NativeBridge.Send(new UnityToRNMessage
-            { type = "fitHandles", handles = list.ToArray(), eyeVp = eyeVp });
-        }
-
-        // 캐노니컬 마스크 존 중심 c를 실제 표시점 q로 역산한다. 셰이더는 표시점에서
-        // c = q + sampleSign*spread*W(q)를 샘플하므로 W를 c가 아닌 갱신 중인 q로 평가해야
-        // 한다. inward만 0.5 완화한 fixed-point 5회 + 얼굴 반쪽 경계 clamp로 발산을 막는다.
-        static Vector2 SourceMaskUvToDisplayUv(Vector2 sourceUv, float lift, float spread)
-        {
-            var displayUv = sourceUv;
-            displayUv.y += lift;
-            var sourceX = sourceUv.x;
-            var outwardSign = sourceX < 0.5f ? -1f : sourceX > 0.5f ? 1f : 0f;
-            var displayX = sourceX;
-            if (outwardSign != 0f)
+            if (!IsFitHandlesSessionCurrent(capturedSessionId)) return;
+            var outlines = new System.Collections.Generic.List<FitOutline>(12);
+            var totalPoints = 0;
+            foreach (var slot in OutlinePrioritySlots)
             {
-                var lo = outwardSign < 0f ? 0f : 0.5f;
-                var hi = outwardSign < 0f ? 0.5f : 1f;
-                for (var i = 0; i < 5; i++)
-                {
-                    var st = Mathf.Clamp01(
-                        (Mathf.Abs(displayX - 0.5f) - 0.04f) / (0.22f - 0.04f));
-                    var spreadW = st * st * (3f - 2f * st);
-                    var solved = Mathf.Clamp(sourceX + outwardSign * spread * spreadW, lo, hi);
-                    // inward(spread<0)은 W가 작아지는 방향이라 단순 반복이 왕복할 수 있어 완화.
-                    // outward는 W가 커지는 단조 방향이므로 완화 없이 빠르게 수렴한다.
-                    displayX = Mathf.Lerp(displayX, solved, spread < 0f ? 0.5f : 1f);
-                }
+                var outline = _outlineBySlot[slot];
+                if (!_outlineValid[slot]) continue;
+                var pointCount = outline?.points?.Length / 2 ?? 0;
+                if (pointCount < 8 || totalPoints + pointCount > 96) continue;
+                outlines.Add(outline);
+                totalPoints += pointCount;
             }
-            displayUv.x = displayX;
-            return displayUv;
+            NativeBridge.Send(new UnityToRNMessage
+            {
+                type = "fitHandles", handles = list.ToArray(), eyeVp = eyeVp,
+                outlines = outlines.ToArray(), sessionId = capturedSessionId,
+            });
+            _lastFitHandlesAt = now;
         }
 
-        Vector2 MaskZoneHandleVp(CanonicalFaceMesh mesh, Vector4 zone, float lift, float spread)
+        Vector2 MaskZoneHandleVp(CanonicalFaceMesh mesh, Vector4 zone, float lift, float spread,
+                                 RegionAffine affine)
         {
-            return MaskZoneHandleVp(mesh, new Vector2(zone.x, zone.y), lift, spread);
+            return MaskZoneHandleVp(mesh, new Vector2(zone.x, zone.y), lift, spread, affine);
         }
 
-        Vector2 MaskZoneHandleVp(CanonicalFaceMesh mesh, Vector2 sourceUv, float lift, float spread)
+        Vector2 MaskZoneHandleVp(CanonicalFaceMesh mesh, Vector2 sourceUv, float lift, float spread,
+                                 RegionAffine affine)
         {
-            var uv = SourceMaskUvToDisplayUv(sourceUv, lift, spread);
+            var uv = RegionAffineUtility.SolveZoneDisplayUv(sourceUv, lift, spread, affine);
             if (!mesh.TryResolveUv(uv, out var a, out var b, out var c, out var bary))
                 return Vector2.zero;
             return bary.x * mesh.ViewportOfVertex(a)
@@ -1241,19 +1524,33 @@ namespace ARMakeup.Face
         // brow=중심선(arch), browThickness=상단 경계(현재 두께가 직접 보임).
         void BrowHandleVps(Vector3[] lm, int e, out Vector2 centerVp, out Vector2 upperVp)
         {
-            var n = BrowUpper[e].Length;
+            const int n = BrowWarp.BandSegments;
+            BrowWarp.SubdivideArc(lm, BrowLower[e], _browLo);
+            BrowWarp.SubdivideArc(lm, BrowUpper[e], _browUp);
             for (var i = 0; i < n; i++)
             {
-                var lo = ImgPt(lm, BrowLower[e][i]);
-                var up = ImgPt(lm, BrowUpper[e][i]);
+                var lo = _browLo[i];
+                var up = _browUp[i];
+                var rawLo = lo;
+                var rawUp = up;
+                _browRawLo[i] = rawLo;
+                _browRawUp[i] = rawUp;
                 var along = i / (float)(n - 1);
-                BrowWarp.ShapeBand(ref lo, ref up, along, _browThickness, _browArch, _browShape);
-                BrowWarp.TaperTail(ref lo, ref up, along);
+                BrowWarp.ShapeBand(ref lo, ref up, along, _browThickness, _browArch, _browShape,
+                    _browThicknessProfile, _browExpandUpper, _browExpandLower);
+                BrowWarp.TaperTail(ref lo, ref up, along, _browThicknessProfile,
+                    BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower));
+                if (_browThicknessProfile != BrowWarp.LegacyProfile || _browExpandUpper != 0f || _browExpandLower != 0f)
+                    BrowWarp.EnsureMinimumFinalBandSpan(ref lo, ref up, rawLo, rawUp);
+                _browCoverageLo[i] = lo;
                 _browLo[i] = lo;
                 _browUp[i] = up;
             }
             var warped = BrowWarp.WarpAndLiftDroopingTail(
                 _browLo, _browUp, n, lm, FramePresenter.Instance.ImageAspect);
+                if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
+                    for (var i = 0; i < n; i++)
+                    BrowWarp.RestoreCoverageLowerFloor(ref _browLo[i], ref _browUp[i], _browCoverageLo[i], _browRawLo[i], _browRawUp[i], warped);
             var mid = n / 2;
             var center = 0.5f * (_browLo[mid] + _browUp[mid]);
             centerVp = warped
@@ -1325,6 +1622,23 @@ namespace ARMakeup.Face
             var basePt = Vector2.Lerp(inner, outer, along); // 눈앞머리 → 눈꼬리
             var off = dip + chord.magnitude * AegyoRenderBandFactor * _aegyoHeightMult * v;
             return basePt + normal * off;
+        }
+
+        // LowerLidRenderer가 비활성이라 실제 핸들 캐시가 없을 때도 동일한 눈 로컬 좌표계로
+        // W4를 적용한다. 중심은 공유 밴드 중앙이며, +X는 눈앞머리→눈꼬리, +Y는 해부학적 위.
+        Vector2 ApplyLowerBandAffine(Vector3[] lm, int e, Vector2 point, RegionAffine affine)
+        {
+            var lids = LowerLids[e];
+            var outer = ImgPt(lm, lids[0]);
+            var inner = ImgPt(lm, lids[lids.Length - 1]);
+            var lidMid = ImgPt(lm, lids[lids.Length / 2]);
+            var down = (lidMid - ImgPt(lm, EyeBrowLower[e][2])).normalized;
+            var eyeXAxis = (outer - inner).normalized;
+            var eyeWidth = (outer - inner).magnitude;
+            var center = lidMid + down * (eyeWidth * AegyoRenderBandFactor * 0.5f);
+            return RegionAffineUtility.TransformBandPoint(
+                point, center, eyeXAxis, -down, eyeWidth,
+                eyeWidth * AegyoRenderBandFactor, affine);
         }
     }
 }

@@ -8,10 +8,10 @@ import {
   View,
 } from 'react-native';
 
-import type {StencilParams, SymmetryParams} from '../bridge/types';
+import type {StencilParams} from '../bridge/types';
 import {isolateStencilStep, maskStencilByKeys} from '../composer/stencilSteps';
 import type {StencilStep} from '../composer/stencilSteps';
-import {CONTROL_H, PANEL_INSET, SP, labelTextOn} from '../theme';
+import {PANEL_INSET, SP, labelTextOn} from '../theme';
 
 /**
  * 가이드 레인 본문 (#2 튜토리얼 스텐실) — 메이크업/보정과 동렬인 세 번째 레인.
@@ -53,10 +53,6 @@ interface Props {
   steps: StencilStep[];
   /** 룩에 실제 있는 가이드 부위 집합 — '전체' 카드가 이 부위들만 켠다. */
   available: Set<string>;
-  // ── 좌우 대칭(#6) — 중심축·대칭쌍 칩만(별도 ON/OFF 없음). 오버레이 켬/끔은
-  // 가이드 레인 진입/이탈이 담당(App), 칩 조합은 유저 선호로 유지·복원된다.
-  symValue: SymmetryParams;
-  onSymChange: (next: SymmetryParams) => void;
 }
 
 export default function GuideMode({
@@ -64,8 +60,6 @@ export default function GuideMode({
   onChange,
   steps,
   available,
-  symValue,
-  onSymChange,
 }: Props) {
   // 선택 카드 — null=전체(조감도), n=스텝 n 격리. 룩이 바뀌어 스텝이 줄면 클램프.
   const [selIdx, setSelIdx] = useState<number | null>(null);
@@ -98,39 +92,6 @@ export default function GuideMode({
 
   return (
     <View style={styles.panel}>
-      {/* 헤더 줄 — [호흡][점선][중심축][대칭쌍] 칩. 가이드/대칭 켬·끔은 레인
-          진입/이탈이 담당(별도 스위치 없음), 농도는 공용 헤더 슬라이더. */}
-      <View style={styles.headRow}>
-        <TouchableOpacity
-          style={[styles.fxChip, value.pulse && styles.fxChipOn]}
-          onPress={() => onChange({...value, pulse: !value.pulse})}>
-          <Text style={[styles.fxText, value.pulse && styles.fxTextOn]}>
-            호흡
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.fxChip, value.dash && styles.fxChipOn]}
-          onPress={() => onChange({...value, dash: !value.dash})}>
-          <Text style={[styles.fxText, value.dash && styles.fxTextOn]}>
-            점선
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.fxChip, symValue.midline && styles.fxChipOn]}
-          onPress={() => onSymChange({...symValue, midline: !symValue.midline})}>
-          <Text style={[styles.fxText, symValue.midline && styles.fxTextOn]}>
-            중심축
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.fxChip, symValue.pairs && styles.fxChipOn]}
-          onPress={() => onSymChange({...symValue, pairs: !symValue.pairs})}>
-          <Text style={[styles.fxText, symValue.pairs && styles.fxTextOn]}>
-            대칭쌍
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       {/* 스텝 카드 — [전체] + 잎별 순서 카드. 카드=한 스텝(제품×어디에). */}
       {steps.length === 0 ? (
         <Text style={styles.emptyHint}>메이크업을 선택해주세요.</Text>
@@ -201,33 +162,6 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: SP.sm,
     gap: SP.sm,
-  },
-  // 헤더 한 줄 — [호흡][점선][중심축][대칭쌍] 칩. 좁은 화면에선 줄바꿈 허용.
-  headRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: SP.xs,
-  },
-  fxChip: {
-    height: CONTROL_H,
-    justifyContent: 'center',
-    paddingHorizontal: SP.sm,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-  },
-  fxChipOn: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderColor: 'rgba(255,255,255,0.9)',
-  },
-  fxText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  fxTextOn: {
-    color: '#FFFFFF',
   },
   cardRow: {
     gap: SP.sm,

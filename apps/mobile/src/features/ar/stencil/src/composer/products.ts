@@ -21,9 +21,8 @@
  * ⚠ 브리지엔 컴파일된 patch만 넘긴다 — 채널·제형 등 제품 상태 모델은 RN에만 산다.
  */
 import type { FilterParams } from '../bridge/types';
-import { categoryKeys } from './multiUse';
 import { REGION_MAP, regionOwnKeys } from './regions';
-import type { FinishDetailKeys, RegionDef, RegionKey } from './regions';
+import type { FinishBundle, FinishDetailKeys, RegionDef, RegionKey } from './regions';
 
 // ── 채널 타입(§5 그대로) ─────────────────────────────────────────────────────
 
@@ -77,6 +76,35 @@ export interface ProductForm {
   shimmerGain?: number;
 }
 
+/** 같은 제품 물성을 공유하는 색상 한 칸. */
+export interface ProductColorway {
+  id: string;
+  name: string;
+  color: string;
+  pearlColor?: string;
+  shift?: string;
+}
+
+/** 설계 문서의 짧은 명칭. */
+export type Colorway = ProductColorway;
+
+export interface ProductMaterial {
+  type: 0 | 2 | 3 | 4;
+  strength: number;
+}
+
+export interface ProductParticleLayer {
+  size: number;
+  density: number;
+  brightness: number;
+  color: string;
+  twinkle: number;
+  shape: number;
+  feather: number;
+  parallax: number;
+  confetti: number;
+}
+
 /** 제품 정의 — 라이브러리 엔티티. 전 채널 슬롯 선택적, glitter ≤3. */
 export interface ProductDef {
   id: string;
@@ -95,7 +123,136 @@ export interface ProductDef {
    *  기본(0=크림/baseline). 값 규약은 대상 부위 제형 세그(regions.ts)를 따르므로
    *  제품군의 주 부위 템플릿에 맞춰 지정한다(예: 립=LIP_TEXTURES 벨벳틴트=1). */
   texture?: number;
+  colorways?: ProductColorway[];
+  defaultColorwayId?: string;
+  finishDetail?: FinishBundle;
+  material?: ProductMaterial;
+  particleLayer?: ProductParticleLayer;
   owner: 'system' | 'user';
+}
+
+export type NormalizedProduct = ProductDef & {
+  colorways: ProductColorway[];
+  defaultColorwayId?: string;
+};
+
+/** 구 단색 JSON을 수정하지 않고 런타임 singleton 컬렉션 뷰로 승격한다. */
+export function normalizeProduct(product: ProductDef): NormalizedProduct {
+  const explicit = product.colorways?.map(colorway => ({...colorway})) ?? [];
+  const colorways = explicit.length > 0
+    ? explicit
+    : product.base
+      ? [{id: 'default', name: product.name, color: product.base.color}]
+      : [];
+  const requestedDefault = product.defaultColorwayId;
+  const defaultColorwayId = colorways.some(c => c.id === requestedDefault)
+    ? requestedDefault
+    : colorways[0]?.id;
+  const defaultColor = colorways.find(c => c.id === defaultColorwayId)?.color;
+  return {
+    ...product,
+    ...(product.base
+      ? {base: {...product.base, color: defaultColor ?? product.base.color}}
+      : {}),
+    ...(product.pearl ? {pearl: {...product.pearl}} : {}),
+    colorways,
+    ...(defaultColorwayId ? {defaultColorwayId} : {}),
+  };
+}
+
+export const normalizeProducts = (products: ProductDef[]): NormalizedProduct[] =>
+  products.map(normalizeProduct);
+
+/**
+ * 영속화 직전 명시 컬렉션만 canonical default/base로 맞춘다. colorways가 없거나 빈
+ * legacy 제품은 합성 singleton을 저장하지 않도록 원 객체를 그대로 돌려준다.
+ */
+export function prepareProductForSave(product: ProductDef): ProductDef {
+  if (!product.colorways?.length) return product;
+  const defaultColorway = product.colorways.find(
+    colorway => colorway.id === product.defaultColorwayId,
+  ) ?? product.colorways[0];
+  return {
+    ...product,
+    defaultColorwayId: defaultColorway.id,
+    ...(product.base
+      ? {base: {...product.base, color: defaultColorway.color}}
+      : {}),
+  };
+}
+
+export const prepareProductsForSave = (products: ProductDef[]): ProductDef[] =>
+  products.map(prepareProductForSave);
+
+/** 요청→기본→첫 색 순서. 구 단색은 합성 singleton으로 base까지 폴백한다. */
+export function resolveColorway(
+  product: ProductDef,
+  requestedId?: string,
+): ProductColorway | undefined {
+  const view = normalizeProduct(product);
+  return view.colorways.find(c => c.id === requestedId)
+    ?? view.colorways.find(c => c.id === view.defaultColorwayId)
+    ?? view.colorways[0];
+}
+
+export function resolveBaseColor(product: ProductDef, requestedId?: string): string | undefined {
+  return resolveColorway(product, requestedId)?.color ?? product.base?.color;
+}
+
+const syncBaseToDefault = (product: ProductDef): ProductDef => {
+  const selected = resolveColorway(product, product.defaultColorwayId);
+  return selected && product.base
+    ? {...product, base: {...product.base, color: selected.color}}
+    : product;
+};
+
+/** Studio 편집용 명시적 추가. 첫 추가에서만 legacy 단색을 c0/c1로 승격한다. */
+export function addProductColorway(
+  product: ProductDef,
+  colorway: Omit<ProductColorway, 'id'>,
+): ProductDef {
+  if (!product.colorways?.length) {
+    const first = product.base
+      ? {id: 'c0', name: product.name, color: product.base.color}
+      : undefined;
+    const colorways: ProductColorway[] = [
+      ...(first ? [first] : []),
+      {id: first ? 'c1' : 'c0', ...colorway},
+    ];
+    return syncBaseToDefault({
+      ...product,
+      colorways,
+      defaultColorwayId: colorways[0].id,
+    });
+  }
+  let index = 0;
+  const ids = new Set(product.colorways.map(c => c.id));
+  while (ids.has(`c${index}`)) index += 1;
+  return syncBaseToDefault({
+    ...product,
+    colorways: [...product.colorways.map(c => ({...c})), {id: `c${index}`, ...colorway}],
+    defaultColorwayId: resolveColorway(product)?.id,
+  });
+}
+
+/** 마지막 색은 제품의 가시 색을 잃지 않도록 삭제하지 않는다. */
+export function deleteProductColorway(product: ProductDef, colorwayId: string): ProductDef {
+  if (!product.colorways || product.colorways.length <= 1) return product;
+  const colorways = product.colorways.filter(c => c.id !== colorwayId);
+  if (colorways.length === product.colorways.length) return product;
+  const defaultColorwayId = colorways.some(c => c.id === product.defaultColorwayId)
+    ? product.defaultColorwayId
+    : colorways[0].id;
+  return syncBaseToDefault({...product, colorways, defaultColorwayId});
+}
+
+/** 존재하는 셰이드만 기본값으로 지정하며 구버전 대표색(base.color)도 함께 맞춘다. */
+export function setDefaultProductColorway(
+  product: ProductDef,
+  colorwayId: string,
+): ProductDef {
+  if (!product.colorways?.some(colorway => colorway.id === colorwayId)) return product;
+  return syncBaseToDefault({...product, defaultColorwayId: colorwayId});
 }
 
 // ── 제품군 템플릿 — "구성은 제품군 템플릿"(§5) ───────────────────────────────
@@ -190,7 +347,7 @@ export const FAMILY_TEMPLATES: Record<ProductFamily, FamilyTemplate> = {
   eyeshadow: {
     label: '아이섀도',
     slots: ['base', 'pearl'],
-    regions: ['eyeshadow', 'eyeshadowLower'],  // 언더 섀도도 같은 섀도 제품
+    regions: ['eyeshadow'], // 위/아래는 region이 아니라 layer.surface로 구분
     base: { color: '#8A6A55', coverage: 0.5, response: 'soft' },
     pearl: { color: '#C9A98A', gain: 0.5 },
     form: form(0.5, 0),
@@ -333,6 +490,232 @@ function textureKeyOf(def: RegionDef): keyof FilterParams | undefined {
   return undefined;
 }
 
+/** 제품 번역에 필요한 대표 축. multiUse와 같은 카탈로그 유도 규칙을 로컬에서 쓴다. */
+interface ProductCategoryKeys {
+  colorKey?: keyof FilterParams;
+  finishKey?: keyof FilterParams;
+  shimmerKey?: keyof FilterParams;
+  finishIsLadder: boolean;
+  intensityKey?: keyof FilterParams;
+}
+
+function productCategoryKeys(def: RegionDef): ProductCategoryKeys {
+  const out: ProductCategoryKeys = {finishIsLadder: false};
+  for (const control of def.axes.color ?? []) {
+    if (control.type === 'swatches') {
+      out.colorKey = control.key;
+      break;
+    }
+  }
+  for (const control of def.axes.finish ?? []) {
+    if (control.type === 'finish') {
+      out.finishKey = control.finishKey;
+      out.shimmerKey = control.shimmerKey;
+      out.finishIsLadder = true;
+      break;
+    }
+    if (control.type === 'segments') {
+      out.finishKey = control.key;
+      break;
+    }
+  }
+  out.intensityKey = def.onKeys[0];
+  return out;
+}
+
+const MATERIAL_PARTICLE_REGIONS = new Set<RegionKey>(['lip', 'blush', 'eyeshadow']);
+const PARTICLE_SUFFIXES = [
+  'Size', 'Density', 'Brightness', 'Color', 'Twinkle',
+  'Shape', 'Feather', 'Parallax', 'Confetti',
+] as const;
+
+/** 제품을 바꿀 때 제거할 수 있는 제품 물성 override 키의 정확한 집합. */
+export function physicalKeysForRegion(region: RegionKey): (keyof FilterParams)[] {
+  const def = REGION_MAP[region];
+  const own = new Set<string>(regionOwnKeys(def) as string[]);
+  const category = productCategoryKeys(def);
+  const keys: (keyof FilterParams)[] = [];
+  const add = (key: keyof FilterParams | undefined) => {
+    if (key && own.has(key as string) && !keys.includes(key)) keys.push(key);
+  };
+  add(category.colorKey);
+  add(category.intensityKey);
+  add(textureKeyOf(def));
+  if (category.finishIsLadder) {
+    add(category.finishKey);
+    add(category.shimmerKey);
+    const detail = finishDetailOf(def);
+    if (detail) Object.values(detail).forEach(add);
+  }
+  if (MATERIAL_PARTICLE_REGIONS.has(region)) {
+    add(`${region}Material` as keyof FilterParams);
+    add(`${region}MaterialStrength` as keyof FilterParams);
+    PARTICLE_SUFFIXES.forEach(suffix => add(`${region}Particle${suffix}` as keyof FilterParams));
+  }
+  return keys;
+}
+
+/** 현재 잎의 해석된 물성만 사용자 제품으로 캡처한다. 모양·핏·strength는 읽지 않는다. */
+export function productFromLeafPhysicals(
+  leaf: Pick<ComposerLayer, 'region' | 'params' | 'technique'>,
+  compiledParams: Partial<FilterParams>,
+  family: ProductFamily,
+  name: string,
+  source?: ProductDef,
+  id = `usr:prod:${Date.now().toString(36)}`,
+): ProductDef {
+  const def = REGION_MAP[leaf.region];
+  const category = productCategoryKeys(def);
+  const template = FAMILY_TEMPLATES[family];
+  // 제품군을 바꿔 저장할 때는 이전 제품군의 form/채널을 새 제품으로 섞지 않는다.
+  const compatibleSource = source?.family === family ? source : undefined;
+  const color = category.colorKey && typeof compiledParams[category.colorKey] === 'string'
+    ? compiledParams[category.colorKey] as string
+    : (compatibleSource ? resolveBaseColor(compatibleSource) : undefined)
+      ?? template.base?.color
+      ?? '#FFFFFF';
+  const intensityKey = category.intensityKey;
+  const hasCompiledIntensity = intensityKey
+    && typeof compiledParams[intensityKey] === 'number';
+  const intensity = hasCompiledIntensity
+    ? clamp01(compiledParams[intensityKey] as number)
+    : compatibleSource?.base?.coverage ?? template.base?.coverage ?? 0.5;
+  let coverage = intensity;
+  if (intensityKey && hasCompiledIntensity) {
+    const hasIntensityOverride = leaf.params[intensityKey] !== undefined;
+    if (compatibleSource?.base && !hasIntensityOverride) {
+      // compiledParams에는 이미 technique strength가 적용돼 있다. 제품 그대로 저장할 때는
+      // 원래 coverage를 보존해야 다음 번역에서 strength가 두 번 곱해지지 않는다.
+      coverage = compatibleSource.base.coverage;
+    } else {
+      // 커스텀/직접 조정 농도는 잎에 남는 strength를 고려해 buildOpacity를 역산한다.
+      const strength = clamp01(leaf.technique?.strength ?? 1);
+      const buildability = compatibleSource?.form.buildability ?? template.form.buildability;
+      const exponent = 1 / (0.5 + clamp01(buildability));
+      const strengthFactor = Math.pow(strength, exponent);
+      coverage = strengthFactor > 0
+        ? clamp01(intensity / strengthFactor)
+        : compatibleSource?.base?.coverage ?? template.base?.coverage ?? intensity;
+    }
+  }
+  const textureKey = textureKeyOf(def);
+  const texture = textureKey && typeof compiledParams[textureKey] === 'number'
+    ? compiledParams[textureKey] as number
+    : compatibleSource?.texture;
+  const finish = category.finishIsLadder && category.finishKey
+    && typeof compiledParams[category.finishKey] === 'number'
+    ? compiledParams[category.finishKey] as number
+    : compatibleSource?.form.finish ?? template.form.finish;
+  const shimmerGain = category.finishIsLadder && category.shimmerKey
+    && typeof compiledParams[category.shimmerKey] === 'number'
+    ? compiledParams[category.shimmerKey] as number
+    : compatibleSource?.form.shimmerGain;
+  const detailKeys = category.finishIsLadder ? finishDetailOf(def) : undefined;
+  const finishDetail = detailKeys
+    ? Object.fromEntries(
+        (Object.keys(detailKeys) as (keyof FinishBundle)[]).map(axis => [
+          axis,
+          typeof compiledParams[detailKeys[axis]] === 'number'
+            ? compiledParams[detailKeys[axis]] as number
+            : compatibleSource?.finishDetail?.[axis] ?? 0,
+        ]),
+      ) as FinishBundle
+    : undefined;
+  const prefix = leaf.region;
+  const materialType = compiledParams[`${prefix}Material` as keyof FilterParams];
+  const materialStrength = compiledParams[`${prefix}MaterialStrength` as keyof FilterParams];
+  const material: ProductMaterial | undefined = MATERIAL_PARTICLE_REGIONS.has(leaf.region)
+    && (materialType === 0 || materialType === 2 || materialType === 3 || materialType === 4)
+    ? {type: materialType, strength: typeof materialStrength === 'number' ? materialStrength : 0.85}
+    : compatibleSource?.material;
+  const particleValue = (suffix: typeof PARTICLE_SUFFIXES[number]) =>
+    compiledParams[`${prefix}Particle${suffix}` as keyof FilterParams];
+  const particleLayer = MATERIAL_PARTICLE_REGIONS.has(leaf.region)
+    && typeof particleValue('Color') === 'string'
+    ? {
+        size: Number(particleValue('Size') ?? 0),
+        density: Number(particleValue('Density') ?? 0),
+        brightness: Number(particleValue('Brightness') ?? 0),
+        color: particleValue('Color') as string,
+        twinkle: Number(particleValue('Twinkle') ?? 0),
+        shape: Number(particleValue('Shape') ?? 0),
+        feather: Number(particleValue('Feather') ?? 0),
+        parallax: Number(particleValue('Parallax') ?? 0),
+        confetti: Number(particleValue('Confetti') ?? 0),
+      }
+    : compatibleSource?.particleLayer;
+  const baseSeed = compatibleSource ? compatibleSource.base : template.base;
+  // base 제품군의 optional 채널을 템플릿에서 새로 주입하면 현재 픽셀에 없던 펄/네온이
+  // 생긴다. source 채널은 그대로 보존하고, base 없는 제품군만 정의 채널을 시드한다.
+  const seedBaseLessChannels = !compatibleSource && !template.base;
+  const pearlSeed = compatibleSource
+    ? compatibleSource.pearl
+    : seedBaseLessChannels ? template.pearl : undefined;
+  const glitterSeed = compatibleSource
+    ? compatibleSource.glitter
+    : seedBaseLessChannels && template.glitter ? [template.glitter] : undefined;
+  const neonSeed = compatibleSource
+    ? compatibleSource.neon
+    : seedBaseLessChannels ? template.neon : undefined;
+  const inherited: Partial<ProductDef> = compatibleSource ? {...compatibleSource} : {};
+  delete inherited.base;
+  delete inherited.colorways;
+  delete inherited.defaultColorwayId;
+  return prepareProductForSave({
+    ...inherited,
+    id,
+    name: name.slice(0, 24),
+    family,
+    owner: 'user',
+    ...(baseSeed ? {
+      base: {...baseSeed, color, coverage},
+      colorways: [{id: 'c0', name: '기본', color}],
+      defaultColorwayId: 'c0',
+    } : {}),
+    ...(pearlSeed ? {pearl: {...pearlSeed}} : {}),
+    ...(glitterSeed ? {glitter: glitterSeed.map(glitter => ({...glitter}))} : {}),
+    ...(neonSeed ? {neon: {...neonSeed}} : {}),
+    form: {
+      ...(compatibleSource?.form ?? template.form),
+      finish,
+      ...(shimmerGain !== undefined ? {shimmerGain} : {}),
+    },
+    ...(texture !== undefined ? {texture} : {}),
+    ...(finishDetail ? {finishDetail} : {}),
+    ...(material ? {material} : {}),
+    ...(particleLayer ? {particleLayer} : {}),
+  });
+}
+
+/**
+ * 저장 제품의 [0..1] coverage로 정확히 재현할 수 없는 물성만 잎 override로 남긴다.
+ * 보통은 빈 객체이며, 낮은 strength×고농도처럼 표현 범위를 넘는 경우만 최소 보존한다.
+ */
+export function physicalOverridesForRoundTrip(
+  leaf: Pick<ComposerLayer, 'region' | 'technique'>,
+  compiledParams: Partial<FilterParams>,
+  product: ProductDef,
+  colorwayId = product.defaultColorwayId,
+): Partial<FilterParams> {
+  const translated = translateProduct(
+    product,
+    leaf.technique ?? {strength: 1},
+    leaf.region,
+    colorwayId,
+  );
+  const retained: Partial<FilterParams> = {};
+  for (const key of physicalKeysForRegion(leaf.region)) {
+    const expected = compiledParams[key];
+    if (expected === undefined) continue;
+    const actual = translated[key];
+    const equal = typeof expected === 'number' && typeof actual === 'number'
+      ? Math.abs(expected - actual) <= 1e-8
+      : expected === actual;
+    if (!equal) (retained as Record<string, unknown>)[key] = expected;
+  }
+  return retained;
+}
+
 /**
  * 제품×테크닉 강도를 대상 부위의 브리지 필드로 번역한다(부위 소유 필드만 반환).
  * 담지 않는 것: blendability(마스크 베이킹 A14) · neon(발광 A15) · pearl.shift(듀오크롬 A15) ·
@@ -342,9 +725,10 @@ export function translateProduct(
   p: ProductDef,
   t: LeafTechnique,
   region: RegionKey,
+  colorwayId?: string,
 ): Partial<FilterParams> {
   const def = REGION_MAP[region];
-  const ck = categoryKeys(def);
+  const ck = productCategoryKeys(def);
   const patch: Partial<FilterParams> = {};
   const put = (k: keyof FilterParams, v: unknown) => {
     (patch as Record<string, unknown>)[k] = v;
@@ -352,7 +736,7 @@ export function translateProduct(
 
   // 베이스 — 색(루마 보존 틴트) + 최종 농도(coverage ⊗ 강도).
   if (p.base) {
-    if (ck.colorKey) put(ck.colorKey, p.base.color);
+    if (ck.colorKey) put(ck.colorKey, resolveBaseColor(p, colorwayId) ?? p.base.color);
     if (ck.intensityKey) {
       put(ck.intensityKey, buildOpacity(p.base.coverage, t.strength, p.form.buildability));
     }
@@ -395,6 +779,33 @@ export function translateProduct(
       put(ck.shimmerKey, clamp01(prev + g.density));
     }
     // g[1..]는 미지원(단일 셀 해시) — ProductDef에 보존만.
+  }
+
+  if (p.finishDetail) {
+    const detail = finishDetailOf(def);
+    if (detail) {
+      for (const axis of Object.keys(p.finishDetail) as (keyof FinishBundle)[]) {
+        put(detail[axis], clamp01(p.finishDetail[axis]));
+      }
+    }
+  }
+
+  if (p.material && MATERIAL_PARTICLE_REGIONS.has(region)) {
+    put(`${region}Material` as keyof FilterParams, p.material.type);
+    put(`${region}MaterialStrength` as keyof FilterParams, clamp01(p.material.strength));
+  }
+
+  if (p.particleLayer && MATERIAL_PARTICLE_REGIONS.has(region)) {
+    const values = p.particleLayer;
+    put(`${region}ParticleSize` as keyof FilterParams, clamp01(values.size));
+    put(`${region}ParticleDensity` as keyof FilterParams, clamp01(values.density));
+    put(`${region}ParticleBrightness` as keyof FilterParams, clamp01(values.brightness));
+    put(`${region}ParticleColor` as keyof FilterParams, values.color);
+    put(`${region}ParticleTwinkle` as keyof FilterParams, clamp01(values.twinkle));
+    put(`${region}ParticleShape` as keyof FilterParams, values.shape);
+    put(`${region}ParticleFeather` as keyof FilterParams, clamp01(values.feather));
+    put(`${region}ParticleParallax` as keyof FilterParams, clamp01(values.parallax));
+    put(`${region}ParticleConfetti` as keyof FilterParams, clamp01(values.confetti));
   }
 
   // neon — 렌더 필드 없음(A15). blendability — 매핑 없음(마스크 베이킹 A14). 둘 다 무매핑.
@@ -555,6 +966,22 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     form: form(0.5, 0),
     owner: 'system',
   },
+  {
+    id: 'sys:prod:eyeshadow:daily-quad',
+    name: '데일리 섀도 쿼드',
+    brandish: '데일리 섀도 팔레트',
+    family: 'eyeshadow',
+    base: { color: '#8A6A55', coverage: 0.5, response: 'soft' },
+    form: form(0.5, 1),
+    colorways: [
+      { id: 'c0', name: '소프트 베이지', color: '#8A6A55' },
+      { id: 'c1', name: '로즈 브라운', color: '#9A6570' },
+      { id: 'c2', name: '코랄 브릭', color: '#A9654F' },
+      { id: 'c3', name: '딥 토프', color: '#5C4A46' },
+    ],
+    defaultColorwayId: 'c0',
+    owner: 'system',
+  },
   // 글리터 토퍼 (단일 · 믹스 2종)
   {
     id: 'sys:prod:glitterTopper:stardust',
@@ -665,7 +1092,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     family: 'lipLiner',
     base: { color: '#9E3B54', coverage: 0.6, response: 'hard' },
     form: form(0.4, 1),
-    texture: 4, // 펜슬 (GENERIC_TEXTURES)
+    texture: 0, // 펜슬 (LIP_LINER_TEXTURES)
     owner: 'system',
   },
   {
@@ -675,7 +1102,7 @@ export const SYSTEM_PRODUCTS: ProductDef[] = [
     family: 'lipLiner',
     base: { color: '#B56C6A', coverage: 0.55, response: 'hard' },
     form: form(0.45, 1),
-    texture: 4, // 펜슬 (GENERIC_TEXTURES)
+    texture: 0, // 펜슬 (LIP_LINER_TEXTURES)
     owner: 'system',
   },
   // 립글로스
@@ -816,7 +1243,7 @@ export function familiesRankedForRegion(region: RegionKey): {
   for (const f of Object.keys(FAMILY_TEMPLATES) as ProductFamily[]) {
     (FAMILY_TEMPLATES[f].regions.includes(region) ? fit : others).push(f);
   }
-  const ck = categoryKeys(REGION_MAP[region]);
+  const ck = productCategoryKeys(REGION_MAP[region]);
   const translatable = !!(ck.colorKey || ck.intensityKey);
   return { fit, others: translatable ? others : [] };
 }
@@ -826,7 +1253,7 @@ export function productsOfFamily(
   family: ProductFamily,
   extra: ProductDef[] = [],
 ): ProductDef[] {
-  return [...SYSTEM_PRODUCTS, ...extra].filter(p => p.family === family);
+  return [...extra, ...SYSTEM_PRODUCTS].filter(p => p.family === family);
 }
 
 /** id로 제품 조회 — 내장 우선, 없으면 사용자 제품에서. */
@@ -863,6 +1290,7 @@ export function applyProductsToLayers(
       product,
       layer.technique ?? { strength: 1 },
       layer.region,
+      layer.colorwayId,
     );
     if (Object.keys(translated).length === 0) return layer;
     changed = true;

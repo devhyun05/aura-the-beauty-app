@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace ARMakeup.Face
@@ -56,6 +57,9 @@ namespace ARMakeup.Face
         float _thickness = 1f; // R7 두께/아치 — BrowRenderer와 동일 워프(제품 동조)
         float _arch = 0f;
         int _shape = 0;        // 눈썹 모양(#19b) — BrowRenderer와 동일 값 공유
+        int _browThicknessProfile;
+        float _browExpandUpper;
+        float _browExpandLower;
 
         static readonly int BrowColorId = Shader.PropertyToID("_BrowColor");
         static readonly int BrowIntensityId = Shader.PropertyToID("_BrowIntensity");
@@ -64,9 +68,17 @@ namespace ARMakeup.Face
 
         readonly Vector2[] _up = new Vector2[Seg];
         readonly Vector2[] _lo = new Vector2[Seg];
+        readonly Vector2[] _rawUp = new Vector2[Seg];
+        readonly Vector2[] _rawLo = new Vector2[Seg];
+        readonly Vector2[] _coverageLo = new Vector2[Seg];
 
         void Awake() => Instance = this;
-        void OnDestroy() { if (Instance == this) Instance = null; }
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+            if (_mesh != null) Destroy(_mesh);
+            if (_material != null) Destroy(_material);
+        }
 
         public void Init(Camera cam, FaceLandmarkSource source)
         {
@@ -83,6 +95,7 @@ namespace ARMakeup.Face
 
             var strokes = Brows * StrokesPerBrow;
             var uvs = new Vector2[strokes * 4];
+            var sideIds = new Vector4[strokes * 4];
             var tris = new int[strokes * 6];
             for (var s = 0; s < strokes; s++)
             {
@@ -91,6 +104,9 @@ namespace ARMakeup.Face
                 uvs[v + 1] = new Vector2(0f, 1f); // 뿌리-우
                 uvs[v + 2] = new Vector2(1f, 0f); // 끝-좌
                 uvs[v + 3] = new Vector2(1f, 1f); // 끝-우
+                var side = s / StrokesPerBrow;
+                sideIds[v] = sideIds[v + 1] = sideIds[v + 2] = sideIds[v + 3] =
+                    new Vector4(side, 0f, 0f, 0f);
                 var t = s * 6;
                 tris[t] = v; tris[t + 1] = v + 2; tris[t + 2] = v + 1;
                 tris[t + 3] = v + 1; tris[t + 4] = v + 2; tris[t + 5] = v + 3;
@@ -98,6 +114,7 @@ namespace ARMakeup.Face
             _vertices = new Vector3[strokes * 4];
             _mesh.vertices = _vertices;
             _mesh.uv = uvs;
+            _mesh.SetUVs(3, new List<Vector4>(sideIds));
             _mesh.triangles = tris;
 
             gameObject.AddComponent<MeshFilter>().sharedMesh = _mesh;
@@ -107,13 +124,17 @@ namespace ARMakeup.Face
             _renderer.enabled = false;
         }
 
-        public void ApplyPencilParams(string colorHex, float intensity, float thickness, float arch, int shape, int finish, int texture)
+        public void ApplyPencilParams(string colorHex, float intensity, float thickness, float arch, int shape, int finish, int texture,
+                                      int thicknessProfile, float expandUpper, float expandLower)
         {
             _intensity = Mathf.Clamp01(intensity);
             // R7 두께/아치 — BrowRenderer와 동일 클램프. 밴드가 워프되면 스트로크도 따라간다.
             _thickness = Mathf.Clamp(thickness, 0.4f, 2f);
             _arch = Mathf.Clamp(arch, 0f, 1f);
             _shape = Mathf.Clamp(shape, 0, 5); // 모양(#19b, 슬롯 공통 — 4=상승 5=반달 포함)
+            _browThicknessProfile = Mathf.Clamp(thicknessProfile, 0, 6);
+            _browExpandUpper = Mathf.Clamp(expandUpper, -0.25f, 0.75f);
+            _browExpandLower = Mathf.Clamp(expandLower, -0.25f, 0.75f);
             if (_material == null) return;
             if (!string.IsNullOrEmpty(colorHex) &&
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
@@ -133,31 +154,45 @@ namespace ARMakeup.Face
             if (!visible) return;
 
             var lm = _source.Landmarks;
+            BrowResponseReference.Apply(_material, lm);
             var vi = 0;
             for (var e = 0; e < Brows; e++)
             {
-                SubdivideArc(lm, BrowUpper[e], _up);
-                SubdivideArc(lm, BrowLower[e], _lo);
+                BrowWarp.SubdivideArc(lm, BrowUpper[e], _up);
+                BrowWarp.SubdivideArc(lm, BrowLower[e], _lo);
                 // R7 두께/아치와 공용 꼬리 테이퍼 — 밴드를 먼저 워프하면 SampleBand 기반
                 // 스트로크의 뿌리 분포·길이·폭이 파우더 밴드와 함께 점진 축소된다.
-                var shapeBand = _thickness != 1f || _arch != 0f || _shape != 0;
+                var shapeBand = _thickness != 1f || _arch != 0f || _shape != 0 ||
+                    _browThicknessProfile != 0 || _browExpandUpper != 0f || _browExpandLower != 0f;
                 for (var i = 0; i < Seg; i++)
                 {
                     var along = i / (float)(Seg - 1);
+                    var rawLo = _lo[i];
+                    var rawUp = _up[i];
+                    _rawLo[i] = rawLo;
+                    _rawUp[i] = rawUp;
                     if (shapeBand)
                         BrowWarp.ShapeBand(
-                            ref _lo[i], ref _up[i], along, _thickness, _arch, _shape);
-                    BrowWarp.TaperTail(ref _lo[i], ref _up[i], along);
+                            ref _lo[i], ref _up[i], along, _thickness, _arch, _shape,
+                            _browThicknessProfile, _browExpandUpper, _browExpandLower);
+                    BrowWarp.TaperTail(ref _lo[i], ref _up[i], along, _browThicknessProfile,
+                        BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower));
+                    if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
+                        BrowWarp.EnsureMinimumFinalBandSpan(ref _lo[i], ref _up[i], rawLo, rawUp);
+                    _coverageLo[i] = _lo[i];
                 }
                 // 꼬리 처짐 클램프 — 모양 확정 뒤 최종 얼굴 워프 공간에서 적용.
                 var browWarped = BrowWarp.WarpAndLiftDroopingTail(
                     _lo, _up, Seg, lm, FramePresenter.Instance.ImageAspect);
+                if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
+                    for (var i = 0; i < Seg; i++)
+                        BrowWarp.RestoreCoverageLowerFloor(ref _lo[i], ref _up[i], _coverageLo[i], _rawLo[i], _rawUp[i], browWarped);
                 var depth = Depth(lm[BrowUpper[e][2]].z);
 
                 for (var s = 0; s < StrokesPerBrow; s++)
                 {
                     // 결정론적 해시(스트로크별 흔들림 — 프레임 무관 시드).
-                    var seed = e * StrokesPerBrow + s;
+                    var seed = s;
                     var h1 = Hash(seed * 2 + 1);
                     var h2 = Hash(seed * 2 + 7);
                     var h3 = Hash(seed * 2 + 13);
@@ -165,7 +200,7 @@ namespace ARMakeup.Face
 
                     // 밴드 위 위치 u(0 꼬리 → 1 앞머리) + 약간 흔들기
                     var u = Mathf.Clamp01((s + 0.5f) / StrokesPerBrow + (h1 - 0.5f) * 0.5f / StrokesPerBrow);
-                    SampleBand(u, out var lo, out var up, out var along);
+                    SampleBand(u, e, out var lo, out var up, out var along);
 
                     var upDir = up - lo;
                     var bandH = upDir.magnitude;
@@ -206,7 +241,7 @@ namespace ARMakeup.Face
         }
 
         // 밴드를 u(0~1)에서 샘플: 하단·상단 점 + 진행 접선.
-        void SampleBand(float u, out Vector2 lo, out Vector2 up, out Vector2 along)
+        void SampleBand(float u, int browSide, out Vector2 lo, out Vector2 up, out Vector2 along)
         {
             var f = Mathf.Clamp(u, 0f, 0.9999f) * (Seg - 1);
             var j0 = (int)f;
@@ -214,8 +249,24 @@ namespace ARMakeup.Face
             var t = f - j0;
             lo = Vector2.Lerp(_lo[j0], _lo[j1], t);
             up = Vector2.Lerp(_up[j0], _up[j1], t);
-            along = (_up[j1] - _up[j0]);
-            if (along.sqrMagnitude < 1e-12f) along = new Vector2(1f, 0f);
+            along = _up[j1] - _up[j0];
+            if (along.sqrMagnitude < 1e-12f)
+            {
+                // Closed/occluded landmark pair: search an adjacent valid segment before
+                // using a bilateral fallback. The two brows get opposite fallback axes so
+                // their tail sweep cannot both point screen-right.
+                for (var radius = 1; radius < Seg; radius++)
+                {
+                    var a = Mathf.Max(0, j0 - radius);
+                    var b = Mathf.Min(Seg - 1, j1 + radius);
+                    var candidate = _up[b] - _up[a];
+                    if (candidate.sqrMagnitude < 1e-12f) continue;
+                    along = candidate;
+                    break;
+                }
+                if (along.sqrMagnitude < 1e-12f)
+                    along = browSide == 0 ? new Vector2(1f, 0f) : new Vector2(-1f, 0f);
+            }
             along.Normalize();
         }
 

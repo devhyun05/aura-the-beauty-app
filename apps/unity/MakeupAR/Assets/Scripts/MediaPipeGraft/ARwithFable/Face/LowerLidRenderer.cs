@@ -18,6 +18,7 @@ namespace ARMakeup.Face
     /// 프레임별 재탐색을 얹으면 오히려 요동친다(실기기 확인). 저차 곡선 + 계수 EMA로
     /// "안 울렁거리고 매끈한 아크"를 보장한다.
     /// </summary>
+    [DefaultExecutionOrder(-20)]
     public class LowerLidRenderer : MonoBehaviour
     {
         public static LowerLidRenderer Instance { get; private set; }
@@ -38,6 +39,7 @@ namespace ARMakeup.Face
         const int Eyes = 2;
         const int LidPts = 9;
         const int Seg = 25; // lash 아크 리샘플 밀도
+        const int MaxLowerEyeshadowLayers = 8;
 
         const float BandHeightFactor = 0.45f; // 밴드 높이 = 눈 가로폭 × 이 값
         // LowerLid.shader 능선(하이라이트) 피크의 대표 raw v — 재설계로 롤이 얇아지고
@@ -72,8 +74,14 @@ namespace ARMakeup.Face
         float _concealerIntensity; // 눈밑 컨실러(언더아이 홀로우 브라이튼) 강도 — 독립 (0=끔)
         float _lowerShadowIntensity; // A3 아이섀도 하(하안검 아래 섀도) 강도 — 애교살보다 아래 깔림 (0=끔)
         float _cornerLift; // 눈꼬리 띄우기(R7 워프) — 상안검 코너와 접점 유지용 동일 리프트
-        float _heightMult = 1f; // 밴드 높이 배수 핸들(애교살 두께, 1=원래)
         Texture2D _importedAegyo;
+        Texture2D _runtimeConcealerFallback;
+        MakeupController _lowerLayerController;
+        EyeshadowLayerParams[] _lastPendingLowerEyeshadowLayers;
+        int _lowerEyeshadowLayerCount;
+        RegionAffine _linerAffine = new RegionAffine { region = "eyelinerLower" };
+        RegionAffine _aegyoAffine = new RegionAffine { region = "aegyo" };
+        RegionAffine _triAffine = new RegionAffine { region = "triangleZone" };
 
         static readonly int LinerColorId = Shader.PropertyToID("_LinerColor");
         static readonly int LinerIntensityId = Shader.PropertyToID("_LinerIntensity");
@@ -82,10 +90,12 @@ namespace ARMakeup.Face
         static readonly int AegyoIntensityId = Shader.PropertyToID("_AegyoIntensity");
         static readonly int AegyoTexId = Shader.PropertyToID("_AegyoTex");
         static readonly int AegyoStyleIntensityId = Shader.PropertyToID("_AegyoStyleIntensity");
+        static readonly int AegyoHeightId = Shader.PropertyToID("_AegyoHeight");
         static readonly int TriColorId = Shader.PropertyToID("_TriColor");
         static readonly int TriIntensityId = Shader.PropertyToID("_TriIntensity");
         static readonly int ConcealerColorId = Shader.PropertyToID("_ConcealerColor");
         static readonly int ConcealerIntensityId = Shader.PropertyToID("_ConcealerIntensity");
+        static readonly int ConcealerMaskId = Shader.PropertyToID("_ConcealerMask");
         static readonly int LowerShadowColorId = Shader.PropertyToID("_LowerShadowColor");
         static readonly int LowerShadowIntensityId = Shader.PropertyToID("_LowerShadowIntensity");
         // 마감 — 애교살(하이라이트 밴드)·아이섀도 하. 블러셔와 동일 enum(0=새틴=기존 출력).
@@ -95,14 +105,16 @@ namespace ARMakeup.Face
         static readonly int LowerShadowShimmerId = Shader.PropertyToID("_LowerShadowShimmer");
         // 아이라인(하)·삼각존·컨실러 마감 — 0=새틴=기존 출력(하위호환).
         static readonly int LinerFinishId = Shader.PropertyToID("_LinerFinish");
+        static readonly int LinerShimmerId = Shader.PropertyToID("_LinerShimmer");
         static readonly int TriFinishId = Shader.PropertyToID("_TriFinish");
+        static readonly int TriShimmerId = Shader.PropertyToID("_TriShimmer");
         static readonly int ConcealerFinishId = Shader.PropertyToID("_ConcealerFinish");
         // 핏(개인 공간 델타) 배수 — 자기 제품 세로 프로파일 폭만 스케일(1=원래).
         static readonly int LinerThicknessId = Shader.PropertyToID("_LinerThickness");
         static readonly int TriHeightId = Shader.PropertyToID("_TriHeight");
         static readonly int LowerShadowHeightId = Shader.PropertyToID("_LowerShadowHeight");
-        // 제형(텍스처) GENERIC — 애교살·삼각존·아이섀도 하·눈밑 컨실러(컨실러는 FaceMakeup
-        // 붉은기 경로와 같은 concealerTexture 값 공유). 0=크림=현행(하위호환).
+        // 제형(텍스처) — RN 부위별 template enum. -1=필드 부재/레거시 무변조.
+        static readonly int LinerTextureId = Shader.PropertyToID("_LinerTexture");
         static readonly int AegyoTextureId = Shader.PropertyToID("_AegyoTexture");
         static readonly int TriTextureId = Shader.PropertyToID("_TriTexture");
         static readonly int LowerShadowTextureId = Shader.PropertyToID("_LowerShadowTexture");
@@ -112,6 +124,32 @@ namespace ARMakeup.Face
         static readonly int LinerSegmentId = Shader.PropertyToID("_LinerSegment");
         static readonly int TriShapeId = Shader.PropertyToID("_TriShape");
         static readonly int LowerShadowShapeId = Shader.PropertyToID("_LowerShadowShape");
+        static readonly int LowerEsLayerColorId = Shader.PropertyToID("_LowerEsLayerColor");
+        static readonly int LowerEsLayerColor2Id = Shader.PropertyToID("_LowerEsLayerColor2");
+        static readonly int LowerEsLayerParamId = Shader.PropertyToID("_LowerEsLayerParam");
+        static readonly int LowerEsLayerPhysicalId = Shader.PropertyToID("_LowerEsLayerPhysical");
+        static readonly int LowerEsLayerFinishId = Shader.PropertyToID("_LowerEsLayerFinish");
+        static readonly int LowerEsLayerParticleId = Shader.PropertyToID("_LowerEsLayerParticle");
+        static readonly int LowerEsLayerMaterialId = Shader.PropertyToID("_LowerEsLayerMaterial");
+        static readonly int LowerEsLayerParticleStyleId = Shader.PropertyToID("_LowerEsLayerParticleStyle");
+        static readonly int LowerEsLayerParticleColorId = Shader.PropertyToID("_LowerEsLayerParticleColor");
+        static readonly int LowerEsLayerCountId = Shader.PropertyToID("_LowerEsLayerCount");
+        static readonly int LinerAffineId = Shader.PropertyToID("_LinerAffine");
+        static readonly int LinerAffineRotId = Shader.PropertyToID("_LinerAffineRot");
+        static readonly int AegyoAffineId = Shader.PropertyToID("_AegyoAffine");
+        static readonly int AegyoAffineRotId = Shader.PropertyToID("_AegyoAffineRot");
+        static readonly int TriAffineId = Shader.PropertyToID("_TriAffine");
+        static readonly int TriAffineRotId = Shader.PropertyToID("_TriAffineRot");
+
+        readonly Vector4[] _lowerEsLayerColors = new Vector4[MaxLowerEyeshadowLayers];
+        readonly Vector4[] _lowerEsLayerColor2s = new Vector4[MaxLowerEyeshadowLayers];
+        readonly Vector4[] _lowerEsLayerParams = new Vector4[MaxLowerEyeshadowLayers];
+        readonly Vector4[] _lowerEsLayerPhysical = new Vector4[MaxLowerEyeshadowLayers];
+        readonly Vector4[] _lowerEsLayerFinish = new Vector4[MaxLowerEyeshadowLayers];
+        readonly Vector4[] _lowerEsLayerParticle = new Vector4[MaxLowerEyeshadowLayers];
+        readonly Vector4[] _lowerEsLayerMaterial = new Vector4[MaxLowerEyeshadowLayers];
+        readonly Vector4[] _lowerEsLayerParticleStyle = new Vector4[MaxLowerEyeshadowLayers];
+        readonly Vector4[] _lowerEsLayerParticleColor = new Vector4[MaxLowerEyeshadowLayers];
 
         // 애교살 기본 색(LowerLid.shader Properties와 동치) — aegyoColor 빈 값일 때 되돌림.
         static readonly Color AegyoHiDefault = new Color(1.0f, 0.95f, 0.88f);
@@ -149,7 +187,21 @@ namespace ARMakeup.Face
         void OnDestroy()
         {
             if (Instance == this) Instance = null;
-            if (_importedAegyo != null) Destroy(_importedAegyo);
+            ReleaseOwned(_importedAegyo);
+            ReleaseOwned(_runtimeConcealerFallback);
+            ReleaseOwned(_material);
+            ReleaseOwned(_mesh);
+            _importedAegyo = null;
+            _runtimeConcealerFallback = null;
+            _material = null;
+            _mesh = null;
+        }
+
+        static void ReleaseOwned(Object owned)
+        {
+            if (owned == null) return;
+            if (Application.isPlaying) Destroy(owned);
+            else DestroyImmediate(owned);
         }
 
         public void Init(Camera cam, FaceLandmarkSource source)
@@ -163,6 +215,16 @@ namespace ARMakeup.Face
             _material.renderQueue = MakeupQueues.LowerLid; // 부위별 고유 큐(섀도 위·스텐실 아래)
             // 임포트 전엔 투명 — 그림 없이 강도만 올라가도 아무것도 안 그려지게.
             _material.SetTexture(AegyoTexId, ImageFileLoader.ClearTexture);
+            var concealerMask = Resources.Load<Texture2D>("Masks/concealer_under_eye");
+            if (concealerMask == null)
+            {
+                _runtimeConcealerFallback = CreateConcealerFallbackMask();
+                concealerMask = _runtimeConcealerFallback;
+            }
+            _material.SetTexture(ConcealerMaskId, concealerMask);
+            PushAffine(LinerAffineId, LinerAffineRotId, _linerAffine);
+            PushAffine(AegyoAffineId, AegyoAffineRotId, _aegyoAffine);
+            PushAffine(TriAffineId, TriAffineRotId, _triAffine);
 
             _mesh = new Mesh { name = "LowerLid" };
             _mesh.MarkDynamic();
@@ -206,10 +268,40 @@ namespace ARMakeup.Face
             _renderer.enabled = false;
         }
 
+        /// <summary>공유 메시의 제품별 역아핀 유니폼만 갱신한다. 다른 하안검 부위는 유지된다.</summary>
+        public void SetRegionAffine(RegionAffine source)
+        {
+            if (source == null) return;
+            var affine = RegionAffineUtility.Sanitize(source);
+            switch (affine.region)
+            {
+                case "eyelinerLower":
+                    _linerAffine = affine;
+                    PushAffine(LinerAffineId, LinerAffineRotId, affine);
+                    break;
+                case "aegyo":
+                    _aegyoAffine = affine;
+                    PushAffine(AegyoAffineId, AegyoAffineRotId, affine);
+                    break;
+                case "triangleZone":
+                    _triAffine = affine;
+                    PushAffine(TriAffineId, TriAffineRotId, affine);
+                    break;
+            }
+        }
+
+        void PushAffine(int vectorId, int rotationId, RegionAffine affine)
+        {
+            if (_material == null) return;
+            _material.SetVector(vectorId, RegionAffineUtility.ToShaderVector(affine));
+            _material.SetFloat(rotationId, affine.rot);
+        }
+
         /// <summary>밴드가 살아있어 눈 열림 스텐실이 필요한가 (IrisRenderer가 조회).</summary>
         public bool NeedsEyeMask =>
             _aegyoIntensity > 0f || _linerIntensity > 0f || _aegyoStyleIntensity > 0f ||
-            _triIntensity > 0f || _concealerIntensity > 0f || _lowerShadowIntensity > 0f;
+            _triIntensity > 0f || _concealerIntensity > 0f || _lowerShadowIntensity > 0f ||
+            _lowerEyeshadowLayerCount > 0;
 
         /// <summary>실제 하안검 메시에서 셰이더 하이라이트 피크(vv=0.32)에 해당하는
         /// 중앙점(뷰포트 좌표). 현재/직전 프레임만 허용하고 얼굴 소실 시 거부한다.</summary>
@@ -264,7 +356,8 @@ namespace ARMakeup.Face
         /// <summary>삼각존 — 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 하안검 밴드의
         /// 꼬리 쪽(u 바깥 1/3)에 가중된 어두운 섀도 텀. 색·강도 독립(0=끔), 애교살/아이라인
         /// (하)과 같은 밴드에서 블렌드. 기본 딥브라운(#4A342A 계열)은 셰이더 기본값.</summary>
-        public void ApplyTriangleZone(string colorHex, float intensity, int finish, float heightMult, int texture, int shape)
+        public void ApplyTriangleZone(string colorHex, float intensity, int finish, float shimmer,
+                                      float heightMult, int texture, int shape)
         {
             _triIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
@@ -274,9 +367,11 @@ namespace ARMakeup.Face
             _material.SetFloat(TriIntensityId, _triIntensity);
             // 마감 — 애교살과 동일 enum. 생략(0)=새틴=기존 출력(하위호환).
             _material.SetFloat(TriFinishId, finish);
+            // 시머 게인은 finish=3에서만 실효. 다른 마감에서는 0을 명시해 스테일 누수도 차단한다.
+            _material.SetFloat(TriShimmerId, finish == 3 ? Mathf.Clamp01(shimmer) : 0f);
             // 밴드 높이 배수(핏) — 생략 0은 미설정 → 1(원래). eyeshadowHeight 선례 클램프(0.3~2).
             _material.SetFloat(TriHeightId, heightMult <= 0f ? 1f : Mathf.Clamp(heightMult, 0.3f, 2f));
-            // 제형(텍스처) GENERIC — 0=크림=현행(하위호환).
+            // 삼각존 템플릿 — -1=필드 부재/레거시 무변조, 0=파우더, 1=크림.
             _material.SetFloat(TriTextureId, texture);
             // 모양(triangleZoneShape) — 0=기본=현행 바이트 동일 1=좁게 2=넓게.
             _material.SetFloat(TriShapeId, shape);
@@ -284,12 +379,13 @@ namespace ARMakeup.Face
 
         /// <summary>눈밑 컨실러(§08) — 언더아이 홀로우(눈물고랑)를 밝히는 넓고 부드러운
         /// 브라이튼. 애교살 하이라이트(도톰한 리본)보다 세로로 넓고 페더 강한 벨 프로파일로
-        /// lash 라인 아래 홀로우 전체를 덮는다. concealerColor 틴트 + 스크린(가산) 합성,
+        /// lash 라인 아래 홀로우를 해부학 마스크로 덮는다. concealerColor 색조 + 피드 명암 보존 타깃,
         /// concealerIntensity 강도. 애교살과 독립(둘 다 켜도 밴드에서 자연 합성). 색은 밝은
         /// 톤이라 색 반전 없음(FaceMakeup 눈밑 존 마스크 경로의 밴드 정식판). 0=끔.
         /// shape=1(붉은기 자동)은 FaceMakeup 전담이라 여기 강도는 0으로 들어온다.</summary>
         public void ApplyConcealer(string colorHex, float intensity, int finish, int texture)
         {
+            if (float.IsNaN(intensity) || float.IsInfinity(intensity)) intensity = 0f;
             _concealerIntensity = Mathf.Clamp01(intensity);
             if (_material == null) return;
             if (!string.IsNullOrEmpty(colorHex) &&
@@ -298,8 +394,152 @@ namespace ARMakeup.Face
             _material.SetFloat(ConcealerIntensityId, _concealerIntensity);
             // 마감 — FaceMakeup 붉은기 자동 경로와 같은 필드(concealerFinish) 공용. 0=새틴=기존.
             _material.SetFloat(ConcealerFinishId, finish);
-            // 제형(텍스처) GENERIC — FaceMakeup 붉은기 경로와 같은 concealerTexture 값 공유.
+            // 컨실러 템플릿 — -1=필드 부재/레거시 무변조, FaceMakeup 경로와 enum 값 공유.
             _material.SetFloat(ConcealerTextureId, texture);
+        }
+
+        /// <summary>Resources 마스크 누락 시에도 물선·눈꼬리·볼을 피하는 유한 해부학 밴드.</summary>
+        static Texture2D CreateConcealerFallbackMask()
+        {
+            const int width = 128;
+            const int height = 64;
+            var texture = new Texture2D(width, height, TextureFormat.R8, false, true)
+            {
+                name = "ConcealerUnderEye_AnalyticFallback",
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear,
+            };
+            var pixels = new byte[width * height];
+            for (var y = 0; y < height; y++)
+            {
+                var textureV = y / (float)(height - 1);
+                var anatomicalV = 1f - textureV; // PNG top=waterline, Unity texture bottom=cheek
+                var vertical = SmoothGate(0.16f, 0.28f, anatomicalV) *
+                               (1f - SmoothGate(0.60f, 0.72f, anatomicalV));
+                for (var x = 0; x < width; x++)
+                {
+                    var along = x / (float)(width - 1);
+                    var horizontal = SmoothGate(0.10f, 0.22f, along) *
+                                     (1f - SmoothGate(0.66f, 0.78f, along));
+                    var troughCenter = 0.34f + 0.12f * along;
+                    var delta = (anatomicalV - troughCenter) / 0.20f;
+                    var trough = Mathf.Exp(-0.5f * delta * delta);
+                    pixels[y * width + x] = (byte)Mathf.RoundToInt(
+                        Mathf.Clamp01(horizontal * vertical * trough) * 255f);
+                }
+            }
+            texture.SetPixelData(pixels, 0);
+            texture.Apply(false, false);
+            return texture;
+        }
+
+        static float SmoothGate(float lo, float hi, float value) =>
+            Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(lo, hi, value));
+
+        /// <summary>Phase B lower/both 아이섀도 배열을 하안검 단일 드로우콜 유니폼으로 기록.</summary>
+        public void SetEyeshadowLayers(EyeshadowLayerParams[] layers)
+        {
+            if (_material == null) return;
+            var count = 0;
+            var sourceCount = layers != null ? layers.Length : 0;
+            for (var sourceIndex = 0;
+                 sourceIndex < sourceCount && count < MaxLowerEyeshadowLayers;
+                 sourceIndex++)
+            {
+                var item = layers[sourceIndex];
+                if (item == null || !(item.surface == 1 || item.surface == 2)) continue;
+
+                var profile = item.profile == 0 && item.shape != 0 ? item.shape : item.profile;
+                var color = Color.white;
+                if (!string.IsNullOrEmpty(item.color) &&
+                    !ColorUtility.TryParseHtmlString(item.color, out color)) color = Color.white;
+                var color2 = color;
+                if (!string.IsNullOrEmpty(item.color2) &&
+                    !ColorUtility.TryParseHtmlString(item.color2, out color2)) color2 = color;
+
+                _lowerEsLayerColors[count] = new Vector4(
+                    color.r, color.g, color.b,
+                    Mathf.Clamp(FiniteOrLower(item.intensity, 0f), 0f, 1.5f));
+                _lowerEsLayerColor2s[count] = new Vector4(color2.r, color2.g, color2.b, 1f);
+                _lowerEsLayerParams[count] = new Vector4(
+                    Mathf.Clamp(profile, 0, 11),
+                    Mathf.Clamp(item.finish, 0, 3),
+                    Mathf.Clamp01(FiniteOrLower(item.gradient, 0f)),
+                    Mathf.Clamp(FiniteOrLower(item.height, 1f), 0.25f, 2f));
+                _lowerEsLayerPhysical[count] = new Vector4(
+                    Mathf.Clamp(item.texture, -1, 2),
+                    Mathf.Clamp01(FiniteOrLower(item.shimmer, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.glossLo, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.glossGain, 0f)));
+                _lowerEsLayerFinish[count] = new Vector4(
+                    Mathf.Clamp01(FiniteOrLower(item.shimmerSize, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.shimmerDensity, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.matte, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.sheen, 0f)));
+                _lowerEsLayerParticle[count] = new Vector4(
+                    Mathf.Clamp01(FiniteOrLower(item.particleSize, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.particleDensity, 0f)), 0f, 0f);
+                _lowerEsLayerMaterial[count] = new Vector4(
+                    Mathf.Clamp(item.material, 0, 4),
+                    Mathf.Clamp01(FiniteOrLower(item.materialStrength, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.particleBrightness, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.particleTwinkle, 0f)));
+                _lowerEsLayerParticleStyle[count] = new Vector4(
+                    Mathf.Clamp01(FiniteOrLower(item.particleShape, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.particleFeather, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.particleParallax, 0f)),
+                    Mathf.Clamp01(FiniteOrLower(item.particleConfetti, 0f)));
+                Color particleColor = new Color32(255, 242, 217, 255);
+                if (!string.IsNullOrEmpty(item.particleColor) &&
+                    ColorUtility.TryParseHtmlString(item.particleColor, out var parsedParticleColor))
+                    particleColor = parsedParticleColor;
+                _lowerEsLayerParticleColor[count] = new Vector4(
+                    particleColor.r, particleColor.g, particleColor.b, particleColor.a);
+                count++;
+            }
+
+            for (var slot = count; slot < MaxLowerEyeshadowLayers; slot++)
+            {
+                _lowerEsLayerColors[slot] = Vector4.zero;
+                _lowerEsLayerColor2s[slot] = Vector4.zero;
+                _lowerEsLayerParams[slot] = Vector4.zero;
+                _lowerEsLayerPhysical[slot] = new Vector4(-1f, 0f, 0f, 0f);
+                _lowerEsLayerFinish[slot] = Vector4.zero;
+                _lowerEsLayerParticle[slot] = Vector4.zero;
+                _lowerEsLayerMaterial[slot] = Vector4.zero;
+                _lowerEsLayerParticleStyle[slot] = Vector4.zero;
+                _lowerEsLayerParticleColor[slot] = Vector4.zero;
+            }
+
+            _lowerEyeshadowLayerCount = count;
+            _material.SetVectorArray(LowerEsLayerColorId, _lowerEsLayerColors);
+            _material.SetVectorArray(LowerEsLayerColor2Id, _lowerEsLayerColor2s);
+            _material.SetVectorArray(LowerEsLayerParamId, _lowerEsLayerParams);
+            _material.SetVectorArray(LowerEsLayerPhysicalId, _lowerEsLayerPhysical);
+            _material.SetVectorArray(LowerEsLayerFinishId, _lowerEsLayerFinish);
+            _material.SetVectorArray(LowerEsLayerParticleId, _lowerEsLayerParticle);
+            _material.SetVectorArray(LowerEsLayerMaterialId, _lowerEsLayerMaterial);
+            _material.SetVectorArray(LowerEsLayerParticleStyleId, _lowerEsLayerParticleStyle);
+            _material.SetVectorArray(LowerEsLayerParticleColorId, _lowerEsLayerParticleColor);
+            _material.SetInt(LowerEsLayerCountId, count);
+        }
+
+        static float FiniteOrLower(float value, float fallback) =>
+            float.IsNaN(value) || float.IsInfinity(value) ? fallback : value;
+
+        void SyncPendingLowerEyeshadowLayers()
+        {
+            var controller = _lowerLayerController;
+            if (controller == null)
+            {
+                controller = FindAnyObjectByType<MakeupController>();
+                _lowerLayerController = controller;
+            }
+            if (controller == null) return;
+            var pending = controller.PendingLowerEyeshadowLayers;
+            if (ReferenceEquals(pending, _lastPendingLowerEyeshadowLayers)) return;
+            _lastPendingLowerEyeshadowLayers = pending;
+            SetEyeshadowLayers(pending);
         }
 
         /// <summary>A3 아이섀도 하 — 하안검 lash 라인 아래로 부드럽게 페이드하는 섀도 밴드.
@@ -318,7 +558,7 @@ namespace ARMakeup.Face
             _material.SetFloat(LowerShadowShimmerId, Mathf.Clamp01(shimmer));
             // 밴드 높이 배수(핏) — 생략 0은 미설정 → 1(원래). eyeshadowHeight 선례 클램프(0.3~2).
             _material.SetFloat(LowerShadowHeightId, heightMult <= 0f ? 1f : Mathf.Clamp(heightMult, 0.3f, 2f));
-            // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). eyeshadowLowerTexture 값.
+            // 하단 아이섀도 템플릿 — -1=필드 부재/레거시 무변조, eyeshadowLowerTexture enum 값.
             _material.SetFloat(LowerShadowTextureId, texture);
             // 모양(eyeshadowLowerShape) — 0=기본밴드=현행 바이트 동일 1=넓게 2=꼬리집중.
             _material.SetFloat(LowerShadowShapeId, shape);
@@ -330,7 +570,8 @@ namespace ARMakeup.Face
         public void ApplyParams(
             float aegyoIntensity, string linerColorHex, float linerIntensity, float cornerLift,
             float heightMult, float aegyoStyleIntensity, string aegyoColor,
-            int aegyoFinish, float aegyoShimmer, float linerThickness, int linerFinish, int aegyoTexture,
+            int aegyoFinish, float aegyoShimmer, float linerThickness,
+            int linerFinish, float linerShimmer, int linerTexture, int aegyoTexture,
             int aegyoShape, int linerSegment)
         {
             _aegyoIntensity = Mathf.Clamp01(aegyoIntensity);
@@ -339,8 +580,11 @@ namespace ARMakeup.Face
             _cornerLift = Mathf.Clamp01(cornerLift);
             // 밴드 높이 배수 핸들(애교살 두께) — JsonUtility 생략 0은 미설정 → 1(원래).
             // 하한 0.25 = "아주 얇은 애교살"까지 허용 (RN 슬라이더 하한 0.3보다 여유).
-            _heightMult = heightMult <= 0f ? 1f : Mathf.Clamp(heightMult, 0.25f, 2f);
+            var aegyoHeight = heightMult <= 0f ? 1f : Mathf.Clamp(heightMult, 0.25f, 2f);
             if (_material == null) return;
+            // 애교살 높이는 공유 메시가 아니라 애교살 SDF 두께에만 적용한다. 컨실러·하라이너·
+            // 삼각존·하섀도의 해부학적 캔버스가 애교살 설정에 따라 늘어나는 것을 방지한다.
+            _material.SetFloat(AegyoHeightId, aegyoHeight);
             if (!string.IsNullOrEmpty(linerColorHex) &&
                 ColorUtility.TryParseHtmlString(linerColorHex, out var c))
                 _material.SetColor(LinerColorId, c);
@@ -368,9 +612,12 @@ namespace ARMakeup.Face
             _material.SetFloat(AegyoShimmerId, Mathf.Clamp01(aegyoShimmer));
             // 아이라이너(하) 두께 배수(핏) — 생략 0은 미설정 → 1(원래). eyelinerThickness 선례 클램프(0.3~2.5).
             _material.SetFloat(LinerThicknessId, linerThickness <= 0f ? 1f : Mathf.Clamp(linerThickness, 0.3f, 2.5f));
-            // 아이라인(하) 마감 — 0=새틴=기존 출력(하위호환). 리본이라 시머 없음(0/1/2).
+            // 아이라인(하) 마감 — 시머 게인은 finish=3에서만 실효.
             _material.SetFloat(LinerFinishId, linerFinish);
-            // 제형(텍스처, 애교살) GENERIC — 0=크림=현행(하위호환).
+            _material.SetFloat(LinerShimmerId, linerFinish == 3 ? Mathf.Clamp01(linerShimmer) : 0f);
+            // -1=필드 부재/레거시 무변조, 명시 0/1/2만 펜슬/스머지/글리터 시드 적용.
+            _material.SetFloat(LinerTextureId, linerTexture);
+            // 제형(텍스처, 애교살) — -1=필드 부재/레거시 무변조.
             _material.SetFloat(AegyoTextureId, aegyoTexture);
             // 모양 — 애교살 실루엣(0=초승달=현행 바이트 동일 1=일자 2=중앙도톰) + 하안검
             // 라이너 구간(0=전체=현행 바이트 동일 1=꼬리만 2=앞+꼬리).
@@ -397,11 +644,13 @@ namespace ARMakeup.Face
 
         void LateUpdate()
         {
+            SyncPendingLowerEyeshadowLayers();
             var visible = _source != null && _source.HasFace &&
                           FramePresenter.Instance != null &&
                           (_aegyoIntensity > 0f || _linerIntensity > 0f ||
                            _aegyoStyleIntensity > 0f || _triIntensity > 0f ||
-                           _concealerIntensity > 0f || _lowerShadowIntensity > 0f);
+                           _concealerIntensity > 0f || _lowerShadowIntensity > 0f ||
+                           _lowerEyeshadowLayerCount > 0);
             if (_renderer.enabled != visible) _renderer.enabled = visible;
             if (!visible)
             {
@@ -435,10 +684,12 @@ namespace ARMakeup.Face
 
                 FitArc(e, down); // _ctrl → 매끈한 lash 아크 _lash
 
-                var width = eyeDist * BandHeightFactor * _heightMult; // 높이 핸들
+                var width = eyeDist * BandHeightFactor; // 공유 캔버스는 제품별 높이 핸들과 독립
                 var depth = Depth(lm[lids[4]].z);
                 var b = e * Seg * 2;
                 var triIdx = Mathf.RoundToInt(0.85f * (Seg - 1)); // 삼각존(눈꼬리 쪽)
+                var eyeXAxis = (_lash[Seg - 1] - _lash[0]).normalized;
+                var affineCenter = Vector2.zero;
                 // 애교살 SDF 곡선 계수(눈당 상수) — bandWidth = 이번 눈의 밴드 세로 폭(width).
                 var curveVec = new Vector4(_arcK0, _arcK1, _arcL, width);
                 for (var i = 0; i < Seg; i++)
@@ -464,12 +715,19 @@ namespace ARMakeup.Face
                     _sdfCurve[b + 2 * i + 1] = curveVec;
                     if (i == Seg / 2)
                     {
+                        affineCenter = Vector2.Lerp(_lash[i], bottom, 0.5f);
                         var peakImg = Vector2.Lerp(_lash[i], bottom, AegyoHighlightPeakV);
+                        peakImg = RegionAffineUtility.TransformBandPoint(
+                            peakImg, affineCenter, eyeXAxis, -down,
+                            eyeDist, width, _aegyoAffine);
                         _fitAegyoPeakVp[e] = FramePresenter.Instance.ImageToViewport(peakImg);
                         _fitAegyoPeakFrame[e] = Time.frameCount;
                         _fitAegyoPeakValid[e] = true;
 
                         var linerImg = Vector2.Lerp(_lash[i], bottom, EyelinerLowerPeakV);
+                        linerImg = RegionAffineUtility.TransformBandPoint(
+                            linerImg, affineCenter, eyeXAxis, -down,
+                            eyeDist, width, _linerAffine);
                         _fitEyelinerLowerVp[e] = FramePresenter.Instance.ImageToViewport(linerImg);
                         _fitEyelinerLowerFrame[e] = Time.frameCount;
                         _fitEyelinerLowerValid[e] = true;
@@ -482,6 +740,9 @@ namespace ARMakeup.Face
                     if (i == triIdx)
                     {
                         var triImg = Vector2.Lerp(_lash[i], bottom, TriangleZonePeakV);
+                        triImg = RegionAffineUtility.TransformBandPoint(
+                            triImg, affineCenter, eyeXAxis, -down,
+                            eyeDist, width, _triAffine);
                         _fitTriangleZoneVp[e] = FramePresenter.Instance.ImageToViewport(triImg);
                         _fitTriangleZoneFrame[e] = Time.frameCount;
                         _fitTriangleZoneValid[e] = true;
