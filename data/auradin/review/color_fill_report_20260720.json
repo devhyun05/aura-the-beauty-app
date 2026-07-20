@@ -12,6 +12,16 @@
       "entries": 87,
       "filled": 87,
       "source": "color_glowpick_20260720.jsonl"
+    },
+    {
+      "entries": 97,
+      "filled": 97,
+      "source": "color_representative_20260720.jsonl"
+    },
+    {
+      "entries": 8,
+      "filled": 8,
+      "source": "color_tail_20260720.jsonl"
     }
   ],
   "imageInferred": {
@@ -24,7 +34,7 @@
   },
   "seedCoverageAfter": {
     "eligible": 64,
-    "present": 527,
+    "present": 632,
     "total": 1835
   },
   "seedCoverageBefore": {
