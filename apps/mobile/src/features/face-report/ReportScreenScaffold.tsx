@@ -6,6 +6,7 @@ import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
 import {
   loadOptionalCaptureRefFunction,
   OptionalViewShot,
+  type OptionalViewShotRef,
 } from '../../shared/ui/OptionalViewShot';
 import { color, font, radius, shadow } from './reportTokens';
 import type { BandKey, ReportScreenProps } from './reportTypes';
@@ -48,36 +49,64 @@ export function ReportScreenScaffold({
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
   const scrollRef = useRef<Animated.ScrollView>(null);
+  const innerCaptureRef = useRef<OptionalViewShotRef | null>(null);
   const contentSize = useRef({height: 0, width: 0});
+  const contentBodySize = useRef({height: 0, width: 0});
   const sectionY = useRef<Record<string, number>>({});
   const cardY = useRef<Record<string, number>>({});
 
-  // 보고서 전체 캡처 — 스크롤뷰의 contentSize 기준 snapshotContentContainer로
-  // 긴 콘텐츠 전체를 한 장에 담는다. 픽셀 한계 초과 시 비율 축소.
+  // 보고서 전체 캡처. 1순위: 스크롤뷰 안쪽 콘텐츠 래퍼를 직접 캡처(전체가
+  // 이미 레이아웃돼 있어 가장 신뢰도 높음) + 픽셀 한계 초과 시 비율 축소.
+  // 폴백: 스크롤뷰 snapshotContentContainer. (호출부 서비스에 재시도·화면
+  // 캡처 최후 폴백이 한 겹 더 있다.)
   const captureFullReport = useCallback(async () => {
     const captureNode = loadOptionalCaptureRefFunction();
-    const scrollNode = scrollRef.current;
 
-    if (!captureNode || !scrollNode) {
+    if (!captureNode) {
       return undefined;
     }
 
-    const {height, width} = contentSize.current;
     const deviceScale = PixelRatio.get();
-    const scaleDown =
-      height > 0
-        ? Math.min(1, REPORT_CAPTURE_MAX_PIXELS / (height * deviceScale))
-        : 1;
-
-    return captureNode(scrollNode, {
-      ...REPORT_CAPTURE_OPTIONS,
-      snapshotContentContainer: true,
-      ...(scaleDown < 1 && width > 0
+    const scaledDims = (width: number, height: number) => {
+      const scaleDown = Math.min(
+        1,
+        REPORT_CAPTURE_MAX_PIXELS / (height * deviceScale),
+      );
+      return scaleDown < 1 && width > 0
         ? {
             height: Math.floor(height * scaleDown),
             width: Math.floor(width * scaleDown),
           }
-        : {}),
+        : {};
+    };
+
+    const body = contentBodySize.current;
+    if (innerCaptureRef.current && body.height > 0) {
+      try {
+        const innerUri = await captureNode(innerCaptureRef.current, {
+          ...REPORT_CAPTURE_OPTIONS,
+          ...scaledDims(body.width, body.height),
+        });
+        if (innerUri) {
+          return innerUri;
+        }
+      } catch (error) {
+        console.info('[aura:analysis] report-share:inner-capture-failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const scrollNode = scrollRef.current;
+    const {height, width} = contentSize.current;
+    if (!scrollNode || height <= 0) {
+      return undefined;
+    }
+
+    return captureNode(scrollNode, {
+      ...REPORT_CAPTURE_OPTIONS,
+      snapshotContentContainer: true,
+      ...scaledDims(width, height),
     });
   }, []);
 
@@ -160,8 +189,18 @@ export function ReportScreenScaffold({
           */}
           {/* 캡처는 이제 ScrollView 전체 콘텐츠(snapshotContentContainer)로 수행
               — captureRef는 위 effect에서 스크롤 캡처 클로저로 연결된다. */}
-          <View onLayout={e => { captureOffsetY.current = e.nativeEvent.layout.y; }}>
-          <OptionalViewShot options={REPORT_CAPTURE_OPTIONS} style={{ backgroundColor: color.bg }}>
+          <View
+            onLayout={e => {
+              captureOffsetY.current = e.nativeEvent.layout.y;
+              contentBodySize.current = {
+                height: e.nativeEvent.layout.height,
+                width: e.nativeEvent.layout.width,
+              };
+            }}>
+          <OptionalViewShot
+            options={REPORT_CAPTURE_OPTIONS}
+            ref={innerCaptureRef}
+            style={{ backgroundColor: color.bg }}>
           <View onLayout={e => { sectionY.current.s1 = e.nativeEvent.layout.y; }}>
             <S1Summary data={data.s1} />
           </View>
