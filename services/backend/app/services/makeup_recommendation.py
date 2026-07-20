@@ -1107,20 +1107,6 @@ def deterministic_recommendation_v2(
       "cheek": ("로지 피치", "#D98E8E", "맑은 쉬어"),
       "lip": ("뮤티드 로즈", "#A85D68", "편안한 세미 글로우"),
     }),
-    ("bold", "포인트 룩", "사진과 현장에서 또렷하게 남는 포인트", 25, "medium", {
-      "base": ("웜 뉴트럴", "#D3AA90", "매끈한 세미 매트"),
-      "brow": ("딥 브라운", "#5C4038", "선명한 소프트 매트"),
-      "eye": ("딥 로즈 브라운", "#7B4E55", "밀도 있는 새틴"),
-      "cheek": ("클리어 로즈", "#CF6F7D", "선명한 쉬어"),
-      "lip": ("딥 베리 로즈", "#8F354D", "또렷한 벨벳"),
-    }),
-    ("discovery", "디스커버리 룩", "익숙한 인상에 한 가지 세련된 변주", 20, "medium", {
-      "base": ("소프트 베이지", "#D8B399", "투명한 새틴"),
-      "brow": ("애쉬 브라운", "#6B5147", "가벼운 파우더"),
-      "eye": ("모브 토프", "#8B6B87", "잔잔한 쉬머"),
-      "cheek": ("모브 로즈", "#C98291", "부드러운 쉬어"),
-      "lip": ("플럼 로즈", "#9E5A78", "촉촉한 블러"),
-    }),
   )
   presentation_palette_overrides = {
     "feminine": {},
@@ -1228,12 +1214,6 @@ async def generate_recommendation_v2(
 ) -> dict[str, Any]:
   context_snapshot = sanitize_recommendation_context(context_snapshot)
   time_budget_minutes = resolve_prep_time_budget_minutes(questions, answers)
-  if settings.makeup_recommendation_fast_mode_enabled:
-    logger.info(
-      "[aura:makeup-recommendation] recommendation-v2:fast-fallback environment=%s",
-      settings.environment,
-    )
-    return deterministic_recommendation_v2(context_snapshot, answers, questions)
   validation_errors: list[dict[str, Any]] = []
   for _attempt in range(1):
     try:

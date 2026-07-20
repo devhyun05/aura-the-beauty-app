@@ -368,7 +368,7 @@ def _map_product(
     "brandName": (_clean_text(product.get("brandName")) or "브랜드 정보 없음")[:100],
     "productName": product_name[:200],
     "shadeName": (_clean_text(product.get("shadeName")) or None),
-    "reason": (_clean_text(product.get("reason")) or _clean_text(guide.get("reason")) or "추천 룩의 색감과 질감에 맞는 제품이에요.")[:240],
+    "reason": (_clean_text(product.get("reason")) or _clean_text(guide.get("reason")) or "이 상황과 무드에 어울리는 추천 제품이에요.")[:240],
     "price": max(0, int(price)) if isinstance(price, int | float) else None,
     "imageUrl": image_url,
     "purchaseUrl": purchase_url,

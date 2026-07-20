@@ -1560,8 +1560,8 @@ async def run_recommendation_image_job(
 
   recommendation = _json_value(report.get("recommendation"), {})
   looks = recommendation.get("looks") if isinstance(recommendation, dict) else None
-  if not isinstance(looks, list) or len(looks) != 3:
-    error = AppError(502, "MAKEUP_RECOMMENDATION_LOOKS_INVALID", "The recommendation does not contain three looks.")
+  if not isinstance(looks, list) or not 1 <= len(looks) <= 3:
+    error = AppError(502, "MAKEUP_RECOMMENDATION_LOOKS_INVALID", "The recommendation does not contain a valid look.")
     await db.execute(
       "update makeup_recommendation_reports set image_status = 'failed', image_error = $2, updated_at = now() where id = $1",
       report_id,

@@ -635,14 +635,18 @@ class GeneratedMakeupRecommendationV2(CamelModel):
     alias="generationSource",
   )
   context_summary: list[str] = Field(alias="contextSummary", min_length=1, max_length=8)
-  looks: list[GeneratedMakeupLookV2] = Field(min_length=3, max_length=3)
+  looks: list[GeneratedMakeupLookV2] = Field(min_length=1, max_length=3)
   match_assessment: GeneratedMakeupMatchAssessment | None = Field(
     default=None,
     alias="matchAssessment",
   )
 
   @model_validator(mode="after")
-  def includes_three_distinct_roles(self):
-    if [look.role for look in self.looks] != ["anchor", "bold", "discovery"]:
-      raise ValueError("V2 recommendation roles must be ordered anchor, bold, discovery.")
+  def roles_are_ordered_prefix(self):
+    # A recommendation now carries a single anchor look. Legacy multi-look
+    # payloads stay valid only as the ordered prefix anchor -> bold -> discovery.
+    expected = ["anchor", "bold", "discovery"]
+    roles = [look.role for look in self.looks]
+    if roles != expected[: len(roles)]:
+      raise ValueError("V2 recommendation roles must be an ordered prefix of anchor, bold, discovery.")
     return self

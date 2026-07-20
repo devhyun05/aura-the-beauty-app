@@ -91,7 +91,7 @@ async def test_product_enrichment_attaches_verified_products_to_every_area(
     answers,
   )
 
-  assert len(calls) == 15
+  assert len(calls) == 5
   assert {call["category"] for call in calls} == {"base", "brow", "shadow", "cheek", "lip"}
   assert all(call["legacyNaverEnabled"] is False for call in calls)
   assert all(call["embeddingModel"] == "" for call in calls)

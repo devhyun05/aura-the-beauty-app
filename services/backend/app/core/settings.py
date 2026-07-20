@@ -89,9 +89,8 @@ class Settings(BaseSettings):
   bedrock_analysis_inference_id: str | None = None
   bedrock_scenario_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_question_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-  bedrock_recommendation_model_id: str | None = "global.anthropic.claude-sonnet-4-6"
-  makeup_recommendation_fast_mode: bool = False
-  makeup_recommendation_provider_timeout_seconds: float = Field(default=25.0, ge=5.0, le=120.0)
+  bedrock_recommendation_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  makeup_recommendation_provider_timeout_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
   makeup_recommendation_max_tokens: int = Field(default=6000, ge=2000, le=9000)
   bedrock_credential_readiness_timeout_seconds: float = Field(default=5.0, ge=1.0, le=15.0)
   bedrock_analysis_region: str | None = None
@@ -496,10 +495,6 @@ class Settings(BaseSettings):
   @property
   def effective_recommendation_model_id(self) -> str:
     return (self.bedrock_recommendation_model_id or self.effective_analysis_model_id).strip()
-
-  @property
-  def makeup_recommendation_fast_mode_enabled(self) -> bool:
-    return self.makeup_recommendation_fast_mode
 
   @property
   def effective_embedding_model_id(self) -> str:

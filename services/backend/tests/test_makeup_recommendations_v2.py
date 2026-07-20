@@ -471,7 +471,7 @@ def test_deterministic_recommendation_obeys_selected_prep_time_budget() -> None:
     questions,
   )
 
-  assert [look["durationMinutes"] for look in result["looks"]] == [15, 15, 15]
+  assert [look["durationMinutes"] for look in result["looks"]] == [15]
   for look in result["looks"]:
     area_total = sum(
       guide["applicationPlan"]["estimatedMinutes"]
@@ -674,7 +674,6 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
   monkeypatch.setattr(makeup_service, "generate_json", fake_generate_json)
   settings = Settings(
     bedrock_recommendation_model_id="global.anthropic.claude-sonnet-4-6",
-    makeup_recommendation_fast_mode=False,
   )
   result = await makeup_service.generate_recommendation_v2(
     settings,
@@ -685,7 +684,7 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
 
   assert calls[0]["modelId"] == "global.anthropic.claude-sonnet-4-6"
   assert calls[0]["max_tokens"] == 6000
-  assert calls[0]["timeout_seconds"] == 25.0
+  assert calls[0]["timeout_seconds"] == 45.0
   assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
   assert result["generationSource"] == "claude"
   assert result["matchAssessment"]["version"] == "makeup-match-v1"
@@ -733,7 +732,7 @@ async def test_provider_recommendation_is_clamped_to_selected_prep_time(
   answers = [{"questionId": "prep_time", "optionId": "quick_15"}]
 
   result = await makeup_service.generate_recommendation_v2(
-    Settings(makeup_recommendation_fast_mode=False),
+    Settings(),
     {"selection": {"situation": {"label": "무대 공연"}}},
     questions,
     answers,
@@ -750,29 +749,6 @@ async def test_provider_recommendation_is_clamped_to_selected_prep_time(
 
 
 @pytest.mark.asyncio
-async def test_local_fast_mode_skips_provider_and_returns_complete_fallback(
-  monkeypatch: pytest.MonkeyPatch,
-) -> None:
-  async def unexpected_provider_call(*_args, **_kwargs):
-    raise AssertionError("explicit fast mode must not call Bedrock")
-
-  monkeypatch.setattr(makeup_service, "generate_json", unexpected_provider_call)
-  settings = Settings(environment="local", makeup_recommendation_fast_mode=True)
-
-  result = await makeup_service.generate_recommendation_v2(
-    settings,
-    {"selection": {"situation": {"label": "촬영"}}},
-    _questions(),
-    [{"questionId": "change_level", "optionId": "balanced"}],
-  )
-
-  assert settings.makeup_recommendation_fast_mode_enabled is True
-  assert result["generationSource"] == "deterministic_fallback"
-  assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
-  assert all(len(look["areaGuides"]) == 5 for look in result["looks"])
-
-
-@pytest.mark.asyncio
 async def test_invalid_v2_recommendation_uses_vetted_fallback_without_retry(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -785,11 +761,11 @@ async def test_invalid_v2_recommendation_uses_vetted_fallback_without_retry(
 
   monkeypatch.setattr(makeup_service, "generate_json", invalid_response)
   result = await makeup_service.generate_recommendation_v2(
-    Settings(makeup_recommendation_fast_mode=False), {}, [], [],
+    Settings(), {}, [], [],
   )
 
   assert attempts == 1
-  assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
+  assert [look["role"] for look in result["looks"]] == ["anchor"]
   assert all(len(look["areaGuides"]) == 5 for look in result["looks"])
 
 
@@ -802,7 +778,7 @@ async def test_v2_recommendation_provider_failure_uses_report_and_answers_fallba
 
   monkeypatch.setattr(makeup_service, "generate_json", fail_provider)
   result = await makeup_service.generate_recommendation_v2(
-    Settings(makeup_recommendation_fast_mode=False),
+    Settings(),
     {
       "analysisReport": {"personalColor": "summer mute", "faceShape": "oval"},
       "selection": {
@@ -817,7 +793,7 @@ async def test_v2_recommendation_provider_failure_uses_report_and_answers_fallba
   assert result["contextSummary"][0] == "출근·등교"
   assert any("summer mute" in item for item in result["contextSummary"])
   assert any("익숙한 선에서 자연스럽게" in item for item in result["contextSummary"])
-  assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
+  assert [look["role"] for look in result["looks"]] == ["anchor"]
   assert all({guide["area"] for guide in look["areaGuides"]} == {"base", "brow", "eye", "cheek", "lip"} for look in result["looks"])
   assert result["generationSource"] == "deterministic_fallback"
   assert result["matchAssessment"]["version"] == "makeup-match-v1"
