@@ -43,13 +43,47 @@ export const initialMakeupRecommendationDiscoveryState: MakeupRecommendationDisc
   customSituationText: '',
 };
 
+// 세션 동안 유지되는 인메모리 캐시. 추천 진입 시 캐시가 있으면 로딩 화면 없이 바로
+// 이전 보고서·상황 목록을 보여주고 백그라운드로 갱신한다(stale-while-revalidate).
+// 계정 전환/로그아웃 시 authSessionContext가 clearMakeupDiscoveryCache로 비운다.
+let cachedReports: FaceAnalysisReport[] | null = null;
+let cachedCatalog: MakeupRecommendationDiscovery | null = null;
+
+export function cacheMakeupDiscoveryReports(reports: FaceAnalysisReport[]): void {
+  cachedReports = reports;
+}
+
+export function cacheMakeupDiscoveryCatalog(catalog: MakeupRecommendationDiscovery): void {
+  cachedCatalog = catalog;
+}
+
+export function clearMakeupDiscoveryCache(): void {
+  cachedReports = null;
+  cachedCatalog = null;
+}
+
+export function buildInitialMakeupRecommendationDiscoveryState(): MakeupRecommendationDiscoveryState {
+  const reports = cachedReports ?? [];
+  return {
+    ...initialMakeupRecommendationDiscoveryState,
+    reports,
+    reportStatus: cachedReports ? (reports.length > 0 ? 'ready' : 'empty') : 'idle',
+    selectedReportId: reports[0]?.id ?? null,
+    catalog: cachedCatalog,
+    catalogStatus: cachedCatalog ? 'ready' : 'idle',
+  };
+}
+
 export function makeupRecommendationDiscoveryReducer(
   state: MakeupRecommendationDiscoveryState,
   action: MakeupRecommendationDiscoveryAction,
 ): MakeupRecommendationDiscoveryState {
   switch (action.type) {
     case 'reports/loading':
-      return {...state, reportStatus: 'loading', reportError: undefined};
+      // 캐시로 이미 표시 중이면(ready/empty) 로딩 화면 대신 조용히 갱신한다.
+      return state.reportStatus === 'ready' || state.reportStatus === 'empty'
+        ? {...state, reportError: undefined}
+        : {...state, reportStatus: 'loading', reportError: undefined};
     case 'reports/loaded': {
       const preferred = action.preferredReportId
         ? action.reports.find(report => report.id === action.preferredReportId)
@@ -75,7 +109,10 @@ export function makeupRecommendationDiscoveryReducer(
     case 'reports/failed':
       return {...state, reportStatus: 'error', reportError: action.message};
     case 'catalog/loading':
-      return {...state, catalogStatus: 'loading', catalogError: undefined};
+      // 캐시로 이미 표시 중이면 로딩 화면 대신 조용히 갱신한다.
+      return state.catalogStatus === 'ready'
+        ? {...state, catalogError: undefined}
+        : {...state, catalogStatus: 'loading', catalogError: undefined};
     case 'catalog/loaded': {
       const selectedStillExists = action.catalog.situations.some(
         situation => situation.id === state.selectedSituationId,

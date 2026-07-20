@@ -15,6 +15,7 @@ import {clearMyPageProfileSummaryCache} from '../../../shared/services/profileSe
 import {clearCachedUserProfile} from '../../../shared/services/userService';
 import {invalidateMakeupJourneyCache} from '../../makeup-journey/services/makeupJourneyCache';
 import {clearMakeupJourneyPrivateImageMemoryCache} from '../../makeup-journey/services/makeupJourneyPrivateImage';
+import {clearMakeupDiscoveryCache} from '../../makeup-recommendation/state/makeupRecommendationDiscoveryReducer';
 import {resetProductEventCollection} from '../../recommendation/services/productEventService';
 import {clearProductHubRecommendationCache} from '../../recommendation/services/productHubService';
 import {unregisterCurrentPushDevice} from '../../notifications/services/notificationService';
@@ -149,6 +150,7 @@ export function AuthSessionProvider({
       resetProductEventCollection();
       clearProductHubRecommendationCache();
       clearMyPageProfileSummaryCache();
+      clearMakeupDiscoveryCache();
       await clearCachedUserProfile();
     }
 

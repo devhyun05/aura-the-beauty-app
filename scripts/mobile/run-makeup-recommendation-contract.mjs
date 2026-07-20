@@ -543,7 +543,6 @@ requireIncludes(finalSingleLookMap, [
   '{generatedReady && !pointImageFailed ? (',
   'source={look.image}',
   'style={styles.pointImage}',
-  'look.mapRationale',
 ], 'Final single-look map');
 if (
   finalSingleLookMap.includes('looks.map')

@@ -57,9 +57,11 @@ import {
   type MakeupRecommendationLoadingContext,
 } from '../services/makeupRecommendationAgentConversation';
 import {
+  buildInitialMakeupRecommendationDiscoveryState,
+  cacheMakeupDiscoveryCatalog,
+  cacheMakeupDiscoveryReports,
   getSelectedFaceAnalysisReport,
   getSelectedMakeupSituation,
-  initialMakeupRecommendationDiscoveryState,
   makeupRecommendationDiscoveryReducer,
 } from '../state/makeupRecommendationDiscoveryReducer';
 import type {
@@ -248,7 +250,8 @@ export const MakeupRecommendationScreen = forwardRef<
   }, [onResultsVisibilityChange, phase]);
   const [discovery, dispatchDiscovery] = useReducer(
     makeupRecommendationDiscoveryReducer,
-    initialMakeupRecommendationDiscoveryState,
+    undefined,
+    buildInitialMakeupRecommendationDiscoveryState,
   );
   const [session, setSession] = useState<MakeupRecommendationSession>();
   const [isStarting, setIsStarting] = useState(false);
@@ -309,6 +312,7 @@ export const MakeupRecommendationScreen = forwardRef<
 
     if (catalogResult.status === 'fulfilled') {
       dispatchDiscovery({type: 'catalog/loaded', catalog: catalogResult.value});
+      cacheMakeupDiscoveryCatalog(catalogResult.value);
     } else {
       dispatchDiscovery({
         type: 'catalog/failed',
@@ -339,6 +343,7 @@ export const MakeupRecommendationScreen = forwardRef<
         // Ownership/not-found stays hidden; latest owned completed report remains the safe default.
       }
     }
+    cacheMakeupDiscoveryReports(reports);
     dispatchDiscovery({type: 'reports/loaded', reports, preferredReportId: analysisReportId});
   }, [analysisReportId]);
 
