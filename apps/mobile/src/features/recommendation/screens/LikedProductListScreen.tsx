@@ -125,7 +125,8 @@ export function LikedProductListScreen({onOpenProduct}: LikedProductListScreenPr
                   {product.status === 'unavailable' ? '제품 정보는 숨김 처리되었어요.' : product.productName}
                 </Text>
                 <Text numberOfLines={1} style={styles.price}>
-                  {product.status === 'unavailable' ? '좋아요 취소 가능' : product.status === 'soldOut' ? '판매 종료' : formatPrice(product.price)}
+                  {/* 가격 미보유(0 이하) 항목에 "0원"을 노출하지 않는다. */}
+                  {product.status === 'unavailable' ? '좋아요 취소 가능' : product.status === 'soldOut' ? '판매 종료' : product.price > 0 ? formatPrice(product.price) : '가격 정보 없음'}
                 </Text>
               </Pressable>
             </View>
