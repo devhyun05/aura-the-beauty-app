@@ -84,6 +84,8 @@ export type FaceFeatureObservationKey =
   | 'browDensity'
   | 'cheekboneHeight'
   | 'cheekVolume'
+  | 'eyeContrast'
+  | 'cheekContrast'
   | 'lipColorContrast';
 
 export type FaceFeatureObservations = Partial<
@@ -104,6 +106,8 @@ export type FaceFeatureEyeProfile = {
   upperLidHooding: VlmObservation<SaggingBand>;
   lowerLidSagging: VlmObservation<SaggingBand>;
   aegyoSal: VlmObservation<PresenceBand>;
+  // 눈매 대비 — 2층 시각 무게 지도 입력.
+  contrast: VlmObservation<ContrastBand>;
 };
 
 export type FaceFeatureBrowProfile = {
@@ -133,6 +137,8 @@ export type FaceFeatureCheekProfile = {
   // 볼은 결정론 지표가 없어 전부 VLM.
   cheekboneHeight: VlmObservation<CheekHeightBand>;
   volume: VlmObservation<CheekVolumeBand>;
+  // 볼 대비 — 2층 시각 무게 지도 입력.
+  contrast: VlmObservation<ContrastBand>;
 };
 
 export type FaceFeatureContourProfile = {

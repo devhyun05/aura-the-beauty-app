@@ -285,6 +285,7 @@ export function deriveMeasuredFeatureBands(
       upperLidHooding: null,
       lowerLidSagging: null,
       aegyoSal: null,
+      contrast: null,
     },
     brow: {
       slope: directionBand(browSlope, [
@@ -319,6 +320,7 @@ export function deriveMeasuredFeatureBands(
     cheek: {
       cheekboneHeight: null,
       volume: null,
+      contrast: null,
     },
     contour: {
       jawWidth: magnitudeBand(

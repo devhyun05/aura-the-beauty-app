@@ -108,7 +108,12 @@ type VisualWeightMap = {
 - ✅ **VLM enum 백엔드 연결 + 프로파일 조립** — 백엔드·모바일 배선 완료, 테스트 통과.
   - 백엔드: `openai_analysis.py`에 6번째 팬아웃 레그 `feature` 추가 — `featureObservations`(8부면: eyelidType·상/하안검·애교살·눈썹숱·광대위치/볼륨·립대비, 각 `{value, confidence, evidence}`, `unclear` 허용). 스키마·드리프트가드·지시문·머지·필드가이드 배선. 저장은 기존 `result` 패스스루(allowlist 없음). 드리프트가드 import 통과 + 분석 테스트 36개 회귀 없음.
   - 모바일: `FaceAnalysisReport.featureObservations` 타입(순수 계약에 정의, faceAnalysis.ts 재수출로 RN 무의존 유지) + `parseFeatureObservations` 어댑터. `faceFeatureProfileBuilder.ts`의 `buildFaceFeatureProfile`이 측정 밴드 + VLM 슬롯을 조립하며 **생략 규칙**(unclear·enum 밖·confidence<0.5 → 슬롯 null) 적용 — 1층과 연결. 계약 테스트 + 모바일 타입체크 0 에러.
-- ⬜ 2층 VisualWeightMap 산출 · 보고서 반영 · 매핑 엔진(`deriveFitDeltas`) — 후속.
+- ✅ **2층 VisualWeightMap 산출** — 부위별 대비 → 부위 간 우세 분포. 테스트 통과.
+  - 백엔드: feature 레그에 `eyeContrast`·`cheekContrast` 추가(lip은 lipColorContrast, brow는 browDensity 프록시) — 4부위 대비 완성. 계획 §2.2의 "부위별 대비 = 2층 입력" 이행.
+  - 계약: `shared/contracts/visualWeightMap.ts` (weights 합1.0·dominantRegion·contrastLevel·coverage·basis, schema/mapping 버전 분리).
+  - 합성: `features/face-analysis/services/visualWeightMap.ts`의 `buildVisualWeightMap(profile)` — 대비 서수(low1/med2/high3)를 근거 있는 부위끼리만 정규화. 미해소 부위는 키 없음(0 아님), 근거<2면 dominant='insufficient'(over-claim 방지), 팽팽하면 'balanced'. 눈썹은 density 프록시라 basis에 명시.
+  - 검증: 계약 테스트 3종(derive/builder/visualWeightMap) + 백엔드 36개 + 모바일 타입체크 0 에러.
+- ⬜ 보고서 반영(부위 카드·인상 섹션에 2층 주입) · 매핑 엔진(`deriveFitDeltas(profile, styleLane)`) + AR맞춤핏 δ — 후속.
 
 ## 6. 구현 범위 (합의됨 — v0.2에서 전 부위로 확장)
 

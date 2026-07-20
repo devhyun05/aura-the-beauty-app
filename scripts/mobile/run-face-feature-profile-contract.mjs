@@ -16,6 +16,7 @@ const srcDir = join(repoRoot, 'apps/mobile/src');
 const entries = [
   'features/face-analysis/services/faceFeatureProfileDerive.test.ts',
   'features/face-analysis/services/faceFeatureProfileBuilder.test.ts',
+  'features/face-analysis/services/visualWeightMap.test.ts',
 ];
 
 function run(command, args) {
@@ -43,4 +44,7 @@ run(process.execPath, [
 ]);
 run(process.execPath, [
   join(outDir, 'features/face-analysis/services/faceFeatureProfileBuilder.test.js'),
+]);
+run(process.execPath, [
+  join(outDir, 'features/face-analysis/services/visualWeightMap.test.js'),
 ]);

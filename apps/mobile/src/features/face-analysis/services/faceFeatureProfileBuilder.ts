@@ -83,6 +83,7 @@ export function buildFaceFeatureProfile(
       upperLidHooding: resolveObservation(obs.upperLidHooding, SAGGING_BANDS, t),
       lowerLidSagging: resolveObservation(obs.lowerLidSagging, SAGGING_BANDS, t),
       aegyoSal: resolveObservation(obs.aegyoSal, PRESENCE_BANDS, t),
+      contrast: resolveObservation(obs.eyeContrast, CONTRAST_BANDS, t),
     },
     brow: {
       ...base.brow,
@@ -96,6 +97,7 @@ export function buildFaceFeatureProfile(
       ...base.cheek,
       cheekboneHeight: resolveObservation(obs.cheekboneHeight, CHEEK_HEIGHT_BANDS, t),
       volume: resolveObservation(obs.cheekVolume, CHEEK_VOLUME_BANDS, t),
+      contrast: resolveObservation(obs.cheekContrast, CONTRAST_BANDS, t),
     },
   };
 }

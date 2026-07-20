@@ -529,6 +529,8 @@ const FEATURE_OBSERVATION_KEYS: readonly FaceFeatureObservationKey[] = [
   'browDensity',
   'cheekboneHeight',
   'cheekVolume',
+  'eyeContrast',
+  'cheekContrast',
   'lipColorContrast',
 ];
 

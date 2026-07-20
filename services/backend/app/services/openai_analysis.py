@@ -859,6 +859,11 @@ FEATURE_OBSERVATION_ENUMS: dict[str, tuple[str, ...]] = {
   "browDensity": ("sparse", "medium", "dense", "unclear"),
   "cheekboneHeight": ("low", "mid", "high", "unclear"),
   "cheekVolume": ("flat", "medium", "full", "unclear"),
+  # 부위별 대비(주변 피부 대비 명도/색 대비) — 2층 시각 무게 지도의 입력.
+  # lip은 lipColorContrast로 이미 있고 brow는 browDensity를 프록시로 쓴다. 눈·볼만
+  # 신설해 4부위 대비를 완성한다(리서치 W-1/W-3: 시각 무게 = 부위별 대비).
+  "eyeContrast": ("low", "medium", "high", "unclear"),
+  "cheekContrast": ("low", "medium", "high", "unclear"),
   "lipColorContrast": ("low", "medium", "high", "unclear"),
 }
 FEATURE_OBSERVATION_KEYS = tuple(FEATURE_OBSERVATION_ENUMS.keys())
@@ -1116,7 +1121,8 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "intensity — natural is a light daily version, glam is a stronger, more "
   "defined version. "
   "featureObservations keys: eyelidType, upperLidHooding, lowerLidSagging, "
-  "aegyoSal, browDensity, cheekboneHeight, cheekVolume, lipColorContrast. "
+  "aegyoSal, browDensity, cheekboneHeight, cheekVolume, eyeContrast, "
+  "cheekContrast, lipColorContrast. "
   "Each value is an object with keys value (one of the allowed enum options, "
   "or 'unclear' when the photo does not permit a confident call), confidence "
   "(0..1), evidence (one short Korean sentence citing the photo). Never invent "
@@ -1205,6 +1211,8 @@ _ANALYSIS_SEC_FEATURE = (
   "lowerLidSagging 하안검 처짐(none/mild/pronounced/unclear) — 상안검과 하안검을 각각 따로 판정해, "
   "aegyoSal 애교살(present/absent/unclear), browDensity 눈썹 숱(sparse/medium/dense/unclear), "
   "cheekboneHeight 광대 위치(low/mid/high/unclear), cheekVolume 볼 볼륨(flat/medium/full/unclear), "
+  "eyeContrast 눈매 대비(주변 피부 대비 눈·속눈썹·라인의 명도 대비, low/medium/high/unclear), "
+  "cheekContrast 볼 대비(주변 피부 대비 볼 혈색·음영 대비, low/medium/high/unclear), "
   "lipColorContrast 입술 혈색 대비(low/medium/high/unclear). "
   "confidence는 0..1 확신도, evidence는 그렇게 본 사진 근거 한 줄. "
   "조명·각도·안경·그림자로 확실치 않으면 value를 'unclear'로 두고 confidence를 낮춰 — 절대 지어내지 마. "
