@@ -8,6 +8,7 @@ import {
   FACE_ANALYSIS_CAPTURE_DURATION_COPY,
   FACE_ANALYSIS_CAPTURE_PLAN,
 } from '../services/faceAnalysisCaptureGuidance';
+import {FACE_ANALYSIS_CAPTURE_CHECKLIST} from '../services/faceAnalysisCaptureChecklist';
 
 type FaceAnalysisIntroScreenProps = {
   onStartAnalysisGuide?: () => void;
@@ -21,45 +22,13 @@ const faceAnalysisIntroContent = {
   primaryActionLabel: '촬영 가이드 보기',
 } as const;
 
-const faceAnalysisIntroSteps = [
-  {
-    id: 'light',
-    title: '자연광 아래에서 찍기',
-    description: '얼굴에 큰 그림자나 색 번짐이 생기지 않게 찍어 주세요.',
-  },
-  {
-    id: 'hair',
-    title: '이마 보이기',
-    description: '헤어라인이 가려지면 상안부 비율을 계산하기 어려워요.',
-  },
-  {
-    id: 'ears',
-    title: '귀 보이게 하기',
-    description: '옆머리를 넘기면 얼굴 폭과 윤곽 기준을 더 잘 잡을 수 있어요.',
-  },
-  {
-    id: 'accessory',
-    title: '액세서리 빼기',
-    description: '안경, 모자, 큰 귀걸이는 얼굴 경계와 색 측정을 방해할 수 있어요.',
-  },
-  {
-    id: 'expression',
-    title: '무표정으로 찍기',
-    description: '웃거나 입을 벌리면 눈·입·턱 비율이 달라질 수 있어요.',
-  },
-  {
-    id: 'jaw',
-    title: '턱선까지 넣기',
-    description: '턱끝이 잘리면 얼굴 길이와 하관 비율이 보류돼요.',
-  },
-] as const;
 
 export function getFaceAnalysisIntroContent() {
   return faceAnalysisIntroContent;
 }
 
 export function getFaceAnalysisIntroStepTitles() {
-  return faceAnalysisIntroSteps.map(step => step.title);
+  return FACE_ANALYSIS_CAPTURE_CHECKLIST.map(step => step.title);
 }
 
 export function getFaceAnalysisCapturePlanTitles() {
@@ -98,7 +67,7 @@ export function FaceAnalysisIntroScreen({
         </YStack>
 
         <YStack style={styles.checkList}>
-          {faceAnalysisIntroSteps.map((step, index) => (
+          {FACE_ANALYSIS_CAPTURE_CHECKLIST.map((step, index) => (
             <XStack key={step.id} style={styles.checkRow}>
               <Text style={styles.checkIndex}>{String(index + 1).padStart(2, '0')}</Text>
               <YStack style={styles.checkCopy}>

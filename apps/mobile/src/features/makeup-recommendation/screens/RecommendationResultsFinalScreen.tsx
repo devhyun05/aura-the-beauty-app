@@ -1,8 +1,7 @@
-import {Download, Share2, Sparkles} from 'lucide-react-native';
+import {ChevronLeft, MoreHorizontal, ShoppingBag, Sparkles} from 'lucide-react-native';
 import {useCallback, useMemo, useRef, useState} from 'react';
 import {
   AccessibilityInfo,
-  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -13,15 +12,12 @@ import {
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {APP_HEADER_BASE_HEIGHT} from '../../../shared/ui/AppHeader';
 import {
   OptionalViewShot,
   type OptionalViewShotRef,
 } from '../../../shared/ui/OptionalViewShot';
 import {FinalAreaGuideSection} from '../components/result/FinalAreaGuideSection';
 import {FinalGeneratedMakeupHero} from '../components/result/FinalGeneratedMakeupHero';
-import {FinalMatchReasonSection} from '../components/result/FinalMatchReasonSection';
-import {FinalRecommendationContextReceipt} from '../components/result/FinalRecommendationContextReceipt';
 import {FinalSingleLookMap} from '../components/result/FinalSingleLookMap';
 import {
   captureRecommendationResult,
@@ -41,7 +37,7 @@ const CAPTURE_OPTIONS = {
   result: 'tmpfile',
 } as const;
 
-type CaptureAsset = 'crop' | 'hero' | 'map' | 'product' | 'report';
+type CaptureAsset = 'crop' | 'hero' | 'map' | 'product';
 type CaptureReadiness = Record<CaptureAsset, boolean>;
 
 const INITIAL_CAPTURE_READINESS: CaptureReadiness = {
@@ -49,14 +45,15 @@ const INITIAL_CAPTURE_READINESS: CaptureReadiness = {
   hero: false,
   map: false,
   product: false,
-  report: false,
 };
 
 export function RecommendationResultsFinalScreen({
   context,
   imageRetryError,
   imageStatus,
+  onOpenRecommendedProducts,
   onApplyAR,
+  onBack,
   onAreaOpened,
   onRetry,
   onRetryImages,
@@ -65,8 +62,6 @@ export function RecommendationResultsFinalScreen({
   const insets = useSafeAreaInsets();
   const captureRef = useRef<OptionalViewShotRef>(null);
   const activeShareTargetRef = useRef<RecommendationResultShareTarget | null>(null);
-  const [activeShareTarget, setActiveShareTarget] =
-    useState<RecommendationResultShareTarget | null>(null);
   const [captureReadiness, setCaptureReadiness] =
     useState<CaptureReadiness>(INITIAL_CAPTURE_READINESS);
   const model = useMemo(
@@ -104,7 +99,6 @@ export function RecommendationResultsFinalScreen({
       hero: (ready: boolean) => updateCaptureReadiness('hero', ready),
       map: (ready: boolean) => updateCaptureReadiness('map', ready),
       product: (ready: boolean) => updateCaptureReadiness('product', ready),
-      report: (ready: boolean) => updateCaptureReadiness('report', ready),
     }),
     [updateCaptureReadiness],
   );
@@ -122,7 +116,6 @@ export function RecommendationResultsFinalScreen({
       }
 
       activeShareTargetRef.current = target;
-      setActiveShareTarget(target);
 
       try {
         if (target === 'save-image') {
@@ -149,16 +142,39 @@ export function RecommendationResultsFinalScreen({
         );
       } finally {
         activeShareTargetRef.current = null;
-        setActiveShareTarget(null);
       }
     },
     [captureReady],
   );
 
+  const handleMore = useCallback(() => {
+    if (activeShareTargetRef.current) {
+      Alert.alert(
+        '공유 준비 중',
+        '이전 저장 또는 공유 작업을 처리하고 있어요. 잠시만 기다려 주세요.',
+      );
+      return;
+    }
+    if (!captureReady) {
+      Alert.alert('결과 준비 중', '추천 이미지를 모두 불러온 뒤 저장하거나 공유할 수 있어요.');
+      return;
+    }
+    Alert.alert('추천 메이크업 보고서', '원하는 작업을 선택해 주세요.', [
+      {text: '이미지 저장', onPress: () => void handleShareAction('save-image')},
+      {text: '공유하기', onPress: () => void handleShareAction('share-result')},
+      {text: '취소', style: 'cancel'},
+    ]);
+  }, [captureReady, handleShareAction]);
+
   if (!model) {
     return (
       <LinearGradient colors={colors.screenGradient} style={styles.fill}>
-        <View style={[styles.empty, {paddingTop: insets.top + APP_HEADER_BASE_HEIGHT + 32}]}>
+        <RecommendationReportHeader
+          onBack={onBack}
+          onMore={handleMore}
+          topInset={insets.top}
+        />
+        <View style={styles.empty}>
           <Text style={styles.emptyTitle}>추천 결과를 준비하지 못했어요</Text>
           <Pressable accessibilityRole="button" onPress={onRetry} style={styles.primaryButton}>
             <Text style={styles.primaryLabel}>다시 시도하기</Text>
@@ -168,8 +184,6 @@ export function RecommendationResultsFinalScreen({
     );
   }
 
-  const shareActionsDisabled = !captureReady || Boolean(activeShareTarget);
-
   return (
     <LinearGradient colors={colors.screenGradient} style={styles.fill}>
       <ScrollView
@@ -177,10 +191,14 @@ export function RecommendationResultsFinalScreen({
           styles.content,
           {
             paddingBottom: Math.max(insets.bottom, 20),
-            paddingTop: insets.top + APP_HEADER_BASE_HEIGHT + 18,
           },
         ]}
         showsVerticalScrollIndicator={false}>
+        <RecommendationReportHeader
+          onBack={onBack}
+          onMore={handleMore}
+          topInset={insets.top}
+        />
         <OptionalViewShot
           options={CAPTURE_OPTIONS}
           ref={captureRef}
@@ -188,31 +206,17 @@ export function RecommendationResultsFinalScreen({
           <LinearGradient colors={colors.screenGradient} style={styles.captureStack}>
             <View style={styles.heroInset}>
               <FinalGeneratedMakeupHero
+                alignmentMetadata={model.sourceLook.imageAlignmentMetadata}
                 afterImage={model.look.image}
                 beforeImageUri={context?.reportImageUri}
                 imageError={model.sourceLook.imageError ?? imageRetryError}
                 imageStatus={resolvedImageStatus}
                 onReadyChange={captureReadyHandlers.hero}
                 onRetry={() => onRetryImages()}
+                title={context?.keywordLabel?.trim()
+                  || context?.situationLabel?.trim()
+                  || model.look.name}
               />
-            </View>
-
-            <View style={styles.sectionInset}>
-              <FinalRecommendationContextReceipt
-                additionalConstraints={model.additionalConstraints}
-                answerRows={model.answerRows}
-                keywordLabel={context?.keywordLabel}
-                onImageSettledChange={captureReadyHandlers.report}
-                reportAnalyzedAt={context?.reportAnalyzedAt}
-                reportImageUri={context?.reportImageUri}
-                reportLabel={context?.reportLabel}
-                reportSummary={context?.reportSummary}
-                situationLabel={context?.situationLabel}
-              />
-            </View>
-
-            <View style={styles.sectionInset}>
-              <FinalMatchReasonSection match={model.match} />
             </View>
 
             <View style={styles.sectionInset}>
@@ -238,77 +242,87 @@ export function RecommendationResultsFinalScreen({
           </LinearGradient>
         </OptionalViewShot>
 
-        <View style={styles.shareSection}>
-          <View style={styles.shareActions}>
-            <Pressable
-              accessibilityLabel="전체 추천 결과 저장"
-              accessibilityRole="button"
-              accessibilityState={{
-                busy: activeShareTarget === 'save-image',
-                disabled: shareActionsDisabled,
-              }}
-              disabled={shareActionsDisabled}
-              hitSlop={8}
-              onPress={() => {
-                void handleShareAction('save-image');
-              }}
-              style={({pressed}) => [
-                styles.shareButton,
-                pressed && styles.pressed,
-                shareActionsDisabled && styles.disabled,
-              ]}>
-              {activeShareTarget === 'save-image' ? (
-                <ActivityIndicator color={colors.ink} size="small" />
-              ) : (
-                <Download color={colors.ink} size={24} strokeWidth={1.9} />
-              )}
-            </Pressable>
-
-            <Pressable
-              accessibilityLabel="전체 추천 결과 공유하기"
-              accessibilityRole="button"
-              accessibilityState={{
-                busy: activeShareTarget === 'share-result',
-                disabled: shareActionsDisabled,
-              }}
-              disabled={shareActionsDisabled}
-              hitSlop={8}
-              onPress={() => {
-                void handleShareAction('share-result');
-              }}
-              style={({pressed}) => [
-                styles.shareButton,
-                pressed && styles.pressed,
-                shareActionsDisabled && styles.disabled,
-              ]}>
-              {activeShareTarget === 'share-result' ? (
-                <ActivityIndicator color={colors.ink} size="small" />
-              ) : (
-                <Share2 color={colors.ink} size={24} strokeWidth={1.9} />
-              )}
-            </Pressable>
-          </View>
-        </View>
+        <View style={styles.floatingActionClearance} />
       </ScrollView>
 
       <View
         pointerEvents="box-none"
         style={[styles.floatingActionHost, {bottom: Math.max(insets.bottom, 12) + 10}]}>
-        <Pressable
-          accessibilityHint="현재 추천 메이크업을 얼굴에 미리 적용합니다"
-          accessibilityLabel="추천 메이크업 AR 적용"
-          accessibilityRole="button"
-          onPress={() => onApplyAR(model.sourceLook)}
-          style={({pressed}) => [
-            styles.floatingAction,
-            shadows.darkTile,
-            pressed && styles.pressed,
-          ]}>
-          <Sparkles color={colors.white} size={19} strokeWidth={2.1} />
-          <Text style={styles.floatingActionLabel}>AR로 적용하기</Text>
-        </Pressable>
+        <View style={styles.floatingActionRow}>
+          <Pressable
+            accessibilityHint="맞춤 추천 제품 페이지로 이동합니다"
+            accessibilityLabel="추천 제품 페이지로 이동"
+            accessibilityRole="button"
+            onPress={onOpenRecommendedProducts}
+            style={({pressed}) => [
+              styles.floatingAction,
+              styles.productAction,
+              pressed && styles.pressed,
+            ]}>
+            <ShoppingBag color={colors.ink} size={18} strokeWidth={2.1} />
+            <Text numberOfLines={1} style={styles.productActionLabel}>
+              추천 제품
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityHint="현재 추천 메이크업을 얼굴에 미리 적용합니다"
+            accessibilityLabel="추천 메이크업 AR 적용"
+            accessibilityRole="button"
+            onPress={() => onApplyAR(model.sourceLook)}
+            style={({pressed}) => [
+              styles.floatingAction,
+              styles.arAction,
+              shadows.darkTile,
+              pressed && styles.pressed,
+            ]}>
+            <Sparkles color={colors.white} size={19} strokeWidth={2.1} />
+            <Text numberOfLines={1} style={styles.floatingActionLabel}>
+              AR로 적용하기
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </LinearGradient>
+  );
+}
+
+function RecommendationReportHeader({
+  onBack,
+  onMore,
+  topInset,
+}: {
+  onBack?: () => void;
+  onMore: () => void;
+  topInset: number;
+}) {
+  return (
+    <View style={[styles.reportHeader, {paddingTop: Math.max(topInset, 54) + 10}]}>
+      <Pressable
+        accessibilityLabel="뒤로가기"
+        accessibilityRole="button"
+        accessibilityState={{disabled: !onBack}}
+        disabled={!onBack}
+        hitSlop={6}
+        onPress={onBack}
+        style={({pressed}) => [
+          styles.reportHeaderButton,
+          pressed && styles.pressed,
+          !onBack && styles.headerButtonDisabled,
+        ]}>
+        <ChevronLeft color={colors.ink3} size={18} strokeWidth={2.2} />
+      </Pressable>
+      <Text numberOfLines={1} style={styles.reportHeaderTitle}>
+        추천 메이크업 보고서
+      </Text>
+      <Pressable
+        accessibilityLabel="추천 메이크업 보고서 더보기"
+        accessibilityRole="button"
+        hitSlop={6}
+        onPress={onMore}
+        style={({pressed}) => [styles.reportHeaderButton, pressed && styles.pressed]}>
+        <MoreHorizontal color={colors.ink3} size={16} strokeWidth={2} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -319,23 +333,36 @@ const styles = StyleSheet.create({
   captureStack: {gap: 26, paddingBottom: 24, paddingTop: 18},
   heroInset: {paddingHorizontal: 14},
   sectionInset: {paddingHorizontal: 14},
-  shareSection: {
+  floatingActionClearance: {height: 116},
+  headerButtonDisabled: {opacity: 0.42},
+  reportHeader: {
     alignItems: 'center',
-    backgroundColor: colors.screenGradient[2],
-    paddingBottom: 116,
-    paddingHorizontal: 14,
-    paddingTop: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 6,
+    paddingHorizontal: 20,
   },
-  shareActions: {alignItems: 'center', flexDirection: 'row', gap: 24, justifyContent: 'center'},
-  shareButton: {
+  reportHeaderButton: {
     alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderRadius: 26,
-    height: 52,
+    backgroundColor: colors.white,
+    borderRadius: 17,
+    elevation: 2,
+    height: 34,
     justifyContent: 'center',
-    width: 52,
+    shadowColor: colors.ink,
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    width: 34,
   },
-  disabled: {opacity: 0.48},
+  reportHeaderTitle: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    marginHorizontal: 12,
+    textAlign: 'center',
+  },
   pressed: {opacity: 0.76},
   floatingActionHost: {
     left: 12,
@@ -343,17 +370,26 @@ const styles = StyleSheet.create({
     right: 12,
     zIndex: 40,
   },
+  floatingActionRow: {flexDirection: 'row', gap: 10},
   floatingAction: {
     alignItems: 'center',
-    backgroundColor: colors.dark,
     borderRadius: radius.pill,
+    flex: 1,
     flexDirection: 'row',
     gap: 9,
     justifyContent: 'center',
     minHeight: 58,
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
   },
-  floatingActionLabel: {color: colors.white, fontSize: 15, fontWeight: '800'},
+  productAction: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderColor: colors.glassBorder,
+    borderWidth: 1,
+    flex: 0.9,
+  },
+  arAction: {backgroundColor: colors.dark, flex: 1.1},
+  productActionLabel: {color: colors.ink, flexShrink: 1, fontSize: 15, fontWeight: '800'},
+  floatingActionLabel: {color: colors.white, flexShrink: 1, fontSize: 15, fontWeight: '800'},
   primaryButton: {
     alignItems: 'center',
     backgroundColor: colors.dark,

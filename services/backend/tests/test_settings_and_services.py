@@ -136,7 +136,7 @@ def test_gpt_image_2_edit_params_omit_input_fidelity() -> None:
   assert params["model"] == "gpt-image-2"
   assert params["quality"] == "low"
   assert params["output_format"] == "jpeg"
-  assert params["output_compression"] == 80
+  assert params["output_compression"] == 90
   assert "response_format" not in params
   assert "input_fidelity" not in params
 

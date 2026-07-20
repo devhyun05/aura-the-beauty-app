@@ -16,6 +16,7 @@ import {
   filterMakeupRecommendationReportsByDiscovery,
   formatMakeupRecommendationHistoryDate,
   isMakeupRecommendationReportAllowedByDiscovery,
+  getInitialMakeupRecommendationScreenPhase,
   getQuestionActionMode,
   getQuestionProgressSegments,
   makeupRecommendationDiscoveryCopy,
@@ -149,6 +150,36 @@ expectEqual(shouldHandleMakeupRecommendationBack('discovery'), false, 'discovery
 expectEqual(shouldHandleMakeupRecommendationBack('question'), true, 'question back is handled');
 expectEqual(shouldHandleMakeupRecommendationBack('results'), true, 'results back is handled');
 expectEqual(shouldHandleMakeupRecommendationBack('history'), true, 'history back is handled');
+expectEqual(
+  getInitialMakeupRecommendationScreenPhase({initialView: 'discovery', reportId: 'report-9'}),
+  'reportLoading',
+  'direct saved report starts in neutral report loading',
+);
+expectEqual(
+  getInitialMakeupRecommendationScreenPhase({initialView: 'history'}),
+  'history',
+  'history list preserves its requested initial view',
+);
+expectEqual(
+  getInitialMakeupRecommendationScreenPhase({initialView: 'discovery', reportId: '   '}),
+  'discovery',
+  'blank report id does not enter report loading',
+);
+expectEqual(
+  shouldHandleMakeupRecommendationBack('reportLoading', {directReportEntry: true}),
+  false,
+  'direct report loading back exits the native route',
+);
+expectEqual(
+  shouldHandleMakeupRecommendationBack('results', {directReportEntry: true}),
+  false,
+  'direct report result back exits the native route',
+);
+expectEqual(
+  shouldHandleMakeupRecommendationBack('results', {directReportEntry: false}),
+  true,
+  'history-selected report result back stays inside the recommendation flow',
+);
 
 const loadingContext = {
   answerKeywords: [
@@ -200,6 +231,10 @@ const analysisReportPickerSource = readFileSync(
 );
 const loadingViewSource = readFileSync(
   'apps/mobile/src/features/makeup-recommendation/screens/RecommendationAgentLoadingView.tsx',
+  'utf8',
+);
+const reportLoadingViewSource = readFileSync(
+  'apps/mobile/src/features/makeup-recommendation/screens/RecommendationReportLoadingView.tsx',
   'utf8',
 );
 const recommendationServiceSource = readFileSync(
@@ -264,13 +299,14 @@ expectEqual(customSituationComposerSource.includes('backgroundColor: colors.back
 expectEqual(customSituationComposerSource.includes("rgba(17, 17, 17, 0.08)"), false, 'custom sheet has no dim backdrop');
 expectEqual(analysisReportPickerSource.includes("rgba(17,17,17,0.42)"), false, 'report picker has no dim backdrop');
 expectEqual(customSituationComposerSource.includes('autoFocus'), true, 'custom sheet focuses its visible input');
-expectEqual(loadingViewSource.includes('const MESSAGE_INTERVAL_MS = 3000;'), true, 'final generation messages advance at a readable pace');
-expectEqual(screenSource.includes('export const MIN_AGENT_CONVERSATION_MS = 20_000;'), true, 'agent conversation remains visible long enough to show all specialists');
+expectEqual(loadingViewSource.includes('const MESSAGE_INTERVAL_MS = 1500;'), true, 'short loading flow still advances through specialist messages');
+expectEqual(screenSource.includes('export const MIN_AGENT_CONVERSATION_MS = 6_000;'), true, 'agent conversation has a short minimum without delaying completed results');
 expectEqual(screenSource.includes('await waitForMinimumAgentConversation(loadingStartedAt, signal);'), true, 'result navigation waits for the minimum agent conversation');
 expectEqual(screenSource.includes("imageStatus: 'failed', imageError: '이미지 상태 확인 실패'"), false, 'transient polling errors do not become terminal image failures');
 expectEqual(loadingViewSource.includes('<Text style={styles.liveStatusText}>AURA 메이크업 크루</Text>'), false, 'final generation removes the status subtitle');
 expectEqual(loadingViewSource.includes('선택한 답변과 얼굴 분석 사진을 함께 보며'), false, 'final generation removes the explanatory subtitle');
-expectEqual(recommendationServiceSource.includes('timeoutMs: 180000'), true, 'Claude generation allows enough time for streaming and product matching');
+expectEqual(recommendationServiceSource.includes('export const MAKEUP_RECOMMENDATION_GENERATION_TIMEOUT_MS = 45_000;'), true, 'generation timeout is bounded above the backend fast-fallback budget');
+expectEqual(recommendationServiceSource.includes('timeoutMs: MAKEUP_RECOMMENDATION_GENERATION_TIMEOUT_MS'), true, 'V2 generation uses the bounded timeout');
 expectEqual(recommendationServiceSource.includes('timeoutMs: 90000'), false, 'obsolete ninety-second cutoff is removed');
 expectEqual(screenSource.includes('Promise.allSettled(['), true, 'catalog and reports load independently');
 expectEqual(screenSource.includes('fetchMakeupRecommendationDiscovery(),'), true, 'catalog request participates in independent loading');
@@ -278,6 +314,68 @@ expectEqual(screenSource.includes('getFaceAnalysisReports({limit: 50}),'), true,
 expectEqual(screenSource.includes('getFaceAnalysisReportById(reportIdToHydrate)'), true, 'selected list report hydrates from detail API');
 expectEqual(screenSource.includes("type: 'report/detailLoaded'"), true, 'hydrated detail replaces list summary');
 expectEqual(screenSource.includes('reportRegionVisuals: sourceReport?.measurements?.regionVisuals'), true, 'result context receives region visuals');
+expectEqual(screenSource.includes("setPhase('reportLoading')"), true, 'direct report fetch uses neutral loading');
+expectEqual(screenSource.includes('<RecommendationReportLoadingView />'), true, 'neutral report loading renders separately');
+expectEqual(
+  screenSource.includes("prompt: '완성된 추천 메이크업 보고서를 불러오는 중이에요.'"),
+  false,
+  'saved report hydration never creates an analysis conversation context',
+);
+expectEqual(reportLoadingViewSource.includes('RecommendationAgentLoadingView'), false, 'neutral report loading cannot render the analysis conversation');
+const showHydratedHistoryReportStart = screenSource.indexOf('const showHydratedHistoryReport');
+const openHistoryReportStart = screenSource.indexOf('const openHistoryReport');
+const directReportEffectStart = screenSource.indexOf('  useEffect(() => {', openHistoryReportStart);
+const showHydratedHistoryReportSource = screenSource.slice(
+  showHydratedHistoryReportStart,
+  openHistoryReportStart,
+);
+const openHistoryReportSource = screenSource.slice(
+  openHistoryReportStart,
+  directReportEffectStart,
+);
+const directReportEffectSource = screenSource.slice(
+  directReportEffectStart,
+  screenSource.indexOf('const handleRefine'),
+);
+expectEqual(openHistoryReportSource.includes('refreshGeneratedMakeupRecommendation'), false, 'opening a fetched report does not immediately fetch it a second time');
+expectEqual(openHistoryReportSource.includes('fetchGeneratedMakeupRecommendationReport('), true, 'history list item hydrates its omitted image metadata with one detail request');
+expectEqual(openHistoryReportSource.includes("setPhase('loading')"), false, 'history list selection never opens the generation analysis loader');
+expectEqual(
+  directReportEffectSource.match(/fetchGeneratedMakeupRecommendationReport\(/g)?.length ?? 0,
+  1,
+  'direct report entry performs exactly one recommendation detail request',
+);
+expectEqual(directReportEffectSource.includes('getFaceAnalysisReportById(requestedReport.sourceAnalysisReportId)'), true, 'direct entry preloads the source photo before results');
+expectEqual(directReportEffectSource.includes('.catch(() => null)'), true, 'source photo preload fails gracefully');
+expectEqual(
+  directReportEffectSource.includes('showHydratedHistoryReport(requestedReport, operation, preloadedSourceReport)'),
+  true,
+  'direct entry reuses both fetched detail payloads',
+);
+const preloadedSourceApplyIndex = showHydratedHistoryReportSource.indexOf(
+  'if (preloadedSourceReport) applySourceReport(preloadedSourceReport)',
+);
+expectEqual(
+  preloadedSourceApplyIndex >= 0
+    && preloadedSourceApplyIndex < showHydratedHistoryReportSource.indexOf("setPhase('results')"),
+  true,
+  'preloaded source photo enters state before direct results render',
+);
+expectEqual(
+  /if \(reportId\?\.trim\(\)\) return;\r?\n\s+void loadDiscoveryData\(\);/.test(screenSource),
+  true,
+  'direct saved report skips the unrelated discovery bootstrap',
+);
+expectEqual(
+  showHydratedHistoryReportSource.includes('hydratedReportDetailIds.current.add(restored.sourceAnalysisReportId)'),
+  true,
+  'saved report source analysis detail is guarded against duplicate hydration',
+);
+expectEqual(
+  screenSource.includes("if (reportId?.trim() || initialView === 'history') return undefined;"),
+  true,
+  'history list cannot be replaced by resumable generation session restoration',
+);
 expectEqual(screenSource.includes('completedReportIds'), false, 'catalog failure cannot mark reports unavailable');
 expectEqual(screenSource.includes('.then(loadReports)'), false, 'reports are not chained after catalog loading');
 const resultsSource = readFileSync(

@@ -1,4 +1,3 @@
-import {Image} from 'expo-image';
 import React, {useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {
   AccessibilityInfo,
@@ -12,7 +11,11 @@ import {
   View,
 } from 'react-native';
 
-import type {MakeupRecommendationImageStatus} from '../../types';
+import type {
+  MakeupRecommendationImageAlignmentMetadata,
+  MakeupRecommendationImageStatus,
+} from '../../types';
+import {AlignedHeroImageLayer} from './AlignedHeroImageLayer';
 
 const INITIAL_COMPARE_RATIO = 0.95;
 const MIN_COMPARE_RATIO = 0.04;
@@ -24,6 +27,7 @@ export const clampFinalCompareRatio = (ratio: number): number =>
   Math.min(MAX_COMPARE_RATIO, Math.max(MIN_COMPARE_RATIO, ratio));
 
 type FinalGeneratedMakeupHeroProps = {
+  alignmentMetadata?: MakeupRecommendationImageAlignmentMetadata;
   beforeImageUri?: string;
   afterImage: ImageSourcePropType;
   imageStatus: MakeupRecommendationImageStatus;
@@ -31,9 +35,11 @@ type FinalGeneratedMakeupHeroProps = {
   onReadyChange?: (ready: boolean) => void;
   onRetry: () => void;
   reduceMotion?: boolean;
+  title?: string;
 };
 
 export const FinalGeneratedMakeupHero = ({
+  alignmentMetadata,
   beforeImageUri,
   afterImage,
   imageStatus,
@@ -41,6 +47,7 @@ export const FinalGeneratedMakeupHero = ({
   onReadyChange,
   onRetry,
   reduceMotion = false,
+  title,
 }: FinalGeneratedMakeupHeroProps) => {
   const isServerGenerating = imageStatus === 'pending' || imageStatus === 'processing';
   const isIncomplete = imageStatus === 'failed' || imageStatus === 'partial';
@@ -69,10 +76,13 @@ export const FinalGeneratedMakeupHero = ({
     () => Animated.subtract(comparePosition, 24),
     [comparePosition],
   );
-  const afterImageLayout = useMemo(
-    () => ({height: Math.max(heroHeight, 1), width: Math.max(heroWidth, 1)}),
-    [heroHeight, heroWidth],
-  );
+  const sourceFrame = alignmentMetadata?.source;
+  const sourceImageWidth = sourceFrame?.imageSize.width ?? 0;
+  const sourceImageHeight = sourceFrame?.imageSize.height ?? 0;
+  const heroAspectRatio = sourceImageWidth > 0 && sourceImageHeight > 0
+    ? sourceImageWidth / sourceImageHeight
+    : undefined;
+  const displayTitle = title?.trim();
 
   const canCompare = imageStatus === 'completed' && afterLoaded && !afterLoadFailed;
 
@@ -229,15 +239,15 @@ export const FinalGeneratedMakeupHero = ({
         setHeroWidth(nextWidth);
         setHeroHeight(nextHeight);
       }}
-      style={styles.hero}
+      style={[styles.hero, heroAspectRatio ? {aspectRatio: heroAspectRatio} : null]}
     >
       {beforeImageUri?.trim() ? (
-        <Image
-          accessibilityIgnoresInvertColors
+        <AlignedHeroImageLayer
+          alignmentFrame={sourceFrame}
+          referenceFrame={sourceFrame}
           source={{uri: beforeImageUri}}
-          style={StyleSheet.absoluteFill}
-          contentFit="contain"
-          contentPosition="center"
+          viewportHeight={heroHeight}
+          viewportWidth={heroWidth}
         />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.placeholder]}>
@@ -253,14 +263,10 @@ export const FinalGeneratedMakeupHero = ({
           style={[StyleSheet.absoluteFill, {opacity: afterOpacity}]}
         >
           <Animated.View style={[styles.afterClip, {width: comparePosition}]}>
-            <Image
-              accessibilityIgnoresInvertColors
+            <AlignedHeroImageLayer
+              alignmentFrame={alignmentMetadata?.generated}
               key={afterLoadEpochKey}
-              recyclingKey={afterLoadEpochKey}
-              source={afterImage}
-              style={[styles.afterImage, afterImageLayout]}
-              contentFit="contain"
-              contentPosition="center"
+              referenceFrame={sourceFrame}
               onLoad={() => {
                 if (afterLoadEpochKeyRef.current !== afterLoadEpochKey) return;
                 setAfterLoadFailed(false);
@@ -271,11 +277,20 @@ export const FinalGeneratedMakeupHero = ({
                 setAfterLoaded(false);
                 setAfterLoadFailed(true);
               }}
+              recyclingKey={afterLoadEpochKey}
+              source={afterImage}
+              viewportHeight={heroHeight}
+              viewportWidth={heroWidth}
             />
           </Animated.View>
         </Animated.View>
       ) : null}
 
+      {displayTitle && imageStatus === 'completed' ? (
+        <View pointerEvents="none" style={styles.titleOverlay}>
+          <Text numberOfLines={2} style={styles.titleText}>{displayTitle}</Text>
+        </View>
+      ) : null}
 
       {isLoading ? (
         <View
@@ -409,12 +424,29 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     overflow: 'hidden',
-    backgroundColor: '#D8DAE2',
+    backgroundColor: 'transparent',
   },
-  afterImage: {
+  titleOverlay: {
     position: 'absolute',
-    top: 0,
+    right: 0,
+    bottom: 0,
     left: 0,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  titleText: {
+    maxWidth: '84%',
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    lineHeight: 26,
+    textShadowColor: 'rgba(0,0,0,0.72)',
+    textShadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    textShadowRadius: 5,
   },
 
   stateOverlay: {

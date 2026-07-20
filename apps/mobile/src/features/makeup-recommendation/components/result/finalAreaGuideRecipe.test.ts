@@ -129,6 +129,11 @@ expectEqual(
   5,
   'eye recipe preserves at least three distinct color layers',
 );
+expectEqual(
+  recipes[0]?.summaryColors.map(color => color.name).join('|'),
+  '라이트 베이지|소프트 토프|로즈 브라운|딥 브라운|샴페인 베이지',
+  'eye summary exposes every application color in step order',
+);
 expectEqual(recipes[0]?.steps[0]?.tool, '플랫 브러시', 'step tool is preserved');
 expectEqual(recipes[0]?.completionCriteria[0], '경계가 보이지 않아요.', 'completion criteria are preserved');
 expectEqual(recipes[4]?.steps.length, 3, 'lip recipe preserves all three application steps');
@@ -147,6 +152,11 @@ expectEqual(
   'legacy instruction and stored technique stay visible',
 );
 expectEqual(legacy?.steps[0]?.placement, '정해진 범위', 'legacy stored placement stays visible');
+expectEqual(
+  legacy?.summaryColors[0]?.name,
+  '로즈 브라운',
+  'legacy summary falls back to the area guide primary color',
+);
 expectEqual(legacy?.steps[0]?.tool, '', 'legacy fallback does not invent a tool');
 expectEqual(legacy?.steps[0]?.amount, '', 'legacy fallback does not invent an amount');
 expectEqual(legacy?.completionCriteria.length, 0, 'legacy fallback does not invent completion criteria');

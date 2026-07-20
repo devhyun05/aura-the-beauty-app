@@ -304,6 +304,8 @@ export type MakeupRecommendationReportHistoryItem = {
   createdAt: string;
   imageStatus: MakeupRecommendationImageStatus;
   imageError?: string;
+  previewImageUrl?: string;
+  previewImageStatus?: MakeupRecommendationImageStatus;
   profileGender?: MakeupRecommendationProfileGender;
   personalColor?: string;
   sourceAnalysisReportId?: string;
