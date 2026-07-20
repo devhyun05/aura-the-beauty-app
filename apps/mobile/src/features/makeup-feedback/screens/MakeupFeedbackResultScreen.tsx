@@ -363,7 +363,8 @@ export function MakeupFeedbackResultScreen({
                   {strengthTakeaway ? (
                     <View style={styles.takeawayRow}>
                       <Text style={styles.takeawayLabel}>잘된 점</Text>
-                      <Text numberOfLines={2} style={styles.takeawayText}>
+                      {/* 종합 판단 요약은 잘리지 않고 전문이 보여야 한다. */}
+                      <Text style={styles.takeawayText}>
                         {strengthTakeaway}
                       </Text>
                     </View>
@@ -373,7 +374,7 @@ export function MakeupFeedbackResultScreen({
                       <Text style={[styles.takeawayLabel, styles.takeawayLabelPriority]}>
                         먼저 고칠 점
                       </Text>
-                      <Text numberOfLines={2} style={styles.takeawayText}>
+                      <Text style={styles.takeawayText}>
                         {improvementTakeaway}
                       </Text>
                     </View>
