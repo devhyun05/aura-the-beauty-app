@@ -352,7 +352,7 @@ export function buildVariantLibrary(): LookLibrary {
   // ── 블러셔 6종 — 모양(클래식/이가리/드레이핑) × 색, 배치 변형(blushLift/Spread) 1종
   addRegionLook(lib, 'blush', 'classic-rose', '클래식 로즈', '컨투어',
     single('블러셔', 'blush', {
-      blushShape: 0, blushColor: '#F08FA0', blushIntensity: 0.45, blushFinish: 0,
+      blushShape: 0, blushColor: '#F08FA0', blushIntensity: 0.45, blushFinish: 0, blushLift: 0.05,
     }));
   addRegionLook(lib, 'blush', 'classic-peach', '클래식 피치 시머', '컨투어',
     single('블러셔', 'blush', {
@@ -361,14 +361,15 @@ export function buildVariantLibrary(): LookLibrary {
       blushIntensity: 0.4,
       blushFinish: 3,
       blushShimmer: 0.4,
+      blushLift: 0.05,
     }));
   addRegionLook(lib, 'blush', 'igari-coral', '이가리 코랄', '컨투어',
     single('블러셔', 'blush', {
-      blushShape: 1, blushColor: '#E86A80', blushIntensity: 0.5, blushFinish: 0,
+      blushShape: 1, blushColor: '#E86A80', blushIntensity: 0.5, blushFinish: 0, blushLift: 0.115,
     }));
   addRegionLook(lib, 'blush', 'igari-mauve', '이가리 모브', '컨투어',
     single('블러셔', 'blush', {
-      blushShape: 1, blushColor: '#B85C6E', blushIntensity: 0.4, blushFinish: 1,
+      blushShape: 1, blushColor: '#B85C6E', blushIntensity: 0.4, blushFinish: 1, blushLift: 0.115,
     }));
   addRegionLook(lib, 'blush', 'draping-rose', '드레이핑 로즈', '컨투어',
     single('블러셔', 'blush', {
@@ -806,7 +807,7 @@ export function buildVariantLibrary(): LookLibrary {
   addRegionLook(lib, 'eyeshadow-lower', 'deep-smoky-under', '딥 스모키 언더', '눈',
     single('딥 스모키 언더', 'eyeshadow', {
       eyeshadowLowerColor: '#5C4A46',
-      eyeshadowLowerIntensity: 0.44, eyeshadowLowerShape: 2, eyeshadowLowerFinish: 1,
+      eyeshadowLowerIntensity: 0.7, eyeshadowLowerShape: 2, eyeshadowLowerFinish: 1,
     }), false);
 
   // 아이라인 하 3종 — 색은 상·하 라인이 공유하는 계약을 그대로 따른다.
