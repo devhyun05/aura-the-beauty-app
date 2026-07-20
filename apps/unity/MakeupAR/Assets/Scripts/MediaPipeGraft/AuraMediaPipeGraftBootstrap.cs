@@ -175,6 +175,15 @@ namespace ARMakeup.Face
 
             _wired = true;
             Debug.Log("[AuraStencil] tutorial-stencil-0710 runtime graft ready");
+
+            // AURA는 자체 씬(ARSession 존재)을 소유하므로 ARBootstrap.Init이 25행에서
+            // bail한다 → 그 경로의 NativeBridge.MarkReady()가 영영 불리지 않는다. 그래프트
+            // 배선이 끝난 지금 인스턴스 MarkReady()를 직접 불러 (1)_bootState=Ready로
+            // 만들어 OnMessageFromRN이 applyFilter 레시피를 드롭하지 않게 하고 (2)generation
+            // 포함 'ready'를 RN에 보내 핸드셰이크를 완결한다. AuraStencilHost의
+            // SetStencilActive/OnApplicationPause 기반 SendReady는 런타임 pause/idle churn에
+            // 게이트되어 신뢰할 수 없었다(실기기에서 recipe 드롭·"카메라 연결 확인 중" 고착).
+            bridgeObject.GetComponent<NativeBridge>().MarkReady();
         }
 
         static void AddIfMissing<T>(GameObject target) where T : Component
