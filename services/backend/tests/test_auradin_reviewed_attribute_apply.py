@@ -114,6 +114,36 @@ def test_merge_review_decisions_requires_approval() -> None:
   assert [d["field"] for d in decisions] == ["colorFamily"]
 
 
+def test_accepted_values_as_decisions_forces_value_only() -> None:
+  review = [
+    {
+      "catalogItemId": "a",
+      "fields": {
+        "colorFamily": {"status": "accepted", "value": "pink", "confidence": 0.9, "evidenceSpan": "pink", "promotionCandidate": True},
+        "finish": {"status": "empty"},
+      },
+    },
+  ]
+  decisions = apply_mod.accepted_values_as_decisions(review)
+  assert len(decisions) == 1
+  # promotionCandidate is forced False so hardFilter is never granted without human review
+  assert decisions[0]["promotionCandidate"] is False
+  assert decisions[0]["value"] == "pink"
+
+
+def test_auto_fill_applies_value_but_never_promotes() -> None:
+  rows = [_seed_row("a")]
+  decisions = apply_mod.accepted_values_as_decisions(
+    [{"catalogItemId": "a", "fields": {"colorFamily": {"status": "accepted", "value": "pink", "confidence": 0.92, "evidenceSpan": "pink", "promotionCandidate": True}}}]
+  )
+  new_rows, _ = apply_mod.apply_reviewed_to_seed(
+    rows, decisions, run_date="20260720", input_text_fn=_text, source_label="llm_b3_autofilled"
+  )
+  assert new_rows[0]["attributes"]["colorFamily"] == "pink"
+  assert new_rows[0]["hardFilterEligible"]["colorFamily"] is False  # value-only
+  assert new_rows[0]["evidence"][-1]["sourceType"] == "llm_b3_autofilled"
+
+
 def test_spotcheck_verdict_parsing() -> None:
   rows = [
     {"catalogItemId": "a", "field": "colorFamily", "verdict": "approve"},
@@ -129,12 +159,38 @@ def test_structured_detail_fills_missing_only_no_promotion() -> None:
     _seed_row("a"),  # missing colorFamily
     _seed_row("b", attributes={"colorFamily": "red"}),  # already has one
   ]
-  index = {"https://img/x.jpg": "mauve"}
+  index = apply_mod.index_structured_color(
+    [{"imageUrl": "https://img/x.jpg", "colorFamily": "mauve"}]
+  )
   new_rows, report = apply_mod.apply_structured_detail(rows, index, run_date="20260720")
   assert new_rows[0]["attributes"]["colorFamily"] == "mauve"
   assert new_rows[0]["hardFilterEligible"]["colorFamily"] is False
   assert new_rows[1]["attributes"]["colorFamily"] == "red"  # unchanged
   assert report["filled"] == 1
+
+
+def test_structured_detail_brand_name_fallback_join() -> None:
+  # imageUrl differs (detail CDN vs offer CDN), so only brand+productName matches.
+  rows = [_seed_row("a")]
+  rows[0]["liveOffer"]["imageUrl"] = "https://offer-cdn/a.jpg"
+  index = apply_mod.index_structured_color(
+    [{"imageUrl": "https://detail-cdn/z.jpg", "brand": "롬앤", "productName": "쥬시 래스팅 틴트 핑크", "colorFamily": "pink"}]
+  )
+  new_rows, report = apply_mod.apply_structured_detail(rows, index, run_date="20260720")
+  assert new_rows[0]["attributes"]["colorFamily"] == "pink"
+  assert report["filled"] == 1
+
+
+def test_structured_detail_image_join_takes_precedence() -> None:
+  rows = [_seed_row("a")]  # imageUrl https://img/x.jpg, brand 롬앤
+  index = apply_mod.index_structured_color(
+    [
+      {"imageUrl": "https://img/x.jpg", "colorFamily": "coral"},
+      {"brand": "롬앤", "productName": "쥬시 래스팅 틴트 핑크", "colorFamily": "pink"},
+    ]
+  )
+  new_rows, _ = apply_mod.apply_structured_detail(rows, index, run_date="20260720")
+  assert new_rows[0]["attributes"]["colorFamily"] == "coral"  # image match wins
 
 
 def test_coverage_and_invariant() -> None:

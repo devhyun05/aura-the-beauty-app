@@ -27,6 +27,7 @@ import argparse
 import copy
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Callable
@@ -113,6 +114,39 @@ def merge_review_decisions(
   return decisions
 
 
+def accepted_values_as_decisions(review_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+  """Every gate-accepted field as a VALUE-ONLY decision (no human verdict needed).
+
+  Used by ``--auto-fill-values`` to collect grounded colorFamily/etc. without a
+  human spotcheck. ``promotionCandidate`` is forced False: the evidenceSpan gate
+  already guarantees the value is not invented, but hardFilter eligibility still
+  requires the human spotcheck path (merge_review_decisions). This does NOT
+  reproduce the seed-coverage fabrication trap, which was specifically about
+  inflating hardFilter eligibility via an overall-confidence fallback.
+  """
+
+  decisions: list[dict[str, Any]] = []
+  for result in review_rows:
+    item_id = str(result.get("catalogItemId") or "").strip()
+    if not item_id:
+      continue
+    fields = result.get("fields") if isinstance(result.get("fields"), dict) else {}
+    for field, payload in fields.items():
+      if not isinstance(payload, dict) or payload.get("status") != "accepted":
+        continue
+      decisions.append(
+        {
+          "catalogItemId": item_id,
+          "field": field,
+          "value": str(payload.get("value")).strip(),
+          "confidence": float(payload.get("confidence") or 0.0),
+          "evidenceSpan": str(payload.get("evidenceSpan") or ""),
+          "promotionCandidate": False,  # value-only; hardFilter needs human spotcheck
+        }
+      )
+  return decisions
+
+
 # ── application (pure) ────────────────────────────────────────────────────────
 
 def _seed_id(row: dict[str, Any]) -> str:
@@ -133,8 +167,13 @@ def apply_reviewed_to_seed(
   *,
   run_date: str,
   input_text_fn: Callable[[dict[str, Any]], str] = build_input_text,
+  source_label: str = "llm_b3_reviewed",
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-  """Apply approved decisions to copies of the seed rows. Ids/count invariant."""
+  """Apply decisions to copies of the seed rows. Ids/count invariant.
+
+  ``source_label`` is recorded as the evidence sourceType so machine-auto-filled
+  values (``llm_b3_autofilled``) are distinguishable from human-reviewed ones.
+  """
 
   new_rows = [copy.deepcopy(row) for row in seed_rows]
   by_id: dict[str, dict[str, Any]] = {_seed_id(r): r for r in new_rows}
@@ -181,7 +220,7 @@ def apply_reviewed_to_seed(
       {
         "field": field,
         "value": decision["value"],
-        "sourceType": "llm_b3_reviewed",
+        "sourceType": source_label,
         "confidence": decision["confidence"],
         "evidenceSpan": decision["evidenceSpan"],
         "hardFilterEligible": bool(promote),
@@ -200,25 +239,59 @@ def apply_reviewed_to_seed(
   return new_rows, report
 
 
-def index_structured_color(structured_rows: list[dict[str, Any]]) -> dict[str, str]:
-  """imageUrl -> colorFamily for structured detail rows that carry one."""
+def _normalize_join_key(value: Any) -> str:
+  """Lowercase + strip brackets/whitespace for a stable brand/name join key."""
 
-  index: dict[str, str] = {}
+  text = str(value or "").lower()
+  text = re.sub(r"[\[\]()]", "", text)
+  return re.sub(r"\s+", "", text)
+
+
+def index_structured_color(structured_rows: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+  """Build colorFamily lookup indexes from structured detail rows.
+
+  Returns two indexes because imageUrl alone joins very few seed rows (the
+  detail imageUrl and the offer imageUrl often differ); a normalized
+  brand+productName key recovers roughly ten times as many real matches.
+  """
+
+  by_image: dict[str, str] = {}
+  by_brand_name: dict[str, str] = {}
   for row in structured_rows:
     color = str(row.get("colorFamily") or "").strip()
+    if not color:
+      continue
     image_url = str(row.get("imageUrl") or "").strip()
-    if color and image_url:
-      index.setdefault(image_url, color)
-  return index
+    if image_url:
+      by_image.setdefault(image_url, color)
+    brand = _normalize_join_key(row.get("brand"))
+    name = _normalize_join_key(row.get("productName"))
+    if brand and name:
+      by_brand_name.setdefault(f"{brand}|{name}", color)
+  return {"byImage": by_image, "byBrandName": by_brand_name}
+
+
+def _lookup_structured_color(row: dict[str, Any], index: dict[str, dict[str, str]]) -> str | None:
+  """imageUrl first (most precise), then normalized brand+productName."""
+
+  live_offer = row.get("liveOffer") if isinstance(row.get("liveOffer"), dict) else {}
+  image_url = str(live_offer.get("imageUrl") or "").strip()
+  if image_url and image_url in index["byImage"]:
+    return index["byImage"][image_url]
+  brand = _normalize_join_key(row.get("brandName"))
+  name = _normalize_join_key(row.get("productName"))
+  if brand and name:
+    return index["byBrandName"].get(f"{brand}|{name}")
+  return None
 
 
 def apply_structured_detail(
   seed_rows: list[dict[str, Any]],
-  color_by_image: dict[str, str],
+  structured_index: dict[str, dict[str, str]],
   *,
   run_date: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-  """Fill MISSING colorFamily from detail evidence (join by image URL).
+  """Fill MISSING colorFamily from detail evidence (join by image URL, then brand+name).
 
   Value-only (never hardFilter-promoted): detail-derived color is below the
   human-spotcheck bar, so it improves visibility/coverage without granting
@@ -231,9 +304,7 @@ def apply_structured_detail(
     attributes = _ensure_dict(row, "attributes")
     if str(attributes.get("colorFamily") or "").strip():
       continue  # never overwrite an existing value
-    live_offer = row.get("liveOffer") if isinstance(row.get("liveOffer"), dict) else {}
-    image_url = str(live_offer.get("imageUrl") or "").strip()
-    color = color_by_image.get(image_url)
+    color = _lookup_structured_color(row, structured_index)
     if not color:
       continue
     attributes["colorFamily"] = color
@@ -290,6 +361,12 @@ def main(argv: list[str] | None = None) -> int:
   parser.add_argument("--review-queue", type=Path, help="run_auradin_llm_attribute_extraction 출력 jsonl")
   parser.add_argument("--spotcheck", type=Path, help="사람이 verdict 기입한 spotcheck csv")
   parser.add_argument("--structured-detail", type=Path, nargs="*", help="detail/structured/*.jsonl (colorFamily 보강)")
+  parser.add_argument(
+    "--auto-fill-values",
+    action="store_true",
+    help="사람 spotcheck 없이 gate-accepted 값을 value-only로 채움 "
+    "(evidenceSpan 게이트로 날조는 막지만 hardFilter 승격은 안 함).",
+  )
   parser.add_argument("--run-date", required=True)
   parser.add_argument("--report", type=Path, help="before/after 커버리지 리포트 json 경로")
   args = parser.parse_args(argv)
@@ -303,20 +380,31 @@ def main(argv: list[str] | None = None) -> int:
     structured: list[dict[str, Any]] = []
     for path in args.structured_detail:
       structured.extend(read_jsonl(path))
-    color_by_image = index_structured_color(structured)
-    rows, structured_report = apply_structured_detail(rows, color_by_image, run_date=args.run_date)
-    reports["structuredDetail"] = {**structured_report, "colorByImageCount": len(color_by_image)}
+    structured_index = index_structured_color(structured)
+    rows, structured_report = apply_structured_detail(rows, structured_index, run_date=args.run_date)
+    reports["structuredDetail"] = {
+      **structured_report,
+      "colorByImageCount": len(structured_index["byImage"]),
+      "colorByBrandNameCount": len(structured_index["byBrandName"]),
+    }
 
   if args.review_queue:
-    if not args.spotcheck:
-      parser.error("--review-queue requires --spotcheck (human verdicts)")
     review_rows = read_jsonl(args.review_queue)
-    with args.spotcheck.open(encoding="utf-8") as handle:
-      spotcheck_rows = list(csv.DictReader(handle))
-    verdicts = load_spotcheck_verdicts(spotcheck_rows)
-    decisions = merge_review_decisions(review_rows, verdicts)
-    rows, reviewed_report = apply_reviewed_to_seed(rows, decisions, run_date=args.run_date)
-    reports["reviewed"] = {**reviewed_report, "approvedDecisions": len(decisions)}
+    if args.auto_fill_values:
+      decisions = accepted_values_as_decisions(review_rows)
+      rows, reviewed_report = apply_reviewed_to_seed(
+        rows, decisions, run_date=args.run_date, source_label="llm_b3_autofilled"
+      )
+      reports["autoFilled"] = {**reviewed_report, "acceptedValues": len(decisions)}
+    else:
+      if not args.spotcheck:
+        parser.error("--review-queue requires --spotcheck (or --auto-fill-values)")
+      with args.spotcheck.open(encoding="utf-8") as handle:
+        spotcheck_rows = list(csv.DictReader(handle))
+      verdicts = load_spotcheck_verdicts(spotcheck_rows)
+      decisions = merge_review_decisions(review_rows, verdicts)
+      rows, reviewed_report = apply_reviewed_to_seed(rows, decisions, run_date=args.run_date)
+      reports["reviewed"] = {**reviewed_report, "approvedDecisions": len(decisions)}
 
   _assert_invariant(seed_rows, rows)
   after = color_family_coverage(rows)
