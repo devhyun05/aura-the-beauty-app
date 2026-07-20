@@ -443,20 +443,23 @@ export function HomeScreen({
               onPressProductRecommendations={onPressProductRecommendations}
             />
 
-            <RecommendedFilterPreviewSection
-              cardWidth={recommendedFilterPreviewCardWidth}
-              filters={recommendedFilterPreviewItems}
-              isMakeupFilterLiked={isMakeupFilterLiked}
-              onPressFilter={
-                onPressRecommendedFilter ? handleRecommendedFilterPress : undefined
-              }
-              onPressMore={
-                onPressRecommendedFilterMore
-                  ? handleRecommendedFilterMorePress
-                  : undefined
-              }
-              onToggleFilterLike={onToggleMakeupFilterLike}
-            />
+            {/* 추천 메이크업 필터 섹션 — 스토어 빌드 홈에서는 숨긴다(dev 전용). */}
+            {__DEV__ ? (
+              <RecommendedFilterPreviewSection
+                cardWidth={recommendedFilterPreviewCardWidth}
+                filters={recommendedFilterPreviewItems}
+                isMakeupFilterLiked={isMakeupFilterLiked}
+                onPressFilter={
+                  onPressRecommendedFilter ? handleRecommendedFilterPress : undefined
+                }
+                onPressMore={
+                  onPressRecommendedFilterMore
+                    ? handleRecommendedFilterMorePress
+                    : undefined
+                }
+                onToggleFilterLike={onToggleMakeupFilterLike}
+              />
+            ) : null}
           </YStack>
         }
         maxToRenderPerBatch={2}
