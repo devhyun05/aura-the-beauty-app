@@ -1062,6 +1062,15 @@ POST_SCHEMA_MIGRATIONS = {
 
     create index if not exists idx_beard_jobs_user_created on beard_jobs (user_id, created_at desc);
   """,
+  "schema.sql:report-request-rate-limits-v1": """
+    create table if not exists report_request_rate_limits (
+      user_id uuid not null,
+      scope text not null,
+      window_started_at timestamptz not null,
+      request_count integer not null,
+      primary key (user_id, scope)
+    );
+  """,
 }
 # NOTE(M3 후속): 동일 (user_id, source_media_id) in-flight 중복을 막는 부분 유니크
 # 인덱스는 이 POST_SCHEMA_MIGRATIONS(단일 트랜잭션)로는 CONCURRENTLY 불가 →
