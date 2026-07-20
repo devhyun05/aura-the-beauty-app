@@ -68,6 +68,10 @@ function axisPhrase(a: FeatureAxis): string | null {
       return hi ? '눈썹은 꼬리가 올라간 흐름이에요.'
         : lo ? '눈썹은 완만하게 내려온 흐름이에요.'
         : '눈썹은 수평에 가까운 흐름이에요.';
+    case 'browApex':
+      return hi ? '눈썹 산이 바깥쪽에 있어요.'
+        : lo ? '눈썹 산이 앞쪽에 있어요.'
+        : '눈썹 산이 가운데쯤에 있어요.';
     case 'lipThickness':
       return hi ? '아랫입술이 윗입술보다 도톰해요.'
         : lo ? '윗입술이 아랫입술보다 도톰해요.'
@@ -92,12 +96,15 @@ export function describeRegionAxes(axes: FeatureAxis[]): string {
 export function buildRegionFeatureAxes(m: FaceGeometryMetrics): RegionFeatureAxes {
   const canthal = meanOrNull(metricValue(m, 'canthalTiltLeftDeg'), metricValue(m, 'canthalTiltRightDeg'));
   const brow = meanOrNull(metricValue(m, 'browSlopeLeftDeg'), metricValue(m, 'browSlopeRightDeg'));
+  // 눈썹 봉우리(산) 위치 0=앞머리..1=꼬리 — 이미 자기 눈썹 위 자기참조 값이라 그대로 위치로.
+  const browApex = meanOrNull(metricValue(m, 'browApexRatioLeft'), metricValue(m, 'browApexRatioRight'));
   const lip = metricValue(m, 'lipThicknessRatio'); // 윗입술 두께 / 아랫입술 두께
 
   return {
     upper: [
       {key: 'canthalTilt', leftLabel: '내려간 눈꼬리', rightLabel: '올라간 눈꼬리', position: directionPosition(canthal)},
       {key: 'browSlope', leftLabel: '처진 눈썹', rightLabel: '올라간 눈썹', position: directionPosition(brow)},
+      {key: 'browApex', leftLabel: '앞쪽 산', rightLabel: '바깥쪽 산', position: browApex == null ? null : clamp01(browApex)},
     ],
     mid: [],
     lower: [
