@@ -99,12 +99,14 @@ const expectedHomeServiceShortcutLabels: readonly [
   '추천 제품',
   '컨설팅',
   '메이크업 추천',
+  '수염 제거',
 ] = HOME_SERVICE_SHORTCUT_LABELS;
 const homeServiceShortcutRowLabels = getHomeServiceShortcutRowLabels();
 const expectedHomeServiceShortcutFirstRowLabels =
   '얼굴 분석,메이크업 필터,메이크업 추출,메이크업 피드백';
 const expectedHomeServiceShortcutSecondRowLabels =
   '아우라딘,추천 제품,컨설팅,메이크업 추천';
+const expectedHomeServiceShortcutThirdRowLabels = '수염 제거';
 const makeupExtractionActionLabels = getHomeMakeupExtractionActionLabels();
 const makeupFeedbackActionLabels = getHomeMakeupFeedbackActionLabels();
 const expectedRecommendedFilterGridColumnCount: 2 =
@@ -224,6 +226,11 @@ expectEqual(
   homeServiceShortcutRowLabels[1]?.join(','),
   expectedHomeServiceShortcutSecondRowLabels,
   'home service shortcut second row order',
+);
+expectEqual(
+  homeServiceShortcutRowLabels[2]?.join(','),
+  expectedHomeServiceShortcutThirdRowLabels,
+  'home service shortcut third row order',
 );
 expectEqual(
   HOME_SERVICE_SHORTCUT_LABELS.some(label => label.includes('\n')),

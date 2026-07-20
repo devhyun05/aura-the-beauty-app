@@ -208,6 +208,12 @@ class Settings(BaseSettings):
   naver_api_hub_client_id: str | None = None
   naver_api_hub_client_secret: str | None = None
 
+  beard_lambda_function_url: str | None = None
+  beard_lambda_region: str = "us-west-2"
+  # FLUX 입력/출력 버킷 (upload-url 이 만든 inputKey 가 여기 있음). 상세 보고서(Bedrock)가
+  # 같은 셀피를 다시 읽을 때 사용 — 앱 미디어 버킷(s3_bucket_name)과 다르다.
+  beard_s3_bucket: str | None = None
+
   # Product recommendation V2 rollout.  Data-dependent sections still enforce
   # catalog rights, consent and minimum cohort size even when their flag is on.
   product_hub_v2: bool = True
@@ -714,6 +720,10 @@ class Settings(BaseSettings):
       "naverShoppingApi": {
         "configured": bool(self.naver_shopping_client_id and self.naver_shopping_client_secret),
         "requiredWhen": "Korean cosmetic product recommendations should include live purchasable shopping links.",
+      },
+      "beardLambdaFunctionUrl": {
+        "configured": bool(self.beard_lambda_function_url),
+        "requiredWhen": "Beard-removal orchestration endpoints proxy the AWS Lambda Function URL.",
       },
       "naverTrendAutomation": {
         "configured": (

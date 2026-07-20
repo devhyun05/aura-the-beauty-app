@@ -1,0 +1,10 @@
+{
+  "psd05": [
+    {
+      "x": 354,
+      "y": 51,
+      "r": 28
+    }
+  ],
+  "_note": "one-time manual exclusion: alar-fold shadow misdetected as hair (zoom_psd05_nose_base.jpg). Frozen 2026-07-11."
+}

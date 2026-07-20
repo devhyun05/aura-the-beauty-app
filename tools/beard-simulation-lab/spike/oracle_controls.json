@@ -1,0 +1,128 @@
+{
+ "pic2": [
+  {
+   "kind": "lip_corner",
+   "x": 116,
+   "y": 90,
+   "r": 6
+  },
+  {
+   "kind": "lip_corner",
+   "x": 234,
+   "y": 93,
+   "r": 6
+  }
+ ],
+ "pic4": [
+  {
+   "kind": "lip_corner",
+   "x": 125,
+   "y": 100,
+   "r": 7
+  },
+  {
+   "kind": "lip_corner",
+   "x": 266,
+   "y": 97,
+   "r": 7
+  }
+ ],
+ "psd05": [
+  {
+   "kind": "lip_corner",
+   "x": 201,
+   "y": 166,
+   "r": 12
+  },
+  {
+   "kind": "lip_corner",
+   "x": 451,
+   "y": 157,
+   "r": 12
+  }
+ ],
+ "psd03": [
+  {
+   "kind": "lip_corner",
+   "x": 207,
+   "y": 198,
+   "r": 13
+  },
+  {
+   "kind": "lip_corner",
+   "x": 491,
+   "y": 176,
+   "r": 13
+  }
+ ],
+ "pic1": [
+  {
+   "kind": "lip_corner",
+   "x": 103,
+   "y": 74,
+   "r": 6
+  },
+  {
+   "kind": "lip_corner",
+   "x": 201,
+   "y": 77,
+   "r": 6
+  }
+ ],
+ "pic3": [
+  {
+   "kind": "lip_corner",
+   "x": 122,
+   "y": 96,
+   "r": 6
+  },
+  {
+   "kind": "lip_corner",
+   "x": 254,
+   "y": 99,
+   "r": 6
+  }
+ ],
+ "psd01": [
+  {
+   "kind": "lip_corner",
+   "x": 223,
+   "y": 167,
+   "r": 11
+  },
+  {
+   "kind": "lip_corner",
+   "x": 442,
+   "y": 163,
+   "r": 11
+  }
+ ],
+ "psd02": [
+  {
+   "kind": "lip_corner",
+   "x": 207,
+   "y": 161,
+   "r": 12
+  },
+  {
+   "kind": "lip_corner",
+   "x": 470,
+   "y": 149,
+   "r": 12
+  }
+ ],
+ "psd04": [
+  {
+   "kind": "lip_corner",
+   "x": 242,
+   "y": 161,
+   "r": 11
+  },
+  {
+   "kind": "lip_corner",
+   "x": 475,
+   "y": 149,
+   "r": 11
+  }
+ ]
+}

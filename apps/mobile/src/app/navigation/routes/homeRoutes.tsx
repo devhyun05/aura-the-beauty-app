@@ -14,6 +14,11 @@ import type {
 } from '../../../features/home/types/homeModules';
 import {getHomeFeatureNavigationTarget} from '../../../features/home/config/homeFeatureRouteMap';
 import {useAuthSession} from '../../../features/auth';
+import {
+  BeardSimulationNavigator,
+  prewarmBeardSimulation,
+  realBeardSimulationService,
+} from '../../../features/beard-simulation';
 import {markFaceCaptureTutorialCompleted} from '../../../features/onboarding';
 import {openTrustedProductOffer} from '../../../features/recommendation/services/productHubService';
 import {
@@ -612,20 +617,16 @@ export function CommunityRouteScreen({navigation}: RootScreenProps<'Community'>)
   );
 }
 
-export function HairRemovalSimulationRouteScreen({
-  navigation,
-}: RootScreenProps<'HairRemovalSimulation'>) {
-  return (
-    <DetailRouteChrome
-      routeName="HairRemovalSimulation"
-      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
-      <RoutePlaceholder
-        description="제모 시뮬레이션을 준비 중이에요."
-        showHeader={false}
-        title="제모 시뮬레이션"
-      />
-    </DetailRouteChrome>
-  );
+export function HairRemovalSimulationRouteScreen(
+  _props: RootScreenProps<'HairRemovalSimulation'>,
+) {
+  // 팀이 예약해둔 제모 시뮬레이션 슬롯 — 실제 수염 제거 플로우로 연결한다.
+  // 자체 프로바이더 + 내부 스택을 가진 완결형 네비게이터라 풀스크린 렌더(BeardSimulation 라우트와 동일).
+  React.useEffect(() => {
+    prewarmBeardSimulation();
+  }, []);
+
+  return <BeardSimulationNavigator service={realBeardSimulationService} />;
 }
 
 export function CommunityThreadDetailRouteScreen({

@@ -1,0 +1,19 @@
+# Core pipeline (deterministic path) — python3.12 required (mediapipe wheels)
+numpy>=1.26
+opencv-python>=4.9
+# Pin exactly: mediapipe 0.10.30+ ship a Tasks-only build that DROPPED the
+# legacy Solutions API (mp.solutions.face_mesh) that detect_face.py uses.
+mediapipe==0.10.14
+scikit-image>=0.24
+Pillow>=10.0
+PyYAML>=6.0
+pytest>=8.0
+
+# Local dev API (Stage 7)
+fastapi>=0.111
+uvicorn>=0.30
+python-multipart>=0.0.9
+
+# Local web tuning UI (app.py) — reuses the same engine
+gradio>=4.44
+pillow-heif>=1.0   # decode iPhone HEIC uploads in the web UI
