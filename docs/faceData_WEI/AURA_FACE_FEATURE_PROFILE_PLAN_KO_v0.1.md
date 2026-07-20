@@ -119,7 +119,14 @@ type VisualWeightMap = {
   - 렌더: `sections/S6Impression.tsx`에 시각 무게 블록(부위별 % 막대 + 우세/대비 문구) 추가.
   - derive의 metrics를 옵셔널화(2층은 관찰만으로도 성립).
   - 검증: 계약 테스트 4종(derive/builder/visualWeightMap/presenter) + face-report 러너 무회귀 + 모바일 타입체크 0 에러. ⚠️ 실기기 시각 렌더는 미검증(분석 플로우 필요).
-- ⬜ 매핑 엔진(`deriveFitDeltas(profile, styleLane)`) + AR맞춤핏 δ — 후속(헤드라인 목표: 분석→AR 자동 적용).
+- ✅ **S3 부위 카드에 1층 상세 반영** — 쌍꺼풀 유형·상/하안검 처짐·애교살·눈썹 숱·볼·입술 대비 등 VLM 판정을 부위별 칩으로. 판정된 것만(unclear·저confidence·'무난/없음'은 생략). `face-report/regionFeatureDescriptors.ts`(순수) + `sections/S3Features.tsx` 렌더. 계약 테스트 통과.
+- ◻️ **매핑 엔진 `deriveFitDeltas(profile, styleLane)` — 순수 코어 완료, 라이브 배선 미완**.
+  - 계약: `shared/contracts/personalFitProfile.ts` (PersonalFitEntry/Profile, StyleLane, `toFitEntries` strip→병합). AR맞춤핏 v0.2 §3.
+  - 엔진: `features/ar/services/deriveFitDeltas.ts` — 리서치 테이블 B등급 방향 규칙만(처진 눈꼬리→윙·눈꼬리 리프트, hooded→가짜 크리스 높게+라인 얇게, 무쌍→윙 연장, 둥근/가는 눈→가로/세로 반전, 애교살→강조, 중안부 김→블러셔 고배치). **방향·부호만 문헌 근거, δ 크기는 잠정.**
+  - 안전장치: `deltaScale` 기본 0 = **자동 적용 OFF**(계약 D-4/D-5). 구조·근거(basis)는 산출되되 실제 δ=0. accent 레인은 형태 보정 δ=0(개성 보존). 신뢰 밴드 없으면 행 생략(δ=0 아님).
+  - 배선 지점: `applyFitToLayers(layers, state, baseDeltas)`의 **`baseDeltas`가 이미 계약이 말한 측정 자동 시트 주입점**(최하위 우선순위·가산·field 범위 클램프). toFitEntries 출력을 여기 넣으면 됨.
+  - ⬜ **남은 것(실기기 필요)**: AR 필터 진입점에서 프로파일 조립→deriveFitDeltas→baseDeltas 배선 + 슬라이더 실험으로 축별 non-zero δ 승인(deltaScale>0). 이 저장소에서 시각 검증 불가라 device 작업으로 분리.
+  - 검증: 계약 테스트(deriveFitDeltas) + 모바일 타입체크 0 에러.
 
 ## 6. 구현 범위 (합의됨 — v0.2에서 전 부위로 확장)
 
