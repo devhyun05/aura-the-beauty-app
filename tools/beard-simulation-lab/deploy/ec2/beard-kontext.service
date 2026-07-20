@@ -1,0 +1,18 @@
+[Unit]
+Description=FLUX Kontext beard-removal 상주 추론 서버
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+Environment=BEARD_SERVE_PORT=8077
+ExecStart=/opt/pytorch/bin/python /home/ubuntu/serve_kontext.py
+Restart=always
+RestartSec=10
+# 모델 로드(~4~5분)가 오래 걸려도 start 실패로 죽이지 않는다.
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

@@ -23,12 +23,15 @@ except Exception:
     pass
 
 MODEL = "/home/ubuntu/models/flux-kontext-dev"
+# 확정 프롬프트 v2 (2026-07-18 사용자 피드백 반영: 창백해짐·가로폭 축소 대응).
 PROMPT = (
-    "Remove only the mustache and all chin and jaw stubble, leaving original skin. "
-    "Keep the eyebrows unchanged. "
-    "Same person, same eyes, same eyebrows, same lips, same moles, same lighting, same background."
+    "Remove the mustache and chin stubble completely, leaving clean bare skin. "
+    "Same person, same lips, same moles, same lighting, same background. "
+    "Keep the exact same skin color and tone - do not lighten or pale the face. "
+    "Keep the original framing and image dimensions - do not crop or resize. "
+    "Natural skin texture with visible pores, not airbrushed."
 )
-GUIDANCE, STEPS, WORK_RES = 2.5, 24, 1024
+GUIDANCE, STEPS, WORK_RES = 2.5, 28, 1024
 
 _SRGB = ImageCms.createProfile("sRGB")
 
@@ -81,6 +84,41 @@ def _color(out, ref):
     a = fm[..., None]
     return Image.fromarray(np.clip(corr * a + o * (1 - a), 0, 255).astype(np.uint8))
 
+def load_pipe(compile=True):
+    """FLUX Kontext 파이프라인을 GPU에 로드(가장 비싼 단계, ~4~5분).
+    상주 서버(serve_kontext.py)는 이걸 프로세스당 1회만 호출해 재사용한다.
+    compile=True면 transformer를 torch.compile로 최적화 → 첫 추론(=컴파일)은 느리지만
+    이후 추론이 빨라진다(dynamic=True로 셀피별 해상도 변화 흡수). 실패 시 eager 폴백."""
+    pipe = FluxKontextPipeline.from_pretrained(MODEL, torch_dtype=torch.bfloat16).to("cuda")
+    if compile:
+        try:
+            pipe.transformer = torch.compile(pipe.transformer, dynamic=True)
+            print("[run_kontext] torch.compile 적용(transformer, dynamic)", flush=True)
+        except Exception as e:
+            print(f"[run_kontext] torch.compile 스킵(eager 폴백): {e}", flush=True)
+    return pipe
+
+
+def infer(pipe, inp, out, prompt=None, guidance=None, steps=None):
+    """이미 로드된 pipe로 1장 추론(수염제거 + 얼굴색 보존). 로드 비용 없음.
+    prompt/guidance/steps는 튜닝 테스트용 override — 미지정 시 확정 기본값(v2/28/2.5)."""
+    prompt = prompt or PROMPT
+    guidance = GUIDANCE if guidance is None else guidance
+    steps = STEPS if steps is None else steps
+    img = load_image(inp)                 # 원본 (ICC 있을 수 있음)
+    orig_size = img.size
+    src = _prep(img, WORK_RES)            # 작업 해상도 <=1024
+    print(f"추론: {inp} steps={steps} g={guidance} 원본{orig_size[0]}x{orig_size[1]} -> 작업{src.size[0]}x{src.size[1]}", flush=True)
+    res = pipe(image=src, prompt=prompt, guidance_scale=guidance,
+               num_inference_steps=steps, width=src.width, height=src.height).images[0]
+
+    res = _color(res, img)               # 얼굴색 보존
+    if res.size != orig_size:            # 원본 크기로 복원
+        res = res.resize(orig_size, Image.LANCZOS)
+    res.save(out)
+    return out
+
+
 def main():
     if len(sys.argv) < 2:
         print("사용: python run_kontext.py 입력.jpg [출력.png]"); sys.exit(1)
@@ -88,19 +126,8 @@ def main():
     out = sys.argv[2] if len(sys.argv) > 2 else "out.png"
 
     print("모델 로드 중...", flush=True)
-    pipe = FluxKontextPipeline.from_pretrained(MODEL, torch_dtype=torch.bfloat16).to("cuda")
-
-    img = load_image(inp)                 # 원본 (ICC 있을 수 있음)
-    orig_size = img.size
-    src = _prep(img, WORK_RES)            # 작업 해상도 <=1024
-    print(f"추론: {inp}  원본{orig_size[0]}x{orig_size[1]} -> 작업{src.size[0]}x{src.size[1]}", flush=True)
-    res = pipe(image=src, prompt=PROMPT, guidance_scale=GUIDANCE,
-               num_inference_steps=STEPS, width=src.width, height=src.height).images[0]
-
-    res = _color(res, img)               # 얼굴색 보존
-    if res.size != orig_size:            # 원본 크기로 복원
-        res = res.resize(orig_size, Image.LANCZOS)
-    res.save(out)
+    pipe = load_pipe()
+    infer(pipe, inp, out)
     print("저장:", out, flush=True)
 
 if __name__ == "__main__":

@@ -1,21 +1,27 @@
 #!/bin/bash
-# EC2 인스턴스에서 SSM Run Command로 실행됨(root 실행). 절대경로만 사용.
-# S3 입력 다운로드 → FLUX.1 Kontext 추론 → S3 결과 업로드.
-# 필요 env: BUCKET, INPUT_KEY, OUTPUT_KEY
+# EC2에서 SSM Run Command로 실행됨(root). 상주 추론 서버(beard-kontext.service)에
+# 요청만 전달하는 경량 클라이언트. 서버가 모델을 상주시키므로 요청당 추론은 ~20초대.
+# S3 다운로드/업로드는 서버가 수행한다. 필요 env: BUCKET, INPUT_KEY, OUTPUT_KEY
 set -euo pipefail
+PORT="${BEARD_SERVE_PORT:-8077}"
+BASE="http://127.0.0.1:${PORT}"
 
-# DLAMI PyTorch env 활성화 (모델·의존성은 setup_ec2.sh에서 이미 설치됨)
-source /opt/pytorch/bin/activate 2>/dev/null || source activate pytorch 2>/dev/null || true
-
-cd /home/ubuntu
-
-# 추론 스크립트가 없으면 S3 scripts/에서 가져옴(프롬프트 갱신 = S3 재업로드로 반영)
-if [ ! -f /home/ubuntu/run_kontext.py ]; then
-  aws s3 cp "s3://${BUCKET}/scripts/run_kontext.py" /home/ubuntu/run_kontext.py
+# 부팅 직후엔 서버가 모델 로딩 중(~4~5분)일 수 있으니 /ready 를 대기(최대 ~6분).
+# 모델 로드는 서버 프로세스가 하므로(이 SSM 명령의 자식이 아님) 여기선 가벼운 폴링만 → ipc 타임아웃 없음.
+ready=0
+for _ in $(seq 1 90); do
+  if curl -sf "${BASE}/ready" >/dev/null 2>&1; then ready=1; break; fi
+  sleep 4
+done
+if [ "$ready" -ne 1 ]; then
+  echo "SERVER_NOT_READY" >&2
+  exit 1
 fi
 
-aws s3 cp "s3://${BUCKET}/${INPUT_KEY}" /home/ubuntu/_in.jpg
-python /home/ubuntu/run_kontext.py /home/ubuntu/_in.jpg /home/ubuntu/_out.png
-aws s3 cp /home/ubuntu/_out.png "s3://${BUCKET}/${OUTPUT_KEY}"
-
+# 동기 추론 요청. 서버가 S3 다운로드 → 추론 → S3 업로드까지 수행.
+resp="$(curl -sS -m 300 -X POST "${BASE}/infer" \
+  -H 'content-type: application/json' \
+  -d "{\"bucket\":\"${BUCKET}\",\"input_key\":\"${INPUT_KEY}\",\"output_key\":\"${OUTPUT_KEY}\"}")"
+echo "$resp"
+echo "$resp" | grep -q '"status": *"ok"' || { echo "INFER_FAILED" >&2; exit 1; }
 echo "DONE ${OUTPUT_KEY}"
