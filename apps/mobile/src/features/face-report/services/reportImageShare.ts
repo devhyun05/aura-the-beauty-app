@@ -34,6 +34,27 @@ async function waitFrames(count: number) {
 
 const CAPTURE_TIMEOUT_MS = 10000;
 
+// 전체 콘텐츠 캡처가 기기에서 실패할 때의 최후 폴백 — 보이는 화면을
+// 스크린샷 방식으로 캡처한다(항상 동작하는 경로).
+function loadOptionalCaptureScreen(): (() => Promise<string>) | null {
+  try {
+    const viewShotModule = require('react-native-view-shot') as {
+      captureScreen?: (options?: unknown) => Promise<string>;
+    };
+
+    return typeof viewShotModule.captureScreen === 'function'
+      ? () =>
+          viewShotModule.captureScreen!({
+            format: 'jpg',
+            quality: 0.95,
+            result: 'tmpfile',
+          })
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function withCaptureTimeout(capturePromise: Promise<string | undefined>) {
   return Promise.race([
     capturePromise,
@@ -73,6 +94,25 @@ export async function captureReportImage(reportCaptureRef: {
       lastError = error;
       console.info('[aura:analysis] report-share:capture-retry', {
         attempt,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // 전체 콘텐츠 캡처가 계속 실패하면 보이는 화면 스크린샷으로 폴백한다.
+  const captureScreen = loadOptionalCaptureScreen();
+  if (captureScreen) {
+    try {
+      const screenUri = await withCaptureTimeout(captureScreen());
+      if (screenUri) {
+        console.info('[aura:analysis] report-share:screen-fallback', {
+          contentCaptureError:
+            lastError instanceof Error ? lastError.message : String(lastError),
+        });
+        return screenUri;
+      }
+    } catch (error) {
+      console.info('[aura:analysis] report-share:screen-fallback-failed', {
         message: error instanceof Error ? error.message : String(error),
       });
     }
