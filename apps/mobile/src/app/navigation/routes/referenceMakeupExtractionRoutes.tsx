@@ -1,4 +1,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
+import {Alert} from 'react-native';
+
+import {BackendApiError} from '../../../shared/services/backendApi';
 
 import {
   ExtractedMakeupLookAdjustScreen,
@@ -236,7 +239,15 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
       }
     };
 
-    void runReferenceMakeupExtractionSafely(photo, safeOnProgress)
+    void runReferenceMakeupExtractionSafely(photo, safeOnProgress, error => {
+      logReferenceMakeupExtractionError(error);
+      // 한도 초과(429)는 가짜 결과로 넘어가지 않고 안내 후 되돌린다.
+      // goBack이 먼저라 onComplete의 isFocused() 가드가 결과 이동을 막는다.
+      if (error instanceof BackendApiError && error.status === 429) {
+        goBackToPreviousOrMainTab(navigation, 'HomeTab');
+        Alert.alert('잠시 후 다시 시도해 주세요', error.message);
+      }
+    })
       .finally(() => {
         if (isMounted) {
           setIsAnalysisReady(true);
