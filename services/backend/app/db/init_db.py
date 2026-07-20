@@ -867,6 +867,56 @@ POST_SCHEMA_MIGRATIONS = {
     create index if not exists idx_auradin_events_received
       on auradin_events (received_at);
   """,
+  "schema.sql:auradin-catalog-mirror-v1": """
+    -- Auradin catalog DB mirror — read-only mirror of the git-tracked JSONL snapshot
+    -- so teammates can query the catalog (incl. color attributes) from the deployed DB.
+    -- Serving still reads JSONL via catalog_loader; populated by app.db.sync_auradin_catalog.
+    create table if not exists auradin_catalog_snapshots (
+      snapshot_id text primary key,
+      manifest_sha256 text not null,
+      catalog_sha256 text not null,
+      manifest_path text not null,
+      item_count integer not null,
+      color_family_count integer not null default 0,
+      quality_summary jsonb not null default '{}'::jsonb,
+      status text not null default 'imported'
+        check (status in ('importing','imported','active','superseded','failed')),
+      imported_at timestamptz not null default now(),
+      activated_at timestamptz
+    );
+    create table if not exists auradin_catalog_items (
+      snapshot_id text not null
+        references auradin_catalog_snapshots(snapshot_id) on delete cascade,
+      item_id text not null,
+      category text,
+      brand_name text,
+      product_name text,
+      color_family text,
+      color_family_confidence real,
+      finish text,
+      texture text,
+      undertone text,
+      price_krw integer,
+      is_purchasable boolean not null default false,
+      hard_filter_eligible jsonb not null default '{}'::jsonb,
+      payload jsonb not null,
+      primary key (snapshot_id, item_id)
+    );
+    create index if not exists idx_auradin_catalog_items_category
+      on auradin_catalog_items (snapshot_id, category);
+    create index if not exists idx_auradin_catalog_items_color_family
+      on auradin_catalog_items (snapshot_id, color_family)
+      where color_family is not null;
+    create index if not exists idx_auradin_catalog_items_brand
+      on auradin_catalog_items (snapshot_id, brand_name);
+    create index if not exists idx_auradin_catalog_items_payload_gin
+      on auradin_catalog_items using gin (payload jsonb_path_ops);
+    create or replace view auradin_active_catalog as
+      select i.*
+      from auradin_catalog_items i
+      join auradin_catalog_snapshots s on s.snapshot_id = i.snapshot_id
+      where s.status = 'active';
+  """,
   "schema.sql:account-deletion-v1": """
     create table if not exists account_deletion_tombstones (
       subject_hash text primary key,

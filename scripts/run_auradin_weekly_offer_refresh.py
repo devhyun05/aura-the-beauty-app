@@ -432,7 +432,9 @@ def write_pending_approval(
     f"\n    --approval-evidence-sha $(shasum -a 256 {approval_path} | cut -d' ' -f1) \\"
     f"\n    --expected-active-manifest-sha <active_snapshot.json의 manifestSha256 — 현재 pointer sha {active_sha[:12]}…> \\"
     "\n    --worker-count 1 --artifact-filesystem-mode mutable_shared \\"
-    "\n    --restart-mechanism single_restart --active-pointer-persistence local_disk\n",
+    "\n    --restart-mechanism single_restart --active-pointer-persistence local_disk\n"
+    "\n[DB 미러] activate 후 main에 push하면 배포 CI가 DB 미러를 자동 갱신한다"
+    " (python -m app.db.sync_auradin_catalog). 즉시 확인은 scripts/sync_auradin_snapshot_to_db.py.\n",
   )
   return approval_path
 

@@ -752,6 +752,48 @@ Table auradin_events {
   Note: 'A5 §7.2 Auradin behavioral events. 보존: received_at 기반 주기 배치 DELETE. 사용자 삭제는 파생 user_taste_profile과 한 트랜잭션.'
 }
 
+Table auradin_catalog_snapshots {
+  snapshot_id text [pk, note: "e.g. 'snapshot_20260719'"]
+  manifest_sha256 text [not null, note: 'manifest file sha256 — idempotency key']
+  catalog_sha256 text [not null, note: 'catalog JSONL sha256 recorded in manifest']
+  manifest_path text [not null]
+  item_count integer [not null]
+  color_family_count integer [not null, default: 0, note: 'rows with attributes.colorFamily set']
+  quality_summary jsonb [not null, default: `'{}'`, note: 'a8_quality_summary output']
+  status text [not null, default: 'imported', note: 'importing | imported | active | superseded | failed']
+  imported_at timestamptz [not null, default: `now()`]
+  activated_at timestamptz
+
+  Note: 'Auradin catalog import ledger (schema.sql:auradin-catalog-mirror-v1). status=active marks the served snapshot.'
+}
+
+Table auradin_catalog_items {
+  snapshot_id text [not null, ref: > auradin_catalog_snapshots.snapshot_id]
+  item_id text [not null, note: 'JSONL row id (auradin-seed-*/auradin-mvp-*)']
+  category text [note: 'lip/cheek/shadow/liner/brow/base']
+  brand_name text
+  product_name text
+  color_family text [note: 'attributes.colorFamily (nullable)']
+  color_family_confidence real [note: 'attributeConfidence.colorFamily (optional -> null)']
+  finish text
+  texture text
+  undertone text [note: 'reference only; undertone hard-filter forbidden']
+  price_krw integer [note: 'liveOffer.priceKrw']
+  is_purchasable boolean [not null, default: false]
+  hard_filter_eligible jsonb [not null, default: `'{}'`]
+  payload jsonb [not null, note: 'full original JSONL row']
+
+  indexes {
+    (snapshot_id, item_id) [pk]
+    (snapshot_id, category)
+    (snapshot_id, color_family)
+    (snapshot_id, brand_name)
+    payload [type: gin]
+  }
+
+  Note: 'Auradin catalog rows mirrored per snapshot. Query auradin_active_catalog view for the active snapshot. Serving unaffected (JSONL-backed).'
+}
+
 Table product_recommendation_runs {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
