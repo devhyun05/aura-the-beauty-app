@@ -108,6 +108,24 @@ async def test_product_enrichment_attaches_verified_products_to_every_area(
   assert product["matchRate"] == 91
 
 
+def test_texture_ranking_floats_matching_products_without_forced_variety() -> None:
+  guide = {"texture": "촉촉한 벨벳 마무리", "color": {"name": "로즈"}}
+  raw = [
+    {"id": "matte", "productName": "매트 파우더 립", "productInfo": {"finish": "matte"}},
+    {"id": "velvet", "productName": "벨벳 립 틴트", "productInfo": {"finish": "velvet"}},
+  ]
+
+  ranked = product_service._rank_products_by_texture(raw, guide)
+  assert [product["id"] for product in ranked] == ["velvet", "matte"]
+
+  # 질감 신호가 없으면 원래(인기) 순서를 유지한다.
+  assert product_service._rank_products_by_texture(raw, {"texture": ""}) == raw
+
+  # 맞는 후보가 없으면 억지로 섞지 않고 원래 순서를 유지한다.
+  plain = [{"id": "x", "productName": "제품 X"}, {"id": "y", "productName": "제품 Y"}]
+  assert product_service._rank_products_by_texture(plain, guide) == plain
+
+
 @pytest.mark.parametrize(
   "source",
   ["database", "database_matched_semantic", "auradin_catalog", "auradin_catalog_matched_semantic"],

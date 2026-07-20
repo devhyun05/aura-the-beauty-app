@@ -396,6 +396,75 @@ def _map_products(
   return products
 
 
+# 생성된 guide의 질감/피니시를 후보 제품과 매칭하기 위한 키워드 사전.
+# 카탈로그에 제품별 색(hex) 데이터가 없어 색 매칭은 불가하므로, 제품명·specs에
+# 실제로 존재하는 질감/피니시 신호만으로 후보 순위를 조정한다(강제 다양성 없음).
+_TEXTURE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+  ("velvet", ("벨벳", "velvet")),
+  ("matte", ("매트", "matte")),
+  ("glossy", ("글로시", "글로스", "글로우", "글래스", "윤기", "촉촉", "물광", "glossy", "gloss", "glow", "dewy")),
+  ("satin", ("새틴", "satin")),
+  ("sheer", ("쉬어", "시어", "sheer")),
+  ("shimmer", ("쉬머", "글리터", "펄", "shimmer", "glitter", "pearl")),
+  ("tint", ("틴트", "tint")),
+  ("cushion", ("쿠션", "cushion")),
+  ("powder", ("파우더", "powder")),
+  ("cream", ("크림", "cream")),
+  ("blur", ("블러", "blur")),
+)
+
+
+def _texture_tokens(text: str) -> set[str]:
+  lowered = _clean_text(text).casefold()
+  if not lowered:
+    return set()
+  return {
+    canonical
+    for canonical, variants in _TEXTURE_KEYWORDS
+    if any(variant.casefold() in lowered for variant in variants)
+  }
+
+
+def _rank_products_by_texture(
+  raw_products: Any,
+  guide: dict[str, Any],
+) -> list[dict[str, Any]]:
+  """생성된 guide의 질감/피니시에 맞는 후보를 앞으로 정렬한다.
+
+  색 데이터가 없어 색 매칭은 하지 않는다. 동점(질감 신호 없음/동일)은 원래 순서를
+  유지하므로, 맞는 게 없으면 기존 인기순 그대로다(억지 다양성 아님).
+  """
+  if not isinstance(raw_products, list) or len(raw_products) <= 1:
+    return raw_products if isinstance(raw_products, list) else []
+  color = guide.get("color") if isinstance(guide.get("color"), dict) else {}
+  wanted = _texture_tokens(
+    " ".join(
+      _clean_text(part)
+      for part in (guide.get("texture"), guide.get("technique"), color.get("name"))
+    ),
+  )
+  if not wanted:
+    return raw_products
+
+  def _match_score(product: Any) -> int:
+    if not isinstance(product, dict):
+      return 0
+    info = product.get("productInfo") if isinstance(product.get("productInfo"), dict) else {}
+    tags = product.get("tags") if isinstance(product.get("tags"), list) else []
+    haystack = " ".join(
+      [
+        _clean_text(product.get("productName")),
+        _clean_text(info.get("finish")),
+        _clean_text(info.get("texture")),
+        " ".join(_clean_text(tag) for tag in tags),
+      ],
+    )
+    return len(wanted & _texture_tokens(haystack))
+
+  # sorted는 안정 정렬 → 동점은 기존 인기순 유지.
+  return sorted(raw_products, key=lambda product: -_match_score(product))
+
+
 async def enrich_makeup_recommendation_products(
   db: Database,
   settings: Settings,
@@ -466,6 +535,7 @@ async def enrich_makeup_recommendation_products(
       if _is_trusted_product_source(source):
         sources.add(source)
         raw_products = recommendation_data.get("products") if isinstance(recommendation_data, dict) else []
+        raw_products = _rank_products_by_texture(raw_products, guide)
         products = _map_products(raw_products, area, category, guide)
       else:
         logger.warning(
