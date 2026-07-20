@@ -339,6 +339,86 @@ def apply_structured_detail(
   return new_rows, {"filled": filled}
 
 
+IMAGE_VISION_CONFIDENCE = 0.40
+
+
+def load_image_inferred(
+  vision_rows: list[dict[str, Any]],
+  *,
+  min_confidence: float = 0.8,
+  allowed_basis: set[str] | None = None,
+  allowed_families: set[str] | None = None,
+) -> dict[str, str]:
+  """catalogItemId -> colorFamily from a vision run, gated by basis/confidence.
+
+  Vision output is the least-reliable source (an inference from the product
+  photo, not text/detail evidence), so it is gated hard: only rows the model
+  judged from an actual swatch at high confidence are accepted, and results are
+  applied value-only with an ``image_vision_inferred`` provenance so a human can
+  scrutinise them. Never hardFilter-promoted.
+  """
+
+  allowed_basis = allowed_basis if allowed_basis is not None else {"swatch"}
+  inferred: dict[str, str] = {}
+  for row in vision_rows:
+    item_id = str(row.get("catalogItemId") or "").strip()
+    family = str(row.get("colorFamily") or "").strip()
+    basis = str(row.get("basis") or "").strip()
+    try:
+      conf = float(row.get("confidence") or 0)
+    except (TypeError, ValueError):
+      conf = 0.0
+    if not item_id or not family or family == "none":
+      continue
+    if allowed_families is not None and family not in allowed_families:
+      continue
+    if basis not in allowed_basis or conf < min_confidence:
+      continue
+    inferred.setdefault(item_id, family)
+  return inferred
+
+
+def apply_image_inferred(
+  seed_rows: list[dict[str, Any]],
+  inferred: dict[str, str],
+  *,
+  run_date: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+  """Fill MISSING colorFamily from gated vision inference (value-only)."""
+
+  new_rows = [copy.deepcopy(row) for row in seed_rows]
+  by_id = {_seed_id(r): r for r in new_rows}
+  filled = 0
+  for item_id, family in inferred.items():
+    row = by_id.get(item_id)
+    if row is None:
+      continue
+    attributes = _ensure_dict(row, "attributes")
+    if str(attributes.get("colorFamily") or "").strip():
+      continue  # never overwrite text/detail evidence with a weaker image guess
+    attributes["colorFamily"] = family
+    confidence = _ensure_dict(row, "attributeConfidence")
+    confidence["colorFamily"] = IMAGE_VISION_CONFIDENCE
+    hard_filter = _ensure_dict(row, "hardFilterEligible")
+    hard_filter["colorFamily"] = False
+    evidence = row.get("evidence")
+    if not isinstance(evidence, list):
+      evidence = []
+      row["evidence"] = evidence
+    evidence.append(
+      {
+        "field": "colorFamily",
+        "value": family,
+        "sourceType": "image_vision_inferred",
+        "confidence": IMAGE_VISION_CONFIDENCE,
+        "hardFilterEligible": False,
+        "runDate": run_date,
+      }
+    )
+    filled += 1
+  return new_rows, {"filled": filled}
+
+
 def color_family_coverage(rows: list[dict[str, Any]]) -> dict[str, int]:
   present = 0
   eligible = 0
@@ -381,6 +461,14 @@ def main(argv: list[str] | None = None) -> int:
     default=None,
     help="auto-fill 대상 필드 제한 (쉼표구분, 예: colorFamily). 기본: 전체 accepted 필드",
   )
+  parser.add_argument(
+    "--image-inferred",
+    type=Path,
+    help="비전 추론 jsonl(catalogItemId/colorFamily/confidence/basis). 가장 약한 소스 — "
+    "swatch 근거 고신뢰만, value-only, image_vision_inferred provenance.",
+  )
+  parser.add_argument("--image-min-confidence", type=float, default=0.8)
+  parser.add_argument("--image-basis", default="swatch", help="허용 basis(쉼표구분). 기본 swatch")
   parser.add_argument("--run-date", required=True)
   parser.add_argument("--report", type=Path, help="before/after 커버리지 리포트 json 경로")
   args = parser.parse_args(argv)
@@ -420,6 +508,23 @@ def main(argv: list[str] | None = None) -> int:
       decisions = merge_review_decisions(review_rows, verdicts)
       rows, reviewed_report = apply_reviewed_to_seed(rows, decisions, run_date=args.run_date)
       reports["reviewed"] = {**reviewed_report, "approvedDecisions": len(decisions)}
+
+  # Weakest source last — only fills what text/detail/LLM could not.
+  if args.image_inferred:
+    vision_rows = read_jsonl(args.image_inferred)
+    allowed_basis = {b.strip() for b in args.image_basis.split(",") if b.strip()}
+    inferred = load_image_inferred(
+      vision_rows,
+      min_confidence=args.image_min_confidence,
+      allowed_basis=allowed_basis,
+    )
+    rows, image_report = apply_image_inferred(rows, inferred, run_date=args.run_date)
+    reports["imageInferred"] = {
+      **image_report,
+      "acceptedAfterGate": len(inferred),
+      "minConfidence": args.image_min_confidence,
+      "allowedBasis": sorted(allowed_basis),
+    }
 
   _assert_invariant(seed_rows, rows)
   after = color_family_coverage(rows)

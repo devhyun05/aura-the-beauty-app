@@ -7,9 +7,17 @@
     "skippedLowerConfidence": 2,
     "skippedUnknownRow": 0
   },
+  "imageInferred": {
+    "acceptedAfterGate": 137,
+    "allowedBasis": [
+      "swatch"
+    ],
+    "filled": 137,
+    "minConfidence": 0.8
+  },
   "seedCoverageAfter": {
     "eligible": 64,
-    "present": 303,
+    "present": 440,
     "total": 1835
   },
   "seedCoverageBefore": {

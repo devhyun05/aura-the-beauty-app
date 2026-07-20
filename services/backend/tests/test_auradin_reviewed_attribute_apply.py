@@ -207,6 +207,31 @@ def test_structured_detail_image_join_takes_precedence() -> None:
   assert new_rows[0]["attributes"]["colorFamily"] == "coral"  # image match wins
 
 
+def test_image_inferred_gates_by_basis_and_confidence() -> None:
+  vision = [
+    {"catalogItemId": "a", "colorFamily": "coral", "confidence": 0.9, "basis": "swatch"},   # kept
+    {"catalogItemId": "b", "colorFamily": "pink", "confidence": 0.9, "basis": "package"},    # dropped: basis
+    {"catalogItemId": "c", "colorFamily": "red", "confidence": 0.5, "basis": "swatch"},      # dropped: conf
+    {"catalogItemId": "d", "colorFamily": "none", "confidence": 0.9, "basis": "swatch"},     # dropped: none
+  ]
+  inferred = apply_mod.load_image_inferred(vision, min_confidence=0.8, allowed_basis={"swatch"})
+  assert inferred == {"a": "coral"}
+
+
+def test_image_inferred_fills_value_only_and_never_overwrites() -> None:
+  rows = [
+    _seed_row("a"),  # missing
+    _seed_row("b", attributes={"colorFamily": "red"}),  # already has (text/detail) — must not overwrite
+  ]
+  inferred = {"a": "coral", "b": "pink"}
+  new_rows, report = apply_mod.apply_image_inferred(rows, inferred, run_date="20260720")
+  assert new_rows[0]["attributes"]["colorFamily"] == "coral"
+  assert new_rows[0]["hardFilterEligible"]["colorFamily"] is False
+  assert new_rows[0]["evidence"][-1]["sourceType"] == "image_vision_inferred"
+  assert new_rows[1]["attributes"]["colorFamily"] == "red"  # unchanged
+  assert report["filled"] == 1
+
+
 def test_coverage_and_invariant() -> None:
   rows = [_seed_row("a", attributes={"colorFamily": "pink"}, hardFilterEligible={"colorFamily": True}), _seed_row("b")]
   cov = apply_mod.color_family_coverage(rows)
