@@ -117,24 +117,13 @@ def test_api_task_validation_allows_every_workflow_managed_environment_variable(
   assert rendered_names <= validation_names
 
 
-def test_backend_ci_is_a_path_scoped_pull_request_gate() -> None:
+def test_backend_ci_is_manual_only() -> None:
   workflow = (PROJECT_ROOT / ".github/workflows/backend-ci.yml").read_text(
     encoding="utf-8",
   )
 
-  assert "pull_request:" in workflow
+  assert "pull_request:" not in workflow
   assert "workflow_dispatch:" in workflow
-  for branch in ("dev", "main"):
-    assert f"      - {branch}\n" in workflow
-  for path in (
-    "services/backend/**",
-    "docs/backend/**",
-    "scripts/aws/**",
-    "apps/mobile/eas.json",
-    ".github/workflows/backend-ci.yml",
-    ".github/workflows/deploy-backend-ecs.yml",
-  ):
-    assert f'      - "{path}"' in workflow
 
 
 def test_makeup_journey_postgres_contract_runs_in_ci_with_an_isolated_database() -> None:
@@ -152,7 +141,7 @@ def test_makeup_journey_postgres_contract_runs_in_ci_with_an_isolated_database()
   assert "image: postgres:16" not in deploy_workflow
   assert deploy_workflow.count(
     "AURA_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres",
-  ) == 2
+  ) == 3
   assert backend_ci_workflow.count("image: pgvector/pgvector:pg16") == 1
   assert "image: postgres:16" not in backend_ci_workflow
   assert backend_ci_workflow.count(
