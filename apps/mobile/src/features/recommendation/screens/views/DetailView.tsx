@@ -331,9 +331,7 @@ export function DetailView({
           >
             {p.purchaseUrl || onOpenTrustedProduct ? (
               <CTAButton label={onOpenTrustedProduct ? '제품 상세·판매처 보기' : '구매하러 가기 ↗'} onPress={openBuy} style={{ flex: 1 }} />
-            ) : (
-              <CTAButton label="구매 링크 준비 중" disabled style={{ flex: 1 }} />
-            )}
+            ) : null}
             <GlassBase tier="chip" radius={radius.pill}>
               <HeartButton liked={liked} onToggle={onToggleSave} style={{ margin: 4 }} />
             </GlassBase>

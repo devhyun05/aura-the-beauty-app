@@ -213,7 +213,6 @@ export function HomeView({
                 }}
               />
               <MenuRow label="필터" onPress={() => setMenu('filter')} />
-              <MenuRow label="사진  (준비중)" disabled onPress={() => {}} />
               {reportHint && !availableReport ? (
                 <Text style={[text.metaSm, { color: color.inkFaint, marginTop: 4 }]} allowFontScaling={false}>
                   먼저 얼굴 분석을 해주세요
