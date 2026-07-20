@@ -1091,6 +1091,12 @@ const homeServiceShortcutRows = [
     },
   ],
 ] as const;
+// 수염 제거 시뮬레이션은 스토어 빌드 홈에서 숨긴다(dev 빌드에서만 노출).
+const visibleHomeServiceShortcutRows = homeServiceShortcutRows
+  .map(row =>
+    row.filter(shortcut => __DEV__ || shortcut.id !== 'beardSimulation'),
+  )
+  .filter(row => row.length > 0);
 const homeServiceShortcuts = homeServiceShortcutRows.flat();
 
 type HomeServiceShortcutId = (typeof homeServiceShortcuts)[number]['id'];
@@ -1220,7 +1226,7 @@ function HomeServiceShortcutSection({
 
   return (
     <YStack style={styles.homeServiceShortcutList}>
-      {homeServiceShortcutRows.map((row, rowIndex) => (
+      {visibleHomeServiceShortcutRows.map((row, rowIndex) => (
         <XStack key={`home-service-shortcut-row-${rowIndex}`} style={styles.homeServiceShortcutRow}>
           {row.map((action) => (
             <Pressable
