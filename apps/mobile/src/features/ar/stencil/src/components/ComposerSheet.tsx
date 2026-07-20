@@ -72,6 +72,7 @@ import {
   findProduct,
   addProductColorway,
   normalizeProduct,
+  DEFAULT_TECHNIQUE_STRENGTH,
   physicalKeysForRegion,
   physicalOverridesForRoundTrip,
   productFromLeafPhysicals,
@@ -555,7 +556,7 @@ export default function ComposerSheet({
       ? {
           ...translateProduct(
             saveSource,
-            saveLeaf.technique ?? {strength: 1},
+            saveLeaf.technique ?? {strength: DEFAULT_TECHNIQUE_STRENGTH},
             saveLeaf.region,
             saveLeaf.colorwayId,
           ),
@@ -1323,7 +1324,7 @@ export default function ComposerSheet({
                   const nextTree = selectLeafProduct(tree, saveLeaf.id, {
                     productId: updated.id,
                     colorwayId,
-                    technique: saveLeaf.technique ?? {strength: 1},
+                    technique: saveLeaf.technique ?? {strength: DEFAULT_TECHNIQUE_STRENGTH},
                   }, physicalKeysForRegion(saveLeaf.region), retained);
                   onCommitProductsAndTree(products, nextTree);
                 } else {
@@ -1338,7 +1339,7 @@ export default function ComposerSheet({
                   const nextTree = selectLeafProduct(tree, saveLeaf.id, {
                     productId: product.id,
                     colorwayId: product.defaultColorwayId,
-                    technique: saveLeaf.technique ?? {strength: 1},
+                    technique: saveLeaf.technique ?? {strength: DEFAULT_TECHNIQUE_STRENGTH},
                   }, physicalKeysForRegion(saveLeaf.region), retained);
                   onCommitProductsAndTree([...(userProducts ?? []), product], nextTree);
                 }
@@ -1735,7 +1736,7 @@ function AxisEditor({
   const referencedPhysicals = referencedProduct
     ? translateProduct(
         referencedProduct,
-        leaf.technique ?? {strength: 1},
+        leaf.technique ?? {strength: DEFAULT_TECHNIQUE_STRENGTH},
         leaf.region,
         leaf.colorwayId,
       )
@@ -2022,7 +2023,7 @@ function AxisEditor({
               {leaf.productId ? (
                 <ParamSlider
                   label="강도 (제품 coverage와 곱)"
-                  value={leaf.technique?.strength ?? 0.8}
+                  value={leaf.technique?.strength ?? DEFAULT_TECHNIQUE_STRENGTH}
                   accent={GOLD}
                   onChange={v => onIdentity({ technique: { strength: v } })}
                 />

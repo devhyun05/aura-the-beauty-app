@@ -158,7 +158,7 @@ export function buildVariantLibrary(): LookLibrary {
         label: '아이섀도',
         region: 'eyeshadow',
         role: 'main',
-        params: { eyeshadowColor: '#C29A7B', eyeshadowIntensity: 0.35, eyeshadowFinish: 0 },
+        params: { eyeshadowColor: '#C29A7B', eyeshadowIntensity: 0.5, eyeshadowFinish: 0 },
       }],
     },
   ]);
@@ -171,7 +171,7 @@ export function buildVariantLibrary(): LookLibrary {
         role: 'main',
         params: {
           eyeshadowColor: '#D89AA0',
-          eyeshadowIntensity: 0.45,
+          eyeshadowIntensity: 0.6,
           eyeshadowFinish: 3,
           eyeshadowShimmer: 0.6,
         },
@@ -200,7 +200,7 @@ export function buildVariantLibrary(): LookLibrary {
           label: '베이스 브라운',
           region: 'eyeshadow',
           role: 'base',
-          params: { eyeshadowColor: '#8A5A44', eyeshadowIntensity: 0.45, eyeshadowFinish: 0 },
+          params: { eyeshadowColor: '#8A5A44', eyeshadowIntensity: 0.6, eyeshadowFinish: 0 },
         },
         {
           // 위 겹이 기본으로 이긴다 — 끄면 베이스 브라운만 남는 2겹 스택
@@ -209,7 +209,7 @@ export function buildVariantLibrary(): LookLibrary {
           role: 'point',
           params: {
             eyeshadowColor: '#5C4A46',
-            eyeshadowIntensity: 0.6,
+            eyeshadowIntensity: 0.78,
             eyeshadowFinish: 1,
             eyeshadowHeight: 1.25,
           },
@@ -239,7 +239,7 @@ export function buildVariantLibrary(): LookLibrary {
         label: '아이섀도',
         region: 'eyeshadow',
         role: 'main',
-        params: { eyeshadowColor: '#E0A183', eyeshadowIntensity: 0.4, eyeshadowFinish: 0 },
+        params: { eyeshadowColor: '#E0A183', eyeshadowIntensity: 0.55, eyeshadowFinish: 0 },
       }],
     },
     {
@@ -264,7 +264,7 @@ export function buildVariantLibrary(): LookLibrary {
         label: '아이섀도',
         region: 'eyeshadow',
         role: 'main',
-        params: { eyeshadowColor: '#6E5A8A', eyeshadowIntensity: 0.45, eyeshadowFinish: 1 },
+        params: { eyeshadowColor: '#6E5A8A', eyeshadowIntensity: 0.6, eyeshadowFinish: 1 },
       }],
     },
   ]);
@@ -276,7 +276,7 @@ export function buildVariantLibrary(): LookLibrary {
           label: '베이스 새틴',
           region: 'eyeshadow',
           role: 'base',
-          params: { eyeshadowColor: '#C29A7B', eyeshadowIntensity: 0.35, eyeshadowFinish: 0 },
+          params: { eyeshadowColor: '#C29A7B', eyeshadowIntensity: 0.5, eyeshadowFinish: 0 },
         },
         {
           label: '글리터 토퍼',
@@ -284,7 +284,7 @@ export function buildVariantLibrary(): LookLibrary {
           role: 'point',
           params: {
             eyeshadowColor: '#D8B49A',
-            eyeshadowIntensity: 0.5,
+            eyeshadowIntensity: 0.65,
             eyeshadowFinish: 3,
             eyeshadowShimmer: 0.9,
           },
@@ -777,32 +777,36 @@ export function buildVariantLibrary(): LookLibrary {
       contourEdgeSoftness: 0.58,
     }), false);
 
-  // 아이섀도 하 5종 — 같은 eyeshadow region의 lower surface 레이어.
+  // 아이섀도 하 5종 — LowerLid 소프트 확산 밴드(eyeshadowLower*)로 라우팅.
+  // 예전엔 eyeshadow surface=1(IrisRenderer)로 갔는데, 눈 밑에 바닥 평평·옆 각진 사다리꼴
+  // 블록("파인애플 단면", 실기기)이 생겼다. LowerLid esBand는 래시라인에서 1−smoothstep
+  // 확산이라 각짐 없이 부드럽게 번진다. 리전은 'eyeshadow' 유지(마이그레이션 회피) —
+  // compileLayers가 Object.assign으로 eyeshadowLower*를 그대로 FilterParams에 반영한다.
   addRegionLook(lib, 'eyeshadow-lower', 'daily-beige', '데일리 베이지', '눈',
     single('데일리 베이지', 'eyeshadow', {
-      eyeshadowSurface: 1, eyeshadowColor: '#C29A7B',
-      eyeshadowIntensity: 0.16, eyeshadowFinish: 0,
+      eyeshadowLowerColor: '#C29A7B',
+      eyeshadowLowerIntensity: 0.36, eyeshadowLowerFinish: 0,
     }), false);
   addRegionLook(lib, 'eyeshadow-lower', 'coral-shadow', '코랄 그늘', '눈',
     single('코랄 그늘', 'eyeshadow', {
-      eyeshadowSurface: 1, eyeshadowColor: '#B06A4E',
-      eyeshadowIntensity: 0.22, eyeshadowFinish: 0,
+      eyeshadowLowerColor: '#B06A4E',
+      eyeshadowLowerIntensity: 0.42, eyeshadowLowerFinish: 0,
     }), false);
   addRegionLook(lib, 'eyeshadow-lower', 'rosy-under', '로지 언더', '눈',
     single('로지 언더', 'eyeshadow', {
-      eyeshadowSurface: 1, eyeshadowColor: '#D89AA0',
-      eyeshadowIntensity: 0.23, eyeshadowFinish: 0,
+      eyeshadowLowerColor: '#D89AA0',
+      eyeshadowLowerIntensity: 0.42, eyeshadowLowerFinish: 0,
     }), false);
   addRegionLook(lib, 'eyeshadow-lower', 'mauve-shimmer', '모브 시머', '눈',
     single('모브 시머', 'eyeshadow', {
-      eyeshadowSurface: 1, eyeshadowColor: '#6E5A8A',
-      eyeshadowIntensity: 0.27, eyeshadowFinish: 3, eyeshadowShimmer: 0.35,
+      eyeshadowLowerColor: '#6E5A8A',
+      eyeshadowLowerIntensity: 0.46, eyeshadowLowerFinish: 3, eyeshadowLowerShimmer: 0.35,
     }), false);
   // 꼬리집중 매트 — 언더 스모키의 눈꼬리 깊이(esBand 프로파일 2 + 매트 마감).
   addRegionLook(lib, 'eyeshadow-lower', 'deep-smoky-under', '딥 스모키 언더', '눈',
     single('딥 스모키 언더', 'eyeshadow', {
-      eyeshadowSurface: 1, eyeshadowColor: '#5C4A46',
-      eyeshadowIntensity: 0.26, eyeshadowShape: 2, eyeshadowFinish: 1,
+      eyeshadowLowerColor: '#5C4A46',
+      eyeshadowLowerIntensity: 0.44, eyeshadowLowerShape: 2, eyeshadowLowerFinish: 1,
     }), false);
 
   // 아이라인 하 3종 — 색은 상·하 라인이 공유하는 계약을 그대로 따른다.
@@ -839,39 +843,39 @@ export function buildVariantLibrary(): LookLibrary {
   //   마감(새틴/매트/펄) 축을 조합해 성격이 또렷이 갈리게. 세부부위 카드 전용.
   addRegionLook(lib, 'eyeliner-upper', 'black-wing-liquid', '블랙 윙 리퀴드', '눈',
     single('블랙 윙 리퀴드', 'eyelinerUpper', {
-      eyelinerColor: '#141014',
-      eyelinerIntensity: 0.6,
+      eyelinerColor: '#0E0B10',
+      eyelinerIntensity: 0.85, eyelinerThickness: 1.5, eyelinerWingLength: 1.5, // 두껍고 진한 긴 윙
       eyelinerStyle: 0, // 윙업
       eyelinerTexture: 0, // 리퀴드
-      eyelinerFinish: 1, // 구 새틴은 로컬 도메인에 없어 매트로 안전 치환
+      eyelinerFinish: 1,
     }), false);
   addRegionLook(lib, 'eyeliner-upper', 'brown-daily-pencil', '브라운 데일리 펜슬', '눈',
     single('브라운 데일리 펜슬', 'eyelinerUpper', {
-      eyelinerColor: '#3A2A20',
-      eyelinerIntensity: 0.42,
+      eyelinerColor: '#2E1F16',
+      eyelinerIntensity: 0.6, eyelinerThickness: 1.15, eyelinerWingLength: 0.85, // 데일리 = 짧고 얇은 편
       eyelinerStyle: 2, // 롱
       eyelinerTexture: 2, // 펜슬
       eyelinerFinish: 1, // 매트
     }), false);
   addRegionLook(lib, 'eyeliner-upper', 'inner-line-gel', '이너라인 젤', '눈',
     single('이너라인 젤', 'eyelinerUpper', {
-      eyelinerColor: '#181418',
-      eyelinerIntensity: 0.5,
+      eyelinerColor: '#0E0B10',
+      eyelinerIntensity: 0.72, eyelinerThickness: 1.35, // 이너 채움 = 두껍게(윙 없음=타이트라인)
       eyelinerSegment: 3, // 눈동자 위 — 안쪽 채움
       eyelinerTexture: 1, // 젤
-      eyelinerFinish: 1, // 구 새틴은 로컬 도메인에 없어 매트로 안전 치환
+      eyelinerFinish: 1,
     }), false);
   addRegionLook(lib, 'eyeliner-upper', 'burgundy-pearl', '버건디 펄 라인', '눈',
     single('버건디 펄 라인', 'eyelinerUpper', {
-      eyelinerColor: '#5A2A3A',
-      eyelinerIntensity: 0.45,
+      eyelinerColor: '#4A1F2E',
+      eyelinerIntensity: 0.62, eyelinerThickness: 1.25, eyelinerWingLength: 1.1, // 중간 길이
       eyelinerTexture: 0, // 리퀴드
       eyelinerFinish: 3, // 펄
     }), false);
   addRegionLook(lib, 'eyeliner-upper', 'long-matte-wing', '롱 매트 윙', '눈',
     single('롱 매트 윙', 'eyelinerUpper', {
-      eyelinerColor: '#141014',
-      eyelinerIntensity: 0.55,
+      eyelinerColor: '#0E0B10',
+      eyelinerIntensity: 0.8, eyelinerThickness: 1.6, eyelinerWingLength: 1.75, // 가장 두껍고 긴 윙
       eyelinerStyle: 2, // 롱
       eyelinerSegment: 2, // 앞+꼬리
       eyelinerFinish: 1, // 매트
@@ -920,25 +924,29 @@ export function buildVariantLibrary(): LookLibrary {
 
   // 속눈썹 상 5종 — 내장 스트로크 프로파일(MASCARA_STYLES_UPPER) 조합.
   addRegionLook(lib, 'mascara', 'natural-brown', '내추럴 브라운', '눈',
+    // 컨셉: 옅은 갈색·짧고 성긴 '데일리 노메이크업'. 확실히 갈색으로 읽히게 밝게(알파
+    // 부스트로도 안 검게), 길이 최단 → 롱래시/돌리와 확연히 구분.
     single('내추럴 브라운', 'mascara', {
-      mascaraStyle: 0,
-      mascaraColor: '#3A2A20',
-      mascaraIntensity: 0.32,
-      mascaraLength: 0.92,
+      mascaraStyle: 3, // 오픈아이(수직에 가깝게) — 짧아도 또렷
+      mascaraColor: '#6B4A33',
+      mascaraIntensity: 0.34,
+      mascaraLength: 0.8,
     }), false);
   addRegionLook(lib, 'mascara', 'long-lash', '롱래시 블랙', '눈',
+    // 컨셉: 새까맣고 '길이' 강조 — 최장 + 바깥 스윕. 색·길이 모두 브라운과 반대극.
     single('롱래시 블랙', 'mascara', {
       mascaraStyle: 0,
-      mascaraColor: '#181418',
-      mascaraIntensity: 0.46,
-      mascaraLength: 1.2,
+      mascaraColor: '#0E0B10',
+      mascaraIntensity: 0.5,
+      mascaraLength: 1.4,
     }), false);
   addRegionLook(lib, 'mascara', 'dolly-volume', '돌리 볼륨', '눈',
+    // 컨셉: 중앙 볼륨·풍성(돌리) — 길이는 중간이되 진하고 꽉 참. 롱래시와 '길이 vs 볼륨'으로 대비.
     single('돌리 볼륨', 'mascara', {
       mascaraStyle: 1,
-      mascaraColor: '#141014',
-      mascaraIntensity: 0.52,
-      mascaraLength: 1.08,
+      mascaraColor: '#161016',
+      mascaraIntensity: 0.68,
+      mascaraLength: 1.0,
     }), false);
   addRegionLook(lib, 'mascara', 'cat-lift', '캣 리프트', '눈',
     single('캣 리프트', 'mascara', {
@@ -953,6 +961,20 @@ export function buildVariantLibrary(): LookLibrary {
       mascaraColor: '#3A2A20',
       mascaraIntensity: 0.43,
       mascaraLength: 1.15,
+    }), false);
+  // 텍스처 속눈썹 2종 — 절차 스트로크(각짐·컬 찌그러짐) 대신 곡선 스트로크 PNG를
+  // 상안검 리본에 매핑(mascaraTexStyle). 부드러운 곡선·부챗살·컬이 래스터로 구워져 있다.
+  addRegionLook(lib, 'mascara', 'tex-natural', '텍스처 내추럴', '눈',
+    single('텍스처 내추럴', 'mascara', {
+      mascaraTexStyle: 1,
+      mascaraColor: '#1A1418',
+      mascaraIntensity: 0.85,
+    }), false);
+  addRegionLook(lib, 'mascara', 'tex-volume', '텍스처 볼륨', '눈',
+    single('텍스처 볼륨', 'mascara', {
+      mascaraTexStyle: 2,
+      mascaraColor: '#120E12',
+      mascaraIntensity: 0.95,
     }), false);
   addRegionLook(lib, 'mascara', 'downturned-lash', '처짐 래시', '눈',
     single('처짐 래시', 'mascara', {
@@ -1053,7 +1075,7 @@ export function buildVariantLibrary(): LookLibrary {
       browConcealIntensity: 0.65,
     }), false);
 
-  // 눈썹 스타일 4종 — 임포트 없이 번들 default_brow 텍스처를 색·모양·핏으로 변주.
+  // 눈썹 스타일 5종 — 임포트 없이 번들 default_brow 텍스처를 색·모양·핏으로 변주(마지막 소프트 헤어는 전용 텍스처).
   addRegionLook(lib, 'brow-style', 'natural-texture', '내추럴 결', '눈썹',
     single('내추럴 결', 'browStyle', {
       browStyleColor: '#4A3628',
@@ -1107,6 +1129,17 @@ export function buildVariantLibrary(): LookLibrary {
       browThicknessProfile: 3,
       browThickness: 1,
       browArch: 0.3,
+    }), false);
+  // 소프트 헤어스트록 — 전용 텍스처(default_brow_soft, template 4) 기반의 정돈된 자연 결.
+  addRegionLook(lib, 'brow-style', 'soft-hairstroke', '소프트 헤어', '눈썹',
+    single('소프트 헤어', 'browStyle', {
+      browStyleTemplate: 4,
+      browStyleColor: '#4A3428',
+      browStyleIntensity: 0.36,
+      browShape: 0,
+      browThicknessProfile: 2,
+      browThickness: 1,
+      browArch: 0.12,
     }), false);
 
   // 베이스립 4종 — 본래 입술색을 정리하는 누드 톤과 커버 단계.

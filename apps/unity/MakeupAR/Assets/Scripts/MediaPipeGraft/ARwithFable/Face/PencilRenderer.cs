@@ -33,9 +33,11 @@ namespace ARMakeup.Face
         const int Seg = (ArcPts - 1) * (Sub + 1) + 1; // 17
         const int Brows = 2;
 
-        const int StrokesPerBrow = 60;  // 36은 1렬처럼 성김(실기기) — 다층 분포와 함께 증량
-        const float LenMult = 0.9f;     // 밴드 높이 대비 털 길이
-        const float WidthMult = 0.06f;  // 밴드 높이 대비 뿌리 폭
+        const int StrokesPerBrow = 100; // 60은 여전히 거칢(실기기) — 곱고 촘촘하게 증량. 폭↓과
+                                        // 함께 총 커버리지는 유지(밀도↑·굵기↓ = 부드러운 결)
+        const float LenMult = 0.62f;    // 밴드 높이 대비 털 길이 — 0.9는 한올이 밴드를 거의 다 가로질러
+                                        // "털이 너무 길다"(실기기). 짧게 줄여 촘촘한 채움 결로.
+        const float WidthMult = 0.038f; // 밴드 높이 대비 뿌리 폭 — 0.06은 획이 굵어 거칢. 가늘게
         // 뿌리 세로 분포(0 하단 → 1 상단) — 한 줄(BaseV 고정)이 아니라 밴드 전체에
         // 다층으로: 하단 밀도가 높도록 h^1.4 편향. 실제 눈썹의 2~3겹 결 재현.
         const float RootVMin = 0.06f;
@@ -221,8 +223,8 @@ namespace ARMakeup.Face
                     var len = bandH * LenMult * (0.75f + 0.5f * h4) * (1f - 0.35f * rootV);
                     var tip = baseP + dir * len;
                     var perp = Perp(dir);
-                    var w = bandH * WidthMult * (0.7f + 0.6f * h1);
-                    var wTip = w * 0.15f;
+                    var w = bandH * WidthMult * (0.8f + 0.4f * h1); // 폭 지터 완화(0.7±0.6→0.8±0.4)로 굵기 대비↓ 부드럽게
+                    var wTip = w * 0.10f;                           // 끝을 더 가늘게 테이퍼(0.15→0.10)로 획을 곱게
 
                     _vertices[vi++] = ImageToWorld(baseP - perp * w, depth, browWarped);
                     _vertices[vi++] = ImageToWorld(baseP + perp * w, depth, browWarped);

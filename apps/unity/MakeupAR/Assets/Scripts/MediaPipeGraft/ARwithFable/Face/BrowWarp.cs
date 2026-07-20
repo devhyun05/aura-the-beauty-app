@@ -46,9 +46,25 @@ namespace ARMakeup.Face
         // 미용 규칙: 눈썹 꼬리 끝(바깥·along 0)은 앞머리(안쪽·along 1) 높이 이상에서
         // 끝나야 한다(처진 눈썹 불가). WarpAndLiftDroopingTail가 ShapeBand와 꼬리 폭 테이퍼 적용
         // 후 얹는 가드로 이를 강제한다. 이미 목표 floor보다 높은 shape(상승 등)는 no-op.
-        const float AntiDroopHeadMargin = 0.05f; // 목표 floor를 앞머리보다 올릴 여유(밴드 높이 배수)
-        const float AntiDroopFullRegion = 0.20f; // 꼬리 끝 20%는 목표 floor까지 완전 보정
+        // 꼬리 리프트 — 사용자 피드백("꼬리 너무 아래로 내려감, 확 올려")으로 크게 상향.
+        // floor를 앞머리보다 밴드높이의 80% 위에 둬 꼬리가 확실히 위로 뻗는다(fox-eye 지향).
+        // 실기기 튜닝 대상.
+        const float AntiDroopHeadMargin = 0.8f;  // 목표 floor를 앞머리보다 올릴 여유(밴드 높이 배수)
+        const float AntiDroopFullRegion = 0.30f; // 꼬리 끝 30%는 목표 floor까지 완전 보정(넓게 리프트)
         const float AntiDroopTailRegion = 0.80f; // 이후 이 지점까지 가중치를 부드럽게 0으로 감쇠
+        // 꼬리 길이 — arc[0](꼬리) 제어점을 브로우 축(arc[0]-arc[1]) 방향으로 외삽해 눈썹을
+        // 길게. SubdivideArc가 전 브로우 렌더러 공유라 호출부 변경 없이 일관 적용.
+        // 목표점 = 미용 규칙선(콧볼 alar → 눈꼬리 outer corner 연장선). 브로우 축 위에서
+        // 그 선과 만나는 지점까지만 전진하므로(축 밖 이동 아님) Catmull-Rom·꼬리 테이퍼와
+        // 합쳐지면 스파이크가 아니라 자연 테이퍼로 규칙선에 닿는다. 연장량은 꼬리 세그먼트
+        // 길이 배수로 상·하한 클램프 — 과연장(스파이크)·무연장(뭉툭)을 모두 방지. 실기기 튜닝 대상.
+        const float TailExtendMin = 0.25f;       // 최소 연장(뭉툭 방지·항상 약간 길게) — 꼬리 세그먼트 배수
+        const float TailExtendMax = 1.10f;       // 최대 연장(스파이크 방지) — 꼬리 세그먼트 배수
+        const float TailRuleFallback = 0.35f;    // 규칙선 계산 불가 시 고정 연장 배수
+        const int EyeOuterCornerRight = 33;      // MediaPipe 눈꼬리(오른쪽)
+        const int EyeOuterCornerLeft = 263;      // MediaPipe 눈꼬리(왼쪽)
+        const int AlarRight = 129;               // MediaPipe 콧볼(오른쪽)
+        const int AlarLeft = 358;                // MediaPipe 콧볼(왼쪽)
         const int FaceUpForeheadLandmark = 10;   // 안정 얼굴축 상단(MediaPipe forehead top)
         const int FaceUpChinLandmark = 152;      // 안정 얼굴축 하단(MediaPipe chin)
 
@@ -147,12 +163,15 @@ namespace ARMakeup.Face
         {
             if (landmarks == null || arc == null || output == null || arc.Length != BandArcPoints ||
                 output.Length < BandSegments) return;
+            // 꼬리(arc[0]) 제어점을 브로우 축 방향으로 외삽해 미용 규칙선(콧볼→눈꼬리 연장선)에
+            // 닿게 한다(사용자 요청: 더 길게 + 꼬리는 규칙선에서 끝). 앞머리(arc[last])는 그대로.
+            var tailExt = ComputeTailExtension(landmarks, arc[0], arc[1]);
             var mi = 0;
             for (var i = 0; i < arc.Length - 1; i++)
             {
-                var p1 = LandmarkPoint(landmarks, arc[i]);
+                var p1 = i == 0 ? tailExt : LandmarkPoint(landmarks, arc[i]);
                 var p2 = LandmarkPoint(landmarks, arc[i + 1]);
-                var p0 = i == 0 ? p1 : LandmarkPoint(landmarks, arc[i - 1]);
+                var p0 = i == 0 ? tailExt : LandmarkPoint(landmarks, arc[i - 1]);
                 var p3 = i + 2 > arc.Length - 1 ? p2 : LandmarkPoint(landmarks, arc[i + 2]);
                 output[mi++] = p1;
                 for (var k = 1; k <= BandSubdivisions; k++)
@@ -160,6 +179,46 @@ namespace ARMakeup.Face
             }
             output[mi] = LandmarkPoint(landmarks, arc[arc.Length - 1]);
         }
+
+        /// <summary>꼬리 제어점을 브로우 축(inner→tail) 방향으로 외삽해, 콧볼(alar)→눈꼬리(outer
+        /// corner) 규칙선과 만나는 지점까지 늘린다. 축 밖 이동이 아니라 축 위 전진이라
+        /// Catmull-Rom 스무딩·꼬리 테이퍼와 합쳐지면 스파이크가 아닌 자연 테이퍼가 된다.
+        /// 연장량 s는 꼬리 세그먼트 길이 배수로 [TailExtendMin, TailExtendMax] 클램프(뭉툭·
+        /// 스파이크 동시 방지·항상 양수 전진). 규칙선을 못 구하면(랜드마크 결측·평행) 고정
+        /// 배수로 폴백한다. 좌/우 눈꼬리·콧볼은 꼬리와의 근접도로 골라 미러 규약에 무관하다.</summary>
+        static Vector2 ComputeTailExtension(Vector3[] landmarks, int tailIndex, int innerIndex)
+        {
+            var tail = LandmarkPoint(landmarks, tailIndex);
+            var inner = LandmarkPoint(landmarks, innerIndex);
+            var axis = tail - inner;                 // 안쪽→꼬리(바깥 방향)
+            var axisLen = axis.magnitude;
+            if (!IsFinite(axis) || axisLen < GeometryEpsilon) return tail;
+            var dir = axis / axisLen;
+
+            // 같은 쪽 눈꼬리·콧볼을 꼬리와의 근접도로 선택(L/R 명명 무관).
+            var cornerR = LandmarkPoint(landmarks, EyeOuterCornerRight);
+            var cornerL = LandmarkPoint(landmarks, EyeOuterCornerLeft);
+            var useRight = (tail - cornerR).sqrMagnitude <= (tail - cornerL).sqrMagnitude;
+            var corner = useRight ? cornerR : cornerL;
+            var alar = LandmarkPoint(landmarks, useRight ? AlarRight : AlarLeft);
+
+            var rule = corner - alar;                // 규칙선 방향(콧볼→눈꼬리)
+            var denom = Cross(dir, rule);
+            float s;
+            if (!IsFinite(corner) || !IsFinite(alar) ||
+                corner == Vector2.zero || alar == Vector2.zero ||
+                Mathf.Abs(denom) < GeometryEpsilon)
+                s = axisLen * TailRuleFallback;      // 규칙선 불가 → 고정 연장
+            else
+                // tail + s*dir 가 alar·corner 직선 위에 오는 s: (tail+s·dir − alar) × rule = 0.
+                s = -Cross(tail - alar, rule) / denom;
+
+            if (!IsFinite(s)) s = axisLen * TailRuleFallback;
+            s = Mathf.Clamp(s, axisLen * TailExtendMin, axisLen * TailExtendMax);
+            return tail + dir * s;
+        }
+
+        static float Cross(Vector2 u, Vector2 v) => u.x * v.y - u.y * v.x;
 
         /// <summary>
         /// Anatomical thickness profiles. Profile 0 is intentionally the legacy entry point:

@@ -38,6 +38,7 @@ namespace ARMakeup.Face
             { 127, 162, 21, 54, 103, 67, 109, 10, 338, 297, 332, 284, 251, 389, 356 };
         const int NasionIndex = 168;           // 연장 방향 기준점(미간)
         const float ForeheadExtension = 0.45f; // 정수리 방향 최대 연장 비율
+        const float ExtOffsetEma = 0.35f;      // 이마 연장 오프셋 EMA 계수(작을수록 안정·지연↑) 실기기 튜닝 대상
 
         // 관자놀이 쪽 얼굴 경계는 머리카락이 겹치기 쉬워 효과를 미리 감쇠한다
         // (경계에서 안쪽으로 자연스럽게 페더링됨). 좌/우 대칭 인덱스.
@@ -182,6 +183,11 @@ namespace ARMakeup.Face
         Vector2[] _viewports;
         float[] _depths;
         int _baseVertexCount;
+        Vector2[] _extOffsetPrev; // 이마 연장 오프셋 EMA 상태(정점별)
+        bool _extEmaInit;
+
+        static bool IsFinite(Vector2 v) =>
+            !float.IsNaN(v.x) && !float.IsInfinity(v.x) && !float.IsNaN(v.y) && !float.IsInfinity(v.y);
         Matrix4x4 _displayMatrix = Matrix4x4.identity;
         bool _hasDisplayMatrix;
 
@@ -359,6 +365,8 @@ namespace ARMakeup.Face
             // 연장 가중치: 아크 중앙(정수리 방향)은 1, 양끝(관자놀이)은 0에 수렴
             // — 균일 연장은 위쪽은 모자라고 옆쪽은 머리카락을 덮는다.
             _arcWeights = new float[extCount];
+            _extOffsetPrev = new Vector2[extCount];
+            _extEmaInit = false;
             for (var i = 0; i < extCount; i++)
             {
                 var t = i / (float)(extCount - 1);
@@ -446,15 +454,24 @@ namespace ARMakeup.Face
                 }
             }
 
-            // 이마 연장: 윤곽 아크 정점을 미간 반대 방향으로 밀어낸다
+            // 이마 연장: 윤곽 아크 정점을 미간 반대 방향으로 밀어낸다.
+            // (p−nasion)×amount는 외삽이라 랜드마크 노이즈를 증폭 → 이마 파운데 경계가
+            // 프레임마다 흔들려 "연결부가 움직이는" 지터의 뿌리(실기기). 처방: 연장
+            // 오프셋을 앵커(arcPoint p) 상대 EMA로 평활 — 앵커는 그대로라 얼굴 추종엔
+            // 지연이 없고, 외삽 방향·길이 노이즈만 제거된다(AGENTS.md 검증 안티지터 패턴).
             var nasion = _viewports[NasionIndex];
             for (var i = 0; i < ForeheadArc.Length; i++)
             {
                 var p = _viewports[ForeheadArc[i]];
                 var amount = ForeheadExtension * (0.08f + 0.92f * _arcWeights[i]);
-                _viewports[_baseVertexCount + i] = p + (p - nasion) * amount;
+                var offset = (p - nasion) * amount;
+                if (_extEmaInit && IsFinite(offset) && IsFinite(_extOffsetPrev[i]))
+                    offset = Vector2.Lerp(_extOffsetPrev[i], offset, ExtOffsetEma);
+                _extOffsetPrev[i] = offset;
+                _viewports[_baseVertexCount + i] = p + offset;
                 _depths[_baseVertexCount + i] = _depths[ForeheadArc[i]];
             }
+            _extEmaInit = true;
 
             EnsureExtensionWinding();
 
