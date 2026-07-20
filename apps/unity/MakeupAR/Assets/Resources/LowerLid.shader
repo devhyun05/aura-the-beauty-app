@@ -18,6 +18,11 @@ Shader "ARMakeup/LowerLid"
         _AegyoHiColor ("Aegyo Highlight Color", Color) = (1.0, 0.95, 0.88, 1)
         _AegyoShColor ("Aegyo Shadow Color", Color) = (0.69, 0.54, 0.41, 1)
         _AegyoIntensity ("Aegyo Intensity", Range(0, 1)) = 0
+        // 애교살 베이크드 프로파일(절차 SDF 대체) — R=하이라이트 G=아래그림자 B=중앙펄게이트.
+        // 바이리니어 샘플이라 메시 해상도와 무관하게 매끈(각짐 원천 소거). 밴드 UV에 워프.
+        _AegyoProfile ("Aegyo Profile (R hi, G shadow, B pearl gate)", 2D) = "black" {}
+        // 중앙 펄 강도 — 0=펄 없음(기존 프리셋 기본). B게이트 영역에만 라이브 시머를 켠다.
+        _AegyoPearl ("Aegyo Center Pearl", Range(0, 1)) = 0
         // 임포트 애교살 그림(데칼) — 밴드 (가로×세로) UV에 워프. 알파=그린 영역.
         _AegyoTex ("Aegyo Art", 2D) = "black" {}
         _AegyoStyleIntensity ("Aegyo Art Intensity", Range(0, 1)) = 0
@@ -34,6 +39,11 @@ Shader "ARMakeup/LowerLid"
         // 라인/애교살보다 아래(먼저)에 곱(감산) 블렌드로 깔린다. _LowerShadowIntensity 0 = 끔.
         _LowerShadowColor ("Lower Shadow Color", Color) = (0.55, 0.42, 0.40, 1)
         _LowerShadowIntensity ("Lower Shadow Intensity", Range(0, 1)) = 0
+        // 스모키 언더 모양 마스크(profile 6 전용) — 밴드 UV(along × 1-v)에 그려진 알파.
+        // 절차 프로파일(래시 평행 밴드)은 실루엣 자유도가 없어 "쓸 수 없는 모양"이었다.
+        // profile 6(deep-smoky-under 라우팅)일 때 LowerEsProfile 대신 이 마스크 .r을 커버리지로
+        // 쓴다. scripts/generate-lower-smoky-mask.py 생성. "black"=미설정 시 무영향.
+        _LowerSmokyMask ("Lower Smoky Shape Mask", 2D) = "black" {}
         // 마감 — 블러셔와 동일 enum(0 새틴 1 매트 2 글로시 3 시머). ApplyFinish 레거시
         // 경로(세부 0 상수)라 0=새틴=기존 출력과 바이트 동일(하위호환).
         _AegyoFinish ("Aegyo Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
@@ -106,6 +116,8 @@ Shader "ARMakeup/LowerLid"
             fixed4 _AegyoHiColor;
             fixed4 _AegyoShColor;
             float _AegyoIntensity;
+            sampler2D _AegyoProfile;
+            float _AegyoPearl;
             sampler2D _AegyoTex;
             float _AegyoStyleIntensity;
             fixed4 _TriColor;
@@ -113,6 +125,7 @@ Shader "ARMakeup/LowerLid"
             fixed4 _ConcealerColor;
             float _ConcealerIntensity;
             sampler2D _ConcealerMask;
+            sampler2D _LowerSmokyMask; // 스모키 언더 모양 마스크(profile 6 전용)
             fixed4 _LowerShadowColor;
             float _LowerShadowIntensity;
             // Phase B lower/both 멀티레이어 — 배열 뒤 원소가 위에 오는 alpha-over 스택.
@@ -167,10 +180,6 @@ Shader "ARMakeup/LowerLid"
             #define TRI_FEATHER 0.10   // 바깥 코너(메시 경계) 페더 폭
             #define TRI_V_WIDTH 0.55   // 세로 폭 비율 — 라인(v=0) 근처에서 이 값까지 페이드
             #define CONCEALER_ALPHA_CEILING 0.45 // 피부 명암 보존 보정의 독립 기여 상한
-
-            // A3 아이섀도 하 세로 폭 — 예전 0.55는 눈물고랑 홀로우까지 넓게 덮어 다크서클
-            // 처럼 보였다(실기기). 래시라인에 바짝 붙는 얇은 스머지가 자연 스모키 언더 → 축소.
-            #define ES_V_FADE   0.30   // A3 아이섀도 하: lash(v=0)에서 이 v까지 아래로 페이드 (실기기 튜닝 대상)
 
             // 애교살 볼륨 프로파일 상수 (전부 실기기 튜닝 대상) — "판"이 아니라 "살(볼록 롤)".
             // 롤은 하안검 lash 라인 바로 아래 얇게 붙는다: aegyoV = vv/AEGYO_BAND 로 초승달
@@ -359,8 +368,6 @@ Shader "ARMakeup/LowerLid"
                 float linerV = linerUV.y;
 
                 // 가로 가중: 코너 페이드(라인용).
-                float edge = smoothstep(0.0, 0.08, along)
-                           * (1.0 - smoothstep(0.92, 1.0, along));
                 float linerEdge = smoothstep(0.0, 0.08, linerAlong)
                                 * (1.0 - smoothstep(0.92, 1.0, linerAlong));
 
@@ -380,57 +387,21 @@ Shader "ARMakeup/LowerLid"
                 float lnAmt = (1.0 - smoothstep(0.10 * _LinerThickness, 0.22 * _LinerThickness, linerV))
                               * linerEdge * _LinerIntensity * lnSeg;
                 lnAmt = TexEdge(TexCoverage(saturate(lnAmt), lnTexC), lnTexE);
-                // ── 애교살 SDF(아크 피팅 곡선 + 픽셀 단위 거리장) ──────────────────────────
-                // 근본 교체: 폴리라인 밴드 (along,v) 좌표계 프로파일은 밴드 정점 보간을 타서
-                // 능선/골 등고선이 세그먼트 경계에서 꺾인다("모서리 각"). 대신 픽셀의 밴드
-                // 로컬 위치(localXY, 픽셀당 보간)에서 FitArc 곡선까지의 수직 거리 d를 매 픽셀
-                // 해석적으로 재서 능선/골 밴드를 긋는다 — 등고선이 곡선의 오프셋 곡선이라
-                // 메시 테셀레이션과 무관하게 매끈하다(각짐이 구조적으로 소거).
-                float k0c = i.curve.x, k1c = i.curve.y;
-                float Lc = max(i.curve.z, 1e-5);   // 눈폭(현 길이, 이미지 단위)
-                float bw = max(i.curve.w, 1e-5);   // 밴드 세로 폭(이미지 단위, v=1 상당)
-                float2 aegyoLocal = InverseBandAffine(
-                    float2(i.localXY.x / Lc, i.localXY.y / bw),
-                    _AegyoAffine, _AegyoAffineRot);
-                bool aegyoAffineZero = all(_AegyoAffine == 0.0) && _AegyoAffineRot == 0.0;
-                float t = saturate(aegyoAffineZero ? i.localXY.x / Lc : aegyoLocal.x);
-                // 피팅 곡선 Yc(t)와 기울기(FitArc와 동일 v(u)=k0·u(1−u)+k1·u²(1−u)).
-                float Yc  = k0c * t * (1.0 - t) + k1c * t * t * (1.0 - t);
-                float dYc = k0c * (1.0 - 2.0 * t) + k1c * (2.0 * t - 3.0 * t * t); // dY/dt
-                float slope = dYc / Lc;              // dY/dX
-                // 수직 낙하 근사 + 기울기 1차 보정 = 곡선까지 수직거리(아래=피부 방향 양수).
-                float aegyoLocalY = aegyoAffineZero ? i.localXY.y : aegyoLocal.y * bw;
-                float d = (aegyoLocalY - Yc) / sqrt(1.0 + slope * slope);
-
-                // 롤 두께 T(t) = v3 비대칭 평탄대 × AEGYO_BAND × bandWidth. thick 프로파일은
-                // 연속이라 SDF 위에서도 각 없이 매끈(_AegyoShape 3형 그대로 스위치).
-                float riseIn  = smoothstep(0.0, AEGYO_IN_RISE, t);            // 눈머리 빠른 차오름
-                float plateau = 1.0 + AEGYO_PUPIL_BULGE
-                                * sin(3.14159 * saturate((t - 0.15) / 0.55)); // 눈동자 아래 미세 볼록
-                float fadeOut = 1.0 - smoothstep(AEGYO_TAIL_START, 1.0, t);   // 꼬리 짧고 뭉툭한 소멸
-                float arch = sin(3.14159 * t);                               // shape 2 전용(끝 0)
-                float thick;
-                if (_AegyoShape > 1.5)        thick = pow(arch, 2.2);        // 2 중앙 도톰(렌즈형)
-                else if (_AegyoShape > 0.5)   thick = riseIn * fadeOut;      // 1 일자(볼록 0)
-                else                          thick = riseIn * plateau * fadeOut; // 0 비대칭 평탄대
-                float Troll = max(thick * AEGYO_BAND * bw * _AegyoHeight, 1e-5); // 애교살 전용 높이
-                float aegyoV = d / Troll;   // v3 aegyoV와 동치(0=lash 곡선 → 1=롤 바깥 끝)
-
-                // 코너 페이드·중앙 강조는 곡선 파라미터 t 기준(밴드 along 대신) — 완전 해석적.
-                float aegyoEdge = smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(0.92, 1.0, t));
-                float soft = 0.5 + 0.5 * sin(3.14159 * t); // 은은한 중앙 강조
-
-                // 능선 하이라이트: 곡선(위)에서 소프트하게 올라와 aegyoV 0.15~0.5에서 피크,
-                // 아래로 감쇠. 경계는 전부 smoothstep 페더(각짐 금지) — v3 세로 구조의 SDF 번역.
-                float ridge = smoothstep(0.0, 0.15, aegyoV) * (1.0 - smoothstep(0.5, 0.72, aegyoV));
-                // 골 그림자: 능선 아래 얇은 줄(aegyoV 0.75~0.95) — 살의 아래 윤곽으로 볼록 정의.
-                float valley = smoothstep(0.70, 0.80, aegyoV) * (1.0 - smoothstep(0.90, 1.0, aegyoV));
-                // intensity = 능선/골 대비 강도(패널 불투명도 아님). 피크 알파 상한(AEGYO_*_MAX)으로
-                // 눌러 100%여도 살처럼 은은하고, soft·thick이 알파에 곱해져 양끝 소멸 그라데 유지.
-                float hiAmt = ridge * soft * aegyoEdge * _AegyoIntensity * AEGYO_HI_MAX;
-                hiAmt = TexEdge(TexCoverage(saturate(hiAmt), agTexC), agTexE); // 제형 커버·엣지(애교살 능선)
-                float shAmt = valley * soft * aegyoEdge * _AegyoIntensity * AEGYO_SH_MAX;
-                shAmt = TexEdge(TexCoverage(saturate(shAmt), agTexC), agTexE); // 제형 커버·엣지(애교살 골)
+                // ── 애교살 베이크드 프로파일(절차 SDF 대체) ──────────────────────────────
+                // 근본 교체 v4: FitArc SDF도 곡선을 정점 계수로 나르는 절차 경로라, 요구가
+                // 늘 때마다(그림자 아래만·중앙 펄) 상수 튜닝이 폭증했다. 대신 애교살 "모양"을
+                // 미리 부드럽게 구운 텍스처(R 하이라이트 / G 아래그림자 / B 중앙펄게이트)로
+                // 두고 밴드 UV에 바이리니어 샘플만 한다. 매끈함의 근거가 메시 해상도·smoothstep
+                // 튜닝이 아니라 텍스처 필터링이라 각짐이 구조적으로 불가능하다.
+                // 캔버스는 위(y↑)가 lash, Unity UV는 아래→위이므로 v를 뒤집어 샘플(컨실러 관례).
+                float2 aegyoUV = InverseBandAffine(i.uv, _AegyoAffine, _AegyoAffineRot);
+                fixed3 aegyoProf = tex2D(_AegyoProfile, float2(aegyoUV.x, 1.0 - aegyoUV.y)).rgb;
+                float hiAmt = aegyoProf.r * _AegyoIntensity * AEGYO_HI_MAX;
+                hiAmt = TexEdge(TexCoverage(saturate(hiAmt), agTexC), agTexE); // 제형 커버·엣지(애교살 하이라이트)
+                float shAmt = aegyoProf.g * _AegyoIntensity * AEGYO_SH_MAX;   // G는 롤 아래에만 칠해짐 → 양옆 0
+                shAmt = TexEdge(TexCoverage(saturate(shAmt), agTexC), agTexE); // 제형 커버·엣지(애교살 그림자)
+                // 중앙 펄: B게이트 영역에만 라이브 시머. _AegyoPearl 0(기본)=펄 없음(기존 프리셋).
+                float pearlAmt = aegyoProf.b * _AegyoIntensity * _AegyoPearl * AEGYO_HI_MAX;
 
                 // 삼각존: 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 애교살과 무관한
                 // 별도 텀 — 꼬리(u 바깥 1/3)에서 상승, 코너에서 페더, 세로는 lash 라인(v=0)
@@ -457,17 +428,14 @@ Shader "ARMakeup/LowerLid"
                 ccAmt = TexEdge(TexCoverage(saturate(ccAmt), ccTexC), ccTexE); // 제형 커버·엣지(눈밑 컨실러)
                 float ccA = saturate(ccAmt) * CONCEALER_ALPHA_CEILING;
 
-                // A3 아이섀도 하: lash 라인(v=0) 바로 아래에서 ES_V_FADE까지 부드럽게
-                // 페이드하는 섀도 밴드. hiAmt/shAmt 프로파일과 동형(edge 코너 접기·원시 v
-                // 기준). 라인·애교살보다 아래에 곱 블렌드로 깔린다(아래 comb 단계). 강도 0 = 무영향.
-                // 높이 핸들(_LowerShadowHeight) — 페이드 폭 ES_V_FADE를 배수. 1=원래(하위호환).
-                // 모양(_LowerShadowShape) — 0=기본밴드=현행 바이트 동일. 1=넓게(세로 폭 확장).
-                //   2=꼬리집중(along 바깥 가중, 세로 폭은 기본).
-                float esShapeW = (_LowerShadowShape > 0.5 && _LowerShadowShape < 1.5) ? 1.5 : 1.0;
-                float esTail = (_LowerShadowShape > 1.5) ? smoothstep(0.45, 0.75, along) : 1.0;
-                // 페이드 거리 클램프(triV와 동일 근거) — 극값 조합의 v=1 직선 컷 방지, 기본값 항등.
-                float esBand = 1.0 - smoothstep(0.0, min(ES_V_FADE * _LowerShadowHeight * esShapeW, 1.0), v);
-                float esAmt = esBand * edge * _LowerShadowIntensity * esTail;
+                // 아이섀도 하(하안검 섀도) = 그린 마스크 실루엣. 구 절차 esBand(래시 평행 밴드
+                // 세로 페이드)는 실루엣 자유도가 없어 "쓸 수 없는 모양"이라 폐기. eyeshadowLower*
+                // 스칼라를 쓰는 전 하부 룩(데일리 베이지·코랄·로지·모브·딥스모키)이 이 한 경로를
+                // 공용한다 — 색·강도·마감·핏높이만 다르고 실루엣은 마스크가 정본.
+                // 세로는 _LowerShadowHeight로 스트레치. UV는 컨실러와 동일 1-v flip(PNG 위=래시).
+                // 마스크가 안쪽/바깥 테이퍼를 담으므로 edge 코너페이드는 곱하지 않는다(윙 보존).
+                float smokyV = saturate(v / clamp(_LowerShadowHeight, 0.25, 2.0));
+                float esAmt = tex2D(_LowerSmokyMask, float2(along, 1.0 - smokyV)).r * _LowerShadowIntensity;
                 esAmt = TexEdge(TexCoverage(saturate(esAmt), esTexC), esTexE); // 제형 커버·엣지(아이섀도 하)
 
                 // 색소(피드 기준 풀강도): 라이너=루마 보존 틴트, 애교살=스크린(가산),
@@ -480,11 +448,17 @@ Shader "ARMakeup/LowerLid"
                 pigLn = TexGrain(pigLn, i.uv, lnTexG);
                 fixed3 pigHi = 1.0 - (1.0 - feed) * (1.0 - _AegyoHiColor.rgb);
                 pigHi = TexBody(pigHi, luma, agTexB); // 제형 발색 body(애교살)
-                // 애교살 마감 — 하이라이트 밴드에 ApplyFinish(시머=펄 애교살, 매트=톤다운).
-                // sparkleUV는 밴드 로컬 uv라 시머가 밴드에 접착. 0=새틴=무변형(하위호환).
-                pigHi = ApplyFinish(pigHi, luma, i.uv, _AegyoFinish, _AegyoShimmer,
+                // 애교살 base 마감 — 시머(finish 3)는 밴드 전체를 반짝여 "펄 없는 애교살"을
+                // 깨므로 base에선 새틴으로 중화한다. 반짝임은 전부 중앙 펄(pigPearl·B게이트)로만
+                // 보낸다. 매트(1)·글로시(2)는 base에 그대로 적용.
+                float aegyoBaseFinish = (_AegyoFinish > 2.5) ? 0.0 : _AegyoFinish;
+                pigHi = ApplyFinish(pigHi, luma, i.uv, aegyoBaseFinish, 0,
                                     0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
                 pigHi = TexGrain(pigHi, i.uv, agTexG); // 제형 그레인(애교살)
+                // 중앙 펄 색소 — 하이라이트 위에 라이브 시머(finish=3). pearlAmt(B게이트)가
+                // 0이면(=_AegyoPearl 0, 기존 프리셋) 합성에서 기여 0이라 계산만 되고 안 보인다.
+                fixed3 pigPearl = ApplyFinish(pigHi, luma, i.uv, 3.0, _AegyoShimmer,
+                                              0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
                 fixed3 pigSh = feed * _AegyoShColor.rgb;
                 pigSh = TexGrain(TexBody(pigSh, luma, agTexB), i.uv, agTexG); // 제형 body·grain(애교살 섀도)
                 fixed3 pigTri = feed * _TriColor.rgb; // 삼각존 = 곱(감산) 딥브라운 섀도
@@ -543,7 +517,20 @@ Shader "ARMakeup/LowerLid"
                         float edgeB, grainB, coverageB, bodyB;
                         TexBundleFromEnum(9.0, textureB, edgeB, grainB, coverageB, bodyB);
                         float liftedIntensityB = EyeshadowVisibilityLift(_LowerEsLayerColor[b].a);
-                        float amtB = LowerEsProfile(along, v, heightB, profileB) * liftedIntensityB;
+                        // profile 6 = 스모키 언더: 절차 밴드 대신 그린 마스크 실루엣을 커버리지로.
+                        // 세로는 heightB로 스트레치(핏 높이 핸들 유지). 마스크 UV는 컨실러와 동일
+                        // 1-v flip(PNG 위=래시라인). 다른 11개 프로파일은 종전 경로 그대로.
+                        float amtShapeB;
+                        if (profileB > 5.5 && profileB < 6.5)
+                        {
+                            float smokyV = saturate(v / clamp(heightB, 0.25, 2.0));
+                            amtShapeB = tex2D(_LowerSmokyMask, float2(along, 1.0 - smokyV)).r;
+                        }
+                        else
+                        {
+                            amtShapeB = LowerEsProfile(along, v, heightB, profileB);
+                        }
+                        float amtB = amtShapeB * liftedIntensityB;
                         amtB = TexEdge(TexCoverage(saturate(amtB), coverageB), edgeB);
 
                         fixed3 baseB = lerp(_LowerEsLayerColor[b].rgb,
@@ -578,10 +565,10 @@ Shader "ARMakeup/LowerLid"
                 // 컨실러를 나머지 하안검 제품 amount에 더하지 않는다. 먼저 피부 보정층으로
                 // 독립 alpha-over하고, 라이너·애교살·삼각존은 그 위에 놓는다. 따라서 컨실러
                 // 자체 기여는 항상 0.45 이하이고 다른 제품과 겹쳐도 단순 합산 포화되지 않는다.
-                float total = lnAmt + hiAmt + shAmt + triAmt;
+                float total = lnAmt + hiAmt + shAmt + triAmt + pearlAmt;
                 float procA = saturate(total);
                 fixed3 procPig = (pigLn * lnAmt + pigHi * hiAmt + pigSh * shAmt
-                                  + pigTri * triAmt)
+                                  + pigTri * triAmt + pigPearl * pearlAmt)
                                  / max(total, 1e-4);
 
                 float upperA = procA + ccA * (1.0 - procA);
