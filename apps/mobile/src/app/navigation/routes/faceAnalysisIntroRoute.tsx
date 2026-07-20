@@ -8,7 +8,9 @@ import {goBackToPreviousOrMainTab, type RootScreenProps} from './routeUtils';
 export function FaceAnalysisIntroRouteScreen({
   navigation,
 }: RootScreenProps<'FaceAnalysisIntro'>) {
-  const [isGuideVisible, setIsGuideVisible] = React.useState(false);
+  // 홈에서 얼굴 분석 진입 시 촬영 가이드를 바로 보여준다. 닫으면 인트로가
+  // 남고, "촬영 가이드 보기"로 언제든 다시 열 수 있다.
+  const [isGuideVisible, setIsGuideVisible] = React.useState(true);
 
   const openAnalysisGuide = React.useCallback(() => {
     setIsGuideVisible(true);
