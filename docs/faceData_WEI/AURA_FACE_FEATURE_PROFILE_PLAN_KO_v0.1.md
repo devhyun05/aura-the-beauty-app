@@ -125,8 +125,10 @@ type VisualWeightMap = {
   - 엔진: `features/ar/services/deriveFitDeltas.ts` — 리서치 테이블 B등급 방향 규칙만(처진 눈꼬리→윙·눈꼬리 리프트, hooded→가짜 크리스 높게+라인 얇게, 무쌍→윙 연장, 둥근/가는 눈→가로/세로 반전, 애교살→강조, 중안부 김→블러셔 고배치). **방향·부호만 문헌 근거, δ 크기는 잠정.**
   - 안전장치: `deltaScale` 기본 0 = **자동 적용 OFF**(계약 D-4/D-5). 구조·근거(basis)는 산출되되 실제 δ=0. accent 레인은 형태 보정 δ=0(개성 보존). 신뢰 밴드 없으면 행 생략(δ=0 아님).
   - 배선 지점: `applyFitToLayers(layers, state, baseDeltas)`의 **`baseDeltas`가 이미 계약이 말한 측정 자동 시트 주입점**(최하위 우선순위·가산·field 범위 클램프). toFitEntries 출력을 여기 넣으면 됨.
-  - ⬜ **남은 것(실기기 필요)**: AR 필터 진입점에서 프로파일 조립→deriveFitDeltas→baseDeltas 배선 + 슬라이더 실험으로 축별 non-zero δ 승인(deltaScale>0). 이 저장소에서 시각 검증 불가라 device 작업으로 분리.
-  - 검증: 계약 테스트(deriveFitDeltas) + 모바일 타입체크 0 에러.
+  - ✅ **라이브 배선 완료(δ=0 no-op)**: `features/ar/services/personalFitService.ts`(순수 조립: 보고서→프로파일→핏 델타, 입력은 RN 무의존 구조적 타입) + `personalFitLoad.ts`(최신 보고서 로더, 실패=빈 배열) + `StencilARApp.tsx` 3곳 최소 편집(ref·로드·compileWithFit의 baseDeltas 합류 — 기존 dev autoFit 기저와 가산 병합, 수동 시트 우선순위 불변).
+  - **켜는 스위치는 단 하나**: `PERSONAL_FIT_DELTA_SCALE`(personalFitService.ts, 현재 0). 실기기 슬라이더 실험으로 축별 δ 승인 후 이 값만 올리면 활성화(계약 D-5).
+  - 참고: 기존 `composer/autoFit.ts`(computeAutoFit)는 dev 슬라이더 실험 표면으로 병존 — 고정 참조값(AUTO_FIT_REFS) 기반이라 자기참조 원칙과 철학이 다름. 실사용 경로는 deriveFitDeltas로 통일하고 autoFit은 실험 도구로 유지(향후 정리 후보).
+  - 검증: 계약 테스트 7종 + 모바일 타입체크 0 에러. 실기기 δ 튜닝만 남음.
 
 ## 6. 구현 범위 (합의됨 — v0.2에서 전 부위로 확장)
 
