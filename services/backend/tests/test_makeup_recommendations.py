@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 from uuid import UUID
 
 import pytest
@@ -99,6 +100,34 @@ def test_converse_allows_bounded_long_form_recommendation_timeout(
   config = captured_kwargs.get("config")
   assert isinstance(config, Config)
   assert 90 <= config.read_timeout <= 120
+  assert config.retries == {"max_attempts": 1, "mode": "standard"}
+
+
+def test_converse_caps_sdk_timeouts_to_remaining_provider_budget(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  client = FakeBedrockClient()
+  captured_kwargs: dict = {}
+
+  def fake_boto_client(*_args, **kwargs):
+    captured_kwargs.update(kwargs)
+    return client
+
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", fake_boto_client)
+
+  _converse(
+    Settings(),
+    "model-id",
+    "system",
+    "prompt",
+    max_tokens=9000,
+    timeout_seconds=7.5,
+  )
+
+  config = captured_kwargs.get("config")
+  assert isinstance(config, Config)
+  assert config.read_timeout == 7.5
+  assert config.connect_timeout == 7.5
   assert config.retries == {"max_attempts": 1, "mode": "standard"}
 
 
@@ -431,6 +460,36 @@ async def test_generate_json_retries_invalid_json_once(monkeypatch: pytest.Monke
 
   assert result == {"ok": True}
   assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_generate_json_enforces_one_deadline_across_provider_call(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  seen_timeouts: list[float] = []
+
+  def slow_converse(*_args, **kwargs):
+    seen_timeouts.append(kwargs["timeout_seconds"])
+    time.sleep(0.08)
+    return {"ok": True}
+
+  monkeypatch.setattr(makeup_service, "_converse", slow_converse)
+  started_at = time.perf_counter()
+
+  with pytest.raises(AppError) as raised:
+    await makeup_service.generate_json(
+      Settings(),
+      "model-id",
+      "plain JSON system",
+      "prompt",
+      timeout_seconds=0.02,
+    )
+
+  elapsed_seconds = time.perf_counter() - started_at
+  assert raised.value.code == "BEDROCK_REQUEST_TIMEOUT"
+  assert elapsed_seconds < 0.07
+  assert len(seen_timeouts) == 1
+  assert 0 < seen_timeouts[0] <= 0.02
 
 
 @pytest.mark.asyncio

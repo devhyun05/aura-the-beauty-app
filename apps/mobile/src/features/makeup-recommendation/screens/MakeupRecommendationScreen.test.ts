@@ -241,6 +241,10 @@ const recommendationServiceSource = readFileSync(
   'apps/mobile/src/features/makeup-recommendation/services/makeupRecommendationService.ts',
   'utf8',
 );
+const backendApiSource = readFileSync(
+  'apps/mobile/src/shared/services/backendApi.ts',
+  'utf8',
+);
 expectEqual(
   discoverySource.includes('선택한 보고서 기반으로 추천메이크업이 생성됩니다'),
   true,
@@ -308,6 +312,10 @@ expectEqual(loadingViewSource.includes('선택한 답변과 얼굴 분석 사진
 expectEqual(recommendationServiceSource.includes('export const MAKEUP_RECOMMENDATION_GENERATION_TIMEOUT_MS = 45_000;'), true, 'generation timeout is bounded above the backend fast-fallback budget');
 expectEqual(recommendationServiceSource.includes('timeoutMs: MAKEUP_RECOMMENDATION_GENERATION_TIMEOUT_MS'), true, 'V2 generation uses the bounded timeout');
 expectEqual(recommendationServiceSource.includes('timeoutMs: 90000'), false, 'obsolete ninety-second cutoff is removed');
+expectEqual(screenSource.includes('isBackendTimeoutError'), true, 'generation timeout is treated as a resumable server-side operation');
+expectEqual(screenSource.includes('isMakeupRecommendationGenerationRecoverable'), true, 'timeout and in-flight conflicts share session recovery');
+expectEqual(backendApiSource.includes('export class BackendTimeoutError extends Error'), true, 'request timeout has a distinct recoverable error type');
+expectEqual(backendApiSource.includes('throw new BackendTimeoutError(timeoutMs);'), true, 'request timeout preserves its cause for session recovery');
 expectEqual(screenSource.includes('Promise.allSettled(['), true, 'catalog and reports load independently');
 expectEqual(screenSource.includes('fetchMakeupRecommendationDiscovery(),'), true, 'catalog request participates in independent loading');
 expectEqual(screenSource.includes('getFaceAnalysisReports({limit: 50}),'), true, 'report request always participates in independent loading');
@@ -417,6 +425,7 @@ expectEqual(
   'pollGeneratingSession',
   'MAKEUP_SESSION_GENERATING',
   'MAKEUP_SESSION_STATE_CHANGED',
+  'isBackendTimeoutError',
   'getMakeupRecommendationSessionRestoreDestination',
   "destination === 'retry'",
   '답변은 그대로 유지했으니 다시 시도해 주세요.',

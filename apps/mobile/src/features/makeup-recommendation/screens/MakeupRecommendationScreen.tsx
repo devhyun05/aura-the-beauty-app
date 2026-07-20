@@ -11,7 +11,11 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Pressable, StyleSheet, Text} from 'react-native';
 
-import {BackendApiError, isRequestAbortedError} from '../../../shared/services/backendApi';
+import {
+  BackendApiError,
+  isBackendTimeoutError,
+  isRequestAbortedError,
+} from '../../../shared/services/backendApi';
 import {
   getFaceAnalysisReportById,
   getFaceAnalysisReports,
@@ -175,13 +179,13 @@ async function pollGeneratingSession(
   return currentSession;
 }
 
-function isMakeupRecommendationGeneratingConflict(error: unknown): boolean {
-  return error instanceof BackendApiError
+function isMakeupRecommendationGenerationRecoverable(error: unknown): boolean {
+  return isBackendTimeoutError(error) || (error instanceof BackendApiError
     && error.status === 409
     && (
       error.code === 'MAKEUP_SESSION_GENERATING'
       || error.code === 'MAKEUP_SESSION_STATE_CHANGED'
-    );
+    ));
 }
 
 function getMakeupRecommendationWorkflowErrorMessage(
@@ -421,7 +425,10 @@ export const MakeupRecommendationScreen = forwardRef<
     try {
       generated = await generateMakeupRecommendationV2(activeSession, undefined, signal);
     } catch (error) {
-      if (!isMakeupRecommendationGeneratingConflict(error)) throw error;
+      // The POST can outlive the mobile request timeout. The backend has already
+      // persisted the session as `generating`, so recover and poll that session
+      // instead of incorrectly presenting a failure while work continues.
+      if (!isMakeupRecommendationGenerationRecoverable(error)) throw error;
       let recoveringSession = await fetchGeneratedMakeupRecommendationSessionV2(
         activeSession.id,
         undefined,

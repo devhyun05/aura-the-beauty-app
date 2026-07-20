@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -954,6 +955,37 @@ async def test_v2_recommendation_provider_failure_uses_report_and_answers_fallba
     assert look["fitAssessment"]["overallScore"] <= 74
   anchor_map = result["looks"][0]["lookMap"]
   assert (anchor_map["naturalityToPersonality"], anchor_map["casualToGlam"]) != (28, 56)
+
+
+@pytest.mark.asyncio
+async def test_v2_recommendation_timeout_returns_deterministic_fallback_promptly(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  def slow_converse(*_args, **_kwargs):
+    time.sleep(0.08)
+    return _v2_recommendation()
+
+  monkeypatch.setattr(makeup_service, "_converse", slow_converse)
+  settings = Settings().model_copy(update={
+    "makeup_recommendation_provider_timeout_seconds": 0.02,
+  })
+  started_at = time.perf_counter()
+
+  result = await makeup_service.generate_recommendation_v2(
+    settings,
+    {
+      "analysisReport": {"faceShape": "oval"},
+      "selection": {"situation": {"label": "데이트"}},
+    },
+    _questions(),
+    [{"questionId": "change_level", "optionId": "balanced"}],
+  )
+
+  # The provider is cut off at its deadline; the remaining time is the local
+  # deterministic recipe assembly and schema validation.
+  assert time.perf_counter() - started_at < 0.2
+  assert result["generationSource"] == "deterministic_fallback"
+  assert [look["role"] for look in result["looks"]] == ["anchor"]
 
 @pytest.mark.asyncio
 async def test_analysis_context_requires_owned_completed_non_deleted_report() -> None:
