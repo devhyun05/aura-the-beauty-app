@@ -1,7 +1,9 @@
 import {
   getConsultingHistoryBackAction,
+  getMainTabResetState,
   getMainTabHeaderBorderWidth,
   goBackToPreviousOrMainTab,
+  navigateMainTab,
   type RootNavigation,
 } from './routeUtils';
 
@@ -46,6 +48,8 @@ const stackedBackCalls: string[] = [];
 goBackToPreviousOrMainTab(
   {
     canGoBack: () => true,
+    dispatch: (action: {type?: string}) => stackedBackCalls.push(action.type ?? 'dispatch'),
+    getState: () => ({index: 1, routes: [{name: 'MainTabs'}, {name: 'ProductRecommendation'}]}),
     goBack: () => stackedBackCalls.push('goBack'),
     navigate: () => stackedBackCalls.push('navigate'),
   } as unknown as RootNavigation,
@@ -53,21 +57,48 @@ goBackToPreviousOrMainTab(
 );
 expectEqual(
   stackedBackCalls.join(','),
-  'goBack',
-  'profile child pops the existing screen instead of navigating to another profile',
+  'POP',
+  'profile child dispatches a real stack pop instead of navigating to another profile',
 );
 
 const fallbackBackCalls: string[] = [];
+let fallbackResetState: unknown = null;
 goBackToPreviousOrMainTab(
   {
     canGoBack: () => false,
+    dispatch: (action: {type?: string}) => fallbackBackCalls.push(action.type ?? 'dispatch'),
+    getState: () => ({index: 0, routes: [{name: 'MainTabs'}]}),
     goBack: () => fallbackBackCalls.push('goBack'),
     navigate: (routeName: string) => fallbackBackCalls.push(routeName),
+    reset: (state: unknown) => {
+      fallbackBackCalls.push('reset');
+      fallbackResetState = state;
+    },
   } as unknown as RootNavigation,
   'ProfileTab',
 );
 expectEqual(
   fallbackBackCalls.join(','),
-  'MainTabs',
-  'profile child only opens the profile tab when no previous screen exists',
+  'reset',
+  'profile child resets to the profile tab when no previous screen exists',
+);
+expectEqual(
+  JSON.stringify(fallbackResetState),
+  JSON.stringify(getMainTabResetState('ProfileTab')),
+  'profile child fallback reset leaves only MainTabs/ProfileTab in the stack',
+);
+
+const navigateMainTabCalls: string[] = [];
+navigateMainTab(
+  {
+    reset: (state: unknown) => {
+      navigateMainTabCalls.push(JSON.stringify(state));
+    },
+  } as unknown as RootNavigation,
+  'HomeTab',
+);
+expectEqual(
+  navigateMainTabCalls.join(','),
+  JSON.stringify(getMainTabResetState('HomeTab')),
+  'main tab fallback must reset instead of stacking another MainTabs route',
 );

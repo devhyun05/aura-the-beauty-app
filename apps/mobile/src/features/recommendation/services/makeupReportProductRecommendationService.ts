@@ -1,5 +1,6 @@
 import {requestProductBackendJson} from '../../../shared/services/productBackendApi';
 import type {
+  MakeupReportProductCategory,
   MakeupReportProductResultStatus,
   MakeupReportProductSnapshot,
   MakeupReportProductSnapshotRunStatus,
@@ -21,6 +22,11 @@ const RESULT_STATUSES = new Set<MakeupReportProductResultStatus>([
   ...SNAPSHOT_RUN_STATUSES,
   'noEligibleProducts',
 ]);
+
+type MakeupReportProductRequestOptions = {
+  signal?: AbortSignal;
+  categories?: readonly MakeupReportProductCategory[];
+};
 
 type BackendMakeupReportProductRecommendations = Omit<
   MakeupReportProductRecommendations,
@@ -63,6 +69,7 @@ export function buildMakeupReportProductsPath(
   reportId: string,
   lookId?: string | null,
   perCategoryLimit = DEFAULT_PER_CATEGORY_LIMIT,
+  categories: readonly MakeupReportProductCategory[] = [],
 ): string {
   const normalizedReportId = reportId.trim();
   if (!normalizedReportId) throw new Error('추천 보고서를 선택해 주세요.');
@@ -70,6 +77,8 @@ export function buildMakeupReportProductsPath(
   const params = new URLSearchParams();
   const normalizedLookId = lookId?.trim();
   if (normalizedLookId) params.set('lookId', normalizedLookId);
+  const normalizedCategories = [...new Set(categories)];
+  if (normalizedCategories.length > 0) params.set('categories', normalizedCategories.join(','));
   params.set(
     'perCategoryLimit',
     String(Math.min(MAX_PER_CATEGORY_LIMIT, Math.max(1, Math.round(perCategoryLimit)))),
@@ -80,6 +89,7 @@ export function buildMakeupReportProductsPath(
 export function buildMakeupReportProductsRefreshPath(
   reportId: string,
   lookId?: string | null,
+  categories: readonly MakeupReportProductCategory[] = [],
 ): string {
   const normalizedReportId = reportId.trim();
   if (!normalizedReportId) throw new Error('추천 보고서를 선택해 주세요.');
@@ -87,6 +97,8 @@ export function buildMakeupReportProductsRefreshPath(
   const params = new URLSearchParams();
   const normalizedLookId = lookId?.trim();
   if (normalizedLookId) params.set('lookId', normalizedLookId);
+  const normalizedCategories = [...new Set(categories)];
+  if (normalizedCategories.length > 0) params.set('categories', normalizedCategories.join(','));
   const query = params.toString();
   return `/products/recommendations/makeup-reports/${encodeURIComponent(normalizedReportId)}/refresh${query ? `?${query}` : ''}`;
 }
@@ -135,10 +147,10 @@ export function getMakeupReportProductRecommendations(
   reportId: string,
   lookId?: string | null,
   perCategoryLimit = DEFAULT_PER_CATEGORY_LIMIT,
-  options: {signal?: AbortSignal} = {},
+  options: MakeupReportProductRequestOptions = {},
 ): Promise<MakeupReportProductRecommendations> {
   return requestProductBackendJson<BackendMakeupReportProductRecommendations>(
-    buildMakeupReportProductsPath(reportId, lookId, perCategoryLimit),
+    buildMakeupReportProductsPath(reportId, lookId, perCategoryLimit, options.categories),
     {signal: options.signal},
   ).then(normalizeMakeupReportProductRecommendations);
 }
@@ -147,11 +159,11 @@ export async function refreshMakeupReportProductRecommendations(
   reportId: string,
   lookId?: string | null,
   perCategoryLimit = DEFAULT_PER_CATEGORY_LIMIT,
-  options: {signal?: AbortSignal} = {},
+  options: MakeupReportProductRequestOptions = {},
 ): Promise<MakeupReportProductRecommendations> {
   try {
     const response = await requestProductBackendJson<BackendMakeupReportProductRecommendations>(
-      buildMakeupReportProductsRefreshPath(reportId, lookId),
+      buildMakeupReportProductsRefreshPath(reportId, lookId, options.categories),
       {method: 'POST', signal: options.signal},
     );
     return normalizeMakeupReportProductRecommendations(response);

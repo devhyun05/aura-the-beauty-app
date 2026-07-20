@@ -1,4 +1,5 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
+import type {ProductRecommendationCategory} from '../../features/recommendation/types';
 import type {UnifiedFaceCaptureCompletedEvent} from '../../features/face-capture/services/unifiedFaceCaptureContract';
 import type {
   ConsultingBookingDraft,
@@ -73,11 +74,19 @@ export type RootStackParamList = {
     arStyleId?: string;
     initialSection?: 'ar' | 'seasonal' | 'personalized' | 'cohort';
   } | undefined;
-  ProductRecommendationShelf: {
-    shelf: 'ar' | 'seasonal' | 'personalized' | 'cohort';
-    title?: string;
-    arStyleId?: string;
-  };
+  ProductRecommendationShelf:
+    | {
+        shelf: 'ar' | 'seasonal' | 'personalized' | 'cohort';
+        title?: string;
+        arStyleId?: string;
+      }
+    | {
+        shelf: 'makeupReport';
+        title: string;
+        makeupReportId: string;
+        makeupLookId: string;
+        initialCategory?: ProductRecommendationCategory;
+      };
   ProductSearchResult: {query: string};
   ProductDetail: {
     productId: string;

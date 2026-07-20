@@ -9,7 +9,6 @@ report and look, even when application or catalog versions change.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -30,11 +29,12 @@ from app.services.makeup_report_product_recommendations import (
   normalize_makeup_report_recommendation,
   resolve_report_look,
 )
-from app.services.product_catalog import map_catalog_product
-from app.services.product_external_catalog import (
-  AURADIN_CATALOG_SOURCE,
-  get_auradin_catalog_products_by_ids,
+from app.services.makeup_report_product_discovery import (
+  dedupe_lowest_price_product_offers,
+  is_verified_report_discovery_item,
 )
+from app.services.product_catalog import map_catalog_product
+from app.services.product_external_catalog import AURADIN_CATALOG_SOURCE  # noqa: F401 - legacy tests import this module attr.
 
 
 logger = logging.getLogger(__name__)
@@ -316,6 +316,8 @@ async def ensure_makeup_report_product_snapshots(
       report_id=report_id,
       look_id=selected_look_id,
     )
+    if current is not None and not _snapshot_run_matches_current_contract(current):
+      current = None
     runs.append(current or await _insert_next_run(
       db,
       settings,
@@ -496,6 +498,33 @@ def _snapshot_meta(run: dict[str, Any]) -> dict[str, Any]:
   }
 
 
+def _snapshot_contains_fallback_items(run: dict[str, Any]) -> bool:
+  payload = _json_object(run.get("recommendation_payload"))
+  ranking = _json_object(payload.get("ranking"))
+  fallback = _json_object(ranking.get("fallback"))
+  if str(fallback.get("mode") or "none") != "none":
+    return True
+  for group in _json_list(payload.get("groups")):
+    if not isinstance(group, dict):
+      continue
+    if bool(group.get("degraded")):
+      return True
+    for item in _json_list(group.get("items")):
+      if (
+        isinstance(item, dict)
+        and item.get("externalSource")
+        and not is_verified_report_discovery_item(item)
+      ):
+        return True
+  return False
+
+
+def _snapshot_run_matches_current_contract(run: dict[str, Any]) -> bool:
+  if str(run.get("algorithm_version") or "") != ALGORITHM_VERSION:
+    return False
+  return not _snapshot_contains_fallback_items(run)
+
+
 _DYNAMIC_ITEM_FIELDS = {
   "imageUrl",
   "purchaseUrl",
@@ -534,11 +563,6 @@ async def _hydrate_snapshot_groups(
     if isinstance(item, dict)
   ]
   internal_items = [item for item in stored_items if not item.get("externalSource")]
-  external_items = [
-    item
-    for item in stored_items
-    if item.get("externalSource") == AURADIN_CATALOG_SOURCE
-  ]
   internal_product_ids: list[UUID] = []
   for item in internal_items:
     try:
@@ -547,11 +571,6 @@ async def _hydrate_snapshot_groups(
       continue
     if product_id not in internal_product_ids:
       internal_product_ids.append(product_id)
-  external_product_ids = [
-    str(item.get("productId") or "")
-    for item in external_items
-    if item.get("productId")
-  ]
 
   async def load_internal() -> list[dict[str, Any]]:
     if not internal_items:
@@ -564,21 +583,7 @@ async def _hydrate_snapshot_groups(
       product_ids=internal_product_ids,
     )
 
-  async def load_external() -> list[dict[str, Any]]:
-    if not external_items:
-      return []
-    try:
-      return await get_auradin_catalog_products_by_ids(
-        db,
-        user_id=user_id,
-        product_ids=external_product_ids,
-        verified_offer_max_age_hours=settings.product_offer_max_age_hours,
-      )
-    except Exception:  # noqa: BLE001 - supplemental failure must not hide licensed items.
-      logger.warning("[aura:products] makeup-snapshot:external-hydration-unavailable", exc_info=True)
-      return []
-
-  internal_rows, current_external = await asyncio.gather(load_internal(), load_external())
+  internal_rows = await load_internal()
   internal_by_pair: dict[tuple[str, str | None], dict[str, Any]] = {}
   internal_by_product: dict[str, dict[str, Any]] = {}
   for row in internal_rows:
@@ -588,12 +593,6 @@ async def _hydrate_snapshot_groups(
       continue
     internal_by_pair.setdefault((product_id, shade_id), row)
     internal_by_product.setdefault(product_id, row)
-  external_by_id = {
-    str(item.get("productId") or ""): item
-    for item in current_external
-    if item.get("productId")
-  }
-
   hydrated_groups: list[dict[str, Any]] = []
   for group in groups:
     hydrated_items: list[dict[str, Any]] = []
@@ -601,17 +600,16 @@ async def _hydrate_snapshot_groups(
     for stored in original_items:
       external_source = str(stored.get("externalSource") or "")
       if external_source:
-        current = external_by_id.get(str(stored.get("productId") or ""))
-        if (
-          current is None
-          or external_source != AURADIN_CATALOG_SOURCE
-          or str(current.get("category") or "") != str(group.get("category") or "")
-        ):
-          continue
-        hydrated_items.append({
-          **stored,
-          **{key: current[key] for key in _DYNAMIC_ITEM_FIELDS if key in current},
-        })
+        # Only report-bound, evidence-complete discovery rows from the current
+        # contract may be replayed. Legacy external fallback rows still fail
+        # closed and are dropped.
+        if is_verified_report_discovery_item(stored):
+          hydrated_items.append({
+            **stored,
+            "viewerState": {"liked": False},
+            "canLike": False,
+            "canUnlike": False,
+          })
         continue
 
       product_id = str(stored.get("productId") or "")
@@ -633,6 +631,7 @@ async def _hydrate_snapshot_groups(
       hydrated_items.append(hydrated)
 
     unavailable_count = len(original_items) - len(hydrated_items)
+    hydrated_items = dedupe_lowest_price_product_offers(hydrated_items)
     hydrated_groups.append({
       **group,
       "status": "ready" if hydrated_items else "empty",

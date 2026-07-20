@@ -54,10 +54,30 @@ export type MakeupReportRecommendationReportsResponse = {
   reports: MakeupReportRecommendationReport[];
 };
 
+export type MakeupReportRecommendationTargetColor = {
+  role?: string;
+  name?: string;
+  hex: string;
+};
+
+export type MakeupReportRecommendationTarget = {
+  category: MakeupReportProductCategory;
+  colorName?: string;
+  colorHex?: string;
+  colors?: MakeupReportRecommendationTargetColor[];
+  colorFamily?: string;
+  colorFamilies?: string[];
+  finish?: string;
+  texture?: string;
+  productTypes?: string[];
+  coverage?: string;
+};
+
 export type MakeupReportRecommendationGroup = {
   category: MakeupReportProductCategory;
   label: string;
   status: ProductSectionStatus;
+  target?: MakeupReportRecommendationTarget;
   items: CatalogProduct[];
 };
 

@@ -20,13 +20,20 @@ import {
 } from '../../../shared/services/productService';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {useTransientToast} from '../../../shared/ui';
+import {MakeupReportTargetLegend} from '../components/MakeupReportTargetLegend';
 import {RecommendationProductCard} from '../components/RecommendationProductCard';
 import {RecommendationSectionState} from '../components/RecommendationSectionState';
+import {getMakeupReportProductRecommendations} from '../services/makeupReportProductRecommendationService';
+import type {
+  MakeupReportProductResultStatus,
+  MakeupReportRecommendationGroup,
+} from '../services/makeupReportProductRecommendationTypes';
 import {
   initializeProductEventCollection,
   productEventIdentity,
   queueProductEvent,
 } from '../services/productEventService';
+import {productLikeKey} from '../services/productLikeIdentity';
 import {
   getArRecommendations,
   getCohortRecommendations,
@@ -48,6 +55,7 @@ import {
   filterProductShelfItems,
   productShelfCategoryLabel,
 } from '../services/productShelfCategories';
+import {sortCatalogProductsByMatchRate} from '../services/productMatchPresentation';
 import type {
   CatalogProduct,
   ProductRecommendationCategory,
@@ -55,6 +63,8 @@ import type {
   ProductRecommendationShelf,
   ProductSectionStatus,
 } from '../types';
+
+type ProductRecommendationShelfMode = ProductRecommendationShelf | 'makeupReport';
 
 type ShelfPageData = {
   status: ProductSectionStatus;
@@ -71,6 +81,9 @@ type ShelfPageData = {
   personalizationStatus?: ProductSectionStatus;
   cohortStatus?: ProductSectionStatus;
   fallback?: ProductRecommendationFallback | null;
+  makeupReportStatus?: MakeupReportProductResultStatus;
+  makeupReportGroups?: MakeupReportRecommendationGroup[];
+  message?: string | null;
 };
 
 type ShelfLoadState = {
@@ -81,7 +94,7 @@ type ShelfLoadState = {
 
 type ShelfCategoryStates = Partial<Record<ProductRecommendationCategory, ShelfLoadState>>;
 
-const SHELF_DEFAULTS: Record<ProductRecommendationShelf, {title: string; description: string}> = {
+const SHELF_DEFAULTS: Record<ProductRecommendationShelfMode, {title: string; description: string}> = {
   ar: {
     title: 'AR 필터 기반 추천제품',
     description: '저장한 AR 룩의 색상과 피니시에 가까우며 판매 정보가 확인되는 상품이에요.',
@@ -98,6 +111,10 @@ const SHELF_DEFAULTS: Record<ProductRecommendationShelf, {title: string; descrip
     title: '나와 비슷한 분들이 많이 좋아해요',
     description: '나와 퍼스널컬러·제품 취향이 비슷한 사용자들이 좋아한 상품이에요.',
   },
+  makeupReport: {
+    title: '메이크업 보고서 기반 추천제품',
+    description: '선택한 추천 룩의 목표 색상·피니시·제형을 기준으로 저장된 실제 제품을 보여드려요.',
+  },
 };
 
 function uniqueProducts(items: CatalogProduct[]): CatalogProduct[] {
@@ -111,12 +128,42 @@ function uniqueProducts(items: CatalogProduct[]): CatalogProduct[] {
 }
 
 async function loadShelfData(
-  shelf: ProductRecommendationShelf,
+  shelf: ProductRecommendationShelfMode,
   arStyleId?: string | null,
   category: ProductRecommendationCategory = 'all',
   regionCode: TrendRegionCode = DEFAULT_TREND_REGION_CODE,
+  makeupReportId?: string | null,
+  makeupLookId?: string | null,
 ): Promise<ShelfPageData> {
   const requestedCategory = category === 'all' ? undefined : category;
+  if (shelf === 'makeupReport') {
+    if (!makeupReportId?.trim() || !makeupLookId?.trim()) {
+      throw new Error('추천 보고서와 룩을 확인하지 못했어요.');
+    }
+    const data = await getMakeupReportProductRecommendations(
+      makeupReportId,
+      makeupLookId,
+      8,
+      {categories: requestedCategory ? [requestedCategory] : undefined},
+    );
+    const groups = data.groups ?? [];
+    const items = sortCatalogProductsByMatchRate(uniqueProducts(groups.flatMap(group => group.items)));
+    return {
+      status: items.length > 0
+        ? 'ready'
+        : data.status === 'noEligibleProducts'
+          ? 'noEligibleProducts'
+          : 'empty',
+      items,
+      runId: data.snapshot.runId ?? data.runId,
+      description: data.ranking?.embeddingApplied
+        ? '보고서 조건으로 후보를 고른 뒤 제품 유형·질감 유사도로 정렬한 저장 결과예요.'
+        : '보고서의 목표 색상·피니시·제형과 검증된 제품 정보를 기준으로 고른 저장 결과예요.',
+      makeupReportStatus: data.status,
+      makeupReportGroups: groups,
+      message: data.message,
+    };
+  }
   if (shelf === 'ar') {
     const data = await getArRecommendations(arStyleId, 20, requestedCategory);
     const items = uniqueProducts(data.groups.flatMap(group => group.items));
@@ -168,40 +215,47 @@ async function loadShelfData(
   };
 }
 
-function unavailableMessage(shelf: ProductRecommendationShelf, status?: ProductSectionStatus): string {
+function unavailableMessage(shelf: ProductRecommendationShelfMode, status?: ProductSectionStatus): string {
   if (status === 'personalizationOff') return '개인화 설정에서 동의하면 이 추천을 이용할 수 있어요.';
   if (status === 'control') return '추천 품질을 검증하는 비교 그룹이라 현재 상품을 표시하지 않아요.';
   if (shelf === 'ar') return '저장한 AR 룩과 색상 근거가 맞는 판매 상품이 아직 없어요.';
   if (shelf === 'seasonal') return '확인 가능한 요즘 트렌드 제품을 준비하고 있어요.';
   if (shelf === 'cohort') return '비슷한 컬러 취향 추천을 준비하고 있어요.';
+  if (shelf === 'makeupReport') return '이 카테고리에서 조건에 맞는 판매 제품을 준비하고 있어요.';
   return '좋아요·검색·클릭 기록이 더 쌓이면 취향에 맞는 상품을 보여드려요.';
 }
 
 export function ProductRecommendationShelfScreen({
   arStyleId,
+  initialCategory = 'all',
   initialTitle,
+  makeupLookId,
+  makeupReportId,
   onOpenLikedProducts,
   onOpenProduct,
   shelf,
 }: {
   arStyleId?: string | null;
+  initialCategory?: ProductRecommendationCategory;
   initialTitle?: string | null;
+  makeupLookId?: string | null;
+  makeupReportId?: string | null;
   onOpenLikedProducts?: () => void;
   onOpenProduct: (product: CatalogProduct) => void;
-  shelf: ProductRecommendationShelf;
+  shelf: ProductRecommendationShelfMode;
 }) {
   const insets = useSafeAreaInsets();
   const {showToast, toast} = useTransientToast(2600);
-  const [activeCategory, setActiveCategory] = useState<ProductRecommendationCategory>('all');
-  const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
-  const likedProductIdsRef = useRef<Set<string>>(new Set());
-  const confirmedLikedProductIdsRef = useRef<Set<string>>(new Set());
+  const [activeCategory, setActiveCategory] = useState<ProductRecommendationCategory>(initialCategory);
+  const [likedProductKeys, setLikedProductKeys] = useState<Set<string>>(new Set());
+  const likedProductKeysRef = useRef<Set<string>>(new Set());
+  const confirmedLikedProductKeysRef = useRef<Set<string>>(new Set());
   const productLikeIntentVersionsRef = useRef(new Map<string, number>());
   const likedProductsRequestRef = useRef(0);
   const hasFocusedRef = useRef(false);
   const [categoryStates, setCategoryStates] = useState<ShelfCategoryStates>({});
   const categoryStatesRef = useRef<ShelfCategoryStates>({});
-  const activeCategoryRef = useRef<ProductRecommendationCategory>('all');
+  const activeCategoryRef = useRef<ProductRecommendationCategory>(initialCategory);
   const seasonalRegionCodeRef = useRef<TrendRegionCode>(DEFAULT_TREND_REGION_CODE);
   const loadedRegionCodesRef = useRef(new Map<ProductRecommendationCategory, TrendRegionCode>());
   const regionResolutionStartedRef = useRef(false);
@@ -212,25 +266,25 @@ export function ProductRecommendationShelfScreen({
   const viewabilityConfig = useRef({itemVisiblePercentThreshold: 60, minimumViewTime: 700}).current;
   const impressionRef = useRef<(product: CatalogProduct, position: number) => void>(() => undefined);
 
-  const applyServerLikedProductIds = useCallback((nextIds: Set<string>) => {
-    confirmedLikedProductIdsRef.current = new Set(nextIds);
-    likedProductIdsRef.current = nextIds;
-    setLikedProductIds(nextIds);
+  const applyServerLikedProductKeys = useCallback((nextKeys: Set<string>) => {
+    confirmedLikedProductKeysRef.current = new Set(nextKeys);
+    likedProductKeysRef.current = nextKeys;
+    setLikedProductKeys(nextKeys);
   }, []);
 
-  const applyLikedIntent = useCallback((productId: string, liked: boolean) => {
-    const nextIds = new Set(likedProductIdsRef.current);
-    if (liked) nextIds.add(productId);
-    else nextIds.delete(productId);
-    likedProductIdsRef.current = nextIds;
-    setLikedProductIds(nextIds);
+  const applyLikedIntent = useCallback((productKey: string, liked: boolean) => {
+    const nextKeys = new Set(likedProductKeysRef.current);
+    if (liked) nextKeys.add(productKey);
+    else nextKeys.delete(productKey);
+    likedProductKeysRef.current = nextKeys;
+    setLikedProductKeys(nextKeys);
   }, []);
 
-  const recordConfirmedLike = useCallback((productId: string, liked: boolean) => {
-    const nextIds = new Set(confirmedLikedProductIdsRef.current);
-    if (liked) nextIds.add(productId);
-    else nextIds.delete(productId);
-    confirmedLikedProductIdsRef.current = nextIds;
+  const recordConfirmedLike = useCallback((productKey: string, liked: boolean) => {
+    const nextKeys = new Set(confirmedLikedProductKeysRef.current);
+    if (liked) nextKeys.add(productKey);
+    else nextKeys.delete(productKey);
+    confirmedLikedProductKeysRef.current = nextKeys;
   }, []);
 
   const updateCategoryState = useCallback((category: ProductRecommendationCategory, next: ShelfLoadState) => {
@@ -249,7 +303,14 @@ export function ProductRecommendationShelfScreen({
     if (!preserveExisting || !existing?.data) {
       updateCategoryState(category, {status: 'loading'});
     }
-    loadShelfData(shelf, arStyleId, category, regionCode)
+    loadShelfData(
+      shelf,
+      arStyleId,
+      category,
+      regionCode,
+      makeupReportId,
+      makeupLookId,
+    )
       .then(data => {
         if (requestIdsRef.current.get(category) === requestId) {
           if (shelf === 'seasonal') loadedRegionCodesRef.current.set(category, regionCode);
@@ -268,7 +329,7 @@ export function ProductRecommendationShelfScreen({
               : '추천 제품을 불러오지 못했어요.',
         });
       });
-  }, [arStyleId, shelf, updateCategoryState]);
+  }, [arStyleId, makeupLookId, makeupReportId, shelf, updateCategoryState]);
 
   const load = useCallback(() => {
     loadCategory(activeCategory);
@@ -302,15 +363,15 @@ export function ProductRecommendationShelfScreen({
     requestIdsRef.current.clear();
     loadedRegionCodesRef.current.clear();
     seasonalRegionCodeRef.current = DEFAULT_TREND_REGION_CODE;
-    activeCategoryRef.current = 'all';
+    activeCategoryRef.current = initialCategory;
     regionResolutionStartedRef.current = false;
-    setActiveCategory('all');
-    loadCategory('all', DEFAULT_TREND_REGION_CODE);
+    setActiveCategory(initialCategory);
+    loadCategory(initialCategory, DEFAULT_TREND_REGION_CODE);
     return () => {
       requestSerialRef.current += 1;
       requestIdsRef.current.clear();
     };
-  }, [loadCategory]);
+  }, [initialCategory, loadCategory]);
 
   useEffect(() => {
     if (
@@ -335,10 +396,15 @@ export function ProductRecommendationShelfScreen({
     const requestId = ++likedProductsRequestRef.current;
     getLikedProducts().then(products => {
       if (active && likedProductsRequestRef.current === requestId) {
-        applyServerLikedProductIds(new Set(products.map(product => product.id)));
+        applyServerLikedProductKeys(new Set(products.map(product =>
+          productLikeKey(product.id, product.externalSource),
+        )));
       }
     }).catch(() => undefined);
-    if (hasFocusedRef.current && (shelf === 'personalized' || shelf === 'cohort')) {
+    if (
+      hasFocusedRef.current
+      && (shelf === 'personalized' || shelf === 'cohort' || shelf === 'makeupReport')
+    ) {
       loadCategory(activeCategoryRef.current, seasonalRegionCodeRef.current, true);
     } else {
       hasFocusedRef.current = true;
@@ -349,7 +415,7 @@ export function ProductRecommendationShelfScreen({
         likedProductsRequestRef.current += 1;
       }
     };
-  }, [applyServerLikedProductIds, loadCategory, shelf]));
+  }, [applyServerLikedProductKeys, loadCategory, shelf]));
 
   useEffect(() => {
     impressed.current.clear();
@@ -358,12 +424,16 @@ export function ProductRecommendationShelfScreen({
   const allItems = useMemo(() => (state.data?.items ?? []).map(item => ({
     ...item,
     viewerState: {
-      liked: item.canLike === false ? false : likedProductIds.has(item.productId),
+      liked: item.canLike === false
+        ? false
+        : likedProductKeys.has(productLikeKey(item.productId, item.externalSource)),
     },
-  })), [likedProductIds, state.data?.items]);
+  })), [likedProductKeys, state.data?.items]);
   const visibleItems = useMemo(
-    () => filterProductShelfItems(allItems, activeCategory),
-    [activeCategory, allItems],
+    () => shelf === 'makeupReport'
+      ? sortCatalogProductsByMatchRate(filterProductShelfItems(allItems, activeCategory))
+      : filterProductShelfItems(allItems, activeCategory),
+    [activeCategory, allItems, shelf],
   );
   const defaults = SHELF_DEFAULTS[shelf];
   const initialNickname = initialTitle?.match(/^(.+?)님/)?.[1]?.trim() || '회원';
@@ -393,6 +463,24 @@ export function ProductRecommendationShelfScreen({
   const queueShelfEvent = useCallback((eventType: 'impression' | 'product_open', product: CatalogProduct, position: number) => {
     const data = state.data;
     if (!data) return;
+    if (shelf === 'makeupReport') {
+      queueProductEvent({
+        eventType,
+        section: 'legacy',
+        ...productEventIdentity(product),
+        position,
+        context: eventType === 'impression'
+          ? {
+              screen: 'product_shelf',
+              category: activeCategory,
+              source: 'makeup_report',
+              viewportRatio: 0.6,
+              visibleMs: 700,
+            }
+          : {screen: 'product_shelf', category: activeCategory, source: 'makeup_report'},
+      });
+      return;
+    }
     const isSignedRunSection = shelf === 'ar' || shelf === 'personalized';
     const isUnsignedFallback = isSignedRunSection
       && (!data.runId || !product.exposureToken)
@@ -436,20 +524,20 @@ export function ProductRecommendationShelfScreen({
 
   const toggleLike = async (product: CatalogProduct) => {
     if (product.canLike === false) return;
-    const productKey = `${product.externalSource ?? 'catalog'}:${product.productId}`;
-    const wasLiked = likedProductIdsRef.current.has(product.productId);
+    const productKey = productLikeKey(product.productId, product.externalSource);
+    const wasLiked = likedProductKeysRef.current.has(productKey);
     const nextLiked = !wasLiked;
     const intentVersion = (productLikeIntentVersionsRef.current.get(productKey) ?? 0) + 1;
     productLikeIntentVersionsRef.current.set(productKey, intentVersion);
     likedProductsRequestRef.current += 1;
-    applyLikedIntent(product.productId, nextLiked);
+    applyLikedIntent(productKey, nextLiked);
     try {
       if (wasLiked) await unlikeProduct(product.productId, product.externalSource);
       else {
         if (product.externalSource) await likeExternalProduct(product.productId, product.externalSource);
         else await likeProduct(product.productId, product.shadeId);
       }
-      recordConfirmedLike(product.productId, nextLiked);
+      recordConfirmedLike(productKey, nextLiked);
       if (!mountedRef.current) return;
       if (productLikeIntentVersionsRef.current.get(productKey) !== intentVersion) return;
       if (nextLiked) {
@@ -464,8 +552,8 @@ export function ProductRecommendationShelfScreen({
       if (!mountedRef.current) return;
       if (productLikeIntentVersionsRef.current.get(productKey) !== intentVersion) return;
       applyLikedIntent(
-        product.productId,
-        confirmedLikedProductIdsRef.current.has(product.productId),
+        productKey,
+        confirmedLikedProductKeysRef.current.has(productKey),
       );
       if (shelf === 'personalized' || shelf === 'cohort') {
         loadCategory(activeCategoryRef.current, seasonalRegionCodeRef.current, true);
@@ -498,6 +586,16 @@ export function ProductRecommendationShelfScreen({
   };
 
   const activeCategoryLabel = productShelfCategoryLabel(activeCategory);
+  const makeupReportStatus = state.data?.makeupReportStatus;
+  const makeupReportInProgress = shelf === 'makeupReport'
+    && (makeupReportStatus === 'pending' || makeupReportStatus === 'processing');
+  const makeupReportFailed = shelf === 'makeupReport' && makeupReportStatus === 'failed';
+  const makeupReportNoProducts = shelf === 'makeupReport'
+    && makeupReportStatus === 'noEligibleProducts';
+  const allMakeupReportTargetGroups = (state.data?.makeupReportGroups ?? []);
+  const makeupReportTargetGroups = allMakeupReportTargetGroups.filter(group =>
+    activeCategory !== 'all' && group.category === activeCategory,
+  );
   const basisStatus = shelf === 'personalized'
     ? state.data?.personalizationStatus ?? state.data?.status
     : shelf === 'cohort'
@@ -517,6 +615,23 @@ export function ProductRecommendationShelfScreen({
         {shelf === 'seasonal' && state.data?.freshnessStatus === 'stale' ? <Text accessibilityLiveRegion="polite" style={styles.evidence}>최근 확인된 트렌드 제품이에요. 새 신호를 확인하고 있어요.</Text> : null}
         {shelf === 'cohort' && state.data?.cohortSizeBand ? <Text style={styles.evidence}>{cohortSizeEvidenceCopy(state.data.cohortSizeBand)}</Text> : null}
       </View>
+      {shelf === 'makeupReport' && allMakeupReportTargetGroups.length > 0 ? (
+        <View style={styles.reportTargetOverview}>
+          <Text style={styles.reportTargetTitle}>보고서 색상 기준</Text>
+          <View style={styles.reportTargetGrid}>
+            {allMakeupReportTargetGroups.map(group => (
+              <MakeupReportTargetLegend
+                category={group.category}
+                categoryLabel={group.label}
+                key={group.category}
+                style={styles.reportTargetTile}
+                target={group.target}
+                variant="compact"
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
       <ScrollView
         contentContainerStyle={styles.tabs}
         horizontal
@@ -537,6 +652,22 @@ export function ProductRecommendationShelfScreen({
           );
         })}
       </ScrollView>
+      {shelf === 'makeupReport' && makeupReportTargetGroups.length > 0 ? (
+        <ScrollView
+          contentContainerStyle={styles.targetLegends}
+          horizontal
+          style={styles.targetLegendScroller}
+          showsHorizontalScrollIndicator={false}>
+          {makeupReportTargetGroups.map(group => (
+            <MakeupReportTargetLegend
+              category={group.category}
+              categoryLabel={group.label}
+              key={group.category}
+              target={group.target}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
       <View style={styles.countRow}>
         <Text style={styles.count}>{state.status === 'ready' ? `${activeCategoryLabel} · ${visibleItems.length}개` : activeCategoryLabel}</Text>
       </View>
@@ -550,7 +681,13 @@ export function ProductRecommendationShelfScreen({
           ? <RecommendationGridPlaceholder />
           : state.status === 'error'
             ? <RecommendationSectionState kind="error" message={state.message ?? (shelf === 'seasonal' ? '요즘 트렌드 제품을 불러오지 못했어요.' : '추천 제품을 불러오지 못했어요.')} actionLabel="다시 시도" onAction={load} />
-            : <RecommendationSectionState kind="empty" message={empty} />}
+            : makeupReportInProgress
+              ? <RecommendationSectionState kind="loading" message="저장된 보고서 기반 제품 매칭을 확인하고 있어요." actionLabel="상태 다시 확인" onAction={load} />
+              : makeupReportFailed
+                ? <RecommendationSectionState kind="error" message={state.data?.message ?? '저장된 제품 매칭을 확인하지 못했어요.'} actionLabel="상태 다시 확인" onAction={load} />
+                : makeupReportNoProducts
+                  ? <RecommendationSectionState kind="empty" message="현재 판매 중인 제품 가운데 이 룩의 조건에 맞는 제품을 찾지 못했어요." actionLabel="상태 다시 확인" onAction={load} />
+                  : <RecommendationSectionState kind="empty" message={empty} />}
         numColumns={2}
         onViewableItemsChanged={onViewableItemsChanged}
         maxToRenderPerBatch={6}
@@ -598,8 +735,14 @@ const styles = StyleSheet.create({
   title: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xl, lineHeight: typography.lineHeight.xl},
   description: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
   evidence: {...typography.caption, color: colors.textTertiary},
+  reportTargetOverview: {backgroundColor: colors.surfaceMuted, borderRadius: radius.lg, gap: spacing.xs, marginBottom: spacing.sm, marginHorizontal: spacing.screenX, padding: spacing.sm},
+  reportTargetTitle: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
+  reportTargetGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs},
+  reportTargetTile: {flexBasis: '48%', flexGrow: 1, maxWidth: '100%'},
   tabs: {gap: spacing.xs, paddingHorizontal: spacing.screenX},
   tabScroller: {backgroundColor: colors.background, flexGrow: 0, height: 44, zIndex: 1},
+  targetLegends: {gap: spacing.xs, paddingHorizontal: spacing.screenX, paddingTop: spacing.sm},
+  targetLegendScroller: {flexGrow: 0},
   tab: {alignItems: 'center', borderColor: colors.borderStrong, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md},
   tabSelected: {alignItems: 'center', backgroundColor: colors.black, borderColor: colors.black, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md},
   tabText: {color: colors.textSecondary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm},

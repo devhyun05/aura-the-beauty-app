@@ -24,6 +24,7 @@ import {
   personalizedRecommendationTitle,
   recommendationNickname,
 } from '../services/productRecommendationPresentation';
+import {productLikeKey} from '../services/productLikeIdentity';
 import {
   DEFAULT_TREND_REGION_CODE,
   getCachedTrendRegionCode,
@@ -32,6 +33,7 @@ import {
 } from '../services/trendRegionService';
 import type {
   CatalogProduct,
+  MakeupReportProductShelfContext,
   PersonalizedRecommendationData,
   ProductRecommendationShelf,
   SeasonalRecommendationData,
@@ -51,9 +53,10 @@ function initialSectionLoad<T>(cached: T | null): SectionLoad<T> {
 export function ProductRecommendationHubContent({
   isActive = true,
   likedProducts,
-  likedProductIds,
+  likedProductKeys,
   onCreateMakeupRecommendation,
   onOpenProduct,
+  onOpenMakeupReportShelf,
   onOpenShelf,
   onSearch,
   onToggleLike,
@@ -64,9 +67,10 @@ export function ProductRecommendationHubContent({
 }: {
   isActive?: boolean;
   likedProducts: Product[];
-  likedProductIds: Set<string>;
+  likedProductKeys: Set<string>;
   onCreateMakeupRecommendation?: () => void;
   onOpenProduct: (product: CatalogProduct) => void;
+  onOpenMakeupReportShelf?: (context: MakeupReportProductShelfContext) => void;
   onOpenShelf: (shelf: ProductRecommendationShelf, title: string, arStyleId?: string | null) => void;
   onSearch: (query: string) => void;
   onToggleLike: (product: CatalogProduct) => void;
@@ -164,10 +168,15 @@ export function ProductRecommendationHubContent({
   const cohortTitle = cohortRecommendationTitle(cohort.data, nickname);
   const withLikeState = useCallback((items: CatalogProduct[]) => items.map(item => ({
     ...item,
-    viewerState: {liked: item.canLike === false ? false : likedProductIds.has(item.productId)},
-  })), [likedProductIds]);
+    viewerState: {
+      liked: item.canLike === false
+        ? false
+        : likedProductKeys.has(productLikeKey(item.productId, item.externalSource)),
+    },
+  })), [likedProductKeys]);
   const likedFallbackItems = useMemo<CatalogProduct[]>(() => likedProducts
-    .filter(product => product.status !== 'unavailable' && likedProductIds.has(product.id))
+    .filter(product => product.status !== 'unavailable'
+      && likedProductKeys.has(productLikeKey(product.id, product.externalSource)))
     .map(product => {
       const imageSource = product.imageSource;
       const imageUrl = imageSource && typeof imageSource === 'object' && 'uri' in imageSource
@@ -187,7 +196,7 @@ export function ProductRecommendationHubContent({
         purchaseUrl: product.purchaseUrl,
         externalSource: product.externalSource,
       };
-    }), [likedProductIds, likedProducts]);
+    }), [likedProductKeys, likedProducts]);
 
   const openSeasonalProduct = (product: CatalogProduct, position: number) => {
     if (product.externalSource) {
@@ -205,8 +214,9 @@ export function ProductRecommendationHubContent({
       <View onLayout={event => onSectionLayout?.('ar', event.nativeEvent.layout.y)}>
         <MakeupReportProductRecommendationShelf
           isActive={isActive}
-          likedProductIds={likedProductIds}
+          likedProductKeys={likedProductKeys}
           onCreateRecommendation={onCreateMakeupRecommendation}
+          onOpenMore={onOpenMakeupReportShelf}
           onOpenProduct={onOpenProduct}
           onToggleLike={onToggleLike}
           preferredMakeupReportId={preferredMakeupReportId}
@@ -216,7 +226,7 @@ export function ProductRecommendationHubContent({
 
       <View onLayout={event => onSectionLayout?.('personalized', event.nativeEvent.layout.y)}>
         <Section title={personalizedTitle} onAction={() => onOpenShelf('personalized', personalizedTitle)}>
-          <PersonalizedBody section="personalized" state={personalized} fallbackItems={likedFallbackItems} onRetry={loadPersonalized} likedProductIds={likedProductIds} onOpenProduct={onOpenProduct} onToggleLike={onToggleLike} />
+          <PersonalizedBody section="personalized" state={personalized} fallbackItems={likedFallbackItems} onRetry={loadPersonalized} likedProductKeys={likedProductKeys} onOpenProduct={onOpenProduct} onToggleLike={onToggleLike} />
         </Section>
       </View>
 
@@ -237,7 +247,7 @@ export function ProductRecommendationHubContent({
 
       <View onLayout={event => onSectionLayout?.('cohort', event.nativeEvent.layout.y)}>
         <Section title={cohortTitle} onAction={() => onOpenShelf('cohort', cohortTitle)}>
-          <PersonalizedBody section="cohort" state={cohort} onRetry={loadCohort} likedProductIds={likedProductIds} onOpenProduct={onOpenProduct} onToggleLike={onToggleLike} />
+          <PersonalizedBody section="cohort" state={cohort} onRetry={loadCohort} likedProductKeys={likedProductKeys} onOpenProduct={onOpenProduct} onToggleLike={onToggleLike} />
         </Section>
       </View>
 
@@ -255,7 +265,7 @@ function queuePreferenceEvent(section: 'personalized' | 'cohort', data: Personal
   queueProductEvent({eventType, section, ...productEventIdentity(product), runId: data?.runId ?? undefined, exposureToken: product.exposureToken, position, context: eventType === 'impression' ? {screen: 'product_hub', viewportRatio: 0.6, visibleMs: 700} : {screen: 'product_hub'}});
 }
 
-function PersonalizedBody({section, state, fallbackItems = [], onRetry, likedProductIds, onOpenProduct, onToggleLike}: {section: 'personalized' | 'cohort'; state: SectionLoad<PersonalizedRecommendationData>; fallbackItems?: CatalogProduct[]; onRetry: () => void; likedProductIds: Set<string>; onOpenProduct: (product: CatalogProduct) => void; onToggleLike: (product: CatalogProduct) => void}) {
+function PersonalizedBody({section, state, fallbackItems = [], onRetry, likedProductKeys, onOpenProduct, onToggleLike}: {section: 'personalized' | 'cohort'; state: SectionLoad<PersonalizedRecommendationData>; fallbackItems?: CatalogProduct[]; onRetry: () => void; likedProductKeys: Set<string>; onOpenProduct: (product: CatalogProduct) => void; onToggleLike: (product: CatalogProduct) => void}) {
   const minimumCohortSize = state.data?.minimumCohortSize ?? 5;
   const hasRecommendationItems = Boolean(state.data?.items.length);
   const basisStatus = section === 'personalized'
@@ -268,7 +278,14 @@ function PersonalizedBody({section, state, fallbackItems = [], onRetry, likedPro
   if (section === 'personalized' && !hasRecommendationItems && fallbackItems.length > 0) return <View style={styles.stack}><Text style={styles.meta}>새 추천을 준비하는 동안 최근 좋아요한 제품을 보여드려요.</Text><ProductRail items={fallbackItems} onOpen={(product) => onOpenProduct(product)} onToggleLike={onToggleLike} /></View>;
   if (state.data?.status !== 'ready') return <RecommendationSectionState kind="empty" message={section === 'cohort' ? `퍼스널컬러와 제품 취향이 비슷한 사용자가 ${minimumCohortSize}명 이상 모이면 추천을 시작해요.` : '좋아요·검색·클릭 기록이 더 쌓이면 취향에 맞는 상품을 보여드려요.'} />;
   if (!hasRecommendationItems) return <RecommendationSectionState kind="empty" message={section === 'cohort' ? '나와 취향이 비슷한 사용자들이 좋아한 상품을 준비하고 있어요.' : '취향에 맞는 인기 상품을 준비하고 있어요.'} actionLabel="다시 시도" onAction={onRetry} />;
-  const items = state.data.items.map(item => ({...item, viewerState: {liked: item.canLike === false ? false : likedProductIds.has(item.productId)}}));
+  const items = state.data.items.map(item => ({
+    ...item,
+    viewerState: {
+      liked: item.canLike === false
+        ? false
+        : likedProductKeys.has(productLikeKey(item.productId, item.externalSource)),
+    },
+  }));
   const impressionScopeKey = state.data.runId
     || `${section}:${state.data.cohortSizeBand ?? state.data.fallback?.reason ?? state.data.algorithmVersion ?? 'ready'}`;
   const description = section === 'cohort' && state.data.cohortSizeBand

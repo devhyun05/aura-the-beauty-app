@@ -1,6 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Image, Modal, Pressable, ScrollView, StyleSheet, View} from 'react-native';
-import {ChevronDown, X} from 'lucide-react-native';
+import {ChevronDown, ChevronRight, X} from 'lucide-react-native';
 import {Text} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
@@ -11,13 +11,20 @@ import {
   resolveMakeupReportSelection,
 } from '../services/makeupReportProductRecommendationService';
 import {productEventIdentity, queueProductEvent} from '../services/productEventService';
+import {productLikeKey} from '../services/productLikeIdentity';
 import type {
   MakeupReportProductCategory,
   MakeupReportProductRecommendations,
   MakeupReportRecommendationReport,
 } from '../services/makeupReportProductRecommendationTypes';
 import {PRODUCT_SHELF_CATEGORY_TABS} from '../services/productShelfCategories';
-import type {CatalogProduct, ProductRecommendationCategory} from '../types';
+import {sortCatalogProductsByMatchRate} from '../services/productMatchPresentation';
+import type {
+  CatalogProduct,
+  MakeupReportProductShelfContext,
+  ProductRecommendationCategory,
+} from '../types';
+import {MakeupReportTargetLegend} from './MakeupReportTargetLegend';
 import {ProductRail} from './ProductRail';
 import {RecommendationSectionState} from './RecommendationSectionState';
 
@@ -42,16 +49,18 @@ const MAKEUP_REPORT_CATEGORIES = new Set<MakeupReportProductCategory>([
 
 export function MakeupReportProductRecommendationShelf({
   isActive = true,
-  likedProductIds,
+  likedProductKeys,
   onCreateRecommendation,
+  onOpenMore,
   onOpenProduct,
   onToggleLike,
   preferredMakeupReportId,
   refreshKey = 0,
 }: {
   isActive?: boolean;
-  likedProductIds: Set<string>;
+  likedProductKeys: Set<string>;
   onCreateRecommendation?: () => void;
+  onOpenMore?: (context: MakeupReportProductShelfContext) => void;
   onOpenProduct: (product: CatalogProduct) => void;
   onToggleLike: (product: CatalogProduct) => void;
   preferredMakeupReportId?: string | null;
@@ -285,16 +294,6 @@ export function MakeupReportProductRecommendationShelf({
     setReportPickerVisible(false);
   }, [applySelection]);
 
-  const selectLook = useCallback((lookId: string) => {
-    if (lookId === selectedLookIdRef.current) return;
-    cancelRecommendationPolling();
-    selectedLookIdRef.current = lookId;
-    setSelectedLookId(lookId);
-    setActiveCategory('all');
-    setSnapshotPollExhausted(false);
-    setRecommendations({status: 'loading'});
-  }, [cancelRecommendationPolling]);
-
   const retryRecommendations = useCallback(() => {
     if (!selectedReportIdRef.current || !selectedLookIdRef.current) return;
     const reportId = selectedReportIdRef.current;
@@ -316,7 +315,7 @@ export function MakeupReportProductRecommendationShelf({
       ? groups.flatMap(group => group.items)
       : groups.find(group => group.category === activeCategory)?.items ?? [];
     const seen = new Set<string>();
-    return source
+    return sortCatalogProductsByMatchRate(source
       .filter(product => {
         const identity = `${product.productId}:${product.shadeId ?? 'family'}`;
         if (seen.has(identity)) return false;
@@ -326,10 +325,20 @@ export function MakeupReportProductRecommendationShelf({
       .map(product => ({
         ...product,
         viewerState: {
-          liked: product.canLike === false ? false : likedProductIds.has(product.productId),
+          liked: product.canLike === false
+            ? false
+          : likedProductKeys.has(productLikeKey(product.productId, product.externalSource)),
         },
-      }));
-  }, [activeCategory, likedProductIds, recommendations.data]);
+      })));
+  }, [activeCategory, likedProductKeys, recommendations.data]);
+  const reportTargetGroups = useMemo(() => recommendations.data?.groups?.filter(group =>
+    MAKEUP_REPORT_CATEGORIES.has(group.category),
+  ) ?? [], [recommendations.data]);
+  const activeTargetGroups = useMemo(() => {
+    return activeCategory === 'all'
+      ? []
+      : reportTargetGroups.filter(group => group.category === activeCategory);
+  }, [activeCategory, reportTargetGroups]);
   const canOpenReportPicker = Boolean(reports.data?.length);
   const queueReportProductEvent = useCallback((
     eventType: 'impression' | 'product_open',
@@ -407,35 +416,30 @@ export function MakeupReportProductRecommendationShelf({
             <View style={styles.reportCopy}>
               <Text numberOfLines={1} style={styles.reportDate}>{formatDate(selectedReport.createdAt)}</Text>
               <Text numberOfLines={2} style={styles.reportScenario}>{selectedReport.scenarioText}</Text>
-              <Text numberOfLines={1} style={styles.reportLook}>{selectedLook?.title ?? '추천 룩 선택'}</Text>
-              {selectedLook?.palette.length ? (
-                <View accessibilityLabel={`대표 색상 ${selectedLook.palette.join(', ')}`} style={styles.palette}>
-                  {selectedLook.palette.slice(0, 5).map((color, index) => (
-                    <View key={`${color}:${index}`} style={[styles.paletteDot, {backgroundColor: color}]} />
-                  ))}
-                </View>
-              ) : null}
+              <Text numberOfLines={1} style={styles.reportLook}>보고서 기준 색상·피니시</Text>
             </View>
           </View>
-
-          {selectedReport.looks.length > 1 ? (
-            <ScrollView
-              contentContainerStyle={styles.chips}
-              horizontal
-              showsHorizontalScrollIndicator={false}>
-              {selectedReport.looks.map(look => (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{selected: look.lookId === selectedLookId}}
-                  key={look.lookId}
-                  onPress={() => selectLook(look.lookId)}
-                  style={look.lookId === selectedLookId ? styles.chipActive : styles.chip}>
-                  <Text style={look.lookId === selectedLookId ? styles.chipTextActive : styles.chipText}>
-                    {look.title}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+          {reportTargetGroups.length > 0 ? (
+            <View style={styles.reportTargets}>
+              <View style={styles.reportTargetsHeader}>
+                <Text style={styles.reportTargetsTitle}>보고서 색상 기준</Text>
+                <Text numberOfLines={1} style={styles.reportTargetsHint}>
+                  이 색·피니시와 가까운 제품을 추천해요
+                </Text>
+              </View>
+              <View style={styles.reportTargetLegends}>
+                {reportTargetGroups.map(group => (
+                  <MakeupReportTargetLegend
+                    category={group.category}
+                    categoryLabel={group.label}
+                    key={group.category}
+                    style={styles.reportTargetLegend}
+                    target={group.target}
+                    variant="compact"
+                  />
+                ))}
+              </View>
+            </View>
           ) : null}
 
           {recommendations.status === 'loading' ? (
@@ -483,11 +487,28 @@ export function MakeupReportProductRecommendationShelf({
               {snapshotStatus === 'partial' ? (
                 <Text style={styles.rankingCopy}>조건을 충족한 카테고리부터 저장된 추천을 보여드려요.</Text>
               ) : null}
-              <Text style={styles.rankingCopy}>
-                {recommendations.data.ranking?.embeddingApplied
-                  ? '색상·피니시 조건으로 후보를 고른 뒤 제품 유형·질감 유사도로 정렬했어요.'
-                  : '보고서의 색상·피니시 조건과 검증된 제품 정보를 기준으로 골랐어요.'}
-              </Text>
+              <View style={styles.rankingHeader}>
+                <Text style={[styles.rankingCopy, styles.rankingDescription]}>
+                  {recommendations.data.ranking?.embeddingApplied
+                    ? '색상·피니시 조건으로 후보를 고른 뒤 제품 유형·질감 유사도로 정렬했어요.'
+                    : '보고서의 색상·피니시 조건과 검증된 제품 정보를 기준으로 골랐어요.'}
+                </Text>
+                {onOpenMore && selectedLookId ? (
+                  <Pressable
+                    accessibilityLabel={`${selectedReport.scenarioText} ${categoryLabel(activeCategory)} 추천제품 더보기`}
+                    accessibilityRole="button"
+                    onPress={() => onOpenMore({
+                      reportId: selectedReport.reportId,
+                      lookId: selectedLookId,
+                      category: activeCategory,
+                      title: `${selectedReport.scenarioText} 추천제품`,
+                    })}
+                    style={styles.moreButton}>
+                    <Text style={styles.moreButtonText}>더보기</Text>
+                    <ChevronRight color={colors.textPrimary} size={iconSize.xs} />
+                  </Pressable>
+                ) : null}
+              </View>
               <ScrollView
                 contentContainerStyle={styles.chips}
                 horizontal
@@ -505,6 +526,21 @@ export function MakeupReportProductRecommendationShelf({
                   </Pressable>
                 ))}
               </ScrollView>
+              {activeTargetGroups.length > 0 ? (
+                <ScrollView
+                  contentContainerStyle={styles.targetLegends}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}>
+                  {activeTargetGroups.map(group => (
+                    <MakeupReportTargetLegend
+                      category={group.category}
+                      categoryLabel={group.label}
+                      key={group.category}
+                      target={group.target}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
               {activeItems.length > 0 ? (
                 <ProductRail
                   impressionScopeKey={`${recommendations.data.snapshot.runId ?? recommendations.data.runId ?? selectedReport.reportId}:${recommendations.data.snapshot.revision ?? 0}:${selectedLookId ?? 'default'}:${activeCategory}`}
@@ -619,7 +655,7 @@ const styles = StyleSheet.create({
   section: {gap: spacing.sm},
   header: {alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between'},
   title: {color: colors.textPrimary, flex: 1, fontFamily: typography.fontFamily.bold, fontSize: 22, lineHeight: 28},
-  headerAction: {alignItems: 'center', flexDirection: 'row', gap: spacing.xs, justifyContent: 'center', minHeight: 44, paddingLeft: spacing.sm},
+  headerAction: {alignItems: 'center', flexDirection: 'row', flexShrink: 0, gap: spacing.xs, justifyContent: 'center', minHeight: 44, paddingLeft: spacing.sm},
   headerActionDisabled: {opacity: 0.36},
   headerActionText: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
   stack: {gap: spacing.sm},
@@ -628,12 +664,21 @@ const styles = StyleSheet.create({
   reportDate: {...typography.caption, color: colors.textTertiary},
   reportScenario: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
   reportLook: {...typography.caption, color: colors.textSecondary},
+  reportTargets: {backgroundColor: colors.surfaceMuted, borderRadius: radius.lg, gap: spacing.xs, padding: spacing.sm},
+  reportTargetsHeader: {alignItems: 'baseline', flexDirection: 'row', gap: spacing.xs},
+  reportTargetsTitle: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},
+  reportTargetsHint: {color: colors.textTertiary, flex: 1, fontFamily: typography.fontFamily.medium, fontSize: typography.fontSize.xs, lineHeight: typography.lineHeight.xs},
+  reportTargetLegends: {flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs},
+  reportTargetLegend: {flexBasis: '48%', flexGrow: 1, maxWidth: '100%'},
   thumbnail: {alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: radius.md, height: 72, justifyContent: 'center', overflow: 'hidden', width: 72},
   thumbnailImage: {height: '100%', width: '100%'},
   thumbnailFallback: {color: colors.textTertiary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xs, letterSpacing: 1},
-  palette: {flexDirection: 'row', gap: 4, paddingTop: 4},
-  paletteDot: {borderColor: colors.border, borderRadius: radius.pill, borderWidth: 1, height: 14, width: 14},
   rankingCopy: {...typography.caption, color: colors.textSecondary},
+  rankingDescription: {flex: 1},
+  rankingHeader: {alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'space-between'},
+  moreButton: {alignItems: 'center', flexDirection: 'row', flexShrink: 0, justifyContent: 'center', minHeight: 44, paddingLeft: spacing.sm},
+  moreButtonText: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.sm},
+  targetLegends: {gap: spacing.xs},
   chips: {gap: spacing.xs},
   chip: {borderColor: colors.borderStrong, borderRadius: radius.pill, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md},
   chipActive: {backgroundColor: colors.black, borderRadius: radius.pill, justifyContent: 'center', minHeight: 44, paddingHorizontal: spacing.md},

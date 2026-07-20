@@ -524,8 +524,17 @@ def _fit_assessment(
       reason = FALLBACK_DIMENSION_REASONS[key]
     else:
       raw_dimension = _object(raw_dimensions.get(key))
-      score = raw_dimension.get("score")
-      reason = _clean(raw_dimension.get("reason"), 400)
+      raw_score = raw_dimension.get("score")
+      score = (
+        raw_score
+        if (
+          not isinstance(raw_score, bool)
+          and isinstance(raw_score, (int, float))
+          and 0 <= float(raw_score) <= 100
+        )
+        else FALLBACK_DIMENSION_SCORES[key]
+      )
+      reason = _clean(raw_dimension.get("reason"), 400) or FALLBACK_DIMENSION_REASONS[key]
 
     path, label = descriptor
     dimensions[key] = {"available": True, "score": score, "reason": reason}
@@ -623,7 +632,7 @@ def finalize_recommendation_metadata(
       finalized_looks.append(raw_look)
       continue
     look = dict(raw_look)
-    if generation_source == "deterministic_fallback":
+    if generation_source == "deterministic_fallback" or not isinstance(look.get("lookMap"), dict):
       look["lookMap"] = derive_deterministic_look_map(look, context_snapshot)
     else:
       look_map = _object(look.get("lookMap"))

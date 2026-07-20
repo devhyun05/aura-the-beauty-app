@@ -14,7 +14,10 @@ import {
 } from '../../../features/settings';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
-import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {
+  goBackToPreviousOrMainTab,
+  type RootScreenProps,
+} from './routeUtils';
 
 export function AppSettingsRouteScreen({
   navigation,
@@ -25,7 +28,7 @@ export function AppSettingsRouteScreen({
       headerBackgroundColor="rgba(248, 245, 239, 0.94)"
       headerBorderColor="rgba(100, 116, 99, 0.06)"
       routeName="AppSettings"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <AppSettingsScreen
         onPressAccountManagement={() => navigation.navigate('AccountManagement')}
         onPressFaq={() => navigation.navigate('Faq')}
@@ -46,7 +49,7 @@ export function FaqRouteScreen({navigation}: RootScreenProps<'Faq'>) {
           return;
         }
 
-        navigation.navigate('AppSettings');
+        navigation.replace('AppSettings');
       }}>
       <FaqScreen />
     </DetailRouteChrome>
@@ -83,7 +86,7 @@ export function AccountManagementRouteScreen({
           return;
         }
 
-        navigation.navigate('AppSettings');
+        navigation.replace('AppSettings');
       }}>
       <AccountManagementScreen
         accountEmail={session?.user.email}
@@ -137,7 +140,7 @@ export function AccountDeletionRouteScreen({
           return;
         }
 
-        navigation.navigate('AccountManagement');
+        navigation.replace('AccountManagement');
       }}>
       <AccountDeletionScreen onDeleteAccount={handleDeleteAccount} />
     </DetailRouteChrome>
