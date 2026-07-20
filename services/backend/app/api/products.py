@@ -56,6 +56,14 @@ from app.services.product_recommendations import (
 )
 from app.services.product_rate_limit import enforce_product_rate_limit
 from app.services.product_live_seasonal import resolve_live_external_product
+from app.services.makeup_report_product_recommendations import (
+  list_owned_makeup_reports,
+  parse_categories,
+)
+from app.services.makeup_report_product_snapshots import (
+  dispatch_makeup_report_product_snapshot_jobs,
+  makeup_report_product_snapshot_response,
+)
 from app.services.product_trend_regions import NATIONAL_REGION_CODE, TREND_REGION_LABELS
 from app.services.product_trend_health import record_seasonal_serving_outcome
 from app.services.auradin_agent.session_manager import resolve_auradin_result_product
@@ -414,6 +422,130 @@ async def get_product_recommendations(
     report_id=report_id,
   )
   return success(data, {"source": source, "deprecated": False, "contractVersion": "v1-compatible"})
+
+
+@router.get("/recommendations/makeup-reports")
+async def get_makeup_report_picker(
+  response: Response,
+  limit: int = Query(default=20, ge=1, le=50),
+  offset: int = Query(default=0, ge=0),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  user = await ensure_user(db, auth)
+  await enforce_product_rate_limit(
+    db,
+    user_id=user["id"],
+    scope="recommendation",
+    limit=settings.product_recommendation_rate_limit_per_minute,
+  )
+  data = await list_owned_makeup_reports(
+    db,
+    settings,
+    user_id=user["id"],
+    limit=limit,
+    offset=offset,
+  )
+  response.headers["Cache-Control"] = "private, no-store"
+  return success(data, {"source": "owned-makeup-recommendations", "contractVersion": "makeup-report-v1"})
+
+
+@router.get("/recommendations/makeup-reports/{report_id}")
+async def get_makeup_report_products(
+  report_id: UUID,
+  response: Response,
+  background_tasks: BackgroundTasks,
+  look_id: str | None = Query(default=None, alias="lookId", min_length=1, max_length=80),
+  categories: str | None = Query(default=None, max_length=120),
+  per_category_limit: int = Query(default=6, alias="perCategoryLimit", ge=1, le=8),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  user = await ensure_user(db, auth)
+  await enforce_product_rate_limit(
+    db,
+    user_id=user["id"],
+    scope="recommendation",
+    limit=settings.product_recommendation_rate_limit_per_minute,
+  )
+  runs = await dispatch_makeup_report_product_snapshot_jobs(
+    db=db,
+    background_tasks=background_tasks,
+    user_id=user["id"],
+    report_id=report_id,
+    look_id=look_id,
+    settings=settings,
+    all_looks=False,
+  )
+  data = await makeup_report_product_snapshot_response(
+    db,
+    settings,
+    user_id=user["id"],
+    run=runs[0],
+    categories=parse_categories(categories),
+    per_category_limit=per_category_limit,
+  )
+  response.headers["Cache-Control"] = "private, no-store"
+  return success(
+    data,
+    {
+      "source": "makeup-report-snapshot",
+      "algorithmVersion": data.get("algorithmVersion"),
+      "contractVersion": "makeup-report-snapshot-v1",
+    },
+  )
+
+
+@router.post("/recommendations/makeup-reports/{report_id}/refresh")
+async def refresh_makeup_report_products(
+  report_id: UUID,
+  response: Response,
+  background_tasks: BackgroundTasks,
+  look_id: str | None = Query(default=None, alias="lookId", min_length=1, max_length=80),
+  categories: str | None = Query(default=None, max_length=120),
+  per_category_limit: int = Query(default=6, alias="perCategoryLimit", ge=1, le=8),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  """Create an explicit new revision; ordinary GETs never re-rank a report."""
+
+  user = await ensure_user(db, auth)
+  await enforce_product_rate_limit(
+    db,
+    user_id=user["id"],
+    scope="recommendation",
+    limit=settings.product_recommendation_rate_limit_per_minute,
+  )
+  runs = await dispatch_makeup_report_product_snapshot_jobs(
+    db=db,
+    background_tasks=background_tasks,
+    user_id=user["id"],
+    report_id=report_id,
+    look_id=look_id,
+    settings=settings,
+    all_looks=False,
+    force=True,
+  )
+  data = await makeup_report_product_snapshot_response(
+    db,
+    settings,
+    user_id=user["id"],
+    run=runs[0],
+    categories=parse_categories(categories),
+    per_category_limit=per_category_limit,
+  )
+  response.headers["Cache-Control"] = "private, no-store"
+  return success(
+    data,
+    {
+      "source": "makeup-report-snapshot-refresh",
+      "algorithmVersion": data.get("algorithmVersion"),
+      "contractVersion": "makeup-report-snapshot-v1",
+    },
+  )
 
 
 @router.get("/recommendations/ar")

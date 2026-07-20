@@ -9,8 +9,8 @@ must never be inserted into, or described as, the trusted catalog.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
-from math import ceil, log1p
+from datetime import datetime, timedelta, timezone
+from math import ceil, isfinite, log1p
 import re
 from typing import Any, Iterable, Mapping
 from urllib.parse import urlparse
@@ -70,6 +70,73 @@ def _timestamp(value: Any) -> datetime | None:
   except ValueError:
     return None
   return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def _verified_offer_snapshot_proof(
+  item: Mapping[str, Any],
+  snapshot: Any,
+  *,
+  max_age_hours: int,
+  now: datetime | None = None,
+) -> dict[str, Any] | None:
+  """Validate the promoted snapshot and its concrete refreshed offer evidence.
+
+  This is stricter than generic Auradin discovery displayability. Report-based
+  product recommendations may supplement only from a cryptographically
+  validated snapshot row whose offer was actually refreshed within the same
+  freshness window as trusted catalog offers.
+  """
+
+  evidence = item.get("offerRefreshEvidence")
+  if not isinstance(evidence, dict):
+    return None
+  hard_filter_eligible = item.get("hardFilterEligible")
+  if not isinstance(hard_filter_eligible, dict) or any(
+    hard_filter_eligible.get(field) is not True
+    for field in ("category", "purchaseUrl", "imageUrl", "priceKrw")
+  ):
+    return None
+  offer_at = _timestamp(evidence.get("fetchedAt"))
+  source_at = _timestamp(item.get("updatedAt"))
+  run_date = _text(getattr(snapshot, "run_date", ""))
+  try:
+    snapshot_at = datetime.strptime(run_date, "%Y%m%d").replace(
+      tzinfo=timezone(timedelta(hours=9)),
+    ).astimezone(timezone.utc)
+    match_score = float(evidence.get("matchScore"))
+  except (TypeError, ValueError):
+    return None
+  current = now or datetime.now(timezone.utc)
+  current = current if current.tzinfo else current.replace(tzinfo=timezone.utc)
+  current = current.astimezone(timezone.utc)
+  oldest = current - timedelta(hours=max(1, int(max_age_hours)))
+  if (
+    offer_at is None
+    or source_at is None
+    or offer_at > current
+    or source_at > current
+    or snapshot_at > current
+    or offer_at < oldest
+    or source_at < offer_at
+    or snapshot_at < oldest
+    or _text(evidence.get("matchLevel")) not in {"listing_id", "title_variant"}
+    or not _text(evidence.get("productId"))
+    or not _text(evidence.get("query"))
+    or not re.fullmatch(r"[0-9a-f]{64}", _text(evidence.get("resultsSha")))
+    or not isfinite(match_score)
+    or not 0 <= match_score <= 1
+  ):
+    return None
+  return {
+    "_freshnessVerified": True,
+    "_offerVerifiedAt": offer_at.isoformat(),
+    "_snapshotRunDate": run_date,
+    "_hardFilterEligible": {
+      key: value is True
+      for key, value in hard_filter_eligible.items()
+      if isinstance(key, str)
+    },
+  }
 
 
 def _palette(item: Mapping[str, Any]) -> list[str]:
@@ -367,6 +434,42 @@ async def _viewer_liked_ids(db: Database, user_id: UUID | None) -> set[str]:
   return {str(row["external_product_id"]) for row in rows}
 
 
+async def get_auradin_catalog_products_by_ids(
+  db: Database,
+  *,
+  user_id: UUID | None,
+  product_ids: Iterable[str],
+  verified_offer_max_age_hours: int,
+  verified_offer_now: datetime | None = None,
+) -> list[dict[str, Any]]:
+  """Rehydrate exact stored identities without popularity/ranking truncation."""
+
+  requested_ids = list(dict.fromkeys(_text(value) for value in product_ids if _text(value)))
+  if not requested_ids:
+    return []
+  liked_ids = await _viewer_liked_ids(db, user_id)
+  catalog = get_catalog()
+  hydrated: list[dict[str, Any]] = []
+  for product_id in requested_ids:
+    raw_item = catalog.get(product_id)
+    if raw_item is None:
+      continue
+    freshness_proof = _verified_offer_snapshot_proof(
+      raw_item,
+      catalog.snapshot,
+      max_age_hours=verified_offer_max_age_hours,
+      now=verified_offer_now,
+    )
+    if freshness_proof is None:
+      continue
+    mapped = _map_catalog_item(raw_item, liked=product_id in liked_ids)
+    if mapped is None:
+      continue
+    mapped.update(freshness_proof)
+    hydrated.append(mapped)
+  return hydrated
+
+
 async def _catalog_popularity_counts(db: Database) -> Counter[str]:
   if getattr(db, "is_connected", True) is False:
     return Counter()
@@ -459,6 +562,8 @@ async def get_auradin_catalog_products(
   seasonal_keywords: Iterable[str] | None = None,
   exclude_identities: set[tuple[str, str]] | None = None,
   exclude_liked: bool = False,
+  verified_offer_max_age_hours: int | None = None,
+  verified_offer_now: datetime | None = None,
 ) -> list[dict[str, Any]]:
   """Rank and adapt server-owned external catalog rows for a recommendation use."""
 
@@ -471,7 +576,8 @@ async def get_auradin_catalog_products(
   popularity_counts = await _catalog_popularity_counts(db) if strategy == "popular" else Counter()
   excluded = exclude_identities or set()
   ranked: list[tuple[float, str, dict[str, Any]]] = []
-  for raw_item in get_catalog().items:
+  catalog = get_catalog()
+  for raw_item in catalog.items:
     product_id = _text(raw_item.get("id"))
     category = _text(raw_item.get("category"))
     if (
@@ -480,9 +586,21 @@ async def get_auradin_catalog_products(
       or (exclude_liked and product_id in liked_ids)
     ):
       continue
+    freshness_proof = None
+    if verified_offer_max_age_hours is not None:
+      freshness_proof = _verified_offer_snapshot_proof(
+        raw_item,
+        catalog.snapshot,
+        max_age_hours=verified_offer_max_age_hours,
+        now=verified_offer_now,
+      )
+      if freshness_proof is None:
+        continue
     mapped = _map_catalog_item(raw_item, liked=product_id in liked_ids)
     if not mapped:
       continue
+    if freshness_proof:
+      mapped.update(freshness_proof)
     distance: float | None = None
     if strategy == "ar":
       score, distance = _ar_score(

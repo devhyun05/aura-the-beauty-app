@@ -5,7 +5,7 @@ import {FaceAnalysisIntroScreen} from '../../../features/face-analysis/screens/F
 import {FaceCaptureTutorialSheet} from '../../../features/onboarding/screens/FaceCaptureTutorialScreen';
 import {appAssetUri} from '../../../shared/config/mediaAssets';
 import {DetailRouteChrome} from '../detailHeaderChrome';
-import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {goBackToPreviousOrMainTab, type RootScreenProps} from './routeUtils';
 
 const FACE_CAPTURE_TUTORIAL_IMAGE_URIS = [
   'images/photo-capture-expression-guide.png',
@@ -44,7 +44,7 @@ export function FaceAnalysisIntroRouteScreen({
     <>
       <DetailRouteChrome
         routeName="FaceAnalysisIntro"
-        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+        onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
         <FaceAnalysisIntroScreen onStartAnalysisGuide={openAnalysisGuide} />
       </DetailRouteChrome>
       <FaceCaptureTutorialSheet

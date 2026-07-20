@@ -170,7 +170,7 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
   const handleClose = () => {
     setSelectedRecommendedMakeupFilterId(null);
     setSelectedReferenceMakeupPhoto(null);
-    navigateMainTab(navigation, 'HomeTab');
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
   };
 
   const handleStartAnalysis = (result?: FaceCaptureUploadResult) => {
@@ -251,10 +251,7 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
   return (
     <ReferenceMakeupExtractionLoadingScreen
       isAnalysisReady={isAnalysisReady}
-      onBack={() => navigation.reset({
-        index: 0,
-        routes: [{name: 'MainTabs', params: {screen: 'HomeTab'}}],
-      })}
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}
       onComplete={() => {
         if (navigation.isFocused()) {
           navigation.reset({
@@ -331,10 +328,7 @@ export function ReferenceMakeupExtractionResultRouteScreen({
       return;
     }
 
-    navigation.reset({
-      index: 0,
-      routes: [{name: 'MainTabs', params: {screen: 'HomeTab'}}],
-    });
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
   };
 
   const handleRetake = () => {
@@ -390,7 +384,11 @@ export function ExtractedMakeupLookAdjustRouteScreen({
 
   return (
     <ExtractedMakeupLookAdjustScreen
-      onClose={() => navigation.navigate('ReferenceMakeupExtractionResult')}
+      onClose={() =>
+        navigation.canGoBack()
+          ? navigation.goBack()
+          : navigation.replace('ReferenceMakeupExtractionResult')
+      }
       onCreateRecipe={() => navigation.navigate('MakeupRecipeDetail')}
       onSave={handleSave}
       photo={photo}
@@ -462,8 +460,13 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
   };
 
   const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
     if (recommendedFilter) {
-      navigation.navigate('ARFilter', {
+      navigation.replace('ARFilter', {
         initialGuideMode: 'half',
         initialMakeupFilterId: recommendedFilter.id,
         source: 'recommendedFilter',
@@ -471,7 +474,7 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
       return;
     }
 
-    navigation.navigate('ExtractedMakeupLookAdjust');
+    navigation.replace('ExtractedMakeupLookAdjust');
   };
 
   return (

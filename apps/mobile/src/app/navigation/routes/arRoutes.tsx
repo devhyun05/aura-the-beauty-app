@@ -15,7 +15,12 @@ import {
   getARFilterDetailEditRouteParams,
   getSavedArLookProductRecommendationRouteParams,
 } from './arRouteActions';
-import {navigateARBack, navigateMainTab, type RootScreenProps} from './routeUtils';
+import {
+  goBackToPreviousOrMainTab,
+  navigateARBack,
+  navigateMainTab,
+  type RootScreenProps,
+} from './routeUtils';
 
 const DEFAULT_AR_GUIDE_MODE: GuideMode = 'basic';
 
@@ -116,7 +121,11 @@ export function ARFilterRouteScreen({
   };
 
   if (shouldUseStencilExperience) {
-    return <StencilARApp onBack={() => navigateMainTab(navigation, 'HomeTab')} />;
+    return (
+      <StencilARApp
+        onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}
+      />
+    );
   }
 
   return (
@@ -125,7 +134,7 @@ export function ARFilterRouteScreen({
       initialGuideMode={initialGuideMode}
       initialMakeupFilterId={initialMakeupFilterId}
       initialSource={initialSource}
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}
       onComplete={() => navigateMainTab(navigation, 'HomeTab')}
       onOpenDetailEdit={handleOpenDetailEdit}
       onOpenShapeAdjust={handleOpenShapeAdjust}
@@ -139,11 +148,7 @@ export function UnityMakeupCaptureRouteScreen({
 }: RootScreenProps<'UnityMakeupCapture'>) {
   return (
     <UnityMakeupCaptureScreen
-      onBack={() =>
-        navigation.canGoBack()
-          ? navigation.goBack()
-          : navigateMainTab(navigation, 'HomeTab')
-      }
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}
       onComplete={sourceFrameMetadata =>
         navigation.navigate('MakeupFilterEdit', {
           backRoute: 'FaceAnalysisReportDetail',

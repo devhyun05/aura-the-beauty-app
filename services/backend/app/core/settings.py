@@ -279,6 +279,21 @@ class Settings(BaseSettings):
   product_exposure_token_ttl_seconds: int = Field(default=1800, ge=60, le=86400)
   product_ar_max_delta_e: float = Field(default=18.0, gt=0, le=100)
   product_offer_max_age_hours: int = Field(default=168, ge=1, le=2160)
+  # MakeupRecommendation V2 보고서가 완성될 때 실제 Naver Shopping 후보를
+  # 비동기로 수집하고, 상품 이미지 색상 검증을 통과한 항목만 보고서 스냅샷에
+  # 고정한다. 자격증명이 없거나 검증 후보가 없으면 빈 결과를 유지한다.
+  makeup_report_product_discovery_enabled: bool = True
+  makeup_report_product_discovery_timeout_seconds: float = Field(default=24.0, ge=3.0, le=60.0)
+  makeup_report_product_discovery_candidates_per_category: int = Field(default=12, ge=3, le=30)
+  # Listing thumbnails are not calibrated swatches. Shadow palettes therefore
+  # use a slightly wider image-pixel gate, while still requiring measured
+  # CIEDE2000 evidence for at least one independently matched pan.
+  makeup_report_shadow_palette_max_delta_e: float = Field(default=26.0, gt=0, le=40)
+  makeup_report_product_discovery_max_image_bytes: int = Field(
+    default=3 * 1024 * 1024,
+    ge=128 * 1024,
+    le=10 * 1024 * 1024,
+  )
   product_seasonal_source_max_age_days: int = Field(default=30, ge=1, le=180)
   product_event_retention_days: int = Field(default=90, ge=1, le=365)
   product_profile_retention_days: int = Field(default=180, ge=1, le=730)

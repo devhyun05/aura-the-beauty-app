@@ -16,6 +16,13 @@ export type ProductRecommendationShelf =
   | 'seasonal'
   | 'cohort';
 
+export type MakeupReportProductShelfContext = {
+  reportId: string;
+  lookId: string;
+  category: ProductRecommendationCategory;
+  title: string;
+};
+
 export type ProductRecommendationTab = {
   id: ProductRecommendationCategory;
   label: string;
@@ -103,6 +110,8 @@ export type CatalogProduct = {
   disclosureLabel?: string | null;
   reasonCodes?: string[];
   reasonLabels?: string[];
+  matchRate?: number | null;
+  semanticMatchRate?: number | null;
   exposureToken?: string | null;
   status?: 'active' | 'soldOut' | 'unavailable';
   canUnlike?: boolean;

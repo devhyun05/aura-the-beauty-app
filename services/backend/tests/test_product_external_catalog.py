@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from itertools import combinations
 from math import ceil
 from uuid import uuid4
@@ -6,9 +6,11 @@ from uuid import uuid4
 import pytest
 
 from app.core.settings import Settings
+from app.services.auradin_agent.catalog_loader import get_catalog
 from app.services.product_external_catalog import (
   AURADIN_CATALOG_SOURCE,
   get_auradin_catalog_products,
+  get_auradin_catalog_products_by_ids,
   get_auradin_catalog_readiness,
   resolve_auradin_catalog_product,
 )
@@ -142,6 +144,37 @@ async def test_popular_catalog_results_are_unique_balanced_and_diverse() -> None
   assert {item["category"] for item in items} == {"base", "shadow", "brow", "cheek", "lip", "liner"}
   brands = {item["brandName"] for item in items}
   assert max(sum(item["brandName"] == brand for item in items) for brand in brands) <= ceil(18 / len(brands))
+
+
+@pytest.mark.asyncio
+async def test_exact_catalog_rehydration_preserves_requested_identity_order_without_ranking_cap() -> None:
+  descriptor = get_catalog().snapshot
+  assert descriptor is not None
+  verified_now = (
+    datetime.strptime(descriptor.run_date, "%Y%m%d").replace(tzinfo=timezone.utc)
+    + timedelta(days=1)
+    - timedelta(seconds=1)
+  )
+  candidates = await get_auradin_catalog_products(
+    _OfflineDatabase(),  # type: ignore[arg-type]
+    user_id=None,
+    limit=3,
+    categories=["lip"],
+    strategy="popular",
+    verified_offer_max_age_hours=168,
+    verified_offer_now=verified_now,
+  )
+  assert len(candidates) == 3
+  requested = [str(item["productId"]) for item in reversed(candidates)]
+  hydrated = await get_auradin_catalog_products_by_ids(
+    _OfflineDatabase(),  # type: ignore[arg-type]
+    user_id=None,
+    product_ids=[*requested, "missing-server-owned-id"],
+    verified_offer_max_age_hours=168,
+    verified_offer_now=verified_now,
+  )
+  assert [str(item["productId"]) for item in hydrated] == requested
+  assert all(item.get("_freshnessVerified") is True for item in hydrated)
 
 
 @pytest.mark.asyncio

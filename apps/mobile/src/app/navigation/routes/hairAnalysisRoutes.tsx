@@ -29,12 +29,17 @@ import {
 import {prefetchImageUri, prefetchTransientImageUri} from '../../../shared/services/imageCacheService';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
-import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {
+  goBackToPreviousOrMainTab,
+  type RootScreenProps,
+} from './routeUtils';
 
 
 export function HairAnalysisIntroRouteScreen({navigation}: RootScreenProps<'HairAnalysisIntro'>) {
   return (
-    <DetailRouteChrome routeName="HairAnalysisIntro" onBack={() => navigateMainTab(navigation)}>
+    <DetailRouteChrome
+      routeName="HairAnalysisIntro"
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <HairAnalysisIntroScreen
         onOpenSaved={() => navigation.navigate('SavedHairSimulations')}
         onStart={() => navigation.navigate('HairAnalysisCapture')}

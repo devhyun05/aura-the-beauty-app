@@ -36,6 +36,8 @@ import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {renderConsultingHome} from './consultingRoutes';
 import {
+  getMainTabResetState,
+  goBackToPreviousOrMainTab,
   MainTabChrome,
   navigateMainTab,
   type MainTabScreenProps,
@@ -503,7 +505,13 @@ export function ConsultingTabRouteScreen({
 }
 
 function navigateCommunity(navigation: RootNavigation) {
-  navigation.navigate('Community');
+  navigation.reset({
+    index: 1,
+    routes: [
+      ...getMainTabResetState('HomeTab').routes,
+      {name: 'Community'},
+    ],
+  });
 }
 
 function navigateBackOrCommunity(navigation: RootNavigation) {
@@ -546,7 +554,7 @@ export function HomeFilterStoreRouteScreen({
   return (
     <DetailRouteChrome
       routeName="HomeFilterStore"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <FilterStoreScreen
         initialFilterId={route.params?.initialMakeupFilterId}
         isFilterLiked={isMakeupFilterLiked}
@@ -568,7 +576,7 @@ export function SavedMakeupListRouteScreen({
   return (
     <DetailRouteChrome
       routeName="SavedMakeupList"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <SavedMakeupListScreen
         latestAnalysisReport={selectedFaceAnalysisReport}
         onPressMakeup={savedMakeup => {
@@ -589,7 +597,7 @@ export function CommunityRouteScreen({navigation}: RootScreenProps<'Community'>)
   return (
     <DetailRouteChrome
       routeName="Community"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <CommunityHomeScreen
         onPressCreate={() => navigation.navigate('CommunityThreadCreate')}
         onPressAuthor={author => navigation.navigate('CommunityUserProfile', {
@@ -610,7 +618,7 @@ export function HairRemovalSimulationRouteScreen({
   return (
     <DetailRouteChrome
       routeName="HairRemovalSimulation"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <RoutePlaceholder
         description="제모 시뮬레이션을 준비 중이에요."
         showHeader={false}
@@ -703,7 +711,7 @@ export function ConsultingRouteScreen({navigation}: RootScreenProps<'Consulting'
         />
       }
       routeName="Consulting"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       {renderConsultingHome(navigation)}
     </DetailRouteChrome>
   );

@@ -25,8 +25,8 @@ import type {
   RootStackParamList,
 } from '../routeTypes';
 import {
+  goBackToPreviousOrMainTab,
   getMakeupJourneyDayResetState,
-  navigateMainTab,
   type RootScreenProps,
 } from './routeUtils';
 
@@ -469,11 +469,11 @@ export function FaceCaptureConfirmationRouteScreen({
         navigation.reset(getMakeupJourneyDayResetState(returnEntryDate));
         return;
       }
-      navigateMainTab(navigation, 'HomeTab');
+      goBackToPreviousOrMainTab(navigation, 'HomeTab');
       return;
     }
 
-    navigateMainTab(navigation, 'HomeTab');
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
   }, [
     invalidateUnifiedFaceCapture,
     clearMakeupFeedbackFlowContext,

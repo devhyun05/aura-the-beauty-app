@@ -6,7 +6,7 @@ pydantic==2.10.6
 asyncpg==0.30.0
 python-jose[cryptography]==3.5.0
 httpx==0.28.1
-boto3==1.35.90
+boto3==1.43.51
 openai>=2.0.0,<3.0.0
 Pillow==12.3.0
 pillow-heif==0.20.0

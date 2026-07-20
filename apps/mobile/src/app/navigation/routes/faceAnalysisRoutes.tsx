@@ -176,7 +176,7 @@ export function FaceCaptureRouteScreen({
       <UnifiedFaceCaptureScreen
         onCancel={() => {
           invalidateUnifiedFaceCapture({resetRetryAttempt: true});
-          navigateMainTab(navigation, 'HomeTab');
+          goBackToPreviousOrMainTab(navigation, 'HomeTab');
         }}
         onCaptureCommitted={commitUnifiedFaceCapture}
         onCaptureReadyForProcessing={(result, loadingStartedAtMs) => {
@@ -194,7 +194,7 @@ export function FaceCaptureRouteScreen({
           // 홈으로 돌려보내 사용자가 통합 촬영을 다시 시작하게 한다. 실패 사유는
           // [aura:unified-face-capture] fallback-to-legacy 로그로 남는다.
           invalidateUnifiedFaceCapture({resetRetryAttempt: true});
-          navigateMainTab(navigation, 'HomeTab');
+          goBackToPreviousOrMainTab(navigation, 'HomeTab');
         }}
         onRequestStarted={beginUnifiedFaceCapture}
         request={unifiedCaptureRequest}
@@ -229,7 +229,7 @@ export function FaceCaptureRouteScreen({
             : {target: 'faceAnalysis'},
         );
       }}
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}
+      onClose={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}
     />
   );
 }
@@ -406,8 +406,8 @@ export function FaceAnalysisLoadingRouteScreen({
   // 한다. 직전 3D 측정 화면은 teardown 에서 pause 한다(카메라 반납에 올바름) —
   // 그래서 로딩이 lease 를 잡아 resume+ready 를 보장하고, 분석이 모두 settle
   // 하면 아래 end-lease 효과가 pause 로 반납한다.
-  // isFocused 가드: onBack 이 navigate 라 스택 하단에 stale 로딩 인스턴스가
-  // 남을 수 있는데, 그 인스턴스가 촬영 화면 밑에서 Unity 를 resume 하면 안 된다.
+  // isFocused 가드: 네이티브 back gesture, 화면 교체, 비동기 완료 레이스로
+  // 포커스를 잃은 로딩 인스턴스가 촬영 화면 밑에서 Unity 를 resume 하면 안 된다.
   React.useEffect(() => {
     stillAnalysisReadyPromiseRef.current = null;
     stillAnalysisLeaseIdRef.current = null;
@@ -793,7 +793,7 @@ export function FaceAnalysisLoadingRouteScreen({
       }
     }
 
-    navigateMainTab(navigation, 'HomeTab');
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
   }, [
     invalidateUnifiedFaceCapture,
     navigation,
@@ -903,7 +903,7 @@ export function FaceAnalysisReportPreviewRouteScreen({
       setSelectedFaceAnalysisReport(currentReport =>
         currentReport?.id === reportId ? null : currentReport,
       );
-      navigation.navigate('FaceAnalysisReportsList');
+      navigation.replace('FaceAnalysisReportsList');
     },
     [navigation, setSelectedFaceAnalysisReport],
   );
@@ -916,7 +916,7 @@ export function FaceAnalysisReportPreviewRouteScreen({
         onBack={() =>
           shouldReturnToProfile
             ? goBackToPreviousOrMainTab(navigation, 'ProfileTab')
-            : navigation.goBack()
+            : goBackToPreviousOrMainTab(navigation, 'HomeTab')
         }
         onCreateARFilter={() => {
           if (currentReportId) {

@@ -77,14 +77,14 @@ def test_makeup_journey_eas_profiles_keep_production_closed_by_default() -> None
   }
 
 
-def test_dev_deploy_enables_face_analysis_v2_for_api_and_worker() -> None:
+def test_deploy_defaults_face_analysis_v2_off_for_api_and_worker() -> None:
   workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
     encoding="utf-8",
   )
 
   assert (
-    "FACE_ANALYSIS_V2_ENABLED: ${{ vars.FACE_ANALYSIS_V2_ENABLED "
-    "|| (github.ref_name == 'dev' && 'true') || 'false' }}"
+    "FACE_ANALYSIS_V2_ENABLED: "
+    "${{ vars.FACE_ANALYSIS_V2_ENABLED || 'false' }}"
   ) in workflow
   assert workflow.count("FACE_ANALYSIS_V2_ENABLED=${{ env.FACE_ANALYSIS_V2_ENABLED }}") == 2
 
@@ -159,6 +159,25 @@ def test_makeup_journey_postgres_contract_runs_in_ci_with_an_isolated_database()
     "AURA_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres",
   ) == 1
   assert 'os.getenv("AURA_TEST_DATABASE_URL")' in postgres_test
+  assert 'create database "{database_name}"' in postgres_test
+  assert 'drop database if exists "{database_name}"' in postgres_test
+  assert "apply_schema(isolated_url)" in postgres_test
+  assert "check_schema(isolated_url)" in postgres_test
+
+
+def test_product_recommendation_postgres_contract_runs_in_ci_with_an_isolated_database() -> None:
+  backend_ci_workflow = (PROJECT_ROOT / ".github/workflows/backend-ci.yml").read_text(
+    encoding="utf-8",
+  )
+  postgres_test = (
+    PROJECT_ROOT / "services/backend/tests/test_product_recommendation_postgres.py"
+  ).read_text(encoding="utf-8")
+
+  assert backend_ci_workflow.count(
+    "AURA_PRODUCT_RECOMMENDATION_TEST_DATABASE_URL: "
+    "postgresql://postgres:postgres@127.0.0.1:5432/postgres",
+  ) == 1
+  assert 'os.getenv("AURA_PRODUCT_RECOMMENDATION_TEST_DATABASE_URL")' in postgres_test
   assert 'create database "{database_name}"' in postgres_test
   assert 'drop database if exists "{database_name}"' in postgres_test
   assert "apply_schema(isolated_url)" in postgres_test
