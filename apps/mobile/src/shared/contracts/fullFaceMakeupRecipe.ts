@@ -1,4 +1,9 @@
 import type {FullFaceMakeupSourceInput} from './fullFaceMakeupCapture';
+import {
+  AR_BLUSH_COLORS,
+  AR_BLUSH_DEFAULT_COLOR,
+  AR_BLUSH_REFERENCE_SHAPES,
+} from './arBlushCatalog';
 
 // 'lens' is LAST so the colored contact-lens disc paints AFTER (on top of) the
 // eye makeup layers (eyeliner) in a combined look.
@@ -259,8 +264,11 @@ export const FULL_FACE_REGION_RUNTIME_ASSETS: Record<
   },
   blush: {
     region: 'blush',
-    candidateId: 'blush-session-1-v1',
-    maskTextureId: 'cheek-session-mask-1-v1',
+    // Keep the 512x512 balanced atlas as the no-selection fallback. The five
+    // reference masks are 1254px candidate choices and must not inherit this
+    // runtime asset's dimensions.
+    candidateId: 'blush-balanced-soft-oval-v0',
+    maskTextureId: 'e7-blush-balanced-uv-v0',
     width: 512,
     height: 512,
     runtimeReady: false,
@@ -318,12 +326,7 @@ export const REGION_COLOR_OPTIONS: Record<
     {id: 'rosy', label: '로지', hex: '#D96C7B'},
     {id: 'berry', label: '베리', hex: '#9E3B54'},
   ],
-  blush: [
-    {id: 'peach', label: '피치', hex: '#E67B5F'},
-    {id: 'rose', label: '로즈', hex: '#D77986'},
-    {id: 'apricot', label: '살구', hex: '#E99A6E'},
-    {id: 'mauve', label: '모브', hex: '#BE7684'},
-  ],
+  blush: AR_BLUSH_COLORS.map(({id, label, hex}) => ({id, label, hex})),
   brow: [
     {id: 'soft-brown', label: '브라운', hex: '#4A342B'},
     {id: 'ash', label: '애쉬', hex: '#5C514B'},
@@ -583,38 +586,12 @@ export const REGION_CANDIDATE_OPTIONS: Record<
       maskTextureId: 'e7-lip-validation-safe-v0',
     },
   ],
-  blush: [
-    {
-      id: 'daily',
-      label: 'Daily',
-      candidateId: 'blush-session-1-v1',
-      maskTextureId: 'cheek-session-mask-1-v1',
-    },
-    {
-      id: 'lovely',
-      label: 'Lovely',
-      candidateId: 'blush-session-2-v1',
-      maskTextureId: 'cheek-session-mask-2-v1',
-    },
-    {
-      id: 'under-eye',
-      label: 'Under',
-      candidateId: 'blush-session-3-v1',
-      maskTextureId: 'cheek-session-mask-3-v1',
-    },
-    {
-      id: 'sun-1',
-      label: 'Sun 1',
-      candidateId: 'blush-session-4-v1',
-      maskTextureId: 'cheek-session-mask-4-v1',
-    },
-    {
-      id: 'sun-2',
-      label: 'Sun 2',
-      candidateId: 'blush-session-5-v1',
-      maskTextureId: 'cheek-session-mask-5-v1',
-    },
-  ],
+  blush: AR_BLUSH_REFERENCE_SHAPES.map(shape => ({
+    id: shape.fullFaceCandidateOptionId,
+    label: shape.label,
+    candidateId: shape.candidateId,
+    maskTextureId: shape.maskTextureId,
+  })),
   brow: [
     {
       id: 'psd',
@@ -898,9 +875,9 @@ export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
   },
   blush: {
     enabled: true,
-    colorHex: REGION_COLOR_OPTIONS.blush[0].hex,
-    opacity: 0.45,
-    intensity: 0.45,
+    colorHex: AR_BLUSH_DEFAULT_COLOR.hex,
+    opacity: 0.58,
+    intensity: 0.62,
     ...REGION_FINISH_OPTIONS.blush[0],
     gradientAmount: 0,
     candidateId: REGION_CANDIDATE_OPTIONS.blush[0].candidateId,

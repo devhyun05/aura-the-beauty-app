@@ -35,9 +35,14 @@ namespace ARMakeup.Face
             // 익스포트마다 바뀌는 GUID — 기기에 어떤 빌드가 깔렸는지 syslog로 확인용
             Debug.Log($"[ARBootstrap] Unity build {Application.buildGUID}");
 
-            // iOS Unity 기본 targetFrameRate는 30 — 지연 재생(FaceLandmarkSource)이
-            // 매 프레임 캡처·표시하려면 디스플레이 레이트로 돌아야 한다.
+            // iPhone에서 카메라·MediaPipe·Unity 렌더를 60Hz로 계속 돌리면 발열 보호로
+            // iOS가 앱 밖에서도 화면을 강제 디밍한다. AR은 30Hz로 제한해 열 부하를
+            // 낮추고, 지연 재생은 같은 프레임 시계 안에서 계속 동기화한다.
+#if UNITY_IOS && !UNITY_EDITOR
+            Application.targetFrameRate = 30;
+#else
             Application.targetFrameRate = 60;
+#endif
 
             stage = "AR session";
             new GameObject("AR Session", typeof(ARSession), typeof(ARInputManager));

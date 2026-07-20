@@ -10,6 +10,7 @@ import {
   REGION_COLOR_OPTIONS,
   type MakeupRecipeRegion,
 } from '../../../shared/contracts/fullFaceMakeupRecipe';
+import {AR_BLUSH_SHAPES} from '../../../shared/contracts/arBlushCatalog';
 
 // Base/lip/cheek (and eye/brow) color swatches come from OUR branch's region
 // palettes (REGION_COLOR_OPTIONS) instead of the dev filter's flat cosmetic
@@ -150,13 +151,10 @@ const SHAPE_OPTIONS_BY_MAKEUP_AREA: Record<MakeupArea, readonly ShapeOption[]> =
     {id: 'lip-over', label: '오버 립'},
     {id: 'lip-gradient', label: '그라데이션'},
   ],
-  cheek: [
-    {id: 'cheek-daily', label: '데일리'},
-    {id: 'cheek-lovely', label: '러블리'},
-    {id: 'cheek-under', label: '언더'},
-    {id: 'cheek-sunkiss1', label: '선키스 1'},
-    {id: 'cheek-sunkiss2', label: '선키스 2'},
-  ],
+  cheek: AR_BLUSH_SHAPES.map(shape => ({
+    id: shape.arFilterShapeId,
+    label: shape.label,
+  })),
   // 렌즈는 색(COLOR)이 주 선택 수단이라 핏은 최소 세트만 노출합니다. 비비드는
   // 진한 컬러를 더 선명하게(높은 opacity 프리셋의 색을 선택하도록 안내)하는 표시용.
   lens: [
@@ -314,12 +312,15 @@ export function getARFilterSelectionAfterPointMakeupLookSelect({
   const textureOptions = selectedMakeupArea
     ? resolveAreaTextureOptions(selectedMakeupArea, makeupFilter.textureOptions)
     : makeupFilter.textureOptions;
+  const colorOptions = selectedMakeupArea
+    ? resolveAreaColorOptions(selectedMakeupArea, makeupFilter.colorOptions)
+    : makeupFilter.colorOptions;
 
   return {
     ...selectionState,
     selectedTotalMakeupLookId: null,
     selectedPointMakeupLookId: makeupFilter.id,
-    selectedColorId: getARFilterInitialColorId(makeupFilter.colorOptions),
+    selectedColorId: getARFilterInitialColorId(colorOptions),
     selectedTypeId: typeOptions[0]?.id ?? '',
     selectedTextureId: textureOptions[0]?.id ?? '',
     hasUnsavedMakeupChanges: true,

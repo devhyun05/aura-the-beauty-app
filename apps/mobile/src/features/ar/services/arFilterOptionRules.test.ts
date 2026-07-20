@@ -4,6 +4,7 @@ import {
   getARFilterTotalMakeupLookIdAfterOptionEdit,
   getARFilterOptionGroupAfterMakeupAreaChange,
   getARFilterOptionGroupLabels,
+  getARFilterShapeOptions,
   getARFilterSelectionAfterOptionEdit,
   getARFilterSelectionAfterOriginalCardPress,
   getARFilterSelectionAfterPointMakeupLookSelect,
@@ -11,6 +12,10 @@ import {
   isARFilterSaveEnabled,
   type ARFilterSelectionState,
 } from './arFilterOptionRules';
+import {
+  AR_BLUSH_COLORS,
+  AR_BLUSH_SHAPES,
+} from '../../../shared/contracts/arBlushCatalog';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -50,6 +55,16 @@ expectEqual(
   getARFilterOptionGroupLabels('lip').join(','),
   '룩,컬러,타입,질감,핏',
   'point makeup option groups',
+);
+expectEqual(
+  getARFilterShapeOptions('cheek').map(option => option.id).join(','),
+  AR_BLUSH_SHAPES.map(shape => shape.arFilterShapeId).join(','),
+  'cheek shape ids use the common stable blush catalog',
+);
+expectEqual(
+  getARFilterShapeOptions('cheek').map(option => option.label).join(','),
+  AR_BLUSH_SHAPES.map(shape => shape.label).join(','),
+  'cheek shape labels use the common Korean blush names',
 );
 expectEqual(
   getARFilterOptionGroupAfterMakeupAreaChange({
@@ -128,6 +143,23 @@ expectEqual(
   }).hasUnsavedMakeupChanges,
   true,
   'point makeup look select enables save',
+);
+expectEqual(
+  getARFilterSelectionAfterPointMakeupLookSelect({
+    makeupFilter: mockMakeupFilter,
+    selectedMakeupArea: 'cheek',
+    selectionState: baseSelectionState,
+  }).selectedColorId,
+  AR_BLUSH_COLORS[0].id,
+  'cheek point look seeds the first area-resolved blush color',
+);
+expectEqual(
+  getARFilterSelectionAfterPointMakeupLookSelect({
+    makeupFilter: mockMakeupFilter,
+    selectionState: baseSelectionState,
+  }).selectedColorId,
+  mockMakeupFilter.colorOptions[0].id,
+  'legacy point look call without an area keeps the filter color seed',
 );
 expectEqual(
   getARFilterTotalMakeupLookIdAfterOptionEdit({

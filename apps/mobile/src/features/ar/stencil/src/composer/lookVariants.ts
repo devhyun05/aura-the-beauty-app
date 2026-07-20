@@ -15,6 +15,10 @@
  *    병합 순서) — 위 겹을 끄면 아래 겹이 드러나는 스택 의미론.
  */
 import type { FilterParams, LensLayer } from '../bridge/types';
+import {
+  AR_BLUSH_COLORS,
+  AR_BLUSH_SHAPES,
+} from '../../../../../shared/contracts/arBlushCatalog';
 import type { LeafDef, LookLibrary, SlotKey } from './lookTree';
 import type { RegionKey } from './regions';
 
@@ -349,41 +353,61 @@ export function buildVariantLibrary(): LookLibrary {
     },
   ]);
 
-  // ── 블러셔 6종 — 모양(클래식/이가리/드레이핑) × 색, 배치 변형(blushLift/Spread) 1종
+  // ── 블러셔 6종 — 기존 룩 ID는 유지하고 표시 이름은 실제 색상과 맞춘다.
   addRegionLook(lib, 'blush', 'classic-rose', '클래식 로즈', '컨투어',
     single('블러셔', 'blush', {
-      blushShape: 0, blushColor: '#F08FA0', blushIntensity: 0.45, blushFinish: 0, blushLift: 0.05,
+      blushShape: AR_BLUSH_SHAPES[0].value,
+      blushColor: AR_BLUSH_COLORS[3].hex,
+      blushIntensity: 0.72,
+      blushFinish: 0,
+      blushLift: AR_BLUSH_SHAPES[0].lift,
+      blushSpread: AR_BLUSH_SHAPES[0].spread,
     }));
-  addRegionLook(lib, 'blush', 'classic-peach', '클래식 피치 시머', '컨투어',
+  addRegionLook(lib, 'blush', 'classic-peach', '클래식 피치 베이지 시머', '컨투어',
     single('블러셔', 'blush', {
-      blushShape: 0,
-      blushColor: '#E89A7A',
-      blushIntensity: 0.4,
+      blushShape: AR_BLUSH_SHAPES[0].value,
+      blushColor: AR_BLUSH_COLORS[1].hex,
+      blushIntensity: 0.68,
       blushFinish: 3,
       blushShimmer: 0.4,
-      blushLift: 0.05,
+      blushLift: AR_BLUSH_SHAPES[0].lift,
+      blushSpread: AR_BLUSH_SHAPES[0].spread,
     }));
-  addRegionLook(lib, 'blush', 'igari-coral', '이가리 코랄', '컨투어',
+  addRegionLook(lib, 'blush', 'igari-coral', '이가리 살구 코랄', '컨투어',
     single('블러셔', 'blush', {
-      blushShape: 1, blushColor: '#E86A80', blushIntensity: 0.5, blushFinish: 0, blushLift: 0.115,
-    }));
-  addRegionLook(lib, 'blush', 'igari-mauve', '이가리 모브', '컨투어',
-    single('블러셔', 'blush', {
-      blushShape: 1, blushColor: '#B85C6E', blushIntensity: 0.4, blushFinish: 1, blushLift: 0.115,
-    }));
-  addRegionLook(lib, 'blush', 'draping-rose', '드레이핑 로즈', '컨투어',
-    single('블러셔', 'blush', {
-      blushShape: 2, blushColor: '#D96C7B', blushIntensity: 0.45, blushFinish: 0,
-    }));
-  // 배치 변형 — R4 골드 핸들(blushLift/Spread)을 룩 정의에 포함
-  addRegionLook(lib, 'blush', 'draping-lift', '드레이핑 리프트', '컨투어',
-    single('블러셔', 'blush', {
-      blushShape: 2,
-      blushColor: '#E86A80',
-      blushIntensity: 0.45,
+      blushShape: AR_BLUSH_SHAPES[1].value,
+      blushColor: AR_BLUSH_COLORS[0].hex,
+      blushIntensity: 0.82,
       blushFinish: 0,
-      blushLift: 0.05,
-      blushSpread: 0.04,
+      blushLift: AR_BLUSH_SHAPES[1].lift,
+      blushSpread: AR_BLUSH_SHAPES[1].spread,
+    }));
+  addRegionLook(lib, 'blush', 'igari-mauve', '이가리 라일락 모브', '컨투어',
+    single('블러셔', 'blush', {
+      blushShape: AR_BLUSH_SHAPES[1].value,
+      blushColor: AR_BLUSH_COLORS[6].hex,
+      blushIntensity: 0.7,
+      blushFinish: 1,
+      blushLift: AR_BLUSH_SHAPES[1].lift,
+      blushSpread: AR_BLUSH_SHAPES[1].spread,
+    }));
+  addRegionLook(lib, 'blush', 'draping-rose', '드레이핑 소프트 레드', '컨투어',
+    single('블러셔', 'blush', {
+      blushShape: AR_BLUSH_SHAPES[2].value,
+      blushColor: AR_BLUSH_COLORS[4].hex,
+      blushIntensity: 0.78,
+      blushFinish: 0,
+      blushLift: AR_BLUSH_SHAPES[2].lift,
+      blushSpread: AR_BLUSH_SHAPES[2].spread,
+    }));
+  addRegionLook(lib, 'blush', 'draping-lift', '드레이핑 베리', '컨투어',
+    single('블러셔', 'blush', {
+      blushShape: AR_BLUSH_SHAPES[2].value,
+      blushColor: AR_BLUSH_COLORS[7].hex,
+      blushIntensity: 0.8,
+      blushFinish: 0,
+      blushLift: AR_BLUSH_SHAPES[2].lift,
+      blushSpread: AR_BLUSH_SHAPES[2].spread,
     }));
 
   // ── 눈썹 4종 — 제품 종류가 각각 별도 부위(#19b 분리). 제품 스택 조합 다양화.
