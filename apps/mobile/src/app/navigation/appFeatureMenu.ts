@@ -68,6 +68,7 @@ const STORE_HIDDEN_MENU_ITEM_IDS: readonly AppFeatureMenuItemId[] = [
   'community',
   'beardSimulation',
   'consulting',
+  'recommendedFilters',
 ];
 
 const allAppFeatureMenuSections: readonly AppFeatureMenuSection[] = [
