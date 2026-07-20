@@ -73,13 +73,16 @@ export function ProfileSummaryCard({
         </IconButton>
       </View>
 
-      <View style={styles.traitPanel}>
-        <ProfileTrait label="퍼스널 컬러" value={beautyProfile.personalColor} />
-        <View style={styles.traitDivider} />
-        <ProfileTrait label="피부 타입" value={beautyProfile.skinType} />
-        <View style={styles.traitDivider} />
-        <ProfileTrait label="피부 톤" value={beautyProfile.skinTone} />
-      </View>
+      {/* 퍼스널 컬러·피부 타입·피부 톤 패널 — 스토어 빌드에서는 숨긴다. */}
+      {__DEV__ ? (
+        <View style={styles.traitPanel}>
+          <ProfileTrait label="퍼스널 컬러" value={beautyProfile.personalColor} />
+          <View style={styles.traitDivider} />
+          <ProfileTrait label="피부 타입" value={beautyProfile.skinType} />
+          <View style={styles.traitDivider} />
+          <ProfileTrait label="피부 톤" value={beautyProfile.skinTone} />
+        </View>
+      ) : null}
     </AppCard>
   );
 }
