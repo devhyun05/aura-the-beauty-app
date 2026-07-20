@@ -1753,7 +1753,9 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🪮',
         productName: '마스카라',
         onKeys: ['mascaraIntensity'],
-        defaults: { mascaraIntensity: 0.5 },
+        // mascaraTexStyle: 0=절차 스트로크(기본) 1=텍스처 내추럴 2=텍스처 볼륨.
+        // defaults에 넣어 부위 소유 등록(텍스처 룩이 이 필드를 담을 수 있게).
+        defaults: { mascaraIntensity: 0.5, mascaraTexStyle: 0 },
         axes: {
           shape: [
             { type: 'segments', key: 'mascaraStyle', options: MASCARA_STYLES_UPPER },

@@ -14,8 +14,10 @@ import type {Product} from '../../../shared/types/profile';
 import {AppScreen, useTransientToast} from '../../../shared/ui';
 import {AuradinFloatingOrb} from '../components/AuradinFloatingOrb';
 import {ProductRecommendationHubContent} from '../components/ProductRecommendationHubContent';
+import {productLikeKey} from '../services/productLikeIdentity';
 import type {
   CatalogProduct,
+  MakeupReportProductShelfContext,
   ProductDetailRecommendationContext,
   ProductRecommendationShelf,
 } from '../types';
@@ -68,6 +70,7 @@ type ProductRecommendationScreenProps = {
     title: string,
     arStyleId?: string | null,
   ) => void;
+  onOpenMakeupReportShelf?: (context: MakeupReportProductShelfContext) => void;
   onSearch?: (query: string) => void;
   // Kept distinct from preferredMakeupReportId: this is face-analysis context
   // for Auradin, never a MakeupRecommendation report identity.
@@ -83,36 +86,38 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
   const hasFocusedHubRef = useRef(false);
   const preferenceRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const likedProductsRequestRef = useRef(0);
-  const likedProductIdsRef = useRef<Set<string>>(new Set());
-  const confirmedLikedProductIdsRef = useRef<Set<string>>(new Set());
+  const likedProductKeysRef = useRef<Set<string>>(new Set());
+  const confirmedLikedProductKeysRef = useRef<Set<string>>(new Set());
   const productLikeIntentVersionsRef = useRef(new Map<string, number>());
   const mountedRef = useRef(true);
-  const [likedProductIds, setLikedProductIds] = useState<Set<string>>(new Set());
+  const [likedProductKeys, setLikedProductKeys] = useState<Set<string>>(new Set());
   const [likedProducts, setLikedProducts] = useState<Product[]>([]);
   const [hubRefreshKey, setHubRefreshKey] = useState(0);
   const [preferenceMutationRefreshKey, setPreferenceMutationRefreshKey] = useState(0);
 
   const applyServerLikedProducts = useCallback((products: Product[]) => {
-    const nextIds = new Set(products.map(product => product.id));
-    confirmedLikedProductIdsRef.current = new Set(nextIds);
-    likedProductIdsRef.current = nextIds;
+    const nextKeys = new Set(products.map(product =>
+      productLikeKey(product.id, product.externalSource),
+    ));
+    confirmedLikedProductKeysRef.current = new Set(nextKeys);
+    likedProductKeysRef.current = nextKeys;
     setLikedProducts(products);
-    setLikedProductIds(nextIds);
+    setLikedProductKeys(nextKeys);
   }, []);
 
-  const applyLikedIntent = useCallback((productId: string, liked: boolean) => {
-    const nextIds = new Set(likedProductIdsRef.current);
-    if (liked) nextIds.add(productId);
-    else nextIds.delete(productId);
-    likedProductIdsRef.current = nextIds;
-    setLikedProductIds(nextIds);
+  const applyLikedIntent = useCallback((productKey: string, liked: boolean) => {
+    const nextKeys = new Set(likedProductKeysRef.current);
+    if (liked) nextKeys.add(productKey);
+    else nextKeys.delete(productKey);
+    likedProductKeysRef.current = nextKeys;
+    setLikedProductKeys(nextKeys);
   }, []);
 
-  const recordConfirmedLike = useCallback((productId: string, liked: boolean) => {
-    const nextIds = new Set(confirmedLikedProductIdsRef.current);
-    if (liked) nextIds.add(productId);
-    else nextIds.delete(productId);
-    confirmedLikedProductIdsRef.current = nextIds;
+  const recordConfirmedLike = useCallback((productKey: string, liked: boolean) => {
+    const nextKeys = new Set(confirmedLikedProductKeysRef.current);
+    if (liked) nextKeys.add(productKey);
+    else nextKeys.delete(productKey);
+    confirmedLikedProductKeysRef.current = nextKeys;
   }, []);
 
   useEffect(() => {
@@ -175,13 +180,13 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
 
   const handleToggleLike = useCallback(async (product: CatalogProduct) => {
     if (product.canLike === false) return;
-    const productKey = `${product.externalSource ?? 'catalog'}:${product.productId}`;
-    const wasLiked = likedProductIdsRef.current.has(product.productId);
+    const productKey = productLikeKey(product.productId, product.externalSource);
+    const wasLiked = likedProductKeysRef.current.has(productKey);
     const nextLiked = !wasLiked;
     const intentVersion = (productLikeIntentVersionsRef.current.get(productKey) ?? 0) + 1;
     productLikeIntentVersionsRef.current.set(productKey, intentVersion);
     likedProductsRequestRef.current += 1;
-    applyLikedIntent(product.productId, nextLiked);
+    applyLikedIntent(productKey, nextLiked);
     try {
       if (wasLiked) {
         await unlikeProduct(product.productId, product.externalSource);
@@ -189,7 +194,7 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
         if (product.externalSource) await likeExternalProduct(product.productId, product.externalSource);
         else await likeProduct(product.productId, product.shadeId);
       }
-      recordConfirmedLike(product.productId, nextLiked);
+      recordConfirmedLike(productKey, nextLiked);
       if (!mountedRef.current) return;
       if (productLikeIntentVersionsRef.current.get(productKey) !== intentVersion) return;
       if (nextLiked) {
@@ -202,8 +207,8 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
       if (!mountedRef.current) return;
       if (productLikeIntentVersionsRef.current.get(productKey) !== intentVersion) return;
       applyLikedIntent(
-        product.productId,
-        confirmedLikedProductIdsRef.current.has(product.productId),
+        productKey,
+        confirmedLikedProductKeysRef.current.has(productKey),
       );
       schedulePreferenceRefresh();
       showToast('좋아요를 변경하지 못했어요. 잠시 후 다시 시도해 주세요.');
@@ -250,10 +255,11 @@ export function ProductRecommendationScreen(props: ProductRecommendationScreenPr
         <ProductRecommendationHubContent
           isActive={isScreenFocused}
           preferredMakeupReportId={props.preferredMakeupReportId}
-          likedProductIds={likedProductIds}
+          likedProductKeys={likedProductKeys}
           likedProducts={likedProducts}
           onCreateMakeupRecommendation={props.onCreateMakeupRecommendation}
           onOpenProduct={handleOpenProduct}
+          onOpenMakeupReportShelf={props.onOpenMakeupReportShelf}
           onOpenShelf={props.onOpenShelf ?? (() => undefined)}
           onSearch={props.onSearch ?? (() => undefined)}
           onSectionLayout={(section, y) => {

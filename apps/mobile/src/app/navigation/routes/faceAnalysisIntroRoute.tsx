@@ -3,7 +3,7 @@ import React from 'react';
 import {FaceAnalysisIntroScreen} from '../../../features/face-analysis/screens/FaceAnalysisIntroScreen';
 import {FaceCaptureTutorialSheet} from '../../../features/onboarding/screens/FaceCaptureTutorialScreen';
 import {DetailRouteChrome} from '../detailHeaderChrome';
-import {navigateMainTab, type RootScreenProps} from './routeUtils';
+import {goBackToPreviousOrMainTab, type RootScreenProps} from './routeUtils';
 
 export function FaceAnalysisIntroRouteScreen({
   navigation,
@@ -27,7 +27,7 @@ export function FaceAnalysisIntroRouteScreen({
     <>
       <DetailRouteChrome
         routeName="FaceAnalysisIntro"
-        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+        onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
         <FaceAnalysisIntroScreen onStartAnalysisGuide={openAnalysisGuide} />
       </DetailRouteChrome>
       <FaceCaptureTutorialSheet

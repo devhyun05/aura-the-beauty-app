@@ -1,9 +1,10 @@
-"""Recommend real catalog products from a saved MakeupRecommendation V2 recipe.
+"""Recommend real products from a saved MakeupRecommendation V2 recipe.
 
-The recipe is already structured by the recommendation pipeline.  This module
-never asks an LLM to invent products and never treats generated-image pixels as
-shade evidence.  Licensed shade data leads; the packaged Auradin catalog only
-fills empty shelf slots with explicitly degraded, non-shade claims.
+The recipe is already structured by the recommendation pipeline. This module
+never asks an LLM to invent products and never treats generated user-image
+pixels as product shade evidence. Licensed shades and report-bound Naver
+Shopping candidates that pass listing-image color verification are ranked as
+primary evidence sources and persisted by the snapshot worker.
 """
 
 from __future__ import annotations
@@ -29,22 +30,22 @@ from app.core.settings import Settings
 from app.db.session import Database
 from app.services.embeddings import embed_text, embedding_match_percent
 from app.services.makeup_recommendation_recipe import enrich_makeup_application_plans
+from app.services.makeup_report_product_discovery import (
+  DISCOVERY_CONTRACT_VERSION,
+  discover_report_products,
+)
 from app.services.product_catalog import (
   ELIGIBLE_EVIDENCE_TYPES,
   map_catalog_product,
   offer_freshness_sql,
 )
 from app.services.product_color import delta_e_ciede2000, normalize_hex_color, srgb_hex_to_lab
-from app.services.product_external_catalog import (
-  AURADIN_CATALOG_SOURCE,
-  get_auradin_catalog_products,
-)
 from app.services.s3 import S3Service
 
 
 logger = logging.getLogger(__name__)
 
-ALGORITHM_VERSION = "makeup_report_hybrid_v2"
+ALGORITHM_VERSION = "makeup_report_verified_discovery_v7"
 EMBEDDING_CACHE_VERSION = "bounded_process_lru_v1"
 EMBEDDING_CACHE_MAX_ENTRIES = 512
 EMBEDDING_CACHE_SUCCESS_TTL_SECONDS = 6 * 60 * 60
@@ -54,7 +55,6 @@ MAX_RERANK_CANDIDATES_PER_CATEGORY = 8
 SEMANTIC_RERANK_TIMEOUT_SECONDS = 7.0
 MAX_CONCURRENT_EMBEDDING_CALLS = 8
 MAX_INTERNAL_ROWS_PER_CATEGORY = 200
-MAX_EXTERNAL_PREFILTER_PER_CATEGORY = 200
 MIN_VERIFIED_SHADE_EVIDENCE_CONFIDENCE = 0.60
 DEFAULT_CATEGORIES = ("base", "shadow", "liner", "brow", "cheek", "lip")
 CATEGORY_LABELS = {
@@ -161,19 +161,6 @@ _COLOR_NAME_ALIASES = {
   "gold": ("gold", "골드", "금색"),
 }
 _EMBEDDING_COLOR_FAMILIES = frozenset({*_COLOR_NAME_ALIASES, "green", "blue"})
-
-# This graph is intentionally small and non-transitive. It lets a verified
-# broad catalog family such as coral support an orange target without turning
-# an arbitrary warm color into a match. Exact family matches always score
-# higher than these explicitly reviewed neighbours.
-_ADJACENT_COLOR_FAMILIES = {
-  "orange": frozenset({"coral", "peach"}),
-  "coral": frozenset({"orange", "peach", "rose", "pink"}),
-  "peach": frozenset({"orange", "coral", "pink"}),
-  "rose": frozenset({"mauve", "pink", "coral"}),
-  "mauve": frozenset({"rose", "pink"}),
-  "pink": frozenset({"rose", "mauve", "coral", "peach"}),
-}
 
 
 def _json_object(value: Any) -> dict[str, Any]:
@@ -452,6 +439,7 @@ async def list_owned_makeup_reports(
     select id, scenario_text, recommendation, image_status, created_at
     from makeup_recommendation_reports
     where user_id=$1 and schema_version='makeup-recommendation-v2'
+      and image_status is distinct from 'failed'
     order by created_at desc
     limit $2 offset $3
     """,
@@ -478,6 +466,11 @@ async def list_owned_makeup_reports(
   s3 = S3Service(settings)
   items: list[dict[str, Any]] = []
   for report in reports:
+    # Keep the same fail-closed boundary for test doubles or replicas that do
+    # not apply the primary SQL predicate. Pending/processing/partial reports
+    # remain selectable because their structured recipe is already complete.
+    if str(report.get("image_status") or "") == "failed":
+      continue
     recommendation = normalize_makeup_report_recommendation(report.get("recommendation"))
     # Image generation may still be pending/partial; the structured recipe is
     # independently valid and remains eligible for product matching.
@@ -760,137 +753,6 @@ def _internal_candidate(
   if distance is not None:
     item["colorDistance"] = round(distance, 4)
   return item
-
-
-def _broad_color_match(target: dict[str, Any], candidate_family: str) -> str | None:
-  target_families = {
-    str(value).casefold()
-    for value in (target.get("colorFamilies") or [target.get("colorFamily")])
-    if value
-  }
-  if candidate_family in target_families:
-    return "exact"
-  if any(candidate_family in _ADJACENT_COLOR_FAMILIES.get(family, ()) for family in target_families):
-    return "adjacent"
-  return None
-
-
-def _external_candidate(item: dict[str, Any], target: dict[str, Any]) -> dict[str, Any] | None:
-  category = target["category"]
-  eligible = item.get("_hardFilterEligible") if isinstance(item.get("_hardFilterEligible"), dict) else {}
-  price = item.get("price") if isinstance(item.get("price"), dict) else {}
-  offer = item.get("offer") if isinstance(item.get("offer"), dict) else {}
-  try:
-    price_amount = int(price.get("amount") or 0)
-  except (TypeError, ValueError):
-    price_amount = 0
-  purchase_url = _safe_https_url(item.get("purchaseUrl"))
-  image_url = _safe_https_url(item.get("imageUrl"))
-  if (
-    item.get("externalSource") != AURADIN_CATALOG_SOURCE
-    or item.get("category") != category
-    or item.get("_freshnessVerified") is not True
-    or not purchase_url
-    or not image_url
-    or price_amount <= 0
-    or not offer.get("offerId")
-    or any(eligible.get(field) is not True for field in ("category", "purchaseUrl", "imageUrl", "priceKrw"))
-  ):
-    return None
-  candidate_color_family = _clean(item.get("colorFamily"), 40).casefold()
-  color_match = None if category == "base" else _broad_color_match(target, candidate_color_family)
-  if category != "base" and (
-    eligible.get("colorFamily") is not True
-    or not candidate_color_family
-    or color_match is None
-  ):
-    return None
-  product_text = " ".join((
-    _clean(item.get("productName"), 180),
-    _clean(item.get("shadeName"), 100),
-    _clean(item.get("texture"), 80) if eligible.get("texture") is True else "",
-  ))
-  candidate_finish = (
-    _canonical_one(item.get("finish"), _FINISH_ALIASES)
-    if eligible.get("finish") is True
-    else None
-  )
-  candidate_texture = (
-    _canonical_one(item.get("texture"), _TEXTURE_ALIASES)
-    if eligible.get("texture") is True
-    else None
-  )
-  candidate_types = set(_canonical_product_types(product_text))
-  target_types = set(target.get("productTypes") or [])
-  # Supplemental catalog category labels are not enough to establish cosmetic
-  # function on their own (for example, an eyelash product can be misclassified
-  # as brow). Require a locally allowlisted report/candidate product-type match
-  # for every category before semantic scoring can see the item.
-  if not target_types or not target_types & candidate_types:
-    return None
-  score = 30.0
-  reasons = ["REPORT_CATALOG_FALLBACK"]
-  labels = [
-    "검증 제품군이 부족해 보고서의 제품 유형과 관련된 외부 베이스 상품을 함께 보여드려요"
-    if category == "base"
-    else "검증 shade가 부족해 보고서 맥락과 관련된 외부 상품을 함께 보여드려요"
-  ]
-  if category != "base":
-    if color_match == "exact":
-      score += 10.0
-      reasons.append("MATCHING_COLOR_FAMILY")
-      labels.append("검증된 넓은 컬러 계열이 보고서와 일치해요")
-    else:
-      score += 5.0
-      reasons.append("ADJACENT_COLOR_FAMILY")
-      labels.append("검증된 넓은 컬러 계열이 보고서 색상과 인접해요")
-  if _finish_similarity(target.get("finish"), candidate_finish):
-    score += 15.0
-    reasons.append("MATCHING_FINISH")
-    labels.append("보고서의 추천 피니시와 관련 있어요")
-  if target.get("texture") and target["texture"] == candidate_texture:
-    score += 10.0
-    reasons.append("MATCHING_TEXTURE")
-    labels.append("보고서의 추천 제형과 관련 있어요")
-  if set(target.get("productTypes") or []) & candidate_types:
-    score += 15.0
-    reasons.append("MATCHING_PRODUCT_TYPE")
-    labels.append("보고서에 적힌 제품 유형과 맞아요")
-  external = dict(item)
-  # The snapshot palette is not verified swatch evidence.  Never expose it as
-  # an exact shade match for this report path.
-  external.update({
-    "shadeId": None,
-    "shadeName": None,
-    "shadeHex": None,
-    "palette": [],
-    "colorFamily": None if category == "base" else candidate_color_family,
-    "finish": candidate_finish,
-    "texture": candidate_texture,
-    "imageUrl": image_url,
-    "purchaseUrl": purchase_url,
-    "reasonCodes": reasons,
-    "reasonLabels": labels,
-    "matchRate": round(score),
-    "semanticMatchRate": None,
-    "colorDistance": None,
-    "externalSource": AURADIN_CATALOG_SOURCE,
-    "recommendationBasis": "semanticCatalogProductFamily" if category == "base" else "semanticCatalog",
-    "degradedReason": (
-      "external_catalog_unverified_product_family"
-      if category == "base"
-      else "external_catalog_unverified_shade"
-    ),
-    "_ruleScore": score,
-    "_semanticText": _embedding_text(
-      category=category,
-      color_family=None if category == "base" else candidate_color_family,
-      finish=candidate_finish,
-      texture=candidate_texture,
-      product_types=candidate_types,
-    ),
-  })
-  return external
 
 
 def _query_text(target: dict[str, Any]) -> str:
@@ -1258,6 +1120,9 @@ async def get_makeup_report_product_recommendations(
       {"missingCategories": missing_guides},
     )
 
+  # The licensed, measured-shade database is the fast and strongest evidence
+  # source. Live shopping search is deliberately deferred until its per-
+  # category shortage is known; it is never called for a sufficient category.
   internal_rows = await _fetch_internal_candidates(
     db,
     settings,
@@ -1269,7 +1134,6 @@ async def get_makeup_report_product_recommendations(
     rows_by_category[str(row.get("product_region") or "")].append(dict(row))
 
   internal_by_category: dict[str, list[dict[str, Any]]] = {}
-  needs_external: list[str] = []
   for category in categories:
     candidates = [
       candidate
@@ -1281,47 +1145,76 @@ async def get_makeup_report_product_recommendations(
       )) is not None
     ]
     candidates.sort(key=lambda item: (-float(item["_ruleScore"]), str(item.get("productId") or "")))
-    internal_by_category[category] = _dedupe_product_candidates(candidates)[:MAX_RERANK_CANDIDATES_PER_CATEGORY]
-    if len(internal_by_category[category]) < per_category_limit:
-      needs_external.append(category)
+    # Licensed measured shades retain strict score/Delta-E order. Report-bound
+    # discovery candidates are independently color-gated before entering this
+    # list; Naver search order itself never contributes to the final ranking.
+    internal_by_category[category] = _dedupe_product_candidates(
+      candidates,
+    )[:MAX_RERANK_CANDIDATES_PER_CATEGORY]
 
-  external_by_category: dict[str, list[dict[str, Any]]] = defaultdict(list)
-  external_unavailable = False
-  if needs_external:
-    try:
-      external_items = await get_auradin_catalog_products(
-        db,
-        user_id=user_id,
-        # Filter a sufficiently broad, still-bounded category pool before the
-        # report color/type gates. Truncating to eight popular items first can
-        # erase a valid broad-color match that exists later in the snapshot.
-        limit=len(needs_external) * MAX_EXTERNAL_PREFILTER_PER_CATEGORY,
-        categories=needs_external,
-        strategy="popular",
-        verified_offer_max_age_hours=settings.product_offer_max_age_hours,
-      )
-    except Exception:  # noqa: BLE001 - optional snapshot must not hide valid internal results.
-      logger.warning("[aura:products] makeup-report:external-catalog-unavailable", exc_info=True)
-      external_items = []
-      external_unavailable = True
-    for item in external_items:
-      category = str(item.get("category") or "")
-      if category in target_by_category:
-        candidate = _external_candidate(item, target_by_category[category])
-        if candidate is not None:
-          external_by_category[category].append(candidate)
+  desired_count = min(per_category_limit, MAX_RERANK_CANDIDATES_PER_CATEGORY)
+  shortages = {
+    category: max(0, desired_count - len(internal_by_category[category]))
+    for category in categories
+  }
+  shortage_targets = {
+    category: target_by_category[category]
+    for category in categories
+    if shortages[category] > 0
+  }
+  if shortage_targets:
+    discovered_by_category, discovery_meta = await discover_report_products(
+      settings,
+      targets_by_category=shortage_targets,
+      per_category_limit=desired_count,
+    )
+  else:
+    discovered_by_category = {}
+    discovery_meta = {
+      "contractVersion": DISCOVERY_CONTRACT_VERSION,
+      "provider": "naver_shopping",
+      "configured": bool(
+        settings.naver_shopping_client_id and settings.naver_shopping_client_secret
+      ),
+      "applied": False,
+      "queriedCategories": [],
+      "verifiedItems": 0,
+      "error": None,
+      "skippedReason": "database_sufficient",
+    }
+  discovery_meta = {
+    **discovery_meta,
+    "databaseFirst": True,
+    "databaseEligibleItems": sum(len(items) for items in internal_by_category.values()),
+    "databaseSufficientCategories": [
+      category for category in categories if shortages[category] == 0
+    ],
+    "shortageCategories": [
+      category for category in categories if shortages[category] > 0
+    ],
+    "requestedItemsPerCategory": desired_count,
+    "supplementedItems": sum(
+      min(shortages[category], len(discovered_by_category.get(category, [])))
+      for category in categories
+    ),
+  }
 
   candidate_groups: dict[str, list[dict[str, Any]]] = {}
-  source_split: dict[str, int] = {}
   for category in categories:
-    internal = internal_by_category[category]
-    external_budget = max(0, MAX_RERANK_CANDIDATES_PER_CATEGORY - len(internal))
-    external = _dedupe_product_candidates(sorted(
-      external_by_category.get(category, []),
-      key=lambda item: (-float(item["_ruleScore"]), str(item.get("productId") or "")),
-    ))[:external_budget]
-    candidate_groups[category] = [*internal, *external]
-    source_split[category] = len(internal)
+    discovered = []
+    for item in discovered_by_category.get(category, [])[:shortages[category]]:
+      candidate = dict(item)
+      candidate["_semanticText"] = _embedding_text(
+        category=category,
+        color_family=target_by_category[category].get("colorFamily"),
+        finish=target_by_category[category].get("finish"),
+        texture=target_by_category[category].get("texture"),
+        product_types=target_by_category[category].get("productTypes") or (),
+      )
+      discovered.append(candidate)
+    combined = [*internal_by_category[category], *discovered]
+    combined.sort(key=lambda item: (-float(item.get("_ruleScore") or 0), str(item.get("productId") or "")))
+    candidate_groups[category] = _dedupe_product_candidates(combined)[:MAX_RERANK_CANDIDATES_PER_CATEGORY]
 
   semaphore = asyncio.Semaphore(8)
   reranked_results = await asyncio.gather(*(
@@ -1334,8 +1227,6 @@ async def get_makeup_report_product_recommendations(
   groups: list[dict[str, Any]] = []
   embedding_stats = {"applied": False, "cacheHits": 0, "cacheMisses": 0}
   degraded_reasons: set[str] = set()
-  supplemental_auradin_applied = False
-  final_shortage = False
   for category, (candidates, semantic_meta) in zip(categories, reranked_results):
     embedding_stats["applied"] = bool(embedding_stats["applied"] or semantic_meta["applied"])
     embedding_stats["cacheHits"] += int(semantic_meta["cacheHits"])
@@ -1343,31 +1234,16 @@ async def get_makeup_report_product_recommendations(
     if semantic_meta.get("degradedReason"):
       degraded_reasons.add(str(semantic_meta["degradedReason"]))
 
-    internal_count = source_split[category]
-    internal_ids = {
-      str(item.get("productId")) for item in internal_by_category[category]
-    }
-    internal = [item for item in candidates if str(item.get("productId")) in internal_ids and not item.get("externalSource")]
-    external = [item for item in candidates if item.get("externalSource") == AURADIN_CATALOG_SOURCE]
-    selected_items = [*internal[:per_category_limit], *external[:max(0, per_category_limit - len(internal))]]
-    used_external = any(item.get("externalSource") for item in selected_items)
-    category_shortage = len(selected_items) < per_category_limit
-    final_shortage = final_shortage or category_shortage
-    supplemental_auradin_applied = supplemental_auradin_applied or used_external
-    if category_shortage and not external_unavailable:
-      degraded_reasons.add("external_catalog_filtered")
-    group_degraded_reason = (
-      "external_catalog_unavailable"
-      if category_shortage and external_unavailable
-      else "external_catalog_filtered_or_stale"
-      if category_shortage and not external_by_category.get(category)
-      else "requested_limit_not_filled"
-      if category_shortage
-      else "insufficient_verified_product_families"
-      if used_external and category == "base"
-      else "insufficient_verified_shades"
-      if used_external
-      else None
+    selected_items = candidates[:per_category_limit]
+    selected_sources = {str(item.get("externalSource") or "licensed") for item in selected_items}
+    group_source = (
+      "licensedCatalog"
+      if selected_sources == {"licensed"}
+      else "verifiedLiveDiscovery"
+      if selected_sources == {"naver_shopping_search"}
+      else "verifiedCatalogAndLiveDiscovery"
+      if selected_items
+      else "none"
     )
     groups.append({
       "category": category,
@@ -1375,64 +1251,13 @@ async def get_makeup_report_product_recommendations(
       "status": "ready" if selected_items else "empty",
       "target": _target_response(target_by_category[category]),
       "items": [_strip_private_fields(item) for item in selected_items],
-      "source": (
-        "licensedCatalog+auradinCatalog"
-        if internal_count and used_external
-        else "licensedCatalog"
-        if internal_count
-        else "auradinCatalog"
-        if used_external
-        else "none"
-      ),
-      "degraded": used_external or category_shortage,
-      "degradedReason": group_degraded_reason,
+      "source": group_source,
+      "degraded": False,
+      "degradedReason": None,
     })
 
   nonempty = sum(bool(group["items"]) for group in groups)
   status = "noEligibleProducts" if nonempty == 0 else "ready" if nonempty == len(groups) else "partial"
-  if external_unavailable:
-    degraded_reasons.add("external_catalog_unavailable")
-  embedding_fallback_reasons = {
-    "embedding_not_configured",
-    "embedding_unavailable",
-    "candidate_embeddings_unavailable",
-    "embedding_capacity_saturated",
-    "embedding_timeout",
-  }
-  rules_fallback_applied = bool(degraded_reasons & embedding_fallback_reasons) or final_shortage
-  fallback_mode = (
-    "empty"
-    if nonempty == 0
-    else "catalog_shortage"
-    if final_shortage
-    else "rules_only_with_catalog_supplement"
-    if rules_fallback_applied and supplemental_auradin_applied
-    else "rules_only"
-    if rules_fallback_applied
-    else "catalog_supplement"
-    if supplemental_auradin_applied
-    else "none"
-  )
-  public_reason_codes = {
-    "embedding_not_configured": "EMBEDDING_NOT_CONFIGURED",
-    "embedding_unavailable": "EMBEDDING_UNAVAILABLE",
-    "candidate_embeddings_unavailable": "CANDIDATE_EMBEDDINGS_UNAVAILABLE",
-    "embedding_capacity_saturated": "EMBEDDING_CAPACITY_SATURATED",
-    "embedding_timeout": "EMBEDDING_TIMEOUT",
-    "external_catalog_unavailable": "SUPPLEMENTAL_CATALOG_UNAVAILABLE",
-    "external_catalog_filtered": "SUPPLEMENTAL_CATALOG_FILTERED",
-  }
-  fallback_reason_codes = [
-    public_reason_codes[reason]
-    for reason in sorted(degraded_reasons)
-    if reason in public_reason_codes
-  ]
-  if nonempty == 0:
-    fallback_reason_codes.append("NO_ELIGIBLE_PRODUCTS")
-  if needs_external:
-    fallback_reason_codes.append("VERIFIED_CATALOG_SHORTAGE")
-  if supplemental_auradin_applied:
-    fallback_reason_codes.append("SUPPLEMENTAL_AURADIN_APPLIED")
   embedding = {
     **embedding_stats,
     "modelId": settings.effective_embedding_model_id or None,
@@ -1457,10 +1282,11 @@ async def get_makeup_report_product_recommendations(
       "cacheHits": embedding["cacheHits"],
       "cacheMisses": embedding["cacheMisses"],
       "degradedReason": embedding["degradedReason"],
+      "discovery": discovery_meta,
       "fallback": {
-        "mode": fallback_mode,
-        "reasonCodes": fallback_reason_codes,
-        "supplementalAuradinApplied": supplemental_auradin_applied,
+        "mode": "none",
+        "reasonCodes": [],
+        "supplementalAuradinApplied": False,
       },
     },
     "algorithmVersion": ALGORITHM_VERSION,

@@ -2,6 +2,7 @@ import {useEffect, useRef} from 'react';
 import {FlatList, StyleSheet, View, type ViewToken} from 'react-native';
 
 import {spacing} from '../../../shared/theme';
+import {productLikeKey} from '../services/productLikeIdentity';
 import type {CatalogProduct} from '../types';
 import {RecommendationProductCard, RECOMMENDATION_RAIL_CARD_WIDTH} from './RecommendationProductCard';
 
@@ -36,7 +37,10 @@ export function ProductRail({
     ({viewableItems}: {viewableItems: Array<ViewToken<CatalogProduct>>}) => {
       viewableItems.forEach(token => {
         if (!token.isViewable || !token.item || token.index === null) return;
-        const key = `${token.item.productId}:${token.item.shadeId ?? 'family'}`;
+        const key = `${productLikeKey(
+          token.item.productId,
+          token.item.externalSource,
+        )}:${token.item.shadeId ?? 'family'}`;
         if (impressed.current.has(key)) return;
         impressed.current.add(key);
         onImpressionRef.current?.(token.item, token.index);
@@ -52,7 +56,10 @@ export function ProductRail({
       getItemLayout={(_, index) => ({index, length: RECOMMENDATION_RAIL_CARD_WIDTH + spacing.sm, offset: (RECOMMENDATION_RAIL_CARD_WIDTH + spacing.sm) * index})}
       horizontal
       ItemSeparatorComponent={() => <View style={styles.separator} />}
-      keyExtractor={item => `${item.productId}:${item.shadeId ?? 'family'}`}
+      keyExtractor={item => `${productLikeKey(
+        item.productId,
+        item.externalSource,
+      )}:${item.shadeId ?? 'family'}`}
       onViewableItemsChanged={onViewableItemsChanged}
       renderItem={({item, index}) => <RecommendationProductCard product={item} showReason={showReason} onOpen={() => onOpen(item, index)} onToggleLike={() => onToggleLike(item)} />}
       showsHorizontalScrollIndicator={false}

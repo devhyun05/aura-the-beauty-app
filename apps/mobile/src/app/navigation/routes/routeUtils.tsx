@@ -1,7 +1,11 @@
 import React from 'react';
 import {StyleSheet} from 'react-native';
 import type {BottomTabScreenProps} from '@react-navigation/bottom-tabs';
-import type {CompositeScreenProps, NavigationProp} from '@react-navigation/native';
+import {
+  StackActions,
+  type CompositeScreenProps,
+  type NavigationProp,
+} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {YStack} from 'tamagui';
@@ -48,23 +52,59 @@ type MainTabChromeProps = {
   wrapContentInScreen?: boolean;
 };
 
+export function getMainTabResetState(
+  screen: MainTabRouteName = 'HomeTab',
+) {
+  return {
+    index: 0,
+    routes: [
+      {
+        name: 'MainTabs' as const,
+        params: {screen},
+      },
+    ],
+  };
+}
+
 export function navigateMainTab(
   navigation: RootNavigation,
   screen: MainTabRouteName = 'HomeTab',
 ) {
-  navigation.navigate('MainTabs', {screen});
+  navigation.reset(getMainTabResetState(screen));
 }
 
 export function goBackToPreviousOrMainTab(
   navigation: RootNavigation,
   fallbackScreen: MainTabRouteName,
 ) {
-  if (navigation.canGoBack()) {
-    navigation.goBack();
+  if (goBackToPreviousRoute(navigation)) {
     return;
   }
 
   navigateMainTab(navigation, fallbackScreen);
+}
+
+function canPopRootStack(navigation: RootNavigation): boolean {
+  try {
+    const state = navigation.getState();
+    return typeof state.index === 'number' && state.index > 0;
+  } catch {
+    return false;
+  }
+}
+
+export function goBackToPreviousRoute(navigation: RootNavigation): boolean {
+  if (canPopRootStack(navigation)) {
+    navigation.dispatch(StackActions.pop(1));
+    return true;
+  }
+
+  if (navigation.canGoBack()) {
+    navigation.goBack();
+    return true;
+  }
+
+  return false;
 }
 
 export function getConsultingHistoryBackAction(
@@ -103,15 +143,7 @@ export function getMakeupJourneyTabResetState(month?: string) {
 }
 
 export function getHomeTabResetState() {
-  return {
-    index: 0,
-    routes: [
-      {
-        name: 'MainTabs' as const,
-        params: {screen: 'HomeTab' as const},
-      },
-    ],
-  };
+  return getMainTabResetState('HomeTab');
 }
 
 export function getMakeupJourneyDayResetState(
@@ -142,6 +174,10 @@ export function getMakeupJourneySafeReturnResetState(
 }
 
 export function navigateARBack(navigation: RootNavigation, backRoute?: ARFilterBackRouteName) {
+  if (goBackToPreviousRoute(navigation)) {
+    return;
+  }
+
   if (backRoute === 'FaceAnalysisReportDetail') {
     navigation.navigate('FaceAnalysisReportDetail');
     return;

@@ -3,6 +3,7 @@ import {ExternalLink, Heart} from 'lucide-react-native';
 import {Text} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {productMatchRateLabel} from '../services/productMatchPresentation';
 import type {CatalogProduct} from '../types';
 
 export const RECOMMENDATION_RAIL_CARD_WIDTH = 148;
@@ -22,14 +23,21 @@ export function RecommendationProductCard({
 }) {
   const liked = product.viewerState.liked;
   const canLike = product.canLike !== false;
+  const matchLabel = productMatchRateLabel(product);
   return (
     <Pressable
-      accessibilityLabel={`${product.brandName} ${product.productName}${product.shadeName ? ` ${product.shadeName}` : ''}`}
+      accessibilityHint={product.externalSource ? '외부 판매처 페이지를 엽니다' : '제품 상세를 엽니다'}
+      accessibilityLabel={`${product.brandName} ${product.productName}${product.shadeName ? ` ${product.shadeName}` : ''}${matchLabel ? `, 매칭 ${matchLabel}` : ''}`}
       accessibilityRole="button"
       onPress={onOpen}
       style={[styles.card, grid ? styles.gridCard : undefined]}>
       <View style={[styles.imageFrame, grid ? styles.gridImageFrame : undefined]}>
         {product.imageUrl ? <Image resizeMode="contain" source={{uri: product.imageUrl}} style={styles.image} /> : <Text style={styles.noImage}>이미지 없음</Text>}
+        {matchLabel ? (
+          <View accessibilityLabel={`매칭 ${matchLabel}`} style={styles.matchBadge}>
+            <Text style={styles.matchBadgeText}>{matchLabel}</Text>
+          </View>
+        ) : null}
         {canLike ? <Pressable
           accessibilityLabel={liked ? '좋아요 취소' : '좋아요 추가'}
           accessibilityRole="button"
@@ -52,11 +60,13 @@ export function RecommendationProductCard({
 
 const styles = StyleSheet.create({
   card: {backgroundColor: colors.background, gap: spacing.xs, width: RECOMMENDATION_RAIL_CARD_WIDTH},
-  gridCard: {flexBasis: '48%', flexGrow: 0, minWidth: 0, width: '48%'},
+  gridCard: {flexBasis: '48%', flexGrow: 0, flexShrink: 1, minWidth: 0, width: '48%'},
   imageFrame: {alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: radius.md, height: 148, justifyContent: 'center', overflow: 'hidden'},
   gridImageFrame: {aspectRatio: 1, height: undefined},
   image: {height: '100%', width: '100%'},
   noImage: {...typography.caption, color: colors.textTertiary},
+  matchBadge: {alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.78)', borderRadius: radius.pill, justifyContent: 'center', left: 6, minHeight: 28, paddingHorizontal: spacing.xs, position: 'absolute', top: 6},
+  matchBadgeText: {color: colors.white, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xs, lineHeight: typography.lineHeight.xs},
   heart: {alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.pill, height: 44, justifyContent: 'center', position: 'absolute', right: 4, top: 4, width: 44},
   external: {alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.pill, height: 36, justifyContent: 'center', position: 'absolute', right: 6, top: 6, width: 36},
   brand: {color: colors.textSecondary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.xs, lineHeight: typography.lineHeight.xs},

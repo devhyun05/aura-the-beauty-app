@@ -3,6 +3,8 @@
 // 호출측(faceGeometryService)이 이 모듈의 순수 함수로 끝낸 뒤 넘긴다.
 
 import type {
+  FaceGeometryDebugAnchor,
+  FaceGeometryDebugAnchors,
   FaceGeometryMetric,
   FaceGeometryMetricKey,
   FaceGeometryMetricUnit,
@@ -12,6 +14,8 @@ import {FACE_GEOMETRY_METRIC_KEYS} from '../../types';
 import {
   BROW_CORE_LEFT_INDICES,
   BROW_CORE_RIGHT_INDICES,
+  BROW_UPPER_EDGE_LEFT_INDICES,
+  BROW_UPPER_EDGE_RIGHT_INDICES,
   FACE_GEOMETRY_LANDMARK_INDICES,
 } from './landmarkIndices';
 
@@ -152,6 +156,55 @@ function browSlopeDeg(
   return metric('deg', round(deg, 2));
 }
 
+// 눈썹 상연 edge(medial→lateral)에서 최고점(y 최소)을 apex 로, 그 지점의 호길이 비율
+// (0=medial, 1=lateral)을 반환. slope 한 개보다 형태(어디서 솟는가)를 보존한다.
+//
+// MediaPipe 상연 샘플이 5점뿐(드문드문)이라 진짜 봉우리가 두 샘플 사이에 있으면
+// 최근접 샘플로 스냅돼 미묘하게 어긋난다. 최고점 샘플과 양옆 2점에 포물선을 맞춰
+// 정점(vertex)을 호길이 상에서 sub-sample 추정한다(양 끝점이면 그대로 사용).
+function browApexRatioMetric(edge: PixelPoint[]): FaceGeometryMetric {
+  if (edge.length < 3) {
+    return unavailable('ratio', 'brow_edge_insufficient');
+  }
+  const cum: number[] = [0];
+  for (let i = 1; i < edge.length; i++) {
+    cum.push(cum[i - 1] + distance(edge[i - 1], edge[i]));
+  }
+  const total = cum[cum.length - 1];
+  if (!(total > GEOMETRY_EPSILON)) {
+    return unavailable('ratio', 'brow_length_degenerate');
+  }
+  let apex = 0;
+  for (let i = 1; i < edge.length; i++) {
+    if (edge[i].y < edge[apex].y) {
+      apex = i;
+    }
+  }
+
+  let apexArc = cum[apex];
+  if (apex > 0 && apex < edge.length - 1) {
+    // 호길이 s 를 파라미터로 (s, y) 3점에 포물선 y = a·s² + b·s + c 를 맞춘다.
+    const s0 = cum[apex - 1];
+    const s1 = cum[apex];
+    const s2 = cum[apex + 1];
+    const y0 = edge[apex - 1].y;
+    const y1 = edge[apex].y;
+    const y2 = edge[apex + 1].y;
+    const denom = (s0 - s1) * (s0 - s2) * (s1 - s2);
+    if (Math.abs(denom) > GEOMETRY_EPSILON) {
+      const a = (s2 * (y1 - y0) + s1 * (y0 - y2) + s0 * (y2 - y1)) / denom;
+      const b =
+        (s2 * s2 * (y0 - y1) + s1 * s1 * (y2 - y0) + s0 * s0 * (y1 - y2)) / denom;
+      // a>0 이라야 아래로 볼록(=y 최소=봉우리)이 유효. 정점은 이웃 구간으로 clamp.
+      if (a > GEOMETRY_EPSILON) {
+        apexArc = Math.min(s2, Math.max(s0, -b / (2 * a)));
+      }
+    }
+  }
+
+  return metric('ratio', round(apexArc / total, 4));
+}
+
 // 상꺼풀 ↔ 눈썹 하연 최저점(링에서 y 최대 = 눈에 가장 가까운 점)의 수직거리.
 function eyeBrowGapMetric(
   upperLid: PixelPoint,
@@ -172,12 +225,14 @@ function eyeBrowGapMetric(
 export type ComputeFaceGeometryMetricsInput = {
   map: PixelLandmarkMap;
   // roll 보정이 적용되지 않은 좌표에서는 기울기·수직거리 계열(canthalTilt,
-  // browSlope, eyeBrowGap, mouthCornerAsymmetry)을 계산하지 않는다 —
+  // browSlope, browApexRatio, eyeBrowGap, mouthCornerAsymmetry)을 계산하지 않는다 —
   // 카메라 기울기를 얼굴 특징으로 오인하기 때문. 해당 지표만 null 이 된다.
   rollCorrectionApplied: boolean;
 };
 
 const ROLL_SENSITIVE_KEYS: readonly FaceGeometryMetricKey[] = [
+  'browApexRatioLeft',
+  'browApexRatioRight',
   'browSlopeLeftDeg',
   'browSlopeRightDeg',
   'canthalTiltLeftDeg',
@@ -315,6 +370,15 @@ export function computeFaceGeometryMetrics({
     metrics.browSlopeRightDeg = browSlopeDeg(browRingRight, 'right');
   }
 
+  const browEdgeRight = getRing(BROW_UPPER_EDGE_RIGHT_INDICES);
+  if (browEdgeRight) {
+    metrics.browApexRatioRight = browApexRatioMetric(browEdgeRight);
+  }
+  const browEdgeLeft = getRing(BROW_UPPER_EDGE_LEFT_INDICES);
+  if (browEdgeLeft) {
+    metrics.browApexRatioLeft = browApexRatioMetric(browEdgeLeft);
+  }
+
   if (upperLidL && browRingLeft && eyeWidthLeftPx !== null) {
     metrics.eyeBrowGapLeft = eyeBrowGapMetric(upperLidL, browRingLeft, eyeWidthLeftPx);
   }
@@ -335,4 +399,43 @@ export function computeFaceGeometryMetrics({
   }
 
   return metrics;
+}
+
+// 오버레이 검증 전용(로컬) — 지표 계산에 실제 쓴 랜드마크 점을 정규화(0..1)
+// 좌표로 담는다. computeFaceGeometryMetrics 와 같은 인덱스를 재사용해 지표와
+// 시각화가 어긋나지 않게 한다. ⚠ 서버 wire payload 에는 절대 포함하지 않는다
+// (faceAnalysisMeasurements.encodeFaceGeometry 가 명시적으로 제외).
+export function collectFaceGeometryDebugAnchors(
+  map: PixelLandmarkMap,
+  imageWidth: number,
+  imageHeight: number,
+): FaceGeometryDebugAnchors {
+  if (!(imageWidth > 0) || !(imageHeight > 0)) {
+    return [];
+  }
+  const anchors: FaceGeometryDebugAnchor[] = [];
+  const norm = (p: PixelPoint) => ({x: p.x / imageWidth, y: p.y / imageHeight});
+  const seg = (label: string, a: number, b: number): void => {
+    const pa = map.get(a);
+    const pb = map.get(b);
+    if (pa && pb) {
+      anchors.push({label, kind: 'segment', points: [norm(pa), norm(pb)]});
+    }
+  };
+  seg('canthalTiltRight', IDX.eyeInnerRight, IDX.eyeOuterRight);
+  seg('canthalTiltLeft', IDX.eyeInnerLeft, IDX.eyeOuterLeft);
+  seg('eyeOpennessRight', IDX.eyeUpperLidRight, IDX.eyeLowerLidRight);
+  seg('eyeOpennessLeft', IDX.eyeUpperLidLeft, IDX.eyeLowerLidLeft);
+  // 눈썹 상연 edge polyline
+  const browEdge = (label: string, indices: readonly number[]): void => {
+    const pts: {x: number; y: number}[] = [];
+    for (const i of indices) {
+      const p = map.get(i);
+      if (p) pts.push(norm(p));
+    }
+    if (pts.length >= 2) anchors.push({label, kind: 'polyline', points: pts});
+  };
+  browEdge('browEdgeRight', BROW_UPPER_EDGE_RIGHT_INDICES);
+  browEdge('browEdgeLeft', BROW_UPPER_EDGE_LEFT_INDICES);
+  return anchors;
 }

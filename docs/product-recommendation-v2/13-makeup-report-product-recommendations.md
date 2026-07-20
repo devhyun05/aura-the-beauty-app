@@ -22,16 +22,18 @@
   명시적으로 재시도할 때만 기존 결과를 보존한 채 `revision + 1`을 만든다.
 - inline 실행에서도 제품 snapshot과 추천 이미지 작업은 한 background coordinator에서 병렬로
   실행한다. 세 룩 제품 계산이 이미지 생성을 직렬로 막거나 그 반대가 되지 않는다.
-- 제품은 mock이나 LLM이 만든 상품이 아니라 검증된 실제 카탈로그와 유효한 판매 offer에서만
-  가져온다. 자체 카탈로그가 부족하면 검증된 supplemental Auradin 상품을 출처가 드러나게
-  보충할 수 있다.
+- 제품은 mock이나 LLM이 만든 상품이 아니라 검증된 내부 카탈로그 또는 보고서 색상으로
+  검색·검증한 실제 Naver Shopping 상품에서만 가져온다. Naver 검색 순위는 추천 근거로 쓰지
+  않고, 비-base 상품은 listing image에서 추출한 색과 보고서 색의 CIEDE2000 검증을 통과해야 한다.
 - 기존 `/api/products/recommendations/ar` API, 저장 AR 룩, AR 편집·프리뷰 흐름과 과거
   `ar_v1` 데이터는 호환성을 위해 유지한다. 다만 추천제품 허브의 첫 shelf는 더 이상 이를
   추천 기준으로 사용하지 않는다.
 
 ## 2. 선택과 표시 계약
 
-보고서 목록은 인증된 사용자의 완료된 보고서만 최신순으로 반환한다. 진입 시 명시적으로 전달된
+보고서 목록은 인증된 사용자의 구조화 레시피가 완성된 보고서만 최신순으로 반환한다. 추천 이미지가
+`pending`, `processing`, `partial`, `completed`인 보고서는 유지하되 이미지 생성 자체가 `failed`인
+보고서는 선택기에서 제외한다. 진입 시 명시적으로 전달된
 보고서가 유효하면 이를 우선하고, 그렇지 않으면 최신 보고서를 선택한다. 보고서 안에서는
 `anchor`를 기본으로 선택하되, 없으면 서버가 반환한 첫 유효 룩을 선택한다.
 
@@ -62,11 +64,15 @@ recipe enricher로 읽기 시 정규화한 뒤 같은 canonical recipe를 hash·
 소유권이 확인된 보고서·룩
 → legacy/early V2 레시피 정규화
 → 구조화 영역·단계별 레시피 추출
-→ hard eligibility filter
+→ 내부 verified catalog 조회·hard evidence filter·색상/유형/제형 순위
+→ 요청 수량을 채운 카테고리는 즉시 종료
+→ 부족한 카테고리만 보고서 기반 Naver Shopping 후보 검색
+→ Naver listing-image palette hard evidence filter 후 부족 수량만 보충
+→ 동일 제품의 검증 offer를 묶고 총 결제가격이 가장 낮은 판매 링크 하나만 유지
 → 비-base 색상 Lab/ΔE + 피니시·제품유형 규칙
 → sanitized Titan embedding bounded rerank
-→ verified catalog + fresh offer 결과를 snapshot revision으로 저장
-→ 화면 GET은 저장 순서 유지 + 현재 offer/license만 재검증
+→ 검증된 실제 상품 결과를 snapshot revision으로 저장
+→ 화면 GET은 저장 identity·순서 유지(검색·색상 계산 재실행 없음)
 ```
 
 ### 3.1 Hard eligibility
@@ -82,15 +88,28 @@ semantic score를 계산하기 전에 다음 조건을 모두 적용한다.
 - 내부 shade 근거는 허용된 측정·공식·제휴 evidence, 현재 또는 과거의 `reviewed_at`,
   `evidence_confidence >= 0.60`을 모두 충족해야 한다.
 - 이미지와 구매 URL은 검증된 public HTTPS URL이어야 한다.
+- Naver 후보는 Naver API가 반환한 실제 product identity, 가격, 판매 링크와 pstatic 상품 이미지를
+  모두 가져야 하며 보고서 카테고리와 listing 분류/제목이 일치해야 한다.
+- Naver 비-base 후보는 상품 이미지의 흰 배경·잡음을 제외한 palette cluster와 보고서 색상의
+  CIEDE2000 ΔE를 통과해야 한다. 단일 색 제품은 `PRODUCT_AR_MAX_DELTA_E`, 섀도우 팔레트는
+  listing thumbnail의 촬영·조명 편차를 반영한 `MAKEUP_REPORT_SHADOW_PALETTE_MAX_DELTA_E`를
+  사용한다. 추출 palette, 1:1로 대응한 대상·관측 색, 각 ΔE, pixel coverage, 수집 시각과
+  evidence confidence를 snapshot item에 함께 보존한다.
 
 hard eligibility에서 탈락한 후보는 색상 점수나 embedding 점수가 높아도 복구하지 않는다.
 
 ### 3.2 색상·피니시 규칙
 
 `brow`, `shadow`, `liner`, `cheek`, `lip`은 보고서 레시피의 유효한 `#RRGGBB`를 CIELAB으로
-변환하고, 근거가 확인된 상품 shade Lab과 CIEDE2000 ΔE를 비교한다. 허용 ΔE 범위를 넘는
-색상은 semantic rerank 후보에 넣지 않는다. 가까운 색 안에서는 피니시·질감과 제품 유형,
-evidence confidence를 함께 점수화한다.
+변환하고, 내부 verified shade Lab 또는 live listing image에서 추출한 관측 Lab과 CIEDE2000 ΔE를
+비교한다. 허용 ΔE 범위를 넘는 색상은 semantic rerank 후보에 넣지 않는다. 가까운 색 안에서는
+피니시·질감과 제품 유형, evidence confidence를 함께 점수화한다.
+
+`shadow`는 보고서의 모든 색이 한 팔레트에 완전히 들어 있어야 하는 AND 조건을 사용하지 않는다.
+팔레트 이미지에서 서로 다른 팬과 서로 다른 보고서 목표색을 1:1로 비교하고, 유사한 팬이 하나
+이상이면 실제 부분 일치 후보로 인정한다. 통과한 목표색 수와 최소 ΔE를 함께 저장하며, 독립적으로
+일치한 색이 많을수록 match rate와 evidence confidence가 올라간다. 따라서 서로 보완하는 여러
+팔레트가 추천될 수 있지만, 실제 이미지 픽셀 검증을 하나도 통과하지 않은 팔레트는 포함되지 않는다.
 
 `base`는 보고서의 shade hex를 제품 shade 매칭에 사용하지 않는다. 생성된 base 색은 메이크업
 연출 또는 렌더링 힌트일 수 있어 실제 파운데이션 호수와 같은 의미가 아니기 때문이다. base는
@@ -119,7 +138,7 @@ Bedrock Titan text embedding은 hard filter와 규칙을 통과한 후보 안에
 - semantic 가중치와 순위 이동 폭은 제한한다. embedding은 카테고리, eligibility, ΔE 제한 또는
   명백한 피니시·제품유형 불일치를 뒤집을 수 없다.
 - Bedrock 장애나 권한 문제에서 hash vector를 Titan vector인 것처럼 비교하지 않는다. 규칙 기반
-  정렬로 저하하고 fallback metadata를 반환한다.
+  정렬을 유지하고 embedding `degradedReason`만 반환한다.
 
 ### 3.4 LLM 신뢰 경계
 
@@ -128,27 +147,56 @@ query의 근거일 뿐 상품 사실의 source of truth가 아니다.
 
 LLM은 product ID, shade ID, 상품명, 브랜드, 이미지 URL, 구매 URL, 가격, 재고, license,
 evidence 또는 “일치율”을 만들거나 보정할 수 없다. 모든 표시 상품과 판매 정보는 server-side
-verified catalog 조회 결과여야 한다. 추천 이유도 카탈로그와 실제 적용된 rule/semantic signal로만
-조립한다.
+verified catalog 또는 report-bound live evidence pipeline 결과여야 한다. 추천 이유도 실제 적용된
+catalog/listing evidence와 rule/semantic signal로만 조립한다.
 
-## 4. 카탈로그와 fallback 표시
+## 4. 실제 상품 discovery와 no-fallback 계약
 
-내부 verified catalog 상품을 우선한다. 카테고리별 적격 상품이 부족할 때만 현재 검증된 Auradin
-snapshot과 `PRODUCT_OFFER_MAX_AGE_HOURS` 이내의 `offerRefreshEvidence`를 가진 상품을 보충한다.
-보충 전에는 보고서 색상과 allowlist로 정규화한 제품 유형의 교집합 hard filter를 카테고리별 최대
-200개의 bounded 후보군에 먼저 적용한다. 이 제품 유형 gate는 `base`뿐 아니라
-`brow`, `shadow`, `liner`, `cheek`, `lip`에도 동일하게 적용한다.
-보충 상품은 `externalSource: "auradin_catalog"`와
-실제 external product identity를 유지하며 내부 상품으로 위장하지 않는다. 좋아요와 판매처 이동도
-이 identity를 사용한다.
+내부 verified catalog가 항상 첫 번째 소스다. 먼저 카테고리·권리·offer·shade evidence를 검증하고
+색상 ΔE, 제품 유형, 피니시·질감으로 정렬한다. 카테고리별 요청 수량을 채우면 그 카테고리는 즉시
+종료하며 Naver API를 호출하지 않는다. 수량이 부족한 카테고리만 보고서 저장 시 background snapshot
+작업 안에서 live discovery로 보충한다. 보고서의 canonical 색상명·color family·제품 카테고리만
+Naver query에 넣고 얼굴 이미지, 생성 이미지, 사용자 답변 원문과 상황 자유문은 넣지 않는다.
+
+Naver 검색 결과는 후보 발견에만 사용한다. 비-base 후보는 pstatic listing image의 quantized
+palette에서 실제 관측 색을 추출하고 보고서 색과 ΔE를 계산하며, 기준을 넘는 상품은 제목에 같은
+색 이름이 있어도 제외한다. exact color term은 통과 여부가 아니라 evidence confidence와 동점
+순서만 보조한다. base는 보고서 렌더링 hex를 파운데이션 호수로 오인하지 않고 live listing의 제품
+유형·카테고리·판매정보만 검증한다.
+
+섀도우는 한 검색어에 여러 목표색을 모두 묶지 않는다. 대표색과 개별 팔레트 색을 최대 4개의 독립
+query로 검색한 뒤 product identity를 dedupe한다. 각 listing palette의 서로 다른 팬을 목표색과
+1:1로 비교하며, 하나 이상의 팬이 기준을 통과하면 후보가 되고 추가 일치 팬 수가 순위를 높인다.
+
+검증 결과는 `externalSource: "naver_shopping_search"`, `recommendationBasis`, `verification`과
+실제 external product identity를 유지한다. 내부 상품인 것처럼 UUID를 만들지 않는다. 일반 GET은
+Naver API나 이미지 분석을 다시 호출하지 않고 snapshot을 재생한다. 사용자 명시적 refresh만 새
+revision에서 다시 수집한다. 과거 Auradin 보충·Naver 일반 검색 결과처럼 현재 verification contract가
+없는 external item은 snapshot 재사용과 hydration 단계에서 제거한다.
+
+같은 제품이 판매처별 product ID 또는 `1개/2개`, `g/ml` 표기 차이로 여러 번 발견되면 검증을
+통과한 offer만 제품군으로 묶는다. 호수·색상 옵션 번호는 제품 key에 남겨 서로 다른 shade를 합치지
+않고, 같은 제품군에서는 총 결제가격이 가장 낮은 item의 가격과 구매 링크 하나만 snapshot에
+보존한다. 기존 snapshot 재생 시에도 같은 규칙을 적용해 중복 카드를 노출하지 않는다.
 
 응답의 `ranking`은 최소한 다음 정보를 제공한다.
 
 ```json
 {
-  "strategy": "makeup_report_hybrid_v2",
+  "strategy": "makeup_report_verified_discovery_v7",
   "embeddingApplied": true,
   "embeddingModelId": "amazon.titan-embed-text-v2:0",
+  "discovery": {
+    "contractVersion": "makeup-report-live-product-evidence-v2",
+    "provider": "naver_shopping",
+    "configured": true,
+    "applied": true,
+    "verifiedItems": 4,
+    "databaseFirst": true,
+    "databaseEligibleItems": 14,
+    "databaseSufficientCategories": ["base", "lip"],
+    "shortageCategories": ["shadow"]
+  },
   "fallback": {
     "mode": "none",
     "reasonCodes": [],
@@ -157,16 +205,10 @@ snapshot과 `PRODUCT_OFFER_MAX_AGE_HOURS` 이내의 `offerRefreshEvidence`를 �
 }
 ```
 
-허용되는 fallback mode는 `none`, `rules_only`, `catalog_supplement`,
-`rules_only_with_catalog_supplement`, `catalog_shortage`, `empty`다. `catalog_shortage`는
-embedding 적용 여부와 무관하게 최종 상품 수가 요청 상한보다 적다는 뜻이다. `reasonCodes`는 내부 예외 문구가 아니라
-`EMBEDDING_UNAVAILABLE`, `EMBEDDING_CAPACITY_SATURATED`, `VERIFIED_CATALOG_SHORTAGE`,
-`SUPPLEMENTAL_CATALOG_UNAVAILABLE`, `SUPPLEMENTAL_CATALOG_FILTERED`,
-`NO_ELIGIBLE_PRODUCTS`처럼 공개 가능한 안정된 코드만 사용한다. 최종 상품 수가 요청한
-`perCategoryLimit`보다 적으면 group을 degraded로 표시하고 `VERIFIED_CATALOG_SHORTAGE`를 남긴다.
-
-fallback에서도 mock, request-time live shopping search, 만료 offer 또는 검증되지 않은 URL을
-노출하지 않는다. 적격 상품이 없으면 해당 group은 정직한 empty 상태를 반환한다. 전체 snapshot이
+`fallback.mode`는 항상 `none`이다. Bedrock이 비활성·timeout이어도 hard evidence와 로컬 rule score는
+유효하므로 `ranking.degradedReason`에 embedding 상태만 기록하고 다른 상품군으로 대체하지 않는다.
+Naver 자격증명이 없거나 provider가 실패하거나 색상 검증 후보가 없으면 임의 상품, 고정 palette,
+Auradin catalog 또는 mock을 넣지 않는다. 해당 group은 정직한 empty 상태를 반환한다. 전체 snapshot이
 비어 있으면 모바일은 `추천 다시 찾기`를 제공하고, 사용자가 이를 누를 때만 새 revision을 계산한다.
 
 ## 5. API 계약
@@ -233,7 +275,8 @@ claim으로 중복 요청이 서로 다른 순위를 저장하지 못하게 한�
 재claim할 수 있다.
 
 각 product item은 기존 `CatalogProduct` 계약을 재사용한다. 내부 상품은 검증된 product/shade/offer
-identity를, supplemental 상품은 `externalSource`와 외부 `productId`의 identity 쌍을 보존한다.
+identity를, live discovery 상품은 `externalSource`와 외부 `productId`의 identity 쌍 및 색상 evidence를
+보존한다.
 
 ## 6. 개인정보·소유권
 
@@ -270,7 +313,7 @@ identity를, supplemental 상품은 `externalSource`와 외부 `productId`의 id
   최초 접근에서 한 번 backfill된다.
 - base ranking은 report shade hex에 영향을 받지 않는다.
 - 비-base 색상 범위 밖 상품과 hard eligibility 탈락 상품은 embedding으로 복구되지 않는다.
-- Titan 성공, model/dimension 불일치, timeout/권한 실패, rules-only fallback이 모두 테스트된다.
-- 내부·supplemental 상품 모두 검증된 이미지와 fresh offer만 가지며 출처가 구분된다.
+- Titan 성공, model/dimension 불일치, timeout/권한 실패, rules-only 정렬 유지가 모두 테스트된다.
+- 내부·live discovery 상품 모두 실제 이미지와 판매 offer를 가지며 출처와 색상 evidence가 구분된다.
 - 교차 사용자 report 접근, 삭제 report, 잘못된 look ID가 거절된다.
 - 기존 AR 저장·프리뷰와 `/api/products/recommendations/ar` 회귀 테스트는 계속 통과한다.

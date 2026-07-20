@@ -22,6 +22,8 @@ export type FaceGeometryMetric = {
 // 명명 기준: 피사체(anatomical) 기준 — Left/Right 는 피사체 자신의 좌/우.
 // 각도(deg) 지표의 부호는 좌우 mirror 정규화되어 있다(양수 = 꼬리/외측이 올라감).
 export const FACE_GEOMETRY_METRIC_KEYS = [
+  'browApexRatioLeft',
+  'browApexRatioRight',
   'browSlopeLeftDeg',
   'browSlopeRightDeg',
   'canthalTiltLeftDeg',
@@ -56,6 +58,15 @@ export type FaceGeometryPose = {
   yawDeg: number;
 };
 
+// 오버레이 검증 전용(로컬). 측정에 실제 쓴 점을 정규화(0..1)로 담는다.
+// ⚠ buildFaceAnalysisMeasurementsPayload(서버 wire)에 절대 포함하지 않는다.
+export type FaceGeometryDebugAnchor = {
+  label: string;
+  kind: 'segment' | 'polyline';
+  points: {x: number; y: number}[];
+};
+export type FaceGeometryDebugAnchors = FaceGeometryDebugAnchor[];
+
 export type FaceGeometryResult = {
   captureId: string;
   createdAt: string;
@@ -65,6 +76,8 @@ export type FaceGeometryResult = {
   // 코덱(faceAnalysisMeasurements)이 top-level로 lift 하므로 여기서는 전달용.
   regionVisuals?: RegionVisuals;
   rollCorrection: FaceGeometryRollCorrection;
+  // 로컬 전용 검증 앵커(직렬화 금지). 없을 수 있음.
+  debugAnchors?: FaceGeometryDebugAnchors;
   schemaVersion: 'aura-face-geometry-v1';
   sessionId: string;
   sourceImage: {height: number; uri: string; width: number};

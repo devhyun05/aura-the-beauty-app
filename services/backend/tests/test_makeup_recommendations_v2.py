@@ -146,6 +146,118 @@ def test_deterministic_recommendation_reflects_profile_presentation(
   assert lip["color"]["hex"] == expected_lip_hex
 
 
+def test_deterministic_palette_uses_situation_and_personal_color_semantics() -> None:
+  warm_context = {
+    "analysisReport": {"personalColor": "봄 웜"},
+    "profile": compile_profile_snapshot("female"),
+    "selection": {
+      "situation": {"key": "festival_performance", "label": "야외 페스티벌"},
+    },
+  }
+  cool_context = {
+    "analysisReport": {"personalColor": "겨울 쿨"},
+    "profile": compile_profile_snapshot("female"),
+    "selection": {
+      "situation": {"key": "camera_content", "label": "야간 카메라 촬영"},
+    },
+  }
+
+  warm = makeup_service.deterministic_recommendation_v2(warm_context, [])
+  warm_repeat = makeup_service.deterministic_recommendation_v2(warm_context, [])
+  cool = makeup_service.deterministic_recommendation_v2(cool_context, [])
+
+  def anchor_color(result: dict, area: str) -> str:
+    guide = next(
+      item for item in result["looks"][0]["areaGuides"] if item["area"] == area
+    )
+    return guide["color"]["hex"]
+
+  assert warm == warm_repeat
+  assert anchor_color(warm, "eye") == "#A87D6E"
+  assert anchor_color(warm, "lip") == "#B96662"
+  assert anchor_color(cool, "eye") == "#8D7486"
+  assert anchor_color(cool, "lip") == "#A45572"
+  assert anchor_color(warm, "eye") != anchor_color(cool, "eye")
+  assert anchor_color(warm, "lip") != anchor_color(cool, "lip")
+
+
+def test_deterministic_editorial_situation_outranks_same_personal_color() -> None:
+  shared_analysis = {"personalColor": "summer mute 쿨"}
+  shared_profile = compile_profile_snapshot("female")
+  baseball = makeup_service.deterministic_recommendation_v2(
+    {
+      "analysisReport": shared_analysis,
+      "profile": shared_profile,
+      "selection": {
+        "editorialPreset": {
+          "id": "baseball-camera",
+          "displayText": "야구장 전광판에 잡히고 싶은 날",
+          "seedPrompt": "야외 야구장에서 생기 있고 또렷하며 오래 유지되는 메이크업",
+        },
+      },
+    },
+    [],
+  )
+  first_impression = makeup_service.deterministic_recommendation_v2(
+    {
+      "analysisReport": shared_analysis,
+      "profile": shared_profile,
+      "selection": {
+        "editorialPreset": {
+          "id": "not-a-blind-date",
+          "displayText": "소개팅은 아니지만 첫인상은 중요하니까",
+          "seedPrompt": "과하지 않지만 첫인상이 좋은 약속 메이크업",
+        },
+      },
+    },
+    [],
+  )
+
+  def anchor_color(result: dict, area: str) -> str:
+    guide = next(
+      item for item in result["looks"][0]["areaGuides"] if item["area"] == area
+    )
+    return guide["color"]["hex"]
+
+  assert anchor_color(baseball, "eye") == "#A87D6E"
+  assert anchor_color(baseball, "lip") == "#B96662"
+  assert anchor_color(first_impression, "eye") == "#A08B82"
+  assert anchor_color(first_impression, "lip") == "#9B6D68"
+  assert anchor_color(baseball, "eye") != anchor_color(first_impression, "eye")
+  assert anchor_color(baseball, "lip") != anchor_color(first_impression, "lip")
+
+
+def test_deterministic_palette_resolves_selected_answer_option_labels() -> None:
+  context = {
+    "analysisReport": {},
+    "profile": compile_profile_snapshot("female"),
+    "selection": {"customSituationLabel": "주말 약속"},
+  }
+  familiar = makeup_service.deterministic_recommendation_v2(
+    context,
+    [{"questionId": "change_level", "optionId": "familiar"}],
+    _questions(),
+  )
+  bold = makeup_service.deterministic_recommendation_v2(
+    context,
+    [{"questionId": "change_level", "optionId": "bold"}],
+    _questions(),
+  )
+
+  def anchor_color(result: dict, area: str) -> str:
+    guide = next(
+      item for item in result["looks"][0]["areaGuides"] if item["area"] == area
+    )
+    return guide["color"]["hex"]
+
+  assert "응답: 익숙한 나를 또렷하게" in familiar["contextSummary"]
+  assert "응답: 오늘만큼은 확실한 반전" in bold["contextSummary"]
+  assert anchor_color(familiar, "eye") == "#A08B82"
+  assert anchor_color(familiar, "lip") == "#9B6D68"
+  assert anchor_color(bold, "eye") == "#7F626E"
+  assert anchor_color(bold, "lip") == "#A94366"
+
+
 def auth_context() -> AuthContext:
   return AuthContext(
     subject="makeup-v2-user",
@@ -267,6 +379,40 @@ def test_finalized_match_score_is_generation_source_independent() -> None:
   assert claude["matchAssessment"]["components"] == fallback["matchAssessment"]["components"]
   assert claude["matchAssessment"]["generationSource"] == "claude"
   assert fallback["matchAssessment"]["generationSource"] == "deterministic_fallback"
+
+
+def test_finalized_claude_recommendation_derives_missing_look_map() -> None:
+  recommendation = _v2_recommendation()
+  for look in recommendation["looks"]:
+    look.pop("lookMap")
+    look.pop("fitAssessment")
+
+  finalized = finalize_recommendation_metadata(
+    recommendation,
+    {"selection": {"situation": {"label": "데이트"}}},
+    [{"questionId": "change_level", "optionId": "balanced"}],
+    _questions(),
+    generation_source="claude",
+  )
+
+  parsed = GeneratedMakeupRecommendationV2.model_validate(finalized)
+
+  assert parsed.generation_source == "claude"
+  assert all(look.look_map.version == "makeup-look-map-v1" for look in parsed.looks)
+  assert all(0 <= look.look_map.naturality_to_personality <= 100 for look in parsed.looks)
+  assert all(0 <= look.look_map.casual_to_glam <= 100 for look in parsed.looks)
+  assert all(look.fit_assessment.overall_score > 0 for look in parsed.looks)
+  assert all(
+    dimension.reason
+    for look in parsed.looks
+    for dimension in (
+      look.fit_assessment.dimensions.situation,
+      look.fit_assessment.dimensions.preference,
+      look.fit_assessment.dimensions.personal_color,
+      look.fit_assessment.dimensions.face_structure,
+      look.fit_assessment.dimensions.look_coherence,
+    )
+  )
 
 
 def test_v2_schema_accepts_saved_payload_without_match_assessment() -> None:

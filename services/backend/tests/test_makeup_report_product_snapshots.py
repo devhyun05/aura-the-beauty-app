@@ -12,6 +12,7 @@ from fastapi import BackgroundTasks
 
 from app.api import makeup_recommendations as makeup_api
 from app.core.settings import Settings
+from app.services import makeup_report_product_discovery as discovery
 from app.services import makeup_report_product_snapshots as snapshots
 
 
@@ -308,6 +309,55 @@ async def test_legacy_recipe_creates_one_durable_pending_run_and_ordinary_ensure
 
 
 @pytest.mark.asyncio
+async def test_fallback_era_run_is_not_reused_for_verified_only_contract(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  _use_test_catalog_version(monkeypatch)
+  db = SnapshotDatabase()
+  old_run = (await snapshots.ensure_makeup_report_product_snapshots(
+    db,
+    Settings(),
+    user_id=USER_ID,
+    report_id=REPORT_ID,
+    look_id="anchor-look",
+  ))[0]
+  old_run.update({
+    "algorithm_version": "makeup_report_hybrid_v3",
+    "status": "ready",
+    "recommendation_payload": {
+      "ranking": {
+        "fallback": {
+          "mode": "rules_only_with_catalog_supplement",
+          "reasonCodes": ["SUPPLEMENTAL_AURADIN_APPLIED"],
+          "supplementalAuradinApplied": True,
+        },
+      },
+      "groups": [{
+        "category": "lip",
+        "items": [{
+          "productId": "external-lip",
+          "externalSource": snapshots.AURADIN_CATALOG_SOURCE,
+        }],
+      }],
+    },
+  })
+
+  current = (await snapshots.ensure_makeup_report_product_snapshots(
+    db,
+    Settings(),
+    user_id=USER_ID,
+    report_id=REPORT_ID,
+    look_id="anchor-look",
+  ))[0]
+
+  assert current["id"] != old_run["id"]
+  assert current["algorithm_version"] == snapshots.ALGORITHM_VERSION
+  assert current["revision"] == 2
+  assert current["status"] == "pending"
+  assert db.insert_count == 2
+
+
+@pytest.mark.asyncio
 async def test_force_refresh_creates_next_revision_without_replacing_the_previous_run(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -567,6 +617,7 @@ async def test_response_filters_then_live_hydrates_without_changing_snapshot_ide
             {
               "productId": external_id,
               "externalSource": snapshots.AURADIN_CATALOG_SOURCE,
+              "brandName": "Stored External Brand",
               "productName": "Stored External B",
               "imageUrl": "https://old.example.com/b.png",
               "purchaseUrl": "https://old.example.com/b",
@@ -631,31 +682,7 @@ async def test_response_filters_then_live_hydrates_without_changing_snapshot_ide
       "liked": True,
     }]
 
-  async def load_external(
-    _db: Any,
-    *,
-    user_id: UUID,
-    product_ids: list[str],
-    verified_offer_max_age_hours: int,
-  ) -> list[dict[str, Any]]:
-    assert user_id == USER_ID
-    assert product_ids == [external_id]
-    assert verified_offer_max_age_hours > 0
-    return [{
-      "productId": external_id,
-      "externalSource": snapshots.AURADIN_CATALOG_SOURCE,
-      "productName": "Live External Name Must Not Re-rank",
-      "category": "lip",
-      "imageUrl": "https://live.example.com/b.png",
-      "purchaseUrl": "https://live.example.com/b",
-      "price": {"amount": 27000, "currency": "KRW"},
-      "offer": {"offerId": "live-offer"},
-      "viewerState": {"liked": False},
-      "catalogVersion": "auradin:live",
-    }]
-
   monkeypatch.setattr(snapshots, "_fetch_internal_candidates", load_internal)
-  monkeypatch.setattr(snapshots, "get_auradin_catalog_products_by_ids", load_external)
   response = await snapshots.makeup_report_product_snapshot_response(
     object(),
     Settings(),
@@ -672,17 +699,94 @@ async def test_response_filters_then_live_hydrates_without_changing_snapshot_ide
   assert loader_categories == [["lip"]]
   assert [group["category"] for group in response["groups"]] == ["lip"]
   items = response["groups"][0]["items"]
-  assert [item["productId"] for item in items] == [str(INTERNAL_PRODUCT_ID), external_id]
-  assert [item["productName"] for item in items] == ["Stored Internal A", "Stored External B"]
-  assert [item["matchPercent"] for item in items] == [98, 94]
+  assert [item["productId"] for item in items] == [str(INTERNAL_PRODUCT_ID)]
+  assert [item["productName"] for item in items] == ["Stored Internal A"]
+  assert [item["matchPercent"] for item in items] == [98]
   assert items[0]["imageUrl"] == "https://live.example.com/a.png"
   assert items[0]["price"]["amount"] == 31000
   assert items[0]["viewerState"] == {"liked": True}
-  assert items[1]["imageUrl"] == "https://live.example.com/b.png"
-  assert items[1]["purchaseUrl"] == "https://live.example.com/b"
-  assert items[1]["price"]["amount"] == 27000
+  assert external_id not in json.dumps(response)
   assert SECOND_INTERNAL_PRODUCT_ID.hex not in json.dumps(response)
   assert shadow_id not in json.dumps(response)
+
+
+@pytest.mark.asyncio
+async def test_verified_report_discovery_item_replays_from_snapshot_without_recalculation() -> None:
+  now = datetime.now(timezone.utc)
+  item = {
+    "productId": "naver-123456",
+    "externalSource": discovery.DISCOVERY_SOURCE,
+    "brandName": "실제 브랜드",
+    "productName": "로즈 립 틴트",
+    "category": "lip",
+    "imageUrl": "https://shopping-phinf.pstatic.net/main/123456.jpg",
+    "purchaseUrl": "https://shop.example.com/products/123456",
+    "price": {"amount": 18000, "currency": "KRW"},
+    "viewerState": {"liked": True},
+    "canLike": True,
+    "matchRate": 94,
+    "recommendationBasis": "verifiedListingImageColor",
+    "verification": {
+      "contractVersion": discovery.DISCOVERY_CONTRACT_VERSION,
+      "provider": "naver_shopping",
+      "evidenceType": discovery.IMAGE_EVIDENCE_TYPE,
+      "evidenceConfidence": 0.9,
+      "capturedAt": now.isoformat(),
+      "observedColorHex": "#B85E6D",
+      "reportTargetHex": "#B85E6D",
+      "colorDistance": 1.2,
+    },
+  }
+  cheaper_duplicate = {
+    **item,
+    "productId": "naver-654321",
+    "productName": "로즈 립 틴트 2개",
+    "imageUrl": "https://shopping-phinf.pstatic.net/main/654321.jpg",
+    "purchaseUrl": "https://shop.example.com/products/654321",
+    "price": {"amount": 15000, "currency": "KRW"},
+    "matchRate": 91,
+  }
+  run = {
+    "id": RUN_ID,
+    "status": "ready",
+    "revision": 1,
+    "recipe_hash": "e" * 64,
+    "algorithm_version": snapshots.ALGORITHM_VERSION,
+    "catalog_version": "catalog:test",
+    "created_at": now,
+    "started_at": now,
+    "completed_at": now,
+    "error_code": None,
+    "recommendation_payload": {
+      "status": "ready",
+      "algorithmVersion": snapshots.ALGORITHM_VERSION,
+      "ranking": {"fallback": {"mode": "none"}},
+      "groups": [{
+        "category": "lip",
+        "label": "립",
+        "status": "ready",
+        "items": [item, cheaper_duplicate],
+      }],
+    },
+  }
+
+  response = await snapshots.makeup_report_product_snapshot_response(
+    object(),
+    Settings(),
+    user_id=USER_ID,
+    run=run,
+    categories=["lip"],
+    per_category_limit=6,
+  )
+
+  assert response["status"] == "ready"
+  assert len(response["groups"][0]["items"]) == 1
+  replayed = response["groups"][0]["items"][0]
+  assert replayed["productId"] == "naver-654321"
+  assert replayed["price"]["amount"] == 15000
+  assert replayed["matchRate"] == 91
+  assert replayed["viewerState"] == {"liked": False}
+  assert replayed["canLike"] is False
 
 
 @pytest.mark.asyncio
@@ -719,15 +823,67 @@ async def test_external_hydration_drops_product_reclassified_to_another_category
     },
   }
 
-  async def load_external(*_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
-    return [{
-      "productId": external_id,
-      "externalSource": snapshots.AURADIN_CATALOG_SOURCE,
-      "category": "cheek",
-      "productName": "Now a cheek product",
-    }]
+  response = await snapshots.makeup_report_product_snapshot_response(
+    object(),
+    Settings(),
+    user_id=USER_ID,
+    run=run,
+    categories=["lip"],
+    per_category_limit=6,
+  )
 
-  monkeypatch.setattr(snapshots, "get_auradin_catalog_products_by_ids", load_external)
+  assert response["status"] == "noEligibleProducts"
+  assert response["groups"][0]["items"] == []
+  assert response["groups"][0]["degradedReason"] == "stored_product_offer_unavailable"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("current_brand", "current_name"),
+  [
+    ("Drifted Brand", "Stored Tint"),
+    ("Stored Brand", "Drifted Product Name"),
+  ],
+)
+async def test_external_hydration_drops_brand_or_product_identity_drift(
+  monkeypatch: pytest.MonkeyPatch,
+  current_brand: str,
+  current_name: str,
+) -> None:
+  now = datetime.now(timezone.utc)
+  external_id = "auradin-lip-identity"
+  run = {
+    "id": RUN_ID,
+    "status": "ready",
+    "revision": 1,
+    "recipe_hash": "d" * 64,
+    "algorithm_version": "makeup_report_hybrid_v3",
+    "catalog_version": "catalog:test",
+    "created_at": now,
+    "started_at": now,
+    "completed_at": now,
+    "error_code": None,
+    "recommendation_payload": {
+      "status": "ready",
+      "algorithmVersion": "makeup_report_hybrid_v3",
+      "ranking": {"embeddingApplied": False},
+      "groups": [{
+        "category": "lip",
+        "label": "립",
+        "status": "ready",
+        "items": [{
+          "productId": external_id,
+          "externalSource": snapshots.AURADIN_CATALOG_SOURCE,
+          "category": "lip",
+          "brandName": "Stored Brand",
+          "productName": "Stored Tint",
+          "shadeName": "Stored Rose Option",
+          "reasonCodes": ["VERIFIED_EXTERNAL_SHADE_OPTION"],
+        }],
+      }],
+    },
+  }
+
   response = await snapshots.makeup_report_product_snapshot_response(
     object(),
     Settings(),
@@ -793,11 +949,7 @@ async def test_external_hydration_failure_keeps_current_internal_snapshot_items(
       "liked": False,
     }]
 
-  async def unavailable_external(*_args: Any, **_kwargs: Any) -> list[dict[str, Any]]:
-    raise RuntimeError("private snapshot loader detail")
-
   monkeypatch.setattr(snapshots, "_fetch_internal_candidates", load_internal)
-  monkeypatch.setattr(snapshots, "get_auradin_catalog_products_by_ids", unavailable_external)
   response = await snapshots.makeup_report_product_snapshot_response(
     object(),
     Settings(),

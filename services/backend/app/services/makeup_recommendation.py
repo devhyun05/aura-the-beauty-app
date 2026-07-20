@@ -10,7 +10,7 @@ from typing import Any
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError, ReadTimeoutError
+from botocore.exceptions import ClientError, ParamValidationError, ReadTimeoutError
 from pydantic import ValidationError
 
 from app.core.errors import AppError
@@ -49,6 +49,61 @@ BEDROCK_CONVERSE_CONFIG = Config(
   connect_timeout=10,
   retries={"max_attempts": 1, "mode": "standard"},
 )
+BEDROCK_LONG_FORM_CONVERSE_CONFIG = Config(
+  # A three-look recommendation streams a substantially larger tool payload
+  # than scenario normalization or follow-up questions. Keep the short-form
+  # fail-fast boundary while allowing the report request to finish inside the
+  # mobile client's existing 180-second generation timeout.
+  read_timeout=110,
+  connect_timeout=10,
+  retries={"max_attempts": 1, "mode": "standard"},
+)
+
+
+STRUCTURED_RESPONSE_MODELS = {
+  CUSTOM_NORMALIZATION_SYSTEM_PROMPT: (
+    "normalize_makeup_situation",
+    NormalizedCustomSituation,
+  ),
+  QUESTION_V2_SYSTEM_PROMPT: (
+    "generate_makeup_questions",
+    GeneratedQuestions,
+  ),
+  RECOMMENDATION_V2_SYSTEM_PROMPT: (
+    "generate_makeup_recommendation",
+    GeneratedMakeupRecommendationV2,
+  ),
+}
+
+BEDROCK_TOOL_SCHEMA_UNSUPPORTED_KEYS = {
+  "exclusiveMaximum",
+  "exclusiveMinimum",
+  "format",
+  "maxItems",
+  "maxLength",
+  "maximum",
+  "minItems",
+  "minLength",
+  "minimum",
+  "multipleOf",
+  "pattern",
+}
+MAKEUP_RECOMMENDATION_REQUIRED_AREAS = ("base", "brow", "eye", "cheek", "lip")
+MAKEUP_RECOMMENDATION_ROLE_ORDER = ("anchor",)
+MAKEUP_RECOMMENDATION_AREA_LABELS = {
+  "base": "베이스",
+  "brow": "브로우",
+  "eye": "아이",
+  "cheek": "치크",
+  "lip": "립",
+}
+MAKEUP_RECOMMENDATION_AREA_FALLBACK_COLORS = {
+  "base": ("뉴트럴 베이지", "#D9B49A"),
+  "brow": ("내추럴 브라운", "#795548"),
+  "eye": ("소프트 토프", "#9B7F74"),
+  "cheek": ("로지 피치", "#D98E8E"),
+  "lip": ("뮤티드 로즈", "#A85D68"),
+}
 
 
 QUESTION_SYSTEM_PROMPT = """너는 사용자가 직접 메이크업을 설계하게 만드는 설문지가 아니라, 사용자가 원하는 장면과 캐릭터를 발견하도록 돕는 재치 있는 에디토리얼 디렉터다.
@@ -227,110 +282,213 @@ def apply_refinement_contract(
     )
   return {**generated, "looks": merged}
 
-def _bedrock_generation_timeout_error(timeout_seconds: float) -> AppError:
-  return AppError(
-    504,
-    "BEDROCK_GENERATION_TIMEOUT",
-    "Bedrock recommendation generation exceeded its time budget.",
-    {"timeoutSeconds": timeout_seconds},
+def _strict_json_schema(value: Any) -> Any:
+  """Close object schemas while preserving the Pydantic contract structure."""
+  if isinstance(value, list):
+    return [_strict_json_schema(item) for item in value]
+  if not isinstance(value, dict):
+    return value
+
+  normalized = {
+    key: _strict_json_schema(item)
+    for key, item in value.items()
+    if key not in BEDROCK_TOOL_SCHEMA_UNSUPPORTED_KEYS
+  }
+  if normalized.get("type") == "object" and isinstance(normalized.get("properties"), dict):
+    normalized["additionalProperties"] = False
+  return normalized
+
+
+def _recommendation_v2_tool_schema() -> dict[str, Any]:
+  """Keep Bedrock's strict grammar small; server-side Pydantic still validates."""
+  text = {"type": "string"}
+  color = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["name", "hex"],
+    "properties": {
+      "name": text,
+      "hex": text,
+    },
+  }
+  area_guide = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["goal", "color", "texture"],
+    "properties": {
+      "goal": text,
+      "color": color,
+      "texture": text,
+    },
+  }
+  area_guides = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": list(MAKEUP_RECOMMENDATION_REQUIRED_AREAS),
+    "properties": {area: area_guide for area in MAKEUP_RECOMMENDATION_REQUIRED_AREAS},
+  }
+  look = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+      "title",
+      "summary",
+      "areaGuides",
+    ],
+    "properties": {
+      "title": text,
+      "summary": text,
+      "areaGuides": area_guides,
+      "imageBrief": text,
+    },
+  }
+  return {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["contextSummary", "looks"],
+    "properties": {
+      "contextSummary": {"type": "array", "items": text},
+      "looks": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": list(MAKEUP_RECOMMENDATION_ROLE_ORDER),
+        "properties": {role: look for role in MAKEUP_RECOMMENDATION_ROLE_ORDER},
+      },
+    },
+  }
+
+
+def _fallback_area_guide(area: str, raw_guide: dict[str, Any], look_title: str) -> dict[str, Any]:
+  label = MAKEUP_RECOMMENDATION_AREA_LABELS[area]
+  fallback_color_name, fallback_hex = MAKEUP_RECOMMENDATION_AREA_FALLBACK_COLORS[area]
+  raw_color = raw_guide.get("color") if isinstance(raw_guide.get("color"), dict) else {}
+  color_name = str(raw_color.get("name") or fallback_color_name).strip()[:80] or fallback_color_name
+  color_hex = str(raw_color.get("hex") or fallback_hex).strip()
+  if not re.fullmatch(r"#[0-9A-Fa-f]{6}", color_hex):
+    color_hex = fallback_hex
+  texture = str(raw_guide.get("texture") or "얇고 자연스럽게 밀착되는 질감").strip()
+  goal = str(raw_guide.get("goal") or f"{look_title}에 어울리는 {label} 균형").strip()
+  technique = str(
+    raw_guide.get("technique")
+    or f"{color_name} 계열을 소량씩 얇게 쌓아 {label} 경계가 자연스럽게 이어지게 합니다."
+  ).strip()
+  placement = str(raw_guide.get("placement") or f"{label}의 필요한 범위에만 얇게 적용").strip()
+  steps = raw_guide.get("steps")
+  normalized_steps = (
+    steps
+    if isinstance(steps, list) and steps
+    else [{"order": 1, "instruction": technique}]
   )
+  avoid = raw_guide.get("avoid")
+  return {
+    "area": area,
+    "label": str(raw_guide.get("label") or label).strip()[:80] or label,
+    "goal": goal[:180],
+    "color": {"name": color_name, "hex": color_hex.upper()},
+    "texture": texture[:100],
+    "placement": placement[:300],
+    "technique": technique[:300],
+    "steps": normalized_steps,
+    "reason": str(raw_guide.get("reason") or f"{look_title}의 색상 계획과 연결했습니다.").strip()[:300],
+    "avoid": avoid if isinstance(avoid, list) else ["한 번에 두껍게 올리지 않기"],
+    "products": [],
+    "arSupported": bool(raw_guide.get("arSupported", True)),
+  }
 
 
-def _converse(
-  settings: Settings,
-  model_id: str,
-  system: str,
-  prompt: str,
-  *,
-  max_tokens: int = 3500,
-  timeout_seconds: float | None = None,
-) -> dict[str, Any]:
-  client_config = BEDROCK_CONVERSE_CONFIG
-  started_at = time.perf_counter()
-  if timeout_seconds is not None:
-    client_config = Config(
-      read_timeout=min(float(BEDROCK_CONVERSE_CONFIG.read_timeout), timeout_seconds),
-      connect_timeout=min(float(BEDROCK_CONVERSE_CONFIG.connect_timeout), timeout_seconds),
-      retries={"max_attempts": 1, "mode": "standard"},
-    )
-  client_kwargs = {"region_name": settings.aws_region, "config": client_config}
-  if settings.aws_profile_name:
-    client = boto3.Session(profile_name=settings.aws_profile_name).client("bedrock-runtime", **client_kwargs)
-  else:
-    client = boto3.client("bedrock-runtime", **client_kwargs)
-  stream: Any = None
-  deadline_exceeded = threading.Event()
-  deadline_timer: threading.Timer | None = None
-  text_parts: list[str] = []
+def _normalize_provider_area_guides(value: Any, look_title: str) -> list[dict[str, Any]]:
+  if isinstance(value, dict):
+    return [
+      _fallback_area_guide(area, guide if isinstance(guide, dict) else {}, look_title)
+      for area in MAKEUP_RECOMMENDATION_REQUIRED_AREAS
+      for guide in [value.get(area)]
+    ]
+  if isinstance(value, list):
+    by_area = {
+      str(guide.get("area") or ""): guide
+      for guide in value
+      if isinstance(guide, dict)
+    }
+    return [
+      _fallback_area_guide(area, by_area.get(area, {}), look_title)
+      for area in MAKEUP_RECOMMENDATION_REQUIRED_AREAS
+    ]
+  return [
+    _fallback_area_guide(area, {}, look_title)
+    for area in MAKEUP_RECOMMENDATION_REQUIRED_AREAS
+  ]
 
-  def close_for_deadline() -> None:
-    deadline_exceeded.set()
-    for resource in (stream, client):
-      close_resource = getattr(resource, "close", None)
-      if callable(close_resource):
-        try:
-          close_resource()
-        except Exception:
-          pass
 
-  if timeout_seconds is not None:
-    remaining_seconds = timeout_seconds - (time.perf_counter() - started_at)
-    if remaining_seconds <= 0:
-      close_for_deadline()
-      raise _bedrock_generation_timeout_error(timeout_seconds)
-    deadline_timer = threading.Timer(remaining_seconds, close_for_deadline)
-    deadline_timer.daemon = True
-    deadline_timer.start()
-  try:
-    response = client.converse_stream(
-      modelId=model_id,
-      system=[{"text": system}],
-      messages=[{"role": "user", "content": [{"text": prompt}]}],
-      inferenceConfig={"maxTokens": max_tokens, "temperature": 0.35},
-    )
-    stream = response.get("stream", [])
-    if deadline_exceeded.is_set() and timeout_seconds is not None:
-      close_for_deadline()
-      raise _bedrock_generation_timeout_error(timeout_seconds)
-    for event in stream:
-      if deadline_exceeded.is_set() or (
-        timeout_seconds is not None
-        and time.perf_counter() - started_at >= timeout_seconds
-      ):
-        raise _bedrock_generation_timeout_error(timeout_seconds)
-      if not isinstance(event, dict):
-        continue
-      content_delta = event.get("contentBlockDelta")
-      if not isinstance(content_delta, dict):
-        continue
-      delta = content_delta.get("delta")
-      if isinstance(delta, dict):
-        text_parts.append(str(delta.get("text") or ""))
-  except Exception as exc:
-    if deadline_exceeded.is_set() and timeout_seconds is not None:
-      raise _bedrock_generation_timeout_error(timeout_seconds) from exc
-    raise
-  finally:
-    if deadline_timer is not None:
-      deadline_timer.cancel()
-    for resource in (stream, client):
-      close_resource = getattr(resource, "close", None)
-      if callable(close_resource):
-        try:
-          close_resource()
-        except Exception:
-          pass
-  if deadline_exceeded.is_set() and timeout_seconds is not None:
-    raise _bedrock_generation_timeout_error(timeout_seconds)
-  text = "".join(text_parts).strip()
-  if not text:
-    output = response.get("output", {})
-    message = output.get("message", {}) if isinstance(output, dict) else {}
-    content = message.get("content", []) if isinstance(message, dict) else []
-    text = "".join(
-      str(item.get("text") or "") for item in content if isinstance(item, dict)
-    ).strip()
+def _normalize_provider_look(role: str, value: Any) -> dict[str, Any]:
+  raw = value if isinstance(value, dict) else {}
+  title = str(raw.get("title") or f"{role} 룩").strip()[:100] or f"{role} 룩"
+  summary = str(raw.get("summary") or f"{title} 색상 계획을 중심으로 구성한 메이크업입니다.").strip()[:300]
+  durations = {"anchor": 20, "bold": 30, "discovery": 25}
+  difficulties = {"anchor": "easy", "bold": "advanced", "discovery": "medium"}
+  reasons = raw.get("reasons")
+  applied_conditions = raw.get("appliedConditions")
+  return {
+    "id": str(raw.get("id") or role).strip()[:80] or role,
+    "role": role,
+    "title": title,
+    "summary": summary,
+    "reasons": reasons if isinstance(reasons, list) and reasons else ["상황과 얼굴 분석 맥락을 반영했습니다."],
+    "appliedConditions": (
+      applied_conditions
+      if isinstance(applied_conditions, list) and applied_conditions
+      else [title]
+    ),
+    "durationMinutes": raw.get("durationMinutes") if isinstance(raw.get("durationMinutes"), int) else durations[role],
+    "difficulty": raw.get("difficulty") if raw.get("difficulty") in {"easy", "medium", "advanced"} else difficulties[role],
+    "areaGuides": _normalize_provider_area_guides(raw.get("areaGuides"), title),
+    "imageBrief": str(
+      raw.get("imageBrief")
+      or f"인물의 얼굴 특징은 유지하고 {title}의 색상과 질감만 자연스럽게 적용"
+    ).strip()[:800],
+  }
 
+
+def _normalize_recommendation_tool_response(value: dict[str, Any]) -> dict[str, Any]:
+  normalized = dict(value)
+  looks = normalized.get("looks")
+  if isinstance(looks, dict):
+    normalized["looks"] = [
+      _normalize_provider_look(role, looks.get(role))
+      for role in MAKEUP_RECOMMENDATION_ROLE_ORDER
+    ]
+    return normalized
+  if not isinstance(looks, list):
+    return normalized
+
+  normalized_looks: list[Any] = []
+  for look in looks:
+    if not isinstance(look, dict):
+      normalized_looks.append(look)
+      continue
+    role = str(look.get("role") or "")
+    if role in MAKEUP_RECOMMENDATION_ROLE_ORDER and isinstance(look.get("areaGuides"), dict):
+      normalized_looks.append(_normalize_provider_look(role, look))
+    else:
+      normalized_looks.append(look)
+  normalized["looks"] = normalized_looks
+  return normalized
+
+
+def _structured_response_contract(system: str) -> tuple[str, dict[str, Any]] | None:
+  contract = STRUCTURED_RESPONSE_MODELS.get(system)
+  if contract is None:
+    return None
+  tool_name, response_model = contract
+  if response_model is GeneratedMakeupRecommendationV2:
+    return tool_name, _recommendation_v2_tool_schema()
+
+  schema = response_model.model_json_schema(by_alias=True)
+
+  return tool_name, _strict_json_schema(schema)
+
+
+def _parse_json_object(text: str) -> dict[str, Any]:
+  text = text.strip()
   if text.startswith("```") and text.endswith("```"):
     first_newline = text.find("\n")
     text = text[first_newline + 1 : -3].strip() if first_newline >= 0 else text[3:-3].strip()
@@ -341,10 +499,197 @@ def _converse(
   try:
     value = json.loads(text)
   except json.JSONDecodeError as exc:
-    raise AppError(502, "BEDROCK_INVALID_JSON", "Bedrock returned an invalid recommendation response.") from exc
+    raise AppError(
+      502,
+      "BEDROCK_INVALID_JSON",
+      "Bedrock returned an invalid recommendation response.",
+    ) from exc
   if not isinstance(value, dict):
-    raise AppError(502, "BEDROCK_INVALID_JSON", "Bedrock returned an invalid recommendation response.")
+    raise AppError(
+      502,
+      "BEDROCK_INVALID_JSON",
+      "Bedrock returned an invalid recommendation response.",
+    )
   return value
+
+
+def _message_content(response: dict[str, Any]) -> list[dict[str, Any]]:
+  output = response.get("output", {})
+  message = output.get("message", {}) if isinstance(output, dict) else {}
+  content = message.get("content", []) if isinstance(message, dict) else []
+  return [item for item in content if isinstance(item, dict)] if isinstance(content, list) else []
+
+
+def _tool_input_from_message(
+  response: dict[str, Any],
+  tool_name: str,
+) -> dict[str, Any] | None:
+  for item in _message_content(response):
+    tool_use = item.get("toolUse")
+    if not isinstance(tool_use, dict) or tool_use.get("name") != tool_name:
+      continue
+    tool_input = tool_use.get("input")
+    if isinstance(tool_input, dict):
+      return tool_input
+    if isinstance(tool_input, str):
+      return _parse_json_object(tool_input)
+  return None
+
+
+def _tool_input_from_stream(
+  events: list[dict[str, Any]],
+  tool_name: str,
+) -> dict[str, Any] | None:
+  blocks: dict[int, dict[str, Any]] = {}
+  for event in events:
+    block_start = event.get("contentBlockStart")
+    if isinstance(block_start, dict):
+      block_index = block_start.get("contentBlockIndex")
+      start = block_start.get("start")
+      tool_use = start.get("toolUse") if isinstance(start, dict) else None
+      if isinstance(block_index, int) and isinstance(tool_use, dict):
+        blocks[block_index] = {
+          "name": str(tool_use.get("name") or ""),
+          "chunks": [],
+        }
+        initial_input = tool_use.get("input")
+        if isinstance(initial_input, str):
+          blocks[block_index]["chunks"].append(initial_input)
+
+    block_delta = event.get("contentBlockDelta")
+    if not isinstance(block_delta, dict):
+      continue
+    block_index = block_delta.get("contentBlockIndex")
+    delta = block_delta.get("delta")
+    tool_use = delta.get("toolUse") if isinstance(delta, dict) else None
+    if not isinstance(block_index, int) or not isinstance(tool_use, dict):
+      continue
+    block = blocks.setdefault(block_index, {"name": tool_name, "chunks": []})
+    chunk = tool_use.get("input")
+    if isinstance(chunk, str):
+      block["chunks"].append(chunk)
+
+  for block in blocks.values():
+    if block.get("name") != tool_name:
+      continue
+    text = "".join(block.get("chunks") or []).strip()
+    if text:
+      return _parse_json_object(text)
+  return None
+
+
+def _response_text(
+  response: dict[str, Any],
+  events: list[dict[str, Any]],
+) -> str:
+  text = "".join(
+    str(delta.get("text") or "")
+    for event in events
+    if isinstance((content_delta := event.get("contentBlockDelta")), dict)
+    if isinstance((delta := content_delta.get("delta")), dict)
+  ).strip()
+  if text:
+    return text
+  return "".join(str(item.get("text") or "") for item in _message_content(response)).strip()
+
+
+def _strict_tool_schema_is_unsupported(exc: Exception) -> bool:
+  if isinstance(exc, ParamValidationError):
+    return "strict" in str(exc).casefold()
+  if not isinstance(exc, ClientError):
+    return False
+  error = exc.response.get("Error", {})
+  return (
+    str(error.get("Code") or "") == "ValidationException"
+    and "strict" in str(error.get("Message") or "").casefold()
+  )
+
+
+def _forced_tool_use_is_unsupported(exc: Exception) -> bool:
+  if isinstance(exc, ParamValidationError):
+    return not _strict_tool_schema_is_unsupported(exc)
+  if not isinstance(exc, ClientError):
+    return False
+  error = exc.response.get("Error", {})
+  provider_code = str(error.get("Code") or "")
+  if provider_code != "ValidationException":
+    return False
+  provider_message = str(error.get("Message") or "").casefold()
+  return any(
+    marker in provider_message
+    for marker in ("toolconfig", "tool config", "toolchoice", "tool choice", "tool use")
+  )
+
+
+def _client_supports_strict_tool_schema(client: Any) -> bool:
+  """Check the installed Bedrock service model before sending the newer field."""
+  try:
+    operation = client.meta.service_model.operation_model("ConverseStream")
+    tool_config = operation.input_shape.members["toolConfig"]
+    tools = tool_config.members["tools"]
+    tool_spec = tools.member.members["toolSpec"]
+    return "strict" in tool_spec.members
+  except (AttributeError, KeyError, TypeError):
+    return False
+
+
+def _converse(
+  settings: Settings,
+  model_id: str,
+  system: str,
+  prompt: str,
+  *,
+  max_tokens: int = 3500,
+  response_schema: dict[str, Any] | None = None,
+  tool_name: str | None = None,
+  use_strict_tool_schema: bool | None = None,
+) -> dict[str, Any]:
+  converse_config = (
+    BEDROCK_LONG_FORM_CONVERSE_CONFIG
+    if max_tokens >= 8000
+    else BEDROCK_CONVERSE_CONFIG
+  )
+  client_kwargs = {"region_name": settings.aws_region, "config": converse_config}
+  if settings.aws_profile_name:
+    client = boto3.Session(profile_name=settings.aws_profile_name).client("bedrock-runtime", **client_kwargs)
+  else:
+    client = boto3.client("bedrock-runtime", **client_kwargs)
+  request: dict[str, Any] = {
+    "modelId": model_id,
+    "system": [{"text": system}],
+    "messages": [{"role": "user", "content": [{"text": prompt}]}],
+    "inferenceConfig": {"maxTokens": max_tokens, "temperature": 0.35},
+  }
+  if response_schema is not None and tool_name:
+    tool_spec: dict[str, Any] = {
+      "name": tool_name,
+      "description": "Return the response as JSON that satisfies this schema.",
+      "inputSchema": {"json": response_schema},
+    }
+    strict_supported = (
+      _client_supports_strict_tool_schema(client)
+      if use_strict_tool_schema is None
+      else use_strict_tool_schema
+    )
+    if strict_supported:
+      tool_spec["strict"] = True
+    request["toolConfig"] = {
+      "tools": [{"toolSpec": tool_spec}],
+      "toolChoice": {"tool": {"name": tool_name}},
+    }
+  response = client.converse_stream(**request)
+  raw_stream = response.get("stream", [])
+  events = [event for event in raw_stream if isinstance(event, dict)]
+
+  if response_schema is not None and tool_name:
+    tool_input = _tool_input_from_stream(events, tool_name)
+    if tool_input is None:
+      tool_input = _tool_input_from_message(response, tool_name)
+    if tool_input is not None:
+      return tool_input
+
+  text = _response_text(response, events)
+  return _parse_json_object(text)
 
 
 async def generate_json(
@@ -357,31 +702,104 @@ async def generate_json(
   timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
   started_at = time.perf_counter()
+  structured_contract = _structured_response_contract(system)
+  structured_enabled = structured_contract is not None
   try:
     if not model_id:
       raise AppError(503, "BEDROCK_MODEL_NOT_CONFIGURED", "The Bedrock model is not configured.")
-    request = asyncio.to_thread(
-      _converse,
-      settings,
-      model_id,
-      system,
-      prompt,
-      max_tokens=max_tokens,
-      timeout_seconds=timeout_seconds,
-    )
-    result = (
-      await asyncio.wait_for(request, timeout=timeout_seconds)
-      if timeout_seconds is not None
-      else await request
-    )
-  except TimeoutError as exc:
-    error = _bedrock_generation_timeout_error(timeout_seconds or 0.0)
-    emit_ai_metric(
-      provider="bedrock", operation="generate_json", model_id=model_id,
-      status="error", latency_ms=(time.perf_counter() - started_at) * 1000,
-      error_code=error.code,
-    )
-    raise error from exc
+    for attempt in range(2):
+      try:
+        if structured_enabled and structured_contract is not None:
+          tool_name, response_schema = structured_contract
+          prefer_strict_tool_schema = tool_name != "generate_makeup_recommendation"
+          try:
+            result = await asyncio.to_thread(
+              _converse,
+              settings,
+              model_id,
+              system,
+              prompt,
+              max_tokens=max_tokens,
+              response_schema=response_schema,
+              tool_name=tool_name,
+              use_strict_tool_schema=prefer_strict_tool_schema,
+            )
+          except Exception as exc:
+            if _strict_tool_schema_is_unsupported(exc):
+              logger.warning(
+                "[aura:makeup-recommendation] bedrock:strict-tool-schema-unsupported "
+                "modelId=%s errorType=%s retrying forced tool use without strict",
+                model_id,
+                type(exc).__name__,
+              )
+              try:
+                result = await asyncio.to_thread(
+                  _converse,
+                  settings,
+                  model_id,
+                  system,
+                  prompt,
+                  max_tokens=max_tokens,
+                  response_schema=response_schema,
+                  tool_name=tool_name,
+                  use_strict_tool_schema=False,
+                )
+              except Exception as tool_exc:
+                if not _forced_tool_use_is_unsupported(tool_exc):
+                  raise
+                structured_enabled = False
+                logger.warning(
+                  "[aura:makeup-recommendation] bedrock:structured-output-unsupported "
+                  "modelId=%s errorType=%s falling back to text JSON",
+                  model_id,
+                  type(tool_exc).__name__,
+                )
+                result = await asyncio.to_thread(
+                  _converse,
+                  settings,
+                  model_id,
+                  system,
+                  prompt,
+                  max_tokens=max_tokens,
+                )
+            elif _forced_tool_use_is_unsupported(exc):
+              structured_enabled = False
+              logger.warning(
+                "[aura:makeup-recommendation] bedrock:structured-output-unsupported "
+                "modelId=%s errorType=%s falling back to text JSON",
+                model_id,
+                type(exc).__name__,
+              )
+              result = await asyncio.to_thread(
+                _converse,
+                settings,
+                model_id,
+                system,
+                prompt,
+                max_tokens=max_tokens,
+              )
+            else:
+              raise
+        else:
+          result = await asyncio.to_thread(
+            _converse,
+            settings,
+            model_id,
+            system,
+            prompt,
+            max_tokens=max_tokens,
+          )
+        break
+      except AppError as exc:
+        if exc.code == "BEDROCK_INVALID_JSON" and attempt == 0 and max_tokens < 8000:
+          logger.warning(
+            "[aura:makeup-recommendation] bedrock:invalid-json-retry "
+            "modelId=%s attempt=%s",
+            model_id,
+            attempt + 1,
+          )
+          continue
+        raise
   except AppError as exc:
     emit_ai_metric(
       provider="bedrock", operation="generate_json", model_id=model_id,
@@ -1044,6 +1462,308 @@ async def generate_questions_v2_with_fallback(
   }
 
 
+FALLBACK_SEMANTIC_PALETTES: dict[str, dict[str, dict[str, tuple[str, str, str]]]] = {
+  "warm_bright": {
+    "anchor": {
+      "brow": ("소프트 웜 브라운", "#806052", "보송한 파우더"),
+      "eye": ("피치 토프", "#A87D6E", "은은한 새틴"),
+      "cheek": ("코랄 베이지", "#D78F7E", "맑은 쉬어"),
+      "lip": ("코랄 로즈", "#B96662", "편안한 세미 글로우"),
+    },
+    "bold": {
+      "brow": ("딥 체스트넛", "#68483D", "선명한 소프트 매트"),
+      "eye": ("코퍼 로즈 브라운", "#8D574B", "밀도 있는 새틴"),
+      "cheek": ("클리어 코랄", "#D87568", "선명한 쉬어"),
+      "lip": ("브릭 코랄", "#B84F45", "또렷한 벨벳"),
+    },
+    "discovery": {
+      "brow": ("캐러멜 브라운", "#76513F", "가벼운 파우더"),
+      "eye": ("애프리콧 브론즈", "#B87955", "잔잔한 쉬머"),
+      "cheek": ("애프리콧 코랄", "#E09570", "부드러운 쉬어"),
+      "lip": ("테라코타 로즈", "#B9634C", "촉촉한 블러"),
+    },
+  },
+  "cool_mauve": {
+    "anchor": {
+      "brow": ("소프트 애쉬 브라운", "#6F5D5E", "보송한 파우더"),
+      "eye": ("쿨 모브 토프", "#8D7486", "은은한 새틴"),
+      "cheek": ("쿨 로즈", "#CC8496", "맑은 쉬어"),
+      "lip": ("쿨 로즈", "#A45572", "편안한 세미 글로우"),
+    },
+    "bold": {
+      "brow": ("딥 애쉬 브라운", "#544649", "선명한 소프트 매트"),
+      "eye": ("플럼 브라운", "#694B61", "밀도 있는 새틴"),
+      "cheek": ("베리 로즈", "#C36180", "선명한 쉬어"),
+      "lip": ("베리 플럼", "#8D315B", "또렷한 벨벳"),
+    },
+    "discovery": {
+      "brow": ("그레이시 브라운", "#66585D", "가벼운 파우더"),
+      "eye": ("라벤더 토프", "#88758F", "잔잔한 쉬머"),
+      "cheek": ("오키드 로즈", "#C17D9B", "부드러운 쉬어"),
+      "lip": ("모브 플럼", "#925472", "촉촉한 블러"),
+    },
+  },
+  "natural_neutral": {
+    "anchor": {
+      "brow": ("내추럴 뉴트럴 브라운", "#76605A", "보송한 파우더"),
+      "eye": ("베이지 토프", "#A08B82", "은은한 새틴"),
+      "cheek": ("로즈 베이지", "#C99185", "맑은 쉬어"),
+      "lip": ("로즈 베이지", "#9B6D68", "편안한 세미 글로우"),
+    },
+    "bold": {
+      "brow": ("딥 뉴트럴 브라운", "#5E4B47", "선명한 소프트 매트"),
+      "eye": ("코코아 토프", "#755D58", "밀도 있는 새틴"),
+      "cheek": ("뮤티드 로즈", "#B97878", "선명도를 낮춘 쉬어"),
+      "lip": ("브릭 로즈", "#87504F", "부드러운 벨벳"),
+    },
+    "discovery": {
+      "brow": ("애쉬 뉴트럴 브라운", "#695A58", "가벼운 파우더"),
+      "eye": ("머시룸 토프", "#8B7773", "잔잔한 쉬머"),
+      "cheek": ("더스티 로즈 베이지", "#B98983", "부드러운 쉬어"),
+      "lip": ("뮤티드 로즈 브라운", "#88615F", "촉촉한 블러"),
+    },
+  },
+  "dramatic_berry": {
+    "anchor": {
+      "brow": ("딥 애쉬 브라운", "#604E50", "정돈된 소프트 매트"),
+      "eye": ("로즈 플럼 토프", "#7F626E", "선명한 새틴"),
+      "cheek": ("베리 로즈", "#C37489", "맑은 쉬어"),
+      "lip": ("클리어 베리", "#A94366", "또렷한 세미 글로우"),
+    },
+    "bold": {
+      "brow": ("에스프레소 브라운", "#493A3D", "선명한 소프트 매트"),
+      "eye": ("딥 플럼 브라운", "#5D3D4E", "밀도 있는 새틴"),
+      "cheek": ("딥 베리", "#AD526E", "선명한 쉬어"),
+      "lip": ("딥 와인 베리", "#7B2847", "또렷한 벨벳"),
+    },
+    "discovery": {
+      "brow": ("스모키 브라운", "#58494D", "가벼운 파우더"),
+      "eye": ("블랙베리 모브", "#705168", "잔잔한 쉬머"),
+      "cheek": ("플럼 로즈", "#B26382", "부드러운 쉬어"),
+      "lip": ("플럼 마젠타", "#8F3E67", "촉촉한 블러"),
+    },
+  },
+}
+
+
+def _semantic_text(*values: Any) -> str:
+  flattened: list[str] = []
+  for value in values:
+    if isinstance(value, (list, tuple, set)):
+      flattened.extend(str(item) for item in value if item is not None)
+    elif value is not None:
+      flattened.append(str(value))
+  return " ".join(flattened).casefold()
+
+
+def _resolved_answer_signals(
+  answers: list[dict[str, Any]],
+  questions: list[dict[str, Any]] | None,
+) -> tuple[list[str], list[str], str]:
+  option_labels: dict[tuple[str, str], str] = {}
+  for question in questions or []:
+    if not isinstance(question, dict):
+      continue
+    question_id = str(question.get("id") or "")
+    options = question.get("options")
+    if not isinstance(options, list):
+      continue
+    for option in options:
+      if not isinstance(option, dict):
+        continue
+      option_id = str(option.get("id") or "")
+      label = str(option.get("label") or "").strip()
+      if question_id and option_id and label:
+        option_labels[(question_id, option_id)] = label
+
+  display_labels: list[str] = []
+  option_ids: list[str] = []
+  semantic_parts: list[str] = []
+  for answer in answers:
+    if not isinstance(answer, dict):
+      continue
+    question_id = str(answer.get("questionId") or "")
+    option_id = str(answer.get("optionId") or "")
+    explicit_label = str(answer.get("label") or answer.get("freeText") or "").strip()
+    resolved_label = explicit_label or option_labels.get((question_id, option_id), "")
+    additional_constraints = str(answer.get("additionalConstraints") or "").strip()
+    if resolved_label:
+      display_labels.append(resolved_label[:80])
+    if additional_constraints:
+      display_labels.append(additional_constraints[:80])
+    if option_id:
+      option_ids.append(option_id.casefold())
+    semantic_parts.extend(
+      part
+      for part in (question_id, option_id, resolved_label, additional_constraints)
+      if part
+    )
+  return display_labels, option_ids, _semantic_text(semantic_parts)
+
+
+def _signal_count(text: str, signals: tuple[str, ...]) -> int:
+  return sum(1 for signal in signals if signal in text)
+
+
+def _fallback_palette_key(
+  analysis: dict[str, Any],
+  selection: dict[str, Any],
+  answers: list[dict[str, Any]],
+  questions: list[dict[str, Any]] | None,
+) -> str | None:
+  situation = selection.get("situation") if isinstance(selection.get("situation"), dict) else {}
+  keyword = selection.get("keyword") if isinstance(selection.get("keyword"), dict) else {}
+  normalized_custom = (
+    selection.get("normalizedCustom")
+    if isinstance(selection.get("normalizedCustom"), dict)
+    else {}
+  )
+  editorial_preset = (
+    selection.get("editorialPreset")
+    if isinstance(selection.get("editorialPreset"), dict)
+    else {}
+  )
+  situation_key = str(situation.get("key") or "").casefold()
+  scenario_text = _semantic_text(
+    situation.get("label"),
+    situation.get("description"),
+    keyword.get("label"),
+    keyword.get("tags"),
+    selection.get("customSituationText"),
+    selection.get("customSituationLabel"),
+    normalized_custom.get("situationIntent"),
+    normalized_custom.get("desiredImpression"),
+    normalized_custom.get("constraints"),
+    editorial_preset.get("id"),
+    editorial_preset.get("displayText"),
+    editorial_preset.get("seedPrompt"),
+    editorial_preset.get("label"),
+    editorial_preset.get("tags"),
+  )
+  _answer_labels, option_ids, answer_text = _resolved_answer_signals(answers, questions)
+
+  direction_scores = {
+    "warm_bright": 0,
+    "cool_mauve": 0,
+    "natural_neutral": 0,
+    "dramatic_berry": 0,
+  }
+  personal_color = _semantic_text(analysis.get("personalColor"))
+  if _signal_count(personal_color, ("warm", "웜", "spring", "봄", "autumn", "가을")):
+    direction_scores["warm_bright"] += 3
+  if _signal_count(personal_color, ("cool", "쿨", "summer", "여름", "winter", "겨울")):
+    direction_scores["cool_mauve"] += 3
+
+  key_directions = {
+    "travel_outdoor": "warm_bright",
+    "festival_performance": "warm_bright",
+    "camera_content": "cool_mauve",
+    "formal_event": "cool_mauve",
+    "daily": "natural_neutral",
+    "work_school": "natural_neutral",
+    "interview": "natural_neutral",
+  }
+  keyed_direction = key_directions.get(situation_key)
+  if keyed_direction:
+    direction_scores[keyed_direction] += 5
+
+  editorial_directions = {
+    "baseball-camera": "warm_bright",
+    "concert-encore": "warm_bright",
+    "camera-first": "cool_mauve",
+    "ex-wedding": "cool_mauve",
+    "not-a-blind-date": "natural_neutral",
+    "one-lip": "natural_neutral",
+    "art-student": "natural_neutral",
+    "trend-my-way": "natural_neutral",
+    "saved-look": "natural_neutral",
+    "wanghong-glass": "dramatic_berry",
+    "neon-two-am": "dramatic_berry",
+    "hip-point": "dramatic_berry",
+  }
+  editorial_direction = editorial_directions.get(
+    str(editorial_preset.get("id") or "").casefold(),
+  )
+  if editorial_direction:
+    direction_scores[editorial_direction] += 7
+
+  direction_scores["warm_bright"] += 2 * min(
+    _signal_count(
+      scenario_text,
+      (
+        "festival", "페스티벌", "outdoor", "야외", "travel", "여행", "vacation", "휴가",
+        "축제", "코랄", "피치", "활기", "생기", "햇살", "sunset", "노을",
+      ),
+    ),
+    3,
+  )
+  direction_scores["cool_mauve"] += 2 * min(
+    _signal_count(
+      scenario_text,
+      (
+        "camera", "카메라", "촬영", "photo", "사진", "night", "야간", "formal", "격식",
+        "모브", "플럼", "시크", "도시", "데이트", "date",
+      ),
+    ),
+    3,
+  )
+  direction_scores["natural_neutral"] += 2 * min(
+    _signal_count(
+      scenario_text,
+      (
+        "daily", "일상", "출근", "등교", "interview", "면접", "work", "office", "오피스",
+        "quick", "빠르게", "자연", "내추럴", "단정",
+      ),
+    ),
+    3,
+  )
+  direction_scores["dramatic_berry"] += 2 * min(
+    _signal_count(
+      scenario_text,
+      (
+        "wanghong", "왕홍", "neon", "네온", "ruby", "루비", "레드", "와인", "딥",
+        "dramatic", "드라마틱", "무대", "flash", "플래시",
+      ),
+    ),
+    3,
+  )
+
+  answer_direction_signals = {
+    "warm_bright": ("warm", "웜", "코랄", "피치", "활기", "생기"),
+    "cool_mauve": ("cool", "쿨", "모브", "플럼", "시크", "차분"),
+    "natural_neutral": ("natural", "내추럴", "자연", "익숙", "편안", "단정"),
+  }
+  for direction, signals in answer_direction_signals.items():
+    direction_scores[direction] += min(_signal_count(answer_text, signals), 2) * 3
+
+  highest_score = max(direction_scores.values())
+  highest_directions = [
+    direction for direction, score in direction_scores.items() if score == highest_score
+  ]
+  direction = highest_directions[0] if highest_score >= 3 and len(highest_directions) == 1 else None
+
+  bold_option_ids = {
+    "bold", "different", "moment", "dramatic", "statement", "clear", "photo", "video",
+  }
+  soft_option_ids = {"familiar", "quick", "natural", "quiet", "lasting", "standard"}
+  bold_signal = bool(bold_option_ids.intersection(option_ids)) or _signal_count(
+    answer_text,
+    ("확실한 반전", "과감", "강한", "선명", "등장부터", "장면 만들기", "드라마틱"),
+  ) > 0
+  soft_signal = bool(soft_option_ids.intersection(option_ids)) or _signal_count(
+    answer_text,
+    ("익숙한", "빠르게", "자연스럽", "조용", "편안", "은은"),
+  ) > 0
+
+  if bold_signal and direction in {None, "natural_neutral"}:
+    return "dramatic_berry"
+  if direction:
+    return direction
+  if soft_signal:
+    return "natural_neutral"
+  return None
+
+
 def deterministic_recommendation_v2(
   context_snapshot: dict[str, Any],
   answers: list[dict[str, Any]],
@@ -1077,12 +1797,7 @@ def deterministic_recommendation_v2(
     or situation.get("label")
     or "선택한 상황"
   ).strip()[:40] or "선택한 상황"
-  answer_labels = [
-    str(answer.get("label") or answer.get("freeText") or "").strip()[:80]
-    for answer in answers
-    if isinstance(answer, dict)
-    and str(answer.get("label") or answer.get("freeText") or "").strip()
-  ]
+  answer_labels, _option_ids, _answer_text = _resolved_answer_signals(answers, questions)
   context_summary = [scenario]
   for label, value in (
     ("퍼스널 컬러", analysis.get("personalColor")),
@@ -1145,12 +1860,27 @@ def deterministic_recommendation_v2(
       },
     },
   }[presentation]
+  semantic_palette_key = _fallback_palette_key(
+    analysis,
+    selection,
+    answers,
+    questions,
+  )
+  semantic_palette_overrides = (
+    FALLBACK_SEMANTIC_PALETTES[semantic_palette_key]
+    if semantic_palette_key is not None
+    else {}
+  )
 
 
   applied_conditions = context_summary[:8] or [scenario]
   looks: list[dict[str, Any]] = []
   for role, title_suffix, direction, duration, difficulty, palette in role_specs:
-    palette = {**palette, **presentation_palette_overrides.get(role, {})}
+    palette = {
+      **palette,
+      **presentation_palette_overrides.get(role, {}),
+      **semantic_palette_overrides.get(role, {}),
+    }
     direction = f"{profile_direction} {direction}"
     guides = []
     for area, (label, goal, placement, technique) in area_specs.items():
@@ -1234,6 +1964,7 @@ async def generate_recommendation_v2(
       )
       return deterministic_recommendation_v2(context_snapshot, answers, questions)
     try:
+      response = _normalize_recommendation_tool_response(response)
       enriched = enrich_makeup_application_plans(
         response,
         max_total_minutes=time_budget_minutes,

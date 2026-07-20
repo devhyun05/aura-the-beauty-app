@@ -96,6 +96,10 @@ export function RootNavigator() {
         getComponent={() => loadFaceAnalysisRoutes().FaceAnalysisReportPreviewRouteScreen}
       />
       <Stack.Screen
+        name="FaceGeometryDebug"
+        getComponent={() => loadFaceAnalysisRoutes().FaceGeometryDebugRouteScreen}
+      />
+      <Stack.Screen
         name="FloatingActionSettings"
         getComponent={() => loadHomeRoutes().FloatingActionSettingsRouteScreen}
       />

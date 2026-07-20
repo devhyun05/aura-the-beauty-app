@@ -65,6 +65,56 @@ def _pair_guidance(
   }
 
 
+def _brow_apex_guidance(profile: dict[str, Any]) -> dict[str, Any] | None:
+  """눈썹 봉우리(산) 위치 0=앞머리..1=꼬리. 이상 ~0.66(한국 여성 실측/전통 안쪽 2/3).
+
+  성별로 이상형이 갈리므로(여성=뚜렷한 아치, 남성=낮고 평평·직선) makeupUse에
+  여성/남성 방향을 함께 담아, profileGender를 아는 메이크업 LLM이 골라 쓰게 한다.
+  좌우 평균으로 판단하고 측정된 쪽만 derivedFrom에 남긴다.
+  """
+  left = _measured_value(profile, "geometry2d.browApexRatioLeft")
+  right = _measured_value(profile, "geometry2d.browApexRatioRight")
+  measured = [side for side in (left, right) if side is not None]
+  if not measured:
+    return None
+  mean_apex = sum(side[0] for side in measured) / len(measured)
+  if mean_apex < 0.55:
+    relationship = "medial"
+    label = "눈썹 산이 안쪽에 위치"
+    makeup_use = (
+      "산이 앞쪽에 치우쳐 놀란 인상을 줄 수 있어요. 여성은 바깥쪽 아래를 채워 "
+      "아치 정점을 눈동자 바깥으로 옮기고, 남성은 결만 정돈해 자연스러운 직선형을 유지하세요."
+    )
+  elif mean_apex > 0.72:
+    relationship = "lateral"
+    label = "눈썹 산이 바깥쪽에 위치"
+    makeup_use = (
+      "산이 꼬리 쪽에 치우쳐 있어요. 여성은 꼬리를 짧게 다듬어 정점을 안쪽으로 당기고, "
+      "남성은 아치를 낮춰 평평·직선적으로 정리하세요."
+    )
+  else:
+    relationship = "balanced"
+    label = "눈썹 산 위치 균형"
+    makeup_use = (
+      "산이 안쪽 2/3 지점의 균형 잡힌 위치예요. 여성은 본래 아치를 유지하고, "
+      "남성은 과한 아치 없이 결만 정돈하세요."
+    )
+  return {
+    "label": label,
+    "relationship": relationship,
+    "makeupUse": makeup_use,
+    "confidence": round(min(side[1] for side in measured), 3),
+    "derivedFrom": [
+      key
+      for key, side in (
+        ("geometry2d.browApexRatioLeft", left),
+        ("geometry2d.browApexRatioRight", right),
+      )
+      if side is not None
+    ],
+  }
+
+
 def compile_actionable_geometry_guidance(
   profile: dict[str, Any],
 ) -> dict[str, list[dict[str, Any]]]:
@@ -94,6 +144,7 @@ def compile_actionable_geometry_guidance(
       balanced_use="양쪽 눈썹 하단선을 같은 강도로 정리하세요.",
       difference_use="{side} 쪽 간격이 더 넓으므로 눈썹 하단과 아이 음영 높이를 조금씩 맞추세요.",
     ),
+    _brow_apex_guidance(profile),
   ]
   eye = [
     _pair_guidance(

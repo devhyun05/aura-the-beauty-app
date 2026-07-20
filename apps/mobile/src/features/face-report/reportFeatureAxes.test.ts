@@ -52,6 +52,24 @@ function metrics(overrides: Record<string, number>): FaceGeometryMetrics {
   const c = a.upper.find(x => x.key === 'canthalTilt')!;
   assert(c.position != null && c.position >= 0.99, 'one-side +18deg -> ~1.0');
 }
+// 눈썹 산 위치 = 0..1 자기참조 값 그대로. 0.66(이상 근처, 바깥쪽 2/3) → 우측(>0.5)
+{
+  const a = buildRegionFeatureAxes(metrics({browApexRatioLeft: 0.66, browApexRatioRight: 0.66}));
+  const apex = a.upper.find(x => x.key === 'browApex')!;
+  assert(apex.position === 0.66, 'apex 0.66 -> position 0.66 (right of center)');
+}
+// 산이 앞머리쪽(0.3) → 좌측(<0.5), 한쪽만 측정돼도 평균 폴백
+{
+  const a = buildRegionFeatureAxes(metrics({browApexRatioLeft: 0.3}));
+  const apex = a.upper.find(x => x.key === 'browApex')!;
+  assert(apex.position === 0.3, 'one-side apex 0.3 -> position 0.3 (left of center)');
+}
+// 지표 없으면 browApex 축도 보류(null)
+{
+  const a = buildRegionFeatureAxes(metrics({}));
+  const apex = a.upper.find(x => x.key === 'browApex')!;
+  assert(apex.position === null, 'no apex metric -> withheld');
+}
 
 // describeRegionAxes — 자기참조 서술('남들 대비'·'많이' 없음), 보류 축은 건너뜀
 {

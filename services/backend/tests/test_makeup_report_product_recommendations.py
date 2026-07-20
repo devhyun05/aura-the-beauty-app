@@ -118,36 +118,6 @@ def _catalog_row(
   }
 
 
-def _fresh_external_item(category: str, *, product_name: str, color_family: str | None) -> dict:
-  return {
-    "productId": f"external-{category}",
-    "brandName": "External Brand",
-    "productName": product_name,
-    "shadeName": "Rose",
-    "category": category,
-    "colorFamily": color_family,
-    "finish": "glow",
-    "texture": "liquid" if category != "base" else "cream",
-    "imageUrl": "https://images.example.com/product.png",
-    "purchaseUrl": "https://shop.example.com/product",
-    "price": {"amount": 25000, "currency": "KRW"},
-    "offer": {"offerId": f"external-{category}-offer"},
-    "externalSource": external_catalog.AURADIN_CATALOG_SOURCE,
-    "_freshnessVerified": True,
-    "_offerVerifiedAt": "2026-07-20T00:00:00+00:00",
-    "_snapshotRunDate": "20260720",
-    "_hardFilterEligible": {
-      "category": True,
-      "purchaseUrl": True,
-      "imageUrl": True,
-      "priceKrw": True,
-      "colorFamily": True,
-      "finish": True,
-      "texture": True,
-    },
-  }
-
-
 class _DetailDatabase:
   is_connected = True
 
@@ -211,6 +181,37 @@ async def test_picker_uses_one_bulk_asset_query_and_keeps_partial_recipe(
   assert report["looks"][0]["palette"] == ["#6E5148", "#B96872", "#D98A91", "#B85E6D"]
   assert report["looks"][0]["targets"] == ["base", "brow", "shadow", "liner", "cheek", "lip"]
   assert "contextSnapshot" not in report and "questions" not in report
+
+
+@pytest.mark.asyncio
+async def test_picker_excludes_failed_images_but_keeps_pending_and_partial() -> None:
+  failed = _report_row(image_status="failed")
+  failed["scenario_text"] = "failed"
+  pending = _report_row(image_status="pending")
+  pending["scenario_text"] = "pending"
+  partial = _report_row(image_status="partial")
+  partial["scenario_text"] = "partial"
+
+  class PickerDatabase:
+    def __init__(self) -> None:
+      self.report_query = ""
+
+    async def fetch(self, query: str, *_args):
+      normalized = " ".join(query.split())
+      if "from makeup_recommendation_reports" in query:
+        self.report_query = normalized
+        # Deliberately return a failed row to verify the service boundary too;
+        # a real PostgreSQL query applies the predicate below.
+        return [failed, pending, partial]
+      return []
+
+  db = PickerDatabase()
+  result = await service.list_owned_makeup_reports(
+    db, Settings(), user_id=USER_ID, limit=20, offset=0,
+  )
+  assert "image_status is distinct from 'failed'" in db.report_query
+  assert [report["scenarioText"] for report in result["reports"]] == ["pending", "partial"]
+  assert [report["imageStatus"] for report in result["reports"]] == ["pending", "partial"]
 
 
 @pytest.mark.asyncio
@@ -346,7 +347,6 @@ async def test_legacy_v2_guide_steps_and_products_are_enriched_before_matching(
     _catalog_row("shadow", shadow_target["colorHex"], product_name="검증 아이섀도"),
     _catalog_row("liner", liner_target["colorHex"], product_name="검증 아이라이너"),
   ]
-  monkeypatch.setattr(service, "get_auradin_catalog_products", _empty_external)
   result = await service.get_makeup_report_product_recommendations(
     _DetailDatabase(report, rows),
     Settings(),
@@ -365,10 +365,9 @@ async def test_legacy_v2_guide_steps_and_products_are_enriched_before_matching(
 
 
 @pytest.mark.asyncio
-async def test_missing_anchor_defaults_to_first_complete_look(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_missing_anchor_defaults_to_first_complete_look() -> None:
   report = _report_row()
   report["recommendation"]["looks"] = report["recommendation"]["looks"][1:]
-  monkeypatch.setattr(service, "get_auradin_catalog_products", _empty_external)
   result = await service.get_makeup_report_product_recommendations(
     _DetailDatabase(report, [_catalog_row("lip", "#B85E6D")]),
     Settings(),
@@ -392,7 +391,6 @@ async def test_eye_maps_to_shadow_and_delta_e_orders_then_dedupes_products(
     _catalog_row("shadow", "#A65F69", product_name="조금 먼 shade"),
   ]
   db = _DetailDatabase(_report_row(), rows)
-  monkeypatch.setattr(service, "get_auradin_catalog_products", _empty_external)
   result = await service.get_makeup_report_product_recommendations(
     db,
     Settings(),
@@ -412,16 +410,176 @@ async def test_eye_maps_to_shadow_and_delta_e_orders_then_dedupes_products(
   assert result["ranking"]["strategy"] == service.ALGORITHM_VERSION
 
 
-async def _empty_external(*_args, **_kwargs):
-  return []
+@pytest.mark.asyncio
+async def test_report_bound_verified_discovery_is_primary_and_never_marked_fallback(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  discovered = {
+    "productId": "naver-123456",
+    "shadeId": None,
+    "brandName": "실제 브랜드",
+    "productName": "로즈 립 틴트",
+    "category": "lip",
+    "shadeName": None,
+    "shadeHex": "#B85E6D",
+    "imageUrl": "https://shopping-phinf.pstatic.net/main/123456.jpg",
+    "purchaseUrl": "https://shop.example.com/products/123456",
+    "price": {"amount": 18000, "currency": "KRW"},
+    "offer": {"offerId": "external-naver-123456", "affiliateType": "none"},
+    "viewerState": {"liked": False},
+    "externalSource": "naver_shopping_search",
+    "canLike": False,
+    "reasonCodes": ["REPORT_COLOR_IMAGE_MATCH", "LIVE_OFFER_VERIFIED"],
+    "reasonLabels": ["상품 이미지 색상이 보고서 색상과 가까워요"],
+    "matchRate": 94,
+    "recommendationBasis": "verifiedListingImageColor",
+    "colorDistance": 1.2,
+    "verification": {
+      "contractVersion": "makeup-report-live-product-evidence-v2",
+      "provider": "naver_shopping",
+      "evidenceType": "listing_image_palette_ciede2000",
+      "evidenceConfidence": 0.9,
+      "observedColorHex": "#B85E6D",
+      "reportTargetHex": "#B85E6D",
+      "colorDistance": 1.2,
+    },
+    "_ruleScore": 94.0,
+  }
+
+  async def fake_discovery(*_args, **_kwargs):
+    return {"lip": [discovered]}, {
+      "contractVersion": "makeup-report-live-product-evidence-v2",
+      "provider": "naver_shopping",
+      "configured": True,
+      "applied": True,
+      "verifiedItems": 1,
+    }
+
+  monkeypatch.setattr(service, "discover_report_products", fake_discovery)
+  result = await service.get_makeup_report_product_recommendations(
+    _DetailDatabase(_report_row(), []),
+    Settings(),
+    user_id=USER_ID,
+    report_id=REPORT_ID,
+    look_id="anchor-look",
+    categories=["lip"],
+    per_category_limit=6,
+  )
+
+  group = result["groups"][0]
+  assert group["source"] == "verifiedLiveDiscovery"
+  assert group["items"][0]["productId"] == "naver-123456"
+  assert group["items"][0]["matchRate"] == 94
+  assert result["ranking"]["discovery"]["applied"] is True
+  assert result["ranking"]["fallback"]["mode"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_internal_database_short_circuits_live_discovery_when_sufficient(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  async def unexpected_discovery(*_args, **_kwargs):
+    raise AssertionError("Naver must not be queried when the verified database is sufficient")
+
+  monkeypatch.setattr(service, "discover_report_products", unexpected_discovery)
+  result = await service.get_makeup_report_product_recommendations(
+    _DetailDatabase(_report_row(), [_catalog_row("lip", "#B85E6D")]),
+    Settings(naver_shopping_client_id="configured", naver_shopping_client_secret="configured"),
+    user_id=USER_ID,
+    report_id=REPORT_ID,
+    look_id="anchor-look",
+    categories=["lip"],
+    per_category_limit=1,
+  )
+
+  assert len(result["groups"][0]["items"]) == 1
+  assert result["ranking"]["discovery"]["queriedCategories"] == []
+  assert result["ranking"]["discovery"]["skippedReason"] == "database_sufficient"
+  assert result["ranking"]["discovery"]["databaseSufficientCategories"] == ["lip"]
+
+
+@pytest.mark.asyncio
+async def test_live_discovery_receives_only_categories_short_in_verified_database(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  requested_categories: list[str] = []
+
+  async def fake_discovery(_settings, *, targets_by_category, per_category_limit):
+    requested_categories.extend(targets_by_category)
+    assert per_category_limit == 1
+    return {"shadow": []}, {
+      "contractVersion": "makeup-report-live-product-evidence-v2",
+      "provider": "naver_shopping",
+      "configured": True,
+      "applied": False,
+      "queriedCategories": list(targets_by_category),
+      "verifiedItems": 0,
+      "error": None,
+    }
+
+  monkeypatch.setattr(service, "discover_report_products", fake_discovery)
+  result = await service.get_makeup_report_product_recommendations(
+    _DetailDatabase(_report_row(), [_catalog_row("lip", "#B85E6D")]),
+    Settings(),
+    user_id=USER_ID,
+    report_id=REPORT_ID,
+    look_id="anchor-look",
+    categories=["shadow", "lip"],
+    per_category_limit=1,
+  )
+
+  assert requested_categories == ["shadow"]
+  assert result["ranking"]["discovery"]["databaseSufficientCategories"] == ["lip"]
+  assert result["ranking"]["discovery"]["shortageCategories"] == ["shadow"]
+
+
+@pytest.mark.asyncio
+async def test_live_discovery_only_fills_the_exact_database_shortage(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  def external(product_id: str, score: int) -> dict:
+    return {
+      "productId": product_id,
+      "brandName": "실제 브랜드",
+      "productName": f"검증 립 {product_id}",
+      "category": "lip",
+      "externalSource": "naver_shopping_search",
+      "matchRate": score,
+      "_ruleScore": float(score),
+    }
+
+  async def fake_discovery(*_args, **_kwargs):
+    return {"lip": [external("naver-first", 99), external("naver-second", 98)]}, {
+      "contractVersion": "makeup-report-live-product-evidence-v2",
+      "provider": "naver_shopping",
+      "configured": True,
+      "applied": True,
+      "queriedCategories": ["lip"],
+      "verifiedItems": 2,
+      "error": None,
+    }
+
+  monkeypatch.setattr(service, "discover_report_products", fake_discovery)
+  result = await service.get_makeup_report_product_recommendations(
+    _DetailDatabase(_report_row(), [_catalog_row("lip", "#B85E6D")]),
+    Settings(),
+    user_id=USER_ID,
+    report_id=REPORT_ID,
+    look_id="anchor-look",
+    categories=["lip"],
+    per_category_limit=2,
+  )
+
+  items = result["groups"][0]["items"]
+  assert len(items) == 2
+  assert sum(item.get("externalSource") == "naver_shopping_search" for item in items) == 1
+  assert {item["productId"] for item in items} != {"naver-first", "naver-second"}
 
 
 @pytest.mark.asyncio
 async def test_base_is_family_level_and_never_claims_color_or_shade(
-  monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   db = _DetailDatabase(_report_row(), [_catalog_row("base", "#101010", product_name="글로우 쿠션")])
-  monkeypatch.setattr(service, "get_auradin_catalog_products", _empty_external)
   result = await service.get_makeup_report_product_recommendations(
     db,
     Settings(),
@@ -439,8 +597,8 @@ async def test_base_is_family_level_and_never_claims_color_or_shade(
   assert item["recommendationBasis"] == "verifiedProductFamily"
   assert "purchaseUrl" not in item  # trusted offer resolves again at click time.
   assert result["ranking"]["fallback"] == {
-    "mode": "rules_only",
-    "reasonCodes": ["EMBEDDING_NOT_CONFIGURED"],
+    "mode": "none",
+    "reasonCodes": [],
     "supplementalAuradinApplied": False,
   }
 
@@ -462,139 +620,6 @@ def test_base_hex_cannot_change_rule_or_semantic_score_inputs() -> None:
   assert "shade=" not in first["_semanticText"] and "color_family=" not in first["_semanticText"]
 
 
-def test_external_supplement_accepts_only_verified_exact_or_adjacent_broad_color() -> None:
-  target = {
-    "category": "lip",
-    "colorFamily": "rose",
-    "finish": "glow",
-    "texture": "liquid",
-    "productTypes": ["tint"],
-  }
-  product = _fresh_external_item("lip", product_name="Rose Tint", color_family=None)
-  assert service._external_candidate({**product, "colorFamily": None}, target) is None
-  assert service._external_candidate({**product, "colorFamily": "peach"}, target) is None
-  assert service._external_candidate({**product, "colorFamily": "brown"}, target) is None
-  exact = service._external_candidate({**product, "colorFamily": "rose"}, target)
-  adjacent = service._external_candidate({**product, "colorFamily": "mauve"}, target)
-  assert exact is not None and adjacent is not None
-  assert exact["_ruleScore"] > adjacent["_ruleScore"]
-  assert exact["shadeHex"] is None and exact["colorDistance"] is None
-  assert adjacent["shadeHex"] is None and adjacent["colorDistance"] is None
-  assert "MATCHING_COLOR_FAMILY" in exact["reasonCodes"]
-  assert "ADJACENT_COLOR_FAMILY" in adjacent["reasonCodes"]
-  assert "인접" in adjacent["reasonLabels"][1]
-
-
-@pytest.mark.parametrize(
-  ("target_family", "candidate_family"),
-  [
-    ("orange", "coral"),
-    ("orange", "peach"),
-    ("rose", "pink"),
-    ("rose", "coral"),
-  ],
-)
-def test_reviewed_adjacent_color_graph_is_non_transitive(
-  target_family: str,
-  candidate_family: str,
-) -> None:
-  target = {
-    "category": "lip",
-    "colorFamily": target_family,
-    "finish": "glow",
-    "texture": "liquid",
-    "productTypes": ["tint"],
-  }
-  product = _fresh_external_item("lip", product_name="Color Tint", color_family=candidate_family)
-  accepted = service._external_candidate(product, target)
-  assert accepted is not None
-  assert accepted["reasonCodes"][1] == "ADJACENT_COLOR_FAMILY"
-
-  far = service._external_candidate({**product, "colorFamily": "purple"}, target)
-  assert far is None
-
-
-def test_external_base_is_always_product_family_level() -> None:
-  accepted = service._external_candidate(
-    {
-      **_fresh_external_item("base", product_name="Glow Cushion", color_family="warm-beige"),
-      "shadeName": "Warm Beige 23",
-    },
-    {
-      "category": "base",
-      "colorFamily": None,
-      "finish": "glow",
-      "texture": "cream",
-      "productTypes": ["cushion"],
-    },
-  )
-  assert accepted is not None
-  assert accepted["shadeId"] is None and accepted["shadeName"] is None
-  assert accepted["shadeHex"] is None and accepted["colorDistance"] is None
-  assert accepted["recommendationBasis"] == "semanticCatalogProductFamily"
-  assert accepted["degradedReason"] == "external_catalog_unverified_product_family"
-  assert "color_family=" not in accepted["_semanticText"]
-  assert "검증 제품군" in accepted["reasonLabels"][0]
-
-
-def test_external_candidate_rejects_missing_freshness_or_real_offer() -> None:
-  target = {
-    "category": "lip",
-    "colorFamily": "rose",
-    "finish": "glow",
-    "texture": "liquid",
-    "productTypes": ["tint"],
-  }
-  product = _fresh_external_item("lip", product_name="Rose Tint", color_family="rose")
-  assert service._external_candidate({**product, "_freshnessVerified": False}, target) is None
-  assert service._external_candidate({**product, "purchaseUrl": "http://shop.example.com"}, target) is None
-  assert service._external_candidate({**product, "price": {"amount": 0}}, target) is None
-
-
-def test_external_candidate_uses_only_hard_filter_eligible_attributes() -> None:
-  target = {
-    "category": "lip",
-    "colorFamily": "rose",
-    "finish": "glow",
-    "texture": "liquid",
-    "productTypes": ["tint"],
-  }
-  product = _fresh_external_item("lip", product_name="Rose Tint", color_family="rose")
-  rejected = {**product, "_hardFilterEligible": {**product["_hardFilterEligible"], "colorFamily": False}}
-  assert service._external_candidate(rejected, target) is None
-
-  eligible_without_soft_fields = {
-    **product,
-    "_hardFilterEligible": {
-      **product["_hardFilterEligible"],
-      "finish": False,
-      "texture": False,
-    },
-  }
-  accepted = service._external_candidate(eligible_without_soft_fields, target)
-  assert accepted is not None
-  assert "MATCHING_FINISH" not in accepted["reasonCodes"]
-  assert "MATCHING_TEXTURE" not in accepted["reasonCodes"]
-  assert accepted["finish"] is None and accepted["texture"] is None
-  assert "finish=" not in accepted["_semanticText"]
-  assert "texture=" not in accepted["_semanticText"]
-
-
-def test_external_candidate_accepts_legitimate_korean_blush_alias() -> None:
-  accepted = service._external_candidate(
-    _fresh_external_item("cheek", product_name="로즈 블러쉬", color_family="rose"),
-    {
-      "category": "cheek",
-      "colorFamily": "rose",
-      "finish": "glow",
-      "texture": "liquid",
-      "productTypes": ["blush"],
-    },
-  )
-  assert accepted is not None
-  assert "MATCHING_PRODUCT_TYPE" in accepted["reasonCodes"]
-
-
 @pytest.mark.parametrize(
   "product_name",
   ["Brow Pencil", "Eyebrow Pencil", "Eye Brow Pencil", "아이브로우펜슬", "브로우 카라"],
@@ -612,71 +637,6 @@ def test_brown_lash_cannot_satisfy_brow_product_type_or_embedding_input() -> Non
     color_family="brown",
     product_types=["brown"],
   )
-  assert service._external_candidate(
-    _fresh_external_item("brow", product_name="Brown Lash Maker", color_family="brown"),
-    {
-      "category": "brow",
-      "colorFamily": "brown",
-      "finish": "glow",
-      "texture": "liquid",
-      "productTypes": ["brow"],
-    },
-  ) is None
-
-
-def test_actual_industrial_base_fixture_is_rejected_by_cosmetic_type_gate() -> None:
-  # This active snapshot row was misclassified as base because its industrial
-  # product title contains "마그네틱 베이스" and the brand token "3CE".
-  product = external_catalog.resolve_auradin_catalog_product("auradin-seed-38c1602f279ef2ea")
-  assert product is not None and "마그네틱 베이스" in product["productName"]
-  product["_freshnessVerified"] = True  # isolate the independent cosmetic-type gate.
-  raw_product = external_catalog.get_catalog().get("auradin-seed-38c1602f279ef2ea")
-  assert raw_product is not None
-  product["_hardFilterEligible"] = raw_product["hardFilterEligible"]
-  assert service._external_candidate(
-    product,
-    {
-      "category": "base",
-      "colorFamily": None,
-      "finish": "glow",
-      "texture": "cream",
-      "productTypes": ["cushion", "foundation"],
-    },
-  ) is None
-
-
-@pytest.mark.parametrize(
-  ("product_id", "category", "color_family", "target_type", "title_token"),
-  [
-    ("auradin-seed-eb3b65093cd71d03", "brow", "black", "brow", "래쉬 메이커"),
-    ("auradin-seed-99180d0c667df201", "shadow", "brown", "shadow", "슬림라이너"),
-  ],
-)
-def test_actual_nonmatching_cosmetic_type_fixtures_are_rejected(
-  product_id: str,
-  category: str,
-  color_family: str,
-  target_type: str,
-  title_token: str,
-) -> None:
-  product = external_catalog.resolve_auradin_catalog_product(product_id)
-  assert product is not None and title_token in product["productName"]
-  raw_product = external_catalog.get_catalog().get(product_id)
-  assert raw_product is not None
-  product.update({
-    "_freshnessVerified": True,
-    "_hardFilterEligible": raw_product["hardFilterEligible"],
-  })
-  assert service._external_candidate(
-    product,
-    {
-      "category": category,
-      "colorFamily": color_family,
-      "finish": None,
-      "texture": None,
-      "productTypes": [target_type],
-    },
-  ) is None
 
 
 def test_active_snapshot_offer_proof_is_fresh_and_unknown_or_expired_proof_fails() -> None:
@@ -712,30 +672,6 @@ def test_active_snapshot_offer_proof_is_fresh_and_unknown_or_expired_proof_fails
     max_age_hours=168,
     now=datetime(2026, 8, 20, tzinfo=timezone.utc),
   ) is None
-
-
-@pytest.mark.asyncio
-async def test_active_rose_cheek_match_survives_broad_pool_before_report_gate() -> None:
-  class OfflineDatabase:
-    is_connected = False
-
-  kwargs = {
-    "user_id": None,
-    "categories": ["cheek"],
-    "strategy": "popular",
-    "verified_offer_max_age_hours": 168,
-    "verified_offer_now": datetime(2026, 7, 20, tzinfo=timezone.utc),
-  }
-  popular_eight = await external_catalog.get_auradin_catalog_products(
-    OfflineDatabase(), limit=8, **kwargs,
-  )
-  broad_pool = await external_catalog.get_auradin_catalog_products(
-    OfflineDatabase(), limit=service.MAX_EXTERNAL_PREFILTER_PER_CATEGORY, **kwargs,
-  )
-  assert not any(item.get("colorFamily") == "rose" for item in popular_eight)
-  target = service._guide_target(_guide("cheek", "#D98A91", "크림 블러셔"), {}, "cheek")
-  accepted = [item for item in broad_pool if service._external_candidate(item, target)]
-  assert "auradin-seed-9228b94647924247" in {item["productId"] for item in accepted}
 
 
 @pytest.mark.asyncio
@@ -792,23 +728,15 @@ def test_real_candidate_embedding_text_contains_only_canonical_allowlist_fields(
   })
   target = service._guide_target(_guide("lip", "#B85E6D", "글로우 틴트"), {}, "lip")
   internal = service._internal_candidate(internal_row, target, max_delta_e=18)
-  external = service._external_candidate(
-    _fresh_external_item(
-      "lip",
-      product_name="SECRET 외부 상품 로즈 틴트",
-      color_family="rose",
-    ),
-    target,
-  )
 
-  assert internal is not None and external is not None
+  assert internal is not None
   allowed_keys = {"category", "color_family", "finish", "texture", "product_type"}
-  for text in (internal["_semanticText"], external["_semanticText"]):
-    assert {part.split("=", 1)[0] for part in text.split()} <= allowed_keys
-    assert not any(
-      forbidden in text
-      for forbidden in ("SECRET", "PRIVATE", "DO NOT SEND", "brand=", "product=", "shade=", "coverage=")
-    )
+  text = internal["_semanticText"]
+  assert {part.split("=", 1)[0] for part in text.split()} <= allowed_keys
+  assert not any(
+    forbidden in text
+    for forbidden in ("SECRET", "PRIVATE", "DO NOT SEND", "brand=", "product=", "shade=", "coverage=")
+  )
 
 
 @pytest.mark.asyncio
@@ -929,16 +857,8 @@ async def test_semantic_timeout_returns_rule_order_without_failing(
 
 
 @pytest.mark.asyncio
-async def test_fallback_metadata_reports_rules_and_catalog_supplement(
-  monkeypatch: pytest.MonkeyPatch,
+async def test_verified_only_path_does_not_use_catalog_supplement_when_empty(
 ) -> None:
-  captured: dict = {}
-
-  async def external(*_args, **_kwargs):
-    captured.update(_kwargs)
-    return [_fresh_external_item("lip", product_name="Rose Glow Tint", color_family="rose")]
-
-  monkeypatch.setattr(service, "get_auradin_catalog_products", external)
   result = await service.get_makeup_report_product_recommendations(
     _DetailDatabase(_report_row()),
     Settings(),
@@ -948,27 +868,21 @@ async def test_fallback_metadata_reports_rules_and_catalog_supplement(
     categories=["lip"],
     per_category_limit=1,
   )
-  assert captured["limit"] == service.MAX_EXTERNAL_PREFILTER_PER_CATEGORY
-  assert captured["verified_offer_max_age_hours"] == Settings().product_offer_max_age_hours
+  assert result["status"] == "noEligibleProducts"
+  assert result["groups"][0]["items"] == []
+  assert result["groups"][0]["source"] == "none"
+  assert result["groups"][0]["degraded"] is False
+  assert result["groups"][0]["degradedReason"] is None
   assert result["ranking"]["fallback"] == {
-    "mode": "rules_only_with_catalog_supplement",
-    "reasonCodes": [
-      "EMBEDDING_NOT_CONFIGURED",
-      "VERIFIED_CATALOG_SHORTAGE",
-      "SUPPLEMENTAL_AURADIN_APPLIED",
-    ],
-    "supplementalAuradinApplied": True,
+    "mode": "none",
+    "reasonCodes": [],
+    "supplementalAuradinApplied": False,
   }
 
 
 @pytest.mark.asyncio
-async def test_filtered_supplement_reports_shortage_and_rules_only(
-  monkeypatch: pytest.MonkeyPatch,
+async def test_verified_only_underfilled_group_is_not_marked_as_fallback(
 ) -> None:
-  async def mismatched(*_args, **_kwargs):
-    return [_fresh_external_item("lip", product_name="Peach Tint", color_family="peach")]
-
-  monkeypatch.setattr(service, "get_auradin_catalog_products", mismatched)
   result = await service.get_makeup_report_product_recommendations(
     _DetailDatabase(_report_row(), [_catalog_row("lip", "#B85E6D")]),
     Settings(),
@@ -980,53 +894,18 @@ async def test_filtered_supplement_reports_shortage_and_rules_only(
   )
   group = result["groups"][0]
   assert len(group["items"]) == 1
-  assert group["degraded"] is True
-  assert group["degradedReason"] == "external_catalog_filtered_or_stale"
+  assert group["source"] == "licensedCatalog"
+  assert group["degraded"] is False
+  assert group["degradedReason"] is None
   assert result["ranking"]["fallback"] == {
-    "mode": "catalog_shortage",
-    "reasonCodes": [
-      "EMBEDDING_NOT_CONFIGURED",
-      "SUPPLEMENTAL_CATALOG_FILTERED",
-      "VERIFIED_CATALOG_SHORTAGE",
-    ],
+    "mode": "none",
+    "reasonCodes": [],
     "supplementalAuradinApplied": False,
   }
 
 
 @pytest.mark.asyncio
-async def test_unavailable_supplement_reports_shortage_and_rules_only(
-  monkeypatch: pytest.MonkeyPatch,
-) -> None:
-  async def unavailable(*_args, **_kwargs):
-    raise RuntimeError("snapshot unavailable")
-
-  monkeypatch.setattr(service, "get_auradin_catalog_products", unavailable)
-  result = await service.get_makeup_report_product_recommendations(
-    _DetailDatabase(_report_row(), [_catalog_row("lip", "#B85E6D")]),
-    Settings(),
-    user_id=USER_ID,
-    report_id=REPORT_ID,
-    look_id="anchor-look",
-    categories=["lip"],
-    per_category_limit=2,
-  )
-  group = result["groups"][0]
-  assert len(group["items"]) == 1
-  assert group["degraded"] is True
-  assert group["degradedReason"] == "external_catalog_unavailable"
-  assert result["ranking"]["fallback"] == {
-    "mode": "catalog_shortage",
-    "reasonCodes": [
-      "EMBEDDING_NOT_CONFIGURED",
-      "SUPPLEMENTAL_CATALOG_UNAVAILABLE",
-      "VERIFIED_CATALOG_SHORTAGE",
-    ],
-    "supplementalAuradinApplied": False,
-  }
-
-
-@pytest.mark.asyncio
-async def test_embedding_success_with_underfilled_group_uses_catalog_shortage_mode(
+async def test_embedding_success_with_underfilled_group_still_has_no_fallback(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   async def successful_rerank(candidates, *_args, **_kwargs):
@@ -1037,7 +916,6 @@ async def test_embedding_success_with_underfilled_group_uses_catalog_shortage_mo
       "degradedReason": None,
     }
 
-  monkeypatch.setattr(service, "get_auradin_catalog_products", _empty_external)
   monkeypatch.setattr(service, "_bounded_semantic_rerank", successful_rerank)
   result = await service.get_makeup_report_product_recommendations(
     _DetailDatabase(_report_row(), [_catalog_row("lip", "#B85E6D")]),
@@ -1049,8 +927,11 @@ async def test_embedding_success_with_underfilled_group_uses_catalog_shortage_mo
     per_category_limit=2,
   )
   assert result["ranking"]["embeddingApplied"] is True
-  assert result["ranking"]["fallback"]["mode"] == "catalog_shortage"
-  assert "VERIFIED_CATALOG_SHORTAGE" in result["ranking"]["fallback"]["reasonCodes"]
+  assert result["ranking"]["fallback"] == {
+    "mode": "none",
+    "reasonCodes": [],
+    "supplementalAuradinApplied": False,
+  }
 
 
 @pytest.mark.asyncio

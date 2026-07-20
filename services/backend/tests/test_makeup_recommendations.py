@@ -4,7 +4,8 @@ from uuid import UUID
 
 import pytest
 from botocore.config import Config
-from botocore.exceptions import ClientError, ReadTimeoutError
+from botocore.exceptions import ClientError, ParamValidationError, ReadTimeoutError
+from botocore.validate import validate_parameters
 from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
 
@@ -81,6 +82,26 @@ def test_converse_uses_bounded_bedrock_timeout_and_retries(monkeypatch: pytest.M
   assert config.retries == {"max_attempts": 1, "mode": "standard"}
 
 
+def test_converse_allows_bounded_long_form_recommendation_timeout(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  client = FakeBedrockClient()
+  captured_kwargs: dict = {}
+
+  def fake_boto_client(*_args, **kwargs):
+    captured_kwargs.update(kwargs)
+    return client
+
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", fake_boto_client)
+
+  _converse(Settings(), "model-id", "system", "prompt", max_tokens=9000)
+
+  config = captured_kwargs.get("config")
+  assert isinstance(config, Config)
+  assert 90 <= config.read_timeout <= 120
+  assert config.retries == {"max_attempts": 1, "mode": "standard"}
+
+
 def test_converse_accepts_json_code_fence(monkeypatch: pytest.MonkeyPatch) -> None:
   monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", lambda *_args, **_kwargs: FakeBedrockClient())
 
@@ -121,68 +142,416 @@ def test_converse_uses_bounded_three_look_recommendation_payload(monkeypatch: py
   assert client.calls[0]["inferenceConfig"]["temperature"] <= 0.5
 
 
-def test_converse_closes_stream_when_total_generation_budget_expires(monkeypatch: pytest.MonkeyPatch) -> None:
-  class TimedStream:
-    def __init__(self) -> None:
-      self.closed = False
-      self.release = threading.Event()
+def test_structured_recommendation_contract_uses_bedrock_lean_schema() -> None:
+  contract = makeup_service._structured_response_contract(
+    makeup_service.RECOMMENDATION_V2_SYSTEM_PROMPT,
+  )
 
-    def __iter__(self):
-      self.release.wait(timeout=1)
-      yield {"contentBlockDelta": {"delta": {"text": "{"}}}
+  assert contract is not None
+  tool_name, schema = contract
+  assert tool_name == "generate_makeup_recommendation"
+  assert schema["additionalProperties"] is False
+  assert {"contextSummary", "looks"}.issubset(schema["required"])
+  assert "$defs" not in schema
+  assert "generationSource" not in schema["properties"]
+  assert "matchAssessment" not in schema["properties"]
+  looks_schema = schema["properties"]["looks"]
+  assert looks_schema["required"] == ["anchor"]
+  look_schema = looks_schema["properties"]["anchor"]
+  assert "fitAssessment" not in look_schema["properties"]
+  assert "lookMap" not in look_schema["properties"]
+  assert "products" not in look_schema["properties"]
+  area_guides_schema = look_schema["properties"]["areaGuides"]
+  assert area_guides_schema["required"] == ["base", "brow", "eye", "cheek", "lip"]
+  guide_schema = area_guides_schema["properties"]["base"]
+  assert "applicationPlan" not in guide_schema["properties"]
 
-    def close(self) -> None:
-      self.closed = True
-      self.release.set()
 
-  stream = TimedStream()
+def test_recommendation_tool_response_normalizes_area_guides_by_area() -> None:
+  response = {
+    "contextSummary": ["데이트"],
+    "looks": [
+      {
+        "id": "anchor",
+        "role": "anchor",
+        "areaGuides": {
+          "base": {"label": "베이스"},
+          "brow": {"label": "브로우"},
+          "eye": {"label": "아이"},
+          "cheek": {"label": "치크"},
+          "lip": {"label": "립"},
+        },
+      },
+    ],
+  }
 
-  class TimedBedrockClient:
+  normalized = makeup_service._normalize_recommendation_tool_response(response)
+
+  assert [guide["area"] for guide in normalized["looks"][0]["areaGuides"]] == [
+    "base", "brow", "eye", "cheek", "lip",
+  ]
+  assert normalized["looks"][0]["areaGuides"][2]["label"] == "아이"
+
+
+def test_recommendation_tool_response_normalizes_role_keyed_looks() -> None:
+  response = {
+    "contextSummary": ["야구장"],
+    "looks": {
+      role: {
+        "title": f"{role} title",
+        "summary": f"{role} summary",
+        "areaGuides": {
+          area: {
+            "goal": f"{area} goal",
+            "color": {"name": f"{area} color", "hex": "#AABBCC"},
+            "texture": f"{area} texture",
+          }
+          for area in ["base", "brow", "eye", "cheek", "lip"]
+        },
+      }
+      for role in ["anchor", "bold", "discovery"]
+    },
+  }
+
+  normalized = makeup_service._normalize_recommendation_tool_response(response)
+
+  assert [look["role"] for look in normalized["looks"]] == ["anchor"]
+  assert [guide["area"] for guide in normalized["looks"][0]["areaGuides"]] == [
+    "base", "brow", "eye", "cheek", "lip",
+  ]
+  assert normalized["looks"][0]["areaGuides"][0]["color"]["hex"] == "#AABBCC"
+  assert normalized["looks"][0]["areaGuides"][0]["steps"][0]["instruction"]
+
+
+def test_structured_recommendation_contract_removes_bedrock_unsupported_schema_keys() -> None:
+  contract = makeup_service._structured_response_contract(
+    makeup_service.RECOMMENDATION_V2_SYSTEM_PROMPT,
+  )
+
+  assert contract is not None
+  _tool_name, schema = contract
+  seen_keys: set[str] = set()
+
+  def walk(value):
+    if isinstance(value, dict):
+      seen_keys.update(value.keys())
+      for child in value.values():
+        walk(child)
+    elif isinstance(value, list):
+      for child in value:
+        walk(child)
+
+  walk(schema)
+
+  assert not seen_keys.intersection(makeup_service.BEDROCK_TOOL_SCHEMA_UNSUPPORTED_KEYS)
+
+
+def test_converse_returns_forced_tool_input(monkeypatch: pytest.MonkeyPatch) -> None:
+  class ToolBedrockClient:
+    def __init__(self):
+      self.calls: list[dict] = []
+
+    def converse_stream(self, **kwargs):
+      self.calls.append(kwargs)
+      return {
+        "output": {
+          "message": {
+            "content": [
+              {
+                "toolUse": {
+                  "name": "generate_makeup_questions",
+                  "input": {"questions": [{"id": "mood"}]},
+                },
+              },
+            ],
+          },
+        },
+      }
+
+  client = ToolBedrockClient()
+  monkeypatch.setattr(
+    "app.services.makeup_recommendation.boto3.client",
+    lambda *_args, **_kwargs: client,
+  )
+  schema = {
+    "type": "object",
+    "properties": {"questions": {"type": "array"}},
+    "required": ["questions"],
+    "additionalProperties": False,
+  }
+
+  result = _converse(
+    Settings(),
+    "model-id",
+    "system",
+    "prompt",
+    response_schema=schema,
+    tool_name="generate_makeup_questions",
+    use_strict_tool_schema=True,
+  )
+
+  assert result == {"questions": [{"id": "mood"}]}
+  tool_config = client.calls[0]["toolConfig"]
+  assert tool_config["toolChoice"] == {"tool": {"name": "generate_makeup_questions"}}
+  assert tool_config["tools"][0]["toolSpec"]["inputSchema"] == {"json": schema}
+  assert tool_config["tools"][0]["toolSpec"]["strict"] is True
+
+
+def test_converse_reassembles_streamed_tool_input(monkeypatch: pytest.MonkeyPatch) -> None:
+  class StreamToolBedrockClient:
     def converse_stream(self, **_kwargs):
-      return {"stream": stream}
-
-    def close(self) -> None:
-      stream.release.set()
+      return {
+        "stream": [
+          {
+            "contentBlockStart": {
+              "contentBlockIndex": 0,
+              "start": {
+                "toolUse": {
+                  "toolUseId": "tool-use-1",
+                  "name": "generate_makeup_questions",
+                },
+              },
+            },
+          },
+          {
+            "contentBlockDelta": {
+              "contentBlockIndex": 0,
+              "delta": {"toolUse": {"input": '{"questions":['}},
+            },
+          },
+          {
+            "contentBlockDelta": {
+              "contentBlockIndex": 0,
+              "delta": {"toolUse": {"input": "]}"}},
+            },
+          },
+        ],
+      }
 
   monkeypatch.setattr(
     "app.services.makeup_recommendation.boto3.client",
-    lambda *_args, **_kwargs: TimedBedrockClient(),
+    lambda *_args, **_kwargs: StreamToolBedrockClient(),
   )
 
-  with pytest.raises(AppError) as exc_info:
-    _converse(Settings(), "model-id", "system", "prompt", timeout_seconds=0.02)
+  result = _converse(
+    Settings(),
+    "model-id",
+    "system",
+    "prompt",
+    response_schema={"type": "object"},
+    tool_name="generate_makeup_questions",
+    use_strict_tool_schema=False,
+  )
 
-  assert exc_info.value.code == "BEDROCK_GENERATION_TIMEOUT"
-  assert stream.closed is True
+  assert result == {"questions": []}
 
 
-def test_converse_closes_client_when_initial_response_exceeds_budget(
+def test_converse_request_keeps_forced_tool_use_with_installed_sdk_shape(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-  class BlockingBedrockClient:
-    def __init__(self) -> None:
-      self.closed = False
-      self.release = threading.Event()
+  sdk_client = makeup_service.boto3.client(
+    "bedrock-runtime",
+    region_name="ap-northeast-2",
+    aws_access_key_id="test-access-key",
+    aws_secret_access_key="test-secret-key",
+  )
 
-    def converse_stream(self, **_kwargs):
-      self.release.wait(timeout=1)
-      raise RuntimeError("request closed")
+  class NonStrictSdkBedrockClient:
+    def __init__(self):
+      self.calls: list[dict] = []
+      self.meta = sdk_client.meta
 
-    def close(self) -> None:
-      self.closed = True
-      self.release.set()
+    def converse_stream(self, **kwargs):
+      self.calls.append(kwargs)
+      return {
+        "output": {
+          "message": {
+            "content": [
+              {
+                "toolUse": {
+                  "name": "generate_makeup_questions",
+                  "input": {"questions": []},
+                },
+              },
+            ],
+          },
+        },
+      }
 
-  client = BlockingBedrockClient()
+  client = NonStrictSdkBedrockClient()
   monkeypatch.setattr(
     "app.services.makeup_recommendation.boto3.client",
     lambda *_args, **_kwargs: client,
   )
 
-  with pytest.raises(AppError) as exc_info:
-    _converse(Settings(), "model-id", "system", "prompt", timeout_seconds=0.02)
+  result = _converse(
+    Settings(),
+    "model-id",
+    "system",
+    "prompt",
+    response_schema={"type": "object"},
+    tool_name="generate_makeup_questions",
+  )
 
-  assert exc_info.value.code == "BEDROCK_GENERATION_TIMEOUT"
-  assert client.closed is True
+  assert result == {"questions": []}
+  tool_config = client.calls[0]["toolConfig"]
+  assert tool_config["toolChoice"] == {"tool": {"name": "generate_makeup_questions"}}
+  assert tool_config["tools"][0]["toolSpec"]["inputSchema"] == {
+    "json": {"type": "object"},
+  }
+  operation = sdk_client.meta.service_model.operation_model("ConverseStream")
+  validate_parameters(client.calls[0], operation.input_shape)
+  strict_supported = makeup_service._client_supports_strict_tool_schema(sdk_client)
+  assert ("strict" in tool_config["tools"][0]["toolSpec"]) is strict_supported
+
+
+@pytest.mark.asyncio
+async def test_generate_json_retries_invalid_json_once(monkeypatch: pytest.MonkeyPatch) -> None:
+  calls = 0
+
+  def fake_converse(*_args, **_kwargs):
+    nonlocal calls
+    calls += 1
+    if calls == 1:
+      raise AppError(
+        502,
+        "BEDROCK_INVALID_JSON",
+        "Bedrock returned an invalid recommendation response.",
+      )
+    return {"ok": True}
+
+  monkeypatch.setattr(makeup_service, "_converse", fake_converse)
+
+  result = await makeup_service.generate_json(
+    Settings(),
+    "model-id",
+    "plain JSON system",
+    "prompt",
+  )
+
+  assert result == {"ok": True}
+  assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_generate_json_does_not_retry_invalid_long_form_json(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls = 0
+
+  def fake_converse(*_args, **_kwargs):
+    nonlocal calls
+    calls += 1
+    raise AppError(
+      502,
+      "BEDROCK_INVALID_JSON",
+      "Bedrock returned an invalid recommendation response.",
+    )
+
+  monkeypatch.setattr(makeup_service, "_converse", fake_converse)
+
+  with pytest.raises(AppError) as raised:
+    await makeup_service.generate_json(
+      Settings(),
+      "model-id",
+      "plain JSON system",
+      "prompt",
+      max_tokens=9000,
+    )
+
+  assert raised.value.code == "BEDROCK_INVALID_JSON"
+  assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_json_retries_forced_tool_without_unsupported_strict(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls: list[dict] = []
+
+  def fake_converse(*_args, **kwargs):
+    calls.append(kwargs)
+    if (
+      kwargs.get("response_schema") is not None
+      and kwargs.get("use_strict_tool_schema") is not False
+    ):
+      raise ParamValidationError(report="Unknown parameter in toolSpec: strict")
+    return {"questions": []}
+
+  monkeypatch.setattr(makeup_service, "_converse", fake_converse)
+
+  result = await makeup_service.generate_json(
+    Settings(),
+    "model-id",
+    makeup_service.QUESTION_V2_SYSTEM_PROMPT,
+    "prompt",
+  )
+
+  assert result == {"questions": []}
+  assert calls[0]["tool_name"] == "generate_makeup_questions"
+  assert calls[0]["response_schema"]["additionalProperties"] is False
+  assert calls[1]["tool_name"] == "generate_makeup_questions"
+  assert calls[1]["use_strict_tool_schema"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_json_starts_recommendation_tool_without_strict(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls: list[dict] = []
+
+  def fake_converse(*_args, **kwargs):
+    calls.append(kwargs)
+    return {"contextSummary": ["야구장"], "looks": {}}
+
+  monkeypatch.setattr(makeup_service, "_converse", fake_converse)
+
+  result = await makeup_service.generate_json(
+    Settings(),
+    "model-id",
+    makeup_service.RECOMMENDATION_V2_SYSTEM_PROMPT,
+    "prompt",
+    max_tokens=9000,
+  )
+
+  assert result == {"contextSummary": ["야구장"], "looks": {}}
+  assert calls[0]["tool_name"] == "generate_makeup_recommendation"
+  assert calls[0]["use_strict_tool_schema"] is False
+
+
+@pytest.mark.asyncio
+async def test_generate_json_falls_back_when_model_rejects_tool_use(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls: list[dict] = []
+
+  def fake_converse(*_args, **kwargs):
+    calls.append(kwargs)
+    if kwargs.get("response_schema") is not None:
+      raise ClientError(
+        {
+          "Error": {
+            "Code": "ValidationException",
+            "Message": "This model does not support tool use or toolConfig.",
+          },
+          "ResponseMetadata": {"RequestId": "request-structured"},
+        },
+        "ConverseStream",
+      )
+    return {"questions": []}
+
+  monkeypatch.setattr(makeup_service, "_converse", fake_converse)
+
+  result = await makeup_service.generate_json(
+    Settings(),
+    "model-id",
+    makeup_service.QUESTION_V2_SYSTEM_PROMPT,
+    "prompt",
+  )
+
+  assert result == {"questions": []}
+  assert calls[0]["tool_name"] == "generate_makeup_questions"
+  assert "response_schema" not in calls[1]
 
 
 def test_bedrock_access_denial_keeps_safe_provider_diagnostics() -> None:

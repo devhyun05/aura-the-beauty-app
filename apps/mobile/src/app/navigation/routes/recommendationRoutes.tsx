@@ -22,7 +22,6 @@ import {
 } from './auradinLandingReport';
 import {
   goBackToPreviousOrMainTab,
-  navigateMainTab,
   type RootScreenProps,
 } from './routeUtils';
 
@@ -41,7 +40,7 @@ export function ProductRecommendationRouteScreen({
     <DetailRouteChrome
       headerMode="standard"
       routeName="ProductRecommendation"
-      onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <ProductRecommendationScreen
         initialSection={route.params?.initialSection}
         preferredMakeupReportId={route.params?.makeupRecommendationReportId}
@@ -53,6 +52,15 @@ export function ProductRecommendationRouteScreen({
           )
         }
         onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
+        onOpenMakeupReportShelf={context =>
+          navigation.navigate('ProductRecommendationShelf', {
+            shelf: 'makeupReport',
+            title: context.title,
+            makeupReportId: context.reportId,
+            makeupLookId: context.lookId,
+            initialCategory: context.category,
+          })
+        }
         onOpenProduct={(productId, shadeId, recommendationContext) =>
           navigation.navigate('ProductDetail', {
             productId,
@@ -91,14 +99,20 @@ export function ProductRecommendationShelfRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ProductRecommendationShelf'>) {
+  const reportParams = route.params.shelf === 'makeupReport' ? route.params : null;
+  const arStyleId = 'arStyleId' in route.params ? route.params.arStyleId : undefined;
+
   return (
     <DetailRouteChrome
       headerMode="standard"
       routeName="ProductRecommendationShelf"
-      onBack={() => navigation.goBack()}>
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <ProductRecommendationShelfScreen
-        arStyleId={route.params.arStyleId}
+        arStyleId={arStyleId}
+        initialCategory={reportParams?.initialCategory}
         initialTitle={route.params.title}
+        makeupLookId={reportParams?.makeupLookId}
+        makeupReportId={reportParams?.makeupReportId}
         onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
         onOpenProduct={product =>
           navigation.navigate('ProductDetail', {
@@ -203,7 +217,7 @@ export function AuradinSearchRouteScreen({navigation, route}: RootScreenProps<'A
       onBack={() =>
         navigation.canGoBack()
           ? navigation.goBack()
-          : navigation.navigate('ProductRecommendation')
+          : navigation.replace('ProductRecommendation')
       }
       onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
       onOpenProduct={(productId, shadeId) => navigation.navigate('ProductDetail', {
@@ -219,7 +233,9 @@ export function ProductSearchResultRouteScreen({
   route,
 }: RootScreenProps<'ProductSearchResult'>) {
   return (
-    <DetailRouteChrome routeName="ProductSearchResult" onBack={() => navigation.goBack()}>
+    <DetailRouteChrome
+      routeName="ProductSearchResult"
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <ProductSearchResultScreen
         onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
         onOpenProduct={product =>
@@ -257,7 +273,9 @@ export function ProductDetailRouteScreen({
     ],
   );
   return (
-    <DetailRouteChrome routeName="ProductDetail" onBack={() => navigation.goBack()}>
+    <DetailRouteChrome
+      routeName="ProductDetail"
+      onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <ProductDetailScreen
         onOpenLikedProducts={() => navigation.navigate('LikedProductList')}
         productId={route.params.productId}

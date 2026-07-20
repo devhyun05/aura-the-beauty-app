@@ -55,6 +55,8 @@ VERTICAL_THIRDS_MODEL_VISIBLE_PROFILE_KEYS = frozenset(
   },
 )
 GEOMETRY2D_MODEL_VISIBLE_METRIC_NAMES = (
+  "browApexRatioLeft",
+  "browApexRatioRight",
   "browSlopeLeftDeg",
   "browSlopeRightDeg",
   "canthalTiltLeftDeg",

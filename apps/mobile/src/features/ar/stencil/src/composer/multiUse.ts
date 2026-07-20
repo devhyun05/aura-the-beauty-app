@@ -20,7 +20,7 @@ import { isDecoRegion, REGION_DEFS, REGION_MAP } from './regions';
 import type { RegionDef, RegionKey } from './regions';
 import { newRegionNode } from './lookTree';
 import type { LookNode, ProductLeaf } from './lookTree';
-import {findProduct, translateProduct} from './products';
+import {DEFAULT_TECHNIQUE_STRENGTH, findProduct, translateProduct} from './products';
 import type {ProductDef} from './products';
 
 /** 부위의 색/마감/농도 대표 필드 — axes 선언에서 유도(드리프트 방지). */
@@ -92,7 +92,7 @@ export function translateLeafParams(
     ? {
         ...translateProduct(
           product,
-          leaf.technique ?? {strength: 1},
+          leaf.technique ?? {strength: DEFAULT_TECHNIQUE_STRENGTH},
           leaf.region,
           leaf.colorwayId,
         ),
