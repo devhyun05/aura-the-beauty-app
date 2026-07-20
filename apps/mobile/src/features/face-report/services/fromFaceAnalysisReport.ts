@@ -27,7 +27,8 @@ import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/
 import {ALL_12_TYPES, TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
 import {getColorFamilyReference} from '../../personal-color/services/personalColorCore/palette';
 import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
-import {buildRegionFeatureAxes} from '../reportFeatureAxes';
+import {buildRegionFeatureAxes, type RegionAxesKey} from '../reportFeatureAxes';
+import {buildRegionFeatureDescriptors} from '../regionFeatureDescriptors';
 import {buildVisualWeightPresentation} from '../visualWeightPresentation';
 import {buildFaceFeatureProfile} from '../../face-analysis/services/faceFeatureProfileBuilder';
 import {buildVisualWeightMap} from '../../face-analysis/services/visualWeightMap';
@@ -643,6 +644,7 @@ function buildS3(
   photo: S1Data['photo'],
   regionVisuals: RegionVisuals | null,
   geometryMetrics: FaceGeometryMetrics | null,
+  featureDescriptors: Record<RegionAxesKey, string[]> | null,
 ): S3Data | null {
   if (!regionNotes) {
     return null;
@@ -702,12 +704,14 @@ function buildS3(
             : [{leftLabel: a.leftLabel, rightLabel: a.rightLabel, state: {kind: 'point' as const, position: a.position}}],
         );
         const note = normalizeRegionNote(regionNotes[key]);
+        const descriptors = featureDescriptors ? featureDescriptors[key] : [];
         return {
           axes,
           insight: note.insight,
           evidence: note.evidence,
           recommendation: note.recommendation,
           paragraph: note.insight,
+          ...(descriptors.length > 0 ? {featureDescriptors: descriptors} : {}),
         };
       })(),
     };
@@ -834,6 +838,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     measuredAt: report.analyzedAt,
   });
   const visualWeight = buildVisualWeightPresentation(buildVisualWeightMap(featureProfile));
+  const regionDescriptors = buildRegionFeatureDescriptors(featureProfile);
 
   return {
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
@@ -844,7 +849,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
       verticalThirds ?? null,
     ),
     s2: buildS2(verticalThirds, gender),
-    s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null, geometryMetrics ?? null),
+    s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null, geometryMetrics ?? null, regionDescriptors),
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile, gender),
     s6: buildS6(report.impressionNotes, visualWeight),

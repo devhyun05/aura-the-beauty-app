@@ -127,6 +127,9 @@ export interface RegionCardData {
   evidence?: string;
   recommendation?: string;
   paragraph: string;
+  // 1층 사진 판정(VLM) 상세 구절(쌍꺼풀 유형·안검 처짐·애교살 등). 판정된 것만.
+  // 비어 있으면 컴포넌트가 상세 칩 블록을 숨긴다.
+  featureDescriptors?: string[];
 }
 export interface S3Data { eyebrow: string; title: string; sub: string; cards: RegionCardData[] }
 

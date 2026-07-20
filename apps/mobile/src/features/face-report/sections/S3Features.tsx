@@ -49,6 +49,24 @@ function RegionCard({ card }: { card: RegionCardData }) {
           ? <WhatIfRail key={i} axis={axis} config={card.whatIf.config} />
           : <SpectrumRail key={i} axis={axis} />
       )}
+      {card.featureDescriptors && card.featureDescriptors.length > 0 ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {card.featureDescriptors.map(d => (
+            <View
+              key={d}
+              style={{
+                backgroundColor: color.dial,
+                borderWidth: 1,
+                borderColor: color.outline6,
+                borderRadius: radius.pill,
+                paddingVertical: 5,
+                paddingHorizontal: 11,
+              }}>
+              <Text style={[font(11.5, '600'), { color: color.body }]}>{d}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       {card.insight ? (
         <View style={{ gap: 6 }}>
           <Text style={[font(13.5, '700', 1.6), { color: color.ink }]}>{card.insight}</Text>
