@@ -469,6 +469,8 @@ type StencilARAppProps = {
 // The stencil source includes authoring/debug utilities that are useful while
 // developing the Unity scene but are not part of AURA's customer-facing AR UI.
 const SHOW_INTERNAL_AR_TOOLS = false;
+// 전문가 깊이 모드 — 스토어 빌드에서는 기본/상세만 노출한다.
+const SHOW_EXPERT_MAKEUP_MODE = false;
 
 function App({ onBack }: StencilARAppProps) {
   return (
@@ -3640,7 +3642,10 @@ function FilterScreen({ onBack }: StencilARAppProps) {
             {/* 보정은 상세만 — 기본/상세/전문가 버튼은 메이크업에서만 노출. */}
             {lane === 'makeup' && (
               <View style={styles.depthModes}>
-                {(['basic', 'detail', 'expert'] as const).map(depth => (
+                {(SHOW_EXPERT_MAKEUP_MODE
+                  ? (['basic', 'detail', 'expert'] as const)
+                  : (['basic', 'detail'] as const)
+                ).map(depth => (
                   <TouchableOpacity
                     key={depth}
                     testID={`mode-${depth}`}
