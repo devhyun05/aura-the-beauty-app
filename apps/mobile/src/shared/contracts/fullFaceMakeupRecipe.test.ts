@@ -13,6 +13,10 @@ import {
   getMakeupRecipeRegionsForArea,
   normalizeMakeupRecipeRegion,
 } from './fullFaceMakeupRecipe';
+import {
+  AR_BLUSH_COLORS,
+  AR_BLUSH_REFERENCE_SHAPES,
+} from './arBlushCatalog';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -103,9 +107,19 @@ expectEqual(
   'lip inner fill schema is preserved',
 );
 expectEqual(
-  REGION_COLOR_OPTIONS.blush.length >= 3,
-  true,
-  'blush color palette is preserved',
+  REGION_COLOR_OPTIONS.blush.map(option => option.hex).join(','),
+  AR_BLUSH_COLORS.map(option => option.hex).join(','),
+  'full-face blush palette uses the common AR catalog',
+);
+expectEqual(
+  REGION_CANDIDATE_OPTIONS.blush.map(option => option.label).join(','),
+  AR_BLUSH_REFERENCE_SHAPES.map(option => option.label).join(','),
+  'full-face blush candidate labels use the common AR catalog',
+);
+expectEqual(
+  REGION_CANDIDATE_OPTIONS.blush.map(option => option.maskTextureId).join(','),
+  AR_BLUSH_REFERENCE_SHAPES.map(option => option.maskTextureId).join(','),
+  'full-face blush masks preserve the five reference mappings',
 );
 expectEqual(
   REGION_FINISH_OPTIONS.lip.some(option => option.finish === 'gloss'),
@@ -137,7 +151,22 @@ expectEqual(
 expectEqual(
   FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
   'e7-blush-balanced-uv-v0',
-  'blush runtime asset id',
+  'blush runtime fallback keeps the 512px balanced atlas',
+);
+expectEqual(
+  FULL_FACE_REGION_RUNTIME_ASSETS.blush.candidateId,
+  'blush-balanced-soft-oval-v0',
+  'blush runtime fallback candidate id',
+);
+expectEqual(
+  DEFAULT_FULL_FACE_REGION_CONTROLS.blush.opacity,
+  0.58,
+  'default full-face blush opacity is visibly stronger',
+);
+expectEqual(
+  DEFAULT_FULL_FACE_REGION_CONTROLS.blush.intensity,
+  0.62,
+  'default full-face blush intensity is visibly stronger',
 );
 expectEqual(
   FULL_FACE_REGION_RUNTIME_ASSETS.foundation.maskTextureId,

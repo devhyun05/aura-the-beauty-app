@@ -98,6 +98,7 @@ export interface FilterParams {
   /** 립 데칼 글리터 명멸 0..1 (0=끔). 움직임에 반응하는 절차 반짝을 데칼 위에 얹음 */
   lipStyleSparkle?: number;
   blushColor: string;
+  /** 블러셔 안료 강도 0..1.2. 1.2는 전역 기본 농도 0.75에서도 또렷한 최대 발색을 보장한다. */
   blushIntensity: number;
   /** 블러셔 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 생략 시 0(새틴) */
   blushFinish?: number;
@@ -357,7 +358,8 @@ export interface FilterParams {
   blushLift?: number;
   /** 블러셔 바깥/안쪽 (+ = 바깥, 좌우 미러) */
   blushSpread?: number;
-  /** 블러셔 모양: 0=클래식(양볼) 1=이가리(코걸침 한 장) 2=드레이핑(관자 스윕). 생략 시 0 */
+  /** 블러셔 모양: 0=클래식 1=이가리 2=드레이핑 3=데일리 4=러블리
+   *  5=언더아이 6=선키스드 소프트 7=선키스드 밴드. 생략 시 0 */
   blushShape?: number;
   /** 하이라이터·컨투어 핏 아핀(A17 확장, 블러셔 lift/spread 일반화) — 캐노니컬 UV, 생략 0 */
   highlightLift?: number;
