@@ -8,10 +8,14 @@ import { color, font, radius, shadow } from './reportTokens';
 import type { BandKey, ReportScreenProps } from './reportTypes';
 
 // Matches the legacy report screen's capture settings.
+// useRenderInContext: 보고서 전체(긴 콘텐츠)는 기본 drawViewHierarchy 캡처가
+// 실기기에서 실패한다(네이티브 주석 "doesn't work for large views") —
+// 대형 뷰용 renderInContext 경로를 쓴다.
 const REPORT_CAPTURE_OPTIONS = {
   format: 'jpg',
   quality: 0.95,
   result: 'tmpfile',
+  useRenderInContext: true,
 } as const;
 import { ScrollAnimContext } from './visuals/RiseIn';
 import { S1Summary } from './sections/S1Summary';

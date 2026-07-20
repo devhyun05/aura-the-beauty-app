@@ -17,6 +17,9 @@ export type OptionalViewShotOptions = {
   format?: 'jpg' | 'png' | 'webm' | 'raw';
   quality?: number;
   result?: 'tmpfile' | 'base64' | 'data-uri' | 'zip-base64';
+  // 대형(긴) 뷰는 기본 drawViewHierarchy 캡처가 실기기에서 실패한다.
+  // layer.renderInContext 경로로 전환하는 네이티브 옵션.
+  useRenderInContext?: boolean;
 };
 
 type OptionalViewShotProps = {
