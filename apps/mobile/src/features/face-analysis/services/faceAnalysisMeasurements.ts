@@ -183,9 +183,11 @@ function encodeVerticalThirds(
 }
 
 // regionVisuals 는 buildFaceAnalysisMeasurementsPayload 가 top-level 로 lift 하므로
-// nested 사본은 여기서 뺀다(중복 저장 방지).
+// nested 사본은 여기서 뺀다(중복 저장 방지). debugAnchors 는 오버레이 검증
+// 전용 로컬 필드다 — 서버 wire payload 에 절대 실려서는 안 되므로 여기서도
+// 명시적으로 제외한다(⚠ 필드 추가 시 이 화이트리스트 제외 목록을 잊지 말 것).
 function encodeFaceGeometry(result: FaceGeometryResult): Record<string, unknown> {
-  const {regionVisuals: _regionVisuals, sourceImage, ...rest} = result;
+  const {debugAnchors: _debugAnchors, regionVisuals: _regionVisuals, sourceImage, ...rest} = result;
 
   return {
     ...rest,
@@ -1016,7 +1018,7 @@ function decodeFaceGeometry(value: unknown): FaceGeometryResult | undefined {
   const metricsRecord = isRecord(value.metrics) ? value.metrics : {};
   const metrics = {} as FaceGeometryResult['metrics'];
 
-  // 화면이 metrics[key].value 를 직접 dereference 하므로 16키를 항상 채운다 —
+  // 화면이 metrics[key].value 를 직접 dereference 하므로 18키를 항상 채운다 —
   // 누락 키는 측정 불가로 간주(구버전·부분 손상 응답 방어).
   for (const key of FACE_GEOMETRY_METRIC_KEYS) {
     const metricRecord = isRecord(metricsRecord[key]) ? metricsRecord[key] : undefined;

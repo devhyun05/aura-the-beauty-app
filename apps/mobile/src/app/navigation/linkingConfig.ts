@@ -55,6 +55,8 @@ export const rootStackLinkingScreens = {
   FaceAnalysisLoading: 'face-analysis-loading',
   FaceAnalysisReportsList: 'face-analysis-reports',
   FaceAnalysisReportDetail: 'face-analysis-report/:reportId?',
+  // __DEV__ 전용 검증 화면 — 딥링크 진입 대상이 아니지만 타입상 항목이 필요하다.
+  FaceGeometryDebug: 'face-geometry-debug',
   FloatingActionSettings: 'floating-action-settings',
   AppSettings: 'app-settings',
   Faq: 'faq',

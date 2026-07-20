@@ -1,5 +1,5 @@
 import React from 'react';
-import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
+import {Pressable, StyleSheet, Text, useWindowDimensions} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {YStack} from 'tamagui';
 
@@ -39,6 +39,7 @@ import {raceWithNullTimeout} from '../../../features/face-analysis/services/stil
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
 import {analyzeFaceGeometry2d} from '../../../features/face-geometry/services/faceGeometryService';
 import type {FaceGeometryResult} from '../../../features/face-geometry/types';
+import {FaceGeometryDebugScreen} from '../../../features/face-geometry/screens/FaceGeometryDebugScreen';
 import {buildFaceVerticalThirdsAnalysisPayload} from '../../../features/face-ratio/services/faceVerticalThirdsAiPayload';
 import {analyzeFaceVerticalThirds} from '../../../features/face-ratio/services/faceVerticalThirdsService';
 import type {
@@ -908,32 +909,47 @@ export function FaceAnalysisReportPreviewRouteScreen({
   );
 
   return (
-    <FaceAnalysisReportPreviewScreen
-      analysisReport={selectedFaceAnalysisReport}
-      capturedPhotoUri={selectedFaceCapture?.imageUri}
-      onBack={() =>
-        shouldReturnToProfile
-          ? goBackToPreviousOrMainTab(navigation, 'ProfileTab')
-          : goBackToPreviousOrMainTab(navigation, 'HomeTab')
-      }
-      onCreateARFilter={() => {
-        if (currentReportId) {
-          navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
-          return;
+    <>
+      <FaceAnalysisReportPreviewScreen
+        analysisReport={selectedFaceAnalysisReport}
+        capturedPhotoUri={selectedFaceCapture?.imageUri}
+        onBack={() =>
+          shouldReturnToProfile
+            ? goBackToPreviousOrMainTab(navigation, 'ProfileTab')
+            : goBackToPreviousOrMainTab(navigation, 'HomeTab')
         }
-        navigation.navigate('MakeupRecommendation');
-      }}
-      onDeleteReport={handleDeleteReport}
-      onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
-      onRetake={() => navigation.navigate('FaceCapture')}
-      face3d={route.params?.reportId ? null : selectedFace3DProfile}
-      faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
-      personalColor={route.params?.reportId ? null : selectedPersonalColor}
-      reportId={route.params?.reportId ?? null}
-      sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
-      verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
-    />
+        onCreateARFilter={() => {
+          if (currentReportId) {
+            navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
+            return;
+          }
+          navigation.navigate('MakeupRecommendation');
+        }}
+        onDeleteReport={handleDeleteReport}
+        onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
+        onRetake={() => navigation.navigate('FaceCapture')}
+        face3d={route.params?.reportId ? null : selectedFace3DProfile}
+        faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
+        personalColor={route.params?.reportId ? null : selectedPersonalColor}
+        reportId={route.params?.reportId ?? null}
+        sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
+        verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
+      />
+      {__DEV__ && selectedFaceGeometry2d ? (
+        <Pressable
+          onPress={() => navigation.navigate('FaceGeometryDebug')}
+          style={styles.devFaceGeometryDebugButton}>
+          <Text style={styles.devFaceGeometryDebugButtonLabel}>▷ 기하검증</Text>
+        </Pressable>
+      ) : null}
+    </>
   );
+}
+
+// __DEV__ 전용: Face 2D 지오메트리(눈꼬리·눈썹선·roll) 오버레이 검증 화면.
+// 결과는 화면이 flow state(selectedFaceGeometry2d)에서 직접 읽으므로 param 불필요.
+export function FaceGeometryDebugRouteScreen() {
+  return <FaceGeometryDebugScreen />;
 }
 
 function FaceAnalysisReportBottomNav({
@@ -1186,6 +1202,21 @@ function FaceAnalysisReportBottomNav({
 }
 
 const styles = StyleSheet.create({
+  devFaceGeometryDebugButton: {
+    backgroundColor: 'rgba(17, 24, 39, 0.85)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    position: 'absolute',
+    right: 12,
+    top: 56,
+    zIndex: 40,
+  },
+  devFaceGeometryDebugButtonLabel: {
+    color: '#facc15',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   reportFooterDismissLayer: {
     backgroundColor: 'transparent',
     bottom: 0,

@@ -6,7 +6,7 @@ import type {
 import {FACE_GEOMETRY_METRIC_KEYS} from '../types';
 
 // 보고서 작성 AI(requestPayload.faceGeometry2d)로 보내는 요약.
-// 측정 데이터 3-반영 규칙: 16키 전량(미산출 지표도 null+warnings로), pose,
+// 측정 데이터 3-반영 규칙: 18키 전량(미산출 지표도 null+warnings로), pose,
 // roll 보정 상세, statusReason까지 싣는다. raw 랜드마크 좌표는 보내지 않는다.
 export type FaceGeometryAnalysisPayload = {
   metrics: Record<

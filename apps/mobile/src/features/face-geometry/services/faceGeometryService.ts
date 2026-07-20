@@ -7,6 +7,7 @@ import type {
   FaceGeometryStatus,
 } from '../types';
 import {
+  collectFaceGeometryDebugAnchors,
   collectMissingIndices,
   computeFaceGeometryMetrics,
   createUnavailableFaceGeometryMetrics,
@@ -132,6 +133,10 @@ export async function analyzeFaceGeometry2d(
   } else if (Math.abs(rollDeg) > ROLL_CORRECTION_MAX_ABS_DEG) {
     rollCorrection = {...SKIPPED_ROLL_CORRECTION, skippedReason: 'roll_out_of_range'};
   } else {
+    // 부호 규약(TS pin: faceGeometryMath.test.ts §10-11): rollDeg>0 = 머리가 이미지에서
+    // 시계방향으로 기운 상태여야 하며, angleDeg=-rollDeg 로 되돌린다. rollDeg의 네이티브
+    // 의미(StillFaceLandmarkService.cs: roll=atan2(m.m10,m.m00))는 TS로 검증 불가이므로,
+    // 실기기에서 "머리를 시계방향으로 기울여 촬영 → canthalTilt 부호가 올바른지" 1회 검증할 것.
     const angleDeg = -rollDeg;
     correctedMap = rotatePixelLandmarkMap(pixelMap, angleDeg, {
       x: detected.imageWidth / 2,
@@ -148,6 +153,13 @@ export async function analyzeFaceGeometry2d(
     rollCorrectionApplied: rollCorrection.applied,
   });
   const regionVisuals = regionVisualsBuilder(correctedMap, detected.imageWidth, detected.imageHeight);
+  // 오버레이 정합: 앵커는 원본(비회전) 좌표로 수집해 촬영 사진 위에 정확히 얹는다.
+  // (지표값은 correctedMap 기준으로 이미 계산됨 — 앵커는 위치 검증용, 값은 라벨로 표시)
+  const debugAnchors = collectFaceGeometryDebugAnchors(
+    pixelMap,
+    detected.imageWidth,
+    detected.imageHeight,
+  );
 
   const nullCount = Object.values(metrics).filter(metric => metric.value === null).length;
   const status: FaceGeometryStatus = nullCount === 0 ? 'full_success' : 'partial_success';
@@ -167,6 +179,7 @@ export async function analyzeFaceGeometry2d(
     pose: detected.pose,
     regionVisuals: Object.keys(regionVisuals).length ? regionVisuals : undefined,
     rollCorrection,
+    ...(debugAnchors.length ? {debugAnchors} : {}),
     schemaVersion: 'aura-face-geometry-v1',
     sessionId: input.sessionId,
     sourceImage,
