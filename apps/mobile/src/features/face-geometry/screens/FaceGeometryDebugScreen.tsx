@@ -87,6 +87,10 @@ export function FaceGeometryDebugScreen() {
         ))}
       </ScrollView>
 
+      {/* 핀치 줌(bouncesZoom·min/maximumZoomScale·centerContent)은 iOS 전용
+          ScrollView 속성이다. __DEV__ 지오메트리 검증은 주로 iOS 실기기에서 하므로
+          그대로 둔다 — Android에선 스크롤만 되고 줌은 무시된다(크래시·경고 없음).
+          Android 핀치가 필요해지면 react-native-gesture-handler Pinch로 교체할 것. */}
       <ScrollView
         bouncesZoom
         centerContent
