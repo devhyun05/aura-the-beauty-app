@@ -117,12 +117,13 @@ def test_api_task_validation_allows_every_workflow_managed_environment_variable(
   assert rendered_names <= validation_names
 
 
-def test_backend_ci_is_manual_only() -> None:
+def test_backend_ci_supports_manual_dispatch() -> None:
+  # dev가 PR 트리거 CI를 복원해 핫픽스 브랜치 시점의 "수동 전용" 전제와
+  # 어긋난다(사용자 결정 A). 계약은 수동 실행 가능 여부만 유지한다.
   workflow = (PROJECT_ROOT / ".github/workflows/backend-ci.yml").read_text(
     encoding="utf-8",
   )
 
-  assert "pull_request:" not in workflow
   assert "workflow_dispatch:" in workflow
 
 

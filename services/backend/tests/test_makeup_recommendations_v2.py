@@ -2487,7 +2487,12 @@ def test_single_look_retry_claims_and_dispatches_only_that_look(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   class DB:
+    async def execute(self, query: str, *args):
+      return "OK"
+
     async def fetchrow(self, query: str, *args):
+      if "report_request_rate_limits" in query:
+        return {"request_count": 1, "retry_after": 0}
       if "select asset.look_id" in query:
         assert args == (RECOMMENDATION_REPORT_ID, "bold", USER_ID)
         return {"look_id": "bold", "status": "failed"}
@@ -2572,6 +2577,8 @@ def test_v2_refinement_initializes_pending_assets(monkeypatch: pytest.MonkeyPatc
       self.executed: list[tuple[str, tuple]] = []
 
     async def fetchrow(self, query: str, *args):
+      if "report_request_rate_limits" in query:
+        return {"request_count": 1, "retry_after": 0}
       if "from makeup_recommendation_reports" in query:
         return {
           "id": RECOMMENDATION_REPORT_ID,
