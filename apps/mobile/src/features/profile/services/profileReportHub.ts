@@ -2,6 +2,8 @@ import type {ImageSourcePropType} from 'react-native';
 
 import {fetchMakeupFeedbackReports} from '../../makeup-feedback/services/makeupFeedbackService';
 import {fetchGeneratedMakeupRecommendationReports} from '../../makeup-recommendation/services/makeupRecommendationService';
+import {getMakeupRecommendationPreviewPresentation} from '../../makeup-recommendation/services/makeupRecommendationPreview';
+import type {MakeupRecommendationReportHistoryItem} from '../../makeup-recommendation/types';
 import {fetchReferenceMakeupExtractionReports} from '../../reference-makeup-extraction/services/makeupExtractionService';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 
@@ -14,7 +16,8 @@ export type ProfileReportKind =
 export type ProfileReportPreview = {
   hasMore: boolean;
   id: string;
-  imageSource: ImageSourcePropType;
+  imageSource?: ImageSourcePropType;
+  statusLabel?: string;
   title: string;
 };
 
@@ -46,6 +49,22 @@ function mapFaceAnalysisPreview(
         title: report.title,
       }
     : null;
+}
+
+export function mapMakeupRecommendationProfilePreview(
+  recommendation: MakeupRecommendationReportHistoryItem | undefined,
+  hasMore: boolean,
+): ProfileReportPreview | null {
+  if (!recommendation) return null;
+
+  const preview = getMakeupRecommendationPreviewPresentation(recommendation);
+  return {
+    hasMore,
+    id: recommendation.reportId,
+    imageSource: preview.imageUrl ? {uri: preview.imageUrl} : undefined,
+    statusLabel: preview.imageUrl ? undefined : preview.statusLabel,
+    title: recommendation.scenarioText,
+  };
 }
 
 export function getProfileReportHubSnapshot(
@@ -86,14 +105,10 @@ export async function loadProfileReportHub(
 
   const reportHub: ProfileReportHubData = {
     faceAnalysis: mapFaceAnalysisPreview(faceAnalysisReports),
-    makeupRecommendation: recommendation?.results[0]
-      ? {
-          hasMore: recommendations.length > 1,
-          id: recommendation.reportId,
-          imageSource: recommendation.results[0].imageSource,
-          title: recommendation.scenarioText,
-        }
-      : null,
+    makeupRecommendation: mapMakeupRecommendationProfilePreview(
+      recommendation,
+      recommendations.length > 1,
+    ),
     makeupExtraction: extraction
       ? {
           hasMore: extractions.length > 1,

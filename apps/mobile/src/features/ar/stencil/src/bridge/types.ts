@@ -339,6 +339,8 @@ export interface FilterParams {
   mascaraLength?: number;
   /** 속눈썹 모양: 0=내추럴 1=돌리 2=캣아이 3=오픈아이 4=위스피 */
   mascaraStyle?: number;
+  /** 위 속눈썹 렌더: 0=절차 스트로크 1=텍스처 내추럴 2=텍스처 볼륨 */
+  mascaraTexStyle?: number;
   /** 아래 속눈썹 모양 — 위와 같은 5종, 값 독립 */
   lowerLashStyle?: number;
   /** 하안검 밴드 높이 배수 (애교살 두께) */
@@ -506,6 +508,8 @@ export interface FilterParams {
   browPencilTexture?: number;
   browLightenerTexture?: number;
   browStyleTexture?: number;
+  /** 눈썹 스타일 built-in 텍스처 선택: 0=default_brow 1=글램(정의) 2=두꺼운(풍성) 3=와일드(앞머리 수직 브러시업) 4=소프트 헤어(정돈된 자연 결). 생략 0 */
+  browStyleTemplate?: number;
   lipBaseTexture?: number;
   lipLinerTexture?: number;
   lipGlossTexture?: number;

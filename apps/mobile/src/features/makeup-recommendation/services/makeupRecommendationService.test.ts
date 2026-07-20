@@ -23,6 +23,10 @@ import {
 } from './makeupRecommendationService';
 import {buildRecommendedAreaGuides} from './makeupRecommendationMappers';
 import {
+  getMakeupRecommendationPreviewPresentation,
+  getMakeupRecommendationPreviewStatusLabel,
+} from './makeupRecommendationPreview';
+import {
   MAKEUP_RECOMMENDATION_EVENT_NAMES,
   markKnownMakeupRecommendationImageEvents,
   sanitizeMakeupRecommendationEventMetadata,
@@ -407,6 +411,8 @@ const reportHistory = mapBackendRecommendationReports([
       })),
     },
     imageStatus: 'completed',
+    previewImageUrl: 'https://signed.example.com/report-1-anchor.jpg',
+    previewImageStatus: 'completed',
     createdAt: '2026-07-14T12:34:56Z',
     profileGender: 'unspecified',
     sourceAnalysisReportId: '11111111-1111-4111-8111-111111111111',
@@ -458,6 +464,56 @@ const reportHistory = mapBackendRecommendationReports([
 ]);
 expectEqual(reportHistory.length, 1, 'saved report history count');
 expectEqual(reportHistory[0].reportId, 'report-1', 'saved report id');
+expectEqual(
+  reportHistory[0].previewImageUrl,
+  'https://signed.example.com/report-1-anchor.jpg',
+  'saved report maps its applied preview URL',
+);
+expectEqual(
+  reportHistory[0].previewImageStatus,
+  'completed',
+  'saved report maps its applied preview status',
+);
+expectEqual(
+  JSON.stringify(reportHistory[0].results[0].imageSource),
+  JSON.stringify({uri: 'https://signed.example.com/report-1-anchor.jpg'}),
+  'saved report anchor uses the received applied preview instead of a fixture',
+);
+expectEqual(
+  reportHistory[0].results[0].imageStatus,
+  'completed',
+  'saved report anchor keeps the received preview renderable',
+);
+expectEqual(
+  getMakeupRecommendationPreviewStatusLabel('processing'),
+  '적용 이미지 생성 중',
+  'processing preview uses a neutral status label',
+);
+expectEqual(
+  getMakeupRecommendationPreviewStatusLabel('failed'),
+  '적용 이미지 없음',
+  'failed preview does not claim a fixture is generated',
+);
+const appliedPreview = getMakeupRecommendationPreviewPresentation(reportHistory[0]);
+expectEqual(
+  appliedPreview.imageUrl,
+  'https://signed.example.com/report-1-anchor.jpg',
+  'history presentation uses only the applied preview URL',
+);
+const unavailablePreview = getMakeupRecommendationPreviewPresentation({
+  imageStatus: 'failed',
+  previewImageStatus: 'failed',
+});
+expectEqual(
+  unavailablePreview.imageUrl,
+  undefined,
+  'missing applied preview stays empty instead of using a look fixture',
+);
+expectEqual(
+  unavailablePreview.statusLabel,
+  '적용 이미지 없음',
+  'missing applied preview keeps its neutral status',
+);
 expectEqual(reportHistory[0].scenarioText, '퇴근 후 약속', 'saved report scenario');
 expectEqual(reportHistory[0].profileGender, 'unspecified', 'history prefers scalar profile gender');
 expectEqual(reportHistory[0].results.length, 3, 'saved report restores three looks');
@@ -485,6 +541,11 @@ expectEqual(restoredReport.reportId, 'report-1', 'restored session keeps report 
 expectEqual(restoredReport.profileGender, 'unspecified', 'restored report keeps snapshot gender');
 expectEqual(restoredReport.generationMode, 'backend', 'restored report is server-backed');
 expectEqual(restoredReport.results.length, 3, 'restored session keeps all looks');
+expectEqual(
+  JSON.stringify(restoredReport.results[0].imageSource),
+  JSON.stringify({uri: 'https://signed.example.com/report-1-anchor.jpg'}),
+  'detail refresh failure retains the list preview instead of restoring a fixture',
+);
 expectEqual(
   restoredReport.results[0].generationSource,
   'deterministic_fallback',

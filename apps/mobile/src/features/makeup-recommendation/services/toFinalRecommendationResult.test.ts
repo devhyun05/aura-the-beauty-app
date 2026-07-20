@@ -401,15 +401,17 @@ const alignmentViewport = {width: 400, height: 500};
 expectEqual(
   computeFinalMakeupImageTransform(undefined, alignmentViewport),
   null,
-  'missing alignment metadata keeps the cover fallback',
+  'missing alignment metadata keeps the full-photo fallback',
 );
 const sourceTransform = computeFinalMakeupImageTransform(
   alignmentMetadata.source,
   alignmentViewport,
+  alignmentMetadata.source,
 );
 const generatedTransform = computeFinalMakeupImageTransform(
   alignmentMetadata.generated,
   alignmentViewport,
+  alignmentMetadata.source,
 );
 if (!sourceTransform || !generatedTransform) {
   throw new Error('valid face alignment transform was not computed');
@@ -439,14 +441,19 @@ const distance = (left: {x: number; y: number}, right: {x: number; y: number}) =
   Math.hypot(right.x - left.x, right.y - left.y);
 const sourceMidpoint = midpoint(sourceLeftEye, sourceRightEye);
 const generatedMidpoint = midpoint(generatedLeftEye, generatedRightEye);
-expectClose(sourceMidpoint.x, 200, 'source eye midpoint x');
-expectClose(sourceMidpoint.y, 200, 'source eye midpoint y');
+expectClose(sourceMidpoint.x, 200, 'source eye midpoint x preserves the captured frame');
+expectClose(sourceMidpoint.y, 210, 'source eye midpoint y preserves the captured frame');
 expectClose(generatedMidpoint.x, sourceMidpoint.x, 'generated eye midpoint x');
 expectClose(generatedMidpoint.y, sourceMidpoint.y, 'generated eye midpoint y');
-expectClose(distance(sourceLeftEye, sourceRightEye), 120, 'source eye distance');
-expectClose(distance(generatedLeftEye, generatedRightEye), 120, 'generated eye distance');
+expectClose(distance(sourceLeftEye, sourceRightEye), 160, 'source eye distance is not zoomed');
+expectClose(distance(generatedLeftEye, generatedRightEye), 160, 'generated eye distance');
 expectClose(sourceLeftEye.y, sourceRightEye.y, 'source eye line roll');
 expectClose(generatedLeftEye.y, generatedRightEye.y, 'generated eye line roll');
+expectClose(sourceTransform.scale, 1, 'source keeps its original scale');
+expectClose(sourceTransform.rotationDeg, 0, 'source keeps its original angle');
+expectClose(sourceTransform.renderedWidth, 400, 'source contain width');
+expectClose(sourceTransform.renderedHeight, 400, 'source contain height');
+expectClose(sourceTransform.originY, 50, 'source remains centered without cropping');
 
 const faceBoxFallbackMetadata = mapBackendImageAlignmentMetadata({
   version: 'makeup-face-alignment-v1',

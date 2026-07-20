@@ -4,6 +4,7 @@ from hashlib import sha256
 import json
 import logging
 import re
+import threading
 import time
 from typing import Any
 
@@ -36,6 +37,9 @@ from app.services.makeup_recommendation_prompt import (
   sanitize_recommendation_context,
 )
 from app.services.makeup_recommendation_recipe import enrich_makeup_application_plans
+from app.services.makeup_recommendation_timing import (
+  resolve_prep_time_budget_minutes,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -85,7 +89,7 @@ BEDROCK_TOOL_SCHEMA_UNSUPPORTED_KEYS = {
   "pattern",
 }
 MAKEUP_RECOMMENDATION_REQUIRED_AREAS = ("base", "brow", "eye", "cheek", "lip")
-MAKEUP_RECOMMENDATION_ROLE_ORDER = ("anchor", "bold", "discovery")
+MAKEUP_RECOMMENDATION_ROLE_ORDER = ("anchor",)
 MAKEUP_RECOMMENDATION_AREA_LABELS = {
   "base": "베이스",
   "brow": "브로우",
@@ -695,6 +699,7 @@ async def generate_json(
   prompt: str,
   *,
   max_tokens: int = 3500,
+  timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
   started_at = time.perf_counter()
   structured_contract = _structured_response_contract(system)
@@ -1817,20 +1822,6 @@ def deterministic_recommendation_v2(
       "cheek": ("로지 피치", "#D98E8E", "맑은 쉬어"),
       "lip": ("뮤티드 로즈", "#A85D68", "편안한 세미 글로우"),
     }),
-    ("bold", "포인트 룩", "사진과 현장에서 또렷하게 남는 포인트", 25, "medium", {
-      "base": ("웜 뉴트럴", "#D3AA90", "매끈한 세미 매트"),
-      "brow": ("딥 브라운", "#5C4038", "선명한 소프트 매트"),
-      "eye": ("딥 로즈 브라운", "#7B4E55", "밀도 있는 새틴"),
-      "cheek": ("클리어 로즈", "#CF6F7D", "선명한 쉬어"),
-      "lip": ("딥 베리 로즈", "#8F354D", "또렷한 벨벳"),
-    }),
-    ("discovery", "디스커버리 룩", "익숙한 인상에 한 가지 세련된 변주", 20, "medium", {
-      "base": ("소프트 베이지", "#D8B399", "투명한 새틴"),
-      "brow": ("애쉬 브라운", "#6B5147", "가벼운 파우더"),
-      "eye": ("모브 토프", "#8B6B87", "잔잔한 쉬머"),
-      "cheek": ("모브 로즈", "#C98291", "부드러운 쉬어"),
-      "lip": ("플럼 로즈", "#9E5A78", "촉촉한 블러"),
-    }),
   )
   presentation_palette_overrides = {
     "feminine": {},
@@ -1927,10 +1918,14 @@ def deterministic_recommendation_v2(
       ),
     })
 
-  detailed = enrich_makeup_application_plans({
-    "contextSummary": context_summary[:8] or [scenario],
-    "looks": looks,
-  })
+  time_budget_minutes = resolve_prep_time_budget_minutes(questions, answers)
+  detailed = enrich_makeup_application_plans(
+    {
+      "contextSummary": context_summary[:8] or [scenario],
+      "looks": looks,
+    },
+    max_total_minutes=time_budget_minutes,
+  )
   finalized = finalize_recommendation_metadata(
     detailed,
     context_snapshot,
@@ -1948,15 +1943,17 @@ async def generate_recommendation_v2(
   answers: list[dict[str, Any]],
 ) -> dict[str, Any]:
   context_snapshot = sanitize_recommendation_context(context_snapshot)
+  time_budget_minutes = resolve_prep_time_budget_minutes(questions, answers)
   validation_errors: list[dict[str, Any]] = []
-  for _attempt in range(2):
+  for _attempt in range(1):
     try:
       response = await generate_json(
         settings,
         settings.effective_recommendation_model_id,
         RECOMMENDATION_V2_SYSTEM_PROMPT,
         build_recommendation_prompt(context_snapshot, questions, answers),
-        max_tokens=9000,
+        max_tokens=settings.makeup_recommendation_max_tokens,
+        timeout_seconds=settings.makeup_recommendation_provider_timeout_seconds,
       )
     except Exception:
       logger.warning(
@@ -1968,7 +1965,10 @@ async def generate_recommendation_v2(
       return deterministic_recommendation_v2(context_snapshot, answers, questions)
     try:
       response = _normalize_recommendation_tool_response(response)
-      enriched = enrich_makeup_application_plans(response)
+      enriched = enrich_makeup_application_plans(
+        response,
+        max_total_minutes=time_budget_minutes,
+      )
       finalized = finalize_recommendation_metadata(
         enriched,
         context_snapshot,

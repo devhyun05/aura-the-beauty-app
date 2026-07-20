@@ -3,6 +3,7 @@ import asyncio
 import logging
 import math
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query
@@ -31,6 +32,7 @@ from app.services.makeup_recommendation import (
   generate_recommendation_v2,
   generate_shared_scenarios,
 )
+from app.services.makeup_editorial_question_templates import resolve_reviewed_editorial_preset
 from app.services.makeup_recommendation_image import (
   PersonalizedImageInput,
   generate_recommendation_images,
@@ -95,6 +97,105 @@ def _require_makeup_v2(settings: Settings) -> None:
 def _require_makeup_v1_compat(settings: Settings) -> None:
   if not settings.makeup_recommendation_v1_compat_enabled:
     raise AppError(410, "MAKEUP_RECOMMENDATION_V1_DISABLED", "Legacy makeup recommendation generation is disabled.")
+
+
+_RECOMMENDATION_LIST_PRIVATE_FIELDS = frozenset({
+  # analysisReportId/sourceAnalysisReportId are domain links used to restore saved-report context.
+  # Strip only storage and raw media-delivery identifiers, including generic payload variants.
+  "bucket",
+  "storageBucket",
+  "storage_bucket",
+  "objectKey",
+  "object_key",
+  "mediaId",
+  "media_id",
+  "inputMediaId",
+  "input_media_id",
+  "sourceMediaId",
+  "source_media_id",
+})
+
+
+def _sanitize_recommendation_list_value(value: object) -> object:
+  if isinstance(value, dict):
+    return {
+      key: _sanitize_recommendation_list_value(item)
+      for key, item in value.items()
+      if key not in _RECOMMENDATION_LIST_PRIVATE_FIELDS
+    }
+  if isinstance(value, list):
+    return [_sanitize_recommendation_list_value(item) for item in value]
+  return value
+
+
+def _sanitize_recommendation_list_context(context_snapshot: object) -> dict:
+  context = sanitize_recommendation_context(_json_value(context_snapshot, {}))
+  sanitized = _sanitize_recommendation_list_value(context)
+  return sanitized if isinstance(sanitized, dict) else {}
+
+
+def _recommendation_preview_status(value: object) -> str:
+  status = str(value or "pending")
+  return status if status in {"pending", "processing", "partial", "completed", "failed"} else "pending"
+
+
+def _public_preview_url(value: object) -> str | None:
+  normalized = str(value or "").strip()
+  parsed = urlparse(normalized)
+  return normalized if parsed.scheme.lower() in {"http", "https"} and parsed.netloc else None
+
+
+def _recommendation_preview(
+  report: dict,
+  asset: dict | None,
+  *,
+  settings: Settings,
+  s3_service: S3Service,
+) -> tuple[str | None, str]:
+  if asset is not None:
+    status = _recommendation_preview_status(asset.get("status"))
+    if status != "completed":
+      return None, status
+
+    if asset.get("is_private"):
+      bucket = str(asset.get("storage_bucket") or "")
+      object_key = str(asset.get("object_key") or "")
+      if not bucket or not object_key:
+        return None, status
+      try:
+        return (
+          s3_service.create_presigned_download(
+            bucket=bucket,
+            object_key=object_key,
+            expires_in=settings.makeup_private_url_ttl_seconds,
+          ),
+          status,
+        )
+      except Exception:
+        logger.exception(
+          "[aura:makeup-recommendation] preview-delivery:presign-failed reportId=%s",
+          report.get("id"),
+        )
+        return None, status
+
+    public_asset_url = _public_preview_url(asset.get("image_url"))
+    if public_asset_url:
+      return public_asset_url, status
+    public_report_url = _public_preview_url(report.get("image_url"))
+    if str(report.get("image_mode") or "generic") == "generic" and public_report_url:
+      return public_report_url, status
+    return None, status
+
+  status = _recommendation_preview_status(report.get("image_status"))
+  is_public_fallback = (
+    str(report.get("schema_version") or "makeup-recommendation-v1") != "makeup-recommendation-v2"
+    or str(report.get("image_mode") or "generic") == "generic"
+  )
+  public_report_url = _public_preview_url(report.get("image_url"))
+  if is_public_fallback and status == "completed" and public_report_url:
+    return public_report_url, status
+  return None, status
+
 
 @router.post("/events")
 async def record_makeup_recommendation_event(
@@ -991,6 +1092,33 @@ async def _recommendation_report_response(
     recommendation = {**recommendation, "looks": response_looks}
 
   context_snapshot = _json_value(report.get("context_snapshot"), {})
+  selection_context = (
+    context_snapshot.get("selection")
+    if isinstance(context_snapshot.get("selection"), dict)
+    else {}
+  )
+  stored_editorial_preset = (
+    selection_context.get("editorialPreset")
+    if isinstance(selection_context.get("editorialPreset"), dict)
+    else {}
+  )
+  current_editorial_preset = resolve_reviewed_editorial_preset(
+    str(stored_editorial_preset.get("id") or ""),
+  )
+  if current_editorial_preset is not None:
+    context_snapshot = {
+      **context_snapshot,
+      "selection": {
+        **selection_context,
+        "customSituationText": current_editorial_preset["seedPrompt"],
+        "customSituationLabel": current_editorial_preset["displayText"],
+        "editorialPreset": {
+          **stored_editorial_preset,
+          "displayText": current_editorial_preset["displayText"],
+          "seedPrompt": current_editorial_preset["seedPrompt"],
+        },
+      },
+    }
   analysis_context = (
     context_snapshot.get("analysisReport")
     if isinstance(context_snapshot.get("analysisReport"), dict)
@@ -1010,7 +1138,11 @@ async def _recommendation_report_response(
     **report,
     "schema_version": schema_version,
     "scenario_tags": _json_value(report.get("scenario_tags"), []),
-    "questions": _json_value(report.get("questions"), []),
+    "questions": (
+      current_editorial_preset["questions"]
+      if current_editorial_preset is not None
+      else _json_value(report.get("questions"), [])
+    ),
     "answers": _json_value(report.get("answers"), []),
     "context_snapshot": context_snapshot,
     "recommendation": recommendation,
@@ -1428,8 +1560,8 @@ async def run_recommendation_image_job(
 
   recommendation = _json_value(report.get("recommendation"), {})
   looks = recommendation.get("looks") if isinstance(recommendation, dict) else None
-  if not isinstance(looks, list) or len(looks) != 3:
-    error = AppError(502, "MAKEUP_RECOMMENDATION_LOOKS_INVALID", "The recommendation does not contain three looks.")
+  if not isinstance(looks, list) or not 1 <= len(looks) <= 3:
+    error = AppError(502, "MAKEUP_RECOMMENDATION_LOOKS_INVALID", "The recommendation does not contain a valid look.")
     await db.execute(
       "update makeup_recommendation_reports set image_status = 'failed', image_error = $2, updated_at = now() where id = $1",
       report_id,
@@ -2046,6 +2178,7 @@ async def create_recommendation(
 async def list_recommendation_reports(
   limit: int = Query(default=20, ge=1, le=50),
   offset: int = Query(default=0, ge=0),
+  settings: Settings = Depends(get_settings),
   auth: AuthContext = Depends(get_current_user),
   db: Database = Depends(require_database),
 ) -> dict:
@@ -2067,15 +2200,51 @@ async def list_recommendation_reports(
     limit,
     offset,
   )
+  report_ids = [report["id"] for report in reports]
+  anchor_assets = (
+    await db.fetch(
+      """
+      select distinct on (asset.report_id)
+             asset.report_id, asset.status, asset.image_url, asset.storage_bucket,
+             asset.object_key, asset.is_private
+      from makeup_recommendation_assets as asset
+      join makeup_recommendation_reports as report on report.id = asset.report_id
+      where report.user_id = $1
+        and asset.report_id = any($2::uuid[])
+        and asset.role = 'anchor'
+      order by asset.report_id, asset.updated_at desc
+      """,
+      user["id"],
+      report_ids,
+    )
+    if report_ids
+    else []
+  )
+  anchor_assets_by_report_id = {
+    asset["report_id"]: dict(asset)
+    for asset in anchor_assets
+  }
+  s3_service = S3Service(settings)
   response_reports: list[dict] = []
   for report in reports:
     item = dict(report)
-    recommendation = _json_value(item.get("recommendation"), {})
+    recommendation = _sanitize_recommendation_list_value(
+      _json_value(item.get("recommendation"), {}),
+    )
+    recommendation = recommendation if isinstance(recommendation, dict) else {}
     item["recommendation"] = recommendation
     item["generationSource"] = str(recommendation.get("generationSource") or "") or None
-    item["context_snapshot"] = sanitize_recommendation_context(
-      _json_value(item.get("context_snapshot"), {}),
+    item["context_snapshot"] = _sanitize_recommendation_list_context(
+      item.get("context_snapshot"),
     )
+    preview_url, preview_status = _recommendation_preview(
+      item,
+      anchor_assets_by_report_id.get(item["id"]),
+      settings=settings,
+      s3_service=s3_service,
+    )
+    item["preview_image_url"] = preview_url
+    item["preview_image_status"] = preview_status
     response_reports.append(item)
   return success({"reports": response_reports, "limit": limit, "offset": offset})
 

@@ -28,6 +28,7 @@ export type FinalAreaRecipe = {
   estimatedMinutes?: number;
   completionCriteria: string[];
   steps: FinalRecipeStep[];
+  summaryColors: MakeupRecommendationApplicationColor[];
   detailed: boolean;
   sourceGuide?: RecommendedMakeupAreaGuide;
 };
@@ -46,6 +47,25 @@ function uniqueColors(colors: readonly MakeupRecommendationApplicationColor[]) {
     seen.add(key);
     return true;
   });
+}
+
+function summaryColors(
+  steps: readonly FinalRecipeStep[],
+  guide: RecommendedMakeupAreaGuide | undefined,
+  part: PartGuide,
+): MakeupRecommendationApplicationColor[] {
+  const seen = new Set<string>();
+  const fromSteps = steps.flatMap(step => step.colors).filter(color => {
+    const key = `${color.name}\u0000${color.hex}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (fromSteps.length > 0) return fromSteps;
+
+  const name = guide?.color.name.trim() || part.colorName.trim();
+  const hex = guide?.color.hex.trim() || part.hex.trim();
+  return name && hex ? [{role: '', name, hex}] : [];
 }
 
 function detailedSteps(
@@ -115,6 +135,7 @@ export function buildFinalAreaRecipes(
         ? guide?.applicationPlan?.completionCriteria.filter(Boolean) ?? []
         : [],
       steps: detailed ? detail : legacySteps(area, label, guide, part),
+      summaryColors: summaryColors(detailed ? detail : [], guide, part),
       detailed,
       sourceGuide: guide,
     };

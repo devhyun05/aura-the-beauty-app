@@ -54,6 +54,7 @@ async def test_product_enrichment_attaches_verified_products_to_every_area(
     return ({
       "products": [{
         "id": f"catalog-{category}",
+        "category": category,
         "brandName": "Verified Brand",
         "productName": f"Verified {category}",
         "shadeName": "Rose",
@@ -64,6 +65,7 @@ async def test_product_enrichment_attaches_verified_products_to_every_area(
         "reason": "Generated area profile match",
       }, {
         "id": f"catalog-{category}-second",
+        "category": category,
         "brandName": "Second Brand",
         "productName": f"Second {category}",
         "reason": "Should be capped",
@@ -89,10 +91,10 @@ async def test_product_enrichment_attaches_verified_products_to_every_area(
     answers,
   )
 
-  assert len(calls) == 15
+  assert len(calls) == 5
   assert {call["category"] for call in calls} == {"base", "brow", "shadow", "cheek", "lip"}
   assert all(call["legacyNaverEnabled"] is False for call in calls)
-  assert all(call["embeddingModel"] == "" for call in calls)
+  assert all(call["embeddingModel"] == "amazon.titan-embed-text-v2:0" for call in calls)
   assert all(call["profile_override"]["summary"] for call in calls)
   assert all(
     len(guide["products"]) == 1
@@ -104,6 +106,24 @@ async def test_product_enrichment_attaches_verified_products_to_every_area(
   assert product["imageUrl"] == "https://cdn.example.com/product.png"
   assert product["purchaseUrl"] == "https://shop.example.com/product"
   assert product["matchRate"] == 91
+
+
+def test_texture_ranking_floats_matching_products_without_forced_variety() -> None:
+  guide = {"texture": "촉촉한 벨벳 마무리", "color": {"name": "로즈"}}
+  raw = [
+    {"id": "matte", "productName": "매트 파우더 립", "productInfo": {"finish": "matte"}},
+    {"id": "velvet", "productName": "벨벳 립 틴트", "productInfo": {"finish": "velvet"}},
+  ]
+
+  ranked = product_service._rank_products_by_texture(raw, guide)
+  assert [product["id"] for product in ranked] == ["velvet", "matte"]
+
+  # 질감 신호가 없으면 원래(인기) 순서를 유지한다.
+  assert product_service._rank_products_by_texture(raw, {"texture": ""}) == raw
+
+  # 맞는 후보가 없으면 억지로 섞지 않고 원래 순서를 유지한다.
+  plain = [{"id": "x", "productName": "제품 X"}, {"id": "y", "productName": "제품 Y"}]
+  assert product_service._rank_products_by_texture(plain, guide) == plain
 
 
 @pytest.mark.parametrize(
@@ -131,13 +151,14 @@ def test_makeup_product_mapping_requires_https_image_and_purchase_urls(
 ) -> None:
   product = {
     "id": "catalog-lip",
+    "category": "lip",
     "brandName": "Verified Brand",
     "productName": "Verified Lip",
     "imageUrl": "https://cdn.example.com/lip.png",
     "purchaseUrl": "https://shop.example.com/lip",
   }
   product[field] = value
-  assert product_service._map_product(product, "lip", {}) is None
+  assert product_service._map_product(product, "lip", "lip", {}) is None
 
 
 @pytest.mark.asyncio

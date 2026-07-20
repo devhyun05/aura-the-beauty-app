@@ -53,6 +53,12 @@ namespace ARMakeup.Face
         float _browExpandLower;
         Texture2D _importedTex; // 사용자 임포트본(로드 시 이전 것 파기)
         Texture _styleTexture;
+        // built-in 눈썹 텍스처 라이브러리 — browStyleTemplate로 선택(글램=정의, 두꺼운=풍성).
+        // 사용자 임포트(SetStyleTextureFromFile)가 있으면 그게 우선(_userStyleActive).
+        static readonly string[] StyleTemplateNames = { "default_brow", "default_brow_glam", "default_brow_thick", "default_brow_wild", "default_brow_soft" };
+        readonly Texture2D[] _styleTemplateCache = new Texture2D[StyleTemplateNames.Length];
+        int _appliedStyleTemplate;
+        bool _userStyleActive;
         float _styleVMin;
         float _styleVMax = 1f;
         bool _styleLumaKey;
@@ -157,7 +163,7 @@ namespace ARMakeup.Face
         }
 
         public void ApplyStyleParams(string colorHex, float intensity, float thickness, float arch, int shape, int finish, int texture,
-                                     int thicknessProfile, float expandUpper, float expandLower)
+                                     int template, int thicknessProfile, float expandUpper, float expandLower)
         {
             _intensity = Mathf.Clamp01(intensity);
             // R7 두께/아치 이식(섹션 12 정정 1) — BrowRenderer와 동일 클램프·워프.
@@ -165,6 +171,7 @@ namespace ARMakeup.Face
             _arch = Mathf.Clamp(arch, 0f, 1f);
             _shape = Mathf.Clamp(shape, 0, 5); // 모양(#19b, 슬롯 공통 — 4=상승 5=반달 포함)
             if (_material == null) return;
+            ApplyStyleTemplate(template);
             ApplyBrowCoverage(thicknessProfile, expandUpper, expandLower);
             if (!string.IsNullOrEmpty(colorHex) &&
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
@@ -175,6 +182,28 @@ namespace ARMakeup.Face
             // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). _BrowStyleTex(모양)과 별개 축.
             _material.SetFloat(StyleTextureId, texture);
             SyncConcealProtectMask();
+        }
+
+        // built-in 눈썹 텍스처 선택(browStyleTemplate). 사용자가 이미지를 임포트했으면
+        // 그게 우선이라 무시. 로드한 텍스처는 캐시(반복 로드 방지)하고 UV 크롭도 재설정한다.
+        void ApplyStyleTemplate(int template)
+        {
+            if (_userStyleActive) return;
+            template = Mathf.Clamp(template, 0, StyleTemplateNames.Length - 1);
+            if (template == _appliedStyleTemplate && _styleTexture != null) return;
+            var tex = _styleTemplateCache[template];
+            if (tex == null)
+            {
+                tex = Resources.Load<Texture2D>(StyleTemplateNames[template]);
+                _styleTemplateCache[template] = tex;
+            }
+            if (tex == null) return;
+            _appliedStyleTemplate = template;
+            _styleTexture = tex;
+            _styleLumaKey = false;
+            _material.SetTexture(StyleTexId, tex);
+            _material.SetFloat(LumaKeyId, 0f);
+            ConfigureDefaultStyleUvCrop(tex);
         }
 
         public void ApplyBrowCoverage(int thicknessProfile, float expandUpper, float expandLower)
@@ -203,6 +232,7 @@ namespace ARMakeup.Face
                 { type = "error", message = $"눈썹 스타일 임포트 실패: {error}" });
                 return;
             }
+            _userStyleActive = true; // 임포트가 built-in 템플릿보다 우선
 
             // 투명 영역이 거의 없으면 알파 채널이 없는 그림 → 어두운 획을 털로 인식.
             var lumaKey = ImageFileLoader.TransparentFraction(tex) < AlphaCutoutThreshold;

@@ -119,6 +119,16 @@ if (reducer.includes('imageMode')) {
 }
 
 const screen = read(featureRoot, 'screens/MakeupRecommendationScreen.tsx');
+const agentConversation = read(
+  featureRoot,
+  'services/makeupRecommendationAgentConversation.ts',
+);
+requireIncludes(agentConversation, [
+  '원본 얼굴 사진에 자연스럽게 적용한 추천 이미지를 만들고 있어요.',
+], 'App-purpose recommendation loading conversation');
+if (agentConversation.includes('OpenAI') || agentConversation.includes('이미지 편집')) {
+  throw new Error('Recommendation loading copy must describe the app outcome, not its provider or implementation.');
+}
 requireIncludes(screen, [
   'reportId?: string;',
   'fetchMakeupRecommendationDiscovery',
@@ -133,6 +143,7 @@ requireIncludes(screen, [
   'pollGeneratingSession',
   'MAKEUP_SESSION_GENERATING',
   'MAKEUP_SESSION_STATE_CHANGED',
+  'directReportEntry: Boolean(reportId?.trim())',
 ], 'Makeup recommendation screen');
 
 const editorialTrends = read(featureRoot, 'data/makeupRecommendationEditorialTrends.ts');
@@ -144,6 +155,47 @@ requireIncludes(editorialTrends, [
 ], 'Editorial trend catalog');
 
 const service = read(featureRoot, 'services/makeupRecommendationService.ts');
+const historyView = read(featureRoot, 'screens/RecommendationHistoryView.tsx');
+requireIncludes(historyView, [
+  'getMakeupRecommendationPreviewPresentation(item)',
+  'preview.imageUrl ? (',
+  'source={{uri: preview.imageUrl}}',
+  'preview.statusLabel',
+], 'Applied-image recommendation history preview');
+if (
+  historyView.includes('const preview = item.results[0]')
+  || historyView.includes('source={preview.imageSource}')
+) {
+  throw new Error('Recommendation history must not present a fixture look as a generated preview.');
+}
+
+const profileReportHub = read(
+  srcRoot,
+  'features/profile/services/profileReportHub.ts',
+);
+requireIncludes(profileReportHub, [
+  'mapMakeupRecommendationProfilePreview',
+  'getMakeupRecommendationPreviewPresentation(recommendation)',
+  'imageSource: preview.imageUrl ? {uri: preview.imageUrl} : undefined',
+  'statusLabel: preview.imageUrl ? undefined : preview.statusLabel',
+], 'Profile applied-image report preview');
+if (profileReportHub.includes('imageSource: recommendation.results[0].imageSource')) {
+  throw new Error('Profile must not present a recommendation fixture as the generated report preview.');
+}
+
+const profileScreen = read(srcRoot, 'features/profile/screens/ProfileScreen.tsx');
+const profileRoutes = read(srcRoot, 'app/navigation/routes/profileRoutes.tsx');
+requireIncludes(profileScreen, [
+  'onPressMakeupRecommendationReport?: (reportId: string) => void;',
+  'onPressLatestMakeupRecommendation',
+  'onPressMakeupRecommendationReport(makeupRecommendationPreview.id)',
+  'onPress={onPressLatestMakeupRecommendation}',
+], 'Latest recommendation report action');
+requireIncludes(profileRoutes, [
+  "navigate('MakeupRecommendation', {view: 'history'})",
+  "navigate('MakeupRecommendation', {reportId})",
+], 'Profile recommendation list and exact-detail routes');
+
 requireIncludes(service, [
   '/makeup-recommendations/discovery',
   "'/makeup-recommendations/sessions'",
@@ -157,6 +209,9 @@ requireIncludes(service, [
   'look.imageAsset?.provenance?.cropMetadata',
   "const completedImageMissing = resolvedImageStatus === 'completed' && !imageUrl;",
   "imageStatus: completedImageMissing ? 'failed' : resolvedImageStatus",
+  'const previewImageUrl = normalizeOptionalBackendText(report.previewImageUrl);',
+  "look.role !== 'anchor' || !previewImageUrl",
+  'imageSource: {uri: previewImageUrl}',
 ], 'Makeup recommendation service');
 
 const notificationCoordinator = read(
@@ -239,35 +294,46 @@ if (
 const finalScreen = read(featureRoot, 'screens/RecommendationResultsFinalScreen.tsx');
 requireIncludes(finalScreen, [
   "import {FinalGeneratedMakeupHero} from '../components/result/FinalGeneratedMakeupHero';",
-  "import {FinalRecommendationContextReceipt} from '../components/result/FinalRecommendationContextReceipt';",
-  "import {FinalMatchReasonSection} from '../components/result/FinalMatchReasonSection';",
   "import {FinalAreaGuideSection} from '../components/result/FinalAreaGuideSection';",
   "import {FinalSingleLookMap} from '../components/result/FinalSingleLookMap';",
   '<FinalGeneratedMakeupHero',
-  '<FinalRecommendationContextReceipt',
-  '<FinalMatchReasonSection',
-  '<FinalMatchReasonSection match={model.match} />',
   '<FinalAreaGuideSection',
   '<FinalSingleLookMap',
+  'accessibilityLabel="추천 제품 페이지로 이동"',
+  'onPress={onOpenRecommendedProducts}',
   "const generatedReady = Boolean(model) && resolvedImageStatus === 'completed';",
   'generatedReady={generatedReady}',
   'onReadyChange={captureReadyHandlers.hero}',
-  'onImageSettledChange={captureReadyHandlers.report}',
   'onCropSettledChange={captureReadyHandlers.crop}',
   'onProductImageSettledChange={captureReadyHandlers.product}',
   'onPointSettledChange={captureReadyHandlers.map}',
-  'const shareActionsDisabled = !captureReady || Boolean(activeShareTarget);',
+  '<RecommendationReportHeader',
+  'accessibilityLabel="추천 메이크업 보고서 더보기"',
+  "Alert.alert('추천 메이크업 보고서'",
   '<OptionalViewShot',
   'captureRecommendationResult(captureRef)',
   "handleShareAction('save-image')",
   "handleShareAction('share-result')",
+  '추천 제품',
   'AR로 적용하기',
   'onRetry={() => onRetryImages()}',
-  'hitSlop={8}',
-  "backgroundColor: 'transparent'",
-  'backgroundColor: colors.screenGradient[2]',
-  'paddingBottom: 116',
+  'hitSlop={6}',
+  'floatingActionClearance: {height: 116}',
 ], 'Final recommendation result composition');
+if (
+  finalScreen.includes('FinalRecommendationContextReceipt')
+  || finalScreen.includes('이번 추천에 반영했어요')
+  || finalScreen.includes('recommendedProductRef')
+  || finalScreen.includes('handleScrollToRecommendedProduct')
+) {
+  throw new Error('Final result must remove the recommendation receipt and stale in-page product scrolling.');
+}
+if (
+  finalScreen.includes('FinalMatchReasonSection')
+  || finalScreen.includes('추천 메이크업 매칭률')
+) {
+  throw new Error('Final recommendation result must not render the removed makeup match-rate section.');
+}
 if (finalScreen.includes('setCaptureReadiness({...INITIAL_CAPTURE_READINESS})')) {
   throw new Error('Final capture readiness must not reset already-settled report/product images on generation status changes.');
 }
@@ -275,9 +341,29 @@ if (
   finalScreen.includes('저장과 공유하기')
   || finalScreen.includes('shareTitle')
   || finalScreen.includes('shareButtonLabel')
+  || finalScreen.includes('<Download')
+  || finalScreen.includes('<Share2')
+  || finalScreen.includes('styles.shareSection')
 ) {
-  throw new Error('Final save/share controls must show only two icons on the page background.');
+  throw new Error('Final save/share controls must live only in the report-header overflow menu.');
 }
+
+const detailHeaderChrome = read(srcRoot, 'app/navigation/detailHeaderChrome.tsx');
+const makeupRecommendationRoutes = read(srcRoot, 'app/navigation/routes/makeupRecommendationRoutes.tsx');
+requireIncludes(detailHeaderChrome, [
+  'headerHidden?: boolean;',
+  'isOverlayHeader || headerHidden ? null : header',
+  'isOverlayHeader && !headerHidden ? header : null',
+], 'Recommendation result route-header suppression');
+requireIncludes(makeupRecommendationRoutes, [
+  'const [isResultsVisible, setIsResultsVisible] = React.useState(false);',
+  'headerHidden={isResultsVisible}',
+  'onResultsVisibilityChange={setIsResultsVisible}',
+], 'Recommendation result report-header routing');
+requireIncludes(screen, [
+  "onResultsVisibilityChange?.(phase === 'results');",
+  'onBack={onBack}',
+], 'Recommendation result report-header handoff');
 
 
 const finalShareService = read(featureRoot, 'services/recommendationResultShare.ts');
@@ -299,63 +385,7 @@ if (
   throw new Error('Final recommendation result removed copy is still present.');
 }
 
-const finalReceipt = read(featureRoot, 'components/result/FinalRecommendationContextReceipt.tsx');
-requireIncludes(finalReceipt, [
-  '이번 추천에 반영했어요',
-  '사용한 분석 보고서',
-  '역질문 답변',
-  'answerRows.map',
-  'key={row.id}',
-  'styles.answerInline',
-  'reportSummary?.title',
-  'reportImageUri',
-], 'Final recommendation source-report card');
-if (finalReceipt.includes('RECOMMENDATION RECEIPT')) {
-  throw new Error('Final recommendation receipt eyebrow must stay removed.');
-}
-
-if (
-  finalReceipt.includes('선택한 분석 보고서와 답변을 한눈에 확인해 보세요.') ||
-  finalReceipt.includes('reportSummary?.recommendedMood') ||
-  finalReceipt.includes('reportSummary?.shortSummary')
-) {
-  throw new Error('Final recommendation receipt still contains removed subtitle or mood fallback.');
-}
-const receiptSummaryIndex = finalReceipt.indexOf('{summaryItems.length > 0 ? (');
-const receiptAnswersIndex = finalReceipt.indexOf('{answerRows.length > 0 ? (');
-const receiptAnswerInlineIndex = finalReceipt.indexOf('? styles.answerInline', receiptAnswersIndex);
-const receiptDividerFallbackIndex = finalReceipt.indexOf(': hasSourceReport && styles.withDivider', receiptAnswerInlineIndex);
-if (
-  receiptSummaryIndex < 0
-  || receiptAnswersIndex <= receiptSummaryIndex
-  || receiptAnswerInlineIndex <= receiptAnswersIndex
-  || receiptDividerFallbackIndex <= receiptAnswerInlineIndex
-) {
-  throw new Error('Reverse-question answers must render immediately below the situation and keyword summary.');
-}
-const finalMatchReason = read(featureRoot, 'components/result/FinalMatchReasonSection.tsx');
 const finalMatchMapper = read(featureRoot, 'services/toFinalRecommendationResult.ts');
-requireIncludes(finalMatchReason, [
-  'const score = match.value;',
-  "match.source === 'legacy-unavailable'",
-  '{score}%',
-  'accessibilityRole="progressbar"',
-  'accessibilityValue={{min: 0, max: 100, now: score}}',
-  'match.explanation',
-], 'Single recommendation match-score display');
-if (
-  finalMatchReason.includes('WHY IT FITS') ||
-  finalMatchReason.includes('왜 당신에게 맞을까요') ||
-  finalMatchReason.includes('이 룩을 추천한 이유') ||
-  finalMatchReason.includes('look.time') ||
-  finalMatchReason.includes('matchDimensions') ||
-  finalMatchReason.includes('generationSource') ||
-  finalMatchReason.includes('fitAssessment') ||
-  finalMatchReason.includes('Claude') ||
-  finalMatchReason.includes('deterministic_fallback')
-) {
-  throw new Error('Final match section must not expose the old fit/source breakdown or removed copy.');
-}
 requireIncludes(finalMatchMapper, [
   'id: string;',
   'rows.push({id: question.id, questionLabel, answerLabel});',
@@ -381,12 +411,14 @@ if (
 
 requireIncludes(screen, [
   '<RecommendationResultsView',
+  'onOpenRecommendedProducts={() => onOpenRecommendedProducts?.(session.sourceAnalysisReportId)}',
+  'onOpenRecommendedProducts?: (sourceAnalysisReportId?: string) => void;',
   'reportImageUri,',
   'reportSummary: sourceReport',
   'questions: session.questions',
   'answers: session.answers',
   'additionalConstraints: session.additionalConstraints',
-  'export const MIN_AGENT_CONVERSATION_MS = 20_000;',
+  'export const MIN_AGENT_CONVERSATION_MS = 6_000;',
   'await waitForMinimumAgentConversation(loadingStartedAt, signal);'
 ], 'Final recommendation result context wiring');
 if (screen.includes("imageStatus: 'failed', imageError: '이미지 상태 확인 실패'")) {
@@ -394,16 +426,40 @@ if (screen.includes("imageStatus: 'failed', imageError: '이미지 상태 확인
 }
 
 
+const makeupRecommendationRoute = read(
+  srcRoot,
+  'app/navigation/routes/makeupRecommendationRoutes.tsx',
+);
+requireIncludes(makeupRecommendationRoute, [
+  'onOpenRecommendedProducts={sourceAnalysisReportId =>',
+  "navigation.navigate('ProductRecommendation', {",
+  "initialSection: 'personalized',",
+  '...(sourceAnalysisReportId ? {reportId: sourceAnalysisReportId} : {})',
+], 'Recommendation result product hub route');
+
 const finalHero = read(featureRoot, 'components/result/FinalGeneratedMakeupHero.tsx');
+const alignedHeroImageLayer = read(featureRoot, 'components/result/AlignedHeroImageLayer.tsx');
+const finalImageAlignment = read(featureRoot, 'services/finalMakeupImageAlignment.ts');
+requireIncludes(finalImageAlignment, [
+  'referenceFrame: MakeupRecommendationImageAlignmentFrame | undefined = frame',
+  'const containScale = Math.min(',
+  'const requestedScale = measuredReference.span / measuredFrame.span;',
+  'rotationDeg: measuredReference.rollDeg - measuredFrame.rollDeg',
+], 'Captured-frame-relative final image alignment');
 requireIncludes(finalHero, [
   "const AURA_LETTERS = ['A', 'U', 'R', 'A'] as const;",
+  'alignmentMetadata?: MakeupRecommendationImageAlignmentMetadata;',
   'beforeImageUri?: string;',
   'afterImage: ImageSourcePropType;',
+  'title?: string;',
   'source={{uri: beforeImageUri}}',
   'source={afterImage}',
-  'contentFit="contain"',
-  'const afterImageLayout = useMemo(',
-  'style={[styles.afterImage, afterImageLayout]}',
+  'const sourceFrame = alignmentMetadata?.source;',
+  'alignmentFrame={sourceFrame}',
+  'alignmentFrame={alignmentMetadata?.generated}',
+  'referenceFrame={sourceFrame}',
+  'const heroAspectRatio = sourceImageWidth > 0 && sourceImageHeight > 0',
+  'style={[styles.hero, heroAspectRatio ? {aspectRatio: heroAspectRatio} : null]}',
   'key={afterLoadEpochKey}',
   'recyclingKey={afterLoadEpochKey}',
   'afterLoadEpochKeyRef.current !== afterLoadEpochKey',
@@ -414,6 +470,8 @@ requireIncludes(finalHero, [
   'onPanResponderRelease: () => {',
   "backgroundColor: 'rgba(229,237,233,0.96)'",
   "color: '#788A80'",
+  '<View pointerEvents="none" style={styles.titleOverlay}>',
+  '<Text numberOfLines={2} style={styles.titleText}>{displayTitle}</Text>',
 ], 'Final generated makeup hero');
 const completedAfterGateIndex = finalHero.indexOf("imageStatus === 'completed' ? (");
 const afterImageIndex = finalHero.indexOf('source={afterImage}');
@@ -423,19 +481,50 @@ if (completedAfterGateIndex < 0 || afterImageIndex < completedAfterGateIndex) {
 if ((finalHero.match(/source=\{afterImage\}/g) ?? []).length !== 1) {
   throw new Error('Final hero must have exactly one generated after-image render path.');
 }
-if ((finalHero.match(/contentFit="contain"/g) ?? []).length !== 2) {
-  throw new Error('Final hero must contain-fit both full before and after images without cropping.');
+requireIncludes(alignedHeroImageLayer, [
+  'computeFinalMakeupImageTransform(',
+  'referenceFrame?: MakeupRecommendationImageAlignmentFrame;',
+  'contentFit="cover"',
+  'contentFit="contain"',
+  'contentFit="fill"',
+  'alignmentStyles.outer',
+  'alignmentStyles.scaleAndRotate',
+  'alignmentStyles.inner',
+  '`${recyclingKey}:background`',
+  'const hasMeasuredViewport = viewportWidth > 0 && viewportHeight > 0;',
+  'const fullCanvasStyle = useMemo(',
+  'width: viewportWidth',
+  'height: viewportHeight',
+  ': StyleSheet.absoluteFill',
+], 'Aligned final hero image layer');
+requireIncludes(finalScreen, [
+  'alignmentMetadata={model.sourceLook.imageAlignmentMetadata}',
+  'title={context?.keywordLabel?.trim()',
+  '|| context?.situationLabel?.trim()',
+  '|| model.look.name}',
+], 'Final hero alignment and title wiring');
+const afterClipIndex = finalHero.indexOf('<Animated.View style={[styles.afterClip');
+const afterClipEndIndex = finalHero.indexOf('</Animated.View>', afterClipIndex);
+const fixedTitleIndex = finalHero.indexOf('<View pointerEvents="none" style={styles.titleOverlay}>');
+if (
+  afterClipIndex < 0
+  || afterClipEndIndex < 0
+  || fixedTitleIndex <= afterClipEndIndex
+) {
+  throw new Error('The situation keyword must stay outside the divider-clipped after-image layer.');
 }
 if (
-  finalHero.includes('alignmentMetadata')
-  || finalHero.includes('computeFinalMakeupImageTransform')
-  || finalHero.includes('AlignedHeroImageLayer')
+  finalHero.includes('RECOMMENDED MAKEUP')
+  || finalHero.includes('titleEyebrow')
+  || finalHero.includes('titleOverlayLayout')
 ) {
-  throw new Error('Final hero must compare the delivered full images without face alignment or crop transforms.');
+  throw new Error('The hero must show only the fixed situation keyword title.');
 }
-
-if (finalHero.includes('titleScrim') || finalHero.includes('title: string;')) {
-  throw new Error('Final hero must not overlay the look title on the generated image.');
+if ((finalHero.match(/referenceFrame=\{sourceFrame\}/g) ?? []).length !== 2) {
+  throw new Error('Both photos must align against the captured source frame.');
+}
+if ((alignedHeroImageLayer.match(/style=\{fullCanvasStyle\}/g) ?? []).length !== 2) {
+  throw new Error('Both aligned and fallback after images must keep the full hero canvas while the divider clips them.');
 }
 if (
   finalHero.includes('loadingTitle')
@@ -454,7 +543,6 @@ requireIncludes(finalSingleLookMap, [
   '{generatedReady && !pointImageFailed ? (',
   'source={look.image}',
   'style={styles.pointImage}',
-  'look.mapRationale',
 ], 'Final single-look map');
 if (
   finalSingleLookMap.includes('looks.map')
@@ -464,7 +552,7 @@ if (
   throw new Error('Final look map must render one generated-image point without duration copy.');
 }
 if (finalSingleLookMap.includes('look.match') || finalSingleLookMap.includes('% 매치')) {
-  throw new Error('The recommendation match score must be visible only once in FinalMatchReasonSection.');
+  throw new Error('LOOK MAP must not render the removed recommendation match score.');
 }
 if (
   finalSingleLookMap.includes('한 가지 룩, 한눈에 보기') ||
@@ -484,16 +572,34 @@ requireIncludes(finalAreaGuide, [
   'buildFinalAreaRecipes(sourceLook.areaGuides, look.parts)',
   "() => recipes[0]?.area ?? 'base'",
   'const activeArea = recipes[activeIndex]?.area',
+  'const [pageHeights, setPageHeights]',
+  'const [settledPagerArea, setSettledPagerArea]',
+  'const activePageHeight = pageHeights[settledPagerArea]',
   'onPress={() => handleSelectArea(index)}',
+  'setSettledPagerArea(nextArea)',
   'pagerRef.current?.scrollTo',
+  'contentContainerStyle={styles.pagerContent}',
   'onScroll={handlePagerScroll}',
   'onMomentumScrollEnd={handlePagerMomentumEnd}',
-  'selectAreaIndex(indexFromOffset(',
+  'const settledIndex = indexFromOffset(',
   'pagingEnabled',
+  'style={[styles.pager, activePagerHeightStyle]}',
+  'onLayout={event => handlePageLayout(recipe.area, event)}',
+  "pagerContent: {alignItems: 'flex-start'}",
   '<FinalAreaRecipePage',
   '메이크업 순서',
   'recipe.displayOrder',
+  'contentContainerStyle={styles.sequenceContent}',
+  'ref={sequenceRef}',
+  'centerSequenceTab(activeArea)',
+  'styles.sequenceItemWrap',
   'AREA_SEQUENCE_COLORS[recipe.area]',
+  'style={styles.areaTitleRow}',
+  'recipe.summaryColors.length > 0',
+  'recipe.summaryColors.map(color => (',
+  'style={styles.areaColorSwatches}',
+  'styles.areaColorSwatch',
+  'backgroundColor: SUMMARY_HEX_COLOR.test(color.hex)',
   '<FinalMakeupRecipeStepCard',
   'recipe.goal',
   'recipe.texture',
@@ -515,12 +621,29 @@ if (
 ) {
   throw new Error('Final area guide still renders removed subtitle/shop copy or the pre-pager selected recipe UI.');
 }
+if (
+  finalAreaGuide.includes('styles.sequenceAreaColumn')
+  || finalAreaGuide.includes('styles.sequencePaletteColumn')
+  || finalAreaGuide.includes('styles.sequenceColorName')
+) {
+  throw new Error('Makeup order must keep the original compact horizontal tabs without color-name rows.');
+}
+const areaTitleRowIndex = finalAreaGuide.indexOf('style={styles.areaTitleRow}');
+const areaGoalIndex = finalAreaGuide.indexOf('{recipe.goal ? (', areaTitleRowIndex);
+if (areaTitleRowIndex < 0 || areaGoalIndex <= areaTitleRowIndex) {
+  throw new Error('Area color swatches must render beside the area name and above the area goal.');
+}
+if (/<Text[^>]*>\s*\{color\.(?:name|hex)(?:\.toUpperCase\(\))?\}\s*<\/Text>/.test(finalAreaGuide)) {
+  throw new Error('Area-header swatches must not render color names or HEX values as text.');
+}
 
 const finalRecipeStepCard = read(featureRoot, 'components/result/FinalMakeupRecipeStepCard.tsx');
 requireIncludes(finalRecipeStepCard, [
   '사용 색상 · {step.colors.length}개',
   '{color.role}',
   '{color.name}',
+  'key={`${color.role}:${color.name}:${color.hex}`}',
+  '{backgroundColor: HEX_COLOR.test(color.hex) ? color.hex : colors.heroPlaceholder},',
   "{label: '도구', value: step.tool}",
   "{label: '사용량', value: step.amount}",
   "{label: '바르는 범위', value: step.placement}",
@@ -529,6 +652,9 @@ requireIncludes(finalRecipeStepCard, [
   '이 단계의 완료 기준',
   'step.finishCheck',
 ], 'Detailed application recipe step card');
+if (/<Text[^>]*>\s*\{color\.hex(?:\.toUpperCase\(\))?\}\s*<\/Text>/.test(finalRecipeStepCard)) {
+  throw new Error('Detailed application recipe cards must keep HEX values out of user-visible text.');
+}
 const finalRecipeMapper = read(featureRoot, 'services/makeupRecommendationMappers.ts');
 requireIncludes(finalRecipeMapper, [
   "value?.recipeVersion !== 'makeup-application-v1'",

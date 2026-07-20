@@ -218,7 +218,6 @@ import type { EditSnapshot } from './src/composer/history';
 import {
   ACCENT,
   ACCENT_LIGHT,
-  CONTROL_H,
   GOLD_CTA,
   NEUTRAL_ACCENT,
   PANEL_BG,

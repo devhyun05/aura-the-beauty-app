@@ -861,7 +861,12 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "title": _STR,
       "subtitle": _STR,
       "description": _STR,
-      "rows": {"type": "array", "minItems": 4, "items": styling_row},
+      "rows": {
+        "type": "array",
+        "minItems": 4,
+        "maxItems": 6,
+        "items": styling_row,
+      },
     },
     ["title", "subtitle", "description", "rows"],
   )
@@ -894,7 +899,12 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
             "title": _STR,
             "subtitle": _STR,
             "description": _STR,
-            "tags": {"type": "array", "minItems": 2, "items": _STR},
+            "tags": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": _STR,
+            },
           },
           ["title", "subtitle", "description", "tags"],
         ),
@@ -907,7 +917,12 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
         {
           "overallMood": _STR,
           "paragraph": _STR,
-          "keywords": {"type": "array", "minItems": 3, "items": _STR},
+          "keywords": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 5,
+            "items": _STR,
+          },
           "axes": {"type": "array", "minItems": 2, "maxItems": 2, "items": axis},
         },
         ["overallMood", "paragraph", "keywords", "axes"],

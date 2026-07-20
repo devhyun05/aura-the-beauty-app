@@ -75,6 +75,8 @@ export type StartMakeupRecommendationV2Input = {
   forceFixture?: boolean;
 };
 
+export const MAKEUP_RECOMMENDATION_GENERATION_TIMEOUT_MS = 45_000;
+
 export class MakeupRecommendationRetryableError extends Error {
   constructor(message: string) {
     super(message);
@@ -309,6 +311,8 @@ type BackendRecommendationReport = {
   answers?: unknown;
   imageStatus: MakeupRecommendationImageStatus;
   imageUrl?: string;
+  previewImageUrl?: unknown;
+  previewImageStatus?: unknown;
   profileGender?: unknown;
   personalColor?: unknown;
   imageError?: string;
@@ -937,14 +941,23 @@ function getBackendLookAlignmentMetadata(look: BackendLook): unknown {
   return look.imageAsset?.provenance?.alignmentMetadata;
 }
 
+function isMakeupRecommendationImageStatus(
+  value: unknown,
+): value is MakeupRecommendationImageStatus {
+  return value === 'pending'
+    || value === 'processing'
+    || value === 'partial'
+    || value === 'completed'
+    || value === 'failed';
+}
+
 function isBackendRecommendationReport(value: unknown): value is BackendRecommendationReport {
   if (!isBackendRecord(value) || typeof value.id !== 'string') return false;
   if (typeof value.recommendation !== 'string' && !isBackendRecord(value.recommendation)) return false;
-  return value.imageStatus === 'pending'
-    || value.imageStatus === 'processing'
-    || value.imageStatus === 'partial'
-    || value.imageStatus === 'completed'
-    || value.imageStatus === 'failed';
+  if (!isMakeupRecommendationImageStatus(value.imageStatus)) return false;
+  if (value.previewImageUrl != null && typeof value.previewImageUrl !== 'string') return false;
+  return value.previewImageStatus == null
+    || isMakeupRecommendationImageStatus(value.previewImageStatus);
 }
 
 function getBackendReportProfileGender(
@@ -1420,6 +1433,10 @@ export function mapBackendRecommendationReports(
         ?? normalizeOptionalBackendText(analysisReport?.personalColor);
       const sourceAnalysisReportId = normalizeOptionalBackendText(report.sourceAnalysisReportId)
         ?? normalizeOptionalBackendText(analysisReport?.id);
+      const previewImageUrl = normalizeOptionalBackendText(report.previewImageUrl);
+      const previewImageStatus = isMakeupRecommendationImageStatus(report.previewImageStatus)
+        ? report.previewImageStatus
+        : undefined;
       const results = mapBackendRecommendationLooks({
         reportId: report.id,
         recommendation: report.recommendation ?? {},
@@ -1428,7 +1445,14 @@ export function mapBackendRecommendationReports(
         answers,
         imageStatus: report.imageStatus,
         imageError: report.imageError,
-      });
+      }).map(look => look.role !== 'anchor' || !previewImageUrl
+        ? look
+        : {
+            ...look,
+            imageSource: {uri: previewImageUrl},
+            imageStatus: previewImageStatus ?? 'completed',
+            imageError: undefined,
+          });
       if (!report.id?.trim() || results.length === 0) return [];
       return [{
         reportId: report.id,
@@ -1437,6 +1461,8 @@ export function mapBackendRecommendationReports(
         createdAt: report.createdAt ?? '',
         imageStatus: report.imageStatus,
         imageError: report.imageError,
+        previewImageUrl,
+        previewImageStatus,
         profileGender: getBackendReportProfileGender(report),
         personalColor,
         sourceAnalysisReportId,
@@ -2032,7 +2058,7 @@ export async function generateMakeupRecommendationV2(
       imageStatus: BackendRecommendationReport['imageStatus'];
     }>(`/makeup-recommendations/sessions/${session.id}/generate`, {
       method: 'POST',
-      timeoutMs: 180000,
+      timeoutMs: MAKEUP_RECOMMENDATION_GENERATION_TIMEOUT_MS,
       signal,
     });
   } catch (error) {
@@ -2226,7 +2252,7 @@ export async function refineGeneratedMakeupRecommendation(
   }>(`/makeup-recommendations/${session.reportId}/refine`, {
     method: 'POST',
     body: {refinement},
-    timeoutMs: 180000,
+    timeoutMs: MAKEUP_RECOMMENDATION_GENERATION_TIMEOUT_MS,
     signal,
   });
   return {

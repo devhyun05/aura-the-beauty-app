@@ -15,6 +15,7 @@ from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.makeup_recommendation_image import (
   GeneratedRecommendationAsset,
   PersonalizedImageInput,
+  _validate_and_normalize_output,
   generate_recommendation_asset,
   generate_recommendation_images,
 )
@@ -134,11 +135,29 @@ def test_production_v2_enforces_claude_text_and_gpt_image_2_boundary() -> None:
     Settings(makeup_private_asset_prefix="uploads/generated-makeup-recommendations/private")
 
 
-def test_openai_image_defaults_use_fast_fixed_portrait_contract() -> None:
+def test_openai_image_defaults_use_balanced_high_resolution_portrait_contract() -> None:
   settings = Settings()
   assert settings.openai_image_model_id == "gpt-image-2"
   assert settings.openai_image_quality == "low"
-  assert settings.openai_image_size == "768x1024"
+  assert settings.openai_image_size == "1024x1536"
+  assert settings.openai_image_output_compression == 90
+  assert settings.openai_image_output_max_edge == 1536
+
+
+def test_matching_provider_jpeg_is_not_lossy_reencoded() -> None:
+  source = BytesIO()
+  PillowImage.new("RGB", (1024, 1536), (182, 128, 108)).save(
+    source,
+    format="JPEG",
+    quality=90,
+  )
+  content = source.getvalue()
+
+  output = _validate_and_normalize_output(Settings(), content, "jpeg")
+
+  assert output.content == content
+  assert (output.width, output.height) == (1024, 1536)
+  assert output.resized is False
 
 
 @pytest.mark.asyncio
@@ -207,9 +226,9 @@ async def test_generic_gpt_image_2_generation_uses_matching_format_and_public_ca
 
   assert calls["generate"]["model"] == "gpt-image-2"
   assert calls["generate"]["quality"] == "low"
-  assert calls["generate"]["size"] == "768x1024"
+  assert calls["generate"]["size"] == "1024x1536"
   assert calls["generate"]["output_format"] == "jpeg"
-  assert calls["generate"]["output_compression"] == 80
+  assert calls["generate"]["output_compression"] == 90
   assert "Soft editorial strawberry glow" in calls["generate"]["prompt"]
   assert "Rose Milk #A85D68" in calls["generate"]["prompt"]
   assert "texture soft satin" in calls["generate"]["prompt"]
@@ -408,7 +427,7 @@ async def test_personalized_edit_requires_owned_consented_media_and_stays_privat
 
   assert calls["edit"]["model"] == "gpt-image-2"
   assert calls["edit"]["quality"] == "low"
-  assert calls["edit"]["size"] == "768x1024"
+  assert calls["edit"]["size"] == "1024x1536"
   assert "input_fidelity" not in calls["edit"]
   assert "A muted rose office makeup edit" in calls["edit"]["prompt"]
   assert "masculine makeup presentation" in calls["edit"]["prompt"]

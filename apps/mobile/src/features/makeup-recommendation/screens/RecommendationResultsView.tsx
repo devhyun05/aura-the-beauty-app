@@ -27,7 +27,9 @@ export type RecommendationResultsViewProps = {
     additionalConstraints?: string;
   };
   onApplyAR: (look: MakeupLookRecommendation) => void;
+  onBack?: () => void;
   onAreaOpened: (area: RecommendedMakeupAreaGuide['area'], look: MakeupLookRecommendation) => void;
+  onOpenRecommendedProducts: () => void;
   onRefine: (refinement: MakeupRecommendationRefinement) => void;
   onReset: () => void;
   onRetry: () => void;
