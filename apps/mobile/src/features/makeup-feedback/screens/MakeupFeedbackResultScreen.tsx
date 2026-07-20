@@ -38,6 +38,7 @@ import {
   typography,
 } from '../../../shared/theme';
 import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
+import {SavedImagePreviewSheet} from '../../../shared/ui/SavedImagePreviewSheet';
 import {
   MakeupFeedbackCorrectionGuideDetails,
   MakeupFeedbackPriorityCorrectionCard,
@@ -202,6 +203,9 @@ export function MakeupFeedbackResultScreen({
 }: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
   const captureRef = useRef<OptionalViewShotRef | null>(null);
+  const [savedImagePreviewUri, setSavedImagePreviewUri] = useState<string | null>(
+    null,
+  );
   const evaluationByTopicId = new Map(
     result.evaluations.map(evaluation => [evaluation.topicId, evaluation]),
   );
@@ -260,6 +264,7 @@ export function MakeupFeedbackResultScreen({
       if (target === 'save-image') {
         await saveFeedbackImageToLibrary(imageUri);
         setShareFeedback({message: '이미지를 저장했어요.', tone: 'success'});
+        setSavedImagePreviewUri(imageUri);
         return;
       }
 
@@ -568,6 +573,10 @@ export function MakeupFeedbackResultScreen({
             <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2} />
           </Button>
         </ScrollView>
+        <SavedImagePreviewSheet
+          imageUri={savedImagePreviewUri}
+          onClose={() => setSavedImagePreviewUri(null)}
+        />
       </View>
     </MakeupFeedbackScreenScaffold>
   );
