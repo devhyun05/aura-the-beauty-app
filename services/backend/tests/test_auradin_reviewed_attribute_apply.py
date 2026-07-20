@@ -232,6 +232,26 @@ def test_image_inferred_fills_value_only_and_never_overwrites() -> None:
   assert report["filled"] == 1
 
 
+def test_color_map_fills_missing_value_only_with_provenance() -> None:
+  rows = [
+    _seed_row("a"),  # missing
+    _seed_row("b", attributes={"colorFamily": "red"}),  # already has text/detail evidence
+  ]
+  color_map = [
+    {"catalogItemId": "a", "colorFamily": "coral", "sourceType": "glowpick_shadenames", "confidence": 0.55, "note": "코랄/피치 계열"},
+    {"catalogItemId": "b", "colorFamily": "pink"},  # must NOT overwrite existing
+    {"catalogItemId": "ghost", "colorFamily": "brown"},  # unknown id ignored
+  ]
+  new_rows, report = apply_mod.apply_color_map(rows, color_map, run_date="20260720")
+  assert new_rows[0]["attributes"]["colorFamily"] == "coral"
+  assert abs(new_rows[0]["attributeConfidence"]["colorFamily"] - 0.55) < 1e-9
+  assert new_rows[0]["hardFilterEligible"]["colorFamily"] is False
+  assert new_rows[0]["evidence"][-1]["sourceType"] == "glowpick_shadenames"
+  assert new_rows[0]["evidence"][-1]["note"] == "코랄/피치 계열"
+  assert new_rows[1]["attributes"]["colorFamily"] == "red"  # unchanged
+  assert report["filled"] == 1
+
+
 def test_coverage_and_invariant() -> None:
   rows = [_seed_row("a", attributes={"colorFamily": "pink"}, hardFilterEligible={"colorFamily": True}), _seed_row("b")]
   cov = apply_mod.color_family_coverage(rows)

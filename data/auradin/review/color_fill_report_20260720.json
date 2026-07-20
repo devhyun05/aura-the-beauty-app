@@ -7,6 +7,13 @@
     "skippedLowerConfidence": 2,
     "skippedUnknownRow": 0
   },
+  "colorMap": [
+    {
+      "entries": 87,
+      "filled": 87,
+      "source": "color_glowpick_20260720.jsonl"
+    }
+  ],
   "imageInferred": {
     "acceptedAfterGate": 137,
     "allowedBasis": [
@@ -17,7 +24,7 @@
   },
   "seedCoverageAfter": {
     "eligible": 64,
-    "present": 440,
+    "present": 527,
     "total": 1835
   },
   "seedCoverageBefore": {

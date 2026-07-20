@@ -419,6 +419,64 @@ def apply_image_inferred(
   return new_rows, {"filled": filled}
 
 
+def apply_color_map(
+  seed_rows: list[dict[str, Any]],
+  color_map: list[dict[str, Any]],
+  *,
+  run_date: str,
+  default_source: str = "external_color_map",
+  default_confidence: float = 0.55,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+  """Fill MISSING colorFamily from a generic {catalogItemId, colorFamily, ...} map.
+
+  Used for external, already-interpreted sources (e.g. glowpick shade names read
+  and interpreted by the operator). Value-only: never hardFilter-promoted. Each
+  row may carry its own ``sourceType``/``confidence``/``note``; the note is kept
+  as evidence so a human reviewer can trace the interpretation.
+  """
+
+  new_rows = [copy.deepcopy(row) for row in seed_rows]
+  by_id = {_seed_id(r): r for r in new_rows}
+  filled = 0
+  for entry in color_map:
+    item_id = str(entry.get("catalogItemId") or "").strip()
+    family = str(entry.get("colorFamily") or "").strip()
+    if not item_id or not family or family == "none":
+      continue
+    row = by_id.get(item_id)
+    if row is None:
+      continue
+    attributes = _ensure_dict(row, "attributes")
+    if str(attributes.get("colorFamily") or "").strip():
+      continue  # never overwrite existing text/detail evidence
+    try:
+      conf = float(entry.get("confidence") or default_confidence)
+    except (TypeError, ValueError):
+      conf = default_confidence
+    attributes["colorFamily"] = family
+    confidence = _ensure_dict(row, "attributeConfidence")
+    confidence["colorFamily"] = conf
+    hard_filter = _ensure_dict(row, "hardFilterEligible")
+    hard_filter["colorFamily"] = False
+    evidence = row.get("evidence")
+    if not isinstance(evidence, list):
+      evidence = []
+      row["evidence"] = evidence
+    evidence.append(
+      {
+        "field": "colorFamily",
+        "value": family,
+        "sourceType": str(entry.get("sourceType") or default_source),
+        "confidence": conf,
+        "hardFilterEligible": False,
+        "note": entry.get("note"),
+        "runDate": run_date,
+      }
+    )
+    filled += 1
+  return new_rows, {"filled": filled}
+
+
 def color_family_coverage(rows: list[dict[str, Any]]) -> dict[str, int]:
   present = 0
   eligible = 0
@@ -469,6 +527,13 @@ def main(argv: list[str] | None = None) -> int:
   )
   parser.add_argument("--image-min-confidence", type=float, default=0.8)
   parser.add_argument("--image-basis", default="swatch", help="허용 basis(쉼표구분). 기본 swatch")
+  parser.add_argument(
+    "--color-map",
+    type=Path,
+    action="append",
+    help="외부 해석 색 소스 jsonl(catalogItemId/colorFamily[/sourceType/confidence/note]). "
+    "예: glowpick 호수명 해석. value-only. 여러 번 지정 가능.",
+  )
   parser.add_argument("--run-date", required=True)
   parser.add_argument("--report", type=Path, help="before/after 커버리지 리포트 json 경로")
   args = parser.parse_args(argv)
@@ -509,7 +574,17 @@ def main(argv: list[str] | None = None) -> int:
       rows, reviewed_report = apply_reviewed_to_seed(rows, decisions, run_date=args.run_date)
       reports["reviewed"] = {**reviewed_report, "approvedDecisions": len(decisions)}
 
-  # Weakest source last — only fills what text/detail/LLM could not.
+  # External interpreted color sources (e.g. glowpick shade names) — real
+  # manufacturer shade data, stronger than an image guess, so applied before it.
+  if args.color_map:
+    color_reports = []
+    for path in args.color_map:
+      color_map = read_jsonl(path)
+      rows, cm_report = apply_color_map(rows, color_map, run_date=args.run_date)
+      color_reports.append({"source": path.name, **cm_report, "entries": len(color_map)})
+    reports["colorMap"] = color_reports
+
+  # Weakest source last — only fills what text/detail/LLM/color-map could not.
   if args.image_inferred:
     vision_rows = read_jsonl(args.image_inferred)
     allowed_basis = {b.strip() for b in args.image_basis.split(",") if b.strip()}
