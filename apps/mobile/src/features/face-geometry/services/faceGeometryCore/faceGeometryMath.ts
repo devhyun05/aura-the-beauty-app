@@ -16,7 +16,6 @@ import {
   BROW_CORE_RIGHT_INDICES,
   BROW_UPPER_EDGE_LEFT_INDICES,
   BROW_UPPER_EDGE_RIGHT_INDICES,
-  CANTHAL_TANGENT_INDICES,
   FACE_GEOMETRY_LANDMARK_INDICES,
 } from './landmarkIndices';
 
@@ -126,18 +125,6 @@ function canthalTiltDeg(inner: PixelPoint, outer: PixelPoint): FaceGeometryMetri
     return unavailable('deg', 'canthal_axis_degenerate');
   }
   const deg = (Math.atan2(-(outer.y - inner.y), dx) * 180) / Math.PI;
-  return metric('deg', round(deg, 2));
-}
-
-// 눈꼬리 위쪽 각도(도): 외안각으로 내려오는 윗꺼풀선(상접선점→외안각)이 수평보다
-// 얼마나 아래로 떨어지는지. 양수 = 아래로 처짐(후드/답답형 위꼬리), 클수록 가파름.
-// 수평 대비라 roll 민감(게이트 안에서 산출). canthalTilt(내→외안각)와는 별개 지표.
-function eyeTailUpperAngleDeg(upper: PixelPoint, outer: PixelPoint): FaceGeometryMetric {
-  const dx = Math.abs(outer.x - upper.x);
-  if (!(dx > GEOMETRY_EPSILON)) {
-    return unavailable('deg', 'eye_tail_axis_degenerate');
-  }
-  const deg = (Math.atan2(outer.y - upper.y, dx) * 180) / Math.PI;
   return metric('deg', round(deg, 2));
 }
 
@@ -252,8 +239,6 @@ const ROLL_SENSITIVE_KEYS: readonly FaceGeometryMetricKey[] = [
   'canthalTiltRightDeg',
   'eyeBrowGapLeft',
   'eyeBrowGapRight',
-  'eyeTailUpperAngleLeftDeg',
-  'eyeTailUpperAngleRightDeg',
   'mouthCornerAsymmetry',
 ];
 
@@ -348,11 +333,6 @@ export function computeFaceGeometryMetrics({
     );
   }
 
-  // 눈꼬리 위쪽 접선점(윗꺼풀선 at 꼬리). eyeTailUpperAngle 은 수평 대비라
-  // roll 게이트 안에서 산출한다.
-  const canthalUpperR = get(CANTHAL_TANGENT_INDICES.upperRight);
-  const canthalUpperL = get(CANTHAL_TANGENT_INDICES.upperLeft);
-
   // 하악 폭 / 얼굴 폭, 아래턱 윤곽 폭 / 얼굴 폭
   const jawR = get(IDX.jawRight);
   const jawL = get(IDX.jawLeft);
@@ -397,14 +377,6 @@ export function computeFaceGeometryMetrics({
   const browEdgeLeft = getRing(BROW_UPPER_EDGE_LEFT_INDICES);
   if (browEdgeLeft) {
     metrics.browApexRatioLeft = browApexRatioMetric(browEdgeLeft);
-  }
-
-  // 눈꼬리 위쪽 각도(윗꺼풀선이 수평보다 아래로 떨어진 각). 수평 대비라 roll 민감.
-  if (eyeOuterR && canthalUpperR) {
-    metrics.eyeTailUpperAngleRightDeg = eyeTailUpperAngleDeg(canthalUpperR, eyeOuterR);
-  }
-  if (eyeOuterL && canthalUpperL) {
-    metrics.eyeTailUpperAngleLeftDeg = eyeTailUpperAngleDeg(canthalUpperL, eyeOuterL);
   }
 
   if (upperLidL && browRingLeft && eyeWidthLeftPx !== null) {
@@ -454,9 +426,6 @@ export function collectFaceGeometryDebugAnchors(
   seg('canthalTiltLeft', IDX.eyeInnerLeft, IDX.eyeOuterLeft);
   seg('eyeOpennessRight', IDX.eyeUpperLidRight, IDX.eyeLowerLidRight);
   seg('eyeOpennessLeft', IDX.eyeUpperLidLeft, IDX.eyeLowerLidLeft);
-  // 눈꼬리 위쪽선: 외안각→상접선 (eyeTailUpperAngle 이 재는 그 선)
-  seg('canthalUpperRight', IDX.eyeOuterRight, CANTHAL_TANGENT_INDICES.upperRight);
-  seg('canthalUpperLeft', IDX.eyeOuterLeft, CANTHAL_TANGENT_INDICES.upperLeft);
   // 눈썹 상연 edge polyline
   const browEdge = (label: string, indices: readonly number[]): void => {
     const pts: {x: number; y: number}[] = [];

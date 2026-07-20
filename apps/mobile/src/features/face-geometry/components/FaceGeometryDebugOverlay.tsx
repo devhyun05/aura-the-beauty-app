@@ -4,11 +4,9 @@ import Svg, {Circle, G, Line, Polyline} from 'react-native-svg';
 
 import type {FaceGeometryResult} from '../types';
 
-// 지표 계열별 색 — 라벨 접두사로 매핑. (magenta=눈꼬리 위쪽선, blue=tilt, green=개방도, cyan=눈썹)
+// 지표 계열별 색 — 라벨 접두사로 매핑. (blue=눈꼬리 tilt, green=개방도, cyan=눈썹)
 const FAMILY_COLOR: ReadonlyArray<readonly [string, string]> = [
   ['canthalTilt', '#3b82f6'],
-  ['canthalUpper', '#ff4d9d'],
-  ['canthalLower', '#ff4d9d'],
   ['eyeOpenness', '#34d399'],
   ['browEdge', '#22d3ee'],
 ];

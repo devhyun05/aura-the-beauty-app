@@ -32,8 +32,6 @@ export const FACE_GEOMETRY_METRIC_KEYS = [
   'eyeBrowGapRight',
   'eyeOpennessLeft',
   'eyeOpennessRight',
-  'eyeTailUpperAngleLeftDeg',
-  'eyeTailUpperAngleRightDeg',
   'eyeWidthRatioLeft',
   'eyeWidthRatioRight',
   'interCanthalRatio',

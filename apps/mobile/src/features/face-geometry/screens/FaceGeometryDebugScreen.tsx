@@ -12,7 +12,7 @@ import {
 import {useNavigationFlowState} from '../../../app/navigation/flowState';
 import {FaceGeometryDebugOverlay} from '../components/FaceGeometryDebugOverlay';
 
-type FamilyKey = 'all' | 'tilt' | 'converge' | 'brow' | 'openness';
+type FamilyKey = 'all' | 'tilt' | 'brow' | 'openness';
 
 // 색은 오버레이(FaceGeometryDebugOverlay)의 계열 색과 일치. 칩이 곧 범례+토글.
 const FAMILIES: {
@@ -23,12 +23,6 @@ const FAMILIES: {
 }[] = [
   {color: '#e2e8f0', key: 'all', label: '전체', match: () => true},
   {color: '#3b82f6', key: 'tilt', label: '눈꼬리각(tilt)', match: l => l.startsWith('canthalTilt')},
-  {
-    color: '#ff4d9d',
-    key: 'converge',
-    label: '눈꼬리 위각',
-    match: l => l.startsWith('canthalUpper'),
-  },
   {color: '#22d3ee', key: 'brow', label: '눈썹', match: l => l.startsWith('browEdge')},
   {color: '#34d399', key: 'openness', label: '개방도', match: l => l.startsWith('eyeOpenness')},
 ];

@@ -15,7 +15,6 @@ import {
   BROW_CORE_RIGHT_INDICES,
   BROW_UPPER_EDGE_LEFT_INDICES,
   BROW_UPPER_EDGE_RIGHT_INDICES,
-  CANTHAL_TANGENT_INDICES,
   FACE_GEOMETRY_LANDMARK_INDICES,
   FACE_GEOMETRY_REQUIRED_INDICES,
 } from './landmarkIndices';
@@ -73,12 +72,6 @@ function buildBaseMap(): PixelLandmarkMap {
   map.set(IDX.eyeLowerLidRight, {x: 420, y: 410});
   map.set(IDX.eyeUpperLidLeft, {x: 580, y: 390});
   map.set(IDX.eyeLowerLidLeft, {x: 580, y: 410});
-
-  // 외안각 상/하 접선점(수렴각용) — 외안각과 상연/하연 점 사이 좁은 눈꼬리 타입.
-  map.set(CANTHAL_TANGENT_INDICES.upperRight, {x: 400, y: 393});
-  map.set(CANTHAL_TANGENT_INDICES.lowerRight, {x: 400, y: 407});
-  map.set(CANTHAL_TANGENT_INDICES.upperLeft, {x: 600, y: 393});
-  map.set(CANTHAL_TANGENT_INDICES.lowerLeft, {x: 600, y: 407});
 
   map.set(IDX.mouthCornerRight, {x: 430, y: 600});
   map.set(IDX.mouthCornerLeft, {x: 570, y: 600});
@@ -334,22 +327,7 @@ function buildBaseMap(): PixelLandmarkMap {
   }
 }
 
-// ── 13. 눈꼬리 위쪽 각도: 윗꺼풀선(상접선점→외안각)이 수평보다 아래로 떨어진 각. roll 게이트 안. ──
-{
-  const map = buildBaseMap();
-  // 외안각(우) 33=(380,400), 상접선점 161=(420,360): 외안각이 상접선보다 +40 아래,
-  //   가로 40 → atan2(40,40)=45° (양수=아래로 처짐)
-  map.set(IDX.eyeOuterRight, {x: 380, y: 400});
-  map.set(CANTHAL_TANGENT_INDICES.upperRight, {x: 420, y: 360});
-  const m = computeFaceGeometryMetrics({map, rollCorrectionApplied: true});
-  expectClose(m.eyeTailUpperAngleRightDeg.value, 45, 'eye-tail upper 45deg', 0.01);
-
-  // roll 미보정이면 null(수평 대비라 roll 민감)
-  const m2 = computeFaceGeometryMetrics({map, rollCorrectionApplied: false});
-  expectEqual(m2.eyeTailUpperAngleRightDeg.value, null, 'eye-tail upper null without roll');
-}
-
-// ── 14. 눈썹 봉우리 비율: 중앙(3/5 지점)이 최고점이면 호길이 비율 0.5 ───────────
+// ── 13. 눈썹 봉우리 비율: 중앙(3/5 지점)이 최고점이면 호길이 비율 0.5 ───────────
 {
   const map = buildBaseMap();
   // 상연 edge medial→lateral 5점을 등간격 x + 가운데가 최고(min y)로 세팅
