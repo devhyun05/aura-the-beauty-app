@@ -43,7 +43,10 @@ export function LikedProductListScreen({onOpenProduct}: LikedProductListScreenPr
     setStatus('loading');
     getLikedProducts().then((nextProducts) => {
       if (isMounted) {
-        setProducts(nextProducts);
+        // 표시 권리가 만료된(unavailable) 항목은 목록에 노출하지 않는다.
+        setProducts(
+          nextProducts.filter(product => product.status !== 'unavailable'),
+        );
         setStatus('ready');
       }
     }).catch(() => {if (isMounted) setStatus('error');});

@@ -243,9 +243,13 @@ export function ProfileScreen({
     : onPressMakeupRecommendationReportsList;
   const previewCreatedMakeupLooks = createdMakeupLooks.slice(0, 4);
   const previewLikedMakeupLooks = likedMakeupLooks.slice(0, 4);
-  // 상세 데이터가 비어 있는 좋아요(이름 없음)는 빈 카드+0원으로 보이므로 걸러낸다.
+  // 상세 데이터가 비어 있는 좋아요(이름 없음)와 표시 권리가 만료된 항목은
+  // 빈 카드·"숨김 처리" 카드로 보이므로 걸러낸다.
   const previewProducts = data.likedProducts
-    .filter(product => product.productName?.trim())
+    .filter(
+      product =>
+        product.productName?.trim() && product.status !== 'unavailable',
+    )
     .slice(0, PROFILE_SCREEN_LIKED_PRODUCT_PREVIEW_LIMIT);
 
   return (
