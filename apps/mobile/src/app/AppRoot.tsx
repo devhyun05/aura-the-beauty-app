@@ -1,5 +1,5 @@
 import React, {type ReactNode, useCallback, useEffect, useRef, useState} from 'react';
-import {InteractionManager, StyleSheet, View} from 'react-native';
+import {InteractionManager, Pressable, StyleSheet, Text, View} from 'react-native';
 import {
   NavigationContainer,
   useNavigationContainerRef,
@@ -37,7 +37,7 @@ import {
   recordFeaturePerformanceRoute,
   startFeaturePerformanceLogging,
 } from '../shared/performance/featurePerformanceLogger';
-import {typography} from '../shared/theme';
+import {colors, typography} from '../shared/theme';
 import {
   makeupJourneyBackendAnalyticsAdapter,
   setMakeupJourneyAnalyticsAdapter,
@@ -76,6 +76,46 @@ function DeferredAppServices({
       <IncomingConsultingCallGate onAnswer={onAnswerConsultingCall} />
     </>
   );
+}
+
+type AppErrorBoundaryState = {hasError: boolean};
+
+// release 빌드에는 RedBox가 없어 잡히지 않은 렌더 예외가 곧바로 흰 화면·크래시로
+// 이어진다. 최상위에서 받아 복구 UI를 보여주고, 다시 시도 시 트리를 재마운트한다.
+class AppErrorBoundary extends React.Component<
+  {children: ReactNode},
+  AppErrorBoundaryState
+> {
+  state: AppErrorBoundaryState = {hasError: false};
+
+  static getDerivedStateFromError(): AppErrorBoundaryState {
+    return {hasError: true};
+  }
+
+  handleRetry = () => {
+    this.setState({hasError: false});
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.errorFallback}>
+          <Text style={styles.errorFallbackTitle}>화면을 불러오지 못했어요</Text>
+          <Text style={styles.errorFallbackBody}>
+            일시적인 문제가 발생했어요. 잠시 후 다시 시도해 주세요.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={this.handleRetry}
+            style={styles.errorFallbackButton}>
+            <Text style={styles.errorFallbackButtonLabel}>다시 시도</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
 }
 
 type StartupGateProps = {
@@ -250,6 +290,7 @@ export function AppRoot() {
     <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
       <SafeAreaProvider>
         <StatusBar style={statusBarStyle} />
+        <AppErrorBoundary>
         <AuthSessionProvider>
           <StartupGate
             fontsLoaded={fontsReady}
@@ -285,6 +326,7 @@ export function AppRoot() {
             </NavigationFlowStateProvider>
           </StartupGate>
         </AuthSessionProvider>
+        </AppErrorBoundary>
       </SafeAreaProvider>
     </TamaguiProvider>
   );
@@ -293,5 +335,37 @@ export function AppRoot() {
 const styles = StyleSheet.create({
   appLayer: {
     flex: 1,
+  },
+  errorFallback: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  errorFallbackBody: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  errorFallbackButton: {
+    backgroundColor: colors.textPrimary,
+    borderRadius: 12,
+    marginTop: 24,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+  },
+  errorFallbackButtonLabel: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 15,
+  },
+  errorFallbackTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 18,
   },
 });

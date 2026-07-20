@@ -1,5 +1,9 @@
 ﻿import React from 'react';
 
+import {Pressable, StyleSheet, View} from 'react-native';
+import {Settings} from 'lucide-react-native';
+
+import {colors, iconSize, spacing} from '../../../shared/theme';
 import {useAuthSession} from '../../../features/auth';
 import {ConsultingHeaderActions} from '../../../features/consulting';
 import {getRecommendedFilterRouteParams} from '../../../features/home';
@@ -54,12 +58,27 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
   return (
     <MainTabChrome
       headerRightSlot={
-        <ConsultingHeaderActions
-          onPressNotifications={() =>
-            rootNavigation?.navigate('ConsultingNotifications')
-          }
-          showMessages={false}
-        />
+        <View style={profileHeaderStyles.rightSlotRow}>
+          {/* 설정(계정 관리·회원 탈퇴) 진입점 — 홈의 전체 기능 메뉴는 스토어
+              빌드에서 숨겨지므로 이 버튼이 유일한 프로덕션 경로다. */}
+          <Pressable
+            accessibilityLabel="설정"
+            accessibilityRole="button"
+            hitSlop={spacing.xs}
+            onPress={() => rootNavigation?.navigate('AppSettings')}>
+            <Settings
+              color={colors.textPrimary}
+              size={iconSize.lg}
+              strokeWidth={1.8}
+            />
+          </Pressable>
+          <ConsultingHeaderActions
+            onPressNotifications={() =>
+              rootNavigation?.navigate('ConsultingNotifications')
+            }
+            showMessages={false}
+          />
+        </View>
       }
       navigation={navigation}
       routeName="ProfileTab"
@@ -126,3 +145,11 @@ export function ProfileEditRouteScreen({navigation}: RootScreenProps<'ProfileEdi
     />
   );
 }
+
+const profileHeaderStyles = StyleSheet.create({
+  rightSlotRow: {
+    alignItems: 'center',
+    columnGap: spacing.sm,
+    flexDirection: 'row',
+  },
+});

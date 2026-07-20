@@ -1,6 +1,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -420,6 +421,7 @@ export function CameraFaceCaptureScreen({
     shouldValidateFace ? 'front' : 'back',
   );
   const [isCameraReady, setIsCameraReady] = useState(false);
+  const [isCameraPermissionDenied, setIsCameraPermissionDenied] = useState(false);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [captureValidationMessage, setCaptureValidationMessage] = useState<string | null>(null);
@@ -878,6 +880,7 @@ export function CameraFaceCaptureScreen({
           nativeEvent.status !== 'camera_unavailable' &&
           nativeEvent.status !== 'input_unavailable',
       );
+      setIsCameraPermissionDenied(nativeEvent.status === 'permission_denied');
       setLandmarkDetection(detection);
       setLiveCaptureChecks(nextChecks);
       const now = Date.now();
@@ -1462,6 +1465,23 @@ export function CameraFaceCaptureScreen({
         />
       )}
 
+      {isCameraPermissionDenied ? (
+        <View style={cameraPermissionStyles.overlay}>
+          <Text style={cameraPermissionStyles.title}>
+            카메라 접근이 꺼져 있어요
+          </Text>
+          <Text style={cameraPermissionStyles.body}>
+            얼굴 촬영을 하려면 설정에서 AURA의 카메라 접근을 허용해 주세요.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void Linking.openSettings()}
+            style={cameraPermissionStyles.button}>
+            <Text style={cameraPermissionStyles.buttonLabel}>설정 열기</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <View style={[styles.closeButtonWrap, closeButtonPosition]}>
         <Pressable
           accessibilityLabel="Close capture screen"
@@ -1631,5 +1651,46 @@ const styles = StyleSheet.create({
   },
   transparentCaptureButtonSurface: {
     backgroundColor: 'transparent',
+  },
+});
+
+const cameraPermissionStyles = StyleSheet.create({
+  body: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: spacing.sm,
+    opacity: 0.85,
+    textAlign: 'center',
+  },
+  button: {
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  buttonLabel: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 15,
+  },
+  overlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.82)',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    paddingHorizontal: spacing.xl,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  title: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.semibold,
+    fontSize: 18,
+    textAlign: 'center',
   },
 });

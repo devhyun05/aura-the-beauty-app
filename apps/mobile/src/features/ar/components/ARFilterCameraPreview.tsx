@@ -5,6 +5,7 @@ import {
   type ImageSourcePropType,
   type ViewStyle,
 } from 'react-native';
+import {useCameraPermissions} from 'expo-camera';
 import type {CameraType} from 'expo-camera';
 import {Text, View} from 'tamagui';
 
@@ -78,7 +79,15 @@ export function ARFilterCameraPreview({
   sourceImageUri,
 }: ARFilterCameraPreviewProps) {
   const previewColorOverlayLayers = getMakeupPreviewColorOverlayLayers();
-  const shouldUseUnityPreview = useUnityMakeupNativeViewReady();
+  const [cameraPermission] = useCameraPermissions();
+  // 카메라 권한이 영구 거부되면 Unity(ARKit) 프리뷰는 검은 화면만 남는다.
+  // 이때는 LiveCameraLayer 분기로 내려 권한 안내·설정 열기 UI가 보이게 한다.
+  const isCameraPermissionBlocked =
+    cameraPermission != null &&
+    !cameraPermission.granted &&
+    !cameraPermission.canAskAgain;
+  const shouldUseUnityPreview =
+    useUnityMakeupNativeViewReady() && !isCameraPermissionBlocked;
   const resolvedSourceImage = sourceImageUri ? {uri: sourceImageUri} : sourceImageSource ?? null;
   const shouldUseSourceImagePreview = Boolean(resolvedSourceImage);
   const leftComparisonLabel = selectedComparisonMode === 'left' ? 'After' : 'Before';
