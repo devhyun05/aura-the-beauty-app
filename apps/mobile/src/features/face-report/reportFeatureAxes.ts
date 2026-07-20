@@ -68,10 +68,8 @@ function axisPhrase(a: FeatureAxis): string | null {
       return hi ? '눈썹은 꼬리가 올라간 흐름이에요.'
         : lo ? '눈썹은 완만하게 내려온 흐름이에요.'
         : '눈썹은 수평에 가까운 흐름이에요.';
-    case 'browApex':
-      return hi ? '눈썹 산이 바깥쪽에 있어요.'
-        : lo ? '눈썹 산이 앞쪽에 있어요.'
-        : '눈썹 산이 가운데쯤에 있어요.';
+    // browApex(눈썹 산 위치)는 자기참조 서술 helper가 아닌 시각 축(buildRegionFeatureAxes
+    // → buildS3)으로만 전달한다 — describeRegionAxes는 프로덕션 미사용 경로라 케이스를 두지 않는다.
     case 'lipThickness':
       return hi ? '아랫입술이 윗입술보다 도톰해요.'
         : lo ? '윗입술이 아랫입술보다 도톰해요.'

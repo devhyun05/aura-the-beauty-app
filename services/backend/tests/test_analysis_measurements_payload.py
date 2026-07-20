@@ -30,6 +30,7 @@ PERSONAL_COLOR_TYPES = [
 ]
 
 GEOMETRY_METRIC_KEYS = [
+  "browApexRatioLeft", "browApexRatioRight",
   "browSlopeLeftDeg", "browSlopeRightDeg", "canthalTiltLeftDeg", "canthalTiltRightDeg",
   "eyeBrowGapLeft", "eyeBrowGapRight", "eyeOpennessLeft", "eyeOpennessRight",
   "eyeWidthRatioLeft", "eyeWidthRatioRight", "interCanthalRatio", "jawWidthRatio",
@@ -232,6 +233,11 @@ def test_prompt_injects_and_explains_measurements() -> None:
   assert "alare-alare 콧볼 폭" in prompt
   assert "좌우 앞광대의 전방 돌출" in prompt
   assert "절대 mm·임상 진단·모집단 백분위가 아니고" in prompt
+  # geometry2d 눈썹 봉우리(산) 위치가 payload→prompt까지 실제로 흐르는지 회귀 고정
+  # (해설 문장 + 메타데이터 값 둘 다). 튜플·gloss에서 browApex가 빠지면 여기서 잡힌다.
+  assert "눈썹 봉우리(산) 위치" in prompt
+  assert "browApexRatioLeft" in metadata["faceGeometry2d"]["metrics"]
+  assert "browApexRatioRight" in metadata["faceGeometry2d"]["metrics"]
   # 이미지 위치 필드는 여전히 제외된다.
   assert "https://cdn.example.com/x.jpg" not in prompt
 
