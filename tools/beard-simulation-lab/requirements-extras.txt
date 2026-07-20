@@ -1,0 +1,16 @@
+# Optional heavy deps — install only when the corresponding feature is enabled.
+#
+# Spike C2 (CLIPSeg "beard" prior for dense-beard boundary):
+#   pip install torch transformers
+#
+# Spike C3 (SegFormer face parsing probe):
+#   pip install torch transformers torchvision
+#
+# Geometry guard identity check (ArcFace embedding distance).
+# Required before Stage 6 acceptance runs (guard.identity_check: require):
+#   pip install insightface onnxruntime
+torch
+transformers
+torchvision
+insightface
+onnxruntime

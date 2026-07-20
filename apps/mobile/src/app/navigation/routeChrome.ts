@@ -106,6 +106,12 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'light',
   },
+  BeardSimulation: {
+    category: 'list',
+    depth: 'immersive',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
   FaceAnalysisIntro: {
     category: 'feature-entry',
     contextLabel: 'FACE ANALYSIS',

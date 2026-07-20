@@ -2411,6 +2411,223 @@
         }
       }
     },
+    "/api/beard/upload-url": {
+      "post": {
+        "tags": [
+          "beard"
+        ],
+        "summary": "Create Beard Upload Url",
+        "operationId": "create_beard_upload_url_api_beard_upload_url_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeardUploadUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Create Beard Upload Url Api Beard Upload Url Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/beard/prewarm": {
+      "post": {
+        "tags": [
+          "beard"
+        ],
+        "summary": "Prewarm Beard Lambda",
+        "operationId": "prewarm_beard_lambda_api_beard_prewarm_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Prewarm Beard Lambda Api Beard Prewarm Post"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/beard/jobs": {
+      "post": {
+        "tags": [
+          "beard"
+        ],
+        "summary": "Create Beard Job",
+        "operationId": "create_beard_job_api_beard_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeardJobCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Create Beard Job Api Beard Jobs Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/beard/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "beard"
+        ],
+        "summary": "Get Beard Job",
+        "operationId": "get_beard_job_api_beard_jobs__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Beard Job Api Beard Jobs  Job Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/beard/report": {
+      "post": {
+        "tags": [
+          "beard"
+        ],
+        "summary": "Create Beard Report",
+        "operationId": "create_beard_report_api_beard_report_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BeardAnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Create Beard Report Api Beard Report Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/products/features": {
       "get": {
         "tags": [
@@ -2504,6 +2721,261 @@
                 "schema": {
                   "type": "object",
                   "title": "Response Get Product Recommendations Api Products Recommendations Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products/recommendations/makeup-reports": {
+      "get": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Get Makeup Report Picker",
+        "operationId": "get_makeup_report_picker_api_products_recommendations_makeup_reports_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Makeup Report Picker Api Products Recommendations Makeup Reports Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products/recommendations/makeup-reports/{report_id}": {
+      "get": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Get Makeup Report Products",
+        "operationId": "get_makeup_report_products_api_products_recommendations_makeup_reports__report_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "lookId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lookid"
+            }
+          },
+          {
+            "name": "categories",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Categories"
+            }
+          },
+          {
+            "name": "perCategoryLimit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 8,
+              "minimum": 1,
+              "default": 6,
+              "title": "Percategorylimit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Makeup Report Products Api Products Recommendations Makeup Reports  Report Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products/recommendations/makeup-reports/{report_id}/refresh": {
+      "post": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Refresh Makeup Report Products",
+        "description": "Create an explicit new revision; ordinary GETs never re-rank a report.",
+        "operationId": "refresh_makeup_report_products_api_products_recommendations_makeup_reports__report_id__refresh_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "lookId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lookid"
+            }
+          },
+          {
+            "name": "categories",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Categories"
+            }
+          },
+          {
+            "name": "perCategoryLimit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 8,
+              "minimum": 1,
+              "default": 6,
+              "title": "Percategorylimit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Refresh Makeup Report Products Api Products Recommendations Makeup Reports  Report Id  Refresh Post"
                 }
               }
             }
@@ -11262,6 +11734,160 @@
         "title": "AuradinEventIn",
         "description": "모바일 fire-and-forget 배치 이벤트 1건 — clientEventId는 재시도 멱등 키(필수)."
       },
+      "BeardAnalysisRequest": {
+        "properties": {
+          "imageKey": {
+            "type": "string",
+            "title": "Imagekey"
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket"
+          },
+          "contentType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contenttype"
+          },
+          "guardPassed": {
+            "type": "boolean",
+            "title": "Guardpassed",
+            "default": true
+          },
+          "survey": {
+            "$ref": "#/components/schemas/BeardSurveyAnswersRequest"
+          }
+        },
+        "type": "object",
+        "required": [
+          "imageKey"
+        ],
+        "title": "BeardAnalysisRequest"
+      },
+      "BeardJobCreate": {
+        "properties": {
+          "inputKey": {
+            "type": "string",
+            "title": "Inputkey"
+          },
+          "path": {
+            "type": "string",
+            "enum": [
+              "analysis",
+              "photo"
+            ],
+            "title": "Path",
+            "default": "photo"
+          },
+          "survey": {
+            "type": "object",
+            "title": "Survey"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inputKey"
+        ],
+        "title": "BeardJobCreate"
+      },
+      "BeardSurveyAnswersRequest": {
+        "properties": {
+          "a1": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "A1"
+          },
+          "shave": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shave"
+          },
+          "freq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freq"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          },
+          "areas": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Areas"
+          }
+        },
+        "type": "object",
+        "title": "BeardSurveyAnswersRequest"
+      },
+      "BeardUploadUrlRequest": {
+        "properties": {
+          "deviceLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Devicelabel"
+          }
+        },
+        "type": "object",
+        "title": "BeardUploadUrlRequest"
+      },
       "BookingCreate": {
         "properties": {
           "expertId": {
@@ -15759,13 +16385,6 @@
           "type": {
             "type": "string",
             "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
           }
         },
         "type": "object",

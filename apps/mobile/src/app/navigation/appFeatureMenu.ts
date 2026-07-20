@@ -12,6 +12,7 @@ export type AppFeatureMenuItemId =
   | 'makeupExtraction'
   | 'makeupFeedback'
   | 'faceAnalysis'
+  | 'beardSimulation'
   | 'recommendedFilters'
   | 'makeupRecommendation'
   | 'productRecommendation'
@@ -26,6 +27,7 @@ export type AppFeatureMenuRootRouteName = Extract<
   | 'ReferenceMakeupExtractionUpload'
   | 'MakeupFeedbackAlbumUpload'
   | 'FaceAnalysisIntro'
+  | 'BeardSimulation'
   | 'HomeFilterStore'
   | 'Community'
   | 'Consulting'
@@ -124,6 +126,12 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
         label: '얼굴 분석',
         description: '얼굴형과 퍼스널 무드를 분석해요.',
         target: {kind: 'root', routeName: 'FaceAnalysisIntro'},
+      },
+      {
+        id: 'beardSimulation',
+        label: '수염 제거',
+        description: '수염을 분석하거나 사진 속 수염 자국을 정리해요.',
+        target: {kind: 'root', routeName: 'BeardSimulation'},
       },
       {
         id: 'recommendedFilters',

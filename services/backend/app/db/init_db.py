@@ -990,6 +990,28 @@ POST_SCHEMA_MIGRATIONS = {
     end $migration$;
   """,
   "schema.sql:media-upload-sessions-v1": MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL,
+  "schema.sql:beard-jobs-v1": """
+    create table if not exists beard_jobs (
+      id uuid primary key default gen_random_uuid(),
+      user_id uuid not null references users(id) on delete cascade,
+      status job_status not null default 'pending',
+      path text not null default 'photo',
+      input_key text not null,
+      output_key text,
+      flux_command_id text,
+      instance_state text,
+      result_url text,
+      result_url_expires_at timestamptz,
+      error_message text,
+      error_details jsonb not null default '{}'::jsonb,
+      survey_payload jsonb not null default '{}'::jsonb,
+      attempt_count integer not null default 0,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create index if not exists idx_beard_jobs_user_created on beard_jobs (user_id, created_at desc);
+  """,
 }
 # NOTE(M3 후속): 동일 (user_id, source_media_id) in-flight 중복을 막는 부분 유니크
 # 인덱스는 이 POST_SCHEMA_MIGRATIONS(단일 트랜잭션)로는 CONCURRENTLY 불가 →
