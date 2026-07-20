@@ -1,22 +1,24 @@
-import React, { useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { PixelRatio, Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
-import { OptionalViewShot } from '../../shared/ui/OptionalViewShot';
+import {
+  loadOptionalCaptureRefFunction,
+  OptionalViewShot,
+} from '../../shared/ui/OptionalViewShot';
 import { color, font, radius, shadow } from './reportTokens';
 import type { BandKey, ReportScreenProps } from './reportTypes';
 
-// Matches the legacy report screen's capture settings.
-// useRenderInContext: 보고서 전체(긴 콘텐츠)는 기본 drawViewHierarchy 캡처가
-// 실기기에서 실패한다(네이티브 주석 "doesn't work for large views") —
-// 대형 뷰용 renderInContext 경로를 쓴다.
 const REPORT_CAPTURE_OPTIONS = {
   format: 'jpg',
   quality: 0.95,
   result: 'tmpfile',
-  useRenderInContext: true,
 } as const;
+
+// iOS 이미지 렌더러는 한 변이 대략 16384px를 넘으면 실패한다. 보고서 전체
+// (contentSize × 기기 스케일)가 한계를 넘으면 비율을 유지한 채 축소 캡처한다.
+const REPORT_CAPTURE_MAX_PIXELS = 16000;
 import { ScrollAnimContext } from './visuals/RiseIn';
 import { S1Summary } from './sections/S1Summary';
 import { S2Proportion } from './sections/S2Proportion';
@@ -46,8 +48,61 @@ export function ReportScreenScaffold({
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
   const scrollRef = useRef<Animated.ScrollView>(null);
+  const contentSize = useRef({height: 0, width: 0});
   const sectionY = useRef<Record<string, number>>({});
   const cardY = useRef<Record<string, number>>({});
+
+  // 보고서 전체 캡처 — 스크롤뷰의 contentSize 기준 snapshotContentContainer로
+  // 긴 콘텐츠 전체를 한 장에 담는다. 픽셀 한계 초과 시 비율 축소.
+  const captureFullReport = useCallback(async () => {
+    const captureNode = loadOptionalCaptureRefFunction();
+    const scrollNode = scrollRef.current;
+
+    if (!captureNode || !scrollNode) {
+      return undefined;
+    }
+
+    const {height, width} = contentSize.current;
+    const deviceScale = PixelRatio.get();
+    const scaleDown =
+      height > 0
+        ? Math.min(1, REPORT_CAPTURE_MAX_PIXELS / (height * deviceScale))
+        : 1;
+
+    return captureNode(scrollNode, {
+      ...REPORT_CAPTURE_OPTIONS,
+      snapshotContentContainer: true,
+      ...(scaleDown < 1 && width > 0
+        ? {
+            height: Math.floor(height * scaleDown),
+            width: Math.floor(width * scaleDown),
+          }
+        : {}),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!captureRef) {
+      return undefined;
+    }
+
+    const captureHandle = {capture: captureFullReport};
+
+    if (typeof captureRef === 'function') {
+      captureRef(captureHandle);
+      return () => {
+        captureRef(null);
+      };
+    }
+
+    const mutableCaptureRef =
+      captureRef as React.MutableRefObject<typeof captureHandle | null>;
+    mutableCaptureRef.current = captureHandle;
+
+    return () => {
+      mutableCaptureRef.current = null;
+    };
+  }, [captureFullReport, captureRef]);
   const onScroll = useAnimatedScrollHandler(e => { scrollY.value = e.contentOffset.y; });
 
   // Sections live inside the capture wrapper, so their onLayout y is relative to
@@ -80,6 +135,9 @@ export function ReportScreenScaffold({
       <View style={{ flex: 1, backgroundColor: color.bg }}>
         <Animated.ScrollView
           ref={scrollRef}
+          onContentSizeChange={(width, height) => {
+            contentSize.current = {height, width};
+          }}
           onScroll={onScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
@@ -100,8 +158,10 @@ export function ReportScreenScaffold({
             The outer View exists only to measure where this wrapper starts,
             since the sections' onLayout y is now relative to it.
           */}
+          {/* 캡처는 이제 ScrollView 전체 콘텐츠(snapshotContentContainer)로 수행
+              — captureRef는 위 effect에서 스크롤 캡처 클로저로 연결된다. */}
           <View onLayout={e => { captureOffsetY.current = e.nativeEvent.layout.y; }}>
-          <OptionalViewShot ref={captureRef} options={REPORT_CAPTURE_OPTIONS} style={{ backgroundColor: color.bg }}>
+          <OptionalViewShot options={REPORT_CAPTURE_OPTIONS} style={{ backgroundColor: color.bg }}>
           <View onLayout={e => { sectionY.current.s1 = e.nativeEvent.layout.y; }}>
             <S1Summary data={data.s1} />
           </View>
