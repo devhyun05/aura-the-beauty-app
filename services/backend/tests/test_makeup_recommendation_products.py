@@ -94,7 +94,7 @@ async def test_product_enrichment_attaches_verified_products_to_every_area(
   assert len(calls) == 5
   assert {call["category"] for call in calls} == {"base", "brow", "shadow", "cheek", "lip"}
   assert all(call["legacyNaverEnabled"] is False for call in calls)
-  assert all(call["embeddingModel"] == "" for call in calls)
+  assert all(call["embeddingModel"] == "amazon.titan-embed-text-v2:0" for call in calls)
   assert all(call["profile_override"]["summary"] for call in calls)
   assert all(
     len(guide["products"]) == 1

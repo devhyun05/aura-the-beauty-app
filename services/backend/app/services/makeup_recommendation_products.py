@@ -478,10 +478,10 @@ async def enrich_makeup_recommendation_products(
   looks = enriched.get("looks") if isinstance(enriched.get("looks"), list) else []
   jobs: list[tuple[dict[str, Any], dict[str, Any], str, str, Any]] = []
 
-  # Deterministic catalog scoring consumes the generated profile. Disabling per-product
-  # embeddings avoids dozens of extra Bedrock calls for a single recommendation.
+  # 부위별 semantic 매칭(생성된 보고서 내용 + 색/피니시를 임베딩)이 의도된 설계이므로
+  # 임베딩은 켜 둔다. 텍스처 키워드 랭킹(_rank_products_by_texture)은 임베딩이 적용되지
+  # 않았을 때(모델 미설정·호출 실패)만 fallback으로 쓴다.
   catalog_settings = settings.model_copy(update={
-    "bedrock_embedding_model_id": None,
     # Never mix request-time shopping search results into a saved makeup report.
     "legacy_naver_product_search": False,
   })
@@ -535,7 +535,9 @@ async def enrich_makeup_recommendation_products(
       if _is_trusted_product_source(source):
         sources.add(source)
         raw_products = recommendation_data.get("products") if isinstance(recommendation_data, dict) else []
-        raw_products = _rank_products_by_texture(raw_products, guide)
+        # 임베딩 semantic 랭킹이 적용됐으면 그 순서를 존중하고, 아니면 텍스처로 정렬(fallback).
+        if not str(source).endswith("_semantic"):
+          raw_products = _rank_products_by_texture(raw_products, guide)
         products = _map_products(raw_products, area, category, guide)
       else:
         logger.warning(
