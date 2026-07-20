@@ -17,6 +17,7 @@ const entries = [
   'features/face-analysis/services/faceFeatureProfileDerive.test.ts',
   'features/face-analysis/services/faceFeatureProfileBuilder.test.ts',
   'features/face-analysis/services/visualWeightMap.test.ts',
+  'features/face-report/visualWeightPresentation.test.ts',
 ];
 
 function run(command, args) {
@@ -47,4 +48,7 @@ run(process.execPath, [
 ]);
 run(process.execPath, [
   join(outDir, 'features/face-analysis/services/visualWeightMap.test.js'),
+]);
+run(process.execPath, [
+  join(outDir, 'features/face-report/visualWeightPresentation.test.js'),
 ]);

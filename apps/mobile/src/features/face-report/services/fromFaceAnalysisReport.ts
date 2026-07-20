@@ -28,6 +28,9 @@ import {ALL_12_TYPES, TYPE_LABEL_KO} from '../../personal-color/services/persona
 import {getColorFamilyReference} from '../../personal-color/services/personalColorCore/palette';
 import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
 import {buildRegionFeatureAxes} from '../reportFeatureAxes';
+import {buildVisualWeightPresentation} from '../visualWeightPresentation';
+import {buildFaceFeatureProfile} from '../../face-analysis/services/faceFeatureProfileBuilder';
+import {buildVisualWeightMap} from '../../face-analysis/services/visualWeightMap';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
 import type {AxisName, PaletteItem} from '../../personal-color/services/personalColorCore/contracts';
 import {analyzeBody, resolveStyleGender} from '../../ar/stencil/src/composer/bodyProfile';
@@ -720,6 +723,7 @@ function buildS3(
 
 function buildS6(
   impressionNotes: FaceAnalysisImpressionNotes | undefined,
+  visualWeight: S6Data['visualWeight'],
 ): S6Data | null {
   if (!impressionNotes) {
     return null;
@@ -730,6 +734,7 @@ function buildS6(
     sub: '이목구비와 윤곽을 함께 보면 얼굴에서 먼저 느껴지는 분위기를 알 수 있어요.',
     axes: impressionNotes.axes ?? [],
     keywords: impressionNotes.keywords,
+    visualWeight,
     paragraph: impressionNotes.paragraph,
   };
 }
@@ -816,6 +821,20 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     ? {uri: heroUri, placeholderLabel: '얼굴 확대 컷'}
     : {placeholderLabel: '얼굴 확대 컷'};
 
+  // 1층 프로파일 + 2층 시각 무게 지도 → S6 인상 섹션 주입. 측정·사진 근거가 없으면
+  // 프레젠터가 null을 돌려 섹션이 블록을 숨긴다(조용한 생성 금지).
+  const displayRatio = verticalThirds?.verticalThirds?.displayRatio;
+  const featureProfile = buildFaceFeatureProfile({
+    metrics: geometryMetrics ?? null,
+    verticalThirds: displayRatio
+      ? {upper: displayRatio.upper, middle: displayRatio.middle, lower: displayRatio.lower}
+      : null,
+    faceShapeLabel: report.faceAnalysisV2?.derived.faceShape?.label ?? report.faceShape ?? null,
+    observations: report.featureObservations ?? null,
+    measuredAt: report.analyzedAt,
+  });
+  const visualWeight = buildVisualWeightPresentation(buildVisualWeightMap(featureProfile));
+
   return {
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
     s1: buildS1(
@@ -828,7 +847,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null, geometryMetrics ?? null),
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile, gender),
-    s6: buildS6(report.impressionNotes),
+    s6: buildS6(report.impressionNotes, visualWeight),
     s7: buildS7(report.stylingLooks),
     s8: buildS8(report.skinPerception),
     footer: {

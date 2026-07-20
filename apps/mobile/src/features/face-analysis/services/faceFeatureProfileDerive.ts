@@ -10,7 +10,11 @@
 // 확정 전까지 임계값은 잠정이고, 그 사실을 소비처가 알 수 있게 한다.
 // RN·토큰 무의존(계약 러너가 plain node로 실행).
 
-import type {FaceGeometryMetricKey, FaceGeometryMetrics} from '../../face-geometry/types';
+import {
+  FACE_GEOMETRY_METRIC_KEYS,
+  type FaceGeometryMetricKey,
+  type FaceGeometryMetrics,
+} from '../../face-geometry/types';
 import {
   FACE_FEATURE_BAND_MAPPING_VERSION,
   FACE_FEATURE_PROFILE_SCHEMA_VERSION,
@@ -55,6 +59,16 @@ const THRESHOLDS = {
   jawWidthCenter: 0.78, // population: jawWidth/faceWidth 중심
   jawWidthDeadzone: 0.06,
 } as const;
+
+// 전 지표 null(측정 없음) 스텁 — geometryMetrics 부재 시 사용. 밴드는 전부 판정
+// 보류가 되고, VLM 슬롯(관찰 기반)만 채워진다(2층 무게 지도는 관찰만으로도 성립).
+function emptyFaceGeometryMetrics(): FaceGeometryMetrics {
+  const m = {} as FaceGeometryMetrics;
+  for (const k of FACE_GEOMETRY_METRIC_KEYS) {
+    m[k] = {unit: k.endsWith('Deg') ? 'deg' : 'ratio', value: null, warnings: []};
+  }
+  return m;
+}
 
 function metricValue(
   m: FaceGeometryMetrics,
@@ -213,7 +227,8 @@ function verticalBalanceBand(
 }
 
 export type DeriveFeatureBandsInput = {
-  metrics: FaceGeometryMetrics;
+  // 없으면 전 지표 판정 보류(VLM 슬롯만 채워짐 — 2층은 관찰만으로도 성립).
+  metrics?: FaceGeometryMetrics | null;
   // 세로3분할 표시비율(middle=1.0 정규화). 없으면 verticalBalance 보류.
   verticalThirds?: {upper: number | null; middle: number; lower: number} | null;
   // faceAnalysisV2.derived.faceShape.label — 없으면 null.
@@ -230,7 +245,7 @@ export type DeriveFeatureBandsInput = {
 export function deriveMeasuredFeatureBands(
   input: DeriveFeatureBandsInput,
 ): FaceFeatureProfile {
-  const {metrics: m} = input;
+  const m = input.metrics ?? emptyFaceGeometryMetrics();
 
   const canthal = meanOrNull(
     metricValue(m, 'canthalTiltLeftDeg'),

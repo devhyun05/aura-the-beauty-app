@@ -5,6 +5,8 @@
 import type {FaceShapeView} from './reportFormat';
 import type {Silhouette, StyleGender} from '../ar/stencil/src/composer/bodyProfile';
 import type {PersonalColor12Type} from '../personal-color/services/personalColorCore/contracts';
+import type {VisualWeightPresentation} from './visualWeightPresentation';
+export type {VisualWeightPresentation} from './visualWeightPresentation';
 
 export interface PhotoSlotData {
   uri?: string;
@@ -197,11 +199,16 @@ export interface S5Data {
 
 // ---------- S6 ----------
 export interface ImpressionAxis { key: string; leftLabel: string; rightLabel: string; value: number }
+// 2층 시각 무게 지도의 프레젠테이션 타입은 순수 파일(visualWeightPresentation)에
+// 정의하고 상단에서 재수출한다 — 소비처가 reportTypes만 보게 하면서, reportTypes의
+// RN(React) 전이 의존이 계약 러너로 새지 않게 한다.
 export interface S6Data {
   eyebrow: string; title: string; sub: string;
   axes: ImpressionAxis[];   // AI가 반환한 축만 사용. 없으면 빈 배열.
   keywords: string[];
   paragraph: string;
+  // 시각 무게 지도(2층). 근거 부족이면 null → 컴포넌트가 블록 숨김.
+  visualWeight?: VisualWeightPresentation | null;
 }
 
 // ---------- S7 ----------

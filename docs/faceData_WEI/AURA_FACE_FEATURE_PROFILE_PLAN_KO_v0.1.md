@@ -113,7 +113,13 @@ type VisualWeightMap = {
   - 계약: `shared/contracts/visualWeightMap.ts` (weights 합1.0·dominantRegion·contrastLevel·coverage·basis, schema/mapping 버전 분리).
   - 합성: `features/face-analysis/services/visualWeightMap.ts`의 `buildVisualWeightMap(profile)` — 대비 서수(low1/med2/high3)를 근거 있는 부위끼리만 정규화. 미해소 부위는 키 없음(0 아님), 근거<2면 dominant='insufficient'(over-claim 방지), 팽팽하면 'balanced'. 눈썹은 density 프록시라 basis에 명시.
   - 검증: 계약 테스트 3종(derive/builder/visualWeightMap) + 백엔드 36개 + 모바일 타입체크 0 에러.
-- ⬜ 보고서 반영(부위 카드·인상 섹션에 2층 주입) · 매핑 엔진(`deriveFitDeltas(profile, styleLane)`) + AR맞춤핏 δ — 후속.
+- ✅ **보고서 반영(S6 인상 섹션에 2층 주입)** — 데이터·프레젠테이션·렌더 배선, 테스트 통과.
+  - 어댑터: `buildReportDataFromFaceAnalysisReport`가 geometryMetrics+verticalThirds+featureObservations로 프로파일→무게지도→프레젠테이션을 조립해 S6에 주입. 근거 부족이면 프레젠터가 null → 블록 숨김(조용한 생성 금지).
+  - 프레젠터: `face-report/visualWeightPresentation.ts`(순수) — 무게지도 → 부위 막대(정렬·우세 강조) + 대비→인상 문구(W-2). 프레젠테이션 타입은 순수 파일에 두고 reportTypes가 재수출(RN 전이 의존이 계약 러너로 새지 않게).
+  - 렌더: `sections/S6Impression.tsx`에 시각 무게 블록(부위별 % 막대 + 우세/대비 문구) 추가.
+  - derive의 metrics를 옵셔널화(2층은 관찰만으로도 성립).
+  - 검증: 계약 테스트 4종(derive/builder/visualWeightMap/presenter) + face-report 러너 무회귀 + 모바일 타입체크 0 에러. ⚠️ 실기기 시각 렌더는 미검증(분석 플로우 필요).
+- ⬜ 매핑 엔진(`deriveFitDeltas(profile, styleLane)`) + AR맞춤핏 δ — 후속(헤드라인 목표: 분석→AR 자동 적용).
 
 ## 6. 구현 범위 (합의됨 — v0.2에서 전 부위로 확장)
 
