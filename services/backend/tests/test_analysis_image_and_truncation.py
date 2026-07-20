@@ -66,10 +66,15 @@ class _FakeBedrockClient:
         return {"body": BytesIO(json.dumps(self.response_payload).encode("utf-8"))}
 
 
-def _bedrock_service(fake_client: _FakeBedrockClient) -> OpenAIAnalysisService:
+def _bedrock_service(
+    fake_client: _FakeBedrockClient,
+    *,
+    tool_enforcement: bool = True,
+) -> OpenAIAnalysisService:
     service = _service(
         ai_provider="bedrock",
         bedrock_analysis_model_id="test-analysis-model",
+        bedrock_analysis_tool_enforcement=tool_enforcement,
     )
     service._bedrock_runtime_client = lambda: fake_client  # type: ignore[method-assign]
     # 이미지 변환은 이 테스트의 관심사가 아니므로 통과시킨다.
@@ -77,6 +82,52 @@ def _bedrock_service(fake_client: _FakeBedrockClient) -> OpenAIAnalysisService:
         lambda image_bytes, content_type: (image_bytes, content_type)
     )
     return service
+
+
+def test_bedrock_analysis_request_enforces_schema_tool_choice():
+    fake = _FakeBedrockClient(
+        {
+            "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": '{"faceShape":"oval"}'}],
+        }
+    )
+    service = _bedrock_service(fake, tool_enforcement=True)
+
+    with pytest.raises(AppError) as exc_info:
+        service._analyze_image_with_bedrock_sync({}, b"image-bytes")
+
+    assert exc_info.value.code == "BEDROCK_TOOL_USE_MISSING"
+    request_body = fake.request_bodies[0]
+    assert request_body["tool_choice"] == {
+        "type": "tool",
+        "name": "return_face_analysis_report",
+    }
+    assert request_body["tools"][0]["name"] == "return_face_analysis_report"
+    schema = request_body["tools"][0]["input_schema"]
+    required = set(schema["required"])
+    assert "faceShape" in required
+    assert {"personalColor", "toneSummary"}.isdisjoint(required)
+    assert schema["properties"]["recommendedMakeups"]["items"]["properties"][
+        "tags"
+    ]["maxItems"] == 2
+    assert schema["properties"]["impressionNotes"]["properties"]["keywords"][
+        "maxItems"
+    ] == 5
+    assert schema["properties"]["stylingLooks"]["properties"]["natural"][
+        "properties"
+    ]["rows"]["maxItems"] == 6
+
+
+def test_analysis_validator_requires_ai_report_fields():
+    service = _service()
+
+    with pytest.raises(AppError) as exc_info:
+        service._validate_analysis_result_before_normalization({})
+
+    assert exc_info.value.code == "FACE_ANALYSIS_AI_INCOMPLETE"
+    missing_fields = set(exc_info.value.details["missingFields"])
+    assert {"faceShape", "skinType"} <= missing_fields
+    assert {"personalColor", "toneSummary"}.isdisjoint(missing_fields)
 
 
 def test_bedrock_truncation_attaches_stop_reason_to_failure():
@@ -178,4 +229,4 @@ def test_bedrock_request_uses_configured_max_tokens():
         fake.request_bodies[0]["max_tokens"]
         == service.settings.bedrock_analysis_max_tokens
     )
-    assert service.settings.bedrock_analysis_max_tokens >= 4000
+    assert service.settings.bedrock_analysis_max_tokens == 8192

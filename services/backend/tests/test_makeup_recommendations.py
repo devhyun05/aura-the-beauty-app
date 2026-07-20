@@ -1,4 +1,5 @@
 import json
+import threading
 from uuid import UUID
 
 import pytest
@@ -155,7 +156,7 @@ def test_structured_recommendation_contract_uses_bedrock_lean_schema() -> None:
   assert "generationSource" not in schema["properties"]
   assert "matchAssessment" not in schema["properties"]
   looks_schema = schema["properties"]["looks"]
-  assert looks_schema["required"] == ["anchor", "bold", "discovery"]
+  assert looks_schema["required"] == ["anchor"]
   look_schema = looks_schema["properties"]["anchor"]
   assert "fitAssessment" not in look_schema["properties"]
   assert "lookMap" not in look_schema["properties"]
@@ -214,7 +215,7 @@ def test_recommendation_tool_response_normalizes_role_keyed_looks() -> None:
 
   normalized = makeup_service._normalize_recommendation_tool_response(response)
 
-  assert [look["role"] for look in normalized["looks"]] == ["anchor", "bold", "discovery"]
+  assert [look["role"] for look in normalized["looks"]] == ["anchor"]
   assert [guide["area"] for guide in normalized["looks"][0]["areaGuides"]] == [
     "base", "brow", "eye", "cheek", "lip",
   ]
@@ -639,8 +640,15 @@ class RecommendationReportDatabase:
     self.image_status = image_status
     self.executed: list[tuple[str, tuple]] = []
     self.fetchrow_queries: list[tuple[str, tuple]] = []
+    self.fetch_queries: list[tuple[str, tuple]] = []
 
   async def fetch(self, query: str, *args):
+    self.fetch_queries.append((query, args))
+    if "from makeup_recommendation_assets" in query:
+      assert "report.user_id = $1" in query
+      assert "asset.report_id = any($2::uuid[])" in query
+      assert args == (USER_ID, [REPORT_ID])
+      return []
     assert "from makeup_recommendation_reports" in query
     assert "as profile_gender" in query
     assert args == (USER_ID, 20, 0)
@@ -906,6 +914,359 @@ def test_user_can_list_saved_recommendation_reports(monkeypatch: pytest.MonkeyPa
   report = response.json()["data"]["reports"][0]
   assert report["scenarioText"] == "퇴근 후 약속"
   assert report["profileGender"] == "unspecified"
+  assert report["previewImageUrl"] == "https://cdn.example.com/anchor.png"
+  assert report["previewImageStatus"] == "completed"
+  assert len(db.fetch_queries) == 2
+
+
+def test_report_list_batches_owned_anchor_previews_and_presigns_private_assets(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  private_report_id = UUID("44444444-4444-4444-8444-444444444444")
+  pending_report_id = UUID("55555555-5555-4555-8555-555555555555")
+  failed_report_id = UUID("66666666-6666-4666-8666-666666666666")
+  legacy_report_id = UUID("77777777-7777-4777-8777-777777777777")
+  generic_report_id = UUID("88888888-8888-4888-8888-888888888888")
+
+  class PreviewListDatabase:
+    def __init__(self) -> None:
+      self.fetch_queries: list[tuple[str, tuple]] = []
+
+    async def fetch(self, query: str, *args):
+      self.fetch_queries.append((query, args))
+      if "from makeup_recommendation_assets" in query:
+        assert "join makeup_recommendation_reports as report" in query
+        assert "report.user_id = $1" in query
+        assert "asset.report_id = any($2::uuid[])" in query
+        assert args == (
+          USER_ID,
+          [
+            private_report_id,
+            pending_report_id,
+            failed_report_id,
+            generic_report_id,
+            legacy_report_id,
+          ],
+        )
+        return [
+          {
+            "report_id": private_report_id,
+            "status": "completed",
+            "image_url": None,
+            "storage_bucket": "private-media",
+            "object_key": "private/generated/anchor.jpg",
+            "is_private": True,
+          },
+          {
+            "report_id": pending_report_id,
+            "status": "processing",
+            "image_url": "https://cdn.example.com/stale.png",
+            "storage_bucket": None,
+            "object_key": None,
+            "is_private": False,
+          },
+          {
+            "report_id": failed_report_id,
+            "status": "failed",
+            "image_url": None,
+            "storage_bucket": None,
+            "object_key": None,
+            "is_private": False,
+          },
+        ]
+      assert "from makeup_recommendation_reports" in query
+      assert args == (USER_ID, 20, 0)
+      base = {
+        "scenario_text": "saved recommendation",
+        "recommendation": {"looks": []},
+        "questions": [],
+        "answers": [],
+        "image_error": None,
+        "profile_gender": "unspecified",
+        "created_at": "2026-07-20T00:00:00Z",
+        "updated_at": "2026-07-20T00:00:00Z",
+      }
+      return [
+        {
+          **base,
+          "id": private_report_id,
+          "recommendation": {
+            "looks": [{
+              "imageAsset": {
+                "bucket": "private-media",
+                "storageBucket": "private-media",
+                "objectKey": "private/generated/anchor.jpg",
+                "mediaId": "secret-generic-media-id",
+                "inputMediaId": "secret-input-media-id",
+                "analysisReportId": str(REPORT_ID),
+                "provenance": {
+                  "media_id": "secret-snake-media-id",
+                  "sourceMediaId": "secret-source-media-id",
+                  "sourceAnalysisReportId": str(REFINED_REPORT_ID),
+                },
+              },
+            }],
+          },
+          "schema_version": "makeup-recommendation-v2",
+          "image_mode": "personalized",
+          "image_status": "completed",
+          "image_url": None,
+          "source_analysis_report_id": REPORT_ID,
+          "context_snapshot": {
+            "analysisReportId": str(REPORT_ID),
+            "sourceAnalysisReportId": str(REFINED_REPORT_ID),
+            "image": {
+              "bucket": "private-media",
+              "sourceMediaId": "secret-media-id",
+              "nested": [{"mediaId": "secret-media-id", "media_id": "secret-media-id"}],
+            },
+          },
+        },
+        {
+          **base,
+          "id": pending_report_id,
+          "schema_version": "makeup-recommendation-v2",
+          "image_mode": "generic",
+          "image_status": "completed",
+          "image_url": "https://cdn.example.com/stale.png",
+          "context_snapshot": {},
+        },
+        {
+          **base,
+          "id": failed_report_id,
+          "schema_version": "makeup-recommendation-v2",
+          "image_mode": "generic",
+          "image_status": "failed",
+          "image_url": None,
+          "context_snapshot": {},
+        },
+        {
+          **base,
+          "id": generic_report_id,
+          "schema_version": "makeup-recommendation-v2",
+          "image_mode": "generic",
+          "image_status": "completed",
+          "image_url": "https://cdn.example.com/generic-anchor.png",
+          "context_snapshot": {},
+        },
+        {
+          **base,
+          "id": legacy_report_id,
+          "schema_version": "makeup-recommendation-v1",
+          "image_mode": "generic",
+          "image_status": "completed",
+          "image_url": "https://cdn.example.com/legacy-anchor.png",
+          "context_snapshot": {},
+        },
+      ]
+
+  presign_calls: list[dict] = []
+
+  class FakeS3Service:
+    def __init__(self, _settings: Settings) -> None:
+      pass
+
+    def create_presigned_download(self, **kwargs) -> str:
+      presign_calls.append(kwargs)
+      return "https://signed.example.com/private-anchor?fresh=1"
+
+  db = PreviewListDatabase()
+  app = create_app(Settings(database_url=None, makeup_private_url_ttl_seconds=321))
+  app.dependency_overrides[get_current_user] = auth_context
+  app.dependency_overrides[require_database] = lambda: db
+
+  async def fake_ensure_user(_db, _auth):
+    return {"id": USER_ID}
+
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(makeup_api, "S3Service", FakeS3Service)
+
+  response = TestClient(app).get("/api/makeup-recommendations?limit=20&offset=0")
+
+  assert response.status_code == 200
+  reports = {
+    report["id"]: report
+    for report in response.json()["data"]["reports"]
+  }
+  assert reports[str(private_report_id)]["previewImageUrl"] == (
+    "https://signed.example.com/private-anchor?fresh=1"
+  )
+  assert reports[str(private_report_id)]["previewImageStatus"] == "completed"
+  assert reports[str(private_report_id)]["sourceAnalysisReportId"] == str(REPORT_ID)
+  private_image_asset = reports[str(private_report_id)]["recommendation"]["looks"][0]["imageAsset"]
+  assert private_image_asset["analysisReportId"] == str(REPORT_ID)
+  assert private_image_asset["provenance"]["sourceAnalysisReportId"] == str(REFINED_REPORT_ID)
+  assert reports[str(private_report_id)]["contextSnapshot"]["analysisReportId"] == str(REPORT_ID)
+  assert reports[str(private_report_id)]["contextSnapshot"]["sourceAnalysisReportId"] == str(
+    REFINED_REPORT_ID
+  )
+  assert reports[str(pending_report_id)]["previewImageUrl"] is None
+  assert reports[str(pending_report_id)]["previewImageStatus"] == "processing"
+  assert reports[str(failed_report_id)]["previewImageUrl"] is None
+  assert reports[str(failed_report_id)]["previewImageStatus"] == "failed"
+  assert reports[str(legacy_report_id)]["previewImageUrl"] == (
+    "https://cdn.example.com/legacy-anchor.png"
+  )
+  assert reports[str(generic_report_id)]["previewImageUrl"] == (
+    "https://cdn.example.com/generic-anchor.png"
+  )
+  assert reports[str(generic_report_id)]["previewImageStatus"] == "completed"
+  assert presign_calls == [
+    {
+      "bucket": "private-media",
+      "object_key": "private/generated/anchor.jpg",
+      "expires_in": 321,
+    },
+  ]
+  assert len(db.fetch_queries) == 2
+  response_payload = json.dumps(response.json())
+  assert '"bucket"' not in response_payload
+  assert "storageBucket" not in response_payload
+  assert "objectKey" not in response_payload
+  assert '"mediaId"' not in response_payload
+  assert '"media_id"' not in response_payload
+  assert "inputMediaId" not in response_payload
+  assert "sourceMediaId" not in response_payload
+
+
+def test_report_list_isolates_presign_failures_and_rejects_internal_public_urls(
+  monkeypatch: pytest.MonkeyPatch,
+  caplog: pytest.LogCaptureFixture,
+) -> None:
+  broken_report_id = UUID("99999999-9999-4999-8999-999999999999")
+  signed_report_id = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+  public_report_id = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+  s3_report_id = UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+  internal_report_id = UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+  report_ids = [
+    broken_report_id,
+    signed_report_id,
+    public_report_id,
+    s3_report_id,
+    internal_report_id,
+  ]
+
+  class PreviewFailureDatabase:
+    def __init__(self) -> None:
+      self.fetch_queries: list[tuple[str, tuple]] = []
+
+    async def fetch(self, query: str, *args):
+      self.fetch_queries.append((query, args))
+      if "from makeup_recommendation_assets" in query:
+        assert args == (USER_ID, report_ids)
+        return [
+          {
+            "report_id": broken_report_id,
+            "status": "completed",
+            "image_url": None,
+            "storage_bucket": "private-media",
+            "object_key": "private/generated/broken-anchor.jpg",
+            "is_private": True,
+          },
+          {
+            "report_id": signed_report_id,
+            "status": "completed",
+            "image_url": None,
+            "storage_bucket": "private-media",
+            "object_key": "private/generated/signed-anchor.jpg",
+            "is_private": True,
+          },
+        ]
+
+      assert "from makeup_recommendation_reports" in query
+      assert args == (USER_ID, 20, 0)
+      base = {
+        "scenario_text": "saved recommendation",
+        "recommendation": {"looks": []},
+        "questions": [],
+        "answers": [],
+        "image_error": None,
+        "profile_gender": "unspecified",
+        "created_at": "2026-07-20T00:00:00Z",
+        "updated_at": "2026-07-20T00:00:00Z",
+        "context_snapshot": {},
+      }
+
+      def report(
+        report_id: UUID,
+        *,
+        schema_version: str = "makeup-recommendation-v2",
+        image_mode: str = "personalized",
+        image_url: str | None = None,
+      ) -> dict:
+        return {
+          **base,
+          "id": report_id,
+          "schema_version": schema_version,
+          "image_mode": image_mode,
+          "image_status": "completed",
+          "image_url": image_url,
+        }
+
+      return [
+        report(broken_report_id),
+        report(signed_report_id),
+        report(
+          public_report_id,
+          image_mode="generic",
+          image_url="https://cdn.example.com/public-anchor.png",
+        ),
+        report(s3_report_id, image_mode="generic", image_url="s3://private-media/internal.jpg"),
+        report(
+          internal_report_id,
+          schema_version="makeup-recommendation-v1",
+          image_mode="generic",
+          image_url="internal://makeup/anchor",
+        ),
+      ]
+
+  s3_init_calls: list[Settings] = []
+  presign_calls: list[dict] = []
+
+  class PartiallyFailingS3Service:
+    def __init__(self, settings: Settings) -> None:
+      s3_init_calls.append(settings)
+
+    def create_presigned_download(self, **kwargs) -> str:
+      presign_calls.append(kwargs)
+      if kwargs["object_key"].endswith("broken-anchor.jpg"):
+        raise RuntimeError("presign unavailable")
+      return "https://signed.example.com/signed-anchor?fresh=1"
+
+  db = PreviewFailureDatabase()
+  app = create_app(Settings(database_url=None, makeup_private_url_ttl_seconds=654))
+  app.dependency_overrides[get_current_user] = auth_context
+  app.dependency_overrides[require_database] = lambda: db
+
+  async def fake_ensure_user(_db, _auth):
+    return {"id": USER_ID}
+
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(makeup_api, "S3Service", PartiallyFailingS3Service)
+
+  response = TestClient(app).get("/api/makeup-recommendations?limit=20&offset=0")
+
+  assert response.status_code == 200
+  reports = {report["id"]: report for report in response.json()["data"]["reports"]}
+  assert reports[str(broken_report_id)]["previewImageUrl"] is None
+  assert reports[str(broken_report_id)]["previewImageStatus"] == "completed"
+  assert reports[str(signed_report_id)]["previewImageUrl"] == (
+    "https://signed.example.com/signed-anchor?fresh=1"
+  )
+  assert reports[str(public_report_id)]["previewImageUrl"] == (
+    "https://cdn.example.com/public-anchor.png"
+  )
+  assert reports[str(s3_report_id)]["previewImageUrl"] is None
+  assert reports[str(s3_report_id)]["previewImageStatus"] == "completed"
+  assert reports[str(internal_report_id)]["previewImageUrl"] is None
+  assert reports[str(internal_report_id)]["previewImageStatus"] == "completed"
+  assert len(s3_init_calls) == 1
+  assert [call["object_key"] for call in presign_calls] == [
+    "private/generated/broken-anchor.jpg",
+    "private/generated/signed-anchor.jpg",
+  ]
+  assert len(db.fetch_queries) == 2
+  assert "preview-delivery:presign-failed" in caplog.text
 
 
 def test_user_can_poll_owned_report_with_camel_case_image_state(monkeypatch: pytest.MonkeyPatch) -> None:

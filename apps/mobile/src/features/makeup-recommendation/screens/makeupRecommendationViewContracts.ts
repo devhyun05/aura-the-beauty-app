@@ -42,9 +42,30 @@ export function formatMakeupRecommendationHistoryDate(value: string): string {
   return match ? `${match[1]}. ${match[2]}. ${match[3]}.` : '';
 }
 
-export type MakeupRecommendationScreenPhase = 'discovery' | 'history' | 'loading' | 'question' | 'results' | 'error';
-export function shouldHandleMakeupRecommendationBack(phase: MakeupRecommendationScreenPhase): boolean {
-  return phase !== 'discovery';
+export type MakeupRecommendationScreenPhase =
+  | 'discovery'
+  | 'history'
+  | 'reportLoading'
+  | 'loading'
+  | 'question'
+  | 'results'
+  | 'error';
+
+export function getInitialMakeupRecommendationScreenPhase({
+  initialView,
+  reportId,
+}: {
+  initialView: 'discovery' | 'history';
+  reportId?: string;
+}): MakeupRecommendationScreenPhase {
+  return reportId?.trim() ? 'reportLoading' : initialView;
+}
+
+export function shouldHandleMakeupRecommendationBack(
+  phase: MakeupRecommendationScreenPhase,
+  {directReportEntry = false}: {directReportEntry?: boolean} = {},
+): boolean {
+  return !directReportEntry && phase !== 'discovery';
 }
 
 export function getQuestionActionMode({currentQuestionIndex, questionCount}: {currentQuestionIndex: number; questionCount: number}): 'advance' | 'complete' {

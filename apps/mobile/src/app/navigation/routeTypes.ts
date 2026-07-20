@@ -39,6 +39,7 @@ export type RootStackParamList = {
   };
   UnityMakeupCapture: undefined;
   FaceAnalysisIntro: undefined;
+  BeardSimulation: undefined;
   // 사진 확인 뒤 ARKit 3D 자동 측정(셔터 없음) — 완료/실패/skip 시 로딩으로 이어진다.
   Face3DMeasurement: {afterAnalysisRoute?: FaceAnalysisCompletionRouteName} | undefined;
   FaceAnalysisLoading:
@@ -214,6 +215,7 @@ export const rootStackRoutes = [
   'FaceCaptureConfirmation',
   'UnityMakeupCapture',
   'FaceAnalysisIntro',
+  'BeardSimulation',
   'Face3DMeasurement',
   'FaceAnalysisLoading',
   'FaceAnalysisReportsList',

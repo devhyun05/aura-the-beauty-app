@@ -39,6 +39,7 @@ type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
   onPressFaceAnalysisReportsList?: () => void;
   onPressMakeupRecommendationReportsList?: () => void;
+  onPressMakeupRecommendationReport?: (reportId: string) => void;
   onPressMakeupExtractionReportsList?: () => void;
   onPressMakeupFeedbackReportsList?: () => void;
   onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
@@ -65,6 +66,7 @@ export function ProfileScreen({
   onPressProfileEdit,
   onPressFaceAnalysisReportsList,
   onPressMakeupRecommendationReportsList,
+  onPressMakeupRecommendationReport,
   onPressMakeupExtractionReportsList,
   onPressMakeupFeedbackReportsList,
   onPressMakeupLook,
@@ -233,6 +235,12 @@ export function ProfileScreen({
   }
 
   const data = loadState.data;
+  const makeupRecommendationPreview = data.reportHub.makeupRecommendation;
+  const onPressLatestMakeupRecommendation = (
+    makeupRecommendationPreview && onPressMakeupRecommendationReport
+  )
+    ? () => onPressMakeupRecommendationReport(makeupRecommendationPreview.id)
+    : onPressMakeupRecommendationReportsList;
   const previewCreatedMakeupLooks = createdMakeupLooks.slice(0, 4);
   const previewLikedMakeupLooks = likedMakeupLooks.slice(0, 4);
   const previewProducts = data.likedProducts.slice(
@@ -273,8 +281,9 @@ export function ProfileScreen({
           <ProfileReportPreviewCard
             description="나에게 어울리는 룩"
             label="메이크업 추천"
-            onPress={onPressMakeupRecommendationReportsList}
-            preview={data.reportHub.makeupRecommendation}
+            onPress={onPressLatestMakeupRecommendation}
+            opensReportDetail={Boolean(makeupRecommendationPreview)}
+            preview={makeupRecommendationPreview}
             style={reportCardLayout}
           />
           <ProfileReportPreviewCard

@@ -1,0 +1,12 @@
+# "초기 변화 느낌" — shadow softening only, strands mostly intact.
+stage: mild
+shadow_strength: 0.35
+hair_attenuation: 0.30
+strand_strength: 0.35   # A: thin-strand inpaint blend-back
+stubble_inpaint: false
+luma_shift_frac: 1.0   # B: full close -- the LOCAL reference already carries the jaw shading
+feather_ratio: 0.035
+global_strength: 0.9
+guard:
+  identity_check: warn
+regrain: true    # C: refill the erased pixels with this person's own skin grain

@@ -50,6 +50,7 @@ const AREA_SEQUENCE_COLORS: Record<PartKey, string> = {
 };
 
 const PROGRAMMATIC_SCROLL_UNLOCK_MS = 520;
+const SUMMARY_HEX_COLOR = /^#[0-9A-F]{6}$/i;
 
 export function FinalAreaGuideSection({
   look,
@@ -68,8 +69,12 @@ export function FinalAreaGuideSection({
   const [selectedArea, setSelectedArea] = useState<PartKey>(
     () => recipes[0]?.area ?? 'base',
   );
+  const [settledPagerArea, setSettledPagerArea] = useState<PartKey>(
+    () => recipes[0]?.area ?? 'base',
+  );
   const [pagerWidth, setPagerWidth] = useState(0);
   const [sequenceViewportWidth, setSequenceViewportWidth] = useState(0);
+  const [pageHeights, setPageHeights] = useState<Partial<Record<PartKey, number>>>({});
   const pagerRef = useRef<ScrollView | null>(null);
   const previousPagerWidthRef = useRef(0);
   const sequenceRef = useRef<ScrollView | null>(null);
@@ -81,6 +86,11 @@ export function FinalAreaGuideSection({
   const selectedIndex = recipes.findIndex(recipe => recipe.area === selectedArea);
   const activeIndex = selectedIndex >= 0 ? selectedIndex : 0;
   const activeArea = recipes[activeIndex]?.area ?? 'base';
+  const activePageHeight = pageHeights[settledPagerArea];
+  const activePagerHeightStyle = useMemo(
+    () => activePageHeight ? {height: activePageHeight} : undefined,
+    [activePageHeight],
+  );
 
   const clearProgrammaticTimer = useCallback(() => {
     if (programmaticUnlockTimerRef.current) {
@@ -95,18 +105,20 @@ export function FinalAreaGuideSection({
     if (recipes.length === 0 || selectedIndex >= 0) return;
     const nextArea = recipes[0].area;
     setSelectedArea(nextArea);
+    setSettledPagerArea(nextArea);
     pagerRef.current?.scrollTo({animated: false, x: 0, y: 0});
   }, [recipes, selectedIndex]);
 
   useEffect(() => {
     if (pagerWidth <= 0 || previousPagerWidthRef.current === pagerWidth) return;
     previousPagerWidthRef.current = pagerWidth;
+    setSettledPagerArea(activeArea);
     pagerRef.current?.scrollTo({
       animated: false,
       x: activeIndex * pagerWidth,
       y: 0,
     });
-  }, [activeIndex, pagerWidth]);
+  }, [activeArea, activeIndex, pagerWidth]);
 
   const notifyAreaOpened = useCallback((area: PartKey) => {
     if (lastOpenedAreaRef.current === area) return;
@@ -142,6 +154,7 @@ export function FinalAreaGuideSection({
       centerSequenceTab(recipes[index].area);
       return;
     }
+    const nextArea = recipes[index].area;
     isProgrammaticScrollRef.current = true;
     clearProgrammaticTimer();
     selectAreaIndex(index, true);
@@ -150,6 +163,7 @@ export function FinalAreaGuideSection({
     }
     programmaticUnlockTimerRef.current = setTimeout(() => {
       isProgrammaticScrollRef.current = false;
+      setSettledPagerArea(nextArea);
       programmaticUnlockTimerRef.current = null;
     }, PROGRAMMATIC_SCROLL_UNLOCK_MS);
   }, [activeIndex, centerSequenceTab, clearProgrammaticTimer, pagerWidth, recipes, selectAreaIndex]);
@@ -171,15 +185,23 @@ export function FinalAreaGuideSection({
     const wasProgrammatic = isProgrammaticScrollRef.current;
     isProgrammaticScrollRef.current = false;
     clearProgrammaticTimer();
-    selectAreaIndex(
-      indexFromOffset(event.nativeEvent.contentOffset.x),
-      !wasProgrammatic,
-    );
-  }, [clearProgrammaticTimer, indexFromOffset, selectAreaIndex]);
+    const settledIndex = indexFromOffset(event.nativeEvent.contentOffset.x);
+    const nextArea = recipes[settledIndex]?.area;
+    selectAreaIndex(settledIndex, !wasProgrammatic);
+    if (nextArea) setSettledPagerArea(nextArea);
+  }, [clearProgrammaticTimer, indexFromOffset, recipes, selectAreaIndex]);
 
   const handlePagerLayout = useCallback((event: LayoutChangeEvent) => {
     const nextWidth = Math.round(event.nativeEvent.layout.width);
     if (nextWidth > 0) setPagerWidth(current => current === nextWidth ? current : nextWidth);
+  }, []);
+
+  const handlePageLayout = useCallback((area: PartKey, event: LayoutChangeEvent) => {
+    const nextHeight = Math.ceil(event.nativeEvent.layout.height);
+    if (nextHeight <= 0) return;
+    setPageHeights(current => current[area] === nextHeight
+      ? current
+      : {...current, [area]: nextHeight});
   }, []);
 
   return (
@@ -264,6 +286,7 @@ export function FinalAreaGuideSection({
         {pagerWidth > 0 ? (
           <ScrollView
             bounces={false}
+            contentContainerStyle={styles.pagerContent}
             directionalLockEnabled
             horizontal
             nestedScrollEnabled
@@ -273,12 +296,13 @@ export function FinalAreaGuideSection({
             ref={pagerRef}
             scrollEventThrottle={16}
             showsHorizontalScrollIndicator={false}
-            style={styles.pager}>
+            style={[styles.pager, activePagerHeightStyle]}>
             {recipes.map((recipe, index) => (
               <View
                 accessibilityElementsHidden={index !== activeIndex}
                 importantForAccessibility={index === activeIndex ? 'auto' : 'no-hide-descendants'}
                 key={recipe.area}
+                onLayout={event => handlePageLayout(recipe.area, event)}
                 style={[styles.page, {width: pagerWidth}]}>
                 <FinalAreaRecipePage
                   active={index === activeIndex}
@@ -373,7 +397,31 @@ function FinalAreaRecipePage({
           ]}
         />
         <Text style={styles.areaEnglish}>{part.en}</Text>
-        <Text accessibilityRole="header" style={styles.areaLabel}>{areaLabel}</Text>
+        <View style={styles.areaTitleRow}>
+          <Text accessibilityRole="header" style={styles.areaLabel}>{areaLabel}</Text>
+          {recipe.summaryColors.length > 0 ? (
+            <View
+              accessibilityLabel={`${areaLabel} 추천 색상 ${recipe.summaryColors.length}개`}
+              accessible
+              style={styles.areaColorSwatches}>
+              {recipe.summaryColors.map(color => (
+                <View
+                  accessibilityElementsHidden
+                  importantForAccessibility="no"
+                  key={`${color.name}:${color.hex}`}
+                  style={[
+                    styles.areaColorSwatch,
+                    {
+                      backgroundColor: SUMMARY_HEX_COLOR.test(color.hex)
+                        ? color.hex
+                        : AREA_SEQUENCE_COLORS[activeArea],
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          ) : null}
+        </View>
         {recipe.goal ? (
           <Text style={styles.areaGoal}>{recipe.goal}</Text>
         ) : null}
@@ -499,13 +547,23 @@ const styles = StyleSheet.create({
   sequenceArea: {color: colors.ink, fontSize: 12, fontWeight: '800'},
   selectedSequenceArea: {color: colors.white},
   pagerViewport: {width: '100%'},
-  pager: {width: '100%'},
+  pager: {overflow: 'hidden', width: '100%'},
+  pagerContent: {alignItems: 'flex-start'},
   page: {paddingTop: 2},
   card: {width: '100%'},
   areaHeader: {gap: 5, marginTop: 15},
   areaColorAccent: {borderRadius: 2, height: 4, marginBottom: 3, width: 36},
   areaEnglish: {...typography.eyebrow, color: colors.faint, letterSpacing: 2.2},
+  areaTitleRow: {alignItems: 'center', flexDirection: 'row', gap: 10},
   areaLabel: {color: colors.ink, fontSize: 21, fontWeight: '800', lineHeight: 27},
+  areaColorSwatches: {alignItems: 'center', flexDirection: 'row', gap: 5},
+  areaColorSwatch: {
+    borderColor: 'rgba(16,24,40,0.16)',
+    borderRadius: 9,
+    borderWidth: 1,
+    height: 18,
+    width: 18,
+  },
   areaGoal: {color: colors.ink3, fontSize: 12.5, fontWeight: '600', lineHeight: 19},
   textureRow: {
     alignItems: 'center',

@@ -2,6 +2,9 @@ import json
 from typing import Any
 
 from app.schemas.makeup_recommendation import GeneratedMakeupAreaGuide
+from app.services.makeup_recommendation_timing import (
+  resolve_prep_time_budget_minutes,
+)
 
 
 INPUT_PRIORITY = (
@@ -46,8 +49,8 @@ Never reconstruct or invent raw biometric values from these semantic summaries.
 lookMap \ub450 \uc88c\ud45c\ub294 role\uc758 \uace0\uc815\uac12\uc744 \uc4f0\uc9c0 \ub9d0\uace0 \ud574\ub2f9 \ub8e9\uc758 \uc2e4\uc81c \uc0c9 \ucc44\ub3c4\u00b7\uba85\ub3c4\u00b7\ub300\ube44\u00b7\uc9c8\uac10\u00b7\uc0c1\ud669\uc744 \uadfc\uac70\ub85c 0~100\uc5d0\uc11c \uc0b0\uc815\ud55c\ub2e4.
 fitAssessment\uc758 \uc5ec\uc12f dimensions\ub294 \ucd94\ucc9c \uc774\ubbf8\uc9c0 \ube0c\ub9ac\ud504\uc640 \ubd84\uc11d \ud14d\uc2a4\ud2b8\uac00 \uc0c1\ud669\u00b7\uc120\ud638\u00b7\ud37c\uc2a4\ub110\uceec\ub7ec\u00b7\uc5bc\uad74\uad6c\uc870\u00b7\ud53c\ubd80\u00b7\ub8e9 \uc77c\uad00\uc131\uc5d0 \uc5bc\ub9c8\ub098 \ub9de\ub294\uc9c0 \uac01\uac01 \ud3c9\uac00\ud55c\ub2e4. \uc0ac\uc6a9\ud55c context \ub610\ub294 answers\uc758 \uc2e4\uc81c \uacbd\ub85c\ub97c reason\uc5d0 \uba85\uc2dc\ud55c\ub2e4.
 \uc785\ub825 \uadfc\uac70\uac00 \uc5c6\ub294 fit \ucd95\uc740 available=false, score=null\ub85c \ub450\uace0 \ucd94\uce21\ud558\uc9c0 \uc54a\ub294\ub2e4. overallScore\uc640 evidence\ub294 \uc11c\ubc84\uac00 \uc2e4\uc81c \uc0ac\uc6a9 \uac00\ub2a5\ud55c \ucd95\ub9cc\uc73c\ub85c \ub2e4\uc2dc \uacc4\uc0b0\ud55c\ub2e4.
-anchor, bold, discovery 세 룩은 한 색상 강도만 바꾼 복제본이 아니라 서사와 표현이 분명히 달라야 한다.
-모든 룩에 base, brow, eye, cheek, lip 부위 가이드를 빠짐없이 넣는다.
+추천 룩은 role이 anchor인 단 하나이며, 상황·답변·퍼스널컬러·얼굴 구조를 모두 반영한 완성도 높은 하나의 룩으로 구성한다.
+룩에 base, brow, eye, cheek, lip 부위 가이드를 빠짐없이 넣는다.
 Do not copy or infer the analysis report's prior mood, base/area makeup guides, or recommendedMakeups. Generate every areaGuides entry freshly from situation, answers, personalColor, faceStructure, and skin evidence.
 서버가 각 guide를 상세 시술 순서로 보강하므로 color, texture, placement, technique에는 추천 이미지에 실제로 표현할 핵심 색·질감·범위·레이어 방향을 정확히 쓴다. JSON만 반환한다."""
 
@@ -88,7 +91,7 @@ def build_recommendation_prompt(
     "looks": [
       {
         "id": "anchor",
-        "role": "anchor|bold|discovery",
+        "role": "anchor",
         "title": "string",
         "summary": "string",
         "reasons": ["string"],
@@ -131,17 +134,26 @@ def build_recommendation_prompt(
       },
     ],
   }
+  time_budget_minutes = resolve_prep_time_budget_minutes(questions, answers)
   payload = {
     "inputPriority": list(INPUT_PRIORITY),
     "context": sanitize_recommendation_context(context_snapshot),
     "questions": questions,
     "answers": answers,
+    "timeBudgetMinutes": time_budget_minutes,
   }
+  time_budget_instruction = (
+    f"선택한 준비 시간 {time_budget_minutes}분은 강제 상한이다. 룩의 durationMinutes를 "
+    f"{time_budget_minutes} 이하로 두고, 5개 부위의 방법을 합쳐 그 시간 안에 실행 가능하게 설계하라. "
+    if time_budget_minutes is not None
+    else ""
+  )
   return (
-    "아래 출력 예시와 동일한 키를 사용하고, looks를 anchor→bold→discovery 순서로 정확히 3개 반환하라. "
-    "각 룩의 areaGuides에는 필수 5개 부위를 정확히 한 번씩 넣어라. 각 guide는 color 단일 객체, avoid 문자열 배열, steps의 order/instruction 객체 배열을 정확히 사용하라. "
+    "아래 출력 예시와 동일한 키를 사용하고, looks에는 role이 anchor인 룩 1개만 반환하라. "
+    f"{time_budget_instruction}"
+    "룩의 areaGuides에는 필수 5개 부위를 정확히 한 번씩 넣어라. 각 guide는 color 단일 객체, avoid 문자열 배열, steps의 order/instruction 객체 배열을 정확히 사용하라. "
     "Do not copy or infer the analysis report\'s prior mood, base/area makeup guides, or recommendedMakeups. Generate every areaGuides entry freshly from situation, answers, personalColor, faceStructure, and skin evidence. "
-    "제품은 별도 검증 카탈로그가 연결하므로 모든 products를 빈 배열로 둬라. 서버가 상세 시술 절차를 보강할 수 있도록 color, texture, placement, technique를 룩마다 구체적으로 구분하라. "
+    "제품은 별도 검증 카탈로그가 연결하므로 모든 products를 빈 배열로 둬라. 서버가 상세 시술 절차를 보강할 수 있도록 color, texture, placement, technique를 부위마다 구체적으로 구분하라. "
     "각 설명은 한 문장으로 간결하게 쓰고, guide마다 steps 1개와 avoid 1개만 반환하라. "
     "\uac01 \ub8e9\uc5d0 lookMap\uacfc fitAssessment.dimensions \uc5ec\uc12f \ucd95\uc744 \ube60\uc9d0\uc5c6\uc774 \ub123\uace0, lookMap \uc88c\ud45c\ub97c role \uc774\ub984\uc73c\ub85c \uace0\uc815\ud558\uc9c0 \ub9c8\ub77c. "
     "fit \ucd95\uc758 score\ub294 0~100 \uc815\uc218\uc774\uba70 \uc2e4\uc81c \uc785\ub825 \uadfc\uac70\uac00 \uc5c6\uc73c\uba74 available=false\uc640 score=null\uc744 \uc0ac\uc6a9\ud558\ub77c. "

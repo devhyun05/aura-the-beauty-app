@@ -1,0 +1,38 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DescribeInstances",
+      "Effect": "Allow",
+      "Action": "ec2:DescribeInstances",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ControlThisInstance",
+      "Effect": "Allow",
+      "Action": ["ec2:StartInstances", "ec2:StopInstances", "ec2:CreateTags"],
+      "Resource": "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/__INSTANCE_ID__"
+    },
+    {
+      "Sid": "SsmSend",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": [
+        "arn:aws:ec2:__REGION__:__ACCOUNT__:instance/__INSTANCE_ID__",
+        "arn:aws:ssm:__REGION__::document/AWS-RunShellScript"
+      ]
+    },
+    {
+      "Sid": "SsmRead",
+      "Effect": "Allow",
+      "Action": ["ssm:GetCommandInvocation", "ssm:DescribeInstanceInformation"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3Images",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::__BUCKET__/*"
+    }
+  ]
+}

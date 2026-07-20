@@ -1,8 +1,10 @@
 import {ActivityIndicator, Image, Pressable, StyleSheet, Text, View} from 'react-native';
+import {ImageOff} from 'lucide-react-native';
 
-import {colors, radius, spacing, typography} from '../../../shared/theme';
+import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AppCard, AppScreen} from '../../../shared/ui';
 import type {MakeupRecommendationReportHistoryItem} from '../types';
+import {getMakeupRecommendationPreviewPresentation} from '../services/makeupRecommendationPreview';
 import {
   formatMakeupRecommendationHistoryDate,
   makeupRecommendationHistoryCopy,
@@ -74,7 +76,7 @@ export function RecommendationHistoryView({
         <View style={styles.list}>
           {error ? <Text accessibilityRole="alert" style={styles.inlineError}>{error}</Text> : null}
           {items.map(item => {
-            const preview = item.results[0];
+            const preview = getMakeupRecommendationPreviewPresentation(item);
             const date = formatMakeupRecommendationHistoryDate(item.createdAt);
             return (
               <AppCard
@@ -84,7 +86,26 @@ export function RecommendationHistoryView({
                 padded={false}
                 style={styles.reportCard}
               >
-                <Image resizeMode="cover" source={preview.imageSource} style={styles.previewImage} />
+                {preview.imageUrl ? (
+                  <Image
+                    accessibilityLabel={`${item.scenarioText} 적용 메이크업 미리보기`}
+                    resizeMode="cover"
+                    source={{uri: preview.imageUrl}}
+                    style={styles.previewImage}
+                  />
+                ) : (
+                  <View
+                    accessibilityLabel={preview.statusLabel}
+                    accessibilityRole="image"
+                    style={styles.previewPlaceholder}>
+                    <ImageOff
+                      color={colors.textTertiary}
+                      size={iconSize.lg}
+                      strokeWidth={1.5}
+                    />
+                    <Text style={styles.previewStatus}>{preview.statusLabel}</Text>
+                  </View>
+                )}
                 <View style={styles.cardBody}>
                   <View style={styles.cardMetaRow}>
                     <Text style={styles.cardMeta}>{date || '저장된 추천'}</Text>
@@ -135,6 +156,21 @@ const styles = StyleSheet.create({
   inlineError: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.xs},
   reportCard: {overflow: 'hidden'},
   previewImage: {backgroundColor: colors.surfaceMuted, height: 160, width: '100%'},
+  previewPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+    gap: spacing.sm,
+    height: 160,
+    justifyContent: 'center',
+    padding: spacing.lg,
+    width: '100%',
+  },
+  previewStatus: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.sm,
+    textAlign: 'center',
+  },
   cardBody: {gap: spacing.sm, padding: spacing.lg},
   cardMetaRow: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'},
   cardMeta: {color: colors.textTertiary, fontFamily: typography.fontFamily.medium, fontSize: typography.fontSize.xs},

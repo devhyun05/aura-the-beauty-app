@@ -99,7 +99,7 @@ export function FinalRecommendedProductCard({
         </View>
         <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>추천 제품</Text>
-          <Text style={styles.title}>이 룩에 가까운 제품</Text>
+          <Text style={styles.title}>이 무드에 어울리는 제품</Text>
         </View>
       </View>
 

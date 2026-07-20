@@ -55,6 +55,7 @@ type DetailRouteChromeProps = {
   children: ReactNode;
   headerBackgroundColor?: string;
   headerBorderColor?: string;
+  headerHidden?: boolean;
   headerMode?: DetailRouteHeaderMode;
   headerRightSlot?: ReactNode;
   onBack?: () => void;
@@ -72,6 +73,7 @@ export function DetailRouteChrome({
   children,
   headerBackgroundColor,
   headerBorderColor,
+  headerHidden = false,
   headerMode = DETAIL_ROUTE_DEFAULT_HEADER_MODE,
   headerRightSlot,
   onBack,
@@ -154,14 +156,14 @@ export function DetailRouteChrome({
 
   return (
     <YStack style={[styles.screen, {backgroundColor}]}>
-      {isOverlayHeader ? null : header}
+      {isOverlayHeader || headerHidden ? null : header}
       <AppScreenOverlayHeaderHeightProvider
-        headerHeight={isOverlayHeader && reserveOverlayHeaderSpace ? overlayHeaderHeight : 0}>
+        headerHeight={isOverlayHeader && reserveOverlayHeaderSpace && !headerHidden ? overlayHeaderHeight : 0}>
         <YStack style={[styles.body, {backgroundColor}]}>
           {children}
         </YStack>
       </AppScreenOverlayHeaderHeightProvider>
-      {isOverlayHeader ? header : null}
+      {isOverlayHeader && !headerHidden ? header : null}
     </YStack>
   );
 }

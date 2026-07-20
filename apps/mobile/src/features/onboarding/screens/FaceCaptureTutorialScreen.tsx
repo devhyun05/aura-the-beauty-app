@@ -15,6 +15,7 @@ import {
 import {SafeAreaView, useSafeAreaInsets, type Edge} from 'react-native-safe-area-context';
 import {
   Camera,
+  Check,
   CheckCircle2,
   Glasses,
   ScanFace,
@@ -22,16 +23,20 @@ import {
 } from 'lucide-react-native';
 import {Button, Text, View, XStack, YStack} from 'tamagui';
 
-import {appAssetSource} from '../../../shared/config/mediaAssets';
+import {FACE_ANALYSIS_CAPTURE_CHECKLIST} from '../../face-analysis/services/faceAnalysisCaptureChecklist';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppHeader, IconButton, PaginationDots, XIcon} from '../../../shared/ui';
 
-const expressionGuideImageSource = appAssetSource('images/photo-capture-expression-guide.png');
-const hairGuideImageSource = appAssetSource('images/photo-capture-hair-guide.png');
-const accessoryGuideImageSource = appAssetSource('images/photo-capture-accessory-guide.png');
-const framingGuideImageSource = appAssetSource('images/photo-capture-framing-guide.png');
+const faceCaptureTutorialImageSources = {
+  accessory: require('../../../assets/images/face-capture-guide/04-no-accessories.png'),
+  ears: require('../../../assets/images/face-capture-guide/03-ears-clear.png'),
+  expression: require('../../../assets/images/face-capture-guide/05-neutral-expression.png'),
+  forehead: require('../../../assets/images/face-capture-guide/02-forehead-clear.png'),
+  framing: require('../../../assets/images/face-capture-guide/06-full-chin.png'),
+  light: require('../../../assets/images/face-capture-guide/01-even-light.png'),
+} as const;
 
-type FaceCaptureTutorialIconKey = 'face' | 'hair' | 'accessory' | 'framing';
+type FaceCaptureTutorialIconKey = keyof typeof faceCaptureTutorialImageSources;
 type FaceCaptureTutorialPresentation = 'screen' | 'sheet';
 
 type FaceCaptureTutorialStep = {
@@ -39,6 +44,8 @@ type FaceCaptureTutorialStep = {
   description: string;
   heading: string;
   iconKey: FaceCaptureTutorialIconKey;
+  id: FaceCaptureTutorialIconKey;
+  imageAccessibilityLabel: string;
   imageSource: ImageSourcePropType;
   requiresPrivacyAgreement: false;
   stepLabel: string;
@@ -52,53 +59,50 @@ export const FACE_CAPTURE_TUTORIAL_ACCESSIBILITY_LABEL = '사진 촬영 가이�
 
 const faceCaptureTutorialIconNames = {
   accessory: 'glasses',
-  face: 'scan-face',
+  ears: 'scan-face',
+  expression: 'scan-face',
+  forehead: 'scan-face',
   framing: 'camera',
-  hair: 'wand-sparkles',
+  light: 'wand-sparkles',
 } as const satisfies Record<FaceCaptureTutorialIconKey, string>;
 
-const faceCaptureTutorialSteps = [
-  {
-    buttonLabel: null,
-    description: '눈썹과 입가에 힘을 빼고 정면을 바라보면 얼굴 균형을 더 정확히 읽을 수 있어요.',
-    heading: '표정은 편안하게 유지해 주세요',
-    iconKey: 'face',
-    imageSource: expressionGuideImageSource,
+const faceCaptureTutorialTips = {
+  accessory: '안경·모자·큰 귀걸이는 빼 주세요.',
+  ears: '양쪽 귀와 얼굴 옆선이 모두 보여야 해요.',
+  expression: '입을 다물고 입술에 힘을 빼 주세요.',
+  forehead: '이마와 헤어라인이 모두 보여야 해요.',
+  framing: '턱끝이 잘리지 않았는지 확인해 주세요.',
+  light: '큰 그림자와 색 번짐이 없는지 확인해 주세요.',
+} as const satisfies Record<FaceCaptureTutorialIconKey, string>;
+
+const faceCaptureTutorialSteps: readonly FaceCaptureTutorialStep[] =
+  FACE_ANALYSIS_CAPTURE_CHECKLIST.map((item, index) => ({
+    buttonLabel:
+      index === FACE_ANALYSIS_CAPTURE_CHECKLIST.length - 1 ? '촬영하기' : null,
+    description: item.description,
+    heading: item.title,
+    iconKey: item.id,
+    id: item.id,
+    imageAccessibilityLabel: item.imageAccessibilityLabel,
+    imageSource: faceCaptureTutorialImageSources[item.id],
     requiresPrivacyAgreement: false,
-    stepLabel: '1/4',
-    tip: '무표정에 가까운 자연스러운 얼굴이 좋아요.',
+    stepLabel: `${index + 1}/${FACE_ANALYSIS_CAPTURE_CHECKLIST.length}`,
+    tip: faceCaptureTutorialTips[item.id],
+  }));
+
+const faceCaptureTutorialComparisonBadges = {
+  correct: {
+    color: colors.guideReady,
+    icon: 'check',
+    placement: 'right-panel-bottom-right',
   },
-  {
-    buttonLabel: null,
-    description: '이마와 귀 라인이 보이도록 머리를 정리하면 톤과 윤곽 분석이 안정적이에요.',
-    heading: '머리는 얼굴 밖으로 넘겨주세요',
-    iconKey: 'hair',
-    imageSource: hairGuideImageSource,
-    requiresPrivacyAgreement: false,
-    stepLabel: '2/4',
-    tip: '앞머리는 잠깐 고정하고 촬영해 주세요.',
+  incorrect: {
+    color: colors.danger,
+    icon: 'x',
+    placement: 'left-panel-bottom-right',
   },
-  {
-    buttonLabel: null,
-    description: '안경, 모자, 큰 귀걸이처럼 얼굴을 가리는 요소는 분석 결과를 흐릴 수 있어요.',
-    heading: '액세서리는 잠시 빼주세요',
-    iconKey: 'accessory',
-    imageSource: accessoryGuideImageSource,
-    requiresPrivacyAgreement: false,
-    stepLabel: '3/4',
-    tip: '렌즈 반사와 그림자도 함께 줄여주세요.',
-  },
-  {
-    buttonLabel: '촬영하기',
-    description: '밝은 곳에서 얼굴과 턱선이 화면 중앙에 들어오도록 맞춘 뒤 촬영을 시작해요.',
-    heading: '얼굴을 중앙에 맞춰 촬영해 주세요',
-    iconKey: 'framing',
-    imageSource: framingGuideImageSource,
-    requiresPrivacyAgreement: false,
-    stepLabel: '4/4',
-    tip: '역광보다 정면의 부드러운 조명이 좋아요.',
-  },
-] as const satisfies readonly FaceCaptureTutorialStep[];
+  source: 'ui-overlay',
+} as const;
 
 const faceCaptureTutorialNavigationMode = {
   showsStepAdvanceButton: false,
@@ -144,6 +148,10 @@ export function getFaceCaptureTutorialNavigationMode() {
 
 export function getFaceCaptureTutorialIconNames() {
   return faceCaptureTutorialIconNames;
+}
+
+export function getFaceCaptureTutorialComparisonBadges() {
+  return faceCaptureTutorialComparisonBadges;
 }
 
 export function getFaceCaptureTutorialVisualPresentation() {
@@ -371,7 +379,7 @@ export function FaceCaptureTutorialScreen({
             style={styles.guideCarousel}>
             {faceCaptureTutorialSteps.map((step) => (
               <YStack
-                key={step.stepLabel}
+                key={step.id}
                 style={[
                   styles.guidePage,
                   isSheetPresentation ? styles.sheetGuidePage : null,
@@ -383,13 +391,40 @@ export function FaceCaptureTutorialScreen({
                     getGuideImageSize(step),
                   ]}>
                   <Image
+                    accessible
+                    accessibilityLabel={step.imageAccessibilityLabel}
                     accessibilityIgnoresInvertColors
                     resizeMode="contain"
                     source={step.imageSource}
                     style={styles.guideImage}
                   />
-                </View>
+                  <View
+                    accessible={false}
+                    importantForAccessibility="no-hide-descendants"
+                    pointerEvents="none"
+                    style={styles.comparisonBadgeOverlay}>
+                    {(['incorrect', 'correct'] as const).map(kind => {
+                      const badge = faceCaptureTutorialComparisonBadges[kind];
 
+                      return (
+                        <View key={kind} style={styles.comparisonBadgeHalf}>
+                          <View
+                            style={[
+                              styles.comparisonBadge,
+                              {backgroundColor: badge.color},
+                            ]}>
+                            {kind === 'incorrect' ? (
+                              <XIcon color={colors.white} size={iconSize.xs} strokeWidth={2.6} />
+                            ) : (
+                              <Check color={colors.white} size={iconSize.xs} strokeWidth={2.8} />
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
+
+                  </View>
+                </View>
                 <YStack style={styles.guidePanel}>
                   <XStack style={styles.guideHeadingRow}>
                     <View style={styles.guideIconCircle}>
@@ -468,6 +503,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     paddingBottom: spacing.xl,
+  },
+  comparisonBadge: {
+    alignItems: 'center',
+    borderColor: colors.white,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    height: 32,
+    justifyContent: 'center',
+    shadowColor: colors.black,
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    width: 32,
+  },
+  comparisonBadgeHalf: {
+    alignItems: 'flex-end',
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: spacing.sm,
+  },
+  comparisonBadgeOverlay: {
+    bottom: 0,
+    flexDirection: 'row',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   description: {
     color: colors.textSecondary,

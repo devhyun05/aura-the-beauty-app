@@ -346,7 +346,14 @@ def _build_product_profile(
   }
 
 
-def _map_product(product: dict[str, Any], area: str, guide: dict[str, Any]) -> dict[str, Any] | None:
+def _map_product(
+  product: dict[str, Any],
+  area: str,
+  expected_category: str,
+  guide: dict[str, Any],
+) -> dict[str, Any] | None:
+  if _clean_text(product.get("category")).casefold() != expected_category.casefold():
+    return None
   product_id = _clean_text(product.get("id"))
   product_name = _clean_text(product.get("productName"))
   image_url = _clean_https_url(product.get("imageUrl"))
@@ -361,12 +368,101 @@ def _map_product(product: dict[str, Any], area: str, guide: dict[str, Any]) -> d
     "brandName": (_clean_text(product.get("brandName")) or "브랜드 정보 없음")[:100],
     "productName": product_name[:200],
     "shadeName": (_clean_text(product.get("shadeName")) or None),
-    "reason": (_clean_text(product.get("reason")) or _clean_text(guide.get("reason")) or "추천 룩의 색감과 질감에 맞는 제품이에요.")[:240],
+    "reason": (_clean_text(product.get("reason")) or _clean_text(guide.get("reason")) or "이 상황과 무드에 어울리는 추천 제품이에요.")[:240],
     "price": max(0, int(price)) if isinstance(price, int | float) else None,
     "imageUrl": image_url,
     "purchaseUrl": purchase_url,
     "matchRate": max(0, min(100, int(match_rate))) if isinstance(match_rate, int | float) else None,
   }
+
+def _map_products(
+  raw_products: Any,
+  area: str,
+  expected_category: str,
+  guide: dict[str, Any],
+) -> list[dict[str, Any]]:
+  if not isinstance(raw_products, list):
+    return []
+  products: list[dict[str, Any]] = []
+  for raw in raw_products:
+    if not isinstance(raw, dict):
+      continue
+    mapped = _map_product(raw, area, expected_category, guide)
+    if mapped is None:
+      continue
+    products.append(mapped)
+    if len(products) >= MAX_PRODUCTS_PER_AREA:
+      break
+  return products
+
+
+# 생성된 guide의 질감/피니시를 후보 제품과 매칭하기 위한 키워드 사전.
+# 카탈로그에 제품별 색(hex) 데이터가 없어 색 매칭은 불가하므로, 제품명·specs에
+# 실제로 존재하는 질감/피니시 신호만으로 후보 순위를 조정한다(강제 다양성 없음).
+_TEXTURE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+  ("velvet", ("벨벳", "velvet")),
+  ("matte", ("매트", "matte")),
+  ("glossy", ("글로시", "글로스", "글로우", "글래스", "윤기", "촉촉", "물광", "glossy", "gloss", "glow", "dewy")),
+  ("satin", ("새틴", "satin")),
+  ("sheer", ("쉬어", "시어", "sheer")),
+  ("shimmer", ("쉬머", "글리터", "펄", "shimmer", "glitter", "pearl")),
+  ("tint", ("틴트", "tint")),
+  ("cushion", ("쿠션", "cushion")),
+  ("powder", ("파우더", "powder")),
+  ("cream", ("크림", "cream")),
+  ("blur", ("블러", "blur")),
+)
+
+
+def _texture_tokens(text: str) -> set[str]:
+  lowered = _clean_text(text).casefold()
+  if not lowered:
+    return set()
+  return {
+    canonical
+    for canonical, variants in _TEXTURE_KEYWORDS
+    if any(variant.casefold() in lowered for variant in variants)
+  }
+
+
+def _rank_products_by_texture(
+  raw_products: Any,
+  guide: dict[str, Any],
+) -> list[dict[str, Any]]:
+  """생성된 guide의 질감/피니시에 맞는 후보를 앞으로 정렬한다.
+
+  색 데이터가 없어 색 매칭은 하지 않는다. 동점(질감 신호 없음/동일)은 원래 순서를
+  유지하므로, 맞는 게 없으면 기존 인기순 그대로다(억지 다양성 아님).
+  """
+  if not isinstance(raw_products, list) or len(raw_products) <= 1:
+    return raw_products if isinstance(raw_products, list) else []
+  color = guide.get("color") if isinstance(guide.get("color"), dict) else {}
+  wanted = _texture_tokens(
+    " ".join(
+      _clean_text(part)
+      for part in (guide.get("texture"), guide.get("technique"), color.get("name"))
+    ),
+  )
+  if not wanted:
+    return raw_products
+
+  def _match_score(product: Any) -> int:
+    if not isinstance(product, dict):
+      return 0
+    info = product.get("productInfo") if isinstance(product.get("productInfo"), dict) else {}
+    tags = product.get("tags") if isinstance(product.get("tags"), list) else []
+    haystack = " ".join(
+      [
+        _clean_text(product.get("productName")),
+        _clean_text(info.get("finish")),
+        _clean_text(info.get("texture")),
+        " ".join(_clean_text(tag) for tag in tags),
+      ],
+    )
+    return len(wanted & _texture_tokens(haystack))
+
+  # sorted는 안정 정렬 → 동점은 기존 인기순 유지.
+  return sorted(raw_products, key=lambda product: -_match_score(product))
 
 
 async def enrich_makeup_recommendation_products(
@@ -380,12 +476,12 @@ async def enrich_makeup_recommendation_products(
   """Match each generated area guide to verified catalog records without inventing products."""
   enriched = deepcopy(recommendation)
   looks = enriched.get("looks") if isinstance(enriched.get("looks"), list) else []
-  jobs: list[tuple[dict[str, Any], dict[str, Any], str, Any]] = []
+  jobs: list[tuple[dict[str, Any], dict[str, Any], str, str, Any]] = []
 
-  # Deterministic catalog scoring consumes the generated profile. Disabling per-product
-  # embeddings avoids dozens of extra Bedrock calls for a single recommendation.
+  # 부위별 semantic 매칭(생성된 보고서 내용 + 색/피니시를 임베딩)이 의도된 설계이므로
+  # 임베딩은 켜 둔다. 텍스처 키워드 랭킹(_rank_products_by_texture)은 임베딩이 적용되지
+  # 않았을 때(모델 미설정·호출 실패)만 fallback으로 쓴다.
   catalog_settings = settings.model_copy(update={
-    "bedrock_embedding_model_id": None,
     # Never mix request-time shopping search results into a saved makeup report.
     "legacy_naver_product_search": False,
   })
@@ -419,14 +515,14 @@ async def enrich_makeup_recommendation_products(
         profile_override=profile,
         query_override=query or None,
       )
-      jobs.append((look, guide, area, job))
+      jobs.append((look, guide, area, category, job))
 
   if not jobs:
     return GeneratedMakeupRecommendationV2.model_validate(enriched).model_dump(by_alias=True)
 
   results = await asyncio.gather(*(job for *_metadata, job in jobs), return_exceptions=True)
   sources: set[str] = set()
-  for (look, guide, area, _job), result in zip(jobs, results):
+  for (look, guide, area, category, _job), result in zip(jobs, results):
     products: list[dict[str, Any]] = []
     if isinstance(result, Exception):
       logger.warning(
@@ -439,13 +535,10 @@ async def enrich_makeup_recommendation_products(
       if _is_trusted_product_source(source):
         sources.add(source)
         raw_products = recommendation_data.get("products") if isinstance(recommendation_data, dict) else []
-        if isinstance(raw_products, list):
-          products = [
-            mapped
-            for raw in raw_products[:MAX_PRODUCTS_PER_AREA]
-            if isinstance(raw, dict)
-            if (mapped := _map_product(raw, area, guide)) is not None
-          ]
+        # 임베딩 semantic 랭킹이 적용됐으면 그 순서를 존중하고, 아니면 텍스처로 정렬(fallback).
+        if not str(source).endswith("_semantic"):
+          raw_products = _rank_products_by_texture(raw_products, guide)
+        products = _map_products(raw_products, area, category, guide)
       else:
         logger.warning(
           "[aura:makeup-recommendation] product-enrichment:untrusted-source area=%s source=%s",

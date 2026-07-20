@@ -21,6 +21,8 @@ const loadFaceAnalysisRoutes = () =>
   require('./routes/faceAnalysisRoutes') as typeof import('./routes/faceAnalysisRoutes');
 const loadFaceAnalysisIntroRoute = () =>
   require('./routes/faceAnalysisIntroRoute') as typeof import('./routes/faceAnalysisIntroRoute');
+const loadBeardSimulationRoutes = () =>
+  require('./routes/beardSimulationRoutes') as typeof import('./routes/beardSimulationRoutes');
 const loadMakeupFeedbackRoutes = () =>
   require('./routes/makeupFeedbackRoutes') as typeof import('./routes/makeupFeedbackRoutes');
 const loadMakeupJourneyRoutes = () =>
@@ -77,6 +79,10 @@ export function RootNavigator() {
       <Stack.Screen
         name="FaceAnalysisIntro"
         getComponent={() => loadFaceAnalysisIntroRoute().FaceAnalysisIntroRouteScreen}
+      />
+      <Stack.Screen
+        name="BeardSimulation"
+        getComponent={() => loadBeardSimulationRoutes().BeardSimulationRouteScreen}
       />
       <Stack.Screen
         name="Face3DMeasurement"

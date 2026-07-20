@@ -29,6 +29,7 @@ import {
   Camera,
   ChevronUp,
   Compass,
+  Eraser,
   Heart,
   MessageSquareText,
   PackageSearch,
@@ -1000,10 +1001,12 @@ export const HOME_SERVICE_SHORTCUT_LABELS = [
   '추천 제품',
   '컨설팅',
   '메이크업 추천',
+  '수염 제거',
 ] as const;
 export const HOME_SERVICE_SHORTCUT_ROW_LABELS = [
   HOME_SERVICE_SHORTCUT_LABELS.slice(0, 4),
-  HOME_SERVICE_SHORTCUT_LABELS.slice(4),
+  HOME_SERVICE_SHORTCUT_LABELS.slice(4, 8),
+  HOME_SERVICE_SHORTCUT_LABELS.slice(8),
 ] as const;
 export const HOME_SERVICE_SHORTCUT_LABEL_NUMBER_OF_LINES = 1;
 export const HOME_SERVICE_SHORTCUT_LABEL_MIN_HEIGHT = typography.lineHeight.xs;
@@ -1071,6 +1074,16 @@ const homeServiceShortcutRows = [
       accessibilityLabel: '메이크업 추천 시작',
       icon: (color: string) => (
         <Sparkles color={color} size={iconSize.lg} strokeWidth={1.9} />
+      ),
+    },
+  ],
+  [
+    {
+      id: 'beardSimulation',
+      label: HOME_SERVICE_SHORTCUT_LABELS[8],
+      accessibilityLabel: '수염 제거 시뮬레이션 시작',
+      icon: (color: string) => (
+        <Eraser color={color} size={iconSize.lg} strokeWidth={1.9} />
       ),
     },
   ],
@@ -1144,6 +1157,10 @@ export function getHomeServiceShortcutPressHandler(
 
   if (actionId === 'makeupFeedback') {
     return onPressMakeupFeedback;
+  }
+
+  if (actionId === 'beardSimulation') {
+    return onPressHairRemovalSimulation;
   }
 
   return undefined;

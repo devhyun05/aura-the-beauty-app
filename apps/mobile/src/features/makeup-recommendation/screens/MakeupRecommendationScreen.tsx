@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useReducer,
   useRef,
   useState,
@@ -15,6 +16,7 @@ import {
   getFaceAnalysisReportById,
   getFaceAnalysisReports,
 } from '../../../shared/services/faceAnalysisService';
+import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 import {
@@ -55,9 +57,11 @@ import {
   type MakeupRecommendationLoadingContext,
 } from '../services/makeupRecommendationAgentConversation';
 import {
+  buildInitialMakeupRecommendationDiscoveryState,
+  cacheMakeupDiscoveryCatalog,
+  cacheMakeupDiscoveryReports,
   getSelectedFaceAnalysisReport,
   getSelectedMakeupSituation,
-  initialMakeupRecommendationDiscoveryState,
   makeupRecommendationDiscoveryReducer,
 } from '../state/makeupRecommendationDiscoveryReducer';
 import type {
@@ -74,10 +78,12 @@ import type {
 import {RecommendationAgentLoadingView} from './RecommendationAgentLoadingView';
 import {RecommendationHistoryView} from './RecommendationHistoryView';
 import {RecommendationQuestionView} from './RecommendationQuestionView';
+import {RecommendationReportLoadingView} from './RecommendationReportLoadingView';
 import {RecommendationResultsView} from './RecommendationResultsView';
 import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
 import {
   filterMakeupRecommendationReportsByDiscovery,
+  getInitialMakeupRecommendationScreenPhase,
   isMakeupRecommendationReportAllowedByDiscovery,
   shouldHandleMakeupRecommendationBack,
   type MakeupRecommendationScreenPhase,
@@ -92,6 +98,9 @@ export type MakeupRecommendationScreenProps = {
   faceImageUri?: string;
   analysisReportId?: string;
   initialView?: 'discovery' | 'history';
+  onBack?: () => void;
+  onOpenRecommendedProducts?: (sourceAnalysisReportId?: string) => void;
+  onResultsVisibilityChange?: (visible: boolean) => void;
   onApplyAR?: (look: MakeupLookRecommendation) => void;
   onStartFaceAnalysis?: () => void;
   personalColor?: string;
@@ -106,7 +115,7 @@ const HISTORY_PAGE_SIZE = 20;
 const IMAGE_POLL_MAX_FAILURES = 3;
 const SESSION_RESTORE_POLL_MS = 2500;
 const SESSION_RESTORE_MAX_POLLS = 72;
-export const MIN_AGENT_CONVERSATION_MS = 20_000;
+export const MIN_AGENT_CONVERSATION_MS = 6_000;
 
 function waitForAbortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -226,15 +235,23 @@ export const MakeupRecommendationScreen = forwardRef<
   faceImageUri,
   analysisReportId,
   initialView = 'discovery',
+  onBack,
+  onOpenRecommendedProducts,
+  onResultsVisibilityChange,
   onApplyAR,
   onStartFaceAnalysis,
   personalColor,
   reportId,
 }, ref) {
-  const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>(initialView);
+  const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>(() =>
+    getInitialMakeupRecommendationScreenPhase({initialView, reportId}));
+  useLayoutEffect(() => {
+    onResultsVisibilityChange?.(phase === 'results');
+  }, [onResultsVisibilityChange, phase]);
   const [discovery, dispatchDiscovery] = useReducer(
     makeupRecommendationDiscoveryReducer,
-    initialMakeupRecommendationDiscoveryState,
+    undefined,
+    buildInitialMakeupRecommendationDiscoveryState,
   );
   const [session, setSession] = useState<MakeupRecommendationSession>();
   const [isStarting, setIsStarting] = useState(false);
@@ -295,6 +312,7 @@ export const MakeupRecommendationScreen = forwardRef<
 
     if (catalogResult.status === 'fulfilled') {
       dispatchDiscovery({type: 'catalog/loaded', catalog: catalogResult.value});
+      cacheMakeupDiscoveryCatalog(catalogResult.value);
     } else {
       dispatchDiscovery({
         type: 'catalog/failed',
@@ -325,12 +343,14 @@ export const MakeupRecommendationScreen = forwardRef<
         // Ownership/not-found stays hidden; latest owned completed report remains the safe default.
       }
     }
+    cacheMakeupDiscoveryReports(reports);
     dispatchDiscovery({type: 'reports/loaded', reports, preferredReportId: analysisReportId});
   }, [analysisReportId]);
 
   useEffect(() => {
+    if (reportId?.trim()) return;
     void loadDiscoveryData();
-  }, [loadDiscoveryData]);
+  }, [loadDiscoveryData, reportId]);
 
   const selectedReport = getSelectedFaceAnalysisReport(discovery);
   const selectedSituation = getSelectedMakeupSituation(discovery);
@@ -367,8 +387,8 @@ export const MakeupRecommendationScreen = forwardRef<
   const resolveReadySession = useCallback(async (
     nextSession: MakeupRecommendationSession,
     signal: AbortSignal,
+    loadingStartedAt = Date.now(),
   ) => {
-    const loadingStartedAt = Date.now();
     const hydrateCompletedSession = async (completedSession: MakeupRecommendationSession) => {
       if (!completedSession.reportId) throw new Error('완료된 추천 보고서를 찾지 못했어요.');
       const hydrated = await refreshGeneratedMakeupRecommendation(completedSession, signal);
@@ -429,7 +449,7 @@ export const MakeupRecommendationScreen = forwardRef<
   }, []);
 
   useEffect(() => {
-    if (reportId?.trim()) return undefined;
+    if (reportId?.trim() || initialView === 'history') return undefined;
     const operation = beginOperation(workflowRequest);
     const isCurrent = () => workflowRequest.current?.id === operation.id;
     void (async () => {
@@ -506,7 +526,7 @@ export const MakeupRecommendationScreen = forwardRef<
       }
     })();
     return () => operation.controller.abort();
-  }, [beginOperation, reportId, resolveReadySession]);
+  }, [beginOperation, initialView, reportId, resolveReadySession]);
 
   const runStart = useCallback((input: StartMakeupRecommendationV2Input) => {
     const operation = beginOperation(workflowRequest);
@@ -630,6 +650,7 @@ export const MakeupRecommendationScreen = forwardRef<
     if (!session || answerRequestInFlight.current) return;
     answerRequestInFlight.current = true;
     const isFinalQuestion = session.currentQuestionIndex >= session.questions.length - 1;
+    const loadingStartedAt = Date.now();
     const answeredQuestion = session.questions.find(question => question.id === answer.questionId);
     trackMakeupRecommendationEvent('recommendation_question_answered', {
       id: answer.questionId,
@@ -659,7 +680,11 @@ export const MakeupRecommendationScreen = forwardRef<
           await saveCurrentMakeupRecommendationSessionId(answeredSession.id, AsyncStorage);
         }
         if (workflowRequest.current?.id !== operation.id) return;
-        const nextSession = await resolveReadySession(answeredSession, operation.controller.signal);
+        const nextSession = await resolveReadySession(
+          answeredSession,
+          operation.controller.signal,
+          loadingStartedAt,
+        );
         if (workflowRequest.current?.id !== operation.id) return;
         setSession(nextSession);
         setPhase(nextSession.phase === 'ready' ? 'loading' : nextSession.phase);
@@ -703,51 +728,87 @@ export const MakeupRecommendationScreen = forwardRef<
     void loadHistory();
   }, [initialView, loadHistory]);
 
-  const openHistoryReport = useCallback((report: MakeupRecommendationReportHistoryItem) => {
+  const showHydratedHistoryReport = useCallback((
+    report: MakeupRecommendationReportHistoryItem,
+    operation: {controller: AbortController; id: number},
+    preloadedSourceReport?: FaceAnalysisReport | null,
+  ) => {
     const restored = restoreMakeupRecommendationReport(report);
-    const operation = beginOperation(workflowRequest);
-    imagePollFailureCount.current = 0;
-    setImageRetryError('');
-    setLoadingContext(buildLoadingContextFromSession(restored));
-    setSession(restored);
-    setPhase('loading');
-
     const cachedSourceReport = restored.sourceAnalysisReportId
       ? discovery.reports.find(item => item.id === restored.sourceAnalysisReportId)
       : undefined;
+    const sourceReportWasPreloaded = preloadedSourceReport !== undefined;
+    const applySourceReport = (sourceReport: FaceAnalysisReport) => {
+      if (cachedSourceReport) {
+        dispatchDiscovery({type: 'report/detailLoaded', report: sourceReport});
+      } else {
+        dispatchDiscovery({
+          type: 'reports/loaded',
+          reports: [sourceReport, ...discovery.reports],
+          preferredReportId: discovery.selectedReportId ?? undefined,
+        });
+      }
+    };
+
+    if (sourceReportWasPreloaded && restored.sourceAnalysisReportId) {
+      hydratedReportDetailIds.current.add(restored.sourceAnalysisReportId);
+      if (preloadedSourceReport) applySourceReport(preloadedSourceReport);
+    }
+
+    imagePollFailureCount.current = 0;
+    setImageRetryError('');
+    setLoadingContext(null);
+    setSession(restored);
+    setPhase('results');
+
+    if (sourceReportWasPreloaded) return;
+
+    const sourceReportNeedsHydration = Boolean(
+      restored.sourceAnalysisReportId && !cachedSourceReport?.measurements?.regionVisuals,
+    );
+    if (sourceReportNeedsHydration && restored.sourceAnalysisReportId) {
+      hydratedReportDetailIds.current.add(restored.sourceAnalysisReportId);
+    }
     const sourceReportRequest = restored.sourceAnalysisReportId
-      ? cachedSourceReport?.measurements?.regionVisuals
-        ? Promise.resolve(cachedSourceReport)
-        : getFaceAnalysisReportById(restored.sourceAnalysisReportId)
+      ? sourceReportNeedsHydration
+        ? getFaceAnalysisReportById(restored.sourceAnalysisReportId)
+        : Promise.resolve(cachedSourceReport ?? null)
       : Promise.resolve(null);
 
-    void Promise.allSettled([
-      refreshGeneratedMakeupRecommendation(restored, operation.controller.signal),
-      sourceReportRequest,
-    ]).then(([refreshResult, sourceReportResult]) => {
+    void sourceReportRequest.then(sourceReport => {
       if (workflowRequest.current?.id !== operation.id) return;
-
-      if (sourceReportResult.status === 'fulfilled' && sourceReportResult.value) {
-        if (cachedSourceReport) {
-          dispatchDiscovery({type: 'report/detailLoaded', report: sourceReportResult.value});
-        } else {
-          dispatchDiscovery({
-            type: 'reports/loaded',
-            reports: [sourceReportResult.value, ...discovery.reports],
-            preferredReportId: discovery.selectedReportId ?? undefined,
-          });
-        }
+      if (sourceReport) applySourceReport(sourceReport);
+    }).catch(error => {
+      if (!isRequestAbortedError(error) && restored.sourceAnalysisReportId) {
+        hydratedReportDetailIds.current.delete(restored.sourceAnalysisReportId);
       }
-
-      if (refreshResult.status === 'fulfilled') {
-        setSession(refreshResult.value);
-      } else {
-        if (isRequestAbortedError(refreshResult.reason)) return;
-        setImageRetryError('상세 이미지 상태를 불러오지 못했어요. 저장된 추천 내용은 그대로 보여드려요.');
-      }
-      setPhase('results');
     });
-  }, [beginOperation, discovery.reports, discovery.selectedReportId]);
+  }, [discovery.reports, discovery.selectedReportId]);
+
+  const openHistoryReport = useCallback((report: MakeupRecommendationReportHistoryItem) => {
+    const operation = beginOperation(workflowRequest);
+    setHistoryError('');
+    setIsLoadingHistory(true);
+
+    void fetchGeneratedMakeupRecommendationReport(
+      report.reportId,
+      operation.controller.signal,
+    ).then(hydratedReport => {
+      if (workflowRequest.current?.id !== operation.id) return;
+      showHydratedHistoryReport(hydratedReport, operation);
+    }).catch(error => {
+      if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
+      setHistoryError(
+        error instanceof Error
+          ? error.message
+          : '추천 메이크업 보고서를 불러오지 못했어요.',
+      );
+    }).finally(() => {
+      if (workflowRequest.current?.id === operation.id) {
+        setIsLoadingHistory(false);
+      }
+    });
+  }, [beginOperation, showHydratedHistoryReport]);
 
   useEffect(() => {
     const requestedReportId = reportId?.trim();
@@ -760,25 +821,27 @@ export const MakeupRecommendationScreen = forwardRef<
     loadedReportId.current = requestedReportId;
     const operation = beginOperation(workflowRequest);
     setSession(undefined);
-    setLoadingContext({
-      answerKeywords: [],
-      prompt: '완성된 추천 메이크업 보고서를 불러오는 중이에요.',
-      useProfile: false,
-    });
-    setPhase('loading');
+    setLoadingContext(null);
+    setPhase('reportLoading');
     setErrorMessage('');
     setImageRetryError('');
 
     void (async () => {
       try {
-        await clearCurrentMakeupRecommendationSessionId(AsyncStorage);
-        if (workflowRequest.current?.id !== operation.id) return;
-        const requestedReport = await fetchGeneratedMakeupRecommendationReport(
-          requestedReportId,
-          operation.controller.signal,
-        );
-        if (workflowRequest.current?.id !== operation.id) return;
-        openHistoryReport(requestedReport);
+        const [, requestedReport] = await Promise.all([
+          clearCurrentMakeupRecommendationSessionId(AsyncStorage),
+          fetchGeneratedMakeupRecommendationReport(
+            requestedReportId,
+            operation.controller.signal,
+          ),
+        ]);
+        if (operation.controller.signal.aborted || workflowRequest.current?.id !== operation.id) return;
+        const preloadedSourceReport = requestedReport.sourceAnalysisReportId
+          ? await getFaceAnalysisReportById(requestedReport.sourceAnalysisReportId)
+            .catch(() => null)
+          : undefined;
+        if (operation.controller.signal.aborted || workflowRequest.current?.id !== operation.id) return;
+        showHydratedHistoryReport(requestedReport, operation, preloadedSourceReport);
       } catch (error) {
         if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
         loadedReportId.current = null;
@@ -794,7 +857,7 @@ export const MakeupRecommendationScreen = forwardRef<
     return () => {
       if (workflowRequest.current?.id === operation.id) operation.controller.abort();
     };
-  }, [beginOperation, openHistoryReport, reportId, reportLoadAttempt]);
+  }, [beginOperation, reportId, reportLoadAttempt, showHydratedHistoryReport]);
 
   const handleRefine = (refinement: MakeupRecommendationRefinement) => {
     if (!session) return;
@@ -932,11 +995,13 @@ export const MakeupRecommendationScreen = forwardRef<
 
   useImperativeHandle(ref, () => ({
     handleBack() {
-      if (!shouldHandleMakeupRecommendationBack(phase)) return false;
+      if (!shouldHandleMakeupRecommendationBack(phase, {
+        directReportEntry: Boolean(reportId?.trim()),
+      })) return false;
       returnToDiscovery(false);
       return true;
     },
-  }), [phase, returnToDiscovery]);
+  }), [phase, reportId, returnToDiscovery]);
 
   const handleSelectReport = useCallback((selectedId: string) => {
     trackMakeupRecommendationEvent('analysis_report_selected', {
@@ -1066,6 +1131,10 @@ export const MakeupRecommendationScreen = forwardRef<
     );
   }
 
+  if (phase === 'reportLoading') {
+    return <RecommendationReportLoadingView />;
+  }
+
   if (phase === 'loading') {
     return loadingContext ? (
       <RecommendationAgentLoadingView context={loadingContext} faceImageUri={selectedFaceImageUri} />
@@ -1106,6 +1175,7 @@ export const MakeupRecommendationScreen = forwardRef<
 
     return (
       <RecommendationResultsView
+        onBack={onBack}
         context={{
           personalColor: session.personalColor,
           profileGender: session.profileGender,
@@ -1139,6 +1209,7 @@ export const MakeupRecommendationScreen = forwardRef<
         onApplyAR={handleApplyAR}
         onAreaOpened={handleAreaOpened}
         onRefine={handleRefine}
+        onOpenRecommendedProducts={() => onOpenRecommendedProducts?.(session.sourceAnalysisReportId)}
         onReset={() => returnToDiscovery(true)}
         onRetry={retry}
         onRetryImages={handleRetryImages}

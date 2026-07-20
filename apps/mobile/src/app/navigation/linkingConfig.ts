@@ -51,6 +51,7 @@ export const rootStackLinkingScreens = {
   FaceCaptureConfirmation: 'face-capture-confirmation/:target',
   UnityMakeupCapture: 'unity-makeup-capture',
   FaceAnalysisIntro: 'face-analysis-intro',
+  BeardSimulation: 'beard-simulation',
   Face3DMeasurement: 'face-3d-measurement',
   FaceAnalysisLoading: 'face-analysis-loading',
   FaceAnalysisReportsList: 'face-analysis-reports',

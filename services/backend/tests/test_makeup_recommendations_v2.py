@@ -48,6 +48,9 @@ from app.services.makeup_recommendation_session import (
   create_session,
   guard_custom_text,
 )
+from app.services.makeup_recommendation_timing import (
+  resolve_prep_time_budget_minutes,
+)
 from app.services.makeup_trends import (
   curated_fallback_discovery,
   fetch_discovery,
@@ -274,6 +277,25 @@ def _questions() -> list[dict]:
         {"id": "familiar", "label": "익숙한 나를 또렷하게"},
         {"id": "balanced", "label": "한 단계 새로운 인상"},
         {"id": "bold", "label": "오늘만큼은 확실한 반전"},
+        {"id": "ai_pick", "label": "AI가 골라줘"},
+      ],
+    },
+  ]
+
+
+def _prep_time_questions(
+  *,
+  question_id: str = "prep_time",
+  option_ids: tuple[str, str, str] = ("quick_15", "standard_30", "detail_60_plus"),
+) -> list[dict]:
+  return [
+    {
+      "id": question_id,
+      "title": "메이크업에 어느 정도 시간을 쓸 수 있나요?",
+      "options": [
+        {"id": option_ids[0], "label": "15분 안에 핵심만"},
+        {"id": option_ids[1], "label": "30분 정도 꼼꼼하게"},
+        {"id": option_ids[2], "label": "60분 이상 디테일까지"},
         {"id": "ai_pick", "label": "AI가 골라줘"},
       ],
     },
@@ -536,6 +558,83 @@ def test_generated_prep_time_options_use_realistic_intervals() -> None:
   ]
 
 
+@pytest.mark.parametrize(
+  ("question_id", "option_ids", "selected_option_id", "expected_minutes"),
+  [
+    ("prep_time", ("quick_15", "standard_30", "detail_60_plus"), "quick_15", 15),
+    ("provider_generated_axis", ("short", "medium", "long"), "medium", 30),
+    ("question-time-skill", ("quick", "steady", "detailed"), "detailed", 60),
+    ("prep_time", ("quick_15", "standard_30", "detail_60_plus"), "ai_pick", 30),
+  ],
+)
+def test_prep_time_budget_resolver_supports_persisted_question_shapes(
+  question_id: str,
+  option_ids: tuple[str, str, str],
+  selected_option_id: str,
+  expected_minutes: int,
+) -> None:
+  questions = _prep_time_questions(question_id=question_id, option_ids=option_ids)
+
+  assert resolve_prep_time_budget_minutes(
+    questions,
+    [{"questionId": question_id, "optionId": selected_option_id}],
+  ) == expected_minutes
+
+
+def test_prep_time_budget_resolver_uses_latest_answer_and_ignores_other_axes() -> None:
+  questions = _prep_time_questions()
+  answers = [
+    {"questionId": "prep_time", "optionId": "quick_15"},
+    {"questionId": "prep_time", "optionId": "detail_60_plus"},
+  ]
+  unrelated_questions = [
+    {
+      "id": "commute_window",
+      "title": "이동은 언제 하나요?",
+      "options": [
+        {"id": "later", "label": "30분 뒤 이동"},
+        {"id": "evening", "label": "저녁 이동"},
+        {"id": "night", "label": "밤 이동"},
+        {"id": "ai_pick", "label": "AI가 골라줘"},
+      ],
+    },
+  ]
+
+  assert resolve_prep_time_budget_minutes(questions, answers) == 60
+  assert resolve_prep_time_budget_minutes(
+    unrelated_questions,
+    [{"questionId": "commute_window", "optionId": "later", "label": "30분 뒤 이동"}],
+  ) is None
+
+
+def test_deterministic_recommendation_obeys_selected_prep_time_budget() -> None:
+  questions = _prep_time_questions()
+  answers = [{"questionId": "prep_time", "optionId": "quick_15"}]
+
+  result = makeup_service.deterministic_recommendation_v2(
+    {"selection": {"situation": {"label": "무대 공연"}}},
+    answers,
+    questions,
+  )
+
+  assert [look["durationMinutes"] for look in result["looks"]] == [15]
+  for look in result["looks"]:
+    area_total = sum(
+      guide["applicationPlan"]["estimatedMinutes"]
+      for guide in look["areaGuides"]
+    )
+    assert area_total == look["durationMinutes"]
+    assert area_total <= 15
+
+  prompt = build_recommendation_prompt(
+    {"selection": {"situation": {"label": "무대 공연"}}},
+    questions,
+    answers,
+  )
+  assert '"timeBudgetMinutes":15' in prompt
+  assert "15분은 강제 상한" in prompt
+
+
 def test_generated_question_normalizer_appends_missing_delegate() -> None:
   normalized = makeup_service.normalize_generated_questions_response(
     {
@@ -719,7 +818,9 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
     return _v2_recommendation()
 
   monkeypatch.setattr(makeup_service, "generate_json", fake_generate_json)
-  settings = Settings(bedrock_recommendation_model_id="global.anthropic.claude-sonnet-4-6")
+  settings = Settings(
+    bedrock_recommendation_model_id="global.anthropic.claude-sonnet-4-6",
+  )
   result = await makeup_service.generate_recommendation_v2(
     settings,
     {"analysisReport": {"faceShape": "oval"}, "selection": {"situation": {"label": "데이트"}}},
@@ -728,7 +829,8 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
   )
 
   assert calls[0]["modelId"] == "global.anthropic.claude-sonnet-4-6"
-  assert calls[0]["max_tokens"] == 9000
+  assert calls[0]["max_tokens"] == 6000
+  assert calls[0]["timeout_seconds"] == 45.0
   assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
   assert result["generationSource"] == "claude"
   assert result["matchAssessment"]["version"] == "makeup-match-v1"
@@ -759,7 +861,41 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
 
 
 @pytest.mark.asyncio
-async def test_invalid_v2_recommendation_is_retried_then_uses_vetted_fallback(
+async def test_provider_recommendation_is_clamped_to_selected_prep_time(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls: list[dict] = []
+
+  async def fake_generate_json(_settings, _model_id, _system, prompt, **_kwargs):
+    calls.append({"prompt": prompt})
+    response = _v2_recommendation()
+    for look in response["looks"]:
+      look["durationMinutes"] = 120
+    return response
+
+  monkeypatch.setattr(makeup_service, "generate_json", fake_generate_json)
+  questions = _prep_time_questions()
+  answers = [{"questionId": "prep_time", "optionId": "quick_15"}]
+
+  result = await makeup_service.generate_recommendation_v2(
+    Settings(),
+    {"selection": {"situation": {"label": "무대 공연"}}},
+    questions,
+    answers,
+  )
+
+  assert '"timeBudgetMinutes":15' in calls[0]["prompt"]
+  for look in result["looks"]:
+    area_minutes = [
+      guide["applicationPlan"]["estimatedMinutes"]
+      for guide in look["areaGuides"]
+    ]
+    assert look["durationMinutes"] == 15
+    assert sum(area_minutes) == 15
+
+
+@pytest.mark.asyncio
+async def test_invalid_v2_recommendation_uses_vetted_fallback_without_retry(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   attempts = 0
@@ -770,10 +906,12 @@ async def test_invalid_v2_recommendation_is_retried_then_uses_vetted_fallback(
     return {"contextSummary": ["조건"], "looks": []}
 
   monkeypatch.setattr(makeup_service, "generate_json", invalid_response)
-  result = await makeup_service.generate_recommendation_v2(Settings(), {}, [], [])
+  result = await makeup_service.generate_recommendation_v2(
+    Settings(), {}, [], [],
+  )
 
-  assert attempts == 2
-  assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
+  assert attempts == 1
+  assert [look["role"] for look in result["looks"]] == ["anchor"]
   assert all(len(look["areaGuides"]) == 5 for look in result["looks"])
 
 
@@ -801,7 +939,7 @@ async def test_v2_recommendation_provider_failure_uses_report_and_answers_fallba
   assert result["contextSummary"][0] == "출근·등교"
   assert any("summer mute" in item for item in result["contextSummary"])
   assert any("익숙한 선에서 자연스럽게" in item for item in result["contextSummary"])
-  assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
+  assert [look["role"] for look in result["looks"]] == ["anchor"]
   assert all({guide["area"] for guide in look["areaGuides"]} == {"base", "brow", "eye", "cheek", "lip"} for look in result["looks"])
   assert result["generationSource"] == "deterministic_fallback"
   assert result["matchAssessment"]["version"] == "makeup-match-v1"

@@ -86,6 +86,71 @@ def test_deterministic_recipe_has_shop_order_and_area_specific_detail() -> None:
   assert all(token in lip_copy for token in ("바탕", "안쪽", "그라데이션", "글로스"))
 
 
+@pytest.mark.parametrize(
+  ("duration", "expected_minutes"),
+  [
+    (15, [4, 2, 5, 2, 2]),
+    (20, [6, 3, 6, 2, 3]),
+    (25, [7, 4, 7, 3, 4]),
+    (30, [8, 4, 9, 4, 5]),
+    (60, [16, 9, 18, 7, 10]),
+  ],
+)
+def test_recipe_enricher_allocates_exact_integer_total_without_mutation(
+  duration: int,
+  expected_minutes: list[int],
+) -> None:
+  source = _recommendation()
+  for look in source["looks"]:
+    look["durationMinutes"] = duration
+  before = deepcopy(source)
+
+  enriched = enrich_makeup_application_plans(source)
+
+  assert source == before
+  for look in enriched["looks"]:
+    actual_minutes = [
+      guide["applicationPlan"]["estimatedMinutes"]
+      for guide in look["areaGuides"]
+    ]
+    assert actual_minutes == expected_minutes
+    assert sum(actual_minutes) == duration
+
+
+def test_recipe_enricher_overrides_existing_minutes_with_selected_budget() -> None:
+  source = _recommendation()
+  for look in source["looks"]:
+    look["durationMinutes"] = 120
+    for guide in look["areaGuides"]:
+      guide["applicationPlan"]["estimatedMinutes"] = 60
+  before = deepcopy(source)
+
+  enriched = enrich_makeup_application_plans(source, max_total_minutes=15)
+
+  assert source == before
+  for look_index, look in enumerate(enriched["looks"]):
+    assert look["durationMinutes"] == 15
+    assert sum(
+      guide["applicationPlan"]["estimatedMinutes"]
+      for guide in look["areaGuides"]
+    ) == 15
+    assert [
+      guide["applicationPlan"]["steps"]
+      for guide in look["areaGuides"]
+    ] == [
+      guide["applicationPlan"]["steps"]
+      for guide in source["looks"][look_index]["areaGuides"]
+    ]
+
+
+def test_schema_rejects_area_time_above_look_duration() -> None:
+  invalid = _recommendation()
+  invalid["looks"][0]["durationMinutes"] -= 1
+
+  with pytest.raises(ValidationError, match="Area application time"):
+    GeneratedMakeupRecommendationV2.model_validate(invalid)
+
+
 def test_recipe_enricher_replaces_unsupported_or_noncontiguous_plan_without_mutation() -> None:
   source = _recommendation()
   eye = next(guide for guide in source["looks"][0]["areaGuides"] if guide["area"] == "eye")

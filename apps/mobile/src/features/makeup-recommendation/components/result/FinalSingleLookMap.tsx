@@ -90,8 +90,6 @@ export function FinalSingleLookMap({
           </View>
         </View>
 
-        <Text style={styles.rationale}>{look.mapRationale}</Text>
-
         <View style={styles.summary}>
           <View style={styles.summaryCopy}>
             <Text style={styles.roleLabel}>{look.roleLabel}</Text>
@@ -188,13 +186,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   pointLabelText: {color: colors.white, fontSize: 10.5, fontWeight: '700'},
-  rationale: {
-    color: colors.sub,
-    fontSize: 11,
-    fontWeight: '500',
-    lineHeight: 17,
-    marginTop: 12,
-  },
   summary: {
     alignItems: 'center',
     flexDirection: 'row',

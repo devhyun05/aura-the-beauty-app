@@ -3,12 +3,6 @@ import type {
   MakeupRecommendationImageAlignmentPoint,
 } from '../types';
 
-const TARGET_EYE_CENTER_Y_RATIO = 0.4;
-const TARGET_EYE_DISTANCE_WIDTH_RATIO = 0.3;
-const TARGET_EYE_DISTANCE_HEIGHT_RATIO = 0.26;
-const TARGET_FACE_CENTER_Y_RATIO = 0.5;
-const TARGET_FACE_WIDTH_RATIO = 0.72;
-const TARGET_FACE_HEIGHT_RATIO = 0.62;
 const MIN_ALIGNMENT_SCALE = 0.45;
 const MAX_ALIGNMENT_SCALE = 3.2;
 
@@ -53,103 +47,139 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-export function computeFinalMakeupImageTransform(
-  frame: MakeupRecommendationImageAlignmentFrame | undefined,
+type MeasuredAlignmentFrame = {
+  anchorX: number;
+  anchorY: number;
+  originX: number;
+  originY: number;
+  renderedHeight: number;
+  renderedWidth: number;
+  rollDeg: number;
+  span: number;
+};
+
+function hasUsableEyeCenters(frame: MakeupRecommendationImageAlignmentFrame): boolean {
+  const imageLeftEye = frame.eyeCenters?.imageLeft;
+  const imageRightEye = frame.eyeCenters?.imageRight;
+  return Boolean(
+    isNormalizedPoint(imageLeftEye)
+    && isNormalizedPoint(imageRightEye)
+    && imageRightEye.x > imageLeftEye.x,
+  );
+}
+
+function measureAlignmentFrame(
+  frame: MakeupRecommendationImageAlignmentFrame,
   viewport: FinalMakeupAlignmentViewport,
-): FinalMakeupImageTransform | null {
+  useEyeCenters: boolean,
+): MeasuredAlignmentFrame | null {
+  const imageWidth = frame.imageSize.width;
+  const imageHeight = frame.imageSize.height;
   if (
-    !frame
-    || !isPositiveFinite(frame.imageSize.width)
-    || !isPositiveFinite(frame.imageSize.height)
+    !isPositiveFinite(imageWidth)
+    || !isPositiveFinite(imageHeight)
     || !isPositiveFinite(viewport.width)
     || !isPositiveFinite(viewport.height)
   ) return null;
 
-  const imageWidth = frame.imageSize.width;
-  const imageHeight = frame.imageSize.height;
-  const coverScale = Math.max(viewport.width / imageWidth, viewport.height / imageHeight);
-  const renderedWidth = imageWidth * coverScale;
-  const renderedHeight = imageHeight * coverScale;
+  // Preserve the complete camera frame. The layer fills any edge space with
+  // the same photo, so keeping the shot intact never creates gray gutters.
+  const containScale = Math.min(viewport.width / imageWidth, viewport.height / imageHeight);
+  const renderedWidth = imageWidth * containScale;
+  const renderedHeight = imageHeight * containScale;
   const originX = (viewport.width - renderedWidth) / 2;
   const originY = (viewport.height - renderedHeight) / 2;
-  const centerX = viewport.width / 2;
-  const centerY = viewport.height / 2;
-  const imageLeftEye = frame.eyeCenters?.imageLeft;
-  const imageRightEye = frame.eyeCenters?.imageRight;
 
-  let anchorImageX: number;
-  let anchorImageY: number;
-  let sourceSpan: number;
-  let targetSpan: number;
-  let targetX = centerX;
-  let targetY: number;
-  let measuredRollDeg = 0;
-
-  if (
-    isNormalizedPoint(imageLeftEye)
-    && isNormalizedPoint(imageRightEye)
-    && imageRightEye.x > imageLeftEye.x
-  ) {
+  if (useEyeCenters && hasUsableEyeCenters(frame)) {
+    const imageLeftEye = frame.eyeCenters!.imageLeft!;
+    const imageRightEye = frame.eyeCenters!.imageRight!;
     const leftX = imageLeftEye.x * imageWidth;
     const leftY = imageLeftEye.y * imageHeight;
     const rightX = imageRightEye.x * imageWidth;
     const rightY = imageRightEye.y * imageHeight;
     const deltaX = rightX - leftX;
     const deltaY = rightY - leftY;
-    const eyeDistance = Math.hypot(deltaX, deltaY);
-    if (!isPositiveFinite(eyeDistance)) return null;
-    anchorImageX = (leftX + rightX) / 2;
-    anchorImageY = (leftY + rightY) / 2;
-    sourceSpan = eyeDistance * coverScale;
-    targetSpan = Math.min(
-      viewport.width * TARGET_EYE_DISTANCE_WIDTH_RATIO,
-      viewport.height * TARGET_EYE_DISTANCE_HEIGHT_RATIO,
-    );
-    targetY = viewport.height * TARGET_EYE_CENTER_Y_RATIO;
-    measuredRollDeg = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-  } else {
-    const {faceBox} = frame;
-    if (
-      !Number.isFinite(faceBox.left)
-      || !Number.isFinite(faceBox.top)
-      || !Number.isFinite(faceBox.right)
-      || !Number.isFinite(faceBox.bottom)
-      || faceBox.right <= faceBox.left
-      || faceBox.bottom <= faceBox.top
-    ) return null;
-    anchorImageX = ((faceBox.left + faceBox.right) / 2) * imageWidth;
-    anchorImageY = ((faceBox.top + faceBox.bottom) / 2) * imageHeight;
-    sourceSpan = (faceBox.right - faceBox.left) * imageWidth * coverScale;
-    targetSpan = Math.min(
-      viewport.width * TARGET_FACE_WIDTH_RATIO,
-      viewport.height * TARGET_FACE_HEIGHT_RATIO,
-    );
-    targetY = viewport.height * TARGET_FACE_CENTER_Y_RATIO;
+    const span = Math.hypot(deltaX, deltaY) * containScale;
+    if (!isPositiveFinite(span)) return null;
+    const measuredRollDeg = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+    return {
+      anchorX: originX + ((leftX + rightX) / 2) * containScale,
+      anchorY: originY + ((leftY + rightY) / 2) * containScale,
+      originX,
+      originY,
+      renderedHeight,
+      renderedWidth,
+      rollDeg: typeof frame.rollDeg === 'number' && Number.isFinite(frame.rollDeg)
+        ? frame.rollDeg
+        : measuredRollDeg,
+      span,
+    };
   }
 
-  if (!isPositiveFinite(sourceSpan) || !isPositiveFinite(targetSpan)) return null;
-  const anchorX = originX + anchorImageX * coverScale;
-  const anchorY = originY + anchorImageY * coverScale;
-  const requestedScale = targetSpan / sourceSpan;
-  const rollDeg = typeof frame.rollDeg === 'number' && Number.isFinite(frame.rollDeg)
-    ? frame.rollDeg
-    : measuredRollDeg;
-
+  const {faceBox} = frame;
+  if (
+    !Number.isFinite(faceBox.left)
+    || !Number.isFinite(faceBox.top)
+    || !Number.isFinite(faceBox.right)
+    || !Number.isFinite(faceBox.bottom)
+    || faceBox.right <= faceBox.left
+    || faceBox.bottom <= faceBox.top
+  ) return null;
+  const faceWidth = (faceBox.right - faceBox.left) * imageWidth;
+  const span = faceWidth * containScale;
+  if (!isPositiveFinite(span)) return null;
   return {
-    anchorX,
-    anchorY,
-    innerTranslateX: centerX - anchorX,
-    innerTranslateY: centerY - anchorY,
+    anchorX: originX + ((faceBox.left + faceBox.right) / 2) * imageWidth * containScale,
+    anchorY: originY + ((faceBox.top + faceBox.bottom) / 2) * imageHeight * containScale,
     originX,
     originY,
-    outerTranslateX: targetX - centerX,
-    outerTranslateY: targetY - centerY,
     renderedHeight,
     renderedWidth,
-    rotationDeg: -rollDeg,
+    rollDeg: typeof frame.rollDeg === 'number' && Number.isFinite(frame.rollDeg)
+      ? frame.rollDeg
+      : 0,
+    span,
+  };
+}
+
+export function computeFinalMakeupImageTransform(
+  frame: MakeupRecommendationImageAlignmentFrame | undefined,
+  viewport: FinalMakeupAlignmentViewport,
+  referenceFrame: MakeupRecommendationImageAlignmentFrame | undefined = frame,
+): FinalMakeupImageTransform | null {
+  if (
+    !frame
+    || !referenceFrame
+    || !isPositiveFinite(frame.imageSize.width)
+    || !isPositiveFinite(frame.imageSize.height)
+    || !isPositiveFinite(viewport.width)
+    || !isPositiveFinite(viewport.height)
+  ) return null;
+
+  const useEyeCenters = hasUsableEyeCenters(frame) && hasUsableEyeCenters(referenceFrame);
+  const measuredFrame = measureAlignmentFrame(frame, viewport, useEyeCenters);
+  const measuredReference = measureAlignmentFrame(referenceFrame, viewport, useEyeCenters);
+  if (!measuredFrame || !measuredReference) return null;
+
+  const centerX = viewport.width / 2;
+  const centerY = viewport.height / 2;
+  const requestedScale = measuredReference.span / measuredFrame.span;
+
+  return {
+    anchorX: measuredFrame.anchorX,
+    anchorY: measuredFrame.anchorY,
+    innerTranslateX: centerX - measuredFrame.anchorX,
+    innerTranslateY: centerY - measuredFrame.anchorY,
+    originX: measuredFrame.originX,
+    originY: measuredFrame.originY,
+    outerTranslateX: measuredReference.anchorX - centerX,
+    outerTranslateY: measuredReference.anchorY - centerY,
+    renderedHeight: measuredFrame.renderedHeight,
+    renderedWidth: measuredFrame.renderedWidth,
+    rotationDeg: measuredReference.rollDeg - measuredFrame.rollDeg,
     scale: clamp(requestedScale, MIN_ALIGNMENT_SCALE, MAX_ALIGNMENT_SCALE),
-    targetX,
-    targetY,
+    targetX: measuredReference.anchorX,
+    targetY: measuredReference.anchorY,
   };
 }
 
