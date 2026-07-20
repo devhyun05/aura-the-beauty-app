@@ -161,14 +161,17 @@ export function ReferenceMakeupExtractionResultScreen({
             style={({pressed}) => [styles.secondaryButton, pressed && styles.pressed]}>
             <Text style={styles.secondaryButtonText}>다시 선택</Text>
           </Pressable>
-          <Pressable
-            accessibilityLabel="레퍼런스 메이크업 기반 메이크업 필터 보기"
-            accessibilityRole="button"
-            onPress={onOpenARFilter}
-            style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
-            <Text style={styles.primaryButtonText}>메이크업 필터로 보기</Text>
-            <ChevronRight color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
-          </Pressable>
+          {/* 추출→AR 연동은 구형 AR 경로라 스토어 빌드에서는 숨긴다(dev 전용). */}
+          {__DEV__ ? (
+            <Pressable
+              accessibilityLabel="레퍼런스 메이크업 기반 메이크업 필터 보기"
+              accessibilityRole="button"
+              onPress={onOpenARFilter}
+              style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
+              <Text style={styles.primaryButtonText}>메이크업 필터로 보기</Text>
+              <ChevronRight color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
+            </Pressable>
+          ) : null}
         </XStack>
       </ScrollView>
     </AppScreen>
