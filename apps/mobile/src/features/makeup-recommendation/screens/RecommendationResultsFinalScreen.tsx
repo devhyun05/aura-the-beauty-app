@@ -264,22 +264,25 @@ export function RecommendationResultsFinalScreen({
               추천 제품
             </Text>
           </Pressable>
-          <Pressable
-            accessibilityHint="현재 추천 메이크업을 얼굴에 미리 적용합니다"
-            accessibilityLabel="추천 메이크업 AR 적용"
-            accessibilityRole="button"
-            onPress={() => onApplyAR(model.sourceLook)}
-            style={({pressed}) => [
-              styles.floatingAction,
-              styles.arAction,
-              shadows.darkTile,
-              pressed && styles.pressed,
-            ]}>
-            <Sparkles color={colors.white} size={19} strokeWidth={2.1} />
-            <Text numberOfLines={1} style={styles.floatingActionLabel}>
-              AR로 적용하기
-            </Text>
-          </Pressable>
+          {/* 추천→AR 연동은 구형 AR 경로라 스토어 빌드에서는 숨긴다(dev 전용). */}
+          {__DEV__ ? (
+            <Pressable
+              accessibilityHint="현재 추천 메이크업을 얼굴에 미리 적용합니다"
+              accessibilityLabel="추천 메이크업 AR 적용"
+              accessibilityRole="button"
+              onPress={() => onApplyAR(model.sourceLook)}
+              style={({pressed}) => [
+                styles.floatingAction,
+                styles.arAction,
+                shadows.darkTile,
+                pressed && styles.pressed,
+              ]}>
+              <Sparkles color={colors.white} size={19} strokeWidth={2.1} />
+              <Text numberOfLines={1} style={styles.floatingActionLabel}>
+                AR로 적용하기
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </LinearGradient>
