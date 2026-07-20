@@ -10,7 +10,7 @@ export const FACE_ANALYSIS_CAPTURE_PLAN = [
 ] as const;
 
 export const FACE_ANALYSIS_CAPTURE_DURATION_COPY =
-  '보통 10초 내외이며, 얼굴을 맞추는 시간에 따라 더 걸릴 수 있어요.' as const;
+  '보통 40초 내외이며, 얼굴을 맞추는 시간에 따라 더 걸릴 수 있어요.' as const;
 
 export const FACE_3D_PREFLIGHT_COPY = {
   action: '준비됐어요',
