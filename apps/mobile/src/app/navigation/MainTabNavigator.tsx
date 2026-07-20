@@ -339,7 +339,11 @@ function MainTabBar({
         activeTab={activeTab}
         bottomInset={insets.bottom}
         floating
-        hiddenTabs={makeupJourneyEnabled ? undefined : ['journey']}
+        hiddenTabs={[
+          ...(makeupJourneyEnabled ? [] : (['journey'] as const)),
+          // 컨설팅 탭은 스토어 빌드에서 숨긴다(dev 빌드에서만 노출).
+          ...(__DEV__ ? [] : (['consulting'] as const)),
+        ]}
         onTabPress={handleTabPress}
       />
       {hasMountedExtractionSheet ? (

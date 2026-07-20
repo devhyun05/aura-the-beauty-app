@@ -175,7 +175,11 @@ export function HomeScreen({
   );
   const recommendedFilterPreviewCardWidth = getRecommendedFilterPreviewCardWidth(width);
   const visibleHomeModules = useMemo(
-    () => getVisibleHomeModules(audience, homeFeedContent),
+    () =>
+      getVisibleHomeModules(audience, homeFeedContent).filter(
+        // 컨설팅 모듈은 스토어 빌드 홈에서 숨긴다.
+        module => __DEV__ || module.id !== 'consulting',
+      ),
     [audience, homeFeedContent],
   );
   const visibleHomeModulesRef = useRef(visibleHomeModules);
@@ -426,7 +430,9 @@ export function HomeScreen({
               onPressFeature={handleHeroFeaturePress}
               onPressFilter={onPressHeroTrendFilter ? handleHeroFilterPress : undefined}
               topInset={insets.top}
-              trends={homeData.hero.trends}
+              trends={homeData.hero.trends.filter(
+                trend => __DEV__ || trend.featureId !== 'consulting',
+              )}
             />
 
             <HomeServiceShortcutSection
@@ -1093,10 +1099,16 @@ const homeServiceShortcutRows = [
     },
   ],
 ] as const;
-// 수염 제거 시뮬레이션은 스토어 빌드 홈에서 숨긴다(dev 빌드에서만 노출).
+// 수염 제거·컨설팅은 스토어 빌드 홈에서 숨긴다(dev 빌드에서만 노출).
+const STORE_HIDDEN_SHORTCUT_IDS: readonly string[] = [
+  'beardSimulation',
+  'consulting',
+];
 const visibleHomeServiceShortcutRows = homeServiceShortcutRows
   .map(row =>
-    row.filter(shortcut => __DEV__ || shortcut.id !== 'beardSimulation'),
+    row.filter(
+      shortcut => __DEV__ || !STORE_HIDDEN_SHORTCUT_IDS.includes(shortcut.id),
+    ),
   )
   .filter(row => row.length > 0);
 const homeServiceShortcuts = homeServiceShortcutRows.flat();

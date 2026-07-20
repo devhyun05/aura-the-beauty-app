@@ -372,7 +372,8 @@ export function ProfileScreen({
         )}
       </View>
 
-      {onPressConsultingHistory ? (
+      {/* 전문가 상담 섹션(예약·요약·상담 톡) — 스토어 빌드에서는 숨긴다. */}
+      {__DEV__ && onPressConsultingHistory ? (
         <View style={styles.section}>
           <SectionHeader
             actionLabel="더보기"
