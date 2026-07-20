@@ -1,5 +1,5 @@
 import React from 'react';
-import {Pressable, StyleSheet, useWindowDimensions} from 'react-native';
+import {Pressable, StyleSheet, Text, useWindowDimensions} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {YStack} from 'tamagui';
 
@@ -39,6 +39,7 @@ import {raceWithNullTimeout} from '../../../features/face-analysis/services/stil
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
 import {analyzeFaceGeometry2d} from '../../../features/face-geometry/services/faceGeometryService';
 import type {FaceGeometryResult} from '../../../features/face-geometry/types';
+import {FaceGeometryDebugScreen} from '../../../features/face-geometry/screens/FaceGeometryDebugScreen';
 import {buildFaceVerticalThirdsAnalysisPayload} from '../../../features/face-ratio/services/faceVerticalThirdsAiPayload';
 import {analyzeFaceVerticalThirds} from '../../../features/face-ratio/services/faceVerticalThirdsService';
 import type {
@@ -175,7 +176,7 @@ export function FaceCaptureRouteScreen({
       <UnifiedFaceCaptureScreen
         onCancel={() => {
           invalidateUnifiedFaceCapture({resetRetryAttempt: true});
-          navigateMainTab(navigation, 'HomeTab');
+          goBackToPreviousOrMainTab(navigation, 'HomeTab');
         }}
         onCaptureCommitted={commitUnifiedFaceCapture}
         onCaptureReadyForProcessing={(result, loadingStartedAtMs) => {
@@ -193,7 +194,7 @@ export function FaceCaptureRouteScreen({
           // 홈으로 돌려보내 사용자가 통합 촬영을 다시 시작하게 한다. 실패 사유는
           // [aura:unified-face-capture] fallback-to-legacy 로그로 남는다.
           invalidateUnifiedFaceCapture({resetRetryAttempt: true});
-          navigateMainTab(navigation, 'HomeTab');
+          goBackToPreviousOrMainTab(navigation, 'HomeTab');
         }}
         onRequestStarted={beginUnifiedFaceCapture}
         request={unifiedCaptureRequest}
@@ -228,7 +229,7 @@ export function FaceCaptureRouteScreen({
             : {target: 'faceAnalysis'},
         );
       }}
-      onClose={() => navigateMainTab(navigation, 'HomeTab')}
+      onClose={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}
     />
   );
 }
@@ -405,8 +406,8 @@ export function FaceAnalysisLoadingRouteScreen({
   // 한다. 직전 3D 측정 화면은 teardown 에서 pause 한다(카메라 반납에 올바름) —
   // 그래서 로딩이 lease 를 잡아 resume+ready 를 보장하고, 분석이 모두 settle
   // 하면 아래 end-lease 효과가 pause 로 반납한다.
-  // isFocused 가드: onBack 이 navigate 라 스택 하단에 stale 로딩 인스턴스가
-  // 남을 수 있는데, 그 인스턴스가 촬영 화면 밑에서 Unity 를 resume 하면 안 된다.
+  // isFocused 가드: 네이티브 back gesture, 화면 교체, 비동기 완료 레이스로
+  // 포커스를 잃은 로딩 인스턴스가 촬영 화면 밑에서 Unity 를 resume 하면 안 된다.
   React.useEffect(() => {
     stillAnalysisReadyPromiseRef.current = null;
     stillAnalysisLeaseIdRef.current = null;
@@ -792,7 +793,7 @@ export function FaceAnalysisLoadingRouteScreen({
       }
     }
 
-    navigateMainTab(navigation, 'HomeTab');
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
   }, [
     invalidateUnifiedFaceCapture,
     navigation,
@@ -902,38 +903,53 @@ export function FaceAnalysisReportPreviewRouteScreen({
       setSelectedFaceAnalysisReport(currentReport =>
         currentReport?.id === reportId ? null : currentReport,
       );
-      navigation.navigate('FaceAnalysisReportsList');
+      navigation.replace('FaceAnalysisReportsList');
     },
     [navigation, setSelectedFaceAnalysisReport],
   );
 
   return (
-    <FaceAnalysisReportPreviewScreen
-      analysisReport={selectedFaceAnalysisReport}
-      capturedPhotoUri={selectedFaceCapture?.imageUri}
-      onBack={() =>
-        shouldReturnToProfile
-          ? goBackToPreviousOrMainTab(navigation, 'ProfileTab')
-          : navigation.goBack()
-      }
-      onCreateARFilter={() => {
-        if (currentReportId) {
-          navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
-          return;
+    <>
+      <FaceAnalysisReportPreviewScreen
+        analysisReport={selectedFaceAnalysisReport}
+        capturedPhotoUri={selectedFaceCapture?.imageUri}
+        onBack={() =>
+          shouldReturnToProfile
+            ? goBackToPreviousOrMainTab(navigation, 'ProfileTab')
+            : goBackToPreviousOrMainTab(navigation, 'HomeTab')
         }
-        navigation.navigate('MakeupRecommendation');
-      }}
-      onDeleteReport={handleDeleteReport}
-      onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
-      onRetake={() => navigation.navigate('FaceCapture')}
-      face3d={route.params?.reportId ? null : selectedFace3DProfile}
-      faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
-      personalColor={route.params?.reportId ? null : selectedPersonalColor}
-      reportId={route.params?.reportId ?? null}
-      sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
-      verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
-    />
+        onCreateARFilter={() => {
+          if (currentReportId) {
+            navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
+            return;
+          }
+          navigation.navigate('MakeupRecommendation');
+        }}
+        onDeleteReport={handleDeleteReport}
+        onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
+        onRetake={() => navigation.navigate('FaceCapture')}
+        face3d={route.params?.reportId ? null : selectedFace3DProfile}
+        faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
+        personalColor={route.params?.reportId ? null : selectedPersonalColor}
+        reportId={route.params?.reportId ?? null}
+        sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
+        verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
+      />
+      {__DEV__ && selectedFaceGeometry2d ? (
+        <Pressable
+          onPress={() => navigation.navigate('FaceGeometryDebug')}
+          style={styles.devFaceGeometryDebugButton}>
+          <Text style={styles.devFaceGeometryDebugButtonLabel}>▷ 기하검증</Text>
+        </Pressable>
+      ) : null}
+    </>
   );
+}
+
+// __DEV__ 전용: Face 2D 지오메트리(눈꼬리·눈썹선·roll) 오버레이 검증 화면.
+// 결과는 화면이 flow state(selectedFaceGeometry2d)에서 직접 읽으므로 param 불필요.
+export function FaceGeometryDebugRouteScreen() {
+  return <FaceGeometryDebugScreen />;
 }
 
 function FaceAnalysisReportBottomNav({
@@ -1186,6 +1202,21 @@ function FaceAnalysisReportBottomNav({
 }
 
 const styles = StyleSheet.create({
+  devFaceGeometryDebugButton: {
+    backgroundColor: 'rgba(17, 24, 39, 0.85)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    position: 'absolute',
+    right: 12,
+    top: 56,
+    zIndex: 40,
+  },
+  devFaceGeometryDebugButtonLabel: {
+    color: '#facc15',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   reportFooterDismissLayer: {
     backgroundColor: 'transparent',
     bottom: 0,

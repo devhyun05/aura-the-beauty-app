@@ -756,25 +756,39 @@ Table product_recommendation_runs {
   id uuid [pk, default: `gen_random_uuid()`]
   user_id uuid [not null]
   source_analysis_report_id uuid
+  source_makeup_report_id uuid [note: 'Owned situation makeup report; cascade-deletes all derived snapshot revisions']
+  source_look_id text [note: 'Stable nested report look id; required for makeup_report_v1']
   user_nickname text
   look_title text
   look_description text
   look_media_id uuid
   source_style_id uuid
-  strategy text [not null, default: 'legacy_v1']
+  strategy text [not null, default: 'legacy_v1', note: 'legacy_v1 | ar_v1 | seasonal_v1 | personalized_v1 | cohort_v1 | makeup_report_v1']
   algorithm_version text
+  recipe_hash text [note: 'Lowercase SHA-256 of the normalized report/look targets']
+  catalog_version text [note: 'Deterministic catalog input version used for this immutable revision']
+  status text [not null, default: 'ready', note: 'pending | processing | ready | partial | failed']
+  revision integer [not null, default: 1, note: 'Monotonic refresh revision, >= 1']
   consent_snapshot jsonb [not null, default: '{}']
   product_ids uuid[]
-  recommendation_payload jsonb [not null, default: '{}']
+  recommendation_payload jsonb [not null, default: '{}', note: 'Stable ranked product/shade identity snapshot; price, stock and outbound URL are revalidated on read']
   created_at timestamptz [not null, default: `now()`]
+  started_at timestamptz [note: 'Worker claim time; processing rows older than the lease can be reclaimed']
+  completed_at timestamptz
+  error_code text [note: 'Bounded machine-readable code, required only for failed makeup_report_v1 runs']
   expires_at timestamptz [not null, default: `now() + interval '30 days'`]
 
   indexes {
     (user_id, created_at)
     (source_analysis_report_id)
+    (source_makeup_report_id) [name: 'idx_product_recommendation_runs_source_makeup_report', note: 'Partial where source_makeup_report_id is not null; supports report cascade/delete lookup']
+    (source_makeup_report_id, source_look_id, recipe_hash, algorithm_version, catalog_version, revision) [unique, name: 'uq_product_recommendation_runs_makeup_snapshot_revision', note: 'Partial unique index where strategy = makeup_report_v1']
+    (source_makeup_report_id, source_look_id, revision) [unique, name: 'uq_product_recommendation_runs_makeup_look_revision', note: 'Partial unique index where strategy = makeup_report_v1; serializes refresh revisions across rolling algorithm/catalog releases']
+    (user_id, source_makeup_report_id, source_look_id, revision) [name: 'idx_product_recommendation_runs_makeup_ready_revision', note: 'revision DESC; partial where strategy = makeup_report_v1 and status in (ready, partial)']
+    (status, started_at, created_at) [name: 'idx_product_recommendation_runs_makeup_work_queue', note: 'Partial worker/reclaim queue where strategy = makeup_report_v1 and status in (pending, processing)']
   }
 
-  Note: 'ProductRecommendationData. tabs, products, sets, matchRate, reason are kept in recommendation_payload for v1 API flexibility.'
+  Note: 'makeup_report_v1 snapshots are append-only by revision. A refresh creates revision+1, so the latest ready/partial revision remains available while a new revision is processing.'
 }
 
 Table product_shades {
@@ -782,7 +796,7 @@ Table product_shades {
   product_id uuid [not null]
   external_shade_key text [not null]
   shade_name text [not null]
-  product_region text [not null, note: 'lip | cheek | liner | base | brow']
+  product_region text [not null, note: 'lip | cheek | shadow | liner | base | brow']
   srgb_hex text
   lab_l double
   lab_a double
@@ -2133,6 +2147,7 @@ Ref: external_product_likes.user_id > users.id
 
 Ref: product_recommendation_runs.user_id > users.id
 Ref: product_recommendation_runs.source_analysis_report_id > analysis_reports.id
+Ref: product_recommendation_runs.source_makeup_report_id > makeup_recommendation_reports.id [delete: cascade]
 Ref: product_recommendation_runs.look_media_id > media_assets.id
 Ref: product_recommendation_runs.source_style_id > saved_makeup_styles.id
 Ref: product_shades.product_id > products.id

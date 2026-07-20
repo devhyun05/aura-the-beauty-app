@@ -99,7 +99,7 @@ export function ConsultingExpertListRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ConsultingExpertList"
-      onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+      onBack={() => goBackToConsulting(navigation)}>
       <ConsultingExpertListScreen
         initialCategoryId={route.params?.categoryId ?? null}
         onPressExpert={expertId =>
@@ -358,7 +358,7 @@ export function ConsultingBookingCompleteRouteScreen({
     return (
       <DetailRouteChrome
         routeName="ConsultingBookingComplete"
-        onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+        onBack={() => goBackToConsulting(navigation)}>
         <ConsultingRouteLoading />
       </DetailRouteChrome>
     );
@@ -367,7 +367,7 @@ export function ConsultingBookingCompleteRouteScreen({
   return (
     <DetailRouteChrome
       routeName="ConsultingBookingComplete"
-      onBack={() => navigateMainTab(navigation, 'ConsultingTab')}>
+      onBack={() => goBackToConsulting(navigation)}>
       <ConsultingBookingCompleteScreen
         draft={draft}
         expert={expert}

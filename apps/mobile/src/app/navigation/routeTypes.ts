@@ -1,4 +1,5 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
+import type {ProductRecommendationCategory} from '../../features/recommendation/types';
 import type {UnifiedFaceCaptureCompletedEvent} from '../../features/face-capture/services/unifiedFaceCaptureContract';
 import type {
   ConsultingBookingDraft,
@@ -51,6 +52,8 @@ export type RootStackParamList = {
   FaceAnalysisReportDetail:
     | {reportId?: string; returnTo?: 'profile'}
     | undefined;
+  // __DEV__ 전용 검증 화면: Face 2D 지오메트리(눈꼬리·눈썹선·roll) 오버레이 확인.
+  FaceGeometryDebug: undefined;
   FloatingActionSettings: undefined;
   AppSettings: undefined;
   Faq: undefined;
@@ -69,14 +72,23 @@ export type RootStackParamList = {
   SavedMakeupList: undefined;
   ProductRecommendation: {
     reportId?: string;
+    makeupRecommendationReportId?: string;
     arStyleId?: string;
     initialSection?: 'ar' | 'seasonal' | 'personalized' | 'cohort';
   } | undefined;
-  ProductRecommendationShelf: {
-    shelf: 'ar' | 'seasonal' | 'personalized' | 'cohort';
-    title?: string;
-    arStyleId?: string;
-  };
+  ProductRecommendationShelf:
+    | {
+        shelf: 'ar' | 'seasonal' | 'personalized' | 'cohort';
+        title?: string;
+        arStyleId?: string;
+      }
+    | {
+        shelf: 'makeupReport';
+        title: string;
+        makeupReportId: string;
+        makeupLookId: string;
+        initialCategory?: ProductRecommendationCategory;
+      };
   ProductSearchResult: {query: string};
   ProductDetail: {
     productId: string;
@@ -206,6 +218,7 @@ export const rootStackRoutes = [
   'FaceAnalysisLoading',
   'FaceAnalysisReportsList',
   'FaceAnalysisReportDetail',
+  'FaceGeometryDebug',
   'FloatingActionSettings',
   'AppSettings',
   'Faq',

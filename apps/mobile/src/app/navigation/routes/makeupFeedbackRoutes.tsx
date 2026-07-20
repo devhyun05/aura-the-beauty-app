@@ -120,7 +120,7 @@ export function MakeupFeedbackCaptureRouteScreen({
       navigation.reset(getMakeupJourneyDayResetState(returnEntryDate));
       return;
     }
-    navigateMainTab(navigation, 'HomeTab');
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
   }, [clearMakeupFeedbackFlowContext, journeyContext, navigation]);
 
   return (
@@ -178,7 +178,7 @@ export function MakeupFeedbackAlbumUploadRouteScreen({
       navigation.reset(getMakeupJourneyDayResetState(returnEntryDate));
       return;
     }
-    navigateMainTab(navigation, 'HomeTab');
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
   }, [clearMakeupFeedbackFlowContext, journeyContext, navigation]);
 
   return (
@@ -214,7 +214,7 @@ export function MakeupFeedbackGoalInputRouteScreen({
       navigation.reset(getMakeupJourneyDayResetState(returnEntryDate));
       return;
     }
-    navigateMainTab(navigation, 'HomeTab');
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
   }, [
     clearMakeupFeedbackFlowContext,
     makeupFeedbackEntryDate,
@@ -284,10 +284,7 @@ export function MakeupFeedbackLoadingRouteScreen({
       navigation.reset(getMakeupJourneyDayResetState(flowContext.entryDate));
       return;
     }
-    navigation.reset({
-      index: 0,
-      routes: [{name: 'MainTabs', params: {screen: 'HomeTab'}}],
-    });
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
   }, [clearMakeupFeedbackFlowContext, flowContext, navigation]);
   const handleEditGoal = React.useCallback(() => {
     if (flowContext.feedbackKind === 'correction') {
@@ -569,7 +566,7 @@ export function MakeupCorrectionGuideRouteScreen({navigation}: RootScreenProps<'
     return (
       <DetailRouteChrome
         routeName="MakeupCorrectionGuide"
-        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+        onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
         <RoutePlaceholder
           description="A makeup feedback result is required to show the guide."
           showHeader={false}
@@ -597,7 +594,7 @@ export function MakeupCorrectionTipRouteScreen({
     return (
       <DetailRouteChrome
         routeName="MakeupCorrectionTip"
-        onBack={() => navigateMainTab(navigation, 'HomeTab')}>
+        onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
         <RoutePlaceholder
           description="The selected correction point was not found."
           showHeader={false}

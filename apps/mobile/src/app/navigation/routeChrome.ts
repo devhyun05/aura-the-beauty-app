@@ -138,6 +138,13 @@ export const routeChromeByRoute = {
     kind: 'fullscreen',
     statusBarStyle: 'dark',
   },
+  // __DEV__ 전용 검증 화면 — FaceGeometryDebugScreen이 자체 렌더링을 담당한다.
+  FaceGeometryDebug: {
+    category: 'detail-report',
+    depth: 'sub',
+    kind: 'fullscreen',
+    statusBarStyle: 'dark',
+  },
   FloatingActionSettings: {
     category: 'form-edit',
     contextLabel: 'QUICK ACTION',

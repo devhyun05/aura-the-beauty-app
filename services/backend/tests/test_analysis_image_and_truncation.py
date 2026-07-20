@@ -13,7 +13,7 @@ from PIL import Image
 
 from app.core.errors import AppError
 from app.core.settings import Settings
-from app.services.openai_analysis import OpenAIAnalysisService
+from app.services.openai_analysis import FACE_ANALYSIS_TOOL_NAME, OpenAIAnalysisService
 
 
 def _service(**overrides) -> OpenAIAnalysisService:
@@ -80,11 +80,17 @@ def _bedrock_service(fake_client: _FakeBedrockClient) -> OpenAIAnalysisService:
 
 
 def test_bedrock_truncation_attaches_stop_reason_to_failure():
-    # 절단으로 필수 필드가 빠진 (그러나 파싱은 되는) 부분 JSON.
+    # 절단으로 필수 필드가 빠진 (그러나 파싱은 되는) 부분 도구 응답.
     fake = _FakeBedrockClient(
         {
             "stop_reason": "max_tokens",
-            "content": [{"type": "text", "text": json.dumps({"faceShape": "계란형"})}],
+            "content": [
+                {
+                    "type": "tool_use",
+                    "name": FACE_ANALYSIS_TOOL_NAME,
+                    "input": {"faceShape": "계란형"},
+                }
+            ],
         }
     )
     service = _bedrock_service(fake)
@@ -119,7 +125,7 @@ def test_structured_v2_stage_truncation_attaches_stop_reason():
     assert exc_info.value.details.get("stopReason") == "max_tokens"
 
 
-def test_structured_v2_stage_empty_truncated_output_reports_stop_reason():
+def test_structured_v2_stage_missing_tool_reports_stop_reason():
     fake = _FakeBedrockClient({"stop_reason": "max_tokens", "content": []})
     service = _bedrock_service(fake)
 
@@ -132,7 +138,7 @@ def test_structured_v2_stage_empty_truncated_output_reports_stop_reason():
             max_tokens=2800,
         )
 
-    assert exc_info.value.code == "AI_EMPTY_OUTPUT"
+    assert exc_info.value.code == "BEDROCK_TOOL_USE_MISSING"
     assert exc_info.value.details.get("stopReason") == "max_tokens"
 
 
