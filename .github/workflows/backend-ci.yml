@@ -1,6 +1,17 @@
 name: Backend CI
 
 on:
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - "services/backend/**"
+      - "docs/backend/**"
+      - "scripts/aws/**"
+      - "apps/mobile/eas.json"
+      - ".github/workflows/backend-ci.yml"
+      - ".github/workflows/deploy-backend-ecs.yml"
   workflow_dispatch:
 
 permissions:
