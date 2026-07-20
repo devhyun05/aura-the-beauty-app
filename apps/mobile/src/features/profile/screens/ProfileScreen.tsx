@@ -307,49 +307,54 @@ export function ProfileScreen({
         </NativeScrollView>
       </View>
 
-      <View style={styles.section}>
-        <SectionHeader
-          actionLabel="더보기"
-          onPressAction={onPressCreatedMakeupLookList}
-          title="내가 만든 필터"
-        />
-        {previewCreatedMakeupLooks.length > 0 ? (
-          <View style={styles.previewGrid}>
-            {previewCreatedMakeupLooks.map(makeupLook => (
-              <MakeupLookCard
-                key={makeupLook.id}
-                makeupLook={makeupLook}
-                onPress={onPressMakeupLook}
-                style={previewCardLayout}
-              />
-            ))}
-          </View>
-        ) : (
-          <EmptySection label="아직 만든 필터가 없어요." />
-        )}
-      </View>
+      {/* 필터 섹션(내가 만든·좋아요) — AR 필터 진입점과 함께 스토어 빌드에서는 숨긴다. */}
+      {__DEV__ ? (
+        <View style={styles.section}>
+          <SectionHeader
+            actionLabel="더보기"
+            onPressAction={onPressCreatedMakeupLookList}
+            title="내가 만든 필터"
+          />
+          {previewCreatedMakeupLooks.length > 0 ? (
+            <View style={styles.previewGrid}>
+              {previewCreatedMakeupLooks.map(makeupLook => (
+                <MakeupLookCard
+                  key={makeupLook.id}
+                  makeupLook={makeupLook}
+                  onPress={onPressMakeupLook}
+                  style={previewCardLayout}
+                />
+              ))}
+            </View>
+          ) : (
+            <EmptySection label="아직 만든 필터가 없어요." />
+          )}
+        </View>
+      ) : null}
 
-      <View style={styles.section}>
-        <SectionHeader
-          actionLabel="더보기"
-          onPressAction={onPressMakeupLookList}
-          title="좋아요한 메이크업 필터"
-        />
-        {previewLikedMakeupLooks.length > 0 ? (
-          <View style={styles.previewGrid}>
-            {previewLikedMakeupLooks.map((makeupLook) => (
-              <MakeupLookCard
-                key={makeupLook.id}
-                makeupLook={makeupLook}
-                onPress={onPressMakeupLook}
-                style={previewCardLayout}
-              />
-            ))}
-          </View>
-        ) : (
-          <EmptySection label="좋아요한 메이크업 필터가 없어요." />
-        )}
-      </View>
+      {__DEV__ ? (
+        <View style={styles.section}>
+          <SectionHeader
+            actionLabel="더보기"
+            onPressAction={onPressMakeupLookList}
+            title="좋아요한 메이크업 필터"
+          />
+          {previewLikedMakeupLooks.length > 0 ? (
+            <View style={styles.previewGrid}>
+              {previewLikedMakeupLooks.map((makeupLook) => (
+                <MakeupLookCard
+                  key={makeupLook.id}
+                  makeupLook={makeupLook}
+                  onPress={onPressMakeupLook}
+                  style={previewCardLayout}
+                />
+              ))}
+            </View>
+          ) : (
+            <EmptySection label="좋아요한 메이크업 필터가 없어요." />
+          )}
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <SectionHeader

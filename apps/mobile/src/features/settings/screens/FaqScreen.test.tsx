@@ -34,6 +34,7 @@ expectEqual(
 <AppSettingsScreen
   onPressAccountManagement={() => undefined}
   onPressFaq={() => undefined}
+  onPressPrivacyPolicy={() => undefined}
   onPressProfile={() => undefined}
   onPressQuickActions={() => undefined}
 />;

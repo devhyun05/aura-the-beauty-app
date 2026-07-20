@@ -97,7 +97,7 @@ export function LoginScreen({onLoginSuccess, simulateLoginFailure = false}: Logi
           <Text
             style={styles.termsText}
           >
-            가입 시 이용약관,{' '}
+            가입 시{' '}
             <Text style={styles.termsLink} onPress={() => setShowPrivacyPolicy(true)}>
               개인정보 수집·이용 및 처리방침
             </Text>

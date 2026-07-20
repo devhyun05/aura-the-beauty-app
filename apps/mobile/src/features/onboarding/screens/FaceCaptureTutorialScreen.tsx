@@ -455,7 +455,13 @@ export function FaceCaptureTutorialScreen({
             />
           </YStack>
 
-          <View style={styles.privacyNoticePlaceholder} />
+          {/* 촬영 전 처리 안내 — 개인정보처리방침 2항(사전 안내) 이행 문구. */}
+          <View style={styles.privacyNoticePlaceholder}>
+            <Text style={styles.privacyNoticeText}>
+              촬영한 사진은 AI 분석과 보고서 생성에만 사용되며, 보고서 삭제 또는
+              회원 탈퇴 시 함께 삭제됩니다.
+            </Text>
+          </View>
 
           {isFinalStep ? (
             <Button
@@ -635,6 +641,13 @@ const styles = StyleSheet.create({
     maxWidth: 362,
     minHeight: 0,
     width: '100%',
+  },
+  privacyNoticeText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
   },
   safeArea: {
     backgroundColor: colors.background,
