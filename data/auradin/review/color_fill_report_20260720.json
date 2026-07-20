@@ -1,0 +1,25 @@
+{
+  "autoFilled": {
+    "acceptedValues": 60,
+    "applied": 58,
+    "hardFilterPromoted": 0,
+    "skippedEvidenceSpan": 0,
+    "skippedLowerConfidence": 2,
+    "skippedUnknownRow": 0
+  },
+  "seedCoverageAfter": {
+    "eligible": 64,
+    "present": 303,
+    "total": 1835
+  },
+  "seedCoverageBefore": {
+    "eligible": 64,
+    "present": 212,
+    "total": 1835
+  },
+  "structuredDetail": {
+    "colorByBrandNameCount": 82,
+    "colorByImageCount": 56,
+    "filled": 40
+  }
+}

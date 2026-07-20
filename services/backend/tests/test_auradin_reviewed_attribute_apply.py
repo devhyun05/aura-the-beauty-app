@@ -131,6 +131,20 @@ def test_accepted_values_as_decisions_forces_value_only() -> None:
   assert decisions[0]["value"] == "pink"
 
 
+def test_accepted_values_only_fields_filter() -> None:
+  review = [
+    {
+      "catalogItemId": "a",
+      "fields": {
+        "colorFamily": {"status": "accepted", "value": "pink", "confidence": 0.9, "evidenceSpan": "pink", "promotionCandidate": True},
+        "texture": {"status": "accepted", "value": "tint", "confidence": 0.9, "evidenceSpan": "tint", "promotionCandidate": True},
+      },
+    },
+  ]
+  decisions = apply_mod.accepted_values_as_decisions(review, only_fields={"colorFamily"})
+  assert [d["field"] for d in decisions] == ["colorFamily"]  # texture excluded
+
+
 def test_auto_fill_applies_value_but_never_promotes() -> None:
   rows = [_seed_row("a")]
   decisions = apply_mod.accepted_values_as_decisions(

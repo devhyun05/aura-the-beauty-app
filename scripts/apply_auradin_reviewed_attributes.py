@@ -114,7 +114,11 @@ def merge_review_decisions(
   return decisions
 
 
-def accepted_values_as_decisions(review_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def accepted_values_as_decisions(
+  review_rows: list[dict[str, Any]],
+  *,
+  only_fields: set[str] | None = None,
+) -> list[dict[str, Any]]:
   """Every gate-accepted field as a VALUE-ONLY decision (no human verdict needed).
 
   Used by ``--auto-fill-values`` to collect grounded colorFamily/etc. without a
@@ -123,6 +127,9 @@ def accepted_values_as_decisions(review_rows: list[dict[str, Any]]) -> list[dict
   requires the human spotcheck path (merge_review_decisions). This does NOT
   reproduce the seed-coverage fabrication trap, which was specifically about
   inflating hardFilter eligibility via an overall-confidence fallback.
+
+  ``only_fields`` restricts which attribute fields are collected (e.g. just
+  ``{"colorFamily"}``).
   """
 
   decisions: list[dict[str, Any]] = []
@@ -132,6 +139,8 @@ def accepted_values_as_decisions(review_rows: list[dict[str, Any]]) -> list[dict
       continue
     fields = result.get("fields") if isinstance(result.get("fields"), dict) else {}
     for field, payload in fields.items():
+      if only_fields is not None and field not in only_fields:
+        continue
       if not isinstance(payload, dict) or payload.get("status") != "accepted":
         continue
       decisions.append(
@@ -367,6 +376,11 @@ def main(argv: list[str] | None = None) -> int:
     help="사람 spotcheck 없이 gate-accepted 값을 value-only로 채움 "
     "(evidenceSpan 게이트로 날조는 막지만 hardFilter 승격은 안 함).",
   )
+  parser.add_argument(
+    "--fields",
+    default=None,
+    help="auto-fill 대상 필드 제한 (쉼표구분, 예: colorFamily). 기본: 전체 accepted 필드",
+  )
   parser.add_argument("--run-date", required=True)
   parser.add_argument("--report", type=Path, help="before/after 커버리지 리포트 json 경로")
   args = parser.parse_args(argv)
@@ -391,7 +405,8 @@ def main(argv: list[str] | None = None) -> int:
   if args.review_queue:
     review_rows = read_jsonl(args.review_queue)
     if args.auto_fill_values:
-      decisions = accepted_values_as_decisions(review_rows)
+      only_fields = {f.strip() for f in args.fields.split(",") if f.strip()} if args.fields else None
+      decisions = accepted_values_as_decisions(review_rows, only_fields=only_fields)
       rows, reviewed_report = apply_reviewed_to_seed(
         rows, decisions, run_date=args.run_date, source_label="llm_b3_autofilled"
       )
