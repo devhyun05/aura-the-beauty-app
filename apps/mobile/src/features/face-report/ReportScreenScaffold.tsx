@@ -6,6 +6,7 @@ import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
 import {
   loadOptionalCaptureRefFunction,
   OptionalViewShot,
+  type OptionalViewShotOptions,
   type OptionalViewShotRef,
 } from '../../shared/ui/OptionalViewShot';
 import { color, font, radius, shadow } from './reportTokens';
@@ -56,9 +57,11 @@ export function ReportScreenScaffold({
   const cardY = useRef<Record<string, number>>({});
 
   // 보고서 전체 캡처 — 스크롤뷰 안쪽 콘텐츠 래퍼를 직접 캡처한다.
-  // 실기기 확정 원인: 긴 보고서는 drawViewHierarchyInRect가
-  // "The view cannot be captured..."로 실패한다(렌더러 픽셀 한계).
-  // 픽셀 캡을 단계적으로 낮춰 재시도해 전체 길이를 항상 보존한다.
+  // 실기기 확정 원인: 긴 보고서는 drawViewHierarchyInRect가 목표 크기와
+  // 무관하게 원본 크기 뷰를 내부 스냅샷하다 실패한다(렌더러 픽셀 한계).
+  // 그래서 한계를 넘는 보고서는 useRenderInContext(CoreGraphics 경로,
+  // 크기 한계 없음)로 전체 길이를 캡처한다. 이 경로는 크기 옵션을 주면
+  // 축소가 아니라 잘림이 되므로 반드시 자연 크기로 호출해야 한다.
   // (호출부 서비스에 화면 캡처 최후 폴백이 한 겹 더 있다.)
   const captureFullReport = useCallback(async () => {
     const captureNode = loadOptionalCaptureRefFunction();
@@ -71,25 +74,48 @@ export function ReportScreenScaffold({
 
     const deviceScale = PixelRatio.get();
     const naturalPixels = body.height * deviceScale;
-    // 자연 크기(캡 없음) → 점점 보수적인 캡 순서로 시도.
-    const pixelCaps = [naturalPixels, 14000, 9800, 7000].filter(
-      (cap, index) => index === 0 || cap < naturalPixels,
-    );
+    const fitsSnapshotPath = naturalPixels <= REPORT_CAPTURE_MAX_PIXELS;
+
+    const attempts: Array<{
+      label: string;
+      options: OptionalViewShotOptions & {width?: number; height?: number};
+    }> = [];
+
+    if (fitsSnapshotPath) {
+      // 짧은 보고서: 스냅샷 경로가 충실도가 더 높아 우선한다.
+      attempts.push({label: 'snapshot-natural', options: {}});
+      attempts.push({
+        label: 'render-in-context',
+        options: {useRenderInContext: true},
+      });
+    } else {
+      // 긴 보고서: 전체 길이를 보존하는 유일한 경로를 먼저 시도한다.
+      attempts.push({
+        label: 'render-in-context',
+        options: {useRenderInContext: true},
+      });
+      // 최후 폴백 — 축소 스냅샷(실패 가능성이 높지만 무해).
+      for (const cap of [14000, 9800, 7000]) {
+        const scaleDown = cap / naturalPixels;
+        if (scaleDown >= 1 || body.width <= 0) {
+          continue;
+        }
+        attempts.push({
+          label: `snapshot-cap-${cap}`,
+          options: {
+            height: Math.floor(body.height * scaleDown),
+            width: Math.floor(body.width * scaleDown),
+          },
+        });
+      }
+    }
 
     let lastError: unknown = null;
-    for (const cap of pixelCaps) {
-      const scaleDown = Math.min(1, cap / naturalPixels);
-      const dims =
-        scaleDown < 1 && body.width > 0
-          ? {
-              height: Math.floor(body.height * scaleDown),
-              width: Math.floor(body.width * scaleDown),
-            }
-          : {};
+    for (const attempt of attempts) {
       try {
         const uri = await captureNode(captureTarget, {
           ...REPORT_CAPTURE_OPTIONS,
-          ...dims,
+          ...attempt.options,
         });
         if (uri) {
           return uri;
@@ -97,7 +123,7 @@ export function ReportScreenScaffold({
       } catch (error) {
         lastError = error;
         console.info('[aura:analysis] report-share:capture-tier-failed', {
-          cap,
+          attempt: attempt.label,
           message: error instanceof Error ? error.message : String(error),
         });
       }

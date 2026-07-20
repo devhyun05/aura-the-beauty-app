@@ -117,7 +117,8 @@ export function RecommendationResultsFinalScreen({
   const captureReady =
     generatedReady && Object.values(captureReadiness).every(Boolean);
 
-  // 결과가 렌더러 픽셀 한계를 넘으면 축소 캡처, 아니면 기존 캡처 경로.
+  // 결과가 렌더러 픽셀 한계를 넘으면 renderInContext(큰 뷰에서도 동작,
+  // 크기 옵션을 주면 잘리므로 자연 크기 호출) → 축소 스냅샷 순으로 시도.
   const captureFullResult = useCallback(async () => {
     const body = captureBodySize.current;
     const captureNode = loadOptionalCaptureRefFunction();
@@ -129,6 +130,20 @@ export function RecommendationResultsFinalScreen({
       body.height > 0 &&
       body.height * deviceScale > CAPTURE_MAX_PIXELS
     ) {
+      try {
+        const fullUri = await captureNode(captureRef.current, {
+          ...CAPTURE_OPTIONS,
+          useRenderInContext: true,
+        });
+        if (fullUri) {
+          return fullUri;
+        }
+      } catch (error) {
+        console.info('[aura:recommendation] capture-render-in-context-failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       const scaleDown = CAPTURE_MAX_PIXELS / (body.height * deviceScale);
       const scaledUri = await captureNode(captureRef.current, {
         ...CAPTURE_OPTIONS,
