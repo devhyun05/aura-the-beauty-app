@@ -69,6 +69,7 @@ const STORE_HIDDEN_MENU_ITEM_IDS: readonly AppFeatureMenuItemId[] = [
   'beardSimulation',
   'consulting',
   'recommendedFilters',
+  'makeupLooks',
 ];
 
 const allAppFeatureMenuSections: readonly AppFeatureMenuSection[] = [
