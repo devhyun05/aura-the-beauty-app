@@ -890,21 +890,20 @@ function HomeHeroChrome({
       <AuraLogo style={styles.homeHeroLogo} variant="header" />
       <XStack style={styles.homeHeroRightActions}>
         {headerRightSlot}
-        {/* \uC2A4\uD1A0\uC5B4 \uBE4C\uB4DC\uC5D0\uC11C\uB294 \uC804\uCCB4 \uAE30\uB2A5 \uBA54\uB274(\uCEE4\uBBA4\uB2C8\uD2F0 \uB4F1 \uB0B4\uBD80 \uAC80\uC99D \uACBD\uB85C \uD3EC\uD568)\uB97C \uB178\uCD9C\uD558\uC9C0 \uC54A\uB294\uB2E4. */}
-        {__DEV__ ? (
-          <Pressable
-            accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
-            accessibilityRole="button"
-            disabled={!onOpenFeatureMenu}
-            hitSlop={spacing.xs}
-            onPress={onOpenFeatureMenu}
-            style={({pressed}) => [
-              styles.homeHeroMenuButton,
-              pressed && styles.pressed,
-            ]}>
-            <MenuHeaderIcon color={colors.brandMuted} size={20} strokeWidth={2} />
-          </Pressable>
-        ) : null}
+        {/* \uC804\uCCB4 \uAE30\uB2A5 \uBA54\uB274 \u2014 \uC2A4\uD1A0\uC5B4 \uBE4C\uB4DC \uB178\uCD9C \uD56D\uBAA9\uC740 appFeatureMenu\uC758
+            STORE_HIDDEN_MENU_ITEM_IDS \uD544\uD130\uAC00 \uACB0\uC815\uD55C\uB2E4. */}
+        <Pressable
+          accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
+          accessibilityRole="button"
+          disabled={!onOpenFeatureMenu}
+          hitSlop={spacing.xs}
+          onPress={onOpenFeatureMenu}
+          style={({pressed}) => [
+            styles.homeHeroMenuButton,
+            pressed && styles.pressed,
+          ]}>
+          <MenuHeaderIcon color={colors.brandMuted} size={20} strokeWidth={2} />
+        </Pressable>
       </XStack>
     </XStack>
   );
