@@ -83,6 +83,39 @@ def test_confidence_threshold_marks_promotion_candidate_only() -> None:
   assert gated["finish"]["promotionCandidate"] is True
 
 
+def test_filter_by_categories_excludes_base() -> None:
+  rows = [
+    {"category": "lip", "attributes": {}},
+    {"category": "base", "attributes": {}},
+    {"category": "cheek", "attributes": {}},
+  ]
+  filtered = extractor.filter_input_rows(rows, categories={"lip", "cheek", "shadow", "liner", "brow"})
+  assert [r["category"] for r in filtered] == ["lip", "cheek"]
+
+
+def test_filter_only_missing_keeps_rows_without_field() -> None:
+  rows = [
+    {"category": "lip", "attributes": {"colorFamily": "pink"}},
+    {"category": "lip", "attributes": {"colorFamily": None}},
+    {"category": "lip", "attributes": {}},
+  ]
+  filtered = extractor.filter_input_rows(rows, only_missing="colorFamily")
+  assert len(filtered) == 2
+  assert all(not (r["attributes"].get("colorFamily")) for r in filtered)
+
+
+def test_filter_categories_and_only_missing_compose() -> None:
+  rows = [
+    {"category": "lip", "attributes": {}},               # kept
+    {"category": "base", "attributes": {}},              # dropped: base
+    {"category": "cheek", "attributes": {"colorFamily": "coral"}},  # dropped: has color
+  ]
+  filtered = extractor.filter_input_rows(
+    rows, categories={"lip", "cheek"}, only_missing="colorFamily"
+  )
+  assert [r["category"] for r in filtered] == ["lip"]
+
+
 def test_dry_run_round_trip_writes_review_queue_not_seed(tmp_path: Path) -> None:
   input_path = tmp_path / "seed.jsonl"
   vocab_path = tmp_path / "catalog.jsonl"

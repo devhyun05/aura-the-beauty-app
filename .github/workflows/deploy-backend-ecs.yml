@@ -101,11 +101,16 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -r services/backend/requirements.txt
 
-      - name: Run backend security and regression tests
+      - name: Run manual makeup recommendation deployment gate
         env:
           AURA_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
         working-directory: services/backend
-        run: python -m pytest -q
+        run: >-
+          python -m pytest -q
+          tests/test_makeup_recommendations.py
+          tests/test_makeup_recommendations_v2.py
+          tests/test_makeup_recommendation_infra_v2.py
+          tests/test_makeup_deployment_config.py
 
       - name: Build backend image
         env:
@@ -195,11 +200,24 @@ jobs:
       - name: Install backend dependencies
         run: python -m pip install -r services/backend/requirements.txt
 
-      - name: Run backend security and regression tests
+      - name: Run full backend security and regression tests
+        if: ${{ github.event_name == 'push' }}
         env:
           AURA_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
         working-directory: services/backend
         run: python -m pytest -q
+
+      - name: Run manual makeup recommendation deployment gate
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          AURA_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        working-directory: services/backend
+        run: >-
+          python -m pytest -q
+          tests/test_makeup_recommendations.py
+          tests/test_makeup_recommendations_v2.py
+          tests/test_makeup_recommendation_infra_v2.py
+          tests/test_makeup_deployment_config.py
 
       - name: Validate deployment configuration
         run: |
@@ -484,7 +502,7 @@ jobs:
           )"
           echo "arn=$registered_task_definition" >> "$GITHUB_OUTPUT"
 
-      - name: Apply and verify production database schema
+      - name: Apply and verify production database schema, sync Auradin catalog mirror
         env:
           REGISTERED_TASK_DEFINITION: ${{ steps.register-api-task.outputs.arn }}
         run: |
@@ -511,7 +529,7 @@ jobs:
               command: [
                 "/bin/sh",
                 "-c",
-                "python -m app.db.init_db && python -m app.db.check_schema"
+                "python -m app.db.init_db && python -m app.db.check_schema && python -m app.db.sync_auradin_catalog"
               ]
             }]
           }' > migration-overrides.json

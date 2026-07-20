@@ -47,6 +47,29 @@ export function isBackendNetworkError(error: unknown): error is BackendNetworkEr
 }
 
 /**
+ * The client stopped waiting for a response, but the backend may still be
+ * processing the request. Callers that own a resumable job/session can use
+ * this signal to recover its server-side state instead of showing a failure.
+ */
+export class BackendTimeoutError extends Error {
+  code = 'BACKEND_REQUEST_TIMEOUT' as const;
+  timeoutMs: number;
+
+  constructor(
+    timeoutMs: number,
+    message = '서버 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.',
+  ) {
+    super(message);
+    this.name = 'BackendTimeoutError';
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export function isBackendTimeoutError(error: unknown): error is BackendTimeoutError {
+  return error instanceof BackendTimeoutError;
+}
+
+/**
  * 사용자가 의도적으로 취소(홈 복귀·화면 이탈)해 요청이 abort된 경우. 타임아웃과 구분해
  * 호출부가 조용히 삼킬 수 있게 별도 타입으로 던진다 (실패 화면을 띄우면 안 됨).
  */
@@ -198,7 +221,7 @@ export async function requestBackendJson<T>(
         path,
         timeoutMs,
       });
-      throw new Error('서버 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.');
+      throw new BackendTimeoutError(timeoutMs);
     }
 
     if (isNetworkFailure(error)) {

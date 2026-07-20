@@ -30,7 +30,10 @@ export function FaceAnalysisIntroRouteScreen({
       <DetailRouteChrome
         routeName="FaceAnalysisIntro"
         onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
-        <FaceAnalysisIntroScreen onStartAnalysisGuide={openAnalysisGuide} />
+        <FaceAnalysisIntroScreen
+          onOpenCaptureTips={openAnalysisGuide}
+          onStartAnalysis={startFaceCapture}
+        />
       </DetailRouteChrome>
       <FaceCaptureTutorialSheet
         isVisible={isGuideVisible}

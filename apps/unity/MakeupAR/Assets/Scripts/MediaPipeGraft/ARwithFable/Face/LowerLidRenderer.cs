@@ -88,6 +88,7 @@ namespace ARMakeup.Face
         static readonly int AegyoHiColorId = Shader.PropertyToID("_AegyoHiColor");
         static readonly int AegyoShColorId = Shader.PropertyToID("_AegyoShColor");
         static readonly int AegyoIntensityId = Shader.PropertyToID("_AegyoIntensity");
+        static readonly int AegyoProfileId = Shader.PropertyToID("_AegyoProfile");
         static readonly int AegyoTexId = Shader.PropertyToID("_AegyoTex");
         static readonly int AegyoStyleIntensityId = Shader.PropertyToID("_AegyoStyleIntensity");
         static readonly int AegyoHeightId = Shader.PropertyToID("_AegyoHeight");
@@ -96,6 +97,7 @@ namespace ARMakeup.Face
         static readonly int ConcealerColorId = Shader.PropertyToID("_ConcealerColor");
         static readonly int ConcealerIntensityId = Shader.PropertyToID("_ConcealerIntensity");
         static readonly int ConcealerMaskId = Shader.PropertyToID("_ConcealerMask");
+        static readonly int LowerSmokyMaskId = Shader.PropertyToID("_LowerSmokyMask");
         static readonly int LowerShadowColorId = Shader.PropertyToID("_LowerShadowColor");
         static readonly int LowerShadowIntensityId = Shader.PropertyToID("_LowerShadowIntensity");
         // 마감 — 애교살(하이라이트 밴드)·아이섀도 하. 블러셔와 동일 enum(0=새틴=기존 출력).
@@ -213,6 +215,10 @@ namespace ARMakeup.Face
             if (shader == null) shader = Shader.Find("ARMakeup/LowerLid");
             _material = new Material(shader);
             _material.renderQueue = MakeupQueues.LowerLid; // 부위별 고유 큐(섀도 위·스텐실 아래)
+            // 애교살 베이크드 프로파일(절차 SDF 대체) — R 하이라이트 / G 아래그림자 / B 중앙펄.
+            // 누락 시 "black"(전부 0)으로 남아 애교살이 안 그려질 뿐 크래시 없음.
+            var aegyoProfile = Resources.Load<Texture2D>("aegyo_profile");
+            if (aegyoProfile != null) _material.SetTexture(AegyoProfileId, aegyoProfile);
             // 임포트 전엔 투명 — 그림 없이 강도만 올라가도 아무것도 안 그려지게.
             _material.SetTexture(AegyoTexId, ImageFileLoader.ClearTexture);
             var concealerMask = Resources.Load<Texture2D>("Masks/concealer_under_eye");
@@ -222,6 +228,10 @@ namespace ARMakeup.Face
                 concealerMask = _runtimeConcealerFallback;
             }
             _material.SetTexture(ConcealerMaskId, concealerMask);
+            // 스모키 언더 모양 마스크(profile 6). scripts/generate-lower-smoky-mask.py 생성.
+            // 누락 시 셰이더 기본 "black"(전부 0)이라 스모키가 안 그려질 뿐 크래시 없음.
+            var smokyMask = Resources.Load<Texture2D>("lower_smoky_mask");
+            if (smokyMask != null) _material.SetTexture(LowerSmokyMaskId, smokyMask);
             PushAffine(LinerAffineId, LinerAffineRotId, _linerAffine);
             PushAffine(AegyoAffineId, AegyoAffineRotId, _aegyoAffine);
             PushAffine(TriAffineId, TriAffineRotId, _triAffine);
