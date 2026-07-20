@@ -20,6 +20,7 @@ from app.services.reference_makeup_extraction import (
 )
 from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
 from app.services.push_notifications import create_and_send_notification
+from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
 
 
@@ -235,6 +236,13 @@ async def create_filter_extraction_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="filter_extraction",
+    per_minute=settings.filter_extraction_generation_limit_per_minute,
+    per_day=settings.filter_extraction_generation_limit_per_day,
+  )
   media = await resolve_owned_source_media(
     db,
     owner_user_id=user["id"],
@@ -277,6 +285,13 @@ async def analyze_filter_extraction(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="filter_extraction",
+    per_minute=settings.filter_extraction_generation_limit_per_minute,
+    per_day=settings.filter_extraction_generation_limit_per_day,
+  )
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if execution_mode not in {"inline", "sqs"}:

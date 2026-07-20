@@ -319,6 +319,16 @@ class Settings(BaseSettings):
   product_event_rate_limit_per_minute: int = Field(default=60, ge=1, le=10000)
   product_outbound_rate_limit_per_minute: int = Field(default=30, ge=1, le=10000)
 
+  # 비용이 발생하는 보고서/AI 생성의 사용자별 한도 — 분당(스팸 방지)·일일(비용 상한).
+  face_analysis_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
+  face_analysis_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
+  filter_extraction_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
+  filter_extraction_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
+  makeup_feedback_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
+  makeup_feedback_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
+  makeup_recommendation_generation_limit_per_minute: int = Field(default=3, ge=1, le=1000)
+  makeup_recommendation_generation_limit_per_day: int = Field(default=20, ge=1, le=100000)
+
   chime_enabled: bool = False
   chime_control_region: str | None = None
   chime_region: str | None = None
