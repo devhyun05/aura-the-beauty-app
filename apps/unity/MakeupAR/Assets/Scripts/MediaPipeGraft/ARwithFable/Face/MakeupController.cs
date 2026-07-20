@@ -1334,7 +1334,7 @@ namespace ARMakeup.Face
             if (StyleRenderer.Instance != null)
                 StyleRenderer.Instance.ApplyStyleParams(
                     p.browStyleColor, p.browStyleIntensity, p.browThickness, p.browArch,
-                    p.browShape, p.browStyleFinish, p.browStyleTexture,
+                    p.browShape, p.browStyleFinish, p.browStyleTexture, p.browStyleTemplate,
                     p.browThicknessProfile, p.browExpandUpper, p.browExpandLower);
             if (EyelinerStyleRenderer.Instance != null)
                 EyelinerStyleRenderer.Instance.ApplyParams(
@@ -1376,7 +1376,7 @@ namespace ARMakeup.Face
             {
                 LashRenderer.Instance.ApplyParams(
                     p.mascaraColor, p.mascaraIntensity, p.eyeCornerLift, p.mascaraLength,
-                    p.mascaraStyle, p.mascaraFinish);
+                    p.mascaraStyle, p.mascaraFinish, p.mascaraTexStyle);
                 LashRenderer.Instance.ApplyLowerParams(
                     p.mascaraColor, p.lowerLashIntensity, p.lowerLashLength,
                     p.lowerLashStyle, p.lowerMascaraFinish);

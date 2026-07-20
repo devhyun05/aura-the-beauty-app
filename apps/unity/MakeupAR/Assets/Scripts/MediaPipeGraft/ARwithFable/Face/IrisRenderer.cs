@@ -76,10 +76,10 @@ namespace ARMakeup.Face
         const float StencilInsetFrac = 0.12f;  // 스텐실 개구부 세로 inset(보조 클립)
 
         // ── 아이라이너 ──
-        const int LashSubdiv = 3;              // lash-line 변당 CR 보간 정점 (각짐 제거·조밀화)
+        const int LashSubdiv = 5;              // lash-line 변당 CR 보간 정점 (각짐 제거·조밀화; 3→5로 아이섀도 밴드 파인애플 각짐 해소)
         const int TailSubdiv = 6;              // 눈꼬리 꼬리 테셀레이션 점 수
-        const int MainPts = 9 + 8 * LashSubdiv; // 세분된 안쪽 체인 점 수 = 33
-        const int ChainPts = MainPts + TailSubdiv; // 꼬리 + 메인 = 39
+        const int MainPts = 9 + 8 * LashSubdiv; // 세분된 안쪽 체인 점 수 = 49
+        const int ChainPts = MainPts + TailSubdiv; // 꼬리 + 메인 = 55
         // 두께: 두꺼우면 눈두덩(아이섀도우 자리)을 덮고 꼬리가 스파이크로 보인다(실기기).
         const float EyelinerThickness = 0.26f; // 눈 반경 대비 리본 최대 두께
         // 세그먼트 좌표축(uv.y): 눈꺼풀 파라메트릭 t = 앞머리(안쪽) 0 → 바깥 눈꼬리
@@ -1580,7 +1580,10 @@ namespace ARMakeup.Face
                         var weight = Mathf.Lerp(1f, ShadowInnerWeight, s);
                         h = eyeRadius * ShadowHeightMult * weight * heightMult; // 높이 핸들(스모키)/봉투
                         // 꼬리 스윕: 끝 구간(s<TailSweepAlong)에서 상단을 tailDir(수평≈170°)로 눕힘.
-                        var sweep = TailSweepStrength * (1f - Mathf.SmoothStep(0f, TailSweepAlong, s));
+                        // Unity Mathf.SmoothStep(from,to,t)는 임계 리맵이 아니라 t를 [0,1] 보간계수로
+                        // 쓰는 함수라, 여기 쓰면 s>TailSweepAlong 구간에서도 sweep이 안 꺼져 스윕이
+                        // 눈꺼풀 전체로 번진다(LashRenderer와 동일 오용). 임계 리맵은 SmoothThreshold.
+                        var sweep = TailSweepStrength * (1f - SmoothThreshold(0f, TailSweepAlong, s));
                         if (sweep > 0f) dir = Vector2.Lerp(dir, tailDir, sweep).normalized;
                     }
                     else // 연장 컬럼(눈꼬리 밖) — c=0 furthest → LidExtendPts-1 near tail
@@ -1777,6 +1780,15 @@ namespace ARMakeup.Face
                 }
             }
             return uv2;
+        }
+
+        // HLSL/GLSL smoothstep(edge0,edge1,x)와 동일한 임계 리맵 — x를 [edge0,edge1]에서
+        // [0,1]로 부드럽게 정규화. Unity Mathf.SmoothStep(from,to,t)는 다른(부드러운 lerp)
+        // 함수라 '값을 문턱으로 판정'하는 용도엔 이걸 쓴다. (LashRenderer의 동명 헬퍼와 동일.)
+        static float SmoothThreshold(float edge0, float edge1, float x)
+        {
+            var t = Mathf.Clamp01((x - edge0) / Mathf.Max(edge1 - edge0, 1e-6f));
+            return t * t * (3f - 2f * t);
         }
     }
 }

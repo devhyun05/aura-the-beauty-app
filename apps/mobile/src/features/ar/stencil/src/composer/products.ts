@@ -458,6 +458,14 @@ export interface LeafTechnique {
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /**
+ * 세부부위 룩 적용 시 레이어 농도(technique.strength) 기본값 — 전역 메이크업 농도
+ * (DEFAULT_MAKEUP_OPACITY=0.75)와 일치. strength 미지정 잎이 정방향 컴파일·UI·역산·
+ * 저장·멀티유즈에서 모두 이 값으로 해석돼야 라운드트립 시 농도가 드리프트하지 않는다.
+ * (이전: 정방향/역산=1, UI=0.8로 불일치 → 슬라이더 80%인데 100%로 렌더되던 버그.)
+ */
+export const DEFAULT_TECHNIQUE_STRENGTH = 0.75;
+
+/**
  * 덧바름 쌓임 곡선(§5 buildability). 단조 증가·[0,coverage] 클램프:
  *   opacity = coverage · strength^(1 / (0.5 + buildability))
  * buildability↑ → 지수↓ → 낮은 강도에서도 빨리 쌓인다("잘 쌓이는 제품").
@@ -589,7 +597,7 @@ export function productFromLeafPhysicals(
       coverage = compatibleSource.base.coverage;
     } else {
       // 커스텀/직접 조정 농도는 잎에 남는 strength를 고려해 buildOpacity를 역산한다.
-      const strength = clamp01(leaf.technique?.strength ?? 1);
+      const strength = clamp01(leaf.technique?.strength ?? DEFAULT_TECHNIQUE_STRENGTH);
       const buildability = compatibleSource?.form.buildability ?? template.form.buildability;
       const exponent = 1 / (0.5 + clamp01(buildability));
       const strengthFactor = Math.pow(strength, exponent);
@@ -699,7 +707,7 @@ export function physicalOverridesForRoundTrip(
 ): Partial<FilterParams> {
   const translated = translateProduct(
     product,
-    leaf.technique ?? {strength: 1},
+    leaf.technique ?? {strength: DEFAULT_TECHNIQUE_STRENGTH},
     leaf.region,
     colorwayId,
   );
@@ -1288,7 +1296,7 @@ export function applyProductsToLayers(
     if (!product) return layer; // 삭제된 제품 참조 — 잎 자체 값으로 폴백(고아 무해)
     const translated = translateProduct(
       product,
-      layer.technique ?? { strength: 1 },
+      layer.technique ?? { strength: DEFAULT_TECHNIQUE_STRENGTH },
       layer.region,
       layer.colorwayId,
     );

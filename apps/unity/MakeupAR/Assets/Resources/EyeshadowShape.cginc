@@ -108,7 +108,8 @@ void EsEvalShape(
     }
 
     // 해부학적 안쪽 경계(u=0)를 모든 프로파일에서 부드럽게 닫는다.
-    hweight *= smoothstep(0.0, 0.10, u);
+    // 0.10→0.18: 안쪽 테이퍼를 더 넓게 펼쳐 뾰족한 삼각 코너 대신 둥근 마무리(파인애플 각짐 해소).
+    hweight *= smoothstep(0.0, 0.18, u);
     vfall = saturate(vfall);
     hweight = saturate(hweight);
 }

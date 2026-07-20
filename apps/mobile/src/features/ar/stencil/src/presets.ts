@@ -132,6 +132,19 @@ export const BARE: FilterParams = {
   cheekWidth: 0,
   mouthScale: 0,
   noseWingScale: 0,
+  // 아래 필드들은 optional이라 이전엔 BARE에서 생략됐는데, 브리지가 FromJsonOverwrite
+  // (병합)라 생략 필드는 직전 룩 값이 유지된다 → 꾹 눌러 원본 볼 때 삼각존·마스카라 등이
+  // 안 꺼지고 눈 아래 모양이 남는 버그. BARE는 '완전 맨얼굴'이어야 하므로 전부 명시 0.
+  triangleZoneIntensity: 0,
+  eyelinerLowerIntensity: 0,
+  lowerLashIntensity: 0,
+  mascaraIntensity: 0,
+  doubleLidIntensity: 0,
+  teethWhitenIntensity: 0,
+  browConcealIntensity: 0,
+  lipBaseIntensity: 0,
+  lipGlossIntensity: 0,
+  lipLinerIntensity: 0,
 };
 
 export const PRESETS: FilterPreset[] = [
@@ -154,7 +167,7 @@ export const PRESETS: FilterPreset[] = [
       blushColor: '#F2A0AC',
       blushIntensity: 0.25,
       eyeshadowColor: '#C29A7B',
-      eyeshadowIntensity: 0.15,
+      eyeshadowIntensity: 0.28,
       irisColor: '#5B7B8C',
       irisIntensity: 0,
       eyelinerColor: '#181418',
@@ -213,7 +226,7 @@ export const PRESETS: FilterPreset[] = [
       blushColor: '#F08698',
       blushIntensity: 0.45,
       eyeshadowColor: '#D89AA0',
-      eyeshadowIntensity: 0.3,
+      eyeshadowIntensity: 0.45,
       irisColor: '#6E8B5B',
       irisIntensity: 0,
       eyelinerColor: '#181418',
@@ -274,7 +287,7 @@ export const PRESETS: FilterPreset[] = [
       blushColor: '#F7A98C',
       blushIntensity: 0.4,
       eyeshadowColor: '#E0A183',
-      eyeshadowIntensity: 0.4,
+      eyeshadowIntensity: 0.55,
       irisColor: '#8A6A4A',
       irisIntensity: 0,
       eyelinerColor: '#181418',
@@ -345,25 +358,28 @@ export const PRESETS: FilterPreset[] = [
       blushParticleFeather: 1,
       blushParticleParallax: 0.4,
       eyeshadowColor: '#8A5A44',
-      eyeshadowIntensity: 0.5,
+      eyeshadowIntensity: 0.62,
       // legacy 렌즈 off — 실제 렌즈는 아래 lensLayers(레이어드)로 이관
       irisColor: '#5B7B8C',
       irisIntensity: 0,
       eyelinerColor: '#141014',
       eyelinerIntensity: 0.6,
       eyelinerStyle: 0,
-      // 글램 — 진하고 또렷하게, 펜슬로 정의 + 아치 강조 (기본 톤다운)
+      // 글램 — 예전의 절차적 펜슬 브로우 복원(사용자 "다시 살려"). 와일드 텍스처는
+      // 앞머리가 수평으로 눕고 이상해 폐기. 얇다는 피드백만 반영해 원본보다 살짝
+      // 진하고 두껍게(농도 0.36→0.42·펜슬 0.27→0.3·두께 1.1→1.15).
       browColor: '#2A1E16',
-      browIntensity: 0.36,
+      browIntensity: 0.42,
       browPowderColor: '#3A2A20',
-      browPowderIntensity: 0.27,
+      browPowderIntensity: 0.28,
       browLightenerIntensity: 0,
       browPencilColor: '#2A1E16',
-      browPencilIntensity: 0.27,
+      browPencilIntensity: 0.3, // 절차적 펜슬 결(복원)
       browStyleColor: '#2A1E16',
-      browStyleIntensity: 0,
-      browThicknessProfile: 3,
-      browThickness: 1.1,
+      browStyleIntensity: 0, // 스타일 텍스처 OFF — 절차적 브로우로 복귀
+      browStyleTemplate: 0,
+      browThicknessProfile: 3, // 원본 글램 두께 프로파일 복원
+      browThickness: 1.15, // 살짝 두껍게
       browArch: 0.15,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,
@@ -381,10 +397,11 @@ export const PRESETS: FilterPreset[] = [
       powderIntensity: 0.15,
       powderFinish: 1, // 매트
       // 세부부위 확충 — 돌리 볼륨 마스카라 + 윙 라이너(글램 무대 컨셉, 하이라이터는 듀이).
+      // 글램은 길고 진하게(내추럴과 확연히 구분): 농도·길이 상향.
       mascaraColor: '#141014',
-      mascaraIntensity: 0.5,
-      mascaraStyle: 1, // 돌리 볼륨
-      mascaraLength: 1.1,
+      mascaraIntensity: 0.72,
+      mascaraStyle: 1, // 돌리 볼륨(절차) — 텍스처는 이상함 피드백으로 글램에서 해제, 선택형 룩으로만 유지
+      mascaraLength: 1.5,
       eyelinerWingLength: 1.3,
     },
     // 렌즈 — legacy 단색(iris) 폐지 후 레이어드 베이스로 이관(색·강도 동일).
@@ -407,7 +424,7 @@ export const PRESETS: FilterPreset[] = [
       blushColor: '#C98A93',
       blushIntensity: 0.2,
       eyeshadowColor: '#5C4A46',
-      eyeshadowIntensity: 0.65,
+      eyeshadowIntensity: 0.8,
       // legacy 렌즈 off — 실제 렌즈는 아래 lensLayers(레이어드)로 이관
       irisColor: '#7A6A9E',
       irisIntensity: 0,
@@ -421,10 +438,11 @@ export const PRESETS: FilterPreset[] = [
       browPowderIntensity: 0.3,
       browLightenerIntensity: 0,
       browPencilColor: '#2A1E16',
-      browPencilIntensity: 0.18,
+      browPencilIntensity: 0, // item3: 두께=밴드 스트레치(펜슬 털 길어짐) 폐기 → 새 dense 텍스처로 이관
       browStyleColor: '#2A1E16',
-      browStyleIntensity: 0,
-      browThicknessProfile: 3,
+      browStyleIntensity: 0.7, // item3: 두꺼운 눈썹 = 촘촘한 스타일 텍스처(자연 길이 털)
+      browStyleTemplate: 2, // 두꺼운(풍성) 템플릿(default_brow_thick)
+      browThicknessProfile: 0, // item3: 밴드 자연 높이 유지(늘리지 않음) → 결이 늘어나지 않음
       browThickness: 1,
       browArch: 0,
       faceOverlayIntensity: 0,
@@ -443,10 +461,10 @@ export const PRESETS: FilterPreset[] = [
       powderFinish: 1, // 매트
       // 세부부위 확충 — 하안검 섀도 + 삼각존 + 캣아이 마스카라 + 아래 속눈썹(스모키 딥 컨셉).
       eyeshadowLowerColor: '#5C4A46',
-      eyeshadowLowerIntensity: 0.3,
+      eyeshadowLowerIntensity: 0.12,
       eyeshadowLowerFinish: 1,
-      triangleZoneColor: '#3E2C24',
-      triangleZoneIntensity: 0.28,
+      triangleZoneColor: '#9A5A50', // 붉은기 도는 밝은 톤(다크브라운 X) — 눈밑을 어둡게 안 죽임
+      triangleZoneIntensity: 0.22,
       mascaraColor: '#141014',
       mascaraIntensity: 0.5,
       mascaraStyle: 2, // 캣아이

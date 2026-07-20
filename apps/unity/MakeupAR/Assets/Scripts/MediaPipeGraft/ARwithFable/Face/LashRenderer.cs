@@ -52,19 +52,29 @@ namespace ARMakeup.Face
         const int Sub = 2;
         const int Seg = (LidPts - 1) * (Sub + 1) + 1; // 25
 
-        const int LashesPerEye = 28;
-        const float LenFactor = 0.16f;   // 속눈썹 길이 = 눈 가로폭 × 이 값
-        const float WidthMult = 0.07f;   // 길이 대비 뿌리 폭
-        const float SweepMax = 0.9f;     // 바깥 눈꼬리에서 바깥 스윕
-        // 앞머리는 살짝 코쪽(음수 = 안쪽 스윕) — 양수 하한이면 앞머리~중간 가닥까지
-        // 전부 꼬리쪽을 봐서 "뒷방향" 인상(실기기). 선형 lerp로 u≈0.28에서 0을
-        // 지나 바깥 스윕으로 자연 전환.
-        const float SweepMin = -0.35f;
+        const int LashesPerEye = 24;
+        const float LenFactor = 0.115f;  // 속눈썹 길이 = 눈 가로폭 × 이 값
+        const float WidthMult = 0.032f;  // 길이 대비 뿌리 폭
+        // 컬 0 = 직선. 볼록 아크 방식은 찌그러져(실기기) 폐기 — 깨끗한 컬은 속눈썹 텍스처
+        // 에셋으로 별도 구현 예정. 그때까진 직선이 낫다(사용자 요청).
+        const float UpperCurl = 0f;      // 위 속눈썹 컬(0=직선)
+        const float LowerCurl = 0f;      // 아래 속눈썹 컬(0=직선)
+        // 부챗살 대칭 규약: 앞머리(u=0)=코쪽(앞, 음수), 중앙(u=0.5)=수직(0), 눈꼬리(u=1)=
+        // 뒤쪽(양수). |SweepMin|=|SweepMax|라 0 교차가 정확히 중앙에 와서 중앙이 수직으로
+        // 선다(비대칭이면 전체가 한쪽으로 쏠려 "전부 뒷방향" 인상 — 실기기). 스타일별로
+        // StyleProfile이 이 기본 부챗살을 배수/바이어스한다(캣아이만 전 구간 꼬리 쏠림).
+        const float SweepMax = 0.4f;     // 눈꼬리쪽(뒤)
+        const float SweepMin = -0.4f;    // 앞머리쪽(앞) — 대칭
+        const float SweepJitter = 0.18f;
+        const float LocalNormalBlend = 0.28f;
+        const float OpenEyeMinUpDot = 0.42f;
+        const float RootLiftImg = 0.08f; // 상안검 높이 대비, 마스카라 전용 뿌리선 브로우쪽 보정
         const float EdgeFade = 0.06f;    // 양끝(코너) 근처 길이 테이퍼 구간
 
         // 아래 속눈썹 — 위보다 짧고 성기게(자연 기본). 폭·엣지 테이퍼는 위와 공유.
-        const int LowerLashesPerEye = 16;     // 개수 (위 28보다 성기게) // 실기기 튜닝 대상
-        const float LowerLenFactor = 0.09f;   // 길이 = 눈 가로폭 × 이 값 (위 0.16보다 짧게) // 실기기 튜닝 대상
+        const float LowerRootDrop = 0.06f;    // 아래 속눈썹 뿌리를 하안검보다 아래로(눈폭 배수) 실기기 튜닝 대상
+        const int LowerLashesPerEye = 14;     // 개수 (위보다 성기게) // 실기기 튜닝 대상
+        const float LowerLenFactor = 0.07f;   // 길이 = 눈 가로폭 × 이 값 (위보다 짧게) // 실기기 튜닝 대상
         const float LowerSweepMax = 0.7f;     // 바깥 눈꼬리 스윕 (위 0.9보다 완만) // 실기기 튜닝 대상
         const float LowerSweepMin = -0.25f;   // 앞머리는 살짝 코쪽(위 SweepMin과 동일 근거) // 실기기 튜닝 대상
         // 위 속눈썹과 다른 변이 패턴을 얻기 위한 해시 시드 오프셋(위: 0..2*28-1 사용).
@@ -95,6 +105,18 @@ namespace ARMakeup.Face
         static readonly int ColorId = Shader.PropertyToID("_BrowColor");
         static readonly int IntensityId = Shader.PropertyToID("_BrowIntensity");
         static readonly int FinishId = Shader.PropertyToID("_PencilFinish"); // 마감(Tier B) — 위·아래 머티리얼 독립
+        static readonly int MainTexId = Shader.PropertyToID("_MainTex");
+
+        // 텍스처 속눈썹(리본) — 절차 쿼드의 대안. mascaraTexStyle>0이면 절차 대신 활성.
+        // 상안검 lash 라인을 따라 리본을 세우고 곡선 스트로크 PNG(lash_natural/volume)를 매핑한다.
+        const int RibbonCols = Seg;          // 리본 세로 컬럼 수 = lash 라인 점 수(25)
+        const float RibbonLenMult = 1.5f;    // 리본 높이 배수(텍스처 결이 다 보이게 절차보다 김) — 실기기 튜닝
+        Mesh _texMesh;
+        MeshRenderer _texRenderer;
+        Material _texMaterial;
+        Vector3[] _texVertices;
+        int _texStyle;                       // 0=off(절차) 1=natural 2=volume
+        readonly Texture2D[] _texCache = new Texture2D[3];
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _lash = new Vector2[Seg];
@@ -132,52 +154,133 @@ namespace ARMakeup.Face
             _lowerRenderer.sharedMaterial = _lowerMaterial;
             _lowerRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _lowerRenderer.enabled = false;
+
+            // 텍스처 속눈썹(리본) — 자식 GO. 전용 셰이더(알파 텍스처, 루마 보존 아님).
+            var texShader = Resources.Load<Shader>("LashTexture");
+            if (texShader == null) texShader = Shader.Find("ARMakeup/LashTexture");
+            _texMaterial = new Material(texShader);
+            _texMaterial.renderQueue = MakeupQueues.Mascara;
+            _texMesh = BuildRibbonMesh("MascaraTex", Eyes, out _texVertices);
+            var texGO = new GameObject("MascaraTex");
+            texGO.transform.SetParent(transform, false);
+            texGO.AddComponent<MeshFilter>().sharedMesh = _texMesh;
+            _texRenderer = texGO.AddComponent<MeshRenderer>();
+            _texRenderer.sharedMaterial = _texMaterial;
+            _texRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _texRenderer.enabled = false;
         }
 
-        // 스트로크(테이퍼 쿼드) 메시 토폴로지 — 위/아래 속눈썹 공용.
-        static Mesh BuildStrokeMesh(string name, int strokes, out Vector3[] vertices)
+        // 텍스처 속눈썹 리본 메시 — 컬럼당 뿌리(v=0)·끝(v=1) 2정점, 눈당 (RibbonCols-1) 쿼드.
+        // UV.x(텍스처 가로)=바깥꼬리(1)→안쪽머리(0). PNG는 x=0 머리(수직)·x=1 꼬리(눕힘)이라
+        // lash 인덱스 0(바깥)→texU 1, 인덱스 끝(안쪽)→texU 0. 두 눈 모두 동일 매핑 —
+        // "texU 증가=바깥"이 각 눈의 자기 바깥쪽이라 결 눕힘이 자동으로 좌우 대칭이 된다.
+        static Mesh BuildRibbonMesh(string name, int eyes, out Vector3[] vertices)
         {
             var mesh = new Mesh { name = name };
             mesh.MarkDynamic();
-
-            var uvs = new Vector2[strokes * 4];
-            var tris = new int[strokes * 6];
-            for (var s = 0; s < strokes; s++)
+            var vpe = RibbonCols * 2;
+            var uvs = new Vector2[eyes * vpe];
+            var tris = new int[eyes * (RibbonCols - 1) * 6];
+            var ti = 0;
+            for (var e = 0; e < eyes; e++)
             {
-                var v = s * 4;
-                uvs[v] = new Vector2(0f, 0f);     // 뿌리-좌
-                uvs[v + 1] = new Vector2(0f, 1f); // 뿌리-우
-                uvs[v + 2] = new Vector2(1f, 0f); // 끝-좌
-                uvs[v + 3] = new Vector2(1f, 1f); // 끝-우
-                var t = s * 6;
-                tris[t] = v; tris[t + 1] = v + 2; tris[t + 2] = v + 1;
-                tris[t + 3] = v + 1; tris[t + 4] = v + 2; tris[t + 5] = v + 3;
+                var baseV = e * vpe;
+                for (var c = 0; c < RibbonCols; c++)
+                {
+                    var texU = 1f - c / (float)(RibbonCols - 1); // 바깥(c=0)=1=꼬리
+                    uvs[baseV + c * 2] = new Vector2(texU, 0f);      // 뿌리
+                    uvs[baseV + c * 2 + 1] = new Vector2(texU, 1f);  // 끝
+                }
+                for (var c = 0; c < RibbonCols - 1; c++)
+                {
+                    var b0 = baseV + c * 2; var t0 = b0 + 1;
+                    var b1 = baseV + (c + 1) * 2; var t1 = b1 + 1;
+                    tris[ti++] = b0; tris[ti++] = t0; tris[ti++] = b1;
+                    tris[ti++] = b1; tris[ti++] = t0; tris[ti++] = t1;
+                }
             }
-            vertices = new Vector3[strokes * 4];
+            vertices = new Vector3[eyes * vpe];
             mesh.vertices = vertices;
             mesh.uv = uvs;
             mesh.triangles = tris;
             return mesh;
         }
 
-        /// <summary>위 속눈썹이 상안검 스냅+아크 점을 원함 — IrisRenderer가 라이너·섀도
-        /// 없이 마스카라만 켜져도 ComputeLidSnaps를 유지하는 수요 게이트.</summary>
-        public bool WantsLidSnaps => _intensity > 0f;
+        Texture2D LoadLashTex(int style)
+        {
+            if (style < 1 || style > 2) return null;
+            if (_texCache[style] == null)
+                _texCache[style] = Resources.Load<Texture2D>(style == 2 ? "lash_volume" : "lash_natural");
+            return _texCache[style];
+        }
 
-        public void ApplyParams(string colorHex, float intensity, float cornerLift, float lengthMult, int style, int finish)
+        // 스트로크(3단면 곡선 스트립) 메시 토폴로지 — 위/아래 속눈썹 공용. 뿌리(0)·중간(2)·
+        // 끝(4) 세 단면 × 좌우 = 6정점, 2쿼드(4삼각). 직선 쿼드였을 땐 속눈썹이 곧은 스파이크로
+        // 보였다(실기기) → 중간 단면을 컬 방향으로 꺾어 곡선(마스카라 컬)을 만든다.
+        const int LashVerts = 6;
+        static Mesh BuildStrokeMesh(string name, int strokes, out Vector3[] vertices)
+        {
+            var mesh = new Mesh { name = name };
+            mesh.MarkDynamic();
+
+            var uvs = new Vector2[strokes * LashVerts];
+            var tris = new int[strokes * 12];
+            for (var s = 0; s < strokes; s++)
+            {
+                var v = s * LashVerts;
+                uvs[v] = new Vector2(0f, 0f);       // 뿌리-좌
+                uvs[v + 1] = new Vector2(0f, 1f);   // 뿌리-우
+                uvs[v + 2] = new Vector2(0.5f, 0f); // 중간-좌
+                uvs[v + 3] = new Vector2(0.5f, 1f); // 중간-우
+                uvs[v + 4] = new Vector2(1f, 0f);   // 끝-좌
+                uvs[v + 5] = new Vector2(1f, 1f);   // 끝-우
+                var t = s * 12;
+                // 쿼드1 뿌리→중간
+                tris[t] = v; tris[t + 1] = v + 2; tris[t + 2] = v + 1;
+                tris[t + 3] = v + 1; tris[t + 4] = v + 2; tris[t + 5] = v + 3;
+                // 쿼드2 중간→끝
+                tris[t + 6] = v + 2; tris[t + 7] = v + 4; tris[t + 8] = v + 3;
+                tris[t + 9] = v + 3; tris[t + 10] = v + 4; tris[t + 11] = v + 5;
+            }
+            vertices = new Vector3[strokes * LashVerts];
+            mesh.vertices = vertices;
+            mesh.uv = uvs;
+            mesh.triangles = tris;
+            return mesh;
+        }
+
+        /// <summary>마스카라는 더 이상 아이라이너용 스냅 라인을 공유하지 않는다.
+        /// 스냅 라인은 눈 쪽 최암선/폴백 드롭을 포함해 속눈썹 뿌리로 쓰면 열린 눈에서도
+        /// 아래로 깔리는 원인이 된다. IrisRenderer의 수요 게이트는 라이너·섀도 전용.</summary>
+        public bool WantsLidSnaps => false;
+
+        public void ApplyParams(string colorHex, float intensity, float cornerLift, float lengthMult, int style, int finish, int texStyle)
         {
             _intensity = Mathf.Clamp01(intensity);
             _cornerLift = Mathf.Clamp01(cornerLift);
             // 길이 배수 핸들 — JsonUtility 생략 0은 미설정 → 1(원래).
             _lengthMult = lengthMult <= 0f ? 1f : Mathf.Clamp(lengthMult, 0.4f, 2.5f);
             _style = Mathf.Clamp(style, 0, 5); // 모양(생략 0=내추럴=기존 출력, 5=처짐 위 전용)
-            if (_material == null) return;
-            if (!string.IsNullOrEmpty(colorHex) &&
-                ColorUtility.TryParseHtmlString(colorHex, out var c))
-                _material.SetColor(ColorId, c);
-            _material.SetFloat(IntensityId, _intensity);
-            // 마감(Tier B) — 위 속눈썹 머티리얼 전용(하 속눈썹과 독립). 0=새틴=기존 출력.
-            _material.SetFloat(FinishId, finish);
+            _texStyle = Mathf.Clamp(texStyle, 0, 2); // 0=절차(기본) 1=텍스처 내추럴 2=텍스처 볼륨
+            if (_material != null)
+            {
+                if (!string.IsNullOrEmpty(colorHex) &&
+                    ColorUtility.TryParseHtmlString(colorHex, out var c))
+                    _material.SetColor(ColorId, c);
+                _material.SetFloat(IntensityId, LashAlpha(_intensity));
+                // 마감(Tier B) — 위 속눈썹 머티리얼 전용(하 속눈썹과 독립). 0=새틴=기존 출력.
+                _material.SetFloat(FinishId, finish);
+            }
+            // 텍스처 리본 머티리얼 — 색·알파 공유, 텍스처는 스타일별.
+            if (_texMaterial != null)
+            {
+                if (!string.IsNullOrEmpty(colorHex) &&
+                    ColorUtility.TryParseHtmlString(colorHex, out var tc))
+                    _texMaterial.SetColor(ColorId, tc);
+                _texMaterial.SetFloat(IntensityId, LashAlpha(_intensity));
+                var tex = LoadLashTex(_texStyle);
+                if (tex != null) _texMaterial.SetTexture(MainTexId, tex);
+            }
         }
 
         /// <summary>아래 속눈썹 — 색은 mascaraColor 공용, 길이 배수는 mascaraLength와
@@ -192,7 +295,7 @@ namespace ARMakeup.Face
             if (!string.IsNullOrEmpty(colorHex) &&
                 ColorUtility.TryParseHtmlString(colorHex, out var c))
                 _lowerMaterial.SetColor(ColorId, c);
-            _lowerMaterial.SetFloat(IntensityId, _lowerIntensity);
+            _lowerMaterial.SetFloat(IntensityId, LashAlpha(_lowerIntensity));
             // 마감(Tier B) — 아래 속눈썹 머티리얼 전용(위 속눈썹과 독립). 0=새틴=기존 출력.
             _lowerMaterial.SetFloat(FinishId, finish);
         }
@@ -202,12 +305,17 @@ namespace ARMakeup.Face
             var tracked = _source != null && _source.HasFace && FramePresenter.Instance != null;
             var upperOn = tracked && _intensity > 0f;
             var lowerOn = tracked && _lowerIntensity > 0f;
-            if (_renderer.enabled != upperOn) _renderer.enabled = upperOn;
+            // 위 속눈썹은 텍스처 스타일이면 리본, 아니면 절차 — 둘 중 하나만 켠다.
+            var texOn = upperOn && _texStyle > 0;
+            var procOn = upperOn && _texStyle == 0;
+            if (_renderer.enabled != procOn) _renderer.enabled = procOn;
+            if (_texRenderer.enabled != texOn) _texRenderer.enabled = texOn;
             if (_lowerRenderer.enabled != lowerOn) _lowerRenderer.enabled = lowerOn;
             if (!upperOn && !lowerOn) return;
 
             var lm = _source.Landmarks;
-            if (upperOn) UpdateUpper(lm);
+            if (procOn) UpdateUpper(lm);
+            if (texOn) UpdateUpperTex(lm);
             if (lowerOn) UpdateLower(lm);
         }
 
@@ -221,30 +329,39 @@ namespace ARMakeup.Face
                 var outer = ImgPt(lm, lids[0]);
                 var eyeDist = (outer - inner).magnitude;
 
-                // 뿌리는 IrisRenderer의 스냅+아크 점(라이너 리본과 동일 점)에 박는다 —
-                // 실제 속눈썹 라인 밀착 + 모양 단위 안정화 + 라이너와 정합이 공짜.
-                // 신선도: 당/직전 프레임(LateUpdate 순서 무보장, EMA라 1프레임 지연 무해).
-                // 스테일·미계산(라이너·섀도·마스카라 전부 방금 켜짐 등)이면 원시 폴백.
-                var ir = IrisRenderer.Instance;
-                var snap = ir != null && ir.LidSnapFrame >= Time.frameCount - 1
-                    ? ir.GetLidSnap(e) : null;
-                for (var j = 0; j < LidPts; j++)
-                    _ctrl[j] = snap != null
-                        ? snap[LidPts - 1 - j]
-                        : ImgPt(lm, lids[LidPts - 1 - j]); // 안쪽 → 바깥
-
                 var lidMid = ImgPt(lm, lids[4]);
                 var up = (ImgPt(lm, BrowLower[e][2]) - lidMid).normalized;
+                var eyeOpen = Vector2.Distance(lidMid, ImgPt(lm, LowerLids[e][4]));
 
-                // 눈 감김 — 감을수록 속눈썹이 눈꺼풀을 따라 아래(뺨쪽)로 접힌다.
-                // 뜬 눈과 같은 위 부챗살이 감은 눈 위에 그려지면 부자연(실기기).
+                // 뿌리는 아이라이너 스냅(IrisRenderer.GetLidSnap)이 아니라 원시 상안검에서
+                // 시작한다. 아이라이너 스냅은 "눈 쪽 최암선"으로 내려가는 폴백/탐색이 있어
+                // 마스카라 뿌리로 쓰면 처짐 스타일이 아니어도 속눈썹이 눈 안쪽에 깔린다.
+                // 마스카라는 실제 털이 피부 쪽에서 솟아나야 하므로 브로우 방향으로 아주
+                // 얕게 올린 별도 뿌리선을 쓴다. 코너는 떠 보이지 않게 리프트를 줄인다.
+                var rootLift = RootLiftImg * Mathf.Max(eyeOpen, eyeDist * 0.08f);
+                for (var j = 0; j < LidPts; j++)
+                {
+                    var uRoot = j / (float)(LidPts - 1);
+                    var centerT = 1f - Mathf.Abs(uRoot * 2f - 1f);
+                    var liftT = Mathf.Lerp(0.4f, 1f, centerT);
+                    _ctrl[j] = ImgPt(lm, lids[LidPts - 1 - j]) + up * rootLift * liftT; // 안쪽 → 바깥
+                }
+
+                // 눈 감김 — 반쯤 감긴 눈에서는 방향을 뒤집지 않고 투영상 길이만
+                // 눌렀다가, 실제 폐구에 가까워진 뒤에만 눈꺼풀을 따라 아래로 접는다.
                 // 개방도 = 상·하안검 중앙 거리 / 눈폭(스케일 불변 정규화).
-                // 창은 아주 낮게(0.02~0.06): 반쯤 뜬 눈/셀피 하방 카메라에서도 기본
-                // 마스카라가 아래로 뒤집히지 않게 한다. 아래로 누운 모양은 style 5
-                // (처짐)로 별도 노출하므로 기본은 열린 눈 방향을 강하게 보존.
-                var openRatio = Vector2.Distance(lidMid, ImgPt(lm, LowerLids[e][4])) /
-                                Mathf.Max(eyeDist, 1e-6f);
-                var closedT = 1f - Mathf.SmoothStep(0.02f, 0.06f, openRatio);
+                // 주의: Unity Mathf.SmoothStep(from,to,t)는 HLSL smoothstep(edge0,edge1,x)와
+                // 달리 임계 리맵이 아니라 t를 [0,1] 보간계수로 쓰는 부드러운 lerp다. 개방도
+                // 게이트에 Mathf.SmoothStep을 쓰면 openRatio와 무관하게 결과가 항상 ~edge라
+                // foldT가 늘 ~1이 되어 뜬 눈에서도 속눈썹이 아래로 접혔다(실기기 규명). 임계
+                // 리맵은 SmoothThreshold로 직접 구현.
+                var openRatio = eyeOpen / Mathf.Max(eyeDist, 1e-6f);
+                var closureT = 1f - SmoothThreshold(0.06f, 0.20f, openRatio);
+                // 눈 감을 때 속눈썹이 눈꺼풀 따라 아래로 내려깔리게 — 문턱을 넓혀 반쯤 감겨도
+                // 폴드가 시작되게 한다. 랜드마크 159↔145는 완전 폐구에서도 openRatio가 ~0.10~0.15에
+                // 머물러(실기기), 0.04~0.14 문턱으론 아예 발동을 못 했다. 0.10~0.24로 올려 그 값에서 발동.
+                var foldT = 1f - SmoothThreshold(0.10f, 0.24f, openRatio);
+                var midCloseSquash = Mathf.Sin(Mathf.Clamp01(closureT) * Mathf.PI);
 
                 // 눈꼬리 띄우기 — 라이너·섀도·하안검과 동일 리프트로 속눈썹도 추종.
                 if (_cornerLift > 0f)
@@ -269,45 +386,92 @@ namespace ARMakeup.Face
                     SampleLash(u, out var root, out var along);
 
                     // 바깥으로 갈수록 부챗살 스윕. 접선(along)은 안쪽→바깥 방향.
-                    // 기준축은 전역 up이 아니라 아크 로컬 법선 — 전역 up이면 모든
-                    // 가닥이 평행해져 "너무 한 방향"(실기기). 로컬 법선은 눈꺼풀
-                    // 곡률을 따라 돌므로 자연 방사형이 된다. 각도 변이도 ±로 확대.
+                    // 기준축은 눈썹 방향 up을 주축으로 두고 아크 로컬 법선은 아주 조금만
+                    // 섞는다. 로컬 법선을 그대로 쓰면 눈꺼풀 곡률·스냅 노이즈 때문에
+                    // 열린 눈에서도 가닥이 눈 안쪽/아래로 꽂히는 "뒤집힌 빗살"이 된다.
                     var lnrm = Perp(along);
                     if (Vector2.Dot(lnrm, up) < 0f) lnrm = -lnrm;
-                    var sweep = Mathf.Lerp(SweepMin, SweepMax, u) + (h2 - 0.5f) * 0.5f;
+                    lnrm = StableLashNormal(up, lnrm);
+                    var sweep = Mathf.Lerp(SweepMin, SweepMax, u) + (h2 - 0.5f) * SweepJitter;
                     var nrmScale = 1f;
                     var lenProf = StyleProfile(_style, u, ref sweep, ref nrmScale);
-                    // 감김 블렌드 — 법선을 아래(-1)로 연속 회전(처짐 스타일 -0.65도
-                    // 감으면 -1로 수렴), 스윕은 완만하게. 중간값에서 방향이 접선에
-                    // 가까워지는 것도 깜빡임 중간 모습으로 자연스럽다.
-                    // 반전(nrmScale<0)은 확실히 감긴 뒤에만 — 블렌드를 제곱해 뒤집힘을
-                    // 폐구 직전(closedT→1)으로 미룬다. 뜬~반쯤 뜬 눈에서는 법선을
-                    // 눕히기만 하고(≥0) 아래로 뒤집지 않아 '반대로 자람'을 차단.
-                    nrmScale = Mathf.Lerp(nrmScale, -1f, closedT * closedT);
-                    var dirV = lnrm * nrmScale + along * (sweep * Mathf.Lerp(1f, 0.7f, closedT));
+                    // 감김 블렌드 — 방향 접힘은 late fold만 사용한다. 중간 감김용
+                    // closureT는 길이 squash에만 관여해 기본 마스카라 조기 반전을 막는다
+                    // (처짐 style 5의 열린 눈 nrmScale=-0.65 동작은 그대로 보존).
+                    // foldT 선형 적용(제곱 제거) — 제곱은 부분 폴드를 죽여 반쯤 감겨도 안 깔렸다(실기기).
+                    nrmScale = Mathf.Lerp(nrmScale, -1f, foldT);
+                    var dirV = lnrm * nrmScale + along * (sweep * Mathf.Lerp(1f, 0.7f, foldT));
                     var dir = dirV.sqrMagnitude < 1e-10f ? along : dirV.normalized;
+                    if (_style != 5)
+                    {
+                        var minUpDot = Mathf.Lerp(OpenEyeMinUpDot, -0.85f, foldT);
+                        dir = KeepAboveLid(dir, up, minUpDot);
+                    }
 
                     // 양끝 코너 근처는 짧게(경계 삐짐 방지) + 개체 변이.
                     var edge = Mathf.Clamp01(u / EdgeFade) * Mathf.Clamp01((1f - u) / EdgeFade);
                     // 길이 프로파일 — 앞머리 ≈45%에서 시작해 중간(u≈0.55)부터 최대.
                     // 균일 길이는 앞머리가 길어 보여 부자연(실기기). EdgeFade(6%)와
-                    // 별개로 안쪽 절반 전체에 걸리는 완만한 램프. 감으면 살짝 축소
-                    // (투영상 접힘).
+                    // 별개로 안쪽 절반 전체에 걸리는 완만한 램프. 반쯤 감긴 눈은
+                    // 투영상 압축으로 가장 짧게 보이고, 실제로 감기면 일부 길이가
+                    // 돌아와 눈꺼풀에 접힌 느낌을 유지한다.
                     var lenBase = Mathf.Lerp(0.45f, 1f, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(u / 0.55f)));
+                    var closureLen = (1f - 0.38f * midCloseSquash) * Mathf.Lerp(1f, 0.92f, foldT);
                     var lashLen = len * lenBase * lenProf * (0.7f + 0.6f * h3) * Mathf.Lerp(0.5f, 1f, edge)
-                                  * Mathf.Lerp(1f, 0.85f, closedT);
-                    var tip = root + dir * lashLen;
-                    var perp = Perp(dir);
+                                  * closureLen;
                     var w = lashLen * WidthMult;
-
-                    _vertices[vi++] = ImageToWorld(root - perp * w, depth);
-                    _vertices[vi++] = ImageToWorld(root + perp * w, depth);
-                    _vertices[vi++] = ImageToWorld(tip - perp * w * 0.15f, depth);
-                    _vertices[vi++] = ImageToWorld(tip + perp * w * 0.15f, depth);
+                    // 곡선(컬) — 끝을 눈썹 방향(up)으로 꺾는다. 감김(fold)이면 컬을 줄여
+                    // 눕는 결을 살린다.
+                    WriteCurvedLash(_vertices, ref vi, root, dir, up, lashLen, w,
+                        UpperCurl * Mathf.Lerp(1f, 0.3f, foldT), depth);
                 }
             }
             _mesh.vertices = _vertices;
             _mesh.RecalculateBounds();
+        }
+
+        // 텍스처 리본(위 속눈썹) — 절차와 같은 이미지 공간 파이프라인. lash 라인 각 점에서
+        // 뿌리(라인)+up*길이(끝)로 리본을 세우고, 정적 UV로 곡선 스트로크 PNG를 매핑한다.
+        // 방향 폴드(눈 감김)는 텍스처 경로에선 적용하지 않는다(정적 리본).
+        void UpdateUpperTex(Vector3[] lm)
+        {
+            var vpe = RibbonCols * 2;
+            for (var e = 0; e < Eyes; e++)
+            {
+                var lids = UpperLids[e];
+                var inner = ImgPt(lm, lids[LidPts - 1]);
+                var outer = ImgPt(lm, lids[0]);
+                var eyeDist = (outer - inner).magnitude;
+                var lidMid = ImgPt(lm, lids[4]);
+                var up = (ImgPt(lm, BrowLower[e][2]) - lidMid).normalized;
+
+                for (var j = 0; j < LidPts; j++) _ctrl[j] = ImgPt(lm, lids[j]);
+                if (_cornerLift > 0f)
+                    for (var j = 0; j < LidPts; j++)
+                        _ctrl[j] = EyeWarp.LiftCorner(
+                            _ctrl[j], j / (float)(LidPts - 1), up, eyeDist, _cornerLift);
+                SubdivideArc(_ctrl, LidPts, _lash);
+
+                var len = eyeDist * LenFactor * _lengthMult;
+                var depth = Depth(lm[lids[4]].z);
+                var baseV = e * vpe;
+                for (var c = 0; c < RibbonCols; c++)
+                {
+                    var root = _lash[c];
+                    // c: 0=바깥 → RibbonCols-1=안쪽. 길이 프로파일은 안쪽 짧고 중앙~바깥 길게.
+                    var t = c / (float)(RibbonCols - 1); // 0 바깥 .. 1 안쪽
+                    var uu = 1f - t;                      // 0 안쪽 .. 1 바깥
+                    var lenBase = Mathf.Lerp(0.45f, 1f,
+                        Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(uu / 0.55f)));
+                    var edge = Mathf.Clamp01(t / EdgeFade) * Mathf.Clamp01((1f - t) / EdgeFade);
+                    var lashLen = len * lenBase * Mathf.Lerp(0.6f, 1f, edge) * RibbonLenMult;
+                    var top = root + up * lashLen;
+                    _texVertices[baseV + c * 2] = ImageToWorld(root, depth);
+                    _texVertices[baseV + c * 2 + 1] = ImageToWorld(top, depth);
+                }
+            }
+            _texMesh.vertices = _texVertices;
+            _texMesh.RecalculateBounds();
         }
 
         /// <summary>모양(mascaraStyle/lowerLashStyle) — 길이·스윕·법선 프로파일 변조,
@@ -324,9 +488,12 @@ namespace ARMakeup.Face
                 sweep *= 0.55f;
                 return 1f + 0.5f * bell * bell;
             }
-            if (style == 2)      // 캣아이 — 꼬리 강조 + 더 눕힘
+            if (style == 2)      // 캣아이(리프트) — 앞머리까지 전 구간을 눈꼬리로 눕힘
             {
-                sweep *= 1.35f;
+                // 대칭 부챗살에 양(+) 바이어스를 더해 0 교차를 없앤다 → 앞머리도 코쪽이
+                // 아니라 꼬리쪽을 본다("전부 눈꼬리" 리프트 룩). 다른 스타일의 대칭 결과
+                // 구별되는 유일한 케이스.
+                sweep = sweep * 0.9f + 0.32f;
                 return 1f + 0.7f * Mathf.SmoothStep(0f, 1f, (u - 0.5f) * 2f);
             }
             if (style == 3)      // 오픈아이 — 전체 길고 수직에 가깝게
@@ -360,13 +527,17 @@ namespace ARMakeup.Face
                 var outer = ImgPt(lm, lids[0]);
                 var eyeDist = (outer - inner).magnitude;
 
-                for (var j = 0; j < LidPts; j++)
-                    _ctrl[j] = ImgPt(lm, lids[LidPts - 1 - j]); // 안쪽 → 바깥
-
                 // "아래" 기준: 눈썹→하안검 방향 — 눈을 감아도 부호가 안 뒤집힌다
                 // (LowerLidRenderer와 동일 근거).
                 var lidMid = ImgPt(lm, lids[4]);
                 var down = (lidMid - ImgPt(lm, BrowLower[e][2])).normalized;
+
+                // 아래 속눈썹 뿌리를 하안검 랜드마크(흰자 바로 아래·워터라인 근처)보다 down으로
+                // 소폭 내린다 — 랜드마크에서 바로 나면 눈에 너무 붙어 어색(실기기). 실제 아래
+                // 속눈썹은 그보다 살짝 아래 lash 라인에서 난다.
+                var rootDrop = eyeDist * LowerRootDrop;
+                for (var j = 0; j < LidPts; j++)
+                    _ctrl[j] = ImgPt(lm, lids[LidPts - 1 - j]) + down * rootDrop; // 안쪽 → 바깥
 
                 // 눈꼬리 띄우기 — 하안검 밴드(LowerLidRenderer)와 동일 리프트로
                 // 코너 접점을 유지한다(리프트 방향은 위 = -down).
@@ -392,26 +563,22 @@ namespace ARMakeup.Face
                     SampleLash(u, out var root, out var along);
 
                     // 바깥으로 갈수록 부챗살 스윕(아래 방향 기준) — 위와 동일 모델.
-                    // 위와 같은 이유로 전역 down 대신 아크 로컬 법선(아래 지향).
+                    // 위와 같은 이유로 전역 down을 주축으로 두고 아크 로컬 법선은 일부만 섞는다.
                     var lnrm = Perp(along);
                     if (Vector2.Dot(lnrm, down) < 0f) lnrm = -lnrm;
-                    var sweep = Mathf.Lerp(LowerSweepMin, LowerSweepMax, u) + (h2 - 0.5f) * 0.5f;
+                    lnrm = StableLashNormal(down, lnrm);
+                    var sweep = Mathf.Lerp(LowerSweepMin, LowerSweepMax, u) + (h2 - 0.5f) * SweepJitter;
                     var lowerNrm = 1f; // clamp 0..4라 항상 1(처짐 차단)
                     var lenProf = StyleProfile(_lowerStyle, u, ref sweep, ref lowerNrm); // 모양 — 위와 공유 프로파일
-                    var dir = (lnrm + sweep * along).normalized;
+                    var dir = KeepAboveLid((lnrm + sweep * along).normalized, down, OpenEyeMinUpDot);
 
                     var edge = Mathf.Clamp01(u / EdgeFade) * Mathf.Clamp01((1f - u) / EdgeFade);
                     // 길이 프로파일 — 위와 동일 근거(앞머리 짧게), 아래는 완만하게.
                     var lenBase = Mathf.Lerp(0.55f, 1f, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(u / 0.5f)));
                     var lashLen = len * lenBase * lenProf * (0.7f + 0.6f * h3) * Mathf.Lerp(0.5f, 1f, edge);
-                    var tip = root + dir * lashLen;
-                    var perp = Perp(dir);
                     var w = lashLen * WidthMult;
-
-                    _lowerVertices[vi++] = ImageToWorld(root - perp * w, depth);
-                    _lowerVertices[vi++] = ImageToWorld(root + perp * w, depth);
-                    _lowerVertices[vi++] = ImageToWorld(tip - perp * w * 0.15f, depth);
-                    _lowerVertices[vi++] = ImageToWorld(tip + perp * w * 0.15f, depth);
+                    // 곡선(컬) — 아래 속눈썹은 소폭만, 끝을 눈 쪽(-down)으로 살짝 꺾는다.
+                    WriteCurvedLash(_lowerVertices, ref vi, root, dir, -down, lashLen, w, LowerCurl, depth);
                 }
             }
             _lowerMesh.vertices = _lowerVertices;
@@ -461,6 +628,71 @@ namespace ARMakeup.Face
                 h ^= h >> 13; h *= 2246822519u; h ^= h >> 16;
                 return (h & 0xFFFFFF) / (float)0x1000000;
             }
+        }
+
+        // HLSL/GLSL smoothstep(edge0,edge1,x)와 동일한 임계 리맵 — x를 [edge0,edge1]에서
+        // [0,1]로 부드럽게 정규화. Unity Mathf.SmoothStep(from,to,t)는 이것과 다른(부드러운
+        // lerp) 함수라, 개방도처럼 '값을 문턱으로 판정'하는 용도엔 반드시 이걸 쓴다.
+        static float SmoothThreshold(float edge0, float edge1, float x)
+        {
+            var t = Mathf.Clamp01((x - edge0) / Mathf.Max(edge1 - edge0, 1e-6f));
+            return t * t * (3f - 2f * t);
+        }
+
+        // 속눈썹 알파 게인 — 셰이더 amt = taper·edge·intensity라 상한이 낮아 얇은 가닥이
+        // 흐릿하게 보인다(실기기: "내추럴이 눈에 안 보임"). 감마(<1)로 저·중 강도를 크게
+        // 끌어올려 훨씬 진하게. 0은 그대로 0(활성 게이트는 _intensity로 별도 판정). 튜닝 대상.
+        static float LashAlpha(float intensity) =>
+            intensity <= 0f ? 0f : Mathf.Clamp01(Mathf.Pow(intensity, 0.55f) * 1.5f);
+
+        static Vector2 StableLashNormal(Vector2 stable, Vector2 local)
+        {
+            if (stable.sqrMagnitude < 1e-10f) return local.normalized;
+            if (local.sqrMagnitude < 1e-10f) return stable.normalized;
+            stable.Normalize();
+            local.Normalize();
+            if (Vector2.Dot(local, stable) < 0f) local = -local;
+            return Vector2.Lerp(stable, local, LocalNormalBlend).normalized;
+        }
+
+        static Vector2 KeepAboveLid(Vector2 dir, Vector2 up, float minUpDot)
+        {
+            if (dir.sqrMagnitude < 1e-10f) return up.normalized;
+            if (up.sqrMagnitude < 1e-10f) return dir.normalized;
+            dir.Normalize();
+            up.Normalize();
+
+            var current = Vector2.Dot(dir, up);
+            if (current >= minUpDot) return dir;
+
+            var side = dir - up * current;
+            if (side.sqrMagnitude < 1e-10f) return up;
+            side.Normalize();
+
+            var sideScale = Mathf.Sqrt(Mathf.Max(0f, 1f - minUpDot * minUpDot));
+            return (up * minUpDot + side * sideScale).normalized;
+        }
+
+        // 곡선 속눈썹 한 가닥 — 뿌리→중간→끝 3단면, 끝으로 갈수록 curlToward로 꺾어 컬을 만든다.
+        // 폭은 뿌리(w)→중간(0.5w)→끝(0.12w) 테이퍼. 직선 쿼드였을 때의 스파이크 인상을 없앤다.
+        void WriteCurvedLash(Vector3[] verts, ref int vi, Vector2 root, Vector2 dir,
+                             Vector2 curlToward, float len, float w, float curl, float depth)
+        {
+            // 끝은 직선 진행(root+dir*len), 중간을 진행방향 수직으로 볼록하게 밀어 C자 아크를
+            // 만든다 — 방향을 up으로 회전만 하면 dir이 이미 위라 커브가 안 보였다(실기기).
+            // 볼록 방향은 curlToward 쪽(위로 휘는 컬).
+            var tip = root + dir * len;
+            var bulge = Perp(dir);
+            if (Vector2.Dot(bulge, curlToward) < 0f) bulge = -bulge;
+            var mid = (root + tip) * 0.5f + bulge * (len * curl);
+            var dirMid = (tip - root).normalized;
+            var pR = Perp(dir); var pM = Perp(dirMid); var pT = Perp(dir);
+            verts[vi++] = ImageToWorld(root - pR * w, depth);
+            verts[vi++] = ImageToWorld(root + pR * w, depth);
+            verts[vi++] = ImageToWorld(mid - pM * w * 0.5f, depth);
+            verts[vi++] = ImageToWorld(mid + pM * w * 0.5f, depth);
+            verts[vi++] = ImageToWorld(tip - pT * w * 0.12f, depth);
+            verts[vi++] = ImageToWorld(tip + pT * w * 0.12f, depth);
         }
 
         static Vector2 Perp(Vector2 v) => new Vector2(-v.y, v.x);
