@@ -26,6 +26,48 @@ function waitForNextFrame() {
   });
 }
 
+async function waitFrames(count: number) {
+  for (let index = 0; index < count; index += 1) {
+    await waitForNextFrame();
+  }
+}
+
+// 스캐폴드가 픽셀 캡을 단계적으로 낮춰가며 최대 4회 시도하므로 여유를 둔다.
+const CAPTURE_TIMEOUT_MS = 30000;
+
+// 전체 콘텐츠 캡처가 기기에서 실패할 때의 최후 폴백 — 보이는 화면을
+// 스크린샷 방식으로 캡처한다(항상 동작하는 경로).
+function loadOptionalCaptureScreen(): (() => Promise<string>) | null {
+  try {
+    const viewShotModule = require('react-native-view-shot') as {
+      captureScreen?: (options?: unknown) => Promise<string>;
+    };
+
+    return typeof viewShotModule.captureScreen === 'function'
+      ? () =>
+          viewShotModule.captureScreen!({
+            format: 'jpg',
+            quality: 0.95,
+            result: 'tmpfile',
+          })
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function withCaptureTimeout(capturePromise: Promise<string | undefined>) {
+  return Promise.race([
+    capturePromise,
+    new Promise<never>((_resolve, reject) => {
+      setTimeout(
+        () => reject(new Error('capture timed out')),
+        CAPTURE_TIMEOUT_MS,
+      );
+    }),
+  ]);
+}
+
 export async function captureReportImage(reportCaptureRef: {
   current: OptionalViewShotRef | null;
 }) {
@@ -36,14 +78,53 @@ export async function captureReportImage(reportCaptureRef: {
     throw new Error('보고서 이미지를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.');
   }
 
-  await waitForNextFrame();
-  const imageUri = await capture.call(captureTarget);
+  // 스냅샷은 레이아웃 직후 프레임에서 간헐 실패할 수 있어 한 번 재시도한다.
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await waitFrames(attempt === 0 ? 2 : 6);
+    try {
+      const imageUri = await withCaptureTimeout(
+        Promise.resolve(capture.call(captureTarget)),
+      );
 
-  if (!imageUri) {
-    throw new Error('보고서 이미지를 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
+      if (imageUri) {
+        return imageUri;
+      }
+      lastError = new Error('empty capture uri');
+    } catch (error) {
+      lastError = error;
+      console.info('[aura:analysis] report-share:capture-retry', {
+        attempt,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
-  return imageUri;
+  // 전체 콘텐츠 캡처가 계속 실패하면 보이는 화면 스크린샷으로 폴백한다.
+  const captureScreen = loadOptionalCaptureScreen();
+  if (captureScreen) {
+    try {
+      const screenUri = await withCaptureTimeout(captureScreen());
+      if (screenUri) {
+        console.info('[aura:analysis] report-share:screen-fallback', {
+          contentCaptureError:
+            lastError instanceof Error ? lastError.message : String(lastError),
+        });
+        return screenUri;
+      }
+    } catch (error) {
+      console.info('[aura:analysis] report-share:screen-fallback-failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // 최종 실패 시 원인 문구를 함께 노출해 현장에서 바로 진단 가능하게 한다.
+  const detail =
+    lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown');
+  throw new Error(
+    `보고서 이미지를 만들지 못했어요. 잠시 후 다시 시도해 주세요. (${detail})`,
+  );
 }
 
 export async function shareReportImageWithSystemSheet({

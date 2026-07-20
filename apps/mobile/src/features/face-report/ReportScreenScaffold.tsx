@@ -1,18 +1,25 @@
-import React, { useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { PixelRatio, Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
-import { OptionalViewShot } from '../../shared/ui/OptionalViewShot';
+import {
+  loadOptionalCaptureRefFunction,
+  OptionalViewShot,
+  type OptionalViewShotRef,
+} from '../../shared/ui/OptionalViewShot';
 import { color, font, radius, shadow } from './reportTokens';
 import type { BandKey, ReportScreenProps } from './reportTypes';
 
-// Matches the legacy report screen's capture settings.
 const REPORT_CAPTURE_OPTIONS = {
   format: 'jpg',
   quality: 0.95,
   result: 'tmpfile',
 } as const;
+
+// iOS 이미지 렌더러는 한 변이 대략 16384px를 넘으면 실패한다. 보고서 전체
+// (contentSize × 기기 스케일)가 한계를 넘으면 비율을 유지한 채 축소 캡처한다.
+const REPORT_CAPTURE_MAX_PIXELS = 16000;
 import { ScrollAnimContext } from './visuals/RiseIn';
 import { S1Summary } from './sections/S1Summary';
 import { S2Proportion } from './sections/S2Proportion';
@@ -42,8 +49,88 @@ export function ReportScreenScaffold({
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
   const scrollRef = useRef<Animated.ScrollView>(null);
+  const innerCaptureRef = useRef<OptionalViewShotRef | null>(null);
+  const contentSize = useRef({height: 0, width: 0});
+  const contentBodySize = useRef({height: 0, width: 0});
   const sectionY = useRef<Record<string, number>>({});
   const cardY = useRef<Record<string, number>>({});
+
+  // 보고서 전체 캡처 — 스크롤뷰 안쪽 콘텐츠 래퍼를 직접 캡처한다.
+  // 실기기 확정 원인: 긴 보고서는 drawViewHierarchyInRect가
+  // "The view cannot be captured..."로 실패한다(렌더러 픽셀 한계).
+  // 픽셀 캡을 단계적으로 낮춰 재시도해 전체 길이를 항상 보존한다.
+  // (호출부 서비스에 화면 캡처 최후 폴백이 한 겹 더 있다.)
+  const captureFullReport = useCallback(async () => {
+    const captureNode = loadOptionalCaptureRefFunction();
+    const captureTarget = innerCaptureRef.current;
+    const body = contentBodySize.current;
+
+    if (!captureNode || !captureTarget || body.height <= 0) {
+      return undefined;
+    }
+
+    const deviceScale = PixelRatio.get();
+    const naturalPixels = body.height * deviceScale;
+    // 자연 크기(캡 없음) → 점점 보수적인 캡 순서로 시도.
+    const pixelCaps = [naturalPixels, 14000, 9800, 7000].filter(
+      (cap, index) => index === 0 || cap < naturalPixels,
+    );
+
+    let lastError: unknown = null;
+    for (const cap of pixelCaps) {
+      const scaleDown = Math.min(1, cap / naturalPixels);
+      const dims =
+        scaleDown < 1 && body.width > 0
+          ? {
+              height: Math.floor(body.height * scaleDown),
+              width: Math.floor(body.width * scaleDown),
+            }
+          : {};
+      try {
+        const uri = await captureNode(captureTarget, {
+          ...REPORT_CAPTURE_OPTIONS,
+          ...dims,
+        });
+        if (uri) {
+          return uri;
+        }
+      } catch (error) {
+        lastError = error;
+        console.info('[aura:analysis] report-share:capture-tier-failed', {
+          cap,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (lastError instanceof Error) {
+      throw lastError;
+    }
+    return undefined;
+  }, []);
+
+  useEffect(() => {
+    if (!captureRef) {
+      return undefined;
+    }
+
+    const captureHandle = {capture: captureFullReport};
+
+    if (typeof captureRef === 'function') {
+      captureRef(captureHandle);
+      return () => {
+        captureRef(null);
+      };
+    }
+
+    const mutableCaptureRef =
+      captureRef as React.MutableRefObject<typeof captureHandle | null>;
+    mutableCaptureRef.current = captureHandle;
+
+    return () => {
+      mutableCaptureRef.current = null;
+    };
+  }, [captureFullReport, captureRef]);
   const onScroll = useAnimatedScrollHandler(e => { scrollY.value = e.contentOffset.y; });
 
   // Sections live inside the capture wrapper, so their onLayout y is relative to
@@ -76,6 +163,9 @@ export function ReportScreenScaffold({
       <View style={{ flex: 1, backgroundColor: color.bg }}>
         <Animated.ScrollView
           ref={scrollRef}
+          onContentSizeChange={(width, height) => {
+            contentSize.current = {height, width};
+          }}
           onScroll={onScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
@@ -96,8 +186,20 @@ export function ReportScreenScaffold({
             The outer View exists only to measure where this wrapper starts,
             since the sections' onLayout y is now relative to it.
           */}
-          <View onLayout={e => { captureOffsetY.current = e.nativeEvent.layout.y; }}>
-          <OptionalViewShot ref={captureRef} options={REPORT_CAPTURE_OPTIONS} style={{ backgroundColor: color.bg }}>
+          {/* 캡처는 이제 ScrollView 전체 콘텐츠(snapshotContentContainer)로 수행
+              — captureRef는 위 effect에서 스크롤 캡처 클로저로 연결된다. */}
+          <View
+            onLayout={e => {
+              captureOffsetY.current = e.nativeEvent.layout.y;
+              contentBodySize.current = {
+                height: e.nativeEvent.layout.height,
+                width: e.nativeEvent.layout.width,
+              };
+            }}>
+          <OptionalViewShot
+            options={REPORT_CAPTURE_OPTIONS}
+            ref={innerCaptureRef}
+            style={{ backgroundColor: color.bg }}>
           <View onLayout={e => { sectionY.current.s1 = e.nativeEvent.layout.y; }}>
             <S1Summary data={data.s1} />
           </View>
