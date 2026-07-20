@@ -484,7 +484,7 @@ jobs:
           )"
           echo "arn=$registered_task_definition" >> "$GITHUB_OUTPUT"
 
-      - name: Apply and verify production database schema
+      - name: Apply and verify production database schema, sync Auradin catalog mirror
         env:
           REGISTERED_TASK_DEFINITION: ${{ steps.register-api-task.outputs.arn }}
         run: |
@@ -511,7 +511,7 @@ jobs:
               command: [
                 "/bin/sh",
                 "-c",
-                "python -m app.db.init_db && python -m app.db.check_schema"
+                "python -m app.db.init_db && python -m app.db.check_schema && python -m app.db.sync_auradin_catalog"
               ]
             }]
           }' > migration-overrides.json

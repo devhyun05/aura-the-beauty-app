@@ -608,6 +608,14 @@ def main() -> None:
       active_pointer_persistence=args.active_pointer_persistence,
     )
   print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+  if result.get("mode") == "activated":
+    print(
+      "\n다음 단계 (DB 미러): 이 활성 스냅샷을 main에 push하면 배포 CI가 "
+      "`python -m app.db.sync_auradin_catalog`로 DB 미러를 자동 갱신합니다.\n"
+      "즉시 반영이 필요하면 DATABASE_URL을 주고 "
+      "`python scripts/sync_auradin_snapshot_to_db.py`를 수동 실행하세요.",
+      file=sys.stderr,
+    )
 
 
 if __name__ == "__main__":

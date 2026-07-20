@@ -617,6 +617,68 @@ comment on table auradin_events is
   'A5 (schema.sql:auradin-events-v1) — §7.2 이벤트 로깅. payload는 allowlist 구조화 값만(raw query 원문 금지). '
   '보존: received_at 인덱스 기반 주기 배치 DELETE(비파티션 MVP). 사용자 삭제 시 이벤트와 파생 user_taste_profile을 한 트랜잭션으로 삭제.';
 
+-- Auradin catalog DB mirror (schema.sql:auradin-catalog-mirror-v1)
+-- Read-only mirror of the git-tracked JSONL snapshot so teammates can query the
+-- catalog (incl. color attributes) from the deployed DB. Serving still reads the
+-- JSONL via catalog_loader; this is populated by app.db.sync_auradin_catalog.
+create table if not exists auradin_catalog_snapshots (
+  snapshot_id text primary key,                 -- e.g. 'snapshot_20260719'
+  manifest_sha256 text not null,                -- manifest file sha256 — idempotency key
+  catalog_sha256 text not null,                 -- catalog JSONL sha256 (recorded in manifest)
+  manifest_path text not null,                  -- repo-relative manifest path
+  item_count integer not null,
+  color_family_count integer not null default 0,  -- rows with attributes.colorFamily set (coverage tracking)
+  quality_summary jsonb not null default '{}'::jsonb,  -- a8_quality_summary output
+  status text not null default 'imported'
+    check (status in ('importing', 'imported', 'active', 'superseded', 'failed')),
+  imported_at timestamptz not null default now(),
+  activated_at timestamptz
+);
+
+comment on table auradin_catalog_snapshots is
+  'Auradin catalog import ledger (schema.sql:auradin-catalog-mirror-v1). One row per synced snapshot; '
+  'status=active marks the snapshot currently served from JSONL. manifest_sha256 is the idempotency key.';
+
+create table if not exists auradin_catalog_items (
+  snapshot_id text not null
+    references auradin_catalog_snapshots(snapshot_id) on delete cascade,
+  item_id text not null,                        -- JSONL row id (auradin-seed-*/auradin-mvp-*)
+  category text,                                -- lip/cheek/shadow/liner/brow/base
+  brand_name text,
+  product_name text,
+  color_family text,                            -- attributes.colorFamily (nullable)
+  color_family_confidence real,                 -- attributeConfidence.colorFamily (optional -> null)
+  finish text,
+  texture text,
+  undertone text,                               -- reference only; undertone hard-filter is forbidden
+  price_krw integer,                            -- liveOffer.priceKrw
+  is_purchasable boolean not null default false,
+  hard_filter_eligible jsonb not null default '{}'::jsonb,
+  payload jsonb not null,                       -- full original JSONL row
+  primary key (snapshot_id, item_id)
+);
+
+create index if not exists idx_auradin_catalog_items_category
+  on auradin_catalog_items (snapshot_id, category);
+create index if not exists idx_auradin_catalog_items_color_family
+  on auradin_catalog_items (snapshot_id, color_family)
+  where color_family is not null;
+create index if not exists idx_auradin_catalog_items_brand
+  on auradin_catalog_items (snapshot_id, brand_name);
+create index if not exists idx_auradin_catalog_items_payload_gin
+  on auradin_catalog_items using gin (payload jsonb_path_ops);
+
+comment on table auradin_catalog_items is
+  'Auradin catalog rows mirrored per snapshot (schema.sql:auradin-catalog-mirror-v1). Query via the '
+  'auradin_active_catalog view for the currently active snapshot. Serving is unaffected (JSONL-backed).';
+
+-- Convenience view: rows of the active snapshot. Teammates should query this.
+create or replace view auradin_active_catalog as
+  select i.*
+  from auradin_catalog_items i
+  join auradin_catalog_snapshots s on s.snapshot_id = i.snapshot_id
+  where s.status = 'active';
+
 create table if not exists product_recommendation_runs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,

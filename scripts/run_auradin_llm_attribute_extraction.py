@@ -98,6 +98,37 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
   return rows
 
 
+def filter_input_rows(
+  rows: list[dict[str, Any]],
+  *,
+  categories: set[str] | None = None,
+  only_missing: str | None = None,
+) -> list[dict[str, Any]]:
+  """Scope extraction inputs by category and/or a missing attribute.
+
+  categories: keep only rows whose ``category`` is in the set (case-insensitive) —
+    e.g. the color categories {lip, cheek, shadow, liner, brow}, excluding base.
+  only_missing: keep only rows whose ``attributes[only_missing]`` is empty — used to
+    target colorFamily gaps without re-extracting rows already covered.
+  """
+
+  filtered = rows
+  if categories:
+    wanted = {value.strip().lower() for value in categories if value.strip()}
+    filtered = [
+      row for row in filtered if str(row.get("category") or "").strip().lower() in wanted
+    ]
+  if only_missing:
+    field = only_missing.strip()
+
+    def _is_missing(row: dict[str, Any]) -> bool:
+      attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+      return not str(attributes.get(field) or "").strip()
+
+    filtered = [row for row in filtered if _is_missing(row)]
+  return filtered
+
+
 def resolve_active_catalog_path(data_root: Path) -> Path | None:
   pointer_path = data_root / "active_snapshot.json"
   if not pointer_path.exists():
@@ -542,6 +573,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
   parser.add_argument("--output", type=Path, default=None)
   parser.add_argument("--spotcheck-output", type=Path, default=None)
   parser.add_argument("--data-root", type=Path, default=REPO_ROOT / "data" / "auradin")
+  parser.add_argument(
+    "--categories",
+    default=None,
+    help="쉼표구분 카테고리 필터 (예: lip,cheek,shadow,liner,brow — base 제외 색조 집중)",
+  )
+  parser.add_argument(
+    "--only-missing",
+    default=None,
+    metavar="FIELD",
+    help="해당 attributes 필드가 빈 행만 추출 (예: colorFamily — 결손분만 태움)",
+  )
   parser.add_argument("--max-items", type=int, default=0, help="0이면 전체")
   parser.add_argument("--model-id", default=None)
   parser.add_argument("--region", default=None)
@@ -574,6 +616,11 @@ def main(argv: list[str] | None = None) -> int:
       client: Any = DryRunAttributeExtractionClient()
     else:
       client = BedrockAttributeExtractionClient(model_id=args.model_id, region=args.region)
+
+    categories = set(args.categories.split(",")) if args.categories else None
+    input_rows = filter_input_rows(
+      input_rows, categories=categories, only_missing=args.only_missing
+    )
 
     if args.max_items > 0:
       input_rows = input_rows[: args.max_items]
