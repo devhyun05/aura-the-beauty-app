@@ -15,6 +15,7 @@ import type {
   FaceFeatureObservationRaw,
   FaceFeatureObservations,
   FaceFeatureProfile,
+  FullnessBand,
   PresenceBand,
   SaggingBand,
   VlmObservation,
@@ -42,6 +43,7 @@ const DENSITY_BANDS: readonly DensityBand[] = ['sparse', 'medium', 'dense'];
 const CHEEK_HEIGHT_BANDS: readonly CheekHeightBand[] = ['low', 'mid', 'high'];
 const CHEEK_VOLUME_BANDS: readonly CheekVolumeBand[] = ['flat', 'medium', 'full'];
 const CONTRAST_BANDS: readonly ContrastBand[] = ['low', 'medium', 'high'];
+const FULLNESS_BANDS: readonly FullnessBand[] = ['thin', 'medium', 'full'];
 
 // 원본 관찰 → 타입된 VLM 슬롯. enum 밖 값('unclear' 포함)이거나 저confidence면 null.
 function resolveObservation<B extends string>(
@@ -92,6 +94,7 @@ export function buildFaceFeatureProfile(
     lip: {
       ...base.lip,
       colorContrast: resolveObservation(obs.lipColorContrast, CONTRAST_BANDS, t),
+      fullness: resolveObservation(obs.lipFullness, FULLNESS_BANDS, t),
     },
     cheek: {
       ...base.cheek,

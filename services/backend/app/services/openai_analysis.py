@@ -865,6 +865,8 @@ FEATURE_OBSERVATION_ENUMS: dict[str, tuple[str, ...]] = {
   "eyeContrast": ("low", "medium", "high", "unclear"),
   "cheekContrast": ("low", "medium", "high", "unclear"),
   "lipColorContrast": ("low", "medium", "high", "unclear"),
+  # 입술 볼륨(자기 얼굴 대비 얇음/도톰) — 리서치 L-1(얇은 입술→국소 오버립) 입력.
+  "lipFullness": ("thin", "medium", "full", "unclear"),
 }
 FEATURE_OBSERVATION_KEYS = tuple(FEATURE_OBSERVATION_ENUMS.keys())
 
@@ -888,6 +890,14 @@ def _build_feature_observations_schema() -> dict[str, Any]:
     },
     list(FEATURE_OBSERVATION_KEYS),
   )
+
+
+# AR 필터 색 개인화(B)용 — 부위별 메이크업 색을 hex로. makeupGuideline(텍스트)은
+# 그대로 두고 색만 담는 병렬 필드라 기존 파서를 깨지 않는다. 값은 사용자의
+# measuredPersonalColor에 근거한, 해당 부위에 실제로 어울리는 메이크업 색.
+# AR 레시피 부위(lip/blush/eyeshadow/brow/eyeliner)와 매칭 — foundation은 스킨-세이프라 제외.
+MAKEUP_COLOR_KEYS = ("lip", "blush", "eyeshadow", "brow", "eyeliner")
+_HEX_COLOR = {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"}
 
 
 def _build_face_analysis_tool_schema() -> dict[str, Any]:
@@ -934,6 +944,10 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "skinPerception": skin_perception,
       "baseMakeupGuide": _STR,
       "makeupGuideline": _obj({key: _STR for key in guideline_keys}, guideline_keys),
+      "makeupColors": _obj(
+        {key: _HEX_COLOR for key in MAKEUP_COLOR_KEYS},
+        list(MAKEUP_COLOR_KEYS),
+      ),
       "recommendedMakeups": {
         "type": "array",
         "minItems": RECOMMENDED_MAKEUP_COUNT,
@@ -987,6 +1001,7 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "skinPerception",
       "baseMakeupGuide",
       "makeupGuideline",
+      "makeupColors",
       "recommendedMakeups",
       "regionNotes",
       "impressionNotes",
@@ -1015,6 +1030,7 @@ PERCEPTION_FIELD_KEYS = (
 PRESCRIPTION_FIELD_KEYS = (
   "baseMakeupGuide",
   "makeupGuideline",
+  "makeupColors",
   "recommendedMakeups",
 )
 STYLING_FIELD_KEYS = ("stylingLooks",)
@@ -1095,6 +1111,9 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "baseMakeupGuide, makeupGuideline, recommendedMakeups, beautyGuide, "
   "regionNotes, impressionNotes, stylingLooks. "
   "makeupGuideline keys: brow, blush, highlight, eyeshadow, eyeliner, lip. "
+  "makeupColors keys: lip, blush, eyeshadow, brow, eyeliner. Each value is a "
+  "'#RRGGBB' hex color grounded in the user's measuredPersonalColor and "
+  "consistent with makeupGuideline, natural makeup saturation (no neon). "
   "recommendedMakeups must be exactly 1 object. The object keys: title, "
   "subtitle, description, tags. tags must contain exactly 2 strings. "
   "beautyGuide is optional but recommended. beautyGuide keys: bestColors, "
@@ -1122,7 +1141,7 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "defined version. "
   "featureObservations keys: eyelidType, upperLidHooding, lowerLidSagging, "
   "aegyoSal, browDensity, cheekboneHeight, cheekVolume, eyeContrast, "
-  "cheekContrast, lipColorContrast. "
+  "cheekContrast, lipColorContrast, lipFullness. "
   "Each value is an object with keys value (one of the allowed enum options, "
   "or 'unclear' when the photo does not permit a confident call), confidence "
   "(0..1), evidence (one short Korean sentence citing the photo). Never invent "
@@ -1206,14 +1225,22 @@ _ANALYSIS_SEC_SKIN = (
 _ANALYSIS_SEC_FEATURE = (
   "featureObservations는 top-level 필드로, 사진에서만 판정 가능한 이목구비 형태 부면을 "
   "각각 {value, confidence, evidence}로 채워. value는 정해진 enum 중 하나여야 해: "
-  "eyelidType(monolid 무쌍/inner 속쌍/outer 겉쌍/hooded 헐린눈/unclear), "
+  "eyelidType(monolid 무쌍/inner 속쌍/outer 겉쌍/hooded 헐린눈/unclear) — 판별 기준: "
+  "outer(겉쌍)는 쌍꺼풀 라인이 눈 앞머리부터 꼬리까지 전 구간에서 또렷하게 보이고 눈을 뜬 "
+  "상태에서도 라인과 눈꺼풀 접힘 면이 분명히 드러남. inner(속쌍)는 라인이 눈 앞머리 쪽에서 "
+  "살에 묻혀 보이지 않다가 중앙~꼬리에서만 가늘게 드러남. monolid(무쌍)는 접힘 라인이 전 "
+  "구간에 없음. hooded는 라인 유무와 무관하게 눈두덩 살이 접힘 라인을 위에서 덮어 가림. "
+  "라인이 전 구간에서 보이면 앞머리가 다소 옅어도 inner가 아니라 outer로 판정해. "
+  "확대해 보아도 이 기준으로 구분이 안 되면 반드시 unclear. "
   "upperLidHooding 상안검 처짐(none/mild/pronounced/unclear), "
   "lowerLidSagging 하안검 처짐(none/mild/pronounced/unclear) — 상안검과 하안검을 각각 따로 판정해, "
   "aegyoSal 애교살(present/absent/unclear), browDensity 눈썹 숱(sparse/medium/dense/unclear), "
   "cheekboneHeight 광대 위치(low/mid/high/unclear), cheekVolume 볼 볼륨(flat/medium/full/unclear), "
   "eyeContrast 눈매 대비(주변 피부 대비 눈·속눈썹·라인의 명도 대비, low/medium/high/unclear), "
   "cheekContrast 볼 대비(주변 피부 대비 볼 혈색·음영 대비, low/medium/high/unclear), "
-  "lipColorContrast 입술 혈색 대비(low/medium/high/unclear). "
+  "lipColorContrast 입술 혈색 대비(low/medium/high/unclear), "
+  "lipFullness 입술 볼륨(본인 얼굴 크기 대비 얇음 thin/중간 medium/도톰 full/unclear — "
+  "모집단 표준이 아니라 그 얼굴 안에서의 상대 볼륨). "
   "confidence는 0..1 확신도, evidence는 그렇게 본 사진 근거 한 줄. "
   "조명·각도·안경·그림자로 확실치 않으면 value를 'unclear'로 두고 confidence를 낮춰 — 절대 지어내지 마. "
   "이 필드는 사진 형태 판정만 담고 색·메이크업 처방은 만들지 마. "
@@ -1222,6 +1249,13 @@ _ANALYSIS_SEC_PRESCRIPTION = (
   "baseMakeupGuide는 top-level 필드로 작성하고, makeupGuideline 안에는 brow, eyeshadow, lip, highlight, eyeliner, blush만 작성해. "
   "makeupGuideline의 각 항목은 촬영 사진과 보고서 판단을 바탕으로 한 문장으로 짧게 작성해. "
   "makeupGuideline에는 단순 색상 추천뿐 아니라 배치 가이드도 포함해. "
+  "makeupColors는 top-level 필드로 lip, blush, eyeshadow, brow, eyeliner 각각에 대해 "
+  "'#RRGGBB' 6자리 hex 색을 하나씩 채워. 이 색은 요청 메타데이터의 measuredPersonalColor "
+  "(실측 퍼스널 컬러 톤·축)에 근거해서, 그 부위에 실제로 어울리는 메이크업 제품 색이어야 해 "
+  "— makeupGuideline 텍스트에서 말한 색과 일관되게. 립은 실제 립 제품 색, 블러셔는 볼 발색, "
+  "eyeshadow는 눈두덩 색, brow는 눈썹 색, eyeliner는 라인 색. measuredPersonalColor가 "
+  "insufficient거나 없으면 사진 관찰에 근거한 무난한 색으로. AR 필터에 그대로 쓰이니 "
+  "실물 메이크업으로 자연스러운 채도·명도를 지켜(형광·순색 금지). "
   "brow는 눈썹 모양/결/두께 방향, eyeshadow는 색과 눈두덩이 배치, lip은 립 컬러와 립라인 방향, "
   "highlight는 T존/눈밑/광대 등 위치, eyeliner는 점막/꼬리/두께, blush는 광대/볼 위치와 확산 방향을 설명해. "
   "추천 메이크업은 위 보고서에서 판단한 퍼스널 컬러, 얼굴형, 톤 요약, 추천 무드, 눈매, 입술 톤, 헤어 방향에 근거해서 정확히 1개만 작성해. "

@@ -44,17 +44,23 @@ const sourcedRecipe = buildFullFaceMakeupRecipe({
 
 expectEqual(
   MAKEUP_RECIPE_REGIONS.join(','),
-  'foundation,lip,blush,brow,eyeliner,lens',
+  'foundation,lip,blush,brow,eyeshadow,eyeliner,lens',
   'canonical makeup region registry',
 );
 expectEqual(
   recipe.layers.map(layer => layer.region).join(','),
-  'foundation,lip,blush,brow,eyeliner',
+  'foundation,lip,blush,brow,eyeshadow,eyeliner',
   'full-face recipe layer order',
 );
 expectEqual(recipe.version, 2, 'full-face recipe version');
-expectEqual(recipe.layerCount, 5, 'full-face recipe layer count');
+expectEqual(recipe.layerCount, 6, 'full-face recipe layer count');
 expectEqual(recipe.enabledLayerCount, 4, 'full-face recipe enabled layer count');
+// 아이섀도는 기본 OFF(기존 저장 룩·프리셋 회귀 방지) — 레이어는 존재하되 비활성.
+expectEqual(
+  recipe.layers.find(layer => layer.region === 'eyeshadow')?.enabled,
+  false,
+  'eyeshadow layer present but disabled by default',
+);
 expectEqual(recipe.rendererMode, 'smooth-region-mask', 'full-face renderer mode');
 expectEqual(
   recipe.layers.every(layer => layer.rendererMode === 'smooth-region-mask'),
@@ -84,7 +90,7 @@ expectEqual(
 expectEqual(
   getMakeupRecipeRegionsForArea('all').join(','),
   'foundation,lip,blush,brow,eyeliner',
-  'all makeup area maps to five regions',
+  'all makeup area maps to five regions (eyeshadow/lens stay opt-in)',
 );
 expectEqual(
   getMakeupRecipeRegionsForArea('base').join(','),

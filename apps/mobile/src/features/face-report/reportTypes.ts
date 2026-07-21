@@ -7,6 +7,8 @@ import type {Silhouette, StyleGender} from '../ar/stencil/src/composer/bodyProfi
 import type {PersonalColor12Type} from '../personal-color/services/personalColorCore/contracts';
 import type {VisualWeightPresentation} from './visualWeightPresentation';
 export type {VisualWeightPresentation} from './visualWeightPresentation';
+import type {StyleLaneCard} from './styleLaneRecommendations';
+export type {StyleLaneCard, StyleLaneMove, StyleLaneKey} from './styleLaneRecommendations';
 
 export interface PhotoSlotData {
   uri?: string;
@@ -231,6 +233,12 @@ export interface S8Data {
   aspects: { key: string; heading: string; label: string; description: string }[];
 }
 
+// ---------- S9 (3 스타일 레인 추천) ----------
+export interface S9Data {
+  eyebrow: string; title: string; sub: string;
+  lanes: StyleLaneCard[];   // 균형·동안·개성강조 3장. 항상 3장.
+}
+
 // ---------- screen ----------
 // Only s1 (built from fields every successfully-created report already has)
 // and s5 (has its own internal "설문 전" empty state — no coordinates/guides to
@@ -247,6 +255,7 @@ export interface ReportData {
   topBarTitle: string;
   s1: S1Data; s2: S2Data | null; s3: S3Data | null; s4: S4Data | null; s5: S5Data;
   s6: S6Data | null; s7: S7Data | null; s8: S8Data | null;
+  s9: S9Data | null;
   footer: { disclaimer: string; cta: string };
 }
 

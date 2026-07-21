@@ -60,6 +60,10 @@ export function buildRegionFeatureDescriptors(
   if (lipContrast === 'high') lower.push('입술 혈색이 뚜렷');
   else if (lipContrast === 'low') lower.push('입술 혈색이 옅은 편');
 
+  const fullness = profile.lip.fullness?.value;
+  if (fullness === 'thin') lower.push('입술이 얇은 편');
+  else if (fullness === 'full') lower.push('입술이 도톰한 편');
+
   // ── 광대·턱: 광대 위치 ─────────────────────────────────────────────────
   const cheekbone = profile.cheek.cheekboneHeight?.value;
   if (cheekbone === 'high') jaw.push('광대가 높은 편');

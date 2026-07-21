@@ -9,7 +9,7 @@ import {
   ProductRecommendationShelfScreen,
   ProductSearchResultScreen,
 } from '../../../features/recommendation';
-import {getRecommendedFilterRouteParams} from '../../../features/home';
+import {getRecommendedFilterStencilRouteParams} from './arRouteActions';
 import {getFaceAnalysisReportById} from '../../../shared/services/faceAnalysisService';
 import {
   getLikedMakeupFilterLooks,
@@ -322,7 +322,7 @@ export function MakeupLookListRouteScreen({
       }
 
       setSelectedRecommendedMakeupFilterId(filterId);
-      navigation.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+      navigation.navigate('ARFilter', getRecommendedFilterStencilRouteParams(filterId));
     },
     [navigation, setSelectedRecommendedMakeupFilterId],
   );

@@ -31,6 +31,7 @@ const BASE_DELTA = {
   eyeshadowHeight: 0.1,
   aegyoHeight: 0.1,
   blushLift: 0.1,
+  lipOverline: 0.08, // 얇은 입술용 국소 오버립(L-1: 코너까지 확장 금지 — 은은하게)
 } as const;
 
 // youthful 레인은 중안부 축소 계열을 강조(계수 상향), balance는 기본.
@@ -122,6 +123,11 @@ export function deriveFitDeltas(
     // C-1/C-2 중안부 김 → 블러셔 고배치(B). youthful은 계수 강화.
     if (profile.contour.verticalBalance.band === 'middle' && midGain > 0) {
       push('blush', {blushLift: BASE_DELTA.blushLift * midGain}, basis('contour.verticalBalance', 'middle', 'B'));
+    }
+
+    // L-1 얇은 입술 → 국소 오버립(B). 과한 오버라이닝은 입꼬리 처짐 역효과(L-2)라 은은하게.
+    if (profile.lip.fullness?.value === 'thin') {
+      push('lip', {lipOverline: BASE_DELTA.lipOverline}, basis('lip.fullness', 'thin', 'B'));
     }
   }
 

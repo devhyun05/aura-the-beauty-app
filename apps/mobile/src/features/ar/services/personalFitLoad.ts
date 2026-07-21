@@ -7,7 +7,9 @@
 import {getLatestFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
 import type {StyleLane} from '../../../shared/contracts/personalFitProfile';
 import {
+  buildAnalysisFitSheet,
   buildPersonalFitBaseDeltas,
+  type AnalysisFitSheet,
   type PersonalFitBaseDelta,
 } from './personalFitService';
 
@@ -30,5 +32,29 @@ export async function loadPersonalFitBaseDeltas(
       message: error instanceof Error ? error.message : String(error),
     });
     return [];
+  }
+}
+
+// 최신 분석 리포트 → "분석 맞춤 핏" 시트(저장 라이브러리에 upsert할 후보). 실패/부재/
+// 근거없음이면 null(무해). 적용 여부는 스텐실 mainId 토글이 결정한다.
+export async function loadAnalysisFitSheet(
+  styleLane: StyleLane = 'balance',
+): Promise<AnalysisFitSheet | null> {
+  try {
+    const report = await getLatestFaceAnalysisReport();
+    const sheet = buildAnalysisFitSheet(report, styleLane);
+    if (sheet) {
+      console.info('[aura:personal-fit] analysis-fit-sheet:built', {
+        reportId: report?.id,
+        regions: sheet.entries.map(e => e.region),
+        styleLane,
+      });
+    }
+    return sheet;
+  } catch (error) {
+    console.info('[aura:personal-fit] analysis-fit-sheet:load-failed', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
   }
 }

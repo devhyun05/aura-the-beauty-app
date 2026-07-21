@@ -56,6 +56,8 @@ export type SaggingBand = 'none' | 'mild' | 'pronounced';
 export type PresenceBand = 'present' | 'absent';
 export type ContrastBand = 'low' | 'medium' | 'high';
 export type DensityBand = 'sparse' | 'medium' | 'dense';
+// 입술 볼륨(자기 얼굴 대비) — 리서치 L-1(얇은 입술→국소 오버립) 입력.
+export type FullnessBand = 'thin' | 'medium' | 'full';
 export type CheekHeightBand = 'low' | 'mid' | 'high';
 export type CheekVolumeBand = 'flat' | 'medium' | 'full';
 
@@ -86,7 +88,8 @@ export type FaceFeatureObservationKey =
   | 'cheekVolume'
   | 'eyeContrast'
   | 'cheekContrast'
-  | 'lipColorContrast';
+  | 'lipColorContrast'
+  | 'lipFullness';
 
 export type FaceFeatureObservations = Partial<
   Record<FaceFeatureObservationKey, FaceFeatureObservationRaw>
@@ -131,6 +134,8 @@ export type FaceFeatureLipProfile = {
   cornerAsymmetry: MeasuredBand<AsymmetryBand>;
   // VLM
   colorContrast: VlmObservation<ContrastBand>;
+  // 입술 볼륨(자기 얼굴 대비 얇음/도톰) — 오버립 규칙 입력.
+  fullness: VlmObservation<FullnessBand>;
 };
 
 export type FaceFeatureCheekProfile = {

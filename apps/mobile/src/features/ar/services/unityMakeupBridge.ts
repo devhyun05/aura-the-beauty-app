@@ -35,7 +35,16 @@ import {
   getArBlushReferenceShapeByArFilterId,
   getArBlushShapeByArFilterId,
 } from '../../../shared/contracts/arBlushCatalog';
+import type {EyeshadowLayerV2} from '../stencil/src/bridge/types';
 import {ORIGINAL_OPTION_CARD_ID} from './arFilterOptionRules';
+
+// ARwithFable graft envelope target (BridgeMessages.RNToUnityMessage). Distinct
+// from UNITY_MAKEUP_BRIDGE_TARGET: recipe-v2 goes to AURA's RNBridge, graft
+// messages (applyFilter/setEyeshadowLayers/...) go to the grafted NativeBridge.
+export const UNITY_GRAFT_BRIDGE_TARGET = {
+  gameObject: 'NativeBridge',
+  messageMethod: 'OnMessageFromRN',
+} as const;
 
 export const UNITY_MAKEUP_BRIDGE_TARGET = {
   gameObject: 'RNBridge',
@@ -129,6 +138,16 @@ export const UNITY_MAKEUP_LAYER_PRESETS: Record<
     region: 'blush',
     texture: 'soft_blush',
   },
+  eyeshadow: {
+    branchSource: 'makeupAR-graft-eyeshadow',
+    color: '#B06A4E',
+    finish: 'satin',
+    label: PRODUCT_REGION_LABELS.eyeshadow,
+    maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.eyeshadow.maskTextureId,
+    opacity: 0.5,
+    region: 'eyeshadow',
+    texture: 'shimmer_eye',
+  },
   eyeliner: {
     branchSource: 'makeupAR-full-face',
     color: '#8A756E',
@@ -168,6 +187,7 @@ export const UNITY_MAKEUP_REGION_PRESETS: Record<
   foundation: UNITY_MAKEUP_LAYER_PRESETS.foundation,
   brow: UNITY_MAKEUP_LAYER_PRESETS.brow,
   blush: UNITY_MAKEUP_LAYER_PRESETS.blush,
+  eyeshadow: UNITY_MAKEUP_LAYER_PRESETS.eyeshadow,
   eyeliner: UNITY_MAKEUP_LAYER_PRESETS.eyeliner,
   lip: UNITY_MAKEUP_LAYER_PRESETS.lip,
   lens: UNITY_MAKEUP_LAYER_PRESETS.lens,
@@ -730,7 +750,7 @@ function createUnityMakeupRecipeBatchForRegions({
         ? 'base'
         : region === 'blush'
         ? 'cheek'
-        : region === 'eyeliner'
+        : region === 'eyeliner' || region === 'eyeshadow'
         ? 'eye'
         : region,
       selectedMakeupFilter: {
@@ -1350,6 +1370,9 @@ type NativeUnityPostMetadata = {
 type ScheduledNativePost = {
   attemptNumber: number;
   createdAtMs: number;
+  // Target GameObject; defaults to UNITY_MAKEUP_BRIDGE_TARGET.gameObject
+  // (RNBridge). Graft messages set UNITY_GRAFT_BRIDGE_TARGET.gameObject.
+  gameObject?: string;
   metadata: NativeUnityPostMetadata;
   method: string;
   payload: string;
@@ -1944,12 +1967,18 @@ function runScheduledNativePostAttempt(retryKey: string) {
     return;
   }
 
-  sendNativeUnityMethod(nativeBridge, scheduledPost.method, scheduledPost.payload, {
-    ...scheduledPost.metadata,
-    attemptNumber,
-    unityReady,
-    unityWarm,
-  });
+  sendNativeUnityMethod(
+    nativeBridge,
+    scheduledPost.method,
+    scheduledPost.payload,
+    {
+      ...scheduledPost.metadata,
+      attemptNumber,
+      unityReady,
+      unityWarm,
+    },
+    scheduledPost.gameObject ?? UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+  );
 
   if (
     scheduledPost.metadata.eventName === 'generated_lip_mask_apply' ||
@@ -1967,13 +1996,14 @@ function sendNativeUnityMethod(
   method: string,
   payload: string,
   metadata?: NativeUnityPostMetadata & {attemptNumber?: number; unityReady?: boolean; unityWarm?: boolean},
+  gameObject: string = UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
 ) {
   const payloadBytes = payload.length;
   const metadataPayload = metadata
     ? JSON.stringify({
         attemptNumber: metadata.attemptNumber,
         eventName: metadata.eventName,
-        gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+        gameObject,
         messageId: metadata.messageId,
         method,
         packageId: metadata.packageId,
@@ -1987,7 +2017,7 @@ function sendNativeUnityMethod(
   console.info('[aura:unity] native-send:dispatch', {
     attemptNumber: metadata?.attemptNumber,
     eventName: metadata?.eventName ?? 'unity_method',
-    gameObject: UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+    gameObject,
     messageId: metadata?.messageId,
     method,
     packageId: metadata?.packageId,
@@ -1999,7 +2029,7 @@ function sendNativeUnityMethod(
 
   if (metadataPayload && nativeBridge.postMessageWithMetadata) {
     nativeBridge.postMessageWithMetadata(
-      UNITY_MAKEUP_BRIDGE_TARGET.gameObject,
+      gameObject,
       method,
       payload,
       metadataPayload,
@@ -2007,7 +2037,7 @@ function sendNativeUnityMethod(
     return;
   }
 
-  nativeBridge.postMessage?.(UNITY_MAKEUP_BRIDGE_TARGET.gameObject, method, payload);
+  nativeBridge.postMessage?.(gameObject, method, payload);
 }
 
 function sendNativeUnityMessage(nativeBridge: NativeUnityMakeupBridge, payload: string) {
@@ -2035,6 +2065,7 @@ function postNativeUnityMessageWithWarmupRetries(
   method: string = UNITY_MAKEUP_BRIDGE_TARGET.applyRecipeMethod,
   metadata: {
     eventName?: string;
+    gameObject?: string;
     messageId?: string;
     packageId?: string;
     retryKey?: string;
@@ -2059,6 +2090,7 @@ function postNativeUnityMessageWithWarmupRetries(
   scheduledNativePosts.set(retryKey, {
     attemptNumber: 0,
     createdAtMs: Date.now(),
+    gameObject: metadata.gameObject,
     metadata: postMetadata,
     method,
     payload,
@@ -2069,8 +2101,130 @@ function postNativeUnityMessageWithWarmupRetries(
   scheduleNativePostAttempt(retryKey, getNativeUnityRetryDelayMs(1));
 }
 
+// 아이섀도 finish 문자열(REGION_FINISH_OPTIONS.eyeshadow) → 그래프트 마감 enum
+// (EyeshadowLayerParams.finish: 0=새틴 1=매트 2=글로시 3=시머).
+const EYESHADOW_FINISH_ENUM_BY_FINISH: Record<string, number> = {
+  satin: 0,
+  matte: 1,
+  gloss: 2,
+  shimmer: 3,
+};
+
+function clampNumberTo(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(Math.max(value, min), max);
+}
+
+/**
+ * recipe.layers의 eyeshadow 레이어 → 그래프트 setEyeshadowLayers 밴드.
+ * 비활성/무레이어면 빈 배열(그래프트가 밴드를 끄는 계약). Unity JsonUtility가
+ * 생략 필드를 기본값으로 읽더라도 wire 계약(EyeshadowLayerV2)의 필수 필드는
+ * 전부 명시해 보낸다.
+ */
+export function buildEyeshadowLayersFromRecipe(
+  recipeBatch: UnityMakeupRecipeBatch,
+): EyeshadowLayerV2[] {
+  const layer = recipeBatch.layers.find(
+    candidate => candidate.region === 'eyeshadow',
+  );
+
+  if (!layer || !layer.enabled || layer.intensity <= 0) {
+    return [];
+  }
+
+  return [
+    {
+      surface: 0,
+      profile: 0,
+      shape: 0,
+      color: layer.color,
+      color2: layer.secondaryColor ?? layer.color,
+      intensity: clampNumberTo(layer.intensity, 0, 1),
+      finish: EYESHADOW_FINISH_ENUM_BY_FINISH[layer.finish] ?? 0,
+      gradient: clampNumberTo(layer.gradientAmount, 0, 1),
+      // 편집 필드 coverage(범위)를 밴드 세로 높이 배수로 번역.
+      height: clampNumberTo(layer.coverage, 0.6, 1.6),
+      shimmer: clampNumberTo(layer.shimmer, 0, 1),
+      texture: -1,
+      glossLo: 0,
+      glossGain: 0,
+      shimmerSize: 0,
+      shimmerDensity: 0,
+      matte: 0,
+      sheen: 0,
+      particleSize: 0,
+      particleDensity: 0,
+    },
+  ];
+}
+
+/**
+ * ApplyRecipeJson 와이어 페이로드에서 그래프트 전용(eyeshadow) 레이어를 제거하고
+ * 카운트·activeRegions를 재계산한다. Unity의 ParseRecipeLayers는 per-layer 격리
+ * 이전에 region을 검증하며, 미지원 region이 하나라도 있으면 전체 레시피를 초기화
+ * 하므로 eyeshadow는 절대 이 페이로드에 실리면 안 된다.
+ */
+export function stripGraftOnlyRecipeLayers(
+  recipeBatch: UnityMakeupRecipeBatch,
+): UnityMakeupRecipeBatch {
+  const wireLayers = recipeBatch.layers.filter(
+    layer => layer.region !== 'eyeshadow',
+  );
+
+  if (wireLayers.length === recipeBatch.layers.length) {
+    return recipeBatch;
+  }
+
+  const activeRegions = wireLayers
+    .filter(layer => layer.enabled)
+    .map(layer => layer.region);
+
+  return {
+    ...recipeBatch,
+    activeRegions: activeRegions.length > 0 ? activeRegions.join(',') : 'none',
+    layerCount: wireLayers.length,
+    enabledLayerCount: activeRegions.length,
+    layers: wireLayers,
+  };
+}
+
+export function postUnityEyeshadowLayers(
+  layers: readonly EyeshadowLayerV2[],
+  packageId = 'latest',
+): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+
+  if (!nativeBridge?.postMessage || !isUnityMakeupFrameworkAvailable()) {
+    return false;
+  }
+
+  const payload = JSON.stringify({
+    type: 'setEyeshadowLayers',
+    eyeshadowLayers: layers,
+  });
+
+  postNativeUnityMessageWithWarmupRetries(
+    nativeBridge,
+    payload,
+    UNITY_GRAFT_BRIDGE_TARGET.messageMethod,
+    {
+      eventName: 'eyeshadow_layers_apply',
+      gameObject: UNITY_GRAFT_BRIDGE_TARGET.gameObject,
+      messageId: `eyeshadow-layers:${packageId}:${Date.now()}`,
+      packageId,
+      retryKey: `${UNITY_GRAFT_BRIDGE_TARGET.messageMethod}:eyeshadowLayers:latest`,
+    },
+  );
+
+  return true;
+}
+
 export function postUnityMakeupRecipe(recipeBatch: UnityMakeupRecipeBatch): boolean {
-  const payload = serializeUnityMakeupRecipeBatch(recipeBatch);
+  const payload = serializeUnityMakeupRecipeBatch(
+    stripGraftOnlyRecipeLayers(recipeBatch),
+  );
   const nativeBridge = getNativeUnityMakeupBridge();
   const canUseBridge = isUnityMakeupFrameworkAvailable();
 
@@ -2081,6 +2235,13 @@ export function postUnityMakeupRecipe(recipeBatch: UnityMakeupRecipeBatch): bool
       packageId: recipeBatch.recipeBatchId,
       retryKey: `${UNITY_MAKEUP_BRIDGE_TARGET.applyRecipeMethod}:latest`,
     });
+
+    // 아이섀도는 레시피와 항상 짝으로 전송: 활성 시 밴드 적용, 비활성 시 빈
+    // 배열로 클리어(이전 룩의 밴드 잔상 방지).
+    postUnityEyeshadowLayers(
+      buildEyeshadowLayersFromRecipe(recipeBatch),
+      recipeBatch.recipeBatchId,
+    );
 
     return true;
   }

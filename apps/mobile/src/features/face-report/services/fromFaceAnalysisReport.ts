@@ -31,6 +31,7 @@ import {describeFaceLength, type FaceShapeGender} from '../reportFormat';
 import {buildRegionFeatureAxes, type RegionAxesKey} from '../reportFeatureAxes';
 import {buildRegionFeatureDescriptors} from '../regionFeatureDescriptors';
 import {buildVisualWeightPresentation} from '../visualWeightPresentation';
+import {buildStyleLaneRecommendations} from '../styleLaneRecommendations';
 import {buildFaceFeatureProfile} from '../../face-analysis/services/faceFeatureProfileBuilder';
 import {buildVisualWeightMap} from '../../face-analysis/services/visualWeightMap';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
@@ -833,8 +834,10 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     observations: report.featureObservations ?? null,
     measuredAt: report.analyzedAt,
   });
-  const visualWeight = buildVisualWeightPresentation(buildVisualWeightMap(featureProfile));
+  const weightMap = buildVisualWeightMap(featureProfile);
+  const visualWeight = buildVisualWeightPresentation(weightMap);
   const regionDescriptors = buildRegionFeatureDescriptors(featureProfile);
+  const styleLanes = buildStyleLaneRecommendations(featureProfile, weightMap);
 
   return {
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
@@ -851,6 +854,12 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     s6: buildS6(report.impressionNotes, visualWeight),
     s7: buildS7(report.stylingLooks),
     s8: buildS8(report.skinPerception),
+    s9: {
+      eyebrow: 'STYLE',
+      title: '세 가지 방향으로 스타일을 추천해요',
+      sub: '같은 얼굴도 전략에 따라 달라져요 — 균형·동안·개성 강조 중 취향에 맞게 골라 보세요.',
+      lanes: styleLanes,
+    },
     footer: {
       disclaimer: '분석 결과는 AI 기반으로 제공되며, 개인 차이가 있을 수 있습니다.',
       cta: '메이크업 추천 보러가기',
