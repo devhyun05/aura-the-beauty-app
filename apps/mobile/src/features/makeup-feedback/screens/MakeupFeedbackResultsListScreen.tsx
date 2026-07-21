@@ -12,6 +12,7 @@ import {Text, View, XStack, YStack} from 'tamagui';
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
 import {getMakeupFeedbackAnalysisSourceLabel} from '../services/makeupFeedbackResultPresentation';
+import {mapMakeupFeedbackResultToViewModel} from '../redesign/makeupFeedbackResultViewModel';
 import type {MakeupFeedbackResult} from '../types';
 
 type MakeupFeedbackResultsListScreenProps = {
@@ -74,7 +75,8 @@ function MakeupFeedbackResultCard({
   onPress: () => void;
   result: MakeupFeedbackResult;
 }) {
-  const goalLabel = result.interpretedGoal?.label ?? '메이크업 피드백';
+  const viewModel = mapMakeupFeedbackResultToViewModel(result);
+  const goalLabel = viewModel.goalLabel ?? '메이크업 피드백';
   const analysisSourceLabel = getMakeupFeedbackAnalysisSourceLabel(result.analysisSource);
   const pointCount = result.points.length;
   const strengthCount = result.strengths.length;

@@ -147,6 +147,47 @@ def _axis_scores_for_total(score: object) -> list[int]:
   return scores
 
 
+def _score_components_for_axis(
+  axis_id: str,
+  score: int,
+  evidence_ids: list[str],
+) -> list[dict]:
+  contract = next(
+    axis
+    for axis in analysis_module.SCORE_AXIS_CONTRACT
+    if axis["id"] == axis_id
+  )
+  component_maximums = [
+    component["maxScore"]
+    for component in contract["components"]
+  ]
+  component_scores = [
+    score * maximum // contract["maxScore"]
+    for maximum in component_maximums
+  ]
+  index = 0
+  while sum(component_scores) < score:
+    if component_scores[index] < component_maximums[index]:
+      component_scores[index] += 1
+    index = (index + 1) % len(component_scores)
+
+  return [
+    {
+      "id": component["id"],
+      "label": component["label"],
+      "score": component_score,
+      "maxScore": component["maxScore"],
+      "reason": f"{component['label']}에서 충족한 점과 보완할 점을 사진 근거로 비교했습니다.",
+      "evidenceIds": evidence_ids,
+    }
+    for component, component_score in zip(
+      contract["components"],
+      component_scores,
+      strict=True,
+    )
+  ]
+
+
 def _correction_guide(topic_label: str) -> dict:
   return {
     "tool": "깨끗한 작은 블렌딩 브러시",
@@ -230,6 +271,11 @@ def _valid_result(score: object = 88) -> dict:
           "maxScore": 30,
           "reason": "눈썹 경계가 정돈되었고 속눈썹 경계에는 다듬을 부분이 보입니다.",
           "evidenceIds": axis_evidence_ids,
+          "components": _score_components_for_axis(
+            "application-finish",
+            axis_scores[0],
+            axis_evidence_ids,
+          ),
         },
         {
           "id": "placement-balance",
@@ -238,6 +284,11 @@ def _valid_result(score: object = 88) -> dict:
           "maxScore": 25,
           "reason": "눈썹과 속눈썹의 배치가 얼굴 안에서 비교적 안정적으로 연결됩니다.",
           "evidenceIds": axis_evidence_ids,
+          "components": _score_components_for_axis(
+            "placement-balance",
+            axis_scores[1],
+            axis_evidence_ids,
+          ),
         },
         {
           "id": "color-value-harmony",
@@ -246,6 +297,11 @@ def _valid_result(score: object = 88) -> dict:
           "maxScore": 20,
           "reason": "사진 안에서 눈썹과 속눈썹의 상대 명암이 과도하게 분리되지 않습니다.",
           "evidenceIds": axis_evidence_ids,
+          "components": _score_components_for_axis(
+            "color-value-harmony",
+            axis_scores[2],
+            axis_evidence_ids,
+          ),
         },
         {
           "id": "overall-goal-fit",
@@ -254,6 +310,11 @@ def _valid_result(score: object = 88) -> dict:
           "maxScore": 25,
           "reason": "관찰된 표현이 사용자가 요청한 인상과 전반적으로 연결됩니다.",
           "evidenceIds": axis_evidence_ids,
+          "components": _score_components_for_axis(
+            "overall-goal-fit",
+            axis_scores[3],
+            axis_evidence_ids,
+          ),
         },
       ],
     },
@@ -293,6 +354,14 @@ def _valid_result(score: object = 88) -> dict:
       "improvementSummary": "한 부위의 경계를 조금 더 정리하면 좋습니다.",
     },
   }
+
+
+def _mark_all_evaluations_as_strength(raw_result: dict) -> dict:
+  for evaluation in raw_result["evaluations"]:
+    evaluation["status"] = "strength"
+    evaluation["scoreImpact"] = "low"
+    evaluation["correctionGuide"] = None
+  return raw_result
 
 
 def _retake_result() -> dict:
@@ -340,7 +409,10 @@ def _retake_result() -> dict:
 
 
 def test_score_breakdown_is_canonical_explainable_total() -> None:
-  result = normalize_makeup_feedback_result(_valid_result(92), _request_payload())
+  result = normalize_makeup_feedback_result(
+    _mark_all_evaluations_as_strength(_valid_result(92)),
+    _request_payload(),
+  )
 
   assert result["score"] == 92
   assert result["scoreBreakdown"]["maxScore"] == 100
@@ -353,7 +425,7 @@ def test_score_breakdown_is_canonical_explainable_total() -> None:
 
 
 def test_score_breakdown_repairs_model_arithmetic_formula_evidence_and_range() -> None:
-  raw_result = _valid_result(92)
+  raw_result = _mark_all_evaluations_as_strength(_valid_result(92))
   raw_result["score"] = 65
   raw_result["scoreBreakdown"]["formula"] = "잘못 계산한 식"
   raw_result["scoreEvidenceIds"] = ["unknown-extra", "lash-obs-1"]
@@ -369,11 +441,88 @@ def test_score_breakdown_repairs_model_arithmetic_formula_evidence_and_range() -
 
 
 def test_full_score_is_reachable_without_global_ninety_point_ceiling() -> None:
-  result = normalize_makeup_feedback_result(_valid_result(100), _request_payload())
+  result = normalize_makeup_feedback_result(
+    _mark_all_evaluations_as_strength(_valid_result(100)),
+    _request_payload(),
+  )
 
   assert result["score"] == 100
   assert [axis["score"] for axis in result["scoreBreakdown"]["axes"]] == [30, 25, 20, 25]
   assert result["scoreBreakdown"]["formula"].endswith("= 100/100")
+
+
+def test_every_integer_total_from_zero_to_one_hundred_is_preserved() -> None:
+  normalized_scores = {
+    normalize_makeup_feedback_result(_valid_result(score), _request_payload())["score"]
+    for score in range(101)
+  }
+
+  assert normalized_scores == set(range(101))
+
+
+def test_axis_and_total_scores_are_derived_from_analytic_components() -> None:
+  raw_result = _valid_result(85)
+  raw_result["score"] = 99
+  raw_result["scoreBreakdown"]["axes"][0]["score"] = 30
+
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert result["score"] == 85
+  assert result["scoreBreakdown"]["axes"][0]["score"] == 26
+  assert result["scoreBreakdown"]["formula"].endswith("= 85/100")
+
+
+def test_low_thirties_are_valid_when_component_evidence_sums_to_them() -> None:
+  result = normalize_makeup_feedback_result(_valid_result(31), _request_payload())
+
+  assert result["score"] == 31
+  assert result["scoreBreakdown"]["formula"].endswith("= 31/100")
+  assert sum(
+    component["score"]
+    for axis in result["scoreBreakdown"]["axes"]
+    for component in axis["components"]
+  ) == 31
+
+
+def test_score_breakdown_rejects_changed_component_contract() -> None:
+  raw_result = _valid_result()
+  raw_result["scoreBreakdown"]["axes"][0]["components"][0]["id"] = "unknown"
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == "scoreBreakdown.axes[0].components[0].id"
+
+
+def test_score_breakdown_rejects_unknown_component_evidence_without_repair() -> None:
+  raw_result = _valid_result()
+  raw_result["scoreBreakdown"]["axes"][0]["components"][0]["evidenceIds"] = [
+    "brow-unknown-observation",
+  ]
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == (
+    "scoreBreakdown.axes[0].components[0].evidenceIds"
+  )
+  assert exc_info.value.details["unknownIds"] == ["brow-unknown-observation"]
+
+
+def test_every_improvement_topic_must_affect_an_analytic_component() -> None:
+  raw_result = _valid_result()
+  for axis in raw_result["scoreBreakdown"]["axes"]:
+    axis["evidenceIds"] = ["brow-obs-1"]
+    for component in axis["components"]:
+      component["evidenceIds"] = ["brow-obs-1"]
+
+  with pytest.raises(AppError) as exc_info:
+    normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert exc_info.value.details["field"] == (
+    "scoreBreakdown.axes.components.evidenceIds"
+  )
+  assert exc_info.value.details["uncoveredTopicIds"] == ["lash"]
 
 
 @pytest.mark.parametrize("axis_score", [-1, 31, 12.5, True])
@@ -464,7 +613,20 @@ def test_external_prompts_render_context_contract_and_lip_without_recursive_subs
   assert "채도·명도 대비가 다른 부위보다 높아" in system_prompt
   assert "피부·치크·아이 메이크업과 비교한 색 강도" in system_prompt
   assert "적용 완성도 30점" in system_prompt
-  assert "전역 90점 상한은 없습니다" in system_prompt
+  assert "30년 이상 활동" in system_prompt
+  assert "사용자의 기분을 맞추기 위한 칭찬" in system_prompt
+  assert "결함 후보 → 반대쪽 비교 → full face 재확인 → 상태 확정" in user_prompt
+  assert "파운데이션: 제품 적용이 실제로 식별되는지" in user_prompt
+  assert "13개 component" in user_prompt
+  assert "component.score는 0부터 maxScore까지의 1점 단위 정수" in user_prompt
+  assert "중간의 모든 정수를 실제 충족 정도에 따라 사용하세요" in user_prompt
+  assert "92점은 최대점이 아니며" in user_prompt
+  assert "13개 component가 모두 최대점이면 정확히 100점" in user_prompt
+  assert "scoreImpact 개수나 등급으로 component 점수를 계산하거나 총점 상한" in user_prompt
+  assert "medium이 하나라도 있으면 74점 이하" not in user_prompt
+  assert "high 2개와 medium 2개가 함께 있으면 전체 상한은 29점" not in user_prompt
+  assert "= 72/100" not in user_prompt
+  assert "92점은 상한이 아니며" in system_prompt
   assert "계절형 퍼스널컬러" in user_prompt
   assert "타고난 얼굴이 예쁘거나 잘생겼는지" in user_prompt
   assert "편집 안내" not in user_prompt
@@ -750,6 +912,8 @@ def test_live_result_repairs_missing_reason_for_limited_visibility(
     raw_result["scoreEvidenceIds"] = [fallback_evidence_id]
     for axis in raw_result["scoreBreakdown"]["axes"]:
       axis["evidenceIds"] = [fallback_evidence_id]
+      for component in axis["components"]:
+        component["evidenceIds"] = [fallback_evidence_id]
 
   result = normalize_makeup_feedback_result(raw_result, _request_payload())
 
@@ -1076,6 +1240,9 @@ def test_material_optional_is_promoted_to_improvement() -> None:
   optional_evaluation = raw_result["evaluations"][2]
   optional_evaluation["scoreImpact"] = "medium"
   optional_evaluation["correctionGuide"] = _correction_guide(optional_evaluation["topicLabel"])
+  raw_result["scoreBreakdown"]["axes"][3]["components"][2]["evidenceIds"].append(
+    optional_evaluation["observations"][0]["id"],
+  )
 
   result = normalize_makeup_feedback_result(raw_result, _request_payload())
   normalized_by_topic = {item["topicId"]: item for item in result["evaluations"]}
@@ -1097,6 +1264,53 @@ def test_optional_observation_cannot_be_score_evidence() -> None:
   assert exc_info.value.details["disallowedIds"] == [observation_id]
 
 
+def test_partial_visibility_caps_evaluation_confidence() -> None:
+  raw_result = _valid_result()
+  evaluation = raw_result["evaluations"][2]
+  evaluation["visibility"] = "partial"
+  evaluation["visibilityReason"] = "모자 그림자로 일부 경계만 확인됩니다."
+  evaluation["confidence"] = 0.95
+
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert (
+    result["evaluations"][2]["confidence"]
+    == analysis_module.PARTIAL_VISIBILITY_CONFIDENCE_CAP
+  )
+
+
+def test_not_assessable_confidence_is_zero() -> None:
+  raw_result = _valid_result()
+  evaluation = raw_result["evaluations"][2]
+  evaluation.update(
+    {
+      "status": "not_assessable",
+      "visibility": "partial",
+      "visibilityReason": "반사 때문에 세부 적용을 확인할 수 없습니다.",
+      "observations": [],
+      "goalCriterionIds": [],
+      "actionSteps": [],
+      "correctionGuide": None,
+      "scoreImpact": "low",
+      "confidence": 0.95,
+    },
+  )
+
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert result["evaluations"][2]["confidence"] == 0.0
+
+
+def test_score_confidence_is_capped_by_capture_and_evidence_confidence() -> None:
+  raw_result = _mark_all_evaluations_as_strength(_valid_result(88))
+  raw_result["captureQuality"]["colorConfidence"] = "medium"
+  raw_result["scoreConfidence"] = 0.95
+
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  assert result["scoreConfidence"] == 0.74
+
+
 def test_live_result_rejects_unknown_score_evidence_reference() -> None:
   raw_result = _valid_result()
   raw_result["scoreBreakdown"]["axes"][0]["evidenceIds"] = ["missing-observation"]
@@ -1112,6 +1326,12 @@ def test_live_result_repairs_topic_prefixed_score_evidence_reference() -> None:
   raw_result = _valid_result()
   raw_result["evaluations"][0]["observations"][0]["id"] = "brow-observation-primary"
   raw_result["scoreEvidenceIds"] = ["brow-obs-1"]
+  for axis in raw_result["scoreBreakdown"]["axes"]:
+    for component in axis["components"]:
+      component["evidenceIds"] = [
+        "brow-observation-primary" if item == "brow-obs-1" else item
+        for item in component["evidenceIds"]
+      ]
 
   result = normalize_makeup_feedback_result(raw_result, _request_payload())
 
@@ -1119,7 +1339,7 @@ def test_live_result_repairs_topic_prefixed_score_evidence_reference() -> None:
 
 
 def test_live_result_repairs_score_range_that_does_not_include_axis_total() -> None:
-  raw_result = _valid_result()
+  raw_result = _mark_all_evaluations_as_strength(_valid_result())
   raw_result["scoreRange"] = [0, 80]
 
   result = normalize_makeup_feedback_result(raw_result, _request_payload())
@@ -1375,7 +1595,7 @@ def test_bedrock_invoke_uses_external_system_and_user_prompts(
   request_body = json.loads(calls["body"])
 
   assert request_body["system"] == service._build_system_prompt()
-  assert request_body["max_tokens"] == 8192
+  assert request_body["max_tokens"] == 16384
   assert request_body["messages"][0]["content"][0]["text"] == service._build_prompt(_request_payload())
   assert "amazon-bedrock-guardrailConfig" not in request_body
   assert all(

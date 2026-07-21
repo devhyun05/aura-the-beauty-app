@@ -358,6 +358,127 @@ const v2ScoreBreakdown = {
   formula: '적용 완성도 28/30 + 배치·형태 균형 23/25 + 색·명암 조화 18/20 + 전체 조화·목표 적합도 22/25 = 91/100',
   maxScore: 100,
 };
+const analyticComponentsByAxis = [
+  [
+    {
+      evidenceIds: ['foundation-observation-1'],
+      id: 'base-finish',
+      label: '베이스 도포·균일도',
+      maxScore: 8,
+      reason: '베이스가 대체로 균일하게 표현됐어요.',
+      score: 8,
+    },
+    {
+      evidenceIds: ['foundation-observation-1'],
+      id: 'brow-eye-finish',
+      label: '눈썹·아이 정교함',
+      maxScore: 9,
+      reason: '눈썹과 아이 메이크업 경계가 정돈됐어요.',
+      score: 8,
+    },
+    {
+      evidenceIds: ['foundation-observation-1'],
+      id: 'cheek-finish',
+      label: '치크·윤곽 블렌딩',
+      maxScore: 7,
+      reason: '치크와 윤곽 경계가 자연스럽게 연결돼요.',
+      score: 6,
+    },
+    {
+      evidenceIds: ['foundation-observation-1'],
+      id: 'lip-finish',
+      label: '립 라인·채움·마감',
+      maxScore: 6,
+      reason: '립 라인과 채움이 안정적이에요.',
+      score: 6,
+    },
+  ],
+  [
+    {
+      evidenceIds: ['brow-observation-1'],
+      id: 'bilateral-balance',
+      label: '좌우 대칭·균형',
+      maxScore: 10,
+      reason: '좌우 형태가 비교적 균형을 이뤄요.',
+      score: 10,
+    },
+    {
+      evidenceIds: ['brow-observation-1'],
+      id: 'landmark-placement',
+      label: '랜드마크 기준 배치',
+      maxScore: 10,
+      reason: '주요 표현이 얼굴 구조에 맞게 배치됐어요.',
+      score: 9,
+    },
+    {
+      evidenceIds: ['brow-observation-1'],
+      id: 'visual-weight',
+      label: '부위 간 시각적 비중',
+      maxScore: 5,
+      reason: '부위별 시각적 비중이 과도하게 쏠리지 않았어요.',
+      score: 4,
+    },
+  ],
+  [
+    {
+      evidenceIds: ['eyeliner-observation-1'],
+      id: 'relative-contrast',
+      label: '상대 채도·명도·대비',
+      maxScore: 8,
+      reason: '부위 간 대비가 안정적이에요.',
+      score: 7,
+    },
+    {
+      evidenceIds: ['eyeliner-observation-1'],
+      id: 'color-continuity',
+      label: '피부·치크·립 색 연결',
+      maxScore: 7,
+      reason: '피부와 색조의 연결이 자연스러워요.',
+      score: 6,
+    },
+    {
+      evidenceIds: ['eyeliner-observation-1'],
+      id: 'finish-coherence',
+      label: '마감·질감 일관성',
+      maxScore: 5,
+      reason: '부위별 마감 질감이 일관돼요.',
+      score: 5,
+    },
+  ],
+  [
+    {
+      evidenceIds: ['eyeshadow-observation-1'],
+      id: 'full-face-coherence',
+      label: '얼굴 전체 내부 조화',
+      maxScore: 10,
+      reason: '얼굴 전체 표현이 하나의 방향으로 연결돼요.',
+      score: 9,
+    },
+    {
+      evidenceIds: ['eyeshadow-observation-1'],
+      id: 'focal-hierarchy',
+      label: '시각적 중심·위계',
+      maxScore: 7,
+      reason: '시각적 중심이 명확하게 형성됐어요.',
+      score: 6,
+    },
+    {
+      evidenceIds: ['eyeshadow-observation-1'],
+      id: 'explicit-goal-fit',
+      label: '명시 목표 적합도',
+      maxScore: 8,
+      reason: '사용자가 명시한 목적에 부합해요.',
+      score: 7,
+    },
+  ],
+];
+const v10ScoreBreakdown = {
+  ...v2ScoreBreakdown,
+  axes: v2ScoreBreakdown.axes.map((axis, index) => ({
+    ...axis,
+    components: analyticComponentsByAxis[index],
+  })),
+};
 
 const v2Outcome = mapBackendJobToFeedbackResult(
   {
@@ -409,6 +530,123 @@ expectEqual(
   v9Outcome.points[0]?.correctionGuide?.stopCondition,
   correctionGuide.stopCondition,
   'stored v9 correction guide survives detail mapping',
+);
+
+const analyticRubricModelVersion =
+  'makeup-feedback:bedrock-v10-expert-analytic-rubric';
+const v10Job = {
+  ...v9Job,
+  modelVersion: analyticRubricModelVersion,
+  feedbackPayload: {
+    ...v9Job.feedbackPayload,
+    result: {
+      ...v9Job.feedbackPayload.result,
+      modelVersion: analyticRubricModelVersion,
+      scoreBreakdown: v10ScoreBreakdown,
+    },
+  },
+};
+const v10Outcome = mapBackendJobToFeedbackResult(v10Job, selection);
+if (v10Outcome.analysisDecision !== 'completed') {
+  throw new Error('v10 result unexpectedly requested a retake');
+}
+expectEqual(
+  v10Outcome.modelVersion,
+  analyticRubricModelVersion,
+  'v10 model version',
+);
+expectEqual(v10Outcome.scoreBreakdown?.axes.length, 4, 'stored v10 score breakdown');
+expectEqual(
+  v10Outcome.scoreBreakdown?.axes.flatMap(axis => axis.components ?? []).length,
+  13,
+  'v10 maps all analytic score components',
+);
+expectEqual(
+  v10Outcome.scoreBreakdown?.axes[0]?.components?.[0]?.label,
+  '베이스 도포·균일도',
+  'v10 maps the exact component contract',
+);
+
+expectBackendError(
+  () =>
+    mapBackendJobToFeedbackResult(
+      {
+        ...v10Job,
+        feedbackPayload: {
+          ...v10Job.feedbackPayload,
+          result: {
+            ...v10Job.feedbackPayload.result,
+            scoreBreakdown: v2ScoreBreakdown,
+          },
+        },
+      },
+      selection,
+    ),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'v10 requires analytic components while v9 remains compatible without them',
+  'scoreBreakdown.axes[0].components',
+);
+
+expectBackendError(
+  () =>
+    mapBackendJobToFeedbackResult(
+      {
+        ...v10Job,
+        feedbackPayload: {
+          ...v10Job.feedbackPayload,
+          result: {
+            ...v10Job.feedbackPayload.result,
+            scoreBreakdown: {
+              ...v10ScoreBreakdown,
+              axes: v10ScoreBreakdown.axes.map((axis, axisIndex) => ({
+                ...axis,
+                components: (axis.components ?? []).map(
+                  (component, componentIndex) =>
+                    axisIndex === 0 && componentIndex === 0
+                      ? {...component, score: component.score - 1}
+                      : component,
+                ),
+              })),
+            },
+          },
+        },
+      },
+      selection,
+    ),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'v10 component scores must sum to the axis score',
+  'scoreBreakdown.axes[0].components',
+);
+
+expectBackendError(
+  () =>
+    mapBackendJobToFeedbackResult(
+      {
+        ...v10Job,
+        feedbackPayload: {
+          ...v10Job.feedbackPayload,
+          result: {
+            ...v10Job.feedbackPayload.result,
+            scoreBreakdown: {
+              ...v10ScoreBreakdown,
+              axes: v10ScoreBreakdown.axes.map((axis, axisIndex) => ({
+                ...axis,
+                components: (axis.components ?? []).map(
+                  (component, componentIndex) =>
+                    axisIndex === 0 && componentIndex === 0
+                      ? {...component, id: 'unexpected-component'}
+                      : component,
+                ),
+              })),
+            },
+          },
+        },
+      },
+      selection,
+    ),
+  'FEEDBACK_REPORT_CONTRACT_INVALID',
+  'v10 component order and ids are exact',
+  'scoreBreakdown.axes[0].components[0].id',
 );
 
 expectBackendError(
@@ -466,6 +704,20 @@ expectEqual(
   storedV9Results[0]?.points[0]?.correctionGuide?.tool,
   correctionGuide.tool,
   'stored list and detail use the same correction guide mapping',
+);
+expectBackendError(
+  () =>
+    mapBackendReportsToFeedbackResults([
+      {
+        ...storedV9Job,
+        feedbackPayload: {
+          ...storedV9Job.feedbackPayload,
+          request: {},
+        },
+      },
+    ]),
+  'FEEDBACK_REPORT_IMAGE_REQUIRED',
+  'stored report requires its grounded analysis image',
 );
 expectEqual(
   mapBackendReportsToFeedbackResults([
@@ -770,66 +1022,52 @@ const resultScreenSource = readFileSync(
   'utf8',
 );
 const scoreCardSource = readFileSync(
-  'apps/mobile/src/features/makeup-feedback/components/MakeupFeedbackScoreBreakdownCard.tsx',
+  'apps/mobile/src/features/makeup-feedback/redesign/FeedbackScoreAxisAccordion.tsx',
   'utf8',
 );
 const correctionCardSource = readFileSync(
-  'apps/mobile/src/features/makeup-feedback/components/MakeupFeedbackCorrectionGuideCard.tsx',
+  'apps/mobile/src/features/makeup-feedback/redesign/MakeupFeedbackRedesignSlidesScreen.tsx',
   'utf8',
 );
 const evidencePreviewSource = readFileSync(
-  'apps/mobile/src/features/makeup-feedback/components/MakeupFeedbackEvidencePreview.tsx',
+  'apps/mobile/src/features/makeup-feedback/redesign/FeedbackEvidenceImage.tsx',
   'utf8',
 );
 expectEqual(
-  resultScreenSource.includes('{result.scoreBreakdown ? ('),
+  resultScreenSource.includes('useMakeupFeedbackRedesignController') &&
+    resultScreenSource.includes('<MakeupFeedbackRedesignHomeScreen') &&
+    resultScreenSource.includes('<MakeupFeedbackRedesignSlidesScreen'),
   true,
-  'legacy result keeps the existing score panel when breakdown is absent',
+  'all reports are rendered through the redesign while keeping the route contract',
 );
 expectEqual(
-  scoreCardSource.includes('점수 계산') &&
-    scoreCardSource.includes('.map(axis =>') &&
-    scoreCardSource.includes('useState<MakeupFeedbackScoreAxisId | null>(\n    null,') &&
-    scoreCardSource.includes('setActiveAxisId(null)') &&
+  scoreCardSource.includes('axis.primaryEvidence') &&
     scoreCardSource.includes('accessibilityRole="progressbar"') &&
-    scoreCardSource.includes('이 점수가 나온 이유') &&
-    scoreCardSource.includes('사진에서 확인한 사실') &&
-    scoreCardSource.includes('axis.evidenceIds') &&
-    scoreCardSource.includes('evaluation.observations'),
+    scoreCardSource.includes('점수 판단') &&
+    scoreCardSource.includes('사진에서 확인한 점') &&
+    scoreCardSource.includes('<FeedbackEvidenceImage') &&
+    scoreCardSource.includes('accessibilityState={{expanded: isOpen}}'),
   true,
-  'score breakdown connects each axis to written reasons, photo observations, and accessible progress values',
+  'score breakdown connects each axis to grounded observations and accessible disclosure',
 );
 expectEqual(
-  correctionCardSource.includes('가장 먼저 할 것') &&
-    correctionCardSource.includes('바를 위치') &&
-    correctionCardSource.includes('칠할 범위') &&
-    correctionCardSource.includes('여기서 멈추세요') &&
-    correctionCardSource.includes('accessibilityState={{expanded: isExpanded}}'),
+  correctionCardSource.includes('guide.chips.map') &&
+    correctionCardSource.includes('guide.rows.map') &&
+    correctionCardSource.includes('guide.instructions.map') &&
+    correctionCardSource.includes('guide.possibility'),
   true,
-  'priority correction exposes immediate details and accessible progressive disclosure',
+  'redesign detail card renders the complete correction guide contract',
 );
 expectEqual(
-  evidencePreviewSource.includes("region.id !== 'full'") &&
-    evidencePreviewSource.includes('visibleRegions.map(region => (') &&
-    evidencePreviewSource.includes('<EvidenceRegionTile') &&
-    evidencePreviewSource.includes("regionId.startsWith('left_') ? '왼쪽' : '오른쪽'") &&
-    evidencePreviewSource.includes("right_cheek: '오른쪽 볼'") &&
-    evidencePreviewSource.includes('getTopicFocusBox') &&
-    evidencePreviewSource.includes("topicId === 'lash'") &&
-    evidencePreviewSource.includes("topicId === 'eyeliner'") &&
-    evidencePreviewSource.includes("topicId === 'eyeshadow'") &&
-    evidencePreviewSource.includes("topicId === 'brow'") &&
-    evidencePreviewSource.includes('filterRegionsForGuide') &&
-    evidencePreviewSource.includes("lash: `${side} 속눈썹`") &&
-    evidencePreviewSource.includes('Math.max(1, focusWidth * imageWidth)') &&
-    evidencePreviewSource.includes('Math.max(1, focusHeight * imageHeight)') &&
-    evidencePreviewSource.includes('Number.isFinite(value)') &&
+  evidencePreviewSource.includes('addCropPadding') &&
+    evidencePreviewSource.includes('region.box') &&
+    evidencePreviewSource.includes('imageSize.width') &&
+    evidencePreviewSource.includes('imageSize.height') &&
+    evidencePreviewSource.includes("region.id !== 'full'") &&
     !evidencePreviewSource.includes('react-native-svg') &&
-    !evidencePreviewSource.includes('CorrectionGuideOverlay') &&
-    evidencePreviewSource.includes('어디에') &&
-    evidencePreviewSource.includes('사용량'),
+    !evidencePreviewSource.includes('CorrectionGuideOverlay'),
   true,
-  'evidence preview renders separate topic-aligned crops without drawing unreliable photo overlays',
+  'evidence preview crops the real report image from normalized backend coordinates',
 );
 const feedbackServiceSource = readFileSync(
   'apps/mobile/src/features/makeup-feedback/services/makeupFeedbackService.ts',

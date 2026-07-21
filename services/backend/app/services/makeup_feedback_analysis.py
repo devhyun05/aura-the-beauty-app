@@ -27,7 +27,7 @@ from app.services.makeup_feedback_vision import (
 
 logger = logging.getLogger(__name__)
 
-MODEL_VERSION = "makeup-feedback:bedrock-v9-explainable-coaching"
+MODEL_VERSION = "makeup-feedback:bedrock-v10-expert-analytic-rubric"
 
 BEDROCK_GUARDRAIL_TAG_PREFIX = "amazon-bedrock-guardrails-guardContent"
 BEDROCK_GUARDRAIL_TAG_SUFFIX_BYTES = 10
@@ -71,6 +71,13 @@ VALID_ANALYSIS_DECISIONS = {"completed", "retake_required"}
 VALID_COLOR_CONFIDENCES = {"low", "medium", "high"}
 COLOR_CONFIDENCE_RANK = {"low": 0, "medium": 1, "high": 2}
 LIGHTING_SENSITIVE_SCORE_CONFIDENCE_CAP = 0.74
+PARTIAL_VISIBILITY_CONFIDENCE_CAP = 0.74
+DETECTOR_UNAVAILABLE_SCORE_CONFIDENCE_CAP = 0.69
+COLOR_CONFIDENCE_SCORE_CAPS = {
+  "low": 0.49,
+  "medium": 0.74,
+  "high": 1.0,
+}
 VALID_STATUSES = {
   "strength",
   "improvement",
@@ -90,21 +97,42 @@ SCORE_AXIS_CONTRACT = (
     "id": "application-finish",
     "label": "적용 완성도",
     "maxScore": 30,
+    "components": (
+      {"id": "base-finish", "label": "베이스 도포·균일도", "maxScore": 8},
+      {"id": "brow-eye-finish", "label": "눈썹·아이 정교함", "maxScore": 9},
+      {"id": "cheek-finish", "label": "치크·윤곽 블렌딩", "maxScore": 7},
+      {"id": "lip-finish", "label": "립 라인·채움·마감", "maxScore": 6},
+    ),
   },
   {
     "id": "placement-balance",
     "label": "배치·형태 균형",
     "maxScore": 25,
+    "components": (
+      {"id": "bilateral-balance", "label": "좌우 대칭·균형", "maxScore": 10},
+      {"id": "landmark-placement", "label": "랜드마크 기준 배치", "maxScore": 10},
+      {"id": "visual-weight", "label": "부위 간 시각적 비중", "maxScore": 5},
+    ),
   },
   {
     "id": "color-value-harmony",
     "label": "색·명암 조화",
     "maxScore": 20,
+    "components": (
+      {"id": "relative-contrast", "label": "상대 채도·명도·대비", "maxScore": 8},
+      {"id": "color-continuity", "label": "피부·치크·립 색 연결", "maxScore": 7},
+      {"id": "finish-coherence", "label": "마감·질감 일관성", "maxScore": 5},
+    ),
   },
   {
     "id": "overall-goal-fit",
     "label": "전체 조화·목표 적합도",
     "maxScore": 25,
+    "components": (
+      {"id": "full-face-coherence", "label": "얼굴 전체 내부 조화", "maxScore": 10},
+      {"id": "focal-hierarchy", "label": "시각적 중심·위계", "maxScore": 7},
+      {"id": "explicit-goal-fit", "label": "명시 목표 적합도", "maxScore": 8},
+    ),
   },
 )
 CORRECTION_GUIDE_FIELD_LIMITS = {
@@ -1045,10 +1073,10 @@ def _normalize_observations(value: Any, field: str) -> list[dict[str, Any]]:
 
 
 def _normalize_dynamic_criteria(value: Any) -> list[dict[str, str]]:
-  if not isinstance(value, list) or not 3 <= len(value) <= 6:
+  if not isinstance(value, list) or not 2 <= len(value) <= 6:
     raise _invalid_live_result(
       "interpretedGoal.dynamicCriteria",
-      "must contain the two common baselines and 1 to 4 user criteria",
+      "must contain the two common baselines and 0 to 4 user criteria",
     )
 
   criteria: list[dict[str, str]] = []
@@ -1337,6 +1365,31 @@ def _normalize_evaluations(
       )
 
     observation_ids.update(current_observation_ids)
+    confidence = _require_confidence(
+      raw_item.get("confidence"),
+      f"{field_prefix}.confidence",
+    )
+    confidence_cap = 1.0
+    if status == "not_assessable":
+      confidence_cap = 0.0
+    elif visibility == "partial" or any(
+      observation["lightingSensitive"]
+      for observation in observations
+    ):
+      confidence_cap = PARTIAL_VISIBILITY_CONFIDENCE_CAP
+
+    if confidence > confidence_cap:
+      logger.warning(
+        "[aura:feedback-bedrock] output:repaired field=%s from=%s to=%s "
+        "visibility=%s topicId=%s",
+        f"{field_prefix}.confidence",
+        confidence,
+        confidence_cap,
+        visibility,
+        topic_id,
+      )
+      confidence = confidence_cap
+
     normalized_item = {
       "id": f"{topic_id}-{status}",
       "topicId": topic_id,
@@ -1358,7 +1411,7 @@ def _normalize_evaluations(
       "correctionGuide": correction_guide,
       "scoreImpact": score_impact,
       "kind": topic["kind"],
-      "confidence": _require_confidence(raw_item.get("confidence"), f"{field_prefix}.confidence"),
+      "confidence": confidence,
     }
     item_by_topic[topic_id] = normalized_item
 
@@ -1549,6 +1602,97 @@ def _normalize_score_axis_reason(mapping: dict[str, Any], field: str) -> str:
   return reason
 
 
+def _normalize_score_components(
+  value: Any,
+  field: str,
+  component_contracts: tuple[dict[str, Any], ...],
+  evaluation_by_observation_id: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+  if not isinstance(value, list) or len(value) != len(component_contracts):
+    raise _invalid_live_result(
+      field,
+      f"must contain exactly {len(component_contracts)} analytic components",
+    )
+
+  components: list[dict[str, Any]] = []
+  for index, contract in enumerate(component_contracts):
+    component_field = f"{field}[{index}]"
+    component = _require_mapping(value[index], component_field)
+    component_id = _require_text(component, "id", f"{component_field}.id")
+    if component_id != contract["id"]:
+      raise _invalid_live_result(
+        f"{component_field}.id",
+        "must match the configured analytic component order",
+        {"expected": contract["id"]},
+      )
+
+    label = _require_text(component, "label", f"{component_field}.label")
+    if label != contract["label"]:
+      raise _invalid_live_result(
+        f"{component_field}.label",
+        "must match the configured analytic component label",
+        {"expected": contract["label"]},
+      )
+    if component.get("maxScore") != contract["maxScore"]:
+      raise _invalid_live_result(
+        f"{component_field}.maxScore",
+        "must match the configured analytic component maximum",
+        {"expected": contract["maxScore"]},
+      )
+
+    evidence_ids = _require_text_list(
+      component.get("evidenceIds"),
+      f"{component_field}.evidenceIds",
+      min_items=1,
+      max_items=8,
+      unique=True,
+    )
+    unknown_evidence_ids = [
+      evidence_id
+      for evidence_id in evidence_ids
+      if evidence_id not in evaluation_by_observation_id
+    ]
+    if unknown_evidence_ids:
+      raise _invalid_live_result(
+        f"{component_field}.evidenceIds",
+        "references unknown observation ids",
+        {"unknownIds": unknown_evidence_ids},
+      )
+
+    disallowed_evidence_ids = [
+      evidence_id
+      for evidence_id in evidence_ids
+      if evaluation_by_observation_id[evidence_id]["status"]
+      not in SCORE_EVIDENCE_STATUSES
+    ]
+    if disallowed_evidence_ids:
+      raise _invalid_live_result(
+        f"{component_field}.evidenceIds",
+        "must reference only strength or improvement observations",
+        {"disallowedIds": disallowed_evidence_ids},
+      )
+
+    components.append(
+      {
+        "id": component_id,
+        "label": label,
+        "score": _require_live_integer_score(
+          component.get("score"),
+          f"{component_field}.score",
+          max_score=contract["maxScore"],
+        ),
+        "maxScore": contract["maxScore"],
+        "reason": _normalize_score_axis_reason(
+          component,
+          f"{component_field}.reason",
+        ),
+        "evidenceIds": evidence_ids,
+      },
+    )
+
+  return components
+
+
 def _normalize_score_breakdown(
   value: Any,
   analysis_decision: str,
@@ -1611,7 +1755,7 @@ def _normalize_score_breakdown(
       axis.get("evidenceIds"),
       f"{field}.evidenceIds",
       min_items=1,
-      max_items=8,
+      max_items=16,
       unique=True,
     )
     evidence_ids, unresolved_evidence_ids = _repair_score_evidence_ids(
@@ -1645,22 +1789,79 @@ def _normalize_score_breakdown(
         {"disallowedIds": disallowed_evidence_ids},
       )
 
+    components = _normalize_score_components(
+      axis.get("components"),
+      f"{field}.components",
+      contract["components"],
+      evaluation_by_observation_id,
+    )
+    component_score = sum(component["score"] for component in components)
+    raw_axis_score = _require_live_integer_score(
+      axis.get("score"),
+      f"{field}.score",
+      max_score=contract["maxScore"],
+    )
+    if raw_axis_score != component_score:
+      logger.warning(
+        "[aura:feedback-bedrock] output:repaired field=%s from=%s to=%s "
+        "source=analytic-components",
+        f"{field}.score",
+        raw_axis_score,
+        component_score,
+      )
+
+    component_evidence_ids = list(
+      dict.fromkeys(
+        evidence_id
+        for component in components
+        for evidence_id in component["evidenceIds"]
+      ),
+    )
+    if evidence_ids != component_evidence_ids:
+      logger.warning(
+        "[aura:feedback-bedrock] output:repaired field=%s from=%s to=%s "
+        "source=analytic-components",
+        f"{field}.evidenceIds",
+        evidence_ids,
+        component_evidence_ids,
+      )
+      evidence_ids = component_evidence_ids
+
     axes.append(
       {
         "id": axis_id,
         "label": label,
-        "score": _require_live_integer_score(
-          axis.get("score"),
-          f"{field}.score",
-          max_score=contract["maxScore"],
-        ),
+        "score": component_score,
         "maxScore": contract["maxScore"],
         "reason": _normalize_score_axis_reason(axis, f"{field}.reason"),
         "evidenceIds": evidence_ids,
+        "components": components,
       },
     )
 
   score = sum(axis["score"] for axis in axes)
+  component_evidence_ids = {
+    evidence_id
+    for axis in axes
+    for component in axis["components"]
+    for evidence_id in component["evidenceIds"]
+  }
+  uncovered_improvement_topics = [
+    evaluation["topicId"]
+    for evaluation in evaluations
+    if evaluation["status"] == "improvement"
+    and not any(
+      observation["id"] in component_evidence_ids
+      for observation in evaluation["observations"]
+    )
+  ]
+  if uncovered_improvement_topics:
+    raise _invalid_live_result(
+      "scoreBreakdown.axes.components.evidenceIds",
+      "must represent at least one observation from every improvement evaluation",
+      {"uncoveredTopicIds": uncovered_improvement_topics},
+    )
+
   formula = " + ".join(
     f"{axis['label']} {axis['score']}/{axis['maxScore']}"
     for axis in axes
@@ -1831,6 +2032,28 @@ def normalize_makeup_feedback_result(result: dict[str, Any] | None, payload: dic
       )
     score_evidence_ids = breakdown_evidence_ids
 
+    confidence_caps = [
+      COLOR_CONFIDENCE_SCORE_CAPS[capture_quality["colorConfidence"]],
+      *(
+        [DETECTOR_UNAVAILABLE_SCORE_CONFIDENCE_CAP]
+        if not capture_quality["detectorAvailable"]
+        else []
+      ),
+      *[
+        evaluation_by_observation_id[evidence_id]["confidence"]
+        for evidence_id in score_evidence_ids
+      ],
+    ]
+    evidence_confidence_cap = min(confidence_caps)
+    if score_confidence > evidence_confidence_cap:
+      logger.warning(
+        "[aura:feedback-bedrock] output:repaired field=scoreConfidence "
+        "reason=evidence-confidence from=%s to=%s",
+        score_confidence,
+        evidence_confidence_cap,
+      )
+      score_confidence = evidence_confidence_cap
+
   lighting_sensitive_observation_ids = {
     observation["id"]
     for evaluation in evaluations
@@ -1906,37 +2129,25 @@ def _build_output_contract() -> dict[str, Any]:
       "formula": "적용 완성도 0/30 + 배치·형태 균형 0/25 + 색·명암 조화 0/20 + 전체 조화·목표 적합도 0/25 = 0/100",
       "axes": [
         {
-          "id": "application-finish",
-          "label": "적용 완성도",
+          "id": axis["id"],
+          "label": axis["label"],
           "score": 0,
-          "maxScore": 30,
-          "reason": "경계·균일도·블렌딩처럼 사용자가 바꿀 수 있는 적용 결과의 근거 1~2문장",
+          "maxScore": axis["maxScore"],
+          "reason": f"{axis['label']} 세부 점수와 사진 근거를 종합한 1~2문장",
           "evidenceIds": ["brow-obs-1"],
-        },
-        {
-          "id": "placement-balance",
-          "label": "배치·형태 균형",
-          "score": 0,
-          "maxScore": 25,
-          "reason": "현재 얼굴 랜드마크에 대한 배치·형태의 근거 1~2문장",
-          "evidenceIds": ["brow-obs-1"],
-        },
-        {
-          "id": "color-value-harmony",
-          "label": "색·명암 조화",
-          "score": 0,
-          "maxScore": 20,
-          "reason": "사진 안에서 관찰되는 부위 간 색·명암 관계의 근거 1~2문장",
-          "evidenceIds": ["brow-obs-1"],
-        },
-        {
-          "id": "overall-goal-fit",
-          "label": "전체 조화·목표 적합도",
-          "score": 0,
-          "maxScore": 25,
-          "reason": "전체 시각적 중심과 사용자가 명시한 목표 적합성의 근거 1~2문장",
-          "evidenceIds": ["brow-obs-1"],
-        },
+          "components": [
+            {
+              "id": component["id"],
+              "label": component["label"],
+              "score": 0,
+              "maxScore": component["maxScore"],
+              "reason": f"{component['label']}의 충족·미달과 관찰 근거를 연결한 1~2문장",
+              "evidenceIds": ["brow-obs-1"],
+            }
+            for component in axis["components"]
+          ],
+        }
+        for axis in SCORE_AXIS_CONTRACT
       ],
     },
     "scoreRange": [0, 0],

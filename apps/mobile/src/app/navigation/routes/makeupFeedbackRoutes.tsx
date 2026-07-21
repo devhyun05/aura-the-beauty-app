@@ -452,6 +452,7 @@ export function MakeupFeedbackResultRouteScreen({
   const resultReportId =
     makeupFeedbackResult?.analysisId ?? reportId ?? makeupFeedbackResult?.id;
   const [reportLoadError, setReportLoadError] = React.useState('');
+  const [reportLoadRevision, setReportLoadRevision] = React.useState(0);
   const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
   const handleHeaderShareActionChange = React.useCallback(
     (nextShareAction: (() => void) | null) => {
@@ -473,6 +474,10 @@ export function MakeupFeedbackResultRouteScreen({
       getMakeupJourneySafeReturnResetState(resultEntryDate, resultReportId),
     );
   }, [navigation, resultEntryDate, resultReportId]);
+  const handleRetryReportLoad = React.useCallback(() => {
+    setReportLoadError('');
+    setReportLoadRevision(current => current + 1);
+  }, []);
   const detailHeaderNavigationProps = shouldReturnToJourney
     ? {onBack: handleBackToJourney}
     : shouldReturnToProfile
@@ -509,7 +514,7 @@ export function MakeupFeedbackResultRouteScreen({
     return () => {
       isMounted = false;
     };
-  }, [reportId, reportIsLoaded, setMakeupFeedbackResult]);
+  }, [reportId, reportIsLoaded, reportLoadRevision, setMakeupFeedbackResult]);
 
   if (reportId && !reportIsLoaded) {
     return (
@@ -518,9 +523,11 @@ export function MakeupFeedbackResultRouteScreen({
         routeName="MakeupFeedbackResult"
         shareDisabled>
         <RoutePlaceholder
+          actionLabel={reportLoadError ? '다시 시도' : undefined}
           description={
             reportLoadError || '완료된 메이크업 피드백 보고서를 불러오고 있어요.'
           }
+          onAction={reportLoadError ? handleRetryReportLoad : undefined}
           showHeader={false}
           title={reportLoadError ? '보고서를 열지 못했어요' : '보고서를 여는 중'}
         />

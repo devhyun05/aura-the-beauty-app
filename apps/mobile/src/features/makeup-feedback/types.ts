@@ -87,7 +87,33 @@ export type MakeupFeedbackScoreAxisId =
   | 'color-value-harmony'
   | 'overall-goal-fit';
 
+export type MakeupFeedbackScoreComponentId =
+  | 'base-finish'
+  | 'brow-eye-finish'
+  | 'cheek-finish'
+  | 'lip-finish'
+  | 'bilateral-balance'
+  | 'landmark-placement'
+  | 'visual-weight'
+  | 'relative-contrast'
+  | 'color-continuity'
+  | 'finish-coherence'
+  | 'full-face-coherence'
+  | 'focal-hierarchy'
+  | 'explicit-goal-fit';
+
+export type MakeupFeedbackScoreComponent = {
+  evidenceIds: string[];
+  id: MakeupFeedbackScoreComponentId;
+  label: string;
+  maxScore: number;
+  reason: string;
+  score: number;
+};
+
 export type MakeupFeedbackScoreAxis = {
+  /** Absent on stored v9 reports created before analytic component scoring. */
+  components?: MakeupFeedbackScoreComponent[];
   evidenceIds: string[];
   id: MakeupFeedbackScoreAxisId;
   label: string;
