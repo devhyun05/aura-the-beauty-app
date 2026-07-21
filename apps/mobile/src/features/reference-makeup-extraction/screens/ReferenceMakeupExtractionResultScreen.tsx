@@ -180,6 +180,9 @@ export function ReferenceMakeupExtractionResultScreen({
             generatedReady={false}
             look={areaGuideLook}
             onAreaOpened={() => {}}
+            // 추출 보고서에는 생성(추천) 이미지가 없어 "준비 중" 박스만 남으므로
+            // 크롭 프리뷰를 끈다(사용자 결정).
+            showCropPreview={false}
             sourceImageUri={referencePhotoUri}
             sourceLook={areaGuideSourceLook}
             sourceRegionVisuals={regionVisuals}

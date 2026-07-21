@@ -34,6 +34,9 @@ export interface FinalAreaGuideSectionProps {
   onAreaOpened: (area: PartKey) => void;
   onCropSettledChange?: (settled: boolean) => void;
   onProductImageSettledChange?: (settled: boolean) => void;
+  // 부위별 크롭(추천 이미지) 프리뷰 표시 여부 — 생성 이미지가 없는 소비자
+  // (메이크업 추출 보고서)는 끈다. 기본 true(추천 결과 화면).
+  showCropPreview?: boolean;
   sourceImageUri?: string;
   sourceRegionVisuals?: FaceAnalysisRegionVisuals;
 }
@@ -59,6 +62,7 @@ export function FinalAreaGuideSection({
   onAreaOpened,
   onCropSettledChange,
   onProductImageSettledChange,
+  showCropPreview = true,
   sourceImageUri,
   sourceRegionVisuals,
 }: FinalAreaGuideSectionProps) {
@@ -311,6 +315,7 @@ export function FinalAreaGuideSection({
                   onCropSettledChange={onCropSettledChange}
                   onProductImageSettledChange={onProductImageSettledChange}
                   recipe={recipe}
+                  showCropPreview={showCropPreview}
                   sourceImageUri={sourceImageUri}
                   sourceLook={sourceLook}
                   sourceRegionVisuals={sourceRegionVisuals}
@@ -331,6 +336,7 @@ function FinalAreaRecipePage({
   onCropSettledChange,
   onProductImageSettledChange,
   recipe,
+  showCropPreview,
   sourceImageUri,
   sourceLook,
   sourceRegionVisuals,
@@ -341,11 +347,13 @@ function FinalAreaRecipePage({
   onCropSettledChange?: (settled: boolean) => void;
   onProductImageSettledChange?: (settled: boolean) => void;
   recipe: FinalAreaRecipe;
+  showCropPreview: boolean;
   sourceImageUri?: string;
   sourceLook: MakeupLookRecommendation;
   sourceRegionVisuals?: FaceAnalysisRegionVisuals;
 }) {
-  const [cropSettled, setCropSettled] = useState(false);
+  // 프리뷰를 끈 소비자는 크롭 로딩을 기다릴 것이 없으므로 settled로 시작한다.
+  const [cropSettled, setCropSettled] = useState(!showCropPreview);
   const [productSettled, setProductSettled] = useState(false);
   const activeArea = recipe.area;
   const part = look.parts[activeArea];
@@ -376,16 +384,18 @@ function FinalAreaRecipePage({
 
   return (
     <ResultGlassCard style={styles.card}>
-      <FinalAreaCropPreview
-        area={activeArea}
-        areaLabel={areaLabel}
-        cropRegions={sourceLook.imageCropRegions}
-        generatedImage={look.image}
-        generatedReady={generatedReady}
-        onSettledChange={handleCropSettledChange}
-        sourceImageUri={sourceImageUri}
-        sourceRegionVisuals={sourceRegionVisuals}
-      />
+      {showCropPreview ? (
+        <FinalAreaCropPreview
+          area={activeArea}
+          areaLabel={areaLabel}
+          cropRegions={sourceLook.imageCropRegions}
+          generatedImage={look.image}
+          generatedReady={generatedReady}
+          onSettledChange={handleCropSettledChange}
+          sourceImageUri={sourceImageUri}
+          sourceRegionVisuals={sourceRegionVisuals}
+        />
+      ) : null}
 
       <View style={styles.areaHeader}>
         <View
