@@ -6,7 +6,7 @@ import {
 } from '../../../features/makeup-recommendation';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
-import {getMakeupRecommendationARFilterRouteParams} from './makeupRecommendationRouteActions';
+import {getLookMakeupColors, getMakeupRecommendationARFilterRouteParams} from './makeupRecommendationRouteActions';
 import type {RootScreenProps} from './routeUtils';
 
 export function MakeupRecommendationRouteScreen({
@@ -45,19 +45,22 @@ export function MakeupRecommendationRouteScreen({
         faceImageUri={canUseSelectedFlowData ? selectedFaceCapture?.imageUri : undefined}
         initialView={route.params?.view}
         onBack={handleBack}
-        onApplyAR={look =>
+        onApplyAR={look => {
+          // 색 우선순위: 이 룩이 직접 고른 areaGuides 색 > 분석 기본색(퍼스널 컬러
+          // 근거, 선택 플로우 유효 시) > 정적 프리셋. 모양·질감은 프리셋 유지.
+          const analysisColors = canUseSelectedFlowData
+            ? selectedFaceAnalysisReport?.makeupColors
+            : undefined;
+          const lookColors = getLookMakeupColors(look);
+          const mergedColors =
+            analysisColors || lookColors
+              ? {...analysisColors, ...lookColors}
+              : undefined;
           navigation.navigate(
             'ARFilter',
-            getMakeupRecommendationARFilterRouteParams(
-              look.arFilterId,
-              // 선택된 분석의 색(퍼스널 컬러 근거)으로 필터 색 개인화. 선택 플로우
-              // 데이터가 유효할 때만(personalColor 전달과 동일 가드), 없으면 프리셋 유지.
-              canUseSelectedFlowData
-                ? selectedFaceAnalysisReport?.makeupColors
-                : undefined,
-            ),
-          )
-        }
+            getMakeupRecommendationARFilterRouteParams(look.arFilterId, mergedColors),
+          );
+        }}
         onResultsVisibilityChange={setIsResultsVisible}
         onOpenRecommendedProducts={sourceAnalysisReportId =>
           navigation.navigate('ProductRecommendation', {

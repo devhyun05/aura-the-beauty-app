@@ -534,6 +534,7 @@ const FEATURE_OBSERVATION_KEYS: readonly FaceFeatureObservationKey[] = [
   'eyeContrast',
   'cheekContrast',
   'lipColorContrast',
+  'lipFullness',
 ];
 
 // 사진 판정 원본을 보고서 필드로 옮긴다. value/evidence 텍스트 + confidence 숫자가

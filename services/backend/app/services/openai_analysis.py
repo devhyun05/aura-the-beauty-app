@@ -865,6 +865,8 @@ FEATURE_OBSERVATION_ENUMS: dict[str, tuple[str, ...]] = {
   "eyeContrast": ("low", "medium", "high", "unclear"),
   "cheekContrast": ("low", "medium", "high", "unclear"),
   "lipColorContrast": ("low", "medium", "high", "unclear"),
+  # 입술 볼륨(자기 얼굴 대비 얇음/도톰) — 리서치 L-1(얇은 입술→국소 오버립) 입력.
+  "lipFullness": ("thin", "medium", "full", "unclear"),
 }
 FEATURE_OBSERVATION_KEYS = tuple(FEATURE_OBSERVATION_ENUMS.keys())
 
@@ -1139,7 +1141,7 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "defined version. "
   "featureObservations keys: eyelidType, upperLidHooding, lowerLidSagging, "
   "aegyoSal, browDensity, cheekboneHeight, cheekVolume, eyeContrast, "
-  "cheekContrast, lipColorContrast. "
+  "cheekContrast, lipColorContrast, lipFullness. "
   "Each value is an object with keys value (one of the allowed enum options, "
   "or 'unclear' when the photo does not permit a confident call), confidence "
   "(0..1), evidence (one short Korean sentence citing the photo). Never invent "
@@ -1223,14 +1225,22 @@ _ANALYSIS_SEC_SKIN = (
 _ANALYSIS_SEC_FEATURE = (
   "featureObservations는 top-level 필드로, 사진에서만 판정 가능한 이목구비 형태 부면을 "
   "각각 {value, confidence, evidence}로 채워. value는 정해진 enum 중 하나여야 해: "
-  "eyelidType(monolid 무쌍/inner 속쌍/outer 겉쌍/hooded 헐린눈/unclear), "
+  "eyelidType(monolid 무쌍/inner 속쌍/outer 겉쌍/hooded 헐린눈/unclear) — 판별 기준: "
+  "outer(겉쌍)는 쌍꺼풀 라인이 눈 앞머리부터 꼬리까지 전 구간에서 또렷하게 보이고 눈을 뜬 "
+  "상태에서도 라인과 눈꺼풀 접힘 면이 분명히 드러남. inner(속쌍)는 라인이 눈 앞머리 쪽에서 "
+  "살에 묻혀 보이지 않다가 중앙~꼬리에서만 가늘게 드러남. monolid(무쌍)는 접힘 라인이 전 "
+  "구간에 없음. hooded는 라인 유무와 무관하게 눈두덩 살이 접힘 라인을 위에서 덮어 가림. "
+  "라인이 전 구간에서 보이면 앞머리가 다소 옅어도 inner가 아니라 outer로 판정해. "
+  "확대해 보아도 이 기준으로 구분이 안 되면 반드시 unclear. "
   "upperLidHooding 상안검 처짐(none/mild/pronounced/unclear), "
   "lowerLidSagging 하안검 처짐(none/mild/pronounced/unclear) — 상안검과 하안검을 각각 따로 판정해, "
   "aegyoSal 애교살(present/absent/unclear), browDensity 눈썹 숱(sparse/medium/dense/unclear), "
   "cheekboneHeight 광대 위치(low/mid/high/unclear), cheekVolume 볼 볼륨(flat/medium/full/unclear), "
   "eyeContrast 눈매 대비(주변 피부 대비 눈·속눈썹·라인의 명도 대비, low/medium/high/unclear), "
   "cheekContrast 볼 대비(주변 피부 대비 볼 혈색·음영 대비, low/medium/high/unclear), "
-  "lipColorContrast 입술 혈색 대비(low/medium/high/unclear). "
+  "lipColorContrast 입술 혈색 대비(low/medium/high/unclear), "
+  "lipFullness 입술 볼륨(본인 얼굴 크기 대비 얇음 thin/중간 medium/도톰 full/unclear — "
+  "모집단 표준이 아니라 그 얼굴 안에서의 상대 볼륨). "
   "confidence는 0..1 확신도, evidence는 그렇게 본 사진 근거 한 줄. "
   "조명·각도·안경·그림자로 확실치 않으면 value를 'unclear'로 두고 confidence를 낮춰 — 절대 지어내지 마. "
   "이 필드는 사진 형태 판정만 담고 색·메이크업 처방은 만들지 마. "
