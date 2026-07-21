@@ -26,6 +26,7 @@ import {AppScreen} from '../../../shared/ui';
 import {
   answerGeneratedMakeupRecommendationQuestionV2,
   createMakeupRecommendationIdempotencyKey,
+  deleteGeneratedMakeupRecommendationReport,
   fetchGeneratedMakeupRecommendationReport,
   fetchGeneratedMakeupRecommendationReports,
   fetchGeneratedMakeupRecommendationSessionV2,
@@ -950,6 +951,24 @@ export const MakeupRecommendationScreen = forwardRef<
     if (resetIntent) dispatchDiscovery({type: 'intent/reset'});
   }, [session?.generationMode, session?.id]);
 
+  const handleDeleteHistoryReport = useCallback(
+    async (item: MakeupRecommendationReportHistoryItem) => {
+      await deleteGeneratedMakeupRecommendationReport(item.reportId);
+      setHistoryItems(current =>
+        current.filter(historyItem => historyItem.reportId !== item.reportId),
+      );
+
+      if (session?.reportId === item.reportId) {
+        await clearCurrentMakeupRecommendationSessionId(
+          AsyncStorage,
+          session.generationMode === 'v2' ? session.id : undefined,
+        );
+        setSession(undefined);
+      }
+    },
+    [session],
+  );
+
   const telemetryContextId = session?.reportId ?? session?.id;
   const telemetryLooks = session?.results;
   useEffect(() => {
@@ -1131,6 +1150,7 @@ export const MakeupRecommendationScreen = forwardRef<
         isLoadingMore={isLoadingMoreHistory}
         items={historyItems}
         onBack={() => returnToDiscovery(false)}
+        onDelete={handleDeleteHistoryReport}
         onLoadMore={() => void loadHistory('append')}
         onRefresh={() => void loadHistory()}
         onSelect={openHistoryReport}
@@ -1189,6 +1209,7 @@ export const MakeupRecommendationScreen = forwardRef<
           keywordLabel: session.keyword?.label
             ?? (session.editorialPresetId ? session.scenarioLabel : undefined),
           reportLabel: sourceReport?.reportTitle,
+          reportCreatedAt: session.createdAt,
           reportAnalyzedAt: sourceReport?.analyzedAt,
           reportImageUri,
           reportRegionVisuals: sourceReport?.measurements?.regionVisuals,

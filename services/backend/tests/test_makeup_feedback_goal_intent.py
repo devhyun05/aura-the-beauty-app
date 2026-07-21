@@ -23,6 +23,37 @@ def test_localize_makeup_feedback_intensity_terms(raw: str, expected: str) -> No
   assert localize_makeup_feedback_intensity_terms(raw) == expected
 
 
+def test_blank_goal_selects_generic_expert_review() -> None:
+  assert classify_makeup_feedback_goal_text("   ") == {
+    "intentType": "generic_default",
+    "normalizedGoalText": "",
+    "originalGoalText": "",
+  }
+
+
+@pytest.mark.asyncio
+async def test_blank_goal_skips_guardrail_and_keeps_user_input_empty(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  async def fail_guardrail(*_args, **_kwargs) -> None:
+    pytest.fail("blank expert review must not invoke the user-input guardrail")
+
+  monkeypatch.setattr(
+    "app.services.makeup_feedback_goal_intent.assert_bedrock_guardrail_input_allowed",
+    fail_guardrail,
+  )
+  payload = {"feedbackContext": {"userGoalText": "   "}}
+
+  await normalize_feedback_goal_context_for_request(payload, Settings())
+
+  assert payload["feedbackContext"] == {
+    "goalIntentType": "generic_default",
+    "normalizedGoalText": "",
+    "originalGoalText": "",
+    "userGoalText": "",
+  }
+
+
 
 
 @pytest.mark.parametrize(
@@ -85,6 +116,9 @@ def test_goal_intent_preserves_generic_request_text(value: str) -> None:
 @pytest.mark.parametrize(
   "value",
   [
+    "청순",
+    "글로우",
+    "시크한 느낌",
     "\uc5ec\uc790\uce5c\uad6c\ub791 \uce74\ud398\uac00\uc57c\ud558\ub294 \uc0c1\ud669",
     "\uba74\uc811\uc6a9\uc73c\ub85c \uae54\ub054\ud55c\uc9c0 \ubd10\uc918",
     "\ub9bd \ucd94\ucc9c\ud574\uc918",

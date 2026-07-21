@@ -63,6 +63,20 @@ const feedbackResultScreen = readFileSync(
   ),
   'utf8',
 );
+const feedbackRedesignHomeScreen = readFileSync(
+  join(
+    process.cwd(),
+    'apps/mobile/src/features/makeup-feedback/redesign/MakeupFeedbackRedesignHomeScreen.tsx',
+  ),
+  'utf8',
+);
+const feedbackRedesignSlidesScreen = readFileSync(
+  join(
+    process.cwd(),
+    'apps/mobile/src/features/makeup-feedback/redesign/MakeupFeedbackRedesignSlidesScreen.tsx',
+  ),
+  'utf8',
+);
 const journeyRoutes = readFileSync(
   join(
     process.cwd(),
@@ -427,8 +441,9 @@ expect(
   'loading error recovery restores the frozen journey context before every alternate route',
 );
 expect(
-  feedbackRoutes.includes('getMakeupJourneySafeReturnResetState(route.params?.entryDate)') &&
-    !feedbackRoutes.includes('if (navigation.canGoBack()) {\n      navigation.goBack();'),
+  /const handleBackToJourney = React\.useCallback\(\(\) => \{\s+navigation\.reset\(\s+getMakeupJourneySafeReturnResetState\(route\.params\?\.entryDate\),\s+\);\s+\}, \[navigation, route\.params\?\.entryDate\]\);/.test(
+    feedbackRoutes,
+  ),
   'journey results always reset to their resolved entry date instead of an older day below them',
 );
 expect(
@@ -453,8 +468,11 @@ expect(
   'stored journey reports reuse the existing feedback report endpoint and result mapper',
 );
 expect(
-  feedbackResultScreen.includes('메이크업 기록에서 보기') &&
-    feedbackResultScreen.includes('onPress={onOpenMakeupJourney}') &&
+  feedbackResultScreen.match(/onOpenRecord=\{onOpenMakeupJourney\}/g)?.length === 2 &&
+    feedbackRedesignHomeScreen.includes('메이크업 기록에서 보기') &&
+    feedbackRedesignHomeScreen.includes('onPress={onOpenRecord}') &&
+    feedbackRedesignSlidesScreen.includes('메이크업 기록에서 보기') &&
+    feedbackRedesignSlidesScreen.includes('onPress={onOpenRecord}') &&
     feedbackRoutes.includes('notifyMakeupJourneyFeedbackCompleted(resultEntryDate)') &&
     feedbackRoutes.includes(
       'getMakeupJourneySafeReturnResetState(resultEntryDate, resultReportId)',

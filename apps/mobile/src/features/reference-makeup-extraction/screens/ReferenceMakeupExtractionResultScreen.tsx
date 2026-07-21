@@ -13,6 +13,7 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import type {FaceAnalysisRegionVisuals} from '../../face-analysis/services/faceAnalysisMeasurements';
 import {analyzeFaceGeometry2d} from '../../face-geometry/services/faceGeometryService';
 import {FinalAreaGuideSection} from '../../makeup-recommendation/components/result/FinalAreaGuideSection';
@@ -50,7 +51,7 @@ export function ReferenceMakeupExtractionResultScreen({
   onOpenARFilter,
   onRetake,
 }: ReferenceMakeupExtractionResultScreenProps) {
-  const {extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
+  const {createdAt, extractedMakeupLook} = getReferenceMakeupExtractionDataSync();
   const [activeAreaIndex, setActiveAreaIndex] = useState(0);
   const {width} = useWindowDimensions();
   const areaScrollRef = useRef<ScrollView | null>(null);
@@ -173,6 +174,11 @@ export function ReferenceMakeupExtractionResultScreen({
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}>
         <LookIntroPhoto photo={photo} width={width} />
+        <View style={styles.reportMeta}>
+          <Text style={styles.reportCreatedAt}>
+            {formatReportCreatedAtLabel(createdAt, {includeTime: true})}
+          </Text>
+        </View>
         <ReferenceSummaryCard points={extractedMakeupLook.points} />
 
         <YStack style={styles.areaExploreSection}>
@@ -771,6 +777,17 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     backgroundColor: colors.surfaceMuted,
     overflow: 'hidden',
+  },
+  reportMeta: {
+    alignItems: 'flex-end',
+    marginBottom: -spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  reportCreatedAt: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   introImageFrame: {
     borderRadius: radius.md,

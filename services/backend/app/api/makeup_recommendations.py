@@ -2594,3 +2594,30 @@ async def get_recommendation_report(
   if report is None:
     raise AppError(404, "MAKEUP_RECOMMENDATION_NOT_FOUND", "The makeup recommendation report was not found.")
   return success(await _recommendation_report_response(report, db=db, settings=settings))
+
+
+@router.delete("/{report_id}")
+async def delete_recommendation_report(
+  report_id: UUID,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  deleted_report = await db.fetchrow(
+    """
+    delete from makeup_recommendation_reports
+    where id = $1 and user_id = $2
+    returning id
+    """,
+    report_id,
+    user["id"],
+  )
+
+  if not deleted_report:
+    raise AppError(
+      404,
+      "MAKEUP_RECOMMENDATION_NOT_FOUND",
+      "The makeup recommendation report was not found.",
+    )
+
+  return success({"deleted": True, "reportId": str(report_id)})

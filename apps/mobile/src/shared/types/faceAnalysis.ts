@@ -110,6 +110,7 @@ export interface FaceAnalysisReport {
   id: string;
   title: string;
   reportTitle: string;
+  createdAt?: string;
   analyzedAt: string;
   imageSource: ImageSourcePropType;
   environmentLabel: string;

@@ -55,7 +55,6 @@ export type FaceAnalysisReportPreviewScreenProps = {
   onRetake?: () => void;
   // 옛 보고서 화면에 있던 액션들 — 화면 교체로 사라지지 않도록 포팅했다.
   onCreateARFilter?: () => void;
-  onDeleteReport?: (reportId: string) => Promise<void> | void;
   onPressProducts?: (reportId: string) => void;
 };
 
@@ -98,7 +97,6 @@ export function FaceAnalysisReportPreviewScreen({
   onBack,
   onRetake,
   onCreateARFilter,
-  onDeleteReport,
   onPressProducts,
 }: FaceAnalysisReportPreviewScreenProps) {
   const insets = useSafeAreaInsets();
@@ -293,22 +291,8 @@ export function FaceAnalysisReportPreviewScreen({
     [activeShareTarget, profileName, report],
   );
 
-  const handleConfirmDelete = useCallback(async () => {
-    if (!report || !onDeleteReport) {
-      return;
-    }
-    try {
-      await onDeleteReport(report.id);
-    } catch (error) {
-      console.info('[aura:analysis] report-detail:delete-failed', {
-        message: error instanceof Error ? error.message : String(error),
-        reportId: report.id,
-      });
-      Alert.alert('삭제 실패', '보고서를 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.');
-    }
-  }, [onDeleteReport, report]);
-
-  // 상단 "더보기" → 옛 화면의 공유/저장/추천제품/삭제 액션 메뉴.
+  // 상세 보고서의 상단 더보기는 공유·저장·추천 제품만 제공한다.
+  // 삭제는 보고서 목록 카드의 점점점 메뉴에서만 수행한다.
   const handleMore = useCallback(() => {
     if (!report) {
       return;
@@ -332,25 +316,12 @@ export function FaceAnalysisReportPreviewScreen({
     if (onPressProducts) {
       options.push({text: '추천 제품', onPress: () => onPressProducts(report.id)});
     }
-    if (onDeleteReport) {
-      options.push({
-        text: '삭제',
-        style: 'destructive',
-        onPress: () =>
-          Alert.alert('보고서 삭제', '삭제한 맞춤 분석 보고서는 되돌릴 수 없어요.', [
-            {text: '취소', style: 'cancel'},
-            {text: '삭제', style: 'destructive', onPress: () => void handleConfirmDelete()},
-          ]),
-      });
-    }
     options.push({text: '취소', style: 'cancel'});
 
     Alert.alert('맞춤 분석 보고서', '원하는 작업을 선택해 주세요.', options);
   }, [
     activeShareTarget,
-    handleConfirmDelete,
     handleShareAction,
-    onDeleteReport,
     onPressProducts,
     report,
   ]);
