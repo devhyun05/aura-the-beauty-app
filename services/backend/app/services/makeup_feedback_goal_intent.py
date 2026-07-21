@@ -50,6 +50,9 @@ GENERIC_REQUEST_KEYWORDS = {
 
 CONTEXT_ANCHOR_KEYWORDS = {
   "가볍",
+  "강렬",
+  "글램",
+  "글로우",
   "결혼식",
   "공연",
   "과하",
@@ -61,20 +64,26 @@ CONTEXT_ANCHOR_KEYWORDS = {
   "데이트",
   "데일리",
   "들떠",
+  "러블리",
   "립",
+  "맑",
+  "매트",
   "마스카라",
   "면접",
   "모임",
   "무대",
   "발색",
   "발표",
+  "부드러",
   "블러셔",
   "사진",
   "색감",
+  "생기",
   "섀도",
   "소개팅",
   "수업",
   "약속",
+  "은은",
   "여행",
   "연말",
   "예식",
@@ -85,18 +94,24 @@ CONTEXT_ANCHOR_KEYWORDS = {
   "자연",
   "증명",
   "차분",
+  "청순",
   "촬영",
   "출근",
   "축제",
   "치크",
+  "촉촉",
   "클럽",
   "카페",
   "커버",
   "톤",
+  "투명",
   "파티",
   "피부",
   "학교",
   "화사",
+  "화려",
+  "시크",
+  "힙",
   "회사",
   "회식",
   "cafe",
@@ -306,6 +321,15 @@ def needs_more_detail(value: str) -> bool:
 
 def classify_makeup_feedback_goal_text(value: Any) -> GoalIntentResult:
   original_goal_text = clean_goal_text(value)
+
+  # A goal is optional. An empty value deliberately selects the server-owned
+  # expert review mode instead of masquerading a fixed default as user input.
+  if not original_goal_text:
+    return {
+      "intentType": "generic_default",
+      "normalizedGoalText": "",
+      "originalGoalText": "",
+    }
 
   if is_clearly_noise_goal_text(original_goal_text):
     return {
@@ -1252,6 +1276,10 @@ async def normalize_feedback_goal_context_for_request(
 
   if classification["intentType"] in {"noise", "needs_detail"}:
     _apply_goal_classification(request_payload, feedback_context, classification)
+
+  if not raw_goal_text:
+    _apply_goal_classification(request_payload, feedback_context, classification)
+    return
 
   if _should_reject_goal_locally(raw_goal_text, classification):
     local_error = _local_goal_guardrail_error()

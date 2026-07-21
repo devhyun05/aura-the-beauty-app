@@ -1365,6 +1365,12 @@ async def build_makeup_feedback_conference_messages(
   if settings.analysis_provider != "bedrock":
     return [], "provider_fallback", None
 
+  if not settings.makeup_feedback_conference_ai_enabled:
+    logger.info(
+      "[aura:feedback-conference] deterministic-fallback aiCall=false",
+    )
+    return [], "deterministic_fallback", None
+
   try:
     messages = await MakeupFeedbackConferenceBedrockService(settings).generate(
       result,

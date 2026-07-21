@@ -353,10 +353,21 @@ function mapDynamicCriteria(value: unknown): MakeupFeedbackDynamicCriterion[] {
 
     seenIds.add(id);
 
+    const sourceType = item.sourceType;
+    if (
+      sourceType !== undefined &&
+      sourceType !== 'common_baseline' &&
+      sourceType !== 'explicit_user_goal' &&
+      sourceType !== 'inferred_expert_standard'
+    ) {
+      throw feedbackContractError(`${field}.sourceType`, '동적 평가 기준 출처 형식이 잘못되었습니다.');
+    }
+
     return {
       criterion: requireText(item.criterion, `${field}.criterion`),
       derivedFrom: requireText(item.derivedFrom, `${field}.derivedFrom`),
       id,
+      ...(sourceType ? {sourceType} : {}),
     };
   });
 }
@@ -1635,6 +1646,13 @@ export async function fetchMakeupFeedbackReport(
     '/feedback/reports/' + encodeURIComponent(reportId),
   );
   return mapStoredMakeupFeedbackReport(report, reportId);
+}
+
+export async function deleteMakeupFeedbackReport(reportId: string): Promise<void> {
+  await requestBackendJson(
+    '/feedback/reports/' + encodeURIComponent(reportId),
+    {method: 'DELETE'},
+  );
 }
 
 function mapStoredMakeupFeedbackReport(

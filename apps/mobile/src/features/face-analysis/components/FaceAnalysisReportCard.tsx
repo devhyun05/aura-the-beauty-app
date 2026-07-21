@@ -1,13 +1,17 @@
 import {StyleSheet, type StyleProp, type ViewStyle} from 'react-native';
-import {ChevronRight} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
-import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
-import {AppCard, ImagePlaceholder} from '../../../shared/ui';
+import {
+  AppCard,
+  ImagePlaceholder,
+  ReportOverflowMenuButton,
+} from '../../../shared/ui';
 
 type FaceAnalysisReportCardProps = {
   report: FaceAnalysisReport;
+  onDelete?: () => Promise<void> | void;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 };
@@ -31,6 +35,7 @@ function getReportTags(report: FaceAnalysisReport) {
 }
 
 export function FaceAnalysisReportCard({
+  onDelete,
   onPress,
   report,
   style,
@@ -38,7 +43,11 @@ export function FaceAnalysisReportCard({
   const tags = getReportTags(report);
 
   return (
-    <AppCard onPress={onPress} padded={false} style={[styles.card, style]}>
+    <AppCard
+      accessibilityLabel={`${report.title} 얼굴 분석 보고서 보기`}
+      onPress={onPress}
+      padded={false}
+      style={[styles.card, style]}>
       <View style={styles.dateColumn}>
         <Text style={styles.dateText}>{formatJournalDate(report.analyzedAt)}</Text>
         <View style={styles.dateDot} />
@@ -68,7 +77,7 @@ export function FaceAnalysisReportCard({
         </View>
       </View>
 
-      <ChevronRight color={colors.textPrimary} size={iconSize.xs} strokeWidth={2.2} />
+      {onDelete ? <ReportOverflowMenuButton onDelete={onDelete} /> : null}
     </AppCard>
   );
 }

@@ -122,7 +122,7 @@ export function MakeupFeedbackGoalInputScreen({
             style={styles.scrollView}>
             <YStack style={styles.titleBlock}>
               <Text style={styles.screenTitle}>어떤 기준으로 피드백 받을까요?</Text>
-              <Text style={styles.screenDescription}>사진을 보면서 상황이나 원하는 분위기를 적어주세요.</Text>
+              <Text style={styles.screenDescription}>원하는 분위기가 있다면 간단히 적어주세요. 입력하지 않아도 전문가 종합 평가를 받을 수 있어요.</Text>
             </YStack>
 
             <YStack style={styles.formBlock}>
@@ -130,7 +130,7 @@ export function MakeupFeedbackGoalInputScreen({
                 <View style={styles.fieldIcon}>
                   <MessageSquareText color={C.primary} size={iconSize.sm} strokeWidth={2} />
                 </View>
-                <Text style={styles.fieldLabel}>메이크업 상황/목적</Text>
+                <Text style={styles.fieldLabel}>메이크업 상황/목적 (선택)</Text>
               </XStack>
 
               <View style={[styles.inputFrame, shouldShowGoalError && styles.inputFrameError]}>
@@ -158,7 +158,7 @@ export function MakeupFeedbackGoalInputScreen({
               <XStack style={styles.criteriaInfo}>
                 <Info color={C.primary} size={15} strokeWidth={2} />
                 <Text style={styles.criteriaInfoText}>
-                  입력하지 않으면 상황을 추측하지 않고 사진에 확인되는 공통 기준으로 평가해요.
+                  입력하지 않으면 얼굴 특징에 맞는 배치, 색·명암 조화, 부위별 완성도를 메이크업 아티스트의 기준으로 정밀하게 평가해요.
                 </Text>
               </XStack>
             </YStack>

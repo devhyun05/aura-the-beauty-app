@@ -22,6 +22,7 @@ import type {MakeupFeedbackResult} from '../types';
 
 type MakeupFeedbackResultScreenProps = {
   onHeaderShareActionChange?: (action: MakeupFeedbackHeaderShareAction | null) => void;
+  onInternalBackActionChange?: (action: (() => void) | null) => void;
   onOpenMakeupJourney: () => void;
   reduceMotion?: boolean;
   result: MakeupFeedbackResult;
@@ -121,6 +122,7 @@ function getShareErrorMessage(error: unknown) {
 
 export function MakeupFeedbackResultScreen({
   onHeaderShareActionChange,
+  onInternalBackActionChange,
   onOpenMakeupJourney,
   reduceMotion,
   result,
@@ -209,6 +211,12 @@ export function MakeupFeedbackResultScreen({
 
     return () => onHeaderShareActionChange?.(null);
   }, [handleOpenShareOptions, onHeaderShareActionChange]);
+
+  useEffect(() => {
+    onInternalBackActionChange?.(isSlides ? controller.goHome : null);
+
+    return () => onInternalBackActionChange?.(null);
+  }, [controller.goHome, isSlides, onInternalBackActionChange]);
 
   useEffect(() => {
     if (!shareFeedback) {

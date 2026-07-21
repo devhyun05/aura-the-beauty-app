@@ -44,7 +44,6 @@ export function MakeupFeedbackRedesignSlidesScreen({
   onShare: () => void;
 }) {
   const currentRegionId = controller.currentEvaluation?.regionId ?? null;
-  const isPreviousDisabled = controller.evaluationIndex === 0;
   const isNextDisabled = controller.isSummary;
 
   return (
@@ -128,10 +127,18 @@ export function MakeupFeedbackRedesignSlidesScreen({
 
       <View style={styles.footer}>
         <RoundNavigationButton
-          accessibilityLabel="이전 피드백 카드"
-          disabled={isPreviousDisabled}
-          icon={<ChevronLeft color={isPreviousDisabled ? C.chevron : C.textMuted4} size={21} strokeWidth={2.2} />}
-          onPress={controller.previous}
+          accessibilityLabel={
+            controller.evaluationIndex === 0
+              ? '전체 보고서로 돌아가기'
+              : '이전 피드백 카드'
+          }
+          disabled={false}
+          icon={<ChevronLeft color={C.textMuted4} size={21} strokeWidth={2.2} />}
+          onPress={
+            controller.evaluationIndex === 0
+              ? controller.goHome
+              : controller.previous
+          }
           variant="previous"
         />
         <Text numberOfLines={1} style={styles.nextHint}>{controller.nextHint}</Text>

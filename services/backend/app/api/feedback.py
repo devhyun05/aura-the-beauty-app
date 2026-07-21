@@ -652,3 +652,26 @@ async def get_feedback_report(
     raise AppError(404, "FEEDBACK_REPORT_NOT_FOUND", "Feedback report was not found.")
 
   return success({"report": normalize_feedback_report_row(report)})
+
+
+@router.delete("/reports/{report_id}")
+async def delete_feedback_report(
+  report_id: UUID,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  deleted_report = await db.fetchrow(
+    """
+    delete from makeup_feedback_reports
+    where id = $1 and user_id = $2
+    returning id
+    """,
+    report_id,
+    user["id"],
+  )
+
+  if not deleted_report:
+    raise AppError(404, "FEEDBACK_REPORT_NOT_FOUND", "Feedback report was not found.")
+
+  return success({"deleted": True, "reportId": str(report_id)})

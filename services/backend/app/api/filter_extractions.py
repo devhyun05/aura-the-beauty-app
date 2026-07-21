@@ -410,3 +410,26 @@ async def get_filter_extraction(
     raise AppError(404, "FILTER_EXTRACTION_NOT_FOUND", "Filter extraction report was not found.")
 
   return success({"report": normalize_filter_extraction_report_row(report)})
+
+
+@router.delete("/{report_id}")
+async def delete_filter_extraction(
+  report_id: UUID,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  deleted_report = await db.fetchrow(
+    """
+    delete from filter_extraction_reports
+    where id = $1 and user_id = $2
+    returning id
+    """,
+    report_id,
+    user["id"],
+  )
+
+  if not deleted_report:
+    raise AppError(404, "FILTER_EXTRACTION_NOT_FOUND", "Filter extraction report was not found.")
+
+  return success({"deleted": True, "reportId": str(report_id)})

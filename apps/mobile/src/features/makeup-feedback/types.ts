@@ -186,6 +186,7 @@ export type MakeupFeedbackDynamicCriterion = {
   id: string;
   criterion: string;
   derivedFrom: string;
+  sourceType?: 'common_baseline' | 'explicit_user_goal' | 'inferred_expert_standard';
 };
 
 export type MakeupFeedbackTopic = {

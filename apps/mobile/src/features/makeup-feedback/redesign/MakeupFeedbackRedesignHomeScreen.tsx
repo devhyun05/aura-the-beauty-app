@@ -390,6 +390,7 @@ function confidenceLevelLabel(value: 'low' | 'medium' | 'high') {
 const styles = StyleSheet.create({
   actionSection: {
     backgroundColor: C.cardAlt,
+    gap: 14,
     paddingBottom: 24,
     paddingHorizontal: 16,
   },

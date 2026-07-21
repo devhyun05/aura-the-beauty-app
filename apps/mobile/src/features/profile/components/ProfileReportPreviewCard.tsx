@@ -11,7 +11,6 @@ type ProfileReportPreviewCardProps = {
   description: string;
   label: string;
   onPress?: () => void;
-  opensReportDetail?: boolean;
   preview: ProfileReportPreview | null;
   style?: StyleProp<ViewStyle>;
 };
@@ -20,17 +19,12 @@ export function ProfileReportPreviewCard({
   description,
   label,
   onPress,
-  opensReportDetail = false,
   preview,
   style,
 }: ProfileReportPreviewCardProps) {
   const hasPreviewImage = Boolean(preview?.imageSource);
-  const previewAccessibilityHint = opensReportDetail && preview
-    ? '선택한 보고서를 엽니다.'
-    : '해당 종류의 보고서 목록으로 이동해요.';
-  const previewAccessibilityLabel = opensReportDetail && preview
-    ? `${label} ${preview.title} 보고서 열기`
-    : `${label} 전체 목록 열기`;
+  const previewAccessibilityHint = '해당 종류의 보고서 목록으로 이동해요.';
+  const previewAccessibilityLabel = `${label} 전체 목록 열기`;
 
   return (
     <View style={[styles.card, style]}>

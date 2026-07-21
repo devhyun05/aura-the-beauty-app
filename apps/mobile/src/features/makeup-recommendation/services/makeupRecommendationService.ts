@@ -2107,6 +2107,15 @@ export async function fetchGeneratedMakeupRecommendationReport(
   return mappedReport;
 }
 
+export async function deleteGeneratedMakeupRecommendationReport(
+  reportId: string,
+): Promise<void> {
+  await requestBackendJson(
+    `/makeup-recommendations/${encodeURIComponent(reportId)}`,
+    {method: 'DELETE'},
+  );
+}
+
 export async function startGeneratedMakeupRecommendation(
   input: StartMakeupRecommendationInput,
   scenarioTags: readonly string[] = [],

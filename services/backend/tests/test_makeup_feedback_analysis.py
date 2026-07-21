@@ -128,7 +128,10 @@ def _service_with_bedrock_result(
       calls.update(kwargs)
       return {"body": ResponseBody()}
 
-  service = MakeupFeedbackBedrockService(settings if settings is not None else Settings())
+  effective_settings = (settings if settings is not None else Settings()).model_copy(
+    update={"makeup_feedback_evidence_pipeline_enabled": False},
+  )
+  service = MakeupFeedbackBedrockService(effective_settings)
   monkeypatch.setattr(service, "_bedrock_runtime_client", lambda: FakeBedrockClient())
   return service, calls
 
@@ -352,6 +355,54 @@ def _valid_result(score: object = 88) -> dict:
     "summary": {
       "strengthSummary": "목적에 맞는 표현이 사진에서 확인됩니다.",
       "improvementSummary": "한 부위의 경계를 조금 더 정리하면 좋습니다.",
+    },
+  }
+
+
+def _compact_result() -> dict:
+  topics = []
+  for index, topic in enumerate(FEEDBACK_TOPICS):
+    status = "strength" if index == 0 else "improvement" if index == 1 else "optional"
+    topics.append(
+      {
+        "id": topic["id"],
+        "status": status,
+        "visibility": "clear",
+        "visibilityReason": None,
+        "claim": f"{topic['label']}의 경계와 상대 강도가 사진에서 확인됩니다.",
+        "where": f"얼굴의 {topic['label']} 영역",
+        "lighting": False,
+        "advice": f"정면에서 {topic['label']}의 경계와 양쪽 균형을 확인하세요.",
+        "impact": "medium" if status == "improvement" else "low",
+        "confidence": 0.8,
+      },
+    )
+
+  components = []
+  for axis in analysis_module.SCORE_AXIS_CONTRACT:
+    for component in axis["components"]:
+      components.append(
+        {
+          "id": component["id"],
+          "score": component["maxScore"] - 1,
+          "reason": f"{component['label']}에서 충족한 점과 국소 보완점을 함께 확인했습니다.",
+          "topics": ["brow", "lash"],
+        },
+      )
+
+  return {
+    "goal": {
+      "label": "자연스러운 데이트 메이크업",
+      "intensity": "light",
+      "reason": "사용자가 자연스럽고 생기 있는 인상을 요청했습니다.",
+      "criterion": "각 부위가 과도하게 분리되지 않고 생기 있게 연결되는가",
+    },
+    "topics": topics,
+    "components": components,
+    "scoreConfidence": 0.82,
+    "summary": {
+      "strength": "사진에서 확인된 눈썹 표현은 비교적 안정적입니다.",
+      "improvement": "속눈썹 경계와 좌우 연결을 먼저 정리할 필요가 있습니다.",
     },
   }
 
@@ -585,9 +636,12 @@ def test_feedback_topics_include_lip_as_an_eleventh_topic() -> None:
 
 def test_external_prompts_render_context_contract_and_lip_without_recursive_substitution() -> None:
   injected_placeholder = "{{TOPIC_COUNT}} 데이트 메이크업"
-  service = MakeupFeedbackBedrockService(Settings())
+  service = MakeupFeedbackBedrockService(
+    Settings(makeup_feedback_evidence_pipeline_enabled=False),
+  )
 
   user_prompt = service._build_prompt(_request_payload(injected_placeholder))
+  compact_prompt = service._build_compact_prompt(_request_payload(injected_placeholder))
   system_prompt = service._build_system_prompt()
 
   assert "아래 11개 주제를 모두 평가하세요" in user_prompt
@@ -608,10 +662,26 @@ def test_external_prompts_render_context_contract_and_lip_without_recursive_subs
   assert "full face overview에서 피부·눈·치크·립 사이의 상대 채도" in user_prompt
   assert "립 색의 상대 채도·명도·대비와 시각적 지배력" in user_prompt
   assert "퍼스널컬러, 피부 언더톤" in user_prompt
+  assert "머리카락·홍채·피부 표현" in user_prompt
+  assert "얼굴 중앙의 세로 공간" in user_prompt
+  assert "입술이 얇아 보일 때" in user_prompt
+  assert "메이크업이 진하거나 연한 정도 자체" in user_prompt
+  assert "derivedFrom과 sourceType은 서버가 추가합니다" in user_prompt
+  output_criterion = analysis_module._build_output_contract()["interpretedGoal"][
+    "dynamicCriteria"
+  ][0]
+  assert "derivedFrom" not in output_criterion
   assert "전체 조화의 불일치" in user_prompt
   assert "촌스럽다" in user_prompt
   assert "채도·명도 대비가 다른 부위보다 높아" in system_prompt
   assert "피부·치크·아이 메이크업과 비교한 색 강도" in system_prompt
+  assert "강도 증가 하드 게이트" in system_prompt
+  assert "립의 낮은 발색은 그 자체로 결함이 아닙니다" in system_prompt
+  assert "lip-finish`는 진하기가 아니라 라인·채움·마감" in system_prompt
+  assert "두 개의 경쟁 중심" in compact_prompt
+  assert "`연하다`, `발색이 약하다`, `존재감이 낮다`만으로는 improvement 근거" in compact_prompt
+  assert "더 진하게" in compact_prompt
+  assert "full-face 반증" in compact_prompt
   assert "적용 완성도 30점" in system_prompt
   assert "30년 이상 활동" in system_prompt
   assert "사용자의 기분을 맞추기 위한 칭찬" in system_prompt
@@ -696,26 +766,35 @@ def test_prompt_values_remain_unchanged_without_analysis_goal_text() -> None:
   assert "메이크업 상황:" not in prompt
 
 
-def test_missing_goal_is_rejected_instead_of_inserting_a_fixed_default() -> None:
-  with pytest.raises(AppError) as exc_info:
-    MakeupFeedbackBedrockService(Settings())._build_prompt(
-      {"source": "gallery", "feedbackContext": {"goalIntentType": "generic_default"}},
-    )
+def test_missing_goal_builds_server_owned_expert_review_prompt() -> None:
+  payload = {
+    "source": "gallery",
+    "feedbackContext": {"goalIntentType": "generic_default"},
+  }
 
-  assert exc_info.value.status_code == 400
-  assert exc_info.value.code == "FEEDBACK_GOAL_REQUIRED"
+  values = analysis_module._build_user_prompt_values(payload)
+  prompt = MakeupFeedbackBedrockService(Settings())._build_prompt(payload)
+
+  assert analysis_module._get_feedback_context(payload)["userGoalText"] == ""
+  assert json.loads(values["ORIGINAL_GOAL_TEXT_JSON"]) == ""
+  assert "사용자 입력 없음 — 30년 경력 메이크업 아티스트의 전문가 종합 평가" in prompt
+  assert "얼굴 특징에 대한 배치 적응" in prompt
 
 
 
 @pytest.mark.asyncio
-async def test_analyze_rejects_missing_goal_before_reading_the_image(
+async def test_analyze_accepts_missing_goal_and_starts_image_read(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   service = MakeupFeedbackBedrockService(Settings())
+
+  def fail_after_goal_validation(_payload):
+    raise AppError(400, "TEST_IMAGE_READ_REACHED", "test sentinel")
+
   monkeypatch.setattr(
     service,
     "_read_image_bytes",
-    lambda _payload: pytest.fail("image read must not start without a goal"),
+    fail_after_goal_validation,
   )
 
   with pytest.raises(AppError) as exc_info:
@@ -723,7 +802,7 @@ async def test_analyze_rejects_missing_goal_before_reading_the_image(
       {"source": "gallery", "feedbackContext": {"goalIntentType": "generic_default"}},
     )
 
-  assert exc_info.value.code == "FEEDBACK_GOAL_REQUIRED"
+  assert exc_info.value.code == "TEST_IMAGE_READ_REACHED"
 
 
 
@@ -1129,7 +1208,6 @@ def test_live_result_rejects_missing_nested_contract_fields(
   [
     ("criterion", "id", "interpretedGoal.dynamicCriteria[0].id"),
     ("criterion", "criterion", "interpretedGoal.dynamicCriteria[0].criterion"),
-    ("criterion", "derivedFrom", "interpretedGoal.dynamicCriteria[0].derivedFrom"),
     ("observation", "id", "evaluations[0].observations[0].id"),
     ("observation", "claim", "evaluations[0].observations[0].claim"),
     ("observation", "evidenceLocation", "evaluations[0].observations[0].evidenceLocation"),
@@ -1408,7 +1486,7 @@ def test_capture_quality_rejects_unknown_affected_topic_id() -> None:
   assert exc_info.value.details["unknownIds"] == ["unknown-topic"]
 
 
-def test_dynamic_criterion_derived_from_accepts_normalized_original_substring() -> None:
+def test_dynamic_criterion_source_uses_trusted_original_goal() -> None:
   payload = _request_payload("  피드백   해줘  ")
   raw_result = _valid_result()
   raw_result["interpretedGoal"]["dynamicCriteria"][2]["derivedFrom"] = "피드백 해줘"
@@ -1418,7 +1496,21 @@ def test_dynamic_criterion_derived_from_accepts_normalized_original_substring() 
   assert result["interpretedGoal"]["dynamicCriteria"][2]["derivedFrom"] == "피드백 해줘"
 
 
-def test_dynamic_criterion_derived_from_uses_trusted_analysis_goal() -> None:
+def test_dynamic_criterion_sources_are_server_owned_when_model_omits_them() -> None:
+  raw_result = _valid_result()
+  for criterion in raw_result["interpretedGoal"]["dynamicCriteria"]:
+    criterion.pop("derivedFrom")
+
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
+
+  criteria = result["interpretedGoal"]["dynamicCriteria"]
+  assert criteria[0]["derivedFrom"] == "공통 기준: 적용 완성도"
+  assert criteria[0]["sourceType"] == "common_baseline"
+  assert criteria[2]["derivedFrom"] == "데이트에서 자연스럽고 생기 있게 보이고 싶어요"
+  assert criteria[2]["sourceType"] == "explicit_user_goal"
+
+
+def test_dynamic_criterion_source_uses_trusted_analysis_goal() -> None:
   payload = _request_payload("처음 가는 야시장")
   payload["feedbackContext"]["analysisGoalText"] = "외출 상황"
   raw_result = _valid_result()
@@ -1429,16 +1521,45 @@ def test_dynamic_criterion_derived_from_uses_trusted_analysis_goal() -> None:
   assert result["interpretedGoal"]["dynamicCriteria"][2]["derivedFrom"] == "외출 상황"
 
 
-def test_dynamic_criterion_derived_from_rejects_fixed_criterion_not_in_original() -> None:
+def test_dynamic_criterion_source_ignores_model_paraphrase() -> None:
   raw_result = _valid_result()
   raw_result["interpretedGoal"]["dynamicCriteria"][2]["derivedFrom"] = "화려한 메이크업"
 
-  with pytest.raises(AppError) as exc_info:
-    normalize_makeup_feedback_result(raw_result, _request_payload())
+  result = normalize_makeup_feedback_result(raw_result, _request_payload())
 
-  assert (
-    exc_info.value.details["field"]
-    == "interpretedGoal.dynamicCriteria[2].derivedFrom"
+  assert result["interpretedGoal"]["dynamicCriteria"][2]["derivedFrom"] == (
+    "데이트에서 자연스럽고 생기 있게 보이고 싶어요"
+  )
+  assert result["interpretedGoal"]["dynamicCriteria"][2]["sourceType"] == (
+    "explicit_user_goal"
+  )
+
+
+def test_dynamic_criterion_derived_from_uses_server_owned_expert_source_without_goal() -> None:
+  raw_result = _valid_result()
+  raw_result["interpretedGoal"]["explicitFacts"] = []
+  raw_result["interpretedGoal"]["dynamicCriteria"][2]["derivedFrom"] = "모델이 만든 출처"
+  payload = {
+    "source": "camera",
+    "feedbackContext": {
+      "goalIntentType": "generic_default",
+      "normalizedGoalText": "",
+      "originalGoalText": "",
+      "userGoalText": "",
+    },
+  }
+
+  result = normalize_makeup_feedback_result(raw_result, payload)
+
+  assert result["interpretedGoal"]["explicitFacts"] == []
+  assert result["interpretedGoal"]["dynamicCriteria"][2]["derivedFrom"] == (
+    analysis_module.GENERIC_EXPERT_REVIEW_DERIVED_FROM
+  )
+  assert result["interpretedGoal"]["dynamicCriteria"][2]["sourceType"] == (
+    "inferred_expert_standard"
+  )
+  assert result["interpretedGoal"]["dynamicCriteria"][0]["sourceType"] == (
+    "common_baseline"
   )
 
 
@@ -1462,17 +1583,16 @@ def test_dynamic_criteria_rejects_missing_common_baseline() -> None:
   assert exc_info.value.details["missingBaselineIds"] == ["baseline-application"]
 
 
-@pytest.mark.parametrize("field", ["criterion", "derivedFrom"])
-def test_dynamic_criteria_rejects_modified_common_baseline(field: str) -> None:
+def test_dynamic_criteria_rejects_modified_common_baseline() -> None:
   raw_result = _valid_result()
-  raw_result["interpretedGoal"]["dynamicCriteria"][0][field] = "모델이 바꾼 공통 기준"
+  raw_result["interpretedGoal"]["dynamicCriteria"][0]["criterion"] = "모델이 바꾼 공통 기준"
 
   with pytest.raises(AppError) as exc_info:
     normalize_makeup_feedback_result(raw_result, _request_payload())
 
   assert (
     exc_info.value.details["field"]
-    == f"interpretedGoal.dynamicCriteria[0].{field}"
+    == "interpretedGoal.dynamicCriteria[0].criterion"
   )
 
 
@@ -1588,15 +1708,17 @@ def test_bedrock_invoke_uses_external_system_and_user_prompts(
       calls.update(kwargs)
       return {"body": ResponseBody()}
 
-  service = MakeupFeedbackBedrockService(Settings())
+  service = MakeupFeedbackBedrockService(
+    Settings(makeup_feedback_evidence_pipeline_enabled=False),
+  )
   monkeypatch.setattr(service, "_bedrock_runtime_client", lambda: FakeBedrockClient())
 
   result = service._analyze_sync(_request_payload(), _vision_result())
   request_body = json.loads(calls["body"])
 
   assert request_body["system"] == service._build_system_prompt()
-  assert request_body["max_tokens"] == 16384
-  assert request_body["messages"][0]["content"][0]["text"] == service._build_prompt(_request_payload())
+  assert request_body["max_tokens"] == analysis_module.BEDROCK_COMPACT_FINAL_MAX_TOKENS
+  assert request_body["messages"][0]["content"][0]["text"] == service._build_compact_prompt(_request_payload())
   assert "amazon-bedrock-guardrailConfig" not in request_body
   assert all(
     analysis_module.BEDROCK_GUARDRAIL_TAG_PREFIX not in str(part.get("text") or "")
@@ -1605,6 +1727,163 @@ def test_bedrock_invoke_uses_external_system_and_user_prompts(
   )
   assert result["score"] == 88
   assert result["evaluations"][-1]["topicId"] == "lip"
+
+
+def test_compact_high_reasoning_path_uses_one_bedrock_call_and_expands_contract(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls: list[dict[str, object]] = []
+
+  class ResponseBody:
+    def read(self) -> str:
+      return json.dumps(
+        {
+          "content": [
+            {
+              "type": "text",
+              "text": json.dumps(_compact_result(), ensure_ascii=False),
+            },
+          ],
+        },
+        ensure_ascii=False,
+      )
+
+  class FakeBedrockClient:
+    def invoke_model(self, **kwargs):
+      calls.append(kwargs)
+      return {"body": ResponseBody()}
+
+  settings = Settings(
+    bedrock_analysis_model_id="global.anthropic.claude-sonnet-4-6",
+    makeup_feedback_evidence_pipeline_enabled=False,
+    makeup_feedback_compact_single_call_enabled=True,
+    makeup_feedback_adaptive_thinking_enabled=True,
+    makeup_feedback_global_inference_allowed=True,
+    makeup_feedback_reasoning_effort="high",
+  )
+  service = MakeupFeedbackBedrockService(settings)
+  monkeypatch.setattr(service, "_bedrock_runtime_client", lambda: FakeBedrockClient())
+
+  result = service._analyze_sync(_request_payload(), _vision_result())
+
+  assert len(calls) == 1
+  request_body = json.loads(calls[0]["body"])
+  assert request_body["output_config"] == {"effort": "high"}
+  assert request_body["max_tokens"] == analysis_module.BEDROCK_COMPACT_FINAL_MAX_TOKENS
+  assert len(service._build_compact_prompt(_request_payload())) < len(service._build_prompt(_request_payload()))
+  assert result["score"] == 87
+  assert len(result["evaluations"]) == len(FEEDBACK_TOPICS)
+  assert sum(
+    len(axis["components"])
+    for axis in result["scoreBreakdown"]["axes"]
+  ) == 13
+
+
+def test_global_sonnet_46_requires_explicit_routing_opt_in() -> None:
+  service = MakeupFeedbackBedrockService(
+    Settings(
+      bedrock_analysis_model_id="global.anthropic.claude-sonnet-4-6",
+      makeup_feedback_global_inference_allowed=False,
+    ),
+  )
+
+  with pytest.raises(AppError) as exc_info:
+    service._analyze_sync(_request_payload(), _vision_result())
+
+  assert exc_info.value.code == "FEEDBACK_GLOBAL_INFERENCE_NOT_ALLOWED"
+
+
+def test_sonnet_46_evidence_pipeline_observes_audits_then_scores(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  observation = {
+    "imageAssessment": {
+      "scoreable": True,
+      "lightingReliability": "high",
+      "geometryReliability": "high",
+      "textureReliability": "high",
+      "limitations": [],
+    },
+    "faceStructure": [],
+    "observations": [
+      {
+        "id": "OBS-001",
+        "topicId": "eyeliner",
+        "polarity": "negative",
+        "claim": "아이라인 꼬리 끝의 두께가 좌우에서 다르게 보입니다.",
+      },
+    ],
+    "crossRegionChecks": [],
+  }
+  audit = {
+    "auditSummary": {"scoreable": True, "keyRisks": ["아이라인 과대평가 금지"]},
+    "verifiedObservations": [
+      {
+        "id": "AUD-001",
+        "sourceObservationIds": ["OBS-001"],
+        "topicId": "eyeliner",
+        "verdict": "confirmed",
+        "polarity": "negative",
+        "claim": "아이라인 꼬리 끝의 두께가 좌우에서 다르게 보입니다.",
+      },
+    ],
+    "rejectedObservations": [],
+    "contradictions": [],
+    "missingChecks": [],
+  }
+  responses = iter((observation, audit, _valid_result()))
+  calls: list[dict[str, object]] = []
+
+  class ResponseBody:
+    def __init__(self, value: dict) -> None:
+      self.value = value
+
+    def read(self) -> str:
+      return json.dumps(
+        {"content": [{"type": "text", "text": json.dumps(self.value, ensure_ascii=False)}]},
+        ensure_ascii=False,
+      )
+
+  class FakeBedrockClient:
+    def invoke_model(self, **kwargs):
+      calls.append(kwargs)
+      return {"body": ResponseBody(next(responses))}
+
+  service = MakeupFeedbackBedrockService(
+    Settings(
+      bedrock_analysis_model_id="global.anthropic.claude-sonnet-4-6",
+      makeup_feedback_evidence_pipeline_enabled=True,
+      makeup_feedback_adaptive_thinking_enabled=True,
+      makeup_feedback_global_inference_allowed=True,
+      makeup_feedback_reasoning_effort="high",
+    ),
+  )
+  monkeypatch.setattr(service, "_bedrock_runtime_client", lambda: FakeBedrockClient())
+
+  result = service._analyze_sync(_request_payload(), _vision_result())
+
+  assert result["score"] == 88
+  assert len(calls) == 3
+  bodies = [json.loads(str(call["body"])) for call in calls]
+  assert [call["modelId"] for call in calls] == [
+    "global.anthropic.claude-sonnet-4-6",
+  ] * 3
+  assert all(body["thinking"] == {"type": "adaptive"} for body in bodies)
+  assert all(body["output_config"] == {"effort": "high"} for body in bodies)
+  assert all("temperature" not in body for body in bodies)
+  assert bodies[0]["system"] == service._build_static_prompt(
+    service.observation_system_prompt_path,
+  )
+  assert bodies[1]["system"] == service._build_static_prompt(
+    service.audit_system_prompt_path,
+  )
+  final_text = "\n".join(
+    str(part.get("text") or "")
+    for part in bodies[2]["messages"][0]["content"]
+    if isinstance(part, dict) and part.get("type") == "text"
+  )
+  assert "Server-generated audited evidence JSON follows" in final_text
+  assert "AUD-001" in final_text
 
 def test_bedrock_invoke_uses_fresh_server_controlled_guardrail_tags(
   monkeypatch: pytest.MonkeyPatch,
@@ -1632,6 +1911,7 @@ def test_bedrock_invoke_uses_fresh_server_controlled_guardrail_tags(
   settings = Settings(
     bedrock_guardrail_id="gr-123",
     bedrock_guardrail_version="1",
+    makeup_feedback_evidence_pipeline_enabled=False,
   )
   service = MakeupFeedbackBedrockService(settings)
   monkeypatch.setattr(service, "_bedrock_runtime_client", lambda: FakeBedrockClient())
@@ -1683,7 +1963,11 @@ def test_bedrock_guardrail_intervention_is_explicit_and_does_not_log_trace(
       return {"body": ResponseBody()}
 
   service = MakeupFeedbackBedrockService(
-    Settings(bedrock_guardrail_id="gr-123", bedrock_guardrail_version="1"),
+    Settings(
+      bedrock_guardrail_id="gr-123",
+      bedrock_guardrail_version="1",
+      makeup_feedback_evidence_pipeline_enabled=False,
+    ),
   )
   monkeypatch.setattr(service, "_bedrock_runtime_client", lambda: FakeBedrockClient())
 
@@ -1791,18 +2075,16 @@ def test_normal_vision_sends_canonical_labeled_region_pairs_and_safe_context(
   request_body = json.loads(request_body_text)
   content = request_body["messages"][0]["content"]
   expected_names = [
-    "full",
-    "left_eye",
-    "right_eye",
-    "left_cheek",
-    "right_cheek",
-    "lips",
+      "full",
+      "left_eye",
+      "right_eye",
+      "lips",
   ]
   vision_context = content[1]["text"]
   assert '"detectorAvailable":true' in vision_context
   assert '"faceCount":1' in vision_context
   assert '"pose":' in vision_context
-  assert '"regionNames":["full","left_eye","right_eye","left_cheek","right_cheek","lips"]' in vision_context
+  assert '"regionNames":["full","left_eye","right_eye","lips"]' in vision_context
   assert '"landmarks"' not in vision_context
   assert '"faceBox"' not in vision_context
   assert '"metrics"' not in vision_context

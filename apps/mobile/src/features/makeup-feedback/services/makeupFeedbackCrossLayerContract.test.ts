@@ -139,7 +139,7 @@ expectEqual(completed.analysisSource, 'ai', 'mobile analysis source');
 expectEqual(completed.analysisStatus, 'bedrock_completed', 'mobile analysis status');
 expectEqual(
   completed.modelVersion,
-  'makeup-feedback:bedrock-v10-expert-analytic-rubric',
+  'makeup-feedback:bedrock-v12-single-call-compact-evidence',
   'model version',
 );
 expectEqual(completed.analysisId, 'makeup-feedback-cross-layer-job', 'canonical analysis id');
@@ -371,6 +371,21 @@ expect(
     feedbackRoutesSource.includes('handleRetryReportLoad') &&
     feedbackRoutesSource.includes('reportLoadRevision'),
   'stored report loading errors do not expose a retry action',
+);
+expect(
+  feedbackRoutesSource.includes("navigation.addListener('beforeRemove'") &&
+    feedbackRoutesSource.includes("actionType === 'GO_BACK' || actionType === 'POP'") &&
+    feedbackRoutesSource.includes('internalBackAction.cb()') &&
+    !feedbackRoutesSource.includes(
+      "navigation.navigate('MakeupFeedbackResultsList')",
+    ),
+  'feedback report back navigation can still push the results list or skip the internal report page',
+);
+expect(
+  redesignSlidesSource.includes('controller.evaluationIndex === 0') &&
+    redesignSlidesSource.includes('? controller.goHome') &&
+    redesignSlidesSource.includes("? '전체 보고서로 돌아가기'"),
+  'the first feedback slide must return to the full report before leaving the report route',
 );
 expect(
   !resultScreenSource.includes('mockMakeupFeedbackResultService') &&

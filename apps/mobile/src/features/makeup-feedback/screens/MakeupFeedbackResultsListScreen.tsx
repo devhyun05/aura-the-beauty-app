@@ -10,7 +10,7 @@ import {CheckCircle2, CircleAlert} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppScreen} from '../../../shared/ui';
+import {AppScreen, ReportOverflowMenuButton} from '../../../shared/ui';
 import {getMakeupFeedbackAnalysisSourceLabel} from '../services/makeupFeedbackResultPresentation';
 import {mapMakeupFeedbackResultToViewModel} from '../redesign/makeupFeedbackResultViewModel';
 import type {MakeupFeedbackResult} from '../types';
@@ -18,6 +18,7 @@ import type {MakeupFeedbackResult} from '../types';
 type MakeupFeedbackResultsListScreenProps = {
   error?: string;
   isLoading?: boolean;
+  onDeleteResult?: (result: MakeupFeedbackResult) => Promise<void> | void;
   onRetry?: () => void;
   onPressResult?: (result: MakeupFeedbackResult) => void;
   results: MakeupFeedbackResult[];
@@ -26,6 +27,7 @@ type MakeupFeedbackResultsListScreenProps = {
 export function MakeupFeedbackResultsListScreen({
   error,
   isLoading = false,
+  onDeleteResult,
   onRetry,
   onPressResult,
   results,
@@ -54,6 +56,9 @@ export function MakeupFeedbackResultsListScreen({
           results.map((result) => (
             <MakeupFeedbackResultCard
               key={result.id}
+              onDelete={
+                onDeleteResult ? () => onDeleteResult(result) : undefined
+              }
               onPress={() => onPressResult?.(result)}
               result={result}
             />
@@ -69,9 +74,11 @@ export function MakeupFeedbackResultsListScreen({
 }
 
 function MakeupFeedbackResultCard({
+  onDelete,
   onPress,
   result,
 }: {
+  onDelete?: () => Promise<void> | void;
   onPress: () => void;
   result: MakeupFeedbackResult;
 }) {
@@ -107,6 +114,7 @@ function MakeupFeedbackResultCard({
             <Text style={styles.scoreValue}>{result.score}</Text>
             <Text style={styles.scoreLabel}>점</Text>
           </YStack>
+          {onDelete ? <ReportOverflowMenuButton onDelete={onDelete} /> : null}
         </XStack>
 
         <XStack style={styles.summaryRow}>

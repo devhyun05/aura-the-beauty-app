@@ -133,6 +133,7 @@ export type ReferenceMakeupExtractionData = {
   photos: ReferenceMakeupPhoto[];
   loadingSteps: MakeupExtractionStep[];
   extractedMakeupLook: ReferenceMakeupExtractionResult;
+  reportId?: string;
 };
 
 export type ReferenceMakeupExtractionReportHistoryItem = {

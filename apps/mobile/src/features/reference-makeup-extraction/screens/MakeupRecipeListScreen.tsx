@@ -9,7 +9,7 @@ import {Palette, Sparkles} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppScreen} from '../../../shared/ui';
+import {AppScreen, ReportOverflowMenuButton} from '../../../shared/ui';
 import type {ReferenceMakeupPhoto} from '../types';
 
 export type MakeupRecipeListItem = {
@@ -24,6 +24,7 @@ export type MakeupRecipeListItem = {
 type MakeupRecipeListScreenProps = {
   error?: string;
   isLoading?: boolean;
+  onDeleteRecipe?: (item: MakeupRecipeListItem) => Promise<void> | void;
   onRetry?: () => void;
   onPressRecipe?: (item: MakeupRecipeListItem) => void;
   recipes: MakeupRecipeListItem[];
@@ -32,6 +33,7 @@ type MakeupRecipeListScreenProps = {
 export function MakeupRecipeListScreen({
   error,
   isLoading = false,
+  onDeleteRecipe,
   onRetry,
   onPressRecipe,
   recipes,
@@ -60,6 +62,11 @@ export function MakeupRecipeListScreen({
           recipes.map((recipe) => (
             <MakeupRecipeCard
               key={recipe.id}
+              onDelete={
+                recipe.reportId && onDeleteRecipe
+                  ? () => onDeleteRecipe(recipe)
+                  : undefined
+              }
               onPress={() => onPressRecipe?.(recipe)}
               recipe={recipe}
             />
@@ -75,9 +82,11 @@ export function MakeupRecipeListScreen({
 }
 
 function MakeupRecipeCard({
+  onDelete,
   onPress,
   recipe,
 }: {
+  onDelete?: () => Promise<void> | void;
   onPress: () => void;
   recipe: MakeupRecipeListItem;
 }) {
@@ -98,9 +107,13 @@ function MakeupRecipeCard({
               {recipe.title}
             </Text>
           </YStack>
-          <View style={styles.recipeIcon}>
-            <Palette color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
-          </View>
+          {onDelete ? (
+            <ReportOverflowMenuButton onDelete={onDelete} />
+          ) : (
+            <View style={styles.recipeIcon}>
+              <Palette color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+            </View>
+          )}
         </XStack>
 
         <Text numberOfLines={2} style={styles.subtitle}>

@@ -211,6 +211,7 @@ const validJob = {
             criterion: 'Match the requested balanced daily look.',
             derivedFrom: 'Balanced everyday makeup',
             id: 'goal-1',
+            sourceType: 'explicit_user_goal',
           },
         ],
         explicitFacts: ['The user requested balanced everyday makeup.'],
@@ -269,6 +270,11 @@ expectEqual(mappedResult.entryDate, '2026-07-17', 'completed result preserves it
 expectEqual(mappedResult.modelVersion, 'bedrock:model-v1', 'model version');
 expectEqual(mappedResult.score, 91, 'score');
 expectEqual(mappedResult.interpretedGoal.intensity, 'medium', 'intensity enum remains unchanged');
+expectEqual(
+  mappedResult.interpretedGoal.dynamicCriteria[0]?.sourceType,
+  'explicit_user_goal',
+  'server-owned criterion source type is preserved',
+);
 expectEqual(
   mappedResult.interpretedGoal.reason,
   '사진에서 표현이 관찰되어 적당한 강도로 요약했습니다.',
