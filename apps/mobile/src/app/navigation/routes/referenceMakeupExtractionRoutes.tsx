@@ -210,7 +210,9 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
 
   return (
     <CameraFaceCaptureScreen
-      captureMode="reference"
+      // 얼굴 분석·피드백과 동일한 촬영 UX(사용자 결정): 셀피 기본 + 타원
+      // 프레이밍 검증. 'reference'는 후면 기본에 얼굴 검증이 없었다.
+      captureMode="face"
       captureType="filter_extraction"
       onCapture={handleStartAnalysis}
       onClose={handleClose}
