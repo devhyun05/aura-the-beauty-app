@@ -580,9 +580,11 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const [autoFitMetrics, setAutoFitMetrics] = useState<AutoFitMetrics>(defaultAutoFitMetrics);
   const [autoFitRecord, setAutoFitRecord] = useState<AutoFitStore | null>(null);
   const autoFitRecordRef = useRef<AutoFitStore | null>(null);
-  // 개인 핏(측정 자동) 기저 델타 — 최신 분석 보고서에서 파생. 자동 적용 게이트
-  // (PERSONAL_FIT_DELTA_SCALE=0)가 꺼져 있으면 항상 빈 배열이라 렌더 무변화.
-  const personalFitDeltasRef = useRef<PersonalFitBaseDelta[]>([]);
+  // 개인 핏(측정 자동) 기저 델타 — 최신 분석 보고서에서 파생. 비동기 로드 완료가
+  // 리렌더·재컴파일로 이어지도록 state로 둔다(ref면 로드돼도 반영 시점이 없음 —
+  // 코드리뷰 반영). 자동 적용 게이트(PERSONAL_FIT_DELTA_SCALE=0)가 꺼져 있으면
+  // 항상 빈 배열이라 렌더 무변화.
+  const [personalFitDeltas, setPersonalFitDeltas] = useState<PersonalFitBaseDelta[]>([]);
   const [autoFitPreviewAfter, setAutoFitPreviewAfter] = useState(false);
   const autoFitPreviewAfterRef = useRef(false);
   const autoFitPreviewActiveRef = useRef(false);
@@ -855,9 +857,7 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     loadCatalogStore().then(setCatalog);
     // 개인 핏(측정 자동) 기저 — 최신 분석 보고서에서 파생. 실패/부재는 빈 배열이라
     // 무해하고, 델타 게이트 OFF(δ=0) 동안엔 로드돼도 렌더가 변하지 않는다.
-    loadPersonalFitBaseDeltas().then(deltas => {
-      personalFitDeltasRef.current = deltas;
-    });
+    loadPersonalFitBaseDeltas().then(setPersonalFitDeltas);
   }, []);
 
   const sendToUnity = useCallback((msg: RNToUnityMessage) => {
@@ -1399,15 +1399,15 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     // 개인 핏(측정 자동) 기저를 dev autoFit 기저 앞에 합류 — applyFitToLayers가
     // 부위별 rules를 가산 병합하므로 순서는 결과에 영향 없다. 수동 시트가 이긴다는
     // 우선순위(개인 시트·핏체인 > 기저)도 그대로.
-    const baseDeltas = personalFitDeltasRef.current.length > 0
-      ? [...(personalFitDeltasRef.current as FitEntry[]), ...autoFitDeltas]
+    const baseDeltas = personalFitDeltas.length > 0
+      ? [...(personalFitDeltas as FitEntry[]), ...autoFitDeltas]
       : autoFitDeltas;
     return {
       ...compileLayers(applyFitToLayers(layers, fitState, baseDeltas)),
       regionAffines: assembleRegionAffines(layers, fitState),
       regionWarps: assembleRegionWarps(layers, fitState),
     };
-  }, []);
+  }, [personalFitDeltas]);
 
   const emitAutoFitPreview = useCallback(() => {
     emitCompiled(
@@ -1416,6 +1416,15 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       wpGainRef.current,
     );
   }, [compileWithFit, emitCompiled]);
+
+  // 개인 핏 기저가 비동기로 늦게 도착하면 현재 룩을 재컴파일해 Unity에 즉시
+  // 반영한다 — state 전환(코드리뷰 반영)의 목적이 이 재적용이다.
+  useEffect(() => {
+    if (personalFitDeltas.length === 0) {
+      return;
+    }
+    emitAutoFitPreview();
+  }, [personalFitDeltas, emitAutoFitPreview]);
 
   const toggleAutoFitDev = useCallback(() => {
     const next = !autoFitOpen;
