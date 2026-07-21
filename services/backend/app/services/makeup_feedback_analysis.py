@@ -2208,7 +2208,9 @@ class MakeupFeedbackBedrockService:
 
     request_payload = {
       "anthropic_version": "bedrock-2023-05-31",
-      "max_tokens": 8192,
+      # 피드백 JSON이 8192에서 잘려 FEEDBACK_BEDROCK_OUTPUT_TRUNCATED로 하드 실패하던 문제
+      # 대응. Sonnet 4.6은 이 계정에서 64000까지 수용하므로 넉넉히 16384로 상향.
+      "max_tokens": 16384,
       "temperature": 0.2,
       "system": self._build_system_prompt(),
       "messages": [{"role": "user", "content": content}],
