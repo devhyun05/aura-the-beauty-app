@@ -111,12 +111,31 @@ namespace ARMakeup.Face
         // 상안검 lash 라인을 따라 리본을 세우고 곡선 스트로크 PNG(lash_natural/volume)를 매핑한다.
         const int RibbonCols = Seg;          // 리본 세로 컬럼 수 = lash 라인 점 수(25)
         const float RibbonLenMult = 1.5f;    // 리본 높이 배수(텍스처 결이 다 보이게 절차보다 김) — 실기기 튜닝
+        // 리본 뿌리 턱 — 랜드마크 체인과 육안 래시라인 사이 슬리버(피부 띠) 제거용.
+        // 뿌리를 눈쪽(브로우 반대)으로 눈폭 대비 이 비율만큼 내려 라이너 밑으로 파고들게 한다.
+        const float RibbonRootTuck = 0.008f; // 실기기 튜닝 대상 (0.02는 눈알 침범 — 사용자 판정)
+        // 아래 리본 뿌리 리프트 — 0.03은 상하 반전 텍스처 시절 튜닝값. 방향 규약(뿌리=v0) 수정 후
+        // 털 뿌리가 눈알 위로 올라가는 침범이 생겨 위 리본 RootTuck 수준으로 축소 (사용자 침범 판정).
+        const float LowerRibbonLift = 0.008f;
+        // 아래 텍스처 리본 전용 기본 비례 — 절차식(LowerLenFactor 0.07)과 독립.
+        // 0.10은 화면 ~25px = 128행 텍스처의 5:1 축소로 가는 털 팁이 밉맵에서 침식됨
+        // (사용자 "짧고 떡짐" 판정) → 0.15로 상향해 3:1로 완화 + 도안 비례 회복.
+        const float LowerTexLenFactor = 0.15f;
         Mesh _texMesh;
         MeshRenderer _texRenderer;
         Material _texMaterial;
         Vector3[] _texVertices;
-        int _texStyle;                       // 0=off(절차) 1=natural 2=volume
-        readonly Texture2D[] _texCache = new Texture2D[3];
+        int _texStyle;                       // 0=off(절차) 1=natural 2=volume 3=glam
+        readonly Texture2D[] _texCache = new Texture2D[4];
+        Texture2D _lowerGlamTex;             // 스타일 3 전용 아래 리본 텍스처 (lash_glam_lower)
+        bool _lowerTexFromStyle;             // 아래 오버라이드가 스타일 3 자동 장착분인지 (수동 SetLowerTexOverride와 구분)
+        // 아래 속눈썹 텍스처 리본 — 위 리본과 동일 구조를 하안검 체인에 세움(끝은 아래로).
+        // 오버라이드 텍스처가 설정된 동안 절차 아래 속눈썹을 대체한다(SetLowerTexOverride).
+        Mesh _lowerTexMesh;
+        MeshRenderer _lowerTexRenderer;
+        Material _lowerTexMaterial;
+        Vector3[] _lowerTexVertices;
+        bool _lowerTexOn;
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _lash = new Vector2[Seg];
@@ -168,6 +187,36 @@ namespace ARMakeup.Face
             _texRenderer.sharedMaterial = _texMaterial;
             _texRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _texRenderer.enabled = false;
+
+            // 아래 속눈썹 텍스처 리본 — 위 리본과 같은 셰이더/토폴로지, 하안검 체인 전용.
+            _lowerTexMaterial = new Material(texShader);
+            _lowerTexMaterial.renderQueue = MakeupQueues.LowerLash;
+            _lowerTexMesh = BuildRibbonMesh("LowerLashTex", Eyes, out _lowerTexVertices);
+            var lowerTexGO = new GameObject("LowerLashTex");
+            lowerTexGO.transform.SetParent(transform, false);
+            lowerTexGO.AddComponent<MeshFilter>().sharedMesh = _lowerTexMesh;
+            _lowerTexRenderer = lowerTexGO.AddComponent<MeshRenderer>();
+            _lowerTexRenderer.sharedMaterial = _lowerTexMaterial;
+            _lowerTexRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            _lowerTexRenderer.enabled = false;
+        }
+
+        /// <summary>아래 속눈썹 텍스처 오버라이드 — null이면 절차 아래 속눈썹으로 복귀.
+        /// 색·알파는 절차 아래 머티리얼과 동기(ApplyLowerParams에서 함께 갱신).</summary>
+        public void SetLowerTexOverride(Texture2D tex)
+        {
+            _lowerTexOn = tex != null;
+            if (_lowerTexMaterial != null && tex != null)
+            {
+                tex.wrapMode = TextureWrapMode.Clamp;
+                _lowerTexMaterial.SetTexture(MainTexId, tex);
+                // 색·알파를 현재 절차 아래 머티리얼과 맞춘다.
+                if (_lowerMaterial != null)
+                {
+                    _lowerTexMaterial.SetColor(ColorId, _lowerMaterial.GetColor(ColorId));
+                    _lowerTexMaterial.SetFloat(IntensityId, _lowerMaterial.GetFloat(IntensityId));
+                }
+            }
         }
 
         // 텍스처 속눈썹 리본 메시 — 컬럼당 뿌리(v=0)·끝(v=1) 2정점, 눈당 (RibbonCols-1) 쿼드.
@@ -208,9 +257,10 @@ namespace ARMakeup.Face
 
         Texture2D LoadLashTex(int style)
         {
-            if (style < 1 || style > 2) return null;
+            if (style < 1 || style > 3) return null;
             if (_texCache[style] == null)
-                _texCache[style] = Resources.Load<Texture2D>(style == 2 ? "lash_volume" : "lash_natural");
+                _texCache[style] = Resources.Load<Texture2D>(
+                    style == 3 ? "lash_glam" : style == 2 ? "lash_volume" : "lash_natural");
             return _texCache[style];
         }
 
@@ -261,7 +311,7 @@ namespace ARMakeup.Face
             // 길이 배수 핸들 — JsonUtility 생략 0은 미설정 → 1(원래).
             _lengthMult = lengthMult <= 0f ? 1f : Mathf.Clamp(lengthMult, 0.4f, 2.5f);
             _style = Mathf.Clamp(style, 0, 5); // 모양(생략 0=내추럴=기존 출력, 5=처짐 위 전용)
-            _texStyle = Mathf.Clamp(texStyle, 0, 2); // 0=절차(기본) 1=텍스처 내추럴 2=텍스처 볼륨
+            _texStyle = Mathf.Clamp(texStyle, 0, 3); // 0=절차(기본) 1=텍스처 내추럴 2=텍스처 볼륨 3=텍스처 글램
             if (_material != null)
             {
                 if (!string.IsNullOrEmpty(colorHex) &&
@@ -281,6 +331,18 @@ namespace ARMakeup.Face
                 var tex = LoadLashTex(_texStyle);
                 if (tex != null) _texMaterial.SetTexture(MainTexId, tex);
             }
+            // 스타일 3(글램)은 아래 리본 텍스처를 자동 동반 장착 — 수동 오버라이드와 충돌하지
+            // 않게 자동 장착분만 플래그로 추적해 스타일 이탈 시 해제한다.
+            if (_texStyle == 3)
+            {
+                if (_lowerGlamTex == null) _lowerGlamTex = Resources.Load<Texture2D>("lash_glam_lower");
+                if (_lowerGlamTex != null) { SetLowerTexOverride(_lowerGlamTex); _lowerTexFromStyle = true; }
+            }
+            else if (_lowerTexFromStyle)
+            {
+                SetLowerTexOverride(null);
+                _lowerTexFromStyle = false;
+            }
         }
 
         /// <summary>아래 속눈썹 — 색은 mascaraColor 공용, 길이 배수는 mascaraLength와
@@ -298,6 +360,12 @@ namespace ARMakeup.Face
             _lowerMaterial.SetFloat(IntensityId, LashAlpha(_lowerIntensity));
             // 마감(Tier B) — 아래 속눈썹 머티리얼 전용(위 속눈썹과 독립). 0=새틴=기존 출력.
             _lowerMaterial.SetFloat(FinishId, finish);
+            // 아래 텍스처 리본 머티리얼 색·알파 동기 (오버라이드 활성 시 사용).
+            if (_lowerTexMaterial != null)
+            {
+                _lowerTexMaterial.SetColor(ColorId, _lowerMaterial.GetColor(ColorId));
+                _lowerTexMaterial.SetFloat(IntensityId, _lowerMaterial.GetFloat(IntensityId));
+            }
         }
 
         void LateUpdate()
@@ -308,15 +376,21 @@ namespace ARMakeup.Face
             // 위 속눈썹은 텍스처 스타일이면 리본, 아니면 절차 — 둘 중 하나만 켠다.
             var texOn = upperOn && _texStyle > 0;
             var procOn = upperOn && _texStyle == 0;
+            // 아래도 동일 원칙 — 오버라이드 텍스처가 있으면 리본, 없으면 절차.
+            var lowerTexOn = lowerOn && _lowerTexOn;
+            var lowerProcOn = lowerOn && !_lowerTexOn;
             if (_renderer.enabled != procOn) _renderer.enabled = procOn;
             if (_texRenderer.enabled != texOn) _texRenderer.enabled = texOn;
-            if (_lowerRenderer.enabled != lowerOn) _lowerRenderer.enabled = lowerOn;
+            if (_lowerRenderer.enabled != lowerProcOn) _lowerRenderer.enabled = lowerProcOn;
+            if (_lowerTexRenderer != null && _lowerTexRenderer.enabled != lowerTexOn)
+                _lowerTexRenderer.enabled = lowerTexOn;
             if (!upperOn && !lowerOn) return;
 
             var lm = _source.Landmarks;
             if (procOn) UpdateUpper(lm);
             if (texOn) UpdateUpperTex(lm);
-            if (lowerOn) UpdateLower(lm);
+            if (lowerProcOn) UpdateLower(lm);
+            if (lowerTexOn) UpdateLowerTex(lm);
         }
 
         void UpdateUpper(Vector3[] lm)
@@ -457,7 +531,7 @@ namespace ARMakeup.Face
                 var baseV = e * vpe;
                 for (var c = 0; c < RibbonCols; c++)
                 {
-                    var root = _lash[c];
+                    var root = _lash[c] - up * (eyeDist * RibbonRootTuck); // 뿌리 턱: 슬리버 제거
                     // c: 0=바깥 → RibbonCols-1=안쪽. 길이 프로파일은 안쪽 짧고 중앙~바깥 길게.
                     var t = c / (float)(RibbonCols - 1); // 0 바깥 .. 1 안쪽
                     var uu = 1f - t;                      // 0 안쪽 .. 1 바깥
@@ -472,6 +546,43 @@ namespace ARMakeup.Face
             }
             _texMesh.vertices = _texVertices;
             _texMesh.RecalculateBounds();
+        }
+
+        // 아래 속눈썹 텍스처 리본 — UpdateUpperTex의 하안검판. 뿌리=하안검 체인(v=0),
+        // 끝은 아래(브로우 반대) 방향. 텍스처 계약: 뿌리=텍스처 하단(v=0), 털이 위로 자라는
+        // 이미지를 그대로 쓰면 리본이 아래로 뒤집어 그린다(왼오/꼬리 규약은 위와 동일).
+        void UpdateLowerTex(Vector3[] lm)
+        {
+            var vpe = RibbonCols * 2;
+            for (var e = 0; e < Eyes; e++)
+            {
+                var lids = LowerLids[e];
+                var inner = ImgPt(lm, lids[LidPts - 1]);
+                var outer = ImgPt(lm, lids[0]);
+                var eyeDist = (outer - inner).magnitude;
+                var lidMid = ImgPt(lm, lids[4]);
+                var up = (ImgPt(lm, BrowLower[e][2]) - lidMid).normalized;
+                var down = -up;
+
+                for (var j = 0; j < LidPts; j++) _ctrl[j] = ImgPt(lm, lids[j]);
+                SubdivideArc(_ctrl, LidPts, _lash);
+
+                var len = eyeDist * LowerTexLenFactor * _lowerLengthMult * RibbonLenMult;
+                var depth = Depth(lm[lids[4]].z);
+                var baseV = e * vpe;
+                for (var c = 0; c < RibbonCols; c++)
+                {
+                    var root = _lash[c] - down * (eyeDist * LowerRibbonLift);
+                    // 컬럼 길이 균일 — 도안 텍스처는 자체 길이 변화를 갖고 있어 컬럼별 차등
+                    // 길이(안쪽 0.5·가장자리 0.6 변조)를 겹치면 비스듬한 털이 컬럼 경계에서
+                    // 계단으로 끊긴다(사용자 "중간 잘림" 판정). 절차식 경로만 변조 유지.
+                    var tip = root + down * len;
+                    _lowerTexVertices[baseV + c * 2] = ImageToWorld(root, depth);
+                    _lowerTexVertices[baseV + c * 2 + 1] = ImageToWorld(tip, depth);
+                }
+            }
+            _lowerTexMesh.vertices = _lowerTexVertices;
+            _lowerTexMesh.RecalculateBounds();
         }
 
         /// <summary>모양(mascaraStyle/lowerLashStyle) — 길이·스윕·법선 프로파일 변조,

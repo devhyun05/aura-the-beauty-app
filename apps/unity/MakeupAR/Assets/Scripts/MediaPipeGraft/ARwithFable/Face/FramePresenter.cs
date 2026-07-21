@@ -218,6 +218,13 @@ namespace ARMakeup.Face
         {
             _mappingDirty = false;
 
+            if (_camera == null || float.IsNaN(_camera.aspect) || float.IsInfinity(_camera.aspect) || _camera.aspect <= 0.001f)
+            {
+                _screenUnits = new Vector2(1f, 1f);
+                _coverScale = 1f;
+                return;
+            }
+
             // 화면 단위(중심 기준, 높이 1): 회전된 이미지가 화면을 덮는 배율.
             //  - 라이브: aspect-fill(max) — 화면을 꽉 채운다(가장자리 크롭).
             //  - 편집(_externalUpright): aspect-fit(min) — 전체가 보이게 화면에 맞춘다(레터박스).

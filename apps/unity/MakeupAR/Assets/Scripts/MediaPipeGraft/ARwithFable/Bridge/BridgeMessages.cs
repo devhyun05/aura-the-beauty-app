@@ -269,7 +269,7 @@ namespace ARMakeup.Bridge
         public float eyeshadowLowerHeight = 1f;// 아이섀도 하(하안검 아래 섀도) 밴드 높이 배수
         public float mascaraLength = 1f;       // 속눈썹 길이 배수
         public int mascaraStyle = 0;           // 속눈썹 모양: 0=내추럴 1=돌리 2=캣아이 3=오픈아이 4=위스피 5=처짐(위 전용)
-        public int mascaraTexStyle = 0;        // 위 속눈썹 렌더: 0=절차 스트로크 1=텍스처 내추럴 2=텍스처 볼륨
+        public int mascaraTexStyle = 0;        // 위 속눈썹 렌더: 0=절차 스트로크 1=텍스처 내추럴 2=텍스처 볼륨 3=텍스처 글램(아래 리본 자동 동반)
         public int lowerLashStyle = 0;         // 아래 속눈썹 모양 — 위와 같은 5종, 값 독립
         public float aegyoHeight = 1f;         // 하안검 밴드 높이 배수 (애교살 두께)
         public float triangleZoneHeight = 1f;  // 삼각존(눈꼬리 아래 삼각 음영) 밴드 높이 배수

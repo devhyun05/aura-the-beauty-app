@@ -41,6 +41,9 @@ namespace ARMakeup.Face
         const float BandHeightFactor = 0.5f;  // 밴드 높이 = 눈 가로폭 × 이 값
         const float WingLenFactor = 0.32f;    // 윙 연장 = 눈 가로폭 × 이 값
         const float WingRise = 0.6f;          // 윙이 위로 꺾이는 정도
+        // 밴드 하단 턱 — 랜드마크 체인과 육안 속눈썹 라인 사이 틈(라이너-눈알 사이 빈 살)
+        // 메움. LashRenderer.RibbonRootTuck과 동일 원리 (사용자 판정 2026-07-21).
+        const float BandTuck = 0.012f;        // 실기기 튜닝 대상
 
         const float DistanceFromCamera = 0.5f;
         const float DepthScale = 1.0f;
@@ -204,6 +207,9 @@ namespace ARMakeup.Face
                 _ctrl[LidPts] = _ctrl[LidPts - 1] + wingDir * (eyeDist * WingLenFactor);
 
                 SubdivideArc(_ctrl, CtrlPts, _lo);
+
+                // 밴드 하단 턱 — 라이너가 눈알 쪽으로 살짝 내려가 랜드마크-육안 틈을 채운다.
+                for (var i = 0; i < Seg; i++) _lo[i] -= up * (eyeDist * BandTuck);
 
                 var width = eyeDist * BandHeightFactor;
                 for (var i = 0; i < Seg; i++)
