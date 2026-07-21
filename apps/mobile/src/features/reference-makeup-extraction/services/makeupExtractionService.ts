@@ -176,6 +176,18 @@ async function rememberReferenceExtractionReport(
   );
 }
 
+async function forgetReferenceExtractionReport(reportId: string): Promise<void> {
+  const normalizedReportId = reportId.trim();
+  const storedReports = await getStoredReferenceExtractionReports();
+
+  await SecureStore.setItemAsync(
+    REFERENCE_EXTRACTION_REPORT_IDS_STORAGE_KEY,
+    JSON.stringify(
+      storedReports.filter(report => report.reportId !== normalizedReportId),
+    ),
+  );
+}
+
 function getNotificationReportId(data: unknown): string | null {
   let normalizedData = data;
 
@@ -458,6 +470,8 @@ function mapCompletedFilterExtractionReport(
   };
   const data: ReferenceMakeupExtractionData = {
     ...referenceMakeupExtractionMock,
+    createdAt: job.createdAt?.trim() || undefined,
+    reportId,
     photos: [
       photo,
       ...referenceMakeupExtractionMock.photos.filter(item => item.id !== photo.id),
@@ -507,6 +521,16 @@ export async function fetchReferenceMakeupExtractionReport(
   );
 
   return {data: latestReferenceMakeupExtractionData, photo: mappedReport.photo};
+}
+
+export async function deleteReferenceMakeupExtractionReport(
+  reportId: string,
+): Promise<void> {
+  await requestBackendJson(
+    '/filter-extractions/' + encodeURIComponent(reportId),
+    {method: 'DELETE'},
+  );
+  await forgetReferenceExtractionReport(reportId);
 }
 
 export async function fetchReferenceMakeupExtractionReports({
@@ -707,6 +731,8 @@ export async function runReferenceMakeupExtraction(
 
     latestReferenceMakeupExtractionData = {
       ...referenceMakeupExtractionMock,
+      createdAt: createResponse.job.createdAt?.trim() || undefined,
+      ...(reportId ? {reportId} : {}),
       photos: [
         photo,
         ...referenceMakeupExtractionMock.photos.filter(

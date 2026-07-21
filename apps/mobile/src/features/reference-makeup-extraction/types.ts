@@ -130,9 +130,11 @@ export type MakeupLookAttributeGroup = 'color' | 'type' | 'texture';
 export type MakeupRecipeTab = 'all' | 'eye' | 'lip' | 'cheek' | 'base';
 
 export type ReferenceMakeupExtractionData = {
+  createdAt?: string;
   photos: ReferenceMakeupPhoto[];
   loadingSteps: MakeupExtractionStep[];
   extractedMakeupLook: ReferenceMakeupExtractionResult;
+  reportId?: string;
 };
 
 export type ReferenceMakeupExtractionReportHistoryItem = {

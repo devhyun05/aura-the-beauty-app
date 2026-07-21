@@ -87,6 +87,26 @@ class Settings(BaseSettings):
   bedrock_model_id: str | None = "anthropic.claude-3-5-sonnet-20241022-v2:0"
   bedrock_analysis_model_id: str | None = None
   bedrock_analysis_inference_id: str | None = None
+  # Makeup feedback is intentionally one Bedrock call per report.  The model
+  # still performs the observation/counter-check/scoring sequence in one high-
+  # reasoning request; the backend expands the compact answer into the stable UI
+  # contract.  The legacy three-call pipeline remains only as an explicit
+  # rollback switch and must not be enabled in the cost-controlled path.
+  makeup_feedback_evidence_pipeline_enabled: bool = False
+  makeup_feedback_compact_single_call_enabled: bool = True
+  # Conference preview copy has a deterministic local implementation. Keeping
+  # its LLM path off prevents an otherwise hidden second Bedrock call per report.
+  makeup_feedback_conference_preview_ai_enabled: bool = False
+  makeup_feedback_conference_ai_enabled: bool = False
+  # Adaptive thinking on Sonnet 4.6 exceeded 90 seconds even with the compact
+  # contract. Standard Sonnet inference keeps the stronger model and detailed
+  # evidence rubric without paying for a separate hidden reasoning stream.
+  makeup_feedback_adaptive_thinking_enabled: bool = False
+  makeup_feedback_reasoning_effort: Literal["low", "medium", "high"] = "high"
+  # Global inference can process prompts and images in any supported commercial
+  # AWS Region. Require an explicit deployment opt-in instead of enabling it by
+  # accident through a model-id typo or environment drift.
+  makeup_feedback_global_inference_allowed: bool = False
   bedrock_scenario_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_question_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_recommendation_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"

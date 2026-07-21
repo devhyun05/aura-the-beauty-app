@@ -153,6 +153,7 @@ type BackendMediaReference = {
 
 type BackendAnalysisJob = {
   analyzedAt?: string | null;
+  createdAt?: string | null;
   baseMakeupGuide?: string | null;
   detailPayload?: {
     request?: BackendAnalysisRequest | null;
@@ -938,6 +939,7 @@ function mapBackendJobToFaceAnalysisReport(
 
   return {
     id: reportId,
+    createdAt: job.createdAt?.trim() || undefined,
     analyzedAt: requireAnalysisText(job, 'analyzedAt', job.analyzedAt),
     // 과거 보고서 복원용 측정 원본 — 서버 사진 URL 을 오버레이 이미지로 주입한다.
     measurements: parseFaceAnalysisMeasurements(job.detailPayload?.request?.measurements, {

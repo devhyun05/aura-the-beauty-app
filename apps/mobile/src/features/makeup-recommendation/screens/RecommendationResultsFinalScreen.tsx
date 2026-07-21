@@ -16,6 +16,7 @@ import {
   OptionalViewShot,
   type OptionalViewShotRef,
 } from '../../../shared/ui/OptionalViewShot';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import {FinalAreaGuideSection} from '../components/result/FinalAreaGuideSection';
 import {FinalGeneratedMakeupHero} from '../components/result/FinalGeneratedMakeupHero';
 import {FinalSingleLookMap} from '../components/result/FinalSingleLookMap';
@@ -170,6 +171,7 @@ export function RecommendationResultsFinalScreen({
     return (
       <LinearGradient colors={colors.screenGradient} style={styles.fill}>
         <RecommendationReportHeader
+          createdAt={context?.reportCreatedAt}
           onBack={onBack}
           onMore={handleMore}
           topInset={insets.top}
@@ -195,6 +197,7 @@ export function RecommendationResultsFinalScreen({
         ]}
         showsVerticalScrollIndicator={false}>
         <RecommendationReportHeader
+          createdAt={context?.reportCreatedAt}
           onBack={onBack}
           onMore={handleMore}
           topInset={insets.top}
@@ -287,10 +290,12 @@ export function RecommendationResultsFinalScreen({
 }
 
 function RecommendationReportHeader({
+  createdAt,
   onBack,
   onMore,
   topInset,
 }: {
+  createdAt?: string;
   onBack?: () => void;
   onMore: () => void;
   topInset: number;
@@ -311,9 +316,14 @@ function RecommendationReportHeader({
         ]}>
         <ChevronLeft color={colors.ink3} size={18} strokeWidth={2.2} />
       </Pressable>
-      <Text numberOfLines={1} style={styles.reportHeaderTitle}>
-        추천 메이크업 보고서
-      </Text>
+      <View style={styles.reportHeaderTitleGroup}>
+        <Text numberOfLines={1} style={styles.reportHeaderTitle}>
+          추천 메이크업 보고서
+        </Text>
+        <Text numberOfLines={1} style={styles.reportHeaderDate}>
+          {formatReportCreatedAtLabel(createdAt, {includeTime: true})}
+        </Text>
+      </View>
       <Pressable
         accessibilityLabel="추천 메이크업 보고서 더보기"
         accessibilityRole="button"
@@ -357,11 +367,19 @@ const styles = StyleSheet.create({
   },
   reportHeaderTitle: {
     color: colors.ink,
-    flex: 1,
     fontSize: 14,
     fontWeight: '700',
-    marginHorizontal: 12,
     textAlign: 'center',
+  },
+  reportHeaderDate: {
+    color: colors.ink3,
+    fontSize: 10,
+    textAlign: 'center',
+  },
+  reportHeaderTitleGroup: {
+    flex: 1,
+    gap: 2,
+    marginHorizontal: 12,
   },
   pressed: {opacity: 0.76},
   floatingActionHost: {

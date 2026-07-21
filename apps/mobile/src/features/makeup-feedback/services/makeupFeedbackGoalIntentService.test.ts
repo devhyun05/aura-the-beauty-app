@@ -26,6 +26,15 @@ expectEqual(
   'bold copy without replacing a substring',
 );
 
+const emptyGoal = classifyMakeupFeedbackGoalText('   ');
+expectEqual(emptyGoal.intentType, 'generic_default', 'empty goal intent');
+expectEqual(emptyGoal.normalizedGoalText, '', 'empty normalized goal');
+const emptyGoalContext = buildMakeupFeedbackGoalContext(emptyGoal);
+if (!emptyGoalContext) {
+  throw new Error('empty goal should build the expert review context');
+}
+expectEqual(emptyGoalContext.userGoalText, '', 'empty context user goal');
+
 for (const value of ['ㅗㅗㅗㅗㅗㅗ', 'ㅋㅋㅋㅋㅋㅋ', 'ㅎㅎㅎㅎㅎㅎ', 'ㄱㄱㄱㄱ', '....', '!!!', 'asdfasdf', 'qwerqwer', 'qwerty', 'sdfghj', '123123', 'a', '.']) {
   const result = classifyMakeupFeedbackGoalText(value);
   expectEqual(result.intentType, 'noise', `${value} intent`);
@@ -59,6 +68,9 @@ expectEqual(genericContext.normalizedGoalText, genericGoalText, 'generic context
 
 
 for (const value of [
+  '청순',
+  '글로우',
+  '시크한 느낌',
   '립이 너무 진한지 봐줘',
   '데일리로 자연스럽게 보이는지',
   '피부 전체적으로 봐줘',

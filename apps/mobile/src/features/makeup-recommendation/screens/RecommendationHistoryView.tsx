@@ -2,13 +2,11 @@ import {ActivityIndicator, Image, Pressable, StyleSheet, Text, View} from 'react
 import {ImageOff} from 'lucide-react-native';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
-import {AppCard, AppScreen} from '../../../shared/ui';
+import {AppCard, AppScreen, ReportOverflowMenuButton} from '../../../shared/ui';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import type {MakeupRecommendationReportHistoryItem} from '../types';
 import {getMakeupRecommendationPreviewPresentation} from '../services/makeupRecommendationPreview';
-import {
-  formatMakeupRecommendationHistoryDate,
-  makeupRecommendationHistoryCopy,
-} from './makeupRecommendationViewContracts';
+import {makeupRecommendationHistoryCopy} from './makeupRecommendationViewContracts';
 
 type RecommendationHistoryViewProps = {
   canLoadMore: boolean;
@@ -17,6 +15,7 @@ type RecommendationHistoryViewProps = {
   isLoadingMore: boolean;
   items: readonly MakeupRecommendationReportHistoryItem[];
   onBack: () => void;
+  onDelete: (item: MakeupRecommendationReportHistoryItem) => Promise<void> | void;
   onLoadMore: () => void;
   onRefresh: () => void;
   onSelect: (item: MakeupRecommendationReportHistoryItem) => void;
@@ -29,6 +28,7 @@ export function RecommendationHistoryView({
   isLoadingMore,
   items,
   onBack,
+  onDelete,
   onLoadMore,
   onRefresh,
   onSelect,
@@ -77,10 +77,10 @@ export function RecommendationHistoryView({
           {error ? <Text accessibilityRole="alert" style={styles.inlineError}>{error}</Text> : null}
           {items.map(item => {
             const preview = getMakeupRecommendationPreviewPresentation(item);
-            const date = formatMakeupRecommendationHistoryDate(item.createdAt);
+            const createdAtLabel = formatReportCreatedAtLabel(item.createdAt);
             return (
               <AppCard
-                accessibilityLabel={`${item.scenarioText} 저장된 추천 열기`}
+                accessibilityLabel={`${item.scenarioText} 저장된 추천, ${createdAtLabel}, 열기`}
                 key={item.reportId}
                 onPress={() => onSelect(item)}
                 padded={false}
@@ -108,8 +108,11 @@ export function RecommendationHistoryView({
                 )}
                 <View style={styles.cardBody}>
                   <View style={styles.cardMetaRow}>
-                    <Text style={styles.cardMeta}>{date || '저장된 추천'}</Text>
-                    <Text style={styles.cardMeta}>{item.results.length}가지 메이크업</Text>
+                    <Text style={styles.cardMeta}>{createdAtLabel}</Text>
+                    <View style={styles.cardMetaActions}>
+                      <Text style={styles.cardMeta}>{item.results.length}가지 메이크업</Text>
+                      <ReportOverflowMenuButton onDelete={() => onDelete(item)} />
+                    </View>
                   </View>
                   <Text style={styles.scenario}>{item.scenarioText}</Text>
                   <Text style={styles.lookNames} numberOfLines={2}>
@@ -173,6 +176,7 @@ const styles = StyleSheet.create({
   },
   cardBody: {gap: spacing.sm, padding: spacing.lg},
   cardMetaRow: {alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'},
+  cardMetaActions: {alignItems: 'center', flexDirection: 'row', gap: spacing.xs},
   cardMeta: {color: colors.textTertiary, fontFamily: typography.fontFamily.medium, fontSize: typography.fontSize.xs},
   scenario: {color: colors.textPrimary, fontFamily: typography.fontFamily.bold, fontSize: typography.fontSize.lg, lineHeight: typography.lineHeight.lg},
   lookNames: {color: colors.textSecondary, fontFamily: typography.fontFamily.regular, fontSize: typography.fontSize.sm, lineHeight: typography.lineHeight.sm},

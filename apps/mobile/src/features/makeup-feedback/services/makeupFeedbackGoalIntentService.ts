@@ -76,6 +76,9 @@ const genericRequestKeywords = [
 
 const contextAnchorKeywords = [
   '가볍',
+  '강렬',
+  '글램',
+  '글로우',
   '결혼식',
   '공연',
   '과하',
@@ -87,20 +90,26 @@ const contextAnchorKeywords = [
   '데이트',
   '데일리',
   '들떠',
+  '러블리',
   '립',
+  '맑',
+  '매트',
   '마스카라',
   '면접',
   '모임',
   '무대',
   '발색',
   '발표',
+  '부드러',
   '블러셔',
   '사진',
   '색감',
+  '생기',
   '섀도',
   '소개팅',
   '수업',
   '약속',
+  '은은',
   '여행',
   '연말',
   '예식',
@@ -111,17 +120,23 @@ const contextAnchorKeywords = [
   '자연',
   '증명',
   '차분',
+  '청순',
   '촬영',
   '출근',
   '축제',
   '치크',
+  '촉촉',
   '카페',
   '커버',
   '톤',
+  '투명',
   '파티',
   '피부',
   '학교',
   '화사',
+  '화려',
+  '시크',
+  '힙',
   '회사',
   '회식',
   'cafe',
@@ -286,6 +301,14 @@ function needsMoreDetail(normalizedText: string) {
 
 export function classifyMakeupFeedbackGoalText(value: string): MakeupFeedbackGoalIntentResult {
   const normalizedText = normalizeGoalText(value);
+
+  if (!normalizedText) {
+    return {
+      intentType: 'generic_default',
+      normalizedGoalText: '',
+      originalGoalText: '',
+    };
+  }
 
   if (isClearlyNoiseGoalText(normalizedText)) {
     return {

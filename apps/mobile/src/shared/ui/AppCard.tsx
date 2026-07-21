@@ -39,7 +39,7 @@ export function AppCard({
         accessibilityRole={accessibilityRole}
         accessibilityState={accessibilityState}
         onPress={onPress}
-        style={cardStyle}
+        style={({pressed}) => [cardStyle, pressed && styles.pressed]}
       >
         {children}
       </Pressable>
@@ -63,5 +63,8 @@ const styles = StyleSheet.create({
   },
   padded: {
     padding: 18,
+  },
+  pressed: {
+    opacity: 0.72,
   },
 });

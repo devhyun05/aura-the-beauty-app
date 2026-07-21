@@ -991,6 +991,10 @@ async def test_correction_rejects_foreign_or_incomplete_parent() -> None:
 @pytest.mark.asyncio
 async def test_feedback_job_persists_canonical_correction_fields(monkeypatch) -> None:
   inserted: dict = {}
+  rate_limit_call: dict = {}
+
+  async def capture_rate_limit(_db, **kwargs) -> None:
+    rate_limit_call.update(kwargs)
 
   class FeedbackDatabase:
     async def fetchrow(self, query, *args):
@@ -1019,6 +1023,15 @@ async def test_feedback_job_persists_canonical_correction_fields(monkeypatch) ->
       raise AssertionError(query)
 
   monkeypatch.setattr(feedback_api, "ensure_user", _ensure_user)
+  monkeypatch.setattr(
+    feedback_api,
+    "enforce_report_generation_limit",
+    capture_rate_limit,
+  )
+  settings = Settings(
+    makeup_feedback_generation_limit_per_minute=2,
+    makeup_feedback_generation_limit_per_day=10,
+  )
   response = await feedback_api.create_feedback_job(
     FeedbackJobCreate(
       entryDate="2026-07-17",
@@ -1035,9 +1048,15 @@ async def test_feedback_job_persists_canonical_correction_fields(monkeypatch) ->
     BackgroundTasks(),
     auth=type("Auth", (), {"subject": "owner"})(),
     db=FeedbackDatabase(),
-    settings=Settings(),
+    settings=settings,
   )
 
+  assert rate_limit_call == {
+    "user_id": USER_ID,
+    "feature": "makeup_feedback",
+    "per_minute": 2,
+    "per_day": 10,
+  }
   assert inserted["args"][5:8] == (date(2026, 7, 10), "correction", PARENT_ID)
   stored = json.loads(inserted["args"][8])
   assert stored["request"]["feedbackContext"] == {"userGoalText": "저장된 목표"}

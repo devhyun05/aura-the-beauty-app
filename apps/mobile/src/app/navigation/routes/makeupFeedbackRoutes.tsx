@@ -12,6 +12,7 @@ import {
   type MakeupFeedbackResult,
 } from '../../../features/makeup-feedback';
 import {
+  deleteMakeupFeedbackReport,
   fetchMakeupFeedbackReport,
   fetchMakeupFeedbackReports,
 } from '../../../features/makeup-feedback/services/makeupFeedbackService';
@@ -423,6 +424,24 @@ export function MakeupFeedbackResultsListRouteScreen({
     navigation.navigate('MakeupFeedbackResult', {reportId: result.analysisId});
   }, [navigation, setMakeupFeedbackResult]);
 
+  const handleDeleteResult = React.useCallback(
+    async (result: MakeupFeedbackResult) => {
+      const reportId = result.analysisId ?? result.id;
+      await deleteMakeupFeedbackReport(reportId);
+      setResults(current =>
+        current.filter(
+          item => item.analysisId !== reportId && item.id !== reportId,
+        ),
+      );
+      setMakeupFeedbackResult(current =>
+        current?.analysisId === reportId || current?.id === reportId
+          ? null
+          : current,
+      );
+    },
+    [setMakeupFeedbackResult],
+  );
+
   return (
     <DetailRouteChrome
       routeName="MakeupFeedbackResultsList"
@@ -430,6 +449,7 @@ export function MakeupFeedbackResultsListRouteScreen({
       <MakeupFeedbackResultsListScreen
         error={loadError}
         isLoading={isLoading}
+        onDeleteResult={handleDeleteResult}
         onRetry={loadResults}
         onPressResult={handlePressResult}
         results={results}
@@ -452,10 +472,19 @@ export function MakeupFeedbackResultRouteScreen({
   const resultReportId =
     makeupFeedbackResult?.analysisId ?? reportId ?? makeupFeedbackResult?.id;
   const [reportLoadError, setReportLoadError] = React.useState('');
+  const [reportLoadRevision, setReportLoadRevision] = React.useState(0);
   const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
+  const [internalBackAction, setInternalBackAction] =
+    React.useState<HeaderShareAction | null>(null);
   const handleHeaderShareActionChange = React.useCallback(
     (nextShareAction: (() => void) | null) => {
       setShareAction(nextShareAction ? {cb: nextShareAction} : null);
+    },
+    [],
+  );
+  const handleInternalBackActionChange = React.useCallback(
+    (nextAction: (() => void) | null) => {
+      setInternalBackAction(nextAction ? {cb: nextAction} : null);
     },
     [],
   );
@@ -467,20 +496,65 @@ export function MakeupFeedbackResultRouteScreen({
       getMakeupJourneySafeReturnResetState(route.params?.entryDate),
     );
   }, [navigation, route.params?.entryDate]);
+  const handleDefaultBack = React.useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    goBackToPreviousOrMainTab(navigation, 'HomeTab');
+  }, [navigation]);
+  const handleBack = React.useCallback(() => {
+    if (internalBackAction) {
+      internalBackAction.cb();
+      return;
+    }
+
+    if (shouldReturnToJourney) {
+      handleBackToJourney();
+      return;
+    }
+
+    if (shouldReturnToProfile) {
+      handleBackToProfile();
+      return;
+    }
+
+    handleDefaultBack();
+  }, [
+    handleBackToJourney,
+    handleBackToProfile,
+    handleDefaultBack,
+    internalBackAction,
+    shouldReturnToJourney,
+    shouldReturnToProfile,
+  ]);
   const handleOpenMakeupJourney = React.useCallback(() => {
     notifyMakeupJourneyFeedbackCompleted(resultEntryDate);
     navigation.reset(
       getMakeupJourneySafeReturnResetState(resultEntryDate, resultReportId),
     );
   }, [navigation, resultEntryDate, resultReportId]);
-  const detailHeaderNavigationProps = shouldReturnToJourney
-    ? {onBack: handleBackToJourney}
-    : shouldReturnToProfile
-    ? {onBack: handleBackToProfile}
-    : {
-        onOpenDocumentList: () =>
-          navigation.navigate('MakeupFeedbackResultsList'),
-      };
+  const handleRetryReportLoad = React.useCallback(() => {
+    setReportLoadError('');
+    setReportLoadRevision(current => current + 1);
+  }, []);
+  const detailHeaderNavigationProps = {onBack: handleBack};
+
+  React.useEffect(
+    () =>
+      navigation.addListener('beforeRemove', event => {
+        const actionType = event.data.action.type;
+        const isBackAction = actionType === 'GO_BACK' || actionType === 'POP';
+        if (!internalBackAction || !isBackAction) {
+          return;
+        }
+
+        event.preventDefault();
+        internalBackAction.cb();
+      }),
+    [internalBackAction, navigation],
+  );
 
   React.useEffect(() => {
     if (!reportId || reportIsLoaded) {
@@ -509,7 +583,7 @@ export function MakeupFeedbackResultRouteScreen({
     return () => {
       isMounted = false;
     };
-  }, [reportId, reportIsLoaded, setMakeupFeedbackResult]);
+  }, [reportId, reportIsLoaded, reportLoadRevision, setMakeupFeedbackResult]);
 
   if (reportId && !reportIsLoaded) {
     return (
@@ -518,9 +592,11 @@ export function MakeupFeedbackResultRouteScreen({
         routeName="MakeupFeedbackResult"
         shareDisabled>
         <RoutePlaceholder
+          actionLabel={reportLoadError ? '다시 시도' : undefined}
           description={
             reportLoadError || '완료된 메이크업 피드백 보고서를 불러오고 있어요.'
           }
+          onAction={reportLoadError ? handleRetryReportLoad : undefined}
           showHeader={false}
           title={reportLoadError ? '보고서를 열지 못했어요' : '보고서를 여는 중'}
         />
@@ -552,6 +628,7 @@ export function MakeupFeedbackResultRouteScreen({
       shareDisabled={!shareAction}>
       <MakeupFeedbackResultScreen
         onHeaderShareActionChange={handleHeaderShareActionChange}
+        onInternalBackActionChange={handleInternalBackActionChange}
         onOpenMakeupJourney={handleOpenMakeupJourney}
         result={makeupFeedbackResult}
       />

@@ -8,7 +8,7 @@ import {
   StyleSheet,
   TextInput,
 } from 'react-native';
-import {MessageSquareText, Sparkles} from 'lucide-react-native';
+import {Info, MessageSquareText, Sparkles} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
@@ -20,6 +20,7 @@ import {
 } from '../services/makeupFeedbackGoalIntentService';
 import {prefetchMakeupFeedbackGeneratedPreviewMessages} from '../services/makeupFeedbackAgentConferenceService';
 import {makeupFeedbackLoadingPreviewSource} from '../services/makeupFeedbackLoadingService';
+import {feedbackRedesignColors as C} from '../redesign/feedbackRedesignTheme';
 import type {MakeupFeedbackPhotoSelection} from '../types';
 
 type MakeupFeedbackGoalInputScreenProps = {
@@ -121,15 +122,15 @@ export function MakeupFeedbackGoalInputScreen({
             style={styles.scrollView}>
             <YStack style={styles.titleBlock}>
               <Text style={styles.screenTitle}>어떤 기준으로 피드백 받을까요?</Text>
-              <Text style={styles.screenDescription}>사진을 보면서 상황이나 원하는 분위기를 적어주세요.</Text>
+              <Text style={styles.screenDescription}>원하는 분위기가 있다면 간단히 적어주세요. 입력하지 않아도 전문가 종합 평가를 받을 수 있어요.</Text>
             </YStack>
 
             <YStack style={styles.formBlock}>
               <XStack style={styles.fieldHeader}>
                 <View style={styles.fieldIcon}>
-                  <MessageSquareText color={colors.textPrimary} size={iconSize.sm} strokeWidth={2} />
+                  <MessageSquareText color={C.primary} size={iconSize.sm} strokeWidth={2} />
                 </View>
-                <Text style={styles.fieldLabel}>메이크업 상황/목적</Text>
+                <Text style={styles.fieldLabel}>메이크업 상황/목적 (선택)</Text>
               </XStack>
 
               <View style={[styles.inputFrame, shouldShowGoalError && styles.inputFrameError]}>
@@ -154,6 +155,12 @@ export function MakeupFeedbackGoalInputScreen({
                   </Text>
                 </XStack>
               </View>
+              <XStack style={styles.criteriaInfo}>
+                <Info color={C.primary} size={15} strokeWidth={2} />
+                <Text style={styles.criteriaInfoText}>
+                  입력하지 않으면 얼굴 특징에 맞는 배치, 색·명암 조화, 부위별 완성도를 메이크업 아티스트의 기준으로 정밀하게 평가해요.
+                </Text>
+              </XStack>
             </YStack>
           </ScrollView>
 
@@ -188,9 +195,20 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
   },
   countText: {
-    color: colors.textTertiary,
+    color: C.textMuted3,
     flexShrink: 0,
     fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
+  },
+  criteriaInfo: {
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  criteriaInfoText: {
+    color: C.textMuted,
+    flex: 1,
+    fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
   },
@@ -200,7 +218,7 @@ const styles = StyleSheet.create({
   },
   fieldIcon: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: C.chipBg,
     borderRadius: radius.pill,
     height: 42,
     justifyContent: 'center',
@@ -216,14 +234,14 @@ const styles = StyleSheet.create({
   },
   footer: {
     backgroundColor: colors.background,
-    borderTopColor: colors.border,
+    borderTopColor: C.borderCard,
     borderTopWidth: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
   formBlock: {
     backgroundColor: colors.surface,
-    borderColor: colors.border,
+    borderColor: C.borderCard,
     borderRadius: radius.lg,
     borderWidth: 1,
     gap: spacing.lg,
@@ -243,7 +261,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   inputFrame: {
-    borderColor: colors.borderStrong,
+    borderColor: C.borderAxisOpen,
     borderRadius: radius.md,
     borderWidth: 1,
     gap: spacing.sm,
@@ -267,7 +285,7 @@ const styles = StyleSheet.create({
   },
   previewBadge: {
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.32)',
+    backgroundColor: 'rgba(12,110,158,0.86)',
     borderColor: 'rgba(255, 255, 255, 0.72)',
     borderRadius: radius.pill,
     borderWidth: 1,
@@ -308,8 +326,8 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: colors.blackSurface,
-    borderRadius: radius.pill,
+    backgroundColor: C.primaryStrong,
+    borderRadius: radius.lg,
     justifyContent: 'center',
     minHeight: 58,
   },
@@ -323,7 +341,7 @@ const styles = StyleSheet.create({
     lineHeight: typography.lineHeight.md,
   },
   screenDescription: {
-    color: colors.textSecondary,
+    color: C.textMuted,
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
@@ -333,10 +351,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   screenTitle: {
-    color: colors.textPrimary,
+    color: C.ink,
     fontFamily: typography.fontFamily.bold,
-    fontSize: typography.fontSize.lg,
-    lineHeight: typography.lineHeight.lg,
+    fontSize: 23,
+    lineHeight: 31,
   },
   scrollView: {
     backgroundColor: colors.background,

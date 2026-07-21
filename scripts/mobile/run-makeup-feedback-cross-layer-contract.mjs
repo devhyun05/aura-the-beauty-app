@@ -32,6 +32,10 @@ const feedbackServiceTestPath = join(
   mobileSourceRoot,
   'features/makeup-feedback/services/makeupFeedbackService.test.ts',
 );
+const redesignViewModelTestPath = join(
+  mobileSourceRoot,
+  'features/makeup-feedback/redesign/makeupFeedbackResultViewModel.test.ts',
+);
 const tscPath = join(repositoryRoot, 'apps/mobile/node_modules/typescript/bin/tsc');
 const mobileTypeRoots = join(repositoryRoot, 'apps/mobile/node_modules/@types');
 const pythonCandidates = [
@@ -105,6 +109,7 @@ run(process.execPath, [
   conferenceTestPath,
   resultPresentationTestPath,
   feedbackServiceTestPath,
+  redesignViewModelTestPath,
 ]);
 
 run(process.execPath, [
@@ -124,6 +129,15 @@ run(process.execPath, [
   join(
     outputDirectory,
     'features/makeup-feedback/services/makeupFeedbackAgentConferenceService.test.js',
+  ),
+]);
+
+run(process.execPath, [
+  '--require',
+  runtimeShimPath,
+  join(
+    outputDirectory,
+    'features/makeup-feedback/redesign/makeupFeedbackResultViewModel.test.js',
   ),
 ]);
 

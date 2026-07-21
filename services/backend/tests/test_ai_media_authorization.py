@@ -32,6 +32,10 @@ async def ensure_owner(_db, _auth) -> dict:
   return {"id": OWNER_USER_ID, "gender": None}
 
 
+async def allow_report_generation(_db, **_kwargs) -> None:
+  return None
+
+
 class RejectingMediaDatabase:
   async def fetchrow(self, _query: str, *_args):
     return None
@@ -181,6 +185,11 @@ def test_analysis_uses_database_location_for_owned_media(
   app.dependency_overrides[get_current_user] = owner_auth
   app.dependency_overrides[require_database] = lambda: db
   monkeypatch.setattr(analysis_api, "ensure_user", ensure_owner)
+  monkeypatch.setattr(
+    analysis_api,
+    "enforce_report_generation_limit",
+    allow_report_generation,
+  )
 
   response = TestClient(app).post(
     "/api/analysis/jobs",

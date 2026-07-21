@@ -844,6 +844,7 @@ def test_bedrock_generation_uses_grounded_refs_and_returns_valid_shape(monkeypat
   settings = Settings(
     ai_provider="bedrock",
     bedrock_analysis_model_id="test-conference-model",
+    makeup_feedback_conference_ai_enabled=True,
   )
   service = MakeupFeedbackConferenceBedrockService(settings)
   fake_client = _FakeBedrockClient(_generated_messages())
@@ -935,6 +936,7 @@ def test_legacy_payload_fails_gracefully_without_invoking_bedrock():
   settings = Settings(
     ai_provider="bedrock",
     bedrock_analysis_model_id="test-conference-model",
+    makeup_feedback_conference_ai_enabled=True,
   )
   messages, status, error = asyncio.run(
     build_makeup_feedback_conference_messages(
@@ -948,3 +950,31 @@ def test_legacy_payload_fails_gracefully_without_invoking_bedrock():
   assert status == "bedrock_failed_fallback"
   assert error is not None
   assert error["code"] == "FEEDBACK_CONFERENCE_GROUNDING_INCOMPLETE"
+
+
+def test_cost_controlled_conference_does_not_call_bedrock(monkeypatch):
+  settings = Settings(
+    ai_provider="bedrock",
+    bedrock_analysis_model_id="test-conference-model",
+    makeup_feedback_conference_ai_enabled=False,
+  )
+
+  async def unexpected_generation(self, *args, **kwargs):
+    raise AssertionError("conference must not make a second AI call")
+
+  monkeypatch.setattr(
+    MakeupFeedbackConferenceBedrockService,
+    "generate",
+    unexpected_generation,
+  )
+  messages, status, error = asyncio.run(
+    build_makeup_feedback_conference_messages(
+      _full_result(),
+      _request_payload(),
+      settings,
+    ),
+  )
+
+  assert messages == []
+  assert status == "deterministic_fallback"
+  assert error is None
