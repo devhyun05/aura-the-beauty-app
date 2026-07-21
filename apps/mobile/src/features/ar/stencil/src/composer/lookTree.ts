@@ -201,7 +201,7 @@ const gid = () => `grp${++groupSeq}`;
 
 // ── 시스템 라이브러리 — 기존 PRESETS를 재귀 구조로 분해 ─────────────────────
 
-const SYSTEM_PRESET_IDS = ['natural', 'rosy', 'peach', 'glam', 'smoky'];
+const SYSTEM_PRESET_IDS = ['natural', 'rosy', 'peach', 'glam', 'glam2', 'smoky'];
 
 // ── 세부부위(sub) 이름 유도 — 프리셋(전체룩) 이름을 물려주지 않는다 ─────────────
 // 사용자 지적: 세부부위 카드가 "글램 마스카라"처럼 전체룩 이름을 물려받았다. 세부부위

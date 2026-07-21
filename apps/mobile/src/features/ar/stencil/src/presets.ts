@@ -410,6 +410,89 @@ export const PRESETS: FilterPreset[] = [
     ],
   },
   {
+    // 글램 2.0 — 2026-07 SODA/도우인 레퍼런스 기반 재설계(기존 글램 보존, 신규 항목).
+    // 눈: 스타일 아이라이너 v5(default_eyeliner 교체본) + 텍스처 속눈썹 글램(lash_glam,
+    // DL1 돌스파이크) — 절차 라이너·마스카라는 끄고 텍스처 경로만 사용.
+    // 립: 살색 혼합(0.3) + 글로시 + 그라데(안쪽 딥) + 아랫입술 시럽광 + 워터틴트 경계.
+    // 판정 기록: docs/unity-ar/GLAM2_WORKLOG_KO.md
+    id: 'glam2',
+    name: '글램 2.0',
+    params: {
+      skinSmoothing: 0.6,
+      skinBrightening: 0.25,
+      foundationColor: '#EFD0BC',
+      foundationIntensity: 0.38,
+      foundationFinish: 2, // 듀이
+      // 립 — 원본 입술색 70% 투과(강도 0.3) 위 글로시, 그라데(바깥 라이트로즈→입선 딥),
+      // 워터틴트 제형(경계 페더 0.14→0.30), 아랫입술 시럽광.
+      lipColor: '#C75A70',
+      lipColor2: '#8F0F2A',
+      lipGradient: 1.0,
+      lipIntensity: 0.3,
+      lipFinish: 2, // 글로시
+      lipTexture: 2, // 워터틴트
+      lipGlossColor: '#FFFFFF',
+      lipGlossIntensity: 0.7,
+      lipGlossShape: 2, // 아랫입술만
+      blushColor: '#D97386',
+      blushIntensity: 0.3,
+      blushParticleSize: 0.35,
+      blushParticleDensity: 0.85,
+      blushParticleBrightness: 0.6,
+      blushParticleColor: '#FFE7C2',
+      blushParticleTwinkle: 1,
+      blushParticleShape: 0,
+      blushParticleFeather: 1,
+      blushParticleParallax: 0.4,
+      eyeshadowColor: '#8A5A44',
+      eyeshadowIntensity: 0.62,
+      irisColor: '#5B7B8C',
+      irisIntensity: 0,
+      // 아이라이너 — 절차 라이너 off, 스타일 텍스처(윙 도안 v5)만.
+      eyelinerColor: '#2B2220',
+      eyelinerIntensity: 0,
+      eyelinerStyle: 0,
+      eyelinerStyleIntensity: 0.85,
+      browColor: '#2A1E16',
+      browIntensity: 0.42,
+      browPowderColor: '#3A2A20',
+      browPowderIntensity: 0.28,
+      browLightenerIntensity: 0,
+      browPencilColor: '#2A1E16',
+      browPencilIntensity: 0.3,
+      browStyleColor: '#2A1E16',
+      browStyleIntensity: 0,
+      browStyleTemplate: 0,
+      browThicknessProfile: 3,
+      browThickness: 1.15,
+      browArch: 0.15,
+      faceOverlayIntensity: 0,
+      lipStyleIntensity: 0,
+      blushStyleIntensity: 0,
+      highlightColor: '#FFE9C8',
+      highlightIntensity: 0.28,
+      highlightFinish: 0,
+      contourColor: '#9E806B',
+      contourIntensity: 0,
+      concealerColor: '#FADCC2',
+      concealerIntensity: 0.3,
+      powderColor: '#FFFFFF',
+      powderIntensity: 0.15,
+      powderFinish: 1,
+      // 속눈썹 — 텍스처 글램(위 lash_glam + 아래 lash_glam_lower 자동 동반).
+      mascaraColor: '#141014',
+      mascaraIntensity: 0.95,
+      mascaraStyle: 1,
+      mascaraLength: 1.0,
+      mascaraTexStyle: 3, // 텍스처 글램(위 DL1 + 아래 low1a v11)
+      lowerLashIntensity: 1.0, // v11 텍스처가 도안 실측 반투명 알파라 감쇠 불필요
+      lowerLashLength: 0.65, // 도안 비례 r=0.146 ÷ (LowerTexLenFactor 0.15 × RibbonLenMult 1.5)
+    },
+    lensLayers: [
+      {part: 0, color: '#5B7B8C', blendMode: 1, intensity: 0.5, inner: 0, outer: 1},
+    ],
+  },
+  {
     id: 'smoky',
     name: '스모키',
     params: {
