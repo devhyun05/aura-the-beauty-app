@@ -115,7 +115,9 @@ import {
   regionWarpsForEmit,
   upsertEntry,
 } from './src/composer/fitSheets';
-import type {FitDelta} from './src/composer/fitSheets';
+import type {FitDelta, FitEntry} from './src/composer/fitSheets';
+import {loadPersonalFitBaseDeltas} from '../services/personalFitLoad';
+import type {PersonalFitBaseDelta} from '../services/personalFitService';
 import {
   FIT_HANDLE_REGIONS,
   FIT_HANDLE_RULES,
@@ -578,6 +580,9 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const [autoFitMetrics, setAutoFitMetrics] = useState<AutoFitMetrics>(defaultAutoFitMetrics);
   const [autoFitRecord, setAutoFitRecord] = useState<AutoFitStore | null>(null);
   const autoFitRecordRef = useRef<AutoFitStore | null>(null);
+  // 개인 핏(측정 자동) 기저 델타 — 최신 분석 보고서에서 파생. 자동 적용 게이트
+  // (PERSONAL_FIT_DELTA_SCALE=0)가 꺼져 있으면 항상 빈 배열이라 렌더 무변화.
+  const personalFitDeltasRef = useRef<PersonalFitBaseDelta[]>([]);
   const [autoFitPreviewAfter, setAutoFitPreviewAfter] = useState(false);
   const autoFitPreviewAfterRef = useRef(false);
   const autoFitPreviewActiveRef = useRef(false);
@@ -848,6 +853,11 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     });
     // 에셋 카탈로그 로드 — 실패해도 빈 목록으로 무해(픽커는 "파일에서" 경로 유지).
     loadCatalogStore().then(setCatalog);
+    // 개인 핏(측정 자동) 기저 — 최신 분석 보고서에서 파생. 실패/부재는 빈 배열이라
+    // 무해하고, 델타 게이트 OFF(δ=0) 동안엔 로드돼도 렌더가 변하지 않는다.
+    loadPersonalFitBaseDeltas().then(deltas => {
+      personalFitDeltasRef.current = deltas;
+    });
   }, []);
 
   const sendToUnity = useCallback((msg: RNToUnityMessage) => {
@@ -1383,9 +1393,15 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     const applyAutoFit = autoFitPreviewActiveRef.current
       ? autoFitPreviewAfterRef.current
       : autoFit?.accepted === true;
-    const baseDeltas = autoFitPreviewActiveRef.current
+    const autoFitDeltas = autoFitPreviewActiveRef.current
       ? (applyAutoFit ? autoFit?.deltas ?? [] : [])
       : acceptedAutoFitDeltas(autoFit);
+    // 개인 핏(측정 자동) 기저를 dev autoFit 기저 앞에 합류 — applyFitToLayers가
+    // 부위별 rules를 가산 병합하므로 순서는 결과에 영향 없다. 수동 시트가 이긴다는
+    // 우선순위(개인 시트·핏체인 > 기저)도 그대로.
+    const baseDeltas = personalFitDeltasRef.current.length > 0
+      ? [...(personalFitDeltasRef.current as FitEntry[]), ...autoFitDeltas]
+      : autoFitDeltas;
     return {
       ...compileLayers(applyFitToLayers(layers, fitState, baseDeltas)),
       regionAffines: assembleRegionAffines(layers, fitState),

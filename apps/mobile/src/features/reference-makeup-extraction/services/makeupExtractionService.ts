@@ -339,7 +339,11 @@ function mergeBackendAreaGuide(
         ? {
             ...fallbackProduct,
             ...backendProduct,
-            imageSource: fallbackProduct.imageSource,
+            // 백엔드가 실제 제품 이미지(네이버 등)를 주면 그것을 사용하고,
+            // 없을 때만 목 이미지로 대체한다.
+            imageSource: backendProduct.imageUrl
+              ? {uri: backendProduct.imageUrl}
+              : fallbackProduct.imageSource,
           }
         : fallbackProduct,
     },

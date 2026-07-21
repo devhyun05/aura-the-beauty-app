@@ -90,6 +90,10 @@ class Settings(BaseSettings):
   bedrock_scenario_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_question_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_recommendation_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  # 레퍼런스 메이크업 추출(비전)은 얼굴 분석과 분리된 모델을 사용한다. 기본 Haiku 4.5로
+  # 두어 추출 지연(Sonnet 비전)을 줄이고, 얼굴 분석은 effective_analysis_model_id(Sonnet)를 유지.
+  # 비우면(빈 문자열/None) effective_analysis_model_id로 폴백해 손쉽게 Sonnet 복귀 가능.
+  bedrock_reference_extraction_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   makeup_recommendation_provider_timeout_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
   makeup_recommendation_max_tokens: int = Field(default=6000, ge=2000, le=9000)
   bedrock_credential_readiness_timeout_seconds: float = Field(default=5.0, ge=1.0, le=15.0)
@@ -319,16 +323,6 @@ class Settings(BaseSettings):
   product_event_rate_limit_per_minute: int = Field(default=60, ge=1, le=10000)
   product_outbound_rate_limit_per_minute: int = Field(default=30, ge=1, le=10000)
 
-  # 비용이 발생하는 보고서/AI 생성의 사용자별 한도 — 분당(스팸 방지)·일일(비용 상한).
-  face_analysis_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
-  face_analysis_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
-  filter_extraction_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
-  filter_extraction_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
-  makeup_feedback_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
-  makeup_feedback_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
-  makeup_recommendation_generation_limit_per_minute: int = Field(default=3, ge=1, le=1000)
-  makeup_recommendation_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
-
   chime_enabled: bool = False
   chime_control_region: str | None = None
   chime_region: str | None = None
@@ -526,6 +520,12 @@ class Settings(BaseSettings):
   @property
   def effective_recommendation_model_id(self) -> str:
     return (self.bedrock_recommendation_model_id or self.effective_analysis_model_id).strip()
+
+  @property
+  def effective_reference_extraction_model_id(self) -> str:
+    return (
+      self.bedrock_reference_extraction_model_id or self.effective_analysis_model_id
+    ).strip()
 
   @property
   def effective_embedding_model_id(self) -> str:

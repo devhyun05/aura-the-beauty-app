@@ -24,6 +24,7 @@ import {
   type UnitySynchronizedCaptureEvent,
   type UnitySynchronizedCaptureRequest,
 } from '../../../shared/contracts/fullFaceMakeupRecipe';
+import {AR_BLUSH_REFERENCE_SHAPES} from '../../../shared/contracts/arBlushCatalog';
 import {
   UnityMakeupNativeView,
   useUnityMakeupNativeViewReady,
@@ -154,13 +155,11 @@ const GENERATED_MASK_FINISH_OPTIONS = [
     | 'textureAmount'
   > & {label: string}
 >;
-const AR_BLUSH_CHEEK_REGION_OPTIONS = [
-  {label: '데일리', candidateId: 'blush-session-1-v1', maskTextureId: 'cheek-session-mask-1-v1'},
-  {label: '러블리', candidateId: 'blush-session-2-v1', maskTextureId: 'cheek-session-mask-2-v1'},
-  {label: '언더', candidateId: 'blush-session-3-v1', maskTextureId: 'cheek-session-mask-3-v1'},
-  {label: '선키스 1', candidateId: 'blush-session-4-v1', maskTextureId: 'cheek-session-mask-4-v1'},
-  {label: '선키스 2', candidateId: 'blush-session-5-v1', maskTextureId: 'cheek-session-mask-5-v1'},
-] as const;
+const AR_BLUSH_CHEEK_REGION_OPTIONS = AR_BLUSH_REFERENCE_SHAPES.map(shape => ({
+  label: shape.label,
+  candidateId: shape.candidateId,
+  maskTextureId: shape.maskTextureId,
+}));
 const AR_BLUSH_EYEBROW_REGION_OPTIONS = [
   {label: '데일리', candidateId: 'brow-soft-arch-fine-hair-v1', maskTextureId: 'brow-soft-arch-fine-hair-v1'},
   {label: '내추럴', candidateId: 'brow-png-natural-hair-v1', maskTextureId: 'brow-png-natural-hair-v1'},

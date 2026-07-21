@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Image,
   type NativeScrollEvent,
@@ -8,19 +8,32 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import {
-  ChevronRight,
-  Search,
-  ShoppingBag,
-} from 'lucide-react-native';
+import {ChevronRight} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
+import type {FaceAnalysisRegionVisuals} from '../../face-analysis/services/faceAnalysisMeasurements';
+import {analyzeFaceGeometry2d} from '../../face-geometry/services/faceGeometryService';
+import {FinalAreaGuideSection} from '../../makeup-recommendation/components/result/FinalAreaGuideSection';
+import {FinalMakeupRecipeStepCard} from '../../makeup-recommendation/components/result/FinalMakeupRecipeStepCard';
+import type {FinalRecipeStep} from '../../makeup-recommendation/components/result/finalAreaGuideRecipe';
+import {FinalRecommendedProductCard} from '../../makeup-recommendation/components/result/FinalRecommendedProductCard';
+import type {
+  Look,
+  PartGuide,
+  PartKey,
+} from '../../makeup-recommendation/screens/recommendationResultTypes';
+import type {
+  MakeupLookRecommendation,
+  MakeupRecommendationProduct,
+  RecommendedMakeupAreaGuide,
+} from '../../makeup-recommendation/types';
 import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtractionService';
 import type {
   MakeupLookPoint,
   ReferenceMakeupAreaGuide,
+  ReferenceMakeupExtractionResult,
   ReferenceMakeupPhoto,
 } from '../types';
 
@@ -31,9 +44,6 @@ type ReferenceMakeupExtractionResultScreenProps = {
   onBack?: () => void;
   onRetake: () => void;
 };
-
-const formatPrice = (price: number) =>
-  price > 0 ? `${price.toLocaleString('ko-KR')}원` : '가격 확인';
 
 export function ReferenceMakeupExtractionResultScreen({
   photo,
@@ -110,6 +120,46 @@ export function ReferenceMakeupExtractionResultScreen({
     updateActiveAreaIndexFromOffset(event.nativeEvent.contentOffset.x);
   };
 
+  const {look: areaGuideLook, sourceLook: areaGuideSourceLook} = useMemo(
+    () => buildExtractionRecommendationLook(extractedMakeupLook, photo),
+    [extractedMakeupLook, photo],
+  );
+  const referencePhotoUri = useMemo(
+    () => Image.resolveAssetSource(photo.imageSource)?.uri,
+    [photo.imageSource],
+  );
+  const [regionVisuals, setRegionVisuals] = useState<
+    FaceAnalysisRegionVisuals | undefined
+  >(undefined);
+
+  useEffect(() => {
+    if (!referencePhotoUri) {
+      setRegionVisuals(undefined);
+      return;
+    }
+    let isMounted = true;
+    const requestId = `reference-extraction-${Date.now()}`;
+    void analyzeFaceGeometry2d({
+      captureId: requestId,
+      createdAt: new Date().toISOString(),
+      imageUri: referencePhotoUri,
+      sessionId: requestId,
+    })
+      .then((result) => {
+        if (isMounted) {
+          setRegionVisuals(result.regionVisuals);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setRegionVisuals(undefined);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [referencePhotoUri]);
+
   return (
     <AppScreen
       bottomPadding={0}
@@ -126,31 +176,14 @@ export function ReferenceMakeupExtractionResultScreen({
         <ReferenceSummaryCard points={extractedMakeupLook.points} />
 
         <YStack style={styles.areaExploreSection}>
-          <Text style={styles.sectionTitle}>부위별 메이크업</Text>
-
-          <AreaTabRail
-            activeAreaIndex={activeAreaIndex}
-            guides={extractedMakeupLook.areaGuides}
-            onSelectArea={handleSelectArea}
+          <FinalAreaGuideSection
+            generatedReady={false}
+            look={areaGuideLook}
+            onAreaOpened={() => {}}
+            sourceImageUri={referencePhotoUri}
+            sourceLook={areaGuideSourceLook}
+            sourceRegionVisuals={regionVisuals}
           />
-
-          <ScrollView
-            bounces={false}
-            horizontal
-            nestedScrollEnabled
-            onMomentumScrollEnd={handleAreaMomentumEnd}
-            onScroll={handleAreaScroll}
-            pagingEnabled
-            ref={areaScrollRef}
-            scrollEventThrottle={16}
-            showsHorizontalScrollIndicator={false}
-            style={styles.areaCarousel}>
-            {extractedMakeupLook.areaGuides.map((guide, index) => (
-              <View key={guide.id} style={[styles.areaPage, {width: areaPageWidth}]}>
-                <AreaGuidePanel guide={guide} />
-              </View>
-            ))}
-          </ScrollView>
         </YStack>
 
         <XStack style={styles.actionRow}>
@@ -273,13 +306,191 @@ function AreaTabRail({
   );
 }
 
+const RECOMMENDATION_AREA_ORDER: PartKey[] = ['base', 'brow', 'eye', 'cheek', 'lip'];
+const AREA_EN_LABEL: Record<PartKey, string> = {
+  base: 'BASE',
+  brow: 'BROW',
+  eye: 'EYE',
+  cheek: 'CHEEK',
+  lip: 'LIP',
+};
+
+function extractionGuideForPart(
+  guides: ReferenceMakeupAreaGuide[],
+  part: PartKey,
+): ReferenceMakeupAreaGuide | undefined {
+  const targetId = part === 'base' ? 'skin' : part;
+  return guides.find((guide) => guide.id === targetId);
+}
+
+function extractionStepPairs(
+  guide: ReferenceMakeupAreaGuide | undefined,
+): Array<{order: number; instruction: string}> {
+  if (!guide) {
+    return [];
+  }
+  if (guide.steps && guide.steps.length > 0) {
+    return guide.steps;
+  }
+  return parseNumberedDetailSteps(guide.howTo).map((step, index) => ({
+    order: index + 1,
+    instruction: step.text,
+  }));
+}
+
+function toRecommendedAreaGuide(
+  guide: ReferenceMakeupAreaGuide,
+  part: PartKey,
+): RecommendedMakeupAreaGuide {
+  const product = toRecommendationProduct(guide);
+  return {
+    area: part,
+    label: guide.label,
+    goal: guide.goal ?? '',
+    color: {name: guide.color.name, hex: guide.color.hex},
+    texture: guide.texture,
+    placement: guide.placement ?? '',
+    technique: guide.technique ?? '',
+    reason: guide.reason ?? guide.productRecommendation.reason,
+    avoid: guide.avoid ?? [],
+    steps: extractionStepPairs(guide),
+    products: product ? [product] : [],
+    arSupported: false,
+  };
+}
+
+function toExtractionPartGuide(
+  guide: ReferenceMakeupAreaGuide | undefined,
+  part: PartKey,
+): PartGuide {
+  return {
+    label: guide?.label ?? part,
+    en: AREA_EN_LABEL[part],
+    colorName: guide?.color.name ?? '',
+    hex: guide?.color.hex ?? '#CFC4BA',
+    texture: guide?.texture ?? '',
+    textureNote: guide?.placement ?? '',
+    steps: extractionStepPairs(guide).map((step) => step.instruction),
+    finish: guide?.professionalPoint ?? '',
+    prod: {brand: '', name: '', price: '', why: '', ini: ''},
+  };
+}
+
+function buildExtractionRecommendationLook(
+  extractedMakeupLook: ReferenceMakeupExtractionResult,
+  photo: ReferenceMakeupPhoto,
+): {look: Look; sourceLook: MakeupLookRecommendation} {
+  const guides = extractedMakeupLook.areaGuides;
+  const parts = RECOMMENDATION_AREA_ORDER.reduce<Record<PartKey, PartGuide>>(
+    (accumulator, part) => {
+      accumulator[part] = toExtractionPartGuide(
+        extractionGuideForPart(guides, part),
+        part,
+      );
+      return accumulator;
+    },
+    {} as Record<PartKey, PartGuide>,
+  );
+
+  const areaGuides = RECOMMENDATION_AREA_ORDER.flatMap((part) => {
+    const guide = extractionGuideForPart(guides, part);
+    return guide ? [toRecommendedAreaGuide(guide, part)] : [];
+  });
+  const products = areaGuides.flatMap((guide) => guide.products);
+
+  const look: Look = {
+    id: 'anchor',
+    roleLabel: '',
+    roleEn: '',
+    name: extractedMakeupLook.title,
+    image: photo.imageSource,
+    match: null,
+    diff: '',
+    matchLine: '',
+    mx: 50,
+    my: 50,
+    mapRationale: '',
+    reasons: [],
+    parts,
+  };
+  const sourceLook: MakeupLookRecommendation = {
+    id: extractedMakeupLook.id,
+    arFilterId: '',
+    role: 'anchor',
+    title: extractedMakeupLook.title,
+    summary: extractedMakeupLook.subtitle,
+    imageSource: photo.imageSource,
+    reasons: [],
+    appliedConditions: [],
+    durationMinutes: 0,
+    difficulty: 'easy',
+    steps: [],
+    products,
+    areaGuides,
+  };
+  return {look, sourceLook};
+}
+
+function toFinalRecipeSteps(guide: ReferenceMakeupAreaGuide): FinalRecipeStep[] {
+  const rawSteps =
+    guide.steps && guide.steps.length > 0
+      ? guide.steps
+      : parseNumberedDetailSteps(guide.howTo).map((step, index) => ({
+          order: index + 1,
+          instruction: step.text,
+        }));
+
+  return rawSteps.map((step, index) => ({
+    order: step.order || index + 1,
+    title: `${guide.label} ${index + 1}단계`,
+    productType: '',
+    tool: '',
+    colors:
+      index === 0 && guide.color?.name
+        ? [{role: '', name: guide.color.name, hex: guide.color.hex}]
+        : [],
+    amount: '',
+    placement: index === 0 ? guide.placement ?? '' : '',
+    technique:
+      index === 0 && guide.technique && guide.technique !== step.instruction
+        ? `${step.instruction}\n${guide.technique}`
+        : step.instruction,
+    blending: '',
+    finishCheck: '',
+    key: `${guide.id}:step:${index + 1}`,
+    legacy: true,
+  }));
+}
+
+function toRecommendationProduct(
+  guide: ReferenceMakeupAreaGuide,
+): MakeupRecommendationProduct | undefined {
+  const product = guide.productRecommendation.product;
+  if (!product) {
+    return undefined;
+  }
+
+  return {
+    id: product.id,
+    area: 'base' as MakeupRecommendationProduct['area'],
+    brandName: product.brandName,
+    productName: product.productName,
+    reason: guide.productRecommendation.reason,
+    price: product.price,
+    imageUrl: product.imageUrl ?? undefined,
+    purchaseUrl: product.purchaseUrl ?? undefined,
+  };
+}
+
 function AreaGuidePanel({
   guide,
 }: {
   guide: ReferenceMakeupAreaGuide;
 }) {
-  const product = guide.productRecommendation.product;
-  const hasProductReason = guide.productRecommendation.reason.trim().length > 0;
+  const steps = toFinalRecipeSteps(guide);
+  const product = toRecommendationProduct(guide);
+  const finishDetail = normalizeFinishDetail(guide.professionalPoint);
+  const avoids = (guide.avoid ?? []).filter((item) => item.trim().length > 0);
 
   return (
     <YStack style={styles.areaCard}>
@@ -294,6 +505,13 @@ function AreaGuidePanel({
         </YStack>
       </XStack>
 
+      {guide.goal?.trim() ? (
+        <YStack style={styles.quickTipBox}>
+          <Text style={styles.quickTipLabel}>목표</Text>
+          <Text style={styles.quickTipText}>{guide.goal}</Text>
+        </YStack>
+      ) : null}
+
       <YStack style={styles.quickTipBox}>
         <Text style={styles.quickTipLabel}>핵심</Text>
         <Text style={styles.quickTipText}>{guide.quickTip}</Text>
@@ -304,50 +522,42 @@ function AreaGuidePanel({
         <Text style={styles.textureText}>{guide.texture}</Text>
       </YStack>
 
-      <ProDetailSteps guide={guide} />
-
-      <YStack style={styles.productSection}>
-        <XStack style={styles.productHeader}>
-          <View style={styles.productIconShell}>
-            <ShoppingBag color={colors.white} size={iconSize.xs} strokeWidth={2} />
-          </View>
-          <YStack style={styles.productHeaderCopy}>
-            <Text style={styles.productEyebrow}>추천 제품</Text>
-            <Text style={styles.productTitle}>이 룩에 가까운 제품</Text>
-          </YStack>
-        </XStack>
-
-        <XStack style={styles.searchQueryRow}>
-          <Search color={colors.textSecondary} size={iconSize.xs} strokeWidth={2} />
-          <Text style={styles.searchQueryText}>
-            {guide.productRecommendation.searchQuery}
-          </Text>
-        </XStack>
-
-        {product ? (
-          <XStack style={styles.productRow}>
-            <View style={styles.productImageFrame}>
-              <Image
-                resizeMode="contain"
-                source={product.imageUrl ? {uri: product.imageUrl} : product.imageSource}
-                style={styles.productImage}
-              />
-            </View>
-            <YStack style={styles.productCopy}>
-              <Text style={styles.productBrand}>{product.brandName}</Text>
-              <Text style={styles.productName}>{product.productName}</Text>
-              <Text style={styles.productPrice}>{formatPrice(product.price)}</Text>
-            </YStack>
-          </XStack>
-        ) : null}
-
-        {hasProductReason ? (
-          <View style={styles.productReasonBubble}>
-            <Text style={styles.productReasonLabel}>제품 선택 기준</Text>
-            <Text style={styles.productReasonText}>{guide.productRecommendation.reason}</Text>
-          </View>
-        ) : null}
+      <YStack style={styles.proDetailBlock}>
+        <Text style={styles.proDetailHeading}>순서 따라가기</Text>
+        <YStack style={styles.proStepList}>
+          {steps.map((step) => (
+            <FinalMakeupRecipeStepCard
+              accentHex={guide.color.hex}
+              key={step.key}
+              step={step}
+            />
+          ))}
+        </YStack>
       </YStack>
+
+      {avoids.length > 0 ? (
+        <YStack style={styles.textureBox}>
+          <Text style={styles.textureLabel}>주의</Text>
+          {avoids.map((item, index) => (
+            <Text key={`${guide.id}-avoid-${index}`} style={styles.textureText}>
+              {`· ${item}`}
+            </Text>
+          ))}
+        </YStack>
+      ) : null}
+
+      {finishDetail.length > 0 ? (
+        <YStack style={styles.proDetailBlock}>
+          <Text style={styles.proDetailHeading}>메이크업 마무리</Text>
+          <Text style={styles.proFinishText}>{finishDetail}</Text>
+        </YStack>
+      ) : null}
+
+      <FinalRecommendedProductCard
+        colorHex={guide.color.hex}
+        product={product}
+        searchQuery={guide.productRecommendation.searchQuery}
+      />
     </YStack>
   );
 }
@@ -410,36 +620,6 @@ function normalizeFinishDetail(text: string): string {
   }
 
   return text.replace(/\r\n/g, '\n').trim();
-}
-
-function ProDetailSteps({guide}: {guide: ReferenceMakeupAreaGuide}) {
-  const guideSteps = parseNumberedDetailSteps(guide.howTo);
-  const finishDetail = normalizeFinishDetail(guide.professionalPoint);
-
-  return (
-    <YStack style={styles.proDetailSection}>
-      <YStack style={styles.proDetailBlock}>
-        <Text style={styles.proDetailHeading}>순서 따라가기</Text>
-        <YStack style={styles.proStepList}>
-          {guideSteps.map((step, index) => (
-            <XStack key={`${step.id}-${index}`} style={styles.proStepRow}>
-              <View style={styles.proStepNumberBadge}>
-                <Text style={styles.proStepNumberText}>{`${step.number ?? index + 1}.`}</Text>
-              </View>
-              <Text style={styles.proStepDescription}>{step.text}</Text>
-            </XStack>
-          ))}
-        </YStack>
-      </YStack>
-
-      {finishDetail.length > 0 ? (
-        <YStack style={styles.proDetailBlock}>
-          <Text style={styles.proDetailHeading}>메이크업 마무리</Text>
-          <Text style={styles.proFinishText}>{finishDetail}</Text>
-        </YStack>
-      ) : null}
-    </YStack>
-  );
 }
 
 const sharedCardShadow = {

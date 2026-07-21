@@ -36,6 +36,11 @@ namespace ARMakeup.Bridge
     [Serializable]
     public class FilterParams
     {
+        // 블러셔 레거시/확장 계약. JsonUtility 필드가 아니므로 payload에는 포함되지 않는다.
+        public const int MinBlushShape = 0;
+        public const int MaxBlushShape = 7;
+        public const float MaxBlushIntensity = 1.2f;
+
         public float skinSmoothing = 0.5f;
         public float matteGrain = 0f;            // 매트 파우더 입자감(전역, 전 부위 마감 공유. 0=끔)
         public float skinBrightening = 0.2f;
@@ -64,7 +69,7 @@ namespace ARMakeup.Bridge
         public float lipStyleIntensity = 0f;    // 임포트 립 그림(데칼) 강도
         public float lipStyleSparkle = 0f;      // 립 데칼 글리터 명멸 0..1 (0=끔)
         public string blushColor = "#F08FA0";
-        public float blushIntensity = 0.35f;
+        public float blushIntensity = 0.35f;       // 0..1.2 (1.0 이상은 고발색 최대 대역)
         public int blushFinish = 0;              // 블러셔 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머
         public float blushShimmer = 0.5f;        // 시머 게인 0..1 (blushFinish=3일 때)
         public int blushMaterial = 0;            // 재질: 0=없음(기본) 1=벨벳 2=메탈 3=홀로그램
@@ -124,7 +129,7 @@ namespace ARMakeup.Bridge
         public float contourLift = 0f;
         public float contourSpread = 0f;
         // ── A14 마스크 재베이크(배치 A ③) — 가장자리 softness 상대 배수(Ellipse hand-tuned
-        // softness에 곱 적용). 0=기존 마스크(버킷 0)와 바이트 동일. 블러셔는 blushShape별 버킷.
+        // softness에 곱 적용). 0=각 부위의 기본 버킷. 블러셔는 0..7 shape별 절차 마스크 버킷.
         public float blushEdgeSoftness = 0f;
         public float highlightEdgeSoftness = 0f;
         public float contourEdgeSoftness = 0f;
@@ -278,7 +283,7 @@ namespace ARMakeup.Bridge
         public float lipGlossOverline = 0f;    // 립글로스 마스크 확장(±, UV) — 메인립 lipOverline과 독립
         public float blushLift = 0f;           // 블러셔 위/아래 (캐노니컬 UV, + = 위)
         public float blushSpread = 0f;         // 블러셔 바깥/안쪽 (+ = 바깥, 좌우 미러)
-        public int blushShape = 0;             // 블러셔 모양: 0=클래식(양볼) 1=이가리(코걸침) 2=드레이핑
+        public int blushShape = 0;             // 0=클래식 1=이가리 2=드레이핑 3=데일리 4=러블리 5=언더아이 6=선키스드 소프트 7=선키스드 밴드
         // ── 부위 확장(컨실·치아·아래 속눈썹) ── 강도는 0=끔, 길이 배수는 1=원래
         // (JsonUtility 생략 0은 Unity가 1로 보정 — mascaraLength 선례).
         public float browConcealIntensity = 0f;  // 눈썹 지우기(스킨톤 컨실 — 눈썹 스택 밑작업)

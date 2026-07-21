@@ -18,22 +18,21 @@ type ReferenceMakeupExtractionLoadingScreenProps = {
   onComplete: () => void;
 };
 
-const PROGRESS_TICK_MS = 320;
-const TOTAL_LOADING_MS = 26000;
+const PROGRESS_TICK_MS = 120;
+// 완료 전에는 경과 시간에 선형 비례해 "일정한 속도"로 채운다(예전 점근 곡선의 감속 제거).
+// 핵심: FILL_MS를 실제 소요(~55~70s)보다 넉넉히(85s) 잡아, 정상 구간에서는 상한에
+// 닿기 전에 분석이 끝나 곧바로 마무리되게 한다. 그래도 상한에 닿으면 95%가 아니라
+// NEAR_DONE(99%)이라 '거의 완료'로 읽히고, 도달 후에도 완전히 멈추지 않는다.
+const FILL_MS = 85000;
+const NEAR_DONE = 0.99;
+const ELAPSED_CAP_MS = 180000;
+// 분석 완료 후 100%까지 채우는 균일 속도(초당). 틱과 무관하게 실제 속도 일정.
+const FINISH_PER_SEC = 0.18;
+const FINISH_STEP = FINISH_PER_SEC * (PROGRESS_TICK_MS / 1000);
 const RING_SIZE = 132;
 const RING_STROKE = 8;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-
-const progressCapByPhase: Record<MakeupExtractionProgressUpdate['phase'], number> = {
-  queued: 0.08,
-  uploading: 0.22,
-  uploaded: 0.36,
-  analyzing: 0.82,
-  products: 0.96,
-  complete: 1,
-  fallback: 1,
-};
 
 const loadingStepDescriptions: Record<string, string> = {
   'reference-read': '업로드한 레퍼런스 사진과 이름을 확인해요.',
@@ -56,12 +55,9 @@ export function ReferenceMakeupExtractionLoadingScreen({
   const [elapsedMs, setElapsedMs] = useState(0);
   const [displayedProgress, setDisplayedProgress] = useState(0);
   const stepCount = data.loadingSteps.length;
-  const timedProgress = Math.min(1, elapsedMs / TOTAL_LOADING_MS);
-  const reportedProgress = progressUpdate?.progress ?? 0;
-  const progressCap = progressUpdate ? progressCapByPhase[progressUpdate.phase] : 0.95;
-  const targetProgress = isAnalysisReady
-    ? 1
-    : Math.min(Math.max(reportedProgress, timedProgress), progressCap, 0.95);
+  // 경과 시간에 선형 비례(일정 속도). 분석이 끝나면 100%로 마무리.
+  const timedLinear = Math.min(NEAR_DONE, elapsedMs * (NEAR_DONE / FILL_MS));
+  const targetProgress = isAnalysisReady ? 1 : timedLinear;
   const targetProgressRef = useRef(targetProgress);
   const progress = displayedProgress >= 0.995 ? 1 : displayedProgress;
   const progressLabel = `${Math.round(progress * 100)}%`;
@@ -89,7 +85,7 @@ export function ReferenceMakeupExtractionLoadingScreen({
   useEffect(() => {
     const intervalId = setInterval(() => {
       setElapsedMs((currentElapsedMs) =>
-        Math.min(currentElapsedMs + PROGRESS_TICK_MS, TOTAL_LOADING_MS),
+        Math.min(currentElapsedMs + PROGRESS_TICK_MS, ELAPSED_CAP_MS),
       );
     }, PROGRESS_TICK_MS);
 
@@ -105,18 +101,17 @@ export function ReferenceMakeupExtractionLoadingScreen({
   useEffect(() => {
     const intervalId = setInterval(() => {
       setDisplayedProgress((currentProgress) => {
-        const nextTarget = Math.max(0, Math.min(targetProgressRef.current, 1));
+        const finishing = targetProgressRef.current >= 1;
 
-        if (nextTarget <= currentProgress) {
-          return currentProgress;
+        // 분석 완료: 현재 위치에서 100%까지 일정 속도로 마무리(감속·점프 없음).
+        if (finishing) {
+          const nextProgress = currentProgress + FINISH_STEP;
+          return nextProgress >= 0.995 ? 1 : Math.min(nextProgress, 1);
         }
 
-        const remainingProgress = nextTarget - currentProgress;
-        const maxStep = nextTarget >= 1 ? 0.065 : 0.028;
-        const easedStep = Math.max(0.006, Math.min(maxStep, remainingProgress * 0.34));
-        const nextProgress = currentProgress + Math.min(remainingProgress, easedStep);
-
-        return nextTarget >= 1 && nextProgress >= 0.995 ? 1 : nextProgress;
+        // 진행 중: 시간 선형 목표(NEAR_DONE 이내)를 그대로 따라가 균일 속도 유지.
+        const nextTarget = Math.min(targetProgressRef.current, NEAR_DONE);
+        return Math.max(currentProgress, nextTarget);
       });
     }, PROGRESS_TICK_MS);
 

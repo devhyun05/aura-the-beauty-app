@@ -15,6 +15,7 @@
 import React, {useMemo, useState} from 'react';
 import {
   Dimensions,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,8 +24,21 @@ import {
 } from 'react-native';
 import ParamSlider from './ParamSlider';
 import type {LaneChip} from './LaneRow';
+import {
+  AR_BLUSH_COLORS,
+  AR_BLUSH_SHAPES,
+  arBlushIntensityFromSlider,
+  getArBlushColorByHex,
+  normalizeArBlushIntensity,
+} from '../../../../../shared/contracts/arBlushCatalog';
 import {REGION_GROUPS, REGION_MAP} from '../composer/regions';
 import type {RegionDef, RegionKey} from '../composer/regions';
+import {
+  patchBlushTree,
+  readBlushTree,
+  removeBlushTree,
+} from '../composer/blushTree';
+import {patchTeethTree, readTeethTree} from '../composer/teethTree';
 import {
   defSwatchColor,
   regionDefsForSlot,
@@ -49,6 +63,15 @@ import {
 // 카드 = 5:6 세로형 썸네일, 한 줄 가로 스크롤(캐러셀). 한 화면에 ~6장 보이게 폭 산정.
 const CARD_W = Math.floor((Dimensions.get('window').width - 48) / 6);
 const CARD_H = Math.round((CARD_W * 6) / 5); // 5:6 → 카드 높이(캐러셀 고정 높이용)
+const BLUSH_COLOR_CARD_W = Math.max(44, CARD_W - 10);
+const BLUSH_COLOR_CARD_H = 44;
+const BLUSH_SHAPE_ATLAS = require('../assets/blush-shape-atlas-v1.png') as number;
+const BLUSH_SHAPE_ATLAS_COLUMNS = 4;
+const BLUSH_SHAPE_CELL_W = CARD_W - 4;
+// 생성 아틀라스는 전체 3:4, 4×2 셀이므로 셀 하나는 3:8 비율이다.
+const BLUSH_SHAPE_CELL_H = (BLUSH_SHAPE_CELL_W * 8) / 3;
+const BLUSH_SHAPE_PREVIEW_H = CARD_H - 4;
+const BLUSH_SHAPE_CROP_TOP = BLUSH_SHAPE_CELL_W * 0.34;
 const ALL = '전체' as const;
 type Cat = typeof ALL | SlotKey;
 // 카테고리 표시 라벨 — 내부 키와 화면 표기 분리('컨투어'→'윤곽' 등). '전체'는 그대로.
@@ -70,6 +93,34 @@ const midLabelOf = (label: string): string => label.replace(/ 조정 베이스$/
 // 휘도로 밝은/어두운 텍스트를 고른다(GuideMode ZONE_TEXT와 동일 판정 로직).
 const swatchLabelColor = (color: string): string =>
   labelTextOn(compositeOverWhite(color, 0.1));
+
+function BlushShapePreview({index}: {index: number}) {
+  const column = index % BLUSH_SHAPE_ATLAS_COLUMNS;
+  const row = Math.floor(index / BLUSH_SHAPE_ATLAS_COLUMNS);
+
+  return (
+    <View style={styles.blushShapePreview}>
+      <Image
+        accessibilityIgnoresInvertColors
+        source={BLUSH_SHAPE_ATLAS}
+        resizeMode="stretch"
+        style={[
+          styles.blushShapeAtlas,
+          {
+            left: -column * BLUSH_SHAPE_CELL_W,
+            top: -(row * BLUSH_SHAPE_CELL_H + BLUSH_SHAPE_CROP_TOP),
+          },
+        ]}
+      />
+    </View>
+  );
+}
+
+const blushShapeCardLabel = (id: string, label: string): string => {
+  if (id === 'sun-kissed-soft') return '소프트';
+  if (id === 'sun-kissed-band') return '밴드';
+  return label;
+};
 
 interface Props {
   /** 작업본 룩 트리 — null이면 원본(빈 조합) */
@@ -132,6 +183,14 @@ export default function BasicMode({
   //   · '전체' 탭     = 부위(슬롯)룩(level:'region') 목록 → 슬롯 전체 교체(setSlotRegion)
   const isSubTab = !isAll && midCat !== ALL;
   const subRegion: RegionKey | null = isSubTab ? (midCat as RegionKey) : null;
+  const isBlushTab = subRegion === 'blush';
+  const blushState = useMemo(() => readBlushTree(tree), [tree]);
+  // 치아 미백 — 세부부위에 강도 한 축만 있어 슬롯 게인('립 농도')으로는 조절이 안 됐다.
+  // 치아 서브탭에서는 아래 농도 슬라이더를 teethWhitenIntensity에 직접 연결한다(#치아 QA).
+  const isTeethTab = subRegion === 'teeth';
+  const teethState = useMemo(() => readTeethTree(tree), [tree]);
+  const changeTeethIntensity = (v: number) =>
+    onChangeTree(patchTeethTree(tree, library, v));
 
   // '전체' 탭 카드 — 이 슬롯의 부위(슬롯)룩 전부(시스템+사용자).
   const slotDefs = useMemo(
@@ -171,9 +230,36 @@ export default function BasicMode({
     if (slot) onChangeTree(setSlotRegion(tree, library, slot, defId));
   };
   const chooseSub = (subDefId: string | null) => {
-    if (slot && subRegion) {
-      onChangeTree(setSubRegion(tree, library, slot, subRegion, subDefId));
+    if (!slot || !subRegion) return;
+    let next = setSubRegion(tree, library, slot, subRegion, subDefId);
+    // 메인립 ↔ 그라데이션은 상호배타 — 둘 다 입술 메인 색을 칠하는 모드라 동시에 못 쌓는다.
+    // 하나를 켜면(subDefId != null) 다른 하나를 끈다. 베이스립·립라이너·립글로스·치아는
+    // 서로 독립이라 그대로 레이어로 공존한다.
+    if (subDefId != null) {
+      if (subRegion === 'lipGradient') {
+        next = setSubRegion(next, library, slot, 'lip', null);
+      } else if (subRegion === 'lip') {
+        next = setSubRegion(next, library, slot, 'lipGradient', null);
+      }
     }
+    onChangeTree(next);
+  };
+  const chooseBlushShape = (shapeValue: number | null) => {
+    onChangeTree(
+      shapeValue === null
+        ? removeBlushTree(tree, library)
+        : patchBlushTree(tree, library, {shapeValue}),
+    );
+  };
+  const chooseBlushColor = (color: string) => {
+    onChangeTree(patchBlushTree(tree, library, {color}));
+  };
+  const changeBlushIntensity = (normalized: number) => {
+    onChangeTree(
+      patchBlushTree(tree, library, {
+        intensity: arBlushIntensityFromSlider(normalized),
+      }),
+    );
   };
 
   // 카테고리 표시 2종: 내용물 있음(밝은 텍스트) / 수정됨(● 도트).
@@ -264,13 +350,117 @@ export default function BasicMode({
 
       {/* 필터 저장 버튼은 공유 헤더(농도 슬라이더 오른쪽)로 이동 — App.tsx panelHeader. */}
 
-      {/* 1) 카드 캐러셀 — 한 줄 가로 스크롤. 전체=전체룩 카드, 슬롯=부위 스타일 카드 */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.cardScroll}
-        contentContainerStyle={styles.cardRow}>
-        <View style={styles.cardGrid}>
+      {/* 1) 카드 캐러셀 — 블러셔만 모양/색상을 독립 축으로 노출한다. */}
+      {isBlushTab ? (
+        <View style={styles.blushAxes}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.blushAxisScroll}
+            contentContainerStyle={styles.cardRow}>
+            <View style={styles.cardGrid}>
+              <TouchableOpacity
+                accessibilityLabel="블러셔 없음"
+                accessibilityRole="button"
+                accessibilityState={{selected: !blushState.enabled}}
+                testID="basic-blush-shape-none"
+                onPress={() => chooseBlushShape(null)}
+                style={[
+                  styles.card,
+                  styles.blushShapeCard,
+                  styles.cardTintNone,
+                  !blushState.enabled && styles.cardOn,
+                ]}>
+                <View style={styles.blushShapeNoneMark}>
+                  <View style={styles.blushShapeNoneLine} />
+                </View>
+                <View style={[styles.cardLabelBar, styles.blushShapeLabelBar]}>
+                  <Text
+                    style={[styles.cardLabel, styles.blushShapeLabel]}
+                    numberOfLines={1}>
+                    없음
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              {AR_BLUSH_SHAPES.map(shape => {
+                const on =
+                  blushState.enabled && blushState.shapeValue === shape.value;
+                return (
+                  <TouchableOpacity
+                    accessibilityLabel={`${shape.label} 블러셔 모양`}
+                    accessibilityRole="button"
+                    accessibilityState={{selected: on}}
+                    testID={`basic-blush-shape-${shape.id}`}
+                    key={shape.id}
+                    onPress={() => chooseBlushShape(shape.value)}
+                    style={[
+                      styles.card,
+                      styles.blushShapeCard,
+                      styles.cardTintShape,
+                      on && styles.cardOn,
+                    ]}>
+                    <BlushShapePreview index={shape.value} />
+                    <View style={[styles.cardLabelBar, styles.blushShapeLabelBar]}>
+                      <Text
+                        style={[styles.cardLabel, styles.blushShapeLabel]}
+                        numberOfLines={1}>
+                        {blushShapeCardLabel(shape.id, shape.label)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.blushColorAxisScroll}
+            contentContainerStyle={styles.blushColorRow}>
+            <View style={styles.cardGrid}>
+              {AR_BLUSH_COLORS.map(color => {
+                const on =
+                  blushState.enabled &&
+                  getArBlushColorByHex(blushState.color)?.id === color.id;
+                return (
+                  <TouchableOpacity
+                    accessibilityLabel={`${color.label} 블러셔 색상`}
+                    accessibilityRole="button"
+                    accessibilityState={{selected: on}}
+                    testID={`basic-blush-color-${color.id}`}
+                    key={color.id}
+                    onPress={() => chooseBlushColor(color.hex)}
+                    style={[
+                      styles.card,
+                      styles.blushColorCard,
+                      {backgroundColor: color.hex},
+                      on && styles.cardOn,
+                    ]}>
+                    <View style={[styles.cardLabelBar, styles.blushColorLabelBar]}>
+                      <Text
+                        style={[
+                          styles.cardLabel,
+                          styles.blushColorLabel,
+                          {color: swatchLabelColor(color.hex)},
+                        ]}
+                        numberOfLines={2}>
+                        {color.label}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.cardScroll}
+          contentContainerStyle={styles.cardRow}>
+          <View style={styles.cardGrid}>
           {isAll
             ? lookChips.map(chip => {
                 const on = chip.id === lookSelectedId;
@@ -306,15 +496,10 @@ export default function BasicMode({
                     </Text>
                   </View>
                 </TouchableOpacity>
-                {subCustom && (
-                  <View style={[styles.card, styles.cardTintMine, styles.cardOn]}>
-                    <View style={styles.cardLabelBar}>
-                      <Text style={styles.cardLabel} numberOfLines={2}>
-                        ◈ 내 조합
-                      </Text>
-                    </View>
-                  </View>
-                )}
+                {/* '◈ 내 조합'(subCustom) 카드는 세부부위 탭에선 노출하지 않는다 — 메인립·
+                    베이스·라이너·글로스는 각자 레이어로 쌓는 축이라, 세부부위 탭엔 그 부위
+                    프리셋만 두고 여러 레이어가 합쳐진 '조합'은 상위 '전체' 탭(showCustom)에만
+                    보인다(#메인립 조합 QA). subCustom은 여전히 트리에 반영되어 렌더된다. */}
                 {subDefs.map(def => {
                   const on = def.id === activeSubRef;
                   const color = defSwatchColor(library, def.id) ?? '#666666';
@@ -377,17 +562,46 @@ export default function BasicMode({
                 })}
               </>
             )}
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      )}
 
-      {/* 2) 농도 슬라이더 — 룩카드 바로 아래(간격 최소). 카테고리별 라우팅: '전체'=
-          전역 농도(opacity), 슬롯 카테고리=그 슬롯 부위만(slotGain). 둘 다 비파괴
-          배수(원본 트리 유지, 전송 시 스케일) — 0으로 내렸다 올려도 원본 강도 복구. */}
+      {/* 2) 농도 — 블러셔 중분류는 잎 값을 직접 저장하고, 나머지는 기존 게인을 쓴다. */}
       <View style={styles.densityWrap}>
         <ParamSlider
-          label={isAll ? '전체 농도' : `${catLabel(cat)} 농도`}
-          value={isAll ? opacity : slotGain[slot!] ?? 1}
-          onChange={isAll ? onOpacity : v => onSlotGain(slot!, v)}
+          label={
+            isAll ? '전체 농도' : isTeethTab ? '치아 미백' : `${catLabel(cat)} 농도`
+          }
+          value={
+            isBlushTab
+              ? normalizeArBlushIntensity(blushState.intensity)
+              : isTeethTab
+                ? teethState.intensity
+                : isAll
+                  ? opacity
+                  : slotGain[slot!] ?? 1
+          }
+          onChange={
+            isBlushTab
+              ? changeBlushIntensity
+              : isTeethTab
+                ? changeTeethIntensity
+                : isAll
+                  ? onOpacity
+                  : v => onSlotGain(slot!, v)
+          }
+          accessibilityLabel={isBlushTab ? '블러셔 윤곽 농도' : undefined}
+          accessibilityValue={
+            isBlushTab
+              ? {
+                  min: 0,
+                  max: 100,
+                  now: Math.round(
+                    normalizeArBlushIntensity(blushState.intensity) * 100,
+                  ),
+                }
+              : undefined
+          }
           accent={NEUTRAL_ACCENT}
         />
       </View>
@@ -497,6 +711,21 @@ const styles = StyleSheet.create({
     height: CARD_H + 8, // 카드 한 줄 높이로 고정 — 세로 확장 막아 아래 농도 슬라이더 보장
     flexGrow: 0,
   },
+  blushAxes: {
+    gap: 0,
+  },
+  blushAxisScroll: {
+    height: CARD_H + 6,
+    flexGrow: 0,
+  },
+  blushColorAxisScroll: {
+    height: BLUSH_COLOR_CARD_H + 4,
+    flexGrow: 0,
+  },
+  blushColorRow: {
+    paddingTop: 1,
+    paddingBottom: 1,
+  },
   // 카드↔농도 슬라이더 간격 축소(panel gap 상쇄).
   densityWrap: {
     marginTop: -SP.sm,
@@ -529,6 +758,64 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.9)',
     borderWidth: 2,
   },
+  blushShapeCard: {
+    height: CARD_H,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  blushShapePreview: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    width: BLUSH_SHAPE_CELL_W,
+    height: BLUSH_SHAPE_PREVIEW_H,
+    overflow: 'hidden',
+    backgroundColor: '#EFE8E2',
+  },
+  blushShapeAtlas: {
+    position: 'absolute',
+    width: BLUSH_SHAPE_CELL_W * BLUSH_SHAPE_ATLAS_COLUMNS,
+    height: BLUSH_SHAPE_CELL_H * 2,
+  },
+  blushShapeLabelBar: {
+    minHeight: 15,
+    paddingVertical: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(18,18,18,0.66)',
+  },
+  blushShapeLabel: {
+    fontSize: 8,
+    lineHeight: 10,
+  },
+  blushShapeNoneMark: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    right: 2,
+    height: BLUSH_SHAPE_PREVIEW_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  blushShapeNoneLine: {
+    width: 27,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: 'rgba(255,255,255,0.48)',
+    transform: [{rotate: '-38deg'}],
+  },
+  blushColorCard: {
+    width: BLUSH_COLOR_CARD_W,
+    height: BLUSH_COLOR_CARD_H,
+    borderRadius: 9,
+  },
+  blushColorLabelBar: {
+    minHeight: 17,
+    paddingVertical: 1,
+    paddingHorizontal: 2,
+  },
+  blushColorLabel: {
+    fontSize: 8,
+    lineHeight: 9,
+  },
   // '전체' 탭의 완성 룩(LOOK) 카드 틴트 — 선택 표현이 아니라 "이 카드는 완성 룩
   // 타입"이라는 카드 종류 구분색(부위 스와치 카드와 시각적으로 구분). 3라운드 정정:
   // 기본 모드는 세 모드(무채색) 스코프라 ACCENT를 뺐다 — WarpSheet.cardTintFit과
@@ -538,6 +825,9 @@ const styles = StyleSheet.create({
   },
   cardTintNone: {
     backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  cardTintShape: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   cardTintMine: {
     backgroundColor: GOLD,

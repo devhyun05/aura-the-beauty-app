@@ -34,7 +34,11 @@ DEFAULT_CATEGORY_BY_AREA = {
   "contour": "shadow",
 }
 
-REFERENCE_BEDROCK_MAX_TOKENS = 8192
+# 부위별 리치 스키마(goal/placement/technique/steps/reason/avoid×6부위) 출력이
+# 8192에서 잘려 두 번째 풀 호출(재시도)을 유발해 지연이 배가되던 문제 대응.
+# 재시도가 성공하던 12288을 초기 상한으로 올려 단일 호출로 완결한다(상한↑은 응답이
+# 짧으면 지연에 영향 없음 — 실제 지연은 생성 토큰 수에 비례).
+REFERENCE_BEDROCK_MAX_TOKENS = 12288
 REFERENCE_BEDROCK_RETRY_MAX_TOKENS = 12288
 REFERENCE_BEDROCK_INPUT_USD_PER_MILLION_TOKENS = 3.0
 REFERENCE_BEDROCK_OUTPUT_USD_PER_MILLION_TOKENS = 15.0
@@ -401,18 +405,60 @@ def _normalize_product_recommendation(
   }
 
 
+def _normalize_string_list(value: Any) -> list[str]:
+  if not isinstance(value, list):
+    return []
+  items: list[str] = []
+  for item in value:
+    text = _clean_text(item)
+    if text:
+      items.append(text)
+  return items
+
+
+def _normalize_steps(value: Any, how_to_text: str) -> list[dict[str, Any]]:
+  steps: list[dict[str, Any]] = []
+  if isinstance(value, list):
+    for item in value:
+      if not isinstance(item, dict):
+        continue
+      instruction = _clean_text(_get_value(item, "instruction", "text", "description"))
+      if not instruction:
+        continue
+      steps.append({"order": len(steps) + 1, "instruction": instruction})
+  if not steps and how_to_text:
+    for part in re.split(r"\s*\d+\.\s*", how_to_text):
+      instruction = _clean_text(part)
+      if instruction:
+        steps.append({"order": len(steps) + 1, "instruction": instruction})
+  return steps
+
+
 def _normalize_area_guide(raw: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
   area_id = fallback["id"]
+  how_to = _clean_text(_get_value(raw, "howTo", "how_to")) or fallback["how_to"]
 
   return {
     **fallback,
     "label": _clean_text(_get_value(raw, "label")) or fallback["label"],
     "title": _clean_text(_get_value(raw, "title")) or fallback["title"],
+    "goal": _clean_text(_get_value(raw, "goal")) or fallback.get("goal") or fallback["quick_tip"],
     "color": _normalize_color(_get_value(raw, "color"), fallback["color"]),
     "texture": _clean_text(_get_value(raw, "texture")) or fallback["texture"],
+    "placement": (
+      _clean_text(_get_value(raw, "placement")) or fallback.get("placement") or ""
+    ),
+    "technique": (
+      _clean_text(_get_value(raw, "technique"))
+      or fallback.get("technique")
+      or fallback["professional_point"]
+    ),
     "quick_tip": _clean_text(_get_value(raw, "quickTip", "quick_tip")) or fallback["quick_tip"],
     "analysis": _clean_text(_get_value(raw, "analysis")) or fallback["analysis"],
-    "how_to": _clean_text(_get_value(raw, "howTo", "how_to")) or fallback["how_to"],
+    "steps": _normalize_steps(_get_value(raw, "steps"), how_to),
+    "how_to": how_to,
+    "reason": _clean_text(_get_value(raw, "reason")) or fallback.get("reason") or fallback["analysis"],
+    "avoid": _normalize_string_list(_get_value(raw, "avoid")),
     "professional_point": (
       _clean_text(_get_value(raw, "professionalPoint", "professional_point"))
       or fallback["professional_point"]
@@ -714,11 +760,22 @@ Top-level key는 extractedMakeupLook 하나만 둔다.
         "id": "skin",
         "label": "피부",
         "title": "부위별 제목",
+        "goal": "이 부위에서 이루려는 목표를 한 문장으로",
         "color": {{"name": "색상명", "hex": "#F0D6C8"}},
         "texture": "질감 설명",
+        "placement": "어느 위치에 어떤 범위로 올리는지",
+        "technique": "바르는 기법과 도구 사용 포인트",
         "quickTip": "한 줄 핵심",
         "analysis": "이미지 기준으로 보이는 표현 방식",
+        "steps": [
+          {{"order": 1, "instruction": "첫 단계 구체 설명"}},
+          {{"order": 2, "instruction": "두 번째 단계 구체 설명"}},
+          {{"order": 3, "instruction": "세 번째 단계 구체 설명"}},
+          {{"order": 4, "instruction": "마무리 단계 구체 설명"}}
+        ],
         "howTo": "1. 첫 단계 설명\\n2. 두 번째 단계 설명\\n3. 세 번째 단계 설명\\n4. 마무리 단계 설명",
+        "reason": "이 부위를 그렇게 해석하고 구성한 근거",
+        "avoid": ["피해야 할 실수 1", "피해야 할 실수 2"],
         "professionalPoint": "메이크업 마무리에서 완성도를 높이는 위치, 농도, 질감, 도구 사용 포인트",
         "productRecommendation": {{
           "category": "base",
@@ -738,8 +795,11 @@ areaGuides는 반드시 이 순서와 id로 6개를 모두 작성한다:
 5. lip / 입술 / category lip
 6. contour / 윤곽 / category shadow
 
-각 부위의 howTo와 professionalPoint는 서로 다른 내용을 써라.
-howTo는 반드시 1. 2. 3. 4. 번호가 붙은 4단계 순서 가이드로 작성한다. professionalPoint는 '메이크업 마무리' 관점에서 완성도를 높이는 디테일을 작성한다.
+각 부위의 goal, placement, technique, steps, reason, professionalPoint는 서로 다른 내용을 구체적으로 써라.
+steps는 반드시 order(1부터)와 instruction으로 이루어진 3~5개의 구조화된 단계 배열로 작성한다. 각 instruction은 위치·농도·도구·질감을 포함해 초보자도 그대로 따라 할 수 있게 쓴다.
+howTo는 steps와 같은 순서를 1. 2. 3. 4. 번호가 붙은 한 문단으로도 함께 작성한다(하위 호환용).
+goal은 그 부위에서 이루려는 목표, placement는 올리는 위치와 범위, technique는 기법·도구, reason은 그렇게 해석한 근거, avoid는 피해야 할 실수 1~3개 배열로 작성한다.
+professionalPoint는 '메이크업 마무리' 관점에서 완성도를 높이는 디테일을 작성한다.
 메이크업 핵심 points는 정확히 3개만 작성한다.
 tags는 1개에서 4개 사이로 작성한다.
 색상 hex는 이미지에서 관찰되는 색을 근사한다.
@@ -832,7 +892,8 @@ tags는 1개에서 4개 사이로 작성한다.
     image_bytes: bytes,
     content_type: str | None = None,
   ) -> dict[str, Any]:
-    model_id = self.settings.effective_analysis_model_id
+    # 추출 비전은 얼굴 분석과 분리된 전용 모델(기본 Haiku 4.5)을 사용해 지연을 줄인다.
+    model_id = self.settings.effective_reference_extraction_model_id
 
     if not model_id:
       raise AppError(
@@ -1158,7 +1219,11 @@ async def enrich_reference_makeup_products(
     return extraction_payload, "fallback"
 
   product_source = "fallback"
-  recommendation_cache: dict[tuple[str, str], dict[str, Any] | None] = {}
+
+  # 1) 각 가이드의 (category, search_query) 캐시키와 임베딩 프로파일을 수집한다.
+  #    같은 키는 최초 등장 부위의 프로파일 한 번만 조회한다(중복 제거).
+  guide_entries: list[tuple[dict[str, Any], tuple[str, str]]] = []
+  unique_specs: dict[tuple[str, str], tuple[str, str, Any]] = {}
 
   for guide in area_guides:
     if not isinstance(guide, dict):
@@ -1177,35 +1242,59 @@ async def enrich_reference_makeup_products(
       continue
 
     cache_key = (category, search_query)
+    guide_entries.append((recommendation, cache_key))
+    if cache_key not in unique_specs:
+      unique_specs[cache_key] = (
+        category,
+        search_query,
+        _build_reference_product_profile(extracted_look, guide),
+      )
+
+  if not unique_specs:
+    return extraction_payload, "fallback"
+
+  # 2) 유니크 키별 상품 추천을 병렬 조회한다(부위 순차 → 동시 실행으로 지연 단축).
+  #    부위별 응답 프로파일(요약)을 임베딩해 신선-오퍼 후보를 시맨틱 리랭크한다.
+  #    (build_product_recommendation_data 내부의 _apply_semantic_product_scores)
+  keys = list(unique_specs.keys())
+  jobs = [
+    build_product_recommendation_data(
+      db,
+      settings,
+      category,
+      profile_override=profile,
+      query_override=search_query,
+    )
+    for category, search_query, profile in (unique_specs[key] for key in keys)
+  ]
+  results = await asyncio.gather(*jobs, return_exceptions=True)
+
+  recommendation_cache: dict[tuple[str, str], dict[str, Any] | None] = {}
+  for cache_key, result in zip(keys, results):
+    if isinstance(result, Exception):  # 상품 보강 실패는 리포트 생성을 막지 않는다.
+      logger.warning(
+        "[aura:reference-products] enrich:failed category=%s query=%s error=%s",
+        cache_key[0],
+        cache_key[1],
+        result.__class__.__name__,
+      )
+      recommendation_cache[cache_key] = None
+      continue
+
+    recommendation_data, source = result
+    products = recommendation_data.get("products")
+    first_product = products[0] if isinstance(products, list) and products else None
+    mapped_product = (
+      _map_shopping_product(first_product or {}) if isinstance(first_product, dict) else None
+    )
+    recommendation_cache[cache_key] = mapped_product
+
+    if mapped_product and source != "fallback" and product_source == "fallback":
+      product_source = source
+
+  # 3) 조회 결과를 각 가이드에 반영한다.
+  for recommendation, cache_key in guide_entries:
     mapped_product = recommendation_cache.get(cache_key)
-
-    if cache_key not in recommendation_cache:
-      try:
-        recommendation_data, source = await build_product_recommendation_data(
-          db,
-          settings,
-          category,
-          profile_override=_build_reference_product_profile(extracted_look, guide),
-          query_override=search_query,
-        )
-      except Exception as exc:  # noqa: BLE001 - product enrichment must not fail report generation.
-        logger.warning(
-          "[aura:reference-products] enrich:failed category=%s query=%s error=%s",
-          category,
-          search_query,
-          exc.__class__.__name__,
-        )
-        recommendation_cache[cache_key] = None
-        continue
-
-      products = recommendation_data.get("products")
-      first_product = products[0] if isinstance(products, list) and products else None
-      mapped_product = _map_shopping_product(first_product or {}) if isinstance(first_product, dict) else None
-      recommendation_cache[cache_key] = mapped_product
-
-      if mapped_product and source != "fallback":
-        product_source = source
-
     if mapped_product:
       recommendation["product"] = mapped_product
 

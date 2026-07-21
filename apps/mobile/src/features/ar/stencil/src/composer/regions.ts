@@ -9,7 +9,11 @@
  */
 import type { FilterParams, LensLayer } from '../bridge/types';
 import {
-  BLUSH_COLORS,
+  AR_BLUSH_COLORS,
+  AR_BLUSH_MAX_INTENSITY,
+  AR_BLUSH_SHAPES,
+} from '../../../../../shared/contracts/arBlushCatalog';
+import {
   BROW_COLORS,
   CONCEALER_COLORS,
   CONTOUR_COLORS,
@@ -325,12 +329,11 @@ export const EYELINER_FINISHES: DomainOption[] = [
   { value: 3, label: '펄' },
 ];
 
-// 블러셔 모양 프리셋 (AXIS 02) — 이가리=코걸침 한 장, 드레이핑=관자 스윕
-export const BLUSH_SHAPES = [
-  { value: 0, label: '클래식' },
-  { value: 1, label: '이가리' },
-  { value: 2, label: '드레이핑' },
-];
+// 블러셔 모양 프리셋 (AXIS 02) — 공통 저장/Unity 계약 value 0..7.
+export const BLUSH_SHAPES = AR_BLUSH_SHAPES.map(({value, label}) => ({
+  value,
+  label,
+}));
 
 // 재질 아키타입 — 마감(벨벳시언=sheen 축)과 중복 제거: 벨벳은 마감에 두고, 재질은
 // "마감으로 안 되는 것"(각도 기반 메탈·홀로그램)만. 값은 셰이더 매핑 유지(2·3).
@@ -854,6 +857,7 @@ export type RegionKey =
   // 립
   | 'lipBase'
   | 'lip'
+  | 'lipGradient'
   | 'lipLiner'
   | 'lipGloss'
   | 'teeth'
@@ -1098,7 +1102,14 @@ export const REGION_GROUPS: RegionGroup[] = [
             { type: 'slider', label: '결 보정', key: 'skinSmoothing' },
             { type: 'slider', label: '이마·목 확장 (세그)', key: 'skinSmoothingExtended' },
           ],
-          finish: [{ type: 'slider', label: '윤광', key: 'skinGlow' }],
+          finish: [{
+            type: 'segments',
+            key: 'skinGlow',
+            options: [
+              { value: 0, label: '모공 프라이머' },
+              { value: 0.5, label: '윤광 프라이머' },
+            ],
+          }],
         },
       },
       {
@@ -1212,7 +1223,7 @@ export const REGION_GROUPS: RegionGroup[] = [
         // 프리셋이 blushParticle*를 실으면 seedLayers→compileLayers 왕복에 보존된다(BARE 우회 불필요).
         // density 0 = 기본 off. (UI 슬라이더 노출은 후속.)
         defaults: {
-          blushIntensity: 0.5,
+          blushIntensity: 0.72,
           blushMaterial: 0,
           blushMaterialStrength: 0.85,
           blushParticleSize: 0.4,
@@ -1252,7 +1263,11 @@ export const REGION_GROUPS: RegionGroup[] = [
               fallback: 0,
             },
           ],
-          color: [{ type: 'swatches', key: 'blushColor', palette: BLUSH_COLORS }],
+          color: [{
+            type: 'swatches',
+            key: 'blushColor',
+            palette: AR_BLUSH_COLORS.map(color => color.hex),
+          }],
           finish: [
             {
               type: 'finish',
@@ -1283,7 +1298,12 @@ export const REGION_GROUPS: RegionGroup[] = [
             { type: 'slider', label: '글리터 시차', key: 'blushParticleParallax', group: '글리터' },
             { type: 'slider', label: '글리터 컨페티(다색)', key: 'blushParticleConfetti', group: '글리터' },
           ],
-          opacity: [{ type: 'slider', label: '블러셔', key: 'blushIntensity' }],
+          opacity: [{
+            type: 'slider',
+            label: '블러셔',
+            key: 'blushIntensity',
+            max: AR_BLUSH_MAX_INTENSITY,
+          }],
           fit: [
             {
               type: 'slider',
@@ -2185,6 +2205,42 @@ export const REGION_GROUPS: RegionGroup[] = [
         },
       },
       {
+        // 그라데이션 립 — 안쪽 진하고 바깥 연한 물든 입술 + 물광 글로스. 렌더는 메인립과
+        // 같은 lip 필드(lipColor/lipColor2/lipGradient/lipShape) + 글로스(lipGlossIntensity)로
+        // 나가므로 Unity 리전 추가는 불필요(compileLayers가 FilterParams로 평탄화). 별도
+        // 세부부위로 두어 기본 모드에서 '그라데이션' 카테고리(서브탭)로 노출한다.
+        key: 'lipGradient',
+        label: '그라데이션',
+        emoji: '🌗',
+        productName: '그라데 틴트',
+        onKeys: ['lipGradient'],
+        defaults: {
+          lipColor: '#DC6F87',
+          lipColor2: '#AE2647',
+          lipGradient: 0.82,
+          lipShape: 1,
+          lipIntensity: 0.82,
+          lipFinish: 0,
+        },
+        axes: {
+          shape: [
+            { type: 'segments', key: 'lipShape', options: LIP_SHAPES },
+          ],
+          color: [
+            { type: 'swatches', label: '바깥 색', key: 'lipColor', palette: LIP_COLORS },
+            { type: 'swatches', label: '안쪽(진한) 색', key: 'lipColor2', palette: LIP_COLORS },
+            { type: 'slider', label: '그라데이션', key: 'lipGradient' },
+          ],
+          // 그라데는 색만 — 광택은 립글로스 세부부위로 따로 쌓는다. 여기선 색 마감만.
+          finish: [
+            { type: 'finish', finishKey: 'lipFinish', shimmerKey: 'lipShimmer', options: LIP_FINISHES },
+          ],
+          opacity: [
+            { type: 'slider', label: '립', key: 'lipIntensity' },
+          ],
+        },
+      },
+      {
         key: 'lipLiner',
         label: '립라이너',
         emoji: '🖍️',
@@ -2398,6 +2454,7 @@ export const REGION_AXIS_PRESENTATION: Record<
   browStyle: { texture: 'segment', finish: 'hidden' },
   lipBase: { texture: 'segment', finish: 'segment' },
   lip: { texture: 'segment', finish: 'segment' },
+  lipGradient: { texture: 'hidden', finish: 'segment' },
   lipLiner: { texture: 'segment', finish: 'badge' },
   lipGloss: { texture: 'segment', finish: 'segment' },
   teeth: { texture: 'badge', finish: 'segment' },
