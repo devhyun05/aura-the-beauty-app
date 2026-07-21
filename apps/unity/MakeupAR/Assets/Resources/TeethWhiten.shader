@@ -19,8 +19,8 @@ Shader "ARMakeup/TeethWhiten"
         _GumRedLo ("Gum Redness Lo", Range(0, 0.5)) = 0.06
         _GumRedHi ("Gum Redness Hi", Range(0, 0.5)) = 0.16
         // 미백 최대치 — intensity=1일 때 채도 감쇠 비율·밝기 가산량. // 실기기 튜닝 대상
-        _MaxDesat ("Max Desaturation", Range(0, 1)) = 0.8
-        _BrightenAdd ("Brighten Add", Range(0, 0.3)) = 0.07
+        _MaxDesat ("Max Desaturation", Range(0, 1)) = 0.92
+        _BrightenAdd ("Brighten Add", Range(0, 0.3)) = 0.18
         // 스트립 상·하 변(입술 안쪽 경계) 페더 구간 — uv.x(0=상변 → 1=하변)의
         // 양끝에서 감쇠. // 실기기 튜닝 대상
         _RimFeather ("Rim Feather", Range(0, 0.6)) = 0.25

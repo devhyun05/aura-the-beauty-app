@@ -857,6 +857,7 @@ export type RegionKey =
   // 립
   | 'lipBase'
   | 'lip'
+  | 'lipGradient'
   | 'lipLiner'
   | 'lipGloss'
   | 'teeth'
@@ -2204,6 +2205,42 @@ export const REGION_GROUPS: RegionGroup[] = [
         },
       },
       {
+        // 그라데이션 립 — 안쪽 진하고 바깥 연한 물든 입술 + 물광 글로스. 렌더는 메인립과
+        // 같은 lip 필드(lipColor/lipColor2/lipGradient/lipShape) + 글로스(lipGlossIntensity)로
+        // 나가므로 Unity 리전 추가는 불필요(compileLayers가 FilterParams로 평탄화). 별도
+        // 세부부위로 두어 기본 모드에서 '그라데이션' 카테고리(서브탭)로 노출한다.
+        key: 'lipGradient',
+        label: '그라데이션',
+        emoji: '🌗',
+        productName: '그라데 틴트',
+        onKeys: ['lipGradient'],
+        defaults: {
+          lipColor: '#DC6F87',
+          lipColor2: '#AE2647',
+          lipGradient: 0.82,
+          lipShape: 1,
+          lipIntensity: 0.82,
+          lipFinish: 0,
+        },
+        axes: {
+          shape: [
+            { type: 'segments', key: 'lipShape', options: LIP_SHAPES },
+          ],
+          color: [
+            { type: 'swatches', label: '바깥 색', key: 'lipColor', palette: LIP_COLORS },
+            { type: 'swatches', label: '안쪽(진한) 색', key: 'lipColor2', palette: LIP_COLORS },
+            { type: 'slider', label: '그라데이션', key: 'lipGradient' },
+          ],
+          // 그라데는 색만 — 광택은 립글로스 세부부위로 따로 쌓는다. 여기선 색 마감만.
+          finish: [
+            { type: 'finish', finishKey: 'lipFinish', shimmerKey: 'lipShimmer', options: LIP_FINISHES },
+          ],
+          opacity: [
+            { type: 'slider', label: '립', key: 'lipIntensity' },
+          ],
+        },
+      },
+      {
         key: 'lipLiner',
         label: '립라이너',
         emoji: '🖍️',
@@ -2417,6 +2454,7 @@ export const REGION_AXIS_PRESENTATION: Record<
   browStyle: { texture: 'segment', finish: 'hidden' },
   lipBase: { texture: 'segment', finish: 'segment' },
   lip: { texture: 'segment', finish: 'segment' },
+  lipGradient: { texture: 'hidden', finish: 'segment' },
   lipLiner: { texture: 'segment', finish: 'badge' },
   lipGloss: { texture: 'segment', finish: 'segment' },
   teeth: { texture: 'badge', finish: 'segment' },

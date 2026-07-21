@@ -480,6 +480,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     minHeight: AR_FILTER_OPTION_PICKER_MIN_HEIGHT,
     paddingRight: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   optionCard: {
     alignItems: 'center',

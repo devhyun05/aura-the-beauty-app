@@ -71,7 +71,7 @@ export const EXPERT_PARAMS = deepFreeze([
     uniform: '_GlossLumaLo',
     min: 0,
     max: 1,
-    default: 0.6,
+    default: 0.4,
     step: null,
     tier: 'expert',
     owner: 'Lip.shader',

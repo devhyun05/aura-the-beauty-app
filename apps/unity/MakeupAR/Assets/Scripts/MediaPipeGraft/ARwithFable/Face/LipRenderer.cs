@@ -45,7 +45,7 @@ namespace ARMakeup.Face
         const float SnapOutRange = 0.28f;  // 바깥(피부쪽) 탐색
         const int SnapSteps = 12;
         const float SnapMinDrop = 0.04f;   // 붉은기 낙차 이 이상이어야 스냅(약하면 랜드마크)
-        const float SnapEma = 0.12f;       // 낮을수록 안정(꿀렁임 방지) — 아이라이너 E1과 동일
+        const float SnapEma = 0.20f;       // 낮을수록 안정(꿀렁임 방지), 높을수록 반응↑. 얼굴 움직임 시 경계 지연 완화를 위해 0.12→0.20(#립 딜레이 QA, 실기기 튜닝 대상)
         // 코너 무스냅 테이퍼 — 입꼬리(코너 인덱스 0=61, 10=291) 근처는 붉은기 급락 지점이
         // 실제 립 경계가 아니라 입꼬리 크리스(구각) 그림자라, 스냅이 링을 크리스로 끌어당겨
         // 요/틸트 시 옆끝이 처지거나 뜬다(아이라인 카런클 그림자와 동일 실패,
@@ -53,7 +53,7 @@ namespace ARMakeup.Face
         // 2스텝부터 1로 테이퍼해 코너는 아크 보정된 랜드마크(_outerFixed)에 정확히 머물게 한다.
         const float CornerSnapTaperSteps = 2f;  // 코너에서 0→1 도달까지 링 스텝 수(아이라인 준용, 실기기 튜닝)
         // 코너 근처 오프셋 추가 시간 안정화 — 고개 회전 후 들뜸 방지(아이라인 SnapOffEmaFront=0.08 준용).
-        const float SnapEmaCorner = 0.06f;      // 코너 ≤2스텝 점에 적용(중앙 SnapEma=0.12보다 강함, 실기기 튜닝)
+        const float SnapEmaCorner = 0.12f;      // 코너 ≤2스텝 점에 적용(중앙 SnapEma보다 강함). 반응성 위해 0.06→0.12(#립 딜레이 QA, 실기기 튜닝)
 
         // 윗입술 채움 보정: 윗입술 밴드(외곽-top↔내곽-top)가 너무 좁게 잡혀 위(입술산
         // 가장자리)·아래(마우스라인) 모두 덜 칠해진다(실기기 픽셀 확인). 윗입술 점만 골라
