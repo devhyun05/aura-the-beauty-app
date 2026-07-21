@@ -447,6 +447,18 @@ export function getFloatingActionDefinition(
   return definition;
 }
 
+// 스토어 빌드에서 노출하지 않는 플로팅 액션 — AR 필터(발열 이슈로 릴리스 범위
+// 제외)와 추천 필터 스토어. 렌더 경로와 설정 후보 목록이 모두 이 필터를 거치므로
+// 기본값·저장된 선택에 남아 있어도 화면에는 나오지 않는다.
+const STORE_HIDDEN_FLOATING_ACTION_IDS: readonly FloatingActionId[] = [
+  'arFilter',
+  'filterStore',
+];
+
+export function isFloatingActionAvailable(actionId: FloatingActionId): boolean {
+  return __DEV__ || !STORE_HIDDEN_FLOATING_ACTION_IDS.includes(actionId);
+}
+
 export function getVisibleFloatingActionIds(
   selectedActionIds: readonly FloatingActionId[],
 ): readonly FloatingActionId[] {
@@ -460,6 +472,10 @@ export function getVisibleFloatingActionIds(
       return;
     }
 
+    if (!isFloatingActionAvailable(actionId)) {
+      return;
+    }
+
     if (visibleIds.includes(actionId)) {
       return;
     }
@@ -469,7 +485,9 @@ export function getVisibleFloatingActionIds(
     }
   });
 
-  return visibleIds.length > 0 ? visibleIds : DEFAULT_FLOATING_ACTION_IDS;
+  return visibleIds.length > 0
+    ? visibleIds
+    : DEFAULT_FLOATING_ACTION_IDS.filter(isFloatingActionAvailable);
 }
 
 export function getNextFloatingActionSelection(

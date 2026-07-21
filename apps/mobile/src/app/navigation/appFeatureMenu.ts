@@ -70,6 +70,7 @@ const STORE_HIDDEN_MENU_ITEM_IDS: readonly AppFeatureMenuItemId[] = [
   'consulting',
   'recommendedFilters',
   'makeupLooks',
+  'arFilter',
 ];
 
 const allAppFeatureMenuSections: readonly AppFeatureMenuSection[] = [

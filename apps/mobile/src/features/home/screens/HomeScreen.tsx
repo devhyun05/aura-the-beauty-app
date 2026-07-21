@@ -1099,10 +1099,12 @@ const homeServiceShortcutRows = [
     },
   ],
 ] as const;
-// 수염 제거·컨설팅은 스토어 빌드 홈에서 숨긴다(dev 빌드에서만 노출).
+// 수염 제거·컨설팅·메이크업 필터(AR — 발열 이슈로 릴리스 범위 제외)는
+// 스토어 빌드 홈에서 숨긴다(dev 빌드에서만 노출).
 const STORE_HIDDEN_SHORTCUT_IDS: readonly string[] = [
   'beardSimulation',
   'consulting',
+  'arFilter',
 ];
 const visibleHomeServiceShortcutRows = homeServiceShortcutRows
   .map(row =>

@@ -49,6 +49,7 @@ export {
   getFloatingActionSlotOffset,
   getNextFloatingActionSelection,
   getVisibleFloatingActionIds,
+  isFloatingActionAvailable,
   type FloatingActionButtonPosition,
   type FloatingActionAnchor,
   type FloatingActionCenter,
