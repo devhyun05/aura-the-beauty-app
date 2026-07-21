@@ -32,7 +32,12 @@ type FaceAnalysisLoadingScreenProps = {
   progressStartedAtMs?: number;
 };
 
-const PROGRESS_TICK_MS = 320;
+const PROGRESS_TICK_MS = 120;
+// 완료 전엔 경과 시간에 선형 비례(일정 속도)해 NEAR_DONE까지 오르고, 분석이 끝나면
+// 100%까지 일정 속도로 마무리한다. 예전 0.95 하드 캡의 정체+점프를 없앤다.
+const NEAR_DONE = 0.99;
+const FINISH_PER_SEC = 0.18;
+const FINISH_STEP = FINISH_PER_SEC * (PROGRESS_TICK_MS / 1000);
 const RING_SIZE = 132;
 const RING_STROKE = 8;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
@@ -59,35 +64,24 @@ export function FaceAnalysisLoadingScreen({
       Math.max(0, Date.now() - progressStartedAtMsRef.current),
     ),
   );
+  const [displayedProgress, setDisplayedProgress] = useState(0);
   const progressState = useMemo(
     () => getFaceAnalysisProgressState(elapsedMs),
     [elapsedMs],
   );
-  const displayedProgressState = useMemo(() => {
-    if (isAnalysisReady) {
-      return {
-        ...progressState,
-        activeStep: faceAnalysisLoadingSteps[faceAnalysisLoadingSteps.length - 1],
-        progress: 1,
-        progressLabel: '100%',
-        isComplete: true,
-      };
-    }
-
-    if (progressState.progress < 0.95) {
-      return progressState;
-    }
-
-    return {
-      ...progressState,
-      progress: 0.95,
-      progressLabel: '95%',
-      isComplete: false,
-    };
-  }, [isAnalysisReady, progressState]);
-  const activeStepIndex = faceAnalysisLoadingSteps.findIndex(
-    step => step.id === displayedProgressState.activeStep.id,
-  );
+  // 경과 시간에 선형 비례(일정 속도)한 목표. NEAR_DONE 이내로 두고, 분석이 끝나면 100%로.
+  const timedLinear = Math.min(NEAR_DONE, elapsedMs / FACE_ANALYSIS_LOADING_TOTAL_MS);
+  const targetProgress = isAnalysisReady ? 1 : timedLinear;
+  const targetProgressRef = useRef(targetProgress);
+  const progress = displayedProgress >= 0.995 ? 1 : displayedProgress;
+  const progressLabel = `${Math.round(progress * 100)}%`;
+  const isComplete = progress >= 1 && isAnalysisReady;
+  const activeStepIndex = isComplete
+    ? faceAnalysisLoadingSteps.length - 1
+    : Math.max(
+        0,
+        faceAnalysisLoadingSteps.findIndex(step => step.id === progressState.activeStep.id),
+      );
   const hasAnalysisError = Boolean(analysisErrorMessage);
 
   useEffect(() => {
@@ -106,7 +100,33 @@ export function FaceAnalysisLoadingScreen({
   }, []);
 
   useEffect(() => {
-    if (!displayedProgressState.isComplete) {
+    targetProgressRef.current = targetProgress;
+  }, [targetProgress]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setDisplayedProgress((currentProgress) => {
+        const finishing = targetProgressRef.current >= 1;
+
+        // 분석 완료: 현재 위치에서 100%까지 일정 속도로 마무리(감속·점프 없음).
+        if (finishing) {
+          const nextProgress = currentProgress + FINISH_STEP;
+          return nextProgress >= 0.995 ? 1 : Math.min(nextProgress, 1);
+        }
+
+        // 진행 중: 시간 선형 목표(NEAR_DONE 이내)를 그대로 따라가 균일 속도 유지.
+        const nextTarget = Math.min(targetProgressRef.current, NEAR_DONE);
+        return Math.max(currentProgress, nextTarget);
+      });
+    }, PROGRESS_TICK_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isComplete) {
       return;
     }
 
@@ -117,7 +137,7 @@ export function FaceAnalysisLoadingScreen({
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [displayedProgressState.isComplete, onComplete]);
+  }, [isComplete, onComplete]);
 
   return (
     <AppScreen
@@ -154,15 +174,15 @@ export function FaceAnalysisLoadingScreen({
 
           <XStack style={styles.progressBlock}>
             <ProgressRing
-              label={displayedProgressState.progressLabel}
-              progress={displayedProgressState.progress}
+              label={progressLabel}
+              progress={progress}
             />
 
             <YStack style={styles.stepList}>
               {faceAnalysisLoadingSteps.map((step, stepIndex) => {
-                const isDone = displayedProgressState.isComplete || stepIndex < activeStepIndex;
+                const isDone = isComplete || stepIndex < activeStepIndex;
                 const isActive =
-                  stepIndex === activeStepIndex && !displayedProgressState.isComplete;
+                  stepIndex === activeStepIndex && !isComplete;
 
                 return (
                   <XStack key={step.id} style={styles.stepRow}>
