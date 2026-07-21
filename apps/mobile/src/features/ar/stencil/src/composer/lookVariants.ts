@@ -113,45 +113,62 @@ function single(
 export function buildVariantLibrary(): LookLibrary {
   const lib: LookLibrary = {};
 
-  // ── 립 8종 — LIP_COLORS 팔레트 축 + finish 다양화(매트/글로시/새틴≈벨벳/시머)
-  addRegionLook(lib, 'lip', 'mlbb', 'MLBB 벨벳', '립',
-    single('MLBB 벨벳', 'lip', { lipColor: '#C94F6D', lipIntensity: 0.4, lipFinish: 0, lipTexture: 1 })); // 벨벳틴트
-  addRegionLook(lib, 'lip', 'red', '레드 매트', '립',
-    single('레드 매트', 'lip', { lipColor: '#B01E3C', lipIntensity: 0.65, lipFinish: 1 }));
-  addRegionLook(lib, 'lip', 'coral', '코랄 글로시', '립',
-    single('코랄 글로시', 'lip', { lipColor: '#F2846B', lipIntensity: 0.55, lipFinish: 2 }));
-  addRegionLook(lib, 'lip', 'peach', '피치 새틴', '립',
-    single('피치 새틴', 'lip', { lipColor: '#F09A80', lipIntensity: 0.45, lipFinish: 0 }));
-  addRegionLook(lib, 'lip', 'mauve', '모브 매트', '립',
-    single('모브 매트', 'lip', { lipColor: '#A8647E', lipIntensity: 0.5, lipFinish: 1 }));
-  addRegionLook(lib, 'lip', 'rose', '로즈 글로시', '립',
-    single('로즈 글로시', 'lip', { lipColor: '#D96C7B', lipIntensity: 0.5, lipFinish: 2 }));
-  // 버건디는 라이너 링까지 — 립라이너 분리(#19b) 후 메인립+라이너 2 sub로 또렷한 딥립
-  addRegionLook(lib, 'lip', 'burgundy', '버건디 매트', '립', [
-    {
-      name: '메인립',
-      leaves: [{
-        label: '립스틱',
-        region: 'lip',
-        params: { lipColor: '#9E3B54', lipIntensity: 0.7, lipFinish: 1 },
-      }],
-    },
-    {
-      name: '라이너',
-      leaves: [{
-        label: '립 펜슬',
-        region: 'lipLiner',
-        params: { lipLinerColor: '#7A2A40', lipLinerIntensity: 0.35, lipLinerTexture: 0 }, // 펜슬
-      }],
-    },
-  ]);
-  addRegionLook(lib, 'lip', 'orange', '오렌지 시머', '립',
-    single('오렌지 시머', 'lip', {
-      lipColor: '#E8703C',
-      lipIntensity: 0.55,
-      lipFinish: 3,
-      lipShimmer: 0.45,
-    }));
+  // ── 메인립 6종 — "색만". 마감(글로시/매트/시머)·질감·라이너를 섞지 않는다(조합 금지).
+  //    메인립은 입술 메인 색을 풀로 칠하는 단일 색 레이어일 뿐이고, 마감은 상세 모드 마감
+  //    축에서, 광은 립글로스 세부부위에서 따로 쌓는다. 농도(lipIntensity)는 색 밝기로 체감을
+  //    맞춘다(밝은 색↑·어두운 색↓). 유사색이던 MLBB·피치는 정리해 제거(6색 또렷이 구분).
+  addRegionLook(lib, 'lip', 'rose', '로즈', '립',
+    single('로즈', 'lip', { lipColor: '#D96C7B', lipIntensity: 0.55 }));
+  addRegionLook(lib, 'lip', 'coral', '코랄', '립',
+    single('코랄', 'lip', { lipColor: '#F2846B', lipIntensity: 0.6 }));
+  addRegionLook(lib, 'lip', 'mauve', '모브', '립',
+    single('모브', 'lip', { lipColor: '#A8647E', lipIntensity: 0.52 }));
+  addRegionLook(lib, 'lip', 'red', '레드', '립',
+    single('레드', 'lip', { lipColor: '#B01E3C', lipIntensity: 0.5 }));
+  addRegionLook(lib, 'lip', 'burgundy', '버건디', '립',
+    single('버건디', 'lip', { lipColor: '#9E3B54', lipIntensity: 0.48 }));
+  addRegionLook(lib, 'lip', 'orange', '오렌지', '립',
+    single('오렌지', 'lip', { lipColor: '#E8703C', lipIntensity: 0.58 }));
+
+  // ── 그라데이션 립 3종 — 전용 '그라데이션' 세부부위(lipGradient)로 카테고리(서브탭) 노출.
+  //    "색만" 칠한다(글로스·광은 넣지 않음 — 립글로스 탭에서 레이어로 따로 쌓는다).
+  //    · lipColor(바깥 옅은 톤) → lipColor2(안쪽 짙은 톤), lipGradient 혼합, lipShape=1(중앙 집중)
+  //      = "안쪽 진하고 바깥 연한" 그라데. lipFinish=0(새틴)로 깔끔한 색.
+  addRegionLook(lib, 'lip-gradient', 'rose-gradient', '로즈 그라데', '립',
+    single('로즈 그라데', 'lipGradient', {
+      lipColor: '#DC6F87', lipColor2: '#AE2647', lipGradient: 0.82, lipShape: 1,
+      lipIntensity: 0.82, lipFinish: 0,
+    }), false);
+  addRegionLook(lib, 'lip-gradient', 'coral-gradient', '코랄 그라데', '립',
+    single('코랄 그라데', 'lipGradient', {
+      lipColor: '#EE8062', lipColor2: '#CE3E22', lipGradient: 0.82, lipShape: 1,
+      lipIntensity: 0.82, lipFinish: 0,
+    }), false);
+  addRegionLook(lib, 'lip-gradient', 'berry-gradient', '베리 그라데', '립',
+    single('베리 그라데', 'lipGradient', {
+      lipColor: '#C55766', lipColor2: '#8E1226', lipGradient: 0.85, lipShape: 1,
+      lipIntensity: 0.8, lipFinish: 0,
+    }), false);
+  addRegionLook(lib, 'lip-gradient', 'pink-gradient', '핑크 그라데', '립',
+    single('핑크 그라데', 'lipGradient', {
+      lipColor: '#E98BAA', lipColor2: '#C63A6E', lipGradient: 0.82, lipShape: 1,
+      lipIntensity: 0.8, lipFinish: 0,
+    }), false);
+  addRegionLook(lib, 'lip-gradient', 'orange-gradient', '오렌지 그라데', '립',
+    single('오렌지 그라데', 'lipGradient', {
+      lipColor: '#F1976C', lipColor2: '#DA531E', lipGradient: 0.82, lipShape: 1,
+      lipIntensity: 0.8, lipFinish: 0,
+    }), false);
+  addRegionLook(lib, 'lip-gradient', 'mauve-gradient', '모브 그라데', '립',
+    single('모브 그라데', 'lipGradient', {
+      lipColor: '#B47C92', lipColor2: '#793858', lipGradient: 0.82, lipShape: 1,
+      lipIntensity: 0.78, lipFinish: 0,
+    }), false);
+  addRegionLook(lib, 'lip-gradient', 'plum-gradient', '플럼 그라데', '립',
+    single('플럼 그라데', 'lipGradient', {
+      lipColor: '#9C6580', lipColor2: '#571F3F', lipGradient: 0.85, lipShape: 1,
+      lipIntensity: 0.78, lipFinish: 0,
+    }), false);
 
   // ── 눈 6종 — 섀도 색·finish·강도 변형, 일부는 라이너 스타일/질감 조합.
   //    스모키·글리터는 같은 부위 2겹 스택 예시(위 겹이 기본, 끄면 베이스).
@@ -1189,40 +1206,37 @@ export function buildVariantLibrary(): LookLibrary {
       lipBaseIntensity: 0.55,
     }), false);
 
-  // 립글로스 4종 — 독립 광 톱코트의 투명·피치·로즈 틴트와 광량 차이.
+  // 립글로스 4종 — 독립 광 톱코트의 투명·피치·로즈 틴트와 광량 차이. 다른 립(메인립·
+  //  그라데)과 별도 리전이라 그 위에 레이어로 얹힌다. 셰이더 _GlossLumaLo 기본을 낮춰
+  //  (0.6→0.4) 광택이 입술 전반에 촉촉하게 퍼지게 했고, 강도도 올려 확실히 보이게 한다.
   addRegionLook(lib, 'lip-gloss', 'clear-dew', '클리어 듀', '립',
     single('클리어 듀', 'lipGloss', {
       lipGlossColor: '#FFFFFF',
-      lipGlossIntensity: 0.3,
+      lipGlossIntensity: 0.5,
     }), false);
   addRegionLook(lib, 'lip-gloss', 'peach-jelly', '피치 젤리', '립',
     single('피치 젤리', 'lipGloss', {
       lipGlossColor: '#F7D9D0',
-      lipGlossIntensity: 0.4,
+      lipGlossIntensity: 0.58,
     }), false);
   addRegionLook(lib, 'lip-gloss', 'rose-syrup', '로즈 시럽', '립',
     single('로즈 시럽', 'lipGloss', {
       lipGlossColor: '#E9B7C2',
-      lipGlossIntensity: 0.46,
+      lipGlossIntensity: 0.6,
     }), false);
   addRegionLook(lib, 'lip-gloss', 'glass-coat', '글래스 코팅', '립',
     single('글래스 코팅', 'lipGloss', {
       lipGlossColor: '#FFFFFF',
-      lipGlossIntensity: 0.55,
+      lipGlossIntensity: 0.72,
     }), false);
 
-  // 치아 미백 3종 — 입을 벌렸을 때만 보이는 자연스러운 단계.
-  addRegionLook(lib, 'teeth', 'daily-bright', '데일리 브라이트', '립',
-    single('데일리 브라이트', 'teeth', {
-      teethWhitenIntensity: 0.25,
-    }), false);
-  addRegionLook(lib, 'teeth', 'clean-white', '클린 화이트', '립',
-    single('클린 화이트', 'teeth', {
-      teethWhitenIntensity: 0.45,
-    }), false);
-  addRegionLook(lib, 'teeth', 'photo-white', '포토 화이트', '립',
-    single('포토 화이트', 'teeth', {
-      teethWhitenIntensity: 0.65,
+  // 치아 미백 — 프리셋(데일리/클린/포토) 대신 단일 "치아 미백" 룩 1장으로 정리했다.
+  // 기본 모드에선 이 카드로 켜고 '치아 농도' 슬라이더로 미백 정도를 직접 조절하며,
+  // 상세/전문가 모드의 '미백' 슬라이더(regions.ts teeth opacity)가 세밀 제어를 준다.
+  // 입을 벌렸을 때만, TeethWhiten 셰이더가 밝은 치아 픽셀만 골라 미백한다.
+  addRegionLook(lib, 'teeth', 'whiten', '치아 미백', '립',
+    single('치아 미백', 'teeth', {
+      teethWhitenIntensity: 0.5,
     }), false);
 
   // 헤어 컬러 6종 — 기존 HAIR_COLORS 팔레트 안에서 세그멘테이션 틴트만 사용.

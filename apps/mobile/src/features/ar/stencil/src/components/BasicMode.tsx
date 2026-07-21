@@ -38,6 +38,7 @@ import {
   readBlushTree,
   removeBlushTree,
 } from '../composer/blushTree';
+import {patchTeethTree, readTeethTree} from '../composer/teethTree';
 import {
   defSwatchColor,
   regionDefsForSlot,
@@ -184,6 +185,12 @@ export default function BasicMode({
   const subRegion: RegionKey | null = isSubTab ? (midCat as RegionKey) : null;
   const isBlushTab = subRegion === 'blush';
   const blushState = useMemo(() => readBlushTree(tree), [tree]);
+  // 치아 미백 — 세부부위에 강도 한 축만 있어 슬롯 게인('립 농도')으로는 조절이 안 됐다.
+  // 치아 서브탭에서는 아래 농도 슬라이더를 teethWhitenIntensity에 직접 연결한다(#치아 QA).
+  const isTeethTab = subRegion === 'teeth';
+  const teethState = useMemo(() => readTeethTree(tree), [tree]);
+  const changeTeethIntensity = (v: number) =>
+    onChangeTree(patchTeethTree(tree, library, v));
 
   // '전체' 탭 카드 — 이 슬롯의 부위(슬롯)룩 전부(시스템+사용자).
   const slotDefs = useMemo(
@@ -223,9 +230,19 @@ export default function BasicMode({
     if (slot) onChangeTree(setSlotRegion(tree, library, slot, defId));
   };
   const chooseSub = (subDefId: string | null) => {
-    if (slot && subRegion) {
-      onChangeTree(setSubRegion(tree, library, slot, subRegion, subDefId));
+    if (!slot || !subRegion) return;
+    let next = setSubRegion(tree, library, slot, subRegion, subDefId);
+    // 메인립 ↔ 그라데이션은 상호배타 — 둘 다 입술 메인 색을 칠하는 모드라 동시에 못 쌓는다.
+    // 하나를 켜면(subDefId != null) 다른 하나를 끈다. 베이스립·립라이너·립글로스·치아는
+    // 서로 독립이라 그대로 레이어로 공존한다.
+    if (subDefId != null) {
+      if (subRegion === 'lipGradient') {
+        next = setSubRegion(next, library, slot, 'lip', null);
+      } else if (subRegion === 'lip') {
+        next = setSubRegion(next, library, slot, 'lipGradient', null);
+      }
     }
+    onChangeTree(next);
   };
   const chooseBlushShape = (shapeValue: number | null) => {
     onChangeTree(
@@ -479,15 +496,10 @@ export default function BasicMode({
                     </Text>
                   </View>
                 </TouchableOpacity>
-                {subCustom && (
-                  <View style={[styles.card, styles.cardTintMine, styles.cardOn]}>
-                    <View style={styles.cardLabelBar}>
-                      <Text style={styles.cardLabel} numberOfLines={2}>
-                        ◈ 내 조합
-                      </Text>
-                    </View>
-                  </View>
-                )}
+                {/* '◈ 내 조합'(subCustom) 카드는 세부부위 탭에선 노출하지 않는다 — 메인립·
+                    베이스·라이너·글로스는 각자 레이어로 쌓는 축이라, 세부부위 탭엔 그 부위
+                    프리셋만 두고 여러 레이어가 합쳐진 '조합'은 상위 '전체' 탭(showCustom)에만
+                    보인다(#메인립 조합 QA). subCustom은 여전히 트리에 반영되어 렌더된다. */}
                 {subDefs.map(def => {
                   const on = def.id === activeSubRef;
                   const color = defSwatchColor(library, def.id) ?? '#666666';
@@ -557,20 +569,26 @@ export default function BasicMode({
       {/* 2) 농도 — 블러셔 중분류는 잎 값을 직접 저장하고, 나머지는 기존 게인을 쓴다. */}
       <View style={styles.densityWrap}>
         <ParamSlider
-          label={isAll ? '전체 농도' : `${catLabel(cat)} 농도`}
+          label={
+            isAll ? '전체 농도' : isTeethTab ? '치아 미백' : `${catLabel(cat)} 농도`
+          }
           value={
             isBlushTab
               ? normalizeArBlushIntensity(blushState.intensity)
-              : isAll
-                ? opacity
-                : slotGain[slot!] ?? 1
+              : isTeethTab
+                ? teethState.intensity
+                : isAll
+                  ? opacity
+                  : slotGain[slot!] ?? 1
           }
           onChange={
             isBlushTab
               ? changeBlushIntensity
-              : isAll
-                ? onOpacity
-                : v => onSlotGain(slot!, v)
+              : isTeethTab
+                ? changeTeethIntensity
+                : isAll
+                  ? onOpacity
+                  : v => onSlotGain(slot!, v)
           }
           accessibilityLabel={isBlushTab ? '블러셔 윤곽 농도' : undefined}
           accessibilityValue={
