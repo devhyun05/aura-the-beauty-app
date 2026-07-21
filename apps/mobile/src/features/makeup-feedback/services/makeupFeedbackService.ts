@@ -85,6 +85,7 @@ type BackendFeedbackPayload = {
 } | null;
 
 export type BackendFeedbackJob = {
+  createdAt?: string | null;
   entryDate?: string | null;
   feedbackPayload?: BackendFeedbackPayload;
   feedbackKind?: 'initial' | 'correction' | null;
@@ -1288,6 +1289,7 @@ export function mapBackendJobToFeedbackOutcome(
     analysisId,
     analysisStatus,
     captureQuality,
+    createdAt: firstText(job.createdAt),
     entryDate: firstText(job.entryDate),
     id: analysisId,
     modelVersion,

@@ -14,6 +14,7 @@ import {
   OptionalViewShot,
   type OptionalViewShotRef,
 } from '../../../shared/ui/OptionalViewShot';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import {getMakeupFeedbackAnalysisSourceLabel} from '../services/makeupFeedbackResultPresentation';
 import {FeedbackEvidenceImage} from './FeedbackEvidenceImage';
 import {FeedbackScoreAxisAccordion} from './FeedbackScoreAxisAccordion';
@@ -48,6 +49,7 @@ const FEEDBACK_CAPTURE_OPTIONS = {
 export function MakeupFeedbackRedesignHomeScreen({
   captureRef,
   controller,
+  createdAt,
   isShareBusy,
   onOpenRecord,
   onSave,
@@ -55,6 +57,7 @@ export function MakeupFeedbackRedesignHomeScreen({
 }: {
   captureRef: RefObject<OptionalViewShotRef | null>;
   controller: MakeupFeedbackRedesignController;
+  createdAt?: string;
   isShareBusy: boolean;
   onOpenRecord: () => void;
   onSave: () => void;
@@ -113,6 +116,9 @@ export function MakeupFeedbackRedesignHomeScreen({
         start={{x: 0.5, y: 0}}
         style={styles.scoreSection}>
         <Text style={styles.eyebrow}>오늘의 메이크업</Text>
+        <Text style={styles.createdAt}>
+          {formatReportCreatedAtLabel(createdAt, {includeTime: true})}
+        </Text>
         <View style={styles.scoreRow}>
           <Text accessibilityLabel={`종합 점수 ${displayedScore}점`} style={styles.score}>
             {displayedScore}
@@ -449,6 +455,12 @@ const styles = StyleSheet.create({
     fontFamily: feedbackRedesignFonts.bold,
     fontSize: 12,
     letterSpacing: 1.2,
+  },
+  createdAt: {
+    color: C.textMuted3,
+    fontFamily: feedbackRedesignFonts.medium,
+    fontSize: 11,
+    marginTop: 6,
   },
   formulaBlock: {
     backgroundColor: 'rgba(255,255,255,0.7)',

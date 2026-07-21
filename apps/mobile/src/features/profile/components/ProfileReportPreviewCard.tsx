@@ -5,6 +5,7 @@ import {Text, View} from 'tamagui';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {ImagePlaceholder} from '../../../shared/ui';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import type {ProfileReportPreview} from '../services/profileReportHub';
 
 type ProfileReportPreviewCardProps = {
@@ -24,7 +25,10 @@ export function ProfileReportPreviewCard({
 }: ProfileReportPreviewCardProps) {
   const hasPreviewImage = Boolean(preview?.imageSource);
   const previewAccessibilityHint = '해당 종류의 보고서 목록으로 이동해요.';
-  const previewAccessibilityLabel = `${label} 전체 목록 열기`;
+  const createdAtLabel = preview
+    ? formatReportCreatedAtLabel(preview.createdAt)
+    : undefined;
+  const previewAccessibilityLabel = `${label} 전체 목록${createdAtLabel ? `, ${createdAtLabel}` : ''} 열기`;
 
   return (
     <View style={[styles.card, style]}>
@@ -81,6 +85,12 @@ export function ProfileReportPreviewCard({
         </View>
       </Pressable>
 
+      {preview ? (
+        <Text numberOfLines={1} style={styles.createdAt}>
+          {createdAtLabel}
+        </Text>
+      ) : null}
+
     </View>
   );
 }
@@ -116,6 +126,13 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: typography.fontWeight.medium,
     lineHeight: 14,
+    textAlign: 'center',
+  },
+  createdAt: {
+    color: colors.textSecondary,
+    fontSize: 9,
+    fontWeight: typography.fontWeight.medium,
+    lineHeight: 12,
     textAlign: 'center',
   },
   emptyIcon: {

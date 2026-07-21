@@ -470,6 +470,7 @@ function mapCompletedFilterExtractionReport(
   };
   const data: ReferenceMakeupExtractionData = {
     ...referenceMakeupExtractionMock,
+    createdAt: job.createdAt?.trim() || undefined,
     reportId,
     photos: [
       photo,
@@ -730,6 +731,7 @@ export async function runReferenceMakeupExtraction(
 
     latestReferenceMakeupExtractionData = {
       ...referenceMakeupExtractionMock,
+      createdAt: createResponse.job.createdAt?.trim() || undefined,
       ...(reportId ? {reportId} : {}),
       photos: [
         photo,

@@ -1493,6 +1493,7 @@ export function restoreMakeupRecommendationReport(
   const keyword = report.keyword ? {...report.keyword, tags: normalizeBackendStringArray(report.keyword.tags)} : undefined;
   return {
     id: report.reportId,
+    createdAt: report.createdAt,
     reportId: report.reportId,
     phase: 'results',
     prompt: report.customSituationText?.trim()
@@ -2219,6 +2220,7 @@ export async function refreshGeneratedMakeupRecommendation(
   });
   return {
     ...session,
+    createdAt: report.createdAt ?? session.createdAt,
     profileGender: getBackendReportProfileGender(report) ?? session.profileGender,
     sourceAnalysisReportId: report.sourceAnalysisReportId ?? session.sourceAnalysisReportId,
     imageStatus: report.imageStatus,

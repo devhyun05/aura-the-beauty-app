@@ -699,6 +699,7 @@ expectBackendError(
 
 const storedV9Job = {
   ...v9Job,
+  createdAt: '2026-07-22T06:01:00Z',
   feedbackPayload: {
     ...v9Job.feedbackPayload,
     request: {sourceUrl: 'https://example.com/makeup-feedback.jpg'},
@@ -706,6 +707,11 @@ const storedV9Job = {
 };
 const storedV9Results = mapBackendReportsToFeedbackResults([storedV9Job]);
 expectEqual(storedV9Results.length, 1, 'stored v9 report remains in list mapping');
+expectEqual(
+  storedV9Results[0]?.createdAt,
+  '2026-07-22T06:01:00Z',
+  'stored report keeps its database creation date',
+);
 expectEqual(
   storedV9Results[0]?.points[0]?.correctionGuide?.tool,
   correctionGuide.tool,

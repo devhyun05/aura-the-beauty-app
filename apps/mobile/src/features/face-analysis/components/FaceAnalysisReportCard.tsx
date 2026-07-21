@@ -3,6 +3,7 @@ import {Text, View} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import {
   AppCard,
   ImagePlaceholder,
@@ -17,14 +18,6 @@ type FaceAnalysisReportCardProps = {
 };
 
 export const FACE_ANALYSIS_REPORT_CARD_LAYOUT = 'journal-entry' as const;
-
-const formatJournalDate = (dateText: string) => {
-  const date = new Date(dateText);
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${month}.${day}`;
-};
 
 function getReportTags(report: FaceAnalysisReport) {
   // 측정 실패로 personalColor 등이 NULL/미정일 수 있어 null-safe하게 다룬다.
@@ -41,18 +34,16 @@ export function FaceAnalysisReportCard({
   style,
 }: FaceAnalysisReportCardProps) {
   const tags = getReportTags(report);
+  const createdAtLabel = formatReportCreatedAtLabel(
+    report.createdAt ?? report.analyzedAt,
+  );
 
   return (
     <AppCard
-      accessibilityLabel={`${report.title} 얼굴 분석 보고서 보기`}
+      accessibilityLabel={`${report.title} 얼굴 분석 보고서, ${createdAtLabel}, 보기`}
       onPress={onPress}
       padded={false}
       style={[styles.card, style]}>
-      <View style={styles.dateColumn}>
-        <Text style={styles.dateText}>{formatJournalDate(report.analyzedAt)}</Text>
-        <View style={styles.dateDot} />
-      </View>
-
       <View style={styles.thumbnail}>
         <ImagePlaceholder
           borderRadius={radius.md}
@@ -62,6 +53,9 @@ export function FaceAnalysisReportCard({
       </View>
 
       <View style={styles.content}>
+        <Text numberOfLines={1} style={styles.createdAt}>
+          {createdAtLabel}
+        </Text>
         <Text numberOfLines={1} style={styles.title}>
           {report.recommendedMood}
         </Text>
@@ -102,22 +96,10 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     minWidth: 0,
   },
-  dateColumn: {
-    alignItems: 'center',
-    gap: spacing.xs,
-    width: 44,
-  },
-  dateDot: {
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    height: 5,
-    opacity: 0.38,
-    width: 5,
-  },
-  dateText: {
-    color: colors.textPrimary,
+  createdAt: {
+    color: colors.textSecondary,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
   subtitle: {

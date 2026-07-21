@@ -14,6 +14,7 @@ export type ProfileReportKind =
   | 'makeupFeedback';
 
 export type ProfileReportPreview = {
+  createdAt?: string;
   hasMore: boolean;
   id: string;
   imageSource?: ImageSourcePropType;
@@ -43,6 +44,7 @@ function mapFaceAnalysisPreview(
 
   return report
     ? {
+        createdAt: report.createdAt ?? report.analyzedAt,
         hasMore: faceAnalysisReports.length > 1,
         id: report.id,
         imageSource: report.imageSource,
@@ -59,6 +61,7 @@ export function mapMakeupRecommendationProfilePreview(
 
   const preview = getMakeupRecommendationPreviewPresentation(recommendation);
   return {
+    createdAt: recommendation.createdAt,
     hasMore,
     id: recommendation.reportId,
     imageSource: preview.imageUrl ? {uri: preview.imageUrl} : undefined,
@@ -111,6 +114,7 @@ export async function loadProfileReportHub(
     ),
     makeupExtraction: extraction
       ? {
+          createdAt: extraction.createdAt,
           hasMore: extractions.length > 1,
           id: extraction.reportId,
           imageSource: extraction.photo.imageSource,
@@ -119,6 +123,7 @@ export async function loadProfileReportHub(
       : null,
     makeupFeedback: feedback
       ? {
+          createdAt: feedback.createdAt,
           hasMore: feedbackReports.length > 1,
           id: feedback.analysisId,
           imageSource: feedback.uploadedImage,

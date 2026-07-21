@@ -3,12 +3,10 @@ import {ImageOff} from 'lucide-react-native';
 
 import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
 import {AppCard, AppScreen, ReportOverflowMenuButton} from '../../../shared/ui';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import type {MakeupRecommendationReportHistoryItem} from '../types';
 import {getMakeupRecommendationPreviewPresentation} from '../services/makeupRecommendationPreview';
-import {
-  formatMakeupRecommendationHistoryDate,
-  makeupRecommendationHistoryCopy,
-} from './makeupRecommendationViewContracts';
+import {makeupRecommendationHistoryCopy} from './makeupRecommendationViewContracts';
 
 type RecommendationHistoryViewProps = {
   canLoadMore: boolean;
@@ -79,10 +77,10 @@ export function RecommendationHistoryView({
           {error ? <Text accessibilityRole="alert" style={styles.inlineError}>{error}</Text> : null}
           {items.map(item => {
             const preview = getMakeupRecommendationPreviewPresentation(item);
-            const date = formatMakeupRecommendationHistoryDate(item.createdAt);
+            const createdAtLabel = formatReportCreatedAtLabel(item.createdAt);
             return (
               <AppCard
-                accessibilityLabel={`${item.scenarioText} 저장된 추천 열기`}
+                accessibilityLabel={`${item.scenarioText} 저장된 추천, ${createdAtLabel}, 열기`}
                 key={item.reportId}
                 onPress={() => onSelect(item)}
                 padded={false}
@@ -110,7 +108,7 @@ export function RecommendationHistoryView({
                 )}
                 <View style={styles.cardBody}>
                   <View style={styles.cardMetaRow}>
-                    <Text style={styles.cardMeta}>{date || '저장된 추천'}</Text>
+                    <Text style={styles.cardMeta}>{createdAtLabel}</Text>
                     <View style={styles.cardMetaActions}>
                       <Text style={styles.cardMeta}>{item.results.length}가지 메이크업</Text>
                       <ReportOverflowMenuButton onDelete={() => onDelete(item)} />

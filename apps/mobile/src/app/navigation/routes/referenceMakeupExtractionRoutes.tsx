@@ -91,7 +91,7 @@ function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): Re
 function buildMakeupRecipeListItems(
   selectedPhoto: ReferenceMakeupPhoto | null,
 ): MakeupRecipeListItem[] {
-  const {extractedMakeupLook, photos} = getReferenceMakeupExtractionDataSync();
+  const {createdAt, extractedMakeupLook, photos} = getReferenceMakeupExtractionDataSync();
   const primaryPhoto = getSelectedReferenceMakeupPhoto(selectedPhoto);
   const recipePhotos = [
     primaryPhoto,
@@ -99,6 +99,7 @@ function buildMakeupRecipeListItems(
   ];
 
   return recipePhotos.map((photo, index) => ({
+    createdAt,
     id: `makeup-recipe-${photo.id}`,
     photo,
     subtitle:
@@ -116,6 +117,7 @@ function buildMakeupRecipeListItemsFromReports(
   reports: readonly ReferenceMakeupExtractionReportHistoryItem[],
 ): MakeupRecipeListItem[] {
   return reports.map(report => ({
+    createdAt: report.createdAt,
     id: `makeup-recipe-${report.reportId}`,
     photo: report.photo,
     reportId: report.reportId,

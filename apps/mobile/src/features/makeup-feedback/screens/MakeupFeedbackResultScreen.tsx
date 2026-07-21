@@ -234,6 +234,7 @@ export function MakeupFeedbackResultScreen({
           <MakeupFeedbackRedesignHomeScreen
             captureRef={captureRef}
             controller={controller}
+            createdAt={result.createdAt}
             isShareBusy={Boolean(activeShareTarget)}
             onOpenRecord={onOpenMakeupJourney}
             onSave={() => void handleShareAction('save-image')}

@@ -10,9 +10,11 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen, ReportOverflowMenuButton} from '../../../shared/ui';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import type {ReferenceMakeupPhoto} from '../types';
 
 export type MakeupRecipeListItem = {
+  createdAt?: string;
   id: string;
   photo: ReferenceMakeupPhoto;
   reportId?: string;
@@ -90,9 +92,11 @@ function MakeupRecipeCard({
   onPress: () => void;
   recipe: MakeupRecipeListItem;
 }) {
+  const createdAtLabel = formatReportCreatedAtLabel(recipe.createdAt);
+
   return (
     <Pressable
-      accessibilityLabel={`${recipe.title} 레시피 보기`}
+      accessibilityLabel={`${recipe.title} 레시피, ${createdAtLabel}, 보기`}
       accessibilityRole="button"
       onPress={onPress}
       style={({pressed}) => [styles.card, pressed && styles.cardPressed]}>
@@ -105,6 +109,9 @@ function MakeupRecipeCard({
             </Text>
             <Text numberOfLines={2} style={styles.title}>
               {recipe.title}
+            </Text>
+            <Text numberOfLines={1} style={styles.createdAt}>
+              {createdAtLabel}
             </Text>
           </YStack>
           {onDelete ? (
@@ -200,6 +207,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  createdAt: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.xs,
   },
   recipeIcon: {

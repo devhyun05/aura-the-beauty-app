@@ -268,6 +268,7 @@ export type MakeupFeedbackSummary = {
 
 export type MakeupFeedbackResult = {
   id: string;
+  createdAt?: string;
   analysisSource: MakeupFeedbackAnalysisSource;
   analysisId?: string;
   analysisStatus?: string;
@@ -314,6 +315,7 @@ export type MakeupFeedbackCompletedResult = MakeupFeedbackResult & {
 
 export type MakeupFeedbackRetakeOutcome = {
   analysisDecision: 'retake_required';
+  createdAt?: string;
   analysisStatus?: string;
   captureQuality: MakeupFeedbackCaptureQuality;
   id: string;

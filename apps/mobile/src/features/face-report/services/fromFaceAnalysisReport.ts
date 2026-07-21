@@ -19,6 +19,7 @@ import type {
   FaceAnalysisStylingLookRowCategory,
   FaceAnalysisStylingLooks,
 } from '../../../shared/types/faceAnalysis';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import {getFaceAnalysisReportSummaryItems} from '../../face-analysis/services/faceAnalysisReportDetailModel';
 import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceAnalysisMeasurements';
 import type {Face3DProfile} from '../../face-3d/types';
@@ -80,14 +81,6 @@ function resolveHeroUri(report: FaceAnalysisReport, heroImageUri?: string): stri
     : undefined;
 }
 
-function formatDateLine(analyzedAt: string): string {
-  const date = new Date(analyzedAt);
-  if (Number.isNaN(date.getTime())) {
-    return '분석 결과';
-  }
-  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 분석 결과`;
-}
-
 function buildS1(
   report: FaceAnalysisReport,
   heroUri: string | undefined,
@@ -96,7 +89,10 @@ function buildS1(
 ): S1Data {
   return {
     photo: heroUri ? {uri: heroUri, placeholderLabel: '분석 셀피'} : {placeholderLabel: '분석 셀피'},
-    dateLine: formatDateLine(report.analyzedAt),
+    dateLine: formatReportCreatedAtLabel(
+      report.createdAt ?? report.analyzedAt,
+      {includeTime: true},
+    ),
     headline: report.recommendedMood,
     // V2의 consulting.shortSummary는 AI 자유 서술이라 얼굴형과 세로 구획을
     // 모순되게 엮은 과거 결과가 있다. 사용자 요약에는 검증 가능한 카드만 두고,

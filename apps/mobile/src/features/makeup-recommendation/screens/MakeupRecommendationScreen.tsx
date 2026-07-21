@@ -1209,6 +1209,7 @@ export const MakeupRecommendationScreen = forwardRef<
           keywordLabel: session.keyword?.label
             ?? (session.editorialPresetId ? session.scenarioLabel : undefined),
           reportLabel: sourceReport?.reportTitle,
+          reportCreatedAt: session.createdAt,
           reportAnalyzedAt: sourceReport?.analyzedAt,
           reportImageUri,
           reportRegionVisuals: sourceReport?.measurements?.regionVisuals,

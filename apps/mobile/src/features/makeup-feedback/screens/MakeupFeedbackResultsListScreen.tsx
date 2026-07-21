@@ -11,6 +11,7 @@ import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
 import {AppScreen, ReportOverflowMenuButton} from '../../../shared/ui';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import {getMakeupFeedbackAnalysisSourceLabel} from '../services/makeupFeedbackResultPresentation';
 import {mapMakeupFeedbackResultToViewModel} from '../redesign/makeupFeedbackResultViewModel';
 import type {MakeupFeedbackResult} from '../types';
@@ -87,10 +88,11 @@ function MakeupFeedbackResultCard({
   const analysisSourceLabel = getMakeupFeedbackAnalysisSourceLabel(result.analysisSource);
   const pointCount = result.points.length;
   const strengthCount = result.strengths.length;
+  const createdAtLabel = formatReportCreatedAtLabel(result.createdAt);
 
   return (
     <Pressable
-      accessibilityLabel={`${goalLabel} 피드백, 참고 점수 ${result.score}점, 잘한 점 ${strengthCount}개, 보완할 점 ${pointCount}개, 보기`}
+      accessibilityLabel={`${goalLabel} 피드백, ${createdAtLabel}, 참고 점수 ${result.score}점, 잘한 점 ${strengthCount}개, 보완할 점 ${pointCount}개, 보기`}
       accessibilityRole="button"
       onPress={onPress}
       style={({pressed}) => [styles.card, pressed && styles.cardPressed]}>
@@ -108,6 +110,9 @@ function MakeupFeedbackResultCard({
             </XStack>
             <Text numberOfLines={2} style={styles.title}>
               {goalLabel}
+            </Text>
+            <Text numberOfLines={1} style={styles.createdAt}>
+              {createdAtLabel}
             </Text>
           </YStack>
           <YStack style={styles.scoreBadge}>
@@ -213,6 +218,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  createdAt: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.xs,
   },
   scoreBadge: {
