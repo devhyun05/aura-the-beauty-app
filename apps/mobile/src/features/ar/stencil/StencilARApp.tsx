@@ -115,9 +115,8 @@ import {
   regionWarpsForEmit,
   upsertEntry,
 } from './src/composer/fitSheets';
-import type {FitDelta, FitEntry} from './src/composer/fitSheets';
-import {loadPersonalFitBaseDeltas} from '../services/personalFitLoad';
-import type {PersonalFitBaseDelta} from '../services/personalFitService';
+import type {FitDelta} from './src/composer/fitSheets';
+import {loadAnalysisFitSheet} from '../services/personalFitLoad';
 import {
   FIT_HANDLE_REGIONS,
   FIT_HANDLE_RULES,
@@ -578,9 +577,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
   const [autoFitMetrics, setAutoFitMetrics] = useState<AutoFitMetrics>(defaultAutoFitMetrics);
   const [autoFitRecord, setAutoFitRecord] = useState<AutoFitStore | null>(null);
   const autoFitRecordRef = useRef<AutoFitStore | null>(null);
-  // 개인 핏(측정 자동) 기저 델타 — 최신 분석 보고서에서 파생. 자동 적용 게이트
-  // (PERSONAL_FIT_DELTA_SCALE=0)가 꺼져 있으면 항상 빈 배열이라 렌더 무변화.
-  const personalFitDeltasRef = useRef<PersonalFitBaseDelta[]>([]);
   const [autoFitPreviewAfter, setAutoFitPreviewAfter] = useState(false);
   const autoFitPreviewAfterRef = useRef(false);
   const autoFitPreviewActiveRef = useRef(false);
@@ -818,10 +814,18 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       setUserProducts(products);
     });
     // 내 핏(§5 A13) — 시트가 있으면 다음 컴파일부터 자동 적용(메인 시트).
-    loadFitSheets().then(store => {
-      fitSheetsRef.current = store.sheets;
+    // 로드 후, 최신 분석에서 파생한 "분석 맞춤 핏"을 라이브러리에 upsert한다(기본은
+    // 미적용 = 원본; mainId는 저장값 존중). 사용자가 ★로 켜면 그 핏, 끄면 원본.
+    loadFitSheets().then(async store => {
+      let sheets = store.sheets;
+      const analysisSheet = await loadAnalysisFitSheet();
+      if (analysisSheet) {
+        const rest = sheets.filter(s => s.id !== analysisSheet.id);
+        sheets = [...rest, analysisSheet as unknown as FitSheetData];
+      }
+      fitSheetsRef.current = sheets;
       mainFitIdRef.current = store.mainId;
-      setFitSheets(store.sheets);
+      setFitSheets(sheets);
       setMainFitId(store.mainId);
     });
     loadAutoFit().then(record => {
@@ -851,11 +855,6 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     });
     // 에셋 카탈로그 로드 — 실패해도 빈 목록으로 무해(픽커는 "파일에서" 경로 유지).
     loadCatalogStore().then(setCatalog);
-    // 개인 핏(측정 자동) 기저 — 최신 분석 보고서에서 파생. 실패/부재는 빈 배열이라
-    // 무해하고, 델타 게이트 OFF(δ=0) 동안엔 로드돼도 렌더가 변하지 않는다.
-    loadPersonalFitBaseDeltas().then(deltas => {
-      personalFitDeltasRef.current = deltas;
-    });
   }, []);
 
   const sendToUnity = useCallback((msg: RNToUnityMessage) => {
@@ -1391,15 +1390,11 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     const applyAutoFit = autoFitPreviewActiveRef.current
       ? autoFitPreviewAfterRef.current
       : autoFit?.accepted === true;
-    const autoFitDeltas = autoFitPreviewActiveRef.current
+    // 분석 맞춤 핏은 이제 baseDeltas가 아니라 저장된 핏 시트(mainId 토글)로 적용된다.
+    // baseDeltas는 기존 dev autoFit 기저만 담는다.
+    const baseDeltas = autoFitPreviewActiveRef.current
       ? (applyAutoFit ? autoFit?.deltas ?? [] : [])
       : acceptedAutoFitDeltas(autoFit);
-    // 개인 핏(측정 자동) 기저를 dev autoFit 기저 앞에 합류 — applyFitToLayers가
-    // 부위별 rules를 가산 병합하므로 순서는 결과에 영향 없다. 수동 시트가 이긴다는
-    // 우선순위(개인 시트·핏체인 > 기저)도 그대로.
-    const baseDeltas = personalFitDeltasRef.current.length > 0
-      ? [...(personalFitDeltasRef.current as FitEntry[]), ...autoFitDeltas]
-      : autoFitDeltas;
     return {
       ...compileLayers(applyFitToLayers(layers, fitState, baseDeltas)),
       regionAffines: assembleRegionAffines(layers, fitState),

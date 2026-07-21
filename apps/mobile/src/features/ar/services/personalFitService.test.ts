@@ -1,5 +1,7 @@
 import {
+  buildAnalysisFitSheet,
   buildPersonalFitBaseDeltas,
+  ANALYSIS_FIT_SHEET_ID,
   PERSONAL_FIT_DELTA_SCALE,
   type PersonalFitReportInput,
 } from './personalFitService';
@@ -31,11 +33,13 @@ const DOWNTURNED_REPORT: PersonalFitReportInput = {
   },
 };
 
-// ── 전역 게이트: 기본 스케일은 0(자동 적용 OFF) ────────────────────────────
+// ── 레거시 baseDeltas 경로: 명시적 scale 0이면 OFF(δ 0), 1이면 흐른다 ────────
 {
-  assert(PERSONAL_FIT_DELTA_SCALE === 0, 'global delta gate is OFF by default');
-  const deltas = buildPersonalFitBaseDeltas(DOWNTURNED_REPORT, 'balance');
-  assert(deltas.length === 0, 'default scale 0 -> no non-zero deltas (render no-op)');
+  const off = buildPersonalFitBaseDeltas(DOWNTURNED_REPORT, 'balance', 0);
+  assert(off.length === 0, 'explicit scale 0 -> no non-zero deltas');
+  assert(PERSONAL_FIT_DELTA_SCALE === 0, 'legacy global gate stays OFF (sheet path replaces it)');
+  const on = buildPersonalFitBaseDeltas(DOWNTURNED_REPORT, 'balance', 1);
+  assert(on.length > 0, 'explicit scale 1 -> deltas flow (downturned canthal fires)');
 }
 
 // ── 게이트 열면(scale>0) 방향 규칙이 흐른다 ────────────────────────────────
@@ -76,6 +80,29 @@ const DOWNTURNED_REPORT: PersonalFitReportInput = {
   const deltas = buildPersonalFitBaseDeltas(report, 'youthful', 1);
   const blush = deltas.find(d => d.region === 'blush');
   assert(blush != null && (blush.rules.blushLift ?? 0) > 0, 'long midface via report -> blushLift +');
+}
+
+// ── 분석 맞춤 핏 시트 ────────────────────────────────────────────────────
+{
+  // 발동 규칙 있는 리포트 → 시트 생성(id 고정, 실제 δ scale=1)
+  const sheet = buildAnalysisFitSheet(DOWNTURNED_REPORT, 'balance');
+  assert(sheet != null, 'fit sheet built when rules fire');
+  assert(sheet!.id === ANALYSIS_FIT_SHEET_ID, 'stable sheet id');
+  assert(sheet!.entries.length > 0, 'sheet has entries');
+  assert(
+    sheet!.entries.some(e => e.region === 'eyelinerUpper' && (e.rules.eyeCornerLift ?? 0) > 0),
+    'sheet carries real (non-zero) deltas at scale 1',
+  );
+}
+{
+  // 근거 없으면 시트 안 만듦(빈 시트 방지)
+  const empty: PersonalFitReportInput = {id: 'r-x', analyzedAt: '2026-07-21T00:00:00.000Z'};
+  assert(buildAnalysisFitSheet(empty, 'balance') === null, 'no rules -> no sheet');
+  assert(buildAnalysisFitSheet(null, 'balance') === null, 'null report -> no sheet');
+}
+{
+  // accent 레인은 형태 보정 없음 → 시트 없음
+  assert(buildAnalysisFitSheet(DOWNTURNED_REPORT, 'accent') === null, 'accent -> no shape sheet');
 }
 
 console.log('personalFitService: all assertions passed');
