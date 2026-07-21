@@ -890,6 +890,14 @@ def _build_feature_observations_schema() -> dict[str, Any]:
   )
 
 
+# AR 필터 색 개인화(B)용 — 부위별 메이크업 색을 hex로. makeupGuideline(텍스트)은
+# 그대로 두고 색만 담는 병렬 필드라 기존 파서를 깨지 않는다. 값은 사용자의
+# measuredPersonalColor에 근거한, 해당 부위에 실제로 어울리는 메이크업 색.
+# AR 레시피 부위(lip/blush/eyeshadow/brow/eyeliner)와 매칭 — foundation은 스킨-세이프라 제외.
+MAKEUP_COLOR_KEYS = ("lip", "blush", "eyeshadow", "brow", "eyeliner")
+_HEX_COLOR = {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"}
+
+
 def _build_face_analysis_tool_schema() -> dict[str, Any]:
   guideline_keys = ["brow", "blush", "highlight", "eyeshadow", "eyeliner", "lip"]
   region_note = _obj(
@@ -934,6 +942,10 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "skinPerception": skin_perception,
       "baseMakeupGuide": _STR,
       "makeupGuideline": _obj({key: _STR for key in guideline_keys}, guideline_keys),
+      "makeupColors": _obj(
+        {key: _HEX_COLOR for key in MAKEUP_COLOR_KEYS},
+        list(MAKEUP_COLOR_KEYS),
+      ),
       "recommendedMakeups": {
         "type": "array",
         "minItems": RECOMMENDED_MAKEUP_COUNT,
@@ -987,6 +999,7 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "skinPerception",
       "baseMakeupGuide",
       "makeupGuideline",
+      "makeupColors",
       "recommendedMakeups",
       "regionNotes",
       "impressionNotes",
@@ -1015,6 +1028,7 @@ PERCEPTION_FIELD_KEYS = (
 PRESCRIPTION_FIELD_KEYS = (
   "baseMakeupGuide",
   "makeupGuideline",
+  "makeupColors",
   "recommendedMakeups",
 )
 STYLING_FIELD_KEYS = ("stylingLooks",)
@@ -1095,6 +1109,9 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "baseMakeupGuide, makeupGuideline, recommendedMakeups, beautyGuide, "
   "regionNotes, impressionNotes, stylingLooks. "
   "makeupGuideline keys: brow, blush, highlight, eyeshadow, eyeliner, lip. "
+  "makeupColors keys: lip, blush, eyeshadow, brow, eyeliner. Each value is a "
+  "'#RRGGBB' hex color grounded in the user's measuredPersonalColor and "
+  "consistent with makeupGuideline, natural makeup saturation (no neon). "
   "recommendedMakeups must be exactly 1 object. The object keys: title, "
   "subtitle, description, tags. tags must contain exactly 2 strings. "
   "beautyGuide is optional but recommended. beautyGuide keys: bestColors, "
@@ -1222,6 +1239,13 @@ _ANALYSIS_SEC_PRESCRIPTION = (
   "baseMakeupGuide는 top-level 필드로 작성하고, makeupGuideline 안에는 brow, eyeshadow, lip, highlight, eyeliner, blush만 작성해. "
   "makeupGuideline의 각 항목은 촬영 사진과 보고서 판단을 바탕으로 한 문장으로 짧게 작성해. "
   "makeupGuideline에는 단순 색상 추천뿐 아니라 배치 가이드도 포함해. "
+  "makeupColors는 top-level 필드로 lip, blush, eyeshadow, brow, eyeliner 각각에 대해 "
+  "'#RRGGBB' 6자리 hex 색을 하나씩 채워. 이 색은 요청 메타데이터의 measuredPersonalColor "
+  "(실측 퍼스널 컬러 톤·축)에 근거해서, 그 부위에 실제로 어울리는 메이크업 제품 색이어야 해 "
+  "— makeupGuideline 텍스트에서 말한 색과 일관되게. 립은 실제 립 제품 색, 블러셔는 볼 발색, "
+  "eyeshadow는 눈두덩 색, brow는 눈썹 색, eyeliner는 라인 색. measuredPersonalColor가 "
+  "insufficient거나 없으면 사진 관찰에 근거한 무난한 색으로. AR 필터에 그대로 쓰이니 "
+  "실물 메이크업으로 자연스러운 채도·명도를 지켜(형광·순색 금지). "
   "brow는 눈썹 모양/결/두께 방향, eyeshadow는 색과 눈두덩이 배치, lip은 립 컬러와 립라인 방향, "
   "highlight는 T존/눈밑/광대 등 위치, eyeliner는 점막/꼬리/두께, blush는 광대/볼 위치와 확산 방향을 설명해. "
   "추천 메이크업은 위 보고서에서 판단한 퍼스널 컬러, 얼굴형, 톤 요약, 추천 무드, 눈매, 입술 톤, 헤어 방향에 근거해서 정확히 1개만 작성해. "

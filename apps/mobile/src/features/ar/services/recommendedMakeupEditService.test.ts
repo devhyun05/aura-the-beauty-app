@@ -114,3 +114,37 @@ expectEqual(
   'face-analysis-full-face',
   'existing Unity save source remains the default',
 );
+
+// ── 분석 색(퍼스널 컬러 근거) 오버라이드 — B ─────────────────────────────────
+// 유효 hex가 있으면 데코 부위 색을 개인화하고, foundation은 스킨-세이프로 불변,
+// 형식 이상/부재 부위는 프리셋 색 폴백.
+const presetLipHex = cleanSmokyState.controls.lip.colorHex;
+const overriddenState = createRecommendedMakeupEditState(cleanSmokyFilter, {
+  lip: '#C0334D',
+  blush: '#E58B7A',
+  brow: 'not-a-hex',      // 형식 이상 → 폴백
+  // eyeliner 생략 → 폴백
+});
+expectEqual(overriddenState.controls.lip.colorHex, '#C0334D', 'lip color overridden by analysis');
+expectEqual(overriddenState.controls.blush.colorHex, '#E58B7A', 'blush color overridden by analysis');
+expectEqual(
+  overriddenState.controls.brow.colorHex,
+  cleanSmokyState.controls.brow.colorHex,
+  'invalid hex -> preset brow color kept',
+);
+expectEqual(
+  overriddenState.controls.eyeliner.colorHex,
+  cleanSmokyState.controls.eyeliner.colorHex,
+  'missing color -> preset eyeliner color kept',
+);
+expectEqual(
+  overriddenState.controls.foundation.colorHex,
+  cleanSmokyState.controls.foundation.colorHex,
+  'foundation stays skin-safe (never overridden)',
+);
+// 오버라이드 없으면 기존과 동일(회귀 없음)
+expectEqual(
+  createRecommendedMakeupEditState(cleanSmokyFilter).controls.lip.colorHex,
+  presetLipHex,
+  'no override -> unchanged preset behavior',
+);

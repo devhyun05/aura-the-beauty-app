@@ -7,6 +7,10 @@ import {
   type MakeupRecipeRegion,
 } from '../../../shared/contracts/fullFaceMakeupRecipe';
 import type {RecommendedMakeupFilter} from '../../../shared/types/makeupGuide';
+import type {
+  FaceAnalysisMakeupColorRegion,
+  FaceAnalysisMakeupColors,
+} from '../../../shared/types/faceAnalysis';
 import {
   createFullFaceMakeupRecipeFromEditState,
   createFullFaceMakeupSavedContract,
@@ -23,6 +27,35 @@ const DECORATIVE_COLOR_INDEX_BY_REGION: Record<MakeupRecipeRegion, number> = {
   eyeliner: 2,
   lens: 0,
 };
+
+// AR 레시피 부위 → 분석 makeupColors 키. foundation/lens는 색 개인화 대상 아님(null).
+// 레시피엔 eyeshadow 부위가 없어 eye 색은 eyeliner 부위가 대표한다.
+const ANALYSIS_COLOR_KEY_BY_REGION: Record<
+  MakeupRecipeRegion,
+  FaceAnalysisMakeupColorRegion | null
+> = {
+  foundation: null,
+  lip: 'lip',
+  blush: 'blush',
+  brow: 'brow',
+  eyeliner: 'eyeliner',
+  lens: null,
+};
+
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+// 분석 색 오버라이드 — 유효한 hex만 채택. 없거나 형식 이상이면 undefined(프리셋 폴백).
+function resolveAnalysisColorHex(
+  region: MakeupRecipeRegion,
+  makeupColors: FaceAnalysisMakeupColors | undefined,
+): string | undefined {
+  const key = ANALYSIS_COLOR_KEY_BY_REGION[region];
+  if (!key || !makeupColors) {
+    return undefined;
+  }
+  const hex = makeupColors[key];
+  return hex && HEX_COLOR_PATTERN.test(hex) ? hex : undefined;
+}
 
 function clampIntensity(value: number): number {
   if (!Number.isFinite(value)) {
@@ -51,9 +84,16 @@ function getRegionColorHex(
   filter: RecommendedMakeupFilter,
   region: MakeupRecipeRegion,
   fallbackColorHex: string,
+  makeupColors?: FaceAnalysisMakeupColors,
 ): string {
   if (region === 'foundation') {
     return fallbackColorHex;
+  }
+
+  // 분석(퍼스널 컬러 근거) 색이 있으면 프리셋보다 우선. 없으면 프리셋 팔레트.
+  const analysisHex = resolveAnalysisColorHex(region, makeupColors);
+  if (analysisHex) {
+    return analysisHex;
   }
 
   const colorIndex = Math.min(
@@ -132,6 +172,9 @@ function applyRecommendedFinish(
  */
 export function createRecommendedMakeupEditState(
   filter: RecommendedMakeupFilter,
+  // 분석이 낸 부위별 hex(퍼스널 컬러 근거). 있으면 데코 부위 색을 이걸로 개인화하고,
+  // 없거나 형식 이상인 부위는 프리셋 색을 그대로 쓴다(색만 바뀌고 모양·질감은 불변).
+  makeupColors?: FaceAnalysisMakeupColors,
 ): FullFaceMakeupEditState {
   const initialState = getInitialFullFaceMakeupEditState();
   const activeRegions = getActiveRegions(filter);
@@ -145,7 +188,7 @@ export function createRecommendedMakeupEditState(
         {
           ...initialControl,
           colorHex: isActive
-            ? getRegionColorHex(filter, region, initialControl.colorHex)
+            ? getRegionColorHex(filter, region, initialControl.colorHex, makeupColors)
             : initialControl.colorHex,
           enabled: isActive,
           intensity: isActive ? intensity : initialControl.intensity,

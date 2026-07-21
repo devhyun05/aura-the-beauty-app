@@ -48,7 +48,14 @@ export function MakeupRecommendationRouteScreen({
         onApplyAR={look =>
           navigation.navigate(
             'ARFilter',
-            getMakeupRecommendationARFilterRouteParams(look.arFilterId),
+            getMakeupRecommendationARFilterRouteParams(
+              look.arFilterId,
+              // 선택된 분석의 색(퍼스널 컬러 근거)으로 필터 색 개인화. 선택 플로우
+              // 데이터가 유효할 때만(personalColor 전달과 동일 가드), 없으면 프리셋 유지.
+              canUseSelectedFlowData
+                ? selectedFaceAnalysisReport?.makeupColors
+                : undefined,
+            ),
           )
         }
         onResultsVisibilityChange={setIsResultsVisible}
