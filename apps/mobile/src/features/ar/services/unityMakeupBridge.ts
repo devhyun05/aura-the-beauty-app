@@ -485,6 +485,23 @@ export function postUnityFilterParams(params: ArwFilterParams): boolean {
   return true;
 }
 
+// 반반(half-face) 모드. ARwithFable 엔진의 FilterParams에는 halfFaceMode 필드가
+// 없어(옛 AURA 엔진 계약) applyFilter에 실어 보내면 조용히 버려진다. 전용
+// setSplit 메시지로 SplitMaskRenderer를 몰아야 스플릿 쿼드(MakeupQueues.SplitMask)
+// 가 맨얼굴 절반을 카메라 원본으로 복원한다. mode 0=전체 1=왼쪽 2=오른쪽.
+export function postUnitySplitMode(mode: number): boolean {
+  const nativeBridge = getNativeUnityMakeupBridge();
+  if (!nativeBridge?.postMessage) {
+    return false;
+  }
+  nativeBridge.postMessage(
+    'NativeBridge',
+    'OnMessageFromRN',
+    JSON.stringify({split: {mode}, type: 'setSplit'}),
+  );
+  return true;
+}
+
 // Generic UnitySendMessage entry point used by the exact stencil-0710 screen.
 // The host native bridge already supports arbitrary GameObject/method targets,
 // so the standalone @azesmway native package must not be installed as a second
