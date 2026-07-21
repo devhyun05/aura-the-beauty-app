@@ -235,6 +235,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 12,
+    // 이미지·텍스트 그룹을 카드 가운데로 정렬한다.
+    justifyContent: 'center',
     padding: 10,
   },
   productImageFrame: {
@@ -250,7 +252,7 @@ const styles = StyleSheet.create({
   },
   productImage: {height: '100%', width: '100%'},
   productFallback: {borderRadius: 18, height: 36, opacity: 0.72, width: 36},
-  productCopy: {flex: 1, gap: 3, justifyContent: 'center', minWidth: 0},
+  productCopy: {flexShrink: 1, gap: 3, justifyContent: 'center', minWidth: 0},
   productBrand: {color: colors.sub2, fontSize: 10.5, fontWeight: '600'},
   productName: {color: colors.ink, fontSize: 13.5, fontWeight: '800', lineHeight: 18},
   productShade: {color: colors.sub2, fontSize: 10.5, fontWeight: '600'},

@@ -38,6 +38,7 @@ import {
   typography,
 } from '../../../shared/theme';
 import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
+import {SavedImagePreviewSheet} from '../../../shared/ui/SavedImagePreviewSheet';
 import {
   MakeupFeedbackCorrectionGuideDetails,
   MakeupFeedbackPriorityCorrectionCard,
@@ -202,6 +203,9 @@ export function MakeupFeedbackResultScreen({
 }: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
   const captureRef = useRef<OptionalViewShotRef | null>(null);
+  const [savedImagePreviewUri, setSavedImagePreviewUri] = useState<string | null>(
+    null,
+  );
   const evaluationByTopicId = new Map(
     result.evaluations.map(evaluation => [evaluation.topicId, evaluation]),
   );
@@ -260,6 +264,7 @@ export function MakeupFeedbackResultScreen({
       if (target === 'save-image') {
         await saveFeedbackImageToLibrary(imageUri);
         setShareFeedback({message: '이미지를 저장했어요.', tone: 'success'});
+        setSavedImagePreviewUri(imageUri);
         return;
       }
 
@@ -358,7 +363,8 @@ export function MakeupFeedbackResultScreen({
                   {strengthTakeaway ? (
                     <View style={styles.takeawayRow}>
                       <Text style={styles.takeawayLabel}>잘된 점</Text>
-                      <Text numberOfLines={2} style={styles.takeawayText}>
+                      {/* 종합 판단 요약은 잘리지 않고 전문이 보여야 한다. */}
+                      <Text style={styles.takeawayText}>
                         {strengthTakeaway}
                       </Text>
                     </View>
@@ -368,7 +374,7 @@ export function MakeupFeedbackResultScreen({
                       <Text style={[styles.takeawayLabel, styles.takeawayLabelPriority]}>
                         먼저 고칠 점
                       </Text>
-                      <Text numberOfLines={2} style={styles.takeawayText}>
+                      <Text style={styles.takeawayText}>
                         {improvementTakeaway}
                       </Text>
                     </View>
@@ -568,6 +574,10 @@ export function MakeupFeedbackResultScreen({
             <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2} />
           </Button>
         </ScrollView>
+        <SavedImagePreviewSheet
+          imageUri={savedImagePreviewUri}
+          onClose={() => setSavedImagePreviewUri(null)}
+        />
       </View>
     </MakeupFeedbackScreenScaffold>
   );

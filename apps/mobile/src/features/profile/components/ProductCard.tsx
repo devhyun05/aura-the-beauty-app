@@ -34,15 +34,20 @@ export function ProductCard({product, style}: ProductCardProps) {
       </View>
 
       <View style={styles.textArea}>
-        <Text numberOfLines={1} style={styles.brand}>
-          {product.brandName}
-        </Text>
+        {product.brandName?.trim() ? (
+          <Text numberOfLines={1} style={styles.brand}>
+            {product.brandName}
+          </Text>
+        ) : null}
         <Text numberOfLines={2} style={styles.name}>
           {product.productName}
         </Text>
-        <Text numberOfLines={1} style={styles.price}>
-          {formatPrice(product.price)}
-        </Text>
+        {/* 가격 정보가 없는(0 이하) 항목에 "0원"을 보여주지 않는다. */}
+        {product.price > 0 ? (
+          <Text numberOfLines={1} style={styles.price}>
+            {formatPrice(product.price)}
+          </Text>
+        ) : null}
       </View>
     </AppCard>
   );

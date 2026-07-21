@@ -194,27 +194,29 @@ export function HomeView({
           {/* attach menu — root(리포트/필터/사진) or filter presets */}
           {menu === 'root' ? (
             <View style={styles.menuPanel}>
-              <MenuRow
-                label="분석 리포트"
-                disabled={!availableReport}
-                onPress={() => {
-                  if (!availableReport) {
-                    setReportHint(true);
-                    return;
-                  }
-                  onAddAttachment({
-                    kind: 'report',
-                    id: availableReport.id,
-                    personalColor: availableReport.personalColor,
-                    skinType: availableReport.skinType,
-                  });
-                  setMenu(null);
-                  setReportHint(false);
-                }}
-              />
+              {/* 분석 리포트 첨부는 스토어 빌드에서 숨긴다(dev 전용). */}
+              {__DEV__ ? (
+                <MenuRow
+                  label="분석 리포트"
+                  disabled={!availableReport}
+                  onPress={() => {
+                    if (!availableReport) {
+                      setReportHint(true);
+                      return;
+                    }
+                    onAddAttachment({
+                      kind: 'report',
+                      id: availableReport.id,
+                      personalColor: availableReport.personalColor,
+                      skinType: availableReport.skinType,
+                    });
+                    setMenu(null);
+                    setReportHint(false);
+                  }}
+                />
+              ) : null}
               <MenuRow label="필터" onPress={() => setMenu('filter')} />
-              <MenuRow label="사진  (준비중)" disabled onPress={() => {}} />
-              {reportHint && !availableReport ? (
+              {__DEV__ && reportHint && !availableReport ? (
                 <Text style={[text.metaSm, { color: color.inkFaint, marginTop: 4 }]} allowFontScaling={false}>
                   먼저 얼굴 분석을 해주세요
                 </Text>

@@ -17,6 +17,9 @@ export type OptionalViewShotOptions = {
   format?: 'jpg' | 'png' | 'webm' | 'raw';
   quality?: number;
   result?: 'tmpfile' | 'base64' | 'data-uri' | 'zip-base64';
+  // 대형(긴) 뷰는 기본 drawViewHierarchy 캡처가 실기기에서 실패한다.
+  // layer.renderInContext 경로로 전환하는 네이티브 옵션.
+  useRenderInContext?: boolean;
 };
 
 type OptionalViewShotProps = {
@@ -24,6 +27,31 @@ type OptionalViewShotProps = {
   options?: OptionalViewShotOptions;
   style?: StyleProp<ViewStyle>;
 };
+
+// 스크롤뷰 전체 콘텐츠 캡처(snapshotContentContainer)용 임의 노드 캡처 함수.
+// 모듈 부재 시 null — 호출부가 폴백을 결정한다.
+export type OptionalCaptureRefFunction = (
+  node: unknown,
+  options?: OptionalViewShotOptions & {
+    snapshotContentContainer?: boolean;
+    width?: number;
+    height?: number;
+  },
+) => Promise<string | undefined>;
+
+export function loadOptionalCaptureRefFunction(): OptionalCaptureRefFunction | null {
+  try {
+    const viewShotModule = require('react-native-view-shot') as {
+      captureRef?: unknown;
+    };
+
+    return typeof viewShotModule.captureRef === 'function'
+      ? (viewShotModule.captureRef as OptionalCaptureRefFunction)
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 type NativeViewShotComponent = ComponentType<
   OptionalViewShotProps & {

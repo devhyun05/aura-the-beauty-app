@@ -732,6 +732,12 @@ export async function runReferenceMakeupExtraction(
 
     return latestReferenceMakeupExtractionData;
   } catch (error) {
+    // 한도 초과(429)는 조용한 mock 폴백 대신 호출부가 안내하도록 던진다 —
+    // 가짜 결과가 "정상 분석"처럼 보이면 안 된다.
+    if (error instanceof BackendApiError && error.status === 429) {
+      throw error;
+    }
+
     console.info('[aura:reference-extraction] fallback:backend-failed', {
       message: error instanceof Error ? error.message : String(error),
     });

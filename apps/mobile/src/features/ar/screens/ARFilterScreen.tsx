@@ -95,6 +95,7 @@ import {
   hideUnityMakeupView,
   postUnityFilterParams,
   postUnityMakeupRecipe,
+  postUnitySplitMode,
 } from '../services/unityMakeupBridge';
 
 type ARFilterScreenProps = {
@@ -420,6 +421,9 @@ export function ARFilterScreen({
     postUnityFilterParams(
       buildFilterParamsFromARFilterSelections(unitySelections, halfFaceMode),
     );
+    // ARwithFable 엔진은 halfFaceMode를 setSplit으로 받아야 반반이 동작한다
+    // (applyFilter에 실린 값은 무시됨 — postUnitySplitMode 주석 참조).
+    postUnitySplitMode(halfFaceMode);
   }, [
     arFilterSelectionState.selectionStatesByArea,
     arFilterSelectionState.guideMode,

@@ -21,6 +21,7 @@ import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import {loadBodyProfile} from '../../ar/stencil/src/storage/bodyProfileStore';
 import BodyPanel from '../../ar/stencil/src/components/BodyPanel';
 import type {OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
+import {SavedImagePreviewSheet} from '../../../shared/ui/SavedImagePreviewSheet';
 import {ReportScreenScaffold} from '../ReportScreenScaffold';
 import {color, font} from '../reportTokens';
 import {
@@ -107,6 +108,9 @@ export function FaceAnalysisReportPreviewScreen({
   const [isBodySurveyOpen, setIsBodySurveyOpen] = useState(false);
   const [activeShareTarget, setActiveShareTarget] = useState<ReportShareTarget | null>(null);
   const reportCaptureRef = useRef<OptionalViewShotRef | null>(null);
+  const [savedImagePreviewUri, setSavedImagePreviewUri] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -273,6 +277,7 @@ export function FaceAnalysisReportPreviewScreen({
 
         if (target === 'save-image') {
           await saveReportImageToLibrary(imageUri);
+          setSavedImagePreviewUri(imageUri);
           return;
         }
 
@@ -421,6 +426,10 @@ export function FaceAnalysisReportPreviewScreen({
           </View>
         </View>
       </Modal>
+      <SavedImagePreviewSheet
+        imageUri={savedImagePreviewUri}
+        onClose={() => setSavedImagePreviewUri(null)}
+      />
     </>
   );
 }

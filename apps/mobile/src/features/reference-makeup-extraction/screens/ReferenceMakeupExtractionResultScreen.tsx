@@ -180,6 +180,9 @@ export function ReferenceMakeupExtractionResultScreen({
             generatedReady={false}
             look={areaGuideLook}
             onAreaOpened={() => {}}
+            // 추출 보고서에는 생성(추천) 이미지가 없어 "준비 중" 박스만 남으므로
+            // 크롭 프리뷰를 끈다(사용자 결정).
+            showCropPreview={false}
             sourceImageUri={referencePhotoUri}
             sourceLook={areaGuideSourceLook}
             sourceRegionVisuals={regionVisuals}
@@ -194,14 +197,17 @@ export function ReferenceMakeupExtractionResultScreen({
             style={({pressed}) => [styles.secondaryButton, pressed && styles.pressed]}>
             <Text style={styles.secondaryButtonText}>다시 선택</Text>
           </Pressable>
-          <Pressable
-            accessibilityLabel="레퍼런스 메이크업 기반 메이크업 필터 보기"
-            accessibilityRole="button"
-            onPress={onOpenARFilter}
-            style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
-            <Text style={styles.primaryButtonText}>메이크업 필터로 보기</Text>
-            <ChevronRight color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
-          </Pressable>
+          {/* 추출→AR 연동은 구형 AR 경로라 스토어 빌드에서는 숨긴다(dev 전용). */}
+          {__DEV__ ? (
+            <Pressable
+              accessibilityLabel="레퍼런스 메이크업 기반 메이크업 필터 보기"
+              accessibilityRole="button"
+              onPress={onOpenARFilter}
+              style={({pressed}) => [styles.primaryButton, pressed && styles.pressed]}>
+              <Text style={styles.primaryButtonText}>메이크업 필터로 보기</Text>
+              <ChevronRight color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
+            </Pressable>
+          ) : null}
         </XStack>
       </ScrollView>
     </AppScreen>

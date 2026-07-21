@@ -62,7 +62,18 @@ export type AppFeatureMenuSection = {
   label: string;
 };
 
-export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
+// 스토어 빌드에서 메뉴에 노출하지 않는 항목 — 커뮤니티(신고·차단 미구현, 1.2),
+// 수염 제거·컨설팅(스토어 릴리스 범위 제외). 라우트는 유지, 메뉴 표시만 걸러진다.
+const STORE_HIDDEN_MENU_ITEM_IDS: readonly AppFeatureMenuItemId[] = [
+  'community',
+  'beardSimulation',
+  'consulting',
+  'recommendedFilters',
+  'makeupLooks',
+  'arFilter',
+];
+
+const allAppFeatureMenuSections: readonly AppFeatureMenuSection[] = [
   {
     id: 'main',
     label: '주요 화면',
@@ -184,6 +195,16 @@ export const appFeatureMenuSections: readonly AppFeatureMenuSection[] = [
     ],
   },
 ];
+
+export const appFeatureMenuSections: readonly AppFeatureMenuSection[] =
+  allAppFeatureMenuSections.map(section => ({
+    ...section,
+    items: __DEV__
+      ? section.items
+      : section.items.filter(
+          item => !STORE_HIDDEN_MENU_ITEM_IDS.includes(item.id),
+        ),
+  }));
 
 export function getAppFeatureMenuSectionLabels(): readonly string[] {
   return appFeatureMenuSections.map(section => section.label);

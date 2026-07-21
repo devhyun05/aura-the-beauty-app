@@ -43,7 +43,10 @@ export function LikedProductListScreen({onOpenProduct}: LikedProductListScreenPr
     setStatus('loading');
     getLikedProducts().then((nextProducts) => {
       if (isMounted) {
-        setProducts(nextProducts);
+        // 표시 권리가 만료된(unavailable) 항목은 목록에 노출하지 않는다.
+        setProducts(
+          nextProducts.filter(product => product.status !== 'unavailable'),
+        );
         setStatus('ready');
       }
     }).catch(() => {if (isMounted) setStatus('error');});
@@ -125,7 +128,8 @@ export function LikedProductListScreen({onOpenProduct}: LikedProductListScreenPr
                   {product.status === 'unavailable' ? '제품 정보는 숨김 처리되었어요.' : product.productName}
                 </Text>
                 <Text numberOfLines={1} style={styles.price}>
-                  {product.status === 'unavailable' ? '좋아요 취소 가능' : product.status === 'soldOut' ? '판매 종료' : formatPrice(product.price)}
+                  {/* 가격 미보유(0 이하) 항목에 "0원"을 노출하지 않는다. */}
+                  {product.status === 'unavailable' ? '좋아요 취소 가능' : product.status === 'soldOut' ? '판매 종료' : product.price > 0 ? formatPrice(product.price) : '가격 정보 없음'}
                 </Text>
               </Pressable>
             </View>

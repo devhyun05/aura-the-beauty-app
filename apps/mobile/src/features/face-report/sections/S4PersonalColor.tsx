@@ -183,7 +183,8 @@ function ToneMapChart({ data }: { data: S4Data['toneMap'] }) {
 }
 
 function AxisGlossary() {
-  const [expanded, setExpanded] = useState(true);
+  // 용어 읽는 법은 기본 접힘 — 필요할 때만 펼쳐 본다.
+  const [expanded, setExpanded] = useState(false);
   const seasonItems = [
     {term: '봄', desc: '따뜻하고 밝거나 선명한 색감'},
     {term: '여름', desc: '차갑고 밝거나 부드러운 색감'},

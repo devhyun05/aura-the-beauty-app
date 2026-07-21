@@ -1,7 +1,8 @@
 import React from 'react';
-import {Alert} from 'react-native';
+import {Alert, Modal} from 'react-native';
 
 import {useAuthSession} from '../../../features/auth';
+import {PrivacyPolicyScreen} from '../../../features/legal/screens/PrivacyPolicyScreen';
 import {
   AccountDeletionScreen,
   AccountManagementScreen,
@@ -22,6 +23,9 @@ import {
 export function AppSettingsRouteScreen({
   navigation,
 }: RootScreenProps<'AppSettings'>) {
+  // 로그인 이후에도 개인정보처리방침을 볼 수 있어야 한다(App Store 5.1.1).
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = React.useState(false);
+
   return (
     <DetailRouteChrome
       backgroundColor={APP_SETTINGS_BACKGROUND_COLOR}
@@ -32,9 +36,17 @@ export function AppSettingsRouteScreen({
       <AppSettingsScreen
         onPressAccountManagement={() => navigation.navigate('AccountManagement')}
         onPressFaq={() => navigation.navigate('Faq')}
+        onPressPrivacyPolicy={() => setShowPrivacyPolicy(true)}
         onPressProfile={() => navigation.navigate('ProfileEdit')}
         onPressQuickActions={() => navigation.navigate('FloatingActionSettings')}
       />
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setShowPrivacyPolicy(false)}
+        presentationStyle="pageSheet"
+        visible={showPrivacyPolicy}>
+        <PrivacyPolicyScreen onClose={() => setShowPrivacyPolicy(false)} />
+      </Modal>
     </DetailRouteChrome>
   );
 }

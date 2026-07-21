@@ -2,6 +2,7 @@ import React from 'react';
 import {
   CircleHelp,
   Settings2,
+  ShieldCheck,
   UserCog,
   UserRound,
   type LucideIcon,
@@ -29,6 +30,7 @@ const settingsPalette = {
 type AppSettingsScreenProps = {
   onPressAccountManagement: () => void;
   onPressFaq: () => void;
+  onPressPrivacyPolicy: () => void;
   onPressProfile: () => void;
   onPressQuickActions: () => void;
 };
@@ -44,6 +46,7 @@ type SettingsItemProps = {
 export const APP_SETTINGS_LABELS = {
   accountManagement: '계정 관리',
   faq: 'FAQ',
+  privacyPolicy: '개인정보처리방침',
   profile: '프로필 관리',
   quickActions: '빠른 실행 설정',
 } as const;
@@ -80,6 +83,7 @@ function SettingsItem({
 export function AppSettingsScreen({
   onPressAccountManagement,
   onPressFaq,
+  onPressPrivacyPolicy,
   onPressProfile,
   onPressQuickActions,
 }: AppSettingsScreenProps) {
@@ -131,9 +135,15 @@ export function AppSettingsScreen({
             <SettingsItem
               description="자주 묻는 질문과 앱 사용 안내를 확인해요."
               icon={CircleHelp}
-              isLast
               label={APP_SETTINGS_LABELS.faq}
               onPress={onPressFaq}
+            />
+            <SettingsItem
+              description="개인정보 수집·이용과 보호 조치를 확인해요."
+              icon={ShieldCheck}
+              isLast
+              label={APP_SETTINGS_LABELS.privacyPolicy}
+              onPress={onPressPrivacyPolicy}
             />
           </View>
         </View>

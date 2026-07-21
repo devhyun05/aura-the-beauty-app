@@ -175,7 +175,11 @@ export function HomeScreen({
   );
   const recommendedFilterPreviewCardWidth = getRecommendedFilterPreviewCardWidth(width);
   const visibleHomeModules = useMemo(
-    () => getVisibleHomeModules(audience, homeFeedContent),
+    () =>
+      getVisibleHomeModules(audience, homeFeedContent).filter(
+        // 컨설팅 모듈은 스토어 빌드 홈에서 숨긴다.
+        module => __DEV__ || module.id !== 'consulting',
+      ),
     [audience, homeFeedContent],
   );
   const visibleHomeModulesRef = useRef(visibleHomeModules);
@@ -426,7 +430,13 @@ export function HomeScreen({
               onPressFeature={handleHeroFeaturePress}
               onPressFilter={onPressHeroTrendFilter ? handleHeroFilterPress : undefined}
               topInset={insets.top}
-              trends={homeData.hero.trends}
+              trends={homeData.hero.trends.filter(
+                // 스토어 빌드: 컨설팅 배너와, 탭 시 AR 필터로 이동하는
+                // 트렌드 필터 배너(filterId)를 함께 숨긴다.
+                trend =>
+                  __DEV__ ||
+                  (trend.featureId !== 'consulting' && !trend.filterId),
+              )}
             />
 
             <HomeServiceShortcutSection
@@ -443,20 +453,23 @@ export function HomeScreen({
               onPressProductRecommendations={onPressProductRecommendations}
             />
 
-            <RecommendedFilterPreviewSection
-              cardWidth={recommendedFilterPreviewCardWidth}
-              filters={recommendedFilterPreviewItems}
-              isMakeupFilterLiked={isMakeupFilterLiked}
-              onPressFilter={
-                onPressRecommendedFilter ? handleRecommendedFilterPress : undefined
-              }
-              onPressMore={
-                onPressRecommendedFilterMore
-                  ? handleRecommendedFilterMorePress
-                  : undefined
-              }
-              onToggleFilterLike={onToggleMakeupFilterLike}
-            />
+            {/* 추천 메이크업 필터 섹션 — 스토어 빌드 홈에서는 숨긴다(dev 전용). */}
+            {__DEV__ ? (
+              <RecommendedFilterPreviewSection
+                cardWidth={recommendedFilterPreviewCardWidth}
+                filters={recommendedFilterPreviewItems}
+                isMakeupFilterLiked={isMakeupFilterLiked}
+                onPressFilter={
+                  onPressRecommendedFilter ? handleRecommendedFilterPress : undefined
+                }
+                onPressMore={
+                  onPressRecommendedFilterMore
+                    ? handleRecommendedFilterMorePress
+                    : undefined
+                }
+                onToggleFilterLike={onToggleMakeupFilterLike}
+              />
+            ) : null}
           </YStack>
         }
         maxToRenderPerBatch={2}
@@ -890,6 +903,8 @@ function HomeHeroChrome({
       <AuraLogo style={styles.homeHeroLogo} variant="header" />
       <XStack style={styles.homeHeroRightActions}>
         {headerRightSlot}
+        {/* \uC804\uCCB4 \uAE30\uB2A5 \uBA54\uB274 \u2014 \uC2A4\uD1A0\uC5B4 \uBE4C\uB4DC \uB178\uCD9C \uD56D\uBAA9\uC740 appFeatureMenu\uC758
+            STORE_HIDDEN_MENU_ITEM_IDS \uD544\uD130\uAC00 \uACB0\uC815\uD55C\uB2E4. */}
         <Pressable
           accessibilityLabel={'\uC804\uCCB4 \uAE30\uB2A5 \uBCF4\uAE30'}
           accessibilityRole="button"
@@ -1088,6 +1103,20 @@ const homeServiceShortcutRows = [
     },
   ],
 ] as const;
+// 수염 제거·컨설팅·메이크업 필터(AR — 발열 이슈로 릴리스 범위 제외)는
+// 스토어 빌드 홈에서 숨긴다(dev 빌드에서만 노출).
+const STORE_HIDDEN_SHORTCUT_IDS: readonly string[] = [
+  'beardSimulation',
+  'consulting',
+  'arFilter',
+];
+const visibleHomeServiceShortcutRows = homeServiceShortcutRows
+  .map(row =>
+    row.filter(
+      shortcut => __DEV__ || !STORE_HIDDEN_SHORTCUT_IDS.includes(shortcut.id),
+    ),
+  )
+  .filter(row => row.length > 0);
 const homeServiceShortcuts = homeServiceShortcutRows.flat();
 
 type HomeServiceShortcutId = (typeof homeServiceShortcuts)[number]['id'];
@@ -1217,7 +1246,7 @@ function HomeServiceShortcutSection({
 
   return (
     <YStack style={styles.homeServiceShortcutList}>
-      {homeServiceShortcutRows.map((row, rowIndex) => (
+      {visibleHomeServiceShortcutRows.map((row, rowIndex) => (
         <XStack key={`home-service-shortcut-row-${rowIndex}`} style={styles.homeServiceShortcutRow}>
           {row.map((action) => (
             <Pressable

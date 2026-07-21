@@ -3,6 +3,7 @@ import {useCallback, useMemo, useRef, useState} from 'react';
 import {
   AccessibilityInfo,
   Alert,
+  PixelRatio,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,9 +14,11 @@ import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {
+  loadOptionalCaptureRefFunction,
   OptionalViewShot,
   type OptionalViewShotRef,
 } from '../../../shared/ui/OptionalViewShot';
+import {SavedImagePreviewSheet} from '../../../shared/ui/SavedImagePreviewSheet';
 import {FinalAreaGuideSection} from '../components/result/FinalAreaGuideSection';
 import {FinalGeneratedMakeupHero} from '../components/result/FinalGeneratedMakeupHero';
 import {FinalSingleLookMap} from '../components/result/FinalSingleLookMap';
@@ -36,6 +39,10 @@ const CAPTURE_OPTIONS = {
   quality: 0.95,
   result: 'tmpfile',
 } as const;
+
+// iOS 이미지 렌더러 한계(≈16384px)를 넘는 긴 결과는 잘리므로, 실측 높이
+// 기준으로 필요할 때만 비율 축소 캡처한다 (분석·피드백 보고서와 동일 규칙).
+const CAPTURE_MAX_PIXELS = 16000;
 
 type CaptureAsset = 'crop' | 'hero' | 'map' | 'product';
 type CaptureReadiness = Record<CaptureAsset, boolean>;
@@ -61,6 +68,10 @@ export function RecommendationResultsFinalScreen({
 }: RecommendationResultsViewProps) {
   const insets = useSafeAreaInsets();
   const captureRef = useRef<OptionalViewShotRef>(null);
+  const captureBodySize = useRef({height: 0, width: 0});
+  const [savedImagePreviewUri, setSavedImagePreviewUri] = useState<string | null>(
+    null,
+  );
   const activeShareTargetRef = useRef<RecommendationResultShareTarget | null>(null);
   const [captureReadiness, setCaptureReadiness] =
     useState<CaptureReadiness>(INITIAL_CAPTURE_READINESS);
@@ -106,6 +117,47 @@ export function RecommendationResultsFinalScreen({
   const captureReady =
     generatedReady && Object.values(captureReadiness).every(Boolean);
 
+  // 결과가 렌더러 픽셀 한계를 넘으면 renderInContext(큰 뷰에서도 동작,
+  // 크기 옵션을 주면 잘리므로 자연 크기 호출) → 축소 스냅샷 순으로 시도.
+  const captureFullResult = useCallback(async () => {
+    const body = captureBodySize.current;
+    const captureNode = loadOptionalCaptureRefFunction();
+    const deviceScale = PixelRatio.get();
+
+    if (
+      captureNode &&
+      captureRef.current &&
+      body.height > 0 &&
+      body.height * deviceScale > CAPTURE_MAX_PIXELS
+    ) {
+      try {
+        const fullUri = await captureNode(captureRef.current, {
+          ...CAPTURE_OPTIONS,
+          useRenderInContext: true,
+        });
+        if (fullUri) {
+          return fullUri;
+        }
+      } catch (error) {
+        console.info('[aura:recommendation] capture-render-in-context-failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      const scaleDown = CAPTURE_MAX_PIXELS / (body.height * deviceScale);
+      const scaledUri = await captureNode(captureRef.current, {
+        ...CAPTURE_OPTIONS,
+        height: Math.floor(body.height * scaleDown),
+        width: Math.floor(body.width * scaleDown),
+      });
+      if (scaledUri) {
+        return scaledUri;
+      }
+    }
+
+    return captureRecommendationResult(captureRef);
+  }, []);
+
   const handleShareAction = useCallback(
     async (target: RecommendationResultShareTarget) => {
       if (activeShareTargetRef.current) return;
@@ -122,10 +174,11 @@ export function RecommendationResultsFinalScreen({
           await requestRecommendationResultSavePermission();
         }
 
-        const imageUri = await captureRecommendationResult(captureRef);
+        const imageUri = await captureFullResult();
 
         if (target === 'save-image') {
           await saveRecommendationResultToLibrary(imageUri);
+          setSavedImagePreviewUri(imageUri);
           AccessibilityInfo.announceForAccessibility('전체 추천 결과를 사진에 저장했어요.');
         } else {
           const result = await shareRecommendationResult(imageUri);
@@ -199,6 +252,13 @@ export function RecommendationResultsFinalScreen({
           onMore={handleMore}
           topInset={insets.top}
         />
+        <View
+          onLayout={e => {
+            captureBodySize.current = {
+              height: e.nativeEvent.layout.height,
+              width: e.nativeEvent.layout.width,
+            };
+          }}>
         <OptionalViewShot
           options={CAPTURE_OPTIONS}
           ref={captureRef}
@@ -241,6 +301,7 @@ export function RecommendationResultsFinalScreen({
             </View>
           </LinearGradient>
         </OptionalViewShot>
+        </View>
 
         <View style={styles.floatingActionClearance} />
       </ScrollView>
@@ -264,24 +325,31 @@ export function RecommendationResultsFinalScreen({
               추천 제품
             </Text>
           </Pressable>
-          <Pressable
-            accessibilityHint="현재 추천 메이크업을 얼굴에 미리 적용합니다"
-            accessibilityLabel="추천 메이크업 AR 적용"
-            accessibilityRole="button"
-            onPress={() => onApplyAR(model.sourceLook)}
-            style={({pressed}) => [
-              styles.floatingAction,
-              styles.arAction,
-              shadows.darkTile,
-              pressed && styles.pressed,
-            ]}>
-            <Sparkles color={colors.white} size={19} strokeWidth={2.1} />
-            <Text numberOfLines={1} style={styles.floatingActionLabel}>
-              AR로 적용하기
-            </Text>
-          </Pressable>
+          {/* 추천→AR 연동은 구형 AR 경로라 스토어 빌드에서는 숨긴다(dev 전용). */}
+          {__DEV__ ? (
+            <Pressable
+              accessibilityHint="현재 추천 메이크업을 얼굴에 미리 적용합니다"
+              accessibilityLabel="추천 메이크업 AR 적용"
+              accessibilityRole="button"
+              onPress={() => onApplyAR(model.sourceLook)}
+              style={({pressed}) => [
+                styles.floatingAction,
+                styles.arAction,
+                shadows.darkTile,
+                pressed && styles.pressed,
+              ]}>
+              <Sparkles color={colors.white} size={19} strokeWidth={2.1} />
+              <Text numberOfLines={1} style={styles.floatingActionLabel}>
+                AR로 적용하기
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
+      <SavedImagePreviewSheet
+        imageUri={savedImagePreviewUri}
+        onClose={() => setSavedImagePreviewUri(null)}
+      />
     </LinearGradient>
   );
 }

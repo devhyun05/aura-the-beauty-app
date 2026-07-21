@@ -7,6 +7,7 @@ import {
   floatingActionButtonPositionOptions,
   floatingActionInteractionModeOptions,
   floatingActionDefinitions,
+  isFloatingActionAvailable,
   getNextFloatingActionSelection,
   getFloatingActionSelectedSlotNumber,
   AppScreen,
@@ -183,7 +184,9 @@ export function FloatingActionSettingsScreen({
         </XStack>
 
         <YStack style={styles.actionList}>
-          {floatingActionDefinitions.map(action => {
+          {floatingActionDefinitions
+            .filter(action => isFloatingActionAvailable(action.id))
+            .map(action => {
             const slotNumber = getFloatingActionSelectedSlotNumber(
               selectedActionIds,
               action.id,

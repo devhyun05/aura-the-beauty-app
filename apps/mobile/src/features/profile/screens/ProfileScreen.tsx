@@ -243,10 +243,14 @@ export function ProfileScreen({
     : onPressMakeupRecommendationReportsList;
   const previewCreatedMakeupLooks = createdMakeupLooks.slice(0, 4);
   const previewLikedMakeupLooks = likedMakeupLooks.slice(0, 4);
-  const previewProducts = data.likedProducts.slice(
-    0,
-    PROFILE_SCREEN_LIKED_PRODUCT_PREVIEW_LIMIT,
-  );
+  // 상세 데이터가 비어 있는 좋아요(이름 없음)와 표시 권리가 만료된 항목은
+  // 빈 카드·"숨김 처리" 카드로 보이므로 걸러낸다.
+  const previewProducts = data.likedProducts
+    .filter(
+      product =>
+        product.productName?.trim() && product.status !== 'unavailable',
+    )
+    .slice(0, PROFILE_SCREEN_LIKED_PRODUCT_PREVIEW_LIMIT);
 
   return (
     <AppScreen
@@ -303,49 +307,54 @@ export function ProfileScreen({
         </NativeScrollView>
       </View>
 
-      <View style={styles.section}>
-        <SectionHeader
-          actionLabel="더보기"
-          onPressAction={onPressCreatedMakeupLookList}
-          title="내가 만든 필터"
-        />
-        {previewCreatedMakeupLooks.length > 0 ? (
-          <View style={styles.previewGrid}>
-            {previewCreatedMakeupLooks.map(makeupLook => (
-              <MakeupLookCard
-                key={makeupLook.id}
-                makeupLook={makeupLook}
-                onPress={onPressMakeupLook}
-                style={previewCardLayout}
-              />
-            ))}
-          </View>
-        ) : (
-          <EmptySection label="아직 만든 필터가 없어요." />
-        )}
-      </View>
+      {/* 필터 섹션(내가 만든·좋아요) — AR 필터 진입점과 함께 스토어 빌드에서는 숨긴다. */}
+      {__DEV__ ? (
+        <View style={styles.section}>
+          <SectionHeader
+            actionLabel="더보기"
+            onPressAction={onPressCreatedMakeupLookList}
+            title="내가 만든 필터"
+          />
+          {previewCreatedMakeupLooks.length > 0 ? (
+            <View style={styles.previewGrid}>
+              {previewCreatedMakeupLooks.map(makeupLook => (
+                <MakeupLookCard
+                  key={makeupLook.id}
+                  makeupLook={makeupLook}
+                  onPress={onPressMakeupLook}
+                  style={previewCardLayout}
+                />
+              ))}
+            </View>
+          ) : (
+            <EmptySection label="아직 만든 필터가 없어요." />
+          )}
+        </View>
+      ) : null}
 
-      <View style={styles.section}>
-        <SectionHeader
-          actionLabel="더보기"
-          onPressAction={onPressMakeupLookList}
-          title="좋아요한 메이크업 필터"
-        />
-        {previewLikedMakeupLooks.length > 0 ? (
-          <View style={styles.previewGrid}>
-            {previewLikedMakeupLooks.map((makeupLook) => (
-              <MakeupLookCard
-                key={makeupLook.id}
-                makeupLook={makeupLook}
-                onPress={onPressMakeupLook}
-                style={previewCardLayout}
-              />
-            ))}
-          </View>
-        ) : (
-          <EmptySection label="좋아요한 메이크업 필터가 없어요." />
-        )}
-      </View>
+      {__DEV__ ? (
+        <View style={styles.section}>
+          <SectionHeader
+            actionLabel="더보기"
+            onPressAction={onPressMakeupLookList}
+            title="좋아요한 메이크업 필터"
+          />
+          {previewLikedMakeupLooks.length > 0 ? (
+            <View style={styles.previewGrid}>
+              {previewLikedMakeupLooks.map((makeupLook) => (
+                <MakeupLookCard
+                  key={makeupLook.id}
+                  makeupLook={makeupLook}
+                  onPress={onPressMakeupLook}
+                  style={previewCardLayout}
+                />
+              ))}
+            </View>
+          ) : (
+            <EmptySection label="좋아요한 메이크업 필터가 없어요." />
+          )}
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <SectionHeader
@@ -372,7 +381,8 @@ export function ProfileScreen({
         )}
       </View>
 
-      {onPressConsultingHistory ? (
+      {/* 전문가 상담 섹션(예약·요약·상담 톡) — 스토어 빌드에서는 숨긴다. */}
+      {__DEV__ && onPressConsultingHistory ? (
         <View style={styles.section}>
           <SectionHeader
             actionLabel="더보기"
