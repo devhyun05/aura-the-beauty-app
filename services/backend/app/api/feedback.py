@@ -440,13 +440,6 @@ async def create_feedback_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="makeup_feedback",
-    per_minute=settings.makeup_feedback_generation_limit_per_minute,
-    per_day=settings.makeup_feedback_generation_limit_per_day,
-  )
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if payload.run_immediately and execution_mode not in {"inline", "sqs"}:
@@ -469,6 +462,13 @@ async def create_feedback_job(
     settings,
     inherited_goal_context=inherited_goal_context,
     entry_date=entry_date,
+  )
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="makeup_feedback",
+    per_minute=settings.makeup_feedback_generation_limit_per_minute,
+    per_day=settings.makeup_feedback_generation_limit_per_day,
   )
   logger.info(
     "[aura:feedback-api] job:create-start userSub=%s runImmediately=%s source=%s executionMode=%s",

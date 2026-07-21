@@ -236,13 +236,6 @@ async def create_filter_extraction_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="filter_extraction",
-    per_minute=settings.filter_extraction_generation_limit_per_minute,
-    per_day=settings.filter_extraction_generation_limit_per_day,
-  )
   media = await resolve_owned_source_media(
     db,
     owner_user_id=user["id"],
@@ -251,6 +244,13 @@ async def create_filter_extraction_job(
     required=False,
   )
   request_payload = trusted_media_request_payload(settings, payload.request_payload, media)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="filter_extraction",
+    per_minute=settings.filter_extraction_generation_limit_per_minute,
+    per_day=settings.filter_extraction_generation_limit_per_day,
+  )
   report = await db.fetchrow(
     """
     insert into filter_extraction_reports (
@@ -285,13 +285,6 @@ async def analyze_filter_extraction(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="filter_extraction",
-    per_minute=settings.filter_extraction_generation_limit_per_minute,
-    per_day=settings.filter_extraction_generation_limit_per_day,
-  )
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if execution_mode not in {"inline", "sqs"}:
@@ -316,6 +309,13 @@ async def analyze_filter_extraction(
         media,
       ),
     },
+  )
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="filter_extraction",
+    per_minute=settings.filter_extraction_generation_limit_per_minute,
+    per_day=settings.filter_extraction_generation_limit_per_day,
   )
 
   report = await db.fetchrow(

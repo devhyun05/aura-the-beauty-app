@@ -844,13 +844,6 @@ async def create_analysis_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="face_analysis",
-    per_minute=settings.face_analysis_generation_limit_per_minute,
-    per_day=settings.face_analysis_generation_limit_per_day,
-  )
   # 계정 성별을 서버가 주입한다(클라이언트 값은 신뢰하지 않고 덮어씀).
   # 분석 프롬프트가 사진으로 성별을 추론하는 대신 이 값을 쓰게 하는 근거 —
   # 메이크업 추천 V2의 "성별 재추론 금지" 원칙과 정합.
@@ -890,6 +883,13 @@ async def create_analysis_job(
         source_media,
       ),
     },
+  )
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="face_analysis",
+    per_minute=settings.face_analysis_generation_limit_per_minute,
+    per_day=settings.face_analysis_generation_limit_per_day,
   )
   logger.info(
     "[aura:analysis-api] job:create-start userSub=%s runImmediately=%s executionMode=%s",

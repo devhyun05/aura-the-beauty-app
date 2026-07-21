@@ -441,8 +441,9 @@ expect(
   'loading error recovery restores the frozen journey context before every alternate route',
 );
 expect(
-  feedbackRoutes.includes('getMakeupJourneySafeReturnResetState(route.params?.entryDate)') &&
-    !feedbackRoutes.includes('if (navigation.canGoBack()) {\n      navigation.goBack();'),
+  /const handleBackToJourney = React\.useCallback\(\(\) => \{\s+navigation\.reset\(\s+getMakeupJourneySafeReturnResetState\(route\.params\?\.entryDate\),\s+\);\s+\}, \[navigation, route\.params\?\.entryDate\]\);/.test(
+    feedbackRoutes,
+  ),
   'journey results always reset to their resolved entry date instead of an older day below them',
 );
 expect(
