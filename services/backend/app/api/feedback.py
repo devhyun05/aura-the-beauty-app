@@ -39,6 +39,7 @@ from app.services.makeup_feedback_goal_intent import (
 )
 from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
 from app.services.push_notifications import create_and_send_notification
+from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
 
 
@@ -439,6 +440,13 @@ async def create_feedback_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="makeup_feedback",
+    per_minute=settings.makeup_feedback_generation_limit_per_minute,
+    per_day=settings.makeup_feedback_generation_limit_per_day,
+  )
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if payload.run_immediately and execution_mode not in {"inline", "sqs"}:

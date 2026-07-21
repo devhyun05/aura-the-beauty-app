@@ -520,6 +520,22 @@ POST_SCHEMA_MIGRATIONS = {
     alter table media_assets add column if not exists thumbnail_width integer;
     alter table media_assets add column if not exists thumbnail_height integer;
   """,
+  "schema.sql:report-rate-limits-v1": """
+    create table if not exists report_request_rate_limits (
+      user_id uuid not null,
+      scope text not null,
+      window_started_at timestamptz not null,
+      request_count integer not null default 0,
+      primary key (user_id, scope),
+      constraint chk_report_request_rate_scope check (scope in (
+        'face_analysis:1m','face_analysis:1d',
+        'filter_extraction:1m','filter_extraction:1d',
+        'makeup_feedback:1m','makeup_feedback:1d',
+        'makeup_recommendation:1m','makeup_recommendation:1d'
+      )),
+      constraint chk_report_request_rate_count check (request_count >= 0)
+    );
+  """,
   "schema.sql:consulting-messages-v1": """
     create table if not exists consulting_messages (
       id uuid primary key default gen_random_uuid(),
@@ -1061,6 +1077,15 @@ POST_SCHEMA_MIGRATIONS = {
     );
 
     create index if not exists idx_beard_jobs_user_created on beard_jobs (user_id, created_at desc);
+  """,
+  "schema.sql:report-request-rate-limits-v1": """
+    create table if not exists report_request_rate_limits (
+      user_id uuid not null,
+      scope text not null,
+      window_started_at timestamptz not null,
+      request_count integer not null,
+      primary key (user_id, scope)
+    );
   """,
 }
 # NOTE(M3 후속): 동일 (user_id, source_media_id) in-flight 중복을 막는 부분 유니크

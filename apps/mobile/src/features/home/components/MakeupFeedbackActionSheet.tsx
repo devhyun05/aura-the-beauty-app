@@ -1,5 +1,5 @@
 import React from 'react';
-import {Modal, Pressable, StyleSheet} from 'react-native';
+import {Modal, Platform, Pressable, StyleSheet} from 'react-native';
 import {ArrowRight, Camera, ImagePlus} from 'lucide-react-native';
 import {Text, View, YStack} from 'tamagui';
 
@@ -53,6 +53,13 @@ export function MakeupFeedbackActionSheet({
   const queueActionAfterDismiss = (action: () => void) => {
     pendingActionRef.current = action;
     onClose();
+    // Modal의 onDismiss는 iOS 전용이라 Android/기타 플랫폼에선 호출되지 않는다.
+    // 그런 플랫폼에서는 모달을 닫은 뒤 직접 실행해 준다.
+    if (Platform.OS !== 'ios') {
+      const pendingAction = pendingActionRef.current;
+      pendingActionRef.current = null;
+      setTimeout(() => pendingAction?.(), 220);
+    }
   };
 
   return (

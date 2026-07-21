@@ -115,37 +115,67 @@ namespace ARMakeup.Face
             new Vector4(0.255f, 0.20f, 0.082f, 0.058f), // 턱선 L
             new Vector4(0.745f, 0.20f, 0.082f, 0.058f), // 턱선 R
         };
-        // 블러셔 모양 프리셋별 존 — MaskGenerator BlushRegion/Igari/Drape 복사(캐노니컬 UV).
-        // 프리셋마다 존 개수가 다르다(클래식2·이가리3·드레이핑4). 리프트/퍼짐은 셰이더와
-        // 동일하게 경계점마다 UV 워프해 투영(정적 아님 → 값 바뀔 때 재해석).
-        // ★클래식만 구운 마스크(Masks/blush.png)를 쓴다 — BlushRegion 좌표(0.38)가 아니라
-        // 구운 텍스처 실측값(중심 0.468·rx0.075·ry0.055). 이가리/드레이핑은 구운 파일이 없어
-        // 좌표대로 생성돼 아래 값과 일치. (blush.png 재도색 시 재측정 필요)
+        // 블러셔 모양 프리셋별 존 — MaskGenerator의 0..7 절차 Gaussian과 같은 canonical UV.
+        // 리프트/퍼짐/워프 가이드가 각 shape의 2~6개 실제 절차 존을 그대로 따라간다.
         static readonly Vector4[] BlushClassic =
         {
-            new Vector4(0.277f, 0.468f, 0.075f, 0.055f), new Vector4(0.722f, 0.468f, 0.075f, 0.055f),
+            new Vector4(0.285f, 0.435f, 0.150f, 0.092f), new Vector4(0.715f, 0.435f, 0.150f, 0.092f),
         };
         static readonly Vector4[] BlushIgari =
         {
-            new Vector4(0.35f, 0.44f, 0.085f, 0.045f), new Vector4(0.65f, 0.44f, 0.085f, 0.045f),
-            new Vector4(0.50f, 0.45f, 0.090f, 0.030f),
+            new Vector4(0.330f, 0.485f, 0.145f, 0.060f), new Vector4(0.670f, 0.485f, 0.145f, 0.060f),
+            new Vector4(0.420f, 0.478f, 0.090f, 0.042f), new Vector4(0.580f, 0.478f, 0.090f, 0.042f),
+            new Vector4(0.500f, 0.472f, 0.105f, 0.034f),
         };
         static readonly Vector4[] BlushDrape =
         {
-            new Vector4(0.25f, 0.42f, 0.085f, 0.055f), new Vector4(0.75f, 0.42f, 0.085f, 0.055f),
-            new Vector4(0.16f, 0.49f, 0.055f, 0.045f), new Vector4(0.84f, 0.49f, 0.055f, 0.045f),
+            new Vector4(0.305f, 0.435f, 0.140f, 0.075f), new Vector4(0.695f, 0.435f, 0.140f, 0.075f),
+            new Vector4(0.215f, 0.475f, 0.125f, 0.068f), new Vector4(0.785f, 0.475f, 0.125f, 0.068f),
+            new Vector4(0.135f, 0.520f, 0.095f, 0.060f), new Vector4(0.865f, 0.520f, 0.095f, 0.060f),
+        };
+        static readonly Vector4[] BlushDaily =
+        {
+            new Vector4(0.305f, 0.425f, 0.165f, 0.082f), new Vector4(0.695f, 0.425f, 0.165f, 0.082f),
+            new Vector4(0.185f, 0.450f, 0.105f, 0.062f), new Vector4(0.815f, 0.450f, 0.105f, 0.062f),
+        };
+        static readonly Vector4[] BlushLovely =
+        {
+            new Vector4(0.325f, 0.425f, 0.138f, 0.112f), new Vector4(0.675f, 0.425f, 0.138f, 0.112f),
+            new Vector4(0.235f, 0.445f, 0.115f, 0.078f), new Vector4(0.765f, 0.445f, 0.115f, 0.078f),
+        };
+        static readonly Vector4[] BlushUnderEye =
+        {
+            new Vector4(0.335f, 0.515f, 0.155f, 0.050f), new Vector4(0.665f, 0.515f, 0.155f, 0.050f),
+            new Vector4(0.225f, 0.505f, 0.100f, 0.042f), new Vector4(0.775f, 0.505f, 0.100f, 0.042f),
+        };
+        static readonly Vector4[] BlushSunKissedSoft =
+        {
+            new Vector4(0.290f, 0.455f, 0.168f, 0.088f), new Vector4(0.710f, 0.455f, 0.168f, 0.088f),
+            new Vector4(0.410f, 0.455f, 0.105f, 0.048f), new Vector4(0.590f, 0.455f, 0.105f, 0.048f),
+            new Vector4(0.500f, 0.452f, 0.065f, 0.038f),
+        };
+        static readonly Vector4[] BlushSunKissedBand =
+        {
+            new Vector4(0.285f, 0.465f, 0.175f, 0.080f), new Vector4(0.715f, 0.465f, 0.175f, 0.080f),
+            new Vector4(0.410f, 0.463f, 0.125f, 0.052f), new Vector4(0.590f, 0.463f, 0.125f, 0.052f),
+            new Vector4(0.500f, 0.460f, 0.125f, 0.043f),
+        };
+        static readonly Vector4[][] BlushShapeZones =
+        {
+            BlushClassic, BlushIgari, BlushDrape, BlushDaily,
+            BlushLovely, BlushUnderEye, BlushSunKissedSoft, BlushSunKissedBand,
         };
         const int HlZones = 9;
         const int CtZones = 8;
-        const int BlMaxZones = 4;
+        const int BlMaxZones = 6;
         const int ZoneTotal = HlZones + CtZones + BlMaxZones; // 캐시 크기
         const int BlCache = HlZones + CtZones;                // 블러셔 캐시 시작 존 인덱스
         const int HlPts = 16; // 존 경계 샘플 수
 
         // ── 슬롯 배치(고정 순서) ──
         // 0=립, 1·2=눈썹, 3·4=아이섀도, 5·6=블러셔(랜드마크·미사용), 7·8=컨투어(랜드마크·미사용),
-        // 9·10=아이라인, 11·12=애교살, 13~21=하이라이터(9존), 22~29=컨투어 UV, 30~33=블러셔 UV
-        const int MaxStrokes = 34;
+        // 9·10=아이라인, 11·12=애교살, 13~21=하이라이터(9존), 22~29=컨투어 UV, 30~35=블러셔 UV
+        const int MaxStrokes = 36;
         const int S_LIP = 0, S_BROW = 1, S_SHADOW = 3, S_BLUSH = 5, S_CONTOUR = 7,
                   S_LINER = 9, S_AEGYO = 11, S_HL = 13, S_CTZ = 22, S_BLZ = 30;
         const int Pts = 40;      // 스트로크당 리샘플 컬럼 수(외곽 매끈)
@@ -208,8 +238,8 @@ namespace ARMakeup.Face
         RegionWarpProfile _eyeshadowWarp = RegionWarpUtility.SanitizeProfile(
             new RegionWarp { region = "eyeshadow" });
         RegionWarpProfile _blushWarp = RegionWarpUtility.SanitizeProfile(new RegionWarp { region = "blush" });
-        int _blushShape;               // 블러셔 모양 프리셋 (blushShape: 클래식/이가리/드레이핑)
-        int _blushCount;               // 현재 프리셋 존 개수(2~4)
+        int _blushShape;               // 블러셔 모양 프리셋 (FilterParams 0..7 계약)
+        int _blushCount;               // 현재 프리셋 존 개수(2~6)
         bool _blushDirty = true;       // 프리셋/리프트/퍼짐 변경 시 재해석 플래그
 
         // 립/아이라인 스타일 상수 — 실제 렌더러와 동일값(가이드=메이크업 일치).
@@ -492,7 +522,7 @@ namespace ARMakeup.Face
             // 블러셔 — 프리셋/리프트/퍼짐 중 하나라도 바뀌면 UV 존 재해석(정적 아님).
             var lift = Mathf.Clamp(p.blushLift, -0.15f, 0.15f);
             var spread = Mathf.Clamp(p.blushSpread, -0.15f, 0.15f);
-            var shape = Mathf.Clamp(p.blushShape, 0, 2);
+            var shape = MaskGenerator.ClampBlushShape(p.blushShape);
             if (shape != _blushShape || !Mathf.Approximately(lift, _blushLift)
                 || !Mathf.Approximately(spread, _blushSpread))
                 _blushDirty = true;
@@ -829,7 +859,7 @@ namespace ARMakeup.Face
         // UV 워프(buv.y-=lift → +lift 위, spread는 좌우 미러 바깥·중앙 페이드). 값 바뀔 때만.
         void ResolveBlush(CanonicalFaceMesh mesh)
         {
-            var zones = _blushShape == 1 ? BlushIgari : _blushShape == 2 ? BlushDrape : BlushClassic;
+            var zones = BlushShapeZones[MaskGenerator.ClampBlushShape(_blushShape)];
             _blushCount = zones.Length;
             for (var z = 0; z < _blushCount; z++)
             {
@@ -1226,7 +1256,7 @@ namespace ARMakeup.Face
 
             // 마스크 존 L/R — 셰이더의 역샘플 워프와 같은 +lift/+outward 표시 좌표.
             // 프리셋이 바뀌는 블러셔도 현재 첫 두 볼 존을 매 방출 시 resolve해 stale 캐시 없음.
-            var blushZones = _blushShape == 1 ? BlushIgari : _blushShape == 2 ? BlushDrape : BlushClassic;
+            var blushZones = BlushShapeZones[MaskGenerator.ClampBlushShape(_blushShape)];
             Add("blushL", MaskZoneHandleVp(mesh, blushZones[0], _blushLift, _blushSpread, _blushAffine));
             Add("blushR", MaskZoneHandleVp(mesh, blushZones[1], _blushLift, _blushSpread, _blushAffine));
             if (_customHl == null)

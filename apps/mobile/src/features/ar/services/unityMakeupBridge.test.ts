@@ -5,6 +5,7 @@ import {
   UNITY_MAKEUP_LAYER_ORDER,
   UNITY_STILL_FACE_LANDMARKS_TARGET,
   buildAnalyzeFaceLandmarksStillRequest,
+  buildFilterParamsFromARFilterSelections,
   cancelUnityUnifiedFaceCapture,
   createUnityMakeupRecipeBatch,
   createUnityMakeupRecipeBatchFromARFilterSelections,
@@ -18,6 +19,7 @@ import {
 import {NativeModules} from 'react-native';
 import type {MakeupFilter} from '../../../shared/types/makeupGuide';
 import {buildUnifiedFaceCaptureRequest} from '../../face-capture/services/unifiedFaceCaptureContract';
+import {AR_BLUSH_SHAPES} from '../../../shared/contracts/arBlushCatalog';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -58,6 +60,27 @@ expectEqual(
   'eyeliner',
   'eye area alias',
 );
+
+for (const shape of AR_BLUSH_SHAPES) {
+  const params = buildFilterParamsFromARFilterSelections([
+    {
+      selectedColor: {hex: '#D77986', label: '로즈'},
+      selectedColorId: 'neutral-rose',
+      selectedMakeupArea: 'cheek',
+      selectedMakeupFilter: mockFilter,
+      selectedPointMakeupLookId: 'custom-blush',
+      selectedShapeId: shape.arFilterShapeId,
+      selectedTextureId: 'matte',
+      selectedTotalMakeupLookId: null,
+      selectedTypeId: 'blush',
+    },
+  ]);
+  expectEqual(
+    params.blushShape,
+    shape.value,
+    `${shape.label} AR 필터 shape value`,
+  );
+}
 
 const generatedLipRoute = getUnityGeneratedMaskBridgeRoute('lip');
 const generatedBrowRoute = getUnityGeneratedMaskBridgeRoute('brow');

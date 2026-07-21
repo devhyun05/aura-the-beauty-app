@@ -26,6 +26,10 @@ import {
   type FullFaceMakeupSourceInput,
   type FullFaceRegionControls,
 } from '../../../shared/contracts/fullFaceMakeupRecipe';
+import {
+  AR_BLUSH_DEFAULT_COLOR,
+  AR_BLUSH_REFERENCE_SHAPES,
+} from '../../../shared/contracts/arBlushCatalog';
 
 type E7NativeLipBoundaryProviders = {
   extractLipBoundary?: (requestJson: string) => Promise<string>;
@@ -167,10 +171,10 @@ export const DEFAULT_PERSONALIZED_COMPANION_MAKEUP_CONTROLS: PersonalizedCompani
     blemish: 0.38,
   },
   blush: {
-    candidateId: 'blush-session-1-v1',
-    colorHex: '#E67B5F',
+    candidateId: AR_BLUSH_REFERENCE_SHAPES[0].candidateId,
+    colorHex: AR_BLUSH_DEFAULT_COLOR.hex,
     intensity: 0.5,
-    maskTextureId: 'cheek-session-mask-1-v1',
+    maskTextureId: AR_BLUSH_REFERENCE_SHAPES[0].maskTextureId,
     opacity: 0.5,
   },
   brow: {

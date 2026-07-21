@@ -29,6 +29,12 @@ import {
   type FullFaceRegionControls,
   type MakeupRecipeRegion,
 } from '../../../shared/contracts/fullFaceMakeupRecipe';
+import {
+  AR_BLUSH_DEFAULT_COLOR,
+  AR_BLUSH_DEFAULT_SHAPE,
+  getArBlushReferenceShapeByArFilterId,
+  getArBlushShapeByArFilterId,
+} from '../../../shared/contracts/arBlushCatalog';
 import {ORIGINAL_OPTION_CARD_ID} from './arFilterOptionRules';
 
 export const UNITY_MAKEUP_BRIDGE_TARGET = {
@@ -115,7 +121,7 @@ export const UNITY_MAKEUP_LAYER_PRESETS: Record<
   },
   blush: {
     branchSource: 'makeupAR-full-face',
-    color: '#E67B5F',
+    color: AR_BLUSH_DEFAULT_COLOR.hex,
     finish: 'powder-blush',
     label: PRODUCT_REGION_LABELS.blush,
     maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
@@ -222,26 +228,17 @@ function resolveEyelinerMaskForShape(selectedShapeId: string): string {
   return EYELINER_SHAPE_MASKS[key] ?? DEFAULT_GENERATED_EYELINER_MASK;
 }
 
-// Cheek 핏(shape) tab -> a blush session mask. The recipe builder auto-derives
-// the blush_session_N texture from the cheek-session-mask-N maskTextureId, so we
-// only override maskTextureId + candidateId (same pattern as the brow shapes).
-const BLUSH_SHAPE_MASKS: Record<string, {maskTextureId: string; candidateId: string}> = {
-  'cheek-daily': {maskTextureId: 'cheek-session-mask-1-v1', candidateId: 'blush-session-1-v1'},
-  'cheek-lovely': {maskTextureId: 'cheek-session-mask-2-v1', candidateId: 'blush-session-2-v1'},
-  'cheek-under': {maskTextureId: 'cheek-session-mask-3-v1', candidateId: 'blush-session-3-v1'},
-  'cheek-sunkiss1': {maskTextureId: 'cheek-session-mask-4-v1', candidateId: 'blush-session-4-v1'},
-  'cheek-sunkiss2': {maskTextureId: 'cheek-session-mask-5-v1', candidateId: 'blush-session-5-v1'},
-};
-
+// 레퍼런스 5종은 공통 카탈로그의 기존 FullFace candidate/mask ID를 그대로 쓴다.
 function resolveBlushMaskForShape(
   selectedShapeId: string,
 ): {maskTextureId: string; candidateId: string} {
-  return (
-    BLUSH_SHAPE_MASKS[selectedShapeId] ?? {
-      maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
-      candidateId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.candidateId,
-    }
-  );
+  const shape = getArBlushReferenceShapeByArFilterId(selectedShapeId);
+  return shape
+    ? {maskTextureId: shape.maskTextureId, candidateId: shape.candidateId}
+    : {
+        maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
+        candidateId: FULL_FACE_REGION_RUNTIME_ASSETS.blush.candidateId,
+      };
 }
 
 // Lens 컬러(color id) -> 홍채 틴트 색 + opacity. The color id IS the lens id (from
@@ -299,8 +296,7 @@ export type ArwFilterParams = {
   lipStyleIntensity: number;
   blushColor: string;
   blushIntensity: number;
-  // AURA cheek session-mask index (0..4: daily/lovely/under/sunkiss1/sunkiss2).
-  // Drives the ported AURA CheekBlushRenderer's mask + per-mask tuning in Unity.
+  // 공통 블러셔 shape value 0..7 (클래식/이가리/드레이핑 + 레퍼런스 5종).
   blushShape: number;
   blushStyleIntensity: number;
   eyeshadowColor: string;
@@ -346,9 +342,9 @@ export const ARW_BARE_FILTER_PARAMS: ArwFilterParams = {
   lipColor: '#C94F6D',
   lipIntensity: 0,
   lipStyleIntensity: 0,
-  blushColor: '#F08FA0',
+  blushColor: AR_BLUSH_DEFAULT_COLOR.hex,
   blushIntensity: 0,
-  blushShape: 0,
+  blushShape: AR_BLUSH_DEFAULT_SHAPE.value,
   blushStyleIntensity: 0,
   eyeshadowColor: '#B06A4E',
   eyeshadowIntensity: 0,
@@ -379,18 +375,11 @@ export const ARW_BARE_FILTER_PARAMS: ArwFilterParams = {
   halfFaceMode: 0,
 };
 
-// AURA cheek 형태 tab -> session-mask index. Mirrors BLUSH_SHAPE_MASKS
-// (cheek-session-mask-N -> index N-1) which the ported CheekBlushRenderer uses.
-const BLUSH_SHAPE_INDEX: Record<string, number> = {
-  'cheek-daily': 0,
-  'cheek-lovely': 1,
-  'cheek-under': 2,
-  'cheek-sunkiss1': 3,
-  'cheek-sunkiss2': 4,
-};
-
 function mapArwBlushShapeId(selectedShapeId: string): number {
-  return BLUSH_SHAPE_INDEX[selectedShapeId] ?? 0;
+  return (
+    getArBlushShapeByArFilterId(selectedShapeId)?.value ??
+    AR_BLUSH_DEFAULT_SHAPE.value
+  );
 }
 
 function mapArwEyelinerStyleId(selectedShapeId: string): number {

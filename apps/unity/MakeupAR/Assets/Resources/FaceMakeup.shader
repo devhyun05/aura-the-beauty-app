@@ -15,7 +15,7 @@ Shader "ARMakeup/FaceMakeup"
     {
         _BlushMask ("Blush Mask", 2D) = "black" {}
         _BlushColor ("Blush Color", Color) = (0.94, 0.56, 0.63, 1)
-        _BlushIntensity ("Blush Intensity", Range(0, 1)) = 0.35
+        _BlushIntensity ("Blush Intensity", Range(0, 1.2)) = 0.35
         // 블러셔 제형 template(4): -1=부재/레거시, 0=파우더 1=크림 2=리퀴드 3=틴트.
         _BlushTexture ("Blush Texture (domain enum)", Float) = -1
         // 블러셔 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머. 피드 luma만(신규의존0).

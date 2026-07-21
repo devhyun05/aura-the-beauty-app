@@ -1386,6 +1386,22 @@ create table if not exists product_request_rate_limits (
   constraint chk_product_request_rate_count check (request_count >= 0)
 );
 
+-- 비용이 발생하는 보고서/AI 생성의 사용자별 한도 (scope = <feature>:1m|1d)
+create table if not exists report_request_rate_limits (
+  user_id uuid not null,
+  scope text not null,
+  window_started_at timestamptz not null,
+  request_count integer not null default 0,
+  primary key (user_id, scope),
+  constraint chk_report_request_rate_scope check (scope in (
+    'face_analysis:1m','face_analysis:1d',
+    'filter_extraction:1m','filter_extraction:1d',
+    'makeup_feedback:1m','makeup_feedback:1d',
+    'makeup_recommendation:1m','makeup_recommendation:1d'
+  )),
+  constraint chk_report_request_rate_count check (request_count >= 0)
+);
+
 create table if not exists product_color_cohort_memberships (
   user_id uuid primary key,
   cohort_key text not null,

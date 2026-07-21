@@ -15,14 +15,23 @@ const contractTest = join(
   'features/ar/stencil/src/composer/skinPrimerContract.test.ts',
 );
 
-const composerSource = readFileSync(
-  join(srcRoot, 'features/ar/stencil/src/components/ComposerSheet.tsx'),
+const regionsSource = readFileSync(
+  join(srcRoot, 'features/ar/stencil/src/composer/regions.ts'),
+  'utf8',
+);
+const lookVariantsSource = readFileSync(
+  join(srcRoot, 'features/ar/stencil/src/composer/lookVariants.ts'),
   'utf8',
 );
 
 assert.match(
-  composerSource,
-  /leaf\.region === 'skin'[\s\S]*?skinGlow[\s\S]*?'윤광 프라이머'[\s\S]*?'모공 프라이머'/,
+  regionsSource,
+  /type:\s*'segments'[\s\S]*key:\s*'skinGlow'[\s\S]*'모공 프라이머'[\s\S]*'윤광 프라이머'/,
+  '피부결 상세에는 skinGlow 프라이머 선택지가 있어야 한다',
+);
+assert.match(
+  lookVariantsSource,
+  /'윤광 프라이머'[\s\S]*skinGlow:\s*0\.5[\s\S]*'모공 프라이머'[\s\S]*skinGlow:\s*0/,
   '상세 트리의 프라이머 이름은 skinGlow 선택과 일치해야 한다',
 );
 

@@ -1095,7 +1095,7 @@ namespace ARMakeup.Face
 
         void ApplyRegionWarps(FilterParams p)
         {
-            var shape = Mathf.Clamp(p.blushShape, 0, 2);
+            var shape = MaskGenerator.ClampBlushShape(p.blushShape);
             var softness = Mathf.Clamp01(p.blushEdgeSoftness);
             var geometryChanged = shape != _blushWarpShape ||
                                   !Mathf.Approximately(softness, _blushWarpSoftness);
@@ -1157,7 +1157,10 @@ namespace ARMakeup.Face
             if (!string.IsNullOrEmpty(p.hairTintColor) &&
                 ColorUtility.TryParseHtmlString(p.hairTintColor, out var hairTint))
                 Shader.SetGlobalColor(HairTintColorId, hairTint);
-            mat.SetFloat(BlushIntensityId, Mathf.Clamp01(p.blushIntensity));
+            // 1.0에서 발색이 끊기지 않도록 1.2까지 허용. 셰이더의
+            // 최종 coverage는 saturate되므로 과포화는 마스크 안에서만 제한된다.
+            mat.SetFloat(BlushIntensityId, Mathf.Clamp(
+                p.blushIntensity, 0f, FilterParams.MaxBlushIntensity));
             SetColor(mat, BlushColorId, p.blushColor);
             mat.SetFloat(BlushTextureId, p.blushTexture); // 제형(텍스처) W1 — 0=크림=현행
             mat.SetFloat(BlushFinishId, p.blushFinish);

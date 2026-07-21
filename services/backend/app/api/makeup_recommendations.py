@@ -69,6 +69,7 @@ from app.services.makeup_recommendation_session import (
 from app.services.makeup_trends import curated_fallback_discovery, fetch_discovery, fetch_source_report_projections
 from app.services.push_notifications import create_and_send_notification
 from app.services.s3 import S3Service
+from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
 
 
@@ -2084,6 +2085,13 @@ async def generate_makeup_recommendation_session(
 ) -> dict:
   _require_makeup_v2(settings)
   user = await ensure_user(db, auth)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="makeup_recommendation",
+    per_minute=settings.makeup_recommendation_generation_limit_per_minute,
+    per_day=settings.makeup_recommendation_generation_limit_per_day,
+  )
   generation = await begin_generation(db, user["id"], session_id)
   if generation.get("reused"):
     await dispatch_makeup_product_snapshot_job(
@@ -2136,6 +2144,13 @@ async def create_recommendation(
 ) -> dict:
   _require_makeup_v1_compat(settings)
   user = await ensure_user(db, auth)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="makeup_recommendation",
+    per_minute=settings.makeup_recommendation_generation_limit_per_minute,
+    per_day=settings.makeup_recommendation_generation_limit_per_day,
+  )
   recommendation = await generate_recommendation(
     settings,
     payload.scenario_text,
@@ -2260,6 +2275,13 @@ async def retry_recommendation_images(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="makeup_recommendation",
+    per_minute=settings.makeup_recommendation_generation_limit_per_minute,
+    per_day=settings.makeup_recommendation_generation_limit_per_day,
+  )
   look_id = payload.look_id if payload is not None else None
   if look_id is not None:
     asset = await db.fetchrow(
@@ -2368,6 +2390,13 @@ async def refine_recommendation_report(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="makeup_recommendation",
+    per_minute=settings.makeup_recommendation_generation_limit_per_minute,
+    per_day=settings.makeup_recommendation_generation_limit_per_day,
+  )
   source = await db.fetchrow(
     """
     select id, scenario_text, scenario_tags, questions, answers, recommendation,

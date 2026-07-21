@@ -27,6 +27,7 @@ const library = buildVariantLibrary();
 for (const label of ['모공 프라이머', '윤광 프라이머']) {
   const definition = Object.values(library).find(def => {
     if (def.level !== 'sub') return false;
+    if (def.internal) return false;
     const leaves = def.kids as LeafDef[];
     return leaves.some(leaf => leaf.region === 'skin' && leaf.label === label);
   });
