@@ -431,7 +431,11 @@ export function HomeScreen({
               onPressFilter={onPressHeroTrendFilter ? handleHeroFilterPress : undefined}
               topInset={insets.top}
               trends={homeData.hero.trends.filter(
-                trend => __DEV__ || trend.featureId !== 'consulting',
+                // 스토어 빌드: 컨설팅 배너와, 탭 시 AR 필터로 이동하는
+                // 트렌드 필터 배너(filterId)를 함께 숨긴다.
+                trend =>
+                  __DEV__ ||
+                  (trend.featureId !== 'consulting' && !trend.filterId),
               )}
             />
 
