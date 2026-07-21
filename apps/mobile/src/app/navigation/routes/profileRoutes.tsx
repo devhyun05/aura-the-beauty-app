@@ -2,7 +2,7 @@
 
 import {useAuthSession} from '../../../features/auth';
 import {ConsultingHeaderActions} from '../../../features/consulting';
-import {getRecommendedFilterRouteParams} from '../../../features/home';
+import {getRecommendedFilterStencilRouteParams} from './arRouteActions';
 import {ProfileEditScreen, ProfileScreen} from '../../../features/profile';
 import {
   getLikedMakeupFilterLooks,
@@ -46,7 +46,7 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
       }
 
       setSelectedRecommendedMakeupFilterId(filterId);
-      rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+      rootNavigation?.navigate('ARFilter', getRecommendedFilterStencilRouteParams(filterId));
     },
     [rootNavigation, setSelectedRecommendedMakeupFilterId],
   );

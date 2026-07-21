@@ -94,12 +94,6 @@ export const routeChromeByRoute = {
     statusBarStyle: 'dark',
     title: '사진 확인',
   },
-  UnityMakeupCapture: {
-    category: 'capture-runtime',
-    depth: 'immersive',
-    kind: 'fullscreen',
-    statusBarStyle: 'light',
-  },
   Face3DMeasurement: {
     category: 'capture-runtime',
     depth: 'immersive',
@@ -495,12 +489,6 @@ export const routeChromeByRoute = {
     depth: 'immersive',
     kind: 'fullscreen',
     statusBarStyle: 'light',
-  },
-  MakeupFilterEdit: {
-    category: 'ar-runtime',
-    depth: 'immersive',
-    kind: 'fullscreen',
-    statusBarStyle: 'dark',
   },
   MakeupFeedbackCapture: {
     category: 'capture-runtime',

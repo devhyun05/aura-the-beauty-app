@@ -1,4 +1,8 @@
-import {createRecommendedMakeupEditState} from '../../../features/ar/services/recommendedMakeupEditService';
+import {
+  createLookMakeupEditState,
+  createRecommendedMakeupEditState,
+} from '../../../features/ar/services/recommendedMakeupEditService';
+import {createRecommendedStencilLook} from '../../../features/ar/services/recommendedStencilLook';
 import {getRecommendedMakeupFilterById} from '../../../shared/services/makeupGuideService';
 import type {FaceAnalysisMakeupColors} from '../../../shared/types/faceAnalysis';
 import type {MakeupLookRecommendation} from '../../../features/makeup-recommendation/types';
@@ -36,22 +40,31 @@ export function getLookMakeupColors(
   return Object.keys(colors).length > 0 ? colors : undefined;
 }
 
-export type MakeupRecommendationARFilterRouteParams = NonNullable<
+export type MakeupRecommendationStencilRouteParams = NonNullable<
   RootStackParamList['ARFilter']
 >;
 
-export function getMakeupRecommendationARFilterRouteParams(
-  arFilterId: string,
-  // 분석이 낸 부위별 hex(퍼스널 컬러 근거). 있으면 데코 부위 색을 개인화하고, 없거나
-  // 형식 이상이면 프리셋 색을 그대로 쓴다(모양·질감은 불변).
+// 추천 "AR로 적용하기" → 홈 바로가기 "메이크업 필터"와 같은 스텐실 경험에 추천
+// 룩을 시작 상태로 주입하는 ARFilter 라우트 파라미터.
+export function getMakeupRecommendationStencilRouteParams(
+  look: Pick<MakeupLookRecommendation, 'arFilterId' | 'role' | 'title' | 'areaGuides'>,
+  // 분석이 낸 부위별 hex(퍼스널 컬러 근거). 가이드에 hex가 없는 부위의 폴백 색.
   makeupColors?: FaceAnalysisMakeupColors,
-): MakeupRecommendationARFilterRouteParams {
-  const recommendedFilter = getRecommendedMakeupFilterById(arFilterId);
+): MakeupRecommendationStencilRouteParams {
+  // 1순위: 룩의 areaGuides로 부위·색·질감·강도를 직접 빌드(추천 그 자체가 레시피).
+  // 폴백(구버전 리포트 등 areaGuides 부재): role 고정 프리셋에 색만 개인화.
+  const editState =
+    createLookMakeupEditState(look, makeupColors) ??
+    createRecommendedMakeupEditState(
+      getRecommendedMakeupFilterById(look.arFilterId),
+      makeupColors,
+    );
 
   return {
-    fullFaceEditState: createRecommendedMakeupEditState(recommendedFilter, makeupColors),
-    initialGuideMode: 'half',
-    initialMakeupFilterId: recommendedFilter.id,
+    recommendedLook: createRecommendedStencilLook(
+      editState,
+      look.title?.trim() || '추천 룩',
+    ),
     source: 'recommendedFilter',
   };
 }

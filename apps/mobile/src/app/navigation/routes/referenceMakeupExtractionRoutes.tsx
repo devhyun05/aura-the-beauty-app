@@ -16,6 +16,7 @@ import {
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {getRecommendedFilterStencilRouteParams} from './arRouteActions';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {
   fetchReferenceMakeupExtractionReport,
@@ -356,11 +357,10 @@ export function ReferenceMakeupExtractionResultRouteScreen({
       routeName="ReferenceMakeupExtractionResult"
       onBack={handleBack}>
       <ReferenceMakeupExtractionResultScreen
-        onOpenARFilter={() => navigation.navigate('ARFilter', {
-          initialGuideMode: 'half',
-          initialMakeupFilterId: 'filter-milky-strawberry-pink',
-          source: 'recommendedFilter',
-        })}
+        onOpenARFilter={() => navigation.navigate(
+          'ARFilter',
+          getRecommendedFilterStencilRouteParams('filter-milky-strawberry-pink'),
+        )}
         onRetake={handleRetake}
         photo={photo}
       />
@@ -466,11 +466,10 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
     }
 
     if (recommendedFilter) {
-      navigation.replace('ARFilter', {
-        initialGuideMode: 'half',
-        initialMakeupFilterId: recommendedFilter.id,
-        source: 'recommendedFilter',
-      });
+      navigation.replace(
+        'ARFilter',
+        getRecommendedFilterStencilRouteParams(recommendedFilter.id),
+      );
       return;
     }
 
@@ -501,11 +500,10 @@ export function MakeupFilterSaveCompleteRouteScreen({
 
   const handleApplyNow = () => {
     if (selectedRecommendedMakeupFilterId) {
-      navigation.navigate('ARFilter', {
-        initialGuideMode: 'half',
-        initialMakeupFilterId: selectedRecommendedMakeupFilterId,
-        source: 'recommendedFilter',
-      });
+      navigation.navigate(
+        'ARFilter',
+        getRecommendedFilterStencilRouteParams(selectedRecommendedMakeupFilterId),
+      );
       return;
     }
 

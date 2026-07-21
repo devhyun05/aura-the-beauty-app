@@ -55,6 +55,7 @@ import type {
   SymmetryParams,
 } from './src/bridge/types';
 import { BARE, PRESETS } from './src/presets';
+import type { StencilInitialLook } from './stencilInitialLook';
 import { suggestStyleName } from './src/storage/styleStore';
 import {
   loadAutoFit,
@@ -465,21 +466,22 @@ const TEXTUREMAP_SPEC = {
 
 type StencilARAppProps = {
   onBack?: () => void;
+  initialLook?: StencilInitialLook;
 };
 
 // The stencil source includes authoring/debug utilities that are useful while
 // developing the Unity scene but are not part of AURA's customer-facing AR UI.
 const SHOW_INTERNAL_AR_TOOLS = false;
 
-function App({ onBack }: StencilARAppProps) {
+function App({ onBack, initialLook }: StencilARAppProps) {
   return (
     <SafeAreaProvider>
-      <FilterScreen onBack={onBack} />
+      <FilterScreen onBack={onBack} initialLook={initialLook} />
     </SafeAreaProvider>
   );
 }
 
-function FilterScreen({ onBack }: StencilARAppProps) {
+function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
   const insets = useSafeAreaInsets();
   const cameraSessionActive = useCameraSessionActive();
   const unityRef = useRef<UnityView | null>(null);
@@ -1921,6 +1923,25 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     },
     [commitEdit, treeEditTag, changeTree],
   );
+
+  // 외부 주입 시작 룩(메이크업 추천 등) — 마운트 1회, lookExtracted와 같은 관문으로
+  // 트리 적용. Unity가 아직 부팅 전이어도 컴파일 결과가 compiledRef에 남아
+  // ready 시 resyncAll이 재전송하므로 타이밍 레이스가 없다.
+  const initialLookAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!initialLook || initialLookAppliedRef.current) return;
+    initialLookAppliedRef.current = true;
+    changeTreeUser(
+      decomposeToTree(
+        { ...BARE, ...initialLook.params },
+        [],
+        initialLook.label,
+        [],
+        initialLook.eyeshadowLayers ?? [],
+      ),
+    );
+  }, [initialLook, changeTreeUser]);
+
 
   // 제품 저장은 라이브러리와 잎 참조를 한 번에 교체한다. prepared 배열 하나를
   // state/ref/disk가 공유하고, 새 제품 ref가 든 트리만 정확히 한 번 컴파일한다.

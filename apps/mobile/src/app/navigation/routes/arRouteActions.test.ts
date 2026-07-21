@@ -1,7 +1,5 @@
-import {
-  getARFilterDetailEditRouteParams,
-  getSavedArLookProductRecommendationRouteParams,
-} from './arRouteActions';
+import {getRecommendedFilterStencilRouteParams} from './arRouteActions';
+import {getRecommendedMakeupFilterById} from '../../../shared/services/makeupGuideService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -9,66 +7,32 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
   }
 }
 
-const detailEditRouteParams = getARFilterDetailEditRouteParams();
-const recommendedDetailEditRouteParams = getARFilterDetailEditRouteParams({
-  editSourceImageUri: 'file:///captured-filter-edit.jpg',
-  initialGuideMode: 'half',
-  initialMakeupFilterId: 'filter-clean-smoky-city',
-  source: 'recommendedFilter',
-});
+// ── 프리셋 추천 필터 → 스텐실 진입 파라미터 (홈 카드·프로필·제품추천·추출 공유) ──
+const cleanSmokyFilter = getRecommendedMakeupFilterById('filter-clean-smoky-city');
+const stencilRouteParams = getRecommendedFilterStencilRouteParams(cleanSmokyFilter.id);
 
 expectEqual(
-  detailEditRouteParams.backRoute,
-  'ARFilter',
-  'AR filter detail edit back route',
-);
-expectEqual(
-  detailEditRouteParams.mode,
-  'preset',
-  'AR filter detail edit mode',
-);
-expectEqual(
-  detailEditRouteParams.initialEditMode,
-  'product',
-  'AR filter detail edit default tab mode',
-);
-expectEqual(
-  recommendedDetailEditRouteParams.editSourceImageUri,
-  'file:///captured-filter-edit.jpg',
-  'AR filter detail edit source image uri',
-);
-expectEqual(
-  recommendedDetailEditRouteParams.initialGuideMode,
-  'half',
-  'AR filter detail edit initial guide mode',
-);
-expectEqual(
-  recommendedDetailEditRouteParams.initialMakeupFilterId,
-  'filter-clean-smoky-city',
-  'AR filter detail edit initial makeup filter id',
-);
-expectEqual(
-  recommendedDetailEditRouteParams.source,
+  stencilRouteParams.source,
   'recommendedFilter',
-  'AR filter detail edit source',
-);
-
-expectEqual(
-  getARFilterDetailEditRouteParams({initialEditMode: 'fit'}).initialEditMode,
-  'fit',
-  'AR filter detail edit fit tab mode',
-);
-
-const savedLookProductRouteParams =
-  getSavedArLookProductRecommendationRouteParams('style-recommended-1');
-
-expectEqual(
-  savedLookProductRouteParams.arStyleId,
-  'style-recommended-1',
-  'saved AR look product recommendation style id',
+  'preset filter stencil route source',
 );
 expectEqual(
-  savedLookProductRouteParams.initialSection,
-  'ar',
-  'saved AR look product recommendation initial section',
+  stencilRouteParams.recommendedLook?.label,
+  cleanSmokyFilter.title,
+  'stencil look label from preset filter title',
+);
+expectEqual(
+  typeof stencilRouteParams.recommendedLook?.params.lipColor,
+  'string',
+  'preset filter carries a lip color into the stencil look',
+);
+expectEqual(
+  stencilRouteParams.recommendedLook?.params.skinSmoothing,
+  undefined,
+  'preset filter with disabled foundation stays skin-safe',
+);
+expectEqual(
+  Object.keys(stencilRouteParams).sort().join(','),
+  'recommendedLook,source',
+  'stencil route carries only the stencil contract (no preset screen params)',
 );

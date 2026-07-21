@@ -21,7 +21,6 @@ import type {
 } from '../appFeatureMenu';
 import {getMainHeaderCopy} from '../mainTabChrome';
 import type {
-  ARFilterBackRouteName,
   MainTabParamList,
   MainTabRouteName,
   RootStackParamList,
@@ -171,19 +170,6 @@ export function getMakeupJourneySafeReturnResetState(
   return typeof entryDate === 'string' && isIsoDateString(entryDate)
     ? getMakeupJourneyDayResetState(entryDate, initialReportId)
     : getMakeupJourneyTabResetState();
-}
-
-export function navigateARBack(navigation: RootNavigation, backRoute?: ARFilterBackRouteName) {
-  if (goBackToPreviousRoute(navigation)) {
-    return;
-  }
-
-  if (backRoute === 'FaceAnalysisReportDetail') {
-    navigation.navigate('FaceAnalysisReportDetail');
-    return;
-  }
-
-  navigation.navigate('ARFilter');
 }
 
 export function getMainTabHeaderBorderWidth(

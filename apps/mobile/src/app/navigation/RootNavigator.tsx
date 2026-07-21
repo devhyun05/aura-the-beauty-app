@@ -72,11 +72,6 @@ export function RootNavigator() {
         }
       />
       <Stack.Screen
-        name="UnityMakeupCapture"
-        getComponent={() => loadArRoutes().UnityMakeupCaptureRouteScreen}
-        options={{gestureEnabled: false}}
-      />
-      <Stack.Screen
         name="FaceAnalysisIntro"
         getComponent={() => loadFaceAnalysisIntroRoute().FaceAnalysisIntroRouteScreen}
       />
@@ -285,10 +280,6 @@ export function RootNavigator() {
       <Stack.Screen
         name="ARFilter"
         getComponent={() => loadArRoutes().ARFilterRouteScreen}
-      />
-      <Stack.Screen
-        name="MakeupFilterEdit"
-        getComponent={() => loadArRoutes().MakeupFilterEditRouteScreen}
       />
       <Stack.Screen
         name="MakeupFeedbackCapture"

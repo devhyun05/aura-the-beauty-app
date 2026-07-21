@@ -412,11 +412,12 @@ requireContract(
     arSave.includes("recipeContract: 'FullFaceMakeupRecipe'"),
   'saved AR look requests must use the minimized versioned recipe contract.',
 );
+// 저장 AR 룩 "생성" 플로우(recipe-v2 맞춤 조정 화면)는 2026-07 스텐실 통일로
+// 제거됐다 — arRoutes는 이제 스텐실 단일 경로만 가진다. 저장 룩 "조회" 계약
+// (saved_ar_look_v1 스키마)은 위 arSave 검증이 계속 보증한다.
 requireContract(
-  arRoutes.includes('saveRequestIdsByRecipe') &&
-    arRoutes.includes('saveArLook(savedContract, clientRequestId)') &&
-    arRoutes.includes("navigation.replace('MakeupFilterSaveComplete'"),
-  'AR save retries must reuse an idempotency key for the same recipe and connect to save completion.',
+  arRoutes.includes('StencilARApp') && !arRoutes.includes('saveArLook('),
+  'AR route must be the unified stencil experience without a legacy save flow.',
 );
 requireContract(
   auradinService.includes("EXPO_PUBLIC_PRODUCT_RECOMMENDATION_FIXTURE === '1'") && auradinService.includes('offerId'),

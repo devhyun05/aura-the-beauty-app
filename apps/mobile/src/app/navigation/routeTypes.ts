@@ -7,22 +7,15 @@ import type {
   ConsultingRecord,
   ConsultingSessionMode,
 } from '../../features/consulting/types';
-import type {FullFaceMakeupEditState} from '../../features/ar/services/fullFaceMakeupEditService';
-import type {FullFaceMakeupSourceInput} from '../../shared/contracts/fullFaceMakeupRecipe';
-import type {
-  ARFilterLaunchSource,
-  GuideMode,
-} from '../../shared/types/makeupGuide';
+import type {StencilInitialLook} from '../../features/ar/stencil/stencilInitialLook';
+import type {ARFilterLaunchSource} from '../../shared/types/makeupGuide';
 
-export type ARFilterBackRouteName = 'ARFilter' | 'FaceAnalysisReportDetail';
 export type FaceAnalysisCompletionRouteName = 'ProductRecommendation';
 export type FaceCaptureConfirmationTarget =
   | 'faceAnalysis'
   | 'hairAnalysis'
   | 'makeupFeedback'
   | 'referenceMakeupExtraction';
-export type MakeupFilterEditMode = 'preset' | 'fullFace';
-export type MakeupFilterEditTabMode = 'product' | 'fit';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -37,7 +30,6 @@ export type RootStackParamList = {
     afterAnalysisRoute?: FaceAnalysisCompletionRouteName;
     target: FaceCaptureConfirmationTarget;
   };
-  UnityMakeupCapture: undefined;
   FaceAnalysisIntro: undefined;
   BeardSimulation: undefined;
   // 사진 확인 뒤 ARKit 3D 자동 측정(셔터 없음) — 완료/실패/skip 시 로딩으로 이어진다.
@@ -140,24 +132,14 @@ export type RootStackParamList = {
   ConsultingReview: {expertId: string; recordId: string};
   MakeupLookList: {kind?: 'created' | 'liked'} | undefined;
   LikedProductList: undefined;
+  // AR 필터 = 스텐실 경험 단일 화면. recommendedLook이 있으면 그 룩(추천·프리셋)을
+  // 시작 상태로 주입하고, 없으면 맨얼굴 라이브로 연다.
   ARFilter:
     | {
-        fullFaceEditState?: FullFaceMakeupEditState;
-        initialGuideMode?: GuideMode;
-        initialMakeupFilterId?: string;
+        recommendedLook?: StencilInitialLook;
         source?: ARFilterLaunchSource;
       }
     | undefined;
-  MakeupFilterEdit: {
-    backRoute?: ARFilterBackRouteName;
-    initialEditMode?: MakeupFilterEditTabMode;
-    editSourceImageUri?: string;
-    initialGuideMode?: GuideMode;
-    initialMakeupFilterId?: string;
-    mode?: MakeupFilterEditMode;
-    source?: ARFilterLaunchSource;
-    sourceFrameMetadata?: FullFaceMakeupSourceInput;
-  } | undefined;
   MakeupFeedbackCapture: undefined;
   MakeupFeedbackAlbumUpload: undefined;
   MakeupFeedbackGoalInput: undefined;
@@ -213,7 +195,6 @@ export const rootStackRoutes = [
   'MainTabs',
   'FaceCapture',
   'FaceCaptureConfirmation',
-  'UnityMakeupCapture',
   'FaceAnalysisIntro',
   'BeardSimulation',
   'Face3DMeasurement',
@@ -265,7 +246,6 @@ export const rootStackRoutes = [
   'MakeupLookList',
   'LikedProductList',
   'ARFilter',
-  'MakeupFilterEdit',
   'MakeupFeedbackCapture',
   'MakeupFeedbackAlbumUpload',
   'MakeupFeedbackGoalInput',
