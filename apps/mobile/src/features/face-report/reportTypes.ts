@@ -270,8 +270,8 @@ export interface ReportScreenProps {
   // `data.footer.cta` (메이크업 추천), so wiring it to retake would fire
   // 재촬영 from a button that promises makeup recommendations.
   onPressCta?: () => void;
-  // Wraps the report body so the screen can capture it as an image
-  // (공유/이미지 저장). Must sit inside the ScrollView to capture full content.
+  // Points at the separate expanded vertical document used for 공유/이미지 저장.
+  // Story covers, pager chrome and CTA are intentionally outside this target.
   captureRef?: React.Ref<any>;
   // 개발 단계 QA용: 보고서 맨 아래에서 저장/세션 측정값 원본을 접어서 확인한다.
   measurementDebugPayload?: unknown;

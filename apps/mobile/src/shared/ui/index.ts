@@ -106,4 +106,10 @@ export {
   SectionMoreButton,
 } from './SectionMoreButton';
 export {SectionHeader} from './SectionHeader';
+export {
+  StoryReportPager,
+  type StoryReportPage,
+  type StoryReportPagerRef,
+  type StoryReportSection,
+} from './StoryReportPager';
 export {useTransientToast} from './TransientToast';

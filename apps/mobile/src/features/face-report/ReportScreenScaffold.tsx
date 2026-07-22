@@ -1,11 +1,24 @@
-import React, { useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import React, { useMemo, useRef, useState } from 'react';
+import { ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
 import { OptionalViewShot } from '../../shared/ui/OptionalViewShot';
+import {
+  StoryReportPager,
+  type StoryReportPage,
+  type StoryReportPagerRef,
+  type StoryReportSection,
+} from '../../shared/ui/StoryReportPager';
 import { color, font, radius, shadow } from './reportTokens';
 import type { BandKey, ReportScreenProps } from './reportTypes';
+import {
+  buildFaceReportStoryModel,
+  type FaceReportStoryPage,
+  type FaceReportStorySection,
+} from './services/reportStoryModel';
+import { ReportSectionCover } from './components/ReportSectionCover';
 
 // Matches the legacy report screen's capture settings.
 const REPORT_CAPTURE_OPTIONS = {
@@ -16,21 +29,113 @@ const REPORT_CAPTURE_OPTIONS = {
 import { ScrollAnimContext } from './visuals/RiseIn';
 import { S1Summary } from './sections/S1Summary';
 import { S2Proportion } from './sections/S2Proportion';
-import { S3Features } from './sections/S3Features';
-import { S4PersonalColor } from './sections/S4PersonalColor';
+import { S3Features, S3RegionCard } from './sections/S3Features';
+import { S4DrapePalette, S4PersonalColor, S4ToneOverview } from './sections/S4PersonalColor';
 import { S5Body } from './sections/S5Body';
 import { S6Impression } from './sections/S6Impression';
-import { S7Styling } from './sections/S7Styling';
+import { S7LookCard, S7Styling } from './sections/S7Styling';
 import { S8Skin } from './sections/S8Skin';
 import { S9StyleLanes } from './sections/S9StyleLanes';
 
+declare const require: (moduleName: string) => number;
+
+function StoryContentCard({
+  section,
+  pagerRef,
+  title,
+  sub,
+  children,
+  inset = false,
+}: {
+  section: FaceReportStorySection;
+  pagerRef: React.RefObject<StoryReportPagerRef | null>;
+  title?: string;
+  sub?: string;
+  children: React.ReactNode;
+  inset?: boolean;
+}) {
+  const unlockPager = () => pagerRef.current?.setPagingEnabled(true);
+  return (
+    <View style={{flex: 1, backgroundColor: section.tint}}>
+      <View style={{height: 5, backgroundColor: section.accent}} />
+      <ScrollView
+        contentContainerStyle={{flexGrow: 1, paddingBottom: 30, ...(inset ? {paddingHorizontal: 16, paddingTop: 20} : null)}}
+        directionalLockEnabled
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+        onScrollBeginDrag={() => pagerRef.current?.setPagingEnabled(false)}
+        onScrollEndDrag={unlockPager}
+        onMomentumScrollEnd={unlockPager}
+        onTouchEnd={unlockPager}>
+        {title ? (
+          <View style={{gap: 5, marginBottom: 13}}>
+            <Text style={[font(10.5, '800', undefined, 1.35), {color: section.accent}]}>
+              {section.number} · {section.koreanTitle}
+            </Text>
+            <Text style={[font(20, '800'), {color: color.ink}]}>{title}</Text>
+            {sub ? <Text style={[font(12.5, '400', 1.55), {color: color.text}]}>{sub}</Text> : null}
+          </View>
+        ) : null}
+        {children}
+      </ScrollView>
+    </View>
+  );
+}
+
+function MakeupCtaCard({
+  data,
+  onPress,
+  debugPayload,
+  debugSummary,
+}: {
+  data: ReportScreenProps['data'];
+  onPress?: () => void;
+  debugPayload?: unknown;
+  debugSummary?: {label: string; value: string}[];
+}) {
+  return (
+    <ImageBackground
+      accessibilityIgnoresInvertColors
+      resizeMode="cover"
+      source={require('./assets/covers/makeup-cta.jpg')}
+      style={{flex: 1}}>
+      <LinearGradient
+        colors={['rgba(12,28,34,0.25)', 'rgba(12,28,34,0.82)']}
+        style={{position: 'absolute', inset: 0}}
+      />
+      <ScrollView
+        contentContainerStyle={{flexGrow: 1, justifyContent: 'flex-end', padding: 24, gap: 14}}
+        directionalLockEnabled
+        showsVerticalScrollIndicator={false}>
+        <View style={{gap: 7, marginBottom: 4}}>
+          <Text style={{fontFamily: 'Lora', fontSize: 38, lineHeight: 42, color: color.white}}>MAKEUP</Text>
+          <Text style={[font(17, '700'), {color: color.white}]}>{data.footer.cta}</Text>
+        </View>
+        {__DEV__ ? <MeasurementDebugPanel payload={debugPayload} summary={debugSummary} /> : null}
+        <Text style={[font(11.5, '400', 1.55), {color: 'rgba(255,255,255,0.8)', textAlign: 'center'}]}>
+          {data.footer.disclaimer}
+        </Text>
+        <Pressable
+          accessibilityLabel={data.footer.cta}
+          accessibilityRole="button"
+          onPress={onPress}
+          style={({pressed}) => [{
+            alignItems: 'center', backgroundColor: color.accent, borderRadius: radius.lg,
+            paddingVertical: 16, opacity: pressed ? 0.86 : 1,
+          }, shadow.cta]}>
+          <Text style={[font(14.5, '800'), {color: color.white}]}>{data.footer.cta}</Text>
+        </Pressable>
+      </ScrollView>
+    </ImageBackground>
+  );
+}
+
 /**
- * Report screen: top bar + S1..S7 in fixed order + footer CTA.
+ * Story report screen: editorial covers + meaning-complete horizontal cards.
  * Pure & props-driven — navigation, retake and survey actions bubble up as callbacks.
  */
 export function ReportScreenScaffold({
   data,
-  entryAnimation = true,
   onBack,
   onMore,
   onRetake,
@@ -41,27 +146,94 @@ export function ReportScreenScaffold({
   measurementDebugSummary,
 }: ReportScreenProps) {
   const insets = useSafeAreaInsets();
+  const {width: windowWidth} = useWindowDimensions();
   const scrollY = useSharedValue(0);
-  const scrollRef = useRef<Animated.ScrollView>(null);
-  const sectionY = useRef<Record<string, number>>({});
-  const cardY = useRef<Record<string, number>>({});
-  const onScroll = useAnimatedScrollHandler(e => { scrollY.value = e.contentOffset.y; });
+  const pagerRef = useRef<StoryReportPagerRef | null>(null);
+  const storyModel = useMemo(() => buildFaceReportStoryModel(data), [data]);
 
-  // Sections live inside the capture wrapper, so their onLayout y is relative to
-  // that wrapper — not to the ScrollView content. Track where the wrapper itself
-  // starts and add it back, or "카드 보기" scrolls short by the top bar's height.
-  const captureOffsetY = useRef(0);
-
-  // S2 lens "카드 보기" → scroll to the matching S3 region card, 64px below the top edge.
-  // No-op when S3 isn't rendered (no real region data yet) — scrolling to 0 would
-  // read as a broken button rather than an honest "not available" state.
   const openRegionCard = (key: BandKey) => {
-    if (!data.s3) {
-      return;
-    }
-    const y = captureOffsetY.current + (sectionY.current.s3 ?? 0) + (cardY.current[key] ?? 0);
-    scrollRef.current?.scrollTo({ y: Math.max(0, y - 64), animated: true });
+    const pageId = storyModel.featurePageIds[key];
+    if (pageId) pagerRef.current?.goToPage(pageId);
   };
+
+  const sectionById = new Map(storyModel.sections.map(section => [section.id, section]));
+  const renderContent = (page: FaceReportStoryPage, section: FaceReportStorySection) => {
+    switch (page.contentKey) {
+      case 'summary':
+        return <StoryContentCard section={section} pagerRef={pagerRef}><S1Summary data={data.s1} /></StoryContentCard>;
+      case 'proportion':
+        return data.s2 ? (
+          <StoryContentCard section={section} pagerRef={pagerRef}>
+            <S2Proportion data={data.s2} onOpenRegionCard={openRegionCard} onRetake={onRetake} />
+          </StoryContentCard>
+        ) : null;
+      case 'personal-color:tone':
+        return data.s4 ? (
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.title} sub={data.s4.sub} inset>
+            <S4ToneOverview data={data.s4} />
+          </StoryContentCard>
+        ) : null;
+      case 'personal-color:drape':
+        return data.s4 ? (
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.drape.title} sub={data.s4.drape.sub} inset>
+            <S4DrapePalette data={data.s4} />
+          </StoryContentCard>
+        ) : null;
+      case 'body':
+        return <StoryContentCard section={section} pagerRef={pagerRef}><S5Body data={data.s5} onResurvey={onResurvey} /></StoryContentCard>;
+      case 'impression':
+        return data.s6 ? <StoryContentCard section={section} pagerRef={pagerRef}><S6Impression data={data.s6} /></StoryContentCard> : null;
+      case 'styling:natural':
+        return data.s7 ? (
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.naturalCard.title} inset>
+            <S7LookCard card={data.s7.naturalCard} />
+          </StoryContentCard>
+        ) : null;
+      case 'styling:glam':
+        return data.s7 ? (
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.glamCard.title} inset>
+            <S7LookCard card={data.s7.glamCard} />
+            {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
+          </StoryContentCard>
+        ) : null;
+      case 'skin':
+        return data.s8 ? <StoryContentCard section={section} pagerRef={pagerRef}><S8Skin data={data.s8} /></StoryContentCard> : null;
+      case 'makeup:cta':
+        return <MakeupCtaCard data={data} onPress={onPressCta} debugPayload={measurementDebugPayload} debugSummary={measurementDebugSummary} />;
+      default:
+        if (page.contentKey?.startsWith('features:') && data.s3) {
+          const key = page.contentKey.slice('features:'.length);
+          const card = data.s3.cards.find(item => item.key === key);
+          return card ? (
+            <StoryContentCard section={section} pagerRef={pagerRef} title={card.regionTitle} sub={data.s3.sub} inset>
+              <S3RegionCard card={card} />
+            </StoryContentCard>
+          ) : null;
+        }
+        return null;
+    }
+  };
+
+  const storyPages: StoryReportPage[] = storyModel.pages.map(page => {
+    const section = sectionById.get(page.sectionId)!;
+    return {
+      id: page.id,
+      sectionId: page.sectionId,
+      kind: page.kind,
+      title: page.title,
+      accentColor: section.accent,
+      render: page.kind === 'cover'
+        ? <ReportSectionCover section={section} />
+        : renderContent(page, section),
+    };
+  });
+  const storySections: StoryReportSection[] = storyModel.sections.map(section => ({
+    id: section.id,
+    title: section.koreanTitle,
+    accentColor: section.accent,
+    pageIds: section.pages.map(page => page.id),
+  }));
+  const resetKey = `${data.s1.photo.uri ?? 'report'}:${data.s1.dateLine}:${storyPages.map(page => page.id).join(',')}`;
 
   const circleBtn = (child: React.ReactNode, onPress?: () => void) => (
     <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [{
@@ -73,91 +245,44 @@ export function ReportScreenScaffold({
   );
 
   return (
-    <ScrollAnimContext.Provider value={{ scrollY, enabled: entryAnimation }}>
-      <View style={{ flex: 1, backgroundColor: color.bg }}>
-        <Animated.ScrollView
-          ref={scrollRef}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={{
-            paddingTop: Math.max(insets.top, 54) + 10, paddingHorizontal: 20, paddingBottom: 6,
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            {circleBtn(<ChevronLeft size={18} color={color.body} strokeWidth={2.2} />, onBack)}
-            <Text style={[font(14, '700'), { color: color.ink }]}>{data.topBarTitle}</Text>
-            {circleBtn(<MoreHorizontal size={16} color={color.body} />, onMore)}
-          </View>
-
-          {/*
-            Capture target for 공유/이미지 저장. Wraps the report body (not the
-            top bar) and lives inside the ScrollView so the captured image
-            contains the whole report, not just the visible viewport.
-            The outer View exists only to measure where this wrapper starts,
-            since the sections' onLayout y is now relative to it.
-          */}
-          <View onLayout={e => { captureOffsetY.current = e.nativeEvent.layout.y; }}>
-          <OptionalViewShot ref={captureRef} options={REPORT_CAPTURE_OPTIONS} style={{ backgroundColor: color.bg }}>
-          <View onLayout={e => { sectionY.current.s1 = e.nativeEvent.layout.y; }}>
+    <ScrollAnimContext.Provider value={{scrollY, enabled: false}}>
+      <View style={{flex: 1, backgroundColor: color.bg}}>
+        {/* 공유/저장은 모든 실제 콘텐츠가 펼쳐진 별도 세로 문서를 캡처한다. */}
+        <OptionalViewShot
+          ref={captureRef}
+          options={REPORT_CAPTURE_OPTIONS}
+          style={{position: 'absolute', left: 0, top: 0, width: windowWidth, backgroundColor: color.bg}}>
+          <View>
             <S1Summary data={data.s1} />
           </View>
           {data.s2 ? (
-            <View onLayout={e => { sectionY.current.s2 = e.nativeEvent.layout.y; }}>
-              <S2Proportion data={data.s2} onOpenRegionCard={openRegionCard} onRetake={onRetake} />
-            </View>
+            <S2Proportion data={data.s2} onOpenRegionCard={() => undefined} onRetake={onRetake} />
           ) : null}
-          {data.s3 ? (
-            <View onLayout={e => { sectionY.current.s3 = e.nativeEvent.layout.y; }}>
-              <S3Features data={data.s3} onCardLayout={(k, y) => { cardY.current[k] = y; }} />
-            </View>
-          ) : null}
-          {data.s4 ? (
-            <View onLayout={e => { sectionY.current.s4 = e.nativeEvent.layout.y; }}>
-              <S4PersonalColor data={data.s4} />
-            </View>
-          ) : null}
-          <View onLayout={e => { sectionY.current.s5 = e.nativeEvent.layout.y; }}>
-            <S5Body data={data.s5} onResurvey={onResurvey} />
-          </View>
-          {data.s6 ? (
-            <View onLayout={e => { sectionY.current.s6 = e.nativeEvent.layout.y; }}>
-              <S6Impression data={data.s6} />
-            </View>
-          ) : null}
-          {data.s7 ? (
-            <View onLayout={e => { sectionY.current.s7 = e.nativeEvent.layout.y; }}>
-              <S7Styling data={data.s7} />
-            </View>
-          ) : null}
-          {data.s8 ? (
-            <View onLayout={e => { sectionY.current.s8 = e.nativeEvent.layout.y; }}>
-              <S8Skin data={data.s8} />
-            </View>
-          ) : null}
-          {data.s9 ? (
-            <View onLayout={e => { sectionY.current.s9 = e.nativeEvent.layout.y; }}>
-              <S9StyleLanes data={data.s9} />
-            </View>
-          ) : null}
-          </OptionalViewShot>
-          </View>
+          {data.s3 ? <S3Features data={data.s3} /> : null}
+          {data.s4 ? <S4PersonalColor data={data.s4} /> : null}
+          <S5Body data={data.s5} onResurvey={onResurvey} />
+          {data.s6 ? <S6Impression data={data.s6} /> : null}
+          {data.s7 ? <S7Styling data={data.s7} /> : null}
+          {data.s8 ? <S8Skin data={data.s8} /> : null}
+          {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
+        </OptionalViewShot>
 
-          <View style={{ paddingTop: 26, paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 0) + 96, alignItems: 'center', gap: 14 }}>
-            <Text style={[font(11.5, '400', 1.65), { color: color.muted, textAlign: 'center', maxWidth: 300 }]}>
-              {data.footer.disclaimer}
-            </Text>
-            <Pressable onPress={onPressCta} style={({ pressed }) => [{
-              alignSelf: 'stretch', paddingVertical: 15, borderRadius: radius.lg,
-              backgroundColor: color.accent, alignItems: 'center', opacity: pressed ? 0.9 : 1,
-            }, shadow.cta]}>
-              <Text style={[font(14.5, '800'), { color: color.white }]}>{data.footer.cta}</Text>
-            </Pressable>
-            {__DEV__ ? (
-              <MeasurementDebugPanel payload={measurementDebugPayload} summary={measurementDebugSummary} />
-            ) : null}
+        <View style={{flex: 1, zIndex: 1, backgroundColor: color.bg}}>
+          <View style={{
+            paddingTop: Math.max(insets.top, 12) + 4, paddingHorizontal: 20, paddingBottom: 4,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            {circleBtn(<ChevronLeft size={18} color={color.body} strokeWidth={2.2} />, onBack)}
+            <Text style={[font(14, '700'), {color: color.ink}]}>{data.topBarTitle}</Text>
+            {circleBtn(<MoreHorizontal size={16} color={color.body} />, onMore)}
           </View>
-        </Animated.ScrollView>
+          <StoryReportPager
+            ref={pagerRef}
+            pages={storyPages}
+            sections={storySections}
+            resetKey={resetKey}
+          />
+        </View>
       </View>
     </ScrollAnimContext.Provider>
   );
