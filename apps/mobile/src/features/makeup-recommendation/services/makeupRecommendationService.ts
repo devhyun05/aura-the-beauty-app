@@ -1989,10 +1989,13 @@ export async function generateMakeupRecommendationV2(
   });
   if (
     results.length === 0
-    || results.some(look => look.generationSource !== 'claude')
+    || results.some(look => (
+      look.generationSource !== 'claude'
+      && look.generationSource !== 'deterministic_fallback'
+    ))
   ) {
     throw new MakeupRecommendationRetryableError(
-      'AI가 완성한 추천 결과를 확인하지 못했어요. 답변은 유지했으니 다시 시도해 주세요.',
+      '완성된 추천 결과 형식을 확인하지 못했어요. 답변은 유지했으니 다시 시도해 주세요.',
     );
   }
   return {

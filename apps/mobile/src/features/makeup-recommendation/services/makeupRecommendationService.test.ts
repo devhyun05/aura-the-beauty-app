@@ -995,7 +995,7 @@ async function expectGeneratedRecommendationFailureIsSurfaced() {
   expectEqual((error as Error).message, 'recommendation unavailable', 'recommendation failure is not replaced by fixtures');
 }
 
-async function expectV2FallbackGenerationIsRejected() {
+async function expectV2FallbackGenerationIsAccepted() {
   const session: MakeupRecommendationSession = {
     id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     phase: 'ready',
@@ -1024,18 +1024,70 @@ async function expectV2FallbackGenerationIsRejected() {
     } as T;
   }
 
-  let error: unknown;
-  try {
-    await generateMakeupRecommendationV2(session, fallbackResponse);
-  } catch (caught) {
-    error = caught;
-  }
-
+  const generated = await generateMakeupRecommendationV2(session, fallbackResponse);
   expectEqual(
-    error instanceof MakeupRecommendationRetryableError,
-    true,
-    'v2 client rejects a deterministic fallback response instead of rendering it',
+    generated.phase,
+    'results',
+    'v2 client renders a validated deterministic fallback instead of discarding the report',
   );
+  expectEqual(generated.status, 'completed', 'v2 fallback completes the visible recommendation session');
+  expectEqual(
+    generated.reportId,
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'v2 fallback keeps the report that the server already saved',
+  );
+  expectEqual(generated.results.length, 1, 'v2 fallback keeps its validated anchor look');
+  expectEqual(
+    generated.results[0]?.generationSource,
+    'deterministic_fallback',
+    'v2 fallback keeps its honest generation provenance',
+  );
+}
+
+async function expectV2InvalidGenerationPayloadsAreRejected() {
+  const session: MakeupRecommendationSession = {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    phase: 'ready',
+    prompt: '데이트 메이크업',
+    questions: [],
+    currentQuestionIndex: 0,
+    answers: [],
+    results: [],
+    useProfile: true,
+    status: 'ready',
+    generationMode: 'v2',
+  };
+  const invalidRecommendations = [
+    {
+      label: 'unknown generation source',
+      recommendation: {
+        generationSource: 'unexpected_provider',
+        looks: [{id: 'anchor', role: 'anchor', title: 'invalid', summary: 'invalid'}],
+      },
+    },
+    {
+      label: 'empty looks',
+      recommendation: {generationSource: 'claude', looks: []},
+    },
+  ];
+
+  for (const invalid of invalidRecommendations) {
+    let error: unknown;
+    try {
+      await generateMakeupRecommendationV2(session, async <T>(): Promise<T> => ({
+        reportId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        recommendation: invalid.recommendation,
+        imageStatus: 'pending',
+      } as T));
+    } catch (caught) {
+      error = caught;
+    }
+    expectEqual(
+      error instanceof MakeupRecommendationRetryableError,
+      true,
+      `v2 client rejects ${invalid.label}`,
+    );
+  }
 }
 
 async function expectPollingParsesJsonStringRecommendationAndKeepsResults() {
@@ -1961,7 +2013,8 @@ async function runAsyncContracts() {
   await expectAbortSignalIsForwarded();
   await expectGeneratedBackendFlowCompletesAndKeepsSavedReport();
   await expectGeneratedRecommendationFailureIsSurfaced();
-  await expectV2FallbackGenerationIsRejected();
+  await expectV2FallbackGenerationIsAccepted();
+  await expectV2InvalidGenerationPayloadsAreRejected();
   await expectPollingParsesJsonStringRecommendationAndKeepsResults();
   await expectV2DiscoverySessionAnswerGenerateContract();
   await expectV2FailsClosedWithoutBackend();

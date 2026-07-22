@@ -1,0 +1,93 @@
+.DS_Store
+.git/
+
+# Dependencies and local package-manager caches
+node_modules/
+.pnpm-store/
+.yarn/
+
+# Expo / React Native local state
+.expo/
+.expo-shared/
+apps/mobile/.expo/
+
+# Environment files. Production values are managed by the EAS production
+# environment and must not be uploaded from a developer machine.
+.env
+.env.*
+!*.env.example
+!**/.env.example
+services/backend/partner-credentials*.json
+.agents/local.env
+
+# Logs and local language caches
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+.codex-logs/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+
+# Local deployment and native build artifacts
+.codex-build/
+.lambda-build/
+dist/lambda/
+services/backend/models/
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+apps/mobile/ios/DerivedData/
+apps/mobile/ios/**/*.xcuserdata/
+*.xcuserstate
+
+# Test artifacts and local datasets
+apps/mobile/screenshots/
+output/
+playwright-report/
+test-results/
+.playwright-mcp/
+.superpowers/
+.codegraph/
+tools/beard-simulation-lab/samples/
+tools/beard-simulation-lab/outputs/
+tools/beard-simulation-lab/external/
+tools/beard-simulation-lab/.hf-cache/
+tools/beard-simulation-lab/.mplconfig/
+AuradinRN 2/
+newbeards/
+아카이브/
+/얼굴 분석 보고서 디자인/
+/artifacts/face3d/
+/artifacts/face-ratio/phase1-local/
+/local-face-measurement/
+
+# Unity editor caches and local exports
+apps/unity-builds/
+apps/unity/MakeupAR/Library/
+apps/unity/MakeupAR/Temp/
+apps/unity/MakeupAR/Obj/
+apps/unity/MakeupAR/Build/
+apps/unity/MakeupAR/Builds/
+apps/unity/MakeupAR/Logs/
+apps/unity/MakeupAR/UserSettings/
+apps/unity/MakeupAR/MemoryCaptures/
+apps/unity/MakeupAR/*.csproj
+apps/unity/MakeupAR/*.sln
+apps/unity/MakeupAR/*.user
+apps/unity/MakeupAR/Assets/XR/Temp/
+apps/unity/MakeupAR/Assets/XR/Temp.meta
+apps/unity/MakeupAR/Packages/local/
+apps/unity/MakeupAR/Assets/StreamingAssets/selfie_multiclass_256x256.tflite
+tmp-debug/
+data/auradin/.active_snapshot.lock
+logs/
+
+# UnityBuild is generated and gitignored, but the iOS archive links these
+# exact artifacts. Keep these rules last so EAS uploads their contents.
+!apps/mobile/ios/UnityBuild/
+!apps/mobile/ios/UnityBuild/**

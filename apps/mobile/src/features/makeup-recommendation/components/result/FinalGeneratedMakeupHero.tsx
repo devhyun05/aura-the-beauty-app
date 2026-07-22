@@ -17,9 +17,9 @@ import type {
 } from '../../types';
 import {AlignedHeroImageLayer} from './AlignedHeroImageLayer';
 
-const INITIAL_COMPARE_RATIO = 0.95;
+const INITIAL_COMPARE_RATIO = 1;
 const MIN_COMPARE_RATIO = 0.04;
-const MAX_COMPARE_RATIO = 0.96;
+const MAX_COMPARE_RATIO = 1;
 const IOS_EDGE_GUARD = 24;
 const AURA_LETTERS = ['A', 'U', 'R', 'A'] as const;
 
@@ -417,7 +417,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 8,
   },
-
   afterClip: {
     position: 'absolute',
     top: 0,
