@@ -91,7 +91,7 @@ import FndColorDebugPanel from './src/components/FndColorDebugPanel';
 import ExtractSourceThumb from './src/components/ExtractSourceThumb';
 import Icon from './src/components/Icon';
 import BasicMode from './src/components/BasicMode';
-import LaneRow, { type LaneChip } from './src/components/LaneRow';
+import type { LaneChip } from './src/components/LaneRow';
 import ComposerSheet from './src/components/ComposerSheet';
 import GuideMode from './src/components/GuideMode';
 import {maskStencilByKeys, stencilStepsFromTree} from './src/composer/stencilSteps';
@@ -1562,9 +1562,10 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
     [emitCompiled, compileWithFit],
   );
 
-  // 내 핏 칩(보정 레인) — 메인 핏 선택의 파라미터 패널 진입점. 스튜디오의 '★ 메인으로'와
-  // 같은 상태(mainFitId)를 공유하므로 어느 쪽에서 바꿔도 함께 움직이고, 저장도 동일
-  // (changeFitSheets가 영속+재컴파일). 'fit-off'=원본(핏 없음, mainId=null).
+  // 내 핏 선택(기본 모드 '핏' 카테고리 탭) — 메인 핏 선택의 파라미터 패널 진입점.
+  // 스튜디오의 '★ 메인으로'와 같은 상태(mainFitId)를 공유하므로 어느 쪽에서 바꿔도
+  // 함께 움직이고, 저장도 동일(changeFitSheets가 영속+재컴파일).
+  // 'fit-off'=원본(핏 없음, mainId=null).
   const selectFitSheet = useCallback(
     (id: string) => {
       changeFitSheets(fitSheetsRef.current, id === 'fit-off' ? null : id);
@@ -3168,7 +3169,7 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
     })),
   ];
   const editingStyle = userStylesV2.find(s => s.id === editingStyleId);
-  // 내 핏 칩 줄(보정 레인) — [원본] + 분석 맞춤 핏 + ◈사용자 시트. 선택=메인 핏 지정.
+  // 내 핏 카드(기본 모드 '핏' 탭) — [원본] + 분석 맞춤 핏 + ◈사용자 시트. 선택=메인 핏 지정.
   const fitChips: LaneChip[] = [
     { id: 'fit-off', label: '원본' },
     ...fitSheets.map(s => ({
@@ -3906,6 +3907,9 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
               onOpacity={setOpacityUser}
               slotGain={slotGain}
               onSlotGain={setSlotGainUser}
+              fitChips={fitChips}
+              fitSelectedId={mainFitId ?? 'fit-off'}
+              onSelectFit={selectFitSheet}
             />
           )}
           {lane === 'makeup' && mode !== 'basic' && (
@@ -3954,26 +3958,8 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
               expertError={expertError}
             />
           )}
-          {/* 내 핏(A13) 선택 — 메이크업 레인 하단 고정 줄. 스튜디오 '★ 메인으로'와 같은
-              mainFitId 상태의 빠른 진입점(어떤 룩에도 따라오는 내 얼굴 프로필이라 룩
-              선택과 동렬로 노출). 시트가 없어도 항상 표시 — 원본 칩 + 안내 문구로
-              "얼굴측정 → 맞춤 핏" 흐름을 발견하게 한다. */}
-          {lane === 'makeup' && (
-            <>
-              <LaneRow
-                label="내 핏"
-                accent="gold"
-                chips={fitChips}
-                selectedId={mainFitId ?? 'fit-off'}
-                onSelect={selectFitSheet}
-              />
-              {fitSheets.length === 0 && (
-                <Text style={styles.fitEmptyHint}>
-                  얼굴측정을 하면 ‘분석 맞춤 핏’이 여기에 생겨요
-                </Text>
-              )}
-            </>
-          )}
+          {/* 내 핏(A13) 선택은 기본 모드 카테고리 '핏' 탭으로 이동(BasicMode) —
+              룩 카드와 같은 카드 문법으로 원본/분석 맞춤/◈사용자 시트를 고른다. */}
           {/* 보정은 기본 모드 없이 상세(FitSheet)만 — 프리셋 칩+슬라이더 한 벌. */}
           {lane === 'warp' && (
             <>
@@ -4448,13 +4434,6 @@ const styles = StyleSheet.create({
     borderRadius: SP.lg,
     overflow: 'hidden',
     backgroundColor: PANEL_BG,
-  },
-  // 내 핏 줄 빈 상태 안내 — 시트 0장일 때 원본 칩 아래 한 줄(측정 유도).
-  fitEmptyHint: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 11,
-    paddingHorizontal: PANEL_INSET,
-    paddingBottom: SP.sm,
   },
   // 레인(메이크업/보정) 토글 버튼 — 깊이 버튼 왼쪽. 솔리드 필로 깊이(아웃라인)와 구분.
   // 'MODE' 라벨 — 레인 버튼 왼쪽.
