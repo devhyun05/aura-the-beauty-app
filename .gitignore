@@ -46,6 +46,7 @@ services/backend/models/
 apps/mobile/ios/Pods/
 apps/mobile/ios/build/
 apps/mobile/ios/DerivedData/
+apps/mobile/ios/build_reum/
 apps/mobile/ios/**/*.xcuserdata/
 *.xcuserstate
 
@@ -90,6 +91,8 @@ apps/unity/MakeupAR/Builds/
 apps/unity/MakeupAR/Logs/
 apps/unity/MakeupAR/UserSettings/
 apps/unity/MakeupAR/MemoryCaptures/
+apps/unity/MakeupAR/Assets/Resources/Generated/
+apps/unity/MakeupAR/Assets/Resources/Generated.meta
 apps/unity/MakeupAR/*.csproj
 apps/unity/MakeupAR/*.sln
 apps/unity/MakeupAR/*.user

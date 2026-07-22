@@ -42,15 +42,9 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>AURA 얼굴 촬영, AR 메이크업, 퍼스널 컬러(피부·헤어·입술 색) 분석 기능을 위해 카메라 접근 권한이 필요합니다. 퍼스널 컬러 분석은 기기 내에서만 처리됩니다.</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>AURA 개발 빌드에서 앱 화면을 불러오기 위해 로컬 개발 서버에 연결합니다.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>AURA가 현재 위치 주변의 네이버 뷰티샵을 보여주고 지역 날씨 기반 요즘 트렌드 제품을 추천하기 위해 위치 접근 권한이 필요합니다.</string>
 	<key>NSMicrophoneUsageDescription</key>
