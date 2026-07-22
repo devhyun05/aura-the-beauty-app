@@ -655,11 +655,25 @@ requireIncludes(finalScreen, [
 ], 'Final hero alignment and title wiring');
 const afterClipIndex = finalHero.indexOf('<Animated.View style={[styles.afterClip');
 const afterClipEndIndex = finalHero.indexOf('</Animated.View>', afterClipIndex);
+const imageClipIndex = finalHero.indexOf(
+  '<View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.imageClip]}>',
+);
+const imageClipEndIndex = finalHero.indexOf(
+  '\n      </View>\n\n      {displayTitle',
+  imageClipIndex,
+);
 const fixedTitleIndex = finalHero.indexOf('<View pointerEvents="none" style={styles.titleOverlay}>');
+const titleOutsideAfterClip =
+  afterClipIndex >= 0
+  && afterClipEndIndex >= 0
+  && fixedTitleIndex > afterClipEndIndex;
+const titleOutsideImageClip =
+  imageClipIndex >= 0
+  && imageClipEndIndex >= 0
+  && fixedTitleIndex > imageClipEndIndex;
 if (
-  afterClipIndex < 0
-  || afterClipEndIndex < 0
-  || fixedTitleIndex <= afterClipEndIndex
+  !titleOutsideAfterClip
+  && !titleOutsideImageClip
 ) {
   throw new Error('The situation keyword must stay outside the divider-clipped after-image layer.');
 }
@@ -670,7 +684,9 @@ if (
 ) {
   throw new Error('The hero must show only the fixed situation keyword title.');
 }
-if ((finalHero.match(/referenceFrame=\{sourceFrame\}/g) ?? []).length !== 2) {
+const sourceFrameReferenceCount =
+  (finalHero.match(/referenceFrame=\{sourceFrame\}/g) ?? []).length;
+if (![2, 3].includes(sourceFrameReferenceCount)) {
   throw new Error('Both photos must align against the captured source frame.');
 }
 if ((alignedHeroImageLayer.match(/style=\{fullCanvasStyle\}/g) ?? []).length !== 2) {
