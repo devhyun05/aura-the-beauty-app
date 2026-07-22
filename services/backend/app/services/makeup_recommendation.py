@@ -448,6 +448,37 @@ def _normalize_provider_look(role: str, value: Any) -> dict[str, Any]:
   }
 
 
+def _is_complete_role_keyed_provider_look(value: Any) -> bool:
+  if not isinstance(value, dict):
+    return False
+  if any(
+    not isinstance(value.get(key), str) or not value[key].strip()
+    for key in ("title", "summary")
+  ):
+    return False
+  area_guides = value.get("areaGuides")
+  if not isinstance(area_guides, dict):
+    return False
+  for area in MAKEUP_RECOMMENDATION_REQUIRED_AREAS:
+    guide = area_guides.get(area)
+    if not isinstance(guide, dict):
+      return False
+    color = guide.get("color")
+    if not isinstance(color, dict):
+      return False
+    if any(
+      not isinstance(guide.get(key), str) or not guide[key].strip()
+      for key in ("goal", "texture")
+    ):
+      return False
+    if any(
+      not isinstance(color.get(key), str) or not color[key].strip()
+      for key in ("name", "hex")
+    ):
+      return False
+  return True
+
+
 def _normalize_recommendation_tool_response(value: dict[str, Any]) -> dict[str, Any]:
   normalized = dict(value)
   looks = normalized.get("looks")
@@ -455,6 +486,7 @@ def _normalize_recommendation_tool_response(value: dict[str, Any]) -> dict[str, 
     normalized["looks"] = [
       _normalize_provider_look(role, looks.get(role))
       for role in MAKEUP_RECOMMENDATION_ROLE_ORDER
+      if _is_complete_role_keyed_provider_look(looks.get(role))
     ]
     return normalized
   if not isinstance(looks, list):

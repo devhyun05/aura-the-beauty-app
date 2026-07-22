@@ -252,6 +252,31 @@ def test_recommendation_tool_response_normalizes_role_keyed_looks() -> None:
   assert normalized["looks"][0]["areaGuides"][0]["steps"][0]["instruction"]
 
 
+def test_recommendation_tool_response_does_not_fabricate_incomplete_anchor() -> None:
+  for looks in (
+    {},
+    {"anchor": {}},
+    {
+      "anchor": {
+        "title": "부분 응답",
+        "summary": "일부 부위만 반환됨",
+        "areaGuides": {
+          "base": {
+            "goal": "베이스 정돈",
+            "color": {"name": "뉴트럴", "hex": "#AABBCC"},
+            "texture": "세미매트",
+          },
+        },
+      },
+    },
+  ):
+    normalized = makeup_service._normalize_recommendation_tool_response(
+      {"contextSummary": ["데이트"], "looks": looks},
+    )
+
+    assert normalized["looks"] == []
+
+
 def test_structured_recommendation_contract_removes_bedrock_unsupported_schema_keys() -> None:
   contract = makeup_service._structured_response_contract(
     makeup_service.RECOMMENDATION_V2_SYSTEM_PROMPT,
