@@ -21,6 +21,7 @@ import type {
   LensLayer,
   OverlayLayer,
 } from '../bridge/types';
+import {AR_BLUSH_COLORS} from '../../../../../shared/contracts/arBlushCatalog';
 import { PRESETS } from '../presets';
 import {
   EYELINER_STYLES,
@@ -214,6 +215,7 @@ const COLOR_FAMILY_KO: Record<string, string> = {
   '#D96C7B': '로즈', '#E04E68': '로즈', '#F2846B': '코랄', '#B01E3C': '레드', '#A65560': '모브',
   // 블러셔
   '#F2A0AC': '로즈', '#F08698': '핑크', '#F7A98C': '피치', '#D97386': '로즈', '#C98A93': '모브',
+  ...Object.fromEntries(AR_BLUSH_COLORS.map(color => [color.hex, color.label])),
   // 아이섀도(상·하)·삼각존
   '#C29A7B': '베이지', '#D89AA0': '로즈', '#E0A183': '코랄', '#8A5A44': '브라운', '#5C4A46': '토프',
   '#3E2C24': '딥브라운',
@@ -1226,6 +1228,16 @@ export function defSwatchColor(lib: LookLibrary, defId: string): string | null {
   const def = lib[defId];
   if (!def) return null;
   if (def.level === 'sub') {
+    // 블러셔는 글리터색(blushParticleColor) 등 보조색보다 실제 안료색을 우선한다.
+    for (const leaf of def.kids as LeafDef[]) {
+      if (
+        leaf.region === 'blush' &&
+        typeof leaf.params.blushColor === 'string' &&
+        leaf.params.blushColor.startsWith('#')
+      ) {
+        return leaf.params.blushColor;
+      }
+    }
     for (const leaf of def.kids as LeafDef[]) {
       for (const v of Object.values(leaf.params)) {
         if (typeof v === 'string' && v.startsWith('#')) return v;

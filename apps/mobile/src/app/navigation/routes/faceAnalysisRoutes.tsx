@@ -849,12 +849,24 @@ export function FaceAnalysisLoadingRouteScreen({
 export function FaceAnalysisReportsListRouteScreen({
   navigation,
 }: RootScreenProps<'FaceAnalysisReportsList'>) {
+  const {setSelectedFaceAnalysisReport} = useNavigationFlowState();
+  const handleDeleteReport = React.useCallback(
+    async (reportId: string) => {
+      await deleteFaceAnalysisReport(reportId);
+      setSelectedFaceAnalysisReport(currentReport =>
+        currentReport?.id === reportId ? null : currentReport,
+      );
+    },
+    [setSelectedFaceAnalysisReport],
+  );
+
   return (
     <DetailRouteChrome
       reserveOverlayHeaderSpace={false}
       routeName="FaceAnalysisReportsList"
       onBack={() => goBackToPreviousOrMainTab(navigation, 'ProfileTab')}>
       <FaceAnalysisReportsListScreen
+        onDeleteReport={handleDeleteReport}
         onPressReport={reportId =>
           navigation.navigate('FaceAnalysisReportDetail', {reportId})
         }
@@ -897,17 +909,6 @@ export function FaceAnalysisReportPreviewRouteScreen({
     setUnityMakeupSessionPaused(true);
   }, []);
 
-  const handleDeleteReport = React.useCallback(
-    async (reportId: string) => {
-      await deleteFaceAnalysisReport(reportId);
-      setSelectedFaceAnalysisReport(currentReport =>
-        currentReport?.id === reportId ? null : currentReport,
-      );
-      navigation.replace('FaceAnalysisReportsList');
-    },
-    [navigation, setSelectedFaceAnalysisReport],
-  );
-
   return (
     <>
       <FaceAnalysisReportPreviewScreen
@@ -925,7 +926,6 @@ export function FaceAnalysisReportPreviewRouteScreen({
           }
           navigation.navigate('MakeupRecommendation');
         }}
-        onDeleteReport={handleDeleteReport}
         onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
         onRetake={() => navigation.navigate('FaceCapture')}
         face3d={route.params?.reportId ? null : selectedFace3DProfile}

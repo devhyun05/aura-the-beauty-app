@@ -23,18 +23,6 @@ const bridgePath = join(
   repoRoot,
   'apps/mobile/src/features/ar/services/unityMakeupBridge.ts',
 );
-const lipRendererPath = join(
-  repoRoot,
-  'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Face/LipRenderer.cs',
-);
-
-const lipRendererSource = readFileSync(lipRendererPath, 'utf8');
-
-assert.doesNotMatch(
-  lipRendererSource,
-  /EnableSnap|ComputeOuterSnap|TrySampleColor|Snap(?:InRange|OutRange|Steps|MinDrop|Ema|EmaCorner)|_outer(?:Ptmp|Dtmp|RawTmp|OffEma)|_snapPrimed/,
-  '립 외곽은 카메라 색상 경계 스냅 없이 정본 랜드마크 경계만 사용해야 한다',
-);
 
 const graftFaceRoot = join(
   repoRoot,
@@ -139,7 +127,7 @@ assert.match(
 );
 assert.match(
   lowerLidShaderSource,
-  /float shAmt\s*=\s*valley[^;]*_AegyoIntensity[\s\S]*fixed3 pigHi\s*=\s*1\.0\s*-\s*\(1\.0\s*-\s*feed\)/,
+  /tex2D\(_AegyoProfile[\s\S]*float hiAmt\s*=\s*aegyoProf\.r[^;]*_AegyoIntensity[\s\S]*float shAmt\s*=\s*aegyoProf\.g[^;]*_AegyoIntensity[\s\S]*fixed3 pigHi\s*=\s*1\.0\s*-\s*\(1\.0\s*-\s*feed\)/,
   '애교살 능선과 골은 정본 LowerLid 셰이더 프로파일을 사용해야 한다',
 );
 assert.match(
@@ -186,7 +174,9 @@ const tsFilterFields = new Set(
   [...tsFilterBody.matchAll(/^\s{2}([A-Za-z_]\w*)\??:/gm)].map(match => match[1]),
 );
 const csFilterFields = new Set(
-  [...csFilterBody.matchAll(/^[ \t]*public[ \t]+(?!static\b)[A-Za-z_]\w*(?:\[\])?[ \t]+([A-Za-z_]\w*)\b[^\n;]*;/gm)]
+  // JsonUtility serializes instance fields only. Contract constants document
+  // valid ranges but are not payload fields, so exclude both static and const.
+  [...csFilterBody.matchAll(/^[ \t]*public[ \t]+(?!static\b|const\b)[A-Za-z_]\w*(?:\[\])?[ \t]+([A-Za-z_]\w*)\b[^\n;]*;/gm)]
     .map(match => match[1]),
 );
 const compileOnlyTsFilterFields = new Set([

@@ -1,8 +1,17 @@
 import type {FullFaceMakeupSourceInput} from './fullFaceMakeupCapture';
+import {
+  AR_BLUSH_COLORS,
+  AR_BLUSH_DEFAULT_COLOR,
+  AR_BLUSH_REFERENCE_SHAPES,
+} from './arBlushCatalog';
 
 // 'lens' is LAST so the colored contact-lens disc paints AFTER (on top of) the
 // eye makeup layers (eyeliner) in a combined look.
-export const MAKEUP_RECIPE_REGIONS = ['foundation', 'lip', 'blush', 'brow', 'eyeliner', 'lens'] as const;
+// 'eyeshadow' renders via the ARwithFable graft band (setEyeshadowLayers), NOT
+// the ApplyRecipeJson wire — Unity's recipe parser rejects the region and a
+// parse failure wipes every layer, so postUnityMakeupRecipe strips it from the
+// wire payload and side-channels it (same pattern as the dormant lens layer).
+export const MAKEUP_RECIPE_REGIONS = ['foundation', 'lip', 'blush', 'brow', 'eyeshadow', 'eyeliner', 'lens'] as const;
 
 export type MakeupRecipeRegion = (typeof MAKEUP_RECIPE_REGIONS)[number];
 
@@ -220,6 +229,7 @@ export const MAKEUP_REGION_ALIASES: Record<MakeupRecipeRegionAlias, MakeupRecipe
   cheek: 'blush',
   eye: 'eyeliner',
   eyeliner: 'eyeliner',
+  eyeshadow: 'eyeshadow',
   foundation: 'foundation',
   lens: 'lens',
   lip: 'lip',
@@ -230,6 +240,7 @@ export const PRODUCT_REGION_LABELS: Record<MakeupRecipeRegion, string> = {
   lip: '립',
   blush: '블러셔',
   brow: '브로우',
+  eyeshadow: '아이섀도',
   eyeliner: '아이라이너',
   lens: '렌즈',
 };
@@ -259,8 +270,11 @@ export const FULL_FACE_REGION_RUNTIME_ASSETS: Record<
   },
   blush: {
     region: 'blush',
-    candidateId: 'blush-session-1-v1',
-    maskTextureId: 'cheek-session-mask-1-v1',
+    // Keep the 512x512 balanced atlas as the no-selection fallback. The five
+    // reference masks are 1254px candidate choices and must not inherit this
+    // runtime asset's dimensions.
+    candidateId: 'blush-balanced-soft-oval-v0',
+    maskTextureId: 'e7-blush-balanced-uv-v0',
     width: 512,
     height: 512,
     runtimeReady: false,
@@ -274,6 +288,17 @@ export const FULL_FACE_REGION_RUNTIME_ASSETS: Record<
     // natural-hair brow mask (shape in RGB, positioned on the brows).
     candidateId: 'brow-png-natural-hair-v1',
     maskTextureId: 'brow-png-natural-hair-v1',
+    width: 512,
+    height: 512,
+    runtimeReady: false,
+  },
+  eyeshadow: {
+    region: 'eyeshadow',
+    // The eyeshadow band is generated at runtime by the ARwithFable graft
+    // (IrisRenderer dynamic band via setEyeshadowLayers); no UV mask PNG. These
+    // ids never reach the ApplyRecipeJson wire.
+    candidateId: 'eyeshadow-graft-band-v1',
+    maskTextureId: 'eyeshadow-graft-band-v1',
     width: 512,
     height: 512,
     runtimeReady: false,
@@ -318,17 +343,21 @@ export const REGION_COLOR_OPTIONS: Record<
     {id: 'rosy', label: '로지', hex: '#D96C7B'},
     {id: 'berry', label: '베리', hex: '#9E3B54'},
   ],
-  blush: [
-    {id: 'peach', label: '피치', hex: '#E67B5F'},
-    {id: 'rose', label: '로즈', hex: '#D77986'},
-    {id: 'apricot', label: '살구', hex: '#E99A6E'},
-    {id: 'mauve', label: '모브', hex: '#BE7684'},
-  ],
+  blush: AR_BLUSH_COLORS.map(({id, label, hex}) => ({id, label, hex})),
   brow: [
     {id: 'soft-brown', label: '브라운', hex: '#4A342B'},
     {id: 'ash', label: '애쉬', hex: '#5C514B'},
     {id: 'deep', label: '딥', hex: '#2F261F'},
     {id: 'light', label: '라이트', hex: '#7A5A43'},
+  ],
+  // 아이섀도 밴드 틴트. 기본 브라운은 Unity FilterParams 기본색(#B06A4E)과 동일.
+  eyeshadow: [
+    {id: 'warm-brown', label: '웜 브라운', hex: '#B06A4E'},
+    {id: 'coral', label: '코랄', hex: '#E08A6B'},
+    {id: 'rose', label: '로즈', hex: '#D98A94'},
+    {id: 'beige', label: '베이지', hex: '#C9A07E'},
+    {id: 'mauve', label: '모브', hex: '#9E7B8F'},
+    {id: 'burgundy', label: '버건디', hex: '#7E4A50'},
   ],
   eyeliner: [
     {id: 'soft-black', label: '블랙', hex: '#2F2730'},
@@ -499,6 +528,54 @@ export const REGION_FINISH_OPTIONS: Record<
       shimmer: 0,
     },
   ],
+  // 아이섀도 마감 — finish 문자열은 unityMakeupBridge에서 그래프트 enum으로 번역
+  // (satin=0, matte=1, gloss=2, shimmer=3). shimmer 값은 시머 게인으로 전달.
+  eyeshadow: [
+    {
+      id: 'satin',
+      label: '새틴',
+      finish: 'satin',
+      textureAmount: 0.2,
+      roughness: 0.3,
+      specular: 0.06,
+      specularPower: 12,
+      glossBoost: 0.04,
+      shimmer: 0,
+    },
+    {
+      id: 'matte',
+      label: '매트',
+      finish: 'matte',
+      textureAmount: 0.26,
+      roughness: 0.45,
+      specular: 0,
+      specularPower: 8,
+      glossBoost: 0,
+      shimmer: 0,
+    },
+    {
+      id: 'gloss',
+      label: '글로시',
+      finish: 'gloss',
+      textureAmount: 0.2,
+      roughness: 0.15,
+      specular: 0.2,
+      specularPower: 20,
+      glossBoost: 0.2,
+      shimmer: 0.05,
+    },
+    {
+      id: 'shimmer',
+      label: '시머',
+      finish: 'shimmer',
+      textureAmount: 0.24,
+      roughness: 0.2,
+      specular: 0.14,
+      specularPower: 16,
+      glossBoost: 0.1,
+      shimmer: 0.5,
+    },
+  ],
   eyeliner: [
     {
       id: 'soft',
@@ -583,38 +660,12 @@ export const REGION_CANDIDATE_OPTIONS: Record<
       maskTextureId: 'e7-lip-validation-safe-v0',
     },
   ],
-  blush: [
-    {
-      id: 'daily',
-      label: 'Daily',
-      candidateId: 'blush-session-1-v1',
-      maskTextureId: 'cheek-session-mask-1-v1',
-    },
-    {
-      id: 'lovely',
-      label: 'Lovely',
-      candidateId: 'blush-session-2-v1',
-      maskTextureId: 'cheek-session-mask-2-v1',
-    },
-    {
-      id: 'under-eye',
-      label: 'Under',
-      candidateId: 'blush-session-3-v1',
-      maskTextureId: 'cheek-session-mask-3-v1',
-    },
-    {
-      id: 'sun-1',
-      label: 'Sun 1',
-      candidateId: 'blush-session-4-v1',
-      maskTextureId: 'cheek-session-mask-4-v1',
-    },
-    {
-      id: 'sun-2',
-      label: 'Sun 2',
-      candidateId: 'blush-session-5-v1',
-      maskTextureId: 'cheek-session-mask-5-v1',
-    },
-  ],
+  blush: AR_BLUSH_REFERENCE_SHAPES.map(shape => ({
+    id: shape.fullFaceCandidateOptionId,
+    label: shape.label,
+    candidateId: shape.candidateId,
+    maskTextureId: shape.maskTextureId,
+  })),
   brow: [
     {
       id: 'psd',
@@ -633,6 +684,14 @@ export const REGION_CANDIDATE_OPTIONS: Record<
       label: '슬림',
       candidateId: 'brow-slim-tail-fine-hair-v1',
       maskTextureId: 'brow-slim-tail-fine-hair-v1',
+    },
+  ],
+  eyeshadow: [
+    {
+      id: 'band',
+      label: '기본 밴드',
+      candidateId: FULL_FACE_REGION_RUNTIME_ASSETS.eyeshadow.candidateId,
+      maskTextureId: FULL_FACE_REGION_RUNTIME_ASSETS.eyeshadow.maskTextureId,
     },
   ],
   eyeliner: [
@@ -839,6 +898,18 @@ export const REGION_ADJUSTMENT_FIELD_SCHEMAS: Record<
       help: '눈썹 산의 좌우 위치를 조정합니다.',
     },
   ],
+  // coverage는 그래프트 밴드의 세로 높이 배수(EyeshadowLayerParams.height)로 번역된다.
+  eyeshadow: [
+    {
+      name: 'coverage',
+      label: '범위',
+      min: 0.7,
+      max: 1.4,
+      step: 0.05,
+      defaultValue: 1,
+      help: '아이섀도가 눈두덩을 덮는 높이를 조정합니다.',
+    },
+  ],
   eyeliner: [
     {
       name: 'coverage',
@@ -898,9 +969,9 @@ export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
   },
   blush: {
     enabled: true,
-    colorHex: REGION_COLOR_OPTIONS.blush[0].hex,
-    opacity: 0.45,
-    intensity: 0.45,
+    colorHex: AR_BLUSH_DEFAULT_COLOR.hex,
+    opacity: 0.58,
+    intensity: 0.62,
     ...REGION_FINISH_OPTIONS.blush[0],
     gradientAmount: 0,
     candidateId: REGION_CANDIDATE_OPTIONS.blush[0].candidateId,
@@ -917,6 +988,21 @@ export const DEFAULT_FULL_FACE_REGION_CONTROLS: FullFaceRegionControls = {
     candidateId: REGION_CANDIDATE_OPTIONS.brow[0].candidateId,
     maskTextureId: REGION_CANDIDATE_OPTIONS.brow[0].maskTextureId,
     params: createDefaultRegionParams('brow'),
+  },
+  eyeshadow: {
+    // Off by default: existing saved looks/presets predate the region and must
+    // not suddenly grow an eyeshadow band. The recommendation builder or the
+    // editor tab opts in explicitly.
+    enabled: false,
+    colorHex: REGION_COLOR_OPTIONS.eyeshadow[0].hex,
+    opacity: 0.5,
+    intensity: 0.45,
+    ...REGION_FINISH_OPTIONS.eyeshadow[0],
+    // 세로 그라데 기본 강도(EyeshadowLayerParams.gradient) — 리드쪽이 살짝 진한 자연스러운 밴드.
+    gradientAmount: 0.35,
+    candidateId: REGION_CANDIDATE_OPTIONS.eyeshadow[0].candidateId,
+    maskTextureId: REGION_CANDIDATE_OPTIONS.eyeshadow[0].maskTextureId,
+    params: createDefaultRegionParams('eyeshadow'),
   },
   eyeliner: {
     enabled: true,
@@ -955,8 +1041,12 @@ export function getMakeupRecipeRegionsForArea(
   if (area === 'all') {
     // 'all' (전체 look) intentionally EXCLUDES lens: a colored contact lens is
     // an opt-in point item, not part of a full-face makeup look. It only
-    // activates from its own dedicated 렌즈 tab.
-    return MAKEUP_RECIPE_REGIONS.filter(region => region !== 'lens');
+    // activates from its own dedicated 렌즈 tab. Eyeshadow is likewise excluded:
+    // pre-existing 'all' preset looks were authored without a shadow band, and
+    // painting one with the look's single color would change how they render.
+    return MAKEUP_RECIPE_REGIONS.filter(
+      region => region !== 'lens' && region !== 'eyeshadow',
+    );
   }
 
   if (area === 'cheek') {
@@ -1017,6 +1107,10 @@ export function buildFullFaceMakeupRecipe({
   // guard) and the recipe-apply catch responded by wiping ALL makeup. Excluding
   // the lens layer here means no lens layer is ever sent/parsed. The lens Unity
   // + RN code stays dormant for a clean re-introduction later.
+  //
+  // Eyeshadow IS included in recipe.layers so saved contracts round-trip it,
+  // but postUnityMakeupRecipe strips it from the ApplyRecipeJson wire payload
+  // (Unity's parser rejects the region) and delivers it via setEyeshadowLayers.
   const recipeRegionsActive = MAKEUP_RECIPE_REGIONS.filter(region => region !== 'lens');
   const recipeLayerCount = recipeRegionsActive.length;
   const activeRegions = recipeRegionsActive.filter(region => controls[region].enabled);

@@ -11,7 +11,11 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Pressable, StyleSheet, Text} from 'react-native';
 
-import {BackendApiError, isRequestAbortedError} from '../../../shared/services/backendApi';
+import {
+  BackendApiError,
+  isBackendTimeoutError,
+  isRequestAbortedError,
+} from '../../../shared/services/backendApi';
 import {
   getFaceAnalysisReportById,
   getFaceAnalysisReports,
@@ -22,6 +26,7 @@ import {AppScreen} from '../../../shared/ui';
 import {
   answerGeneratedMakeupRecommendationQuestionV2,
   createMakeupRecommendationIdempotencyKey,
+  deleteGeneratedMakeupRecommendationReport,
   fetchGeneratedMakeupRecommendationReport,
   fetchGeneratedMakeupRecommendationReports,
   fetchGeneratedMakeupRecommendationSessionV2,
@@ -175,13 +180,13 @@ async function pollGeneratingSession(
   return currentSession;
 }
 
-function isMakeupRecommendationGeneratingConflict(error: unknown): boolean {
-  return error instanceof BackendApiError
+function isMakeupRecommendationGenerationRecoverable(error: unknown): boolean {
+  return isBackendTimeoutError(error) || (error instanceof BackendApiError
     && error.status === 409
     && (
       error.code === 'MAKEUP_SESSION_GENERATING'
       || error.code === 'MAKEUP_SESSION_STATE_CHANGED'
-    );
+    ));
 }
 
 function getMakeupRecommendationWorkflowErrorMessage(
@@ -421,7 +426,10 @@ export const MakeupRecommendationScreen = forwardRef<
     try {
       generated = await generateMakeupRecommendationV2(activeSession, undefined, signal);
     } catch (error) {
-      if (!isMakeupRecommendationGeneratingConflict(error)) throw error;
+      // The POST can outlive the mobile request timeout. The backend has already
+      // persisted the session as `generating`, so recover and poll that session
+      // instead of incorrectly presenting a failure while work continues.
+      if (!isMakeupRecommendationGenerationRecoverable(error)) throw error;
       let recoveringSession = await fetchGeneratedMakeupRecommendationSessionV2(
         activeSession.id,
         undefined,
@@ -943,6 +951,24 @@ export const MakeupRecommendationScreen = forwardRef<
     if (resetIntent) dispatchDiscovery({type: 'intent/reset'});
   }, [session?.generationMode, session?.id]);
 
+  const handleDeleteHistoryReport = useCallback(
+    async (item: MakeupRecommendationReportHistoryItem) => {
+      await deleteGeneratedMakeupRecommendationReport(item.reportId);
+      setHistoryItems(current =>
+        current.filter(historyItem => historyItem.reportId !== item.reportId),
+      );
+
+      if (session?.reportId === item.reportId) {
+        await clearCurrentMakeupRecommendationSessionId(
+          AsyncStorage,
+          session.generationMode === 'v2' ? session.id : undefined,
+        );
+        setSession(undefined);
+      }
+    },
+    [session],
+  );
+
   const telemetryContextId = session?.reportId ?? session?.id;
   const telemetryLooks = session?.results;
   useEffect(() => {
@@ -1124,6 +1150,7 @@ export const MakeupRecommendationScreen = forwardRef<
         isLoadingMore={isLoadingMoreHistory}
         items={historyItems}
         onBack={() => returnToDiscovery(false)}
+        onDelete={handleDeleteHistoryReport}
         onLoadMore={() => void loadHistory('append')}
         onRefresh={() => void loadHistory()}
         onSelect={openHistoryReport}
@@ -1182,6 +1209,7 @@ export const MakeupRecommendationScreen = forwardRef<
           keywordLabel: session.keyword?.label
             ?? (session.editorialPresetId ? session.scenarioLabel : undefined),
           reportLabel: sourceReport?.reportTitle,
+          reportCreatedAt: session.createdAt,
           reportAnalyzedAt: sourceReport?.analyzedAt,
           reportImageUri,
           reportRegionVisuals: sourceReport?.measurements?.regionVisuals,

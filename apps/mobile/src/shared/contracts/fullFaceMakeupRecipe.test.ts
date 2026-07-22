@@ -13,6 +13,10 @@ import {
   getMakeupRecipeRegionsForArea,
   normalizeMakeupRecipeRegion,
 } from './fullFaceMakeupRecipe';
+import {
+  AR_BLUSH_COLORS,
+  AR_BLUSH_REFERENCE_SHAPES,
+} from './arBlushCatalog';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -40,17 +44,23 @@ const sourcedRecipe = buildFullFaceMakeupRecipe({
 
 expectEqual(
   MAKEUP_RECIPE_REGIONS.join(','),
-  'foundation,lip,blush,brow,eyeliner,lens',
+  'foundation,lip,blush,brow,eyeshadow,eyeliner,lens',
   'canonical makeup region registry',
 );
 expectEqual(
   recipe.layers.map(layer => layer.region).join(','),
-  'foundation,lip,blush,brow,eyeliner',
+  'foundation,lip,blush,brow,eyeshadow,eyeliner',
   'full-face recipe layer order',
 );
 expectEqual(recipe.version, 2, 'full-face recipe version');
-expectEqual(recipe.layerCount, 5, 'full-face recipe layer count');
+expectEqual(recipe.layerCount, 6, 'full-face recipe layer count');
 expectEqual(recipe.enabledLayerCount, 4, 'full-face recipe enabled layer count');
+// 아이섀도는 기본 OFF(기존 저장 룩·프리셋 회귀 방지) — 레이어는 존재하되 비활성.
+expectEqual(
+  recipe.layers.find(layer => layer.region === 'eyeshadow')?.enabled,
+  false,
+  'eyeshadow layer present but disabled by default',
+);
 expectEqual(recipe.rendererMode, 'smooth-region-mask', 'full-face renderer mode');
 expectEqual(
   recipe.layers.every(layer => layer.rendererMode === 'smooth-region-mask'),
@@ -80,7 +90,7 @@ expectEqual(
 expectEqual(
   getMakeupRecipeRegionsForArea('all').join(','),
   'foundation,lip,blush,brow,eyeliner',
-  'all makeup area maps to five regions',
+  'all makeup area maps to five regions (eyeshadow/lens stay opt-in)',
 );
 expectEqual(
   getMakeupRecipeRegionsForArea('base').join(','),
@@ -103,9 +113,19 @@ expectEqual(
   'lip inner fill schema is preserved',
 );
 expectEqual(
-  REGION_COLOR_OPTIONS.blush.length >= 3,
-  true,
-  'blush color palette is preserved',
+  REGION_COLOR_OPTIONS.blush.map(option => option.hex).join(','),
+  AR_BLUSH_COLORS.map(option => option.hex).join(','),
+  'full-face blush palette uses the common AR catalog',
+);
+expectEqual(
+  REGION_CANDIDATE_OPTIONS.blush.map(option => option.label).join(','),
+  AR_BLUSH_REFERENCE_SHAPES.map(option => option.label).join(','),
+  'full-face blush candidate labels use the common AR catalog',
+);
+expectEqual(
+  REGION_CANDIDATE_OPTIONS.blush.map(option => option.maskTextureId).join(','),
+  AR_BLUSH_REFERENCE_SHAPES.map(option => option.maskTextureId).join(','),
+  'full-face blush masks preserve the five reference mappings',
 );
 expectEqual(
   REGION_FINISH_OPTIONS.lip.some(option => option.finish === 'gloss'),
@@ -137,7 +157,22 @@ expectEqual(
 expectEqual(
   FULL_FACE_REGION_RUNTIME_ASSETS.blush.maskTextureId,
   'e7-blush-balanced-uv-v0',
-  'blush runtime asset id',
+  'blush runtime fallback keeps the 512px balanced atlas',
+);
+expectEqual(
+  FULL_FACE_REGION_RUNTIME_ASSETS.blush.candidateId,
+  'blush-balanced-soft-oval-v0',
+  'blush runtime fallback candidate id',
+);
+expectEqual(
+  DEFAULT_FULL_FACE_REGION_CONTROLS.blush.opacity,
+  0.58,
+  'default full-face blush opacity is visibly stronger',
+);
+expectEqual(
+  DEFAULT_FULL_FACE_REGION_CONTROLS.blush.intensity,
+  0.62,
+  'default full-face blush intensity is visibly stronger',
 );
 expectEqual(
   FULL_FACE_REGION_RUNTIME_ASSETS.foundation.maskTextureId,

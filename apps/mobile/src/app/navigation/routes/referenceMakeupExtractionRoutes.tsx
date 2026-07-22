@@ -16,8 +16,10 @@ import {
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {getRecommendedFilterStencilRouteParams} from './arRouteActions';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {
+  deleteReferenceMakeupExtractionReport,
   fetchReferenceMakeupExtractionReport,
   fetchReferenceMakeupExtractionReports,
   getReferenceMakeupExtractionDataSync,
@@ -90,7 +92,7 @@ function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): Re
 function buildMakeupRecipeListItems(
   selectedPhoto: ReferenceMakeupPhoto | null,
 ): MakeupRecipeListItem[] {
-  const {extractedMakeupLook, photos} = getReferenceMakeupExtractionDataSync();
+  const {createdAt, extractedMakeupLook, photos} = getReferenceMakeupExtractionDataSync();
   const primaryPhoto = getSelectedReferenceMakeupPhoto(selectedPhoto);
   const recipePhotos = [
     primaryPhoto,
@@ -98,6 +100,7 @@ function buildMakeupRecipeListItems(
   ];
 
   return recipePhotos.map((photo, index) => ({
+    createdAt,
     id: `makeup-recipe-${photo.id}`,
     photo,
     subtitle:
@@ -115,6 +118,7 @@ function buildMakeupRecipeListItemsFromReports(
   reports: readonly ReferenceMakeupExtractionReportHistoryItem[],
 ): MakeupRecipeListItem[] {
   return reports.map(report => ({
+    createdAt: report.createdAt,
     id: `makeup-recipe-${report.reportId}`,
     photo: report.photo,
     reportId: report.reportId,
@@ -356,11 +360,10 @@ export function ReferenceMakeupExtractionResultRouteScreen({
       routeName="ReferenceMakeupExtractionResult"
       onBack={handleBack}>
       <ReferenceMakeupExtractionResultScreen
-        onOpenARFilter={() => navigation.navigate('ARFilter', {
-          initialGuideMode: 'half',
-          initialMakeupFilterId: 'filter-milky-strawberry-pink',
-          source: 'recommendedFilter',
-        })}
+        onOpenARFilter={() => navigation.navigate(
+          'ARFilter',
+          getRecommendedFilterStencilRouteParams('filter-milky-strawberry-pink'),
+        )}
         onRetake={handleRetake}
         photo={photo}
       />
@@ -466,11 +469,10 @@ export function MakeupFilterSaveRouteScreen({navigation}: RootScreenProps<'Makeu
     }
 
     if (recommendedFilter) {
-      navigation.replace('ARFilter', {
-        initialGuideMode: 'half',
-        initialMakeupFilterId: recommendedFilter.id,
-        source: 'recommendedFilter',
-      });
+      navigation.replace(
+        'ARFilter',
+        getRecommendedFilterStencilRouteParams(recommendedFilter.id),
+      );
       return;
     }
 
@@ -501,11 +503,10 @@ export function MakeupFilterSaveCompleteRouteScreen({
 
   const handleApplyNow = () => {
     if (selectedRecommendedMakeupFilterId) {
-      navigation.navigate('ARFilter', {
-        initialGuideMode: 'half',
-        initialMakeupFilterId: selectedRecommendedMakeupFilterId,
-        source: 'recommendedFilter',
-      });
+      navigation.navigate(
+        'ARFilter',
+        getRecommendedFilterStencilRouteParams(selectedRecommendedMakeupFilterId),
+      );
       return;
     }
 
@@ -601,6 +602,16 @@ export function MakeupRecipeListRouteScreen({
     navigation.navigate('MakeupRecipeDetail');
   };
 
+  const handleDeleteRecipe = async (recipe: MakeupRecipeListItem) => {
+    if (!recipe.reportId) {
+      throw new Error('삭제할 메이크업 추출 보고서를 찾지 못했어요.');
+    }
+
+    await deleteReferenceMakeupExtractionReport(recipe.reportId);
+    setRecipes(current => current.filter(item => item.id !== recipe.id));
+    setSelectedReferenceMakeupPhoto(null);
+  };
+
   return (
     <DetailRouteChrome
       routeName="MakeupRecipeList"
@@ -608,6 +619,7 @@ export function MakeupRecipeListRouteScreen({
       <MakeupRecipeListScreen
         error={loadError}
         isLoading={isLoading}
+        onDeleteRecipe={handleDeleteRecipe}
         onRetry={loadRecipes}
         onPressRecipe={handlePressRecipe}
         recipes={recipes}

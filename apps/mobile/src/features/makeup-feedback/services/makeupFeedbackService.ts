@@ -1,5 +1,4 @@
 import {uploadFaceCaptureImage} from '../../face-capture/services/faceCaptureUploadService';
-import {appAssetUri} from '../../../shared/config/mediaAssets';
 import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
 import type {
   MakeupFeedbackAnalysisOutcome,
@@ -18,6 +17,8 @@ import type {
   MakeupFeedbackRetakeOutcome,
   MakeupFeedbackScoreAxisId,
   MakeupFeedbackScoreBreakdown,
+  MakeupFeedbackScoreComponent,
+  MakeupFeedbackScoreComponentId,
   MakeupFeedbackScoreImpact,
   MakeupFeedbackStrength,
   MakeupFeedbackSummary,
@@ -31,8 +32,12 @@ import {getLocalMakeupFeedbackEntryDate} from './makeupFeedbackJourneyContext';
 
 const FEEDBACK_ANALYSIS_TIMEOUT_MS = 180000;
 const FEEDBACK_REPORT_POLL_INTERVAL_MS = 2000;
-const EXPLAINABLE_COACHING_MODEL_VERSION =
-  'makeup-feedback:bedrock-v9-explainable-coaching';
+const EXPLAINABLE_COACHING_MODEL_VERSIONS = new Set([
+  'makeup-feedback:bedrock-v9-explainable-coaching',
+  'makeup-feedback:bedrock-v10-expert-analytic-rubric',
+]);
+const ANALYTIC_RUBRIC_MODEL_VERSION =
+  'makeup-feedback:bedrock-v10-expert-analytic-rubric';
 const FEEDBACK_GOAL_VALIDATION_ERROR_CODES = new Set([
   'FEEDBACK_GOAL_INVALID',
   'FEEDBACK_GOAL_NEEDS_DETAIL',
@@ -80,6 +85,7 @@ type BackendFeedbackPayload = {
 } | null;
 
 export type BackendFeedbackJob = {
+  createdAt?: string | null;
   entryDate?: string | null;
   feedbackPayload?: BackendFeedbackPayload;
   feedbackKind?: 'initial' | 'correction' | null;
@@ -348,10 +354,21 @@ function mapDynamicCriteria(value: unknown): MakeupFeedbackDynamicCriterion[] {
 
     seenIds.add(id);
 
+    const sourceType = item.sourceType;
+    if (
+      sourceType !== undefined &&
+      sourceType !== 'common_baseline' &&
+      sourceType !== 'explicit_user_goal' &&
+      sourceType !== 'inferred_expert_standard'
+    ) {
+      throw feedbackContractError(`${field}.sourceType`, '동적 평가 기준 출처 형식이 잘못되었습니다.');
+    }
+
     return {
       criterion: requireText(item.criterion, `${field}.criterion`),
       derivedFrom: requireText(item.derivedFrom, `${field}.derivedFrom`),
       id,
+      ...(sourceType ? {sourceType} : {}),
     };
   });
 }
@@ -398,16 +415,169 @@ const scoreAxisIds = new Set<MakeupFeedbackScoreAxisId>(scoreAxisOrder);
 
 const scoreAxisContract: Record<
   MakeupFeedbackScoreAxisId,
-  {label: string; maxScore: number}
+  {
+    components: readonly {
+      id: MakeupFeedbackScoreComponentId;
+      label: string;
+      maxScore: number;
+    }[];
+    label: string;
+    maxScore: number;
+  }
 > = {
-  'application-finish': {label: '적용 완성도', maxScore: 30},
-  'placement-balance': {label: '배치·형태 균형', maxScore: 25},
-  'color-value-harmony': {label: '색·명암 조화', maxScore: 20},
-  'overall-goal-fit': {label: '전체 조화·목표 적합도', maxScore: 25},
+  'application-finish': {
+    components: [
+      {id: 'base-finish', label: '베이스 도포·균일도', maxScore: 8},
+      {id: 'brow-eye-finish', label: '눈썹·아이 정교함', maxScore: 9},
+      {id: 'cheek-finish', label: '치크·윤곽 블렌딩', maxScore: 7},
+      {id: 'lip-finish', label: '립 라인·채움·마감', maxScore: 6},
+    ],
+    label: '적용 완성도',
+    maxScore: 30,
+  },
+  'placement-balance': {
+    components: [
+      {id: 'bilateral-balance', label: '좌우 대칭·균형', maxScore: 10},
+      {id: 'landmark-placement', label: '랜드마크 기준 배치', maxScore: 10},
+      {id: 'visual-weight', label: '부위 간 시각적 비중', maxScore: 5},
+    ],
+    label: '배치·형태 균형',
+    maxScore: 25,
+  },
+  'color-value-harmony': {
+    components: [
+      {id: 'relative-contrast', label: '상대 채도·명도·대비', maxScore: 8},
+      {id: 'color-continuity', label: '피부·치크·립 색 연결', maxScore: 7},
+      {id: 'finish-coherence', label: '마감·질감 일관성', maxScore: 5},
+    ],
+    label: '색·명암 조화',
+    maxScore: 20,
+  },
+  'overall-goal-fit': {
+    components: [
+      {id: 'full-face-coherence', label: '얼굴 전체 내부 조화', maxScore: 10},
+      {id: 'focal-hierarchy', label: '시각적 중심·위계', maxScore: 7},
+      {id: 'explicit-goal-fit', label: '명시 목표 적합도', maxScore: 8},
+    ],
+    label: '전체 조화·목표 적합도',
+    maxScore: 25,
+  },
 };
 
 function isScoreAxisId(value: unknown): value is MakeupFeedbackScoreAxisId {
   return typeof value === 'string' && scoreAxisIds.has(value as MakeupFeedbackScoreAxisId);
+}
+
+function mapScoreComponents(
+  value: unknown,
+  axisId: MakeupFeedbackScoreAxisId,
+  field: string,
+  evaluationStatusByObservationId: ReadonlyMap<
+    string,
+    MakeupFeedbackEvaluationStatus
+  >,
+  required: boolean,
+): MakeupFeedbackScoreComponent[] | undefined {
+  if (value == null) {
+    if (required) {
+      throw feedbackContractError(
+        field,
+        '분석형 점수 보고서에는 세부 점수가 필요합니다.',
+      );
+    }
+
+    return undefined;
+  }
+
+  const componentContracts = scoreAxisContract[axisId].components;
+  if (!Array.isArray(value) || value.length !== componentContracts.length) {
+    throw feedbackContractError(
+      field,
+      `세부 점수 ${componentContracts.length}개가 정확히 필요합니다.`,
+    );
+  }
+
+  return value.map((rawComponent, index) => {
+    const componentField = `${field}[${index}]`;
+    const componentContract = componentContracts[index];
+
+    if (!componentContract || !isObject(rawComponent)) {
+      throw feedbackContractError(componentField, '세부 점수 형식이 잘못되었습니다.');
+    }
+
+    if (rawComponent.id !== componentContract.id) {
+      throw feedbackContractError(
+        `${componentField}.id`,
+        '세부 점수 기준의 순서와 id가 앱 계약과 일치하지 않습니다.',
+      );
+    }
+
+    if (rawComponent.label !== componentContract.label) {
+      throw feedbackContractError(
+        `${componentField}.label`,
+        `세부 점수 기준 이름은 ${componentContract.label}이어야 합니다.`,
+      );
+    }
+
+    if (
+      typeof rawComponent.maxScore !== 'number' ||
+      !Number.isInteger(rawComponent.maxScore) ||
+      rawComponent.maxScore !== componentContract.maxScore
+    ) {
+      throw feedbackContractError(
+        `${componentField}.maxScore`,
+        `${componentContract.label} 배점은 ${componentContract.maxScore}점이어야 합니다.`,
+      );
+    }
+
+    if (
+      typeof rawComponent.score !== 'number' ||
+      !Number.isInteger(rawComponent.score) ||
+      rawComponent.score < 0 ||
+      rawComponent.score > componentContract.maxScore
+    ) {
+      throw feedbackContractError(
+        `${componentField}.score`,
+        '세부 점수는 0점 이상이고 해당 기준 배점 이하여야 합니다.',
+      );
+    }
+
+    const evidenceIds = requireTextList(
+      rawComponent.evidenceIds,
+      `${componentField}.evidenceIds`,
+      {maxItems: 8, minItems: 1, unique: true},
+    );
+    const unknownEvidenceIds = evidenceIds.filter(
+      id => !evaluationStatusByObservationId.has(id),
+    );
+    if (unknownEvidenceIds.length > 0) {
+      throw feedbackContractError(
+        `${componentField}.evidenceIds`,
+        `알 수 없는 관찰 근거 id입니다: ${unknownEvidenceIds.join(', ')}`,
+      );
+    }
+
+    const disallowedEvidenceIds = evidenceIds.filter(id => {
+      const status = evaluationStatusByObservationId.get(id);
+
+      return status !== 'strength' && status !== 'improvement';
+    });
+    if (disallowedEvidenceIds.length > 0) {
+      throw feedbackContractError(
+        `${componentField}.evidenceIds`,
+        '세부 점수 근거는 잘한 점 또는 보완할 점의 관찰만 참조할 수 있습니다.',
+      );
+    }
+
+    return {
+      evidenceIds,
+      id: componentContract.id,
+      label: componentContract.label,
+      maxScore: componentContract.maxScore,
+      reason: requireText(rawComponent.reason, `${componentField}.reason`),
+      score: rawComponent.score,
+    };
+  });
 }
 
 function mapScoreBreakdown(
@@ -417,6 +587,7 @@ function mapScoreBreakdown(
     string,
     MakeupFeedbackEvaluationStatus
   >,
+  requireAnalyticComponents: boolean,
 ): MakeupFeedbackScoreBreakdown | undefined {
   if (value == null) {
     return undefined;
@@ -488,7 +659,7 @@ function mapScoreBreakdown(
     }
 
     const evidenceIds = requireTextList(rawAxis.evidenceIds, `${field}.evidenceIds`, {
-      maxItems: 8,
+      maxItems: 16,
       minItems: 1,
       unique: true,
     });
@@ -515,7 +686,51 @@ function mapScoreBreakdown(
       );
     }
 
+    const components = mapScoreComponents(
+      rawAxis.components,
+      rawAxis.id,
+      `${field}.components`,
+      evaluationStatusByObservationId,
+      requireAnalyticComponents,
+    );
+
+    if (components) {
+      const componentScore = components.reduce(
+        (total, component) => total + component.score,
+        0,
+      );
+      const componentMaxScore = components.reduce(
+        (total, component) => total + component.maxScore,
+        0,
+      );
+
+      if (componentScore !== rawAxis.score || componentMaxScore !== rawAxis.maxScore) {
+        throw feedbackContractError(
+          `${field}.components`,
+          '세부 점수의 합이 기준별 받은 점수와 배점에 일치해야 합니다.',
+        );
+      }
+
+      if (requireAnalyticComponents) {
+        const componentEvidenceIds = Array.from(
+          new Set(components.flatMap(component => component.evidenceIds)),
+        );
+        if (
+          componentEvidenceIds.length !== evidenceIds.length ||
+          componentEvidenceIds.some(
+            (evidenceId, evidenceIndex) => evidenceId !== evidenceIds[evidenceIndex],
+          )
+        ) {
+          throw feedbackContractError(
+            `${field}.evidenceIds`,
+            '기준별 근거는 세부 점수 근거의 순서 있는 합집합과 일치해야 합니다.',
+          );
+        }
+      }
+    }
+
     return {
+      ...(components ? {components} : {}),
       evidenceIds,
       id: rawAxis.id,
       label: axisContract.label,
@@ -1074,6 +1289,7 @@ export function mapBackendJobToFeedbackOutcome(
     analysisId,
     analysisStatus,
     captureQuality,
+    createdAt: firstText(job.createdAt),
     entryDate: firstText(job.entryDate),
     id: analysisId,
     modelVersion,
@@ -1126,7 +1342,9 @@ export function mapBackendJobToFeedbackOutcome(
   const completedAnalysisStatus = analysisStatus;
   const completedModelVersion = requireText(modelVersion, 'modelVersion');
   const requiresExplainableCoachingContract =
-    completedModelVersion === EXPLAINABLE_COACHING_MODEL_VERSION;
+    EXPLAINABLE_COACHING_MODEL_VERSIONS.has(completedModelVersion);
+  const requiresAnalyticRubricContract =
+    completedModelVersion === ANALYTIC_RUBRIC_MODEL_VERSION;
 
   if (requiresExplainableCoachingContract && backendResult.scoreBreakdown == null) {
     throw feedbackContractError(
@@ -1220,6 +1438,7 @@ export function mapBackendJobToFeedbackOutcome(
     backendResult.scoreBreakdown,
     backendResult.score,
     evaluationStatusByObservationId,
+    requiresAnalyticRubricContract,
   );
   const unknownObservationRegionIds = evaluations.flatMap(evaluation =>
     (evaluation.observations ?? []).flatMap(observation =>
@@ -1431,16 +1650,21 @@ export async function fetchMakeupFeedbackReport(
   return mapStoredMakeupFeedbackReport(report, reportId);
 }
 
+export async function deleteMakeupFeedbackReport(reportId: string): Promise<void> {
+  await requestBackendJson(
+    '/feedback/reports/' + encodeURIComponent(reportId),
+    {method: 'DELETE'},
+  );
+}
+
 function mapStoredMakeupFeedbackReport(
   report: BackendFeedbackJob,
   reportId = report.id ?? '',
 ): MakeupFeedbackCompletedResult {
   const request = report.feedbackPayload?.request;
-  const fallbackImageUri = appAssetUri('images/analysis/report-retake-20260608.png');
   const imageUri =
     stringValue(request?.cdnUrl) ??
-    stringValue(request?.sourceUrl) ??
-    fallbackImageUri;
+    stringValue(request?.sourceUrl);
 
   if (!imageUri) {
     throw new BackendApiError(
@@ -1474,8 +1698,10 @@ function isExplainableCoachingReport(report: BackendFeedbackJob): boolean {
   const resultModelVersion = isObject(result) ? stringValue(result.modelVersion) : undefined;
 
   return (
-    resultModelVersion === EXPLAINABLE_COACHING_MODEL_VERSION ||
-    report.modelVersion === EXPLAINABLE_COACHING_MODEL_VERSION
+    (resultModelVersion != null &&
+      EXPLAINABLE_COACHING_MODEL_VERSIONS.has(resultModelVersion)) ||
+    (report.modelVersion != null &&
+      EXPLAINABLE_COACHING_MODEL_VERSIONS.has(report.modelVersion))
   );
 }
 

@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 from uuid import UUID
 
 import pytest
@@ -99,6 +100,34 @@ def test_converse_allows_bounded_long_form_recommendation_timeout(
   config = captured_kwargs.get("config")
   assert isinstance(config, Config)
   assert 90 <= config.read_timeout <= 120
+  assert config.retries == {"max_attempts": 1, "mode": "standard"}
+
+
+def test_converse_caps_sdk_timeouts_to_remaining_provider_budget(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  client = FakeBedrockClient()
+  captured_kwargs: dict = {}
+
+  def fake_boto_client(*_args, **kwargs):
+    captured_kwargs.update(kwargs)
+    return client
+
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", fake_boto_client)
+
+  _converse(
+    Settings(),
+    "model-id",
+    "system",
+    "prompt",
+    max_tokens=9000,
+    timeout_seconds=7.5,
+  )
+
+  config = captured_kwargs.get("config")
+  assert isinstance(config, Config)
+  assert config.read_timeout == 7.5
+  assert config.connect_timeout == 7.5
   assert config.retries == {"max_attempts": 1, "mode": "standard"}
 
 
@@ -434,6 +463,36 @@ async def test_generate_json_retries_invalid_json_once(monkeypatch: pytest.Monke
 
 
 @pytest.mark.asyncio
+async def test_generate_json_enforces_one_deadline_across_provider_call(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  seen_timeouts: list[float] = []
+
+  def slow_converse(*_args, **kwargs):
+    seen_timeouts.append(kwargs["timeout_seconds"])
+    time.sleep(0.08)
+    return {"ok": True}
+
+  monkeypatch.setattr(makeup_service, "_converse", slow_converse)
+  started_at = time.perf_counter()
+
+  with pytest.raises(AppError) as raised:
+    await makeup_service.generate_json(
+      Settings(),
+      "model-id",
+      "plain JSON system",
+      "prompt",
+      timeout_seconds=0.02,
+    )
+
+  elapsed_seconds = time.perf_counter() - started_at
+  assert raised.value.code == "BEDROCK_REQUEST_TIMEOUT"
+  assert elapsed_seconds < 0.07
+  assert len(seen_timeouts) == 1
+  assert 0 < seen_timeouts[0] <= 0.02
+
+
+@pytest.mark.asyncio
 async def test_generate_json_does_not_retry_invalid_long_form_json(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -624,6 +683,8 @@ class RecommendationDatabase:
     self.executed: list[tuple[str, tuple]] = []
 
   async def fetchrow(self, query: str, *args):
+    if "report_request_rate_limits" in query:
+      return {"request_count": 1, "retry_after": 0}
     if "insert into makeup_recommendation_reports" in query:
       self.insert_args = args
       self.insert_query = query
@@ -666,6 +727,8 @@ class RecommendationReportDatabase:
     ]
 
   async def fetchrow(self, query: str, *args):
+    if "report_request_rate_limits" in query:
+      return {"request_count": 1, "retry_after": 0}
     self.fetchrow_queries.append((query, args))
     if "select id, image_status" in query:
       return {"id": REPORT_ID, "image_status": self.image_status}
@@ -679,7 +742,12 @@ class RecommendationReportDatabase:
 
 
 class RefinementDatabase:
+  async def execute(self, query: str, *args):
+    return "OK"
+
   async def fetchrow(self, query: str, *args):
+    if "report_request_rate_limits" in query:
+      return {"request_count": 1, "retry_after": 0}
     if "from makeup_recommendation_reports" in query:
       assert args == (REPORT_ID, USER_ID)
       return {

@@ -214,7 +214,41 @@
           "score": 27,
           "maxScore": 30,
           "reason": "The visible brow edges are controlled, while the outer lashes need a small separation adjustment.",
-          "evidenceIds": ["brow-observation-1", "lash-observation-1"]
+          "evidenceIds": ["foundation-observation-1", "brow-observation-1", "lash-observation-1", "eyeliner-observation-1", "eyeshadow-observation-1", "blush-observation-1", "highlight-observation-1", "shading-observation-1", "lip-observation-1"],
+          "components": [
+            {
+              "id": "base-finish",
+              "label": "베이스 도포·균일도",
+              "score": 7,
+              "maxScore": 8,
+              "reason": "The visible application reads as mostly even, with a small amount of finish refinement remaining.",
+              "evidenceIds": ["foundation-observation-1"]
+            },
+            {
+              "id": "brow-eye-finish",
+              "label": "눈썹·아이 정교함",
+              "score": 8,
+              "maxScore": 9,
+              "reason": "The brow edges are controlled while the outer lashes need a local separation adjustment.",
+              "evidenceIds": ["brow-observation-1", "lash-observation-1", "eyeliner-observation-1", "eyeshadow-observation-1"]
+            },
+            {
+              "id": "cheek-finish",
+              "label": "치크·윤곽 블렌딩",
+              "score": 6,
+              "maxScore": 7,
+              "reason": "The visible transitions are mostly controlled with minor refinement available.",
+              "evidenceIds": ["blush-observation-1", "highlight-observation-1", "shading-observation-1"]
+            },
+            {
+              "id": "lip-finish",
+              "label": "립 라인·채움·마감",
+              "score": 6,
+              "maxScore": 6,
+              "reason": "The visible lip line, fill, and finish meet the component standard without a score-limiting issue.",
+              "evidenceIds": ["lip-observation-1"]
+            }
+          ]
         },
         {
           "id": "placement-balance",
@@ -222,7 +256,33 @@
           "score": 22,
           "maxScore": 25,
           "reason": "The brow and lash placement remains balanced around both eyes.",
-          "evidenceIds": ["brow-observation-1", "lash-observation-1"]
+          "evidenceIds": ["brow-observation-1", "lash-observation-1", "blush-observation-1", "lip-observation-1", "eyeliner-observation-1", "eyeshadow-observation-1"],
+          "components": [
+            {
+              "id": "bilateral-balance",
+              "label": "좌우 대칭·균형",
+              "score": 9,
+              "maxScore": 10,
+              "reason": "The visible eye-area placement is balanced with a small local difference remaining.",
+              "evidenceIds": ["brow-observation-1", "lash-observation-1", "blush-observation-1", "lip-observation-1"]
+            },
+            {
+              "id": "landmark-placement",
+              "label": "랜드마크 기준 배치",
+              "score": 9,
+              "maxScore": 10,
+              "reason": "The visible placement follows the current facial landmarks with limited refinement needed.",
+              "evidenceIds": ["brow-observation-1", "eyeliner-observation-1", "blush-observation-1", "lip-observation-1"]
+            },
+            {
+              "id": "visual-weight",
+              "label": "부위 간 시각적 비중",
+              "score": 4,
+              "maxScore": 5,
+              "reason": "The eye-area weight stays controlled, although the outer lash definition is slightly concentrated.",
+              "evidenceIds": ["eyeshadow-observation-1", "blush-observation-1", "lip-observation-1"]
+            }
+          ]
         },
         {
           "id": "color-value-harmony",
@@ -230,7 +290,33 @@
           "score": 18,
           "maxScore": 20,
           "reason": "The visible eye-area contrast stays connected to the rest of the makeup.",
-          "evidenceIds": ["brow-observation-1", "lash-observation-1"]
+          "evidenceIds": ["eyeshadow-observation-1", "blush-observation-1", "lip-observation-1", "foundation-observation-1"],
+          "components": [
+            {
+              "id": "relative-contrast",
+              "label": "상대 채도·명도·대비",
+              "score": 7,
+              "maxScore": 8,
+              "reason": "The visible contrast is mostly balanced with a small outer-lash concentration.",
+              "evidenceIds": ["eyeshadow-observation-1", "blush-observation-1", "lip-observation-1"]
+            },
+            {
+              "id": "color-continuity",
+              "label": "피부·치크·립 색 연결",
+              "score": 6,
+              "maxScore": 7,
+              "reason": "The visible color relationships remain connected with minor refinement available.",
+              "evidenceIds": ["foundation-observation-1", "blush-observation-1", "lip-observation-1"]
+            },
+            {
+              "id": "finish-coherence",
+              "label": "마감·질감 일관성",
+              "score": 5,
+              "maxScore": 5,
+              "reason": "The visible finish is coherent across the assessed base, eye, cheek, and lip regions.",
+              "evidenceIds": ["foundation-observation-1", "eyeshadow-observation-1", "blush-observation-1", "lip-observation-1"]
+            }
+          ]
         },
         {
           "id": "overall-goal-fit",
@@ -238,13 +324,39 @@
           "score": 22,
           "maxScore": 25,
           "reason": "The visible finish supports the requested balanced everyday look with one local lash adjustment.",
-          "evidenceIds": ["brow-observation-1", "lash-observation-1"]
+          "evidenceIds": ["foundation-observation-1", "brow-observation-1", "blush-observation-1", "lip-observation-1", "eyeshadow-observation-1", "lash-observation-1"],
+          "components": [
+            {
+              "id": "full-face-coherence",
+              "label": "얼굴 전체 내부 조화",
+              "score": 9,
+              "maxScore": 10,
+              "reason": "The assessed regions read coherently with one local lash adjustment remaining.",
+              "evidenceIds": ["foundation-observation-1", "brow-observation-1", "blush-observation-1", "lip-observation-1"]
+            },
+            {
+              "id": "focal-hierarchy",
+              "label": "시각적 중심·위계",
+              "score": 6,
+              "maxScore": 7,
+              "reason": "The visual focus is controlled, though the outer lash edge draws slightly more attention.",
+              "evidenceIds": ["eyeshadow-observation-1", "blush-observation-1", "lip-observation-1"]
+            },
+            {
+              "id": "explicit-goal-fit",
+              "label": "명시 목표 적합도",
+              "score": 7,
+              "maxScore": 8,
+              "reason": "The visible result supports the requested balanced everyday goal with a small refinement remaining.",
+              "evidenceIds": ["brow-observation-1", "lash-observation-1", "foundation-observation-1", "blush-observation-1", "lip-observation-1"]
+            }
+          ]
         }
       ]
     },
     "scoreRange": [86, 92],
-    "scoreConfidence": 0.84,
-    "scoreEvidenceIds": ["brow-observation-1", "lash-observation-1"],
+    "scoreConfidence": 0.74,
+    "scoreEvidenceIds": ["foundation-observation-1", "brow-observation-1", "lash-observation-1", "eyeliner-observation-1", "eyeshadow-observation-1", "blush-observation-1", "highlight-observation-1", "shading-observation-1", "lip-observation-1"],
     "scoreLabel": "Overall score",
     "scoreReason": "The visible makeup is balanced and supports the requested natural everyday finish.",
     "interpretedGoal": {
@@ -333,7 +445,7 @@
       {
         "topicId": "eyeliner",
         "topicLabel": "아이라인",
-        "status": "optional",
+        "status": "strength",
         "visibility": "clear",
         "visibilityReason": null,
         "observations": [{"id": "eyeliner-observation-1", "claim": "The eyeliner edge is visible.", "evidenceLocation": "upper lash lines", "lightingSensitive": false}],
@@ -348,7 +460,7 @@
       {
         "topicId": "eyeshadow",
         "topicLabel": "아이섀도",
-        "status": "optional",
+        "status": "strength",
         "visibility": "clear",
         "visibilityReason": null,
         "observations": [{"id": "eyeshadow-observation-1", "claim": "The shadow gradient is visible.", "evidenceLocation": "both eyelids", "lightingSensitive": true}],
@@ -363,7 +475,7 @@
       {
         "topicId": "aegyosal",
         "topicLabel": "애교살",
-        "status": "optional",
+        "status": "strength",
         "visibility": "clear",
         "visibilityReason": null,
         "observations": [{"id": "aegyosal-observation-1", "claim": "The lower-eye highlight is visible.", "evidenceLocation": "lower eye area", "lightingSensitive": true}],
@@ -378,7 +490,7 @@
       {
         "topicId": "foundation",
         "topicLabel": "파운데이션",
-        "status": "optional",
+        "status": "strength",
         "visibility": "clear",
         "visibilityReason": null,
         "observations": [{"id": "foundation-observation-1", "claim": "The base finish is visible across both cheeks.", "evidenceLocation": "forehead and cheeks", "lightingSensitive": true}],
@@ -393,7 +505,7 @@
       {
         "topicId": "blush",
         "topicLabel": "블러셔",
-        "status": "optional",
+        "status": "strength",
         "visibility": "clear",
         "visibilityReason": null,
         "observations": [{"id": "blush-observation-1", "claim": "The cheek color is visible on both sides.", "evidenceLocation": "left and right cheeks", "lightingSensitive": true}],
@@ -408,7 +520,7 @@
       {
         "topicId": "highlight",
         "topicLabel": "하이라이터",
-        "status": "optional",
+        "status": "strength",
         "visibility": "clear",
         "visibilityReason": null,
         "observations": [{"id": "highlight-observation-1", "claim": "The highlight reflection is visible.", "evidenceLocation": "upper cheekbones", "lightingSensitive": true}],
@@ -423,7 +535,7 @@
       {
         "topicId": "shading",
         "topicLabel": "섀딩",
-        "status": "optional",
+        "status": "strength",
         "visibility": "clear",
         "visibilityReason": null,
         "observations": [{"id": "shading-observation-1", "claim": "The contour transition is visible.", "evidenceLocation": "jaw and cheek perimeter", "lightingSensitive": true}],
@@ -438,7 +550,7 @@
       {
         "topicId": "lip",
         "topicLabel": "립",
-        "status": "optional",
+        "status": "strength",
         "visibility": "clear",
         "visibilityReason": null,
         "observations": [{"id": "lip-observation-1", "claim": "The lip color and edge are visible.", "evidenceLocation": "full lip area", "lightingSensitive": true}],

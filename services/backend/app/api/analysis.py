@@ -48,6 +48,7 @@ from app.services.owned_media import (
   trusted_media_request_payload,
 )
 from app.services.push_notifications import create_and_send_notification
+from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
 
 
@@ -883,6 +884,13 @@ async def create_analysis_job(
       ),
     },
   )
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="face_analysis",
+    per_minute=settings.face_analysis_generation_limit_per_minute,
+    per_day=settings.face_analysis_generation_limit_per_day,
+  )
   logger.info(
     "[aura:analysis-api] job:create-start userSub=%s runImmediately=%s executionMode=%s",
     auth.subject,
@@ -1030,6 +1038,13 @@ async def retry_analysis_job_stage(
     )
 
   user = await ensure_user(db, auth)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="face_analysis",
+    per_minute=settings.face_analysis_generation_limit_per_minute,
+    per_day=settings.face_analysis_generation_limit_per_day,
+  )
   existing = await db.fetchrow(
     """
     select *

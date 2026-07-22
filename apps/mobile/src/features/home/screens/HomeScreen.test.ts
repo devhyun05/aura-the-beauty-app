@@ -11,7 +11,6 @@ import {
   getRecommendedFilterPreviewItems,
   getIsHomeScrollTopButtonVisible,
   getRecommendedFilterAccessibilityLabel,
-  getRecommendedFilterRouteParams,
   getHomeMakeupExtractionActionLabels,
   getHomeMakeupFeedbackActionLabels,
   getHomeServiceShortcutPresentation,
@@ -128,7 +127,6 @@ const heroCarouselScrollEndHandler = () => undefined;
 const heroCarouselLoopResetHandlers =
   createHeroCarouselLoopResetHandlers(heroCarouselScrollEndHandler);
 const cleanSmokyFilter = getRecommendedMakeupFilterById('filter-clean-smoky-city');
-const cleanSmokyRouteParams = getRecommendedFilterRouteParams(cleanSmokyFilter.id);
 
 expectEqual(headline, expectedHeadline, 'weekly trend headline');
 expectEqual(
@@ -414,21 +412,8 @@ expectEqual(
   '차가운 도시의 클린 스모키,',
   'recommended filter accessibility label',
 );
-expectEqual(
-  cleanSmokyRouteParams.initialMakeupFilterId,
-  cleanSmokyFilter.id,
-  'recommended filter route id',
-);
-expectEqual(
-  cleanSmokyRouteParams.initialGuideMode,
-  'half',
-  'recommended filter route guide mode',
-);
-expectEqual(
-  cleanSmokyRouteParams.source,
-  'recommendedFilter',
-  'recommended filter route source',
-);
+// 추천 필터 → AR 라우트 파라미터는 스텐실 통일 이후
+// app/navigation/routes/arRouteActions.test.ts에서 검증한다.
 
 let selectedHomeServiceShortcut:
   | 'arFilter'

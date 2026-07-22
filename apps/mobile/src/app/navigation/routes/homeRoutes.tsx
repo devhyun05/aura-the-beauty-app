@@ -4,10 +4,10 @@ import {Alert, Linking} from 'react-native';
 import {
   FilterStoreScreen,
   FloatingActionSettingsScreen,
-  getRecommendedFilterRouteParams,
   HomeScreen,
   SavedMakeupListScreen,
 } from '../../../features/home';
+import {getRecommendedFilterStencilRouteParams} from './arRouteActions';
 import type {
   HomeFeatureId,
   HomeFeaturePressPayload,
@@ -148,12 +148,12 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
 
   const handleRecommendedFilterPress = React.useCallback((filterId: string) => {
     setSelectedRecommendedMakeupFilterId(filterId);
-    rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+    rootNavigation?.navigate('ARFilter', getRecommendedFilterStencilRouteParams(filterId));
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
 
   const handleHeroTrendFilterPress = React.useCallback((filterId: string) => {
     setSelectedRecommendedMakeupFilterId(filterId);
-    rootNavigation?.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+    rootNavigation?.navigate('ARFilter', getRecommendedFilterStencilRouteParams(filterId));
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
 
   const handleMakeupFilterPress = React.useCallback(() => {
@@ -161,13 +161,6 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     rootNavigation?.navigate('ARFilter', {source: 'homeServiceShortcut'});
   }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
 
-  const handleHalfMakeupPress = React.useCallback(() => {
-    setSelectedRecommendedMakeupFilterId(null);
-    rootNavigation?.navigate('ARFilter', {
-      initialGuideMode: 'half',
-      source: 'homeServiceShortcut',
-    });
-  }, [rootNavigation, setSelectedRecommendedMakeupFilterId]);
 
   const closeExtractionSheet = React.useCallback(() => {
     setIsExtractionSheetVisible(false);
@@ -431,7 +424,6 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
             onPressArFilter={() => rootNavigation?.navigate('ARFilter')}
             onPressFaceDiagnosis={() => rootNavigation?.navigate('FaceAnalysisIntro')}
             onPressConsulting={() => navigation.navigate('ConsultingTab')}
-            onPressHalfMakeup={handleHalfMakeupPress}
             onPressMakeupRecommendation={() =>
               rootNavigation?.navigate('MakeupRecommendation')
             }
@@ -540,7 +532,7 @@ export function HomeFilterStoreRouteScreen({
 
   const handleApplyFilter = React.useCallback((filterId: string) => {
     setSelectedRecommendedMakeupFilterId(filterId);
-    navigation.navigate('ARFilter', getRecommendedFilterRouteParams(filterId));
+    navigation.navigate('ARFilter', getRecommendedFilterStencilRouteParams(filterId));
   }, [navigation, setSelectedRecommendedMakeupFilterId]);
 
   const handleToggleMakeupFilterLike = React.useCallback((filterId: string) => {

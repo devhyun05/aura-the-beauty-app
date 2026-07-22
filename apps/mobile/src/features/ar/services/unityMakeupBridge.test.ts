@@ -5,6 +5,7 @@ import {
   UNITY_MAKEUP_LAYER_ORDER,
   UNITY_STILL_FACE_LANDMARKS_TARGET,
   buildAnalyzeFaceLandmarksStillRequest,
+  buildFilterParamsFromARFilterSelections,
   cancelUnityUnifiedFaceCapture,
   createUnityMakeupRecipeBatch,
   createUnityMakeupRecipeBatchFromARFilterSelections,
@@ -18,6 +19,7 @@ import {
 import {NativeModules} from 'react-native';
 import type {MakeupFilter} from '../../../shared/types/makeupGuide';
 import {buildUnifiedFaceCaptureRequest} from '../../face-capture/services/unifiedFaceCaptureContract';
+import {AR_BLUSH_SHAPES} from '../../../shared/contracts/arBlushCatalog';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -40,7 +42,7 @@ const mockFilter: MakeupFilter = {
 
 expectEqual(
   UNITY_MAKEUP_LAYER_ORDER.join(','),
-  'foundation,lip,blush,brow,eyeliner,lens',
+  'foundation,lip,blush,brow,eyeshadow,eyeliner,lens',
   'Unity makeup layer order',
 );
 expectEqual(
@@ -58,6 +60,27 @@ expectEqual(
   'eyeliner',
   'eye area alias',
 );
+
+for (const shape of AR_BLUSH_SHAPES) {
+  const params = buildFilterParamsFromARFilterSelections([
+    {
+      selectedColor: {hex: '#D77986', label: '로즈'},
+      selectedColorId: 'neutral-rose',
+      selectedMakeupArea: 'cheek',
+      selectedMakeupFilter: mockFilter,
+      selectedPointMakeupLookId: 'custom-blush',
+      selectedShapeId: shape.arFilterShapeId,
+      selectedTextureId: 'matte',
+      selectedTotalMakeupLookId: null,
+      selectedTypeId: 'blush',
+    },
+  ]);
+  expectEqual(
+    params.blushShape,
+    shape.value,
+    `${shape.label} AR 필터 shape value`,
+  );
+}
 
 const generatedLipRoute = getUnityGeneratedMaskBridgeRoute('lip');
 const generatedBrowRoute = getUnityGeneratedMaskBridgeRoute('brow');
@@ -96,12 +119,12 @@ expectEqual(
 const singleRegionRecipe = createUnityMakeupRecipeBatch('eyeliner', 1000);
 
 expectEqual(singleRegionRecipe.version, 2, 'single region recipe version');
-expectEqual(singleRegionRecipe.layerCount, 5, 'single region recipe layer count');
+expectEqual(singleRegionRecipe.layerCount, 6, 'single region recipe layer count');
 expectEqual(singleRegionRecipe.enabledLayerCount, 1, 'single region enabled count');
 expectEqual(singleRegionRecipe.activeRegions, 'eyeliner', 'single region active summary');
 expectEqual(
   singleRegionRecipe.layers.map(layer => layer.region).join(','),
-  'foundation,lip,blush,brow,eyeliner',
+  'foundation,lip,blush,brow,eyeshadow,eyeliner',
   'single region recipe keeps full-layer shape',
 );
 expectEqual(
@@ -127,9 +150,9 @@ const allRegionRecipe = createUnityMakeupRecipeBatchFromARFilterSelections(
   2000,
 );
 
-expectEqual(allRegionRecipe.layerCount, 5, 'all region recipe layer count');
-// 'all' enables every region EXCEPT lens (lens is opt-in via its own tab), so
-// 5 of the 6 emitted layers are active.
+expectEqual(allRegionRecipe.layerCount, 6, 'all region recipe layer count');
+// 'all' enables every region EXCEPT lens and eyeshadow (both opt-in), so
+// 5 of the 7 emitted layers are active.
 expectEqual(allRegionRecipe.enabledLayerCount, 5, 'all region enabled count');
 expectEqual(
   allRegionRecipe.activeRegions,
@@ -406,3 +429,67 @@ const noFace = parseFaceLandmarksMessage(
 expectEqual(noFace?.status, 'no_face', 'no_face status parsed');
 expectEqual(noFace?.landmarks.length, 0, 'no_face empty landmarks');
 expectEqual(noFace?.pose, null, 'no_face null pose');
+
+// ── 아이섀도 그래프트 사이드채널 (setEyeshadowLayers) ────────────────────────
+// eyeshadow 레이어는 ApplyRecipeJson 와이어에 실리면 Unity 파서가 전체 레시피를
+// 초기화하므로, 와이어에서 제거되고 그래프트 밴드 계약으로 번역되어야 한다.
+import {
+  buildEyeshadowLayersFromRecipe,
+  stripGraftOnlyRecipeLayers,
+} from './unityMakeupBridge';
+import {
+  DEFAULT_FULL_FACE_REGION_CONTROLS,
+  buildFullFaceMakeupRecipe,
+} from '../../../shared/contracts/fullFaceMakeupRecipe';
+
+const eyeshadowControls = {
+  ...DEFAULT_FULL_FACE_REGION_CONTROLS,
+  eyeshadow: {
+    ...DEFAULT_FULL_FACE_REGION_CONTROLS.eyeshadow,
+    enabled: true,
+    colorHex: '#B03A48',
+    intensity: 0.6,
+    finish: 'shimmer',
+    shimmer: 0.5,
+    params: {coverage: 1.2},
+  },
+};
+const eyeshadowRecipe = buildFullFaceMakeupRecipe({
+  controls: eyeshadowControls,
+  sentAtMs: 4000,
+});
+
+const eyeshadowBands = buildEyeshadowLayersFromRecipe(eyeshadowRecipe);
+expectEqual(eyeshadowBands.length, 1, 'enabled eyeshadow -> single band');
+expectEqual(eyeshadowBands[0]?.color, '#B03A48', 'band color from control');
+expectEqual(eyeshadowBands[0]?.finish, 3, 'shimmer finish enum');
+expectEqual(eyeshadowBands[0]?.shimmer, 0.5, 'shimmer gain passthrough');
+expectEqual(eyeshadowBands[0]?.height, 1.2, 'coverage param -> band height');
+expectEqual(eyeshadowBands[0]?.intensity, 0.6, 'band intensity');
+expectEqual(eyeshadowBands[0]?.surface, 0, 'band surface upper');
+
+const wireRecipe = stripGraftOnlyRecipeLayers(eyeshadowRecipe);
+expectEqual(
+  wireRecipe.layers.some(layer => layer.region === 'eyeshadow'),
+  false,
+  'eyeshadow layer stripped from ApplyRecipeJson wire',
+);
+expectEqual(wireRecipe.layerCount, 5, 'wire layer count recomputed');
+expectEqual(
+  wireRecipe.activeRegions.includes('eyeshadow'),
+  false,
+  'wire active regions exclude eyeshadow',
+);
+expectEqual(
+  wireRecipe.enabledLayerCount,
+  eyeshadowRecipe.enabledLayerCount - 1,
+  'wire enabled count recomputed',
+);
+
+// 비활성(기본) 아이섀도 → 빈 배열(밴드 클리어 계약)
+const defaultWireRecipe = buildFullFaceMakeupRecipe({sentAtMs: 5000});
+expectEqual(
+  buildEyeshadowLayersFromRecipe(defaultWireRecipe).length,
+  0,
+  'disabled eyeshadow -> empty band list (clears graft band)',
+);

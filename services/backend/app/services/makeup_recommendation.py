@@ -643,12 +643,28 @@ def _converse(
   response_schema: dict[str, Any] | None = None,
   tool_name: str | None = None,
   use_strict_tool_schema: bool | None = None,
+  timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
+  request_deadline = (
+    time.monotonic() + max(0.0, float(timeout_seconds))
+    if timeout_seconds is not None
+    else None
+  )
   converse_config = (
     BEDROCK_LONG_FORM_CONVERSE_CONFIG
     if max_tokens >= 8000
     else BEDROCK_CONVERSE_CONFIG
   )
+  if timeout_seconds is not None:
+    # Keep the socket timeout inside the caller's total provider deadline. The
+    # asyncio deadline in generate_json is still authoritative, but bounding
+    # botocore as well prevents a cancelled worker thread from lingering for
+    # the static 50/110 second read timeout.
+    bounded_timeout = max(0.1, float(timeout_seconds))
+    converse_config = converse_config.merge(Config(
+      read_timeout=bounded_timeout,
+      connect_timeout=min(10.0, bounded_timeout),
+    ))
   client_kwargs = {"region_name": settings.aws_region, "config": converse_config}
   if settings.aws_profile_name:
     client = boto3.Session(profile_name=settings.aws_profile_name).client("bedrock-runtime", **client_kwargs)
@@ -678,8 +694,25 @@ def _converse(
       "toolChoice": {"tool": {"name": tool_name}},
     }
   response = client.converse_stream(**request)
+  if request_deadline is not None and time.monotonic() >= request_deadline:
+    raise AppError(
+      504,
+      "BEDROCK_REQUEST_TIMEOUT",
+      "The Bedrock request timed out.",
+      {"providerCode": "ProviderDeadlineExceeded"},
+    )
   raw_stream = response.get("stream", [])
-  events = [event for event in raw_stream if isinstance(event, dict)]
+  events: list[dict[str, Any]] = []
+  for event in raw_stream:
+    if request_deadline is not None and time.monotonic() >= request_deadline:
+      raise AppError(
+        504,
+        "BEDROCK_REQUEST_TIMEOUT",
+        "The Bedrock request timed out.",
+        {"providerCode": "ProviderDeadlineExceeded"},
+      )
+    if isinstance(event, dict):
+      events.append(event)
 
   if response_schema is not None and tool_name:
     tool_input = _tool_input_from_stream(events, tool_name)
@@ -702,8 +735,49 @@ async def generate_json(
   timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
   started_at = time.perf_counter()
+  provider_deadline = (
+    time.monotonic() + max(0.0, float(timeout_seconds))
+    if timeout_seconds is not None
+    else None
+  )
   structured_contract = _structured_response_contract(system)
   structured_enabled = structured_contract is not None
+
+  async def invoke_converse(**kwargs: Any) -> dict[str, Any]:
+    remaining_seconds = (
+      provider_deadline - time.monotonic()
+      if provider_deadline is not None
+      else None
+    )
+    if remaining_seconds is not None and remaining_seconds <= 0:
+      raise AppError(
+        504,
+        "BEDROCK_REQUEST_TIMEOUT",
+        "The Bedrock request timed out.",
+        {"providerCode": "ProviderDeadlineExceeded"},
+      )
+    if remaining_seconds is not None:
+      kwargs["timeout_seconds"] = remaining_seconds
+    worker = asyncio.to_thread(
+      _converse,
+      settings,
+      model_id,
+      system,
+      prompt,
+      **kwargs,
+    )
+    try:
+      if remaining_seconds is None:
+        return await worker
+      return await asyncio.wait_for(worker, timeout=remaining_seconds)
+    except TimeoutError as exc:
+      raise AppError(
+        504,
+        "BEDROCK_REQUEST_TIMEOUT",
+        "The Bedrock request timed out.",
+        {"providerCode": "ProviderDeadlineExceeded"},
+      ) from exc
+
   try:
     if not model_id:
       raise AppError(503, "BEDROCK_MODEL_NOT_CONFIGURED", "The Bedrock model is not configured.")
@@ -713,12 +787,7 @@ async def generate_json(
           tool_name, response_schema = structured_contract
           prefer_strict_tool_schema = tool_name != "generate_makeup_recommendation"
           try:
-            result = await asyncio.to_thread(
-              _converse,
-              settings,
-              model_id,
-              system,
-              prompt,
+            result = await invoke_converse(
               max_tokens=max_tokens,
               response_schema=response_schema,
               tool_name=tool_name,
@@ -733,12 +802,7 @@ async def generate_json(
                 type(exc).__name__,
               )
               try:
-                result = await asyncio.to_thread(
-                  _converse,
-                  settings,
-                  model_id,
-                  system,
-                  prompt,
+                result = await invoke_converse(
                   max_tokens=max_tokens,
                   response_schema=response_schema,
                   tool_name=tool_name,
@@ -754,12 +818,7 @@ async def generate_json(
                   model_id,
                   type(tool_exc).__name__,
                 )
-                result = await asyncio.to_thread(
-                  _converse,
-                  settings,
-                  model_id,
-                  system,
-                  prompt,
+                result = await invoke_converse(
                   max_tokens=max_tokens,
                 )
             elif _forced_tool_use_is_unsupported(exc):
@@ -770,23 +829,13 @@ async def generate_json(
                 model_id,
                 type(exc).__name__,
               )
-              result = await asyncio.to_thread(
-                _converse,
-                settings,
-                model_id,
-                system,
-                prompt,
+              result = await invoke_converse(
                 max_tokens=max_tokens,
               )
             else:
               raise
         else:
-          result = await asyncio.to_thread(
-            _converse,
-            settings,
-            model_id,
-            system,
-            prompt,
+          result = await invoke_converse(
             max_tokens=max_tokens,
           )
         break

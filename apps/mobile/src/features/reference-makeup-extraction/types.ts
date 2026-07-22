@@ -102,6 +102,13 @@ export type ReferenceMakeupAreaGuide = {
   analysis: string;
   howTo: string;
   professionalPoint: string;
+  // 추천 부위별 스키마와 동일 계열의 상세 필드 (백엔드 v1 이상에서 제공, 없을 수 있음)
+  goal?: string;
+  placement?: string;
+  technique?: string;
+  reason?: string;
+  avoid?: string[];
+  steps?: Array<{order: number; instruction: string}>;
   productRecommendation: ReferenceMakeupAreaProductRecommendation;
 };
 
@@ -123,9 +130,11 @@ export type MakeupLookAttributeGroup = 'color' | 'type' | 'texture';
 export type MakeupRecipeTab = 'all' | 'eye' | 'lip' | 'cheek' | 'base';
 
 export type ReferenceMakeupExtractionData = {
+  createdAt?: string;
   photos: ReferenceMakeupPhoto[];
   loadingSteps: MakeupExtractionStep[];
   extractedMakeupLook: ReferenceMakeupExtractionResult;
+  reportId?: string;
 };
 
 export type ReferenceMakeupExtractionReportHistoryItem = {

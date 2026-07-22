@@ -817,6 +817,18 @@ async def build_makeup_feedback_conference_preview(
   if settings.analysis_provider != "bedrock":
     return fallback_messages, fallback_summary, fallback_last, "provider_fallback", None
 
+  if not settings.makeup_feedback_conference_preview_ai_enabled:
+    logger.info(
+      "[aura:feedback-conference-preview] deterministic-fallback aiCall=false",
+    )
+    return (
+      fallback_messages,
+      fallback_summary,
+      fallback_last,
+      "deterministic_fallback",
+      None,
+    )
+
   try:
     generation = MakeupFeedbackConferencePreviewBedrockService(
       settings,

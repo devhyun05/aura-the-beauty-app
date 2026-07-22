@@ -186,15 +186,18 @@ if (profileReportHub.includes('imageSource: recommendation.results[0].imageSourc
 const profileScreen = read(srcRoot, 'features/profile/screens/ProfileScreen.tsx');
 const profileRoutes = read(srcRoot, 'app/navigation/routes/profileRoutes.tsx');
 requireIncludes(profileScreen, [
-  'onPressMakeupRecommendationReport?: (reportId: string) => void;',
-  'onPressLatestMakeupRecommendation',
-  'onPressMakeupRecommendationReport(makeupRecommendationPreview.id)',
-  'onPress={onPressLatestMakeupRecommendation}',
-], 'Latest recommendation report action');
+  'onPressMakeupRecommendationReportsList?: () => void;',
+  'onPress={onPressMakeupRecommendationReportsList}',
+], 'Recommendation report list action');
 requireIncludes(profileRoutes, [
   "navigate('MakeupRecommendation', {view: 'history'})",
-  "navigate('MakeupRecommendation', {reportId})",
-], 'Profile recommendation list and exact-detail routes');
+], 'Profile recommendation list route');
+if (
+  profileScreen.includes('onPressMakeupRecommendationReport?: (reportId: string) => void;')
+  || profileRoutes.includes("navigate('MakeupRecommendation', {reportId})")
+) {
+  throw new Error('Profile recommendation preview must open history, not the latest report detail.');
+}
 
 requireIncludes(service, [
   '/makeup-recommendations/discovery',

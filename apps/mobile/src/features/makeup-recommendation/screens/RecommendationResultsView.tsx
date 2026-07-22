@@ -14,6 +14,7 @@ import {RecommendationResultsFinalScreen} from './RecommendationResultsFinalScre
 export type RecommendationResultsViewProps = {
   context?: {
     reportLabel?: string;
+    reportCreatedAt?: string;
     situationLabel?: string;
     keywordLabel?: string;
     personalColor?: string;

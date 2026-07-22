@@ -20,6 +20,7 @@ from app.services.reference_makeup_extraction import (
 )
 from app.services.owned_media import resolve_owned_source_media, trusted_media_request_payload
 from app.services.push_notifications import create_and_send_notification
+from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
 
 
@@ -243,6 +244,13 @@ async def create_filter_extraction_job(
     required=False,
   )
   request_payload = trusted_media_request_payload(settings, payload.request_payload, media)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="filter_extraction",
+    per_minute=settings.filter_extraction_generation_limit_per_minute,
+    per_day=settings.filter_extraction_generation_limit_per_day,
+  )
   report = await db.fetchrow(
     """
     insert into filter_extraction_reports (
@@ -301,6 +309,13 @@ async def analyze_filter_extraction(
         media,
       ),
     },
+  )
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="filter_extraction",
+    per_minute=settings.filter_extraction_generation_limit_per_minute,
+    per_day=settings.filter_extraction_generation_limit_per_day,
   )
 
   report = await db.fetchrow(
@@ -395,3 +410,26 @@ async def get_filter_extraction(
     raise AppError(404, "FILTER_EXTRACTION_NOT_FOUND", "Filter extraction report was not found.")
 
   return success({"report": normalize_filter_extraction_report_row(report)})
+
+
+@router.delete("/{report_id}")
+async def delete_filter_extraction(
+  report_id: UUID,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+  deleted_report = await db.fetchrow(
+    """
+    delete from filter_extraction_reports
+    where id = $1 and user_id = $2
+    returning id
+    """,
+    report_id,
+    user["id"],
+  )
+
+  if not deleted_report:
+    raise AppError(404, "FILTER_EXTRACTION_NOT_FOUND", "Filter extraction report was not found.")
+
+  return success({"deleted": True, "reportId": str(report_id)})

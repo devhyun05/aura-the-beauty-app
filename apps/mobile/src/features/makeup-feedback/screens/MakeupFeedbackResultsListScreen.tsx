@@ -10,13 +10,16 @@ import {CheckCircle2, CircleAlert} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
-import {AppScreen} from '../../../shared/ui';
+import {AppScreen, ReportOverflowMenuButton} from '../../../shared/ui';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import {getMakeupFeedbackAnalysisSourceLabel} from '../services/makeupFeedbackResultPresentation';
+import {mapMakeupFeedbackResultToViewModel} from '../redesign/makeupFeedbackResultViewModel';
 import type {MakeupFeedbackResult} from '../types';
 
 type MakeupFeedbackResultsListScreenProps = {
   error?: string;
   isLoading?: boolean;
+  onDeleteResult?: (result: MakeupFeedbackResult) => Promise<void> | void;
   onRetry?: () => void;
   onPressResult?: (result: MakeupFeedbackResult) => void;
   results: MakeupFeedbackResult[];
@@ -25,6 +28,7 @@ type MakeupFeedbackResultsListScreenProps = {
 export function MakeupFeedbackResultsListScreen({
   error,
   isLoading = false,
+  onDeleteResult,
   onRetry,
   onPressResult,
   results,
@@ -53,6 +57,9 @@ export function MakeupFeedbackResultsListScreen({
           results.map((result) => (
             <MakeupFeedbackResultCard
               key={result.id}
+              onDelete={
+                onDeleteResult ? () => onDeleteResult(result) : undefined
+              }
               onPress={() => onPressResult?.(result)}
               result={result}
             />
@@ -68,20 +75,24 @@ export function MakeupFeedbackResultsListScreen({
 }
 
 function MakeupFeedbackResultCard({
+  onDelete,
   onPress,
   result,
 }: {
+  onDelete?: () => Promise<void> | void;
   onPress: () => void;
   result: MakeupFeedbackResult;
 }) {
-  const goalLabel = result.interpretedGoal?.label ?? '메이크업 피드백';
+  const viewModel = mapMakeupFeedbackResultToViewModel(result);
+  const goalLabel = viewModel.goalLabel ?? '메이크업 피드백';
   const analysisSourceLabel = getMakeupFeedbackAnalysisSourceLabel(result.analysisSource);
   const pointCount = result.points.length;
   const strengthCount = result.strengths.length;
+  const createdAtLabel = formatReportCreatedAtLabel(result.createdAt);
 
   return (
     <Pressable
-      accessibilityLabel={`${goalLabel} 피드백, 참고 점수 ${result.score}점, 잘한 점 ${strengthCount}개, 보완할 점 ${pointCount}개, 보기`}
+      accessibilityLabel={`${goalLabel} 피드백, ${createdAtLabel}, 참고 점수 ${result.score}점, 잘한 점 ${strengthCount}개, 보완할 점 ${pointCount}개, 보기`}
       accessibilityRole="button"
       onPress={onPress}
       style={({pressed}) => [styles.card, pressed && styles.cardPressed]}>
@@ -100,11 +111,15 @@ function MakeupFeedbackResultCard({
             <Text numberOfLines={2} style={styles.title}>
               {goalLabel}
             </Text>
+            <Text numberOfLines={1} style={styles.createdAt}>
+              {createdAtLabel}
+            </Text>
           </YStack>
           <YStack style={styles.scoreBadge}>
             <Text style={styles.scoreValue}>{result.score}</Text>
             <Text style={styles.scoreLabel}>점</Text>
           </YStack>
+          {onDelete ? <ReportOverflowMenuButton onDelete={onDelete} /> : null}
         </XStack>
 
         <XStack style={styles.summaryRow}>
@@ -203,6 +218,12 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.fontSize.xs,
     fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.xs,
+  },
+  createdAt: {
+    color: colors.textSecondary,
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.xs,
   },
   scoreBadge: {

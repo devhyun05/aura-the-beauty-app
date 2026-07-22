@@ -11,10 +11,12 @@ import {FaceAnalysisReportCard} from '../components/FaceAnalysisReportCard';
 type FaceAnalysisReportsListScreenProps = {
   headerTitle?: string;
   onBack?: () => void;
+  onDeleteReport?: (reportId: string) => Promise<void> | void;
   onPressReport?: (reportId: string) => void;
 };
 
 export function FaceAnalysisReportsListScreen({
+  onDeleteReport,
   onPressReport,
 }: FaceAnalysisReportsListScreenProps) {
   const [reports, setReports] = useState<FaceAnalysisReport[]>([]);
@@ -33,14 +35,28 @@ export function FaceAnalysisReportsListScreen({
     };
   }, []);
 
+  const handleDeleteReport = useCallback(
+    async (reportId: string) => {
+      if (!onDeleteReport) {
+        return;
+      }
+      await onDeleteReport(reportId);
+      setReports(current => current.filter(report => report.id !== reportId));
+    },
+    [onDeleteReport],
+  );
+
   const renderItem = useCallback(
     ({item}: {item: FaceAnalysisReport}) => (
       <FaceAnalysisReportCard
+        onDelete={
+          onDeleteReport ? () => handleDeleteReport(item.id) : undefined
+        }
         onPress={() => onPressReport?.(item.id)}
         report={item}
       />
     ),
-    [onPressReport],
+    [handleDeleteReport, onDeleteReport, onPressReport],
   );
 
   // 목록은 서버 상한(기본 50)까지 커질 수 있어 .map 대신 FlatList로 가상화한다.

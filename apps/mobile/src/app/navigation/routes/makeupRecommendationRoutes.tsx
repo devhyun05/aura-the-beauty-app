@@ -6,7 +6,7 @@ import {
 } from '../../../features/makeup-recommendation';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
-import {getMakeupRecommendationARFilterRouteParams} from './makeupRecommendationRouteActions';
+import {getLookMakeupColors, getMakeupRecommendationStencilRouteParams} from './makeupRecommendationRouteActions';
 import type {RootScreenProps} from './routeUtils';
 
 export function MakeupRecommendationRouteScreen({
@@ -45,12 +45,23 @@ export function MakeupRecommendationRouteScreen({
         faceImageUri={canUseSelectedFlowData ? selectedFaceCapture?.imageUri : undefined}
         initialView={route.params?.view}
         onBack={handleBack}
-        onApplyAR={look =>
+        onApplyAR={look => {
+          // areaGuides가 있으면 룩 자체(부위·색·질감·강도)로 AR 레시피를 직접
+          // 빌드하고, 없으면 프리셋 폴백. 색 폴백 우선순위: areaGuides 색 >
+          // 분석 기본색(퍼스널 컬러 근거, 선택 플로우 유효 시) > 기본 팔레트.
+          const analysisColors = canUseSelectedFlowData
+            ? selectedFaceAnalysisReport?.makeupColors
+            : undefined;
+          const lookColors = getLookMakeupColors(look);
+          const mergedColors =
+            analysisColors || lookColors
+              ? {...analysisColors, ...lookColors}
+              : undefined;
           navigation.navigate(
             'ARFilter',
-            getMakeupRecommendationARFilterRouteParams(look.arFilterId),
-          )
-        }
+            getMakeupRecommendationStencilRouteParams(look, mergedColors),
+          );
+        }}
         onResultsVisibilityChange={setIsResultsVisible}
         onOpenRecommendedProducts={sourceAnalysisReportId =>
           navigation.navigate('ProductRecommendation', {

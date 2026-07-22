@@ -274,6 +274,7 @@ export type MakeupLookRecommendation = {
 export type MakeupRecommendationProfileGender = 'female' | 'male' | 'unspecified';
 export type MakeupRecommendationSession = {
   id: string;
+  createdAt?: string;
   phase: 'question' | 'ready' | 'results';
   prompt: string;
   scenarioLabel?: string;

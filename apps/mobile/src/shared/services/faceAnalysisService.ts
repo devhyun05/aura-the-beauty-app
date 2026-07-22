@@ -22,6 +22,10 @@ import type {
   FaceAnalysisStylingLook,
   FaceAnalysisStylingLookRowCategory,
   FaceAnalysisStylingLooks,
+  FaceFeatureObservationKey,
+  FaceFeatureObservations,
+  FaceAnalysisMakeupColorRegion,
+  FaceAnalysisMakeupColors,
 } from '../types/faceAnalysis';
 import {
   buildFaceAnalysisRequestPayload,
@@ -84,6 +88,14 @@ type BackendSkinAspect = {label?: string | null; description?: string | null};
 type BackendSkinPerception = Partial<
   Record<FaceAnalysisSkinPerceptionAspect, BackendSkinAspect | null>
 >;
+type BackendFeatureObservation = {
+  value?: string | null;
+  confidence?: number | null;
+  evidence?: string | null;
+};
+type BackendFeatureObservations = Partial<
+  Record<FaceFeatureObservationKey, BackendFeatureObservation | null>
+>;
 
 type BackendAnalysisResult = {
   avoidedMakeups?: BackendMakeupCard[] | null;
@@ -99,6 +111,7 @@ type BackendAnalysisResult = {
   impressionNotes?: BackendImpressionNotes | null;
   stylingLooks?: BackendStylingLooks | null;
   skinPerception?: BackendSkinPerception | null;
+  featureObservations?: BackendFeatureObservations | null;
   shortSummary?: string | null;
   skinAnalysisSummary?: string | null;
   skinType?: string | null;
@@ -140,6 +153,7 @@ type BackendMediaReference = {
 
 type BackendAnalysisJob = {
   analyzedAt?: string | null;
+  createdAt?: string | null;
   baseMakeupGuide?: string | null;
   detailPayload?: {
     request?: BackendAnalysisRequest | null;
@@ -510,6 +524,73 @@ function parseSkinPerception(
   return parsed;
 }
 
+const FEATURE_OBSERVATION_KEYS: readonly FaceFeatureObservationKey[] = [
+  'eyelidType',
+  'upperLidHooding',
+  'lowerLidSagging',
+  'aegyoSal',
+  'browDensity',
+  'cheekboneHeight',
+  'cheekVolume',
+  'eyeContrast',
+  'cheekContrast',
+  'lipColorContrast',
+  'lipFullness',
+];
+
+// 사진 판정 원본을 보고서 필드로 옮긴다. value/evidence 텍스트 + confidence 숫자가
+// 다 있는 부면만 통과 — 없는 값을 지어내지 않는다. 'unclear' 등 판정 보류값도 그대로
+// 보존하고, enum 유효성·confidence 임계 생략은 프로파일 빌더가 처리한다.
+const MAKEUP_COLOR_REGIONS: readonly FaceAnalysisMakeupColorRegion[] = [
+  'lip',
+  'blush',
+  'eyeshadow',
+  'brow',
+  'eyeliner',
+];
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+// 부위별 hex 색 파싱. 형식(#RRGGBB) 검증 통과한 것만 담는다 — 이상하면 그 부위는
+// 생략(소비처가 프리셋 색으로 폴백). 없는 값을 지어내지 않는다.
+function parseMakeupColors(
+  value: Partial<Record<string, unknown>> | null | undefined,
+): FaceAnalysisMakeupColors | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const parsed: FaceAnalysisMakeupColors = {};
+  for (const region of MAKEUP_COLOR_REGIONS) {
+    const hex = firstText(value[region] as string | undefined);
+    if (hex && HEX_COLOR_PATTERN.test(hex)) {
+      parsed[region] = hex.toLowerCase();
+    }
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
+function parseFeatureObservations(
+  value: BackendFeatureObservations | null | undefined,
+): FaceFeatureObservations | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const parsed: FaceFeatureObservations = {};
+  for (const key of FEATURE_OBSERVATION_KEYS) {
+    const entry = value[key];
+    const obsValue = firstText(entry?.value);
+    const confidence = entry?.confidence;
+    if (!obsValue || typeof confidence !== 'number' || !Number.isFinite(confidence)) {
+      continue;
+    }
+    parsed[key] = {
+      value: obsValue,
+      confidence,
+      evidence: firstText(entry?.evidence) ?? '',
+    };
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
 function resolveMakeupImageStatus(
   card: BackendMakeupCard | null | undefined,
   generatedImageUrl: string | undefined,
@@ -858,6 +939,7 @@ function mapBackendJobToFaceAnalysisReport(
 
   return {
     id: reportId,
+    createdAt: job.createdAt?.trim() || undefined,
     analyzedAt: requireAnalysisText(job, 'analyzedAt', job.analyzedAt),
     // 과거 보고서 복원용 측정 원본 — 서버 사진 URL 을 오버레이 이미지로 주입한다.
     measurements: parseFaceAnalysisMeasurements(job.detailPayload?.request?.measurements, {
@@ -873,11 +955,15 @@ function mapBackendJobToFaceAnalysisReport(
     faceShape: requireAnalysisText(job, 'faceShape', result.faceShape, job.faceShape),
     imageSource: reportImageSource,
     makeupGuideline,
+    makeupColors: parseMakeupColors(
+      (result as {makeupColors?: Partial<Record<string, unknown>>}).makeupColors,
+    ),
     personalColor,
     regionNotes: parseRegionNotes(result.regionNotes),
     impressionNotes: parseImpressionNotes(result.impressionNotes),
     stylingLooks: parseStylingLooks(result.stylingLooks),
     skinPerception: parseSkinPerception(result.skinPerception),
+    featureObservations: parseFeatureObservations(result.featureObservations),
     recommendedMakeups: mapMakeupCards(
       reportId,
       result.recommendedMakeups,

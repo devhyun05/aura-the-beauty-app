@@ -846,6 +846,60 @@ SKIN_PERCEPTION_ASPECTS = (
 )
 
 
+# 1층 프로파일의 사진 판정(VLM) 부면 — 랜드마크로 불가한 속성만(쌍꺼풀 유형·상/하
+# 안검 처짐·애교살·눈썹 숱·광대 위치/볼륨·입술 혈색 대비). 각 부면은 {value(enum),
+# confidence(0..1), evidence(한 줄 근거)}. 'unclear'는 정직한 판정 보류값 — 모바일
+# faceFeatureProfile 빌더가 unclear·저confidence를 슬롯 null(생략)로 매핑한다.
+# 참고: docs/faceData_WEI/AURA_FACE_FEATURE_PROFILE_PLAN_KO_v0.1.md §2.2
+FEATURE_OBSERVATION_ENUMS: dict[str, tuple[str, ...]] = {
+  "eyelidType": ("monolid", "inner", "outer", "hooded", "unclear"),
+  "upperLidHooding": ("none", "mild", "pronounced", "unclear"),
+  "lowerLidSagging": ("none", "mild", "pronounced", "unclear"),
+  "aegyoSal": ("present", "absent", "unclear"),
+  "browDensity": ("sparse", "medium", "dense", "unclear"),
+  "cheekboneHeight": ("low", "mid", "high", "unclear"),
+  "cheekVolume": ("flat", "medium", "full", "unclear"),
+  # 부위별 대비(주변 피부 대비 명도/색 대비) — 2층 시각 무게 지도의 입력.
+  # lip은 lipColorContrast로 이미 있고 brow는 browDensity를 프록시로 쓴다. 눈·볼만
+  # 신설해 4부위 대비를 완성한다(리서치 W-1/W-3: 시각 무게 = 부위별 대비).
+  "eyeContrast": ("low", "medium", "high", "unclear"),
+  "cheekContrast": ("low", "medium", "high", "unclear"),
+  "lipColorContrast": ("low", "medium", "high", "unclear"),
+  # 입술 볼륨(자기 얼굴 대비 얇음/도톰) — 리서치 L-1(얇은 입술→국소 오버립) 입력.
+  "lipFullness": ("thin", "medium", "full", "unclear"),
+}
+FEATURE_OBSERVATION_KEYS = tuple(FEATURE_OBSERVATION_ENUMS.keys())
+
+
+def _feature_observation(values: tuple[str, ...]) -> dict[str, Any]:
+  return _obj(
+    {
+      "value": {"type": "string", "enum": list(values)},
+      "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+      "evidence": _STR,
+    },
+    ["value", "confidence", "evidence"],
+  )
+
+
+def _build_feature_observations_schema() -> dict[str, Any]:
+  return _obj(
+    {
+      key: _feature_observation(values)
+      for key, values in FEATURE_OBSERVATION_ENUMS.items()
+    },
+    list(FEATURE_OBSERVATION_KEYS),
+  )
+
+
+# AR 필터 색 개인화(B)용 — 부위별 메이크업 색을 hex로. makeupGuideline(텍스트)은
+# 그대로 두고 색만 담는 병렬 필드라 기존 파서를 깨지 않는다. 값은 사용자의
+# measuredPersonalColor에 근거한, 해당 부위에 실제로 어울리는 메이크업 색.
+# AR 레시피 부위(lip/blush/eyeshadow/brow/eyeliner)와 매칭 — foundation은 스킨-세이프라 제외.
+MAKEUP_COLOR_KEYS = ("lip", "blush", "eyeshadow", "brow", "eyeliner")
+_HEX_COLOR = {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"}
+
+
 def _build_face_analysis_tool_schema() -> dict[str, Any]:
   guideline_keys = ["brow", "blush", "highlight", "eyeshadow", "eyeliner", "lip"]
   region_note = _obj(
@@ -890,6 +944,10 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "skinPerception": skin_perception,
       "baseMakeupGuide": _STR,
       "makeupGuideline": _obj({key: _STR for key in guideline_keys}, guideline_keys),
+      "makeupColors": _obj(
+        {key: _HEX_COLOR for key in MAKEUP_COLOR_KEYS},
+        list(MAKEUP_COLOR_KEYS),
+      ),
       "recommendedMakeups": {
         "type": "array",
         "minItems": RECOMMENDED_MAKEUP_COUNT,
@@ -931,6 +989,7 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
         {"natural": styling_look, "glam": styling_look},
         ["natural", "glam"],
       ),
+      "featureObservations": _build_feature_observations_schema(),
     },
     [
       "faceShape",
@@ -942,10 +1001,12 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "skinPerception",
       "baseMakeupGuide",
       "makeupGuideline",
+      "makeupColors",
       "recommendedMakeups",
       "regionNotes",
       "impressionNotes",
       "stylingLooks",
+      "featureObservations",
     ],
   )
 
@@ -969,12 +1030,16 @@ PERCEPTION_FIELD_KEYS = (
 PRESCRIPTION_FIELD_KEYS = (
   "baseMakeupGuide",
   "makeupGuideline",
+  "makeupColors",
   "recommendedMakeups",
 )
 STYLING_FIELD_KEYS = ("stylingLooks",)
 # 구조화 피부(#5)는 독립 병렬 레그로 둔다 — perception/prescription이 이미 ~23s라
 # 어느 쪽에 붙이면 30s를 넘긴다. 별도 레그면 max(레그)에 흡수돼 지연 flat.
 SKIN_FIELD_KEYS = ("skinPerception",)
+# 사진 판정(VLM) 특징 부면도 skin과 같은 이유로 독립 레그 — 짧은 enum이라 지연은
+# max(레그)에 흡수. skin(피부)과 성격이 달라 별도 레그로 분리한다.
+FEATURE_FIELD_KEYS = ("featureObservations",)
 
 
 def _subset_face_analysis_schema(keys: tuple[str, ...]) -> dict[str, Any]:
@@ -987,6 +1052,7 @@ PERCEPTION_TOOL_SCHEMA = _subset_face_analysis_schema(PERCEPTION_FIELD_KEYS)
 PRESCRIPTION_TOOL_SCHEMA = _subset_face_analysis_schema(PRESCRIPTION_FIELD_KEYS)
 STYLING_TOOL_SCHEMA = _subset_face_analysis_schema(STYLING_FIELD_KEYS)
 SKIN_TOOL_SCHEMA = _subset_face_analysis_schema(SKIN_FIELD_KEYS)
+FEATURE_TOOL_SCHEMA = _subset_face_analysis_schema(FEATURE_FIELD_KEYS)
 
 # 드리프트 가드(임포트 시 즉시 실패): 그룹 키가 서로 겹치지 않고 합집합이 전체 required와
 # 정확히 일치해야 한다. 전체 스키마에 필드를 추가하고 그룹 배정을 빠뜨리면 여기서 잡힌다.
@@ -996,6 +1062,7 @@ _FANOUT_GROUP_KEYS = (
   + PRESCRIPTION_FIELD_KEYS
   + STYLING_FIELD_KEYS
   + SKIN_FIELD_KEYS
+  + FEATURE_FIELD_KEYS
 )
 if len(_FANOUT_GROUP_KEYS) != len(set(_FANOUT_GROUP_KEYS)):
   raise RuntimeError("fan-out 스키마 그룹 키가 겹칩니다(anchor/perception/prescription).")
@@ -1027,6 +1094,11 @@ _FANOUT_SKIN_DIRECTIVE = (
   "이번 호출에서는 skinPerception 하나만 작성해. 사진에서 관찰 가능한 피부 부면을 "
   "각각 {label(짧은 상태명), description(한 문장 관찰 설명)}으로. 의학적 진단은 하지 마."
 )
+_FANOUT_FEATURE_DIRECTIVE = (
+  "이번 호출에서는 featureObservations 하나만 작성해. 사진에서만 판정 가능한 이목구비 "
+  "형태 부면을 각각 {value(정해진 enum 중 하나), confidence(0..1), evidence(한 줄 근거)}로. "
+  "확실하지 않으면 value를 반드시 'unclear'로 두고 confidence를 낮게. 지어내지 마."
+)
 
 DEFAULT_IMPRESSION_AXES = (
   {"key": "softness", "leftLabel": "부드러움", "rightLabel": "또렷함", "value": 0.0},
@@ -1039,6 +1111,9 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "baseMakeupGuide, makeupGuideline, recommendedMakeups, beautyGuide, "
   "regionNotes, impressionNotes, stylingLooks. "
   "makeupGuideline keys: brow, blush, highlight, eyeshadow, eyeliner, lip. "
+  "makeupColors keys: lip, blush, eyeshadow, brow, eyeliner. Each value is a "
+  "'#RRGGBB' hex color grounded in the user's measuredPersonalColor and "
+  "consistent with makeupGuideline, natural makeup saturation (no neon). "
   "recommendedMakeups must be exactly 1 object. The object keys: title, "
   "subtitle, description, tags. tags must contain exactly 2 strings. "
   "beautyGuide is optional but recommended. beautyGuide keys: bestColors, "
@@ -1063,7 +1138,14 @@ ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "styled for this look), why (why it suits this user). natural and glam "
   "must be grounded in the same face/personal-color analysis but differ in "
   "intensity — natural is a light daily version, glam is a stronger, more "
-  "defined version."
+  "defined version. "
+  "featureObservations keys: eyelidType, upperLidHooding, lowerLidSagging, "
+  "aegyoSal, browDensity, cheekboneHeight, cheekVolume, eyeContrast, "
+  "cheekContrast, lipColorContrast, lipFullness. "
+  "Each value is an object with keys value (one of the allowed enum options, "
+  "or 'unclear' when the photo does not permit a confident call), confidence "
+  "(0..1), evidence (one short Korean sentence citing the photo). Never invent "
+  "a definite value when unsure — use 'unclear'."
 )
 
 # ── 지시문 모듈화 (레그별 슬림 프롬프트용) ────────────────────────────────────
@@ -1140,10 +1222,40 @@ _ANALYSIS_SEC_SKIN = (
   "darkCircles(다크서클), toneUniformity(톤 균일감) 9개 부면 각각을 {label(짧은 상태명), "
   "description(사진에서 관찰 가능한 한 문장, 의학적 진단 금지)}로 채워. "
 )
+_ANALYSIS_SEC_FEATURE = (
+  "featureObservations는 top-level 필드로, 사진에서만 판정 가능한 이목구비 형태 부면을 "
+  "각각 {value, confidence, evidence}로 채워. value는 정해진 enum 중 하나여야 해: "
+  "eyelidType(monolid 무쌍/inner 속쌍/outer 겉쌍/hooded 헐린눈/unclear) — 판별 기준: "
+  "outer(겉쌍)는 쌍꺼풀 라인이 눈 앞머리부터 꼬리까지 전 구간에서 또렷하게 보이고 눈을 뜬 "
+  "상태에서도 라인과 눈꺼풀 접힘 면이 분명히 드러남. inner(속쌍)는 라인이 눈 앞머리 쪽에서 "
+  "살에 묻혀 보이지 않다가 중앙~꼬리에서만 가늘게 드러남. monolid(무쌍)는 접힘 라인이 전 "
+  "구간에 없음. hooded는 라인 유무와 무관하게 눈두덩 살이 접힘 라인을 위에서 덮어 가림. "
+  "라인이 전 구간에서 보이면 앞머리가 다소 옅어도 inner가 아니라 outer로 판정해. "
+  "확대해 보아도 이 기준으로 구분이 안 되면 반드시 unclear. "
+  "upperLidHooding 상안검 처짐(none/mild/pronounced/unclear), "
+  "lowerLidSagging 하안검 처짐(none/mild/pronounced/unclear) — 상안검과 하안검을 각각 따로 판정해, "
+  "aegyoSal 애교살(present/absent/unclear), browDensity 눈썹 숱(sparse/medium/dense/unclear), "
+  "cheekboneHeight 광대 위치(low/mid/high/unclear), cheekVolume 볼 볼륨(flat/medium/full/unclear), "
+  "eyeContrast 눈매 대비(주변 피부 대비 눈·속눈썹·라인의 명도 대비, low/medium/high/unclear), "
+  "cheekContrast 볼 대비(주변 피부 대비 볼 혈색·음영 대비, low/medium/high/unclear), "
+  "lipColorContrast 입술 혈색 대비(low/medium/high/unclear), "
+  "lipFullness 입술 볼륨(본인 얼굴 크기 대비 얇음 thin/중간 medium/도톰 full/unclear — "
+  "모집단 표준이 아니라 그 얼굴 안에서의 상대 볼륨). "
+  "confidence는 0..1 확신도, evidence는 그렇게 본 사진 근거 한 줄. "
+  "조명·각도·안경·그림자로 확실치 않으면 value를 'unclear'로 두고 confidence를 낮춰 — 절대 지어내지 마. "
+  "이 필드는 사진 형태 판정만 담고 색·메이크업 처방은 만들지 마. "
+)
 _ANALYSIS_SEC_PRESCRIPTION = (
   "baseMakeupGuide는 top-level 필드로 작성하고, makeupGuideline 안에는 brow, eyeshadow, lip, highlight, eyeliner, blush만 작성해. "
   "makeupGuideline의 각 항목은 촬영 사진과 보고서 판단을 바탕으로 한 문장으로 짧게 작성해. "
   "makeupGuideline에는 단순 색상 추천뿐 아니라 배치 가이드도 포함해. "
+  "makeupColors는 top-level 필드로 lip, blush, eyeshadow, brow, eyeliner 각각에 대해 "
+  "'#RRGGBB' 6자리 hex 색을 하나씩 채워. 이 색은 요청 메타데이터의 measuredPersonalColor "
+  "(실측 퍼스널 컬러 톤·축)에 근거해서, 그 부위에 실제로 어울리는 메이크업 제품 색이어야 해 "
+  "— makeupGuideline 텍스트에서 말한 색과 일관되게. 립은 실제 립 제품 색, 블러셔는 볼 발색, "
+  "eyeshadow는 눈두덩 색, brow는 눈썹 색, eyeliner는 라인 색. measuredPersonalColor가 "
+  "insufficient거나 없으면 사진 관찰에 근거한 무난한 색으로. AR 필터에 그대로 쓰이니 "
+  "실물 메이크업으로 자연스러운 채도·명도를 지켜(형광·순색 금지). "
   "brow는 눈썹 모양/결/두께 방향, eyeshadow는 색과 눈두덩이 배치, lip은 립 컬러와 립라인 방향, "
   "highlight는 T존/눈밑/광대 등 위치, eyeliner는 점막/꼬리/두께, blush는 광대/볼 위치와 확산 방향을 설명해. "
   "추천 메이크업은 위 보고서에서 판단한 퍼스널 컬러, 얼굴형, 톤 요약, 추천 무드, 눈매, 입술 톤, 헤어 방향에 근거해서 정확히 1개만 작성해. "
@@ -1171,6 +1283,7 @@ _ANALYSIS_STAGE_SECTIONS = {
   "anchor": _ANALYSIS_SEC_ANCHOR,
   "perception": _ANALYSIS_SEC_PERCEPTION,
   "skin": _ANALYSIS_SEC_SKIN,
+  "feature": _ANALYSIS_SEC_FEATURE,
   "prescription": _ANALYSIS_SEC_PRESCRIPTION,
   "styling": _ANALYSIS_SEC_STYLING,
 }
@@ -2814,9 +2927,10 @@ class OpenAIAnalysisService:
       except Exception as exc:  # noqa: BLE001 - 프리뷰 부가기능은 분석을 깨지 않는다.
         logger.warning("[aura:bedrock] anchor-callback failed: %s", exc.__class__.__name__)
 
-    # 2) perception ∥ prescription ∥ styling ∥ skin — 앵커 주입, 동시 실행(5분할).
-    #    독립 병렬 레그라 지연은 max(레그)에 흡수. prescription에서 스타일링을 떼어
-    #    병목 레그를 낮췄다.
+    # 2) perception ∥ prescription ∥ styling ∥ skin ∥ feature — 앵커 주입, 동시
+    #    실행(6분할). 독립 병렬 레그라 지연은 max(레그)에 흡수. prescription에서
+    #    스타일링을 떼어 병목 레그를 낮췄고, feature(사진 형태 판정)는 짧은 enum이라
+    #    max에 묻힌다.
     def leg(stage: str, directive: str, schema: dict[str, Any]):
       return asyncio.to_thread(
         self._bedrock_invoke_tool_sync,
@@ -2836,13 +2950,14 @@ class OpenAIAnalysisService:
       leg("prescription", _FANOUT_PRESCRIPTION_DIRECTIVE, PRESCRIPTION_TOOL_SCHEMA),
       leg("styling", _FANOUT_STYLING_DIRECTIVE, STYLING_TOOL_SCHEMA),
       leg("skin", _FANOUT_SKIN_DIRECTIVE, SKIN_TOOL_SCHEMA),
+      leg("feature", _FANOUT_FEATURE_DIRECTIVE, FEATURE_TOOL_SCHEMA),
       return_exceptions=True,
     )
     # fail-closed: 한쪽이라도 실패하면 전체 실패(현행 all-or-nothing 시맨틱 보존).
     for result in results:
       if isinstance(result, BaseException):
         raise result
-    perception_raw, prescription_raw, styling_raw, skin_raw = results
+    perception_raw, prescription_raw, styling_raw, skin_raw, feature_raw = results
 
     merged: dict[str, Any] = {}
     for key in ANCHOR_FIELD_KEYS:
@@ -2855,6 +2970,8 @@ class OpenAIAnalysisService:
       merged[key] = styling_raw.get(key)
     for key in SKIN_FIELD_KEYS:
       merged[key] = skin_raw.get(key)
+    for key in FEATURE_FIELD_KEYS:
+      merged[key] = feature_raw.get(key)
 
     parsed = self._normalize_analysis_result(merged)
     logger.info(

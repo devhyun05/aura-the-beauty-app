@@ -54,6 +54,7 @@ EXPECTED_TABLES = {
   "product_engagement_events",
   "product_preference_profiles",
   "product_request_rate_limits",
+  "report_request_rate_limits",
   "product_color_cohort_memberships",
   "ar_filters",
   "user_ar_filter_states",

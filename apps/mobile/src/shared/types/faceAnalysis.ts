@@ -11,6 +11,20 @@ export interface FaceAnalysisMakeupGuideline {
   lip: string;
 }
 
+// AR 필터 색 개인화(B) — 분석이 퍼스널 컬러 근거로 낸 부위별 hex. makeupGuideline
+// 텍스트와 별개 필드. 부위 키는 AR 레시피 데코 부위와 매칭(foundation 제외).
+// 이 필드 추가 이전 보고서엔 없다(어댑터가 부재를 "프리셋 색 유지"로 처리).
+export type FaceAnalysisMakeupColorRegion =
+  | 'lip'
+  | 'blush'
+  | 'eyeshadow'
+  | 'brow'
+  | 'eyeliner';
+
+export type FaceAnalysisMakeupColors = Partial<
+  Record<FaceAnalysisMakeupColorRegion, string>
+>;
+
 export interface FaceAnalysisMakeupCard {
   id: string;
   title: string;
@@ -95,10 +109,22 @@ export type FaceAnalysisSkinPerception = Record<
   FaceAnalysisSkinAspect
 >;
 
+// 사진 판정(VLM) 특징 부면 원본 — 순수 계약(shared/contracts/faceFeatureProfile)에
+// 정의하고 여기서 재수출한다. 계약을 RN 무의존으로 유지해 밴드 판정·프로파일 빌더
+// (계약 러너가 plain node로 실행)가 이 파일의 react-native 의존을 끌지 않게 한다.
+import type {FaceFeatureObservations} from '../contracts/faceFeatureProfile';
+
+export type {
+  FaceFeatureObservationRaw,
+  FaceFeatureObservationKey,
+  FaceFeatureObservations,
+} from '../contracts/faceFeatureProfile';
+
 export interface FaceAnalysisReport {
   id: string;
   title: string;
   reportTitle: string;
+  createdAt?: string;
   analyzedAt: string;
   imageSource: ImageSourcePropType;
   environmentLabel: string;
@@ -113,6 +139,8 @@ export interface FaceAnalysisReport {
   skinAnalysisSummary: string;
   baseMakeupGuide: string;
   makeupGuideline: FaceAnalysisMakeupGuideline;
+  // 부위별 hex(퍼스널 컬러 근거) — AR 필터 색 개인화 소스. 구버전 보고서엔 없음.
+  makeupColors?: FaceAnalysisMakeupColors;
   recommendedMakeups: FaceAnalysisMakeupCard[];
   avoidedMakeups: FaceAnalysisMakeupCard[];
   // 서버 detail_payload.request.measurements 에서 복원한 온디바이스 측정 원본 —
@@ -125,4 +153,7 @@ export interface FaceAnalysisReport {
   impressionNotes?: FaceAnalysisImpressionNotes;
   stylingLooks?: FaceAnalysisStylingLooks;
   skinPerception?: FaceAnalysisSkinPerception;
+  // 사진 판정(VLM) 특징 부면 — 이 필드 추가 이전 보고서에는 없다(어댑터가 부재를
+  // 생략으로 처리). 1층 프로파일 VLM 슬롯의 소스.
+  featureObservations?: FaceFeatureObservations;
 }

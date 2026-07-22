@@ -1,4 +1,10 @@
 import type {FilterParams, LensLayer, OverlayLayer} from './bridge/types';
+import {
+  AR_BLUSH_COLORS,
+  AR_BLUSH_DEFAULT_COLOR,
+  AR_BLUSH_DEFAULT_SHAPE,
+  AR_BLUSH_SHAPES,
+} from '../../../../shared/contracts/arBlushCatalog';
 
 export interface FilterPreset {
   id: string;
@@ -31,8 +37,11 @@ export const BARE: FilterParams = {
   // R2 그라데 — 색2는 색1과 동일 시작(단색), 강도 0 = 끔 = 기존 출력
   lipColor2: '#C94F6D',
   lipGradient: 0,
-  blushColor: '#F08FA0',
+  blushColor: AR_BLUSH_DEFAULT_COLOR.hex,
   blushIntensity: 0,
+  blushShape: AR_BLUSH_DEFAULT_SHAPE.value,
+  blushLift: AR_BLUSH_DEFAULT_SHAPE.lift,
+  blushSpread: AR_BLUSH_DEFAULT_SHAPE.spread,
   blushFinish: 0, // 새틴(기본)
   blushShimmer: 0.5,
   blushMaterial: 0, // 없음(기본). 벨벳=1 메탈=2 홀로그램=3
@@ -164,8 +173,9 @@ export const PRESETS: FilterPreset[] = [
       foundationFinish: 0, // 새틴
       lipColor: '#D96C7B',
       lipIntensity: 0.35,
-      blushColor: '#F2A0AC',
-      blushIntensity: 0.25,
+      blushColor: AR_BLUSH_COLORS[3].hex,
+      blushIntensity: 0.55,
+      blushShape: AR_BLUSH_SHAPES[3].value, // 데일리
       eyeshadowColor: '#C29A7B',
       eyeshadowIntensity: 0.28,
       irisColor: '#5B7B8C',
@@ -223,8 +233,9 @@ export const PRESETS: FilterPreset[] = [
       foundationFinish: 2, // 듀이
       lipColor: '#E04E68',
       lipIntensity: 0.55,
-      blushColor: '#F08698',
-      blushIntensity: 0.45,
+      blushColor: AR_BLUSH_COLORS[5].hex,
+      blushIntensity: 0.72,
+      blushShape: AR_BLUSH_SHAPES[4].value, // 러블리
       eyeshadowColor: '#D89AA0',
       eyeshadowIntensity: 0.45,
       irisColor: '#6E8B5B',
@@ -284,8 +295,9 @@ export const PRESETS: FilterPreset[] = [
       foundationFinish: 0, // 새틴
       lipColor: '#F2846B',
       lipIntensity: 0.5,
-      blushColor: '#F7A98C',
-      blushIntensity: 0.4,
+      blushColor: AR_BLUSH_COLORS[1].hex,
+      blushIntensity: 0.68,
+      blushShape: AR_BLUSH_SHAPES[6].value, // 선키스드 소프트
       eyeshadowColor: '#E0A183',
       eyeshadowIntensity: 0.55,
       irisColor: '#8A6A4A',
@@ -345,8 +357,9 @@ export const PRESETS: FilterPreset[] = [
       foundationFinish: 2, // 듀이
       lipColor: '#B01E3C',
       lipIntensity: 0.7,
-      blushColor: '#D97386',
-      blushIntensity: 0.3,
+      blushColor: AR_BLUSH_COLORS[7].hex,
+      blushIntensity: 0.82,
+      blushShape: AR_BLUSH_SHAPES[2].value, // 드레이핑
       // 고운 글리터 블러셔 — 부드러운 윤곽(feather 1) + 곱고 촘촘 + 은은. (파티클=글리터 도구,
       // 진짜 펄은 MatCap/연속 sheen 예정)
       blushParticleSize: 0.35,
@@ -504,8 +517,9 @@ export const PRESETS: FilterPreset[] = [
       foundationFinish: 1, // 매트
       lipColor: '#A65560',
       lipIntensity: 0.4,
-      blushColor: '#C98A93',
-      blushIntensity: 0.2,
+      blushColor: AR_BLUSH_COLORS[6].hex,
+      blushIntensity: 0.58,
+      blushShape: AR_BLUSH_SHAPES[2].value, // 드레이핑
       eyeshadowColor: '#5C4A46',
       eyeshadowIntensity: 0.8,
       // legacy 렌즈 off — 실제 렌즈는 아래 lensLayers(레이어드)로 이관
@@ -623,15 +637,8 @@ export const BROW_COLORS = [
   '#7A6350',
 ];
 
-/** 블러셔 스와치 (로즈~피치~코랄) */
-export const BLUSH_COLORS = [
-  '#F08FA0',
-  '#E86A80',
-  '#E89A7A',
-  '#D96C7B',
-  '#C96A5E',
-  '#B85C6E',
-];
+/** 공통 AR 블러셔 카탈로그의 웜·뉴트럴·쿨 8색. */
+export const BLUSH_COLORS = AR_BLUSH_COLORS.map(color => color.hex);
 
 /** 하이라이터 스와치 (웜 화이트~샴페인~펄핑크) */
 export const HIGHLIGHT_COLORS = [

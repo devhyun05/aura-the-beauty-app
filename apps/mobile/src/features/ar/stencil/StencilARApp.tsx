@@ -55,6 +55,7 @@ import type {
   SymmetryParams,
 } from './src/bridge/types';
 import { BARE, PRESETS } from './src/presets';
+import type { StencilInitialLook } from './stencilInitialLook';
 import { suggestStyleName } from './src/storage/styleStore';
 import {
   loadAutoFit,
@@ -116,6 +117,7 @@ import {
   upsertEntry,
 } from './src/composer/fitSheets';
 import type {FitDelta} from './src/composer/fitSheets';
+import {loadAnalysisFitSheet} from '../services/personalFitLoad';
 import {
   FIT_HANDLE_REGIONS,
   FIT_HANDLE_RULES,
@@ -464,21 +466,22 @@ const TEXTUREMAP_SPEC = {
 
 type StencilARAppProps = {
   onBack?: () => void;
+  initialLook?: StencilInitialLook;
 };
 
 // The stencil source includes authoring/debug utilities that are useful while
 // developing the Unity scene but are not part of AURA's customer-facing AR UI.
 const SHOW_INTERNAL_AR_TOOLS = false;
 
-function App({ onBack }: StencilARAppProps) {
+function App({ onBack, initialLook }: StencilARAppProps) {
   return (
     <SafeAreaProvider>
-      <FilterScreen onBack={onBack} />
+      <FilterScreen onBack={onBack} initialLook={initialLook} />
     </SafeAreaProvider>
   );
 }
 
-function FilterScreen({ onBack }: StencilARAppProps) {
+function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
   const insets = useSafeAreaInsets();
   const cameraSessionActive = useCameraSessionActive();
   const unityRef = useRef<UnityView | null>(null);
@@ -813,10 +816,18 @@ function FilterScreen({ onBack }: StencilARAppProps) {
       setUserProducts(products);
     });
     // 내 핏(§5 A13) — 시트가 있으면 다음 컴파일부터 자동 적용(메인 시트).
-    loadFitSheets().then(store => {
-      fitSheetsRef.current = store.sheets;
+    // 로드 후, 최신 분석에서 파생한 "분석 맞춤 핏"을 라이브러리에 upsert한다(기본은
+    // 미적용 = 원본; mainId는 저장값 존중). 사용자가 ★로 켜면 그 핏, 끄면 원본.
+    loadFitSheets().then(async store => {
+      let sheets = store.sheets;
+      const analysisSheet = await loadAnalysisFitSheet();
+      if (analysisSheet) {
+        const rest = sheets.filter(s => s.id !== analysisSheet.id);
+        sheets = [...rest, analysisSheet as unknown as FitSheetData];
+      }
+      fitSheetsRef.current = sheets;
       mainFitIdRef.current = store.mainId;
-      setFitSheets(store.sheets);
+      setFitSheets(sheets);
       setMainFitId(store.mainId);
     });
     loadAutoFit().then(record => {
@@ -1381,6 +1392,8 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     const applyAutoFit = autoFitPreviewActiveRef.current
       ? autoFitPreviewAfterRef.current
       : autoFit?.accepted === true;
+    // 분석 맞춤 핏은 이제 baseDeltas가 아니라 저장된 핏 시트(mainId 토글)로 적용된다.
+    // baseDeltas는 기존 dev autoFit 기저만 담는다.
     const baseDeltas = autoFitPreviewActiveRef.current
       ? (applyAutoFit ? autoFit?.deltas ?? [] : [])
       : acceptedAutoFitDeltas(autoFit);
@@ -1910,6 +1923,25 @@ function FilterScreen({ onBack }: StencilARAppProps) {
     },
     [commitEdit, treeEditTag, changeTree],
   );
+
+  // 외부 주입 시작 룩(메이크업 추천 등) — 마운트 1회, lookExtracted와 같은 관문으로
+  // 트리 적용. Unity가 아직 부팅 전이어도 컴파일 결과가 compiledRef에 남아
+  // ready 시 resyncAll이 재전송하므로 타이밍 레이스가 없다.
+  const initialLookAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!initialLook || initialLookAppliedRef.current) return;
+    initialLookAppliedRef.current = true;
+    changeTreeUser(
+      decomposeToTree(
+        { ...BARE, ...initialLook.params },
+        [],
+        initialLook.label,
+        [],
+        initialLook.eyeshadowLayers ?? [],
+      ),
+    );
+  }, [initialLook, changeTreeUser]);
+
 
   // 제품 저장은 라이브러리와 잎 참조를 한 번에 교체한다. prepared 배열 하나를
   // state/ref/disk가 공유하고, 새 제품 ref가 든 트리만 정확히 한 번 컴파일한다.

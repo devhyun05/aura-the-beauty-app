@@ -464,7 +464,11 @@ class _FakeBedrockClient:
 
 
 def test_bedrock_returns_validated_ai_text_instead_of_server_variants(monkeypatch):
-  settings = Settings(ai_provider="bedrock", bedrock_analysis_model_id="test-preview-model")
+  settings = Settings(
+    ai_provider="bedrock",
+    bedrock_analysis_model_id="test-preview-model",
+    makeup_feedback_conference_preview_ai_enabled=True,
+  )
   service = MakeupFeedbackConferencePreviewBedrockService(settings)
   output = _valid_output()
   fake_client = _FakeBedrockClient(output)
@@ -504,6 +508,30 @@ def test_non_bedrock_provider_returns_safe_four_role_preview():
   assert last_speaker == messages[-1]["agentId"] == "coach"
   assert "사용자 목적" in summary
   assert status == "provider_fallback"
+  assert error is None
+
+
+def test_cost_controlled_preview_does_not_call_bedrock(monkeypatch):
+  settings = Settings(
+    ai_provider="bedrock",
+    bedrock_analysis_model_id="test-preview-model",
+    makeup_feedback_conference_preview_ai_enabled=False,
+  )
+
+  async def unexpected_generation(self, request_payload):
+    raise AssertionError("conference preview must not make a second AI call")
+
+  monkeypatch.setattr(
+    MakeupFeedbackConferencePreviewBedrockService,
+    "generate",
+    unexpected_generation,
+  )
+  messages, _, _, status, error = asyncio.run(
+    build_makeup_feedback_conference_preview(_request_payload(), settings),
+  )
+
+  _assert_safe_fallback(messages)
+  assert status == "deterministic_fallback"
   assert error is None
 
 
@@ -556,7 +584,11 @@ def test_seed_aware_fallback_starts_with_other_speaker_and_connector():
 
 
 def test_bedrock_failure_and_timeout_return_safe_fallback(monkeypatch):
-  settings = Settings(ai_provider="bedrock", bedrock_analysis_model_id="test-preview-model")
+  settings = Settings(
+    ai_provider="bedrock",
+    bedrock_analysis_model_id="test-preview-model",
+    makeup_feedback_conference_preview_ai_enabled=True,
+  )
 
   async def fail_generation(self, request_payload):
     raise AppError(502, "PREVIEW_TEST_FAILURE", "preview failed")

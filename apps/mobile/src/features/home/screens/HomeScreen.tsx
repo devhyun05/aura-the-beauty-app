@@ -97,7 +97,6 @@ type HomeScreenProps = {
   onPressArFilter?: () => void;
   onPressFaceDiagnosis?: () => void;
   onPressConsulting?: () => void;
-  onPressHalfMakeup?: () => void;
   onPressMakeupRecommendation?: () => void;
   onPressHairRemovalSimulation?: () => void;
   onPressMakeupExtraction?: () => void;
@@ -129,7 +128,6 @@ export function HomeScreen({
   onPressFaceDiagnosis,
   onPressHeroTrendFilter,
   onPressConsulting,
-  onPressHalfMakeup,
   onPressMakeupRecommendation,
   onPressHairRemovalSimulation,
   onPressMakeupExtraction,
@@ -434,7 +432,6 @@ export function HomeScreen({
               onPressAuradin={handleAuradinShortcutPress}
               onPressFaceDiagnosis={onPressFaceDiagnosis}
               onPressConsulting={onPressConsulting}
-              onPressHalfMakeup={onPressHalfMakeup}
               onPressMakeupRecommendation={onPressMakeupRecommendation}
               onPressHairRemovalSimulation={onPressHairRemovalSimulation}
               onPressMakeupExtraction={onPressMakeupExtraction}
@@ -1102,7 +1099,6 @@ type HomeServiceShortcutHandlers = {
   onPressAuradin?: () => void;
   onPressConsulting?: () => void;
   onPressFaceDiagnosis?: () => void;
-  onPressHalfMakeup?: () => void;
   onPressMakeupRecommendation?: () => void;
   onPressHairRemovalSimulation?: () => void;
   onPressMakeupExtraction?: () => void;
@@ -1118,7 +1114,6 @@ export function getHomeServiceShortcutPressHandler(
     onPressAuradin,
     onPressConsulting,
     onPressFaceDiagnosis,
-    onPressHalfMakeup,
     onPressMakeupRecommendation,
     onPressHairRemovalSimulation,
     onPressMakeupExtraction,
@@ -1193,7 +1188,6 @@ function HomeServiceShortcutSection({
   onPressAuradin,
   onPressConsulting,
   onPressFaceDiagnosis,
-  onPressHalfMakeup,
   onPressMakeupRecommendation,
   onPressHairRemovalSimulation,
   onPressMakeupExtraction,
@@ -1206,7 +1200,6 @@ function HomeServiceShortcutSection({
     onPressAuradin,
     onPressConsulting,
     onPressFaceDiagnosis,
-    onPressHalfMakeup,
     onPressMakeupRecommendation,
     onPressHairRemovalSimulation,
     onPressMakeupExtraction,
@@ -1423,14 +1416,6 @@ export function getRecommendedFilterAccessibilityLabel(
   filter: RecommendedMakeupFilter,
 ): string {
   return `${filter.headline} ${filter.displayTitle}`;
-}
-
-export function getRecommendedFilterRouteParams(filterId: string) {
-  return {
-    initialGuideMode: 'half',
-    initialMakeupFilterId: filterId,
-    source: 'recommendedFilter',
-  } as const;
 }
 
 function RecommendedFilterCard({

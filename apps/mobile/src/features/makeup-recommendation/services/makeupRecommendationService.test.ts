@@ -464,6 +464,7 @@ const reportHistory = mapBackendRecommendationReports([
 ]);
 expectEqual(reportHistory.length, 1, 'saved report history count');
 expectEqual(reportHistory[0].reportId, 'report-1', 'saved report id');
+expectEqual(reportHistory[0].createdAt, '2026-07-14T12:34:56Z', 'saved report creation date');
 expectEqual(
   reportHistory[0].previewImageUrl,
   'https://signed.example.com/report-1-anchor.jpg',
@@ -538,6 +539,7 @@ expectEqual(reportHistory[0].results[1].matchAssessment, undefined, 'saved match
 const restoredReport = restoreMakeupRecommendationReport(reportHistory[0]);
 expectEqual(restoredReport.phase, 'results', 'saved report opens in results phase');
 expectEqual(restoredReport.reportId, 'report-1', 'restored session keeps report id');
+expectEqual(restoredReport.createdAt, '2026-07-14T12:34:56Z', 'restored session keeps creation date');
 expectEqual(restoredReport.profileGender, 'unspecified', 'restored report keeps snapshot gender');
 expectEqual(restoredReport.generationMode, 'backend', 'restored report is server-backed');
 expectEqual(restoredReport.results.length, 3, 'restored session keeps all looks');

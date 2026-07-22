@@ -80,7 +80,7 @@ Shader "ARMakeup/Lip"
         _LipGlossFinish ("Lip Gloss Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
         // 립글로스 template(18): -1=부재/레거시, 0=글로스 1=오일 2=플럼퍼. Finish.cginc 미러.
         _LipGlossTexture ("Lip Gloss Texture (domain enum)", Float) = -1
-        _GlossLumaLo ("Gloss Luma Lo", Range(0, 1)) = 0.6 // 광 하한 — 이상 luma에서 반짝 // 실기기 튜닝 대상
+        _GlossLumaLo ("Gloss Luma Lo", Range(0, 1)) = 0.4 // 광 하한 — 이상 luma에서 반짝. 기본을 낮춰(0.6→0.4) 립글로스가 밝은 픽셀뿐 아니라 입술 전반에 촉촉하게 퍼지게 함(글로우 광택 가시성). // 실기기 튜닝 대상
         // 핏(개인 공간 델타) — 베이스립·립글로스 오버라인 값(진짜 모양 확장). 0=원래(메인
         // 틴트 edge와 동일). 링 메시가 max(overline)만큼 실제 확장되고, 각 레이어 경계는 확장된
         // UV에서 자기 값 기준으로 (E−ov)·k 만큼 되돌려 독립 배치된다. 립라이너는 미설정 → 0(무영향).
@@ -365,6 +365,14 @@ Shader "ARMakeup/Lip"
                 float lnTexE, lnTexG, lnTexC, lnTexB;
                 TexBundleFromEnum(17.0, _LipLinerTexture, lnTexE, lnTexG, lnTexC, lnTexB);
                 fixed3 lipBase = lerp(_LipColor.rgb, _LipColor2.rgb, i.uv.x * _LipGradient);
+                // ── 농도 체감 정규화(통일) — 밝은 립색(코랄·피치)은 같은 _LipIntensity에서
+                //    덜 진해 보이고, 어두운 색(레드·버건디)은 과하게 진해 보인다. 립색 밝기가
+                //    높을수록 강도에 비례해 색소를 살짝 더 깊게(어둡고 진하게) 밀어, 100에서의
+                //    "진하기"를 색상 간에 맞춘다. 어두운 색은 t≈0이라 기존 픽셀과 사실상 동일
+                //    (하위호환). 계수는 실기기 튜닝 대상.
+                float lipTintLuma = dot(lipBase, fixed3(0.299, 0.587, 0.114));
+                float lipDeepen = _LipIntensity * saturate((lipTintLuma - 0.45) * 2.2);
+                lipBase = lerp(lipBase, lipBase * 0.80, lipDeepen * 0.5);
                 fixed3 textureBody = lipBase * PigmentBase(luma, 1.5, 0.15);
                 textureBody = TexBody(textureBody, luma, lipTexBody);
                 fixed3 pigment = TexBody(textureBody, luma, lnTexB); // 제형 발색 body(라이너, 메인 립 0=무변조)
@@ -456,6 +464,21 @@ Shader "ARMakeup/Lip"
                                               _LipShimmer, 0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
                 glossPig = TexGrain(glossPig, float2(i.uv.x, 0.0), lgTexG); // 제형 그레인(글로스)
                 premult += glossPig * glossAmt;
+                // ── 물광(젤리/글래스) — '흰 물감 가로줄'이 아니라 젖은 반사 "질감"을 낸다.
+                //    (a) 실제 카메라 하이라이트 증폭(자연스러운 젖은 반사, 빛 따라 이동)
+                //    (b) 아랫입술 중앙의 부드러운 방사형 sheen(밴드 아님 — 가우시안 falloff)
+                //    (c) 잘게 부서진 스파클(균일 흰칠이 아니라 광택 알갱이). 전부 _LipGlossIntensity 비례.
+                //    링 uv: x=반경(0 바깥→1 입라인), y=중앙도(0 코너→1 중앙), lipUpper=윗입술도. 튜닝 대상.
+                //    하드 스파클/미러볼(스크린 격자 점)은 쓰지 않는다 — 아랫입술 중앙의 부드러운
+                //    소프트 하이라이트(가우시안) + 실제 카메라 하이라이트를 매끄럽게 증폭해 젖은
+                //    반사만 낸다. _LipGlossIntensity 비례(0이면 0 → 하위호환). 위치/세기 튜닝 대상.
+                float glLower = 1.0 - saturate(i.lipUpper);                     // 아랫입술
+                float glDx = i.uv.x - 0.42;                                     // 입술살 중앙 기준 반경 오프셋
+                float glDc = 1.0 - i.uv.y;                                      // 중앙에서 0(코너로 멀어짐)
+                float glSheen = exp(-(glDx * glDx * 20.0 + glDc * glDc * 4.0)) * glLower; // 부드러운 spot(가우시안)
+                float glHi = smoothstep(0.55, 0.92, luma);                     // 실제 하이라이트(부드럽게)
+                float glWet = saturate(glSheen * 0.75 + glHi * 0.6);           // 매끈한 젖은 반사
+                premult += fixed3(1.0, 1.0, 1.0) * glWet * edgeGloss * _LipGlossIntensity * 0.7;
                 // 입자(글리터) — 립 위 반짝. premult에 가산(립글로스와 동일, 알파 불변).
                 // c=0으로 호출해 순수 반짝 기여만 얻어 더한다. coverage=edge(립 모양).
                 premult += ApplyParticles(fixed3(0,0,0), luma, float2(i.uv.x, 0.0), screenUV,

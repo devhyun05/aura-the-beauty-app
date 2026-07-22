@@ -5,6 +5,10 @@
 import type {FaceShapeView} from './reportFormat';
 import type {Silhouette, StyleGender} from '../ar/stencil/src/composer/bodyProfile';
 import type {PersonalColor12Type} from '../personal-color/services/personalColorCore/contracts';
+import type {VisualWeightPresentation} from './visualWeightPresentation';
+export type {VisualWeightPresentation} from './visualWeightPresentation';
+import type {StyleLaneCard} from './styleLaneRecommendations';
+export type {StyleLaneCard, StyleLaneMove, StyleLaneKey} from './styleLaneRecommendations';
 
 export interface PhotoSlotData {
   uri?: string;
@@ -125,6 +129,9 @@ export interface RegionCardData {
   evidence?: string;
   recommendation?: string;
   paragraph: string;
+  // 1층 사진 판정(VLM) 상세 구절(쌍꺼풀 유형·안검 처짐·애교살 등). 판정된 것만.
+  // 비어 있으면 컴포넌트가 상세 칩 블록을 숨긴다.
+  featureDescriptors?: string[];
 }
 export interface S3Data { eyebrow: string; title: string; sub: string; cards: RegionCardData[] }
 
@@ -197,11 +204,16 @@ export interface S5Data {
 
 // ---------- S6 ----------
 export interface ImpressionAxis { key: string; leftLabel: string; rightLabel: string; value: number }
+// 2층 시각 무게 지도의 프레젠테이션 타입은 순수 파일(visualWeightPresentation)에
+// 정의하고 상단에서 재수출한다 — 소비처가 reportTypes만 보게 하면서, reportTypes의
+// RN(React) 전이 의존이 계약 러너로 새지 않게 한다.
 export interface S6Data {
   eyebrow: string; title: string; sub: string;
   axes: ImpressionAxis[];   // AI가 반환한 축만 사용. 없으면 빈 배열.
   keywords: string[];
   paragraph: string;
+  // 시각 무게 지도(2층). 근거 부족이면 null → 컴포넌트가 블록 숨김.
+  visualWeight?: VisualWeightPresentation | null;
 }
 
 // ---------- S7 ----------
@@ -221,6 +233,12 @@ export interface S8Data {
   aspects: { key: string; heading: string; label: string; description: string }[];
 }
 
+// ---------- S9 (3 스타일 레인 추천) ----------
+export interface S9Data {
+  eyebrow: string; title: string; sub: string;
+  lanes: StyleLaneCard[];   // 균형·동안·개성강조 3장. 항상 3장.
+}
+
 // ---------- screen ----------
 // Only s1 (built from fields every successfully-created report already has)
 // and s5 (has its own internal "설문 전" empty state — no coordinates/guides to
@@ -237,6 +255,7 @@ export interface ReportData {
   topBarTitle: string;
   s1: S1Data; s2: S2Data | null; s3: S3Data | null; s4: S4Data | null; s5: S5Data;
   s6: S6Data | null; s7: S7Data | null; s8: S8Data | null;
+  s9: S9Data | null;
   footer: { disclaimer: string; cta: string };
 }
 
