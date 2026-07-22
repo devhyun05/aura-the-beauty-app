@@ -6,7 +6,8 @@ import { Card } from '../visuals/Card';
 import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
 
-function LookCard({ card }: { card: LookCardData }) {
+/** One complete styling look for a single story page or a long-form capture. */
+export function S7LookCard({ card }: { card: LookCardData }) {
   const natural = card.variant === 'natural';
   return (
     <RiseIn>
@@ -45,8 +46,8 @@ export function S7Styling({ data }: { data: S7Data }) {
   return (
     <RiseIn style={{ paddingTop: 30, paddingHorizontal: 20, gap: 12 }}>
       <SectionHeader eyebrow={data.eyebrow} title={data.title} />
-      <LookCard card={data.naturalCard} />
-      <LookCard card={data.glamCard} />
+      <S7LookCard card={data.naturalCard} />
+      <S7LookCard card={data.glamCard} />
     </RiseIn>
   );
 }
