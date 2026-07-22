@@ -34,7 +34,9 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import * as MediaLibrary from 'expo-media-library/legacy';
+import { useIsFocused } from '@react-navigation/native';
 import UnityView from './StencilUnityViewAdapter';
+import { postUnityMessage } from '../services/unityMakeupBridge';
 import { launchImageLibrary } from 'react-native-image-picker';
 
 import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
@@ -89,7 +91,7 @@ import FndColorDebugPanel from './src/components/FndColorDebugPanel';
 import ExtractSourceThumb from './src/components/ExtractSourceThumb';
 import Icon from './src/components/Icon';
 import BasicMode from './src/components/BasicMode';
-import type { LaneChip } from './src/components/LaneRow';
+import LaneRow, { type LaneChip } from './src/components/LaneRow';
 import ComposerSheet from './src/components/ComposerSheet';
 import GuideMode from './src/components/GuideMode';
 import {maskStencilByKeys, stencilStepsFromTree} from './src/composer/stencilSteps';
@@ -118,6 +120,7 @@ import {
 } from './src/composer/fitSheets';
 import type {FitDelta} from './src/composer/fitSheets';
 import {loadAnalysisFitSheet} from '../services/personalFitLoad';
+import {ANALYSIS_FIT_SHEET_ID} from '../services/personalFitService';
 import {
   FIT_HANDLE_REGIONS,
   FIT_HANDLE_RULES,
@@ -473,10 +476,45 @@ type StencilARAppProps = {
 // developing the Unity scene but are not part of AURA's customer-facing AR UI.
 const SHOW_INTERNAL_AR_TOOLS = false;
 
+// 화면 이탈 시 Unity 싱글턴에 남은 메이크업을 즉시 맨얼굴로 비운다. Unity 플레이어는
+// 화면 밖에서도 살아 있어 마지막 applyFilter 파라미터를 그대로 들고 있는다 — 재진입해
+// 카메라/AR 세션이 다시 뜨는 첫 프레임들이 그 이전 필터를 몇 초간 렌더한 뒤에야
+// resyncAll(맨얼굴)이 도착해 풀린다. 이탈 순간 브리지로 직접 중립값을 실어두면(뷰
+// 마운트와 무관하게 싱글턴에 전달) 재개 프레임이 처음부터 맨얼굴이라 그 깜빡임이 없다.
+function resetUnityMakeupToBare() {
+  const send = (msg: RNToUnityMessage) =>
+    postUnityMessage('NativeBridge', 'OnMessageFromRN', JSON.stringify(msg));
+  send({ type: 'applyFilter', filter: BARE });
+  send({ type: 'setOverlayLayers', overlayLayers: [] });
+  send({ type: 'setLensLayers', lensLayers: [] });
+  send({ type: 'setEyeshadowLayers', eyeshadowLayers: [] });
+  send({ type: 'setStencil', stencil: { ...DEFAULT_STENCIL, opacity: 0 } });
+  send({ type: 'setSymmetry', symmetry: { ...DEFAULT_SYMMETRY, opacity: 0 } });
+  send({ type: 'setLighting', lighting: DEFAULT_LIGHTING });
+}
+
 function App({ onBack, initialLook }: StencilARAppProps) {
+  // AR 화면은 네이티브 스택 화면이라 나가도(블러) 언마운트되지 않고 편집 상태를
+  // 그대로 들고 있는다. 그 상태로 다시 들어오면(포커스 복귀) UnityView가 재마운트되며
+  // resyncAll이 직전 룩을 그대로 재방출해 "이전 필터가 리셋 안 되고 남는" 버그가 난다.
+  // 포커스를 잃었다 되찾는 재진입마다 FilterScreen을 새 key로 리마운트해, 새로 진입한
+  // 것과 동일하게 초기 상태(맨얼굴 또는 initialLook 주입)로 시작하게 한다.
+  const isFocused = useIsFocused();
+  const [sessionKey, setSessionKey] = useState(0);
+  const wasFocusedRef = useRef(isFocused);
+  useEffect(() => {
+    if (isFocused && !wasFocusedRef.current) {
+      setSessionKey(key => key + 1);
+    } else if (!isFocused && wasFocusedRef.current) {
+      // 이탈 순간 Unity 메이크업을 미리 비워, 재진입 시 이전 필터가 잠깐 보였다 풀리는
+      // 깜빡임을 없앤다(잔여 지연은 카메라/AR 세션 재개 자체 — 필터가 아님).
+      resetUnityMakeupToBare();
+    }
+    wasFocusedRef.current = isFocused;
+  }, [isFocused]);
   return (
     <SafeAreaProvider>
-      <FilterScreen onBack={onBack} initialLook={initialLook} />
+      <FilterScreen key={sessionKey} onBack={onBack} initialLook={initialLook} />
     </SafeAreaProvider>
   );
 }
@@ -1522,6 +1560,16 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       );
     },
     [emitCompiled, compileWithFit],
+  );
+
+  // 내 핏 칩(보정 레인) — 메인 핏 선택의 파라미터 패널 진입점. 스튜디오의 '★ 메인으로'와
+  // 같은 상태(mainFitId)를 공유하므로 어느 쪽에서 바꿔도 함께 움직이고, 저장도 동일
+  // (changeFitSheets가 영속+재컴파일). 'fit-off'=원본(핏 없음, mainId=null).
+  const selectFitSheet = useCallback(
+    (id: string) => {
+      changeFitSheets(fitSheetsRef.current, id === 'fit-off' ? null : id);
+    },
+    [changeFitSheets],
   );
 
   // 온페이스 핸들 드래그(A17 v2) → 메인 핏 시트에 "겹 단위(#겹id)" 델타 기록.
@@ -3120,6 +3168,15 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
     })),
   ];
   const editingStyle = userStylesV2.find(s => s.id === editingStyleId);
+  // 내 핏 칩 줄(보정 레인) — [원본] + 분석 맞춤 핏 + ◈사용자 시트. 선택=메인 핏 지정.
+  const fitChips: LaneChip[] = [
+    { id: 'fit-off', label: '원본' },
+    ...fitSheets.map(s => ({
+      id: s.id,
+      label: s.name,
+      mine: s.id !== ANALYSIS_FIT_SHEET_ID,
+    })),
+  ];
 
   // 셔터 버튼 — 전체 UI(카메라 줄)와 가리기 모드에서 공용. 사진/동영상·녹화 상태 반영.
   const shutterButton = (
@@ -3897,6 +3954,26 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
               expertError={expertError}
             />
           )}
+          {/* 내 핏(A13) 선택 — 메이크업 레인 하단 고정 줄. 스튜디오 '★ 메인으로'와 같은
+              mainFitId 상태의 빠른 진입점(어떤 룩에도 따라오는 내 얼굴 프로필이라 룩
+              선택과 동렬로 노출). 시트가 없어도 항상 표시 — 원본 칩 + 안내 문구로
+              "얼굴측정 → 맞춤 핏" 흐름을 발견하게 한다. */}
+          {lane === 'makeup' && (
+            <>
+              <LaneRow
+                label="내 핏"
+                accent="gold"
+                chips={fitChips}
+                selectedId={mainFitId ?? 'fit-off'}
+                onSelect={selectFitSheet}
+              />
+              {fitSheets.length === 0 && (
+                <Text style={styles.fitEmptyHint}>
+                  얼굴측정을 하면 ‘분석 맞춤 핏’이 여기에 생겨요
+                </Text>
+              )}
+            </>
+          )}
           {/* 보정은 기본 모드 없이 상세(FitSheet)만 — 프리셋 칩+슬라이더 한 벌. */}
           {lane === 'warp' && (
             <>
@@ -4371,6 +4448,13 @@ const styles = StyleSheet.create({
     borderRadius: SP.lg,
     overflow: 'hidden',
     backgroundColor: PANEL_BG,
+  },
+  // 내 핏 줄 빈 상태 안내 — 시트 0장일 때 원본 칩 아래 한 줄(측정 유도).
+  fitEmptyHint: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 11,
+    paddingHorizontal: PANEL_INSET,
+    paddingBottom: SP.sm,
   },
   // 레인(메이크업/보정) 토글 버튼 — 깊이 버튼 왼쪽. 솔리드 필로 깊이(아웃라인)와 구분.
   // 'MODE' 라벨 — 레인 버튼 왼쪽.
