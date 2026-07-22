@@ -4,6 +4,8 @@
   "private": true,
   "main": "index.ts",
   "scripts": {
+    "eas-build-pre-install": "node scripts/verify-eas-production-env.mjs",
+    "release:verify-env": "node scripts/verify-eas-production-env.mjs --force",
     "start": "expo start",
     "start:perf": "EXPO_PUBLIC_PERFORMANCE_LOGGING=true expo start --dev-client",
     "pods": "cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install",

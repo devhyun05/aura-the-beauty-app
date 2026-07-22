@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -12,6 +13,9 @@
       }
     },
     "production": {
+      "environment": "production",
+      "distribution": "store",
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "0",
         "EXPO_PUBLIC_UNIFIED_FACE_CAPTURE": "1"
