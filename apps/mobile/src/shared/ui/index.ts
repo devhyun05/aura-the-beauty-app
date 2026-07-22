@@ -101,6 +101,7 @@ export {PagedGrid} from './PagedGrid';
 export {PaginationDots} from './PaginationDots';
 export {MenuHeaderIcon, ProfileHeaderIcon, SearchHeaderIcon} from './HeaderIcons';
 export {RoutePlaceholder} from './RoutePlaceholder';
+export {ReportOverflowMenuButton} from './ReportOverflowMenuButton';
 export {
   SECTION_MORE_BUTTON_ICON_NAME,
   SectionMoreButton,

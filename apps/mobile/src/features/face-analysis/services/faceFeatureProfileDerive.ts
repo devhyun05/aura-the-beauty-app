@@ -331,6 +331,7 @@ export function deriveMeasuredFeatureBands(
         ['mouthCornerAsymmetry'],
       ),
       colorContrast: null,
+      fullness: null,
     },
     cheek: {
       cheekboneHeight: null,

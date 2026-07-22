@@ -1,26 +1,23 @@
 import {StyleSheet, type StyleProp, type ViewStyle} from 'react-native';
-import {ChevronRight} from 'lucide-react-native';
 import {Text, View} from 'tamagui';
 
-import {colors, iconSize, radius, spacing, typography} from '../../../shared/theme';
+import {colors, radius, spacing, typography} from '../../../shared/theme';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
-import {AppCard, ImagePlaceholder} from '../../../shared/ui';
+import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
+import {
+  AppCard,
+  ImagePlaceholder,
+  ReportOverflowMenuButton,
+} from '../../../shared/ui';
 
 type FaceAnalysisReportCardProps = {
   report: FaceAnalysisReport;
+  onDelete?: () => Promise<void> | void;
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
 export const FACE_ANALYSIS_REPORT_CARD_LAYOUT = 'journal-entry' as const;
-
-const formatJournalDate = (dateText: string) => {
-  const date = new Date(dateText);
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${month}.${day}`;
-};
 
 function getReportTags(report: FaceAnalysisReport) {
   // 측정 실패로 personalColor 등이 NULL/미정일 수 있어 null-safe하게 다룬다.
@@ -31,19 +28,22 @@ function getReportTags(report: FaceAnalysisReport) {
 }
 
 export function FaceAnalysisReportCard({
+  onDelete,
   onPress,
   report,
   style,
 }: FaceAnalysisReportCardProps) {
   const tags = getReportTags(report);
+  const createdAtLabel = formatReportCreatedAtLabel(
+    report.createdAt ?? report.analyzedAt,
+  );
 
   return (
-    <AppCard onPress={onPress} padded={false} style={[styles.card, style]}>
-      <View style={styles.dateColumn}>
-        <Text style={styles.dateText}>{formatJournalDate(report.analyzedAt)}</Text>
-        <View style={styles.dateDot} />
-      </View>
-
+    <AppCard
+      accessibilityLabel={`${report.title} 얼굴 분석 보고서, ${createdAtLabel}, 보기`}
+      onPress={onPress}
+      padded={false}
+      style={[styles.card, style]}>
       <View style={styles.thumbnail}>
         <ImagePlaceholder
           borderRadius={radius.md}
@@ -53,6 +53,9 @@ export function FaceAnalysisReportCard({
       </View>
 
       <View style={styles.content}>
+        <Text numberOfLines={1} style={styles.createdAt}>
+          {createdAtLabel}
+        </Text>
         <Text numberOfLines={1} style={styles.title}>
           {report.recommendedMood}
         </Text>
@@ -68,7 +71,7 @@ export function FaceAnalysisReportCard({
         </View>
       </View>
 
-      <ChevronRight color={colors.textPrimary} size={iconSize.xs} strokeWidth={2.2} />
+      {onDelete ? <ReportOverflowMenuButton onDelete={onDelete} /> : null}
     </AppCard>
   );
 }
@@ -93,22 +96,10 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     minWidth: 0,
   },
-  dateColumn: {
-    alignItems: 'center',
-    gap: spacing.xs,
-    width: 44,
-  },
-  dateDot: {
-    backgroundColor: colors.textPrimary,
-    borderRadius: radius.pill,
-    height: 5,
-    opacity: 0.38,
-    width: 5,
-  },
-  dateText: {
-    color: colors.textPrimary,
+  createdAt: {
+    color: colors.textSecondary,
     fontSize: typography.fontSize.sm,
-    fontWeight: typography.fontWeight.bold,
+    fontWeight: typography.fontWeight.medium,
     lineHeight: typography.lineHeight.sm,
   },
   subtitle: {

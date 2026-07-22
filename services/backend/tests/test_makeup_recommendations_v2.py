@@ -908,6 +908,54 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
 
 
 @pytest.mark.asyncio
+async def test_v2_recommendation_accepts_the_canonical_role_keyed_provider_payload(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  async def fake_generate_json(*_args, **_kwargs):
+    return {
+      "contextSummary": ["데이트", "자연스러운 표현", "얼굴 분석 반영"],
+      "looks": {
+        "anchor": {
+          "title": "로지 데이트 룩",
+          "summary": "로지 색조를 얇게 연결한 데이트 메이크업입니다.",
+          "areaGuides": {
+            area: {
+              "goal": f"{area} 균형",
+              "color": {"name": f"{area} 로즈", "hex": "#B76E79"},
+              "texture": f"{area} 소프트 텍스처",
+            }
+            for area in ("base", "brow", "eye", "cheek", "lip")
+          },
+          "imageBrief": "얼굴 특징은 유지하고 로지 메이크업만 자연스럽게 적용",
+        },
+      },
+    }
+
+  monkeypatch.setattr(makeup_service, "generate_json", fake_generate_json)
+
+  result = await makeup_service.generate_recommendation_v2(
+    Settings(),
+    {"selection": {"situation": {"label": "데이트"}}},
+    _questions(),
+    [{"questionId": "change_level", "optionId": "balanced"}],
+  )
+
+  assert result["generationSource"] == "claude"
+  assert len(result["looks"]) == 1
+  look = result["looks"][0]
+  assert look["role"] == "anchor"
+  assert look["title"] == "로지 데이트 룩"
+  assert look["summary"] == "로지 색조를 얇게 연결한 데이트 메이크업입니다."
+  assert look["imageBrief"] == "얼굴 특징은 유지하고 로지 메이크업만 자연스럽게 적용"
+  assert [guide["area"] for guide in look["areaGuides"]] == [
+    "base", "brow", "eye", "cheek", "lip",
+  ]
+  assert look["areaGuides"][0]["goal"] == "base 균형"
+  assert look["areaGuides"][0]["color"] == {"name": "base 로즈", "hex": "#B76E79"}
+  assert look["areaGuides"][0]["texture"] == "base 소프트 텍스처"
+
+
+@pytest.mark.asyncio
 async def test_provider_recommendation_is_clamped_to_selected_prep_time(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1178,6 +1226,43 @@ def test_recommendation_prompt_generates_fresh_area_guides_without_report_advice
     assert sentinel not in prompt
   assert '"areaGuides"' in prompt
   assert "Generate every areaGuides entry freshly" in prompt
+
+
+def test_recommendation_prompt_matches_the_bedrock_lean_object_contract() -> None:
+  prompt = build_recommendation_prompt(
+    {"selection": {"situation": {"label": "데이트"}}},
+    [],
+    [],
+  )
+  output_contract = prompt.split("<OUTPUT_CONTRACT>", 1)[1].split(
+    "</OUTPUT_CONTRACT>",
+    1,
+  )[0]
+  contract = json.loads(output_contract)
+  structured_contract = makeup_service._structured_response_contract(
+    RECOMMENDATION_V2_SYSTEM_PROMPT,
+  )
+
+  assert structured_contract is not None
+  _tool_name, schema = structured_contract
+  looks_schema = schema["properties"]["looks"]
+  assert list(contract["looks"]) == looks_schema["required"] == ["anchor"]
+  anchor = contract["looks"]["anchor"]
+  anchor_schema = looks_schema["properties"]["anchor"]
+  assert set(anchor) == set(anchor_schema["properties"])
+  area_guides_schema = anchor_schema["properties"]["areaGuides"]
+  assert list(anchor["areaGuides"]) == area_guides_schema["required"] == [
+    "base", "brow", "eye", "cheek", "lip",
+  ]
+  assert all(
+    set(guide) == set(area_guides_schema["properties"][area]["properties"])
+    for area, guide in anchor["areaGuides"].items()
+  )
+  assert "looks는 배열이나 빈 객체가 아니라" in prompt
+  assert "areaGuides도 배열이나 빈 객체가 아니라" in prompt
+  assert "durationMinutes" not in output_contract
+  assert "lookMap" not in output_contract
+  assert "fitAssessment" not in output_contract
 
 
 def test_custom_situation_label_round_trips_and_participates_in_idempotency() -> None:

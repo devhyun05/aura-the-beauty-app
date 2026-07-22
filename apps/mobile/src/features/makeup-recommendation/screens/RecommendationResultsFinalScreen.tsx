@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     right: 12,
     zIndex: 40,
   },
-  floatingActionRow: {flexDirection: 'row', gap: 10},
+  floatingActionRow: {flexDirection: 'row', gap: 10, justifyContent: 'center'},
   floatingAction: {
     alignItems: 'center',
     borderRadius: radius.pill,
@@ -253,6 +253,7 @@ const styles = StyleSheet.create({
     borderColor: colors.glassBorder,
     borderWidth: 1,
     flex: 0.9,
+    maxWidth: 220,
   },
   arAction: {backgroundColor: colors.dark, flex: 1.1},
   productActionLabel: {color: colors.ink, flexShrink: 1, fontSize: 15, fontWeight: '800'},

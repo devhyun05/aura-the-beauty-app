@@ -17,9 +17,9 @@ import type {
 } from '../../types';
 import {AlignedHeroImageLayer} from './AlignedHeroImageLayer';
 
-const INITIAL_COMPARE_RATIO = 0.95;
+const INITIAL_COMPARE_RATIO = 1;
 const MIN_COMPARE_RATIO = 0.04;
-const MAX_COMPARE_RATIO = 0.96;
+const MAX_COMPARE_RATIO = 1;
 const IOS_EDGE_GUARD = 24;
 const AURA_LETTERS = ['A', 'U', 'R', 'A'] as const;
 
@@ -74,6 +74,10 @@ export const FinalGeneratedMakeupHero = ({
   const afterLoadEpochKeyRef = useRef(afterLoadEpochKey);
   const dividerLeft = useMemo(
     () => Animated.subtract(comparePosition, 24),
+    [comparePosition],
+  );
+  const beforeClipTranslateX = useMemo(
+    () => Animated.multiply(comparePosition, -1),
     [comparePosition],
   );
   const sourceFrame = alignmentMetadata?.source;
@@ -241,28 +245,18 @@ export const FinalGeneratedMakeupHero = ({
       }}
       style={[styles.hero, heroAspectRatio ? {aspectRatio: heroAspectRatio} : null]}
     >
-      {beforeImageUri?.trim() ? (
-        <AlignedHeroImageLayer
-          alignmentFrame={sourceFrame}
-          referenceFrame={sourceFrame}
-          source={{uri: beforeImageUri}}
-          viewportHeight={heroHeight}
-          viewportWidth={heroWidth}
-        />
-      ) : (
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.imageClip]}>
         <View style={[StyleSheet.absoluteFill, styles.placeholder]}>
           <View style={[styles.placeholderGlow, styles.placeholderGlowTop]} />
           <View style={[styles.placeholderGlow, styles.placeholderGlowBottom]} />
           <Text style={styles.placeholderMark}>AURA</Text>
         </View>
-      )}
 
-      {imageStatus === 'completed' ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, {opacity: afterOpacity}]}
-        >
-          <Animated.View style={[styles.afterClip, {width: comparePosition}]}>
+        {imageStatus === 'completed' ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, {opacity: afterOpacity}]}
+          >
             <AlignedHeroImageLayer
               alignmentFrame={alignmentMetadata?.generated}
               key={afterLoadEpochKey}
@@ -283,8 +277,38 @@ export const FinalGeneratedMakeupHero = ({
               viewportWidth={heroWidth}
             />
           </Animated.View>
-        </Animated.View>
-      ) : null}
+        ) : beforeImageUri?.trim() ? (
+          <AlignedHeroImageLayer
+            alignmentFrame={sourceFrame}
+            referenceFrame={sourceFrame}
+            source={{uri: beforeImageUri}}
+            viewportHeight={heroHeight}
+            viewportWidth={heroWidth}
+          />
+        ) : null}
+
+        {canCompare && beforeImageUri?.trim() ? (
+          <Animated.View style={[styles.beforeClip, {left: comparePosition}]}>
+            <Animated.View
+              style={[
+                styles.beforeClipCanvas,
+                {
+                  transform: [{translateX: beforeClipTranslateX}],
+                  width: heroWidth || '100%',
+                },
+              ]}
+            >
+              <AlignedHeroImageLayer
+                alignmentFrame={sourceFrame}
+                referenceFrame={sourceFrame}
+                source={{uri: beforeImageUri}}
+                viewportHeight={heroHeight}
+                viewportWidth={heroWidth}
+              />
+            </Animated.View>
+          </Animated.View>
+        ) : null}
+      </View>
 
       {displayTitle && imageStatus === 'completed' ? (
         <View pointerEvents="none" style={styles.titleOverlay}>
@@ -417,14 +441,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 8,
   },
+  imageClip: {
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
 
-  afterClip: {
+  beforeClip: {
     position: 'absolute',
     top: 0,
     bottom: 0,
-    left: 0,
+    right: 0,
     overflow: 'hidden',
     backgroundColor: 'transparent',
+  },
+  beforeClipCanvas: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    top: 0,
   },
   titleOverlay: {
     position: 'absolute',

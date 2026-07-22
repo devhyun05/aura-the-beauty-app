@@ -24,6 +24,8 @@ import type {
   FaceAnalysisStylingLooks,
   FaceFeatureObservationKey,
   FaceFeatureObservations,
+  FaceAnalysisMakeupColorRegion,
+  FaceAnalysisMakeupColors,
 } from '../types/faceAnalysis';
 import {
   buildFaceAnalysisRequestPayload,
@@ -151,6 +153,7 @@ type BackendMediaReference = {
 
 type BackendAnalysisJob = {
   analyzedAt?: string | null;
+  createdAt?: string | null;
   baseMakeupGuide?: string | null;
   detailPayload?: {
     request?: BackendAnalysisRequest | null;
@@ -532,11 +535,39 @@ const FEATURE_OBSERVATION_KEYS: readonly FaceFeatureObservationKey[] = [
   'eyeContrast',
   'cheekContrast',
   'lipColorContrast',
+  'lipFullness',
 ];
 
 // 사진 판정 원본을 보고서 필드로 옮긴다. value/evidence 텍스트 + confidence 숫자가
 // 다 있는 부면만 통과 — 없는 값을 지어내지 않는다. 'unclear' 등 판정 보류값도 그대로
 // 보존하고, enum 유효성·confidence 임계 생략은 프로파일 빌더가 처리한다.
+const MAKEUP_COLOR_REGIONS: readonly FaceAnalysisMakeupColorRegion[] = [
+  'lip',
+  'blush',
+  'eyeshadow',
+  'brow',
+  'eyeliner',
+];
+const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+// 부위별 hex 색 파싱. 형식(#RRGGBB) 검증 통과한 것만 담는다 — 이상하면 그 부위는
+// 생략(소비처가 프리셋 색으로 폴백). 없는 값을 지어내지 않는다.
+function parseMakeupColors(
+  value: Partial<Record<string, unknown>> | null | undefined,
+): FaceAnalysisMakeupColors | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const parsed: FaceAnalysisMakeupColors = {};
+  for (const region of MAKEUP_COLOR_REGIONS) {
+    const hex = firstText(value[region] as string | undefined);
+    if (hex && HEX_COLOR_PATTERN.test(hex)) {
+      parsed[region] = hex.toLowerCase();
+    }
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
 function parseFeatureObservations(
   value: BackendFeatureObservations | null | undefined,
 ): FaceFeatureObservations | undefined {
@@ -908,6 +939,7 @@ function mapBackendJobToFaceAnalysisReport(
 
   return {
     id: reportId,
+    createdAt: job.createdAt?.trim() || undefined,
     analyzedAt: requireAnalysisText(job, 'analyzedAt', job.analyzedAt),
     // 과거 보고서 복원용 측정 원본 — 서버 사진 URL 을 오버레이 이미지로 주입한다.
     measurements: parseFaceAnalysisMeasurements(job.detailPayload?.request?.measurements, {
@@ -923,6 +955,9 @@ function mapBackendJobToFaceAnalysisReport(
     faceShape: requireAnalysisText(job, 'faceShape', result.faceShape, job.faceShape),
     imageSource: reportImageSource,
     makeupGuideline,
+    makeupColors: parseMakeupColors(
+      (result as {makeupColors?: Partial<Record<string, unknown>>}).makeupColors,
+    ),
     personalColor,
     regionNotes: parseRegionNotes(result.regionNotes),
     impressionNotes: parseImpressionNotes(result.impressionNotes),
@@ -986,11 +1021,7 @@ export const getFaceAnalysisReports = async (
   options: GetFaceAnalysisReportsOptions = {},
 ): Promise<FaceAnalysisReport[]> => {
   if (!getBackendApiBaseUrl()) {
-    throw new BackendApiError(
-      '얼굴 분석 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행해 주세요.',
-      503,
-      'FACE_ANALYSIS_API_BASE_URL_MISSING',
-    );
+    return [];
   }
 
   const {reports} = await requestBackendJson<ListAnalysisReportsResponse>(
@@ -1035,11 +1066,7 @@ export const getFaceAnalysisReportById = async (
   reportId: string,
 ): Promise<FaceAnalysisReport | null> => {
   if (!getBackendApiBaseUrl()) {
-    throw new BackendApiError(
-      '얼굴 분석 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행해 주세요.',
-      503,
-      'FACE_ANALYSIS_API_BASE_URL_MISSING',
-    );
+    return null;
   }
 
   const {report} = await requestBackendJson<GetAnalysisReportResponse>(
