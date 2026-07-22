@@ -107,5 +107,7 @@ class FilterExtractionAnalyzeRequest(CamelModel):
   reference_image_id: str | None = Field(default=None, alias="referenceImageId")
   title: str = "Reference makeup"
   subtitle: str | None = None
-  run_ai: bool = Field(default=False, alias="runAi")
+  # `/filter-extractions/analyze` is a production AI endpoint: omitting runAi
+  # means real AI, while an explicit false is rejected by the route.
+  run_ai: bool = Field(default=True, alias="runAi")
   request_payload: dict = Field(default_factory=dict, alias="requestPayload")

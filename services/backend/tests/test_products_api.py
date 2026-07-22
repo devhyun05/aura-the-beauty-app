@@ -185,6 +185,80 @@ async def test_packaged_auradin_product_is_resolved_server_side_for_like() -> No
 
 
 @pytest.mark.asyncio
+async def test_missing_packaged_seed_is_resolved_only_from_owner_search_session(monkeypatch) -> None:
+  missing_seed_id = "auradin-seed-4c618f9db3100c1b"
+  resolution = {}
+
+  monkeypatch.setattr(
+    "app.api.products.resolve_auradin_catalog_product",
+    lambda _product_id: None,
+  )
+
+  async def resolve_owner_result(**kwargs):
+    resolution.update(kwargs)
+    return {
+      "id": missing_seed_id,
+      "brandName": "세션 검증 브랜드",
+      "productName": "세션 검증 제품",
+      "category": "lip",
+      "imageUrl": "https://shopping-phinf.pstatic.net/session-image.jpg",
+      "purchaseUrl": "https://search.shopping.naver.com/catalog/session-product",
+      "priceKrw": 18000,
+    }
+
+  monkeypatch.setattr(
+    "app.api.products.resolve_auradin_result_product",
+    resolve_owner_result,
+  )
+  settings = Settings()
+  db = object()
+
+  product = await _resolve_external_product_for_like(
+    db=db,  # type: ignore[arg-type]
+    settings=settings,
+    external_source="auradin_catalog",
+    external_product_id=missing_seed_id,
+    owner_subject="owner-subject",
+  )
+
+  assert product is not None
+  assert product["productId"] == missing_seed_id
+  assert product["externalSource"] == "auradin_catalog"
+  assert resolution == {
+    "owner_subject": "owner-subject",
+    "product_id": missing_seed_id,
+    "settings": settings,
+    "db": db,
+  }
+
+
+@pytest.mark.asyncio
+async def test_missing_packaged_seed_without_owner_does_not_read_search_sessions(monkeypatch) -> None:
+  monkeypatch.setattr(
+    "app.api.products.resolve_auradin_catalog_product",
+    lambda _product_id: None,
+  )
+
+  async def unexpected_session_resolution(**_kwargs):
+    raise AssertionError("anonymous catalog likes must not inspect search sessions")
+
+  monkeypatch.setattr(
+    "app.api.products.resolve_auradin_result_product",
+    unexpected_session_resolution,
+  )
+
+  product = await _resolve_external_product_for_like(
+    db=object(),  # type: ignore[arg-type]
+    settings=Settings(),
+    external_source="auradin_catalog",
+    external_product_id="auradin-seed-4c618f9db3100c1b",
+    owner_subject=None,
+  )
+
+  assert product is None
+
+
+@pytest.mark.asyncio
 async def test_packaged_like_passes_timezone_aware_timestamp_to_database(monkeypatch) -> None:
   class _LikeDatabase:
     def __init__(self) -> None:

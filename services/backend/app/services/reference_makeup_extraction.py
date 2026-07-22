@@ -5,6 +5,7 @@ import base64
 from copy import deepcopy
 import json
 import logging
+import math
 import re
 import time
 from typing import Any
@@ -25,30 +26,13 @@ logger = logging.getLogger(__name__)
 MODEL_VERSION = "reference-makeup-extraction:bedrock-v1"
 AREA_IDS = ("skin", "eye", "brow", "cheek", "lip", "contour")
 PRODUCT_CATEGORIES = {"base", "shadow", "liner", "cheek", "lip"}
-DEFAULT_CATEGORY_BY_AREA = {
-  "skin": "base",
-  "eye": "shadow",
-  "brow": "liner",
-  "cheek": "cheek",
-  "lip": "lip",
-  "contour": "shadow",
-}
 
 # 부위별 리치 스키마(goal/placement/technique/steps/reason/avoid×6부위) 출력이
-# 8192에서 잘려 두 번째 풀 호출(재시도)을 유발해 지연이 배가되던 문제 대응.
-# 재시도가 성공하던 12288을 초기 상한으로 올려 단일 호출로 완결한다(상한↑은 응답이
-# 짧으면 지연에 영향 없음 — 실제 지연은 생성 토큰 수에 비례).
+# 8192에서 잘리던 문제를 줄이기 위해 단일 호출 상한을 12288로 둔다. 응답이
+# 불완전하면 비용이 드는 자동 재호출 없이 명시적으로 실패한다.
 REFERENCE_BEDROCK_MAX_TOKENS = 12288
-REFERENCE_BEDROCK_RETRY_MAX_TOKENS = 12288
 REFERENCE_BEDROCK_INPUT_USD_PER_MILLION_TOKENS = 3.0
 REFERENCE_BEDROCK_OUTPUT_USD_PER_MILLION_TOKENS = 15.0
-REFERENCE_BEDROCK_FATAL_OUTPUT_CODES = {
-  "REFERENCE_BEDROCK_EMPTY_OUTPUT",
-  "REFERENCE_BEDROCK_OUTPUT_INCOMPLETE",
-  "REFERENCE_BEDROCK_OUTPUT_INVALID",
-  "REFERENCE_BEDROCK_OUTPUT_PARSE_FAILED",
-}
-
 REFERENCE_MAKEUP_REPORT_TOOL_NAME = "submit_reference_makeup_report"
 REFERENCE_MAKEUP_REPORT_TOOL = {
   "name": REFERENCE_MAKEUP_REPORT_TOOL_NAME,
@@ -266,10 +250,6 @@ def _get_value(source: dict[str, Any], *keys: str) -> Any:
   return None
 
 
-def _fallback_area_by_id() -> dict[str, dict[str, Any]]:
-  return {guide["id"]: guide for guide in BASE_AREA_GUIDES}
-
-
 def _reference_text(payload: FilterExtractionAnalyzeRequest) -> str:
   request_payload = payload.request_payload if isinstance(payload.request_payload, dict) else {}
   parts = [
@@ -336,72 +316,39 @@ def build_reference_makeup_extraction_payload(
   }
 
 
-def _normalize_tags(value: Any, fallback: list[str]) -> list[str]:
-  raw_tags = value if isinstance(value, list) else []
-  tags = []
-
-  for tag in raw_tags:
-    normalized = _clean_text(tag)
-
-    if not normalized:
-      continue
-
-    tags.append(normalized if normalized.startswith("#") else f"#{normalized}")
-
-  return (tags or fallback)[:4]
+def _normalize_tags(value: Any) -> list[str]:
+  return [
+    tag if tag.startswith("#") else f"#{tag}"
+    for raw_tag in value
+    if (tag := _clean_text(raw_tag))
+  ]
 
 
-def _normalize_points(value: Any, fallback: list[dict[str, Any]]) -> list[dict[str, str]]:
-  points = value if isinstance(value, list) else []
-  normalized_points = []
-
-  for index in range(3):
-    raw = points[index] if index < len(points) and isinstance(points[index], dict) else {}
-    fallback_point = fallback[index]
-    normalized_points.append(
-      {
-        "id": _clean_text(_get_value(raw, "id")) or fallback_point["id"],
-        "title": _clean_text(_get_value(raw, "title")) or fallback_point["title"],
-        "description": _clean_text(_get_value(raw, "description")) or fallback_point["description"],
-      },
-    )
-
-  return normalized_points
+def _normalize_points(value: Any) -> list[dict[str, str]]:
+  return [
+    {
+      "id": _clean_text(_get_value(point, "id")),
+      "title": _clean_text(_get_value(point, "title")),
+      "description": _clean_text(_get_value(point, "description")),
+    }
+    for point in value
+  ]
 
 
-def _normalize_color(value: Any, fallback: dict[str, str]) -> dict[str, str]:
-  color = value if isinstance(value, dict) else {}
-  hex_value = _clean_text(_get_value(color, "hex")) or fallback["hex"]
-
-  if not re.fullmatch(r"#[0-9A-Fa-f]{6}", hex_value):
-    hex_value = fallback["hex"]
-
+def _normalize_color(value: dict[str, Any]) -> dict[str, str]:
   return {
-    "name": _clean_text(_get_value(color, "name")) or fallback["name"],
-    "hex": hex_value.upper(),
+    "name": _clean_text(_get_value(value, "name")),
+    "hex": _clean_text(_get_value(value, "hex")).upper(),
   }
 
 
-def _normalize_product_recommendation(
-  value: Any,
-  fallback: dict[str, Any],
-  area_id: str,
-) -> dict[str, Any]:
-  recommendation = value if isinstance(value, dict) else {}
-  fallback_category = fallback.get("category") or DEFAULT_CATEGORY_BY_AREA[area_id]
-  category = _clean_text(_get_value(recommendation, "category")) or fallback_category
-
-  if category not in PRODUCT_CATEGORIES:
-    category = fallback_category
-
+def _normalize_product_recommendation(value: dict[str, Any]) -> dict[str, Any]:
+  # 실제 상품은 enrich_reference_makeup_products()가 카탈로그 조회에 성공했을
+  # 때만 붙인다. 모델은 실제 관찰에서 나온 검색 기준만 제공한다.
   return {
-    **fallback,
-    "category": category,
-    "search_query": (
-      _clean_text(_get_value(recommendation, "searchQuery", "search_query"))
-      or fallback["search_query"]
-    ),
-    "reason": _clean_text(_get_value(recommendation, "reason")) or fallback["reason"],
+    "category": _clean_text(_get_value(value, "category")),
+    "search_query": _clean_text(_get_value(value, "searchQuery", "search_query")),
+    "reason": _clean_text(_get_value(value, "reason")),
   }
 
 
@@ -416,126 +363,110 @@ def _normalize_string_list(value: Any) -> list[str]:
   return items
 
 
-def _normalize_steps(value: Any, how_to_text: str) -> list[dict[str, Any]]:
-  steps: list[dict[str, Any]] = []
-  if isinstance(value, list):
-    for item in value:
-      if not isinstance(item, dict):
-        continue
-      instruction = _clean_text(_get_value(item, "instruction", "text", "description"))
-      if not instruction:
-        continue
-      steps.append({"order": len(steps) + 1, "instruction": instruction})
-  if not steps and how_to_text:
-    for part in re.split(r"\s*\d+\.\s*", how_to_text):
-      instruction = _clean_text(part)
-      if instruction:
-        steps.append({"order": len(steps) + 1, "instruction": instruction})
-  return steps
+def _normalize_steps(value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+  return [
+    {
+      "order": int(_get_value(item, "order")),
+      "instruction": _clean_text(_get_value(item, "instruction")),
+    }
+    for item in value
+  ]
 
 
-def _normalize_area_guide(raw: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
-  area_id = fallback["id"]
-  how_to = _clean_text(_get_value(raw, "howTo", "how_to")) or fallback["how_to"]
-
+def _normalize_area_guide(raw: dict[str, Any]) -> dict[str, Any]:
   return {
-    **fallback,
-    "label": _clean_text(_get_value(raw, "label")) or fallback["label"],
-    "title": _clean_text(_get_value(raw, "title")) or fallback["title"],
-    "goal": _clean_text(_get_value(raw, "goal")) or fallback.get("goal") or fallback["quick_tip"],
-    "color": _normalize_color(_get_value(raw, "color"), fallback["color"]),
-    "texture": _clean_text(_get_value(raw, "texture")) or fallback["texture"],
-    "placement": (
-      _clean_text(_get_value(raw, "placement")) or fallback.get("placement") or ""
-    ),
-    "technique": (
-      _clean_text(_get_value(raw, "technique"))
-      or fallback.get("technique")
-      or fallback["professional_point"]
-    ),
-    "quick_tip": _clean_text(_get_value(raw, "quickTip", "quick_tip")) or fallback["quick_tip"],
-    "analysis": _clean_text(_get_value(raw, "analysis")) or fallback["analysis"],
-    "steps": _normalize_steps(_get_value(raw, "steps"), how_to),
-    "how_to": how_to,
-    "reason": _clean_text(_get_value(raw, "reason")) or fallback.get("reason") or fallback["analysis"],
+    "id": _clean_text(_get_value(raw, "id")),
+    "label": _clean_text(_get_value(raw, "label")),
+    "title": _clean_text(_get_value(raw, "title")),
+    "goal": _clean_text(_get_value(raw, "goal")),
+    "color": _normalize_color(_get_value(raw, "color")),
+    "texture": _clean_text(_get_value(raw, "texture")),
+    "placement": _clean_text(_get_value(raw, "placement")),
+    "technique": _clean_text(_get_value(raw, "technique")),
+    "quick_tip": _clean_text(_get_value(raw, "quickTip", "quick_tip")),
+    "analysis": _clean_text(_get_value(raw, "analysis")),
+    "steps": _normalize_steps(_get_value(raw, "steps")),
+    "how_to": _clean_text(_get_value(raw, "howTo", "how_to")),
+    "reason": _clean_text(_get_value(raw, "reason")),
     "avoid": _normalize_string_list(_get_value(raw, "avoid")),
-    "professional_point": (
-      _clean_text(_get_value(raw, "professionalPoint", "professional_point"))
-      or fallback["professional_point"]
+    "professional_point": _clean_text(
+      _get_value(raw, "professionalPoint", "professional_point"),
     ),
     "product_recommendation": _normalize_product_recommendation(
       _get_value(raw, "productRecommendation", "product_recommendation"),
-      fallback["product_recommendation"],
-      area_id,
     ),
   }
 
 
 def _normalize_area_guides(value: Any) -> list[dict[str, Any]]:
-  raw_guides = value if isinstance(value, list) else []
   raw_by_id = {
     _clean_text(_get_value(guide, "id")): guide
-    for guide in raw_guides
-    if isinstance(guide, dict) and _clean_text(_get_value(guide, "id")) in AREA_IDS
+    for guide in value
   }
-  fallback_by_id = _fallback_area_by_id()
-
-  return [
-    _normalize_area_guide(raw_by_id.get(area_id, {}), fallback_by_id[area_id])
-    for area_id in AREA_IDS
-  ]
+  return [_normalize_area_guide(raw_by_id[area_id]) for area_id in AREA_IDS]
 
 
 def _normalize_palette(value: Any) -> list[dict[str, str]]:
-  raw_palette = value if isinstance(value, list) else []
-  normalized_palette = []
-
-  for index, fallback in enumerate(BASE_PALETTE):
-    raw = raw_palette[index] if index < len(raw_palette) and isinstance(raw_palette[index], dict) else {}
-    hex_value = _clean_text(_get_value(raw, "hex")) or fallback["hex"]
-
-    if not re.fullmatch(r"#[0-9A-Fa-f]{6}", hex_value):
-      hex_value = fallback["hex"]
-
-    normalized_palette.append(
-      {
-        "id": _clean_text(_get_value(raw, "id")) or fallback["id"],
-        "label": _clean_text(_get_value(raw, "label")) or fallback["label"],
-        "hex": hex_value.upper(),
-        "description": _clean_text(_get_value(raw, "description")) or fallback["description"],
-      },
-    )
-
-  return normalized_palette
+  return [
+    {
+      "id": _clean_text(_get_value(color, "id")),
+      "label": _clean_text(_get_value(color, "label")),
+      "hex": _clean_text(_get_value(color, "hex")).upper(),
+      "description": _clean_text(_get_value(color, "description")),
+    }
+    for color in value
+  ]
 
 
 def _normalize_accuracy(value: Any) -> int:
-  try:
-    accuracy = int(value)
-  except (TypeError, ValueError):
-    return 91
+  return int(value)
 
-  return min(99, max(60, accuracy))
+
+def _normalize_look_dna(value: dict[str, Any]) -> dict[str, Any]:
+  raw_balance = _get_value(value, "textureBalance", "texture_balance")
+  return {
+    "mood_keywords": _normalize_string_list(
+      _get_value(value, "moodKeywords", "mood_keywords"),
+    ),
+    "difficulty": _clean_text(_get_value(value, "difficulty")),
+    "key_areas": _normalize_string_list(_get_value(value, "keyAreas", "key_areas")),
+    "texture_balance": [
+      {
+        "id": _clean_text(_get_value(metric, "id")),
+        "label": _clean_text(_get_value(metric, "label")),
+        "value": _get_value(metric, "value"),
+        "color": _clean_text(_get_value(metric, "color")).upper(),
+      }
+      for metric in raw_balance
+    ],
+  }
 
 
 def _normalize_bedrock_payload(
   parsed: dict[str, Any],
   request_payload: FilterExtractionAnalyzeRequest,
 ) -> dict[str, Any]:
-  fallback_payload = build_reference_makeup_extraction_payload(request_payload)
-  fallback_look = fallback_payload["extracted_makeup_look"]
+  missing_fields = _missing_bedrock_output_fields(parsed)
+  if missing_fields:
+    raise AppError(
+      502,
+      "REFERENCE_BEDROCK_OUTPUT_INCOMPLETE",
+      "Bedrock reference makeup extraction returned an incomplete response.",
+      {"missingFields": missing_fields},
+    )
+
   raw_look = _get_value(parsed, "extractedMakeupLook", "extracted_makeup_look")
-  raw_look = raw_look if isinstance(raw_look, dict) else parsed
-  title = _clean_text(_get_value(raw_look, "title")) or fallback_look["title"]
+  reference_id = _clean_text(request_payload.reference_image_id) or "uploaded"
 
   extracted_makeup_look = {
-    **fallback_look,
-    "title": title,
-    "subtitle": _clean_text(_get_value(raw_look, "subtitle")) or title,
-    "tags": _normalize_tags(_get_value(raw_look, "tags"), fallback_look["tags"]),
+    "id": f"reference-makeup-look-{reference_id}",
+    "title": _clean_text(_get_value(raw_look, "title")),
+    "subtitle": _clean_text(_get_value(raw_look, "subtitle")),
+    "tags": _normalize_tags(_get_value(raw_look, "tags")),
     "accuracy": _normalize_accuracy(_get_value(raw_look, "accuracy")),
+    "look_dna": _normalize_look_dna(_get_value(raw_look, "lookDna", "look_dna")),
     "palette": _normalize_palette(_get_value(raw_look, "palette")),
-    "points": _normalize_points(_get_value(raw_look, "points"), fallback_look["points"]),
+    "points": _normalize_points(_get_value(raw_look, "points")),
     "area_guides": _normalize_area_guides(
       _get_value(raw_look, "areaGuides", "area_guides"),
     ),
@@ -547,57 +478,227 @@ def _normalize_bedrock_payload(
   }
 
 
+def _is_non_empty_string(value: Any) -> bool:
+  return isinstance(value, str) and bool(value.strip())
+
+
+def _is_valid_hex_color(value: Any) -> bool:
+  return isinstance(value, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", value.strip()) is not None
+
+
+def _is_finite_number(value: Any) -> bool:
+  return (
+    isinstance(value, (int, float))
+    and not isinstance(value, bool)
+    and math.isfinite(float(value))
+  )
+
+
 def _missing_bedrock_output_fields(parsed: dict[str, Any]) -> list[str]:
-  if not parsed:
+  if not isinstance(parsed, dict) or not parsed:
     return ["extractedMakeupLook"]
 
   raw_look = _get_value(parsed, "extractedMakeupLook", "extracted_makeup_look")
-
   if not isinstance(raw_look, dict) or not raw_look:
     return ["extractedMakeupLook"]
 
   missing: list[str] = []
 
-  for field, aliases in (
-    ("title", ("title",)),
-    ("tags", ("tags",)),
-    ("accuracy", ("accuracy",)),
-    ("points", ("points",)),
-    ("palette", ("palette",)),
-    ("areaGuides", ("areaGuides", "area_guides")),
-  ):
-    value = _get_value(raw_look, *aliases)
-
-    if value is None or value == "" or value == [] or value == {}:
+  for field in ("title", "subtitle"):
+    if not _is_non_empty_string(_get_value(raw_look, field)):
       missing.append(field)
 
+  tags = _get_value(raw_look, "tags")
+  if (
+    not isinstance(tags, list)
+    or not 1 <= len(tags) <= 4
+    or any(not _is_non_empty_string(tag) for tag in tags)
+  ):
+    missing.append("tags.items")
+
+  accuracy = _get_value(raw_look, "accuracy")
+  if (
+    not isinstance(accuracy, int)
+    or isinstance(accuracy, bool)
+    or not 0 <= accuracy <= 100
+  ):
+    missing.append("accuracy.value")
+
+  points = _get_value(raw_look, "points")
+  if not isinstance(points, list) or len(points) != 3:
+    missing.append("points.items")
+  else:
+    for index, point in enumerate(points):
+      if not isinstance(point, dict):
+        missing.append(f"points.{index}")
+        continue
+      for field in ("id", "title", "description"):
+        if not _is_non_empty_string(_get_value(point, field)):
+          missing.append(f"points.{index}.{field}")
+
+  palette = _get_value(raw_look, "palette")
+  if not isinstance(palette, list) or len(palette) != len(BASE_PALETTE):
+    missing.append("palette.items")
+  else:
+    palette_ids: list[str] = []
+    for index, color in enumerate(palette):
+      if not isinstance(color, dict):
+        missing.append(f"palette.{index}")
+        continue
+      for field in ("id", "label", "description"):
+        value = _get_value(color, field)
+        if not _is_non_empty_string(value):
+          missing.append(f"palette.{index}.{field}")
+      if _is_non_empty_string(_get_value(color, "id")):
+        palette_ids.append(_get_value(color, "id").strip())
+      if not _is_valid_hex_color(_get_value(color, "hex")):
+        missing.append(f"palette.{index}.hex")
+    if len(set(palette_ids)) != len(palette_ids):
+      missing.append("palette.ids")
+
+  look_dna = _get_value(raw_look, "lookDna", "look_dna")
+  if look_dna is None or look_dna == {}:
+    missing.append("lookDna")
+  if not isinstance(look_dna, dict):
+    missing.append("lookDna.type")
+  else:
+    for list_field, aliases in (
+      ("moodKeywords", ("moodKeywords", "mood_keywords")),
+      ("keyAreas", ("keyAreas", "key_areas")),
+    ):
+      values = _get_value(look_dna, *aliases)
+      if (
+        not isinstance(values, list)
+        or not values
+        or any(not _is_non_empty_string(item) for item in values)
+      ):
+        missing.append(f"lookDna.{list_field}.items")
+
+    if not _is_non_empty_string(_get_value(look_dna, "difficulty")):
+      missing.append("lookDna.difficulty")
+
+    texture_balance = _get_value(look_dna, "textureBalance", "texture_balance")
+    if not isinstance(texture_balance, list) or len(texture_balance) != 3:
+      missing.append("lookDna.textureBalance.items")
+    else:
+      metric_ids: list[str] = []
+      total = 0.0
+      all_values_valid = True
+      for index, metric in enumerate(texture_balance):
+        if not isinstance(metric, dict):
+          missing.append(f"lookDna.textureBalance.{index}")
+          all_values_valid = False
+          continue
+        for field in ("id", "label"):
+          value = _get_value(metric, field)
+          if not _is_non_empty_string(value):
+            missing.append(f"lookDna.textureBalance.{index}.{field}")
+        metric_id = _get_value(metric, "id")
+        if _is_non_empty_string(metric_id):
+          metric_ids.append(metric_id.strip())
+        if not _is_valid_hex_color(_get_value(metric, "color")):
+          missing.append(f"lookDna.textureBalance.{index}.color")
+        metric_value = _get_value(metric, "value")
+        if not _is_finite_number(metric_value) or not 0 <= float(metric_value) <= 100:
+          missing.append(f"lookDna.textureBalance.{index}.value")
+          all_values_valid = False
+        else:
+          total += float(metric_value)
+      if len(set(metric_ids)) != len(metric_ids):
+        missing.append("lookDna.textureBalance.ids")
+      if all_values_valid and not math.isclose(total, 100.0, abs_tol=0.01):
+        missing.append("lookDna.textureBalance.total")
+
   area_guides = _get_value(raw_look, "areaGuides", "area_guides")
-  guide_by_id = {
-    _clean_text(guide.get("id")): guide
-    for guide in area_guides
-    if isinstance(guide, dict) and _clean_text(guide.get("id"))
-  } if isinstance(area_guides, list) else {}
+  guide_by_id: dict[str, dict[str, Any]] = {}
+  if not isinstance(area_guides, list) or len(area_guides) != len(AREA_IDS):
+    missing.append("areaGuides.items")
+  else:
+    guide_ids: list[str] = []
+    for index, guide in enumerate(area_guides):
+      if not isinstance(guide, dict):
+        missing.append(f"areaGuides.{index}")
+        continue
+      area_id = _get_value(guide, "id")
+      if not _is_non_empty_string(area_id):
+        missing.append(f"areaGuides.{index}.id")
+        continue
+      normalized_id = area_id.strip()
+      guide_ids.append(normalized_id)
+      guide_by_id[normalized_id] = guide
+    if len(set(guide_ids)) != len(guide_ids) or set(guide_ids) != set(AREA_IDS):
+      missing.append("areaGuides.ids")
 
   for area_id in AREA_IDS:
     guide = guide_by_id.get(area_id)
-
     if not guide:
       missing.append(f"areaGuides.{area_id}")
       continue
 
     for field, aliases in (
+      ("label", ("label",)),
       ("title", ("title",)),
+      ("goal", ("goal",)),
+      ("texture", ("texture",)),
+      ("placement", ("placement",)),
+      ("technique", ("technique",)),
+      ("quickTip", ("quickTip", "quick_tip")),
       ("analysis", ("analysis",)),
       ("howTo", ("howTo", "how_to")),
+      ("reason", ("reason",)),
       ("professionalPoint", ("professionalPoint", "professional_point")),
-      ("productRecommendation", ("productRecommendation", "product_recommendation")),
     ):
-      value = _get_value(guide, *aliases)
-
-      if value is None or value == "" or value == {}:
+      if not _is_non_empty_string(_get_value(guide, *aliases)):
         missing.append(f"areaGuides.{area_id}.{field}")
 
-  return missing
+    color = _get_value(guide, "color")
+    if not isinstance(color, dict):
+      missing.append(f"areaGuides.{area_id}.color.type")
+    else:
+      if not _is_non_empty_string(_get_value(color, "name")):
+        missing.append(f"areaGuides.{area_id}.color.name")
+      if not _is_valid_hex_color(_get_value(color, "hex")):
+        missing.append(f"areaGuides.{area_id}.color.hex")
+
+    steps = _get_value(guide, "steps")
+    if not isinstance(steps, list) or not 3 <= len(steps) <= 5:
+      missing.append(f"areaGuides.{area_id}.steps")
+    else:
+      for index, step in enumerate(steps):
+        if not isinstance(step, dict):
+          missing.append(f"areaGuides.{area_id}.steps.{index}")
+          continue
+        order = _get_value(step, "order")
+        if not isinstance(order, int) or isinstance(order, bool) or order != index + 1:
+          missing.append(f"areaGuides.{area_id}.steps.{index}.order")
+        if not _is_non_empty_string(_get_value(step, "instruction")):
+          missing.append(f"areaGuides.{area_id}.steps.{index}.instruction")
+
+    avoid = _get_value(guide, "avoid")
+    if (
+      not isinstance(avoid, list)
+      or not 1 <= len(avoid) <= 3
+      or any(not _is_non_empty_string(item) for item in avoid)
+    ):
+      missing.append(f"areaGuides.{area_id}.avoid")
+
+    recommendation = _get_value(guide, "productRecommendation", "product_recommendation")
+    if not isinstance(recommendation, dict):
+      missing.append(f"areaGuides.{area_id}.productRecommendation.type")
+    else:
+      category = _get_value(recommendation, "category")
+      if not _is_non_empty_string(category) or category.strip() not in PRODUCT_CATEGORIES:
+        missing.append(f"areaGuides.{area_id}.productRecommendation.category")
+      for field, aliases in (
+        ("searchQuery", ("searchQuery", "search_query")),
+        ("reason", ("reason",)),
+      ):
+        if not _is_non_empty_string(_get_value(recommendation, *aliases)):
+          missing.append(f"areaGuides.{area_id}.productRecommendation.{field}")
+
+  # Keep error details deterministic and concise even when a malformed field
+  # triggers both its collection-level and item-level checks.
+  return list(dict.fromkeys(missing))
 
 
 def _bedrock_usage(response_payload: dict[str, Any]) -> tuple[int, int, float]:
@@ -635,7 +736,11 @@ class ReferenceMakeupBedrockService:
   def _bedrock_runtime_client(self):
     client_kwargs = {
       "region_name": self.settings.effective_bedrock_analysis_region,
-      "config": Config(connect_timeout=30, read_timeout=150, retries={"max_attempts": 1}),
+      "config": Config(
+        connect_timeout=30,
+        read_timeout=150,
+        retries={"mode": "standard", "total_max_attempts": 1},
+      ),
     }
 
     if self.settings.aws_access_key_id and self.settings.aws_secret_access_key:
@@ -744,6 +849,16 @@ Top-level key는 extractedMakeupLook 하나만 둔다.
     "subtitle": "{requested_title}",
     "tags": ["#레퍼런스분석"],
     "accuracy": 90,
+    "lookDna": {{
+      "moodKeywords": ["이미지에서 관찰한 무드 1", "이미지에서 관찰한 무드 2"],
+      "difficulty": "쉬움/보통/어려움 중 실제 재현 난이도",
+      "keyAreas": ["룩을 결정하는 핵심 부위 1", "핵심 부위 2"],
+      "textureBalance": [
+        {{"id": "glow", "label": "광택", "value": 40, "color": "#F0D6C8"}},
+        {{"id": "matte", "label": "매트", "value": 35, "color": "#B7776E"}},
+        {{"id": "sheer", "label": "투명감", "value": 25, "color": "#E59AA6"}}
+      ]
+    }},
     "points": [
       {{"id": "point-1", "title": "핵심 제목", "description": "핵심 설명"}},
       {{"id": "point-2", "title": "핵심 제목", "description": "핵심 설명"}},
@@ -802,6 +917,8 @@ goal은 그 부위에서 이루려는 목표, placement는 올리는 위치와 �
 professionalPoint는 '메이크업 마무리' 관점에서 완성도를 높이는 디테일을 작성한다.
 메이크업 핵심 points는 정확히 3개만 작성한다.
 tags는 1개에서 4개 사이로 작성한다.
+lookDna는 이미지에서 실제로 관찰한 무드, 재현 난이도, 핵심 부위, 질감 비중으로만 작성하고 예시 값을 복사하지 않는다.
+textureBalance의 value 합은 100으로 작성한다.
 색상 hex는 이미지에서 관찰되는 색을 근사한다.
 
 요청 메타데이터:
@@ -912,112 +1029,87 @@ tags는 1개에서 4개 사이로 작성한다.
       self.settings.effective_bedrock_analysis_region,
     )
     prompt = self._build_prompt(payload)
-    token_limits = (REFERENCE_BEDROCK_MAX_TOKENS, REFERENCE_BEDROCK_RETRY_MAX_TOKENS)
-
-    for attempt, max_tokens in enumerate(token_limits, start=1):
-      retry_instruction = ""
-
-      if attempt > 1:
-        retry_instruction = (
-          "\n\nThe previous response exceeded the output limit. "
-          "Return every required field, but keep each string concise."
-        )
-
-      response = self._bedrock_runtime_client().invoke_model(
-        modelId=model_id,
-        body=json.dumps(
-          {
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "temperature": 0.2,
-            "system": "You are a practical K-beauty reference makeup analyst. Use the provided tool to submit structured JSON only.",
-            "tools": [REFERENCE_MAKEUP_REPORT_TOOL],
-            "tool_choice": {"type": "tool", "name": REFERENCE_MAKEUP_REPORT_TOOL_NAME},
-            "messages": [
-              {
-                "role": "user",
-                "content": [
-                  {"type": "text", "text": prompt + retry_instruction},
-                  {
-                    "type": "image",
-                    "source": {
-                      "type": "base64",
-                      "media_type": content_type,
-                      "data": image_base64,
-                    },
+    response = self._bedrock_runtime_client().invoke_model(
+      modelId=model_id,
+      body=json.dumps(
+        {
+          "anthropic_version": "bedrock-2023-05-31",
+          "max_tokens": REFERENCE_BEDROCK_MAX_TOKENS,
+          "temperature": 0.2,
+          "system": "You are a practical K-beauty reference makeup analyst. Use the provided tool to submit structured JSON only.",
+          "tools": [REFERENCE_MAKEUP_REPORT_TOOL],
+          "tool_choice": {"type": "tool", "name": REFERENCE_MAKEUP_REPORT_TOOL_NAME},
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {"type": "text", "text": prompt},
+                {
+                  "type": "image",
+                  "source": {
+                    "type": "base64",
+                    "media_type": content_type,
+                    "data": image_base64,
                   },
-                ],
-              },
-            ],
+                },
+              ],
+            },
+          ],
+        },
+        ensure_ascii=False,
+      ),
+      accept="application/json",
+      contentType="application/json",
+    )
+    response_payload = json.loads(response["body"].read())
+    parsed = self._extract_bedrock_tool_input(response_payload)
+    output_text = self._extract_bedrock_output_text(response_payload)
+    stop_reason = response_payload.get("stop_reason") or response_payload.get("stopReason")
+    input_tokens, output_tokens, estimated_cost_usd = _bedrock_usage(response_payload)
+    output_length = len(json.dumps(parsed, ensure_ascii=False)) if parsed is not None else len(output_text)
+    logger.info(
+      "[aura:reference-bedrock] output:received attempt=1 chars=%s stopReason=%s mode=%s",
+      output_length,
+      stop_reason,
+      "tool" if parsed is not None else "text",
+    )
+    logger.info(
+      "[aura:reference-bedrock] usage attempt=1 inputTokens=%s outputTokens=%s estimatedCostUsd=%.6f",
+      input_tokens,
+      output_tokens,
+      estimated_cost_usd,
+    )
+
+    if parsed is None and output_text:
+      try:
+        parsed = self._parse_json_output(output_text)
+      except AppError as exc:
+        raise AppError(
+          exc.status_code,
+          exc.code,
+          exc.message,
+          {
+            **(exc.details or {}),
+            "attempt": 1,
+            "stopReason": stop_reason,
+            "inputTokens": input_tokens,
+            "outputTokens": output_tokens,
           },
-          ensure_ascii=False,
-        ),
-        accept="application/json",
-        contentType="application/json",
-      )
-      response_payload = json.loads(response["body"].read())
-      parsed = self._extract_bedrock_tool_input(response_payload)
-      output_text = self._extract_bedrock_output_text(response_payload)
-      stop_reason = response_payload.get("stop_reason") or response_payload.get("stopReason")
-      input_tokens, output_tokens, estimated_cost_usd = _bedrock_usage(response_payload)
-      output_length = len(json.dumps(parsed, ensure_ascii=False)) if parsed is not None else len(output_text)
-      logger.info(
-        "[aura:reference-bedrock] output:received attempt=%s chars=%s stopReason=%s mode=%s",
-        attempt,
-        output_length,
-        stop_reason,
-        "tool" if parsed is not None else "text",
-      )
-      logger.info(
-        "[aura:reference-bedrock] usage attempt=%s inputTokens=%s outputTokens=%s estimatedCostUsd=%.6f",
-        attempt,
-        input_tokens,
-        output_tokens,
-        estimated_cost_usd,
-      )
+        ) from exc
 
-      if parsed is None and output_text:
-        try:
-          parsed = self._parse_json_output(output_text)
-        except AppError:
-          if attempt == 1 and stop_reason == "max_tokens":
-            logger.warning(
-              "[aura:reference-bedrock] output:retry attempt=%s reason=max_tokens nextMaxTokens=%s",
-              attempt,
-              token_limits[1],
-            )
-            continue
-          raise
+    missing_fields = (
+      ["extractedMakeupLook"]
+      if parsed is None
+      else _missing_bedrock_output_fields(parsed)
+    )
 
-      missing_fields = (
-        ["extractedMakeupLook"]
-        if parsed is None
-        else _missing_bedrock_output_fields(parsed)
-      )
-
-      if not missing_fields:
-        logger.info(
-          "[aura:reference-bedrock] analyze:success attempts=%s durationMs=%s",
-          attempt,
-          round((time.monotonic() - started_at) * 1000),
-        )
-        return _normalize_bedrock_payload(parsed, payload)
-
-      if attempt == 1 and stop_reason == "max_tokens":
-        logger.warning(
-          "[aura:reference-bedrock] output:retry attempt=%s reason=max_tokens missingFields=%s nextMaxTokens=%s",
-          attempt,
-          missing_fields,
-          token_limits[1],
-        )
-        continue
-
+    if missing_fields:
       raise AppError(
         502,
         "REFERENCE_BEDROCK_OUTPUT_INCOMPLETE",
         "Bedrock reference makeup extraction returned an incomplete response.",
         {
-          "attempt": attempt,
+          "attempt": 1,
           "stopReason": stop_reason,
           "missingFields": missing_fields,
           "inputTokens": input_tokens,
@@ -1025,7 +1117,11 @@ tags는 1개에서 4개 사이로 작성한다.
         },
       )
 
-    raise AssertionError("Reference Bedrock retry loop exited unexpectedly.")
+    logger.info(
+      "[aura:reference-bedrock] analyze:success attempts=1 durationMs=%s",
+      round((time.monotonic() - started_at) * 1000),
+    )
+    return _normalize_bedrock_payload(parsed, payload)
 
   async def analyze(self, payload: FilterExtractionAnalyzeRequest) -> dict[str, Any]:
     image_bytes = await asyncio.to_thread(self._read_reference_image_bytes, payload)
@@ -1058,7 +1154,11 @@ async def build_reference_makeup_extraction_payload_for_request(
   settings: Settings,
 ) -> tuple[dict[str, Any], str, dict[str, Any] | None]:
   if not payload.run_ai:
-    return build_reference_makeup_extraction_payload(payload), "disabled_fallback", None
+    raise AppError(
+      400,
+      "REFERENCE_MAKEUP_AI_REQUIRED",
+      "Reference makeup extraction requires AI analysis.",
+    )
 
   try:
     return await ReferenceMakeupBedrockService(settings).analyze(payload), "bedrock_completed", None
@@ -1068,31 +1168,27 @@ async def build_reference_makeup_extraction_payload_for_request(
       exc.code,
       exc.details,
     )
-    if exc.code in REFERENCE_BEDROCK_FATAL_OUTPUT_CODES:
-      raise
-    return (
-      build_reference_makeup_extraction_payload(payload),
-      "bedrock_failed_fallback",
-      {"code": exc.code, "message": exc.message, "details": exc.details},
-    )
+    raise
   except (BotoCoreError, ClientError) as exc:
     logger.warning(
       "[aura:reference-bedrock] analyze:aws-error reason=%s message=%s",
       exc.__class__.__name__,
       str(exc),
     )
-    return (
-      build_reference_makeup_extraction_payload(payload),
-      "bedrock_failed_fallback",
-      {"code": "BEDROCK_INVOCATION_FAILED", "message": str(exc)},
-    )
-  except Exception as exc:  # noqa: BLE001 - keep the mobile flow alive during prompt iteration.
+    raise AppError(
+      502,
+      "BEDROCK_INVOCATION_FAILED",
+      "Reference makeup extraction provider request failed.",
+      {"reason": exc.__class__.__name__},
+    ) from exc
+  except Exception as exc:  # noqa: BLE001 - convert unknown provider errors to a stable API error.
     logger.exception("[aura:reference-bedrock] analyze:failed")
-    return (
-      build_reference_makeup_extraction_payload(payload),
-      "bedrock_failed_fallback",
-      {"code": "REFERENCE_BEDROCK_FAILED", "message": exc.__class__.__name__},
-    )
+    raise AppError(
+      502,
+      "REFERENCE_BEDROCK_FAILED",
+      "Reference makeup extraction provider request failed.",
+      {"reason": exc.__class__.__name__},
+    ) from exc
 
 
 def _map_shopping_product(product: dict[str, Any]) -> dict[str, Any] | None:

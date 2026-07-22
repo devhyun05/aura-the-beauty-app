@@ -49,8 +49,6 @@ def test_classification_rejects_noise(value: str) -> None:
 @pytest.mark.parametrize(
   "value",
   [
-    "몰라",
-    "아무거나",
     "예쁘게",
     "예쁘게 해줘",
     "자연스럽게",
@@ -64,11 +62,11 @@ def test_classification_rejects_noise(value: str) -> None:
     "내일 뭘 입을까",
   ],
 )
-def test_classification_requests_detail_for_vague_input(value: str) -> None:
+def test_classification_accepts_short_or_novel_intent_for_ai_clarification(value: str) -> None:
   result = classify_custom_situation_text(value)
 
-  assert result["intentType"] == "needs_detail"
-  assert result["normalizedText"] == ""
+  assert result["intentType"] == "valid_context"
+  assert result["normalizedText"] == value
 
 
 @pytest.mark.parametrize(
@@ -100,11 +98,16 @@ def test_validation_requires_only_a_concrete_when_or_where_situation(value: str)
     "알레르기 때문에 향료 제외",
   ],
 )
-def test_validation_treats_optional_details_without_a_situation_as_incomplete(value: str) -> None:
-  with pytest.raises(AppError) as exc_info:
-    validate_custom_situation_text(value)
+def test_validation_accepts_optional_details_without_a_known_situation(value: str) -> None:
+  assert validate_custom_situation_text(value) == value
 
-  assert exc_info.value.code == "MAKEUP_CUSTOM_SITUATION_NEEDS_DETAIL"
+
+@pytest.mark.parametrize(
+  "value",
+  ["봄", "도서관 사서 첫 출근", "로판 여주 느낌", "교생 실습 첫날"],
+)
+def test_validation_does_not_require_a_fixed_keyword_allowlist(value: str) -> None:
+  assert validate_custom_situation_text(value) == value
 
 
 def test_validation_normalizes_unicode_and_whitespace() -> None:
@@ -124,11 +127,6 @@ def test_validation_keeps_medical_context_as_makeup_safety_constraint() -> None:
   [
     ("", "MAKEUP_CUSTOM_SITUATION_EMPTY", "의미 있는 상황을 한 문장으로 적어주세요."),
     ("ㅋㅋㅋㅋㅋㅋ", "MAKEUP_CUSTOM_SITUATION_INVALID", "의미 있는 상황을 한 문장으로 적어주세요."),
-    (
-      "아무거나",
-      "MAKEUP_CUSTOM_SITUATION_NEEDS_DETAIL",
-      "어디에서 또는 언제 사용할 메이크업인지 조금만 더 적어주세요.",
-    ),
     (
       "강남 맛집 추천해줘",
       "MAKEUP_CUSTOM_SITUATION_OUT_OF_SCOPE",

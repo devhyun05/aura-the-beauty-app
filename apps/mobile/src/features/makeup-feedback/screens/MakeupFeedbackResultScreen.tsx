@@ -1,11 +1,8 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useEffect, useState} from 'react';
 import {
-  ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
@@ -14,18 +11,12 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronUp,
-  Download,
   Eye,
   Heart,
-  Share2,
   Sparkles,
 } from 'lucide-react-native';
 import {Button, Text, View} from 'tamagui';
 
-import {
-  loadOptionalMediaLibraryModule,
-  loadOptionalSharingModule,
-} from '../../../shared/services/optionalNativeShareModules';
 import {
   colors,
   feedbackColors,
@@ -37,8 +28,6 @@ import {
   spacing,
   typography,
 } from '../../../shared/theme';
-import {OptionalViewShot, type OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
-import {SavedImagePreviewSheet} from '../../../shared/ui/SavedImagePreviewSheet';
 import {
   MakeupFeedbackCorrectionGuideDetails,
   MakeupFeedbackPriorityCorrectionCard,
@@ -64,112 +53,9 @@ import type {
 } from '../types';
 
 type MakeupFeedbackResultScreenProps = {
-  onHeaderShareActionChange?: (action: MakeupFeedbackHeaderShareAction | null) => void;
   onOpenMakeupJourney: () => void;
   result: MakeupFeedbackResult;
 };
-
-type MakeupFeedbackHeaderShareAction = () => void;
-type MakeupFeedbackShareTarget = 'save-image' | 'share-report';
-type MakeupFeedbackShareFeedback = {
-  message: string;
-  tone: 'success' | 'error';
-};
-
-const FEEDBACK_CAPTURE_OPTIONS = {
-  format: 'jpg',
-  quality: 0.95,
-  result: 'tmpfile',
-} as const;
-
-const shareTargetLabels: Record<MakeupFeedbackShareTarget, string> = {
-  'save-image': '이미지 저장',
-  'share-report': '공유하기',
-};
-
-function waitForNextFrame() {
-  return new Promise<void>((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-}
-
-async function captureFeedbackImage(captureRef: {current: OptionalViewShotRef | null}) {
-  const captureTarget = captureRef.current;
-  const capture = captureTarget?.capture;
-
-  if (!captureTarget || !capture) {
-    throw new Error('피드백 이미지를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.');
-  }
-
-  await waitForNextFrame();
-  const imageUri = await capture.call(captureTarget);
-
-  if (!imageUri) {
-    throw new Error('피드백 이미지를 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
-  }
-
-  return imageUri;
-}
-
-async function requestFeedbackImageSavePermission() {
-  const mediaLibraryModule = loadOptionalMediaLibraryModule();
-
-  if (!mediaLibraryModule) {
-    throw new Error('현재 설치된 앱에 사진 저장 모듈이 포함되어 있지 않아요. 앱을 새로 설치한 뒤 다시 시도해 주세요.');
-  }
-
-  const currentPermission = await mediaLibraryModule.getPermissionsAsync(true, ['photo']);
-  const permission = currentPermission.granted
-    ? currentPermission
-    : await mediaLibraryModule.requestPermissionsAsync(true, ['photo']);
-
-  if (!permission.granted) {
-    throw new Error('사진 저장 권한이 필요합니다. 설정에서 사진 접근을 허용해 주세요.');
-  }
-}
-
-async function saveFeedbackImageToLibrary(imageUri: string) {
-  const mediaLibraryModule = loadOptionalMediaLibraryModule();
-
-  if (!mediaLibraryModule) {
-    throw new Error('현재 설치된 앱에 사진 저장 모듈이 포함되어 있지 않아요. 앱을 새로 설치한 뒤 다시 시도해 주세요.');
-  }
-
-  try {
-    await mediaLibraryModule.saveToLibraryAsync(imageUri);
-  } catch (error) {
-    console.info('[aura:makeup-feedback] share:save-to-library-failed', {
-      imageUri,
-      message: error instanceof Error ? error.message : String(error),
-    });
-    await mediaLibraryModule.createAssetAsync(imageUri);
-  }
-}
-
-async function shareFeedbackImageWithSystemSheet(imageUri: string) {
-  const title = 'AI 피드백 리포트';
-  const sharingModule = loadOptionalSharingModule();
-  const isSharingAvailable = sharingModule
-    ? await sharingModule.isAvailableAsync()
-    : false;
-
-  if (sharingModule && isSharingAvailable) {
-    await sharingModule.shareAsync(imageUri, {
-      dialogTitle: title,
-      mimeType: 'image/jpeg',
-      UTI: 'public.jpeg',
-    });
-    return;
-  }
-
-  await Share.share({title, url: imageUri});
-}
-
-function getShareErrorMessage(error: unknown) {
-  return error instanceof Error
-    ? error.message
-    : '공유 작업을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.';
-}
 function getCaptureColorConfidenceLabel(
   confidence: MakeupFeedbackConfidenceLevel,
 ): string | undefined {
@@ -197,15 +83,10 @@ function getGoalIntensityLabel(intensity: MakeupFeedbackIntensity) {
 
 
 export function MakeupFeedbackResultScreen({
-  onHeaderShareActionChange,
   onOpenMakeupJourney,
   result,
 }: MakeupFeedbackResultScreenProps) {
   const {width} = useWindowDimensions();
-  const captureRef = useRef<OptionalViewShotRef | null>(null);
-  const [savedImagePreviewUri, setSavedImagePreviewUri] = useState<string | null>(
-    null,
-  );
   const evaluationByTopicId = new Map(
     result.evaluations.map(evaluation => [evaluation.topicId, evaluation]),
   );
@@ -222,8 +103,6 @@ export function MakeupFeedbackResultScreen({
     () => new Set<string>(),
   );
   const [isOverallJudgmentExpanded, setIsOverallJudgmentExpanded] = useState(false);
-  const [activeShareTarget, setActiveShareTarget] = useState<MakeupFeedbackShareTarget | null>(null);
-  const [shareFeedback, setShareFeedback] = useState<MakeupFeedbackShareFeedback | null>(null);
   const analysisSourceLabel = getMakeupFeedbackAnalysisSourceLabel(result.analysisSource);
   const photoWidth = width;
   const photoHeight = Math.round(photoWidth);
@@ -244,81 +123,11 @@ export function MakeupFeedbackResultScreen({
   const strengthTakeaway = result.summary?.strengthSummary ?? result.strengths[0]?.title;
   const improvementTakeaway = priorityPoint?.title ?? result.summary?.improvementSummary;
 
-
-  const handleShareAction = useCallback(async (target: MakeupFeedbackShareTarget) => {
-    if (activeShareTarget) {
-      Alert.alert('공유 준비 중', '이전 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
-      return;
-    }
-
-    setActiveShareTarget(target);
-    setShareFeedback(null);
-
-    try {
-      if (target === 'save-image') {
-        await requestFeedbackImageSavePermission();
-      }
-
-      const imageUri = await captureFeedbackImage(captureRef);
-
-      if (target === 'save-image') {
-        await saveFeedbackImageToLibrary(imageUri);
-        setShareFeedback({message: '이미지를 저장했어요.', tone: 'success'});
-        setSavedImagePreviewUri(imageUri);
-        return;
-      }
-
-      await shareFeedbackImageWithSystemSheet(imageUri);
-      setShareFeedback({message: '공유 화면을 열었어요.', tone: 'success'});
-    } catch (error) {
-      console.info('[aura:makeup-feedback] share:failed', {
-        target,
-        message: error instanceof Error ? error.message : String(error),
-      });
-      setShareFeedback({message: getShareErrorMessage(error), tone: 'error'});
-    } finally {
-      setActiveShareTarget(null);
-    }
-  }, [activeShareTarget]);
-
-  const handleOpenShareOptions = useCallback(() => {
-    if (activeShareTarget) {
-      Alert.alert('공유 준비 중', '이전 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
-      return;
-    }
-
-    Alert.alert('메이크업 피드백', '원하는 방식을 선택해 주세요.', [
-      {
-        text: shareTargetLabels['save-image'],
-        onPress: () => {
-          void handleShareAction('save-image');
-        },
-      },
-      {
-        text: shareTargetLabels['share-report'],
-        onPress: () => {
-          void handleShareAction('share-report');
-        },
-      },
-      {text: '취소', style: 'cancel'},
-    ]);
-  }, [activeShareTarget, handleShareAction]);
-
   useEffect(() => {
     setOpenPointIds(new Set<string>());
     setOpenStrengthIds(new Set<string>());
     setIsOverallJudgmentExpanded(false);
-    setActiveShareTarget(null);
-    setShareFeedback(null);
   }, [result.id]);
-
-  useEffect(() => {
-    onHeaderShareActionChange?.(handleOpenShareOptions);
-
-    return () => {
-      onHeaderShareActionChange?.(null);
-    };
-  }, [handleOpenShareOptions, onHeaderShareActionChange]);
 
   return (
     <MakeupFeedbackScreenScaffold topPadding="none">
@@ -327,10 +136,7 @@ export function MakeupFeedbackResultScreen({
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           style={styles.scrollView}>
-          <OptionalViewShot
-            ref={captureRef}
-            options={FEEDBACK_CAPTURE_OPTIONS}
-            style={styles.captureArea}>
+          <View style={styles.captureArea}>
             <View style={[styles.resultCard, {width: photoWidth}]}>
               <View style={[styles.photoWrap, {height: photoHeight, width: photoWidth}]}>
                 <Image
@@ -555,13 +361,8 @@ export function MakeupFeedbackResultScreen({
               )}
             </View>
 
-          </OptionalViewShot>
+          </View>
 
-          <FeedbackShareActions
-            activeTarget={activeShareTarget}
-            feedback={shareFeedback}
-            onPressShareAction={handleShareAction}
-          />
           <Button
             accessibilityLabel="메이크업 기록에서 보기"
             accessibilityRole="button"
@@ -574,10 +375,6 @@ export function MakeupFeedbackResultScreen({
             <ArrowRight color={colors.white} size={iconSize.sm} strokeWidth={2} />
           </Button>
         </ScrollView>
-        <SavedImagePreviewSheet
-          imageUri={savedImagePreviewUri}
-          onClose={() => setSavedImagePreviewUri(null)}
-        />
       </View>
     </MakeupFeedbackScreenScaffold>
   );
@@ -835,73 +632,6 @@ function EvaluationActionSteps({
           <Text style={styles.actionStepText}>{step}</Text>
         </View>
       ))}
-    </View>
-  );
-}
-
-function FeedbackShareActions({
-  activeTarget,
-  feedback,
-  onPressShareAction,
-}: {
-  activeTarget: MakeupFeedbackShareTarget | null;
-  feedback: MakeupFeedbackShareFeedback | null;
-  onPressShareAction: (target: MakeupFeedbackShareTarget) => Promise<void>;
-}) {
-  const shareActions: Array<{
-    icon: React.ReactNode;
-    target: MakeupFeedbackShareTarget;
-  }> = [
-    {
-      icon: <Download color={feedbackColors.text} size={iconSize.md} strokeWidth={2.1} />,
-      target: 'save-image',
-    },
-    {
-      icon: <Share2 color={feedbackColors.text} size={iconSize.md} strokeWidth={2.1} />,
-      target: 'share-report',
-    },
-  ];
-
-  return (
-    <View style={styles.shareActionArea}>
-      <View style={styles.shareActionRow}>
-        {shareActions.map((action) => {
-          const isActive = activeTarget === action.target;
-          const isDisabled = Boolean(activeTarget);
-
-          return (
-            <Button
-              accessibilityLabel={shareTargetLabels[action.target]}
-              accessibilityRole="button"
-              accessibilityState={{busy: isActive, disabled: isDisabled}}
-              disabled={isDisabled}
-              disabledStyle={styles.shareActionDisabled}
-              key={action.target}
-              onPress={() => {
-                void onPressShareAction(action.target);
-              }}
-              pressStyle={{opacity: 0.56}}
-              style={styles.shareActionButton}
-              unstyled>
-              {isActive ? (
-                <ActivityIndicator color={feedbackColors.text} size="small" />
-              ) : (
-                action.icon
-              )}
-            </Button>
-          );
-        })}
-      </View>
-      {feedback ? (
-        <Text
-          accessibilityLiveRegion="polite"
-          style={[
-            styles.shareFeedback,
-            feedback.tone === 'success' ? styles.shareFeedbackSuccess : styles.shareFeedbackError,
-          ]}>
-          {feedback.message}
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -1425,41 +1155,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
-  },
-  shareActionArea: {
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingTop: spacing.xs,
-  },
-  shareActionButton: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  shareActionDisabled: {
-    opacity: 0.52,
-  },
-  shareActionRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.md,
-    justifyContent: 'center',
-  },
-  shareFeedback: {
-    fontFamily: typography.fontFamily.semibold,
-    fontSize: typography.fontSize.xs,
-    fontWeight: typography.fontWeight.semibold,
-    letterSpacing: 0,
-    lineHeight: typography.lineHeight.xs,
-    textAlign: 'center',
-  },
-  shareFeedbackError: {
-    color: colors.danger,
-  },
-  shareFeedbackSuccess: {
-    color: feedbackColors.textSoft,
   },
   strengthIcon: {
     alignItems: 'center',

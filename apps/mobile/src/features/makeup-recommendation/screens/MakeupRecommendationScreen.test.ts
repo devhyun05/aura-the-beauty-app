@@ -15,6 +15,7 @@ import {
 import {
   filterMakeupRecommendationReportsByDiscovery,
   formatMakeupRecommendationHistoryDate,
+  getMakeupRecommendationHistoryBackAction,
   isMakeupRecommendationReportAllowedByDiscovery,
   getInitialMakeupRecommendationScreenPhase,
   getQuestionActionMode,
@@ -31,7 +32,9 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 expectEqual(makeupRecommendationDiscoveryCopy.title, '어떤 상황을 위한 메이크업인가요?', 'v2 discovery title');
 expectEqual(makeupRecommendationDiscoveryCopy.eyebrow, 'AI MAKEUP RECOMMENDATION', 'v2 discovery eyebrow');
 expectEqual(MAKEUP_SITUATION_FIXTURES.length, 4, 'four broad parent situations');
-expectEqual(MAKEUP_SITUATION_FIXTURES.every(item => item.keywords.length === 5), true, 'five concrete situations per parent');
+expectEqual(MAKEUP_SITUATION_FIXTURES.filter(item => item.key !== 'festival_performance').every(item => item.keywords.length === 5), true, 'five concrete situations in standard parents');
+expectEqual(MAKEUP_SITUATION_FIXTURES.find(item => item.key === 'festival_performance')?.keywords.length, 6, 'unique-day parent includes six situations');
+expectEqual(MAKEUP_SITUATION_FIXTURES.some(item => item.keywords.some(keyword => keyword.label === '로판 여주')), true, 'romantic fantasy heroine situation is discoverable');
 expectEqual(MAKEUP_SITUATION_FIXTURES.map(item => item.label).join(','), '일상,특별한 날,촬영,독특한 날', 'broad parent labels');
 expectEqual(MAKEUP_SITUATION_FIXTURES.flatMap(item => item.keywords).every(item => item.kind === 'curated'), true, 'child options are situations rather than makeup styles');
 expectEqual(MAKEUP_SITUATION_FIXTURES.flatMap(item => item.keywords).some(item => /메이크업|립|블러시|매트|글로우/.test(item.label)), false, 'makeup style names are removed from situation keywords');
@@ -151,6 +154,29 @@ expectEqual(shouldHandleMakeupRecommendationBack('question'), true, 'question ba
 expectEqual(shouldHandleMakeupRecommendationBack('results'), true, 'results back is handled');
 expectEqual(shouldHandleMakeupRecommendationBack('history'), true, 'history back is handled');
 expectEqual(
+  shouldHandleMakeupRecommendationBack('history', {directHistoryEntry: true}),
+  false,
+  'profile-entered history back exits to the previous route',
+);
+expectEqual(
+  getMakeupRecommendationHistoryBackAction({directReportEntry: false}),
+  'discovery',
+  'ordinary report history back returns to recommendation discovery',
+);
+expectEqual(
+  getMakeupRecommendationHistoryBackAction({directReportEntry: true}),
+  'route',
+  'direct saved-report history back exits the native route instead of opening uninitialized discovery',
+);
+expectEqual(
+  getMakeupRecommendationHistoryBackAction({
+    directHistoryEntry: true,
+    directReportEntry: false,
+  }),
+  'route',
+  'profile-entered report history back returns to profile',
+);
+expectEqual(
   getInitialMakeupRecommendationScreenPhase({initialView: 'discovery', reportId: 'report-9'}),
   'reportLoading',
   'direct saved report starts in neutral report loading',
@@ -201,6 +227,17 @@ const screenSource = readFileSync(
   'apps/mobile/src/features/makeup-recommendation/screens/MakeupRecommendationScreen.tsx',
   'utf8',
 );
+expectEqual(
+  screenSource.includes('onBack={handleReportHistoryBack}'),
+  true,
+  'history view delegates back handling through the direct-entry-aware action',
+);
+const questionViewSource = readFileSync(
+  'apps/mobile/src/features/makeup-recommendation/screens/RecommendationQuestionView.tsx',
+  'utf8',
+);
+expectEqual(screenSource.includes('faceImageUri={selectedFaceImageUri}'), true, 'question receives the selected analysis photo');
+expectEqual(questionViewSource.includes('source={{uri: faceImageUri}}'), true, 'question renders the selected analysis photo');
 const discoverySource = readFileSync(
   'apps/mobile/src/features/makeup-recommendation/screens/ScenarioDiscoveryView.tsx',
   'utf8',
@@ -427,13 +464,39 @@ expectEqual(
   'MAKEUP_SESSION_STATE_CHANGED',
   'isBackendTimeoutError',
   'getMakeupRecommendationSessionRestoreDestination',
-  "destination === 'retry'",
-  '답변은 그대로 유지했으니 다시 시도해 주세요.',
   'saveCurrentMakeupRecommendationSessionId',
   'clearCurrentMakeupRecommendationSessionId',
 ].forEach(contract => {
   expectEqual(screenSource.includes(contract), true, `${contract} is wired into restart restoration`);
 });
+expectEqual(
+  persistenceSource.includes("session.status === 'failed') return 'discard'"),
+  true,
+  'failed persisted sessions are discarded instead of forcing the error screen on re-entry',
+);
+expectEqual(
+  screenSource.includes('메이크업 추천 보고서를 불러오지 못했어요'),
+  true,
+  'direct saved-report failures explain that loading the report failed',
+);
+expectEqual(
+  screenSource.includes('보고서 목록 보기'),
+  true,
+  'all recommendation failures provide an escape to report history',
+);
+[
+  "error.code?.startsWith('BEDROCK_')",
+  "error.code === 'MAKEUP_RECOMMENDATION_PROVIDER_FAILED'",
+  "error.code === 'MAKEUP_RECOMMENDATION_OUTPUT_INVALID'",
+  "error.code === 'MAKEUP_RECOMMENDATION_GENERATION_SOURCE_INVALID'",
+].forEach(contract => {
+  expectEqual(screenSource.includes(contract), true, `${contract} receives retry-safe Korean failure copy`);
+});
+expectEqual(
+  screenSource.includes("phase === 'results' && openedHistoryReport.current"),
+  true,
+  'a report opened from history returns to that list without creating a navigation loop',
+);
 expectEqual(persistenceSource.includes('JSON.stringify'), false, 'session persistence never serializes context or answers');
 expectEqual(persistenceSource.includes('setItem(MAKEUP_RECOMMENDATION_CURRENT_SESSION_ID_STORAGE_KEY, normalized)'), true, 'session persistence writes the opaque id only');
 expectEqual(persistenceSource.includes("error.code === 'MAKEUP_SESSION_GENERATING'"), true, 'in-flight generation conflict preserves the resumable session id');

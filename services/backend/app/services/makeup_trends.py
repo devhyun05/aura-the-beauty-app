@@ -94,6 +94,7 @@ SEED_SITUATIONS: tuple[dict[str, Any], ...] = (
       ("테마 파티·코스프레", "curated", None),
       ("무대 공연", "curated", None),
       ("패션 행사·전시 오프닝", "curated", None),
+      ("로판 여주", "curated", None),
     ),
   },
 )

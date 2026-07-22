@@ -1,10 +1,10 @@
 // AURADIN swatch answer tile (question screen). The deliberate exception
 // to glass: SOLID swatch fill, radius 24, dark bottom scrim + WHITE label
 // (white belongs here — on saturated color). Tap advances immediately.
-// Fill variants (§8.2): string → solid hex (neutral fallback), gradient →
-// colorFamily 3-stop brightness ramp, texture → abstract finish swatch.
+// Fill variants: real candidate photo first; otherwise string → solid hex,
+// gradient → colorFamily ramp, texture → abstract finish swatch.
 import * as React from 'react';
-import { Animated, Pressable, Text } from 'react-native';
+import { Animated, Image, Pressable, Text } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -20,14 +20,15 @@ import { TextureSwatch } from './TextureSwatch';
 import { usePressScale } from './motion';
 
 export type SwatchTileProps = {
-  swatch: AuradinSwatch;
+  swatch?: AuradinSwatch;
+  imageUrl?: string;
   label: string;
   onPick: () => void;
   height?: number;
   style?: StyleProp<ViewStyle>;
 };
 
-export function SwatchTile({ swatch, label, onPick, height = 160, style }: SwatchTileProps): React.JSX.Element {
+export function SwatchTile({ swatch, imageUrl, label, onPick, height = 160, style }: SwatchTileProps): React.JSX.Element {
   const { pressStyle, onPressIn, onPressOut } = usePressScale(0.97, 0.92);
   const spec = typeof swatch === 'string' ? null : swatch;
   // 단색 폴백 배경 — gradient/texture는 아래 절대배치 레이어가 덮는다.
@@ -61,8 +62,16 @@ export function SwatchTile({ swatch, label, onPick, height = 160, style }: Swatc
           pressStyle,
         ]}
       >
+        {imageUrl ? (
+          <Image
+            accessibilityIgnoresInvertColors
+            resizeMode="cover"
+            source={{uri: imageUrl}}
+            style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0}}
+          />
+        ) : null}
         {/* colorFamily 3색 밝기 그라데이션 (§8.2-3) — 계열의 폭을 보여준다 */}
-        {spec?.kind === 'gradient' ? (
+        {!imageUrl && spec?.kind === 'gradient' ? (
           <LinearGradient
             pointerEvents="none"
             colors={spec.colors}
@@ -73,7 +82,7 @@ export function SwatchTile({ swatch, label, onPick, height = 160, style }: Swatc
           />
         ) : null}
         {/* finish/texture 추상 질감 (§8.2-1) — 자체 제작, 제품 연상 차단 */}
-        {spec?.kind === 'texture' ? <TextureSwatch texture={spec.texture} /> : null}
+        {!imageUrl && spec?.kind === 'texture' ? <TextureSwatch texture={spec.texture} /> : null}
         {/* glass edge glare (edges only) */}
         <LinearGradient
           pointerEvents="none"

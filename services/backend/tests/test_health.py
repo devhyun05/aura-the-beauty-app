@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 import pytest
+from botocore.exceptions import UnauthorizedSSOTokenError
 
 from app.api import health as health_api
 from app.core.settings import Settings
@@ -107,6 +108,27 @@ def test_health_ready_checks_bedrock_credentials_when_makeup_v2_is_enabled() -> 
   }
 
 
+def test_health_ready_reports_all_generation_credential_sources() -> None:
+  app = create_app(Settings(makeup_recommendation_v2_enabled=True))
+  probe = _FakeBedrockCredentialProbe(
+    BedrockCredentialReadiness(
+      status="ready",
+      credential_source="profile",
+      credential_sources=("profile", "static"),
+    ),
+  )
+  app.state.makeup_recommendation_bedrock_credential_probe = probe
+
+  response = TestClient(app).get("/health/ready")
+
+  assert response.status_code == 200
+  assert response.json()["data"]["makeupRecommendationBedrock"] == {
+    "status": "ready",
+    "credentialSource": "profile",
+    "credentialSources": ["profile", "static"],
+  }
+
+
 def test_health_ready_skips_bedrock_credentials_when_makeup_v2_is_disabled() -> None:
   app = create_app(Settings(makeup_recommendation_v2_enabled=False))
   probe = _FakeBedrockCredentialProbe(
@@ -183,6 +205,25 @@ class _FakeCredentials:
     return _FakeFrozenCredentials()
 
 
+def test_bedrock_readiness_maps_every_generation_runtime_credential_path() -> None:
+  assert bedrock_readiness._generation_credential_sources(
+    Settings(
+      aws_profile_name="local-profile",
+      aws_access_key_id="test-access-key",
+      aws_secret_access_key="test-secret-key",
+    ),
+  ) == ("profile", "static")
+  assert bedrock_readiness._generation_credential_sources(
+    Settings(aws_profile_name="local-profile"),
+  ) == ("profile", "provider_chain")
+  assert bedrock_readiness._generation_credential_sources(
+    Settings(aws_access_key_id="test-access-key", aws_secret_access_key="test-secret-key"),
+  ) == ("provider_chain", "static")
+  assert bedrock_readiness._generation_credential_sources(
+    Settings(aws_use_iam_role=True),
+  ) == ("iam_role",)
+
+
 def test_bedrock_readiness_resolves_static_profile_and_iam_role_credentials(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -195,24 +236,79 @@ def test_bedrock_readiness_resolves_static_profile_and_iam_role_credentials(
     def get_credentials(self) -> _FakeCredentials:
       return _FakeCredentials()
 
+    def client(self, service_name: str, **_kwargs):
+      assert service_name == "sts"
+
+      class FakeStsClient:
+        def get_caller_identity(self) -> dict[str, str]:
+          return {"Account": "123456789012", "Arn": "arn:aws:iam::123456789012:user/test"}
+
+      return FakeStsClient()
+
   monkeypatch.setattr(bedrock_readiness.boto3, "Session", FakeSession)
 
-  static = bedrock_readiness._resolve_credentials(
-    Settings(aws_access_key_id="test-access-key", aws_secret_access_key="test-secret-key"),
+  profile_and_static = bedrock_readiness._resolve_credentials(
+    Settings(
+      aws_profile_name="local-profile",
+      aws_access_key_id="test-access-key",
+      aws_secret_access_key="test-secret-key",
+    ),
   )
-  profile = bedrock_readiness._resolve_credentials(Settings(aws_profile_name="local-profile"))
   role = bedrock_readiness._resolve_credentials(Settings(aws_use_iam_role=True))
 
-  assert [static.credential_source, profile.credential_source, role.credential_source] == [
-    "static",
+  assert [profile_and_static.credential_source, role.credential_source] == [
     "profile",
     "iam_role",
   ]
-  assert session_kwargs[0]["aws_access_key_id"] == "test-access-key"
-  assert session_kwargs[1]["profile_name"] == "local-profile"
+  assert profile_and_static.public_status() == {
+    "status": "ready",
+    "credential_source": "profile",
+    "credential_sources": ["profile", "static"],
+  }
+  assert session_kwargs[0]["profile_name"] == "local-profile"
+  assert session_kwargs[1]["aws_access_key_id"] == "test-access-key"
   assert set(session_kwargs[2]) == {"region_name"}
-  assert "test-access-key" not in str(static.public_status())
-  assert "test-secret-key" not in str(static.public_status())
+  assert "test-access-key" not in str(profile_and_static.public_status())
+  assert "test-secret-key" not in str(profile_and_static.public_status())
+
+
+def test_bedrock_readiness_rejects_invalid_static_used_by_analysis_even_when_profile_is_valid(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  class FakeSession:
+    def __init__(self, **kwargs: str) -> None:
+      self.source = "static" if "aws_access_key_id" in kwargs else "profile"
+
+    def get_credentials(self) -> _FakeCredentials:
+      return _FakeCredentials()
+
+    def client(self, service_name: str, **_kwargs):
+      assert service_name == "sts"
+
+      class InvalidStsClient:
+        def get_caller_identity(self) -> dict[str, str]:
+          raise RuntimeError("invalid static credentials")
+
+      return InvalidStsClient()
+
+  monkeypatch.setattr(bedrock_readiness.boto3, "Session", FakeSession)
+
+  result = bedrock_readiness._resolve_credentials(
+    Settings(
+      aws_profile_name="local-profile",
+      aws_access_key_id="invalid-access-key",
+      aws_secret_access_key="invalid-secret-key",
+    ),
+  )
+
+  assert result.public_status() == {
+    "status": "not_ready",
+    "reason": "credentials_invalid",
+    "failed_credential_source": "static",
+    "credential_sources": ["profile", "static"],
+  }
+  assert "invalid-access-key" not in str(result.public_status())
+  assert "invalid-secret-key" not in str(result.public_status())
 
 
 def test_bedrock_readiness_rejects_expired_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -228,6 +324,28 @@ def test_bedrock_readiness_rejects_expired_credentials(monkeypatch: pytest.Monke
   result = bedrock_readiness._resolve_credentials(Settings(aws_use_iam_role=True))
 
   assert result.public_status() == {"status": "not_ready", "reason": "credentials_expired"}
+
+
+def test_bedrock_readiness_classifies_expired_profile_session(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  class FakeSession:
+    def __init__(self, **_kwargs: str) -> None:
+      pass
+
+    def get_credentials(self):
+      raise UnauthorizedSSOTokenError()
+
+  monkeypatch.setattr(bedrock_readiness.boto3, "Session", FakeSession)
+
+  result = bedrock_readiness._resolve_credentials(Settings(aws_profile_name="aura-dev"))
+
+  assert result.public_status() == {
+    "status": "not_ready",
+    "reason": "credentials_expired",
+    "failed_credential_source": "profile",
+    "credential_sources": ["profile", "provider_chain"],
+  }
 
 
 def test_bedrock_readiness_probe_caches_resolution(monkeypatch: pytest.MonkeyPatch) -> None:

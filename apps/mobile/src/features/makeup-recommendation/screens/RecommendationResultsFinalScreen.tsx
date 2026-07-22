@@ -1,58 +1,15 @@
-import {ChevronLeft, MoreHorizontal, ShoppingBag, Sparkles} from 'lucide-react-native';
-import {useCallback, useMemo, useRef, useState} from 'react';
-import {
-  AccessibilityInfo,
-  Alert,
-  PixelRatio,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ChevronLeft, ShoppingBag, Sparkles} from 'lucide-react-native';
+import {useMemo} from 'react';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {
-  loadOptionalCaptureRefFunction,
-  OptionalViewShot,
-  type OptionalViewShotRef,
-} from '../../../shared/ui/OptionalViewShot';
-import {SavedImagePreviewSheet} from '../../../shared/ui/SavedImagePreviewSheet';
 import {FinalAreaGuideSection} from '../components/result/FinalAreaGuideSection';
 import {FinalGeneratedMakeupHero} from '../components/result/FinalGeneratedMakeupHero';
 import {FinalSingleLookMap} from '../components/result/FinalSingleLookMap';
-import {
-  captureRecommendationResult,
-  getRecommendationResultShareError,
-  requestRecommendationResultSavePermission,
-  saveRecommendationResultToLibrary,
-  shareRecommendationResult,
-  type RecommendationResultShareTarget,
-} from '../services/recommendationResultShare';
 import {toFinalRecommendationResult} from '../services/toFinalRecommendationResult';
 import {colors, radius, shadows} from '../theme/makeupResultTokens';
 import type {RecommendationResultsViewProps} from './RecommendationResultsView';
-
-const CAPTURE_OPTIONS = {
-  format: 'jpg',
-  quality: 0.95,
-  result: 'tmpfile',
-} as const;
-
-// iOS 이미지 렌더러 한계(≈16384px)를 넘는 긴 결과는 잘리므로, 실측 높이
-// 기준으로 필요할 때만 비율 축소 캡처한다 (분석·피드백 보고서와 동일 규칙).
-const CAPTURE_MAX_PIXELS = 16000;
-
-type CaptureAsset = 'crop' | 'hero' | 'map' | 'product';
-type CaptureReadiness = Record<CaptureAsset, boolean>;
-
-const INITIAL_CAPTURE_READINESS: CaptureReadiness = {
-  crop: false,
-  hero: false,
-  map: false,
-  product: false,
-};
 
 export function RecommendationResultsFinalScreen({
   context,
@@ -67,14 +24,6 @@ export function RecommendationResultsFinalScreen({
   results,
 }: RecommendationResultsViewProps) {
   const insets = useSafeAreaInsets();
-  const captureRef = useRef<OptionalViewShotRef>(null);
-  const captureBodySize = useRef({height: 0, width: 0});
-  const [savedImagePreviewUri, setSavedImagePreviewUri] = useState<string | null>(
-    null,
-  );
-  const activeShareTargetRef = useRef<RecommendationResultShareTarget | null>(null);
-  const [captureReadiness, setCaptureReadiness] =
-    useState<CaptureReadiness>(INITIAL_CAPTURE_READINESS);
   const model = useMemo(
     () =>
       toFinalRecommendationResult(results, {
@@ -98,133 +47,11 @@ export function RecommendationResultsFinalScreen({
   const resolvedImageStatus = model?.sourceLook.imageStatus ?? imageStatus ?? 'pending';
   const generatedReady = Boolean(model) && resolvedImageStatus === 'completed';
 
-  const updateCaptureReadiness = useCallback((asset: CaptureAsset, ready: boolean) => {
-    setCaptureReadiness(current =>
-      current[asset] === ready ? current : {...current, [asset]: ready},
-    );
-  }, []);
-
-  const captureReadyHandlers = useMemo(
-    () => ({
-      crop: (ready: boolean) => updateCaptureReadiness('crop', ready),
-      hero: (ready: boolean) => updateCaptureReadiness('hero', ready),
-      map: (ready: boolean) => updateCaptureReadiness('map', ready),
-      product: (ready: boolean) => updateCaptureReadiness('product', ready),
-    }),
-    [updateCaptureReadiness],
-  );
-
-  const captureReady =
-    generatedReady && Object.values(captureReadiness).every(Boolean);
-
-  // 결과가 렌더러 픽셀 한계를 넘으면 renderInContext(큰 뷰에서도 동작,
-  // 크기 옵션을 주면 잘리므로 자연 크기 호출) → 축소 스냅샷 순으로 시도.
-  const captureFullResult = useCallback(async () => {
-    const body = captureBodySize.current;
-    const captureNode = loadOptionalCaptureRefFunction();
-    const deviceScale = PixelRatio.get();
-
-    if (
-      captureNode &&
-      captureRef.current &&
-      body.height > 0 &&
-      body.height * deviceScale > CAPTURE_MAX_PIXELS
-    ) {
-      try {
-        const fullUri = await captureNode(captureRef.current, {
-          ...CAPTURE_OPTIONS,
-          useRenderInContext: true,
-        });
-        if (fullUri) {
-          return fullUri;
-        }
-      } catch (error) {
-        console.info('[aura:recommendation] capture-render-in-context-failed', {
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-
-      const scaleDown = CAPTURE_MAX_PIXELS / (body.height * deviceScale);
-      const scaledUri = await captureNode(captureRef.current, {
-        ...CAPTURE_OPTIONS,
-        height: Math.floor(body.height * scaleDown),
-        width: Math.floor(body.width * scaleDown),
-      });
-      if (scaledUri) {
-        return scaledUri;
-      }
-    }
-
-    return captureRecommendationResult(captureRef);
-  }, []);
-
-  const handleShareAction = useCallback(
-    async (target: RecommendationResultShareTarget) => {
-      if (activeShareTargetRef.current) return;
-
-      if (!captureReady) {
-        AccessibilityInfo.announceForAccessibility('결과 이미지를 준비하고 있어요.');
-        return;
-      }
-
-      activeShareTargetRef.current = target;
-
-      try {
-        if (target === 'save-image') {
-          await requestRecommendationResultSavePermission();
-        }
-
-        const imageUri = await captureFullResult();
-
-        if (target === 'save-image') {
-          await saveRecommendationResultToLibrary(imageUri);
-          setSavedImagePreviewUri(imageUri);
-          AccessibilityInfo.announceForAccessibility('전체 추천 결과를 사진에 저장했어요.');
-        } else {
-          const result = await shareRecommendationResult(imageUri);
-          AccessibilityInfo.announceForAccessibility(
-            result === 'dismissed'
-              ? '공유를 취소했어요.'
-              : '전체 추천 결과 공유 창을 열었어요.',
-          );
-        }
-      } catch (error) {
-        Alert.alert(
-          '저장·공유를 완료하지 못했어요',
-          getRecommendationResultShareError(error),
-        );
-      } finally {
-        activeShareTargetRef.current = null;
-      }
-    },
-    [captureReady],
-  );
-
-  const handleMore = useCallback(() => {
-    if (activeShareTargetRef.current) {
-      Alert.alert(
-        '공유 준비 중',
-        '이전 저장 또는 공유 작업을 처리하고 있어요. 잠시만 기다려 주세요.',
-      );
-      return;
-    }
-    if (!captureReady) {
-      Alert.alert('결과 준비 중', '추천 이미지를 모두 불러온 뒤 저장하거나 공유할 수 있어요.');
-      return;
-    }
-    Alert.alert('추천 메이크업 보고서', '원하는 작업을 선택해 주세요.', [
-      {text: '이미지 저장', onPress: () => void handleShareAction('save-image')},
-      {text: '공유하기', onPress: () => void handleShareAction('share-result')},
-      {text: '취소', style: 'cancel'},
-    ]);
-  }, [captureReady, handleShareAction]);
-
   if (!model) {
     return (
       <LinearGradient colors={colors.screenGradient} style={styles.fill}>
         <RecommendationReportHeader
           onBack={onBack}
-          onMore={handleMore}
           topInset={insets.top}
         />
         <View style={styles.empty}>
@@ -249,20 +76,9 @@ export function RecommendationResultsFinalScreen({
         showsVerticalScrollIndicator={false}>
         <RecommendationReportHeader
           onBack={onBack}
-          onMore={handleMore}
           topInset={insets.top}
         />
-        <View
-          onLayout={e => {
-            captureBodySize.current = {
-              height: e.nativeEvent.layout.height,
-              width: e.nativeEvent.layout.width,
-            };
-          }}>
-        <OptionalViewShot
-          options={CAPTURE_OPTIONS}
-          ref={captureRef}
-          style={styles.captureRoot}>
+        <View style={styles.captureRoot}>
           <LinearGradient colors={colors.screenGradient} style={styles.captureStack}>
             <View style={styles.heroInset}>
               <FinalGeneratedMakeupHero
@@ -271,7 +87,6 @@ export function RecommendationResultsFinalScreen({
                 beforeImageUri={context?.reportImageUri}
                 imageError={model.sourceLook.imageError ?? imageRetryError}
                 imageStatus={resolvedImageStatus}
-                onReadyChange={captureReadyHandlers.hero}
                 onRetry={() => onRetryImages()}
                 title={context?.keywordLabel?.trim()
                   || context?.situationLabel?.trim()
@@ -284,8 +99,6 @@ export function RecommendationResultsFinalScreen({
                 generatedReady={generatedReady}
                 look={model.look}
                 onAreaOpened={area => onAreaOpened(area, model.sourceLook)}
-                onCropSettledChange={captureReadyHandlers.crop}
-                onProductImageSettledChange={captureReadyHandlers.product}
                 sourceImageUri={context?.reportImageUri}
                 sourceRegionVisuals={context?.reportRegionVisuals}
                 sourceLook={model.sourceLook}
@@ -296,11 +109,9 @@ export function RecommendationResultsFinalScreen({
               <FinalSingleLookMap
                 generatedReady={generatedReady}
                 look={model.look}
-                onPointSettledChange={captureReadyHandlers.map}
               />
             </View>
           </LinearGradient>
-        </OptionalViewShot>
         </View>
 
         <View style={styles.floatingActionClearance} />
@@ -346,21 +157,15 @@ export function RecommendationResultsFinalScreen({
           ) : null}
         </View>
       </View>
-      <SavedImagePreviewSheet
-        imageUri={savedImagePreviewUri}
-        onClose={() => setSavedImagePreviewUri(null)}
-      />
     </LinearGradient>
   );
 }
 
 function RecommendationReportHeader({
   onBack,
-  onMore,
   topInset,
 }: {
   onBack?: () => void;
-  onMore: () => void;
   topInset: number;
 }) {
   return (
@@ -382,14 +187,7 @@ function RecommendationReportHeader({
       <Text numberOfLines={1} style={styles.reportHeaderTitle}>
         추천 메이크업 보고서
       </Text>
-      <Pressable
-        accessibilityLabel="추천 메이크업 보고서 더보기"
-        accessibilityRole="button"
-        hitSlop={6}
-        onPress={onMore}
-        style={({pressed}) => [styles.reportHeaderButton, pressed && styles.pressed]}>
-        <MoreHorizontal color={colors.ink3} size={16} strokeWidth={2} />
-      </Pressable>
+      <View style={styles.reportHeaderSpacer} />
     </View>
   );
 }
@@ -423,6 +221,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     width: 34,
   },
+  reportHeaderSpacer: {height: 34, width: 34},
   reportHeaderTitle: {
     color: colors.ink,
     flex: 1,

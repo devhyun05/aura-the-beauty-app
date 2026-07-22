@@ -67,7 +67,7 @@ export function CustomSituationComposer({
           <View style={styles.header}>
             <View style={styles.heading}>
               <Text style={styles.title}>원하는 상황을 직접 설명해 주세요</Text>
-              <Text style={styles.description}>언제 또는 어디에서 사용할지만 필수예요. 인상·지속력·환경·피할 조건은 선택이에요.</Text>
+              <Text style={styles.description}>상황이나 원하는 느낌을 짧게 적어도 괜찮아요. AI가 원뜻을 유지해 필요한 질문으로 구체화해요.</Text>
             </View>
             <Pressable
               accessibilityLabel="직접 설명 닫기"
@@ -94,7 +94,7 @@ export function CustomSituationComposer({
                 maxLength={MAKEUP_RECOMMENDATION_CUSTOM_SITUATION_MAX_LENGTH}
                 multiline
                 onChangeText={onChangeText}
-                placeholder="예: 출근 / 친구 결혼식 / 야외 페스티벌"
+                placeholder="예: 로판 여주 느낌 / 사진 잘 나오게 / 친구 결혼식"
                 placeholderTextColor={colors.textTertiary}
                 style={styles.input}
                 textAlignVertical="top"

@@ -1,8 +1,4 @@
 import React, {useEffect, useMemo, useState} from 'react';
-import {Alert} from 'react-native';
-
-import {BackendApiError} from '../../../shared/services/backendApi';
-
 import {
   ExtractedMakeupLookAdjustScreen,
   MakeupFilterSaveCompleteScreen,
@@ -24,7 +20,9 @@ import {
   fetchReferenceMakeupExtractionReport,
   fetchReferenceMakeupExtractionReports,
   getReferenceMakeupExtractionDataSync,
+  hasCompletedReferenceMakeupExtractionSync,
   runReferenceMakeupExtraction,
+  type ReferenceMakeupExtractionRunResult,
 } from '../../../features/reference-makeup-extraction/services/makeupExtractionService';
 import {
   getRecommendedMakeupFilterById,
@@ -47,10 +45,6 @@ import {
   type MakeupFilterSaveSettings,
 } from '../../../features/reference-makeup-extraction/services/makeupFilterSaveModel';
 
-type HeaderShareAction = {
-  cb: () => void;
-};
-
 export const REFERENCE_MAKEUP_EXTRACTION_ERROR_LOG_PREFIX =
   '[aura:extraction] extraction:error';
 
@@ -58,7 +52,7 @@ export type ReferenceMakeupExtractionSafeRunner = (
   photo: ReferenceMakeupPhoto,
   onProgress: (progress: MakeupExtractionProgressUpdate) => void,
   onError?: (error: unknown) => void,
-) => Promise<void>;
+) => Promise<ReferenceMakeupExtractionRunResult | null>;
 
 const REFERENCE_MAKEUP_SAVE_AREAS: readonly MakeupArea[] = [
   'base',
@@ -90,30 +84,6 @@ function getSelectedReferenceMakeupPhoto(photo: ReferenceMakeupPhoto | null): Re
   return photo ?? getReferenceMakeupExtractionDataSync().photos[0];
 }
 
-function buildMakeupRecipeListItems(
-  selectedPhoto: ReferenceMakeupPhoto | null,
-): MakeupRecipeListItem[] {
-  const {extractedMakeupLook, photos} = getReferenceMakeupExtractionDataSync();
-  const primaryPhoto = getSelectedReferenceMakeupPhoto(selectedPhoto);
-  const recipePhotos = [
-    primaryPhoto,
-    ...photos.filter((photo) => photo.id !== primaryPhoto.id),
-  ];
-
-  return recipePhotos.map((photo, index) => ({
-    id: `makeup-recipe-${photo.id}`,
-    photo,
-    subtitle:
-      index === 0
-        ? extractedMakeupLook.subtitle
-        : '레퍼런스 사진에서 추출한 색상과 적용 순서를 정리했어요.',
-    tags: extractedMakeupLook.tags,
-    title: index === 0
-      ? extractedMakeupLook.title
-      : `${extractedMakeupLook.title} ${index + 1}`,
-  }));
-}
-
 function buildMakeupRecipeListItemsFromReports(
   reports: readonly ReferenceMakeupExtractionReportHistoryItem[],
 ): MakeupRecipeListItem[] {
@@ -136,9 +106,10 @@ function logReferenceMakeupExtractionError(error: unknown) {
 export const runReferenceMakeupExtractionSafely: ReferenceMakeupExtractionSafeRunner =
   async (photo, onProgress, onError = logReferenceMakeupExtractionError) => {
     try {
-      await runReferenceMakeupExtraction(photo, onProgress);
+      return await runReferenceMakeupExtraction(photo, onProgress);
     } catch (error) {
       onError(error);
+      return null;
     }
   };
 
@@ -223,17 +194,30 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
 export function ReferenceMakeupExtractionLoadingRouteScreen({
   navigation,
 }: RootScreenProps<'ReferenceMakeupExtractionLoading'>) {
-  const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
-  const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
+  const {
+    selectedReferenceMakeupPhoto,
+    setSelectedReferenceMakeupPhoto,
+  } = useNavigationFlowState();
+  const photo = selectedReferenceMakeupPhoto;
   const [isAnalysisReady, setIsAnalysisReady] = useState(false);
   const [analysisProgress, setAnalysisProgress] =
     useState<MakeupExtractionProgressUpdate | null>(null);
+  const [analysisErrorMessage, setAnalysisErrorMessage] = useState<string | null>(null);
+  const [completedReportId, setCompletedReportId] = useState<string | null>(null);
+  const [requestKey, setRequestKey] = useState(0);
 
   useEffect(() => {
+    if (!photo) {
+      navigation.replace('ReferenceMakeupExtractionUpload');
+      return;
+    }
+
     let isMounted = true;
 
     setIsAnalysisReady(false);
     setAnalysisProgress(null);
+    setAnalysisErrorMessage(null);
+    setCompletedReportId(null);
 
     const safeOnProgress = (progress: MakeupExtractionProgressUpdate) => {
       if (isMounted) {
@@ -243,15 +227,17 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
 
     void runReferenceMakeupExtractionSafely(photo, safeOnProgress, error => {
       logReferenceMakeupExtractionError(error);
-      // 한도 초과(429)는 가짜 결과로 넘어가지 않고 안내 후 되돌린다.
-      // goBack이 먼저라 onComplete의 isFocused() 가드가 결과 이동을 막는다.
-      if (error instanceof BackendApiError && error.status === 429) {
-        goBackToPreviousOrMainTab(navigation, 'HomeTab');
-        Alert.alert('잠시 후 다시 시도해 주세요', error.message);
+      if (isMounted) {
+        setAnalysisErrorMessage(
+          error instanceof Error
+            ? error.message
+            : '메이크업 추출을 완료하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        );
       }
     })
-      .finally(() => {
-        if (isMounted) {
+      .then(result => {
+        if (isMounted && result) {
+          setCompletedReportId(result.reportId);
           setIsAnalysisReady(true);
         }
       });
@@ -259,23 +245,40 @@ export function ReferenceMakeupExtractionLoadingRouteScreen({
     return () => {
       isMounted = false;
     };
-  }, [photo]);
+  }, [navigation, photo, requestKey]);
+
+  if (!photo) {
+    return null;
+  }
 
   return (
     <ReferenceMakeupExtractionLoadingScreen
+      key={`${photo.id}:${requestKey}`}
+      analysisAttemptKey={requestKey}
+      analysisErrorMessage={analysisErrorMessage}
       isAnalysisReady={isAnalysisReady}
       onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}
+      onChooseDifferentPhoto={() => {
+        const initialSource = photo.referenceSource === 'album' ? 'gallery' : 'camera';
+        setSelectedReferenceMakeupPhoto(null);
+        navigation.replace('ReferenceMakeupExtractionUpload', {initialSource});
+      }}
       onComplete={() => {
-        if (navigation.isFocused()) {
+        if (navigation.isFocused() && completedReportId) {
           navigation.reset({
             index: 1,
             routes: [
               {name: 'MainTabs', params: {screen: 'HomeTab'}},
-              {name: 'ReferenceMakeupExtractionResult'},
+              {
+                name: 'ReferenceMakeupExtractionResult',
+                params: {reportId: completedReportId},
+              },
             ],
           });
         }
       }}
+      onOpenReportList={() => navigation.replace('MakeupRecipeList')}
+      onRetry={() => setRequestKey(currentKey => currentKey + 1)}
       photo={photo}
       progressUpdate={analysisProgress}
     />
@@ -295,6 +298,7 @@ export function ReferenceMakeupExtractionResultRouteScreen({
   const [loadedReportPhoto, setLoadedReportPhoto] =
     useState<ReferenceMakeupPhoto | null>(null);
   const [reportLoadError, setReportLoadError] = useState('');
+  const [reportRequestKey, setReportRequestKey] = useState(0);
   const photo =
     loadedReportPhoto ??
     getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
@@ -328,7 +332,7 @@ export function ReferenceMakeupExtractionResultRouteScreen({
     return () => {
       isMounted = false;
     };
-  }, [reportId, setSelectedReferenceMakeupPhoto]);
+  }, [reportId, reportRequestKey, setSelectedReferenceMakeupPhoto]);
 
   const handleBack = () => {
     if (shouldReturnToProfile) {
@@ -348,6 +352,20 @@ export function ReferenceMakeupExtractionResultRouteScreen({
     navigation.replace('ReferenceMakeupExtractionUpload');
   };
 
+  if (!reportId && !hasCompletedReferenceMakeupExtractionSync()) {
+    return (
+      <DetailRouteChrome
+        routeName="ReferenceMakeupExtractionResult"
+        onBack={handleBack}>
+        <RoutePlaceholder
+          description="완료된 메이크업 추출 보고서를 먼저 선택해 주세요."
+          showHeader={false}
+          title="보고서를 열지 못했어요"
+        />
+      </DetailRouteChrome>
+    );
+  }
+
   if (reportId && !loadedReportPhoto) {
     return (
       <DetailRouteChrome
@@ -357,6 +375,16 @@ export function ReferenceMakeupExtractionResultRouteScreen({
           description={
             reportLoadError || '완료된 메이크업 추출 보고서를 불러오고 있어요.'
           }
+          onPrimaryAction={
+            reportLoadError
+              ? () => setReportRequestKey(currentKey => currentKey + 1)
+              : undefined
+          }
+          onSecondaryAction={
+            reportLoadError ? () => navigation.replace('MakeupRecipeList') : undefined
+          }
+          primaryActionLabel={reportLoadError ? '다시 시도하기' : undefined}
+          secondaryActionLabel={reportLoadError ? '보고서 목록으로' : undefined}
           showHeader={false}
           title={reportLoadError ? '보고서를 열지 못했어요' : '보고서를 여는 중'}
         />
@@ -539,23 +567,12 @@ export function MakeupRecipeDetailRouteScreen({
 }: RootScreenProps<'MakeupRecipeDetail'>) {
   const {selectedReferenceMakeupPhoto} = useNavigationFlowState();
   const photo = getSelectedReferenceMakeupPhoto(selectedReferenceMakeupPhoto);
-  const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
-  const handleHeaderShareActionChange = React.useCallback(
-    (nextShareAction: (() => void) | null) => {
-      setShareAction(nextShareAction ? {cb: nextShareAction} : null);
-    },
-    [],
-  );
 
   return (
     <DetailRouteChrome
       routeName="MakeupRecipeDetail"
-      onOpenDocumentList={() => navigation.navigate('MakeupRecipeList')}
-      onShare={shareAction?.cb}
-      shareDisabled={!shareAction}>
+      onOpenDocumentList={() => navigation.navigate('MakeupRecipeList')}>
       <MakeupRecipeDetailScreen
-        onHeaderShareActionChange={handleHeaderShareActionChange}
-        onSaveRecipe={() => navigation.navigate('MakeupRecipeSaveComplete')}
         photo={photo}
       />
     </DetailRouteChrome>
@@ -565,15 +582,7 @@ export function MakeupRecipeDetailRouteScreen({
 export function MakeupRecipeListRouteScreen({
   navigation,
 }: RootScreenProps<'MakeupRecipeList'>) {
-  const {selectedReferenceMakeupPhoto, setSelectedReferenceMakeupPhoto} =
-    useNavigationFlowState();
-  const fallbackRecipes = useMemo(
-    () =>
-      selectedReferenceMakeupPhoto
-        ? buildMakeupRecipeListItems(selectedReferenceMakeupPhoto).slice(0, 1)
-        : [],
-    [selectedReferenceMakeupPhoto],
-  );
+  const {setSelectedReferenceMakeupPhoto} = useNavigationFlowState();
   const [recipes, setRecipes] = useState<MakeupRecipeListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -584,7 +593,7 @@ export function MakeupRecipeListRouteScreen({
     void fetchReferenceMakeupExtractionReports()
       .then(reports => {
         const nextRecipes = buildMakeupRecipeListItemsFromReports(reports);
-        setRecipes(nextRecipes.length > 0 ? nextRecipes : fallbackRecipes);
+        setRecipes(nextRecipes);
       })
       .catch(error => {
         setLoadError(
@@ -596,7 +605,7 @@ export function MakeupRecipeListRouteScreen({
       .finally(() => {
         setIsLoading(false);
       });
-  }, [fallbackRecipes]);
+  }, []);
 
   useEffect(() => {
     loadRecipes();

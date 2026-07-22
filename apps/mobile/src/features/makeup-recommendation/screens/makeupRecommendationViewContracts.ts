@@ -63,9 +63,27 @@ export function getInitialMakeupRecommendationScreenPhase({
 
 export function shouldHandleMakeupRecommendationBack(
   phase: MakeupRecommendationScreenPhase,
-  {directReportEntry = false}: {directReportEntry?: boolean} = {},
+  {
+    directHistoryEntry = false,
+    directReportEntry = false,
+  }: {
+    directHistoryEntry?: boolean;
+    directReportEntry?: boolean;
+  } = {},
 ): boolean {
-  return !directReportEntry && phase !== 'discovery';
+  if (directReportEntry) return false;
+  if (directHistoryEntry && phase === 'history') return false;
+  return phase !== 'discovery';
+}
+
+export function getMakeupRecommendationHistoryBackAction({
+  directHistoryEntry = false,
+  directReportEntry,
+}: {
+  directHistoryEntry?: boolean;
+  directReportEntry: boolean;
+}): 'route' | 'discovery' {
+  return directReportEntry || directHistoryEntry ? 'route' : 'discovery';
 }
 
 export function getQuestionActionMode({currentQuestionIndex, questionCount}: {currentQuestionIndex: number; questionCount: number}): 'advance' | 'complete' {

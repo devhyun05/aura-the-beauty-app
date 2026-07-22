@@ -835,11 +835,29 @@ const feedbackServiceSource = readFileSync(
   'apps/mobile/src/features/makeup-feedback/services/makeupFeedbackService.ts',
   'utf8',
 );
+const feedbackRoutesSource = readFileSync(
+  'apps/mobile/src/app/navigation/routes/makeupFeedbackRoutes.tsx',
+  'utf8',
+);
 expectEqual(
   feedbackServiceSource.includes('if (isExplainableCoachingReport(report))') &&
     feedbackServiceSource.includes('throw error;'),
   true,
   'v9 list mapping surfaces contract errors instead of silently dropping reports',
+);
+expectEqual(
+  feedbackRoutesSource.includes(': {onBack: handleBack};') &&
+    !feedbackRoutesSource.includes(
+      "onOpenDocumentList: () =>\n          navigation.navigate('MakeupFeedbackResultsList')",
+    ),
+  true,
+  'feedback report header performs real back navigation instead of stacking another list screen',
+);
+expectEqual(
+  feedbackRoutesSource.includes("primaryActionLabel={reportLoadError ? '다시 시도하기' : undefined}") &&
+    feedbackRoutesSource.includes("secondaryActionLabel={reportLoadError ? '보고서 목록 보기' : undefined}"),
+  true,
+  'feedback report load errors expose retry and a non-cycling list exit',
 );
 
 

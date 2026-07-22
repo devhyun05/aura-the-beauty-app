@@ -31,6 +31,7 @@ from app.services.makeup_recommendation import (
   generate_recommendation,
   generate_recommendation_v2,
   generate_shared_scenarios,
+  require_claude_recommendation_v2,
 )
 from app.services.makeup_editorial_question_templates import resolve_reviewed_editorial_preset
 from app.services.makeup_recommendation_image import (
@@ -2085,13 +2086,6 @@ async def generate_makeup_recommendation_session(
 ) -> dict:
   _require_makeup_v2(settings)
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="makeup_recommendation",
-    per_minute=settings.makeup_recommendation_generation_limit_per_minute,
-    per_day=settings.makeup_recommendation_generation_limit_per_day,
-  )
   generation = await begin_generation(db, user["id"], session_id)
   if generation.get("reused"):
     await dispatch_makeup_product_snapshot_job(
@@ -2103,6 +2097,21 @@ async def generate_makeup_recommendation_session(
     )
     generation.pop("reused", None)
     return success(generation)
+
+  # begin_generation performs the owned-session/state/idempotency checks and
+  # atomically claims the one request allowed to start generation. Replayed,
+  # incomplete, foreign, or already-running sessions therefore spend no quota.
+  try:
+    await enforce_report_generation_limit(
+      db,
+      user_id=user["id"],
+      feature="makeup_recommendation",
+      per_minute=settings.makeup_recommendation_generation_limit_per_minute,
+      per_day=settings.makeup_recommendation_generation_limit_per_day,
+    )
+  except Exception:
+    await fail_generation(db, user["id"], session_id)
+    raise
 
   session = generation["session"]
   context = _json_value(session.get("context_snapshot"), {})
@@ -2275,18 +2284,11 @@ async def retry_recommendation_images(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="makeup_recommendation",
-    per_minute=settings.makeup_recommendation_generation_limit_per_minute,
-    per_day=settings.makeup_recommendation_generation_limit_per_day,
-  )
   look_id = payload.look_id if payload is not None else None
   if look_id is not None:
     asset = await db.fetchrow(
       """
-      select asset.look_id, asset.status
+      select asset.look_id, asset.status, asset.image_error, asset.updated_at
       from makeup_recommendation_assets asset
       join makeup_recommendation_reports report on report.id = asset.report_id
       where asset.report_id = $1 and asset.look_id = $2 and report.user_id = $3
@@ -2324,6 +2326,34 @@ async def retry_recommendation_images(
         "MAKEUP_RECOMMENDATION_IMAGE_PROCESSING",
         "This look is already being generated.",
       )
+    try:
+      await enforce_report_generation_limit(
+        db,
+        user_id=user["id"],
+        feature="makeup_recommendation",
+        per_minute=settings.makeup_recommendation_generation_limit_per_minute,
+        per_day=settings.makeup_recommendation_generation_limit_per_day,
+      )
+    except Exception:
+      await db.execute(
+        """
+        update makeup_recommendation_assets asset
+        set status = $4,
+            image_error = $5,
+            updated_at = $6
+        from makeup_recommendation_reports report
+        where asset.report_id = $1 and asset.look_id = $2
+          and report.id = asset.report_id and report.user_id = $3
+          and asset.status = 'pending'
+        """,
+        report_id,
+        look_id,
+        user["id"],
+        asset.get("status"),
+        asset.get("image_error"),
+        asset.get("updated_at"),
+      )
+      raise
     image_status = await dispatch_recommendation_image_job(
       db=db,
       background_tasks=background_tasks,
@@ -2341,7 +2371,15 @@ async def retry_recommendation_images(
     )
 
   report = await db.fetchrow(
-    "select id, image_status from makeup_recommendation_reports where id = $1 and user_id = $2",
+    """
+    select id, image_status, image_error, updated_at
+    from makeup_recommendation_reports
+    where id = $1 and user_id = $2
+      and (
+        schema_version <> 'makeup-recommendation-v2'
+        or recommendation->>'generationSource' = 'claude'
+      )
+    """,
     report_id,
     user["id"],
   )
@@ -2371,6 +2409,30 @@ async def retry_recommendation_images(
     if report.get("image_status") == "processing":
       raise AppError(409, "MAKEUP_RECOMMENDATION_IMAGE_PROCESSING", "Recommendation images are already being generated.")
     raise AppError(409, "MAKEUP_RECOMMENDATION_IMAGE_PENDING", "Recommendation images are already waiting to be generated.")
+  try:
+    await enforce_report_generation_limit(
+      db,
+      user_id=user["id"],
+      feature="makeup_recommendation",
+      per_minute=settings.makeup_recommendation_generation_limit_per_minute,
+      per_day=settings.makeup_recommendation_generation_limit_per_day,
+    )
+  except Exception:
+    await db.execute(
+      """
+      update makeup_recommendation_reports
+      set image_status = $3,
+          image_error = $4,
+          updated_at = $5
+      where id = $1 and user_id = $2 and image_status = 'pending'
+      """,
+      report_id,
+      user["id"],
+      report.get("image_status"),
+      report.get("image_error"),
+      report.get("updated_at"),
+    )
+    raise
   image_status = await dispatch_recommendation_image_job(
     db=db,
     background_tasks=background_tasks,
@@ -2390,13 +2452,6 @@ async def refine_recommendation_report(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="makeup_recommendation",
-    per_minute=settings.makeup_recommendation_generation_limit_per_minute,
-    per_day=settings.makeup_recommendation_generation_limit_per_day,
-  )
   source = await db.fetchrow(
     """
     select id, scenario_text, scenario_tags, questions, answers, recommendation,
@@ -2404,6 +2459,10 @@ async def refine_recommendation_report(
            schema_version, image_mode
     from makeup_recommendation_reports
     where id = $1 and user_id = $2
+      and (
+        schema_version <> 'makeup-recommendation-v2'
+        or recommendation->>'generationSource' = 'claude'
+      )
     """,
     report_id,
     user["id"],
@@ -2437,6 +2496,16 @@ async def refine_recommendation_report(
     _require_makeup_v2(settings)
   else:
     _require_makeup_v1_compat(settings)
+  # Ownership and schema/feature eligibility are free validation. Reserve the
+  # generation budget only immediately before invoking the recommendation
+  # provider; a foreign/missing/ineligible parent report must not spend it.
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="makeup_recommendation",
+    per_minute=settings.makeup_recommendation_generation_limit_per_minute,
+    per_day=settings.makeup_recommendation_generation_limit_per_day,
+  )
   if schema_version == "makeup-recommendation-v2":
     refinement_context = {
       **sanitized_context,
@@ -2491,6 +2560,7 @@ async def refine_recommendation_report(
       refined_answers,
       questions,
     )
+    recommendation = require_claude_recommendation_v2(recommendation)
   row = await db.fetchrow(
     """
     insert into makeup_recommendation_reports

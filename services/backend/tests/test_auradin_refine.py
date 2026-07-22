@@ -4,7 +4,9 @@ from fastapi.testclient import TestClient
 
 from app.core.settings import Settings
 from app.main import create_app
-from app.services.auradin_agent.session_manager import clear_sessions
+from app.services.auradin_agent.catalog_loader import get_catalog
+from app.services.auradin_agent.ranking import attribute_similarity, normalized_product_key
+from app.services.auradin_agent.session_manager import clear_sessions, get_session
 
 
 def _client(**settings_overrides) -> TestClient:
@@ -34,7 +36,7 @@ def _refine_log(turn: dict) -> dict:
 
 
 def test_dial_reranks_cached_candidates_without_research() -> None:
-  """dial 다이얼은 λ만 조절해 캐시된 후보를 재랭킹한다 — 재검색 0 (§7)."""
+  """dial은 λ/의미축/미노출 이력으로 캐시 후보를 재랭킹한다 — 재검색 0 (§7)."""
   client = _client()
   session_id = _create(client, "글리터 추천해줘")
   before = _turn(client, session_id)
@@ -58,6 +60,104 @@ def test_dial_reranks_cached_candidates_without_research() -> None:
   assert products[0]["id"] == anchor_before
 
 
+def test_each_dial_click_serves_unseen_cached_alternatives_when_available() -> None:
+  """A single dial click must not look like a dead control when cache has alternatives.
+
+  Lip was a real regression case: lambda 0.70, 0.55 and 0.85 all selected the
+  same visible Top3 even though the backend accepted the refine request.  Keep
+  the anchor, but rotate both supporting cards from the ranked cache.
+  """
+  for dial in ("more_similar", "more_diverse"):
+    client = _client()
+    session_id = _create(client, "립 추천해줘")
+    before = _turn(client, session_id)
+    before_ids = [product["id"] for product in before["result"]["products"]]
+
+    refined = client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": dial})
+    assert refined.status_code == 200
+
+    turn = _turn(client, session_id)
+    after_ids = [product["id"] for product in turn["result"]["products"]]
+    log = _refine_log(turn)
+    assert log["usedCache"] is True
+    assert log["rotationApplied"] is True
+    assert after_ids[0] == before_ids[0]
+    assert set(after_ids[1:]).isdisjoint(before_ids[1:])
+
+
+def test_refine_history_prevents_immediate_triplet_reappearance() -> None:
+  client = _client()
+  session_id = _create(client, "립 추천해줘")
+  served_sets: list[frozenset[str]] = []
+
+  for turn_index in range(4):
+    turn = _turn(client, session_id)
+    served_sets.append(frozenset(product["id"] for product in turn["result"]["products"]))
+    if turn_index < 3:
+      response = client.post(
+        f"/api/search/sessions/{session_id}/refine",
+        json={"dial": "more_similar"},
+      )
+      assert response.status_code == 200
+
+  assert len(set(served_sets)) == len(served_sets)
+  assert _refine_log(_turn(client, session_id))["usedCache"] is True
+
+
+def _result_axis_metrics(turn: dict) -> tuple[float, float]:
+  catalog = get_catalog()
+  items = [catalog.get(product["id"]) for product in turn["result"]["products"]]
+  assert all(items)
+  anchor_similarity = sum(attribute_similarity(items[0], item) for item in items[1:]) / 2
+  pairwise_similarity = (
+    attribute_similarity(items[0], items[1])
+    + attribute_similarity(items[0], items[2])
+    + attribute_similarity(items[1], items[2])
+  ) / 3
+  return anchor_similarity, 1.0 - pairwise_similarity
+
+
+def test_refine_dials_move_anchor_similarity_and_pairwise_diversity_in_expected_directions() -> None:
+  turns: dict[str, dict] = {}
+  for dial in ("more_similar", "more_diverse"):
+    client = _client()
+    session_id = _create(client, "립 추천해줘")
+    response = client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": dial})
+    assert response.status_code == 200
+    turns[dial] = _turn(client, session_id)
+
+  similar_anchor, similar_diversity = _result_axis_metrics(turns["more_similar"])
+  diverse_anchor, diverse_diversity = _result_axis_metrics(turns["more_diverse"])
+  assert similar_anchor > diverse_anchor
+  assert diverse_diversity > similar_diversity
+
+
+def test_exhausted_refine_history_reuses_candidates_with_explicit_notice() -> None:
+  client = _client()
+  session_id = _create(client, "립 추천해줘")
+  state = get_session(session_id, owner_subject="local-dev-user")
+  assert state is not None
+  catalog = get_catalog()
+  state["servedCandidateIds"] = list(state["rankedCandidateIds"])
+  state["servedProductKeys"] = [
+    key
+    for product_id in state["rankedCandidateIds"]
+    if (item := catalog.get(product_id)) is not None
+    if (key := normalized_product_key(item))
+  ]
+
+  response = client.post(
+    f"/api/search/sessions/{session_id}/refine",
+    json={"dial": "more_diverse"},
+  )
+  assert response.status_code == 200
+  turn = _turn(client, session_id)
+  log = _refine_log(turn)
+  assert log["rotationApplied"] is False
+  assert log["candidateHistoryExhausted"] is True
+  assert turn["result"]["refineNotice"]["kind"] == "dial_candidates_reused"
+
+
 def test_dial_accumulates_lambda_and_clamps() -> None:
   """다이얼 반복은 세션 λ에 누적되고 [0.05, 0.95]로 클램프된다."""
   client = _client()
@@ -69,13 +169,13 @@ def test_dial_accumulates_lambda_and_clamps() -> None:
   assert _refine_log(turn)["lambda"] == 0.05
 
 
-def test_dial_saturation_is_reported_honestly() -> None:
-  """λ가 클램프 끝에 닿으면 '다시 정렬했어요'는 거짓 — no-op을 정직하게 알린다 (§7)."""
+def test_lambda_saturation_still_rotates_unseen_candidates() -> None:
+  """A saturated lambda is not a no-op while the session still has unseen rows."""
   client = _client()
   session_id = _create(client, "글리터 추천해줘")
-  # 먼저 포화까지 밀어붙인 뒤, 한 번 더 눌러 no-op을 유도.
   for _ in range(10):
     client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": "more_diverse"})
+  before_ids = [product["id"] for product in _turn(client, session_id)["result"]["products"]]
 
   saturated = client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": "more_diverse"})
   assert saturated.status_code == 200
@@ -83,12 +183,12 @@ def test_dial_saturation_is_reported_honestly() -> None:
 
   log = _refine_log(turn)
   assert log["lambdaMoved"] is False
-  assert turn["result"]["headerLabel"] == "이미 가장 다양한 순서예요"
-  notice = turn["result"].get("refineNotice")
-  assert notice and notice["kind"] == "dial_saturated"
-  assert notice["dial"] == "more_diverse"
+  assert log["rotationApplied"] is True
+  assert [product["id"] for product in turn["result"]["products"]] != before_ids
+  assert turn["result"]["headerLabel"] == "더 다양한 결로 다시 정렬했어요"
+  assert turn["result"].get("refineNotice") is None
 
-  # 반대 방향으로 누르면 다시 움직인다 → 정상 재정렬 헤더 + notice 없음.
+  # 반대 방향은 λ를 다시 움직이고, 역시 남은 미노출 후보를 우선한다.
   moved = client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": "more_similar"})
   assert moved.status_code == 200
   turn = _turn(client, session_id)

@@ -313,7 +313,7 @@ async def refine_search_session(
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
 ) -> dict:
-  # §7: dial은 기존 후보 재랭킹(λ 조절)만, prompt는 §3 파서로 hard/soft 병합.
+  # §7: dial은 기존 후보 캐시에서 λ/의미축/미노출 이력 재랭킹만, prompt는 hard/soft 병합.
   prompt = str(payload.prompt or "").strip()
   dial = str(payload.dial or "").strip() or None
   if len(prompt) > MAX_SEARCH_PROMPT_LENGTH:

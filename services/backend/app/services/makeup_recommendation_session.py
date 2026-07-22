@@ -15,9 +15,9 @@ from app.schemas.makeup_recommendation import (
 from app.services.makeup_editorial_question_templates import resolve_reviewed_editorial_preset
 from app.services.makeup_keyword_question_templates import resolve_reviewed_keyword_questions
 from app.services.makeup_recommendation import (
-  deterministic_questions_v2,
-  generate_questions_v2_with_fallback,
+  generate_questions_v2,
   normalize_custom_situation_v2,
+  require_claude_recommendation_v2,
 )
 from app.services.makeup_recommendation_custom_situation import validate_custom_situation_for_request
 from app.services.makeup_recommendation_context import (
@@ -218,11 +218,11 @@ async def create_session(
   if keyword is not None:
     question_result = await resolve_reviewed_keyword_questions(db, keyword)
     if question_result is None:
-      question_result = {
-        "questions": deterministic_questions_v2(context),
-        "source": "keyword_template_fallback",
-        "version": "makeup-keyword-questions-fallback-v1",
-      }
+      raise AppError(
+        503,
+        "MAKEUP_KEYWORD_QUESTIONS_UNAVAILABLE",
+        "The reviewed questions for this makeup keyword are not available.",
+      )
   elif editorial_preset is not None:
     question_result = {
       "questions": editorial_preset["questions"],
@@ -230,7 +230,7 @@ async def create_session(
       "version": editorial_preset["version"],
     }
   else:
-    question_result = await generate_questions_v2_with_fallback(settings, context)
+    question_result = await generate_questions_v2(settings, context)
   questions = question_result["questions"]
   context["questioning"] = {
     "source": question_result["source"],
@@ -394,6 +394,7 @@ async def _existing_report(db: Any, user_id: UUID, report_id: UUID) -> dict[str,
   if row is None:
     raise AppError(404, "MAKEUP_RECOMMENDATION_NOT_FOUND", "The makeup recommendation report was not found.")
   recommendation = _json_value(row.get("recommendation"), {})
+  recommendation = require_claude_recommendation_v2(recommendation)
   return {
     "reportId": row["id"],
     "recommendation": recommendation,
@@ -440,6 +441,7 @@ async def complete_generation(
   session: dict[str, Any],
   recommendation: dict[str, Any],
 ) -> dict[str, Any]:
+  recommendation = require_claude_recommendation_v2(recommendation)
   context = _json_value(session.get("context_snapshot"), {})
   selection = context.get("selection") if isinstance(context.get("selection"), dict) else {}
   situation = selection.get("situation") if isinstance(selection.get("situation"), dict) else {}

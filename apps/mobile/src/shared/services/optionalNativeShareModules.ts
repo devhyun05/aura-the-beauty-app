@@ -1,4 +1,5 @@
-declare const require: (moduleName: string) => unknown;
+import * as MediaLibraryLegacy from 'expo-media-library/legacy';
+import * as ExpoSharing from 'expo-sharing';
 
 type PhotoPermissionResponse = {
   granted: boolean;
@@ -59,23 +60,17 @@ function isOptionalSharingModule(value: unknown): value is OptionalSharingModule
 }
 
 export function loadOptionalMediaLibraryModule() {
-  try {
-    const mediaLibraryModule = require('expo-media-library/legacy');
-
-    return isOptionalMediaLibraryModule(mediaLibraryModule)
-      ? mediaLibraryModule
-      : null;
-  } catch {
-    return null;
-  }
+  // These packages are normal app dependencies and are linked in the Release
+  // target. Keeping them behind a runtime `require()` made Metro treat the
+  // module as optional, so every photo-save entry point could report a missing
+  // module even though the native pod was present. A static legacy import also
+  // keeps the removed procedural APIs (saveToLibraryAsync/createAssetAsync)
+  // away from Expo 56's new class-based root entry point.
+  return isOptionalMediaLibraryModule(MediaLibraryLegacy)
+    ? MediaLibraryLegacy
+    : null;
 }
 
 export function loadOptionalSharingModule() {
-  try {
-    const sharingModule = require('expo-sharing');
-
-    return isOptionalSharingModule(sharingModule) ? sharingModule : null;
-  } catch {
-    return null;
-  }
+  return isOptionalSharingModule(ExpoSharing) ? ExpoSharing : null;
 }

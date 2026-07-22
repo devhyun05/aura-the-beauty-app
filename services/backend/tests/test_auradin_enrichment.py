@@ -182,12 +182,63 @@ def test_live_discovery_replaces_slot_with_hedged_naver_pick(monkeypatch) -> Non
   # anchor/diverse는 큐레이션 유지.
   assert [p["source"] for p in products].count("live_naver") == 1
 
-  # dial refine 후 재-enrich는 Naver를 다시 부르지 않는다 (세션 캐시).
+  # dial refine 후에는 같은 라이브 상품을 다시 끼우지 않는다. 캐시 안에 새 적격
+  # 라이브 후보가 없으므로 큐레이션 discovery를 유지하며 Naver 재호출도 하지 않는다.
   refined = client.post(f"/api/search/sessions/{session_id}/refine", json={"dial": "more_diverse"})
   assert refined.status_code == 200
   turn = client.get(f"/api/search/sessions/{session_id}").json()["data"]
-  assert any(p["source"] == "live_naver" for p in turn["result"]["products"])
+  assert all(p["source"] == "curated" for p in turn["result"]["products"])
+  assert all(p["id"] != "naver-1001" for p in turn["result"]["products"])
   assert len(calls) == 1
+
+
+def test_refine_uses_next_unseen_live_candidate_from_session_cache(monkeypatch) -> None:
+  calls: list[str] = []
+  _patch_naver(
+    monkeypatch,
+    [
+      _naver_item(
+        product_id="1101",
+        title="페리페라 올테이크 무드 팔레트 쉬머",
+        brand="페리페라",
+        lprice="18000",
+      ),
+      # 같은 제품의 다른 판매 오퍼 — ID가 달라도 normalized product key
+      # 이력으로 다음 refine에서 '새 카드'처럼 재등장하면 안 된다.
+      _naver_item(
+        product_id="1101-duplicate",
+        title="페리페라 올테이크 무드 팔레트 쉬머",
+        brand="페리페라",
+        lprice="17500",
+      ),
+      _naver_item(
+        product_id="1102",
+        title="웨이크메이크 소프트 블러링 아이 팔레트 쉬머",
+        brand="웨이크메이크",
+        lprice="19000",
+      ),
+    ],
+    calls,
+  )
+  client = _client(
+    naver_shopping_client_id="test-id",
+    naver_shopping_client_secret="test-secret",
+  )
+  session_id, turn = _results(client, "2만원 이하 글리터 추천해줘")
+  first_live = next(product for product in turn["result"]["products"] if product["source"] == "live_naver")
+
+  refined = client.post(
+    f"/api/search/sessions/{session_id}/refine",
+    json={"dial": "more_diverse"},
+  )
+  assert refined.status_code == 200
+  turn = client.get(f"/api/search/sessions/{session_id}").json()["data"]
+  second_live = next(product for product in turn["result"]["products"] if product["source"] == "live_naver")
+
+  assert second_live["id"] != first_live["id"]
+  assert {first_live["id"], second_live["id"]} == {"naver-1101", "naver-1102"}
+  assert second_live["id"] != "naver-1101-duplicate"
+  assert len(calls) == 1  # 두 번째 후보도 첫 응답의 세션 캐시에서 선택
 
 
 def test_live_discovery_fills_multiple_slots_and_dedupes(monkeypatch) -> None:

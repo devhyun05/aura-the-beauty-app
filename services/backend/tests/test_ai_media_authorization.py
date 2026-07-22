@@ -98,6 +98,25 @@ def protected_ai_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
   monkeypatch.setattr(analysis_api, "ensure_user", ensure_owner)
   monkeypatch.setattr(feedback_api, "ensure_user", ensure_owner)
   monkeypatch.setattr(filter_extractions_api, "ensure_user", ensure_owner)
+
+  async def fail_if_quota_is_consumed(*_args, **_kwargs) -> None:
+    raise AssertionError("invalid or unowned media must not consume generation quota")
+
+  monkeypatch.setattr(
+    analysis_api,
+    "enforce_report_generation_limit",
+    fail_if_quota_is_consumed,
+  )
+  monkeypatch.setattr(
+    feedback_api,
+    "enforce_report_generation_limit",
+    fail_if_quota_is_consumed,
+  )
+  monkeypatch.setattr(
+    filter_extractions_api,
+    "enforce_report_generation_limit",
+    fail_if_quota_is_consumed,
+  )
   return TestClient(app)
 
 
@@ -181,6 +200,15 @@ def test_analysis_uses_database_location_for_owned_media(
   app.dependency_overrides[get_current_user] = owner_auth
   app.dependency_overrides[require_database] = lambda: db
   monkeypatch.setattr(analysis_api, "ensure_user", ensure_owner)
+
+  async def fail_if_quota_is_consumed(*_args, **_kwargs) -> None:
+    raise AssertionError("draft-only report creation must not consume generation quota")
+
+  monkeypatch.setattr(
+    analysis_api,
+    "enforce_report_generation_limit",
+    fail_if_quota_is_consumed,
+  )
 
   response = TestClient(app).post(
     "/api/analysis/jobs",

@@ -5,7 +5,12 @@ from uuid import UUID
 
 import pytest
 from botocore.config import Config
-from botocore.exceptions import ClientError, ParamValidationError, ReadTimeoutError
+from botocore.exceptions import (
+  ClientError,
+  ParamValidationError,
+  ReadTimeoutError,
+  UnauthorizedSSOTokenError,
+)
 from botocore.validate import validate_parameters
 from fastapi import BackgroundTasks
 from fastapi.testclient import TestClient
@@ -101,6 +106,31 @@ def test_converse_allows_bounded_long_form_recommendation_timeout(
   assert isinstance(config, Config)
   assert 90 <= config.read_timeout <= 120
   assert config.retries == {"max_attempts": 1, "mode": "standard"}
+
+
+def test_converse_can_disable_sdk_retries_for_single_billable_attempt(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  client = FakeBedrockClient()
+  captured_kwargs: dict = {}
+
+  def fake_boto_client(*_args, **kwargs):
+    captured_kwargs.update(kwargs)
+    return client
+
+  monkeypatch.setattr("app.services.makeup_recommendation.boto3.client", fake_boto_client)
+
+  _converse(
+    Settings(),
+    "model-id",
+    "system",
+    "prompt",
+    allow_provider_retries=False,
+  )
+
+  config = captured_kwargs.get("config")
+  assert isinstance(config, Config)
+  assert config.retries == {"total_max_attempts": 1, "mode": "standard"}
 
 
 def test_converse_caps_sdk_timeouts_to_remaining_provider_budget(
@@ -375,6 +405,86 @@ def test_converse_reassembles_streamed_tool_input(monkeypatch: pytest.MonkeyPatc
   assert result == {"questions": []}
 
 
+def test_converse_repairs_unescaped_text_whitespace_in_streamed_tool_input(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  class StreamToolBedrockClient:
+    def __init__(self) -> None:
+      self.calls = 0
+
+    def converse_stream(self, **_kwargs):
+      self.calls += 1
+      return {
+        "stream": [
+          {
+            "contentBlockStart": {
+              "contentBlockIndex": 0,
+              "start": {
+                "toolUse": {
+                  "toolUseId": "tool-use-1",
+                  "name": "generate_makeup_questions",
+                },
+              },
+            },
+          },
+          {
+            "contentBlockDelta": {
+              "contentBlockIndex": 0,
+              "delta": {
+                "toolUse": {
+                  "input": '{"questions":[{"id":"mood","title":"첫 줄',
+                },
+              },
+            },
+          },
+          {
+            "contentBlockDelta": {
+              "contentBlockIndex": 0,
+              "delta": {
+                "toolUse": {
+                  "input": '\n둘째 줄\t보충"}]}',
+                },
+              },
+            },
+          },
+        ],
+      }
+
+  client = StreamToolBedrockClient()
+  monkeypatch.setattr(
+    "app.services.makeup_recommendation.boto3.client",
+    lambda *_args, **_kwargs: client,
+  )
+
+  result = _converse(
+    Settings(),
+    "model-id",
+    "system",
+    "prompt",
+    response_schema={"type": "object"},
+    tool_name="generate_makeup_questions",
+    use_strict_tool_schema=False,
+    allow_provider_retries=False,
+  )
+
+  assert result == {
+    "questions": [{"id": "mood", "title": "첫 줄\n둘째 줄\t보충"}],
+  }
+  assert client.calls == 1
+
+
+@pytest.mark.parametrize("control_character", ["\x00", "\x01", "\x0b"])
+def test_parse_json_object_rejects_unsafe_unescaped_control_characters(
+  control_character: str,
+) -> None:
+  with pytest.raises(AppError) as exc_info:
+    makeup_service._parse_json_object(
+      '{"title":"안전하지 않은' + control_character + '제어문자"}',
+    )
+
+  assert exc_info.value.code == "BEDROCK_INVALID_JSON"
+
+
 def test_converse_request_keeps_forced_tool_use_with_installed_sdk_shape(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -641,6 +751,15 @@ def test_bedrock_read_timeout_is_reported_as_timeout() -> None:
   assert error.details == {"providerCode": "ReadTimeoutError"}
 
 
+def test_bedrock_expired_sso_token_is_reported_as_credentials_expired() -> None:
+  error = _bedrock_app_error(UnauthorizedSSOTokenError())
+
+  assert error.status_code == 503
+  assert error.code == "BEDROCK_CREDENTIALS_EXPIRED"
+  assert error.details == {"providerCode": "UnauthorizedSSOTokenError"}
+  assert "SSO" not in error.message
+
+
 def test_product_only_refinement_preserves_makeup_and_replaces_products() -> None:
   previous = {
     "looks": [
@@ -717,7 +836,12 @@ class RecommendationReportDatabase:
       {
         "id": REPORT_ID,
         "scenario_text": "퇴근 후 약속",
-        "recommendation": {"looks": []},
+        "recommendation": {
+          "generationSource": "deterministic_fallback",
+          "looks": [],
+        },
+        "schema_version": "makeup-recommendation-v2",
+        "image_mode": "generic",
         "image_status": "completed",
         "image_url": "https://cdn.example.com/anchor.png",
         "profile_gender": "unspecified",
@@ -984,7 +1108,9 @@ def test_user_can_list_saved_recommendation_reports(monkeypatch: pytest.MonkeyPa
   assert report["profileGender"] == "unspecified"
   assert report["previewImageUrl"] == "https://cdn.example.com/anchor.png"
   assert report["previewImageStatus"] == "completed"
+  assert report["generationSource"] == "deterministic_fallback"
   assert len(db.fetch_queries) == 2
+  assert "generationSource" not in db.fetch_queries[0][0]
 
 
 def test_report_list_batches_owned_anchor_previews_and_presigns_private_assets(
@@ -1346,8 +1472,14 @@ def test_user_can_poll_owned_report_with_camel_case_image_state(monkeypatch: pyt
   }
 
   class PollDatabase:
+    async def fetch(self, query: str, *args):
+      assert "from makeup_recommendation_assets" in query
+      assert args == (REPORT_ID,)
+      return []
+
     async def fetchrow(self, query: str, *args):
       assert "from makeup_recommendation_reports" in query
+      assert "generationSource" not in query
       assert args == (REPORT_ID, USER_ID)
       return {
         "id": REPORT_ID,
@@ -1355,7 +1487,12 @@ def test_user_can_poll_owned_report_with_camel_case_image_state(monkeypatch: pyt
         "scenario_tags": json.dumps(["차분"], ensure_ascii=False),
         "questions": json.dumps([{"id": "mood"}], ensure_ascii=False),
         "answers": json.dumps([{"questionId": "mood", "optionId": "soft"}], ensure_ascii=False),
-        "recommendation": json.dumps(recommendation, ensure_ascii=False),
+        "recommendation": json.dumps(
+          {**recommendation, "generationSource": "deterministic_fallback"},
+          ensure_ascii=False,
+        ),
+        "schema_version": "makeup-recommendation-v2",
+        "context_snapshot": {},
         "image_status": "processing",
         "image_url": None,
         "image_error": None,
@@ -1381,7 +1518,14 @@ def test_user_can_poll_owned_report_with_camel_case_image_state(monkeypatch: pyt
   assert response.json()["data"]["scenarioTags"] == ["차분"]
   assert response.json()["data"]["questions"] == [{"id": "mood"}]
   assert response.json()["data"]["answers"] == [{"questionId": "mood", "optionId": "soft"}]
-  assert response.json()["data"]["recommendation"] == recommendation
+  assert response.json()["data"]["recommendation"]["generationSource"] == (
+    "deterministic_fallback"
+  )
+  assert [
+    look["role"]
+    for look in response.json()["data"]["recommendation"]["looks"]
+  ] == ["anchor", "bold", "discovery"]
+  assert response.json()["data"]["generationSource"] == "deterministic_fallback"
   assert "image_error" not in response.json()["data"]
 
 

@@ -9,10 +9,12 @@ export type ApiEnvelope<T> = {
 };
 
 type AuthTokenProvider = () => string | null;
+type AuthTokenRefreshProvider = () => Promise<string | null>;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
 
 let authTokenProvider: AuthTokenProvider | null = null;
+let authTokenRefreshProvider: AuthTokenRefreshProvider | null = null;
 
 export class BackendApiError extends Error {
   code?: string;
@@ -88,6 +90,18 @@ export function setBackendAuthTokenProvider(provider: AuthTokenProvider | null):
   authTokenProvider = provider;
 }
 
+/**
+ * Registers the session refresh path used when the synchronous provider has no
+ * currently usable JWT. This closes the short window where an expiring token
+ * is intentionally hidden by the client leeway but the 30-second refresh
+ * timer has not completed yet.
+ */
+export function setBackendAuthTokenRefreshProvider(
+  provider: AuthTokenRefreshProvider | null,
+): void {
+  authTokenRefreshProvider = provider;
+}
+
 export function getBackendAuthToken(): string | null {
   return authTokenProvider?.() ?? null;
 }
@@ -148,6 +162,27 @@ function resolveAuthToken(authToken: string | null | undefined): string | null {
   return authTokenProvider?.() ?? null;
 }
 
+async function resolveRequestAuthToken(
+  authToken: string | null | undefined,
+): Promise<string | null> {
+  const currentToken = resolveAuthToken(authToken);
+
+  // Explicit null means that the caller intentionally wants an anonymous
+  // request. A supplied or currently usable token also needs no refresh.
+  if (authToken !== undefined || currentToken || !authTokenRefreshProvider) {
+    return currentToken;
+  }
+
+  try {
+    return (await authTokenRefreshProvider())?.trim() || null;
+  } catch {
+    // Preserve the existing API error contract if Cognito refresh genuinely
+    // fails. The backend will return its normal 401 instead of leaking a
+    // provider-specific exception through every feature.
+    return null;
+  }
+}
+
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === 'AbortError';
 }
@@ -174,7 +209,7 @@ export async function requestBackendJson<T>(
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     ...requestInit
   } = init;
-  const resolvedAuthToken = resolveAuthToken(authToken);
+  const resolvedAuthToken = await resolveRequestAuthToken(authToken);
   const startedAt = Date.now();
   const method = requestInit.method ?? 'GET';
   const url = buildBackendApiUrl(path, baseUrl);

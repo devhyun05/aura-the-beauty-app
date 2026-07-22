@@ -477,6 +477,53 @@ def test_soft_question_expected_count_is_actual_value_match() -> None:
   assert counts["rose"] == 1
 
 
+def test_question_option_uses_highest_ranked_matching_real_product_image() -> None:
+  pink = _item("pink", color="pink")
+  pink["liveOffer"]["imageUrl"] = "https://example.com/pink.jpg"
+  rose = _item("rose", color="rose")
+  rose["liveOffer"]["imageUrl"] = "https://example.com/rose.jpg"
+  no_image = _item("pink-without-image", color="pink")
+  question = build_question(
+    _ranked([no_image, pink, rose]),
+    {
+      "attribute": "colorFamily",
+      "questionMode": "soft",
+      "confidence": 0.9,
+      "valueDistribution": {"pink": 2, "rose": 1},
+    },
+    question_count=0,
+  )
+
+  assert question is not None
+  images = {option["id"]: option.get("imageUrl") for option in question["options"]}
+  assert images["colorFamily-pink"] == "https://example.com/pink.jpg"
+  assert images["colorFamily-rose"] == "https://example.com/rose.jpg"
+  assert images["colorFamily-noop"] is None
+
+
+def test_question_option_image_keeps_safe_legacy_projection_fallback_only() -> None:
+  unsafe_nested = _item("pink", color="pink")
+  unsafe_nested["liveOffer"]["imageUrl"] = "http://example.com/not-secure.jpg"
+  unsafe_nested["imageUrl"] = "https://cdn.example.com/projected-pink.jpg"
+  private_ip = _item("rose", color="rose")
+  private_ip["liveOffer"]["imageUrl"] = "https://127.0.0.1/rose.jpg"
+  question = build_question(
+    _ranked([unsafe_nested, private_ip]),
+    {
+      "attribute": "colorFamily",
+      "questionMode": "soft",
+      "confidence": 0.9,
+      "valueDistribution": {"pink": 1, "rose": 1},
+    },
+    question_count=0,
+  )
+
+  assert question is not None
+  images = {option["id"]: option.get("imageUrl") for option in question["options"]}
+  assert images["colorFamily-pink"] == "https://cdn.example.com/projected-pink.jpg"
+  assert images["colorFamily-rose"] is None
+
+
 def test_question_builder_falls_back_to_next_viable_attribute() -> None:
   items = [
     _item(

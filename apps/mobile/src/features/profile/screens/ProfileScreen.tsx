@@ -39,7 +39,6 @@ type ProfileScreenProps = {
   onPressProfileEdit?: () => void;
   onPressFaceAnalysisReportsList?: () => void;
   onPressMakeupRecommendationReportsList?: () => void;
-  onPressMakeupRecommendationReport?: (reportId: string) => void;
   onPressMakeupExtractionReportsList?: () => void;
   onPressMakeupFeedbackReportsList?: () => void;
   onPressMakeupLook?: (makeupLook: MakeupLookPreview) => void;
@@ -66,7 +65,6 @@ export function ProfileScreen({
   onPressProfileEdit,
   onPressFaceAnalysisReportsList,
   onPressMakeupRecommendationReportsList,
-  onPressMakeupRecommendationReport,
   onPressMakeupExtractionReportsList,
   onPressMakeupFeedbackReportsList,
   onPressMakeupLook,
@@ -236,11 +234,6 @@ export function ProfileScreen({
 
   const data = loadState.data;
   const makeupRecommendationPreview = data.reportHub.makeupRecommendation;
-  const onPressLatestMakeupRecommendation = (
-    makeupRecommendationPreview && onPressMakeupRecommendationReport
-  )
-    ? () => onPressMakeupRecommendationReport(makeupRecommendationPreview.id)
-    : onPressMakeupRecommendationReportsList;
   const previewCreatedMakeupLooks = createdMakeupLooks.slice(0, 4);
   const previewLikedMakeupLooks = likedMakeupLooks.slice(0, 4);
   // 상세 데이터가 비어 있는 좋아요(이름 없음)와 표시 권리가 만료된 항목은
@@ -285,8 +278,7 @@ export function ProfileScreen({
           <ProfileReportPreviewCard
             description="나에게 어울리는 룩"
             label="메이크업 추천"
-            onPress={onPressLatestMakeupRecommendation}
-            opensReportDetail={Boolean(makeupRecommendationPreview)}
+            onPress={onPressMakeupRecommendationReportsList}
             preview={makeupRecommendationPreview}
             style={reportCardLayout}
           />

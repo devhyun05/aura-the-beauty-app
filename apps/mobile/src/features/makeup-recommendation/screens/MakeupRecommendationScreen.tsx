@@ -33,7 +33,6 @@ import {
   generateMakeupRecommendationV2,
   MakeupRecommendationRetryableError,
   refineGeneratedMakeupRecommendation,
-  refineMakeupRecommendation,
   refreshGeneratedMakeupRecommendation,
   restoreMakeupRecommendationReport,
   retryGeneratedMakeupRecommendationImages,
@@ -87,6 +86,7 @@ import {RecommendationResultsView} from './RecommendationResultsView';
 import {ScenarioDiscoveryView} from './ScenarioDiscoveryView';
 import {
   filterMakeupRecommendationReportsByDiscovery,
+  getMakeupRecommendationHistoryBackAction,
   getInitialMakeupRecommendationScreenPhase,
   isMakeupRecommendationReportAllowedByDiscovery,
   shouldHandleMakeupRecommendationBack,
@@ -192,9 +192,24 @@ function getMakeupRecommendationWorkflowErrorMessage(
   error: unknown,
   fallback: string,
 ): string {
-  return error instanceof MakeupRecommendationRetryableError
-    ? error.message
-    : fallback;
+  if (error instanceof MakeupRecommendationRetryableError) return error.message;
+  if (
+    error instanceof BackendApiError
+    && (
+      error.code?.startsWith('BEDROCK_')
+      || error.code === 'MAKEUP_CUSTOM_SITUATION_PROVIDER_FAILED'
+      || error.code === 'MAKEUP_CUSTOM_SITUATION_OUTPUT_INVALID'
+      || error.code === 'MAKEUP_QUESTIONS_PROVIDER_FAILED'
+      || error.code === 'MAKEUP_QUESTIONS_OUTPUT_INVALID'
+      || error.code === 'MAKEUP_KEYWORD_QUESTIONS_UNAVAILABLE'
+      || error.code === 'MAKEUP_RECOMMENDATION_PROVIDER_FAILED'
+      || error.code === 'MAKEUP_RECOMMENDATION_OUTPUT_INVALID'
+      || error.code === 'MAKEUP_RECOMMENDATION_GENERATION_SOURCE_INVALID'
+    )
+  ) {
+    return 'AI 추천을 완성하지 못했어요. 선택과 답변은 유지되어 있으니 잠시 후 다시 시도해 주세요.';
+  }
+  return fallback;
 }
 
 
@@ -283,6 +298,7 @@ export const MakeupRecommendationScreen = forwardRef<
   const loadedReportId = useRef<string | null>(null);
   const loadedInitialView = useRef(false);
   const hydratedReportDetailIds = useRef(new Set<string>());
+  const openedHistoryReport = useRef(false);
 
   const beginOperation = useCallback((slot: typeof workflowRequest) => {
     slot.current?.controller.abort();
@@ -494,13 +510,6 @@ export const MakeupRecommendationScreen = forwardRef<
           setPhase('question');
           return;
         }
-        if (destination === 'retry') {
-          setSession(restored);
-          setErrorMessage('이전 추천 생성이 완료되지 않았어요. 답변은 그대로 유지했으니 다시 시도해 주세요.');
-          setPhase('error');
-          return;
-        }
-
         setSession(restored);
         setPhase('loading');
         if (destination === 'loading') {
@@ -728,6 +737,19 @@ export const MakeupRecommendationScreen = forwardRef<
     }
   }, [historyItems.length]);
 
+  const openReportHistory = useCallback(() => {
+    workflowRequest.current?.controller.abort();
+    mutationRequest.current?.controller.abort();
+    workflowRequest.current = undefined;
+    mutationRequest.current = undefined;
+    setSession(undefined);
+    setLoadingContext(null);
+    setErrorMessage('');
+    openedHistoryReport.current = false;
+    setPhase('history');
+    void loadHistory();
+  }, [loadHistory]);
+
   useEffect(() => {
     if (initialView !== 'history' || loadedInitialView.current) return;
 
@@ -802,6 +824,7 @@ export const MakeupRecommendationScreen = forwardRef<
       operation.controller.signal,
     ).then(hydratedReport => {
       if (workflowRequest.current?.id !== operation.id) return;
+      openedHistoryReport.current = true;
       showHydratedHistoryReport(hydratedReport, operation);
     }).catch(error => {
       if (isRequestAbortedError(error) || workflowRequest.current?.id !== operation.id) return;
@@ -827,6 +850,7 @@ export const MakeupRecommendationScreen = forwardRef<
 
     loadedReportId.current = requestedReportId;
     const operation = beginOperation(workflowRequest);
+    openedHistoryReport.current = false;
     setSession(undefined);
     setLoadingContext(null);
     setPhase('reportLoading');
@@ -882,9 +906,11 @@ export const MakeupRecommendationScreen = forwardRef<
     setLoadingContext(buildLoadingContextFromSession(session, undefined, refinement));
     setPhase('loading');
 
-    const refinementRequest = session.generationMode === 'fixture'
-      ? Promise.resolve(refineMakeupRecommendation(session, refinement))
-      : refineGeneratedMakeupRecommendation(session, refinement, operation.controller.signal);
+    const refinementRequest = refineGeneratedMakeupRecommendation(
+      session,
+      refinement,
+      operation.controller.signal,
+    );
     void refinementRequest
       .then(nextSession => {
         if (mutationRequest.current?.id !== operation.id) return;
@@ -942,6 +968,7 @@ export const MakeupRecommendationScreen = forwardRef<
     setLoadingContext(null);
     setImageRetryError('');
     setIsStarting(false);
+    openedHistoryReport.current = false;
     imagePollFailureCount.current = 0;
     void clearCurrentMakeupRecommendationSessionId(
       AsyncStorage,
@@ -949,6 +976,18 @@ export const MakeupRecommendationScreen = forwardRef<
     );
     if (resetIntent) dispatchDiscovery({type: 'intent/reset'});
   }, [session?.generationMode, session?.id]);
+
+  const handleReportHistoryBack = useCallback(() => {
+    const action = getMakeupRecommendationHistoryBackAction({
+      directHistoryEntry: initialView === 'history',
+      directReportEntry: Boolean(reportId?.trim()),
+    });
+    if (action === 'route') {
+      onBack?.();
+      return;
+    }
+    returnToDiscovery(false);
+  }, [initialView, onBack, reportId, returnToDiscovery]);
 
   const telemetryContextId = session?.reportId ?? session?.id;
   const telemetryLooks = session?.results;
@@ -1002,13 +1041,21 @@ export const MakeupRecommendationScreen = forwardRef<
 
   useImperativeHandle(ref, () => ({
     handleBack() {
+      if (phase === 'results' && openedHistoryReport.current) {
+        openedHistoryReport.current = false;
+        setSession(undefined);
+        setLoadingContext(null);
+        setPhase('history');
+        return true;
+      }
       if (!shouldHandleMakeupRecommendationBack(phase, {
+        directHistoryEntry: initialView === 'history',
         directReportEntry: Boolean(reportId?.trim()),
       })) return false;
       returnToDiscovery(false);
       return true;
     },
-  }), [phase, reportId, returnToDiscovery]);
+  }), [initialView, phase, reportId, returnToDiscovery]);
 
   const handleSelectReport = useCallback((selectedId: string) => {
     trackMakeupRecommendationEvent('analysis_report_selected', {
@@ -1130,7 +1177,7 @@ export const MakeupRecommendationScreen = forwardRef<
         isLoading={isLoadingHistory}
         isLoadingMore={isLoadingMoreHistory}
         items={historyItems}
-        onBack={() => returnToDiscovery(false)}
+        onBack={handleReportHistoryBack}
         onLoadMore={() => void loadHistory('append')}
         onRefresh={() => void loadHistory()}
         onSelect={openHistoryReport}
@@ -1154,6 +1201,7 @@ export const MakeupRecommendationScreen = forwardRef<
       return (
         <RecommendationQuestionView
           currentQuestionIndex={session.currentQuestionIndex}
+          faceImageUri={selectedFaceImageUri}
           initialAnswer={session.answers.find(answer => answer.questionId === question.id)}
           onAnswer={handleAnswer}
           onBack={() => {
@@ -1229,16 +1277,27 @@ export const MakeupRecommendationScreen = forwardRef<
     );
   }
 
+  const isDirectReportLoadError = Boolean(reportId?.trim() && !session);
+
   return (
     <AppScreen contentGap={spacing.lg} scroll={false} topPadding="belowShellHeader">
-      <Text accessibilityRole="alert" style={styles.errorTitle}>추천을 이어가지 못했어요</Text>
+      <Text accessibilityRole="alert" style={styles.errorTitle}>
+        {isDirectReportLoadError
+          ? '메이크업 추천 보고서를 불러오지 못했어요'
+          : '추천을 이어가지 못했어요'}
+      </Text>
       <Text style={styles.errorDescription}>{errorMessage || '잠시 후 다시 시도해 주세요.'}</Text>
       <Pressable accessibilityRole="button" onPress={retry} style={styles.retryButton}>
         <Text style={styles.retryLabel}>다시 시도하기</Text>
       </Pressable>
-      <Pressable accessibilityRole="button" onPress={() => returnToDiscovery(false)} style={styles.resetButton}>
-        <Text style={styles.resetLabel}>선택 화면으로 돌아가기</Text>
+      <Pressable accessibilityRole="button" onPress={openReportHistory} style={styles.resetButton}>
+        <Text style={styles.resetLabel}>보고서 목록 보기</Text>
       </Pressable>
+      {!isDirectReportLoadError ? (
+        <Pressable accessibilityRole="button" onPress={() => returnToDiscovery(false)} style={styles.resetButton}>
+          <Text style={styles.resetLabel}>선택 화면으로 돌아가기</Text>
+        </Pressable>
+      ) : null}
     </AppScreen>
   );
 });

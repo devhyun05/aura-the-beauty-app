@@ -59,6 +59,7 @@ const rootNavigator = source('apps/mobile/src/app/navigation/RootNavigator.tsx')
 const arSave = source('apps/mobile/src/features/ar/services/savedArLookService.ts');
 const auradinService = source('apps/mobile/src/features/recommendation/services/auradinSearchService.ts');
 const auradinScreen = source('apps/mobile/src/features/recommendation/screens/AuradinSearchScreen.tsx');
+const auradinNavigation = source('apps/mobile/src/features/recommendation/services/auradinNavigation.ts');
 const auradinSavedProducts = source('apps/mobile/src/features/recommendation/services/auradinSavedProducts.ts');
 const auradinDetailView = source('apps/mobile/src/features/recommendation/screens/views/DetailView.tsx');
 const legacyAuradinService = source('apps/mobile/src/features/recommendation/services/auradinService.ts');
@@ -87,6 +88,100 @@ const loginScreen = source('apps/mobile/src/features/auth/screens/LoginScreen.ts
 const iosAppDelegate = source('apps/mobile/ios/AURA/AppDelegate.swift');
 const mobileEntry = source('apps/mobile/index.ts');
 const devRefreshBanner = source('apps/mobile/src/shared/dev/disableDevRefreshBanner.js');
+
+requireContract(
+  /name="AuradinSearch"[\s\S]{0,240}options=\{\{gestureEnabled: false\}\}/.test(rootNavigator) &&
+    auradinScreen.includes('PanResponder.create') &&
+    auradinScreen.includes('shouldClaimAuradinBackSwipe') &&
+    auradinScreen.includes('shouldCommitAuradinBackSwipe') &&
+    auradinScreen.includes('{...backSwipePanResponder.panHandlers}'),
+  'AURADIN must route edge-swipe back through its internal phase stack instead of native-pop to Home.',
+);
+
+const auradinNavigationModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/auradinNavigation.ts',
+  {},
+);
+requireContract(
+  auradinNavigationModule.getAuradinInternalBackTarget({
+    phase: 'detail',
+    detailOrigin: 'results',
+    hasResults: true,
+  }) === 'results' &&
+    auradinNavigationModule.getAuradinInternalBackTarget({
+      phase: 'detail',
+      detailOrigin: 'saved',
+      hasResults: true,
+    }) === 'saved' &&
+    auradinNavigationModule.shouldClaimAuradinBackSwipe({
+      enabled: true,
+      startX: 12,
+      dx: 24,
+      dy: 3,
+    }) &&
+    !auradinNavigationModule.shouldClaimAuradinBackSwipe({
+      enabled: true,
+      startX: 80,
+      dx: 24,
+      dy: 3,
+    }) &&
+    auradinNavigationModule.shouldCommitAuradinBackSwipe({dx: 72, velocityX: 0.1}),
+  'AURADIN back resolver must preserve results/saved origin and reject non-edge horizontal content gestures.',
+);
+
+requireContract(
+  backendApi.includes('setBackendAuthTokenRefreshProvider') &&
+    backendApi.includes('await resolveRequestAuthToken(authToken)') &&
+    authSessionContext.includes('setBackendAuthTokenRefreshProvider(async () =>') &&
+    authSessionContext.includes('await refreshSessionIfNeeded()') &&
+    authSessionContext.includes('sessionRef.current !== currentSession'),
+  'protected requests must wait for Cognito refresh when the synchronous JWT provider is temporarily empty.',
+);
+
+const authRefreshBackendApiModule = executeTypeScriptModule(
+  'apps/mobile/src/shared/services/backendApi.ts',
+  {},
+);
+const originalFetch = globalThis.fetch;
+let capturedAuthorization = null;
+let authRefreshCount = 0;
+try {
+  globalThis.fetch = async (_input, init) => {
+    capturedAuthorization = new Headers(init?.headers).get('Authorization');
+    return new Response(JSON.stringify({data: {ok: true}}), {
+      headers: {'Content-Type': 'application/json'},
+      status: 200,
+    });
+  };
+  authRefreshBackendApiModule.setBackendAuthTokenProvider(() => null);
+  authRefreshBackendApiModule.setBackendAuthTokenRefreshProvider(async () => {
+    authRefreshCount += 1;
+    return 'fresh-cognito-token';
+  });
+  await authRefreshBackendApiModule.requestBackendJson('/search/sessions', {
+    baseUrl: 'https://api.example.com/api',
+    body: {prompt: '립 추천'},
+    method: 'POST',
+  });
+  requireContract(
+    authRefreshCount === 1 && capturedAuthorization === 'Bearer fresh-cognito-token',
+    'an expiring-session gap must refresh once and attach the fresh JWT before AURADIN session creation.',
+  );
+
+  capturedAuthorization = null;
+  await authRefreshBackendApiModule.requestBackendJson('/public', {
+    authToken: null,
+    baseUrl: 'https://api.example.com/api',
+  });
+  requireContract(
+    authRefreshCount === 1 && capturedAuthorization === null,
+    'an explicitly anonymous request must not trigger JWT refresh or attach Authorization.',
+  );
+} finally {
+  globalThis.fetch = originalFetch;
+  authRefreshBackendApiModule.setBackendAuthTokenProvider(null);
+  authRefreshBackendApiModule.setBackendAuthTokenRefreshProvider(null);
+}
 
 requireContract(
   rootNavigator.includes('initialRouteName="Login"') &&

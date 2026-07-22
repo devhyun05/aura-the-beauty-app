@@ -16,10 +16,6 @@ for (const value of ['ㅋㅋㅋㅋㅋㅋ', 'ㅗㅗㅗㅗ', '....', 'asdfasdf', '
 }
 
 for (const value of [
-  '몰라',
-  '아무거나',
-  '알아서',
-  '이거',
   '예쁘게',
   '예쁘게 해줘',
   '트렌디하게',
@@ -35,8 +31,16 @@ for (const value of [
 ]) {
   expectEqual(
     validateMakeupRecommendationCustomSituation(value).intentType,
-    'needs_detail',
-    `${value} needs more detail`,
+    'valid_context',
+    `${value} is accepted for AI clarification`,
+  );
+}
+
+for (const value of ['봄', '도서관 사서 첫 출근', '로판 여주 느낌', '교생 실습 첫날']) {
+  expectEqual(
+    validateMakeupRecommendationCustomSituation(value).intentType,
+    'valid_context',
+    `${value} does not depend on a fixed keyword allowlist`,
   );
 }
 

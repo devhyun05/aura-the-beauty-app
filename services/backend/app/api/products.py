@@ -262,6 +262,19 @@ async def _resolve_external_product_for_like(
   product = None
   if external_source == AURADIN_CATALOG_SOURCE:
     product = resolve_auradin_catalog_product(external_product_id)
+    # A search session can legitimately retain a verified seed from the
+    # snapshot it ranked even after that seed is no longer present in the
+    # process's current packaged catalog.  The result card still carries the
+    # stable auradin_catalog identity, so resolve that exact card from the
+    # authenticated owner's active session before returning 404.  Never fall
+    # back to another user's session or to an arbitrary stored like snapshot.
+    if product is None and owner_subject:
+      product = await resolve_auradin_result_product(
+        owner_subject=owner_subject,
+        product_id=external_product_id,
+        settings=settings,
+        db=db,
+      )
   elif external_source == "auradin_search" and owner_subject:
     product = await resolve_auradin_result_product(
       owner_subject=owner_subject,

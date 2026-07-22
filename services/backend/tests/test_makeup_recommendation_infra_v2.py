@@ -104,6 +104,7 @@ def test_seed_ids_match_v2_fallback_uuid5_contract() -> None:
   assert "('daily', '출근·등교', 10)" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
   assert "('formal_event', '소개팅·데이트', 10)" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
   assert "('festival_performance', '패션 행사·전시 오프닝', 50)" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
+  assert "('festival_performance', '로판 여주', 60)" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
 
 
 def test_schema_and_dbml_documents_are_synchronized_with_v2_contract() -> None:

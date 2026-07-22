@@ -9,8 +9,8 @@
 // 팔레트는 features/recommendation 로컬 토큰만 사용 (가드: test:auradin-theme-scope).
 
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {useFocusEffect} from '@react-navigation/native';
-import {Pressable, StyleSheet, View} from 'react-native';
+import {useFocusEffect, usePreventRemove} from '@react-navigation/native';
+import {PanResponder, Pressable, StyleSheet, View} from 'react-native';
 import {ChevronLeft} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -28,6 +28,7 @@ import {
   answerAuradinQuestion,
   cancelAuradinSearchSession,
   createAuradinSearchSession,
+  getAuradinRefineFailureMessage,
   isAuradinAbort,
   makeClientRequestId,
   pollAuradinSearchTurn,
@@ -52,6 +53,12 @@ import type {
 import {buildRequestParts, type AuradinAttachment} from '../attachments';
 import {initializeProductEventCollection} from '../services/productEventService';
 import {useTransientToast} from '../../../shared/ui';
+import {
+  getAuradinInternalBackTarget,
+  shouldClaimAuradinBackSwipe,
+  shouldCommitAuradinBackSwipe,
+  type AuradinDetailOrigin,
+} from '../services/auradinNavigation';
 
 // 첨부만(리포트/필터)으로 보낼 때의 중립 broad 시드 — 백엔드가 '어느 부위' 스코프 질문을 묻게 한다(§4).
 const BROAD_SEED = '추천해줘';
@@ -132,6 +139,67 @@ export function AuradinSearchScreen({
   const abortRef = useRef<AbortController | null>(null);
   // 3-1: HomeView 로테이션이 올려주는 '현재 표시 중 추천 질의' — 빈 전송 시 이 질의로 검색.
   const currentSuggestionRef = useRef<string>('');
+  const detailOriginRef = useRef<AuradinDetailOrigin>('results');
+
+  const internalBackTarget = getAuradinInternalBackTarget({
+    phase,
+    detailOrigin: detailOriginRef.current,
+    hasResults: turn?.phase === 'results',
+  });
+  const returnWithinAuradin = useCallback((): boolean => {
+    const target = getAuradinInternalBackTarget({
+      phase,
+      detailOrigin: detailOriginRef.current,
+      hasResults: turn?.phase === 'results',
+    });
+    if (!target) {
+      return false;
+    }
+    setSelected(null);
+    setPhase(target);
+    return true;
+  }, [phase, turn?.phase]);
+  const handleBack = useCallback(() => {
+    if (!returnWithinAuradin()) {
+      onBack?.();
+    }
+  }, [onBack, returnWithinAuradin]);
+
+  // AuradinSearch is one native route whose result/detail/saved pages are
+  // internal phases. The parent native pop gesture is disabled so it cannot
+  // discard the whole search route; this edge responder maps the same user
+  // gesture to the phase-aware back resolver instead.
+  const backSwipePanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_event, gesture) =>
+          shouldClaimAuradinBackSwipe({
+            enabled: Boolean(onBack),
+            startX: gesture.x0,
+            dx: gesture.dx,
+            dy: gesture.dy,
+          }),
+        onPanResponderRelease: (_event, gesture) => {
+          if (
+            shouldCommitAuradinBackSwipe({
+              dx: gesture.dx,
+              velocityX: gesture.vx,
+            })
+          ) {
+            handleBack();
+          }
+        },
+        onPanResponderTerminationRequest: () => false,
+      }),
+    [handleBack, onBack],
+  );
+
+  // detail/saved are pages inside this route.  Intercept iOS edge-swipe and
+  // hardware back so they return to the previous AURADIN page instead of
+  // removing the whole route (which would discard the current result set).
+  usePreventRemove(internalBackTarget !== null, () => {
+    returnWithinAuradin();
+  });
 
   useEffect(() => {
     setFeaturePerformanceStage(`auradin:${phase}`);
@@ -340,9 +408,16 @@ export function AuradinSearchScreen({
         const nextTurn = await pollAuradinSearchTurn(sessionId, {signal});
         if (!cancelled.current && !signal.aborted && nextTurn.phase === 'results') {
           setTurn(nextTurn);
+          if (nextTurn.refineNotice?.message) {
+            showToast(nextTurn.refineNotice.message);
+          }
         }
-      } catch {
-        // refine 실패/취소는 조용히 — 기존 결과 유지 (§7 recovery는 백엔드가 담당)
+      } catch (error) {
+        // 사용자 취소/화면 이탈은 조용히 끝낸다. 실제 실패는 기존 결과를 유지하면서
+        // 토스트로 알려 버튼이 반응하지 않는 것처럼 보이지 않게 한다.
+        if (!cancelled.current && !signal.aborted && !isAuradinAbort(error)) {
+          showToast(getAuradinRefineFailureMessage(error));
+        }
       } finally {
         if (!cancelled.current && !signal.aborted) {
           setRefining(false);
@@ -412,6 +487,7 @@ export function AuradinSearchScreen({
     emitProductEvent('product_open', product, {
       rank: position >= 0 ? position + 1 : undefined,
     });
+    detailOriginRef.current = phase === 'saved' ? 'saved' : 'results';
     setSelected(product);
     setPhase('detail');
   };
@@ -521,14 +597,18 @@ export function AuradinSearchScreen({
   }, [driveKey, phase, turn]);
 
   return (
-    <View style={styles.shell}>
+    <View style={styles.shell} {...backSwipePanResponder.panHandlers}>
       <AuradinGround dark={phase === 'searching'}>
         <PersistentOrb phase={phase} paused={orbPaused} />
         {onBack ? (
           <Pressable
-            accessibilityLabel="제품 추천으로 돌아가기"
+            accessibilityLabel={
+              internalBackTarget
+                ? '이전 아우라딘 페이지로 돌아가기'
+                : '제품 추천으로 돌아가기'
+            }
             accessibilityRole="button"
-            onPress={onBack}
+            onPress={handleBack}
             style={[styles.backButton, {top: insets.top + 8}]}>
             <ChevronLeft color="#2D2940" size={24} />
           </Pressable>
@@ -589,7 +669,7 @@ export function AuradinSearchScreen({
         {phase === 'detail' && selected ? (
           <DetailView
             liked={savedKeys.has(savedProductKey(selected))}
-            onBack={() => setPhase('results')}
+            onBack={handleBack}
             onHome={reset}
             // 라이브 발견 픽은 rankedCache(카탈로그) 밖 — 진입점을 숨긴다 (B6 계약).
             onSimilar={
@@ -615,7 +695,7 @@ export function AuradinSearchScreen({
 
         {phase === 'saved' ? (
           <SavedView
-            onBack={() => setPhase(turn?.phase === 'results' ? 'results' : 'home')}
+            onBack={handleBack}
             onHome={reset}
             onOpen={openDetail}
             products={visibleSaved}

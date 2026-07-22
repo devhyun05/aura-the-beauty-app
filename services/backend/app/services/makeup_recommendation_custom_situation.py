@@ -315,12 +315,14 @@ def _looks_like_medical_advice_request(value: str) -> bool:
 
 def _is_noise(value: str) -> bool:
   compact = _compact_text(value)
-  if len(compact) < 2:
+  if not compact:
     return True
 
   hangul_syllables = len(re.findall(r"[가-힣]", compact))
   hangul_jamo = len(re.findall(r"[ㄱ-ㅎㅏ-ㅣ]", compact))
   latin_letters = len(re.findall(r"[a-z]", compact))
+  if len(compact) == 1:
+    return hangul_syllables != 1
   if hangul_syllables + latin_letters == 0:
     return True
   if hangul_syllables == 0 and hangul_jamo / len(compact) > 0.5:
@@ -346,24 +348,11 @@ def classify_custom_situation_text(value: Any) -> CustomSituationIntentResult:
   original = clean_custom_situation_text(value)
   if _is_noise(original):
     return {"intentType": "noise", "normalizedText": "", "originalText": original}
-
-  compact = _compact_text(original)
-  if compact in {_compact_text(term) for term in VAGUE_EXACT_TERMS}:
-    return {"intentType": "needs_detail", "normalizedText": "", "originalText": original}
-
-  if _has_context(original):
-    return {
-      "intentType": "valid_context",
-      "normalizedText": original,
-      "originalText": original,
-    }
-
-  has_direction_only = _contains_any(original, MAKEUP_TERMS | IMPRESSION_TERMS)
-  has_incomplete_safety_context = _contains_any(original, SAFETY_CONDITION_TERMS)
-  if len(compact) <= 3 or has_direction_only or has_incomplete_safety_context:
-    return {"intentType": "needs_detail", "normalizedText": "", "originalText": original}
-
-  return {"intentType": "needs_detail", "normalizedText": "", "originalText": original}
+  return {
+    "intentType": "valid_context",
+    "normalizedText": original,
+    "originalText": original,
+  }
 
 
 def _local_block_reason(value: str) -> Literal["medical", "out_of_scope", "pii", "unsafe"] | None:

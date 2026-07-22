@@ -10,7 +10,12 @@ from typing import Any
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError, ParamValidationError, ReadTimeoutError
+from botocore.exceptions import (
+  ClientError,
+  ParamValidationError,
+  ReadTimeoutError,
+  UnauthorizedSSOTokenError,
+)
 from pydantic import ValidationError
 
 from app.core.errors import AppError
@@ -487,6 +492,44 @@ def _structured_response_contract(system: str) -> tuple[str, dict[str, Any]] | N
   return tool_name, _strict_json_schema(schema)
 
 
+def _escape_unescaped_json_text_whitespace(text: str) -> str:
+  """Escape raw line whitespace only when it occurs inside a JSON string.
+
+  ConverseStream tool input occasionally contains a literal newline, carriage
+  return, or tab in generated prose instead of the JSON escape sequence. These
+  characters are meaningful text whitespace, but RFC-compliant JSON requires
+  them to be escaped. Keep the repair deliberately narrow: other control
+  characters and every other kind of malformed JSON must still fail closed.
+  """
+  escaped_text: list[str] = []
+  inside_string = False
+  previous_was_escape = False
+  replacements = {"\n": r"\n", "\r": r"\r", "\t": r"\t"}
+
+  for character in text:
+    if not inside_string:
+      escaped_text.append(character)
+      if character == '"':
+        inside_string = True
+      continue
+
+    if previous_was_escape:
+      escaped_text.append(character)
+      previous_was_escape = False
+      continue
+    if character == "\\":
+      escaped_text.append(character)
+      previous_was_escape = True
+      continue
+    if character == '"':
+      escaped_text.append(character)
+      inside_string = False
+      continue
+    escaped_text.append(replacements.get(character, character))
+
+  return "".join(escaped_text)
+
+
 def _parse_json_object(text: str) -> dict[str, Any]:
   text = text.strip()
   if text.startswith("```") and text.endswith("```"):
@@ -499,11 +542,22 @@ def _parse_json_object(text: str) -> dict[str, Any]:
   try:
     value = json.loads(text)
   except json.JSONDecodeError as exc:
-    raise AppError(
-      502,
-      "BEDROCK_INVALID_JSON",
-      "Bedrock returned an invalid recommendation response.",
-    ) from exc
+    if exc.msg.startswith("Invalid control character"):
+      repaired_text = _escape_unescaped_json_text_whitespace(text)
+      try:
+        value = json.loads(repaired_text)
+      except json.JSONDecodeError as repaired_exc:
+        raise AppError(
+          502,
+          "BEDROCK_INVALID_JSON",
+          "Bedrock returned an invalid recommendation response.",
+        ) from repaired_exc
+    else:
+      raise AppError(
+        502,
+        "BEDROCK_INVALID_JSON",
+        "Bedrock returned an invalid recommendation response.",
+      ) from exc
   if not isinstance(value, dict):
     raise AppError(
       502,
@@ -644,6 +698,7 @@ def _converse(
   tool_name: str | None = None,
   use_strict_tool_schema: bool | None = None,
   timeout_seconds: float | None = None,
+  allow_provider_retries: bool = True,
 ) -> dict[str, Any]:
   request_deadline = (
     time.monotonic() + max(0.0, float(timeout_seconds))
@@ -664,6 +719,12 @@ def _converse(
     converse_config = converse_config.merge(Config(
       read_timeout=bounded_timeout,
       connect_timeout=min(10.0, bounded_timeout),
+    ))
+  if not allow_provider_retries:
+    # `total_max_attempts=1` includes the initial request, so botocore cannot
+    # silently repeat a billable recommendation invocation.
+    converse_config = converse_config.merge(Config(
+      retries={"total_max_attempts": 1, "mode": "standard"},
     ))
   client_kwargs = {"region_name": settings.aws_region, "config": converse_config}
   if settings.aws_profile_name:
@@ -733,6 +794,7 @@ async def generate_json(
   *,
   max_tokens: int = 3500,
   timeout_seconds: float | None = None,
+  allow_provider_retries: bool = True,
 ) -> dict[str, Any]:
   started_at = time.perf_counter()
   provider_deadline = (
@@ -758,6 +820,7 @@ async def generate_json(
       )
     if remaining_seconds is not None:
       kwargs["timeout_seconds"] = remaining_seconds
+    kwargs["allow_provider_retries"] = allow_provider_retries
     worker = asyncio.to_thread(
       _converse,
       settings,
@@ -794,6 +857,8 @@ async def generate_json(
               use_strict_tool_schema=prefer_strict_tool_schema,
             )
           except Exception as exc:
+            if not allow_provider_retries:
+              raise
             if _strict_tool_schema_is_unsupported(exc):
               logger.warning(
                 "[aura:makeup-recommendation] bedrock:strict-tool-schema-unsupported "
@@ -840,7 +905,12 @@ async def generate_json(
           )
         break
       except AppError as exc:
-        if exc.code == "BEDROCK_INVALID_JSON" and attempt == 0 and max_tokens < 8000:
+        if (
+          allow_provider_retries
+          and exc.code == "BEDROCK_INVALID_JSON"
+          and attempt == 0
+          and max_tokens < 8000
+        ):
           logger.warning(
             "[aura:makeup-recommendation] bedrock:invalid-json-retry "
             "modelId=%s attempt=%s",
@@ -878,6 +948,14 @@ async def generate_json(
 
 
 def _bedrock_app_error(exc: Exception) -> AppError:
+  if isinstance(exc, UnauthorizedSSOTokenError):
+    return AppError(
+      503,
+      "BEDROCK_CREDENTIALS_EXPIRED",
+      "Bedrock credentials have expired and must be refreshed.",
+      {"providerCode": "UnauthorizedSSOTokenError"},
+    )
+
   if isinstance(exc, ReadTimeoutError):
     return AppError(
       504,
@@ -1294,89 +1372,43 @@ async def normalize_custom_situation_v2(settings: Settings, text: str) -> dict[s
       CUSTOM_NORMALIZATION_SYSTEM_PROMPT,
       build_custom_normalization_prompt(text),
       max_tokens=900,
+      timeout_seconds=settings.makeup_recommendation_provider_timeout_seconds,
+      allow_provider_retries=False,
     )
-    normalized = NormalizedCustomSituation.model_validate(response).model_dump(by_alias=True)
-    return {**normalized, "normalizationSource": "claude"}
-  except Exception:
+  except AppError:
+    raise
+  except Exception as exc:
     logger.warning(
-      "[aura:makeup-recommendation] custom-normalization:fallback modelId=%s",
+      "[aura:makeup-recommendation] custom-normalization:provider-failed modelId=%s",
       settings.effective_question_model_id,
       exc_info=True,
     )
-    return {
-      "situationIntent": text,
-      "desiredImpression": None,
-      "constraints": [],
-      "normalizationSource": "deterministic_fallback",
-    }
+    raise AppError(
+      502,
+      "MAKEUP_CUSTOM_SITUATION_PROVIDER_FAILED",
+      "The custom makeup situation could not be normalized by the AI provider.",
+      {"modelId": settings.effective_question_model_id},
+    ) from exc
 
-
-def deterministic_questions_v2(context_snapshot: dict[str, Any]) -> list[dict[str, Any]]:
-  selection = context_snapshot.get("selection")
-  if not isinstance(selection, dict):
-    selection = {}
-  situation = selection.get("situation")
-  situation_key = str(situation.get("key") or "") if isinstance(situation, dict) else ""
-  keyword = selection.get("keyword")
-  keyword_label = str(keyword.get("label") or "").strip() if isinstance(keyword, dict) else ""
-  change_title = (
-    f"‘{keyword_label}’ 분위기를 평소보다 어느 정도 강조할까요?"
-    if keyword_label
-    else "평소보다 어느 정도 변화를 줄까요?"
-  )
-
-  questions: list[dict[str, Any]] = [
-    {
-      "id": "change_level",
-      "title": change_title,
-      "options": [
-        {"id": "familiar", "label": "익숙한 나를 또렷하게"},
-        {"id": "balanced", "label": "한 단계 새로운 인상"},
-        {"id": "bold", "label": "오늘만큼은 확실한 반전"},
-        {"id": "ai_pick", "label": "AI가 골라줘"},
-      ],
-    },
-  ]
-  if situation_key == "camera_content":
-    questions.append(
-      {
-        "id": "camera_priority",
-        "title": "결과는 어디에서 가장 빛나면 좋을까요?",
-        "options": [
-          {"id": "photo", "label": "사진 한 장의 선명함"},
-          {"id": "video", "label": "움직이는 영상의 생동감"},
-          {"id": "both", "label": "렌즈 밖 실물까지 균형"},
-          {"id": "ai_pick", "label": "AI가 골라줘"},
-        ],
-      },
+  try:
+    normalized = NormalizedCustomSituation.model_validate(response).model_dump(by_alias=True)
+  except ValidationError as exc:
+    validation_errors = exc.errors(include_input=False)
+    logger.warning(
+      "[aura:makeup-recommendation] custom-normalization:validation-failed modelId=%s errors=%s",
+      settings.effective_question_model_id,
+      validation_errors,
     )
-  elif situation_key in {"travel_outdoor", "festival_performance"}:
-    questions.append(
+    raise AppError(
+      502,
+      "MAKEUP_CUSTOM_SITUATION_OUTPUT_INVALID",
+      "The AI provider returned an invalid custom makeup situation.",
       {
-        "id": "wear_priority",
-        "title": "현장에서 무엇을 가장 우선할까요?",
-        "options": [
-          {"id": "lasting", "label": "오래 유지되는 안정감"},
-          {"id": "quick_fix", "label": "빠르게 고치기 쉬운 표현"},
-          {"id": "moment", "label": "짧아도 강한 순간의 인상"},
-          {"id": "ai_pick", "label": "AI가 골라줘"},
-        ],
+        "modelId": settings.effective_question_model_id,
+        "validationErrors": validation_errors[:12],
       },
-    )
-  else:
-    questions.append(
-      {
-        "id": "prep_time",
-        "title": "오늘은 어느 정도 공들일 수 있어요?",
-        "options": [
-          {"id": "quick", "label": "15분 안에 빠르게"},
-          {"id": "standard", "label": "30분 정도 여유 있게"},
-          {"id": "detail", "label": "60분 이상 디테일까지"},
-          {"id": "ai_pick", "label": "AI가 골라줘"},
-        ],
-      },
-    )
-  return GeneratedQuestions.model_validate({"questions": questions}).model_dump(by_alias=True)["questions"]
+    ) from exc
+  return {**normalized, "normalizationSource": "claude"}
 
 
 def _normalized_generated_text(value: Any) -> str:
@@ -1470,45 +1502,57 @@ def normalize_prep_time_question_options(questions: list[dict[str, Any]]) -> lis
     normalized_questions.append(normalized_question)
   return normalized_questions
 
-async def generate_questions_v2_with_fallback(
+async def generate_questions_v2(
   settings: Settings,
   context_snapshot: dict[str, Any],
 ) -> dict[str, Any]:
-  validation_errors: list[dict[str, Any]] = []
-  for _attempt in range(2):
-    try:
-      response = await generate_json(
-        settings,
-        settings.effective_question_model_id,
-        QUESTION_V2_SYSTEM_PROMPT,
-        build_question_prompt(context_snapshot),
-        max_tokens=1800,
-      )
-      normalized = normalize_generated_questions_response(response)
-      questions = GeneratedQuestions.model_validate(normalized).model_dump(by_alias=True)["questions"]
-      questions = normalize_prep_time_question_options(questions)
-      questions = GeneratedQuestions.model_validate({"questions": questions}).model_dump(by_alias=True)["questions"]
-      return {"questions": questions, "source": "claude", "version": "makeup-questions-v2"}
-    except ValidationError as exc:
-      validation_errors = exc.errors(include_input=False)
-      logger.warning(
-        "[aura:makeup-recommendation] questions-v2:validation-failed modelId=%s errors=%s",
-        settings.effective_question_model_id,
-        validation_errors,
-      )
-    except Exception:
-      logger.warning(
-        "[aura:makeup-recommendation] questions-v2:provider-failed modelId=%s",
-        settings.effective_question_model_id,
-        exc_info=True,
-      )
-      break
+  try:
+    response = await generate_json(
+      settings,
+      settings.effective_question_model_id,
+      QUESTION_V2_SYSTEM_PROMPT,
+      build_question_prompt(context_snapshot),
+      max_tokens=1800,
+      timeout_seconds=settings.makeup_recommendation_provider_timeout_seconds,
+      allow_provider_retries=False,
+    )
+  except AppError:
+    raise
+  except Exception as exc:
+    logger.warning(
+      "[aura:makeup-recommendation] questions-v2:provider-failed modelId=%s",
+      settings.effective_question_model_id,
+      exc_info=True,
+    )
+    raise AppError(
+      502,
+      "MAKEUP_QUESTIONS_PROVIDER_FAILED",
+      "The makeup questions could not be generated by the AI provider.",
+      {"modelId": settings.effective_question_model_id},
+    ) from exc
 
-  return {
-    "questions": deterministic_questions_v2(context_snapshot),
-    "source": "deterministic_fallback",
-    "version": "makeup-questions-fallback-v1",
-  }
+  try:
+    normalized = normalize_generated_questions_response(response)
+    questions = GeneratedQuestions.model_validate(normalized).model_dump(by_alias=True)["questions"]
+    questions = normalize_prep_time_question_options(questions)
+    questions = GeneratedQuestions.model_validate({"questions": questions}).model_dump(by_alias=True)["questions"]
+  except ValidationError as exc:
+    validation_errors = exc.errors(include_input=False)
+    logger.warning(
+      "[aura:makeup-recommendation] questions-v2:validation-failed modelId=%s errors=%s",
+      settings.effective_question_model_id,
+      validation_errors,
+    )
+    raise AppError(
+      502,
+      "MAKEUP_QUESTIONS_OUTPUT_INVALID",
+      "The AI provider returned invalid makeup questions.",
+      {
+        "modelId": settings.effective_question_model_id,
+        "validationErrors": validation_errors[:12],
+      },
+    ) from exc
+  return {"questions": questions, "source": "claude", "version": "makeup-questions-v2"}
 
 
 FALLBACK_SEMANTIC_PALETTES: dict[str, dict[str, dict[str, tuple[str, str, str]]]] = {
@@ -1985,6 +2029,25 @@ def deterministic_recommendation_v2(
   return GeneratedMakeupRecommendationV2.model_validate(finalized).model_dump(by_alias=True)
 
 
+def require_claude_recommendation_v2(recommendation: dict[str, Any]) -> dict[str, Any]:
+  """Reject non-provider recipes before they can become user-visible reports."""
+  match_assessment = (
+    recommendation.get("matchAssessment")
+    if isinstance(recommendation.get("matchAssessment"), dict)
+    else {}
+  )
+  if (
+    recommendation.get("generationSource") != "claude"
+    or match_assessment.get("generationSource") != "claude"
+  ):
+    raise AppError(
+      502,
+      "MAKEUP_RECOMMENDATION_GENERATION_SOURCE_INVALID",
+      "Only a validated AI-generated makeup recommendation can be saved as a report.",
+    )
+  return recommendation
+
+
 async def generate_recommendation_v2(
   settings: Settings,
   context_snapshot: dict[str, Any],
@@ -1993,51 +2056,71 @@ async def generate_recommendation_v2(
 ) -> dict[str, Any]:
   context_snapshot = sanitize_recommendation_context(context_snapshot)
   time_budget_minutes = resolve_prep_time_budget_minutes(questions, answers)
-  validation_errors: list[dict[str, Any]] = []
-  for _attempt in range(1):
-    try:
-      response = await generate_json(
-        settings,
-        settings.effective_recommendation_model_id,
-        RECOMMENDATION_V2_SYSTEM_PROMPT,
-        build_recommendation_prompt(context_snapshot, questions, answers),
-        max_tokens=settings.makeup_recommendation_max_tokens,
-        timeout_seconds=settings.makeup_recommendation_provider_timeout_seconds,
-      )
-    except Exception:
-      logger.warning(
-        "[aura:makeup-recommendation] recommendation-v2:provider-failed "
-        "modelId=%s using deterministic fallback",
-        settings.effective_recommendation_model_id,
-        exc_info=True,
-      )
-      return deterministic_recommendation_v2(context_snapshot, answers, questions)
-    try:
-      response = _normalize_recommendation_tool_response(response)
-      enriched = enrich_makeup_application_plans(
-        response,
-        max_total_minutes=time_budget_minutes,
-      )
-      finalized = finalize_recommendation_metadata(
-        enriched,
-        context_snapshot,
-        answers,
-        questions,
-        generation_source="claude",
-      )
-      return GeneratedMakeupRecommendationV2.model_validate(finalized).model_dump(by_alias=True)
-    except ValidationError as exc:
-      validation_errors = exc.errors(include_input=False)
-      logger.warning(
-        "[aura:makeup-recommendation] recommendation-v2:validation-failed modelId=%s errors=%s",
-        settings.effective_recommendation_model_id,
-        validation_errors,
-      )
+  try:
+    response = await generate_json(
+      settings,
+      settings.effective_recommendation_model_id,
+      RECOMMENDATION_V2_SYSTEM_PROMPT,
+      build_recommendation_prompt(context_snapshot, questions, answers),
+      max_tokens=settings.makeup_recommendation_max_tokens,
+      timeout_seconds=settings.makeup_recommendation_provider_timeout_seconds,
+      # A report generation is one billable provider request. Invalid JSON is a
+      # failed attempt, not permission to make a second hidden model call.
+      allow_provider_retries=False,
+    )
+  except AppError:
+    logger.warning(
+      "[aura:makeup-recommendation] recommendation-v2:provider-failed modelId=%s",
+      settings.effective_recommendation_model_id,
+      exc_info=True,
+    )
+    raise
+  except Exception as exc:
+    logger.exception(
+      "[aura:makeup-recommendation] recommendation-v2:provider-failed-unexpected modelId=%s",
+      settings.effective_recommendation_model_id,
+    )
+    raise AppError(
+      502,
+      "MAKEUP_RECOMMENDATION_PROVIDER_FAILED",
+      "The AI makeup recommendation provider failed.",
+      {"errorType": type(exc).__name__},
+    ) from exc
 
-  logger.warning(
-    "[aura:makeup-recommendation] recommendation-v2:using deterministic fallback "
-    "after validation failures modelId=%s errors=%s",
-    settings.effective_recommendation_model_id,
-    validation_errors[:16],
-  )
-  return deterministic_recommendation_v2(context_snapshot, answers, questions)
+  try:
+    response = _normalize_recommendation_tool_response(response)
+    enriched = enrich_makeup_application_plans(
+      response,
+      max_total_minutes=time_budget_minutes,
+    )
+    finalized = finalize_recommendation_metadata(
+      enriched,
+      context_snapshot,
+      answers,
+      questions,
+      generation_source="claude",
+    )
+    validated = GeneratedMakeupRecommendationV2.model_validate(finalized).model_dump(by_alias=True)
+    return require_claude_recommendation_v2(validated)
+  except ValidationError as exc:
+    validation_errors = exc.errors(include_input=False)
+    logger.warning(
+      "[aura:makeup-recommendation] recommendation-v2:validation-failed modelId=%s errors=%s",
+      settings.effective_recommendation_model_id,
+      validation_errors,
+    )
+    raise AppError(
+      502,
+      "MAKEUP_RECOMMENDATION_OUTPUT_INVALID",
+      "The AI makeup recommendation response did not satisfy the report contract.",
+      {
+        "modelId": settings.effective_recommendation_model_id,
+        "validationErrors": [
+          {
+            "field": ".".join(str(part) for part in error.get("loc", ())),
+            "type": str(error.get("type") or "validation_error"),
+          }
+          for error in validation_errors[:16]
+        ],
+      },
+    ) from exc

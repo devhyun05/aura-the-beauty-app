@@ -271,7 +271,7 @@ export type AuradinThinkingStep = {
   status: 'done' | 'active' | 'pending';
 };
 
-// §8.2-1 마감감 추상 질감 스와치 4종 — 제품 사진·생성형 발색 이미지 금지(§8.2-2/5).
+// 마감감 추상 질감 스와치 4종. 실제 후보 사진이 없을 때의 안전한 폴백이다.
 export type AuradinTextureKind = 'glossy' | 'matte' | 'velvet' | 'shimmer';
 
 // 질문 옵션 타일 채움 스펙. string은 기존 단색 hex(중립 타일 폴백),
@@ -284,6 +284,7 @@ export type AuradinSwatch = string | AuradinSwatchSpec;
 
 export type AuradinQuestionOption = {
   id: string;
+  imageUrl?: string;
   label: string;
   swatch?: AuradinSwatch;
 };
@@ -355,6 +356,12 @@ export type ThinkingStep = {label: string; state: ThinkingStepState};
 
 export type RefineDial = 'more_similar' | 'more_diverse';
 
+export type AuradinRefineNotice = {
+  kind: string;
+  message: string;
+  dial?: RefineDial;
+};
+
 // B6 §10.3-2 '이 제품과 비슷한 것' 의향 3종 — 색 유지 / 더 저렴 / 다른 브랜드.
 export type AuradinSimilarIntent = 'keep_color' | 'cheaper' | 'other_brand';
 
@@ -366,6 +373,7 @@ export type AuradinSearchTurn = {
   question?: AuradinQuestion;
   candidates: AuradinCandidateProduct[];
   headerLabel?: string;
+  refineNotice?: AuradinRefineNotice;
   appliedFilters?: AuradinAppliedFilter[];
   error?: {code?: string; message?: string; recoverable?: boolean} | null;
 };

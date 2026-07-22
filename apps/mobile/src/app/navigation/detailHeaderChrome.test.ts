@@ -75,12 +75,12 @@ expectEqual(
 );
 expectEqual(
   getDetailHeaderRightActions('MakeupFeedbackResult').join(','),
-  'share',
+  '',
   'makeup feedback result route header actions',
 );
 expectEqual(
   getDetailHeaderRightActions('MakeupRecipeDetail').join(','),
-  'share',
+  '',
   'makeup recipe detail route header actions',
 );
 expectEqual(

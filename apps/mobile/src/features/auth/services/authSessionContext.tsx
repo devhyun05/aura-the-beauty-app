@@ -10,7 +10,10 @@
 } from 'react';
 import * as SecureStore from '../../../shared/services/localSecureStore';
 
-import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
+import {
+  setBackendAuthTokenProvider,
+  setBackendAuthTokenRefreshProvider,
+} from '../../../shared/services/backendApi';
 import {clearMyPageProfileSummaryCache} from '../../../shared/services/profileService';
 import {clearCachedUserProfile} from '../../../shared/services/userService';
 import {invalidateMakeupJourneyCache} from '../../makeup-journey/services/makeupJourneyCache';
@@ -176,6 +179,13 @@ export function AuthSessionProvider({
     const refreshPromise = (async () => {
       const refreshedSession = await refreshAuthSession(currentSession);
 
+      // Refresh can finish after logout or an account switch. Never let the
+      // stale response restore the previous account over the user's newer
+      // session; the caller should continue with whatever session is current.
+      if (sessionRef.current !== currentSession) {
+        return Boolean(getUsableTokenFromSession(sessionRef.current));
+      }
+
       if (!refreshedSession || !getUsableTokenFromSession(refreshedSession)) {
         await setSession(null);
         return false;
@@ -204,9 +214,16 @@ export function AuthSessionProvider({
 
   useEffect(() => {
     setBackendAuthTokenProvider(() => getTokenFromSession(sessionRef.current));
+    setBackendAuthTokenRefreshProvider(async () => {
+      await refreshSessionIfNeeded();
+      return getTokenFromSession(sessionRef.current);
+    });
 
-    return () => setBackendAuthTokenProvider(null);
-  }, []);
+    return () => {
+      setBackendAuthTokenProvider(null);
+      setBackendAuthTokenRefreshProvider(null);
+    };
+  }, [refreshSessionIfNeeded]);
 
   useEffect(() => {
     let isMounted = true;

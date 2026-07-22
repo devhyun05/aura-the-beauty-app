@@ -37,6 +37,7 @@ type BackendFilterDelta = {
 
 type BackendQuestionOption = {
   id?: string | null;
+  imageUrl?: string | null;
   label?: string | null;
   filterDelta?: BackendFilterDelta | null;
 };
@@ -77,12 +78,22 @@ type BackendAppliedFilter = {
   coverageCaveat?: string | null;
 };
 
+type BackendRefineNotice = {
+  kind?: string | null;
+  message?: string | null;
+  dial?: string | null;
+};
+
 type BackendSearchTurn = {
   sessionId?: string | null;
   phase?: string | null;
   thinking?: AuradinSearchTurn['thinking'] | null;
   question?: BackendQuestion | null;
-  result?: {headerLabel?: string | null; products?: BackendProduct[] | null} | null;
+  result?: {
+    headerLabel?: string | null;
+    products?: BackendProduct[] | null;
+    refineNotice?: BackendRefineNotice | null;
+  } | null;
   appliedFilters?: BackendAppliedFilter[] | null; // 최상위, 전 phase 존재
   error?: AuradinSearchTurn['error'];
   retryAfterMs?: number | null;
@@ -129,9 +140,9 @@ const COLOR_FAMILY_GRADIENT: Record<string, [string, string, string]> = {
   plum: ['#B0879F', '#8E5A79', '#6B3F5A'],
 };
 
-// §8.2-1 finish/texture 옵션 → 추상 질감 스와치 4종 매핑. 자체 제작 렌더만 사용 —
-// 대표 제품 썸네일(§8.2-2)·생성형 발색 이미지(§8.2-5)는 금지. 매핑이 애매한 값
-// (satin/sheer는 광택 계열로 근사, palette는 제형이 아니라 포맷)은 중립 폴백.
+// finish/texture 옵션 → 추상 질감 스와치 4종 매핑. 백엔드가 실제 후보의
+// 대표 imageUrl을 주면 사진을 우선하고, 사진이 없거나 매핑이 애매한 값은 이
+// 결정론적 스와치/중립색으로 폴백한다.
 const FINISH_TEXTURE_KIND: Record<string, Record<string, AuradinTextureKind>> = {
   finish: {
     glossy: 'glossy',
@@ -203,6 +214,7 @@ function optionSwatch(option: BackendQuestionOption): AuradinSwatch | undefined 
 export function mapQuestionOption(option: BackendQuestionOption): AuradinQuestionOption {
   return {
     id: String(option.id ?? ''),
+    imageUrl: option.imageUrl?.trim() || undefined,
     label: String(option.label ?? ''),
     swatch: optionSwatch(option),
   };
@@ -267,6 +279,18 @@ function mapAppliedFilters(filters: BackendAppliedFilter[] | null | undefined): 
     .filter((filter) => filter.label.length > 0);
 }
 
+function mapRefineNotice(notice: BackendRefineNotice | null | undefined): AuradinSearchTurn['refineNotice'] {
+  const kind = notice?.kind?.trim();
+  const message = notice?.message?.trim();
+  if (!kind || !message) {
+    return undefined;
+  }
+  const dial = notice?.dial === 'more_similar' || notice?.dial === 'more_diverse'
+    ? notice.dial
+    : undefined;
+  return {kind, message, ...(dial ? {dial} : {})};
+}
+
 export function mapSearchTurn(turn: BackendSearchTurn): AuradinSearchTurn {
   const products = Array.isArray(turn.result?.products) ? turn.result!.products! : [];
   return {
@@ -285,6 +309,7 @@ export function mapSearchTurn(turn: BackendSearchTurn): AuradinSearchTurn {
       .filter((product) => product.imageUrl && (product.purchaseUrl || product.offerId))
       .map(mapCandidate),
     headerLabel: turn.result?.headerLabel ?? undefined,
+    refineNotice: mapRefineNotice(turn.result?.refineNotice),
     appliedFilters: mapAppliedFilters(turn.appliedFilters),
     error: turn.error ?? null,
   };
@@ -454,6 +479,12 @@ export async function answerAuradinQuestion(
   );
 }
 
+export function buildAuradinPollRequestInit(signal?: AbortSignal): RequestInit {
+  // 같은 세션 URL을 반복 조회한다. iOS URL 캐시가 직전 results 응답을 재사용하면
+  // refine 이후에도 이전 순서가 그대로 보이므로 매 poll은 서버 상태를 직접 확인한다.
+  return {signal, cache: 'no-store'};
+}
+
 // 세션이 searching이면 retryAfterMs 후 재시도. in-memory 백엔드는 보통 즉시 확정되지만 방어적으로.
 export async function pollAuradinSearchTurn(
   sessionId: string,
@@ -474,7 +505,7 @@ export async function pollAuradinSearchTurn(
 
   let turn = await requestBackendJson<BackendSearchTurn>(
     `/search/sessions/${encodeURIComponent(sessionId)}`,
-    {signal},
+    buildAuradinPollRequestInit(signal),
   );
   let attempts = 1;
   while (normalizePhase(turn.phase) === 'searching' && attempts < maxAttempts) {
@@ -484,7 +515,7 @@ export async function pollAuradinSearchTurn(
     await delay(turn.retryAfterMs ?? 350);
     turn = await requestBackendJson<BackendSearchTurn>(
       `/search/sessions/${encodeURIComponent(sessionId)}`,
-      {signal},
+      buildAuradinPollRequestInit(signal),
     );
     attempts += 1;
   }
@@ -497,6 +528,26 @@ export function isAuradinAbort(error: unknown): boolean {
     isRequestAbortedError(error) ||
     (error instanceof Error && error.name === 'AbortError')
   );
+}
+
+export function getAuradinRefineFailureMessage(error: unknown): string {
+  const failure = error && typeof error === 'object'
+    ? error as {code?: unknown; name?: unknown; status?: unknown}
+    : null;
+
+  if (failure?.status === 401) {
+    return '로그인이 만료됐어요. 다시 로그인한 뒤 시도해 주세요.';
+  }
+  if (failure?.status === 409) {
+    return '다른 요청이 먼저 반영됐어요. 현재 결과는 유지했으니 다시 시도해 주세요.';
+  }
+  if (failure?.name === 'BackendNetworkError' || failure?.code === 'NETWORK_UNAVAILABLE') {
+    return '네트워크 연결을 확인해 주세요. 현재 결과는 그대로 유지했어요.';
+  }
+  if (failure?.name === 'BackendTimeoutError' || failure?.code === 'BACKEND_REQUEST_TIMEOUT') {
+    return '서버 응답이 지연되고 있어요. 현재 결과는 유지했으니 다시 시도해 주세요.';
+  }
+  return '추천 조건을 반영하지 못했어요. 현재 결과는 유지했으니 다시 시도해 주세요.';
 }
 
 // ------------------------------------------------------------------ A5 events (§7.2)

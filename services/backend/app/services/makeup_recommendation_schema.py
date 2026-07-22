@@ -1,6 +1,11 @@
+import json
+
 from app.db.session import Database
 from app.services.makeup_keyword_question_templates import (
+  CURATED_KEYWORD_QUESTION_TEMPLATES,
   MAKEUP_KEYWORD_QUESTION_TEMPLATE_SCHEMA_SQL,
+  QUESTION_TEMPLATE_PROMPT_VERSION,
+  QUESTION_TEMPLATE_VERSION,
 )
 
 
@@ -248,7 +253,8 @@ keyword_seed(id, text, seed_prompt, keyword_kind, source_key, market_scope, conf
     ('99d5c986-4c36-5191-a45c-033566b80aad'::uuid, '클럽·야간 파티', '어두운 조명 아래 클럽이나 야간 파티를 즐기는 상황', 'curated', null, 'KR', 'A'),
     ('d7e8d63d-8bd1-5d0f-88a3-730808876fd9'::uuid, '테마 파티·코스프레', '정해진 테마나 캐릭터가 있는 파티에 참여하는 상황', 'curated', null, 'KR', 'A'),
     ('7c82e3cb-a2c4-58d7-aa17-e55bae7a7f10'::uuid, '무대 공연', '관객과 조명 앞에서 무대 공연을 하는 상황', 'curated', null, 'KR', 'A'),
-    ('d9d57ef7-699e-52fd-a0b5-44297525ab92'::uuid, '패션 행사·전시 오프닝', '패션 행사나 전시 오프닝에 참석하는 색다른 상황', 'curated', null, 'KR', 'A')
+    ('d9d57ef7-699e-52fd-a0b5-44297525ab92'::uuid, '패션 행사·전시 오프닝', '패션 행사나 전시 오프닝에 참석하는 색다른 상황', 'curated', null, 'KR', 'A'),
+    ('c4964d4c-76e2-5f73-8db8-7065658cb254'::uuid, '로판 여주', '로맨스 판타지 여주인공처럼 우아하고 몽환적이되 실제로 재현 가능한 메이크업 상황', 'curated', null, 'KR', 'A')
 )
 insert into makeup_scenario_library as current (
   id, text, normalized_text, seed_prompt, tags, source, prompt_version, status,
@@ -330,7 +336,7 @@ with seed(situation_key, keyword_text, sort_order) as (
     ('camera_content', 'SNS 셀카', 30), ('camera_content', '영상·라이브', 40), ('camera_content', '야구장 전광판', 50),
     ('festival_performance', '콘서트·페스티벌', 10), ('festival_performance', '클럽·야간 파티', 20),
     ('festival_performance', '테마 파티·코스프레', 30), ('festival_performance', '무대 공연', 40),
-    ('festival_performance', '패션 행사·전시 오프닝', 50)
+    ('festival_performance', '패션 행사·전시 오프닝', 50), ('festival_performance', '로판 여주', 60)
 )
 insert into makeup_situation_keywords as current
   (situation_id, keyword_id, relevance_score, sort_order, status)
@@ -549,6 +555,175 @@ for each row execute function set_updated_at();
 """
 
 MAKEUP_RECOMMENDATION_SCHEMA_SQL += "\n" + MAKEUP_KEYWORD_QUESTION_TEMPLATE_SCHEMA_SQL
+
+
+_ROMANTASY_HEROINE_QUESTIONS_JSON = json.dumps(
+  CURATED_KEYWORD_QUESTION_TEMPLATES["로판 여주"],
+  ensure_ascii=False,
+  separators=(",", ":"),
+)
+
+# `schema.sql:makeup-recommendation-v2`가 이미 적용된 운영 DB에도 새 선택지와
+# 검수 질문을 반영하기 위한 독립 증분 migration. 전체 V2 schema 문자열을
+# 수정하는 것만으로는 기존 migration marker 때문에 재실행되지 않는다.
+ROMANTASY_HEROINE_SEED_MIGRATION_SQL = f"""
+insert into makeup_scenario_library as current (
+  id, text, normalized_text, seed_prompt, tags, source, prompt_version, status,
+  keyword_kind, source_name, source_url, source_published_at, evidence_summary,
+  market_scope, confidence, review_status, locale, as_of, valid_from, expires_at
+)
+values (
+  'c4964d4c-76e2-5f73-8db8-7065658cb254'::uuid,
+  '로판 여주',
+  '로판 여주',
+  '로맨스 판타지 여주인공처럼 우아하고 몽환적이되 실제로 재현 가능한 메이크업 상황',
+  '[]'::jsonb,
+  'curated',
+  'makeup-keyword-seed-v2',
+  'active',
+  'curated',
+  'AURA editorial',
+  null,
+  null,
+  '상황 적합성을 운영 검수한 선택지',
+  'KR',
+  'A',
+  'approved',
+  'ko-KR',
+  '2026-07-16'::timestamptz,
+  '2026-07-16'::timestamptz,
+  null
+)
+on conflict (normalized_text, locale, (coalesce(market_scope, ''))) do update set
+  text = excluded.text,
+  seed_prompt = excluded.seed_prompt,
+  tags = excluded.tags,
+  source = excluded.source,
+  prompt_version = excluded.prompt_version,
+  status = excluded.status,
+  keyword_kind = excluded.keyword_kind,
+  source_name = excluded.source_name,
+  source_url = excluded.source_url,
+  source_published_at = excluded.source_published_at,
+  evidence_summary = excluded.evidence_summary,
+  market_scope = excluded.market_scope,
+  confidence = excluded.confidence,
+  review_status = excluded.review_status,
+  as_of = excluded.as_of,
+  valid_from = excluded.valid_from,
+  expires_at = excluded.expires_at
+where (
+  current.text,
+  current.seed_prompt,
+  current.tags,
+  current.source,
+  current.prompt_version,
+  current.status,
+  current.keyword_kind,
+  current.source_name,
+  current.source_url,
+  current.source_published_at,
+  current.evidence_summary,
+  current.market_scope,
+  current.confidence,
+  current.review_status,
+  current.as_of,
+  current.valid_from,
+  current.expires_at
+) is distinct from (
+  excluded.text,
+  excluded.seed_prompt,
+  excluded.tags,
+  excluded.source,
+  excluded.prompt_version,
+  excluded.status,
+  excluded.keyword_kind,
+  excluded.source_name,
+  excluded.source_url,
+  excluded.source_published_at,
+  excluded.evidence_summary,
+  excluded.market_scope,
+  excluded.confidence,
+  excluded.review_status,
+  excluded.as_of,
+  excluded.valid_from,
+  excluded.expires_at
+);
+
+with resolved as (
+  select situation.id as situation_id, keyword.id as keyword_id
+  from makeup_situations situation
+  join lateral (
+    select candidate.id
+    from makeup_scenario_library candidate
+    where candidate.normalized_text = '로판 여주'
+      and candidate.locale = 'ko-KR'
+      and candidate.status = 'active'
+      and candidate.review_status = 'approved'
+    order by (candidate.prompt_version = 'makeup-keyword-seed-v2') desc,
+             candidate.created_at,
+             candidate.id
+    limit 1
+  ) keyword on true
+  where situation.key = 'festival_performance'
+)
+insert into makeup_situation_keywords as current
+  (situation_id, keyword_id, relevance_score, sort_order, status)
+select situation_id, keyword_id, 1, 60, 'active'
+from resolved
+on conflict (situation_id, keyword_id) do update set
+  relevance_score = excluded.relevance_score,
+  sort_order = excluded.sort_order,
+  status = excluded.status
+where (current.relevance_score, current.sort_order, current.status)
+  is distinct from (excluded.relevance_score, excluded.sort_order, excluded.status);
+
+with keyword as (
+  select candidate.id
+  from makeup_scenario_library candidate
+  where candidate.normalized_text = '로판 여주'
+    and candidate.locale = 'ko-KR'
+    and candidate.status = 'active'
+    and candidate.review_status = 'approved'
+  order by (candidate.prompt_version = 'makeup-keyword-seed-v2') desc,
+           candidate.created_at,
+           candidate.id
+  limit 1
+)
+insert into makeup_keyword_question_templates as current (
+  keyword_id, template_version, locale, questions, source, model_id,
+  prompt_version, review_status, status, reviewed_at
+)
+select
+  keyword.id,
+  {QUESTION_TEMPLATE_VERSION},
+  'ko-KR',
+  $romantasy${_ROMANTASY_HEROINE_QUESTIONS_JSON}$romantasy$::jsonb,
+  'curated',
+  null,
+  '{QUESTION_TEMPLATE_PROMPT_VERSION}',
+  'approved',
+  'active',
+  now()
+from keyword
+where not exists (
+  select 1
+  from makeup_keyword_question_templates approved
+  where approved.keyword_id = keyword.id
+    and approved.status = 'active'
+    and approved.review_status = 'approved'
+)
+on conflict (keyword_id, template_version) do update set
+  locale = excluded.locale,
+  questions = excluded.questions,
+  source = excluded.source,
+  model_id = excluded.model_id,
+  prompt_version = excluded.prompt_version,
+  review_status = excluded.review_status,
+  status = excluded.status,
+  reviewed_at = excluded.reviewed_at,
+  updated_at = now();
+"""
 
 
 async def ensure_makeup_recommendation_schema(db: Database) -> None:

@@ -13,7 +13,6 @@ export type MakeupRecommendationSessionIdStorage = {
 export type MakeupRecommendationSessionRestoreDestination =
   | 'question'
   | 'loading'
-  | 'retry'
   | 'results'
   | 'discard';
 
@@ -83,7 +82,7 @@ export function getMakeupRecommendationSessionRestoreDestination(
   if (isMakeupRecommendationSessionExpired(session, nowMs)) return 'discard';
   if (session.status === 'questioning') return 'question';
   if (session.status === 'ready' || session.status === 'generating') return 'loading';
-  if (session.status === 'failed') return 'retry';
+  if (session.status === 'failed') return 'discard';
   if (session.status === 'completed' && session.reportId) return 'results';
   return 'discard';
 }

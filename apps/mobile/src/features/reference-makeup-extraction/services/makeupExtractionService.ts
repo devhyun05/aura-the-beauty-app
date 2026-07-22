@@ -8,10 +8,15 @@ import {referenceMakeupExtractionMock} from '../mocks/referenceMakeupExtraction.
 import type {
   MakeupExtractionProgressUpdate,
   MakeupExtractionStep,
+  MakeupLookPalette,
+  MakeupLookPoint,
   ReferenceMakeupAreaGuide,
+  ReferenceMakeupAreaId,
+  ReferenceMakeupAreaProductRecommendation,
   ReferenceMakeupExtractionData,
   ReferenceMakeupExtractionReportHistoryItem,
   ReferenceMakeupExtractionResult,
+  ReferenceMakeupLookDna,
   ReferenceMakeupPhoto,
 } from '../types';
 
@@ -24,6 +29,11 @@ type BackendReferenceMakeupExtractionResponse = {
   extractedMakeupLook?: BackendReferenceMakeupExtractionLook;
   loadingSteps?: MakeupExtractionStep[];
   productSource?: string;
+};
+
+export type ReferenceMakeupExtractionRunResult = {
+  data: ReferenceMakeupExtractionData;
+  reportId: string;
 };
 
 const REFERENCE_EXTRACTION_TIMEOUT_MS = 180000;
@@ -46,7 +56,7 @@ type BackendFilterExtractionResultPayload = {
     cdnUrl?: string | null;
     contentType?: string | null;
     referenceImageId?: string | null;
-    referenceSource?: 'camera' | 'gallery' | null;
+    referenceSource?: 'album' | 'camera' | 'gallery' | null;
     referenceTitle?: string | null;
     sourceUrl?: string | null;
   } | null;
@@ -89,6 +99,7 @@ function delay(ms: number): Promise<void> {
 }
 
 let latestReferenceMakeupExtractionData: ReferenceMakeupExtractionData = referenceMakeupExtractionMock;
+let hasCompletedReferenceMakeupExtraction = false;
 
 function isPlainBackendObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -224,7 +235,20 @@ async function waitForCompleteFilterExtractionJob(
   while (true) {
     const completedResponse = extractionResponseFromJob(currentJob);
 
-    if (completedResponse?.extractedMakeupLook) {
+    if (currentJob.status === 'failed' || currentJob.status === 'cancelled') {
+      throw new BackendApiError(
+        currentJob.resultPayload?.error?.message ?? '레퍼런스 메이크업 추출 작업이 실패했어요.',
+        502,
+        'FILTER_EXTRACTION_JOB_FAILED',
+        {jobId: currentJob.id ?? null, status: currentJob.status},
+      );
+    }
+
+    if (
+      currentJob.status === 'completed' &&
+      completedResponse?.extractedMakeupLook &&
+      completedResponse.aiStatus === 'bedrock_completed'
+    ) {
       console.info('[aura:reference-extraction] report:ready', {
         durationMs: Date.now() - startedAt,
         jobId: currentJob.id ?? null,
@@ -233,12 +257,18 @@ async function waitForCompleteFilterExtractionJob(
       return completedResponse;
     }
 
-    if (currentJob.status === 'failed') {
+    if (
+      currentJob.status === 'completed' &&
+      completedResponse?.aiStatus !== 'bedrock_completed'
+    ) {
       throw new BackendApiError(
-        currentJob.resultPayload?.error?.message ?? '레퍼런스 메이크업 추출 작업이 실패했어요.',
+        '실제 AI 메이크업 추출 결과를 만들지 못했어요. 다시 시도해 주세요.',
         502,
-        'FILTER_EXTRACTION_JOB_FAILED',
-        {jobId: currentJob.id ?? null},
+        'FILTER_EXTRACTION_AI_RESULT_REQUIRED',
+        {
+          aiStatus: completedResponse?.aiStatus ?? null,
+          jobId: currentJob.id ?? null,
+        },
       );
     }
 
@@ -293,89 +323,289 @@ async function waitForCompleteFilterExtractionJob(
   }
 }
 
-function buildFallbackDataForPhoto(photo?: ReferenceMakeupPhoto | null): ReferenceMakeupExtractionData {
-  if (!photo) {
-    return referenceMakeupExtractionMock;
-  }
+const REFERENCE_MAKEUP_AREA_IDS: readonly ReferenceMakeupAreaId[] = [
+  'skin',
+  'eye',
+  'brow',
+  'cheek',
+  'lip',
+  'contour',
+];
+const REFERENCE_PRODUCT_CATEGORIES = ['base', 'shadow', 'liner', 'cheek', 'lip'] as const;
 
-  return {
-    ...referenceMakeupExtractionMock,
-    extractedMakeupLook: {
-      ...referenceMakeupExtractionMock.extractedMakeupLook,
-      imageSource: photo.imageSource,
-    },
-  };
+function readBackendText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-function getFallbackAreaGuide(id: string | undefined): ReferenceMakeupAreaGuide | undefined {
-  return referenceMakeupExtractionMock.extractedMakeupLook.areaGuides.find(
-    (guide) => guide.id === id,
-  );
-}
-
-function mergeBackendAreaGuide(
-  backendGuide: Partial<ReferenceMakeupAreaGuide>,
-): ReferenceMakeupAreaGuide | null {
-  const fallbackGuide = getFallbackAreaGuide(backendGuide.id);
-
-  if (!fallbackGuide) {
+function readBackendStringList(value: unknown): string[] | null {
+  if (!Array.isArray(value)) {
     return null;
   }
 
-  const backendProduct = backendGuide.productRecommendation?.product;
-  const fallbackProduct = fallbackGuide.productRecommendation.product;
+  const items = value.flatMap(item => {
+    const text = readBackendText(item);
+    return text ? [text] : [];
+  });
+  return items.length > 0 ? items : null;
+}
+
+function isReferenceMakeupAreaId(value: string): value is ReferenceMakeupAreaId {
+  return REFERENCE_MAKEUP_AREA_IDS.some(areaId => areaId === value);
+}
+
+function isReferenceProductCategory(
+  value: string,
+): value is ReferenceMakeupAreaProductRecommendation['category'] {
+  return REFERENCE_PRODUCT_CATEGORIES.some(category => category === value);
+}
+
+function parseBackendPalette(value: unknown): MakeupLookPalette[] | null {
+  if (!Array.isArray(value) || value.length === 0) {
+    return null;
+  }
+
+  const palette = value.flatMap(item => {
+    if (!isPlainBackendObject(item)) {
+      return [];
+    }
+
+    const id = readBackendText(item.id);
+    const label = readBackendText(item.label);
+    const hex = readBackendText(item.hex);
+    const description = readBackendText(item.description);
+
+    return id && label && hex && description
+      ? [{description, hex, id, label}]
+      : [];
+  });
+
+  return palette.length === value.length ? palette : null;
+}
+
+function parseBackendPoints(value: unknown): MakeupLookPoint[] | null {
+  if (!Array.isArray(value) || value.length === 0) {
+    return null;
+  }
+
+  const points = value.flatMap(item => {
+    if (!isPlainBackendObject(item)) {
+      return [];
+    }
+
+    const id = readBackendText(item.id);
+    const title = readBackendText(item.title);
+    const description = readBackendText(item.description);
+
+    return id && title && description ? [{description, id, title}] : [];
+  });
+
+  return points.length === value.length ? points : null;
+}
+
+function parseBackendLookDna(value: unknown): ReferenceMakeupLookDna | null {
+  if (!isPlainBackendObject(value)) {
+    return null;
+  }
+
+  const difficulty = readBackendText(value.difficulty);
+  const keyAreas = readBackendStringList(value.keyAreas);
+  const moodKeywords = readBackendStringList(value.moodKeywords);
+  const rawTextureBalance = value.textureBalance;
+
+  if (!difficulty || !keyAreas || !moodKeywords || !Array.isArray(rawTextureBalance)) {
+    return null;
+  }
+
+  const textureBalance = rawTextureBalance.flatMap(item => {
+    if (!isPlainBackendObject(item)) {
+      return [];
+    }
+
+    const id = readBackendText(item.id);
+    const label = readBackendText(item.label);
+    const color = readBackendText(item.color);
+    const metricValue = typeof item.value === 'number' && Number.isFinite(item.value)
+      ? item.value
+      : null;
+
+    return id && label && color && metricValue !== null
+      ? [{color, id, label, value: metricValue}]
+      : [];
+  });
+
+  return textureBalance.length === rawTextureBalance.length && textureBalance.length > 0
+    ? {difficulty, keyAreas, moodKeywords, textureBalance}
+    : null;
+}
+
+function parseBackendAreaGuide(value: unknown): ReferenceMakeupAreaGuide | null {
+  if (!isPlainBackendObject(value)) {
+    return null;
+  }
+
+  const id = readBackendText(value.id);
+  const label = readBackendText(value.label);
+  const title = readBackendText(value.title);
+  const texture = readBackendText(value.texture);
+  const quickTip = readBackendText(value.quickTip);
+  const analysis = readBackendText(value.analysis);
+  const howTo = readBackendText(value.howTo);
+  const professionalPoint = readBackendText(value.professionalPoint);
+  const colorValue = value.color;
+  const recommendationValue = value.productRecommendation;
+
+  if (
+    !id ||
+    !isReferenceMakeupAreaId(id) ||
+    !label ||
+    !title ||
+    !texture ||
+    !quickTip ||
+    !analysis ||
+    !howTo ||
+    !professionalPoint ||
+    !isPlainBackendObject(colorValue) ||
+    !isPlainBackendObject(recommendationValue)
+  ) {
+    return null;
+  }
+
+  const colorName = readBackendText(colorValue.name);
+  const colorHex = readBackendText(colorValue.hex);
+  const category = readBackendText(recommendationValue.category);
+  const searchQuery = readBackendText(recommendationValue.searchQuery);
+  const productReason = readBackendText(recommendationValue.reason);
+
+  if (
+    !colorName ||
+    !colorHex ||
+    !category ||
+    !isReferenceProductCategory(category) ||
+    !searchQuery ||
+    !productReason
+  ) {
+    return null;
+  }
+
+  const productValue = recommendationValue.product;
+  let product: ReferenceMakeupAreaProductRecommendation['product'];
+
+  if (isPlainBackendObject(productValue)) {
+    const productId = readBackendText(productValue.id);
+    const brandName = readBackendText(productValue.brandName);
+    const productName = readBackendText(productValue.productName);
+    const imageUrl = readBackendText(productValue.imageUrl);
+    const purchaseUrl = readBackendText(productValue.purchaseUrl);
+    const price = typeof productValue.price === 'number' && Number.isFinite(productValue.price)
+      ? productValue.price
+      : null;
+
+    if (productId && brandName && productName && imageUrl && price !== null) {
+      product = {
+        brandName,
+        id: productId,
+        imageSource: {uri: imageUrl},
+        imageUrl,
+        price,
+        productName,
+        purchaseUrl,
+      };
+    }
+  }
+
+  const avoid = readBackendStringList(value.avoid) ?? undefined;
+  const steps = Array.isArray(value.steps)
+    ? value.steps.flatMap((step, index) => {
+        if (!isPlainBackendObject(step)) {
+          return [];
+        }
+        const instruction = readBackendText(step.instruction);
+        const order = typeof step.order === 'number' && Number.isFinite(step.order)
+          ? step.order
+          : index + 1;
+        return instruction ? [{instruction, order}] : [];
+      })
+    : undefined;
 
   return {
-    ...fallbackGuide,
-    ...backendGuide,
-    color: {
-      ...fallbackGuide.color,
-      ...backendGuide.color,
-    },
+    analysis,
+    avoid,
+    color: {hex: colorHex, name: colorName},
+    goal: readBackendText(value.goal) ?? undefined,
+    howTo,
+    id,
+    label,
+    placement: readBackendText(value.placement) ?? undefined,
     productRecommendation: {
-      ...fallbackGuide.productRecommendation,
-      ...backendGuide.productRecommendation,
-      product: backendProduct && fallbackProduct
-        ? {
-            ...fallbackProduct,
-            ...backendProduct,
-            // 백엔드가 실제 제품 이미지(네이버 등)를 주면 그것을 사용하고,
-            // 없을 때만 목 이미지로 대체한다.
-            imageSource: backendProduct.imageUrl
-              ? {uri: backendProduct.imageUrl}
-              : fallbackProduct.imageSource,
-          }
-        : fallbackProduct,
+      category,
+      product,
+      reason: productReason,
+      searchQuery,
     },
+    professionalPoint,
+    quickTip,
+    reason: readBackendText(value.reason) ?? undefined,
+    steps,
+    technique: readBackendText(value.technique) ?? undefined,
+    texture,
+    title,
   };
 }
 
-function mergeBackendExtractionLook(
+function parseBackendExtractionLook(
   backendLook: BackendReferenceMakeupExtractionResponse['extractedMakeupLook'],
   photo: ReferenceMakeupPhoto,
-): ReferenceMakeupExtractionResult {
-  const fallbackLook = referenceMakeupExtractionMock.extractedMakeupLook;
-  const backendGuides = Array.isArray(backendLook?.areaGuides)
-    ? backendLook.areaGuides
-        .map((guide) => mergeBackendAreaGuide(guide))
-        .filter((guide): guide is ReferenceMakeupAreaGuide => Boolean(guide))
+): ReferenceMakeupExtractionResult | null {
+  if (!isPlainBackendObject(backendLook)) {
+    return null;
+  }
+
+  const id = readBackendText(backendLook.id);
+  const title = readBackendText(backendLook.title);
+  const subtitle = readBackendText(backendLook.subtitle);
+  const tags = readBackendStringList(backendLook.tags);
+  const palette = parseBackendPalette(backendLook.palette);
+  const points = parseBackendPoints(backendLook.points);
+  const lookDna = parseBackendLookDna(backendLook.lookDna);
+  const accuracy = typeof backendLook.accuracy === 'number' && Number.isFinite(backendLook.accuracy)
+    ? backendLook.accuracy
+    : null;
+  const rawGuides = backendLook.areaGuides;
+  const areaGuides = Array.isArray(rawGuides)
+    ? rawGuides.flatMap(guide => {
+        const parsedGuide = parseBackendAreaGuide(guide);
+        return parsedGuide ? [parsedGuide] : [];
+      })
     : [];
+  const areaIds = new Set(areaGuides.map(guide => guide.id));
+  const hasAllAreas = REFERENCE_MAKEUP_AREA_IDS.every(areaId => areaIds.has(areaId));
+
+  if (
+    !id ||
+    !title ||
+    !subtitle ||
+    !tags ||
+    !palette ||
+    !points ||
+    !lookDna ||
+    accuracy === null ||
+    !hasAllAreas ||
+    areaGuides.length !== REFERENCE_MAKEUP_AREA_IDS.length
+  ) {
+    return null;
+  }
 
   return {
-    ...fallbackLook,
-    ...backendLook,
+    accuracy,
+    areaGuides,
+    id,
     imageSource: photo.imageSource,
-    lookDna: {
-      ...fallbackLook.lookDna,
-      ...backendLook?.lookDna,
-      keyAreas: backendLook?.lookDna?.keyAreas ?? fallbackLook.lookDna.keyAreas,
-      moodKeywords: backendLook?.lookDna?.moodKeywords ?? fallbackLook.lookDna.moodKeywords,
-      textureBalance: backendLook?.lookDna?.textureBalance ?? fallbackLook.lookDna.textureBalance,
-    },
-    palette: backendLook?.palette ?? fallbackLook.palette,
-    points: backendLook?.points ?? fallbackLook.points,
-    tags: backendLook?.tags ?? fallbackLook.tags,
-    areaGuides: backendGuides.length > 0 ? backendGuides : fallbackLook.areaGuides,
+    lookDna,
+    palette,
+    points,
+    subtitle,
+    tags,
+    title,
   };
 }
 
@@ -419,8 +649,10 @@ function getReferencePhotoUploadExtension(contentType: string | null): string {
   return 'jpg';
 }
 
-function shouldRunReferenceMakeupAi(): boolean {
-  return process.env.EXPO_PUBLIC_REFERENCE_MAKEUP_AI_ENABLED === 'true';
+export function shouldRunReferenceMakeupAi(): boolean {
+  // 프로덕션 추출은 실제 AI 결과만 성공으로 인정한다. 환경값 하나로 정적
+  // 결과가 사용자 보고서처럼 노출되지 않도록 런타임 토글을 두지 않는다.
+  return true;
 }
 
 export const getReferenceMakeupExtractionData = async (): Promise<ReferenceMakeupExtractionData> => {
@@ -430,6 +662,9 @@ export const getReferenceMakeupExtractionData = async (): Promise<ReferenceMakeu
 export const getReferenceMakeupExtractionDataSync = (): ReferenceMakeupExtractionData =>
   latestReferenceMakeupExtractionData;
 
+export const hasCompletedReferenceMakeupExtractionSync = (): boolean =>
+  hasCompletedReferenceMakeupExtraction;
+
 function mapCompletedFilterExtractionReport(
   job: BackendFilterExtractionJob,
   fallbackReportId = '',
@@ -437,38 +672,54 @@ function mapCompletedFilterExtractionReport(
   const completedResponse = extractionResponseFromJob(job);
   const reportId = job.id?.trim() || fallbackReportId.trim();
 
-  if (!reportId || !completedResponse?.extractedMakeupLook) {
+  if (
+    job.status !== 'completed' ||
+    !reportId ||
+    !completedResponse?.extractedMakeupLook ||
+    completedResponse.aiStatus !== 'bedrock_completed'
+  ) {
     return null;
   }
 
   const request = job.resultPayload?.request;
-  const fallbackPhoto = referenceMakeupExtractionMock.photos[0];
   const imageUri = request?.cdnUrl?.trim() || request?.sourceUrl?.trim();
+  const extractedMakeupLook = imageUri
+    ? parseBackendExtractionLook(
+        completedResponse.extractedMakeupLook,
+        {
+          contentType: request?.contentType?.trim() || null,
+          id: request?.referenceImageId?.trim() || `filter-extraction-${reportId}`,
+          imageSource: {uri: imageUri},
+          referenceSource: request?.referenceSource === 'camera' ? 'camera' : 'album',
+          title:
+            request?.referenceTitle?.trim() ||
+            completedResponse.extractedMakeupLook.title ||
+            '메이크업 추출 보고서',
+        },
+      )
+    : null;
+
+  if (!imageUri || !extractedMakeupLook) {
+    return null;
+  }
+
   const photo: ReferenceMakeupPhoto = {
-    ...fallbackPhoto,
-    contentType: request?.contentType?.trim() || fallbackPhoto.contentType,
+    contentType: request?.contentType?.trim() || null,
     id: request?.referenceImageId?.trim() || `filter-extraction-${reportId}`,
-    imageSource: imageUri ? {uri: imageUri} : fallbackPhoto.imageSource,
+    imageSource: {uri: imageUri},
     referenceSource:
       request?.referenceSource === 'camera' ? 'camera' : 'album',
     title:
       request?.referenceTitle?.trim() ||
       completedResponse.extractedMakeupLook.title ||
-      fallbackPhoto.title,
+      '메이크업 추출 보고서',
   };
   const data: ReferenceMakeupExtractionData = {
-    ...referenceMakeupExtractionMock,
-    photos: [
-      photo,
-      ...referenceMakeupExtractionMock.photos.filter(item => item.id !== photo.id),
-    ],
+    photos: [photo],
     loadingSteps:
       completedResponse.loadingSteps ??
       referenceMakeupExtractionMock.loadingSteps,
-    extractedMakeupLook: mergeBackendExtractionLook(
-      completedResponse.extractedMakeupLook,
-      photo,
-    ),
+    extractedMakeupLook,
   };
 
   return {
@@ -501,6 +752,7 @@ export async function fetchReferenceMakeupExtractionReport(
   }
 
   latestReferenceMakeupExtractionData = mappedReport.data;
+  hasCompletedReferenceMakeupExtraction = true;
   await rememberReferenceExtractionReport(
     mappedReport.reportId,
     mappedReport.createdAt || new Date().toISOString(),
@@ -526,17 +778,38 @@ export async function fetchReferenceMakeupExtractionReports({
     const normalizedResponse = camelizeBackendValue(
       response,
     ) as ListFilterExtractionReportsResponse;
+    if (!Array.isArray(normalizedResponse.reports)) {
+      throw new BackendApiError(
+        '메이크업 추출 보고서 목록 응답이 올바르지 않아요.',
+        502,
+        'FILTER_EXTRACTION_REPORT_LIST_INVALID',
+      );
+    }
 
-    return (normalizedResponse.reports ?? []).flatMap(report => {
+    return normalizedResponse.reports.flatMap(report => {
       const mappedReport = mapCompletedFilterExtractionReport(report);
       return mappedReport ? [mappedReport] : [];
     });
-  } catch {
-    return fetchReferenceMakeupExtractionReportsFromNotifications({
-      limit,
-      offset,
-      timeoutMs,
-    });
+  } catch (primaryError) {
+    try {
+      return await fetchReferenceMakeupExtractionReportsFromNotifications({
+        limit,
+        offset,
+        timeoutMs,
+      });
+    } catch (fallbackError) {
+      throw new BackendApiError(
+        '메이크업 추출 보고서 목록을 불러오지 못했어요. 다시 시도해 주세요.',
+        503,
+        'FILTER_EXTRACTION_REPORT_LIST_UNAVAILABLE',
+        {
+          fallbackReason:
+            fallbackError instanceof Error ? fallbackError.name : typeof fallbackError,
+          primaryReason:
+            primaryError instanceof Error ? primaryError.name : typeof primaryError,
+        },
+      );
+    }
   }
 }
 
@@ -550,15 +823,21 @@ async function fetchReferenceMakeupExtractionReportsFromNotifications({
   timeoutMs?: number;
 }): Promise<ReferenceMakeupExtractionReportHistoryItem[]> {
   const notificationLimit = Math.min(100, Math.max(50, limit + offset));
-  const [storedReports, response] = await Promise.all([
+  const [storedResult, notificationResult] = await Promise.allSettled([
     getStoredReferenceExtractionReports(),
     requestBackendJson<FilterExtractionNotificationListResponse>(
       `/notifications?limit=${notificationLimit}&offset=0`,
       {timeoutMs},
-    ).catch(() => ({notifications: []})),
+    ),
   ]);
+  const storedReports = storedResult.status === 'fulfilled' ? storedResult.value : [];
+  const notifications =
+    notificationResult.status === 'fulfilled'
+    && Array.isArray(notificationResult.value.notifications)
+      ? notificationResult.value.notifications
+      : null;
   const notificationReportIds = new Set<string>();
-  const notificationReports = (response.notifications ?? []).flatMap(
+  const notificationReports = (notifications ?? []).flatMap(
     notification => {
       const reportId = getNotificationReportId(notification.data);
 
@@ -589,62 +868,92 @@ async function fetchReferenceMakeupExtractionReportsFromNotifications({
     offset,
     offset + limit,
   );
-  const reports = await Promise.all(
-    selectedReports.map(async storedReport => {
-      try {
-        const response = await requestBackendJson<unknown>(
-          '/filter-extractions/' + encodeURIComponent(storedReport.reportId),
-          {timeoutMs},
-        );
-        const normalizedResponse = camelizeBackendValue(
-          response,
-        ) as GetFilterExtractionReportResponse;
-        const mappedReport = mapCompletedFilterExtractionReport(
-          normalizedResponse.report,
-          storedReport.reportId,
-        );
+  if (reportCandidates.length === 0) {
+    if (notificationResult.status === 'rejected') {
+      throw notificationResult.reason;
+    }
+    if (notifications === null) {
+      throw new BackendApiError(
+        '메이크업 추출 알림 목록 응답이 올바르지 않아요.',
+        502,
+        'FILTER_EXTRACTION_NOTIFICATION_LIST_INVALID',
+      );
+    }
+    throw new BackendApiError(
+      '기본 보고서 서버가 응답하지 않아 저장된 메이크업 추출 목록을 확인하지 못했어요.',
+      503,
+      'FILTER_EXTRACTION_FALLBACK_EMPTY',
+    );
+  }
 
-        return mappedReport
-          ? {
-              ...mappedReport,
-              createdAt: mappedReport.createdAt || storedReport.createdAt,
-            }
-          : null;
-      } catch {
-        return null;
+  const reportResults = await Promise.allSettled(
+    selectedReports.map(async storedReport => {
+      const response = await requestBackendJson<unknown>(
+        '/filter-extractions/' + encodeURIComponent(storedReport.reportId),
+        {timeoutMs},
+      );
+      const normalizedResponse = camelizeBackendValue(
+        response,
+      ) as GetFilterExtractionReportResponse;
+      const mappedReport = mapCompletedFilterExtractionReport(
+        normalizedResponse.report,
+        storedReport.reportId,
+      );
+
+      if (!mappedReport) {
+        throw new BackendApiError(
+          '완료된 메이크업 추출 보고서를 불러오지 못했어요.',
+          409,
+          'FILTER_EXTRACTION_REPORT_NOT_COMPLETED',
+          {reportId: storedReport.reportId},
+        );
       }
+
+      return {
+        ...mappedReport,
+        createdAt: mappedReport.createdAt || storedReport.createdAt,
+      };
     }),
   );
-
-  return reports.filter(
-    (report): report is ReferenceMakeupExtractionReportHistoryItem =>
-      report !== null,
+  const reports = reportResults.flatMap(result =>
+    result.status === 'fulfilled' ? [result.value] : [],
   );
+
+  if (selectedReports.length > 0 && reports.length === 0) {
+    const firstFailure = reportResults.find(result => result.status === 'rejected');
+    if (firstFailure?.status === 'rejected') {
+      throw firstFailure.reason;
+    }
+  }
+
+  return reports;
 }
 
 export async function runReferenceMakeupExtraction(
   photo: ReferenceMakeupPhoto,
   onProgress?: (update: MakeupExtractionProgressUpdate) => void,
-): Promise<ReferenceMakeupExtractionData> {
+): Promise<ReferenceMakeupExtractionRunResult> {
   const hasBackendApiBaseUrl = Boolean(getBackendApiBaseUrl());
-  const fallbackData = buildFallbackDataForPhoto(photo);
 
   onProgress?.({activeStepId: 'reference-read', phase: 'queued', progress: 0.03});
 
   if (!hasBackendApiBaseUrl) {
-    console.info('[aura:reference-extraction] fallback:no-api-base');
-    latestReferenceMakeupExtractionData = fallbackData;
-    onProgress?.({activeStepId: 'ar-filter-ready', phase: 'fallback', progress: 1});
-    return latestReferenceMakeupExtractionData;
+    throw new BackendApiError(
+      '메이크업 추출 서버 주소가 설정되지 않았어요.',
+      503,
+      'FILTER_EXTRACTION_API_REQUIRED',
+    );
   }
 
   const photoUri = resolveReferencePhotoUri(photo);
 
   if (!photoUri) {
-    console.info('[aura:reference-extraction] fallback:no-photo-uri', {photoId: photo.id});
-    latestReferenceMakeupExtractionData = fallbackData;
-    onProgress?.({activeStepId: 'ar-filter-ready', phase: 'fallback', progress: 1});
-    return latestReferenceMakeupExtractionData;
+    throw new BackendApiError(
+      '선택한 사진을 불러오지 못했어요. 다른 사진을 선택해 주세요.',
+      400,
+      'FILTER_EXTRACTION_PHOTO_REQUIRED',
+      {photoId: photo.id},
+    );
   }
 
   try {
@@ -679,7 +988,7 @@ export async function runReferenceMakeupExtraction(
           photoCaptureId: upload.photoCaptureId,
           referenceImageId: photo.id,
           resultMediaId: upload.mediaId,
-          runAi: shouldRunReferenceMakeupAi(),
+          runAi: true,
           subtitle: null,
           title: photo.title,
           requestPayload: {
@@ -697,6 +1006,15 @@ export async function runReferenceMakeupExtraction(
       response,
     ) as CreateFilterExtractionJobResponse;
     const reportId = createResponse.job.id?.trim() || '';
+
+    if (!reportId) {
+      throw new BackendApiError(
+        '메이크업 추출 작업 번호를 받지 못했어요.',
+        502,
+        'FILTER_EXTRACTION_REPORT_ID_REQUIRED',
+      );
+    }
+
     const normalizedResponse = await waitForCompleteFilterExtractionJob(
       createResponse.job,
       onProgress,
@@ -705,21 +1023,28 @@ export async function runReferenceMakeupExtraction(
 
     onProgress?.({activeStepId: 'product-criteria', phase: 'products', progress: 0.86});
 
-    latestReferenceMakeupExtractionData = {
-      ...referenceMakeupExtractionMock,
-      photos: [
-        photo,
-        ...referenceMakeupExtractionMock.photos.filter(
-          item => item.id !== photo.id,
-        ),
-      ],
-      loadingSteps: normalizedResponse.loadingSteps ?? referenceMakeupExtractionMock.loadingSteps,
-      extractedMakeupLook: mergeBackendExtractionLook(normalizedResponse.extractedMakeupLook, photo),
-    };
+    const extractedMakeupLook = parseBackendExtractionLook(
+      normalizedResponse.extractedMakeupLook,
+      photo,
+    );
 
-    if (reportId) {
-      await rememberReferenceExtractionReport(reportId);
+    if (!extractedMakeupLook) {
+      throw new BackendApiError(
+        '메이크업 추출 결과가 완전하지 않아요. 다시 시도해 주세요.',
+        502,
+        'FILTER_EXTRACTION_RESULT_INVALID',
+        {reportId},
+      );
     }
+
+    latestReferenceMakeupExtractionData = {
+      photos: [photo],
+      loadingSteps: normalizedResponse.loadingSteps ?? referenceMakeupExtractionMock.loadingSteps,
+      extractedMakeupLook,
+    };
+    hasCompletedReferenceMakeupExtraction = true;
+
+    await rememberReferenceExtractionReport(reportId);
     notifyNotificationStateChanged();
     onProgress?.({activeStepId: 'ar-filter-ready', phase: 'complete', progress: 1});
 
@@ -730,19 +1055,11 @@ export async function runReferenceMakeupExtraction(
       title: latestReferenceMakeupExtractionData.extractedMakeupLook.title,
     });
 
-    return latestReferenceMakeupExtractionData;
+    return {data: latestReferenceMakeupExtractionData, reportId};
   } catch (error) {
-    // 한도 초과(429)는 조용한 mock 폴백 대신 호출부가 안내하도록 던진다 —
-    // 가짜 결과가 "정상 분석"처럼 보이면 안 된다.
-    if (error instanceof BackendApiError && error.status === 429) {
-      throw error;
-    }
-
-    console.info('[aura:reference-extraction] fallback:backend-failed', {
+    console.info('[aura:reference-extraction] analyze:failed', {
       message: error instanceof Error ? error.message : String(error),
     });
-    latestReferenceMakeupExtractionData = fallbackData;
-    onProgress?.({activeStepId: 'ar-filter-ready', phase: 'fallback', progress: 1});
-    return latestReferenceMakeupExtractionData;
+    throw error;
   }
 }

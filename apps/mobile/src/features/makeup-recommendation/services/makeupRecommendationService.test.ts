@@ -388,12 +388,13 @@ const reportHistory = mapBackendRecommendationReports([
   {
     id: 'report-1',
     scenarioText: '퇴근 후 약속',
+    schemaVersion: 'makeup-recommendation-v2',
     recommendation: {
-      generationSource: 'deterministic_fallback',
+      generationSource: 'claude',
       matchAssessment: {
         ...BACKEND_MATCH_ASSESSMENT,
         score: 99,
-        generationSource: 'deterministic_fallback',
+        generationSource: 'claude',
       },
       looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
         id: `saved-look-${index + 1}`,
@@ -462,6 +463,25 @@ const reportHistory = mapBackendRecommendationReports([
     }),
   },
 ]);
+const restoredFallbackHistory = mapBackendRecommendationReports([{
+  id: 'fallback-report',
+  schemaVersion: 'makeup-recommendation-v2',
+  recommendation: {
+    generationSource: 'deterministic_fallback',
+    looks: [{id: 'fallback-anchor', role: 'anchor', title: 'fallback', summary: 'fallback'}],
+  },
+  imageStatus: 'pending',
+}]);
+expectEqual(
+  restoredFallbackHistory.length,
+  1,
+  'previously saved v2 deterministic fallback payloads remain readable in report history',
+);
+expectEqual(
+  restoredFallbackHistory[0].results[0].generationSource,
+  'deterministic_fallback',
+  'history restoration preserves the stored generation source',
+);
 expectEqual(reportHistory.length, 1, 'saved report history count');
 expectEqual(reportHistory[0].reportId, 'report-1', 'saved report id');
 expectEqual(
@@ -520,18 +540,18 @@ expectEqual(reportHistory[0].results.length, 3, 'saved report restores three loo
 expectEqual(reportHistory[0].results[0].title, 'anchor title', 'saved report restores look copy');
 expectEqual(
   reportHistory[0].results[0].generationSource,
-  'deterministic_fallback',
-  'saved report restores fallback generation source',
+  'claude',
+  'saved v2 report restores its Claude generation source',
 );
 expectEqual(reportHistory[0].results[0].fitAssessment?.overallScore, 74, 'saved report restores fit score');
 expectEqual(
   reportHistory[0].results[0].matchAssessment?.score,
   99,
-  'saved fallback report restores the exact uncapped server match score',
+  'saved Claude report restores the exact server match score',
 );
 expectEqual(
   reportHistory[0].results[0].matchAssessment?.generationSource,
-  'deterministic_fallback',
+  'claude',
   'saved report restores match generation metadata without changing the score',
 );
 expectEqual(reportHistory[0].results[1].matchAssessment, undefined, 'saved match remains anchor-only');
@@ -548,7 +568,7 @@ expectEqual(
 );
 expectEqual(
   restoredReport.results[0].generationSource,
-  'deterministic_fallback',
+  'claude',
   'restored session keeps generation source',
 );
 expectEqual(
@@ -876,6 +896,7 @@ async function expectGeneratedBackendFlowCompletesAndKeepsSavedReport() {
       reportId: 'report-success',
       imageStatus: 'pending',
       recommendation: {
+        generationSource: 'claude',
         looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
           id: `look-${index + 1}`,
           role,
@@ -972,6 +993,49 @@ async function expectGeneratedRecommendationFailureIsSurfaced() {
   }
 
   expectEqual((error as Error).message, 'recommendation unavailable', 'recommendation failure is not replaced by fixtures');
+}
+
+async function expectV2FallbackGenerationIsRejected() {
+  const session: MakeupRecommendationSession = {
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    phase: 'ready',
+    prompt: '데이트 메이크업',
+    questions: [],
+    currentQuestionIndex: 0,
+    answers: [],
+    results: [],
+    useProfile: true,
+    status: 'ready',
+    generationMode: 'v2',
+  };
+  async function fallbackResponse<T>(): Promise<T> {
+    return {
+      reportId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      recommendation: {
+        generationSource: 'deterministic_fallback',
+        looks: [{
+          id: 'anchor',
+          role: 'anchor',
+          title: 'fallback',
+          summary: 'fallback',
+        }],
+      },
+      imageStatus: 'pending',
+    } as T;
+  }
+
+  let error: unknown;
+  try {
+    await generateMakeupRecommendationV2(session, fallbackResponse);
+  } catch (caught) {
+    error = caught;
+  }
+
+  expectEqual(
+    error instanceof MakeupRecommendationRetryableError,
+    true,
+    'v2 client rejects a deterministic fallback response instead of rendering it',
+  );
 }
 
 async function expectPollingParsesJsonStringRecommendationAndKeepsResults() {
@@ -1146,6 +1210,7 @@ async function expectV2DiscoverySessionAnswerGenerateContract() {
       reportId,
       imageStatus: 'pending',
       recommendation: {
+        generationSource: 'claude',
         looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
           id: `v2-look-${index + 1}`,
           role,
@@ -1266,19 +1331,22 @@ async function expectV2DiscoverySessionAnswerGenerateContract() {
   );
 }
 
-async function expectV2OnlyFallsBackForUnavailableEndpoint() {
+async function expectV2FailsClosedWithoutBackend() {
   const situation = MAKEUP_SITUATION_FIXTURES[0];
   const analysisReportId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   async function legacyDiscoveryCollisionRequest<T>(): Promise<T> {
     throw new BackendApiError('Request validation failed.', 422, 'VALIDATION_ERROR');
   }
-  const discoveryFallback = await fetchMakeupRecommendationDiscovery(
-    legacyDiscoveryCollisionRequest,
-  );
+  let discoveryCollisionError: unknown;
+  try {
+    await fetchMakeupRecommendationDiscovery(legacyDiscoveryCollisionRequest);
+  } catch (error) {
+    discoveryCollisionError = error;
+  }
   expectEqual(
-    discoveryFallback.source,
-    'fixture',
-    'legacy report-id route collision falls back to the local situation catalog',
+    discoveryCollisionError instanceof MakeupRecommendationRetryableError,
+    true,
+    'legacy report-id route collision fails closed instead of loading a local catalog',
   );
 
   async function malformedDiscoveryRequest<T>(): Promise<T> {
@@ -1291,8 +1359,17 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
       }],
     } as T;
   }
-  const malformedFallback = await fetchMakeupRecommendationDiscovery(malformedDiscoveryRequest);
-  expectEqual(malformedFallback.source, 'fixture', 'malformed discovery success uses the reviewed fixture catalog');
+  let malformedDiscoveryError: unknown;
+  try {
+    await fetchMakeupRecommendationDiscovery(malformedDiscoveryRequest);
+  } catch (error) {
+    malformedDiscoveryError = error;
+  }
+  expectEqual(
+    malformedDiscoveryError instanceof MakeupRecommendationRetryableError,
+    true,
+    'malformed discovery success fails closed instead of using fixture data',
+  );
 
   async function duplicateDiscoveryRequest<T>(): Promise<T> {
     const keys = ['daily', 'formal_event', 'camera_content', 'festival_performance'];
@@ -1311,14 +1388,37 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
       })),
     } as T;
   }
-  const duplicateFallback = await fetchMakeupRecommendationDiscovery(duplicateDiscoveryRequest);
-  expectEqual(duplicateFallback.source, 'fixture', 'duplicate discovery ids use the reviewed fixture catalog');
+  let duplicateDiscoveryError: unknown;
+  try {
+    await fetchMakeupRecommendationDiscovery(duplicateDiscoveryRequest);
+  } catch (error) {
+    duplicateDiscoveryError = error;
+  }
+  expectEqual(
+    duplicateDiscoveryError instanceof MakeupRecommendationRetryableError,
+    true,
+    'duplicate discovery ids fail closed instead of using fixture data',
+  );
 
   async function networkDiscoveryRequest<T>(): Promise<T> {
     throw new BackendNetworkError();
   }
-  const networkFallback = await fetchMakeupRecommendationDiscovery(networkDiscoveryRequest);
-  expectEqual(networkFallback.source, 'fixture', 'network discovery failure uses the reviewed fixture catalog');
+  let discoveryNetworkError: unknown;
+  try {
+    await fetchMakeupRecommendationDiscovery(networkDiscoveryRequest);
+  } catch (error) {
+    discoveryNetworkError = error;
+  }
+  expectEqual(
+    discoveryNetworkError instanceof MakeupRecommendationRetryableError,
+    true,
+    'network discovery failure never becomes a local fixture success',
+  );
+  expectEqual(
+    (discoveryNetworkError as Error).message.includes('네트워크'),
+    true,
+    'network discovery failure keeps the actionable retry message',
+  );
 
   const fixtureKeyword = situation.keywords[0];
   const fixtureSessionId = 'f0000000-0000-4000-8000-000000000001';
@@ -1413,29 +1513,52 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
   const previousApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
   try {
     delete process.env.EXPO_PUBLIC_API_BASE_URL;
-    const noApiFallback = await startGeneratedMakeupRecommendationV2({
-      analysisReportId,
-      discoverySource: 'fixture',
-      situation,
-      keyword: fixtureKeyword,
-    });
-    expectEqual(noApiFallback.generationMode, 'fixture', 'missing API base uses the explicit local fixture flow');
+    let noApiError: unknown;
+    try {
+      await startGeneratedMakeupRecommendationV2({
+        analysisReportId,
+        discoverySource: 'fixture',
+        situation,
+        keyword: fixtureKeyword,
+      });
+    } catch (error) {
+      noApiError = error;
+    }
+    expectEqual(
+      noApiError instanceof MakeupRecommendationRetryableError,
+      true,
+      'missing API base fails closed instead of completing with local fixture looks',
+    );
+    expectEqual(
+      (noApiError as Error).message.includes('서버 연결 설정'),
+      true,
+      'missing API base explains the release configuration problem',
+    );
   } finally {
     if (previousApiBaseUrl === undefined) delete process.env.EXPO_PUBLIC_API_BASE_URL;
     else process.env.EXPO_PUBLIC_API_BASE_URL = previousApiBaseUrl;
   }
 
   let nonUuidFixtureRequestCount = 0;
-  const fixtureReportFallback = await startGeneratedMakeupRecommendationV2({
-    analysisReportId: 'analysis-report-fixture',
-    discoverySource: 'fixture',
-    situation,
-    keyword: fixtureKeyword,
-  }, async () => {
-    nonUuidFixtureRequestCount += 1;
-    throw new Error('fixture report must stay local');
-  });
-  expectEqual(fixtureReportFallback.generationMode, 'fixture', 'non-UUID fixture report stays in local preview');
+  let fixtureReportError: unknown;
+  try {
+    await startGeneratedMakeupRecommendationV2({
+      analysisReportId: 'analysis-report-fixture',
+      discoverySource: 'fixture',
+      situation,
+      keyword: fixtureKeyword,
+    }, async () => {
+      nonUuidFixtureRequestCount += 1;
+      throw new Error('fixture report must never reach the backend');
+    });
+  } catch (error) {
+    fixtureReportError = error;
+  }
+  expectEqual(
+    fixtureReportError instanceof MakeupRecommendationRetryableError,
+    true,
+    'non-UUID fixture report fails closed instead of becoming a local preview',
+  );
   expectEqual(nonUuidFixtureRequestCount, 0, 'non-UUID fixture report never reaches the backend');
 
   let networkFailure: unknown;
@@ -1454,69 +1577,41 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
   expectEqual(networkFailure instanceof MakeupRecommendationRetryableError, true, 'network failure never becomes fake local success');
   expectEqual((networkFailure as Error).message.includes('네트워크'), true, 'network failure shows the reviewed Korean retry message');
 
-  const legacyRequestPaths: string[] = [];
-  let legacyV2Body: Record<string, unknown> | undefined;
-  const question = {
-    id: 'legacy-finish',
-    title: '어떤 마무리가 좋아요?',
-    options: [
-      {id: 'soft', label: '은은하게'},
-      {id: 'clear', label: '또렷하게'},
-      {id: 'glossy', label: '촉촉하게'},
-      {id: 'ai_pick', label: 'AI가 골라줘'},
-    ],
-  };
-  async function legacyCompatibleRequest<T>(
+  const unavailableRequestPaths: string[] = [];
+  async function unavailableV2Request<T>(
     path: string,
-    init?: Parameters<typeof requestBackendJson>[1],
   ): Promise<T> {
-    legacyRequestPaths.push(path);
+    unavailableRequestPaths.push(path);
     if (path.endsWith('/sessions')) {
-      legacyV2Body = init?.body as Record<string, unknown>;
       throw new BackendApiError('method not allowed', 405, 'HTTP_ERROR');
     }
-    if (path.endsWith('/questions')) return {questions: [question]} as T;
-    if (path === '/makeup-recommendations') {
-      return {
-        reportId: 'legacy-report',
-        imageStatus: 'pending',
-        recommendation: {
-          looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
-            id: `legacy-look-${index + 1}`,
-            role,
-            title: `레거시 룩 ${index + 1}`,
-            summary: '선택한 트렌드를 반영한 추천',
-            reasons: ['선택한 트렌드와 답변을 반영했어요.'],
-            durationMinutes: 15,
-            difficulty: 'medium',
-          })),
-        },
-      } as T;
-    }
-    throw new Error(`Unexpected legacy request: ${path}`);
+    throw new Error(`V2-unavailable flow must not call a legacy endpoint: ${path}`);
   }
-  const legacyStarted = await startGeneratedMakeupRecommendationV2({
-    analysisReportId,
-    discoverySource: 'fixture',
-    situation,
-    keyword: fixtureKeyword,
-  }, legacyCompatibleRequest);
-  expectEqual(legacyStarted.generationMode, 'backend', 'old API uses its real legacy question flow');
-  expectEqual(legacyStarted.sourceAnalysisReportId, analysisReportId, 'legacy compatibility keeps selected report context');
-  expectEqual(legacyV2Body?.customSituationText, fixtureKeyword.seedPrompt, 'old API probe also uses the fixture custom contract');
-  expectEqual(legacyV2Body?.situationId, undefined, 'old API probe never receives a fixture situation id');
-  expectEqual(legacyV2Body?.keywordId, undefined, 'old API probe never receives a fixture keyword id');
-  const legacyCompleted = await answerGeneratedMakeupRecommendationQuestionV2(
-    legacyStarted,
-    {questionId: question.id, optionId: 'soft'},
-    legacyCompatibleRequest,
-  );
-  expectEqual(legacyCompleted.phase, 'results', 'legacy compatibility completes the selected fixture trend');
-  expectEqual(legacyCompleted.results.length, 3, 'legacy compatibility keeps the three recommendation looks');
+  let unavailableV2Error: unknown;
+  try {
+    await startGeneratedMakeupRecommendationV2({
+      analysisReportId,
+      discoverySource: 'fixture',
+      situation,
+      keyword: fixtureKeyword,
+    }, unavailableV2Request);
+  } catch (error) {
+    unavailableV2Error = error;
+  }
   expectEqual(
-    legacyRequestPaths.join(','),
-    '/makeup-recommendations/sessions,/makeup-recommendations/questions,/makeup-recommendations',
-    'v2-unavailable flow falls back through legacy questions and recommendation generation',
+    unavailableV2Error instanceof MakeupRecommendationRetryableError,
+    true,
+    'unavailable V2 endpoint fails closed instead of discarding the selected face report in V1',
+  );
+  expectEqual(
+    (unavailableV2Error as Error).message.includes('얼굴 분석 기반 AI 추천 서버'),
+    true,
+    'unavailable V2 endpoint returns the explicit report-based retry message',
+  );
+  expectEqual(
+    unavailableRequestPaths.join(','),
+    '/makeup-recommendations/sessions',
+    'V2-unavailable flow never calls legacy questions or recommendation generation',
   );
 
   let unexpectedRequestCount = 0;
@@ -1847,7 +1942,7 @@ async function expectGeneratedV2SessionRestoreContract() {
   expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'questioning', expiresAt: activeExpiry}), 'question', 'questioning resumes at question');
   expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'ready', expiresAt: activeExpiry}), 'loading', 'ready resumes at loading');
   expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'generating', expiresAt: activeExpiry}), 'loading', 'generating resumes at loading');
-  expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'failed', expiresAt: activeExpiry}), 'retry', 'failed session waits for explicit user retry');
+  expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'failed', expiresAt: activeExpiry}), 'discard', 'failed session cannot force error restoration on re-entry');
   expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'completed', reportId: 'report-v2', expiresAt: activeExpiry}), 'results', 'completed resumes through result hydration');
   expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'completed', expiresAt: activeExpiry}), 'discard', 'completed session without report is discarded');
   expectEqual(getMakeupRecommendationSessionRestoreDestination({status: 'ready', expiresAt: '2020-01-01T00:00:00Z'}), 'discard', 'expired session is discarded');
@@ -1866,9 +1961,10 @@ async function runAsyncContracts() {
   await expectAbortSignalIsForwarded();
   await expectGeneratedBackendFlowCompletesAndKeepsSavedReport();
   await expectGeneratedRecommendationFailureIsSurfaced();
+  await expectV2FallbackGenerationIsRejected();
   await expectPollingParsesJsonStringRecommendationAndKeepsResults();
   await expectV2DiscoverySessionAnswerGenerateContract();
-  await expectV2OnlyFallsBackForUnavailableEndpoint();
+  await expectV2FailsClosedWithoutBackend();
   await expectLookRetryTargetsOnlyFailedLook();
   await expectMakeupRecommendationTelemetryIsFireAndForget();
   await expectMakeupRecommendationSessionIdPersistenceContract();

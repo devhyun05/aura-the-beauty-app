@@ -37,6 +37,7 @@ from .ranking import (
   CATEGORY_LABELS,
   conditional_mmr_picks,
   guard_conflicting_candidates,
+  normalized_product_key,
   passes_floor,
   price_delta_matches,
   rank_candidates,
@@ -758,11 +759,26 @@ async def _enrich_live_discovery(
   queries = _discovery_queries(state, category)
   hard_filters = [f for f in state.get("hardFilters") or [] if _clean(f.get("mode")) != "soft"]
   existing_ids = {product.get("id") for product in products}
+  served_ids = {
+    _clean(value) for value in state.get("servedCandidateIds") or [] if _clean(value)
+  }
+  served_keys = {
+    _clean(value) for value in state.get("servedProductKeys") or [] if _clean(value)
+  }
 
   def _eligible(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     # §9/F11: 명시 하드는 라이브에도 동일하게 적용하되, 질문에서 온
     # clarification hard는 known mismatch만 제거한다(unknown != negative).
-    unseen = [item for item in items if item["id"] not in existing_ids]
+    unseen = [
+      item
+      for item in items
+      if item["id"] not in existing_ids
+      and item["id"] not in served_ids
+      and (
+        not normalized_product_key(item)
+        or normalized_product_key(item) not in served_keys
+      )
+    ]
     return apply_hard_filters(unseen, hard_filters)
 
   cache_key = " | ".join(queries)

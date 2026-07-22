@@ -3,12 +3,10 @@ import {
   MAKEUP_QUESTIONS,
   MAKEUP_SCENARIOS,
 } from '../data/makeupRecommendationCatalog';
-import {getMakeupRecommendationFixtureDiscovery} from '../data/makeupRecommendationV2Catalog';
 import {
   BackendApiError,
   getBackendApiBaseUrl,
   isBackendNetworkError,
-  isRequestAbortedError,
   requestBackendJson,
 } from '../../../shared/services/backendApi';
 import {
@@ -72,7 +70,6 @@ export type StartMakeupRecommendationV2Input = {
   customSituationLabel?: string;
   imageMode?: 'personalized' | 'generic';
   personalColor?: string;
-  forceFixture?: boolean;
 };
 
 export const MAKEUP_RECOMMENDATION_GENERATION_TIMEOUT_MS = 45_000;
@@ -325,6 +322,7 @@ type BackendRecommendationReport = {
   customSituationLabel?: unknown;
   createdAt?: string;
   contextSnapshot?: BackendRecommendationContextSnapshot | string;
+  schemaVersion?: unknown;
 };
 
 function normalizeBackendProfileGender(
@@ -1399,6 +1397,7 @@ export function mapBackendRecommendationReports(
     if (!isBackendRecommendationReport(value)) return [];
     const report = value;
     try {
+      const parsedRecommendation = parseBackendRecommendation(report.recommendation);
       const scenarioText = normalizeOptionalBackendText(report.scenarioText) || '저장된 메이크업 추천';
       const contextSnapshot = parseBackendReportContextSnapshot(report.contextSnapshot);
       const selection = isBackendRecord(contextSnapshot?.selection) ? contextSnapshot.selection : undefined;
@@ -1552,32 +1551,19 @@ type BackendRecommendationSessionV2 = {
   expiresAt?: string;
 };
 
-function isUnavailableV2Endpoint(error: unknown): boolean {
-  return error instanceof BackendApiError && (
-    error.status === 405
-    || error.status === 501
-    || (error.status === 404 && error.code === 'MAKEUP_RECOMMENDATION_V2_DISABLED')
-  );
-}
-
-function shouldUseDiscoveryFixture(error: unknown): boolean {
-  if (isRequestAbortedError(error)) return false;
-  if (isBackendNetworkError(error)) return true;
-  if (error instanceof BackendApiError) {
-    if (error.status === 401 || error.status === 403) return false;
-    return error.status === 404
-      || error.status === 405
-      || error.status === 422
-      || error.status === 501
-      || error.status >= 500;
-  }
-  return error instanceof Error && /EXPO_PUBLIC_API_BASE_URL is required/.test(error.message);
-}
-
 function normalizeV2BackendError(error: unknown): unknown {
   if (isBackendNetworkError(error)) {
     return new MakeupRecommendationRetryableError(
       '네트워크 연결을 확인한 뒤 다시 시도해 주세요.',
+    );
+  }
+  if (error instanceof BackendApiError && (
+    error.status === 405
+    || error.status === 501
+    || (error.status === 404 && error.code === 'MAKEUP_RECOMMENDATION_V2_DISABLED')
+  )) {
+    return new MakeupRecommendationRetryableError(
+      '얼굴 분석 기반 AI 추천 서버를 사용할 수 없어요. 잠시 후 다시 시도해 주세요.',
     );
   }
   if (!(error instanceof BackendApiError) || error.status !== 422) return error;
@@ -1687,40 +1673,6 @@ function buildV2SessionCreateBody(
     ...(input.customSituationLabel?.trim()
       ? {customSituationLabel: input.customSituationLabel.trim()}
       : {}),
-  };
-}
-
-function createFixtureV2Session(input: StartMakeupRecommendationV2Input): MakeupRecommendationSession {
-  const prompt = v2Prompt(input);
-  const fixtureSession = startMakeupRecommendation({
-    prompt,
-    scenarioId: input.keyword?.id ?? input.editorialPresetId,
-    scenarioLabel: input.keyword?.label
-      || input.editorialPresetLabel?.trim()
-      || input.customSituationLabel?.trim()
-      || input.situation?.label
-      || '직접 입력',
-    useProfile: true,
-    personalColor: input.personalColor,
-  });
-  return {
-    ...fixtureSession,
-    results: fixtureSession.results.map(cloneLook),
-    sourceAnalysisReportId: input.analysisReportId,
-    situation: input.situation ? {
-      id: input.situation.id,
-      key: input.situation.key,
-      label: input.situation.label,
-      description: input.situation.description,
-    } : undefined,
-    keyword: input.keyword,
-    editorialPresetId: input.editorialPresetId,
-    customSituationText: input.customSituationText?.trim()
-      || input.editorialPresetPrompt?.trim()
-      || undefined,
-    status: fixtureSession.phase === 'results' ? 'completed' : 'questioning',
-    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-    generationMode: 'fixture',
   };
 }
 
@@ -1881,54 +1833,15 @@ export async function fetchMakeupRecommendationDiscovery(
   try {
     const response = await backendRequest<unknown>('/makeup-recommendations/discovery', {signal});
     const normalized = normalizeMakeupRecommendationDiscovery(response);
-    return normalized ?? getMakeupRecommendationFixtureDiscovery();
+    if (!normalized) {
+      throw new MakeupRecommendationRetryableError(
+        '추천 상황 목록을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
+      );
+    }
+    return normalized;
   } catch (error) {
-    if (!shouldUseDiscoveryFixture(error)) throw error;
-    return getMakeupRecommendationFixtureDiscovery();
+    throw normalizeV2BackendError(error);
   }
-}
-
-async function startLegacyCompatibleMakeupRecommendation(
-  input: StartMakeupRecommendationV2Input,
-  backendRequest: typeof requestBackendJson,
-  signal?: AbortSignal,
-): Promise<MakeupRecommendationSession> {
-  const prompt = v2Prompt(input);
-  const scenarioLabel = input.keyword?.label
-    || input.editorialPresetLabel?.trim()
-    || input.customSituationLabel?.trim()
-    || input.situation?.label
-    || '직접 입력';
-  const legacySession = await startGeneratedMakeupRecommendation(
-    {
-      prompt,
-      scenarioId: input.keyword?.id ?? input.editorialPresetId,
-      scenarioLabel,
-      useProfile: true,
-      personalColor: input.personalColor,
-    },
-    input.keyword?.tags ?? [],
-    backendRequest,
-    signal,
-  );
-  return {
-    ...legacySession,
-    useProfile: true,
-    personalColor: input.personalColor,
-    sourceAnalysisReportId: input.analysisReportId,
-    situation: input.situation ? {
-      id: input.situation.id,
-      key: input.situation.key,
-      label: input.situation.label,
-      description: input.situation.description,
-    } : undefined,
-    keyword: input.keyword,
-    editorialPresetId: input.editorialPresetId,
-    customSituationText: input.customSituationText?.trim()
-      || input.editorialPresetPrompt?.trim()
-      || undefined,
-    status: 'questioning',
-  };
 }
 
 export async function fetchGeneratedMakeupRecommendationSessionV2(
@@ -1964,8 +1877,15 @@ export async function startGeneratedMakeupRecommendationV2(
   const hasConfiguredBackend = Boolean(getBackendApiBaseUrl()) || hasInjectedBackend;
   const hasFixtureReportId = input.discoverySource === 'fixture'
     && !isMakeupRecommendationUuid(input.analysisReportId);
-  if (input.forceFixture || !hasConfiguredBackend || hasFixtureReportId) {
-    return createFixtureV2Session(input);
+  if (!hasConfiguredBackend) {
+    throw new MakeupRecommendationRetryableError(
+      '추천 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행한 뒤 시도해 주세요.',
+    );
+  }
+  if (hasFixtureReportId) {
+    throw new MakeupRecommendationRetryableError(
+      '선택한 얼굴 분석 보고서를 확인하지 못했어요. 실제 보고서를 다시 골라주세요.',
+    );
   }
   const body = buildV2SessionCreateBody(input, selectionKind);
   try {
@@ -1982,13 +1902,6 @@ export async function startGeneratedMakeupRecommendationV2(
     );
     return mapBackendV2Session({input, response});
   } catch (error) {
-    if (isUnavailableV2Endpoint(error)) {
-      try {
-        return await startLegacyCompatibleMakeupRecommendation(input, backendRequest, signal);
-      } catch (legacyError) {
-        throw normalizeV2BackendError(legacyError);
-      }
-    }
     throw normalizeV2BackendError(error);
   }
 }
@@ -2000,13 +1913,9 @@ export async function answerGeneratedMakeupRecommendationQuestionV2(
   signal?: AbortSignal,
 ): Promise<MakeupRecommendationSession> {
   if (session.generationMode === 'fixture') {
-    const answered = answerMakeupRecommendationQuestion(session, answer);
-    return {
-      ...answered,
-      results: answered.results.map(cloneLook),
-      status: answered.phase === 'results' ? 'completed' : 'questioning',
-      generationMode: 'fixture',
-    };
+    throw new MakeupRecommendationRetryableError(
+      '실제 AI 추천 세션을 확인하지 못했어요. 새 추천을 시작해 주세요.',
+    );
   }
   if (session.generationMode === 'backend') {
     return answerGeneratedMakeupRecommendationQuestion(
@@ -2039,8 +1948,9 @@ export async function generateMakeupRecommendationV2(
   signal?: AbortSignal,
 ): Promise<MakeupRecommendationSession> {
   if (session.generationMode === 'fixture') {
-    if (session.phase !== 'results') throw new Error('질문에 모두 답한 뒤 추천을 만들 수 있어요.');
-    return {...session, results: session.results.map(cloneLook), status: 'completed'};
+    throw new MakeupRecommendationRetryableError(
+      '실제 AI 추천 세션을 확인하지 못했어요. 새 추천을 시작해 주세요.',
+    );
   }
   assertBackendUuid(
     session.id,
@@ -2077,7 +1987,14 @@ export async function generateMakeupRecommendationV2(
     answers: session.answers,
     imageStatus: response.imageStatus,
   });
-  if (results.length === 0) throw new Error('추천 결과 형식을 확인하지 못했어요. 다시 시도해 주세요.');
+  if (
+    results.length === 0
+    || results.some(look => look.generationSource !== 'claude')
+  ) {
+    throw new MakeupRecommendationRetryableError(
+      'AI가 완성한 추천 결과를 확인하지 못했어요. 답변은 유지했으니 다시 시도해 주세요.',
+    );
+  }
   return {
     ...session,
     phase: 'results',

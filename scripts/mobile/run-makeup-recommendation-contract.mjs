@@ -37,6 +37,24 @@ function requireIncludes(source, contracts, label) {
   }
 }
 
+function requireExcludes(source, contracts, label) {
+  for (const contract of contracts) {
+    if (source.includes(contract)) {
+      throw new Error(label + ' still contains removed report export UI: ' + contract);
+    }
+  }
+}
+
+function requireRouteExcludes(source, routeName, contracts) {
+  const marker = `  ${routeName}: {`;
+  const start = source.indexOf(marker);
+  const end = start >= 0 ? source.indexOf('\n  },', start) : -1;
+  if (start < 0 || end < 0) {
+    throw new Error('Route chrome is missing route: ' + routeName);
+  }
+  requireExcludes(source.slice(start, end), contracts, routeName + ' route chrome');
+}
+
 function validateSituationWebP(assetPath) {
   const bytes = readFileSync(assetPath);
   if (bytes.length > 150 * 1024) throw new Error('Situation image exceeds 150 KiB: ' + assetPath);
@@ -186,15 +204,19 @@ if (profileReportHub.includes('imageSource: recommendation.results[0].imageSourc
 const profileScreen = read(srcRoot, 'features/profile/screens/ProfileScreen.tsx');
 const profileRoutes = read(srcRoot, 'app/navigation/routes/profileRoutes.tsx');
 requireIncludes(profileScreen, [
-  'onPressMakeupRecommendationReport?: (reportId: string) => void;',
-  'onPressLatestMakeupRecommendation',
-  'onPressMakeupRecommendationReport(makeupRecommendationPreview.id)',
-  'onPress={onPressLatestMakeupRecommendation}',
-], 'Latest recommendation report action');
+  'onPressMakeupRecommendationReportsList?: () => void;',
+  'onPress={onPressMakeupRecommendationReportsList}',
+], 'Recommendation report-list action');
+if (
+  profileScreen.includes('onPressLatestMakeupRecommendation')
+  || profileScreen.includes('onPressMakeupRecommendationReport?:')
+  || profileScreen.includes('onPressMakeupRecommendationReport(')
+) {
+  throw new Error('Profile recommendation preview must open the matching report list, not a report detail.');
+}
 requireIncludes(profileRoutes, [
   "navigate('MakeupRecommendation', {view: 'history'})",
-  "navigate('MakeupRecommendation', {reportId})",
-], 'Profile recommendation list and exact-detail routes');
+], 'Profile recommendation list route');
 
 requireIncludes(service, [
   '/makeup-recommendations/discovery',
@@ -303,23 +325,163 @@ requireIncludes(finalScreen, [
   'onPress={onOpenRecommendedProducts}',
   "const generatedReady = Boolean(model) && resolvedImageStatus === 'completed';",
   'generatedReady={generatedReady}',
-  'onReadyChange={captureReadyHandlers.hero}',
-  'onCropSettledChange={captureReadyHandlers.crop}',
-  'onProductImageSettledChange={captureReadyHandlers.product}',
-  'onPointSettledChange={captureReadyHandlers.map}',
   '<RecommendationReportHeader',
-  'accessibilityLabel="추천 메이크업 보고서 더보기"',
-  "Alert.alert('추천 메이크업 보고서'",
-  '<OptionalViewShot',
-  'captureRecommendationResult(captureRef)',
-  "handleShareAction('save-image')",
-  "handleShareAction('share-result')",
   '추천 제품',
   'AR로 적용하기',
   'onRetry={() => onRetryImages()}',
   'hitSlop={6}',
   'floatingActionClearance: {height: 116}',
 ], 'Final recommendation result composition');
+requireExcludes(finalScreen, [
+  'MoreHorizontal',
+  'onMore',
+  'ReportCaptureHost',
+  'SavedImagePreviewSheet',
+  'saveCapturedReportPages',
+  'prepareReportExportWithFallback',
+  'handleShareAction',
+  '이미지 저장',
+  '공유하기',
+], 'Recommendation report');
+
+const extractionService = read(
+  srcRoot,
+  'features/reference-makeup-extraction/services/makeupExtractionService.ts',
+);
+requireIncludes(extractionService, [
+  'export function shouldRunReferenceMakeupAi(): boolean',
+  'return true;',
+  'runAi: true,',
+  "completedResponse.aiStatus === 'bedrock_completed'",
+  "'FILTER_EXTRACTION_AI_RESULT_REQUIRED'",
+  "'FILTER_EXTRACTION_RESULT_INVALID'",
+  'throw error;',
+  "'FILTER_EXTRACTION_REPORT_LIST_UNAVAILABLE'",
+  "'FILTER_EXTRACTION_FALLBACK_EMPTY'",
+  'Promise.allSettled(',
+  'throw firstFailure.reason;',
+], 'Reference makeup extraction accepts only a complete real AI result');
+if (
+  extractionService.includes('fallback:backend-failed')
+  || extractionService.includes('fallback:no-api-base')
+  || extractionService.includes('latestReferenceMakeupExtractionData = fallbackData')
+) {
+  throw new Error('Reference makeup extraction must fail closed instead of presenting mock data.');
+}
+
+const extractionRoutes = read(
+  srcRoot,
+  'app/navigation/routes/referenceMakeupExtractionRoutes.tsx',
+);
+const extractionLoadingScreen = read(
+  srcRoot,
+  'features/reference-makeup-extraction/screens/ReferenceMakeupExtractionLoadingScreen.tsx',
+);
+const faceAnalysisService = read(srcRoot, 'shared/services/faceAnalysisService.ts');
+requireIncludes(extractionRoutes, [
+  'Promise<ReferenceMakeupExtractionRunResult | null>',
+  'if (isMounted && result)',
+  'setAnalysisErrorMessage(',
+  'onRetry={() => setRequestKey(currentKey => currentKey + 1)}',
+  'key={`${photo.id}:${requestKey}`}',
+  'analysisAttemptKey={requestKey}',
+  '[reportId, reportRequestKey, setSelectedReferenceMakeupPhoto]',
+  'setReportRequestKey(currentKey => currentKey + 1)',
+  "primaryActionLabel={reportLoadError ? '다시 시도하기' : undefined}",
+  "secondaryActionLabel={reportLoadError ? '보고서 목록으로' : undefined}",
+  "onOpenReportList={() => navigation.replace('MakeupRecipeList')}",
+  'params: {reportId: completedReportId}',
+], 'Reference makeup extraction failure and retry routing');
+requireIncludes(extractionLoadingScreen, [
+  'analysisAttemptKey: number;',
+  '[analysisAttemptKey, photo.id]',
+  'analysisErrorMessage?: string | null;',
+  '메이크업 추출을 완료하지 못했어요',
+  '다시 시도하기',
+  '다른 사진 선택',
+  '보고서 목록 보기',
+], 'Reference makeup extraction explicit failure state');
+requireIncludes(faceAnalysisService, [
+  "'FACE_ANALYSIS_API_BASE_URL_MISSING'",
+  'throw new BackendApiError(',
+], 'Face report lists and details surface missing backend configuration');
+
+const faceReportScaffold = read(srcRoot, 'features/face-report/ReportScreenScaffold.tsx');
+const faceReportScreen = read(srcRoot, 'features/face-report/screens/FaceAnalysisReportPreviewScreen.tsx');
+requireExcludes(faceReportScaffold, [
+  'ReportCaptureHost',
+  'OptionalViewShot',
+  'captureRef',
+  'captureFullReport',
+], 'Face analysis report scaffold');
+requireExcludes(faceReportScreen, [
+  'reportImageShare',
+  'SavedImagePreviewSheet',
+  'handleShareAction',
+  'save-image',
+  'share-report',
+  '이미지 저장',
+  '공유하기',
+], 'Face analysis report');
+
+const feedbackResultScreen = read(srcRoot, 'features/makeup-feedback/screens/MakeupFeedbackResultScreen.tsx');
+const feedbackRoutes = read(srcRoot, 'app/navigation/routes/makeupFeedbackRoutes.tsx');
+requireExcludes(feedbackResultScreen, [
+  'FeedbackShareActions',
+  'ReportCaptureHost',
+  'SavedImagePreviewSheet',
+  'saveCapturedReportPages',
+  'shareFeedbackImageWithSystemSheet',
+  'onHeaderShareActionChange',
+  'save-image',
+  'share-report',
+  '이미지 저장',
+  '공유하기',
+], 'Makeup feedback report');
+requireExcludes(feedbackRoutes, [
+  'HeaderShareAction',
+  'shareAction',
+  'onShare={shareAction',
+  'onHeaderShareActionChange',
+  'shareDisabled',
+], 'Makeup feedback report routes');
+
+const extractionResultScreen = read(srcRoot, 'features/reference-makeup-extraction/screens/ReferenceMakeupExtractionResultScreen.tsx');
+requireExcludes(extractionResultScreen, [
+  'ReportCaptureHost',
+  'SavedImagePreviewSheet',
+  'saveCapturedReportPages',
+  'MakeupAreaReportExportPage',
+  '메이크업 추출 전체 보고서 저장',
+  '보고서 저장',
+], 'Reference makeup extraction report');
+
+const recipeDetailScreen = read(
+  srcRoot,
+  'features/reference-makeup-extraction/screens/MakeupRecipeDetailScreen.tsx',
+);
+requireExcludes(recipeDetailScreen, [
+  'onHeaderShareActionChange',
+  'onSaveRecipe',
+  'Share.share',
+  'BookmarkPlus',
+  '현재 메이크업 레시피 저장하기',
+], 'Reference makeup recipe report');
+requireExcludes(extractionRoutes, [
+  'HeaderShareAction',
+  'shareAction',
+  'onShare={shareAction',
+  'onHeaderShareActionChange',
+  'onSaveRecipe=',
+], 'Reference makeup extraction report routes');
+const routeChromeSource = read(srcRoot, 'app/navigation/routeChrome.ts');
+for (const routeName of [
+  'MakeupFeedbackResult',
+  'ReferenceMakeupExtractionResult',
+  'MakeupRecipeDetail',
+]) {
+  requireRouteExcludes(routeChromeSource, routeName, ['rightActions', 'share']);
+}
 if (
   finalScreen.includes('FinalRecommendationContextReceipt')
   || finalScreen.includes('이번 추천에 반영했어요')
@@ -345,7 +507,7 @@ if (
   || finalScreen.includes('<Share2')
   || finalScreen.includes('styles.shareSection')
 ) {
-  throw new Error('Final save/share controls must live only in the report-header overflow menu.');
+  throw new Error('Final recommendation report must not expose save/share controls.');
 }
 
 const detailHeaderChrome = read(srcRoot, 'app/navigation/detailHeaderChrome.tsx');
@@ -365,18 +527,6 @@ requireIncludes(screen, [
   'onBack={onBack}',
 ], 'Recommendation result report-header handoff');
 
-
-const finalShareService = read(featureRoot, 'services/recommendationResultShare.ts');
-requireIncludes(finalShareService, [
-  'getPermissionsAsync(true, [])',
-  'requestPermissionsAsync(true, [])',
-  'saveToLibraryAsync(imageUri)',
-  'createAssetAsync(imageUri)',
-  'sharingModule.shareAsync(imageUri',
-], 'Final recommendation result share service');
-if (finalShareService.includes("['photo']")) {
-  throw new Error('Final result save must not request granular media permissions in Android Expo Go.');
-}
 
 if (
   finalScreen.includes('FINAL MAKEUP RESULT') ||

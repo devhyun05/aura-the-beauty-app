@@ -1,7 +1,6 @@
-// AURADIN — Narrowing question as tappable color-swatch tiles. Tapping a tile
-// advances immediately (no confirm). Tiles are SOLID swatch color (the
-// deliberate exception to glass); skip = the FIRST swatchless option, as an
-// underlined text link. One magenta accent: the eyebrow.
+// AURADIN — Narrowing question as tappable representative-product/photo tiles,
+// with deterministic swatches when a matching catalog photo is unavailable.
+// Tapping advances immediately; the first option with neither visual is skip.
 // Recreated from prompts/2-question.md.
 import * as React from 'react';
 import {
@@ -37,9 +36,8 @@ export function QuestionView({
   const enter = useEnterTransition(12);
   const [draft, setDraft] = React.useState('');
 
-  // Branch ONLY on `swatch` existence (per spec). Skip = FIRST swatchless option.
-  const tiles = options.filter((o) => o.swatch);
-  const skip = options.find((o) => !o.swatch);
+  const tiles = options.filter((o) => o.swatch || o.imageUrl);
+  const skip = options.find((o) => !o.swatch && !o.imageUrl);
 
   const sendFree = () => {
     const v = draft.trim();
@@ -94,6 +92,7 @@ export function QuestionView({
             {tiles.map((o) => (
               <SwatchTile
                 key={o.id}
+                imageUrl={o.imageUrl}
                 swatch={o.swatch ?? color.swatchNeutral}
                 label={o.label}
                 onPick={() => onPick(o.id)}

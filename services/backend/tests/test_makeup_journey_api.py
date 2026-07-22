@@ -57,6 +57,52 @@ def test_settings_schema_accepts_score_boundaries_and_rejects_bad_values() -> No
     )
 
 
+def test_report_generation_limit_settings_are_not_dropped() -> None:
+  settings = Settings(
+    face_analysis_generation_limit_per_minute=11,
+    face_analysis_generation_limit_per_day=101,
+    filter_extraction_generation_limit_per_minute=12,
+    filter_extraction_generation_limit_per_day=102,
+    makeup_feedback_generation_limit_per_minute=13,
+    makeup_feedback_generation_limit_per_day=103,
+    makeup_recommendation_generation_limit_per_minute=14,
+    makeup_recommendation_generation_limit_per_day=104,
+    report_draft_pending_limit_per_minute=15,
+    report_draft_pending_limit_per_day=105,
+    report_draft_pending_limit_per_user=205,
+  )
+
+  assert {
+    "face_analysis": (
+      settings.face_analysis_generation_limit_per_minute,
+      settings.face_analysis_generation_limit_per_day,
+    ),
+    "filter_extraction": (
+      settings.filter_extraction_generation_limit_per_minute,
+      settings.filter_extraction_generation_limit_per_day,
+    ),
+    "makeup_feedback": (
+      settings.makeup_feedback_generation_limit_per_minute,
+      settings.makeup_feedback_generation_limit_per_day,
+    ),
+    "makeup_recommendation": (
+      settings.makeup_recommendation_generation_limit_per_minute,
+      settings.makeup_recommendation_generation_limit_per_day,
+    ),
+    "report_draft_pending": (
+      settings.report_draft_pending_limit_per_minute,
+      settings.report_draft_pending_limit_per_day,
+      settings.report_draft_pending_limit_per_user,
+    ),
+  } == {
+    "face_analysis": (11, 101),
+    "filter_extraction": (12, 102),
+    "makeup_feedback": (13, 103),
+    "makeup_recommendation": (14, 104),
+    "report_draft_pending": (15, 105, 205),
+  }
+
+
 def _http_auth() -> AuthContext:
   return AuthContext(
     subject="journey-http-user",

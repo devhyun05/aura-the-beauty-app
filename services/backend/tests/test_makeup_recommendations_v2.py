@@ -110,10 +110,10 @@ def test_custom_and_gender_prompt_contracts_preserve_only_explicit_optional_deta
   question_prompt = build_question_prompt(context)
   recommendation_prompt = build_recommendation_prompt(context, [], [])
 
-  assert "언제 또는 어디에서 메이크업을 사용할지" in CUSTOM_NORMALIZATION_SYSTEM_PROMPT
+  assert "짧거나 느낌 중심인 입력도" in CUSTOM_NORMALIZATION_SYSTEM_PROMPT
   assert "원문에 없는 선택 정보는 만들지 않는다" in CUSTOM_NORMALIZATION_SYSTEM_PROMPT
-  assert "situationIntent에는 언제 또는 어디에서 사용할지" in normalization_prompt
-  assert "자유 입력의 상황은 다시 묻지 말고" in question_prompt
+  assert "원문에 없는 장소·직업·행사는 만들지 마라" in normalization_prompt
+  assert "짧은 입력에서 비어 있는 축만 질문하라" in question_prompt
   assert "성별을 다시 묻거나" in QUESTION_V2_SYSTEM_PROMPT
   assert "미선택은 성별을 추정하지 않는 중성적 표현" in RECOMMENDATION_V2_SYSTEM_PROMPT
   assert '"gender":"unspecified"' in recommendation_prompt
@@ -356,6 +356,17 @@ def _v2_recommendation() -> dict:
       for role in roles
     ],
   }
+
+
+def _validated_v2_recommendation(*, generation_source: str = "claude") -> dict:
+  finalized = finalize_recommendation_metadata(
+    _v2_recommendation(),
+    {"selection": {"situation": {"label": "데이트"}}},
+    [{"questionId": "change_level", "optionId": "balanced"}],
+    _questions(),
+    generation_source=generation_source,
+  )
+  return GeneratedMakeupRecommendationV2.model_validate(finalized).model_dump(by_alias=True)
 
 
 def test_finalized_match_score_is_generation_source_independent() -> None:
@@ -714,14 +725,82 @@ def test_generated_question_normalizer_keeps_ordinary_collisions_for_strict_reje
 
 
 @pytest.mark.asyncio
-async def test_question_two_options_retry_twice_then_use_fallback(
+async def test_custom_normalization_uses_one_provider_call_and_marks_claude(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls: list[dict] = []
+
+  async def valid_normalization(_settings, model_id, system, prompt, **kwargs):
+    calls.append({"modelId": model_id, "system": system, "prompt": prompt, **kwargs})
+    return {
+      "situationIntent": "야외 발표",
+      "desiredImpression": "자연스럽고 단정한 인상",
+      "constraints": ["오래 유지"],
+    }
+
+  monkeypatch.setattr(makeup_service, "generate_json", valid_normalization)
+  settings = Settings(makeup_recommendation_provider_timeout_seconds=37)
+  result = await makeup_service.normalize_custom_situation_v2(
+    settings,
+    "야외 발표에서 오래 유지되는 자연스러운 인상",
+  )
+
+  assert result["normalizationSource"] == "claude"
+  assert len(calls) == 1
+  assert calls[0]["modelId"] == settings.effective_question_model_id
+  assert calls[0]["system"] == CUSTOM_NORMALIZATION_SYSTEM_PROMPT
+  assert calls[0]["timeout_seconds"] == 37
+  assert calls[0]["allow_provider_retries"] is False
+
+
+@pytest.mark.asyncio
+async def test_custom_normalization_invalid_output_fails_closed_after_one_call(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   calls = 0
 
-  async def too_few_choices(*_args, **_kwargs):
+  async def invalid_normalization(*_args, **_kwargs):
     nonlocal calls
     calls += 1
+    return {"situationIntent": ""}
+
+  monkeypatch.setattr(makeup_service, "generate_json", invalid_normalization)
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.normalize_custom_situation_v2(Settings(), "데이트")
+
+  assert calls == 1
+  assert exc_info.value.status_code == 502
+  assert exc_info.value.code == "MAKEUP_CUSTOM_SITUATION_OUTPUT_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_custom_normalization_provider_error_is_preserved_without_fallback(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls = 0
+
+  async def fail_provider(*_args, **_kwargs):
+    nonlocal calls
+    calls += 1
+    raise AppError(504, "BEDROCK_REQUEST_TIMEOUT", "timed out")
+
+  monkeypatch.setattr(makeup_service, "generate_json", fail_provider)
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.normalize_custom_situation_v2(Settings(), "데이트")
+
+  assert calls == 1
+  assert exc_info.value.status_code == 504
+  assert exc_info.value.code == "BEDROCK_REQUEST_TIMEOUT"
+
+
+@pytest.mark.asyncio
+async def test_question_invalid_output_fails_closed_after_one_call(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls: list[dict] = []
+
+  async def too_few_choices(_settings, model_id, system, prompt, **kwargs):
+    calls.append({"modelId": model_id, "system": system, "prompt": prompt, **kwargs})
     return {
       "questions": [
         {
@@ -736,54 +815,23 @@ async def test_question_two_options_retry_twice_then_use_fallback(
     }
 
   monkeypatch.setattr(makeup_service, "generate_json", too_few_choices)
-  result = await makeup_service.generate_questions_v2_with_fallback(
-    Settings(),
-    {"selection": {"situation": {"key": "daily"}}},
-  )
+  settings = Settings(makeup_recommendation_provider_timeout_seconds=31)
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_questions_v2(
+      settings,
+      {"selection": {"situation": {"key": "daily"}}},
+    )
 
-  assert calls == 2
-  assert result["source"] == "deterministic_fallback"
-  assert result["version"] == "makeup-questions-fallback-v1"
-  GeneratedQuestions.model_validate({"questions": result["questions"]})
+  assert len(calls) == 1
+  assert calls[0]["system"] == QUESTION_V2_SYSTEM_PROMPT
+  assert calls[0]["timeout_seconds"] == 31
+  assert calls[0]["allow_provider_retries"] is False
+  assert exc_info.value.status_code == 502
+  assert exc_info.value.code == "MAKEUP_QUESTIONS_OUTPUT_INVALID"
 
-
-@pytest.mark.asyncio
-async def test_question_surplus_choices_retry_twice_then_use_fallback(
-  monkeypatch: pytest.MonkeyPatch,
-) -> None:
-  calls = 0
-
-  async def too_many_choices(*_args, **_kwargs):
-    nonlocal calls
-    calls += 1
-    return {
-      "questions": [
-        {
-          "id": "mood",
-          "title": "어떤 분위기가 끌리나요?",
-          "options": [
-            {"id": "quiet", "label": "조용한 장면"},
-            {"id": "bold", "label": "선명한 장면"},
-            {"id": "warm", "label": "따뜻한 장면"},
-            {"id": "afterimage", "label": "여운 있는 장면"},
-            {"id": "ai_pick", "label": "AI가 골라줘"},
-          ],
-        },
-      ],
-    }
-
-  monkeypatch.setattr(makeup_service, "generate_json", too_many_choices)
-  result = await makeup_service.generate_questions_v2_with_fallback(
-    Settings(),
-    {"selection": {"situation": {"key": "daily"}}},
-  )
-
-  assert calls == 2
-  assert result["source"] == "deterministic_fallback"
-  GeneratedQuestions.model_validate({"questions": result["questions"]})
 
 @pytest.mark.asyncio
-async def test_question_provider_failure_uses_vetted_deterministic_fallback(
+async def test_question_provider_error_is_preserved_without_fallback(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   calls = 0
@@ -794,18 +842,15 @@ async def test_question_provider_failure_uses_vetted_deterministic_fallback(
     raise AppError(503, "BEDROCK_ACCESS_DENIED", "not configured")
 
   monkeypatch.setattr(makeup_service, "generate_json", fail_provider)
-  result = await makeup_service.generate_questions_v2_with_fallback(
-    Settings(),
-    {"selection": {"situation": {"key": "camera_content"}, "keyword": {"label": "리플렉티브 아이"}}},
-  )
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_questions_v2(
+      Settings(),
+      {"selection": {"situation": {"key": "camera_content"}}},
+    )
 
-  assert result["source"] == "deterministic_fallback"
   assert calls == 1
-  assert result["version"] == "makeup-questions-fallback-v1"
-  assert 1 <= len(result["questions"]) <= 3
-  assert result["questions"][1]["id"] == "camera_priority"
-  assert result["questions"][0]["options"][-1] == {"id": "ai_pick", "label": "AI가 골라줘"}
-  assert "리플렉티브 아이" in result["questions"][0]["title"]
+  assert exc_info.value.status_code == 503
+  assert exc_info.value.code == "BEDROCK_ACCESS_DENIED"
 
 
 @pytest.mark.asyncio
@@ -832,6 +877,7 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
   assert calls[0]["modelId"] == "global.anthropic.claude-sonnet-4-6"
   assert calls[0]["max_tokens"] == 6000
   assert calls[0]["timeout_seconds"] == 45.0
+  assert calls[0]["allow_provider_retries"] is False
   assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
   assert result["generationSource"] == "claude"
   assert result["matchAssessment"]["version"] == "makeup-match-v1"
@@ -896,7 +942,7 @@ async def test_provider_recommendation_is_clamped_to_selected_prep_time(
 
 
 @pytest.mark.asyncio
-async def test_invalid_v2_recommendation_uses_vetted_fallback_without_retry(
+async def test_invalid_v2_recommendation_fails_closed_without_retry(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   attempts = 0
@@ -907,58 +953,42 @@ async def test_invalid_v2_recommendation_uses_vetted_fallback_without_retry(
     return {"contextSummary": ["조건"], "looks": []}
 
   monkeypatch.setattr(makeup_service, "generate_json", invalid_response)
-  result = await makeup_service.generate_recommendation_v2(
-    Settings(), {}, [], [],
-  )
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_recommendation_v2(Settings(), {}, [], [])
 
   assert attempts == 1
-  assert [look["role"] for look in result["looks"]] == ["anchor"]
-  assert all(len(look["areaGuides"]) == 5 for look in result["looks"])
+  assert exc_info.value.status_code == 502
+  assert exc_info.value.code == "MAKEUP_RECOMMENDATION_OUTPUT_INVALID"
+  assert exc_info.value.details["validationErrors"]
 
 
 @pytest.mark.asyncio
-async def test_v2_recommendation_provider_failure_uses_report_and_answers_fallback(
+async def test_v2_recommendation_provider_failure_is_not_replaced_with_a_report(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   async def fail_provider(*_args, **_kwargs):
     raise AppError(502, "BEDROCK_REQUEST_FAILED", "missing credentials")
 
   monkeypatch.setattr(makeup_service, "generate_json", fail_provider)
-  result = await makeup_service.generate_recommendation_v2(
-    Settings(),
-    {
-      "analysisReport": {"personalColor": "summer mute", "faceShape": "oval"},
-      "selection": {
-        "situation": {"label": "일상"},
-        "keyword": {"label": "출근·등교"},
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_recommendation_v2(
+      Settings(),
+      {
+        "analysisReport": {"personalColor": "summer mute", "faceShape": "oval"},
+        "selection": {
+          "situation": {"label": "일상"},
+          "keyword": {"label": "출근·등교"},
+        },
       },
-    },
-    _questions(),
-    [{"questionId": "change_level", "label": "익숙한 선에서 자연스럽게"}],
-  )
+      _questions(),
+      [{"questionId": "change_level", "label": "익숙한 선에서 자연스럽게"}],
+    )
 
-  assert result["contextSummary"][0] == "출근·등교"
-  assert any("summer mute" in item for item in result["contextSummary"])
-  assert any("익숙한 선에서 자연스럽게" in item for item in result["contextSummary"])
-  assert [look["role"] for look in result["looks"]] == ["anchor"]
-  assert all({guide["area"] for guide in look["areaGuides"]} == {"base", "brow", "eye", "cheek", "lip"} for look in result["looks"])
-  assert result["generationSource"] == "deterministic_fallback"
-  assert result["matchAssessment"]["version"] == "makeup-match-v1"
-  assert result["matchAssessment"]["generationSource"] == "deterministic_fallback"
-  assert result["matchAssessment"]["evaluatedWeight"] == 85
-  assert result["matchAssessment"]["score"] is not None
-  for look in result["looks"]:
-    assert look["lookMap"]["version"] == "makeup-look-map-v1"
-    assert 0 <= look["lookMap"]["naturalityToPersonality"] <= 100
-    assert 0 <= look["lookMap"]["casualToGlam"] <= 100
-    assert look["fitAssessment"]["scoringVersion"] == "makeup-fit-v1"
-    assert look["fitAssessment"]["overallScore"] <= 74
-  anchor_map = result["looks"][0]["lookMap"]
-  assert (anchor_map["naturalityToPersonality"], anchor_map["casualToGlam"]) != (28, 56)
+  assert exc_info.value.code == "BEDROCK_REQUEST_FAILED"
 
 
 @pytest.mark.asyncio
-async def test_v2_recommendation_timeout_returns_deterministic_fallback_promptly(
+async def test_v2_recommendation_timeout_fails_closed_promptly(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   def slow_converse(*_args, **_kwargs):
@@ -971,21 +1001,48 @@ async def test_v2_recommendation_timeout_returns_deterministic_fallback_promptly
   })
   started_at = time.perf_counter()
 
-  result = await makeup_service.generate_recommendation_v2(
-    settings,
-    {
-      "analysisReport": {"faceShape": "oval"},
-      "selection": {"situation": {"label": "데이트"}},
-    },
-    _questions(),
-    [{"questionId": "change_level", "optionId": "balanced"}],
-  )
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_recommendation_v2(
+      settings,
+      {
+        "analysisReport": {"faceShape": "oval"},
+        "selection": {"situation": {"label": "데이트"}},
+      },
+      _questions(),
+      [{"questionId": "change_level", "optionId": "balanced"}],
+    )
 
   # The provider is cut off at its deadline; the remaining time is the local
-  # deterministic recipe assembly and schema validation.
+  # failed response propagation.
   assert time.perf_counter() - started_at < 0.2
-  assert result["generationSource"] == "deterministic_fallback"
-  assert [look["role"] for look in result["looks"]] == ["anchor"]
+  assert exc_info.value.status_code == 504
+  assert exc_info.value.code == "BEDROCK_REQUEST_TIMEOUT"
+
+
+@pytest.mark.asyncio
+async def test_v2_recommendation_invalid_json_does_not_make_a_second_provider_call(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  provider_calls = 0
+
+  def invalid_json(*_args, **_kwargs):
+    nonlocal provider_calls
+    provider_calls += 1
+    raise AppError(502, "BEDROCK_INVALID_JSON", "invalid output")
+
+  monkeypatch.setattr(makeup_service, "_converse", invalid_json)
+
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_recommendation_v2(
+      Settings(),
+      {"selection": {"situation": {"label": "데이트"}}},
+      _questions(),
+      [{"questionId": "change_level", "optionId": "balanced"}],
+    )
+
+  assert exc_info.value.code == "BEDROCK_INVALID_JSON"
+  assert provider_calls == 1
+
 
 @pytest.mark.asyncio
 async def test_analysis_context_requires_owned_completed_non_deleted_report() -> None:
@@ -1172,7 +1229,15 @@ def test_custom_situation_label_round_trips_and_participates_in_idempotency() ->
 def test_curated_discovery_fallback_has_four_broad_parents_and_no_trend_badges() -> None:
   payload = curated_fallback_discovery()
   assert len(payload["situations"]) == 4
-  assert all(len(situation["keywords"]) == 5 for situation in payload["situations"])
+  assert all(
+    len(situation["keywords"]) == (6 if situation["key"] == "festival_performance" else 5)
+    for situation in payload["situations"]
+  )
+  assert any(
+    keyword["label"] == "로판 여주"
+    for situation in payload["situations"]
+    for keyword in situation["keywords"]
+  )
   assert all(
     keyword["kind"] == "curated" and keyword["badge"] == "CURATED"
     for situation in payload["situations"]
@@ -1315,7 +1380,7 @@ async def test_completed_session_generate_reuses_same_report() -> None:
       if "from makeup_recommendation_reports" in query:
         return {
           "id": RECOMMENDATION_REPORT_ID,
-          "recommendation": _v2_recommendation(),
+          "recommendation": _validated_v2_recommendation(),
           "image_status": "pending",
         }
       raise AssertionError(query)
@@ -1534,7 +1599,7 @@ async def test_session_creation_compiles_immutable_context_and_questions(
   monkeypatch.setattr(session_service, "fetch_owned_completed_analysis_report", fake_report)
   monkeypatch.setattr(session_service, "resolve_keyword_selection", fake_selection)
   monkeypatch.setattr(session_service, "resolve_reviewed_keyword_questions", fake_reviewed_questions)
-  monkeypatch.setattr(session_service, "generate_questions_v2_with_fallback", fail_runtime_questions)
+  monkeypatch.setattr(session_service, "generate_questions_v2", fail_runtime_questions)
 
   payload = MakeupRecommendationSessionCreate.model_validate(
     {
@@ -1556,37 +1621,75 @@ async def test_session_creation_compiles_immutable_context_and_questions(
 
 
 @pytest.mark.asyncio
-async def test_session_api_returns_questions_fallback_after_two_invalid_model_outputs(
+async def test_keyword_session_requires_reviewed_questions_without_fallback(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-  captured: dict = {}
+  insert_calls = 0
+
+  class DB:
+    async def fetchrow(self, query: str, *_args):
+      nonlocal insert_calls
+      if "where user_id = $1 and idempotency_key = $2" in query:
+        return None
+      if "insert into makeup_recommendation_sessions" in query:
+        insert_calls += 1
+        raise AssertionError("A missing reviewed template must not create a session.")
+      raise AssertionError(query)
+
+  async def fake_report(*_args):
+    return {
+      "id": ANALYSIS_REPORT_ID,
+      "status": "completed",
+      "report_title": "최근 분석",
+      "valid_source_media_id": UUID("77777777-7777-7777-7777-777777777777"),
+      "detail_payload": {},
+    }
+
+  async def fake_selection(*_args):
+    return (
+      {"id": str(SITUATION_ID), "key": "date", "label": "데이트"},
+      {"id": str(KEYWORD_ID), "label": "미검수 키워드", "seedPrompt": "미검수", "tags": []},
+    )
+
+  async def missing_reviewed_questions(*_args):
+    return None
+
+  monkeypatch.setattr(session_service, "fetch_owned_completed_analysis_report", fake_report)
+  monkeypatch.setattr(session_service, "resolve_keyword_selection", fake_selection)
+  monkeypatch.setattr(session_service, "resolve_reviewed_keyword_questions", missing_reviewed_questions)
+
+  payload = MakeupRecommendationSessionCreate.model_validate(
+    {
+      "analysisReportId": ANALYSIS_REPORT_ID,
+      "situationId": SITUATION_ID,
+      "keywordId": KEYWORD_ID,
+      "imageMode": "generic",
+    },
+  )
+  with pytest.raises(AppError) as exc_info:
+    await create_session(DB(), Settings(), USER_ID, payload, "missing-reviewed-template-v2")
+
+  assert exc_info.value.status_code == 503
+  assert exc_info.value.code == "MAKEUP_KEYWORD_QUESTIONS_UNAVAILABLE"
+  assert insert_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_session_api_rejects_invalid_ai_questions_without_inserting_session(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
   model_calls = 0
+  insert_calls = 0
   custom_text = "야외 발표에서 오래 유지되는 자연스러운 인상"
 
   class DB:
     async def fetchrow(self, query: str, *args):
+      nonlocal insert_calls
       if "where user_id = $1 and idempotency_key = $2" in query:
         return None
       if "insert into makeup_recommendation_sessions" in query:
-        context = json.loads(args[5])
-        questions = json.loads(args[6])
-        captured.update(context=context, questions=questions)
-        return {
-          "id": SESSION_ID,
-          "analysis_report_id": ANALYSIS_REPORT_ID,
-          "situation_id": None,
-          "keyword_id": None,
-          "custom_situation_text": custom_text,
-          "context_snapshot": context,
-          "questions": questions,
-          "answers": [],
-          "current_question_index": 0,
-          "status": args[7],
-          "report_id": None,
-          "image_mode": args[9],
-          "idempotency_key": "fallback-session-v2",
-          "expires_at": "2026-07-19T00:00:00Z",
-        }
+        insert_calls += 1
+        raise AssertionError("An invalid AI question payload must not create a session.")
       raise AssertionError(query)
 
   async def fake_report(_db, user_id, report_id):
@@ -1642,23 +1745,17 @@ async def test_session_api_returns_questions_fallback_after_two_invalid_model_ou
   app.dependency_overrides[require_database] = lambda: DB()
   response = TestClient(app).post(
     "/api/makeup-recommendations/sessions",
-    headers={"Idempotency-Key": "fallback-session-v2"},
+    headers={"Idempotency-Key": "invalid-question-session-v2"},
     json={
       "analysisReportId": str(ANALYSIS_REPORT_ID),
       "customSituationText": custom_text,
       "imageMode": "generic",
     },
   )
-  assert response.status_code == 200
-  result = response.json()["data"]
-  assert model_calls == 2
-  assert result["status"] == "questioning"
-  assert result["questions"] == captured["questions"]
-  assert captured["context"]["questioning"] == {
-    "source": "deterministic_fallback",
-    "version": "makeup-questions-fallback-v1",
-  }
-  GeneratedQuestions.model_validate({"questions": result["questions"]})
+  assert response.status_code == 502
+  assert response.json()["error"]["code"] == "MAKEUP_QUESTIONS_OUTPUT_INVALID"
+  assert model_calls == 1
+  assert insert_calls == 0
 
 
 @pytest.mark.asyncio
@@ -1708,7 +1805,7 @@ async def test_editorial_preset_uses_reviewed_questions_without_runtime_ai(
   monkeypatch.setattr(session_service, "fetch_owned_completed_analysis_report", fake_report)
   monkeypatch.setattr(session_service, "validate_custom_situation_for_request", fail_runtime_ai)
   monkeypatch.setattr(session_service, "normalize_custom_situation_v2", fail_runtime_ai)
-  monkeypatch.setattr(session_service, "generate_questions_v2_with_fallback", fail_runtime_ai)
+  monkeypatch.setattr(session_service, "generate_questions_v2", fail_runtime_ai)
 
   payload = MakeupRecommendationSessionCreate.model_validate(
     {
@@ -1779,7 +1876,7 @@ async def test_session_creation_persists_custom_situation_label(
 
   monkeypatch.setattr(session_service, "fetch_owned_completed_analysis_report", fake_report)
   monkeypatch.setattr(session_service, "normalize_custom_situation_v2", fake_normalize)
-  monkeypatch.setattr(session_service, "generate_questions_v2_with_fallback", fake_questions)
+  monkeypatch.setattr(session_service, "generate_questions_v2", fake_questions)
 
   payload = MakeupRecommendationSessionCreate.model_validate(
     {
@@ -1830,11 +1927,7 @@ async def test_complete_generation_uses_session_unique_idempotency() -> None:
     "answers": [{"questionId": "change_level", "optionId": "balanced"}],
     "image_mode": "generic",
   }
-  recommendation = makeup_service.deterministic_recommendation_v2(
-    session["context_snapshot"],
-    session["answers"],
-    session["questions"],
-  )
+  recommendation = _validated_v2_recommendation()
   expected_match = recommendation["matchAssessment"]
   result = await complete_generation(DB(), Settings(), USER_ID, session, recommendation)
 
@@ -1844,6 +1937,109 @@ async def test_complete_generation_uses_session_unique_idempotency() -> None:
   assert result["recommendation"]["matchAssessment"] == expected_match
   assert result["recommendation"]["matchAssessment"]["score"] == expected_match["score"]
   assert all(look["imageStatus"] == "pending" for look in result["recommendation"]["looks"])
+
+
+@pytest.mark.asyncio
+async def test_complete_generation_rejects_fallback_before_report_insert() -> None:
+  class DB:
+    async def fetchrow(self, _query: str, *_args):
+      raise AssertionError("A fallback recommendation must not reach the report insert.")
+
+  session = {
+    "id": SESSION_ID,
+    "analysis_report_id": ANALYSIS_REPORT_ID,
+    "context_snapshot": {"selection": {"situation": {"label": "데이트"}}},
+    "questions": _questions(),
+    "answers": [{"questionId": "change_level", "optionId": "balanced"}],
+    "image_mode": "generic",
+  }
+
+  with pytest.raises(AppError) as exc_info:
+    await complete_generation(
+      DB(),
+      Settings(),
+      USER_ID,
+      session,
+      _validated_v2_recommendation(generation_source="deterministic_fallback"),
+    )
+
+  assert exc_info.value.code == "MAKEUP_RECOMMENDATION_GENERATION_SOURCE_INVALID"
+
+
+@pytest.mark.parametrize(
+  ("status_code", "error_code"),
+  [
+    (502, "BEDROCK_REQUEST_FAILED"),
+    (502, "MAKEUP_RECOMMENDATION_OUTPUT_INVALID"),
+    (504, "BEDROCK_REQUEST_TIMEOUT"),
+  ],
+)
+def test_session_generate_failure_marks_failed_without_report_insert(
+  monkeypatch: pytest.MonkeyPatch,
+  status_code: int,
+  error_code: str,
+) -> None:
+  class DB:
+    def __init__(self) -> None:
+      self.executed: list[tuple[str, tuple]] = []
+
+    async def execute(self, query: str, *args):
+      self.executed.append((query, args))
+      return "UPDATE 1"
+
+  db = DB()
+
+  async def fake_ensure_user(_db, _auth):
+    return {"id": USER_ID}
+
+  async def fake_limit(*_args, **_kwargs):
+    return None
+
+  async def fake_begin(_db, user_id, session_id):
+    assert (user_id, session_id) == (USER_ID, SESSION_ID)
+    return {
+      "reused": False,
+      "session": {
+        "id": SESSION_ID,
+        "analysis_report_id": ANALYSIS_REPORT_ID,
+        "context_snapshot": {},
+        "questions": _questions(),
+        "answers": [{"questionId": "change_level", "optionId": "balanced"}],
+        "image_mode": "generic",
+      },
+    }
+
+  async def fail_provider(*_args, **_kwargs):
+    raise AppError(status_code, error_code, "provider failure")
+
+  async def must_not_enrich(*_args, **_kwargs):
+    raise AssertionError("A failed generation must not enrich products.")
+
+  async def must_not_complete(*_args, **_kwargs):
+    raise AssertionError("A failed generation must not insert a report.")
+
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(makeup_api, "enforce_report_generation_limit", fake_limit)
+  monkeypatch.setattr(makeup_api, "begin_generation", fake_begin)
+  monkeypatch.setattr(makeup_api, "generate_recommendation_v2", fail_provider)
+  monkeypatch.setattr(makeup_api, "enrich_makeup_recommendation_products", must_not_enrich)
+  monkeypatch.setattr(makeup_api, "complete_generation", must_not_complete)
+
+  app = create_app(Settings(database_url=None))
+  app.dependency_overrides[get_current_user] = auth_context
+  app.dependency_overrides[require_database] = lambda: db
+  response = TestClient(app).post(
+    f"/api/makeup-recommendations/sessions/{SESSION_ID}/generate",
+  )
+
+  assert response.status_code == status_code
+  assert response.json()["error"]["code"] == error_code
+  assert len(db.executed) == 1
+  failure_query, failure_args = db.executed[0]
+  assert "set status = 'failed'" in failure_query
+  assert "report_id is null" in failure_query
+  assert failure_args == (SESSION_ID, USER_ID)
+  assert "insert into makeup_recommendation_reports" not in failure_query
 
 
 @pytest.mark.asyncio
@@ -2611,7 +2807,7 @@ def test_v2_refinement_initializes_pending_assets(monkeypatch: pytest.MonkeyPatc
     return {"id": USER_ID}
 
   async def fake_generate(*_args, **_kwargs):
-    return _v2_recommendation()
+    return _validated_v2_recommendation()
 
   async def fake_enrich(_db, _settings, recommendation, *_args):
     return recommendation

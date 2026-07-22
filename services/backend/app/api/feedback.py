@@ -440,13 +440,6 @@ async def create_feedback_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="makeup_feedback",
-    per_minute=settings.makeup_feedback_generation_limit_per_minute,
-    per_day=settings.makeup_feedback_generation_limit_per_day,
-  )
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if payload.run_immediately and execution_mode not in {"inline", "sqs"}:
@@ -470,6 +463,18 @@ async def create_feedback_job(
     inherited_goal_context=inherited_goal_context,
     entry_date=entry_date,
   )
+  # Parent-report ownership/completion, entry date, media ownership, and the
+  # trusted server-side media location must all be established before a
+  # cost-bearing generation attempt is counted. Saving a draft alone does not
+  # invoke the analysis provider.
+  if payload.run_immediately:
+    await enforce_report_generation_limit(
+      db,
+      user_id=user["id"],
+      feature="makeup_feedback",
+      per_minute=settings.makeup_feedback_generation_limit_per_minute,
+      per_day=settings.makeup_feedback_generation_limit_per_day,
+    )
   logger.info(
     "[aura:feedback-api] job:create-start userSub=%s runImmediately=%s source=%s executionMode=%s",
     auth.subject,
@@ -479,6 +484,31 @@ async def create_feedback_job(
   )
   report = await db.fetchrow(
     """
+    with create_lock as materialized (
+      select case
+        when $10::boolean then true
+        else pg_try_advisory_xact_lock(
+          hashtextextended(
+            'makeup-feedback-draft:' || ($1::uuid)::text,
+            0
+          )
+        )
+      end as acquired
+    ), pending_counts as materialized (
+      select
+        count(*) filter (
+          where report.created_at >= now() - interval '1 minute'
+        )::int as minute_count,
+        count(*) filter (
+          where report.created_at >= now() - interval '1 day'
+        )::int as day_count,
+        count(*)::int as total_count,
+        (select acquired from create_lock) as lock_acquired
+      from makeup_feedback_reports report
+      where not $10::boolean
+        and report.user_id = $1::uuid
+        and report.status = 'pending'
+    )
     insert into makeup_feedback_reports (
       user_id,
       photo_capture_id,
@@ -491,7 +521,15 @@ async def create_feedback_job(
       parent_feedback_report_id,
       feedback_payload
     )
-    values ($1, $2, $3, $4, $5, 'pending', $6, $7, $8, $9::jsonb)
+    select $1::uuid, $2, $3, $4, $5, 'pending', $6, $7, $8, $9::jsonb
+    from pending_counts
+    where $10::boolean
+       or (
+         lock_acquired
+         and minute_count < $11::int
+         and day_count < $12::int
+         and total_count < $13::int
+       )
     returning *
     """,
     user["id"],
@@ -503,7 +541,31 @@ async def create_feedback_job(
     payload.feedback_kind,
     payload.parent_feedback_report_id,
     json.dumps(build_feedback_payload(payload, request_payload), ensure_ascii=False),
+    payload.run_immediately,
+    settings.report_draft_pending_limit_per_minute,
+    settings.report_draft_pending_limit_per_day,
+    settings.report_draft_pending_limit_per_user,
   )
+
+  if report is None:
+    if not payload.run_immediately:
+      raise AppError(
+        429,
+        "REPORT_DRAFT_RATE_LIMITED",
+        "저장 요청이 많아요. 잠시 후 다시 시도해 주세요.",
+        {
+          "feature": "makeup_feedback",
+          "retryAfterSeconds": 60,
+          "perMinute": settings.report_draft_pending_limit_per_minute,
+          "pendingPerDay": settings.report_draft_pending_limit_per_day,
+          "pendingPerUser": settings.report_draft_pending_limit_per_user,
+        },
+      )
+    raise AppError(
+      503,
+      "FEEDBACK_REPORT_CREATE_FAILED",
+      "Feedback report could not be created.",
+    )
 
   if payload.run_immediately:
     await dispatch_feedback_job(

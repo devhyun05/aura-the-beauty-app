@@ -582,3 +582,58 @@ async def test_run_filter_extraction_job_background_completes_report(
   assert calls["db"] is fake_db
   assert calls["notification"]["user_id"] == USER_ID
   assert calls["notification"]["notification_type"] == "filter_extraction_completed"
+
+
+@pytest.mark.asyncio
+async def test_run_filter_extraction_job_background_marks_provider_failure_failed(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  calls: dict[str, object] = {}
+
+  class FakeDB:
+    def __init__(self) -> None:
+      self.executed: list[tuple] = []
+
+    async def execute(self, *args):
+      self.executed.append(args)
+      return "UPDATE 1"
+
+    async def fetchrow(self, *_args):
+      raise AssertionError("A failed AI job must not be stored as completed.")
+
+  async def fail_build_result(_payload, _settings):
+    raise AppError(
+      502,
+      "BEDROCK_INVOCATION_FAILED",
+      "Reference makeup extraction provider request failed.",
+    )
+
+  async def fail_enrich(*_args, **_kwargs):
+    raise AssertionError("Product enrichment must not run after AI failure.")
+
+  async def fail_notification(*_args, **_kwargs):
+    calls["notification"] = True
+
+  monkeypatch.setattr(
+    filter_extractions_api,
+    "build_reference_makeup_extraction_payload_for_request",
+    fail_build_result,
+  )
+  monkeypatch.setattr(filter_extractions_api, "enrich_reference_makeup_products", fail_enrich)
+  monkeypatch.setattr(filter_extractions_api, "create_and_send_notification", fail_notification)
+  fake_db = FakeDB()
+
+  await filter_extractions_api.run_filter_extraction_job_background(
+    REPORT_ID,
+    FilterExtractionAnalyzeRequest(runAi=True),
+    Settings(),
+    db=fake_db,
+  )
+
+  assert "status = 'processing'" in fake_db.executed[0][0]
+  assert "status = 'failed'" in fake_db.executed[1][0]
+  failed_payload = json.loads(fake_db.executed[1][2])
+  assert failed_payload["error"]["message"] == (
+    "Reference makeup extraction provider request failed."
+  )
+  assert "notification" not in calls

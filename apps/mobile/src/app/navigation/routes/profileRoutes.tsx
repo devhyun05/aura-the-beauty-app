@@ -90,9 +90,6 @@ export function ProfileRouteScreen({navigation}: MainTabScreenProps<'ProfileTab'
         onPressMakeupRecommendationReportsList={() =>
           rootNavigation?.navigate('MakeupRecommendation', {view: 'history'})
         }
-        onPressMakeupRecommendationReport={reportId =>
-          rootNavigation?.navigate('MakeupRecommendation', {reportId})
-        }
         onPressMakeupExtractionReportsList={() =>
           rootNavigation?.navigate('MakeupRecipeList')
         }

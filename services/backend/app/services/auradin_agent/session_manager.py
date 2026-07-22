@@ -20,7 +20,13 @@ from .intent_parser import parse_intent
 from .question_engine import propose_question
 from .report_profile import report_context_to_soft_preferences
 from .taste_profile import get_taste_profile
-from .ranking import attribute_similarity, build_slice_result, normalized_brand, price_filter_label
+from .ranking import (
+  attribute_similarity,
+  build_slice_result,
+  normalized_brand,
+  normalized_product_key,
+  price_filter_label,
+)
 from .retrieval_service import FilterDeltaContractViolation, retrieve_and_rank
 
 
@@ -39,6 +45,7 @@ SIMILAR_LAMBDA = 0.9
 SIMILAR_PREF_WEIGHT = 0.35
 # B6 재시도 멱등성 — similar receipt는 세션 state에 남아 같은 키 재전송을 무저장 no-op으로 만든다.
 SIMILAR_RECEIPT_LIMIT = 50
+SERVED_CANDIDATE_HISTORY_LIMIT = 512
 # receipt 키 네임스페이스 — clientRequestId 기반은 리스트로 누적(액션마다 고유),
 # fingerprint 기반은 직전 액션 하나만 유지(개입 액션 뒤 같은 요청 재처리 허용).
 _SIMILAR_CLIENT_PREFIX = "client:"
@@ -424,6 +431,106 @@ def _ranked_from_cache(state: dict[str, Any]) -> list[dict[str, Any]]:
   return rows
 
 
+def _remember_served_candidates(
+  state: dict[str, Any],
+  result: dict[str, Any] | None,
+) -> None:
+  """Persist session-scoped product identity history, including live discovery rows."""
+  products = (
+    result.get("products")
+    if isinstance(result, dict) and isinstance(result.get("products"), list)
+    else []
+  )
+  ids = [str(value).strip() for value in state.get("servedCandidateIds") or [] if str(value).strip()]
+  keys = [str(value).strip() for value in state.get("servedProductKeys") or [] if str(value).strip()]
+  known_ids = set(ids)
+  known_keys = set(keys)
+  for product in products:
+    if not isinstance(product, dict):
+      continue
+    product_id = str(product.get("id") or "").strip()
+    product_key = normalized_product_key(product)
+    if product_id and product_id not in known_ids:
+      ids.append(product_id)
+      known_ids.add(product_id)
+    if product_key and product_key not in known_keys:
+      keys.append(product_key)
+      known_keys.add(product_key)
+  state["servedCandidateIds"] = ids[-SERVED_CANDIDATE_HISTORY_LIMIT:]
+  state["servedProductKeys"] = keys[-SERVED_CANDIDATE_HISTORY_LIMIT:]
+
+
+def _ranked_with_unseen_non_anchor(
+  ranked: list[dict[str, Any]],
+  state: dict[str, Any],
+  previous_result: dict[str, Any] | None,
+  *,
+  dial: str,
+) -> list[dict[str, Any]]:
+  """Keep the anchor and orient never-served cached candidates along the dial axis.
+
+  IDs and normalized brand/product keys are both excluded.  The latter prevents a
+  duplicate offer/listing for the same product from masquerading as a new card.
+  ``_scoreRaw`` is an ephemeral selection score: display match rates still use the
+  original grounded score, and the ranked cache is never overwritten with it.
+  """
+  products = (
+    previous_result.get("products")
+    if isinstance(previous_result, dict) and isinstance(previous_result.get("products"), list)
+    else []
+  )
+  previous_ids = [
+    str(product.get("id") or "").strip()
+    for product in products
+    if isinstance(product, dict) and str(product.get("id") or "").strip()
+  ]
+  if not previous_ids:
+    return []
+
+  anchor_id = previous_ids[0]
+  anchor = next(
+    (
+      row
+      for row in ranked
+      if str((row.get("item") or {}).get("id") or "").strip() == anchor_id
+    ),
+    None,
+  )
+  if anchor is None:
+    return []
+
+  served_ids = {
+    str(value).strip() for value in state.get("servedCandidateIds") or [] if str(value).strip()
+  }
+  served_keys = {
+    str(value).strip() for value in state.get("servedProductKeys") or [] if str(value).strip()
+  }
+  unseen: list[dict[str, Any]] = []
+  for row in ranked:
+    item = row.get("item") if isinstance(row.get("item"), dict) else {}
+    item_id = str(item.get("id") or "").strip()
+    item_key = normalized_product_key(item)
+    if item_id == anchor_id or item_id in served_ids or (item_key and item_key in served_keys):
+      continue
+    similarity = attribute_similarity(anchor["item"], item)
+    axis_score = similarity if dial == "more_similar" else 1.0 - similarity
+    unseen.append(
+      {
+        **row,
+        # Relevance is a deterministic tie-break only. All candidates already
+        # passed the original retrieval score and will pass guard/floor again.
+        "_scoreRaw": axis_score + min(1.0, max(0.0, float(row.get("score") or 0.0))) * 0.001,
+        "components": {
+          **(row.get("components") or {}),
+          "refineAnchorSimilarity": round(similarity, 6),
+          "refineDial": dial,
+        },
+      },
+    )
+  unseen.sort(key=lambda row: float(row.get("_scoreRaw") or 0.0), reverse=True)
+  return [anchor, *unseen]
+
+
 def _profile_suppressed_attributes(state: dict[str, Any]) -> frozenset[str]:
   """B7 §7.3 위계(프롬프트>리포트>프로필) — 세션 선호·하드필터가 이미 다루는 attribute 집합.
 
@@ -632,6 +739,10 @@ def create_session(
     "questionCount": 0,
     "currentCandidateIds": [],
     "rankedCandidateIds": [],
+    # Refine result rotation history. IDs cover exact offers; normalized keys
+    # also suppress duplicate listings of the same brand/product.
+    "servedCandidateIds": [],
+    "servedProductKeys": [],
     "refineResiduals": [],
     "logs": [],
     "createdAt": now,
@@ -790,6 +901,15 @@ def _refine_saturation_notice(dial: str | None) -> dict[str, Any]:
   }
 
 
+def _refine_history_exhausted_notice(dial: str | None) -> dict[str, Any]:
+  axis = "비슷한" if dial == "more_similar" else "다양한"
+  return {
+    "kind": "dial_candidates_reused",
+    "dial": dial,
+    "message": f"조건을 만족하는 새로운 {axis} 후보를 모두 보여드려 기존 후보를 다시 정렬했어요.",
+  }
+
+
 def _refine_recovery(state: dict[str, Any], prompt: str) -> dict[str, Any]:
   # §7: 후보 0이어도 조용히 완화 금지 — 이전 결과 유지 + 복구 옵션 제시.
   return {
@@ -811,10 +931,10 @@ def refine_session(
   dial: str | None = None,
   settings: Settings | None = None,
 ) -> dict[str, Any] | None:
-  """§7 refine — dial은 캐시된 후보를 λ만 바꿔 재랭킹(재검색 X), prompt는 §3 파서로 hard/soft 병합.
+  """§7 refine — dial은 캐시 안에서 λ·의미축·미노출 이력을 재랭킹하고, prompt는 hard/soft 병합.
 
   같은 attribute는 refine-출처 필터끼리만 교체한다. 원 프롬프트/질문 답변 출처는 불변(§9).
-  후보 0이면 이전 결과를 유지하고 recoveryOptions를 싣는다 — 조용한 완화 금지.
+  dial도 신규 검색은 하지 않는다. 후보 0이면 이전 결과를 유지하고 recoveryOptions를 싣는다.
   """
   settings = settings or get_settings()
   state = get_session(session_id, owner_subject=owner_subject)
@@ -831,6 +951,10 @@ def refine_session(
   prompt = str(prompt or "").strip()
   dial = str(dial or "").strip() or None
   snapshot = copy.deepcopy(state)
+  # Enrichment may have swapped in a live discovery card after the previous
+  # synchronous ranking turn, so capture the actually served result at the start
+  # of every refine rather than only the curated pre-enrichment result.
+  _remember_served_candidates(state, snapshot.get("result"))
 
   lambda_moved = True
   if dial in REFINE_DIALS:
@@ -911,23 +1035,68 @@ def refine_session(
       )
       ranked = retrieval["ranked"]
 
-  state.setdefault("logs", []).append(
-    {
-      "refine": {
-        "dial": dial,
-        "prompt": prompt or None,
-        "lambda": _session_lambda(state, settings),
-        "lambdaMoved": lambda_moved,
-        "usedCache": used_cache,
-        "candidateCount": len(ranked),
-        "retrievalBackend": retrieval.get("retrievalBackend") if retrieval else "ranked_cache",
-        "retrievalStatus": retrieval.get("retrievalStatus") if retrieval else "cached",
-        "retrievalDegradedReason": retrieval.get("retrievalDegradedReason") if retrieval else None,
-      },
-    },
-  )
+  refine_log = {
+    "dial": dial,
+    "prompt": prompt or None,
+    "lambda": _session_lambda(state, settings),
+    "lambdaMoved": lambda_moved,
+    "usedCache": used_cache,
+    "candidateCount": len(ranked),
+    "retrievalBackend": retrieval.get("retrievalBackend") if retrieval else "ranked_cache",
+    "retrievalStatus": retrieval.get("retrievalStatus") if retrieval else "cached",
+    "retrievalDegradedReason": retrieval.get("retrievalDegradedReason") if retrieval else None,
+    "rotationApplied": False,
+    "candidateHistoryExhausted": False,
+  }
+  state.setdefault("logs", []).append({"refine": refine_log})
 
-  result = _build_result(state, ranked, settings) if ranked else None
+  result = None
+  history_exhausted = False
+  if ranked and dial and not prompt:
+    # Prefer session-unseen cached candidates even when lambda is already at its
+    # clamp. Repeated taps therefore walk the eligible pool instead of bouncing
+    # between the last two triplets. Hard filters/floor remain unchanged.
+    unseen_ranked = _ranked_with_unseen_non_anchor(
+      ranked,
+      state,
+      snapshot.get("result"),
+      dial=dial,
+    )
+    if len(unseen_ranked) >= 3:
+      logs_before_trial = len(state.get("logs") or [])
+      rotated_result = _build_result(state, unseen_ranked, settings)
+      rotated_products = rotated_result.get("products") or []
+      rotated_ids = [
+        str(product.get("id") or "").strip()
+        for product in rotated_products
+        if isinstance(product, dict)
+      ]
+      previous_anchor_id = str(
+        (((snapshot.get("result") or {}).get("products") or [{}])[0]).get("id") or "",
+      ).strip()
+      served_ids = {
+        str(value).strip()
+        for value in state.get("servedCandidateIds") or []
+        if str(value).strip()
+      }
+      if (
+        len(rotated_products) == 3
+        and rotated_ids[0] == previous_anchor_id
+        and set(rotated_ids[1:]).isdisjoint(served_ids)
+      ):
+        result = rotated_result
+        refine_log["rotationApplied"] = True
+      else:
+        # _build_result may add a profile shadow log.  A rejected trial must not
+        # leak diagnostics for a result that was never served.
+        del state.setdefault("logs", [])[logs_before_trial:]
+        history_exhausted = True
+    else:
+      history_exhausted = True
+
+  if result is None:
+    result = _build_result(state, ranked, settings) if ranked else None
+  refine_log["candidateHistoryExhausted"] = history_exhausted
   if not result or not result["products"]:
     # 실패한 refine은 residual·provenance·cache·logs까지 전체 원복한다.
     state.clear()
@@ -938,8 +1107,14 @@ def refine_session(
     state["updatedAt"] = _now()
     return state
 
-  result["headerLabel"] = _refine_header(prompt, dial, lambda_moved=lambda_moved)
-  if dial and not prompt and not lambda_moved:
+  result["headerLabel"] = _refine_header(
+    prompt,
+    dial,
+    lambda_moved=lambda_moved or bool(refine_log["rotationApplied"]),
+  )
+  if dial and not prompt and history_exhausted:
+    result["refineNotice"] = _refine_history_exhausted_notice(dial)
+  elif dial and not prompt and not lambda_moved and not refine_log["rotationApplied"]:
     result["refineNotice"] = _refine_saturation_notice(dial)
   # 결과 뷰가 바뀌면 같은 (productId, intent) similar 재요청은 새 의도다 — receipt 무효화.
   state.pop("similarReceipts", None)
@@ -1299,6 +1474,11 @@ async def _enrich_if_results(
       extra_caveats=_interpretation_caveats(state),
       allow_live_discovery=enrichment_policy != ENRICH_POLICY_CACHE_ONLY,
     )
+    # Record only the final cards the user can actually see. Live enrichment can
+    # replace a curated discovery slot, so remembering before this point would
+    # incorrectly consume a product that was never served. This also initializes
+    # history for create/answer turns, not just refine.
+    _remember_served_candidates(state, state.get("result"))
 
 
 async def _enrich_if_question(state: dict[str, Any] | None, settings: Settings) -> None:

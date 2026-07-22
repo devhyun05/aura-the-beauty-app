@@ -323,6 +323,21 @@ class Settings(BaseSettings):
   product_event_rate_limit_per_minute: int = Field(default=60, ge=1, le=10000)
   product_outbound_rate_limit_per_minute: int = Field(default=30, ge=1, le=10000)
 
+  # Cost-bearing report/AI generation limits, scoped per user.
+  face_analysis_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
+  face_analysis_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
+  filter_extraction_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
+  filter_extraction_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
+  makeup_feedback_generation_limit_per_minute: int = Field(default=2, ge=1, le=1000)
+  makeup_feedback_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
+  makeup_recommendation_generation_limit_per_minute: int = Field(default=3, ge=1, le=1000)
+  makeup_recommendation_generation_limit_per_day: int = Field(default=10, ge=1, le=100000)
+  # Draft-only report writes do not spend AI quota, but still need a bounded
+  # per-user pending-row budget to prevent unmetered database growth.
+  report_draft_pending_limit_per_minute: int = Field(default=6, ge=1, le=1000)
+  report_draft_pending_limit_per_day: int = Field(default=30, ge=1, le=100000)
+  report_draft_pending_limit_per_user: int = Field(default=100, ge=1, le=100000)
+
   chime_enabled: bool = False
   chime_control_region: str | None = None
   chime_region: str | None = None

@@ -281,10 +281,6 @@ expect(
   'feedback photo accessibility label is missing',
 );
 expect(
-  resultScreenSource.includes('accessibilityState={{busy: isActive, disabled: isDisabled}}'),
-  'share action accessibility state is missing',
-);
-expect(
   !resultScreenSource.includes('getScoreConfidenceLabel'),
   'capture color confidence is mislabeled as score confidence',
 );

@@ -844,13 +844,6 @@ async def create_analysis_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="face_analysis",
-    per_minute=settings.face_analysis_generation_limit_per_minute,
-    per_day=settings.face_analysis_generation_limit_per_day,
-  )
   # 계정 성별을 서버가 주입한다(클라이언트 값은 신뢰하지 않고 덮어씀).
   # 분석 프롬프트가 사진으로 성별을 추론하는 대신 이 값을 쓰게 하는 근거 —
   # 메이크업 추천 V2의 "성별 재추론 금지" 원칙과 정합.
@@ -900,6 +893,32 @@ async def create_analysis_job(
   async def insert_report(executor) -> dict | None:
     row = await executor.fetchrow(
       """
+      with create_lock as materialized (
+        select case
+          when $8::boolean then true
+          else pg_try_advisory_xact_lock(
+            hashtextextended(
+              'analysis-report-draft:' || ($1::uuid)::text,
+              0
+            )
+          )
+        end as acquired
+      ), pending_counts as materialized (
+        select
+          count(*) filter (
+            where r.created_at >= now() - interval '1 minute'
+          )::int as minute_count,
+          count(*) filter (
+            where r.created_at >= now() - interval '1 day'
+          )::int as day_count,
+          count(*)::int as total_count,
+          (select acquired from create_lock) as lock_acquired
+        from analysis_reports r
+        where not $8::boolean
+          and r.user_id = $1::uuid
+          and r.status = 'pending'
+          and r.deleted_at is null
+      )
       insert into analysis_reports (
         user_id,
         photo_capture_id,
@@ -911,7 +930,15 @@ async def create_analysis_job(
         environment_label,
         detail_payload
       )
-      values ($1, $2, $3, $4, 'pending', $5, $6, $7, $8::jsonb)
+      select $1::uuid, $2, $3, $4, 'pending', $5, $6, $7, $12::jsonb
+      from pending_counts
+      where $8::boolean
+         or (
+           lock_acquired
+           and minute_count < $9::int
+           and day_count < $10::int
+           and total_count < $11::int
+         )
       returning *
       """,
       user["id"],
@@ -921,6 +948,10 @@ async def create_analysis_job(
       payload.title,
       payload.report_title or payload.title,
       payload.environment_label,
+      payload.run_immediately,
+      settings.report_draft_pending_limit_per_minute,
+      settings.report_draft_pending_limit_per_day,
+      settings.report_draft_pending_limit_per_user,
       json.dumps(
         build_initial_analysis_detail_payload(
           payload,
@@ -959,6 +990,19 @@ async def create_analysis_job(
     else None
   )
 
+  # Consume the cost-bearing quota only after request configuration and every
+  # client-controlled media location have been validated. Draft-only report
+  # creation does not invoke an AI provider and must not spend generation
+  # quota.
+  if payload.run_immediately:
+    await enforce_report_generation_limit(
+      db,
+      user_id=user["id"],
+      feature="face_analysis",
+      per_minute=settings.face_analysis_generation_limit_per_minute,
+      per_day=settings.face_analysis_generation_limit_per_day,
+    )
+
   # NOTE(M3 후속): 동일 촬영 연타의 멱등 dedup은 부분 유니크 인덱스(위 init_db
   # NOTE 참조)가 전제인데, 그 인덱스는 배포 안전성 문제로 보류했다. 인덱스 없이
   # UniqueViolation catch만 두면 무의미하므로 함께 보류한다.
@@ -971,7 +1015,36 @@ async def create_analysis_job(
         expected_report_context_id=receipt_request_context.report_context_id,
         expected_subject_context_id=receipt_request_context.subject_context_id,
       )
-      return await insert_report(connection)
+      inserted_report = await insert_report(connection)
+      if inserted_report is None:
+        # Keep the one-time calibrated receipt reusable when the draft budget
+        # rejects this write: raising inside the transaction rolls consumption
+        # back together with the failed insert.
+        raise AppError(
+          429 if not payload.run_immediately else 503,
+          (
+            "REPORT_DRAFT_RATE_LIMITED"
+            if not payload.run_immediately
+            else "ANALYSIS_REPORT_CREATE_FAILED"
+          ),
+          (
+            "저장 요청이 많아요. 잠시 후 다시 시도해 주세요."
+            if not payload.run_immediately
+            else "Analysis report could not be created."
+          ),
+          (
+            {
+              "feature": "face_analysis",
+              "retryAfterSeconds": 60,
+              "perMinute": settings.report_draft_pending_limit_per_minute,
+              "pendingPerDay": settings.report_draft_pending_limit_per_day,
+              "pendingPerUser": settings.report_draft_pending_limit_per_user,
+            }
+            if not payload.run_immediately
+            else None
+          ),
+        )
+      return inserted_report
 
     report = await db.run_in_transaction(consume_and_insert)
   else:
@@ -983,6 +1056,26 @@ async def create_analysis_job(
       expected_subject_context_id=receipt_request_context.subject_context_id,
     )
     report = await insert_report(db)
+
+  if report is None:
+    if not payload.run_immediately:
+      raise AppError(
+        429,
+        "REPORT_DRAFT_RATE_LIMITED",
+        "저장 요청이 많아요. 잠시 후 다시 시도해 주세요.",
+        {
+          "feature": "face_analysis",
+          "retryAfterSeconds": 60,
+          "perMinute": settings.report_draft_pending_limit_per_minute,
+          "pendingPerDay": settings.report_draft_pending_limit_per_day,
+          "pendingPerUser": settings.report_draft_pending_limit_per_user,
+        },
+      )
+    raise AppError(
+      503,
+      "ANALYSIS_REPORT_CREATE_FAILED",
+      "Analysis report could not be created.",
+    )
 
   if payload.run_immediately:
     await dispatch_analysis_job(
@@ -1038,13 +1131,6 @@ async def retry_analysis_job_stage(
     )
 
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="face_analysis",
-    per_minute=settings.face_analysis_generation_limit_per_minute,
-    per_day=settings.face_analysis_generation_limit_per_day,
-  )
   existing = await db.fetchrow(
     """
     select *
@@ -1098,11 +1184,12 @@ async def retry_analysis_job_stage(
           to_jsonb($2::text),
           true
         )
-    where id = $1 and status in ('completed', 'failed')
+    where id = $1 and user_id = $3 and status in ('completed', 'failed')
     returning *
     """,
     job_id,
     retry.stage.value,
+    user["id"],
   )
   if updated is None:
     raise AppError(
@@ -1111,6 +1198,33 @@ async def retry_analysis_job_stage(
       "이미 분석이 진행 중이에요. 잠시 후 다시 시도해 주세요.",
       {"jobId": str(job_id)},
     )
+  try:
+    await enforce_report_generation_limit(
+      db,
+      user_id=user["id"],
+      feature="face_analysis",
+      per_minute=settings.face_analysis_generation_limit_per_minute,
+      per_day=settings.face_analysis_generation_limit_per_day,
+    )
+  except Exception:
+    # The conditional pending claim prevents concurrent retries from spending
+    # quota twice. If quota reservation itself fails, restore the exact prior
+    # report state so the user can retry after the window/storage recovers.
+    await db.execute(
+      """
+      update analysis_reports
+      set status = $3,
+          error_message = $4,
+          detail_payload = $5::jsonb
+      where id = $1 and user_id = $2 and status = 'pending'
+      """,
+      job_id,
+      user["id"],
+      row.get("status"),
+      row.get("error_message"),
+      json.dumps(detail),
+    )
+    raise
   await dispatch_analysis_job(
     db,
     background_tasks,

@@ -238,7 +238,11 @@ async def test_owned_analysis_media_is_queued_after_trusted_payload_rewrite(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   calls: dict[str, object] = {}
+  rate_limit_call: dict[str, object] = {}
   face3d = face3d_profile()
+
+  async def capture_rate_limit(_db, **kwargs) -> None:
+    rate_limit_call.update(kwargs)
 
   class Publisher:
     def __init__(self, _settings: Settings) -> None:
@@ -251,6 +255,11 @@ async def test_owned_analysis_media_is_queued_after_trusted_payload_rewrite(
   monkeypatch.setattr(analysis_api, "ensure_user", ensure_test_user)
   monkeypatch.setattr(analysis_api, "resolve_owned_source_media", resolve_test_media)
   monkeypatch.setattr(analysis_api, "AIJobQueuePublisher", Publisher)
+  monkeypatch.setattr(
+    analysis_api,
+    "enforce_report_generation_limit",
+    capture_rate_limit,
+  )
   db = AnalysisDatabase()
   background_tasks = BackgroundTasks()
 
@@ -285,6 +294,12 @@ async def test_owned_analysis_media_is_queued_after_trusted_payload_rewrite(
   assert response["data"]["job"]["status"] == "pending"
   assert calls["queued"] == (REPORT_ID, USER_ID)
   assert len(background_tasks.tasks) == 0
+  assert rate_limit_call == {
+    "user_id": USER_ID,
+    "feature": "face_analysis",
+    "per_minute": 2,
+    "per_day": 10,
+  }
   assert db.insert_args is not None
   stored_request = response["data"]["job"]["detailPayload"]["request"]
   assert stored_request["bucket"] == "media-bucket"
@@ -304,6 +319,15 @@ async def test_calibrated_face3d_receipt_is_consumed_atomically_with_report(
 ) -> None:
   monkeypatch.setattr(analysis_api, "ensure_user", ensure_test_user)
   monkeypatch.setattr(analysis_api, "resolve_owned_source_media", resolve_test_media)
+
+  async def fail_if_quota_is_consumed(*_args, **_kwargs) -> None:
+    raise AssertionError("runImmediately=false must not consume generation quota")
+
+  monkeypatch.setattr(
+    analysis_api,
+    "enforce_report_generation_limit",
+    fail_if_quota_is_consumed,
+  )
   profile = calibrated_face3d_profile(datetime.now(UTC))
   db = TransactionalAnalysisDatabase()
 
@@ -366,6 +390,10 @@ async def test_owned_reference_media_is_queued_without_running_ai_in_api(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   calls: dict[str, object] = {}
+  rate_limit_call: dict[str, object] = {}
+
+  async def capture_rate_limit(_db, **kwargs) -> None:
+    rate_limit_call.update(kwargs)
 
   class Publisher:
     def __init__(self, _settings: Settings) -> None:
@@ -385,6 +413,11 @@ async def test_owned_reference_media_is_queued_without_running_ai_in_api(
     resolve_test_media,
   )
   monkeypatch.setattr(filter_extractions_api, "AIJobQueuePublisher", Publisher)
+  monkeypatch.setattr(
+    filter_extractions_api,
+    "enforce_report_generation_limit",
+    capture_rate_limit,
+  )
   monkeypatch.setattr(
     filter_extractions_api,
     "build_reference_makeup_extraction_payload_for_request",
@@ -417,6 +450,12 @@ async def test_owned_reference_media_is_queued_without_running_ai_in_api(
   assert response["data"]["job"]["status"] == "pending"
   assert calls["queued"] == (REPORT_ID, USER_ID)
   assert len(background_tasks.tasks) == 0
+  assert rate_limit_call == {
+    "user_id": USER_ID,
+    "feature": "filter_extraction",
+    "per_minute": 2,
+    "per_day": 10,
+  }
   assert db.insert_args is not None
 
 

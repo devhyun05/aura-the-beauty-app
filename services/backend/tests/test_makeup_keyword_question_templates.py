@@ -43,6 +43,7 @@ def test_all_curated_situation_keywords_have_contract_validated_questions() -> N
     "테마 파티·코스프레",
     "무대 공연",
     "패션 행사·전시 오프닝",
+    "로판 여주",
   }
 
   first_titles: set[str] = set()
@@ -83,6 +84,7 @@ def test_template_schema_is_versioned_reviewed_and_in_runtime_schema() -> None:
   assert "idx_makeup_keyword_question_templates_lookup" in sql
   assert "'출근·등교'" in sql
   assert "'패션 행사·전시 오프닝'" in sql
+  assert "'로판 여주'" in sql
   assert "15분 안에 핵심만" in sql
   assert "60분 이상 디테일까지" in sql
   assert "on conflict (keyword_id, template_version) do nothing" in sql

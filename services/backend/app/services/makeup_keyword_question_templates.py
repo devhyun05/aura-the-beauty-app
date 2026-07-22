@@ -196,6 +196,13 @@ _CONTEXT_QUESTIONS: dict[str, dict[str, Any]] = {
     ("networking", "사람들과 가까이 대화하기"),
     ("photo", "포토월과 기록 남기기"),
   ),
+  "로판 여주": _question(
+    "romantic_fantasy_expression",
+    "로판 여주 분위기를 어느 정도로 표현하고 싶나요?",
+    ("everyday", "일상에서도 자연스럽게"),
+    ("elegant", "우아하고 몽환적인 분위기가 보이게"),
+    ("dramatic", "의상과 사진에 맞춰 확실하게"),
+  ),
 }
 
 

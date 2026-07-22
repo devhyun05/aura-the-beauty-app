@@ -262,6 +262,18 @@ def test_makeup_trend_draft_evidence_migration_is_registered() -> None:
   assert "review_status = 'approved'" not in normalized
 
 
+def test_romantasy_heroine_seed_has_an_independent_existing_db_migration() -> None:
+  migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:makeup-romantasy-heroine-v1"]
+  normalized = " ".join(migration_sql.lower().split())
+
+  assert "'로판 여주'" in migration_sql
+  assert "'festival_performance'" in migration_sql
+  assert "select situation_id, keyword_id, 1, 60, 'active'" in normalized
+  assert "insert into makeup_keyword_question_templates" in normalized
+  assert "romantic_fantasy_expression" in migration_sql
+  assert "on conflict (normalized_text, locale" in normalized
+
+
 def test_product_event_query_minimization_migration_removes_raw_query_context() -> None:
   migration_sql = POST_SCHEMA_MIGRATIONS["schema.sql:product-event-query-minimization-v1"]
   normalized = " ".join(migration_sql.lower().split())

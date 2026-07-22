@@ -103,6 +103,13 @@ async def run_filter_extraction_job_background(
     extraction_payload, ai_status, ai_error = (
       await build_reference_makeup_extraction_payload_for_request(payload, settings)
     )
+    if payload.run_ai and ai_status != "bedrock_completed":
+      raise AppError(
+        502,
+        "REFERENCE_MAKEUP_AI_RESULT_REQUIRED",
+        "Reference makeup extraction did not return a real AI result.",
+        {"aiStatus": ai_status},
+      )
     extraction_payload, product_source = await enrich_reference_makeup_products(
       db,
       settings,
@@ -236,13 +243,6 @@ async def create_filter_extraction_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="filter_extraction",
-    per_minute=settings.filter_extraction_generation_limit_per_minute,
-    per_day=settings.filter_extraction_generation_limit_per_day,
-  )
   media = await resolve_owned_source_media(
     db,
     owner_user_id=user["id"],
@@ -251,6 +251,13 @@ async def create_filter_extraction_job(
     required=False,
   )
   request_payload = trusted_media_request_payload(settings, payload.request_payload, media)
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="filter_extraction",
+    per_minute=settings.filter_extraction_generation_limit_per_minute,
+    per_day=settings.filter_extraction_generation_limit_per_day,
+  )
   report = await db.fetchrow(
     """
     insert into filter_extraction_reports (
@@ -284,14 +291,16 @@ async def analyze_filter_extraction(
   db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
+  # This endpoint creates production extraction reports. Reject a disabled AI
+  # request before auth/DB/rate-limit/dispatch so it cannot leave a pending row.
+  if not payload.run_ai:
+    raise AppError(
+      400,
+      "REFERENCE_MAKEUP_AI_REQUIRED",
+      "Reference makeup extraction requires AI analysis.",
+    )
+
   user = await ensure_user(db, auth)
-  await enforce_report_generation_limit(
-    db,
-    user_id=user["id"],
-    feature="filter_extraction",
-    per_minute=settings.filter_extraction_generation_limit_per_minute,
-    per_day=settings.filter_extraction_generation_limit_per_day,
-  )
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if execution_mode not in {"inline", "sqs"}:
@@ -316,6 +325,13 @@ async def analyze_filter_extraction(
         media,
       ),
     },
+  )
+  await enforce_report_generation_limit(
+    db,
+    user_id=user["id"],
+    feature="filter_extraction",
+    per_minute=settings.filter_extraction_generation_limit_per_minute,
+    per_day=settings.filter_extraction_generation_limit_per_day,
   )
 
   report = await db.fetchrow(
@@ -366,6 +382,7 @@ async def list_filter_extractions(
     from filter_extraction_reports
     where user_id = $1
       and status = 'completed'
+      and result_payload->>'aiStatus' = 'bedrock_completed'
     order by created_at desc
     limit $2 offset $3
     """,

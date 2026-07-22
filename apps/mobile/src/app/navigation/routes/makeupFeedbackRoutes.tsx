@@ -38,10 +38,6 @@ import {
 const loadMakeupPhotoPicker = () =>
   require('../../../features/home/services/makeupPhotoPicker') as typeof import('../../../features/home/services/makeupPhotoPicker');
 
-type HeaderShareAction = {
-  cb: () => void;
-};
-
 function getMakeupFeedbackPhotoSourceRoute(selection: MakeupFeedbackPhotoSelection) {
   return selection.photoSource === 'gallery'
     ? 'MakeupFeedbackAlbumUpload'
@@ -452,13 +448,7 @@ export function MakeupFeedbackResultRouteScreen({
   const resultReportId =
     makeupFeedbackResult?.analysisId ?? reportId ?? makeupFeedbackResult?.id;
   const [reportLoadError, setReportLoadError] = React.useState('');
-  const [shareAction, setShareAction] = React.useState<HeaderShareAction | null>(null);
-  const handleHeaderShareActionChange = React.useCallback(
-    (nextShareAction: (() => void) | null) => {
-      setShareAction(nextShareAction ? {cb: nextShareAction} : null);
-    },
-    [],
-  );
+  const [reportLoadAttempt, setReportLoadAttempt] = React.useState(0);
   const handleBackToProfile = React.useCallback(() => {
     goBackToPreviousOrMainTab(navigation, 'ProfileTab');
   }, [navigation]);
@@ -473,14 +463,20 @@ export function MakeupFeedbackResultRouteScreen({
       getMakeupJourneySafeReturnResetState(resultEntryDate, resultReportId),
     );
   }, [navigation, resultEntryDate, resultReportId]);
+  const handleBack = React.useCallback(() => {
+    goBackToPreviousOrMainTab(navigation, 'ProfileTab');
+  }, [navigation]);
+  const handleOpenFeedbackList = React.useCallback(() => {
+    navigation.replace('MakeupFeedbackResultsList');
+  }, [navigation]);
+  const handleRetryReportLoad = React.useCallback(() => {
+    setReportLoadAttempt(currentAttempt => currentAttempt + 1);
+  }, []);
   const detailHeaderNavigationProps = shouldReturnToJourney
     ? {onBack: handleBackToJourney}
     : shouldReturnToProfile
     ? {onBack: handleBackToProfile}
-    : {
-        onOpenDocumentList: () =>
-          navigation.navigate('MakeupFeedbackResultsList'),
-      };
+    : {onBack: handleBack};
 
   React.useEffect(() => {
     if (!reportId || reportIsLoaded) {
@@ -509,18 +505,21 @@ export function MakeupFeedbackResultRouteScreen({
     return () => {
       isMounted = false;
     };
-  }, [reportId, reportIsLoaded, setMakeupFeedbackResult]);
+  }, [reportId, reportIsLoaded, reportLoadAttempt, setMakeupFeedbackResult]);
 
   if (reportId && !reportIsLoaded) {
     return (
       <DetailRouteChrome
         {...detailHeaderNavigationProps}
-        routeName="MakeupFeedbackResult"
-        shareDisabled>
+        routeName="MakeupFeedbackResult">
         <RoutePlaceholder
           description={
             reportLoadError || '완료된 메이크업 피드백 보고서를 불러오고 있어요.'
           }
+          onPrimaryAction={reportLoadError ? handleRetryReportLoad : undefined}
+          onSecondaryAction={reportLoadError ? handleOpenFeedbackList : undefined}
+          primaryActionLabel={reportLoadError ? '다시 시도하기' : undefined}
+          secondaryActionLabel={reportLoadError ? '보고서 목록 보기' : undefined}
           showHeader={false}
           title={reportLoadError ? '보고서를 열지 못했어요' : '보고서를 여는 중'}
         />
@@ -532,11 +531,11 @@ export function MakeupFeedbackResultRouteScreen({
     return (
       <DetailRouteChrome
         {...detailHeaderNavigationProps}
-        routeName="MakeupFeedbackResult"
-        onShare={shareAction?.cb}
-        shareDisabled>
+        routeName="MakeupFeedbackResult">
         <RoutePlaceholder
           description="Start makeup feedback analysis first."
+          onPrimaryAction={handleOpenFeedbackList}
+          primaryActionLabel="보고서 목록 보기"
           showHeader={false}
           title="Makeup feedback"
         />
@@ -547,11 +546,8 @@ export function MakeupFeedbackResultRouteScreen({
   return (
     <DetailRouteChrome
       {...detailHeaderNavigationProps}
-      routeName="MakeupFeedbackResult"
-      onShare={shareAction?.cb}
-      shareDisabled={!shareAction}>
+      routeName="MakeupFeedbackResult">
       <MakeupFeedbackResultScreen
-        onHeaderShareActionChange={handleHeaderShareActionChange}
         onOpenMakeupJourney={handleOpenMakeupJourney}
         result={makeupFeedbackResult}
       />

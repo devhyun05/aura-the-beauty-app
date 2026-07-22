@@ -12,7 +12,10 @@ from app.services.face_measurement_schema import (
   FACE_MEASUREMENT_SCHEMA_VERSION,
 )
 from app.services.media_upload_schema import MEDIA_UPLOAD_SESSIONS_SCHEMA_SQL
-from app.services.makeup_recommendation_schema import MAKEUP_RECOMMENDATION_SCHEMA_SQL
+from app.services.makeup_recommendation_schema import (
+  MAKEUP_RECOMMENDATION_SCHEMA_SQL,
+  ROMANTASY_HEROINE_SEED_MIGRATION_SQL,
+)
 
 
 SCHEMA_VERSION = "schema.sql:v8-makeup-journey"
@@ -943,6 +946,7 @@ POST_SCHEMA_MIGRATIONS = {
       on account_deletion_tombstones (deleted_at);
   """,
   "schema.sql:makeup-recommendation-v2": MAKEUP_RECOMMENDATION_SCHEMA_SQL,
+  "schema.sql:makeup-romantasy-heroine-v1": ROMANTASY_HEROINE_SEED_MIGRATION_SQL,
   "schema.sql:makeup-report-product-snapshots-v1": """
     alter table product_recommendation_runs
       add column if not exists source_makeup_report_id uuid,

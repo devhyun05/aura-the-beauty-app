@@ -196,6 +196,7 @@ export function RootNavigator() {
       <Stack.Screen
         name="AuradinSearch"
         getComponent={() => loadRecommendationRoutes().AuradinSearchRouteScreen}
+        options={{gestureEnabled: false}}
       />
       <Stack.Screen
         name="Community"

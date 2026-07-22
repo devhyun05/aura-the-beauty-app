@@ -4,6 +4,8 @@ import math
 from collections import Counter
 from typing import Any
 
+from app.services.shopping_products import _safe_naver_result_url
+
 from .attribute_evaluator import evaluate_attribute, hard_question_keeps, soft_expected_matches
 from .ranking import top_score_gap
 
@@ -274,6 +276,29 @@ def _expected_count(items: list[dict[str, Any]], filter_delta: dict[str, Any], m
   return sum(1 for evaluation in evaluations if reducer(evaluation))
 
 
+def _representative_image_url(
+  items: list[dict[str, Any]],
+  *,
+  attribute: str,
+  value: str,
+) -> str | None:
+  """Pick the highest-ranked real product image that actually matches an option."""
+  for item in items:
+    live_offer = item.get("liveOffer") if isinstance(item.get("liveOffer"), dict) else {}
+    # The catalog source of truth keeps offer media under liveOffer.  The
+    # top-level fallback only supports already-projected/legacy rows; both paths
+    # use the same public-HTTPS gate as other product images sent to devices.
+    image_url = _safe_naver_result_url(live_offer.get("imageUrl"))
+    if image_url is None:
+      image_url = _safe_naver_result_url(item.get("imageUrl"))
+    if not image_url:
+      continue
+    evaluation = evaluate_attribute(item, attribute, [value])
+    if evaluation["valueMatches"]:
+      return image_url
+  return None
+
+
 def build_question(
   ranked: list[dict[str, Any]],
   analysis: dict[str, Any],
@@ -316,6 +341,11 @@ def build_question(
         "expectedCandidateCount": expected_count,
         "filterDelta": delta,
         "mode": mode,
+        "imageUrl": _representative_image_url(
+          items,
+          attribute=attribute,
+          value=value,
+        ),
       },
     )
 

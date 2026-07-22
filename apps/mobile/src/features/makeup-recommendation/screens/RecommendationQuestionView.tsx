@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,6 +18,7 @@ export {getQuestionActionMode, getQuestionProgressSegments} from './makeupRecomm
 
 type RecommendationQuestionViewProps = {
   currentQuestionIndex: number;
+  faceImageUri?: string;
   initialAnswer?: MakeupRecommendationAnswer;
   onAnswer: (answer: MakeupRecommendationAnswer) => void;
   onBack: () => void;
@@ -27,6 +29,7 @@ type RecommendationQuestionViewProps = {
 
 export function RecommendationQuestionView({
   currentQuestionIndex,
+  faceImageUri,
   initialAnswer,
   onAnswer,
   onBack,
@@ -88,6 +91,17 @@ export function RecommendationQuestionView({
           </Pressable>
           <Text style={styles.progress}>{currentQuestionIndex + 1} / {questionCount}</Text>
         </View>
+
+        {faceImageUri ? (
+          <View style={styles.facePreviewFrame}>
+            <Image
+              accessibilityLabel="추천에 사용 중인 얼굴 분석 사진"
+              resizeMode="cover"
+              source={{uri: faceImageUri}}
+              style={styles.facePreview}
+            />
+          </View>
+        ) : null}
 
         {scenarioLabel ? (
           <View style={styles.scenarioContext}>
@@ -191,6 +205,17 @@ export function RecommendationQuestionView({
 
 const styles = StyleSheet.create({
   keyboardView: {flex: 1},
+  facePreviewFrame: {
+    alignSelf: 'center',
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    height: 132,
+    overflow: 'hidden',
+    width: 132,
+  },
+  facePreview: {height: '100%', width: '100%'},
   topRow: {
     alignItems: 'center',
     flexDirection: 'row',

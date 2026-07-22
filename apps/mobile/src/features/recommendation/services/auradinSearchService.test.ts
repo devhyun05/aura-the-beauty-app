@@ -1,13 +1,50 @@
 // 매퍼 단위 검증 (프로젝트 관례: expectEqual + tsc --noEmit 게이트).
 // 백엔드 SearchTurn → 화면 소비 타입 매핑이 role/근거/가격/스와치를 올바로 옮기는지 확인.
 
-import {mapCandidate, mapQuestionOption, mapSearchTurn} from './auradinSearchService';
+import {
+  buildAuradinPollRequestInit,
+  getAuradinRefineFailureMessage,
+  isAuradinAbort,
+  mapCandidate,
+  mapQuestionOption,
+  mapSearchTurn,
+} from './auradinSearchService';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
     throw new Error(`${label}: expected ${String(expected)}, received ${String(actual)}`);
   }
 }
+
+// refine/poll은 같은 URL을 반복 조회하므로 iOS HTTP 캐시를 반드시 우회한다.
+const pollController = new AbortController();
+const pollRequestInit = buildAuradinPollRequestInit(pollController.signal);
+expectEqual(pollRequestInit.cache, 'no-store', 'session poll bypasses stale HTTP cache');
+expectEqual(pollRequestInit.signal, pollController.signal, 'session poll preserves cancellation signal');
+
+expectEqual(
+  getAuradinRefineFailureMessage({status: 401}),
+  '로그인이 만료됐어요. 다시 로그인한 뒤 시도해 주세요.',
+  'refine 401 exposes an authentication message',
+);
+expectEqual(
+  getAuradinRefineFailureMessage({status: 409}),
+  '다른 요청이 먼저 반영됐어요. 현재 결과는 유지했으니 다시 시도해 주세요.',
+  'refine 409 explains the preserved result',
+);
+expectEqual(
+  getAuradinRefineFailureMessage({code: 'NETWORK_UNAVAILABLE'}),
+  '네트워크 연결을 확인해 주세요. 현재 결과는 그대로 유지했어요.',
+  'refine network failure exposes a retryable message',
+);
+expectEqual(
+  getAuradinRefineFailureMessage(new Error('unexpected')),
+  '추천 조건을 반영하지 못했어요. 현재 결과는 유지했으니 다시 시도해 주세요.',
+  'unknown refine failure uses a safe fallback',
+);
+const abortedRefine = new Error('cancelled');
+abortedRefine.name = 'AbortError';
+expectEqual(isAuradinAbort(abortedRefine), true, 'refine abort remains silent');
 
 // --- 제품 매핑: role/가격/근거 관통 ---
 const candidate = mapCandidate({
@@ -66,9 +103,11 @@ expectEqual(
 // --- 질문 옵션 스와치: colorFamily→3색 그라데이션(§8.2-3), finish/texture→질감(§8.2-1), noop→skip ---
 const colorOption = mapQuestionOption({
   id: 'colorFamily-coral',
+  imageUrl: 'https://example.com/coral.jpg',
   label: '코랄',
   filterDelta: {attribute: 'colorFamily', op: 'eq', values: ['coral']},
 });
+expectEqual(colorOption.imageUrl, 'https://example.com/coral.jpg', 'question option keeps representative product photo');
 const colorSwatch = colorOption.swatch;
 expectEqual(
   typeof colorSwatch === 'object' && colorSwatch.kind,
@@ -117,7 +156,7 @@ expectEqual(
   'texture option maps into the 4-kind abstract set (cream → velvet)',
 );
 
-// 매핑이 없는 속성/값 → 중립 단색 폴백 (라벨이 의미 전달, 제품 이미지 금지 §8.2-2)
+// 매핑과 대표 사진이 모두 없는 속성/값 → 중립 단색 폴백
 const channelOption = mapQuestionOption({
   id: 'channel-naver',
   label: '구매 링크만 있으면 괜찮아요',
@@ -191,3 +230,48 @@ expectEqual(
   'partial unknown coverage appends an honest chip suffix',
 );
 expectEqual(mapSearchTurn({phase: 'results'}).appliedFilters?.length, 0, 'missing appliedFilters → []');
+
+const saturatedRefineTurn = mapSearchTurn({
+  sessionId: 'auradin-refine-saturated',
+  phase: 'results',
+  result: {
+    products: [],
+    refineNotice: {
+      kind: 'dial_saturated',
+      message: '이미 가장 다양한 순서로 정렬돼 있어요.',
+      dial: 'more_diverse',
+    },
+  },
+});
+expectEqual(
+  saturatedRefineTurn.refineNotice?.kind,
+  'dial_saturated',
+  'refine notice kind passthrough',
+);
+expectEqual(
+  saturatedRefineTurn.refineNotice?.message,
+  '이미 가장 다양한 순서로 정렬돼 있어요.',
+  'refine notice message passthrough',
+);
+expectEqual(
+  saturatedRefineTurn.refineNotice?.dial,
+  'more_diverse',
+  'refine notice dial passthrough',
+);
+
+const recoveryRefineTurn = mapSearchTurn({
+  phase: 'results',
+  result: {
+    products: [],
+    refineNotice: {kind: 'recovery', message: '조건에 맞는 새 후보가 없어요.'},
+  },
+});
+expectEqual(recoveryRefineTurn.refineNotice?.kind, 'recovery', 'refine recovery notice without dial');
+expectEqual(
+  mapSearchTurn({
+    phase: 'results',
+    result: {products: [], refineNotice: {kind: 'dial_saturated', message: '   '}},
+  }).refineNotice,
+  undefined,
+  'empty refine notice message is ignored',
+);

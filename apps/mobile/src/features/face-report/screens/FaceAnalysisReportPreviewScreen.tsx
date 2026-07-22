@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -20,8 +20,6 @@ import {
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import {loadBodyProfile} from '../../ar/stencil/src/storage/bodyProfileStore';
 import BodyPanel from '../../ar/stencil/src/components/BodyPanel';
-import type {OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
-import {SavedImagePreviewSheet} from '../../../shared/ui/SavedImagePreviewSheet';
 import {ReportScreenScaffold} from '../ReportScreenScaffold';
 import {color, font} from '../reportTokens';
 import {
@@ -29,16 +27,6 @@ import {
   summarizeFace3DProfile,
   summarizeRegionMeasurements,
 } from '../services/fromFaceAnalysisReport';
-import {
-  captureReportImage,
-  getReportCaptureTitle,
-  getShareErrorMessage,
-  requestReportImageSavePermission,
-  reportShareTargetLabels,
-  saveReportImageToLibrary,
-  shareReportImageWithSystemSheet,
-  type ReportShareTarget,
-} from '../services/reportImageShare';
 
 export type FaceAnalysisReportPreviewScreenProps = {
   // Same session-props shape as FaceAnalysisReportDetailScreen — this preview
@@ -65,11 +53,15 @@ function CenteredMessage({
   description,
   actionLabel,
   onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
 }: {
   title: string;
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
 }) {
   return (
     <View style={styles.centered}>
@@ -81,6 +73,14 @@ function CenteredMessage({
           onPress={onAction}
           style={styles.centeredAction}>
           <Text style={styles.centeredActionText}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
+      {secondaryActionLabel && onSecondaryAction ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={onSecondaryAction}
+          style={styles.centeredSecondaryAction}>
+          <Text style={styles.centeredSecondaryActionText}>{secondaryActionLabel}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -104,13 +104,9 @@ export function FaceAnalysisReportPreviewScreen({
 }: FaceAnalysisReportPreviewScreenProps) {
   const insets = useSafeAreaInsets();
   const [loadState, setLoadState] = useState<FaceAnalysisReportDetailLoadState>({status: 'loading'});
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [bodyProfile, setBodyProfile] = useState<BodyProfile | null>(null);
   const [isBodySurveyOpen, setIsBodySurveyOpen] = useState(false);
-  const [activeShareTarget, setActiveShareTarget] = useState<ReportShareTarget | null>(null);
-  const reportCaptureRef = useRef<OptionalViewShotRef | null>(null);
-  const [savedImagePreviewUri, setSavedImagePreviewUri] = useState<string | null>(
-    null,
-  );
 
   useEffect(() => {
     let isMounted = true;
@@ -136,7 +132,11 @@ export function FaceAnalysisReportPreviewScreen({
     return () => {
       isMounted = false;
     };
-  }, [analysisReport, reportId]);
+  }, [analysisReport, loadAttempt, reportId]);
+
+  const retryReportLoad = useCallback(() => {
+    setLoadAttempt(currentAttempt => currentAttempt + 1);
+  }, []);
 
   const reloadBodyProfile = useCallback(() => {
     void loadBodyProfile().then(setBodyProfile);
@@ -259,45 +259,6 @@ export function FaceAnalysisReportPreviewScreen({
     reloadBodyProfile();
   }, [reloadBodyProfile]);
 
-  const profileName = loadState.status === 'success' ? loadState.profile?.name : undefined;
-
-  const handleShareAction = useCallback(
-    async (target: ReportShareTarget) => {
-      if (!report || activeShareTarget) {
-        return;
-      }
-
-      setActiveShareTarget(target);
-      try {
-        if (target === 'save-image') {
-          await requestReportImageSavePermission();
-        }
-
-        const imageUri = await captureReportImage(reportCaptureRef);
-
-        if (target === 'save-image') {
-          await saveReportImageToLibrary(imageUri);
-          setSavedImagePreviewUri(imageUri);
-          return;
-        }
-
-        await shareReportImageWithSystemSheet({
-          imageUri,
-          title: getReportCaptureTitle(profileName),
-        });
-      } catch (error) {
-        console.info('[aura:analysis] report-share:failed', {
-          message: error instanceof Error ? error.message : String(error),
-          target,
-        });
-        Alert.alert(`${reportShareTargetLabels[target]} 실패`, getShareErrorMessage(error));
-      } finally {
-        setActiveShareTarget(null);
-      }
-    },
-    [activeShareTarget, profileName, report],
-  );
-
   const handleConfirmDelete = useCallback(async () => {
     if (!report || !onDeleteReport) {
       return;
@@ -313,26 +274,13 @@ export function FaceAnalysisReportPreviewScreen({
     }
   }, [onDeleteReport, report]);
 
-  // 상단 "더보기" → 옛 화면의 공유/저장/추천제품/삭제 액션 메뉴.
+  // 상단 "더보기" → 추천 제품과 보고서 삭제 액션 메뉴.
   const handleMore = useCallback(() => {
     if (!report) {
       return;
     }
-    if (activeShareTarget) {
-      Alert.alert('공유 준비 중', '이전 공유 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
-      return;
-    }
 
-    const options: Array<{text: string; onPress?: () => void; style?: 'cancel' | 'destructive'}> = [
-      {
-        text: reportShareTargetLabels['save-image'],
-        onPress: () => void handleShareAction('save-image'),
-      },
-      {
-        text: reportShareTargetLabels['share-report'],
-        onPress: () => void handleShareAction('share-report'),
-      },
-    ];
+    const options: Array<{text: string; onPress?: () => void; style?: 'cancel' | 'destructive'}> = [];
 
     if (onPressProducts) {
       options.push({text: '추천 제품', onPress: () => onPressProducts(report.id)});
@@ -352,9 +300,7 @@ export function FaceAnalysisReportPreviewScreen({
 
     Alert.alert('맞춤 분석 보고서', '원하는 작업을 선택해 주세요.', options);
   }, [
-    activeShareTarget,
     handleConfirmDelete,
-    handleShareAction,
     onDeleteReport,
     onPressProducts,
     report,
@@ -371,14 +317,24 @@ export function FaceAnalysisReportPreviewScreen({
   if (!reportData) {
     return loadState.status === 'error' ? (
       <CenteredMessage
-        actionLabel={loadState.canRetake ? '다시 촬영' : undefined}
+        actionLabel="다시 시도하기"
         description={loadState.description}
-        onAction={loadState.canRetake ? onRetake : undefined}
+        onAction={retryReportLoad}
+        onSecondaryAction={loadState.canRetake ? onRetake : onBack}
+        secondaryActionLabel={
+          loadState.canRetake
+            ? '다시 촬영'
+            : onBack
+              ? '보고서 목록으로 돌아가기'
+              : undefined
+        }
         title={loadState.message}
       />
     ) : (
       <CenteredMessage
+        actionLabel={onBack ? '보고서 목록으로 돌아가기' : undefined}
         description="목록에서 얼굴 분석 결과를 다시 선택해 주세요."
+        onAction={onBack}
         title="얼굴 분석 결과를 찾을 수 없어요"
       />
     );
@@ -387,7 +343,6 @@ export function FaceAnalysisReportPreviewScreen({
   return (
     <>
       <ReportScreenScaffold
-        captureRef={reportCaptureRef}
         data={reportData}
         onBack={onBack}
         onMore={handleMore}
@@ -426,10 +381,6 @@ export function FaceAnalysisReportPreviewScreen({
           </View>
         </View>
       </Modal>
-      <SavedImagePreviewSheet
-        imageUri={savedImagePreviewUri}
-        onClose={() => setSavedImagePreviewUri(null)}
-      />
     </>
   );
 }
@@ -466,6 +417,17 @@ const styles = StyleSheet.create({
   centeredActionText: {
     ...font(14, '700'),
     color: color.white,
+  },
+  centeredSecondaryAction: {
+    borderColor: color.outline,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+  },
+  centeredSecondaryActionText: {
+    ...font(14, '700'),
+    color: color.ink,
   },
   centeredTitle: {
     ...font(15, '700'),
