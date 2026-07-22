@@ -353,6 +353,10 @@ expectEqual(screenSource.includes('isBackendTimeoutError'), true, 'generation ti
 expectEqual(screenSource.includes('isMakeupRecommendationGenerationRecoverable'), true, 'timeout and in-flight conflicts share session recovery');
 expectEqual(backendApiSource.includes('export class BackendTimeoutError extends Error'), true, 'request timeout has a distinct recoverable error type');
 expectEqual(backendApiSource.includes('throw new BackendTimeoutError(timeoutMs);'), true, 'request timeout preserves its cause for session recovery');
+expectEqual(backendApiSource.includes("let abortCause: 'timeout' | 'external' | null = null;"), true, 'native iOS cancellation preserves the first abort cause');
+expectEqual(backendApiSource.includes("abortWithCause('timeout')"), true, 'the request timer records a recoverable timeout before native cancellation');
+expectEqual(backendApiSource.includes("abortWithCause('external')"), true, 'screen cancellation remains a distinct non-recoverable abort');
+expectEqual(backendApiSource.includes("if (abortCause === 'timeout') {"), true, 'native -999 cancellation is classified as a recoverable timeout independently of its JS error shape');
 expectEqual(screenSource.includes('Promise.allSettled(['), true, 'catalog and reports load independently');
 expectEqual(screenSource.includes('fetchMakeupRecommendationDiscovery(),'), true, 'catalog request participates in independent loading');
 expectEqual(screenSource.includes('getFaceAnalysisReports({limit: 50}),'), true, 'report request always participates in independent loading');

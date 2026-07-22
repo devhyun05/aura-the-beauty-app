@@ -214,11 +214,17 @@ export async function requestBackendJson<T>(
   const method = requestInit.method ?? 'GET';
   const url = buildBackendApiUrl(path, baseUrl);
   const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
-  const handleExternalAbort = () => abortController.abort();
+  let abortCause: 'timeout' | 'external' | null = null;
+  const abortWithCause = (cause: 'timeout' | 'external') => {
+    if (abortCause !== null) return;
+    abortCause = cause;
+    abortController.abort();
+  };
+  const timeoutId = setTimeout(() => abortWithCause('timeout'), timeoutMs);
+  const handleExternalAbort = () => abortWithCause('external');
 
   if (externalSignal?.aborted) {
-    abortController.abort();
+    abortWithCause('external');
   } else {
     externalSignal?.addEventListener('abort', handleExternalAbort, {once: true});
   }
@@ -244,12 +250,15 @@ export async function requestBackendJson<T>(
       signal: abortController.signal,
     });
   } catch (error) {
-    if (isAbortError(error)) {
-      // 외부 시그널이 원인이면 사용자 취소 — 타임아웃 카피 대신 조용한 abort 에러.
-      if (externalSignal?.aborted) {
-        console.info('[aura:api] request:aborted', {durationMs: Date.now() - startedAt, method, path});
-        throw new RequestAbortedError();
-      }
+    // React Native iOS may surface AbortController cancellation as a TypeError
+    // backed by NSURLErrorCancelled (-999), rather than a DOM AbortError. Track
+    // the first abort cause explicitly so a completed server-side job remains
+    // recoverable even when the native error shape differs.
+    if (abortCause === 'external') {
+      console.info('[aura:api] request:aborted', {durationMs: Date.now() - startedAt, method, path});
+      throw new RequestAbortedError();
+    }
+    if (abortCause === 'timeout') {
       console.info('[aura:api] request:timeout', {
         durationMs: Date.now() - startedAt,
         method,
@@ -257,6 +266,11 @@ export async function requestBackendJson<T>(
         timeoutMs,
       });
       throw new BackendTimeoutError(timeoutMs);
+    }
+
+    if (isAbortError(error)) {
+      console.info('[aura:api] request:aborted', {durationMs: Date.now() - startedAt, method, path});
+      throw new RequestAbortedError();
     }
 
     if (isNetworkFailure(error)) {
