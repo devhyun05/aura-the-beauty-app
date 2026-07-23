@@ -522,6 +522,13 @@ function App({ onBack, initialLook }: StencilARAppProps) {
 function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
   const insets = useSafeAreaInsets();
   const cameraSessionActive = useCameraSessionActive();
+  if (__DEV__) {
+    console.info('[aura:ar-filter] filter-screen:render', {
+      cameraSessionActive,
+      hasInitialLook: Boolean(initialLook),
+      label: initialLook?.label,
+    });
+  }
   const unityRef = useRef<UnityView | null>(null);
   const paramsRef = useRef<FilterParams>(BARE);
   const opacityRef = useRef(DEFAULT_MAKEUP_OPACITY); // 전역 메이크업 농도 (0~1) — 기본 75%
@@ -1976,10 +1983,42 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
   // 외부 주입 시작 룩(메이크업 추천 등) — 마운트 1회, lookExtracted와 같은 관문으로
   // 트리 적용. Unity가 아직 부팅 전이어도 컴파일 결과가 compiledRef에 남아
   // ready 시 resyncAll이 재전송하므로 타이밍 레이스가 없다.
-  const initialLookAppliedRef = useRef(false);
+  const lastAppliedInitialLookRef = useRef('');
   useEffect(() => {
-    if (!initialLook || initialLookAppliedRef.current) return;
-    initialLookAppliedRef.current = true;
+    if (!initialLook) {
+      if (__DEV__) {
+        console.info('[aura:ar-filter] initial-look:empty');
+      }
+      return;
+    }
+
+    const key = JSON.stringify({
+      label: initialLook.label,
+      params: initialLook.params,
+      eyeshadowLayers: initialLook.eyeshadowLayers ?? [],
+    });
+    if (lastAppliedInitialLookRef.current === key) {
+      if (__DEV__) {
+        console.info('[aura:ar-filter] initial-look:skipped-same-key', {
+          label: initialLook.label,
+          paramKeys: Object.keys(initialLook.params),
+          eyeshadowLayerCount: initialLook.eyeshadowLayers?.length ?? 0,
+        });
+      }
+      return;
+    }
+
+    lastAppliedInitialLookRef.current = key;
+    if (__DEV__) {
+      console.info('[aura:ar-filter] initial-look:applying', {
+        label: initialLook.label,
+        keyLength: key.length,
+        paramKeys: Object.keys(initialLook.params),
+        eyeshadowLayerCount: initialLook.eyeshadowLayers?.length ?? 0,
+        unityReady: unityReadyRef.current,
+      });
+    }
+
     changeTreeUser(
       decomposeToTree(
         { ...BARE, ...initialLook.params },

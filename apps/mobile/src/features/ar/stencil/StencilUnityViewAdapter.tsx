@@ -10,7 +10,6 @@ import {
   hideUnityMakeupView,
   isUnityMakeupReady,
   postUnityMessage,
-  prepareUnityMakeupRuntime,
 } from '../services/unityMakeupBridge';
 
 type UnityMessageEvent = NativeSyntheticEvent<{message: string}>;
@@ -33,6 +32,12 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
   private subscription: {remove: () => void} | null = null;
 
   componentDidMount() {
+    if (__DEV__) {
+      console.info('[aura:ar-filter] unity-view:did-mount');
+    }
+    if (__DEV__) {
+      console.info('[aura:ar-filter] unity-view:add-listener-start');
+    }
     this.subscription = addUnityMakeupEventListener(event => {
       const message = typeof event.message === 'string' ? event.message : '';
       if (!message) {
@@ -61,11 +66,13 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
         nativeEvent: {message},
       } as UnityMessageEvent);
     });
+    if (__DEV__) {
+      console.info('[aura:ar-filter] unity-view:add-listener-success');
+    }
 
-    // The native Unity container owns the live-runtime lease. Keeping the
-    // legacy global resume lease here meant it survived after this screen was
-    // removed and left Unity, ARKit and the camera running on Home.
-    prepareUnityMakeupRuntime();
+    // The native Unity container owns visible runtime startup through
+    // AURAUnityMakeupView.didMoveToWindow. Calling prepareRuntime here races that
+    // owner path and can re-enter UnityFramework startup on physical devices.
     this.activationTimer = setInterval(() => {
       this.activateStencilRuntime();
       this.recoverMissedReadyEvent();
@@ -87,6 +94,16 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
   }
 
   private activateStencilRuntime() {
+    if (!isUnityMakeupReady()) {
+      if (__DEV__) {
+        console.info('[aura:ar-filter] unity-view:activate-stencil-deferred');
+      }
+      return;
+    }
+
+    if (__DEV__) {
+      console.info('[aura:ar-filter] unity-view:activate-stencil');
+    }
     postUnityMessage('Aura Stencil Runtime', 'SetStencilActive', 'true');
     postUnityMessage('NativeBridge', 'SendReady', '');
   }
@@ -127,6 +144,9 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
   }
 
   render() {
+    if (__DEV__) {
+      console.info('[aura:ar-filter] unity-view:render');
+    }
     const {
       androidKeepPlayerMounted: _androidKeepPlayerMounted,
       onUnityMessage: _onUnityMessage,

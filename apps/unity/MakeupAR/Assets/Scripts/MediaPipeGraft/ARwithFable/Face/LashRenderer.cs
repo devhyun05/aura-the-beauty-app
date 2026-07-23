@@ -111,62 +111,15 @@ namespace ARMakeup.Face
         // 상안검 lash 라인을 따라 리본을 세우고 곡선 스트로크 PNG(lash_natural/volume)를 매핑한다.
         const int RibbonCols = Seg;          // 리본 세로 컬럼 수 = lash 라인 점 수(25)
         const float RibbonLenMult = 1.5f;    // 리본 높이 배수(텍스처 결이 다 보이게 절차보다 김) — 실기기 튜닝
-        // 리본 뿌리 턱 — 랜드마크 체인과 육안 래시라인 사이 슬리버(피부 띠) 제거용.
-        // 뿌리를 눈쪽(브로우 반대)으로 눈폭 대비 이 비율만큼 내려 라이너 밑으로 파고들게 한다.
-        const float RibbonRootTuck = 0.008f; // 실기기 튜닝 대상 (0.02는 눈알 침범 — 사용자 판정)
-        // 아래 리본 뿌리 리프트 — 0.03은 상하 반전 텍스처 시절 튜닝값. 방향 규약(뿌리=v0) 수정 후
-        // 털 뿌리가 눈알 위로 올라가는 침범이 생겨 위 리본 RootTuck 수준으로 축소 (사용자 침범 판정).
-        const float LowerRibbonLift = 0.008f;
-        // 아래 텍스처 리본 전용 기본 비례 — 절차식(LowerLenFactor 0.07)과 독립.
-        // 0.10은 화면 ~25px = 128행 텍스처의 5:1 축소로 가는 털 팁이 밉맵에서 침식됨
-        // (사용자 "짧고 떡짐" 판정) → 0.15로 상향해 3:1로 완화 + 도안 비례 회복.
-        const float LowerTexLenFactor = 0.15f;
-        // 뿌리줄 오프셋(리본 확장) — 도안에서 뿌리선 '아래'로 처지는 꼬리 결까지 표현.
-        // 텍스처의 뿌리줄은 v=rootV(추출기 lash_extract.py 사이드카 JSON의 rootV)이고,
-        // 리본을 눈 라인 밖으로 len×rootV만큼 연장해 그 줄이 정확히 눈 라인에 오게 한다.
-        // 재추출 시 사이드카 값으로 갱신할 것(tools/glam2-lash/out/lash_glam_*.json).
-        // 위 리본 꼬리 발산 억제(0723 v15 사용자 판정) — 탈출 레일 하향 ≈12° + 끝 기둥 테이퍼.
-        const float TailExitDropTan = 0.3f;  // 탈출 방향 하향(tan22°) — 굵은선 기울기(사용자 0723)
-        const int TailTaperCols = 10;         // 꼬리쪽(c=0부터) 길이 테이퍼 기둥 수 — 넓고 완만하게
-        const float TailTaperMin = 0.7f;    // 맨 끝 기둥 길이 배율 — 가는 아치선 트림 기준(사용자 0723)
-        const float TailExitStretch = 1.2f;  // 탈출 구간 간격 배율 — 1.4는 실효 5%뿐, 굵은선 끝(~15% 눈폭)까지
-        const float TailSlideFrac = 0.16f;   // 눈 곡선 슬라이드 이동량(눈폭 배수) — 도안 통째 바깥 이동(사용자 0723)
-        const int FrontTaperCols = 3;        // 앞머리(안쪽 c 큰 쪽) 테이퍼 기둥 수(사용자 0723)
-        const float FrontTaperMin = 0.75f;   // 앞머리 끝 기둥 길이 배율
-        // 아래 리본 바깥 끝 가닥 축소(사용자 0723: "가장 바깥 한 가닥 40% 줄이기")
-        const int LowerTailTaperCols = 3;    // 바깥쪽(c=0부터) 테이퍼 기둥 수(한 가닥 폭)
-        const float LowerTailTaperMin = 0.6f;// 맨 끝 기둥 길이 배율(-40%)
-        const float UpperTexRootV = 0.0448f; // 0723 위 초록선(펜연장 32°)+국소 회전 재산출값
-        const float LowerTexRootV = 0.1f;    // 0723 급전환(틈 x=3113) 재산출값
         Mesh _texMesh;
         MeshRenderer _texRenderer;
         Material _texMaterial;
         Vector3[] _texVertices;
-        int _texStyle;                       // 0=off(절차) 1=natural 2=volume 3=glam
-        readonly Texture2D[] _texCache = new Texture2D[4];
-        Texture2D _lowerGlamTex;             // 스타일 3 전용 아래 리본 텍스처 (lash_glam_lower)
-        bool _lowerTexFromStyle;             // 아래 오버라이드가 스타일 3 자동 장착분인지 (수동 SetLowerTexOverride와 구분)
-        // 아래 속눈썹 텍스처 리본 — 위 리본과 동일 구조를 하안검 체인에 세움(끝은 아래로).
-        // 오버라이드 텍스처가 설정된 동안 절차 아래 속눈썹을 대체한다(SetLowerTexOverride).
-        Mesh _lowerTexMesh;
-        MeshRenderer _lowerTexRenderer;
-        Material _lowerTexMaterial;
-        Vector3[] _lowerTexVertices;
-        bool _lowerTexOn;
+        int _texStyle;                       // 0=off(절차) 1=natural 2=volume
+        readonly Texture2D[] _texCache = new Texture2D[3];
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _lash = new Vector2[Seg];
-        // 텍스처 리본 컬럼 법선 — 전역 up 단일 방향은 눈꼬리(급커브)에서 기둥-라인 직각이
-        // 무너져 텍스처 전단(가닥 일그러짐, 사용자 판정 0723). 라이너와 동일 레시피:
-        // ±2 스텐실 접선 + 2패스 스무딩(EyelinerStyleRenderer._nrm 이식).
-        readonly Vector2[] _ribNrm = new Vector2[Seg];
-        // 눈 곡선 슬라이드용 임시 버퍼 + 탈출 방향(TailTangentExit가 기록)
-        readonly Vector2[] _ribTmp = new Vector2[Seg];
-        Vector2 _exitDir;
-        // 위 텍스처 리본 꼬리 연장용 컨트롤(+1점) — 눈꼬리 너머 스윕 (SODA 판정 반영)
-        readonly Vector2[] _ctrlExt = new Vector2[LidPts + 1];
-        // 꼬리 연장 비율(눈폭 대비) — 얼굴 무관 스타일 파라미터. 어떤 도안이든 눈길이+α 커버.
-        const float UpperTailExt = 0.18f;
 
         void Awake() => Instance = this;
         void OnDestroy() { if (Instance == this) Instance = null; }
@@ -215,115 +168,12 @@ namespace ARMakeup.Face
             _texRenderer.sharedMaterial = _texMaterial;
             _texRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             _texRenderer.enabled = false;
-
-            // 아래 속눈썹 텍스처 리본 — 위 리본과 같은 셰이더/토폴로지, 하안검 체인 전용.
-            _lowerTexMaterial = new Material(texShader);
-            _lowerTexMaterial.renderQueue = MakeupQueues.LowerLash;
-            _lowerTexMesh = BuildRibbonMesh("LowerLashTex", Eyes, out _lowerTexVertices);
-            var lowerTexGO = new GameObject("LowerLashTex");
-            lowerTexGO.transform.SetParent(transform, false);
-            lowerTexGO.AddComponent<MeshFilter>().sharedMesh = _lowerTexMesh;
-            _lowerTexRenderer = lowerTexGO.AddComponent<MeshRenderer>();
-            _lowerTexRenderer.sharedMaterial = _lowerTexMaterial;
-            _lowerTexRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            _lowerTexRenderer.enabled = false;
-        }
-
-        /// <summary>아래 속눈썹 텍스처 오버라이드 — null이면 절차 아래 속눈썹으로 복귀.
-        /// 색·알파는 절차 아래 머티리얼과 동기(ApplyLowerParams에서 함께 갱신).</summary>
-        public void SetLowerTexOverride(Texture2D tex)
-        {
-            _lowerTexOn = tex != null;
-            if (_lowerTexMaterial != null && tex != null)
-            {
-                tex.wrapMode = TextureWrapMode.Clamp;
-                _lowerTexMaterial.SetTexture(MainTexId, tex);
-                // 색·알파를 현재 절차 아래 머티리얼과 맞춘다.
-                if (_lowerMaterial != null)
-                {
-                    _lowerTexMaterial.SetColor(ColorId, _lowerMaterial.GetColor(ColorId));
-                    _lowerTexMaterial.SetFloat(IntensityId, _lowerMaterial.GetFloat(IntensityId));
-                }
-            }
         }
 
         // 텍스처 속눈썹 리본 메시 — 컬럼당 뿌리(v=0)·끝(v=1) 2정점, 눈당 (RibbonCols-1) 쿼드.
         // UV.x(텍스처 가로)=바깥꼬리(1)→안쪽머리(0). PNG는 x=0 머리(수직)·x=1 꼬리(눕힘)이라
         // lash 인덱스 0(바깥)→texU 1, 인덱스 끝(안쪽)→texU 0. 두 눈 모두 동일 매핑 —
         // "texU 증가=바깥"이 각 눈의 자기 바깥쪽이라 결 눕힘이 자동으로 좌우 대칭이 된다.
-        /// <summary>꼬리 접선 탈출 — 눈꺼풀 랜드마크 체인은 눈꼬리(인덱스 0 쪽)에서
-        /// 코너 최저점을 향해 급강하하는데, 실제 인조속눈썹 밴드는 그 지점에서 라인의
-        /// 흐름(접선)대로 곧게 빠져나간다. 라이너 v5 코너 윙과 동일 취지(사용자 확정 형태).
-        /// 코너 영향권 밖 접선으로 바깥쪽 점들을 점진 대체(간격 유지 → u 매핑 보존).</summary>
-        void TailTangentExit(float dropTan = 0f, float stretch = 1f)
-        {
-            // v9 실패 교훈(픽셀 diff 270px = 사실상 무변화): ①블렌드가 교정을 희석
-            // ②구간(5점)이 급강하 몸통(~8점)보다 짧음 ③접선 측정점(5~8)이 이미 꺾인 구간.
-            // → 구간 8점, 접선은 코너 영향권 밖(8~12)에서 측정, 블렌드 없이 통째 교체.
-            // dropTan: 탈출 방향 하향 바이어스(+y) — 원본 밴드는 꼬리에서 32~42° 급강하해
-            // 클러스터를 낮게 데려가는데 접선 그대로면 출발점이 높아 꼬리가 위로 발산
-            // (사용자 판정 0723 v15). 위 리본만 사용, 아래는 0.
-            const int Pivot = 8;
-            var d = (_lash[Pivot] - _lash[Pivot + 4]).normalized; // 안 꺾인 구간의 진행 방향
-            if (dropTan != 0f) d = (d + new Vector2(0f, dropTan)).normalized;
-            _exitDir = d; // 슬라이드(SlideAlongChain)의 체인 밖 연장 방향
-            for (var i = Pivot - 1; i >= 0; i--)
-            {
-                // stretch>1이면 간격을 늘려 꼬리가 눈꼬리 너머까지 길게 빠진다(사용자 요청 —
-                // "속눈썹이 너무 빨리 사라짐"). 텍스처 u 매핑상 꼬리 내용이 옆으로 완만히 늘어남.
-                var step = (_lash[i] - _lash[i + 1]).magnitude * stretch;
-                _lash[i] = _lash[i + 1] + d * step;               // 가던 방향(+하향) 직진
-            }
-        }
-
-        /// <summary>눈 곡선 슬라이드(사용자 0723) — 텍스처는 그대로 두고 기둥 앵커를
-        /// 체인 폴리라인을 따라 바깥(꼬리)으로 dist만큼 민다. 구슬을 레일 따라 밀듯이 —
-        /// 체인을 벗어나면 탈출 방향(_exitDir)으로 직선 연장. 텍스처 쪽 이동(좌측 패드)은
-        /// 종횡비 축소 부작용으로 이동이 상쇄돼 기각(v21 판정).</summary>
-        void SlideAlongChain(float dist)
-        {
-            for (var c = 0; c < Seg; c++) _ribTmp[c] = _lash[c];
-            for (var c = 0; c < Seg; c++)
-            {
-                var remaining = dist;
-                var i = c;
-                var p = _ribTmp[c];
-                while (i > 0 && remaining > 0f)
-                {
-                    var seg = (_ribTmp[i - 1] - _ribTmp[i]).magnitude;
-                    if (remaining <= seg)
-                    {
-                        p = Vector2.Lerp(_ribTmp[i], _ribTmp[i - 1], remaining / Mathf.Max(seg, 1e-5f));
-                        remaining = 0f;
-                        break;
-                    }
-                    remaining -= seg;
-                    i--;
-                    p = _ribTmp[i];
-                }
-                if (remaining > 0f) p = _ribTmp[0] + _exitDir * remaining; // 체인 밖 연장
-                _lash[c] = p;
-            }
-        }
-
-        /// <summary>텍스처 리본 컬럼 법선 — _lash 체인에서 ±2 스텐실 접선의 수직을 구해
-        /// 2패스 스무딩(라이너 검증 레시피). up 쪽으로 부호 정렬.</summary>
-        void SmoothedRibbonNormals(Vector2 up)
-        {
-            for (var i = 0; i < Seg; i++)
-            {
-                var a = _lash[Mathf.Max(i - 2, 0)];
-                var b = _lash[Mathf.Min(i + 2, Seg - 1)];
-                var t = (b - a).normalized;
-                var n = new Vector2(-t.y, t.x);
-                if (Vector2.Dot(n, up) < 0f) n = -n;
-                _ribNrm[i] = n;
-            }
-            for (var pass = 0; pass < 2; pass++)
-                for (var i = 1; i < Seg - 1; i++)
-                    _ribNrm[i] = (_ribNrm[i - 1] + _ribNrm[i] * 2f + _ribNrm[i + 1]).normalized;
-        }
-
         static Mesh BuildRibbonMesh(string name, int eyes, out Vector3[] vertices)
         {
             var mesh = new Mesh { name = name };
@@ -358,10 +208,9 @@ namespace ARMakeup.Face
 
         Texture2D LoadLashTex(int style)
         {
-            if (style < 1 || style > 3) return null;
+            if (style < 1 || style > 2) return null;
             if (_texCache[style] == null)
-                _texCache[style] = Resources.Load<Texture2D>(
-                    style == 3 ? "lash_glam" : style == 2 ? "lash_volume" : "lash_natural");
+                _texCache[style] = Resources.Load<Texture2D>(style == 2 ? "lash_volume" : "lash_natural");
             return _texCache[style];
         }
 
@@ -412,7 +261,7 @@ namespace ARMakeup.Face
             // 길이 배수 핸들 — JsonUtility 생략 0은 미설정 → 1(원래).
             _lengthMult = lengthMult <= 0f ? 1f : Mathf.Clamp(lengthMult, 0.4f, 2.5f);
             _style = Mathf.Clamp(style, 0, 5); // 모양(생략 0=내추럴=기존 출력, 5=처짐 위 전용)
-            _texStyle = Mathf.Clamp(texStyle, 0, 3); // 0=절차(기본) 1=텍스처 내추럴 2=텍스처 볼륨 3=텍스처 글램
+            _texStyle = Mathf.Clamp(texStyle, 0, 2); // 0=절차(기본) 1=텍스처 내추럴 2=텍스처 볼륨
             if (_material != null)
             {
                 if (!string.IsNullOrEmpty(colorHex) &&
@@ -432,18 +281,6 @@ namespace ARMakeup.Face
                 var tex = LoadLashTex(_texStyle);
                 if (tex != null) _texMaterial.SetTexture(MainTexId, tex);
             }
-            // 스타일 3(글램)은 아래 리본 텍스처를 자동 동반 장착 — 수동 오버라이드와 충돌하지
-            // 않게 자동 장착분만 플래그로 추적해 스타일 이탈 시 해제한다.
-            if (_texStyle == 3)
-            {
-                if (_lowerGlamTex == null) _lowerGlamTex = Resources.Load<Texture2D>("lash_glam_lower");
-                if (_lowerGlamTex != null) { SetLowerTexOverride(_lowerGlamTex); _lowerTexFromStyle = true; }
-            }
-            else if (_lowerTexFromStyle)
-            {
-                SetLowerTexOverride(null);
-                _lowerTexFromStyle = false;
-            }
         }
 
         /// <summary>아래 속눈썹 — 색은 mascaraColor 공용, 길이 배수는 mascaraLength와
@@ -461,12 +298,6 @@ namespace ARMakeup.Face
             _lowerMaterial.SetFloat(IntensityId, LashAlpha(_lowerIntensity));
             // 마감(Tier B) — 아래 속눈썹 머티리얼 전용(위 속눈썹과 독립). 0=새틴=기존 출력.
             _lowerMaterial.SetFloat(FinishId, finish);
-            // 아래 텍스처 리본 머티리얼 색·알파 동기 (오버라이드 활성 시 사용).
-            if (_lowerTexMaterial != null)
-            {
-                _lowerTexMaterial.SetColor(ColorId, _lowerMaterial.GetColor(ColorId));
-                _lowerTexMaterial.SetFloat(IntensityId, _lowerMaterial.GetFloat(IntensityId));
-            }
         }
 
         void LateUpdate()
@@ -477,21 +308,15 @@ namespace ARMakeup.Face
             // 위 속눈썹은 텍스처 스타일이면 리본, 아니면 절차 — 둘 중 하나만 켠다.
             var texOn = upperOn && _texStyle > 0;
             var procOn = upperOn && _texStyle == 0;
-            // 아래도 동일 원칙 — 오버라이드 텍스처가 있으면 리본, 없으면 절차.
-            var lowerTexOn = lowerOn && _lowerTexOn;
-            var lowerProcOn = lowerOn && !_lowerTexOn;
             if (_renderer.enabled != procOn) _renderer.enabled = procOn;
             if (_texRenderer.enabled != texOn) _texRenderer.enabled = texOn;
-            if (_lowerRenderer.enabled != lowerProcOn) _lowerRenderer.enabled = lowerProcOn;
-            if (_lowerTexRenderer != null && _lowerTexRenderer.enabled != lowerTexOn)
-                _lowerTexRenderer.enabled = lowerTexOn;
+            if (_lowerRenderer.enabled != lowerOn) _lowerRenderer.enabled = lowerOn;
             if (!upperOn && !lowerOn) return;
 
             var lm = _source.Landmarks;
             if (procOn) UpdateUpper(lm);
             if (texOn) UpdateUpperTex(lm);
-            if (lowerProcOn) UpdateLower(lm);
-            if (lowerTexOn) UpdateLowerTex(lm);
+            if (lowerOn) UpdateLower(lm);
         }
 
         void UpdateUpper(Vector3[] lm)
@@ -625,86 +450,28 @@ namespace ARMakeup.Face
                     for (var j = 0; j < LidPts; j++)
                         _ctrl[j] = EyeWarp.LiftCorner(
                             _ctrl[j], j / (float)(LidPts - 1), up, eyeDist, _cornerLift);
-                // (이전 UpperTailExt 꼬리 연장은 _ctrlExt(10점) 서브디비전이 _lash[25]를
-                // 오버플로해 매 프레임 IndexOutOfRange로 상단 리본을 무력화 → 제거. 꼬리 연장은
-                // 새 래시 아키텍처(실제 속눈썹 증폭)에서 배열 크기와 함께 제대로 재구현할 것.)
                 SubdivideArc(_ctrl, LidPts, _lash);
-                TailTangentExit(TailExitDropTan, TailExitStretch); // 접선 탈출 + 하향 + 연장
-                SlideAlongChain(eyeDist * TailSlideFrac);          // 눈 곡선 따라 통째 바깥 이동
 
-                // 종횡비 잠금 — 리본 높이 = 눈폭 × 도안(h/w). 가로·세로가 같은 비율로
-                // 줄어 도안의 털 각도가 수학적으로 보존된다(비등방 축소가 모든 각도를
-                // 수직으로 쏠리게 해 "다 똑같아지던" 문제 제거 — 사용자 판정 0722).
-                var texUp = _texMaterial != null ? _texMaterial.mainTexture : null;
-                var aspectUp = texUp != null && texUp.width > 0
-                    ? (float)texUp.height / texUp.width
-                    : LenFactor * RibbonLenMult;
-                var len = eyeDist * aspectUp * _lengthMult;
+                var len = eyeDist * LenFactor * _lengthMult;
                 var depth = Depth(lm[lids[4]].z);
                 var baseV = e * vpe;
-                SmoothedRibbonNormals(up); // 컬럼별 국소 법선 — 눈꼬리 전단 제거
                 for (var c = 0; c < RibbonCols; c++)
                 {
-                    var n = _ribNrm[c];
-                    // 뿌리 턱(슬리버 제거) + 뿌리줄 오프셋: 텍스처 v=RootV 줄이 눈 라인에
-                    // 오도록 v0 변을 len×RootV만큼 라인 아래로 내림(처지는 꼬리 결 표현).
-                    var root = _lash[c] - n * (eyeDist * RibbonRootTuck + len * UpperTexRootV);
-                    // 컬럼 길이 균일(계약 복원) — 차등 길이는 걸친 가닥을 휘게 한다
-                    // (0723 재확인). 길이 다듬기는 텍스처 가위질(trim_heights)이 담당.
-                    var lashLen = len;
-                    var top = root + n * lashLen;
+                    var root = _lash[c];
+                    // c: 0=바깥 → RibbonCols-1=안쪽. 길이 프로파일은 안쪽 짧고 중앙~바깥 길게.
+                    var t = c / (float)(RibbonCols - 1); // 0 바깥 .. 1 안쪽
+                    var uu = 1f - t;                      // 0 안쪽 .. 1 바깥
+                    var lenBase = Mathf.Lerp(0.45f, 1f,
+                        Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(uu / 0.55f)));
+                    var edge = Mathf.Clamp01(t / EdgeFade) * Mathf.Clamp01((1f - t) / EdgeFade);
+                    var lashLen = len * lenBase * Mathf.Lerp(0.6f, 1f, edge) * RibbonLenMult;
+                    var top = root + up * lashLen;
                     _texVertices[baseV + c * 2] = ImageToWorld(root, depth);
                     _texVertices[baseV + c * 2 + 1] = ImageToWorld(top, depth);
                 }
             }
             _texMesh.vertices = _texVertices;
             _texMesh.RecalculateBounds();
-        }
-
-        // 아래 속눈썹 텍스처 리본 — UpdateUpperTex의 하안검판. 뿌리=하안검 체인(v=0),
-        // 끝은 아래(브로우 반대) 방향. 텍스처 계약: 뿌리=텍스처 하단(v=0), 털이 위로 자라는
-        // 이미지를 그대로 쓰면 리본이 아래로 뒤집어 그린다(왼오/꼬리 규약은 위와 동일).
-        void UpdateLowerTex(Vector3[] lm)
-        {
-            var vpe = RibbonCols * 2;
-            for (var e = 0; e < Eyes; e++)
-            {
-                var lids = LowerLids[e];
-                var inner = ImgPt(lm, lids[LidPts - 1]);
-                var outer = ImgPt(lm, lids[0]);
-                var eyeDist = (outer - inner).magnitude;
-                var lidMid = ImgPt(lm, lids[4]);
-                var up = (ImgPt(lm, BrowLower[e][2]) - lidMid).normalized;
-
-                for (var j = 0; j < LidPts; j++) _ctrl[j] = ImgPt(lm, lids[j]);
-                SubdivideArc(_ctrl, LidPts, _lash);
-                TailTangentExit(); // 아래 리본도 동일 — 코너 급커브로 뿌리선이 말려드는 것 방지
-
-                // 종횡비 잠금 — 위 리본과 동일 원칙(도안 h/w가 높이 소유, 각도 보존).
-                var texLo = _lowerTexMaterial != null ? _lowerTexMaterial.mainTexture : null;
-                var aspectLo = texLo != null && texLo.width > 0
-                    ? (float)texLo.height / texLo.width
-                    : LowerTexLenFactor * RibbonLenMult;
-                var len = eyeDist * aspectLo * _lowerLengthMult;
-                var depth = Depth(lm[lids[4]].z);
-                var baseV = e * vpe;
-                SmoothedRibbonNormals(up); // 컬럼별 국소 법선(부호는 up 기준, 사용은 반전)
-                for (var c = 0; c < RibbonCols; c++)
-                {
-                    var downN = -_ribNrm[c];
-                    // 뿌리 리프트 + 뿌리줄 오프셋(위 리본과 동일 원칙, 값은 아래 도안 소유)
-                    var root = _lash[c] - downN * (eyeDist * LowerRibbonLift + len * LowerTexRootV);
-                    // 컬럼 길이 균일 — 도안 텍스처는 자체 길이 변화를 갖고 있어 컬럼별 차등
-                    // 길이(안쪽 0.5·가장자리 0.6 변조)를 겹치면 비스듬한 털이 컬럼 경계에서
-                    // 계단으로 끊긴다(사용자 "중간 잘림" 판정). 절차식 경로만 변조 유지.
-                    // 길이 균일(계약) — 바깥 끝 -40%는 텍스처 가위질로 이관(휨 방지, 0723)
-                    var tip = root + downN * len;
-                    _lowerTexVertices[baseV + c * 2] = ImageToWorld(root, depth);
-                    _lowerTexVertices[baseV + c * 2 + 1] = ImageToWorld(tip, depth);
-                }
-            }
-            _lowerTexMesh.vertices = _lowerTexVertices;
-            _lowerTexMesh.RecalculateBounds();
         }
 
         /// <summary>모양(mascaraStyle/lowerLashStyle) — 길이·스윕·법선 프로파일 변조,

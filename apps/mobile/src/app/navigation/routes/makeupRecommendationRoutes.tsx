@@ -57,9 +57,25 @@ export function MakeupRecommendationRouteScreen({
             analysisColors || lookColors
               ? {...analysisColors, ...lookColors}
               : undefined;
+          const routeParams = getMakeupRecommendationStencilRouteParams(
+            look,
+            mergedColors,
+          );
+          if (__DEV__) {
+            console.info('[aura:makeup-recommendation] ar-route:prepared', {
+              lookId: look.id,
+              title: look.title,
+              arFilterId: look.arFilterId,
+              areaGuideCount: look.areaGuides?.length ?? 0,
+              mergedColorKeys: Object.keys(mergedColors ?? {}),
+              paramKeys: Object.keys(routeParams.recommendedLook?.params ?? {}),
+              eyeshadowLayerCount:
+                routeParams.recommendedLook?.eyeshadowLayers?.length ?? 0,
+            });
+          }
           navigation.navigate(
             'ARFilter',
-            getMakeupRecommendationStencilRouteParams(look, mergedColors),
+            routeParams,
           );
         }}
         onResultsVisibilityChange={setIsResultsVisible}

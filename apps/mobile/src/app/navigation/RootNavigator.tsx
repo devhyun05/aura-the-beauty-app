@@ -9,8 +9,25 @@ const loadAuthRoutes = () =>
   require('./routes/authRoutes') as typeof import('./routes/authRoutes');
 const loadHomeRoutes = () =>
   require('./routes/homeRoutes') as typeof import('./routes/homeRoutes');
-const loadArRoutes = () =>
-  require('./routes/arRoutes') as typeof import('./routes/arRoutes');
+const loadArRoutes = () => {
+  if (__DEV__) {
+    console.info('[aura:ar-filter] route-module:load-start');
+  }
+  try {
+    const routes = require('./routes/arRoutes') as typeof import('./routes/arRoutes');
+    if (__DEV__) {
+      console.info('[aura:ar-filter] route-module:load-success');
+    }
+    return routes;
+  } catch (error) {
+    if (__DEV__) {
+      console.info('[aura:ar-filter] route-module:load-failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  }
+};
 const loadConsultingRoutes = () =>
   require('./routes/consultingRoutes') as typeof import('./routes/consultingRoutes');
 const loadFaceCaptureConfirmationRoutes = () =>

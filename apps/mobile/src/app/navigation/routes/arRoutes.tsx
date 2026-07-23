@@ -15,6 +15,28 @@ export function ARFilterRouteScreen({
   navigation,
   route,
 }: RootScreenProps<'ARFilter'>) {
+  const initialLook = route.params?.recommendedLook;
+  if (__DEV__) {
+    console.info('[aura:ar-filter] route:render', {
+      source: route.params?.source ?? 'direct',
+      hasInitialLook: Boolean(initialLook),
+      label: initialLook?.label,
+      paramKeys: Object.keys(initialLook?.params ?? {}),
+      eyeshadowLayerCount: initialLook?.eyeshadowLayers?.length ?? 0,
+    });
+  }
+
+  React.useEffect(() => {
+    if (!__DEV__) return;
+    console.info('[aura:ar-filter] route:received', {
+      source: route.params?.source ?? 'direct',
+      hasInitialLook: Boolean(initialLook),
+      label: initialLook?.label,
+      paramKeys: Object.keys(initialLook?.params ?? {}),
+      eyeshadowLayerCount: initialLook?.eyeshadowLayers?.length ?? 0,
+    });
+  }, [initialLook, route.params?.source]);
+
   return (
     <StencilARApp
       initialLook={route.params?.recommendedLook}

@@ -399,13 +399,6 @@ namespace ARMakeup.Face
         {
             if (!TopologyReady || _source == null || _camera == null) return;
 
-            // Guard against invalid camera aspects to prevent NaN propagation during division or scaling
-            if (float.IsNaN(_camera.aspect) || float.IsInfinity(_camera.aspect) || _camera.aspect <= 0.001f)
-            {
-                _renderer.enabled = false;
-                return;
-            }
-
             var visible = _source.HasFace;
             if (_renderer.enabled != visible) _renderer.enabled = visible;
             if (!visible) return;
@@ -481,29 +474,6 @@ namespace ARMakeup.Face
             _extEmaInit = true;
 
             EnsureExtensionWinding();
-
-            // Validate all calculated viewport coordinates and depths before converting them to world points
-            var hasInvalidValue = false;
-            for (var i = 0; i < _viewports.Length; i++)
-            {
-                if (!IsFinite(_viewports[i]) || float.IsNaN(_depths[i]) || float.IsInfinity(_depths[i]))
-                {
-                    hasInvalidValue = true;
-                    break;
-                }
-            }
-
-            if (hasInvalidValue)
-            {
-                _renderer.enabled = false;
-                // Clean up any NaNs/Infinities in _viewports so other renderers don't read them
-                for (var i = 0; i < _viewports.Length; i++)
-                {
-                    if (!IsFinite(_viewports[i])) _viewports[i] = Vector2.zero;
-                    if (float.IsNaN(_depths[i]) || float.IsInfinity(_depths[i])) _depths[i] = 0f;
-                }
-                return;
-            }
 
             for (var i = 0; i < _vertices.Length; i++)
                 _vertices[i] = _camera.ViewportToWorldPoint(

@@ -661,71 +661,7 @@ namespace ARMakeup.Face
 
             if (_lastPresentedTs >= 0) InterpolateLandmarks(_lastPresentedTs, inferenceDead);
 
-            // 눈가 시간축 안정화(One-Euro) — 실기기에서 속눈썹·라이너가 랜드마크 지터에
-            // 직결돼 떨리던 문제(사용자 0723). 얼굴 상실 시 상태 리셋(재획득 팝 방지).
-            if (HasFace && !_externalMode) SmoothEyeLandmarks(Time.deltaTime);
-            else _euroInit = false;
-
             LogStats();
-        }
-
-        // ── 눈 랜드마크 시간축 안정화(One-Euro 필터) ──
-        // MediaPipe 지터(프레임당 1~2px)가 눈꺼풀 체인에 직결된 속눈썹·라이너에서
-        // 증폭돼 보이던 문제(실기기, 사용자 0723). 정지 시 저역통과로 떨림을 흡수하고
-        // 이동 속도에 비례해 컷오프를 올려 지연을 최소화하는 표준 레시피.
-        // 대상: 상·하안검 체인(양눈 32점)만 — 다른 부위 트래킹에 영향 없음.
-        // 라이브 전용(외부 주입 모드는 정지 사진 = 무의미, 리그 결정론 유지).
-        static readonly int[] EyeSmoothIdx =
-        {
-            33, 246, 161, 160, 159, 158, 157, 173, 133,   // 우 상안검
-            7, 163, 144, 145, 153, 154, 155,              // 우 하안검(코너 중복 제외)
-            263, 466, 388, 387, 386, 385, 384, 398, 362,  // 좌 상안검
-            249, 390, 373, 374, 380, 381, 382,            // 좌 하안검
-        };
-        const float EyeEuroMinCutoff = 1.5f; // Hz — 정지 떨림 억제 강도(낮을수록 강함) // 실기기 튜닝 대상
-        const float EyeEuroBeta = 30f;       // 속도(정규화/s)→컷오프 가중(빠른 이동 시 지연 제거) // 실기기 튜닝 대상
-        const float EyeEuroDCutoff = 1f;     // 속도 추정 자체의 저역통과
-        Vector3[] _euroX;
-        Vector3[] _euroDx;
-        bool _euroInit;
-
-        void SmoothEyeLandmarks(float dt)
-        {
-            if (dt <= 0f) return;
-            if (_euroX == null)
-            {
-                _euroX = new Vector3[EyeSmoothIdx.Length];
-                _euroDx = new Vector3[EyeSmoothIdx.Length];
-            }
-            if (!_euroInit)
-            {
-                for (var k = 0; k < EyeSmoothIdx.Length; k++)
-                {
-                    _euroX[k] = Landmarks[EyeSmoothIdx[k]];
-                    _euroDx[k] = Vector3.zero;
-                }
-                _euroInit = true;
-                return;
-            }
-            var ad = EuroAlpha(EyeEuroDCutoff, dt);
-            for (var k = 0; k < EyeSmoothIdx.Length; k++)
-            {
-                var i = EyeSmoothIdx[k];
-                var x = Landmarks[i];
-                var dx = (x - _euroX[k]) / dt;
-                var dxf = _euroDx[k] + (dx - _euroDx[k]) * ad;
-                var cutoff = EyeEuroMinCutoff + EyeEuroBeta * dxf.magnitude;
-                var xf = _euroX[k] + (x - _euroX[k]) * EuroAlpha(cutoff, dt);
-                _euroX[k] = xf;
-                _euroDx[k] = dxf;
-                Landmarks[i] = xf;
-            }
-        }
-
-        static float EuroAlpha(float cutoff, float dt)
-        {
-            var tau = 1f / (2f * Mathf.PI * Mathf.Max(cutoff, 1e-3f));
-            return 1f / (1f + tau / dt);
         }
 
         /// <summary>
