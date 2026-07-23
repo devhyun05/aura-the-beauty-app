@@ -21,6 +21,8 @@ export interface FilterPreset {
 /** 보정이 전혀 없는 원본 상태 */
 export const BARE: FilterParams = {
   skinSmoothing: 0,
+  skinDetailPreservation: 0.7,
+  skinClarity: 0,
   matteGrain: 0,
   skinBrightening: 0,
   // 세그 확장 — 이마·목 스무딩(스킨과 독립)·헤어 염색 (레이어 추가 시 색 시작값)
@@ -108,6 +110,8 @@ export const BARE: FilterParams = {
   contourShimmer: 0.5,
   concealerColor: '#FADCC2',
   concealerIntensity: 0,
+  correctorColor: '#F7C9A8',
+  correctorIntensity: 0,
   // 베이스 팩(#18) — 전부 0/""=기존 픽셀 동일
   foundationColor: '#E8C4A8',
   foundationIntensity: 0,

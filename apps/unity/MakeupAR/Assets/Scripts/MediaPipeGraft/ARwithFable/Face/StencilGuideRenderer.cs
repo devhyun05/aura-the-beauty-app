@@ -362,6 +362,8 @@ namespace ARMakeup.Face
         // 가이드 슬롯 on/off와 독립: 트래킹 중이면 매 프레임 기록, 소실 시 무효(z=0)로 폴백.
         static readonly int FndOvalId = Shader.PropertyToID("_FndOval");
         static readonly int FndOvalAxisId = Shader.PropertyToID("_FndOvalAxis");
+        static readonly int FndChinAxisId = Shader.PropertyToID("_FndChinAxis");
+        static readonly int FndFaceHeightId = Shader.PropertyToID("_FndFaceHeight");
         static readonly Vector4 OvalInactive = Vector4.zero; // z=0 = 타원 무효 → seg 파운데 off
 
         // ── A17 온페이스 핏 핸들 (좌표 방출; 터치는 RN 소관) ──
@@ -439,6 +441,7 @@ namespace ARMakeup.Face
 
             // 얼굴 오벌 게이트 초기값 = 무효(첫 LateUpdate 전·얼굴 소실 시 seg 파운데 off).
             Shader.SetGlobalVector(FndOvalAxisId, OvalInactive);
+            Shader.SetGlobalFloat(FndFaceHeightId, 0f);
         }
 
         /// <summary>
@@ -582,7 +585,11 @@ namespace ARMakeup.Face
             // 얼굴 오벌 게이트(파운데 seg 코어 제외) — 가이드 슬롯 on/off와 독립. 트래킹 중이면
             // 매 프레임 타원을 기록하고, 소실 시 무효(z=0)로 폴백해 seg 파운데를 끈다.
             if (tracking) WriteFaceOval(_source.Landmarks);
-            else Shader.SetGlobalVector(FndOvalAxisId, OvalInactive);
+            else
+            {
+                Shader.SetGlobalVector(FndOvalAxisId, OvalInactive);
+                Shader.SetGlobalFloat(FndFaceHeightId, 0f);
+            }
             // A17 온페이스 핏 핸들 — 가이드 슬롯 on/off와 독립. 트래킹 중이면 6프레임마다 좌표 방출.
             if (_captureFitOutlinesThisFrame) EmitFitHandles(_source.Landmarks, now);
             _captureFitOutlinesThisFrame = false;
@@ -623,6 +630,21 @@ namespace ARMakeup.Face
             Shader.SetGlobalVector(FndOvalId,
                 new Vector4(c.x, c.y, Mathf.Max(rx, 1e-4f), Mathf.Max(ry, 1e-4f)));
             Shader.SetGlobalVector(FndOvalAxisId, new Vector4(cos, sin, 1f, 0f)); // z=1 = active
+
+            // 턱 아래 방향은 PCA 타원의 축 부호에 기대지 않고 실제 이마(10)→턱(152)
+            // 랜드마크로 기록한다. 고개 기울기에도 목 방향이 그대로 회전한다.
+            var forehead = ImgPt(lm, 10);
+            var chin = ImgPt(lm, 152);
+            var faceAxis = chin - forehead;
+            var faceHeight = faceAxis.magnitude;
+            if (faceHeight > 1e-4f)
+            {
+                faceAxis /= faceHeight;
+                Shader.SetGlobalVector(FndChinAxisId,
+                    new Vector4(chin.x, chin.y, faceAxis.x, faceAxis.y));
+                Shader.SetGlobalFloat(FndFaceHeightId, faceHeight);
+            }
+            else Shader.SetGlobalFloat(FndFaceHeightId, 0f);
         }
 
         /// <summary>setStencil로 켜진 슬롯의 가이드 스트로크/존을 매 프레임 재구성해 리본
