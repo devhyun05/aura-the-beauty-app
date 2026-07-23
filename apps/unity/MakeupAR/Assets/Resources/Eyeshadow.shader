@@ -56,6 +56,9 @@ Shader "ARMakeup/Eyeshadow"
         // (하위호환 — 미임포트 시 절차 밴드 그대로, 바이트 동일). setRegionMask 브리지로 임포트.
         _EyeshadowDesign ("Eyeshadow Design Mask (band-local uv2)", 2D) = "white" {}
         _EyeshadowHasDesign ("Eyeshadow Has Design", Float) = 0
+        // 와이드 계약(§16b) — 가로 2:1 마스크는 u 0..2(눈+눈꼬리 밖 연장 전체)를 덮는다.
+        // 좌측 절반=눈(0..1), 우측 절반=연장(1..2). 임포터가 종횡비로 자동 감지해 설정.
+        _EyeshadowDesignWide ("Eyeshadow Design Wide (u 0..2)", Float) = 0
     }
 
     SubShader
@@ -107,6 +110,7 @@ Shader "ARMakeup/Eyeshadow"
             float _EyeshadowShape;     // 모양 ID 0..11 (EyeshadowShape.cginc 정본)
             sampler2D _EyeshadowDesign; // 디자이너 모양 마스크(§16) — 밴드-로컬 uv2로 샘플
             float _EyeshadowHasDesign;  // 0 = 마스크 없음(절차 밴드 그대로, 하위호환)
+            float _EyeshadowDesignWide; // §16b: 1 = 2:1 와이드 마스크(u 0..2, x=u/2로 샘플)
 
             // ── 멀티밴드(A14 ①) — 최대높이 메시 1장에 밴드별 세로 cutoff로 N밴드(≤8)를
             // over 합성한다(드로우콜 1, 큐 재번호 불필요). Properties 없이 유니폼만
@@ -181,8 +185,14 @@ Shader "ARMakeup/Eyeshadow"
                     fixed4 esFinishMapM = tex2D(_EyeshadowFinishMap, i.uv);
                     // 연장 컬럼(bandUV.x>1)은 디자인 마스크 밖 — u를 눈꼬리 열(1.0)로 클램프해
                     // 마스크 꼬리 엣지를 이어 샘플(랩 모드 무관 안전). u≤1이면 무변화(하위호환).
-                    float designGate = _EyeshadowHasDesign > 0.5
-                        ? tex2D(_EyeshadowDesign, float2(min(i.bandUV.x, 1.0), i.bandUV.y)).r : 1.0;
+                    // 와이드(§16b)는 마스크 가로가 u 0..2 전체를 덮으므로 x=u/2로 샘플.
+                    float designGate = 1.0;
+                    if (_EyeshadowHasDesign > 0.5)
+                    {
+                        float designU = _EyeshadowDesignWide > 0.5
+                            ? i.bandUV.x * 0.5 : min(i.bandUV.x, 1.0);
+                        designGate = tex2D(_EyeshadowDesign, float2(designU, i.bandUV.y)).r;
+                    }
 
                     fixed3 accum = fixed3(0, 0, 0); // over 프리멀티 누적색
                     float accumA = 0.0;             // over 누적 알파
@@ -223,7 +233,11 @@ Shader "ARMakeup/Eyeshadow"
                                     shapeB, vfall, hweight);
                         float liftedIntensityB = EyeshadowVisibilityLift(_EsLayerColor[b].a);
                         float amt = vfall * hweight * liftedIntensityB; // a 리프트 후 surface profile 적용
-                        amt *= EsExtensionGate(i.bandUV.x, shapeB);
+                        // 와이드 마스크(§16b)는 연장 마감을 마스크가 소유 — 게이트 개방.
+                        float extGateB = EsExtensionGate(i.bandUV.x, shapeB);
+                        if (_EyeshadowHasDesign > 0.5 && _EyeshadowDesignWide > 0.5)
+                            extGateB = 1.0;
+                        amt *= extGateB;
                         // scalar와 동일하게 디자인 마스크를 비선형 coverage/edge보다 먼저 적용.
                         amt *= designGate;
                         amt = TexEdge(TexCoverage(saturate(amt), coverageB), edgeB);
@@ -262,14 +276,24 @@ Shader "ARMakeup/Eyeshadow"
                 EsEvalShape(i.uv.x, i.uv.y, i.bandUV.x, 1.0, 0.45,
                             _EyeshadowShape, vfall, hweight);
                 float amt = vfall * hweight * _EyeshadowIntensity;
-                amt *= EsExtensionGate(i.bandUV.x, _EyeshadowShape);
+                // 와이드 마스크(§16b)는 연장 마감을 마스크가 소유 — 게이트 개방.
+                float extGate = EsExtensionGate(i.bandUV.x, _EyeshadowShape);
+                if (_EyeshadowHasDesign > 0.5 && _EyeshadowDesignWide > 0.5)
+                    extGate = 1.0;
+                amt *= extGate;
 
                 // 디자이너 모양 마스크(§16) — 밴드-로컬 uv2로 존 스텐실을 샘플해 커버리지에
                 // 곱한다(디자이너 그라데/글리터 형태를 절차 밴드 위에 얹음). _HasDesign=0이면
                 // 분기 스킵 → 절차 밴드 그대로(하위호환, 미임포트 시 바이트 동일).
                 // 연장 컬럼(bandUV.x>1)은 u를 눈꼬리 열(1.0)로 클램프(랩 모드 무관 안전).
-                float designGate = _EyeshadowHasDesign > 0.5
-                    ? tex2D(_EyeshadowDesign, float2(min(i.bandUV.x, 1.0), i.bandUV.y)).r : 1.0;
+                // 와이드(§16b)는 마스크 가로가 u 0..2 전체를 덮으므로 x=u/2로 샘플.
+                float designGate = 1.0;
+                if (_EyeshadowHasDesign > 0.5)
+                {
+                    float designU = _EyeshadowDesignWide > 0.5
+                        ? i.bandUV.x * 0.5 : min(i.bandUV.x, 1.0);
+                    designGate = tex2D(_EyeshadowDesign, float2(designU, i.bandUV.y)).r;
+                }
                 amt *= designGate;
                 amt = EyeshadowVisibilityLift(amt);
                 // 제형 커버·엣지 — 최종 커버리지 amt에 배선(enum 0=무변조).

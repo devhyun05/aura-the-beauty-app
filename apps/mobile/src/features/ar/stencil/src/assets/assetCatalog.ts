@@ -37,7 +37,7 @@ type Equals<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y
   : false;
 type AssertTrue<T extends true> = T;
 
-export const MASK_REGIONS = ['blush', 'highlighter', 'contour', 'eyeshadow'] as const;
+export const MASK_REGIONS = ['blush', 'highlighter', 'contour', 'eyeshadow', 'eyeshadowLower'] as const;
 export const COLOR_ART_REGIONS = ['brow', 'eyeliner', 'lip', 'blush', 'aegyo'] as const;
 export const TEXTURE_MAP_REGIONS = ['lip', 'eyeshadow', 'blush'] as const;
 

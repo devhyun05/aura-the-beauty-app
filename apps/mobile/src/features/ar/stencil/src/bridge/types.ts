@@ -191,6 +191,12 @@ export interface FilterParams {
   correctorColor?: string;
   /** 자동 컬러 코렉터 강도 0..1. 마스크 선택 없이 피부 색 이상치에만 적용. */
   correctorIntensity?: number;
+  /** 코렉터 슬롯 2·3 — 색마다 강도를 따로 주는 다중 중첩(그린+피치 동시 적용).
+   *  슬롯1(correctorColor/Intensity)과 같은 자동 셀렉터, 순차 적용. 생략 시 강도 0(끔) */
+  corrector2Color?: string;
+  corrector2Intensity?: number;
+  corrector3Color?: string;
+  corrector3Intensity?: number;
   /** 애교살(하안검 밴드): 하이라이트+섀도 2줄 한 강도 0..1 (0=끔). 생략 시 0 */
   aegyoIntensity?: number;
   /** 임포트 애교살 그림(하안검 밴드 데칼) 강도. 텍스처는 setAegyoStyle로 임포트 */
@@ -456,6 +462,9 @@ export interface FilterParams {
   toneShape?: number;
   /** 피부결 존: 0=전체 1=T존 2=볼 제외. FaceMakeup _SkinShape(_Smoothing 존 곱). 생략 0 */
   skinShape?: number;
+  /** 윤광(프라이머) 존: 0=전체 1=T존 2=볼 제외 3=볼만. FaceMakeup _GlowShape(_SkinGlow 존 곱).
+   *  skinShape와 독립이라 T존 매트 + 볼 윤광 동시 성립. 생략 0 */
+  glowShape?: number;
   /** 파운데 존: 0=전체 1=T존 집중 2=외곽 페더 강화. FaceMakeup _FoundationShape(얼굴 메시 커버 존 곱). 생략 0 */
   foundationShape?: number;
   /** ── 모양 축 W4 립 실루엣/존 (Lip.shader, generate-masks 무재베이크) — 생략 0 = 현행 픽셀 동일 ── */
@@ -483,6 +492,10 @@ export interface FilterParams {
   /** 아이섀도 디자이너 마스크(모양 축, §16) — Unity가 setRegionMask region=="eyeshadow"를
    *  특수분기로 IrisRenderer(밴드 로컬 UV)에 라우팅. 빈 path=절차 밴드 복원. */
   eyeshadowMaskImported?: number;
+  /** 아래 섀도 실루엣 마스크(§16 하부 확장) — setRegionMask region=="eyeshadowLower"를
+   *  LowerLidRenderer로 라우팅해 전 하부 룩 공용 실루엣(_LowerSmokyMask)을 스왑.
+   *  빈 path=번들 기본(lower_smoky_mask) 복원. PNG 상단=lash 라인(위 마스크와 반대). */
+  eyeshadowLowerMaskImported?: number;
   /** ── 질감 맵 임포트(#22, 에셋 3층의 ③) 세션 상태 — 1=이번 세션 광 지도(마감 변조)
    *  적용됨. 마스크 마커와 동일한 UI 상태 마커(Unity FilterParams엔 없음 — JsonUtility
    *  무시). 맵 픽셀은 별도 setTextureMap 브리지로 스왑, 파일 경로는 저장 스냅샷 미포함

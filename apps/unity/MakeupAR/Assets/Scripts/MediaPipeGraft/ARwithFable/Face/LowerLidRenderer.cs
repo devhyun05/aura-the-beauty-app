@@ -76,6 +76,8 @@ namespace ARMakeup.Face
         float _cornerLift; // 눈꼬리 띄우기(R7 워프) — 상안검 코너와 접점 유지용 동일 리프트
         Texture2D _importedAegyo;
         Texture2D _runtimeConcealerFallback;
+        Texture2D _importedLowerShadowMask; // 소유(교체·해제 시 파기)
+        Texture2D _bundledLowerShadowMask;  // Resources 번들(lower_smoky_mask) — 파기 금지, 해제 복원용
         MakeupController _lowerLayerController;
         EyeshadowLayerParams[] _lastPendingLowerEyeshadowLayers;
         int _lowerEyeshadowLayerCount;
@@ -191,10 +193,12 @@ namespace ARMakeup.Face
             if (Instance == this) Instance = null;
             ReleaseOwned(_importedAegyo);
             ReleaseOwned(_runtimeConcealerFallback);
+            ReleaseOwned(_importedLowerShadowMask);
             ReleaseOwned(_material);
             ReleaseOwned(_mesh);
             _importedAegyo = null;
             _runtimeConcealerFallback = null;
+            _importedLowerShadowMask = null;
             _material = null;
             _mesh = null;
         }
@@ -230,8 +234,10 @@ namespace ARMakeup.Face
             _material.SetTexture(ConcealerMaskId, concealerMask);
             // 스모키 언더 모양 마스크(profile 6). scripts/generate-lower-smoky-mask.py 생성.
             // 누락 시 셰이더 기본 "black"(전부 0)이라 스모키가 안 그려질 뿐 크래시 없음.
-            var smokyMask = Resources.Load<Texture2D>("lower_smoky_mask");
-            if (smokyMask != null) _material.SetTexture(LowerSmokyMaskId, smokyMask);
+            // 임포트 마스크 해제 시 복원 원본으로 보관(SetLowerShadowMaskFromFile).
+            _bundledLowerShadowMask = Resources.Load<Texture2D>("lower_smoky_mask");
+            if (_bundledLowerShadowMask != null)
+                _material.SetTexture(LowerSmokyMaskId, _bundledLowerShadowMask);
             PushAffine(LinerAffineId, LinerAffineRotId, _linerAffine);
             PushAffine(AegyoAffineId, AegyoAffineRotId, _aegyoAffine);
             PushAffine(TriAffineId, TriAffineRotId, _triAffine);
@@ -650,6 +656,35 @@ namespace ARMakeup.Face
             if (_importedAegyo != null) Destroy(_importedAegyo);
             _importedAegyo = tex;
             _material.SetTexture(AegyoTexId, tex);
+        }
+
+        /// <summary>아래 섀도 실루엣 마스크 임포트(§16 하부 확장) — 하안검 밴드 UV
+        /// (x=안쪽 눈머리0→바깥 눈꼬리1, PNG 상단=lash 라인, 셰이더가 1-v 플립)로 샘플하는
+        /// 흑백/알파 스텐실. 전 하부 룩이 공용하는 _LowerSmokyMask 실루엣을 런타임 스왑한다 —
+        /// 색·강도·핏높이(_LowerShadowHeight) 축은 앱이 유지(마스크=색 없는 존). 컬러 아트면
+        /// TryLoadMask가 거부. 빈 경로 = 번들 기본(lower_smoky_mask) 복원(회귀 0).
+        /// setRegionMask region="eyeshadowLower"로 라우팅.</summary>
+        public void SetLowerShadowMaskFromFile(string path)
+        {
+            if (_material == null) return;
+            if (string.IsNullOrEmpty(path))
+            {
+                ReleaseOwned(_importedLowerShadowMask);
+                _importedLowerShadowMask = null;
+                // 번들 부재 시 셰이더 기본과 동일한 black — 스모키만 안 그려질 뿐 안전.
+                _material.SetTexture(LowerSmokyMaskId,
+                    _bundledLowerShadowMask != null ? _bundledLowerShadowMask : Texture2D.blackTexture);
+                return;
+            }
+            if (!ImageFileLoader.TryLoadMask(path, out var mask, out var error))
+            {
+                NativeBridge.Send(new UnityToRNMessage
+                { type = "error", message = $"아래 섀도 마스크 임포트 실패: {error}" });
+                return;
+            }
+            ReleaseOwned(_importedLowerShadowMask);
+            _importedLowerShadowMask = mask;
+            _material.SetTexture(LowerSmokyMaskId, mask);
         }
 
         void LateUpdate()

@@ -308,6 +308,7 @@ export function compileLayers(
     // 보이는 잎 중 하나라도 요청하면 compiled.params에 마커를 남겨 App reconcile이 set/clear한다.
     for (const key of [
       'eyeshadowMaskImported',
+      'eyeshadowLowerMaskImported',
       'eyeshadowFinishMapImported',
     ] as const) {
       if (retainedEyeshadowLeaves.some(
@@ -426,6 +427,7 @@ export function seedLayers(
     const importedMarkers: Partial<FilterParams> = {};
     for (const key of [
       'eyeshadowMaskImported',
+      'eyeshadowLowerMaskImported',
       'eyeshadowFinishMapImported',
     ] as const) {
       if (((params[key] as number | undefined) ?? 0) > 0) importedMarkers[key] = 1;

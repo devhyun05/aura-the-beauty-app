@@ -340,6 +340,13 @@ namespace ARMakeup.Face
         Texture2D _maskTexture;
         double _uploadedTs = -1.0;
 
+        // 마스크 시간 안정화(EMA) — 헤어라인 등 저신뢰 경계의 프레임 간 지터가
+        // 세그 소비자(확장 스무딩·파운데 확장·헤어 염색) 페더를 울렁이게 하는 문제.
+        // 업로드 직전 이전 프레임과 지수이동평균으로 섞는다. 256px 확률맵이라 비용 무시.
+        // 분자 115/256 ≈ 0.45 = 신규 프레임 가중(작을수록 안정↑·경계 추종 지연↑). 실기기 튜닝 대상.
+        const int SegMaskEmaNewWeight = 115;
+        byte[] _emaRgba;
+
         // 계측(스테이지 ③) — 추론 소요 EMA(캡처 ts→메인 스레드 승격: 순수 추론 + ≤1프레임).
         double _inferEmaMs = -1.0;
         int _statSubmits, _statResults;
@@ -678,6 +685,7 @@ namespace ARMakeup.Face
                 }
             }
             _uploadedTs = -1.0;
+            _emaRgba = null; // 카메라 전환 — 이전 카메라 마스크가 EMA로 섞이지 않게 리셋
             _resetMs = Time.realtimeSinceStartupAsDouble * 1000.0;
             Shader.SetGlobalFloat(SegOnId, 0f);
         }
@@ -1087,8 +1095,23 @@ namespace ARMakeup.Face
                     filterMode = FilterMode.Bilinear,  // 256px 소프트 확률맵 — 페더가 매끈해진다
                 };
                 Shader.SetGlobalTexture(SegMaskId, _maskTexture);
+                _emaRgba = null; // 해상도 변경 — EMA 이력 리셋(첫 프레임은 원본 그대로)
             }
-            _maskTexture.LoadRawTextureData(f.rgba);
+            // EMA 시간 안정화 — 헤어라인 울렁임 방지. 첫 프레임은 복사로 시드.
+            if (_emaRgba == null || _emaRgba.Length != f.rgba.Length)
+            {
+                _emaRgba = (byte[])f.rgba.Clone();
+            }
+            else
+            {
+                var ema = _emaRgba;
+                var cur = f.rgba;
+                for (int i = 0; i < ema.Length; i++)
+                {
+                    ema[i] = (byte)(ema[i] + (((cur[i] - ema[i]) * SegMaskEmaNewWeight) >> 8));
+                }
+            }
+            _maskTexture.LoadRawTextureData(_emaRgba);
             _maskTexture.Apply(false, false);
             _uploadedTs = f.timestampMs;
         }

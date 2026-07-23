@@ -107,8 +107,10 @@ Shader "ARMakeup/CameraFeed"
             #define SEG_SMOOTH_LUMA_KEEP 0.35  // luma 보존 비율(0=순수 블러, 1=크로마만 스무딩) // 실기기 튜닝 대상
             // 목 body-skin 실측 확신(~0.19)을 포함. 기존 0.35/0.75는 목을 거의 전부
             // 탈락시켜 얼굴 메시 아래에서 피부결이 끊겼다.
-            #define SEG_SMOOTH_SKIN_LO 0.10    // 피부(face+body) 확률 페더 하한 // 실기기 튜닝 대상
-            #define SEG_SMOOTH_SKIN_HI 0.28    // 페더 상한 // 실기기 튜닝 대상
+            #define SEG_SMOOTH_SKIN_LO 0.10    // 피부(face+body) 확률 페더 하한 — 목 전이대 포함 계약, 올리지 말 것 // 실기기 튜닝 대상
+            // 페더 상한 0.28→0.55(0724) — 밴드를 넓혀 확률 지터 민감도(∝1/(HI−LO))를
+            // ~2.5× 낮춘다(헤어라인 울렁임 감쇠). 마스크 EMA(SegmentationSource)와 세트.
+            #define SEG_SMOOTH_SKIN_HI 0.55    // 페더 상한 // 실기기 튜닝 대상
             // 파운데이션 이음새(귀·턱선·목) 게이트 — 스무딩과 별도 임계. body-skin(B)+face-skin(R)
             // 전이대(skin=max(R,B))를 채우되, 얼굴 메시가 소유·재적용하는 오벌 코어는 seg.r 램프가
             // 아니라 랜드마크 타원 게이트(_FndOval)로 제외한다 — seg.r로는 목까지 죽거나(코어↓)

@@ -475,6 +475,14 @@ export const SKIN_ZONE_SHAPES = [
   { value: 1, label: 'T존' },
   { value: 2, label: '볼 제외' },
 ];
+// 윤광(프라이머) 존 — _GlowShape로 _SkinGlow를 존만큼 곱한다. 피부결 존과 독립이라
+// "T존 매트 + 볼 윤광"이 동시에 성립. 3=볼만(볼 제외의 반전).
+export const GLOW_ZONE_SHAPES = [
+  { value: 0, label: '전체' },
+  { value: 1, label: 'T존' },
+  { value: 2, label: '볼 제외' },
+  { value: 3, label: '볼만' },
+];
 // 파운데 존 — _FoundationShape로 커버(fCov·fChroma)를 존만큼 곱한다. T존 집중=중앙 세로 스트립,
 // 외곽 페더=방사 외곽 감쇠(경계 자연 페이드).
 export const FOUNDATION_ZONE_SHAPES = [
@@ -878,7 +886,7 @@ export type TextureAction = 'brow' | 'eyeliner' | 'lip' | 'blush' | 'aegyo';
  *  대상 = FaceMakeup 캐노니컬 UV 존 마스크(블러셔·하이라이터·컨투어) + 아이섀도(밴드 로컬
  *  UV, Unity가 setRegionMask region=="eyeshadow"를 IrisRenderer로 특수분기). App의
  *  setRegionMask region 값과 1:1. */
-export type MaskRegion = 'blush' | 'highlighter' | 'contour' | 'eyeshadow';
+export type MaskRegion = 'blush' | 'highlighter' | 'contour' | 'eyeshadow' | 'eyeshadowLower';
 
 /** 질감 맵 임포트 대상(#22, 에셋 3층의 ③) — 픽셀별 "빛 반응 지도"로 부위 마감(광)을
  *  변조. 컬러 아트(TextureAction="무엇을")·존 마스크(MaskRegion="어디에")와 구분되는
@@ -1083,9 +1091,9 @@ export const REGION_GROUPS: RegionGroup[] = [
         key: 'skin',
         label: '피부결',
         emoji: '✨',
-        productName: '모공 프라이머',
-        onKeys: ['skinSmoothing', 'skinSmoothingExtended'],
-        defaults: { skinSmoothing: 0.5 },
+        productName: '프라이머',
+        onKeys: ['skinSmoothing', 'skinSmoothingExtended', 'skinGlow'],
+        defaults: { skinSmoothing: 0.5, skinDetailPreservation: 0.7 },
         axes: {
           // 존(W3) — 전체 / T존 / 볼 제외 (FaceMakeup _SkinShape가 결 보정 존 곱)
           shape: [
@@ -1098,18 +1106,20 @@ export const REGION_GROUPS: RegionGroup[] = [
           texture: [
             { type: 'segments', key: 'skinTexture', options: TONE_TEXTURES },
           ],
+          // 모공 프라이머(리터치) — PR #83 주파수 분리 축 노출. 티어 룩(내추럴/소프트/풀)이
+          // 이 세 슬라이더를 설정한다(부위 소유 원칙 — 잡티·코렉터는 부분 커버 소유).
           opacity: [
             { type: 'slider', label: '결 보정', key: 'skinSmoothing' },
+            { type: 'slider', label: '결 보존', key: 'skinDetailPreservation' },
+            { type: 'slider', label: '선명도', key: 'skinClarity', min: -1, max: 1, fallback: 0 },
             { type: 'slider', label: '이마·목 확장 (세그)', key: 'skinSmoothingExtended' },
           ],
-          finish: [{
-            type: 'segments',
-            key: 'skinGlow',
-            options: [
-              { value: 0, label: '모공 프라이머' },
-              { value: 0.5, label: '윤광 프라이머' },
-            ],
-          }],
+          // 윤광 프라이머 — 구 '마감' 양자택일 세그 해체. 윤광은 독립 축(강도+존)이라
+          // 모공 매트(결 보정 존)와 중첩 가능: "T존 매트 + 볼만 윤광"이 한 룩에 담긴다.
+          finish: [
+            { type: 'slider', label: '윤광', key: 'skinGlow' },
+            { type: 'segments', key: 'glowShape', options: GLOW_ZONE_SHAPES },
+          ],
         },
       },
       {
@@ -1147,8 +1157,18 @@ export const REGION_GROUPS: RegionGroup[] = [
         label: '부분 커버',
         emoji: '🩹',
         productName: '컨실러',
-        onKeys: ['concealerIntensity'],
-        defaults: { concealerIntensity: 0.5 },
+        onKeys: [
+          'concealerIntensity', 'blemishRemoval',
+          'correctorIntensity', 'corrector2Intensity', 'corrector3Intensity',
+        ],
+        // 코렉터 슬롯 색 규약 — 1=그린(홍조) 2=피치(다크서클) 3=라벤더(누런기).
+        // 색은 defaults가 고정하고 UI는 색별 강도만 노출한다(0=끔, 다중=중첩).
+        defaults: {
+          concealerIntensity: 0.5,
+          correctorColor: '#BFE3C8',
+          corrector2Color: '#F7C9A8',
+          corrector3Color: '#D9CBE8',
+        },
         note: '붉은기 자동 = 피드에서 붉은 픽셀만 골라 커버(홍조·트러블·콧볼)',
         axes: {
           // 모양(#19b) — 눈밑 존 / 붉은기 자동 (FaceMakeup 붉은기 게이트)
@@ -1169,6 +1189,11 @@ export const REGION_GROUPS: RegionGroup[] = [
             // 잡티 지우기(밀어내기) — 색을 얹지 않고 국소 이상치만 이웃 색으로 되민다
             // (FaceMakeup 피부 경로, 스무딩 선례). 임계·반경은 셰이더 v1 상수, 슬라이더는 강도만.
             { type: 'slider', label: '잡티 지우기', key: 'blemishRemoval' },
+            // 컬러 코렉터 3슬롯 — 색마다 강도를 따로 줘 중첩(그린+피치 동시). 슬롯 색은
+            // defaults 규약 고정, FaceMakeup ApplyCorrectorSlot 순차 적용.
+            { type: 'slider', label: '그린 코렉터 (홍조)', key: 'correctorIntensity' },
+            { type: 'slider', label: '피치 코렉터 (다크서클)', key: 'corrector2Intensity' },
+            { type: 'slider', label: '라벤더 코렉터 (누런기)', key: 'corrector3Intensity' },
           ],
         },
       },
@@ -1498,6 +1523,15 @@ export const REGION_GROUPS: RegionGroup[] = [
               label: '섀도 존 마스크',
               region: 'eyeshadow',
               appliedKey: 'eyeshadowMaskImported',
+            },
+            {
+              // 아래 섀도 실루엣(§16 하부 확장) — 전 하부 룩이 공용하는 _LowerSmokyMask
+              // 스왑. 위 마스크와 짝지어 고르면 "위아래 세트" 룩이 된다(밴드가 분리라
+              // 단일 마스크로는 위아래를 한 장에 못 담음 — PNG 상단=lash 주의).
+              type: 'maskImport',
+              label: '아래 존 마스크',
+              region: 'eyeshadowLower',
+              appliedKey: 'eyeshadowLowerMaskImported',
             },
           ],
           texture: [

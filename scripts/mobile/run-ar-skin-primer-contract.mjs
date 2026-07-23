@@ -26,13 +26,27 @@ const lookVariantsSource = readFileSync(
 
 assert.match(
   regionsSource,
-  /type:\s*'segments'[\s\S]*key:\s*'skinGlow'[\s\S]*'모공 프라이머'[\s\S]*'윤광 프라이머'/,
-  '피부결 상세에는 skinGlow 프라이머 선택지가 있어야 한다',
+  /type:\s*'slider',\s*label:\s*'윤광',\s*key:\s*'skinGlow'/,
+  '피부결 상세의 윤광은 독립 슬라이더여야 한다(양자택일 세그 해체)',
+);
+assert.match(
+  regionsSource,
+  /type:\s*'segments',\s*key:\s*'glowShape',\s*options:\s*GLOW_ZONE_SHAPES/,
+  '윤광 존 세그(glowShape)가 있어야 T존 매트+볼 윤광이 성립한다',
+);
+assert.ok(
+  !regionsSource.includes("label: '윤광 프라이머' }"),
+  '모공/윤광 프라이머 양자택일 세그 옵션은 해체되어야 한다',
 );
 assert.match(
   lookVariantsSource,
-  /'윤광 프라이머'[\s\S]*skinGlow:\s*0\.5[\s\S]*'모공 프라이머'[\s\S]*skinGlow:\s*0/,
-  '상세 트리의 프라이머 이름은 skinGlow 선택과 일치해야 한다',
+  /'skin-tier',\s*'natural',\s*'내추럴 보정'/,
+  '피부결 리터치 티어 룩(내추럴 보정)이 있어야 한다',
+);
+assert.match(
+  lookVariantsSource,
+  /corrector2Intensity:\s*0\.4/,
+  '코렉터 색 중첩(슬롯 2 동시 적용) 룩이 있어야 한다',
 );
 
 const result = spawnSync(process.execPath, [

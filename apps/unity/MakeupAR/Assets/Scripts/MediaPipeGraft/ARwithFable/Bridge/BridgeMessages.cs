@@ -141,6 +141,10 @@ namespace ARMakeup.Bridge
         public float blemishRemoval = 0f;            // 잡티 지우기(밀어내기) 0..1 — 넓은 이웃 대비 국소 이상치만 되밈 (0=현행 픽셀 동일)
         public string correctorColor = "#F7C9A8";   // 자동 코렉터(그린=홍조, 피치=푸른기, 라벤더=노란기)
         public float correctorIntensity = 0f;        // 색 계열 기반 자동 셀렉터 강도(마스크 선택 없음)
+        public string corrector2Color = "#F7C9A8";   // 코렉터 슬롯 2 — 색별 강도 중첩. 슬롯 규약: 1=그린 2=피치 3=라벤더
+        public float corrector2Intensity = 0f;
+        public string corrector3Color = "#D9CBE8";   // 코렉터 슬롯 3 (라벤더=누런기)
+        public float corrector3Intensity = 0f;
         // ── 베이스 팩(#18) — 전부 0/""=기존 픽셀 동일 ──
         public string foundationColor = "#E8C4A8";  // 파운데이션 색(밝은 쿨~딥 웜)
         public float foundationIntensity = 0f;      // 커버리지(0=끔)
@@ -381,6 +385,7 @@ namespace ARMakeup.Bridge
         // ── 모양 축 W3 피부 존 (FaceMakeup.shader 존 게이트, powderShape 선례) — 생략 0 = 현행 픽셀 동일 ──
         public int toneShape = 0;        // 언더톤 존: 0=전체 1=T존 2=얼굴 중앙 — FaceMakeup(_Brightening 존 곱)
         public int skinShape = 0;        // 피부결 존: 0=전체 1=T존 2=볼 제외 — FaceMakeup(_Smoothing 존 곱)
+        public int glowShape = 0;        // 윤광 존: 0=전체 1=T존 2=볼 제외 3=볼만 — FaceMakeup(_SkinGlow 존 곱, skinShape와 독립)
         public int foundationShape = 0;  // 파운데 존: 0=전체 1=T존 집중 2=외곽 페더 — FaceMakeup 얼굴 메시(커버 존 곱)
         // ── 모양 축 W4 립 실루엣/존 (Lip.shader, 링 메시 uv.y=중앙도·uv2.y=윗입술도) — 생략 0 = 현행 픽셀 동일 ──
         public int lipBaseShape = 0;     // 베이스립: 0=전체 1=중앙 그라데 2=외곽 정리 — LipRenderer(메인 립 메시)
@@ -426,6 +431,10 @@ namespace ARMakeup.Bridge
                 concealerColor = null,
                 correctorColor = null,
                 correctorIntensity = 0f,
+                corrector2Color = null,
+                corrector2Intensity = 0f,
+                corrector3Color = null,
+                corrector3Intensity = 0f,
                 foundationColor = null,
                 toneTexture = -1,
                 skinTexture = -1,
@@ -504,6 +513,8 @@ namespace ARMakeup.Bridge
                 skinClarity = 0f,
                 skinBrightening = 0f,
                 correctorIntensity = 0f,
+                corrector2Intensity = 0f,
+                corrector3Intensity = 0f,
                 lipIntensity = 0f,
                 blushIntensity = 0f,
                 eyeshadowIntensity = 0f,
@@ -676,7 +687,7 @@ namespace ARMakeup.Bridge
         public string facing; // setCamera: "front" | "rear"
         public CalibrationParams calibration;
         public string path;   // setBrowStyle/setFaceOverlay/setRegionMask/setTextureMap: 임포트할 이미지 파일 경로 (file:// · http(s):// 원격 카탈로그 §16 v2 허용)
-        public string region; // setRegionMask: "blush" | "highlighter" | "contour" | "eyeshadow" (모양 축 존 스텐실; eyeshadow=동적 밴드 밴드-로컬 마스크) · setTextureMap: "lip" | "eyeshadow" | "blush" (질감 맵=마감 광 지도)
+        public string region; // setRegionMask: "blush" | "highlighter" | "contour" | "eyeshadow" | "eyeshadowLower" (모양 축 존 스텐실; eyeshadow=위 밴드 밴드-로컬 마스크, eyeshadowLower=하안검 밴드 실루엣 마스크) · setTextureMap: "lip" | "eyeshadow" | "blush" (질감 맵=마감 광 지도)
         public OverlayLayerParams[] overlayLayers; // setOverlayLayers: 캐노니컬 N장 (순서=그리기 순서)
         public LensLayerParams[] lensLayers; // setLensLayers: 렌즈 세부 N장 (#25, 순서=합성 순서)
         public EyeshadowLayerParams[] eyeshadowLayers; // setEyeshadowLayers: 아이섀도 밴드 N장 (A14 ①, 순서=아래→위)

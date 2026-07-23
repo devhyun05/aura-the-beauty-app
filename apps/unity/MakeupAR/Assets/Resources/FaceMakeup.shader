@@ -96,6 +96,13 @@ Shader "ARMakeup/FaceMakeup"
         _ConcealerIntensity ("Concealer Intensity", Range(0, 1)) = 0
         _CorrectorColor ("Automatic Corrector Color", Color) = (0.969, 0.788, 0.659, 1)
         _CorrectorIntensity ("Automatic Corrector Intensity", Range(0, 1)) = 0
+        // 코렉터 슬롯 2·3 — 색마다 강도를 따로 주는 다중 중첩(그린+피치 동시).
+        // 슬롯1과 같은 자동 셀렉터를 순차 적용. 강도 0=슬롯 무효(하위호환).
+        // 슬롯 색 규약(UI defaults): 1=그린(홍조) 2=피치(다크서클) 3=라벤더(누런기)
+        _Corrector2Color ("Corrector Slot 2 Color", Color) = (0.969, 0.788, 0.659, 1)
+        _Corrector2Intensity ("Corrector Slot 2 Intensity", Range(0, 1)) = 0
+        _Corrector3Color ("Corrector Slot 3 Color", Color) = (0.851, 0.796, 0.910, 1)
+        _Corrector3Intensity ("Corrector Slot 3 Intensity", Range(0, 1)) = 0
         // 컨실러 마감(붉은기 자동 경로) — 블러셔와 동일 enum. ApplyFinish 레거시 경로(세부 0)라
         // 0=새틴=기존 출력과 바이트 동일(하위호환). LowerLid(눈밑존)와 같은 필드(concealerFinish) 공용.
         _ConcealerFinish ("Concealer Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
@@ -126,6 +133,8 @@ Shader "ARMakeup/FaceMakeup"
         _PowderShimmer ("Powder Shimmer Gain", Range(0, 1)) = 0.5
         _ToneBaseColor ("Tone Base Cast (white=none)", Color) = (1, 1, 1, 1)
         _SkinGlow ("Primer Glow", Range(0, 1)) = 0
+        // 윤광 존 — _SkinShape 선례 + 3=볼만(블러셔 존 반전). 0=전체(현행 바이트 동일).
+        _GlowShape ("Glow Zone (0 all 1 tzone 2 no-cheek 3 cheek-only)", Float) = 0
         // 애교살은 LowerLid.shader(하안검 밴드 정식판, 랜드마크 정밀)로 이관.
         // 사용자가 UV 템플릿 위에 그린 메이크업 룩(얼굴 UV 데칼). 알파=그린 영역,
         // RGB=그린 색 그대로. setFaceOverlay로 런타임 임포트.
@@ -282,6 +291,10 @@ Shader "ARMakeup/FaceMakeup"
             float _ConcealerShape; // 0=눈밑 존(밴드로 이관, 무효) 1=붉은기 자동
             fixed4 _CorrectorColor;
             float _CorrectorIntensity;
+            fixed4 _Corrector2Color;   // 코렉터 슬롯 2 (색별 강도 중첩)
+            float _Corrector2Intensity;
+            fixed4 _Corrector3Color;   // 코렉터 슬롯 3
+            float _Corrector3Intensity;
             float _BlemishRemoval; // 잡티 지우기(밀어내기) 강도 — 0=현행 픽셀 동일
             float _PowderShape;    // 0=전체 1=T존 2=볼 제외
             // 붉은기 자동 게이트(#19b) — 치아 미백 redness 게이트의 역방향(붉은 픽셀 선택).
@@ -379,10 +392,17 @@ Shader "ARMakeup/FaceMakeup"
             float _PowderShimmer;
             fixed4 _ToneBaseColor;
             float _SkinGlow;
+            float _GlowShape;        // 윤광 존: 0=전체 1=T존 2=볼 제외 3=볼만
             // 파운데이션 target/softclip/blend 상수와 제형 램프는 Foundation.cginc에서
             // 얼굴·목 경로가 공유한다. 아래는 파우더·프라이머 전용 튜닝 상수.
-            #define GLOW_SPEC_LO 0.6         // 실기기 튜닝 대상
-            #define GLOW_GAIN 0.35           // 실기기 튜닝 대상
+            // 윤광 v2(젖은 반사 모델) — 실기기 튜닝 대상. 코어 창을 좁혀 실제 반사
+            // 지점에만 광이 맺히고, 마이크로 시인이 결 능선의 잔광택을 담당한다.
+            #define GLOW_CORE_LO 0.68        // 코어 하이라이트 창 하한(원본 루마)
+            #define GLOW_CORE_HI 0.92        // 코어 하이라이트 창 상한
+            #define GLOW_GAIN 0.5            // 코어 게인(스크린 혼합이라 가산보다 안전)
+            #define GLOW_MICRO_GAIN 5.0      // 고주파(원본−스무딩) 시인 증폭
+            #define GLOW_MICRO_FLOOR 0.45    // 마이크로 시인 루마 하한(그늘 결엔 광 없음)
+            #define GLOW_MICRO_MIX 0.25      // 마이크로 시인 기여 상한
             #define POWDER_SHINE_LO 0.62     // 실기기 튜닝 대상
             // 이전 0.5는 하이라이트를 최대 50% 감쇠 → 파운데가 이미 압축한 하이라이트를
             // 이중으로 눌러 입체 소실(밋밋). 유분광만 부드럽게 눌러 매트감은 남기고 입체 보존.
@@ -642,6 +662,44 @@ Shader "ARMakeup/FaceMakeup"
                 return lerp(col, target, cover);
             }
 
+            // 컬러 코렉터 한 슬롯 — 스와치 색 계열이 셀렉터를 자동 결정한다. 그린은 홍조,
+            // 피치는 푸른기, 라벤더는 노란기만 이웃 대비 이상치로 선택한다. 별도 위치
+            // 마스크나 선택 UI가 없고, 강한 특징색은 상한 밴드로 보호한다. 슬롯을 순차
+            // 적용해 색별 강도 중첩(그린+피치 동시)을 지원한다. 강도 0 = 항등.
+            fixed3 ApplyCorrectorSlot(fixed3 col, fixed3 original, fixed3 neighborhood,
+                                      fixed4 productColor, float intensity)
+            {
+                if (intensity <= 0.001) return col;
+
+                float redAnomaly = (original.r - max(original.g, original.b))
+                                 - (neighborhood.r - max(neighborhood.g, neighborhood.b));
+                float blueAnomaly = (original.b - max(original.r, original.g))
+                                  - (neighborhood.b - max(neighborhood.r, neighborhood.g));
+                float yellowAnomaly = (min(original.r, original.g) - original.b)
+                                    - (min(neighborhood.r, neighborhood.g) - neighborhood.b);
+
+                float greenAffinity = saturate((productColor.g
+                                      - max(productColor.r, productColor.b)) * 8.0);
+                float peachAffinity = saturate((productColor.r - productColor.b) * 5.0);
+                float lavenderAffinity = saturate((min(productColor.r, productColor.b)
+                                         - productColor.g) * 8.0);
+                float affinitySum = max(greenAffinity + peachAffinity + lavenderAffinity, 1e-4);
+                float anomaly = (max(redAnomaly, 0.0) * greenAffinity
+                               + max(blueAnomaly, 0.0) * peachAffinity
+                               + max(yellowAnomaly, 0.0) * lavenderAffinity) / affinitySum;
+                float selector = smoothstep(CR_ANOMALY_LO, CR_ANOMALY_HI, anomaly)
+                               * (1.0 - smoothstep(CR_FEATURE_HI, CR_FEATURE_HI + 0.05, anomaly));
+
+                float sourceLuma = dot(col, fixed3(0.299, 0.587, 0.114));
+                float productLuma = max(dot(productColor.rgb,
+                                            fixed3(0.299, 0.587, 0.114)), 1e-4);
+                fixed3 correctorTarget = col * (productColor.rgb / productLuma);
+                float targetLuma = max(dot(correctorTarget,
+                                           fixed3(0.299, 0.587, 0.114)), 1e-4);
+                correctorTarget *= sourceLuma / targetLuma;
+                return lerp(col, saturate(correctorTarget), selector * intensity * 0.65);
+            }
+
             fixed4 frag(v2f i) : SV_Target
             {
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
@@ -690,41 +748,14 @@ Shader "ARMakeup/FaceMakeup"
                     col = saturate(col + (wide - original) * (pull * _BlemishRemoval));
                 }
 
-                // 컬러 코렉터 — 스와치 색 계열이 셀렉터를 자동 결정한다. 그린은 홍조,
-                // 피치는 푸른기, 라벤더는 노란기만 이웃 대비 이상치로 선택한다. 별도 위치
-                // 마스크나 선택 UI가 없고, 강한 특징색은 상한 밴드로 보호한다.
-                if (_CorrectorIntensity > 0.001)
-                {
-                    fixed3 neighborhood = smoothed;
-                    float redAnomaly = (original.r - max(original.g, original.b))
-                                     - (neighborhood.r - max(neighborhood.g, neighborhood.b));
-                    float blueAnomaly = (original.b - max(original.r, original.g))
-                                      - (neighborhood.b - max(neighborhood.r, neighborhood.g));
-                    float yellowAnomaly = (min(original.r, original.g) - original.b)
-                                        - (min(neighborhood.r, neighborhood.g) - neighborhood.b);
-
-                    float greenAffinity = saturate((_CorrectorColor.g
-                                          - max(_CorrectorColor.r, _CorrectorColor.b)) * 8.0);
-                    float peachAffinity = saturate((_CorrectorColor.r - _CorrectorColor.b) * 5.0);
-                    float lavenderAffinity = saturate((min(_CorrectorColor.r, _CorrectorColor.b)
-                                             - _CorrectorColor.g) * 8.0);
-                    float affinitySum = max(greenAffinity + peachAffinity + lavenderAffinity, 1e-4);
-                    float anomaly = (max(redAnomaly, 0.0) * greenAffinity
-                                   + max(blueAnomaly, 0.0) * peachAffinity
-                                   + max(yellowAnomaly, 0.0) * lavenderAffinity) / affinitySum;
-                    float selector = smoothstep(CR_ANOMALY_LO, CR_ANOMALY_HI, anomaly)
-                                   * (1.0 - smoothstep(CR_FEATURE_HI, CR_FEATURE_HI + 0.05, anomaly));
-
-                    float sourceLuma = dot(col, fixed3(0.299, 0.587, 0.114));
-                    float productLuma = max(dot(_CorrectorColor.rgb,
-                                                fixed3(0.299, 0.587, 0.114)), 1e-4);
-                    fixed3 correctorTarget = col * (_CorrectorColor.rgb / productLuma);
-                    float targetLuma = max(dot(correctorTarget,
-                                               fixed3(0.299, 0.587, 0.114)), 1e-4);
-                    correctorTarget *= sourceLuma / targetLuma;
-                    col = lerp(col, saturate(correctorTarget),
-                               selector * _CorrectorIntensity * 0.65);
-                }
+                // 컬러 코렉터 — 슬롯 3개 순차 적용(색별 강도 중첩, 그린+피치 동시).
+                // 셀렉터 판정 기준(original/smoothed)은 슬롯 공통, 틴트만 누적된다.
+                col = ApplyCorrectorSlot(col, original, smoothed,
+                                         _CorrectorColor, _CorrectorIntensity);
+                col = ApplyCorrectorSlot(col, original, smoothed,
+                                         _Corrector2Color, _Corrector2Intensity);
+                col = ApplyCorrectorSlot(col, original, smoothed,
+                                         _Corrector3Color, _Corrector3Intensity);
 
                 col = saturate(col * (1.0 + 0.18 * toneAmt) + 0.04 * toneAmt);
 
@@ -738,9 +769,27 @@ Shader "ARMakeup/FaceMakeup"
                 TexBundleFromEnum(0.0, _ToneTexture, toneTexEdge, toneTexGrain, toneTexCoverage, toneTexBody);
                 col = TexGrain(col, i.uv, toneTexGrain * saturate(toneAmt));
 
-                // 프라이머 윤광 — 기존 luma 스펙 추출 재사용, 하이라이트만 증폭(0=무효과).
-                float glowSpec = smoothstep(GLOW_SPEC_LO, 1.0, dot(col, fixed3(0.299, 0.587, 0.114)));
-                col = saturate(col + _SkinGlow * glowSpec * GLOW_GAIN);
+                // 프라이머 윤광 v2 — 발광 리프트('피부가 조명') 문제 수정, 젖은 반사 모델.
+                //  · 판정은 원본 피드 루마 — 톤업·파운데로 밝아진 픽셀에 광이 재귀로
+                //    붙던 피드백을 끊는다(v1은 보정 후 col 루마 0.6↑ 전면 가산 = 면 발광)
+                //  · 코어: 좁은 상위 루마 창(²) — 실제 조명이 반사되는 지점에만 광이 맺힘
+                //  · 마이크로 시인: 고주파(원본−스무딩) 밝은 성분 — 결 능선의 잔광택
+                //  · 스크린 혼합(1-col 스케일) — 화이트 블로우아웃 없이 색 보존
+                // 존(_GlowShape)은 피부결 존(_SkinShape)과 독립 곱 게이트 — T존 매트+볼 윤광
+                // 동시 성립. 3=볼만은 볼 제외의 반전(파우더 캐노니컬 존 어휘 재사용).
+                float glowZone = 1.0;
+                if (_GlowShape > 2.5)      glowZone = smoothstep(PWD_CHEEK_LO, PWD_CHEEK_HI, faceDx);
+                else if (_GlowShape > 1.5) glowZone = 1.0 - smoothstep(PWD_CHEEK_LO, PWD_CHEEK_HI, faceDx);
+                else if (_GlowShape > 0.5) glowZone = 1.0 - smoothstep(PWD_TZONE_LO, PWD_TZONE_HI, faceDx);
+                float glowLuma = dot(original, fixed3(0.299, 0.587, 0.114));
+                float glowCore = smoothstep(GLOW_CORE_LO, GLOW_CORE_HI, glowLuma);
+                glowCore *= glowCore;
+                float glowMicro = saturate(
+                    (glowLuma - dot(smoothed, fixed3(0.299, 0.587, 0.114))) * GLOW_MICRO_GAIN)
+                    * smoothstep(GLOW_MICRO_FLOOR, GLOW_CORE_LO, glowLuma);
+                float glowAmt = _SkinGlow * glowZone;
+                col = saturate(col + (glowCore * GLOW_GAIN + glowMicro * GLOW_MICRO_MIX)
+                               * glowAmt * (1.0 - col));
 
                 // 파운데이션 — 루마 보존 커버(피부색→파운데색 보간, 원본 명암 유지) +
                 // 커버리지 비례 chroma 평탄화(잡티 감쇠). 마감은 ApplyFinish 사다리

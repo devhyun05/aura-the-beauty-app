@@ -32,6 +32,10 @@ namespace ARMakeup.Face
         static readonly int ConcealerTextureId = Shader.PropertyToID("_ConcealerTexture");
         static readonly int CorrectorColorId = Shader.PropertyToID("_CorrectorColor");
         static readonly int CorrectorIntensityId = Shader.PropertyToID("_CorrectorIntensity");
+        static readonly int Corrector2ColorId = Shader.PropertyToID("_Corrector2Color");
+        static readonly int Corrector2IntensityId = Shader.PropertyToID("_Corrector2Intensity");
+        static readonly int Corrector3ColorId = Shader.PropertyToID("_Corrector3Color");
+        static readonly int Corrector3IntensityId = Shader.PropertyToID("_Corrector3Intensity");
         static readonly int PowderTextureId = Shader.PropertyToID("_PowderTexture");
         static readonly int BlushFinishId = Shader.PropertyToID("_BlushFinish");
         static readonly int BlushShimmerId = Shader.PropertyToID("_BlushShimmer");
@@ -146,6 +150,7 @@ namespace ARMakeup.Face
         static readonly int PowderShimmerId = Shader.PropertyToID("_PowderShimmer");
         static readonly int ToneBaseColorId = Shader.PropertyToID("_ToneBaseColor");
         static readonly int SkinGlowId = Shader.PropertyToID("_SkinGlow");
+        static readonly int GlowShapeId = Shader.PropertyToID("_GlowShape");
         // A15 펄/시머 방향 게인 — Finish.cginc 공용(립·아이섀도·블러셔). Init에서 1회 전역
         // 설정하는 고정값(v1은 RN 필드 없음). 0=완전 하위호환, 시머 있는 룩만 시각 변화.
         static readonly int PearlLightGainId = Shader.PropertyToID("_PearlLightGain");
@@ -799,6 +804,14 @@ namespace ARMakeup.Face
                 if (IrisRenderer.Instance != null) IrisRenderer.Instance.SetEyeshadowDesignFromFile(path);
                 return;
             }
+            // 아래 섀도도 캐노니컬 UV 슬롯이 아니라 하안검 밴드(LowerLidRenderer 소유) —
+            // 전 하부 룩이 공용하는 실루엣 마스크(_LowerSmokyMask)를 스왑한다. _material 무관.
+            if (region == "eyeshadowLower")
+            {
+                if (LowerLidRenderer.Instance != null)
+                    LowerLidRenderer.Instance.SetLowerShadowMaskFromFile(path);
+                return;
+            }
             if (_material == null) return;
             if (!TryMaskRegion(region, out var slot, out var label))
             {
@@ -1268,6 +1281,18 @@ namespace ARMakeup.Face
                 mat.SetColor(CorrectorColorId, new Color(0.969f, 0.788f, 0.659f, 1f));
             else
                 SetColor(mat, CorrectorColorId, p.correctorColor);
+            // 코렉터 슬롯 2·3 — 색별 강도 중첩(그린+피치 동시). 색 미전송 시 슬롯 기본색
+            // 복원(공유 머티리얼 스테일 유출 방지, toneBaseColor 선례). 강도 0=슬롯 무효.
+            mat.SetFloat(Corrector2IntensityId, Mathf.Clamp01(p.corrector2Intensity));
+            if (string.IsNullOrEmpty(p.corrector2Color))
+                mat.SetColor(Corrector2ColorId, new Color(0.969f, 0.788f, 0.659f, 1f));
+            else
+                SetColor(mat, Corrector2ColorId, p.corrector2Color);
+            mat.SetFloat(Corrector3IntensityId, Mathf.Clamp01(p.corrector3Intensity));
+            if (string.IsNullOrEmpty(p.corrector3Color))
+                mat.SetColor(Corrector3ColorId, new Color(0.851f, 0.796f, 0.910f, 1f));
+            else
+                SetColor(mat, Corrector3ColorId, p.corrector3Color);
             // 축 개선(#19b) — 부분 커버 모양(0=눈밑 1=붉은기 자동)·파우더 존(0=전체 1=T존 2=볼 제외).
             // 생략(JsonUtility 0) = 기존 동작. FaceMakeup.shader가 float 분기.
             mat.SetFloat(ConcealerShapeId, p.concealerShape);
@@ -1286,6 +1311,8 @@ namespace ARMakeup.Face
             else
                 SetColor(mat, ToneBaseColorId, p.toneBaseColor);
             mat.SetFloat(SkinGlowId, Mathf.Clamp01(p.skinGlow));
+            // 윤광 존 — 피부결 존과 독립 곱 게이트(T존 매트+볼 윤광). 생략(0)=전체=현행.
+            mat.SetFloat(GlowShapeId, p.glowShape);
             // 제형(텍스처) — 언더톤·피부결(TONE 템플릿 grain만). 0=매끈=현행(하위호환).
             mat.SetFloat(ToneTextureId, p.toneTexture);
             mat.SetFloat(SkinTextureId, p.skinTexture);

@@ -247,6 +247,7 @@ namespace ARMakeup.Face
                 if (_eyeshadowDesign != null) { Destroy(_eyeshadowDesign); _eyeshadowDesign = null; }
                 esMat.SetTexture(EyeshadowDesignId, Texture2D.whiteTexture);
                 esMat.SetFloat(EyeshadowHasDesignId, 0f);
+                esMat.SetFloat(EyeshadowDesignWideId, 0f);
                 return;
             }
             if (!ImageFileLoader.TryLoadMask(path, out var mask, out var error))
@@ -259,6 +260,10 @@ namespace ARMakeup.Face
             _eyeshadowDesign = mask;
             esMat.SetTexture(EyeshadowDesignId, mask);
             esMat.SetFloat(EyeshadowHasDesignId, 1f);
+            // 와이드 계약(§16b) — 가로 2:1 이상이면 u 0..2(눈+연장) 전체를 덮는 마스크로
+            // 간주(x=u/2 샘플 + 연장 게이트 개방). 표준 1:1은 기존 계약 그대로.
+            esMat.SetFloat(EyeshadowDesignWideId,
+                mask.width >= mask.height * 2 ? 1f : 0f);
         }
 
         /// <summary>렌즈 레이어드(#25) — 3세부 슬롯 배열을 셰이더 유니폼에 기록한다
@@ -597,6 +602,7 @@ namespace ARMakeup.Face
         Texture2D _eyeshadowFinishMap; // 소유(교체·해제 시 파기)
         static readonly int EyeshadowDesignId = Shader.PropertyToID("_EyeshadowDesign");       // 모양 마스크(§16)
         static readonly int EyeshadowHasDesignId = Shader.PropertyToID("_EyeshadowHasDesign");
+        static readonly int EyeshadowDesignWideId = Shader.PropertyToID("_EyeshadowDesignWide"); // §16b 와이드(u 0..2)
         Texture2D _eyeshadowDesign; // 소유(교체·해제 시 파기)
         // ── 멀티밴드(A14 ①) — Eyeshadow.shader ES_MAX와 일치. 밴드당 색(rgb)+강도(a),
         // 색2(그라데 스톱B), param(cutoff·finish·shape·gradient). 배열은 SetVectorArray로,

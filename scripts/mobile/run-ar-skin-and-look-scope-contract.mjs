@@ -129,4 +129,113 @@ assert.match(
   '콧볼 피부는 보호 타원에서 제외하고 실제 콧구멍만 보호해야 한다',
 );
 
+// ── 피부 룩 개편(0724) — 윤광 존 곱 + 코렉터 3슬롯 엔진 계약 ──
+const stencilTypesSource = readFileSync(
+  join(repoRoot, 'apps/mobile/src/features/ar/stencil/src/bridge/types.ts'),
+  'utf8',
+);
+const bridgeMessagesSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Bridge/BridgeMessages.cs',
+  ),
+  'utf8',
+);
+
+assert.match(
+  faceMakeupSource,
+  /float _GlowShape;/,
+  '윤광 존 uniform(_GlowShape)이 선언되어야 한다',
+);
+assert.match(
+  faceMakeupSource,
+  /float glowLuma = dot\(original, fixed3\(0\.299, 0\.587, 0\.114\)\);/,
+  '윤광 판정은 보정 후가 아니라 원본 피드 루마 기준이어야 한다(발광 피드백 차단)',
+);
+assert.match(
+  faceMakeupSource,
+  /float glowAmt = _SkinGlow \* glowZone;/,
+  '윤광은 존 곱 게이트를 거쳐야 한다(T존 매트+볼 윤광 성립)',
+);
+assert.match(
+  faceMakeupSource,
+  /\* glowAmt \* \(1\.0 - col\)\);/,
+  '윤광은 가산이 아니라 스크린 혼합(1-col 스케일)이어야 한다(화이트 블로우아웃 방지)',
+);
+assert.match(
+  faceMakeupSource,
+  /if \(_GlowShape > 2\.5\)\s+glowZone = smoothstep\(PWD_CHEEK_LO, PWD_CHEEK_HI, faceDx\);/,
+  '윤광 존 3=볼만은 볼 제외 마스크의 반전이어야 한다',
+);
+assert.match(
+  faceMakeupSource,
+  /fixed3 ApplyCorrectorSlot\(fixed3 col, fixed3 original, fixed3 neighborhood,/,
+  '코렉터는 슬롯 함수로 분리되어 다중 적용 가능해야 한다',
+);
+assert.match(
+  faceMakeupSource,
+  /_Corrector2Color, _Corrector2Intensity\);[\s\S]*_Corrector3Color, _Corrector3Intensity\);/,
+  '코렉터 슬롯 2·3이 순차 적용되어야 한다(색별 강도 중첩)',
+);
+assert.match(
+  makeupControllerSource,
+  /mat\.SetFloat\(GlowShapeId, p\.glowShape\);/,
+  '브리지 glowShape가 셰이더 윤광 존으로 배선되어야 한다',
+);
+assert.match(
+  makeupControllerSource,
+  /mat\.SetFloat\(Corrector2IntensityId, Mathf\.Clamp01\(p\.corrector2Intensity\)\);/,
+  '코렉터 슬롯 2 강도가 배선되어야 한다',
+);
+assert.match(
+  makeupControllerSource,
+  /mat\.SetFloat\(Corrector3IntensityId, Mathf\.Clamp01\(p\.corrector3Intensity\)\);/,
+  '코렉터 슬롯 3 강도가 배선되어야 한다',
+);
+// wire 키 이름은 RN(types.ts)과 C#(BridgeMessages.cs)이 JsonUtility로 일치해야 한다.
+for (const key of ['glowShape', 'corrector2Color', 'corrector2Intensity', 'corrector3Color', 'corrector3Intensity']) {
+  assert.ok(
+    stencilTypesSource.includes(`${key}?:`),
+    `RN FilterParams에 ${key} 키가 있어야 한다`,
+  );
+  assert.ok(
+    new RegExp(`public (float|int|string) ${key}`).test(bridgeMessagesSource),
+    `Unity FilterParams에 ${key} 필드가 있어야 한다`,
+  );
+}
+assert.match(
+  bridgeMessagesSource,
+  /corrector2Intensity = 0f,[\s\S]*corrector3Intensity = 0f,/,
+  '코렉터 슬롯 강도는 wire 기본값 중화 목록에 있어야 한다(스테일 유출 방지)',
+);
+
+// ── 헤어라인 안정화(0724) — 세그 마스크 EMA + 페더 밴드 완화 ──
+const segmentationSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Face/SegmentationSource.cs',
+  ),
+  'utf8',
+);
+assert.match(
+  segmentationSource,
+  /SegMaskEmaNewWeight/,
+  '세그 마스크는 EMA 시간 안정화를 거쳐 업로드되어야 한다(헤어라인 울렁임 방지)',
+);
+assert.match(
+  segmentationSource,
+  /_maskTexture\.LoadRawTextureData\(_emaRgba\);/,
+  '업로드는 원시 프레임이 아니라 EMA 버퍼여야 한다',
+);
+assert.match(
+  segmentationSource,
+  /_emaRgba = null; \/\/ 카메라 전환/,
+  '카메라 전환 시 EMA 이력을 리셋해야 한다(이전 카메라 마스크 혼입 방지)',
+);
+assert.match(
+  cameraFeedSource,
+  /#define SEG_SMOOTH_SKIN_HI 0\.55\b/,
+  '확장 스무딩 페더 밴드는 지터 민감도를 낮춘 0.10~0.55여야 한다',
+);
+
 console.log('AR skin and look-scope runner passed');

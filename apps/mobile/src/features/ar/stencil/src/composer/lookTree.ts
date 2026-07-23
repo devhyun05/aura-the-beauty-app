@@ -309,11 +309,29 @@ function labelForValue(
   return opts.find(o => o.value === v)?.label ?? '';
 }
 
+/** 피부결 리터치 티어 — 프리셋 분해 skin 잎을 흡수하는 강도 구간(lookVariants
+ *  'skin-tier' 룩 3종과 이름·경계 정합). 분해 잎은 tierNameForSkin으로 티어 이름만
+ *  물려받고 internal로 숨긴다 — 잎 params는 그대로라 프리셋 시각 무손상. */
+export const SKIN_TIERS = [
+  { name: '내추럴 보정', maxSmoothing: 0.5 },
+  { name: '소프트 보정', maxSmoothing: 0.55 },
+  { name: '풀 보정', maxSmoothing: Number.POSITIVE_INFINITY },
+] as const;
+
+function tierNameForSkin(params: Partial<FilterParams>): string {
+  const smoothing = params.skinSmoothing ?? 0;
+  for (const tier of SKIN_TIERS) {
+    if (smoothing <= tier.maxSmoothing) return tier.name;
+  }
+  return SKIN_TIERS[SKIN_TIERS.length - 1].name;
+}
+
 /**
  * 세부부위(sub) 정의의 표시 이름 — 프리셋 이름 대신 잎 자신의 특성에서 유도한다.
  *  ① 색 부위 → 대표색 계열("브라운 섀도")  ② 라이너·마스카라 → 스타일("돌리 마스카라")
  *  ③ 파운데 → 마감("듀이 파운데")  ④ 그 외 → 노운만("피부결"). 모두 실패하면 노운.
  * 중복(프리셋마다 유사)은 호출부가 번호로 가른다(setSubName dedup).
+ * 예외: skin은 buildSystemLibrary가 tierNameForSkin(강도 티어)으로 직접 명명한다.
  */
 function systemSubName(
   region: RegionKey,
@@ -370,7 +388,13 @@ export function buildSystemLibrary(): LookLibrary {
         const label = REGION_MAP[layer.region].label;
         const subId = `sys:${preset.id}:${layer.region}`;
         // 세부부위 이름 = 잎 특성 유도(프리셋명 미사용) + 부위 내 중복 시 번호.
-        const baseName = systemSubName(layer.region, layer.params, layer.lens?.color);
+        // skin은 강도 티어 이름으로 흡수 + internal — 스무딩 0.05 차이뿐인 "피부결 N"
+        // 번호 카드 6장이 픽커를 채우던 문제. 표시는 lookVariants 'skin-tier' 3종이
+        // 담당하고, 분해 잎은 프리셋 합성용으로만 남는다(시각 무손상).
+        const absorbedSkin = layer.region === 'skin';
+        const baseName = absorbedSkin
+          ? tierNameForSkin(layer.params)
+          : systemSubName(layer.region, layer.params, layer.lens?.color);
         const perRegion = usedSubNames.get(layer.region) ?? new Map<string, number>();
         const count = (perRegion.get(baseName) ?? 0) + 1;
         perRegion.set(baseName, count);
@@ -382,6 +406,7 @@ export function buildSystemLibrary(): LookLibrary {
           level: 'sub',
           slot,
           owner: 'system',
+          ...(absorbedSkin ? { internal: true } : {}),
           kids: [
             {
               label,

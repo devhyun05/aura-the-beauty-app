@@ -460,6 +460,7 @@ const MASK_SPEC = {
   highlighter: { region: 'highlighter', appliedKey: 'highlightMaskImported' },
   contour: { region: 'contour', appliedKey: 'contourMaskImported' },
   eyeshadow: { region: 'eyeshadow', appliedKey: 'eyeshadowMaskImported' },
+  eyeshadowLower: { region: 'eyeshadowLower', appliedKey: 'eyeshadowLowerMaskImported' },
 } as const;
 
 // 질감 맵 임포트(#22, 에셋 3층의 ③) → setTextureMap region + 세션 적용 마커 필드.
@@ -667,6 +668,7 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
     highlighter: null,
     contour: null,
     eyeshadow: null,
+    eyeshadowLower: null,
   });
   // 질감 맵(#22) 세션 상태 — 마스크와 동형(저장 스냅샷 미포함, 파일은 세션 한정).
   //  mapPaths: 이번 세션에 임포트한 부위별 광 지도 파일 경로.

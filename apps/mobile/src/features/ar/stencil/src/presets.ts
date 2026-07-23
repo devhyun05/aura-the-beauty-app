@@ -110,8 +110,13 @@ export const BARE: FilterParams = {
   contourShimmer: 0.5,
   concealerColor: '#FADCC2',
   concealerIntensity: 0,
-  correctorColor: '#F7C9A8',
+  // 코렉터 3슬롯 — 색별 강도 중첩. 슬롯 색 규약: 1=그린(홍조) 2=피치(다크서클) 3=라벤더(누런기)
+  correctorColor: '#BFE3C8',
   correctorIntensity: 0,
+  corrector2Color: '#F7C9A8',
+  corrector2Intensity: 0,
+  corrector3Color: '#D9CBE8',
+  corrector3Intensity: 0,
   // 베이스 팩(#18) — 전부 0/""=기존 픽셀 동일
   foundationColor: '#E8C4A8',
   foundationIntensity: 0,

@@ -482,8 +482,9 @@ export function buildVariantLibrary(): LookLibrary {
 
   // ── 피부 3종 — 카탈로그 "피부 — 베이스" 제형 잎으로. 글로우/세미매트/커버.
   //    각 잎은 부위 소유 필드만(tone=skinBrightening/toneBaseColor,
-  //    skin=skinSmoothing/skinGlow, foundation=foundationColor/Intensity/Finish,
-  //    powder=powderIntensity, concealer=concealerColor/Intensity).
+  //    skin=skinSmoothing/skinDetailPreservation/skinClarity/skinGlow(+skinShape/glowShape),
+  //    foundation=foundationColor/Intensity/Finish, powder=powderIntensity,
+  //    concealer=concealerColor/Intensity + blemishRemoval/corrector*).
   addRegionLook(lib, 'skin', 'glow', '글로우 스킨', '피부', [
     {
       name: '톤 베이스',
@@ -498,7 +499,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '윤광 프라이머',
         region: 'skin',
-        params: { skinSmoothing: 0.35, skinGlow: 0.5 },
+        params: { skinSmoothing: 0.35, skinDetailPreservation: 0.7, skinGlow: 0.5 },
       }],
     },
     {
@@ -516,7 +517,7 @@ export function buildVariantLibrary(): LookLibrary {
       leaves: [{
         label: '모공 프라이머',
         region: 'skin',
-        params: { skinSmoothing: 0.5 },
+        params: { skinSmoothing: 0.5, skinDetailPreservation: 0.65, skinClarity: -0.1 },
       }],
     },
     {
@@ -568,14 +569,51 @@ export function buildVariantLibrary(): LookLibrary {
 
   // 질감 프라이머 2종 — 위 피부 3종의 '질감 베이스' 파트가 쓰던 params 그대로.
   //  (복합 룩의 내부 파트는 세부부위 카드에 안 뜬다 — 여기서 standalone으로 제공)
+  //  윤광은 독립 축(skinGlow+glowShape)이라 모공 매트와 양자택일이 아니다 — 존이
+  //  다르면 동시 적용(아래 'T존 매트 + 볼 윤광' 조합 참조).
   addRegionLook(lib, 'skin-prime', 'glow-primer', '윤광 프라이머', '피부',
     single('윤광 프라이머', 'skin', {
       skinSmoothing: 0.35,
+      skinDetailPreservation: 0.7,
       skinGlow: 0.5,
+      glowShape: 0, // 전체 — 존은 상세 패널 세그에서
     }), false);
   addRegionLook(lib, 'skin-prime', 'pore-primer', '모공 프라이머', '피부',
     single('모공 프라이머', 'skin', {
       skinSmoothing: 0.5,
+      skinDetailPreservation: 0.7,
+      skinShape: 0, // 전체 — T존만 등은 상세 패널 세그에서
+    }), false);
+  // 존별 중첩 조합 — 매트(결 보정)는 T존, 윤광은 볼만: 한 잎에서 두 프라이머 동시.
+  addRegionLook(lib, 'skin-prime', 'tzone-matte-cheek-glow', 'T존 매트 + 볼 윤광', '피부',
+    single('T존 매트 + 볼 윤광', 'skin', {
+      skinSmoothing: 0.5,
+      skinDetailPreservation: 0.7,
+      skinShape: 1, // T존
+      skinGlow: 0.5,
+      glowShape: 3, // 볼만
+    }), false);
+
+  // 피부결 리터치 티어 3종 — 프리셋 분해가 만들던 "피부결 N" 번호 카드를 흡수하는
+  //  강도 프리셋. 피부결 소유 필드만 만진다(부위 소유 원칙 — 잡티·코렉터는 부분
+  //  커버 소유, 티어와 독립). 값은 lookTree SKIN_TIERS와 정합.
+  addRegionLook(lib, 'skin-tier', 'natural', '내추럴 보정', '피부',
+    single('내추럴 보정', 'skin', {
+      skinSmoothing: 0.3,
+      skinDetailPreservation: 0.8,
+      skinClarity: 0.1,
+    }), false);
+  addRegionLook(lib, 'skin-tier', 'soft', '소프트 보정', '피부',
+    single('소프트 보정', 'skin', {
+      skinSmoothing: 0.5,
+      skinDetailPreservation: 0.6,
+      skinClarity: -0.2,
+    }), false);
+  addRegionLook(lib, 'skin-tier', 'full', '풀 보정', '피부',
+    single('풀 보정', 'skin', {
+      skinSmoothing: 0.7,
+      skinDetailPreservation: 0.4,
+      skinClarity: 0,
     }), false);
 
   // 파운데이션 3종 — 제형(FOUNDATION_TEXTURES) × 마감. 색·커버리지·마감은 피부 3종의
@@ -613,24 +651,31 @@ export function buildVariantLibrary(): LookLibrary {
       concealerColor: '#F0DCC8',
       concealerIntensity: 0.5,
     }), false);
-  // 컬러 코렉터 3종 — CONCEALER_COLORS 보정색 + 모양(눈밑/붉은기 자동)·마감 축 조합.
+  // 컬러 코렉터 — 자동 셀렉터 3슬롯(색별 강도, 중첩 가능). 구 컨실러 레거시 경로
+  //  (concealerColor 스와치 판별) 대신 corrector* 슬롯 키를 직접 쓴다. 슬롯 규약:
+  //  1=그린(홍조) 2=피치(다크서클) 3=라벤더(누런기) — regions.ts defaults와 동일.
   addRegionLook(lib, 'concealer', 'green-corrector', '그린 코렉터', '피부',
     single('그린 코렉터', 'concealer', {
-      concealerColor: '#BFE3C8', // 붉은 트러블 중화
-      concealerShape: 1, // 붉은기 자동
-      concealerIntensity: 0.4,
+      correctorColor: '#BFE3C8', // 붉은 트러블·홍조 중화
+      correctorIntensity: 0.4,
     }), false);
   addRegionLook(lib, 'concealer', 'peach-undereye', '피치 다크서클', '피부',
     single('피치 다크서클', 'concealer', {
-      concealerColor: '#F7C9A8', // 다크서클 중화
-      concealerShape: 0, // 눈밑 존
-      concealerIntensity: 0.42,
+      corrector2Color: '#F7C9A8', // 다크서클(푸른 그늘) 중화
+      corrector2Intensity: 0.42,
     }), false);
   addRegionLook(lib, 'concealer', 'lavender-bright', '라벤더 브라이트', '피부',
     single('라벤더 브라이트', 'concealer', {
-      concealerColor: '#D9C8E8', // 노란기 중화
-      concealerIntensity: 0.35,
-      concealerFinish: 0, // 내추럴
+      corrector3Color: '#D9CBE8', // 노란기 중화
+      corrector3Intensity: 0.35,
+    }), false);
+  // 색 중첩 조합 — 홍조와 다크서클을 한 번에(슬롯 1+2 동시).
+  addRegionLook(lib, 'concealer', 'green-peach-duo', '그린+피치 듀오', '피부',
+    single('그린+피치 듀오', 'concealer', {
+      correctorColor: '#BFE3C8',
+      correctorIntensity: 0.4,
+      corrector2Color: '#F7C9A8',
+      corrector2Intensity: 0.4,
     }), false);
 
   // 파우더 2종 — 무색(POWDER_COLORS[0] 트랜스루선트)에 매트화 강도만 2단(세미매트·커버 파트 값).
