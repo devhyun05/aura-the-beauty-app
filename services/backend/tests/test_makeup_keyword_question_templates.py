@@ -43,6 +43,7 @@ def test_all_curated_situation_keywords_have_contract_validated_questions() -> N
     "테마 파티·코스프레",
     "무대 공연",
     "패션 행사·전시 오프닝",
+    "로판 여주",
   }
 
   first_titles: set[str] = set()
@@ -74,6 +75,17 @@ def test_repository_template_returns_a_fresh_validated_copy() -> None:
   assert reviewed_repository_template("등록되지 않은 키워드") is None
 
 
+def test_romance_fantasy_keyword_has_a_reviewed_context_question() -> None:
+  template = reviewed_repository_template("로판 여주")
+
+  assert template is not None
+  first_question = template["questions"][0]
+  assert first_question["id"] == "romance_fantasy_archetype"
+  assert first_question["title"] == "어떤 로판 여주 분위기에 가까워지고 싶나요?"
+  assert [option["id"] for option in first_question["options"]][-1] == "ai_pick"
+  assert template["questions"][1]["id"] == "prep_time"
+
+
 def test_template_schema_is_versioned_reviewed_and_in_runtime_schema() -> None:
   sql = MAKEUP_KEYWORD_QUESTION_TEMPLATE_SCHEMA_SQL
   assert "create table if not exists makeup_keyword_question_templates" in sql
@@ -83,6 +95,7 @@ def test_template_schema_is_versioned_reviewed_and_in_runtime_schema() -> None:
   assert "idx_makeup_keyword_question_templates_lookup" in sql
   assert "'출근·등교'" in sql
   assert "'패션 행사·전시 오프닝'" in sql
+  assert "'로판 여주'" in sql
   assert "15분 안에 핵심만" in sql
   assert "60분 이상 디테일까지" in sql
   assert "on conflict (keyword_id, template_version) do nothing" in sql

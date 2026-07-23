@@ -3,12 +3,10 @@ import {
   MAKEUP_QUESTIONS,
   MAKEUP_SCENARIOS,
 } from '../data/makeupRecommendationCatalog';
-import {getMakeupRecommendationFixtureDiscovery} from '../data/makeupRecommendationV2Catalog';
 import {
   BackendApiError,
   getBackendApiBaseUrl,
   isBackendNetworkError,
-  isRequestAbortedError,
   requestBackendJson,
 } from '../../../shared/services/backendApi';
 import {
@@ -82,6 +80,13 @@ export class MakeupRecommendationRetryableError extends Error {
     super(message);
     this.name = 'MakeupRecommendationRetryableError';
   }
+}
+
+const INCOMPLETE_MAKEUP_RECOMMENDATION_MESSAGE =
+  'AI 메이크업 추천 결과가 완전하지 않아요. 잠시 후 다시 시도해 주세요.';
+
+function incompleteMakeupRecommendationError(): MakeupRecommendationRetryableError {
+  return new MakeupRecommendationRetryableError(INCOMPLETE_MAKEUP_RECOMMENDATION_MESSAGE);
 }
 
 export function createMakeupRecommendationIdempotencyKey(): string {
@@ -324,6 +329,8 @@ type BackendRecommendationReport = {
   customSituationText?: unknown;
   customSituationLabel?: unknown;
   createdAt?: string;
+  schemaVersion?: unknown;
+  schema_version?: unknown;
   contextSnapshot?: BackendRecommendationContextSnapshot | string;
 };
 
@@ -1282,6 +1289,79 @@ function normalizedArea(value: string | undefined): MakeupLookRecommendation['st
     : 'base';
 }
 
+const REQUIRED_GENERATED_STEP_AREAS = new Set(['base', 'brow', 'eye', 'cheek', 'lip']);
+
+type CompleteBackendLookFields = {
+  appliedConditions: string[];
+  difficulty: MakeupLookRecommendation['difficulty'];
+  durationMinutes: number;
+  imageUrl?: string;
+  reasons: string[];
+  steps: NonNullable<BackendLook['steps']>;
+  summary: string;
+  title: string;
+};
+
+function requireCompleteBackendLook(
+  look: BackendLook,
+  resolvedImageStatus: MakeupRecommendationImageStatus | undefined,
+): CompleteBackendLookFields {
+  const title = look.title?.trim();
+  const summary = look.summary?.trim();
+  const reasons = normalizeBackendStringArray(look.reasons).map(item => item.trim()).filter(Boolean);
+  const appliedConditions = normalizeBackendStringArray(look.appliedConditions)
+    .map(item => item.trim())
+    .filter(Boolean);
+  const rawSteps = parseBackendReportArray(look.steps);
+  const steps = mapBackendLookSteps(look.steps);
+  const stepAreas = new Set(steps.map(step => step.area));
+  const hasCompleteSteps = rawSteps.length === steps.length
+    && steps.length >= 5
+    && steps.length <= 10
+    && steps.every(step => (
+      typeof step.order === 'number'
+      && Number.isInteger(step.order)
+      && typeof step.instruction === 'string'
+      && Boolean(step.instruction.trim())
+      && typeof step.area === 'string'
+      && REQUIRED_GENERATED_STEP_AREAS.has(step.area)
+    ))
+    && [...REQUIRED_GENERATED_STEP_AREAS].every(area => stepAreas.has(area));
+  const imageUrl = look.imageUrl?.trim();
+  const difficulty = look.difficulty === 'easy' || look.difficulty === 'medium' || look.difficulty === 'advanced'
+    ? look.difficulty
+    : undefined;
+
+  if (
+    !look.id?.trim()
+    || !title
+    || !summary
+    || reasons.length === 0
+    || appliedConditions.length === 0
+    || typeof look.durationMinutes !== 'number'
+    || !Number.isInteger(look.durationMinutes)
+    || look.durationMinutes < 5
+    || look.durationMinutes > 120
+    || !difficulty
+    || !hasCompleteSteps
+    || !isMakeupRecommendationImageStatus(resolvedImageStatus)
+    || (resolvedImageStatus === 'completed' && !imageUrl)
+  ) {
+    throw incompleteMakeupRecommendationError();
+  }
+
+  return {
+    appliedConditions,
+    difficulty,
+    durationMinutes: look.durationMinutes,
+    ...(imageUrl ? {imageUrl} : {}),
+    reasons,
+    steps,
+    summary,
+    title,
+  };
+}
+
 export function mapBackendRecommendationLooks({
   reportId,
   recommendation,
@@ -1290,6 +1370,9 @@ export function mapBackendRecommendationLooks({
   answers,
   imageStatus,
   imageError,
+  anchorPreviewImageUrl,
+  anchorPreviewImageStatus,
+  requireClaudeGeneration = false,
 }: {
   reportId: string;
   recommendation: BackendRecommendation;
@@ -1298,42 +1381,46 @@ export function mapBackendRecommendationLooks({
   answers: MakeupRecommendationAnswer[];
   imageStatus?: MakeupRecommendationImageStatus;
   imageError?: string;
+  anchorPreviewImageUrl?: string;
+  anchorPreviewImageStatus?: MakeupRecommendationImageStatus;
+  requireClaudeGeneration?: boolean;
 }): MakeupLookRecommendation[] {
   const parsedRecommendation = parseBackendRecommendation(recommendation);
   const generationSource = parsedRecommendation.generationSource;
+  if (requireClaudeGeneration && generationSource !== 'claude') {
+    throw incompleteMakeupRecommendationError();
+  }
   const matchAssessment = parsedRecommendation.matchAssessment;
-  const conditions = [prompt, ...selectedAnswerLabels(questions, answers)];
   const validRoles: MakeupLookRecommendation['role'][] = ['anchor', 'bold', 'discovery'];
-  return (parsedRecommendation.looks ?? []).flatMap((look, index) => {
+  return parsedRecommendation.looks.flatMap((look, index) => {
     const role = validRoles.includes(look.role as MakeupLookRecommendation['role'])
       ? look.role as MakeupLookRecommendation['role']
       : undefined;
-    if (!role) return [];
+    if (!role) throw incompleteMakeupRecommendationError();
     const fixture = MAKEUP_LOOK_FIXTURES.find(item => item.role === role) ?? MAKEUP_LOOK_FIXTURES[index % MAKEUP_LOOK_FIXTURES.length];
-    const imageUrl = look.imageUrl?.trim();
-    const resolvedImageStatus = look.imageStatus ?? imageStatus;
-    const completedImageMissing = resolvedImageStatus === 'completed' && !imageUrl;
-    const resolvedImageError = completedImageMissing
-      ? '서버에서 생성된 이미지 주소를 받지 못했어요. 다시 시도해 주세요.'
-      : look.imageError?.trim() || imageError?.trim() || undefined;
-    const difficulty = look.difficulty === 'easy' || look.difficulty === 'medium' || look.difficulty === 'advanced'
-      ? look.difficulty
-      : 'medium';
-    const reasons = normalizeBackendStringArray(look.reasons).filter(Boolean);
-    const appliedConditions = normalizeBackendStringArray(look.appliedConditions).filter(Boolean);
-    const steps = mapBackendLookSteps(look.steps);
+    const validatedLook = role === 'anchor' && anchorPreviewImageUrl?.trim()
+      ? {
+          ...look,
+          imageUrl: anchorPreviewImageUrl.trim(),
+          imageStatus: anchorPreviewImageStatus ?? look.imageStatus,
+        }
+      : look;
+    const resolvedImageStatus = validatedLook.imageStatus ?? imageStatus;
+    const complete = requireCompleteBackendLook(validatedLook, resolvedImageStatus);
+    const resolvedImageError = validatedLook.imageError?.trim() || imageError?.trim() || undefined;
+    const {appliedConditions, difficulty, durationMinutes, imageUrl, reasons, steps, summary, title} = complete;
     const products = mapBackendLookProducts(look.products);
     const areaGuides = mapBackendAreaGuides(look.areaGuides);
     const mappedLook: MakeupLookRecommendation = {
-      id: look.id?.trim() || `${reportId}-${role}`,
+      id: look.id!.trim(),
       arFilterId: fixture.arFilterId,
       role,
-      title: look.title?.trim() || fixture.title,
-      summary: look.summary?.trim() || fixture.summary,
+      title,
+      summary,
       imageSource: imageUrl ? {uri: imageUrl} : fixture.imageSource,
-      reasons: look.reasons === undefined ? [look.summary?.trim() || '선택한 상황과 답변을 함께 반영했어요.'] : reasons,
-      appliedConditions: [...new Set(appliedConditions.length > 0 ? appliedConditions : conditions)],
-      durationMinutes: look.durationMinutes ?? fixture.durationMinutes,
+      reasons,
+      appliedConditions: [...new Set(appliedConditions)],
+      durationMinutes,
       difficulty,
       steps: steps.filter(step => step.instruction?.trim()).map((step, stepIndex) => ({
         area: normalizedArea(step.area),
@@ -1352,7 +1439,7 @@ export function mapBackendRecommendationLooks({
         purchaseUrl: product.purchaseUrl?.trim() || undefined,
         matchRate: product.matchRate,
       })),
-      imageStatus: completedImageMissing ? 'failed' : resolvedImageStatus,
+      imageStatus: resolvedImageStatus,
       imageError: resolvedImageError,
       imageCropRegions: mapBackendCropRegions(getBackendLookCropMetadata(look)),
       imageAlignmentMetadata: mapBackendImageAlignmentMetadata(getBackendLookAlignmentMetadata(look)),
@@ -1375,23 +1462,26 @@ function parseBackendRecommendation(
   generationSource?: MakeupRecommendationGenerationSource;
   matchAssessment?: MakeupRecommendationMatchAssessment;
 } {
-  if (!recommendation) return {looks: []};
+  if (!recommendation) throw incompleteMakeupRecommendationError();
   let parsed: unknown = recommendation;
   if (typeof recommendation === 'string') {
     try {
       parsed = JSON.parse(recommendation) as unknown;
     } catch {
-      return {looks: []};
+      throw incompleteMakeupRecommendationError();
     }
   }
-  if (!isBackendRecord(parsed)) return {looks: []};
+  if (!isBackendRecord(parsed)) throw incompleteMakeupRecommendationError();
+  const rawLooks = parseBackendReportArray(parsed.looks);
+  if (rawLooks.length === 0 || !rawLooks.every(isBackendLook)) {
+    throw incompleteMakeupRecommendationError();
+  }
   return {
-    looks: parseBackendReportArray(parsed.looks).filter(isBackendLook),
+    looks: rawLooks,
     generationSource: mapBackendGenerationSource(parsed.generationSource),
     matchAssessment: mapBackendMatchAssessment(parsed.matchAssessment),
   };
 }
-
 export function mapBackendRecommendationReports(
   reports: unknown,
 ): MakeupRecommendationReportHistoryItem[] {
@@ -1445,6 +1535,10 @@ export function mapBackendRecommendationReports(
         answers,
         imageStatus: report.imageStatus,
         imageError: report.imageError,
+        anchorPreviewImageUrl: previewImageUrl,
+        anchorPreviewImageStatus: previewImageStatus,
+        requireClaudeGeneration: report.schemaVersion === 'makeup-recommendation-v2'
+          || report.schema_version === 'makeup-recommendation-v2',
       }).map(look => look.role !== 'anchor' || !previewImageUrl
         ? look
         : {
@@ -1519,6 +1613,55 @@ export function restoreMakeupRecommendationReport(
   };
 }
 
+export type MakeupRecommendationReportHistoryPage = {
+  hasMore: boolean;
+  nextOffset: number;
+  rawCount: number;
+  reports: MakeupRecommendationReportHistoryItem[];
+};
+
+export function rewindMakeupRecommendationHistoryOffset(
+  consumedRawOffset: number,
+): number {
+  return Math.max(0, consumedRawOffset - 1);
+}
+
+export function mapBackendRecommendationReportsPage(
+  reports: unknown,
+  {
+    limit,
+    offset,
+  }: {
+    limit: number;
+    offset: number;
+  },
+): MakeupRecommendationReportHistoryPage {
+  const rawReports = parseBackendReportArray(reports);
+
+  return {
+    hasMore: rawReports.length === limit,
+    nextOffset: offset + rawReports.length,
+    rawCount: rawReports.length,
+    reports: mapBackendRecommendationReports(rawReports),
+  };
+}
+
+export async function fetchGeneratedMakeupRecommendationReportPage({
+  limit = 20,
+  offset = 0,
+  timeoutMs,
+}: {
+  limit?: number;
+  offset?: number;
+  timeoutMs?: number;
+} = {}): Promise<MakeupRecommendationReportHistoryPage> {
+  const response = await requestBackendJson<{reports?: unknown}>(
+    `/makeup-recommendations?limit=${limit}&offset=${offset}`,
+    {timeoutMs},
+  );
+  return mapBackendRecommendationReportsPage(response.reports ?? [], {limit, offset});
+}
+
 export async function fetchGeneratedMakeupRecommendationReports({
   limit = 20,
   offset = 0,
@@ -1528,11 +1671,12 @@ export async function fetchGeneratedMakeupRecommendationReports({
   offset?: number;
   timeoutMs?: number;
 } = {}): Promise<MakeupRecommendationReportHistoryItem[]> {
-  const response = await requestBackendJson<{reports?: unknown}>(
-    `/makeup-recommendations?limit=${limit}&offset=${offset}`,
-    {timeoutMs},
-  );
-  return mapBackendRecommendationReports(response.reports ?? []);
+  const page = await fetchGeneratedMakeupRecommendationReportPage({
+    limit,
+    offset,
+    timeoutMs,
+  });
+  return page.reports;
 }
 
 type BackendRecommendationSessionV2 = {
@@ -1561,24 +1705,19 @@ function isUnavailableV2Endpoint(error: unknown): boolean {
   );
 }
 
-function shouldUseDiscoveryFixture(error: unknown): boolean {
-  if (isRequestAbortedError(error)) return false;
-  if (isBackendNetworkError(error)) return true;
-  if (error instanceof BackendApiError) {
-    if (error.status === 401 || error.status === 403) return false;
-    return error.status === 404
-      || error.status === 405
-      || error.status === 422
-      || error.status === 501
-      || error.status >= 500;
-  }
-  return error instanceof Error && /EXPO_PUBLIC_API_BASE_URL is required/.test(error.message);
-}
 
 function normalizeV2BackendError(error: unknown): unknown {
   if (isBackendNetworkError(error)) {
     return new MakeupRecommendationRetryableError(
       '네트워크 연결을 확인한 뒤 다시 시도해 주세요.',
+    );
+  }
+  if (
+    error instanceof BackendApiError
+    && (error.status >= 500 || error.code?.startsWith('BEDROCK_'))
+  ) {
+    return new MakeupRecommendationRetryableError(
+      'AI 메이크업 추천을 완성하지 못했어요. 잠시 후 다시 시도해 주세요.',
     );
   }
   if (!(error instanceof BackendApiError) || error.status !== 422) return error;
@@ -1882,10 +2021,14 @@ export async function fetchMakeupRecommendationDiscovery(
   try {
     const response = await backendRequest<unknown>('/makeup-recommendations/discovery', {signal});
     const normalized = normalizeMakeupRecommendationDiscovery(response);
-    return normalized ?? getMakeupRecommendationFixtureDiscovery();
+    if (!normalized) {
+      throw new MakeupRecommendationRetryableError(
+        '추천 상황 목록을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
+      );
+    }
+    return normalized;
   } catch (error) {
-    if (!shouldUseDiscoveryFixture(error)) throw error;
-    return getMakeupRecommendationFixtureDiscovery();
+    throw normalizeV2BackendError(error);
   }
 }
 
@@ -1965,8 +2108,18 @@ export async function startGeneratedMakeupRecommendationV2(
   const hasConfiguredBackend = Boolean(getBackendApiBaseUrl()) || hasInjectedBackend;
   const hasFixtureReportId = input.discoverySource === 'fixture'
     && !isMakeupRecommendationUuid(input.analysisReportId);
-  if (input.forceFixture || !hasConfiguredBackend || hasFixtureReportId) {
+  if (input.forceFixture) {
     return createFixtureV2Session(input);
+  }
+  if (!hasConfiguredBackend) {
+    throw new MakeupRecommendationRetryableError(
+      '추천 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행한 뒤 시도해 주세요.',
+    );
+  }
+  if (hasFixtureReportId) {
+    throw new MakeupRecommendationRetryableError(
+      '선택한 얼굴 분석 보고서를 확인하지 못했어요. 실제 보고서를 다시 골라주세요.',
+    );
   }
   const body = buildV2SessionCreateBody(input, selectionKind);
   try {
@@ -2077,6 +2230,7 @@ export async function generateMakeupRecommendationV2(
     questions: session.questions,
     answers: session.answers,
     imageStatus: response.imageStatus,
+    requireClaudeGeneration: true,
   });
   if (results.length === 0) throw new Error('추천 결과 형식을 확인하지 못했어요. 다시 시도해 주세요.');
   return {
@@ -2102,7 +2256,7 @@ export async function fetchGeneratedMakeupRecommendationReport(
   const mappedReport = mapBackendRecommendationReports([report])[0];
 
   if (!mappedReport) {
-    throw new Error('추천 메이크업 보고서 결과가 비어 있어요.');
+    throw incompleteMakeupRecommendationError();
   }
 
   return mappedReport;
@@ -2217,6 +2371,7 @@ export async function refreshGeneratedMakeupRecommendation(
     answers: session.answers,
     imageStatus: report.imageStatus,
     imageError: report.imageError,
+    requireClaudeGeneration: session.generationMode === 'v2',
   });
   return {
     ...session,
@@ -2279,6 +2434,7 @@ export async function refineGeneratedMakeupRecommendation(
       questions: session.questions,
       answers: session.answers,
       imageStatus: response.imageStatus,
+      requireClaudeGeneration: session.generationMode === 'v2',
     }),
   };
 }

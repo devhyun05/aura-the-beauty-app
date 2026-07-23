@@ -12,6 +12,7 @@ import Svg, {Polyline} from 'react-native-svg';
 import type {FaceAnalysisRegionVisuals} from '../../../face-analysis/services/faceAnalysisMeasurements';
 import type {PartKey} from '../../screens/recommendationResultTypes';
 import {
+  isMakeupRecommendationCropRenderReady,
   projectRegionGuidePoints,
   resolveMakeupRecommendationAreaCropAsset,
 } from '../../services/makeupRecommendationRegionVisuals';
@@ -38,6 +39,7 @@ export type FinalAreaCropPreviewProps = {
 
 const EMPTY_CROP_BOXES: readonly MakeupRecommendationCropBox[] = [];
 const EMPTY_INDEXES: ReadonlySet<number> = new Set();
+const FULL_IMAGE_FRAME_HEIGHT = 240;
 
 type CropLoadState = {
   epochKey: string;
@@ -97,13 +99,15 @@ export function FinalAreaCropPreview({
     1,
     (availableWidth - gapWidth) / cropItems.length,
   );
-  const frameHeight = computeRegionFrameHeight({
-    area,
-    boxes,
-    frameWidth,
-    sourceHeight: sourceSize.height,
-    sourceWidth: sourceSize.width,
-  });
+  const frameHeight = cropAsset.coordinateSpace === 'full-image'
+    ? FULL_IMAGE_FRAME_HEIGHT
+    : computeRegionFrameHeight({
+        area,
+        boxes,
+        frameWidth,
+        sourceHeight: sourceSize.height,
+        sourceWidth: sourceSize.width,
+      });
 
   useLayoutEffect(() => {
     loadEpochKeyRef.current = loadEpochKey;
@@ -121,10 +125,12 @@ export function FinalAreaCropPreview({
   }, [loadEpochKey, onSettledChange]);
 
   useEffect(() => {
-    const settled = cropAsset.ready && isCurrentEpoch && (
-      boxes.length === 0
-      || boxes.every((_, index) => loadedIndexes.has(index) || failedIndexes.has(index))
-    );
+    const settled = isCurrentEpoch && isMakeupRecommendationCropRenderReady({
+      assetReady: cropAsset.ready,
+      boxCount: boxes.length,
+      failedIndexes,
+      loadedIndexes,
+    });
     onSettledChange?.(settled);
   }, [boxes, cropAsset.ready, failedIndexes, isCurrentEpoch, loadedIndexes, onSettledChange]);
 
@@ -145,16 +151,19 @@ export function FinalAreaCropPreview({
       {cropItems.map((box, index) => {
         const failed = failedIndexes.has(index);
         const loaded = loadedIndexes.has(index);
-        const imageStyle = box
+        const regionImageLayout = box && cropAsset.coordinateSpace !== 'full-image'
           ? computeRegionImageLayout({
-            area,
-            box,
-            frameHeight,
-            frameWidth,
-            sourceHeight: sourceSize.height,
-            sourceWidth: sourceSize.width,
-          })
+              area,
+              box,
+              frameHeight,
+              frameWidth,
+              sourceHeight: sourceSize.height,
+              sourceWidth: sourceSize.width,
+            })
           : undefined;
+        const imageStyle = cropAsset.coordinateSpace === 'full-image'
+          ? styles.fullImage
+          : regionImageLayout;
 
         return (
           <View
@@ -163,7 +172,7 @@ export function FinalAreaCropPreview({
             {cropAsset.ready && box && !failed ? (
               <Image
                 accessibilityIgnoresInvertColors
-                contentFit="fill"
+                contentFit={cropAsset.coordinateSpace === 'full-image' ? 'contain' : 'fill'}
                 onError={() => {
                   if (loadEpochKeyRef.current !== loadEpochKey) return;
                   setLoadState(current => (
@@ -202,13 +211,13 @@ export function FinalAreaCropPreview({
             ) : null}
 
             {cropAsset.coordinateSpace === 'source-analysis-image'
-            && imageStyle
+            && regionImageLayout
             && loaded
             && !failed
             && cropAsset.guides.length > 0 ? (
               <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
                 {cropAsset.guides.map((guide, guideIndex) => {
-                  const points = projectRegionGuidePoints(guide, imageStyle)
+                  const points = projectRegionGuidePoints(guide, regionImageLayout)
                     .map(point => `${point.x},${point.y}`)
                     .join(' ');
                   return (
@@ -261,6 +270,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   image: {position: 'absolute'},
+  fullImage: {
+    bottom: 0,
+    left: 0,
+    right: 0,
+    top: 0,
+  },
   placeholder: {
     alignItems: 'center',
     backgroundColor: colors.heroPlaceholder,

@@ -58,20 +58,65 @@ function loadReactNativeShare(): ReactNativeShareModule | null {
 
 function waitForNextFrame() {
   return new Promise<void>(resolve => {
-    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    requestAnimationFrame(() => resolve());
   });
 }
 
-export async function captureReportImage(reportCaptureRef: {
-  current: OptionalViewShotRef | null;
-}) {
-  const capture = reportCaptureRef.current?.capture;
-  if (!capture) {
+export const FACE_REPORT_CAPTURE_SETTLE_TIMEOUT_MS = 10_000;
+
+export type CaptureReportImageOptions = {
+  isReady?: () => boolean;
+  shouldContinue?: () => boolean;
+  timeoutMs?: number;
+};
+
+function assertCaptureStillActive(shouldContinue?: () => boolean) {
+  if (shouldContinue && !shouldContinue()) {
+    throw new Error('보고서 이미지 준비가 취소되었어요.');
+  }
+}
+
+export async function waitForFaceReportCaptureAssets({
+  isReady,
+  shouldContinue,
+  timeoutMs = FACE_REPORT_CAPTURE_SETTLE_TIMEOUT_MS,
+}: CaptureReportImageOptions) {
+  if (!isReady) {
+    return;
+  }
+
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (!isReady()) {
+    assertCaptureStillActive(shouldContinue);
+    if (Date.now() >= deadline) {
+      throw new Error('보고서 이미지를 불러오는 데 시간이 오래 걸렸어요. 다시 시도해 주세요.');
+    }
+    await waitForNextFrame();
+  }
+}
+
+async function waitForLayoutFrames(frameCount: number) {
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    await waitForNextFrame();
+  }
+}
+
+export async function captureReportImage(
+  reportCaptureRef: {current: OptionalViewShotRef | null},
+  options: CaptureReportImageOptions = {},
+) {
+  await waitForFaceReportCaptureAssets(options);
+  await waitForLayoutFrames(2);
+  assertCaptureStillActive(options.shouldContinue);
+
+  const captureTarget = reportCaptureRef.current;
+  const capture = captureTarget?.capture;
+  if (!captureTarget || !capture) {
     throw new Error('공유 이미지를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.');
   }
 
-  await waitForNextFrame();
-  const imageUri = await capture.call(reportCaptureRef.current);
+  const imageUri = await capture.call(captureTarget);
+  assertCaptureStillActive(options.shouldContinue);
   if (!imageUri) {
     throw new Error('공유 이미지를 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
   }
@@ -80,10 +125,11 @@ export async function captureReportImage(reportCaptureRef: {
 
 export async function captureReportImages(
   refs: Array<{current: OptionalViewShotRef | null}>,
+  options: CaptureReportImageOptions = {},
 ) {
   const images: string[] = [];
   for (const ref of refs) {
-    images.push(await captureReportImage(ref));
+    images.push(await captureReportImage(ref, options));
   }
   return images;
 }
@@ -133,6 +179,16 @@ export async function shareReportImagesWithSystemSheet({
   return shareResult.action === Share.dismissedAction ? 'dismissed' : 'shared';
 }
 
+export async function shareReportImageWithSystemSheet({
+  imageUri,
+  title,
+}: {
+  imageUri: string;
+  title: string;
+}) {
+  return shareReportImagesWithSystemSheet({imageUris: [imageUri], title});
+}
+
 export async function requestReportImageSavePermission() {
   const mediaLibraryModule = loadOptionalMediaLibraryModule();
   if (!mediaLibraryModule) {
@@ -141,10 +197,10 @@ export async function requestReportImageSavePermission() {
     );
   }
 
-  const currentPermission = await mediaLibraryModule.getPermissionsAsync(true, ['photo']);
+  const currentPermission = await mediaLibraryModule.getPermissionsAsync(true, []);
   const permission = currentPermission.granted
     ? currentPermission
-    : await mediaLibraryModule.requestPermissionsAsync(true, ['photo']);
+    : await mediaLibraryModule.requestPermissionsAsync(true, []);
   if (!permission.granted) {
     throw new Error('사진 저장 권한이 필요합니다. 설정에서 사진 접근을 허용해 주세요.');
   }

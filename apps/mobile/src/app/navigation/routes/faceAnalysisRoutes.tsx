@@ -354,6 +354,7 @@ export function FaceAnalysisLoadingRouteScreen({
     selectedFaceVerticalThirds,
     selectedPersonalColor,
     setSelectedFaceAnalysisReport,
+    setSelectedFaceCapture,
     setSelectedFaceGeometry2d,
     setSelectedFaceVerticalThirds,
     setSelectedPersonalColor,
@@ -372,6 +373,10 @@ export function FaceAnalysisLoadingRouteScreen({
   const [analysisErrorMessage, setAnalysisErrorMessage] = React.useState<string | null>(null);
   const [analysisRequestKey, setAnalysisRequestKey] = React.useState(0);
   const [uploadRequestKey, setUploadRequestKey] = React.useState(0);
+  const [progressAttempt, setProgressAttempt] = React.useState(() => ({
+    key: 0,
+    startedAtMs: route.params?.loadingStartedAtMs ?? Date.now(),
+  }));
   const analysisRetryCountRef = React.useRef(0);
   const pendingUploadPromiseRef = React.useRef<Promise<void> | null>(null);
   const pendingUnifiedCapture = route.params?.pendingUnifiedCapture ?? null;
@@ -1390,6 +1395,10 @@ export function FaceAnalysisLoadingRouteScreen({
     analysisRetryCountRef.current = 0;
     setAnalysisErrorMessage(null);
     setIsAnalysisReady(false);
+    setProgressAttempt(currentAttempt => ({
+      key: currentAttempt.key + 1,
+      startedAtMs: Date.now(),
+    }));
 
     if (pendingUnifiedCapture && !selectedFaceCapture) {
       setUploadRequestKey(currentKey => currentKey + 1);
@@ -1436,6 +1445,61 @@ export function FaceAnalysisLoadingRouteScreen({
     pendingUnifiedCapture,
     selectedFaceCapture,
   ]);
+  const handleRetake = React.useCallback(() => {
+    invalidateUnifiedFaceCapture({resetRetryAttempt: true});
+    setSelectedFaceAnalysisReport(null);
+    setSelectedFaceCapture(null);
+    setSelectedFaceGeometry2d(null);
+    setSelectedFaceVerticalThirds(null);
+    setSelectedPersonalColor(null);
+    setSelectedPersonalColorCorrection(null);
+
+    if (pendingUnifiedCapture) {
+      const pendingUpload = pendingUploadPromiseRef.current;
+      if (pendingUpload) {
+        void pendingUpload
+          .finally(() =>
+            Promise.all([
+              deleteUnifiedFaceCaptureTempImage(
+                pendingUnifiedCapture.image.uri,
+              ),
+              deleteGoldenMaskPendingArtifact(
+                pendingUnifiedCapture.goldenMask,
+              ),
+            ]),
+          )
+          .catch(() => undefined);
+      } else {
+        void Promise.all([
+          deleteUnifiedFaceCaptureTempImage(
+            pendingUnifiedCapture.image.uri,
+          ),
+          deleteGoldenMaskPendingArtifact(pendingUnifiedCapture.goldenMask),
+        ]).catch(() => undefined);
+      }
+    }
+
+    navigation.replace(
+      'FaceCapture',
+      route.params?.afterAnalysisRoute
+        ? {afterAnalysisRoute: route.params.afterAnalysisRoute}
+        : undefined,
+    );
+  }, [
+    invalidateUnifiedFaceCapture,
+    navigation,
+    pendingUnifiedCapture,
+    route.params?.afterAnalysisRoute,
+    setSelectedFaceAnalysisReport,
+    setSelectedFaceCapture,
+    setSelectedFaceGeometry2d,
+    setSelectedFaceVerticalThirds,
+    setSelectedPersonalColor,
+    setSelectedPersonalColorCorrection,
+  ]);
+  const handleOpenReports = React.useCallback(() => {
+    navigation.replace('FaceAnalysisReportsList');
+  }, [navigation]);
   const handleAnalysisComplete = React.useCallback(() => {
     const minimumReportIsOpen = minimumReportLoggedRef.current;
     // 최종 결과가 매우 빨리 끝나도 10~15초 의미 기반 진입 게이트를 우회하지 않는다.
@@ -1475,15 +1539,19 @@ export function FaceAnalysisLoadingRouteScreen({
       routeName="FaceAnalysisLoading"
       onBack={handleBack}>
       <FaceAnalysisLoadingScreen
+        key={progressAttempt.key}
         analysisErrorMessage={analysisErrorMessage}
+        anchorPreview={anchorPreview}
         capturedPhotoUri={
           selectedFaceCapture?.imageUri ?? pendingUnifiedCapture?.image.uri
         }
         isAnalysisReady={isAnalysisReady}
         onBack={handleBack}
         onComplete={handleAnalysisComplete}
+        onOpenReports={handleOpenReports}
+        onRetake={handleRetake}
         onRetry={handleRetryAnalysis}
-        progressStartedAtMs={route.params?.loadingStartedAtMs}
+        progressStartedAtMs={progressAttempt.startedAtMs}
       />
     </DetailRouteChrome>
   );

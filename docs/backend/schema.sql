@@ -3632,7 +3632,8 @@ keyword_seed(id, text, seed_prompt, keyword_kind, source_key, market_scope, conf
     ('99d5c986-4c36-5191-a45c-033566b80aad'::uuid, '클럽·야간 파티', '어두운 조명 아래 클럽이나 야간 파티를 즐기는 상황', 'curated', null, 'KR', 'A'),
     ('d7e8d63d-8bd1-5d0f-88a3-730808876fd9'::uuid, '테마 파티·코스프레', '정해진 테마나 캐릭터가 있는 파티에 참여하는 상황', 'curated', null, 'KR', 'A'),
     ('7c82e3cb-a2c4-58d7-aa17-e55bae7a7f10'::uuid, '무대 공연', '관객과 조명 앞에서 무대 공연을 하는 상황', 'curated', null, 'KR', 'A'),
-    ('d9d57ef7-699e-52fd-a0b5-44297525ab92'::uuid, '패션 행사·전시 오프닝', '패션 행사나 전시 오프닝에 참석하는 색다른 상황', 'curated', null, 'KR', 'A')
+    ('d9d57ef7-699e-52fd-a0b5-44297525ab92'::uuid, '패션 행사·전시 오프닝', '패션 행사나 전시 오프닝에 참석하는 색다른 상황', 'curated', null, 'KR', 'A'),
+    ('c4964d4c-76e2-5f73-8db8-7065658cb254'::uuid, '로판 여주', '로맨스 판타지 작품의 여주인공처럼 연출하고 싶은 테마 촬영이나 코스프레 상황', 'curated', null, 'KR', 'A')
 )
 insert into makeup_scenario_library as current (
   id, text, normalized_text, seed_prompt, tags, source, prompt_version, status,
@@ -3714,7 +3715,7 @@ with seed(situation_key, keyword_text, sort_order) as (
     ('camera_content', 'SNS 셀카', 30), ('camera_content', '영상·라이브', 40), ('camera_content', '야구장 전광판', 50),
     ('festival_performance', '콘서트·페스티벌', 10), ('festival_performance', '클럽·야간 파티', 20),
     ('festival_performance', '테마 파티·코스프레', 30), ('festival_performance', '무대 공연', 40),
-    ('festival_performance', '패션 행사·전시 오프닝', 50)
+    ('festival_performance', '패션 행사·전시 오프닝', 50), ('festival_performance', '로판 여주', 60)
 )
 insert into makeup_situation_keywords as current
   (situation_id, keyword_id, relevance_score, sort_order, status)
@@ -3792,7 +3793,8 @@ with template_seed(keyword_text, template_version, questions) as (
     ('클럽·야간 파티', 1, '[{"id":"night_party_light","title":"파티에서 가장 많이 마주할 빛은 무엇인가요?","options":[{"id":"dark","label":"어두운 실내 조명"},{"id":"neon","label":"컬러 네온과 무빙 라이트"},{"id":"flash","label":"플래시 사진과 영상"},{"id":"ai_pick","label":"AI가 골라줘"}]},{"id":"prep_time","title":"메이크업에 어느 정도 시간을 쓸 수 있나요?","options":[{"id":"quick_15","label":"15분 안에 핵심만"},{"id":"standard_30","label":"30분 정도 꼼꼼하게"},{"id":"detail_60_plus","label":"60분 이상 디테일까지"},{"id":"ai_pick","label":"AI가 골라줘"}]}]'::jsonb),
     ('테마 파티·코스프레', 1, '[{"id":"theme_expression","title":"테마를 어느 정도까지 표현하고 싶나요?","options":[{"id":"subtle","label":"평소 룩에 힌트만 더하기"},{"id":"inspired","label":"캐릭터 특징을 알아볼 만큼"},{"id":"full","label":"의상과 어울리게 확실히 표현"},{"id":"ai_pick","label":"AI가 골라줘"}]},{"id":"prep_time","title":"메이크업에 어느 정도 시간을 쓸 수 있나요?","options":[{"id":"quick_15","label":"15분 안에 핵심만"},{"id":"standard_30","label":"30분 정도 꼼꼼하게"},{"id":"detail_60_plus","label":"60분 이상 디테일까지"},{"id":"ai_pick","label":"AI가 골라줘"}]}]'::jsonb),
     ('무대 공연', 1, '[{"id":"stage_view","title":"메이크업이 가장 잘 보여야 하는 거리는 어디인가요?","options":[{"id":"audience","label":"멀리 있는 객석"},{"id":"camera","label":"가까이 잡히는 카메라"},{"id":"both","label":"객석과 카메라 모두"},{"id":"ai_pick","label":"AI가 골라줘"}]},{"id":"prep_time","title":"메이크업에 어느 정도 시간을 쓸 수 있나요?","options":[{"id":"quick_15","label":"15분 안에 핵심만"},{"id":"standard_30","label":"30분 정도 꼼꼼하게"},{"id":"detail_60_plus","label":"60분 이상 디테일까지"},{"id":"ai_pick","label":"AI가 골라줘"}]}]'::jsonb),
-    ('패션 행사·전시 오프닝', 1, '[{"id":"fashion_event_role","title":"행사에서 어떤 시간을 가장 많이 보내나요?","options":[{"id":"viewing","label":"작품과 공간을 둘러보기"},{"id":"networking","label":"사람들과 가까이 대화하기"},{"id":"photo","label":"포토월과 기록 남기기"},{"id":"ai_pick","label":"AI가 골라줘"}]},{"id":"prep_time","title":"메이크업에 어느 정도 시간을 쓸 수 있나요?","options":[{"id":"quick_15","label":"15분 안에 핵심만"},{"id":"standard_30","label":"30분 정도 꼼꼼하게"},{"id":"detail_60_plus","label":"60분 이상 디테일까지"},{"id":"ai_pick","label":"AI가 골라줘"}]}]'::jsonb)
+    ('패션 행사·전시 오프닝', 1, '[{"id":"fashion_event_role","title":"행사에서 어떤 시간을 가장 많이 보내나요?","options":[{"id":"viewing","label":"작품과 공간을 둘러보기"},{"id":"networking","label":"사람들과 가까이 대화하기"},{"id":"photo","label":"포토월과 기록 남기기"},{"id":"ai_pick","label":"AI가 골라줘"}]},{"id":"prep_time","title":"메이크업에 어느 정도 시간을 쓸 수 있나요?","options":[{"id":"quick_15","label":"15분 안에 핵심만"},{"id":"standard_30","label":"30분 정도 꼼꼼하게"},{"id":"detail_60_plus","label":"60분 이상 디테일까지"},{"id":"ai_pick","label":"AI가 골라줘"}]}]'::jsonb),
+    ('로판 여주', 1, '[{"id":"romance_fantasy_archetype","title":"어떤 로판 여주 분위기에 가까워지고 싶나요?","options":[{"id":"radiant_debutante","label":"햇살처럼 청초한 귀족 영애"},{"id":"elegant_princess","label":"우아하고 기품 있는 황실 주인공"},{"id":"mysterious_sorceress","label":"신비롭고 강단 있는 마법사"},{"id":"ai_pick","label":"AI가 골라줘"}]},{"id":"prep_time","title":"메이크업에 어느 정도 시간을 쓸 수 있나요?","options":[{"id":"quick_15","label":"15분 안에 핵심만"},{"id":"standard_30","label":"30분 정도 꼼꼼하게"},{"id":"detail_60_plus","label":"60분 이상 디테일까지"},{"id":"ai_pick","label":"AI가 골라줘"}]}]'::jsonb)
 ), resolved_seed as (
   select template_seed.*, keyword.id as keyword_id
   from template_seed

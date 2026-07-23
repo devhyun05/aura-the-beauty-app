@@ -19,6 +19,9 @@ export type OptionalViewShotOptions = {
   quality?: number;
   result?: 'tmpfile' | 'base64' | 'data-uri' | 'zip-base64';
   width?: number;
+  // iOS drawViewHierarchy can return a blank image for long capture targets.
+  // CoreGraphics renderInContext preserves the complete card/document.
+  useRenderInContext?: boolean;
 };
 
 type OptionalViewShotProps = {

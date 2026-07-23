@@ -1,49 +1,78 @@
-// AURADIN swatch answer tile (question screen). The deliberate exception
-// to glass: SOLID swatch fill, radius 24, dark bottom scrim + WHITE label
-// (white belongs here — on saturated color). Tap advances immediately.
-// Fill variants (§8.2): string → solid hex (neutral fallback), gradient →
-// colorFamily 3-stop brightness ramp, texture → abstract finish swatch.
+// AURADIN semantic answer tile for narrowing questions.
+// Local semantic images are deterministic and labels live in a separate footer.
 import * as React from 'react';
-import { Animated, Pressable, Text } from 'react-native';
-import type { StyleProp, ViewStyle } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import {
-  color,
-  edgeGlare,
-  font,
-  gradPoints,
-  radius as r,
-  shadows,
-} from '../../theme/auradinTokens';
-import type { AuradinSwatch } from '../../types';
-import { TextureSwatch } from './TextureSwatch';
-import { usePressScale } from './motion';
+import {Animated, Image, Pressable, Text, View} from 'react-native';
+import type {StyleProp, ViewStyle} from 'react-native';
+import {LinearGradient} from 'expo-linear-gradient';
+import {color, font, radius as r, shadows} from '../../theme/auradinTokens';
+import type {AuradinQuestionVisual} from '../../types';
+import {usePressScale} from './motion';
 
 export type SwatchTileProps = {
-  swatch: AuradinSwatch;
+  visual: AuradinQuestionVisual;
   label: string;
   onPick: () => void;
   height?: number;
   style?: StyleProp<ViewStyle>;
 };
 
-export function SwatchTile({ swatch, label, onPick, height = 160, style }: SwatchTileProps): React.JSX.Element {
-  const { pressStyle, onPressIn, onPressOut } = usePressScale(0.97, 0.92);
-  const spec = typeof swatch === 'string' ? null : swatch;
-  // 단색 폴백 배경 — gradient/texture는 아래 절대배치 레이어가 덮는다.
+const FILL = {position: 'absolute', top: 0, left: 0, right: 0, bottom: 0} as const;
+
+const CHANNEL_MARK = {
+  oliveyoung: 'OLIVE YOUNG',
+  department_store: 'DEPARTMENT',
+  naver: 'NAVER',
+} as const;
+
+const CHANNEL_BACKGROUND: Record<
+  'oliveyoung' | 'department_store' | 'naver',
+  [string, string, string]
+> = {
+  oliveyoung: ['#E8F2ED', '#D9E9E6', '#F0DFEC'],
+  department_store: ['#F1E6F3', '#E2E7F5', '#F4E1EA'],
+  naver: ['#E1F0EF', '#DCE8F5', '#EADFF3'],
+};
+
+export function SwatchTile({
+  visual,
+  label,
+  onPick,
+  height = 160,
+  style,
+}: SwatchTileProps): React.JSX.Element {
+  const {pressStyle, onPressIn, onPressOut} = usePressScale(0.97, 0.92);
+  const imageVisual =
+    visual.kind === 'category' || visual.kind === 'application' ? visual : null;
+  const imageKey =
+    imageVisual === null
+      ? null
+      : imageVisual.kind === 'category'
+        ? `category:${imageVisual.category}`
+        : `application:${imageVisual.attribute}:${imageVisual.value}`;
+  const [failedImageKey, setFailedImageKey] = React.useState<string | null>(null);
+  const imageFailed = imageKey !== null && failedImageKey === imageKey;
   const baseColor =
-    typeof swatch === 'string'
-      ? swatch
-      : spec?.kind === 'gradient'
-        ? spec.colors[1]
-        : color.swatchNeutral;
+    visual.kind === 'gradient'
+      ? visual.colors[1]
+      : imageVisual
+        ? '#F7F1F4'
+        : visual.kind === 'price'
+          ? '#EEEAF7'
+          : visual.kind === 'channel'
+            ? '#E7EDF5'
+            : color.swatchNeutral;
+  const accessibilityLabel =
+    visual.kind === 'descriptor'
+      ? label + ', ' + visual.description + ' \uc120\ud0dd'
+      : label + ' \uc120\ud0dd';
+
   return (
     <Pressable
       onPress={onPick}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       accessibilityRole="button"
-      accessibilityLabel={`${label} 선택`}
+      accessibilityLabel={accessibilityLabel}
       style={style}
     >
       <Animated.View
@@ -53,59 +82,172 @@ export function SwatchTile({ swatch, label, onPick, height = 160, style }: Swatc
             borderRadius: r.tile,
             backgroundColor: baseColor,
             borderWidth: 1,
-            borderColor: 'rgba(255,255,255,0.55)',
+            borderColor: 'rgba(255,255,255,0.64)',
             overflow: 'hidden',
-            justifyContent: 'flex-end',
           },
           shadows.tile,
           pressStyle,
         ]}
       >
-        {/* colorFamily 3색 밝기 그라데이션 (§8.2-3) — 계열의 폭을 보여준다 */}
-        {spec?.kind === 'gradient' ? (
-          <LinearGradient
-            pointerEvents="none"
-            colors={spec.colors}
-            locations={[0, 0.52, 1]}
-            start={{ x: 0.12, y: 0 }}
-            end={{ x: 0.88, y: 1 }}
-            style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-          />
-        ) : null}
-        {/* finish/texture 추상 질감 (§8.2-1) — 자체 제작, 제품 연상 차단 */}
-        {spec?.kind === 'texture' ? <TextureSwatch texture={spec.texture} /> : null}
-        {/* glass edge glare (edges only) */}
-        <LinearGradient
-          pointerEvents="none"
-          colors={edgeGlare.colors}
-          locations={edgeGlare.locations}
-          start={gradPoints.glare120.start}
-          end={gradPoints.glare120.end}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        />
-        {/* bottom scrim: flat black 16% fade */}
-        <LinearGradient
-          pointerEvents="none"
-          colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.16)']}
-          locations={[0.55, 1]}
-          start={gradPoints.vertical.start}
-          end={gradPoints.vertical.end}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        />
-        <Text
-          style={{
-            fontFamily: font.sansSemiBold,
-            fontSize: 14,
-            color: color.inkInverse,
-            padding: 14,
-            textShadowColor: 'rgba(0,0,0,0.28)',
-            textShadowOffset: { width: 0, height: 1 },
-            textShadowRadius: 6,
-          }}
-          allowFontScaling={false}
-        >
-          {label}
-        </Text>
+        {visual.kind === 'price' ? (
+          <>
+            <LinearGradient
+              pointerEvents="none"
+              colors={['#F8EEF7', '#E7E8F7', '#E6F1F1']}
+              locations={[0, 0.56, 1]}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}
+              style={FILL}
+            />
+            <View pointerEvents="none" style={[FILL, {alignItems: 'center', justifyContent: 'center'}]}>
+              <Text
+                allowFontScaling={false}
+                numberOfLines={1}
+                style={{
+                  color: color.ink,
+                  fontFamily: font.sansSemiBold,
+                  fontSize: 15,
+                  lineHeight: 20,
+                  paddingHorizontal: 14,
+                  textAlign: 'center',
+                }}
+              >
+                {label}
+              </Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={{flex: 1, backgroundColor: '#F7F1F4', overflow: 'hidden'}}>
+              {imageVisual && !imageFailed ? (
+                <Image
+                  accessibilityIgnoresInvertColors
+                  resizeMode="contain"
+                  source={imageVisual.source}
+                  onError={() => {
+                    if (imageKey) setFailedImageKey(imageKey);
+                  }}
+                  style={{height: '100%', width: '100%'}}
+                />
+              ) : null}
+
+              {visual.kind === 'gradient' ? (
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={visual.colors}
+                  locations={[0, 0.52, 1]}
+                  start={{x: 0.12, y: 0}}
+                  end={{x: 0.88, y: 1}}
+                  style={FILL}
+                />
+              ) : null}
+
+              {visual.kind === 'descriptor' ? (
+                <>
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={['#F5EEF2', '#E9E8F2', '#E5EEF0']}
+                    locations={[0, 0.54, 1]}
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 1}}
+                    style={FILL}
+                  />
+                  <View
+                    pointerEvents="none"
+                    style={[FILL, {alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12}]}
+                  >
+                    <Text
+                      allowFontScaling={false}
+                      numberOfLines={3}
+                      style={{
+                        color: color.inkSoft,
+                        fontFamily: font.sans,
+                        fontSize: 12.5,
+                        lineHeight: 18,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {visual.description}
+                    </Text>
+                  </View>
+                </>
+              ) : null}
+
+              {visual.kind === 'channel' ? (
+                <>
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={CHANNEL_BACKGROUND[visual.channel]}
+                    locations={[0, 0.55, 1]}
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 1}}
+                    style={FILL}
+                  />
+                  <View pointerEvents="none" style={[FILL, {alignItems: 'center', justifyContent: 'center'}]}>
+                    <Text
+                      allowFontScaling={false}
+                      numberOfLines={1}
+                      style={{
+                        fontFamily: font.sansBold,
+                        fontSize: visual.channel === 'department_store' ? 13 : 16,
+                        letterSpacing: 0.5,
+                        color: color.ink,
+                      }}
+                    >
+                      {CHANNEL_MARK[visual.channel]}
+                    </Text>
+                  </View>
+                </>
+              ) : null}
+
+              {visual.kind === 'neutral' || imageFailed ? (
+                <>
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={['#F3E9EE', '#E7E7F3', '#E4EEF0']}
+                    locations={[0, 0.52, 1]}
+                    start={{x: 0, y: 0}}
+                    end={{x: 1, y: 1}}
+                    style={FILL}
+                  />
+                  <View pointerEvents="none" style={[FILL, {alignItems: 'center', justifyContent: 'center'}]}>
+                    <Text allowFontScaling={false} style={{fontSize: 24, color: color.inkFaint}}>
+                      {'\u2726'}
+                    </Text>
+                  </View>
+                </>
+              ) : null}
+            </View>
+
+            <View
+              pointerEvents="none"
+              style={{
+                alignItems: 'center',
+                backgroundColor: '#FFFDFD',
+                borderTopColor: 'rgba(105,82,100,0.10)',
+                borderTopWidth: 1,
+                justifyContent: 'center',
+                minHeight: 44,
+                paddingHorizontal: 10,
+                paddingVertical: 7,
+              }}
+            >
+              <Text
+                allowFontScaling={false}
+                numberOfLines={2}
+                style={{
+                  color: color.ink,
+                  fontFamily: font.sansSemiBold,
+                  fontSize: 13.5,
+                  lineHeight: 18,
+                  textAlign: 'center',
+                }}
+              >
+                {label}
+              </Text>
+            </View>
+          </>
+        )}
       </Animated.View>
     </Pressable>
   );

@@ -2,6 +2,7 @@ import * as WebBrowser from 'expo-web-browser';
 
 import {getCognitoAuthConfig} from './cognitoConfig';
 import {syncAuthSessionWithBackend} from './backendAuthService';
+import {interpretCognitoRefreshResponse} from './authRefreshPolicy';
 import type {AuthSession, AuthUser, SocialLoginProvider} from '../types';
 
 type SocialLoginOptions = {
@@ -411,45 +412,41 @@ export async function refreshAuthSession(session: AuthSession): Promise<AuthSess
     return null;
   }
 
-  try {
-    const config = getCognitoAuthConfig();
-    const response = await withTimeout(
-      fetch(config.discovery.tokenEndpoint, {
-        body: new URLSearchParams({
-          client_id: config.clientId,
-          grant_type: 'refresh_token',
-          refresh_token: session.refreshToken,
-        }).toString(),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        method: 'POST',
-      }),
-      TOKEN_EXCHANGE_TIMEOUT_MS,
-      LOGIN_DELAY_MESSAGE,
-    );
-    const body = await response.json() as CognitoTokenPayload;
+  const config = getCognitoAuthConfig();
+  const response = await withTimeout(
+    fetch(config.discovery.tokenEndpoint, {
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        grant_type: 'refresh_token',
+        refresh_token: session.refreshToken,
+      }).toString(),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      method: 'POST',
+    }),
+    TOKEN_EXCHANGE_TIMEOUT_MS,
+    LOGIN_DELAY_MESSAGE,
+  );
+  const body = interpretCognitoRefreshResponse(response.status, await response.json());
 
-    if (!response.ok || body.error || !body.access_token) {
-      return null;
-    }
-
-    const refreshedSession: AuthSession = {
-      ...session,
-      accessToken: body.access_token,
-      expiresIn: body.expires_in,
-      idToken: body.id_token ?? session.idToken,
-      refreshToken: body.refresh_token ?? session.refreshToken,
-      tokenType: body.token_type ?? session.tokenType,
-    };
-
-    try {
-      return await syncAuthSessionWithBackend(refreshedSession);
-    } catch {
-      // A valid Cognito refresh is still useful when the backend is briefly
-      // unavailable; the next authenticated request will retry normally.
-      return refreshedSession;
-    }
-  } catch {
+  if (!body) {
     return null;
+  }
+
+  const refreshedSession: AuthSession = {
+    ...session,
+    accessToken: body.access_token!,
+    expiresIn: body.expires_in,
+    idToken: body.id_token ?? session.idToken,
+    refreshToken: body.refresh_token ?? session.refreshToken,
+    tokenType: body.token_type ?? session.tokenType,
+  };
+
+  try {
+    return await syncAuthSessionWithBackend(refreshedSession);
+  } catch {
+    // A valid Cognito refresh is still useful when the backend is briefly
+    // unavailable; the next authenticated request will retry normally.
+    return refreshedSession;
   }
 }
 

@@ -1496,19 +1496,34 @@ async def generate_questions_v2_with_fallback(
         settings.effective_question_model_id,
         validation_errors,
       )
-    except Exception:
+    except AppError:
       logger.warning(
         "[aura:makeup-recommendation] questions-v2:provider-failed modelId=%s",
         settings.effective_question_model_id,
         exc_info=True,
       )
-      break
+      raise
+    except Exception as exc:
+      logger.warning(
+        "[aura:makeup-recommendation] questions-v2:provider-failed modelId=%s",
+        settings.effective_question_model_id,
+        exc_info=True,
+      )
+      raise AppError(
+        502,
+        "BEDROCK_REQUEST_FAILED",
+        "The Bedrock request failed.",
+      ) from exc
 
-  return {
-    "questions": deterministic_questions_v2(context_snapshot),
-    "source": "deterministic_fallback",
-    "version": "makeup-questions-fallback-v1",
-  }
+  raise AppError(
+    502,
+    "BEDROCK_INVALID_QUESTIONS",
+    "Bedrock returned invalid makeup questions.",
+    {
+      "modelId": settings.effective_question_model_id,
+      "validationErrors": validation_errors[:12],
+    },
+  )
 
 
 FALLBACK_SEMANTIC_PALETTES: dict[str, dict[str, dict[str, tuple[str, str, str]]]] = {
@@ -2004,14 +2019,24 @@ async def generate_recommendation_v2(
         max_tokens=settings.makeup_recommendation_max_tokens,
         timeout_seconds=settings.makeup_recommendation_provider_timeout_seconds,
       )
-    except Exception:
+    except AppError:
       logger.warning(
-        "[aura:makeup-recommendation] recommendation-v2:provider-failed "
-        "modelId=%s using deterministic fallback",
+        "[aura:makeup-recommendation] recommendation-v2:provider-failed modelId=%s",
         settings.effective_recommendation_model_id,
         exc_info=True,
       )
-      return deterministic_recommendation_v2(context_snapshot, answers, questions)
+      raise
+    except Exception as exc:
+      logger.warning(
+        "[aura:makeup-recommendation] recommendation-v2:provider-failed modelId=%s",
+        settings.effective_recommendation_model_id,
+        exc_info=True,
+      )
+      raise AppError(
+        502,
+        "BEDROCK_REQUEST_FAILED",
+        "The Bedrock request failed.",
+      ) from exc
     try:
       response = _normalize_recommendation_tool_response(response)
       enriched = enrich_makeup_application_plans(
@@ -2034,10 +2059,12 @@ async def generate_recommendation_v2(
         validation_errors,
       )
 
-  logger.warning(
-    "[aura:makeup-recommendation] recommendation-v2:using deterministic fallback "
-    "after validation failures modelId=%s errors=%s",
-    settings.effective_recommendation_model_id,
-    validation_errors[:16],
+  raise AppError(
+    502,
+    "BEDROCK_INVALID_RECOMMENDATION",
+    "Bedrock returned an invalid makeup recommendation.",
+    {
+      "modelId": settings.effective_recommendation_model_id,
+      "validationErrors": validation_errors[:12],
+    },
   )
-  return deterministic_recommendation_v2(context_snapshot, answers, questions)

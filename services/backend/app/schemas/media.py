@@ -28,7 +28,10 @@ class PresignedThumbnailRequest(CamelModel):
   @classmethod
   def validate_content_type(cls, value: str) -> str:
     normalized = normalize_upload_content_type(value)
-    if normalized not in ALLOWED_UPLOAD_CONTENT_TYPES:
+    if (
+      normalized not in ALLOWED_UPLOAD_CONTENT_TYPES
+      or not normalized.startswith("image/")
+    ):
       raise ValueError("Unsupported upload content type.")
     return normalized
 

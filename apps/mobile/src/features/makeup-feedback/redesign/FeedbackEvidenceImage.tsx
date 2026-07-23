@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useLayoutEffect, useRef, useState} from 'react';
 import {
   Image,
   type ImageSourcePropType,
@@ -23,6 +23,7 @@ type FeedbackEvidenceImageProps = {
   height: number;
   imageSize?: MakeupFeedbackAnalysisImageSize;
   label?: string;
+  onSettledChange?: (settled: boolean) => void;
   region?: MakeupFeedbackEvidenceRegion;
   rounded?: boolean;
   source: ImageSourcePropType;
@@ -30,12 +31,14 @@ type FeedbackEvidenceImageProps = {
 };
 
 const FALLBACK_WIDTH = 320;
+type FeedbackEvidenceLoadOutcome = 'pending' | 'loaded' | 'failed';
 
 export function FeedbackEvidenceImage({
   accessibilityLabel,
   height,
   imageSize,
   label,
+  onSettledChange,
   region,
   rounded = true,
   source,
@@ -43,6 +46,44 @@ export function FeedbackEvidenceImage({
 }: FeedbackEvidenceImageProps) {
   const [frameWidth, setFrameWidth] = useState(FALLBACK_WIDTH);
   const canCrop = Boolean(imageSize && region && region.id !== 'full');
+  const sourceKey =
+    Image.resolveAssetSource(source)?.uri ?? JSON.stringify(source);
+  const sourceKeyRef = useRef(sourceKey);
+  const loadOutcomeRef = useRef<FeedbackEvidenceLoadOutcome>('pending');
+  const onSettledChangeRef = useRef(onSettledChange);
+  const [loadFailed, setLoadFailed] = useState(false);
+  onSettledChangeRef.current = onSettledChange;
+
+  useLayoutEffect(() => {
+    sourceKeyRef.current = sourceKey;
+    loadOutcomeRef.current = 'pending';
+    setLoadFailed(false);
+    onSettledChangeRef.current?.(false);
+  }, [sourceKey]);
+
+  const handleImageLoadStart = () => {
+    if (sourceKeyRef.current !== sourceKey) return;
+    loadOutcomeRef.current = 'pending';
+    setLoadFailed(false);
+    onSettledChangeRef.current?.(false);
+  };
+
+  const handleImageLoaded = () => {
+    if (sourceKeyRef.current !== sourceKey) return;
+    loadOutcomeRef.current = 'loaded';
+  };
+
+  const handleImageFailed = () => {
+    if (sourceKeyRef.current !== sourceKey) return;
+    loadOutcomeRef.current = 'failed';
+    setLoadFailed(true);
+    onSettledChangeRef.current?.(false);
+  };
+
+  const handleImageLoadEnd = () => {
+    if (sourceKeyRef.current !== sourceKey) return;
+    onSettledChangeRef.current?.(loadOutcomeRef.current === 'loaded');
+  };
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const nextWidth = Math.round(event.nativeEvent.layout.width);
@@ -68,13 +109,31 @@ export function FeedbackEvidenceImage({
           frameHeight={height}
           frameWidth={frameWidth}
           imageSize={imageSize}
+          onError={handleImageFailed}
+          onLoad={handleImageLoaded}
+          onLoadEnd={handleImageLoadEnd}
+          onLoadStart={handleImageLoadStart}
           region={region}
           source={source}
           topicId={topicId}
         />
       ) : (
-        <Image resizeMode="cover" source={source} style={styles.fullImage} />
+        <Image
+          onError={handleImageFailed}
+          onLoad={handleImageLoaded}
+          onLoadEnd={handleImageLoadEnd}
+          onLoadStart={handleImageLoadStart}
+          resizeMode="cover"
+          source={source}
+          style={styles.fullImage}
+        />
       )}
+
+      {loadFailed ? (
+        <View pointerEvents="none" style={styles.loadFailure}>
+          <Text style={styles.loadFailureText}>이미지를 불러오지 못했어요</Text>
+        </View>
+      ) : null}
 
       {label ? (
         <View pointerEvents="none" style={styles.labelBadge}>
@@ -89,6 +148,10 @@ function CroppedImage({
   frameHeight,
   frameWidth,
   imageSize,
+  onError,
+  onLoad,
+  onLoadEnd,
+  onLoadStart,
   region,
   source,
   topicId,
@@ -96,6 +159,10 @@ function CroppedImage({
   frameHeight: number;
   frameWidth: number;
   imageSize: MakeupFeedbackAnalysisImageSize;
+  onError: () => void;
+  onLoad: () => void;
+  onLoadEnd: () => void;
+  onLoadStart: () => void;
   region: MakeupFeedbackEvidenceRegion;
   source: ImageSourcePropType;
   topicId?: MakeupFeedbackTopicId;
@@ -120,6 +187,10 @@ function CroppedImage({
 
   return (
     <Image
+      onError={onError}
+      onLoad={onLoad}
+      onLoadEnd={onLoadEnd}
+      onLoadStart={onLoadStart}
       resizeMode="stretch"
       source={source}
       style={{
@@ -230,6 +301,19 @@ const styles = StyleSheet.create({
     color: C.card,
     fontFamily: feedbackRedesignFonts.semibold,
     fontSize: 11,
+  },
+  loadFailure: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    backgroundColor: '#EAF2F7',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  loadFailureText: {
+    color: C.textMuted,
+    fontFamily: feedbackRedesignFonts.medium,
+    fontSize: 12,
+    textAlign: 'center',
   },
   rounded: {
     borderRadius: 14,

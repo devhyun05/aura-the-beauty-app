@@ -122,6 +122,8 @@ class _RefineDatabase:
     self.executed: list[tuple[str, tuple]] = []
 
   async def fetchrow(self, query: str, *args):
+    if "report_request_rate_limits" in query:
+      return {"request_count": 1, "retry_after": 0}
     if "from makeup_recommendation_reports" in query:
       assert args == (REPORT_ID, USER_ID)
       return {

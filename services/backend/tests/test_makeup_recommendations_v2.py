@@ -110,9 +110,9 @@ def test_custom_and_gender_prompt_contracts_preserve_only_explicit_optional_deta
   question_prompt = build_question_prompt(context)
   recommendation_prompt = build_recommendation_prompt(context, [], [])
 
-  assert "언제 또는 어디에서 메이크업을 사용할지" in CUSTOM_NORMALIZATION_SYSTEM_PROMPT
+  assert "장면·일정·직업·역할·테마·원하는 인상" in CUSTOM_NORMALIZATION_SYSTEM_PROMPT
   assert "원문에 없는 선택 정보는 만들지 않는다" in CUSTOM_NORMALIZATION_SYSTEM_PROMPT
-  assert "situationIntent에는 언제 또는 어디에서 사용할지" in normalization_prompt
+  assert "situationIntent에는 장면·일정·직업·역할·테마·원하는 인상" in normalization_prompt
   assert "자유 입력의 상황은 다시 묻지 말고" in question_prompt
   assert "성별을 다시 묻거나" in QUESTION_V2_SYSTEM_PROMPT
   assert "미선택은 성별을 추정하지 않는 중성적 표현" in RECOMMENDATION_V2_SYSTEM_PROMPT
@@ -714,7 +714,7 @@ def test_generated_question_normalizer_keeps_ordinary_collisions_for_strict_reje
 
 
 @pytest.mark.asyncio
-async def test_question_two_options_retry_twice_then_use_fallback(
+async def test_question_two_options_retry_twice_then_fail_closed(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   calls = 0
@@ -723,32 +723,30 @@ async def test_question_two_options_retry_twice_then_use_fallback(
     nonlocal calls
     calls += 1
     return {
-      "questions": [
-        {
-          "id": "mood",
-          "title": "어떤 분위기가 끌리나요?",
-          "options": [
-            {"id": "quiet", "label": "조용한 장면"},
-            {"id": "ai_pick", "label": "AI가 골라줘"},
-          ],
-        },
-      ],
+      "questions": [{
+        "id": "mood",
+        "title": "어떤 분위기가 끌리나요?",
+        "options": [
+          {"id": "quiet", "label": "조용한 장면"},
+          {"id": "ai_pick", "label": "AI가 골라줘"},
+        ],
+      }],
     }
 
   monkeypatch.setattr(makeup_service, "generate_json", too_few_choices)
-  result = await makeup_service.generate_questions_v2_with_fallback(
-    Settings(),
-    {"selection": {"situation": {"key": "daily"}}},
-  )
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_questions_v2_with_fallback(
+      Settings(),
+      {"selection": {"situation": {"key": "daily"}}},
+    )
 
   assert calls == 2
-  assert result["source"] == "deterministic_fallback"
-  assert result["version"] == "makeup-questions-fallback-v1"
-  GeneratedQuestions.model_validate({"questions": result["questions"]})
-
+  assert exc_info.value.status_code == 502
+  assert exc_info.value.code == "BEDROCK_INVALID_QUESTIONS"
+  assert exc_info.value.details["validationErrors"]
 
 @pytest.mark.asyncio
-async def test_question_surplus_choices_retry_twice_then_use_fallback(
+async def test_question_surplus_choices_retry_twice_then_fail_closed(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   calls = 0
@@ -757,56 +755,50 @@ async def test_question_surplus_choices_retry_twice_then_use_fallback(
     nonlocal calls
     calls += 1
     return {
-      "questions": [
-        {
-          "id": "mood",
-          "title": "어떤 분위기가 끌리나요?",
-          "options": [
-            {"id": "quiet", "label": "조용한 장면"},
-            {"id": "bold", "label": "선명한 장면"},
-            {"id": "warm", "label": "따뜻한 장면"},
-            {"id": "afterimage", "label": "여운 있는 장면"},
-            {"id": "ai_pick", "label": "AI가 골라줘"},
-          ],
-        },
-      ],
+      "questions": [{
+        "id": "mood",
+        "title": "어떤 분위기가 끌리나요?",
+        "options": [
+          {"id": "quiet", "label": "조용한 장면"},
+          {"id": "bold", "label": "선명한 장면"},
+          {"id": "warm", "label": "따뜻한 장면"},
+          {"id": "afterimage", "label": "여운 있는 장면"},
+          {"id": "ai_pick", "label": "AI가 골라줘"},
+        ],
+      }],
     }
 
   monkeypatch.setattr(makeup_service, "generate_json", too_many_choices)
-  result = await makeup_service.generate_questions_v2_with_fallback(
-    Settings(),
-    {"selection": {"situation": {"key": "daily"}}},
-  )
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_questions_v2_with_fallback(
+      Settings(),
+      {"selection": {"situation": {"key": "daily"}}},
+    )
 
   assert calls == 2
-  assert result["source"] == "deterministic_fallback"
-  GeneratedQuestions.model_validate({"questions": result["questions"]})
+  assert exc_info.value.code == "BEDROCK_INVALID_QUESTIONS"
 
 @pytest.mark.asyncio
-async def test_question_provider_failure_uses_vetted_deterministic_fallback(
+async def test_question_provider_failure_propagates_without_local_success(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   calls = 0
+  provider_error = AppError(503, "BEDROCK_ACCESS_DENIED", "not configured")
 
   async def fail_provider(*_args, **_kwargs):
     nonlocal calls
     calls += 1
-    raise AppError(503, "BEDROCK_ACCESS_DENIED", "not configured")
+    raise provider_error
 
   monkeypatch.setattr(makeup_service, "generate_json", fail_provider)
-  result = await makeup_service.generate_questions_v2_with_fallback(
-    Settings(),
-    {"selection": {"situation": {"key": "camera_content"}, "keyword": {"label": "리플렉티브 아이"}}},
-  )
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_questions_v2_with_fallback(
+      Settings(),
+      {"selection": {"situation": {"key": "camera_content"}}},
+    )
 
-  assert result["source"] == "deterministic_fallback"
   assert calls == 1
-  assert result["version"] == "makeup-questions-fallback-v1"
-  assert 1 <= len(result["questions"]) <= 3
-  assert result["questions"][1]["id"] == "camera_priority"
-  assert result["questions"][0]["options"][-1] == {"id": "ai_pick", "label": "AI가 골라줘"}
-  assert "리플렉티브 아이" in result["questions"][0]["title"]
-
+  assert exc_info.value is provider_error
 
 @pytest.mark.asyncio
 async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
@@ -896,7 +888,7 @@ async def test_provider_recommendation_is_clamped_to_selected_prep_time(
 
 
 @pytest.mark.asyncio
-async def test_invalid_v2_recommendation_uses_vetted_fallback_without_retry(
+async def test_invalid_v2_recommendation_fails_closed_without_retry(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   attempts = 0
@@ -907,58 +899,87 @@ async def test_invalid_v2_recommendation_uses_vetted_fallback_without_retry(
     return {"contextSummary": ["조건"], "looks": []}
 
   monkeypatch.setattr(makeup_service, "generate_json", invalid_response)
-  result = await makeup_service.generate_recommendation_v2(
-    Settings(), {}, [], [],
-  )
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_recommendation_v2(Settings(), {}, [], [])
 
   assert attempts == 1
-  assert [look["role"] for look in result["looks"]] == ["anchor"]
-  assert all(len(look["areaGuides"]) == 5 for look in result["looks"])
-
+  assert exc_info.value.status_code == 502
+  assert exc_info.value.code == "BEDROCK_INVALID_RECOMMENDATION"
+  assert exc_info.value.details["validationErrors"]
 
 @pytest.mark.asyncio
-async def test_v2_recommendation_provider_failure_uses_report_and_answers_fallback(
+async def test_v2_recommendation_provider_failure_propagates_without_fallback(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+  provider_error = AppError(502, "BEDROCK_REQUEST_FAILED", "missing credentials")
+
   async def fail_provider(*_args, **_kwargs):
-    raise AppError(502, "BEDROCK_REQUEST_FAILED", "missing credentials")
+    raise provider_error
 
   monkeypatch.setattr(makeup_service, "generate_json", fail_provider)
-  result = await makeup_service.generate_recommendation_v2(
-    Settings(),
-    {
-      "analysisReport": {"personalColor": "summer mute", "faceShape": "oval"},
-      "selection": {
-        "situation": {"label": "일상"},
-        "keyword": {"label": "출근·등교"},
-      },
-    },
-    _questions(),
-    [{"questionId": "change_level", "label": "익숙한 선에서 자연스럽게"}],
-  )
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_recommendation_v2(
+      Settings(),
+      {"selection": {"situation": {"label": "일상"}}},
+      _questions(),
+      [{"questionId": "change_level", "optionId": "balanced"}],
+    )
 
-  assert result["contextSummary"][0] == "출근·등교"
-  assert any("summer mute" in item for item in result["contextSummary"])
-  assert any("익숙한 선에서 자연스럽게" in item for item in result["contextSummary"])
-  assert [look["role"] for look in result["looks"]] == ["anchor"]
-  assert all({guide["area"] for guide in look["areaGuides"]} == {"base", "brow", "eye", "cheek", "lip"} for look in result["looks"])
-  assert result["generationSource"] == "deterministic_fallback"
-  assert result["matchAssessment"]["version"] == "makeup-match-v1"
-  assert result["matchAssessment"]["generationSource"] == "deterministic_fallback"
-  assert result["matchAssessment"]["evaluatedWeight"] == 85
-  assert result["matchAssessment"]["score"] is not None
-  for look in result["looks"]:
-    assert look["lookMap"]["version"] == "makeup-look-map-v1"
-    assert 0 <= look["lookMap"]["naturalityToPersonality"] <= 100
-    assert 0 <= look["lookMap"]["casualToGlam"] <= 100
-    assert look["fitAssessment"]["scoringVersion"] == "makeup-fit-v1"
-    assert look["fitAssessment"]["overallScore"] <= 74
-  anchor_map = result["looks"][0]["lookMap"]
-  assert (anchor_map["naturalityToPersonality"], anchor_map["casualToGlam"]) != (28, 56)
-
+  assert exc_info.value is provider_error
 
 @pytest.mark.asyncio
-async def test_v2_recommendation_timeout_returns_deterministic_fallback_promptly(
+async def test_v2_generate_api_marks_session_failed_when_ai_generation_fails(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  provider_error = AppError(502, "BEDROCK_REQUEST_FAILED", "provider unavailable")
+  failed_calls: list[tuple[object, UUID, UUID]] = []
+  db = object()
+
+  async def fake_ensure_user(received_db, _auth):
+    assert received_db is db
+    return {"id": USER_ID}
+
+  async def fake_enforce_limit(*_args, **_kwargs):
+    return None
+
+  async def fake_begin_generation(received_db, user_id, session_id):
+    assert (received_db, user_id, session_id) == (db, USER_ID, SESSION_ID)
+    return {
+      "reused": False,
+      "session": {
+        "id": SESSION_ID,
+        "context_snapshot": {"selection": {"situation": {"label": "데이트"}}},
+        "questions": _questions(),
+        "answers": [{"questionId": "change_level", "optionId": "balanced"}],
+      },
+    }
+
+  async def fail_ai_generation(*_args, **_kwargs):
+    raise provider_error
+
+  async def fake_fail_generation(received_db, user_id, session_id):
+    failed_calls.append((received_db, user_id, session_id))
+
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(makeup_api, "enforce_report_generation_limit", fake_enforce_limit)
+  monkeypatch.setattr(makeup_api, "begin_generation", fake_begin_generation)
+  monkeypatch.setattr(makeup_api, "generate_recommendation_v2", fail_ai_generation)
+  monkeypatch.setattr(makeup_api, "fail_generation", fake_fail_generation)
+
+  with pytest.raises(AppError) as exc_info:
+    await makeup_api.generate_makeup_recommendation_session(
+      session_id=SESSION_ID,
+      background_tasks=makeup_api.BackgroundTasks(),
+      settings=Settings(),
+      auth=auth_context(),
+      db=db,
+    )
+
+  assert exc_info.value is provider_error
+  assert failed_calls == [(db, USER_ID, SESSION_ID)]
+
+@pytest.mark.asyncio
+async def test_v2_recommendation_timeout_fails_closed_promptly(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   def slow_converse(*_args, **_kwargs):
@@ -971,21 +992,20 @@ async def test_v2_recommendation_timeout_returns_deterministic_fallback_promptly
   })
   started_at = time.perf_counter()
 
-  result = await makeup_service.generate_recommendation_v2(
-    settings,
-    {
-      "analysisReport": {"faceShape": "oval"},
-      "selection": {"situation": {"label": "데이트"}},
-    },
-    _questions(),
-    [{"questionId": "change_level", "optionId": "balanced"}],
-  )
+  with pytest.raises(AppError) as exc_info:
+    await makeup_service.generate_recommendation_v2(
+      settings,
+      {
+        "analysisReport": {"faceShape": "oval"},
+        "selection": {"situation": {"label": "데이트"}},
+      },
+      _questions(),
+      [{"questionId": "change_level", "optionId": "balanced"}],
+    )
 
-  # The provider is cut off at its deadline; the remaining time is the local
-  # deterministic recipe assembly and schema validation.
   assert time.perf_counter() - started_at < 0.2
-  assert result["generationSource"] == "deterministic_fallback"
-  assert [look["role"] for look in result["looks"]] == ["anchor"]
+  assert exc_info.value.status_code >= 500
+  assert exc_info.value.code.startswith("BEDROCK_")
 
 @pytest.mark.asyncio
 async def test_analysis_context_requires_owned_completed_non_deleted_report() -> None:
@@ -1172,11 +1192,17 @@ def test_custom_situation_label_round_trips_and_participates_in_idempotency() ->
 def test_curated_discovery_fallback_has_four_broad_parents_and_no_trend_badges() -> None:
   payload = curated_fallback_discovery()
   assert len(payload["situations"]) == 4
-  assert all(len(situation["keywords"]) == 5 for situation in payload["situations"])
+  assert [len(situation["keywords"]) for situation in payload["situations"]] == [5, 5, 5, 6]
   assert all(
     keyword["kind"] == "curated" and keyword["badge"] == "CURATED"
     for situation in payload["situations"]
     for keyword in situation["keywords"]
+  )
+  unique_day = next(item for item in payload["situations"] if item["key"] == "festival_performance")
+  romance_fantasy = next(item for item in unique_day["keywords"] if item["label"] == "로판 여주")
+  assert romance_fantasy["id"] == "c4964d4c-76e2-5f73-8db8-7065658cb254"
+  assert romance_fantasy["seedPrompt"] == (
+    "로맨스 판타지 작품의 여주인공처럼 연출하고 싶은 테마 촬영이나 코스프레 상황"
   )
 
 
@@ -1556,7 +1582,7 @@ async def test_session_creation_compiles_immutable_context_and_questions(
 
 
 @pytest.mark.asyncio
-async def test_session_api_returns_questions_fallback_after_two_invalid_model_outputs(
+async def test_session_api_fails_closed_after_two_invalid_model_outputs(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   captured: dict = {}
@@ -1649,16 +1675,10 @@ async def test_session_api_returns_questions_fallback_after_two_invalid_model_ou
       "imageMode": "generic",
     },
   )
-  assert response.status_code == 200
-  result = response.json()["data"]
+  assert response.status_code == 502
+  assert response.json()["error"]["code"] == "BEDROCK_INVALID_QUESTIONS"
   assert model_calls == 2
-  assert result["status"] == "questioning"
-  assert result["questions"] == captured["questions"]
-  assert captured["context"]["questioning"] == {
-    "source": "deterministic_fallback",
-    "version": "makeup-questions-fallback-v1",
-  }
-  GeneratedQuestions.model_validate({"questions": result["questions"]})
+  assert captured == {}
 
 
 @pytest.mark.asyncio

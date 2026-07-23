@@ -33,9 +33,9 @@ ATTRIBUTE_LABELS = {
     "liner": "라이너",
   },
   "priceTier": {
-    "under_15k": "1만 5천원 이하",
-    "15k_25k": "1만 5천~2만 5천원",
-    "25k_40k": "2만 5천~4만원",
+    "under_15k": "1만 5천원 미만",
+    "15k_25k": "1만 5천원 이상 · 2만 5천원 미만",
+    "25k_40k": "2만 5천원 이상 · 4만원 미만",
     "over_40k": "4만원 이상",
   },
   "channel": {
@@ -74,6 +74,8 @@ ATTRIBUTE_LABELS = {
     "plum": "플럼",
   },
 }
+
+PRICE_TIER_ORDER = ("under_15k", "15k_25k", "25k_40k", "over_40k")
 
 QUESTION_TITLES = {
   "category": "어느 부위를 먼저 찾아볼까요?",
@@ -175,6 +177,25 @@ def _locked_attributes(intent: dict[str, Any]) -> set[str]:
     if _clean(preference.get("source")) == "prompt" and _clean(preference.get("attribute"))
   )
   return locked
+
+
+def _single_hard_category(filters: list[dict[str, Any]]) -> str | None:
+  """Return the one category fixed by hard filters, never by candidate inference."""
+  categories: set[str] = set()
+  for filter_delta in filters:
+    if _clean(filter_delta.get("attribute")) != "category":
+      continue
+    if _clean(filter_delta.get("op")) not in {"eq", "in"}:
+      return None
+    values = {
+      _clean(value)
+      for value in _as_list(filter_delta.get("values"))
+      if _clean(value) in ATTRIBUTE_LABELS["category"]
+    }
+    if len(values) != 1:
+      return None
+    categories.update(values)
+  return next(iter(categories)) if len(categories) == 1 else None
 
 
 def _candidate_items(ranked: list[dict[str, Any]], limit: int = 40) -> list[dict[str, Any]]:
@@ -288,9 +309,12 @@ def build_question(
   items = _candidate_items(ranked)
   excluded_values = excluded_values or set()
   max_values = 6 if attribute == "category" else 4 if attribute == "priceTier" else 3
+  include_all_labeled_values = force_all_labeled_values or attribute == "priceTier"
   value_source = (
-    [(value, 0) for value in ATTRIBUTE_LABELS.get(attribute, {})]
-    if force_all_labeled_values
+    [(value, 0) for value in (
+      PRICE_TIER_ORDER if attribute == "priceTier" else ATTRIBUTE_LABELS.get(attribute, {})
+    )]
+    if include_all_labeled_values
     else sorted(distribution.items(), key=lambda row: row[1], reverse=True)
   )
   values = [
@@ -307,7 +331,7 @@ def build_question(
   for value in values:
     delta = _filter_delta(attribute, value, mode, float(analysis.get("confidence") or 0.6))
     expected_count = _expected_count(items, delta, mode)
-    if expected_count <= 0 and not force_all_labeled_values:
+    if expected_count <= 0 and not include_all_labeled_values:
       continue
     options.append(
       {
@@ -357,6 +381,7 @@ def propose_question(
   question_count: int,
   last_answer_was_noop: bool,
   score_gap_threshold: float | None = None,
+  hard_filters: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
   analyses = analyze_attributes(ranked, asked_attributes=asked_attributes, intent=intent)
   viable = [analysis for analysis in analyses if not analysis.get("excludedReason")]
@@ -449,6 +474,12 @@ def propose_question(
   if not question:
     return None, decision_log
 
+  if question["attribute"] in {"finish", "texture"}:
+    context_category = _single_hard_category(
+      hard_filters if hard_filters is not None else intent.get("lockedFilters", []),
+    )
+    if context_category:
+      question["contextCategory"] = context_category
   decision_log["selectedQuestion"] = {
     "questionId": question["id"],
     "attribute": question["attribute"],

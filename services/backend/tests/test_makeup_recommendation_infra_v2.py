@@ -100,10 +100,13 @@ def test_seed_ids_match_v2_fallback_uuid5_contract() -> None:
   assert "1f4f03a6-1e0e-51cd-8f2b-a7d5c61c8d66" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
   assert "3b815ca8-77ec-577c-8342-38554b0a59cf" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
   assert "36224560-13aa-5e42-b3af-3d45a20cf6a0" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
+  assert "c4964d4c-76e2-5f73-8db8-7065658cb254" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
   assert "'makeup-keyword-seed-v2'" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
   assert "('daily', '출근·등교', 10)" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
   assert "('formal_event', '소개팅·데이트', 10)" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
   assert "('festival_performance', '패션 행사·전시 오프닝', 50)" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
+  assert "('festival_performance', '로판 여주', 60)" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
+  assert "로맨스 판타지 작품의 여주인공처럼 연출하고 싶은 테마 촬영이나 코스프레 상황" in MAKEUP_RECOMMENDATION_SCHEMA_SQL
 
 
 def test_schema_and_dbml_documents_are_synchronized_with_v2_contract() -> None:
@@ -121,6 +124,12 @@ def test_schema_and_dbml_documents_are_synchronized_with_v2_contract() -> None:
   ):
     assert token in schema
     assert token in dbml
+  assert "c4964d4c-76e2-5f73-8db8-7065658cb254" in schema
+  assert "('festival_performance', '로판 여주', 60)" in schema
+  assert (
+    "로맨스 판타지 작품의 여주인공처럼 연출하고 싶은 테마 촬영이나 코스프레 상황"
+    in schema
+  )
 
 
 def test_production_v2_enforces_claude_text_and_gpt_image_2_boundary() -> None:

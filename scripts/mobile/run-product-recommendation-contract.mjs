@@ -1,5 +1,5 @@
 import {spawnSync} from 'node:child_process';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync, statSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -58,6 +58,9 @@ const productLikeIdentity = source('apps/mobile/src/features/recommendation/serv
 const rootNavigator = source('apps/mobile/src/app/navigation/RootNavigator.tsx');
 const arSave = source('apps/mobile/src/features/ar/services/savedArLookService.ts');
 const auradinService = source('apps/mobile/src/features/recommendation/services/auradinSearchService.ts');
+const auradinQuestionVisual = source('apps/mobile/src/features/recommendation/services/auradinQuestionVisual.ts');
+const auradinQuestionView = source('apps/mobile/src/features/recommendation/screens/views/QuestionView.tsx');
+const auradinSwatchTile = source('apps/mobile/src/features/recommendation/components/ds/SwatchTile.tsx');
 const auradinScreen = source('apps/mobile/src/features/recommendation/screens/AuradinSearchScreen.tsx');
 const auradinSavedProducts = source('apps/mobile/src/features/recommendation/services/auradinSavedProducts.ts');
 const auradinDetailView = source('apps/mobile/src/features/recommendation/screens/views/DetailView.tsx');
@@ -132,6 +135,295 @@ requireContract(
   'server-resolved external products must support like, unlike, MyPage listing, and seller reopening in both product grids.',
 );
 
+const questionCategoryNames = ['lip', 'cheek', 'shadow', 'base', 'brow', 'liner'];
+const questionFinishNames = ['glossy', 'matte', 'velvet', 'satin', 'sheer', 'shimmer'];
+const questionTextureNames = ['tint', 'balm', 'gloss', 'cream', 'powder', 'liquid', 'palette'];
+const questionVisualGroups = [
+  ['categories', questionCategoryNames],
+  ['finish', questionFinishNames],
+  ['texture', questionTextureNames],
+];
+const questionVisualDependencies = Object.fromEntries(
+  questionVisualGroups.flatMap(([directory, names]) =>
+    names.map(name => [
+      `../assets/question-visuals-v2/${directory}/${name}.jpg`,
+      `${directory}:${name}`,
+    ]),
+  ),
+);
+requireContract(
+  questionCategoryNames.length === 6 &&
+    questionFinishNames.length === 6 &&
+    questionTextureNames.length === 7 &&
+    questionVisualGroups.every(([directory, names]) =>
+      names.every(name => {
+        const assetPath = join(
+          repositoryRoot,
+          'apps/mobile/src/features/recommendation/assets/question-visuals-v2',
+          directory,
+          `${name}.jpg`,
+        );
+        return (
+          existsSync(assetPath) &&
+          statSync(assetPath).size > 20_000 &&
+          auradinQuestionVisual.includes(
+            `require('../assets/question-visuals-v2/${directory}/${name}.jpg')`,
+          )
+        );
+      }),
+    ),
+  'the universal category, finish, and texture question image sets must be bundled as non-empty JPEG assets.',
+);
+const auradinQuestionVisualModule = executeTypeScriptModule(
+  'apps/mobile/src/features/recommendation/services/auradinQuestionVisual.ts',
+  questionVisualDependencies,
+);
+const categoryVisuals = questionCategoryNames.map(value => {
+  const visual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+    id: `category-${value}`,
+    label: value,
+    attribute: 'category',
+    value,
+    op: 'eq',
+  });
+  const source =
+    questionVisualDependencies[`../assets/question-visuals-v2/categories/${value}.jpg`];
+  return visual.kind === 'category' && visual.category === value && visual.source === source;
+});
+const finishApplicationVisuals = questionFinishNames.map(finish => {
+  const visual = auradinQuestionVisualModule.resolveAuradinQuestionVisual(
+    {
+      id: `finish-${finish}`,
+      label: finish,
+      attribute: 'finish',
+      value: finish,
+      op: 'eq',
+    },
+    {attribute: 'finish'},
+  );
+  const source =
+    questionVisualDependencies[`../assets/question-visuals-v2/finish/${finish}.jpg`];
+  return (
+    visual.kind === 'application' &&
+    !Object.hasOwn(visual, 'category') &&
+    visual.attribute === 'finish' &&
+    visual.value === finish &&
+    visual.source === source
+  );
+});
+const textureApplicationVisuals = questionTextureNames.map(texture => {
+  const visual = auradinQuestionVisualModule.resolveAuradinQuestionVisual(
+    {
+      id: `texture-${texture}`,
+      label: texture,
+      attribute: 'texture',
+      value: texture,
+      op: 'eq',
+    },
+    {attribute: 'texture'},
+  );
+  const source =
+    questionVisualDependencies[`../assets/question-visuals-v2/texture/${texture}.jpg`];
+  return (
+    visual.kind === 'application' &&
+    !Object.hasOwn(visual, 'category') &&
+    visual.attribute === 'texture' &&
+    visual.value === texture &&
+    visual.source === source
+  );
+});
+
+const coralVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'colorFamily-coral',
+  label: 'coral',
+  attribute: 'colorFamily',
+  value: 'coral',
+  op: 'eq',
+});
+const contextualMatteVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual(
+  {
+    id: 'finish-matte-contextual',
+    label: 'matte',
+    value: 'matte',
+    op: 'eq',
+  },
+  {attribute: 'finish'},
+);
+const unscopedMatteVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'finish-matte-unscoped',
+  label: 'matte',
+  attribute: 'finish',
+  value: 'matte',
+  op: 'eq',
+});
+const satinVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'finish-satin',
+  label: 'satin',
+  attribute: 'finish',
+  value: 'satin',
+  op: 'eq',
+});
+const liquidTextureVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'texture-liquid',
+  label: 'liquid',
+  attribute: 'texture',
+  value: 'liquid',
+  op: 'eq',
+});
+const unscopedTintTextureVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'texture-tint-unscoped',
+  label: 'tint',
+  attribute: 'texture',
+  value: 'tint',
+  op: 'eq',
+});
+const priceVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'priceTier-over_40k',
+  label: 'premium',
+  attribute: 'priceTier',
+  value: 'over_40k',
+  op: 'eq',
+});
+const channelVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'channel-naver',
+  label: 'naver',
+  attribute: 'channel',
+  value: 'naver',
+  op: 'eq',
+});
+const noopVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'finish-noop',
+  label: 'skip',
+  attribute: 'finish',
+  op: 'noop',
+});
+const unknownVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'future-option',
+  label: 'future',
+  attribute: 'futureAttribute',
+  value: 'futureValue',
+  op: 'eq',
+});
+const matteSource =
+  questionVisualDependencies['../assets/question-visuals-v2/finish/matte.jpg'];
+const unknownFinishVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'finish-future',
+  label: 'future finish',
+  attribute: 'finish',
+  value: 'future_finish',
+  op: 'eq',
+});
+const unknownPriceVisual = auradinQuestionVisualModule.resolveAuradinQuestionVisual({
+  id: 'priceTier-future',
+  label: 'future price',
+  attribute: 'priceTier',
+  value: 'future_price',
+  op: 'eq',
+});
+const satinSource =
+  questionVisualDependencies['../assets/question-visuals-v2/finish/satin.jpg'];
+const tintSource =
+  questionVisualDependencies['../assets/question-visuals-v2/texture/tint.jpg'];
+const liquidSource =
+  questionVisualDependencies['../assets/question-visuals-v2/texture/liquid.jpg'];
+requireContract(
+  categoryVisuals.every(Boolean) &&
+    finishApplicationVisuals.every(Boolean) &&
+    textureApplicationVisuals.every(Boolean) &&
+    coralVisual.kind === 'gradient' &&
+    coralVisual.colors?.[1] === '#F2896B' &&
+    contextualMatteVisual.kind === 'application' &&
+    contextualMatteVisual.attribute === 'finish' &&
+    contextualMatteVisual.value === 'matte' &&
+    contextualMatteVisual.source === matteSource &&
+    !Object.hasOwn(contextualMatteVisual, 'category') &&
+    unscopedMatteVisual.kind === 'application' &&
+    unscopedMatteVisual.attribute === 'finish' &&
+    unscopedMatteVisual.value === 'matte' &&
+    unscopedMatteVisual.source === matteSource &&
+    !Object.hasOwn(unscopedMatteVisual, 'category') &&
+    satinVisual.kind === 'application' &&
+    satinVisual.attribute === 'finish' &&
+    satinVisual.value === 'satin' &&
+    satinVisual.source === satinSource &&
+    liquidTextureVisual.kind === 'application' &&
+    liquidTextureVisual.attribute === 'texture' &&
+    liquidTextureVisual.value === 'liquid' &&
+    liquidTextureVisual.source === liquidSource &&
+    unscopedTintTextureVisual.kind === 'application' &&
+    unscopedTintTextureVisual.attribute === 'texture' &&
+    unscopedTintTextureVisual.value === 'tint' &&
+    unscopedTintTextureVisual.source === tintSource &&
+    priceVisual.kind === 'price' &&
+    Object.keys(priceVisual).length === 1 &&
+    unknownPriceVisual.kind === 'neutral' &&
+    unknownFinishVisual.kind === 'descriptor' &&
+    Object.keys(unknownFinishVisual).sort().join(',') === 'description,kind' &&
+    channelVisual.kind === 'channel' &&
+    channelVisual.channel === 'naver' &&
+    noopVisual.kind === 'noop' &&
+    unknownVisual.kind === 'neutral',
+  'question visuals must map supported semantics without redundant category, descriptor, or price payload metadata.',
+);
+requireContract(
+  auradinQuestionView.includes("visual.kind !== 'noop'") &&
+    auradinQuestionView.includes("visual.kind === 'noop'") &&
+    auradinQuestionView.includes('resolveAuradinQuestionVisual') &&
+    auradinQuestionView.includes('resolveAuradinQuestionVisual(option, {attribute})') &&
+    auradinQuestionView.includes('getQuestionContextCopy') &&
+    auradinQuestionView.includes("attribute === 'finish'") &&
+    auradinQuestionView.includes("attribute === 'texture'") &&
+    !auradinQuestionView.includes('imageUrl={') &&
+    auradinQuestionView.includes('<ScrollView') &&
+    auradinQuestionView.includes('useWindowDimensions') &&
+    auradinQuestionView.includes('optionCount === 3') &&
+    auradinQuestionView.includes('MAX_TILE_GRID_WIDTH = 386') &&
+    auradinQuestionView.includes("flexDirection: isPriceQuestion ? 'column' : 'row'") &&
+    auradinQuestionView.includes("justifyContent: 'center'") &&
+    auradinQuestionView.includes('style={{width: tileWidth}}') &&
+    !auradinQuestionView.includes("style={isPriceQuestion ? {width: '100%'}") &&
+    !auradinQuestionView.includes("flexGrow: 1, flexBasis: '40%'") &&
+    auradinScreen.includes('attribute={question.attribute}') &&
+    auradinScreen.includes('contextCategory={question.contextCategory}') &&
+    !auradinSwatchTile.includes('BUDGET') &&
+    !auradinSwatchTile.includes('SHOP AT') &&
+    !auradinSwatchTile.includes("() => '\u20a9'") &&
+    auradinSwatchTile.includes(
+      "visual.kind === 'category' || visual.kind === 'application'",
+    ) &&
+    auradinSwatchTile.includes('source={imageVisual.source}') &&
+    auradinSwatchTile.includes('application:${imageVisual.attribute}:${imageVisual.value}') &&
+    auradinSwatchTile.includes('resizeMode="contain"') &&
+    !auradinSwatchTile.includes('resizeMode="cover"') &&
+    auradinSwatchTile.includes("backgroundColor: '#FFFDFD'") &&
+    auradinSwatchTile.includes('borderTopWidth: 1') &&
+    !auradinSwatchTile.includes('edgeGlare') &&
+    !auradinSwatchTile.includes('textShadow') &&
+    auradinSwatchTile.includes('setFailedImageKey(imageKey)') &&
+    auradinSwatchTile.includes("visual.kind === 'descriptor'") &&
+    auradinSwatchTile.includes('{visual.description}') &&
+    auradinSwatchTile.includes("label + ', ' + visual.description") &&
+    auradinSwatchTile.includes('accessibilityLabel=') &&
+    !auradinSwatchTile.includes('TextureSwatch') &&
+    auradinQuestionVisual.includes("kind: 'application'") &&
+    auradinQuestionVisual.includes("kind: 'descriptor'") &&
+    auradinQuestionVisual.includes('const source = FINISH_IMAGES[value]') &&
+    auradinQuestionVisual.includes('const source = TEXTURE_IMAGES[value]') &&
+    auradinQuestionVisual.includes('const PRICE_TIERS = new Set<string>') &&
+    auradinQuestionVisual.includes("return PRICE_TIERS.has(value) ? {kind: 'price'}") &&
+    !auradinQuestionVisual.includes('FINISH_DESCRIPTIONS') &&
+    !auradinQuestionVisual.includes('TEXTURE_DESCRIPTIONS') &&
+    !auradinQuestionVisual.includes('contextCategory') &&
+    !auradinQuestionVisual.includes('PRICE_LEVEL') &&
+    !auradinQuestionVisual.includes('question-effects') &&
+    !auradinQuestionVisual.includes('FINISH_APPLICATION_IMAGES') &&
+    !auradinQuestionVisual.includes('TEXTURE_APPLICATION_IMAGES') &&
+    !auradinQuestionVisual.includes('TEXTURE_KIND') &&
+    !auradinQuestionVisual.includes("liquid: 'glossy'") &&
+    auradinQuestionVisual.includes("return {kind: 'neutral'}"),
+  'question UI must use centered equal-width cards, vertical price chips, and unscripted universal imagery with an opaque label footer.',
+);
+
 const auradinSaveCalls = [];
 const internalSavedId = '11111111-1111-4111-8111-111111111111';
 const searchSavedId = '22222222-2222-4222-8222-222222222222';
@@ -160,6 +452,47 @@ if (previousDevFlag === undefined) {
 } else {
   globalThis.__DEV__ = previousDevFlag;
 }
+const mappedLegacyQuestionOption = auradinSearchMapperModule.mapQuestionOption({
+  id: 'colorFamily-coral',
+  imageUrl: 'https://example.com/wrong-product.jpg',
+  label: 'coral',
+  filterDelta: {attribute: 'colorFamily', op: 'eq', values: ['coral']},
+});
+requireContract(
+  mappedLegacyQuestionOption.attribute === 'colorFamily' &&
+    mappedLegacyQuestionOption.value === 'coral' &&
+    mappedLegacyQuestionOption.op === 'eq' &&
+    !Object.hasOwn(mappedLegacyQuestionOption, 'imageUrl'),
+  'question mapping must preserve semantic filter data and discard legacy product imagery.',
+);
+const mappedContextualQuestion = auradinSearchMapperModule.mapSearchTurn({
+  phase: 'question',
+  question: {
+    id: 'q-finish',
+    title: 'finish',
+    attribute: 'finish',
+    contextCategory: 'lip',
+    options: [],
+  },
+}).question;
+const mappedInvalidQuestion = auradinSearchMapperModule.mapSearchTurn({
+  phase: 'question',
+  question: {
+    id: 'q-invalid',
+    title: 'invalid',
+    attribute: 'futureAttribute',
+    contextCategory: 'perfume',
+    options: [],
+  },
+}).question;
+requireContract(
+  mappedContextualQuestion?.attribute === 'finish' &&
+    mappedContextualQuestion?.contextCategory === 'lip' &&
+    mappedInvalidQuestion?.attribute === undefined &&
+    mappedInvalidQuestion?.contextCategory === undefined,
+  'question mapping must validate and preserve attribute/contextCategory metadata.',
+);
+
 const mappedInternalUuid = auradinSearchMapperModule.mapCandidate({id: internalSavedId});
 const mappedExternalUuid = auradinSearchMapperModule.mapCandidate({
   id: searchSavedId,

@@ -36,10 +36,21 @@ export type MakeupRecommendationSourceRegionCrops = Partial<
 
 export type MakeupRecommendationAreaCropAsset = {
   boxes: readonly MakeupRecommendationCropBox[];
-  coordinateSpace: 'generated-image' | 'source-analysis-image' | 'unavailable';
+  coordinateSpace:
+    | 'full-image'
+    | 'generated-image'
+    | 'source-analysis-image'
+    | 'unavailable';
   guides: readonly FaceAnalysisRegionGuide[];
   imageSource: ImageSourcePropType;
   ready: boolean;
+};
+
+const FULL_IMAGE_BOX: MakeupRecommendationCropBox = {
+  bottom: 1,
+  left: 0,
+  right: 1,
+  top: 0,
 };
 
 function toCropBox(
@@ -111,7 +122,9 @@ export function mapAnalysisRegionVisualsToSourceCrops(
  * Coordinate-space-safe fallback order:
  * 1) generated image + its own MediaPipe crop metadata;
  * 2) source report image + source report regionVisuals;
- * 3) unavailable placeholder.
+ * 3) the complete generated image, without invented crop coordinates;
+ * 4) the complete source image, without invented crop coordinates;
+ * 5) unavailable placeholder when no real image is ready.
  *
  * Source coordinates are never paired with the generated AFTER image.
  */
@@ -147,6 +160,27 @@ export function resolveMakeupRecommendationAreaCropAsset(input: {
     };
   }
 
+  if (input.generatedReady) {
+    return {
+      boxes: [FULL_IMAGE_BOX],
+      coordinateSpace: 'full-image',
+      guides: [],
+      imageSource: input.generatedImage,
+      ready: true,
+    };
+  }
+
+  const sourceImageUri = input.sourceImageUri?.trim();
+  if (sourceImageUri) {
+    return {
+      boxes: [FULL_IMAGE_BOX],
+      coordinateSpace: 'full-image',
+      guides: [],
+      imageSource: {uri: sourceImageUri},
+      ready: true,
+    };
+  }
+
   return {
     boxes: [],
     coordinateSpace: 'unavailable',
@@ -154,6 +188,26 @@ export function resolveMakeupRecommendationAreaCropAsset(input: {
     imageSource: input.generatedImage,
     ready: false,
   };
+}
+
+export function isMakeupRecommendationCropRenderReady(input: {
+  assetReady: boolean;
+  boxCount: number;
+  failedIndexes: ReadonlySet<number>;
+  loadedIndexes: ReadonlySet<number>;
+}): boolean {
+  if (!input.assetReady || input.boxCount <= 0) return false;
+
+  for (let index = 0; index < input.boxCount; index += 1) {
+    if (
+      input.failedIndexes.has(index)
+      || !input.loadedIndexes.has(index)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export function projectRegionGuidePoints(

@@ -31,6 +31,8 @@ export interface FinalAreaGuideSectionProps {
   look: Look;
   sourceLook: MakeupLookRecommendation;
   generatedReady: boolean;
+  captureAllPages?: boolean;
+  onCapturePagesSettledChange?: (settled: boolean) => void;
   onAreaOpened: (area: PartKey) => void;
   onCropSettledChange?: (settled: boolean) => void;
   onProductImageSettledChange?: (settled: boolean) => void;
@@ -56,6 +58,8 @@ export function FinalAreaGuideSection({
   look,
   sourceLook,
   generatedReady,
+  captureAllPages = false,
+  onCapturePagesSettledChange,
   onAreaOpened,
   onCropSettledChange,
   onProductImageSettledChange,
@@ -282,6 +286,17 @@ export function FinalAreaGuideSection({
         </ScrollView>
       </View>
 
+      {captureAllPages ? (
+        <FinalAreaCapturePages
+          generatedReady={generatedReady}
+          look={look}
+          onSettledChange={onCapturePagesSettledChange}
+          recipes={recipes}
+          sourceImageUri={sourceImageUri}
+          sourceLook={sourceLook}
+          sourceRegionVisuals={sourceRegionVisuals}
+        />
+      ) : (
       <View onLayout={handlePagerLayout} style={styles.pagerViewport}>
         {pagerWidth > 0 ? (
           <ScrollView
@@ -320,10 +335,120 @@ export function FinalAreaGuideSection({
           </ScrollView>
         ) : null}
       </View>
+      )}
     </View>
   );
 }
 
+type CapturePageReadiness = Partial<
+  Record<PartKey, {crop: boolean; product: boolean}>
+>;
+
+function FinalAreaCapturePages({
+  generatedReady,
+  look,
+  onSettledChange,
+  recipes,
+  sourceImageUri,
+  sourceLook,
+  sourceRegionVisuals,
+}: {
+  generatedReady: boolean;
+  look: Look;
+  onSettledChange?: (settled: boolean) => void;
+  recipes: FinalAreaRecipe[];
+  sourceImageUri?: string;
+  sourceLook: MakeupLookRecommendation;
+  sourceRegionVisuals?: FaceAnalysisRegionVisuals;
+}) {
+  const [readiness, setReadiness] = useState<CapturePageReadiness>({});
+  const allPagesSettled = recipes.every(recipe => {
+    const page = readiness[recipe.area];
+    return page?.crop === true && page.product === true;
+  });
+
+  useEffect(() => {
+    onSettledChange?.(allPagesSettled);
+  }, [allPagesSettled, onSettledChange]);
+
+  const updatePageReadiness = useCallback((
+    area: PartKey,
+    asset: 'crop' | 'product',
+    settled: boolean,
+  ) => {
+    setReadiness(current => {
+      const page = current[area] ?? {crop: false, product: false};
+      if (page[asset] === settled) return current;
+      return {
+        ...current,
+        [area]: {...page, [asset]: settled},
+      };
+    });
+  }, []);
+
+  return (
+    <View
+      accessibilityLabel="저장용 전체 부위 메이크업 상세"
+      style={styles.capturePageList}>
+      {recipes.map(recipe => (
+        <FinalAreaCapturePage
+          generatedReady={generatedReady}
+          key={recipe.area}
+          look={look}
+          onReadinessChange={updatePageReadiness}
+          recipe={recipe}
+          sourceImageUri={sourceImageUri}
+          sourceLook={sourceLook}
+          sourceRegionVisuals={sourceRegionVisuals}
+        />
+      ))}
+    </View>
+  );
+}
+function FinalAreaCapturePage({
+  generatedReady,
+  look,
+  onReadinessChange,
+  recipe,
+  sourceImageUri,
+  sourceLook,
+  sourceRegionVisuals,
+}: {
+  generatedReady: boolean;
+  look: Look;
+  onReadinessChange: (
+    area: PartKey,
+    asset: 'crop' | 'product',
+    settled: boolean,
+  ) => void;
+  recipe: FinalAreaRecipe;
+  sourceImageUri?: string;
+  sourceLook: MakeupLookRecommendation;
+  sourceRegionVisuals?: FaceAnalysisRegionVisuals;
+}) {
+  const handleCropSettledChange = useCallback((settled: boolean) => {
+    onReadinessChange(recipe.area, 'crop', settled);
+  }, [onReadinessChange, recipe.area]);
+  const handleProductSettledChange = useCallback((settled: boolean) => {
+    onReadinessChange(recipe.area, 'product', settled);
+  }, [onReadinessChange, recipe.area]);
+
+  return (
+    <View style={styles.capturePage}>
+      <FinalAreaRecipePage
+        active
+        generatedReady={generatedReady}
+        look={look}
+        onCropSettledChange={handleCropSettledChange}
+        onProductImageSettledChange={handleProductSettledChange}
+        recipe={recipe}
+        sourceImageUri={sourceImageUri}
+        sourceLook={sourceLook}
+        sourceRegionVisuals={sourceRegionVisuals}
+      />
+    </View>
+  );
+}
 function FinalAreaRecipePage({
   active,
   generatedReady,
@@ -657,6 +782,8 @@ const styles = StyleSheet.create({
   pagerContent: {alignItems: 'flex-start'},
   page: {paddingTop: 2},
   card: {width: '100%'},
+  capturePage: {width: '100%'},
+  capturePageList: {gap: 18, width: '100%'},
   areaHeader: {gap: 5, marginTop: 15},
   areaColorAccent: {borderRadius: 2, height: 4, marginBottom: 3, width: 36},
   areaEnglish: {...typography.eyebrow, color: colors.faint, letterSpacing: 2.2},

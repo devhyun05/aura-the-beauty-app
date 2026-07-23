@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from app.api import media as media_api
 from app.core.errors import AppError
+from app.core.media_policy import GOLDEN_MASK_CONTENT_TYPE
 from app.core.security import AuthContext
 from app.core.settings import Settings
 from app.schemas.media import CompleteUploadRequest, PhotoCaptureCreate, PresignedUploadRequest
@@ -152,6 +153,24 @@ async def test_presign_binds_server_generated_locations_to_user_and_single_uploa
     "uploads/community-thread/1.jpg",
     "https://cdn.example.com/uploads/community-thread/1.jpg",
   )
+
+
+def test_presign_rejects_golden_mask_content_type_for_community_thumbnail() -> None:
+  with pytest.raises(ValidationError, match="Unsupported upload content type"):
+    PresignedUploadRequest.model_validate(
+      {
+        "mediaKind": "community-thread",
+        "source": "gallery",
+        "contentType": "image/jpeg",
+        "byteSize": 123,
+        "originalFilename": "look.jpg",
+        "thumbnail": {
+          "contentType": GOLDEN_MASK_CONTENT_TYPE,
+          "byteSize": 45,
+          "originalFilename": "private-mask.auragm",
+        },
+      },
+    )
 
 
 @pytest.mark.asyncio

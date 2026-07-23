@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
-from collections import Counter
 from typing import Any, Literal, TypedDict
 
 from app.core.errors import AppError
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 MAX_CUSTOM_SITUATION_LENGTH = 240
 GENERAL_SEARCH_DENIED_TOPIC_NAME = "General Search And Recommendations"
 
-CustomSituationIntentType = Literal["needs_detail", "noise", "valid_context"]
+CustomSituationIntentType = Literal["noise", "valid_context"]
 
 
 class CustomSituationIntentResult(TypedDict):
@@ -25,18 +24,13 @@ class CustomSituationIntentResult(TypedDict):
   originalText: str
 
 
-NOISE_MESSAGE = "의미 있는 상황을 한 문장으로 적어주세요."
-NEEDS_DETAIL_MESSAGE = "어디에서 또는 언제 사용할 메이크업인지 조금만 더 적어주세요."
-OUT_OF_SCOPE_MESSAGE = "메이크업을 사용할 때나 장소를 중심으로 적어주세요."
-PII_MESSAGE = "개인정보는 빼고 언제 또는 어디에서 사용할지 적어주세요."
+NOISE_MESSAGE = "원하는 메이크업 상황이나 분위기를 적어주세요."
+OUT_OF_SCOPE_MESSAGE = "메이크업 상황, 역할 또는 원하는 분위기를 중심으로 적어주세요."
+PII_MESSAGE = "개인정보는 빼고 원하는 메이크업 상황이나 분위기만 적어주세요."
 MEDICAL_MESSAGE = "진단·치료 요청 대신 메이크업을 사용할 상황만 적어주세요."
 UNSAFE_MESSAGE = "모델 지시가 아닌 메이크업 상황만 설명해 주세요."
 GUARDRAIL_MESSAGE = OUT_OF_SCOPE_MESSAGE
 
-LATIN_KEYBOARD_MASH_PATTERN = re.compile(
-  r"^(?:asdf|qwer|zxcv|hjkl|fdsa|rewq|vcxz|qwerty|asdfgh|zxcvbn)+$",
-  re.IGNORECASE,
-)
 EMAIL_PATTERN = re.compile(
   r"(?<![A-Za-z0-9_.+-])[A-Za-z0-9_.+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?![A-Za-z0-9_.-])",
 )
@@ -53,92 +47,9 @@ PROMPT_CONTROL_PATTERN = re.compile(
   re.IGNORECASE,
 )
 ROLE_TAG_PATTERN = re.compile(r"<\s*/?\s*(?:script|system|assistant|developer)\b", re.IGNORECASE)
-SITUATION_SYNTAX_PATTERN = re.compile(
-  r"(?:[가-힣A-Za-z0-9]{2,}(?:에서|에\s*가|갈\s*때|가는\s*날|만나는\s*날|찍는\s*날|참석))|"
-  r"(?:(?:친구|여친|남친|애인|썸남|썸녀).{0,12}(?:만나|약속|외출))",
-  re.IGNORECASE,
-)
-GENERIC_ENVIRONMENT_PATTERN = re.compile(r"(?:야외|실내)(?:에서)?")
 MEDICAL_CONTEXT_PATTERN = re.compile(
   r"(?:복용|수술|약물|여드름약|진료|처방|치료).{0,10}(?:받은|예정|중|때문|후)",
 )
-
-VAGUE_EXACT_TERMS = {
-  "그거",
-  "그냥",
-  "그냥해",
-  "글쎄",
-  "몰라",
-  "모르겠어",
-  "뭐",
-  "뭐하지",
-  "아무거나",
-  "알아서",
-  "어떻게",
-  "예쁘게",
-  "이거",
-  "자연스럽게",
-  "저거",
-  "화장",
-  "메이크업",
-  "야외",
-  "야외에서",
-  "실내",
-  "실내에서",
-}
-
-SITUATION_ANCHORS = {
-  "결혼식",
-  "공연",
-  "공항",
-  "기념일",
-  "중요한 날",
-  "특별한 날",
-  "놀이공원",
-  "데이트",
-  "등교",
-  "면접",
-  "모임",
-  "북토크",
-  "생일",
-  "세미나",
-  "술집",
-  "무대",
-  "발표",
-  "소개팅",
-  "수업",
-  "약속",
-  "야구장",
-  "야시장",
-  "여행",
-  "연말",
-  "예식",
-  "오피스",
-  "외출",
-  "운동",
-  "입학",
-  "일상",
-  "전시",
-  "증명사진",
-  "촬영",
-  "출근",
-  "축제",
-  "카페",
-  "클럽",
-  "콘서트",
-  "파티",
-  "팝업",
-  "페스티벌",
-  "피크닉",
-  "학교",
-  "회사",
-  "회식",
-  "cafe",
-  "date",
-  "interview",
-  "office",
-  "party",
-}
 
 MAKEUP_TERMS = {
   "메이크업",
@@ -154,24 +65,6 @@ MAKEUP_TERMS = {
   "눈썹",
   "피부표현",
   "톤",
-}
-
-IMPRESSION_TERMS = {
-  "가볍",
-  "깔끔",
-  "단정",
-  "또렷",
-  "맑게",
-  "분위기",
-  "예쁘",
-  "사진발",
-  "선명",
-  "오래",
-  "유지",
-  "자연",
-  "차분",
-  "트렌디",
-  "화사",
 }
 
 PII_TERMS = {
@@ -217,9 +110,6 @@ MEDICAL_REQUEST_MARKERS = {
   "해줘",
 }
 
-SAFETY_CONDITION_TERMS = {"눈시림", "라텍스", "민감", "알레르기", "자극", "향료"}
-SAFETY_AVOIDANCE_TERMS = {"빼고", "사용하지", "안 쓰", "제외", "피하고", "피해", "avoid"}
-
 EXTERNAL_SEARCH_TERMS = {
   "가격",
   "검색",
@@ -240,20 +130,52 @@ EXTERNAL_SEARCH_TERMS = {
   "환율",
 }
 
+NON_MAKEUP_TASK_TERMS = {
+  "가방",
+  "데이트 장소",
+  "드라마",
+  "레시피",
+  "매물",
+  "번역",
+  "부동산",
+  "신발",
+  "스킨케어",
+  "여행지",
+  "옷",
+  "의상",
+  "영화",
+  "유튜브",
+  "장소",
+  "카페",
+  "cafe",
+  "코디",
+  "클립",
+  "향수",
+  "호텔",
+}
+
 EXTERNAL_REQUEST_TERMS = {
+  "계산",
   "골라줘",
   "구매",
+  "만들어",
+  "번역",
+  "써줘",
   "알려",
   "링크",
   "알려줘",
   "어디",
   "얼마",
   "예약",
+  "요약",
   "주문",
+  "작성",
   "추천",
   "추천해줘",
   "찾아",
   "찾아줘",
+  "풀어",
+  "해결",
 }
 
 OUT_OF_SCOPE_DOMAIN_TERMS = {
@@ -265,6 +187,55 @@ OUT_OF_SCOPE_DOMAIN_TERMS = {
   "코드",
   "코딩",
 }
+
+SITUATION_CONTEXT_TERMS = {
+  "결혼식",
+  "기념일",
+  "내일",
+  "데이트",
+  "등교",
+  "로판",
+  "메이크업",
+  "모임",
+  "무도회",
+  "분위기",
+  "생일",
+  "상황",
+  "아무거나",
+  "약속",
+  "역할",
+  "예쁘",
+  "여행",
+  "일정",
+  "자연스럽",
+  "장면",
+  "주인공",
+  "출근",
+  "촬영",
+  "코스프레",
+  "트렌디",
+  "파티",
+  "페스티벌",
+  "회사",
+}
+
+STRONG_SITUATION_DIRECTION_TERMS = {
+  "갈 때",
+  "가는 날",
+  "같은 분위기",
+  "결혼식",
+  "맞게",
+  "발표",
+  "분위기로",
+  "어울",
+  "연출",
+  "처럼",
+  "촬영",
+  "하는 날",
+  "할 때",
+}
+
+MAKEUP_TERM_FALSE_POSITIVES = {"베이스볼", "마라톤", "스크립트", "클립"}
 
 
 def clean_custom_situation_text(value: Any) -> str:
@@ -289,16 +260,11 @@ def _contains_any(value: str, terms: set[str]) -> bool:
   return any(_compact_text(term) in compact for term in terms)
 
 
-def _has_safety_constraint(value: str) -> bool:
-  return _contains_any(value, SAFETY_CONDITION_TERMS) and _contains_any(
-    value,
-    SAFETY_AVOIDANCE_TERMS,
-  )
-
-
-def _has_explicit_situation_context(value: str) -> bool:
-  situation_value = GENERIC_ENVIRONMENT_PATTERN.sub(" ", value)
-  return _contains_any(situation_value, SITUATION_ANCHORS) or bool(SITUATION_SYNTAX_PATTERN.search(situation_value))
+def _contains_makeup_context(value: str) -> bool:
+  compact = _compact_text(value)
+  for term in MAKEUP_TERM_FALSE_POSITIVES:
+    compact = compact.replace(_compact_text(term), "")
+  return any(_compact_text(term) in compact for term in MAKEUP_TERMS)
 
 
 def _looks_like_medical_advice_request(value: str) -> bool:
@@ -313,57 +279,39 @@ def _looks_like_medical_advice_request(value: str) -> bool:
   return not (_contains_any(value, MAKEUP_TERMS) and MEDICAL_CONTEXT_PATTERN.search(value))
 
 
-def _is_noise(value: str) -> bool:
-  compact = _compact_text(value)
-  if len(compact) < 2:
+def _looks_like_explicit_non_makeup_task(value: str) -> bool:
+  """Separate an external task request from a makeup situation described in endpoint context."""
+  has_request = _contains_any(value, EXTERNAL_REQUEST_TERMS)
+  has_makeup_context = _contains_makeup_context(value)
+  if not has_request or has_makeup_context:
+    return False
+
+  has_strong_situation_direction = _contains_any(
+    value,
+    STRONG_SITUATION_DIRECTION_TERMS,
+  )
+  known_non_makeup_topic = _contains_any(
+    value,
+    EXTERNAL_SEARCH_TERMS | NON_MAKEUP_TASK_TERMS | OUT_OF_SCOPE_DOMAIN_TERMS,
+  )
+  if has_strong_situation_direction:
+    return False
+
+  if known_non_makeup_topic:
     return True
 
-  hangul_syllables = len(re.findall(r"[가-힣]", compact))
-  hangul_jamo = len(re.findall(r"[ㄱ-ㅎㅏ-ㅣ]", compact))
-  latin_letters = len(re.findall(r"[a-z]", compact))
-  if hangul_syllables + latin_letters == 0:
-    return True
-  if hangul_syllables == 0 and hangul_jamo / len(compact) > 0.5:
-    return True
-
-  if len(compact) >= 4:
-    repeated_ratio = max(Counter(compact).values()) / len(compact)
-    if repeated_ratio >= 0.7:
-      return True
-
-  if re.fullmatch(r"[a-z]+", compact):
-    return bool(LATIN_KEYBOARD_MASH_PATTERN.fullmatch(compact)) or (
-      len(compact) >= 4 and not re.search(r"[aeiou]", compact)
-    )
-  return False
-
-
-def _has_context(value: str) -> bool:
-  return _has_explicit_situation_context(value)
+  return not _contains_any(value, SITUATION_CONTEXT_TERMS)
 
 
 def classify_custom_situation_text(value: Any) -> CustomSituationIntentResult:
   original = clean_custom_situation_text(value)
-  if _is_noise(original):
-    return {"intentType": "noise", "normalizedText": "", "originalText": original}
-
-  compact = _compact_text(original)
-  if compact in {_compact_text(term) for term in VAGUE_EXACT_TERMS}:
-    return {"intentType": "needs_detail", "normalizedText": "", "originalText": original}
-
-  if _has_context(original):
-    return {
-      "intentType": "valid_context",
-      "normalizedText": original,
-      "originalText": original,
-    }
-
-  has_direction_only = _contains_any(original, MAKEUP_TERMS | IMPRESSION_TERMS)
-  has_incomplete_safety_context = _contains_any(original, SAFETY_CONDITION_TERMS)
-  if len(compact) <= 3 or has_direction_only or has_incomplete_safety_context:
-    return {"intentType": "needs_detail", "normalizedText": "", "originalText": original}
-
-  return {"intentType": "needs_detail", "normalizedText": "", "originalText": original}
+  if not original:
+    return {"intentType": "noise", "normalizedText": "", "originalText": ""}
+  return {
+    "intentType": "valid_context",
+    "normalizedText": original,
+    "originalText": original,
+  }
 
 
 def _local_block_reason(value: str) -> Literal["medical", "out_of_scope", "pii", "unsafe"] | None:
@@ -383,18 +331,7 @@ def _local_block_reason(value: str) -> Literal["medical", "out_of_scope", "pii",
   if _looks_like_medical_advice_request(value):
     return "medical"
 
-  has_external_topic = _contains_any(value, EXTERNAL_SEARCH_TERMS)
-  has_external_request = _contains_any(value, EXTERNAL_REQUEST_TERMS)
-  has_makeup_context = _contains_any(value, MAKEUP_TERMS)
-  has_situation_context = _contains_any(value, SITUATION_ANCHORS)
-  has_impression_context = _contains_any(value, IMPRESSION_TERMS)
-  if _contains_any(value, OUT_OF_SCOPE_DOMAIN_TERMS):
-    return "out_of_scope"
-  if has_external_topic and (has_external_request or not _has_context(value)):
-    return "out_of_scope"
-  if has_external_request and not has_makeup_context and not (
-    has_situation_context and has_impression_context
-  ):
+  if _looks_like_explicit_non_makeup_task(value):
     return "out_of_scope"
   return None
 
@@ -421,9 +358,6 @@ def validate_custom_situation_text(value: Any, *, field: str = "customSituationT
       f"상황은 {MAX_CUSTOM_SITUATION_LENGTH}자 이내로 적어주세요.",
       {"field": field, "maxLength": MAX_CUSTOM_SITUATION_LENGTH},
     )
-  if classification["intentType"] == "noise":
-    raise AppError(422, "MAKEUP_CUSTOM_SITUATION_INVALID", NOISE_MESSAGE, {"field": field})
-
   reason = _local_block_reason(original)
   if reason:
     logger.warning(
@@ -432,8 +366,6 @@ def validate_custom_situation_text(value: Any, *, field: str = "customSituationT
       len(original),
     )
     _raise_local_error(reason, field=field)
-  if classification["intentType"] == "needs_detail":
-    raise AppError(422, "MAKEUP_CUSTOM_SITUATION_NEEDS_DETAIL", NEEDS_DETAIL_MESSAGE, {"field": field})
   return classification["normalizedText"]
 
 
@@ -466,7 +398,10 @@ async def validate_custom_situation_for_request(
   except AppError as exc:
     if exc.code != "FEEDBACK_GOAL_GUARDRAIL_BLOCKED":
       raise
-    if _is_only_general_search_denied_topic(exc.details):
+    if (
+      _is_only_general_search_denied_topic(exc.details)
+      and not _looks_like_explicit_non_makeup_task(normalized)
+    ):
       logger.warning(
         "[aura:makeup-recommendation] custom-situation:guardrail-bypass "
         "reason=general-search-false-positive length=%s",

@@ -71,6 +71,19 @@ export function RecommendationHistoryView({
         <View style={styles.stateCard}>
           <Text style={styles.stateTitle}>{makeupRecommendationHistoryCopy.empty}</Text>
           <Text style={styles.stateDescription}>새 추천을 받으면 이곳에서 언제든 다시 볼 수 있어요.</Text>
+          {canLoadMore ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{disabled: isLoadingMore}}
+              disabled={isLoadingMore}
+              onPress={onLoadMore}
+              style={styles.loadMoreButton}>
+              {isLoadingMore ? <ActivityIndicator color={colors.textPrimary} size="small" /> : null}
+              <Text style={styles.loadMoreLabel}>
+                {isLoadingMore ? '더 불러오는 중…' : '다음 지난 추천 확인하기'}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <View style={styles.list}>

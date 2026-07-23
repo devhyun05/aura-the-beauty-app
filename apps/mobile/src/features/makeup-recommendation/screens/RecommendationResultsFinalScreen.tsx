@@ -36,10 +36,21 @@ const CAPTURE_OPTIONS = {
   format: 'jpg',
   quality: 0.95,
   result: 'tmpfile',
+  useRenderInContext: true,
 } as const;
 
 type CaptureAsset = 'crop' | 'hero' | 'map' | 'product';
 type CaptureReadiness = Record<CaptureAsset, boolean>;
+
+function waitForCaptureLayout() {
+  return new Promise<void>(resolve => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  });
+}
 
 const INITIAL_CAPTURE_READINESS: CaptureReadiness = {
   crop: false,
@@ -47,6 +58,38 @@ const INITIAL_CAPTURE_READINESS: CaptureReadiness = {
   map: false,
   product: false,
 };
+const CAPTURE_PAGES_SETTLE_TIMEOUT_MS = 10_000;
+
+function waitForCapturePagesToSettle(
+  readyRef: {current: boolean},
+  resolveRef: {current: (() => void) | null},
+) {
+  if (readyRef.current) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const finish = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = null;
+      if (resolveRef.current === finish) resolveRef.current = null;
+      resolve();
+    };
+    const fail = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = null;
+      if (resolveRef.current === finish) resolveRef.current = null;
+      reject(
+        new Error(
+          '추천 보고서의 상세 이미지를 모두 불러오지 못했어요. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+        ),
+      );
+    };
+
+    resolveRef.current = finish;
+    timeoutId = setTimeout(fail, CAPTURE_PAGES_SETTLE_TIMEOUT_MS);
+    if (readyRef.current) finish();
+  });
+}
 
 export function RecommendationResultsFinalScreen({
   context,
@@ -63,6 +106,9 @@ export function RecommendationResultsFinalScreen({
   const insets = useSafeAreaInsets();
   const captureRef = useRef<OptionalViewShotRef>(null);
   const activeShareTargetRef = useRef<RecommendationResultShareTarget | null>(null);
+  const capturePagesSettledRef = useRef(false);
+  const capturePagesResolveRef = useRef<(() => void) | null>(null);
+  const [captureAllPages, setCaptureAllPages] = useState(false);
   const [captureReadiness, setCaptureReadiness] =
     useState<CaptureReadiness>(INITIAL_CAPTURE_READINESS);
   const model = useMemo(
@@ -107,6 +153,11 @@ export function RecommendationResultsFinalScreen({
   const captureReady =
     generatedReady && Object.values(captureReadiness).every(Boolean);
 
+  const handleCapturePagesSettledChange = useCallback((settled: boolean) => {
+    capturePagesSettledRef.current = settled;
+    if (settled) capturePagesResolveRef.current?.();
+  }, []);
+
   const handleShareAction = useCallback(
     async (target: RecommendationResultShareTarget) => {
       if (activeShareTargetRef.current) return;
@@ -123,11 +174,20 @@ export function RecommendationResultsFinalScreen({
           await requestRecommendationResultSavePermission();
         }
 
+        capturePagesSettledRef.current = false;
+        setCaptureAllPages(true);
+        await waitForCaptureLayout();
+        await waitForCapturePagesToSettle(
+          capturePagesSettledRef,
+          capturePagesResolveRef,
+        );
+        await waitForCaptureLayout();
         const imageUri = await captureRecommendationResult(captureRef);
 
         if (target === 'save-image') {
           await saveRecommendationResultToLibrary(imageUri);
           AccessibilityInfo.announceForAccessibility('전체 추천 결과를 사진에 저장했어요.');
+          Alert.alert('저장 완료', '모든 부위의 상세 페이지를 포함한 추천 보고서를 갤러리에 저장했어요.');
         } else {
           const result = await shareRecommendationResult(imageUri);
           AccessibilityInfo.announceForAccessibility(
@@ -142,6 +202,9 @@ export function RecommendationResultsFinalScreen({
           getRecommendationResultShareError(error),
         );
       } finally {
+        capturePagesResolveRef.current = null;
+        capturePagesSettledRef.current = false;
+        setCaptureAllPages(false);
         activeShareTargetRef.current = null;
       }
     },
@@ -224,9 +287,11 @@ export function RecommendationResultsFinalScreen({
 
             <View style={styles.sectionInset}>
               <FinalAreaGuideSection
+                captureAllPages={captureAllPages}
                 generatedReady={generatedReady}
                 look={model.look}
                 onAreaOpened={area => onAreaOpened(area, model.sourceLook)}
+                onCapturePagesSettledChange={handleCapturePagesSettledChange}
                 onCropSettledChange={captureReadyHandlers.crop}
                 onProductImageSettledChange={captureReadyHandlers.product}
                 sourceImageUri={context?.reportImageUri}

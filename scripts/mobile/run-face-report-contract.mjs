@@ -11,6 +11,59 @@ const tscPath = join(repoRoot, 'apps/mobile/node_modules/typescript/bin/tsc');
 const srcRoot = join(repoRoot, 'apps/mobile/src');
 const featuresDir = join(repoRoot, 'apps/mobile/src/features');
 
+function source(relativePath) {
+  return readFileSync(join(repoRoot, relativePath), 'utf8');
+}
+
+function requireContract(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function requireAll(content, snippets, label) {
+  for (const snippet of snippets) {
+    requireContract(content.includes(snippet), `${label} missing: ${snippet}`);
+  }
+}
+
+const shareSheetSource = source(
+  'apps/mobile/src/features/face-report/components/FaceReportShareSheet.tsx',
+);
+const shareSource = source(
+  'apps/mobile/src/features/face-report/services/reportImageShare.ts',
+);
+const optionalViewShotSource = source(
+  'apps/mobile/src/shared/ui/OptionalViewShot.tsx',
+);
+
+requireAll(shareSheetSource, [
+  'useRenderInContext: true',
+  'captureReportImages(captureRefs, {',
+  'isReady: areCapturePhotosSettled',
+  'shouldContinue: () =>',
+  'exportInFlightRef.current',
+  'const operationId = ++exportOperationRef.current',
+  'onLoadStart={() => onPhotoLoadStart(captureAssetId)}',
+  'onLoadEnd={() => onPhotoLoadSettled(captureAssetId)}',
+  'onError={() => onPhotoLoadSettled(captureAssetId)}',
+], 'face report share-card capture lifecycle');
+
+requireAll(shareSource, [
+  'FACE_REPORT_CAPTURE_SETTLE_TIMEOUT_MS = 10_000',
+  'if (Date.now() >= deadline)',
+  'await waitForFaceReportCaptureAssets(options)',
+  'await waitForLayoutFrames(2)',
+  'const imageUri = await capture.call(captureTarget)',
+  'assertCaptureStillActive(options.shouldContinue)',
+], 'face report bounded capture wait');
+
+requireAll(optionalViewShotSource, [
+  'height?: number',
+  'width?: number',
+  'useRenderInContext?: boolean',
+], 'optional view-shot capture options');
+
 // 순수(RN 무의존) 파일만 나열한다.
 const entries = [
   'face-report/reportFormat.ts',
@@ -28,6 +81,8 @@ const entries = [
   'face-report/services/goldenMaskInteraction.test.ts',
   'face-report/services/faceDepthPresentation.ts',
   'face-report/services/faceDepthPresentation.test.ts',
+  'face-report/services/reportCaptureReadiness.ts',
+  'face-report/services/reportCaptureReadiness.test.ts',
   'face-geometry/services/faceGeometryCore/regionVisualsBuilder.ts',
   'face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.ts',
   'ar/stencil/src/composer/bodyProfile.ts',
@@ -68,6 +123,7 @@ run(process.execPath, [join(outDir, 'features/face-report/services/reportContent
 run(process.execPath, [join(outDir, 'features/face-report/services/reportCompletionStatus.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/goldenMaskInteraction.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/faceDepthPresentation.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/services/reportCaptureReadiness.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.js')]);
 run(process.execPath, [join(outDir, 'features/ar/stencil/src/composer/bodyProfile.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-analysis/services/faceAnalysisReportGate.test.js')]);

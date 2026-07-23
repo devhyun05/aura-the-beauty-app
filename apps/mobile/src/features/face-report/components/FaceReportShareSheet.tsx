@@ -1,4 +1,4 @@
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -59,6 +59,7 @@ const SHARE_CAPTURE_OPTIONS = {
   format: 'jpg',
   quality: 0.95,
   result: 'tmpfile',
+  useRenderInContext: true,
 } as const;
 
 function getCardCopy(data: ReportData, kind: ShareCardKind) {
@@ -129,14 +130,20 @@ function getCardCopy(data: ReportData, kind: ShareCardKind) {
 }
 
 function ReportShareCard({
+  captureAssetId,
   data,
   kind,
+  onPhotoLoadSettled,
+  onPhotoLoadStart,
   privacy,
   profileName,
   story = false,
 }: {
+  captureAssetId: string;
   data: ReportData;
   kind: ShareCardKind;
+  onPhotoLoadSettled: (captureAssetId: string) => void;
+  onPhotoLoadStart: (captureAssetId: string) => void;
   privacy: ReportSharePrivacy;
   profileName?: string;
   story?: boolean;
@@ -192,6 +199,9 @@ function ReportShareCard({
   return (
     <ImageBackground
       blurRadius={privacy.blurPhotoBackground ? 22 : 0}
+      onError={() => onPhotoLoadSettled(captureAssetId)}
+      onLoadEnd={() => onPhotoLoadSettled(captureAssetId)}
+      onLoadStart={() => onPhotoLoadStart(captureAssetId)}
       resizeMode="cover"
       source={{uri: photoUri}}
       style={[styles.captureCard, story ? styles.captureCardStory : null]}>
@@ -237,6 +247,9 @@ export function FaceReportShareSheet({
   const [format, setFormat] = useState<ReportShareFormat>('summary');
   const [privacy, setPrivacy] = useState(DEFAULT_REPORT_SHARE_PRIVACY);
   const [busyTarget, setBusyTarget] = useState<'save' | 'share' | null>(null);
+  const exportInFlightRef = useRef(false);
+  const exportOperationRef = useRef(0);
+  const isMountedRef = useRef(true);
 
   const summaryRef = useRef<OptionalViewShotRef | null>(null);
   const storyRef = useRef<OptionalViewShotRef | null>(null);
@@ -245,6 +258,66 @@ export function FaceReportShareSheet({
   const styleRef = useRef<OptionalViewShotRef | null>(null);
   const recommendationRef = useRef<OptionalViewShotRef | null>(null);
   const bodyRef = useRef<OptionalViewShotRef | null>(null);
+  const capturePhotoUri = privacy.includePhoto ? data.s1.photo.uri : undefined;
+  const capturePhotoAssetIds = useMemo(
+    () =>
+      capturePhotoUri
+        ? [
+            'summary',
+            'story',
+            'face',
+            'color-skin',
+            'style',
+            'recommendation',
+            ...(data.s5 ? ['body'] : []),
+          ]
+        : [],
+    [capturePhotoUri, data.s5],
+  );
+  const capturePhotoStateRef = useRef<{
+    signature: string;
+    states: Map<string, boolean>;
+  }>({signature: '', states: new Map()});
+  const capturePhotoSignature = `${capturePhotoUri ?? 'none'}:${capturePhotoAssetIds.join(',')}`;
+
+  if (capturePhotoStateRef.current.signature !== capturePhotoSignature) {
+    capturePhotoStateRef.current = {
+      signature: capturePhotoSignature,
+      states: new Map(capturePhotoAssetIds.map(assetId => [assetId, false])),
+    };
+  }
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      exportOperationRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!visible) {
+      exportOperationRef.current += 1;
+    }
+  }, [visible]);
+
+  const handlePhotoLoadStart = useCallback((captureAssetId: string) => {
+    if (capturePhotoStateRef.current.states.has(captureAssetId)) {
+      capturePhotoStateRef.current.states.set(captureAssetId, false);
+    }
+  }, []);
+
+  const handlePhotoLoadSettled = useCallback((captureAssetId: string) => {
+    if (capturePhotoStateRef.current.states.has(captureAssetId)) {
+      capturePhotoStateRef.current.states.set(captureAssetId, true);
+    }
+  }, []);
+
+  const areCapturePhotosSettled = useCallback(() => {
+    const states = capturePhotoStateRef.current.states;
+    return states.size === capturePhotoAssetIds.length
+      && Array.from(states.values()).every(Boolean);
+  }, [capturePhotoAssetIds.length]);
 
   const captureRefs = useMemo(() => {
     if (format === 'summary') return [summaryRef];
@@ -260,12 +333,20 @@ export function FaceReportShareSheet({
   }, [data.s5, format]);
 
   const runExport = async (target: 'save' | 'share') => {
-    if (busyTarget) return;
+    if (exportInFlightRef.current) return;
+    exportInFlightRef.current = true;
+    const operationId = ++exportOperationRef.current;
     setBusyTarget(target);
     const imageUris: string[] = [];
     try {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      imageUris.push(...await captureReportImages(captureRefs));
+      imageUris.push(...await captureReportImages(captureRefs, {
+        isReady: areCapturePhotosSettled,
+        shouldContinue: () =>
+          isMountedRef.current
+          && visible
+          && exportOperationRef.current === operationId,
+      }));
       if (target === 'save') {
         await saveReportImagesToLibrary(imageUris);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -279,6 +360,9 @@ export function FaceReportShareSheet({
         });
       }
     } catch (error) {
+      if (!isMountedRef.current || exportOperationRef.current !== operationId) {
+        return;
+      }
       console.info('[aura:analysis] report-export:failed', {
         format,
         message: error instanceof Error ? error.message : String(error),
@@ -287,7 +371,10 @@ export function FaceReportShareSheet({
       Alert.alert(target === 'save' ? '저장하지 못했어요' : '공유하지 못했어요', getShareErrorMessage(error));
     } finally {
       cleanupReportShareImages(imageUris);
-      setBusyTarget(null);
+      exportInFlightRef.current = false;
+      if (isMountedRef.current) {
+        setBusyTarget(null);
+      }
     }
   };
 
@@ -438,12 +525,29 @@ export function FaceReportShareSheet({
           <OptionalViewShot
             ref={summaryRef}
             options={{...SHARE_CAPTURE_OPTIONS, height: 1350, width: 1080}}>
-            <ReportShareCard data={data} kind="summary" privacy={privacy} profileName={profileName} />
+            <ReportShareCard
+              captureAssetId="summary"
+              data={data}
+              kind="summary"
+              onPhotoLoadSettled={handlePhotoLoadSettled}
+              onPhotoLoadStart={handlePhotoLoadStart}
+              privacy={privacy}
+              profileName={profileName}
+            />
           </OptionalViewShot>
           <OptionalViewShot
             ref={storyRef}
             options={{...SHARE_CAPTURE_OPTIONS, height: 1920, width: 1080}}>
-            <ReportShareCard data={data} kind="summary" privacy={privacy} profileName={profileName} story />
+            <ReportShareCard
+              captureAssetId="story"
+              data={data}
+              kind="summary"
+              onPhotoLoadSettled={handlePhotoLoadSettled}
+              onPhotoLoadStart={handlePhotoLoadStart}
+              privacy={privacy}
+              profileName={profileName}
+              story
+            />
           </OptionalViewShot>
           {(['face', 'color-skin', 'style', 'recommendation'] as ShareCardKind[]).map(kind => {
             const ref =
@@ -459,7 +563,15 @@ export function FaceReportShareSheet({
                 key={kind}
                 ref={ref}
                 options={{...SHARE_CAPTURE_OPTIONS, height: 1350, width: 1080}}>
-                <ReportShareCard data={data} kind={kind} privacy={privacy} profileName={profileName} />
+                <ReportShareCard
+                  captureAssetId={kind}
+                  data={data}
+                  kind={kind}
+                  onPhotoLoadSettled={handlePhotoLoadSettled}
+                  onPhotoLoadStart={handlePhotoLoadStart}
+                  privacy={privacy}
+                  profileName={profileName}
+                />
               </OptionalViewShot>
             );
           })}
@@ -467,7 +579,15 @@ export function FaceReportShareSheet({
             <OptionalViewShot
               ref={bodyRef}
               options={{...SHARE_CAPTURE_OPTIONS, height: 1350, width: 1080}}>
-              <ReportShareCard data={data} kind="body" privacy={privacy} profileName={profileName} />
+              <ReportShareCard
+                captureAssetId="body"
+                data={data}
+                kind="body"
+                onPhotoLoadSettled={handlePhotoLoadSettled}
+                onPhotoLoadStart={handlePhotoLoadStart}
+                privacy={privacy}
+                profileName={profileName}
+              />
             </OptionalViewShot>
           ) : null}
         </View>

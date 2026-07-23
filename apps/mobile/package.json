@@ -22,6 +22,7 @@
     "test:face-analysis-measurements": "node ../../scripts/mobile/run-face-analysis-measurements-contract.mjs",
     "test:face-capture-upload": "node ../../scripts/mobile/run-face-capture-upload-contract.mjs",
     "test:face-report": "node ../../scripts/mobile/run-face-report-contract.mjs",
+    "test:qa-checklist": "node ../../scripts/mobile/run-qa-checklist-contract.mjs",
     "test:face-feature-profile": "node ../../scripts/mobile/run-face-feature-profile-contract.mjs",
     "test:face-capture-tutorial": "node ../../scripts/mobile/run-face-capture-tutorial-contract.mjs",
     "test:makeup-feedback-camera-quality": "node ../../scripts/mobile/run-makeup-feedback-camera-quality-contract.mjs",

@@ -477,6 +477,26 @@ def test_soft_question_expected_count_is_actual_value_match() -> None:
   assert counts["rose"] == 1
 
 
+def test_question_options_do_not_expose_product_image_urls() -> None:
+  pink = _item("pink", color="pink")
+  pink["liveOffer"]["imageUrl"] = "https://example.com/pink.jpg"
+  rose = _item("rose", color="rose")
+  rose["liveOffer"]["imageUrl"] = "https://example.com/rose.jpg"
+  question = build_question(
+    _ranked([pink, rose]),
+    {
+      "attribute": "colorFamily",
+      "questionMode": "soft",
+      "confidence": 0.9,
+      "valueDistribution": {"pink": 1, "rose": 1},
+    },
+    question_count=0,
+  )
+
+  assert question is not None
+  assert all("imageUrl" not in option for option in question["options"])
+
+
 def test_question_builder_falls_back_to_next_viable_attribute() -> None:
   items = [
     _item(
@@ -507,3 +527,134 @@ def test_question_builder_falls_back_to_next_viable_attribute() -> None:
     "attribute": "finish",
     "reason": "insufficient_options",
   }
+
+
+def test_every_price_question_has_the_four_canonical_ranges_then_noop() -> None:
+  question = build_question(
+    _ranked([
+      _item("budget", price_tier="under_15k"),
+      _item("premium", price_tier="over_40k"),
+    ]),
+    {
+      "attribute": "priceTier",
+      "questionMode": "hard",
+      "confidence": 0.9,
+      "valueDistribution": {"over_40k": 1, "under_15k": 1},
+    },
+    question_count=0,
+  )
+
+  assert question is not None
+  assert [option["filterDelta"].get("values", ["noop"])[0] for option in question["options"]] == [
+    "under_15k", "15k_25k", "25k_40k", "over_40k", "noop",
+  ]
+  assert [option["label"] for option in question["options"][:-1]] == [
+    "1만 5천원 미만", "1만 5천원 이상 · 2만 5천원 미만",
+    "2만 5천원 이상 · 4만원 미만", "4만원 이상",
+  ]
+  assert question["options"][-1]["filterDelta"]["op"] == "noop"
+
+
+@pytest.mark.parametrize(
+  ("attribute", "values"),
+  [
+    ("finish", ("matte", "glossy")),
+    ("texture", ("powder", "cream")),
+  ],
+)
+def test_finish_and_texture_questions_keep_the_single_hard_category_context(
+  attribute: str,
+  values: tuple[str, str],
+) -> None:
+  items = []
+  for index in range(12):
+    item = _item(f"{attribute}-{index}", category="lip")
+    item["attributes"][attribute] = values[index % 2]
+    item["attributeConfidence"][attribute] = 0.9
+    item["hardFilterEligible"][attribute] = True
+    items.append(item)
+  intent = parse_intent("립 추천해줘")
+
+  question, _log = propose_question(
+    _ranked(items),
+    asked_attributes=[],
+    intent=intent,
+    question_count=0,
+    last_answer_was_noop=False,
+    hard_filters=intent["lockedFilters"],
+  )
+
+  assert question is not None
+  assert question["attribute"] == attribute
+  assert question["contextCategory"] == "lip"
+
+
+def test_context_category_is_omitted_for_non_visual_or_multi_category_questions() -> None:
+  items = [_item(f"item-{index}", price_tier=("under_15k", "over_40k")[index % 2]) for index in range(12)]
+  intent = {
+    "priceOrDetected": True,
+    "broad": False,
+    "requiresQuestion": True,
+    "lockedFilters": [{"attribute": "category", "op": "in", "values": ["lip", "cheek"], "locked": True}],
+    "softPreferences": [],
+    "avoidCategories": [],
+  }
+
+  question, _log = propose_question(
+    _ranked(items), asked_attributes=[], intent=intent, question_count=0,
+    last_answer_was_noop=False, hard_filters=intent["lockedFilters"],
+  )
+
+  assert question is not None
+  assert question["attribute"] == "priceTier"
+  assert "contextCategory" not in question
+  assert question["options"][-1]["filterDelta"]["op"] == "noop"
+
+  for index, item in enumerate(items):
+    item["attributes"]["finish"] = ("matte", "glossy")[index % 2]
+    item["attributeConfidence"]["finish"] = 0.9
+    item["hardFilterEligible"]["finish"] = True
+  finish_intent = {**intent, "priceOrDetected": False}
+
+  finish_question, _log = propose_question(
+    _ranked(items),
+    asked_attributes=[],
+    intent=finish_intent,
+    question_count=0,
+    last_answer_was_noop=False,
+    hard_filters=finish_intent["lockedFilters"],
+  )
+
+  assert finish_question is not None
+  assert finish_question["attribute"] == "finish"
+  assert "contextCategory" not in finish_question
+
+def test_context_category_is_not_inferred_from_candidates_without_a_hard_filter() -> None:
+  items = []
+  for index in range(12):
+    item = _item(f"candidate-lip-{index}", category="lip")
+    item["attributes"]["finish"] = ("matte", "glossy")[index % 2]
+    item["attributeConfidence"]["finish"] = 0.9
+    item["hardFilterEligible"]["finish"] = True
+    items.append(item)
+  intent = {
+    "priceOrDetected": False,
+    "broad": False,
+    "requiresQuestion": True,
+    "lockedFilters": [],
+    "softPreferences": [],
+    "avoidCategories": [],
+  }
+
+  question, _log = propose_question(
+    _ranked(items),
+    asked_attributes=[],
+    intent=intent,
+    question_count=0,
+    last_answer_was_noop=False,
+    hard_filters=[],
+  )
+
+  assert question is not None
+  assert question["attribute"] == "finish"
+  assert "contextCategory" not in question

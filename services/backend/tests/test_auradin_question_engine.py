@@ -84,3 +84,18 @@ def test_unsupported_perfume_prompt_returns_recoverable_failure() -> None:
   assert turn["phase"] == "failed"
   assert turn["error"]["code"] == "unsupported_category"
   assert turn["error"]["recoverable"] is True
+
+
+def test_followup_finish_question_keeps_prompt_category_context() -> None:
+  clear_sessions()
+  state = create_session(prompt="립 추천해줘", owner_subject=TEST_OWNER)
+  first = to_search_turn(state)
+
+  assert first["phase"] == "question"
+  assert first["question"]["attribute"] == "priceTier"
+
+  second = _answer_first_non_noop(state)
+
+  assert second["phase"] == "question"
+  assert second["question"]["attribute"] in {"finish", "texture"}
+  assert second["question"]["contextCategory"] == "lip"
