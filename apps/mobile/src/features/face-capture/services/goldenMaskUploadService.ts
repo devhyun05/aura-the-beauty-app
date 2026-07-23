@@ -643,7 +643,7 @@ export async function flushPendingGoldenMaskUploads(
         const nextItem = {...item, attempts: item.attempts + 1};
         const shouldRetry =
           !(error instanceof BackendApiError) ||
-          shouldRetryGoldenMaskBackendStatus(error.status);
+          shouldRetryGoldenMaskBackendStatus(error.status, error.code);
         if (!shouldRetry || isGoldenMaskPendingExpired(nextItem, Date.now())) {
           await discardPendingItem(item);
           continue;

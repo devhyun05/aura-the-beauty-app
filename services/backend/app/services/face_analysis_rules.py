@@ -1,7 +1,12 @@
 from collections.abc import Iterable
 from statistics import fmean
 
-from app.schemas.face_analysis_v2 import DerivedResult, Insight, MetricEnvelope
+from app.schemas.face_analysis_v2 import (
+  DerivedResult,
+  Insight,
+  MeasurementInterpretation,
+  MetricEnvelope,
+)
 
 
 RULES_VERSION = "s1-l1-v1"
@@ -20,6 +25,254 @@ def _text(metric: MetricEnvelope | None) -> str | None:
 def _confidence(profile: dict[str, MetricEnvelope], keys: Iterable[str]) -> float:
   values = [profile[key].confidence for key in keys if key in profile]
   return round(min(values), 4) if values else 0.0
+
+
+def _available_numbers(
+  profile: dict[str, MetricEnvelope],
+  keys: Iterable[str],
+) -> list[tuple[str, float]]:
+  values: list[tuple[str, float]] = []
+  for key in keys:
+    value = _number(profile.get(key))
+    if value is not None and profile[key].sensitivity < 3:
+      values.append((key, value))
+  return values
+
+
+def _format_values(
+  values: list[tuple[str, float]],
+  *,
+  kind: str = "ratio",
+) -> str | None:
+  if not values:
+    return None
+  labels = ("좌", "우") if len(values) == 2 else tuple("" for _ in values)
+  parts: list[str] = []
+  for index, (_, value) in enumerate(values):
+    if kind == "deg":
+      rendered = f"{value:.1f}°"
+    elif kind == "percent":
+      rendered = f"{value * 100:.1f}%"
+    else:
+      rendered = f"상대값 {value:.2f}"
+    prefix = labels[index] if index < len(labels) else ""
+    parts.append(f"{prefix} {rendered}".strip())
+  return " · ".join(parts)
+
+
+def _measurement_interpretation(
+  profile: dict[str, MetricEnvelope],
+  *,
+  title: str,
+  result_label: str,
+  description: str,
+  keys: list[str],
+  display_kind: str = "ratio",
+) -> MeasurementInterpretation | None:
+  values = _available_numbers(profile, keys)
+  evidence_keys = [key for key, _ in values]
+  if not evidence_keys:
+    return None
+  return MeasurementInterpretation(
+    title=title,
+    result_label=result_label,
+    description=description,
+    display_value=_format_values(values, kind=display_kind),
+    confidence=_confidence(profile, evidence_keys),
+    rationale_metric_keys=evidence_keys,
+  )
+
+
+def _paired_flow_label(values: list[tuple[str, float]], noun: str) -> str:
+  if len(values) < 2:
+    return f"{noun} 측정 완료"
+  gap = abs(values[0][1] - values[1][1])
+  return f"좌우 {noun} 흐름이 비슷한 편" if gap <= 0.04 else f"좌우 {noun}을 각각 확인"
+
+
+def _build_measurement_interpretations(
+  profile: dict[str, MetricEnvelope],
+) -> dict[str, MeasurementInterpretation]:
+  result: dict[str, MeasurementInterpretation] = {}
+
+  def add(key: str, value: MeasurementInterpretation | None) -> None:
+    if value is not None:
+      result[key] = value
+
+  eye_width_keys = [
+    "geometry2d.eyeWidthRatioLeft",
+    "geometry2d.eyeWidthRatioRight",
+  ]
+  eye_width_values = _available_numbers(profile, eye_width_keys)
+  add("interCanthalDistance", _measurement_interpretation(
+    profile,
+    title="눈 사이 거리",
+    result_label="얼굴 폭 대비 눈 사이 간격",
+    description="얼굴 전체 폭 안에서 두 눈 사이 여백이 차지하는 비율이에요.",
+    keys=["geometry2d.interCanthalRatio"],
+    display_kind="percent",
+  ))
+  add("eyeWidth", _measurement_interpretation(
+    profile,
+    title="좌우 눈 너비",
+    result_label=_paired_flow_label(eye_width_values, "눈 너비"),
+    description="양쪽 눈의 가로 길이를 같은 기준으로 비교한 결과예요.",
+    keys=eye_width_keys,
+    display_kind="percent",
+  ))
+  openness_keys = [
+    "geometry2d.eyeOpennessLeft",
+    "geometry2d.eyeOpennessRight",
+  ]
+  openness_values = _available_numbers(profile, openness_keys)
+  add("eyeOpenness", _measurement_interpretation(
+    profile,
+    title="눈 개방도",
+    result_label=_paired_flow_label(openness_values, "눈 뜨임"),
+    description="눈 너비 대비 위아래로 열린 정도를 좌우 각각 확인했어요.",
+    keys=openness_keys,
+    display_kind="percent",
+  ))
+  tilt_keys = [
+    "geometry2d.canthalTiltLeftDeg",
+    "geometry2d.canthalTiltRightDeg",
+  ]
+  tilt_values = _available_numbers(profile, tilt_keys)
+  mean_tilt = fmean(value for _, value in tilt_values) if tilt_values else 0
+  tilt_label = (
+    "눈꼬리가 위로 향하는 흐름"
+    if mean_tilt > 2
+    else "눈꼬리가 아래로 향하는 흐름"
+    if mean_tilt < -2
+    else "수평에 가까운 눈매"
+  )
+  add("canthalTilt", _measurement_interpretation(
+    profile,
+    title="눈꼬리 기울기",
+    result_label=tilt_label,
+    description="수평선을 기준으로 눈 앞머리에서 눈꼬리로 이어지는 방향이에요.",
+    keys=tilt_keys,
+    display_kind="deg",
+  ))
+  add("browFlow", _measurement_interpretation(
+    profile,
+    title="눈썹 흐름",
+    result_label="눈썹 기울기와 산 위치를 함께 확인",
+    description="좌우 눈썹의 방향과 눈썹 산이 놓인 위치를 함께 본 결과예요.",
+    keys=[
+      "geometry2d.browSlopeLeftDeg",
+      "geometry2d.browSlopeRightDeg",
+    ],
+    display_kind="deg",
+  ))
+
+  nose_value = _number(profile.get("face3d.noseTipProjection"))
+  add("noseTipProjection", _measurement_interpretation(
+    profile,
+    title="코끝 돌출",
+    result_label=(
+      "코끝 입체감이 또렷한 편"
+      if nose_value is not None and nose_value >= 0.18
+      else "코끝 입체감이 완만한 편"
+    ),
+    description="코끝이 양 볼 기준면보다 얼마나 앞으로 놓이는지를 본 결과예요.",
+    keys=["face3d.noseTipProjection"],
+  ))
+  add("noseLength", _measurement_interpretation(
+    profile,
+    title="코 길이",
+    result_label="얼굴 크기 대비 코의 세로 길이",
+    description="미간 기준점부터 코끝까지의 길이를 얼굴 크기에 맞춰 비교했어요.",
+    keys=["face3d.noseLength"],
+  ))
+  add("nasalBridge", _measurement_interpretation(
+    profile,
+    title="콧대와 코축",
+    result_label="콧대 중심선의 흐름을 확인",
+    description="콧대의 직선 흐름과 얼굴 중앙선에 대한 방향을 함께 봤어요.",
+    keys=[
+      "face3d.nasalBridgeStraightness",
+      "face3d.nasalAxisDeviation",
+    ],
+  ))
+  add("alarWidth", _measurement_interpretation(
+    profile,
+    title="콧볼 너비",
+    result_label="얼굴 크기 대비 콧볼 폭",
+    description="양쪽 콧볼 바깥점을 이은 폭을 얼굴 크기에 맞춰 비교했어요.",
+    keys=["face3d.alarWidth"],
+  ))
+  center_value = _number(profile.get("face3d.centralProjectionScore"))
+  add("centralProjectionScore", _measurement_interpretation(
+    profile,
+    title="중앙부와 볼의 관계",
+    result_label=(
+      "중앙부 입체감이 또렷한 편"
+      if center_value is not None and center_value >= 0.55
+      else "중앙부 입체감이 부드러운 편"
+    ),
+    description="얼굴 중앙 영역이 양 볼 기준면보다 앞으로 놓이는 정도예요.",
+    keys=["face3d.centralProjectionScore"],
+  ))
+  malar_keys = [
+    "face3d.malarProjectionLeft",
+    "face3d.malarProjectionRight",
+  ]
+  add("malarProjection", _measurement_interpretation(
+    profile,
+    title="좌우 볼 돌출",
+    result_label="양쪽 광대 부근의 전방 입체감",
+    description="좌우 볼 표면이 기준면보다 앞으로 놓이는 정도를 각각 확인했어요.",
+    keys=malar_keys,
+  ))
+
+  add("mouthWidth", _measurement_interpretation(
+    profile,
+    title="입 너비",
+    result_label="얼굴 폭 대비 입의 가로 길이",
+    description="양쪽 입꼬리 사이가 얼굴 폭에서 차지하는 비율이에요.",
+    keys=["geometry2d.mouthWidthRatio"],
+    display_kind="percent",
+  ))
+  add("lipThickness", _measurement_interpretation(
+    profile,
+    title="위아래 입술 두께",
+    result_label="입 너비 대비 입술의 세로 볼륨",
+    description="입의 가로 길이에 비해 위아래 입술이 차지하는 두께 관계예요.",
+    keys=["geometry2d.lipThicknessRatio"],
+    display_kind="percent",
+  ))
+  add("lipProjection", _measurement_interpretation(
+    profile,
+    title="입술 돌출",
+    result_label="E-line 기준 입술의 전후 위치",
+    description="코끝과 턱끝을 잇는 선을 기준으로 입술이 놓인 위치를 확인했어요.",
+    keys=["face3d.upperLipToELine", "face3d.lowerLipToELine"],
+  ))
+  add("jawWidth", _measurement_interpretation(
+    profile,
+    title="턱 너비",
+    result_label="얼굴 폭 대비 턱 모서리 폭",
+    description="좌우 턱 모서리가 얼굴 전체 폭에서 차지하는 비율이에요.",
+    keys=["geometry2d.jawWidthRatio"],
+    display_kind="percent",
+  ))
+  add("lowerJawWidth", _measurement_interpretation(
+    profile,
+    title="아래턱 너비",
+    result_label="얼굴 폭 대비 아래턱 폭",
+    description="좌우 아래턱 윤곽점 사이 폭을 얼굴 전체 폭과 비교했어요.",
+    keys=["geometry2d.lowerJawWidthRatio"],
+    display_kind="percent",
+  ))
+  add("chinProjection", _measurement_interpretation(
+    profile,
+    title="턱끝 돌출",
+    result_label="중안부 기준면 대비 턱끝의 전후 위치",
+    description="턱끝이 얼굴 기준면보다 앞으로 놓이는 정도를 확인했어요.",
+    keys=["face3d.chinProjection"],
+  ))
+  return result
 
 
 def _insight(
@@ -235,6 +488,7 @@ def derive_face_analysis(
 ) -> DerivedResult:
   return DerivedResult(
     rules_version=rules_version,
+    measurement_interpretations=_build_measurement_interpretations(profile),
     face_shape=_derive_face_shape(profile),
     vertical_balance=_derive_vertical_balance(profile),
     eye_brow=_derive_eye_brow(profile),

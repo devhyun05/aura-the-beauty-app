@@ -21,8 +21,16 @@ import type {
 } from '../../../shared/types/faceAnalysis';
 import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import {getFaceAnalysisReportSummaryItems} from '../../face-analysis/services/faceAnalysisReportDetailModel';
+import type {
+  FaceAnalysisDerivedResult,
+  FaceAnalysisMeasurementInterpretation,
+} from '../../face-analysis/services/faceAnalysisV2';
 import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceAnalysisMeasurements';
-import type {Face3DProfile} from '../../face-3d/types';
+import type {Face3DMetricKey, Face3DProfile} from '../../face-3d/types';
+import type {
+  Face3DPhotoEvidence,
+  Face3DPhotoEvidenceRegionKey,
+} from '../../face-3d/services/face3DPhotoEvidence';
 import type {FaceVerticalThirdsResult, VerticalThirdsDominantPart} from '../../face-ratio/types';
 import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
 import {ALL_12_TYPES, TYPE_LABEL_KO} from '../../personal-color/services/personalColorCore/constants';
@@ -32,6 +40,7 @@ import {buildRegionFeatureAxes, type RegionAxesKey} from '../reportFeatureAxes';
 import {buildRegionFeatureDescriptors} from '../regionFeatureDescriptors';
 import {buildVisualWeightPresentation} from '../visualWeightPresentation';
 import {buildStyleLaneRecommendations} from '../styleLaneRecommendations';
+import {formatDepthMeasurementValues} from './faceDepthPresentation';
 import {buildFaceFeatureProfile} from '../../face-analysis/services/faceFeatureProfileBuilder';
 import {buildVisualWeightMap} from '../../face-analysis/services/visualWeightMap';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
@@ -41,6 +50,8 @@ import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import type {
   LookCardData,
   ReportData,
+  RegionMeasurementItemData,
+  RegionMeasurementValueData,
   S1Data,
   S2Data,
   S3Data,
@@ -70,6 +81,10 @@ export type FaceReportAdapterInput = {
   gender?: string | null;
   // 2D 얼굴 기하 실측치 — S3 자기참조 축·서술의 결정론적 근거. 없으면 축은 판정 보류.
   geometryMetrics?: FaceGeometryMetrics | null;
+  // Same-frame ARKit mesh projection evidence. Optional for legacy reports;
+  // never synthesize it from an aggregated profile.
+  face3dPhotoEvidence?: Face3DPhotoEvidence | null;
+  face3d?: Face3DProfile | null;
 };
 
 function resolveHeroUri(report: FaceAnalysisReport, heroImageUri?: string): string | undefined {
@@ -80,6 +95,26 @@ function resolveHeroUri(report: FaceAnalysisReport, heroImageUri?: string): stri
   return typeof source === 'object' && source !== null && 'uri' in source && typeof source.uri === 'string'
     ? source.uri
     : undefined;
+}
+
+function buildSafeReportSummary(report: FaceAnalysisReport): string {
+  const generated = (report.shortSummary || report.summary).trim();
+  const derived = report.faceAnalysisV2?.derived;
+  if (!derived) {
+    return generated;
+  }
+  const verticalLabel = derived.verticalBalance?.label ?? '';
+  const contradictsVerticalBalance =
+    verticalLabel.includes('우세') && generated.includes('균형');
+  const containsRawNumber = /\d/.test(generated);
+  if (generated && !contradictsVerticalBalance && !containsRawNumber) {
+    return generated;
+  }
+  return [
+    derived.faceShape?.description,
+    derived.verticalBalance?.description,
+    derived.eyeBrow?.description,
+  ].filter((text): text is string => Boolean(text?.trim())).join(' ');
 }
 
 function buildS1(
@@ -95,10 +130,7 @@ function buildS1(
       {includeTime: true},
     ),
     headline: report.recommendedMood,
-    // V2의 consulting.shortSummary는 AI 자유 서술이라 얼굴형과 세로 구획을
-    // 모순되게 엮은 과거 결과가 있다. 사용자 요약에는 검증 가능한 카드만 두고,
-    // 구버전 보고서에만 기존 설명을 유지한다.
-    body: report.faceAnalysisV2 ? '' : report.shortSummary || report.summary,
+    body: buildSafeReportSummary(report),
     legacyReport: !report.measurements,
     legacyBadge: '이 판정은 이전 기준으로 측정된 결과예요',
     cards: buildS1SummaryCards(report, personalColor, verticalThirds),
@@ -202,9 +234,10 @@ const S2_BAND_COPY = {
 // the roll-corrected source image, matched 1:1 to sourceImage.width/height — NOT
 // pre-normalized. GuidePhotoOverlay needs 0..1 fractions, so we divide by the
 // real image dimensions here rather than trusting any embedded normalization.
-function buildS2(
+export function buildFaceProportionSection(
   vt: FaceVerticalThirdsResult | null | undefined,
   gender: string | null | undefined,
+  derived: FaceAnalysisDerivedResult | null = null,
 ): S2Data | null {
   if (!vt || (vt.status !== 'full_success' && vt.status !== 'partial_success')) {
     return null;
@@ -305,6 +338,15 @@ function buildS2(
       !lowConfidence
         ? describeFaceLength(vt.faceLength?.ratio ?? null, faceShapeGender)
         : null,
+    insightLabel:
+      derived?.verticalBalance?.label
+      ?? vt.interpretation.title
+      ?? summarizeDominantPart(vt.interpretation.dominantPart)
+      ?? undefined,
+    insightDescription:
+      derived?.verticalBalance?.description
+      ?? vt.interpretation.summary
+      ?? undefined,
     paragraph: vt.interpretation.summary || vt.interpretation.title || '측정 결과를 요약하지 못했어요.',
   };
 }
@@ -438,7 +480,7 @@ function buildToneMap(probabilities: ToneProbabilityData[]) {
 
   if (active.length === 0) {
     return {
-      caption: '12타입 중 어디에 가까운지 보여주는 상대 위치예요.',
+      caption: '12가지 세부 톤 중 어디에 가까운지 보여주는 상대 위치예요.',
       area: {x: 0.44, y: 0.44, w: 0.12, h: 0.12},
       points,
     };
@@ -453,7 +495,7 @@ function buildToneMap(probabilities: ToneProbabilityData[]) {
   const pad = 0.08;
 
   return {
-    caption: '12타입 prototype과의 가까움이에요. 굵은 영역이 현재 결과가 걸쳐 있는 톤 범위예요.',
+    caption: '12가지 세부 톤 중 가까운 위치를 보여줘요. 굵은 영역은 현재 결과가 걸쳐 있는 톤 범위예요.',
     area: {
       x: clamp01(minX - pad),
       y: clamp01(minY - pad),
@@ -464,7 +506,10 @@ function buildToneMap(probabilities: ToneProbabilityData[]) {
   };
 }
 
-function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, heroUri: string | undefined): S4Data | null {
+export function buildPersonalColorSection(
+  personalColor: MeasuredPersonalColorView | null | undefined,
+  heroUri: string | undefined,
+): S4Data | null {
   if (!personalColor || personalColor.status === 'insufficient' || !personalColor.tone) {
     return null;
   }
@@ -586,14 +631,14 @@ const S3_REGION_META: Record<
 > = {
   upper: {
     chip: '상안부',
-    title: '이마 · 눈썹 · 눈',
+    title: '눈썹 · 눈',
     guide: {kind: 'none'},
     guideLabel: '',
     guideLabelX: 0.14,
   },
   mid: {
     chip: '중안부',
-    title: '코 · 인중 · 볼',
+    title: '코 · 볼 · 중앙부',
     guide: {kind: 'none'},
     guideLabel: '',
     guideLabelX: 0.5,
@@ -607,7 +652,7 @@ const S3_REGION_META: Record<
   },
   jaw: {
     chip: '외곽 라인',
-    title: '광대 · 턱',
+    title: '턱 · 얼굴 외곽',
     // 실제 regionVisuals 턱 polyline이 없을 때는 곡선을 그리지 않는다.
     // 고정 타원은 얼굴 크롭/포즈가 조금만 달라도 턱선이 아닌 목·배경을 감싸
     // "AI가 턱을 잘못 인식한 선"처럼 보이므로 숨기는 편이 정직하다.
@@ -636,90 +681,618 @@ function normalizeRegionNote(
   return {insight: '', evidence: '', recommendation: ''};
 }
 
+function hasGeometryMetric(
+  metrics: FaceGeometryMetrics | null,
+  keys: (keyof FaceGeometryMetrics)[],
+): boolean {
+  return Boolean(metrics && keys.some(key => metrics[key]?.value != null));
+}
+
+function face3dMetric(
+  profile: Face3DProfile | null,
+  key: keyof Face3DProfile['metrics'],
+) {
+  const metric = profile?.metrics[key];
+  return metric?.value != null && Number.isFinite(metric.value) ? metric : null;
+}
+
+function confidenceLabel(
+  profile: Face3DProfile | null,
+  keys: (keyof Face3DProfile['metrics'])[],
+): string | undefined {
+  const confidences = keys
+    .map(key => face3dMetric(profile, key)?.confidence)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (confidences.length === 0) return undefined;
+  const percent = Math.round(
+    (confidences.reduce((sum, value) => sum + value, 0) / confidences.length) * 100,
+  );
+  return `측정 신뢰도 ${Math.max(0, Math.min(100, percent))}%`;
+}
+
+const LOCAL_MEASUREMENT_COPY: Record<
+  string,
+  {resultLabel: string; interpretation: string}
+> = {
+  interCanthalDistance: {
+    resultLabel: '얼굴 폭 대비 눈 사이 간격',
+    interpretation: '두 눈 사이의 여백이 얼굴 전체에서 차지하는 관계예요.',
+  },
+  eyeWidth: {
+    resultLabel: '좌우 눈 너비를 각각 확인',
+    interpretation: '같은 얼굴 폭 기준으로 양쪽 눈의 가로 길이를 비교했어요.',
+  },
+  eyeOpenness: {
+    resultLabel: '좌우 눈 뜨임을 각각 확인',
+    interpretation: '눈 너비에 비해 위아래로 열린 정도를 좌우로 나눠 봤어요.',
+  },
+  canthalTilt: {
+    resultLabel: '눈 앞머리에서 눈꼬리로 이어지는 방향',
+    interpretation: '수평선에 비해 눈꼬리가 향하는 흐름을 보여줘요.',
+  },
+  browFlow: {
+    resultLabel: '눈썹 기울기와 산 위치를 함께 확인',
+    interpretation: '눈썹의 방향과 눈썹 산이 놓인 위치를 함께 본 결과예요.',
+  },
+  noseTipProjection: {
+    resultLabel: '코끝의 전방 입체감',
+    interpretation: '코끝이 양 볼 기준면보다 앞으로 놓이는 정도예요.',
+  },
+  noseLength: {
+    resultLabel: '얼굴 크기 대비 코의 세로 길이',
+    interpretation: '미간 기준점부터 코끝까지 이어지는 길이 관계예요.',
+  },
+  nasalBridge: {
+    resultLabel: '콧대 중심선의 흐름',
+    interpretation: '콧대의 직선감과 얼굴 중앙선에 대한 방향을 함께 봤어요.',
+  },
+  alarWidth: {
+    resultLabel: '얼굴 크기 대비 콧볼 폭',
+    interpretation: '양쪽 콧볼 바깥점 사이의 폭 관계예요.',
+  },
+  centralProjectionScore: {
+    resultLabel: '중앙부와 양 볼의 전후 관계',
+    interpretation: '얼굴 중앙 영역이 양 볼 기준면보다 앞으로 놓이는 정도예요.',
+  },
+  malarProjection: {
+    resultLabel: '양쪽 광대 부근의 전방 입체감',
+    interpretation: '좌우 볼 표면의 돌출 정도를 각각 확인한 결과예요.',
+  },
+  mouthWidth: {
+    resultLabel: '얼굴 폭 대비 입의 가로 길이',
+    interpretation: '양쪽 입꼬리 사이가 얼굴 폭에서 차지하는 관계예요.',
+  },
+  lipThickness: {
+    resultLabel: '입 너비 대비 입술의 세로 볼륨',
+    interpretation: '입의 가로 길이에 비해 위아래 입술이 차지하는 두께 관계예요.',
+  },
+  lipProjection: {
+    resultLabel: 'E-line 기준 입술의 전후 위치',
+    interpretation: '코끝과 턱끝을 잇는 선을 기준으로 입술이 놓인 위치예요.',
+  },
+  jawWidth: {
+    resultLabel: '얼굴 폭 대비 턱 모서리 폭',
+    interpretation: '좌우 턱 모서리가 얼굴 전체 폭에서 차지하는 관계예요.',
+  },
+  lowerJawWidth: {
+    resultLabel: '얼굴 폭 대비 아래턱 폭',
+    interpretation: '좌우 아래턱 윤곽점 사이를 얼굴 전체 폭과 비교했어요.',
+  },
+  chinProjection: {
+    resultLabel: '중안부 기준면 대비 턱끝의 위치',
+    interpretation: '턱끝이 얼굴 기준면보다 앞으로 놓이는 정도예요.',
+  },
+};
+
+function measurementNumber(
+  key: string,
+  geometryMetrics: FaceGeometryMetrics | null,
+  face3d: Face3DProfile | null,
+): number | null {
+  const geometryValue = (
+    geometryMetrics as unknown as Record<string, {value?: unknown}> | null
+  )?.[key]?.value;
+  if (typeof geometryValue === 'number' && Number.isFinite(geometryValue)) {
+    return geometryValue;
+  }
+  const depthValue = (
+    face3d?.metrics as unknown as Record<string, {value?: unknown}> | undefined
+  )?.[key]?.value;
+  return typeof depthValue === 'number' && Number.isFinite(depthValue)
+    ? depthValue
+    : null;
+}
+
+function measurementDisplayValue(
+  metricKeys: string[],
+  geometryMetrics: FaceGeometryMetrics | null,
+  face3d: Face3DProfile | null,
+): string | undefined {
+  const values = metricKeys
+    .map(metricKey => ({
+      key: metricKey,
+      value: measurementNumber(metricKey, geometryMetrics, face3d),
+    }))
+    .filter((entry): entry is {key: string; value: number} => entry.value !== null);
+  if (values.length === 0) return undefined;
+  const paired = values.length === 2;
+  return values.map((entry, index) => {
+    const prefix = paired ? `${index === 0 ? '좌' : '우'} ` : '';
+    if (entry.key.endsWith('Deg')) {
+      return `${prefix}${entry.value.toFixed(1)}°`;
+    }
+    const fromGeometry = Boolean(
+      (geometryMetrics as unknown as Record<string, unknown> | null)?.[entry.key],
+    );
+    return fromGeometry
+      ? `${prefix}${(entry.value * 100).toFixed(1)}%`
+      : `${prefix}상대값 ${entry.value.toFixed(2)}`;
+  }).join(' · ');
+}
+
+const DEPTH_VALUE_LABELS: Partial<Record<Face3DMetricKey, string>> = {
+  noseTipProjection: '코끝',
+  centralProjectionScore: '중앙부',
+  malarProjectionLeft: '왼쪽 광대',
+  malarProjectionRight: '오른쪽 광대',
+  upperLipToELine: '윗입술',
+  lowerLipToELine: '아랫입술',
+  chinProjection: '턱끝',
+};
+
+function measurementDepthValues(
+  metricKeys: string[],
+  face3d: Face3DProfile | null,
+): RegionMeasurementValueData[] {
+  return metricKeys.flatMap(metricKey => {
+    const label = DEPTH_VALUE_LABELS[metricKey as Face3DMetricKey];
+    const metric = face3dMetric(
+      face3d,
+      metricKey as keyof Face3DProfile['metrics'],
+    );
+    return label && metric
+      ? [{
+          label,
+          metricKey,
+          normalizedValue: metric.value as number,
+        }]
+      : [];
+  });
+}
+
+function buildRegionMeasurementItems(
+  key: RegionAxesKey,
+  geometryMetrics: FaceGeometryMetrics | null,
+  face3d: Face3DProfile | null,
+  interpretations: Record<string, FaceAnalysisMeasurementInterpretation> = {},
+): RegionMeasurementItemData[] {
+  const item = (
+    config: Omit<
+      RegionMeasurementItemData,
+      'confidenceLabel' | 'displayValue' | 'interpretation' | 'resultLabel' | 'values'
+    > & {
+      confidenceKeys?: (keyof Face3DProfile['metrics'])[];
+    },
+  ): RegionMeasurementItemData => {
+    const {confidenceKeys, ...rest} = config;
+    const server = interpretations[config.key];
+    const local = LOCAL_MEASUREMENT_COPY[config.key] ?? {
+      resultLabel: '측정 결과를 확인했어요',
+      interpretation: '표시된 기준선과 측정값을 함께 봐 주세요.',
+    };
+    const confidence = confidenceKeys
+      ? confidenceLabel(face3d, confidenceKeys)
+      : undefined;
+    const values =
+      config.visualType === 'depth' || config.visualType === 'line-and-depth'
+        ? measurementDepthValues(config.metricKeys, face3d)
+        : [];
+    const displayValue =
+      values.length > 0
+        ? formatDepthMeasurementValues(values)
+        : server?.displayValue
+          ?? measurementDisplayValue(config.metricKeys, geometryMetrics, face3d);
+    return {
+      ...rest,
+      resultLabel: server?.resultLabel ?? local.resultLabel,
+      interpretation: server?.description ?? local.interpretation,
+      ...(displayValue ? {displayValue} : {}),
+      ...(values.length > 0 ? {values} : {}),
+      ...(confidence ? {confidenceLabel: confidence} : {}),
+    };
+  };
+
+  if (key === 'upper') {
+    const result: RegionMeasurementItemData[] = [];
+    if (hasGeometryMetric(geometryMetrics, ['interCanthalRatio'])) {
+      result.push(item({
+        key: 'interCanthalDistance',
+        label: '눈 사이 거리',
+        detail: '양쪽 눈의 실제 내안각을 잇는 거리와 얼굴 폭의 관계예요.',
+        metricKeys: ['interCanthalRatio'],
+        visualType: 'line',
+      }));
+    }
+    if (hasGeometryMetric(geometryMetrics, ['eyeWidthRatioLeft', 'eyeWidthRatioRight'])) {
+      result.push(item({
+        key: 'eyeWidth',
+        label: '좌우 눈 너비',
+        detail: '각 눈의 내안각과 외안각 사이를 좌우로 나누어 측정했어요.',
+        metricKeys: ['eyeWidthRatioLeft', 'eyeWidthRatioRight'],
+        visualType: 'line',
+      }));
+    }
+    if (hasGeometryMetric(geometryMetrics, ['eyeOpennessLeft', 'eyeOpennessRight'])) {
+      result.push(item({
+        key: 'eyeOpenness',
+        label: '눈 개방도',
+        detail: '좌우 눈의 위·아래 눈꺼풀 중앙점 사이 관계를 확인했어요.',
+        metricKeys: ['eyeOpennessLeft', 'eyeOpennessRight'],
+        visualType: 'line',
+      }));
+    }
+    if (hasGeometryMetric(geometryMetrics, ['canthalTiltLeftDeg', 'canthalTiltRightDeg'])) {
+      result.push(item({
+        key: 'canthalTilt',
+        label: '눈꼬리 기울기',
+        detail: '내안각에서 외안각으로 향하는 선을 수평 기준과 비교했어요.',
+        metricKeys: ['canthalTiltLeftDeg', 'canthalTiltRightDeg'],
+        visualType: 'line',
+      }));
+    }
+    if (hasGeometryMetric(geometryMetrics, ['browSlopeLeftDeg', 'browSlopeRightDeg', 'browApexRatioLeft', 'browApexRatioRight'])) {
+      result.push(item({
+        key: 'browFlow',
+        label: '눈썹 흐름',
+        detail: '실제 눈썹 코어 랜드마크로 기울기와 눈썹 산의 위치를 확인했어요.',
+        metricKeys: ['browSlopeLeftDeg', 'browSlopeRightDeg', 'browApexRatioLeft', 'browApexRatioRight'],
+        visualType: 'line',
+      }));
+    }
+    return result;
+  }
+
+  if (key === 'mid') {
+    const result: RegionMeasurementItemData[] = [];
+    if (face3dMetric(face3d, 'noseTipProjection')) {
+      result.push(item({
+        key: 'noseTipProjection',
+        groupLabel: '코',
+        label: '코끝 돌출',
+        detail: '코끝과 양 볼 기준면의 전후 관계를 대표 측정 프레임에서 확인했어요.',
+        metricKeys: ['noseTipProjection'],
+        visualType: 'depth',
+        confidenceKeys: ['noseTipProjection'],
+      }));
+    }
+    if (face3dMetric(face3d, 'noseLength')) {
+      result.push(item({
+        key: 'noseLength',
+        groupLabel: '코',
+        label: '코 길이',
+        detail: '미간 기준점부터 코끝까지의 3D 길이 관계예요.',
+        metricKeys: ['noseLength'],
+        visualType: 'line',
+        confidenceKeys: ['noseLength'],
+      }));
+    }
+    if (face3dMetric(face3d, 'nasalBridgeStraightness') || face3dMetric(face3d, 'nasalAxisDeviation')) {
+      result.push(item({
+        key: 'nasalBridge',
+        groupLabel: '코',
+        label: '콧대와 코축',
+        detail: '콧대 중심선의 직선 흐름과 얼굴 중앙선 대비 방향을 확인했어요.',
+        metricKeys: ['nasalBridgeStraightness', 'nasalAxisDeviation'],
+        visualType: 'line',
+        confidenceKeys: ['nasalBridgeStraightness', 'nasalAxisDeviation'],
+      }));
+    }
+    if (face3dMetric(face3d, 'alarWidth')) {
+      result.push(item({
+        key: 'alarWidth',
+        groupLabel: '코',
+        label: '콧볼 너비',
+        detail: '좌우 콧볼의 해부학적 최외측점 사이를 측정했어요.',
+        metricKeys: ['alarWidth'],
+        visualType: 'line',
+        confidenceKeys: ['alarWidth'],
+      }));
+    }
+    if (face3dMetric(face3d, 'centralProjectionScore')) {
+      result.push(item({
+        key: 'centralProjectionScore',
+        groupLabel: '볼 · 중앙부',
+        label: '중앙부와 볼의 관계',
+        detail: '얼굴 중앙 영역과 양 볼 기준면의 전후 관계를 확인했어요.',
+        metricKeys: ['centralProjectionScore'],
+        visualType: 'depth',
+        confidenceKeys: ['centralProjectionScore'],
+      }));
+    }
+    if (face3dMetric(face3d, 'malarProjectionLeft') || face3dMetric(face3d, 'malarProjectionRight')) {
+      result.push(item({
+        key: 'malarProjection',
+        groupLabel: '볼 · 중앙부',
+        label: '좌우 볼 돌출',
+        detail: '좌우 광대 부근 표면의 전방 돌출을 각각 측정했어요.',
+        metricKeys: ['malarProjectionLeft', 'malarProjectionRight'],
+        visualType: 'depth',
+        confidenceKeys: ['malarProjectionLeft', 'malarProjectionRight'],
+      }));
+    }
+    return result;
+  }
+
+  if (key === 'lower') {
+    const result: RegionMeasurementItemData[] = [];
+    if (hasGeometryMetric(geometryMetrics, ['mouthWidthRatio'])) {
+      result.push(item({
+        key: 'mouthWidth',
+        label: '입 너비',
+        detail: '양쪽 입꼬리 랜드마크 사이와 얼굴 폭의 관계를 측정했어요.',
+        metricKeys: ['mouthWidthRatio', 'mouthCornerAsymmetry'],
+        visualType: 'line',
+      }));
+    }
+    if (hasGeometryMetric(geometryMetrics, ['lipThicknessRatio'])) {
+      result.push(item({
+        key: 'lipThickness',
+        label: '위아래 입술 두께',
+        detail: '입술 중앙의 위·아래 경계점으로 두께 관계를 확인했어요.',
+        metricKeys: ['lipThicknessRatio'],
+        visualType: 'line',
+      }));
+    }
+    const lipDepthKeys = (['upperLipToELine', 'lowerLipToELine'] as const)
+      .filter(metricKey => face3dMetric(face3d, metricKey));
+    if (lipDepthKeys.length > 0) {
+      result.push(item({
+        key: 'lipProjection',
+        label: '입술 돌출',
+        detail: '코끝과 턱끝을 잇는 기준선에 대한 위·아래 입술의 전후 관계예요.',
+        metricKeys: [...lipDepthKeys],
+        visualType: 'depth',
+        confidenceKeys: [...lipDepthKeys],
+      }));
+    }
+    return result;
+  }
+
+  const result: RegionMeasurementItemData[] = [];
+  if (hasGeometryMetric(geometryMetrics, ['jawWidthRatio'])) {
+    result.push(item({
+      key: 'jawWidth',
+      label: '턱 너비',
+      detail: '좌우 턱 모서리 랜드마크 사이와 얼굴 폭의 관계를 측정했어요.',
+      metricKeys: ['jawWidthRatio'],
+      visualType: 'line',
+    }));
+  }
+  if (hasGeometryMetric(geometryMetrics, ['lowerJawWidthRatio'])) {
+    result.push(item({
+      key: 'lowerJawWidth',
+      label: '아래턱 너비',
+      detail: '좌우 아래턱 윤곽점 사이의 폭 관계를 확인했어요.',
+      metricKeys: ['lowerJawWidthRatio'],
+      visualType: 'line',
+    }));
+  }
+  if (face3dMetric(face3d, 'chinProjection')) {
+    result.push(item({
+      key: 'chinProjection',
+      label: '턱끝 돌출',
+      detail: '턱끝과 중안부 기준면의 전후 관계를 대표 측정 프레임에서 확인했어요.',
+      metricKeys: ['chinProjection'],
+      visualType: 'depth',
+      confidenceKeys: ['chinProjection'],
+    }));
+  }
+  return result;
+}
+
+function cropFromPhotoEvidence(
+  evidence: Face3DPhotoEvidence | null,
+  regionKeys: Face3DPhotoEvidenceRegionKey[],
+): {x: number; y: number; w: number; h: number} | null {
+  if (!evidence) return null;
+  const points = regionKeys.flatMap(key => {
+    const region = evidence.regions[key];
+    return region ? [...region.hull, region.pin] : [];
+  });
+  if (points.length === 0) return null;
+  const minX = Math.min(...points.map(point => point.x));
+  const maxX = Math.max(...points.map(point => point.x));
+  const minY = Math.min(...points.map(point => point.y));
+  const maxY = Math.max(...points.map(point => point.y));
+  const width = maxX - minX;
+  const height = maxY - minY;
+  if (!(width > 0.005) || !(height > 0.005)) return null;
+  const x = Math.max(0, minX - width * 0.3);
+  const y = Math.max(0, minY - height * 0.3);
+  const x2 = Math.min(1, maxX + width * 0.3);
+  const y2 = Math.min(1, maxY + height * 0.3);
+  return {x, y, w: x2 - x, h: y2 - y};
+}
+
 function buildS3(
   regionNotes: FaceAnalysisRegionNotes | undefined,
   photo: S1Data['photo'],
   regionVisuals: RegionVisuals | null,
   geometryMetrics: FaceGeometryMetrics | null,
   featureDescriptors: Record<RegionAxesKey, string[]> | null,
+  face3d: Face3DProfile | null,
+  face3dPhotoEvidence: Face3DPhotoEvidence | null,
+  derived: FaceAnalysisDerivedResult | null,
 ): S3Data | null {
-  if (!regionNotes) {
-    return null;
-  }
-
   // 자기참조 축(위치=실측 결정론적). 지표 없으면 null → 각 축 판정 보류/미표시.
   const regionAxes = geometryMetrics ? buildRegionFeatureAxes(geometryMetrics) : null;
 
-  const cards = (['upper', 'mid', 'lower', 'jaw'] as const).map(key => {
+  const cards = (['upper', 'mid', 'lower', 'jaw'] as const).flatMap(key => {
     const meta = S3_REGION_META[key];
-    // Real per-user crop + landmark polyline, when available (regionVisuals
-    // is only produced by an on-device geometry pass — legacy reports and
-    // degenerate crops never have it). Falls back to the fixed illustrative
-    // S3_REGION_META guide + full (uncropped) photo — same "조용한 생성 금지"
-    // posture as the rest of this adapter.
     const rvRaw = regionVisuals?.[key];
-    // Guard against a degenerate persisted cropRect (w/h === 0, e.g. from a
-    // decoder default on missing/non-numeric crop fields): dividing by a
-    // zero width/height below would produce Infinity/NaN polyline points and
-    // a broken <Polyline> render. Treat it exactly like "no regionVisuals for
-    // this key" and fall back to the fixed guide + full photo.
     const rv = rvRaw && rvRaw.cropRect.w > 0 && rvRaw.cropRect.h > 0 ? rvRaw : undefined;
-    const visual = rv
-      ? {
-          photo: {...photo, cropRect: rv.cropRect},
-          cropRect: rv.cropRect,
-          // Guide points are normalized to the FULL source image; the card
-          // shows only the crop sub-rect, so re-normalize each point into the
-          // crop's own 0..1 frame before GuideOverlay multiplies by its
-          // measured render size.
-          guide: {
-            kind: 'polyline' as const,
-            points: rv.guide.points.map(p => ({
-              x: (p.x - rv.cropRect.x) / rv.cropRect.w,
-              y: (p.y - rv.cropRect.y) / rv.cropRect.h,
-            })),
-          },
-          guideLabel: rv.guide.label,
-        }
-      : {
-          photo,
-          guide: meta.guide,
-          guideLabel: meta.guideLabel,
-        };
-    return {
+    const evidenceRegionKeys: Record<RegionAxesKey, Face3DPhotoEvidenceRegionKey[]> = {
+      upper: [],
+      mid: ['nose', 'central', 'malarLeft', 'malarRight'],
+      lower: ['upperLip', 'lowerLip'],
+      jaw: ['chin'],
+    };
+    const evidenceCrop = cropFromPhotoEvidence(
+      face3dPhotoEvidence,
+      evidenceRegionKeys[key],
+    );
+    const cropRect = rv?.cropRect ?? evidenceCrop ?? undefined;
+    const sourceImage =
+      rv?.sourceImage
+      ?? (face3dPhotoEvidence
+        ? {
+            width: face3dPhotoEvidence.image.width,
+            height: face3dPhotoEvidence.image.height,
+          }
+        : undefined);
+    const measurementItems = buildRegionMeasurementItems(
+      key,
+      geometryMetrics,
+      face3d,
+      derived?.measurementInterpretations,
+    );
+    const itemMetricKeys = new Set(
+      measurementItems.flatMap(itemData => itemData.metricKeys),
+    );
+    const reframe = (point: {x: number; y: number}) =>
+      cropRect
+        ? {
+            x: (point.x - cropRect.x) / cropRect.w,
+            y: (point.y - cropRect.y) / cropRect.h,
+          }
+        : point;
+    const regionGuides = rv
+      ? (rv.guides ?? [rv.guide]).map((regionGuide, index) => ({
+          kind: 'measurement' as const,
+          key: regionGuide.key ?? `${key}-guide-${index}`,
+          label: regionGuide.label,
+          measurementKind: regionGuide.kind ?? 'contour' as const,
+          metricKeys: regionGuide.metricKeys ?? [],
+          points: regionGuide.points.map(reframe),
+        }))
+      : [];
+    const face3dGuides = face3dPhotoEvidence?.guides
+      .filter(evidenceGuide =>
+        evidenceGuide.metricKeys.some(metricKey => itemMetricKeys.has(metricKey)),
+      )
+      .map(evidenceGuide => ({
+        kind: 'measurement' as const,
+        key: evidenceGuide.key,
+        label: evidenceGuide.label,
+        measurementKind: evidenceGuide.kind,
+        metricKeys: [...evidenceGuide.metricKeys],
+        points: evidenceGuide.points.map(reframe),
+      })) ?? [];
+    const guides = [...face3dGuides, ...regionGuides];
+    const note = normalizeRegionNote(regionNotes?.[key]);
+    const derivedInsight = {
+      upper: derived?.eyeBrow,
+      mid: derived?.cheekboneAndEline ?? derived?.nosePhiltrumLips,
+      lower: derived?.nosePhiltrumLips,
+      jaw: derived?.faceShape,
+    }[key];
+    const insight = note.insight || derivedInsight?.label || '';
+    const evidence = note.evidence || derivedInsight?.description || '';
+    const descriptors = featureDescriptors ? featureDescriptors[key] : [];
+    const hasNarrative = Boolean(
+      insight || evidence || note.recommendation || descriptors.length,
+    );
+    if (measurementItems.length === 0 && !hasNarrative) {
+      return [];
+    }
+    const featAxes = regionAxes ? regionAxes[key] : [];
+    const axes = featAxes.flatMap(a =>
+      a.position == null
+        ? []
+        : [{
+            leftLabel: a.leftLabel,
+            rightLabel: a.rightLabel,
+            state: {kind: 'point' as const, position: a.position},
+          }],
+    );
+    const visualAspectRatio =
+      cropRect && sourceImage
+        ? (cropRect.w * sourceImage.width) / (cropRect.h * sourceImage.height)
+        : undefined;
+    return [{
       key,
       regionChip: meta.chip,
       regionTitle: meta.title,
-      ...visual,
+      photo: {
+        ...photo,
+        ...(cropRect ? {cropRect} : {}),
+        ...(sourceImage
+          ? {sourceWidth: sourceImage.width, sourceHeight: sourceImage.height}
+          : {}),
+      },
+      ...(cropRect ? {cropRect} : {}),
+      guide: guides[0] ?? meta.guide,
+      ...(guides.length > 0 ? {guides} : {}),
+      guideLabel: guides[0]?.label ?? meta.guideLabel,
       guideLabelX: meta.guideLabelX,
-      ...(() => {
-        const featAxes = regionAxes ? regionAxes[key] : [];
-        // 측정된 축만 렌더(위치=실측). 지표 없는 축은 조용히 생략 — 허위 강도 대신 침묵.
-        const axes = featAxes.flatMap(a =>
-          a.position == null
-            ? []
-            : [{leftLabel: a.leftLabel, rightLabel: a.rightLabel, state: {kind: 'point' as const, position: a.position}}],
-        );
-        const note = normalizeRegionNote(regionNotes[key]);
-        const descriptors = featureDescriptors ? featureDescriptors[key] : [];
-        return {
-          axes,
-          insight: note.insight,
-          evidence: note.evidence,
-          recommendation: note.recommendation,
-          paragraph: note.insight,
-          ...(descriptors.length > 0 ? {featureDescriptors: descriptors} : {}),
-        };
-      })(),
-    };
+      axes,
+      insight,
+      evidence,
+      recommendation: note.recommendation,
+      paragraph: insight || evidence,
+      ...(descriptors.length > 0 ? {featureDescriptors: descriptors} : {}),
+      ...(measurementItems.length > 0 ? {measurementItems} : {}),
+      ...(face3dPhotoEvidence && evidenceRegionKeys[key].length > 0
+        ? {photoEvidence: face3dPhotoEvidence}
+        : {}),
+      ...(visualAspectRatio && Number.isFinite(visualAspectRatio)
+        ? {visualAspectRatio}
+        : {}),
+    }];
   });
+
+  if (cards.length === 0) return null;
 
   return {
     eyebrow: 'FEATURES',
     title: '이목구비, 하나씩 설명할게요',
-    sub: '눈매·눈썹·입술·턱선의 방향을 보면 전체 인상과 어울리는 메이크업 균형을 알 수 있어요.',
+    sub: '실제 랜드마크 선과 대표 프레임의 3D 메시 측정점을 측정 방식에 맞게 표시해요.',
     cards,
   };
+}
+
+export function buildCoreFeatureSection({
+  photoUri,
+  regionVisuals,
+  geometryMetrics,
+  face3d,
+  face3dPhotoEvidence,
+  derived,
+}: {
+  photoUri: string;
+  regionVisuals?: RegionVisuals | null;
+  geometryMetrics?: FaceGeometryMetrics | null;
+  face3d?: Face3DProfile | null;
+  face3dPhotoEvidence?: Face3DPhotoEvidence | null;
+  derived?: FaceAnalysisDerivedResult | null;
+}): S3Data | null {
+  const featureProfile = buildFaceFeatureProfile({
+    metrics: geometryMetrics ?? null,
+    verticalThirds: null,
+    faceShapeLabel: derived?.faceShape?.label ?? null,
+    observations: null,
+    measuredAt: '',
+  });
+  return buildS3(
+    undefined,
+    {uri: photoUri, placeholderLabel: '얼굴 확대 컷'},
+    regionVisuals ?? null,
+    geometryMetrics ?? null,
+    buildRegionFeatureDescriptors(featureProfile),
+    face3d ?? null,
+    face3dPhotoEvidence ?? null,
+    derived ?? null,
+  );
 }
 
 function buildS6(
@@ -805,7 +1378,7 @@ function buildS8(skinPerception: FaceAnalysisSkinPerception | undefined): S8Data
   return {
     eyebrow: 'SKIN',
     title: '피부는 이렇게 보여요',
-    sub: '사진에서 관찰 가능한 피부 부면을 항목별로 정리했어요.',
+    sub: '사진에서 관찰 가능한 피부 특징을 항목별로 정리했어요.',
     aspects: SKIN_ASPECT_ORDER.map(key => ({
       key,
       heading: SKIN_ASPECT_HEADING_KO[key],
@@ -816,7 +1389,17 @@ function buildS8(skinPerception: FaceAnalysisSkinPerception | undefined): S8Data
 }
 
 export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterInput): ReportData {
-  const {report, bodyProfile, personalColor, verticalThirds, regionVisuals, gender, geometryMetrics} = input;
+  const {
+    report,
+    bodyProfile,
+    personalColor,
+    verticalThirds,
+    regionVisuals,
+    gender,
+    geometryMetrics,
+    face3d,
+    face3dPhotoEvidence,
+  } = input;
   const heroUri = resolveHeroUri(report, input.heroImageUri);
   const featurePhoto: S1Data['photo'] = heroUri
     ? {uri: heroUri, placeholderLabel: '얼굴 확대 컷'}
@@ -838,9 +1421,37 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
   const visualWeight = buildVisualWeightPresentation(weightMap);
   const regionDescriptors = buildRegionFeatureDescriptors(featureProfile);
   const styleLanes = buildStyleLaneRecommendations(featureProfile, weightMap);
+  const derived = report.faceAnalysisV2?.derived ?? null;
+  const s2 = buildFaceProportionSection(verticalThirds, gender, derived);
+  const stylingStatus = report.contentStatus?.stylingStatus;
+  const stylingSettled =
+    !stylingStatus ||
+    stylingStatus === 'completed' ||
+    stylingStatus === 'failed' ||
+    stylingStatus === 'partial';
 
   return {
     reportId: report.id,
+    ...(!stylingSettled ? {generationStatus: 'loading' as const} : {}),
+    contentRevision: report.contentRevision ?? 1,
+    ...(report.contentStatus
+      ? {
+          contentStatus: {
+            ...(report.contentStatus.coreReadyAt
+              ? {coreReadyAt: report.contentStatus.coreReadyAt}
+              : {}),
+            ...(report.contentStatus.narrativeStatus
+              ? {narrativeStatus: report.contentStatus.narrativeStatus}
+              : {}),
+            ...(report.contentStatus.stylingStatus
+              ? {stylingStatus: report.contentStatus.stylingStatus}
+              : {}),
+            ...(report.contentStatus.sources
+              ? {sources: report.contentStatus.sources}
+              : {}),
+          },
+        }
+      : {}),
     ...(report.goldenMask ? {goldenMask: report.goldenMask} : {}),
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
     s1: buildS1(
@@ -849,12 +1460,21 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
       personalColor ?? null,
       verticalThirds ?? null,
     ),
-    s2: buildS2(verticalThirds, gender),
-    s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null, geometryMetrics ?? null, regionDescriptors),
-    s4: buildS4(personalColor, heroUri),
+    s2,
+    s3: buildS3(
+      report.regionNotes,
+      featurePhoto,
+      regionVisuals ?? null,
+      geometryMetrics ?? null,
+      regionDescriptors,
+      face3d ?? null,
+      face3dPhotoEvidence ?? null,
+      derived,
+    ),
+    s4: buildPersonalColorSection(personalColor, heroUri),
     s5: buildS5(bodyProfile, gender),
     s6: buildS6(report.impressionNotes, visualWeight),
-    s7: buildS7(report.stylingLooks),
+    s7: stylingSettled ? buildS7(report.stylingLooks) : null,
     s8: buildS8(report.skinPerception),
     s9: {
       eyebrow: 'STYLE',

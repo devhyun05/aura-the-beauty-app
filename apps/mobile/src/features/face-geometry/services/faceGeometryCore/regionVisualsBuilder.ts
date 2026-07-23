@@ -15,9 +15,27 @@ import {
 
 export type RegionKey = 'upper' | 'mid' | 'lower' | 'jaw';
 export type NormPoint = {x: number; y: number};
+export type RegionGuideKind =
+  | 'angle'
+  | 'contour'
+  | 'distance'
+  | 'length'
+  | 'symmetry';
+export type RegionGuide = {
+  key?: string;
+  kind?: RegionGuideKind;
+  label: string;
+  metricKeys?: string[];
+  points: NormPoint[];
+};
 export type RegionVisual = {
   cropRect: {x: number; y: number; w: number; h: number};
-  guide: {points: NormPoint[]; label: string};
+  // `guide` is retained for persisted v1 readers. New readers use all
+  // measurement-specific guides and can switch between them without guessing
+  // geometry from a generic representative line.
+  guide: RegionGuide;
+  guides?: RegionGuide[];
+  sourceImage?: {width: number; height: number};
 };
 export type RegionVisuals = Partial<Record<RegionKey, RegionVisual>>;
 
@@ -82,6 +100,18 @@ function norm(points: {x: number; y: number}[], imageW: number, imageH: number):
   return points.map(p => ({x: clamp01(p.x / imageW), y: clamp01(p.y / imageH)}));
 }
 
+function guide(
+  key: string,
+  kind: RegionGuideKind,
+  label: string,
+  metricKeys: string[],
+  points: {x: number; y: number}[],
+  imageW: number,
+  imageH: number,
+): RegionGuide {
+  return {key, kind, label, metricKeys, points: norm(points, imageW, imageH)};
+}
+
 // 축정렬 생존점(예: 세로 중앙선 두 점)으로 bbox의 w 또는 h가 0에 가까워지는
 // 퇴화 크롭을 걸러낸다. 카드가 찌그러진 사각형으로 렌더되는 것을 막는 최종 방어선.
 const EPS = 0.005;
@@ -95,6 +125,7 @@ export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number)
     return {};
   }
   const out: RegionVisuals = {};
+  const sourceImage = {width: imageW, height: imageH};
 
   // 상안부: 눈 외/내안각 + 눈꺼풀(필수) + 눈썹 코어(가용한 만큼, 크롭 상단 확장용) → 크롭.
   // 가이드 = 눈 라인(외안각 연결).
@@ -106,12 +137,100 @@ export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number)
     // 없으면(앞머리 가림) forehead가 비어 눈썹까지만 — 기존 동작으로 자연 폴백.
     const cropRect = bbox([...forehead, ...brow, ...eyes], imageW, imageH, 0.2, 0.12);
     if (nonDegenerate(cropRect)) {
+      const upperGuides: RegionGuide[] = [
+        guide(
+          'interCanthalDistance',
+          'distance',
+          '눈 사이 거리',
+          ['interCanthalRatio'],
+          [map.get(IDX.eyeInnerRight)!, map.get(IDX.eyeInnerLeft)!],
+          imageW,
+          imageH,
+        ),
+        guide(
+          'eyeWidthRight',
+          'distance',
+          '오른쪽 눈 너비',
+          ['eyeWidthRatioRight'],
+          [map.get(IDX.eyeOuterRight)!, map.get(IDX.eyeInnerRight)!],
+          imageW,
+          imageH,
+        ),
+        guide(
+          'eyeWidthLeft',
+          'distance',
+          '왼쪽 눈 너비',
+          ['eyeWidthRatioLeft'],
+          [map.get(IDX.eyeInnerLeft)!, map.get(IDX.eyeOuterLeft)!],
+          imageW,
+          imageH,
+        ),
+        guide(
+          'eyeOpenness',
+          'symmetry',
+          '좌우 눈 개방도',
+          ['eyeOpennessRight', 'eyeOpennessLeft'],
+          [
+            map.get(IDX.eyeUpperLidRight)!,
+            map.get(IDX.eyeLowerLidRight)!,
+            map.get(IDX.eyeUpperLidLeft)!,
+            map.get(IDX.eyeLowerLidLeft)!,
+          ],
+          imageW,
+          imageH,
+        ),
+        guide(
+          'canthalTilt',
+          'angle',
+          '눈꼬리 기울기',
+          ['canthalTiltRightDeg', 'canthalTiltLeftDeg'],
+          [
+            map.get(IDX.eyeInnerRight)!,
+            map.get(IDX.eyeOuterRight)!,
+            map.get(IDX.eyeInnerLeft)!,
+            map.get(IDX.eyeOuterLeft)!,
+          ],
+          imageW,
+          imageH,
+        ),
+      ];
+      const browRight = availablePts(map, BROW_CORE_RIGHT_INDICES);
+      const browLeft = availablePts(map, BROW_CORE_LEFT_INDICES);
+      if (browRight.length >= MIN_GUIDE_POINTS && browLeft.length >= MIN_GUIDE_POINTS) {
+        const browMetricKeys = [
+          'browApexRatioRight',
+          'browApexRatioLeft',
+          'browSlopeRightDeg',
+          'browSlopeLeftDeg',
+          'eyeBrowGapRight',
+          'eyeBrowGapLeft',
+        ];
+        upperGuides.push(
+          guide(
+            'browFlowRight',
+            'contour',
+            '오른쪽 눈썹 흐름',
+            browMetricKeys,
+            browRight,
+            imageW,
+            imageH,
+          ),
+          guide(
+            'browFlowLeft',
+            'contour',
+            '왼쪽 눈썹 흐름',
+            browMetricKeys,
+            browLeft,
+            imageW,
+            imageH,
+          ),
+        );
+      }
       out.upper = {
         cropRect,
-        guide: {
-          points: norm([map.get(IDX.eyeOuterRight)!, map.get(IDX.eyeInnerRight)!, map.get(IDX.eyeInnerLeft)!, map.get(IDX.eyeOuterLeft)!], imageW, imageH),
-          label: '눈가',
-        },
+        guide: upperGuides[0],
+        guides: upperGuides,
+        sourceImage,
       };
     }
   }
@@ -123,9 +242,31 @@ export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number)
   if (nose && alae && cheeks) {
     const cropRect = bbox([...nose, ...alae, ...cheeks], imageW, imageH, 0.08, 0.18);
     if (nonDegenerate(cropRect)) {
+      const midGuides = [
+        guide(
+          'noseBridgeReference',
+          'contour',
+          '콧대 중심선',
+          [],
+          nose,
+          imageW,
+          imageH,
+        ),
+        guide(
+          'alarReference',
+          'distance',
+          '콧볼 기준선',
+          [],
+          alae,
+          imageW,
+          imageH,
+        ),
+      ];
       out.mid = {
         cropRect,
-        guide: {points: norm(nose, imageW, imageH), label: '콧대 중심선'},
+        guide: midGuides[0],
+        guides: midGuides,
+        sourceImage,
       };
     }
   }
@@ -135,9 +276,52 @@ export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number)
   if (lip.length >= MIN_GUIDE_POINTS) {
     const cropRect = bbox(lip, imageW, imageH, 0.4, 0.5);
     if (nonDegenerate(cropRect)) {
+      const lowerGuides: RegionGuide[] = [
+        guide(
+          'mouthWidth',
+          'distance',
+          '입 너비',
+          ['mouthWidthRatio', 'mouthCornerAsymmetry'],
+          [map.get(IDX.mouthCornerRight)!, map.get(IDX.mouthCornerLeft)!],
+          imageW,
+          imageH,
+        ),
+        guide(
+          'lipContour',
+          'contour',
+          '입술 윤곽',
+          [],
+          lip,
+          imageW,
+          imageH,
+        ),
+      ];
+      const lipThicknessPoints = pts(map, [
+        IDX.upperLipOuterTop,
+        IDX.upperLipInnerBottom,
+        IDX.lowerLipInnerTop,
+        IDX.lowerLipOuterBottom,
+      ]);
+      if (lipThicknessPoints) {
+        lowerGuides.splice(
+          1,
+          0,
+          guide(
+            'lipThickness',
+            'symmetry',
+            '위아래 입술 두께',
+            ['lipThicknessRatio'],
+            lipThicknessPoints,
+            imageW,
+            imageH,
+          ),
+        );
+      }
       out.lower = {
         cropRect,
-        guide: {points: norm(lip, imageW, imageH), label: '입술 라인'},
+        guide: lowerGuides[0],
+        guides: lowerGuides,
+        sourceImage,
       };
     }
   }
@@ -149,9 +333,40 @@ export function regionVisualsBuilder(map: PxMap, imageW: number, imageH: number)
   if (jaw.length >= MIN_GUIDE_POINTS) {
     const cropRect = bbox([...jaw, ...jawCheeks], imageW, imageH, 0.1, 0.12);
     if (nonDegenerate(cropRect)) {
+      const jawGuides = [
+        guide(
+          'jawWidth',
+          'distance',
+          '턱 너비',
+          ['jawWidthRatio'],
+          [map.get(IDX.jawRight)!, map.get(IDX.jawLeft)!],
+          imageW,
+          imageH,
+        ),
+        guide(
+          'lowerJawWidth',
+          'distance',
+          '아래턱 너비',
+          ['lowerJawWidthRatio'],
+          [map.get(IDX.lowerJawRight)!, map.get(IDX.lowerJawLeft)!],
+          imageW,
+          imageH,
+        ),
+        guide(
+          'jawContour',
+          'contour',
+          '턱선 윤곽',
+          [],
+          jaw,
+          imageW,
+          imageH,
+        ),
+      ];
       out.jaw = {
         cropRect,
-        guide: {points: norm(jaw, imageW, imageH), label: '턱 곡선'},
+        guide: jawGuides[0],
+        guides: jawGuides,
+        sourceImage,
       };
     }
   }

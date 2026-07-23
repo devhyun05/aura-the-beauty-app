@@ -13,7 +13,7 @@ function DotItem({ text, avoid }: { text: string; avoid?: boolean }) {
     <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start' }}>
       <View style={{
         width: 8, height: 8, borderRadius: 4, marginTop: 5,
-        backgroundColor: avoid ? 'transparent' : color.accent,
+        backgroundColor: avoid ? 'transparent' : color.accentDeep,
         borderWidth: avoid ? 2 : 0, borderColor: avoid ? color.dotOutline : undefined,
       }} />
       <Text style={[font(13, '400', 1.55), { color: avoid ? color.muted : color.body, flex: 1 }]}>{text}</Text>
@@ -71,7 +71,7 @@ export function S5Body({ data, onResurvey }: { data: S5Data; onResurvey?: () => 
                     accessibilityRole="button"
                     onPress={onResurvey}
                     style={({ pressed }) => [{
-                      backgroundColor: color.accent,
+                      backgroundColor: color.accentDeep,
                       borderRadius: radius.pill,
                       paddingHorizontal: 15,
                       paddingVertical: 9,

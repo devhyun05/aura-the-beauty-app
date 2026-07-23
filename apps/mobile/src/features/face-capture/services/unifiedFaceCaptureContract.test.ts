@@ -202,6 +202,75 @@ function completedFixture(overrides: Record<string, unknown> = {}) {
 
 const completed = parseUnifiedFaceCaptureEvent(completedFixture());
 expectEqual(completed?.type, 'unified_face_capture_completed', 'completed parses');
+const photoEvidenceFixture = {
+  captureId: 'capture-1',
+  coordinateSpace: 'portrait_unmirrored_normalized',
+  frame: {
+    cameraFrameToken: 'camera-4',
+    faceNativeFrameToken: 'arkit-4',
+    faceNativeTimestampMs: 5004,
+  },
+  guides: [{
+    key: 'noseLength',
+    kind: 'length',
+    label: '코 길이',
+    metricKeys: ['noseLength'],
+    points: [{x: 0.5, y: 0.35}, {x: 0.5, y: 0.57}],
+  }],
+  image: {height: 1920, width: 1080},
+  regions: {
+    nose: {
+      hull: [{x: 0.44, y: 0.35}, {x: 0.56, y: 0.35}, {x: 0.5, y: 0.62}],
+      metricKeys: ['noseTipProjection', 'noseLength'],
+      pin: {
+        x: 0.5,
+        y: 0.57,
+        relativeDepth: 1,
+        signedDepthNormalized: 0.34,
+        label: '코끝',
+        metricKey: 'noseTipProjection',
+      },
+      samples: [
+        {x: 0.46, y: 0.4, relativeDepth: 0.2, signedDepthNormalized: 0.12},
+        {x: 0.54, y: 0.4, relativeDepth: 0.3, signedDepthNormalized: 0.16},
+        {x: 0.5, y: 0.57, relativeDepth: 1, signedDepthNormalized: 0.34},
+      ],
+    },
+  },
+  schemaVersion: 'aura.face3d-photo-evidence.v1',
+  topologyFingerprint: 'synthetic-v2',
+};
+const completedWithPhotoEvidence = parseUnifiedFaceCaptureEvent(
+  completedFixture({face3dPhotoEvidence: photoEvidenceFixture}),
+);
+expectEqual(
+  completedWithPhotoEvidence?.type === 'unified_face_capture_completed'
+    ? completedWithPhotoEvidence.face3dPhotoEvidence?.regions.nose?.pin.label
+    : null,
+  '코끝',
+  'valid same-frame 3D photo evidence parses',
+);
+expectEqual(
+  completedWithPhotoEvidence?.type === 'unified_face_capture_completed'
+    ? completedWithPhotoEvidence.face3dPhotoEvidence?.regions.nose?.pin
+      .signedDepthNormalized
+    : null,
+  0.34,
+  'signed normalized depth parses',
+);
+const completedWithInvalidPhotoEvidence = parseUnifiedFaceCaptureEvent(
+  completedFixture({
+    face3dPhotoEvidence: {...photoEvidenceFixture, captureId: 'other-capture'},
+  }),
+);
+expect(
+  completedWithInvalidPhotoEvidence?.type === 'unified_face_capture_completed'
+    && !completedWithInvalidPhotoEvidence.face3dPhotoEvidence
+    && completedWithInvalidPhotoEvidence.warnings.includes(
+      'face3d_photo_evidence_invalid',
+    ),
+  'invalid optional photo evidence is omitted without blocking capture',
+);
 const completedWithGoldenMask = parseUnifiedFaceCaptureEvent(
   completedFixture({
     goldenMask: {

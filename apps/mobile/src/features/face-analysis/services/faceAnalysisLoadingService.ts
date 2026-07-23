@@ -15,10 +15,9 @@ export type FaceAnalysisProgressState = {
   isComplete: boolean;
 };
 
-// 진행률(0→100%) 커브의 기준 시간. 실제 얼굴 분석(Sonnet)이 30초보다 오래 걸려
-// 예전엔 바가 일찍 포화→95%에서 정체됐다. 실측 소요에 맞춰 넉넉히 잡아
-// 정상 구간에서는 상한에 닿기 전에 분석이 끝나게 한다.
-export const FACE_ANALYSIS_LOADING_TOTAL_MS = 85000;
+// 사용자가 기다리는 대상은 전체 스타일링이 아니라 첫 의미 보고서다. perception을
+// 선호하되 15초에 fallback을 여는 진입 계약과 진행률의 시간축을 맞춘다.
+export const FACE_ANALYSIS_LOADING_TOTAL_MS = 15000;
 
 export const faceAnalysisLoadingPreviewSource =
   appAssetSource('images/analysis/report-bare-face-20260622.png') as ImageSourcePropType;
@@ -42,7 +41,7 @@ export const faceAnalysisLoadingSteps: readonly FaceAnalysisLoadingStep[] = [
 ];
 
 export const faceAnalysisLoadingTip =
-  'AI 분석이 완료된 경우에만 보고서를 보여드려요.';
+  '피부와 이목구비 분석이 준비되면 보고서를 먼저 열고, 스타일 제안은 이어서 완성해요.';
 
 function clampProgress(elapsedMs: number) {
   return Math.min(Math.max(elapsedMs / FACE_ANALYSIS_LOADING_TOTAL_MS, 0), 1);

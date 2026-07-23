@@ -62,7 +62,7 @@ class Settings(BaseSettings):
   makeup_trend_keywords_enabled: bool = True
   makeup_personalized_image_enabled: bool = True
   makeup_recommendation_v1_compat_enabled: bool = True
-  face_analysis_v2_enabled: bool = False
+  face_analysis_v2_enabled: bool = True
   # perceive는 영문에서도 ~40s(상한 45s에 근접)라 마진이 없었고, 한국어 출력으로
   # 더 길어져 타임아웃했다 → 스테이지별 여유를 준다(멈춘 잡은 상위 폴링 타임아웃이 방어).
   face_analysis_stage_timeout_seconds: float = Field(default=100.0, ge=5.0, le=180.0)

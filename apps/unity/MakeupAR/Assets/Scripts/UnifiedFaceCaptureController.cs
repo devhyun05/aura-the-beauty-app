@@ -1319,6 +1319,27 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
             + "-"
             + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                 .ToString(CultureInfo.InvariantCulture);
+        bool hasFace3DPhotoEvidence =
+            Face3DPhotoEvidenceBuilder.TryBuild(
+                anchorSample.MeshSnapshot,
+                anchorSample.ProjectedVertices,
+                anchorSample.CameraFrameToken,
+                anchorSample.FaceNativeFrameToken,
+                anchorSample.FaceNativeTimestampMs,
+                anchorSample.ImageWidth,
+                anchorSample.ImageHeight,
+                semanticMap,
+                captureId,
+                profile.TopologyFingerprint,
+                out string face3DPhotoEvidenceJson,
+                out string face3DPhotoEvidenceReason);
+        if (!hasFace3DPhotoEvidence)
+        {
+            warningSet.Add(
+                string.IsNullOrWhiteSpace(face3DPhotoEvidenceReason)
+                    ? "face3d_photo_evidence_unavailable"
+                    : face3DPhotoEvidenceReason);
+        }
         bool hasGoldenMask = false;
         GoldenMaskArtifactDescriptor goldenMask = null;
         string goldenMaskReason = "golden_mask_artifact_unavailable";
@@ -1366,6 +1387,11 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         json.Append(",\"height\":").Append(anchorSample.ImageHeight);
         json.Append(",\"orientation\":\"upright\",\"mirrored\":false}");
         json.Append(",\"face3d\":").Append(profile.ToCanonicalJson());
+        if (hasFace3DPhotoEvidence)
+        {
+            json.Append(",\"face3dPhotoEvidence\":")
+                .Append(face3DPhotoEvidenceJson);
+        }
         if (hasGoldenMask)
         {
             json.Append(",\"goldenMask\":").Append(goldenMask.ToJson());

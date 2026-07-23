@@ -1316,6 +1316,12 @@ public sealed class RNBridge : MonoBehaviour
         goldenMaskRuntime.SetRotationJson(json);
     }
 
+    public void SetGoldenMaskWireframeVisibleJson(string json)
+    {
+        EnsureGoldenMaskRuntime();
+        goldenMaskRuntime.SetWireframeVisibleJson(json);
+    }
+
     public void ResetGoldenMaskViewJson(string json)
     {
         EnsureGoldenMaskRuntime();

@@ -1,23 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   ImageBackground,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   ScrollView,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
-import {
-  OptionalViewShot,
-  type OptionalViewShotRef,
-} from '../../shared/ui/OptionalViewShot';
+import { ChevronLeft, MoreHorizontal, Share2 } from 'lucide-react-native';
 import {
   StoryReportPager,
   type StoryReportPage,
@@ -25,38 +20,69 @@ import {
   type StoryReportSection,
 } from '../../shared/ui/StoryReportPager';
 import { color, font, radius, shadow } from './reportTokens';
-import type { BandKey, ReportScreenProps } from './reportTypes';
+import type { BandKey, ReportData, ReportScreenProps } from './reportTypes';
 import {
   buildFaceReportStoryModel,
+  FACE_REPORT_STORY_SECTIONS,
   type FaceReportStoryPage,
   type FaceReportStorySection,
 } from './services/reportStoryModel';
-import { ReportSectionCover } from './components/ReportSectionCover';
-import { areFaceReportCaptureAssetsSettled } from './services/reportCaptureReadiness';
+import {keepActivePageContent} from './services/reportContentUpgrade';
+import {resolveReportCompletionStatus} from './services/reportCompletionStatus';
+import {GoldenMaskCard} from './components/GoldenMaskCard';
 import {
-  FaceReportCaptureAssetContext,
-  type FaceReportCaptureAssetContextValue,
-} from './services/reportCaptureAssetContext';
-import { GoldenMaskCard } from './components/GoldenMaskCard';
-// Matches the legacy report screen's capture settings.
-const REPORT_CAPTURE_OPTIONS = {
-  format: 'jpg',
-  quality: 0.95,
-  result: 'tmpfile',
-  useRenderInContext: true,
-} as const;
+  disposePreparedGoldenMask,
+  preloadGoldenMaskForReport,
+} from './services/goldenMaskPreloadService';
+
+const STORY_SECTION_NAV_LABELS: Record<FaceReportStorySection['id'], string> = {
+  summary: '요약',
+  face: '얼굴',
+  'color-skin': '컬러·피부',
+  style: '스타일',
+};
 import { ScrollAnimContext } from './visuals/RiseIn';
-import { S1Summary } from './sections/S1Summary';
+import {S1CombinedSummary} from './sections/S1CombinedSummary';
 import { S2Proportion } from './sections/S2Proportion';
-import { S3Features, S3RegionCard } from './sections/S3Features';
-import { S4DrapePalette, S4PersonalColor, S4ToneOverview } from './sections/S4PersonalColor';
+import { S3RegionCard } from './sections/S3Features';
+import { S4DrapePalette, S4ToneOverview } from './sections/S4PersonalColor';
 import { S5Body } from './sections/S5Body';
 import { S6Impression } from './sections/S6Impression';
-import { S7LookCard, S7Styling } from './sections/S7Styling';
+import { S7LookCard } from './sections/S7Styling';
 import { S8Skin } from './sections/S8Skin';
 import { S9StyleLanes } from './sections/S9StyleLanes';
 
 declare const require: (moduleName: string) => number;
+
+function ChapterMark({
+  inset,
+  section,
+}: {
+  inset: boolean;
+  section: FaceReportStorySection;
+}) {
+  return (
+    <View
+      style={{
+        gap: 11,
+        marginBottom: 18,
+        ...(inset ? null : {paddingHorizontal: 20, paddingTop: 22}),
+      }}>
+      <View
+        style={{
+          backgroundColor: color.accentDeep,
+          borderRadius: 1,
+          height: 2,
+          width: 44,
+        }}
+      />
+      <Text style={[font(10.5, '700', undefined, 1.25), {color: color.accentDeep}]}>
+        {section.number} · {section.englishTitle}
+      </Text>
+    </View>
+  );
+}
+
 function StoryContentCard({
   section,
   pagerRef,
@@ -64,6 +90,8 @@ function StoryContentCard({
   sub,
   children,
   inset = false,
+  scrollEnabled = true,
+  showChapterHeader = false,
 }: {
   section: FaceReportStorySection;
   pagerRef: React.RefObject<StoryReportPagerRef | null>;
@@ -71,27 +99,27 @@ function StoryContentCard({
   sub?: string;
   children: React.ReactNode;
   inset?: boolean;
+  scrollEnabled?: boolean;
+  showChapterHeader?: boolean;
 }) {
   const unlockPager = () => pagerRef.current?.setPagingEnabled(true);
   return (
     <View style={{flex: 1, backgroundColor: section.tint}}>
-      <View style={{height: 5, backgroundColor: section.accent}} />
       <ScrollView
         contentContainerStyle={{flexGrow: 1, paddingBottom: 30, ...(inset ? {paddingHorizontal: 16, paddingTop: 20} : null)}}
         directionalLockEnabled
         nestedScrollEnabled
-        showsVerticalScrollIndicator={false}
+        scrollEnabled={scrollEnabled}
+        showsVerticalScrollIndicator
         onScrollBeginDrag={() => pagerRef.current?.setPagingEnabled(false)}
         onScrollEndDrag={unlockPager}
         onMomentumScrollEnd={unlockPager}
         onTouchEnd={unlockPager}>
+        {showChapterHeader ? <ChapterMark inset={inset} section={section} /> : null}
         {title ? (
-          <View style={{gap: 5, marginBottom: 13}}>
-            <Text style={[font(10.5, '800', undefined, 1.35), {color: section.accent}]}>
-              {section.number} · {section.koreanTitle}
-            </Text>
-            <Text style={[font(20, '800'), {color: color.ink}]}>{title}</Text>
-            {sub ? <Text style={[font(12.5, '400', 1.55), {color: color.text}]}>{sub}</Text> : null}
+          <View style={{gap: 7, marginBottom: 16}}>
+            <Text style={[font(22, '800', 1.25, -0.25), {color: color.ink}]}>{title}</Text>
+            {sub ? <Text style={[font(13.5, '400', 1.55), {color: color.text}]}>{sub}</Text> : null}
           </View>
         ) : null}
         {children}
@@ -100,60 +128,118 @@ function StoryContentCard({
   );
 }
 
-type GoldenMaskCaptureImageStatus = 'pending' | 'loaded' | 'failed';
-
-function GoldenMaskShareCard({
-  onStatusChange,
-  uri,
+function SummaryStoryCard({
+  active,
+  data,
+  debugPayload,
+  debugSummary,
+  onInteractionChange,
+  onPressCta,
+  pagerRef,
 }: {
-  onStatusChange: (status: GoldenMaskCaptureImageStatus) => void;
-  uri: string;
+  active: boolean;
+  data: ReportScreenProps['data'];
+  debugPayload?: unknown;
+  debugSummary?: {label: string; value: string}[];
+  onInteractionChange: (interacting: boolean) => void;
+  onPressCta?: () => void;
+  pagerRef: React.RefObject<StoryReportPagerRef | null>;
 }) {
-  const loadOutcomeRef = useRef<'loaded' | 'failed' | null>(null);
-  const handlePending = React.useCallback(() => {
-    loadOutcomeRef.current = null;
-    onStatusChange('pending');
-  }, [onStatusChange]);
-  const handleLoaded = React.useCallback(() => {
-    loadOutcomeRef.current = 'loaded';
-  }, []);
-  const handleFailed = React.useCallback(() => {
-    loadOutcomeRef.current = 'failed';
-    onStatusChange('failed');
-  }, [onStatusChange]);
-  const handleLoadEnd = React.useCallback(() => {
-    onStatusChange(
-      loadOutcomeRef.current === 'loaded' ? 'loaded' : 'failed',
-    );
-  }, [onStatusChange]);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [maskLayoutY, setMaskLayoutY] = useState(Number.POSITIVE_INFINITY);
+  const [maskMounted, setMaskMounted] = useState(false);
+  const [maskInteracting, setMaskInteracting] = useState(false);
 
-  React.useLayoutEffect(() => {
-    handlePending();
-  }, [handlePending, uri]);
+  React.useEffect(() => {
+    scrollRef.current?.scrollTo({animated: false, y: 0});
+    setMaskLayoutY(Number.POSITIVE_INFINITY);
+    setMaskMounted(false);
+  }, [data.reportId]);
+
+  const updateMaskVisibility = React.useCallback(
+    (offsetY: number) => {
+      if (
+        !maskMounted &&
+        Number.isFinite(maskLayoutY) &&
+        offsetY + viewportHeight + 160 >= maskLayoutY
+      ) {
+        setMaskMounted(true);
+      }
+    },
+    [maskLayoutY, maskMounted, viewportHeight],
+  );
+
+  React.useEffect(() => {
+    updateMaskVisibility(0);
+  }, [updateMaskVisibility]);
+
+  const handleInteractionChange = React.useCallback(
+    (interacting: boolean) => {
+      setMaskInteracting(interacting);
+      onInteractionChange(interacting);
+    },
+    [onInteractionChange],
+  );
 
   return (
-    <View style={{backgroundColor: '#F4F2ED', paddingHorizontal: 22, paddingVertical: 28, gap: 14}}>
-      <View style={{gap: 5}}>
-        <Text style={{color: '#7D786F', fontFamily: 'Lora', fontSize: 12, letterSpacing: 2}}>
-          GOLDEN MASK
-        </Text>
-        <Text style={{color: '#343330', fontFamily: 'Lora', fontSize: 27, lineHeight: 33}}>
-          나의 3D 페이스
-        </Text>
-        <Text style={[font(12.5, '400', 1.5), {color: '#716F69'}]}>
-          TrueDepth로 측정한 얼굴 메시를 고대 조각처럼 담았어요.
-        </Text>
-      </View>
-      <Image
-        accessibilityIgnoresInvertColors
-        onError={handleFailed}
-        onLoad={handleLoaded}
-        onLoadEnd={handleLoadEnd}
-        onLoadStart={handlePending}
-        resizeMode="cover"
-        source={{uri}}
-        style={{aspectRatio: 1024 / 1280, backgroundColor: '#ECEAE5', borderRadius: 24, width: '100%'}}
-      />
+    <View
+      onLayout={event => setViewportHeight(Math.round(event.nativeEvent.layout.height))}
+      style={{backgroundColor: color.surface, flex: 1}}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={{flexGrow: 1}}
+        directionalLockEnabled
+        nestedScrollEnabled
+        onMomentumScrollEnd={() => pagerRef.current?.setPagingEnabled(true)}
+        onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+          updateMaskVisibility(event.nativeEvent.contentOffset.y);
+        }}
+        onScrollBeginDrag={() => pagerRef.current?.setPagingEnabled(false)}
+        onScrollEndDrag={() => pagerRef.current?.setPagingEnabled(true)}
+        scrollEnabled={!maskInteracting}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator>
+        <S1CombinedSummary
+          data={data.s1}
+          introMinHeight={viewportHeight || undefined}
+          onPressCta={onPressCta}>
+          {data.goldenMask ? (
+            <View
+              onLayout={event => {
+                const nextY = event.nativeEvent.layout.y;
+                setMaskLayoutY(nextY);
+              }}>
+              {maskMounted ? (
+                <GoldenMaskCard
+                  active={active}
+                  descriptor={data.goldenMask}
+                  layout="evidence"
+                  onInteractionChange={handleInteractionChange}
+                  pagerRef={pagerRef}
+                  reportId={data.reportId}
+                  sourcePhoto={data.s1.photo}
+                />
+              ) : (
+                <View
+                  accessibilityLabel="3D 얼굴 상세 보기를 준비하는 영역"
+                  style={{
+                    alignItems: 'center',
+                    backgroundColor: color.surface2,
+                    borderRadius: 28,
+                    height: 320,
+                    justifyContent: 'center',
+                  }}>
+                  <ActivityIndicator color={color.muted} size="small" />
+                </View>
+              )}
+            </View>
+          ) : null}
+        </S1CombinedSummary>
+        {__DEV__ ? (
+          <MeasurementDebugPanel payload={debugPayload} summary={debugSummary} />
+        ) : null}
+      </ScrollView>
     </View>
   );
 }
@@ -224,66 +310,6 @@ function ReportGenerationStatus({
   );
 }
 
-type GoldenMaskPosterWaiter = {
-  resolve: (uri: string | null) => void;
-  timer: ReturnType<typeof setTimeout>;
-};
-
-const GOLDEN_MASK_POSTER_WAIT_MS = 18_000;
-const GOLDEN_MASK_CAPTURE_IMAGE_SETTLE_TIMEOUT_MS = 10_000;
-
-type GoldenMaskCaptureImageState = {
-  requestId: number | null;
-  status: GoldenMaskCaptureImageStatus;
-  uri: string | null;
-};
-
-function waitForNextFrame(): Promise<void> {
-  return new Promise(resolve => {
-    requestAnimationFrame(() => resolve());
-  });
-}
-
-async function waitForGoldenMaskCaptureImageSettled({
-  getState,
-  requestId,
-  uri,
-}: {
-  getState: () => GoldenMaskCaptureImageState;
-  requestId: number;
-  uri: string;
-}): Promise<void> {
-  const deadline = Date.now() + GOLDEN_MASK_CAPTURE_IMAGE_SETTLE_TIMEOUT_MS;
-
-  while (true) {
-    const currentState = getState();
-    if (
-      currentState.requestId === requestId &&
-      currentState.uri === uri
-    ) {
-      if (currentState.status === 'loaded') {
-        return;
-      }
-      if (currentState.status === 'failed') {
-        throw new Error(
-          'Golden Mask 이미지를 보고서에 불러오지 못했어요. 다시 시도해 주세요.',
-        );
-      }
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(
-        'Golden Mask 이미지를 보고서에 담는 데 시간이 오래 걸렸어요. 다시 시도해 주세요.',
-      );
-    }
-    await new Promise(resolve => setTimeout(resolve, 16));
-  }
-}
-
-function deleteTemporaryFile(uri: string | null | undefined): void {
-  if (!uri) return;
-  void FileSystem.deleteAsync(uri, {idempotent: true}).catch(() => undefined);
-}
-
 function MakeupCtaCard({
   data,
   onPress,
@@ -310,7 +336,17 @@ function MakeupCtaCard({
         directionalLockEnabled
         showsVerticalScrollIndicator={false}>
         <View style={{gap: 7, marginBottom: 4}}>
-          <Text style={{fontFamily: 'Lora', fontSize: 38, lineHeight: 42, color: color.white}}>MAKEUP</Text>
+          <Text
+            style={{
+              color: color.white,
+              fontFamily: 'Pretendard',
+              fontSize: 34,
+              fontWeight: '800',
+              letterSpacing: -0.6,
+              lineHeight: 40,
+            }}>
+            MAKEUP
+          </Text>
           <Text style={[font(17, '700'), {color: color.white}]}>{data.footer.cta}</Text>
         </View>
         {__DEV__ ? <MeasurementDebugPanel payload={debugPayload} summary={debugSummary} /> : null}
@@ -322,7 +358,7 @@ function MakeupCtaCard({
           accessibilityRole="button"
           onPress={onPress}
           style={({pressed}) => [{
-            alignItems: 'center', backgroundColor: color.accent, borderRadius: radius.lg,
+            alignItems: 'center', backgroundColor: color.accentDeep, borderRadius: radius.lg,
             paddingVertical: 16, opacity: pressed ? 0.86 : 1,
           }, shadow.cta]}>
           <Text style={[font(14.5, '800'), {color: color.white}]}>{data.footer.cta}</Text>
@@ -332,225 +368,118 @@ function MakeupCtaCard({
   );
 }
 
-function countFaceReportCaptureAssets(data: ReportScreenProps['data']) {
-  return Number(Boolean(data.s1.photo.uri))
-    + Number(Boolean(data.s2?.photo.uri))
-    + (data.s3?.cards.filter(card => Boolean(card.photo.uri)).length ?? 0)
-    + (data.s4?.drape.photo.uri ? 2 : 0);
-}
-
-function FaceReportCaptureDocument({
-  captureRef,
-  data,
-  goldenMaskPosterUri,
-  onCaptureDocumentSettledChange,
-  onGoldenMaskPosterStatusChange,
-  onResurvey,
-  onRetake,
-  requestId,
-  width,
-}: {
-  captureRef: ReportScreenProps['captureRef'];
-  data: ReportScreenProps['data'];
-  goldenMaskPosterUri?: string | null;
-  onCaptureDocumentSettledChange?: ReportScreenProps['onCaptureDocumentSettledChange'];
-  onGoldenMaskPosterStatusChange?: (
-    requestId: number,
-    uri: string,
-    status: GoldenMaskCaptureImageStatus,
-  ) => void;
-  onResurvey?: ReportScreenProps['onResurvey'];
-  onRetake?: ReportScreenProps['onRetake'];
-  requestId: number;
-  width: number;
-}) {
-  const assetStatesRef = useRef(new Map<string, boolean>());
-  const [assetRevision, setAssetRevision] = useState(0);
-  const [layoutReady, setLayoutReady] = useState(false);
-  const expectedAssetCount = useMemo(() => countFaceReportCaptureAssets(data), [data]);
-
-  const updateAssetState = useCallback((assetId: string, settled: boolean) => {
-    if (assetStatesRef.current.get(assetId) === settled) {
-      return;
-    }
-    assetStatesRef.current.set(assetId, settled);
-    setAssetRevision(revision => revision + 1);
-  }, []);
-
-  const registerAsset = useCallback((assetId: string) => {
-    if (assetStatesRef.current.has(assetId)) {
-      return;
-    }
-    assetStatesRef.current.set(assetId, false);
-    setAssetRevision(revision => revision + 1);
-  }, []);
-
-  const assetContext = useMemo<FaceReportCaptureAssetContextValue>(() => ({
-    markAssetPending: assetId => updateAssetState(assetId, false),
-    markAssetSettled: assetId => updateAssetState(assetId, true),
-    registerAsset,
-    // The capture document is immutable for one request. Avoid scheduling state
-    // while its complete subtree is being unmounted; its map is discarded too.
-    unregisterAsset: assetId => {
-      assetStatesRef.current.delete(assetId);
-    },
-  }), [registerAsset, updateAssetState]);
-
-  const isSettled = areFaceReportCaptureAssetsSettled({
-    assetStates: assetStatesRef.current,
-    expectedAssetCount,
-    layoutReady,
-  });
-  const handleGoldenMaskPosterStatusChange = useCallback(
-    (status: GoldenMaskCaptureImageStatus) => {
-      if (goldenMaskPosterUri) {
-        onGoldenMaskPosterStatusChange?.(
-          requestId,
-          goldenMaskPosterUri,
-          status,
-        );
-      }
-    },
-    [
-      goldenMaskPosterUri,
-      onGoldenMaskPosterStatusChange,
-      requestId,
-    ],
-  );
-
-  useEffect(() => {
-    onCaptureDocumentSettledChange?.(requestId, isSettled);
-  }, [assetRevision, isSettled, onCaptureDocumentSettledChange, requestId]);
-
-  return (
-    <View
-      accessible={false}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      pointerEvents="none"
-      style={{position: 'absolute', left: 0, top: 0, width}}>
-      <FaceReportCaptureAssetContext.Provider value={assetContext}>
-        <OptionalViewShot
-          ref={captureRef}
-          options={REPORT_CAPTURE_OPTIONS}
-          style={{width, backgroundColor: color.bg}}>
-          {goldenMaskPosterUri ? (
-            <GoldenMaskShareCard
-              key={goldenMaskPosterUri}
-              onStatusChange={handleGoldenMaskPosterStatusChange}
-              uri={goldenMaskPosterUri}
-            />
-          ) : null}
-          <View onLayout={() => setLayoutReady(true)}>
-            <S1Summary data={data.s1} />
-            {data.s2 ? (
-              <S2Proportion data={data.s2} onOpenRegionCard={() => undefined} onRetake={onRetake} />
-            ) : null}
-            {data.s3 ? <S3Features data={data.s3} /> : null}
-            {data.s4 ? <S4PersonalColor data={data.s4} /> : null}
-            {data.s5 ? <S5Body data={data.s5} onResurvey={onResurvey} /> : null}
-            {data.s6 ? <S6Impression data={data.s6} /> : null}
-            {data.s7 ? <S7Styling data={data.s7} /> : null}
-            {data.s8 ? <S8Skin data={data.s8} /> : null}
-            {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
-          </View>
-        </OptionalViewShot>
-      </FaceReportCaptureAssetContext.Provider>
-    </View>
-  );
-}
 /**
  * Story report screen: editorial covers + meaning-complete horizontal cards.
  * Pure & props-driven — navigation, retake and survey actions bubble up as callbacks.
  */
 export function ReportScreenScaffold({
-  data,
+  data: incomingData,
   onBack,
+  onGoldenMaskInteractionChange,
   onMore,
+  onShare,
   onRetake,
   onResurvey,
   onPressCta,
-  captureRef,
-  captureRequestId,
-  onCaptureDocumentSettledChange,
   measurementDebugPayload,
   measurementDebugSummary,
 }: ReportScreenProps) {
   const insets = useSafeAreaInsets();
-  const {width: windowWidth} = useWindowDimensions();
   const scrollY = useSharedValue(0);
   const pagerRef = useRef<StoryReportPagerRef | null>(null);
-  const verticalCaptureRef = useRef<OptionalViewShotRef | null>(null);
-  const posterWaitersRef = useRef(new Set<GoldenMaskPosterWaiter>());
-  const goldenMaskCaptureImageStateRef = useRef<GoldenMaskCaptureImageState>({
-    requestId: null,
-    status: 'pending',
-    uri: null,
-  });
+  const [data, setData] = useState(incomingData);
+  const [pendingData, setPendingData] = useState<ReportData | null>(null);
+  const dataRef = useRef(data);
+  const initialModel = useMemo(
+    () => buildFaceReportStoryModel(incomingData),
+    [incomingData],
+  );
+  const initialPageId =
+    incomingData.initialPageId ??
+    (incomingData.goldenMask
+      ? 'summary:overview'
+      : initialModel.pages[0]?.id ?? null);
+  const [activePageId, setActivePageId] = useState(initialPageId);
+  const activePageIdRef = useRef(activePageId);
+  const reportCompletion = resolveReportCompletionStatus(
+    pendingData ?? data,
+  );
+
+  React.useEffect(() => {
+    const current = dataRef.current;
+    if (current === incomingData) return;
+    const sameReport = current.reportId === incomingData.reportId;
+    const isContentUpgrade =
+      sameReport &&
+      (
+        (
+          current.generationStatus === 'loading' &&
+          incomingData.generationStatus === undefined
+        ) ||
+        (incomingData.contentRevision ?? 0) >
+          (current.contentRevision ?? 0)
+      );
+    const nextData = isContentUpgrade
+      ? keepActivePageContent(
+          current,
+          incomingData,
+          activePageIdRef.current,
+        )
+      : incomingData;
+    dataRef.current = nextData;
+    setData(nextData);
+    setPendingData(isContentUpgrade ? incomingData : null);
+  }, [incomingData]);
+
   const storyModel = useMemo(() => buildFaceReportStoryModel(data), [data]);
-  const [activePageId, setActivePageId] = useState(
-    storyModel.pages[0]?.id ?? null,
-  );
-  const [goldenMaskPosterUri, setGoldenMaskPosterUri] = useState<string | null>(
-    null,
-  );
-  const [posterRequestKey, setPosterRequestKey] = useState(0);
-
-  if (
-    goldenMaskCaptureImageStateRef.current.requestId !==
-      (captureRequestId ?? null) ||
-    goldenMaskCaptureImageStateRef.current.uri !== goldenMaskPosterUri
-  ) {
-    goldenMaskCaptureImageStateRef.current = {
-      requestId: captureRequestId ?? null,
-      status: 'pending',
-      uri: goldenMaskPosterUri,
-    };
-  }
-
-  const handleGoldenMaskCaptureImageStatusChange = React.useCallback(
-    (
-      requestId: number,
-      uri: string,
-      status: GoldenMaskCaptureImageStatus,
-    ) => {
-      const currentState = goldenMaskCaptureImageStateRef.current;
-      if (
-        requestId !== currentState.requestId ||
-        uri !== currentState.uri
-      ) {
-        return;
-      }
-      goldenMaskCaptureImageStateRef.current = {
-        requestId,
-        status,
-        uri,
-      };
-    },
-    [],
-  );
-
-  const handleGoldenMaskPosterReady = React.useCallback((fileUri: string) => {
-    setGoldenMaskPosterUri(previousUri => {
-      if (previousUri && previousUri !== fileUri) {
-        deleteTemporaryFile(previousUri);
-      }
-      return fileUri;
+  const initialStoryPageId =
+    data.initialPageId ??
+    (data.goldenMask ? 'summary:overview' : storyModel.pages[0]?.id ?? null);
+  const handlePageChange = React.useCallback((pageId: string) => {
+    activePageIdRef.current = pageId;
+    setActivePageId(pageId);
+    setPendingData(pending => {
+      if (!pending) return null;
+      dataRef.current = pending;
+      setData(pending);
+      return null;
     });
-    for (const waiter of posterWaitersRef.current) {
-      clearTimeout(waiter.timer);
-      waiter.resolve(fileUri);
-    }
-    posterWaitersRef.current.clear();
   }, []);
+  const handleGoldenMaskInteractionChange = React.useCallback(
+    (interacting: boolean) => {
+      // Own both parent axes for the entire touch. PanResponder capture alone
+      // does not reliably stop an already-mounted native ScrollView on iOS.
+      pagerRef.current?.setPagingEnabled(!interacting);
+      onGoldenMaskInteractionChange?.(interacting);
+    },
+    [onGoldenMaskInteractionChange],
+  );
 
-  const handleGoldenMaskPosterUnavailable = React.useCallback(() => {
-    for (const waiter of posterWaitersRef.current) {
-      clearTimeout(waiter.timer);
-      waiter.resolve(null);
+  React.useEffect(() => {
+    if (!data.goldenMask) {
+      return undefined;
     }
-    posterWaitersRef.current.clear();
-  }, []);
+    const startedAt = Date.now();
+    console.info('[aura:golden-mask] report-prefetch:start', {
+      reportId: data.reportId,
+    });
+    void preloadGoldenMaskForReport(data.reportId, data.goldenMask).then(
+      result => {
+        console.info('[aura:golden-mask] report-prefetch:settled', {
+          elapsedMs: Date.now() - startedAt,
+          ready: result.ready,
+          reportId: data.reportId,
+        });
+      },
+    );
+
+    return () => {
+      disposePreparedGoldenMask(data.reportId);
+    };
+  }, [
+    data.goldenMask?.topologyFingerprint,
+    data.reportId,
+  ]);
 
   const openRegionCard = (key: BandKey) => {
     const pageId = storyModel.featurePageIds[key];
@@ -559,30 +488,20 @@ export function ReportScreenScaffold({
 
   const sectionById = new Map(storyModel.sections.map(section => [section.id, section]));
   const renderContent = (page: FaceReportStoryPage, section: FaceReportStorySection) => {
+    const showChapterHeader = section.id !== 'summary';
     switch (page.contentKey) {
-      case 'summary:golden-mask':
-        return data.goldenMask ? (
-          <GoldenMaskCard
-            active={activePageId === page.id}
-            descriptor={data.goldenMask}
-            onPosterUnavailable={handleGoldenMaskPosterUnavailable}
-            onPosterReady={handleGoldenMaskPosterReady}
-            pagerRef={pagerRef}
-            posterRequestKey={posterRequestKey}
-            reportId={data.reportId}
-          />
-        ) : null;
+      case 'summary:combined':
       case 'summary':
         return (
-          <StoryContentCard section={section} pagerRef={pagerRef}>
-            <S1Summary data={data.s1} />
-            {__DEV__ ? (
-              <MeasurementDebugPanel
-                payload={measurementDebugPayload}
-                summary={measurementDebugSummary}
-              />
-            ) : null}
-          </StoryContentCard>
+          <SummaryStoryCard
+            active={activePageId === page.id}
+            data={data}
+            debugPayload={measurementDebugPayload}
+            debugSummary={measurementDebugSummary}
+            onInteractionChange={handleGoldenMaskInteractionChange}
+            onPressCta={onPressCta}
+            pagerRef={pagerRef}
+          />
         );
       case 'summary:generation':
         return (
@@ -590,6 +509,7 @@ export function ReportScreenScaffold({
             inset
             pagerRef={pagerRef}
             section={section}
+            showChapterHeader={showChapterHeader}
             sub="완성되지 않은 설명을 임의로 채우지 않아요."
             title="보고서 생성 상태">
             <ReportGenerationStatus
@@ -600,45 +520,50 @@ export function ReportScreenScaffold({
         );
       case 'proportion':
         return data.s2 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef}>
+          <StoryContentCard section={section} pagerRef={pagerRef} showChapterHeader={showChapterHeader}>
             <S2Proportion data={data.s2} onOpenRegionCard={openRegionCard} onRetake={onRetake} />
           </StoryContentCard>
         ) : null;
       case 'personal-color:tone':
         return data.s4 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.title} sub={data.s4.sub} inset>
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.title} sub={data.s4.sub} inset showChapterHeader={showChapterHeader}>
             <S4ToneOverview data={data.s4} />
           </StoryContentCard>
         ) : null;
       case 'personal-color:drape':
         return data.s4 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.drape.title} sub={data.s4.drape.sub} inset>
-            <S4DrapePalette data={data.s4} />
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.drape.title} sub={data.s4.drape.sub} inset showChapterHeader={showChapterHeader}>
+            <S4DrapePalette data={data.s4} showHeader={false} />
           </StoryContentCard>
         ) : null;
       case 'body':
         return data.s5 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef}>
+          <StoryContentCard section={section} pagerRef={pagerRef} showChapterHeader={showChapterHeader}>
             <S5Body data={data.s5} onResurvey={onResurvey} />
           </StoryContentCard>
         ) : null;
       case 'impression':
-        return data.s6 ? <StoryContentCard section={section} pagerRef={pagerRef}><S6Impression data={data.s6} /></StoryContentCard> : null;
+        return data.s6 ? <StoryContentCard section={section} pagerRef={pagerRef} showChapterHeader={showChapterHeader}><S6Impression data={data.s6} /></StoryContentCard> : null;
       case 'styling:natural':
         return data.s7 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.naturalCard.title} inset>
-            <S7LookCard card={data.s7.naturalCard} />
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.naturalCard.title} inset showChapterHeader={showChapterHeader}>
+            <S7LookCard card={data.s7.naturalCard} showHeader={false} />
           </StoryContentCard>
         ) : null;
       case 'styling:glam':
         return data.s7 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.glamCard.title} inset>
-            <S7LookCard card={data.s7.glamCard} />
-            {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.glamCard.title} inset showChapterHeader={showChapterHeader}>
+            <S7LookCard card={data.s7.glamCard} showHeader={false} />
+          </StoryContentCard>
+        ) : null;
+      case 'styling:lanes':
+        return data.s9 ? (
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s9.title} sub={data.s9.sub} inset showChapterHeader={showChapterHeader}>
+            <S9StyleLanes data={data.s9} showHeader={false} />
           </StoryContentCard>
         ) : null;
       case 'skin':
-        return data.s8 ? <StoryContentCard section={section} pagerRef={pagerRef}><S8Skin data={data.s8} /></StoryContentCard> : null;
+        return data.s8 ? <StoryContentCard section={section} pagerRef={pagerRef} showChapterHeader={showChapterHeader}><S8Skin data={data.s8} /></StoryContentCard> : null;
       case 'makeup:cta':
         return <MakeupCtaCard data={data} onPress={onPressCta} debugPayload={measurementDebugPayload} debugSummary={measurementDebugSummary} />;
       default:
@@ -646,7 +571,7 @@ export function ReportScreenScaffold({
           const key = page.contentKey.slice('features:'.length);
           const card = data.s3.cards.find(item => item.key === key);
           return card ? (
-            <StoryContentCard section={section} pagerRef={pagerRef} title={card.regionTitle} sub={data.s3.sub} inset>
+            <StoryContentCard section={section} pagerRef={pagerRef} title={card.regionTitle} inset showChapterHeader={showChapterHeader}>
               <S3RegionCard card={card} />
             </StoryContentCard>
           ) : null;
@@ -662,121 +587,48 @@ export function ReportScreenScaffold({
       sectionId: page.sectionId,
       kind: page.kind,
       title: page.title,
+      shortTitle: page.shortTitle,
       accentColor: section.accent,
-      render: page.kind === 'cover'
-        ? <ReportSectionCover section={section} />
-        : renderContent(page, section),
+      render: renderContent(page, section),
     };
   });
-  const storySections: StoryReportSection[] = storyModel.sections.map(section => ({
-    id: section.id,
-    title: section.koreanTitle,
-    accentColor: section.accent,
-    pageIds: section.pages.map(page => page.id),
-  }));
-  const resetKey = `${data.s1.photo.uri ?? 'report'}:${data.s1.dateLine}:${storyPages.map(page => page.id).join(',')}`;
-  const firstStoryPageId = storyModel.pages[0]?.id ?? null;
+  const storySections: StoryReportSection[] = Object.values(
+    FACE_REPORT_STORY_SECTIONS,
+  ).map(section => {
+    const availableSection = sectionById.get(section.id);
+    return {
+      id: section.id,
+      title: section.koreanTitle,
+      shortTitle: STORY_SECTION_NAV_LABELS[section.id],
+      accentColor: section.accent,
+      pageIds: availableSection?.pages.map(page => page.id) ?? [],
+      available: Boolean(availableSection),
+      showPageIndex: false,
+    };
+  });
+  const resetKey = `${data.reportId}:${data.s1.photo.uri ?? 'report'}:${data.s1.dateLine}`;
+  const firstStoryPageId =
+    data.initialPageId ??
+    (data.goldenMask ? 'summary:overview' : storyModel.pages[0]?.id ?? null);
   React.useEffect(() => {
+    activePageIdRef.current = firstStoryPageId;
     setActivePageId(firstStoryPageId);
   }, [firstStoryPageId, resetKey]);
 
-  React.useEffect(
-    () => () => {
-      deleteTemporaryFile(goldenMaskPosterUri);
-    },
-    [goldenMaskPosterUri],
-  );
-
-  React.useEffect(
-    () => () => {
-      for (const waiter of posterWaitersRef.current) {
-        clearTimeout(waiter.timer);
-        waiter.resolve(null);
-      }
-      posterWaitersRef.current.clear();
-    },
-    [],
-  );
-
-  const waitForGoldenMaskPoster = React.useCallback(
-    (): Promise<string | null> => {
-      if (goldenMaskPosterUri) {
-        return Promise.resolve(goldenMaskPosterUri);
-      }
-      return new Promise(resolve => {
-        const waiter = {} as GoldenMaskPosterWaiter;
-        waiter.resolve = resolve;
-        waiter.timer = setTimeout(() => {
-          posterWaitersRef.current.delete(waiter);
-          resolve(null);
-        }, GOLDEN_MASK_POSTER_WAIT_MS);
-        posterWaitersRef.current.add(waiter);
-        setPosterRequestKey(value => value + 1);
-      });
-    },
-    [goldenMaskPosterUri],
-  );
-
-  React.useImperativeHandle(
-    captureRef,
-    () => ({
-      capture: async () => {
-        const previousPageId = activePageId;
-        let posterUri = goldenMaskPosterUri;
-        try {
-          if (data.goldenMask && !posterUri) {
-            pagerRef.current?.goToPage('summary:golden-mask');
-            posterUri = await waitForGoldenMaskPoster();
-          }
-          if (posterUri) {
-            if (captureRequestId === null || captureRequestId === undefined) {
-              throw new Error(
-                'Golden Mask 보고서 저장 요청을 확인하지 못했어요.',
-              );
-            }
-            // The vertical document is mounted lazily for this request. Waiting
-            // for the file alone is insufficient because its new Image instance
-            // may not have committed or decoded yet.
-            await waitForGoldenMaskCaptureImageSettled({
-              getState: () => goldenMaskCaptureImageStateRef.current,
-              requestId: captureRequestId,
-              uri: posterUri,
-            });
-            await waitForNextFrame();
-            await waitForNextFrame();
-          }
-          return await verticalCaptureRef.current?.capture?.();
-        } finally {
-          if (posterUri) {
-            setGoldenMaskPosterUri(currentUri =>
-              currentUri === posterUri ? null : currentUri,
-            );
-            deleteTemporaryFile(posterUri);
-          }
-          if (
-            previousPageId &&
-            previousPageId !== 'summary:golden-mask'
-          ) {
-            pagerRef.current?.goToPage(previousPageId);
-          }
-        }
-      },
-    }),
-    [
-      activePageId,
-      captureRef,
-      captureRequestId,
-      data.goldenMask,
-      goldenMaskPosterUri,
-      waitForGoldenMaskPoster,
-    ],
-  );
-
-  const circleBtn = (child: React.ReactNode, onPress?: () => void) => (
-    <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [{
-      width: 34, height: 34, borderRadius: 17, backgroundColor: color.surface,
+  const circleBtn = (
+    child: React.ReactNode,
+    accessibilityLabel: string,
+    onPress?: () => void,
+  ) => (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={onPress}
+      hitSlop={6}
+      style={({ pressed }) => [{
+      width: 44, height: 44, borderRadius: 22, backgroundColor: 'transparent',
       alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1,
-    }, shadow.circleButton]}>
+    }]}>
       {child}
     </Pressable>
   );
@@ -784,43 +636,53 @@ export function ReportScreenScaffold({
   return (
     <ScrollAnimContext.Provider value={{scrollY, enabled: false}}>
       <View style={{flex: 1, backgroundColor: color.bg}}>
-        {/* 공유/저장은 모든 실제 콘텐츠가 펼쳐진 별도 세로 문서를 캡처한다. */}
-        {captureRequestId !== null && captureRequestId !== undefined ? (
-          <FaceReportCaptureDocument
-            key={captureRequestId}
-            captureRef={verticalCaptureRef}
-            data={data}
-            goldenMaskPosterUri={goldenMaskPosterUri}
-            onCaptureDocumentSettledChange={onCaptureDocumentSettledChange}
-            onGoldenMaskPosterStatusChange={
-              handleGoldenMaskCaptureImageStatusChange
-            }
-            onResurvey={onResurvey}
-            onRetake={onRetake}
-            requestId={captureRequestId}
-            width={windowWidth}
-          />
-        ) : null}
         <View style={{flex: 1, zIndex: 1, backgroundColor: color.bg}}>
           <View style={{
             paddingTop: Math.max(insets.top, 12) + 4, paddingHorizontal: 20, paddingBottom: 4,
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            {circleBtn(<ChevronLeft size={18} color={color.body} strokeWidth={2.2} />, onBack)}
-            <Text style={[font(14, '700'), {color: color.ink}]}>{data.topBarTitle}</Text>
-            {onMore ? (
-              circleBtn(<MoreHorizontal size={16} color={color.body} />, onMore)
-            ) : (
-              <View style={{height: 34, width: 34}} />
-            )}
+            <View style={{width: 88, alignItems: 'flex-start'}}>
+              {circleBtn(
+                <ChevronLeft size={20} color={color.body} strokeWidth={2.2} />,
+                '보고서 닫기',
+                onBack,
+              )}
+            </View>
+            <View style={{alignItems: 'center', gap: 1}}>
+              <Text style={[font(14, '700'), {color: color.ink}]}>얼굴 분석 보고서</Text>
+              <Text
+                accessibilityLabel={reportCompletion.accessibilityLabel}
+                accessibilityLiveRegion="polite"
+                numberOfLines={1}
+                style={[
+                  font(10.5, '600', 1.3, 0.02),
+                  {
+                    color: reportCompletion.failed
+                      ? color.legacyText
+                      : color.faint,
+                    maxWidth: 200,
+                  },
+                ]}>
+                {reportCompletion.compactLabel}
+              </Text>
+            </View>
+            <View style={{alignItems: 'center', flexDirection: 'row', justifyContent: 'flex-end', width: 88}}>
+              {onShare
+                ? circleBtn(<Share2 size={18} color={color.body} />, '보고서 공유', onShare)
+                : null}
+              {onMore
+                ? circleBtn(<MoreHorizontal size={18} color={color.body} />, '보고서 더보기', onMore)
+                : null}
+            </View>
           </View>
           <StoryReportPager
             ref={pagerRef}
-            initialPageId={data.initialPageId}
-            onPageChange={page => setActivePageId(page.id)}
+            initialPageId={initialStoryPageId ?? undefined}
+            onPageChange={page => handlePageChange(page.id)}
             pages={storyPages}
             sections={storySections}
             resetKey={resetKey}
+            showFooter
           />
         </View>
       </View>
@@ -873,7 +735,7 @@ const MEASUREMENT_LABELS: Record<string, string> = {
   pitchDeg: '상하 각도',
   points: '좌표',
   pose: '얼굴 각도',
-  probabilities: '12타입 가까움',
+  probabilities: '12가지 톤 유사도',
   qEff: '적용 신뢰도',
   qNative: '원본 신뢰도',
   regions: '측정 영역',

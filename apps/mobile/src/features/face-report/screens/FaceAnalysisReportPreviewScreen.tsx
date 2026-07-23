@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -9,6 +9,7 @@ import {
 import {getUserProfile} from '../../../shared/services/userService';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import type {Face3DProfile} from '../../face-3d/types';
+import type {Face3DPhotoEvidence} from '../../face-3d/services/face3DPhotoEvidence';
 import type {FaceGeometryResult} from '../../face-geometry/types';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import type {AuraPersonalColorResult} from '../../personal-color/types';
@@ -20,8 +21,8 @@ import {
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import {loadBodyProfile} from '../../ar/stencil/src/storage/bodyProfileStore';
 import BodyPanel from '../../ar/stencil/src/components/BodyPanel';
-import type {OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 import {ReportScreenScaffold} from '../ReportScreenScaffold';
+import {FaceReportShareSheet} from '../components/FaceReportShareSheet';
 import {color, font} from '../reportTokens';
 import {
   buildReportDataFromFaceAnalysisReport,
@@ -32,16 +33,6 @@ import {
   buildMinimumFaceReportData,
   type MinimumFaceReportPreview,
 } from '../services/minimumFaceReport';
-import {
-  captureReportImage,
-  getReportCaptureTitle,
-  getShareErrorMessage,
-  requestReportImageSavePermission,
-  reportShareTargetLabels,
-  saveReportImageToLibrary,
-  shareReportImageWithSystemSheet,
-  type ReportShareTarget,
-} from '../services/reportImageShare';
 
 export type FaceAnalysisReportPreviewScreenProps = {
   // Same session-props shape as FaceAnalysisReportDetailScreen — this preview
@@ -50,6 +41,7 @@ export type FaceAnalysisReportPreviewScreenProps = {
   analysisReport?: FaceAnalysisReport | null;
   capturedPhotoUri?: string;
   face3d?: Face3DProfile | null;
+  face3dPhotoEvidence?: Face3DPhotoEvidence | null;
   faceGeometry2d?: FaceGeometryResult | null;
   initialPageId?: string;
   minimumPreview?: MinimumFaceReportPreview | null;
@@ -58,6 +50,7 @@ export type FaceAnalysisReportPreviewScreenProps = {
   sessionCaptureId?: string | null;
   verticalThirds?: FaceVerticalThirdsResult | null;
   onBack?: () => void;
+  onGoldenMaskInteractionChange?: (interacting: boolean) => void;
   onRetake?: () => void;
   onPressProducts?: (reportId: string) => void;
 };
@@ -93,6 +86,7 @@ export function FaceAnalysisReportPreviewScreen({
   analysisReport,
   capturedPhotoUri,
   face3d,
+  face3dPhotoEvidence,
   faceGeometry2d,
   initialPageId,
   minimumPreview,
@@ -101,6 +95,7 @@ export function FaceAnalysisReportPreviewScreen({
   sessionCaptureId,
   verticalThirds,
   onBack,
+  onGoldenMaskInteractionChange,
   onRetake,
   onPressProducts,
 }: FaceAnalysisReportPreviewScreenProps) {
@@ -108,24 +103,7 @@ export function FaceAnalysisReportPreviewScreen({
   const [loadState, setLoadState] = useState<FaceAnalysisReportDetailLoadState>({status: 'loading'});
   const [bodyProfile, setBodyProfile] = useState<BodyProfile | null>(null);
   const [isBodySurveyOpen, setIsBodySurveyOpen] = useState(false);
-  const [activeShareTarget, setActiveShareTarget] = useState<ReportShareTarget | null>(null);
-  const [captureRequestId, setCaptureRequestId] = useState<number | null>(null);
-  const reportCaptureRef = useRef<OptionalViewShotRef | null>(null);
-  const captureRequestIdRef = useRef<number | null>(null);
-  const captureDocumentReadyRef = useRef(false);
-  const isMountedRef = useRef(true);
-  const shareOperationRef = useRef(0);
-  const shareInFlightRef = useRef(false);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-      shareOperationRef.current += 1;
-      captureRequestIdRef.current = null;
-      captureDocumentReadyRef.current = false;
-    };
-  }, []);
+  const [isShareSheetVisible, setIsShareSheetVisible] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -181,6 +159,10 @@ export function FaceAnalysisReportPreviewScreen({
   const effectivePersonalColor =
     (useSessionMeasurements ? personalColor : null) ?? measurements?.personalColor?.reported ?? null;
   const effectiveFace3d = (useSessionMeasurements ? face3d : null) ?? measurements?.face3d ?? null;
+  const effectiveFace3dPhotoEvidence =
+    (useSessionMeasurements ? face3dPhotoEvidence : null)
+    ?? measurements?.face3dPhotoEvidence
+    ?? null;
   const sessionRegionVisuals = useSessionMeasurements ? faceGeometry2d?.regionVisuals : undefined;
   const sessionGeometryMetrics = useSessionMeasurements ? faceGeometry2d?.metrics : undefined;
   const effectiveRegionVisuals =
@@ -205,12 +187,16 @@ export function FaceAnalysisReportPreviewScreen({
       regionVisuals: effectiveRegionVisuals,
       gender: profileGender,
       geometryMetrics: effectiveGeometryMetrics,
+      face3d: effectiveFace3d,
+      face3dPhotoEvidence: effectiveFace3dPhotoEvidence,
     });
   }, [
     bodyProfile,
     capturedPhotoUri,
     faceGeometry2d,
     effectiveGeometryMetrics,
+    effectiveFace3d,
+    effectiveFace3dPhotoEvidence,
     effectivePersonalColor,
     effectiveRegionVisuals,
     effectiveVerticalThirds,
@@ -221,9 +207,24 @@ export function FaceAnalysisReportPreviewScreen({
   const minimumReportData = useMemo(
     () =>
       !report && minimumPreview
-        ? buildMinimumFaceReportData(minimumPreview)
+        ? buildMinimumFaceReportData(minimumPreview, effectiveVerticalThirds, {
+            face3d: effectiveFace3d,
+            face3dPhotoEvidence: effectiveFace3dPhotoEvidence,
+            geometryMetrics: effectiveGeometryMetrics,
+            personalColor: effectivePersonalColor,
+            regionVisuals: effectiveRegionVisuals,
+          })
         : null,
-    [minimumPreview, report],
+    [
+      effectiveFace3d,
+      effectiveFace3dPhotoEvidence,
+      effectiveGeometryMetrics,
+      effectivePersonalColor,
+      effectiveRegionVisuals,
+      effectiveVerticalThirds,
+      minimumPreview,
+      report,
+    ],
   );
   const visibleReportData = useMemo(() => {
     if (!reportData) {
@@ -249,12 +250,14 @@ export function FaceAnalysisReportPreviewScreen({
       storedMeasurements: measurements ?? null,
       sessionMeasurements: {
         face3d: face3d ?? null,
+        face3dPhotoEvidence: face3dPhotoEvidence ?? null,
         faceGeometry2d: faceGeometry2d ?? null,
         faceVerticalThirds: verticalThirds ?? null,
         personalColor: personalColor ?? null,
       },
       effectiveForReportRendering: {
         face3d: effectiveFace3d,
+        face3dPhotoEvidence: effectiveFace3dPhotoEvidence,
         faceGeometryMetrics: effectiveGeometryMetrics,
         faceRegionVisuals: effectiveRegionVisuals,
         faceVerticalThirds: effectiveVerticalThirds,
@@ -263,6 +266,7 @@ export function FaceAnalysisReportPreviewScreen({
     };
   }, [
     effectiveFace3d,
+    effectiveFace3dPhotoEvidence,
     effectiveGeometryMetrics,
     effectivePersonalColor,
     effectiveRegionVisuals,
@@ -296,98 +300,17 @@ export function FaceAnalysisReportPreviewScreen({
 
   const profileName = loadState.status === 'success' ? loadState.profile?.name : undefined;
 
-  const handleCaptureDocumentSettledChange = useCallback((requestId: number, settled: boolean) => {
-    if (captureRequestIdRef.current === requestId) {
-      captureDocumentReadyRef.current = settled;
-    }
-  }, []);
-
-  const handleShareAction = useCallback(
-    async (target: ReportShareTarget) => {
-      if (!report || shareInFlightRef.current) {
-        return;
-      }
-
-      shareInFlightRef.current = true;
-      const operationId = ++shareOperationRef.current;
-      setActiveShareTarget(target);
-
-      try {
-        if (target === 'save-image') {
-          await requestReportImageSavePermission();
-        }
-
-        if (!isMountedRef.current || shareOperationRef.current !== operationId) {
-          return;
-        }
-
-        captureRequestIdRef.current = operationId;
-        captureDocumentReadyRef.current = false;
-        setCaptureRequestId(operationId);
-
-        const imageUri = await captureReportImage(reportCaptureRef, {
-          isReady: () => captureRequestIdRef.current === operationId
-            && captureDocumentReadyRef.current,
-          shouldContinue: () => isMountedRef.current
-            && shareOperationRef.current === operationId,
-        });
-
-        if (target === 'save-image') {
-          await saveReportImageToLibrary(imageUri);
-          if (isMountedRef.current && shareOperationRef.current === operationId) {
-            Alert.alert('저장 완료', '전체 얼굴 분석 보고서를 갤러리에 저장했어요.');
-          }
-          return;
-        }
-
-        await shareReportImageWithSystemSheet({
-          imageUri,
-          title: getReportCaptureTitle(profileName),
-        });
-      } catch (error) {
-        if (!isMountedRef.current || shareOperationRef.current !== operationId) {
-          return;
-        }
-        console.info('[aura:analysis] report-share:failed', {
-          message: error instanceof Error ? error.message : String(error),
-          target,
-        });
-        Alert.alert(reportShareTargetLabels[target] + ' 실패', getShareErrorMessage(error));
-      } finally {
-        if (captureRequestIdRef.current === operationId) {
-          captureRequestIdRef.current = null;
-          captureDocumentReadyRef.current = false;
-        }
-        if (shareOperationRef.current === operationId) {
-          shareInFlightRef.current = false;
-        }
-        if (isMountedRef.current && shareOperationRef.current === operationId) {
-          setCaptureRequestId(null);
-          setActiveShareTarget(null);
-        }
-      }
-    },
-    [profileName, report],
-  );
   // 상세 보고서의 상단 더보기는 공유·저장·추천 제품만 제공한다.
   // 삭제는 보고서 목록 카드의 점점점 메뉴에서만 수행한다.
   const handleMore = useCallback(() => {
     if (!report) {
       return;
     }
-    if (activeShareTarget) {
-      Alert.alert('공유 준비 중', '이전 공유 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
-      return;
-    }
 
     const options: Array<{text: string; onPress?: () => void; style?: 'cancel' | 'destructive'}> = [
       {
-        text: reportShareTargetLabels['save-image'],
-        onPress: () => void handleShareAction('save-image'),
-      },
-      {
-        text: reportShareTargetLabels['share-report'],
-        onPress: () => void handleShareAction('share-report'),
+        text: '사진으로 저장',
+        onPress: () => setIsShareSheetVisible(true),
       },
     ];
 
@@ -398,8 +321,6 @@ export function FaceAnalysisReportPreviewScreen({
 
     Alert.alert('맞춤 분석 보고서', '원하는 작업을 선택해 주세요.', options);
   }, [
-    activeShareTarget,
-    handleShareAction,
     onPressProducts,
     report,
   ]);
@@ -431,16 +352,26 @@ export function FaceAnalysisReportPreviewScreen({
   return (
     <>
       <ReportScreenScaffold
-        captureRef={reportCaptureRef}
-        captureRequestId={captureRequestId}
         data={visibleReportData}
         onBack={onBack}
+        onGoldenMaskInteractionChange={onGoldenMaskInteractionChange}
         onMore={report ? handleMore : undefined}
+        onPressCta={
+          report && onPressProducts
+            ? () => onPressProducts(report.id)
+            : undefined
+        }
         onResurvey={() => setIsBodySurveyOpen(true)}
         onRetake={onRetake}
+        onShare={() => setIsShareSheetVisible(true)}
         measurementDebugPayload={measurementDebugPayload}
         measurementDebugSummary={measurementDebugSummary}
-        onCaptureDocumentSettledChange={handleCaptureDocumentSettledChange}
+      />
+      <FaceReportShareSheet
+        data={visibleReportData}
+        onClose={() => setIsShareSheetVisible(false)}
+        profileName={profileName}
+        visible={isShareSheetVisible}
       />
       {/*
         BodyPanel is the AR stencil's overlay card (maxHeight 460, dark glass) —

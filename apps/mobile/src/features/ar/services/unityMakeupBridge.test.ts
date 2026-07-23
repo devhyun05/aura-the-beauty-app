@@ -16,6 +16,7 @@ import {
   parseUnityGoldenMaskMessage,
   parseUnityUnifiedFaceCaptureMessage,
   prepareUnityUnifiedFaceCapture,
+  setUnityGoldenMaskWireframeVisible,
   startUnityUnifiedFaceCapture,
 } from './unityMakeupBridge';
 import {NativeModules} from 'react-native';
@@ -56,6 +57,11 @@ expectEqual(
   UNITY_GOLDEN_MASK_BRIDGE_TARGET.capturePosterMethod,
   'CaptureGoldenMaskPosterJson',
   'Golden Mask poster command contract',
+);
+expectEqual(
+  UNITY_GOLDEN_MASK_BRIDGE_TARGET.wireframeVisibilityMethod,
+  'SetGoldenMaskWireframeVisibleJson',
+  'Golden Mask wireframe visibility command contract',
 );
 const goldenMaskFailure = parseUnityGoldenMaskMessage({
   reason: 'mesh_decode_failed',
@@ -430,6 +436,39 @@ expectEqual(
   cancelUnityUnifiedFaceCapture('   '),
   false,
   'blank unified cancel requestId rejected',
+);
+expectEqual(
+  setUnityGoldenMaskWireframeVisible({
+    requestId: ' golden-wireframe-1 ',
+    visible: true,
+  }),
+  true,
+  'Golden Mask wireframe visibility posts',
+);
+expectEqual(
+  unifiedBridgeCalls[3]?.method,
+  UNITY_GOLDEN_MASK_BRIDGE_TARGET.wireframeVisibilityMethod,
+  'Golden Mask wireframe visibility target method',
+);
+expectEqual(
+  JSON.parse(unifiedBridgeCalls[3]?.payload ?? '{}').requestId,
+  'golden-wireframe-1',
+  'Golden Mask wireframe requestId is normalized',
+);
+expectEqual(
+  JSON.parse(unifiedBridgeCalls[3]?.payload ?? '{}').visible,
+  true,
+  'Golden Mask wireframe visible state is preserved',
+);
+expectEqual(
+  setUnityGoldenMaskWireframeVisible({requestId: '   ', visible: false}),
+  false,
+  'blank Golden Mask wireframe requestId rejected',
+);
+expectEqual(
+  unifiedBridgeCalls.length,
+  4,
+  'invalid Golden Mask wireframe request does not reach native bridge',
 );
 
 const unifiedBlockedEvent = parseUnityUnifiedFaceCaptureMessage(

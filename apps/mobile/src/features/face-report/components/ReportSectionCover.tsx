@@ -7,14 +7,9 @@ declare const require: (moduleName: string) => ImageSourcePropType;
 
 const COVER_IMAGES: Record<FaceReportStorySection['id'], ImageSourcePropType> = {
   summary: require('../assets/covers/summary.jpg'),
-  proportion: require('../assets/covers/proportion.jpg'),
-  features: require('../assets/covers/features.jpg'),
-  'personal-color': require('../assets/covers/personal-color.jpg'),
-  body: require('../assets/covers/body-type.jpg'),
-  impression: require('../assets/covers/impression.jpg'),
-  styling: require('../assets/covers/styling.jpg'),
-  skin: require('../assets/covers/skin.jpg'),
-  makeup: require('../assets/covers/makeup-cta.jpg'),
+  face: require('../assets/covers/features.jpg'),
+  'color-skin': require('../assets/covers/personal-color.jpg'),
+  style: require('../assets/covers/styling.jpg'),
 };
 
 export function ReportSectionCover({section}: {section: FaceReportStorySection}) {
