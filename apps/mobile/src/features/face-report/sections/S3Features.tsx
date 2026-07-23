@@ -30,11 +30,16 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
   const needsDepth =
     activeMeasurement?.visualType === 'depth'
     || activeMeasurement?.visualType === 'line-and-depth';
+  const activeDepthRegions = card.photoEvidence
+    ? Object.values(card.photoEvidence.regions).filter(
+        region => region?.metricKeys.some(key => activeMetricKeys.includes(key)),
+      )
+    : [];
   const hasDepthEvidenceForActive = Boolean(
-    card.photoEvidence
-    && Object.values(card.photoEvidence.regions).some(region =>
-      region?.metricKeys.some(key => activeMetricKeys.includes(key)),
-    ),
+    activeDepthRegions.length > 0,
+  );
+  const hasSignedDepthForActive = activeDepthRegions.some(region =>
+    region?.samples.some(sample => sample.signedDepthNormalized !== undefined),
   );
   const showsDepth =
     needsDepth && hasDepthEvidenceForActive;
@@ -58,6 +63,26 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
         </View>
         <Text style={[font(14.5, '700'), { color: color.ink }]}>{card.regionTitle}</Text>
       </View>
+      {card.insight ? (
+        <View
+          style={{
+            gap: 6,
+            backgroundColor: color.accentWash,
+            borderRadius: radius.md,
+            paddingHorizontal: 13,
+            paddingVertical: 11,
+          }}>
+          <Text style={[font(10.5, '800'), {color: color.accentDeep}]}>이 부위의 결론</Text>
+          <Text style={[font(14, '800', 1.55), {color: color.ink}]}>{card.insight}</Text>
+          {card.recommendation ? (
+            <Text style={[font(12.5, '600', 1.55), {color: color.accentInk}]}>
+              메이크업 · {card.recommendation}
+            </Text>
+          ) : null}
+        </View>
+      ) : card.paragraph ? (
+        <Text style={[font(13, '400', 1.7), {color: color.body}]}>{card.paragraph}</Text>
+      ) : null}
       <View style={{
         borderRadius: radius.md,
         overflow: 'hidden',
@@ -69,6 +94,7 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
             activeMetricKeys={activeMetricKeys}
             cropRect={card.cropRect}
             evidence={card.photoEvidence}
+            measurementValues={activeMeasurement?.values}
           />
         ) : null}
         {showsLine ? (
@@ -102,16 +128,34 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
         ) : null}
       </View>
       {showsDepth ? (
-        <View style={{flexDirection: 'row', alignItems: 'center', gap: 7}}>
-          <View style={{width: 34, height: 7, borderRadius: 4, backgroundColor: 'rgba(14,125,168,0.24)'}} />
-          <View style={{width: 34, height: 7, borderRadius: 4, backgroundColor: 'rgba(14,125,168,0.62)'}} />
-          <Text style={[font(10.5, '500'), {color: color.muted}]}>
-            대표 측정 프레임 · 옅음 기준면 · 진함 전방
+        <View style={{gap: 5}}>
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
+            {hasSignedDepthForActive ? (
+              <>
+                <View style={{width: 24, height: 7, borderRadius: 4, backgroundColor: 'rgba(30,118,145,0.62)'}} />
+                <View style={{width: 18, height: 7, borderRadius: 4, backgroundColor: 'rgba(244,225,196,0.54)'}} />
+                <View style={{width: 24, height: 7, borderRadius: 4, backgroundColor: 'rgba(218,105,91,0.66)'}} />
+                <Text style={[font(10.5, '600'), {color: color.muted}]}>
+                  후방 · 0 기준면 · 전방
+                </Text>
+              </>
+            ) : (
+              <>
+                <View style={{width: 30, height: 7, borderRadius: 4, backgroundColor: 'rgba(21,124,153,0.24)'}} />
+                <View style={{width: 30, height: 7, borderRadius: 4, backgroundColor: 'rgba(21,124,153,0.62)'}} />
+                <Text style={[font(10.5, '600'), {color: color.muted}]}>
+                  낮은 깊이 · 높은 깊이
+                </Text>
+              </>
+            )}
+          </View>
+          <Text style={[font(9.5, '400', 1.4), {color: color.muted}]}>
+            색은 대표 프레임의 형태, 핀 숫자는 얼굴 기준폭 대비 반복 측정 상대값이에요.
           </Text>
         </View>
       ) : null}
       {card.measurementItems && card.measurementItems.length > 0 ? (
-        <View style={{gap: 8}}>
+        <View style={{borderTopColor: color.divider, borderTopWidth: 1}}>
           {card.measurementItems.map((item, index) => {
             const selected = item.key === activeMeasurement?.key;
             const previousGroup = card.measurementItems?.[index - 1]?.groupLabel;
@@ -127,12 +171,11 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
                   accessibilityState={{selected}}
                   onPress={() => setActiveMeasurementKey(item.key)}
                   style={{
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: selected ? color.accentDeep : color.outline,
-                    backgroundColor: selected ? color.accentWash : color.surface,
+                    backgroundColor: selected ? color.accentWash : 'transparent',
+                    borderBottomColor: color.divider,
+                    borderBottomWidth: 1,
                     paddingHorizontal: 12,
-                    paddingVertical: 10,
+                    paddingVertical: 12,
                     gap: 3,
                   }}>
                   <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8}}>
@@ -141,14 +184,25 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
                     </Text>
                     <Text style={[font(10.5, '700'), {color: color.accentDeep}]}>
                       {item.visualType === 'depth'
-                        ? '히트맵 · +Z'
+                        ? '깊이 지도 · 상대값'
                         : item.visualType === 'line-and-depth'
                           ? '측정선 · 깊이'
                           : '랜드마크 선'}
                     </Text>
                   </View>
+                  <Text style={[font(12.5, '800', 1.45), {color: color.accentInk}]}>
+                    {item.resultLabel}
+                  </Text>
+                  {item.displayValue ? (
+                    <Text style={[font(11, '700'), {color: color.accentDeep}]}>
+                      측정값 · {item.displayValue}
+                    </Text>
+                  ) : null}
                   <Text style={[font(11.5, '400', 1.5), {color: color.body}]}>
-                    {item.detail}
+                    {item.interpretation}
+                  </Text>
+                  <Text style={[font(10.5, '400', 1.5), {color: color.muted}]}>
+                    측정 방법 · {item.detail}
                   </Text>
                   {item.confidenceLabel ? (
                     <Text style={[font(10.5, '600'), {color: color.muted}]}>
@@ -185,28 +239,11 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
           ))}
         </View>
       ) : null}
-      {card.insight ? (
-        <View style={{ gap: 6 }}>
-          <Text style={[font(13.5, '700', 1.6), { color: color.ink }]}>{card.insight}</Text>
-          {card.evidence ? (
-            <Text style={[font(12.5, '400', 1.6), { color: color.muted }]}>
-              근거 · {card.evidence}
-            </Text>
-          ) : null}
-          {card.recommendation ? (
-            <View style={{
-              backgroundColor: color.accentWash, borderRadius: radius.md,
-              paddingVertical: 9, paddingHorizontal: 12,
-            }}>
-              <Text style={[font(12.5, '600', 1.55), { color: color.accentInk }]}>
-                메이크업 · {card.recommendation}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <Text style={[font(13, '400', 1.7), { color: color.body }]}>{card.paragraph}</Text>
-      )}
+      {card.evidence ? (
+        <Text style={[font(12, '400', 1.6), {color: color.muted}]}>
+          종합 근거 · {card.evidence}
+        </Text>
+      ) : null}
     </Card>
   );
 }

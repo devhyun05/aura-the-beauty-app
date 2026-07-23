@@ -21,8 +21,12 @@ import type {
 } from '../../../shared/types/faceAnalysis';
 import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import {getFaceAnalysisReportSummaryItems} from '../../face-analysis/services/faceAnalysisReportDetailModel';
+import type {
+  FaceAnalysisDerivedResult,
+  FaceAnalysisMeasurementInterpretation,
+} from '../../face-analysis/services/faceAnalysisV2';
 import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceAnalysisMeasurements';
-import type {Face3DProfile} from '../../face-3d/types';
+import type {Face3DMetricKey, Face3DProfile} from '../../face-3d/types';
 import type {
   Face3DPhotoEvidence,
   Face3DPhotoEvidenceRegionKey,
@@ -46,6 +50,7 @@ import type {
   LookCardData,
   ReportData,
   RegionMeasurementItemData,
+  RegionMeasurementValueData,
   S1Data,
   S2Data,
   S3Data,
@@ -91,6 +96,26 @@ function resolveHeroUri(report: FaceAnalysisReport, heroImageUri?: string): stri
     : undefined;
 }
 
+function buildSafeReportSummary(report: FaceAnalysisReport): string {
+  const generated = (report.shortSummary || report.summary).trim();
+  const derived = report.faceAnalysisV2?.derived;
+  if (!derived) {
+    return generated;
+  }
+  const verticalLabel = derived.verticalBalance?.label ?? '';
+  const contradictsVerticalBalance =
+    verticalLabel.includes('우세') && generated.includes('균형');
+  const containsRawNumber = /\d/.test(generated);
+  if (generated && !contradictsVerticalBalance && !containsRawNumber) {
+    return generated;
+  }
+  return [
+    derived.faceShape?.description,
+    derived.verticalBalance?.description,
+    derived.eyeBrow?.description,
+  ].filter((text): text is string => Boolean(text?.trim())).join(' ');
+}
+
 function buildS1(
   report: FaceAnalysisReport,
   heroUri: string | undefined,
@@ -104,10 +129,7 @@ function buildS1(
       {includeTime: true},
     ),
     headline: report.recommendedMood,
-    // V2의 consulting.shortSummary는 AI 자유 서술이라 얼굴형과 세로 구획을
-    // 모순되게 엮은 과거 결과가 있다. 사용자 요약에는 검증 가능한 카드만 두고,
-    // 구버전 보고서에만 기존 설명을 유지한다.
-    body: report.faceAnalysisV2 ? '' : report.shortSummary || report.summary,
+    body: buildSafeReportSummary(report),
     legacyReport: !report.measurements,
     legacyBadge: '이 판정은 이전 기준으로 측정된 결과예요',
     cards: buildS1SummaryCards(report, personalColor, verticalThirds),
@@ -214,6 +236,7 @@ const S2_BAND_COPY = {
 export function buildFaceProportionSection(
   vt: FaceVerticalThirdsResult | null | undefined,
   gender: string | null | undefined,
+  derived: FaceAnalysisDerivedResult | null = null,
 ): S2Data | null {
   if (!vt || (vt.status !== 'full_success' && vt.status !== 'partial_success')) {
     return null;
@@ -314,6 +337,15 @@ export function buildFaceProportionSection(
       !lowConfidence
         ? describeFaceLength(vt.faceLength?.ratio ?? null, faceShapeGender)
         : null,
+    insightLabel:
+      derived?.verticalBalance?.label
+      ?? vt.interpretation.title
+      ?? summarizeDominantPart(vt.interpretation.dominantPart)
+      ?? undefined,
+    insightDescription:
+      derived?.verticalBalance?.description
+      ?? vt.interpretation.summary
+      ?? undefined,
     paragraph: vt.interpretation.summary || vt.interpretation.title || '측정 결과를 요약하지 못했어요.',
   };
 }
@@ -674,21 +706,194 @@ function confidenceLabel(
   return `측정 신뢰도 ${Math.max(0, Math.min(100, percent))}%`;
 }
 
+const LOCAL_MEASUREMENT_COPY: Record<
+  string,
+  {resultLabel: string; interpretation: string}
+> = {
+  interCanthalDistance: {
+    resultLabel: '얼굴 폭 대비 눈 사이 간격',
+    interpretation: '두 눈 사이의 여백이 얼굴 전체에서 차지하는 관계예요.',
+  },
+  eyeWidth: {
+    resultLabel: '좌우 눈 너비를 각각 확인',
+    interpretation: '같은 얼굴 폭 기준으로 양쪽 눈의 가로 길이를 비교했어요.',
+  },
+  eyeOpenness: {
+    resultLabel: '좌우 눈 뜨임을 각각 확인',
+    interpretation: '눈 너비에 비해 위아래로 열린 정도를 좌우로 나눠 봤어요.',
+  },
+  canthalTilt: {
+    resultLabel: '눈 앞머리에서 눈꼬리로 이어지는 방향',
+    interpretation: '수평선에 비해 눈꼬리가 향하는 흐름을 보여줘요.',
+  },
+  browFlow: {
+    resultLabel: '눈썹 기울기와 산 위치를 함께 확인',
+    interpretation: '눈썹의 방향과 눈썹 산이 놓인 위치를 함께 본 결과예요.',
+  },
+  noseTipProjection: {
+    resultLabel: '코끝의 전방 입체감',
+    interpretation: '코끝이 양 볼 기준면보다 앞으로 놓이는 정도예요.',
+  },
+  noseLength: {
+    resultLabel: '얼굴 크기 대비 코의 세로 길이',
+    interpretation: '미간 기준점부터 코끝까지 이어지는 길이 관계예요.',
+  },
+  nasalBridge: {
+    resultLabel: '콧대 중심선의 흐름',
+    interpretation: '콧대의 직선감과 얼굴 중앙선에 대한 방향을 함께 봤어요.',
+  },
+  alarWidth: {
+    resultLabel: '얼굴 크기 대비 콧볼 폭',
+    interpretation: '양쪽 콧볼 바깥점 사이의 폭 관계예요.',
+  },
+  centralProjectionScore: {
+    resultLabel: '중앙부와 양 볼의 전후 관계',
+    interpretation: '얼굴 중앙 영역이 양 볼 기준면보다 앞으로 놓이는 정도예요.',
+  },
+  malarProjection: {
+    resultLabel: '양쪽 광대 부근의 전방 입체감',
+    interpretation: '좌우 볼 표면의 돌출 정도를 각각 확인한 결과예요.',
+  },
+  mouthWidth: {
+    resultLabel: '얼굴 폭 대비 입의 가로 길이',
+    interpretation: '양쪽 입꼬리 사이가 얼굴 폭에서 차지하는 관계예요.',
+  },
+  lipThickness: {
+    resultLabel: '입 너비 대비 입술의 세로 볼륨',
+    interpretation: '입의 가로 길이에 비해 위아래 입술이 차지하는 두께 관계예요.',
+  },
+  lipProjection: {
+    resultLabel: 'E-line 기준 입술의 전후 위치',
+    interpretation: '코끝과 턱끝을 잇는 선을 기준으로 입술이 놓인 위치예요.',
+  },
+  jawWidth: {
+    resultLabel: '얼굴 폭 대비 턱 모서리 폭',
+    interpretation: '좌우 턱 모서리가 얼굴 전체 폭에서 차지하는 관계예요.',
+  },
+  lowerJawWidth: {
+    resultLabel: '얼굴 폭 대비 아래턱 폭',
+    interpretation: '좌우 아래턱 윤곽점 사이를 얼굴 전체 폭과 비교했어요.',
+  },
+  chinProjection: {
+    resultLabel: '중안부 기준면 대비 턱끝의 위치',
+    interpretation: '턱끝이 얼굴 기준면보다 앞으로 놓이는 정도예요.',
+  },
+};
+
+function measurementNumber(
+  key: string,
+  geometryMetrics: FaceGeometryMetrics | null,
+  face3d: Face3DProfile | null,
+): number | null {
+  const geometryValue = (
+    geometryMetrics as unknown as Record<string, {value?: unknown}> | null
+  )?.[key]?.value;
+  if (typeof geometryValue === 'number' && Number.isFinite(geometryValue)) {
+    return geometryValue;
+  }
+  const depthValue = (
+    face3d?.metrics as unknown as Record<string, {value?: unknown}> | undefined
+  )?.[key]?.value;
+  return typeof depthValue === 'number' && Number.isFinite(depthValue)
+    ? depthValue
+    : null;
+}
+
+function measurementDisplayValue(
+  metricKeys: string[],
+  geometryMetrics: FaceGeometryMetrics | null,
+  face3d: Face3DProfile | null,
+): string | undefined {
+  const values = metricKeys
+    .map(metricKey => ({
+      key: metricKey,
+      value: measurementNumber(metricKey, geometryMetrics, face3d),
+    }))
+    .filter((entry): entry is {key: string; value: number} => entry.value !== null);
+  if (values.length === 0) return undefined;
+  const paired = values.length === 2;
+  return values.map((entry, index) => {
+    const prefix = paired ? `${index === 0 ? '좌' : '우'} ` : '';
+    if (entry.key.endsWith('Deg')) {
+      return `${prefix}${entry.value.toFixed(1)}°`;
+    }
+    const fromGeometry = Boolean(
+      (geometryMetrics as unknown as Record<string, unknown> | null)?.[entry.key],
+    );
+    return fromGeometry
+      ? `${prefix}${(entry.value * 100).toFixed(1)}%`
+      : `${prefix}상대값 ${entry.value.toFixed(2)}`;
+  }).join(' · ');
+}
+
+const DEPTH_VALUE_LABELS: Partial<Record<Face3DMetricKey, string>> = {
+  noseTipProjection: '코끝',
+  centralProjectionScore: '중앙부',
+  malarProjectionLeft: '왼쪽 광대',
+  malarProjectionRight: '오른쪽 광대',
+  upperLipToELine: '윗입술',
+  lowerLipToELine: '아랫입술',
+  chinProjection: '턱끝',
+};
+
+function measurementDepthValues(
+  metricKeys: string[],
+  face3d: Face3DProfile | null,
+): RegionMeasurementValueData[] {
+  return metricKeys.flatMap(metricKey => {
+    const label = DEPTH_VALUE_LABELS[metricKey as Face3DMetricKey];
+    const metric = face3dMetric(
+      face3d,
+      metricKey as keyof Face3DProfile['metrics'],
+    );
+    return label && metric
+      ? [{
+          label,
+          metricKey,
+          normalizedValue: metric.value as number,
+        }]
+      : [];
+  });
+}
+
 function buildRegionMeasurementItems(
   key: RegionAxesKey,
   geometryMetrics: FaceGeometryMetrics | null,
   face3d: Face3DProfile | null,
+  interpretations: Record<string, FaceAnalysisMeasurementInterpretation> = {},
 ): RegionMeasurementItemData[] {
   const item = (
-    config: Omit<RegionMeasurementItemData, 'confidenceLabel'> & {
+    config: Omit<
+      RegionMeasurementItemData,
+      'confidenceLabel' | 'displayValue' | 'interpretation' | 'resultLabel' | 'values'
+    > & {
       confidenceKeys?: (keyof Face3DProfile['metrics'])[];
     },
   ): RegionMeasurementItemData => {
     const {confidenceKeys, ...rest} = config;
+    const server = interpretations[config.key];
+    const local = LOCAL_MEASUREMENT_COPY[config.key] ?? {
+      resultLabel: '측정 결과를 확인했어요',
+      interpretation: '표시된 기준선과 측정값을 함께 봐 주세요.',
+    };
     const confidence = confidenceKeys
       ? confidenceLabel(face3d, confidenceKeys)
       : undefined;
-    return {...rest, ...(confidence ? {confidenceLabel: confidence} : {})};
+    const displayValue =
+      server?.displayValue
+      ?? measurementDisplayValue(config.metricKeys, geometryMetrics, face3d);
+    const values =
+      config.visualType === 'depth' || config.visualType === 'line-and-depth'
+        ? measurementDepthValues(config.metricKeys, face3d)
+        : [];
+    return {
+      ...rest,
+      resultLabel: server?.resultLabel ?? local.resultLabel,
+      interpretation: server?.description ?? local.interpretation,
+      ...(displayValue ? {displayValue} : {}),
+      ...(values.length > 0 ? {values} : {}),
+      ...(confidence ? {confidenceLabel: confidence} : {}),
+    };
   };
 
   if (key === 'upper') {
@@ -911,6 +1116,7 @@ function buildS3(
   featureDescriptors: Record<RegionAxesKey, string[]> | null,
   face3d: Face3DProfile | null,
   face3dPhotoEvidence: Face3DPhotoEvidence | null,
+  derived: FaceAnalysisDerivedResult | null,
 ): S3Data | null {
   // 자기참조 축(위치=실측 결정론적). 지표 없으면 null → 각 축 판정 보류/미표시.
   const regionAxes = geometryMetrics ? buildRegionFeatureAxes(geometryMetrics) : null;
@@ -942,6 +1148,7 @@ function buildS3(
       key,
       geometryMetrics,
       face3d,
+      derived?.measurementInterpretations,
     );
     const itemMetricKeys = new Set(
       measurementItems.flatMap(itemData => itemData.metricKeys),
@@ -977,9 +1184,17 @@ function buildS3(
       })) ?? [];
     const guides = [...face3dGuides, ...regionGuides];
     const note = normalizeRegionNote(regionNotes?.[key]);
+    const derivedInsight = {
+      upper: derived?.eyeBrow,
+      mid: derived?.cheekboneAndEline ?? derived?.nosePhiltrumLips,
+      lower: derived?.nosePhiltrumLips,
+      jaw: derived?.faceShape,
+    }[key];
+    const insight = note.insight || derivedInsight?.label || '';
+    const evidence = note.evidence || derivedInsight?.description || '';
     const descriptors = featureDescriptors ? featureDescriptors[key] : [];
     const hasNarrative = Boolean(
-      note.insight || note.evidence || note.recommendation || descriptors.length,
+      insight || evidence || note.recommendation || descriptors.length,
     );
     if (measurementItems.length === 0 && !hasNarrative) {
       return [];
@@ -1015,10 +1230,10 @@ function buildS3(
       guideLabel: guides[0]?.label ?? meta.guideLabel,
       guideLabelX: meta.guideLabelX,
       axes,
-      insight: note.insight,
-      evidence: note.evidence,
+      insight,
+      evidence,
       recommendation: note.recommendation,
-      paragraph: note.insight,
+      paragraph: insight || evidence,
       ...(descriptors.length > 0 ? {featureDescriptors: descriptors} : {}),
       ...(measurementItems.length > 0 ? {measurementItems} : {}),
       ...(face3dPhotoEvidence && evidenceRegionKeys[key].length > 0
@@ -1166,7 +1381,8 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
   const visualWeight = buildVisualWeightPresentation(weightMap);
   const regionDescriptors = buildRegionFeatureDescriptors(featureProfile);
   const styleLanes = buildStyleLaneRecommendations(featureProfile, weightMap);
-  const s2 = buildFaceProportionSection(verticalThirds, gender);
+  const derived = report.faceAnalysisV2?.derived ?? null;
+  const s2 = buildFaceProportionSection(verticalThirds, gender, derived);
 
   return {
     reportId: report.id,
@@ -1187,6 +1403,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
       regionDescriptors,
       face3d ?? null,
       face3dPhotoEvidence ?? null,
+      derived,
     ),
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile, gender),

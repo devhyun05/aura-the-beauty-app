@@ -299,6 +299,64 @@ async def test_consulting_never_sends_image() -> None:
 
 
 @pytest.mark.asyncio
+async def test_consulting_repairs_raw_numbers_and_vertical_contradictions() -> None:
+  def response(*, base: str, summary: str) -> dict[str, Any]:
+    return {
+      "makeup": {
+        "base": base, "brow": "눈썹 결 정리", "eyeshadow": "음영 정리",
+        "eyeliner": "점막 가까이 정리", "blush": "볼 중심에 가볍게",
+        "contour": "외곽을 부드럽게", "highlight": "중앙부에 얇게", "lip": "입술선 정리",
+      },
+      "colorAndProduct": {
+        "summary": "차분한 색을 골라요", "items": ["맑은 질감을 골라요"],
+        "rationaleMetricKeys": [],
+      },
+      "hair": {
+        "summary": "옆선을 정리해요", "items": ["얼굴 옆에 여백을 둬요"],
+        "rationaleMetricKeys": [],
+      },
+      "fashion": {
+        "summary": "단정한 선이 어울려요", "items": ["부드러운 소재를 골라요"],
+        "rationaleMetricKeys": [],
+      },
+      "photography": {
+        "summary": "정면광을 써요", "items": ["카메라 높이를 눈에 맞춰요"],
+        "rationaleMetricKeys": [],
+      },
+      "overallMood": "차분한 선명함",
+      "summary": summary,
+      "shortSummary": summary,
+      "tags": ["차분함"],
+    }
+
+  client = FakeStructuredClient(
+    [
+      response(base="베이스를 2겹 발라요", summary="중안부가 우세하지만 전체 비율은 균형이에요"),
+      response(base="베이스를 얇게 발라요", summary="중안부의 세로 흐름이 상대적으로 강조돼요"),
+    ],
+  )
+
+  result = await FaceAnalysisAI(client).consult(
+    profile={},
+    derived={
+      "verticalBalance": {
+        "label": "중안부 우세",
+        "description": "중안부가 상대적으로 길어요",
+        "confidence": 0.9,
+        "rationaleMetricKeys": [],
+        "sensitivity": 1,
+      },
+    },
+    perception={},
+  )
+
+  assert len(client.calls) == 2
+  assert "user_copy_contains_raw_number" in client.calls[1]["user_prompt"]
+  assert "contradicts_vertical_balance" in client.calls[1]["user_prompt"]
+  assert result.summary == "중안부의 세로 흐름이 상대적으로 강조돼요"
+
+
+@pytest.mark.asyncio
 async def test_consulting_uses_account_gender_directive() -> None:
   # V2 라이브(dev) 경로도 계정 성별을 consult 방향에 반영한다(사진 추론 금지).
   def _response() -> dict:

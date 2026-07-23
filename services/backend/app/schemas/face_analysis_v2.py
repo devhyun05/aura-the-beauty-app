@@ -89,8 +89,22 @@ class Insight(FaceAnalysisV2Model):
   sensitivity: Literal[0, 1, 2, 3]
 
 
+class MeasurementInterpretation(FaceAnalysisV2Model):
+  title: str
+  result_label: str = Field(alias="resultLabel")
+  description: str
+  display_value: str | None = Field(default=None, alias="displayValue")
+  confidence: Annotated[float, Field(ge=0, le=1)]
+  rationale_metric_keys: list[str] = Field(alias="rationaleMetricKeys")
+  sensitivity: Literal[0, 1, 2] = 1
+
+
 class DerivedResult(FaceAnalysisV2Model):
   rules_version: str = Field(alias="rulesVersion")
+  measurement_interpretations: dict[str, MeasurementInterpretation] = Field(
+    default_factory=dict,
+    alias="measurementInterpretations",
+  )
   face_shape: Insight = Field(alias="faceShape")
   vertical_balance: Insight = Field(alias="verticalBalance")
   eye_brow: Insight = Field(alias="eyeBrow")

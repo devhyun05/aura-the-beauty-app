@@ -13,6 +13,17 @@ const derived = {
   colorAxes: insight('뉴트럴'), eyeBrow: insight('수평'), faceShape: insight('타원형'),
   irisExposure: insight('보류'), nosePhiltrumLips: insight('완만'), skinColor: insight('균일'),
   verticalBalance: insight('균형'),
+  measurementInterpretations: {
+    noseTipProjection: {
+      title: '코끝 돌출',
+      resultLabel: '코끝 입체감이 또렷한 편',
+      description: '볼 기준면보다 앞으로 놓이는 정도예요.',
+      displayValue: '상대값 0.21',
+      confidence: 0.9,
+      rationaleMetricKeys: ['face3d.noseTipProjection'],
+      sensitivity: 1,
+    },
+  },
 };
 const stage = {status: 'pending', cacheHit: false};
 const fixture = {
@@ -25,3 +36,12 @@ const fixture = {
 
 if (!parseFaceAnalysisV2(fixture)) throw new Error('valid V2 fixture must parse');
 if (parseFaceAnalysisV2({...fixture, schemaVersion: 'old'})) throw new Error('old schema must fail');
+if (parseFaceAnalysisV2({
+  ...fixture,
+  derived: {
+    ...derived,
+    measurementInterpretations: {
+      noseTipProjection: {...derived.measurementInterpretations.noseTipProjection, confidence: 'high'},
+    },
+  },
+})) throw new Error('invalid measurement interpretation must fail');

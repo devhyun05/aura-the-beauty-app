@@ -1,7 +1,8 @@
 import json
 import logging
+import re
 from collections.abc import Mapping
-from typing import Any, Protocol, TypeVar
+from typing import Any, Callable, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -25,16 +26,17 @@ logger = logging.getLogger(__name__)
 
 MEASUREMENT_PROMPT_VERSION = "s1-measurement-v1"
 # 한국어 출력 지시문 추가로 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
-PERCEPTION_PROMPT_VERSION = "s1-perception-v2"
+PERCEPTION_PROMPT_VERSION = "s1-perception-v3"
 # 성별(v3) + 한국어 출력(v4) 지시문으로 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
-CONSULTING_PROMPT_VERSION = "s1-consulting-v4"
+CONSULTING_PROMPT_VERSION = "s1-consulting-v5"
 # 사용자에게 보이는 라벨·설명·추천 문장은 모두 한국어여야 한다(단일 경로와 동일 원칙).
 # enum status 코드·metric 키만 영문 유지. perceive/consult 두 스테이지가 리포트의
 # 자유 텍스트(피부 라벨·부위 노트·요약·메이크업 가이드)를 전부 생성하므로 여기에 건다.
 _KOREAN_OUTPUT_DIRECTIVE = (
   "Write every label, description, summary, recommendation, and look title/subtitle as "
   "concise natural Korean (한국어) — short phrases, no filler. Keep only enum status codes "
-  "and metric keys in English."
+  "and metric keys in English. Never repeat raw measurements or write digits in user-facing "
+  "copy; translate evidence into a cautious visual interpretation and a useful implication."
 )
 FORBIDDEN_INFERENCES = (
   "medical diagnosis, disease, age, ethnicity, health status, cosmetic procedures, "
@@ -85,6 +87,60 @@ def _jsonable(value: Any) -> Any:
   return value
 
 
+_USER_COPY_FIELDS = {
+  "borderTone",
+  "description",
+  "items",
+  "label",
+  "overallMood",
+  "season",
+  "shortSummary",
+  "subtype",
+  "summary",
+  "tags",
+  "title",
+}
+_METADATA_FIELDS = {"rationaleMetricKeys"}
+
+
+def _user_copy_strings(
+  value: Any,
+  path: tuple[str, ...] = (),
+) -> list[tuple[tuple[str, ...], str]]:
+  payload = _jsonable(value)
+  found: list[tuple[tuple[str, ...], str]] = []
+  if isinstance(payload, dict):
+    for key, item in payload.items():
+      if key in _METADATA_FIELDS:
+        continue
+      child_path = (*path, key)
+      if isinstance(item, str) and (
+        key in _USER_COPY_FIELDS or "makeup" in path
+      ):
+        found.append((child_path, item))
+      elif isinstance(item, (dict, list)):
+        found.extend(_user_copy_strings(item, child_path))
+  elif isinstance(payload, list):
+    for index, item in enumerate(payload):
+      child_path = (*path, str(index))
+      if isinstance(item, str) and path and path[-1] in _USER_COPY_FIELDS:
+        found.append((child_path, item))
+      elif isinstance(item, (dict, list)):
+        found.extend(_user_copy_strings(item, child_path))
+  return found
+
+
+def _validate_user_copy(value: BaseModel) -> list[dict[str, Any]]:
+  return [
+    {
+      "location": list(path),
+      "type": "user_copy_contains_raw_number",
+    }
+    for path, text in _user_copy_strings(value)
+    if re.search(r"\d", text)
+  ]
+
+
 class FaceAnalysisAI:
   def __init__(self, client: StructuredAnalysisClient) -> None:
     self.client = client
@@ -98,6 +154,7 @@ class FaceAnalysisAI:
     source_image_bytes: bytes | None,
     max_tokens: int,
     stage: str | None = None,
+    semantic_validator: Callable[[OutputModel], list[dict[str, Any]]] | None = None,
   ) -> OutputModel:
     validation_errors: list[dict[str, Any]] = []
     current_prompt = user_prompt
@@ -111,24 +168,33 @@ class FaceAnalysisAI:
         stage=stage,
       )
       try:
-        return model_type.model_validate(response)
+        output = model_type.model_validate(response)
       except ValidationError as exc:
         validation_errors = [
           {"location": list(error["loc"]), "type": error["type"]}
           for error in exc.errors(include_input=False, include_url=False)
         ]
-        if attempt == 0:
-          # 1차 검증 실패의 실제 사유를 남긴다 — "왜 재시도했나"(스테이지 지연 +15초의
-          # 주범)를 추정 없이 확인하려는 관측성 로그. 예: consult 룩 title max_length 초과.
-          logger.warning(
-            "[aura:face-analysis-v2] stage=%s retry-on-validation errors=%s",
-            stage or "-",
-            json.dumps(validation_errors, ensure_ascii=False),
-          )
-          current_prompt = (
-            f"{user_prompt}\nThe previous JSON failed validation. Correct only the structure and return "
-            f"one JSON object. Validation errors: {json.dumps(validation_errors)}"
-          )
+      else:
+        validation_errors = (
+          semantic_validator(output)
+          if semantic_validator is not None
+          else []
+        )
+        if not validation_errors:
+          return output
+      if attempt == 0:
+        # 1차 검증 실패의 실제 사유를 남긴다 — "왜 재시도했나"(스테이지 지연 +15초의
+        # 주범)를 추정 없이 확인하려는 관측성 로그. 예: consult 룩 title max_length 초과.
+        logger.warning(
+          "[aura:face-analysis-v2] stage=%s retry-on-validation errors=%s",
+          stage or "-",
+          json.dumps(validation_errors, ensure_ascii=False),
+        )
+        current_prompt = (
+          f"{user_prompt}\nThe previous JSON failed validation. Correct its structure or "
+          "user-facing meaning according to the developer instructions, then return one JSON "
+          f"object. Validation errors: {json.dumps(validation_errors, ensure_ascii=False)}"
+        )
     raise AppError(
       502,
       "FACE_ANALYSIS_STAGE_OUTPUT_INVALID",
@@ -225,6 +291,7 @@ class FaceAnalysisAI:
       # 한국어는 토큰이 더 무거워 상한을 넘겨 절단됐다 → 헤드룸 크게 확보.
       max_tokens=4800,
       stage="perceive",
+      semantic_validator=_validate_user_copy,
     )
     skin_type = anchor_payload.get("skinType")
     recommended_mood = anchor_payload.get("recommendedMood")
@@ -283,7 +350,37 @@ class FaceAnalysisAI:
       profile_gender or "",
       _CONSULT_GENDER_DIRECTIVES["unspecified"],
     )
-    return await self._invoke_validated(
+    derived_payload = _jsonable(derived)
+    vertical_balance = (
+      derived_payload.get("verticalBalance")
+      if isinstance(derived_payload, dict)
+      else None
+    )
+    vertical_label = (
+      vertical_balance.get("label")
+      if isinstance(vertical_balance, dict)
+      and isinstance(vertical_balance.get("label"), str)
+      else ""
+    )
+
+    def validate_consulting(output: ConsultingResult) -> list[dict[str, Any]]:
+      errors = _validate_user_copy(output)
+      if "우세" in vertical_label:
+        for field, text in (
+          ("summary", output.summary),
+          ("shortSummary", output.short_summary),
+        ):
+          if "균형" in text:
+            errors.append(
+              {
+                "location": [field],
+                "type": "contradicts_vertical_balance",
+                "expected": vertical_label,
+              },
+            )
+      return errors
+
+    output = await self._invoke_validated(
       model_type=ConsultingResult,
       developer_prompt=(
         "You are a practical K-beauty, hair, fashion, and photography consultant. Base every "
@@ -306,6 +403,7 @@ class FaceAnalysisAI:
       # 한국어 + 1회 재검증(룩 title 길이 등) 대비 헤드룸.
       max_tokens=3200,
       stage="consult",
+      semantic_validator=validate_consulting,
     )
     recommended_mood = anchor_payload.get("recommendedMood")
     return (

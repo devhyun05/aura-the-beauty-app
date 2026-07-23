@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import {Text, View} from 'react-native';
 import type { BandKey, S2Data } from '../reportTypes';
+import {color, font, radius} from '../reportTokens';
 import { EmptyNotice } from '../visuals/EmptyNotice';
 import { GuidePhotoOverlay } from '../visuals/GuidePhotoOverlay';
 import { RegionLens } from '../visuals/RegionLens';
@@ -24,8 +26,31 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
     : '';
 
   return (
-    <RiseIn style={{ paddingTop: 28, paddingHorizontal: 20 }}>
+    <RiseIn style={{ paddingTop: 10, paddingHorizontal: 20 }}>
       <SectionHeader eyebrow={data.eyebrow} title={data.title} sub={data.sub} mb={12} />
+      {data.insightLabel || data.insightDescription ? (
+        <View
+          style={{
+            backgroundColor: color.accentWash,
+            borderRadius: radius.md,
+            paddingHorizontal: 14,
+            paddingVertical: 12,
+            gap: 4,
+            marginBottom: 12,
+          }}>
+          <Text style={[font(10.5, '800'), {color: color.accentDeep}]}>내 비율 해석</Text>
+          {data.insightLabel ? (
+            <Text style={[font(15, '800', 1.45), {color: color.ink}]}>
+              {data.insightLabel}
+            </Text>
+          ) : null}
+          {data.insightDescription ? (
+            <Text style={[font(12.5, '400', 1.6), {color: color.body}]}>
+              {data.insightDescription}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       <GuidePhotoOverlay
         data={data}
         picked={picked}
@@ -48,9 +73,12 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
           style={{ marginTop: 10 }}
         />
       )}
-      {/* 3분할 자기 서술은 ThirdsRatioReadout 안에 있고, 얼굴형은 별도 블록이다.
-          기존 하단 문단(엔진 3분할 요약)은 얼굴형 밑에 붙어 "게이지 밑에 또 3분할
-          얘기"로 혼동을 줬으므로 제거 — S2 맞춤 rich 문단은 B5(proportionInsight)가 담당. */}
+      <ThirdsRatioReadout ratio={data.ratioNumbers} faceShape={data.faceShape} />
+      {!data.insightDescription && data.paragraph ? (
+        <Text style={[font(12.5, '400', 1.65), {color: color.body, marginTop: 12}]}>
+          {data.paragraph}
+        </Text>
+      ) : null}
     </RiseIn>
   );
 }

@@ -100,6 +100,9 @@ export interface S2Data {
   ratioNumbers?: { upper: number | null; middle: number; lower: number };
   // 얼굴형 — 성별 문헌 참고선 기준 방향 카테고리(가로/균형/세로). '평균 밴드' 폐기.
   faceShape?: FaceShapeView | null;
+  // 측정 결론을 먼저 보여 주고, 아래 수치/가이드가 그 근거가 되도록 분리한다.
+  insightLabel?: string;
+  insightDescription?: string;
   paragraph: string;
 }
 
@@ -125,11 +128,21 @@ export type FeatureGuide =
 export interface RegionMeasurementItemData {
   key: string;
   label: string;
+  resultLabel: string;
+  interpretation: string;
+  displayValue?: string;
+  values?: RegionMeasurementValueData[];
   detail: string;
   groupLabel?: string;
   confidenceLabel?: string;
   metricKeys: string[];
   visualType: 'depth' | 'line' | 'line-and-depth';
+}
+
+export interface RegionMeasurementValueData {
+  label: string;
+  metricKey: string;
+  normalizedValue: number;
 }
 
 export interface RegionCardData {
