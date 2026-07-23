@@ -259,7 +259,7 @@ namespace ARMakeup.Bridge
         public string browStyleColor = "#3A2A20";  // 스타일(텍스처 워프) 틴트 색
         public float browStyleIntensity = 0f;      // 임포트/기본 눈썹 텍스처 강도
         public int browStyleFinish = 0;            // 스타일(텍스처 눈썹) 마감: 0=새틴(기본) 1=매트 2=듀이
-        public int browStyleTemplate = 0;          // built-in 눈썹 텍스처 선택: 0=default_brow 1=글램(정의) 2=두꺼운(풍성) 3=와일드 4=소프트 헤어
+        public int browStyleTemplate = 0;          // built-in 눈썹 텍스처 선택: 0..4=legacy, 5..9=레퍼런스 알파 마스크 1..5
         public float browThickness = 1f;           // 눈썹 두께 배수 (1 = 원래)
         public int browThicknessProfile = 0;       // 0=legacy 1=slim 2=regular 3=full 4=bold 5=headFull 6=bodyFull
         public float browExpandUpper = 0f;         // 실측 눈썹 높이 배수의 위쪽 개인 커버 델타
@@ -290,7 +290,8 @@ namespace ARMakeup.Bridge
         public int blushShape = 0;             // 0=클래식 1=이가리 2=드레이핑 3=데일리 4=러블리 5=언더아이 6=선키스드 소프트 7=선키스드 밴드
         // ── 부위 확장(컨실·치아·아래 속눈썹) ── 강도는 0=끔, 길이 배수는 1=원래
         // (JsonUtility 생략 0은 Unity가 1로 보정 — mascaraLength 선례).
-        public float browConcealIntensity = 0f;  // 눈썹 지우기(스킨톤 컨실 — 눈썹 스택 밑작업)
+        public float browConcealIntensity = 0f;  // 사용자가 고른 눈썹 지우기(명시적 레이어)
+        public float browReplacementIntensity = 0f; // 활성 눈썹 제품이 파생 요청하는 자동 밑지우기
         public int browConcealFinish = 0;        // 눈썹 지우기 마감: 0=새틴(기본) 1=매트 2=듀이
         public float teethWhitenIntensity = 0f;  // 치아 미백(내측 립 링 안쪽, 입 다물면 자동 무효과)
         public int teethFinish = 0;              // 치아 미백 마감: 0=새틴(기본) 1=매트 2=듀이(글로시 스마일)

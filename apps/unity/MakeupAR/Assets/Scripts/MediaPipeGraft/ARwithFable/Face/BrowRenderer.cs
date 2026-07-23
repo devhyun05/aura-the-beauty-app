@@ -11,9 +11,8 @@ namespace ARMakeup.Face
     /// 제품(아래→위 순서, 셰이더 Queue로 정렬):
     ///   컨실(BrowConceal) — "눈썹 지우기"(전체 컨실, 1급 기능): 자연 털 전체를 주변
     ///     피부색(GrabPass 오프셋 샘플)으로 지움. 제품 밴드보다 넓은 전용 무(無)셰이핑
-    ///     밴드 — 큐 순서로 "지우고 그 위에 그리기" 밑작업. §15의 삐침 정리(자연눈썹
-    ///     ∩ ¬새눈썹모양 protect 구멍 — 새 모양을 정점 채널에 베이크)는 미구현 후속
-    ///     이며, 그 근사로 제품 최대 강도에 비례한 전역 감쇠(_BrowProductMax)만 적용.
+    ///     밴드 — 자연 눈썹 실측 범위는 전부 교체하고, 범위 밖 잔털은 피부 대비로
+    ///     선별한다. 큐 순서로 항상 "지우고 그 위에 그리기" 밑작업이 먼저 실행된다.
     ///   라이트너 — 어두운 털을 피부톤으로 덮어 옅게 (밑작업/옅은 눈썹)
     ///   파우더   — 털 사이 빈 곳까지 부드럽게 채움
     ///   마스카라/젤 — 있는 털에만 색·볼륨 (결 보존)
@@ -53,17 +52,20 @@ namespace ARMakeup.Face
         const float DistanceFromCamera = 0.5f;
         const float DepthScale = 1.0f;
 
-        // ── 눈썹 지우기(BrowConceal — 전체 컨실. §15 protect 구멍은 미구현 후속) ──
-        // 컨실 밴드는 제품 밴드보다 넓게 — 그린 모양 밖으로 삐져나온 자연 털까지 덮는다.
-        // 확장량은 로컬 밴드 두께(상·하 아크 거리, "눈썹폭") 대비 비율.
-        const float ConcealExpandUp = 0.45f;    // 위(이마)쪽 확장 비율 // 실기기 튜닝 대상
-        const float ConcealExpandDown = 0.35f;  // 아래(눈꺼풀)쪽 확장 비율 // 실기기 튜닝 대상
-        // 새 커버 프로필의 하단 안전 상한. 0.55h보다 넓히면 짙은 쌍꺼풀/아이라인을
-        // 털로 오인할 위험이 커진다. 바깥 경계는 셰이더의 기존 0.20 페더를 유지한다.
-        const float ConcealExpandDownCoverage = 0.55f;
-        // 피부색 샘플 오프셋 — 확장된 밴드 상단에서 위(이마)로 눈썹폭 × 이 값만큼 떨어진
-        // 지점을 그 세로줄이 칠할 피부색으로 쓴다(눈썹 털 밖 보장, 조명 그라데이션 추종).
-        const float ConcealSkinSampleUp = 0.8f; // 실기기 튜닝 대상
+        // ── 눈썹 완전 교체(BrowConceal) ──
+        // 자연 눈썹 경계 밖의 잔털까지 포함하되 눈꺼풀까지 내려가지 않는 확장 밴드.
+        // 밝은 피부는 셰이더 루마 게이트가 통과시키므로 넓어진 영역에 색 띠가 생기지 않는다.
+        // 실제 눈썹 상·하단 바깥에 각각 눈썹 두께의 75%만큼 깨끗한 피부 런웨이를
+        // 확보한다. 셰이더 페더가 이 구간에서 0까지 내려가므로 지우기 사각 경계가
+        // 자연 눈썹 위에 걸리지 않는다.
+        const float ConcealExpandUp = 0.75f;
+        const float ConcealExpandDown = 0.75f;
+        const float ConcealExpandDownCoverage = 0.82f;
+        public const float ConcealFeatherVMin = 0.34f;
+        public const float ConcealFeatherHMin = 0.24f;
+        // 한 점 피부색을 세로줄 전체에 늘이지 않고, 밴드와 같은 크기의 이마 피부
+        // 패치를 위에서 가져온다. gap은 샘플 패치 하단이 눈썹 털과 겹치지 않게 한다.
+        const float ConcealSkinPatchGap = 0.22f;
 
         // 셰이핑(공유, 파라미터): 두께 배수·아치 올림. 1.0/0.0 = 원래 모양.
         float _thickness = 1f;
@@ -90,12 +92,17 @@ namespace ARMakeup.Face
         Mesh _concealMesh;
         Vector3[] _concealVertices;
         List<Vector3> _concealSkinPos;
-        // uv2/TEXCOORD2: 확장 컨실 밴드 안에서 새 눈썹 제품이 차지하는 하·상 범위.
-        // 컨실 셰이더가 이 구간을 보호해 "지우고 다시 그리기"의 백탁을 막는다.
+        // uv2/TEXCOORD2: 구 protect 계약 호환용 목표 밴드 범위. 완전 교체 셰이더는
+        // 새 눈썹 내부도 먼저 지우므로 현재 출력에는 사용하지 않는다.
         List<Vector2> _concealProtectRange;
+        // uv4/TEXCOORD4: 확장 컨실 밴드 안의 실제 자연 눈썹 하·상 범위. 이 실측
+        // 범위는 털 밝기와 무관하게 전부 피부 패치로 교체한다.
+        List<Vector2> _concealNaturalRange;
 
         static readonly int BrowColorId = Shader.PropertyToID("_BrowColor");
         static readonly int BrowIntensityId = Shader.PropertyToID("_BrowIntensity");
+        static readonly int BrowReplacementIntensityId =
+            Shader.PropertyToID("_BrowReplacementIntensity");
         static readonly int SkinColorId = Shader.PropertyToID("_SkinColor");
         static readonly int BrowProductMaxId = Shader.PropertyToID("_BrowProductMax");
         static readonly int BrowCoverageModeId = Shader.PropertyToID("_BrowCoverageMode");
@@ -131,6 +138,8 @@ namespace ARMakeup.Face
         readonly Vector2[] _upW = new Vector2[Seg];
         readonly Vector2[] _loW = new Vector2[Seg];
         readonly Vector2[] _coverageLo = new Vector2[Seg];
+        readonly float[] _upDepth = new float[Seg];
+        readonly float[] _loDepth = new float[Seg];
 
         void Awake() => Instance = this;
         void OnDestroy()
@@ -239,11 +248,13 @@ namespace ARMakeup.Face
             _concealVertices = new Vector3[vc];
             _concealSkinPos = new List<Vector3>(new Vector3[vc]);
             _concealProtectRange = new List<Vector2>(new Vector2[vc]);
+            _concealNaturalRange = new List<Vector2>(new Vector2[vc]);
             _concealMesh.vertices = _concealVertices;
             _concealMesh.uv = uvs;
             _concealMesh.SetUVs(1, _concealSkinPos);
             _concealMesh.SetUVs(2, _concealProtectRange);
             _concealMesh.SetUVs(3, new List<Vector4>(sideIds));
+            _concealMesh.SetUVs(4, _concealNaturalRange);
             _concealMesh.triangles = tris;
         }
 
@@ -302,17 +313,18 @@ namespace ARMakeup.Face
             _lightener.material.SetFloat(LightenerFinishId, p.browLightenerFinish);
             // 제형(텍스처) 라이트너 — GENERIC(0=크림=현행, 하위호환).
             _lightener.material.SetFloat(LightenerTextureId, p.browLightenerTexture);
-            // 컨실(눈썹 지우기)도 색 없음 — 피부색은 셰이더가 GrabPass 오프셋 UV에서 직접 샘플.
-            _conceal.intensity = Mathf.Clamp01(p.browConcealIntensity);
+            // 명시적 지우개와 눈썹 제품의 자동 밑지우기는 수명이 다르다. 렌더에는
+            // 둘 중 큰 값을 쓰되, 자동 값도 별도 전달해 교체 모드의 넓은 잔털 커버를 켠다.
+            var explicitConceal = Mathf.Clamp01(p.browConcealIntensity);
+            var automaticReplacement = Mathf.Clamp01(p.browReplacementIntensity);
+            _conceal.intensity = Mathf.Max(explicitConceal, automaticReplacement);
             _conceal.material.SetFloat(BrowIntensityId, _conceal.intensity);
+            _conceal.material.SetFloat(BrowReplacementIntensityId, automaticReplacement);
             _conceal.material.SetFloat(ConcealFinishId, p.browConcealFinish);
             // 제형(텍스처) 눈썹 지우기 — GENERIC(0=크림=현행, 하위호환).
             _conceal.material.SetFloat(ConcealTextureId, p.browConcealTexture);
-            // 워시드아웃 완화(전역 근사 protect) — 제품을 진하게 그릴수록 그 아래
-            // 컨실을 약화해 "피부 덮고 반투명 제품 얹기" 이중 처리를 완화한다. 감쇠
-            // 계수는 셰이더 PROTECT_DAMP. 컨실 단독(제품 0)일 땐 감쇠 0 = 완전 지우개.
-            // 공간 불균일 protect(새 눈썹 모양 베이크, §15 정식판)는 모양 텍스처가
-            // 생기는 후속에서. 라이트너는 그 자체가 피부 커버라 제외.
+            // 진단/레거시 머티리얼 호환 필드. 교체 셰이더는 더 이상 새 눈썹 내부를
+            // 보호하지 않는다. 큐 3013에서 원본 털을 지운 뒤 3014~3018이 그 위에 그린다.
             var maxProduct = Mathf.Max(
                 Mathf.Max(Mathf.Clamp01(p.browIntensity), Mathf.Clamp01(p.browPowderIntensity)),
                 Mathf.Max(Mathf.Clamp01(p.browPencilIntensity), Mathf.Clamp01(p.browStyleIntensity)));
@@ -341,8 +353,10 @@ namespace ARMakeup.Face
             _lightener.material.SetFloat(HairHiId, lightenerHairHi);
             _conceal.material.SetFloat(HairLoId, concealHairLo);
             _conceal.material.SetFloat(HairHiId, concealHairHi);
-            _conceal.material.SetFloat(FeatherVId, concealFeatherV);
-            _conceal.material.SetFloat(FeatherHId, concealFeatherH);
+            _conceal.material.SetFloat(
+                FeatherVId, Mathf.Max(ConcealFeatherVMin, concealFeatherV));
+            _conceal.material.SetFloat(
+                FeatherHId, Mathf.Max(ConcealFeatherHMin, concealFeatherH));
         }
 
         /// <summary>StyleRenderer가 실제 표시 텍스처와 동일한 알파 계약을 명시 전달한다.</summary>
@@ -432,19 +446,29 @@ namespace ARMakeup.Face
             {
                 BrowWarp.SubdivideArc(lm, BrowUpper[e], _up);
                 BrowWarp.SubdivideArc(lm, BrowLower[e], _lo);
+                BrowWarp.SubdivideArcDepth(lm, BrowUpper[e], _upDepth);
+                BrowWarp.SubdivideArcDepth(lm, BrowLower[e], _loDepth);
+                // 제품 밴드만 전역 모양 프로필을 적용한다. 원시 _lo/_up은 컨실이 실제
+                // 자연 털을 덮어야 하므로 그대로 보존하고, 작업 배열에서 chord 기반
+                // 일자/아치/각진/상승/반달 중심선을 만든다.
+                for (var i = 0; i < Seg; i++)
+                {
+                    _loW[i] = _lo[i];
+                    _upW[i] = _up[i];
+                }
+                BrowWarp.ShapeArcProfile(
+                    _loW, _upW, Seg, _shape, FramePresenter.Instance.ImageAspect);
                 // R7 두께/아치 + 모양 + 꼬리 처짐 클램프 — 그리는 제품은 워프·클램프된
                 // 아크(_loW/_upW), 컨실은 원시 아크(_lo/_up) 유지. 클램프까지 별도
                 // 배열인 이유: 컨실은 사용자의 실제(처진) 털 위치를 덮어야 하므로
                 // 이상화된 밴드를 따라가면 진짜 꼬리 털을 놓친다(§15와 동일 논리).
                 for (var i = 0; i < Seg; i++)
                 {
-                    _loW[i] = _lo[i];
-                    _upW[i] = _up[i];
                     var rawLo = _loW[i];
                     var rawUp = _upW[i];
                     var along = i / (float)(Seg - 1);
                     BrowWarp.ShapeBand(
-                        ref _loW[i], ref _upW[i], along, _thickness, _arch, _shape,
+                        ref _loW[i], ref _upW[i], along, _thickness, _arch, 0,
                         _thicknessProfile, _expandUpper, _expandLower);
                     BrowWarp.TaperTail(ref _loW[i], ref _upW[i], along, _thicknessProfile,
                         BrowWarp.IsCoverageActive(_thicknessProfile, _expandUpper, _expandLower));
@@ -457,16 +481,18 @@ namespace ARMakeup.Face
                 if (BrowWarp.IsCoverageActive(_thicknessProfile, _expandUpper, _expandLower))
                     for (var i = 0; i < Seg; i++)
                         BrowWarp.RestoreCoverageLowerFloor(ref _loW[i], ref _upW[i], _coverageLo[i], _lo[i], _up[i], browWarped);
-                var depth = Depth(lm[BrowUpper[e][2]].z);
                 var b = e * Seg * 2;
                 for (var i = 0; i < Seg; i++)
                 {
+                    // 얼굴은 평면이 아니다. 상·하 아크의 보간 z를 세로줄마다 평균해
+                    // 이마 곡면을 따라가며, x/y는 같은 사진 좌표에 정확히 투영한다.
+                    var depth = Depth(0.5f * (_upDepth[i] + _loDepth[i]));
                     _vertices[b + 2 * i] = ImageToWorld(_loW[i], depth, browWarped);
                     _vertices[b + 2 * i + 1] = ImageToWorld(_upW[i], depth, browWarped);
 
                     // 컨실 밴드 — §15: 셰이핑(_thickness/_arch) 미반영(반영하면 그린
                     // 모양 밖으로 삐친 자연 털을 또 놓침). 원시 아크(_lo/_up)를 위·
-                    // 아래로 확장하고, 세로줄마다 피부 샘플점(밴드 위 이마)을 uv1에 기록.
+                    // 아래로 확장하고, 밴드와 같은 크기의 이마 피부 패치를 uv1에 기록.
                     if (_conceal.intensity > 0f)
                     {
                         var lo = _lo[i];
@@ -475,13 +501,15 @@ namespace ARMakeup.Face
                             ConcealExpandDown, ConcealExpandDownCoverage, _coverageMode);
                         var loC = lo - thick * concealExpandDown;
                         var upC = _up[i] + thick * ConcealExpandUp;
-                        var skinWorld = ImageToWorld(upC + thick * ConcealSkinSampleUp, depth);
+                        // 확장 밴드 전체를 위로 평행 이동한 동일 크기 패치. 하/상 정점이
+                        // 서로 다른 샘플 좌표를 가져 픽셀별 피부 결·조명 변화가 보존된다.
+                        var skinOffset = (upC - loC) + thick * ConcealSkinPatchGap;
+                        var skinLoWorld = ImageToWorld(loC + skinOffset, depth);
+                        var skinUpWorld = ImageToWorld(upC + skinOffset, depth);
                         _concealVertices[b + 2 * i] = ImageToWorld(loC, depth);
                         _concealVertices[b + 2 * i + 1] = ImageToWorld(upC, depth);
-                        // 세로줄의 두 정점이 같은 샘플점 공유 → 줄 안은 균일, 가로로는
-                        // 이마 조명 그라데이션을 따라간다.
-                        _concealSkinPos[b + 2 * i] = skinWorld;
-                        _concealSkinPos[b + 2 * i + 1] = skinWorld;
+                        _concealSkinPos[b + 2 * i] = skinLoWorld;
+                        _concealSkinPos[b + 2 * i + 1] = skinUpWorld;
 
                         // 새 제품 밴드와 컨실 밴드를 최종 표시(FaceWarp) 공간으로 맞춘 뒤
                         // 컨실 세로 uv상의 target 범위를 구한다. 꼬리 안티-드룹까지 끝난
@@ -493,6 +521,13 @@ namespace ARMakeup.Face
                             loTarget, upTarget, FramePresenter.Instance.ImageAspect);
                         _concealProtectRange[b + 2 * i] = protectRange;
                         _concealProtectRange[b + 2 * i + 1] = protectRange;
+
+                        var naturalRange = ProjectProtectRange(
+                            DisplayedImagePoint(loC), DisplayedImagePoint(upC),
+                            DisplayedImagePoint(_lo[i]), DisplayedImagePoint(_up[i]),
+                            FramePresenter.Instance.ImageAspect);
+                        _concealNaturalRange[b + 2 * i] = naturalRange;
+                        _concealNaturalRange[b + 2 * i + 1] = naturalRange;
                     }
                 }
             }
@@ -503,6 +538,7 @@ namespace ARMakeup.Face
                 _concealMesh.vertices = _concealVertices;
                 _concealMesh.SetUVs(1, _concealSkinPos);
                 _concealMesh.SetUVs(2, _concealProtectRange);
+                _concealMesh.SetUVs(4, _concealNaturalRange);
                 _concealMesh.RecalculateBounds();
             }
         }

@@ -301,6 +301,12 @@ export interface FilterParams {
   /** ── 부위 확장(컨실·치아·아래 속눈썹) — 생략 시 0=끔 ── */
   /** 눈썹 지우기(스킨톤 컨실, 제품 스택 밑작업) 0..1 */
   browConcealIntensity?: number;
+  /**
+   * 활성 눈썹 제품이 자동으로 요청하는 교체용 밑지우기 0..1.
+   * browConcealIntensity(사용자가 고른 지우개)와 수명을 분리해, 눈썹 제품을
+   * 제거하면 자동 지우기만 즉시 꺼지고 명시적 지우개는 그대로 남는다.
+   */
+  browReplacementIntensity?: number;
   /** 눈썹 지우기 마감: 0=새틴(기본) 1=매트 2=듀이. 생략 시 0(기존 출력) */
   browConcealFinish?: number;
   /** 치아 미백(내측 립 링 안, 입 다물면 자동 무효과) 0..1 */

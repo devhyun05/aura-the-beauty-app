@@ -350,6 +350,10 @@ export function compileLayers(
   if (overlayLayers.length > 0 && params.faceOverlayIntensity === 0) {
     params.faceOverlayIntensity = 0.85;
   }
+  // 일반 눈썹은 사용자의 자연 눈썹 위에 알파 털 텍스처만 합성한다.
+  // 피부 복원은 사용자가 지우개 탭을 직접 선택했을 때의
+  // browConcealIntensity 경로로만 실행한다.
+  params.browReplacementIntensity = 0;
   // 세부 순서 고정(베이스<내부<림) + 세부 내 겹 순서 보존(안정 정렬) → Unity가 순서대로
   // over 합성한다. MAX 초과분은 자른다(Unity도 방어하지만 배선 단계에서 상한 준수).
   const lensLayers = lensLeaves

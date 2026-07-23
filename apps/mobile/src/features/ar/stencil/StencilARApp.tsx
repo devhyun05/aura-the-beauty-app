@@ -368,6 +368,7 @@ const INTENSITY_KEYS: (keyof FilterParams)[] = [
   'faceOverlayIntensity',
   // 부위 확장 팩 — 컨실·치아·아래 속눈썹 (적대 리뷰: 전역 농도 스케일 필수 등록)
   'browConcealIntensity',
+  'browReplacementIntensity',
   'teethWhitenIntensity',
   'lowerLashIntensity',
   // 신규 렌더 4종 — 삼각존·쌍꺼풀·베이스립·립글로스 (전역 농도 스케일 등록)

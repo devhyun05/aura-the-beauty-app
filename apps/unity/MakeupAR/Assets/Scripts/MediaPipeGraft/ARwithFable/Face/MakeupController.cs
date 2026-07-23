@@ -1506,8 +1506,8 @@ namespace ARMakeup.Face
             var browLightenerHairHi = 0.7f;
             var browConcealHairLo = 0.32f;
             var browConcealHairHi = 0.7f;
-            var browConcealFeatherV = 0.2f;
-            var browConcealFeatherH = 0.12f;
+            var browConcealFeatherV = BrowRenderer.ConcealFeatherVMin;
+            var browConcealFeatherH = BrowRenderer.ConcealFeatherHMin;
             var toothLumaLo = 0.4f;
             var toothLumaHi = 0.62f;
             var gumRedLo = 0.06f;

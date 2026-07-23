@@ -162,9 +162,24 @@ namespace ARMakeup.Face
         };
         static readonly Vector4[][] BlushShapeZones =
         {
-            BlushClassic, BlushIgari, BlushDrape, BlushDaily,
-            BlushLovely, BlushUnderEye, BlushSunKissedSoft, BlushSunKissedBand,
+            OffsetBlushZones(BlushClassic), OffsetBlushZones(BlushIgari),
+            OffsetBlushZones(BlushDrape), OffsetBlushZones(BlushDaily),
+            OffsetBlushZones(BlushLovely), OffsetBlushZones(BlushUnderEye),
+            OffsetBlushZones(BlushSunKissedSoft), OffsetBlushZones(BlushSunKissedBand),
         };
+
+        static Vector4[] OffsetBlushZones(Vector4[] source)
+        {
+            var result = new Vector4[source.Length];
+            for (var i = 0; i < source.Length; i++)
+            {
+                var zone = source[i];
+                zone.y += MaskGenerator.BlushShapeYOffset;
+                result[i] = zone;
+            }
+            return result;
+        }
+
         const int HlZones = 9;
         const int CtZones = 8;
         const int BlMaxZones = 6;
@@ -684,6 +699,8 @@ namespace ARMakeup.Face
                 const int m = BrowWarp.BandSegments;
                 BrowWarp.SubdivideArc(lm, BrowLower[e], _browLo);
                 BrowWarp.SubdivideArc(lm, up, _browUp);
+                BrowWarp.ShapeArcProfile(
+                    _browLo, _browUp, m, _browShape, FramePresenter.Instance.ImageAspect);
                 // 상·하단 쌍을 함께 셰이핑하고 꼬리 폭 테이퍼 후 안티-드룹 적용 → 링 정점으로
                 // 조립. 제품 렌더러(BrowRenderer 등)와 동일 순서라 가이드 일치.
                 for (var i = 0; i < m; i++)
@@ -696,7 +713,7 @@ namespace ARMakeup.Face
                     _browRawUp[i] = rawUp;
                     var along = i / (float)(m - 1);
                     BrowWarp.ShapeBand(
-                        ref loP, ref upP, along, _browThickness, _browArch, _browShape,
+                        ref loP, ref upP, along, _browThickness, _browArch, 0,
                         _browThicknessProfile, _browExpandUpper, _browExpandLower);
                     BrowWarp.TaperTail(ref loP, ref upP, along, _browThicknessProfile,
                         BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower));
@@ -1579,6 +1596,8 @@ namespace ARMakeup.Face
             const int n = BrowWarp.BandSegments;
             BrowWarp.SubdivideArc(lm, BrowLower[e], _browLo);
             BrowWarp.SubdivideArc(lm, BrowUpper[e], _browUp);
+            BrowWarp.ShapeArcProfile(
+                _browLo, _browUp, n, _browShape, FramePresenter.Instance.ImageAspect);
             for (var i = 0; i < n; i++)
             {
                 var lo = _browLo[i];
@@ -1588,7 +1607,7 @@ namespace ARMakeup.Face
                 _browRawLo[i] = rawLo;
                 _browRawUp[i] = rawUp;
                 var along = i / (float)(n - 1);
-                BrowWarp.ShapeBand(ref lo, ref up, along, _browThickness, _browArch, _browShape,
+                BrowWarp.ShapeBand(ref lo, ref up, along, _browThickness, _browArch, 0,
                     _browThicknessProfile, _browExpandUpper, _browExpandLower);
                 BrowWarp.TaperTail(ref lo, ref up, along, _browThicknessProfile,
                     BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower));

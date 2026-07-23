@@ -155,6 +155,7 @@ export const BARE: FilterParams = {
   doubleLidIntensity: 0,
   teethWhitenIntensity: 0,
   browConcealIntensity: 0,
+  browReplacementIntensity: 0,
   lipBaseIntensity: 0,
   lipGlossIntensity: 0,
   lipLinerIntensity: 0,
@@ -548,7 +549,7 @@ export const IRIS_COLORS = [
   '#3A3A3A',
 ];
 
-/** 눈썹 색 (어두운 갈색~밝은 갈색). 마스카라·파우더 공용 팔레트. */
+/** 눈썹 색. 브라운 기본 6색 + 컬러 브로우 5색. 마스카라·파우더 공용 팔레트. */
 export const BROW_COLORS = [
   '#2A1E16',
   '#3A2A20',
@@ -556,6 +557,11 @@ export const BROW_COLORS = [
   '#5A4433',
   '#6B5240',
   '#7A6350',
+  '#8A6B52',
+  '#6C527E',
+  '#7B3347',
+  '#B89B42',
+  '#B85F7D',
 ];
 
 /** 공통 AR 블러셔 카탈로그의 웜·뉴트럴·쿨 8색. */

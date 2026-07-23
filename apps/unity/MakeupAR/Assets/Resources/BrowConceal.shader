@@ -1,36 +1,34 @@
-// 눈썹 지우기(BrowConceal) — 눈썹 제품 스택 맨 아래(밑작업)에 깔리는 스킨톤 컨실
-// 레이어. 큐 순서(MakeupQueues.BrowConceal < 제품들)로 "지우고 그 위에 그리기"가
-// 자동 성립한다.
+// 눈썹 완전 교체(BrowConceal) — 눈썹 제품 스택 맨 아래에서 자연 눈썹과 주변 잔털을
+// 실제 이마 피부 패치로 복원한다. 이후 고정 렌더 큐(3014~3018)가 새 눈썹을 그리므로
+// 사용자가 지우개와 눈썹을 어떤 순서로 선택해도 결과는 항상 "지우고 그리기"다.
 //
-// 시맨틱: 이 기능은 "전체 지우개"(자연 눈썹 전체 컨실)가 1급 기능이다. 설계 §15의
-// 삐침 정리(커버 영역 = 자연눈썹 ∩ ¬새눈썹모양 — 새 모양을 정점 채널에 베이크한
-// protect 구멍)는 미구현 후속이며, 여기선 그 전역 근사로 제품 최대 강도
-// (_BrowProductMax)에 비례해 컨실을 감쇠만 한다 — 컨실을 최대로 깔고 반투명 제품을
-// 얹을 때 새 모양 안쪽까지 피부로 덮여 워시드아웃되는 것(§15의 밑동 자국)을 완화.
-// 컨실 단독(제품 0)일 땐 감쇠 0 = 완전 지우개 유지.
+// browConcealIntensity는 사용자가 직접 선택한 지우개, browReplacementIntensity는
+// RN 컴포저가 활성 눈썹 제품에서 파생한 자동 밑지우기다. 두 상태를 분리해 눈썹 제품만
+// 제거했을 때 자동 지우기는 꺼지지만 명시적인 지우개 레이어는 유지한다.
 //
 // BrowLightener(균일 _SkinColor — CPU가 이마 랜드마크 평균 1색)와 달리, GrabPass
-// 피드에서 "그 세로줄 바로 위 이마 픽셀"을 샘플해 칠한다 — 샘플점 월드 좌표는
-// BrowRenderer가 정점 채널 TEXCOORD1(uv1)에 매 프레임 기록. 균일 1색 페인트가
-// 남기는 자국 없이 이마 조명 그라데이션을 그대로 따라간다.
+// 피드에서 눈썹 밴드와 같은 크기의 이마 피부 패치를 샘플해 칠한다. 샘플 패치의
+// 하·상 좌표는 BrowRenderer가 TEXCOORD1(uv1)에 기록하므로 피부 결·조명 변화가
+// 세로 방향으로도 유지된다.
 //
 // 신규 셰이더로 만든 근거: BrowLightener.shader는 제품 스택(옅은 눈썹)이 현역으로
 // 쓰는 셰이더라 오프셋 샘플·정점 채널을 추가하면 기존 제품 거동이 바뀐다(침습).
-// 별도 파일 = 기존 눈썹 제품 침습 0. 루마 게이트·페더 패턴은 BrowLightener 재사용.
+// 별도 파일 = 기존 눈썹 제품 침습 0. 페더 패턴은 BrowLightener에서 재사용하고,
+// 잔털 판정은 현 위치 피부와의 국소 RGB/루마 대비를 사용한다.
 Shader "ARMakeup/BrowConceal"
 {
     Properties
     {
         _BrowIntensity ("Conceal Intensity", Range(0, 1)) = 0.0
-        // 털 판정 루마 게이트 — 어두운 털 픽셀일수록 강하게 덮고 밝은 피부는 통과.
-        // BrowLightener와 동일 기본값. // 실기기 튜닝 대상
+        _BrowReplacementIntensity ("Automatic Replacement", Range(0, 1)) = 0.0
+        // 구 전문가 payload/머티리얼 호환 필드. 완전 교체 경로는 절대 루마 대신
+        // 현 위치 피부 대비를 사용한다.
         _HairLo ("Hair Luma Lo", Range(0, 1)) = 0.32
         _HairHi ("Hair Luma Hi", Range(0, 1)) = 0.70
         // 밴드 가장자리 페더 폭(uv 비율) — 컨실 경계가 피부에 녹아들게. // 실기기 튜닝 대상
-        _FeatherV ("Vertical Feather", Range(0, 0.4)) = 0.20
-        _FeatherH ("Horizontal Feather", Range(0, 0.4)) = 0.12
-        // 눈썹 제품 최대 강도(CPU: max(마스카라, 파우더, 펜슬, 스타일)) — 전역 근사
-        // protect. 진한 제품일수록 그 아래 컨실을 감쇠(계수는 PROTECT_DAMP).
+        _FeatherV ("Vertical Feather", Range(0, 0.4)) = 0.34
+        _FeatherH ("Horizontal Feather", Range(0, 0.4)) = 0.24
+        // 레거시 진단/호환 필드. 교체 경로에서는 새 눈썹 내부도 먼저 완전히 지운다.
         _BrowProductMax ("Brow Product Max", Range(0, 1)) = 0.0
         // 마감(Tier B) — 0=새틴(기본, 기존 출력) 1=매트 2=듀이. ApplyFinish 레거시 경로.
         _ConcealFinish ("Conceal Finish (0 satin 1 matte 2 dewy)", Float) = 0
@@ -70,15 +68,8 @@ Shader "ARMakeup/BrowConceal"
             #include "BrowCoverage.cginc"
             #include "BrowResponse.cginc"
 
-            // 칠하는 피부색에 원래 명암을 살짝 반영 — 완전 평면 페인트 방지
-            // (BrowLightener의 0.85 + 0.3·luma 패턴). // 실기기 튜닝 대상
-            #define SHADE_BASE 0.85
-            #define SHADE_LUMA_GAIN 0.3
-            // 제품 강도 비례 컨실 감쇠 계수(전역 근사 protect — 워시드아웃 완화).
-            // 1이면 제품 최대 강도 1에서 컨실 완전 소거. // 실기기 튜닝 대상
-            #define PROTECT_DAMP 0.6
-
             float _BrowIntensity;
+            float _BrowReplacementIntensity;
             float _HairLo;
             float _HairHi;
             float _FeatherV;
@@ -103,6 +94,7 @@ Shader "ARMakeup/BrowConceal"
                 float3 skinPos : TEXCOORD1; // 피부 샘플점 월드 좌표(CPU가 이마 방향 오프셋 계산)
                 float2 targetRange : TEXCOORD2; // 새 눈썹 실루엣의 컨실 uv 하·상 범위
                 float browSide : TEXCOORD3;
+                float2 naturalRange : TEXCOORD4; // 실제 자연 눈썹의 컨실 uv 하·상 범위
             };
 
             struct v2f
@@ -113,6 +105,7 @@ Shader "ARMakeup/BrowConceal"
                 float4 skinGrabPos : TEXCOORD2;
                 float2 targetRange : TEXCOORD3;
                 float browSide : TEXCOORD4;
+                float2 naturalRange : TEXCOORD5;
             };
 
             v2f vert(appdata v)
@@ -125,6 +118,7 @@ Shader "ARMakeup/BrowConceal"
                 o.skinGrabPos = ComputeGrabScreenPos(UnityObjectToClipPos(float4(v.skinPos, 1.0)));
                 o.targetRange = v.targetRange;
                 o.browSide = v.browSide;
+                o.naturalRange = v.naturalRange;
                 return o;
             }
 
@@ -169,60 +163,147 @@ Shader "ARMakeup/BrowConceal"
                 return roots * sparseStrokes * 0.28;
             }
 
+            inline fixed3 SampleBrowSkin(
+                float2 screenUV, float2 skinUV, float verticalT, float3 exposure,
+                out fixed3 localTargetTone)
+            {
+                // 눈썹 바로 위의 실제 이마 피부를 앵커로 잡는다. 고정 피부색을 칠하지
+                // 않으므로 조명·홍조·명암이 현재 얼굴 피부와 이어진다.
+                float2 up = skinUV - screenUV;
+                float2 side = float2(-up.y, up.x);
+                // skinUV 전체 거리(넓은 밴드 한 높이 이상)를 그대로 쓰면 이마의
+                // 다른 조명대가 복사될 수 있다. 경계 바로 바깥의 가까운 피부를 쓴다.
+                // 밴드 아래 픽셀은 위쪽 피부까지 더 멀리 건너뛰어야 중간의 눈썹 털을
+                // 재복사하지 않는다. 확장 밴드의 깨끗한 윗변으로 각 픽셀을 투영한다.
+                float upperDistance = lerp(0.92, 0.12, saturate(verticalT));
+                float2 upperUV = saturate(screenUV + up * upperDistance);
+
+                // BrowRenderer의 전체 skinUV는 밴드 한 높이 이상 위라 이마가 짧거나
+                // 앞머리가 가까우면 헤어라인까지 닿는다. 실제 복사 픽셀은 각 프래그먼트의
+                // 눈썹 바로 위쪽인 upperUV에서만 가져와 먼 헤어라인 질감 유입을 막는다.
+                // 큰 명암 구조를 버리고 미세 피부결만 추출해 절사 평균 피부톤에 더한다.
+                fixed3 patch = BrowResponseNormalizeFeed(
+                    tex2D(_CameraFeed, upperUV).rgb, exposure);
+                fixed3 patchTone = patch;
+                patchTone += BrowResponseNormalizeFeed(
+                    tex2D(_CameraFeed, saturate(upperUV + side * 0.06)).rgb, exposure);
+                patchTone += BrowResponseNormalizeFeed(
+                    tex2D(_CameraFeed, saturate(upperUV - side * 0.06)).rgb, exposure);
+                patchTone += BrowResponseNormalizeFeed(
+                    tex2D(_CameraFeed, saturate(upperUV + up * 0.04)).rgb, exposure);
+                patchTone *= 0.25;
+
+                fixed3 upperCenter = BrowResponseNormalizeFeed(
+                    tex2D(_CameraFeed, upperUV).rgb, exposure);
+                fixed3 upperSideA = BrowResponseNormalizeFeed(
+                    tex2D(_CameraFeed, saturate(upperUV + side * 0.05)).rgb, exposure);
+                fixed3 upperSideB = BrowResponseNormalizeFeed(
+                    tex2D(_CameraFeed, saturate(upperUV - side * 0.05)).rgb, exposure);
+                fixed3 upperWideA = BrowResponseNormalizeFeed(
+                    tex2D(_CameraFeed, saturate(upperUV + side * 0.11)).rgb, exposure);
+                fixed3 upperWideB = BrowResponseNormalizeFeed(
+                    tex2D(_CameraFeed, saturate(upperUV - side * 0.11)).rgb, exposure);
+                // 다섯 점의 채널별 절사 평균. 최저(앞머리/관자 털)와 최고(과노출
+                // 하이라이트)를 버리고 중간 세 점만 평균해 세로 피부톤 띠를 줄인다.
+                fixed3 upperMin = min(
+                    upperCenter, min(min(upperSideA, upperSideB), min(upperWideA, upperWideB)));
+                fixed3 upperMax = max(
+                    upperCenter, max(max(upperSideA, upperSideB), max(upperWideA, upperWideB)));
+                fixed3 upperTone = (
+                    upperCenter + upperSideA + upperSideB + upperWideA + upperWideB
+                    - upperMin - upperMax) / 3.0;
+                // 아래쪽 표본은 눈꺼풀·아이라인까지 닿을 수 있으므로 피부 복원 톤은
+                // 눈썹 바로 위의 검증된 피부만 사용한다.
+                localTargetTone = upperTone;
+                // 패치의 큰 명암 구조(헤어라인·그림자)는 절대 복사하지 않고, 피부결
+                // 크기의 미세 성분만 ±1.2%로 제한해 목표 피부톤 위에 얹는다.
+                // 이렇게 하면 블러처럼 평평해지지 않으면서 검은 털/박스가 재유입되지 않는다.
+                fixed3 microDetail = clamp(
+                    patch - patchTone, fixed3(-0.012, -0.012, -0.012),
+                    fixed3(0.012, 0.012, 0.012));
+                return saturate(localTargetTone + microDetail);
+            }
+
             fixed4 frag(v2f i) : SV_Target
             {
                 float2 screenUV = i.grabPos.xy / i.grabPos.w;
                 fixed3 feed = tex2D(_CameraFeed, screenUV).rgb;
                 float3 exposure = BrowResponseExposure(i.browSide);
                 fixed3 normalizedFeed = BrowResponseNormalizeFeed(feed, exposure);
-                float normalizedLuma = BrowResponseLuma(normalizedFeed);
-                // 루마 게이트 — 어두운 털일수록 강하게 덮는다(§15 재사용 패턴).
-                float hair = BrowResponseHair(normalizedLuma, _HairLo, _HairHi);
 
                 // 위(이마 방향) 오프셋 UV의 실제 피부 픽셀 — 이 세로줄이 칠할 색.
-                float2 skinUV = i.skinGrabPos.xy / i.skinGrabPos.w;
-                fixed3 skin = BrowResponseNormalizeFeed(tex2D(_CameraFeed, skinUV).rgb, exposure);
+                float2 skinUV = saturate(i.skinGrabPos.xy / i.skinGrabPos.w);
+                fixed3 localTargetTone;
+                fixed3 sampledSkin = SampleBrowSkin(
+                    screenUV, skinUV, i.uv.x, exposure, localTargetTone);
+                float skinLuma = BrowResponseLuma(sampledSkin);
+                // 절대 루마 상한을 넓히면 중간 밝기 피부까지 털로 오인해 컨실 띠가
+                // 생긴다. 같은 세로줄의 실제 이마 피부와 비교한 국소 어두움만 쓰면
+                // 피부 결은 통과하고 옅은 잔털까지 선택적으로 복원할 수 있다.
+                float replacement = saturate(max(
+                    _BrowReplacementIntensity, _BrowIntensity));
+                // 복사해 올 이마 패치는 결·조명 때문에 현 위치보다 밝을 수 있다.
+                // 그 패치와 직접 비교하면 깨끗한 피부까지 털로 오인해 사각형이 된다.
+                // 털 판정은 눈썹 바로 위의 실제 피부 절사 평균만 기준으로 삼는다.
+                // 붉은기·그림자는 루마만 보면 털처럼 어두울 수 있지만, 보통 RGB
+                // 세 채널이 동시에 내려가지는 않는다. 세 채널 모두 주변 피부보다
+                // 어두운 양만 사용해 콧대/미간의 붉은 피부를 사각 패치로 오인하지 않는다.
+                fixed3 localDelta = localTargetTone - normalizedFeed;
+                float localDarkness = max(
+                    0.0, min(localDelta.r, min(localDelta.g, localDelta.b)));
+                float hair = smoothstep(
+                    lerp(0.075, 0.018, replacement),
+                    lerp(0.24, 0.095, replacement),
+                    localDarkness);
 
-                float vEdge = smoothstep(0.0, _FeatherV, i.uv.x)
-                            * (1.0 - smoothstep(1.0 - _FeatherV, 1.0, i.uv.x));
-                float hEdge = smoothstep(0.0, _FeatherH, i.uv.y)
-                            * (1.0 - smoothstep(1.0 - _FeatherH, 1.0, i.uv.y));
+                // 완전 지우기에서도 페더를 좁히지 않는다. 이전 0.10/0.03 강제 축소는
+                // 복사 피부 패치의 사각 외곽을 짧은 거리에서 드러내는 직접 원인이었다.
+                float featherV = max(_FeatherV, 0.34);
+                float featherH = max(_FeatherH, 0.24);
+                float vEdge = smoothstep(0.0, featherV, i.uv.x)
+                            * (1.0 - smoothstep(1.0 - featherV, 1.0, i.uv.x));
+                float hEdge = smoothstep(0.0, featherH, i.uv.y)
+                            * (1.0 - smoothstep(1.0 - featherH, 1.0, i.uv.y));
 
                 // 눈썹 컨실 template(14) 시드 번들. body/grain=피부색소, coverage/edge=커버 amt.
                 // -1=레거시 무변조, enum 0은 현재 단일 제품 시드다.
                 float ccTexE, ccTexG, ccTexC, ccTexB;
                 TexBundleFromEnum(14.0, _ConcealTexture, ccTexE, ccTexG, ccTexC, ccTexB);
-                float amt = hair * vEdge * hEdge * _BrowIntensity;
-                // 전역 근사 protect — 위에 얹을 제품이 진할수록 컨실을 약화해
-                // "피부 덮고 반투명 제품" 이중 처리(워시드아웃)를 완화. 제품 0이면
-                // 감쇠 0 = 완전 지우개.
-                float legacyProductDamp = 1.0 - _BrowProductMax * PROTECT_DAMP;
-                // profile 0은 기존 전역 감쇠를 정확히 유지한다. 새 커버 모드는 바깥
-                // 자연 털을 충분히 지우고, 아래의 공간 protect가 새 제품 내부만 비운다.
-                amt *= lerp(
-                    legacyProductDamp, 1.0, BrowCoverageActive(_BrowCoverageMode));
-                float targetValid;
-                float2 targetUv = BrowTargetUV(i.uv, i.targetRange, targetValid);
-                float styleProtect = BrowStyleProtectMask(targetUv)
-                    * saturate(_BrowProtectStyleWeight);
-                float powderProtect = BrowPowderProtectMask(targetUv)
-                    * saturate(_BrowProtectPowderWeight);
-                float pencilProtect = BrowPencilProtectMask(targetUv)
-                    * saturate(_BrowProtectPencilWeight);
-                // 제품별 알파의 합집합. 스타일 PNG의 투명한 털 사이는 보호하지 않아
-                // 컨실이 그 사이로 보이는 실제 자연 털을 계속 억제한다.
-                float targetProtect = targetValid * (1.0
-                    - (1.0 - styleProtect) * (1.0 - powderProtect) * (1.0 - pencilProtect));
-                amt *= 1.0 - targetProtect;
+                // 새 눈썹 실루엣 안도 예외 없이 먼저 지운다. 고정 렌더 큐가 그 위에
+                // 제품을 올리므로 원래 털이 비치거나 모양이 섞이지 않는다.
+                // 자연 눈썹 실측 범위는 전체 커버 알파를 확보해 옅은 털까지 지운다.
+                // 그 바깥 확장 밴드에서는 hair 게이트만 열어 주변 잔털을 추가로 잡는다.
+                // 페이드는 실제 털 경계 안이 아니라 바깥의 깨끗한 피부에서 끝낸다.
+                // 따라서 눈썹 상·하 외곽 털이 어두운 박스 선처럼 남지 않는다.
+                float naturalValid = step(1e-4, i.naturalRange.y - i.naturalRange.x);
+                float naturalCore = naturalValid
+                    * smoothstep(
+                        i.naturalRange.x - 0.14, i.naturalRange.x - 0.025, i.uv.x)
+                    * (1.0 - smoothstep(
+                        i.naturalRange.y + 0.025, i.naturalRange.y + 0.14, i.uv.x))
+                    // 자연 눈썹 강제 교체도 넓어진 깨끗한 피부 런웨이에서 사방으로
+                    // 0까지 녹인다. 이 항이 없으면 마지막 삼각형 경계가 박스 선이 된다.
+                    // 제곱 페더는 외곽의 낮은 알파를 더 빠르게 0으로 내려 피부톤 차가
+                    // 아주 조금만 있어도 보이던 얇은 직선 경계를 제거한다.
+                    * (vEdge * vEdge) * (hEdge * hEdge);
+                float strayCoverage = hair * vEdge * hEdge;
+                float amt = max(strayCoverage, naturalCore) * saturate(_BrowIntensity);
                 amt = TexEdge(TexCoverage(saturate(amt), ccTexC), ccTexE); // 제형 커버·엣지
 
-                fixed3 pig = skin * (SHADE_BASE + SHADE_LUMA_GAIN * normalizedLuma);
-                pig = TexBody(pig, normalizedLuma, ccTexB); // 제형 발색 body
+                // 실측 자연 눈썹은 털 색이 옅거나 조명을 받아도 완전히 지우고,
+                // 넓은 제곱 페더로 실제 피부에 연결한다.
+                // naturalCore 자체가 사방으로 페더되므로 피부 패치의 외곽선은 남지 않는다.
+                // 실측 범위 바깥 잔털만 RGB 털 판정으로 선택한다.
+                float patchConfidence = max(
+                    naturalCore, smoothstep(0.018, 0.095, localDarkness));
+                fixed3 concealedSkin = sampledSkin;
+                concealedSkin = TexBody(concealedSkin, skinLuma, ccTexB); // 제형 발색 body
                 // 마감 — 0=새틴=무변형(ApplyFinish 레거시 경로, 세부 6값 0). 스킨톤
                 // 컨실이라 시머 게인 0. sparkleUV=밴드 uv.
-                pig = ApplyFinish(pig, normalizedLuma, i.uv, _ConcealFinish, 0,
-                                  0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
-                pig = TexGrain(pig, i.uv, ccTexG); // 제형 그레인
+                concealedSkin = ApplyFinish(concealedSkin, skinLuma, i.uv, _ConcealFinish, 0,
+                                            0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
+                concealedSkin = TexGrain(concealedSkin, i.uv, ccTexG); // 제형 그레인
+                fixed3 pig = lerp(normalizedFeed, concealedSkin, patchConfidence);
                 pig = BrowResponseReapplyExposure(pig, exposure);
                 // §11 오클루전 — 앞머리/손 위에 피부색 컨실을 칠하지 않는다.
                 return fixed4(pig, amt * OccludeGate(i.grabPos));

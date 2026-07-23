@@ -33,11 +33,18 @@ import {
 } from '../../../../../shared/contracts/arBlushCatalog';
 import {REGION_GROUPS, REGION_MAP} from '../composer/regions';
 import type {RegionDef, RegionKey} from '../composer/regions';
+import {BROW_COLORS} from '../presets';
 import {
   patchBlushTree,
   readBlushTree,
   removeBlushTree,
 } from '../composer/blushTree';
+import {
+  BROW_REFERENCE_SHAPES,
+  patchBrowTree,
+  readBrowTree,
+  removeBrowTree,
+} from '../composer/browTree';
 import {patchTeethTree, readTeethTree} from '../composer/teethTree';
 import {
   defSwatchColor,
@@ -72,6 +79,20 @@ const BLUSH_SHAPE_CELL_W = CARD_W - 4;
 const BLUSH_SHAPE_CELL_H = (BLUSH_SHAPE_CELL_W * 8) / 3;
 const BLUSH_SHAPE_PREVIEW_H = CARD_H - 4;
 const BLUSH_SHAPE_CROP_TOP = BLUSH_SHAPE_CELL_W * 0.34;
+const BROW_SHAPE_GLYPHS = ['━', '⌁', '⌒', '⌃', '◠'] as const;
+const BROW_COLOR_LABELS = [
+  '딥 브라운',
+  '다크 브라운',
+  '내추럴 브라운',
+  '애쉬 브라운',
+  '웜 브라운',
+  '토프 브라운',
+  '라이트 브라운',
+  '퍼플',
+  '와인',
+  '옐로우',
+  '핑크',
+] as const;
 const ALL = '전체' as const;
 // 내 핏(A13) 카테고리 — 슬롯이 아닌 특수 탭. 카드=핏 시트(원본/분석 맞춤/◈사용자),
 // 선택=메인 핏 지정(App mainFitId). 룩과 독립인 "내 얼굴 프로필" 축이라 맨 뒤에 둔다.
@@ -198,7 +219,9 @@ export default function BasicMode({
   const isSubTab = !isAll && midCat !== ALL;
   const subRegion: RegionKey | null = isSubTab ? (midCat as RegionKey) : null;
   const isBlushTab = subRegion === 'blush';
+  const isBrowTab = subRegion === 'brow';
   const blushState = useMemo(() => readBlushTree(tree), [tree]);
+  const browState = useMemo(() => readBrowTree(tree), [tree]);
   // 치아 미백 — 세부부위에 강도 한 축만 있어 슬롯 게인('립 농도')으로는 조절이 안 됐다.
   // 치아 서브탭에서는 아래 농도 슬라이더를 teethWhitenIntensity에 직접 연결한다(#치아 QA).
   const isTeethTab = subRegion === 'teeth';
@@ -214,7 +237,12 @@ export default function BasicMode({
 
   // 중분류 후보 — 이 슬롯의 세부부위 전부(룩이 없어도 카테고리로 노출해 구조를 드러냄).
   const midCats = useMemo(
-    () => (slot ? REGIONS_BY_SLOT[slot] ?? [] : []),
+    () =>
+      slot === '눈썹'
+        ? [REGION_MAP.browConceal, REGION_MAP.brow]
+        : slot
+          ? REGIONS_BY_SLOT[slot] ?? []
+          : [],
     [slot],
   );
 
@@ -274,6 +302,16 @@ export default function BasicMode({
         intensity: arBlushIntensityFromSlider(normalized),
       }),
     );
+  };
+  const chooseBrowShape = (shapeValue: number | null) => {
+    onChangeTree(
+      shapeValue === null
+        ? removeBrowTree(tree, library)
+        : patchBrowTree(tree, library, {shapeValue}),
+    );
+  };
+  const chooseBrowColor = (color: string) => {
+    onChangeTree(patchBrowTree(tree, library, {color}));
   };
 
   // 카테고리 표시 2종: 내용물 있음(밝은 텍스트) / 수정됨(● 도트).
@@ -352,7 +390,12 @@ export default function BasicMode({
           contentContainerStyle={styles.midRow}>
           {([ALL, ...midCats.map(rd => rd.key)] as MidCat[]).map(key => {
             const on = key === midCat;
-            const label = key === ALL ? ALL : midLabelOf(REGION_MAP[key].label);
+            const label =
+              key === ALL
+                ? ALL
+                : slot === '눈썹' && key === 'brow'
+                  ? '눈썹'
+                  : midLabelOf(REGION_MAP[key].label);
             return (
               <TouchableOpacity
                 key={key}
@@ -372,8 +415,116 @@ export default function BasicMode({
 
       {/* 필터 저장 버튼은 공유 헤더(농도 슬라이더 오른쪽)로 이동 — App.tsx panelHeader. */}
 
-      {/* 1) 카드 캐러셀 — 블러셔만 모양/색상을 독립 축으로 노출한다. */}
-      {isBlushTab ? (
+      {/* 1) 카드 캐러셀 — 블러셔·눈썹은 모양/색상을 독립 축으로 노출한다. */}
+      {isBrowTab ? (
+        <View style={styles.browAxes}>
+          <View style={styles.axisHeadingRow}>
+            <Text style={styles.axisHeading}>눈썹 모양</Text>
+            <Text style={styles.axisHint}>선택 즉시 얼굴에 적용돼요</Text>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.browShapeAxisScroll}
+            contentContainerStyle={styles.cardRow}>
+            <View style={styles.cardGrid}>
+              <TouchableOpacity
+                accessibilityLabel="눈썹 필터 없음"
+                accessibilityRole="button"
+                accessibilityState={{selected: !browState.enabled}}
+                testID="basic-brow-shape-none"
+                onPress={() => chooseBrowShape(null)}
+                style={[
+                  styles.card,
+                  styles.browShapeCard,
+                  styles.cardTintNone,
+                  !browState.enabled && styles.cardOn,
+                ]}>
+                <View style={styles.browShapePreview}>
+                  <View style={styles.browShapeNoneLine} />
+                </View>
+                <View style={styles.cardLabelBar}>
+                  <Text style={styles.cardLabel} numberOfLines={1}>
+                    없음
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              {BROW_REFERENCE_SHAPES.map((shape, index) => {
+                const on =
+                  browState.enabled && browState.shapeValue === shape.value;
+                return (
+                  <TouchableOpacity
+                    accessibilityLabel={`${shape.label} 눈썹 모양`}
+                    accessibilityRole="button"
+                    accessibilityState={{selected: on}}
+                    testID={`basic-brow-shape-${shape.value}`}
+                    key={shape.value}
+                    onPress={() => chooseBrowShape(shape.value)}
+                    style={[
+                      styles.card,
+                      styles.browShapeCard,
+                      styles.cardTintShape,
+                      on && styles.cardOn,
+                    ]}>
+                    <View style={styles.browShapePreview}>
+                      <Text
+                        style={[
+                          styles.browShapeGlyph,
+                          index === 1 && styles.browShapeGlyphStraight,
+                        ]}>
+                        {BROW_SHAPE_GLYPHS[index]}
+                      </Text>
+                    </View>
+                    <View style={styles.cardLabelBar}>
+                      <Text style={styles.cardLabel} numberOfLines={1}>
+                        {shape.label}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          <Text style={styles.axisHeading}>눈썹 색상</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.browColorAxisScroll}
+            contentContainerStyle={styles.browColorRow}>
+            <View style={styles.cardGrid}>
+              {BROW_COLORS.map((color, index) => {
+                const on =
+                  browState.enabled &&
+                  browState.color.toUpperCase() === color.toUpperCase();
+                return (
+                  <TouchableOpacity
+                    accessibilityLabel={`${BROW_COLOR_LABELS[index]} 눈썹 색상`}
+                    accessibilityRole="button"
+                    accessibilityState={{selected: on}}
+                    testID={`basic-brow-color-${index}`}
+                    key={color}
+                    onPress={() => chooseBrowColor(color)}
+                    style={[
+                      styles.browColorCard,
+                      {backgroundColor: color},
+                      on && styles.cardOn,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.browColorLabel,
+                        {color: swatchLabelColor(color)},
+                      ]}
+                      numberOfLines={2}>
+                      {BROW_COLOR_LABELS[index]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
+      ) : isBlushTab ? (
         <View style={styles.blushAxes}>
           <ScrollView
             horizontal
@@ -774,6 +925,81 @@ const styles = StyleSheet.create({
   },
   blushAxes: {
     gap: 0,
+  },
+  browAxes: {
+    gap: 4,
+  },
+  axisHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  axisHeading: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  axisHint: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  browShapeAxisScroll: {
+    height: CARD_H + 6,
+    flexGrow: 0,
+  },
+  browShapeCard: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  browShapePreview: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  browShapeGlyph: {
+    color: '#3A2A20',
+    fontSize: 34,
+    fontWeight: '900',
+    lineHeight: 38,
+    transform: [{scaleX: 1.25}],
+  },
+  browShapeGlyphStraight: {
+    transform: [{scaleX: 1.45}, {scaleY: 0.7}],
+  },
+  browShapeNoneLine: {
+    width: 34,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    transform: [{rotate: '-38deg'}],
+  },
+  browColorAxisScroll: {
+    height: 48,
+    flexGrow: 0,
+  },
+  browColorRow: {
+    paddingVertical: 1,
+  },
+  browColorCard: {
+    width: Math.max(54, CARD_W),
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  browColorLabel: {
+    width: '100%',
+    minHeight: 20,
+    paddingHorizontal: 3,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   blushAxisScroll: {
     height: CARD_H + 6,
