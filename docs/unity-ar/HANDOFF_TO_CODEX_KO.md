@@ -268,3 +268,31 @@ cd apps/mobile && npx expo run:ios --device 00008140-000924DE21BB801C
 - **속눈썹이 안 보일 때 체크 순서**: ①`MascaraTex` GameObject의 MeshRenderer bounds가 (0,0,0)인가? → 리본 크래시(§3-7, IndexOutOfRange) 의심, `read_console` 확인. ②`_LashDebug`가 0인가? → 1~4면 디버그 모드. ③material `_AlphaHi`가 너무 낮아 다 투명해졌나? ④`mascaraTexStyle`가 3인가?
 - **"샘플이 문제"의 진짜 의미**: 원본 샘플은 좋다. Claude 파이프라인의 **밀도보강+과충전**이 망친 것. 그러니 새 샘플 찾기 전에 **재추출 계약(§6)**부터 지킬 것. 그래도 부족하면 그때 Unity AI 신규 생성.
 - **아이라이너·립은 확정**이니 속눈썹 작업 중 실수로 건드리지 말 것. glam2 필터 JSON에 이미 다 들어있음(그대로 쓰면 됨).
+
+---
+
+## [갱신 2026-07-23] 세션 마감 상태 — 이 섹션이 최신 정본
+
+### 현재 확정 상태 (v25)
+- **속눈썹**: 복붙 보존 파이프라인 완성 — 사용자 펜 뿌리선+보간 시프트+꼬리 국소 회전(하이브리드), grain 1.0(결 복원), 눈 곡선 슬라이드 16%, 가위질 트림. 배수 1.0/1.0(각도 완전 보존)
+- **아이라이너**: 승인본 = `docs/unity-ar/glam2-refs/approved/eyeliner_v5_orig.png` (거의 수평+끝만 상향). Resources에 복원 완료
+- **립**: D안 유지, lipIntensity 0.45(0.3은 흐릿 — 사용자 판정)
+- **지터 스무딩**: FaceLandmarkSource One-Euro(눈꺼풀 32점) 구현됨 — **실기기 판정 대기**
+
+### 새 도구 (재사용 필수 — 토큰/실수 절약)
+1. **GlamTestRig** (`Assets/Editor/GlamTestRig.cs`): 플레이 후 `GlamTestRig.Setup("self1")` → 30틱 자동 Ready → `panel/glam2-filter.json`(또는 내장 기본) 적용. `Capture("경로")` = 카메라 RT+luma 검사. **AuraStencilHost.SetStencilActive 자동 호출**(없으면 화면 검정 luma 0 함정)
+2. **추출기** (`tools/glam2-lash/lash_extract.py`): `fit`=게이트 오버레이만, `apply`=산출. 검증 실패 시 산출 차단. 설정은 SOURCES dict(주석 참조)
+3. **정식 필터**: `tools/glam2-lash/rig-filter-glam2.json`
+
+### 0723에 확립된 불변 원칙 (위반 시 재발하는 버그)
+1. **NPOT**: 신규 텍스처 반입 시 임포터 npotScale=None+Clamp 필수 — 3회 적발(몰래 리사이즈로 비율 오염)
+2. **컬럼 균일 계약**: 리본 기둥 길이는 균일. 길이 다듬기는 **텍스처 가위질(trim_heights)만** — 기둥/구간 압축은 걸친 가닥을 휨
+3. **이동은 기하 슬라이드**(SlideAlongChain) — 텍스처 패드 이동은 종횡비 축소로 상쇄됨
+4. **꼬리 뿌리선**: 잉크 통계로 추정 금지(2회 실패) — 사용자 펜 신뢰구간+방향 직선 연장만
+5. **승인 에셋**: approved/에 원본 보존+즉시 커밋. Resources 파일을 승인본으로 믿지 말 것(오라벨 사고)
+6. **판정 전 픽셀 diff**: 기하 수정은 변화량 수치 확인 후 육안 비교(무효 처방 필터)
+7. **grain**: 불투명화(텍스처 1회)와 _GrainAmt(셰이더 되돌리기)는 역할 분리 — 이중 적용 아님
+
+### 즉시 다음 작업
+1. **실기기 빌드·판정**: 글램 v25 통합 + One-Euro 스무딩(EyeEuroMinCutoff 1.5/Beta 30 튜닝) + grain 1.0 밉 감쇠 확인
+2. 백로그: 시머 블록노이즈, 블링크 폴드, 래시 라이팅, 손 가림
