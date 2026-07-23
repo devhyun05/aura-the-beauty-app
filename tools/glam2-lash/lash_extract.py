@@ -157,6 +157,56 @@ def tail_band_refit(a, root_y, start_frac):
     return out
 
 
+def hybrid_flatten(a, root_y, start_frac):
+    """shift+꼬리 국소 회전 하이브리드(승인 0723) — '미끄럼틀과 막대기' 문제 해결.
+
+    수직 시프트는 절대각을 보존해, 42° 밴드에 나란히 눕던 꼬리 가닥이 펴는 순간
+    밴드에서 42° 뻗치는 자세로 변조된다(꼬리로 갈수록 길어져 보임 — 사용자 판정).
+    각 열의 샘플 광선을 수직(=shift)에서 밴드 법선(=국소 회전)으로 블렌드:
+    start 이전 blend 0 → 중앙 무변화, 꼬리에서 1 → 가닥이 밴드와 함께 회전.
+    전면 언롤과 달리 영향 범위가 승인 초록선 구간과 일치한다.
+    """
+    h, w = a.shape
+    k = 121
+    ry = np.convolve(np.pad(root_y, k // 2, mode="edge"), np.ones(k) / k, mode="valid")[:w]
+    dy = np.gradient(ry)
+    tx = 1.0 / np.sqrt(1.0 + dy * dy)
+    ty_ = dy * tx
+    nx, ny = -ty_, tx
+    fl = ny > 0
+    nx = np.where(fl, -nx, nx)
+    ny = np.where(fl, -ny, ny)                    # '위(y 감소)' 정렬
+    x0 = int(w * start_frac)
+    blend = np.clip((np.arange(w) - x0) / max(w * 0.15, 1.0), 0, 1)
+    rx = nx * blend
+    ryv = -1.0 * (1 - blend) + ny * blend         # 수직↔법선 블렌드
+    norm = np.sqrt(rx * rx + ryv * ryv)
+    rx /= norm
+    ryv /= norm
+    kup = int(np.max(ry)) + 2
+    kdn = int(h - np.min(ry)) + 2
+    ks = np.arange(-kdn, kup + 1)
+    px = np.arange(w)[None, :] + rx[None, :] * ks[:, None]
+    py = ry[None, :] + ryv[None, :] * ks[:, None]
+    x0i = np.floor(px).astype(int)
+    y0i = np.floor(py).astype(int)
+    fx = (px - x0i).astype(np.float32)
+    fy = (py - y0i).astype(np.float32)
+
+    def g(yy, xx):
+        valid = (xx >= 0) & (xx < w) & (yy >= 0) & (yy < h)
+        o = np.zeros(px.shape, dtype=np.float32)
+        o[valid] = a[yy[valid], xx[valid]]
+        return o
+
+    v = (g(y0i, x0i) * (1 - fx) * (1 - fy) + g(y0i, x0i + 1) * fx * (1 - fy)
+         + g(y0i + 1, x0i) * (1 - fx) * fy + g(y0i + 1, x0i + 1) * fx * fy)
+    out = v[::-1, :]
+    ang = np.degrees(np.arctan(np.abs(dy)))
+    print(f"  하이브리드 펴기: 꼬리 회전 최대 {ang[x0:].max():.0f}°, 중앙 무변화(blend 0)")
+    return out, kup
+
+
 def unroll(a, root_y):
     """곡선 언롤 — 뿌리 곡선을 따라 '굴려서' 편다(수직 시프트의 승격판).
 
@@ -307,8 +357,11 @@ def main():
             root_y = user if user is not None else np.polyval(curve, np.arange(a.shape[1]))
             if cfg.get("tail_refit"):
                 root_y = tail_band_refit(a, root_y, cfg["tail_refit"])
-            # 언롤은 기각(사용자 0723): 중앙까지 재곡선화 위험 대비 이득 없음 → shift 유지
-            flat, root_row = straighten(a, root_y)
+                # 꼬리 국소 회전(승인 0723) — 중앙은 shift와 동일, 꼬리만 밴드와 함께 회전
+                flat, root_row = hybrid_flatten(a, root_y, cfg["tail_refit"])
+            else:
+                # 전면 언롤은 기각(사용자 0723) → shift 유지
+                flat, root_row = straighten(a, root_y)
             finalize(name, cfg, flat, root_row)
         else:
             save_fit_overlay(name, cfg, a, curve)
