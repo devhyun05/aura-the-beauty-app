@@ -41,10 +41,18 @@ function LaneCard({ card }: { card: StyleLaneCard }) {
 }
 
 /** S9 3 스타일 레인 추천 — 균형·동안·개성 강조 세 카드를 세로로. */
-export function S9StyleLanes({ data }: { data: S9Data }) {
+export function S9StyleLanes({
+  data,
+  showHeader = true,
+}: {
+  data: S9Data;
+  showHeader?: boolean;
+}) {
   return (
     <RiseIn style={{ paddingTop: 30, paddingHorizontal: 20, gap: 12 }}>
-      <SectionHeader eyebrow={data.eyebrow} title={data.title} sub={data.sub} />
+      {showHeader ? (
+        <SectionHeader eyebrow={data.eyebrow} title={data.title} sub={data.sub} />
+      ) : null}
       {data.lanes.map(lane => (
         <RiseIn key={lane.laneKey}>
           <LaneCard card={lane} />

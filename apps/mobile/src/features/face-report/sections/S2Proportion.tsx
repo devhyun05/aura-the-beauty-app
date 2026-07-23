@@ -6,6 +6,7 @@ import {color, font} from '../reportTokens';
 import { EmptyNotice } from '../visuals/EmptyNotice';
 import { GuidePhotoOverlay } from '../visuals/GuidePhotoOverlay';
 import { RegionLens } from '../visuals/RegionLens';
+import { ReadableParagraphs } from '../visuals/ReadableParagraphs';
 import { RiseIn } from '../visuals/RiseIn';
 import { ThirdsRatioReadout } from '../visuals/ThirdsRatioReadout';
 
@@ -70,15 +71,17 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
           </View>
           <Text style={[font(17, '800'), {color: color.ink}]}>얼굴 비율</Text>
         </View>
-        <Text
-          style={[
-            font(13.5, '400', 1.65),
-            {color: color.body, marginLeft: 56, marginTop: 8},
-          ]}>
-          {[data.insightLabel, data.insightDescription ?? data.paragraph]
-            .filter(Boolean)
-            .join(' · ')}
-        </Text>
+        <View style={{gap: 6, marginLeft: 56, marginTop: 8}}>
+          {data.insightLabel ? (
+            <Text style={[font(13.5, '700', 1.5), {color: color.ink}]}>
+              {data.insightLabel}
+            </Text>
+          ) : null}
+          <ReadableParagraphs
+            text={data.insightDescription ?? data.paragraph}
+            textStyle={[font(13.5, '400', 1.65), {color: color.body}]}
+          />
+        </View>
       </View>
       <ThirdsRatioReadout ratio={data.ratioNumbers} faceShape={data.faceShape} />
     </RiseIn>

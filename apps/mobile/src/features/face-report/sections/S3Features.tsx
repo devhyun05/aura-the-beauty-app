@@ -7,6 +7,7 @@ import { BlendBar } from '../visuals/BlendBar';
 import { GuideOverlay } from '../visuals/GuideOverlay';
 import {FaceDepthPointOverlay} from '../visuals/FaceDepthPointOverlay';
 import { PhotoSlot } from '../visuals/PhotoSlot';
+import {ReadableParagraphs} from '../visuals/ReadableParagraphs';
 import { RiseIn } from '../visuals/RiseIn';
 import {ReportGlassSurface} from '../visuals/ReportGlassSurface';
 import { SectionHeader } from '../visuals/SectionHeader';
@@ -127,9 +128,14 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
             }}>
             <View style={{alignItems: 'stretch', flexDirection: 'row'}}>
               <View style={{flex: 1, justifyContent: 'center', paddingRight: 12}}>
-                <Text style={[font(16, '800', 1.35), {color: color.ink}]}>
-                  {card.insight ?? card.paragraph}
-                </Text>
+                <ReadableParagraphs
+                  gap={8}
+                  text={card.insight ?? card.paragraph}
+                  textStyle={[
+                    font(card.insight ? 16 : 14.5, card.insight ? '800' : '700', 1.45),
+                    {color: color.ink},
+                  ]}
+                />
               </View>
               {activeMeasurement ? (
                 <View

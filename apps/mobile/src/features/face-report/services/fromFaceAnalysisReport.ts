@@ -480,7 +480,7 @@ function buildToneMap(probabilities: ToneProbabilityData[]) {
 
   if (active.length === 0) {
     return {
-      caption: '12타입 중 어디에 가까운지 보여주는 상대 위치예요.',
+      caption: '12가지 세부 톤 중 어디에 가까운지 보여주는 상대 위치예요.',
       area: {x: 0.44, y: 0.44, w: 0.12, h: 0.12},
       points,
     };
@@ -495,7 +495,7 @@ function buildToneMap(probabilities: ToneProbabilityData[]) {
   const pad = 0.08;
 
   return {
-    caption: '12타입 prototype과의 가까움이에요. 굵은 영역이 현재 결과가 걸쳐 있는 톤 범위예요.',
+    caption: '12가지 세부 톤 중 가까운 위치를 보여줘요. 굵은 영역은 현재 결과가 걸쳐 있는 톤 범위예요.',
     area: {
       x: clamp01(minX - pad),
       y: clamp01(minY - pad),
@@ -1378,7 +1378,7 @@ function buildS8(skinPerception: FaceAnalysisSkinPerception | undefined): S8Data
   return {
     eyebrow: 'SKIN',
     title: '피부는 이렇게 보여요',
-    sub: '사진에서 관찰 가능한 피부 부면을 항목별로 정리했어요.',
+    sub: '사진에서 관찰 가능한 피부 특징을 항목별로 정리했어요.',
     aspects: SKIN_ASPECT_ORDER.map(key => ({
       key,
       heading: SKIN_ASPECT_HEADING_KO[key],

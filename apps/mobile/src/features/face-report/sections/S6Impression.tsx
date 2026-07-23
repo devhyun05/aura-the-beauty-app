@@ -4,6 +4,7 @@ import { color, font, radius } from '../reportTokens';
 import type { S6Data } from '../reportTypes';
 import { Card } from '../visuals/Card';
 import { ImpressionMap } from '../visuals/ImpressionMap';
+import { ReadableParagraphs } from '../visuals/ReadableParagraphs';
 import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
 
@@ -25,7 +26,11 @@ export function S6Impression({ data }: { data: S6Data }) {
               </View>
             ))}
           </View>
-          <Text style={[font(13, '400', 1.7), { color: color.body }]}>{data.paragraph}</Text>
+          <ReadableParagraphs
+            gap={10}
+            text={data.paragraph}
+            textStyle={[font(13.5, '400', 1.7), { color: color.body }]}
+          />
           {data.visualWeight ? <VisualWeightBlock data={data.visualWeight} /> : null}
         </Card>
       </RiseIn>

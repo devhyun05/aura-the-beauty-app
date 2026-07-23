@@ -7,6 +7,7 @@ import {color, font, radius} from '../reportTokens';
 import type {S1Data} from '../reportTypes';
 import {LegacyBadge} from '../visuals/Badge';
 import {PhotoSlot} from '../visuals/PhotoSlot';
+import {ReadableParagraphs} from '../visuals/ReadableParagraphs';
 import {RiseIn} from '../visuals/RiseIn';
 
 type S1CombinedSummaryProps = {
@@ -75,7 +76,14 @@ export function S1CombinedSummary({
           <Text accessibilityRole="header" style={styles.headline}>
             {data.headline}
           </Text>
-          {data.body ? <Text style={styles.body}>{data.body}</Text> : null}
+          {data.body ? (
+            <ReadableParagraphs
+              gap={8}
+              style={styles.bodyGroup}
+              text={data.body}
+              textStyle={styles.body}
+            />
+          ) : null}
         </Animated.View>
 
         {data.legacyReport ? <LegacyBadge label={data.legacyBadge} /> : null}
@@ -145,6 +153,9 @@ const styles = StyleSheet.create({
   body: {
     ...font(14, '400', 1.6),
     color: color.text,
+    maxWidth: 340,
+  },
+  bodyGroup: {
     maxWidth: 340,
   },
   capturePhoto: {
@@ -249,12 +260,12 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
   },
   highlightLabel: {
-    ...font(9.5, '600'),
+    ...font(11, '600'),
     color: color.muted,
     textAlign: 'center',
   },
   highlightValue: {
-    ...font(12, '800', 1.25),
+    ...font(12.5, '800', 1.3),
     color: color.ink,
     textAlign: 'center',
   },

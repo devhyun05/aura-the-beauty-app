@@ -132,7 +132,9 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
         offset: nextIndex * pageWidth,
       });
 
-      if (!shouldAnimate) {
+      if (shouldAnimate) {
+        requestAnimationFrame(() => commitIndex(nextIndex));
+      } else {
         commitIndex(nextIndex);
       }
     }, [commitIndex, pageWidth, pages.length, reduceMotion]);
@@ -172,9 +174,11 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
       const currentPageId = currentPageIdRef.current;
       if (!currentPageId) return;
       const nextIndex = pages.findIndex(page => page.id === currentPageId);
-      if (nextIndex < 0 || nextIndex === currentIndexRef.current) return;
-      currentIndexRef.current = nextIndex;
-      setCurrentIndex(nextIndex);
+      if (nextIndex < 0) return;
+      if (nextIndex !== currentIndexRef.current) {
+        currentIndexRef.current = nextIndex;
+        setCurrentIndex(nextIndex);
+      }
       requestAnimationFrame(() => {
         if (pageWidth > 0) {
           listRef.current?.scrollToOffset({
@@ -446,17 +450,29 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
             style={({pressed}) => ({
               alignItems: 'center',
               borderRadius: 22,
+              gap: 1,
               justifyContent: 'center',
               minHeight: 44,
-              minWidth: 72,
+              minWidth: 104,
               opacity: pressed ? 0.58 : 1,
               paddingHorizontal: 12,
             })}>
             <Text
+              numberOfLines={1}
+              style={{
+                color: INK,
+                fontFamily: 'Pretendard',
+                fontSize: 12.5,
+                fontWeight: '800',
+                maxWidth: 150,
+              }}>
+              {currentPage?.shortTitle ?? currentPage?.title}
+            </Text>
+            <Text
               style={{
                 color: MUTED,
                 fontFamily: 'Pretendard',
-                fontSize: 12,
+                fontSize: 10.5,
                 fontWeight: '700',
               }}>
               {currentIndex + 1} / {pages.length}

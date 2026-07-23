@@ -110,10 +110,14 @@ function personalColorGradient(axis: S4Data['axes'][number]): SpectrumGradientCo
 }
 
 function ToneProbabilityList({ data }: { data: S4Data['toneProbabilities'] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleData = expanded ? data : data.slice(0, 4);
+  const hiddenCount = Math.max(0, data.length - visibleData.length);
+
   return (
-    <View>
+    <View style={{ gap: 8 }}>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-        {data.map((item, index) => {
+        {visibleData.map((item, index) => {
           const isFirst = index === 0;
           const isSecond = index === 1;
           const toneStyle = TONE_STYLE[item.type];
@@ -131,12 +135,36 @@ function ToneProbabilityList({ data }: { data: S4Data['toneProbabilities'] }) {
                 paddingHorizontal: 9,
                 paddingVertical: 5,
               }}>
-              <Text style={[font(10.5, '700'), { color: toneStyle.text }]}>{item.label}</Text>
-              <Text style={[font(10.5, '800'), { color: toneStyle.text }]}>{formatPercent(item.ratio)}</Text>
+              <Text style={[font(11, '700'), { color: toneStyle.text }]}>{item.label}</Text>
+              <Text style={[font(11, '800'), { color: toneStyle.text }]}>{formatPercent(item.ratio)}</Text>
             </View>
           );
         })}
       </View>
+      {data.length > 4 ? (
+        <Pressable
+          accessibilityLabel={
+            expanded
+              ? '세부 퍼스널 컬러 확률 접기'
+              : `나머지 ${hiddenCount}개 퍼스널 컬러 확률 보기`
+          }
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={() => setExpanded(value => !value)}
+          style={({ pressed }) => ({
+            alignItems: 'center',
+            alignSelf: 'flex-start',
+            borderRadius: radius.pill,
+            justifyContent: 'center',
+            minHeight: 44,
+            opacity: pressed ? 0.6 : 1,
+            paddingHorizontal: 4,
+          })}>
+          <Text style={[font(11.5, '800'), { color: color.accentInk }]}>
+            {expanded ? '간단히 보기' : `나머지 ${hiddenCount}개 보기`}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -172,7 +200,7 @@ function ToneDot({ point }: { point: ToneMapPoint }) {
         <View style={{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: radius.pill, marginTop: 3, paddingHorizontal: 5, paddingVertical: 2 }}>
           <Text
             numberOfLines={1}
-            style={[font(8.5, '800'), { color: color.ink, maxWidth: 66, textAlign: 'center' }]}>
+            style={[font(10.5, '800'), { color: color.ink, maxWidth: 74, textAlign: 'center' }]}>
             {point.label}
           </Text>
         </View>
@@ -185,7 +213,7 @@ function ToneMapChart({ data }: { data: S4Data['toneMap'] }) {
   return (
     <View style={{ gap: 8 }}>
       <Text style={[font(12.5, '800'), { color: color.ink }]}>톤 맵</Text>
-      <Text style={[font(10.5, '700'), { color: color.body, textAlign: 'center' }]}>↑ 라이트 · 밝음</Text>
+      <Text style={[font(11.5, '700'), { color: color.body, textAlign: 'center' }]}>↑ 라이트 · 밝음</Text>
       <View
         style={{
           borderColor: color.outline8,
@@ -249,17 +277,17 @@ function ToneMapChart({ data }: { data: S4Data['toneMap'] }) {
         {data.points.map(point => <ToneDot key={point.type} point={point} />)}
       </View>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-        <Text style={[font(10.5, '700'), { color: color.body, flex: 1 }]}>← 뮤트 · 부드러움</Text>
-        <Text style={[font(10.5, '700'), { color: color.body, flex: 1, textAlign: 'right' }]}>클리어 · 비비드 →</Text>
+        <Text style={[font(11.5, '700'), { color: color.body, flex: 1 }]}>← 뮤트 · 부드러움</Text>
+        <Text style={[font(11.5, '700'), { color: color.body, flex: 1, textAlign: 'right' }]}>클리어 · 비비드 →</Text>
       </View>
-      <Text style={[font(10.5, '700'), { color: color.body, textAlign: 'center' }]}>↓ 딥 · 어두움</Text>
-      <Text style={[font(11.5, '400', 1.5), { color: color.muted }]}>{data.caption}</Text>
+      <Text style={[font(11.5, '700'), { color: color.body, textAlign: 'center' }]}>↓ 딥 · 어두움</Text>
+      <Text style={[font(12.5, '400', 1.55), { color: color.text }]}>{data.caption}</Text>
     </View>
   );
 }
 
 function AxisGlossary() {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const seasonItems = [
     {term: '봄', desc: '따뜻하고 밝거나 선명한 색감'},
     {term: '여름', desc: '차갑고 밝거나 부드러운 색감'},
@@ -291,8 +319,8 @@ function AxisGlossary() {
 
   const renderItems = (items: Array<{term: string; desc: string}>, termWidth = 50) => items.map(item => (
     <View key={item.term} style={{ flexDirection: 'row', gap: 8 }}>
-      <Text style={[font(11, '800'), { color: color.accentInk, width: termWidth }]}>{item.term}</Text>
-      <Text style={[font(11, '400', 1.45), { color: color.text, flex: 1 }]}>{item.desc}</Text>
+      <Text style={[font(12, '800'), { color: color.accentInk, width: termWidth }]}>{item.term}</Text>
+      <Text style={[font(12, '400', 1.5), { color: color.text, flex: 1 }]}>{item.desc}</Text>
     </View>
   ));
 
@@ -303,18 +331,27 @@ function AxisGlossary() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`용어 읽는 법 ${expanded ? '접기' : '펼치기'}`}
+          accessibilityState={{ expanded }}
           onPress={() => setExpanded(value => !value)}
-          style={{ backgroundColor: color.surface, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 5 }}>
-          <Text style={[font(10.5, '800'), { color: color.accentInk }]}>{expanded ? '접기' : '펼치기'}</Text>
+          style={{
+            alignItems: 'center',
+            backgroundColor: color.surface,
+            borderRadius: radius.pill,
+            justifyContent: 'center',
+            minHeight: 44,
+            minWidth: 62,
+            paddingHorizontal: 10,
+          }}>
+          <Text style={[font(11.5, '800'), { color: color.accentInk }]}>{expanded ? '접기' : '펼치기'}</Text>
         </Pressable>
       </View>
       {expanded ? (
         <>
-          <Text style={[font(10.5, '800'), { color: color.faint, marginTop: 2 }]}>계절</Text>
+          <Text style={[font(11.5, '800'), { color: color.faint, marginTop: 2 }]}>계절</Text>
           {renderItems(seasonItems)}
-          <Text style={[font(10.5, '800'), { color: color.faint, marginTop: 4 }]}>축</Text>
+          <Text style={[font(11.5, '800'), { color: color.faint, marginTop: 4 }]}>축</Text>
           {renderItems(axisItems)}
-          <Text style={[font(10.5, '800'), { color: color.faint, marginTop: 4 }]}>세부 톤 12타입</Text>
+          <Text style={[font(11.5, '800'), { color: color.faint, marginTop: 4 }]}>세부 톤 12가지</Text>
           {renderItems(toneItems, 68)}
         </>
       ) : null}
@@ -367,7 +404,7 @@ export function S4ToneOverview({ data }: { data: S4Data }) {
       <Card gap={14}>
         <View style={{ gap: 2 }}>
           <Text style={[font(14, '800'), { color: color.ink }]}>{data.season.headline}</Text>
-          <Text style={[font(11.5, '400', 1.45), { color: color.muted }]}>
+          <Text style={[font(12.5, '400', 1.5), { color: color.text }]}>
             현재 측정값이 각 타입에 얼마나 가까운지 보여줘요.
           </Text>
         </View>
@@ -390,7 +427,13 @@ export function S4ToneOverview({ data }: { data: S4Data }) {
 }
 
 /** Interactive best/worst drape comparison and the measured report palettes. */
-export function S4DrapePalette({ data }: { data: S4Data }) {
+export function S4DrapePalette({
+  data,
+  showHeader = true,
+}: {
+  data: S4Data;
+  showHeader?: boolean;
+}) {
   const d = data.drape;
   const [best, setBest] = useState<SwatchData>({ ...d.initialSwatch });
   const bestColor = useSharedValue(d.initialSwatch.color);
@@ -420,10 +463,12 @@ export function S4DrapePalette({ data }: { data: S4Data }) {
   return (
     <RiseIn>
       <Card gap={14}>
-        <View style={{ gap: 2 }}>
-          <Text style={[font(13, '800'), { color: color.ink }]}>{d.title}</Text>
-          <Text style={[font(11.5, '400', 1.5), { color: color.muted }]}>{d.sub}</Text>
-        </View>
+        {showHeader ? (
+          <View style={{ gap: 2 }}>
+            <Text style={[font(13, '800'), { color: color.ink }]}>{d.title}</Text>
+            <Text style={[font(12.5, '400', 1.5), { color: color.text }]}>{d.sub}</Text>
+          </View>
+        ) : null}
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'stretch' }}>
           <DrapeStage
             header={d.goodTag}

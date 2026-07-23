@@ -7,35 +7,57 @@ import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
 
 /** One complete styling look for a single story page or a long-form capture. */
-export function S7LookCard({ card }: { card: LookCardData }) {
+export function S7LookCard({
+  card,
+  showHeader = true,
+}: {
+  card: LookCardData;
+  showHeader?: boolean;
+}) {
   const natural = card.variant === 'natural';
   return (
     <RiseIn>
       <Card gap={0}>
-        <View style={{ gap: 5, paddingBottom: 13 }}>
-          <View style={{
-            alignSelf: 'flex-start', backgroundColor: natural ? color.accentTint : color.ink,
-            borderRadius: radius.pill, paddingVertical: 5, paddingHorizontal: 12,
-          }}>
-            <Text style={[font(11.5, '800'), { color: natural ? color.accentInk : color.white }]}>{card.chip}</Text>
-          </View>
-          <Text style={[font(14, '700'), { color: color.ink, marginTop: 3 }]}>{card.title}</Text>
-        </View>
-        {card.rows.map((r, i) => (
-          <View key={r.category} style={{
-            flexDirection: 'row', gap: 11, paddingTop: 12,
-            paddingBottom: i === card.rows.length - 1 ? 2 : 12,
-            borderTopWidth: 1, borderTopColor: color.divider,
-          }}>
-            <Text style={[font(12, '800'), { color: color.ink, width: 52, paddingTop: 2 }]}>{r.category}</Text>
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={[font(13, '400', 1.55), { color: color.body }]}>{r.title}</Text>
-              {r.why.trim() ? (
-                <Text style={[font(12, '400', 1.55), { color: color.muted }]}>{r.why}</Text>
-              ) : null}
+        {showHeader ? (
+          <View style={{ gap: 5, paddingBottom: 13 }}>
+            <View style={{
+              alignSelf: 'flex-start', backgroundColor: natural ? color.accentTint : color.ink,
+              borderRadius: radius.pill, paddingVertical: 5, paddingHorizontal: 12,
+            }}>
+              <Text style={[font(11.5, '800'), { color: natural ? color.accentInk : color.white }]}>{card.chip}</Text>
             </View>
+            <Text style={[font(14, '700'), { color: color.ink, marginTop: 3 }]}>{card.title}</Text>
           </View>
-        ))}
+        ) : null}
+        {card.rows.map((r, i) => {
+          const reason = r.why
+            .trim()
+            .replace(/^왜 나에게\s*[—–-]\s*/, '')
+            .replace(/^아티스트들은\s*/, '');
+          return (
+            <View key={r.category} style={{
+              flexDirection: 'row', gap: 11, paddingTop: 13,
+              paddingBottom: i === card.rows.length - 1 ? 2 : 13,
+              borderTopWidth: i === 0 && !showHeader ? 0 : 1,
+              borderTopColor: color.divider,
+            }}>
+              <Text style={[font(12.5, '800'), { color: color.ink, width: 52, paddingTop: 2 }]}>{r.category}</Text>
+              <View style={{ flex: 1, gap: 6 }}>
+                <Text style={[font(13.5, '500', 1.55), { color: color.body }]}>{r.title}</Text>
+                {reason ? (
+                  <View style={{ gap: 2 }}>
+                    <Text style={[font(11.5, '800'), { color: color.accentInk }]}>
+                      {r.evidenceLabel}
+                    </Text>
+                    <Text style={[font(12.5, '400', 1.6), { color: color.text }]}>
+                      {reason}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          );
+        })}
       </Card>
     </RiseIn>
   );

@@ -266,7 +266,7 @@ export interface S7Data {
   glamCard: LookCardData;
 }
 
-// ---------- S8 (구조화 피부 9부면) ----------
+// ---------- S8 (구조화 피부 특징 9개) ----------
 export interface SkinAspectData { label: string; description: string }
 export interface S8Data {
   eyebrow: string; title: string; sub: string;

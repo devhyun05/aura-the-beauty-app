@@ -110,7 +110,7 @@ function StoryContentCard({
         directionalLockEnabled
         nestedScrollEnabled
         scrollEnabled={scrollEnabled}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator
         onScrollBeginDrag={() => pagerRef.current?.setPagingEnabled(false)}
         onScrollEndDrag={unlockPager}
         onMomentumScrollEnd={unlockPager}
@@ -199,7 +199,7 @@ function SummaryStoryCard({
         onScrollEndDrag={() => pagerRef.current?.setPagingEnabled(true)}
         scrollEnabled={!maskInteracting}
         scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator>
         <S1CombinedSummary
           data={data.s1}
           introMinHeight={viewportHeight || undefined}
@@ -533,7 +533,7 @@ export function ReportScreenScaffold({
       case 'personal-color:drape':
         return data.s4 ? (
           <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.drape.title} sub={data.s4.drape.sub} inset showChapterHeader={showChapterHeader}>
-            <S4DrapePalette data={data.s4} />
+            <S4DrapePalette data={data.s4} showHeader={false} />
           </StoryContentCard>
         ) : null;
       case 'body':
@@ -547,19 +547,19 @@ export function ReportScreenScaffold({
       case 'styling:natural':
         return data.s7 ? (
           <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.naturalCard.title} inset showChapterHeader={showChapterHeader}>
-            <S7LookCard card={data.s7.naturalCard} />
+            <S7LookCard card={data.s7.naturalCard} showHeader={false} />
           </StoryContentCard>
         ) : null;
       case 'styling:glam':
         return data.s7 ? (
           <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.glamCard.title} inset showChapterHeader={showChapterHeader}>
-            <S7LookCard card={data.s7.glamCard} />
+            <S7LookCard card={data.s7.glamCard} showHeader={false} />
           </StoryContentCard>
         ) : null;
       case 'styling:lanes':
         return data.s9 ? (
           <StoryContentCard section={section} pagerRef={pagerRef} title={data.s9.title} sub={data.s9.sub} inset showChapterHeader={showChapterHeader}>
-            <S9StyleLanes data={data.s9} />
+            <S9StyleLanes data={data.s9} showHeader={false} />
           </StoryContentCard>
         ) : null;
       case 'skin':
@@ -655,15 +655,12 @@ export function ReportScreenScaffold({
                 accessibilityLiveRegion="polite"
                 numberOfLines={1}
                 style={[
-                  font(8.5, '600', undefined, 0.05),
+                  font(10.5, '600', 1.3, 0.02),
                   {
                     color: reportCompletion.failed
                       ? color.legacyText
-                      : reportCompletion.complete
-                        ? color.faint
-                        : color.muted,
-                    maxWidth: 180,
-                    opacity: reportCompletion.complete ? 0.72 : 0.86,
+                      : color.faint,
+                    maxWidth: 200,
                   },
                 ]}>
                 {reportCompletion.compactLabel}
@@ -685,7 +682,7 @@ export function ReportScreenScaffold({
             pages={storyPages}
             sections={storySections}
             resetKey={resetKey}
-            showFooter={false}
+            showFooter
           />
         </View>
       </View>
@@ -738,7 +735,7 @@ const MEASUREMENT_LABELS: Record<string, string> = {
   pitchDeg: '상하 각도',
   points: '좌표',
   pose: '얼굴 각도',
-  probabilities: '12타입 가까움',
+  probabilities: '12가지 톤 유사도',
   qEff: '적용 신뢰도',
   qNative: '원본 신뢰도',
   regions: '측정 영역',
