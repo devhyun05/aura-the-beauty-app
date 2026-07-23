@@ -1,6 +1,7 @@
 import type {NavigatorScreenParams} from '@react-navigation/native';
 import type {ProductRecommendationCategory} from '../../features/recommendation/types';
 import type {UnifiedFaceCaptureCompletedEvent} from '../../features/face-capture/services/unifiedFaceCaptureContract';
+import type {MinimumFaceReportPreview} from '../../features/face-report/services/minimumFaceReport';
 import type {
   ConsultingBookingDraft,
   ConsultingCategoryId,
@@ -43,7 +44,13 @@ export type RootStackParamList = {
     | undefined;
   FaceAnalysisReportsList: undefined;
   FaceAnalysisReportDetail:
-    | {reportId?: string; returnTo?: 'profile'}
+    | {
+        afterAnalysisRoute?: FaceAnalysisCompletionRouteName;
+        initialPageId?: string;
+        minimumPreview?: MinimumFaceReportPreview;
+        reportId?: string;
+        returnTo?: 'profile';
+      }
     | undefined;
   // __DEV__ 전용 검증 화면: Face 2D 지오메트리(눈꼬리·눈썹선·roll) 오버레이 확인.
   FaceGeometryDebug: undefined;

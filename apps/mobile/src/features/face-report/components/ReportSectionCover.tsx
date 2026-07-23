@@ -14,7 +14,6 @@ const COVER_IMAGES: Record<FaceReportStorySection['id'], ImageSourcePropType> = 
   impression: require('../assets/covers/impression.jpg'),
   styling: require('../assets/covers/styling.jpg'),
   skin: require('../assets/covers/skin.jpg'),
-  makeup: require('../assets/covers/makeup-cta.jpg'),
 };
 
 export function ReportSectionCover({section}: {section: FaceReportStorySection}) {

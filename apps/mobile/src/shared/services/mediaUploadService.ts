@@ -55,6 +55,7 @@ type PresignedUploadTarget = {
   cdnUrl?: string | null;
   contentType: string;
   expiresIn: number;
+  headers?: Record<string, string> | null;
   method: 'PUT';
   objectKey: string;
   uploadUrl: string;
@@ -296,10 +297,16 @@ async function uploadFileToPresignedUrl(
   contentType: string,
 ): Promise<void> {
   const uploadResult = await FileSystem.uploadAsync(upload.uploadUrl, fileUri, {
-    headers: {
-      ...(upload.cacheControl ? {'Cache-Control': upload.cacheControl} : {}),
-      'Content-Type': contentType,
-    },
+    // Golden Mask presigns bind private/no-store + SSE headers into the
+    // signature. When the backend supplies headers they must be replayed
+    // byte-for-byte; legacy image presigns keep the previous fallback.
+    headers:
+      upload.headers && Object.keys(upload.headers).length
+        ? upload.headers
+        : {
+            ...(upload.cacheControl ? {'Cache-Control': upload.cacheControl} : {}),
+            'Content-Type': contentType,
+          },
     httpMethod: upload.method,
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
   });

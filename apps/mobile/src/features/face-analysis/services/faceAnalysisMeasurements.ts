@@ -129,10 +129,10 @@ export function buildFaceAnalysisMeasurementsPayload(
   input: BuildFaceAnalysisMeasurementsInput,
 ): Record<string, unknown> | undefined {
   const faceVerticalThirds = input.faceVerticalThirds
-    ? encodeVerticalThirds(input.faceVerticalThirds)
+    ? encodeVerticalThirds(input.faceVerticalThirds, input.captureId)
     : undefined;
   const faceGeometry2d = input.faceGeometry2d
-    ? encodeFaceGeometry(input.faceGeometry2d)
+    ? encodeFaceGeometry(input.faceGeometry2d, input.captureId)
     : undefined;
   const personalColor = input.personalColor
     ? encodePersonalColor(input.personalColor)
@@ -164,6 +164,7 @@ export function buildFaceAnalysisMeasurementsPayload(
 
 function encodeVerticalThirds(
   result: FaceVerticalThirdsResult,
+  captureId: string,
 ): Record<string, unknown> | undefined {
   // Phase 1 행렬 보정은 paired replay MAD+MAE 관문 전까지 로컬 검증 전용이다.
   // 보정된 비율뿐 아니라 진단 메타데이터도 product/AI 저장 경로로 승격하지 않는다.
@@ -178,6 +179,8 @@ function encodeVerticalThirds(
 
   return {
     ...rest,
+    captureId,
+    sessionId: captureId,
     sourceImage: {height: sourceImage.height, width: sourceImage.width},
   };
 }
@@ -186,11 +189,16 @@ function encodeVerticalThirds(
 // nested 사본은 여기서 뺀다(중복 저장 방지). debugAnchors 는 오버레이 검증
 // 전용 로컬 필드다 — 서버 wire payload 에 절대 실려서는 안 되므로 여기서도
 // 명시적으로 제외한다(⚠ 필드 추가 시 이 화이트리스트 제외 목록을 잊지 말 것).
-function encodeFaceGeometry(result: FaceGeometryResult): Record<string, unknown> {
+function encodeFaceGeometry(
+  result: FaceGeometryResult,
+  captureId: string,
+): Record<string, unknown> {
   const {debugAnchors: _debugAnchors, regionVisuals: _regionVisuals, sourceImage, ...rest} = result;
 
   return {
     ...rest,
+    captureId,
+    sessionId: captureId,
     sourceImage: {height: sourceImage.height, width: sourceImage.width},
   };
 }

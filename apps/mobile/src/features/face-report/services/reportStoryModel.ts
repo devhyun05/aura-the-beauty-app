@@ -8,13 +8,14 @@ export type FaceReportStorySectionId =
   | 'body'
   | 'impression'
   | 'styling'
-  | 'skin'
-  | 'makeup';
+  | 'skin';
 
-export type FaceReportStoryPageKind = 'cover' | 'content' | 'cta';
+export type FaceReportStoryPageKind = 'cover' | 'content';
 
 export type FaceReportStoryContentKey =
   | 'summary'
+  | 'summary:golden-mask'
+  | 'summary:generation'
   | 'proportion'
   | `features:${string}`
   | 'personal-color:tone'
@@ -23,8 +24,7 @@ export type FaceReportStoryContentKey =
   | 'impression'
   | 'styling:natural'
   | 'styling:glam'
-  | 'skin'
-  | 'makeup:cta';
+  | 'skin';
 
 export interface FaceReportStoryPage {
   id: string;
@@ -54,7 +54,7 @@ export interface FaceReportStoryModel {
 
 type StoryInput = Pick<
   ReportData,
-  's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7' | 's8'
+  'generationStatus' | 'goldenMask' | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7' | 's8'
 >;
 
 interface SectionDefinition {
@@ -131,14 +131,6 @@ const SECTION_DEFINITIONS: Record<FaceReportStorySectionId, SectionDefinition> =
     accent: '#2C8091',
     tint: '#EFF8F9',
   },
-  makeup: {
-    id: 'makeup',
-    number: '09',
-    englishTitle: 'MAKEUP',
-    koreanTitle: '메이크업 추천',
-    accent: '#173E49',
-    tint: '#F1F5F5',
-  },
 };
 
 function coverPage(section: SectionDefinition): FaceReportStoryPage {
@@ -162,7 +154,7 @@ function contentPage(
 }
 
 function withCover(
-  id: Exclude<FaceReportStorySectionId, 'makeup'>,
+  id: FaceReportStorySectionId,
   content: FaceReportStoryPage[],
 ): FaceReportStorySection {
   const definition = SECTION_DEFINITIONS[id];
@@ -175,10 +167,33 @@ function withCover(
  * 항상 실제 렌더링 결과를 따른다.
  */
 export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryModel {
+  const summaryPages = [
+    ...(data.goldenMask
+      ? [
+          contentPage(
+            'summary',
+            'summary:golden-mask',
+            '골든마스크',
+            '나의 3D 페이스',
+            'summary:golden-mask',
+          ),
+        ]
+      : []),
+    contentPage('summary', 'summary:overview', '분석 요약', '한눈에 보기', 'summary'),
+    ...(data.generationStatus
+      ? [
+          contentPage(
+            'summary',
+            'summary:generation',
+            '보고서 생성 상태',
+            data.generationStatus === 'failed' ? '생성 중단' : '상세 생성 중',
+            'summary:generation',
+          ),
+        ]
+      : []),
+  ];
   const sections: FaceReportStorySection[] = [
-    withCover('summary', [
-      contentPage('summary', 'summary:overview', '분석 요약', '한눈에 보기', 'summary'),
-    ]),
+    withCover('summary', summaryPages),
   ];
 
   if (data.s2) {
@@ -227,11 +242,13 @@ export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryMode
     );
   }
 
-  sections.push(
-    withCover('body', [
-      contentPage('body', 'body:overview', '체형', '체형 스타일 가이드', 'body'),
-    ]),
-  );
+  if (data.s5) {
+    sections.push(
+      withCover('body', [
+        contentPage('body', 'body:overview', '체형', '체형 스타일 가이드', 'body'),
+      ]),
+    );
+  }
 
   if (data.s6) {
     sections.push(
@@ -257,21 +274,6 @@ export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryMode
       ]),
     );
   }
-
-  const makeup = SECTION_DEFINITIONS.makeup;
-  sections.push({
-    ...makeup,
-    pages: [
-      {
-        id: 'makeup:cta',
-        sectionId: 'makeup',
-        kind: 'cta',
-        title: '메이크업 추천',
-        shortTitle: '추천 보러가기',
-        contentKey: 'makeup:cta',
-      },
-    ],
-  });
 
   const pages = sections.flatMap(section => section.pages);
   const sectionCoverPageIds: FaceReportStoryModel['sectionCoverPageIds'] = {};

@@ -9,14 +9,24 @@ from app.ops.cleanup_expired_media_uploads import (
 
 
 class FakeDB:
-  def __init__(self, rows: list[dict[str, Any]]) -> None:
+  def __init__(
+    self,
+    rows: list[dict[str, Any]],
+    golden_mask_rows: list[dict[str, Any]] | None = None,
+  ) -> None:
     self.rows = rows
+    self.golden_mask_rows = golden_mask_rows or []
     self.fetch_calls: list[tuple[str, tuple[object, ...]]] = []
     self.update_calls: list[tuple[str, tuple[object, ...]]] = []
 
   async def fetch(self, query: str, *args: object) -> list[dict[str, Any]]:
-    self.fetch_calls.append((" ".join(query.split()), args))
-    return self.rows
+    normalized_query = " ".join(query.split())
+    self.fetch_calls.append((normalized_query, args))
+    return (
+      self.golden_mask_rows
+      if "from media_assets media" in normalized_query
+      else self.rows
+    )
 
   async def fetchrow(self, query: str, *args: object) -> dict[str, str]:
     self.update_calls.append((" ".join(query.split()), args))

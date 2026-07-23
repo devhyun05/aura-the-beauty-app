@@ -283,10 +283,6 @@ async def test_consulting_never_sends_image() -> None:
     "hair": {"summary": "hair", "items": ["item"], "rationaleMetricKeys": []},
     "fashion": {"summary": "fashion", "items": ["item"], "rationaleMetricKeys": []},
     "photography": {"summary": "photo", "items": ["item"], "rationaleMetricKeys": []},
-    "recommendedLook": {
-      "title": "데일리", "subtitle": "차분한 룩", "description": "균형을 살린 룩",
-      "tags": ["차분", "데일리"],
-    },
     "overallMood": "차분한 균형",
     "summary": "맞춤 요약",
     "shortSummary": "짧은 요약",
@@ -315,10 +311,6 @@ async def test_consulting_uses_account_gender_directive() -> None:
       "hair": {"summary": "h", "items": ["i"], "rationaleMetricKeys": []},
       "fashion": {"summary": "f", "items": ["i"], "rationaleMetricKeys": []},
       "photography": {"summary": "p", "items": ["i"], "rationaleMetricKeys": []},
-      "recommendedLook": {
-        "title": "데일리", "subtitle": "차분한 룩", "description": "균형을 살린 룩",
-        "tags": ["차분", "데일리"],
-      },
       "overallMood": "차분한 균형", "summary": "s", "shortSummary": "s", "tags": ["t"],
     }
 

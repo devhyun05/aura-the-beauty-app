@@ -1,5 +1,9 @@
 import type {Face3DProfileV3} from '../../face-3d/types';
 import {parseFace3DProfile} from '../../face-3d/services/face3DContract';
+import {
+  parseGoldenMaskCaptureArtifact,
+  type GoldenMaskCaptureArtifact,
+} from '../../../shared/contracts/goldenMask';
 
 export const UNIFIED_FACE_CAPTURE_SCHEMA_VERSION =
   'aura.unified-face-capture.v1' as const;
@@ -92,6 +96,7 @@ export type UnifiedFaceCaptureResult = {
   };
   captureId: string;
   face3d: Face3DProfileV3;
+  goldenMask?: GoldenMaskCaptureArtifact;
   hairline: {
     analysisEligible: boolean;
     confidence: number | null;
@@ -596,6 +601,15 @@ function parseCompletedEvent(
     timestamps.segmentationSensorTimestampMs,
   );
   const parsedFace3D = parseFace3DProfile(payload.face3d);
+  const parsedGoldenMask =
+    payload.goldenMask === undefined || payload.goldenMask === null
+      ? null
+      : parseGoldenMaskCaptureArtifact(payload.goldenMask);
+  const goldenMask =
+    parsedGoldenMask?.captureId === captureId &&
+    parsedGoldenMask.trueDepthHardware
+      ? parsedGoldenMask
+      : null;
 
   if (
     (payload.status !== 'full_success' && payload.status !== 'partial_success') ||
@@ -710,6 +724,13 @@ function parseCompletedEvent(
   }
 
   const warnings = readWarnings(payload.warnings);
+  if (
+    payload.goldenMask !== undefined &&
+    payload.goldenMask !== null &&
+    !goldenMask
+  ) {
+    warnings.push('golden_mask_contract_invalid');
+  }
   const shouldOmitForEvidenceMismatch =
     rawProvider !== 'none' && !detectedHairlineEvidenceMatches;
   if (!detectedHairlineTokenMatches) {
@@ -783,6 +804,7 @@ function parseCompletedEvent(
     ...(cameraMetadata ? {cameraMetadata} : {}),
     captureId,
     face3d: parsedFace3D,
+    ...(goldenMask ? {goldenMask} : {}),
     hairline: normalizedHairline,
     image: {
       format: image.format,

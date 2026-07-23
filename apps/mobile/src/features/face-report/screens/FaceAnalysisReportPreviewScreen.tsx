@@ -29,6 +29,10 @@ import {
   summarizeRegionMeasurements,
 } from '../services/fromFaceAnalysisReport';
 import {
+  buildMinimumFaceReportData,
+  type MinimumFaceReportPreview,
+} from '../services/minimumFaceReport';
+import {
   captureReportImage,
   getReportCaptureTitle,
   getShareErrorMessage,
@@ -47,14 +51,14 @@ export type FaceAnalysisReportPreviewScreenProps = {
   capturedPhotoUri?: string;
   face3d?: Face3DProfile | null;
   faceGeometry2d?: FaceGeometryResult | null;
+  initialPageId?: string;
+  minimumPreview?: MinimumFaceReportPreview | null;
   personalColor?: AuraPersonalColorResult | null;
   reportId?: string | null;
   sessionCaptureId?: string | null;
   verticalThirds?: FaceVerticalThirdsResult | null;
   onBack?: () => void;
   onRetake?: () => void;
-  // 옛 보고서 화면에 있던 액션들 — 화면 교체로 사라지지 않도록 포팅했다.
-  onCreateARFilter?: () => void;
   onPressProducts?: (reportId: string) => void;
 };
 
@@ -90,13 +94,14 @@ export function FaceAnalysisReportPreviewScreen({
   capturedPhotoUri,
   face3d,
   faceGeometry2d,
+  initialPageId,
+  minimumPreview,
   personalColor,
   reportId,
   sessionCaptureId,
   verticalThirds,
   onBack,
   onRetake,
-  onCreateARFilter,
   onPressProducts,
 }: FaceAnalysisReportPreviewScreenProps) {
   const insets = useSafeAreaInsets();
@@ -117,7 +122,9 @@ export function FaceAnalysisReportPreviewScreen({
           ? Promise.resolve(providedReport)
           : reportId
             ? getFaceAnalysisReportById(reportId)
-            : getLatestFaceAnalysisReport(),
+            : minimumPreview
+              ? Promise.resolve(null)
+              : getLatestFaceAnalysisReport(),
         getUserProfile(),
       ]);
       return {report: nextReport, profile: nextProfile};
@@ -130,7 +137,7 @@ export function FaceAnalysisReportPreviewScreen({
     return () => {
       isMounted = false;
     };
-  }, [analysisReport, reportId]);
+  }, [analysisReport, minimumPreview, reportId]);
 
   const reloadBodyProfile = useCallback(() => {
     void loadBodyProfile().then(setBodyProfile);
@@ -140,7 +147,9 @@ export function FaceAnalysisReportPreviewScreen({
     reloadBodyProfile();
   }, [reloadBodyProfile]);
 
-  const report = loadState.status === 'success' ? loadState.report : null;
+  const report =
+    (!reportId ? analysisReport : null) ??
+    (loadState.status === 'success' ? loadState.report : null);
   const profileGender = loadState.status === 'success' ? loadState.profile?.gender ?? null : null;
   const measurements = report?.measurements;
   // Same "3-반영 규칙" identity check the production report screen uses: session
@@ -193,6 +202,22 @@ export function FaceAnalysisReportPreviewScreen({
     report,
     reportId,
   ]);
+  const minimumReportData = useMemo(
+    () =>
+      !report && minimumPreview
+        ? buildMinimumFaceReportData(minimumPreview)
+        : null,
+    [minimumPreview, report],
+  );
+  const visibleReportData = useMemo(() => {
+    if (!reportData) {
+      return minimumReportData;
+    }
+    if (!initialPageId) {
+      return reportData;
+    }
+    return {...reportData, initialPageId};
+  }, [initialPageId, minimumReportData, reportData]);
 
   const measurementDebugPayload = useMemo(() => {
     if (!report) {
@@ -326,7 +351,7 @@ export function FaceAnalysisReportPreviewScreen({
     report,
   ]);
 
-  if (loadState.status === 'loading') {
+  if (loadState.status === 'loading' && !visibleReportData) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator color={color.accentDeep} />
@@ -334,7 +359,7 @@ export function FaceAnalysisReportPreviewScreen({
     );
   }
 
-  if (!reportData) {
+  if (!visibleReportData) {
     return loadState.status === 'error' ? (
       <CenteredMessage
         actionLabel={loadState.canRetake ? '다시 촬영' : undefined}
@@ -354,12 +379,9 @@ export function FaceAnalysisReportPreviewScreen({
     <>
       <ReportScreenScaffold
         captureRef={reportCaptureRef}
-        data={reportData}
+        data={visibleReportData}
         onBack={onBack}
-        onMore={handleMore}
-        // 푸터 CTA는 '메이크업 추천 보러가기' 라벨이므로 AR 추천으로 간다.
-        // 재촬영은 S2의 "이마가 보이게 다시 찍기" 링크가 담당한다.
-        onPressCta={onCreateARFilter}
+        onMore={report ? handleMore : undefined}
         onResurvey={() => setIsBodySurveyOpen(true)}
         onRetake={onRetake}
         measurementDebugPayload={measurementDebugPayload}

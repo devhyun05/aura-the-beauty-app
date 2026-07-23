@@ -23,6 +23,17 @@ const bridgePath = join(
   repoRoot,
   'apps/mobile/src/features/ar/services/unityMakeupBridge.ts',
 );
+const nativeViewSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/mobile/src/features/ar/components/UnityMakeupNativeView.tsx',
+  ),
+  'utf8',
+);
+const iosBridgeSource = readFileSync(
+  join(repoRoot, 'apps/mobile/ios/AURA/UnityMakeupBridge.m'),
+  'utf8',
+);
 
 const graftFaceRoot = join(
   repoRoot,
@@ -73,6 +84,27 @@ const bridgeMessagesSource = readFileSync(
     'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Bridge/BridgeMessages.cs',
   ),
   'utf8',
+);
+
+assert.match(
+  nativeViewSource,
+  /export type UnityMakeupRuntimeMode = 'live' \| 'still';[\s\S]*runtimeMode = 'live'/,
+  'Unity native view는 live 기본값과 still 표시 모드를 타입으로 노출해야 한다',
+);
+assert.match(
+  iosBridgeSource,
+  /RCT_EXPORT_VIEW_PROPERTY\(runtimeMode, NSString\)/,
+  'iOS Unity view manager가 runtimeMode prop을 내보내야 한다',
+);
+assert.match(
+  iosBridgeSource,
+  /if \(_unityViewOwner != container\)[\s\S]*ignored stale unity container runtime mode update[\s\S]*visible-container-mode-changed/,
+  '이전 Unity container의 늦은 prop 갱신이 현재 singleton 소유자의 모드를 바꾸면 안 된다',
+);
+assert.match(
+  iosBridgeSource,
+  /if \(_applicationIsActive && hasVisibleOwner\)[\s\S]*_visibleRuntimeMode isEqualToString:@"still"[\s\S]*runtimeMode = @"live";/,
+  '보이는 container는 live/still 모드를 직접 선택하고 still에서 렌더 루프를 유지해야 한다',
 );
 
 assert.equal(

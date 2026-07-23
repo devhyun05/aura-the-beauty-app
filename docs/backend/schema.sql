@@ -119,10 +119,34 @@ create table if not exists media_assets (
   constraint chk_media_assets_width check (width is null or width > 0),
   constraint chk_media_assets_height check (height is null or height > 0),
   constraint chk_media_assets_thumbnail_width check (thumbnail_width is null or thumbnail_width > 0),
-  constraint chk_media_assets_thumbnail_height check (thumbnail_height is null or thumbnail_height > 0)
+  constraint chk_media_assets_thumbnail_height check (thumbnail_height is null or thumbnail_height > 0),
+  constraint chk_media_assets_golden_mask_private check (
+    media_kind <> 'golden-mask'
+    or (
+      cdn_url is null
+      and bucket is not null
+      and content_type is not null
+      and content_type = 'application/vnd.aura.golden-mask'
+      and object_key is not null
+      and object_key like 'uploads/golden-mask/%.auragm'
+    )
+  )
 );
 
-comment on table media_assets is 'S3/CDN metadata for avatar, capture, analysis, product, look, AR preview images.';
+comment on table media_assets is 'S3/CDN metadata for app media, including private Golden Mask binary assets.';
+alter table media_assets
+  drop constraint if exists chk_media_assets_golden_mask_private,
+  add constraint chk_media_assets_golden_mask_private check (
+    media_kind <> 'golden-mask'
+    or (
+      cdn_url is null
+      and bucket is not null
+      and content_type is not null
+      and content_type = 'application/vnd.aura.golden-mask'
+      and object_key is not null
+      and object_key like 'uploads/golden-mask/%.auragm'
+    )
+  );
 
 create table if not exists media_upload_sessions (
   id uuid primary key,
@@ -187,6 +211,8 @@ create table if not exists analysis_reports (
   photo_capture_id uuid,
   source_media_id uuid,
   preview_media_id uuid,
+  golden_mask_media_id uuid,
+  golden_mask_metadata jsonb not null default '{}'::jsonb,
   status job_status not null default 'completed',
   ai_provider text,
   ai_model text,
@@ -215,6 +241,21 @@ create table if not exists analysis_reports (
 -- CREATE TABLE IF NOT EXISTS does not add columns to an existing volume.
 -- Keep this additive compatibility step before any deleted_at partial index.
 alter table analysis_reports add column if not exists deleted_at timestamptz;
+alter table analysis_reports
+  add column if not exists golden_mask_media_id uuid,
+  add column if not exists golden_mask_metadata jsonb not null default '{}'::jsonb;
+alter table analysis_reports
+  drop constraint if exists chk_analysis_reports_golden_mask_metadata,
+  add constraint chk_analysis_reports_golden_mask_metadata check (
+    jsonb_typeof(golden_mask_metadata) = 'object'
+    and (
+      golden_mask_media_id is null
+      or (
+        golden_mask_metadata ? 'schemaVersion'
+        and golden_mask_metadata ->> 'schemaVersion' = 'aura.golden-mask.v1'
+      )
+    )
+  );
 
 comment on table analysis_reports is 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.';
 
@@ -1983,7 +2024,10 @@ alter table analysis_reports
   foreign key (source_media_id) references media_assets(id) on delete set null,
   drop constraint if exists fk_analysis_reports_preview_media,
   add constraint fk_analysis_reports_preview_media
-  foreign key (preview_media_id) references media_assets(id) on delete set null;
+  foreign key (preview_media_id) references media_assets(id) on delete set null,
+  drop constraint if exists fk_analysis_reports_golden_mask_media,
+  add constraint fk_analysis_reports_golden_mask_media
+  foreign key (golden_mask_media_id) references media_assets(id) on delete set null;
 
 alter table hair_analyses
   drop constraint if exists fk_hair_analyses_user,
@@ -2546,6 +2590,9 @@ create index if not exists idx_photo_captures_user_type_created on photo_capture
 create index if not exists idx_analysis_reports_user_analyzed on analysis_reports (user_id, analyzed_at desc);
 create index if not exists idx_analysis_reports_user_active_analyzed
   on analysis_reports (user_id, analyzed_at desc) where deleted_at is null;
+create index if not exists idx_analysis_reports_golden_mask_media
+  on analysis_reports (golden_mask_media_id)
+  where golden_mask_media_id is not null;
 create index if not exists idx_analysis_stage_runs_report_stage_created
   on analysis_stage_runs (report_id, stage, created_at desc);
 create index if not exists idx_analysis_stage_runs_completed_cache

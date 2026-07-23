@@ -1315,12 +1315,40 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         {
             warningSet.Add("hairline_low_confidence");
         }
-        List<string> warnings = new List<string>(warningSet);
-        warnings.Sort(StringComparer.Ordinal);
         string captureId = activeRequest.RequestId
             + "-"
             + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                 .ToString(CultureInfo.InvariantCulture);
+        bool hasGoldenMask = false;
+        GoldenMaskArtifactDescriptor goldenMask = null;
+        string goldenMaskReason = "golden_mask_artifact_unavailable";
+        try
+        {
+            hasGoldenMask = GoldenMaskArtifactStore.TryPersist(
+                anchorSample.MeshSnapshot,
+                captureId,
+                anchorSample.TrueDepthHardware,
+                anchorSample.DepthDataObserved,
+                anchorSample.FaceTrackingSupported,
+                anchorSample.DeviceModel,
+                out goldenMask,
+                out goldenMaskReason);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogWarning(
+                "[UnifiedFaceCapture] optional Golden Mask artifact failed: "
+                + exception.GetType().Name);
+        }
+        if (!hasGoldenMask)
+        {
+            warningSet.Add(
+                string.IsNullOrWhiteSpace(goldenMaskReason)
+                    ? "golden_mask_artifact_unavailable"
+                    : goldenMaskReason);
+        }
+        List<string> warnings = new List<string>(warningSet);
+        warnings.Sort(StringComparer.Ordinal);
 
         StringBuilder json = new StringBuilder(2048);
         json.Append("{\"type\":\"unified_face_capture_completed\"");
@@ -1338,6 +1366,10 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         json.Append(",\"height\":").Append(anchorSample.ImageHeight);
         json.Append(",\"orientation\":\"upright\",\"mirrored\":false}");
         json.Append(",\"face3d\":").Append(profile.ToCanonicalJson());
+        if (hasGoldenMask)
+        {
+            json.Append(",\"goldenMask\":").Append(goldenMask.ToJson());
+        }
         json.Append(",\"hairline\":{");
         json.Append("\"analysisEligible\":").Append(
             Bool(hairlineAnalysisEligible));

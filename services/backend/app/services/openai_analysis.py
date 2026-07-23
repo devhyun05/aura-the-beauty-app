@@ -816,8 +816,6 @@ def append_analysis_metric(metrics_path: str | None, record: dict[str, Any]) -> 
     logger.warning("[aura:metrics] append failed reason=%s", exc.__class__.__name__)
 
 
-RECOMMENDED_MAKEUP_COUNT = 1
-
 # Bedrock forced tool use로 단일호출 출력을 강제하는 스키마. required 목록은
 # _validate_analysis_result_before_normalization의 필수 필드와 일치해야 하며,
 # test_analysis_tool_schema_matches_validator가 드리프트를 막는다. additionalProperties는
@@ -948,25 +946,6 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
         {key: _HEX_COLOR for key in MAKEUP_COLOR_KEYS},
         list(MAKEUP_COLOR_KEYS),
       ),
-      "recommendedMakeups": {
-        "type": "array",
-        "minItems": RECOMMENDED_MAKEUP_COUNT,
-        "maxItems": RECOMMENDED_MAKEUP_COUNT,
-        "items": _obj(
-          {
-            "title": _STR,
-            "subtitle": _STR,
-            "description": _STR,
-            "tags": {
-              "type": "array",
-              "minItems": 2,
-              "maxItems": 2,
-              "items": _STR,
-            },
-          },
-          ["title", "subtitle", "description", "tags"],
-        ),
-      },
       "regionNotes": _obj(
         {region: region_note for region in ("upper", "mid", "lower", "jaw")},
         ["upper", "mid", "lower", "jaw"],
@@ -1002,7 +981,6 @@ def _build_face_analysis_tool_schema() -> dict[str, Any]:
       "baseMakeupGuide",
       "makeupGuideline",
       "makeupColors",
-      "recommendedMakeups",
       "regionNotes",
       "impressionNotes",
       "stylingLooks",
@@ -1031,7 +1009,6 @@ PRESCRIPTION_FIELD_KEYS = (
   "baseMakeupGuide",
   "makeupGuideline",
   "makeupColors",
-  "recommendedMakeups",
 )
 STYLING_FIELD_KEYS = ("stylingLooks",)
 # 구조화 피부(#5)는 독립 병렬 레그로 둔다 — perception/prescription이 이미 ~23s라
@@ -1083,7 +1060,7 @@ _FANOUT_PERCEPTION_DIRECTIVE = (
   "impressionNotes만 작성해. 메이크업 가이드·추천·스타일링은 만들지 마."
 )
 _FANOUT_PRESCRIPTION_DIRECTIVE = (
-  "이번 호출에서는 baseMakeupGuide, makeupGuideline, recommendedMakeups만 작성해. "
+  "이번 호출에서는 baseMakeupGuide, makeupGuideline, makeupColors만 작성해. "
   "스타일링 룩·얼굴형·피부타입·무드·요약·부위노트·인상노트는 만들지 마."
 )
 _FANOUT_STYLING_DIRECTIVE = (
@@ -1108,14 +1085,12 @@ DEFAULT_IMPRESSION_AXES = (
 ANALYSIS_OUTPUT_FIELD_GUIDE = (
   "Top-level JSON keys: faceShape, skinType, "
   "recommendedMood, tags, summary, shortSummary, skinAnalysisSummary, "
-  "baseMakeupGuide, makeupGuideline, recommendedMakeups, beautyGuide, "
+  "baseMakeupGuide, makeupGuideline, makeupColors, beautyGuide, "
   "regionNotes, impressionNotes, stylingLooks. "
   "makeupGuideline keys: brow, blush, highlight, eyeshadow, eyeliner, lip. "
   "makeupColors keys: lip, blush, eyeshadow, brow, eyeliner. Each value is a "
   "'#RRGGBB' hex color grounded in the user's measuredPersonalColor and "
   "consistent with makeupGuideline, natural makeup saturation (no neon). "
-  "recommendedMakeups must be exactly 1 object. The object keys: title, "
-  "subtitle, description, tags. tags must contain exactly 2 strings. "
   "beautyGuide is optional but recommended. beautyGuide keys: bestColors, "
   "bestNeutrals, bestAccentColors, avoidColors, hairColorDirection, "
   "hairstyleDirection, finalFormula. "
@@ -1258,16 +1233,7 @@ _ANALYSIS_SEC_PRESCRIPTION = (
   "실물 메이크업으로 자연스러운 채도·명도를 지켜(형광·순색 금지). "
   "brow는 눈썹 모양/결/두께 방향, eyeshadow는 색과 눈두덩이 배치, lip은 립 컬러와 립라인 방향, "
   "highlight는 T존/눈밑/광대 등 위치, eyeliner는 점막/꼬리/두께, blush는 광대/볼 위치와 확산 방향을 설명해. "
-  "추천 메이크업은 위 보고서에서 판단한 퍼스널 컬러, 얼굴형, 톤 요약, 추천 무드, 눈매, 입술 톤, 헤어 방향에 근거해서 정확히 1개만 작성해. "
-  "recommendedMakeups는 단순 텍스트 추천이 아니라, 이후 같은 사용자 얼굴 사진에 적용할 데일리 메이크업 이미지 1장의 콘셉트가 되어야 해. "
-  "recommendedMakeups 항목은 보고서의 어떤 판단 때문에 그 데일리 룩이 어울리는지 description에 명확히 반영해. "
-  "추천은 민낯이나 기본 보정 사진처럼 보이면 안 되지만, 사용자의 성별 표현과 일상 스타일에 맞는 자연스러운 데일리 강도여야 해. "
-  "남성 사용자라면 피부 톤 보정, 눈썹 결 정리, 자연스러운 음영, 립밤/톤 보정, 유분 정돈처럼 남성 그루밍에 어울리는 방식으로 작성해. "
-  "여성 사용자라면 퍼스널 컬러에 맞춘 베이스, 아이, 블러셔, 립 포인트를 자연스럽게 제안해. "
-  "다른 사람이나 일반 모델 기준이 아니라 업로드된 사용자 얼굴에 어울리는 추천으로만 작성해. "
-  "추천명은 클리어 & 글로시, 과즙상, 깔끔한 또렷함 같은 고정 예시를 반복하지 말고 사진 분석 결과에 맞춰 새롭게 판단해. "
   "비추천 메이크업, 피해야 할 메이크업, avoidedMakeups는 절대 생성하지 마. "
-  "각 추천은 앱 카드에 들어갈 수 있게 title은 12자 이내, subtitle은 16자 이내, description은 두 줄 이내, tags는 2개만 포함해. "
   "텍스트는 짧고 실용적으로 작성하고, 일반론이나 누구에게나 맞는 조언을 쓰지 마. "
 )
 _ANALYSIS_SEC_STYLING = (
@@ -2182,94 +2148,6 @@ class OpenAIAnalysisService:
 
     return self._first_normalized_text(result.get("baseMakeupGuide"), fallback)
 
-  def _default_recommended_makeup_card(
-    self,
-    result: dict[str, Any],
-    index: int,
-  ) -> dict[str, Any]:
-    personal_color = self._first_normalized_text(result.get("personalColor"), "분석 톤")
-    face_shape = self._first_normalized_text(result.get("faceShape"), "얼굴 균형")
-    tone_summary = self._first_normalized_text(result.get("toneSummary"), personal_color)
-    recommended_mood = self._first_normalized_text(result.get("recommendedMood"), tone_summary)
-    tone_keyword = self._trim_text_field(tone_summary.replace(" ", ""), 6) or "맞춤톤"
-    mood_keyword = self._trim_text_field(recommended_mood.replace(" ", ""), 6) or "추천무드"
-    face_keyword = self._trim_text_field(face_shape.replace(" ", ""), 6) or "얼굴균형"
-    templates = [
-      {
-        "title": f"{tone_keyword} 베이스",
-        "subtitle": f"{mood_keyword} 피부",
-        "description": (
-          f"{personal_color}와 {tone_summary}에 맞춰 피부 결, 볼 생기, 립 광을 "
-          "자연스럽게 살린 메이크업이에요."
-        ),
-        "tags": [tone_keyword, "베이스"],
-      },
-      {
-        "title": f"{face_keyword} 아이",
-        "subtitle": "눈매 균형 포인트",
-        "description": (
-          f"{face_shape} 인상을 바탕으로 눈썹 결, 아이 음영, 아이라인을 "
-          "선명하지만 무겁지 않게 잡은 룩이에요."
-        ),
-        "tags": [face_keyword, "아이"],
-      },
-      {
-        "title": f"{mood_keyword} 립",
-        "subtitle": "립 블러셔 조화",
-        "description": (
-          f"{recommended_mood} 방향에 맞춰 립 컬러와 블러셔 위치를 연결해 "
-          "얼굴 분위기를 또렷하게 만든 룩이에요."
-        ),
-        "tags": [mood_keyword, "립"],
-      },
-    ]
-
-    return templates[index % len(templates)]
-
-  def _ensure_recommended_makeups(self, result: dict[str, Any]) -> list[dict[str, Any]]:
-    recommended_makeups = result.get("recommendedMakeups")
-    cards: list[dict[str, Any]] = []
-
-    if isinstance(recommended_makeups, list):
-      cards = [card for card in recommended_makeups if isinstance(card, dict)]
-
-    while len(cards) < RECOMMENDED_MAKEUP_COUNT:
-      cards.append(self._default_recommended_makeup_card(result, len(cards)))
-
-    normalized_cards: list[dict[str, Any]] = []
-
-    for index, card in enumerate(cards[:RECOMMENDED_MAKEUP_COUNT]):
-      fallback = self._default_recommended_makeup_card(result, index)
-      raw_tags = card.get("tags")
-      tags = [
-        str(tag).strip()
-        for tag in raw_tags
-        if isinstance(raw_tags, list) and str(tag).strip()
-      ] if isinstance(raw_tags, list) else []
-      fallback_tags = fallback["tags"] if isinstance(fallback["tags"], list) else []
-      tags = (tags + fallback_tags)[:2]
-
-      normalized_cards.append(
-        {
-          **card,
-          "title": self._trim_text_field(
-            self._first_normalized_text(card.get("title"), fallback["title"]),
-            12,
-          ),
-          "subtitle": self._trim_text_field(
-            self._first_normalized_text(card.get("subtitle"), fallback["subtitle"]),
-            16,
-          ),
-          "description": self._trim_text_field(
-            self._first_normalized_text(card.get("description"), fallback["description"]),
-            82,
-          ),
-          "tags": tags,
-        },
-      )
-
-    return normalized_cards
-
   def _ensure_region_notes(self, result: dict[str, Any]) -> dict[str, dict[str, str]]:
     notes = result.get("regionNotes")
     normalized_notes = notes if isinstance(notes, dict) else {}
@@ -2475,17 +2353,6 @@ class OpenAIAnalysisService:
       for key in ("brow", "blush", "highlight", "eyeshadow", "eyeliner", "lip"):
         require_text(guideline.get(key), f"makeupGuideline.{key}")
 
-    cards = result.get("recommendedMakeups")
-    if not isinstance(cards, list) or len(cards) != RECOMMENDED_MAKEUP_COUNT:
-      missing.append("recommendedMakeups")
-    else:
-      card = cards[0] if isinstance(cards[0], dict) else {}
-      for key in ("title", "subtitle", "description"):
-        require_text(card.get(key), f"recommendedMakeups[0].{key}")
-      tags = card.get("tags")
-      if not isinstance(tags, list) or len([tag for tag in tags if str(tag).strip()]) < 2:
-        missing.append("recommendedMakeups[0].tags")
-
     region_notes = result.get("regionNotes")
     if not isinstance(region_notes, dict):
       missing.append("regionNotes")
@@ -2558,7 +2425,6 @@ class OpenAIAnalysisService:
     result["recommendedMood"] = self._trim_text_field(result.get("recommendedMood"), 18)
     result["baseMakeupGuide"] = self._ensure_base_makeup_guide(result)
     result["makeupGuideline"] = self._ensure_makeup_guideline(result)
-    result["recommendedMakeups"] = self._ensure_recommended_makeups(result)
     result["regionNotes"] = self._ensure_region_notes(result)
     result["impressionNotes"] = self._ensure_impression_notes(result)
     result["stylingLooks"] = self._ensure_styling_looks(result)
@@ -3214,169 +3080,6 @@ class OpenAIAnalysisService:
 
     return generated_image_bytes, duration_ms
 
-  def _generate_single_makeup_image(
-    self,
-    source_image_bytes: bytes,
-    source_content_type: str,
-    analysis_result: dict[str, Any],
-    card: dict[str, Any],
-    index: int,
-  ) -> dict[str, Any]:
-    generated_image_bytes, duration_ms = self._edit_makeup_image_bytes(
-      source_image_bytes,
-      source_content_type,
-      analysis_result,
-      card,
-      index,
-    )
-    upload = self._upload_generated_image(generated_image_bytes, index + 1)
-    logger.info(
-      "[aura:openai] image-generation:item-success index=%s bytes=%s durationMs=%s imageUrl=%s",
-      index + 1,
-      len(generated_image_bytes),
-      duration_ms,
-      upload["imageUrl"],
-    )
-
-    return {
-      **card,
-      "imageUrl": upload["imageUrl"],
-      "imageBucket": upload["bucket"],
-      "imageObjectKey": upload["objectKey"],
-      "_imageGenerationDurationMs": duration_ms,
-    }
-
-  def _generate_recommended_makeup_images_sync(
-    self,
-    payload: dict[str, Any],
-    source_image_bytes: bytes,
-    analysis_result: dict[str, Any],
-  ) -> dict[str, Any]:
-    recommended_makeups = analysis_result.get("recommendedMakeups")
-
-    if not isinstance(recommended_makeups, list) or not recommended_makeups:
-      raise AppError(
-        502,
-        "RECOMMENDED_MAKEUPS_REQUIRED",
-        "AI analysis must return recommendedMakeups before image generation.",
-      )
-
-    cards = [
-      card
-      for card in recommended_makeups[:RECOMMENDED_MAKEUP_COUNT]
-      if isinstance(card, dict)
-    ]
-
-    if len(cards) < RECOMMENDED_MAKEUP_COUNT:
-      raise AppError(
-        502,
-        "RECOMMENDED_MAKEUPS_INCOMPLETE",
-        "AI analysis must return exactly 1 recommended makeup card.",
-      )
-
-    started_at = time.monotonic()
-    source_content_type = self._infer_content_type(payload)
-    source_image_bytes, source_content_type = self._prepare_source_image_for_generation(
-      source_image_bytes,
-      source_content_type,
-    )
-    generated_cards: list[dict[str, Any] | None] = [None] * len(cards)
-    logger.info(
-      "[aura:openai] image-generation:batch-start count=%s model=%s",
-      len(cards),
-      self.settings.openai_image_model_id,
-    )
-
-    with ThreadPoolExecutor(max_workers=len(cards)) as executor:
-      futures = {
-        executor.submit(
-          self._generate_single_makeup_image,
-          source_image_bytes,
-          source_content_type,
-          analysis_result,
-          card,
-          index,
-        ): index
-        for index, card in enumerate(cards)
-      }
-
-      for future in as_completed(futures):
-        index = futures[future]
-        generated_cards[index] = future.result()
-
-    missing_image_indexes = [
-      index + 1
-      for index, card in enumerate(generated_cards)
-      if not isinstance(card, dict) or not self._first_normalized_text(card.get("imageUrl"))
-    ]
-
-    if missing_image_indexes:
-      raise AppError(
-        502,
-        "RECOMMENDED_MAKEUP_IMAGES_INCOMPLETE",
-        "Recommended makeup image generation must return exactly 1 image URL.",
-        details={"missingIndexes": missing_image_indexes},
-      )
-
-    image_generation_batch_ms = round((time.monotonic() - started_at) * 1000)
-    logger.info(
-      "[aura:openai] image-generation:batch-success count=%s durationMs=%s",
-      len(generated_cards),
-      image_generation_batch_ms,
-    )
-    image_generation_items = [
-      {
-        "index": index + 1,
-        "durationMs": card.pop("_imageGenerationDurationMs", None),
-      }
-      for index, card in enumerate(generated_cards)
-      if isinstance(card, dict)
-    ]
-
-    return {
-      **analysis_result,
-      "recommendedMakeups": generated_cards,
-      "timing": {
-        **(
-          analysis_result.get("timing")
-          if isinstance(analysis_result.get("timing"), dict)
-          else {}
-        ),
-        "imageGenerationBatchMs": image_generation_batch_ms,
-        "imageGenerationItems": image_generation_items,
-      },
-    }
-
-  def _validate_completed_analysis_result(self, result: dict[str, Any]) -> None:
-    recommended_makeups = result.get("recommendedMakeups")
-
-    if (
-      not isinstance(recommended_makeups, list)
-      or len(recommended_makeups) != RECOMMENDED_MAKEUP_COUNT
-    ):
-      raise AppError(
-        502,
-        "RECOMMENDED_MAKEUPS_REQUIRED",
-        "Completed analysis must include exactly 1 recommended makeup card.",
-        details={
-          "receivedCount": len(recommended_makeups) if isinstance(recommended_makeups, list) else 0,
-        },
-      )
-
-    missing_image_indexes = [
-      index + 1
-      for index, card in enumerate(recommended_makeups)
-      if not isinstance(card, dict) or not self._first_normalized_text(card.get("imageUrl"))
-    ]
-
-    if missing_image_indexes:
-      raise AppError(
-        502,
-        "RECOMMENDED_MAKEUP_IMAGES_REQUIRED",
-        "Completed analysis must include 1 generated makeup image URL.",
-        details={"missingIndexes": missing_image_indexes},
-      )
-
   async def analyze_text(
     self,
     payload: dict[str, Any],
@@ -3409,13 +3112,6 @@ class OpenAIAnalysisService:
       analysis_result["analysisModel"] = self.settings.effective_analysis_model_id
       analysis_result["embeddingProvider"] = "bedrock"
       analysis_result["embeddingModel"] = self.settings.effective_embedding_model_id
-      analysis_result["imageGenerationProvider"] = self.settings.image_generation_provider_normalized
-      analysis_result["imageGenerationModel"] = (
-        self.settings.openai_image_model_id
-        if self.settings.image_generation_provider_normalized == "openai"
-        else None
-      )
-      analysis_result["imageGenerationStatus"] = "pending"
       analysis_result["timing"] = {
         **(
           analysis_result.get("timing")
@@ -3445,195 +3141,6 @@ class OpenAIAnalysisService:
         "AI text analysis invocation failed.",
         details={"reason": exc.__class__.__name__},
       ) from exc
-
-  async def prepare_generation_source(
-    self,
-    payload: dict[str, Any],
-    source_image_bytes: bytes | None = None,
-  ) -> tuple[bytes, str]:
-    """Read the source photo (if not already supplied) and downscale/re-encode
-    it for image generation.
-
-    This is safe to run concurrently with text analysis so the slow OpenAI
-    image edit can start as soon as the report text is ready, instead of paying
-    for the S3 read and resize on the image-generation critical path.
-    """
-    if source_image_bytes is None:
-      source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
-
-    source_content_type = self._infer_content_type(payload)
-
-    return await asyncio.to_thread(
-      self._prepare_source_image_for_generation,
-      source_image_bytes,
-      source_content_type,
-    )
-
-  async def generate_recommended_makeup_images(
-    self,
-    payload: dict[str, Any],
-    analysis_result: dict[str, Any],
-    on_card_generated: Any | None = None,
-    *,
-    prepared_source: tuple[bytes, str] | None = None,
-  ) -> dict[str, Any]:
-    if self.settings.image_generation_provider_normalized != "openai":
-      raise AppError(
-        503,
-        "IMAGE_GENERATION_PROVIDER_UNSUPPORTED",
-        "Only OpenAI image generation is currently supported.",
-      )
-
-    recommended_makeups = analysis_result.get("recommendedMakeups")
-
-    if not isinstance(recommended_makeups, list) or not recommended_makeups:
-      raise AppError(
-        502,
-        "RECOMMENDED_MAKEUPS_REQUIRED",
-        "AI analysis must return recommendedMakeups before image generation.",
-      )
-
-    cards = [
-      card
-      for card in recommended_makeups[:RECOMMENDED_MAKEUP_COUNT]
-      if isinstance(card, dict)
-    ]
-
-    if len(cards) < RECOMMENDED_MAKEUP_COUNT:
-      raise AppError(
-        502,
-        "RECOMMENDED_MAKEUPS_INCOMPLETE",
-        "AI analysis must return exactly 1 recommended makeup card.",
-      )
-
-    started_at = time.monotonic()
-
-    if prepared_source is not None:
-      # Source was read and downscaled ahead of time (overlapped with text
-      # analysis), so image generation starts without extra S3/CPU work.
-      source_image_bytes, source_content_type = prepared_source
-      image_source_read_ms = 0
-      image_source_prepare_ms = 0
-    else:
-      source_read_started_at = time.monotonic()
-      source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
-      image_source_read_ms = round((time.monotonic() - source_read_started_at) * 1000)
-      source_content_type = self._infer_content_type(payload)
-      source_prepare_started_at = time.monotonic()
-      source_image_bytes, source_content_type = await asyncio.to_thread(
-        self._prepare_source_image_for_generation,
-        source_image_bytes,
-        source_content_type,
-      )
-      image_source_prepare_ms = round((time.monotonic() - source_prepare_started_at) * 1000)
-
-    generated_cards: list[dict[str, Any]] = [dict(card) for card in cards]
-    image_generation_items: list[dict[str, Any]] = []
-    image_generation_errors: list[dict[str, Any]] = []
-    logger.info(
-      "[aura:openai] image-generation:background-start count=%s model=%s",
-      len(cards),
-      self.settings.openai_image_model_id,
-    )
-
-    async def generate_card(index: int, card: dict[str, Any]):
-      try:
-        generated_card = await asyncio.to_thread(
-          self._generate_single_makeup_image,
-          source_image_bytes,
-          source_content_type,
-          analysis_result,
-          card,
-          index,
-        )
-        return index, generated_card, None
-      except Exception as exc:  # noqa: BLE001 - keep other image tasks alive.
-        return index, None, exc
-
-    tasks = [asyncio.create_task(generate_card(index, card)) for index, card in enumerate(cards)]
-
-    for task in asyncio.as_completed(tasks):
-      index, generated_card, error = await task
-
-      if error is not None:
-        error_message = str(error)
-        error_detail = {
-          "index": index + 1,
-          "message": error_message,
-          "reason": error.__class__.__name__,
-        }
-
-        if isinstance(error, AppError):
-          error_detail.update({"code": error.code, "message": error.message})
-
-        image_generation_errors.append(error_detail)
-        generated_cards[index] = {**generated_cards[index], "imageStatus": "failed"}
-        logger.warning(
-          "[aura:openai] image-generation:item-failed index=%s reason=%s message=%s",
-          index + 1,
-          error.__class__.__name__,
-          error_message,
-        )
-        continue
-
-      if not isinstance(generated_card, dict):
-        continue
-
-      duration_ms = generated_card.pop("_imageGenerationDurationMs", None)
-      generated_cards[index] = {**generated_card, "imageStatus": "ready"}
-      image_generation_items.append({"index": index + 1, "durationMs": duration_ms})
-      partial_result = {
-        **analysis_result,
-        "recommendedMakeups": generated_cards,
-        "imageGenerationStatus": "processing",
-        "timing": {
-          **(
-            analysis_result.get("timing")
-            if isinstance(analysis_result.get("timing"), dict)
-            else {}
-          ),
-          "imageSourceReadMs": image_source_read_ms,
-          "imageSourcePrepareMs": image_source_prepare_ms,
-          "imageGenerationItems": sorted(image_generation_items, key=lambda item: item["index"]),
-          "imageGenerationStatus": "processing",
-        },
-      }
-
-      if on_card_generated:
-        await on_card_generated(index, generated_cards[index], partial_result)
-
-    image_generation_status = "failed" if image_generation_errors else "completed"
-    image_generation_total_ms = round((time.monotonic() - started_at) * 1000)
-    result = {
-      **analysis_result,
-      "recommendedMakeups": generated_cards,
-      "imageGenerationStatus": image_generation_status,
-      "timing": {
-        **(
-          analysis_result.get("timing")
-          if isinstance(analysis_result.get("timing"), dict)
-          else {}
-        ),
-        "imageSourceReadMs": image_source_read_ms,
-        "imageSourcePrepareMs": image_source_prepare_ms,
-        "imageGenerationItems": sorted(image_generation_items, key=lambda item: item["index"]),
-        "imageGenerationStatus": image_generation_status,
-        "imageGenerationTotalMs": image_generation_total_ms,
-      },
-    }
-
-    if image_generation_errors:
-      result["imageGenerationErrors"] = image_generation_errors
-
-    logger.info(
-      "[aura:openai] image-generation:background-finished status=%s generated=%s failed=%s durationMs=%s",
-      image_generation_status,
-      len(image_generation_items),
-      len(image_generation_errors),
-      image_generation_total_ms,
-    )
-
-    return result
 
   def _generate_personalized_makeup_recommendations_sync(
     self,
@@ -3782,32 +3289,7 @@ class OpenAIAnalysisService:
       ) from exc
 
   async def analyze_image(self, payload: dict[str, Any]) -> dict[str, Any]:
-    try:
-      total_started_at = time.monotonic()
-      analysis_result = await self.analyze_text(payload)
-      result = await self.generate_recommended_makeup_images(payload, analysis_result)
-      result["timing"] = {
-        **(result.get("timing") if isinstance(result.get("timing"), dict) else {}),
-        "totalMs": round((time.monotonic() - total_started_at) * 1000),
-      }
-      self._validate_completed_analysis_result(result)
-
-      return result
-    except AppError:
-      raise
-    except (OpenAIError, BotoCoreError, ClientError) as exc:
-      logger.exception("[aura:ai] invocation:failed")
-      raise AppError(
-        502,
-        "AI_INVOCATION_FAILED",
-        "AI analysis or image generation failed.",
-        details={"reason": exc.__class__.__name__, "message": str(exc)},
-      ) from exc
-    except Exception as exc:
-      logger.exception("[aura:ai] invocation:failed")
-      raise AppError(
-        502,
-        "AI_INVOCATION_FAILED",
-        "AI analysis or image generation failed.",
-        details={"reason": exc.__class__.__name__},
-      ) from exc
+    # Backward-compatible method name for callers that still expect it. Face
+    # reports are text-only; recommendation imagery lives in the separate
+    # makeup-recommendation service.
+    return await self.analyze_text(payload)

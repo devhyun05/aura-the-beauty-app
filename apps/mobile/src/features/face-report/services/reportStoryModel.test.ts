@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import {buildFaceReportStoryModel} from './reportStoryModel';
+import {buildMinimumFaceReportData} from './minimumFaceReport';
 import type {ReportData} from '../reportTypes';
 
-function fullInput(): Pick<ReportData, 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7' | 's8'> {
+function fullInput(): Pick<ReportData, 'goldenMask' | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7' | 's8'> {
   return {
     s1: {} as ReportData['s1'],
     s2: {} as NonNullable<ReportData['s2']>,
@@ -23,7 +24,7 @@ function fullInput(): Pick<ReportData, 's1' | 's2' | 's3' | 's4' | 's5' | 's6' |
 }
 
 const full = buildFaceReportStoryModel(fullInput());
-assert.equal(full.pages.length, 22);
+assert.equal(full.pages.length, 21);
 assert.deepEqual(full.pages.map(page => page.id), [
   'summary:cover',
   'summary:overview',
@@ -46,12 +47,37 @@ assert.deepEqual(full.pages.map(page => page.id), [
   'styling:glam',
   'skin:cover',
   'skin:overview',
-  'makeup:cta',
 ]);
 assert.equal(full.featurePageIds.upper, 'features:upper');
 assert.equal(full.featurePageIds.mid, 'features:mid');
 assert.equal(full.featurePageIds.lower, 'features:lower');
 assert.equal(full.sectionCoverPageIds['personal-color'], 'personal-color:cover');
+
+const withGoldenMaskInput = fullInput();
+withGoldenMaskInput.goldenMask = {
+  available: true,
+  byteSize: 38_400,
+  captureId: 'capture-1',
+  contentType: 'application/vnd.aura.golden-mask',
+  createdAt: '2025-07-23T00:00:00.000Z',
+  createdAtUnixMs: 1_753_238_400_000,
+  indexCount: 6_912,
+  mediaId: 'media-1',
+  schemaVersion: 'aura.golden-mask.v1',
+  source: 'arkit_face_mesh',
+  topologyFingerprint: 'a'.repeat(64),
+  triangleIndexCount: 6_912,
+  trueDepthHardware: true,
+  uvCount: 1_220,
+  vertexCount: 1_220,
+};
+const withGoldenMask = buildFaceReportStoryModel(withGoldenMaskInput);
+assert.equal(withGoldenMask.pages.length, 22);
+assert.deepEqual(withGoldenMask.pages.slice(0, 3).map(page => page.id), [
+  'summary:cover',
+  'summary:golden-mask',
+  'summary:overview',
+]);
 
 const sparseInput = fullInput();
 sparseInput.s2 = null;
@@ -61,13 +87,12 @@ sparseInput.s6 = null;
 sparseInput.s7 = null;
 sparseInput.s8 = null;
 const sparse = buildFaceReportStoryModel(sparseInput);
-assert.deepEqual(sparse.sections.map(section => section.id), ['summary', 'body', 'makeup']);
+assert.deepEqual(sparse.sections.map(section => section.id), ['summary', 'body']);
 assert.deepEqual(sparse.pages.map(page => page.id), [
   'summary:cover',
   'summary:overview',
   'body:cover',
   'body:overview',
-  'makeup:cta',
 ]);
 
 const partialFeaturesInput = fullInput();
@@ -82,5 +107,28 @@ assert.equal(partialFeatures.featurePageIds.upper, 'features:upper');
 assert.equal(partialFeatures.featurePageIds.jaw, 'features:jaw');
 assert.equal(partialFeatures.featurePageIds.mid, undefined);
 assert.equal(new Set(partialFeatures.pages.map(page => page.id)).size, partialFeatures.pages.length);
+
+const minimumData = buildMinimumFaceReportData({
+  capturedPhotoUri: 'file:///face.jpg',
+  faceShape: '계란형',
+  has3DModel: true,
+  personalColor: '여름 뮤트',
+  ratioSummary: '세 구획이 고르게 나뉜 편이에요',
+  recommendedMood: '차분한 선명함',
+  skinType: '복합성',
+});
+assert.equal(minimumData.initialPageId, 'summary:overview');
+assert.equal(minimumData.s1.photo.uri, 'file:///face.jpg');
+assert.deepEqual(
+  minimumData.s1.cards.map(card => card.label),
+  ['얼굴형', '피부 타입', '추천 무드', '퍼스널 컬러', '얼굴 비율', '3D 페이스'],
+);
+const minimumStory = buildFaceReportStoryModel(minimumData);
+assert.deepEqual(minimumStory.sections.map(section => section.id), ['summary']);
+assert.deepEqual(minimumStory.pages.map(page => page.id), [
+  'summary:cover',
+  'summary:overview',
+  'summary:generation',
+]);
 
 console.log('reportStoryModel contract passed');

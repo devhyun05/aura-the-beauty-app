@@ -84,7 +84,14 @@ def test_schema_report_lists_missing_embedding_columns() -> None:
   )
 
   assert report["ok"] is False
-  assert report["missingColumns"] == {"analysis_reports": ["deleted_at", "embedding"]}
+  assert report["missingColumns"] == {
+    "analysis_reports": [
+      "deleted_at",
+      "embedding",
+      "golden_mask_media_id",
+      "golden_mask_metadata",
+    ],
+  }
 
 
 def test_schema_report_validates_auradin_v2_constraints_and_partial_indexes() -> None:

@@ -6,6 +6,9 @@ from pydantic import Field, field_validator, model_validator
 from app.core.media_policy import (
   ALLOWED_UPLOAD_CONTENT_TYPES,
   ALLOWED_UPLOAD_MEDIA_KINDS,
+  GOLDEN_MASK_CONTENT_TYPE,
+  GOLDEN_MASK_MAX_BYTES,
+  GOLDEN_MASK_MEDIA_KIND,
   normalize_upload_content_type,
 )
 from app.schemas.base import CamelModel
@@ -59,8 +62,19 @@ class PresignedUploadRequest(CamelModel):
   def validate_upload_policy(self):
     if self.thumbnail is not None and self.media_kind != "community-thread":
       raise ValueError("Thumbnails are only supported for community uploads.")
-    if self.source == "generated" and self.media_kind != "hair-analysis-mask":
-      raise ValueError("Generated uploads are only supported for hair analysis masks.")
+    if self.source == "generated" and self.media_kind not in {
+      "hair-analysis-mask",
+      GOLDEN_MASK_MEDIA_KIND,
+    }:
+      raise ValueError("Generated uploads are only supported for generated media kinds.")
+    is_golden_mask_kind = self.media_kind == GOLDEN_MASK_MEDIA_KIND
+    is_golden_mask_content = self.content_type == GOLDEN_MASK_CONTENT_TYPE
+    if is_golden_mask_kind != is_golden_mask_content:
+      raise ValueError("Golden Mask uploads require the Golden Mask content type and media kind.")
+    if is_golden_mask_kind and (
+      self.byte_size is None or self.byte_size > GOLDEN_MASK_MAX_BYTES
+    ):
+      raise ValueError("Golden Mask uploads require byteSize between 1 byte and 1 MiB.")
     return self
 
 
