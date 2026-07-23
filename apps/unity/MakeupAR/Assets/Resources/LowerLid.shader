@@ -180,6 +180,12 @@ Shader "ARMakeup/LowerLid"
             #define TRI_FEATHER 0.10   // 바깥 코너(메시 경계) 페더 폭
             #define TRI_V_WIDTH 0.55   // 세로 폭 비율 — 라인(v=0) 근처에서 이 값까지 페이드
             #define CONCEALER_ALPHA_CEILING 0.45 // 피부 명암 보존 보정의 독립 기여 상한
+            // 고정 밴드 안을 전부 밝히지 않고 푸른기+어두움이 실제로 있는 픽셀만 선택한다.
+            // 피부는 본래 R 우세라 blueness가 음수일 수 있어 상대적으로 덜 웜한 구간부터 페더.
+            #define CC_BLUE_LO -0.14
+            #define CC_BLUE_HI -0.015
+            #define CC_DARK_LO 0.28
+            #define CC_DARK_HI 0.68
 
             // 애교살 볼륨 프로파일 상수 (전부 실기기 튜닝 대상) — "판"이 아니라 "살(볼록 롤)".
             // 롤은 하안검 lash 라인 바로 아래 얇게 붙는다: aegyoV = vv/AEGYO_BAND 로 초승달
@@ -240,7 +246,8 @@ Shader "ARMakeup/LowerLid"
                 fixed3 tinted = feed * chroma;
                 float tintedLuma = dot(tinted, LUMA_W);
                 tinted *= feedLuma / max(tintedLuma, 1e-4);
-                float lift = 0.08 * (1.0 - feedLuma);
+                // 색 중화가 본체이고 밝힘은 보조. 이전 0.08의 흰 띠 인상을 절반 이하로 낮춘다.
+                float lift = 0.035 * (1.0 - feedLuma);
                 return saturate(tinted + lift);
             }
 
@@ -423,7 +430,11 @@ Shader "ARMakeup/LowerLid"
                 // 양눈 메시가 같은 해부학 방향으로 UV를 갖기 때문에 별도 좌우 반전은 없다.
                 // PNG/Photoshop 캔버스는 위→아래가 y 증가, Unity UV는 아래→위이므로 v만 뒤집는다.
                 float2 ccMaskUV = float2(along, 1.0 - v);
-                float ccMask = tex2D(_ConcealerMask, ccMaskUV).r;
+                float ccBlue = feed.b - max(feed.r, feed.g);
+                float ccBlueSelector = smoothstep(CC_BLUE_LO, CC_BLUE_HI, ccBlue);
+                float ccDarkSelector = smoothstep(CC_DARK_LO, CC_DARK_HI, 1.0 - luma);
+                float ccMask = tex2D(_ConcealerMask, ccMaskUV).r
+                             * ccBlueSelector * ccDarkSelector;
                 float ccAmt = ccMask * _ConcealerIntensity;
                 ccAmt = TexEdge(TexCoverage(saturate(ccAmt), ccTexC), ccTexE); // 제형 커버·엣지(눈밑 컨실러)
                 float ccA = saturate(ccAmt) * CONCEALER_ALPHA_CEILING;

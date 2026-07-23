@@ -95,6 +95,8 @@ Shader "ARMakeup/CameraFeed"
             // 무효 → seg 파운데 전체 off(코어 제외 불가 프레임의 이중 도포 방지 우선).
             float4 _FndOval;      // (cx, cy, rx, ry) 이미지 UV
             float4 _FndOvalAxis;  // (cosθ, sinθ, active, 0)
+            float4 _FndChinAxis;  // (chinX, chinY, forehead→chin axisX, axisY)
+            float _FndFaceHeight; // forehead→chin 이미지 UV 거리(0=무효)
 
             // 세그 확장 GPU 예산 상수 — 배경 전체 화면 패스라 프래그먼트당 예산이 빠듯하다.
             // 스무딩이 켜지면 전화면 8탭(유니폼 분기 — frag의 divergent gradient 주석 참조)
@@ -103,8 +105,10 @@ Shader "ARMakeup/CameraFeed"
             #define SEG_SMOOTH_RADIUS_PX 2.0   // 탭 반경(표시 텍스처 px) // 실기기 튜닝 대상
             #define SEG_SMOOTH_EDGE_GAIN 24.0  // 엣지 보존 가중 지수(FaceMakeup.SmoothSkin과 동일 계수) // 실기기 튜닝 대상
             #define SEG_SMOOTH_LUMA_KEEP 0.35  // luma 보존 비율(0=순수 블러, 1=크로마만 스무딩) // 실기기 튜닝 대상
-            #define SEG_SMOOTH_SKIN_LO 0.35    // 피부(face+body) 확률 페더 하한 // 실기기 튜닝 대상
-            #define SEG_SMOOTH_SKIN_HI 0.75    // 페더 상한 // 실기기 튜닝 대상
+            // 목 body-skin 실측 확신(~0.19)을 포함. 기존 0.35/0.75는 목을 거의 전부
+            // 탈락시켜 얼굴 메시 아래에서 피부결이 끊겼다.
+            #define SEG_SMOOTH_SKIN_LO 0.10    // 피부(face+body) 확률 페더 하한 // 실기기 튜닝 대상
+            #define SEG_SMOOTH_SKIN_HI 0.28    // 페더 상한 // 실기기 튜닝 대상
             // 파운데이션 이음새(귀·턱선·목) 게이트 — 스무딩과 별도 임계. body-skin(B)+face-skin(R)
             // 전이대(skin=max(R,B))를 채우되, 얼굴 메시가 소유·재적용하는 오벌 코어는 seg.r 램프가
             // 아니라 랜드마크 타원 게이트(_FndOval)로 제외한다 — seg.r로는 목까지 죽거나(코어↓)
@@ -247,6 +251,16 @@ Shader "ARMakeup/CameraFeed"
                 return 1.0 - smoothstep(sizeMul - feather, sizeMul + feather, t);
             }
 
+            // 대칭 오벌 제외는 턱 아래까지 0.25 얼굴반경가량 남아 메시 밖 목 상단을
+            // 같이 지웠다. 명시적인 이마→턱 축으로 턱을 지난 방향만 빠르게 해제한다.
+            float NeckRelease(float2 src)
+            {
+                if (_FndFaceHeight <= 1e-4) return 0.0;
+                float chinward = dot(src - _FndChinAxis.xy, _FndChinAxis.zw)
+                                / _FndFaceHeight;
+                return smoothstep(-0.01, 0.08, chinward);
+            }
+
             fixed4 frag(v2f i) : SV_Target
             {
                 float2 src = i.uv;
@@ -338,10 +352,13 @@ Shader "ARMakeup/CameraFeed"
                         float ovalFeather = _FndOvalFeatherDbg >= 0.0 ? _FndOvalFeatherDbg : FND_OVAL_FEATHER;
                         float fndSkin = max(seg.r, seg.b);
                         float insideOval = OvalInside(src, ovalSize, ovalFeather);
+                        float chinRelease = NeckRelease(src);
                         // _FndOvalAxis.z(0=얼굴 소실·미설정)를 곱해 타원 무효 프레임엔 seg 파운데
                         // 전체 off — 코어를 못 가르는 프레임에 전면 도포하면 이중 도포가 나므로
                         // 안 바르는 쪽이 안전(설계 폴백).
-                        fCov *= smoothstep(segLo, segHi, fndSkin) * (1.0 - insideOval) * _FndOvalAxis.z;
+                        fCov *= smoothstep(segLo, segHi, fndSkin)
+                              * max(1.0 - insideOval, chinRelease)
+                              * _FndOvalAxis.z;
                         fixed3 found = FoundationTarget(_FoundationColor.rgb, fLuma, fGain);
                         found = FoundationSoftClip(found);
                         found = ApplyFinish(found, fLuma, src, _FoundationFinish, 0.0,

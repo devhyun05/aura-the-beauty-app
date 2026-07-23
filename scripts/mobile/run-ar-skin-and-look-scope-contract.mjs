@@ -16,6 +16,28 @@ const unityBridgeSource = readFileSync(
   join(repoRoot, 'apps/mobile/src/features/ar/services/unityMakeupBridge.ts'),
   'utf8',
 );
+const cameraFeedSource = readFileSync(
+  join(repoRoot, 'apps/unity/MakeupAR/Assets/Resources/CameraFeed.shader'),
+  'utf8',
+);
+const faceMakeupSource = readFileSync(
+  join(repoRoot, 'apps/unity/MakeupAR/Assets/Resources/FaceMakeup.shader'),
+  'utf8',
+);
+const makeupControllerSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Face/MakeupController.cs',
+  ),
+  'utf8',
+);
+const stencilGuideSource = readFileSync(
+  join(
+    repoRoot,
+    'apps/unity/MakeupAR/Assets/Scripts/MediaPipeGraft/ARwithFable/Face/StencilGuideRenderer.cs',
+  ),
+  'utf8',
+);
 
 assert.match(
   shaderSource,
@@ -70,5 +92,41 @@ const rosyReference = cameraSample.map(channel =>
 );
 assert.ok(luma(protectedFoundation) <= luma(rosyReference) + 1e-6);
 assert.ok(luma(protectedFoundation) < luma(tooBrightFoundation));
+
+assert.match(
+  makeupControllerSource,
+  /Mathf\.Max\(\s*Mathf\.Clamp01\(p\.skinSmoothingExtended\),\s*Mathf\.Clamp01\(p\.skinSmoothing\)\)/,
+  '일반 피부결 보정도 얼굴 메시 밖 턱밑·목 상단 확장 경로를 켜야 한다',
+);
+assert.match(
+  cameraFeedSource,
+  /#define SEG_SMOOTH_SKIN_LO 0\.10\b/,
+  '목 body-skin의 낮은 신뢰도 전이대도 피부결 보정에 포함해야 한다',
+);
+assert.match(
+  cameraFeedSource,
+  /float chinRelease = NeckRelease\(src\);/,
+  '파운데이션 오벌 제외는 턱 방향에서 비대칭으로 풀려야 한다',
+);
+assert.match(
+  cameraFeedSource,
+  /max\(1\.0 - insideOval, chinRelease\)/,
+  '턱 아래는 대칭 오벌 페더가 아니라 목 연결 게이트가 우선해야 한다',
+);
+assert.match(
+  stencilGuideSource,
+  /Shader\.SetGlobalVector\(FndChinAxisId,/,
+  '턱 위치와 얼굴 세로축을 매 프레임 목 연결 게이트에 공급해야 한다',
+);
+assert.match(
+  faceMakeupSource,
+  /float nostrilProtect = 1\.0 - smoothstep\(FEAT_NOS_LUMA_LO, FEAT_NOS_LUMA_HI,\s*dot\(original,/,
+  '콧구멍 제외는 고정 원이 아니라 실제 어두운 픽셀에만 적용해야 한다',
+);
+assert.match(
+  faceMakeupSource,
+  /max\(lipEyeFeat, noseFeat \* nostrilProtect\)/,
+  '콧볼 피부는 보호 타원에서 제외하고 실제 콧구멍만 보호해야 한다',
+);
 
 console.log('AR skin and look-scope runner passed');

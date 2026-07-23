@@ -25,9 +25,13 @@ namespace ARMakeup.Face
         // 블러셔(_BlushTexture) 선례. 0=현행=무변조(하위호환). 컨실러는 하안검 밴드와 값 공유.
         static readonly int ToneTextureId = Shader.PropertyToID("_ToneTexture");
         static readonly int SkinTextureId = Shader.PropertyToID("_SkinTexture");
+        static readonly int SkinDetailPreservationId = Shader.PropertyToID("_SkinDetailPreservation");
+        static readonly int SkinClarityId = Shader.PropertyToID("_SkinClarity");
         static readonly int HighlightTextureId = Shader.PropertyToID("_HighlightTexture");
         static readonly int ContourTextureId = Shader.PropertyToID("_ContourTexture");
         static readonly int ConcealerTextureId = Shader.PropertyToID("_ConcealerTexture");
+        static readonly int CorrectorColorId = Shader.PropertyToID("_CorrectorColor");
+        static readonly int CorrectorIntensityId = Shader.PropertyToID("_CorrectorIntensity");
         static readonly int PowderTextureId = Shader.PropertyToID("_PowderTexture");
         static readonly int BlushFinishId = Shader.PropertyToID("_BlushFinish");
         static readonly int BlushShimmerId = Shader.PropertyToID("_BlushShimmer");
@@ -1143,10 +1147,19 @@ namespace ARMakeup.Face
         static void ApplyTo(Material mat, FilterParams p)
         {
             mat.SetFloat(SmoothingId, Mathf.Clamp01(p.skinSmoothing));
+            // 0은 구 payload/JsonUtility 생략 sentinel. 신규 UI는 0.25..1을 보내며,
+            // 구 룩도 밀랍처럼 되지 않도록 자연스러운 0.7을 기본 복원한다.
+            mat.SetFloat(SkinDetailPreservationId,
+                p.skinDetailPreservation <= 0f ? 0.7f : Mathf.Clamp01(p.skinDetailPreservation));
+            mat.SetFloat(SkinClarityId, Mathf.Clamp(p.skinClarity, -1f, 1f));
             mat.SetFloat(BrighteningId, Mathf.Clamp01(p.skinBrightening));
             // 세그 확장(①이마·목 스무딩 ②헤어 염색) — CameraFeed.shader가 소비하는 전역.
             // _SegOn=0이면 셰이더가 블록째 건너뛰므로 여기선 값만 기록한다.
-            Shader.SetGlobalFloat(SkinSmoothExtId, Mathf.Clamp01(p.skinSmoothingExtended));
+            // 일반 피부결도 턱선에서 끊기지 않게 세그 확장 경로로 보낸다. 기존 전용
+            // 확장값은 더 강한 쪽을 유지하므로 저장 계약/UI 의미는 그대로다.
+            Shader.SetGlobalFloat(SkinSmoothExtId, Mathf.Max(
+                Mathf.Clamp01(p.skinSmoothingExtended),
+                Mathf.Clamp01(p.skinSmoothing)));
             // 그레인(매트 파우더 입자감) — 전역 1회. 전 부위 마감이 공유(0=무변조).
             Shader.SetGlobalFloat(MatteGrainId, Mathf.Clamp01(p.matteGrain));
             Shader.SetGlobalFloat(HairTintIntensityId, Mathf.Clamp01(p.hairTintIntensity));
@@ -1235,15 +1248,26 @@ namespace ARMakeup.Face
             // ApplyTo 뒤 ReassertMaskOverrides가 복원하므로 순서상 자동 정합. softness 0=버킷 0=기존.
             mat.SetTexture(HighlightMaskId, MaskGenerator.HighlightShapeMask(p.highlightEdgeSoftness));
             mat.SetTexture(ContourMaskId, MaskGenerator.ContourShapeMask(p.contourEdgeSoftness));
-            // 컨실러 — FaceMakeup 머티리얼은 붉은기 자동(shape=1)만 소비한다. 눈밑
-            // 존(shape=0)은 아래 하안검 밴드로 라우팅(§08). Color/Intensity/Shape는
-            // shape=1 경로가 그대로 쓰므로 항상 세팅(shape=0이면 셰이더가 셀렉터 0으로 무효).
-            mat.SetFloat(ConcealerIntensityId, Mathf.Clamp01(p.concealerIntensity));
+            // 기존 UI/저장 계약은 그대로 둔다. 코렉터 스와치 3종만 색으로 판별해 새 자동
+            // 색 이상치 경로로 라우팅하고, 컨실러 밝힘 경로는 0으로 눌러 이중 적용을 막는다.
+            var legacyCorrector = IsCorrectorColor(p.concealerColor);
+            mat.SetFloat(ConcealerIntensityId,
+                legacyCorrector ? 0f : Mathf.Clamp01(p.concealerIntensity));
             SetColor(mat, ConcealerColorId, p.concealerColor);
             // 컨실러 마감(붉은기 자동 경로) — 0=새틴=기존 출력. 눈밑존은 아래 밴드가 같은 값 공용.
             mat.SetFloat(ConcealerFinishId, p.concealerFinish);
             // 제형(텍스처) GENERIC — 붉은기 경로. 눈밑존 밴드와 같은 concealerTexture 값 공유.
             mat.SetFloat(ConcealerTextureId, p.concealerTexture);
+            var correctorIntensity = Mathf.Max(
+                Mathf.Clamp01(p.correctorIntensity),
+                legacyCorrector ? Mathf.Clamp01(p.concealerIntensity) : 0f);
+            mat.SetFloat(CorrectorIntensityId, correctorIntensity);
+            if (legacyCorrector)
+                SetColor(mat, CorrectorColorId, p.concealerColor);
+            else if (string.IsNullOrEmpty(p.correctorColor))
+                mat.SetColor(CorrectorColorId, new Color(0.969f, 0.788f, 0.659f, 1f));
+            else
+                SetColor(mat, CorrectorColorId, p.correctorColor);
             // 축 개선(#19b) — 부분 커버 모양(0=눈밑 1=붉은기 자동)·파우더 존(0=전체 1=T존 2=볼 제외).
             // 생략(JsonUtility 0) = 기존 동작. FaceMakeup.shader가 float 분기.
             mat.SetFloat(ConcealerShapeId, p.concealerShape);
@@ -1357,10 +1381,13 @@ namespace ARMakeup.Face
                 LowerLidRenderer.Instance.ApplyTriangleZone(
                     p.triangleZoneColor, p.triangleZoneIntensity, p.triangleZoneFinish,
                     p.triangleZoneShimmer, p.triangleZoneHeight, p.triangleZoneTexture, p.triangleZoneShape);
-                // 눈밑 컨실러(§08) — shape=0만 밴드로 브라이튼(언더아이 홀로우). shape=1
-                // (붉은기 자동)은 FaceMakeup 전담이라 밴드 강도 0으로 눌러 이중 적용 방지.
-                var ccBand = p.concealerShape < 0.5f ? p.concealerIntensity : 0f;
-                LowerLidRenderer.Instance.ApplyConcealer(p.concealerColor, ccBand, p.concealerFinish, p.concealerTexture);
+                // 신규 컨실러는 위치 선택 없이 눈밑 렌더러가 푸른기/어두움을 픽셀 단위로
+                // 자동 선택한다. legacy shape=1 저장물만 종전 FaceMakeup 홍조 경로를 유지한다.
+                var ccBand = IsCorrectorColor(p.concealerColor) || p.concealerShape > 0.5f
+                    ? 0f
+                    : p.concealerIntensity;
+                LowerLidRenderer.Instance.ApplyConcealer(
+                    p.concealerColor, ccBand, p.concealerFinish, p.concealerTexture);
                 // A3 아이섀도 하 — 하안검 lash 아래로 페이드하는 섀도 밴드(애교살보다 아래 깔림). 0=끔.
                 LowerLidRenderer.Instance.ApplyLowerShadow(
                     p.eyeshadowLowerColor, p.eyeshadowLowerIntensity,
@@ -1625,6 +1652,12 @@ namespace ARMakeup.Face
             if (!string.IsNullOrEmpty(hex) && ColorUtility.TryParseHtmlString(hex, out var color))
                 mat.SetColor(propertyId, color);
         }
+
+        // 기존 UI의 컨실러 팔레트/카드 구조를 바꾸지 않고 세 코렉터 스와치만 자동 경로로 승격.
+        static bool IsCorrectorColor(string hex) =>
+            string.Equals(hex, "#BFE3C8", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(hex, "#F7C9A8", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(hex, "#D9C8E8", StringComparison.OrdinalIgnoreCase);
 
         void SetPaused(bool paused)
         {
