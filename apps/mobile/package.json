@@ -44,6 +44,7 @@
     "test:ios-privacy": "node ../../scripts/mobile/verify-ios-privacy-settings.mjs",
     "test:native-wiring": "node ../../scripts/mobile/run-native-wiring-contract.mjs",
     "test:brow-native": "node ../../scripts/mobile/check-brow-native-landmark-contract.mjs",
+    "test:ar-brow": "node ../../scripts/mobile/run-ar-brow-contract.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

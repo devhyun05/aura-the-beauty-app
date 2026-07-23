@@ -21,6 +21,7 @@ namespace ARMakeup.Face
     public static class MaskGenerator
     {
         const int Size = 256;
+        public const float BlushShapeYOffset = 0.020f;
 
         struct Ellipse
         {
@@ -195,14 +196,14 @@ namespace ARMakeup.Face
         const int SoftnessBuckets = 5;
         static readonly Ellipse[][] BlushShapeRegions =
         {
-            BlushRegion,
-            BlushIgariRegion,
-            BlushDrapeRegion,
-            BlushDailyRegion,
-            BlushLovelyRegion,
-            BlushUnderEyeRegion,
-            BlushSunKissedSoftRegion,
-            BlushSunKissedBandRegion,
+            OffsetBlushShape(BlushRegion),
+            OffsetBlushShape(BlushIgariRegion),
+            OffsetBlushShape(BlushDrapeRegion),
+            OffsetBlushShape(BlushDailyRegion),
+            OffsetBlushShape(BlushLovelyRegion),
+            OffsetBlushShape(BlushUnderEyeRegion),
+            OffsetBlushShape(BlushSunKissedSoftRegion),
+            OffsetBlushShape(BlushSunKissedBandRegion),
         };
         static readonly string[] BlushShapeNames =
         {
@@ -226,6 +227,19 @@ namespace ARMakeup.Face
         /// <summary>블러셔 shape 계약을 0..7로 고정하는 단일 클램프.</summary>
         public static int ClampBlushShape(int shape) =>
             Mathf.Clamp(shape, FilterParams.MinBlushShape, FilterParams.MaxBlushShape);
+
+        static Ellipse[] OffsetBlushShape(Ellipse[] source)
+        {
+            var result = new Ellipse[source.Length];
+            for (var i = 0; i < source.Length; i++)
+            {
+                var ellipse = source[i];
+                result[i] = new Ellipse(
+                    ellipse.cx, ellipse.cy + BlushShapeYOffset,
+                    ellipse.rx, ellipse.ry, ellipse.softness, ellipse.gain);
+            }
+            return result;
+        }
 
         /// <summary>블러셔 모양 프리셋 마스크(가장자리 softness 버킷 포함).
         /// 0=클래식, 1=이가리, 2=드레이핑, 3=데일리, 4=러블리, 5=언더아이,

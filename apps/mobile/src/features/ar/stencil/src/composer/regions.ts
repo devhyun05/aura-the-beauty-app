@@ -1928,9 +1928,9 @@ export const REGION_GROUPS: RegionGroup[] = [
         key: 'browConceal',
         label: '지우개',
         emoji: '🧽',
-        productName: '스킨톤 컨실',
+        productName: '눈썹 지우기',
         onKeys: ['browConcealIntensity'],
-        defaults: { browConcealIntensity: 0.6, browThicknessProfile: 2 },
+        defaults: { browConcealIntensity: 1, browThicknessProfile: 2 },
         note: BROW_NOTE,
         axes: {
           shape: BROW_SHAPE_AXIS,
@@ -1942,7 +1942,7 @@ export const REGION_GROUPS: RegionGroup[] = [
             { type: 'segments', key: 'browConcealFinish', options: SATIN_FINISHES },
           ],
           opacity: [
-            { type: 'slider', label: '지우기 (컨실)', key: 'browConcealIntensity' },
+            { type: 'slider', label: '지우기 강도', key: 'browConcealIntensity' },
           ],
           fit: BROW_FIT_AXIS,
         },
