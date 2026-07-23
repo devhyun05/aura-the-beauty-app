@@ -23,7 +23,10 @@ export function PhotoSlot({ slot, shape = 'rect', radius = 0, style }: Props) {
         <View style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
           <Image
             source={{ uri: slot.uri }}
-            contentFit="cover"
+            // The outer percentage transform already performs the normalized
+            // crop. A second `cover` pass re-crops the source and moves every
+            // landmark overlay, so the transformed full image must fill here.
+            contentFit="fill"
             transition={150}
             style={{
               position: 'absolute',

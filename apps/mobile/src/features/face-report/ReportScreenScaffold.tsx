@@ -83,7 +83,7 @@ function StoryContentCard({
   const unlockPager = () => pagerRef.current?.setPagingEnabled(true);
   return (
     <View style={{flex: 1, backgroundColor: section.tint}}>
-      <View style={{height: 5, backgroundColor: section.accent}} />
+      <View style={{height: 2, backgroundColor: section.accent}} />
       <ScrollView
         contentContainerStyle={{flexGrow: 1, paddingBottom: 30, ...(inset ? {paddingHorizontal: 16, paddingTop: 20} : null)}}
         directionalLockEnabled
@@ -110,15 +110,15 @@ function StoryContentCard({
 
 function GoldenMaskShareCard({uri}: {uri: string}) {
   return (
-    <View style={{backgroundColor: '#F4F2ED', paddingHorizontal: 22, paddingVertical: 28, gap: 14}}>
+    <View style={{backgroundColor: color.surface, paddingHorizontal: 22, paddingVertical: 28, gap: 14}}>
       <View style={{gap: 5}}>
-        <Text style={{color: '#7D786F', fontFamily: 'Lora', fontSize: 12, letterSpacing: 2}}>
+        <Text style={{color: color.accentDeep, fontFamily: 'Lora', fontSize: 12, letterSpacing: 2}}>
           GOLDEN MASK
         </Text>
-        <Text style={{color: '#343330', fontFamily: 'Lora', fontSize: 27, lineHeight: 33}}>
+        <Text style={{color: color.ink, fontFamily: 'Lora', fontSize: 27, lineHeight: 33}}>
           나의 3D 페이스
         </Text>
-        <Text style={[font(12.5, '400', 1.5), {color: '#716F69'}]}>
+        <Text style={[font(12.5, '400', 1.5), {color: color.text}]}>
           TrueDepth로 측정한 얼굴 메시를 고대 조각처럼 담았어요.
         </Text>
       </View>
@@ -126,7 +126,7 @@ function GoldenMaskShareCard({uri}: {uri: string}) {
         accessibilityIgnoresInvertColors
         resizeMode="cover"
         source={{uri}}
-        style={{aspectRatio: 1024 / 1280, backgroundColor: '#ECEAE5', borderRadius: 24, width: '100%'}}
+        style={{aspectRatio: 1024 / 1280, backgroundColor: color.surface2, borderRadius: 24, width: '100%'}}
       />
     </View>
   );

@@ -150,7 +150,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                   accessibilityState={{disabled: !available, selected}}
                   disabled={!available}
                   key={section.id}
-                  onPress={() => goToSection(section.id)}
+                  onPress={() => goToSection(section.id, false)}
                   style={({pressed}) => ({
                     alignItems: 'center',
                     flex: 1,
@@ -204,7 +204,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                     accessibilityRole="button"
                     accessibilityState={{selected}}
                     key={page.id}
-                    onPress={() => goToPage(page.id)}
+                    onPress={() => goToPage(page.id, false)}
                     style={({pressed}) => ({
                       alignItems: 'center',
                       backgroundColor: selected ? '#FFFFFF' : 'transparent',

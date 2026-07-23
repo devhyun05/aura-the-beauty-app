@@ -1,4 +1,5 @@
 import type {Face3DProfile} from '../../features/face-3d/types';
+import type {Face3DPhotoEvidence} from '../../features/face-3d/services/face3DPhotoEvidence';
 import {
   buildFaceAnalysisMeasurementsPayload,
   buildMeasuredPersonalColorAiPayload,
@@ -1182,6 +1183,7 @@ export const deleteFaceAnalysisRecommendedMakeup = async ({
 // measurements(원본)와 measuredPersonalColor(AI 요약)를 여기서 함께 만든다.
 export type FaceAnalysisOnDeviceMeasurementsInput = {
   face3d: Face3DProfile | null;
+  face3dPhotoEvidence?: Face3DPhotoEvidence | null;
   faceGeometry2d: FaceGeometryResult | null;
   faceVerticalThirds: FaceVerticalThirdsResult | null;
   personalColor: PersonalColorMeasurementInput | null;
@@ -1271,6 +1273,8 @@ export async function createFaceAnalysisReportFromCapture(
                 ? buildFaceAnalysisMeasurementsPayload({
                     captureId: photoCaptureId,
                     face3d: onDeviceMeasurements.face3d,
+                    face3dPhotoEvidence:
+                      onDeviceMeasurements.face3dPhotoEvidence ?? null,
                     faceGeometry2d: onDeviceMeasurements.faceGeometry2d,
                     faceVerticalThirds: onDeviceMeasurements.faceVerticalThirds,
                     personalColor: onDeviceMeasurements.personalColor,

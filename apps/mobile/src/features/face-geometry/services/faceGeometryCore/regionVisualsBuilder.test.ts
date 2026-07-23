@@ -40,8 +40,21 @@ function synthMap(): Map<number, {x: number; y: number}> {
       assert(r.cropRect.x + r.cropRect.w <= 1.0001, `${k} rect within right edge`);
       assert(r.guide.points.length >= 2, `${k} guide has a line`);
       r.guide.points.forEach(p => assert(p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1, `${k} guide pt normalized`));
+      assert((r.guides?.length ?? 0) >= 2, `${k} has measurement-specific guides`);
+      assert(r.sourceImage?.width === 1000 && r.sourceImage?.height === 1000, `${k} keeps source dimensions`);
     }
   });
+  const eyeDistance = rv.upper?.guides?.find(guide => guide.key === 'interCanthalDistance');
+  assert(eyeDistance?.kind === 'distance', 'eye distance uses distance guide');
+  assert(
+    eyeDistance?.points[0].x === 0.45 && eyeDistance?.points[1].x === 0.55,
+    'eye distance uses the actual inner canthi',
+  );
+  const jawWidth = rv.jaw?.guides?.find(guide => guide.key === 'jawWidth');
+  assert(
+    jawWidth?.points[0].x === 0.34 && jawWidth?.points[1].x === 0.66,
+    'jaw width uses the actual jaw corner landmarks',
+  );
 }
 // B4: 상안부 크롭은 이마까지(눈썹 위로), 외곽 크롭은 광대(faceWidth)까지 포함
 {

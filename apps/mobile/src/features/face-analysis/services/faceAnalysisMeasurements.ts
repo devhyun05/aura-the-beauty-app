@@ -11,6 +11,10 @@
 
 import type {Face3DProfile} from '../../face-3d/types';
 import {parseTrustedServerFace3DProfile} from '../../face-3d/services/face3DContract';
+import {
+  parseFace3DPhotoEvidence,
+  type Face3DPhotoEvidence,
+} from '../../face-3d/services/face3DPhotoEvidence';
 import type {
   FaceGeometryMetricKey,
   FaceGeometryMetricUnit,
@@ -80,6 +84,7 @@ export type FaceAnalysisRegionVisuals = RegionVisuals;
 export type FaceAnalysisReportMeasurements = {
   captureId: string;
   face3d?: Face3DProfile;
+  face3dPhotoEvidence?: Face3DPhotoEvidence;
   faceGeometry2d?: FaceGeometryResult;
   faceVerticalThirds?: FaceVerticalThirdsResult;
   personalColor?: FaceAnalysisMeasurementsPersonalColor;
@@ -117,6 +122,7 @@ export function derivePersonalColorCorrectionStatus(
 export type BuildFaceAnalysisMeasurementsInput = {
   captureId: string;
   face3d: Face3DProfile | null;
+  face3dPhotoEvidence?: Face3DPhotoEvidence | null;
   faceGeometry2d: FaceGeometryResult | null;
   faceVerticalThirds: FaceVerticalThirdsResult | null;
   personalColor: PersonalColorMeasurementInput | null;
@@ -146,6 +152,7 @@ export function buildFaceAnalysisMeasurementsPayload(
     && !faceGeometry2d
     && !personalColor
     && !input.face3d
+    && !input.face3dPhotoEvidence
     && !regionVisuals
   ) {
     return undefined;
@@ -156,6 +163,9 @@ export function buildFaceAnalysisMeasurementsPayload(
     schemaVersion: FACE_ANALYSIS_MEASUREMENTS_SCHEMA_VERSION,
     ...(faceVerticalThirds ? {faceVerticalThirds} : {}),
     ...(input.face3d ? {face3d: input.face3d} : {}),
+    ...(input.face3dPhotoEvidence?.captureId === input.captureId
+      ? {face3dPhotoEvidence: input.face3dPhotoEvidence}
+      : {}),
     ...(faceGeometry2d ? {faceGeometry2d} : {}),
     ...(personalColor ? {personalColor} : {}),
     ...(regionVisuals ? {regionVisuals} : {}),
@@ -494,12 +504,29 @@ function parseRegionCropRect(value: unknown): FaceAnalysisRegionCropRect | null 
 function parseRegionGuide(value: unknown): FaceAnalysisRegionGuide | null {
   if (!isRecord(value) || !Array.isArray(value.points)) return null;
   const label = readString(value.label)?.trim().slice(0, 80) ?? '';
+  const key = readString(value.key)?.trim().slice(0, 80);
+  const kind = readString(value.kind);
+  const validKind =
+    kind === 'angle'
+    || kind === 'contour'
+    || kind === 'distance'
+    || kind === 'length'
+    || kind === 'symmetry'
+      ? kind
+      : undefined;
+  const metricKeys = readStringArray(value.metricKeys).slice(0, 12);
   const points = value.points
     .slice(0, MAX_REGION_GUIDE_POINTS)
     .map(parseRegionPoint)
     .filter((point): point is FaceAnalysisRegionPoint => point !== null);
   if (!label || points.length < 2) return null;
-  return {label, points};
+  return {
+    ...(key ? {key} : {}),
+    ...(validKind ? {kind: validKind} : {}),
+    label,
+    ...(metricKeys.length > 0 ? {metricKeys} : {}),
+    points,
+  };
 }
 
 /**
@@ -523,12 +550,29 @@ export function parseFaceAnalysisRegionVisuals(
       : rawRegion.guide === undefined
         ? []
         : [rawRegion.guide];
-    const guide = rawGuides
+    const guides = rawGuides
       .map(parseRegionGuide)
-      .find((candidate): candidate is FaceAnalysisRegionGuide => candidate !== null);
+      .filter((candidate): candidate is FaceAnalysisRegionGuide => candidate !== null)
+      .slice(0, 12);
+    const guide = guides[0];
     if (!guide) continue;
 
-    parsed[key] = {cropRect, guide};
+    const sourceImage = isRecord(rawRegion.sourceImage)
+      && Number.isInteger(rawRegion.sourceImage.width)
+      && Number.isInteger(rawRegion.sourceImage.height)
+      && Number(rawRegion.sourceImage.width) > 0
+      && Number(rawRegion.sourceImage.height) > 0
+        ? {
+            width: Number(rawRegion.sourceImage.width),
+            height: Number(rawRegion.sourceImage.height),
+          }
+        : undefined;
+    parsed[key] = {
+      cropRect,
+      guide,
+      ...(guides.length > 0 ? {guides} : {}),
+      ...(sourceImage ? {sourceImage} : {}),
+    };
   }
 
   return Object.keys(parsed).length > 0 ? parsed : undefined;
@@ -1390,6 +1434,13 @@ export function parseFaceAnalysisMeasurements(
   // 인증된 backend detail 복원 경계에서만 serverCalibrationReceiptStatus를 허용한다.
   // Unity/device 이벤트 parser는 같은 필드를 fail-closed로 거부한다.
   const face3d = parseTrustedServerFace3DProfile(value.face3d) ?? undefined;
+  const parsedFace3dPhotoEvidence = parseFace3DPhotoEvidence(
+    value.face3dPhotoEvidence,
+  );
+  const face3dPhotoEvidence =
+    parsedFace3dPhotoEvidence?.captureId === captureId
+      ? parsedFace3dPhotoEvidence
+      : undefined;
   const faceGeometry2d = decodeFaceGeometry(value.faceGeometry2d);
   const personalColor = decodePersonalColor(value.personalColor);
   const regionVisuals = parseFaceAnalysisRegionVisuals(value.regionVisuals);
@@ -1399,6 +1450,7 @@ export function parseFaceAnalysisMeasurements(
     schemaVersion: FACE_ANALYSIS_MEASUREMENTS_SCHEMA_VERSION,
     ...(faceVerticalThirds ? {faceVerticalThirds} : {}),
     ...(face3d ? {face3d} : {}),
+    ...(face3dPhotoEvidence ? {face3dPhotoEvidence} : {}),
     ...(faceGeometry2d ? {faceGeometry2d} : {}),
     ...(personalColor ? {personalColor} : {}),
     ...(regionVisuals ? {regionVisuals} : {}),

@@ -9,6 +9,7 @@ import {
 import {getUserProfile} from '../../../shared/services/userService';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import type {Face3DProfile} from '../../face-3d/types';
+import type {Face3DPhotoEvidence} from '../../face-3d/services/face3DPhotoEvidence';
 import type {FaceGeometryResult} from '../../face-geometry/types';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
 import type {AuraPersonalColorResult} from '../../personal-color/types';
@@ -50,6 +51,7 @@ export type FaceAnalysisReportPreviewScreenProps = {
   analysisReport?: FaceAnalysisReport | null;
   capturedPhotoUri?: string;
   face3d?: Face3DProfile | null;
+  face3dPhotoEvidence?: Face3DPhotoEvidence | null;
   faceGeometry2d?: FaceGeometryResult | null;
   initialPageId?: string;
   minimumPreview?: MinimumFaceReportPreview | null;
@@ -93,6 +95,7 @@ export function FaceAnalysisReportPreviewScreen({
   analysisReport,
   capturedPhotoUri,
   face3d,
+  face3dPhotoEvidence,
   faceGeometry2d,
   initialPageId,
   minimumPreview,
@@ -165,6 +168,10 @@ export function FaceAnalysisReportPreviewScreen({
   const effectivePersonalColor =
     (useSessionMeasurements ? personalColor : null) ?? measurements?.personalColor?.reported ?? null;
   const effectiveFace3d = (useSessionMeasurements ? face3d : null) ?? measurements?.face3d ?? null;
+  const effectiveFace3dPhotoEvidence =
+    (useSessionMeasurements ? face3dPhotoEvidence : null)
+    ?? measurements?.face3dPhotoEvidence
+    ?? null;
   const sessionRegionVisuals = useSessionMeasurements ? faceGeometry2d?.regionVisuals : undefined;
   const sessionGeometryMetrics = useSessionMeasurements ? faceGeometry2d?.metrics : undefined;
   const effectiveRegionVisuals =
@@ -189,12 +196,16 @@ export function FaceAnalysisReportPreviewScreen({
       regionVisuals: effectiveRegionVisuals,
       gender: profileGender,
       geometryMetrics: effectiveGeometryMetrics,
+      face3d: effectiveFace3d,
+      face3dPhotoEvidence: effectiveFace3dPhotoEvidence,
     });
   }, [
     bodyProfile,
     capturedPhotoUri,
     faceGeometry2d,
     effectiveGeometryMetrics,
+    effectiveFace3d,
+    effectiveFace3dPhotoEvidence,
     effectivePersonalColor,
     effectiveRegionVisuals,
     effectiveVerticalThirds,
@@ -233,12 +244,14 @@ export function FaceAnalysisReportPreviewScreen({
       storedMeasurements: measurements ?? null,
       sessionMeasurements: {
         face3d: face3d ?? null,
+        face3dPhotoEvidence: face3dPhotoEvidence ?? null,
         faceGeometry2d: faceGeometry2d ?? null,
         faceVerticalThirds: verticalThirds ?? null,
         personalColor: personalColor ?? null,
       },
       effectiveForReportRendering: {
         face3d: effectiveFace3d,
+        face3dPhotoEvidence: effectiveFace3dPhotoEvidence,
         faceGeometryMetrics: effectiveGeometryMetrics,
         faceRegionVisuals: effectiveRegionVisuals,
         faceVerticalThirds: effectiveVerticalThirds,
@@ -247,6 +260,7 @@ export function FaceAnalysisReportPreviewScreen({
     };
   }, [
     effectiveFace3d,
+    effectiveFace3dPhotoEvidence,
     effectiveGeometryMetrics,
     effectivePersonalColor,
     effectiveRegionVisuals,

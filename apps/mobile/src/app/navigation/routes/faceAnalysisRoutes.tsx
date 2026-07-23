@@ -867,6 +867,9 @@ export function FaceAnalysisLoadingRouteScreen({
           // 측정 원본 4축 — 서버 저장(detail_payload)·AI 입력·과거 보고서 복원용.
           {
             face3d: selectedFace3DProfile ?? null,
+            face3dPhotoEvidence:
+              unifiedFaceCaptureFlow.committedCapture?.result
+                .face3dPhotoEvidence ?? null,
             faceGeometry2d: faceGeometry,
             faceVerticalThirds: verticalThirds,
             personalColor: personalColorOutcome,
@@ -1317,6 +1320,7 @@ export function FaceAnalysisReportPreviewRouteScreen({
     selectedFaceVerticalThirds,
     selectedPersonalColor,
     setSelectedFaceAnalysisReport,
+    unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   // 안전망: 보고서는 카메라가 필요 없다. 상류에서 lease 해제가 누락돼도 여기서
   // run-consumer(가시 소유자·explicit lease)를 0으로 만들어 런타임 모드가 idle로 가게 한다
@@ -1401,6 +1405,12 @@ export function FaceAnalysisReportPreviewRouteScreen({
           navigation.navigate('FaceCapture');
         }}
         face3d={route.params?.reportId ? null : selectedFace3DProfile}
+        face3dPhotoEvidence={
+          route.params?.reportId
+            ? null
+            : unifiedFaceCaptureFlow.committedCapture?.result
+                .face3dPhotoEvidence ?? null
+        }
         faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
         personalColor={route.params?.reportId ? null : selectedPersonalColor}
         reportId={route.params?.reportId ?? null}

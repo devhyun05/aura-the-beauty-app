@@ -1,5 +1,6 @@
 // reportTypes.ts — typed props/DTO model for the face-analysis report.
-// 원칙(2026-07-18 완화): 원측정(mm)·모집단 백분위·confidence %는 계속 비노출.
+// 원칙: 원측정(mm)·모집단 백분위는 비노출. 기기 측정 신뢰도는 원시값과
+// 분리된 사용자 설명으로 표시할 수 있다.
 // 세로 3분할의 정규화 비율은 노출 허용, 얼굴형은 성별 참고선 기준 방향 카테고리로만
 // (가짜 '평균 밴드'는 폐기 — 2026-07-18 정직화).
 import type {FaceShapeView} from './reportFormat';
@@ -9,6 +10,7 @@ import type {VisualWeightPresentation} from './visualWeightPresentation';
 export type {VisualWeightPresentation} from './visualWeightPresentation';
 import type {StyleLaneCard} from './styleLaneRecommendations';
 import type {GoldenMaskReportDescriptor} from '../../shared/contracts/goldenMask';
+import type {Face3DPhotoEvidence} from '../face-3d/services/face3DPhotoEvidence';
 export type {StyleLaneCard, StyleLaneMove, StyleLaneKey} from './styleLaneRecommendations';
 
 export interface PhotoSlotData {
@@ -17,6 +19,8 @@ export interface PhotoSlotData {
   // S3 region cards: normalized (0..1) sub-rect of the full photo to crop the
   // display to. Absent for the legacy fixed-guide fallback (full photo).
   cropRect?: { x: number; y: number; w: number; h: number };
+  sourceHeight?: number;
+  sourceWidth?: number;
 }
 
 export type EvidenceKind = 'measured' | 'artist';
@@ -108,7 +112,25 @@ export type FeatureGuide =
   // Real landmark polyline (restored regionVisuals), re-normalized to the
   // crop frame by buildS3 — points are already 0..1 in the CROPPED view, not
   // the full original image.
-  | { kind: 'polyline'; points: { x: number; y: number }[] };
+  | { kind: 'polyline'; points: { x: number; y: number }[] }
+  | {
+      kind: 'measurement';
+      key: string;
+      label: string;
+      measurementKind: 'angle' | 'contour' | 'distance' | 'length' | 'symmetry';
+      metricKeys: string[];
+      points: {x: number; y: number}[];
+    };
+
+export interface RegionMeasurementItemData {
+  key: string;
+  label: string;
+  detail: string;
+  groupLabel?: string;
+  confidenceLabel?: string;
+  metricKeys: string[];
+  visualType: 'depth' | 'line' | 'line-and-depth';
+}
 
 export interface RegionCardData {
   key: string;
@@ -119,6 +141,7 @@ export interface RegionCardData {
   // that need the rect without unpacking photo). Absent = legacy fallback.
   cropRect?: { x: number; y: number; w: number; h: number };
   guide: FeatureGuide;
+  guides?: FeatureGuide[];
   guideLabel: string;
   guideLabelX: number;                  // normalized offset of the label pill
   guideLabelAlign?: 'left' | 'right';
@@ -133,6 +156,9 @@ export interface RegionCardData {
   // 1층 사진 판정(VLM) 상세 구절(쌍꺼풀 유형·안검 처짐·애교살 등). 판정된 것만.
   // 비어 있으면 컴포넌트가 상세 칩 블록을 숨긴다.
   featureDescriptors?: string[];
+  measurementItems?: RegionMeasurementItemData[];
+  photoEvidence?: Face3DPhotoEvidence;
+  visualAspectRatio?: number;
 }
 export interface S3Data { eyebrow: string; title: string; sub: string; cards: RegionCardData[] }
 
