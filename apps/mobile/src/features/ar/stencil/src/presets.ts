@@ -441,7 +441,7 @@ export const PRESETS: FilterPreset[] = [
       lipColor: '#C75A70',
       lipColor2: '#8F0F2A',
       lipGradient: 1.0,
-      lipIntensity: 0.3,
+      lipIntensity: 0.45, // 0.3은 흐릿(사용자 0723) — 진하게
       lipFinish: 2, // 글로시
       lipTexture: 2, // 워터틴트
       lipGlossColor: '#FFFFFF',
@@ -498,8 +498,8 @@ export const PRESETS: FilterPreset[] = [
       mascaraStyle: 1,
       mascaraLength: 1.0,
       mascaraTexStyle: 3, // 텍스처 글램(위 DL1 + 아래 low1a v11)
-      lowerLashIntensity: 1.0, // v11 텍스처가 도안 실측 반투명 알파라 감쇠 불필요
-      lowerLashLength: 0.65, // 도안 비례 r=0.146 ÷ (LowerTexLenFactor 0.15 × RibbonLenMult 1.5)
+      lowerLashIntensity: 1.0,
+      lowerLashLength: 1.0, // 종횡비 잠금(0723) — 1.0 = 도안 각도 완전 보존
     },
     lensLayers: [
       {part: 0, color: '#5B7B8C', blendMode: 1, intensity: 0.5, inner: 0, outer: 1},

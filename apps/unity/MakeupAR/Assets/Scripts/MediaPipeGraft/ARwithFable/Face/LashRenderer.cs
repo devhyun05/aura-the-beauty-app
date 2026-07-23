@@ -126,10 +126,17 @@ namespace ARMakeup.Face
         // 리본을 눈 라인 밖으로 len×rootV만큼 연장해 그 줄이 정확히 눈 라인에 오게 한다.
         // 재추출 시 사이드카 값으로 갱신할 것(tools/glam2-lash/out/lash_glam_*.json).
         // 위 리본 꼬리 발산 억제(0723 v15 사용자 판정) — 탈출 레일 하향 ≈12° + 끝 기둥 테이퍼.
-        const float TailExitDropTan = 0.21f; // 탈출 방향 하향(tan12°) — 클러스터 출발점 낮춤
-        const int TailTaperCols = 4;         // 꼬리쪽(c=0부터) 길이 테이퍼 기둥 수
-        const float TailTaperMin = 0.55f;    // 맨 끝 기둥 길이 배율(브로우 넘는 스파이크 차단)
-        const float UpperTexRootV = 0.045f; // 0723 위 초록선(펜연장 32°)+국소 회전 재산출값
+        const float TailExitDropTan = 0.3f;  // 탈출 방향 하향(tan22°) — 굵은선 기울기(사용자 0723)
+        const int TailTaperCols = 10;         // 꼬리쪽(c=0부터) 길이 테이퍼 기둥 수 — 넓고 완만하게
+        const float TailTaperMin = 0.7f;    // 맨 끝 기둥 길이 배율 — 가는 아치선 트림 기준(사용자 0723)
+        const float TailExitStretch = 1.2f;  // 탈출 구간 간격 배율 — 1.4는 실효 5%뿐, 굵은선 끝(~15% 눈폭)까지
+        const float TailSlideFrac = 0.16f;   // 눈 곡선 슬라이드 이동량(눈폭 배수) — 도안 통째 바깥 이동(사용자 0723)
+        const int FrontTaperCols = 3;        // 앞머리(안쪽 c 큰 쪽) 테이퍼 기둥 수(사용자 0723)
+        const float FrontTaperMin = 0.75f;   // 앞머리 끝 기둥 길이 배율
+        // 아래 리본 바깥 끝 가닥 축소(사용자 0723: "가장 바깥 한 가닥 40% 줄이기")
+        const int LowerTailTaperCols = 3;    // 바깥쪽(c=0부터) 테이퍼 기둥 수(한 가닥 폭)
+        const float LowerTailTaperMin = 0.6f;// 맨 끝 기둥 길이 배율(-40%)
+        const float UpperTexRootV = 0.0448f; // 0723 위 초록선(펜연장 32°)+국소 회전 재산출값
         const float LowerTexRootV = 0.1f;    // 0723 급전환(틈 x=3113) 재산출값
         Mesh _texMesh;
         MeshRenderer _texRenderer;
@@ -153,6 +160,9 @@ namespace ARMakeup.Face
         // 무너져 텍스처 전단(가닥 일그러짐, 사용자 판정 0723). 라이너와 동일 레시피:
         // ±2 스텐실 접선 + 2패스 스무딩(EyelinerStyleRenderer._nrm 이식).
         readonly Vector2[] _ribNrm = new Vector2[Seg];
+        // 눈 곡선 슬라이드용 임시 버퍼 + 탈출 방향(TailTangentExit가 기록)
+        readonly Vector2[] _ribTmp = new Vector2[Seg];
+        Vector2 _exitDir;
         // 위 텍스처 리본 꼬리 연장용 컨트롤(+1점) — 눈꼬리 너머 스윕 (SODA 판정 반영)
         readonly Vector2[] _ctrlExt = new Vector2[LidPts + 1];
         // 꼬리 연장 비율(눈폭 대비) — 얼굴 무관 스타일 파라미터. 어떤 도안이든 눈길이+α 커버.
@@ -245,7 +255,7 @@ namespace ARMakeup.Face
         /// 코너 최저점을 향해 급강하하는데, 실제 인조속눈썹 밴드는 그 지점에서 라인의
         /// 흐름(접선)대로 곧게 빠져나간다. 라이너 v5 코너 윙과 동일 취지(사용자 확정 형태).
         /// 코너 영향권 밖 접선으로 바깥쪽 점들을 점진 대체(간격 유지 → u 매핑 보존).</summary>
-        void TailTangentExit(float dropTan = 0f)
+        void TailTangentExit(float dropTan = 0f, float stretch = 1f)
         {
             // v9 실패 교훈(픽셀 diff 270px = 사실상 무변화): ①블렌드가 교정을 희석
             // ②구간(5점)이 급강하 몸통(~8점)보다 짧음 ③접선 측정점(5~8)이 이미 꺾인 구간.
@@ -256,10 +266,43 @@ namespace ARMakeup.Face
             const int Pivot = 8;
             var d = (_lash[Pivot] - _lash[Pivot + 4]).normalized; // 안 꺾인 구간의 진행 방향
             if (dropTan != 0f) d = (d + new Vector2(0f, dropTan)).normalized;
+            _exitDir = d; // 슬라이드(SlideAlongChain)의 체인 밖 연장 방향
             for (var i = Pivot - 1; i >= 0; i--)
             {
-                var step = (_lash[i] - _lash[i + 1]).magnitude;   // 원래 점 간격 유지
+                // stretch>1이면 간격을 늘려 꼬리가 눈꼬리 너머까지 길게 빠진다(사용자 요청 —
+                // "속눈썹이 너무 빨리 사라짐"). 텍스처 u 매핑상 꼬리 내용이 옆으로 완만히 늘어남.
+                var step = (_lash[i] - _lash[i + 1]).magnitude * stretch;
                 _lash[i] = _lash[i + 1] + d * step;               // 가던 방향(+하향) 직진
+            }
+        }
+
+        /// <summary>눈 곡선 슬라이드(사용자 0723) — 텍스처는 그대로 두고 기둥 앵커를
+        /// 체인 폴리라인을 따라 바깥(꼬리)으로 dist만큼 민다. 구슬을 레일 따라 밀듯이 —
+        /// 체인을 벗어나면 탈출 방향(_exitDir)으로 직선 연장. 텍스처 쪽 이동(좌측 패드)은
+        /// 종횡비 축소 부작용으로 이동이 상쇄돼 기각(v21 판정).</summary>
+        void SlideAlongChain(float dist)
+        {
+            for (var c = 0; c < Seg; c++) _ribTmp[c] = _lash[c];
+            for (var c = 0; c < Seg; c++)
+            {
+                var remaining = dist;
+                var i = c;
+                var p = _ribTmp[c];
+                while (i > 0 && remaining > 0f)
+                {
+                    var seg = (_ribTmp[i - 1] - _ribTmp[i]).magnitude;
+                    if (remaining <= seg)
+                    {
+                        p = Vector2.Lerp(_ribTmp[i], _ribTmp[i - 1], remaining / Mathf.Max(seg, 1e-5f));
+                        remaining = 0f;
+                        break;
+                    }
+                    remaining -= seg;
+                    i--;
+                    p = _ribTmp[i];
+                }
+                if (remaining > 0f) p = _ribTmp[0] + _exitDir * remaining; // 체인 밖 연장
+                _lash[c] = p;
             }
         }
 
@@ -586,7 +629,8 @@ namespace ARMakeup.Face
                 // 오버플로해 매 프레임 IndexOutOfRange로 상단 리본을 무력화 → 제거. 꼬리 연장은
                 // 새 래시 아키텍처(실제 속눈썹 증폭)에서 배열 크기와 함께 제대로 재구현할 것.)
                 SubdivideArc(_ctrl, LidPts, _lash);
-                TailTangentExit(TailExitDropTan); // 접선 탈출 + 하향(발산 억제)
+                TailTangentExit(TailExitDropTan, TailExitStretch); // 접선 탈출 + 하향 + 연장
+                SlideAlongChain(eyeDist * TailSlideFrac);          // 눈 곡선 따라 통째 바깥 이동
 
                 // 종횡비 잠금 — 리본 높이 = 눈폭 × 도안(h/w). 가로·세로가 같은 비율로
                 // 줄어 도안의 털 각도가 수학적으로 보존된다(비등방 축소가 모든 각도를
@@ -605,11 +649,9 @@ namespace ARMakeup.Face
                     // 뿌리 턱(슬리버 제거) + 뿌리줄 오프셋: 텍스처 v=RootV 줄이 눈 라인에
                     // 오도록 v0 변을 len×RootV만큼 라인 아래로 내림(처지는 꼬리 결 표현).
                     var root = _lash[c] - n * (eyeDist * RibbonRootTuck + len * UpperTexRootV);
-                    // 컬럼 길이 균일 — 단, 꼬리 끝(c<TailTaperCols)만 점감(발산 스파이크 차단).
-                    var taper = c < TailTaperCols
-                        ? Mathf.Lerp(TailTaperMin, 1f, c / (float)TailTaperCols)
-                        : 1f;
-                    var lashLen = len * taper;
+                    // 컬럼 길이 균일(계약 복원) — 차등 길이는 걸친 가닥을 휘게 한다
+                    // (0723 재확인). 길이 다듬기는 텍스처 가위질(trim_heights)이 담당.
+                    var lashLen = len;
                     var top = root + n * lashLen;
                     _texVertices[baseV + c * 2] = ImageToWorld(root, depth);
                     _texVertices[baseV + c * 2 + 1] = ImageToWorld(top, depth);
@@ -655,6 +697,7 @@ namespace ARMakeup.Face
                     // 컬럼 길이 균일 — 도안 텍스처는 자체 길이 변화를 갖고 있어 컬럼별 차등
                     // 길이(안쪽 0.5·가장자리 0.6 변조)를 겹치면 비스듬한 털이 컬럼 경계에서
                     // 계단으로 끊긴다(사용자 "중간 잘림" 판정). 절차식 경로만 변조 유지.
+                    // 길이 균일(계약) — 바깥 끝 -40%는 텍스처 가위질로 이관(휨 방지, 0723)
                     var tip = root + downN * len;
                     _lowerTexVertices[baseV + c * 2] = ImageToWorld(root, depth);
                     _lowerTexVertices[baseV + c * 2 + 1] = ImageToWorld(tip, depth);

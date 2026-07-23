@@ -33,11 +33,15 @@ SOURCES = {
         ann_dx=25,   # x0 590→565 잘림 방지(검증기 적발). 주석은 옛 박스 기준 → +25px 이동
         tail_refit=0.55, pen_extend=True,  # 꼬리: 펜 끝(67%)부터 32° 연장(승인 초록선 0723)
         rot_scale=0.9,                     # 꼬리 세움 배율 — v14 100%는 과교정(솟구침)
+        tail_align=True, front_shift=0.0,  # 우측 성긴 여백 크롭만. 통째 이동은 렌더러 슬라이드가 담당(텍스처 이동은 종횡비 축소 부작용)
+        strand_trim=[(3, 0.7)],            # 눈꼬리에서 3번째 가닥 -30%(사용자 0723, 가위질)
+        tip_trim={"tail": (0.4, 0.7), "front": (0.12, 0.75)},  # 기둥 테이퍼 대체(휨 방지)
         min_cover=0.45),                   # 꼬리 연장 구간 제외 후 재측정 기준
     "lower": dict(
         src=REFS / "속눈썹 샘플/1a9bec9d78817015ce809bdc9b3d63a6.jpg",
         box=(5, 380, 1194, 1040), flip=True, gap_frac=0.40,
         tail_refit=0.70,   # 꼬리(바깥 30%): 뿌리선을 승인 초록선(42° 직선 연장)으로 교정
+        strand_trim=[(1, 0.6)],  # 바깥 끝 가닥 -40%(사용자 0723) — 렌더러 테이퍼 대체(휨 방지)
         min_cover=0.40),   # 성긴 스파이크 도안 — 뿌리줄 간격이 넓어 커버 하한 완화
 }
 SUPER = 4          # 초해상 배수(안티앨리어스 보존)
@@ -313,6 +317,63 @@ def straighten(a, root_y):
     return out, int(round(base))
 
 
+def trim_heights(a, r, cfg):
+    """길이 다듬기 v2 — '가위질'(높이 상한선 위 지우기, 부드러운 페이드 컷).
+
+    v1(세로 압축)과 기둥 테이퍼는 배율이 구간별로 달라 걸친 가닥을 휘게 만들었다
+    (사용자 판정 0723 — 코드 주석의 '차등 길이 → 계단' 교훈 재위반). 지우기는
+    끝만 잘리고 몸통은 무변형. 스케일 프로파일 S(x) = 꼬리 램프 × 앞머리 램프 ×
+    표적 가닥 딥(사인 창으로 경계 매끈)을 합성해 상한선을 만든다.
+    """
+    h, w = a.shape
+    hprof = np.zeros(w)
+    for x in range(w):
+        col = np.where(a[:max(r, 1), x] > 0.25)[0]
+        hprof[x] = (r - col.min()) if len(col) else 0
+    k = 15
+    hs = np.convolve(np.pad(hprof, k // 2, mode="edge"), np.ones(k) / k, mode="valid")[:w]
+
+    S = np.ones(w)
+    tt = cfg.get("tip_trim", {})
+    if "tail" in tt:   # 오른쪽(꼬리) 구간 1→min 램프
+        frac, mn = tt["tail"]
+        x0 = int(w * (1 - frac))
+        S[x0:] *= np.linspace(1, mn, w - x0)
+    if "front" in tt:  # 왼쪽(앞머리) 구간 min→1 램프
+        frac, mn = tt["front"]
+        x1 = max(int(w * frac), 1)
+        S[:x1] *= np.linspace(mn, 1, x1)
+    # 표적 가닥(오른쪽 n번째 봉우리) — 사인 창 딥(경계 1, 중심 scale)
+    trims = cfg.get("strand_trim", [])
+    if trims:
+        peaks = [x for x in range(12, w - 12)
+                 if hs[x] == hs[x - 12:x + 13].max() and hs[x] > 0.45 * hs.max()]
+        merged = []
+        for x in sorted(peaks, reverse=True):
+            if not merged or merged[-1] - x >= 15:
+                merged.append(x)
+        for nth, scale in trims:
+            if nth > len(merged):
+                print(f"  경고: 봉우리 {len(merged)}개뿐 — {nth}번째 트림 생략")
+                continue
+            p = merged[nth - 1]
+            lo, hi = p, p
+            while lo > 0 and hs[lo] > 0.55 * hs[p]:
+                lo -= 1
+            while hi < w - 1 and hs[hi] > 0.55 * hs[p]:
+                hi += 1
+            t = (np.arange(lo, hi + 1) - lo) / max(hi - lo, 1)
+            S[lo:hi + 1] *= 1 - (1 - scale) * np.sin(np.pi * t)
+            print(f"  가닥 컷: 오른쪽 {nth}번째 봉우리 x[{lo}:{hi}] 상한 ×{scale}")
+    if np.all(S >= 0.999):
+        return a
+    # 상한선 위 지우기(페이드 폭 = 높이의 10%)
+    ys = np.arange(h, dtype=np.float32)[:, None]
+    cut = r - (S * hs)[None, :]
+    fade = np.maximum(hs * 0.10, 2.0)[None, :]
+    return a * np.clip((ys - cut) / fade, 0, 1)
+
+
 def finalize(name, cfg, a, root_row):
     """bbox 크롭 → 비례 유지 다운스케일 → 앞쪽 페이드 → 불투명화(1회) → 검증 → 산출.
 
@@ -322,6 +383,18 @@ def finalize(name, cfg, a, root_row):
     ys, xs = np.where(a > 0.02)
     y0 = ys.min()
     a = a[y0: ys.max() + 1, xs.min(): xs.max() + 1]
+    # 꼬리 정렬+통째 이동(사용자 0723): ①오른쪽 성긴 여백 크롭 — 진한 꼬리 클러스터가
+    # u=1(=연장 레일 끝)에 정렬돼 연장 구간에 실제 내용이 실린다(v17 무연장·v18 스미어의
+    # 공통 원인 제거) ②왼쪽 투명 패드 — 내용 전체를 꼬리 쪽으로 이동(앞머리 공백은
+    # 아이라인이 커버, 사용자 승인).
+    if cfg.get("tail_align"):
+        strong = np.where(a.max(axis=0) > 0.35)[0]
+        if len(strong):
+            a = a[:, : strong[-1] + 2]
+        pad = int(a.shape[1] * cfg.get("front_shift", 0.0))
+        if pad > 0:
+            a = np.concatenate([np.zeros((a.shape[0], pad), a.dtype), a], axis=1)
+        print(f"  꼬리 정렬: 우측 성긴 여백 크롭 + 좌측 이동 패드 {pad}px")
     h, w = a.shape
     root_idx = int(np.clip(root_row - y0, 0, h - 1))
     tw, th = TARGET_W, max(8, round(h * TARGET_W / w))  # 종횡비 그대로(고정 캔버스 금지)
@@ -332,6 +405,9 @@ def finalize(name, cfg, a, root_row):
     if cfg["gap_frac"] > 0:  # 아래 속눈썹 — 눈 앞쪽 구간 비움
         ramp = np.clip(np.linspace(0, 1, tw) / cfg["gap_frac"], 0, 1)
         a *= ramp[None, :]
+
+    if cfg.get("strand_trim") or cfg.get("tip_trim"):
+        a = trim_heights(a, r, cfg)
 
     # 결(농도) 채널 — 불투명화 '전'의 잉크 농도를 정규화해 RGB에 베이크(0723 승인).
     # 알파=윤곽(가시성 철벽), R=농도(한올 결). 셰이더 _GrainAmt가 반영량을 조절:
@@ -381,7 +457,11 @@ def validate(name, cfg, a, r):
     top = a[: int(h * 0.3), :].mean()
     if bot <= top:
         fails.append(f"방향 의심: 아래 질량({bot:.3f}) ≤ 위 질량({top:.3f}) — 상하반전 확인")
-    for edge, m in (("좌", a[:, 0].max()), ("우", a[:, -1].max()), ("상", a[0, :].max())):
+    # 우측 검사는 tail_align(꼬리를 u=1에 정렬 — 의도적으로 끝에 잉크) 시 면제
+    edges = [("좌", a[:, 0].max()), ("상", a[0, :].max())]
+    if not cfg.get("tail_align"):
+        edges.append(("우", a[:, -1].max()))
+    for edge, m in edges:
         if m > 0.5:
             fails.append(f"{edge}측 가장자리 잉크 {m:.2f} — 크롭이 털을 자름")
     if fails:
