@@ -8,6 +8,7 @@ import type {PersonalColor12Type} from '../personal-color/services/personalColor
 import type {VisualWeightPresentation} from './visualWeightPresentation';
 export type {VisualWeightPresentation} from './visualWeightPresentation';
 import type {StyleLaneCard} from './styleLaneRecommendations';
+import type {GoldenMaskReportDescriptor} from '../../shared/contracts/goldenMask';
 export type {StyleLaneCard, StyleLaneMove, StyleLaneKey} from './styleLaneRecommendations';
 
 export interface PhotoSlotData {
@@ -240,9 +241,9 @@ export interface S9Data {
 }
 
 // ---------- screen ----------
-// Only s1 (built from fields every successfully-created report already has)
-// and s5 (has its own internal "설문 전" empty state — no coordinates/guides to
-// fabricate) are guaranteed. s2/s4 depend on on-device measurements that can
+// Completed reports guarantee s1 and s5 (which has its own internal "설문 전"
+// empty state). The transient minimum report intentionally supplies only s1
+// while the remaining sections are generated. s2/s4 depend on on-device measurements that can
 // fail or come back "insufficient" for a given photo — rendering them from a
 // failed measurement would mean fabricating guide-line pixel positions or
 // color axes that were never actually measured. s3/s6/s7's real data sources
@@ -252,8 +253,13 @@ export interface S9Data {
 // null case the scaffold hides the section rather than guessing — same
 // "조용한 실패 금지, 조용한 생성 금지" posture as the rest of the report.
 export interface ReportData {
+  reportId: string;
+  goldenMask?: GoldenMaskReportDescriptor;
+  generationStatus?: 'loading' | 'failed';
+  generationError?: string;
+  initialPageId?: string;
   topBarTitle: string;
-  s1: S1Data; s2: S2Data | null; s3: S3Data | null; s4: S4Data | null; s5: S5Data;
+  s1: S1Data; s2: S2Data | null; s3: S3Data | null; s4: S4Data | null; s5: S5Data | null;
   s6: S6Data | null; s7: S7Data | null; s8: S8Data | null;
   s9: S9Data | null;
   footer: { disclaimer: string; cta: string };

@@ -3,6 +3,7 @@
 import type { ReportData } from './reportTypes';
 
 export const demoReport: ReportData = {
+  reportId: 'demo-face-report',
   topBarTitle: '얼굴 분석 보고서',
 
   s1: {

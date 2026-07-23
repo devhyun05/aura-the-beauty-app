@@ -18,6 +18,7 @@ import {
   goBackToPreviousOrMainTab,
   type RootScreenProps,
 } from './routeUtils';
+import {clearGoldenMaskCleanupTombstonesForUser} from '../../../features/face-capture/services/goldenMaskUploadService';
 
 export function AppSettingsRouteScreen({
   navigation,
@@ -127,6 +128,9 @@ export function AccountDeletionRouteScreen({
     try {
       await clearSession();
     } finally {
+      await clearGoldenMaskCleanupTombstonesForUser(
+        session.user.id,
+      ).catch(() => undefined);
       navigation.reset({index: 0, routes: [{name: 'Login'}]});
     }
   };

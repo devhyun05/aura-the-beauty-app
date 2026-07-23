@@ -8,8 +8,8 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '../..');
 const outDir = mkdtempSync(join(tmpdir(), 'aura-face-report-'));
 const tscPath = join(repoRoot, 'apps/mobile/node_modules/typescript/bin/tsc');
-const mobileSrcDir = join(repoRoot, 'apps/mobile/src');
-const featuresDir = join(mobileSrcDir, 'features');
+const srcRoot = join(repoRoot, 'apps/mobile/src');
+const featuresDir = join(srcRoot, 'features');
 const mobileTypeRoots = join(repoRoot, 'apps/mobile/node_modules/@types');
 
 function source(relativePath) {
@@ -55,6 +55,68 @@ requireAll(scaffoldSource, [
   '<S8Skin',
   '<S9StyleLanes',
 ], 'face report lazy capture document');
+
+requireAll(scaffoldSource, [
+  'GOLDEN_MASK_CAPTURE_IMAGE_SETTLE_TIMEOUT_MS = 10_000',
+  'onLoadStart={handlePending}',
+  'onLoad={handleLoaded}',
+  'onLoadEnd={handleLoadEnd}',
+  'onError={handleFailed}',
+  "loadOutcomeRef.current = 'failed'",
+  "currentState.status === 'loaded'",
+  "currentState.status === 'failed'",
+  'Golden Mask 이미지를 보고서에 불러오지 못했어요.',
+  'requestId !== currentState.requestId',
+  'uri !== currentState.uri',
+  'await waitForGoldenMaskCaptureImageSettled({',
+  'getState: () => goldenMaskCaptureImageStateRef.current',
+  'requestId: captureRequestId',
+  'uri: posterUri',
+  'if (Date.now() >= deadline)',
+  'posterUri = await waitForGoldenMaskPoster();',
+  'if (posterUri) {',
+  'await waitForNextFrame();',
+], 'Golden Mask lazy capture image readiness');
+
+requireContract(
+  /posterUri = await waitForGoldenMaskPoster\(\);\r?\n {10}}\r?\n {10}if \(posterUri\) \{/.test(
+    scaffoldSource,
+  ),
+  'Existing and newly generated Golden Mask posters must share the Image readiness wait',
+);
+requireContract(
+  (scaffoldSource.match(/await waitForNextFrame\(\);/g) ?? []).length >= 2,
+  'Golden Mask capture must wait two layout frames after Image settlement',
+);
+
+const captureAssetCountStart = scaffoldSource.indexOf(
+  'function countFaceReportCaptureAssets',
+);
+const captureAssetCountEnd = scaffoldSource.indexOf(
+  'function FaceReportCaptureDocument',
+  captureAssetCountStart,
+);
+requireContract(
+  captureAssetCountStart >= 0 &&
+    captureAssetCountEnd > captureAssetCountStart &&
+    !scaffoldSource
+      .slice(captureAssetCountStart, captureAssetCountEnd)
+      .includes('goldenMask'),
+  'Golden Mask readiness must stay separate from the fixed regular asset count',
+);
+
+const goldenMaskImageWaitIndex = scaffoldSource.indexOf(
+  'await waitForGoldenMaskCaptureImageSettled({',
+);
+const verticalCaptureIndex = scaffoldSource.indexOf(
+  'return await verticalCaptureRef.current?.capture?.()',
+  goldenMaskImageWaitIndex,
+);
+requireContract(
+  goldenMaskImageWaitIndex >= 0 &&
+    verticalCaptureIndex > goldenMaskImageWaitIndex,
+  'Golden Mask Image must settle before the vertical native capture call',
+);
 
 requireAll(readinessSource, [
   'assetStates.size !== expectedAssetCount',
@@ -111,6 +173,7 @@ const entries = [
   'face-report/reportFeatureAxes.ts',
   'face-report/reportFeatureAxes.test.ts',
   'face-report/services/reportStoryModel.ts',
+  'face-report/services/minimumFaceReport.ts',
   'face-report/services/reportStoryModel.test.ts',
   'face-report/services/reportCaptureReadiness.ts',
   'face-report/services/reportCaptureReadiness.test.ts',
@@ -138,9 +201,10 @@ run(process.execPath, [
   '--typeRoots', mobileTypeRoots,
   '--strict',
   '--skipLibCheck',
-  '--rootDir', mobileSrcDir,
+  '--rootDir', srcRoot,
   '--outDir', outDir,
   ...entries.map(file => join(featuresDir, file)),
+  join(srcRoot, 'shared/services/faceAnalysisService.test.ts'),
 ]);
 
 run(process.execPath, [join(outDir, 'features/face-report/reportFormat.test.js')]);
@@ -149,3 +213,4 @@ run(process.execPath, [join(outDir, 'features/face-report/services/reportStoryMo
 run(process.execPath, [join(outDir, 'features/face-report/services/reportCaptureReadiness.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.js')]);
 run(process.execPath, [join(outDir, 'features/ar/stencil/src/composer/bodyProfile.test.js')]);
+run(process.execPath, [join(outDir, 'shared/services/faceAnalysisService.test.js')]);

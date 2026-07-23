@@ -25,6 +25,51 @@ ANALYSIS_LAB_REMOVAL_SQL = """
 """
 
 POST_SCHEMA_MIGRATIONS = {
+  "schema.sql:golden-mask-v1": """
+    alter table media_assets
+      drop constraint if exists chk_media_assets_golden_mask_private,
+      add constraint chk_media_assets_golden_mask_private check (
+        media_kind <> 'golden-mask'
+        or (
+          cdn_url is null
+          and bucket is not null
+          and content_type is not null
+          and content_type = 'application/vnd.aura.golden-mask'
+          and object_key is not null
+          and object_key like 'uploads/golden-mask/%.auragm'
+        )
+      );
+
+    alter table analysis_reports
+      add column if not exists golden_mask_media_id uuid,
+      add column if not exists golden_mask_metadata jsonb;
+
+    update analysis_reports
+    set golden_mask_metadata = '{}'::jsonb
+    where golden_mask_metadata is null;
+
+    alter table analysis_reports
+      alter column golden_mask_metadata set default '{}'::jsonb,
+      alter column golden_mask_metadata set not null,
+      drop constraint if exists chk_analysis_reports_golden_mask_metadata,
+      add constraint chk_analysis_reports_golden_mask_metadata check (
+        jsonb_typeof(golden_mask_metadata) = 'object'
+        and (
+          golden_mask_media_id is null
+          or (
+            golden_mask_metadata ? 'schemaVersion'
+            and golden_mask_metadata ->> 'schemaVersion' = 'aura.golden-mask.v1'
+          )
+        )
+      ),
+      drop constraint if exists fk_analysis_reports_golden_mask_media,
+      add constraint fk_analysis_reports_golden_mask_media
+        foreign key (golden_mask_media_id) references media_assets(id) on delete set null;
+
+    create index if not exists idx_analysis_reports_golden_mask_media
+      on analysis_reports (golden_mask_media_id)
+      where golden_mask_media_id is not null;
+  """,
   "schema.sql:makeup-journey-v1": """
     alter table makeup_feedback_reports
       add column if not exists entry_date date,

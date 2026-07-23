@@ -184,20 +184,12 @@ class ConsultingAdvice(FaceAnalysisV2Model):
   rationale_metric_keys: list[str] = Field(alias="rationaleMetricKeys")
 
 
-class RecommendedLook(FaceAnalysisV2Model):
-  title: Annotated[str, Field(max_length=12)]
-  subtitle: Annotated[str, Field(max_length=16)]
-  description: Annotated[str, Field(max_length=82)]
-  tags: Annotated[list[str], Field(min_length=2, max_length=2)]
-
-
 class ConsultingResult(FaceAnalysisV2Model):
   makeup: MakeupConsulting
   color_and_product: ConsultingAdvice = Field(alias="colorAndProduct")
   hair: ConsultingAdvice
   fashion: ConsultingAdvice
   photography: ConsultingAdvice
-  recommended_look: RecommendedLook = Field(alias="recommendedLook")
   overall_mood: Annotated[str, Field(max_length=18)] = Field(alias="overallMood")
   summary: str
   short_summary: str = Field(alias="shortSummary")

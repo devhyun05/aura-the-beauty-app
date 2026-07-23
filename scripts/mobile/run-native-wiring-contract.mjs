@@ -119,11 +119,11 @@ function assertNotContains(source, needle, label) {
 {
   const path = 'apps/mobile/src/app/navigation/routes/faceAnalysisRoutes.tsx';
   const src = readSource(path);
-  assertContains(src, /cameraMetadata:\s*selectedFaceCapture\.cameraMetadata/, `${path}: 보고서 촬영의 cameraMetadata 전달이 없다 — WB 보정/캘리브레이션 수집이 죽음`);
+  assertContains(src, /cameraMetadata:\s*stillAnalysisCapture\.cameraMetadata/, `${path}: 보고서 촬영의 cameraMetadata 전달이 없다 — WB 보정/캘리브레이션 수집이 죽음`);
   assertContains(src, /outcome\.reported/, `${path}: 보고 메인 결과(outcome.reported) 배선이 없다 — 화면·저장 정합`);
   assertContains(
     src,
-    /mapUnifiedHairlineToVerticalThirds\(unifiedHairline\)/,
+    /mapUnifiedHairlineToVerticalThirds\(stillAnalysisHairline\)/,
     `${path}: 통합 촬영 H provider 변환이 보고서 세로비율 경로에서 빠졌다`,
   );
 }

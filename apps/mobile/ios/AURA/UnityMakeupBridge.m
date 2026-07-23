@@ -29,7 +29,8 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 - (void)handleUnityMessage:(NSString *)message;
 - (void)completeWarmupForReason:(NSString *)reason;
 - (UIView *)unityView;
-- (UIView *)unityViewForContainer:(UIView *)container;
+- (UIView *)unityViewForContainer:(UIView *)container runtimeMode:(NSString *)runtimeMode;
+- (void)updateRuntimeMode:(NSString *)runtimeMode forContainer:(UIView *)container;
 - (void)detachUnityView;
 - (void)detachUnityViewForContainer:(UIView *)container;
 - (void)detachUnityViewFromGlobalHide;
@@ -66,6 +67,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   BOOL _hasExplicitHiddenRunLease;
   BOOL _pauseWhenReadyIfHidden;
   __weak UIView *_unityViewOwner;
+  NSString *_visibleRuntimeMode;
   NSMutableSet<NSString *> *_hiddenRunLeaseIds;
   BOOL _applicationIsActive;
   BOOL _desiredPlayerPaused;
@@ -91,6 +93,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
         UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
     _desiredPlayerPaused = YES;
     _requestedRuntimeMode = @"live";
+    _visibleRuntimeMode = @"live";
     [self installApplicationLifecycleObserversIfNeeded];
   }
   return self;
@@ -303,8 +306,9 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     return nil;
   }
 
-  // Keep the loaded scene/models in memory, but resume the render loop,
-  // ARSession, camera and MediaPipe only while an on-screen container owns it.
+  // Keep the loaded scene/models in memory and resume the render loop while an
+  // on-screen container owns it. The owner-selected runtime mode decides
+  // whether ARSession, the camera, and MediaPipe also resume.
   [self reconcilePlayerPauseStateForReason:@"visible-container-claimed" force:NO];
 
   UIView *rootView = [self currentUnityRootView];
@@ -328,14 +332,37 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
   return rootView;
 }
 
-- (UIView *)unityViewForContainer:(UIView *)container
+- (UIView *)unityViewForContainer:(UIView *)container runtimeMode:(NSString *)runtimeMode
 {
   _unityViewOwner = container;
+  _visibleRuntimeMode =
+      [runtimeMode isEqualToString:@"still"] ? @"still" : @"live";
   UIView *rootView = [self unityView];
   if (!rootView && _unityViewOwner == container) {
     _unityViewOwner = nil;
+    _visibleRuntimeMode = @"live";
   }
   return rootView;
+}
+
+- (void)updateRuntimeMode:(NSString *)runtimeMode forContainer:(UIView *)container
+{
+  // React can deliver a prop update from a container whose navigation
+  // transition has already handed the singleton Unity view to a newer screen.
+  // Only the current owner is allowed to change the active runtime mode.
+  if (_unityViewOwner != container) {
+    NSLog(@"[aura:unity-native] ignored stale unity container runtime mode update");
+    return;
+  }
+
+  NSString *normalizedMode =
+      [runtimeMode isEqualToString:@"still"] ? @"still" : @"live";
+  if ([_visibleRuntimeMode isEqualToString:normalizedMode]) {
+    return;
+  }
+
+  _visibleRuntimeMode = normalizedMode;
+  [self reconcilePlayerPauseStateForReason:@"visible-container-mode-changed" force:NO];
 }
 
 - (void)scheduleFallbackRevealUnityView
@@ -358,6 +385,7 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
 - (void)detachUnityView
 {
   _unityViewOwner = nil;
+  _visibleRuntimeMode = @"live";
   _isPresentingUnityView = NO;
   _hasExplicitHiddenRunLease = NO;
   [self concealUnityView];
@@ -484,11 +512,17 @@ static NSString *const UnityMakeupEventNotification = @"AURAUnityMakeupEventNoti
     return;
   }
 
-  BOOL wantsLiveRuntime =
-      _applicationIsActive && (hasVisibleOwner || _hasExplicitHiddenRunLease);
-  NSString *runtimeMode = wantsLiveRuntime
-      ? @"live"
-      : (_applicationIsActive && _hiddenRunLeaseIds.count > 0 ? @"still" : @"idle");
+  NSString *runtimeMode = @"idle";
+  if (_applicationIsActive && hasVisibleOwner) {
+    // A visible still viewer is authoritative over any stale legacy hidden
+    // lease. It needs Unity's render loop, but must never reactivate ARSession,
+    // the front camera, or MediaPipe.
+    runtimeMode = [_visibleRuntimeMode isEqualToString:@"still"] ? @"still" : @"live";
+  } else if (_applicationIsActive && _hasExplicitHiddenRunLease) {
+    runtimeMode = @"live";
+  } else if (_applicationIsActive && _hiddenRunLeaseIds.count > 0) {
+    runtimeMode = @"still";
+  }
 
   // Stable state fast path. In particular, foreground lifecycle callbacks may
   // ask for a forced reassert after UnityAppController changes its own pause
@@ -1163,10 +1197,14 @@ RCT_EXPORT_METHOD(postMessageWithMetadata:(NSString *)gameObject
 @end
 
 @interface UnityMakeupContainerView : UIView
+
+@property (nonatomic, copy) NSString *runtimeMode;
+
 @end
 
 @implementation UnityMakeupContainerView {
   UIView *_unityView;
+  NSString *_runtimeMode;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
@@ -1175,8 +1213,29 @@ RCT_EXPORT_METHOD(postMessageWithMetadata:(NSString *)gameObject
   if (self) {
     self.backgroundColor = UIColor.blackColor;
     self.clipsToBounds = YES;
+    _runtimeMode = @"live";
   }
   return self;
+}
+
+- (NSString *)runtimeMode
+{
+  return _runtimeMode;
+}
+
+- (void)setRuntimeMode:(NSString *)runtimeMode
+{
+  NSString *normalizedMode =
+      [runtimeMode isEqualToString:@"still"] ? @"still" : @"live";
+  if ([_runtimeMode isEqualToString:normalizedMode]) {
+    return;
+  }
+
+  _runtimeMode = [normalizedMode copy];
+  if (self.window != nil) {
+    [[UnityMakeupRuntime sharedRuntime] updateRuntimeMode:_runtimeMode
+                                            forContainer:self];
+  }
 }
 
 - (void)didMoveToWindow
@@ -1200,7 +1259,9 @@ RCT_EXPORT_METHOD(postMessageWithMetadata:(NSString *)gameObject
 
 - (void)mountUnityViewIfNeeded
 {
-  UIView *unityView = [[UnityMakeupRuntime sharedRuntime] unityViewForContainer:self];
+  UIView *unityView =
+      [[UnityMakeupRuntime sharedRuntime] unityViewForContainer:self
+                                                   runtimeMode:_runtimeMode];
   if (!unityView) {
     return;
   }
@@ -1240,6 +1301,7 @@ RCT_EXPORT_METHOD(postMessageWithMetadata:(NSString *)gameObject
 @implementation UnityMakeupViewManager
 
 RCT_EXPORT_MODULE(AURAUnityMakeupView);
+RCT_EXPORT_VIEW_PROPERTY(runtimeMode, NSString)
 
 + (BOOL)requiresMainQueueSetup
 {

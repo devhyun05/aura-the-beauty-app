@@ -106,6 +106,11 @@ EXPECTED_TABLES = {
 EXPECTED_EXTENSIONS = {"btree_gist", "pg_trgm", "vector"}
 
 EXPECTED_CONSTRAINTS = {
+  "media_assets": {"chk_media_assets_golden_mask_private"},
+  "analysis_reports": {
+    "fk_analysis_reports_golden_mask_media",
+    "chk_analysis_reports_golden_mask_metadata",
+  },
   "face_measurement_preferences": {
     "face_measurement_preferences_pkey",
     "face_measurement_preferences_user_id_fkey",
@@ -195,7 +200,12 @@ EXPECTED_CONSTRAINTS = {
 }
 
 EXPECTED_COLUMNS = {
-  "analysis_reports": {"embedding", "deleted_at"},
+  "analysis_reports": {
+    "embedding",
+    "deleted_at",
+    "golden_mask_media_id",
+    "golden_mask_metadata",
+  },
   "face_measurement_preferences": {
     "user_id",
     "self_selected_locale",
@@ -446,6 +456,11 @@ EXPECTED_COLUMNS = {
 }
 
 EXPECTED_COLUMN_CONTRACTS = {
+  "analysis_reports.golden_mask_media_id": {"is_nullable": "YES"},
+  "analysis_reports.golden_mask_metadata": {
+    "is_nullable": "NO",
+    "default_contains": "{}",
+  },
   "face_measurement_preferences.user_id": {"is_nullable": "NO"},
   "face_measurement_preferences.self_selected_locale": {"is_nullable": "YES"},
   "face_measurement_preferences.locale_selection_source": {
@@ -531,6 +546,26 @@ EXPECTED_COLUMN_CONTRACTS = {
 }
 
 EXPECTED_CONSTRAINT_CONTRACTS = {
+  "chk_media_assets_golden_mask_private": (
+    "media_kind <> 'golden-mask'::text",
+    "cdn_url is null",
+    "bucket is not null",
+    "content_type is not null",
+    "content_type = 'application/vnd.aura.golden-mask'::text",
+    "object_key is not null",
+    "object_key ~~ 'uploads/golden-mask/%.auragm'::text",
+  ),
+  "fk_analysis_reports_golden_mask_media": (
+    "foreign key (golden_mask_media_id)",
+    "references media_assets(id)",
+    "on delete set null",
+  ),
+  "chk_analysis_reports_golden_mask_metadata": (
+    "jsonb_typeof(golden_mask_metadata) = 'object'",
+    "golden_mask_metadata ? 'schemaversion'::text",
+    "schemaversion",
+    "aura.golden-mask.v1",
+  ),
   "fk_product_recommendation_runs_source_makeup_report": (
     "foreign key (source_makeup_report_id)",
     "references makeup_recommendation_reports(id)",
@@ -723,6 +758,10 @@ EXPECTED_ENUM_VALUES = {
 }
 
 EXPECTED_INDEX_CONTRACTS = {
+  "idx_analysis_reports_golden_mask_media": (
+    "golden_mask_media_id",
+    "where (golden_mask_media_id is not null)",
+  ),
   "idx_product_recommendation_runs_source_makeup_report": (
     "source_makeup_report_id",
     "where (source_makeup_report_id is not null)",

@@ -23,6 +23,10 @@ import {clearMakeupDiscoveryCache} from '../../makeup-recommendation/state/makeu
 import {resetProductEventCollection} from '../../recommendation/services/productEventService';
 import {clearProductHubRecommendationCache} from '../../recommendation/services/productHubService';
 import {unregisterCurrentPushDevice} from '../../notifications/services/notificationService';
+import {
+  clearGoldenMaskPendingUploadsForUser,
+  handleGoldenMaskAuthUserChanged,
+} from '../../face-capture/services/goldenMaskUploadService';
 import {refreshAuthSession} from './authService';
 import type {AuthSession} from '../types';
 
@@ -143,6 +147,7 @@ export function AuthSessionProvider({
   const [session, setSessionState] = useState<AuthSession | null>(initialUsableSession);
   const [isRestoringSession, setIsRestoringSession] = useState(initialSession === null);
   const sessionRef = useRef<AuthSession | null>(session);
+  const goldenMaskUserIdRef = useRef<string | null>(null);
   const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
 
   const setSession = useCallback(async (nextSession: AuthSession | null) => {
@@ -158,8 +163,22 @@ export function AuthSessionProvider({
       await clearCachedUserProfile();
     }
 
+    if (userChanged && previousUserId) {
+      // The old access token is still active here, so unattached private media
+      // can be deleted from the old account before logout/account switch.
+      await clearGoldenMaskPendingUploadsForUser(previousUserId).catch(
+        () => undefined,
+      );
+    }
+
     sessionRef.current = nextSession;
     setSessionState(nextSession);
+    if (userChanged) {
+      goldenMaskUserIdRef.current = nextUserId;
+      await handleGoldenMaskAuthUserChanged(null, nextUserId).catch(
+        () => undefined,
+      );
+    }
     if (userChanged) {
       invalidateMakeupJourneyCache();
     }
@@ -222,6 +241,16 @@ export function AuthSessionProvider({
     resetProductEventCollection();
     clearProductHubRecommendationCache();
     clearMakeupJourneyPrivateImageMemoryCache();
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    const previousUserId = goldenMaskUserIdRef.current;
+    const nextUserId = session?.user.id ?? null;
+    if (previousUserId === nextUserId) {
+      return;
+    }
+    goldenMaskUserIdRef.current = nextUserId;
+    void handleGoldenMaskAuthUserChanged(previousUserId, nextUserId).catch(() => undefined);
   }, [session?.user.id]);
 
   useEffect(() => {

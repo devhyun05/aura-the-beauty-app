@@ -132,7 +132,7 @@ Table media_assets {
     (owner_user_id, created_at)
   }
 
-  Note: 'S3/CDN metadata for avatar, capture, analysis, product, look, AR preview images.'
+  Note: 'S3/CDN metadata for app media. golden-mask rows are private-only `.auragm` objects with application/vnd.aura.golden-mask and no CDN URL.'
 }
 
 Table media_upload_sessions {
@@ -197,6 +197,8 @@ Table analysis_reports {
   photo_capture_id uuid
   source_media_id uuid
   preview_media_id uuid
+  golden_mask_media_id uuid
+  golden_mask_metadata jsonb [not null, default: '{}', note: 'aura.golden-mask.v1 attachment metadata']
   status job_status [not null, default: 'completed']
   ai_provider text
   ai_model text
@@ -225,6 +227,7 @@ Table analysis_reports {
   indexes {
     (user_id, analyzed_at)
     (user_id, analyzed_at) [note: 'Partial index where deleted_at is null']
+    (golden_mask_media_id) [note: 'Partial index where golden_mask_media_id is not null']
   }
 
   Note: 'ImageAnalysisReportsList and ImageAnalysisReportDetail. facePointGuide, recommendedMakeups, avoidedMakeups live in detail_payload.'
@@ -2141,6 +2144,7 @@ Ref: analysis_reports.user_id > users.id
 Ref: analysis_reports.photo_capture_id > photo_captures.id
 Ref: analysis_reports.source_media_id > media_assets.id
 Ref: analysis_reports.preview_media_id > media_assets.id
+Ref: analysis_reports.golden_mask_media_id > media_assets.id
 Ref: face_measurement_preferences.user_id > users.id [delete: cascade]
 Ref: face_length_measurement_snapshots.report_id > analysis_reports.id [delete: cascade]
 Ref: analysis_stage_runs.report_id > analysis_reports.id [delete: cascade]

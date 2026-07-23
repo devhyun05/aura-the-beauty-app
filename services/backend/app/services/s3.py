@@ -6,7 +6,11 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.core.errors import AppError
-from app.core.media_policy import ALLOWED_UPLOAD_MEDIA_KINDS, upload_extension_for_content_type
+from app.core.media_policy import (
+  ALLOWED_UPLOAD_MEDIA_KINDS,
+  GOLDEN_MASK_MEDIA_KIND,
+  upload_extension_for_content_type,
+)
 from app.core.settings import Settings
 
 
@@ -16,6 +20,7 @@ PRIVATE_HAIR_MEDIA_KINDS = {
   "hair-simulation-result",
 }
 PRIVATE_HAIR_OBJECT_PREFIXES = tuple(f"uploads/{kind}/" for kind in PRIVATE_HAIR_MEDIA_KINDS)
+PRIVATE_GOLDEN_MASK_OBJECT_PREFIX = f"uploads/{GOLDEN_MASK_MEDIA_KIND}/"
 PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX = "uploads/generated-makeup-recommendations/"
 SERVER_MANAGED_MEDIA_KINDS = {
   "face-analysis",
@@ -37,6 +42,10 @@ MANAGED_MEDIA_OBJECT_PREFIXES = tuple(
 
 def is_private_hair_object_key(object_key: str) -> bool:
   return object_key.startswith(PRIVATE_HAIR_OBJECT_PREFIXES)
+
+
+def is_private_golden_mask_object_key(object_key: str) -> bool:
+  return object_key.startswith(PRIVATE_GOLDEN_MASK_OBJECT_PREFIX)
 
 
 def is_makeup_recommendation_object_key(object_key: str, settings: Settings) -> bool:
@@ -98,38 +107,52 @@ class S3Service:
     content_type: str,
     original_filename: str | None,
     expires_in: int = 900,
-  ) -> dict[str, str | int | None]:
+  ) -> dict[str, str | int | None | dict[str, str]]:
     if not self.settings.s3_bucket_name:
       raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required for uploads.")
 
     extension = upload_extension_for_content_type(content_type)
 
     object_key = f"uploads/{media_kind}/{uuid4()}{extension}"
-    is_private_hair_media = media_kind in PRIVATE_HAIR_MEDIA_KINDS
-    cache_control = "private, no-store" if is_private_hair_media else "public, max-age=31536000, immutable"
+    is_golden_mask = media_kind == GOLDEN_MASK_MEDIA_KIND
+    is_private_media = media_kind in PRIVATE_HAIR_MEDIA_KINDS or is_golden_mask
+    cache_control = "private, no-store" if is_private_media else "public, max-age=31536000, immutable"
+    put_params = {
+      "Bucket": self.settings.s3_bucket_name,
+      "ContentType": content_type,
+      "Key": object_key,
+      "CacheControl": cache_control,
+    }
+    required_headers: dict[str, str] | None = None
+    if is_golden_mask:
+      put_params["ServerSideEncryption"] = "AES256"
+      required_headers = {
+        "Content-Type": content_type,
+        "Cache-Control": cache_control,
+        "x-amz-server-side-encryption": "AES256",
+      }
     upload_url = self._client().generate_presigned_url(
       "put_object",
-      Params={
-        "Bucket": self.settings.s3_bucket_name,
-        "ContentType": content_type,
-        "Key": object_key,
-        "CacheControl": cache_control,
-      },
+      Params=put_params,
       ExpiresIn=expires_in,
     )
 
     cdn_base_url = self.settings.effective_cdn_base_url
 
-    return {
+    result: dict[str, str | int | None | dict[str, str]] = {
       "bucket": self.settings.s3_bucket_name,
       "object_key": object_key,
       "upload_url": upload_url,
-      "cdn_url": None if is_private_hair_media else (f"{cdn_base_url}/{object_key}" if cdn_base_url else ""),
+      "cdn_url": None if is_private_media else (f"{cdn_base_url}/{object_key}" if cdn_base_url else ""),
       "method": "PUT",
       "expires_in": expires_in,
       "content_type": content_type,
       "cache_control": cache_control,
     }
+    if required_headers is not None:
+      result["headers"] = required_headers
+      result["server_side_encryption"] = "AES256"
+    return result
 
   def delete_object(self, *, bucket: str, object_key: str) -> None:
     if not bucket or not object_key:

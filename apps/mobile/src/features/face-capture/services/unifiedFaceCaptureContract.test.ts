@@ -202,6 +202,51 @@ function completedFixture(overrides: Record<string, unknown> = {}) {
 
 const completed = parseUnifiedFaceCaptureEvent(completedFixture());
 expectEqual(completed?.type, 'unified_face_capture_completed', 'completed parses');
+const completedWithGoldenMask = parseUnifiedFaceCaptureEvent(
+  completedFixture({
+    goldenMask: {
+      byteSize: 38_400,
+      captureId: 'capture-1',
+      createdAtUnixMs: 1_753_238_400_000,
+      schemaVersion: 'aura.golden-mask.v1',
+      topologyFingerprint: 'a'.repeat(64),
+      triangleIndexCount: 6_912,
+      trueDepthHardware: true,
+      uri: 'file:///tmp/capture-1.gmask',
+      uvCount: 1_220,
+      vertexCount: 1_220,
+    },
+  }),
+);
+expectEqual(
+  completedWithGoldenMask?.type === 'unified_face_capture_completed'
+    ? completedWithGoldenMask.goldenMask?.schemaVersion
+    : null,
+  'aura.golden-mask.v1',
+  'valid optional Golden Mask artifact parses',
+);
+const completedWithInvalidGoldenMask = parseUnifiedFaceCaptureEvent(
+  completedFixture({
+    goldenMask: {
+      byteSize: 38_400,
+      captureId: 'another-capture',
+      createdAtUnixMs: 1_753_238_400_000,
+      schemaVersion: 'aura.golden-mask.v1',
+      topologyFingerprint: 'a'.repeat(64),
+      triangleIndexCount: 6_912,
+      trueDepthHardware: true,
+      uri: 'file:///tmp/capture-1.gmask',
+      uvCount: 1_220,
+      vertexCount: 1_220,
+    },
+  }),
+);
+expect(
+  completedWithInvalidGoldenMask?.type === 'unified_face_capture_completed' &&
+    !completedWithInvalidGoldenMask.goldenMask &&
+    completedWithInvalidGoldenMask.warnings.includes('golden_mask_contract_invalid'),
+  'invalid optional Golden Mask is omitted without blocking the capture',
+);
 const retryRequest = buildUnifiedFaceCaptureRequest({
   requestId: request.requestId,
   retryAttemptCount: 1,

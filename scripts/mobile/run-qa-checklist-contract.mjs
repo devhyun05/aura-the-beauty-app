@@ -436,10 +436,20 @@ const tests = [
     ], 'feedback all-slide capture');
     requireAll(feedbackEvidence, [
       'onSettledChange?: (settled: boolean) => void',
-      'onLoadEnd={handleImageSettled}',
+      "loadOutcomeRef.current = 'pending'",
+      "loadOutcomeRef.current = 'loaded'",
+      "loadOutcomeRef.current = 'failed'",
+      "loadOutcomeRef.current === 'loaded'",
+      'onLoadStart={handleImageLoadStart}',
+      'onLoad={handleImageLoaded}',
+      'onError={handleImageFailed}',
+      'onLoadEnd={handleImageLoadEnd}',
       'onLoadEnd={onLoadEnd}',
     ], 'feedback evidence image settle signal');
     requireAll(feedbackResult, [
+      'activeShareTargetRef.current',
+      'activeShareTargetRef.current = target',
+      'activeShareTargetRef.current = null',
       'requestPermissionsAsync(true, [])',
       'prepareCapture()',
       'FEEDBACK_CAPTURE_SETTLE_TIMEOUT_MS',
@@ -479,6 +489,18 @@ const tests = [
       'key={progressAttempt.key}',
       'progressStartedAtMs={progressAttempt.startedAtMs}',
     ], 'face analysis failure routing');
+    const retakeStart = routes.indexOf('const handleRetake = React.useCallback');
+    const openReportsStart = routes.indexOf('const handleOpenReports', retakeStart);
+    requireContract(
+      retakeStart >= 0 && openReportsStart > retakeStart,
+      'face analysis retake cleanup boundaries must exist',
+    );
+    const retakeSource = routes.slice(retakeStart, openReportsStart);
+    requireAll(retakeSource, [
+      'Promise.all([',
+      'deleteUnifiedFaceCaptureTempImage(',
+      'deleteGoldenMaskPendingArtifact(',
+    ], 'face analysis retake temporary artifact cleanup');
   }],
 
   ['5. romance-fantasy heroine category alignment', () => {

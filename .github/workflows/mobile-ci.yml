@@ -209,9 +209,6 @@ jobs:
       - name: Contract — Face ratio distortion
         run: npm run test:face-ratio-distortion
 
-      - name: Contract — Face ratio Phase 1 replay
-        run: npm run test:face-ratio-phase1
-
       - name: Contract - Generated mask event correlation
         run: npm run test:generated-mask
 

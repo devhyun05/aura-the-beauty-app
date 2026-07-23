@@ -148,7 +148,6 @@ export function FaceAnalysisLoadingScreen({
       bottomPadding={0}
       contentGap={0}
       horizontalPadding={0}
-      scroll={false}
       topPadding="none"
     >
       <YStack style={styles.content}>
@@ -320,7 +319,7 @@ function ProgressRing({label, progress}: ProgressRingProps) {
 
 const styles = StyleSheet.create({
   content: {
-    flex: 1,
+    flexGrow: 1,
     gap: spacing.xxl,
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,

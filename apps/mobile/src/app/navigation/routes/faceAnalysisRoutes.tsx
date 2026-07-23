@@ -7,8 +7,13 @@ import {
   createFaceAnalysisReportFromCapture,
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
-import type {FaceAnalysisAnchorPreview} from '../../../shared/services/faceAnalysisService';
+import {
+  logFaceAnalysisDebug,
+  type FaceAnalysisAnchorPreview,
+} from '../../../shared/services/faceAnalysisService';
 import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
+import {summarizeVerticalThirds} from '../../../features/face-report/services/fromFaceAnalysisReport';
+import type {MinimumFaceReportPreview} from '../../../features/face-report/services/minimumFaceReport';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
@@ -23,7 +28,10 @@ import {evaluateFace3DEntryEligibility} from '../../../features/face-3d/services
 import {isFace3DProfileAnalysisEligible} from '../../../features/face-3d/services/face3DContract';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
 import {UnifiedFaceCaptureScreen} from '../../../features/face-capture/screens/UnifiedFaceCaptureScreen';
-import {buildUnifiedFaceCaptureRequest} from '../../../features/face-capture/services/unifiedFaceCaptureContract';
+import {
+  buildUnifiedFaceCaptureRequest,
+  type UnifiedFaceCaptureCompletedEvent,
+} from '../../../features/face-capture/services/unifiedFaceCaptureContract';
 import {
   uploadFaceCaptureImage,
   type FaceCaptureUploadResult,
@@ -34,6 +42,11 @@ import {
   shouldUseUnifiedFaceCaptureRoute,
 } from '../../../features/face-capture/services/unifiedFaceCaptureNavigation';
 import {deleteUnifiedFaceCaptureTempImage} from '../../../features/face-capture/services/unifiedFaceCaptureTempImageCleanup';
+import {
+  deleteGoldenMaskPendingArtifact,
+  flushPendingGoldenMaskUploads,
+  queueGoldenMaskUploadForReport,
+} from '../../../features/face-capture/services/goldenMaskUploadService';
 import {derivePersonalColorCorrectionStatus} from '../../../features/face-analysis/services/faceAnalysisMeasurements';
 import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
@@ -52,6 +65,7 @@ import {
   analyzePersonalColorCapture,
   type PersonalColorAnalysisOutcome,
 } from '../../../features/personal-color/services/personalColorService';
+import {getMeasuredPersonalColorSummary} from '../../../features/personal-color/services/personalColorCore/presentation';
 import {useAuthSession} from '../../../features/auth';
 import {BackendApiError} from '../../../shared/services/backendApi';
 import {deleteFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
@@ -93,10 +107,35 @@ const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
   'ANALYSIS_JOB_FAILED',
   'ANALYSIS_REPORT_TEXT_REQUIRED',
   'ANALYSIS_REPORT_TIMEOUT',
-  'RECOMMENDED_MAKEUP_IMAGES_REQUIRED',
   // 화면 이탈로 폴링을 의도적으로 중단한 경우 — 재시도 대상이 아니다.
   'ANALYSIS_WAIT_ABORTED',
 ]);
+
+type StillAnalysisCapture = Pick<
+  FaceCaptureUploadResult,
+  'cameraMetadata' | 'imageUri' | 'photoCaptureId' | 'semanticMattes'
+>;
+
+export function resolveStillAnalysisCapture(
+  pendingCapture: UnifiedFaceCaptureCompletedEvent | null,
+  uploadedCapture: FaceCaptureUploadResult | null,
+): StillAnalysisCapture | null {
+  if (!pendingCapture) {
+    return uploadedCapture;
+  }
+
+  return {
+    cameraMetadata: pendingCapture.cameraMetadata
+      ? {
+          exposureDurationMs: pendingCapture.cameraMetadata.exposureDurationMs,
+          iso: pendingCapture.cameraMetadata.iso,
+        }
+      : null,
+    imageUri: pendingCapture.image.uri,
+    photoCaptureId: pendingCapture.captureId,
+    semanticMattes: undefined,
+  };
+}
 
 export function getFaceAnalysisReportFooterReservedHeight(
   footerBottomInset: number,
@@ -298,6 +337,8 @@ export function FaceAnalysisLoadingRouteScreen({
     invalidateUnifiedFaceCapture,
     selectedFace3DProfile,
     selectedFaceCapture,
+    selectedFaceVerticalThirds,
+    selectedPersonalColor,
     setSelectedFaceAnalysisReport,
     setSelectedFaceCapture,
     setSelectedFaceGeometry2d,
@@ -306,7 +347,7 @@ export function FaceAnalysisLoadingRouteScreen({
     setSelectedPersonalColorCorrection,
     unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
-  const {clearSession} = useAuthSession();
+  const {clearSession, session} = useAuthSession();
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
   const [anchorPreview, setAnchorPreview] =
     React.useState<FaceAnalysisAnchorPreview | null>(null);
@@ -320,12 +361,41 @@ export function FaceAnalysisLoadingRouteScreen({
   const analysisRetryCountRef = React.useRef(0);
   const pendingUploadPromiseRef = React.useRef<Promise<void> | null>(null);
   const pendingUnifiedCapture = route.params?.pendingUnifiedCapture ?? null;
+  const pendingStillAnalysisCapture =
+    React.useMemo<StillAnalysisCapture | null>(
+      () => resolveStillAnalysisCapture(pendingUnifiedCapture, null),
+      [pendingUnifiedCapture],
+    );
+  // 통합 촬영은 업로드 전 로컬 이미지로 정지영상 분석을 시작한다. 업로드가
+  // 커밋되어 selectedFaceCapture가 바뀌어도 pending 객체를 유지해 재분석하지 않는다.
+  const stillAnalysisCapture =
+    pendingStillAnalysisCapture ?? selectedFaceCapture;
+  const stillAnalysisHairline = pendingUnifiedCapture
+    ? pendingUnifiedCapture.hairline
+    : unifiedFaceCaptureFlow.committedCapture?.result.hairline;
+  const analysisAttemptRef = React.useRef<{
+    attemptId: string;
+    captureKey: string;
+    startedAt: number;
+  } | null>(null);
+  const minimumReportLoggedRef = React.useRef(false);
+  const minimumReportPreviewRef =
+    React.useRef<MinimumFaceReportPreview | null>(null);
+  const fullReportLoggedRef = React.useRef(false);
+  const completionRouteHandledRef = React.useRef(false);
+  const goldenMaskQueueLifecyclePromiseRef =
+    React.useRef<Promise<unknown> | null>(null);
+  const goldenMaskPendingArtifactRef = React.useRef(
+    pendingUnifiedCapture?.goldenMask ?? null,
+  );
   const verticalThirdsPromiseRef =
     React.useRef<Promise<FaceVerticalThirdsResult | null> | null>(null);
+  const verticalThirdsCaptureIdRef = React.useRef<string | null>(null);
   // 보고서 POST 가 대기하는 2D 기하 promise — POST deps 에 state 를 넣으면
   // 효과 재실행으로 이중 POST 가 나므로 반드시 ref 로만 전달한다.
   const faceGeometry2dPromiseRef =
     React.useRef<Promise<FaceGeometryResult | null> | null>(null);
+  const faceGeometry2dCaptureIdRef = React.useRef<string | null>(null);
   // Unity still-analysis lease: 진입 시 resume+ready 를 보장하는 promise.
   // 아래 정지영상 분석 효과들이 이 promise 를 체인해 시작 순서를 보장한다.
   const stillAnalysisReadyPromiseRef = React.useRef<Promise<boolean> | null>(null);
@@ -334,10 +404,77 @@ export function FaceAnalysisLoadingRouteScreen({
   // outcome(보정 후 결과 포함)을 받아 measurements·measuredPersonalColor 를 싣는다.
   const personalColorOutcomePromiseRef =
     React.useRef<Promise<PersonalColorAnalysisOutcome | null> | null>(null);
+  const personalColorCaptureIdRef = React.useRef<string | null>(null);
+  const deviceAnalysisLoggedCaptureIdRef = React.useRef<string | null>(null);
+
+  const logAttempt = React.useCallback(
+    (event: string, payload: Record<string, unknown> = {}) => {
+      const attempt = analysisAttemptRef.current;
+      if (!attempt) {
+        return;
+      }
+      logFaceAnalysisDebug(event, {
+        attemptId: attempt.attemptId,
+        elapsedMs: Date.now() - attempt.startedAt,
+        ...payload,
+      });
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    const captureKey = stillAnalysisCapture?.photoCaptureId;
+    if (!captureKey) {
+      analysisAttemptRef.current = null;
+      minimumReportLoggedRef.current = false;
+      minimumReportPreviewRef.current = null;
+      fullReportLoggedRef.current = false;
+      completionRouteHandledRef.current = false;
+      return;
+    }
+    if (analysisAttemptRef.current?.captureKey === captureKey) {
+      return;
+    }
+
+    analysisAttemptRef.current = {
+      attemptId: `face-${Date.now().toString(36)}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
+      captureKey,
+      startedAt: Date.now(),
+    };
+    minimumReportLoggedRef.current = false;
+    minimumReportPreviewRef.current = null;
+    fullReportLoggedRef.current = false;
+    completionRouteHandledRef.current = false;
+    logAttempt('capture-preparation:start', {
+      hasPendingUpload: Boolean(pendingStillAnalysisCapture),
+    });
+  }, [logAttempt, pendingStillAnalysisCapture, stillAnalysisCapture?.photoCaptureId]);
 
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
   }, [selectedFaceCapture?.mediaId, selectedFaceCapture?.photoCaptureId]);
+
+  React.useEffect(() => {
+    goldenMaskPendingArtifactRef.current =
+      pendingUnifiedCapture?.goldenMask ?? null;
+  }, [pendingUnifiedCapture?.goldenMask]);
+
+  React.useEffect(
+    () => () => {
+      const artifact = goldenMaskPendingArtifactRef.current;
+      const queued = goldenMaskQueueLifecyclePromiseRef.current;
+      if (queued) {
+        void queued
+          .finally(() => deleteGoldenMaskPendingArtifact(artifact))
+          .catch(() => undefined);
+      } else {
+        void deleteGoldenMaskPendingArtifact(artifact).catch(() => undefined);
+      }
+    },
+    [],
+  );
 
   // 통합 촬영은 실제 대기 화면으로 먼저 이동한 뒤 이 화면 안에서 업로드한다.
   // Promise ref로 StrictMode effect 재실행과 리렌더의 중복 업로드를 막고, 업로드가
@@ -373,15 +510,24 @@ export function FaceAnalysisLoadingRouteScreen({
     })
       .then(async upload => {
         if (commitUnifiedFaceCapture(pendingUnifiedCapture, upload)) {
+          logAttempt('upload:done', {success: true});
           return;
         }
 
-        await deleteUnifiedFaceCaptureTempImage(
-          pendingUnifiedCapture.image.uri,
-        );
+        await Promise.all([
+          deleteUnifiedFaceCaptureTempImage(
+            pendingUnifiedCapture.image.uri,
+          ),
+          deleteGoldenMaskPendingArtifact(pendingUnifiedCapture.goldenMask),
+        ]);
         throw new Error('unified_capture_commit_rejected');
       })
       .catch(error => {
+        logAttempt('attempt:failed', {
+          stage: 'upload',
+          success: false,
+          errorType: error instanceof Error ? error.name : typeof error,
+        });
         console.info('[aura:unified-face-capture] processing-upload:error', {
           message: error instanceof Error ? error.message : String(error),
         });
@@ -400,6 +546,7 @@ export function FaceAnalysisLoadingRouteScreen({
     pendingUploadPromiseRef.current = uploadPromise;
   }, [
     commitUnifiedFaceCapture,
+    logAttempt,
     navigation,
     pendingUnifiedCapture,
     selectedFaceCapture,
@@ -417,11 +564,11 @@ export function FaceAnalysisLoadingRouteScreen({
     stillAnalysisReadyPromiseRef.current = null;
     stillAnalysisLeaseIdRef.current = null;
 
-    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+    if (!stillAnalysisCapture) {
       return undefined;
     }
 
-    const leaseId = `face-analysis:${selectedFaceCapture.photoCaptureId}:${Date.now()}:${Math.random()
+    const leaseId = `face-analysis:${stillAnalysisCapture.photoCaptureId}:${Date.now()}:${Math.random()
       .toString(36)
       .slice(2)}`;
 
@@ -439,167 +586,241 @@ export function FaceAnalysisLoadingRouteScreen({
         stillAnalysisLeaseIdRef.current = null;
       }
     };
-  }, [navigation, selectedFaceCapture]);
+  }, [navigation, stillAnalysisCapture]);
 
   // 얼굴 세로 비율은 캡처당 1회만 온디바이스로 계산한다.
   // 보고서 재시도(analysisRequestKey)와 분리해 재계산을 막고,
   // 실패는 null로 격리해 보고서 생성 흐름에 영향을 주지 않는다.
   React.useEffect(() => {
-    setSelectedFaceVerticalThirds(null);
-    verticalThirdsPromiseRef.current = null;
-
-    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+    if (!stillAnalysisCapture) {
+      setSelectedFaceVerticalThirds(null);
+      verticalThirdsPromiseRef.current = null;
+      verticalThirdsCaptureIdRef.current = null;
       return undefined;
     }
 
     let isMounted = true;
-    const captureId = selectedFaceCapture.photoCaptureId;
-    const unifiedHairline =
-      unifiedFaceCaptureFlow.committedCapture?.result.hairline;
-    const capturedHairline: FaceVerticalThirdsInput['capturedHairline'] =
-      mapUnifiedHairlineToVerticalThirds(unifiedHairline);
+    const captureId = stillAnalysisCapture.photoCaptureId;
+    if (
+      verticalThirdsCaptureIdRef.current !== captureId ||
+      !verticalThirdsPromiseRef.current
+    ) {
+      setSelectedFaceVerticalThirds(null);
+      verticalThirdsCaptureIdRef.current = captureId;
+      const capturedHairline: FaceVerticalThirdsInput['capturedHairline'] =
+        mapUnifiedHairlineToVerticalThirds(stillAnalysisHairline);
 
-    // still-analysis lease 의 resume+ready 뒤에 시작한다 (ready 실패여도 진행 —
-    // 서비스가 자체 타임아웃/미탑재를 null 강등으로 흡수한다).
-    verticalThirdsPromiseRef.current = (
-      stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
-    )
-      .then(() =>
-        analyzeFaceVerticalThirds({
-          captureId,
-          capturedHairline,
-          createdAt: new Date().toISOString(),
-          imageUri: selectedFaceCapture.imageUri,
-          semanticMattes: selectedFaceCapture.semanticMattes,
-          sessionId: captureId,
-        }),
+      // still-analysis lease 의 resume+ready 뒤에 시작한다 (ready 실패여도 진행 —
+      // 서비스가 자체 타임아웃/미탑재를 null 강등으로 흡수한다).
+      verticalThirdsPromiseRef.current = (
+        stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
       )
-      .then(result => {
-        if (isMounted) {
-          setSelectedFaceVerticalThirds(result);
-        }
+        .then(() =>
+          analyzeFaceVerticalThirds({
+            captureId,
+            capturedHairline,
+            createdAt: new Date().toISOString(),
+            imageUri: stillAnalysisCapture.imageUri,
+            semanticMattes: stillAnalysisCapture.semanticMattes,
+            sessionId: captureId,
+          }),
+        )
+        .catch(error => {
+          console.info('[aura:face-ratio] analysis:error', {
+            message: error instanceof Error ? error.message : String(error),
+          });
 
-        return result;
-      })
-      .catch(error => {
-        console.info('[aura:face-ratio] analysis:error', {
-          message: error instanceof Error ? error.message : String(error),
+          return null;
         });
+    }
 
-        return null;
-      });
+    void verticalThirdsPromiseRef.current.then(result => {
+      if (isMounted && verticalThirdsCaptureIdRef.current === captureId) {
+        setSelectedFaceVerticalThirds(result);
+      }
+    });
 
     return () => {
       isMounted = false;
     };
   }, [
-    selectedFaceCapture,
     setSelectedFaceVerticalThirds,
-    unifiedFaceCaptureFlow.committedCapture,
+    stillAnalysisHairline,
+    stillAnalysisCapture,
   ]);
 
   // 2D 기하 지표도 캡처당 1회 온디바이스로 계산한다. 같은 imageUri 라 Unity
   // 랜드마크 검출은 requestFaceLandmarks dedup 으로 세로비율과 1회를 공유한다.
   // 실패는 null 로 격리하고, 보고서 POST 는 ref 의 promise 로만 대기한다.
   React.useEffect(() => {
-    setSelectedFaceGeometry2d(null);
-    faceGeometry2dPromiseRef.current = null;
-
-    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+    if (!stillAnalysisCapture) {
+      setSelectedFaceGeometry2d(null);
+      faceGeometry2dPromiseRef.current = null;
+      faceGeometry2dCaptureIdRef.current = null;
       return undefined;
     }
 
     let isMounted = true;
-    const captureId = selectedFaceCapture.photoCaptureId;
+    const captureId = stillAnalysisCapture.photoCaptureId;
 
-    // still-analysis lease 의 resume+ready 뒤에 시작한다 (ready 실패여도 진행 —
-    // 서비스가 자체 타임아웃/미탑재를 결과 status 로 흡수한다).
-    faceGeometry2dPromiseRef.current = (
-      stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
-    )
-      .then(() =>
-        analyzeFaceGeometry2d({
-          captureId,
-          createdAt: new Date().toISOString(),
-          imageUri: selectedFaceCapture.imageUri,
-          sessionId: captureId,
-        }),
+    if (
+      faceGeometry2dCaptureIdRef.current !== captureId ||
+      !faceGeometry2dPromiseRef.current
+    ) {
+      setSelectedFaceGeometry2d(null);
+      faceGeometry2dCaptureIdRef.current = captureId;
+      // still-analysis lease 의 resume+ready 뒤에 시작한다 (ready 실패여도 진행 —
+      // 서비스가 자체 타임아웃/미탑재를 결과 status 로 흡수한다).
+      faceGeometry2dPromiseRef.current = (
+        stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
       )
-      .then(result => {
-        if (isMounted) {
-          setSelectedFaceGeometry2d(result);
-        }
+        .then(() =>
+          analyzeFaceGeometry2d({
+            captureId,
+            createdAt: new Date().toISOString(),
+            imageUri: stillAnalysisCapture.imageUri,
+            sessionId: captureId,
+          }),
+        )
+        .catch(error => {
+          console.info('[aura:face-geometry] analysis:error', {
+            message: error instanceof Error ? error.message : String(error),
+          });
 
-        return result;
-      })
-      .catch(error => {
-        console.info('[aura:face-geometry] analysis:error', {
-          message: error instanceof Error ? error.message : String(error),
+          return null;
         });
+    }
 
-        return null;
-      });
+    void faceGeometry2dPromiseRef.current.then(result => {
+      if (isMounted && faceGeometry2dCaptureIdRef.current === captureId) {
+        setSelectedFaceGeometry2d(result);
+      }
+    });
 
     return () => {
       isMounted = false;
     };
-  }, [selectedFaceCapture, setSelectedFaceGeometry2d]);
+  }, [setSelectedFaceGeometry2d, stillAnalysisCapture]);
 
   // 퍼스널 컬러도 캡처당 1회 온디바이스로 진단한다. 측정 데이터 3-반영 규칙:
   // outcome(보정 후 reported)은 화면 표시와 함께 보고서 POST(AI 입력·서버 저장)
   // 에도 실린다. 실패는 null 격리 — 보고서 생성 자체는 막지 않는다.
   React.useEffect(() => {
-    setSelectedPersonalColor(null);
-    setSelectedPersonalColorCorrection(null);
-    personalColorOutcomePromiseRef.current = null;
-
-    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+    if (!stillAnalysisCapture) {
+      setSelectedPersonalColor(null);
+      setSelectedPersonalColorCorrection(null);
+      personalColorOutcomePromiseRef.current = null;
+      personalColorCaptureIdRef.current = null;
       return undefined;
     }
 
     let isMounted = true;
-    const captureId = selectedFaceCapture.photoCaptureId;
+    const captureId = stillAnalysisCapture.photoCaptureId;
 
-    // outcome 을 반환해 ref 에 남긴다 — POST 의 measurements 입력 + end-lease
-    // settle 게이트 겸용 (undefined resolve 였던 종전 체인의 버그 수정).
-    personalColorOutcomePromiseRef.current = (
-      stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
-    )
-      .then(() =>
-        analyzePersonalColorCapture({
-          // 셔터 시점 카메라 메타(WB gains 등) — 조명 보정(sclera/WB)의 입력.
-          cameraMetadata: selectedFaceCapture.cameraMetadata ?? null,
-          captureId,
-          createdAt: new Date().toISOString(),
-          imageUri: selectedFaceCapture.imageUri,
-          sessionId: captureId,
-        }),
+    if (
+      personalColorCaptureIdRef.current !== captureId ||
+      !personalColorOutcomePromiseRef.current
+    ) {
+      setSelectedPersonalColor(null);
+      setSelectedPersonalColorCorrection(null);
+      personalColorCaptureIdRef.current = captureId;
+      // outcome 을 반환해 ref 에 남긴다 — POST 의 measurements 입력 + end-lease
+      // settle 게이트 겸용 (undefined resolve 였던 종전 체인의 버그 수정).
+      personalColorOutcomePromiseRef.current = (
+        stillAnalysisReadyPromiseRef.current ?? Promise.resolve(false)
       )
-      .then(outcome => {
-        if (isMounted) {
-          // 보정 우선 표시: 조명 보정 성공 시 corrected 를 메인으로(조명 불변성),
-          // 실패 시 baseline 유지 + 미적용 사유를 배지로 노출(조용한 실패 금지).
-          // reported = 저장(writeResultJson)과 동일한 보고 메인 결과(보정 우선).
-          setSelectedPersonalColor(outcome.reported);
-          setSelectedPersonalColorCorrection(
-            derivePersonalColorCorrectionStatus(outcome),
-          );
-        }
+        .then(() =>
+          analyzePersonalColorCapture({
+            // 셔터 시점 카메라 메타(WB gains 등) — 조명 보정(sclera/WB)의 입력.
+            cameraMetadata: stillAnalysisCapture.cameraMetadata ?? null,
+            captureId,
+            createdAt: new Date().toISOString(),
+            imageUri: stillAnalysisCapture.imageUri,
+            sessionId: captureId,
+          }),
+        )
+        .catch(error => {
+          console.info('[aura:personal-color] analysis:error', {
+            message: error instanceof Error ? error.message : String(error),
+          });
 
-        return outcome;
-      })
-      .catch(error => {
-        console.info('[aura:personal-color] analysis:error', {
-          message: error instanceof Error ? error.message : String(error),
+          return null;
         });
+    }
 
-        return null;
-      });
+    void personalColorOutcomePromiseRef.current.then(outcome => {
+      if (
+        isMounted &&
+        outcome &&
+        personalColorCaptureIdRef.current === captureId
+      ) {
+        // 보정 우선 표시: 조명 보정 성공 시 corrected 를 메인으로(조명 불변성),
+        // 실패 시 baseline 유지 + 미적용 사유를 배지로 노출(조용한 실패 금지).
+        // reported = 저장(writeResultJson)과 동일한 보고 메인 결과(보정 우선).
+        setSelectedPersonalColor(outcome.reported);
+        setSelectedPersonalColorCorrection(
+          derivePersonalColorCorrectionStatus(outcome),
+        );
+      }
+    });
 
     return () => {
       isMounted = false;
     };
-  }, [selectedFaceCapture, setSelectedPersonalColor, setSelectedPersonalColorCorrection]);
+  }, [
+    setSelectedPersonalColor,
+    setSelectedPersonalColorCorrection,
+    stillAnalysisCapture,
+  ]);
+
+  // 실제 세 분석 promise가 모두 settle한 순간을 기록한다. 업로드 완료 시점에
+  // 결과를 소비하며 찍으면 업로드 시간이 섞여 병렬화 여부를 판단할 수 없다.
+  React.useEffect(() => {
+    const captureId = stillAnalysisCapture?.photoCaptureId;
+    if (
+      !captureId ||
+      !verticalThirdsPromiseRef.current ||
+      !faceGeometry2dPromiseRef.current ||
+      !personalColorOutcomePromiseRef.current
+    ) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    void Promise.all([
+      verticalThirdsPromiseRef.current,
+      faceGeometry2dPromiseRef.current,
+      personalColorOutcomePromiseRef.current,
+    ]).then(([verticalThirds, faceGeometry, personalColorOutcome]) => {
+      if (
+        !isMounted ||
+        deviceAnalysisLoggedCaptureIdRef.current === captureId
+      ) {
+        return;
+      }
+      deviceAnalysisLoggedCaptureIdRef.current = captureId;
+      logAttempt('device-analysis:done', {
+        hasFaceGeometry2d: Boolean(faceGeometry),
+        hasFaceVerticalThirds: Boolean(verticalThirds),
+        hasPersonalColor: Boolean(personalColorOutcome),
+        success: Boolean(
+          verticalThirds && faceGeometry && personalColorOutcome,
+        ),
+      });
+      if (!verticalThirds || !faceGeometry || !personalColorOutcome) {
+        console.warn('[aura:analysis] on-device-axis:degraded', {
+          faceGeometry2d: Boolean(faceGeometry),
+          faceVerticalThirds: Boolean(verticalThirds),
+          personalColor: Boolean(personalColorOutcome),
+          timeoutMs: STILL_ANALYSIS_WAIT_TIMEOUT_MS,
+        });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [logAttempt, stillAnalysisCapture?.photoCaptureId]);
 
   React.useEffect(() => {
     setIsAnalysisReady(false);
@@ -613,6 +834,9 @@ export function FaceAnalysisLoadingRouteScreen({
 
     let isMounted = true;
     let retryTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let goldenMaskQueuePromise: ReturnType<
+      typeof queueGoldenMaskUploadForReport
+    > | null = null;
     // 화면 이탈 시 최대 240초짜리 분석 폴링이 백그라운드에 매달리지 않게 중단한다.
     const analysisAbortController = new AbortController();
 
@@ -634,15 +858,6 @@ export function FaceAnalysisLoadingRouteScreen({
           return null;
         }
 
-        if (!verticalThirds || !faceGeometry || !personalColorOutcome) {
-          console.warn('[aura:analysis] on-device-axis:degraded', {
-            faceGeometry2d: Boolean(faceGeometry),
-            faceVerticalThirds: Boolean(verticalThirds),
-            personalColor: Boolean(personalColorOutcome),
-            timeoutMs: STILL_ANALYSIS_WAIT_TIMEOUT_MS,
-          });
-        }
-
         return createFaceAnalysisReportFromCapture(
           selectedFaceCapture,
           buildFaceVerticalThirdsAnalysisPayload(verticalThirds),
@@ -659,7 +874,48 @@ export function FaceAnalysisLoadingRouteScreen({
             personalColor: personalColorOutcome,
           },
           // 앵커(~4s) 확정 시 얼굴형·피부·무드를 로딩 화면에 먼저 노출.
-          {onAnchorPreview: setAnchorPreview},
+          {
+            onAnalysisCreated: reportId => {
+              logAttempt('analysis-job:created', {
+                hasReportId: Boolean(reportId),
+                success: true,
+              });
+              const goldenMask =
+                unifiedFaceCaptureFlow.committedCapture?.result.goldenMask;
+              const userId = session?.user.id;
+              if (!goldenMask || !userId) {
+                return;
+              }
+
+              // 보고서 폴링을 기다리게 하지 않는다. 먼저 no-backup cache에 복사해
+              // 사용자별 retry queue에 넣고, 업로드·귀속은 병렬로 시도한다.
+              goldenMaskQueuePromise = queueGoldenMaskUploadForReport({
+                artifact: goldenMask,
+                reportId,
+                userId,
+              });
+              goldenMaskQueueLifecyclePromiseRef.current =
+                goldenMaskQueuePromise;
+              void goldenMaskQueuePromise.catch(error => {
+                console.info('[aura:golden-mask] queue:error', {
+                  code: error instanceof BackendApiError ? error.code : undefined,
+                  errorType: error instanceof Error ? error.name : typeof error,
+                  reportId,
+                  status:
+                    error instanceof BackendApiError ? error.status : undefined,
+                });
+              });
+            },
+            onAnchorPreview: preview => {
+              setAnchorPreview(preview);
+              logAttempt('anchor:ready', {
+                hasFaceShape: Boolean(preview.faceShape),
+                hasRecommendedMood: Boolean(preview.recommendedMood),
+                hasSkinType: Boolean(preview.skinType),
+                success: true,
+              });
+            },
+          },
           // 화면 이탈 시 폴링 중단 — 최대 240초 백그라운드 매달림 방지.
           analysisAbortController.signal,
         );
@@ -672,6 +928,55 @@ export function FaceAnalysisLoadingRouteScreen({
         setSelectedFaceAnalysisReport(report);
         analysisRetryCountRef.current = 0;
         setIsAnalysisReady(true);
+        if (
+          minimumReportLoggedRef.current &&
+          !fullReportLoggedRef.current
+        ) {
+          fullReportLoggedRef.current = true;
+          logAttempt('full-report:shown', {success: true});
+        }
+        if (
+          minimumReportLoggedRef.current &&
+          route.params?.afterAnalysisRoute === 'ProductRecommendation' &&
+          !completionRouteHandledRef.current
+        ) {
+          completionRouteHandledRef.current = true;
+          navigation.navigate('ProductRecommendation');
+        }
+
+        const userId = session?.user.id;
+        if (userId) {
+          // queue가 먼저 끝났다면 그 descriptor를 반영하고, 네트워크 재시도
+          // 항목이 남아 있으면 완료된 보고서를 보여 준 뒤 한 번 더 flush한다.
+          void (goldenMaskQueuePromise ?? Promise.resolve())
+            .then(async queuedDescriptor => {
+              if (queuedDescriptor) {
+                return queuedDescriptor;
+              }
+              const attachments =
+                await flushPendingGoldenMaskUploads(userId);
+              return (
+                attachments.find(
+                  attachment => attachment.reportId === report.id,
+                )?.descriptor ?? null
+              );
+            })
+            .then(descriptor => {
+              if (!descriptor) {
+                return;
+              }
+              // The loading route may already have handed off to the report
+              // while the private mesh upload is finishing. The flow-state
+              // setter outlives this screen; the report-id guard below keeps a
+              // late completion from touching a newer report.
+              setSelectedFaceAnalysisReport(currentReport =>
+                currentReport?.id === report.id
+                  ? {...currentReport, goldenMask: descriptor}
+                  : currentReport,
+              );
+            })
+            .catch(() => undefined);
+        }
       })
       .catch(error => {
         if (!isMounted) {
@@ -699,6 +1004,11 @@ export function FaceAnalysisLoadingRouteScreen({
           retryCount: analysisRetryCountRef.current,
           status: error instanceof BackendApiError ? error.status : undefined,
         });
+        logAttempt('attempt:failed', {
+          stage: 'analysis-report',
+          success: false,
+          errorType: error instanceof Error ? error.name : typeof error,
+        });
 
         if (
           !shouldRetryAnalysisError(error) ||
@@ -710,9 +1020,22 @@ export function FaceAnalysisLoadingRouteScreen({
             message: error instanceof Error ? error.message : String(error),
             status: error instanceof BackendApiError ? error.status : undefined,
           });
-          setAnalysisErrorMessage(
-            error instanceof Error ? error.message : FACE_ANALYSIS_LOADING_ERROR_MESSAGE,
-          );
+          const finalErrorMessage =
+            error instanceof Error
+              ? error.message
+              : FACE_ANALYSIS_LOADING_ERROR_MESSAGE;
+          setAnalysisErrorMessage(finalErrorMessage);
+          if (minimumReportPreviewRef.current) {
+            const failedPreview = {
+              ...minimumReportPreviewRef.current,
+              errorMessage: finalErrorMessage,
+            };
+            minimumReportPreviewRef.current = failedPreview;
+            navigation.navigate('FaceAnalysisReportDetail', {
+              afterAnalysisRoute: route.params?.afterAnalysisRoute,
+              minimumPreview: failedPreview,
+            });
+          }
           return;
         }
 
@@ -735,9 +1058,13 @@ export function FaceAnalysisLoadingRouteScreen({
     analysisRequestKey,
     clearSession,
     navigation,
+    logAttempt,
     selectedFaceCapture,
     selectedFace3DProfile,
+    session?.user.id,
     setSelectedFaceAnalysisReport,
+    route.params?.afterAnalysisRoute,
+    unifiedFaceCaptureFlow.committedCapture,
   ]);
 
   // [Unity still-analysis lease 반납] 정지영상 분석이 모두 settle 하면 이 화면의
@@ -745,7 +1072,7 @@ export function FaceAnalysisLoadingRouteScreen({
   // 일찍 나가도 Unity가 계속 돌지 않고, 늦은 cleanup이 새 AR 화면이나 새 분석을
   // 멈추지도 않는다.
   React.useEffect(() => {
-    if (!shouldCreateFaceAnalysisReportFromCapture(selectedFaceCapture)) {
+    if (!stillAnalysisCapture) {
       return undefined;
     }
 
@@ -765,7 +1092,61 @@ export function FaceAnalysisLoadingRouteScreen({
     });
 
     return undefined;
-  }, [selectedFaceCapture]);
+  }, [stillAnalysisCapture]);
+
+  const minimumPersonalColor = selectedPersonalColor
+    ? getMeasuredPersonalColorSummary(selectedPersonalColor).personalColor
+    : undefined;
+  const minimumRatioSummary = selectedFaceVerticalThirds
+    ? summarizeVerticalThirds(selectedFaceVerticalThirds)
+    : undefined;
+  const minimumHas3DModel = Boolean(
+    pendingUnifiedCapture?.goldenMask ??
+      unifiedFaceCaptureFlow.committedCapture?.result.goldenMask,
+  );
+
+  React.useEffect(() => {
+    if (
+      !anchorPreview ||
+      minimumReportLoggedRef.current ||
+      !(stillAnalysisCapture?.imageUri)
+    ) {
+      return;
+    }
+
+    const minimumPreview: MinimumFaceReportPreview = {
+      capturedPhotoUri: stillAnalysisCapture.imageUri,
+      faceShape: anchorPreview.faceShape,
+      has3DModel: minimumHas3DModel,
+      personalColor: minimumPersonalColor,
+      ratioSummary: minimumRatioSummary,
+      recommendedMood: anchorPreview.recommendedMood,
+      skinType: anchorPreview.skinType,
+    };
+    minimumReportLoggedRef.current = true;
+    minimumReportPreviewRef.current = minimumPreview;
+    navigation.navigate('FaceAnalysisReportDetail', {
+      afterAnalysisRoute: route.params?.afterAnalysisRoute,
+      minimumPreview,
+    });
+    logAttempt('minimum-report:shown', {
+      hasFaceVerticalThirds: Boolean(selectedFaceVerticalThirds),
+      hasGoldenMask: minimumHas3DModel,
+      hasPersonalColor: Boolean(selectedPersonalColor),
+      success: true,
+    });
+  }, [
+    anchorPreview,
+    logAttempt,
+    minimumHas3DModel,
+    minimumPersonalColor,
+    minimumRatioSummary,
+    navigation,
+    route.params?.afterAnalysisRoute,
+    selectedFaceVerticalThirds,
+    selectedPersonalColor,
+    stillAnalysisCapture?.imageUri,
+  ]);
 
   const handleRetryAnalysis = React.useCallback(() => {
     analysisRetryCountRef.current = 0;
@@ -790,16 +1171,28 @@ export function FaceAnalysisLoadingRouteScreen({
       if (pendingUpload) {
         void pendingUpload
           .finally(() =>
-            deleteUnifiedFaceCaptureTempImage(
-              pendingUnifiedCapture.image.uri,
-            ),
+            Promise.all([
+              deleteUnifiedFaceCaptureTempImage(
+                pendingUnifiedCapture.image.uri,
+              ),
+              deleteGoldenMaskPendingArtifact(
+                pendingUnifiedCapture.goldenMask,
+              ),
+            ]),
           )
           .catch(() => undefined);
       } else {
-        void deleteUnifiedFaceCaptureTempImage(
-          pendingUnifiedCapture.image.uri,
-        ).catch(() => undefined);
+        void Promise.all([
+          deleteUnifiedFaceCaptureTempImage(
+            pendingUnifiedCapture.image.uri,
+          ),
+          deleteGoldenMaskPendingArtifact(pendingUnifiedCapture.goldenMask),
+        ]).catch(() => undefined);
       }
+    } else if (pendingUnifiedCapture?.goldenMask) {
+      void deleteGoldenMaskPendingArtifact(
+        pendingUnifiedCapture.goldenMask,
+      ).catch(() => undefined);
     }
 
     goBackToPreviousOrMainTab(navigation, 'HomeTab');
@@ -822,12 +1215,24 @@ export function FaceAnalysisLoadingRouteScreen({
       const pendingUpload = pendingUploadPromiseRef.current;
       if (pendingUpload) {
         void pendingUpload
-          .finally(() => deleteUnifiedFaceCaptureTempImage(pendingUnifiedCapture.image.uri))
+          .finally(() =>
+            Promise.all([
+              deleteUnifiedFaceCaptureTempImage(
+                pendingUnifiedCapture.image.uri,
+              ),
+              deleteGoldenMaskPendingArtifact(
+                pendingUnifiedCapture.goldenMask,
+              ),
+            ]),
+          )
           .catch(() => undefined);
       } else {
-        void deleteUnifiedFaceCaptureTempImage(pendingUnifiedCapture.image.uri).catch(
-          () => undefined,
-        );
+        void Promise.all([
+          deleteUnifiedFaceCaptureTempImage(
+            pendingUnifiedCapture.image.uri,
+          ),
+          deleteGoldenMaskPendingArtifact(pendingUnifiedCapture.goldenMask),
+        ]).catch(() => undefined);
       }
     }
 
@@ -853,7 +1258,8 @@ export function FaceAnalysisLoadingRouteScreen({
     navigation.replace('FaceAnalysisReportsList');
   }, [navigation]);
   const handleAnalysisComplete = React.useCallback(() => {
-    if (!navigation.isFocused()) {
+    const minimumReportIsOpen = minimumReportLoggedRef.current;
+    if (!minimumReportIsOpen && !navigation.isFocused()) {
       return;
     }
 
@@ -866,17 +1272,33 @@ export function FaceAnalysisLoadingRouteScreen({
       releaseUnityMakeupHiddenRunLease(leaseId);
       stillAnalysisLeaseIdRef.current = null;
     }
+    if (!fullReportLoggedRef.current) {
+      fullReportLoggedRef.current = true;
+      logAttempt('full-report:shown', {success: true});
+    }
 
     // replace: 로딩을 스택에서 제거한다. navigate로 남겨두면 다음 분석 세션에서
     // 캡처 교체 시 이 화면의 효과들이 백그라운드로 재실행돼 보고서 POST가 중복되고,
     // 완료 자동 이동이 새 흐름(3D 측정 등) 위를 덮는 문제가 있었다.
     if (route.params?.afterAnalysisRoute === 'ProductRecommendation') {
-      navigation.replace('ProductRecommendation');
+      if (completionRouteHandledRef.current) {
+        return;
+      }
+      completionRouteHandledRef.current = true;
+      if (minimumReportIsOpen) {
+        navigation.navigate('ProductRecommendation');
+      } else {
+        navigation.replace('ProductRecommendation');
+      }
+      return;
+    }
+
+    if (minimumReportIsOpen) {
       return;
     }
 
     navigation.replace('FaceAnalysisReportDetail');
-  }, [navigation, route.params?.afterAnalysisRoute]);
+  }, [logAttempt, navigation, route.params?.afterAnalysisRoute]);
 
   return (
     <DetailRouteChrome
@@ -940,6 +1362,8 @@ export function FaceAnalysisReportPreviewRouteScreen({
   route,
 }: RootScreenProps<'FaceAnalysisReportDetail'>) {
   const shouldReturnToProfile = route.params?.returnTo === 'profile';
+  const minimumPreview = route.params?.minimumPreview ?? null;
+  const finalizedMinimumHandoffRef = React.useRef(false);
   const {
     selectedFaceAnalysisReport,
     selectedFaceCapture,
@@ -949,9 +1373,6 @@ export function FaceAnalysisReportPreviewRouteScreen({
     selectedPersonalColor,
     setSelectedFaceAnalysisReport,
   } = useNavigationFlowState();
-  const currentReportId =
-    route.params?.reportId ?? selectedFaceAnalysisReport?.id ?? null;
-
   // 안전망: 보고서는 카메라가 필요 없다. 상류에서 lease 해제가 누락돼도 여기서
   // run-consumer(가시 소유자·explicit lease)를 0으로 만들어 런타임 모드가 idle로 가게 한다
   // — idle이어야 네이티브가 ARSession을 끄고 전면 카메라를 반납한다(초록 LED·과열 방지).
@@ -964,25 +1385,69 @@ export function FaceAnalysisReportPreviewRouteScreen({
     setUnityMakeupSessionPaused(true);
   }, []);
 
+  React.useEffect(() => {
+    if (minimumPreview) {
+      navigation.setOptions({gestureEnabled: false});
+    }
+  }, [minimumPreview, navigation]);
+
+  React.useEffect(() => {
+    if (
+      !minimumPreview ||
+      !selectedFaceAnalysisReport ||
+      route.params?.afterAnalysisRoute ||
+      finalizedMinimumHandoffRef.current
+    ) {
+      return;
+    }
+
+    finalizedMinimumHandoffRef.current = true;
+    navigation.reset({
+      index: 1,
+      routes: [
+        {name: 'MainTabs', params: {screen: 'HomeTab'}},
+        {
+          name: 'FaceAnalysisReportDetail',
+          params: {initialPageId: 'summary:overview'},
+        },
+      ],
+    });
+  }, [
+    minimumPreview,
+    navigation,
+    route.params?.afterAnalysisRoute,
+    selectedFaceAnalysisReport,
+  ]);
+
   return (
     <>
       <FaceAnalysisReportPreviewScreen
         analysisReport={selectedFaceAnalysisReport}
         capturedPhotoUri={selectedFaceCapture?.imageUri}
-        onBack={() =>
-          shouldReturnToProfile
-            ? goBackToPreviousOrMainTab(navigation, 'ProfileTab')
-            : goBackToPreviousOrMainTab(navigation, 'HomeTab')
+        initialPageId={
+          route.params?.initialPageId ??
+          (minimumPreview ? 'summary:overview' : undefined)
         }
-        onCreateARFilter={() => {
-          if (currentReportId) {
-            navigation.navigate('MakeupRecommendation', {analysisReportId: currentReportId});
+        minimumPreview={minimumPreview}
+        onBack={() => {
+          if (minimumPreview) {
+            navigateMainTab(navigation, 'HomeTab');
             return;
           }
-          navigation.navigate('MakeupRecommendation');
+          if (shouldReturnToProfile) {
+            goBackToPreviousOrMainTab(navigation, 'ProfileTab');
+            return;
+          }
+          goBackToPreviousOrMainTab(navigation, 'HomeTab');
         }}
         onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
-        onRetake={() => navigation.navigate('FaceCapture')}
+        onRetake={() => {
+          if (minimumPreview) {
+            navigation.reset({index: 0, routes: [{name: 'FaceCapture'}]});
+            return;
+          }
+          navigation.navigate('FaceCapture');
+        }}
         face3d={route.params?.reportId ? null : selectedFace3DProfile}
         faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
         personalColor={route.params?.reportId ? null : selectedPersonalColor}

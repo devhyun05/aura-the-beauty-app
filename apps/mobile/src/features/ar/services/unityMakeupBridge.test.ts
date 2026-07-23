@@ -1,6 +1,7 @@
 import {
   FACE_LANDMARKS_EVENT_TYPE,
   FACE_LANDMARKS_STILL_REQUEST_TYPE,
+  UNITY_GOLDEN_MASK_BRIDGE_TARGET,
   UNITY_MAKEUP_BRIDGE_TARGET,
   UNITY_MAKEUP_LAYER_ORDER,
   UNITY_STILL_FACE_LANDMARKS_TARGET,
@@ -12,6 +13,7 @@ import {
   getUnityGeneratedMaskBridgeRoute,
   getUnityMakeupLayerRegionsForMakeupArea,
   parseFaceLandmarksMessage,
+  parseUnityGoldenMaskMessage,
   parseUnityUnifiedFaceCaptureMessage,
   prepareUnityUnifiedFaceCapture,
   startUnityUnifiedFaceCapture,
@@ -44,6 +46,62 @@ expectEqual(
   UNITY_MAKEUP_LAYER_ORDER.join(','),
   'foundation,lip,blush,brow,eyeshadow,eyeliner,lens',
   'Unity makeup layer order',
+);
+expectEqual(
+  UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
+  'RNBridge',
+  'Golden Mask commands target the C# RNBridge GameObject',
+);
+expectEqual(
+  UNITY_GOLDEN_MASK_BRIDGE_TARGET.capturePosterMethod,
+  'CaptureGoldenMaskPosterJson',
+  'Golden Mask poster command contract',
+);
+const goldenMaskFailure = parseUnityGoldenMaskMessage({
+  reason: 'mesh_decode_failed',
+  requestId: 'golden-1',
+  type: 'golden_mask_failed',
+});
+expectEqual(
+  goldenMaskFailure?.type === 'golden_mask_failed'
+    ? goldenMaskFailure.reason
+    : undefined,
+  'mesh_decode_failed',
+  'Golden Mask failure reason parsed',
+);
+const goldenMaskPosterFailure = parseUnityGoldenMaskMessage({
+  reason: 'poster_render_texture_unavailable',
+  requestId: 'golden-1',
+  type: 'golden_mask_poster_failed',
+});
+expectEqual(
+  goldenMaskPosterFailure?.type === 'golden_mask_poster_failed'
+    ? goldenMaskPosterFailure.reason
+    : undefined,
+  'poster_render_texture_unavailable',
+  'Golden Mask poster failure is distinct from a mesh viewer failure',
+);
+expectEqual(
+  parseUnityGoldenMaskMessage({
+    fileUri: 'file:///tmp/golden-mask-poster.png',
+    height: 1280,
+    requestId: 'golden-1',
+    type: 'golden_mask_poster_ready',
+    width: 1024,
+  })?.type,
+  'golden_mask_poster_ready',
+  'Golden Mask poster event parsed',
+);
+expectEqual(
+  parseUnityGoldenMaskMessage({
+    fileUri: 'file:///tmp/golden-mask-poster.png',
+    height: 640,
+    requestId: 'golden-1',
+    type: 'golden_mask_poster_ready',
+    width: 512,
+  }),
+  null,
+  'Golden Mask poster rejects unexpected dimensions',
 );
 expectEqual(
   getUnityMakeupLayerRegionsForMakeupArea('lens').join(','),

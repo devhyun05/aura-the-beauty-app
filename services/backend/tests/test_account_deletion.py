@@ -10,6 +10,7 @@ from app.core.settings import Settings
 from app.schemas.users import AccountDeletionRequest
 from app.services.account_deletion import (
   AccountDeletionResult,
+  _collect_media_objects,
   _collect_makeup_recommendation_objects,
   delete_cognito_identity,
 )
@@ -63,6 +64,30 @@ def test_makeup_recommendation_account_assets_are_limited_to_managed_prefix_and_
     "uploads/generated-makeup-recommendations/report/look.webp",
     "private/generated-makeup-recommendations/report/look.webp",
   }
+
+
+def test_account_deletion_collects_private_golden_mask_media() -> None:
+  media_id = uuid4()
+  objects = _collect_media_objects(
+    [
+      {
+        "id": media_id,
+        "bucket": "aura-media",
+        "object_key": f"uploads/golden-mask/{media_id}.auragm",
+        "thumbnail_bucket": None,
+        "thumbnail_object_key": None,
+      },
+    ],
+  )
+
+  assert objects == [
+    (
+      media_id,
+      "aura-media",
+      f"uploads/golden-mask/{media_id}.auragm",
+    ),
+  ]
+
 
 @pytest.mark.asyncio
 async def test_deleted_identity_cannot_be_recreated_by_a_still_valid_token() -> None:

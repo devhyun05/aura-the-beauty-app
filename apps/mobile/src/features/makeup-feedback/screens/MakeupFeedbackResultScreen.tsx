@@ -163,6 +163,7 @@ export function MakeupFeedbackResultScreen({
   const captureRef = useRef<OptionalViewShotRef | null>(null);
   const captureDocumentSettledRef = useRef(false);
   const captureDocumentResolveRef = useRef<(() => void) | null>(null);
+  const activeShareTargetRef = useRef<MakeupFeedbackShareTarget | null>(null);
   const controller = useMakeupFeedbackRedesignController({reduceMotion, result});
   const isSlides = controller.isSlides;
   const prepareCapture = controller.prepareCapture;
@@ -179,11 +180,12 @@ export function MakeupFeedbackResultScreen({
   }, []);
 
   const handleShareAction = useCallback(async (target: MakeupFeedbackShareTarget) => {
-    if (activeShareTarget) {
+    if (activeShareTargetRef.current) {
       Alert.alert('공유 준비 중', '이전 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
       return;
     }
 
+    activeShareTargetRef.current = target;
     captureDocumentSettledRef.current = false;
     setCaptureRequestId(current => current + 1);
     setActiveShareTarget(target);
@@ -220,20 +222,23 @@ export function MakeupFeedbackResultScreen({
     } finally {
       captureDocumentResolveRef.current = null;
       captureDocumentSettledRef.current = false;
-      if (restoreSlides) {
-        restoreSlidesAfterCapture();
+      try {
+        if (restoreSlides) {
+          restoreSlidesAfterCapture();
+        }
+      } finally {
+        activeShareTargetRef.current = null;
+        setActiveShareTarget(null);
       }
-      setActiveShareTarget(null);
     }
   }, [
-    activeShareTarget,
     isSlides,
     prepareCapture,
     restoreSlidesAfterCapture,
   ]);
 
   const handleOpenShareOptions = useCallback(() => {
-    if (activeShareTarget) {
+    if (activeShareTargetRef.current) {
       Alert.alert('공유 준비 중', '이전 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
       return;
     }
@@ -249,10 +254,9 @@ export function MakeupFeedbackResultScreen({
       },
       {style: 'cancel', text: '취소'},
     ]);
-  }, [activeShareTarget, handleShareAction]);
+  }, [handleShareAction]);
 
   useEffect(() => {
-    setActiveShareTarget(null);
     setShareFeedback(null);
   }, [result.id]);
 

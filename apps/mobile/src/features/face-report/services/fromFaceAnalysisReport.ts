@@ -134,7 +134,7 @@ export function summarizeFace3DProfile(face3d: Face3DProfile | null): string {
   return targetFrames > 0 ? `완료 · ${validFrames}/${targetFrames}프레임` : `완료 · ${validFrames}프레임`;
 }
 
-function summarizeVerticalThirds(verticalThirds: FaceVerticalThirdsResult | null): string {
+export function summarizeVerticalThirds(verticalThirds: FaceVerticalThirdsResult | null): string {
   if (!verticalThirds) {
     return '측정값 없음';
   }
@@ -840,6 +840,8 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
   const styleLanes = buildStyleLaneRecommendations(featureProfile, weightMap);
 
   return {
+    reportId: report.id,
+    ...(report.goldenMask ? {goldenMask: report.goldenMask} : {}),
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
     s1: buildS1(
       report,
