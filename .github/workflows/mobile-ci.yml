@@ -164,6 +164,9 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Contract - QA checklist
+        run: npm run test:qa-checklist
+
       - name: Contract — Secure credential storage
         run: node ../../scripts/mobile/run-secure-store-contract.mjs
 
@@ -209,8 +212,8 @@ jobs:
       - name: Contract — Face ratio Phase 1 replay
         run: npm run test:face-ratio-phase1
 
-      - name: Contract — Generated brow
-        run: npm run test:generated-brow
+      - name: Contract - Generated mask event correlation
+        run: npm run test:generated-mask
 
       - name: Contract — Auradin theme scope
         run: npm run test:auradin-theme-scope
