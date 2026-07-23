@@ -140,6 +140,8 @@ PODS:
     - ExpoModulesCore
   - ExpoSplashScreen (56.0.13):
     - ExpoModulesCore
+  - ExpoVideo (56.1.4):
+    - ExpoModulesCore
   - ExpoWebBrowser (56.0.5):
     - ExpoModulesCore
   - fast_float (8.0.0)
@@ -3279,6 +3281,7 @@ DEPENDENCIES:
   - ExpoSecureStore (from `../node_modules/expo-secure-store/ios`)
   - ExpoSharing (from `../node_modules/expo-sharing/ios`)
   - ExpoSplashScreen (from `../node_modules/expo-splash-screen/ios`)
+  - ExpoVideo (from `../node_modules/expo-video/ios`)
   - ExpoWebBrowser (from `../node_modules/expo-web-browser/ios`)
   - fast_float (from `../node_modules/react-native/third-party-podspecs/fast_float.podspec`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
@@ -3452,6 +3455,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-sharing/ios"
   ExpoSplashScreen:
     :path: "../node_modules/expo-splash-screen/ios"
+  ExpoVideo:
+    :path: "../node_modules/expo-video/ios"
   ExpoWebBrowser:
     :path: "../node_modules/expo-web-browser/ios"
   fast_float:
@@ -3668,6 +3673,7 @@ SPEC CHECKSUMS:
   ExpoSecureStore: f1bd083c1b7b8d4142013ffcc0082d377d9f49f4
   ExpoSharing: e30e1302796886a7d0477ca996a68d2b9ec23833
   ExpoSplashScreen: 536d8e8c900ba9f298f937486cb8278901a05cd3
+  ExpoVideo: 292b8c6be12bacf0b2e5a697276788280cdccdfb
   ExpoWebBrowser: 6e3d90e3fe1952d21a8494872b1e1a485cd50e2f
   fast_float: b32c788ed9c6a8c584d114d0047beda9664e7cc6
   FBLazyVector: 473b935415b82ae4f7f9aa9d5b3378491143ccbf
