@@ -139,6 +139,10 @@ namespace ARMakeup.Face
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _lash = new Vector2[Seg];
+        // 위 텍스처 리본 꼬리 연장용 컨트롤(+1점) — 눈꼬리 너머 스윕 (SODA 판정 반영)
+        readonly Vector2[] _ctrlExt = new Vector2[LidPts + 1];
+        // 꼬리 연장 비율(눈폭 대비) — 얼굴 무관 스타일 파라미터. 어떤 도안이든 눈길이+α 커버.
+        const float UpperTailExt = 0.18f;
 
         void Awake() => Instance = this;
         void OnDestroy() { if (Instance == this) Instance = null; }
@@ -524,21 +528,26 @@ namespace ARMakeup.Face
                     for (var j = 0; j < LidPts; j++)
                         _ctrl[j] = EyeWarp.LiftCorner(
                             _ctrl[j], j / (float)(LidPts - 1), up, eyeDist, _cornerLift);
+                // (이전 UpperTailExt 꼬리 연장은 _ctrlExt(10점) 서브디비전이 _lash[25]를
+                // 오버플로해 매 프레임 IndexOutOfRange로 상단 리본을 무력화 → 제거. 꼬리 연장은
+                // 새 래시 아키텍처(실제 속눈썹 증폭)에서 배열 크기와 함께 제대로 재구현할 것.)
                 SubdivideArc(_ctrl, LidPts, _lash);
 
-                var len = eyeDist * LenFactor * _lengthMult;
+                // 종횡비 잠금 — 리본 높이 = 눈폭 × 도안(h/w). 가로·세로가 같은 비율로
+                // 줄어 도안의 털 각도가 수학적으로 보존된다(비등방 축소가 모든 각도를
+                // 수직으로 쏠리게 해 "다 똑같아지던" 문제 제거 — 사용자 판정 0722).
+                var texUp = _texMaterial != null ? _texMaterial.mainTexture : null;
+                var aspectUp = texUp != null && texUp.width > 0
+                    ? (float)texUp.height / texUp.width
+                    : LenFactor * RibbonLenMult;
+                var len = eyeDist * aspectUp * _lengthMult;
                 var depth = Depth(lm[lids[4]].z);
                 var baseV = e * vpe;
                 for (var c = 0; c < RibbonCols; c++)
                 {
                     var root = _lash[c] - up * (eyeDist * RibbonRootTuck); // 뿌리 턱: 슬리버 제거
-                    // c: 0=바깥 → RibbonCols-1=안쪽. 길이 프로파일은 안쪽 짧고 중앙~바깥 길게.
-                    var t = c / (float)(RibbonCols - 1); // 0 바깥 .. 1 안쪽
-                    var uu = 1f - t;                      // 0 안쪽 .. 1 바깥
-                    var lenBase = Mathf.Lerp(0.45f, 1f,
-                        Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(uu / 0.55f)));
-                    var edge = Mathf.Clamp01(t / EdgeFade) * Mathf.Clamp01((1f - t) / EdgeFade);
-                    var lashLen = len * lenBase * Mathf.Lerp(0.6f, 1f, edge) * RibbonLenMult;
+                    // 컬럼 길이 균일 — 길이·각도 프로파일은 도안이 소유.
+                    var lashLen = len;
                     var top = root + up * lashLen;
                     _texVertices[baseV + c * 2] = ImageToWorld(root, depth);
                     _texVertices[baseV + c * 2 + 1] = ImageToWorld(top, depth);
@@ -567,7 +576,12 @@ namespace ARMakeup.Face
                 for (var j = 0; j < LidPts; j++) _ctrl[j] = ImgPt(lm, lids[j]);
                 SubdivideArc(_ctrl, LidPts, _lash);
 
-                var len = eyeDist * LowerTexLenFactor * _lowerLengthMult * RibbonLenMult;
+                // 종횡비 잠금 — 위 리본과 동일 원칙(도안 h/w가 높이 소유, 각도 보존).
+                var texLo = _lowerTexMaterial != null ? _lowerTexMaterial.mainTexture : null;
+                var aspectLo = texLo != null && texLo.width > 0
+                    ? (float)texLo.height / texLo.width
+                    : LowerTexLenFactor * RibbonLenMult;
+                var len = eyeDist * aspectLo * _lowerLengthMult;
                 var depth = Depth(lm[lids[4]].z);
                 var baseV = e * vpe;
                 for (var c = 0; c < RibbonCols; c++)

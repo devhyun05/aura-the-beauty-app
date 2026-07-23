@@ -34,16 +34,23 @@ namespace ARMakeup.Face
 
         const int Eyes = 2;
         const int LidPts = 9;
-        const int CtrlPts = LidPts + 1;              // + 윙 컨트롤 1점
+        const int CtrlPts = LidPts + 2;              // + 윙 컨트롤 2점 (완만 아크 — 코너 출발, 접힘/뜸 방지)
         const int Sub = 2;
         const int Seg = (CtrlPts - 1) * (Sub + 1) + 1; // 28
 
-        const float BandHeightFactor = 0.5f;  // 밴드 높이 = 눈 가로폭 × 이 값
-        const float WingLenFactor = 0.32f;    // 윙 연장 = 눈 가로폭 × 이 값
-        const float WingRise = 0.6f;          // 윙이 위로 꺾이는 정도
+        // 밴드 높이 폴백 — 텍스처가 없을 때만 사용. 도안 텍스처가 있으면 종횡비 잠금
+        // (높이 = 눈폭 × 텍스처 h/w)으로 도안이 그린 두께 비례가 그대로 나온다 (얼굴 불변).
+        const float BandHeightFactor = 0.5f;  // 밴드 높이 = 눈 가로폭 × 이 값 (v5 승인값)
+        const float WingLenFactor = 0.42f;    // 윙 연장 = 눈 가로폭 × 이 값 (v5 0.32 → 소폭 연장, 사용자 요청)
+        // 윙 상향 정도 — 이제 윙은 코너에서 출발하는 2점 아크(_ctrl[LidPts], [LidPts+1])의 팁 방향에
+        // 쓰인다. 급한 1점 코너(이음선 원인)도, 눈꺼풀 리프트(뜸 원인)도 없이 코너에서 위로 스윕.
+        const float WingRise = 0.22f;         // 팁 상향 ~12° — 거의 수평, 끝만 살짝 올림 (사용자 "수평에서 끝만 조금 상향")
+        const float TailThick = 1.4f;         // 꼬리 밴드 폭 배수 — 지오메트리 램프(텍스처 무손상), 사용자 "눈꼬리만 두껍게"
         // 밴드 하단 턱 — 랜드마크 체인과 육안 속눈썹 라인 사이 틈(라이너-눈알 사이 빈 살)
         // 메움. LashRenderer.RibbonRootTuck과 동일 원리 (사용자 판정 2026-07-21).
-        const float BandTuck = 0.012f;        // 실기기 튜닝 대상
+        // 밴드 하단 턱 — 0.035는 세로 작은 눈에서 눈알 침범 (사용자 판정). 라시라인에 붙는
+        // 최소만 유지, 채움감은 도안 두께가 담당.
+        const float BandTuck = 0.015f;
 
         const float DistanceFromCamera = 0.5f;
         const float DepthScale = 1.0f;
@@ -67,6 +74,12 @@ namespace ARMakeup.Face
         readonly Vector2[] _ctrl = new Vector2[CtrlPts];
         readonly Vector2[] _lo = new Vector2[Seg];
         readonly Vector2[] _up = new Vector2[Seg];
+        readonly Vector2[] _nrm = new Vector2[Seg]; // 컬럼 법선(스무딩용) — 윙 접합 자기접힘 방지
+        readonly Vector2[] _ctrlRaw = new Vector2[LidPts]; // 피팅 전 원본 체인 (충실도 블렌드용)
+        // 아크 피팅이 직선화한 곡선 위에 획이 얹혀 눈 중간이 라시라인에서 뜨던 문제
+        // (사용자 판정 0722) — 원본 랜드마크 체인 쪽으로 절반 되돌린다.
+        const float RawFollow = 0.5f;
+        const float MidTuck = 0.02f; // 중간 구간 국소 추가 턱 — 눈 중앙 곡률에서 라인 밀착
         // 상안검 9점의 점별 수직 지터를 코너 고정 아크 피팅으로 상쇄
         // (하안검 0f63e2c 패턴 — 계수 EMA 근거도 동일).
         const float FitEma = 0.4f;
@@ -192,7 +205,10 @@ namespace ARMakeup.Face
 
                 // 아크 피팅 — 9점의 수직 지터를 최소제곱 평균으로 상쇄. 리프트·윙
                 // 계산 전에 적용해 이후 지오메트리가 안정된 라인에서 파생되게 한다.
+                for (var j = 0; j < LidPts; j++) _ctrlRaw[j] = _ctrl[j];
                 _lidFit[e].Apply(_ctrl, LidPts, up);
+                for (var j = 0; j < LidPts; j++)
+                    _ctrl[j] = Vector2.Lerp(_ctrl[j], _ctrlRaw[j], RawFollow);
 
                 // 눈꼬리 띄우기(R7 워프) — 바깥꼬리 쪽 컨트롤만 리프트. 윙 컨트롤은
                 // 리프트된 코너에서 연장되므로 자동 추종한다.
@@ -203,24 +219,48 @@ namespace ARMakeup.Face
 
                 // 윙: 바깥 눈꼬리 접선을 위로 살짝 꺾어 연장.
                 var outDir = (_ctrl[LidPts - 1] - _ctrl[LidPts - 2]).normalized;
-                var wingDir = (outDir + up * WingRise).normalized;
-                _ctrl[LidPts] = _ctrl[LidPts - 1] + wingDir * (eyeDist * WingLenFactor);
+                var corner = _ctrl[LidPts - 1];
+                // 윙 = 코너 출발 2점 완만 아크. mid는 살짝, tip은 더 위로 → CatmullRom이
+                // 매끄러운 상향 곡선을 만든다(급한 코너 없음 = 접힘/이음선 없음, 코너 출발 = 뜸 없음).
+                var dirMid = (outDir + up * (WingRise * 0.3f)).normalized;
+                var dirTip = (outDir + up * WingRise).normalized;
+                _ctrl[LidPts]     = corner + dirMid * (eyeDist * WingLenFactor * 0.5f);
+                _ctrl[LidPts + 1] = corner + dirTip * (eyeDist * WingLenFactor);
 
                 SubdivideArc(_ctrl, CtrlPts, _lo);
 
-                // 밴드 하단 턱 — 라이너가 눈알 쪽으로 살짝 내려가 랜드마크-육안 틈을 채운다.
-                for (var i = 0; i < Seg; i++) _lo[i] -= up * (eyeDist * BandTuck);
-
-                var width = eyeDist * BandHeightFactor;
+                // 밴드 하단 턱 — 기본 턱 + 눈 중앙 국소 턱(종 곡선)으로 라시라인 밀착.
+                // (윙 스윕은 이제 컨트롤 아크가 담당하므로 여기서 리프트하지 않는다 — 그게 뜸 원인이었음)
                 for (var i = 0; i < Seg; i++)
                 {
-                    var a = _lo[Mathf.Max(i - 1, 0)];
-                    var bb = _lo[Mathf.Min(i + 1, Seg - 1)];
+                    var tt2 = i / (float)(Seg - 1);
+                    var bell = Mathf.Sin(Mathf.PI * Mathf.Clamp01((tt2 - 0.10f) / 0.65f));
+                    _lo[i] -= up * (eyeDist * (BandTuck + MidTuck * bell));
+                }
+
+                var width = eyeDist * BandHeightFactor;
+                // 컬럼 법선 — 윙 접합부(곡률 급변)에서 위 가장자리가 이웃 컬럼과 교차해
+                // 텍스처가 겹쳐 찍히는 얼룩(사용자 판정 2026-07-22)을 막기 위해
+                // 넓은 스텐실(±2)로 접선을 재고 법선을 2패스 스무딩한다.
+                for (var i = 0; i < Seg; i++)
+                {
+                    var a = _lo[Mathf.Max(i - 2, 0)];
+                    var bb = _lo[Mathf.Min(i + 2, Seg - 1)];
                     var tangent = (bb - a).normalized;
                     var normal = new Vector2(-tangent.y, tangent.x);
                     if (Vector2.Dot(normal, up) < 0f) normal = -normal;
-                    var wFactor = 0.7f + 0.6f * (i / (float)(Seg - 1)); // 안쪽 얇게 → 윙 두껍게
-                    _up[i] = _lo[i] + normal * (width * wFactor);
+                    _nrm[i] = normal;
+                }
+                for (var pass = 0; pass < 2; pass++)
+                    for (var i = 1; i < Seg - 1; i++)
+                        _nrm[i] = (_nrm[i - 1] + _nrm[i] * 2f + _nrm[i + 1]).normalized;
+                for (var i = 0; i < Seg; i++)
+                {
+                    // 꼬리 두께 램프 — 안쪽 1.0배 → 꼬리 TailThick배로 매끄럽게(스무딩된 _nrm 기반이라
+                    // 이음매 없음). 텍스처를 자르지 않고 지오메트리로만 두껍게 (사용자 "잘라서 붙이지 말고").
+                    var tt2 = i / (float)(Seg - 1); // 0 안쪽 → 1 꼬리
+                    var wRamp = Mathf.Lerp(1f, TailThick, Mathf.SmoothStep(0.6f, 1f, tt2)); // 꼬리 구간만 두껍게
+                    _up[i] = _lo[i] + _nrm[i] * (width * wRamp);
                 }
 
                 var depth = Depth(lm[lids[4]].z);
