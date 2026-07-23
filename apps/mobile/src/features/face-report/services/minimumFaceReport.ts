@@ -1,4 +1,6 @@
 import type {ReportData} from '../reportTypes';
+import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
+import {buildFaceProportionSection} from './fromFaceAnalysisReport';
 
 export type MinimumFaceReportPreview = {
   capturedPhotoUri: string;
@@ -13,6 +15,7 @@ export type MinimumFaceReportPreview = {
 
 export function buildMinimumFaceReportData(
   preview: MinimumFaceReportPreview,
+  verticalThirds?: FaceVerticalThirdsResult | null,
 ): ReportData {
   const optionalCards = [
     preview.personalColor
@@ -49,7 +52,7 @@ export function buildMinimumFaceReportData(
         ...optionalCards,
       ],
     },
-    s2: null,
+    s2: buildFaceProportionSection(verticalThirds, null),
     s3: null,
     s4: null,
     s5: null,

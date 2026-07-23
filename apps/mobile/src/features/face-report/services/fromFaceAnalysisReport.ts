@@ -202,7 +202,7 @@ const S2_BAND_COPY = {
 // the roll-corrected source image, matched 1:1 to sourceImage.width/height — NOT
 // pre-normalized. GuidePhotoOverlay needs 0..1 fractions, so we divide by the
 // real image dimensions here rather than trusting any embedded normalization.
-function buildS2(
+export function buildFaceProportionSection(
   vt: FaceVerticalThirdsResult | null | undefined,
   gender: string | null | undefined,
 ): S2Data | null {
@@ -849,7 +849,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
       personalColor ?? null,
       verticalThirds ?? null,
     ),
-    s2: buildS2(verticalThirds, gender),
+    s2: buildFaceProportionSection(verticalThirds, gender),
     s3: buildS3(report.regionNotes, featurePhoto, regionVisuals ?? null, geometryMetrics ?? null, regionDescriptors),
     s4: buildS4(personalColor, heroUri),
     s5: buildS5(bodyProfile, gender),

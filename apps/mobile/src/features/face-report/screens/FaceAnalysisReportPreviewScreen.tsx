@@ -205,9 +205,9 @@ export function FaceAnalysisReportPreviewScreen({
   const minimumReportData = useMemo(
     () =>
       !report && minimumPreview
-        ? buildMinimumFaceReportData(minimumPreview)
+        ? buildMinimumFaceReportData(minimumPreview, verticalThirds)
         : null,
-    [minimumPreview, report],
+    [minimumPreview, report, verticalThirds],
   );
   const visibleReportData = useMemo(() => {
     if (!reportData) {

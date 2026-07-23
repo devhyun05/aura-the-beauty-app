@@ -368,6 +368,28 @@ async def run_analysis_job_background(
 
   analysis_service = OpenAIAnalysisService(settings)
 
+  async def persist_anchor(anchor: dict) -> None:
+    # 앵커 확정 즉시 컬럼을 조기 기록한다. V1 fan-out과 V2 병렬 anchor가
+    # 같은 저장 계약을 사용하므로 모바일은 실행 모드를 구분할 필요가 없다.
+    await db.execute(
+      """
+      update analysis_reports
+      set face_shape = coalesce($2, face_shape),
+          skin_type = coalesce($3, skin_type),
+          recommended_mood = coalesce($4, recommended_mood)
+      where id = $1 and status = 'processing'
+      """,
+      report_id,
+      anchor.get("faceShape"),
+      anchor.get("skinType"),
+      anchor.get("recommendedMood"),
+    )
+    logger.info(
+      "[aura:analysis-api] anchor:persisted reportId=%s durationMs=%s",
+      report_id,
+      round((time.monotonic() - started_at) * 1000),
+    )
+
   try:
     logger.info(
       "[aura:analysis-api] text:start reportId=%s provider=%s model=%s",
@@ -379,6 +401,27 @@ async def run_analysis_job_background(
       source_image_bytes = await analysis_service.read_source_image_bytes(
         payload.request_payload,
       )
+      initial_v2 = initialize_face_analysis_v2(payload.request_payload)
+      authoritative_face_shape = initial_v2.derived.face_shape.label
+
+      async def generate_and_persist_v2_anchor() -> dict | None:
+        try:
+          anchor = await analysis_service.analyze_face_report_anchor(
+            payload.request_payload,
+            source_image_bytes,
+            face_shape=authoritative_face_shape,
+          )
+          await persist_anchor(anchor)
+          return anchor
+        except Exception as exc:  # noqa: BLE001 - preview failure must not fail the report.
+          logger.warning(
+            "[aura:analysis-api] anchor:failed reportId=%s reason=%s",
+            report_id,
+            exc.__class__.__name__,
+          )
+          return None
+
+      anchor_task = asyncio.create_task(generate_and_persist_v2_anchor())
       face_analysis_v2 = await FaceAnalysisPipeline(
         db=db,
         settings=settings,
@@ -387,6 +430,7 @@ async def run_analysis_job_background(
         report_id=report_id,
         request_payload=payload.request_payload,
         source_image_bytes=source_image_bytes,
+        anchor_values=anchor_task,
       )
       missing_stages = [
         stage
@@ -423,28 +467,6 @@ async def run_analysis_job_background(
         mode="json",
       )
     else:
-      async def persist_anchor(anchor: dict) -> None:
-        # 앵커(~4s) 확정 즉시 컬럼을 조기 기록 → 로딩 화면이 핵심 프리뷰를 먼저
-        # 보여준다(Phase 5). 폴이 곧 이 컬럼을 읽는다. status는 processing 유지.
-        await db.execute(
-          """
-          update analysis_reports
-          set face_shape = coalesce($2, face_shape),
-              skin_type = coalesce($3, skin_type),
-              recommended_mood = coalesce($4, recommended_mood)
-          where id = $1 and status = 'processing'
-          """,
-          report_id,
-          anchor.get("faceShape"),
-          anchor.get("skinType"),
-          anchor.get("recommendedMood"),
-        )
-        logger.info(
-          "[aura:analysis-api] anchor:persisted reportId=%s durationMs=%s",
-          report_id,
-          round((time.monotonic() - started_at) * 1000),
-        )
-
       result = await analysis_service.analyze_text(
         payload.request_payload,
         on_anchor=persist_anchor,

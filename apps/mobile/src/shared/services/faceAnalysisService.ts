@@ -202,6 +202,9 @@ const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 // 고정 5초 대신 5→8→13초 백오프: 서버 분석이 길어질수록 폴링 밀도를 낮춘다.
 const ANALYSIS_REPORT_POLL_INTERVALS_MS = [5000, 8000, 13000];
+// Anchor가 아직 없을 때만 조밀하게 조회해 조기 저장 후 화면 반영 지연을 1초
+// 이내로 제한한다. Anchor 이후에는 기존 전체 보고서 백오프로 즉시 복귀한다.
+const ANALYSIS_ANCHOR_POLL_INTERVAL_MS = 1000;
 const ANALYSIS_REPORT_POLL_TIMEOUT_MS = 240000;
 // 예상 완료 구간(팬아웃 ~24s·현행 단일 ~42s 모두 포함) 진입 후엔 폴 간격을 조여
 // "생성 직후" 감지지연을 최소화한다 — 백오프가 만드는 최대 ~9s 낭비 제거. WS push
@@ -806,9 +809,24 @@ function getAnchorPreview(job: BackendAnalysisJob): FaceAnalysisAnchorPreview | 
   const faceShape = firstText(job.faceShape);
   const skinType = firstText(job.skinType);
   const recommendedMood = firstText(job.recommendedMood);
-  return faceShape && skinType && recommendedMood
-    ? {faceShape, recommendedMood, skinType}
-    : undefined;
+  if (!faceShape || !skinType || !recommendedMood) {
+    return undefined;
+  }
+
+  // Anchor 3개만으로는 섹션 1의 실제 분석이 끝난 것이 아니다. V2 perception
+  // 결과까지 저장된 뒤에만 최소 보고서를 열어, 빈 요약을 먼저 보여주지 않는다.
+  // 비-V2 fan-out은 중간 섹션 완료 계약이 없으므로 전체 완료 전에는 알리지 않는다.
+  const faceAnalysisV2 = parseFaceAnalysisV2(
+    job.detailPayload?.result?.faceAnalysisV2,
+  );
+  if (
+    faceAnalysisV2?.pipeline.aiPerception.status !== 'completed' ||
+    !faceAnalysisV2.perception
+  ) {
+    return undefined;
+  }
+
+  return {faceShape, recommendedMood, skinType};
 }
 
 async function waitForCompleteAnalysisReport(
@@ -817,7 +835,7 @@ async function waitForCompleteAnalysisReport(
   startedAt: number,
   // 화면 이탈 시 최대 240초짜리 폴링이 백그라운드에 매달리지 않게 하는 중단 신호.
   signal?: AbortSignal,
-  // 앵커 프리뷰(~4s)를 1회 알린다 — 로딩 화면 조기 노출용.
+  // Anchor와 V2 perception이 모두 준비된 최소 보고서를 1회 알린다.
   onAnchorPreview?: (preview: FaceAnalysisAnchorPreview) => void,
 ): Promise<FaceAnalysisReport> {
   let currentJob = initialJob;
@@ -847,7 +865,8 @@ async function waitForCompleteAnalysisReport(
       return mapBackendJobToFaceAnalysisReport(currentJob, capture);
     }
 
-    // 완결 전 앵커 프리뷰 1회 노출(~4s): 얼굴형·피부·무드가 컬럼에 채워지면 알린다.
+    // 완결 전 최소 보고서 1회 노출: Anchor와 V2 perception(섹션 1)이 모두
+    // 저장된 뒤에만 알린다. 섹션 2 준비 여부는 현재 촬영의 로컬 측정으로 확인한다.
     if (!anchorPreviewSent) {
       const anchorPreview = getAnchorPreview(currentJob);
       if (anchorPreview) {
@@ -894,16 +913,22 @@ async function waitForCompleteAnalysisReport(
       );
     }
 
-    const backoffMs =
-      ANALYSIS_REPORT_POLL_INTERVALS_MS[
-        Math.min(pollAttempt, ANALYSIS_REPORT_POLL_INTERVALS_MS.length - 1)
-      ];
-    // 예상 완료 구간 진입 후엔 조밀 폴링으로 감지지연을 ≤2s로 낮춘다.
-    const nextPollMs =
-      elapsedMs >= ANALYSIS_REPORT_POLL_ETA_MS
-        ? Math.min(backoffMs, ANALYSIS_REPORT_POLL_TIGHT_MS)
-        : backoffMs;
-    pollAttempt += 1;
+    let nextPollMs: number;
+    if (!anchorPreviewSent) {
+      nextPollMs = ANALYSIS_ANCHOR_POLL_INTERVAL_MS;
+    } else {
+      const backoffMs =
+        ANALYSIS_REPORT_POLL_INTERVALS_MS[
+          Math.min(pollAttempt, ANALYSIS_REPORT_POLL_INTERVALS_MS.length - 1)
+        ];
+      // 예상 완료 구간 진입 후엔 조밀 폴링으로 감지지연을 ≤2s로 낮춘다.
+      nextPollMs =
+        elapsedMs >= ANALYSIS_REPORT_POLL_ETA_MS
+          ? Math.min(backoffMs, ANALYSIS_REPORT_POLL_TIGHT_MS)
+          : backoffMs;
+      // Anchor 대기 중 1초 조회는 전체 보고서 백오프 카운터를 소비하지 않는다.
+      pollAttempt += 1;
+    }
 
     await delay(
       Math.min(nextPollMs, ANALYSIS_REPORT_POLL_TIMEOUT_MS - elapsedMs),
@@ -1164,7 +1189,7 @@ export type FaceAnalysisOnDeviceMeasurementsInput = {
 
 export type FaceAnalysisReportCallbacks = {
   onAnalysisCreated?: (reportId: string) => Promise<void> | void;
-  // 앵커 프리뷰(~4s) — 얼굴형·피부·무드가 준비되면 1회 호출(로딩 화면 조기 노출).
+  // 섹션 1 perception까지 준비되면 최소 보고서용 Anchor를 1회 전달한다.
   onAnchorPreview?: (preview: FaceAnalysisAnchorPreview) => void;
 };
 

@@ -2745,6 +2745,59 @@ class OpenAIAnalysisService:
       )
     return f"{_ANALYSIS_CORE_INSTRUCTIONS}{section}{directive} {anchor_block}{dynamic}"
 
+  async def analyze_face_report_anchor(
+    self,
+    payload: dict[str, Any],
+    source_image_bytes: bytes,
+    *,
+    face_shape: str,
+  ) -> dict[str, Any]:
+    """Generate the three-field report preview independently of the full pipeline.
+
+    V2 already has an authoritative, measurement-derived face shape before its
+    sequential AI stages begin. Keep that value fixed and spend the lightweight
+    call only on skin type and recommended mood so the preview and completed
+    report cannot disagree about face shape.
+    """
+    started_at = time.monotonic()
+    anchor_raw = await self.analyze_structured_json(
+      developer_prompt=(
+        "Return only the requested non-medical face-report anchor fields as concise Korean JSON. "
+        "The supplied faceShape is authoritative and must be copied exactly."
+      ),
+      user_prompt=(
+        self._fanout_group_prompt(
+          payload,
+          stage="anchor",
+          directive=_FANOUT_ANCHOR_DIRECTIVE,
+        )
+        + f" The authoritative faceShape is {face_shape!r}; copy it exactly."
+      ),
+      json_schema=ANCHOR_TOOL_SCHEMA,
+      source_image_bytes=source_image_bytes,
+      max_tokens=512,
+      stage="anchor",
+    )
+    skin_type = self._first_normalized_text(anchor_raw.get("skinType"))
+    recommended_mood = self._first_normalized_text(anchor_raw.get("recommendedMood"))
+    if not skin_type or not recommended_mood:
+      raise AppError(
+        502,
+        "FACE_ANALYSIS_ANCHOR_INCOMPLETE",
+        "Face analysis anchor did not return the required preview fields.",
+      )
+    anchor_values = {
+      "faceShape": face_shape,
+      "skinType": skin_type,
+      "recommendedMood": recommended_mood,
+    }
+    logger.info(
+      "[aura:analysis] analysis:anchor-ready provider=%s durationMs=%s",
+      self.settings.analysis_provider,
+      round((time.monotonic() - started_at) * 1000),
+    )
+    return anchor_values
+
   async def _analyze_image_bedrock_fanout(
     self,
     payload: dict[str, Any],
@@ -2786,12 +2839,17 @@ class OpenAIAnalysisService:
       anchor_values.get("faceShape"),
     )
 
-    # 앵커 확정 즉시 콜백(로딩 프리뷰용) — 실패해도 본 분석은 계속.
+    # 앵커 확정 즉시 콜백(로딩 프리뷰용)을 시작하되, DB 왕복 때문에 아래
+    # 병렬 레그 시작이 늦어지지 않게 별도 task로 겹친다.
+    anchor_callback_task: asyncio.Task[None] | None = None
     if on_anchor is not None:
-      try:
-        await on_anchor(anchor_values)
-      except Exception as exc:  # noqa: BLE001 - 프리뷰 부가기능은 분석을 깨지 않는다.
-        logger.warning("[aura:bedrock] anchor-callback failed: %s", exc.__class__.__name__)
+      async def notify_anchor() -> None:
+        try:
+          await on_anchor(anchor_values)
+        except Exception as exc:  # noqa: BLE001 - 프리뷰 부가기능은 분석을 깨지 않는다.
+          logger.warning("[aura:bedrock] anchor-callback failed: %s", exc.__class__.__name__)
+
+      anchor_callback_task = asyncio.create_task(notify_anchor())
 
     # 2) perception ∥ prescription ∥ styling ∥ skin ∥ feature — 앵커 주입, 동시
     #    실행(6분할). 독립 병렬 레그라 지연은 max(레그)에 흡수. prescription에서
@@ -2819,6 +2877,8 @@ class OpenAIAnalysisService:
       leg("feature", _FANOUT_FEATURE_DIRECTIVE, FEATURE_TOOL_SCHEMA),
       return_exceptions=True,
     )
+    if anchor_callback_task is not None:
+      await anchor_callback_task
     # fail-closed: 한쪽이라도 실패하면 전체 실패(현행 all-or-nothing 시맨틱 보존).
     for result in results:
       if isinstance(result, BaseException):

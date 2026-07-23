@@ -193,18 +193,30 @@ class FaceAnalysisAI:
     source_image_bytes: bytes,
     profile: dict[str, MetricEnvelope],
     derived: DerivedResult | dict[str, Any],
+    anchor: Mapping[str, Any] | None = None,
   ) -> PerceptionResult:
     model_profile = filter_metrics_for_model(profile)
     model_derived = filter_internal_only_payload(_jsonable(derived))
-    return await self._invoke_validated(
+    anchor_payload = {
+      key: value
+      for key in ("faceShape", "skinType", "recommendedMood")
+      if isinstance((value := (anchor or {}).get(key)), str) and value.strip()
+    }
+    output = await self._invoke_validated(
       model_type=PerceptionResult,
       developer_prompt=(
         "You provide non-medical beauty perception from an S1 photo and supplied measurements. "
         f"Never infer {FORBIDDEN_INFERENCES}. Do not create measurements. "
+        "When anchor labels are supplied, preserve skinType as skin.sebumDryness.label and "
+        "recommendedMood as gestalt.overallMood.label without reclassifying them. "
         f"{_KOREAN_OUTPUT_DIRECTIVE} Return JSON only."
       ),
       user_prompt=json.dumps(
-        {"faceProfile": _jsonable(model_profile), "derived": model_derived},
+        {
+          "faceProfile": _jsonable(model_profile),
+          "derived": model_derived,
+          **({"anchor": anchor_payload} if anchor_payload else {}),
+        },
         ensure_ascii=False,
         separators=(",", ":"),
       ),
@@ -214,6 +226,33 @@ class FaceAnalysisAI:
       max_tokens=4800,
       stage="perceive",
     )
+    skin_type = anchor_payload.get("skinType")
+    recommended_mood = anchor_payload.get("recommendedMood")
+    if skin_type:
+      output = output.model_copy(
+        update={
+          "skin": output.skin.model_copy(
+            update={
+              "sebum_dryness": output.skin.sebum_dryness.model_copy(
+                update={"label": skin_type},
+              ),
+            },
+          ),
+        },
+      )
+    if recommended_mood:
+      output = output.model_copy(
+        update={
+          "gestalt": output.gestalt.model_copy(
+            update={
+              "overall_mood": output.gestalt.overall_mood.model_copy(
+                update={"label": recommended_mood},
+              ),
+            },
+          ),
+        },
+      )
+    return output
 
   async def consult(
     self,
@@ -222,13 +261,20 @@ class FaceAnalysisAI:
     derived: DerivedResult | dict[str, Any],
     perception: PerceptionResult | dict[str, Any],
     profile_gender: str | None = None,
+    anchor: Mapping[str, Any] | None = None,
   ) -> ConsultingResult:
     model_profile = filter_metrics_for_model(profile)
+    anchor_payload = {
+      key: value
+      for key in ("faceShape", "skinType", "recommendedMood")
+      if isinstance((value := (anchor or {}).get(key)), str) and value.strip()
+    }
     model_payload = filter_internal_only_payload(
       {
         "faceProfile": _jsonable(model_profile),
         "derived": _jsonable(derived),
         "perception": _jsonable(perception),
+        **({"anchor": anchor_payload} if anchor_payload else {}),
       },
     )
     # 계정 성별을 메이크업 방향의 기준으로 쓴다(사진 성별 추론 금지) — analyze_text
@@ -247,6 +293,8 @@ class FaceAnalysisAI:
         "or elongated upper, middle, or lower third as balanced, and never use one as evidence that "
         "the other is balanced. Summary and shortSummary must preserve the supplied derived labels "
         "without combining contradictory traits. "
+        "When an anchor is supplied, keep recommendedMood exactly as overallMood and use the "
+        "anchor labels consistently throughout the advice. "
         f"{_KOREAN_OUTPUT_DIRECTIVE} Return JSON only."
       ),
       user_prompt=json.dumps(
@@ -258,4 +306,10 @@ class FaceAnalysisAI:
       # 한국어 + 1회 재검증(룩 title 길이 등) 대비 헤드룸.
       max_tokens=3200,
       stage="consult",
+    )
+    recommended_mood = anchor_payload.get("recommendedMood")
+    return (
+      output.model_copy(update={"overall_mood": recommended_mood})
+      if recommended_mood
+      else output
     )

@@ -28,6 +28,7 @@ import { color, font, radius, shadow } from './reportTokens';
 import type { BandKey, ReportScreenProps } from './reportTypes';
 import {
   buildFaceReportStoryModel,
+  FACE_REPORT_STORY_SECTIONS,
   type FaceReportStoryPage,
   type FaceReportStorySection,
 } from './services/reportStoryModel';
@@ -40,6 +41,18 @@ const REPORT_CAPTURE_OPTIONS = {
   quality: 0.95,
   result: 'tmpfile',
 } as const;
+
+const STORY_SECTION_NAV_LABELS: Record<FaceReportStorySection['id'], string> = {
+  summary: '요약',
+  proportion: '비율',
+  features: '이목구비',
+  'personal-color': '컬러',
+  body: '체형',
+  impression: '인상',
+  styling: '스타일',
+  skin: '피부',
+  makeup: '추천',
+};
 import { ScrollAnimContext } from './visuals/RiseIn';
 import { S1Summary } from './sections/S1Summary';
 import { S2Proportion } from './sections/S2Proportion';
@@ -413,18 +426,27 @@ export function ReportScreenScaffold({
       sectionId: page.sectionId,
       kind: page.kind,
       title: page.title,
+      shortTitle: page.shortTitle,
       accentColor: section.accent,
       render: page.kind === 'cover'
         ? <ReportSectionCover section={section} />
         : renderContent(page, section),
     };
   });
-  const storySections: StoryReportSection[] = storyModel.sections.map(section => ({
-    id: section.id,
-    title: section.koreanTitle,
-    accentColor: section.accent,
-    pageIds: section.pages.map(page => page.id),
-  }));
+  const storySections: StoryReportSection[] = Object.values(
+    FACE_REPORT_STORY_SECTIONS,
+  ).map(section => {
+    const availableSection = sectionById.get(section.id);
+    return {
+      id: section.id,
+      title: section.koreanTitle,
+      shortTitle: STORY_SECTION_NAV_LABELS[section.id],
+      accentColor: section.accent,
+      pageIds: availableSection?.pages.map(page => page.id) ?? [],
+      available: Boolean(availableSection),
+      showPageIndex: section.id === 'features',
+    };
+  });
   const resetKey = `${data.s1.photo.uri ?? 'report'}:${data.s1.dateLine}:${storyPages.map(page => page.id).join(',')}`;
   const firstStoryPageId = storyModel.pages[0]?.id ?? null;
   React.useEffect(() => {

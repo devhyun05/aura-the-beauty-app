@@ -489,6 +489,7 @@ class FaceAnalysisPipeline:
     report_id: UUID,
     request_payload: dict[str, Any],
     source_image_bytes: bytes,
+    anchor_values: Awaitable[dict[str, Any] | None] | None = None,
   ) -> FaceAnalysisV2:
     result = initialize_face_analysis_v2(request_payload)
     await self.persist_callback(report_id, result)
@@ -529,6 +530,18 @@ class FaceAnalysisPipeline:
     self._update_overall(result)
     await self.persist_callback(report_id, result)
 
+    resolved_anchor = await anchor_values if anchor_values is not None else None
+    if resolved_anchor is not None:
+      anchor_face_shape = resolved_anchor.get("faceShape")
+      if isinstance(anchor_face_shape, str) and anchor_face_shape.strip():
+        result.derived = result.derived.model_copy(
+          update={
+            "face_shape": result.derived.face_shape.model_copy(
+              update={"label": anchor_face_shape.strip()},
+            ),
+          },
+        )
+
     model_face_profile = filter_metrics_for_model(result.face_profile)
     model_derived = filter_internal_only_payload(
       result.derived.model_dump(by_alias=True, mode="json"),
@@ -544,6 +557,7 @@ class FaceAnalysisPipeline:
           for key, value in model_face_profile.items()
         },
         "derived": model_derived,
+        "anchor": resolved_anchor or {},
       },
     )
     perception, result.pipeline.ai_perception = await self._execute_stage(
@@ -553,9 +567,37 @@ class FaceAnalysisPipeline:
         source_image_bytes=source_image_bytes,
         profile=model_face_profile,
         derived=model_derived,
+        anchor=resolved_anchor,
       ),
     )
     if perception is not None:
+      if resolved_anchor is not None:
+        anchor_skin_type = resolved_anchor.get("skinType")
+        anchor_mood = resolved_anchor.get("recommendedMood")
+        if isinstance(anchor_skin_type, str) and anchor_skin_type.strip():
+          perception = perception.model_copy(
+            update={
+              "skin": perception.skin.model_copy(
+                update={
+                  "sebum_dryness": perception.skin.sebum_dryness.model_copy(
+                    update={"label": anchor_skin_type.strip()},
+                  ),
+                },
+              ),
+            },
+          )
+        if isinstance(anchor_mood, str) and anchor_mood.strip():
+          perception = perception.model_copy(
+            update={
+              "gestalt": perception.gestalt.model_copy(
+                update={
+                  "overall_mood": perception.gestalt.overall_mood.model_copy(
+                    update={"label": anchor_mood.strip()},
+                  ),
+                },
+              ),
+            },
+          )
       result.perception = perception
     self._update_overall(result)
     await self.persist_callback(report_id, result)
@@ -603,9 +645,15 @@ class FaceAnalysisPipeline:
           derived=consulting_model_input["derived"],
           perception=consulting_model_input["perception"],
           profile_gender=profile_gender,
+          anchor=resolved_anchor,
         ),
       )
       if consulting is not None:
+        anchor_mood = (resolved_anchor or {}).get("recommendedMood")
+        if isinstance(anchor_mood, str) and anchor_mood.strip():
+          consulting = consulting.model_copy(
+            update={"overall_mood": anchor_mood.strip()},
+          )
         result.consulting = consulting
 
     self._update_overall(result)

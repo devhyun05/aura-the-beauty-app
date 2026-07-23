@@ -12,7 +12,10 @@ import {
   type FaceAnalysisAnchorPreview,
 } from '../../../shared/services/faceAnalysisService';
 import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
-import {summarizeVerticalThirds} from '../../../features/face-report/services/fromFaceAnalysisReport';
+import {
+  buildFaceProportionSection,
+  summarizeVerticalThirds,
+} from '../../../features/face-report/services/fromFaceAnalysisReport';
 import type {MinimumFaceReportPreview} from '../../../features/face-report/services/minimumFaceReport';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
@@ -1092,9 +1095,17 @@ export function FaceAnalysisLoadingRouteScreen({
   const minimumPersonalColor = selectedPersonalColor
     ? getMeasuredPersonalColorSummary(selectedPersonalColor).personalColor
     : undefined;
-  const minimumRatioSummary = selectedFaceVerticalThirds
-    ? summarizeVerticalThirds(selectedFaceVerticalThirds)
+  const minimumFaceVerticalThirds =
+    selectedFaceVerticalThirds?.captureId ===
+    stillAnalysisCapture?.photoCaptureId
+      ? selectedFaceVerticalThirds
+      : null;
+  const minimumRatioSummary = minimumFaceVerticalThirds
+    ? summarizeVerticalThirds(minimumFaceVerticalThirds)
     : undefined;
+  const minimumProportionReady = Boolean(
+    buildFaceProportionSection(minimumFaceVerticalThirds, null),
+  );
   const minimumHas3DModel = Boolean(
     pendingUnifiedCapture?.goldenMask ??
       unifiedFaceCaptureFlow.committedCapture?.result.goldenMask,
@@ -1103,6 +1114,7 @@ export function FaceAnalysisLoadingRouteScreen({
   React.useEffect(() => {
     if (
       !anchorPreview ||
+      !minimumProportionReady ||
       minimumReportLoggedRef.current ||
       !(stillAnalysisCapture?.imageUri)
     ) {
@@ -1125,7 +1137,7 @@ export function FaceAnalysisLoadingRouteScreen({
       minimumPreview,
     });
     logAttempt('minimum-report:shown', {
-      hasFaceVerticalThirds: Boolean(selectedFaceVerticalThirds),
+      hasFaceVerticalThirds: Boolean(minimumFaceVerticalThirds),
       hasGoldenMask: minimumHas3DModel,
       hasPersonalColor: Boolean(selectedPersonalColor),
       success: true,
@@ -1135,10 +1147,11 @@ export function FaceAnalysisLoadingRouteScreen({
     logAttempt,
     minimumHas3DModel,
     minimumPersonalColor,
+    minimumProportionReady,
     minimumRatioSummary,
     navigation,
     route.params?.afterAnalysisRoute,
-    selectedFaceVerticalThirds,
+    minimumFaceVerticalThirds,
     selectedPersonalColor,
     stillAnalysisCapture?.imageUri,
   ]);
@@ -1340,7 +1353,7 @@ export function FaceAnalysisReportPreviewRouteScreen({
         {name: 'MainTabs', params: {screen: 'HomeTab'}},
         {
           name: 'FaceAnalysisReportDetail',
-          params: {initialPageId: 'summary:overview'},
+          params: {initialPageId: 'summary:cover'},
         },
       ],
     });
@@ -1358,12 +1371,19 @@ export function FaceAnalysisReportPreviewRouteScreen({
         capturedPhotoUri={selectedFaceCapture?.imageUri}
         initialPageId={
           route.params?.initialPageId ??
-          (minimumPreview ? 'summary:overview' : undefined)
+          (minimumPreview ? 'summary:cover' : undefined)
         }
         minimumPreview={minimumPreview}
         onBack={() => {
           if (minimumPreview) {
-            navigateMainTab(navigation, 'HomeTab');
+            // 최소 보고서 아래의 로딩 화면까지 제거해 폴링을 abort한다. 단순
+            // navigate는 두 화면을 스택에 남겨 완료 시 홈 위로 다시 열릴 수 있다.
+            navigation.reset({
+              index: 0,
+              routes: [
+                {name: 'MainTabs', params: {screen: 'HomeTab'}},
+              ],
+            });
             return;
           }
           if (shouldReturnToProfile) {
