@@ -145,6 +145,10 @@ namespace ARMakeup.Face
 
         readonly Vector2[] _ctrl = new Vector2[LidPts];
         readonly Vector2[] _lash = new Vector2[Seg];
+        // 텍스처 리본 컬럼 법선 — 전역 up 단일 방향은 눈꼬리(급커브)에서 기둥-라인 직각이
+        // 무너져 텍스처 전단(가닥 일그러짐, 사용자 판정 0723). 라이너와 동일 레시피:
+        // ±2 스텐실 접선 + 2패스 스무딩(EyelinerStyleRenderer._nrm 이식).
+        readonly Vector2[] _ribNrm = new Vector2[Seg];
         // 위 텍스처 리본 꼬리 연장용 컨트롤(+1점) — 눈꼬리 너머 스윕 (SODA 판정 반영)
         readonly Vector2[] _ctrlExt = new Vector2[LidPts + 1];
         // 꼬리 연장 비율(눈폭 대비) — 얼굴 무관 스타일 파라미터. 어떤 도안이든 눈길이+α 커버.
@@ -233,6 +237,24 @@ namespace ARMakeup.Face
         // UV.x(텍스처 가로)=바깥꼬리(1)→안쪽머리(0). PNG는 x=0 머리(수직)·x=1 꼬리(눕힘)이라
         // lash 인덱스 0(바깥)→texU 1, 인덱스 끝(안쪽)→texU 0. 두 눈 모두 동일 매핑 —
         // "texU 증가=바깥"이 각 눈의 자기 바깥쪽이라 결 눕힘이 자동으로 좌우 대칭이 된다.
+        /// <summary>텍스처 리본 컬럼 법선 — _lash 체인에서 ±2 스텐실 접선의 수직을 구해
+        /// 2패스 스무딩(라이너 검증 레시피). up 쪽으로 부호 정렬.</summary>
+        void SmoothedRibbonNormals(Vector2 up)
+        {
+            for (var i = 0; i < Seg; i++)
+            {
+                var a = _lash[Mathf.Max(i - 2, 0)];
+                var b = _lash[Mathf.Min(i + 2, Seg - 1)];
+                var t = (b - a).normalized;
+                var n = new Vector2(-t.y, t.x);
+                if (Vector2.Dot(n, up) < 0f) n = -n;
+                _ribNrm[i] = n;
+            }
+            for (var pass = 0; pass < 2; pass++)
+                for (var i = 1; i < Seg - 1; i++)
+                    _ribNrm[i] = (_ribNrm[i - 1] + _ribNrm[i] * 2f + _ribNrm[i + 1]).normalized;
+        }
+
         static Mesh BuildRibbonMesh(string name, int eyes, out Vector3[] vertices)
         {
             var mesh = new Mesh { name = name };
@@ -549,14 +571,16 @@ namespace ARMakeup.Face
                 var len = eyeDist * aspectUp * _lengthMult;
                 var depth = Depth(lm[lids[4]].z);
                 var baseV = e * vpe;
+                SmoothedRibbonNormals(up); // 컬럼별 국소 법선 — 눈꼬리 전단 제거
                 for (var c = 0; c < RibbonCols; c++)
                 {
+                    var n = _ribNrm[c];
                     // 뿌리 턱(슬리버 제거) + 뿌리줄 오프셋: 텍스처 v=RootV 줄이 눈 라인에
                     // 오도록 v0 변을 len×RootV만큼 라인 아래로 내림(처지는 꼬리 결 표현).
-                    var root = _lash[c] - up * (eyeDist * RibbonRootTuck + len * UpperTexRootV);
+                    var root = _lash[c] - n * (eyeDist * RibbonRootTuck + len * UpperTexRootV);
                     // 컬럼 길이 균일 — 길이·각도 프로파일은 도안이 소유.
                     var lashLen = len;
-                    var top = root + up * lashLen;
+                    var top = root + n * lashLen;
                     _texVertices[baseV + c * 2] = ImageToWorld(root, depth);
                     _texVertices[baseV + c * 2 + 1] = ImageToWorld(top, depth);
                 }
@@ -579,7 +603,6 @@ namespace ARMakeup.Face
                 var eyeDist = (outer - inner).magnitude;
                 var lidMid = ImgPt(lm, lids[4]);
                 var up = (ImgPt(lm, BrowLower[e][2]) - lidMid).normalized;
-                var down = -up;
 
                 for (var j = 0; j < LidPts; j++) _ctrl[j] = ImgPt(lm, lids[j]);
                 SubdivideArc(_ctrl, LidPts, _lash);
@@ -592,14 +615,16 @@ namespace ARMakeup.Face
                 var len = eyeDist * aspectLo * _lowerLengthMult;
                 var depth = Depth(lm[lids[4]].z);
                 var baseV = e * vpe;
+                SmoothedRibbonNormals(up); // 컬럼별 국소 법선(부호는 up 기준, 사용은 반전)
                 for (var c = 0; c < RibbonCols; c++)
                 {
+                    var downN = -_ribNrm[c];
                     // 뿌리 리프트 + 뿌리줄 오프셋(위 리본과 동일 원칙, 값은 아래 도안 소유)
-                    var root = _lash[c] - down * (eyeDist * LowerRibbonLift + len * LowerTexRootV);
+                    var root = _lash[c] - downN * (eyeDist * LowerRibbonLift + len * LowerTexRootV);
                     // 컬럼 길이 균일 — 도안 텍스처는 자체 길이 변화를 갖고 있어 컬럼별 차등
                     // 길이(안쪽 0.5·가장자리 0.6 변조)를 겹치면 비스듬한 털이 컬럼 경계에서
                     // 계단으로 끊긴다(사용자 "중간 잘림" 판정). 절차식 경로만 변조 유지.
-                    var tip = root + down * len;
+                    var tip = root + downN * len;
                     _lowerTexVertices[baseV + c * 2] = ImageToWorld(root, depth);
                     _lowerTexVertices[baseV + c * 2 + 1] = ImageToWorld(tip, depth);
                 }
