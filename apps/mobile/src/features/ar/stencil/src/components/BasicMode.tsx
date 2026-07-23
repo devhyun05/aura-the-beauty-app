@@ -73,11 +73,14 @@ const BLUSH_SHAPE_CELL_H = (BLUSH_SHAPE_CELL_W * 8) / 3;
 const BLUSH_SHAPE_PREVIEW_H = CARD_H - 4;
 const BLUSH_SHAPE_CROP_TOP = BLUSH_SHAPE_CELL_W * 0.34;
 const ALL = '전체' as const;
-type Cat = typeof ALL | SlotKey;
+// 내 핏(A13) 카테고리 — 슬롯이 아닌 특수 탭. 카드=핏 시트(원본/분석 맞춤/◈사용자),
+// 선택=메인 핏 지정(App mainFitId). 룩과 독립인 "내 얼굴 프로필" 축이라 맨 뒤에 둔다.
+const FIT = '핏' as const;
+type Cat = typeof ALL | typeof FIT | SlotKey;
 // 카테고리 표시 라벨 — 내부 키와 화면 표기 분리('컨투어'→'윤곽' 등). '전체'는 그대로.
-const catLabel = (c: Cat): string => (c === ALL ? ALL : SLOT_LABEL[c]);
+const catLabel = (c: Cat): string => (c === ALL || c === FIT ? c : SLOT_LABEL[c]);
 type MidCat = typeof ALL | RegionKey;
-const CATS: Cat[] = [ALL, ...SLOT_ORDER];
+const CATS: Cat[] = [ALL, ...SLOT_ORDER, FIT];
 
 // 슬롯 → 세부부위 정의(카탈로그 순서). 중분류 탭 후보의 단일 출처.
 const REGIONS_BY_SLOT: Record<string, RegionDef[]> = {};
@@ -148,6 +151,13 @@ interface Props {
   /** 슬롯별 농도 게인(없으면 1) — 슬롯 카테고리 선택 시 그 슬롯만 조절 */
   slotGain: Partial<Record<SlotKey, number>>;
   onSlotGain: (slot: SlotKey, v: number) => void;
+  // ── 내 핏(A13) — '핏' 카테고리 탭 ──
+  /** 핏 카드 — [원본]+분석 맞춤 핏+◈사용자 시트 (App fitChips) */
+  fitChips: LaneChip[];
+  /** 활성 핏 카드 id — mainFitId ?? 'fit-off' */
+  fitSelectedId: string;
+  /** 핏 카드 선택 — App selectFitSheet(메인 핏 지정, 'fit-off'=해제) */
+  onSelectFit: (id: string) => void;
 }
 
 export default function BasicMode({
@@ -164,13 +174,17 @@ export default function BasicMode({
   onOpacity,
   slotGain,
   onSlotGain,
+  fitChips,
+  fitSelectedId,
+  onSelectFit,
 }: Props) {
   const [cat, setCat] = useState<Cat>(ALL);
   const [midCat, setMidCat] = useState<MidCat>(ALL);
   const [collapsed, setCollapsed] = useState(false);
 
   const isAll = cat === ALL;
-  const slot: SlotKey | null = isAll ? null : cat;
+  const isFit = cat === FIT;
+  const slot: SlotKey | null = isAll || isFit ? null : cat;
 
   // 대분류 전환 — 중분류는 항상 '전체'로 리셋(슬롯마다 세부부위가 다르므로).
   const selectCat = (c: Cat) => {
@@ -263,12 +277,20 @@ export default function BasicMode({
   };
 
   // 카테고리 표시 2종: 내용물 있음(밝은 텍스트) / 수정됨(● 도트).
+  // '핏'은 룩 트리가 아니라 메인 핏 선택 여부가 내용물(수정 표시는 없음 — 시트 편집은
+  // 스튜디오/핏 패널 소관).
   const hasContent = (c: Cat): boolean =>
     c === ALL
       ? SLOT_ORDER.some(s => slotRegionNodes(tree, s).length > 0)
-      : slotRegionNodes(tree, c).length > 0;
+      : c === FIT
+        ? fitSelectedId !== 'fit-off'
+        : slotRegionNodes(tree, c).length > 0;
   const catDirty = (c: Cat): boolean =>
-    c === ALL ? dirty : slotRegionNodes(tree, c).some(n => n.dirty);
+    c === ALL
+      ? dirty
+      : c === FIT
+        ? false
+        : slotRegionNodes(tree, c).some(n => n.dirty);
 
   const headerBar = (
     <View style={styles.header}>
@@ -461,7 +483,32 @@ export default function BasicMode({
           style={styles.cardScroll}
           contentContainerStyle={styles.cardRow}>
           <View style={styles.cardGrid}>
-          {isAll
+          {isFit
+            ? fitChips.map(chip => {
+                const on = chip.id === fitSelectedId;
+                return (
+                  <TouchableOpacity
+                    key={chip.id}
+                    onPress={() => onSelectFit(chip.id)}
+                    style={[
+                      styles.card,
+                      chip.id === 'fit-off'
+                        ? styles.cardTintNone
+                        : chip.mine
+                          ? styles.cardTintMine
+                          : styles.cardTintLook,
+                      on && styles.cardOn,
+                    ]}>
+                    <View style={styles.cardLabelBar}>
+                      <Text style={styles.cardLabel} numberOfLines={2}>
+                        {chip.mine ? '◈ ' : ''}
+                        {chip.label}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            : isAll
             ? lookChips.map(chip => {
                 const on = chip.id === lookSelectedId;
                 return (
@@ -566,7 +613,15 @@ export default function BasicMode({
         </ScrollView>
       )}
 
+      {/* 핏 탭 — 강도 축이 없어 농도 슬라이더 대신, 시트가 없으면 측정 유도 문구만. */}
+      {isFit && fitChips.length <= 1 && (
+        <Text style={styles.fitEmptyHint}>
+          얼굴측정을 하면 ‘분석 맞춤 핏’이 여기에 생겨요
+        </Text>
+      )}
+
       {/* 2) 농도 — 블러셔 중분류는 잎 값을 직접 저장하고, 나머지는 기존 게인을 쓴다. */}
+      {!isFit && (
       <View style={styles.densityWrap}>
         <ParamSlider
           label={
@@ -605,11 +660,17 @@ export default function BasicMode({
           accent={NEUTRAL_ACCENT}
         />
       </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // 핏 탭 빈 상태 안내 — 시트 0장일 때 원본 카드 아래 한 줄(측정 유도).
+  fitEmptyHint: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 11,
+  },
   // 배경·마진·모서리는 상위 paramPanel(App)이 소유 — 본문은 패딩·gap만.
   panel: {
     paddingHorizontal: PANEL_INSET,

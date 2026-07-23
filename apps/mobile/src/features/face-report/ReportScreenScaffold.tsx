@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
+  ImageBackground,
   Pressable,
   ScrollView,
   Text,
@@ -9,6 +10,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
@@ -49,6 +51,7 @@ import { S7LookCard, S7Styling } from './sections/S7Styling';
 import { S8Skin } from './sections/S8Skin';
 import { S9StyleLanes } from './sections/S9StyleLanes';
 
+declare const require: (moduleName: string) => number;
 function StoryContentCard({
   section,
   pagerRef,
@@ -200,6 +203,54 @@ function waitForLocalImage(uri: string): Promise<void> {
   });
 }
 
+function MakeupCtaCard({
+  data,
+  onPress,
+  debugPayload,
+  debugSummary,
+}: {
+  data: ReportScreenProps['data'];
+  onPress?: () => void;
+  debugPayload?: unknown;
+  debugSummary?: {label: string; value: string}[];
+}) {
+  return (
+    <ImageBackground
+      accessibilityIgnoresInvertColors
+      resizeMode="cover"
+      source={require('./assets/covers/makeup-cta.jpg')}
+      style={{flex: 1}}>
+      <LinearGradient
+        colors={['rgba(12,28,34,0.25)', 'rgba(12,28,34,0.82)']}
+        style={{position: 'absolute', inset: 0}}
+      />
+      <ScrollView
+        contentContainerStyle={{flexGrow: 1, justifyContent: 'flex-end', padding: 24, gap: 14}}
+        directionalLockEnabled
+        showsVerticalScrollIndicator={false}>
+        <View style={{gap: 7, marginBottom: 4}}>
+          <Text style={{fontFamily: 'Lora', fontSize: 38, lineHeight: 42, color: color.white}}>MAKEUP</Text>
+          <Text style={[font(17, '700'), {color: color.white}]}>{data.footer.cta}</Text>
+        </View>
+        {__DEV__ ? <MeasurementDebugPanel payload={debugPayload} summary={debugSummary} /> : null}
+        <Text style={[font(11.5, '400', 1.55), {color: 'rgba(255,255,255,0.8)', textAlign: 'center'}]}>
+          {data.footer.disclaimer}
+        </Text>
+        <Pressable
+          accessibilityLabel={data.footer.cta}
+          accessibilityRole="button"
+          onPress={onPress}
+          style={({pressed}) => [{
+            alignItems: 'center', backgroundColor: color.accent, borderRadius: radius.lg,
+            paddingVertical: 16, opacity: pressed ? 0.86 : 1,
+          }, shadow.cta]}>
+          <Text style={[font(14.5, '800'), {color: color.white}]}>{data.footer.cta}</Text>
+        </Pressable>
+      </ScrollView>
+    </ImageBackground>
+  );
+}
+
 /**
  * Story report screen: editorial covers + meaning-complete horizontal cards.
  * Pure & props-driven — navigation, retake and survey actions bubble up as callbacks.
@@ -210,6 +261,7 @@ export function ReportScreenScaffold({
   onMore,
   onRetake,
   onResurvey,
+  onPressCta,
   captureRef,
   measurementDebugPayload,
   measurementDebugSummary,
@@ -338,6 +390,8 @@ export function ReportScreenScaffold({
         ) : null;
       case 'skin':
         return data.s8 ? <StoryContentCard section={section} pagerRef={pagerRef}><S8Skin data={data.s8} /></StoryContentCard> : null;
+      case 'makeup:cta':
+        return <MakeupCtaCard data={data} onPress={onPressCta} debugPayload={measurementDebugPayload} debugSummary={measurementDebugSummary} />;
       default:
         if (page.contentKey?.startsWith('features:') && data.s3) {
           const key = page.contentKey.slice('features:'.length);

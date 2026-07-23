@@ -94,6 +94,8 @@ Shader "ARMakeup/FaceMakeup"
         // 하안검 밴드(LowerLidRenderer)로 이관(§08). 캐노니컬 _ConcealerMask 삭제.
         _ConcealerColor ("Concealer Color", Color) = (0.98, 0.86, 0.76, 1)
         _ConcealerIntensity ("Concealer Intensity", Range(0, 1)) = 0
+        _CorrectorColor ("Automatic Corrector Color", Color) = (0.969, 0.788, 0.659, 1)
+        _CorrectorIntensity ("Automatic Corrector Intensity", Range(0, 1)) = 0
         // 컨실러 마감(붉은기 자동 경로) — 블러셔와 동일 enum. ApplyFinish 레거시 경로(세부 0)라
         // 0=새틴=기존 출력과 바이트 동일(하위호환). LowerLid(눈밑존)와 같은 필드(concealerFinish) 공용.
         _ConcealerFinish ("Concealer Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
@@ -172,6 +174,8 @@ Shader "ARMakeup/FaceMakeup"
         _ConcealerTexture ("Concealer Texture (domain enum)", Float) = -1
         _PowderTexture ("Powder Texture (domain enum)", Float) = -1
         _Smoothing ("Skin Smoothing", Range(0, 1)) = 0.5
+        _SkinDetailPreservation ("Skin Detail Preservation", Range(0, 1)) = 0.7
+        _SkinClarity ("Skin Clarity", Range(-1, 1)) = 0
         _Brightening ("Skin Brightening", Range(0, 1)) = 0.2
         _BlurRadius ("Blur Radius (px)", Range(0, 6)) = 2.5
         // 고개를 돌리면 실루엣에서 반대쪽 삼각형이 접혀 겹친다(fold-over).
@@ -276,12 +280,17 @@ Shader "ARMakeup/FaceMakeup"
             float _ConcealerIntensity;
             float _ConcealerFinish; // 0=새틴=기존 출력(하위호환) 1 매트 2 글로시 3 시머
             float _ConcealerShape; // 0=눈밑 존(밴드로 이관, 무효) 1=붉은기 자동
+            fixed4 _CorrectorColor;
+            float _CorrectorIntensity;
             float _BlemishRemoval; // 잡티 지우기(밀어내기) 강도 — 0=현행 픽셀 동일
             float _PowderShape;    // 0=전체 1=T존 2=볼 제외
             // 붉은기 자동 게이트(#19b) — 치아 미백 redness 게이트의 역방향(붉은 픽셀 선택).
             // R−max(G,B)가 이 구간을 넘으면 커버(홍조·트러블·콧볼). 실기기 튜닝 대상.
             #define CC_RED_LO 0.05  // 실기기 튜닝 대상
             #define CC_RED_HI 0.16  // 실기기 튜닝 대상
+            #define CR_ANOMALY_LO 0.012 // 이웃 대비 색 이상치 발동
+            #define CR_ANOMALY_HI 0.080 // 완전 교정 도달
+            #define CR_FEATURE_HI 0.180 // 입술/눈 등 강한 특징색 보호 상한
             // 잡티 지우기(밀어내기) 상수 — 넓은 이웃 평균 대비 이상도 판정·밴드패스. 전부
             // 실기기 튜닝 대상(v1). 반경(BR_RADIUS)은 잡티(수 px)를 넘겨 이웃을 피부로 채우고,
             // 밴드패스 상한(BR_HI)은 극단 이상치(눈·눈썹·콧구멍·헤어라인=특징부)를 제외해 보호.
@@ -346,6 +355,10 @@ Shader "ARMakeup/FaceMakeup"
             // 스커트를 uFold 0.39→0.40(uv.x 0.61→0.60)로 당겨 콧방울 옆 피부에 파운데가 먹게 한다.
             #define FEAT_NOS_RX 0.012  // 콧구멍 x 반경 (콧방울 옆 커버 위해 더 타이트, 실기기 튜닝)
             #define FEAT_NOS_RY 0.016  // 콧구멍 y 반경
+            // 기하 타원만 쓰면 콧볼 피부까지 좌우 원형으로 제외된다. 실제 콧구멍처럼
+            // 어두운 픽셀에서만 타원 보호를 살리는 루마 게이트.
+            #define FEAT_NOS_LUMA_LO 0.18 // 이하 = 콧구멍 보호 100%
+            #define FEAT_NOS_LUMA_HI 0.42 // 이상 = 콧볼 피부, 파운데 적용
             #define FEAT_FEATHER 0.30  // 타원 경계 페더 폭(정규화 거리 d 단위) 실기기 튜닝 대상
             #define FND_FEATURE_EXCLUDE 0.85 // 특징부 제외 강도 [0=제외안함=기존, 1=완전제외] 실기기 튜닝 대상
             // (FIX F 붉은기 커버 부스트 폐기 — R−max(G,B) 측정이 웜톤 피부 전역에서 문턱을
@@ -408,6 +421,8 @@ Shader "ARMakeup/FaceMakeup"
             float _ConcealerTexture; // concealer(2) — 붉은기 경로. 밴드(눈밑존)와 값 공유.
             float _PowderTexture;    // powder(3)
             float _Smoothing;
+            float _SkinDetailPreservation;
+            float _SkinClarity;
             float _Brightening;
             float _BlurRadius;
 
@@ -451,14 +466,16 @@ Shader "ARMakeup/FaceMakeup"
                 return o;
             }
 
-            // Edge-preserving blur: taps that differ strongly from the center pixel
-            // get little weight, so eyes, brows and face borders stay crisp while
-            // skin texture is averaged away.
-            fixed3 SmoothSkin(float2 screenUV, fixed3 center)
+            // 한 GrabPass의 기존 12탭을 r1(근거리 8)·r2(중거리 4)로 분리한다.
+            // low + mid + high를 다시 합칠 때 고주파는 사용자 결 보존값만큼 되살리고,
+            // mid는 고정 65%를 남겨 큰 얼룩만 정리한다. 추가 샘플/패스 없음.
+            fixed3 FrequencySeparateSkin(float2 screenUV, fixed3 center)
             {
                 float2 texel = _CameraFeed_TexelSize.xy * _BlurRadius;
-                float3 sum = center;
-                float weightSum = 1.0;
+                float3 innerSum = center;
+                float innerWeight = 1.0;
+                float3 outerSum = center;
+                float outerWeight = 1.0;
 
                 [unroll]
                 for (int i = 0; i < 12; i++)
@@ -466,11 +483,27 @@ Shader "ARMakeup/FaceMakeup"
                     fixed3 s = tex2D(_CameraFeed, screenUV + kTaps[i] * texel).rgb;
                     float diff = dot(abs(s - center), float3(1.0, 1.0, 1.0));
                     float w = exp(-diff * diff * 24.0);
-                    sum += s * w;
-                    weightSum += w;
+                    if (i < 8)
+                    {
+                        innerSum += s * w;
+                        innerWeight += w;
+                    }
+                    else
+                    {
+                        outerSum += s * w;
+                        outerWeight += w;
+                    }
                 }
 
-                return sum / weightSum;
+                fixed3 inner = innerSum / innerWeight;
+                fixed3 outer = outerSum / outerWeight;
+                fixed3 midBand = inner - outer;
+                fixed3 highBand = center - inner;
+                fixed3 separated = outer + midBand * 0.65
+                                 + highBand * _SkinDetailPreservation;
+                // 언샤프 마스크. 음수는 소프트 포커스, 양수는 또렷한 생얼 방향.
+                separated += (center - outer) * (_SkinClarity * 0.32);
+                return saturate(separated);
             }
 
             // 잡티 지우기용 넓은 이웃 링(8탭, 반경 BR_RADIUS) — 스무딩과 달리 엣지 보존
@@ -628,7 +661,7 @@ Shader "ARMakeup/FaceMakeup"
                 else if (_ToneShape > 0.5) toneZone = 1.0 - smoothstep(PWD_TZONE_LO, PWD_TZONE_HI, faceDx);
                 float toneAmt = _Brightening * toneZone;
 
-                fixed3 smoothed = SmoothSkin(screenUV, original);
+                fixed3 smoothed = FrequencySeparateSkin(screenUV, original);
                 fixed3 col = lerp(original, smoothed, smoothAmt);
 
                 // 제형(피부결) — TONE 템플릿 grain(매끈/파우더리). 결 보정(smoothAmt)만큼
@@ -655,6 +688,42 @@ Shader "ARMakeup/FaceMakeup"
                     float pull = smoothstep(BR_LO, BR_LO + BR_FEATHER, outlier)
                                * (1.0 - smoothstep(BR_HI, BR_HI + BR_FEATHER, outlier)); // 밴드패스: 특징부 보호
                     col = saturate(col + (wide - original) * (pull * _BlemishRemoval));
+                }
+
+                // 컬러 코렉터 — 스와치 색 계열이 셀렉터를 자동 결정한다. 그린은 홍조,
+                // 피치는 푸른기, 라벤더는 노란기만 이웃 대비 이상치로 선택한다. 별도 위치
+                // 마스크나 선택 UI가 없고, 강한 특징색은 상한 밴드로 보호한다.
+                if (_CorrectorIntensity > 0.001)
+                {
+                    fixed3 neighborhood = smoothed;
+                    float redAnomaly = (original.r - max(original.g, original.b))
+                                     - (neighborhood.r - max(neighborhood.g, neighborhood.b));
+                    float blueAnomaly = (original.b - max(original.r, original.g))
+                                      - (neighborhood.b - max(neighborhood.r, neighborhood.g));
+                    float yellowAnomaly = (min(original.r, original.g) - original.b)
+                                        - (min(neighborhood.r, neighborhood.g) - neighborhood.b);
+
+                    float greenAffinity = saturate((_CorrectorColor.g
+                                          - max(_CorrectorColor.r, _CorrectorColor.b)) * 8.0);
+                    float peachAffinity = saturate((_CorrectorColor.r - _CorrectorColor.b) * 5.0);
+                    float lavenderAffinity = saturate((min(_CorrectorColor.r, _CorrectorColor.b)
+                                             - _CorrectorColor.g) * 8.0);
+                    float affinitySum = max(greenAffinity + peachAffinity + lavenderAffinity, 1e-4);
+                    float anomaly = (max(redAnomaly, 0.0) * greenAffinity
+                                   + max(blueAnomaly, 0.0) * peachAffinity
+                                   + max(yellowAnomaly, 0.0) * lavenderAffinity) / affinitySum;
+                    float selector = smoothstep(CR_ANOMALY_LO, CR_ANOMALY_HI, anomaly)
+                                   * (1.0 - smoothstep(CR_FEATURE_HI, CR_FEATURE_HI + 0.05, anomaly));
+
+                    float sourceLuma = dot(col, fixed3(0.299, 0.587, 0.114));
+                    float productLuma = max(dot(_CorrectorColor.rgb,
+                                                fixed3(0.299, 0.587, 0.114)), 1e-4);
+                    fixed3 correctorTarget = col * (_CorrectorColor.rgb / productLuma);
+                    float targetLuma = max(dot(correctorTarget,
+                                               fixed3(0.299, 0.587, 0.114)), 1e-4);
+                    correctorTarget *= sourceLuma / targetLuma;
+                    col = lerp(col, saturate(correctorTarget),
+                               selector * _CorrectorIntensity * 0.65);
                 }
 
                 col = saturate(col * (1.0 + 0.18 * toneAmt) + 0.04 * toneAmt);
@@ -706,7 +775,13 @@ Shader "ARMakeup/FaceMakeup"
                     float dLip = length((i.uv - float2(FEAT_LIP_CX, FEAT_LIP_CY)) / float2(FEAT_LIP_RX, FEAT_LIP_RY));
                     float dEye = length((float2(uFold, i.uv.y) - float2(FEAT_EYE_CX, FEAT_EYE_CY)) / float2(FEAT_EYE_RX, FEAT_EYE_RY));
                     float dNos = length((float2(uFold, i.uv.y) - float2(FEAT_NOS_CX, FEAT_NOS_CY)) / float2(FEAT_NOS_RX, FEAT_NOS_RY));
-                    float feat = 1.0 - smoothstep(1.0 - FEAT_FEATHER, 1.0 + FEAT_FEATHER, min(min(dLip, dEye), dNos));
+                    float lipEyeFeat = 1.0 - smoothstep(
+                        1.0 - FEAT_FEATHER, 1.0 + FEAT_FEATHER, min(dLip, dEye));
+                    float noseFeat = 1.0 - smoothstep(
+                        1.0 - FEAT_FEATHER, 1.0 + FEAT_FEATHER, dNos);
+                    float nostrilProtect = 1.0 - smoothstep(FEAT_NOS_LUMA_LO, FEAT_NOS_LUMA_HI,
+                        dot(original, fixed3(0.299, 0.587, 0.114)));
+                    float feat = max(lipEyeFeat, noseFeat * nostrilProtect);
                     float featKeep = 1.0 - FND_FEATURE_EXCLUDE * feat; // 특징부에서 커버 감쇠
                     fCov *= featKeep;
                     fChroma *= featKeep;

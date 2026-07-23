@@ -59,6 +59,10 @@ export interface RegionWarp {
 export interface FilterParams {
   /** 피부 스무딩 강도 0..1 */
   skinSmoothing: number;
+  /** 주파수 분리 뒤 되살릴 미세 피부결 0..1. 0/생략은 Unity 자연스러운 기본값 사용. */
+  skinDetailPreservation?: number;
+  /** 로컬 대비 -1..1. 음수=소프트 포커스, 양수=또렷함, 0=중립. */
+  skinClarity?: number;
   /** 매트 파우더 입자감(전역, 전 부위 마감 공유). 생략 시 0(끔) */
   matteGrain?: number;
   /** 톤업(브라이트닝) 강도 0..1 */
@@ -183,6 +187,10 @@ export interface FilterParams {
    *  국소 어둡/붉은 이상치만 이웃 색으로 되민다(FaceMakeup 피부 경로, 스무딩 선례). 특징부
    *  (눈·눈썹·콧구멍·헤어라인)는 밴드패스 상한으로 보호. 생략 시 0 */
   blemishRemoval?: number;
+  /** 자동 컬러 코렉터 색. 색상 계열로 홍조/푸른기/노란기 셀렉터를 내부 선택한다. */
+  correctorColor?: string;
+  /** 자동 컬러 코렉터 강도 0..1. 마스크 선택 없이 피부 색 이상치에만 적용. */
+  correctorIntensity?: number;
   /** 애교살(하안검 밴드): 하이라이트+섀도 2줄 한 강도 0..1 (0=끔). 생략 시 0 */
   aegyoIntensity?: number;
   /** 임포트 애교살 그림(하안검 밴드 데칼) 강도. 텍스처는 setAegyoStyle로 임포트 */
@@ -428,7 +436,7 @@ export interface FilterParams {
   eyeshadowShape?: EyeshadowShape;
   /** 눈썹 모양(슬롯 공통): 0=내추럴 1=일자 2=아치 3=각진 4=상승 5=반달. 생략 0 */
   browShape?: number;
-  /** 부분 커버 모양: 0=눈밑 존 1=붉은기 자동(붉은 픽셀 선택 커버). 생략 0 */
+  /** @deprecated 저장물 호환 전용. 신규 UI는 컨실러/코렉터를 분리하고 자동 셀렉터를 사용한다. */
   concealerShape?: number;
   /** 파우더 존: 0=전체 1=T존 2=볼 제외. 생략 0 */
   powderShape?: number;

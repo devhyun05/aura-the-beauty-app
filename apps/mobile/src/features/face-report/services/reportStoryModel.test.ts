@@ -24,7 +24,7 @@ function fullInput(): Pick<ReportData, 'goldenMask' | 's1' | 's2' | 's3' | 's4' 
 }
 
 const full = buildFaceReportStoryModel(fullInput());
-assert.equal(full.pages.length, 21);
+assert.equal(full.pages.length, 22); // 21(스토리) + makeup:cta
 assert.deepEqual(full.pages.map(page => page.id), [
   'summary:cover',
   'summary:overview',
@@ -47,6 +47,7 @@ assert.deepEqual(full.pages.map(page => page.id), [
   'styling:glam',
   'skin:cover',
   'skin:overview',
+  'makeup:cta',
 ]);
 assert.equal(full.featurePageIds.upper, 'features:upper');
 assert.equal(full.featurePageIds.mid, 'features:mid');
@@ -72,7 +73,7 @@ withGoldenMaskInput.goldenMask = {
   vertexCount: 1_220,
 };
 const withGoldenMask = buildFaceReportStoryModel(withGoldenMaskInput);
-assert.equal(withGoldenMask.pages.length, 22);
+assert.equal(withGoldenMask.pages.length, 23); // +golden-mask +makeup:cta
 assert.deepEqual(withGoldenMask.pages.slice(0, 3).map(page => page.id), [
   'summary:cover',
   'summary:golden-mask',
@@ -87,12 +88,13 @@ sparseInput.s6 = null;
 sparseInput.s7 = null;
 sparseInput.s8 = null;
 const sparse = buildFaceReportStoryModel(sparseInput);
-assert.deepEqual(sparse.sections.map(section => section.id), ['summary', 'body']);
+assert.deepEqual(sparse.sections.map(section => section.id), ['summary', 'body', 'makeup']);
 assert.deepEqual(sparse.pages.map(page => page.id), [
   'summary:cover',
   'summary:overview',
   'body:cover',
   'body:overview',
+  'makeup:cta',
 ]);
 
 const partialFeaturesInput = fullInput();
@@ -124,11 +126,12 @@ assert.deepEqual(
   ['얼굴형', '피부 타입', '추천 무드', '퍼스널 컬러', '얼굴 비율', '3D 페이스'],
 );
 const minimumStory = buildFaceReportStoryModel(minimumData);
-assert.deepEqual(minimumStory.sections.map(section => section.id), ['summary']);
+assert.deepEqual(minimumStory.sections.map(section => section.id), ['summary', 'makeup']);
 assert.deepEqual(minimumStory.pages.map(page => page.id), [
   'summary:cover',
   'summary:overview',
   'summary:generation',
+  'makeup:cta',
 ]);
 
 console.log('reportStoryModel contract passed');

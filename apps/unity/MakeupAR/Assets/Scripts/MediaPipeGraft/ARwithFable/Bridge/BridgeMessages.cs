@@ -42,6 +42,8 @@ namespace ARMakeup.Bridge
         public const float MaxBlushIntensity = 1.2f;
 
         public float skinSmoothing = 0.5f;
+        public float skinDetailPreservation = 0.7f; // 주파수 분리 고주파 복원(0=wire sentinel→자연 기본값)
+        public float skinClarity = 0f;              // -1=소프트 포커스, +1=로컬 대비 강화
         public float matteGrain = 0f;            // 매트 파우더 입자감(전역, 전 부위 마감 공유. 0=끔)
         public float skinBrightening = 0.2f;
         public string lipColor = "#C94F6D";
@@ -137,6 +139,8 @@ namespace ARMakeup.Bridge
         public float concealerIntensity = 0f;
         public int concealerFinish = 0;              // 컨실러 마감: 0=새틴(기본) 1=매트 2=글로시 3=시머 (두 경로 공통)
         public float blemishRemoval = 0f;            // 잡티 지우기(밀어내기) 0..1 — 넓은 이웃 대비 국소 이상치만 되밈 (0=현행 픽셀 동일)
+        public string correctorColor = "#F7C9A8";   // 자동 코렉터(그린=홍조, 피치=푸른기, 라벤더=노란기)
+        public float correctorIntensity = 0f;        // 색 계열 기반 자동 셀렉터 강도(마스크 선택 없음)
         // ── 베이스 팩(#18) — 전부 0/""=기존 픽셀 동일 ──
         public string foundationColor = "#E8C4A8";  // 파운데이션 색(밝은 쿨~딥 웜)
         public float foundationIntensity = 0f;      // 커버리지(0=끔)
@@ -395,6 +399,8 @@ namespace ARMakeup.Bridge
             return new FilterParams
             {
                 skinSmoothing = 0f,
+                skinDetailPreservation = 0f,
+                skinClarity = 0f,
                 skinBrightening = 0f,
                 lipColor = null,
                 lipIntensity = 0f,
@@ -418,6 +424,8 @@ namespace ARMakeup.Bridge
                 contourColor = null,
                 contourShimmer = 0f,
                 concealerColor = null,
+                correctorColor = null,
+                correctorIntensity = 0f,
                 foundationColor = null,
                 toneTexture = -1,
                 skinTexture = -1,
@@ -492,7 +500,10 @@ namespace ARMakeup.Bridge
             return new FilterParams
             {
                 skinSmoothing = 0f,
+                skinDetailPreservation = 0f,
+                skinClarity = 0f,
                 skinBrightening = 0f,
+                correctorIntensity = 0f,
                 lipIntensity = 0f,
                 blushIntensity = 0f,
                 eyeshadowIntensity = 0f,

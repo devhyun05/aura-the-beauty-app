@@ -272,8 +272,12 @@ export interface ReportScreenProps {
   onMore?: () => void;
   onRetake?: () => void;    // S2 재촬영 링크 (헤어라인 미확인 안내)
   onResurvey?: () => void;  // S5 다시 답하기
+  // Footer CTA. Separate from onRetake: the CTA is labelled with
+  // `data.footer.cta` (메이크업 추천), so wiring it to retake would fire
+  // 재촬영 from a button that promises makeup recommendations.
+  onPressCta?: () => void;
   // Points at the separate expanded vertical document used for 공유/이미지 저장.
-  // Story covers and pager chrome are intentionally outside this target.
+  // Story covers, pager chrome and CTA are intentionally outside this target.
   captureRef?: React.Ref<any>;
   // 개발 단계 QA용: 분석 요약에서 저장/세션 측정값 원본을 접어서 확인한다.
   measurementDebugPayload?: unknown;

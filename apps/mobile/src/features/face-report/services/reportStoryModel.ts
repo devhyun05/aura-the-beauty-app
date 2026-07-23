@@ -8,9 +8,10 @@ export type FaceReportStorySectionId =
   | 'body'
   | 'impression'
   | 'styling'
-  | 'skin';
+  | 'skin'
+  | 'makeup';
 
-export type FaceReportStoryPageKind = 'cover' | 'content';
+export type FaceReportStoryPageKind = 'cover' | 'content' | 'cta';
 
 export type FaceReportStoryContentKey =
   | 'summary'
@@ -24,7 +25,8 @@ export type FaceReportStoryContentKey =
   | 'impression'
   | 'styling:natural'
   | 'styling:glam'
-  | 'skin';
+  | 'skin'
+  | 'makeup:cta';
 
 export interface FaceReportStoryPage {
   id: string;
@@ -131,6 +133,14 @@ const SECTION_DEFINITIONS: Record<FaceReportStorySectionId, SectionDefinition> =
     accent: '#2C8091',
     tint: '#EFF8F9',
   },
+  makeup: {
+    id: 'makeup',
+    number: '09',
+    englishTitle: 'MAKEUP',
+    koreanTitle: '메이크업 추천',
+    accent: '#173E49',
+    tint: '#F1F5F5',
+  },
 };
 
 function coverPage(section: SectionDefinition): FaceReportStoryPage {
@@ -154,7 +164,7 @@ function contentPage(
 }
 
 function withCover(
-  id: FaceReportStorySectionId,
+  id: Exclude<FaceReportStorySectionId, 'makeup'>,
   content: FaceReportStoryPage[],
 ): FaceReportStorySection {
   const definition = SECTION_DEFINITIONS[id];
@@ -274,6 +284,21 @@ export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryMode
       ]),
     );
   }
+
+  const makeup = SECTION_DEFINITIONS.makeup;
+  sections.push({
+    ...makeup,
+    pages: [
+      {
+        id: 'makeup:cta',
+        sectionId: 'makeup',
+        kind: 'cta',
+        title: '메이크업 추천',
+        shortTitle: '추천 보러가기',
+        contentKey: 'makeup:cta',
+      },
+    ],
+  });
 
   const pages = sections.flatMap(section => section.pages);
   const sectionCoverPageIds: FaceReportStoryModel['sectionCoverPageIds'] = {};
