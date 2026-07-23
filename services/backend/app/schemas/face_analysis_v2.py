@@ -211,15 +211,15 @@ class ConsultingAdvice(FaceAnalysisV2Model):
 
 class StylingLookRow(FaceAnalysisV2Model):
   category: Literal["base", "brow", "eyeshadow", "eyeliner", "blush", "lip"]
-  note: str
-  why: str
+  note: Annotated[str, Field(min_length=1)]
+  why: Annotated[str, Field(min_length=1)]
 
 
 class StylingLook(FaceAnalysisV2Model):
-  title: Annotated[str, Field(max_length=28)]
-  subtitle: str
-  description: str
-  rows: list[StylingLookRow]
+  title: Annotated[str, Field(min_length=1, max_length=28)]
+  subtitle: Annotated[str, Field(min_length=1)]
+  description: Annotated[str, Field(min_length=1)]
+  rows: Annotated[list[StylingLookRow], Field(min_length=4, max_length=6)]
 
 
 class StylingLooks(FaceAnalysisV2Model):

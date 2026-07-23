@@ -111,26 +111,6 @@ def _compact_join(parts: list[str], separator: str = " · ") -> str:
   return separator.join(compacted)
 
 
-def _insight_labels(*insights: Insight | None) -> str:
-  return _compact_join([insight.label for insight in insights if insight is not None])
-
-
-def _insight_evidence(*insights: Insight | None) -> str:
-  sentences: list[str] = []
-  for insight in insights:
-    if insight is None:
-      continue
-    label = insight.label.strip()
-    description = insight.description.strip()
-    if not label and not description:
-      continue
-    if label and description:
-      sentences.append(f"{label}: {description}")
-    else:
-      sentences.append(label or description)
-  return _compact_join(sentences, " ")
-
-
 def _region_conclusion(
   region_name: str,
   primary: Insight,
@@ -495,24 +475,24 @@ async def persist_face_analysis_v2(
   report_id: UUID,
   result: FaceAnalysisV2,
 ) -> None:
+  projected_result = project_legacy_analysis_result(result)
+  projected_result["faceAnalysisV2"] = result.model_dump(
+    by_alias=True,
+    mode="json",
+  )
   await db.execute(
     """
     update analysis_reports
     set detail_payload = jsonb_set(
-      jsonb_set(
-        coalesce(detail_payload, '{}'::jsonb),
-        '{result}',
-        coalesce(detail_payload->'result', '{}'::jsonb),
-        true
-      ),
-      '{result,faceAnalysisV2}',
-      $2::jsonb,
+      coalesce(detail_payload, '{}'::jsonb),
+      '{result}',
+      coalesce(detail_payload->'result', '{}'::jsonb) || $2::jsonb,
       true
     )
     where id = $1
     """,
     report_id,
-    json.dumps(result.model_dump(by_alias=True, mode="json"), ensure_ascii=False),
+    json.dumps(projected_result, ensure_ascii=False),
   )
 
 
@@ -536,6 +516,18 @@ def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
     else "피부 세부 관찰은 확정하지 않고, 측정된 얼굴 비율과 이목구비 결과를 먼저 제공해요."
   )
   makeup = consulting.makeup
+  terminal_content_statuses = {
+    StageStatus.COMPLETED,
+    StageStatus.PARTIAL,
+    StageStatus.FAILED,
+  }
+  content_revision = sum(
+    stage.status in terminal_content_statuses
+    for stage in (
+      result.pipeline.ai_perception,
+      result.pipeline.ai_consulting,
+    )
+  )
   legacy: dict[str, Any] = {
     "faceShape": result.derived.face_shape.label,
     "personalColor": personal_color,
@@ -570,7 +562,7 @@ def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
       "fashion": consulting.fashion.model_dump(by_alias=True, mode="json"),
       "photography": consulting.photography.model_dump(by_alias=True, mode="json"),
     },
-    "contentRevision": 2,
+    "contentRevision": content_revision,
     "contentStatus": {
       "coreReadyAt": result.core_ready_at,
       "narrativeStatus": result.pipeline.ai_perception.status.value,

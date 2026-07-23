@@ -212,6 +212,7 @@ const ANALYSIS_REPORT_POLL_INTERVALS_MS = [5000, 8000, 13000];
 // Anchor가 아직 없을 때만 조밀하게 조회해 조기 저장 후 화면 반영 지연을 1초
 // 이내로 제한한다. Anchor 이후에는 기존 전체 보고서 백오프로 즉시 복귀한다.
 const ANALYSIS_ANCHOR_POLL_INTERVAL_MS = 1000;
+const ANALYSIS_PROGRESSIVE_POLL_DEADLINE_MS = 15000;
 const ANALYSIS_REPORT_POLL_TIMEOUT_MS = 240000;
 // 예상 완료 구간(팬아웃 ~24s·현행 단일 ~42s 모두 포함) 진입 후엔 폴 간격을 조여
 // "생성 직후" 감지지연을 최소화한다 — 백오프가 만드는 최대 ~9s 낭비 제거. WS push
@@ -757,7 +758,6 @@ function mapMakeupCards(
 }
 export function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
   const result = job.detailPayload?.result;
-  const faceAnalysisV2 = parseFaceAnalysisV2(result?.faceAnalysisV2);
   const guideline = parseMakeupGuideline(result?.makeupGuideline);
   const regionNotes = parseRegionNotes(result?.regionNotes);
   const impressionNotes = parseImpressionNotes(result?.impressionNotes);
@@ -768,22 +768,8 @@ export function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
         note => note.insight && note.evidence && note.recommendation,
       ),
   );
-  // 목록 응답은 SQL(#-)이 faceAnalysisV2 의 perception/consulting 키 자체를 제거한
-  // 경량 투영이다 — 키 부재는 "상세 GET 에서 받는 필드"이지 AI 결과 누락이 아니다.
-  const rawFaceAnalysisV2 = result?.faceAnalysisV2;
-  const isListProjectedV2 =
-    typeof rawFaceAnalysisV2 === 'object' &&
-    rawFaceAnalysisV2 !== null &&
-    !Array.isArray(rawFaceAnalysisV2) &&
-    !('perception' in rawFaceAnalysisV2) &&
-    !('consulting' in rawFaceAnalysisV2);
-  const hasV2AiResult = rawFaceAnalysisV2 == null || isListProjectedV2
-    ? true
-    : Boolean(faceAnalysisV2?.perception && faceAnalysisV2.consulting);
-
   return Boolean(
     result &&
-      hasV2AiResult &&
       firstText(result.faceShape, job.faceShape) &&
       firstText(result.personalColor, job.personalColor) &&
       firstText(result.recommendedMood, job.recommendedMood) &&
@@ -812,6 +798,23 @@ export function logFaceAnalysisDebug(
   }
 
   console.info('[aura:analysis-debug]', {event, ...payload});
+}
+
+export function recordFaceAnalysisPreviewTiming(
+  reportId: string,
+  elapsedMs: number,
+  perceptionReady: boolean,
+): void {
+  if (!isUuid(reportId) || !Number.isFinite(elapsedMs) || elapsedMs < 0) {
+    return;
+  }
+  const query = new URLSearchParams({
+    clientPreviewElapsedMs: String(Math.round(elapsedMs)),
+    clientPreviewPerceptionReady: String(perceptionReady),
+  });
+  void requestBackendJson(
+    `/analysis/reports/${reportId}?${query.toString()}`,
+  ).catch(() => undefined);
 }
 
 // wakeReportId를 주면 해당 리포트의 WS 완료 이벤트(analysis_report_completed)에도
@@ -851,8 +854,8 @@ function abortedAnalysisWait(job: BackendAnalysisJob): BackendApiError {
   );
 }
 
-// 팬아웃 앵커(~4s)가 컬럼을 조기 기록하면 완결 전에 얼굴형·피부·무드를 먼저 노출한다.
-// 잡 최상위 컬럼(result가 아님)을 읽어 프리뷰를 만든다.
+// 초기 측정 snapshot의 규칙 기반 얼굴형을 즉시 사용하고, 빠른 AI anchor가 저장되면
+// 피부·무드를 보강한다. 이 값은 진입 준비물이지 perception 완료 신호가 아니다.
 export type FaceAnalysisAnchorPreview = {
   derived?: FaceAnalysisDerivedResult;
   faceShape: string;
@@ -892,16 +895,38 @@ async function waitForCompleteAnalysisReport(
   signal?: AbortSignal,
   // 규칙 기반 핵심 보고서에 필요한 최소 데이터가 준비되면 1회 알린다.
   onAnchorPreview?: (preview: FaceAnalysisAnchorPreview) => void,
+  // perception이 완성되면 최종 consulting을 기다리지 않고 의미 있는 보고서를 전달한다.
+  onProgressiveReport?: (report: FaceAnalysisReport) => void,
 ): Promise<FaceAnalysisReport> {
   let currentJob = initialJob;
   let pollAttempt = 0;
   let anchorPreviewSent = false;
+  let progressiveReportSentRevision = -1;
 
   while (true) {
     if (signal?.aborted) {
       throw abortedAnalysisWait(currentJob);
     }
-    if (hasCompleteBackendReportText(currentJob)) {
+
+    // 초기 규칙 판정은 최종 보고서가 매우 빨리 끝난 경우에도 진입 타이머가 사용할
+    // 수 있어야 하므로 완료 반환보다 먼저 전달한다.
+    if (!anchorPreviewSent) {
+      const anchorPreview = getAnchorPreview(currentJob);
+      if (anchorPreview) {
+        anchorPreviewSent = true;
+        console.info('[aura:analysis] anchor-preview', {
+          elapsedMs: Date.now() - startedAt,
+          faceShape: anchorPreview.faceShape,
+          jobId: currentJob.id ?? null,
+        });
+        onAnchorPreview?.(anchorPreview);
+      }
+    }
+
+    if (
+      currentJob.status === 'completed' &&
+      hasCompleteBackendReportText(currentJob)
+    ) {
       const perceivedMs = Date.now() - startedAt;
       console.info('[aura:analysis] analysis-report:ready', {
         durationMs: perceivedMs,
@@ -920,18 +945,38 @@ async function waitForCompleteAnalysisReport(
       return mapBackendJobToFaceAnalysisReport(currentJob, capture);
     }
 
-    // 완결 전 핵심 보고서 1회 노출: 초기 V2 규칙 판정 또는 빠른 Anchor가
-    // 준비되면 알린다. 상세 섹션은 현재 촬영의 로컬 측정으로 구성한다.
-    if (!anchorPreviewSent) {
-      const anchorPreview = getAnchorPreview(currentJob);
-      if (anchorPreview) {
-        anchorPreviewSent = true;
-        console.info('[aura:analysis] anchor-preview', {
+    const result = currentJob.detailPayload?.result;
+    const contentStatus = parseContentStatus(result?.contentStatus);
+    const contentRevision =
+      typeof result?.contentRevision === 'number' &&
+      Number.isFinite(result.contentRevision)
+        ? result.contentRevision
+        : 0;
+    if (
+      currentJob.status !== 'failed' &&
+      contentStatus?.narrativeStatus === 'completed' &&
+      contentRevision > progressiveReportSentRevision &&
+      hasCompleteBackendReportText(currentJob)
+    ) {
+      try {
+        const progressiveReport = mapBackendJobToFaceAnalysisReport(
+          currentJob,
+          capture,
+          {allowProcessing: true},
+        );
+        progressiveReportSentRevision = contentRevision;
+        console.info('[aura:analysis] progressive-report:ready', {
+          contentRevision,
           elapsedMs: Date.now() - startedAt,
-          faceShape: anchorPreview.faceShape,
           jobId: currentJob.id ?? null,
         });
-        onAnchorPreview?.(anchorPreview);
+        onProgressiveReport?.(progressiveReport);
+      } catch (error) {
+        console.info('[aura:analysis] progressive-report:skipped', {
+          contentRevision,
+          errorType: error instanceof Error ? error.name : typeof error,
+          jobId: currentJob.id ?? null,
+        });
       }
     }
 
@@ -969,8 +1014,16 @@ async function waitForCompleteAnalysisReport(
     }
 
     let nextPollMs: number;
-    if (!anchorPreviewSent) {
+    if (
+      !anchorPreviewSent ||
+      (
+        progressiveReportSentRevision < 0 &&
+        elapsedMs < ANALYSIS_PROGRESSIVE_POLL_DEADLINE_MS
+      )
+    ) {
       nextPollMs = ANALYSIS_ANCHOR_POLL_INTERVAL_MS;
+    } else if (progressiveReportSentRevision < 0) {
+      nextPollMs = ANALYSIS_REPORT_POLL_TIGHT_MS;
     } else {
       const backoffMs =
         ANALYSIS_REPORT_POLL_INTERVALS_MS[
@@ -1030,6 +1083,7 @@ function requireAnalysisText(
 function mapBackendJobToFaceAnalysisReport(
   job: BackendAnalysisJob,
   capture?: FaceAnalysisCaptureInput | null,
+  options: {allowProcessing?: boolean} = {},
 ): FaceAnalysisReport {
   const result = job.detailPayload?.result ?? {};
   const faceAnalysisV2 = parseFaceAnalysisV2(result.faceAnalysisV2);
@@ -1062,7 +1116,9 @@ function mapBackendJobToFaceAnalysisReport(
   return {
     id: reportId,
     createdAt: job.createdAt?.trim() || undefined,
-    analyzedAt: requireAnalysisText(job, 'analyzedAt', job.analyzedAt),
+    analyzedAt: options.allowProcessing
+      ? firstText(job.analyzedAt, job.createdAt) ?? new Date().toISOString()
+      : requireAnalysisText(job, 'analyzedAt', job.analyzedAt),
     // 과거 보고서 복원용 측정 원본 — 서버 사진 URL 을 오버레이 이미지로 주입한다.
     measurements: parseFaceAnalysisMeasurements(job.detailPayload?.request?.measurements, {
       imageUrl: resolveFaceAnalysisReportImageUrl(job, capture),
@@ -1251,8 +1307,10 @@ export type FaceAnalysisOnDeviceMeasurementsInput = {
 
 export type FaceAnalysisReportCallbacks = {
   onAnalysisCreated?: (reportId: string) => Promise<void> | void;
-  // 섹션 1 perception까지 준비되면 최소 보고서용 Anchor를 1회 전달한다.
+  // 규칙 기반 최소 보고서용 얼굴형 snapshot을 1회 전달한다.
   onAnchorPreview?: (preview: FaceAnalysisAnchorPreview) => void;
+  // perception이 준비되면 최종 스타일링을 기다리지 않고 갱신 가능한 보고서를 전달한다.
+  onProgressiveReport?: (report: FaceAnalysisReport) => void;
 };
 
 export async function createFaceAnalysisReportFromCapture(
@@ -1384,5 +1442,6 @@ export async function createFaceAnalysisReportFromCapture(
     startedAt,
     signal,
     callbacks?.onAnchorPreview,
+    callbacks?.onProgressiveReport,
   );
 }

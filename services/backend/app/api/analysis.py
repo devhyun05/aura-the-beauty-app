@@ -432,15 +432,7 @@ async def run_analysis_job_background(
         source_image_bytes=source_image_bytes,
         anchor_values=anchor_task,
       )
-      try:
-        result = project_legacy_analysis_result(face_analysis_v2)
-      except ValueError as exc:
-        raise AppError(
-          502,
-          "FACE_ANALYSIS_AI_INCOMPLETE",
-          "얼굴 분석을 완료하지 못했어요. 다시 촬영해 주세요.",
-          {"reason": str(exc)},
-        ) from exc
+      result = project_legacy_analysis_result(face_analysis_v2)
       result["faceAnalysisV2"] = face_analysis_v2.model_dump(
         by_alias=True,
         mode="json",
@@ -980,6 +972,15 @@ async def get_analysis_report(
   # 보고서 준비). 서버 분석 시간엔 안 잡히는 폴링 감지 지연까지 포함한 "체감 시간".
   # ANALYSIS_METRICS_PATH 미설정(프로드 기본)이면 append는 no-op.
   client_elapsed_ms: int | None = Query(default=None, alias="clientElapsedMs", ge=0),
+  client_preview_elapsed_ms: int | None = Query(
+    default=None,
+    alias="clientPreviewElapsedMs",
+    ge=0,
+  ),
+  client_preview_perception_ready: bool | None = Query(
+    default=None,
+    alias="clientPreviewPerceptionReady",
+  ),
 ) -> dict:
   user = await ensure_user(db, auth)
   report = await db.fetchrow(
@@ -1009,6 +1010,17 @@ async def get_analysis_report(
         "reportId": str(report_id),
         "method": "v2" if settings.face_analysis_v2_enabled else "single",
         "clientElapsedMs": client_elapsed_ms,
+      },
+    )
+  if client_preview_elapsed_ms is not None:
+    append_analysis_metric(
+      settings.analysis_metrics_path,
+      {
+        "kind": "preview",
+        "reportId": str(report_id),
+        "method": "v2" if settings.face_analysis_v2_enabled else "single",
+        "clientElapsedMs": client_preview_elapsed_ms,
+        "perceptionReady": client_preview_perception_ready,
       },
     )
 

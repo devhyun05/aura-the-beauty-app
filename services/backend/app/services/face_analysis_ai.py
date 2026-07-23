@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 MEASUREMENT_PROMPT_VERSION = "s1-measurement-v1"
 # 한국어 출력 지시문 추가로 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
 PERCEPTION_PROMPT_VERSION = "s1-perception-v4"
-# 성별(v3) + 한국어 출력(v4) 지시문으로 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
-CONSULTING_PROMPT_VERSION = "s1-consulting-v6"
+# 양쪽 룩과 근거 행을 성공 출력의 필수 계약으로 승격해 캐시를 무효화한다.
+CONSULTING_PROMPT_VERSION = "s1-consulting-v7"
 # 사용자에게 보이는 라벨·설명·추천 문장은 모두 한국어여야 한다(단일 경로와 동일 원칙).
 # enum status 코드·metric 키만 영문 유지. perceive/consult 두 스테이지가 리포트의
 # 자유 텍스트(피부 라벨·부위 노트·요약·메이크업 가이드)를 전부 생성하므로 여기에 건다.
@@ -374,6 +374,25 @@ class FaceAnalysisAI:
 
     def validate_consulting(output: ConsultingResult) -> list[dict[str, Any]]:
       errors = _validate_user_copy(output)
+      if output.styling_looks is None:
+        errors.append(
+          {
+            "location": ["stylingLooks"],
+            "type": "missing_required_styling_looks",
+          },
+        )
+      else:
+        for look_name, look in (
+          ("natural", output.styling_looks.natural),
+          ("glam", output.styling_looks.glam),
+        ):
+          if len({row.category for row in look.rows}) != len(look.rows):
+            errors.append(
+              {
+                "location": ["stylingLooks", look_name, "rows"],
+                "type": "duplicate_styling_row_category",
+              },
+            )
       if "우세" in vertical_label:
         for field, text in (
           ("summary", output.summary),

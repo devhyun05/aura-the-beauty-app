@@ -20,6 +20,10 @@ const entries = [
   'face-report/services/reportStoryModel.ts',
   'face-report/services/minimumFaceReport.ts',
   'face-report/services/reportStoryModel.test.ts',
+  'face-report/services/reportContentUpgrade.ts',
+  'face-report/services/reportContentUpgrade.test.ts',
+  'face-report/services/reportCompletionStatus.ts',
+  'face-report/services/reportCompletionStatus.test.ts',
   'face-report/services/goldenMaskInteraction.ts',
   'face-report/services/goldenMaskInteraction.test.ts',
   'face-report/services/faceDepthPresentation.ts',
@@ -28,6 +32,8 @@ const entries = [
   'face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.ts',
   'ar/stencil/src/composer/bodyProfile.ts',
   'ar/stencil/src/composer/bodyProfile.test.ts',
+  'face-analysis/services/faceAnalysisReportGate.ts',
+  'face-analysis/services/faceAnalysisReportGate.test.ts',
 ];
 
 function run(command, args) {
@@ -58,9 +64,12 @@ run(process.execPath, [
 run(process.execPath, [join(outDir, 'features/face-report/reportFormat.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/reportFeatureAxes.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/reportStoryModel.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/services/reportContentUpgrade.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/services/reportCompletionStatus.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/goldenMaskInteraction.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/faceDepthPresentation.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.js')]);
 run(process.execPath, [join(outDir, 'features/ar/stencil/src/composer/bodyProfile.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-analysis/services/faceAnalysisReportGate.test.js')]);
 run(process.execPath, [join(outDir, 'shared/ui/storyReportPagerGesture.test.js')]);
 run(process.execPath, [join(outDir, 'shared/services/faceAnalysisService.test.js')]);

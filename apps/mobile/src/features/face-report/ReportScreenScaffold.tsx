@@ -27,6 +27,8 @@ import {
   type FaceReportStoryPage,
   type FaceReportStorySection,
 } from './services/reportStoryModel';
+import {keepActivePageContent} from './services/reportContentUpgrade';
+import {resolveReportCompletionStatus} from './services/reportCompletionStatus';
 import {GoldenMaskCard} from './components/GoldenMaskCard';
 import {
   disposePreparedGoldenMask,
@@ -370,50 +372,6 @@ function MakeupCtaCard({
  * Story report screen: editorial covers + meaning-complete horizontal cards.
  * Pure & props-driven — navigation, retake and survey actions bubble up as callbacks.
  */
-function keepActivePageContent(
-  current: ReportData,
-  next: ReportData,
-  pageId: string | null,
-): ReportData {
-  if (!pageId) return next;
-  if (pageId === 'summary:generation') {
-    return {
-      ...next,
-      generationStatus: current.generationStatus,
-      generationError: current.generationError,
-      s1: current.s1,
-    };
-  }
-  if (pageId.startsWith('summary:')) {
-    return {...next, s1: current.s1};
-  }
-  if (pageId === 'proportion:overview') {
-    return {...next, s2: current.s2};
-  }
-  if (pageId.startsWith('features:')) {
-    const key = pageId.slice('features:'.length);
-    const currentCard = current.s3?.cards.find(card => card.key === key);
-    if (!currentCard || !next.s3) return next;
-    return {
-      ...next,
-      s3: {
-        ...next.s3,
-        cards: next.s3.cards.map(card =>
-          card.key === key ? currentCard : card,
-        ),
-      },
-    };
-  }
-  if (pageId === 'impression:overview') return {...next, s6: current.s6};
-  if (pageId.startsWith('personal-color:')) return {...next, s4: current.s4};
-  if (pageId === 'skin:overview') return {...next, s8: current.s8};
-  if (pageId.startsWith('styling:')) {
-    return {...next, s7: current.s7, s9: current.s9};
-  }
-  if (pageId === 'body:overview') return {...next, s5: current.s5};
-  return next;
-}
-
 export function ReportScreenScaffold({
   data: incomingData,
   onBack,
@@ -443,15 +401,25 @@ export function ReportScreenScaffold({
       : initialModel.pages[0]?.id ?? null);
   const [activePageId, setActivePageId] = useState(initialPageId);
   const activePageIdRef = useRef(activePageId);
+  const reportCompletion = resolveReportCompletionStatus(
+    pendingData ?? data,
+  );
 
   React.useEffect(() => {
     const current = dataRef.current;
     if (current === incomingData) return;
-    const isEditorialUpgrade =
-      current.reportId === incomingData.reportId &&
-      current.generationStatus === 'loading' &&
-      incomingData.generationStatus === undefined;
-    const nextData = isEditorialUpgrade
+    const sameReport = current.reportId === incomingData.reportId;
+    const isContentUpgrade =
+      sameReport &&
+      (
+        (
+          current.generationStatus === 'loading' &&
+          incomingData.generationStatus === undefined
+        ) ||
+        (incomingData.contentRevision ?? 0) >
+          (current.contentRevision ?? 0)
+      );
+    const nextData = isContentUpgrade
       ? keepActivePageContent(
           current,
           incomingData,
@@ -460,7 +428,7 @@ export function ReportScreenScaffold({
       : incomingData;
     dataRef.current = nextData;
     setData(nextData);
-    setPendingData(isEditorialUpgrade ? incomingData : null);
+    setPendingData(isContentUpgrade ? incomingData : null);
   }, [incomingData]);
 
   const storyModel = useMemo(() => buildFaceReportStoryModel(data), [data]);
@@ -681,13 +649,26 @@ export function ReportScreenScaffold({
                 onBack,
               )}
             </View>
-            <View style={{alignItems: 'center', gap: 2}}>
+            <View style={{alignItems: 'center', gap: 1}}>
               <Text style={[font(14, '700'), {color: color.ink}]}>{data.topBarTitle}</Text>
-              {pendingData ? (
-                <Text style={[font(9.5, '700'), {color: color.accentDeep}]}>
-                  새로운 분석이 준비됐어요
-                </Text>
-              ) : null}
+              <Text
+                accessibilityLabel={reportCompletion.accessibilityLabel}
+                accessibilityLiveRegion="polite"
+                numberOfLines={1}
+                style={[
+                  font(8.5, '600', undefined, 0.05),
+                  {
+                    color: reportCompletion.failed
+                      ? color.legacyText
+                      : reportCompletion.complete
+                        ? color.faint
+                        : color.muted,
+                    maxWidth: 180,
+                    opacity: reportCompletion.complete ? 0.72 : 0.86,
+                  },
+                ]}>
+                {reportCompletion.compactLabel}
+              </Text>
             </View>
             <View style={{alignItems: 'center', flexDirection: 'row', justifyContent: 'flex-end', width: 88}}>
               {onShare

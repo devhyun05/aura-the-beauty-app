@@ -15,6 +15,7 @@ from app.schemas.face_analysis_v2 import (
 from app.services.face_analysis_pipeline import (
   FaceAnalysisPipeline,
   initialize_face_analysis_v2,
+  persist_face_analysis_v2,
   project_legacy_analysis_result,
 )
 from app.services.face_analysis_ai import FaceAnalysisAI
@@ -93,6 +94,12 @@ def perception() -> PerceptionResult:
 
 def consulting() -> ConsultingResult:
   advice = {"summary": "요약", "items": ["항목"], "rationaleMetricKeys": []}
+  styling_rows = [
+    {"category": "base", "note": "얇은 베이스", "why": "피부 결을 살려요"},
+    {"category": "brow", "note": "결 눈썹", "why": "눈썹 흐름을 살려요"},
+    {"category": "blush", "note": "볼 중앙", "why": "볼 중심을 살려요"},
+    {"category": "lip", "note": "뮤트 립", "why": "색 축과 연결해요"},
+  ]
   return ConsultingResult.model_validate(
     {
       "makeup": {
@@ -104,6 +111,20 @@ def consulting() -> ConsultingResult:
       "photography": advice,
       "overallMood": "차분한 균형", "summary": "전체 맞춤 요약",
       "shortSummary": "짧은 요약", "tags": ["뮤트", "균형"],
+      "stylingLooks": {
+        "natural": {
+          "title": "결을 살린 룩",
+          "subtitle": "차분한 방향",
+          "description": "현재 선을 부드럽게 연결해요",
+          "rows": styling_rows,
+        },
+        "glam": {
+          "title": "선명도를 더한 룩",
+          "subtitle": "또렷한 방향",
+          "description": "같은 비율에 대비를 더해요",
+          "rows": styling_rows,
+        },
+      },
     },
   )
 
@@ -199,6 +220,10 @@ async def test_pipeline_persists_after_every_stage_and_projects_legacy() -> None
   )
 
   assert len(persisted) == 4
+  assert [
+    project_legacy_analysis_result(snapshot)["contentRevision"]
+    for snapshot in persisted
+  ] == [0, 0, 1, 2]
   assert result.pipeline.overall == "completed"
   assert result.perception is not None
   assert result.consulting is not None
@@ -224,6 +249,30 @@ async def test_pipeline_persists_after_every_stage_and_projects_legacy() -> None
   assert legacy["stylingLooks"]["natural"]["rows"]
   assert legacy["skinPerception"]["texture"]["label"] == "균형"
   assert legacy["contentStatus"]["stylingStatus"] == "completed"
+  assert legacy["contentStatus"]["sources"]["styling"] == "llm"
+  assert legacy["contentRevision"] == 2
+
+
+@pytest.mark.asyncio
+async def test_partial_persistence_projects_renderable_report_content() -> None:
+  class CaptureDatabase:
+    def __init__(self) -> None:
+      self.arguments: tuple | None = None
+
+    async def execute(self, *_arguments):
+      self.arguments = _arguments
+
+  db = CaptureDatabase()
+  result = initialize_face_analysis_v2(REQUEST)
+
+  await persist_face_analysis_v2(db, REPORT_ID, result)
+
+  assert db.arguments is not None
+  persisted = json.loads(db.arguments[-1])
+  assert persisted["faceShape"] == result.derived.face_shape.label
+  assert persisted["regionNotes"]["upper"]["insight"]
+  assert persisted["contentRevision"] == 0
+  assert persisted["faceAnalysisV2"]["pipeline"]["aiPerception"]["status"] == "pending"
 
 
 @pytest.mark.asyncio
@@ -283,6 +332,7 @@ def test_legacy_projection_uses_measurement_templates_before_ai_content() -> Non
     "narrative": "template",
     "styling": "template",
   }
+  assert legacy["contentRevision"] == 0
 
 
 @pytest.mark.asyncio
@@ -324,6 +374,7 @@ async def test_perception_failure_does_not_block_independent_styling() -> None:
   assert "skinPerception" not in legacy
   assert legacy["regionNotes"]["mid"]["insight"]
   assert legacy["contentStatus"]["sources"]["narrative"] == "template"
+  assert legacy["contentRevision"] == 2
 
 
 @pytest.mark.asyncio
@@ -345,6 +396,7 @@ async def test_styling_failure_keeps_perception_and_template_styling() -> None:
   assert legacy["skinPerception"]["texture"]["label"] == "균형"
   assert legacy["stylingLooks"]["glam"]["rows"]
   assert legacy["contentStatus"]["sources"]["styling"] == "template"
+  assert legacy["contentRevision"] == 2
 
 
 @pytest.mark.asyncio

@@ -280,17 +280,9 @@ export interface S9Data {
 }
 
 // ---------- screen ----------
-// Completed reports guarantee s1 and s5 (which has its own internal "설문 전"
-// empty state). The transient minimum report intentionally supplies only s1
-// while the remaining sections are generated. s2/s4 depend on on-device measurements that can
-// fail or come back "insufficient" for a given photo — rendering them from a
-// failed measurement would mean fabricating guide-line pixel positions or
-// color axes that were never actually measured. s3/s6/s7's real data sources
-// (region bbox storage, AI perception parsing, natural/glam split generation)
-// aren't wired on the backend at all yet (see
-// docs/superpowers/plans/2026-07-16-face-report-redesign-plan.md §1). In every
-// null case the scaffold hides the section rather than guessing — same
-// "조용한 실패 금지, 조용한 생성 금지" posture as the rest of the report.
+// 최소 보고서는 측정 기반 섹션부터 시작하고 perception/consulting revision이
+// 도착하는 순서대로 확장된다. 측정 실패나 아직 처리 중인 섹션은 null로 유지해
+// 존재하지 않는 가이드·인사이트를 임의로 만들지 않는다.
 export interface ReportData {
   reportId: string;
   contentRevision?: number;
@@ -298,6 +290,11 @@ export interface ReportData {
     coreReadyAt?: string;
     narrativeStatus?: string;
     stylingStatus?: string;
+    sources?: {
+      core?: 'llm' | 'template';
+      narrative?: 'llm' | 'template';
+      styling?: 'llm' | 'template';
+    };
   };
   goldenMask?: GoldenMaskReportDescriptor;
   generationStatus?: 'loading' | 'failed';

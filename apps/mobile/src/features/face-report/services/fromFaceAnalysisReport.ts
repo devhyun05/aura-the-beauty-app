@@ -1423,9 +1423,16 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
   const styleLanes = buildStyleLaneRecommendations(featureProfile, weightMap);
   const derived = report.faceAnalysisV2?.derived ?? null;
   const s2 = buildFaceProportionSection(verticalThirds, gender, derived);
+  const stylingStatus = report.contentStatus?.stylingStatus;
+  const stylingSettled =
+    !stylingStatus ||
+    stylingStatus === 'completed' ||
+    stylingStatus === 'failed' ||
+    stylingStatus === 'partial';
 
   return {
     reportId: report.id,
+    ...(!stylingSettled ? {generationStatus: 'loading' as const} : {}),
     contentRevision: report.contentRevision ?? 1,
     ...(report.contentStatus
       ? {
@@ -1438,6 +1445,9 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
               : {}),
             ...(report.contentStatus.stylingStatus
               ? {stylingStatus: report.contentStatus.stylingStatus}
+              : {}),
+            ...(report.contentStatus.sources
+              ? {sources: report.contentStatus.sources}
               : {}),
           },
         }
@@ -1464,7 +1474,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     s4: buildPersonalColorSection(personalColor, heroUri),
     s5: buildS5(bodyProfile, gender),
     s6: buildS6(report.impressionNotes, visualWeight),
-    s7: buildS7(report.stylingLooks),
+    s7: stylingSettled ? buildS7(report.stylingLooks) : null,
     s8: buildS8(report.skinPerception),
     s9: {
       eyebrow: 'STYLE',
