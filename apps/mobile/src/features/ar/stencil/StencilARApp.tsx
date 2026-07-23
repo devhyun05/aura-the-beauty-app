@@ -41,6 +41,11 @@ import { launchImageLibrary } from 'react-native-image-picker';
 
 import {useCameraSessionActive} from '../../../shared/hooks/useCameraSessionActive';
 
+// 화면 이탈 시 Unity 싱글턴에 남은 메이크업을 즉시 맨얼굴로 비우는 리셋 —
+// UnityView 어댑터의 componentWillUnmount(SetStencilActive(false) 이전)와
+// blur/언마운트 훅이 공유한다. 정의·순서 제약은 stencilMakeupReset.ts 참고.
+import { resetUnityMakeupToBare } from './stencilMakeupReset';
+
 import { parseUnityMessage } from './src/bridge/types';
 import type {
   CalibrationParams,
@@ -472,26 +477,29 @@ type StencilARAppProps = {
   initialLook?: StencilInitialLook;
 };
 
+// 주입 시작 룩(추천 등)의 LOOK 레인 칩 id — 프리셋/내 룩 id와 충돌하지 않는 예약값.
+const INITIAL_LOOK_CHIP_ID = 'initial-look';
+
+// 주입 룩 → 컴포저 트리. 루트를 dirty로 시작시켜 아직 내 룩으로 저장 전임을
+// 표시하고(칩 * 마커) 헤더 저장 버튼이 바로 활성화되게 한다 — 저장하면 일반
+// 내 룩과 동일하게 등록된다(lookExtracted 초안과 같은 취급).
+function buildInitialLookTree(look: StencilInitialLook): LookNode {
+  return {
+    ...decomposeToTree(
+      { ...BARE, ...look.params },
+      [],
+      look.label,
+      [],
+      look.eyeshadowLayers ?? [],
+    ),
+    dirty: true,
+  };
+}
+
 // The stencil source includes authoring/debug utilities that are useful while
 // developing the Unity scene but are not part of AURA's customer-facing AR UI.
 const SHOW_INTERNAL_AR_TOOLS = false;
 
-// 화면 이탈 시 Unity 싱글턴에 남은 메이크업을 즉시 맨얼굴로 비운다. Unity 플레이어는
-// 화면 밖에서도 살아 있어 마지막 applyFilter 파라미터를 그대로 들고 있는다 — 재진입해
-// 카메라/AR 세션이 다시 뜨는 첫 프레임들이 그 이전 필터를 몇 초간 렌더한 뒤에야
-// resyncAll(맨얼굴)이 도착해 풀린다. 이탈 순간 브리지로 직접 중립값을 실어두면(뷰
-// 마운트와 무관하게 싱글턴에 전달) 재개 프레임이 처음부터 맨얼굴이라 그 깜빡임이 없다.
-function resetUnityMakeupToBare() {
-  const send = (msg: RNToUnityMessage) =>
-    postUnityMessage('NativeBridge', 'OnMessageFromRN', JSON.stringify(msg));
-  send({ type: 'applyFilter', filter: BARE });
-  send({ type: 'setOverlayLayers', overlayLayers: [] });
-  send({ type: 'setLensLayers', lensLayers: [] });
-  send({ type: 'setEyeshadowLayers', eyeshadowLayers: [] });
-  send({ type: 'setStencil', stencil: { ...DEFAULT_STENCIL, opacity: 0 } });
-  send({ type: 'setSymmetry', symmetry: { ...DEFAULT_SYMMETRY, opacity: 0 } });
-  send({ type: 'setLighting', lighting: DEFAULT_LIGHTING });
-}
 
 function App({ onBack, initialLook }: StencilARAppProps) {
   // AR 화면은 네이티브 스택 화면이라 나가도(블러) 언마운트되지 않고 편집 상태를
@@ -512,6 +520,10 @@ function App({ onBack, initialLook }: StencilARAppProps) {
     }
     wasFocusedRef.current = isFocused;
   }, [isFocused]);
+  // 뒤로가기(pop)는 blur 이펙트가 돌기 전에 화면을 파괴할 수 있어 위 blur 리셋이
+  // 보장되지 않는다. 언마운트 cleanup에서도 한 번 더 비운다(중복 전송은 무해 —
+  // 같은 중립값 재적용일 뿐이라 idempotent).
+  useEffect(() => () => resetUnityMakeupToBare(), []);
   return (
     <SafeAreaProvider>
       <FilterScreen key={sessionKey} onBack={onBack} initialLook={initialLook} />
@@ -529,9 +541,11 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       label: initialLook?.label,
     });
   }
-  const unityRef = useRef<UnityView | null>(null);
   const paramsRef = useRef<FilterParams>(BARE);
   const opacityRef = useRef(DEFAULT_MAKEUP_OPACITY); // 전역 메이크업 농도 (0~1) — 기본 75%
+  // 주입 시작 룩 미러 — 칩 재탭(selectLook) 시 스테일 클로저 없이 재적용하기 위한 ref.
+  const initialLookRef = useRef(initialLook);
+  initialLookRef.current = initialLook;
 
   const [unityReady, setUnityReady] = useState(false);
   const unityReadyRef = useRef(false);
@@ -540,6 +554,8 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
   const legacyBootingActiveRef = useRef(false);
   const unityBootFatalRef = useRef(false);
   const readyRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ready 후 1회성 후속 재동기화 타이머 — 웜 재진입 초기 전송 유실 복구용(위 ready 케이스).
+  const resyncFollowUpTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const readyDelayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readyRequestInFlightRef = useRef(false);
   const requestReadyNowRef = useRef<((restartFast?: boolean) => void) | null>(null);
@@ -904,12 +920,13 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
     loadCatalogStore().then(setCatalog);
   }, []);
 
+  // ref가 아니라 싱글턴 브리지로 직접 보낸다. React는 ref를 componentDidMount
+  // 이후에 연결하므로, Unity가 이미 떠 있는 재진입에서 어댑터 cDM이 동기 방출하는
+  // 합성 ready → resyncAll 시점엔 unityRef가 아직 null이다 — ref 경유였을 때 그
+  // 재동기화 전체(및 이후 requestReady 재시도)가 조용히 증발해 "RN은 원본인데
+  // 얼굴은 이전 룩" 상태가 됐다. postUnityMessage는 뷰 마운트와 무관하게 전달된다.
   const sendToUnity = useCallback((msg: RNToUnityMessage) => {
-    unityRef.current?.postMessage(
-      'NativeBridge',
-      'OnMessageFromRN',
-      JSON.stringify(msg),
-    );
+    postUnityMessage('NativeBridge', 'OnMessageFromRN', JSON.stringify(msg));
   }, []);
 
   // UaaL은 RN 핸들러가 붙기 전에 ready를 먼저 방출할 수 있다. 처음 20회는 빠르게
@@ -977,6 +994,8 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       requestReadyNowRef.current = null;
       stopReadyHandshakeRef.current = null;
       readyRequestInFlightRef.current = false;
+      for (const t of resyncFollowUpTimersRef.current) clearTimeout(t);
+      resyncFollowUpTimersRef.current = [];
     };
   }, [sendToUnity]);
 
@@ -2019,15 +2038,11 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       });
     }
 
-    changeTreeUser(
-      decomposeToTree(
-        { ...BARE, ...initialLook.params },
-        [],
-        initialLook.label,
-        [],
-        initialLook.eyeshadowLayers ?? [],
-      ),
-    );
+    changeTreeUser(buildInitialLookTree(initialLook));
+    // 주입 룩을 LOOK 레인의 자기 칩으로 선택 표시 — '원본'이 켜진 채 얼굴만
+    // 메이크업돼 보이는 괴리를 없앤다. 칩 재탭 시 selectLook이 재적용한다.
+    lookSelRef.current = INITIAL_LOOK_CHIP_ID;
+    setLookSel(INITIAL_LOOK_CHIP_ID);
   }, [initialLook, changeTreeUser]);
 
 
@@ -2136,6 +2151,14 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       if (id === 'bare') {
         setLookSel('bare');
         changeTree(null);
+        return;
+      }
+      // 주입 시작 룩 칩 재탭 — 주입 당시 레시피로 되돌린다(편집 폐기 후 재적용).
+      if (id === INITIAL_LOOK_CHIP_ID) {
+        const look = initialLookRef.current;
+        if (!look) return;
+        setLookSel(INITIAL_LOOK_CHIP_ID);
+        changeTree(buildInitialLookTree(look));
         return;
       }
       const style = userStylesV2Ref.current.find(s => s.id === id);
@@ -2971,6 +2994,14 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
           // Unity 기동/재마운트(백그라운드 복귀·컨텍스트 로스) 완료 — 베이스 필터만이
           // 아니라 전 편집 상태를 재방출해 재동기화(전역 농도·레이어·가이드·조명 등).
           resyncAll();
+          // 웜 재진입에서는 ready 직후 전송이 플레이어 pause 해제·스텐실 재활성
+          // 전에 도착해 유실될 수 있다(추천룩 주입이 자동 반영 안 되던 원인).
+          // Unity가 확실히 살아난 시점에 한정 횟수만 재방출한다 — Unity 이벤트
+          // 유발(ready 에코)이 아니라 타이머 구동이라 피드백 루프가 원천 불가능.
+          for (const t of resyncFollowUpTimersRef.current) clearTimeout(t);
+          resyncFollowUpTimersRef.current = [700, 1800].map(delay =>
+            setTimeout(() => resyncAll(), delay),
+          );
           break;
         case 'fitHandles':
           // 온페이스 핏 핸들(A17) — 핏 패널 열림 동안 ~10Hz. eyeVp는 드래그 정규화용.
@@ -3195,6 +3226,14 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
   }, [availableStencilKeys, pushStencil]);
   const lookChips: LaneChip[] = [
     { id: 'bare', label: '원본', dirty: lookSel === 'bare' && lookDirty },
+    // 주입 시작 룩(추천 등) — 진입 세션 한정 칩. 저장하면 내 룩 칩으로 옮겨간다.
+    ...(initialLook
+      ? [{
+          id: INITIAL_LOOK_CHIP_ID,
+          label: initialLook.label,
+          dirty: lookSel === INITIAL_LOOK_CHIP_ID && lookDirty,
+        }]
+      : []),
     ...SYSTEM_LOOKS.map(p => ({
       id: p.id,
       label: p.name,
@@ -3254,7 +3293,6 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
 
       {cameraSessionActive && (
         <UnityView
-          ref={unityRef}
           style={StyleSheet.absoluteFill}
           androidKeepPlayerMounted
           onUnityMessage={onUnityMessage}

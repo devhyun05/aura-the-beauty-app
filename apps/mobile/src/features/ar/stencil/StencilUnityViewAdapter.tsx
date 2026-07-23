@@ -11,6 +11,7 @@ import {
   isUnityMakeupReady,
   postUnityMessage,
 } from '../services/unityMakeupBridge';
+import {resetUnityMakeupToBare} from './stencilMakeupReset';
 
 type UnityMessageEvent = NativeSyntheticEvent<{message: string}>;
 
@@ -48,6 +49,12 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
         const parsed = JSON.parse(message) as {type?: string};
         if (parsed.type === 'ready' || parsed.type === 'unity_initialized') {
           if (this.didReceiveReady) {
+            // 첫 ready 이후의 ready/unity_initialized는 반드시 삼킨다. 네이티브
+            // 브리지가 메시지 전송(ensureRunning)마다 이런 이벤트를 되쏠 수 있어,
+            // 화면에 전달하면 전송→이벤트→재동기화→전송 피드백 루프가 된다
+            // (2026-07-24 실기기에서 앱이 jetsam으로 죽는 플러딩 재현됨).
+            // 웜 재활성 시 유실된 적용의 복구는 FilterScreen의 ready 후 1회성
+            // 타이머 재동기화가 담당한다.
             return;
           }
 
@@ -85,6 +92,9 @@ export default class StencilUnityViewAdapter extends React.PureComponent<
     this.stopActivationRetry();
     this.subscription?.remove();
     this.subscription = null;
+    // 순서 중요: 맨얼굴 리셋 → SetStencilActive(false). Unity MakeupController가
+    // OnDisable에서 브리지 구독을 해제하므로, 비활성화 뒤에 보낸 리셋은 증발한다.
+    resetUnityMakeupToBare();
     postUnityMessage('Aura Stencil Runtime', 'SetStencilActive', 'false');
     hideUnityMakeupView();
   }
