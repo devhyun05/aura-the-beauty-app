@@ -975,7 +975,7 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
     topologyFingerprint: 'topology-1',
   } as const;
   const payload = buildFaceAnalysisMeasurementsPayload({
-    captureId: 'c-photo',
+    captureId: 'server-photo-capture',
     face3d: null,
     face3dPhotoEvidence: evidence as any,
     faceGeometry2d: null,
@@ -992,6 +992,16 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
     restored?.face3dPhotoEvidence?.regions.nose?.pin.signedDepthNormalized,
     0.34,
     'signed depth survives measurements round trip',
+  );
+  expectEqual(
+    restored?.face3dPhotoEvidence?.captureId,
+    'server-photo-capture',
+    'stored 3D photo evidence is rebound to the server photo capture identity',
+  );
+  expectEqual(
+    evidence.captureId,
+    'c-photo',
+    'rebinding stored evidence does not mutate the Unity session evidence',
   );
 }
 

@@ -163,8 +163,17 @@ export function buildFaceAnalysisMeasurementsPayload(
     schemaVersion: FACE_ANALYSIS_MEASUREMENTS_SCHEMA_VERSION,
     ...(faceVerticalThirds ? {faceVerticalThirds} : {}),
     ...(input.face3d ? {face3d: input.face3d} : {}),
-    ...(input.face3dPhotoEvidence?.captureId === input.captureId
-      ? {face3dPhotoEvidence: input.face3dPhotoEvidence}
+    // Unity captureId는 촬영 요청의 로컬 identity이고 input.captureId는 업로드 뒤
+    // 서버가 발급한 photoCaptureId다. Unity 이벤트 경계에서 프레임·토폴로지 일치를
+    // 이미 검증했으므로, 저장 사본은 보고서 정본 identity로 다시 묶는다. 원본
+    // 세션 객체는 변경하지 않는다.
+    ...(input.face3dPhotoEvidence
+      ? {
+          face3dPhotoEvidence: {
+            ...input.face3dPhotoEvidence,
+            captureId: input.captureId,
+          },
+        }
       : {}),
     ...(faceGeometry2d ? {faceGeometry2d} : {}),
     ...(personalColor ? {personalColor} : {}),

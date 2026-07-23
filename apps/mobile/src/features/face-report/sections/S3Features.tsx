@@ -5,7 +5,7 @@ import type { RegionCardData, S3Data } from '../reportTypes';
 import { BlendBar } from '../visuals/BlendBar';
 import { Card } from '../visuals/Card';
 import { GuideOverlay } from '../visuals/GuideOverlay';
-import {FaceDepthOverlay} from '../visuals/FaceDepthOverlay';
+import {FaceDepthPointOverlay} from '../visuals/FaceDepthPointOverlay';
 import { PhotoSlot } from '../visuals/PhotoSlot';
 import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
@@ -38,11 +38,10 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
   const hasDepthEvidenceForActive = Boolean(
     activeDepthRegions.length > 0,
   );
-  const hasSignedDepthForActive = activeDepthRegions.some(region =>
-    region?.samples.some(sample => sample.signedDepthNormalized !== undefined),
-  );
   const showsDepth =
     needsDepth && hasDepthEvidenceForActive;
+  const missingDepthEvidence =
+    needsDepth && !hasDepthEvidenceForActive;
   const showsLine =
     !activeMeasurement
     || activeMeasurement.visualType === 'line'
@@ -90,11 +89,10 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
       }}>
         <PhotoSlot slot={card.photo} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
         {showsDepth && card.photoEvidence ? (
-          <FaceDepthOverlay
+          <FaceDepthPointOverlay
             activeMetricKeys={activeMetricKeys}
             cropRect={card.cropRect}
             evidence={card.photoEvidence}
-            measurementValues={activeMeasurement?.values}
           />
         ) : null}
         {showsLine ? (
@@ -107,50 +105,30 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
             labelAlign={card.guideLabelAlign}
           />
         ) : null}
-        {!hasVisibleGuide && !showsDepth && !needsDepth ? (
-          <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: 12,
-              right: 12,
-              bottom: 12,
-              backgroundColor: 'rgba(22,48,59,0.68)',
-              borderRadius: radius.md,
-              paddingHorizontal: 12,
-              paddingVertical: 9,
-            }}>
-            <Text style={[font(12, '800'), { color: color.white }]}>기준선 측정 보류</Text>
-            <Text style={[font(11, '400', 1.45), { color: 'rgba(255,255,255,0.9)', marginTop: 2 }]}>
-              사진에서 이 부위 기준선을 안전하게 표시하지 못했어요.
-            </Text>
-          </View>
-        ) : null}
       </View>
       {showsDepth ? (
-        <View style={{gap: 5}}>
-          <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
-            {hasSignedDepthForActive ? (
-              <>
-                <View style={{width: 24, height: 7, borderRadius: 4, backgroundColor: 'rgba(30,118,145,0.62)'}} />
-                <View style={{width: 18, height: 7, borderRadius: 4, backgroundColor: 'rgba(244,225,196,0.54)'}} />
-                <View style={{width: 24, height: 7, borderRadius: 4, backgroundColor: 'rgba(218,105,91,0.66)'}} />
-                <Text style={[font(10.5, '600'), {color: color.muted}]}>
-                  후방 · 0 기준면 · 전방
-                </Text>
-              </>
-            ) : (
-              <>
-                <View style={{width: 30, height: 7, borderRadius: 4, backgroundColor: 'rgba(21,124,153,0.24)'}} />
-                <View style={{width: 30, height: 7, borderRadius: 4, backgroundColor: 'rgba(21,124,153,0.62)'}} />
-                <Text style={[font(10.5, '600'), {color: color.muted}]}>
-                  낮은 깊이 · 높은 깊이
-                </Text>
-              </>
-            )}
-          </View>
-          <Text style={[font(9.5, '400', 1.4), {color: color.muted}]}>
-            색은 대표 프레임의 형태, 핀 숫자는 얼굴 기준폭 대비 반복 측정 상대값이에요.
+        <Text style={[font(10.5, '400', 1.5), {color: color.muted}]}>
+          큰 점은 대표 측정점, 작은 점은 계산에 사용한 3D 메시 정점이에요.
+        </Text>
+      ) : null}
+      {!hasVisibleGuide && !showsDepth ? (
+        <View
+          style={{
+            backgroundColor: color.accentWash,
+            borderColor: color.outline,
+            borderRadius: radius.md,
+            borderWidth: 1,
+            gap: 2,
+            paddingHorizontal: 12,
+            paddingVertical: 9,
+          }}>
+          <Text style={[font(12, '800'), {color: color.accentInk}]}>
+            {missingDepthEvidence ? '3D 측정점 표시 없음' : '기준선 측정 보류'}
+          </Text>
+          <Text style={[font(11, '400', 1.45), {color: color.body}]}>
+            {missingDepthEvidence
+              ? '이 보고서에는 사진 위 3D 측정점이 저장되지 않았어요. 새 촬영 보고서부터 실제 측정점을 함께 저장해요.'
+              : '사진에서 이 부위 기준선을 안전하게 표시하지 못했어요.'}
           </Text>
         </View>
       ) : null}
@@ -168,6 +146,12 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
                 ) : null}
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel={[
+                    item.label,
+                    item.resultLabel,
+                    item.displayValue,
+                    item.interpretation,
+                  ].filter(Boolean).join(', ')}
                   accessibilityState={{selected}}
                   onPress={() => setActiveMeasurementKey(item.key)}
                   style={{
@@ -184,9 +168,9 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
                     </Text>
                     <Text style={[font(10.5, '700'), {color: color.accentDeep}]}>
                       {item.visualType === 'depth'
-                        ? '깊이 지도 · 상대값'
+                        ? '3D 측정점 · 상대값'
                         : item.visualType === 'line-and-depth'
-                          ? '측정선 · 깊이'
+                          ? '측정선 · 3D 측정점'
                           : '랜드마크 선'}
                     </Text>
                   </View>

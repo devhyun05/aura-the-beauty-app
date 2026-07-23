@@ -40,6 +40,7 @@ import {buildRegionFeatureAxes, type RegionAxesKey} from '../reportFeatureAxes';
 import {buildRegionFeatureDescriptors} from '../regionFeatureDescriptors';
 import {buildVisualWeightPresentation} from '../visualWeightPresentation';
 import {buildStyleLaneRecommendations} from '../styleLaneRecommendations';
+import {formatDepthMeasurementValues} from './faceDepthPresentation';
 import {buildFaceFeatureProfile} from '../../face-analysis/services/faceFeatureProfileBuilder';
 import {buildVisualWeightMap} from '../../face-analysis/services/visualWeightMap';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
@@ -879,13 +880,15 @@ function buildRegionMeasurementItems(
     const confidence = confidenceKeys
       ? confidenceLabel(face3d, confidenceKeys)
       : undefined;
-    const displayValue =
-      server?.displayValue
-      ?? measurementDisplayValue(config.metricKeys, geometryMetrics, face3d);
     const values =
       config.visualType === 'depth' || config.visualType === 'line-and-depth'
         ? measurementDepthValues(config.metricKeys, face3d)
         : [];
+    const displayValue =
+      values.length > 0
+        ? formatDepthMeasurementValues(values)
+        : server?.displayValue
+          ?? measurementDisplayValue(config.metricKeys, geometryMetrics, face3d);
     return {
       ...rest,
       resultLabel: server?.resultLabel ?? local.resultLabel,
@@ -1250,7 +1253,7 @@ function buildS3(
   return {
     eyebrow: 'FEATURES',
     title: '이목구비, 하나씩 설명할게요',
-    sub: '실제 랜드마크 선과 대표 프레임의 3D 깊이 근거를 측정 방식에 맞게 표시해요.',
+    sub: '실제 랜드마크 선과 대표 프레임의 3D 메시 측정점을 측정 방식에 맞게 표시해요.',
     cards,
   };
 }
