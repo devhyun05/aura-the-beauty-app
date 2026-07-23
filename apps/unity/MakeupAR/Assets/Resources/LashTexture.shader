@@ -22,8 +22,9 @@ Shader "ARMakeup/LashTexture"
         _AlphaLo ("Opacify Lo (gap)", Float) = 0
         _AlphaHi ("Opacify Hi (hair)", Float) = 1
         // 결(농도) 반영량 — 텍스처 R=불투명화 전 잉크 농도(추출기 베이크, 0723).
-        // 0=진한 실루엣(하위호환) 1=원본 농담 전부(연한 획은 연하게 → 한올 결 복원).
-        _GrainAmt ("Grain (ink density mix)", Range(0,1)) = 0
+        // 0=진한 실루엣(하위호환) 1=원본 농담 전부(한올 결 복원) 1초과=연한 테두리부터
+        // 깎여 가닥이 가늘고 또렷해지는 슬리밍(사용자 요청 0723, 음수는 0으로 클램프).
+        _GrainAmt ("Grain (ink density mix)", Range(0,3)) = 1 // 기본 1.0 — 사용자 확정 0723
     }
     SubShader
     {
@@ -122,7 +123,8 @@ Shader "ARMakeup/LashTexture"
                 fixed4 t = tex2D(_MainTex, i.uv);
                 float a = saturate((t.a - _AlphaLo) / max(_AlphaHi - _AlphaLo, 0.01));
                 // 결 복원 — 알파(윤곽)는 유지한 채 원본 잉크 농도(t.r)를 섞는다.
-                a *= lerp(1.0, t.r, _GrainAmt);
+                // _GrainAmt>1은 외삽: 연한 픽셀의 계수가 음수로 떨어지므로 0 클램프(슬리밍).
+                a *= max(lerp(1.0, t.r, _GrainAmt), 0.0);
                 a *= _BrowIntensity;
                 return fixed4(_BrowColor.rgb, a);
             }

@@ -125,8 +125,8 @@ namespace ARMakeup.Face
         // 텍스처의 뿌리줄은 v=rootV(추출기 lash_extract.py 사이드카 JSON의 rootV)이고,
         // 리본을 눈 라인 밖으로 len×rootV만큼 연장해 그 줄이 정확히 눈 라인에 오게 한다.
         // 재추출 시 사이드카 값으로 갱신할 것(tools/glam2-lash/out/lash_glam_*.json).
-        const float UpperTexRootV = 0.2081f;
-        const float LowerTexRootV = 0.0989f; // 0723 하이브리드 펴기(꼬리 국소 회전) 재산출값
+        const float UpperTexRootV = 0.0446f; // 0723 위 초록선(펜연장 32°)+국소 회전 재산출값
+        const float LowerTexRootV = 0.1f;    // 0723 급전환(틈 x=3113) 재산출값
         Mesh _texMesh;
         MeshRenderer _texRenderer;
         Material _texMaterial;

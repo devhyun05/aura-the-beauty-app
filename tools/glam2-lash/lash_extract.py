@@ -30,7 +30,9 @@ SOURCES = {
     "upper": dict(
         src=REFS / "속눈썹 샘플/다운로드.png",
         box=(565, 30, 1140, 290), flip=False, gap_frac=0.0,
-        ann_dx=25),  # x0 590→565 잘림 방지(검증기 적발). 주석은 옛 박스 기준 → +25px 이동
+        ann_dx=25,   # x0 590→565 잘림 방지(검증기 적발). 주석은 옛 박스 기준 → +25px 이동
+        tail_refit=0.55, pen_extend=True,  # 꼬리: 펜 끝(67%)부터 32° 연장(승인 초록선 0723)
+        min_cover=0.45),                   # 꼬리 연장 구간 제외 후 재측정 기준
     "lower": dict(
         src=REFS / "속눈썹 샘플/1a9bec9d78817015ce809bdc9b3d63a6.jpg",
         box=(5, 380, 1194, 1040), flip=True, gap_frac=0.40,
@@ -132,6 +134,27 @@ def load_user_rootline(name, a, curve, ann_dx=0):
     return np.interp(np.arange(a.shape[1]), xs * SUPER + ann_dx * SUPER, ys * SUPER)
 
 
+def tail_extend_pen(a, root_y):
+    """위 도안 꼬리 — 펜 끝부터 펜의 마지막 하강 방향으로 직선 연장(승인 초록선 0723).
+
+    펜이 도안 끝 전(67%)에 끊겨 그 뒤가 수평 연장돼 있었고, 그 선이 큰 꼬리
+    클러스터의 몸통을 관통(아래에서 겪은 뿌리·가닥 혼동과 동일). 펜 끝은 값이
+    평평해지는 지점으로 검출, 기울기는 그 직전 6% 구간에서 측정(32°).
+    """
+    h, w = a.shape
+    d = np.gradient(root_y)
+    x0 = int(w * 0.55)
+    flat = np.where(np.abs(d[x0:]) < 0.01)[0]
+    x_end = x0 + flat[0] if len(flat) else int(w * 0.85)
+    span = max(int(w * 0.06), 8)
+    slope = (root_y[x_end - 5] - root_y[x_end - 5 - span]) / span
+    xs = np.arange(w)
+    out = root_y.copy()
+    out[x_end:] = np.clip(root_y[x_end] + slope * (xs[x_end:] - x_end), 0, h - 1)
+    print(f"  꼬리 펜연장(승인 초록선): x≥{x_end}/{w} 직선 {np.degrees(np.arctan(slope)):.0f}°")
+    return out
+
+
 def tail_band_refit(a, root_y, start_frac):
     """아래 도안 꼬리 교정 v2 — 밴드 신뢰 구간의 진행 방향으로 직선 연장.
 
@@ -176,8 +199,16 @@ def hybrid_flatten(a, root_y, start_frac):
     fl = ny > 0
     nx = np.where(fl, -nx, nx)
     ny = np.where(fl, -ny, ny)                    # '위(y 감소)' 정렬
+    # 회전 전환 위치·폭(0723 수정): 넓은 램프(15%)는 긴 가닥 하나에 걸쳐 차등 회전
+    # → 가닥 곡률을 상쇄해 일자로 폄(사용자 판정 '마지막 가닥 부자연'). 가닥 사이
+    # 틈(주변 5% 창에서 잉크 최소 열)을 찾아 2.5% 폭으로 짧게 전환 — 어떤 가닥도
+    # 전환 구간에 걸치지 않게 해 통째 균일 회전(곡률 보존).
     x0 = int(w * start_frac)
-    blend = np.clip((np.arange(w) - x0) / max(w * 0.15, 1.0), 0, 1)
+    win = max(int(w * 0.05), 4)
+    seg = a[:, max(x0 - win, 0): x0 + win].sum(axis=0)
+    x_gap = max(x0 - win, 0) + int(np.argmin(seg))
+    blend = np.clip((np.arange(w) - x_gap) / max(w * 0.025, 2.0), 0, 1)
+    print(f"  회전 전환: 틈 x={x_gap}/{w}(창내 잉크최소), 램프 폭 2.5%")
     rx = nx * blend
     ryv = -1.0 * (1 - blend) + ny * blend         # 수직↔법선 블렌드
     norm = np.sqrt(rx * rx + ryv * ryv)
@@ -366,8 +397,11 @@ def main():
         if mode == "apply":
             user = load_user_rootline(name, a, curve, cfg.get("ann_dx", 0))
             root_y = user if user is not None else np.polyval(curve, np.arange(a.shape[1]))
+            if cfg.get("pen_extend"):
+                root_y = tail_extend_pen(a, root_y)      # 위: 펜 끝부터 32° 연장
+            elif cfg.get("tail_refit"):
+                root_y = tail_band_refit(a, root_y, cfg["tail_refit"])  # 아래: 70%부터 42°
             if cfg.get("tail_refit"):
-                root_y = tail_band_refit(a, root_y, cfg["tail_refit"])
                 # 꼬리 국소 회전(승인 0723) — 중앙은 shift와 동일, 꼬리만 밴드와 함께 회전
                 flat, root_row = hybrid_flatten(a, root_y, cfg["tail_refit"])
             else:
