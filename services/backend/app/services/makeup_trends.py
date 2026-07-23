@@ -94,9 +94,15 @@ SEED_SITUATIONS: tuple[dict[str, Any], ...] = (
       ("테마 파티·코스프레", "curated", None),
       ("무대 공연", "curated", None),
       ("패션 행사·전시 오프닝", "curated", None),
+      ("로판 여주", "curated", None),
     ),
   },
 )
+
+CURATED_SEED_PROMPT_OVERRIDES = {
+  "로판 여주": "로맨스 판타지 작품의 여주인공처럼 연출하고 싶은 테마 촬영이나 코스프레 상황",
+}
+
 
 def _stable_id(kind: str, value: str) -> str:
   return str(uuid5(NAMESPACE_URL, f"aura:makeup:{kind}:{value}"))
@@ -131,7 +137,10 @@ def curated_fallback_discovery() -> dict[str, Any]:
           "kind": "curated",
           "badge": "CURATED",
           "marketScope": "ko-KR",
-          "seedPrompt": f"{seed['label']} 상황에 맞는 {label} 방향을 실용적으로 해석한다.",
+          "seedPrompt": CURATED_SEED_PROMPT_OVERRIDES.get(
+            label,
+            f"{seed['label']} 상황에 맞는 {label} 방향을 실용적으로 해석한다.",
+          ),
           "tags": [seed["key"], label],
           "trendScore": None,
           "sourceName": None,

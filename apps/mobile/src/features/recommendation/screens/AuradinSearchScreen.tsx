@@ -564,6 +564,8 @@ export function AuradinSearchScreen({
 
         {phase === 'question' && question ? (
           <QuestionView
+            attribute={question.attribute}
+            contextCategory={question.contextCategory}
             onFreeText={(text) => submit(`${query} ${text}`)}
             onHome={reset}
             onPick={pick}

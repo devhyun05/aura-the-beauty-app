@@ -18,13 +18,14 @@ import type {
   AuradinAppliedFilter,
   AuradinCandidateProduct,
   AuradinProductRole,
+  AuradinQuestion,
+  AuradinQuestionAttribute,
+  AuradinQuestionCategory,
   AuradinQuestionOption,
   AuradinReason,
   AuradinSearchPhase,
   AuradinSearchTurn,
   AuradinSimilarIntent,
-  AuradinSwatch,
-  AuradinTextureKind,
 } from '../types';
 
 // ------------------------------------------------------------------ backend shapes
@@ -44,6 +45,8 @@ type BackendQuestionOption = {
 type BackendQuestion = {
   id?: string | null;
   title?: string | null;
+  attribute?: string | null;
+  contextCategory?: string | null;
   options?: BackendQuestionOption[] | null;
 };
 
@@ -111,46 +114,6 @@ export function makeClientRequestId(): string {
 
 // ------------------------------------------------------------------ mapping helpers
 
-const NEUTRAL_SWATCH = '#E4D6D2'; // 스와치 매핑이 없는 옵션 타일용 (라벨이 의미 전달)
-
-// §8.2-3 colorFamily 스와치: 단색 → 계열 내 밝기 범위 3색 그라데이션 (light → base → deep).
-// 가운데 스톱은 기존 단색 hex를 유지해 계열 아이덴티티가 흔들리지 않게 한다.
-const COLOR_FAMILY_GRADIENT: Record<string, [string, string, string]> = {
-  pink: ['#F8CBD7', '#F2A6B8', '#D97E95'],
-  rose: ['#EAB6C3', '#D98BA0', '#B96A82'],
-  coral: ['#F8B39C', '#F2896B', '#D6684C'],
-  red: ['#EA8B95', '#D65563', '#AC3A48'],
-  orange: ['#F3AC7E', '#E8844A', '#C56430'],
-  mauve: ['#D2B3C6', '#B58AA6', '#936785'],
-  brown: ['#B28B79', '#8B5E4E', '#663F31'],
-  nude: ['#EAD5C4', '#D8B79E', '#BA9276'],
-  peach: ['#F7C6B1', '#F0A488', '#D67F60'],
-  burgundy: ['#A4576A', '#7B2E3B', '#571C27'],
-  plum: ['#B0879F', '#8E5A79', '#6B3F5A'],
-};
-
-// §8.2-1 finish/texture 옵션 → 추상 질감 스와치 4종 매핑. 자체 제작 렌더만 사용 —
-// 대표 제품 썸네일(§8.2-2)·생성형 발색 이미지(§8.2-5)는 금지. 매핑이 애매한 값
-// (satin/sheer는 광택 계열로 근사, palette는 제형이 아니라 포맷)은 중립 폴백.
-const FINISH_TEXTURE_KIND: Record<string, Record<string, AuradinTextureKind>> = {
-  finish: {
-    glossy: 'glossy',
-    matte: 'matte',
-    velvet: 'velvet',
-    shimmer: 'shimmer',
-    satin: 'glossy',
-    sheer: 'glossy',
-  },
-  texture: {
-    gloss: 'glossy',
-    tint: 'glossy',
-    liquid: 'glossy',
-    balm: 'velvet',
-    cream: 'velvet',
-    powder: 'matte',
-  },
-};
-
 const VALID_PHASES: readonly AuradinSearchPhase[] = [
   'searching',
   'question',
@@ -160,12 +123,35 @@ const VALID_PHASES: readonly AuradinSearchPhase[] = [
 ];
 
 const VALID_ROLES: readonly AuradinProductRole[] = ['anchor', 'diverse', 'discovery'];
+const VALID_QUESTION_ATTRIBUTES: readonly AuradinQuestionAttribute[] = [
+  'category',
+  'priceTier',
+  'channel',
+  'finish',
+  'texture',
+  'colorFamily',
+];
+const VALID_QUESTION_CATEGORIES: readonly AuradinQuestionCategory[] = ['base', 'shadow', 'brow', 'cheek', 'lip', 'liner'];
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function normalizePhase(phase: string | null | undefined): AuradinSearchPhase {
   return VALID_PHASES.includes(phase as AuradinSearchPhase)
     ? (phase as AuradinSearchPhase)
     : 'failed';
+}
+function normalizeQuestionAttribute(value: string | null | undefined): AuradinQuestionAttribute | undefined {
+  const normalized = value?.trim();
+  return VALID_QUESTION_ATTRIBUTES.includes(normalized as AuradinQuestionAttribute)
+    ? (normalized as AuradinQuestionAttribute)
+    : undefined;
+}
+
+function normalizeQuestionCategory(value: string | null | undefined): AuradinQuestionCategory | undefined {
+  const normalized = value?.trim();
+  return VALID_QUESTION_CATEGORIES.includes(normalized as AuradinQuestionCategory)
+    ? (normalized as AuradinQuestionCategory)
+    : undefined;
 }
 
 function formatPrice(value: number | null | undefined): string {
@@ -182,29 +168,32 @@ function normalizeReason(reason: Partial<AuradinReason> | null | undefined): Aur
   };
 }
 
-function optionSwatch(option: BackendQuestionOption): AuradinSwatch | undefined {
-  const delta = option.filterDelta ?? undefined;
-  if (!delta || delta.op === 'noop') {
-    return undefined; // noop("상관 없어요") → skip 타일 (QuestionView가 swatch 없는 걸 skip으로 렌더)
-  }
-  const attribute = delta.attribute ?? '';
-  const value = (delta.values ?? [])[0] ?? '';
-  if (attribute === 'colorFamily') {
-    const gradient = COLOR_FAMILY_GRADIENT[value];
-    return gradient ? {kind: 'gradient', colors: gradient} : NEUTRAL_SWATCH;
-  }
-  const texture = FINISH_TEXTURE_KIND[attribute]?.[value];
-  if (texture) {
-    return {kind: 'texture', texture};
-  }
-  return NEUTRAL_SWATCH;
-}
-
 export function mapQuestionOption(option: BackendQuestionOption): AuradinQuestionOption {
+  const delta = option.filterDelta ?? undefined;
+  const value = (delta?.values ?? [])
+    .find((candidate) => typeof candidate === 'string' && candidate.trim())
+    ?.trim();
   return {
     id: String(option.id ?? ''),
     label: String(option.label ?? ''),
-    swatch: optionSwatch(option),
+    attribute: delta?.attribute?.trim() || undefined,
+    value: value || undefined,
+    op: delta?.op?.trim() || undefined,
+  };
+}
+
+function mapQuestion(question: BackendQuestion): AuradinQuestion {
+  const attribute = normalizeQuestionAttribute(question.attribute);
+  const contextCategory =
+    attribute === 'finish' || attribute === 'texture'
+      ? normalizeQuestionCategory(question.contextCategory)
+      : undefined;
+  return {
+    id: String(question.id ?? ''),
+    title: String(question.title ?? ''),
+    attribute,
+    contextCategory,
+    options: (question.options ?? []).map(mapQuestionOption),
   };
 }
 
@@ -273,13 +262,7 @@ export function mapSearchTurn(turn: BackendSearchTurn): AuradinSearchTurn {
     sessionId: String(turn.sessionId ?? ''),
     phase: normalizePhase(turn.phase),
     thinking: Array.isArray(turn.thinking) ? turn.thinking : [],
-    question: turn.question
-      ? {
-          id: String(turn.question.id ?? ''),
-          title: String(turn.question.title ?? ''),
-          options: (turn.question.options ?? []).map(mapQuestionOption),
-        }
-      : undefined,
+    question: turn.question ? mapQuestion(turn.question) : undefined,
     // 구매 가능한 카드만 (백엔드도 보장하지만 방어적으로).
     candidates: products
       .filter((product) => product.imageUrl && (product.purchaseUrl || product.offerId))

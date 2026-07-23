@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useLayoutEffect, useRef, useState} from 'react';
 import {
   Image,
   type ImageSourcePropType,
@@ -23,6 +23,7 @@ type FeedbackEvidenceImageProps = {
   height: number;
   imageSize?: MakeupFeedbackAnalysisImageSize;
   label?: string;
+  onSettledChange?: (settled: boolean) => void;
   region?: MakeupFeedbackEvidenceRegion;
   rounded?: boolean;
   source: ImageSourcePropType;
@@ -36,6 +37,7 @@ export function FeedbackEvidenceImage({
   height,
   imageSize,
   label,
+  onSettledChange,
   region,
   rounded = true,
   source,
@@ -43,6 +45,21 @@ export function FeedbackEvidenceImage({
 }: FeedbackEvidenceImageProps) {
   const [frameWidth, setFrameWidth] = useState(FALLBACK_WIDTH);
   const canCrop = Boolean(imageSize && region && region.id !== 'full');
+  const sourceKey =
+    Image.resolveAssetSource(source)?.uri ?? JSON.stringify(source);
+  const sourceKeyRef = useRef(sourceKey);
+  const onSettledChangeRef = useRef(onSettledChange);
+  onSettledChangeRef.current = onSettledChange;
+
+  useLayoutEffect(() => {
+    sourceKeyRef.current = sourceKey;
+    onSettledChangeRef.current?.(false);
+  }, [sourceKey]);
+
+  const handleImageSettled = () => {
+    if (sourceKeyRef.current !== sourceKey) return;
+    onSettledChangeRef.current?.(true);
+  };
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const nextWidth = Math.round(event.nativeEvent.layout.width);
@@ -68,12 +85,13 @@ export function FeedbackEvidenceImage({
           frameHeight={height}
           frameWidth={frameWidth}
           imageSize={imageSize}
+          onLoadEnd={handleImageSettled}
           region={region}
           source={source}
           topicId={topicId}
         />
       ) : (
-        <Image resizeMode="cover" source={source} style={styles.fullImage} />
+        <Image onLoadEnd={handleImageSettled} resizeMode="cover" source={source} style={styles.fullImage} />
       )}
 
       {label ? (
@@ -89,6 +107,7 @@ function CroppedImage({
   frameHeight,
   frameWidth,
   imageSize,
+  onLoadEnd,
   region,
   source,
   topicId,
@@ -96,6 +115,7 @@ function CroppedImage({
   frameHeight: number;
   frameWidth: number;
   imageSize: MakeupFeedbackAnalysisImageSize;
+  onLoadEnd: () => void;
   region: MakeupFeedbackEvidenceRegion;
   source: ImageSourcePropType;
   topicId?: MakeupFeedbackTopicId;
@@ -120,6 +140,7 @@ function CroppedImage({
 
   return (
     <Image
+      onLoadEnd={onLoadEnd}
       resizeMode="stretch"
       source={source}
       style={{

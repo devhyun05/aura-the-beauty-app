@@ -11,11 +11,16 @@ import {getReferenceMakeupExtractionDataSync} from '../services/makeupExtraction
 import type {MakeupExtractionProgressUpdate, ReferenceMakeupPhoto} from '../types';
 
 type ReferenceMakeupExtractionLoadingScreenProps = {
+  analysisAttemptKey: number;
+  analysisErrorMessage?: string | null;
   photo: ReferenceMakeupPhoto;
   isAnalysisReady?: boolean;
   progressUpdate?: MakeupExtractionProgressUpdate | null;
   onBack: () => void;
+  onChooseDifferentPhoto?: () => void;
   onComplete: () => void;
+  onOpenReportList?: () => void;
+  onRetry?: () => void;
 };
 
 const PROGRESS_TICK_MS = 120;
@@ -44,20 +49,30 @@ const loadingStepDescriptions: Record<string, string> = {
 
 
 export function ReferenceMakeupExtractionLoadingScreen({
+  analysisAttemptKey,
+  analysisErrorMessage = null,
   isAnalysisReady = true,
   progressUpdate = null,
   photo,
   onBack,
+  onChooseDifferentPhoto,
   onComplete,
+  onOpenReportList,
+  onRetry,
 }: ReferenceMakeupExtractionLoadingScreenProps) {
   const insets = useSafeAreaInsets();
   const data = getReferenceMakeupExtractionDataSync();
   const [elapsedMs, setElapsedMs] = useState(0);
   const [displayedProgress, setDisplayedProgress] = useState(0);
   const stepCount = data.loadingSteps.length;
+  const hasAnalysisError = Boolean(analysisErrorMessage);
   // 경과 시간에 선형 비례(일정 속도). 분석이 끝나면 100%로 마무리.
   const timedLinear = Math.min(NEAR_DONE, elapsedMs * (NEAR_DONE / FILL_MS));
-  const targetProgress = isAnalysisReady ? 1 : timedLinear;
+  const targetProgress = hasAnalysisError
+    ? displayedProgress
+    : isAnalysisReady
+      ? 1
+      : timedLinear;
   const targetProgressRef = useRef(targetProgress);
   const progress = displayedProgress >= 0.995 ? 1 : displayedProgress;
   const progressLabel = `${Math.round(progress * 100)}%`;
@@ -75,12 +90,12 @@ export function ReferenceMakeupExtractionLoadingScreen({
 
     return Math.min(stepCount - 1, Math.floor(progress * stepCount));
   }, [progress, reportedStepIndex, stepCount]);
-  const isComplete = progress >= 1 && isAnalysisReady;
+  const isComplete = progress >= 1 && isAnalysisReady && !hasAnalysisError;
 
   useEffect(() => {
     setElapsedMs(0);
     setDisplayedProgress(0);
-  }, [photo.id]);
+  }, [analysisAttemptKey, photo.id]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -161,7 +176,9 @@ export function ReferenceMakeupExtractionLoadingScreen({
             <View style={styles.previewDim} />
             <XStack style={styles.previewBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.previewBadgeText}>결과서 생성 중</Text>
+              <Text style={styles.previewBadgeText}>
+                {hasAnalysisError ? '분석 중단' : '결과서 생성 중'}
+              </Text>
             </XStack>
           </View>
 
@@ -203,6 +220,36 @@ export function ReferenceMakeupExtractionLoadingScreen({
             </YStack>
           </XStack>
         </YStack>
+
+        {hasAnalysisError ? (
+          <YStack accessibilityRole="alert" style={styles.errorCard}>
+            <Text style={styles.errorTitle}>메이크업 추출을 완료하지 못했어요</Text>
+            <Text style={styles.errorDescription}>{analysisErrorMessage}</Text>
+            <YStack style={styles.errorActions}>
+              <Pressable
+                accessibilityLabel="메이크업 추출 다시 시도"
+                accessibilityRole="button"
+                onPress={onRetry}
+                style={({pressed}) => [styles.primaryAction, pressed && styles.actionPressed]}>
+                <Text style={styles.primaryActionText}>다시 시도하기</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="다른 사진 선택"
+                accessibilityRole="button"
+                onPress={onChooseDifferentPhoto}
+                style={({pressed}) => [styles.secondaryAction, pressed && styles.actionPressed]}>
+                <Text style={styles.secondaryActionText}>다른 사진 선택</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="메이크업 추출 보고서 목록 보기"
+                accessibilityRole="button"
+                onPress={onOpenReportList}
+                style={({pressed}) => [styles.secondaryAction, pressed && styles.actionPressed]}>
+                <Text style={styles.secondaryActionText}>보고서 목록 보기</Text>
+              </Pressable>
+            </YStack>
+          </YStack>
+        ) : null}
 
       </YStack>
     </AppScreen>
@@ -248,6 +295,9 @@ function ProgressRing({label, progress}: ProgressRingProps) {
 }
 
 const styles = StyleSheet.create({
+  actionPressed: {
+    opacity: 0.72,
+  },
   analysisCard: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
@@ -279,6 +329,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.xxl,
+  },
+  errorActions: {
+    gap: spacing.sm,
+    width: '100%',
+  },
+  errorCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.md,
+    padding: spacing.lg,
+  },
+  errorDescription: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.regular,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.regular,
+    lineHeight: typography.lineHeight.sm,
+    textAlign: 'center',
+  },
+  errorTitle: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.lg,
+    textAlign: 'center',
   },
 
   liveDot: {
@@ -354,6 +433,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: spacing.md,
   },
+  primaryAction: {
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+  },
+  primaryActionText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+  },
   progressBlock: {
     alignItems: 'center',
     gap: spacing.lg,
@@ -374,6 +468,23 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xl,
     position: 'absolute',
+  },
+  secondaryAction: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+  },
+  secondaryActionText: {
+    color: colors.textPrimary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
   },
   stepCopy: {
     flex: 1,

@@ -196,6 +196,13 @@ _CONTEXT_QUESTIONS: dict[str, dict[str, Any]] = {
     ("networking", "사람들과 가까이 대화하기"),
     ("photo", "포토월과 기록 남기기"),
   ),
+  "로판 여주": _question(
+    "romance_fantasy_archetype",
+    "어떤 로판 여주 분위기에 가까워지고 싶나요?",
+    ("radiant_debutante", "햇살처럼 청초한 귀족 영애"),
+    ("elegant_princess", "우아하고 기품 있는 황실 주인공"),
+    ("mysterious_sorceress", "신비롭고 강단 있는 마법사"),
+  ),
 }
 
 

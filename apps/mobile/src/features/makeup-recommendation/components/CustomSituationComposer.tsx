@@ -37,9 +37,10 @@ export function CustomSituationComposer({
   const insets = useSafeAreaInsets();
   const validation = validateMakeupRecommendationCustomSituation(value);
   const normalizedServerError = serverError?.trim() ?? '';
+  const hasText = Boolean(value.trim());
   const shouldShowError = Boolean(normalizedServerError) || (Boolean(value.trim()) && !validation.isValid);
   const errorMessage = normalizedServerError || validation.errorMessage;
-  const canSubmit = validation.isValid && !normalizedServerError && !disabled;
+  const canSubmit = hasText && validation.isValid && !normalizedServerError && !disabled;
 
   return (
     <Modal
@@ -67,7 +68,7 @@ export function CustomSituationComposer({
           <View style={styles.header}>
             <View style={styles.heading}>
               <Text style={styles.title}>원하는 상황을 직접 설명해 주세요</Text>
-              <Text style={styles.description}>언제 또는 어디에서 사용할지만 필수예요. 인상·지속력·환경·피할 조건은 선택이에요.</Text>
+              <Text style={styles.description}>짧게 적어도 AI가 맥락을 해석해요. 장면·역할·분위기·피할 조건을 자유롭게 적어주세요.</Text>
             </View>
             <Pressable
               accessibilityLabel="직접 설명 닫기"
@@ -94,7 +95,7 @@ export function CustomSituationComposer({
                 maxLength={MAKEUP_RECOMMENDATION_CUSTOM_SITUATION_MAX_LENGTH}
                 multiline
                 onChangeText={onChangeText}
-                placeholder="예: 출근 / 친구 결혼식 / 야외 페스티벌"
+                placeholder="예: 로판 여주 / 맑고 단정하게 / 내일 첫 만남"
                 placeholderTextColor={colors.textTertiary}
                 style={styles.input}
                 textAlignVertical="top"

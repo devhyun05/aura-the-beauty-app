@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSharedValue } from 'react-native-reanimated';
@@ -19,12 +19,18 @@ import {
   type FaceReportStorySection,
 } from './services/reportStoryModel';
 import { ReportSectionCover } from './components/ReportSectionCover';
+import {areFaceReportCaptureAssetsSettled} from './services/reportCaptureReadiness';
+import {
+  FaceReportCaptureAssetContext,
+  type FaceReportCaptureAssetContextValue,
+} from './services/reportCaptureAssetContext';
 
 // Matches the legacy report screen's capture settings.
 const REPORT_CAPTURE_OPTIONS = {
   format: 'jpg',
   quality: 0.95,
   result: 'tmpfile',
+  useRenderInContext: true,
 } as const;
 import { ScrollAnimContext } from './visuals/RiseIn';
 import { S1Summary } from './sections/S1Summary';
@@ -130,6 +136,102 @@ function MakeupCtaCard({
   );
 }
 
+function countFaceReportCaptureAssets(data: ReportScreenProps['data']) {
+  return Number(Boolean(data.s1.photo.uri))
+    + Number(Boolean(data.s2?.photo.uri))
+    + (data.s3?.cards.filter(card => Boolean(card.photo.uri)).length ?? 0)
+    + (data.s4?.drape.photo.uri ? 2 : 0);
+}
+
+function FaceReportCaptureDocument({
+  captureRef,
+  data,
+  onCaptureDocumentSettledChange,
+  onResurvey,
+  onRetake,
+  requestId,
+  width,
+}: {
+  captureRef: ReportScreenProps['captureRef'];
+  data: ReportScreenProps['data'];
+  onCaptureDocumentSettledChange?: ReportScreenProps['onCaptureDocumentSettledChange'];
+  onResurvey?: ReportScreenProps['onResurvey'];
+  onRetake?: ReportScreenProps['onRetake'];
+  requestId: number;
+  width: number;
+}) {
+  const assetStatesRef = useRef(new Map<string, boolean>());
+  const [assetRevision, setAssetRevision] = useState(0);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const expectedAssetCount = useMemo(() => countFaceReportCaptureAssets(data), [data]);
+
+  const updateAssetState = useCallback((assetId: string, settled: boolean) => {
+    if (assetStatesRef.current.get(assetId) === settled) {
+      return;
+    }
+    assetStatesRef.current.set(assetId, settled);
+    setAssetRevision(revision => revision + 1);
+  }, []);
+
+  const registerAsset = useCallback((assetId: string) => {
+    if (assetStatesRef.current.has(assetId)) {
+      return;
+    }
+    assetStatesRef.current.set(assetId, false);
+    setAssetRevision(revision => revision + 1);
+  }, []);
+
+  const assetContext = useMemo<FaceReportCaptureAssetContextValue>(() => ({
+    markAssetPending: assetId => updateAssetState(assetId, false),
+    markAssetSettled: assetId => updateAssetState(assetId, true),
+    registerAsset,
+    // The capture document is immutable for one request. Avoid scheduling state
+    // while its complete subtree is being unmounted; its map is discarded too.
+    unregisterAsset: assetId => {
+      assetStatesRef.current.delete(assetId);
+    },
+  }), [registerAsset, updateAssetState]);
+
+  const isSettled = areFaceReportCaptureAssetsSettled({
+    assetStates: assetStatesRef.current,
+    expectedAssetCount,
+    layoutReady,
+  });
+
+  useEffect(() => {
+    onCaptureDocumentSettledChange?.(requestId, isSettled);
+  }, [assetRevision, isSettled, onCaptureDocumentSettledChange, requestId]);
+
+  return (
+    <View
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      pointerEvents="none"
+      style={{position: 'absolute', left: 0, top: 0, width}}>
+      <FaceReportCaptureAssetContext.Provider value={assetContext}>
+        <OptionalViewShot
+          ref={captureRef}
+          options={REPORT_CAPTURE_OPTIONS}
+          style={{width, backgroundColor: color.bg}}>
+          <View onLayout={() => setLayoutReady(true)}>
+            <S1Summary data={data.s1} />
+            {data.s2 ? (
+              <S2Proportion data={data.s2} onOpenRegionCard={() => undefined} onRetake={onRetake} />
+            ) : null}
+            {data.s3 ? <S3Features data={data.s3} /> : null}
+            {data.s4 ? <S4PersonalColor data={data.s4} /> : null}
+            <S5Body data={data.s5} onResurvey={onResurvey} />
+            {data.s6 ? <S6Impression data={data.s6} /> : null}
+            {data.s7 ? <S7Styling data={data.s7} /> : null}
+            {data.s8 ? <S8Skin data={data.s8} /> : null}
+            {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
+          </View>
+        </OptionalViewShot>
+      </FaceReportCaptureAssetContext.Provider>
+    </View>
+  );
+}
 /**
  * Story report screen: editorial covers + meaning-complete horizontal cards.
  * Pure & props-driven — navigation, retake and survey actions bubble up as callbacks.
@@ -142,6 +244,8 @@ export function ReportScreenScaffold({
   onResurvey,
   onPressCta,
   captureRef,
+  captureRequestId,
+  onCaptureDocumentSettledChange,
   measurementDebugPayload,
   measurementDebugSummary,
 }: ReportScreenProps) {
@@ -248,24 +352,18 @@ export function ReportScreenScaffold({
     <ScrollAnimContext.Provider value={{scrollY, enabled: false}}>
       <View style={{flex: 1, backgroundColor: color.bg}}>
         {/* 공유/저장은 모든 실제 콘텐츠가 펼쳐진 별도 세로 문서를 캡처한다. */}
-        <OptionalViewShot
-          ref={captureRef}
-          options={REPORT_CAPTURE_OPTIONS}
-          style={{position: 'absolute', left: 0, top: 0, width: windowWidth, backgroundColor: color.bg}}>
-          <View>
-            <S1Summary data={data.s1} />
-          </View>
-          {data.s2 ? (
-            <S2Proportion data={data.s2} onOpenRegionCard={() => undefined} onRetake={onRetake} />
-          ) : null}
-          {data.s3 ? <S3Features data={data.s3} /> : null}
-          {data.s4 ? <S4PersonalColor data={data.s4} /> : null}
-          <S5Body data={data.s5} onResurvey={onResurvey} />
-          {data.s6 ? <S6Impression data={data.s6} /> : null}
-          {data.s7 ? <S7Styling data={data.s7} /> : null}
-          {data.s8 ? <S8Skin data={data.s8} /> : null}
-          {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
-        </OptionalViewShot>
+        {captureRequestId !== null && captureRequestId !== undefined ? (
+          <FaceReportCaptureDocument
+            key={captureRequestId}
+            captureRef={captureRef}
+            data={data}
+            onCaptureDocumentSettledChange={onCaptureDocumentSettledChange}
+            onResurvey={onResurvey}
+            onRetake={onRetake}
+            requestId={captureRequestId}
+            width={windowWidth}
+          />
+        ) : null}
 
         <View style={{flex: 1, zIndex: 1, backgroundColor: color.bg}}>
           <View style={{

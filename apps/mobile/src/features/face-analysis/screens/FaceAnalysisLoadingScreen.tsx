@@ -28,6 +28,8 @@ type FaceAnalysisLoadingScreenProps = {
   isAnalysisReady?: boolean;
   onBack?: () => void;
   onComplete?: () => void;
+  onOpenReports?: () => void;
+  onRetake?: () => void;
   onRetry?: () => void;
   progressStartedAtMs?: number;
 };
@@ -54,6 +56,8 @@ export function FaceAnalysisLoadingScreen({
   isAnalysisReady = true,
   onBack,
   onComplete,
+  onOpenReports,
+  onRetake,
   onRetry,
   progressStartedAtMs,
 }: FaceAnalysisLoadingScreenProps) {
@@ -252,11 +256,18 @@ export function FaceAnalysisLoadingScreen({
               <Pressable
                 accessibilityLabel="다시 촬영"
                 accessibilityRole="button"
-                onPress={onBack}
+                onPress={onRetake ?? onBack}
                 style={styles.retakeButton}>
                 <Text style={styles.retakeButtonText}>다시 촬영</Text>
               </Pressable>
             </XStack>
+            <Pressable
+              accessibilityLabel="얼굴 분석 보고서 목록 보기"
+              accessibilityRole="button"
+              onPress={onOpenReports}
+              style={styles.reportsButton}>
+              <Text style={styles.reportsButtonText}>분석 보고서 목록 보기</Text>
+            </Pressable>
           </YStack>
         ) : (
           <YStack style={styles.tipCard}>
@@ -485,6 +496,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     lineHeight: typography.lineHeight.xl,
     position: 'absolute',
+  },
+  reportsButton: {
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: spacing.md,
+  },
+  reportsButtonText: {
+    color: colors.textSecondary,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.bold,
+    lineHeight: typography.lineHeight.sm,
+    textDecorationLine: 'underline',
   },
   retryButton: {
     alignItems: 'center',

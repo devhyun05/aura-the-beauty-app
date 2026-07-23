@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   createContext,
   useCallback,
   useContext,
@@ -10,7 +10,11 @@
 } from 'react';
 import * as SecureStore from '../../../shared/services/localSecureStore';
 
-import {setBackendAuthTokenProvider} from '../../../shared/services/backendApi';
+import {
+  AuthRefreshTemporarilyUnavailableError,
+  setBackendAuthTokenProvider,
+  setBackendAuthTokenRefreshProvider,
+} from '../../../shared/services/backendApi';
 import {clearMyPageProfileSummaryCache} from '../../../shared/services/profileService';
 import {clearCachedUserProfile} from '../../../shared/services/userService';
 import {invalidateMakeupJourneyCache} from '../../makeup-journey/services/makeupJourneyCache';
@@ -162,10 +166,10 @@ export function AuthSessionProvider({
     await saveSessionToSecureStore(nextSession);
   }, []);
 
-  const refreshSessionIfNeeded = useCallback(async () => {
+  const refreshSessionIfNeeded = useCallback(async (force = false) => {
     const currentSession = sessionRef.current;
 
-    if (!currentSession || getUsableTokenFromSession(currentSession)) {
+    if (!currentSession || (!force && getUsableTokenFromSession(currentSession))) {
       return true;
     }
 
@@ -174,15 +178,33 @@ export function AuthSessionProvider({
     }
 
     const refreshPromise = (async () => {
-      const refreshedSession = await refreshAuthSession(currentSession);
+      try {
+        const refreshedSession = await refreshAuthSession(currentSession);
 
-      if (!refreshedSession || !getUsableTokenFromSession(refreshedSession)) {
-        await setSession(null);
+        // A refresh can finish after logout or an account switch. Never let a
+        // stale response restore the previous account over the newer session.
+        if (sessionRef.current !== currentSession) {
+          return Boolean(getUsableTokenFromSession(sessionRef.current));
+        }
+
+        if (!refreshedSession || !getUsableTokenFromSession(refreshedSession)) {
+          await setSession(null);
+          return false;
+        }
+
+        await setSession(refreshedSession);
+        return true;
+      } catch (error) {
+        // A transport, timeout, 5xx, or malformed-response failure is not proof
+        // that the refresh token expired. Keep the device-local session so the
+        // next request or scheduled refresh can try again.
+        if (sessionRef.current === currentSession) {
+          console.info('[aura:auth] session-refresh:retryable-error', {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
         return false;
       }
-
-      await setSession(refreshedSession);
-      return true;
     })().finally(() => {
       refreshInFlightRef.current = null;
     });
@@ -204,9 +226,24 @@ export function AuthSessionProvider({
 
   useEffect(() => {
     setBackendAuthTokenProvider(() => getTokenFromSession(sessionRef.current));
+    setBackendAuthTokenRefreshProvider(async (force = false) => {
+      const didRefresh = await refreshSessionIfNeeded(force);
 
-    return () => setBackendAuthTokenProvider(null);
-  }, []);
+      // `false` with a retained session means Cognito failed transiently. It is
+      // not an anonymous/expired session and must never be converted into a
+      // backend 401 that feature routes interpret as a reason to log out.
+      if (!didRefresh && sessionRef.current) {
+        throw new AuthRefreshTemporarilyUnavailableError();
+      }
+
+      return getTokenFromSession(sessionRef.current);
+    });
+
+    return () => {
+      setBackendAuthTokenProvider(null);
+      setBackendAuthTokenRefreshProvider(null);
+    };
+  }, [refreshSessionIfNeeded]);
 
   useEffect(() => {
     let isMounted = true;
@@ -218,9 +255,21 @@ export function AuthSessionProvider({
         const shouldRefreshStoredSession = Boolean(
           storedSession && !getUsableTokenFromSession(storedSession),
         );
-        const restoredSession = shouldRefreshStoredSession && storedSession
-          ? await refreshAuthSession(storedSession)
-          : storedSession;
+        let restoredSession = storedSession;
+
+        if (shouldRefreshStoredSession && storedSession) {
+          try {
+            restoredSession = await refreshAuthSession(storedSession);
+          } catch (error) {
+            // Startup must not sign the user out merely because Cognito is
+            // temporarily unreachable. Retain the stored refresh token and
+            // let the next authenticated request retry the refresh.
+            console.info('[aura:auth] session-restore:retryable-error', {
+              message: error instanceof Error ? error.message : String(error),
+            });
+            restoredSession = storedSession;
+          }
+        }
 
         if (!isMounted) {
           return;

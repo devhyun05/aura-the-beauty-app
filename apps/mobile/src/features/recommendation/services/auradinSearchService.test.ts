@@ -63,27 +63,21 @@ expectEqual(
   'explicit external source takes precedence over UUID-shaped ids',
 );
 
-// --- 질문 옵션 스와치: colorFamily→3색 그라데이션(§8.2-3), finish/texture→질감(§8.2-1), noop→skip ---
-const colorOption = mapQuestionOption({
+// --- 질문 옵션 매핑: 서버의 의미 정보만 보존하고 상품 이미지는 화면 계약에서 제외 ---
+const legacyColorPayload = {
   id: 'colorFamily-coral',
+  imageUrl: 'https://example.com/coral.jpg',
   label: '코랄',
   filterDelta: {attribute: 'colorFamily', op: 'eq', values: ['coral']},
-});
-const colorSwatch = colorOption.swatch;
+};
+const colorOption = mapQuestionOption(legacyColorPayload);
+expectEqual(colorOption.attribute, 'colorFamily', 'question option keeps filter attribute');
+expectEqual(colorOption.value, 'coral', 'question option keeps the first non-empty value');
+expectEqual(colorOption.op, 'eq', 'question option keeps filter operation');
 expectEqual(
-  typeof colorSwatch === 'object' && colorSwatch.kind,
-  'gradient',
-  'colorFamily option swatch → 3-stop gradient',
-);
-expectEqual(
-  typeof colorSwatch === 'object' && colorSwatch.kind === 'gradient' ? colorSwatch.colors.length : 0,
-  3,
-  'colorFamily gradient has 3 stops (brightness range)',
-);
-expectEqual(
-  typeof colorSwatch === 'object' && colorSwatch.kind === 'gradient' ? colorSwatch.colors[1] : '',
-  '#F2896B',
-  'colorFamily gradient keeps the legacy base hex as the middle stop',
+  Object.prototype.hasOwnProperty.call(colorOption, 'imageUrl'),
+  false,
+  'legacy question product image is ignored',
 );
 
 const noopOption = mapQuestionOption({
@@ -91,39 +85,22 @@ const noopOption = mapQuestionOption({
   label: '상관 없어요',
   filterDelta: {attribute: 'finish', op: 'noop'},
 });
-expectEqual(noopOption.swatch, undefined, 'noop option → no swatch (skip tile)');
+expectEqual(noopOption.op, 'noop', 'noop stays explicit for the skip link');
 
 const finishOption = mapQuestionOption({
   id: 'finish-matte',
   label: '보송한 매트',
-  filterDelta: {attribute: 'finish', op: 'eq', values: ['matte']},
+  filterDelta: {attribute: 'finish', op: 'eq', values: ['', 'matte']},
 });
-const finishSwatch = finishOption.swatch;
-expectEqual(
-  typeof finishSwatch === 'object' && finishSwatch.kind === 'texture' ? finishSwatch.texture : '',
-  'matte',
-  'finish option → abstract texture swatch (matte)',
-);
+expectEqual(finishOption.value, 'matte', 'blank values do not hide a later semantic value');
 
-const textureOption = mapQuestionOption({
-  id: 'texture-cream',
-  label: '크림',
-  filterDelta: {attribute: 'texture', op: 'eq', values: ['cream']},
-});
-const textureSwatch = textureOption.swatch;
-expectEqual(
-  typeof textureSwatch === 'object' && textureSwatch.kind === 'texture' ? textureSwatch.texture : '',
-  'velvet',
-  'texture option maps into the 4-kind abstract set (cream → velvet)',
-);
-
-// 매핑이 없는 속성/값 → 중립 단색 폴백 (라벨이 의미 전달, 제품 이미지 금지 §8.2-2)
 const channelOption = mapQuestionOption({
   id: 'channel-naver',
   label: '구매 링크만 있으면 괜찮아요',
   filterDelta: {attribute: 'channel', op: 'eq', values: ['naver']},
 });
-expectEqual(channelOption.swatch, '#E4D6D2', 'unmapped option → neutral solid swatch');
+expectEqual(channelOption.attribute, 'channel', 'channel attribute passthrough');
+expectEqual(channelOption.value, 'naver', 'channel value passthrough');
 
 // --- turn 매핑: phase / 구매 가능 카드만 / 질문 / 헤더 ---
 const resultsTurn = mapSearchTurn({
@@ -160,12 +137,52 @@ const questionTurn = mapSearchTurn({
   question: {
     id: 'q-1-colorFamily',
     title: '색감은 어느 쪽이 더 끌려요?',
+    attribute: 'colorFamily',
     options: [{id: 'colorFamily-rose', label: '로즈', filterDelta: {attribute: 'colorFamily', values: ['rose']}}],
   },
 });
 expectEqual(questionTurn.phase, 'question', 'question turn phase');
 expectEqual(questionTurn.question?.options.length, 1, 'question options mapped');
+expectEqual(questionTurn.question?.attribute, 'colorFamily', 'question attribute is validated and preserved');
 expectEqual(questionTurn.candidates.length, 0, 'question turn has no candidates');
+
+const contextualQuestionTurn = mapSearchTurn({
+  phase: 'question',
+  question: {
+    id: 'q-2-finish',
+    title: '립 마무리감은 어느 쪽이 좋아요?',
+    attribute: 'finish',
+    contextCategory: 'lip',
+    options: [{id: 'finish-matte', label: '보송한 매트', filterDelta: {attribute: 'finish', values: ['matte']}}],
+  },
+});
+expectEqual(contextualQuestionTurn.question?.attribute, 'finish', 'finish question attribute is preserved');
+expectEqual(contextualQuestionTurn.question?.contextCategory, 'lip', 'valid finish context category is preserved');
+
+const invalidQuestionTurn = mapSearchTurn({
+  phase: 'question',
+  question: {
+    id: 'q-invalid',
+    title: 'invalid',
+    attribute: 'futureAttribute',
+    contextCategory: 'perfume',
+    options: [],
+  },
+});
+expectEqual(invalidQuestionTurn.question?.attribute, undefined, 'unknown question attribute is dropped');
+expectEqual(invalidQuestionTurn.question?.contextCategory, undefined, 'unknown context category is dropped');
+
+const misplacedContextTurn = mapSearchTurn({
+  phase: 'question',
+  question: {
+    id: 'q-price',
+    title: '예산은 어느 정도가 편해요?',
+    attribute: 'priceTier',
+    contextCategory: 'lip',
+    options: [],
+  },
+});
+expectEqual(misplacedContextTurn.question?.contextCategory, undefined, 'context category is limited to finish and texture questions');
 
 // 알 수 없는 phase → failed로 정규화
 expectEqual(mapSearchTurn({phase: 'weird'}).phase, 'failed', 'unknown phase normalizes to failed');

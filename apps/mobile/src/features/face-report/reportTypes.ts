@@ -273,6 +273,9 @@ export interface ReportScreenProps {
   // Points at the separate expanded vertical document used for 공유/이미지 저장.
   // Story covers, pager chrome and CTA are intentionally outside this target.
   captureRef?: React.Ref<any>;
+  // The expanded S1-S9 document exists only while this save/share request is active.
+  captureRequestId?: number | null;
+  onCaptureDocumentSettledChange?: (requestId: number, settled: boolean) => void;
   // 개발 단계 QA용: 보고서 맨 아래에서 저장/세션 측정값 원본을 접어서 확인한다.
   measurementDebugPayload?: unknown;
   measurementDebugSummary?: {label: string; value: string}[];

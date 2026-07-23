@@ -46,6 +46,39 @@ function waitForNextFrame() {
   });
 }
 
+const FEEDBACK_CAPTURE_SETTLE_TIMEOUT_MS = 10_000;
+
+function waitForFeedbackCaptureAssets(
+  readyRef: {current: boolean},
+  resolveRef: {current: (() => void) | null},
+) {
+  if (readyRef.current) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const finish = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = null;
+      if (resolveRef.current === finish) resolveRef.current = null;
+      resolve();
+    };
+    const fail = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = null;
+      if (resolveRef.current === finish) resolveRef.current = null;
+      reject(
+        new Error(
+          '피드백 보고서의 상세 이미지를 모두 불러오지 못했어요. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+        ),
+      );
+    };
+
+    resolveRef.current = finish;
+    timeoutId = setTimeout(fail, FEEDBACK_CAPTURE_SETTLE_TIMEOUT_MS);
+    if (readyRef.current) finish();
+  });
+}
+
 async function captureFeedbackImage(captureRef: {current: OptionalViewShotRef | null}) {
   const captureTarget = captureRef.current;
   const capture = captureTarget?.capture;
@@ -71,10 +104,10 @@ async function requestFeedbackImageSavePermission() {
     throw new Error('현재 설치된 앱에 사진 저장 모듈이 포함되어 있지 않아요. 앱을 새로 설치한 뒤 다시 시도해 주세요.');
   }
 
-  const currentPermission = await mediaLibraryModule.getPermissionsAsync(true, ['photo']);
+  const currentPermission = await mediaLibraryModule.getPermissionsAsync(true, []);
   const permission = currentPermission.granted
     ? currentPermission
-    : await mediaLibraryModule.requestPermissionsAsync(true, ['photo']);
+    : await mediaLibraryModule.requestPermissionsAsync(true, []);
 
   if (!permission.granted) {
     throw new Error('사진 저장 권한이 필요합니다. 설정에서 사진 접근을 허용해 주세요.');
@@ -128,6 +161,8 @@ export function MakeupFeedbackResultScreen({
   result,
 }: MakeupFeedbackResultScreenProps) {
   const captureRef = useRef<OptionalViewShotRef | null>(null);
+  const captureDocumentSettledRef = useRef(false);
+  const captureDocumentResolveRef = useRef<(() => void) | null>(null);
   const controller = useMakeupFeedbackRedesignController({reduceMotion, result});
   const isSlides = controller.isSlides;
   const prepareCapture = controller.prepareCapture;
@@ -136,6 +171,12 @@ export function MakeupFeedbackResultScreen({
     useState<MakeupFeedbackShareTarget | null>(null);
   const [shareFeedback, setShareFeedback] =
     useState<MakeupFeedbackShareFeedback | null>(null);
+  const [captureRequestId, setCaptureRequestId] = useState(0);
+
+  const handleCaptureDocumentSettledChange = useCallback((settled: boolean) => {
+    captureDocumentSettledRef.current = settled;
+    if (settled) captureDocumentResolveRef.current?.();
+  }, []);
 
   const handleShareAction = useCallback(async (target: MakeupFeedbackShareTarget) => {
     if (activeShareTarget) {
@@ -143,6 +184,8 @@ export function MakeupFeedbackResultScreen({
       return;
     }
 
+    captureDocumentSettledRef.current = false;
+    setCaptureRequestId(current => current + 1);
     setActiveShareTarget(target);
     setShareFeedback(null);
     let restoreSlides = false;
@@ -155,6 +198,11 @@ export function MakeupFeedbackResultScreen({
       restoreSlides = isSlides;
       prepareCapture();
       await waitForNextFrame();
+      await waitForNextFrame();
+      await waitForFeedbackCaptureAssets(
+        captureDocumentSettledRef,
+        captureDocumentResolveRef,
+      );
       await waitForNextFrame();
       const imageUri = await captureFeedbackImage(captureRef);
 
@@ -170,6 +218,8 @@ export function MakeupFeedbackResultScreen({
       feedbackHaptics.error();
       setShareFeedback({message: getShareErrorMessage(error), tone: 'error'});
     } finally {
+      captureDocumentResolveRef.current = null;
+      captureDocumentSettledRef.current = false;
       if (restoreSlides) {
         restoreSlidesAfterCapture();
       }
@@ -233,9 +283,11 @@ export function MakeupFeedbackResultScreen({
         {controller.isHome ? (
           <MakeupFeedbackRedesignHomeScreen
             captureRef={captureRef}
+            captureRequestId={captureRequestId}
             controller={controller}
             createdAt={result.createdAt}
             isShareBusy={Boolean(activeShareTarget)}
+            onCaptureDocumentSettledChange={handleCaptureDocumentSettledChange}
             onOpenRecord={onOpenMakeupJourney}
             onSave={() => void handleShareAction('save-image')}
             onShare={() => void handleShareAction('share-report')}

@@ -21,6 +21,7 @@
     "mobile:test:face-geometry": "npm --prefix apps/mobile run test:face-geometry",
     "mobile:test:face-analysis-measurements": "npm --prefix apps/mobile run test:face-analysis-measurements",
     "mobile:test:face-report": "npm --prefix apps/mobile run test:face-report",
+    "mobile:test:qa-checklist": "npm --prefix apps/mobile run test:qa-checklist",
     "mobile:test:face-capture-tutorial": "npm --prefix apps/mobile run test:face-capture-tutorial",
     "mobile:test:consulting-flow": "npm --prefix apps/mobile run test:consulting-flow",
     "face3d:semantic:candidates": "node scripts/face3d/build-semantic-candidates.mjs",

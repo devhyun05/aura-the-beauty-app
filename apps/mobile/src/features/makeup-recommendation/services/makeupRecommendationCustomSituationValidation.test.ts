@@ -11,58 +11,37 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
   }
 }
 
-for (const value of ['ㅋㅋㅋㅋㅋㅋ', 'ㅗㅗㅗㅗ', '....', 'asdfasdf', 'qwerty', '123123']) {
-  expectEqual(validateMakeupRecommendationCustomSituation(value).intentType, 'noise', `${value} is noise`);
-}
-
 for (const value of [
+  '가',
+  '....',
+  'ㅋㅋㅋㅋㅋㅋ',
+  'asdfasdf',
+  '123123',
   '몰라',
   '아무거나',
-  '알아서',
-  '이거',
   '예쁘게',
   '예쁘게 해줘',
   '트렌디하게',
   '메이크업 추천해줘',
-  '예쁘게 보이고 싶어',
-  '사진 잘 나오게',
-  '오래 유지되게',
-  '30분 안에',
   '야외에서',
-  '야외에서 30분 준비',
-  '실내에서 사진 우선',
+  '30분 안에',
   '알레르기가 있어서 향료는 피하고 싶어요',
-]) {
-  expectEqual(
-    validateMakeupRecommendationCustomSituation(value).intentType,
-    'needs_detail',
-    `${value} needs more detail`,
-  );
-}
-
-for (const value of [
-  '회식',
-  '면접',
-  '출근',
-  '오늘 중요한 약속',
-  '야외 촬영',
-  '성수 팝업',
-  '야구장',
-  '증명사진',
-  '특별한 날',
-  '중요한 날',
-  'cafe',
-  'cafe date',
-  '야외 결혼식에서 사진은 또렷하지만 과해 보이지 않게',
-  '출근할 때 알레르기가 있어서 향료는 피하고 싶어요',
+  '로판 여주',
+  '무도회 주인공',
+  '내일 뭘 입을까',
 ]) {
   expectEqual(
     validateMakeupRecommendationCustomSituation(value).intentType,
     'valid_context',
-    `${value} is a valid situation`,
+    `${value} is accepted as free-form makeup context`,
   );
 }
 
+expectEqual(
+  validateMakeupRecommendationCustomSituation('   ').intentType,
+  'empty',
+  'trimmed empty input stays disabled',
+);
 expectEqual(
   validateMakeupRecommendationCustomSituation('  야외   결혼식에서 자연스럽게  ').normalizedText,
   '야외 결혼식에서 자연스럽게',
@@ -96,6 +75,16 @@ expectEqual(
   'prompt control is blocked',
 );
 expectEqual(
+  validateMakeupRecommendationCustomSituation('피부병 진단하고 치료법 알려줘').intentType,
+  'unsupported_request',
+  'medical advice is blocked',
+);
+expectEqual(
+  validateMakeupRecommendationCustomSituation('카페 추천해줘').intentType,
+  'unsupported_request',
+  'external cafe recommendation is blocked without blocking cafe as a makeup context',
+);
+expectEqual(
   validateMakeupRecommendationCustomSituation('연락은 010-1234-5678로 주세요').intentType,
   'personal_info',
   'phone number is blocked',
@@ -109,12 +98,12 @@ expectEqual(
 expectEqual(
   getMakeupRecommendationCustomSituationServerError(
     new BackendApiError(
-      '어디에서 또는 언제 사용할 메이크업인지 조금만 더 적어주세요.',
+      '원하는 메이크업 맥락을 조금만 더 적어주세요.',
       422,
       'MAKEUP_CUSTOM_SITUATION_NEEDS_DETAIL',
     ),
   ),
-  '어디에서 또는 언제 사용할 메이크업인지 조금만 더 적어주세요.',
+  '원하는 메이크업 맥락을 조금만 더 적어주세요.',
   'custom situation backend validation stays inline',
 );
 expectEqual(
@@ -125,7 +114,7 @@ expectEqual(
       'MAKEUP_CUSTOM_SITUATION_PII',
     ),
   ),
-  '연락처나 개인정보는 빼고 메이크업 상황만 적어주세요.',
+  '연락처나 개인정보는 빼고 원하는 메이크업 상황이나 분위기만 적어주세요.',
   'custom validation never exposes raw backend English',
 );
 expectEqual(
