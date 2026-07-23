@@ -237,6 +237,23 @@ namespace ARMakeup.Face
         // UV.x(텍스처 가로)=바깥꼬리(1)→안쪽머리(0). PNG는 x=0 머리(수직)·x=1 꼬리(눕힘)이라
         // lash 인덱스 0(바깥)→texU 1, 인덱스 끝(안쪽)→texU 0. 두 눈 모두 동일 매핑 —
         // "texU 증가=바깥"이 각 눈의 자기 바깥쪽이라 결 눕힘이 자동으로 좌우 대칭이 된다.
+        /// <summary>꼬리 접선 탈출 — 눈꺼풀 랜드마크 체인은 눈꼬리(인덱스 0 쪽)에서
+        /// 코너 최저점을 향해 급강하하는데, 실제 인조속눈썹 밴드는 그 지점에서 라인의
+        /// 흐름(접선)대로 곧게 빠져나간다. 라이너 v5 코너 윙과 동일 취지(사용자 확정 형태).
+        /// 코너 영향권 밖 접선으로 바깥쪽 점들을 점진 대체(간격 유지 → u 매핑 보존).</summary>
+        void TailTangentExit()
+        {
+            const int Pivot = 5; // 바깥쪽 0..Pivot-1(전체 25점 중 ~20%)을 접선 연장으로 교체
+            var d = (_lash[Pivot] - _lash[Pivot + 3]).normalized;
+            for (var i = Pivot - 1; i >= 0; i--)
+            {
+                var step = (_lash[i] - _lash[i + 1]).magnitude; // 원래 점 간격 유지
+                var straight = _lash[i + 1] + d * step;
+                var t = (Pivot - i) / (float)Pivot;             // 코너로 갈수록 접선 쪽으로
+                _lash[i] = Vector2.Lerp(_lash[i], straight, Mathf.SmoothStep(0f, 1f, t));
+            }
+        }
+
         /// <summary>텍스처 리본 컬럼 법선 — _lash 체인에서 ±2 스텐실 접선의 수직을 구해
         /// 2패스 스무딩(라이너 검증 레시피). up 쪽으로 부호 정렬.</summary>
         void SmoothedRibbonNormals(Vector2 up)
@@ -560,6 +577,7 @@ namespace ARMakeup.Face
                 // 오버플로해 매 프레임 IndexOutOfRange로 상단 리본을 무력화 → 제거. 꼬리 연장은
                 // 새 래시 아키텍처(실제 속눈썹 증폭)에서 배열 크기와 함께 제대로 재구현할 것.)
                 SubdivideArc(_ctrl, LidPts, _lash);
+                TailTangentExit(); // 눈꼬리 급강하 제거 — 뿌리선이 접선으로 빠져나감
 
                 // 종횡비 잠금 — 리본 높이 = 눈폭 × 도안(h/w). 가로·세로가 같은 비율로
                 // 줄어 도안의 털 각도가 수학적으로 보존된다(비등방 축소가 모든 각도를
@@ -606,6 +624,7 @@ namespace ARMakeup.Face
 
                 for (var j = 0; j < LidPts; j++) _ctrl[j] = ImgPt(lm, lids[j]);
                 SubdivideArc(_ctrl, LidPts, _lash);
+                TailTangentExit(); // 아래 리본도 동일 — 코너 급커브로 뿌리선이 말려드는 것 방지
 
                 // 종횡비 잠금 — 위 리본과 동일 원칙(도안 h/w가 높이 소유, 각도 보존).
                 var texLo = _lowerTexMaterial != null ? _lowerTexMaterial.mainTexture : null;
