@@ -118,7 +118,7 @@ function StoryContentCard({
         {showChapterHeader ? <ChapterMark inset={inset} section={section} /> : null}
         {title ? (
           <View style={{gap: 7, marginBottom: 16}}>
-            <Text style={[font(20, '800', 1.25, -0.2), {color: color.ink}]}>{title}</Text>
+            <Text style={[font(22, '800', 1.25, -0.25), {color: color.ink}]}>{title}</Text>
             {sub ? <Text style={[font(13.5, '400', 1.55), {color: color.text}]}>{sub}</Text> : null}
           </View>
         ) : null}
@@ -488,8 +488,7 @@ export function ReportScreenScaffold({
 
   const sectionById = new Map(storyModel.sections.map(section => [section.id, section]));
   const renderContent = (page: FaceReportStoryPage, section: FaceReportStorySection) => {
-    const showChapterHeader =
-      section.id !== 'summary' && section.pages[0]?.id === page.id;
+    const showChapterHeader = section.id !== 'summary';
     switch (page.contentKey) {
       case 'summary:combined':
       case 'summary':
@@ -572,7 +571,7 @@ export function ReportScreenScaffold({
           const key = page.contentKey.slice('features:'.length);
           const card = data.s3.cards.find(item => item.key === key);
           return card ? (
-            <StoryContentCard section={section} pagerRef={pagerRef} title={card.regionTitle} sub={data.s3.sub} inset showChapterHeader={showChapterHeader}>
+            <StoryContentCard section={section} pagerRef={pagerRef} title={card.regionTitle} inset showChapterHeader={showChapterHeader}>
               <S3RegionCard card={card} />
             </StoryContentCard>
           ) : null;
@@ -650,7 +649,7 @@ export function ReportScreenScaffold({
               )}
             </View>
             <View style={{alignItems: 'center', gap: 1}}>
-              <Text style={[font(14, '700'), {color: color.ink}]}>{data.topBarTitle}</Text>
+              <Text style={[font(14, '700'), {color: color.ink}]}>얼굴 분석 보고서</Text>
               <Text
                 accessibilityLabel={reportCompletion.accessibilityLabel}
                 accessibilityLiveRegion="polite"
@@ -686,6 +685,7 @@ export function ReportScreenScaffold({
             pages={storyPages}
             sections={storySections}
             resetKey={resetKey}
+            showFooter={false}
           />
         </View>
       </View>

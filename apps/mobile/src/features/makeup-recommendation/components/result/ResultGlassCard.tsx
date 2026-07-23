@@ -27,6 +27,7 @@ export function ResultGlassCard({
           style={StyleSheet.absoluteFill}
         />
         <View pointerEvents="none" style={styles.fill} />
+        <View pointerEvents="none" style={styles.lightCatch} />
         <View style={styles.content}>{children}</View>
       </View>
     </View>
@@ -45,11 +46,19 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   fill: {
-    backgroundColor: colors.glass,
+    backgroundColor: 'rgba(255,255,255,0.54)',
     bottom: 0,
     left: 0,
     position: 'absolute',
     right: 0,
+    top: 0,
+  },
+  lightCatch: {
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    height: StyleSheet.hairlineWidth,
+    left: 14,
+    position: 'absolute',
+    right: 14,
     top: 0,
   },
   content: {

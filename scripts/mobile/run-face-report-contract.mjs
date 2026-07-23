@@ -1,4 +1,4 @@
-import {mkdtempSync} from 'node:fs';
+import {mkdtempSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -73,3 +73,21 @@ run(process.execPath, [join(outDir, 'features/ar/stencil/src/composer/bodyProfil
 run(process.execPath, [join(outDir, 'features/face-analysis/services/faceAnalysisReportGate.test.js')]);
 run(process.execPath, [join(outDir, 'shared/ui/storyReportPagerGesture.test.js')]);
 run(process.execPath, [join(outDir, 'shared/services/faceAnalysisService.test.js')]);
+
+const regionCardSource = readFileSync(
+  join(featuresDir, 'face-report/sections/S3Features.tsx'),
+  'utf8',
+);
+if (regionCardSource.includes('이 부위의 결론')) {
+  throw new Error('Region report must not render the removed conclusion label.');
+}
+for (const required of [
+  '<ReportGlassSurface',
+  'cropRect: undefined',
+  'accessibilityState={{expanded: selected, selected}}',
+]) {
+  if (!regionCardSource.includes(required)) {
+    throw new Error(`Region report progressive disclosure contract missing: ${required}`);
+  }
+}
+console.log('region report visual hierarchy contract passed');

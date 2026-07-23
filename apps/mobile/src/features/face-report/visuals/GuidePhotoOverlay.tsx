@@ -44,13 +44,16 @@ function Band({ active, top, height, restTint, activeTint, onPress }: {
  * S2 4:5 measurement photo with calibration lines, left dark pills, right cyan band pills,
  * tappable region bands, and the hairline-missing variant (hatched top + dashed pill).
  */
-export function GuidePhotoOverlay({ data, picked, onPickBand }: {
-  data: S2Data; picked: BandKey | null; onPickBand: (k: BandKey) => void;
+export function GuidePhotoOverlay({ aspectRatio, data, picked, onPickBand }: {
+  aspectRatio?: number;
+  data: S2Data;
+  picked: BandKey | null;
+  onPickBand: (k: BandKey) => void;
 }) {
   const press = (k: BandKey) => { Haptics.selectionAsync(); onPickBand(k); };
   return (
-    <View style={[{ borderRadius: radius.lg, backgroundColor: color.surface }, shadow.photo]}>
-      <View style={{ borderRadius: radius.lg, overflow: 'hidden', aspectRatio: data.photoAspectRatio ?? 4 / 5 }}>
+    <View style={{ borderRadius: radius.md, backgroundColor: color.surface }}>
+      <View style={{ borderRadius: radius.md, overflow: 'hidden', aspectRatio: aspectRatio ?? data.photoAspectRatio ?? 4 / 5 }}>
         <PhotoSlot slot={data.photo} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
         {data.hairlineMissing ? (
           <>

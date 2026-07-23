@@ -1,4 +1,4 @@
-import {Check, ChevronRight} from 'lucide-react-native';
+import {Check, ChevronLeft, ChevronRight} from 'lucide-react-native';
 import {
   useCallback,
   useEffect,
@@ -347,6 +347,7 @@ function FinalAreaRecipePage({
 }) {
   const [cropSettled, setCropSettled] = useState(false);
   const [productSettled, setProductSettled] = useState(false);
+  const [activeStepIndex, setActiveStepIndex] = useState(0);
   const activeArea = recipe.area;
   const part = look.parts[activeArea];
   const sourceGuide = recipe.sourceGuide;
@@ -358,6 +359,16 @@ function FinalAreaRecipePage({
   const colorHex = sourceGuide?.color.hex || part.hex || colors.heroPlaceholder;
   const texture = recipe.texture || part.texture;
   const productSearchQuery = `${colorName} ${texture || ''} ${areaLabel} 메이크업`.trim();
+  const activeStep = recipe.steps[activeStepIndex] ?? recipe.steps[0];
+
+  useEffect(() => {
+    setActiveStepIndex(0);
+  }, [recipe.area]);
+
+  useEffect(() => {
+    if (activeStepIndex < recipe.steps.length) return;
+    setActiveStepIndex(Math.max(0, recipe.steps.length - 1));
+  }, [activeStepIndex, recipe.steps.length]);
 
   const handleCropSettledChange = useCallback((settled: boolean) => {
     setCropSettled(settled);
@@ -459,13 +470,108 @@ function FinalAreaRecipePage({
 
       {recipe.steps.length > 0 ? (
         <View style={styles.stepList}>
-          {recipe.steps.map(step => (
+          <View
+            accessibilityLabel="메이크업 단계 타임라인"
+            style={styles.stepTimeline}>
+            {recipe.steps.map((step, index) => {
+              const selected = index === activeStepIndex;
+              const stepColor = step.colors[0]?.hex;
+              return (
+                <Pressable
+                  accessibilityLabel={`${step.order}단계 ${step.title}`}
+                  accessibilityRole="button"
+                  accessibilityState={{selected}}
+                  key={`${step.key}:timeline`}
+                  onPress={() => setActiveStepIndex(index)}
+                  style={({pressed}) => [
+                    styles.stepTimelineItem,
+                    selected && styles.selectedStepTimelineItem,
+                    pressed && styles.pressed,
+                  ]}>
+                  <View style={styles.timelineRail}>
+                    <View
+                      style={[
+                        styles.timelineDot,
+                        {
+                          backgroundColor: SUMMARY_HEX_COLOR.test(stepColor ?? '')
+                            ? stepColor
+                            : colorHex,
+                        },
+                        selected && styles.selectedTimelineDot,
+                      ]}>
+                      <Text style={styles.timelineNumber}>{step.order}</Text>
+                    </View>
+                    {index < recipe.steps.length - 1 ? (
+                      <View style={styles.timelineConnector} />
+                    ) : null}
+                  </View>
+                  <View style={styles.timelineCopy}>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.timelineTitle,
+                        selected && styles.selectedTimelineTitle,
+                      ]}>
+                      {step.title}
+                    </Text>
+                    {step.productType ? (
+                      <Text numberOfLines={1} style={styles.timelineMeta}>
+                        {step.productType}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <ChevronRight
+                    color={selected ? colors.ink : colors.faint}
+                    size={16}
+                    strokeWidth={1.8}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+          {activeStep ? (
             <FinalMakeupRecipeStepCard
               accentHex={colorHex}
-              key={step.key}
-              step={step}
+              expanded
+              key={activeStep.key}
+              step={activeStep}
             />
-          ))}
+          ) : null}
+          {recipe.steps.length > 1 ? (
+            <View style={styles.stepNavigation}>
+              <Pressable
+                accessibilityLabel="이전 메이크업 단계"
+                accessibilityRole="button"
+                accessibilityState={{disabled: activeStepIndex === 0}}
+                disabled={activeStepIndex === 0}
+                onPress={() => setActiveStepIndex(index => Math.max(0, index - 1))}
+                style={({pressed}) => [
+                  styles.stepNavigationButton,
+                  activeStepIndex === 0 && styles.disabledStepNavigationButton,
+                  pressed && styles.pressed,
+                ]}>
+                <ChevronLeft color={colors.ink} size={17} />
+                <Text style={styles.stepNavigationText}>이전 단계</Text>
+              </Pressable>
+              <Text style={styles.stepNavigationCount}>
+                {activeStepIndex + 1} / {recipe.steps.length}
+              </Text>
+              <Pressable
+                accessibilityLabel="다음 메이크업 단계"
+                accessibilityRole="button"
+                accessibilityState={{disabled: activeStepIndex === recipe.steps.length - 1}}
+                disabled={activeStepIndex === recipe.steps.length - 1}
+                onPress={() => setActiveStepIndex(index => Math.min(recipe.steps.length - 1, index + 1))}
+                style={({pressed}) => [
+                  styles.stepNavigationButton,
+                  activeStepIndex === recipe.steps.length - 1 && styles.disabledStepNavigationButton,
+                  pressed && styles.pressed,
+                ]}>
+                <Text style={styles.stepNavigationText}>다음 단계</Text>
+                <ChevronRight color={colors.ink} size={17} />
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       ) : (
         <Text style={styles.emptyDetail}>저장된 단계 설명이 없어요.</Text>
@@ -591,7 +697,80 @@ const styles = StyleSheet.create({
   },
   legacyTitle: {color: '#51675A', fontSize: 11.5, fontWeight: '800'},
   legacyBody: {color: '#53655A', fontSize: 11, fontWeight: '500', lineHeight: 17},
-  stepList: {gap: 11, marginTop: 14},
+  stepList: {gap: 12, marginTop: 14},
+  stepTimeline: {
+    backgroundColor: 'rgba(246,249,251,0.72)',
+    borderColor: colors.glassBorder,
+    borderRadius: radius.tile,
+    borderWidth: 1,
+    overflow: 'hidden',
+    paddingVertical: 4,
+  },
+  stepTimelineItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 54,
+    paddingHorizontal: 11,
+  },
+  selectedStepTimelineItem: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  timelineRail: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    width: 28,
+  },
+  timelineDot: {
+    alignItems: 'center',
+    borderColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 13,
+    borderWidth: 1,
+    height: 26,
+    justifyContent: 'center',
+    width: 26,
+    zIndex: 1,
+  },
+  selectedTimelineDot: {
+    borderColor: colors.ink,
+    borderWidth: 2,
+  },
+  timelineNumber: {
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  timelineConnector: {
+    backgroundColor: 'rgba(16,24,40,0.14)',
+    bottom: -16,
+    left: 13.5,
+    position: 'absolute',
+    top: 28,
+    width: 1,
+  },
+  timelineCopy: {flex: 1, gap: 2, minWidth: 0},
+  timelineTitle: {color: colors.ink3, fontSize: 12.5, fontWeight: '700'},
+  selectedTimelineTitle: {color: colors.ink, fontWeight: '900'},
+  timelineMeta: {color: colors.sub2, fontSize: 10.5, fontWeight: '600'},
+  stepNavigation: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  stepNavigationButton: {
+    alignItems: 'center',
+    borderColor: colors.glassBorder,
+    borderRadius: radius.tile,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 4,
+    minHeight: 40,
+    paddingHorizontal: 10,
+  },
+  disabledStepNavigationButton: {opacity: 0.32},
+  stepNavigationText: {color: colors.ink, fontSize: 11, fontWeight: '800'},
+  stepNavigationCount: {color: colors.sub2, fontSize: 10.5, fontWeight: '800'},
   emptyDetail: {color: colors.sub2, fontSize: 12, lineHeight: 18, marginTop: 12},
   completionCard: {
     backgroundColor: 'rgba(221,235,228,0.72)',

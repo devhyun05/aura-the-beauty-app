@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import {Text, View} from 'react-native';
+import {ScanFace} from 'lucide-react-native';
 import type { BandKey, S2Data } from '../reportTypes';
-import {color, font, radius} from '../reportTokens';
+import {color, font} from '../reportTokens';
 import { EmptyNotice } from '../visuals/EmptyNotice';
 import { GuidePhotoOverlay } from '../visuals/GuidePhotoOverlay';
 import { RegionLens } from '../visuals/RegionLens';
 import { RiseIn } from '../visuals/RiseIn';
-import { SectionHeader } from '../visuals/SectionHeader';
 import { ThirdsRatioReadout } from '../visuals/ThirdsRatioReadout';
 
 interface Props {
@@ -26,32 +26,14 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
     : '';
 
   return (
-    <RiseIn style={{ paddingTop: 10, paddingHorizontal: 20 }}>
-      <SectionHeader eyebrow={data.eyebrow} title={data.title} sub={data.sub} mb={12} />
-      {data.insightLabel || data.insightDescription ? (
-        <View
-          style={{
-            backgroundColor: color.accentWash,
-            borderRadius: radius.md,
-            paddingHorizontal: 14,
-            paddingVertical: 12,
-            gap: 4,
-            marginBottom: 12,
-          }}>
-          <Text style={[font(10.5, '800'), {color: color.accentDeep}]}>내 비율 해석</Text>
-          {data.insightLabel ? (
-            <Text style={[font(15, '800', 1.45), {color: color.ink}]}>
-              {data.insightLabel}
-            </Text>
-          ) : null}
-          {data.insightDescription ? (
-            <Text style={[font(12.5, '400', 1.6), {color: color.body}]}>
-              {data.insightDescription}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
+    <RiseIn style={{ paddingHorizontal: 20 }}>
+      <Text
+        accessibilityRole="header"
+        style={[font(22, '800', 1.25, -0.25), {color: color.ink, marginBottom: 16}]}>
+        얼굴
+      </Text>
       <GuidePhotoOverlay
+        aspectRatio={0.89}
         data={data}
         picked={picked}
         onPickBand={k => setPicked(p => (p === k ? null : k))}
@@ -73,12 +55,32 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
           style={{ marginTop: 10 }}
         />
       )}
-      <ThirdsRatioReadout ratio={data.ratioNumbers} faceShape={data.faceShape} />
-      {!data.insightDescription && data.paragraph ? (
-        <Text style={[font(12.5, '400', 1.65), {color: color.body, marginTop: 12}]}>
-          {data.paragraph}
+      <View style={{marginTop: 22}}>
+        <View style={{alignItems: 'center', flexDirection: 'row', gap: 12}}>
+          <View
+            style={{
+              alignItems: 'center',
+              backgroundColor: color.accentDeep,
+              borderRadius: 22,
+              height: 44,
+              justifyContent: 'center',
+              width: 44,
+            }}>
+            <ScanFace color={color.white} size={21} strokeWidth={1.7} />
+          </View>
+          <Text style={[font(17, '800'), {color: color.ink}]}>얼굴 비율</Text>
+        </View>
+        <Text
+          style={[
+            font(13.5, '400', 1.65),
+            {color: color.body, marginLeft: 56, marginTop: 8},
+          ]}>
+          {[data.insightLabel, data.insightDescription ?? data.paragraph]
+            .filter(Boolean)
+            .join(' · ')}
         </Text>
-      ) : null}
+      </View>
+      <ThirdsRatioReadout ratio={data.ratioNumbers} faceShape={data.faceShape} />
     </RiseIn>
   );
 }

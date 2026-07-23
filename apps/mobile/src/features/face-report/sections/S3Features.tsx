@@ -1,13 +1,14 @@
 import React, {useState} from 'react';
 import {Pressable, Text, View} from 'react-native';
+import {ChevronDown} from 'lucide-react-native';
 import { color, font, radius } from '../reportTokens';
 import type { RegionCardData, S3Data } from '../reportTypes';
 import { BlendBar } from '../visuals/BlendBar';
-import { Card } from '../visuals/Card';
 import { GuideOverlay } from '../visuals/GuideOverlay';
 import {FaceDepthPointOverlay} from '../visuals/FaceDepthPointOverlay';
 import { PhotoSlot } from '../visuals/PhotoSlot';
 import { RiseIn } from '../visuals/RiseIn';
+import {ReportGlassSurface} from '../visuals/ReportGlassSurface';
 import { SectionHeader } from '../visuals/SectionHeader';
 import { SpectrumRail } from '../visuals/SpectrumRail';
 import { WhatIfRail } from '../visuals/WhatIfRail';
@@ -55,55 +56,103 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
     ),
   );
   return (
-    <Card gap={13}>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-        <View style={{ backgroundColor: color.accentBg, borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 }}>
-          <Text style={[font(11, '800'), { color: color.accentDeep }]}>{card.regionChip}</Text>
-        </View>
-        <Text style={[font(14.5, '700'), { color: color.ink }]}>{card.regionTitle}</Text>
-      </View>
-      {card.insight ? (
+    <View style={{gap: 16}}>
+      <View
+        style={{
+          borderRadius: radius.xl,
+          overflow: 'hidden',
+        }}>
         <View
           style={{
-            gap: 6,
-            backgroundColor: color.accentWash,
-            borderRadius: radius.md,
-            paddingHorizontal: 13,
-            paddingVertical: 11,
+            aspectRatio: card.visualAspectRatio ?? 16 / 9,
+            position: 'relative',
           }}>
-          <Text style={[font(10.5, '800'), {color: color.accentDeep}]}>이 부위의 결론</Text>
-          <Text style={[font(14, '800', 1.55), {color: color.ink}]}>{card.insight}</Text>
-          {card.recommendation ? (
-            <Text style={[font(12.5, '600', 1.55), {color: color.accentInk}]}>
-              메이크업 · {card.recommendation}
-            </Text>
+          <PhotoSlot slot={card.photo} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+          {showsDepth && card.photoEvidence ? (
+            <FaceDepthPointOverlay
+              activeMetricKeys={activeMetricKeys}
+              cropRect={card.cropRect}
+              evidence={card.photoEvidence}
+            />
+          ) : null}
+          {showsLine ? (
+            <GuideOverlay
+              activeMetricKeys={activeMetricKeys}
+              guide={card.guide}
+              guides={card.guides}
+              label={activeMeasurement?.label ?? card.guideLabel}
+              labelX={card.guideLabelX}
+              labelAlign={card.guideLabelAlign}
+            />
+          ) : null}
+          {card.photo.uri ? (
+            <View
+              accessible
+              accessibilityLabel="원본 얼굴 사진"
+              accessibilityRole="image"
+              style={{
+                backgroundColor: color.surface,
+                borderColor: 'rgba(255,255,255,0.92)',
+                borderRadius: 28,
+                borderWidth: 2,
+                height: 56,
+                overflow: 'hidden',
+                position: 'absolute',
+                right: 12,
+                shadowColor: color.ink,
+                shadowOffset: {width: 0, height: 2},
+                shadowOpacity: 0.16,
+                shadowRadius: 6,
+                top: 12,
+                width: 56,
+              }}>
+              <PhotoSlot
+                shape="circle"
+                slot={{...card.photo, cropRect: undefined}}
+                style={{height: '100%', width: '100%'}}
+              />
+            </View>
           ) : null}
         </View>
-      ) : card.paragraph ? (
-        <Text style={[font(13, '400', 1.7), {color: color.body}]}>{card.paragraph}</Text>
-      ) : null}
-      <View style={{
-        borderRadius: radius.md,
-        overflow: 'hidden',
-        aspectRatio: card.visualAspectRatio ?? 16 / 9,
-      }}>
-        <PhotoSlot slot={card.photo} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
-        {showsDepth && card.photoEvidence ? (
-          <FaceDepthPointOverlay
-            activeMetricKeys={activeMetricKeys}
-            cropRect={card.cropRect}
-            evidence={card.photoEvidence}
-          />
-        ) : null}
-        {showsLine ? (
-          <GuideOverlay
-            activeMetricKeys={activeMetricKeys}
-            guide={card.guide}
-            guides={card.guides}
-            label={activeMeasurement?.label ?? card.guideLabel}
-            labelX={card.guideLabelX}
-            labelAlign={card.guideLabelAlign}
-          />
+        {(card.insight || card.paragraph) ? (
+          <ReportGlassSurface
+            contentStyle={{paddingHorizontal: 14, paddingVertical: 12}}
+            style={{
+              borderBottomLeftRadius: radius.xl,
+              borderBottomRightRadius: radius.xl,
+              borderTopLeftRadius: 0,
+              borderTopRightRadius: 0,
+              marginTop: -1,
+              shadowOpacity: 0,
+            }}>
+            <View style={{alignItems: 'stretch', flexDirection: 'row'}}>
+              <View style={{flex: 1, justifyContent: 'center', paddingRight: 12}}>
+                <Text style={[font(16, '800', 1.35), {color: color.ink}]}>
+                  {card.insight ?? card.paragraph}
+                </Text>
+              </View>
+              {activeMeasurement ? (
+                <View
+                  style={{
+                    borderLeftColor: 'rgba(22,48,59,0.12)',
+                    borderLeftWidth: 1,
+                    gap: 3,
+                    justifyContent: 'center',
+                    paddingLeft: 12,
+                    width: '43%',
+                  }}>
+                  <Text numberOfLines={1} style={[font(10, '700'), {color: color.body}]}>
+                    {activeMeasurement.label}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[font(15, '800'), {color: color.accentDeep}]}>
+                    {activeMeasurement.displayValue ?? activeMeasurement.resultLabel}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </ReportGlassSurface>
         ) : null}
       </View>
       {showsDepth ? (
@@ -132,15 +181,37 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
           </Text>
         </View>
       ) : null}
+      {card.recommendation ? (
+        <Text style={[font(12.5, '600', 1.6), {color: color.accentInk}]}>
+          메이크업 · {card.recommendation}
+        </Text>
+      ) : null}
       {card.measurementItems && card.measurementItems.length > 0 ? (
-        <View style={{borderTopColor: color.divider, borderTopWidth: 1}}>
+        <View
+          accessibilityLabel="부위별 측정 근거"
+          style={{
+            borderColor: color.outline,
+            borderRadius: radius.lg,
+            borderWidth: 1,
+            overflow: 'hidden',
+          }}>
           {card.measurementItems.map((item, index) => {
             const selected = item.key === activeMeasurement?.key;
             const previousGroup = card.measurementItems?.[index - 1]?.groupLabel;
             return (
               <React.Fragment key={item.key}>
                 {item.groupLabel && item.groupLabel !== previousGroup ? (
-                  <Text style={[font(11, '800'), {color: color.accentDeep, marginTop: index ? 4 : 0}]}>
+                  <Text
+                    style={[
+                      font(10, '800', undefined, 0.65),
+                      {
+                        backgroundColor: color.surface2,
+                        color: color.accentDeep,
+                        paddingHorizontal: 14,
+                        paddingTop: index ? 11 : 10,
+                        paddingBottom: 5,
+                      },
+                    ]}>
                     {item.groupLabel}
                   </Text>
                 ) : null}
@@ -152,46 +223,73 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
                     item.displayValue,
                     item.interpretation,
                   ].filter(Boolean).join(', ')}
-                  accessibilityState={{selected}}
+                  accessibilityState={{expanded: selected, selected}}
                   onPress={() => setActiveMeasurementKey(item.key)}
                   style={{
-                    backgroundColor: selected ? color.accentWash : 'transparent',
+                    backgroundColor: selected ? color.accentWash : color.surface,
+                    borderLeftColor: selected ? color.accentDeep : 'transparent',
+                    borderLeftWidth: 3,
                     borderBottomColor: color.divider,
-                    borderBottomWidth: 1,
-                    paddingHorizontal: 12,
-                    paddingVertical: 12,
-                    gap: 3,
+                    borderBottomWidth: index === card.measurementItems!.length - 1 ? 0 : 1,
+                    paddingHorizontal: 13,
+                    paddingVertical: 13,
+                    gap: 7,
                   }}>
-                  <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8}}>
-                    <Text style={[font(12.5, '800'), {color: color.ink, flex: 1}]}>
-                      {item.label}
-                    </Text>
-                    <Text style={[font(10.5, '700'), {color: color.accentDeep}]}>
-                      {item.visualType === 'depth'
-                        ? '3D 측정점 · 상대값'
-                        : item.visualType === 'line-and-depth'
-                          ? '측정선 · 3D 측정점'
-                          : '랜드마크 선'}
-                    </Text>
+                  <View style={{alignItems: 'center', flexDirection: 'row', gap: 9}}>
+                    <View
+                      style={{
+                        alignItems: 'center',
+                        backgroundColor: selected ? color.accentDeep : color.surface2,
+                        borderRadius: 15,
+                        height: 30,
+                        justifyContent: 'center',
+                        width: 30,
+                      }}>
+                      <Text
+                        style={[
+                          font(11, '800'),
+                          {color: selected ? color.white : color.body},
+                        ]}>
+                        {index + 1}
+                      </Text>
+                    </View>
+                    <View style={{flex: 1, gap: 3}}>
+                      <Text style={[font(12.5, '800'), {color: color.ink}]}>
+                        {item.label}
+                      </Text>
+                      <Text style={[font(12, '700', 1.4), {color: color.accentInk}]}>
+                        {item.resultLabel}
+                        {item.displayValue ? ` · ${item.displayValue}` : ''}
+                      </Text>
+                    </View>
+                    <ChevronDown
+                      color={selected ? color.accentDeep : color.muted}
+                      size={18}
+                      strokeWidth={2}
+                      style={{transform: [{rotate: selected ? '180deg' : '0deg'}]}}
+                    />
                   </View>
-                  <Text style={[font(12.5, '800', 1.45), {color: color.accentInk}]}>
-                    {item.resultLabel}
-                  </Text>
-                  {item.displayValue ? (
-                    <Text style={[font(11, '700'), {color: color.accentDeep}]}>
-                      측정값 · {item.displayValue}
-                    </Text>
-                  ) : null}
-                  <Text style={[font(11.5, '400', 1.5), {color: color.body}]}>
-                    {item.interpretation}
-                  </Text>
-                  <Text style={[font(10.5, '400', 1.5), {color: color.muted}]}>
-                    측정 방법 · {item.detail}
-                  </Text>
-                  {item.confidenceLabel ? (
-                    <Text style={[font(10.5, '600'), {color: color.muted}]}>
-                      {item.confidenceLabel}
-                    </Text>
+                  {selected ? (
+                    <View style={{gap: 6, paddingTop: 3}}>
+                      <Text style={[font(10, '700'), {color: color.accentDeep}]}>
+                        {item.visualType === 'depth'
+                          ? '3D 측정점 · 상대값'
+                          : item.visualType === 'line-and-depth'
+                            ? '측정선 · 3D 측정점'
+                            : '랜드마크 선'}
+                      </Text>
+                      <Text style={[font(11.5, '400', 1.55), {color: color.body}]}>
+                        {item.interpretation}
+                      </Text>
+                      <Text style={[font(10.5, '400', 1.5), {color: color.muted}]}>
+                        측정 방법 · {item.detail}
+                      </Text>
+                      {item.confidenceLabel ? (
+                        <Text style={[font(10.5, '600'), {color: color.muted}]}>
+                          {item.confidenceLabel}
+                        </Text>
+                      ) : null}
+                    </View>
                   ) : null}
                 </Pressable>
               </React.Fragment>
@@ -206,29 +304,18 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
           : <SpectrumRail key={i} axis={axis} />
       )}
       {card.featureDescriptors && card.featureDescriptors.length > 0 ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-          {card.featureDescriptors.map(d => (
-            <View
-              key={d}
-              style={{
-                backgroundColor: color.dial,
-                borderWidth: 1,
-                borderColor: color.outline6,
-                borderRadius: radius.pill,
-                paddingVertical: 5,
-                paddingHorizontal: 11,
-              }}>
-              <Text style={[font(11.5, '600'), { color: color.body }]}>{d}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
-      {card.evidence ? (
-        <Text style={[font(12, '400', 1.6), {color: color.muted}]}>
-          종합 근거 · {card.evidence}
+        <Text style={[font(11.5, '600', 1.55), {color: color.body}]}>
+          {card.featureDescriptors.join(' · ')}
         </Text>
       ) : null}
-    </Card>
+      {card.evidence ? (
+        <View style={{borderTopColor: color.divider, borderTopWidth: 1, paddingTop: 14}}>
+          <Text style={[font(12, '400', 1.6), {color: color.muted}]}>
+            종합 근거 · {card.evidence}
+          </Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 

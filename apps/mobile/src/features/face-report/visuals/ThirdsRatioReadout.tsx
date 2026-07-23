@@ -1,6 +1,7 @@
 import React from 'react';
 import {Text, View} from 'react-native';
-import {color, font, pct, radius} from '../reportTokens';
+import {MoveHorizontal, MoveVertical} from 'lucide-react-native';
+import {color, font} from '../reportTokens';
 import type {S2Data} from '../reportTypes';
 import {describeThirdsInternally, formatThirdsRatio} from '../reportFormat';
 
@@ -22,71 +23,78 @@ export function ThirdsRatioReadout({ratio, faceShape}: Props) {
   }
 
   return (
-    <View style={{gap: 16, marginTop: 12}}>
+    <View style={{borderTopColor: color.divider, borderTopWidth: 1, marginTop: 22}}>
       {r && (
-        <View style={{gap: 6}}>
-          <View style={{flexDirection: 'row', justifyContent: 'space-between'}}>
-            {(
-              [
-                {k: '상안부', v: r.upperLabel},
-                {k: '중안부', v: r.middleLabel},
-                {k: '하안부', v: r.lowerLabel},
-              ] as const
-            ).map(cell => (
-              <View key={cell.k} style={{alignItems: 'center', flex: 1}}>
-                <Text style={[font(11, '600'), {color: color.muted}]}>{cell.k}</Text>
-                <Text style={[font(17, '800'), {color: color.ink}]}>{cell.v}</Text>
-              </View>
-            ))}
+        <View
+          style={{
+            alignItems: 'center',
+            borderBottomColor: color.divider,
+            borderBottomWidth: 1,
+            flexDirection: 'row',
+            gap: 14,
+            paddingVertical: 17,
+          }}>
+          <View
+            style={{
+              alignItems: 'center',
+              backgroundColor: color.accentBg,
+              borderRadius: 22,
+              height: 44,
+              justifyContent: 'center',
+              width: 44,
+            }}>
+            <MoveVertical color={color.accentDeep} size={21} strokeWidth={1.8} />
           </View>
-          {selfDesc && (
-            <Text style={[font(12.5, '600', 1.5), {color: color.body, textAlign: 'center'}]}>{selfDesc}</Text>
-          )}
-          <Text style={[font(10.5, '400', 1.4), {color: color.faint, textAlign: 'center'}]}>{r.contextLabel}</Text>
+          <View style={{flex: 1, gap: 4}}>
+            <Text style={[font(14, '800'), {color: color.ink}]}>세로 비율</Text>
+            <Text style={[font(12.5, '400', 1.55), {color: color.body}]}>
+              {selfDesc ?? `${r.upperLabel} · ${r.middleLabel} · ${r.lowerLabel}`}
+            </Text>
+            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+              {[
+                `상안부 ${r.upperLabel}`,
+                `중안부 ${r.middleLabel}`,
+                `하안부 ${r.lowerLabel}`,
+              ].map(label => (
+                <Text key={label} style={[font(10.5, '600'), {color: color.muted}]}>
+                  {label}
+                </Text>
+              ))}
+            </View>
+            <Text style={[font(9.5, '400', 1.4), {color: color.faint}]}>{r.contextLabel}</Text>
+          </View>
         </View>
       )}
       {faceShape && (
-        <View style={{gap: 8}}>
-          <View style={{flexDirection: 'row', alignItems: 'center'}}>
-            <View
-              style={{
-                backgroundColor: color.accentBg,
-                borderRadius: radius.pill,
-                paddingVertical: 4,
-                paddingHorizontal: 11,
-              }}>
-              <Text style={[font(11.5, '800'), {color: color.accentDeep}]}>{faceShape.categoryLabel}</Text>
-            </View>
+        <View
+          style={{
+            alignItems: 'center',
+            borderBottomColor: color.divider,
+            borderBottomWidth: 1,
+            flexDirection: 'row',
+            gap: 14,
+            paddingVertical: 17,
+          }}>
+          <View
+            style={{
+              alignItems: 'center',
+              backgroundColor: color.accentBg,
+              borderRadius: 22,
+              height: 44,
+              justifyContent: 'center',
+              width: 44,
+            }}>
+            <MoveHorizontal color={color.accentDeep} size={21} strokeWidth={1.8} />
           </View>
-          {/* 방향 스케일: 가로형 ←→ 세로형, 표식 = 내 위치 */}
-          <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
-            <Text style={[font(10.5, '700'), {color: color.faint, width: 40, textAlign: 'right'}]}>가로형</Text>
-            <View
-              style={{
-                flex: 1,
-                height: 8,
-                borderRadius: radius.pill,
-                backgroundColor: color.rail,
-                justifyContent: 'center',
-              }}>
-              <View
-                style={{
-                  position: 'absolute',
-                  left: pct(faceShape.position * 100),
-                  marginLeft: -6,
-                  width: 12,
-                  height: 12,
-                  borderRadius: 6,
-                  backgroundColor: color.accent,
-                  borderWidth: 2,
-                  borderColor: color.white,
-                }}
-              />
-            </View>
-            <Text style={[font(10.5, '700'), {color: color.faint, width: 40}]}>세로형</Text>
+          <View style={{flex: 1, gap: 4}}>
+            <Text style={[font(14, '800'), {color: color.ink}]}>가로 비율</Text>
+            <Text style={[font(12.5, '400', 1.55), {color: color.body}]}>
+              {faceShape.sentence}
+            </Text>
+            <Text style={[font(10, '400', 1.4), {color: color.faint}]}>
+              {faceShape.referenceNote}
+            </Text>
           </View>
-          <Text style={[font(12.5, '400', 1.6), {color: color.body}]}>{faceShape.sentence}</Text>
-          <Text style={[font(10, '400', 1.4), {color: color.faint}]}>{faceShape.referenceNote}</Text>
         </View>
       )}
     </View>

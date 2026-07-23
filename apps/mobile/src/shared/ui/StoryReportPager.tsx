@@ -61,6 +61,7 @@ interface StoryReportPagerProps {
   resetKey: string;
   initialPageId?: string;
   onPageChange?: (page: StoryReportPage, index: number) => void;
+  showFooter?: boolean;
 }
 
 const INK = '#16303B';
@@ -69,7 +70,14 @@ const ACCENT = '#0E7DA8';
 const OUTLINE = 'rgba(22,48,59,0.10)';
 
 export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPagerProps>(
-  function StoryReportPager({pages, sections, resetKey, initialPageId, onPageChange}, ref) {
+  function StoryReportPager({
+    pages,
+    sections,
+    resetKey,
+    initialPageId,
+    onPageChange,
+    showFooter = true,
+  }, ref) {
     const insets = useSafeAreaInsets();
     const reduceMotion = useReducedMotion();
     const listRef = useRef<FlatList<StoryReportPage>>(null);
@@ -266,7 +274,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
       <View
         style={{flex: 1, backgroundColor: '#F6FAFC'}}
         onLayout={event => setPageWidth(Math.round(event.nativeEvent.layout.width))}>
-        <View style={{paddingHorizontal: 12, paddingTop: 6, gap: 6}}>
+        <View style={{paddingTop: 6, gap: 6}}>
           <View
             accessibilityLabel="보고서 섹션 목차"
             style={{
@@ -310,10 +318,9 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                         backgroundColor: ACCENT,
                         bottom: -1,
                         height: 2,
-                        left: '50%',
-                        marginLeft: -24,
+                        left: 0,
                         position: 'absolute',
-                        width: 48,
+                        right: 0,
                       }}
                     />
                   ) : null}
@@ -388,17 +395,17 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
               <View
                 style={{
                   flex: 1,
-                  paddingBottom: 8,
-                  paddingHorizontal: 12,
-                  paddingTop: 10,
+                  paddingBottom: 12,
+                  paddingHorizontal: 16,
+                  paddingTop: 18,
                   width: pageWidth,
                 }}>
                 <View
                   accessibilityLabel={`${item.title} 카드`}
                   style={{
                     backgroundColor: '#FFFFFF',
-                    borderColor: OUTLINE,
-                    borderRadius: 22,
+                    borderColor: '#D7E1E5',
+                    borderRadius: 12,
                     borderWidth: 1,
                     flex: 1,
                     overflow: 'hidden',
@@ -410,7 +417,8 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
           />
         </View>
 
-        <View style={{paddingHorizontal: 16, paddingTop: 4, paddingBottom: Math.max(insets.bottom, 10) + 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+        {showFooter ? (
+          <View style={{paddingHorizontal: 16, paddingTop: 4, paddingBottom: Math.max(insets.bottom, 10) + 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
           <Pressable
             accessibilityLabel="이전 카드"
             accessibilityRole="button"
@@ -463,7 +471,8 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
             style={({pressed}) => ({width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: ACCENT, opacity: currentIndex === pages.length - 1 ? 0.35 : pressed ? 0.75 : 1})}>
             <ChevronRight size={20} color="#FFFFFF" />
           </Pressable>
-        </View>
+          </View>
+        ) : null}
 
         <Modal
           animationType="fade"
