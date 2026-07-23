@@ -631,15 +631,23 @@ export const IRIS_COLORS = [
   '#3A3A3A',
 ];
 
-/** 눈썹 색 (어두운 갈색~밝은 갈색). 마스카라·파우더 공용 팔레트. */
-export const BROW_COLORS = [
-  '#2A1E16',
-  '#3A2A20',
-  '#4A3628',
-  '#5A4433',
-  '#6B5240',
-  '#7A6350',
-];
+/** 눈썹 색상 UI와 렌더 값을 한 순서로 묶어 라벨/인덱스 불일치를 막는다. */
+export const BROW_COLOR_OPTIONS = [
+  {label: '딥 브라운', color: '#2A1E16'},
+  {label: '다크 브라운', color: '#3A2A20'},
+  {label: '내추럴 브라운', color: '#4A3628'},
+  {label: '애쉬 브라운', color: '#5A4433'},
+  {label: '웜 브라운', color: '#6B5240'},
+  {label: '토프 브라운', color: '#7A6350'},
+  {label: '라이트 브라운', color: '#8A6B52'},
+  {label: '퍼플', color: '#6C527E'},
+  {label: '와인', color: '#7B3347'},
+  {label: '옐로우', color: '#B89B42'},
+  {label: '핑크', color: '#B85F7D'},
+] as const;
+
+/** 마스카라·파우더 등 기존 팔레트 소비자를 위한 동일 순서의 색상 배열. */
+export const BROW_COLORS = BROW_COLOR_OPTIONS.map(option => option.color);
 
 /** 공통 AR 블러셔 카탈로그의 웜·뉴트럴·쿨 8색. */
 export const BLUSH_COLORS = AR_BLUSH_COLORS.map(color => color.hex);

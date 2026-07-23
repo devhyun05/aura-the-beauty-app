@@ -1103,18 +1103,18 @@ export function buildVariantLibrary(): LookLibrary {
       doubleLidHeight: 1.3,
     }), false);
 
-  // 눈썹 지우개 3종 — 피부톤 컨실 강도만 단계화해 다른 눈썹 제품의 밑작업으로 사용.
-  addRegionLook(lib, 'brow-conceal', 'soft-cleanup', '소프트 정돈', '눈썹',
-    single('소프트 정돈', 'browConceal', {
-      browConcealIntensity: 0.3,
+  // 눈썹 지우기 3종 — 주변 피부 복원 강도를 단계별로 제공하며 마지막은 완전 교체용.
+  addRegionLook(lib, 'brow-conceal', 'soft-cleanup', '가벼운 커버', '눈썹',
+    single('가벼운 커버', 'browConceal', {
+      browConcealIntensity: 0.72,
     }), false);
-  addRegionLook(lib, 'brow-conceal', 'half-cover', '반톤 커버', '눈썹',
-    single('반톤 커버', 'browConceal', {
-      browConcealIntensity: 0.48,
+  addRegionLook(lib, 'brow-conceal', 'half-cover', '눈썹 지우기', '눈썹',
+    single('눈썹 지우기', 'browConceal', {
+      browConcealIntensity: 0.88,
     }), false);
-  addRegionLook(lib, 'brow-conceal', 'clean-canvas', '클린 캔버스', '눈썹',
-    single('클린 캔버스', 'browConceal', {
-      browConcealIntensity: 0.65,
+  addRegionLook(lib, 'brow-conceal', 'clean-canvas', '완전 지우기', '눈썹',
+    single('완전 지우기', 'browConceal', {
+      browConcealIntensity: 1,
     }), false);
 
   // 눈썹 스타일 5종 — 임포트 없이 번들 default_brow 텍스처를 색·모양·핏으로 변주(마지막 소프트 헤어는 전용 텍스처).
