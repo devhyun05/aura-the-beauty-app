@@ -243,14 +243,15 @@ namespace ARMakeup.Face
         /// 코너 영향권 밖 접선으로 바깥쪽 점들을 점진 대체(간격 유지 → u 매핑 보존).</summary>
         void TailTangentExit()
         {
-            const int Pivot = 5; // 바깥쪽 0..Pivot-1(전체 25점 중 ~20%)을 접선 연장으로 교체
-            var d = (_lash[Pivot] - _lash[Pivot + 3]).normalized;
+            // v9 실패 교훈(픽셀 diff 270px = 사실상 무변화): ①블렌드가 교정을 희석
+            // ②구간(5점)이 급강하 몸통(~8점)보다 짧음 ③접선 측정점(5~8)이 이미 꺾인 구간.
+            // → 구간 8점, 접선은 코너 영향권 밖(8~12)에서 측정, 블렌드 없이 통째 교체.
+            const int Pivot = 8;
+            var d = (_lash[Pivot] - _lash[Pivot + 4]).normalized; // 안 꺾인 구간의 진행 방향
             for (var i = Pivot - 1; i >= 0; i--)
             {
-                var step = (_lash[i] - _lash[i + 1]).magnitude; // 원래 점 간격 유지
-                var straight = _lash[i + 1] + d * step;
-                var t = (Pivot - i) / (float)Pivot;             // 코너로 갈수록 접선 쪽으로
-                _lash[i] = Vector2.Lerp(_lash[i], straight, Mathf.SmoothStep(0f, 1f, t));
+                var step = (_lash[i] - _lash[i + 1]).magnitude;   // 원래 점 간격 유지
+                _lash[i] = _lash[i + 1] + d * step;               // 가던 방향 그대로 직진
             }
         }
 
