@@ -1355,6 +1355,7 @@ export async function createFaceAnalysisReportFromCapture(
     hasBackendApiBaseUrl,
     hasBucket: Boolean(capture?.bucket),
     hasFace3d: Boolean(onDeviceMeasurements?.face3d),
+    hasFace3dPhotoEvidence: Boolean(onDeviceMeasurements?.face3dPhotoEvidence),
     hasFaceGeometry2d: Boolean(faceGeometry2d),
     hasFaceVerticalThirds: Boolean(faceVerticalThirds),
     hasMeasuredPersonalColor: Boolean(measuredPersonalColor),

@@ -52,8 +52,16 @@ export function getGoldenMaskRetryDelayMs(attempts: number): number {
   );
 }
 
-export function shouldRetryGoldenMaskBackendStatus(status: number): boolean {
+export function shouldRetryGoldenMaskBackendStatus(
+  status: number,
+  code?: string,
+): boolean {
   return (
+    // A backend that predates the Golden Mask route returns FastAPI's bare
+    // 404 without our domain error envelope. Preserve the only local mesh
+    // until the backend rollout catches up. A coded 404 (for example,
+    // ANALYSIS_REPORT_NOT_FOUND) is a real terminal ownership/resource error.
+    (status === 404 && !code) ||
     status === 408 ||
     status === 425 ||
     status === 429 ||
