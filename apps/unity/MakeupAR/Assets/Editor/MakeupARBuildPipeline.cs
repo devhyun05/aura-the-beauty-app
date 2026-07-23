@@ -127,6 +127,11 @@ public static class MakeupARBuildPipeline
         RunProcess(
             "/usr/bin/ditto",
             "\"" + mediaPipeFramework + "\" \"" + mediaPipeDestination + "\"");
+        string mediaPipeInfoPlist = Path.Combine(mediaPipeDestination, "Info.plist");
+        RunProcess(
+            "/usr/bin/plutil",
+            "-replace CFBundlePackageType -string FMWK \""
+            + mediaPipeInfoPlist + "\"");
 
         Debug.Log(
             "[BuildPipeline] installed UnityFramework.framework, MediaPipeUnity.framework and Data into "

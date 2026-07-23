@@ -77,6 +77,16 @@ MP_FRAMEWORK_SRC="$(find "${UNITY_EXPORT_PATH}/Frameworks" -type d -name 'MediaP
 if [[ -n "${MP_FRAMEWORK_SRC}" && -d "${MP_FRAMEWORK_SRC}" ]]; then
   echo "[aura:unity] Copying MediaPipeUnity.framework from ${MP_FRAMEWORK_SRC}"
   rsync -a --delete "${MP_FRAMEWORK_SRC}" "${MOBILE_UNITY_BUILD_DIR}/"
+  MP_FRAMEWORK_INFO_PLIST="${MOBILE_UNITY_BUILD_DIR}/MediaPipeUnity.framework/Info.plist"
+  if [[ ! -f "${MP_FRAMEWORK_INFO_PLIST}" ]]; then
+    echo "[aura:unity] MediaPipeUnity.framework is missing Info.plist." >&2
+    exit 1
+  fi
+  # The upstream package has shipped this dynamic framework with APPL here.
+  # App Store Connect then treats it as a second application and searches for
+  # an app record named com.github.homuler.mediapipe.unity. Keep the binary and
+  # identifier unchanged; only declare the bundle's actual framework type.
+  /usr/bin/plutil -replace CFBundlePackageType -string FMWK "${MP_FRAMEWORK_INFO_PLIST}"
 else
   echo "[aura:unity] MediaPipeUnity.framework not found under ${UNITY_EXPORT_PATH}/Frameworks (MediaPipe path disabled?)."
 fi

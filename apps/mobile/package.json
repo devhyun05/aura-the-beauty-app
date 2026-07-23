@@ -4,7 +4,7 @@
   "private": true,
   "main": "index.ts",
   "scripts": {
-    "eas-build-pre-install": "node scripts/verify-eas-production-env.mjs",
+    "eas-build-pre-install": "bash ../../scripts/unity/normalize_mediapipe_ios_framework.sh && node scripts/verify-eas-production-env.mjs",
     "release:verify-env": "node scripts/verify-eas-production-env.mjs --force",
     "start": "expo start",
     "start:perf": "EXPO_PUBLIC_PERFORMANCE_LOGGING=true expo start --dev-client",
