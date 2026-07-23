@@ -163,6 +163,21 @@ public static class GlamTestRig
 
         var w = Mathf.Max(64, _w > 0 ? _w * superSize / 2 : 1080);
         var h = Mathf.Max(64, _h > 0 ? _h * superSize / 2 : 1440);
+        return CaptureCamera(cam, relPath, w, h);
+    }
+
+    /// <summary>
+    /// 다른 검증 리그도 같은 RT 캡처·luma 검사를 재사용하도록 카메라를 명시한다.
+    /// </summary>
+    public static float CaptureCamera(
+        Camera cam,
+        string relPath,
+        int width = 1080,
+        int height = 1440)
+    {
+        if (cam == null) { Debug.LogError("[GlamTestRig] 카메라 없음."); return -1f; }
+        var w = Mathf.Max(64, width);
+        var h = Mathf.Max(64, height);
         var rt = RenderTexture.GetTemporary(w, h, 24);
         var prevTarget = cam.targetTexture;
         var prevActive = RenderTexture.active;

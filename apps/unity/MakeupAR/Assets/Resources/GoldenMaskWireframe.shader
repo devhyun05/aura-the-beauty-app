@@ -52,9 +52,6 @@ Shader "AURA/GoldenMaskWireframe"
 
             fixed4 frag(v2f input) : SV_Target
             {
-                clip(
-                    _ProfileClipThreshold
-                    - input.objectPosition.x * _ProfileClipDirection);
                 return _Color;
             }
             ENDCG

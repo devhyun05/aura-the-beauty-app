@@ -64,9 +64,6 @@ Shader "AURA/GoldenMaskMarble"
                 v2f input,
                 fixed faceSign : VFACE) : SV_Target
             {
-                clip(
-                    _ProfileClipThreshold
-                    - input.objectPosition.x * _ProfileClipDirection);
                 float3 normal = normalize(input.worldNormal)
                     * (faceSign >= 0.0 ? 1.0 : -1.0);
                 float3 viewDirection = normalize(

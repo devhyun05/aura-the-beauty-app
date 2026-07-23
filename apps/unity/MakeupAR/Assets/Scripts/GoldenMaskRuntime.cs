@@ -22,7 +22,7 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
     private const float IdleDelaySeconds = 1.4f;
     private const float PresentationShellThicknessMeters = 0.0018f;
     private const float WireframeSurfaceOffsetMeters = 0.00025f;
-    private const float ProfileOccluderStartYaw = 42.0f;
+    private const float ProfileShellStartYaw = 84.0f;
 
     [Serializable]
     private sealed class LoadRequest
@@ -59,17 +59,14 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
     private Mesh shellMesh;
     private Mesh backingMesh;
     private Mesh wireframeMesh;
-    private Mesh profileOccluderMesh;
     private Material marbleMaterial;
     private Material shellMaterial;
     private Material cavityMaterial;
     private Material wireframeMaterial;
-    private Material profileOccluderMaterial;
     private MeshRenderer faceRenderer;
     private MeshRenderer shellRenderer;
     private MeshRenderer cavityRenderer;
     private MeshRenderer wireframeRenderer;
-    private MeshRenderer profileOccluderRenderer;
     private int presentationLayer = FallbackGoldenMaskLayer;
     private string runtimeMode = "live";
     private string activeRequestId = string.Empty;
@@ -346,15 +343,14 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
             // silhouette while preserving the measured face and shell.
             cavityRenderer.enabled = Mathf.Abs(displayYaw) < 72.0f;
         }
-        if (profileOccluderRenderer != null)
+        if (shellRenderer != null)
         {
-            // ARKit stores an open facial surface, not a closed head. From a
-            // three-quarter view an invisible center partition writes depth
-            // before the plaster, so only the camera-near half can render.
-            // Unlike fragment clipping, this does not cut triangles into
-            // detached wedges or draw a diagonal seam across the face.
-            profileOccluderRenderer.enabled =
-                Mathf.Abs(displayYaw) >= ProfileOccluderStartYaw;
+            // The thin finishing shell intersects the open ARKit surface in
+            // three-quarter views and reads as a second face. Keep the raw
+            // measured surface untouched there; show the clean edge treatment
+            // only when the user is actually inspecting a full profile.
+            shellRenderer.enabled =
+                Mathf.Abs(displayYaw) >= ProfileShellStartYaw;
         }
         Quaternion target = Quaternion.Euler(
             requestedPitch,
@@ -393,11 +389,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         {
             Destroy(wireframeMaterial);
             wireframeMaterial = null;
-        }
-        if (profileOccluderMaterial != null)
-        {
-            Destroy(profileOccluderMaterial);
-            profileOccluderMaterial = null;
         }
     }
 
@@ -439,25 +430,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         presentationRoot = new GameObject("Golden Mask Presentation");
         presentationRoot.layer = presentationLayer;
         presentationRoot.transform.SetParent(transform, false);
-
-        profileOccluderMesh = BuildProfileOccluderMesh(faceMesh.bounds);
-        GameObject profileOccluder = new GameObject(
-            "Golden Mask Far Side Depth Occluder");
-        profileOccluder.layer = presentationLayer;
-        profileOccluder.transform.SetParent(
-            presentationRoot.transform,
-            false);
-        MeshFilter profileOccluderFilter =
-            profileOccluder.AddComponent<MeshFilter>();
-        profileOccluderFilter.sharedMesh = profileOccluderMesh;
-        profileOccluderRenderer =
-            profileOccluder.AddComponent<MeshRenderer>();
-        profileOccluderRenderer.sharedMaterial =
-            profileOccluderMaterial;
-        profileOccluderRenderer.shadowCastingMode =
-            ShadowCastingMode.Off;
-        profileOccluderRenderer.receiveShadows = false;
-        profileOccluderRenderer.enabled = false;
 
         GameObject face = new GameObject("Measured Face Mesh");
         face.layer = presentationLayer;
@@ -602,46 +574,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
                 "_Color",
                 new Color(0.48f, 0.86f, 0.96f, 0.58f));
         }
-        if (profileOccluderMaterial == null)
-        {
-            Shader shader = Resources.Load<Shader>(
-                    "GoldenMaskDepthOccluder")
-                ?? Shader.Find("AURA/GoldenMaskDepthOccluder");
-            if (shader == null)
-            {
-                throw new InvalidOperationException(
-                    "Golden Mask depth occluder shader is unavailable.");
-            }
-            profileOccluderMaterial = new Material(shader)
-            {
-                name = "Golden Mask Invisible Far Side Occluder"
-            };
-        }
-    }
-
-    private static Mesh BuildProfileOccluderMesh(Bounds bounds)
-    {
-        float yPadding = Mathf.Max(bounds.extents.y * 0.18f, 0.01f);
-        float zPadding = Mathf.Max(bounds.extents.z * 0.75f, 0.025f);
-        float x = bounds.center.x;
-        float minY = bounds.min.y - yPadding;
-        float maxY = bounds.max.y + yPadding;
-        float minZ = bounds.min.z - zPadding;
-        float maxZ = bounds.max.z + zPadding;
-        Mesh mesh = new Mesh
-        {
-            name = "Golden Mask Center Depth Partition"
-        };
-        mesh.vertices = new[]
-        {
-            new Vector3(x, minY, minZ),
-            new Vector3(x, maxY, minZ),
-            new Vector3(x, maxY, maxZ),
-            new Vector3(x, minY, maxZ)
-        };
-        mesh.triangles = new[] {0, 1, 2, 0, 2, 3};
-        mesh.RecalculateBounds();
-        return mesh;
     }
 
     private static Mesh BuildWireframeMesh(
@@ -1310,7 +1242,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         shellRenderer = null;
         cavityRenderer = null;
         wireframeRenderer = null;
-        profileOccluderRenderer = null;
         if (presentationRoot != null)
         {
             presentationRoot.SetActive(false);
@@ -1336,11 +1267,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         {
             Destroy(wireframeMesh);
             wireframeMesh = null;
-        }
-        if (profileOccluderMesh != null)
-        {
-            Destroy(profileOccluderMesh);
-            profileOccluderMesh = null;
         }
         ApplyVisibility();
     }
