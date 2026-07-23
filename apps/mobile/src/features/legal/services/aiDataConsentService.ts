@@ -31,6 +31,12 @@ const REQUIRED_AI_DATA_CONSENT_PURPOSES = [
   'third_party_ai',
 ] as const;
 
+const AI_DATA_CONSENT_PURPOSE_WIRE_KEYS = {
+  camera_analysis: ['camera_analysis', 'cameraAnalysis'],
+  ai_processing: ['ai_processing', 'aiProcessing'],
+  third_party_ai: ['third_party_ai', 'thirdPartyAi'],
+} as const;
+
 export function isCurrentAiDataConsentAccepted(
   state: AiDataConsentState | null | undefined,
 ): boolean {
@@ -51,10 +57,27 @@ export function isCurrentAiDataConsentAccepted(
   });
 }
 
-function normalizeConsentState(state: AiDataConsentState): AiDataConsentState {
-  return {
+export function normalizeAiDataConsentState(
+  state: AiDataConsentState,
+): AiDataConsentState {
+  const purposes = Object.fromEntries(
+    REQUIRED_AI_DATA_CONSENT_PURPOSES.map(purpose => {
+      const wireKeys = AI_DATA_CONSENT_PURPOSE_WIRE_KEYS[purpose];
+      const purposeState = wireKeys
+        .map(key => state.purposes?.[key])
+        .find(candidate => candidate !== undefined);
+
+      return [purpose, purposeState];
+    }),
+  ) as AiDataConsentState['purposes'];
+  const normalizedState = {
     ...state,
-    accepted: isCurrentAiDataConsentAccepted(state),
+    purposes,
+  };
+
+  return {
+    ...normalizedState,
+    accepted: isCurrentAiDataConsentAccepted(normalizedState),
   };
 }
 
@@ -76,7 +99,7 @@ export async function getAiDataConsent(
     '/privacy/ai-consent',
     {method: 'GET'},
   );
-  const normalizedConsent = normalizeConsentState(consent);
+  const normalizedConsent = normalizeAiDataConsentState(consent);
   if (requestGeneration === cacheGeneration) {
     cachedConsent = {state: normalizedConsent, userId};
   }
@@ -97,7 +120,7 @@ export async function updateAiDataConsent(
       method: 'PUT',
     },
   );
-  const normalizedConsent = normalizeConsentState(consent);
+  const normalizedConsent = normalizeAiDataConsentState(consent);
   if (requestGeneration === cacheGeneration) {
     cachedConsent = {state: normalizedConsent, userId};
   }

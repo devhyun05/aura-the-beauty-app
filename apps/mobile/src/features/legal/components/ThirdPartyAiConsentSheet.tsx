@@ -58,8 +58,10 @@ export function ThirdPartyAiConsentSheet({
       visible={visible}>
       <View style={[styles.screen, {paddingBottom: Math.max(insets.bottom, spacing.lg)}]}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            {isSettings ? 'AI 데이터 관리' : '얼굴 사진의 외부 AI 처리를 허용할까요?'}
+          <Text
+            lineBreakStrategyIOS="hangul-word"
+            style={styles.headerTitle}>
+            {isSettings ? 'AI 데이터 관리' : '외부 AI 처리를 허용할까요?'}
           </Text>
           <Pressable
             accessibilityLabel="닫기"
@@ -73,6 +75,7 @@ export function ThirdPartyAiConsentSheet({
 
         <ScrollView
           contentContainerStyle={styles.content}
+          style={styles.scroll}
           showsVerticalScrollIndicator={false}>
           {isSettings ? (
             <View style={[styles.statusCard, accepted ? styles.acceptedCard : styles.revokedCard]}>
@@ -82,9 +85,11 @@ export function ThirdPartyAiConsentSheet({
               </Text>
             </View>
           ) : (
-            <Text style={styles.intro}>
-              AURA는 선택한 AI 분석·생성 기능을 제공하기 위해 아래 정보를 외부 AI
-              서비스로 전송합니다. 동의하기 전에는 전송하지 않습니다.
+            <Text
+              lineBreakStrategyIOS="hangul-word"
+              style={styles.intro}>
+              AURA는 선택한 AI 분석·생성 기능을 제공하기 위해 필요한 정보를 외부 AI
+              서비스로 전송할 수 있어요. 동의 전에는 전송하지 않아요.
             </Text>
           )}
 
@@ -96,8 +101,16 @@ export function ThirdPartyAiConsentSheet({
                   styles.disclosureSection,
                   index < disclosureSections.length - 1 ? styles.sectionDivider : null,
                 ]}>
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-                <Text style={styles.sectionBody}>{section.body}</Text>
+                <Text
+                  lineBreakStrategyIOS="hangul-word"
+                  style={styles.sectionTitle}>
+                  {section.title}
+                </Text>
+                <Text
+                  lineBreakStrategyIOS="hangul-word"
+                  style={styles.sectionBody}>
+                  {section.body}
+                </Text>
               </View>
             ))}
           </View>
@@ -105,13 +118,13 @@ export function ThirdPartyAiConsentSheet({
           <Text style={styles.rightsNotice}>
             다른 사람의 사진은 업로드·분석할 권한이 있는 경우에만 사용해 주세요.
           </Text>
-          {errorMessage ? (
-            <Text accessibilityLiveRegion="polite" style={styles.errorText}>
-              {errorMessage}
-            </Text>
-          ) : null}
         </ScrollView>
 
+        {errorMessage ? (
+          <Text accessibilityLiveRegion="polite" style={styles.errorText}>
+            {errorMessage}
+          </Text>
+        ) : null}
         <View style={styles.actions}>
           {accepted ? (
             <Pressable
@@ -156,12 +169,14 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
   },
   closeButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 40,
+    minWidth: 40,
   },
   closeLabel: {
     color: colors.textSecondary,
@@ -169,8 +184,10 @@ const styles = StyleSheet.create({
     fontSize: typography.fontSize.sm,
   },
   content: {
-    gap: spacing.lg,
-    padding: spacing.lg,
+    gap: spacing.xl,
+    paddingBottom: spacing.xxl,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
   },
   disabledButton: {
     opacity: 0.55,
@@ -184,13 +201,16 @@ const styles = StyleSheet.create({
   },
   disclosureSection: {
     gap: spacing.sm,
-    padding: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
   },
   errorText: {
     color: '#B3544D',
     fontFamily: typography.fontFamily.medium,
     fontSize: typography.fontSize.sm,
     lineHeight: typography.lineHeight.sm,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.sm,
     textAlign: 'center',
   },
   header: {
@@ -198,17 +218,19 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ECE9E4',
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
+    gap: spacing.md,
     justifyContent: 'space-between',
-    minHeight: 64,
-    paddingHorizontal: spacing.lg,
+    minHeight: 68,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
   headerTitle: {
     color: colors.textPrimary,
     flex: 1,
     fontFamily: typography.fontFamily.bold,
-    fontSize: 20,
+    fontSize: typography.fontSize.lg,
     fontWeight: typography.fontWeight.bold,
-    lineHeight: 28,
+    lineHeight: typography.lineHeight.lg,
   },
   intro: {
     color: colors.textSecondary,
@@ -242,6 +264,9 @@ const styles = StyleSheet.create({
   },
   screen: {
     backgroundColor: colors.white,
+    flex: 1,
+  },
+  scroll: {
     flex: 1,
   },
   secondaryButton: {

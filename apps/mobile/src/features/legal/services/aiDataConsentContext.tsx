@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 
 import {useAuthSession} from '../../auth/services/authSessionContext';
+import {BackendApiError} from '../../../shared/services/backendApi';
 import {ThirdPartyAiConsentSheet} from '../components/ThirdPartyAiConsentSheet';
 import {
   clearAiDataConsentCache,
@@ -79,16 +80,16 @@ export function AiDataConsentProvider({children}: AiDataConsentProviderProps) {
       if (isCurrentAiDataConsentAccepted(current)) {
         return true;
       }
-    } catch {
+    } catch (error) {
       if (
         userIdRef.current !== userId ||
         requestSequenceRef.current !== requestSequence
       ) {
         return false;
       }
-      setErrorMessage(
-        '동의 상태를 확인하지 못했어요. 아래 내용을 확인하고 다시 동의해 주세요.',
-      );
+      setErrorMessage(error instanceof BackendApiError && error.status === 401
+        ? '로그인이 만료됐어요. 닫은 뒤 다시 로그인해 주세요.'
+        : '동의 상태를 확인하지 못했어요. 아래 내용을 확인하고 다시 동의해 주세요.');
     }
 
     setMode('request');
@@ -161,12 +162,14 @@ export function AiDataConsentProvider({children}: AiDataConsentProviderProps) {
         setVisible(false);
         resolvePending(true);
       })
-      .catch(() => {
+      .catch(error => {
         if (
           userIdRef.current === userId &&
           requestSequenceRef.current === requestSequence
         ) {
-          setErrorMessage('동의를 저장하지 못했어요. 네트워크를 확인해 주세요.');
+          setErrorMessage(error instanceof BackendApiError && error.status === 401
+            ? '로그인이 만료됐어요. 닫은 뒤 다시 로그인해 주세요.'
+            : '동의를 저장하지 못했어요. 네트워크를 확인해 주세요.');
         }
       })
       .finally(() => {

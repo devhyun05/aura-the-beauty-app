@@ -49,7 +49,7 @@ if (typeof isMakeupJourneyEnabled() !== 'boolean') {
 if (!process.env.EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED) {
   expectEqual(
     isMakeupJourneyEnabled(),
-    true,
-    'makeup journey defaults to visible after rollout',
+    false,
+    'makeup journey defaults to hidden when rollout env is absent',
   );
 }

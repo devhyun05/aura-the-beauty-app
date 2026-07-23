@@ -26,10 +26,10 @@ export const ACCOUNT_DELETION_REASONS: readonly {
 ] as const;
 
 export const ACCOUNT_DELETION_NOTICES = [
-  '계정과 프로필 정보가 삭제돼요.',
-  '분석 보고서, 업로드한 사진과 저장 기록이 삭제돼요.',
-  '작성한 커뮤니티 게시물과 컨설팅 내역이 삭제돼요.',
-  '탈퇴한 계정과 데이터는 복구할 수 없어요.',
+  '계정과 프로필 정보의 삭제 절차가 시작돼요.',
+  '분석 보고서, 업로드한 사진과 저장 기록의 삭제 절차가 시작돼요.',
+  '작성한 커뮤니티 게시물과 컨설팅 내역의 삭제 절차가 시작돼요.',
+  '탈퇴가 완료된 계정은 다시 복구할 수 없어요.',
 ] as const;
 
 type AccountDeletionScreenProps = {
@@ -51,7 +51,7 @@ export function AccountDeletionScreen({onDeleteAccount}: AccountDeletionScreenPr
 
     Alert.alert(
       '정말 탈퇴할까요?',
-      '탈퇴를 완료하면 계정과 연결된 데이터가 삭제되며 되돌릴 수 없어요.',
+      '탈퇴를 완료하면 계정과 연결된 운영 데이터의 삭제 절차가 시작되며 계정을 되돌릴 수 없어요.',
       [
         {style: 'cancel', text: '취소'},
         {
@@ -95,7 +95,7 @@ export function AccountDeletionScreen({onDeleteAccount}: AccountDeletionScreenPr
             </View>
             <Text style={styles.title}>탈퇴 전 꼭 확인해 주세요</Text>
             <Text style={styles.description}>
-              회원 탈퇴가 완료되면 아래 정보를 다시 복구할 수 없어요.
+              회원 탈퇴가 완료되면 아래 정보의 삭제 절차가 시작돼요.
             </Text>
           </View>
 
@@ -113,7 +113,8 @@ export function AccountDeletionScreen({onDeleteAccount}: AccountDeletionScreenPr
           </View>
 
           <Text style={styles.retentionNote}>
-            법령에 따라 보관 의무가 있는 기록은 정해진 기간 동안 별도로 보관될 수 있어요.
+            자동 백업은 최대 7일 후 순환 삭제돼요. 법령 준수·분쟁 대응·보안에 필요한
+            최소 기록은 필요한 기간 동안 별도로 보관될 수 있어요.
           </Text>
 
           <Pressable
@@ -131,7 +132,7 @@ export function AccountDeletionScreen({onDeleteAccount}: AccountDeletionScreenPr
               ) : null}
             </View>
             <Text style={styles.acknowledgementText}>
-              삭제되는 정보와 복구 불가 안내를 모두 확인했어요.
+              삭제 절차와 계정 복구 불가 안내를 모두 확인했어요.
             </Text>
           </Pressable>
 

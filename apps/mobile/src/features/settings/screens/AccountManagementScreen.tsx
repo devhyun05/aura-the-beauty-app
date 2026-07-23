@@ -90,7 +90,7 @@ export function AccountManagementScreen({
             onPress={onLogout}
           />
           <AccountAction
-            description="계정과 연결된 데이터를 영구적으로 삭제해요."
+            description="계정과 연결된 데이터의 삭제 절차를 시작해요."
             destructive
             icon={Trash2}
             isLast

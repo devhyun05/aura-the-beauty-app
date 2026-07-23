@@ -459,7 +459,7 @@ export function FaceCaptureTutorialScreen({
           <View style={styles.privacyNoticePlaceholder}>
             <Text style={styles.privacyNoticeText}>
               촬영한 사진은 AI 분석과 보고서 생성에만 사용되며, 보고서 삭제 또는
-              회원 탈퇴 시 함께 삭제됩니다.
+              회원 탈퇴 시 관련 데이터의 삭제 절차가 시작됩니다.
             </Text>
           </View>
 
