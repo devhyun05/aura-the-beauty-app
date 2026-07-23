@@ -179,7 +179,7 @@ const headerIndex = detailScreen.indexOf('\n      <DetailHeader');
 const pagerIndex = detailScreen.indexOf('\n        <FlatList');
 expect(headerIndex >= 0 && pagerIndex > headerIndex, 'fixed detail header is outside and before the report pager');
 expect(
-  detailScreen.match(/\n\s*<ScrollView\n/g)?.length === 1,
+  detailScreen.match(/\r?\n\s*<ScrollView\r?\n/g)?.length === 1,
   'each report page reuses one vertical ScrollView implementation',
 );
 expect(
@@ -493,7 +493,7 @@ expect(
 );
 expect(
   feedbackRoutes.includes('entryDate: flowContext.entryDate,') &&
-    feedbackRoutes.includes(': {\n              entryDate: flowContext.entryDate,') &&
+    /: \{\r?\n              entryDate: flowContext\.entryDate,/.test(feedbackRoutes) &&
     journeyRoutes.includes(
       'navigation.setParams({entryDate: nextEntryDate, initialReportId: undefined})',
     ),

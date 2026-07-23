@@ -159,6 +159,10 @@ async def resolve_test_media(*_args, **_kwargs) -> dict:
   return owned_media()
 
 
+async def allow_report_generation(_db, **_kwargs) -> None:
+  return None
+
+
 class AnalysisDatabase:
   def __init__(self) -> None:
     self.insert_args: tuple | None = None
@@ -250,6 +254,11 @@ async def test_owned_analysis_media_is_queued_after_trusted_payload_rewrite(
 
   monkeypatch.setattr(analysis_api, "ensure_user", ensure_test_user)
   monkeypatch.setattr(analysis_api, "resolve_owned_source_media", resolve_test_media)
+  monkeypatch.setattr(
+    analysis_api,
+    "enforce_report_generation_limit",
+    allow_report_generation,
+  )
   monkeypatch.setattr(analysis_api, "AIJobQueuePublisher", Publisher)
   db = AnalysisDatabase()
   background_tasks = BackgroundTasks()
@@ -304,6 +313,11 @@ async def test_calibrated_face3d_receipt_is_consumed_atomically_with_report(
 ) -> None:
   monkeypatch.setattr(analysis_api, "ensure_user", ensure_test_user)
   monkeypatch.setattr(analysis_api, "resolve_owned_source_media", resolve_test_media)
+  monkeypatch.setattr(
+    analysis_api,
+    "enforce_report_generation_limit",
+    allow_report_generation,
+  )
   profile = calibrated_face3d_profile(datetime.now(UTC))
   db = TransactionalAnalysisDatabase()
 
@@ -379,6 +393,11 @@ async def test_owned_reference_media_is_queued_without_running_ai_in_api(
     raise AssertionError("Reference AI must run in the worker, not the API request.")
 
   monkeypatch.setattr(filter_extractions_api, "ensure_user", ensure_test_user)
+  monkeypatch.setattr(
+    filter_extractions_api,
+    "enforce_report_generation_limit",
+    allow_report_generation,
+  )
   monkeypatch.setattr(
     filter_extractions_api,
     "resolve_owned_source_media",

@@ -1,9 +1,10 @@
-import React from 'react';
+import React, {useCallback, useContext, useEffect, useId} from 'react';
 import { StyleProp, Text, View, ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import { color, font } from '../reportTokens';
 import type { PhotoSlotData } from '../reportTypes';
 import { Hatch } from './Hatch';
+import {FaceReportCaptureAssetContext} from '../services/reportCaptureAssetContext';
 
 interface Props {
   slot: PhotoSlotData;
@@ -17,14 +18,49 @@ export function PhotoSlot({ slot, shape = 'rect', radius = 0, style }: Props) {
   const br = shape === 'circle' || shape === 'oval' ? 999 : radius;
   const c = slot.cropRect;
   const hasCrop = !!c && c.w > 0 && c.h > 0;
+  const captureAssetContext = useContext(FaceReportCaptureAssetContext);
+  const captureAssetId = useId();
+  const hasCaptureAsset = Boolean(captureAssetContext && slot.uri);
+
+  useEffect(() => {
+    if (!captureAssetContext || !slot.uri) {
+      return;
+    }
+
+    captureAssetContext.registerAsset(captureAssetId);
+    return () => captureAssetContext.unregisterAsset(captureAssetId);
+  }, [captureAssetContext, captureAssetId, slot.uri]);
+
+  const handleLoadStart = useCallback(() => {
+    if (hasCaptureAsset) {
+      captureAssetContext?.markAssetPending(captureAssetId);
+    }
+  }, [captureAssetContext, captureAssetId, hasCaptureAsset]);
+
+  const handleLoadSettled = useCallback(() => {
+    if (hasCaptureAsset) {
+      captureAssetContext?.markAssetSettled(captureAssetId);
+    }
+  }, [captureAssetContext, captureAssetId, hasCaptureAsset]);
+
+  const imageReadinessProps = hasCaptureAsset
+    ? {
+        onError: handleLoadSettled,
+        onLoadEnd: handleLoadSettled,
+        onLoadStart: handleLoadStart,
+      }
+    : undefined;
+  const transition = hasCaptureAsset ? 0 : 150;
+
   return (
     <View style={[{ borderRadius: br, overflow: 'hidden', backgroundColor: color.hatchB }, style]}>
       {slot.uri && hasCrop && c ? (
         <View style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
           <Image
+            {...imageReadinessProps}
             source={{ uri: slot.uri }}
             contentFit="cover"
-            transition={150}
+            transition={transition}
             style={{
               position: 'absolute',
               width: `${100 / c.w}%`,
@@ -35,7 +71,13 @@ export function PhotoSlot({ slot, shape = 'rect', radius = 0, style }: Props) {
           />
         </View>
       ) : slot.uri ? (
-        <Image source={{ uri: slot.uri }} style={{ width: '100%', height: '100%' }} contentFit="cover" transition={150} />
+        <Image
+          {...imageReadinessProps}
+          source={{ uri: slot.uri }}
+          style={{ width: '100%', height: '100%' }}
+          contentFit="cover"
+          transition={transition}
+        />
       ) : (
         <View style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', padding: 8 }}>
           <Hatch colorA={color.hatchC} colorB={color.bg} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />

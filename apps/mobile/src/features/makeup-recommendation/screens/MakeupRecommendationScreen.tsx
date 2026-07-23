@@ -28,7 +28,7 @@ import {
   createMakeupRecommendationIdempotencyKey,
   deleteGeneratedMakeupRecommendationReport,
   fetchGeneratedMakeupRecommendationReport,
-  fetchGeneratedMakeupRecommendationReports,
+  fetchGeneratedMakeupRecommendationReportPage,
   fetchGeneratedMakeupRecommendationSessionV2,
   fetchMakeupRecommendationDiscovery,
   generateMakeupRecommendationV2,
@@ -37,6 +37,7 @@ import {
   refineMakeupRecommendation,
   refreshGeneratedMakeupRecommendation,
   restoreMakeupRecommendationReport,
+  rewindMakeupRecommendationHistoryOffset,
   retryGeneratedMakeupRecommendationImages,
   startGeneratedMakeupRecommendationV2,
   type StartMakeupRecommendationV2Input,
@@ -284,6 +285,10 @@ export const MakeupRecommendationScreen = forwardRef<
   const loadedReportId = useRef<string | null>(null);
   const loadedInitialView = useRef(false);
   const hydratedReportDetailIds = useRef(new Set<string>());
+  const historyNextOffset = useRef(0);
+  const historyListRevision = useRef(0);
+  const historyLoadInFlight = useRef(false);
+  const historyMutationInFlight = useRef(false);
 
   const beginOperation = useCallback((slot: typeof workflowRequest) => {
     slot.current?.controller.abort();
@@ -709,25 +714,35 @@ export const MakeupRecommendationScreen = forwardRef<
     })();  };
 
   const loadHistory = useCallback(async (mode: 'replace' | 'append' = 'replace') => {
+    if (historyLoadInFlight.current || historyMutationInFlight.current) return;
+
+    historyLoadInFlight.current = true;
+    const requestRevision = historyListRevision.current;
     if (mode === 'append') setIsLoadingMoreHistory(true);
     else setIsLoadingHistory(true);
     setHistoryError('');
     try {
-      const offset = mode === 'append' ? historyItems.length : 0;
-      const reports = await fetchGeneratedMakeupRecommendationReports({limit: HISTORY_PAGE_SIZE, offset});
+      const offset = mode === 'append' ? historyNextOffset.current : 0;
+      const page = await fetchGeneratedMakeupRecommendationReportPage({limit: HISTORY_PAGE_SIZE, offset});
+      if (requestRevision !== historyListRevision.current) return;
+
+      historyNextOffset.current = page.nextOffset;
       setHistoryItems(previous => {
-        if (mode === 'replace') return reports;
+        if (mode === 'replace') return page.reports;
         const known = new Set(previous.map(item => item.reportId));
-        return [...previous, ...reports.filter(item => !known.has(item.reportId))];
+        return [...previous, ...page.reports.filter(item => !known.has(item.reportId))];
       });
-      setHasMoreHistory(reports.length === HISTORY_PAGE_SIZE);
+      setHasMoreHistory(page.hasMore);
     } catch (error) {
-      setHistoryError(error instanceof Error ? error.message : '지난 추천을 불러오지 못했어요.');
+      if (requestRevision === historyListRevision.current) {
+        setHistoryError(error instanceof Error ? error.message : '지난 추천을 불러오지 못했어요.');
+      }
     } finally {
+      historyLoadInFlight.current = false;
       setIsLoadingHistory(false);
       setIsLoadingMoreHistory(false);
     }
-  }, [historyItems.length]);
+  }, []);
 
   useEffect(() => {
     if (initialView !== 'history' || loadedInitialView.current) return;
@@ -953,17 +968,29 @@ export const MakeupRecommendationScreen = forwardRef<
 
   const handleDeleteHistoryReport = useCallback(
     async (item: MakeupRecommendationReportHistoryItem) => {
-      await deleteGeneratedMakeupRecommendationReport(item.reportId);
-      setHistoryItems(current =>
-        current.filter(historyItem => historyItem.reportId !== item.reportId),
-      );
+      if (historyMutationInFlight.current) return;
 
-      if (session?.reportId === item.reportId) {
-        await clearCurrentMakeupRecommendationSessionId(
-          AsyncStorage,
-          session.generationMode === 'v2' ? session.id : undefined,
+      historyMutationInFlight.current = true;
+      historyListRevision.current += 1;
+      try {
+        await deleteGeneratedMakeupRecommendationReport(item.reportId);
+        historyListRevision.current += 1;
+        historyNextOffset.current = rewindMakeupRecommendationHistoryOffset(
+          historyNextOffset.current,
         );
-        setSession(undefined);
+        setHistoryItems(current =>
+          current.filter(historyItem => historyItem.reportId !== item.reportId),
+        );
+
+        if (session?.reportId === item.reportId) {
+          await clearCurrentMakeupRecommendationSessionId(
+            AsyncStorage,
+            session.generationMode === 'v2' ? session.id : undefined,
+          );
+          setSession(undefined);
+        }
+      } finally {
+        historyMutationInFlight.current = false;
       }
     },
     [session],

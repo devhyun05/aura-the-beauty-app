@@ -85,6 +85,7 @@ export const MAKEUP_SITUATION_FIXTURES: readonly MakeupSituation[] = [
     keyword('festival_performance', 'theme-costume', '테마 파티·코스프레', 'CURATED', '정해진 테마나 캐릭터가 있는 파티에 참여하는 상황', ['theme', 'costume']),
     keyword('festival_performance', 'stage-performance', '무대 공연', 'CURATED', '관객과 조명 앞에서 무대 공연을 하는 상황', ['stage', 'performance']),
     keyword('festival_performance', 'fashion-art-event', '패션 행사·전시 오프닝', 'CURATED', '패션 행사나 전시 오프닝에 참석하는 색다른 상황', ['fashion', 'art-event']),
+    keyword('festival_performance', 'romance-fantasy-heroine', '로판 여주', 'CURATED', '로맨스 판타지 작품의 여주인공처럼 연출하고 싶은 테마 촬영이나 코스프레 상황', ['romance-fantasy', 'heroine', 'costume']),
   ]),
 ];
 

@@ -271,26 +271,44 @@ export type AuradinThinkingStep = {
   status: 'done' | 'active' | 'pending';
 };
 
-// §8.2-1 마감감 추상 질감 스와치 4종 — 제품 사진·생성형 발색 이미지 금지(§8.2-2/5).
-export type AuradinTextureKind = 'glossy' | 'matte' | 'velvet' | 'shimmer';
 
-// 질문 옵션 타일 채움 스펙. string은 기존 단색 hex(중립 타일 폴백),
-// gradient는 colorFamily 3색 밝기 그라데이션(§8.2-3), texture는 추상 질감(§8.2-1).
-export type AuradinSwatchSpec =
+export type AuradinQuestionCategory = Exclude<ProductRecommendationCategory, 'all'>;
+export type AuradinQuestionAttribute =
+  | 'category'
+  | 'priceTier'
+  | 'channel'
+  | 'finish'
+  | 'texture'
+  | 'colorFamily';
+
+export type AuradinQuestionVisual =
+  | {kind: 'category'; category: AuradinQuestionCategory; source: ImageSourcePropType}
   | {kind: 'gradient'; colors: [string, string, string]}
-  | {kind: 'texture'; texture: AuradinTextureKind};
-
-export type AuradinSwatch = string | AuradinSwatchSpec;
+  | {
+      kind: 'application';
+      attribute: 'finish' | 'texture';
+      value: string;
+      source: ImageSourcePropType;
+    }
+  | {kind: 'descriptor'; description: string}
+  | {kind: 'price'}
+  | {kind: 'channel'; channel: 'oliveyoung' | 'department_store' | 'naver'}
+  | {kind: 'neutral'}
+  | {kind: 'noop'};
 
 export type AuradinQuestionOption = {
   id: string;
   label: string;
-  swatch?: AuradinSwatch;
+  attribute?: string;
+  value?: string;
+  op?: string;
 };
 
 export type AuradinQuestion = {
   id: string;
   title: string;
+  attribute?: AuradinQuestionAttribute;
+  contextCategory?: AuradinQuestionCategory;
   options: AuradinQuestionOption[];
 };
 

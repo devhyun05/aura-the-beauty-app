@@ -1063,7 +1063,11 @@ export const getFaceAnalysisReports = async (
   options: GetFaceAnalysisReportsOptions = {},
 ): Promise<FaceAnalysisReport[]> => {
   if (!getBackendApiBaseUrl()) {
-    return [];
+    throw new BackendApiError(
+      '얼굴 분석 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행해 주세요.',
+      503,
+      'FACE_ANALYSIS_API_BASE_URL_MISSING',
+    );
   }
 
   const {reports} = await requestBackendJson<ListAnalysisReportsResponse>(
@@ -1089,7 +1093,11 @@ export const getFaceAnalysisReports = async (
 export const getLatestFaceAnalysisReport =
   async (): Promise<FaceAnalysisReport | null> => {
     if (!getBackendApiBaseUrl()) {
-      return null;
+      throw new BackendApiError(
+        '얼굴 분석 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행해 주세요.',
+        503,
+        'FACE_ANALYSIS_API_BASE_URL_MISSING',
+      );
     }
 
     // 목록 응답은 measurements 를 제외해 경량화되므로(백엔드 #- 처리),
@@ -1108,7 +1116,11 @@ export const getFaceAnalysisReportById = async (
   reportId: string,
 ): Promise<FaceAnalysisReport | null> => {
   if (!getBackendApiBaseUrl()) {
-    return null;
+    throw new BackendApiError(
+      '얼굴 분석 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행해 주세요.',
+      503,
+      'FACE_ANALYSIS_API_BASE_URL_MISSING',
+    );
   }
 
   const {report} = await requestBackendJson<GetAnalysisReportResponse>(
@@ -1122,7 +1134,11 @@ export const deleteFaceAnalysisReport = async (
   reportId: string,
 ): Promise<boolean> => {
   if (!getBackendApiBaseUrl()) {
-    return true;
+    throw new BackendApiError(
+      '얼굴 분석 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행해 주세요.',
+      503,
+      'FACE_ANALYSIS_API_BASE_URL_MISSING',
+    );
   }
 
   const response = await requestBackendJson<DeleteAnalysisReportResponse>(
@@ -1141,7 +1157,11 @@ export const deleteFaceAnalysisRecommendedMakeup = async ({
   reportId: string;
 }): Promise<FaceAnalysisReport | null> => {
   if (!getBackendApiBaseUrl()) {
-    return null;
+    throw new BackendApiError(
+      '얼굴 분석 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행해 주세요.',
+      503,
+      'FACE_ANALYSIS_API_BASE_URL_MISSING',
+    );
   }
 
   const {report} = await requestBackendJson<GetAnalysisReportResponse>(

@@ -31,11 +31,20 @@ function expectEqual<T>(actual: T, expected: T, label: string) {
 expectEqual(makeupRecommendationDiscoveryCopy.title, '어떤 상황을 위한 메이크업인가요?', 'v2 discovery title');
 expectEqual(makeupRecommendationDiscoveryCopy.eyebrow, 'AI MAKEUP RECOMMENDATION', 'v2 discovery eyebrow');
 expectEqual(MAKEUP_SITUATION_FIXTURES.length, 4, 'four broad parent situations');
-expectEqual(MAKEUP_SITUATION_FIXTURES.every(item => item.keywords.length === 5), true, 'five concrete situations per parent');
+expectEqual(MAKEUP_SITUATION_FIXTURES.map(item => item.keywords.length).join(','), '5,5,5,6', 'unique-day parent adds one reviewed situation');
 expectEqual(MAKEUP_SITUATION_FIXTURES.map(item => item.label).join(','), '일상,특별한 날,촬영,독특한 날', 'broad parent labels');
 expectEqual(MAKEUP_SITUATION_FIXTURES.flatMap(item => item.keywords).every(item => item.kind === 'curated'), true, 'child options are situations rather than makeup styles');
 expectEqual(MAKEUP_SITUATION_FIXTURES.flatMap(item => item.keywords).some(item => /메이크업|립|블러시|매트|글로우/.test(item.label)), false, 'makeup style names are removed from situation keywords');
 expectEqual(new Set(MAKEUP_SITUATION_FIXTURES.map(item => item.key)).size, 4, 'situation keys are unique');
+const romanceFantasyHeroine = MAKEUP_SITUATION_FIXTURES
+  .find(item => item.key === 'festival_performance')
+  ?.keywords.find(item => item.label === '로판 여주');
+expectEqual(romanceFantasyHeroine?.id, 'fixture-festival_performance-romance-fantasy-heroine', 'romance-fantasy option keeps a stable fixture id');
+expectEqual(
+  romanceFantasyHeroine?.seedPrompt,
+  '로맨스 판타지 작품의 여주인공처럼 연출하고 싶은 테마 촬영이나 코스프레 상황',
+  'romance-fantasy option sends a concrete reviewed seed prompt',
+);
 expectEqual(MAKEUP_RECOMMENDATION_EDITORIAL_TRENDS.length, 12, 'twelve curated trend seeds');
 expectEqual(MAKEUP_RECOMMENDATION_EDITORIAL_TREND_INITIAL_COUNT, 6, 'six editorial trends before more');
 expectEqual(new Set(MAKEUP_RECOMMENDATION_EDITORIAL_TRENDS.map(item => item.id)).size, 12, 'editorial trend ids are unique');
@@ -303,6 +312,9 @@ expectEqual(customSituationComposerSource.includes('backgroundColor: colors.back
 expectEqual(customSituationComposerSource.includes("rgba(17, 17, 17, 0.08)"), false, 'custom sheet has no dim backdrop');
 expectEqual(analysisReportPickerSource.includes("rgba(17,17,17,0.42)"), false, 'report picker has no dim backdrop');
 expectEqual(customSituationComposerSource.includes('autoFocus'), true, 'custom sheet focuses its visible input');
+expectEqual(customSituationComposerSource.includes('const hasText = Boolean(value.trim());'), true, 'trimmed non-empty input controls custom submit availability');
+expectEqual(customSituationComposerSource.includes('const canSubmit = hasText && validation.isValid'), true, 'safe non-empty custom context enables question start');
+expectEqual(customSituationComposerSource.includes('언제 또는 어디에서 사용할지만 필수예요'), false, 'custom composer no longer requires a fixed when-or-where syntax');
 expectEqual(loadingViewSource.includes('const MESSAGE_INTERVAL_MS = 1500;'), true, 'short loading flow still advances through specialist messages');
 expectEqual(screenSource.includes('export const MIN_AGENT_CONVERSATION_MS = 6_000;'), true, 'agent conversation has a short minimum without delaying completed results');
 expectEqual(screenSource.includes('await waitForMinimumAgentConversation(loadingStartedAt, signal);'), true, 'result navigation waits for the minimum agent conversation');
@@ -323,6 +335,14 @@ expectEqual(screenSource.includes('getFaceAnalysisReportById(reportIdToHydrate)'
 expectEqual(screenSource.includes("type: 'report/detailLoaded'"), true, 'hydrated detail replaces list summary');
 expectEqual(screenSource.includes('reportRegionVisuals: sourceReport?.measurements?.regionVisuals'), true, 'result context receives region visuals');
 expectEqual(screenSource.includes("setPhase('reportLoading')"), true, 'direct report fetch uses neutral loading');
+expectEqual(screenSource.includes('const historyNextOffset = useRef(0);'), true, 'history keeps the server raw-record cursor outside the filtered card list');
+expectEqual(screenSource.includes('historyNextOffset.current = page.nextOffset;'), true, 'history advances using the consumed raw-record count');
+expectEqual(screenSource.includes('setHasMoreHistory(page.hasMore);'), true, 'history continuation follows raw page fullness');
+expectEqual(screenSource.includes("mode === 'append' ? historyItems.length : 0"), false, 'filtered card count never becomes the backend offset');
+expectEqual(screenSource.includes('historyNextOffset.current = rewindMakeupRecommendationHistoryOffset('), true, 'deleting a loaded server row rewinds the consumed raw cursor');
+expectEqual(screenSource.includes('if (historyLoadInFlight.current || historyMutationInFlight.current) return;'), true, 'append cannot start while another history load or deletion is active');
+expectEqual(screenSource.includes('const requestRevision = historyListRevision.current;'), true, 'history requests capture the list revision');
+expectEqual(screenSource.includes('if (requestRevision !== historyListRevision.current) return;'), true, 'a response racing with deletion cannot update cards or cursor');
 expectEqual(screenSource.includes('<RecommendationReportLoadingView />'), true, 'neutral report loading renders separately');
 expectEqual(
   screenSource.includes("prompt: '완성된 추천 메이크업 보고서를 불러오는 중이에요.'"),

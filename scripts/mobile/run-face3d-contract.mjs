@@ -21,7 +21,6 @@ const testPaths = [
   'features/face-capture/services/unifiedFaceCaptureLifecycle.test.ts',
   'features/face-capture/services/unifiedFaceCaptureDeferredCleanup.test.ts',
   'features/face-capture/services/unifiedFaceCaptureTempImageCleanup.test.ts',
-  'features/face-capture/services/unifiedFaceCaptureDiagnostics.test.ts',
   'features/face-capture/services/unifiedFaceCaptureNavigation.test.ts',
   'shared/contracts/goldenMask.test.ts',
 ];

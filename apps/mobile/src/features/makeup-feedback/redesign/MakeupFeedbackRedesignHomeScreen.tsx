@@ -1,5 +1,10 @@
-import type {ReactNode, RefObject} from 'react';
-import {Pressable, ScrollView, StyleSheet} from 'react-native';
+import {useCallback, useEffect, useRef, useState, type ReactNode, type RefObject} from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  type ImageSourcePropType,
+} from 'react-native';
 import {LinearGradient} from 'expo-linear-gradient';
 import {
   CalendarDays,
@@ -44,21 +49,26 @@ const FEEDBACK_CAPTURE_OPTIONS = {
   format: 'jpg',
   quality: 0.95,
   result: 'tmpfile',
+  useRenderInContext: true,
 } as const;
 
 export function MakeupFeedbackRedesignHomeScreen({
   captureRef,
+  captureRequestId,
   controller,
   createdAt,
   isShareBusy,
+  onCaptureDocumentSettledChange,
   onOpenRecord,
   onSave,
   onShare,
 }: {
   captureRef: RefObject<OptionalViewShotRef | null>;
+  captureRequestId: number;
   controller: MakeupFeedbackRedesignController;
   createdAt?: string;
   isShareBusy: boolean;
+  onCaptureDocumentSettledChange: (settled: boolean) => void;
   onOpenRecord: () => void;
   onSave: () => void;
   onShare: () => void;
@@ -75,6 +85,35 @@ export function MakeupFeedbackRedesignHomeScreen({
   const availableTabs = tabLabels.filter(
     tab => tab.id === 'all' || vm.groups.some(group => group.id === tab.id),
   );
+  const captureReadinessRef = useRef({
+    details: false,
+    hero: false,
+    requestId: captureRequestId,
+  });
+
+  if (captureReadinessRef.current.requestId !== captureRequestId) {
+    captureReadinessRef.current = {
+      details: false,
+      hero: false,
+      requestId: captureRequestId,
+    };
+  }
+
+  const updateCaptureReadiness = useCallback((
+    asset: 'details' | 'hero',
+    settled: boolean,
+  ) => {
+    if (
+      !isShareBusy
+      || captureReadinessRef.current.requestId !== captureRequestId
+    ) return;
+
+    captureReadinessRef.current[asset] = settled;
+    onCaptureDocumentSettledChange(
+      captureReadinessRef.current.details
+      && captureReadinessRef.current.hero,
+    );
+  }, [captureRequestId, isShareBusy, onCaptureDocumentSettledChange]);
 
   return (
     <ScrollView
@@ -105,6 +144,8 @@ export function MakeupFeedbackRedesignHomeScreen({
       <FeedbackEvidenceImage
         accessibilityLabel="분석에 사용한 메이크업 사진"
         height={440}
+        key={isShareBusy ? 'capture-hero:' + captureRequestId : 'display-hero'}
+        onSettledChange={settled => updateCaptureReadiness('hero', settled)}
         rounded={false}
         source={vm.imageSource}
       />
@@ -167,8 +208,10 @@ export function MakeupFeedbackRedesignHomeScreen({
                     ? undefined
                     : () => controller.openEvaluation(axis.jumpToEvaluationIndex!)
                 }
-                onToggle={() => controller.toggleAxis(axis.id)}
-                reduceMotion={controller.reduceMotion}
+                onToggle={() => {
+                  if (!isShareBusy) controller.toggleAxis(axis.id);
+                }}
+                reduceMotion={isShareBusy || controller.reduceMotion}
               />
             ))}
           </View>
@@ -268,6 +311,20 @@ export function MakeupFeedbackRedesignHomeScreen({
           ))}
         </View>
       </View>
+      {isShareBusy ? (
+        <CaptureEvaluationDetails
+          evaluations={vm.evaluations}
+          imageSource={vm.imageSource}
+          key={'capture-details:' + captureRequestId}
+          coachingPoints={vm.coachingPoints}
+          onEvidenceSettledChange={settled => {
+            updateCaptureReadiness('details', settled);
+          }}
+          priorityCorrections={vm.priorityCorrections}
+          score={vm.score}
+          summarySentence={vm.summarySentence}
+        />
+      ) : null}
         </View>
       </OptionalViewShot>
 
@@ -361,6 +418,264 @@ function EvaluationRow({
   );
 }
 
+function CaptureEvaluationDetails({
+  coachingPoints,
+  evaluations,
+  imageSource,
+  onEvidenceSettledChange,
+  priorityCorrections,
+  score,
+  summarySentence,
+}: {
+  coachingPoints: MakeupFeedbackRedesignEvaluation[];
+  evaluations: MakeupFeedbackRedesignEvaluation[];
+  imageSource: ImageSourcePropType;
+  onEvidenceSettledChange: (settled: boolean) => void;
+  priorityCorrections: MakeupFeedbackRedesignEvaluation[];
+  score: number;
+  summarySentence?: string | null;
+}) {
+  const [evidenceReadiness, setEvidenceReadiness] = useState<
+    Record<string, boolean>
+  >({});
+  const allEvidenceSettled = evaluations.every(
+    evaluation => evidenceReadiness[evaluation.id] === true,
+  );
+  const firstPossibility = priorityCorrections.find(
+    evaluation => evaluation.guide?.possibility,
+  )?.guide?.possibility;
+  const hasOptionalCoaching = coachingPoints.some(
+    evaluation => evaluation.status === 'optional',
+  );
+
+  useEffect(() => {
+    onEvidenceSettledChange(allEvidenceSettled);
+  }, [allEvidenceSettled, onEvidenceSettledChange]);
+
+  const updateEvidenceReadiness = useCallback((
+    evaluationId: string,
+    settled: boolean,
+  ) => {
+    setEvidenceReadiness(current =>
+      current[evaluationId] === settled
+        ? current
+        : {...current, [evaluationId]: settled},
+    );
+  }, []);
+
+  return (
+    <View
+      accessibilityLabel="저장용 전체 피드백 슬라이드 문서"
+      style={styles.captureDetails}>
+      <Text style={styles.captureDetailsTitle}>세부 분석 전체</Text>
+      <Text style={styles.captureDetailsDescription}>
+        피부부터 립까지 가로 슬라이드에서 확인하는 모든 평가 카드와 최종 요약을 한 문서에 담았어요.
+      </Text>
+
+      {evaluations.map(evaluation => {
+        const verdict = feedbackVerdictColors[evaluation.status];
+        const crop = evaluation.primaryCrop;
+        const useFullPhoto = evaluation.regionId === 'skin' || !crop;
+        const isLowConfidence =
+          evaluation.confidence !== null && evaluation.confidence < 0.6;
+
+        return (
+          <View key={evaluation.id} style={styles.captureDetailCard}>
+            {isLowConfidence && evaluation.confidencePercent !== null ? (
+              <View style={styles.captureLowConfidence}>
+                <Text style={styles.captureLowConfidenceMark}>!</Text>
+                <Text style={styles.captureLowConfidenceText}>
+                  판독 신뢰도 낮음 {evaluation.confidencePercent}% · 가볍게 참고해 주세요.
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.captureDetailHeader}>
+              <Text style={styles.captureDetailNumber}>{evaluation.number}</Text>
+              <View style={styles.captureDetailTitleGroup}>
+                <Text style={styles.captureDetailRegion}>{evaluation.regionLabel}</Text>
+                <Text style={styles.captureDetailTitle}>{evaluation.topicLabel}</Text>
+              </View>
+              <View style={[styles.captureDetailVerdict, {backgroundColor: verdict.solid}]}>
+                <Text style={styles.captureDetailVerdictText}>{evaluation.statusLabel}</Text>
+              </View>
+            </View>
+
+            <FeedbackEvidenceImage
+              accessibilityLabel={evaluation.topicLabel + ' 분석 근거 사진'}
+              height={useFullPhoto ? 300 : 230}
+              imageSize={useFullPhoto ? undefined : crop?.imageSize}
+              label={
+                useFullPhoto && evaluation.regionId !== 'skin'
+                  ? '원본 사진 · 정밀 근거 없음'
+                  : useFullPhoto
+                    ? undefined
+                    : crop?.label
+              }
+              onSettledChange={settled => {
+                updateEvidenceReadiness(evaluation.id, settled);
+              }}
+              region={useFullPhoto ? undefined : crop?.region}
+              source={crop?.source ?? imageSource}
+              topicId={evaluation.topicId}
+            />
+
+            <View style={styles.captureMetaRow}>
+              {evaluation.impactLabel ? (
+                <View style={styles.captureMetaChip}>
+                  <Text style={styles.captureMetaText}>
+                    {'영향 ' + evaluation.impactLabel}
+                  </Text>
+                </View>
+              ) : null}
+              <View
+                style={[
+                  styles.captureMetaChip,
+                  isLowConfidence && styles.captureLowMetaChip,
+                ]}>
+                <Text
+                  style={[
+                    styles.captureMetaText,
+                    isLowConfidence && styles.captureLowMetaText,
+                  ]}>
+                  {evaluation.confidenceLabel ?? '신뢰도 정보 없음'}
+                </Text>
+              </View>
+            </View>
+
+            {evaluation.goalCriteria.length > 0 ? (
+              <View style={styles.captureCopyBlock}>
+                <Text style={styles.captureCopyLabel}>분석 기준</Text>
+                {evaluation.goalCriteria.map(criterion => (
+                  <Text key={criterion.id} style={styles.captureCopyText}>
+                    {'• ' + criterion.criterion}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+
+            {evaluation.observations.length > 0 ? (
+              <View style={styles.captureCopyBlock}>
+                <Text style={styles.captureCopyLabel}>사진에서 확인한 점</Text>
+                {evaluation.observations.map(observation => (
+                  <Text key={observation.id} style={styles.captureCopyText}>
+                    {'• ' + observation.text}
+                  </Text>
+                ))}
+              </View>
+            ) : evaluation.visibilityReason ? (
+              <View style={styles.captureCopyBlock}>
+                <Text style={styles.captureCopyLabel}>판단 범위</Text>
+                <Text style={styles.captureCopyText}>
+                  {evaluation.visibilityReason}
+                </Text>
+              </View>
+            ) : null}
+
+            <Text style={styles.captureDescription}>{evaluation.description}</Text>
+
+            {evaluation.guide ? (
+              <View style={styles.captureGuide}>
+                <Text style={styles.captureGuideTitle}>이렇게 해보세요</Text>
+                {evaluation.guide.chips.map(chip => (
+                  <View key={chip.id} style={styles.captureGuideRow}>
+                    <Text style={styles.captureGuideLabel}>{chip.label}</Text>
+                    <Text style={styles.captureGuideText}>{chip.text}</Text>
+                  </View>
+                ))}
+                {evaluation.guide.rows.map(row => (
+                  <View key={row.id} style={styles.captureGuideRow}>
+                    <Text style={styles.captureGuideLabel}>{row.label}</Text>
+                    <Text style={styles.captureGuideText}>{row.text}</Text>
+                  </View>
+                ))}
+                {evaluation.guide.instructions.map((step, index) => (
+                  <Text
+                    key={evaluation.id + ':step:' + index}
+                    style={styles.captureCopyText}>
+                    {String(index + 1) + '. ' + step}
+                  </Text>
+                ))}
+                <Text style={styles.capturePossibility}>
+                  {'✨ ' + evaluation.guide.possibility}
+                </Text>
+              </View>
+            ) : evaluation.actionSteps.length > 0 ? (
+              <View style={styles.captureGuide}>
+                <Text style={styles.captureGuideTitle}>이렇게 해보세요</Text>
+                {evaluation.actionSteps.map((step, index) => (
+                  <Text
+                    key={evaluation.id + ':action:' + index}
+                    style={styles.captureCopyText}>
+                    {String(index + 1) + '. ' + step}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+
+            {evaluation.status === 'strength' ? (
+              <View style={styles.captureGoodNote}>
+                <Text style={styles.captureGoodNoteText}>
+                  잘하고 있어요. 이대로 유지해 보세요.
+                </Text>
+              </View>
+            ) : null}
+
+            {evaluation.status === 'optional' ? (
+              <Text style={styles.captureOptionalNote}>
+                선택적으로 적용해도 좋아요. 종합 점수의 근거로 사용하지 않아요.
+              </Text>
+            ) : null}
+          </View>
+        );
+      })}
+
+      <View style={styles.captureSummaryCard}>
+        <Text style={styles.captureSummaryEyebrow}>
+          {evaluations.length + '개 모두 확인했어요'}
+        </Text>
+        <View style={styles.captureSummaryScoreRow}>
+          <Text style={styles.captureSummaryScore}>{score}</Text>
+          <Text style={styles.captureSummaryScoreMax}>/ 100</Text>
+        </View>
+        {summarySentence ? (
+          <Text style={styles.captureSummarySentence}>{summarySentence}</Text>
+        ) : null}
+
+        {priorityCorrections.length > 0 ? (
+          <View style={styles.captureCorrectionList}>
+            <Text style={styles.captureGuideTitle}>먼저 보완할 점</Text>
+            {priorityCorrections.map(evaluation => (
+              <View key={evaluation.id} style={styles.captureCorrectionRow}>
+                <View style={styles.captureCorrectionDot} />
+                <View style={styles.captureCorrectionCopy}>
+                  <Text style={styles.captureCorrectionName}>
+                    {evaluation.topicLabel}
+                  </Text>
+                  <Text style={styles.captureCorrectionTitle}>
+                    {evaluation.title}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.captureSummarySentence}>
+            {hasOptionalCoaching
+              ? '우선 보완해야 할 항목은 없어요. 선택 제안은 각 카드에서 확인해 보세요.'
+              : '이번 분석에서는 보완할 항목이 없어요.'}
+          </Text>
+        )}
+
+        {firstPossibility ? (
+          <Text style={styles.capturePossibility}>
+            {'✨ ' + firstPossibility}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
 function IconAction({
   accessibilityLabel,
   disabled,
@@ -404,6 +719,259 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
+  },
+  captureDetails: {
+    backgroundColor: C.cardAlt,
+    gap: 16,
+    padding: 16,
+  },
+  captureDetailsDescription: {
+    color: C.textMuted,
+    fontFamily: feedbackRedesignFonts.regular,
+    fontSize: 12.5,
+    lineHeight: 19,
+  },
+  captureDetailsTitle: {
+    color: C.ink,
+    fontFamily: feedbackRedesignFonts.bold,
+    fontSize: 21,
+  },
+  captureDetailCard: {
+    backgroundColor: C.card,
+    borderColor: C.borderCard,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+    padding: 14,
+  },
+  captureDetailHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  captureDetailNumber: {
+    color: C.primary,
+    fontFamily: feedbackRedesignFonts.bold,
+    fontSize: 18,
+    minWidth: 26,
+  },
+  captureDetailRegion: {
+    color: C.textMuted3,
+    fontFamily: feedbackRedesignFonts.medium,
+    fontSize: 11,
+  },
+  captureDetailTitle: {
+    color: C.ink,
+    fontFamily: feedbackRedesignFonts.bold,
+    fontSize: 17,
+  },
+  captureDetailTitleGroup: {
+    flex: 1,
+    gap: 2,
+  },
+  captureDetailVerdict: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  captureDetailVerdictText: {
+    color: C.card,
+    fontFamily: feedbackRedesignFonts.semibold,
+    fontSize: 11,
+  },
+  captureCopyBlock: {
+    gap: 5,
+  },
+  captureCopyLabel: {
+    color: C.textMuted3,
+    fontFamily: feedbackRedesignFonts.bold,
+    fontSize: 11,
+  },
+  captureCopyText: {
+    color: C.ink,
+    fontFamily: feedbackRedesignFonts.regular,
+    fontSize: 12.5,
+    lineHeight: 19,
+  },
+  captureDescription: {
+    color: C.textMuted,
+    fontFamily: feedbackRedesignFonts.regular,
+    fontSize: 13,
+    lineHeight: 21,
+  },
+  captureGuide: {
+    backgroundColor: C.cardAlt,
+    borderColor: C.borderSoft,
+    borderRadius: 13,
+    borderWidth: 1,
+    gap: 8,
+    padding: 12,
+  },
+  captureGuideLabel: {
+    color: C.primary,
+    fontFamily: feedbackRedesignFonts.bold,
+    fontSize: 10.5,
+    width: 46,
+  },
+  captureGuideRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  captureGuideText: {
+    color: C.textMuted,
+    flex: 1,
+    fontFamily: feedbackRedesignFonts.regular,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  captureGuideTitle: {
+    color: C.ink,
+    fontFamily: feedbackRedesignFonts.bold,
+    fontSize: 13,
+  },
+  capturePossibility: {
+    color: C.primary,
+    fontFamily: feedbackRedesignFonts.semibold,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  captureCorrectionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  captureCorrectionDot: {
+    backgroundColor: C.fix,
+    borderRadius: 999,
+    height: 8,
+    marginTop: 5,
+    width: 8,
+  },
+  captureCorrectionList: {
+    gap: 8,
+  },
+  captureCorrectionName: {
+    color: C.fixText,
+    fontFamily: feedbackRedesignFonts.semibold,
+    fontSize: 13.5,
+  },
+  captureCorrectionRow: {
+    alignItems: 'flex-start',
+    backgroundColor: C.fixChipBg,
+    borderColor: C.fixChipBorder,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 9,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+  },
+  captureCorrectionTitle: {
+    color: C.fixText,
+    fontFamily: feedbackRedesignFonts.regular,
+    fontSize: 11.5,
+    lineHeight: 17,
+    opacity: 0.76,
+  },
+  captureGoodNote: {
+    alignSelf: 'flex-start',
+    backgroundColor: C.goodChipBg,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  captureGoodNoteText: {
+    color: C.good,
+    fontFamily: feedbackRedesignFonts.semibold,
+    fontSize: 12,
+  },
+  captureLowConfidence: {
+    alignItems: 'center',
+    backgroundColor: C.amberBannerBg,
+    borderColor: C.amberBannerBorder,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  captureLowConfidenceMark: {
+    color: C.amberText,
+    fontFamily: feedbackRedesignFonts.bold,
+    fontSize: 13,
+  },
+  captureLowConfidenceText: {
+    color: C.amberText,
+    flex: 1,
+    fontFamily: feedbackRedesignFonts.semibold,
+    fontSize: 12,
+  },
+  captureLowMetaChip: {
+    backgroundColor: C.amberBannerBg,
+    borderColor: C.amberBannerBorder,
+    borderWidth: 1,
+  },
+  captureLowMetaText: {
+    color: C.amberText,
+  },
+  captureMetaChip: {
+    backgroundColor: C.neutralChipBg,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  captureMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  captureMetaText: {
+    color: C.textMuted4,
+    fontFamily: feedbackRedesignFonts.medium,
+    fontSize: 11,
+  },
+  captureOptionalNote: {
+    color: C.textMuted3,
+    fontFamily: feedbackRedesignFonts.regular,
+    fontSize: 11.5,
+    lineHeight: 18,
+  },
+  captureSummaryCard: {
+    backgroundColor: C.card,
+    borderColor: C.borderCard,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 14,
+    padding: 18,
+  },
+  captureSummaryEyebrow: {
+    color: C.primary,
+    fontFamily: feedbackRedesignFonts.bold,
+    fontSize: 12,
+  },
+  captureSummaryScore: {
+    ...tabularNumbers,
+    color: C.ink,
+    fontFamily: feedbackRedesignFonts.bold,
+    fontSize: 40,
+  },
+  captureSummaryScoreMax: {
+    color: C.textMuted3,
+    fontFamily: feedbackRedesignFonts.semibold,
+    fontSize: 16,
+    marginBottom: 6,
+  },
+  captureSummaryScoreRow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  captureSummarySentence: {
+    color: C.textMuted,
+    fontFamily: feedbackRedesignFonts.regular,
+    fontSize: 13,
+    lineHeight: 21,
   },
   captureArea: {
     backgroundColor: C.card,

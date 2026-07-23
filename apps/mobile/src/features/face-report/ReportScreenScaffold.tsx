@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -32,13 +32,18 @@ import {
   type FaceReportStorySection,
 } from './services/reportStoryModel';
 import { ReportSectionCover } from './components/ReportSectionCover';
-import {GoldenMaskCard} from './components/GoldenMaskCard';
-
+import { areFaceReportCaptureAssetsSettled } from './services/reportCaptureReadiness';
+import {
+  FaceReportCaptureAssetContext,
+  type FaceReportCaptureAssetContextValue,
+} from './services/reportCaptureAssetContext';
+import { GoldenMaskCard } from './components/GoldenMaskCard';
 // Matches the legacy report screen's capture settings.
 const REPORT_CAPTURE_OPTIONS = {
   format: 'jpg',
   quality: 0.95,
   result: 'tmpfile',
+  useRenderInContext: true,
 } as const;
 import { ScrollAnimContext } from './visuals/RiseIn';
 import { S1Summary } from './sections/S1Summary';
@@ -95,7 +100,37 @@ function StoryContentCard({
   );
 }
 
-function GoldenMaskShareCard({uri}: {uri: string}) {
+type GoldenMaskCaptureImageStatus = 'pending' | 'loaded' | 'failed';
+
+function GoldenMaskShareCard({
+  onStatusChange,
+  uri,
+}: {
+  onStatusChange: (status: GoldenMaskCaptureImageStatus) => void;
+  uri: string;
+}) {
+  const loadOutcomeRef = useRef<'loaded' | 'failed' | null>(null);
+  const handlePending = React.useCallback(() => {
+    loadOutcomeRef.current = null;
+    onStatusChange('pending');
+  }, [onStatusChange]);
+  const handleLoaded = React.useCallback(() => {
+    loadOutcomeRef.current = 'loaded';
+  }, []);
+  const handleFailed = React.useCallback(() => {
+    loadOutcomeRef.current = 'failed';
+    onStatusChange('failed');
+  }, [onStatusChange]);
+  const handleLoadEnd = React.useCallback(() => {
+    onStatusChange(
+      loadOutcomeRef.current === 'loaded' ? 'loaded' : 'failed',
+    );
+  }, [onStatusChange]);
+
+  React.useLayoutEffect(() => {
+    handlePending();
+  }, [handlePending, uri]);
+
   return (
     <View style={{backgroundColor: '#F4F2ED', paddingHorizontal: 22, paddingVertical: 28, gap: 14}}>
       <View style={{gap: 5}}>
@@ -111,6 +146,10 @@ function GoldenMaskShareCard({uri}: {uri: string}) {
       </View>
       <Image
         accessibilityIgnoresInvertColors
+        onError={handleFailed}
+        onLoad={handleLoaded}
+        onLoadEnd={handleLoadEnd}
+        onLoadStart={handlePending}
         resizeMode="cover"
         source={{uri}}
         style={{aspectRatio: 1024 / 1280, backgroundColor: '#ECEAE5', borderRadius: 24, width: '100%'}}
@@ -191,16 +230,58 @@ type GoldenMaskPosterWaiter = {
 };
 
 const GOLDEN_MASK_POSTER_WAIT_MS = 18_000;
+const GOLDEN_MASK_CAPTURE_IMAGE_SETTLE_TIMEOUT_MS = 10_000;
+
+type GoldenMaskCaptureImageState = {
+  requestId: number | null;
+  status: GoldenMaskCaptureImageStatus;
+  uri: string | null;
+};
+
+function waitForNextFrame(): Promise<void> {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => resolve());
+  });
+}
+
+async function waitForGoldenMaskCaptureImageSettled({
+  getState,
+  requestId,
+  uri,
+}: {
+  getState: () => GoldenMaskCaptureImageState;
+  requestId: number;
+  uri: string;
+}): Promise<void> {
+  const deadline = Date.now() + GOLDEN_MASK_CAPTURE_IMAGE_SETTLE_TIMEOUT_MS;
+
+  while (true) {
+    const currentState = getState();
+    if (
+      currentState.requestId === requestId &&
+      currentState.uri === uri
+    ) {
+      if (currentState.status === 'loaded') {
+        return;
+      }
+      if (currentState.status === 'failed') {
+        throw new Error(
+          'Golden Mask 이미지를 보고서에 불러오지 못했어요. 다시 시도해 주세요.',
+        );
+      }
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        'Golden Mask 이미지를 보고서에 담는 데 시간이 오래 걸렸어요. 다시 시도해 주세요.',
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, 16));
+  }
+}
 
 function deleteTemporaryFile(uri: string | null | undefined): void {
   if (!uri) return;
   void FileSystem.deleteAsync(uri, {idempotent: true}).catch(() => undefined);
-}
-
-function waitForLocalImage(uri: string): Promise<void> {
-  return new Promise(resolve => {
-    Image.getSize(uri, () => resolve(), () => resolve());
-  });
 }
 
 function MakeupCtaCard({
@@ -251,6 +332,133 @@ function MakeupCtaCard({
   );
 }
 
+function countFaceReportCaptureAssets(data: ReportScreenProps['data']) {
+  return Number(Boolean(data.s1.photo.uri))
+    + Number(Boolean(data.s2?.photo.uri))
+    + (data.s3?.cards.filter(card => Boolean(card.photo.uri)).length ?? 0)
+    + (data.s4?.drape.photo.uri ? 2 : 0);
+}
+
+function FaceReportCaptureDocument({
+  captureRef,
+  data,
+  goldenMaskPosterUri,
+  onCaptureDocumentSettledChange,
+  onGoldenMaskPosterStatusChange,
+  onResurvey,
+  onRetake,
+  requestId,
+  width,
+}: {
+  captureRef: ReportScreenProps['captureRef'];
+  data: ReportScreenProps['data'];
+  goldenMaskPosterUri?: string | null;
+  onCaptureDocumentSettledChange?: ReportScreenProps['onCaptureDocumentSettledChange'];
+  onGoldenMaskPosterStatusChange?: (
+    requestId: number,
+    uri: string,
+    status: GoldenMaskCaptureImageStatus,
+  ) => void;
+  onResurvey?: ReportScreenProps['onResurvey'];
+  onRetake?: ReportScreenProps['onRetake'];
+  requestId: number;
+  width: number;
+}) {
+  const assetStatesRef = useRef(new Map<string, boolean>());
+  const [assetRevision, setAssetRevision] = useState(0);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const expectedAssetCount = useMemo(() => countFaceReportCaptureAssets(data), [data]);
+
+  const updateAssetState = useCallback((assetId: string, settled: boolean) => {
+    if (assetStatesRef.current.get(assetId) === settled) {
+      return;
+    }
+    assetStatesRef.current.set(assetId, settled);
+    setAssetRevision(revision => revision + 1);
+  }, []);
+
+  const registerAsset = useCallback((assetId: string) => {
+    if (assetStatesRef.current.has(assetId)) {
+      return;
+    }
+    assetStatesRef.current.set(assetId, false);
+    setAssetRevision(revision => revision + 1);
+  }, []);
+
+  const assetContext = useMemo<FaceReportCaptureAssetContextValue>(() => ({
+    markAssetPending: assetId => updateAssetState(assetId, false),
+    markAssetSettled: assetId => updateAssetState(assetId, true),
+    registerAsset,
+    // The capture document is immutable for one request. Avoid scheduling state
+    // while its complete subtree is being unmounted; its map is discarded too.
+    unregisterAsset: assetId => {
+      assetStatesRef.current.delete(assetId);
+    },
+  }), [registerAsset, updateAssetState]);
+
+  const isSettled = areFaceReportCaptureAssetsSettled({
+    assetStates: assetStatesRef.current,
+    expectedAssetCount,
+    layoutReady,
+  });
+  const handleGoldenMaskPosterStatusChange = useCallback(
+    (status: GoldenMaskCaptureImageStatus) => {
+      if (goldenMaskPosterUri) {
+        onGoldenMaskPosterStatusChange?.(
+          requestId,
+          goldenMaskPosterUri,
+          status,
+        );
+      }
+    },
+    [
+      goldenMaskPosterUri,
+      onGoldenMaskPosterStatusChange,
+      requestId,
+    ],
+  );
+
+  useEffect(() => {
+    onCaptureDocumentSettledChange?.(requestId, isSettled);
+  }, [assetRevision, isSettled, onCaptureDocumentSettledChange, requestId]);
+
+  return (
+    <View
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      pointerEvents="none"
+      style={{position: 'absolute', left: 0, top: 0, width}}>
+      <FaceReportCaptureAssetContext.Provider value={assetContext}>
+        <OptionalViewShot
+          ref={captureRef}
+          options={REPORT_CAPTURE_OPTIONS}
+          style={{width, backgroundColor: color.bg}}>
+          {goldenMaskPosterUri ? (
+            <GoldenMaskShareCard
+              key={goldenMaskPosterUri}
+              onStatusChange={handleGoldenMaskPosterStatusChange}
+              uri={goldenMaskPosterUri}
+            />
+          ) : null}
+          <View onLayout={() => setLayoutReady(true)}>
+            <S1Summary data={data.s1} />
+            {data.s2 ? (
+              <S2Proportion data={data.s2} onOpenRegionCard={() => undefined} onRetake={onRetake} />
+            ) : null}
+            {data.s3 ? <S3Features data={data.s3} /> : null}
+            {data.s4 ? <S4PersonalColor data={data.s4} /> : null}
+            {data.s5 ? <S5Body data={data.s5} onResurvey={onResurvey} /> : null}
+            {data.s6 ? <S6Impression data={data.s6} /> : null}
+            {data.s7 ? <S7Styling data={data.s7} /> : null}
+            {data.s8 ? <S8Skin data={data.s8} /> : null}
+            {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
+          </View>
+        </OptionalViewShot>
+      </FaceReportCaptureAssetContext.Provider>
+    </View>
+  );
+}
 /**
  * Story report screen: editorial covers + meaning-complete horizontal cards.
  * Pure & props-driven — navigation, retake and survey actions bubble up as callbacks.
@@ -263,6 +471,8 @@ export function ReportScreenScaffold({
   onResurvey,
   onPressCta,
   captureRef,
+  captureRequestId,
+  onCaptureDocumentSettledChange,
   measurementDebugPayload,
   measurementDebugSummary,
 }: ReportScreenProps) {
@@ -272,6 +482,11 @@ export function ReportScreenScaffold({
   const pagerRef = useRef<StoryReportPagerRef | null>(null);
   const verticalCaptureRef = useRef<OptionalViewShotRef | null>(null);
   const posterWaitersRef = useRef(new Set<GoldenMaskPosterWaiter>());
+  const goldenMaskCaptureImageStateRef = useRef<GoldenMaskCaptureImageState>({
+    requestId: null,
+    status: 'pending',
+    uri: null,
+  });
   const storyModel = useMemo(() => buildFaceReportStoryModel(data), [data]);
   const [activePageId, setActivePageId] = useState(
     storyModel.pages[0]?.id ?? null,
@@ -280,6 +495,40 @@ export function ReportScreenScaffold({
     null,
   );
   const [posterRequestKey, setPosterRequestKey] = useState(0);
+
+  if (
+    goldenMaskCaptureImageStateRef.current.requestId !==
+      (captureRequestId ?? null) ||
+    goldenMaskCaptureImageStateRef.current.uri !== goldenMaskPosterUri
+  ) {
+    goldenMaskCaptureImageStateRef.current = {
+      requestId: captureRequestId ?? null,
+      status: 'pending',
+      uri: goldenMaskPosterUri,
+    };
+  }
+
+  const handleGoldenMaskCaptureImageStatusChange = React.useCallback(
+    (
+      requestId: number,
+      uri: string,
+      status: GoldenMaskCaptureImageStatus,
+    ) => {
+      const currentState = goldenMaskCaptureImageStateRef.current;
+      if (
+        requestId !== currentState.requestId ||
+        uri !== currentState.uri
+      ) {
+        return;
+      }
+      goldenMaskCaptureImageStateRef.current = {
+        requestId,
+        status,
+        uri,
+      };
+    },
+    [],
+  );
 
   const handleGoldenMaskPosterReady = React.useCallback((fileUri: string) => {
     setGoldenMaskPosterUri(previousUri => {
@@ -478,11 +727,23 @@ export function ReportScreenScaffold({
           if (data.goldenMask && !posterUri) {
             pagerRef.current?.goToPage('summary:golden-mask');
             posterUri = await waitForGoldenMaskPoster();
-            if (posterUri) {
-              // Let the poster Image commit and decode before ViewShot reads it.
-              await waitForLocalImage(posterUri);
-              await new Promise(resolve => setTimeout(resolve, 80));
+          }
+          if (posterUri) {
+            if (captureRequestId === null || captureRequestId === undefined) {
+              throw new Error(
+                'Golden Mask 보고서 저장 요청을 확인하지 못했어요.',
+              );
             }
+            // The vertical document is mounted lazily for this request. Waiting
+            // for the file alone is insufficient because its new Image instance
+            // may not have committed or decoded yet.
+            await waitForGoldenMaskCaptureImageSettled({
+              getState: () => goldenMaskCaptureImageStateRef.current,
+              requestId: captureRequestId,
+              uri: posterUri,
+            });
+            await waitForNextFrame();
+            await waitForNextFrame();
           }
           return await verticalCaptureRef.current?.capture?.();
         } finally {
@@ -504,6 +765,7 @@ export function ReportScreenScaffold({
     [
       activePageId,
       captureRef,
+      captureRequestId,
       data.goldenMask,
       goldenMaskPosterUri,
       waitForGoldenMaskPoster,
@@ -523,28 +785,22 @@ export function ReportScreenScaffold({
     <ScrollAnimContext.Provider value={{scrollY, enabled: false}}>
       <View style={{flex: 1, backgroundColor: color.bg}}>
         {/* 공유/저장은 모든 실제 콘텐츠가 펼쳐진 별도 세로 문서를 캡처한다. */}
-        <OptionalViewShot
-          ref={verticalCaptureRef}
-          options={REPORT_CAPTURE_OPTIONS}
-          style={{position: 'absolute', left: 0, top: 0, width: windowWidth, backgroundColor: color.bg}}>
-          {goldenMaskPosterUri ? (
-            <GoldenMaskShareCard uri={goldenMaskPosterUri} />
-          ) : null}
-          <View>
-            <S1Summary data={data.s1} />
-          </View>
-          {data.s2 ? (
-            <S2Proportion data={data.s2} onOpenRegionCard={() => undefined} onRetake={onRetake} />
-          ) : null}
-          {data.s3 ? <S3Features data={data.s3} /> : null}
-          {data.s4 ? <S4PersonalColor data={data.s4} /> : null}
-          {data.s5 ? <S5Body data={data.s5} onResurvey={onResurvey} /> : null}
-          {data.s6 ? <S6Impression data={data.s6} /> : null}
-          {data.s7 ? <S7Styling data={data.s7} /> : null}
-          {data.s8 ? <S8Skin data={data.s8} /> : null}
-          {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
-        </OptionalViewShot>
-
+        {captureRequestId !== null && captureRequestId !== undefined ? (
+          <FaceReportCaptureDocument
+            key={captureRequestId}
+            captureRef={verticalCaptureRef}
+            data={data}
+            goldenMaskPosterUri={goldenMaskPosterUri}
+            onCaptureDocumentSettledChange={onCaptureDocumentSettledChange}
+            onGoldenMaskPosterStatusChange={
+              handleGoldenMaskCaptureImageStatusChange
+            }
+            onResurvey={onResurvey}
+            onRetake={onRetake}
+            requestId={captureRequestId}
+            width={windowWidth}
+          />
+        ) : null}
         <View style={{flex: 1, zIndex: 1, backgroundColor: color.bg}}>
           <View style={{
             paddingTop: Math.max(insets.top, 12) + 4, paddingHorizontal: 20, paddingBottom: 4,

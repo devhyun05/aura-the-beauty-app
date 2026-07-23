@@ -2353,6 +2353,161 @@
         }
       }
     },
+    "/api/analysis/reports/{report_id}/golden-mask": {
+      "post": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Attach Analysis Report Golden Mask",
+        "operationId": "attach_analysis_report_golden_mask_api_analysis_reports__report_id__golden_mask_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoldenMaskAttachRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Attach Analysis Report Golden Mask Api Analysis Reports  Report Id  Golden Mask Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Get Analysis Report Golden Mask",
+        "operationId": "get_analysis_report_golden_mask_api_analysis_reports__report_id__golden_mask_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Get Analysis Report Golden Mask Api Analysis Reports  Report Id  Golden Mask Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analysis/golden-mask-media/{media_id}": {
+      "delete": {
+        "tags": [
+          "analysis"
+        ],
+        "summary": "Delete Unattached Golden Mask Media",
+        "operationId": "delete_unattached_golden_mask_media_api_analysis_golden_mask_media__media_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "media_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Media Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Delete Unattached Golden Mask Media Api Analysis Golden Mask Media  Media Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/analysis/reports/{report_id}/recommended-makeups/{makeup_index}": {
       "delete": {
         "tags": [
@@ -5056,6 +5211,53 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "makeup-recommendations"
+        ],
+        "summary": "Delete Recommendation Report",
+        "operationId": "delete_recommendation_report_api_makeup_recommendations__report_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Delete Recommendation Report Api Makeup Recommendations  Report Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/makeup-styles": {
@@ -5880,6 +6082,53 @@
                 "schema": {
                   "type": "object",
                   "title": "Response Get Feedback Report Api Feedback Reports  Report Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "Delete Feedback Report",
+        "operationId": "delete_feedback_report_api_feedback_reports__report_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Delete Feedback Report Api Feedback Reports  Report Id  Delete"
                 }
               }
             }
@@ -6772,6 +7021,53 @@
                 "schema": {
                   "type": "object",
                   "title": "Response Get Filter Extraction Api Filter Extractions  Report Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "filter-extractions"
+        ],
+        "summary": "Delete Filter Extraction",
+        "operationId": "delete_filter_extraction_api_filter_extractions__report_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Delete Filter Extraction Api Filter Extractions  Report Id  Delete"
                 }
               }
             }
@@ -13021,6 +13317,78 @@
         ],
         "title": "FloatingActionRepositionedProperties"
       },
+      "GoldenMaskAttachRequest": {
+        "properties": {
+          "mediaId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Mediaid"
+          },
+          "schemaVersion": {
+            "type": "string",
+            "const": "aura.golden-mask.v1",
+            "title": "Schemaversion"
+          },
+          "captureId": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Captureid"
+          },
+          "byteSize": {
+            "type": "integer",
+            "maximum": 1048576.0,
+            "minimum": 1.0,
+            "title": "Bytesize"
+          },
+          "vertexCount": {
+            "type": "integer",
+            "maximum": 4096.0,
+            "minimum": 1.0,
+            "title": "Vertexcount"
+          },
+          "indexCount": {
+            "type": "integer",
+            "maximum": 32768.0,
+            "minimum": 3.0,
+            "title": "Indexcount"
+          },
+          "uvCount": {
+            "type": "integer",
+            "maximum": 4096.0,
+            "minimum": 1.0,
+            "title": "Uvcount"
+          },
+          "topologyFingerprint": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "title": "Topologyfingerprint"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          },
+          "trueDepthHardware": {
+            "type": "boolean",
+            "title": "Truedepthhardware"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mediaId",
+          "schemaVersion",
+          "captureId",
+          "byteSize",
+          "vertexCount",
+          "indexCount",
+          "uvCount",
+          "topologyFingerprint",
+          "createdAt",
+          "trueDepthHardware"
+        ],
+        "title": "GoldenMaskAttachRequest"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -16385,6 +16753,13 @@
           "type": {
             "type": "string",
             "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
           }
         },
         "type": "object",

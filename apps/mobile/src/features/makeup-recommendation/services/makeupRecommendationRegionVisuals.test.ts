@@ -1,5 +1,6 @@
 import type {FaceAnalysisRegionVisuals} from '../../face-analysis/services/faceAnalysisMeasurements';
 import {
+  isMakeupRecommendationCropRenderReady,
   mapAnalysisRegionVisualsToSourceCrops,
   projectRegionGuidePoints,
   resolveMakeupRecommendationAreaCropAsset,
@@ -84,14 +85,67 @@ expectEqual(
 );
 expectEqual(sourceFallback.guides[0]?.label, 'lip line', 'source guide evidence retained');
 
-const unavailable = resolveMakeupRecommendationAreaCropAsset({
+const generatedFullFallback = resolveMakeupRecommendationAreaCropAsset({
   area: 'brow',
   generatedImage: {uri: 'https://cdn/after.jpg'},
   generatedReady: true,
   sourceRegionVisuals: visuals,
 });
-expectEqual(unavailable.coordinateSpace, 'unavailable', 'coordinates without matching image rejected');
-expectEqual(unavailable.boxes.length, 0, 'unavailable crop has no boxes');
+expectEqual(
+  generatedFullFallback.coordinateSpace,
+  'full-image',
+  'missing coordinates fall back to the complete generated image',
+);
+expectEqual(generatedFullFallback.ready, true, 'complete generated image is terminal-ready');
+expectEqual(generatedFullFallback.boxes.length, 1, 'complete image fallback has one full-frame box');
+expectEqual(generatedFullFallback.boxes[0]?.left, 0, 'full-frame fallback starts at left edge');
+expectEqual(generatedFullFallback.boxes[0]?.bottom, 1, 'full-frame fallback reaches bottom edge');
+
+const sourceFullFallback = resolveMakeupRecommendationAreaCropAsset({
+  area: 'lip',
+  generatedImage: {uri: 'https://cdn/after.jpg'},
+  generatedReady: false,
+  sourceImageUri: 'https://cdn/source.jpg',
+});
+expectEqual(
+  sourceFullFallback.coordinateSpace,
+  'full-image',
+  'ready source image remains a safe full-frame fallback',
+);
+expectEqual(
+  (sourceFullFallback.imageSource as {uri?: string}).uri,
+  'https://cdn/source.jpg',
+  'source full-frame fallback uses the real source image',
+);
+
+const unavailable = resolveMakeupRecommendationAreaCropAsset({
+  area: 'brow',
+  generatedImage: {uri: 'https://cdn/after.jpg'},
+  generatedReady: false,
+});
+expectEqual(unavailable.coordinateSpace, 'unavailable', 'no ready real image remains unavailable');
+expectEqual(unavailable.ready, false, 'unavailable asset is not marked ready');
+
+expectEqual(
+  isMakeupRecommendationCropRenderReady({
+    assetReady: true,
+    boxCount: 1,
+    failedIndexes: new Set(),
+    loadedIndexes: new Set([0]),
+  }),
+  true,
+  'loaded full-frame fallback settles capture',
+);
+expectEqual(
+  isMakeupRecommendationCropRenderReady({
+    assetReady: true,
+    boxCount: 1,
+    failedIndexes: new Set([0]),
+    loadedIndexes: new Set(),
+  }),
+  false,
+  'image load failure is not disguised as a successful capture',
+);
 
 const projected = projectRegionGuidePoints(
   visuals.upper?.guide as NonNullable<typeof visuals.upper>['guide'],

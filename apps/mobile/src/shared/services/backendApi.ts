@@ -9,10 +9,26 @@ export type ApiEnvelope<T> = {
 };
 
 type AuthTokenProvider = () => string | null;
+type AuthTokenRefreshProvider = (force?: boolean) => Promise<string | null>;
+
+export const AUTH_REFRESH_TEMPORARILY_UNAVAILABLE_CODE =
+  'AUTH_REFRESH_TEMPORARILY_UNAVAILABLE';
+const AUTH_REFRESH_TEMPORARILY_UNAVAILABLE_MESSAGE =
+  '로그인 상태를 확인하는 중 일시적인 문제가 발생했어요. 잠시 후 다시 시도해 주세요.';
+
+export class AuthRefreshTemporarilyUnavailableError extends Error {
+  code = AUTH_REFRESH_TEMPORARILY_UNAVAILABLE_CODE;
+
+  constructor(message = AUTH_REFRESH_TEMPORARILY_UNAVAILABLE_MESSAGE) {
+    super(message);
+    this.name = 'AuthRefreshTemporarilyUnavailableError';
+  }
+}
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 60000;
 
 let authTokenProvider: AuthTokenProvider | null = null;
+let authTokenRefreshProvider: AuthTokenRefreshProvider | null = null;
 
 export class BackendApiError extends Error {
   code?: string;
@@ -31,6 +47,20 @@ export class BackendApiError extends Error {
     this.code = code;
     this.details = details;
   }
+}
+
+function toBackendAuthRefreshError(error: unknown): BackendApiError {
+  if (error instanceof BackendApiError) {
+    return error;
+  }
+
+  return new BackendApiError(
+    error instanceof AuthRefreshTemporarilyUnavailableError
+      ? error.message
+      : AUTH_REFRESH_TEMPORARILY_UNAVAILABLE_MESSAGE,
+    503,
+    AUTH_REFRESH_TEMPORARILY_UNAVAILABLE_CODE,
+  );
 }
 
 export class BackendNetworkError extends Error {
@@ -86,6 +116,18 @@ export function isRequestAbortedError(error: unknown): error is RequestAbortedEr
 
 export function setBackendAuthTokenProvider(provider: AuthTokenProvider | null): void {
   authTokenProvider = provider;
+}
+
+/**
+ * Registers the session refresh path used when the synchronous provider has no
+ * currently usable JWT. This closes the short window where an expiring token
+ * is intentionally hidden by the client leeway but the scheduled refresh has
+ * not completed yet.
+ */
+export function setBackendAuthTokenRefreshProvider(
+  provider: AuthTokenRefreshProvider | null,
+): void {
+  authTokenRefreshProvider = provider;
 }
 
 export function getBackendAuthToken(): string | null {
@@ -148,6 +190,48 @@ function resolveAuthToken(authToken: string | null | undefined): string | null {
   return authTokenProvider?.() ?? null;
 }
 
+async function resolveRequestAuthToken(
+  authToken: string | null | undefined,
+): Promise<string | null> {
+  const currentToken = resolveAuthToken(authToken);
+
+  // Explicit null means the caller intentionally wants an anonymous request.
+  // A supplied token, or a currently usable provider token, needs no refresh.
+  if (authToken !== undefined || currentToken || !authTokenRefreshProvider) {
+    return currentToken;
+  }
+
+  try {
+    return (await authTokenRefreshProvider(false))?.trim() || null;
+  } catch (error) {
+    // A retryable Cognito outage is not an anonymous session. Stop before the
+    // HTTP request so feature routes cannot misread a synthetic 401 as expiry.
+    throw toBackendAuthRefreshError(error);
+  }
+}
+
+async function forceRefreshRequestAuthToken(): Promise<string | null> {
+  if (!authTokenRefreshProvider) {
+    return null;
+  }
+
+  try {
+    return (await authTokenRefreshProvider(true))?.trim() || null;
+  } catch (error) {
+    // Do not retry the backend with an anonymous or known-stale token after a
+    // transient refresh failure. Surface a retryable 503-class auth error.
+    throw toBackendAuthRefreshError(error);
+  }
+}
+
+async function parseApiEnvelope<T>(response: Response): Promise<ApiEnvelope<T> | null> {
+  try {
+    return (await response.json()) as ApiEnvelope<T>;
+  } catch {
+    return null;
+  }
+}
+
 function isAbortError(error: unknown) {
   return error instanceof Error && error.name === 'AbortError';
 }
@@ -174,7 +258,7 @@ export async function requestBackendJson<T>(
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     ...requestInit
   } = init;
-  const resolvedAuthToken = resolveAuthToken(authToken);
+  let resolvedAuthToken = await resolveRequestAuthToken(authToken);
   const startedAt = Date.now();
   const method = requestInit.method ?? 'GET';
   const url = buildBackendApiUrl(path, baseUrl);
@@ -239,12 +323,75 @@ export async function requestBackendJson<T>(
     externalSignal?.removeEventListener('abort', handleExternalAbort);
   }
 
-  let envelope: ApiEnvelope<T> | null = null;
+  let envelope = await parseApiEnvelope<T>(response);
 
-  try {
-    envelope = (await response.json()) as ApiEnvelope<T>;
-  } catch {
-    envelope = null;
+  // Only provider-backed requests may recover from a stale or revoked token.
+  // Explicit authToken values, including null, preserve the caller's 401.
+  if (response.status === 401 && authToken === undefined) {
+    const refreshedAuthToken = await forceRefreshRequestAuthToken();
+
+    if (refreshedAuthToken) {
+      resolvedAuthToken = refreshedAuthToken;
+      const retryAbortController = new AbortController();
+      const retryTimeoutId = setTimeout(() => retryAbortController.abort(), timeoutMs);
+      const handleRetryExternalAbort = () => retryAbortController.abort();
+
+      if (externalSignal?.aborted) {
+        retryAbortController.abort();
+      } else {
+        externalSignal?.addEventListener('abort', handleRetryExternalAbort, {once: true});
+      }
+
+      console.info('[aura:api] request:auth-refresh-retry', {method, path});
+
+      try {
+        response = await fetch(url, {
+          ...requestInit,
+          body: body === undefined ? undefined : JSON.stringify(body),
+          headers: {
+            Accept: 'application/json',
+            ...(body === undefined ? {} : {'Content-Type': 'application/json'}),
+            ...headers,
+            Authorization: `Bearer ${resolvedAuthToken}`,
+          },
+          signal: retryAbortController.signal,
+        });
+      } catch (error) {
+        if (isAbortError(error)) {
+          if (externalSignal?.aborted) {
+            console.info('[aura:api] request:aborted', {
+              durationMs: Date.now() - startedAt,
+              method,
+              path,
+            });
+            throw new RequestAbortedError();
+          }
+          console.info('[aura:api] request:timeout', {
+            durationMs: Date.now() - startedAt,
+            method,
+            path,
+            timeoutMs,
+          });
+          throw new BackendTimeoutError(timeoutMs);
+        }
+
+        if (isNetworkFailure(error)) {
+          console.info('[aura:api] request:network-unavailable', {
+            durationMs: Date.now() - startedAt,
+            method,
+            path,
+          });
+          throw new BackendNetworkError();
+        }
+
+        throw error;
+      } finally {
+        clearTimeout(retryTimeoutId);
+        externalSignal?.removeEventListener('abort', handleRetryExternalAbort);
+      }
+
+      envelope = await parseApiEnvelope<T>(response);
+    }
   }
 
   if (!response.ok) {

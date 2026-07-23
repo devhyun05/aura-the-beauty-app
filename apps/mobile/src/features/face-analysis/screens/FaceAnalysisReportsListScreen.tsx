@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useState} from 'react';
-import {FlatList, StyleSheet} from 'react-native';
+import {ActivityIndicator, FlatList, Pressable, StyleSheet} from 'react-native';
 import {Text, View} from 'tamagui';
 
 import {getFaceAnalysisReports} from '../../../shared/services/faceAnalysisService';
@@ -20,20 +20,41 @@ export function FaceAnalysisReportsListScreen({
   onPressReport,
 }: FaceAnalysisReportsListScreenProps) {
   const [reports, setReports] = useState<FaceAnalysisReport[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [loadAttemptKey, setLoadAttemptKey] = useState(0);
 
   useEffect(() => {
     let isMounted = true;
 
-    getFaceAnalysisReports().then((nextReports) => {
-      if (isMounted) {
-        setReports(nextReports);
-      }
-    });
+    setIsLoading(true);
+    setLoadError('');
+
+    void getFaceAnalysisReports()
+      .then((nextReports) => {
+        if (isMounted) {
+          setReports(nextReports);
+        }
+      })
+      .catch((error: unknown) => {
+        if (isMounted) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : '얼굴 분석 보고서를 불러오지 못했어요.',
+          );
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadAttemptKey]);
 
   const handleDeleteReport = useCallback(
     async (reportId: string) => {
@@ -71,7 +92,32 @@ export function FaceAnalysisReportsListScreen({
         style={styles.list}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>저장된 얼굴 분석 결과가 없어요.</Text>
+            {isLoading ? (
+              <>
+                <ActivityIndicator color={colors.textPrimary} size="small" />
+                <Text style={styles.emptyStateText}>
+                  얼굴 분석 보고서를 불러오는 중이에요.
+                </Text>
+              </>
+            ) : loadError ? (
+              <>
+                <Text style={styles.emptyStateText}>{loadError}</Text>
+                <Pressable
+                  accessibilityLabel="얼굴 분석 보고서 다시 불러오기"
+                  accessibilityRole="button"
+                  onPress={() => setLoadAttemptKey(current => current + 1)}
+                  style={({pressed}) => [
+                    styles.retryButton,
+                    pressed && styles.retryButtonPressed,
+                  ]}>
+                  <Text style={styles.retryButtonText}>다시 불러오기</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Text style={styles.emptyStateText}>
+                저장된 얼굴 분석 결과가 없어요.
+              </Text>
+            )}
           </View>
         }
       />
@@ -84,6 +130,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.surfaceMuted,
     borderRadius: radius.lg,
+    gap: spacing.md,
     justifyContent: 'center',
     minHeight: 180,
     padding: spacing.xl,
@@ -102,5 +149,22 @@ const styles = StyleSheet.create({
   listContent: {
     gap: spacing.sm,
     paddingBottom: spacing.xl,
+  },
+  retryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: spacing.lg,
+  },
+  retryButtonPressed: {
+    opacity: 0.74,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.semibold,
+    lineHeight: typography.lineHeight.sm,
   },
 });

@@ -10,12 +10,14 @@ import {
   getPopularMakeupScenarios,
   mapBackendCropRegions,
   mapBackendRecommendationReports,
+  mapBackendRecommendationReportsPage,
   mapBackendRecommendationLooks,
   MakeupRecommendationRetryableError,
   refineGeneratedMakeupRecommendation,
   refineMakeupRecommendation,
   refreshGeneratedMakeupRecommendation,
   restoreMakeupRecommendationReport,
+  rewindMakeupRecommendationHistoryOffset,
   retryGeneratedMakeupRecommendationImages,
   startGeneratedMakeupRecommendation,
   startGeneratedMakeupRecommendationV2,
@@ -61,6 +63,20 @@ function expectThrows(action: () => unknown, label: string) {
   }
   expectEqual(threw, true, label);
 }
+
+const COMPLETE_BACKEND_STEPS = ['base', 'brow', 'eye', 'cheek', 'lip'].map((area, index) => ({
+  order: index + 1,
+  area,
+  instruction: `${area} 가이드를 적용해요.`,
+}));
+const COMPLETE_BACKEND_LOOK_FIELDS = {
+  summary: '서버가 생성한 완전한 추천 요약',
+  reasons: ['선택한 상황과 답변을 반영했어요.'],
+  appliedConditions: ['사용자가 선택한 상황'],
+  durationMinutes: 15,
+  difficulty: 'medium',
+  steps: COMPLETE_BACKEND_STEPS,
+};
 
 const intentKeyA = createMakeupRecommendationIdempotencyKey();
 const intentKeyB = createMakeupRecommendationIdempotencyKey();
@@ -220,6 +236,7 @@ const generatedLooks = mapBackendRecommendationLooks({
   prompt: '퇴근 후 약속',
   questions: [],
   answers: [],
+  imageStatus: 'pending',
   recommendation: {
     generationSource: 'claude',
     matchAssessment: BACKEND_MATCH_ASSESSMENT,
@@ -232,7 +249,7 @@ const generatedLooks = mapBackendRecommendationLooks({
       appliedConditions: ['퇴근 후 약속'],
       durationMinutes: 15,
       difficulty: 'medium',
-      steps: [{order: 1, area: 'base', instruction: '얇게 바르기'}],
+      steps: COMPLETE_BACKEND_STEPS,
       products: [{area: 'base', brandName: '브랜드', productName: '쿠션', reason: '얇은 표현'}],
       lookMap: BACKEND_LOOK_MAP,
       fitAssessment: BACKEND_FIT_ASSESSMENT,
@@ -242,6 +259,7 @@ const generatedLooks = mapBackendRecommendationLooks({
     })),
   },
 });
+
 expectEqual(generatedLooks.length, 3, 'three backend looks are mapped');
 expectEqual(generatedLooks.map(look => look.role).join(','), 'anchor,bold,discovery', 'backend look roles are preserved');
 expectEqual(generatedLooks[0].generationSource, 'claude', 'generation source is mapped onto each look');
@@ -276,9 +294,15 @@ const legacyWithoutMatch = mapBackendRecommendationLooks({
   prompt: 'legacy result',
   questions: [],
   answers: [],
+  imageStatus: 'pending',
   recommendation: {
     generationSource: 'claude',
-    looks: [{id: 'legacy-anchor', role: 'anchor', title: 'legacy anchor'}],
+    looks: [{
+      ...COMPLETE_BACKEND_LOOK_FIELDS,
+      id: 'legacy-anchor',
+      role: 'anchor',
+      title: 'legacy anchor',
+    }],
   },
 })[0];
 expectEqual(
@@ -292,33 +316,79 @@ const corruptMatch = mapBackendRecommendationLooks({
   prompt: 'corrupt match result',
   questions: [],
   answers: [],
+  imageStatus: 'pending',
   recommendation: {
     generationSource: 'claude',
     matchAssessment: {...BACKEND_MATCH_ASSESSMENT, score: 101},
-    looks: [{id: 'corrupt-match-anchor', role: 'anchor', title: 'corrupt match anchor'}],
+    looks: [{
+      ...COMPLETE_BACKEND_LOOK_FIELDS,
+      id: 'corrupt-match-anchor',
+      role: 'anchor',
+      title: 'corrupt match anchor',
+    }],
   },
 })[0];
 expectEqual(corruptMatch.matchAssessment, undefined, 'corrupt matchAssessment is ignored without a fallback score');
 
-const completedWithoutImageUrl = mapBackendRecommendationLooks({
-  reportId: 'report-missing-completed-image',
-  prompt: '면접',
-  questions: [],
-  answers: [],
-  imageStatus: 'completed',
-  recommendation: {
-    looks: [{id: 'missing-image-anchor', role: 'anchor', title: '완료됐지만 URL 없는 룩'}],
-  },
-})[0];
-expectEqual(
-  completedWithoutImageUrl.imageStatus,
-  'failed',
-  'aggregate completed status without an image URL is downgraded to failed',
-);
-expectEqual(
-  completedWithoutImageUrl.imageError,
-  '서버에서 생성된 이미지 주소를 받지 못했어요. 다시 시도해 주세요.',
-  'missing completed image URL exposes an actionable error instead of fixture success',
+for (const {label, look} of [
+  {label: 'missing title', look: {...COMPLETE_BACKEND_LOOK_FIELDS, id: 'missing-title', role: 'anchor', title: ' '}},
+  {label: 'missing summary', look: {...COMPLETE_BACKEND_LOOK_FIELDS, id: 'missing-summary', role: 'anchor', title: 'title', summary: ' '}},
+  {label: 'missing duration', look: {...COMPLETE_BACKEND_LOOK_FIELDS, id: 'missing-duration', role: 'anchor', title: 'title', durationMinutes: undefined}},
+  {label: 'missing full steps', look: {...COMPLETE_BACKEND_LOOK_FIELDS, id: 'missing-steps', role: 'anchor', title: 'title', steps: []}},
+]) {
+  expectThrows(
+    () => mapBackendRecommendationLooks({
+      reportId: `report-${label}`,
+      prompt: '면접',
+      questions: [],
+      answers: [],
+      imageStatus: 'pending',
+      recommendation: {generationSource: 'claude', looks: [look]},
+    }),
+    `${label} is rejected instead of being filled from a fixture`,
+  );
+}
+
+for (const generationSource of [undefined, 'deterministic_fallback'] as const) {
+  expectThrows(
+    () => mapBackendRecommendationLooks({
+      reportId: 'report-v2-without-ai-proof',
+      prompt: '면접',
+      questions: [],
+      answers: [],
+      imageStatus: 'pending',
+      requireClaudeGeneration: true,
+      recommendation: {
+        ...(generationSource ? {generationSource} : {}),
+        looks: [{
+          ...COMPLETE_BACKEND_LOOK_FIELDS,
+          id: 'v2-without-ai-proof',
+          role: 'anchor',
+          title: 'V2 source 검증',
+        }],
+      },
+    }),
+    'V2 production result without generationSource=claude is rejected',
+  );
+}
+expectThrows(
+  () => mapBackendRecommendationLooks({
+    reportId: 'report-missing-completed-image',
+    prompt: '면접',
+    questions: [],
+    answers: [],
+    imageStatus: 'completed',
+    recommendation: {
+      generationSource: 'claude',
+      looks: [{
+        ...COMPLETE_BACKEND_LOOK_FIELDS,
+        id: 'missing-image-anchor',
+        role: 'anchor',
+        title: '완료지만 URL 없는 룩',
+      }],
+    },
+  }),
+  'aggregate completed status without an image URL is rejected instead of using a fixture image',
 );
 
 const completedWithImageUrl = mapBackendRecommendationLooks({
@@ -328,7 +398,9 @@ const completedWithImageUrl = mapBackendRecommendationLooks({
   answers: [],
   imageStatus: 'completed',
   recommendation: {
+    generationSource: 'claude',
     looks: [{
+      ...COMPLETE_BACKEND_LOOK_FIELDS,
       id: 'completed-image-anchor',
       role: 'anchor',
       title: 'URL이 있는 완료 룩',
@@ -384,16 +456,27 @@ const missingBrandGuide = buildRecommendedAreaGuides({
 })[0];
 expectEqual(missingBrandGuide.products[0].brandName, '', 'missing backend brand stays empty instead of using a label as a brand');
 
+const invalidOnlyHistoryPage = mapBackendRecommendationReportsPage(
+  [null, {id: 'invalid-report'}],
+  {limit: 2, offset: 40},
+);
+expectEqual(invalidOnlyHistoryPage.reports.length, 0, 'invalid raw history records remain hidden');
+expectEqual(invalidOnlyHistoryPage.rawCount, 2, 'history cursor counts every consumed raw record');
+expectEqual(invalidOnlyHistoryPage.nextOffset, 42, 'history cursor advances past invalid raw records');
+expectEqual(invalidOnlyHistoryPage.hasMore, true, 'a full raw page keeps pagination open even when every record is invalid');
+expectEqual(rewindMakeupRecommendationHistoryOffset(42), 41, 'deleting one loaded raw row rewinds the next offset once');
+expectEqual(rewindMakeupRecommendationHistoryOffset(0), 0, 'deletion cursor rewind never produces a negative offset');
+
 const reportHistory = mapBackendRecommendationReports([
   {
     id: 'report-1',
     scenarioText: '퇴근 후 약속',
     recommendation: {
-      generationSource: 'deterministic_fallback',
+      generationSource: 'claude',
       matchAssessment: {
         ...BACKEND_MATCH_ASSESSMENT,
         score: 99,
-        generationSource: 'deterministic_fallback',
+        generationSource: 'claude',
       },
       looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
         id: `saved-look-${index + 1}`,
@@ -404,13 +487,15 @@ const reportHistory = mapBackendRecommendationReports([
         appliedConditions: ['퇴근 후 약속'],
         durationMinutes: 20,
         difficulty: 'medium',
-        steps: [{order: 1, area: 'base', instruction: '얇게 바르기'}],
+        steps: COMPLETE_BACKEND_STEPS,
         products: [{area: 'base', brandName: '브랜드', productName: '쿠션', reason: '얇은 표현'}],
         lookMap: BACKEND_LOOK_MAP,
         fitAssessment: {...BACKEND_FIT_ASSESSMENT, overallScore: 74},
+        imageUrl: `https://signed.example.com/report-1-${role}.jpg`,
       })),
     },
     imageStatus: 'completed',
+    schema_version: 'makeup-recommendation-v2',
     previewImageUrl: 'https://signed.example.com/report-1-anchor.jpg',
     previewImageStatus: 'completed',
     createdAt: '2026-07-14T12:34:56Z',
@@ -485,6 +570,42 @@ expectEqual(
   'completed',
   'saved report anchor keeps the received preview renderable',
 );
+const previewOnlyAnchorHistory = mapBackendRecommendationReports([{
+  id: 'report-preview-only-anchor',
+  scenarioText: 'preview-only anchor',
+  recommendation: {
+    generationSource: 'claude',
+    looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
+      id: `preview-only-look-${index + 1}`,
+      role,
+      title: `${role} title`,
+      summary: `${role} summary`,
+      reasons: ['generated reason'],
+      appliedConditions: ['preview-only anchor'],
+      durationMinutes: 20,
+      difficulty: 'medium',
+      steps: COMPLETE_BACKEND_STEPS,
+      ...(role === 'anchor'
+        ? {}
+        : {imageUrl: `https://signed.example.com/report-preview-only-${role}.jpg`}),
+    })),
+  },
+  imageStatus: 'completed',
+  schema_version: 'makeup-recommendation-v2',
+  previewImageUrl: 'https://signed.example.com/report-preview-only-anchor.jpg',
+  previewImageStatus: 'completed',
+  createdAt: '2026-07-23T12:34:56Z',
+}]);
+expectEqual(
+  previewOnlyAnchorHistory.length,
+  1,
+  'completed V2 history remains visible when its anchor URL is supplied only as the preview asset',
+);
+expectEqual(
+  JSON.stringify(previewOnlyAnchorHistory[0].results[0].imageSource),
+  JSON.stringify({uri: 'https://signed.example.com/report-preview-only-anchor.jpg'}),
+  'preview-only anchor is applied before completed-look validation',
+);
 expectEqual(
   getMakeupRecommendationPreviewStatusLabel('processing'),
   '적용 이미지 생성 중',
@@ -521,18 +642,18 @@ expectEqual(reportHistory[0].results.length, 3, 'saved report restores three loo
 expectEqual(reportHistory[0].results[0].title, 'anchor title', 'saved report restores look copy');
 expectEqual(
   reportHistory[0].results[0].generationSource,
-  'deterministic_fallback',
-  'saved report restores fallback generation source',
+  'claude',
+  'saved report restores AI generation source',
 );
 expectEqual(reportHistory[0].results[0].fitAssessment?.overallScore, 74, 'saved report restores fit score');
 expectEqual(
   reportHistory[0].results[0].matchAssessment?.score,
   99,
-  'saved fallback report restores the exact uncapped server match score',
+  'saved AI report restores the exact server match score',
 );
 expectEqual(
   reportHistory[0].results[0].matchAssessment?.generationSource,
-  'deterministic_fallback',
+  'claude',
   'saved report restores match generation metadata without changing the score',
 );
 expectEqual(reportHistory[0].results[1].matchAssessment, undefined, 'saved match remains anchor-only');
@@ -550,8 +671,8 @@ expectEqual(
 );
 expectEqual(
   restoredReport.results[0].generationSource,
-  'deterministic_fallback',
-  'restored session keeps generation source',
+  'claude',
+  'restored session keeps AI generation source',
 );
 expectEqual(
   restoredReport.results[0].matchAssessment?.score,
@@ -585,8 +706,9 @@ const mixedRuntimeArrayHistory = mapBackendRecommendationReports([
         appliedConditions: ['mixed runtime arrays'],
         durationMinutes: 15,
         difficulty: 'medium',
-        steps: [{order: 1, area: 'base', instruction: 'apply lightly'}],
+        steps: COMPLETE_BACKEND_STEPS,
         products: [],
+        imageUrl: 'https://signed.example.com/mixed-look.jpg',
       }],
     },
     imageStatus: 'completed',
@@ -887,7 +1009,7 @@ async function expectGeneratedBackendFlowCompletesAndKeepsSavedReport() {
           appliedConditions: ['퇴근 후 약속'],
           durationMinutes: 20,
           difficulty: 'medium',
-          steps: [{order: 1, area: 'base', instruction: '얇게 표현해요.'}],
+          steps: COMPLETE_BACKEND_STEPS,
           products: [{area: 'base', brandName: '브랜드', productName: '제품', reason: '조화로워요.'}],
         })),
       },
@@ -987,11 +1109,12 @@ async function expectPollingParsesJsonStringRecommendationAndKeepsResults() {
       appliedConditions: ['공항 출국 레전드'],
       durationMinutes: 25,
       difficulty: 'medium',
-      steps: [{order: 1, area: 'base', instruction: '얇게 정리해요.'}],
+      steps: COMPLETE_BACKEND_STEPS,
       products: [{area: 'base', brandName: '브랜드', productName: '제품', reason: '잘 맞아요.'}],
     })),
   };
   const initialResults = mapBackendRecommendationLooks({
+    imageStatus: 'pending',
     reportId: 'report-poll',
     recommendation: backendRecommendation,
     prompt: '공항 출국 레전드',
@@ -1148,14 +1271,17 @@ async function expectV2DiscoverySessionAnswerGenerateContract() {
       reportId,
       imageStatus: 'pending',
       recommendation: {
+        generationSource: 'claude',
         looks: ['anchor', 'bold', 'discovery'].map((role, index) => ({
           id: `v2-look-${index + 1}`,
           role,
           title: `V2 룩 ${index + 1}`,
           summary: '보고서와 상황을 반영한 추천',
           reasons: ['선택한 얼굴 분석 보고서와 키워드를 반영했어요.'],
+          appliedConditions: ['선택한 상황과 답변'],
           durationMinutes: 15,
           difficulty: 'medium',
+          steps: COMPLETE_BACKEND_STEPS,
           areaGuides: [{
             area: 'base',
             label: '베이스',
@@ -1235,11 +1361,12 @@ async function expectV2DiscoverySessionAnswerGenerateContract() {
 
   await startGeneratedMakeupRecommendationV2({
     analysisReportId,
-    customSituationText: '야외 결혼식에서 오래 유지되는 단정한 메이크업',
+    customSituationText: '로판 여주',
     imageMode: 'personalized',
   }, backendRequest);
   const customRequest = requestLog.filter(item => item.path.endsWith('/sessions')).at(-1);
   const customBody = customRequest?.body as Record<string, unknown>;
+  expectEqual(customBody.customSituationText, '로판 여주', 'arbitrary safe custom text reaches the backend unchanged');
   expectEqual(
     Object.keys(customBody).sort().join(','),
     'analysisReportId,customSituationText,imageMode',
@@ -1274,13 +1401,16 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
   async function legacyDiscoveryCollisionRequest<T>(): Promise<T> {
     throw new BackendApiError('Request validation failed.', 422, 'VALIDATION_ERROR');
   }
-  const discoveryFallback = await fetchMakeupRecommendationDiscovery(
-    legacyDiscoveryCollisionRequest,
-  );
+  let discoveryCollisionError: unknown;
+  try {
+    await fetchMakeupRecommendationDiscovery(legacyDiscoveryCollisionRequest);
+  } catch (error) {
+    discoveryCollisionError = error;
+  }
   expectEqual(
-    discoveryFallback.source,
-    'fixture',
-    'legacy report-id route collision falls back to the local situation catalog',
+    discoveryCollisionError instanceof MakeupRecommendationRetryableError,
+    true,
+    'legacy report-id route collision fails closed instead of loading a local catalog',
   );
 
   async function malformedDiscoveryRequest<T>(): Promise<T> {
@@ -1293,8 +1423,17 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
       }],
     } as T;
   }
-  const malformedFallback = await fetchMakeupRecommendationDiscovery(malformedDiscoveryRequest);
-  expectEqual(malformedFallback.source, 'fixture', 'malformed discovery success uses the reviewed fixture catalog');
+  let malformedDiscoveryError: unknown;
+  try {
+    await fetchMakeupRecommendationDiscovery(malformedDiscoveryRequest);
+  } catch (error) {
+    malformedDiscoveryError = error;
+  }
+  expectEqual(
+    malformedDiscoveryError instanceof MakeupRecommendationRetryableError,
+    true,
+    'malformed discovery success fails closed instead of using fixture data',
+  );
 
   async function duplicateDiscoveryRequest<T>(): Promise<T> {
     const keys = ['daily', 'formal_event', 'camera_content', 'festival_performance'];
@@ -1313,14 +1452,37 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
       })),
     } as T;
   }
-  const duplicateFallback = await fetchMakeupRecommendationDiscovery(duplicateDiscoveryRequest);
-  expectEqual(duplicateFallback.source, 'fixture', 'duplicate discovery ids use the reviewed fixture catalog');
+  let duplicateDiscoveryError: unknown;
+  try {
+    await fetchMakeupRecommendationDiscovery(duplicateDiscoveryRequest);
+  } catch (error) {
+    duplicateDiscoveryError = error;
+  }
+  expectEqual(
+    duplicateDiscoveryError instanceof MakeupRecommendationRetryableError,
+    true,
+    'duplicate discovery ids fail closed instead of using fixture data',
+  );
 
   async function networkDiscoveryRequest<T>(): Promise<T> {
     throw new BackendNetworkError();
   }
-  const networkFallback = await fetchMakeupRecommendationDiscovery(networkDiscoveryRequest);
-  expectEqual(networkFallback.source, 'fixture', 'network discovery failure uses the reviewed fixture catalog');
+  let discoveryNetworkError: unknown;
+  try {
+    await fetchMakeupRecommendationDiscovery(networkDiscoveryRequest);
+  } catch (error) {
+    discoveryNetworkError = error;
+  }
+  expectEqual(
+    discoveryNetworkError instanceof MakeupRecommendationRetryableError,
+    true,
+    'network discovery failure never becomes a local fixture success',
+  );
+  expectEqual(
+    (discoveryNetworkError as Error).message.includes('네트워크'),
+    true,
+    'network discovery failure keeps the actionable retry message',
+  );
 
   const fixtureKeyword = situation.keywords[0];
   const fixtureSessionId = 'f0000000-0000-4000-8000-000000000001';
@@ -1415,29 +1577,52 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
   const previousApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
   try {
     delete process.env.EXPO_PUBLIC_API_BASE_URL;
-    const noApiFallback = await startGeneratedMakeupRecommendationV2({
-      analysisReportId,
-      discoverySource: 'fixture',
-      situation,
-      keyword: fixtureKeyword,
-    });
-    expectEqual(noApiFallback.generationMode, 'fixture', 'missing API base uses the explicit local fixture flow');
+    let noApiError: unknown;
+    try {
+      await startGeneratedMakeupRecommendationV2({
+        analysisReportId,
+        discoverySource: 'fixture',
+        situation,
+        keyword: fixtureKeyword,
+      });
+    } catch (error) {
+      noApiError = error;
+    }
+    expectEqual(
+      noApiError instanceof MakeupRecommendationRetryableError,
+      true,
+      'missing API base fails closed instead of completing with local fixture looks',
+    );
+    expectEqual(
+      (noApiError as Error).message.includes('추천 서버 연결 설정'),
+      true,
+      'missing API base explains the release configuration problem',
+    );
   } finally {
     if (previousApiBaseUrl === undefined) delete process.env.EXPO_PUBLIC_API_BASE_URL;
     else process.env.EXPO_PUBLIC_API_BASE_URL = previousApiBaseUrl;
   }
 
   let nonUuidFixtureRequestCount = 0;
-  const fixtureReportFallback = await startGeneratedMakeupRecommendationV2({
-    analysisReportId: 'analysis-report-fixture',
-    discoverySource: 'fixture',
-    situation,
-    keyword: fixtureKeyword,
-  }, async () => {
-    nonUuidFixtureRequestCount += 1;
-    throw new Error('fixture report must stay local');
-  });
-  expectEqual(fixtureReportFallback.generationMode, 'fixture', 'non-UUID fixture report stays in local preview');
+  let fixtureReportError: unknown;
+  try {
+    await startGeneratedMakeupRecommendationV2({
+      analysisReportId: 'analysis-report-fixture',
+      discoverySource: 'fixture',
+      situation,
+      keyword: fixtureKeyword,
+    }, async () => {
+      nonUuidFixtureRequestCount += 1;
+      throw new Error('fixture report must never reach the backend');
+    });
+  } catch (error) {
+    fixtureReportError = error;
+  }
+  expectEqual(
+    fixtureReportError instanceof MakeupRecommendationRetryableError,
+    true,
+    'non-UUID fixture report fails closed instead of becoming a local preview',
+  );
   expectEqual(nonUuidFixtureRequestCount, 0, 'non-UUID fixture report never reaches the backend');
 
   let networkFailure: unknown;
@@ -1455,6 +1640,41 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
   }
   expectEqual(networkFailure instanceof MakeupRecommendationRetryableError, true, 'network failure never becomes fake local success');
   expectEqual((networkFailure as Error).message.includes('네트워크'), true, 'network failure shows the reviewed Korean retry message');
+
+  let providerFailureRequestCount = 0;
+  let providerFailure: unknown;
+  try {
+    await startGeneratedMakeupRecommendationV2({
+      analysisReportId,
+      discoverySource: 'fixture',
+      situation,
+      keyword: fixtureKeyword,
+    }, async () => {
+      providerFailureRequestCount += 1;
+      throw new BackendApiError(
+        'AI provider request failed.',
+        502,
+        'BEDROCK_REQUEST_FAILED',
+      );
+    });
+  } catch (error) {
+    providerFailure = error;
+  }
+  expectEqual(
+    providerFailure instanceof MakeupRecommendationRetryableError,
+    true,
+    'Bedrock provider failure is surfaced as a retryable generation error',
+  );
+  expectEqual(
+    (providerFailure as Error).message.includes('AI 메이크업 추천'),
+    true,
+    'Bedrock provider failure keeps the actionable AI retry message',
+  );
+  expectEqual(
+    providerFailureRequestCount,
+    1,
+    'Bedrock provider failure never probes legacy generation or fixture success',
+  );
 
   const legacyRequestPaths: string[] = [];
   let legacyV2Body: Record<string, unknown> | undefined;
@@ -1489,8 +1709,10 @@ async function expectV2OnlyFallsBackForUnavailableEndpoint() {
             title: `레거시 룩 ${index + 1}`,
             summary: '선택한 트렌드를 반영한 추천',
             reasons: ['선택한 트렌드와 답변을 반영했어요.'],
+            appliedConditions: ['선택한 트렌드와 답변'],
             durationMinutes: 15,
             difficulty: 'medium',
+            steps: COMPLETE_BACKEND_STEPS,
           })),
         },
       } as T;

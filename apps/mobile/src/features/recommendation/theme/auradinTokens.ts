@@ -89,7 +89,6 @@ export const gradPoints = {
   deg160: { start: { x: 0.33, y: 0 }, end: { x: 0.67, y: 1 } },
   deg165: { start: { x: 0.37, y: 0 }, end: { x: 0.63, y: 1 } },
   deg178: { start: { x: 0.48, y: 0 }, end: { x: 0.52, y: 1 } },
-  glare120: { start: { x: 0, y: 0.1 }, end: { x: 1, y: 0.65 } },
   vertical: { start: { x: 0.5, y: 0 }, end: { x: 0.5, y: 1 } },
 } as const;
 
@@ -339,16 +338,6 @@ export const glassTiers: Record<GlassTierName, GlassTierSpec> = {
   },
 };
 
-/** Diagonal edge glare — stays at the EDGES, never a full-surface milky wash. */
-export const edgeGlare = {
-  colors: [
-    'rgba(255,255,255,0.40)',
-    'rgba(255,255,255,0)',
-    'rgba(255,255,255,0)',
-    'rgba(255,255,255,0.22)',
-  ] as GradientStops,
-  locations: [0, 0.18, 0.78, 1] as GradientLocations,
-} as const;
 
 /* ─ Motion (tokens/motion.css) ─ */
 export const motion = {

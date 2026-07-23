@@ -109,7 +109,23 @@ export function FaceAnalysisReportPreviewScreen({
   const [bodyProfile, setBodyProfile] = useState<BodyProfile | null>(null);
   const [isBodySurveyOpen, setIsBodySurveyOpen] = useState(false);
   const [activeShareTarget, setActiveShareTarget] = useState<ReportShareTarget | null>(null);
+  const [captureRequestId, setCaptureRequestId] = useState<number | null>(null);
   const reportCaptureRef = useRef<OptionalViewShotRef | null>(null);
+  const captureRequestIdRef = useRef<number | null>(null);
+  const captureDocumentReadyRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const shareOperationRef = useRef(0);
+  const shareInFlightRef = useRef(false);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      shareOperationRef.current += 1;
+      captureRequestIdRef.current = null;
+      captureDocumentReadyRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -280,22 +296,47 @@ export function FaceAnalysisReportPreviewScreen({
 
   const profileName = loadState.status === 'success' ? loadState.profile?.name : undefined;
 
+  const handleCaptureDocumentSettledChange = useCallback((requestId: number, settled: boolean) => {
+    if (captureRequestIdRef.current === requestId) {
+      captureDocumentReadyRef.current = settled;
+    }
+  }, []);
+
   const handleShareAction = useCallback(
     async (target: ReportShareTarget) => {
-      if (!report || activeShareTarget) {
+      if (!report || shareInFlightRef.current) {
         return;
       }
 
+      shareInFlightRef.current = true;
+      const operationId = ++shareOperationRef.current;
       setActiveShareTarget(target);
+
       try {
         if (target === 'save-image') {
           await requestReportImageSavePermission();
         }
 
-        const imageUri = await captureReportImage(reportCaptureRef);
+        if (!isMountedRef.current || shareOperationRef.current !== operationId) {
+          return;
+        }
+
+        captureRequestIdRef.current = operationId;
+        captureDocumentReadyRef.current = false;
+        setCaptureRequestId(operationId);
+
+        const imageUri = await captureReportImage(reportCaptureRef, {
+          isReady: () => captureRequestIdRef.current === operationId
+            && captureDocumentReadyRef.current,
+          shouldContinue: () => isMountedRef.current
+            && shareOperationRef.current === operationId,
+        });
 
         if (target === 'save-image') {
           await saveReportImageToLibrary(imageUri);
+          if (isMountedRef.current && shareOperationRef.current === operationId) {
+            Alert.alert('저장 완료', '전체 얼굴 분석 보고서를 갤러리에 저장했어요.');
+          }
           return;
         }
 
@@ -304,18 +345,30 @@ export function FaceAnalysisReportPreviewScreen({
           title: getReportCaptureTitle(profileName),
         });
       } catch (error) {
+        if (!isMountedRef.current || shareOperationRef.current !== operationId) {
+          return;
+        }
         console.info('[aura:analysis] report-share:failed', {
           message: error instanceof Error ? error.message : String(error),
           target,
         });
-        Alert.alert(`${reportShareTargetLabels[target]} 실패`, getShareErrorMessage(error));
+        Alert.alert(reportShareTargetLabels[target] + ' 실패', getShareErrorMessage(error));
       } finally {
-        setActiveShareTarget(null);
+        if (captureRequestIdRef.current === operationId) {
+          captureRequestIdRef.current = null;
+          captureDocumentReadyRef.current = false;
+        }
+        if (shareOperationRef.current === operationId) {
+          shareInFlightRef.current = false;
+        }
+        if (isMountedRef.current && shareOperationRef.current === operationId) {
+          setCaptureRequestId(null);
+          setActiveShareTarget(null);
+        }
       }
     },
-    [activeShareTarget, profileName, report],
+    [profileName, report],
   );
-
   // 상세 보고서의 상단 더보기는 공유·저장·추천 제품만 제공한다.
   // 삭제는 보고서 목록 카드의 점점점 메뉴에서만 수행한다.
   const handleMore = useCallback(() => {
@@ -379,6 +432,7 @@ export function FaceAnalysisReportPreviewScreen({
     <>
       <ReportScreenScaffold
         captureRef={reportCaptureRef}
+        captureRequestId={captureRequestId}
         data={visibleReportData}
         onBack={onBack}
         onMore={report ? handleMore : undefined}
@@ -386,6 +440,7 @@ export function FaceAnalysisReportPreviewScreen({
         onRetake={onRetake}
         measurementDebugPayload={measurementDebugPayload}
         measurementDebugSummary={measurementDebugSummary}
+        onCaptureDocumentSettledChange={handleCaptureDocumentSettledChange}
       />
       {/*
         BodyPanel is the AR stencil's overlay card (maxHeight 460, dark glass) —

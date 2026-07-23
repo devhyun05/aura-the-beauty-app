@@ -1,5 +1,7 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
+  AccessibilityInfo,
+  Alert,
   Image,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -8,11 +10,16 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
-import {ChevronRight} from 'lucide-react-native';
+import {ChevronRight, Download} from 'lucide-react-native';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, iconSize, radius, shadows, spacing, typography} from '../../../shared/theme';
+import {loadOptionalMediaLibraryModule} from '../../../shared/services/optionalNativeShareModules';
 import {AppScreen} from '../../../shared/ui';
+import {
+  OptionalViewShot,
+  type OptionalViewShotRef,
+} from '../../../shared/ui/OptionalViewShot';
 import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import type {FaceAnalysisRegionVisuals} from '../../face-analysis/services/faceAnalysisMeasurements';
 import {analyzeFaceGeometry2d} from '../../face-geometry/services/faceGeometryService';
@@ -38,6 +45,81 @@ import type {
   ReferenceMakeupPhoto,
 } from '../types';
 
+const EXTRACTION_CAPTURE_OPTIONS = {
+  format: 'jpg',
+  quality: 0.95,
+  result: 'tmpfile',
+  useRenderInContext: true,
+} as const;
+
+function waitForExtractionCaptureLayout() {
+  return new Promise<void>(resolve => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  });
+}
+
+const EXTRACTION_CAPTURE_SETTLE_TIMEOUT_MS = 10_000;
+
+function waitForExtractionCaptureAssets(
+  readyRef: {current: boolean},
+  resolveRef: {current: (() => void) | null},
+) {
+  if (readyRef.current) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const finish = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = null;
+      if (resolveRef.current === finish) resolveRef.current = null;
+      resolve();
+    };
+    const fail = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = null;
+      if (resolveRef.current === finish) resolveRef.current = null;
+      reject(
+        new Error(
+          '메이크업 추출 보고서의 상세 이미지를 모두 불러오지 못했어요. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+        ),
+      );
+    };
+
+    resolveRef.current = finish;
+    timeoutId = setTimeout(fail, EXTRACTION_CAPTURE_SETTLE_TIMEOUT_MS);
+    if (readyRef.current) finish();
+  });
+}
+
+async function requestExtractionReportSavePermission() {
+  const mediaLibrary = loadOptionalMediaLibraryModule();
+  if (!mediaLibrary) {
+    throw new Error('현재 앱에서 사진 저장 기능을 사용할 수 없어요.');
+  }
+  const currentPermission = await mediaLibrary.getPermissionsAsync(true, []);
+  const permission = currentPermission.granted
+    ? currentPermission
+    : await mediaLibrary.requestPermissionsAsync(true, []);
+  if (!permission.granted) {
+    throw new Error('사진 저장 권한이 필요합니다. 설정에서 사진 접근을 허용해 주세요.');
+  }
+}
+
+async function saveExtractionReportImage(imageUri: string) {
+  const mediaLibrary = loadOptionalMediaLibraryModule();
+  if (!mediaLibrary) {
+    throw new Error('현재 앱에서 사진 저장 기능을 사용할 수 없어요.');
+  }
+  try {
+    await mediaLibrary.saveToLibraryAsync(imageUri);
+  } catch {
+    await mediaLibrary.createAssetAsync(imageUri);
+  }
+}
 type ReferenceMakeupExtractionResultScreenProps = {
   headerTitle?: string;
   photo: ReferenceMakeupPhoto;
@@ -58,6 +140,11 @@ export function ReferenceMakeupExtractionResultScreen({
   const isProgrammaticAreaScrollRef = useRef(false);
   const areaScrollUnlockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const areaPageWidth = width;
+  const captureRef = useRef<OptionalViewShotRef | null>(null);
+  const saveInFlightRef = useRef(false);
+  const capturePagesSettledRef = useRef(false);
+  const capturePagesResolveRef = useRef<(() => void) | null>(null);
+  const [isSavingReport, setIsSavingReport] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -161,6 +248,50 @@ export function ReferenceMakeupExtractionResultScreen({
     };
   }, [referencePhotoUri]);
 
+  const handleCapturePagesSettledChange = useCallback((settled: boolean) => {
+    capturePagesSettledRef.current = settled;
+    if (settled) capturePagesResolveRef.current?.();
+  }, []);
+
+  const handleSaveReport = useCallback(async () => {
+    if (saveInFlightRef.current) {
+      return;
+    }
+
+    saveInFlightRef.current = true;
+    capturePagesSettledRef.current = false;
+    setIsSavingReport(true);
+    try {
+      await requestExtractionReportSavePermission();
+      await waitForExtractionCaptureLayout();
+      await waitForExtractionCaptureAssets(
+        capturePagesSettledRef,
+        capturePagesResolveRef,
+      );
+      await waitForExtractionCaptureLayout();
+      const captureTarget = captureRef.current;
+      const imageUri = await captureTarget?.capture?.();
+
+      if (!imageUri) {
+        throw new Error('메이크업 추출 보고서 이미지를 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
+      }
+
+      await saveExtractionReportImage(imageUri);
+      AccessibilityInfo.announceForAccessibility('전체 메이크업 추출 보고서를 사진에 저장했어요.');
+      Alert.alert('저장 완료', '모든 부위의 상세 페이지를 포함한 추출 보고서를 갤러리에 저장했어요.');
+    } catch (error) {
+      Alert.alert(
+        '보고서를 저장하지 못했어요',
+        error instanceof Error ? error.message : '잠시 후 다시 시도해 주세요.',
+      );
+    } finally {
+      capturePagesResolveRef.current = null;
+      capturePagesSettledRef.current = false;
+      setIsSavingReport(false);
+      saveInFlightRef.current = false;
+    }
+  }, []);
+
   return (
     <AppScreen
       bottomPadding={0}
@@ -173,6 +304,10 @@ export function ReferenceMakeupExtractionResultScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}>
+        <OptionalViewShot
+          options={EXTRACTION_CAPTURE_OPTIONS}
+          ref={captureRef}
+          style={styles.captureRoot}>
         <LookIntroPhoto photo={photo} width={width} />
         <View style={styles.reportMeta}>
           <Text style={styles.reportCreatedAt}>
@@ -183,7 +318,9 @@ export function ReferenceMakeupExtractionResultScreen({
 
         <YStack style={styles.areaExploreSection}>
           <FinalAreaGuideSection
-            generatedReady={false}
+            captureAllPages={isSavingReport}
+            generatedReady
+            onCapturePagesSettledChange={handleCapturePagesSettledChange}
             look={areaGuideLook}
             onAreaOpened={() => {}}
             sourceImageUri={referencePhotoUri}
@@ -191,6 +328,24 @@ export function ReferenceMakeupExtractionResultScreen({
             sourceRegionVisuals={regionVisuals}
           />
         </YStack>
+        </OptionalViewShot>
+
+        <Pressable
+          accessibilityLabel="메이크업 추출 전체 보고서 갤러리에 저장"
+          accessibilityRole="button"
+          accessibilityState={{busy: isSavingReport, disabled: isSavingReport}}
+          disabled={isSavingReport}
+          onPress={() => void handleSaveReport()}
+          style={({pressed}) => [
+            styles.reportSaveButton,
+            isSavingReport && styles.reportSaveButtonDisabled,
+            pressed && styles.pressed,
+          ]}>
+          <Download color={colors.white} size={iconSize.xs} strokeWidth={2.2} />
+          <Text style={styles.reportSaveButtonText}>
+            {isSavingReport ? '전체 보고서 준비 중' : '전체 보고서 저장'}
+          </Text>
+        </Pressable>
 
         <XStack style={styles.actionRow}>
           <Pressable
@@ -633,6 +788,30 @@ const sharedCardShadow = {
 } as const;
 
 const styles = StyleSheet.create({
+  captureRoot: {
+    backgroundColor: colors.background,
+    gap: spacing.lg,
+    width: '100%',
+  },
+  reportSaveButton: {
+    alignItems: 'center',
+    backgroundColor: colors.blackSurface,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'center',
+    marginHorizontal: spacing.md,
+    minHeight: 52,
+  },
+  reportSaveButtonDisabled: {
+    opacity: 0.58,
+  },
+  reportSaveButtonText: {
+    color: colors.white,
+    fontFamily: typography.fontFamily.bold,
+    fontSize: typography.fontSize.sm,
+    lineHeight: typography.lineHeight.sm,
+  },
   actionRow: {
     flexDirection: 'row',
     gap: spacing.sm,

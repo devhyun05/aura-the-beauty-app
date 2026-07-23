@@ -560,6 +560,7 @@ def _advance(
     question_count=int(state.get("questionCount") or 0),
     last_answer_was_noop=_last_answer_was_noop(state),
     score_gap_threshold=float(settings.auradin_score_gap_threshold),
+    hard_filters=retrieval["hardFilters"],
   )
   state["logs"].append(decision_log)
   state["logs"][-1]["retrievalBackend"] = retrieval.get("retrievalBackend")

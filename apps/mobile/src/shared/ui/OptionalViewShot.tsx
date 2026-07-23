@@ -17,6 +17,9 @@ export type OptionalViewShotOptions = {
   format?: 'jpg' | 'png' | 'webm' | 'raw';
   quality?: number;
   result?: 'tmpfile' | 'base64' | 'data-uri' | 'zip-base64';
+  // iOS drawViewHierarchy can return a blank image for very long views.
+  // CoreGraphics renderInContext preserves the full document height.
+  useRenderInContext?: boolean;
 };
 
 type OptionalViewShotProps = {

@@ -6,8 +6,11 @@ import hashlib
 import pytest
 
 from app.services.auradin_agent import shade_evidence
-from app.services import makeup_report_product_recommendations as recommendations
 from app.services import product_external_catalog
+
+
+# The retired recommendation fallback is covered by the verified live-discovery
+# color-evidence and offer-dedupe contracts in test_makeup_report_product_discovery.py.
 
 
 VERIFIED_ROSE_LIP_ID = "auradin-seed-7e2b5600678a4be3"
@@ -47,7 +50,7 @@ def test_refined_shade_evidence_digest_and_sources_are_fail_closed(tmp_path) -> 
 
 
 @pytest.mark.asyncio
-async def test_active_offer_identity_selects_verified_shade_without_delta_e_claim() -> None:
+async def test_active_offer_identity_gates_verified_shade_options() -> None:
   class OfflineDatabase:
     is_connected = False
 
@@ -70,66 +73,3 @@ async def test_active_offer_identity_selects_verified_shade_without_delta_e_clai
     **item,
     "_freshnessVerified": False,
   }) == ()
-
-  target = recommendations._guide_target(
-    {
-      "area": "lip",
-      "color": {"name": "로즈", "hex": "#B85E6D"},
-      "texture": "촉촉한 글로우 크림",
-      "applicationPlan": {
-        "steps": [{"productType": "글로우 틴트", "finishCheck": "글로우"}],
-      },
-    },
-    {},
-    "lip",
-  )
-  candidate = recommendations._external_candidate(item, target)
-  assert candidate is not None
-  assert candidate["shadeName"]
-  assert candidate["shadeHex"] is None
-  assert candidate["colorDistance"] is None
-  assert candidate["palette"] == []
-  assert candidate["recommendationBasis"] == "verifiedExternalShadeFamily"
-  assert candidate["degradedReason"] == "external_catalog_no_measured_swatch"
-  assert "VERIFIED_EXTERNAL_SHADE_OPTION" in candidate["reasonCodes"]
-  assert candidate["shadeName"] in candidate["reasonLabels"][0]
-  assert "보고서와 일치" in candidate["reasonLabels"][0]
-  assert not any("색차" in label or "ΔE" in label for label in candidate["reasonLabels"])
-
-
-def test_verified_option_prefers_exact_family_before_higher_confidence_adjacent() -> None:
-  adjacent = shade_evidence.VerifiedShadeOption(
-    shade_name="피치 옵션",
-    option_name="피치 옵션",
-    shade_number=None,
-    color_family="peach",
-    source_type="official_brand_page_option_json",
-    confidence=0.99,
-    color_family_confidence=0.99,
-  )
-  exact = shade_evidence.VerifiedShadeOption(
-    shade_name="로즈 옵션",
-    option_name="로즈 옵션",
-    shade_number=None,
-    color_family="rose",
-    source_type="official_brand_page_option_json",
-    confidence=0.80,
-    color_family_confidence=0.62,
-  )
-  selected = recommendations._verified_shade_option_match(
-    [adjacent, exact],
-    {"colorFamily": "rose", "colorFamilies": ["rose"]},
-  )
-  assert selected == (exact, "exact")
-
-
-def test_external_brand_diversity_defers_only_third_product_per_brand() -> None:
-  candidates = [
-    {"productId": "a1", "brandName": "A"},
-    {"productId": "a2", "brandName": "A"},
-    {"productId": "a3", "brandName": "A"},
-    {"productId": "b1", "brandName": "B"},
-    {"productId": "c1", "brandName": "C"},
-  ]
-  diversified = recommendations._brand_diverse_external_order(candidates)
-  assert [item["productId"] for item in diversified] == ["a1", "a2", "b1", "c1", "a3"]
