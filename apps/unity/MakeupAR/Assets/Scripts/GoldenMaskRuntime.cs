@@ -22,6 +22,10 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
     private const float IdleDelaySeconds = 1.4f;
     private const float PresentationShellThicknessMeters = 0.0018f;
     private const float WireframeSurfaceOffsetMeters = 0.00025f;
+    // Uniform camera zoom only. The measured X/Y/Z vertices remain byte-for-byte
+    // unchanged, while the merged summary card presents the mask at the same
+    // apparent size as the former full-height viewer.
+    private const float PresentationFramingScale = 1.08f;
     private const float ProfileShellStartYaw = 84.0f;
 
     [Serializable]
@@ -345,10 +349,9 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         }
         if (shellRenderer != null)
         {
-            // The thin finishing shell intersects the open ARKit surface in
-            // three-quarter views and reads as a second face. Keep the raw
-            // measured surface untouched there; show the clean edge treatment
-            // only when the user is actually inspecting a full profile.
+            // Keep the clean, thin cut edge for a true profile only. Showing
+            // an outer shell during a three-quarter view can read as a second
+            // face over the measured ARKit surface.
             shellRenderer.enabled =
                 Mathf.Abs(displayYaw) >= ProfileShellStartYaw;
         }
@@ -667,7 +670,7 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         presentationCamera.orthographicSize = Mathf.Max(
             bounds.extents.y,
             bounds.extents.x / aspect,
-            0.05f) * 1.24f;
+            0.05f) * PresentationFramingScale;
         presentationCamera.nearClipPlane = 0.01f;
         presentationCamera.farClipPlane = 2.0f;
     }
