@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   CircleHelp,
+  ShieldCheck,
   Settings2,
   UserCog,
   UserRound,
@@ -28,6 +29,7 @@ const settingsPalette = {
 
 type AppSettingsScreenProps = {
   onPressAccountManagement: () => void;
+  onPressAiDataConsent: () => void;
   onPressFaq: () => void;
   onPressProfile: () => void;
   onPressQuickActions: () => void;
@@ -43,6 +45,7 @@ type SettingsItemProps = {
 
 export const APP_SETTINGS_LABELS = {
   accountManagement: '계정 관리',
+  aiDataConsent: 'AI 데이터 관리',
   faq: 'FAQ',
   profile: '프로필 관리',
   quickActions: '빠른 실행 설정',
@@ -79,6 +82,7 @@ function SettingsItem({
 
 export function AppSettingsScreen({
   onPressAccountManagement,
+  onPressAiDataConsent,
   onPressFaq,
   onPressProfile,
   onPressQuickActions,
@@ -127,6 +131,12 @@ export function AppSettingsScreen({
               icon={UserCog}
               label={APP_SETTINGS_LABELS.accountManagement}
               onPress={onPressAccountManagement}
+            />
+            <SettingsItem
+              description="외부 AI 전송 동의와 철회를 관리해요."
+              icon={ShieldCheck}
+              label={APP_SETTINGS_LABELS.aiDataConsent}
+              onPress={onPressAiDataConsent}
             />
             <SettingsItem
               description="자주 묻는 질문과 앱 사용 안내를 확인해요."

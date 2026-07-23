@@ -25,6 +25,7 @@ import {RootNavigator} from '../app/navigation/RootNavigator';
 import type {RootStackParamList} from '../app/navigation/routeTypes';
 import type {ConsultingRecord} from '../features/consulting/types';
 import {prefetchHomeHeroImages} from '../features/home/config/homeHeroAssets';
+import {AiDataConsentProvider} from '../features/legal/services/aiDataConsentContext';
 import {
   navigateToAppNotification,
   shouldSuppressRealtimeAppNotification,
@@ -251,7 +252,8 @@ export function AppRoot() {
       <SafeAreaProvider>
         <StatusBar style={statusBarStyle} />
         <AuthSessionProvider>
-          <StartupGate
+          <AiDataConsentProvider>
+            <StartupGate
             fontsLoaded={fontsReady}
             hasMinimumElapsed={hasStartupMinimumElapsed}
             navigationReady={isNavigationReady}
@@ -283,7 +285,8 @@ export function AppRoot() {
               ) : null}
             </NavigationContainer>
             </NavigationFlowStateProvider>
-          </StartupGate>
+            </StartupGate>
+          </AiDataConsentProvider>
         </AuthSessionProvider>
       </SafeAreaProvider>
     </TamaguiProvider>
