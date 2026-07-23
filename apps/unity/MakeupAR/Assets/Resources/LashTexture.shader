@@ -21,6 +21,9 @@ Shader "ARMakeup/LashTexture"
         // 여기 값을 올리면 이중 적용되어 가장자리가 이진화(각진 덩어리)됨. 2026-07-22 실증.
         _AlphaLo ("Opacify Lo (gap)", Float) = 0
         _AlphaHi ("Opacify Hi (hair)", Float) = 1
+        // 결(농도) 반영량 — 텍스처 R=불투명화 전 잉크 농도(추출기 베이크, 0723).
+        // 0=진한 실루엣(하위호환) 1=원본 농담 전부(연한 획은 연하게 → 한올 결 복원).
+        _GrainAmt ("Grain (ink density mix)", Range(0,1)) = 0
     }
     SubShader
     {
@@ -51,7 +54,7 @@ Shader "ARMakeup/LashTexture"
             fixed4 _BrowColor;
             float _BrowIntensity;
             float _LashDebug;   // 0=합성 텍스처, 1=원시피드(초록, GATE0), 2=실제 속눈썹 증폭(GATE1)
-            float _EnhAmount, _EnhTap, _EnhSoft, _RootHi, _RootFade, _TightFloor, _TightBand, _AlphaLo, _AlphaHi;
+            float _EnhAmount, _EnhTap, _EnhSoft, _RootHi, _RootFade, _TightFloor, _TightBand, _AlphaLo, _AlphaHi, _GrainAmt;
 
             float FeedLuma(float2 uv)
             {
@@ -118,6 +121,8 @@ Shader "ARMakeup/LashTexture"
                 // 레벨 리맵으로 되살린다: 틈(낮은 알파)=0, 털(높은 알파)=불투명 1.
                 fixed4 t = tex2D(_MainTex, i.uv);
                 float a = saturate((t.a - _AlphaLo) / max(_AlphaHi - _AlphaLo, 0.01));
+                // 결 복원 — 알파(윤곽)는 유지한 채 원본 잉크 농도(t.r)를 섞는다.
+                a *= lerp(1.0, t.r, _GrainAmt);
                 a *= _BrowIntensity;
                 return fixed4(_BrowColor.rgb, a);
             }

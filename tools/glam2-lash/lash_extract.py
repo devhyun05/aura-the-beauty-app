@@ -299,6 +299,13 @@ def finalize(name, cfg, a, root_row):
         ramp = np.clip(np.linspace(0, 1, tw) / cfg["gap_frac"], 0, 1)
         a *= ramp[None, :]
 
+    # 결(농도) 채널 — 불투명화 '전'의 잉크 농도를 정규화해 RGB에 베이크(0723 승인).
+    # 알파=윤곽(가시성 철벽), R=농도(한올 결). 셰이더 _GrainAmt가 반영량을 조절:
+    # 0=현 실루엣(하위호환), 1=원본 농담 전부. 95퍼센타일 정규화라 최진 부분은 1 유지.
+    ink = a[a > 0.05]
+    dens_hi = np.percentile(ink, 95) if ink.size else 1.0
+    dens = np.clip(a / max(dens_hi, 1e-3), 0, 1)
+
     a = np.clip((a - OPACIFY_LO) / (OPACIFY_HI - OPACIFY_LO), 0, 1)  # 불투명화 — 유일한 1회
     a[r, :] = np.maximum(a[r, :], (a[r, :] > 0.15) * 0.6)             # 뿌리줄 앵커
 
@@ -306,6 +313,10 @@ def finalize(name, cfg, a, root_row):
 
     OUT.mkdir(parents=True, exist_ok=True)
     rgba = np.zeros((th, tw, 4), dtype=np.uint8)
+    d8 = (dens * 255).astype(np.uint8)
+    rgba[..., 0] = d8
+    rgba[..., 1] = d8
+    rgba[..., 2] = d8
     rgba[..., 3] = (a * 255).astype(np.uint8)
     png = OUT / f"lash_glam_{name}.png"
     Image.fromarray(rgba).save(png)
