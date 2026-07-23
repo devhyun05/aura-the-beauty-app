@@ -1088,7 +1088,11 @@ export const deleteFaceAnalysisReport = async (
   reportId: string,
 ): Promise<boolean> => {
   if (!getBackendApiBaseUrl()) {
-    return true;
+    throw new BackendApiError(
+      '얼굴 분석 서버 연결 설정을 확인하지 못했어요. 앱을 다시 실행해 주세요.',
+      503,
+      'FACE_ANALYSIS_API_BASE_URL_MISSING',
+    );
   }
 
   const response = await requestBackendJson<DeleteAnalysisReportResponse>(

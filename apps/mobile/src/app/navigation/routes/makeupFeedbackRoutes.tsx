@@ -21,6 +21,7 @@ import {
 } from '../../../features/makeup-feedback/services/makeupFeedbackJourneyContext';
 import {notifyMakeupJourneyFeedbackCompleted} from '../../../features/makeup-journey';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {AiDataConsentGate} from '../../../features/legal/components/AiDataConsentGate';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {RoutePlaceholder} from '../../../shared/ui';
 import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAnalytics';
@@ -120,14 +121,16 @@ export function MakeupFeedbackCaptureRouteScreen({
   }, [clearMakeupFeedbackFlowContext, journeyContext, navigation]);
 
   return (
-    <CameraFaceCaptureScreen
-      captureMode="face"
-      captureType="makeup_feedback"
-      onCapture={handleCapture}
-      deferUpload
-      imageQuality={1}
-      onClose={handleClose}
-    />
+    <AiDataConsentGate onDecline={handleClose}>
+      <CameraFaceCaptureScreen
+        captureMode="face"
+        captureType="makeup_feedback"
+        onCapture={handleCapture}
+        deferUpload
+        imageQuality={1}
+        onClose={handleClose}
+      />
+    </AiDataConsentGate>
   );
 }
 
@@ -178,14 +181,16 @@ export function MakeupFeedbackAlbumUploadRouteScreen({
   }, [clearMakeupFeedbackFlowContext, journeyContext, navigation]);
 
   return (
-    <DetailRouteChrome
-      routeName="MakeupFeedbackAlbumUpload"
-      onBack={handleBack}>
-      <MakeupFeedbackAlbumUploadScreen
-        onCancel={handleBack}
-        onStartAnalysis={handleStartAnalysis}
-      />
-    </DetailRouteChrome>
+    <AiDataConsentGate onDecline={handleBack}>
+      <DetailRouteChrome
+        routeName="MakeupFeedbackAlbumUpload"
+        onBack={handleBack}>
+        <MakeupFeedbackAlbumUploadScreen
+          onCancel={handleBack}
+          onStartAnalysis={handleStartAnalysis}
+        />
+      </DetailRouteChrome>
+    </AiDataConsentGate>
   );
 }
 

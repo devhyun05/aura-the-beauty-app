@@ -29,6 +29,7 @@ const settingsPalette = {
 
 type AppSettingsScreenProps = {
   onPressAccountManagement: () => void;
+  onPressAiDataConsent: () => void;
   onPressFaq: () => void;
   onPressPrivacyPolicy: () => void;
   onPressProfile: () => void;
@@ -45,6 +46,7 @@ type SettingsItemProps = {
 
 export const APP_SETTINGS_LABELS = {
   accountManagement: '계정 관리',
+  aiDataConsent: 'AI 데이터 관리',
   faq: 'FAQ',
   privacyPolicy: '개인정보처리방침',
   profile: '프로필 관리',
@@ -82,6 +84,7 @@ function SettingsItem({
 
 export function AppSettingsScreen({
   onPressAccountManagement,
+  onPressAiDataConsent,
   onPressFaq,
   onPressPrivacyPolicy,
   onPressProfile,
@@ -137,6 +140,12 @@ export function AppSettingsScreen({
               icon={CircleHelp}
               label={APP_SETTINGS_LABELS.faq}
               onPress={onPressFaq}
+            />
+            <SettingsItem
+              description="외부 AI 전송 동의와 철회를 관리해요."
+              icon={ShieldCheck}
+              label={APP_SETTINGS_LABELS.aiDataConsent}
+              onPress={onPressAiDataConsent}
             />
             <SettingsItem
               description="개인정보 수집·이용과 보호 조치를 확인해요."

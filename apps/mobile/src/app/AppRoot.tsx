@@ -25,6 +25,7 @@ import {RootNavigator} from '../app/navigation/RootNavigator';
 import type {RootStackParamList} from '../app/navigation/routeTypes';
 import type {ConsultingRecord} from '../features/consulting/types';
 import {prefetchHomeHeroImages} from '../features/home/config/homeHeroAssets';
+import {AiDataConsentProvider} from '../features/legal/services/aiDataConsentContext';
 import {
   navigateToAppNotification,
   shouldSuppressRealtimeAppNotification,
@@ -291,41 +292,47 @@ export function AppRoot() {
       <SafeAreaProvider>
         <StatusBar style={statusBarStyle} />
         <AppErrorBoundary>
-        <AuthSessionProvider>
-          <StartupGate
-            fontsLoaded={fontsReady}
-            hasMinimumElapsed={hasStartupMinimumElapsed}
-            navigationReady={isNavigationReady}
-            onStartupReady={handleStartupReady}>
-            <NavigationFlowStateProvider>
-            <NavigationContainer
-              linking={navigationLinking}
-              ref={navigationRef}
-              onReady={() => {
-                syncStatusBarStyle(navigationRef.getRootState());
-                recordFeaturePerformanceRoute(navigationRef.getCurrentRoute()?.name);
-                requestAnimationFrame(() => setIsNavigationReady(true));
-                requestAnimationFrame(flushPendingNotification);
-              }}
-              onStateChange={state => {
-                syncStatusBarStyle(state);
-                recordFeaturePerformanceRoute(navigationRef.getCurrentRoute()?.name);
-                requestAnimationFrame(flushPendingNotification);
-              }}>
-              <RootNavigator />
-              {areDeferredAppServicesReady ? (
-                <DeferredAppServices
-                  onAnswerConsultingCall={handleAnswerConsultingCall}
-                  onOpenNotification={handleOpenNotification}
-                  shouldSuppressRealtimeNotification={
-                    shouldSuppressRealtimeNotification
-                  }
-                />
-              ) : null}
-            </NavigationContainer>
-            </NavigationFlowStateProvider>
-          </StartupGate>
-        </AuthSessionProvider>
+          <AuthSessionProvider>
+            <AiDataConsentProvider>
+              <StartupGate
+                fontsLoaded={fontsReady}
+                hasMinimumElapsed={hasStartupMinimumElapsed}
+                navigationReady={isNavigationReady}
+                onStartupReady={handleStartupReady}>
+                <NavigationFlowStateProvider>
+                  <NavigationContainer
+                    linking={navigationLinking}
+                    ref={navigationRef}
+                    onReady={() => {
+                      syncStatusBarStyle(navigationRef.getRootState());
+                      recordFeaturePerformanceRoute(
+                        navigationRef.getCurrentRoute()?.name,
+                      );
+                      requestAnimationFrame(() => setIsNavigationReady(true));
+                      requestAnimationFrame(flushPendingNotification);
+                    }}
+                    onStateChange={state => {
+                      syncStatusBarStyle(state);
+                      recordFeaturePerformanceRoute(
+                        navigationRef.getCurrentRoute()?.name,
+                      );
+                      requestAnimationFrame(flushPendingNotification);
+                    }}>
+                    <RootNavigator />
+                    {areDeferredAppServicesReady ? (
+                      <DeferredAppServices
+                        onAnswerConsultingCall={handleAnswerConsultingCall}
+                        onOpenNotification={handleOpenNotification}
+                        shouldSuppressRealtimeNotification={
+                          shouldSuppressRealtimeNotification
+                        }
+                      />
+                    ) : null}
+                  </NavigationContainer>
+                </NavigationFlowStateProvider>
+              </StartupGate>
+            </AiDataConsentProvider>
+          </AuthSessionProvider>
         </AppErrorBoundary>
       </SafeAreaProvider>
     </TamaguiProvider>

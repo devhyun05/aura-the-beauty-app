@@ -15,6 +15,7 @@ import {
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {AiDataConsentGate} from '../../../features/legal/components/AiDataConsentGate';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {
   fetchReferenceMakeupExtractionReport,
@@ -167,27 +168,31 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
 
   if (route.params?.initialSource === 'gallery') {
     return (
-      <DetailRouteChrome
-        routeName="ReferenceMakeupExtractionUpload"
-        onBack={handleClose}
-        onClose={handleClose}>
-        <ReferenceMakeupExtractionAlbumUploadScreen
-          onCancel={handleClose}
-          onSelectPhoto={handleSelectAlbumPhoto}
-        />
-      </DetailRouteChrome>
+      <AiDataConsentGate onDecline={handleClose}>
+        <DetailRouteChrome
+          routeName="ReferenceMakeupExtractionUpload"
+          onBack={handleClose}
+          onClose={handleClose}>
+          <ReferenceMakeupExtractionAlbumUploadScreen
+            onCancel={handleClose}
+            onSelectPhoto={handleSelectAlbumPhoto}
+          />
+        </DetailRouteChrome>
+      </AiDataConsentGate>
     );
   }
 
   return (
-    <CameraFaceCaptureScreen
-      // 얼굴 분석·피드백과 동일한 촬영 UX(사용자 결정): 셀피 기본 + 타원
-      // 프레이밍 검증. 'reference'는 후면 기본에 얼굴 검증이 없었다.
-      captureMode="face"
-      captureType="filter_extraction"
-      onCapture={handleStartAnalysis}
-      onClose={handleClose}
-    />
+    <AiDataConsentGate onDecline={handleClose}>
+      <CameraFaceCaptureScreen
+        // 얼굴 분석·피드백과 동일한 촬영 UX(사용자 결정): 셀피 기본 + 타원
+        // 프레이밍 검증. 'reference'는 후면 기본에 얼굴 검증이 없었다.
+        captureMode="face"
+        captureType="filter_extraction"
+        onCapture={handleStartAnalysis}
+        onClose={handleClose}
+      />
+    </AiDataConsentGate>
   );
 }
 

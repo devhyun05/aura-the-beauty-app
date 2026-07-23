@@ -14,7 +14,7 @@ const entitlementsPath = path.join(
   'apps/mobile/ios/AURA/AURA.entitlements',
 );
 
-const expectedBundleId = 'com.aurathebeautyapp.mobile';
+const expectedBundleId = 'com.aurastyleguide.mobile';
 const expectedTeamId = 'BRA7W3G4QS';
 
 const [appJsonSource, xcodeProject, entitlements] = await Promise.all([

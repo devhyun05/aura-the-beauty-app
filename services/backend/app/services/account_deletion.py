@@ -14,7 +14,11 @@ from app.core.security import AuthContext
 from app.core.settings import Settings
 from app.db.session import Database
 from app.services.account_identity import hash_auth_subject, normalize_auth_provider
+from app.services.auradin_agent.event_logger import derive_event_owner
 from app.services.auradin_agent.session_manager import purge_in_memory_owner_sessions
+from app.services.face3d_calibration_receipts import (
+  build_face3d_calibration_receipt_request_context,
+)
 from app.services.s3 import is_makeup_recommendation_object_key
 
 
@@ -82,6 +86,60 @@ def _collect_makeup_recommendation_objects(
     ):
       objects[(bucket, object_key)] = (row["report_id"], bucket, object_key)
   return list(objects.values())
+
+
+async def _delete_unlinked_account_data(
+  connection: Any,
+  *,
+  auth: AuthContext,
+  settings: Settings,
+  user_id: UUID | str,
+) -> None:
+  """Delete user-scoped rows that intentionally have no users FK.
+
+  Both tables were introduced after the original account-deletion flow, so
+  older installations may not have them yet. Guard each delete independently
+  rather than making account deletion depend on runtime schema migration.
+  """
+  has_face3d_receipts = await connection.fetchval(
+    "select to_regclass('public.face3d_calibration_receipt_consumptions') is not null",
+  )
+  if has_face3d_receipts:
+    face3d_context = build_face3d_calibration_receipt_request_context(
+      user_id=user_id,
+      photo_capture_id=None,
+      source_media_id=None,
+    )
+    await connection.execute(
+      """
+      delete from face3d_calibration_receipt_consumptions
+      where subject_context_id = $1
+      """,
+      face3d_context.subject_context_id,
+    )
+
+  has_auradin_events = await connection.fetchval(
+    "select to_regclass('public.auradin_events') is not null",
+  )
+  if has_auradin_events:
+    # Current events use the canonical user:v1 owner. Include the raw Cognito
+    # subject as a narrowly scoped cleanup for rows written by older builds.
+    event_owner = derive_event_owner(auth, settings)
+    owner_subjects = sorted(
+      {
+        value
+        for value in (auth.subject.strip(), event_owner)
+        if isinstance(value, str) and value
+      },
+    )
+    if owner_subjects:
+      await connection.execute(
+        """
+        delete from auradin_events
+        where owner_subject = any($1::text[])
+        """,
+        owner_subjects,
+      )
 
 
 async def delete_user_account(
@@ -165,6 +223,12 @@ async def delete_user_account(
       await connection.execute(
         "delete from consulting_expert_reviews where author_user_id = $1",
         user_id,
+      )
+      await _delete_unlinked_account_data(
+        connection,
+        auth=auth,
+        settings=settings,
+        user_id=user_id,
       )
       # Auradin sessions intentionally have no user FK because they can run in
       # memory/no-DB mode. Purge the authenticated owner explicitly.

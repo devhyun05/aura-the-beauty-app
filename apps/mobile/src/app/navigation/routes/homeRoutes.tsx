@@ -14,6 +14,7 @@ import type {
 } from '../../../features/home/types/homeModules';
 import {getHomeFeatureNavigationTarget} from '../../../features/home/config/homeFeatureRouteMap';
 import {useAuthSession} from '../../../features/auth';
+import {useAiDataConsent} from '../../../features/legal/services/aiDataConsentContext';
 import {
   BeardSimulationNavigator,
   prewarmBeardSimulation,
@@ -145,6 +146,7 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
     shouldShowBeautyJourneyGuide,
   } = useNavigationFlowState();
   const {session} = useAuthSession();
+  const {requestAiDataConsent} = useAiDataConsent();
 
   const handleRecommendedFilterPress = React.useCallback((filterId: string) => {
     setSelectedRecommendedMakeupFilterId(filterId);
@@ -179,27 +181,34 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
 
   const startMakeupExtraction = React.useCallback((initialSource: 'camera' | 'gallery') => {
     setIsExtractionSheetVisible(false);
-    setSelectedRecommendedMakeupFilterId(null);
-    setSelectedReferenceMakeupPhoto(null);
-
-    if (initialSource === 'camera') {
-      requestAnimationFrame(() => {
-        rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
-      });
-      return;
-    }
-
-    const {pickReferenceMakeupPhotoFromLibrary} = loadMakeupPhotoPicker();
-    void pickReferenceMakeupPhotoFromLibrary().then(photo => {
-      if (!photo) {
+    void requestAiDataConsent().then(accepted => {
+      if (!accepted) {
         return;
       }
-      setSelectedReferenceMakeupPhoto(photo);
-      rootNavigation?.navigate('FaceCaptureConfirmation', {
-        target: 'referenceMakeupExtraction',
+
+      setSelectedRecommendedMakeupFilterId(null);
+      setSelectedReferenceMakeupPhoto(null);
+
+      if (initialSource === 'camera') {
+        requestAnimationFrame(() => {
+          rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+        });
+        return;
+      }
+
+      const {pickReferenceMakeupPhotoFromLibrary} = loadMakeupPhotoPicker();
+      void pickReferenceMakeupPhotoFromLibrary().then(photo => {
+        if (!photo) {
+          return;
+        }
+        setSelectedReferenceMakeupPhoto(photo);
+        rootNavigation?.navigate('FaceCaptureConfirmation', {
+          target: 'referenceMakeupExtraction',
+        });
       });
     });
   }, [
+    requestAiDataConsent,
     rootNavigation,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
@@ -207,30 +216,36 @@ export function HomeRouteScreen({navigation}: MainTabScreenProps<'HomeTab'>) {
 
   const startMakeupFeedback = React.useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
-
-    if (photoSource === 'camera') {
-      beginMakeupFeedbackFlow();
-      setMakeupFeedbackResult(null);
-      setSelectedMakeupFeedbackPhoto({photoSource});
-      requestAnimationFrame(() => {
-        rootNavigation?.navigate('MakeupFeedbackCapture');
-      });
-      return;
-    }
-
-    const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
-    void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
-      if (!selection) {
+    void requestAiDataConsent().then(accepted => {
+      if (!accepted) {
         return;
       }
-      beginMakeupFeedbackFlow();
-      setMakeupFeedbackResult(null);
-      setSelectedMakeupFeedbackPhoto(selection);
-      rootNavigation?.navigate('FaceCaptureConfirmation', {
-        target: 'makeupFeedback',
+
+      if (photoSource === 'camera') {
+        beginMakeupFeedbackFlow();
+        setMakeupFeedbackResult(null);
+        setSelectedMakeupFeedbackPhoto({photoSource});
+        requestAnimationFrame(() => {
+          rootNavigation?.navigate('MakeupFeedbackCapture');
+        });
+        return;
+      }
+
+      const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+      void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
+        if (!selection) {
+          return;
+        }
+        beginMakeupFeedbackFlow();
+        setMakeupFeedbackResult(null);
+        setSelectedMakeupFeedbackPhoto(selection);
+        rootNavigation?.navigate('FaceCaptureConfirmation', {
+          target: 'makeupFeedback',
+        });
       });
     });
   }, [
+    requestAiDataConsent,
     rootNavigation,
     beginMakeupFeedbackFlow,
     setMakeupFeedbackResult,
@@ -618,15 +633,27 @@ export function CommunityRouteScreen({navigation}: RootScreenProps<'Community'>)
 }
 
 export function HairRemovalSimulationRouteScreen(
-  _props: RootScreenProps<'HairRemovalSimulation'>,
+  {navigation}: RootScreenProps<'HairRemovalSimulation'>,
 ) {
+  const {requestAiDataConsent} = useAiDataConsent();
+  const [isAllowed, setIsAllowed] = React.useState(false);
+
   // 팀이 예약해둔 제모 시뮬레이션 슬롯 — 실제 수염 제거 플로우로 연결한다.
   // 자체 프로바이더 + 내부 스택을 가진 완결형 네비게이터라 풀스크린 렌더(BeardSimulation 라우트와 동일).
   React.useEffect(() => {
     prewarmBeardSimulation();
-  }, []);
+    void requestAiDataConsent().then(accepted => {
+      if (accepted) {
+        setIsAllowed(true);
+      } else {
+        goBackToPreviousOrMainTab(navigation, 'HomeTab');
+      }
+    });
+  }, [navigation, requestAiDataConsent]);
 
-  return <BeardSimulationNavigator service={realBeardSimulationService} />;
+  return isAllowed
+    ? <BeardSimulationNavigator service={realBeardSimulationService} />
+    : null;
 }
 
 export function CommunityThreadDetailRouteScreen({

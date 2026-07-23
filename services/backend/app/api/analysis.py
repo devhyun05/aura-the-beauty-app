@@ -50,6 +50,7 @@ from app.services.owned_media import (
 from app.services.push_notifications import create_and_send_notification
 from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
+from app.services.privacy_consents import require_current_ai_data_consent
 
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
@@ -367,6 +368,22 @@ async def generate_analysis_images_background(
     )
 
   try:
+    report_owner = await db.fetchrow(
+      """
+      select user_id
+      from analysis_reports
+      where id = $1 and deleted_at is null
+      """,
+      report_id,
+    )
+    if report_owner is None:
+      return
+    # Image generation is a separate provider transmission that can start well
+    # after text analysis. Re-check consent at this exact boundary.
+    await require_current_ai_data_consent(
+      db,
+      user_id=report_owner["user_id"],
+    )
     result = await service.generate_recommended_makeup_images(
       payload.request_payload,
       initial_result,
@@ -527,6 +544,40 @@ async def run_analysis_job_background(
     "[aura:analysis-api] background:start reportId=%s",
     report_id,
   )
+  report_owner = await db.fetchrow(
+    """
+    select user_id
+    from analysis_reports
+    where id = $1 and deleted_at is null
+    """,
+    report_id,
+  )
+  if report_owner is None:
+    return
+
+  try:
+    # SQS and inline jobs may start after consent was revoked. Nothing that can
+    # reach an external AI provider is prepared until the current ledger is
+    # checked again.
+    await require_current_ai_data_consent(
+      db,
+      user_id=report_owner["user_id"],
+    )
+  except AppError as exc:
+    record_outcome(success=False, error_code=exc.code)
+    await mark_analysis_failed(db, report_id, exc.message, payload, exc.details)
+    return
+  except Exception as exc:
+    record_outcome(success=False, error_code=exc.__class__.__name__)
+    await mark_analysis_failed(
+      db,
+      report_id,
+      "외부 AI 동의 상태를 확인하지 못해 분석을 시작하지 않았어요.",
+      payload,
+      {"reason": exc.__class__.__name__},
+    )
+    return
+
   await db.execute(
     "update analysis_reports set status = 'processing' where id = $1",
     report_id,
@@ -746,7 +797,20 @@ async def run_analysis_job_background(
 
   # 임베딩 실패는 보고서 완료를 막지 않지만, 조용히 삼키면 벡터 검색에서
   # 해당 보고서가 소리 없이 빠진다 — 최소한 로그로 드러낸다.
-  if not await update_analysis_report_embedding(db, report):
+  try:
+    await require_current_ai_data_consent(db, user_id=report["user_id"])
+    embedding_allowed = True
+  except Exception:  # noqa: BLE001 - fail closed before the external provider.
+    embedding_allowed = False
+    logger.info(
+      "[aura:analysis-api] embedding:skipped-consent reportId=%s",
+      report_id,
+    )
+
+  if (
+    embedding_allowed
+    and not await update_analysis_report_embedding(db, report)
+  ):
     logger.warning(
       "[aura:analysis-api] embedding:failed reportId=%s",
       report_id,
@@ -844,6 +908,7 @@ async def create_analysis_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   # 계정 성별을 서버가 주입한다(클라이언트 값은 신뢰하지 않고 덮어씀).
   # 분석 프롬프트가 사진으로 성별을 추론하는 대신 이 값을 쓰게 하는 근거 —
   # 메이크업 추천 V2의 "성별 재추론 금지" 원칙과 정합.
@@ -1131,6 +1196,7 @@ async def retry_analysis_job_stage(
     )
 
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   existing = await db.fetchrow(
     """
     select *
@@ -1364,11 +1430,17 @@ async def delete_analysis_report(
           r.*,
           source_media.bucket as source_media_bucket,
           source_media.object_key as source_media_object_key,
+          source_media.thumbnail_bucket as source_thumbnail_media_bucket,
+          source_media.thumbnail_object_key as source_thumbnail_media_object_key,
           preview_media.bucket as preview_media_bucket,
           preview_media.object_key as preview_media_object_key,
+          preview_media.thumbnail_bucket as preview_thumbnail_media_bucket,
+          preview_media.thumbnail_object_key as preview_thumbnail_media_object_key,
           capture_media.id as capture_media_id,
           capture_media.bucket as capture_media_bucket,
-          capture_media.object_key as capture_media_object_key
+          capture_media.object_key as capture_media_object_key,
+          capture_media.thumbnail_bucket as capture_thumbnail_media_bucket,
+          capture_media.thumbnail_object_key as capture_thumbnail_media_object_key
         from analysis_reports r
         left join media_assets source_media on source_media.id = r.source_media_id
         left join media_assets preview_media on preview_media.id = r.preview_media_id
@@ -1392,9 +1464,41 @@ async def delete_analysis_report(
       )
 
       await connection.execute(
+        "delete from analysis_stage_runs where report_id = $1",
+        report_id,
+      )
+      await connection.execute(
+        "delete from face_length_measurement_snapshots where report_id = $1",
+        report_id,
+      )
+      await connection.execute(
         """
         update analysis_reports
-        set deleted_at = coalesce(deleted_at, now()),
+        set photo_capture_id = null,
+            source_media_id = null,
+            preview_media_id = null,
+            ai_provider = null,
+            ai_model = null,
+            request_id = null,
+            error_message = null,
+            analyzed_at = null,
+            title = '삭제된 보고서',
+            report_title = '삭제된 보고서',
+            environment_label = null,
+            personal_color = null,
+            face_shape = null,
+            skin_type = null,
+            tone_summary = null,
+            recommended_mood = null,
+            summary = null,
+            short_summary = null,
+            skin_analysis_summary = null,
+            base_makeup_guide = null,
+            tags = '{}'::text[],
+            detail_payload = '{}'::jsonb,
+            embedding = null,
+            deleted_at = coalesce(deleted_at, now()),
+            updated_at = now(),
             status = case
               when status in ('pending', 'processing') then 'cancelled'::job_status
               else status
@@ -1404,6 +1508,35 @@ async def delete_analysis_report(
         report_id,
         user["id"],
       )
+
+      photo_capture_id = report.get("photo_capture_id")
+      if photo_capture_id is not None:
+        await connection.fetchval(
+          """
+          delete from photo_captures capture
+          where capture.id = $1
+            and capture.user_id = $2
+            and not exists (
+              select 1
+              from analysis_reports other_report
+              where other_report.photo_capture_id = capture.id
+                and other_report.deleted_at is null
+            )
+            and not exists (
+              select 1
+              from filter_extraction_reports extraction
+              where extraction.photo_capture_id = capture.id
+            )
+            and not exists (
+              select 1
+              from makeup_feedback_reports feedback
+              where feedback.photo_capture_id = capture.id
+            )
+          returning capture.id
+          """,
+          photo_capture_id,
+          user["id"],
+        )
 
       outbox_ids, skipped_referenced_count = (
         await enqueue_unreferenced_report_media_deletions(

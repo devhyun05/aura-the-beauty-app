@@ -16,6 +16,7 @@ import {
   type FooterTabKey,
 } from '../../shared/ui';
 import {APP_FOOTER_FLOATING_HOST_BASE_HEIGHT} from '../../shared/ui/AppFooter';
+import {useAiDataConsent} from '../../features/legal/services/aiDataConsentContext';
 import {useNavigationFlowState} from './flowState';
 import {getMainTabFooterState, getRootRouteForFooterTab} from './mainTabChrome';
 import type {MainTabParamList, MainTabRouteName, RootStackParamList} from './routeTypes';
@@ -150,6 +151,7 @@ function MainTabBar({
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
   } = useNavigationFlowState();
+  const {requestAiDataConsent} = useAiDataConsent();
   const rootNavigation = navigation.getParent<NavigationProp<RootStackParamList>>();
   const footerBottomInset = Math.max(insets.bottom, spacing.md);
   const makeupJourneyEnabled = isMakeupJourneyEnabled();
@@ -173,27 +175,34 @@ function MainTabBar({
 
   const startMakeupExtraction = useCallback((initialSource: 'camera' | 'gallery') => {
     setIsExtractionSheetVisible(false);
-    setSelectedRecommendedMakeupFilterId(null);
-    setSelectedReferenceMakeupPhoto(null);
-
-    if (initialSource === 'camera') {
-      requestAnimationFrame(() => {
-        rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
-      });
-      return;
-    }
-
-    const {pickReferenceMakeupPhotoFromLibrary} = loadMakeupPhotoPicker();
-    void pickReferenceMakeupPhotoFromLibrary().then(photo => {
-      if (!photo) {
+    void requestAiDataConsent().then(accepted => {
+      if (!accepted) {
         return;
       }
-      setSelectedReferenceMakeupPhoto(photo);
-      rootNavigation?.navigate('FaceCaptureConfirmation', {
-        target: 'referenceMakeupExtraction',
+
+      setSelectedRecommendedMakeupFilterId(null);
+      setSelectedReferenceMakeupPhoto(null);
+
+      if (initialSource === 'camera') {
+        requestAnimationFrame(() => {
+          rootNavigation?.navigate('ReferenceMakeupExtractionUpload', {initialSource});
+        });
+        return;
+      }
+
+      const {pickReferenceMakeupPhotoFromLibrary} = loadMakeupPhotoPicker();
+      void pickReferenceMakeupPhotoFromLibrary().then(photo => {
+        if (!photo) {
+          return;
+        }
+        setSelectedReferenceMakeupPhoto(photo);
+        rootNavigation?.navigate('FaceCaptureConfirmation', {
+          target: 'referenceMakeupExtraction',
+        });
       });
     });
   }, [
+    requestAiDataConsent,
     rootNavigation,
     setSelectedRecommendedMakeupFilterId,
     setSelectedReferenceMakeupPhoto,
@@ -201,31 +210,37 @@ function MainTabBar({
 
   const startMakeupFeedback = useCallback((photoSource: 'camera' | 'gallery') => {
     setIsFeedbackSheetVisible(false);
-
-    if (photoSource === 'camera') {
-      beginMakeupFeedbackFlow();
-      setMakeupFeedbackResult(null);
-      setSelectedMakeupFeedbackPhoto({photoSource});
-      requestAnimationFrame(() => {
-        rootNavigation?.navigate('MakeupFeedbackCapture');
-      });
-      return;
-    }
-
-    const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
-    void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
-      if (!selection) {
+    void requestAiDataConsent().then(accepted => {
+      if (!accepted) {
         return;
       }
-      beginMakeupFeedbackFlow();
-      setMakeupFeedbackResult(null);
-      setSelectedMakeupFeedbackPhoto(selection);
-      rootNavigation?.navigate('FaceCaptureConfirmation', {
-        target: 'makeupFeedback',
+
+      if (photoSource === 'camera') {
+        beginMakeupFeedbackFlow();
+        setMakeupFeedbackResult(null);
+        setSelectedMakeupFeedbackPhoto({photoSource});
+        requestAnimationFrame(() => {
+          rootNavigation?.navigate('MakeupFeedbackCapture');
+        });
+        return;
+      }
+
+      const {pickMakeupFeedbackPhotoFromLibrary} = loadMakeupPhotoPicker();
+      void pickMakeupFeedbackPhotoFromLibrary().then(selection => {
+        if (!selection) {
+          return;
+        }
+        beginMakeupFeedbackFlow();
+        setMakeupFeedbackResult(null);
+        setSelectedMakeupFeedbackPhoto(selection);
+        rootNavigation?.navigate('FaceCaptureConfirmation', {
+          target: 'makeupFeedback',
+        });
       });
     });
   }, [
     beginMakeupFeedbackFlow,
+    requestAiDataConsent,
     rootNavigation,
     setMakeupFeedbackResult,
     setSelectedMakeupFeedbackPhoto,

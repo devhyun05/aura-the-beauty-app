@@ -23,6 +23,13 @@ class AccountDeletionRequest(CamelModel):
 
 class ProfileUpdate(CamelModel):
   avatar_media_id: UUID | None = Field(default=None, alias="avatarMediaId")
+  email: str | None = Field(
+    default=None,
+    min_length=3,
+    max_length=255,
+    pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$",
+  )
+  name: str | None = Field(default=None, min_length=1, max_length=100)
   nickname: str | None = None
   phone: str | None = None
   birth_date: date | None = Field(default=None, alias="birthDate")

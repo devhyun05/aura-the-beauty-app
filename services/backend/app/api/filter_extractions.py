@@ -22,6 +22,7 @@ from app.services.owned_media import resolve_owned_source_media, trusted_media_r
 from app.services.push_notifications import create_and_send_notification
 from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
+from app.services.privacy_consents import require_current_ai_data_consent
 
 
 router = APIRouter(prefix="/filter-extractions", tags=["filter-extractions"])
@@ -100,6 +101,18 @@ async def run_filter_extraction_job_background(
   )
 
   try:
+    report_owner = await db.fetchrow(
+      "select user_id from filter_extraction_reports where id = $1",
+      report_id,
+    )
+    if report_owner is None:
+      return
+    # The queue may outlive the user's consent. Re-check immediately before
+    # invoking the external AI provider.
+    await require_current_ai_data_consent(
+      db,
+      user_id=report_owner["user_id"],
+    )
     extraction_payload, ai_status, ai_error = (
       await build_reference_makeup_extraction_payload_for_request(payload, settings)
     )
@@ -301,6 +314,7 @@ async def analyze_filter_extraction(
     )
 
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if execution_mode not in {"inline", "sqs"}:

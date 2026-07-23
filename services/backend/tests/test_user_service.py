@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.security import AuthContext
-from app.services.account_identity import hash_auth_subject
+from app.services.account_identity import auth_subject_hashes, hash_auth_subject
 from app.services.users import ensure_user
 
 
@@ -40,6 +40,8 @@ async def test_ensure_user_uses_one_atomic_upsert() -> None:
   assert "insert into users" in query
   assert "on conflict (auth_provider, oauth_sub)" in query
   assert "where oauth_sub is not null and deleted_at is null" in query
+  assert "matching_user" in query
+  assert "reused_user" in query
   assert "do update set" in query
   assert "from account_deletion_tombstones" in query
   assert "where not exists" in query
@@ -53,5 +55,31 @@ async def test_ensure_user_uses_one_atomic_upsert() -> None:
     "load-test@example.com",
     "Load Test",
     "Load Test",
-    hash_auth_subject("google", "cognito-sub-1"),
+    auth_subject_hashes("google", "cognito-sub-1"),
   )
+
+
+@pytest.mark.asyncio
+async def test_ensure_user_reuses_legacy_google_identity_for_apple() -> None:
+  db = FakeDb()
+  auth = AuthContext(
+    subject="apple-cognito-sub",
+    provider="SignInWithApple",
+    email="relay@privaterelay.appleid.com",
+    name=None,
+    claims={},
+  )
+
+  user = await ensure_user(db, auth)
+
+  assert user["auth_provider"] == "apple"
+  query, args = db.calls[0]
+  assert "$1::text = 'apple'" in query
+  assert "auth_provider = 'google'::auth_provider" in query
+  assert "set auth_provider = $1::auth_provider" in query
+  assert args[0] == "apple"
+  assert args[1] == "apple-cognito-sub"
+  assert args[5] == [
+    hash_auth_subject("apple", "apple-cognito-sub"),
+    hash_auth_subject("google", "apple-cognito-sub"),
+  ]

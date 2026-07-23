@@ -50,6 +50,9 @@ from app.services.makeup_recommendation_prompt import (
 from app.services.makeup_recommendation_fit import (
   build_post_image_fit_assessment,
 )
+from app.services.makeup_recommendation_context import (
+  has_current_ai_data_consent_snapshot,
+)
 from app.services.makeup_recommendation_match import attach_match_assessment
 from app.services.makeup_recommendation_products import enrich_makeup_recommendation_products
 from app.services.makeup_report_product_snapshots import (
@@ -72,6 +75,7 @@ from app.services.push_notifications import create_and_send_notification
 from app.services.s3 import S3Service
 from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
+from app.services.privacy_consents import require_current_ai_data_consent
 
 
 router = APIRouter(prefix="/makeup-recommendations", tags=["makeup-recommendations"])
@@ -1173,7 +1177,7 @@ def _personalized_retry_context(report: dict) -> tuple[bool, str | None]:
   should_retry_personalized = (
     str(image_context.get('requestedMode') or '').strip().lower() == 'personalized'
     and str(image_context.get('effectiveMode') or '').strip().lower() == 'personalized'
-    and image_context.get('personalizedConsent') is True
+    and has_current_ai_data_consent_snapshot(context)
     and bool(str(source_media_id or '').strip())
   )
   return should_retry_personalized, (
@@ -1190,8 +1194,7 @@ async def _personalized_source_input(
   expected_source_media_id: str | None = None,
 ) -> PersonalizedImageInput | None:
   context = _json_value(report.get("context_snapshot"), {})
-  image_context = context.get("image") if isinstance(context.get("image"), dict) else {}
-  if not image_context.get("personalizedConsent"):
+  if not has_current_ai_data_consent_snapshot(context):
     return None
   source_report_id = report.get("source_analysis_report_id")
   if source_report_id is None:
@@ -1501,6 +1504,36 @@ async def run_recommendation_image_job(
   db: Database,
   look_id: str | None = None,
 ) -> None:
+  try:
+    # Image jobs may begin after consent was revoked. Verify again at the
+    # provider boundary instead of relying only on the earlier API request.
+    await require_current_ai_data_consent(db, user_id=user_id)
+  except AppError as exc:
+    await db.execute(
+      """
+      update makeup_recommendation_reports
+      set image_status = 'failed', image_error = $3, updated_at = now()
+      where id = $1 and user_id = $2
+      """,
+      report_id,
+      user_id,
+      exc.message,
+    )
+    await db.execute(
+      """
+      update makeup_recommendation_assets
+      set status = 'failed', image_error = $2, updated_at = now()
+      where report_id = $1
+        and role = 'anchor'
+        and ($3::text is null or look_id = $3)
+        and status in ('pending', 'processing')
+      """,
+      report_id,
+      exc.message,
+      look_id,
+    )
+    return
+
   claimed_attempts: dict[str, int] = {}
   if look_id is None:
     report = await db.fetchrow(
@@ -1986,13 +2019,21 @@ async def create_scenarios(
 ) -> dict:
   _require_makeup_v1_compat(settings)
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   await enforce_scenario_generation_limit(db, user["id"])
   return success(await generate_shared_scenarios(settings, db, payload.count, payload.exclude_texts, user["id"]))
 
 
 @router.post("/questions")
-async def create_questions(payload: MakeupQuestionRequest, settings: Settings = Depends(get_settings), _: AuthContext = Depends(get_current_user)) -> dict:
+async def create_questions(
+  payload: MakeupQuestionRequest,
+  settings: Settings = Depends(get_settings),
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
   _require_makeup_v1_compat(settings)
+  user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   return success(await generate_questions(settings, payload.scenario_text, payload.scenario_tags, payload.scenario_label))
 
 
@@ -2037,6 +2078,7 @@ async def create_makeup_recommendation_session(
 ) -> dict:
   _require_makeup_v2(settings)
   user = await ensure_user(db, auth)
+  consent_snapshot = await require_current_ai_data_consent(db, user_id=user["id"])
   return success(
     await create_session(
       db,
@@ -2044,6 +2086,7 @@ async def create_makeup_recommendation_session(
       user["id"],
       payload,
       idempotency_key,
+      ai_data_consent_snapshot=consent_snapshot,
       profile_gender=user.get("gender"),
     ),
   )
@@ -2086,6 +2129,7 @@ async def generate_makeup_recommendation_session(
 ) -> dict:
   _require_makeup_v2(settings)
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   generation = await begin_generation(db, user["id"], session_id)
   if generation.get("reused"):
     await dispatch_makeup_product_snapshot_job(
@@ -2153,6 +2197,7 @@ async def create_recommendation(
 ) -> dict:
   _require_makeup_v1_compat(settings)
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   await enforce_report_generation_limit(
     db,
     user_id=user["id"],
@@ -2284,6 +2329,7 @@ async def retry_recommendation_images(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   look_id = payload.look_id if payload is not None else None
   if look_id is not None:
     asset = await db.fetchrow(
@@ -2452,6 +2498,7 @@ async def refine_recommendation_report(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   source = await db.fetchrow(
     """
     select id, scenario_text, scenario_tags, questions, answers, recommendation,

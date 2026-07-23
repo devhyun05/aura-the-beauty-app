@@ -2,7 +2,7 @@
   "expo": {
     "name": "AURA",
     "slug": "ai-ar-makeup-guide",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "platforms": [
       "ios",
@@ -20,10 +20,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aurathebeautyapp.mobile",
+      "bundleIdentifier": "com.aurastyleguide.mobile",
       "appleTeamId": "BRA7W3G4QS",
       "usesAppleSignIn": true,
       "infoPlist": {
+        "NSMotionUsageDescription": "AURA AR 메이크업 기능에서 기기의 움직임에 맞춰 카메라와 그래픽을 안정적으로 표시하기 위해 동작 센서 정보가 필요합니다.",
         "UIBackgroundModes": [
           "remote-notification"
         ]

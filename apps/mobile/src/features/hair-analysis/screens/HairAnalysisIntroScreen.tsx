@@ -53,7 +53,8 @@ export function HairAnalysisIntroScreen({onOpenSaved, onStart}: HairAnalysisIntr
         <Text style={styles.noticeTitle}>사진 처리 안내</Text>
         <Text style={styles.noticeText}>
           선택한 사진은 AI 분석과 합성을 위해 외부 AI 처리 서비스로 전송돼요. AURA가
-          보관하는 원본과 임시 결과는 24시간 후 삭제되며, 계정 저장을 선택한 결과만 보관돼요.
+          전송 항목과 수신자를 먼저 안내하고 동의를 받은 뒤 처리하며, 결과와 연결된 사진은
+          삭제 또는 회원 탈퇴 전까지 보관될 수 있어요.
         </Text>
       </YStack>
 

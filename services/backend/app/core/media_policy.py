@@ -4,6 +4,7 @@ ALLOWED_UPLOAD_MEDIA_KINDS = frozenset(
     "community-thread",
     "community-thread-thumbnail",
     "consulting-chat",
+    "face-analysis-source",
     "filter-extraction",
     "hair-analysis-mask",
     "hair-analysis-source",

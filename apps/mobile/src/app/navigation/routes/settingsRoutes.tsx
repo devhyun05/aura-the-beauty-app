@@ -3,6 +3,7 @@ import {Alert, Modal} from 'react-native';
 
 import {useAuthSession} from '../../../features/auth';
 import {PrivacyPolicyScreen} from '../../../features/legal/screens/PrivacyPolicyScreen';
+import {useAiDataConsent} from '../../../features/legal/services/aiDataConsentContext';
 import {
   AccountDeletionScreen,
   AccountManagementScreen,
@@ -25,6 +26,7 @@ export function AppSettingsRouteScreen({
 }: RootScreenProps<'AppSettings'>) {
   // 로그인 이후에도 개인정보처리방침을 볼 수 있어야 한다(App Store 5.1.1).
   const [showPrivacyPolicy, setShowPrivacyPolicy] = React.useState(false);
+  const {openAiDataConsentSettings} = useAiDataConsent();
 
   return (
     <DetailRouteChrome
@@ -35,6 +37,7 @@ export function AppSettingsRouteScreen({
       onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <AppSettingsScreen
         onPressAccountManagement={() => navigation.navigate('AccountManagement')}
+        onPressAiDataConsent={openAiDataConsentSettings}
         onPressFaq={() => navigation.navigate('Faq')}
         onPressPrivacyPolicy={() => setShowPrivacyPolicy(true)}
         onPressProfile={() => navigation.navigate('ProfileEdit')}

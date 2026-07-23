@@ -17,6 +17,10 @@ bearer_scheme = HTTPBearer(auto_error=False)
 JWKS_CACHE_TTL_SECONDS = 600
 _jwks_cache: dict[str, dict[str, Any]] = {}
 CONSULTING_ADMIN_GROUPS = frozenset({"admin", "operator", "business_manager"})
+AUTH_PROVIDER_ALIASES = {
+  "apple": "apple",
+  "signinwithapple": "apple",
+}
 
 
 @dataclass(frozen=True)
@@ -92,12 +96,14 @@ def _parse_provider(claims: dict[str, Any]) -> str:
     provider = identities[0].get("providerName") or identities[0].get("providerType")
 
     if isinstance(provider, str) and provider:
-      return provider.lower()
+      normalized = provider.strip().lower()
+      return AUTH_PROVIDER_ALIASES.get(normalized, normalized)
 
-  username = claims.get("cognito:username")
+  username = claims.get("cognito:username") or claims.get("username")
 
   if isinstance(username, str) and "_" in username:
-    return username.split("_", 1)[0].lower()
+    normalized = username.split("_", 1)[0].strip().lower()
+    return AUTH_PROVIDER_ALIASES.get(normalized, normalized)
 
   return "google"
 

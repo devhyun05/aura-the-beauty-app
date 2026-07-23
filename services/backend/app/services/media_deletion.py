@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 
 DELETABLE_REPORT_OBJECT_PREFIXES = (
   "uploads/capture/",
+  "uploads/capture-thumbnail/",
   "uploads/face-analysis/",
+  "uploads/face-analysis-source/",
+  "uploads/face-analysis-source-thumbnail/",
   "uploads/generated-makeup/",
   PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX,
   "uploads/photo-captures/",
@@ -123,6 +126,11 @@ def collect_report_media_refs(
     add_ref(
       report.get(f"{prefix}_media_bucket"),
       report.get(f"{prefix}_media_object_key"),
+      report.get(f"{prefix}_media_id"),
+    )
+    add_ref(
+      report.get(f"{prefix}_thumbnail_media_bucket"),
+      report.get(f"{prefix}_thumbnail_media_object_key"),
       report.get(f"{prefix}_media_id"),
     )
 
@@ -312,8 +320,16 @@ async def is_media_object_referenced(
     """
     select id
     from media_assets
-    where bucket = $1
-      and object_key = $2
+    where (
+        (
+          bucket = $1
+          and object_key = $2
+        )
+        or (
+          thumbnail_bucket = $1
+          and thumbnail_object_key = $2
+        )
+      )
       and deleted_at is null
     """,
     bucket,

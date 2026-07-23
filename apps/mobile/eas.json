@@ -28,5 +28,12 @@
         "EXPO_PUBLIC_UNIFIED_FACE_CAPTURE": "1"
       }
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6786329464"
+      }
+    }
   }
 }

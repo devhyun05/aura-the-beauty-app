@@ -174,7 +174,9 @@ async def test_analysis_completion_notification_precedes_slow_post_processing(
     async def execute(self, *_args):
       return "UPDATE 1"
 
-    async def fetchrow(self, *_args):
+    async def fetchrow(self, query, *_args):
+      if "select user_id" in query:
+        return {"user_id": USER_ID}
       events.append("report-persisted")
       return {"id": REPORT_ID, "user_id": USER_ID}
 
@@ -197,6 +199,10 @@ async def test_analysis_completion_notification_precedes_slow_post_processing(
     events.append("embedding")
     return True
 
+  async def fake_require_consent(_db, *, user_id):
+    assert user_id == USER_ID
+    return {"accepted": True}
+
   monkeypatch.setattr(analysis_api, "OpenAIAnalysisService", FakeAnalysisService)
   monkeypatch.setattr(
     analysis_api,
@@ -207,6 +213,11 @@ async def test_analysis_completion_notification_precedes_slow_post_processing(
     analysis_api,
     "update_analysis_report_embedding",
     fake_update_embedding,
+  )
+  monkeypatch.setattr(
+    analysis_api,
+    "require_current_ai_data_consent",
+    fake_require_consent,
   )
 
   await analysis_api.run_analysis_job_background(
@@ -220,6 +231,52 @@ async def test_analysis_completion_notification_precedes_slow_post_processing(
   )
 
   assert events == ["report-persisted", "notification", "embedding"]
+
+
+@pytest.mark.asyncio
+async def test_analysis_worker_stops_before_provider_when_consent_was_revoked(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  class FakeDB:
+    def __init__(self) -> None:
+      self.executed: list[tuple] = []
+
+    async def execute(self, *args):
+      self.executed.append(args)
+      return "UPDATE 1"
+
+    async def fetchrow(self, query, *_args):
+      assert "select user_id" in query
+      return {"user_id": USER_ID}
+
+  async def fake_require_consent(_db, *, user_id):
+    assert user_id == USER_ID
+    raise AppError(
+      403,
+      "AI_DATA_CONSENT_REQUIRED",
+      "AI consent was revoked.",
+    )
+
+  class ProviderMustNotStart:
+    def __init__(self, _settings):
+      raise AssertionError("External AI provider must not start after revocation.")
+
+  monkeypatch.setattr(
+    analysis_api,
+    "require_current_ai_data_consent",
+    fake_require_consent,
+  )
+  monkeypatch.setattr(analysis_api, "OpenAIAnalysisService", ProviderMustNotStart)
+  fake_db = FakeDB()
+
+  await analysis_api.run_analysis_job_background(
+    REPORT_ID,
+    AnalysisJobCreate(requestPayload={"source": "test"}),
+    Settings(face_analysis_v2_enabled=False),
+    db=fake_db,
+  )
+
+  assert any("status = 'failed'" in query for query, *_args in fake_db.executed)
 
 
 def test_ai_job_queue_publisher_sends_feedback_job_message(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -373,6 +430,10 @@ async def test_run_feedback_job_background_completes_report(
   async def fake_create_notification(_db, _settings, **kwargs):
     calls["notification"] = kwargs
 
+  async def fake_require_consent(_db, *, user_id):
+    assert user_id == USER_ID
+    return {"accepted": True}
+
   monkeypatch.setattr(
     feedback_api,
     "build_makeup_feedback_result_for_request",
@@ -382,6 +443,11 @@ async def test_run_feedback_job_background_completes_report(
     feedback_api,
     "create_and_send_notification",
     fake_create_notification,
+  )
+  monkeypatch.setattr(
+    feedback_api,
+    "require_current_ai_data_consent",
+    fake_require_consent,
   )
   fake_db = FakeDB()
   settings = Settings()
@@ -538,6 +604,10 @@ async def test_run_filter_extraction_job_background_completes_report(
   async def fake_create_notification(_db, _settings, **kwargs):
     calls["notification"] = kwargs
 
+  async def fake_require_consent(_db, *, user_id):
+    assert user_id == USER_ID
+    return {"accepted": True}
+
   monkeypatch.setattr(
     filter_extractions_api,
     "build_reference_makeup_extraction_payload_for_request",
@@ -552,6 +622,11 @@ async def test_run_filter_extraction_job_background_completes_report(
     filter_extractions_api,
     "create_and_send_notification",
     fake_create_notification,
+  )
+  monkeypatch.setattr(
+    filter_extractions_api,
+    "require_current_ai_data_consent",
+    fake_require_consent,
   )
   fake_db = FakeDB()
   settings = Settings()
@@ -569,8 +644,8 @@ async def test_run_filter_extraction_job_background_completes_report(
   )
 
   assert "status = 'processing'" in fake_db.executed[0][0]
-  assert "status = 'completed'" in fake_db.fetchrow_calls[0][0]
-  completed_payload = json.loads(fake_db.fetchrow_calls[0][-1])
+  assert "status = 'completed'" in fake_db.fetchrow_calls[-1][0]
+  completed_payload = json.loads(fake_db.fetchrow_calls[-1][-1])
   assert completed_payload["request"] == {"source": "worker-test"}
   assert completed_payload["referenceImageId"] == "reference-1"
   assert completed_payload["runAi"] is True
@@ -598,7 +673,9 @@ async def test_run_filter_extraction_job_background_marks_provider_failure_faile
       self.executed.append(args)
       return "UPDATE 1"
 
-    async def fetchrow(self, *_args):
+    async def fetchrow(self, query, *_args):
+      if "select user_id" in query:
+        return {"user_id": USER_ID}
       raise AssertionError("A failed AI job must not be stored as completed.")
 
   async def fail_build_result(_payload, _settings):
@@ -614,6 +691,10 @@ async def test_run_filter_extraction_job_background_marks_provider_failure_faile
   async def fail_notification(*_args, **_kwargs):
     calls["notification"] = True
 
+  async def fake_require_consent(_db, *, user_id):
+    assert user_id == USER_ID
+    return {"accepted": True}
+
   monkeypatch.setattr(
     filter_extractions_api,
     "build_reference_makeup_extraction_payload_for_request",
@@ -621,6 +702,11 @@ async def test_run_filter_extraction_job_background_marks_provider_failure_faile
   )
   monkeypatch.setattr(filter_extractions_api, "enrich_reference_makeup_products", fail_enrich)
   monkeypatch.setattr(filter_extractions_api, "create_and_send_notification", fail_notification)
+  monkeypatch.setattr(
+    filter_extractions_api,
+    "require_current_ai_data_consent",
+    fake_require_consent,
+  )
   fake_db = FakeDB()
 
   await filter_extractions_api.run_filter_extraction_job_background(

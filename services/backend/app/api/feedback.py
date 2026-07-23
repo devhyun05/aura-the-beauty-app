@@ -41,6 +41,7 @@ from app.services.owned_media import resolve_owned_source_media, trusted_media_r
 from app.services.push_notifications import create_and_send_notification
 from app.services.report_rate_limit import enforce_report_generation_limit
 from app.services.users import ensure_user
+from app.services.privacy_consents import require_current_ai_data_consent
 
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
@@ -313,6 +314,9 @@ async def run_feedback_job_background(
   )
 
   try:
+    # A queued job can start after the user has revoked consent. Re-check at
+    # the provider boundary so revocation stops any new third-party transfer.
+    await require_current_ai_data_consent(db, user_id=user_id)
     result, analysis_status, analysis_error = await build_makeup_feedback_result_for_request(
       request_payload,
       settings,
@@ -440,6 +444,7 @@ async def create_feedback_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   execution_mode = settings.ai_job_execution_mode_normalized
 
   if payload.run_immediately and execution_mode not in {"inline", "sqs"}:
@@ -587,9 +592,10 @@ async def create_feedback_conference_preview_messages(
   db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
+  user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   request_payload = copy.deepcopy(payload.request_payload)
   if payload.report_id is not None:
-    user = await ensure_user(db, auth)
     report = await get_owned_feedback_report(db, report_id=payload.report_id, user_id=user["id"])
     stored_request, _ = feedback_report_context(report)
     request_payload = stored_request
@@ -633,10 +639,11 @@ async def create_feedback_conference_messages(
   db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
+  user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   result = payload.result
   request_payload = copy.deepcopy(payload.request_payload)
   if payload.report_id is not None:
-    user = await ensure_user(db, auth)
     report = await get_owned_feedback_report(db, report_id=payload.report_id, user_id=user["id"])
     stored_request, stored_result = feedback_report_context(report)
     if stored_result is None:

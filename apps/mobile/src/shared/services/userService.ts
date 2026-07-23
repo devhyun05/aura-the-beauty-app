@@ -296,14 +296,18 @@ async function updateBackendUserProfile(
   const body: {
     avatarMediaId?: string | null;
     birthDate: string | null;
+    email: string | null;
     gender: string | null;
     interest: string | null;
+    name: string | null;
     nickname: string | null;
     phone: string | null;
   } = {
     birthDate: profile.birthDate || null,
+    email: profile.email.trim() || null,
     gender: mapProfileGenderToBackend(profile.gender),
     interest: profile.interest || null,
+    name: profile.name.trim() || null,
     nickname: profile.nickname || null,
     phone: profile.phone || null,
   };

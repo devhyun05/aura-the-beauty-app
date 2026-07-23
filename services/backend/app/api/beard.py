@@ -15,6 +15,7 @@ from app.schemas.beard import BeardJobCreate, BeardUploadUrlRequest
 from app.schemas.beard_report import BeardAnalysisRequest
 from app.services.beard_analysis import build_beard_analysis_result_for_request
 from app.services.beard_lambda import BeardLambdaClient
+from app.services.privacy_consents import require_current_ai_data_consent
 from app.services.users import ensure_user
 
 
@@ -199,6 +200,7 @@ async def create_beard_upload_url(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   client = BeardLambdaClient(settings)
   # Never let client-controlled text into the S3 key: scope uploads to the user id.
   result = await client.upload_url(str(user["id"]))
@@ -224,6 +226,7 @@ async def create_beard_job(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   row = await db.fetchrow(
     """
     insert into beard_jobs (user_id, status, path, input_key, survey_payload)
@@ -263,6 +266,12 @@ async def get_beard_job(
   if not row:
     raise AppError(404, "BEARD_JOB_NOT_FOUND", "Beard job was not found.")
 
+  # Polling a pending job can invoke the external simulation provider. A user
+  # may revoke consent after creating the job but before the next poll, so only
+  # advance non-terminal jobs while current consent remains valid.
+  if row.get("status") not in TERMINAL_STATUSES:
+    await require_current_ai_data_consent(db, user_id=user["id"])
+
   client = BeardLambdaClient(settings)
   advanced = await _advance_job(client, db, row)
 
@@ -273,6 +282,7 @@ async def get_beard_job(
 async def create_beard_report(
   payload: BeardAnalysisRequest,
   auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
   settings: Settings = Depends(get_settings),
 ) -> dict:
   # Subsystem C: stateless Bedrock (Claude Sonnet) "상세 보고서" generator.
@@ -285,6 +295,9 @@ async def create_beard_report(
       "BEARD_ANALYSIS_GUARD_NOT_PASSED",
       "원본 보존이 확인되지 않아 상세 보고서를 만들 수 없어요.",
     )
+
+  user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
 
   # The selfie was uploaded via /beard/upload-url into the FLUX bucket (us-west-2),
   # NOT the app media bucket — default there so the report reads the right object.

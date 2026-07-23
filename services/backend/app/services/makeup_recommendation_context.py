@@ -7,6 +7,10 @@ from app.services.makeup_recommendation_measurements import (
   compile_makeup_measurement_insights,
 )
 from app.services.makeup_recommendation_prompt import INPUT_PRIORITY
+from app.services.privacy_consents import (
+  AI_DATA_CONSENT_TYPES,
+  AI_DATA_CONSENT_VERSION,
+)
 
 
 # Precomputed makeup advice from a face-analysis report must not steer a new
@@ -57,6 +61,60 @@ def compile_profile_snapshot(value: Any) -> dict[str, str]:
     "presentation": PROFILE_PRESENTATIONS[gender],
     "presentationGuidance": PROFILE_PRESENTATION_GUIDANCE[gender],
   }
+
+
+def compile_ai_data_consent_snapshot(value: Any) -> dict[str, Any] | None:
+  """Project a current server-verified consent record into persisted context."""
+  if not isinstance(value, dict):
+    return None
+  if value.get("accepted") is not True or value.get("version") != AI_DATA_CONSENT_VERSION:
+    return None
+
+  raw_purposes = value.get("purposes")
+  if not isinstance(raw_purposes, dict):
+    return None
+  purposes: dict[str, dict[str, Any]] = {}
+  for purpose in AI_DATA_CONSENT_TYPES:
+    state = raw_purposes.get(purpose)
+    if not isinstance(state, dict):
+      return None
+    if state.get("accepted") is not True or state.get("version") != AI_DATA_CONSENT_VERSION:
+      return None
+    accepted_at = state.get("acceptedAt")
+    if accepted_at is None:
+      return None
+    purposes[purpose] = {
+      "accepted": True,
+      "acceptedAt": str(accepted_at),
+      "version": AI_DATA_CONSENT_VERSION,
+    }
+
+  raw_consent_ids = value.get("consentIds")
+  consent_ids = (
+    [
+      str(consent_id).strip()
+      for consent_id in raw_consent_ids
+      if str(consent_id).strip()
+    ]
+    if isinstance(raw_consent_ids, list)
+    else []
+  )
+  if len(consent_ids) != len(AI_DATA_CONSENT_TYPES) or len(set(consent_ids)) != len(consent_ids):
+    return None
+
+  return {
+    "schemaVersion": "ai-data-consent-snapshot-v1",
+    "accepted": True,
+    "version": AI_DATA_CONSENT_VERSION,
+    "consentIds": consent_ids,
+    "purposes": purposes,
+  }
+
+
+def has_current_ai_data_consent_snapshot(context_snapshot: Any) -> bool:
+  if not isinstance(context_snapshot, dict):
+    return False
+  return compile_ai_data_consent_snapshot(context_snapshot.get("aiDataConsent")) is not None
 
 
 def _json_object(value: Any) -> dict[str, Any]:
@@ -180,14 +238,20 @@ def compile_context_snapshot(
   custom_situation_label: str | None,
   normalized_custom: dict[str, Any] | None,
   requested_image_mode: str,
+  ai_data_consent_snapshot: dict[str, Any] | None = None,
   personalized_enabled: bool = True,
   editorial_preset: dict[str, Any] | None = None,
   profile_gender: Any = None,
 ) -> dict[str, Any]:
   analysis = compile_analysis_snapshot(report)
+  trusted_consent = compile_ai_data_consent_snapshot(ai_data_consent_snapshot)
+  personalized_consent = (
+    requested_image_mode == "personalized"
+    and trusted_consent is not None
+  )
   effective_image_mode = (
     "personalized"
-    if personalized_enabled and requested_image_mode == "personalized" and analysis.get("sourceMediaId")
+    if personalized_enabled and personalized_consent and analysis.get("sourceMediaId")
     else "generic"
   )
   selection = {
@@ -198,7 +262,7 @@ def compile_context_snapshot(
     "normalizedCustom": normalized_custom,
     "editorialPreset": editorial_preset,
   }
-  return {
+  context = {
     "schemaVersion": "makeup-recommendation-context-v2",
     "analysisInputPolicyVersion": ANALYSIS_INPUT_POLICY_VERSION,
     "analysisReport": analysis,
@@ -207,7 +271,10 @@ def compile_context_snapshot(
     "image": {
       "requestedMode": requested_image_mode,
       "effectiveMode": effective_image_mode,
-      "personalizedConsent": requested_image_mode == "personalized",
+      "personalizedConsent": personalized_consent,
     },
     "inputPriority": list(INPUT_PRIORITY),
   }
+  if trusted_consent is not None:
+    context["aiDataConsent"] = trusted_consent
+  return context

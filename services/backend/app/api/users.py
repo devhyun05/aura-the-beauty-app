@@ -128,6 +128,8 @@ async def update_my_profile(
   data = payload.model_dump(exclude_unset=True, by_alias=False)
   allowed_fields = [
     "avatar_media_id",
+    "email",
+    "name",
     "nickname",
     "phone",
     "birth_date",

@@ -33,6 +33,7 @@ expectEqual(
 
 <AppSettingsScreen
   onPressAccountManagement={() => undefined}
+  onPressAiDataConsent={() => undefined}
   onPressFaq={() => undefined}
   onPressPrivacyPolicy={() => undefined}
   onPressProfile={() => undefined}

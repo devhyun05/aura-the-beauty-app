@@ -24,6 +24,7 @@ from app.services.hair_jobs import HairJobQueue
 from app.services.hair_observability import emit_hair_metric
 from app.services.s3 import S3Service
 from app.services.users import ensure_user
+from app.services.privacy_consents import require_current_ai_data_consent
 
 
 router = APIRouter(tags=["hair"])
@@ -164,6 +165,7 @@ async def create_hair_analysis(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   if db.pool is None:
     raise AppError(503, "DATABASE_NOT_CONFIGURED", "Database is not configured.")
 
@@ -270,6 +272,7 @@ async def create_hair_simulation(
   settings: Settings = Depends(get_settings),
 ) -> dict:
   user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
   if get_hair_style(payload.style_id) is None:
     raise AppError(422, "HAIR_STYLE_NOT_FOUND", "The requested hair style does not exist.")
   if db.pool is None:

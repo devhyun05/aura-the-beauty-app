@@ -7,7 +7,7 @@ const PROFILE_SETUP_COMPLETION_STORAGE_KEY = 'aura.profile.setup.completed.v1';
 type ProfileSetupCompletionMap = Record<string, true>;
 
 function getProfileSetupCompletionKey(user: AuthUser): string {
-  return user.email?.trim().toLowerCase() || user.id;
+  return user.id || user.email?.trim().toLowerCase() || 'unknown-user';
 }
 
 async function readProfileSetupCompletionMap(): Promise<ProfileSetupCompletionMap> {

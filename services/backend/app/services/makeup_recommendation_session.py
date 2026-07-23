@@ -159,6 +159,7 @@ async def create_session(
   payload: MakeupRecommendationSessionCreate,
   idempotency_key: str | None,
   *,
+  ai_data_consent_snapshot: dict[str, Any] | None = None,
   profile_gender: Any = None,
 ) -> dict[str, Any]:
   normalized_key = normalize_idempotency_key(payload, idempotency_key)
@@ -207,6 +208,7 @@ async def create_session(
     custom_situation_label=custom_label,
     normalized_custom=normalized_custom,
     requested_image_mode=payload.image_mode,
+    ai_data_consent_snapshot=ai_data_consent_snapshot,
     personalized_enabled=settings.makeup_personalized_image_enabled,
     editorial_preset={
       "id": editorial_preset["id"],

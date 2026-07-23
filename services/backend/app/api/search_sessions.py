@@ -52,6 +52,8 @@ from app.services.auradin_agent.event_logger import (
   schedule_search_turn_events,
 )
 from app.services.auradin_agent.retrieval_service import FilterDeltaContractViolation
+from app.services.privacy_consents import require_current_ai_data_consent
+from app.services.users import ensure_user
 
 
 router = APIRouter(prefix="/search/sessions", tags=["search"])
@@ -122,6 +124,27 @@ _ANSWER_ERROR_MAP = {
 }
 
 
+async def _require_search_ai_data_consent(
+  db: Database,
+  settings: Settings,
+  auth: AuthContext,
+) -> None:
+  if not db.is_connected:
+    # Local contract tests and the packaged-catalog demo can run without a
+    # database. Deployed environments must never fail open when the consent
+    # ledger is unavailable.
+    if settings.environment.strip().lower() in {"staging", "stage", "production", "prod"}:
+      raise AppError(
+        503,
+        "AI_DATA_CONSENT_STORE_UNAVAILABLE",
+        "AI 데이터 동의 상태를 확인할 수 없어 검색을 시작하지 않았어요.",
+      )
+    return
+
+  user = await ensure_user(db, auth)
+  await require_current_ai_data_consent(db, user_id=user["id"])
+
+
 @router.post("")
 async def create_search_session(
   payload: Annotated[CreateSearchSessionRequest, Body()],
@@ -130,6 +153,7 @@ async def create_search_session(
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
 ) -> dict:
+  await _require_search_ai_data_consent(db, settings, auth)
   prompt = str(payload.prompt or "").strip()
   if not prompt:
     raise AppError(400, "PROMPT_REQUIRED", "Search prompt is required.")
@@ -230,6 +254,7 @@ async def answer_search_session(
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
 ) -> dict:
+  await _require_search_ai_data_consent(db, settings, auth)
   question_id = str(payload.questionId or "").strip()
   option_id = str(payload.optionId or "").strip()
   if not question_id or not option_id:
@@ -313,6 +338,7 @@ async def refine_search_session(
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
 ) -> dict:
+  await _require_search_ai_data_consent(db, settings, auth)
   # §7: dial은 기존 후보 캐시에서 λ/의미축/미노출 이력 재랭킹만, prompt는 hard/soft 병합.
   prompt = str(payload.prompt or "").strip()
   dial = str(payload.dial or "").strip() or None
@@ -373,6 +399,7 @@ async def similar_search_session(
   settings: Settings = Depends(get_settings),
   db: Database = Depends(get_database),
 ) -> dict:
+  await _require_search_ai_data_consent(db, settings, auth)
   # B6 §10.3-2: 신규 검색이 아니라 rankedCache 내 λ=0.9 재랭킹 — refine과 같은
   # ack/poll 계약(200 + searching + retryAfterMs)이며, M1 phase 계약(results에서만)을 따른다.
   product_id = str(payload.productId or "").strip()

@@ -545,7 +545,9 @@ export async function loginWithSocialProvider(
     identity_provider: config.providerNames[provider],
   };
 
-  if (config.prompt) {
+  // `select_account` is useful for Google account switching, but forwarding it
+  // to Apple makes every returning login look like a fresh authorization.
+  if (config.prompt && provider !== 'apple') {
     extraParams.prompt = config.prompt;
   }
 

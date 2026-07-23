@@ -20,6 +20,7 @@ from app.services.media_uploads import (
   issue_upload_session,
   resolve_legacy_upload_session_id,
 )
+from app.services.privacy_consents import require_current_ai_data_consent
 from app.services.s3 import S3Service
 from app.services.users import ensure_user
 
@@ -27,6 +28,14 @@ from app.services.users import ensure_user
 router = APIRouter(tags=["media"])
 logger = logging.getLogger(__name__)
 BACKGROUND_THUMBNAIL_RETRY_DELAYS_SECONDS = (1.0, 2.0, 4.0, 8.0)
+AI_INPUT_MEDIA_KINDS = frozenset({
+  "capture",
+  "face-analysis-source",
+  "filter-extraction",
+  "hair-analysis-mask",
+  "hair-analysis-source",
+  "makeup_feedback",
+})
 
 
 async def update_media_thumbnail_metadata(
@@ -102,6 +111,8 @@ async def create_presigned_upload(
     raise AppError(503, "S3_NOT_CONFIGURED", "S3_BUCKET_NAME is required for uploads.")
   db = await require_database(db)
   user = await ensure_user(db, auth)
+  if payload.media_kind in AI_INPUT_MEDIA_KINDS:
+    await require_current_ai_data_consent(db, user_id=user["id"])
   upload = await issue_upload_session(
     db,
     settings,
@@ -138,6 +149,23 @@ async def complete_upload(
         thumbnail_object_key=payload.thumbnail_object_key,
         owner_user_id=user["id"],
       )
+  upload_session = await db.fetchrow(
+    """
+    select media_kind, status
+    from media_upload_sessions
+    where id = $1 and owner_user_id = $2
+    """,
+    upload_id,
+    user["id"],
+  )
+  if (
+    upload_session
+    and upload_session.get("status") == "pending"
+    and upload_session.get("media_kind") in AI_INPUT_MEDIA_KINDS
+  ):
+    # A presigned URL can remain usable briefly after consent is revoked.
+    # Re-check before the uploaded object is accepted into the media catalog.
+    await require_current_ai_data_consent(db, user_id=user["id"])
   media = await complete_upload_session(
     db,
     settings,

@@ -67,6 +67,28 @@ SESSION_ID = UUID("55555555-5555-5555-5555-555555555555")
 RECOMMENDATION_REPORT_ID = UUID("66666666-6666-6666-6666-666666666666")
 
 
+def _current_ai_data_consent() -> dict:
+  version = "ai-photo-processing-v1"
+  purposes = ("camera_analysis", "ai_processing", "third_party_ai")
+  return {
+    "accepted": True,
+    "version": version,
+    "consentIds": [
+      "71111111-1111-1111-1111-111111111111",
+      "72222222-2222-2222-2222-222222222222",
+      "73333333-3333-3333-3333-333333333333",
+    ],
+    "purposes": {
+      purpose: {
+        "accepted": True,
+        "acceptedAt": "2026-07-23T00:00:00+00:00",
+        "version": version,
+      }
+      for purpose in purposes
+    },
+  }
+
+
 @pytest.mark.parametrize(
   ("value", "expected_gender", "expected_presentation"),
   [
@@ -485,6 +507,49 @@ def test_session_api_rejects_multiple_selection_kinds_with_422() -> None:
   assert error["message"] == "Request validation failed."
   assert error["details"]["errors"][0]["loc"] == ["body"]
   assert "Exactly one of keywordId" in error["details"]["errors"][0]["msg"]
+
+
+@pytest.mark.asyncio
+async def test_session_api_forwards_server_verified_consent_snapshot(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  db = object()
+  verified_snapshot = _current_ai_data_consent()
+  captured: dict = {}
+  payload = MakeupRecommendationSessionCreate.model_validate({
+    "analysisReportId": ANALYSIS_REPORT_ID,
+    "customSituationText": "출근 메이크업",
+    "imageMode": "personalized",
+    # Extra client fields are ignored and must not become the consent source.
+    "personalizedConsent": True,
+  })
+
+  async def fake_ensure_user(received_db, _auth):
+    assert received_db is db
+    return {"id": USER_ID, "gender": "unspecified"}
+
+  async def fake_require(received_db, *, user_id):
+    assert (received_db, user_id) == (db, USER_ID)
+    return verified_snapshot
+
+  async def fake_create(*args, **kwargs):
+    captured.update(args=args, kwargs=kwargs)
+    return {"id": "session-id"}
+
+  monkeypatch.setattr(makeup_api, "ensure_user", fake_ensure_user)
+  monkeypatch.setattr(makeup_api, "require_current_ai_data_consent", fake_require)
+  monkeypatch.setattr(makeup_api, "create_session", fake_create)
+
+  response = await makeup_api.create_makeup_recommendation_session(
+    payload,
+    "consent-test",
+    Settings(),
+    auth_context(),
+    db,
+  )
+
+  assert response["data"]["id"] == "session-id"
+  assert captured["kwargs"]["ai_data_consent_snapshot"] is verified_snapshot
 
 
 def test_editorial_preset_is_a_third_exclusive_selection() -> None:
@@ -1141,6 +1206,7 @@ def test_context_snapshot_whitelists_report_fields_and_effective_image_mode() ->
     custom_situation_label=None,
     normalized_custom=None,
     requested_image_mode="personalized",
+    ai_data_consent_snapshot=_current_ai_data_consent(),
   )
 
   assert snapshot["image"] == {
@@ -1148,6 +1214,23 @@ def test_context_snapshot_whitelists_report_fields_and_effective_image_mode() ->
     "effectiveMode": "personalized",
     "personalizedConsent": True,
   }
+  assert snapshot["aiDataConsent"]["accepted"] is True
+  assert snapshot["aiDataConsent"]["version"] == "ai-photo-processing-v1"
+  without_consent_snapshot = compile_context_snapshot(
+    report,
+    situation={"id": str(SITUATION_ID), "key": "date", "label": "데이트"},
+    keyword={"id": str(KEYWORD_ID), "label": "스트로베리 밀크"},
+    custom_situation_text=None,
+    custom_situation_label=None,
+    normalized_custom=None,
+    requested_image_mode="personalized",
+  )
+  assert without_consent_snapshot["image"] == {
+    "requestedMode": "personalized",
+    "effectiveMode": "generic",
+    "personalizedConsent": False,
+  }
+  assert "aiDataConsent" not in without_consent_snapshot
   assert snapshot["inputPriority"] == list(INPUT_PRIORITY)
   assert snapshot["analysisInputPolicyVersion"] == "objective-analysis-v1"
   disabled_snapshot = compile_context_snapshot(
@@ -1158,6 +1241,7 @@ def test_context_snapshot_whitelists_report_fields_and_effective_image_mode() ->
     custom_situation_label=None,
     normalized_custom=None,
     requested_image_mode="personalized",
+    ai_data_consent_snapshot=_current_ai_data_consent(),
     personalized_enabled=False,
   )
   assert disabled_snapshot["image"] == {
@@ -1694,7 +1778,15 @@ async def test_session_creation_compiles_immutable_context_and_questions(
       "imageMode": "personalized",
     },
   )
-  result = await create_session(DB(), Settings(), USER_ID, payload, "create-v2", profile_gender="male")
+  result = await create_session(
+    DB(),
+    Settings(),
+    USER_ID,
+    payload,
+    "create-v2",
+    ai_data_consent_snapshot=_current_ai_data_consent(),
+    profile_gender="male",
+  )
 
   assert result["status"] == "questioning"
   assert result["imageMode"] == "personalized"
@@ -1899,7 +1991,14 @@ async def test_editorial_preset_uses_reviewed_questions_without_runtime_ai(
       "imageMode": "personalized",
     },
   )
-  result = await create_session(DB(), Settings(), USER_ID, payload, "editorial-v2")
+  result = await create_session(
+    DB(),
+    Settings(),
+    USER_ID,
+    payload,
+    "editorial-v2",
+    ai_data_consent_snapshot=_current_ai_data_consent(),
+  )
 
   assert len(EDITORIAL_QUESTION_PRESETS) == 12
   assert result["editorialPresetId"] == "baseball-camera"
@@ -1971,7 +2070,14 @@ async def test_session_creation_persists_custom_situation_label(
       "imageMode": "personalized",
     },
   )
-  result = await create_session(DB(), Settings(), USER_ID, payload, "custom-label-v2")
+  result = await create_session(
+    DB(),
+    Settings(),
+    USER_ID,
+    payload,
+    "custom-label-v2",
+    ai_data_consent_snapshot=_current_ai_data_consent(),
+  )
 
   assert captured["context"]["selection"]["customSituationLabel"] == "야구장 여신"
   assert result["customSituationLabel"] == "야구장 여신"
@@ -3033,13 +3139,14 @@ def test_failed_generic_image_report_recovers_personalized_request_from_context(
         'effectiveMode': 'personalized',
         'personalizedConsent': True,
       },
+      'aiDataConsent': _current_ai_data_consent(),
       'analysisReport': {'sourceMediaId': source_media_id},
     },
   }
 
   assert makeup_api._personalized_retry_context(report) == (True, source_media_id)
 
-  report['context_snapshot']['image']['personalizedConsent'] = False
+  report['context_snapshot'].pop('aiDataConsent')
   assert makeup_api._personalized_retry_context(report) == (False, source_media_id)
 
 

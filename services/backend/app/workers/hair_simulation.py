@@ -16,6 +16,7 @@ from app.services.hair_jobs import HairJobQueue, decode_hair_job
 from app.services.hair_observability import emit_hair_metric
 from app.services.hair_processing import HairProcessingService
 from app.services.hair_schema import ensure_hair_schema
+from app.services.privacy_consents import require_current_ai_data_consent
 from app.services.s3 import S3Service
 
 
@@ -82,6 +83,7 @@ async def process_analysis_job(db: Database, settings: Settings, job_id: UUID) -
   if row is None:
     return False
   started_at = time.monotonic()
+  await require_current_ai_data_consent(db, user_id=row["user_id"])
 
   media = await db.fetchrow(
     """
@@ -226,6 +228,7 @@ async def process_simulation_job(db: Database, settings: Settings, job_id: UUID)
   if row is None:
     return False
   started_at = time.monotonic()
+  await require_current_ai_data_consent(db, user_id=row["user_id"])
 
   style = get_hair_style(row["style_id"])
   if style is None:

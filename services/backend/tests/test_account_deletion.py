@@ -11,6 +11,7 @@ from app.schemas.users import AccountDeletionRequest
 from app.services.account_deletion import (
   AccountDeletionResult,
   _collect_makeup_recommendation_objects,
+  _delete_unlinked_account_data,
   delete_cognito_identity,
 )
 from app.services.account_identity import hash_auth_subject
@@ -35,12 +36,90 @@ class DeletedIdentityDatabase:
     return None
 
 
+class UnlinkedAccountDataConnection:
+  def __init__(
+    self,
+    *,
+    has_auradin_events: bool,
+    has_face3d_receipts: bool,
+  ) -> None:
+    self.has_auradin_events = has_auradin_events
+    self.has_face3d_receipts = has_face3d_receipts
+    self.executed: list[tuple[str, tuple]] = []
+    self.table_checks: list[str] = []
+
+  async def fetchval(self, query: str, *_args):
+    self.table_checks.append(query)
+    if "face3d_calibration_receipt_consumptions" in query:
+      return self.has_face3d_receipts
+    if "auradin_events" in query:
+      return self.has_auradin_events
+    raise AssertionError(f"Unexpected table check: {query}")
+
+  async def execute(self, query: str, *args):
+    self.executed.append((query, args))
+    return "DELETE 1"
+
+
 def test_auth_subject_hash_is_stable_and_does_not_store_raw_identity() -> None:
   digest = hash_auth_subject("google", "cognito-user-subject")
 
   assert digest == hash_auth_subject("google", "cognito-user-subject")
   assert len(digest) == 64
   assert "cognito-user-subject" not in digest
+
+
+@pytest.mark.asyncio
+async def test_unlinked_face3d_receipts_and_auradin_events_are_deleted() -> None:
+  user_id = uuid4()
+  connection = UnlinkedAccountDataConnection(
+    has_auradin_events=True,
+    has_face3d_receipts=True,
+  )
+
+  await _delete_unlinked_account_data(
+    connection,
+    auth=build_auth_context(),
+    settings=Settings(),
+    user_id=user_id,
+  )
+
+  face3d_delete = next(
+    call
+    for call in connection.executed
+    if "delete from face3d_calibration_receipt_consumptions" in call[0]
+  )
+  assert face3d_delete[1] == (f"subj_user_{user_id}",)
+
+  auradin_delete = next(
+    call
+    for call in connection.executed
+    if "delete from auradin_events" in call[0]
+  )
+  assert auradin_delete[1] == (
+    [
+      "cognito-user-subject",
+      "user:v1:cognito:cognito-user-subject",
+    ],
+  )
+
+
+@pytest.mark.asyncio
+async def test_unlinked_account_cleanup_skips_tables_missing_from_older_installs() -> None:
+  connection = UnlinkedAccountDataConnection(
+    has_auradin_events=False,
+    has_face3d_receipts=False,
+  )
+
+  await _delete_unlinked_account_data(
+    connection,
+    auth=build_auth_context(),
+    settings=Settings(),
+    user_id=uuid4(),
+  )
+
+  assert len(connection.table_checks) == 2
+  assert connection.executed == []
 
 
 def test_makeup_recommendation_account_assets_are_limited_to_managed_prefix_and_bucket() -> None:
