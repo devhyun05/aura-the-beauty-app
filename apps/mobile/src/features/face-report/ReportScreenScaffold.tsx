@@ -20,7 +20,7 @@ import {
   type StoryReportSection,
 } from '../../shared/ui/StoryReportPager';
 import { color, font, radius, shadow } from './reportTokens';
-import type { BandKey, ReportScreenProps } from './reportTypes';
+import type { BandKey, ReportData, ReportScreenProps } from './reportTypes';
 import {
   buildFaceReportStoryModel,
   FACE_REPORT_STORY_SECTIONS,
@@ -370,8 +370,52 @@ function MakeupCtaCard({
  * Story report screen: editorial covers + meaning-complete horizontal cards.
  * Pure & props-driven — navigation, retake and survey actions bubble up as callbacks.
  */
+function keepActivePageContent(
+  current: ReportData,
+  next: ReportData,
+  pageId: string | null,
+): ReportData {
+  if (!pageId) return next;
+  if (pageId === 'summary:generation') {
+    return {
+      ...next,
+      generationStatus: current.generationStatus,
+      generationError: current.generationError,
+      s1: current.s1,
+    };
+  }
+  if (pageId.startsWith('summary:')) {
+    return {...next, s1: current.s1};
+  }
+  if (pageId === 'proportion:overview') {
+    return {...next, s2: current.s2};
+  }
+  if (pageId.startsWith('features:')) {
+    const key = pageId.slice('features:'.length);
+    const currentCard = current.s3?.cards.find(card => card.key === key);
+    if (!currentCard || !next.s3) return next;
+    return {
+      ...next,
+      s3: {
+        ...next.s3,
+        cards: next.s3.cards.map(card =>
+          card.key === key ? currentCard : card,
+        ),
+      },
+    };
+  }
+  if (pageId === 'impression:overview') return {...next, s6: current.s6};
+  if (pageId.startsWith('personal-color:')) return {...next, s4: current.s4};
+  if (pageId === 'skin:overview') return {...next, s8: current.s8};
+  if (pageId.startsWith('styling:')) {
+    return {...next, s7: current.s7, s9: current.s9};
+  }
+  if (pageId === 'body:overview') return {...next, s5: current.s5};
+  return next;
+}
+
 export function ReportScreenScaffold({
-  data,
+  data: incomingData,
   onBack,
   onGoldenMaskInteractionChange,
   onMore,
@@ -385,11 +429,54 @@ export function ReportScreenScaffold({
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
   const pagerRef = useRef<StoryReportPagerRef | null>(null);
+  const [data, setData] = useState(incomingData);
+  const [pendingData, setPendingData] = useState<ReportData | null>(null);
+  const dataRef = useRef(data);
+  const initialModel = useMemo(
+    () => buildFaceReportStoryModel(incomingData),
+    [incomingData],
+  );
+  const initialPageId =
+    incomingData.initialPageId ??
+    (incomingData.goldenMask
+      ? 'summary:overview'
+      : initialModel.pages[0]?.id ?? null);
+  const [activePageId, setActivePageId] = useState(initialPageId);
+  const activePageIdRef = useRef(activePageId);
+
+  React.useEffect(() => {
+    const current = dataRef.current;
+    if (current === incomingData) return;
+    const isEditorialUpgrade =
+      current.reportId === incomingData.reportId &&
+      current.generationStatus === 'loading' &&
+      incomingData.generationStatus === undefined;
+    const nextData = isEditorialUpgrade
+      ? keepActivePageContent(
+          current,
+          incomingData,
+          activePageIdRef.current,
+        )
+      : incomingData;
+    dataRef.current = nextData;
+    setData(nextData);
+    setPendingData(isEditorialUpgrade ? incomingData : null);
+  }, [incomingData]);
+
   const storyModel = useMemo(() => buildFaceReportStoryModel(data), [data]);
   const initialStoryPageId =
     data.initialPageId ??
     (data.goldenMask ? 'summary:overview' : storyModel.pages[0]?.id ?? null);
-  const [activePageId, setActivePageId] = useState(initialStoryPageId);
+  const handlePageChange = React.useCallback((pageId: string) => {
+    activePageIdRef.current = pageId;
+    setActivePageId(pageId);
+    setPendingData(pending => {
+      if (!pending) return null;
+      dataRef.current = pending;
+      setData(pending);
+      return null;
+    });
+  }, []);
   const handleGoldenMaskInteractionChange = React.useCallback(
     (interacting: boolean) => {
       // Own both parent axes for the entire touch. PanResponder capture alone
@@ -500,7 +587,12 @@ export function ReportScreenScaffold({
         return data.s7 ? (
           <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.glamCard.title} inset showChapterHeader={showChapterHeader}>
             <S7LookCard card={data.s7.glamCard} />
-            {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
+          </StoryContentCard>
+        ) : null;
+      case 'styling:lanes':
+        return data.s9 ? (
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s9.title} sub={data.s9.sub} inset showChapterHeader={showChapterHeader}>
+            <S9StyleLanes data={data.s9} />
           </StoryContentCard>
         ) : null;
       case 'skin':
@@ -547,11 +639,12 @@ export function ReportScreenScaffold({
       showPageIndex: false,
     };
   });
-  const resetKey = `${data.s1.photo.uri ?? 'report'}:${data.s1.dateLine}:${storyPages.map(page => page.id).join(',')}`;
+  const resetKey = `${data.reportId}:${data.s1.photo.uri ?? 'report'}:${data.s1.dateLine}`;
   const firstStoryPageId =
     data.initialPageId ??
     (data.goldenMask ? 'summary:overview' : storyModel.pages[0]?.id ?? null);
   React.useEffect(() => {
+    activePageIdRef.current = firstStoryPageId;
     setActivePageId(firstStoryPageId);
   }, [firstStoryPageId, resetKey]);
 
@@ -588,7 +681,14 @@ export function ReportScreenScaffold({
                 onBack,
               )}
             </View>
-            <Text style={[font(14, '700'), {color: color.ink}]}>{data.topBarTitle}</Text>
+            <View style={{alignItems: 'center', gap: 2}}>
+              <Text style={[font(14, '700'), {color: color.ink}]}>{data.topBarTitle}</Text>
+              {pendingData ? (
+                <Text style={[font(9.5, '700'), {color: color.accentDeep}]}>
+                  새로운 분석이 준비됐어요
+                </Text>
+              ) : null}
+            </View>
             <View style={{alignItems: 'center', flexDirection: 'row', justifyContent: 'flex-end', width: 88}}>
               {onShare
                 ? circleBtn(<Share2 size={18} color={color.body} />, '보고서 공유', onShare)
@@ -601,7 +701,7 @@ export function ReportScreenScaffold({
           <StoryReportPager
             ref={pagerRef}
             initialPageId={initialStoryPageId ?? undefined}
-            onPageChange={page => setActivePageId(page.id)}
+            onPageChange={page => handlePageChange(page.id)}
             pages={storyPages}
             sections={storySections}
             resetKey={resetKey}

@@ -432,27 +432,6 @@ async def run_analysis_job_background(
         source_image_bytes=source_image_bytes,
         anchor_values=anchor_task,
       )
-      missing_stages = [
-        stage
-        for stage, value in (
-          ("aiPerception", face_analysis_v2.perception),
-          ("aiConsulting", face_analysis_v2.consulting),
-        )
-        if value is None
-      ]
-      if missing_stages:
-        raise AppError(
-          502,
-          "FACE_ANALYSIS_AI_INCOMPLETE",
-          "얼굴 분석을 완료하지 못했어요. 다시 촬영해 주세요.",
-          {
-            "missingStages": missing_stages,
-            "pipeline": face_analysis_v2.pipeline.model_dump(
-              by_alias=True,
-              mode="json",
-            ),
-          },
-        )
       try:
         result = project_legacy_analysis_result(face_analysis_v2)
       except ValueError as exc:

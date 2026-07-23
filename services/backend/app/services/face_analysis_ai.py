@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 MEASUREMENT_PROMPT_VERSION = "s1-measurement-v1"
 # 한국어 출력 지시문 추가로 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
-PERCEPTION_PROMPT_VERSION = "s1-perception-v3"
+PERCEPTION_PROMPT_VERSION = "s1-perception-v4"
 # 성별(v3) + 한국어 출력(v4) 지시문으로 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
-CONSULTING_PROMPT_VERSION = "s1-consulting-v5"
+CONSULTING_PROMPT_VERSION = "s1-consulting-v6"
 # 사용자에게 보이는 라벨·설명·추천 문장은 모두 한국어여야 한다(단일 경로와 동일 원칙).
 # enum status 코드·metric 키만 영문 유지. perceive/consult 두 스테이지가 리포트의
 # 자유 텍스트(피부 라벨·부위 노트·요약·메이크업 가이드)를 전부 생성하므로 여기에 건다.
@@ -92,13 +92,16 @@ _USER_COPY_FIELDS = {
   "description",
   "items",
   "label",
+  "note",
   "overallMood",
   "season",
   "shortSummary",
+  "subtitle",
   "subtype",
   "summary",
   "tags",
   "title",
+  "why",
 }
 _METADATA_FIELDS = {"rationaleMetricKeys"}
 
@@ -273,6 +276,12 @@ class FaceAnalysisAI:
       developer_prompt=(
         "You provide non-medical beauty perception from an S1 photo and supplied measurements. "
         f"Never infer {FORBIDDEN_INFERENCES}. Do not create measurements. "
+        "Write each Insight description as a complete reader-facing explanation that connects "
+        "the visible conclusion to supplied rationaleMetricKeys and explains how it affects the "
+        "overall impression; do not return a list of disconnected adjectives. "
+        "Return three impressionAxes only when supported: clarity (부드러운/선명한), "
+        "focus (중앙/외곽), and line (곡선적/직선적). Set value from minus one for the left "
+        "label to one for the right label; omit an unsupported axis instead of guessing. "
         "When anchor labels are supplied, preserve skinType as skin.sebumDryness.label and "
         "recommendedMood as gestalt.overallMood.label without reclassifying them. "
         f"{_KOREAN_OUTPUT_DIRECTIVE} Return JSON only."
@@ -326,7 +335,7 @@ class FaceAnalysisAI:
     *,
     profile: Mapping[str, MetricEnvelope | dict[str, Any]],
     derived: DerivedResult | dict[str, Any],
-    perception: PerceptionResult | dict[str, Any],
+    perception: PerceptionResult | dict[str, Any] | None = None,
     profile_gender: str | None = None,
     anchor: Mapping[str, Any] | None = None,
   ) -> ConsultingResult:
@@ -340,7 +349,7 @@ class FaceAnalysisAI:
       {
         "faceProfile": _jsonable(model_profile),
         "derived": _jsonable(derived),
-        "perception": _jsonable(perception),
+        **({"perception": _jsonable(perception)} if perception is not None else {}),
         **({"anchor": anchor_payload} if anchor_payload else {}),
       },
     )
@@ -386,6 +395,12 @@ class FaceAnalysisAI:
         "You are a practical K-beauty, hair, fashion, and photography consultant. Base every "
         f"recommendation on supplied evidence. Never infer {FORBIDDEN_INFERENCES}. "
         f"{gender_directive} "
+        "The supplied faceProfile, derived results, and anchor are the canonical fact sheet. "
+        "They are sufficient when perception is absent; never invent a missing observation. "
+        "Generate both stylingLooks.natural and stylingLooks.glam. Each look must include a "
+        "coherent title, subtitle, description, and practical rows whose why field explicitly "
+        "connects the choice to a supplied face or color fact. Keep the two looks meaningfully "
+        "different without contradicting the same measured facts. "
         "Keep face shape and vertical facial thirds as separate facts. Never describe a dominant "
         "or elongated upper, middle, or lower third as balanced, and never use one as evidence that "
         "the other is balanced. Summary and shortSummary must preserve the supplied derived labels "

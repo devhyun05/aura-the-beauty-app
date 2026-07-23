@@ -207,9 +207,24 @@ export function FaceAnalysisReportPreviewScreen({
   const minimumReportData = useMemo(
     () =>
       !report && minimumPreview
-        ? buildMinimumFaceReportData(minimumPreview, verticalThirds)
+        ? buildMinimumFaceReportData(minimumPreview, effectiveVerticalThirds, {
+            face3d: effectiveFace3d,
+            face3dPhotoEvidence: effectiveFace3dPhotoEvidence,
+            geometryMetrics: effectiveGeometryMetrics,
+            personalColor: effectivePersonalColor,
+            regionVisuals: effectiveRegionVisuals,
+          })
         : null,
-    [minimumPreview, report, verticalThirds],
+    [
+      effectiveFace3d,
+      effectiveFace3dPhotoEvidence,
+      effectiveGeometryMetrics,
+      effectivePersonalColor,
+      effectiveRegionVisuals,
+      effectiveVerticalThirds,
+      minimumPreview,
+      report,
+    ],
   );
   const visibleReportData = useMemo(() => {
     if (!reportData) {

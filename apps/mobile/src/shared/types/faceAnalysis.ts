@@ -110,6 +110,17 @@ export type FaceAnalysisSkinPerception = Record<
   FaceAnalysisSkinAspect
 >;
 
+export interface FaceAnalysisContentStatus {
+  coreReadyAt?: string;
+  narrativeStatus?: string;
+  stylingStatus?: string;
+  sources?: {
+    core?: 'llm' | 'template';
+    narrative?: 'llm' | 'template';
+    styling?: 'llm' | 'template';
+  };
+}
+
 // 사진 판정(VLM) 특징 부면 원본 — 순수 계약(shared/contracts/faceFeatureProfile)에
 // 정의하고 여기서 재수출한다. 계약을 RN 무의존으로 유지해 밴드 판정·프로파일 빌더
 // (계약 러너가 plain node로 실행)가 이 파일의 react-native 의존을 끌지 않게 한다.
@@ -154,6 +165,8 @@ export interface FaceAnalysisReport {
   impressionNotes?: FaceAnalysisImpressionNotes;
   stylingLooks?: FaceAnalysisStylingLooks;
   skinPerception?: FaceAnalysisSkinPerception;
+  contentRevision?: number;
+  contentStatus?: FaceAnalysisContentStatus;
   // 사진 판정(VLM) 특징 부면 — 이 필드 추가 이전 보고서에는 없다(어댑터가 부재를
   // 생략으로 처리). 1층 프로파일 VLM 슬롯의 소스.
   featureObservations?: FaceFeatureObservations;

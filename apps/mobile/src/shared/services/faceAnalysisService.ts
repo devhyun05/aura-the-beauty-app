@@ -6,7 +6,10 @@ import {
   parseFaceAnalysisMeasurements,
   type PersonalColorMeasurementInput,
 } from '../../features/face-analysis/services/faceAnalysisMeasurements';
-import {parseFaceAnalysisV2} from '../../features/face-analysis/services/faceAnalysisV2';
+import {
+  parseFaceAnalysisV2,
+  type FaceAnalysisDerivedResult,
+} from '../../features/face-analysis/services/faceAnalysisV2';
 import type {FaceGeometryAnalysisPayload} from '../../features/face-geometry/services/faceGeometryAiPayload';
 import type {FaceGeometryResult} from '../../features/face-geometry/types';
 import type {FaceVerticalThirdsAnalysisPayload} from '../../features/face-ratio/services/faceVerticalThirdsAiPayload';
@@ -27,6 +30,7 @@ import type {
   FaceFeatureObservations,
   FaceAnalysisMakeupColorRegion,
   FaceAnalysisMakeupColors,
+  FaceAnalysisContentStatus,
 } from '../types/faceAnalysis';
 import {
   buildFaceAnalysisRequestPayload,
@@ -102,6 +106,8 @@ type BackendFeatureObservations = Partial<
 type BackendAnalysisResult = {
   avoidedMakeups?: BackendMakeupCard[] | null;
   baseMakeupGuide?: string | null;
+  contentRevision?: number | null;
+  contentStatus?: unknown;
   faceShape?: string | null;
   faceAnalysisV2?: unknown;
   makeupGuideline?: BackendMakeupGuideline | null;
@@ -526,7 +532,7 @@ function parseImpressionNotes(
   const rawAxes = Array.isArray((value as {axes?: unknown})?.axes) ? (value as {axes: unknown[]}).axes : [];
   const axes = rawAxes
     .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
-    .slice(0, 2)
+    .slice(0, 3)
     .map(a => ({
       key: firstText(typeof a.key === 'string' ? a.key : undefined) ?? '',
       leftLabel: firstText(typeof a.leftLabel === 'string' ? a.leftLabel : undefined) ?? '',
@@ -536,7 +542,7 @@ function parseImpressionNotes(
     .filter(a => a.leftLabel && a.rightLabel);
 
   return overallMood && paragraph && keywords.length > 0
-    ? {overallMood, paragraph, keywords, ...(axes.length === 2 ? {axes} : {})}
+    ? {overallMood, paragraph, keywords, ...(axes.length > 0 ? {axes} : {})}
     : undefined;
 }
 
@@ -597,6 +603,53 @@ function parseSkinPerception(
     parsed[aspect] = {label, description: firstText(entry?.description) ?? ''};
   }
   return parsed;
+}
+
+function parseContentStatus(value: unknown): FaceAnalysisContentStatus | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  const rawSources =
+    raw.sources && typeof raw.sources === 'object' && !Array.isArray(raw.sources)
+      ? (raw.sources as Record<string, unknown>)
+      : null;
+  const parseSource = (source: unknown): 'llm' | 'template' | undefined =>
+    source === 'llm' || source === 'template' ? source : undefined;
+  const sources = rawSources
+    ? {
+        ...(parseSource(rawSources.core)
+          ? {core: parseSource(rawSources.core)}
+          : {}),
+        ...(parseSource(rawSources.narrative)
+          ? {narrative: parseSource(rawSources.narrative)}
+          : {}),
+        ...(parseSource(rawSources.styling)
+          ? {styling: parseSource(rawSources.styling)}
+          : {}),
+      }
+    : undefined;
+  const status: FaceAnalysisContentStatus = {
+    ...(firstText(
+      typeof raw.coreReadyAt === 'string' ? raw.coreReadyAt : undefined,
+    )
+      ? {coreReadyAt: raw.coreReadyAt as string}
+      : {}),
+    ...(firstText(
+      typeof raw.narrativeStatus === 'string'
+        ? raw.narrativeStatus
+        : undefined,
+    )
+      ? {narrativeStatus: raw.narrativeStatus as string}
+      : {}),
+    ...(firstText(
+      typeof raw.stylingStatus === 'string' ? raw.stylingStatus : undefined,
+    )
+      ? {stylingStatus: raw.stylingStatus as string}
+      : {}),
+    ...(sources && Object.keys(sources).length > 0 ? {sources} : {}),
+  };
+  return Object.keys(status).length > 0 ? status : undefined;
 }
 
 const FEATURE_OBSERVATION_KEYS: readonly FaceFeatureObservationKey[] = [
@@ -801,33 +854,34 @@ function abortedAnalysisWait(job: BackendAnalysisJob): BackendApiError {
 // 팬아웃 앵커(~4s)가 컬럼을 조기 기록하면 완결 전에 얼굴형·피부·무드를 먼저 노출한다.
 // 잡 최상위 컬럼(result가 아님)을 읽어 프리뷰를 만든다.
 export type FaceAnalysisAnchorPreview = {
+  derived?: FaceAnalysisDerivedResult;
   faceShape: string;
-  recommendedMood: string;
-  skinType: string;
+  recommendedMood?: string;
+  reportId?: string;
+  skinType?: string;
 };
 
 function getAnchorPreview(job: BackendAnalysisJob): FaceAnalysisAnchorPreview | undefined {
-  const faceShape = firstText(job.faceShape);
-  const skinType = firstText(job.skinType);
-  const recommendedMood = firstText(job.recommendedMood);
-  if (!faceShape || !skinType || !recommendedMood) {
-    return undefined;
-  }
-
-  // Anchor 3개만으로는 섹션 1의 실제 분석이 끝난 것이 아니다. V2 perception
-  // 결과까지 저장된 뒤에만 최소 보고서를 열어, 빈 요약을 먼저 보여주지 않는다.
-  // 비-V2 fan-out은 중간 섹션 완료 계약이 없으므로 전체 완료 전에는 알리지 않는다.
   const faceAnalysisV2 = parseFaceAnalysisV2(
     job.detailPayload?.result?.faceAnalysisV2,
   );
-  if (
-    faceAnalysisV2?.pipeline.aiPerception.status !== 'completed' ||
-    !faceAnalysisV2.perception
-  ) {
+  const faceShape = firstText(
+    job.faceShape,
+    faceAnalysisV2?.derived.faceShape?.label,
+  );
+  const skinType = firstText(job.skinType);
+  const recommendedMood = firstText(job.recommendedMood);
+  if (!faceShape) {
     return undefined;
   }
 
-  return {faceShape, recommendedMood, skinType};
+  return {
+    faceShape,
+    ...(faceAnalysisV2?.derived ? {derived: faceAnalysisV2.derived} : {}),
+    ...(recommendedMood ? {recommendedMood} : {}),
+    ...(job.id ? {reportId: job.id} : {}),
+    ...(skinType ? {skinType} : {}),
+  };
 }
 
 async function waitForCompleteAnalysisReport(
@@ -836,7 +890,7 @@ async function waitForCompleteAnalysisReport(
   startedAt: number,
   // 화면 이탈 시 최대 240초짜리 폴링이 백그라운드에 매달리지 않게 하는 중단 신호.
   signal?: AbortSignal,
-  // Anchor와 V2 perception이 모두 준비된 최소 보고서를 1회 알린다.
+  // 규칙 기반 핵심 보고서에 필요한 최소 데이터가 준비되면 1회 알린다.
   onAnchorPreview?: (preview: FaceAnalysisAnchorPreview) => void,
 ): Promise<FaceAnalysisReport> {
   let currentJob = initialJob;
@@ -866,8 +920,8 @@ async function waitForCompleteAnalysisReport(
       return mapBackendJobToFaceAnalysisReport(currentJob, capture);
     }
 
-    // 완결 전 최소 보고서 1회 노출: Anchor와 V2 perception(섹션 1)이 모두
-    // 저장된 뒤에만 알린다. 섹션 2 준비 여부는 현재 촬영의 로컬 측정으로 확인한다.
+    // 완결 전 핵심 보고서 1회 노출: 초기 V2 규칙 판정 또는 빠른 Anchor가
+    // 준비되면 알린다. 상세 섹션은 현재 촬영의 로컬 측정으로 구성한다.
     if (!anchorPreviewSent) {
       const anchorPreview = getAnchorPreview(currentJob);
       if (anchorPreview) {
@@ -1003,6 +1057,7 @@ function mapBackendJobToFaceAnalysisReport(
   );
   const makeupGuideline = parseMakeupGuideline(result.makeupGuideline);
   const goldenMask = parseGoldenMaskReportDescriptor(job.goldenMask);
+  const contentStatus = parseContentStatus(result.contentStatus);
 
   return {
     id: reportId,
@@ -1031,6 +1086,11 @@ function mapBackendJobToFaceAnalysisReport(
     impressionNotes: parseImpressionNotes(result.impressionNotes),
     stylingLooks: parseStylingLooks(result.stylingLooks),
     skinPerception: parseSkinPerception(result.skinPerception),
+    ...(typeof result.contentRevision === 'number' &&
+    Number.isFinite(result.contentRevision)
+      ? {contentRevision: result.contentRevision}
+      : {}),
+    ...(contentStatus ? {contentStatus} : {}),
     featureObservations: parseFeatureObservations(result.featureObservations),
     recommendedMakeups: mapMakeupCards(
       reportId,

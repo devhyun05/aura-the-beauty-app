@@ -293,6 +293,12 @@ export interface S9Data {
 // "조용한 실패 금지, 조용한 생성 금지" posture as the rest of the report.
 export interface ReportData {
   reportId: string;
+  contentRevision?: number;
+  contentStatus?: {
+    coreReadyAt?: string;
+    narrativeStatus?: string;
+    stylingStatus?: string;
+  };
   goldenMask?: GoldenMaskReportDescriptor;
   generationStatus?: 'loading' | 'failed';
   generationError?: string;

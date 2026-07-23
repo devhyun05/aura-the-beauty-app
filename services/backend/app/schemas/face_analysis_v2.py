@@ -172,6 +172,13 @@ class PersonalColorPerception(FaceAnalysisV2Model):
   rationale_metric_keys: list[str] = Field(alias="rationaleMetricKeys")
 
 
+class ImpressionAxis(FaceAnalysisV2Model):
+  key: str
+  left_label: str = Field(alias="leftLabel")
+  right_label: str = Field(alias="rightLabel")
+  value: Annotated[float, Field(ge=-1, le=1)]
+
+
 class PerceptionResult(FaceAnalysisV2Model):
   skin: SkinPerception
   feature_impression: FeatureImpression = Field(alias="featureImpression")
@@ -179,6 +186,10 @@ class PerceptionResult(FaceAnalysisV2Model):
   gestalt: GestaltPerception
   volume: VolumePerception
   personal_color: PersonalColorPerception = Field(alias="personalColor")
+  impression_axes: list[ImpressionAxis] = Field(
+    default_factory=list,
+    alias="impressionAxes",
+  )
 
 
 class MakeupConsulting(FaceAnalysisV2Model):
@@ -198,6 +209,24 @@ class ConsultingAdvice(FaceAnalysisV2Model):
   rationale_metric_keys: list[str] = Field(alias="rationaleMetricKeys")
 
 
+class StylingLookRow(FaceAnalysisV2Model):
+  category: Literal["base", "brow", "eyeshadow", "eyeliner", "blush", "lip"]
+  note: str
+  why: str
+
+
+class StylingLook(FaceAnalysisV2Model):
+  title: Annotated[str, Field(max_length=28)]
+  subtitle: str
+  description: str
+  rows: list[StylingLookRow]
+
+
+class StylingLooks(FaceAnalysisV2Model):
+  natural: StylingLook
+  glam: StylingLook
+
+
 class ConsultingResult(FaceAnalysisV2Model):
   makeup: MakeupConsulting
   color_and_product: ConsultingAdvice = Field(alias="colorAndProduct")
@@ -208,6 +237,7 @@ class ConsultingResult(FaceAnalysisV2Model):
   summary: str
   short_summary: str = Field(alias="shortSummary")
   tags: list[str]
+  styling_looks: StylingLooks | None = Field(default=None, alias="stylingLooks")
 
 
 class MeasurementPhotoQuality(FaceAnalysisV2Model):
@@ -273,10 +303,12 @@ class FaceAnalysisV2(FaceAnalysisV2Model):
     default="aura-face-analysis-v2",
     alias="schemaVersion",
   )
+  core_ready_at: str | None = Field(default=None, alias="coreReadyAt")
   coverage: MeasurementCoveragePlan
   ai_measurements: dict[str, MetricEnvelope] = Field(alias="aiMeasurements")
   face_profile: dict[str, MetricEnvelope] = Field(alias="faceProfile")
   derived: DerivedResult
+  anchor: dict[str, str] = Field(default_factory=dict)
   perception: PerceptionResult | None = None
   consulting: ConsultingResult | None = None
   pipeline: FaceAnalysisPipelineState

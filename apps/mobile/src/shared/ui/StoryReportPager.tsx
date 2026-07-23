@@ -81,6 +81,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
     const [tableOfContentsVisible, setTableOfContentsVisible] = useState(false);
     const pagingEnabledRef = useRef(true);
     const currentIndexRef = useRef(currentIndex);
+    const currentPageIdRef = useRef(pages[currentIndex]?.id ?? null);
     const gestureAxisRef = useRef<StoryReportGestureAxis>('undecided');
     const dragStartIndexRef = useRef(currentIndex);
 
@@ -99,6 +100,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
       if (!pages.length) return;
       const nextIndex = Math.max(0, Math.min(index, pages.length - 1));
       currentIndexRef.current = nextIndex;
+      currentPageIdRef.current = pages[nextIndex]?.id ?? null;
       setCurrentIndex(nextIndex);
       const page = pages[nextIndex];
       if (page) onPageChange?.(page, nextIndex);
@@ -148,6 +150,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
       const initialIndex = initialPageId ? pages.findIndex(page => page.id === initialPageId) : 0;
       const nextIndex = initialIndex >= 0 ? initialIndex : 0;
       currentIndexRef.current = nextIndex;
+      currentPageIdRef.current = pages[nextIndex]?.id ?? null;
       setCurrentIndex(nextIndex);
       requestAnimationFrame(() => listRef.current?.scrollToIndex({index: nextIndex, animated: false}));
       if (pages[nextIndex]) onPageChange?.(pages[nextIndex], nextIndex);
@@ -156,6 +159,23 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
     // snapping a reader back to the first card.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [resetKey]);
+
+    useEffect(() => {
+      const currentPageId = currentPageIdRef.current;
+      if (!currentPageId) return;
+      const nextIndex = pages.findIndex(page => page.id === currentPageId);
+      if (nextIndex < 0 || nextIndex === currentIndexRef.current) return;
+      currentIndexRef.current = nextIndex;
+      setCurrentIndex(nextIndex);
+      requestAnimationFrame(() => {
+        if (pageWidth > 0) {
+          listRef.current?.scrollToOffset({
+            animated: false,
+            offset: nextIndex * pageWidth,
+          });
+        }
+      });
+    }, [pageWidth, pages]);
 
     const onMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       if (!pageWidth) return;

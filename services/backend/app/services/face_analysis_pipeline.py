@@ -11,11 +11,13 @@ from pydantic import BaseModel
 from app.core.errors import AppError
 from app.db.session import Database
 from app.schemas.face_analysis_v2 import (
+  ConsultingAdvice,
   ConsultingResult,
   FaceAnalysisPipelineState,
   FaceAnalysisV2,
   Insight,
   MeasurementStageOutput,
+  MakeupConsulting,
   PerceptionResult,
   StageName,
   StageState,
@@ -129,6 +131,37 @@ def _insight_evidence(*insights: Insight | None) -> str:
   return _compact_join(sentences, " ")
 
 
+def _region_conclusion(
+  region_name: str,
+  primary: Insight,
+  secondary: Insight | None = None,
+) -> str:
+  sentences = [
+    f"{region_name}의 핵심 인상은 ‘{primary.label.strip()}’입니다.",
+    primary.description,
+    secondary.description if secondary is not None else "",
+  ]
+  return _compact_join(sentences, " ")
+
+
+def _region_evidence(*insights: Insight | None) -> str:
+  evidence = [
+    f"‘{insight.label.strip()}’ 관찰은 {insight.description.strip()}"
+    for insight in insights
+    if insight is not None
+    and insight.label.strip()
+    and insight.description.strip()
+  ]
+  if not evidence:
+    return ""
+  return " ".join(
+    [
+      "사진과 측정 근거를 함께 보면 다음 특징이 연결됩니다.",
+      _compact_join(evidence, " "),
+    ],
+  )
+
+
 def _feature_ranking_text(gestalt: Any) -> str:
   labels = [
     item.label
@@ -145,31 +178,14 @@ def _build_region_notes(
   volume: Any,
   makeup: Any,
 ) -> dict[str, dict[str, str]]:
-  upper_insight = _insight_labels(
-    feature.eye_impression,
-    feature.brow_impression,
-    feature.eyelid_weight,
-  )
-  mid_insight = _insight_labels(
-    volume.upper_lower_distribution,
-    planes.nose_cheek_connection,
-    planes.dimensionality,
-  )
-  lower_insight = _insight_labels(
-    feature.lip_impression,
-    volume.mouth_corner_impression,
-    planes.lower_face_impression,
-  )
-  jaw_insight = _insight_labels(
-    planes.lower_face_impression,
-    planes.jawline_definition,
-    planes.contour_definition,
-  )
-
   return {
     "upper": {
-      "insight": upper_insight or feature.eye_impression.label,
-      "evidence": _insight_evidence(
+      "insight": _region_conclusion(
+        "눈과 눈썹",
+        feature.eye_impression,
+        feature.brow_impression,
+      ),
+      "evidence": _region_evidence(
         feature.eye_impression,
         feature.brow_impression,
         feature.eyelid_weight,
@@ -181,8 +197,12 @@ def _build_region_notes(
       ),
     },
     "mid": {
-      "insight": mid_insight or planes.nose_cheek_connection.label,
-      "evidence": _insight_evidence(
+      "insight": _region_conclusion(
+        "코와 볼",
+        planes.nose_cheek_connection,
+        planes.dimensionality,
+      ),
+      "evidence": _region_evidence(
         volume.upper_lower_distribution,
         planes.nose_cheek_connection,
         planes.nose_shadow_effect,
@@ -194,8 +214,12 @@ def _build_region_notes(
       ),
     },
     "lower": {
-      "insight": lower_insight or feature.lip_impression.label,
-      "evidence": _insight_evidence(
+      "insight": _region_conclusion(
+        "입술과 입 주변",
+        feature.lip_impression,
+        volume.mouth_corner_impression,
+      ),
+      "evidence": _region_evidence(
         feature.lip_impression,
         volume.mouth_corner_impression,
         planes.lower_face_impression,
@@ -203,8 +227,12 @@ def _build_region_notes(
       "recommendation": makeup.lip,
     },
     "jaw": {
-      "insight": jaw_insight or planes.lower_face_impression.label,
-      "evidence": _insight_evidence(
+      "insight": _region_conclusion(
+        "턱과 윤곽",
+        planes.lower_face_impression,
+        planes.jawline_definition,
+      ),
+      "evidence": _region_evidence(
         planes.lower_face_impression,
         planes.jawline_definition,
         planes.contour_definition,
@@ -216,7 +244,13 @@ def _build_region_notes(
   }
 
 
-def _build_impression_notes(gestalt: Any, planes: Any, feature: Any, volume: Any) -> dict[str, Any]:
+def _build_impression_notes(
+  gestalt: Any,
+  planes: Any,
+  feature: Any,
+  volume: Any,
+  axes: list[Any],
+) -> dict[str, Any]:
   keywords = [
     item.label
     for item in (
@@ -240,10 +274,175 @@ def _build_impression_notes(gestalt: Any, planes: Any, feature: Any, volume: Any
     ],
     " ",
   )
-  return {
+  result = {
     "overallMood": gestalt.overall_mood.label,
     "keywords": keywords[:6] or [gestalt.overall_mood.label],
     "paragraph": paragraph or gestalt.overall_mood.description,
+  }
+  if axes:
+    result["axes"] = [
+      axis.model_dump(by_alias=True, mode="json")
+      if isinstance(axis, BaseModel)
+      else axis
+      for axis in axes
+    ]
+  return result
+
+
+def _fallback_styling_looks(consulting: ConsultingResult) -> dict[str, Any]:
+  makeup = consulting.makeup
+  rows = [
+    ("base", makeup.base),
+    ("brow", makeup.brow),
+    ("eyeshadow", makeup.eyeshadow),
+    ("eyeliner", makeup.eyeliner),
+    ("blush", makeup.blush),
+    ("lip", makeup.lip),
+  ]
+
+  def build_look(title: str, description: str) -> dict[str, Any]:
+    return {
+      "title": title,
+      "subtitle": consulting.short_summary,
+      "description": description,
+      "rows": [
+        {
+          "category": category,
+          "note": note,
+          "why": "측정된 얼굴 비율과 이목구비의 시선 흐름을 해치지 않도록 연결한 선택입니다.",
+        }
+        for category, note in rows
+      ],
+    }
+
+  return {
+    "natural": build_look(
+      "결을 살린 내추럴 룩",
+      consulting.color_and_product.summary,
+    ),
+    "glam": build_look(
+      "선명도를 더한 포인트 룩",
+      consulting.summary,
+    ),
+  }
+
+
+def _template_consulting(result: FaceAnalysisV2) -> ConsultingResult:
+  face = result.derived.face_shape
+  vertical = result.derived.vertical_balance
+  eye_brow = result.derived.eye_brow
+  color = result.derived.color_axes
+  mood = (
+    result.anchor.get("recommendedMood")
+    or f"{face.label}의 선을 살린 차분한 무드"
+  )
+  summary = _compact_join(
+    [face.description, vertical.description, eye_brow.description],
+    " ",
+  )
+  advice = ConsultingAdvice(
+    summary="측정된 얼굴 비율과 선의 흐름을 유지하는 방향이 잘 맞아요.",
+    items=[
+      "한 부위를 과하게 바꾸기보다 현재 선을 따라 강약을 조절해 보세요.",
+    ],
+    rationale_metric_keys=face.rationale_metric_keys,
+  )
+  return ConsultingResult(
+    makeup=MakeupConsulting(
+      base="피부 표현은 얇게 겹쳐 본래의 결을 남겨 주세요.",
+      brow="눈썹의 실제 결 방향을 따라 빈 곳만 가볍게 정돈해 주세요.",
+      eyeshadow="눈매의 현재 기울기와 간격이 유지되도록 경계를 부드럽게 풀어 주세요.",
+      eyeliner="눈꼬리의 실제 방향을 따라 짧고 얇게 연결해 주세요.",
+      blush="볼의 돌출 중심을 확인하며 넓게 번지지 않도록 얹어 주세요.",
+      contour="턱과 광대의 실제 윤곽선을 따라 옅게 연결해 주세요.",
+      highlight="코와 볼의 돌출 중심에만 소량 사용해 입체감을 정리해 주세요.",
+      lip="입술의 현재 비율을 유지하며 안쪽부터 색을 겹쳐 주세요.",
+    ),
+    color_and_product=ConsultingAdvice(
+      summary=color.description,
+      items=["측정된 컬러 축과 가까운 색부터 얼굴 옆에서 비교해 보세요."],
+      rationale_metric_keys=color.rationale_metric_keys,
+    ),
+    hair=advice,
+    fashion=advice,
+    photography=advice,
+    overall_mood=mood[:18],
+    summary=summary,
+    short_summary=face.description,
+    tags=[face.label, vertical.label, color.label],
+  )
+
+
+def _template_region_notes(
+  result: FaceAnalysisV2,
+  makeup: MakeupConsulting,
+) -> dict[str, dict[str, str]]:
+  derived = result.derived
+  return {
+    "upper": {
+      "insight": _region_conclusion("눈과 눈썹", derived.eye_brow),
+      "evidence": _region_evidence(derived.eye_brow, derived.iris_exposure),
+      "recommendation": _compact_join(
+        [makeup.brow, makeup.eyeshadow, makeup.eyeliner],
+        " ",
+      ),
+    },
+    "mid": {
+      "insight": _region_conclusion(
+        "코와 볼",
+        derived.cheekbone_and_eline,
+        derived.nose_philtrum_lips,
+      ),
+      "evidence": _region_evidence(
+        derived.cheekbone_and_eline,
+        derived.nose_philtrum_lips,
+      ),
+      "recommendation": _compact_join(
+        [makeup.blush, makeup.contour, makeup.highlight],
+        " ",
+      ),
+    },
+    "lower": {
+      "insight": _region_conclusion("입술과 입 주변", derived.nose_philtrum_lips),
+      "evidence": _region_evidence(derived.nose_philtrum_lips),
+      "recommendation": makeup.lip,
+    },
+    "jaw": {
+      "insight": _region_conclusion(
+        "턱과 윤곽",
+        derived.face_shape,
+        derived.cheekbone_and_eline,
+      ),
+      "evidence": _region_evidence(
+        derived.face_shape,
+        derived.cheekbone_and_eline,
+      ),
+      "recommendation": makeup.contour,
+    },
+  }
+
+
+def _template_impression_notes(result: FaceAnalysisV2) -> dict[str, Any]:
+  derived = result.derived
+  mood = (
+    result.anchor.get("recommendedMood")
+    or f"{derived.face_shape.label}의 선을 살린 무드"
+  )
+  return {
+    "overallMood": mood,
+    "keywords": [
+      derived.face_shape.label,
+      derived.vertical_balance.label,
+      derived.eye_brow.label,
+    ],
+    "paragraph": _compact_join(
+      [
+        derived.face_shape.description,
+        derived.vertical_balance.description,
+        derived.eye_brow.description,
+      ],
+      " ",
+    ),
   }
 
 
@@ -282,6 +481,7 @@ def initialize_face_analysis_v2(request_payload: dict[str, Any]) -> FaceAnalysis
     except ValueError:
       pass
   return FaceAnalysisV2(
+    core_ready_at=_now(),
     coverage=coverage,
     ai_measurements={},
     face_profile=face_profile,
@@ -318,18 +518,23 @@ async def persist_face_analysis_v2(
 
 def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
   perception = result.perception
-  consulting = result.consulting
-  if perception is None or consulting is None:
-    raise ValueError("AI perception and consulting are required for a face analysis report")
-
-  color = perception.personal_color
-  personal_color = " ".join(
-    value for value in (color.season, color.subtype) if value
+  consulting = result.consulting or _template_consulting(result)
+  color = perception.personal_color if perception is not None else None
+  personal_color = (
+    " ".join(value for value in (color.season, color.subtype) if value)
+    if color is not None and color.status == "provisional"
+    else result.derived.color_axes.label
   )
-  if color.status != "provisional" or not personal_color:
-    raise ValueError("AI personal color analysis is incomplete")
-  skin_type = perception.skin.sebum_dryness.label
-  skin_summary = perception.skin.texture.description
+  skin_type = (
+    perception.skin.sebum_dryness.label
+    if perception is not None
+    else result.anchor.get("skinType", "피부 세부 관찰 보류")
+  )
+  skin_summary = (
+    perception.skin.texture.description
+    if perception is not None
+    else "피부 세부 관찰은 확정하지 않고, 측정된 얼굴 비율과 이목구비 결과를 먼저 제공해요."
+  )
   makeup = consulting.makeup
   legacy: dict[str, Any] = {
     "faceShape": result.derived.face_shape.label,
@@ -351,24 +556,60 @@ def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
       "lip": makeup.lip,
     },
     "tags": consulting.tags,
+    "stylingLooks": (
+      consulting.styling_looks.model_dump(by_alias=True, mode="json")
+      if consulting.styling_looks is not None
+      else _fallback_styling_looks(consulting)
+    ),
+    "consultingAdvice": {
+      "colorAndProduct": consulting.color_and_product.model_dump(
+        by_alias=True,
+        mode="json",
+      ),
+      "hair": consulting.hair.model_dump(by_alias=True, mode="json"),
+      "fashion": consulting.fashion.model_dump(by_alias=True, mode="json"),
+      "photography": consulting.photography.model_dump(by_alias=True, mode="json"),
+    },
+    "contentRevision": 2,
+    "contentStatus": {
+      "coreReadyAt": result.core_ready_at,
+      "narrativeStatus": result.pipeline.ai_perception.status.value,
+      "stylingStatus": result.pipeline.ai_consulting.status.value,
+      "sources": {
+        "core": "template",
+        "narrative": "llm" if perception is not None else "template",
+        "styling": (
+          "llm" if consulting.styling_looks is not None else "template"
+        ),
+      },
+    },
   }
-  feature = perception.feature_impression
-  planes = perception.lines_and_planes
-  gestalt = perception.gestalt
-  volume = perception.volume
-  legacy["regionNotes"] = _build_region_notes(
-    feature,
-    planes,
-    gestalt,
-    volume,
-    makeup,
-  )
-  legacy["impressionNotes"] = _build_impression_notes(
-    gestalt,
-    planes,
-    feature,
-    volume,
-  )
+  if perception is not None:
+    legacy["skinPerception"] = perception.skin.model_dump(
+      by_alias=True,
+      mode="json",
+    )
+    feature = perception.feature_impression
+    planes = perception.lines_and_planes
+    gestalt = perception.gestalt
+    volume = perception.volume
+    legacy["regionNotes"] = _build_region_notes(
+      feature,
+      planes,
+      gestalt,
+      volume,
+      makeup,
+    )
+    legacy["impressionNotes"] = _build_impression_notes(
+      gestalt,
+      planes,
+      feature,
+      volume,
+      perception.impression_axes,
+    )
+  else:
+    legacy["regionNotes"] = _template_region_notes(result, makeup)
+    legacy["impressionNotes"] = _template_impression_notes(result)
   return legacy
 
 
@@ -532,6 +773,11 @@ class FaceAnalysisPipeline:
 
     resolved_anchor = await anchor_values if anchor_values is not None else None
     if resolved_anchor is not None:
+      result.anchor = {
+        key: value.strip()
+        for key in ("faceShape", "skinType", "recommendedMood")
+        if isinstance((value := resolved_anchor.get(key)), str) and value.strip()
+      }
       anchor_face_shape = resolved_anchor.get("faceShape")
       if isinstance(anchor_face_shape, str) and anchor_face_shape.strip():
         result.derived = result.derived.model_copy(
@@ -560,102 +806,116 @@ class FaceAnalysisPipeline:
         "anchor": resolved_anchor or {},
       },
     )
-    perception, result.pipeline.ai_perception = await self._execute_stage(
-      model_type=PerceptionResult,
-      kwargs=perception_kwargs,
-      invoke=lambda: self.ai.perceive(
-        source_image_bytes=source_image_bytes,
-        profile=model_face_profile,
-        derived=model_derived,
-        anchor=resolved_anchor,
+    consulting_profile = filter_metrics_for_model(
+      filter_metrics_for_audience(
+        result.face_profile,
+        include_sensitive=False,
       ),
     )
-    if perception is not None:
-      if resolved_anchor is not None:
-        anchor_skin_type = resolved_anchor.get("skinType")
-        anchor_mood = resolved_anchor.get("recommendedMood")
-        if isinstance(anchor_skin_type, str) and anchor_skin_type.strip():
-          perception = perception.model_copy(
-            update={
-              "skin": perception.skin.model_copy(
-                update={
-                  "sebum_dryness": perception.skin.sebum_dryness.model_copy(
-                    update={"label": anchor_skin_type.strip()},
-                  ),
-                },
-              ),
-            },
-          )
-        if isinstance(anchor_mood, str) and anchor_mood.strip():
-          perception = perception.model_copy(
-            update={
-              "gestalt": perception.gestalt.model_copy(
-                update={
-                  "overall_mood": perception.gestalt.overall_mood.model_copy(
-                    update={"label": anchor_mood.strip()},
-                  ),
-                },
-              ),
-            },
-          )
-      result.perception = perception
-    self._update_overall(result)
-    await self.persist_callback(report_id, result)
+    raw_profile_gender = request_payload.get("profileGender")
+    profile_gender = raw_profile_gender if isinstance(raw_profile_gender, str) else None
+    consulting_model_input = filter_internal_only_payload(
+      {
+        "faceProfile": {
+          key: value.model_dump(by_alias=True, mode="json")
+          for key, value in consulting_profile.items()
+        },
+        "derived": result.derived.model_dump(by_alias=True, mode="json"),
+        # 캐시 키에 포함. 스테이지 캐시는 report_id로 스코프되므로 사용자간
+        # 공유는 원래 불가하나, 동일 report 재시도 중 계정 성별이 바뀌면
+        # 캐시 무효화가 필요해 키에 넣는다(성별별 방향이 다르므로).
+        "profileGender": profile_gender,
+        **({"anchor": resolved_anchor} if resolved_anchor else {}),
+      },
+    )
+    consulting_kwargs = self._stage_kwargs(
+      report_id=report_id,
+      stage=StageName.AI_CONSULTING,
+      prompt_version=CONSULTING_PROMPT_VERSION,
+      input_value=consulting_model_input,
+    )
 
-    if result.perception is None:
-      result.pipeline.ai_consulting = StageState(
-        status=StageStatus.FAILED,
-        error_code="DEPENDENCY_FAILED",
-        updated_at=_now(),
-      )
-    else:
-      consulting_profile = filter_metrics_for_model(
-        filter_metrics_for_audience(
-          result.face_profile,
-          include_sensitive=False,
+    async def run_perception_stage() -> tuple[str, BaseModel | None, StageState]:
+      output, state = await self._execute_stage(
+        model_type=PerceptionResult,
+        kwargs=perception_kwargs,
+        invoke=lambda: self.ai.perceive(
+          source_image_bytes=source_image_bytes,
+          profile=model_face_profile,
+          derived=model_derived,
+          anchor=resolved_anchor,
         ),
       )
-      raw_profile_gender = request_payload.get("profileGender")
-      profile_gender = raw_profile_gender if isinstance(raw_profile_gender, str) else None
-      consulting_model_input = filter_internal_only_payload(
-        {
-          "faceProfile": {
-            key: value.model_dump(by_alias=True, mode="json")
-            for key, value in consulting_profile.items()
-          },
-          "derived": result.derived.model_dump(by_alias=True, mode="json"),
-          "perception": result.perception.model_dump(by_alias=True, mode="json"),
-          # 캐시 키에 포함. 스테이지 캐시는 report_id로 스코프되므로 사용자간
-          # 공유는 원래 불가하나, 동일 report 재시도 중 계정 성별이 바뀌면
-          # 캐시 무효화가 필요해 키에 넣는다(성별별 방향이 다르므로).
-          "profileGender": profile_gender,
-        },
-      )
-      consulting_kwargs = self._stage_kwargs(
-        report_id=report_id,
-        stage=StageName.AI_CONSULTING,
-        prompt_version=CONSULTING_PROMPT_VERSION,
-        input_value=consulting_model_input,
-      )
-      consulting, result.pipeline.ai_consulting = await self._execute_stage(
+      return "perception", output, state
+
+    async def run_consulting_stage() -> tuple[str, BaseModel | None, StageState]:
+      output, state = await self._execute_stage(
         model_type=ConsultingResult,
         kwargs=consulting_kwargs,
         invoke=lambda: self.ai.consult(
           profile=consulting_model_input["faceProfile"],
           derived=consulting_model_input["derived"],
-          perception=consulting_model_input["perception"],
           profile_gender=profile_gender,
           anchor=resolved_anchor,
         ),
       )
-      if consulting is not None:
-        anchor_mood = (resolved_anchor or {}).get("recommendedMood")
-        if isinstance(anchor_mood, str) and anchor_mood.strip():
-          consulting = consulting.model_copy(
-            update={"overall_mood": anchor_mood.strip()},
-          )
-        result.consulting = consulting
+      return "consulting", output, state
 
-    self._update_overall(result)
-    await self.persist_callback(report_id, result)
+    # 두 콘텐츠 스트림은 동일한 정본 fact sheet를 읽고 서로를 기다리지 않는다.
+    # 완료된 쪽부터 저장해 폴링 응답이 진행 상태를 즉시 반영하게 한다.
+    tasks = [
+      asyncio.create_task(run_perception_stage()),
+      asyncio.create_task(run_consulting_stage()),
+    ]
+    for completed in asyncio.as_completed(tasks):
+      stage_kind, stage_output, stage_state = await completed
+      if stage_kind == "perception":
+        result.pipeline.ai_perception = stage_state
+        perception = (
+          stage_output if isinstance(stage_output, PerceptionResult) else None
+        )
+        if perception is not None:
+          anchor_skin_type = (resolved_anchor or {}).get("skinType")
+          anchor_mood = (resolved_anchor or {}).get("recommendedMood")
+          if isinstance(anchor_skin_type, str) and anchor_skin_type.strip():
+            perception = perception.model_copy(
+              update={
+                "skin": perception.skin.model_copy(
+                  update={
+                    "sebum_dryness": perception.skin.sebum_dryness.model_copy(
+                      update={"label": anchor_skin_type.strip()},
+                    ),
+                  },
+                ),
+              },
+            )
+          if isinstance(anchor_mood, str) and anchor_mood.strip():
+            perception = perception.model_copy(
+              update={
+                "gestalt": perception.gestalt.model_copy(
+                  update={
+                    "overall_mood": perception.gestalt.overall_mood.model_copy(
+                      update={"label": anchor_mood.strip()},
+                    ),
+                  },
+                ),
+              },
+            )
+          result.perception = perception
+      else:
+        result.pipeline.ai_consulting = stage_state
+        consulting = (
+          stage_output if isinstance(stage_output, ConsultingResult) else None
+        )
+        if consulting is not None:
+          anchor_mood = (resolved_anchor or {}).get("recommendedMood")
+          if isinstance(anchor_mood, str) and anchor_mood.strip():
+            consulting = consulting.model_copy(
+              update={"overall_mood": anchor_mood.strip()},
+            )
+          result.consulting = consulting
+
+      self._update_overall(result)
+      await self.persist_callback(report_id, result)
+
     return result

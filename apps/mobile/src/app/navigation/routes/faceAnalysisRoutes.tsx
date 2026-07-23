@@ -13,7 +13,6 @@ import {
 } from '../../../shared/services/faceAnalysisService';
 import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
 import {
-  buildFaceProportionSection,
   summarizeVerticalThirds,
 } from '../../../features/face-report/services/fromFaceAnalysisReport';
 import type {MinimumFaceReportPreview} from '../../../features/face-report/services/minimumFaceReport';
@@ -1183,17 +1182,11 @@ export function FaceAnalysisLoadingRouteScreen({
   const minimumRatioSummary = minimumFaceVerticalThirds
     ? summarizeVerticalThirds(minimumFaceVerticalThirds)
     : undefined;
-  const minimumProportionReady = Boolean(
-    buildFaceProportionSection(minimumFaceVerticalThirds, null),
-  );
   const minimumHas3DModel = goldenMaskPreloadStatus === 'ready';
-  const minimumGoldenMaskSettled = goldenMaskPreloadStatus !== 'pending';
 
   React.useEffect(() => {
     if (
       !anchorPreview ||
-      !minimumProportionReady ||
-      !minimumGoldenMaskSettled ||
       minimumReportLoggedRef.current ||
       !(stillAnalysisCapture?.imageUri)
     ) {
@@ -1202,18 +1195,21 @@ export function FaceAnalysisLoadingRouteScreen({
 
     const minimumPreview: MinimumFaceReportPreview = {
       capturedPhotoUri: stillAnalysisCapture.imageUri,
+      ...(anchorPreview.derived ? {derived: anchorPreview.derived} : {}),
       faceShape: anchorPreview.faceShape,
       ...(preparedGoldenMask
         ? {
             goldenMask: preparedGoldenMask.descriptor,
-            reportId: preparedGoldenMask.reportId,
           }
         : {}),
       has3DModel: minimumHas3DModel,
       personalColor: minimumPersonalColor,
       ratioSummary: minimumRatioSummary,
-      recommendedMood: anchorPreview.recommendedMood,
-      skinType: anchorPreview.skinType,
+      ...(anchorPreview.recommendedMood
+        ? {recommendedMood: anchorPreview.recommendedMood}
+        : {}),
+      ...(anchorPreview.reportId ? {reportId: anchorPreview.reportId} : {}),
+      ...(anchorPreview.skinType ? {skinType: anchorPreview.skinType} : {}),
     };
     minimumReportLoggedRef.current = true;
     minimumReportPreviewRef.current = minimumPreview;
@@ -1231,10 +1227,8 @@ export function FaceAnalysisLoadingRouteScreen({
     anchorPreview,
     logAttempt,
     minimumHas3DModel,
-    minimumGoldenMaskSettled,
     minimumPersonalColor,
     preparedGoldenMask,
-    minimumProportionReady,
     minimumRatioSummary,
     navigation,
     route.params?.afterAnalysisRoute,

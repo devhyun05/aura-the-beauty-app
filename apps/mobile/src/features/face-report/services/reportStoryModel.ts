@@ -21,6 +21,7 @@ export type FaceReportStoryContentKey =
   | 'skin'
   | 'styling:natural'
   | 'styling:glam'
+  | 'styling:lanes'
   | 'body'
   | 'makeup:cta';
 
@@ -53,7 +54,7 @@ export interface FaceReportStoryModel {
 type StoryInput = Pick<
   ReportData,
   'generationStatus' | 'goldenMask' | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7' | 's8'
->;
+> & {s9?: ReportData['s9']};
 
 interface SectionDefinition {
   id: FaceReportStorySectionId;
@@ -199,6 +200,17 @@ export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryMode
     stylePages.push(
       contentPage('style', 'styling:natural', '내추럴 스타일링', '내추럴', 'styling:natural'),
       contentPage('style', 'styling:glam', '글램 스타일링', '글램', 'styling:glam'),
+    );
+  }
+  if (data.s9) {
+    stylePages.push(
+      contentPage(
+        'style',
+        'styling:lanes',
+        '스타일 방향',
+        '방향',
+        'styling:lanes',
+      ),
     );
   }
   if (data.s5) {

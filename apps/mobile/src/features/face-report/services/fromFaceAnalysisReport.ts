@@ -506,7 +506,10 @@ function buildToneMap(probabilities: ToneProbabilityData[]) {
   };
 }
 
-function buildS4(personalColor: MeasuredPersonalColorView | null | undefined, heroUri: string | undefined): S4Data | null {
+export function buildPersonalColorSection(
+  personalColor: MeasuredPersonalColorView | null | undefined,
+  heroUri: string | undefined,
+): S4Data | null {
   if (!personalColor || personalColor.status === 'insufficient' || !personalColor.tone) {
     return null;
   }
@@ -1258,6 +1261,40 @@ function buildS3(
   };
 }
 
+export function buildCoreFeatureSection({
+  photoUri,
+  regionVisuals,
+  geometryMetrics,
+  face3d,
+  face3dPhotoEvidence,
+  derived,
+}: {
+  photoUri: string;
+  regionVisuals?: RegionVisuals | null;
+  geometryMetrics?: FaceGeometryMetrics | null;
+  face3d?: Face3DProfile | null;
+  face3dPhotoEvidence?: Face3DPhotoEvidence | null;
+  derived?: FaceAnalysisDerivedResult | null;
+}): S3Data | null {
+  const featureProfile = buildFaceFeatureProfile({
+    metrics: geometryMetrics ?? null,
+    verticalThirds: null,
+    faceShapeLabel: derived?.faceShape?.label ?? null,
+    observations: null,
+    measuredAt: '',
+  });
+  return buildS3(
+    undefined,
+    {uri: photoUri, placeholderLabel: '얼굴 확대 컷'},
+    regionVisuals ?? null,
+    geometryMetrics ?? null,
+    buildRegionFeatureDescriptors(featureProfile),
+    face3d ?? null,
+    face3dPhotoEvidence ?? null,
+    derived ?? null,
+  );
+}
+
 function buildS6(
   impressionNotes: FaceAnalysisImpressionNotes | undefined,
   visualWeight: S6Data['visualWeight'],
@@ -1389,6 +1426,22 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
 
   return {
     reportId: report.id,
+    contentRevision: report.contentRevision ?? 1,
+    ...(report.contentStatus
+      ? {
+          contentStatus: {
+            ...(report.contentStatus.coreReadyAt
+              ? {coreReadyAt: report.contentStatus.coreReadyAt}
+              : {}),
+            ...(report.contentStatus.narrativeStatus
+              ? {narrativeStatus: report.contentStatus.narrativeStatus}
+              : {}),
+            ...(report.contentStatus.stylingStatus
+              ? {stylingStatus: report.contentStatus.stylingStatus}
+              : {}),
+          },
+        }
+      : {}),
     ...(report.goldenMask ? {goldenMask: report.goldenMask} : {}),
     topBarTitle: report.reportTitle || '맞춤 분석 보고서',
     s1: buildS1(
@@ -1408,7 +1461,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
       face3dPhotoEvidence ?? null,
       derived,
     ),
-    s4: buildS4(personalColor, heroUri),
+    s4: buildPersonalColorSection(personalColor, heroUri),
     s5: buildS5(bodyProfile, gender),
     s6: buildS6(report.impressionNotes, visualWeight),
     s7: buildS7(report.stylingLooks),
