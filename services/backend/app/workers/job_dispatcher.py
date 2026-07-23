@@ -230,7 +230,6 @@ class AIJobDispatcher:
       payload,
       self.settings,
       db=self.db,
-      await_image_generation=True,
     )
 
   async def dispatch_makeup_recommendation(self, message: ParsedAIJobMessage) -> None:

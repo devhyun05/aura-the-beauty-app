@@ -387,8 +387,10 @@ Shader "ARMakeup/Lip"
                                       lipShimmerDensity, _LipMatte, _LipSheen,
                                       screenUV, _PearlLightGain); // A15 방향 게인(맨얼굴 피드 루마 그라디언트)
                 pigment = ApplyLipTextureSurface(pigment, textureBody, luma, i.uv, lipTexGrain, lipTexSheen, lipTexSpecLo, lipTexSpecGain);
-                // 재질 아키타입(벨벳/메탈/홀로) — matType=0 또는 강도=0이면 pigment 그대로.
-                // 립은 법선 미계산 → 정면 기본값(0,0,1). (추후 립 메시 법선 시 대체)
+                // 재질 아키타입(벨벳/메탈/홀로/멀티크롬) — matType=0 또는 강도=0이면 pigment 그대로.
+                // 법선은 링 메시 실제 값 — LipRenderer가 랜드마크 z 정점(입체 링) 위에
+                // RecalculateNormals()로 실어주고 vert가 뷰공간 변환(i.vnormal) → MatCap
+                // 재질이 입술 굴곡·시점에 반응한다.
                 pigment = ApplyMaterial(pigment, luma, screenUV, i.vnormal, _LipMaterial, _LipMaterialStrength);
                 pigment = ApplyGrain(pigment, float2(i.uv.x, 0.0));   // 매트 파우더 입자감(전역, 0=무변조)
                 pigment = TexGrain(pigment, float2(i.uv.x, 0.0), lnTexG); // 제형 그레인(라이너, 메인 립 0=무변조)

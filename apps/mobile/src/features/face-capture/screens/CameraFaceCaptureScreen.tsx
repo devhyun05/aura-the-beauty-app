@@ -131,7 +131,7 @@ type CameraFaceCaptureScreenProps = {
   onPickImage?: () => void;
   onToggleCamera?: (direction: CameraDirection) => void;
   deferUpload?: boolean;
-  // 실험용(face-capture lab)에서 backend 업로드를 로컬 스텁으로 대체할 때만 주입한다.
+  // 실험 앱에서 backend 업로드를 로컬 스텁으로 대체할 때만 주입한다.
   uploadImage?: FaceCaptureUploadHandler;
 };
 

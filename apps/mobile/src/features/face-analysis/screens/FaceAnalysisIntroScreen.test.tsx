@@ -22,6 +22,11 @@ expectEqual(introTitle, '맞춤 스타일링 얼굴 분석', 'face analysis intr
 expectEqual(primaryAction, '얼굴 분석 시작', 'face analysis intro primary action');
 expectEqual(captureGuide, '촬영 가이드', 'face analysis intro capture guide label');
 expectEqual(
+  content.privacyNotice,
+  '지원 기기에서는 TrueDepth로 만든 골든마스크를 보고서와 함께 비공개 저장해요. 보고서 또는 계정을 삭제하면 함께 삭제됩니다.',
+  'face analysis Golden Mask privacy notice',
+);
+expectEqual(
   getFaceAnalysisCapturePlanTitles().join(','),
   '통합 얼굴 촬영',
   'face analysis capture plan titles',

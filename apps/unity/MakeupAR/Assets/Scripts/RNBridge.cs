@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Collections;
 using System.IO;
 using ARMakeup.Face;
+using Aura.Face3D;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.XR.ARFoundation;
@@ -517,6 +518,7 @@ public sealed class RNBridge : MonoBehaviour
     [SerializeField] private Face3DSessionController face3DSessionController;
     [SerializeField] private FaceCameraFrameBroker faceCameraFrameBroker;
     [SerializeField] private UnifiedFaceCaptureController unifiedFaceCaptureController;
+    [SerializeField] private GoldenMaskRuntime goldenMaskRuntime;
 
     private ARSession runtimeArSession;
     private ARCameraBackground runtimeCameraBackground;
@@ -579,6 +581,8 @@ public sealed class RNBridge : MonoBehaviour
         EnsureReferenceCaptureExporter();
         EnsureFace3DSessionController();
         EnsureUnifiedFaceCaptureController();
+        EnsureGoldenMaskRuntime();
+        GoldenMaskArtifactStore.PrunePendingArtifacts();
         SetFaceRenderersSuppressed(true);
     }
 
@@ -647,6 +651,10 @@ public sealed class RNBridge : MonoBehaviour
         lastRuntimeModeGeneration = request.generation;
         SetLiveRuntimeActive(mode == "live");
         currentRuntimeMode = mode;
+        if (goldenMaskRuntime != null)
+        {
+            goldenMaskRuntime.SetRuntimeMode(mode);
+        }
 
         SendUnityEvent(
             "{\"type\":\"unity_runtime_mode_ack\",\"mode\":\""
@@ -1296,6 +1304,41 @@ public sealed class RNBridge : MonoBehaviour
         SendUnityEvent(json, "[UnifiedFaceCapture]");
     }
 
+    public void LoadGoldenMaskJson(string json)
+    {
+        EnsureGoldenMaskRuntime();
+        goldenMaskRuntime.LoadJson(json);
+    }
+
+    public void SetGoldenMaskRotationJson(string json)
+    {
+        EnsureGoldenMaskRuntime();
+        goldenMaskRuntime.SetRotationJson(json);
+    }
+
+    public void ResetGoldenMaskViewJson(string json)
+    {
+        EnsureGoldenMaskRuntime();
+        goldenMaskRuntime.ResetViewJson(json);
+    }
+
+    public void UnloadGoldenMaskJson(string json)
+    {
+        EnsureGoldenMaskRuntime();
+        goldenMaskRuntime.UnloadJson(json);
+    }
+
+    public void CaptureGoldenMaskPosterJson(string json)
+    {
+        EnsureGoldenMaskRuntime();
+        goldenMaskRuntime.CapturePosterJson(json);
+    }
+
+    public void SendGoldenMaskEvent(string json)
+    {
+        SendUnityEvent(json, "[GoldenMask]");
+    }
+
     public void SendE7MetricSampleEvent(string json)
     {
         SendUnityEvent(json, "[E7]");
@@ -1628,6 +1671,23 @@ public sealed class RNBridge : MonoBehaviour
             cameraManager,
             faceCameraFrameBroker,
             this);
+    }
+
+    private void EnsureGoldenMaskRuntime()
+    {
+        if (goldenMaskRuntime == null)
+        {
+            goldenMaskRuntime = GetComponent<GoldenMaskRuntime>();
+        }
+
+        if (goldenMaskRuntime == null)
+        {
+            goldenMaskRuntime =
+                gameObject.AddComponent<GoldenMaskRuntime>();
+        }
+
+        goldenMaskRuntime.Configure(this);
+        goldenMaskRuntime.SetRuntimeMode(currentRuntimeMode);
     }
 
     private void SetFaceRenderersSuppressed(bool suppressed)

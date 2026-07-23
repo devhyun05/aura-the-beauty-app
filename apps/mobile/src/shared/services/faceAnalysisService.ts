@@ -32,6 +32,7 @@ import {
 } from '../../features/face-capture/services/faceCaptureUploadContract';
 import {subscribeAnalysisReportReady} from './analysisReportReadySignal';
 import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from './backendApi';
+import {parseGoldenMaskReportDescriptor} from '../contracts/goldenMask';
 
 type FaceAnalysisCaptureInput = {
   bucket?: string | null;
@@ -104,7 +105,6 @@ type BackendAnalysisResult = {
   faceAnalysisV2?: unknown;
   makeupGuideline?: BackendMakeupGuideline | null;
   personalColor?: string | null;
-  imageGenerationStatus?: string | null;
   recommendedMakeups?: BackendMakeupCard[] | null;
   recommendedMood?: string | null;
   regionNotes?: BackendRegionNotes | null;
@@ -118,10 +118,6 @@ type BackendAnalysisResult = {
   summary?: string | null;
   tags?: string[] | null;
   timing?: {
-    imageGenerationBatchMs?: number | null;
-    imageGenerationItems?: {durationMs?: number | null; index?: number | null}[] | null;
-    imageGenerationStatus?: string | null;
-    imageGenerationTotalMs?: number | null;
     sourceImageReadMs?: number | null;
     textAnalysisMs?: number | null;
     totalMs?: number | null;
@@ -151,7 +147,7 @@ type BackendMediaReference = {
   url?: string | null;
 };
 
-type BackendAnalysisJob = {
+export type BackendAnalysisJob = {
   analyzedAt?: string | null;
   createdAt?: string | null;
   baseMakeupGuide?: string | null;
@@ -162,6 +158,7 @@ type BackendAnalysisJob = {
   environmentLabel?: string | null;
   errorMessage?: string | null;
   faceShape?: string | null;
+  goldenMask?: unknown;
   id?: string | null;
   personalColor?: string | null;
   recommendedMood?: string | null;
@@ -211,6 +208,77 @@ const ANALYSIS_REPORT_POLL_TIMEOUT_MS = 240000;
 // (Phase 2, 가속기)와 무관하게 폴링 자체의 감지지연을 낮추는 baseline.
 const ANALYSIS_REPORT_POLL_ETA_MS = 18000;
 const ANALYSIS_REPORT_POLL_TIGHT_MS = 2000;
+// React effect 재실행·네트워크 폴링 재시도 때문에 같은 촬영으로 POST가 중복되지
+// 않도록 "잡 생성"만 캡처 ID별로 공유한다. 폴링은 호출별 AbortSignal을 유지한다.
+const FACE_ANALYSIS_JOB_CACHE_TTL_MS = ANALYSIS_REPORT_POLL_TIMEOUT_MS + 60000;
+const FACE_ANALYSIS_JOB_CACHE_MAX_ENTRIES = 32;
+type FaceAnalysisJobCreationCacheEntry = {
+  createdAtMs: number;
+  jobId?: string | null;
+  promise: Promise<BackendAnalysisJob>;
+};
+const faceAnalysisJobCreationCache =
+  new Map<string, FaceAnalysisJobCreationCacheEntry>();
+
+function getOrCreateFaceAnalysisJob(
+  captureId: string,
+  createJob: () => Promise<BackendAnalysisJob>,
+): Promise<BackendAnalysisJob> {
+  const now = Date.now();
+  for (const [cachedCaptureId, entry] of faceAnalysisJobCreationCache) {
+    if (now - entry.createdAtMs > FACE_ANALYSIS_JOB_CACHE_TTL_MS) {
+      faceAnalysisJobCreationCache.delete(cachedCaptureId);
+    }
+  }
+
+  const existing = faceAnalysisJobCreationCache.get(captureId);
+  if (existing) {
+    return existing.promise;
+  }
+
+  while (faceAnalysisJobCreationCache.size >= FACE_ANALYSIS_JOB_CACHE_MAX_ENTRIES) {
+    const oldestCaptureId = faceAnalysisJobCreationCache.keys().next().value;
+    if (typeof oldestCaptureId !== 'string') {
+      break;
+    }
+    faceAnalysisJobCreationCache.delete(oldestCaptureId);
+  }
+
+  let entry: FaceAnalysisJobCreationCacheEntry;
+  let jobPromise: Promise<BackendAnalysisJob>;
+  jobPromise = createJob().then(job => {
+    if (faceAnalysisJobCreationCache.get(captureId) === entry) {
+      entry.jobId = job.id;
+    }
+    return job;
+  }).catch(error => {
+    if (faceAnalysisJobCreationCache.get(captureId)?.promise === jobPromise) {
+      // POST 자체가 실패한 경우에만 다음 사용자 재시도가 새 잡을 만들 수 있게 한다.
+      faceAnalysisJobCreationCache.delete(captureId);
+    }
+    throw error;
+  });
+  entry = {
+    createdAtMs: now,
+    promise: jobPromise,
+  };
+  faceAnalysisJobCreationCache.set(captureId, entry);
+  return jobPromise;
+}
+
+function evictTerminalFaceAnalysisJob(
+  captureId: string | null | undefined,
+  jobId: string | null | undefined,
+): void {
+  if (!captureId) {
+    return;
+  }
+  const entry = faceAnalysisJobCreationCache.get(captureId);
+  if (!entry || (entry.jobId && entry.jobId !== jobId)) {
+    return;
+  }
+  faceAnalysisJobCreationCache.delete(captureId);
+}
 
 function isUuid(value: string | null | undefined): value is string {
   return Boolean(value && uuidPattern.test(value));
@@ -328,13 +396,16 @@ export function resolveFaceAnalysisReportImageSource(
 ): FaceAnalysisReport['imageSource'] | undefined {
   const request = job.detailPayload?.request;
   const directUrl = firstText(
+    // The just-captured local file is already on-device and should render
+    // immediately. Stored reports do not pass `capture`, so they continue to
+    // resolve through durable preview/source media below.
+    capture?.imageUri,
     resolveBackendMediaImageUrl(job.previewMedia),
     capture?.cdnUrl,
     request?.previewUrl,
     request?.cdnUrl,
     request?.imageUrl,
     resolveBackendMediaImageUrl(job.sourceMedia),
-    capture?.imageUri,
     request?.sourceUri,
   );
 
@@ -627,34 +698,10 @@ function mapMakeupCards(
     };
   });
 }
-function getRecommendedMakeupCount(job: BackendAnalysisJob): number {
-  const recommendedMakeups = job.detailPayload?.result?.recommendedMakeups;
-
-  return Array.isArray(recommendedMakeups) ? recommendedMakeups.length : 0;
-}
-
-function getGeneratedMakeupImageCount(job: BackendAnalysisJob): number {
-  const recommendedMakeups = job.detailPayload?.result?.recommendedMakeups;
-
-  if (!Array.isArray(recommendedMakeups)) {
-    return 0;
-  }
-
-  return recommendedMakeups.filter(card => Boolean(resolveMakeupImageUrl(card))).length;
-}
-
-function getImageGenerationStatus(job: BackendAnalysisJob): string | undefined {
-  return firstText(
-    job.detailPayload?.result?.imageGenerationStatus,
-    job.detailPayload?.result?.timing?.imageGenerationStatus,
-  );
-}
-
-function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
+export function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
   const result = job.detailPayload?.result;
   const faceAnalysisV2 = parseFaceAnalysisV2(result?.faceAnalysisV2);
   const guideline = parseMakeupGuideline(result?.makeupGuideline);
-  const recommendedMakeup = result?.recommendedMakeups?.[0];
   const regionNotes = parseRegionNotes(result?.regionNotes);
   const impressionNotes = parseImpressionNotes(result?.impressionNotes);
   const hasGuideline = Object.values(guideline).every(value => value.length > 0);
@@ -680,7 +727,6 @@ function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
   return Boolean(
     result &&
       hasV2AiResult &&
-      getRecommendedMakeupCount(job) === 1 &&
       firstText(result.faceShape, job.faceShape) &&
       firstText(result.personalColor, job.personalColor) &&
       firstText(result.recommendedMood, job.recommendedMood) &&
@@ -690,13 +736,25 @@ function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
       firstText(result.skinAnalysisSummary, job.skinAnalysisSummary) &&
       firstText(result.skinType, job.skinType) &&
       firstText(result.toneSummary, job.toneSummary) &&
-      firstText(recommendedMakeup?.title) &&
-      firstText(recommendedMakeup?.subtitle) &&
-      firstText(recommendedMakeup?.description) &&
       hasGuideline &&
       hasRegionNotes &&
       impressionNotes,
   );
+}
+
+const FACE_ANALYSIS_DEBUG_LOGGING_ENABLED = ['1', 'true', 'yes', 'on'].includes(
+  process.env.EXPO_PUBLIC_FACE_ANALYSIS_DEBUG_LOGGING?.trim().toLowerCase() ?? '',
+);
+
+export function logFaceAnalysisDebug(
+  event: string,
+  payload: Record<string, unknown>,
+): void {
+  if (!FACE_ANALYSIS_DEBUG_LOGGING_ENABLED) {
+    return;
+  }
+
+  console.info('[aura:analysis-debug]', {event, ...payload});
 }
 
 // wakeReportId를 주면 해당 리포트의 WS 완료 이벤트(analysis_report_completed)에도
@@ -770,18 +828,11 @@ async function waitForCompleteAnalysisReport(
     if (signal?.aborted) {
       throw abortedAnalysisWait(currentJob);
     }
-    const generatedImageCount = getGeneratedMakeupImageCount(currentJob);
-    const imageGenerationStatus = getImageGenerationStatus(currentJob);
-    const recommendedCount = getRecommendedMakeupCount(currentJob);
-
     if (hasCompleteBackendReportText(currentJob)) {
       const perceivedMs = Date.now() - startedAt;
       console.info('[aura:analysis] analysis-report:ready', {
         durationMs: perceivedMs,
-        generatedImageCount,
-        imageGenerationStatus,
         jobId: currentJob.id ?? null,
-        recommendedCount,
         status: currentJob.status ?? null,
       });
 
@@ -811,6 +862,7 @@ async function waitForCompleteAnalysisReport(
     }
 
     if (currentJob.status === 'failed') {
+      evictTerminalFaceAnalysisJob(capture?.photoCaptureId, currentJob.id);
       throw new BackendApiError(
         currentJob.errorMessage ?? '\u0041\u0049 \ubd84\uc11d \uc791\uc5c5\uc774 \uc2e4\ud328\ud588\uc5b4\uc694. \ub2e4\uc2dc \ucd2c\uc601\ud574 \uc8fc\uc138\uc694.',
         502,
@@ -820,6 +872,7 @@ async function waitForCompleteAnalysisReport(
     }
 
     if (currentJob.status === 'completed') {
+      evictTerminalFaceAnalysisJob(capture?.photoCaptureId, currentJob.id);
       throw incompleteAnalysisResult(currentJob, 'completeAiResult');
     }
 
@@ -835,10 +888,7 @@ async function waitForCompleteAnalysisReport(
         504,
         'ANALYSIS_REPORT_TIMEOUT',
         {
-          generatedImageCount,
-          imageGenerationStatus,
           jobId: currentJob.id,
-          recommendedCount,
           status: currentJob.status ?? null,
         },
       );
@@ -854,16 +904,6 @@ async function waitForCompleteAnalysisReport(
         ? Math.min(backoffMs, ANALYSIS_REPORT_POLL_TIGHT_MS)
         : backoffMs;
     pollAttempt += 1;
-
-    console.info('[aura:analysis] analysis-report:wait-images', {
-      elapsedMs,
-      generatedImageCount,
-      imageGenerationStatus,
-      jobId: currentJob.id,
-      nextPollMs,
-      recommendedCount,
-      status: currentJob.status ?? null,
-    });
 
     await delay(
       Math.min(nextPollMs, ANALYSIS_REPORT_POLL_TIMEOUT_MS - elapsedMs),
@@ -936,6 +976,7 @@ function mapBackendJobToFaceAnalysisReport(
     job.recommendedMood,
   );
   const makeupGuideline = parseMakeupGuideline(result.makeupGuideline);
+  const goldenMask = parseGoldenMaskReportDescriptor(job.goldenMask);
 
   return {
     id: reportId,
@@ -946,6 +987,7 @@ function mapBackendJobToFaceAnalysisReport(
       imageUrl: resolveFaceAnalysisReportImageUrl(job, capture),
     }),
     faceAnalysisV2,
+    ...(goldenMask ? {goldenMask} : {}),
     baseMakeupGuide: requireAnalysisText(
       job,
       'baseMakeupGuide',
@@ -1165,7 +1207,9 @@ export async function createFaceAnalysisReportFromCapture(
     );
   }
 
-  if (!isUuid(capture?.photoCaptureId) || !isUuid(capture?.mediaId)) {
+  const photoCaptureId = capture?.photoCaptureId;
+  const mediaId = capture?.mediaId;
+  if (!capture || !isUuid(photoCaptureId) || !isUuid(mediaId)) {
     console.info('[aura:analysis] create-report:invalid-capture-ids', {
       mediaId: capture?.mediaId ?? null,
       photoCaptureId: capture?.photoCaptureId ?? null,
@@ -1173,61 +1217,69 @@ export async function createFaceAnalysisReportFromCapture(
 
     throw new Error('촬영 이미지 업로드가 완료되지 않아 AI 분석을 시작할 수 없어요.');
   }
+  const resolvedCapture = capture;
 
-  console.info('[aura:analysis] analysis-job:start', {
-    contentType: capture.contentType ?? 'image/jpeg',
-    mediaId: capture.mediaId,
-    photoCaptureId: capture.photoCaptureId,
-  });
+  const job = await getOrCreateFaceAnalysisJob(
+    photoCaptureId,
+    async () => {
+      console.info('[aura:analysis] analysis-job:start', {
+        contentType: resolvedCapture.contentType ?? 'image/jpeg',
+        mediaId,
+        photoCaptureId,
+      });
 
-  const {job} = await requestBackendJson<CreateAnalysisJobResponse>('/analysis/jobs', {
-    body: {
-      environmentLabel: '촬영 이미지',
-      photoCaptureId: capture.photoCaptureId,
-      previewMediaId: capture.mediaId,
-      reportTitle: '맞춤 분석 보고서',
-      requestPayload: buildFaceAnalysisRequestPayload(
-        capture,
-        faceVerticalThirds,
-        face3d,
-        faceGeometry2d,
-        measuredPersonalColor,
-        onDeviceMeasurements
-          ? buildFaceAnalysisMeasurementsPayload({
-              captureId: capture.photoCaptureId,
-              face3d: onDeviceMeasurements.face3d,
-              faceGeometry2d: onDeviceMeasurements.faceGeometry2d,
-              faceVerticalThirds: onDeviceMeasurements.faceVerticalThirds,
-              personalColor: onDeviceMeasurements.personalColor,
-            })
-          : undefined,
-      ),
-      runImmediately: true,
-      sourceMediaId: capture.mediaId,
-      title: 'AI 맞춤 메이크업 분석',
+      const response = await requestBackendJson<CreateAnalysisJobResponse>(
+        '/analysis/jobs',
+        {
+          body: {
+            environmentLabel: '촬영 이미지',
+            photoCaptureId,
+            previewMediaId: mediaId,
+            reportTitle: '맞춤 분석 보고서',
+            requestPayload: buildFaceAnalysisRequestPayload(
+              resolvedCapture,
+              faceVerticalThirds,
+              face3d,
+              faceGeometry2d,
+              measuredPersonalColor,
+              onDeviceMeasurements
+                ? buildFaceAnalysisMeasurementsPayload({
+                    captureId: photoCaptureId,
+                    face3d: onDeviceMeasurements.face3d,
+                    faceGeometry2d: onDeviceMeasurements.faceGeometry2d,
+                    faceVerticalThirds: onDeviceMeasurements.faceVerticalThirds,
+                    personalColor: onDeviceMeasurements.personalColor,
+                  })
+                : undefined,
+            ),
+            runImmediately: true,
+            sourceMediaId: mediaId,
+            title: 'AI 맞춤 메이크업 분석',
+          },
+          method: 'POST',
+        },
+      );
+      if (!response.job.id) {
+        throw new Error('Analysis job did not return a report id.');
+      }
+      return response.job;
     },
-    method: 'POST',
-  });
+  );
   if (!job.id) {
     throw new Error('Analysis job did not return a report id.');
+  }
+  if (signal?.aborted) {
+    throw abortedAnalysisWait(job);
   }
   await callbacks?.onAnalysisCreated?.(job.id);
 
   console.info('[aura:analysis] analysis-job:success', {
     durationMs: Date.now() - startedAt,
-    generatedImageCount: Array.isArray(job.detailPayload?.result?.recommendedMakeups)
-      ? job.detailPayload.result.recommendedMakeups.filter(card =>
-          Boolean(card?.imageUrl ?? card?.cdnUrl ?? card?.previewUrl),
-        ).length
-      : 0,
     hasFaceShape: Boolean(job.faceShape ?? job.detailPayload?.result?.faceShape),
     hasPersonalColor: Boolean(job.personalColor ?? job.detailPayload?.result?.personalColor),
     hasRecommendedMood: Boolean(job.recommendedMood ?? job.detailPayload?.result?.recommendedMood),
     hasToneSummary: Boolean(job.toneSummary ?? job.detailPayload?.result?.toneSummary),
     jobId: job.id ?? null,
-    recommendedCount: Array.isArray(job.detailPayload?.result?.recommendedMakeups)
-      ? job.detailPayload.result.recommendedMakeups.length
-      : 0,
     status: job.status ?? null,
     timing: job.detailPayload?.result?.timing ?? null,
   });

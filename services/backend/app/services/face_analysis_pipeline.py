@@ -331,8 +331,6 @@ def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
   skin_type = perception.skin.sebum_dryness.label
   skin_summary = perception.skin.texture.description
   makeup = consulting.makeup
-  look = consulting.recommended_look
-
   legacy: dict[str, Any] = {
     "faceShape": result.derived.face_shape.label,
     "personalColor": personal_color,
@@ -352,14 +350,6 @@ def project_legacy_analysis_result(result: FaceAnalysisV2) -> dict[str, Any]:
       "highlight": makeup.highlight,
       "lip": makeup.lip,
     },
-    "recommendedMakeups": [
-      {
-        "title": look.title,
-        "subtitle": look.subtitle,
-        "description": look.description,
-        "tags": look.tags,
-      },
-    ],
     "tags": consulting.tags,
   }
   feature = perception.feature_impression

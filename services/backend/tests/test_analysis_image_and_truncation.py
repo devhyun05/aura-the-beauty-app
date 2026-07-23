@@ -11,6 +11,7 @@ from io import BytesIO
 import pytest
 from PIL import Image
 
+from app.api import analysis as analysis_api
 from app.core.errors import AppError
 from app.core.settings import Settings
 from app.services.openai_analysis import FACE_ANALYSIS_TOOL_NAME, OpenAIAnalysisService
@@ -107,9 +108,8 @@ def test_bedrock_analysis_request_enforces_schema_tool_choice():
     required = set(schema["required"])
     assert "faceShape" in required
     assert {"personalColor", "toneSummary"}.isdisjoint(required)
-    assert schema["properties"]["recommendedMakeups"]["items"]["properties"][
-        "tags"
-    ]["maxItems"] == 2
+    assert "recommendedMakeups" not in schema["properties"]
+    assert "recommendedMakeups" not in required
     assert schema["properties"]["impressionNotes"]["properties"]["keywords"][
         "maxItems"
     ] == 5
@@ -128,6 +128,14 @@ def test_analysis_validator_requires_ai_report_fields():
     missing_fields = set(exc_info.value.details["missingFields"])
     assert {"faceShape", "skinType"} <= missing_fields
     assert {"personalColor", "toneSummary"}.isdisjoint(missing_fields)
+    assert "recommendedMakeups" not in missing_fields
+
+
+def test_face_report_recommended_look_image_path_is_removed():
+    assert not hasattr(analysis_api, "generate_analysis_images_background")
+    assert not hasattr(analysis_api, "schedule_analysis_images_background")
+    assert not hasattr(OpenAIAnalysisService, "prepare_generation_source")
+    assert not hasattr(OpenAIAnalysisService, "generate_recommended_makeup_images")
 
 
 def test_bedrock_truncation_attaches_stop_reason_to_failure():

@@ -23,6 +23,8 @@ const faceAnalysisIntroContent = {
   captureDuration: FACE_ANALYSIS_CAPTURE_DURATION_COPY,
   primaryActionLabel: '얼굴 분석 시작',
   captureGuideLabel: '촬영 가이드',
+  privacyNotice:
+    '지원 기기에서는 TrueDepth로 만든 골든마스크를 보고서와 함께 비공개 저장해요. 보고서 또는 계정을 삭제하면 함께 삭제됩니다.',
 } as const;
 
 
@@ -74,6 +76,9 @@ export function FaceAnalysisIntroScreen({
             style={styles.heroCaption}>
             <Text style={styles.heroCaptionStrong}>1회 촬영</Text>
             {`   ·   ${faceAnalysisIntroContent.captureDuration}`}
+          </Text>
+          <Text style={styles.privacyNotice}>
+            {faceAnalysisIntroContent.privacyNotice}
           </Text>
 
           <Pressable
@@ -139,6 +144,12 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.85,
     transform: [{scale: 0.99}],
+  },
+  privacyNotice: {
+    color: 'rgba(255, 255, 255, 0.74)',
+    fontFamily: typography.fontFamily.medium,
+    fontSize: typography.fontSize.xs,
+    lineHeight: typography.lineHeight.xs,
   },
   primaryButton: {
     alignItems: 'center',

@@ -5,16 +5,18 @@ import logging
 import time
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
-
-
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
 
 from app.core.errors import AppError
+from app.core.media_policy import (
+  GOLDEN_MASK_CONTENT_TYPE,
+  GOLDEN_MASK_MEDIA_KIND,
+)
 from app.core.responses import success
 from app.core.security import AuthContext, get_current_user
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, database, require_database
-from app.schemas.analysis import AnalysisJobCreate
+from app.schemas.analysis import AnalysisJobCreate, GoldenMaskAttachRequest
 from app.schemas.face_analysis_v2 import FaceAnalysisStageRetryRequest
 from app.services.ai_job_queue import AIJobQueuePublisher
 from app.services.embeddings import embed_text, format_pgvector, report_embedding_text
@@ -31,9 +33,13 @@ from app.services.face3d_calibration_receipts import (
   verify_and_consume_face3d_calibration_receipt,
 )
 from app.services.media_deletion import (
+  GOLDEN_MASK_UNATTACHED_DELETION_REASON,
+  MediaObjectRef,
   collect_report_media_refs,
+  enqueue_unattached_media_deletion,
   enqueue_unreferenced_report_media_deletions,
   ensure_media_deletion_schema,
+  is_media_object_referenced,
   process_media_deletion_outbox_items,
 )
 from app.services.makeup_recommendation_context import normalize_makeup_profile_gender
@@ -49,12 +55,12 @@ from app.services.owned_media import (
 )
 from app.services.push_notifications import create_and_send_notification
 from app.services.report_rate_limit import enforce_report_generation_limit
+from app.services.s3 import S3Service, is_private_golden_mask_object_key
 from app.services.users import ensure_user
 
 
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 logger = logging.getLogger(__name__)
-analysis_image_tasks: set[asyncio.Task] = set()
 
 async def update_analysis_report_embedding(db: Database, report: dict) -> bool:
   embedding = await asyncio.to_thread(embed_text, report_embedding_text(report))
@@ -86,7 +92,10 @@ ANALYSIS_MEDIA_SELECT = """
   preview_media.cdn_url as preview_media_ref_cdn_url,
   preview_media.content_type as preview_media_ref_content_type,
   preview_media.width as preview_media_ref_width,
-  preview_media.height as preview_media_ref_height
+  preview_media.height as preview_media_ref_height,
+  golden_mask_media.id as golden_mask_ref_id,
+  golden_mask_media.content_type as golden_mask_ref_content_type,
+  golden_mask_media.byte_size as golden_mask_ref_byte_size
 """
 
 # 목록 응답 경량화: 측정 원본(request.measurements)은 목록 SQL에서도 제외한다.
@@ -212,6 +221,7 @@ def normalize_analysis_report_row(row: dict | None) -> dict | None:
   )
   attach_analysis_media_reference(normalized, "source_media_ref", "source_media")
   attach_analysis_media_reference(normalized, "preview_media_ref", "preview_media")
+  attach_golden_mask_reference(normalized)
 
   return normalized
 
@@ -240,51 +250,32 @@ def attach_analysis_media_reference(row: dict, prefix: str, target_key: str) -> 
   }
 
 
+def attach_golden_mask_reference(row: dict) -> None:
+  attached_media_id = row.pop("golden_mask_media_id", None)
+  metadata = decode_json_object(row.pop("golden_mask_metadata", None))
+  active_media_id = row.pop("golden_mask_ref_id", None)
+  content_type = row.pop("golden_mask_ref_content_type", None)
+  byte_size = row.pop("golden_mask_ref_byte_size", None)
+
+  if attached_media_id is None or active_media_id is None:
+    row["golden_mask"] = None
+    return
+
+  row["golden_mask"] = {
+    **metadata,
+    "available": True,
+    "media_id": str(active_media_id),
+    "content_type": content_type,
+    "byte_size": byte_size,
+  }
+
+
 def normalize_analysis_report_rows(rows: list[dict]) -> list[dict]:
   return [
     normalized
     for row in rows
     if (normalized := normalize_analysis_report_row(row)) is not None
   ]
-
-
-def count_generated_makeup_images(result: dict | None) -> int:
-  if not isinstance(result, dict):
-    return 0
-
-  recommended_makeups = result.get("recommendedMakeups")
-
-  if not isinstance(recommended_makeups, list):
-    return 0
-
-  return sum(
-    1
-    for card in recommended_makeups
-    if isinstance(card, dict)
-    and any(
-      isinstance(card.get(key), str) and card.get(key, "").strip()
-      for key in ("imageUrl", "cdnUrl", "previewUrl")
-    )
-  )
-
-
-def require_complete_makeup_recommendations(result: dict | None) -> None:
-  recommended_makeups = result.get("recommendedMakeups") if isinstance(result, dict) else None
-  recommended_count = len(recommended_makeups) if isinstance(recommended_makeups, list) else 0
-  generated_image_count = count_generated_makeup_images(result)
-
-  if recommended_count != 1 or generated_image_count != 1:
-    raise AppError(
-      502,
-      "RECOMMENDED_MAKEUP_IMAGES_REQUIRED",
-      "Analysis cannot be completed until exactly 1 recommended makeup image is generated.",
-      details={
-        "recommendedCount": recommended_count,
-        "generatedImageCount": generated_image_count,
-      },
-    )
-
-
 
 
 def build_analysis_detail_payload(payload: AnalysisJobCreate, result: dict) -> dict:
@@ -315,162 +306,6 @@ def build_initial_analysis_detail_payload(
     "faceAnalysisV2": face_analysis_v2.model_dump(by_alias=True, mode="json"),
   }
   return build_analysis_detail_payload(payload, result)
-
-
-def mark_recommended_makeup_images_failed(result: dict) -> list[dict]:
-  recommended_makeups = result.get("recommendedMakeups") if isinstance(result, dict) else None
-
-  if not isinstance(recommended_makeups, list):
-    return []
-
-  return [
-    {**card, "imageStatus": "failed"}
-    for card in recommended_makeups
-    if isinstance(card, dict)
-  ]
-
-
-async def update_analysis_image_progress(
-  db: Database,
-  report_id: UUID,
-  payload: AnalysisJobCreate,
-  result: dict,
-) -> None:
-  await db.execute(
-    """
-    update analysis_reports
-    set detail_payload = $2::jsonb
-    where id = $1
-    """,
-    report_id,
-    json.dumps(build_analysis_detail_payload(payload, result)),
-  )
-
-
-async def generate_analysis_images_background(
-  report_id: UUID,
-  payload: AnalysisJobCreate,
-  initial_result: dict,
-  settings: Settings,
-  prepared_source: tuple[bytes, str] | None = None,
-  db: Database = database,
-) -> None:
-  service = OpenAIAnalysisService(settings)
-
-  async def on_card_generated(index: int, generated_card: dict, partial_result: dict) -> None:
-    await update_analysis_image_progress(db, report_id, payload, partial_result)
-    logger.info(
-      "[aura:analysis-api] image-generation:progress reportId=%s index=%s generatedImageCount=%s",
-      report_id,
-      index + 1,
-      count_generated_makeup_images(partial_result),
-    )
-
-  try:
-    result = await service.generate_recommended_makeup_images(
-      payload.request_payload,
-      initial_result,
-      on_card_generated=on_card_generated,
-      prepared_source=prepared_source,
-    )
-  except AppError as exc:
-    logger.warning(
-      "[aura:analysis-api] image-generation:app-error reportId=%s code=%s details=%s",
-      report_id,
-      exc.code,
-      exc.details,
-    )
-    result = {
-      **initial_result,
-      "recommendedMakeups": mark_recommended_makeup_images_failed(initial_result),
-      "imageGenerationStatus": "failed",
-      "imageGenerationErrors": [
-        {"reason": exc.__class__.__name__, "code": exc.code, "message": exc.message}
-      ],
-      "timing": {
-        **(
-          initial_result.get("timing")
-          if isinstance(initial_result.get("timing"), dict)
-          else {}
-        ),
-        "imageGenerationStatus": "failed",
-      },
-    }
-  except Exception as exc:
-    logger.exception(
-      "[aura:analysis-api] image-generation:failed reportId=%s",
-      report_id,
-    )
-    result = {
-      **initial_result,
-      "recommendedMakeups": mark_recommended_makeup_images_failed(initial_result),
-      "imageGenerationStatus": "failed",
-      "imageGenerationErrors": [{"reason": exc.__class__.__name__}],
-      "timing": {
-        **(
-          initial_result.get("timing")
-          if isinstance(initial_result.get("timing"), dict)
-          else {}
-        ),
-        "imageGenerationStatus": "failed",
-      },
-    }
-
-  generated_image_count = count_generated_makeup_images(result)
-
-  await db.execute(
-    """
-    update analysis_reports
-    set status = 'completed',
-        error_message = null,
-        detail_payload = $2::jsonb
-    where id = $1
-    """,
-    report_id,
-    json.dumps(build_analysis_detail_payload(payload, result)),
-  )
-  logger.info(
-    "[aura:analysis-api] image-generation:finalized reportId=%s jobStatus=%s imageStatus=%s generatedImageCount=%s",
-    report_id,
-    "completed",
-    result.get("imageGenerationStatus"),
-    generated_image_count,
-  )
-
-
-def schedule_analysis_images_background(
-  report_id: UUID,
-  payload: AnalysisJobCreate,
-  initial_result: dict,
-  settings: Settings,
-  prepared_source: tuple[bytes, str] | None = None,
-  db: Database = database,
-) -> None:
-  task = asyncio.create_task(
-    generate_analysis_images_background(
-      report_id,
-      payload,
-      initial_result,
-      settings,
-      prepared_source,
-      db,
-    ),
-  )
-  analysis_image_tasks.add(task)
-
-  def log_unhandled_error(completed_task: asyncio.Task) -> None:
-    analysis_image_tasks.discard(completed_task)
-
-    try:
-      completed_task.result()
-    except Exception:  # noqa: BLE001 - this is the last safety net for detached work.
-      logger.exception(
-        "[aura:analysis-api] image-generation:task-crashed reportId=%s",
-        report_id,
-      )
-
-  task.add_done_callback(log_unhandled_error)
-  logger.info("[aura:analysis-api] image-generation:scheduled reportId=%s", report_id)
 
 
 async def mark_analysis_failed(
@@ -505,7 +340,6 @@ async def run_analysis_job_background(
   settings: Settings,
   *,
   db: Database = database,
-  await_image_generation: bool = False,
 ) -> None:
   started_at = time.monotonic()
 
@@ -533,15 +367,6 @@ async def run_analysis_job_background(
   )
 
   analysis_service = OpenAIAnalysisService(settings)
-  generates_images = settings.image_generation_provider_normalized == "openai"
-  prepare_source_task: asyncio.Task | None = None
-
-  if generates_images:
-    # Warm the generation source (S3 read + downscale) while the slower text
-    # analysis runs, so image generation starts without that work on its path.
-    prepare_source_task = asyncio.create_task(
-      analysis_service.prepare_generation_source(payload.request_payload),
-    )
 
   try:
     logger.info(
@@ -614,21 +439,16 @@ async def run_analysis_job_background(
           anchor.get("skinType"),
           anchor.get("recommendedMood"),
         )
+        logger.info(
+          "[aura:analysis-api] anchor:persisted reportId=%s durationMs=%s",
+          report_id,
+          round((time.monotonic() - started_at) * 1000),
+        )
 
       result = await analysis_service.analyze_text(
         payload.request_payload,
         on_anchor=persist_anchor,
       )
-    image_generation_status = (
-      "processing"
-      if generates_images
-      else "disabled"
-    )
-    result["imageGenerationStatus"] = image_generation_status
-    result["timing"] = {
-      **(result.get("timing") if isinstance(result.get("timing"), dict) else {}),
-      "imageGenerationStatus": image_generation_status,
-    }
     logger.info(
       "[aura:analysis-api] text:success reportId=%s provider=%s model=%s durationMs=%s",
       report_id,
@@ -638,8 +458,6 @@ async def run_analysis_job_background(
     )
     record_outcome(success=True, error_code=None)
   except AppError as exc:
-    if prepare_source_task is not None:
-      prepare_source_task.cancel()
     logger.warning(
       "[aura:analysis-api] text:app-error reportId=%s code=%s details=%s",
       report_id,
@@ -650,8 +468,6 @@ async def run_analysis_job_background(
     await mark_analysis_failed(db, report_id, exc.message, payload, exc.details)
     return
   except Exception as exc:
-    if prepare_source_task is not None:
-      prepare_source_task.cancel()
     message = "AI analysis invocation failed."
     details = {"reason": exc.__class__.__name__}
     logger.exception("[aura:analysis-api] text:failed reportId=%s", report_id)
@@ -718,18 +534,21 @@ async def run_analysis_job_background(
   )
 
   if report is None:
-    if prepare_source_task is not None:
-      prepare_source_task.cancel()
     logger.warning(
       "[aura:analysis-api] background:missing-report reportId=%s",
       report_id,
     )
     return
 
+  logger.info(
+    "[aura:analysis-api] report:completed reportId=%s durationMs=%s",
+    report_id,
+    round((time.monotonic() - started_at) * 1000),
+  )
+
   # The report text is already renderable at this point. Publish its completion
-  # event before the slower recommended-image generation so users outside the
-  # loading/result screen receive the notification as soon as My Page can show
-  # the completed report.
+  # event so users outside the loading/result screen receive the notification
+  # as soon as My Page can show the completed report.
   await create_and_send_notification(
     db,
     settings,
@@ -751,47 +570,6 @@ async def run_analysis_job_background(
       "[aura:analysis-api] embedding:failed reportId=%s",
       report_id,
     )
-
-  if generates_images:
-    prepared_source: tuple[bytes, str] | None = None
-
-    if prepare_source_task is not None:
-      try:
-        prepared_source = await prepare_source_task
-      except Exception:  # noqa: BLE001 - fall back to reading inside generation.
-        logger.warning(
-          "[aura:analysis-api] image-source:prepare-failed reportId=%s",
-          report_id,
-          exc_info=True,
-        )
-        prepared_source = None
-    if await_image_generation:
-      await generate_analysis_images_background(
-        report_id,
-        payload,
-        result,
-        settings,
-        prepared_source,
-        db,
-      )
-      return
-
-    schedule_analysis_images_background(
-      report_id,
-      payload,
-      result,
-      settings,
-      prepared_source,
-      db,
-    )
-    return
-
-  logger.info(
-    "[aura:analysis-api] background:completed reportId=%s durationMs=%s",
-    report_id,
-    round((time.monotonic() - started_at) * 1000),
-  )
-
 
 async def dispatch_analysis_job(
   db: Database,
@@ -1009,6 +787,10 @@ async def get_analysis_job(
     from analysis_reports r
     left join media_assets source_media on source_media.id = r.source_media_id
     left join media_assets preview_media on preview_media.id = r.preview_media_id
+    left join media_assets golden_mask_media
+      on golden_mask_media.id = r.golden_mask_media_id
+      and golden_mask_media.status = 'active'
+      and golden_mask_media.deleted_at is null
     where r.id = $1 and r.user_id = $2 and r.deleted_at is null
     """,
     job_id,
@@ -1166,6 +948,10 @@ async def list_analysis_reports(
     from analysis_reports r
     left join media_assets source_media on source_media.id = r.source_media_id
     left join media_assets preview_media on preview_media.id = r.preview_media_id
+    left join media_assets golden_mask_media
+      on golden_mask_media.id = r.golden_mask_media_id
+      and golden_mask_media.status = 'active'
+      and golden_mask_media.deleted_at is null
     where {' and '.join(filters)}
       and r.deleted_at is null
     order by r.created_at desc
@@ -1201,6 +987,10 @@ async def get_analysis_report(
     from analysis_reports r
     left join media_assets source_media on source_media.id = r.source_media_id
     left join media_assets preview_media on preview_media.id = r.preview_media_id
+    left join media_assets golden_mask_media
+      on golden_mask_media.id = r.golden_mask_media_id
+      and golden_mask_media.status = 'active'
+      and golden_mask_media.deleted_at is null
     where r.id = $1 and r.user_id = $2 and r.deleted_at is null
     """,
     report_id,
@@ -1222,6 +1012,363 @@ async def get_analysis_report(
     )
 
   return success({"report": normalize_analysis_report_row(report)})
+
+
+async def _attach_analysis_report_golden_mask(
+  connection,
+  *,
+  report_id: UUID,
+  user_id: UUID,
+  payload: GoldenMaskAttachRequest,
+) -> dict:
+  report = await connection.fetchrow(
+    """
+    select id, status, golden_mask_media_id, golden_mask_metadata
+    from analysis_reports
+    where id = $1 and user_id = $2 and deleted_at is null
+    for update
+    """,
+    report_id,
+    user_id,
+  )
+  if report is None:
+    raise AppError(404, "ANALYSIS_REPORT_NOT_FOUND", "Analysis report was not found.")
+
+  report_status = str(report.get("status") or "")
+  if report_status in {"pending", "processing"}:
+    raise AppError(
+      425,
+      "GOLDEN_MASK_REPORT_NOT_READY",
+      "The analysis report must complete before its Golden Mask can be attached.",
+    )
+  if report_status != "completed":
+    raise AppError(
+      409,
+      "GOLDEN_MASK_REPORT_NOT_ATTACHABLE",
+      "A Golden Mask cannot be attached to this terminal analysis report.",
+    )
+
+  attached_media_id = report.get("golden_mask_media_id")
+  if attached_media_id is not None and attached_media_id != payload.media_id:
+    raise AppError(
+      409,
+      "GOLDEN_MASK_ATTACHMENT_CONFLICT",
+      "A different Golden Mask is already attached to this report.",
+    )
+
+  media = await connection.fetchrow(
+    """
+    select id, media_kind, bucket, object_key, cdn_url, content_type, byte_size
+    from media_assets
+    where id = $1
+      and owner_user_id = $2
+      and status = 'active'
+      and deleted_at is null
+    for share
+    """,
+    payload.media_id,
+    user_id,
+  )
+  if media is None:
+    raise AppError(
+      404,
+      "GOLDEN_MASK_MEDIA_NOT_FOUND",
+      "The Golden Mask media asset was not found for this user.",
+    )
+  if media["media_kind"] != GOLDEN_MASK_MEDIA_KIND:
+    raise AppError(
+      400,
+      "GOLDEN_MASK_MEDIA_KIND_INVALID",
+      "The attached media asset is not a Golden Mask.",
+    )
+  if media["content_type"] != GOLDEN_MASK_CONTENT_TYPE:
+    raise AppError(
+      415,
+      "GOLDEN_MASK_CONTENT_TYPE_INVALID",
+      "The Golden Mask media content type is not supported.",
+    )
+  if media.get("cdn_url") is not None:
+    raise AppError(
+      409,
+      "GOLDEN_MASK_MEDIA_NOT_PRIVATE",
+      "Golden Mask media must not have a public CDN URL.",
+    )
+  if int(media.get("byte_size") or 0) != payload.byte_size:
+    raise AppError(
+      409,
+      "GOLDEN_MASK_BYTE_SIZE_MISMATCH",
+      "Golden Mask metadata does not match the uploaded media size.",
+      {
+        "actualByteSize": int(media.get("byte_size") or 0),
+        "expectedByteSize": payload.byte_size,
+      },
+    )
+
+  if attached_media_id == payload.media_id:
+    descriptor = {
+      **decode_json_object(report.get("golden_mask_metadata")),
+      "available": True,
+      "media_id": str(payload.media_id),
+      "content_type": media["content_type"],
+      "byte_size": media["byte_size"],
+    }
+    return success({"goldenMask": descriptor})
+
+  metadata = payload.metadata_payload()
+  updated = await connection.fetchrow(
+    """
+    update analysis_reports
+    set golden_mask_media_id = $3,
+        golden_mask_metadata = $4::jsonb,
+        updated_at = now()
+    where id = $1
+      and user_id = $2
+      and deleted_at is null
+      and golden_mask_media_id is null
+    returning golden_mask_media_id, golden_mask_metadata
+    """,
+    report_id,
+    user_id,
+    payload.media_id,
+    json.dumps(metadata),
+  )
+  if updated is None:
+    current = await connection.fetchrow(
+      """
+      select golden_mask_media_id, golden_mask_metadata
+      from analysis_reports
+      where id = $1 and user_id = $2 and deleted_at is null
+      """,
+      report_id,
+      user_id,
+    )
+    if current is not None and current.get("golden_mask_media_id") == payload.media_id:
+      descriptor = {
+        **decode_json_object(current.get("golden_mask_metadata")),
+        "available": True,
+        "media_id": str(payload.media_id),
+        "content_type": media["content_type"],
+        "byte_size": media["byte_size"],
+      }
+      return success({"goldenMask": descriptor})
+    raise AppError(
+      409,
+      "GOLDEN_MASK_ATTACHMENT_CONFLICT",
+      "A different Golden Mask is already attached to this report.",
+    )
+
+  descriptor = {
+    **decode_json_object(updated.get("golden_mask_metadata")),
+    "available": True,
+    "media_id": str(payload.media_id),
+    "content_type": media["content_type"],
+    "byte_size": media["byte_size"],
+  }
+  return success({"goldenMask": descriptor})
+
+
+@router.post("/reports/{report_id}/golden-mask")
+async def attach_analysis_report_golden_mask(
+  report_id: UUID,
+  payload: GoldenMaskAttachRequest,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+) -> dict:
+  user = await ensure_user(db, auth)
+
+  async def attach(connection) -> dict:
+    return await _attach_analysis_report_golden_mask(
+      connection,
+      report_id=report_id,
+      user_id=user["id"],
+      payload=payload,
+    )
+
+  return await db.run_in_transaction(attach)
+
+
+@router.get("/reports/{report_id}/golden-mask")
+async def get_analysis_report_golden_mask(
+  report_id: UUID,
+  response: Response,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  user = await ensure_user(db, auth)
+  row = await db.fetchrow(
+    """
+    select
+      r.id as report_id,
+      r.golden_mask_metadata,
+      media.id as media_id,
+      media.bucket,
+      media.object_key,
+      media.content_type,
+      media.byte_size
+    from analysis_reports r
+    left join media_assets media
+      on media.id = r.golden_mask_media_id
+      and media.owner_user_id = r.user_id
+      and media.media_kind = $3
+      and media.content_type = $4
+      and media.cdn_url is null
+      and media.status = 'active'
+      and media.deleted_at is null
+    where r.id = $1
+      and r.user_id = $2
+      and r.deleted_at is null
+    """,
+    report_id,
+    user["id"],
+    GOLDEN_MASK_MEDIA_KIND,
+    GOLDEN_MASK_CONTENT_TYPE,
+  )
+  if row is None:
+    raise AppError(404, "ANALYSIS_REPORT_NOT_FOUND", "Analysis report was not found.")
+  if row.get("media_id") is None:
+    raise AppError(
+      404,
+      "GOLDEN_MASK_NOT_FOUND",
+      "This analysis report does not have an available Golden Mask.",
+    )
+
+  s3 = S3Service(settings)
+  s3.assert_managed_media_location(
+    bucket=str(row["bucket"]),
+    object_key=str(row["object_key"]),
+  )
+  download_url = s3.create_presigned_download(
+    bucket=str(row["bucket"]),
+    object_key=str(row["object_key"]),
+    expires_in=900,
+  )
+  response.headers["Cache-Control"] = "private, no-store"
+  descriptor = {
+    **decode_json_object(row.get("golden_mask_metadata")),
+    "available": True,
+    "media_id": str(row["media_id"]),
+    "content_type": row["content_type"],
+    "byte_size": row["byte_size"],
+    "download_url": download_url,
+    "expires_in_seconds": 900,
+  }
+  return success({"goldenMask": descriptor})
+
+
+@router.delete("/golden-mask-media/{media_id}")
+async def delete_unattached_golden_mask_media(
+  media_id: UUID,
+  background_tasks: BackgroundTasks,
+  auth: AuthContext = Depends(get_current_user),
+  db: Database = Depends(require_database),
+  settings: Settings = Depends(get_settings),
+) -> dict:
+  await ensure_media_deletion_schema(db)
+  user = await ensure_user(db, auth)
+
+  if db.pool is None:
+    raise AppError(503, "DATABASE_NOT_CONFIGURED", "Database is not connected.")
+
+  async def queue_deletion(connection) -> tuple[list[UUID], bool]:
+    media = await connection.fetchrow(
+      """
+      select
+        id,
+        media_kind,
+        bucket,
+        object_key,
+        cdn_url,
+        content_type,
+        status,
+        deleted_at
+      from media_assets
+      where id = $1 and owner_user_id = $2
+      for update
+      """,
+      media_id,
+      user["id"],
+    )
+    if (
+      media is None
+      or media.get("media_kind") != GOLDEN_MASK_MEDIA_KIND
+      or media.get("content_type") != GOLDEN_MASK_CONTENT_TYPE
+      or media.get("cdn_url") is not None
+      or not media.get("bucket")
+      or not is_private_golden_mask_object_key(str(media.get("object_key") or ""))
+    ):
+      raise AppError(
+        404,
+        "GOLDEN_MASK_MEDIA_NOT_FOUND",
+        "The Golden Mask media asset was not found for this user.",
+      )
+
+    already_deleted = (
+      media.get("status") != "active"
+      or media.get("deleted_at") is not None
+    )
+    if media.get("status") == "deleted" or media.get("deleted_at") is not None:
+      return [], True
+    if media.get("status") not in {"active", "deletion_pending"}:
+      raise AppError(
+        404,
+        "GOLDEN_MASK_MEDIA_NOT_FOUND",
+        "The Golden Mask media asset was not found for this user.",
+      )
+
+    bucket = str(media["bucket"])
+    object_key = str(media["object_key"])
+    if await is_media_object_referenced(
+      connection,
+      bucket=bucket,
+      object_key=object_key,
+    ):
+      raise AppError(
+        409,
+        "GOLDEN_MASK_MEDIA_REFERENCED",
+        "An attached Golden Mask cannot be deleted with this endpoint.",
+      )
+
+    if media.get("status") == "active":
+      await connection.execute(
+        """
+        update media_assets
+        set status = 'deletion_pending'
+        where id = $1
+          and owner_user_id = $2
+          and status = 'active'
+          and deleted_at is null
+        """,
+        media_id,
+        user["id"],
+      )
+
+    outbox_id, should_process = await enqueue_unattached_media_deletion(
+      connection,
+      ref=MediaObjectRef(
+        bucket=bucket,
+        object_key=object_key,
+        media_asset_id=media_id,
+      ),
+      reason=GOLDEN_MASK_UNATTACHED_DELETION_REASON,
+    )
+    return ([outbox_id] if should_process else []), already_deleted
+
+  outbox_ids, already_deleted = await db.run_in_transaction(queue_deletion)
+  if outbox_ids:
+    background_tasks.add_task(
+      process_media_deletion_outbox_items,
+      database,
+      settings,
+      outbox_ids,
+    )
+
+  return success({
+    "alreadyDeleted": already_deleted,
+    "deleted": True,
+    "mediaId": str(media_id),
+    "outboxCount": len(outbox_ids),
+  })
 
 
 @router.delete("/reports/{report_id}")
@@ -1252,12 +1399,16 @@ async def delete_analysis_report(
           source_media.object_key as source_media_object_key,
           preview_media.bucket as preview_media_bucket,
           preview_media.object_key as preview_media_object_key,
+          golden_mask_media.id as golden_mask_media_id,
+          golden_mask_media.bucket as golden_mask_media_bucket,
+          golden_mask_media.object_key as golden_mask_media_object_key,
           capture_media.id as capture_media_id,
           capture_media.bucket as capture_media_bucket,
           capture_media.object_key as capture_media_object_key
         from analysis_reports r
         left join media_assets source_media on source_media.id = r.source_media_id
         left join media_assets preview_media on preview_media.id = r.preview_media_id
+        left join media_assets golden_mask_media on golden_mask_media.id = r.golden_mask_media_id
         left join photo_captures pc on pc.id = r.photo_capture_id
         left join media_assets capture_media on capture_media.id = pc.media_id
         where r.id = $1 and r.user_id = $2

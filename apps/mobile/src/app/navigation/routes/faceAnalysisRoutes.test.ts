@@ -2,8 +2,10 @@ import type {FaceCaptureUploadResult} from '../../../features/face-capture/servi
 import {
   getFaceAnalysisReportFooterHostHeight,
   getFaceAnalysisReportFooterReservedHeight,
+  resolveStillAnalysisCapture,
   shouldCreateFaceAnalysisReportFromCapture,
 } from './faceAnalysisRoutes';
+import type {UnifiedFaceCaptureCompletedEvent} from '../../../features/face-capture/services/unifiedFaceCaptureContract';
 
 function expectEqual<T>(actual: T, expected: T, label: string) {
   if (actual !== expected) {
@@ -46,4 +48,41 @@ expectEqual(
   getFaceAnalysisReportFooterHostHeight(220, 18),
   264,
   'face analysis report footer host keeps room for quick action arc',
+);
+
+const pendingStillCapture = resolveStillAnalysisCapture(
+  {
+    cameraMetadata: {
+      exposureDurationMs: 8,
+      iso: 64,
+      provider: 'arfoundation',
+      whiteBalanceAvailable: true,
+    },
+    captureId: 'pending-capture',
+    image: {
+      format: 'jpg',
+      height: 1600,
+      mirrored: false,
+      orientation: 'upright',
+      uri: 'file:///pending-face.jpg',
+      width: 1200,
+    },
+  } as UnifiedFaceCaptureCompletedEvent,
+  null,
+);
+
+expectEqual(
+  pendingStillCapture?.imageUri,
+  'file:///pending-face.jpg',
+  'still analysis can start from the local capture before upload completion',
+);
+expectEqual(
+  pendingStillCapture?.photoCaptureId,
+  'pending-capture',
+  'pre-upload still analysis keeps a stable capture key',
+);
+expectEqual(
+  resolveStillAnalysisCapture(null, captureResult)?.photoCaptureId,
+  captureResult.photoCaptureId,
+  'legacy uploaded capture remains the fallback still-analysis source',
 );

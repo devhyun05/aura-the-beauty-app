@@ -58,7 +58,39 @@ export const UNITY_MAKEUP_BRIDGE_TARGET = {
   cancelUnifiedFaceCaptureMethod: 'CancelUnifiedFaceCaptureJson',
 } as const;
 
+export const UNITY_GOLDEN_MASK_BRIDGE_TARGET = {
+  gameObject: 'RNBridge',
+  capturePosterMethod: 'CaptureGoldenMaskPosterJson',
+  loadMethod: 'LoadGoldenMaskJson',
+  resetMethod: 'ResetGoldenMaskViewJson',
+  rotateMethod: 'SetGoldenMaskRotationJson',
+  unloadMethod: 'UnloadGoldenMaskJson',
+} as const;
+
 export const UNITY_MAKEUP_NATIVE_EVENT_NAME = 'UnityMakeupEvent';
+
+export type UnityGoldenMaskEvent =
+  | {
+      requestId: string;
+      type: 'golden_mask_ready';
+    }
+  | {
+      reason?: string;
+      requestId: string;
+      type: 'golden_mask_failed';
+    }
+  | {
+      fileUri: string;
+      height: number;
+      requestId: string;
+      type: 'golden_mask_poster_ready';
+      width: number;
+    }
+  | {
+      reason?: string;
+      requestId: string;
+      type: 'golden_mask_poster_failed';
+    };
 
 export type UnityMakeupRegion = MakeupRecipeRegion;
 
@@ -610,6 +642,79 @@ export function cancelUnityUnifiedFaceCapture(
     }),
     normalizedRequestId,
     'unified_face_capture_cancel',
+  );
+}
+
+export function loadUnityGoldenMask({
+  fileUri,
+  requestId,
+}: {
+  fileUri: string;
+  requestId: string;
+}): boolean {
+  if (!fileUri.trim() || !requestId.trim()) {
+    return false;
+  }
+  return postUnityMessage(
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.loadMethod,
+    JSON.stringify({fileUri: fileUri.trim(), requestId: requestId.trim()}),
+  );
+}
+
+export function setUnityGoldenMaskRotation({
+  pitch,
+  requestId,
+  yaw,
+}: {
+  pitch: number;
+  requestId: string;
+  yaw: number;
+}): boolean {
+  if (
+    !requestId.trim() ||
+    !Number.isFinite(yaw) ||
+    !Number.isFinite(pitch)
+  ) {
+    return false;
+  }
+  return postUnityMessage(
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.rotateMethod,
+    JSON.stringify({pitch, requestId: requestId.trim(), yaw}),
+  );
+}
+
+export function resetUnityGoldenMaskView(requestId: string): boolean {
+  if (!requestId.trim()) {
+    return false;
+  }
+  return postUnityMessage(
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.resetMethod,
+    JSON.stringify({requestId: requestId.trim()}),
+  );
+}
+
+export function unloadUnityGoldenMask(requestId: string): boolean {
+  if (!requestId.trim()) {
+    return false;
+  }
+  return postUnityMessage(
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.unloadMethod,
+    JSON.stringify({requestId: requestId.trim()}),
+  );
+}
+
+export function captureUnityGoldenMaskPoster(requestId: string): boolean {
+  if (!requestId.trim()) {
+    return false;
+  }
+  return postUnityMessage(
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.capturePosterMethod,
+    JSON.stringify({requestId: requestId.trim()}),
   );
 }
 
@@ -1523,6 +1628,100 @@ export function addUnityUnifiedFaceCaptureEventListener(
             ? Object.keys(message)
             : [],
       });
+    }
+  });
+}
+
+export function parseUnityGoldenMaskMessage(
+  message: unknown,
+): UnityGoldenMaskEvent | null {
+  let payload: unknown = message;
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    Array.isArray(payload)
+  ) {
+    return null;
+  }
+
+  const event = payload as Record<string, unknown>;
+  const requestId =
+    typeof event.requestId === 'string' ? event.requestId.trim() : '';
+  if (!requestId) {
+    return null;
+  }
+  if (event.type === 'golden_mask_ready') {
+    return {requestId, type: 'golden_mask_ready'};
+  }
+  if (event.type === 'golden_mask_failed') {
+    const reasonValue =
+      typeof event.reason === 'string' ? event.reason : event.detail;
+    const reason =
+      typeof reasonValue === 'string' && reasonValue.trim()
+        ? reasonValue.trim()
+        : undefined;
+    return {
+      ...(reason ? {reason} : {}),
+      requestId,
+      type: 'golden_mask_failed',
+    };
+  }
+  if (event.type === 'golden_mask_poster_failed') {
+    const reasonValue =
+      typeof event.reason === 'string' ? event.reason : event.detail;
+    const reason =
+      typeof reasonValue === 'string' && reasonValue.trim()
+        ? reasonValue.trim()
+        : undefined;
+    return {
+      ...(reason ? {reason} : {}),
+      requestId,
+      type: 'golden_mask_poster_failed',
+    };
+  }
+  if (event.type === 'golden_mask_poster_ready') {
+    const fileUri =
+      typeof event.fileUri === 'string' ? event.fileUri.trim() : '';
+    const width =
+      typeof event.width === 'number' && Number.isFinite(event.width)
+        ? event.width
+        : 0;
+    const height =
+      typeof event.height === 'number' && Number.isFinite(event.height)
+        ? event.height
+        : 0;
+    if (
+      !fileUri.startsWith('file:') ||
+      width !== 1024 ||
+      height !== 1280
+    ) {
+      return null;
+    }
+    return {
+      fileUri,
+      height,
+      requestId,
+      type: 'golden_mask_poster_ready',
+      width,
+    };
+  }
+  return null;
+}
+
+export function addUnityGoldenMaskEventListener(
+  listener: (event: UnityGoldenMaskEvent) => void,
+) {
+  return addUnityMakeupEventListener(event => {
+    const parsed = parseUnityGoldenMaskMessage(event.message);
+    if (parsed) {
+      listener(parsed);
     }
   });
 }

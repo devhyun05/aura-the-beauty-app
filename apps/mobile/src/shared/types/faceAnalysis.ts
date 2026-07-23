@@ -1,6 +1,7 @@
 import type { ImageSourcePropType } from 'react-native';
 import type { FaceAnalysisReportMeasurements } from '../../features/face-analysis/services/faceAnalysisMeasurements';
 import type {FaceAnalysisV2} from '../../features/face-analysis/services/faceAnalysisV2';
+import type {GoldenMaskReportDescriptor} from '../contracts/goldenMask';
 
 export interface FaceAnalysisMakeupGuideline {
   brow: string;
@@ -156,4 +157,7 @@ export interface FaceAnalysisReport {
   // 사진 판정(VLM) 특징 부면 — 이 필드 추가 이전 보고서에는 없다(어댑터가 부재를
   // 생략으로 처리). 1층 프로파일 VLM 슬롯의 소스.
   featureObservations?: FaceFeatureObservations;
+  // TrueDepth 촬영에서 실제 ARKit 얼굴 메시를 저장한 선택 자산. 출시 전 보고서나
+  // 생성·업로드 실패 보고서는 undefined이며, UI는 해당 카드 전체를 숨긴다.
+  goldenMask?: GoldenMaskReportDescriptor;
 }

@@ -11,14 +11,22 @@ import {
 
 const UNITY_MAKEUP_NATIVE_VIEW_NAME = 'AURAUnityMakeupView';
 
+export type UnityMakeupRuntimeMode = 'live' | 'still';
+
+export type UnityMakeupNativeViewProps = ViewProps & {
+  runtimeMode?: UnityMakeupRuntimeMode;
+};
+
 type UnityMakeupNativeBridge = {
   isFrameworkAvailable?: () => boolean;
 };
 
 const NativeUnityMakeupView =
   Platform.OS === 'ios'
-    ? requireNativeComponent<ViewProps>(UNITY_MAKEUP_NATIVE_VIEW_NAME)
-    : View;
+    ? requireNativeComponent<UnityMakeupNativeViewProps>(
+        UNITY_MAKEUP_NATIVE_VIEW_NAME,
+      )
+    : (View as React.ComponentType<UnityMakeupNativeViewProps>);
 
 export function isUnityMakeupNativeViewSupported(): boolean {
   if (Platform.OS !== 'ios') {
@@ -46,8 +54,18 @@ export function useUnityMakeupNativeViewReady(): boolean {
   return isSupported;
 }
 
-export function UnityMakeupNativeView({style, ...props}: ViewProps) {
-  return <NativeUnityMakeupView {...props} style={[styles.view, style]} />;
+export function UnityMakeupNativeView({
+  runtimeMode = 'live',
+  style,
+  ...props
+}: UnityMakeupNativeViewProps) {
+  return (
+    <NativeUnityMakeupView
+      {...props}
+      {...(Platform.OS === 'ios' ? {runtimeMode} : {})}
+      style={[styles.view, style]}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

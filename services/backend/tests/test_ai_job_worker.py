@@ -91,12 +91,11 @@ class FakeAnalysisDB:
 async def test_dispatcher_analysis_handler_runs_analysis_job(monkeypatch: pytest.MonkeyPatch) -> None:
   calls: dict[str, object] = {}
 
-  async def fake_run_analysis_job_background(report_id, payload, settings, *, db, await_image_generation):
+  async def fake_run_analysis_job_background(report_id, payload, settings, *, db):
     calls["report_id"] = report_id
     calls["payload"] = payload
     calls["settings"] = settings
     calls["db"] = db
-    calls["await_image_generation"] = await_image_generation
 
   monkeypatch.setattr(
     "app.workers.job_dispatcher.run_analysis_job_background",
@@ -114,7 +113,6 @@ async def test_dispatcher_analysis_handler_runs_analysis_job(monkeypatch: pytest
   assert calls["report_id"] == REPORT_ID
   assert calls["settings"] is settings
   assert calls["db"] is fake_db
-  assert calls["await_image_generation"] is True
   assert payload.photo_capture_id == PHOTO_CAPTURE_ID
   assert payload.source_media_id == SOURCE_MEDIA_ID
   assert payload.preview_media_id == PREVIEW_MEDIA_ID

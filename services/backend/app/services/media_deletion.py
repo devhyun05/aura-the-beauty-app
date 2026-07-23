@@ -15,16 +15,19 @@ from app.services.s3 import (
   PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX,
   S3Service,
   is_makeup_recommendation_object_key,
+  is_private_golden_mask_object_key,
   is_private_hair_object_key,
 )
 
 
 logger = logging.getLogger(__name__)
+GOLDEN_MASK_UNATTACHED_DELETION_REASON = "golden_mask_unattached_deleted"
 
 DELETABLE_REPORT_OBJECT_PREFIXES = (
   "uploads/capture/",
   "uploads/face-analysis/",
   "uploads/generated-makeup/",
+  "uploads/golden-mask/",
   PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX,
   "uploads/photo-captures/",
   "uploads/recommended-makeups/",
@@ -119,7 +122,7 @@ def collect_report_media_refs(
       media_asset_id=normalized_media_id,
     )
 
-  for prefix in ("source", "preview", "capture"):
+  for prefix in ("source", "preview", "golden_mask", "capture"):
     add_ref(
       report.get(f"{prefix}_media_bucket"),
       report.get(f"{prefix}_media_object_key"),
@@ -301,6 +304,83 @@ async def enqueue_unreferenced_report_media_deletions(
   return outbox_ids, skipped_referenced_count
 
 
+async def enqueue_unattached_media_deletion(
+  connection: asyncpg.Connection,
+  *,
+  ref: MediaObjectRef,
+  reason: str,
+) -> tuple[UUID, bool]:
+  """Queue one owner-validated, unattached media object for permanent deletion.
+
+  The caller must hold a row lock on ``ref.media_asset_id``. That lock makes the
+  read-then-insert path idempotent without adding a second outbox uniqueness
+  constraint, while the outbox processor still performs its normal reference
+  check immediately before deleting S3 data.
+  """
+  if ref.media_asset_id is None:
+    raise ValueError("Unattached media deletion requires a media asset id.")
+
+  existing = await connection.fetchrow(
+    """
+    select id, status
+    from media_deletion_outbox
+    where report_id is null
+      and media_asset_id = $1
+      and reason = $2
+    order by created_at desc
+    limit 1
+    """,
+    ref.media_asset_id,
+    reason,
+  )
+  if existing is not None:
+    if existing["status"] in {"completed", "processing"}:
+      return existing["id"], False
+
+    updated = await connection.fetchrow(
+      """
+      update media_deletion_outbox
+      set bucket = $2,
+          object_key = $3,
+          status = 'pending',
+          last_error = null,
+          next_attempt_at = now(),
+          updated_at = now()
+      where id = $1
+      returning id
+      """,
+      existing["id"],
+      ref.bucket,
+      ref.object_key,
+    )
+    if updated is None:
+      raise RuntimeError("Golden Mask deletion outbox row could not be resumed.")
+    return updated["id"], True
+
+  inserted = await connection.fetchrow(
+    """
+    insert into media_deletion_outbox (
+      report_id,
+      media_asset_id,
+      bucket,
+      object_key,
+      reason,
+      status,
+      next_attempt_at
+    )
+    values (null, $1, $2, $3, $4, 'pending', now())
+    returning id
+    """,
+    ref.media_asset_id,
+    ref.bucket,
+    ref.object_key,
+    reason,
+  )
+  if inserted is None:
+    raise RuntimeError("Golden Mask deletion outbox row could not be created.")
+  return inserted["id"], True
+
+
 async def is_media_object_referenced(
   connection: asyncpg.Connection,
   *,
@@ -337,6 +417,7 @@ async def is_media_object_referenced(
           and (
             source_media_id = any($1::uuid[])
             or preview_media_id = any($1::uuid[])
+            or golden_mask_media_id = any($1::uuid[])
           )
         union all
         select 1
@@ -570,9 +651,10 @@ async def process_media_deletion_outbox_item(
       return
 
     s3 = S3Service(settings)
-    permanently_delete = is_private_hair_object_key(object_key) or is_makeup_recommendation_object_key(
-      object_key,
-      settings,
+    permanently_delete = (
+      is_private_hair_object_key(object_key)
+      or is_private_golden_mask_object_key(object_key)
+      or is_makeup_recommendation_object_key(object_key, settings)
     )
     delete = s3.delete_object_permanently if permanently_delete else s3.delete_object
     delete(bucket=bucket, object_key=object_key)

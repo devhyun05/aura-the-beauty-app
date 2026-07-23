@@ -15,6 +15,7 @@ const testPaths = [
   'features/face-3d/services/face3DTier2PassThrough.test.ts',
   'features/face-analysis/services/faceAnalysisCaptureGuidance.test.ts',
   'features/face-capture/services/unifiedFaceCaptureContract.test.ts',
+  'features/face-capture/services/goldenMaskUploadPolicy.test.ts',
   'features/face-capture/services/unifiedFaceCaptureMode.test.ts',
   'features/face-capture/services/unifiedFaceCaptureFlowState.test.ts',
   'features/face-capture/services/unifiedFaceCaptureLifecycle.test.ts',
@@ -22,6 +23,7 @@ const testPaths = [
   'features/face-capture/services/unifiedFaceCaptureTempImageCleanup.test.ts',
   'features/face-capture/services/unifiedFaceCaptureDiagnostics.test.ts',
   'features/face-capture/services/unifiedFaceCaptureNavigation.test.ts',
+  'shared/contracts/goldenMask.test.ts',
 ];
 
 const result = spawnSync(

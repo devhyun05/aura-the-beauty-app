@@ -1,0 +1,5 @@
+[
+ {"name":"low3a","src":"/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/docs/unity-ar/glam2-refs/속눈썹 샘플/3a62a46dec65f85daf8894fc41f33e9b.jpg","box":[40,150,1040,700],"split":0.01,"upper":false,"lower":true,"gain":1.5,"mirror":true},
+ {"name":"low57","src":"/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/docs/unity-ar/glam2-refs/속눈썹 샘플/57ef8a3aa28c463a8134f928484d9062.jpg","box":[30,450,1180,950],"split":0.01,"upper":false,"lower":true,"gain":1.3},
+ {"name":"low1a","src":"/Users/wiseungcheol/Desktop/AURA-cosmetic-search-engine/docs/unity-ar/glam2-refs/속눈썹 샘플/1a9bec9d78817015ce809bdc9b3d63a6.jpg","box":[30,450,1180,950],"split":0.01,"upper":false,"lower":true,"gain":1.4}
+]

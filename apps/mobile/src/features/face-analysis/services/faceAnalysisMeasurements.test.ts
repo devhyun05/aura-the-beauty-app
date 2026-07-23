@@ -261,6 +261,33 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(sourceImage.width, 1080, 'thirds sourceImage.width kept');
 }
 
+// 업로드와 로컬 분석을 병렬화하면 로컬 capture ID와 서버 photoCaptureId가 다를 수
+// 있다. 서버 저장 wire에서는 report의 photoCaptureId로 상관관계를 단일화한다.
+{
+  const thirds = buildThirdsFixture();
+  thirds.captureId = 'native-capture';
+  thirds.sessionId = 'native-capture';
+  const geometry = buildGeometryFixture();
+  geometry.captureId = 'native-capture';
+  geometry.sessionId = 'native-capture';
+  const payload = expectDefined(
+    buildFaceAnalysisMeasurementsPayload({
+      captureId: 'server-photo-capture',
+      face3d: null,
+      faceGeometry2d: geometry,
+      faceVerticalThirds: thirds,
+      personalColor: null,
+    }),
+    'parallel capture id normalization',
+  );
+  const encodedThirds = payload.faceVerticalThirds as Record<string, unknown>;
+  const encodedGeometry = payload.faceGeometry2d as Record<string, unknown>;
+  expectEqual(encodedThirds.captureId, 'server-photo-capture', 'thirds captureId normalized');
+  expectEqual(encodedThirds.sessionId, 'server-photo-capture', 'thirds sessionId normalized');
+  expectEqual(encodedGeometry.captureId, 'server-photo-capture', 'geometry captureId normalized');
+  expectEqual(encodedGeometry.sessionId, 'server-photo-capture', 'geometry sessionId normalized');
+}
+
 // ── 2. 왕복: encode → 백엔드 camelize 재현 → decode ──────────────────────────
 {
   const payload = buildFaceAnalysisMeasurementsPayload({

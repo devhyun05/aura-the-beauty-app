@@ -95,10 +95,6 @@ def consulting() -> ConsultingResult:
       },
       "colorAndProduct": advice, "hair": advice, "fashion": advice,
       "photography": advice,
-      "recommendedLook": {
-        "title": "뮤트 데일리", "subtitle": "차분한 균형", "description": "실측 균형을 살린 룩",
-        "tags": ["뮤트", "데일리"],
-      },
       "overallMood": "차분한 균형", "summary": "전체 맞춤 요약",
       "shortSummary": "짧은 요약", "tags": ["뮤트", "균형"],
     },
@@ -198,7 +194,7 @@ async def test_pipeline_persists_after_every_stage_and_projects_legacy() -> None
   assert result.consulting is not None
   legacy = project_legacy_analysis_result(result)
   assert legacy["faceShape"] == result.derived.face_shape.label
-  assert legacy["recommendedMakeups"][0]["title"] == "뮤트 데일리"
+  assert "recommendedMakeups" not in legacy
   assert set(legacy["regionNotes"]) == {"upper", "mid", "lower", "jaw"}
   assert (
     result.perception.feature_impression.eye_impression.label
