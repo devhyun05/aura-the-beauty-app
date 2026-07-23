@@ -29,7 +29,8 @@ OUT = Path(__file__).resolve().parent / "out"
 SOURCES = {
     "upper": dict(
         src=REFS / "속눈썹 샘플/다운로드.png",
-        box=(590, 30, 1140, 290), flip=False, gap_frac=0.0),
+        box=(565, 30, 1140, 290), flip=False, gap_frac=0.0,
+        ann_dx=25),  # x0 590→565 잘림 방지(검증기 적발). 주석은 옛 박스 기준 → +25px 이동
     "lower": dict(
         src=REFS / "속눈썹 샘플/1a9bec9d78817015ce809bdc9b3d63a6.jpg",
         box=(5, 380, 1194, 1040), flip=True, gap_frac=0.40),
@@ -94,62 +95,106 @@ def save_fit_overlay(name, cfg, a, curve):
     print(f"  게이트 오버레이 저장: {p}")
 
 
-def straighten(a, curve):
-    """뿌리 펴기 — 열별 '수직 시프트'만 사용(회전·기울임 없음 = 털 각도 완전 보존).
+def load_user_rootline(name, a, curve, ann_dx=0):
+    """게이트 이미지에 사용자가 굵은 빨간 펜으로 그린 뿌리선을 추출한다(정답지).
 
-    각 열을 (피팅 뿌리 y → 공통 기준선)으로 아래 정렬. 예전 언롤의 각도 회전
-    부작용('각도를 왜 멋대로 올렸어' 사고)이 원천적으로 없다.
+    내가 그린 얇은 피팅선은 동일 파라미터로 재계산해 ±4px 마스킹으로 제거하고,
+    남은 빨간 픽셀(사용자 펜)을 열별 중앙값→보간→스무딩해 전해상도 뿌리선으로 만든다.
+    스트로크가 없으면 None(피팅 곡선 사용).
+    """
+    p = OUT / f"gate-annotated-{name}.png"
+    if not p.exists():
+        p = OUT / f"gate-rootfit-{name}.png"
+    if not p.exists():
+        return None
+    img = np.asarray(Image.open(p).convert("RGB"), dtype=np.int16)
+    r, g, b = img[..., 0], img[..., 1], img[..., 2]
+    red = (r > 140) & (r - g > 50) & (r - b > 50)
+    h, w = red.shape
+    xs = np.arange(w)
+    # 저장 시 1/SUPER 축소된 좌표계 + 주석은 옛 크롭 기준(ann_dx 이동)
+    my_y = np.polyval(curve, (xs + ann_dx) * SUPER) / SUPER
+    stroke = red & (np.abs(np.arange(h)[:, None] - my_y[None, :]) > 4.0)
+    if stroke.sum() < 50:
+        return None
+    ys = np.full(w, np.nan)
+    for x in range(w):
+        col = np.where(stroke[:, x])[0]
+        if len(col):
+            ys[x] = np.median(col)
+    valid = ~np.isnan(ys)
+    ys = np.interp(xs, xs[valid], ys[valid])          # 펜 끊김 보간(범위 밖은 끝값 유지)
+    k = 15
+    ys = np.convolve(np.pad(ys, k // 2, mode="edge"), np.ones(k) / k, mode="valid")[:w]
+    print(f"  사용자 뿌리선 사용: {p.name} (열 {valid.sum()}/{w} 표시됨)")
+    return np.interp(np.arange(a.shape[1]), xs * SUPER + ann_dx * SUPER, ys * SUPER)
+
+
+def straighten(a, root_y):
+    """뿌리 펴기 — 열별 수직 시프트, 소수점+선형 보간(정수 반올림 계단·지그재그 제거).
+
+    회전 없음 = 털 각도 보존. 뿌리선 아래 잉크(처지는 꼬리 결)는 자르지 않고 전부
+    보존한다 — 렌더러가 뿌리줄(rootV)을 눈 라인에 맞추고 그 아래를 눈 라인 밖으로
+    그린다(리본 확장). 반환: (결과, 뿌리줄 y 인덱스).
     """
     h, w = a.shape
-    xs = np.arange(w)
-    root_y = np.polyval(curve, xs)
-    base = root_y.max()  # 가장 낮은 뿌리를 기준선으로 — 전 열이 아래로만 이동
-    out = np.zeros_like(a)
+    base = float(root_y.max())
+    pad = int(np.ceil((base - root_y).max())) + 1  # 아래로 밀려나는 내용 수용
+    out = np.zeros((h + pad, w), dtype=np.float32)
+    yy = np.arange(h + pad, dtype=np.float32)
+    src = np.arange(h, dtype=np.float32)
     for x in range(w):
-        shift = int(round(base - root_y[x]))
-        if shift <= 0:
-            out[:, x] = a[:, x]
-        else:
-            out[shift:, x] = a[: h - shift, x]
-    return out
+        s = base - root_y[x]
+        out[:, x] = np.interp(yy - s, src, a[:, x], left=0.0, right=0.0)
+    kept = out.sum() / max(a.sum(), 1e-6)
+    print(f"  펴기(보간): 기준선 y={base:.1f}, 잉크 보존율 {kept * 100:.1f}%")
+    return out, int(round(base))
 
 
-def finalize(name, cfg, a):
-    """bbox 크롭 → 비례 유지 다운스케일 → 앞쪽 페이드 → 불투명화(1회) → 검증 → 산출."""
+def finalize(name, cfg, a, root_row):
+    """bbox 크롭 → 비례 유지 다운스케일 → 앞쪽 페이드 → 불투명화(1회) → 검증 → 산출.
+
+    root_row(뿌리줄 y)는 크롭·리사이즈를 따라 추적해 rootV(아랫변에서 뿌리까지의
+    높이 비율)로 사이드카에 기록 — 렌더러가 이 줄을 눈 라인에 맞춘다.
+    """
     ys, xs = np.where(a > 0.02)
-    a = a[ys.min(): ys.max() + 1, xs.min(): xs.max() + 1]
+    y0 = ys.min()
+    a = a[y0: ys.max() + 1, xs.min(): xs.max() + 1]
     h, w = a.shape
+    root_idx = int(np.clip(root_row - y0, 0, h - 1))
     tw, th = TARGET_W, max(8, round(h * TARGET_W / w))  # 종횡비 그대로(고정 캔버스 금지)
     a = np.asarray(Image.fromarray((a * 255).astype(np.uint8))
                    .resize((tw, th), Image.LANCZOS), dtype=np.float32) / 255.0
+    r = int(np.clip(round((root_idx + 0.5) * th / h - 0.5), 0, th - 1))
 
     if cfg["gap_frac"] > 0:  # 아래 속눈썹 — 눈 앞쪽 구간 비움
         ramp = np.clip(np.linspace(0, 1, tw) / cfg["gap_frac"], 0, 1)
         a *= ramp[None, :]
 
     a = np.clip((a - OPACIFY_LO) / (OPACIFY_HI - OPACIFY_LO), 0, 1)  # 불투명화 — 유일한 1회
-    a[-1, :] = np.maximum(a[-1, :], (a[-1, :] > 0.15) * 0.6)          # 뿌리 앵커
+    a[r, :] = np.maximum(a[r, :], (a[r, :] > 0.15) * 0.6)             # 뿌리줄 앵커
 
-    validate(name, cfg, a)
+    validate(name, cfg, a, r)
 
     OUT.mkdir(parents=True, exist_ok=True)
     rgba = np.zeros((th, tw, 4), dtype=np.uint8)
     rgba[..., 3] = (a * 255).astype(np.uint8)
     png = OUT / f"lash_glam_{name}.png"
     Image.fromarray(rgba).save(png)
-    meta = dict(width=tw, height=th, aspect=round(th / tw, 4),
-                note="장착 배수 = 원하는 (속눈썹높이/눈폭) ÷ aspect")
+    root_v = round((th - 1 - r) / th, 4)
+    meta = dict(width=tw, height=th, aspect=round(th / tw, 4), rootV=root_v,
+                note="장착 배수 = 원하는 (속눈썹높이/눈폭) ÷ aspect; rootV = 뿌리줄 높이 비율(아랫변 0)")
     (OUT / f"lash_glam_{name}.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1))
-    print(f"  산출: {png}  {tw}x{th} aspect={meta['aspect']}")
+    print(f"  산출: {png}  {tw}x{th} aspect={meta['aspect']} rootV={root_v}")
 
 
-def validate(name, cfg, a):
-    """실수 차단 검사 — 하나라도 실패하면 산출하지 않는다."""
+def validate(name, cfg, a, r):
+    """실수 차단 검사 — 하나라도 실패하면 산출하지 않는다. r = 뿌리줄 인덱스."""
     h, w = a.shape
     fails = []
     span = a.max(axis=0) > 0.2                       # 도안이 실제 차지하는 가로 구간
     lo = int(w * cfg["gap_frac"])                    # 의도된 앞쪽 공백은 제외
-    root_row = a[-3:, :].max(axis=0) > 0.3
+    root_row = a[max(0, r - 1): r + 2, :].max(axis=0) > 0.3
     cover = root_row[lo:][span[lo:]].mean() if span[lo:].any() else 0.0
     if cover < 0.55:
         fails.append(f"뿌리 정렬 부족: 아랫줄 잉크 커버 {cover:.2f} < 0.55 (펴기 실패?)")
@@ -173,9 +218,13 @@ def main():
         print(f"[{name}] {cfg['src'].name}")
         a = load_alpha(cfg)
         curve, _ = fit_root_curve(a)
-        save_fit_overlay(name, cfg, a, curve)
         if mode == "apply":
-            finalize(name, cfg, straighten(a, curve))
+            user = load_user_rootline(name, a, curve, cfg.get("ann_dx", 0))
+            root_y = user if user is not None else np.polyval(curve, np.arange(a.shape[1]))
+            flat, root_row = straighten(a, root_y)
+            finalize(name, cfg, flat, root_row)
+        else:
+            save_fit_overlay(name, cfg, a, curve)
     if mode != "apply":
         print("→ 오버레이 육안 승인 후 `apply`로 실행.")
 

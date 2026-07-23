@@ -121,6 +121,12 @@ namespace ARMakeup.Face
         // 0.10은 화면 ~25px = 128행 텍스처의 5:1 축소로 가는 털 팁이 밉맵에서 침식됨
         // (사용자 "짧고 떡짐" 판정) → 0.15로 상향해 3:1로 완화 + 도안 비례 회복.
         const float LowerTexLenFactor = 0.15f;
+        // 뿌리줄 오프셋(리본 확장) — 도안에서 뿌리선 '아래'로 처지는 꼬리 결까지 표현.
+        // 텍스처의 뿌리줄은 v=rootV(추출기 lash_extract.py 사이드카 JSON의 rootV)이고,
+        // 리본을 눈 라인 밖으로 len×rootV만큼 연장해 그 줄이 정확히 눈 라인에 오게 한다.
+        // 재추출 시 사이드카 값으로 갱신할 것(tools/glam2-lash/out/lash_glam_*.json).
+        const float UpperTexRootV = 0.2081f;
+        const float LowerTexRootV = 0.1237f;
         Mesh _texMesh;
         MeshRenderer _texRenderer;
         Material _texMaterial;
@@ -545,7 +551,9 @@ namespace ARMakeup.Face
                 var baseV = e * vpe;
                 for (var c = 0; c < RibbonCols; c++)
                 {
-                    var root = _lash[c] - up * (eyeDist * RibbonRootTuck); // 뿌리 턱: 슬리버 제거
+                    // 뿌리 턱(슬리버 제거) + 뿌리줄 오프셋: 텍스처 v=RootV 줄이 눈 라인에
+                    // 오도록 v0 변을 len×RootV만큼 라인 아래로 내림(처지는 꼬리 결 표현).
+                    var root = _lash[c] - up * (eyeDist * RibbonRootTuck + len * UpperTexRootV);
                     // 컬럼 길이 균일 — 길이·각도 프로파일은 도안이 소유.
                     var lashLen = len;
                     var top = root + up * lashLen;
@@ -586,7 +594,8 @@ namespace ARMakeup.Face
                 var baseV = e * vpe;
                 for (var c = 0; c < RibbonCols; c++)
                 {
-                    var root = _lash[c] - down * (eyeDist * LowerRibbonLift);
+                    // 뿌리 리프트 + 뿌리줄 오프셋(위 리본과 동일 원칙, 값은 아래 도안 소유)
+                    var root = _lash[c] - down * (eyeDist * LowerRibbonLift + len * LowerTexRootV);
                     // 컬럼 길이 균일 — 도안 텍스처는 자체 길이 변화를 갖고 있어 컬럼별 차등
                     // 길이(안쪽 0.5·가장자리 0.6 변조)를 겹치면 비스듬한 털이 컬럼 경계에서
                     // 계단으로 끊긴다(사용자 "중간 잘림" 판정). 절차식 경로만 변조 유지.

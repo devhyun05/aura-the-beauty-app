@@ -124,6 +124,10 @@ public static class GlamTestRig
         {
             var bridge = UnityEngine.Object.FindFirstObjectByType<NativeBridge>();
             if (bridge == null) { Debug.LogError("[GlamTestRig] NativeBridge 없음."); _applied = true; return; }
+            // 스텐실 활성 — 이게 꺼져 있으면 FramePresenter 렌더러가 disabled라 화면이
+            // 검정(캡처 luma 0 함정, 2026-07-23 진단). RN이 보내는 신호를 리그가 대신 보낸다.
+            var host = UnityEngine.Object.FindFirstObjectByType<AuraStencilHost>();
+            if (host != null) host.SetStencilActive("true");
             bridge.MarkReady();
             bridge.OnMessageFromRN(LoadFilterJson());
             _applied = true;
