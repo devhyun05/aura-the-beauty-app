@@ -125,7 +125,11 @@ namespace ARMakeup.Face
         // 텍스처의 뿌리줄은 v=rootV(추출기 lash_extract.py 사이드카 JSON의 rootV)이고,
         // 리본을 눈 라인 밖으로 len×rootV만큼 연장해 그 줄이 정확히 눈 라인에 오게 한다.
         // 재추출 시 사이드카 값으로 갱신할 것(tools/glam2-lash/out/lash_glam_*.json).
-        const float UpperTexRootV = 0.0446f; // 0723 위 초록선(펜연장 32°)+국소 회전 재산출값
+        // 위 리본 꼬리 발산 억제(0723 v15 사용자 판정) — 탈출 레일 하향 ≈12° + 끝 기둥 테이퍼.
+        const float TailExitDropTan = 0.21f; // 탈출 방향 하향(tan12°) — 클러스터 출발점 낮춤
+        const int TailTaperCols = 4;         // 꼬리쪽(c=0부터) 길이 테이퍼 기둥 수
+        const float TailTaperMin = 0.55f;    // 맨 끝 기둥 길이 배율(브로우 넘는 스파이크 차단)
+        const float UpperTexRootV = 0.045f; // 0723 위 초록선(펜연장 32°)+국소 회전 재산출값
         const float LowerTexRootV = 0.1f;    // 0723 급전환(틈 x=3113) 재산출값
         Mesh _texMesh;
         MeshRenderer _texRenderer;
@@ -241,17 +245,21 @@ namespace ARMakeup.Face
         /// 코너 최저점을 향해 급강하하는데, 실제 인조속눈썹 밴드는 그 지점에서 라인의
         /// 흐름(접선)대로 곧게 빠져나간다. 라이너 v5 코너 윙과 동일 취지(사용자 확정 형태).
         /// 코너 영향권 밖 접선으로 바깥쪽 점들을 점진 대체(간격 유지 → u 매핑 보존).</summary>
-        void TailTangentExit()
+        void TailTangentExit(float dropTan = 0f)
         {
             // v9 실패 교훈(픽셀 diff 270px = 사실상 무변화): ①블렌드가 교정을 희석
             // ②구간(5점)이 급강하 몸통(~8점)보다 짧음 ③접선 측정점(5~8)이 이미 꺾인 구간.
             // → 구간 8점, 접선은 코너 영향권 밖(8~12)에서 측정, 블렌드 없이 통째 교체.
+            // dropTan: 탈출 방향 하향 바이어스(+y) — 원본 밴드는 꼬리에서 32~42° 급강하해
+            // 클러스터를 낮게 데려가는데 접선 그대로면 출발점이 높아 꼬리가 위로 발산
+            // (사용자 판정 0723 v15). 위 리본만 사용, 아래는 0.
             const int Pivot = 8;
             var d = (_lash[Pivot] - _lash[Pivot + 4]).normalized; // 안 꺾인 구간의 진행 방향
+            if (dropTan != 0f) d = (d + new Vector2(0f, dropTan)).normalized;
             for (var i = Pivot - 1; i >= 0; i--)
             {
                 var step = (_lash[i] - _lash[i + 1]).magnitude;   // 원래 점 간격 유지
-                _lash[i] = _lash[i + 1] + d * step;               // 가던 방향 그대로 직진
+                _lash[i] = _lash[i + 1] + d * step;               // 가던 방향(+하향) 직진
             }
         }
 
@@ -578,7 +586,7 @@ namespace ARMakeup.Face
                 // 오버플로해 매 프레임 IndexOutOfRange로 상단 리본을 무력화 → 제거. 꼬리 연장은
                 // 새 래시 아키텍처(실제 속눈썹 증폭)에서 배열 크기와 함께 제대로 재구현할 것.)
                 SubdivideArc(_ctrl, LidPts, _lash);
-                TailTangentExit(); // 눈꼬리 급강하 제거 — 뿌리선이 접선으로 빠져나감
+                TailTangentExit(TailExitDropTan); // 접선 탈출 + 하향(발산 억제)
 
                 // 종횡비 잠금 — 리본 높이 = 눈폭 × 도안(h/w). 가로·세로가 같은 비율로
                 // 줄어 도안의 털 각도가 수학적으로 보존된다(비등방 축소가 모든 각도를
@@ -597,8 +605,11 @@ namespace ARMakeup.Face
                     // 뿌리 턱(슬리버 제거) + 뿌리줄 오프셋: 텍스처 v=RootV 줄이 눈 라인에
                     // 오도록 v0 변을 len×RootV만큼 라인 아래로 내림(처지는 꼬리 결 표현).
                     var root = _lash[c] - n * (eyeDist * RibbonRootTuck + len * UpperTexRootV);
-                    // 컬럼 길이 균일 — 길이·각도 프로파일은 도안이 소유.
-                    var lashLen = len;
+                    // 컬럼 길이 균일 — 단, 꼬리 끝(c<TailTaperCols)만 점감(발산 스파이크 차단).
+                    var taper = c < TailTaperCols
+                        ? Mathf.Lerp(TailTaperMin, 1f, c / (float)TailTaperCols)
+                        : 1f;
+                    var lashLen = len * taper;
                     var top = root + n * lashLen;
                     _texVertices[baseV + c * 2] = ImageToWorld(root, depth);
                     _texVertices[baseV + c * 2 + 1] = ImageToWorld(top, depth);

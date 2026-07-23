@@ -32,6 +32,7 @@ SOURCES = {
         box=(565, 30, 1140, 290), flip=False, gap_frac=0.0,
         ann_dx=25,   # x0 590→565 잘림 방지(검증기 적발). 주석은 옛 박스 기준 → +25px 이동
         tail_refit=0.55, pen_extend=True,  # 꼬리: 펜 끝(67%)부터 32° 연장(승인 초록선 0723)
+        rot_scale=0.9,                     # 꼬리 세움 배율 — v14 100%는 과교정(솟구침)
         min_cover=0.45),                   # 꼬리 연장 구간 제외 후 재측정 기준
     "lower": dict(
         src=REFS / "속눈썹 샘플/1a9bec9d78817015ce809bdc9b3d63a6.jpg",
@@ -180,7 +181,7 @@ def tail_band_refit(a, root_y, start_frac):
     return out
 
 
-def hybrid_flatten(a, root_y, start_frac):
+def hybrid_flatten(a, root_y, start_frac, rot_scale=1.0):
     """shift+꼬리 국소 회전 하이브리드(승인 0723) — '미끄럼틀과 막대기' 문제 해결.
 
     수직 시프트는 절대각을 보존해, 42° 밴드에 나란히 눕던 꼬리 가닥이 펴는 순간
@@ -207,8 +208,10 @@ def hybrid_flatten(a, root_y, start_frac):
     win = max(int(w * 0.05), 4)
     seg = a[:, max(x0 - win, 0): x0 + win].sum(axis=0)
     x_gap = max(x0 - win, 0) + int(np.argmin(seg))
-    blend = np.clip((np.arange(w) - x_gap) / max(w * 0.025, 2.0), 0, 1)
-    print(f"  회전 전환: 틈 x={x_gap}/{w}(창내 잉크최소), 램프 폭 2.5%")
+    # rot_scale: 회전 상한 다이얼(0=시프트, 1=밴드 기울기 100%). v14 과교정(전부 기립,
+    # 늘어지는 꼬리 성격 소실 — 사용자 판정)의 절충용. 위 도안은 부분 세움을 쓴다.
+    blend = np.clip((np.arange(w) - x_gap) / max(w * 0.025, 2.0), 0, 1) * rot_scale
+    print(f"  회전 전환: 틈 x={x_gap}/{w}, 램프 2.5%, 회전 배율 {rot_scale:.0%}")
     rx = nx * blend
     ryv = -1.0 * (1 - blend) + ny * blend         # 수직↔법선 블렌드
     norm = np.sqrt(rx * rx + ryv * ryv)
@@ -403,7 +406,8 @@ def main():
                 root_y = tail_band_refit(a, root_y, cfg["tail_refit"])  # 아래: 70%부터 42°
             if cfg.get("tail_refit"):
                 # 꼬리 국소 회전(승인 0723) — 중앙은 shift와 동일, 꼬리만 밴드와 함께 회전
-                flat, root_row = hybrid_flatten(a, root_y, cfg["tail_refit"])
+                flat, root_row = hybrid_flatten(
+                    a, root_y, cfg["tail_refit"], cfg.get("rot_scale", 1.0))
             else:
                 # 전면 언롤은 기각(사용자 0723) → shift 유지
                 flat, root_row = straighten(a, root_y)
