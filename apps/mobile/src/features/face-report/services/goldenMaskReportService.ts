@@ -14,6 +14,11 @@ function safePathPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
 }
 
+const downloads = new Map<
+  string,
+  Promise<{descriptor: GoldenMaskReportDescriptor; fileUri: string}>
+>();
+
 async function validCachedFile(
   uri: string,
   expectedByteSize: number,
@@ -50,10 +55,11 @@ export async function getGoldenMaskDownloadDescriptor(
   return descriptor;
 }
 
-export async function downloadGoldenMaskForReport(
+async function downloadGoldenMaskForReportOnce(
   reportId: string,
   knownDescriptor: GoldenMaskReportDescriptor,
 ): Promise<{descriptor: GoldenMaskReportDescriptor; fileUri: string}> {
+  const startedAt = Date.now();
   if (!FileSystem.cacheDirectory) {
     throw new Error('골든마스크 임시 저장 공간을 사용할 수 없어요.');
   }
@@ -71,10 +77,15 @@ export async function downloadGoldenMaskForReport(
   )}-${descriptor.topologyFingerprint.slice(0, 12)}.auragm`;
 
   if (await validCachedFile(fileUri, descriptor.byteSize)) {
+    console.info('[aura:golden-mask] download:cache-hit', {
+      elapsedMs: Date.now() - startedAt,
+      reportId,
+    });
     return {descriptor, fileUri};
   }
 
   try {
+    console.info('[aura:golden-mask] download:start', {reportId});
     await FileSystem.deleteAsync(fileUri, {idempotent: true});
     let downloaded = await FileSystem.downloadAsync(
       descriptor.downloadUrl,
@@ -103,6 +114,11 @@ export async function downloadGoldenMaskForReport(
       throw new Error('골든마스크 파일을 안전하게 내려받지 못했어요.');
     }
 
+    console.info('[aura:golden-mask] download:done', {
+      byteSize: descriptor.byteSize,
+      elapsedMs: Date.now() - startedAt,
+      reportId,
+    });
     return {descriptor, fileUri: downloaded.uri};
   } catch (error) {
     await FileSystem.deleteAsync(fileUri, {idempotent: true}).catch(
@@ -110,4 +126,24 @@ export async function downloadGoldenMaskForReport(
     );
     throw error;
   }
+}
+
+export function downloadGoldenMaskForReport(
+  reportId: string,
+  knownDescriptor: GoldenMaskReportDescriptor,
+): Promise<{descriptor: GoldenMaskReportDescriptor; fileUri: string}> {
+  const key = `${reportId}:${knownDescriptor.topologyFingerprint}`;
+  const existing = downloads.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const download = downloadGoldenMaskForReportOnce(
+    reportId,
+    knownDescriptor,
+  ).finally(() => {
+    downloads.delete(key);
+  });
+  downloads.set(key, download);
+  return download;
 }

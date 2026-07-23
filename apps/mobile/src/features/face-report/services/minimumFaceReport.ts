@@ -1,15 +1,18 @@
 import type {ReportData} from '../reportTypes';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
+import type {GoldenMaskReportDescriptor} from '../../../shared/contracts/goldenMask';
 import {buildFaceProportionSection} from './fromFaceAnalysisReport';
 
 export type MinimumFaceReportPreview = {
   capturedPhotoUri: string;
   errorMessage?: string;
   faceShape: string;
+  goldenMask?: GoldenMaskReportDescriptor;
   has3DModel: boolean;
   personalColor?: string;
   ratioSummary?: string;
   recommendedMood: string;
+  reportId?: string;
   skinType: string;
 };
 
@@ -30,11 +33,12 @@ export function buildMinimumFaceReportData(
   ].filter((card): card is {label: string; value: string} => card !== null);
 
   return {
-    reportId: 'face-analysis-generating',
+    reportId: preview.reportId ?? 'face-analysis-generating',
     topBarTitle: '맞춤 분석 보고서',
     initialPageId: 'summary:overview',
     generationStatus: preview.errorMessage ? 'failed' : 'loading',
     generationError: preview.errorMessage,
+    ...(preview.goldenMask ? {goldenMask: preview.goldenMask} : {}),
     s1: {
       photo: {
         uri: preview.capturedPhotoUri,

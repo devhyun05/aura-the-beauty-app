@@ -1,23 +1,18 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   ImageBackground,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Pressable,
   ScrollView,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
-import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, MoreHorizontal } from 'lucide-react-native';
-import {
-  OptionalViewShot,
-  type OptionalViewShotRef,
-} from '../../shared/ui/OptionalViewShot';
+import { ChevronLeft, MoreHorizontal, Share2 } from 'lucide-react-native';
 import {
   StoryReportPager,
   type StoryReportPage,
@@ -32,39 +27,60 @@ import {
   type FaceReportStoryPage,
   type FaceReportStorySection,
 } from './services/reportStoryModel';
-import { ReportSectionCover } from './components/ReportSectionCover';
 import {GoldenMaskCard} from './components/GoldenMaskCard';
-
-// Matches the legacy report screen's capture settings.
-const REPORT_CAPTURE_OPTIONS = {
-  format: 'jpg',
-  quality: 0.95,
-  result: 'tmpfile',
-} as const;
+import {
+  disposePreparedGoldenMask,
+  preloadGoldenMaskForReport,
+} from './services/goldenMaskPreloadService';
 
 const STORY_SECTION_NAV_LABELS: Record<FaceReportStorySection['id'], string> = {
   summary: '요약',
-  proportion: '비율',
-  features: '이목구비',
-  'personal-color': '컬러',
-  body: '체형',
-  impression: '인상',
-  styling: '스타일',
-  skin: '피부',
-  makeup: '추천',
+  face: '얼굴',
+  'color-skin': '컬러·피부',
+  style: '스타일',
 };
 import { ScrollAnimContext } from './visuals/RiseIn';
-import { S1Summary } from './sections/S1Summary';
+import {S1CombinedSummary} from './sections/S1CombinedSummary';
 import { S2Proportion } from './sections/S2Proportion';
-import { S3Features, S3RegionCard } from './sections/S3Features';
-import { S4DrapePalette, S4PersonalColor, S4ToneOverview } from './sections/S4PersonalColor';
+import { S3RegionCard } from './sections/S3Features';
+import { S4DrapePalette, S4ToneOverview } from './sections/S4PersonalColor';
 import { S5Body } from './sections/S5Body';
 import { S6Impression } from './sections/S6Impression';
-import { S7LookCard, S7Styling } from './sections/S7Styling';
+import { S7LookCard } from './sections/S7Styling';
 import { S8Skin } from './sections/S8Skin';
 import { S9StyleLanes } from './sections/S9StyleLanes';
 
 declare const require: (moduleName: string) => number;
+
+function ChapterMark({
+  inset,
+  section,
+}: {
+  inset: boolean;
+  section: FaceReportStorySection;
+}) {
+  return (
+    <View
+      style={{
+        gap: 11,
+        marginBottom: 18,
+        ...(inset ? null : {paddingHorizontal: 20, paddingTop: 22}),
+      }}>
+      <View
+        style={{
+          backgroundColor: color.accentDeep,
+          borderRadius: 1,
+          height: 2,
+          width: 44,
+        }}
+      />
+      <Text style={[font(10.5, '700', undefined, 1.25), {color: color.accentDeep}]}>
+        {section.number} · {section.englishTitle}
+      </Text>
+    </View>
+  );
+}
+
 function StoryContentCard({
   section,
   pagerRef,
@@ -72,6 +88,8 @@ function StoryContentCard({
   sub,
   children,
   inset = false,
+  scrollEnabled = true,
+  showChapterHeader = false,
 }: {
   section: FaceReportStorySection;
   pagerRef: React.RefObject<StoryReportPagerRef | null>;
@@ -79,27 +97,27 @@ function StoryContentCard({
   sub?: string;
   children: React.ReactNode;
   inset?: boolean;
+  scrollEnabled?: boolean;
+  showChapterHeader?: boolean;
 }) {
   const unlockPager = () => pagerRef.current?.setPagingEnabled(true);
   return (
     <View style={{flex: 1, backgroundColor: section.tint}}>
-      <View style={{height: 2, backgroundColor: section.accent}} />
       <ScrollView
         contentContainerStyle={{flexGrow: 1, paddingBottom: 30, ...(inset ? {paddingHorizontal: 16, paddingTop: 20} : null)}}
         directionalLockEnabled
         nestedScrollEnabled
+        scrollEnabled={scrollEnabled}
         showsVerticalScrollIndicator={false}
         onScrollBeginDrag={() => pagerRef.current?.setPagingEnabled(false)}
         onScrollEndDrag={unlockPager}
         onMomentumScrollEnd={unlockPager}
         onTouchEnd={unlockPager}>
+        {showChapterHeader ? <ChapterMark inset={inset} section={section} /> : null}
         {title ? (
-          <View style={{gap: 5, marginBottom: 13}}>
-            <Text style={[font(10.5, '800', undefined, 1.35), {color: section.accent}]}>
-              {section.number} · {section.koreanTitle}
-            </Text>
-            <Text style={[font(20, '800'), {color: color.ink}]}>{title}</Text>
-            {sub ? <Text style={[font(12.5, '400', 1.55), {color: color.text}]}>{sub}</Text> : null}
+          <View style={{gap: 7, marginBottom: 16}}>
+            <Text style={[font(20, '800', 1.25, -0.2), {color: color.ink}]}>{title}</Text>
+            {sub ? <Text style={[font(13.5, '400', 1.55), {color: color.text}]}>{sub}</Text> : null}
           </View>
         ) : null}
         {children}
@@ -108,26 +126,118 @@ function StoryContentCard({
   );
 }
 
-function GoldenMaskShareCard({uri}: {uri: string}) {
+function SummaryStoryCard({
+  active,
+  data,
+  debugPayload,
+  debugSummary,
+  onInteractionChange,
+  onPressCta,
+  pagerRef,
+}: {
+  active: boolean;
+  data: ReportScreenProps['data'];
+  debugPayload?: unknown;
+  debugSummary?: {label: string; value: string}[];
+  onInteractionChange: (interacting: boolean) => void;
+  onPressCta?: () => void;
+  pagerRef: React.RefObject<StoryReportPagerRef | null>;
+}) {
+  const scrollRef = useRef<ScrollView | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [maskLayoutY, setMaskLayoutY] = useState(Number.POSITIVE_INFINITY);
+  const [maskMounted, setMaskMounted] = useState(false);
+  const [maskInteracting, setMaskInteracting] = useState(false);
+
+  React.useEffect(() => {
+    scrollRef.current?.scrollTo({animated: false, y: 0});
+    setMaskLayoutY(Number.POSITIVE_INFINITY);
+    setMaskMounted(false);
+  }, [data.reportId]);
+
+  const updateMaskVisibility = React.useCallback(
+    (offsetY: number) => {
+      if (
+        !maskMounted &&
+        Number.isFinite(maskLayoutY) &&
+        offsetY + viewportHeight + 160 >= maskLayoutY
+      ) {
+        setMaskMounted(true);
+      }
+    },
+    [maskLayoutY, maskMounted, viewportHeight],
+  );
+
+  React.useEffect(() => {
+    updateMaskVisibility(0);
+  }, [updateMaskVisibility]);
+
+  const handleInteractionChange = React.useCallback(
+    (interacting: boolean) => {
+      setMaskInteracting(interacting);
+      onInteractionChange(interacting);
+    },
+    [onInteractionChange],
+  );
+
   return (
-    <View style={{backgroundColor: color.surface, paddingHorizontal: 22, paddingVertical: 28, gap: 14}}>
-      <View style={{gap: 5}}>
-        <Text style={{color: color.accentDeep, fontFamily: 'Lora', fontSize: 12, letterSpacing: 2}}>
-          GOLDEN MASK
-        </Text>
-        <Text style={{color: color.ink, fontFamily: 'Lora', fontSize: 27, lineHeight: 33}}>
-          나의 3D 페이스
-        </Text>
-        <Text style={[font(12.5, '400', 1.5), {color: color.text}]}>
-          TrueDepth로 측정한 얼굴 메시를 고대 조각처럼 담았어요.
-        </Text>
-      </View>
-      <Image
-        accessibilityIgnoresInvertColors
-        resizeMode="cover"
-        source={{uri}}
-        style={{aspectRatio: 1024 / 1280, backgroundColor: color.surface2, borderRadius: 24, width: '100%'}}
-      />
+    <View
+      onLayout={event => setViewportHeight(Math.round(event.nativeEvent.layout.height))}
+      style={{backgroundColor: color.surface, flex: 1}}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={{flexGrow: 1}}
+        directionalLockEnabled
+        nestedScrollEnabled
+        onMomentumScrollEnd={() => pagerRef.current?.setPagingEnabled(true)}
+        onScroll={(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+          updateMaskVisibility(event.nativeEvent.contentOffset.y);
+        }}
+        onScrollBeginDrag={() => pagerRef.current?.setPagingEnabled(false)}
+        onScrollEndDrag={() => pagerRef.current?.setPagingEnabled(true)}
+        scrollEnabled={!maskInteracting}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}>
+        <S1CombinedSummary
+          data={data.s1}
+          introMinHeight={viewportHeight || undefined}
+          onPressCta={onPressCta}>
+          {data.goldenMask ? (
+            <View
+              onLayout={event => {
+                const nextY = event.nativeEvent.layout.y;
+                setMaskLayoutY(nextY);
+              }}>
+              {maskMounted ? (
+                <GoldenMaskCard
+                  active={active}
+                  descriptor={data.goldenMask}
+                  layout="evidence"
+                  onInteractionChange={handleInteractionChange}
+                  pagerRef={pagerRef}
+                  reportId={data.reportId}
+                  sourcePhoto={data.s1.photo}
+                />
+              ) : (
+                <View
+                  accessibilityLabel="3D 얼굴 상세 보기를 준비하는 영역"
+                  style={{
+                    alignItems: 'center',
+                    backgroundColor: color.surface2,
+                    borderRadius: 28,
+                    height: 320,
+                    justifyContent: 'center',
+                  }}>
+                  <ActivityIndicator color={color.muted} size="small" />
+                </View>
+              )}
+            </View>
+          ) : null}
+        </S1CombinedSummary>
+        {__DEV__ ? (
+          <MeasurementDebugPanel payload={debugPayload} summary={debugSummary} />
+        ) : null}
+      </ScrollView>
     </View>
   );
 }
@@ -198,24 +308,6 @@ function ReportGenerationStatus({
   );
 }
 
-type GoldenMaskPosterWaiter = {
-  resolve: (uri: string | null) => void;
-  timer: ReturnType<typeof setTimeout>;
-};
-
-const GOLDEN_MASK_POSTER_WAIT_MS = 18_000;
-
-function deleteTemporaryFile(uri: string | null | undefined): void {
-  if (!uri) return;
-  void FileSystem.deleteAsync(uri, {idempotent: true}).catch(() => undefined);
-}
-
-function waitForLocalImage(uri: string): Promise<void> {
-  return new Promise(resolve => {
-    Image.getSize(uri, () => resolve(), () => resolve());
-  });
-}
-
 function MakeupCtaCard({
   data,
   onPress,
@@ -242,7 +334,17 @@ function MakeupCtaCard({
         directionalLockEnabled
         showsVerticalScrollIndicator={false}>
         <View style={{gap: 7, marginBottom: 4}}>
-          <Text style={{fontFamily: 'Lora', fontSize: 38, lineHeight: 42, color: color.white}}>MAKEUP</Text>
+          <Text
+            style={{
+              color: color.white,
+              fontFamily: 'Pretendard',
+              fontSize: 34,
+              fontWeight: '800',
+              letterSpacing: -0.6,
+              lineHeight: 40,
+            }}>
+            MAKEUP
+          </Text>
           <Text style={[font(17, '700'), {color: color.white}]}>{data.footer.cta}</Text>
         </View>
         {__DEV__ ? <MeasurementDebugPanel payload={debugPayload} summary={debugSummary} /> : null}
@@ -254,7 +356,7 @@ function MakeupCtaCard({
           accessibilityRole="button"
           onPress={onPress}
           style={({pressed}) => [{
-            alignItems: 'center', backgroundColor: color.accent, borderRadius: radius.lg,
+            alignItems: 'center', backgroundColor: color.accentDeep, borderRadius: radius.lg,
             paddingVertical: 16, opacity: pressed ? 0.86 : 1,
           }, shadow.cta]}>
           <Text style={[font(14.5, '800'), {color: color.white}]}>{data.footer.cta}</Text>
@@ -271,50 +373,58 @@ function MakeupCtaCard({
 export function ReportScreenScaffold({
   data,
   onBack,
+  onGoldenMaskInteractionChange,
   onMore,
+  onShare,
   onRetake,
   onResurvey,
   onPressCta,
-  captureRef,
   measurementDebugPayload,
   measurementDebugSummary,
 }: ReportScreenProps) {
   const insets = useSafeAreaInsets();
-  const {width: windowWidth} = useWindowDimensions();
   const scrollY = useSharedValue(0);
   const pagerRef = useRef<StoryReportPagerRef | null>(null);
-  const verticalCaptureRef = useRef<OptionalViewShotRef | null>(null);
-  const posterWaitersRef = useRef(new Set<GoldenMaskPosterWaiter>());
   const storyModel = useMemo(() => buildFaceReportStoryModel(data), [data]);
-  const [activePageId, setActivePageId] = useState(
-    storyModel.pages[0]?.id ?? null,
+  const initialStoryPageId =
+    data.initialPageId ??
+    (data.goldenMask ? 'summary:overview' : storyModel.pages[0]?.id ?? null);
+  const [activePageId, setActivePageId] = useState(initialStoryPageId);
+  const handleGoldenMaskInteractionChange = React.useCallback(
+    (interacting: boolean) => {
+      // Own both parent axes for the entire touch. PanResponder capture alone
+      // does not reliably stop an already-mounted native ScrollView on iOS.
+      pagerRef.current?.setPagingEnabled(!interacting);
+      onGoldenMaskInteractionChange?.(interacting);
+    },
+    [onGoldenMaskInteractionChange],
   );
-  const [goldenMaskPosterUri, setGoldenMaskPosterUri] = useState<string | null>(
-    null,
-  );
-  const [posterRequestKey, setPosterRequestKey] = useState(0);
 
-  const handleGoldenMaskPosterReady = React.useCallback((fileUri: string) => {
-    setGoldenMaskPosterUri(previousUri => {
-      if (previousUri && previousUri !== fileUri) {
-        deleteTemporaryFile(previousUri);
-      }
-      return fileUri;
+  React.useEffect(() => {
+    if (!data.goldenMask) {
+      return undefined;
+    }
+    const startedAt = Date.now();
+    console.info('[aura:golden-mask] report-prefetch:start', {
+      reportId: data.reportId,
     });
-    for (const waiter of posterWaitersRef.current) {
-      clearTimeout(waiter.timer);
-      waiter.resolve(fileUri);
-    }
-    posterWaitersRef.current.clear();
-  }, []);
+    void preloadGoldenMaskForReport(data.reportId, data.goldenMask).then(
+      result => {
+        console.info('[aura:golden-mask] report-prefetch:settled', {
+          elapsedMs: Date.now() - startedAt,
+          ready: result.ready,
+          reportId: data.reportId,
+        });
+      },
+    );
 
-  const handleGoldenMaskPosterUnavailable = React.useCallback(() => {
-    for (const waiter of posterWaitersRef.current) {
-      clearTimeout(waiter.timer);
-      waiter.resolve(null);
-    }
-    posterWaitersRef.current.clear();
-  }, []);
+    return () => {
+      disposePreparedGoldenMask(data.reportId);
+    };
+  }, [
+    data.goldenMask?.topologyFingerprint,
+    data.reportId,
+  ]);
 
   const openRegionCard = (key: BandKey) => {
     const pageId = storyModel.featurePageIds[key];
@@ -323,30 +433,21 @@ export function ReportScreenScaffold({
 
   const sectionById = new Map(storyModel.sections.map(section => [section.id, section]));
   const renderContent = (page: FaceReportStoryPage, section: FaceReportStorySection) => {
+    const showChapterHeader =
+      section.id !== 'summary' && section.pages[0]?.id === page.id;
     switch (page.contentKey) {
-      case 'summary:golden-mask':
-        return data.goldenMask ? (
-          <GoldenMaskCard
-            active={activePageId === page.id}
-            descriptor={data.goldenMask}
-            onPosterUnavailable={handleGoldenMaskPosterUnavailable}
-            onPosterReady={handleGoldenMaskPosterReady}
-            pagerRef={pagerRef}
-            posterRequestKey={posterRequestKey}
-            reportId={data.reportId}
-          />
-        ) : null;
+      case 'summary:combined':
       case 'summary':
         return (
-          <StoryContentCard section={section} pagerRef={pagerRef}>
-            <S1Summary data={data.s1} />
-            {__DEV__ ? (
-              <MeasurementDebugPanel
-                payload={measurementDebugPayload}
-                summary={measurementDebugSummary}
-              />
-            ) : null}
-          </StoryContentCard>
+          <SummaryStoryCard
+            active={activePageId === page.id}
+            data={data}
+            debugPayload={measurementDebugPayload}
+            debugSummary={measurementDebugSummary}
+            onInteractionChange={handleGoldenMaskInteractionChange}
+            onPressCta={onPressCta}
+            pagerRef={pagerRef}
+          />
         );
       case 'summary:generation':
         return (
@@ -354,6 +455,7 @@ export function ReportScreenScaffold({
             inset
             pagerRef={pagerRef}
             section={section}
+            showChapterHeader={showChapterHeader}
             sub="완성되지 않은 설명을 임의로 채우지 않아요."
             title="보고서 생성 상태">
             <ReportGenerationStatus
@@ -364,45 +466,45 @@ export function ReportScreenScaffold({
         );
       case 'proportion':
         return data.s2 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef}>
+          <StoryContentCard section={section} pagerRef={pagerRef} showChapterHeader={showChapterHeader}>
             <S2Proportion data={data.s2} onOpenRegionCard={openRegionCard} onRetake={onRetake} />
           </StoryContentCard>
         ) : null;
       case 'personal-color:tone':
         return data.s4 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.title} sub={data.s4.sub} inset>
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.title} sub={data.s4.sub} inset showChapterHeader={showChapterHeader}>
             <S4ToneOverview data={data.s4} />
           </StoryContentCard>
         ) : null;
       case 'personal-color:drape':
         return data.s4 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.drape.title} sub={data.s4.drape.sub} inset>
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s4.drape.title} sub={data.s4.drape.sub} inset showChapterHeader={showChapterHeader}>
             <S4DrapePalette data={data.s4} />
           </StoryContentCard>
         ) : null;
       case 'body':
         return data.s5 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef}>
+          <StoryContentCard section={section} pagerRef={pagerRef} showChapterHeader={showChapterHeader}>
             <S5Body data={data.s5} onResurvey={onResurvey} />
           </StoryContentCard>
         ) : null;
       case 'impression':
-        return data.s6 ? <StoryContentCard section={section} pagerRef={pagerRef}><S6Impression data={data.s6} /></StoryContentCard> : null;
+        return data.s6 ? <StoryContentCard section={section} pagerRef={pagerRef} showChapterHeader={showChapterHeader}><S6Impression data={data.s6} /></StoryContentCard> : null;
       case 'styling:natural':
         return data.s7 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.naturalCard.title} inset>
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.naturalCard.title} inset showChapterHeader={showChapterHeader}>
             <S7LookCard card={data.s7.naturalCard} />
           </StoryContentCard>
         ) : null;
       case 'styling:glam':
         return data.s7 ? (
-          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.glamCard.title} inset>
+          <StoryContentCard section={section} pagerRef={pagerRef} title={data.s7.glamCard.title} inset showChapterHeader={showChapterHeader}>
             <S7LookCard card={data.s7.glamCard} />
             {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
           </StoryContentCard>
         ) : null;
       case 'skin':
-        return data.s8 ? <StoryContentCard section={section} pagerRef={pagerRef}><S8Skin data={data.s8} /></StoryContentCard> : null;
+        return data.s8 ? <StoryContentCard section={section} pagerRef={pagerRef} showChapterHeader={showChapterHeader}><S8Skin data={data.s8} /></StoryContentCard> : null;
       case 'makeup:cta':
         return <MakeupCtaCard data={data} onPress={onPressCta} debugPayload={measurementDebugPayload} debugSummary={measurementDebugSummary} />;
       default:
@@ -410,7 +512,7 @@ export function ReportScreenScaffold({
           const key = page.contentKey.slice('features:'.length);
           const card = data.s3.cards.find(item => item.key === key);
           return card ? (
-            <StoryContentCard section={section} pagerRef={pagerRef} title={card.regionTitle} sub={data.s3.sub} inset>
+            <StoryContentCard section={section} pagerRef={pagerRef} title={card.regionTitle} sub={data.s3.sub} inset showChapterHeader={showChapterHeader}>
               <S3RegionCard card={card} />
             </StoryContentCard>
           ) : null;
@@ -428,9 +530,7 @@ export function ReportScreenScaffold({
       title: page.title,
       shortTitle: page.shortTitle,
       accentColor: section.accent,
-      render: page.kind === 'cover'
-        ? <ReportSectionCover section={section} />
-        : renderContent(page, section),
+      render: renderContent(page, section),
     };
   });
   const storySections: StoryReportSection[] = Object.values(
@@ -444,99 +544,31 @@ export function ReportScreenScaffold({
       accentColor: section.accent,
       pageIds: availableSection?.pages.map(page => page.id) ?? [],
       available: Boolean(availableSection),
-      showPageIndex: section.id === 'features',
+      showPageIndex: false,
     };
   });
   const resetKey = `${data.s1.photo.uri ?? 'report'}:${data.s1.dateLine}:${storyPages.map(page => page.id).join(',')}`;
-  const firstStoryPageId = storyModel.pages[0]?.id ?? null;
+  const firstStoryPageId =
+    data.initialPageId ??
+    (data.goldenMask ? 'summary:overview' : storyModel.pages[0]?.id ?? null);
   React.useEffect(() => {
     setActivePageId(firstStoryPageId);
   }, [firstStoryPageId, resetKey]);
 
-  React.useEffect(
-    () => () => {
-      deleteTemporaryFile(goldenMaskPosterUri);
-    },
-    [goldenMaskPosterUri],
-  );
-
-  React.useEffect(
-    () => () => {
-      for (const waiter of posterWaitersRef.current) {
-        clearTimeout(waiter.timer);
-        waiter.resolve(null);
-      }
-      posterWaitersRef.current.clear();
-    },
-    [],
-  );
-
-  const waitForGoldenMaskPoster = React.useCallback(
-    (): Promise<string | null> => {
-      if (goldenMaskPosterUri) {
-        return Promise.resolve(goldenMaskPosterUri);
-      }
-      return new Promise(resolve => {
-        const waiter = {} as GoldenMaskPosterWaiter;
-        waiter.resolve = resolve;
-        waiter.timer = setTimeout(() => {
-          posterWaitersRef.current.delete(waiter);
-          resolve(null);
-        }, GOLDEN_MASK_POSTER_WAIT_MS);
-        posterWaitersRef.current.add(waiter);
-        setPosterRequestKey(value => value + 1);
-      });
-    },
-    [goldenMaskPosterUri],
-  );
-
-  React.useImperativeHandle(
-    captureRef,
-    () => ({
-      capture: async () => {
-        const previousPageId = activePageId;
-        let posterUri = goldenMaskPosterUri;
-        try {
-          if (data.goldenMask && !posterUri) {
-            pagerRef.current?.goToPage('summary:golden-mask');
-            posterUri = await waitForGoldenMaskPoster();
-            if (posterUri) {
-              // Let the poster Image commit and decode before ViewShot reads it.
-              await waitForLocalImage(posterUri);
-              await new Promise(resolve => setTimeout(resolve, 80));
-            }
-          }
-          return await verticalCaptureRef.current?.capture?.();
-        } finally {
-          if (posterUri) {
-            setGoldenMaskPosterUri(currentUri =>
-              currentUri === posterUri ? null : currentUri,
-            );
-            deleteTemporaryFile(posterUri);
-          }
-          if (
-            previousPageId &&
-            previousPageId !== 'summary:golden-mask'
-          ) {
-            pagerRef.current?.goToPage(previousPageId);
-          }
-        }
-      },
-    }),
-    [
-      activePageId,
-      captureRef,
-      data.goldenMask,
-      goldenMaskPosterUri,
-      waitForGoldenMaskPoster,
-    ],
-  );
-
-  const circleBtn = (child: React.ReactNode, onPress?: () => void) => (
-    <Pressable onPress={onPress} hitSlop={6} style={({ pressed }) => [{
-      width: 34, height: 34, borderRadius: 17, backgroundColor: color.surface,
+  const circleBtn = (
+    child: React.ReactNode,
+    accessibilityLabel: string,
+    onPress?: () => void,
+  ) => (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="button"
+      onPress={onPress}
+      hitSlop={6}
+      style={({ pressed }) => [{
+      width: 44, height: 44, borderRadius: 22, backgroundColor: 'transparent',
       alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.8 : 1,
-    }, shadow.circleButton]}>
+    }]}>
       {child}
     </Pressable>
   );
@@ -544,45 +576,31 @@ export function ReportScreenScaffold({
   return (
     <ScrollAnimContext.Provider value={{scrollY, enabled: false}}>
       <View style={{flex: 1, backgroundColor: color.bg}}>
-        {/* 공유/저장은 모든 실제 콘텐츠가 펼쳐진 별도 세로 문서를 캡처한다. */}
-        <OptionalViewShot
-          ref={verticalCaptureRef}
-          options={REPORT_CAPTURE_OPTIONS}
-          style={{position: 'absolute', left: 0, top: 0, width: windowWidth, backgroundColor: color.bg}}>
-          {goldenMaskPosterUri ? (
-            <GoldenMaskShareCard uri={goldenMaskPosterUri} />
-          ) : null}
-          <View>
-            <S1Summary data={data.s1} />
-          </View>
-          {data.s2 ? (
-            <S2Proportion data={data.s2} onOpenRegionCard={() => undefined} onRetake={onRetake} />
-          ) : null}
-          {data.s3 ? <S3Features data={data.s3} /> : null}
-          {data.s4 ? <S4PersonalColor data={data.s4} /> : null}
-          {data.s5 ? <S5Body data={data.s5} onResurvey={onResurvey} /> : null}
-          {data.s6 ? <S6Impression data={data.s6} /> : null}
-          {data.s7 ? <S7Styling data={data.s7} /> : null}
-          {data.s8 ? <S8Skin data={data.s8} /> : null}
-          {data.s9 ? <S9StyleLanes data={data.s9} /> : null}
-        </OptionalViewShot>
-
         <View style={{flex: 1, zIndex: 1, backgroundColor: color.bg}}>
           <View style={{
             paddingTop: Math.max(insets.top, 12) + 4, paddingHorizontal: 20, paddingBottom: 4,
             flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
           }}>
-            {circleBtn(<ChevronLeft size={18} color={color.body} strokeWidth={2.2} />, onBack)}
+            <View style={{width: 88, alignItems: 'flex-start'}}>
+              {circleBtn(
+                <ChevronLeft size={20} color={color.body} strokeWidth={2.2} />,
+                '보고서 닫기',
+                onBack,
+              )}
+            </View>
             <Text style={[font(14, '700'), {color: color.ink}]}>{data.topBarTitle}</Text>
-            {onMore ? (
-              circleBtn(<MoreHorizontal size={16} color={color.body} />, onMore)
-            ) : (
-              <View style={{height: 34, width: 34}} />
-            )}
+            <View style={{alignItems: 'center', flexDirection: 'row', justifyContent: 'flex-end', width: 88}}>
+              {onShare
+                ? circleBtn(<Share2 size={18} color={color.body} />, '보고서 공유', onShare)
+                : null}
+              {onMore
+                ? circleBtn(<MoreHorizontal size={18} color={color.body} />, '보고서 더보기', onMore)
+                : null}
+            </View>
           </View>
           <StoryReportPager
             ref={pagerRef}
-            initialPageId={data.initialPageId}
+            initialPageId={initialStoryPageId ?? undefined}
             onPageChange={page => setActivePageId(page.id)}
             pages={storyPages}
             sections={storySections}

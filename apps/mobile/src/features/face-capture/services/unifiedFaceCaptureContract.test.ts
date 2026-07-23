@@ -226,13 +226,14 @@ const photoEvidenceFixture = {
         x: 0.5,
         y: 0.57,
         relativeDepth: 1,
+        signedDepthNormalized: 0.34,
         label: '코끝',
         metricKey: 'noseTipProjection',
       },
       samples: [
-        {x: 0.46, y: 0.4, relativeDepth: 0.2},
-        {x: 0.54, y: 0.4, relativeDepth: 0.3},
-        {x: 0.5, y: 0.57, relativeDepth: 1},
+        {x: 0.46, y: 0.4, relativeDepth: 0.2, signedDepthNormalized: 0.12},
+        {x: 0.54, y: 0.4, relativeDepth: 0.3, signedDepthNormalized: 0.16},
+        {x: 0.5, y: 0.57, relativeDepth: 1, signedDepthNormalized: 0.34},
       ],
     },
   },
@@ -248,6 +249,14 @@ expectEqual(
     : null,
   '코끝',
   'valid same-frame 3D photo evidence parses',
+);
+expectEqual(
+  completedWithPhotoEvidence?.type === 'unified_face_capture_completed'
+    ? completedWithPhotoEvidence.face3dPhotoEvidence?.regions.nose?.pin
+      .signedDepthNormalized
+    : null,
+  0.34,
+  'signed normalized depth parses',
 );
 const completedWithInvalidPhotoEvidence = parseUnifiedFaceCaptureEvent(
   completedFixture({

@@ -3,30 +3,25 @@ import {color} from '../reportTokens';
 
 export type FaceReportStorySectionId =
   | 'summary'
-  | 'proportion'
-  | 'features'
-  | 'personal-color'
-  | 'body'
-  | 'impression'
-  | 'styling'
-  | 'skin'
-  | 'makeup';
+  | 'face'
+  | 'color-skin'
+  | 'style';
 
-export type FaceReportStoryPageKind = 'cover' | 'content' | 'cta';
+export type FaceReportStoryPageKind = 'content' | 'cta';
 
 export type FaceReportStoryContentKey =
   | 'summary'
-  | 'summary:golden-mask'
+  | 'summary:combined'
   | 'summary:generation'
   | 'proportion'
   | `features:${string}`
+  | 'impression'
   | 'personal-color:tone'
   | 'personal-color:drape'
-  | 'body'
-  | 'impression'
+  | 'skin'
   | 'styling:natural'
   | 'styling:glam'
-  | 'skin'
+  | 'body'
   | 'makeup:cta';
 
 export interface FaceReportStoryPage {
@@ -35,7 +30,7 @@ export interface FaceReportStoryPage {
   kind: FaceReportStoryPageKind;
   title: string;
   shortTitle: string;
-  contentKey?: FaceReportStoryContentKey;
+  contentKey: FaceReportStoryContentKey;
 }
 
 export interface FaceReportStorySection {
@@ -74,85 +69,35 @@ const SECTION_DEFINITIONS: Record<FaceReportStorySectionId, SectionDefinition> =
     id: 'summary',
     number: '01',
     englishTitle: 'PORTRAIT',
-    koreanTitle: '분석 요약',
+    koreanTitle: '요약',
     accent: color.accentDeep,
     tint: color.surface,
   },
-  proportion: {
-    id: 'proportion',
+  face: {
+    id: 'face',
     number: '02',
-    englishTitle: 'PROPORTION',
-    koreanTitle: '얼굴 비율',
+    englishTitle: 'FACE',
+    koreanTitle: '얼굴',
     accent: color.accentDeep,
     tint: color.surface,
   },
-  features: {
-    id: 'features',
+  'color-skin': {
+    id: 'color-skin',
     number: '03',
-    englishTitle: 'FEATURES',
-    koreanTitle: '이목구비',
+    englishTitle: 'COLOR & SKIN',
+    koreanTitle: '컬러·피부',
     accent: color.accentDeep,
     tint: color.surface,
   },
-  'personal-color': {
-    id: 'personal-color',
+  style: {
+    id: 'style',
     number: '04',
-    englishTitle: 'COLOR',
-    koreanTitle: '퍼스널 컬러',
-    accent: color.accentDeep,
-    tint: color.surface,
-  },
-  body: {
-    id: 'body',
-    number: '05',
-    englishTitle: 'SILHOUETTE',
-    koreanTitle: '체형',
-    accent: color.accentDeep,
-    tint: color.surface,
-  },
-  impression: {
-    id: 'impression',
-    number: '06',
-    englishTitle: 'IMPRESSION',
-    koreanTitle: '인상',
-    accent: color.accentDeep,
-    tint: color.surface,
-  },
-  styling: {
-    id: 'styling',
-    number: '07',
-    englishTitle: 'STYLING',
-    koreanTitle: '스타일링',
-    accent: color.accentDeep,
-    tint: color.surface,
-  },
-  skin: {
-    id: 'skin',
-    number: '08',
-    englishTitle: 'SKIN',
-    koreanTitle: '피부',
-    accent: color.accentDeep,
-    tint: color.surface,
-  },
-  makeup: {
-    id: 'makeup',
-    number: '09',
-    englishTitle: 'MAKEUP',
-    koreanTitle: '메이크업 추천',
+    englishTitle: 'STYLE',
+    koreanTitle: '스타일',
     accent: color.accentDeep,
     tint: color.surface,
   },
 };
-
-function coverPage(section: SectionDefinition): FaceReportStoryPage {
-  return {
-    id: `${section.id}:cover`,
-    sectionId: section.id,
-    kind: 'cover',
-    title: section.koreanTitle,
-    shortTitle: '표지',
-  };
-}
 
 function contentPage(
   sectionId: FaceReportStorySectionId,
@@ -160,37 +105,32 @@ function contentPage(
   title: string,
   shortTitle: string,
   contentKey: FaceReportStoryContentKey,
+  kind: FaceReportStoryPageKind = 'content',
 ): FaceReportStoryPage {
-  return {id, sectionId, kind: 'content', title, shortTitle, contentKey};
+  return {id, sectionId, kind, title, shortTitle, contentKey};
 }
 
-function withCover(
-  id: Exclude<FaceReportStorySectionId, 'makeup'>,
-  content: FaceReportStoryPage[],
+function section(
+  id: FaceReportStorySectionId,
+  pages: FaceReportStoryPage[],
 ): FaceReportStorySection {
-  const definition = SECTION_DEFINITIONS[id];
-  return {...definition, pages: [coverPage(definition), ...content]};
+  return {...SECTION_DEFINITIONS[id], pages};
 }
 
 /**
- * 얼굴 보고서의 화면 순서와 직접 이동 대상을 계산하는 단일 소스다.
- * 측정 데이터가 없는 선택 섹션은 표지까지 함께 빠지므로 페이지 수와 진행률도
- * 항상 실제 렌더링 결과를 따른다.
+ * 얼굴 보고서의 네 개 상위 챕터와 직접 이동 대상을 계산하는 단일 소스다.
+ * 측정값이 없는 카드는 숨기되 상위 챕터는 실제 카드가 있을 때만 노출한다.
+ * 별도 표지는 만들지 않고 각 챕터의 첫 카드가 간결한 편집형 헤더를 담당한다.
  */
 export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryModel {
   const summaryPages = [
-    ...(data.goldenMask
-      ? [
-          contentPage(
-            'summary',
-            'summary:golden-mask',
-            '골든마스크',
-            '나의 3D 페이스',
-            'summary:golden-mask',
-          ),
-        ]
-      : []),
-    contentPage('summary', 'summary:overview', '분석 요약', '한눈에 보기', 'summary'),
+    contentPage(
+      'summary',
+      'summary:overview',
+      '분석 요약',
+      '한눈에 보기',
+      data.goldenMask ? 'summary:combined' : 'summary',
+    ),
     ...(data.generationStatus
       ? [
           contentPage(
@@ -203,114 +143,87 @@ export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryMode
         ]
       : []),
   ];
-  const sections: FaceReportStorySection[] = [
-    withCover('summary', summaryPages),
-  ];
 
+  const facePages: FaceReportStoryPage[] = [];
   if (data.s2) {
-    sections.push(
-      withCover('proportion', [
-        contentPage('proportion', 'proportion:overview', '얼굴 비율', '가늠선과 구획', 'proportion'),
-      ]),
+    facePages.push(
+      contentPage('face', 'proportion:overview', '얼굴 비율', '비율', 'proportion'),
     );
   }
-
   if (data.s3?.cards.length) {
-    sections.push(
-      withCover(
-        'features',
-        data.s3.cards.slice(0, 4).map(card =>
-          contentPage(
-            'features',
-            `features:${card.key}`,
-            card.regionTitle,
-            card.regionChip,
-            `features:${card.key}`,
-          ),
+    facePages.push(
+      ...data.s3.cards.slice(0, 4).map(card =>
+        contentPage(
+          'face',
+          `features:${card.key}`,
+          card.regionTitle,
+          card.regionChip,
+          `features:${card.key}`,
         ),
       ),
     );
   }
-
-  if (data.s4) {
-    sections.push(
-      withCover('personal-color', [
-        contentPage(
-          'personal-color',
-          'personal-color:tone',
-          '퍼스널 컬러',
-          '톤 맵과 컬러 축',
-          'personal-color:tone',
-        ),
-        contentPage(
-          'personal-color',
-          'personal-color:drape',
-          '어울리는 색',
-          '드레이프와 색상표',
-          'personal-color:drape',
-        ),
-      ]),
-    );
-  }
-
-  if (data.s5) {
-    sections.push(
-      withCover('body', [
-        contentPage('body', 'body:overview', '체형', '체형 스타일 가이드', 'body'),
-      ]),
-    );
-  }
-
   if (data.s6) {
-    sections.push(
-      withCover('impression', [
-        contentPage('impression', 'impression:overview', '인상', '인상 맵과 키워드', 'impression'),
-      ]),
+    facePages.push(
+      contentPage('face', 'impression:overview', '인상', '인상', 'impression'),
     );
   }
 
-  if (data.s7) {
-    sections.push(
-      withCover('styling', [
-        contentPage('styling', 'styling:natural', '내추럴 스타일링', '내추럴', 'styling:natural'),
-        contentPage('styling', 'styling:glam', '글램 스타일링', '글램', 'styling:glam'),
-      ]),
+  const colorSkinPages: FaceReportStoryPage[] = [];
+  if (data.s4) {
+    colorSkinPages.push(
+      contentPage(
+        'color-skin',
+        'personal-color:tone',
+        '퍼스널 컬러',
+        '톤',
+        'personal-color:tone',
+      ),
+      contentPage(
+        'color-skin',
+        'personal-color:drape',
+        '어울리는 색',
+        '드레이프',
+        'personal-color:drape',
+      ),
     );
   }
-
   if (data.s8) {
-    sections.push(
-      withCover('skin', [
-        contentPage('skin', 'skin:overview', '피부', '9가지 피부 관찰', 'skin'),
-      ]),
+    colorSkinPages.push(
+      contentPage('color-skin', 'skin:overview', '피부', '피부', 'skin'),
     );
   }
 
-  const makeup = SECTION_DEFINITIONS.makeup;
-  sections.push({
-    ...makeup,
-    pages: [
-      {
-        id: 'makeup:cta',
-        sectionId: 'makeup',
-        kind: 'cta',
-        title: '메이크업 추천',
-        shortTitle: '추천 보러가기',
-        contentKey: 'makeup:cta',
-      },
-    ],
-  });
-
-  const pages = sections.flatMap(section => section.pages);
-  const sectionCoverPageIds: FaceReportStoryModel['sectionCoverPageIds'] = {};
-  for (const section of sections) {
-    sectionCoverPageIds[section.id] = section.pages[0]?.id;
+  const stylePages: FaceReportStoryPage[] = [];
+  if (data.s7) {
+    stylePages.push(
+      contentPage('style', 'styling:natural', '내추럴 스타일링', '내추럴', 'styling:natural'),
+      contentPage('style', 'styling:glam', '글램 스타일링', '글램', 'styling:glam'),
+    );
   }
+  if (data.s5) {
+    stylePages.push(
+      contentPage('style', 'body:overview', '체형 스타일 가이드', '체형 부록', 'body'),
+    );
+  }
+  stylePages.push(
+    contentPage('style', 'makeup:cta', '메이크업 추천', '추천', 'makeup:cta', 'cta'),
+  );
 
+  const sections = [
+    section('summary', summaryPages),
+    ...(facePages.length ? [section('face', facePages)] : []),
+    ...(colorSkinPages.length ? [section('color-skin', colorSkinPages)] : []),
+    section('style', stylePages),
+  ];
+  const pages = sections.flatMap(item => item.pages);
+  const sectionCoverPageIds = Object.fromEntries(
+    sections.map(item => [item.id, item.pages[0]?.id]),
+  ) as FaceReportStoryModel['sectionCoverPageIds'];
   const featurePageIds = Object.fromEntries(
     pages
-      .filter(page => page.sectionId === 'features' && page.kind === 'content')
-      .map(page => [page.contentKey?.slice('features:'.length) ?? '', page.id]),
+      .filter(page => page.contentKey.startsWith('features:'))
+      .map(page => [page.contentKey.slice('features:'.length), page.id]),
   );
 
   return {sections, pages, sectionCoverPageIds, featurePageIds};

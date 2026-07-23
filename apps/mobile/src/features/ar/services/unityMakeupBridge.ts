@@ -65,6 +65,7 @@ export const UNITY_GOLDEN_MASK_BRIDGE_TARGET = {
   resetMethod: 'ResetGoldenMaskViewJson',
   rotateMethod: 'SetGoldenMaskRotationJson',
   unloadMethod: 'UnloadGoldenMaskJson',
+  wireframeVisibilityMethod: 'SetGoldenMaskWireframeVisibleJson',
 } as const;
 
 export const UNITY_MAKEUP_NATIVE_EVENT_NAME = 'UnityMakeupEvent';
@@ -682,6 +683,23 @@ export function setUnityGoldenMaskRotation({
     UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
     UNITY_GOLDEN_MASK_BRIDGE_TARGET.rotateMethod,
     JSON.stringify({pitch, requestId: requestId.trim(), yaw}),
+  );
+}
+
+export function setUnityGoldenMaskWireframeVisible({
+  requestId,
+  visible,
+}: {
+  requestId: string;
+  visible: boolean;
+}): boolean {
+  if (!requestId.trim()) {
+    return false;
+  }
+  return postUnityMessage(
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.wireframeVisibilityMethod,
+    JSON.stringify({requestId: requestId.trim(), visible}),
   );
 }
 

@@ -20,6 +20,10 @@ const entries = [
   'face-report/services/reportStoryModel.ts',
   'face-report/services/minimumFaceReport.ts',
   'face-report/services/reportStoryModel.test.ts',
+  'face-report/services/goldenMaskInteraction.ts',
+  'face-report/services/goldenMaskInteraction.test.ts',
+  'face-report/services/faceDepthPresentation.ts',
+  'face-report/services/faceDepthPresentation.test.ts',
   'face-geometry/services/faceGeometryCore/regionVisualsBuilder.ts',
   'face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.ts',
   'ar/stencil/src/composer/bodyProfile.ts',
@@ -46,12 +50,17 @@ run(process.execPath, [
   '--rootDir', srcRoot,
   '--outDir', outDir,
   ...entries.map(file => join(featuresDir, file)),
+  join(srcRoot, 'shared/ui/storyReportPagerGesture.ts'),
+  join(srcRoot, 'shared/ui/storyReportPagerGesture.test.ts'),
   join(srcRoot, 'shared/services/faceAnalysisService.test.ts'),
 ]);
 
 run(process.execPath, [join(outDir, 'features/face-report/reportFormat.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/reportFeatureAxes.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/reportStoryModel.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/services/goldenMaskInteraction.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/services/faceDepthPresentation.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.js')]);
 run(process.execPath, [join(outDir, 'features/ar/stencil/src/composer/bodyProfile.test.js')]);
+run(process.execPath, [join(outDir, 'shared/ui/storyReportPagerGesture.test.js')]);
 run(process.execPath, [join(outDir, 'shared/services/faceAnalysisService.test.js')]);

@@ -9,14 +9,23 @@ import React, {
 } from 'react';
 import {
   FlatList,
+  Modal,
+  PanResponder,
   Pressable,
+  ScrollView,
   Text,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import {ChevronLeft, ChevronRight} from 'lucide-react-native';
+import {ChevronLeft, ChevronRight, X} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useReducedMotion} from 'react-native-reanimated';
+import {
+  classifyStoryReportGesture,
+  resolveStoryReportSwipeTarget,
+  type StoryReportGestureAxis,
+} from './storyReportPagerGesture';
 
 export type StoryReportPageKind = 'cover' | 'content' | 'cta';
 
@@ -56,33 +65,67 @@ interface StoryReportPagerProps {
 
 const INK = '#16303B';
 const MUTED = '#718791';
+const ACCENT = '#0E7DA8';
+const OUTLINE = 'rgba(22,48,59,0.10)';
 
 export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPagerProps>(
   function StoryReportPager({pages, sections, resetKey, initialPageId, onPageChange}, ref) {
     const insets = useSafeAreaInsets();
+    const reduceMotion = useReducedMotion();
     const listRef = useRef<FlatList<StoryReportPage>>(null);
     const [pageWidth, setPageWidth] = useState(0);
     const [currentIndex, setCurrentIndex] = useState(() => {
       const initialIndex = initialPageId ? pages.findIndex(page => page.id === initialPageId) : 0;
       return initialIndex >= 0 ? initialIndex : 0;
     });
-    const [pagingEnabled, setPagingEnabled] = useState(true);
+    const [tableOfContentsVisible, setTableOfContentsVisible] = useState(false);
+    const pagingEnabledRef = useRef(true);
+    const currentIndexRef = useRef(currentIndex);
+    const gestureAxisRef = useRef<StoryReportGestureAxis>('undecided');
+    const dragStartIndexRef = useRef(currentIndex);
+
+    const setPagerEnabled = useCallback((enabled: boolean) => {
+      // Interaction locks (for example the 3D face viewer) must take effect
+      // synchronously inside responder callbacks.
+      pagingEnabledRef.current = enabled;
+    }, []);
 
     const pageIndexById = useMemo(
       () => new Map(pages.map((page, index) => [page.id, index])),
       [pages],
     );
 
-    const goToIndex = useCallback((index: number, animated = true) => {
+    const commitIndex = useCallback((index: number) => {
       if (!pages.length) return;
       const nextIndex = Math.max(0, Math.min(index, pages.length - 1));
+      currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToIndex({index: nextIndex, animated});
-      });
       const page = pages[nextIndex];
       if (page) onPageChange?.(page, nextIndex);
     }, [onPageChange, pages]);
+
+    const goToIndex = useCallback((index: number, animated = true) => {
+      if (!pages.length) return;
+      const nextIndex = Math.max(0, Math.min(index, pages.length - 1));
+      const shouldAnimate = animated && !reduceMotion;
+
+      if (!pageWidth || !listRef.current) {
+        commitIndex(nextIndex);
+        return;
+      }
+
+      // Start settling in the same release frame. Committing the new page
+      // first can trigger a heavy report re-render and leave the card visibly
+      // paused between pages before the native scroll command is dispatched.
+      listRef.current.scrollToOffset({
+        animated: shouldAnimate,
+        offset: nextIndex * pageWidth,
+      });
+
+      if (!shouldAnimate) {
+        commitIndex(nextIndex);
+      }
+    }, [commitIndex, pageWidth, pages.length, reduceMotion]);
 
     const goToPage = useCallback((pageId: string, animated = true) => {
       const index = pageIndexById.get(pageId);
@@ -98,12 +141,13 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
     useImperativeHandle(ref, () => ({
       goToPage,
       goToSection,
-      setPagingEnabled,
-    }), [goToPage, goToSection]);
+      setPagingEnabled: setPagerEnabled,
+    }), [goToPage, goToSection, setPagerEnabled]);
 
     useEffect(() => {
       const initialIndex = initialPageId ? pages.findIndex(page => page.id === initialPageId) : 0;
       const nextIndex = initialIndex >= 0 ? initialIndex : 0;
+      currentIndexRef.current = nextIndex;
       setCurrentIndex(nextIndex);
       requestAnimationFrame(() => listRef.current?.scrollToIndex({index: nextIndex, animated: false}));
       if (pages[nextIndex]) onPageChange?.(pages[nextIndex], nextIndex);
@@ -116,11 +160,81 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
     const onMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       if (!pageWidth) return;
       const index = Math.max(0, Math.min(Math.round(event.nativeEvent.contentOffset.x / pageWidth), pages.length - 1));
-      if (index === currentIndex) return;
-      setCurrentIndex(index);
-      const page = pages[index];
-      if (page) onPageChange?.(page, index);
+      if (index === currentIndexRef.current) return;
+      commitIndex(index);
     };
+
+    const pagerPanResponder = useMemo(
+      () =>
+        PanResponder.create({
+          onStartShouldSetPanResponder: () => {
+            gestureAxisRef.current = 'undecided';
+            return false;
+          },
+          onStartShouldSetPanResponderCapture: () => {
+            gestureAxisRef.current = 'undecided';
+            return false;
+          },
+          onMoveShouldSetPanResponder: () => false,
+          onMoveShouldSetPanResponderCapture: (_event, gesture) => {
+            if (
+              !pagingEnabledRef.current
+              || pageWidth <= 0
+              || pages.length < 2
+              || gestureAxisRef.current === 'vertical'
+            ) {
+              return false;
+            }
+            if (gestureAxisRef.current === 'horizontal') {
+              return true;
+            }
+
+            const axis = classifyStoryReportGesture(gesture.dx, gesture.dy);
+            if (axis !== 'undecided') {
+              // Sticky for this touch: a gesture that first reads as vertical
+              // can never be stolen by the pager later in the same drag.
+              gestureAxisRef.current = axis;
+            }
+            return axis === 'horizontal';
+          },
+          onPanResponderGrant: () => {
+            gestureAxisRef.current = 'horizontal';
+            dragStartIndexRef.current = currentIndexRef.current;
+          },
+          onPanResponderMove: (_event, gesture) => {
+            if (!pageWidth || !pagingEnabledRef.current) return;
+            const maxOffset = Math.max(0, (pages.length - 1) * pageWidth);
+            const offset = Math.max(
+              0,
+              Math.min(
+                dragStartIndexRef.current * pageWidth - gesture.dx,
+                maxOffset,
+              ),
+            );
+            listRef.current?.scrollToOffset({animated: false, offset});
+          },
+          onPanResponderRelease: (_event, gesture) => {
+            const target = resolveStoryReportSwipeTarget({
+              currentIndex: dragStartIndexRef.current,
+              dx: gesture.dx,
+              pageCount: pages.length,
+              pageWidth,
+              velocityX: gesture.vx,
+            });
+            gestureAxisRef.current = 'undecided';
+            goToIndex(target);
+          },
+          onPanResponderTerminate: () => {
+            const target = dragStartIndexRef.current;
+            gestureAxisRef.current = 'undecided';
+            goToIndex(target);
+          },
+          // Once a horizontal swipe wins the direction gate, keep ownership
+          // until release so a late vertical wobble cannot change axes.
+          onPanResponderTerminationRequest: () => false,
+        }),
+      [goToIndex, pageWidth, pages.length],
+    );
 
     const currentPage = pages[currentIndex];
     const currentSection = sections.find(section => section.id === currentPage?.sectionId);
@@ -155,7 +269,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                     alignItems: 'center',
                     flex: 1,
                     justifyContent: 'center',
-                    minHeight: 34,
+                    minHeight: 44,
                     opacity: !available ? 0.38 : pressed ? 0.55 : 1,
                     paddingHorizontal: 1,
                     position: 'relative',
@@ -165,20 +279,21 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                     style={{
                       color: selected ? INK : MUTED,
                       fontFamily: 'Pretendard',
-                      fontSize: 10.5,
-                      fontWeight: selected ? '800' : '600',
+                      fontSize: 13,
+                      fontWeight: selected ? '800' : '500',
                     }}>
                     {section.shortTitle ?? section.title}
                   </Text>
                   {selected ? (
                     <View
                       style={{
-                        backgroundColor: INK,
+                        backgroundColor: ACCENT,
                         bottom: -1,
                         height: 2,
-                        left: 4,
+                        left: '50%',
+                        marginLeft: -24,
                         position: 'absolute',
-                        right: 4,
+                        width: 48,
                       }}
                     />
                   ) : null}
@@ -232,49 +347,48 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
           ) : null}
         </View>
 
-        <FlatList
-          ref={listRef}
-          data={pages}
-          extraData={pageWidth}
-          keyExtractor={page => page.id}
-          horizontal
-          pagingEnabled
-          directionalLockEnabled
-          bounces={false}
-          decelerationRate="fast"
-          scrollEnabled={pagingEnabled}
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={onMomentumScrollEnd}
-          onScrollToIndexFailed={info => {
-            requestAnimationFrame(() => listRef.current?.scrollToOffset({offset: info.index * pageWidth, animated: false}));
-          }}
-          getItemLayout={(_, index) => ({length: pageWidth, offset: pageWidth * index, index})}
-          renderItem={({item, index}) => (
-            <Pressable
-              accessible={false}
-              onPress={event => {
-                if (!pagingEnabled || !pageWidth) {
-                  return;
-                }
-                const tappedLeftHalf =
-                  event.nativeEvent.locationX < pageWidth / 2;
-                goToIndex(tappedLeftHalf ? index - 1 : index + 1);
-              }}
-              style={{
-                flex: 1,
-                paddingBottom: 8,
-                paddingHorizontal: 12,
-                paddingTop: 10,
-                width: pageWidth,
-              }}>
+        <View
+          style={{flex: 1}}
+          {...pagerPanResponder.panHandlers}>
+          <FlatList
+            ref={listRef}
+            data={pages}
+            extraData={pageWidth}
+            keyExtractor={page => page.id}
+            horizontal
+            bounces={false}
+            scrollEnabled={false}
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={onMomentumScrollEnd}
+            onScrollToIndexFailed={info => {
+              requestAnimationFrame(() => listRef.current?.scrollToOffset({offset: info.index * pageWidth, animated: false}));
+            }}
+            getItemLayout={(_, index) => ({length: pageWidth, offset: pageWidth * index, index})}
+            renderItem={({item}) => (
               <View
-                accessibilityLabel={`${item.title} 카드`}
-                style={{flex: 1, borderRadius: 26, overflow: 'hidden', backgroundColor: '#FFFFFF'}}>
-                {item.render}
+                style={{
+                  flex: 1,
+                  paddingBottom: 8,
+                  paddingHorizontal: 12,
+                  paddingTop: 10,
+                  width: pageWidth,
+                }}>
+                <View
+                  accessibilityLabel={`${item.title} 카드`}
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderColor: OUTLINE,
+                    borderRadius: 22,
+                    borderWidth: 1,
+                    flex: 1,
+                    overflow: 'hidden',
+                  }}>
+                  {item.render}
+                </View>
               </View>
-            </Pressable>
-          )}
-        />
+            )}
+          />
+        </View>
 
         <View style={{paddingHorizontal: 16, paddingTop: 4, paddingBottom: Math.max(insets.bottom, 10) + 6, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
           <Pressable
@@ -283,29 +397,160 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
             accessibilityState={{disabled: currentIndex === 0}}
             disabled={currentIndex === 0}
             onPress={() => goToIndex(currentIndex - 1)}
-            style={({pressed}) => ({width: 44, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', opacity: currentIndex === 0 ? 0.35 : pressed ? 0.65 : 1})}>
+            style={({pressed}) => ({
+              alignItems: 'center',
+              backgroundColor: '#FFFFFF',
+              borderColor: OUTLINE,
+              borderRadius: 22,
+              borderWidth: 1,
+              height: 44,
+              justifyContent: 'center',
+              opacity: currentIndex === 0 ? 0.35 : pressed ? 0.65 : 1,
+              width: 44,
+            })}>
             <ChevronLeft size={20} color={INK} />
           </Pressable>
-          <Text
+          <Pressable
+            accessibilityHint="전체 카드 목차를 엽니다."
             accessibilityLabel={`전체 ${pages.length}장 중 ${currentIndex + 1}장`}
-            style={{
-              color: MUTED,
-              fontFamily: 'Pretendard',
-              fontSize: 12,
-              fontWeight: '700',
-            }}>
-            {currentIndex + 1} / {pages.length}
-          </Text>
+            accessibilityRole="button"
+            onPress={() => setTableOfContentsVisible(true)}
+            style={({pressed}) => ({
+              alignItems: 'center',
+              borderRadius: 22,
+              justifyContent: 'center',
+              minHeight: 44,
+              minWidth: 72,
+              opacity: pressed ? 0.58 : 1,
+              paddingHorizontal: 12,
+            })}>
+            <Text
+              style={{
+                color: MUTED,
+                fontFamily: 'Pretendard',
+                fontSize: 12,
+                fontWeight: '700',
+              }}>
+              {currentIndex + 1} / {pages.length}
+            </Text>
+          </Pressable>
           <Pressable
             accessibilityLabel="다음 카드"
             accessibilityRole="button"
             accessibilityState={{disabled: currentIndex === pages.length - 1}}
             disabled={currentIndex === pages.length - 1}
             onPress={() => goToIndex(currentIndex + 1)}
-            style={({pressed}) => ({width: 44, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: INK, opacity: currentIndex === pages.length - 1 ? 0.35 : pressed ? 0.75 : 1})}>
+            style={({pressed}) => ({width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: ACCENT, opacity: currentIndex === pages.length - 1 ? 0.35 : pressed ? 0.75 : 1})}>
             <ChevronRight size={20} color="#FFFFFF" />
           </Pressable>
         </View>
+
+        <Modal
+          animationType="fade"
+          onRequestClose={() => setTableOfContentsVisible(false)}
+          transparent
+          visible={tableOfContentsVisible}>
+          <View
+            accessibilityViewIsModal
+            style={{
+              backgroundColor: 'rgba(7, 22, 28, 0.42)',
+              flex: 1,
+              justifyContent: 'flex-end',
+            }}>
+            <Pressable
+              accessibilityLabel="목차 닫기"
+              onPress={() => setTableOfContentsVisible(false)}
+              style={{flex: 1}}
+            />
+            <View
+              style={{
+                backgroundColor: '#F8FBFC',
+                borderTopLeftRadius: 28,
+                borderTopRightRadius: 28,
+                maxHeight: '76%',
+                paddingBottom: Math.max(insets.bottom, 16),
+                paddingHorizontal: 20,
+                paddingTop: 12,
+              }}>
+              <View style={{alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'}}>
+                <View>
+                  <Text style={{color: INK, fontFamily: 'Pretendard', fontSize: 20, fontWeight: '800'}}>
+                    보고서 목차
+                  </Text>
+                  <Text style={{color: MUTED, fontFamily: 'Pretendard', fontSize: 12, marginTop: 3}}>
+                    원하는 카드로 바로 이동하세요
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="목차 닫기"
+                  accessibilityRole="button"
+                  onPress={() => setTableOfContentsVisible(false)}
+                  style={({pressed}) => ({
+                    alignItems: 'center',
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 22,
+                    height: 44,
+                    justifyContent: 'center',
+                    opacity: pressed ? 0.62 : 1,
+                    width: 44,
+                  })}>
+                  <X color={INK} size={19} />
+                </Pressable>
+              </View>
+              <ScrollView
+                contentContainerStyle={{gap: 18, paddingBottom: 12, paddingTop: 22}}
+                showsVerticalScrollIndicator={false}>
+                {sections.filter(section => section.pageIds.length > 0).map(section => (
+                  <View key={section.id} style={{gap: 8}}>
+                    <Text style={{color: INK, fontFamily: 'Pretendard', fontSize: 13, fontWeight: '800'}}>
+                      {section.title}
+                    </Text>
+                    <View style={{gap: 6}}>
+                      {section.pageIds.map(pageId => {
+                        const page = pages[pageIndexById.get(pageId) ?? -1];
+                        if (!page) return null;
+                        const selected = page.id === currentPage?.id;
+                        return (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityState={{selected}}
+                            key={page.id}
+                            onPress={() => {
+                              setTableOfContentsVisible(false);
+                              goToPage(page.id, false);
+                            }}
+                            style={({pressed}) => ({
+                              alignItems: 'center',
+                              backgroundColor: selected ? '#E8F1F4' : '#FFFFFF',
+                              borderRadius: 14,
+                              flexDirection: 'row',
+                              minHeight: 48,
+                              opacity: pressed ? 0.64 : 1,
+                              paddingHorizontal: 14,
+                            })}>
+                            <Text
+                              style={{
+                                color: selected ? INK : MUTED,
+                                flex: 1,
+                                fontFamily: 'Pretendard',
+                                fontSize: 13,
+                                fontWeight: selected ? '800' : '600',
+                              }}>
+                              {page.title}
+                            </Text>
+                            <Text style={{color: MUTED, fontFamily: 'Pretendard', fontSize: 11}}>
+                              {(pageIndexById.get(page.id) ?? 0) + 1}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   },

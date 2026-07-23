@@ -49,8 +49,8 @@ export function GuidePhotoOverlay({ data, picked, onPickBand }: {
 }) {
   const press = (k: BandKey) => { Haptics.selectionAsync(); onPickBand(k); };
   return (
-    <View style={[{ borderRadius: radius.xl, backgroundColor: color.surface }, shadow.photo]}>
-      <View style={{ borderRadius: radius.xl, overflow: 'hidden', aspectRatio: data.photoAspectRatio ?? 4 / 5 }}>
+    <View style={[{ borderRadius: radius.lg, backgroundColor: color.surface }, shadow.photo]}>
+      <View style={{ borderRadius: radius.lg, overflow: 'hidden', aspectRatio: data.photoAspectRatio ?? 4 / 5 }}>
         <PhotoSlot slot={data.photo} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
         {data.hairlineMissing ? (
           <>

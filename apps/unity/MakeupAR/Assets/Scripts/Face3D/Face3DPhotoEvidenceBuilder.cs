@@ -21,6 +21,7 @@ namespace Aura.Face3D
             public Vector2 Point;
             public float Depth;
             public float RelativeDepth;
+            public float SignedDepthNormalized;
         }
 
         private sealed class Region
@@ -113,20 +114,8 @@ namespace Aura.Face3D
                 "nose",
                 "코끝",
                 Face3DContract.NoseTipProjection,
-                new[]
-                {
-                    Face3DContract.NoseTipProjection,
-                    Face3DContract.NoseLength,
-                    Face3DContract.NasalBridgeStraightness,
-                    Face3DContract.NasalAxisDeviation,
-                    Face3DContract.AlarWidth,
-                },
-                Merge(
-                    semanticMap.NoseTipIndices,
-                    semanticMap.NasionIndices,
-                    semanticMap.NoseBridgeMidlineIndices,
-                    semanticMap.AlarLeftIndices,
-                    semanticMap.AlarRightIndices),
+                new[] {Face3DContract.NoseTipProjection},
+                semanticMap.NoseTipIndices,
                 vertices,
                 projected,
                 origin,
@@ -220,12 +209,20 @@ namespace Aura.Face3D
                 item.RelativeDepth = depthSpan > Epsilon
                     ? Mathf.Clamp01((item.Depth - minimumDepth) / depthSpan)
                     : 0.5f;
+                item.SignedDepthNormalized = Mathf.Clamp(
+                    item.Depth / faceScale,
+                    -2.0f,
+                    2.0f);
             }
             foreach (Region region in regions)
             {
                 region.Pin.RelativeDepth = depthSpan > Epsilon
                     ? Mathf.Clamp01((region.Pin.Depth - minimumDepth) / depthSpan)
                     : 0.5f;
+                region.Pin.SignedDepthNormalized = Mathf.Clamp(
+                    region.Pin.Depth / faceScale,
+                    -2.0f,
+                    2.0f);
             }
 
             List<Guide> guides = BuildGuides(
@@ -603,6 +600,8 @@ namespace Aura.Face3D
                 json.Append(",\"pin\":{\"x\":").Append(Number(region.Pin.Point.x))
                     .Append(",\"y\":").Append(Number(region.Pin.Point.y))
                     .Append(",\"relativeDepth\":").Append(Number(region.Pin.RelativeDepth))
+                    .Append(",\"signedDepthNormalized\":")
+                    .Append(Number(region.Pin.SignedDepthNormalized))
                     .Append(",\"label\":").Append(Quote(region.Label))
                     .Append(",\"metricKey\":").Append(Quote(region.PinMetricKey))
                     .Append("}}");
@@ -635,6 +634,8 @@ namespace Aura.Face3D
                 json.Append("{\"x\":").Append(Number(sample.Point.x))
                     .Append(",\"y\":").Append(Number(sample.Point.y))
                     .Append(",\"relativeDepth\":").Append(Number(sample.RelativeDepth))
+                    .Append(",\"signedDepthNormalized\":")
+                    .Append(Number(sample.SignedDepthNormalized))
                     .Append('}');
             }
             json.Append(']');

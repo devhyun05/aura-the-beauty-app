@@ -24,6 +24,10 @@ export type Face3DPhotoEvidenceSample = Face3DPhotoEvidencePoint & {
   // Representative-frame relative depth only. This is intentionally not mm
   // and cannot be compared across captures.
   relativeDepth: number;
+  // Signed distance from the capture's oriented midface reference plane,
+  // normalized by face width. Added additively to v1 so stored legacy evidence
+  // without this field remains readable.
+  signedDepthNormalized?: number;
 };
 
 export type Face3DPhotoEvidencePin = Face3DPhotoEvidenceSample & {
@@ -95,6 +99,11 @@ function unit(value: unknown): number | null {
   return number !== null && number >= 0 && number <= 1 ? number : null;
 }
 
+function signedDepth(value: unknown): number | null {
+  const number = finite(value);
+  return number !== null && number >= -2 && number <= 2 ? number : null;
+}
+
 function point(value: unknown): Face3DPhotoEvidencePoint | null {
   if (!isRecord(value)) return null;
   const x = unit(value.x);
@@ -105,8 +114,19 @@ function point(value: unknown): Face3DPhotoEvidencePoint | null {
 function sample(value: unknown): Face3DPhotoEvidenceSample | null {
   const parsedPoint = point(value);
   const relativeDepth = isRecord(value) ? unit(value.relativeDepth) : null;
+  const parsedSignedDepth =
+    isRecord(value) && value.signedDepthNormalized !== undefined
+      ? signedDepth(value.signedDepthNormalized)
+      : undefined;
+  if (parsedSignedDepth === null) return null;
   return parsedPoint && relativeDepth !== null
-    ? {...parsedPoint, relativeDepth}
+    ? {
+        ...parsedPoint,
+        relativeDepth,
+        ...(parsedSignedDepth !== undefined
+          ? {signedDepthNormalized: parsedSignedDepth}
+          : {}),
+      }
     : null;
 }
 

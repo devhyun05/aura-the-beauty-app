@@ -72,7 +72,12 @@ namespace Aura.Face3D.Tests
                 reason);
             Assert.That(json, Does.Contain("\"schemaVersion\":\"aura.face3d-photo-evidence.v1\""));
             Assert.That(json, Does.Contain("\"relativeDepth\""));
+            Assert.That(json, Does.Contain("\"signedDepthNormalized\""));
             Assert.That(json, Does.Contain("\"noseLength\""));
+            Assert.That(
+                json,
+                Does.Contain(
+                    "\"nose\":{\"metricKeys\":[\"noseTipProjection\"]"));
             Assert.That(json, Does.Not.Contain("\"vertices\""));
             Assert.That(json, Does.Not.Contain("\"triangles\""));
             Assert.That(json, Does.Not.Contain("\"valueMm\""));

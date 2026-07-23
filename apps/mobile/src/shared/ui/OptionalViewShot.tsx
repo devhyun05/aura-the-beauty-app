@@ -15,8 +15,10 @@ export type OptionalViewShotRef = {
 
 export type OptionalViewShotOptions = {
   format?: 'jpg' | 'png' | 'webm' | 'raw';
+  height?: number;
   quality?: number;
   result?: 'tmpfile' | 'base64' | 'data-uri' | 'zip-base64';
+  width?: number;
 };
 
 type OptionalViewShotProps = {

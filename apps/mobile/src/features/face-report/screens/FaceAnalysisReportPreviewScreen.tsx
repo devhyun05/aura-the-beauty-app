@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -21,8 +21,8 @@ import {
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import {loadBodyProfile} from '../../ar/stencil/src/storage/bodyProfileStore';
 import BodyPanel from '../../ar/stencil/src/components/BodyPanel';
-import type {OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 import {ReportScreenScaffold} from '../ReportScreenScaffold';
+import {FaceReportShareSheet} from '../components/FaceReportShareSheet';
 import {color, font} from '../reportTokens';
 import {
   buildReportDataFromFaceAnalysisReport,
@@ -33,16 +33,6 @@ import {
   buildMinimumFaceReportData,
   type MinimumFaceReportPreview,
 } from '../services/minimumFaceReport';
-import {
-  captureReportImage,
-  getReportCaptureTitle,
-  getShareErrorMessage,
-  requestReportImageSavePermission,
-  reportShareTargetLabels,
-  saveReportImageToLibrary,
-  shareReportImageWithSystemSheet,
-  type ReportShareTarget,
-} from '../services/reportImageShare';
 
 export type FaceAnalysisReportPreviewScreenProps = {
   // Same session-props shape as FaceAnalysisReportDetailScreen — this preview
@@ -60,6 +50,7 @@ export type FaceAnalysisReportPreviewScreenProps = {
   sessionCaptureId?: string | null;
   verticalThirds?: FaceVerticalThirdsResult | null;
   onBack?: () => void;
+  onGoldenMaskInteractionChange?: (interacting: boolean) => void;
   onRetake?: () => void;
   onPressProducts?: (reportId: string) => void;
 };
@@ -104,6 +95,7 @@ export function FaceAnalysisReportPreviewScreen({
   sessionCaptureId,
   verticalThirds,
   onBack,
+  onGoldenMaskInteractionChange,
   onRetake,
   onPressProducts,
 }: FaceAnalysisReportPreviewScreenProps) {
@@ -111,8 +103,7 @@ export function FaceAnalysisReportPreviewScreen({
   const [loadState, setLoadState] = useState<FaceAnalysisReportDetailLoadState>({status: 'loading'});
   const [bodyProfile, setBodyProfile] = useState<BodyProfile | null>(null);
   const [isBodySurveyOpen, setIsBodySurveyOpen] = useState(false);
-  const [activeShareTarget, setActiveShareTarget] = useState<ReportShareTarget | null>(null);
-  const reportCaptureRef = useRef<OptionalViewShotRef | null>(null);
+  const [isShareSheetVisible, setIsShareSheetVisible] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -294,61 +285,17 @@ export function FaceAnalysisReportPreviewScreen({
 
   const profileName = loadState.status === 'success' ? loadState.profile?.name : undefined;
 
-  const handleShareAction = useCallback(
-    async (target: ReportShareTarget) => {
-      if (!report || activeShareTarget) {
-        return;
-      }
-
-      setActiveShareTarget(target);
-      try {
-        if (target === 'save-image') {
-          await requestReportImageSavePermission();
-        }
-
-        const imageUri = await captureReportImage(reportCaptureRef);
-
-        if (target === 'save-image') {
-          await saveReportImageToLibrary(imageUri);
-          return;
-        }
-
-        await shareReportImageWithSystemSheet({
-          imageUri,
-          title: getReportCaptureTitle(profileName),
-        });
-      } catch (error) {
-        console.info('[aura:analysis] report-share:failed', {
-          message: error instanceof Error ? error.message : String(error),
-          target,
-        });
-        Alert.alert(`${reportShareTargetLabels[target]} 실패`, getShareErrorMessage(error));
-      } finally {
-        setActiveShareTarget(null);
-      }
-    },
-    [activeShareTarget, profileName, report],
-  );
-
   // 상세 보고서의 상단 더보기는 공유·저장·추천 제품만 제공한다.
   // 삭제는 보고서 목록 카드의 점점점 메뉴에서만 수행한다.
   const handleMore = useCallback(() => {
     if (!report) {
       return;
     }
-    if (activeShareTarget) {
-      Alert.alert('공유 준비 중', '이전 공유 작업을 처리하고 있어요. 잠시만 기다려 주세요.');
-      return;
-    }
 
     const options: Array<{text: string; onPress?: () => void; style?: 'cancel' | 'destructive'}> = [
       {
-        text: reportShareTargetLabels['save-image'],
-        onPress: () => void handleShareAction('save-image'),
-      },
-      {
-        text: reportShareTargetLabels['share-report'],
-        onPress: () => void handleShareAction('share-report'),
+        text: '사진으로 저장',
+        onPress: () => setIsShareSheetVisible(true),
       },
     ];
 
@@ -359,8 +306,6 @@ export function FaceAnalysisReportPreviewScreen({
 
     Alert.alert('맞춤 분석 보고서', '원하는 작업을 선택해 주세요.', options);
   }, [
-    activeShareTarget,
-    handleShareAction,
     onPressProducts,
     report,
   ]);
@@ -392,14 +337,26 @@ export function FaceAnalysisReportPreviewScreen({
   return (
     <>
       <ReportScreenScaffold
-        captureRef={reportCaptureRef}
         data={visibleReportData}
         onBack={onBack}
+        onGoldenMaskInteractionChange={onGoldenMaskInteractionChange}
         onMore={report ? handleMore : undefined}
+        onPressCta={
+          report && onPressProducts
+            ? () => onPressProducts(report.id)
+            : undefined
+        }
         onResurvey={() => setIsBodySurveyOpen(true)}
         onRetake={onRetake}
+        onShare={() => setIsShareSheetVisible(true)}
         measurementDebugPayload={measurementDebugPayload}
         measurementDebugSummary={measurementDebugSummary}
+      />
+      <FaceReportShareSheet
+        data={visibleReportData}
+        onClose={() => setIsShareSheetVisible(false)}
+        profileName={profileName}
+        visible={isShareSheetVisible}
       />
       {/*
         BodyPanel is the AR stencil's overlay card (maxHeight 460, dark glass) —

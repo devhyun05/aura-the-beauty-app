@@ -17,6 +17,7 @@ import {
   summarizeVerticalThirds,
 } from '../../../features/face-report/services/fromFaceAnalysisReport';
 import type {MinimumFaceReportPreview} from '../../../features/face-report/services/minimumFaceReport';
+import {shouldEnableFaceReportBackGesture} from '../../../features/face-report/services/goldenMaskInteraction';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
@@ -50,6 +51,11 @@ import {
   flushPendingGoldenMaskUploads,
   queueGoldenMaskUploadForReport,
 } from '../../../features/face-capture/services/goldenMaskUploadService';
+import {
+  buildLocalGoldenMaskDescriptor,
+  preloadGoldenMaskFromCapture,
+  type GoldenMaskPreparedResult,
+} from '../../../features/face-report/services/goldenMaskPreloadService';
 import {derivePersonalColorCorrectionStatus} from '../../../features/face-analysis/services/faceAnalysisMeasurements';
 import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
@@ -359,6 +365,13 @@ export function FaceAnalysisLoadingRouteScreen({
   const analysisRetryCountRef = React.useRef(0);
   const pendingUploadPromiseRef = React.useRef<Promise<void> | null>(null);
   const pendingUnifiedCapture = route.params?.pendingUnifiedCapture ?? null;
+  const [goldenMaskPreloadStatus, setGoldenMaskPreloadStatus] = React.useState<
+    'not-required' | 'pending' | 'ready' | 'failed'
+  >(pendingUnifiedCapture?.goldenMask ? 'pending' : 'not-required');
+  const [preparedGoldenMask, setPreparedGoldenMask] = React.useState<{
+    descriptor: ReturnType<typeof buildLocalGoldenMaskDescriptor>;
+    reportId: string;
+  } | null>(null);
   const pendingStillAnalysisCapture =
     React.useMemo<StillAnalysisCapture | null>(
       () => resolveStillAnalysisCapture(pendingUnifiedCapture, null),
@@ -383,6 +396,9 @@ export function FaceAnalysisLoadingRouteScreen({
   const completionRouteHandledRef = React.useRef(false);
   const goldenMaskQueueLifecyclePromiseRef =
     React.useRef<Promise<unknown> | null>(null);
+  const goldenMaskPreloadPromiseRef =
+    React.useRef<Promise<GoldenMaskPreparedResult> | null>(null);
+  const preparedGoldenMaskRef = React.useRef(preparedGoldenMask);
   const goldenMaskPendingArtifactRef = React.useRef(
     pendingUnifiedCapture?.goldenMask ?? null,
   );
@@ -428,6 +444,10 @@ export function FaceAnalysisLoadingRouteScreen({
       minimumReportPreviewRef.current = null;
       fullReportLoggedRef.current = false;
       completionRouteHandledRef.current = false;
+      goldenMaskPreloadPromiseRef.current = null;
+      preparedGoldenMaskRef.current = null;
+      setPreparedGoldenMask(null);
+      setGoldenMaskPreloadStatus('not-required');
       return;
     }
     if (analysisAttemptRef.current?.captureKey === captureKey) {
@@ -445,10 +465,21 @@ export function FaceAnalysisLoadingRouteScreen({
     minimumReportPreviewRef.current = null;
     fullReportLoggedRef.current = false;
     completionRouteHandledRef.current = false;
+    goldenMaskPreloadPromiseRef.current = null;
+    preparedGoldenMaskRef.current = null;
+    setPreparedGoldenMask(null);
+    setGoldenMaskPreloadStatus(
+      pendingUnifiedCapture?.goldenMask ? 'pending' : 'not-required',
+    );
     logAttempt('capture-preparation:start', {
       hasPendingUpload: Boolean(pendingStillAnalysisCapture),
     });
-  }, [logAttempt, pendingStillAnalysisCapture, stillAnalysisCapture?.photoCaptureId]);
+  }, [
+    logAttempt,
+    pendingStillAnalysisCapture,
+    pendingUnifiedCapture?.goldenMask,
+    stillAnalysisCapture?.photoCaptureId,
+  ]);
 
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
@@ -885,16 +916,51 @@ export function FaceAnalysisLoadingRouteScreen({
                 unifiedFaceCaptureFlow.committedCapture?.result.goldenMask;
               const userId = session?.user.id;
               if (!goldenMask || !userId) {
+                goldenMaskPreloadPromiseRef.current = null;
+                preparedGoldenMaskRef.current = null;
+                setPreparedGoldenMask(null);
+                setGoldenMaskPreloadStatus('not-required');
                 return;
               }
 
-              // 보고서 폴링을 기다리게 하지 않는다. 먼저 no-backup cache에 복사해
-              // 사용자별 retry queue에 넣고, 업로드·귀속은 병렬로 시도한다.
-              goldenMaskQueuePromise = queueGoldenMaskUploadForReport({
-                artifact: goldenMask,
+              // 보고서 화면에서 시작하면 늦다. ARKit 원본 로컬 파일을 분석 대기
+              // 화면에서 Unity에 먼저 올려 첫 프레임까지 준비한 뒤, 원본을 삭제할 수
+              // 있는 업로드 큐로 넘긴다. 보고서 생성 폴링과는 계속 병렬이다.
+              setGoldenMaskPreloadStatus('pending');
+              const preloadStartedAt = Date.now();
+              const preloadPromise = preloadGoldenMaskFromCapture(
                 reportId,
-                userId,
+                goldenMask,
+              ).then(result => {
+                const nextPreparedGoldenMask = result.ready
+                  ? {
+                      descriptor: buildLocalGoldenMaskDescriptor(goldenMask),
+                      reportId,
+                    }
+                  : null;
+                preparedGoldenMaskRef.current = nextPreparedGoldenMask;
+                if (isMounted) {
+                  setPreparedGoldenMask(nextPreparedGoldenMask);
+                  setGoldenMaskPreloadStatus(
+                    result.ready ? 'ready' : 'failed',
+                  );
+                }
+                logAttempt('golden-mask:preload-settled', {
+                  elapsedMs: Date.now() - preloadStartedAt,
+                  ready: result.ready,
+                  success: result.ready,
+                });
+                return result;
               });
+              goldenMaskPreloadPromiseRef.current = preloadPromise;
+
+              goldenMaskQueuePromise = preloadPromise.then(() =>
+                queueGoldenMaskUploadForReport({
+                  artifact: goldenMask,
+                  reportId,
+                  userId,
+                }),
+              );
               goldenMaskQueueLifecyclePromiseRef.current =
                 goldenMaskQueuePromise;
               void goldenMaskQueuePromise.catch(error => {
@@ -921,13 +987,24 @@ export function FaceAnalysisLoadingRouteScreen({
           analysisAbortController.signal,
         );
       })
-      .then(report => {
+      .then(async report => {
         if (!isMounted || !report) {
           return;
         }
 
-        setSelectedFaceAnalysisReport(report);
+        const localGoldenMask = preparedGoldenMaskRef.current;
+        setSelectedFaceAnalysisReport(
+          localGoldenMask?.reportId === report.id && !report.goldenMask
+            ? {...report, goldenMask: localGoldenMask.descriptor}
+            : report,
+        );
         analysisRetryCountRef.current = 0;
+        // 보고서 완료가 Golden Mask 첫 프레임보다 빨라도 화면을 먼저 열지 않는다.
+        // 모델이 없는 기기/세션은 promise가 없으므로 기존 경로 그대로 진행한다.
+        await goldenMaskPreloadPromiseRef.current;
+        if (!isMounted) {
+          return;
+        }
         setIsAnalysisReady(true);
         if (
           minimumReportLoggedRef.current &&
@@ -1109,15 +1186,14 @@ export function FaceAnalysisLoadingRouteScreen({
   const minimumProportionReady = Boolean(
     buildFaceProportionSection(minimumFaceVerticalThirds, null),
   );
-  const minimumHas3DModel = Boolean(
-    pendingUnifiedCapture?.goldenMask ??
-      unifiedFaceCaptureFlow.committedCapture?.result.goldenMask,
-  );
+  const minimumHas3DModel = goldenMaskPreloadStatus === 'ready';
+  const minimumGoldenMaskSettled = goldenMaskPreloadStatus !== 'pending';
 
   React.useEffect(() => {
     if (
       !anchorPreview ||
       !minimumProportionReady ||
+      !minimumGoldenMaskSettled ||
       minimumReportLoggedRef.current ||
       !(stillAnalysisCapture?.imageUri)
     ) {
@@ -1127,6 +1203,12 @@ export function FaceAnalysisLoadingRouteScreen({
     const minimumPreview: MinimumFaceReportPreview = {
       capturedPhotoUri: stillAnalysisCapture.imageUri,
       faceShape: anchorPreview.faceShape,
+      ...(preparedGoldenMask
+        ? {
+            goldenMask: preparedGoldenMask.descriptor,
+            reportId: preparedGoldenMask.reportId,
+          }
+        : {}),
       has3DModel: minimumHas3DModel,
       personalColor: minimumPersonalColor,
       ratioSummary: minimumRatioSummary,
@@ -1149,7 +1231,9 @@ export function FaceAnalysisLoadingRouteScreen({
     anchorPreview,
     logAttempt,
     minimumHas3DModel,
+    minimumGoldenMaskSettled,
     minimumPersonalColor,
+    preparedGoldenMask,
     minimumProportionReady,
     minimumRatioSummary,
     navigation,
@@ -1312,6 +1396,8 @@ export function FaceAnalysisReportPreviewRouteScreen({
   const shouldReturnToProfile = route.params?.returnTo === 'profile';
   const minimumPreview = route.params?.minimumPreview ?? null;
   const finalizedMinimumHandoffRef = React.useRef(false);
+  const [goldenMaskInteracting, setGoldenMaskInteracting] =
+    React.useState(false);
   const {
     selectedFaceAnalysisReport,
     selectedFaceCapture,
@@ -1335,10 +1421,22 @@ export function FaceAnalysisReportPreviewRouteScreen({
   }, []);
 
   React.useEffect(() => {
-    if (minimumPreview) {
-      navigation.setOptions({gestureEnabled: false});
+    navigation.setOptions({
+      // The report pager owns both horizontal directions. Keeping the native
+      // iOS back gesture enabled lets an edge swipe win before the pager's
+      // PanResponder can classify it, which unexpectedly exits the report.
+      gestureEnabled: shouldEnableFaceReportBackGesture(),
+    });
+  }, [navigation]);
+
+  React.useEffect(() => {
+    if (!goldenMaskInteracting) {
+      return undefined;
     }
-  }, [minimumPreview, navigation]);
+    return navigation.addListener('beforeRemove', event => {
+      event.preventDefault();
+    });
+  }, [goldenMaskInteracting, navigation]);
 
   React.useEffect(() => {
     if (
@@ -1379,6 +1477,9 @@ export function FaceAnalysisReportPreviewRouteScreen({
         }
         minimumPreview={minimumPreview}
         onBack={() => {
+          if (goldenMaskInteracting) {
+            return;
+          }
           if (minimumPreview) {
             // 최소 보고서 아래의 로딩 화면까지 제거해 폴링을 abort한다. 단순
             // navigate는 두 화면을 스택에 남겨 완료 시 홈 위로 다시 열릴 수 있다.
@@ -1396,6 +1497,7 @@ export function FaceAnalysisReportPreviewRouteScreen({
           }
           goBackToPreviousOrMainTab(navigation, 'HomeTab');
         }}
+        onGoldenMaskInteractionChange={setGoldenMaskInteracting}
         onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
         onRetake={() => {
           if (minimumPreview) {
