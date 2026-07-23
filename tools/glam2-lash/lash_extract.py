@@ -33,7 +33,9 @@ SOURCES = {
         ann_dx=25),  # x0 590→565 잘림 방지(검증기 적발). 주석은 옛 박스 기준 → +25px 이동
     "lower": dict(
         src=REFS / "속눈썹 샘플/1a9bec9d78817015ce809bdc9b3d63a6.jpg",
-        box=(5, 380, 1194, 1040), flip=True, gap_frac=0.40),
+        box=(5, 380, 1194, 1040), flip=True, gap_frac=0.40,
+        tail_refit=0.70,   # 꼬리(바깥 30%): 뿌리선을 승인 초록선(42° 직선 연장)으로 교정
+        min_cover=0.40),   # 성긴 스파이크 도안 — 뿌리줄 간격이 넓어 커버 하한 완화
 }
 SUPER = 4          # 초해상 배수(안티앨리어스 보존)
 ALPHA_FLOOR = 0.04
@@ -130,6 +132,82 @@ def load_user_rootline(name, a, curve, ann_dx=0):
     return np.interp(np.arange(a.shape[1]), xs * SUPER + ann_dx * SUPER, ys * SUPER)
 
 
+def tail_band_refit(a, root_y, start_frac):
+    """아래 도안 꼬리 교정 v2 — 밴드 신뢰 구간의 진행 방향으로 직선 연장.
+
+    꼬리 끝쪽엔 밴드 자체가 없다(마지막 부착 이후는 자유 가닥). 잉크 기반 추정은
+    2회 모두 실패 — 아래-분위수는 가닥 몸통 관통, 최상단 잉크(윗면)는 위층 가닥
+    실루엣 오인(사용자 판정 0723 ×2). 그래서 잉크를 보지 않고, 신뢰 구간(start까지
+    사용자 펜)의 기울기를 그대로 직선 연장한다 — 렌더러 꼬리 접선 탈출과 동일 원리.
+    그 오른쪽 가닥은 전부 '뿌리선 아래 내용'이 되어 리본이 눈꼬리 밖으로 눕혀 그린다.
+    """
+    h, w = a.shape
+    x0 = int(w * start_frac)
+    # 기울기 = 사용자 펜의 하강 구간(x0~펜 끝) 방향(42°, 사용자 승인 0723 '초록선').
+    # 완만 구간(65~70%) 기울기(18°)는 부착 대각선보다 얕아 기각. 펜 끝은 값이
+    # 평평해지는 지점(수평 연장 시작)으로 검출.
+    d = np.gradient(root_y)
+    flat = np.where(np.abs(d[x0:]) < 0.01)[0]
+    x_end = x0 + flat[0] if len(flat) else int(w * 0.85)
+    slope = (root_y[x_end - 5] - root_y[x0]) / max(x_end - 5 - x0, 1)
+    xs = np.arange(w)
+    out = root_y.copy()
+    out[x0:] = np.clip(root_y[x0] + slope * (xs[x0:] - x0), 0, h - 1)
+    print(f"  꼬리 재피팅(승인 초록선): x≥{start_frac:.0%} 직선 연장 {np.degrees(np.arctan(slope)):.0f}°")
+    return out
+
+
+def unroll(a, root_y):
+    """곡선 언롤 — 뿌리 곡선을 따라 '굴려서' 편다(수직 시프트의 승격판).
+
+    각 출력 열은 뿌리 곡선 위의 호길이 등간격 점에서 곡선의 법선 방향으로 샘플링.
+    보존되는 것 = 가닥의 밴드 대비 상대 각도(장착 시 눈 곡선이 되돌려 회전 →
+    꼬리 가닥도 눈 흐름을 타고 자연스럽게 돎). 수직 시프트의 절대각 보존은
+    "휜 밴드에 눕던 꼬리 가닥"을 수평 뻗침으로 만들었음(사용자 판정 0723 v10).
+    반환: (결과, 뿌리줄 y 인덱스).
+    """
+    h, w = a.shape
+    # 접선 안정화 — 뿌리선을 넓게 스무딩해 미세 요철이 회전 지터로 증폭되는 것 방지
+    k = 121
+    ry = np.convolve(np.pad(root_y, k // 2, mode="edge"), np.ones(k) / k, mode="valid")[:w]
+    dy = np.gradient(ry)
+    ds = np.sqrt(1.0 + dy * dy)
+    s = np.concatenate([[0.0], np.cumsum(ds)])[:w]  # 각 x의 호길이
+    W = int(round(s[-1]))
+    sj = np.linspace(0.0, s[-1], W)
+    X = np.interp(sj, s, np.arange(w, dtype=np.float64))
+    Y = np.interp(X, np.arange(w), ry)
+    d_ = np.interp(X, np.arange(w), dy)
+    tx = 1.0 / np.sqrt(1.0 + d_ * d_)
+    ty = d_ * tx
+    nx, ny = -ty, tx
+    flip = ny > 0                     # '위(y 감소)' 방향으로 부호 정렬
+    nx = np.where(flip, -nx, nx)
+    ny = np.where(flip, -ny, ny)
+    kup = int(np.max(ry)) + 2         # 뿌리 위(털 방향) 샘플 범위
+    kdn = int(h - np.min(ry)) + 2     # 뿌리 아래(처지는 결) 범위
+    ks = np.arange(-kdn, kup + 1)
+    px = X[None, :] + nx[None, :] * ks[:, None]
+    py = Y[None, :] + ny[None, :] * ks[:, None]
+    x0 = np.floor(px).astype(int)
+    y0 = np.floor(py).astype(int)
+    fx = (px - x0).astype(np.float32)
+    fy = (py - y0).astype(np.float32)
+
+    def g(yy, xx):
+        valid = (xx >= 0) & (xx < w) & (yy >= 0) & (yy < h)
+        o = np.zeros(px.shape, dtype=np.float32)
+        o[valid] = a[yy[valid], xx[valid]]
+        return o
+
+    v = (g(y0, x0) * (1 - fx) * (1 - fy) + g(y0, x0 + 1) * fx * (1 - fy)
+         + g(y0 + 1, x0) * (1 - fx) * fy + g(y0 + 1, x0 + 1) * fx * fy)
+    out = v[::-1, :]                  # 행 0 = 최상단, 뿌리줄 = kup행
+    ang = np.degrees(np.arctan(np.abs(dy)))
+    print(f"  언롤: 폭 {w}→{W}(호길이), 밴드 기울기 최대 {ang.max():.0f}° 중앙값 {np.median(ang):.0f}°")
+    return out, kup
+
+
 def straighten(a, root_y):
     """뿌리 펴기 — 열별 수직 시프트, 소수점+선형 보간(정수 반올림 계단·지그재그 제거).
 
@@ -194,10 +272,16 @@ def validate(name, cfg, a, r):
     fails = []
     span = a.max(axis=0) > 0.2                       # 도안이 실제 차지하는 가로 구간
     lo = int(w * cfg["gap_frac"])                    # 의도된 앞쪽 공백은 제외
+    hi = int(w * cfg.get("tail_refit", 1.0))         # 꼬리 연장 구간(밴드 없음)도 제외
     root_row = a[max(0, r - 1): r + 2, :].max(axis=0) > 0.3
-    cover = root_row[lo:][span[lo:]].mean() if span[lo:].any() else 0.0
-    if cover < 0.55:
-        fails.append(f"뿌리 정렬 부족: 아랫줄 잉크 커버 {cover:.2f} < 0.55 (펴기 실패?)")
+    sel = span[lo:hi]
+    cover = root_row[lo:hi][sel].mean() if sel.any() else 0.0
+    # 기준은 도안 소유 — 성긴 스파이크 도안(lower)은 뿌리줄에 간격이 많아 커버가
+    # 원래 낮다. 이전 0.60~0.76은 꼬리 가닥 몸통이 뿌리줄을 가로지르며 부풀린 값
+    # (뿌리·가닥 혼동의 부산물)이었음이 0723 교정에서 드러남.
+    min_cover = cfg.get("min_cover", 0.55)
+    if cover < min_cover:
+        fails.append(f"뿌리 정렬 부족: 아랫줄 잉크 커버 {cover:.2f} < {min_cover} (펴기 실패?)")
     bot = a[int(h * 0.7):, :].mean()
     top = a[: int(h * 0.3), :].mean()
     if bot <= top:
@@ -221,6 +305,9 @@ def main():
         if mode == "apply":
             user = load_user_rootline(name, a, curve, cfg.get("ann_dx", 0))
             root_y = user if user is not None else np.polyval(curve, np.arange(a.shape[1]))
+            if cfg.get("tail_refit"):
+                root_y = tail_band_refit(a, root_y, cfg["tail_refit"])
+            # 언롤은 기각(사용자 0723): 중앙까지 재곡선화 위험 대비 이득 없음 → shift 유지
             flat, root_row = straighten(a, root_y)
             finalize(name, cfg, flat, root_row)
         else:

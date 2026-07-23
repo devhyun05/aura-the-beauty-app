@@ -1,7 +1,7 @@
 {
  "width": 512,
- "height": 97,
- "aspect": 0.1895,
- "rootV": 0.1237,
+ "height": 105,
+ "aspect": 0.2051,
+ "rootV": 0.0857,
  "note": "장착 배수 = 원하는 (속눈썹높이/눈폭) ÷ aspect; rootV = 뿌리줄 높이 비율(아랫변 0)"
 }
