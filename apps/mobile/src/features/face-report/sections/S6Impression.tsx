@@ -4,11 +4,12 @@ import { color, font, radius } from '../reportTokens';
 import type { S6Data } from '../reportTypes';
 import { Card } from '../visuals/Card';
 import { ImpressionMap } from '../visuals/ImpressionMap';
+import { InsightList } from '../visuals/InsightList';
 import { ReadableParagraphs } from '../visuals/ReadableParagraphs';
 import { RiseIn } from '../visuals/RiseIn';
 import { SectionHeader } from '../visuals/SectionHeader';
 
-/** S6 인상 종합 — 2D 인상 좌표 맵, keyword chips, synthesis paragraph. */
+/** S6 인상 종합 — 2D 인상 좌표 맵, keyword chips, gestalt 인사이트 전체(압축 없이). */
 export function S6Impression({ data }: { data: S6Data }) {
   return (
     <RiseIn style={{ paddingTop: 30, paddingHorizontal: 20, gap: 12 }}>
@@ -26,11 +27,18 @@ export function S6Impression({ data }: { data: S6Data }) {
               </View>
             ))}
           </View>
-          <ReadableParagraphs
-            gap={10}
-            text={data.paragraph}
-            textStyle={[font(13.5, '400', 1.7), { color: color.body }]}
-          />
+          {/* 실제 분석 리포트는 details(전체 인사이트)를 채운다 — 5문장짜리 압축
+              문단 대신 gestalt 인사이트 7개를 그대로 나열한다. details가 없는
+              고정 fixture/구버전 경로만 paragraph로 폴백한다. */}
+          {data.details && data.details.length > 0 ? (
+            <InsightList items={data.details} />
+          ) : data.paragraph ? (
+            <ReadableParagraphs
+              gap={10}
+              text={data.paragraph}
+              textStyle={[font(13.5, '400', 1.7), { color: color.body }]}
+            />
+          ) : null}
           {data.visualWeight ? <VisualWeightBlock data={data.visualWeight} /> : null}
         </Card>
       </RiseIn>

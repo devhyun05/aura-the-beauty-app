@@ -65,7 +65,9 @@ class Settings(BaseSettings):
   face_analysis_v2_enabled: bool = True
   # perceive는 영문에서도 ~40s(상한 45s에 근접)라 마진이 없었고, 한국어 출력으로
   # 더 길어져 타임아웃했다 → 스테이지별 여유를 준다(멈춘 잡은 상위 폴링 타임아웃이 방어).
-  face_analysis_stage_timeout_seconds: float = Field(default=100.0, ge=5.0, le=180.0)
+  # consult 단일 호출이 ~74s(출력 큼)라 100s 마진이 얕다 → 재시도 없이도 느린
+  # 단일 호출이 실패하지 않도록 상향(타임아웃은 상한일 뿐 정상 런 속도엔 영향 없음).
+  face_analysis_stage_timeout_seconds: float = Field(default=130.0, ge=5.0, le=180.0)
   face_analysis_stage_max_attempts: int = Field(default=2, ge=1, le=3)
   # Phase 4 population norms remain fail-closed. Turning the flag on is not
   # sufficient: the resolver also verifies an approved registry bundle and the

@@ -176,12 +176,6 @@ export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryMode
       ),
     );
   }
-  if (data.s6) {
-    facePages.push(
-      contentPage('face', 'impression:overview', '인상', '인상', 'impression'),
-    );
-  }
-
   const colorSkinPages: FaceReportStoryPage[] = [];
   if (data.s4) {
     colorSkinPages.push(
@@ -204,6 +198,13 @@ export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryMode
   if (data.s8) {
     colorSkinPages.push(
       contentPage('color-skin', 'skin:overview', '피부', '피부', 'skin'),
+    );
+  }
+  // 인상은 컬러·피부 다음에 온다(요청: "컬러/피부가 인상보다 먼저") — 탭
+  // 하이라이트가 sectionId로 계산되므로 물리적 위치와 sectionId를 함께 옮긴다.
+  if (data.s6) {
+    colorSkinPages.push(
+      contentPage('color-skin', 'impression:overview', '인상', '인상', 'impression'),
     );
   }
 

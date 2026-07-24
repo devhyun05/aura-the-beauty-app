@@ -70,6 +70,7 @@ Enum face_part {
   contour
 }
 
+// AI 데이터 동의 목적은 기존 운영 enum에도 idempotent migration으로 소급한다.
 Enum consent_type {
   privacy_policy
   camera_analysis

@@ -13,62 +13,58 @@ export const FACE_3D_METRIC_PRESENTATION: Record<
   {description: string; label: string}
 > = {
   alarWidth: {
-    description: '값이 클수록 얼굴 폭에 비해 콧볼 좌우 폭이 넓어요.',
+    description: '얼굴 폭을 기준으로 콧볼의 좌우 폭을 확인한 항목이에요.',
     label: '콧볼 폭',
   },
   centralProjectionScore: {
-    description: '값이 클수록 얼굴 중앙부가 기준면보다 앞으로 나와 있어요.',
+    description: '얼굴 중앙부와 기준면의 앞뒤 관계를 확인한 항목이에요.',
     label: '중앙부 입체감',
   },
   chinProjection: {
-    description: '값이 클수록 턱의 앞쪽 볼록면이 기준면보다 앞으로 나와 있어요.',
+    description: '턱의 앞쪽 볼록면과 기준면의 관계를 확인한 항목이에요.',
     label: '턱 전방 돌출',
   },
   lowerLipToELine: {
-    description: '0은 E-line 부근, 양수는 앞쪽, 음수는 뒤쪽을 뜻해요.',
+    description: '아랫입술과 E-line의 앞뒤 관계를 확인한 항목이에요.',
     label: '아랫입술 · E-line',
   },
   malarProjectionLeft: {
-    description: '값이 클수록 왼쪽 앞광대가 기준면보다 더 앞으로 나와 있어요.',
+    description: '왼쪽 앞광대와 기준면의 앞뒤 관계를 확인한 항목이에요.',
     label: '앞광대 돌출 · 왼쪽',
   },
   malarProjectionRight: {
-    description: '값이 클수록 오른쪽 앞광대가 기준면보다 더 앞으로 나와 있어요.',
+    description: '오른쪽 앞광대와 기준면의 앞뒤 관계를 확인한 항목이에요.',
     label: '앞광대 돌출 · 오른쪽',
   },
   nasalAxisDeviation: {
-    description: '0은 중앙, 음수는 내 왼쪽, 양수는 내 오른쪽 방향이에요.',
+    description: '얼굴 중앙선을 기준으로 코축의 방향을 확인한 항목이에요.',
     label: '코축 좌우 치우침',
   },
   nasalBridgeStraightness: {
-    description: '값이 작을수록 코뿌리–코끝 기준선에 더 가까워요.',
+    description: '코뿌리에서 코끝까지 이어지는 선의 흐름을 확인한 항목이에요.',
     label: '콧대 직선 이탈량',
   },
   noseLength: {
-    description: '값이 클수록 얼굴 폭에 비해 코뿌리–코끝 길이가 길어요.',
+    description: '얼굴 폭을 기준으로 코뿌리–코끝 길이를 확인한 항목이에요.',
     label: '코 길이',
   },
   noseTipProjection: {
-    description: '값이 클수록 코끝이 얼굴 기준면보다 앞으로 나와 있어요.',
+    description: '코끝과 얼굴 기준면의 앞뒤 관계를 확인한 항목이에요.',
     label: '코끝 돌출',
   },
   upperLipToELine: {
-    description: '0은 E-line 부근, 양수는 앞쪽, 음수는 뒤쪽을 뜻해요.',
+    description: '윗입술과 E-line의 앞뒤 관계를 확인한 항목이에요.',
     label: '윗입술 · E-line',
   },
 };
-
-function formatMetricValue(value: number | null): string {
-  return value === null ? '측정 불가' : value.toFixed(3);
-}
 
 export function Face3DMetricGrid({profile}: {profile: Face3DReportProfile}) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>정규화 3D 지표</Text>
+        <Text style={styles.sectionTitle}>3D 측정 항목</Text>
         <Text style={styles.sectionCaption}>
-          얼굴 크기로 나눈 상대값이에요. 절대 mm나 의학적 진단값은 아니에요.
+          TrueDepth로 확인한 얼굴 입체 측정 항목이에요.
         </Text>
       </View>
 
@@ -87,18 +83,12 @@ export function Face3DMetricGrid({profile}: {profile: Face3DReportProfile}) {
             <View key={key} style={styles.metricCard}>
               <Text style={styles.metricLabel}>{presentation.label}</Text>
               <Text style={metric.value === null ? styles.metricUnavailable : styles.metricValue}>
-                {formatMetricValue(metric.value)}
+                {metric.value === null ? '측정 불가' : '측정 완료'}
               </Text>
               <Text style={styles.metricDescription}>
                 {metric.value === null
                   ? '이번 측정에서는 이 값을 계산하지 못했어요.'
                   : presentation.description}
-              </Text>
-              <Text style={styles.metricMeta}>
-                신뢰도 {Math.round(metric.confidence * 100)}% · {metric.validFrameCount}프레임
-              </Text>
-              <Text style={styles.metricMad}>
-                MAD {metric.mad === null ? '—' : metric.mad.toFixed(4)}
               </Text>
             </View>
           );
@@ -136,18 +126,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily.regular,
     fontSize: typography.fontSize.xs,
     lineHeight: typography.lineHeight.xs,
-  },
-  metricMad: {
-    color: colors.textTertiary,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  metricMeta: {
-    color: colors.textSecondary,
-    fontFamily: typography.fontFamily.regular,
-    fontSize: 11,
-    lineHeight: 15,
   },
   metricUnavailable: {
     color: colors.textTertiary,

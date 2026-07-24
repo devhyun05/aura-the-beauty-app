@@ -475,6 +475,7 @@ function parseMakeupGuideline(
   return {
     brow: firstText(aiGuideline?.brow) ?? '',
     blush: firstText(aiGuideline?.blush) ?? '',
+    contour: firstText(aiGuideline?.contour) ?? '',
     highlight: firstText(aiGuideline?.highlight) ?? '',
     eyeshadow: firstText(aiGuideline?.eyeshadow) ?? '',
     eyeliner: firstText(aiGuideline?.eyeliner) ?? '',
@@ -761,7 +762,12 @@ export function hasCompleteBackendReportText(job: BackendAnalysisJob): boolean {
   const guideline = parseMakeupGuideline(result?.makeupGuideline);
   const regionNotes = parseRegionNotes(result?.regionNotes);
   const impressionNotes = parseImpressionNotes(result?.impressionNotes);
-  const hasGuideline = Object.values(guideline).every(value => value.length > 0);
+  // contour was added after the original report contract. Keep it optional for
+  // stored/legacy reports so adding the field does not make completed reports
+  // appear incomplete.
+  const hasGuideline = (
+    ['brow', 'blush', 'highlight', 'eyeshadow', 'eyeliner', 'lip'] as const
+  ).every(key => guideline[key].length > 0);
   const hasRegionNotes = Boolean(
     regionNotes &&
       Object.values(regionNotes).every(

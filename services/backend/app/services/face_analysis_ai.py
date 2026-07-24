@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol, TypeVar
@@ -25,19 +24,27 @@ from app.services.face_analysis_measurements import (
 logger = logging.getLogger(__name__)
 
 
-MEASUREMENT_PROMPT_VERSION = "s1-measurement-v1"
-# 한국어 출력 지시문 추가로 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
-PERCEPTION_PROMPT_VERSION = "s1-perception-v4"
-# 양쪽 룩과 근거 행을 성공 출력의 필수 계약으로 승격해 캐시를 무효화한다.
-CONSULTING_PROMPT_VERSION = "s1-consulting-v7"
+# 봉투 축소 지시(reason/warnings 생략) 추가로 계약이 바뀌므로 버전 상향.
+MEASUREMENT_PROMPT_VERSION = "s1-measurement-v2"
+# raw measurement·내부 필드명 노출 금지를 복원(치명적 버그: 설명문에 metric key/각도값이
+# 그대로 노출됨)하며 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
+PERCEPTION_PROMPT_VERSION = "s1-perception-v5"
+# 위와 동일한 이유로 버전 상향 — 양쪽 룩과 근거 행 계약은 그대로 유지.
+CONSULTING_PROMPT_VERSION = "s1-consulting-v8"
 # 사용자에게 보이는 라벨·설명·추천 문장은 모두 한국어여야 한다(단일 경로와 동일 원칙).
 # enum status 코드·metric 키만 영문 유지. perceive/consult 두 스테이지가 리포트의
 # 자유 텍스트(피부 라벨·부위 노트·요약·메이크업 가이드)를 전부 생성하므로 여기에 건다.
 _KOREAN_OUTPUT_DIRECTIVE = (
   "Write every label, description, summary, recommendation, and look title/subtitle as "
-  "concise natural Korean (한국어) — short phrases, no filler. Keep only enum status codes "
-  "and metric keys in English. Never repeat raw measurements or write digits in user-facing "
-  "copy; translate evidence into a cautious visual interpretation and a useful implication."
+  "concise natural Korean (한국어) — short phrases, no filler. "
+  "Never quote internal field or metric-key identifiers in user-facing copy — no dotted or "
+  "snake_case tokens like skin.pores, brow_slope_asymmetry, canthal_tilt_asymmetry, "
+  "verticalThirds.lowerNormalized. Never repeat a raw measurement value (angles in degrees, "
+  "mm, percentages, color-distance numbers like dL≈61) either — always translate the "
+  "evidence into a cautious visual interpretation and a useful implication instead of citing "
+  "the number or key behind it. A small natural-language ordinal is fine only when it reads "
+  "like everyday Korean with no unit attached (예: 3분할, 두 겹) — never pair a number with a "
+  "unit, a percent sign, or a field name."
 )
 FORBIDDEN_INFERENCES = (
   "medical diagnosis, disease, age, ethnicity, health status, cosmetic procedures, "
@@ -119,63 +126,6 @@ def _jsonable(value: Any) -> Any:
   return value
 
 
-_USER_COPY_FIELDS = {
-  "borderTone",
-  "description",
-  "items",
-  "label",
-  "note",
-  "overallMood",
-  "season",
-  "shortSummary",
-  "subtitle",
-  "subtype",
-  "summary",
-  "tags",
-  "title",
-  "why",
-}
-_METADATA_FIELDS = {"rationaleMetricKeys"}
-
-
-def _user_copy_strings(
-  value: Any,
-  path: tuple[str, ...] = (),
-) -> list[tuple[tuple[str, ...], str]]:
-  payload = _jsonable(value)
-  found: list[tuple[tuple[str, ...], str]] = []
-  if isinstance(payload, dict):
-    for key, item in payload.items():
-      if key in _METADATA_FIELDS:
-        continue
-      child_path = (*path, key)
-      if isinstance(item, str) and (
-        key in _USER_COPY_FIELDS or "makeup" in path
-      ):
-        found.append((child_path, item))
-      elif isinstance(item, (dict, list)):
-        found.extend(_user_copy_strings(item, child_path))
-  elif isinstance(payload, list):
-    for index, item in enumerate(payload):
-      child_path = (*path, str(index))
-      if isinstance(item, str) and path and path[-1] in _USER_COPY_FIELDS:
-        found.append((child_path, item))
-      elif isinstance(item, (dict, list)):
-        found.extend(_user_copy_strings(item, child_path))
-  return found
-
-
-def _validate_user_copy(value: BaseModel) -> list[dict[str, Any]]:
-  return [
-    {
-      "location": list(path),
-      "type": "user_copy_contains_raw_number",
-    }
-    for path, text in _user_copy_strings(value)
-    if re.search(r"\d", text)
-  ]
-
-
 class FaceAnalysisAI:
   def __init__(self, client: StructuredAnalysisClient) -> None:
     self.client = client
@@ -194,6 +144,14 @@ class FaceAnalysisAI:
   ) -> OutputModel:
     validation_errors: list[dict[str, Any]] = []
     current_prompt = user_prompt
+    last_stop_reason: str | None = None
+
+    def _record_call(metrics: AnalysisCallMetrics) -> None:
+      nonlocal last_stop_reason
+      last_stop_reason = metrics.stop_reason
+      if generation_metrics is not None:
+        generation_metrics.record_call(metrics)
+
     for attempt in range(2):
       response = await self.client.analyze_structured_json(
         developer_prompt=developer_prompt,
@@ -202,11 +160,7 @@ class FaceAnalysisAI:
         source_image_bytes=source_image_bytes,
         max_tokens=max_tokens,
         stage=stage,
-        on_call_metrics=(
-          generation_metrics.record_call
-          if generation_metrics is not None
-          else None
-        ),
+        on_call_metrics=_record_call,
       )
       try:
         output = model_type.model_validate(response)
@@ -223,6 +177,17 @@ class FaceAnalysisAI:
         )
         if not validation_errors:
           return output
+      # 절단(stop_reason=max_tokens)으로 필드가 누락된 경우 재시도는 무의미하다 —
+      # 오류 문구를 덧붙인 더 긴 프롬프트는 또 절단될 뿐이라 스테이지 지연만 배가된다
+      # (관측된 +30초 낭비의 주범). 즉시 중단하고 상위 폴백에 맡긴다. 상한을 모델
+      # 최대치로 둔 지금은 사실상 도달하지 않는 안전장치.
+      if last_stop_reason == "max_tokens":
+        logger.warning(
+          "[aura:face-analysis-v2] stage=%s truncated (stop_reason=max_tokens); "
+          "skipping retry",
+          stage or "-",
+        )
+        break
       if attempt == 0:
         if generation_metrics is not None:
           generation_metrics.record_validation_retry()
@@ -242,7 +207,7 @@ class FaceAnalysisAI:
       502,
       "FACE_ANALYSIS_STAGE_OUTPUT_INVALID",
       "Face analysis stage returned invalid structured output.",
-      {"validationErrors": validation_errors},
+      {"validationErrors": validation_errors, "stopReason": last_stop_reason},
     )
 
   async def measure(
@@ -265,7 +230,9 @@ class FaceAnalysisAI:
       model_type=MeasurementStageOutput,
       developer_prompt=(
         "You measure only explicitly requested visible beauty attributes in one neutral front S1 "
-        f"photo. Never infer {FORBIDDEN_INFERENCES}. Return schema-valid JSON only."
+        f"photo. Never infer {FORBIDDEN_INFERENCES}. Return schema-valid JSON only. "
+        "Keep each metric envelope minimal: omit the reason field and leave warnings empty for "
+        "normal estimated metrics; set reason only when status is unmeasured or blocked."
       ),
       user_prompt=(
         "Estimate only missingObservableKeys. Never remeasure authoritativeKeys. Use source=ai, "
@@ -273,8 +240,9 @@ class FaceAnalysisAI:
         + json.dumps(prompt_payload, ensure_ascii=False, separators=(",", ":"))
       ),
       source_image_bytes=source_image_bytes,
-      # 성공 런도 출력이 2700~2800(상한 2800)에 붙어 절단 위험 → 헤드룸 확보.
-      max_tokens=3200,
+      # 상한을 모델 최대치(8192)로 둬 절단을 원천 차단한다. 상한은 실제 생성량만큼만
+      # 소요되므로 시간 손해가 없고, 낮은 상한이 유발하던 절단→무의미 재시도만 제거된다.
+      max_tokens=8192,
       stage="measure",
       generation_metrics=generation_metrics,
     )
@@ -319,9 +287,9 @@ class FaceAnalysisAI:
       developer_prompt=(
         "You provide non-medical beauty perception from an S1 photo and supplied measurements. "
         f"Never infer {FORBIDDEN_INFERENCES}. Do not create measurements. "
-        "Write each Insight description as a complete reader-facing explanation that connects "
-        "the visible conclusion to supplied rationaleMetricKeys and explains how it affects the "
-        "overall impression; do not return a list of disconnected adjectives. "
+        "Write each Insight description as ONE concise reader-facing sentence that links the "
+        "visible conclusion to its rationaleMetricKeys and names its effect on the overall "
+        "impression; do not write a paragraph and do not return disconnected adjectives. "
         "Return three impressionAxes only when supported: clarity (부드러운/선명한), "
         "focus (중앙/외곽), and line (곡선적/직선적). Set value from minus one for the left "
         "label to one for the right label; omit an unsupported axis instead of guessing. "
@@ -339,11 +307,10 @@ class FaceAnalysisAI:
         separators=(",", ":"),
       ),
       source_image_bytes=source_image_bytes,
-      # perceive는 인사이트 다수를 출력해 영문에서도 ~2600 토큰(상한 3200에 근접).
-      # 한국어는 토큰이 더 무거워 상한을 넘겨 절단됐다 → 헤드룸 크게 확보.
-      max_tokens=4800,
+      # 상한을 모델 최대치(8192)로 둬 절단을 원천 차단. 실제 출력은 설명 1문장화로
+      # ~2200 토큰까지 줄어들어 상한에 닿지 않는다(상한은 시간이 아니라 절단만 좌우).
+      max_tokens=8192,
       stage="perceive",
-      semantic_validator=_validate_user_copy,
       generation_metrics=generation_metrics,
     )
     skin_type = anchor_payload.get("skinType")
@@ -418,7 +385,7 @@ class FaceAnalysisAI:
     )
 
     def validate_consulting(output: ConsultingResult) -> list[dict[str, Any]]:
-      errors = _validate_user_copy(output)
+      errors: list[dict[str, Any]] = []
       if output.styling_looks is None:
         errors.append(
           {
@@ -471,6 +438,8 @@ class FaceAnalysisAI:
         "without combining contradictory traits. "
         "When an anchor is supplied, keep recommendedMood exactly as overallMood and use the "
         "anchor labels consistently throughout the advice. "
+        "Keep every user-facing string concise: one short sentence per row why/note and per "
+        "advice item; do not pad descriptions. "
         f"{_KOREAN_OUTPUT_DIRECTIVE} Return JSON only."
       ),
       user_prompt=json.dumps(
@@ -479,8 +448,8 @@ class FaceAnalysisAI:
         separators=(",", ":"),
       ),
       source_image_bytes=None,
-      # 한국어 + 1회 재검증(룩 title 길이 등) 대비 헤드룸.
-      max_tokens=3200,
+      # 상한을 모델 최대치(8192)로 둬 절단을 원천 차단(절단→재시도 낭비 제거).
+      max_tokens=8192,
       stage="consult",
       semantic_validator=validate_consulting,
       generation_metrics=generation_metrics,

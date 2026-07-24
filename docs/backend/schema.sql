@@ -59,6 +59,10 @@ $$;
 alter type capture_type add value if not exists 'hair_analysis';
 -- R1 (schema.sql:product-category-brow-v1): 기존 DB 소급 — add value if not exists = 멱등.
 alter type product_category add value if not exists 'brow';
+-- 기존 consent_type에도 AI 데이터 동의 목적을 소급 추가한다.
+alter type consent_type add value if not exists 'camera_analysis';
+alter type consent_type add value if not exists 'ai_processing';
+alter type consent_type add value if not exists 'third_party_ai';
 alter type consent_type add value if not exists 'engagement_personalization';
 alter type consent_type add value if not exists 'color_cohort';
 
