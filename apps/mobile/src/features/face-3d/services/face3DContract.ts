@@ -7,6 +7,7 @@ import {
   type Face3DMetrics,
   type Face3DOptionalMetricKey,
   type Face3DProfile,
+  type Face3DReportProfile,
   type Face3DProfileV1,
   type Face3DProfileV2,
   type Face3DProfileV3,
@@ -688,6 +689,52 @@ export function parseTrustedServerFace3DProfile(
   value: unknown,
 ): Face3DProfile | null {
   return parseFace3DProfileWithTrust(value, true);
+}
+
+/**
+ * Parse the privacy-projected profile from an authenticated report detail.
+ * v3 trust material and millimeter values are deliberately absent, so the
+ * result is suitable for normalized metric display only, never AI eligibility.
+ */
+export function parseFace3DReportProfile(
+  value: unknown,
+): Face3DReportProfile | null {
+  const trustedProfile = parseTrustedServerFace3DProfile(value);
+  if (trustedProfile) {
+    return trustedProfile;
+  }
+
+  if (
+    !isRecord(value) ||
+    value.source !== FACE_3D_PROFILE_SOURCE ||
+    value.schemaVersion !== FACE_3D_PROFILE_SCHEMA_VERSION_V3 ||
+    !isRecord(value.metrics) ||
+    hasMillimeterMetricFields(value.metrics)
+  ) {
+    return null;
+  }
+
+  const metrics = parseMetrics(value.metrics, false);
+  if (!metrics) {
+    return null;
+  }
+
+  // The public v3 policy tuple is identical to v2. Reuse its strict frame,
+  // completion, collection-policy, and metric validation before projecting.
+  const publicProfile = parseFace3DProfileV2(value, metrics);
+  if (!publicProfile) {
+    return null;
+  }
+
+  return {
+    metrics: publicProfile.metrics,
+    schemaVersion: FACE_3D_PROFILE_SCHEMA_VERSION_V3,
+    source: publicProfile.source,
+    targetFrameCount: publicProfile.targetFrameCount,
+    topologyFingerprint: publicProfile.topologyFingerprint,
+    validFrameCount: publicProfile.validFrameCount,
+    warnings: publicProfile.warnings,
+  };
 }
 
 // v3 소수 프레임 프로필은 반복성 보정이 완료되고 product policy로 수집된 경우에만

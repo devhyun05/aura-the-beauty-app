@@ -26,7 +26,7 @@ import type {
   FaceAnalysisMeasurementInterpretation,
 } from '../../face-analysis/services/faceAnalysisV2';
 import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceAnalysisMeasurements';
-import type {Face3DMetricKey, Face3DProfile} from '../../face-3d/types';
+import type {Face3DMetricKey, Face3DReportProfile} from '../../face-3d/types';
 import type {
   Face3DPhotoEvidence,
   Face3DPhotoEvidenceRegionKey,
@@ -84,7 +84,7 @@ export type FaceReportAdapterInput = {
   // Same-frame ARKit mesh projection evidence. Optional for legacy reports;
   // never synthesize it from an aggregated profile.
   face3dPhotoEvidence?: Face3DPhotoEvidence | null;
-  face3d?: Face3DProfile | null;
+  face3d?: Face3DReportProfile | null;
 };
 
 function resolveHeroUri(report: FaceAnalysisReport, heroImageUri?: string): string | undefined {
@@ -153,7 +153,7 @@ function buildS1SummaryCards(
   ];
 }
 
-export function summarizeFace3DProfile(face3d: Face3DProfile | null): string {
+export function summarizeFace3DProfile(face3d: Face3DReportProfile | null): string {
   if (!face3d) {
     return '측정값 없음';
   }
@@ -687,16 +687,16 @@ function hasGeometryMetric(
 }
 
 function face3dMetric(
-  profile: Face3DProfile | null,
-  key: keyof Face3DProfile['metrics'],
+  profile: Face3DReportProfile | null,
+  key: keyof Face3DReportProfile['metrics'],
 ) {
   const metric = profile?.metrics[key];
   return metric?.value != null && Number.isFinite(metric.value) ? metric : null;
 }
 
 function confidenceLabel(
-  profile: Face3DProfile | null,
-  keys: (keyof Face3DProfile['metrics'])[],
+  profile: Face3DReportProfile | null,
+  keys: (keyof Face3DReportProfile['metrics'])[],
 ): string | undefined {
   const confidences = keys
     .map(key => face3dMetric(profile, key)?.confidence)
@@ -785,7 +785,7 @@ const LOCAL_MEASUREMENT_COPY: Record<
 function measurementNumber(
   key: string,
   geometryMetrics: FaceGeometryMetrics | null,
-  face3d: Face3DProfile | null,
+  face3d: Face3DReportProfile | null,
 ): number | null {
   const geometryValue = (
     geometryMetrics as unknown as Record<string, {value?: unknown}> | null
@@ -804,7 +804,7 @@ function measurementNumber(
 function measurementDisplayValue(
   metricKeys: string[],
   geometryMetrics: FaceGeometryMetrics | null,
-  face3d: Face3DProfile | null,
+  face3d: Face3DReportProfile | null,
 ): string | undefined {
   const values = metricKeys
     .map(metricKey => ({
@@ -840,13 +840,13 @@ const DEPTH_VALUE_LABELS: Partial<Record<Face3DMetricKey, string>> = {
 
 function measurementDepthValues(
   metricKeys: string[],
-  face3d: Face3DProfile | null,
+  face3d: Face3DReportProfile | null,
 ): RegionMeasurementValueData[] {
   return metricKeys.flatMap(metricKey => {
     const label = DEPTH_VALUE_LABELS[metricKey as Face3DMetricKey];
     const metric = face3dMetric(
       face3d,
-      metricKey as keyof Face3DProfile['metrics'],
+      metricKey as keyof Face3DReportProfile['metrics'],
     );
     return label && metric
       ? [{
@@ -861,7 +861,7 @@ function measurementDepthValues(
 function buildRegionMeasurementItems(
   key: RegionAxesKey,
   geometryMetrics: FaceGeometryMetrics | null,
-  face3d: Face3DProfile | null,
+  face3d: Face3DReportProfile | null,
   interpretations: Record<string, FaceAnalysisMeasurementInterpretation> = {},
 ): RegionMeasurementItemData[] {
   const item = (
@@ -869,7 +869,7 @@ function buildRegionMeasurementItems(
       RegionMeasurementItemData,
       'confidenceLabel' | 'displayValue' | 'interpretation' | 'resultLabel' | 'values'
     > & {
-      confidenceKeys?: (keyof Face3DProfile['metrics'])[];
+      confidenceKeys?: (keyof Face3DReportProfile['metrics'])[];
     },
   ): RegionMeasurementItemData => {
     const {confidenceKeys, ...rest} = config;
@@ -1118,7 +1118,7 @@ function buildS3(
   regionVisuals: RegionVisuals | null,
   geometryMetrics: FaceGeometryMetrics | null,
   featureDescriptors: Record<RegionAxesKey, string[]> | null,
-  face3d: Face3DProfile | null,
+  face3d: Face3DReportProfile | null,
   face3dPhotoEvidence: Face3DPhotoEvidence | null,
   derived: FaceAnalysisDerivedResult | null,
 ): S3Data | null {
@@ -1270,7 +1270,7 @@ export function buildCoreFeatureSection({
   photoUri: string;
   regionVisuals?: RegionVisuals | null;
   geometryMetrics?: FaceGeometryMetrics | null;
-  face3d?: Face3DProfile | null;
+  face3d?: Face3DReportProfile | null;
   face3dPhotoEvidence?: Face3DPhotoEvidence | null;
   derived?: FaceAnalysisDerivedResult | null;
 }): S3Data | null {
