@@ -74,7 +74,11 @@ requireAll(shareSource, [
 ], 'face report full-content bounded capture wait');
 
 requireAll(scaffoldSource, [
-  'function ReportCompletionStepper(',
+  'function ReportCompletionIndicator(',
+  "status.displayState === 'complete'",
+  '{status.successfulCount}/{status.totalCount} 성공',
+  '{status.issueLabel}',
+  '보고서 생성 완료',
   'const capturePage = React.useCallback(',
   'prepareGoldenMaskForCapture',
   'dataRef.current.s1.photo.uri ?? null',
@@ -83,6 +87,10 @@ requireAll(scaffoldSource, [
   'scrollRef.current?.scrollTo({animated: false, y: 0})',
   'entryResetKey',
 ], 'report scaffold progress, capture, restore, and scroll reset');
+requireContract(
+  !scaffoldSource.includes('function ReportCompletionStepper('),
+  'report progress must use the compact non-spinner status treatment',
+);
 const goldenMaskSource = source(
   'apps/mobile/src/features/face-report/components/GoldenMaskCard.tsx',
 );

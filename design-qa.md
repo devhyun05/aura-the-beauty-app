@@ -149,6 +149,60 @@ final result: blocked
 
 ---
 
+# 얼굴 보고서 생성 상태 마이크로 UI Design QA
+
+## 비교 대상
+
+- Source visual truth: `/Users/wiseungcheol/.codex/generated_images/019f9029-b145-7e82-a818-f94120b998f5/call_sIFp3tTwr5qYCMGI8K1Zyz2u.png` (853 × 1844 px)
+- Implementation screenshot: unavailable
+- Viewport: intended iPhone 393 × 852 CSS px
+- Source density: approximately 2.17 px/CSS px
+- Implementation density normalization: unavailable
+- State: `2/3 성공 · 스타일링 분석 실패` terminal issue state
+
+## Full-view comparison evidence
+
+The selected source was opened and inspected. It places the generation result as quiet, right-aligned microcopy in the report header with no spinner, progress bar, warning emoji, or warning icon. The implementation could not be captured because XcodeBuildMCP found no installed or available iOS Simulator, so a same-state visual comparison is not possible.
+
+## Focused-region comparison evidence
+
+The intended focus is the top-right report-header status cluster. Source inspection confirms a small success fraction followed by the failed section label. No implementation crop exists to compare type size, wrapping, alignment, or visual weight.
+
+## Required fidelity surfaces
+
+- Fonts and typography: source calls for compact secondary text; implementation uses the existing report font helper at 10–11.5 px, but rendered weight and truncation remain unverified.
+- Spacing and layout rhythm: source calls for a small right-aligned cluster; implementation caps the width at 280 px and removes the full-width stepper, but rendered header balance remains unverified.
+- Colors and visual tokens: implementation uses the existing accent and muted tokens plus restrained orange issue text; visual contrast remains unverified.
+- Image quality and asset fidelity: no image asset is involved in this status control.
+- Copy and content: automated contracts cover `2/3`, completed/current labels, `보고서 생성 완료`, and `2/3 성공 · 스타일링 분석 실패`.
+
+## Findings
+
+- [P1] Rendered implementation evidence is unavailable.
+  - Location: `ReportCompletionIndicator`, report header.
+  - Evidence: source image is available, but no simulator/device screenshot can be produced.
+  - Impact: clipping, wrapping, alignment, and perceived prominence cannot be judged.
+  - Fix: capture the generating, complete, and partial-failure states on an iPhone 393 × 852 viewport and compare the header region to the source.
+
+## Comparison history
+
+1. Replaced the prominent three-stage stepper and spinner with compact text states.
+2. TypeScript typecheck and face-report contract tests passed.
+3. XcodeBuildMCP project discovery succeeded, but simulator discovery returned no available devices; no post-fix screenshot exists.
+
+## Implementation checklist
+
+- [x] Show overall success count during generation.
+- [x] Show completed/current section names in small adjacent text.
+- [x] Collapse the completed state to `보고서 생성 완료`.
+- [x] Show failed section names in the compact terminal state.
+- [x] Remove warning emoji/icon and spinner.
+- [ ] Capture all three rendered states at the target viewport.
+
+final result: blocked
+
+---
+
 # 얼굴·메이크업 보고서 선택 시안 2 구현 후 Design QA
 
 ## 비교 대상

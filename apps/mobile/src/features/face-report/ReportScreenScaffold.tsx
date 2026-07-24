@@ -12,7 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Check, ChevronLeft, CircleAlert, MoreHorizontal, Share2, X } from 'lucide-react-native';
+import { ChevronLeft, MoreHorizontal, Share2 } from 'lucide-react-native';
 import {
   StoryReportPager,
   type StoryReportPage,
@@ -30,7 +30,7 @@ import {
 import {keepActivePageContent} from './services/reportContentUpgrade';
 import {
   resolveReportCompletionStatus,
-  type ReportCompletionStage,
+  type ReportCompletionStatus,
 } from './services/reportCompletionStatus';
 import {GoldenMaskCard} from './components/GoldenMaskCard';
 import {
@@ -122,105 +122,71 @@ function ChapterMark({
   );
 }
 
-function ReportCompletionStepper({
-  accessibilityLabel,
-  stages,
+function ReportCompletionIndicator({
+  status,
 }: {
-  accessibilityLabel: string;
-  stages: ReportCompletionStage[];
+  status: ReportCompletionStatus;
 }) {
-  const getStateLabel = (stage: ReportCompletionStage) => {
-    if (stage.state === 'complete') return '완료';
-    if (stage.state === 'active') return '진행 중';
-    if (stage.state === 'pending') return '대기';
-    if (stage.state === 'partial') return '일부 완료';
-    if (stage.state === 'fallback') return '기본 내용';
-    return '중단';
-  };
-  const getStateColor = (stage: ReportCompletionStage) => {
-    if (stage.state === 'complete') return color.accentDeep;
-    if (stage.state === 'active') return '#159CCB';
-    if (stage.state === 'partial' || stage.state === 'fallback') return '#A36A13';
-    if (stage.state === 'failed') return '#B24B4B';
-    return color.faint;
-  };
-
   return (
     <View
       accessible
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={status.accessibilityLabel}
       accessibilityLiveRegion="polite"
-      style={{alignItems: 'flex-start', flexDirection: 'row', marginTop: 9}}>
-      {stages.map((stage, index) => {
-        const stateColor = getStateColor(stage);
-        return (
-          <React.Fragment key={stage.key}>
-            {index > 0 ? (
-              <View
-                style={{
-                  backgroundColor:
-                    stage.state === 'pending' ? color.divider : stateColor,
-                  height: 1,
-                  marginHorizontal: 3,
-                  marginTop: 11,
-                  opacity: 0.72,
-                  width: 16,
-                }}
-              />
-            ) : null}
-            <View style={{alignItems: 'center', flex: 1, gap: 3, minWidth: 0}}>
-              <View
-                style={{
-                  alignItems: 'center',
-                  backgroundColor:
-                    stage.state === 'pending' ? color.surface2 : stateColor,
-                  borderColor:
-                    stage.state === 'pending' ? color.divider : stateColor,
-                  borderRadius: 11,
-                  borderWidth: 1,
-                  height: 22,
-                  justifyContent: 'center',
-                  width: 22,
-                }}>
-                {stage.state === 'active' ? (
-                  <ActivityIndicator color={color.white} size="small" />
-                ) : stage.state === 'complete' ? (
-                  <Check color={color.white} size={13} strokeWidth={3} />
-                ) : stage.state === 'partial' || stage.state === 'fallback' ? (
-                  <CircleAlert color={color.white} size={12} strokeWidth={2.4} />
-                ) : stage.state === 'failed' ? (
-                  <X color={color.white} size={12} strokeWidth={2.8} />
-                ) : (
-                  <View
-                    style={{
-                      backgroundColor: color.faint,
-                      borderRadius: 3,
-                      height: 5,
-                      width: 5,
-                    }}
-                  />
-                )}
-              </View>
-              <Text
-                numberOfLines={2}
-                style={[
-                  font(11, '700', 1.25),
-                  {color: color.ink, textAlign: 'center'},
-                ]}>
-                {stage.label}
-              </Text>
+      style={{
+        alignItems: 'flex-end',
+        alignSelf: 'flex-end',
+        gap: 1,
+        marginTop: -2,
+        maxWidth: 280,
+        minHeight: 28,
+      }}>
+      {status.displayState === 'complete' ? (
+        <Text
+          numberOfLines={1}
+          style={[font(11, '700', 1.3), {color: color.accentDeep}]}>
+          보고서 생성 완료
+        </Text>
+      ) : status.displayState === 'issues' ? (
+        <Text numberOfLines={1} style={font(11, '700', 1.3)}>
+          <Text style={{color: color.accentDeep}}>
+            {status.successfulCount}/{status.totalCount} 성공
+          </Text>
+          <Text style={{color: color.faint}}> · </Text>
+          <Text style={{color: '#B96B32'}}>{status.issueLabel}</Text>
+        </Text>
+      ) : (
+        <>
+          <View style={{alignItems: 'center', flexDirection: 'row', gap: 5}}>
+            <Text
+              numberOfLines={1}
+              style={[font(11.5, '700', 1.3), {color: color.accentDeep}]}>
+              {status.successfulCount}/{status.totalCount}
+            </Text>
+            <View
+              style={{
+                backgroundColor: '#22AEDD',
+                borderRadius: 3,
+                height: 5,
+                width: 5,
+              }}
+            />
+            {status.completedLabels.length > 0 ? (
               <Text
                 numberOfLines={1}
-                style={[
-                  font(10.5, '600', 1.25),
-                  {color: stateColor, textAlign: 'center'},
-                ]}>
-                {getStateLabel(stage)}
+                style={[font(10, '500', 1.3), {color: color.muted}]}>
+                {status.completedLabels.join(' · ')} 완료
               </Text>
-            </View>
-          </React.Fragment>
-        );
-      })}
+            ) : null}
+          </View>
+          {status.currentLabel ? (
+            <Text
+              numberOfLines={1}
+              style={[font(10, '500', 1.3), {color: color.faint}]}>
+              {status.currentLabel}
+            </Text>
+          ) : null}
+        </>
+      )}
     </View>
   );
 }
@@ -1022,15 +988,8 @@ export const ReportScreenScaffold = React.forwardRef<
                   onBack,
                 )}
               </View>
-              <View style={{alignItems: 'center', gap: 1}}>
+              <View style={{alignItems: 'center'}}>
                 <Text style={[font(14, '700'), {color: color.ink}]}>얼굴 분석 보고서</Text>
-                <Text style={[font(11.5, '600', 1.35), {color: color.faint}]}>
-                  {reportCompletion.complete
-                    ? '모든 결과가 준비됐어요'
-                    : reportCompletion.failed
-                      ? '일부 결과를 준비하지 못했어요'
-                      : '준비된 결과부터 보여드려요'}
-                </Text>
               </View>
               <View style={{alignItems: 'center', flexDirection: 'row', justifyContent: 'flex-end', width: 88}}>
                 {onShare
@@ -1041,10 +1000,7 @@ export const ReportScreenScaffold = React.forwardRef<
                   : null}
               </View>
             </View>
-            <ReportCompletionStepper
-              accessibilityLabel={reportCompletion.accessibilityLabel}
-              stages={reportCompletion.stages}
-            />
+            <ReportCompletionIndicator status={reportCompletion} />
           </View>
           <StoryReportPager
             ref={pagerRef}

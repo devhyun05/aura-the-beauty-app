@@ -40,7 +40,7 @@ const minimum = resolveReportCompletionStatus(
 );
 expectEqual(
   minimum.compactLabel,
-  '기본 분석 완료, 얼굴 특징 해석 진행 중, 스타일 추천 진행 중',
+  '1/3 · 기본 분석 완료 · 얼굴 해석 · 스타일링 분석 진행 중',
   'minimum report names both independently active generation stages',
 );
 expectEqual(minimum.complete, false, 'minimum report is incomplete');
@@ -66,8 +66,14 @@ const progressive = resolveReportCompletionStatus(
 );
 expectEqual(
   progressive.compactLabel,
-  '기본 분석 완료, 얼굴 특징 해석 완료, 스타일 추천 진행 중',
+  '2/3 · 기본 분석 · 얼굴 해석 완료 · 스타일링 분석 진행 중',
   'progressive report shows which sections are already complete',
+);
+expectEqual(progressive.successfulCount, 2, 'progressive report counts successes');
+expectEqual(
+  progressive.currentLabel,
+  '스타일링 분석 진행 중',
+  'progressive report names the active work',
 );
 
 const complete = resolveReportCompletionStatus(
@@ -80,7 +86,7 @@ const complete = resolveReportCompletionStatus(
 );
 expectEqual(
   complete.compactLabel,
-  '기본 분석 완료, 얼굴 특징 해석 완료, 스타일 추천 완료 · 보고서 준비 완료',
+  '보고서 생성 완료',
   'completed report says it is complete',
 );
 expectEqual(complete.complete, true, 'terminal stages complete the report');
@@ -96,9 +102,10 @@ const fallbackComplete = resolveReportCompletionStatus(
 );
 expectEqual(
   fallbackComplete.complete,
-  true,
-  'terminal fallback stages still complete the report',
+  false,
+  'fallback and partial stages are not labelled as full success',
 );
+expectEqual(fallbackComplete.failed, true, 'terminal issues remain visible');
 expectEqual(
   fallbackComplete.stages[1]?.state,
   'fallback',
@@ -110,9 +117,30 @@ expectEqual(
   'partial styling keeps its actual terminal state',
 );
 
+const partialFailure = resolveReportCompletionStatus(
+  report({
+    generationStatus: 'failed',
+    contentStatus: {
+      narrativeStatus: 'completed',
+      stylingStatus: 'failed',
+      sources: {narrative: 'llm', styling: 'llm'},
+    },
+  }),
+);
+expectEqual(
+  partialFailure.compactLabel,
+  '2/3 성공 · 스타일링 분석 실패',
+  'partial failure uses the selected compact wording',
+);
+expectEqual(
+  partialFailure.displayState,
+  'issues',
+  'partial failure uses the terminal issue state',
+);
+
 const savedLegacy = resolveReportCompletionStatus(report({}));
 expectEqual(
   savedLegacy.compactLabel,
-  '기본 분석 완료, 얼굴 특징 해석 완료, 스타일 추천 완료 · 보고서 준비 완료',
+  '보고서 생성 완료',
   'saved reports without stage metadata remain complete',
 );
