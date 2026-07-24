@@ -54,7 +54,10 @@ export type FaceAnalysisReportPreviewScreenProps = {
   onBack?: () => void;
   onGoldenMaskInteractionChange?: (interacting: boolean) => void;
   onRetake?: () => void;
+  // 상단 더보기의 '추천 제품' 전용. 푸터 CTA는 라벨이 '메이크업 추천 보러가기'라
+  // 제품 추천으로 보내면 버튼 약속과 어긋난다 — onPressMakeupRecommendation을 쓴다.
   onPressProducts?: (reportId: string) => void;
+  onPressMakeupRecommendation?: (reportId: string) => void;
 };
 
 function CenteredMessage({
@@ -101,6 +104,7 @@ export function FaceAnalysisReportPreviewScreen({
   onGoldenMaskInteractionChange,
   onRetake,
   onPressProducts,
+  onPressMakeupRecommendation,
 }: FaceAnalysisReportPreviewScreenProps) {
   const insets = useSafeAreaInsets();
   const reportScreenRef = useRef<ReportScreenScaffoldRef | null>(null);
@@ -309,8 +313,8 @@ export function FaceAnalysisReportPreviewScreen({
         onGoldenMaskInteractionChange={onGoldenMaskInteractionChange}
         onMore={report ? handleMore : undefined}
         onPressCta={
-          recommendationReportId && onPressProducts
-            ? () => onPressProducts(recommendationReportId)
+          recommendationReportId && onPressMakeupRecommendation
+            ? () => onPressMakeupRecommendation(recommendationReportId)
             : undefined
         }
         onResurvey={() => setIsBodySurveyOpen(true)}

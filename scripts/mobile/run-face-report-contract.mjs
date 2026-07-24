@@ -112,8 +112,14 @@ requireAll(previewSource, [
   'const recommendationReportId =',
   'report?.id ??',
   'minimumPreview?.reportId',
-  'onPressProducts(recommendationReportId)',
+  // 푸터 CTA 라벨이 '메이크업 추천 보러가기'이므로 제품 추천이 아니라 메이크업
+  // 추천으로 보낸다(제품 추천은 상단 더보기의 '추천 제품'이 계속 담당).
+  'onPressMakeupRecommendation(recommendationReportId)',
 ], 'progressive report recommendation CTA');
+requireAll(routesSource, [
+  'onPressMakeupRecommendation={reportId =>',
+  "navigation.navigate('MakeupRecommendation', {analysisReportId: reportId})",
+], 'report CTA routes to the makeup recommendation flow');
 requireAll(minimumReportSource, [
   "preview.reportId && !preview.errorMessage",
   "'메이크업 추천 받으러 가기'",

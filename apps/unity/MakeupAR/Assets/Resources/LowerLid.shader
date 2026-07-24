@@ -41,9 +41,14 @@ Shader "ARMakeup/LowerLid"
         _LowerShadowIntensity ("Lower Shadow Intensity", Range(0, 1)) = 0
         // 스모키 언더 모양 마스크(profile 6 전용) — 밴드 UV(along × 1-v)에 그려진 알파.
         // 절차 프로파일(래시 평행 밴드)은 실루엣 자유도가 없어 "쓸 수 없는 모양"이었다.
-        // profile 6(deep-smoky-under 라우팅)일 때 LowerEsProfile 대신 이 마스크 .r을 커버리지로
-        // 쓴다. scripts/generate-lower-smoky-mask.py 생성. "black"=미설정 시 무영향.
+        // profile 6(deep-smoky-under 라우팅)일 때 이 마스크 .r을 커버리지로 쓴다.
+        // "black"=미설정 시 무영향. setRegionMask region="eyeshadowLower"로 스왑.
         _LowerSmokyMask ("Lower Smoky Shape Mask", 2D) = "black" {}
+        // 하부 프로파일 아틀라스(베이크드 개편) — 절차 LowerEsProfile 12종의 대체 정본.
+        // 4×3 타일(각 256px, row=p/4, col=p%4), 타일 좌표계는 _LowerSmokyMask와 동일
+        // (u=눈머리→눈꼬리, PNG 상단=lash). generate-eyeshadow-masks.py가 생성.
+        _LowerProfileAtlas ("Lower Profile Atlas (12 tiles 4x3)", 2D) = "black" {}
+        _LowerProfileAtlasOn ("Lower Profile Atlas Loaded", Float) = 0
         // 마감 — 블러셔와 동일 enum(0 새틴 1 매트 2 글로시 3 시머). ApplyFinish 레거시
         // 경로(세부 0 상수)라 0=새틴=기존 출력과 바이트 동일(하위호환).
         _AegyoFinish ("Aegyo Finish (0 satin 1 matte 2 gloss 3 shimmer)", Float) = 0
@@ -133,6 +138,8 @@ Shader "ARMakeup/LowerLid"
             float _ConcealerIntensity;
             sampler2D _ConcealerMask;
             sampler2D _LowerSmokyMask; // 스모키 언더 모양 마스크(profile 6 전용)
+            sampler2D _LowerProfileAtlas; // 하부 프로파일 아틀라스(비마스크 밴드 실루엣 정본)
+            float _LowerProfileAtlasOn;   // 0 = 번들 누락(비마스크 밴드 미표시, 크래시 없음)
             fixed4 _LowerShadowColor;
             float _LowerShadowIntensity;
             // Phase B lower/both 멀티레이어 — 배열 뒤 원소가 위에 오는 alpha-over 스택.
@@ -261,9 +268,43 @@ Shader "ARMakeup/LowerLid"
                 return saturate(tinted + lift);
             }
 
-            float LowerEsFiniteOr(float value, float fallbackValue)
+            // ── 캔버스 클로저 게이트 (하부 개편 2026-07-24) ─────────────────────────
+            // 하부 밴드의 "모든" 텀 커버리지에 곱하는 공통 봉투 — 캔버스 양옆·연장 끝·
+            // 하단에서 반드시 0. 프로파일·마스크·핏 높이·아핀이 무엇을 하든 밴드 사각
+            // 캔버스가 그대로 비치는 것("네모")이 구조적으로 불가능해진다. 그간의 네모
+            // 회귀는 전부 개별 프로파일 smoothstep 상수 튜닝으로 막았고 새 조합(핏 150%,
+            // 저알파 리프트, 임포트 마스크 흰 엣지)마다 다시 열렸다 — 이 게이트가 그
+            // 부류 전체를 원천 봉쇄한다. lash(상단)는 개방 — 라이너·애교살·언더 섀도
+            // 모두 lash 라인에 붙는 것이 정상이다.
+            float CanvasClosure(float along, float v)
             {
-                return value == value && abs(value) <= 65504.0 ? value : fallbackValue;
+                float extEnd = 1.0 + max(_LowerExtSpan, 0.0);
+                float gIn = smoothstep(0.0, 0.05, along);
+                float gOut = 1.0 - smoothstep(extEnd - 0.06, extEnd, along);
+                float gBot = 1.0 - smoothstep(0.88, 0.995, v);
+                return gIn * gOut * gBot;
+            }
+
+            // ── 하부 프로파일 아틀라스 샘플 (절차 LowerEsProfile 12종 폐기의 대체) ──
+            // 실루엣 정본 = 베이크드 텍스처(바이리니어) — smoothstep 동물원과 달리
+            // 매끈함·클로저가 텍스처 자체에 구워져 있어 각짐·캔버스 노출이 없다.
+            // 캔버스 1024×1024 POT(4×4 타일 격자, 12칸 사용 — NPOT 임포터 리샘플
+            // 회피), 타일 테두리 3px=0(클로저 — 인셋 텍셀까지 0 보장), 우측 컬럼은
+            // 꼬리 계열(3·11)만 워시 잔존: 연장 캔버스의 실제 워시 값은 클램프가
+            // 닿는 인셋 텍셀(253)에 실린다. 샘플은 타일 안쪽 2.5px 인셋 + mip
+            // 없음·비압축 임포트 — 이웃 타일 번짐이 구조적으로 없다.
+            float SampleLowerProfileAtlas(float profile, float u, float vRel)
+            {
+                if (_LowerProfileAtlasOn < 0.5) return 0.0;
+                float p = clamp(floor(profile + 0.5), 0.0, 11.0);
+                float col = fmod(p, 4.0);
+                float row = floor(p * 0.25);
+                const float INSET = 2.5 / 256.0;
+                float tu = clamp(u, INSET, 1.0 - INSET);
+                float tv = clamp(vRel, INSET, 1.0 - INSET); // 0=lash(PNG 상단) → 1=하단
+                float x = (col + tu) * 0.25;
+                float yPng = (row + tv) * 0.25;
+                return tex2D(_LowerProfileAtlas, float2(x, 1.0 - yPng)).r;
             }
 
             float2 InverseBandAffine(float2 bandUV, float4 affine, float rotationDegrees)
@@ -282,92 +323,9 @@ Shader "ARMakeup/LowerLid"
                 return float2(centered.x + 0.5, 0.5 - centered.y);
             }
 
-            // 하안검 전용 12-profile. u=안쪽0→바깥1, v=waterline0→볼1.
-            // 모든 profile이 waterline·메시 하단에서 0으로 닫혀 눈알 침범과 직선 컷을 막는다.
-            float LowerEsProfile(float anatomicalU, float verticalV, float layerHeight, float profile)
-            {
-                float u = saturate(LowerEsFiniteOr(anatomicalU, 0.0));
-                float v = saturate(LowerEsFiniteOr(verticalV, 0.0));
-                float height = clamp(LowerEsFiniteOr(layerHeight, 1.0), 0.25, 2.0);
-                profile = clamp(LowerEsFiniteOr(profile, 0.0), 0.0, 11.0);
-                float waterline = smoothstep(0.10, 0.18, v);
-                float cheekEdge = 1.0 - smoothstep(0.90, 1.00, v);
-                float horizontal = smoothstep(0.02, 0.12, u)
-                                 * (1.0 - smoothstep(0.88, 0.98, u));
-                float vertical;
-
-                if (profile < 0.5)
-                {
-                    // Base: lash에 붙는 은은한 워시. 이전(세로 0.68~0.92 램프 + 좌우 10%
-                    // 엣지)은 밴드 캔버스가 그대로 비치는 "사각 블롭"이었다 — role base
-                    // (surface both)와 모양 미지정 언더 워시 룩 전부가 이 기본값을 타므로
-                    // 좌우 페더를 폭의 ~25%로 넓히고 세로를 lash 쪽으로 눌러 스머지로 만든다.
-                    vertical = waterline * (1.0 - smoothstep(0.30, 0.85, v / height));
-                    horizontal = smoothstep(0.02, 0.25, u)
-                               * (1.0 - smoothstep(0.70, 0.96, u));
-                }
-                else if (profile > 10.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.34, 0.64, v / height));
-                    horizontal = smoothstep(0.62, 0.80, u)
-                               * (1.0 - smoothstep(0.94, 1.00, u));
-                }
-                else if (profile > 9.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.76, 0.98, v / height));
-                }
-                else if (profile > 8.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.30, 0.56, v / height));
-                    horizontal = smoothstep(0.60, 0.76, u)
-                               * (1.0 - smoothstep(0.90, 0.98, u));
-                }
-                else if (profile > 7.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.46, 0.76, v / height));
-                    horizontal *= smoothstep(0.12, 0.26, u)
-                                * (1.0 - smoothstep(0.78, 0.90, u));
-                }
-                else if (profile > 6.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.62, 0.88, v / height));
-                }
-                else if (profile > 5.5 && profile < 6.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.38, 0.66, v / height));
-                    horizontal = smoothstep(0.56, 0.72, u)
-                               * (1.0 - smoothstep(0.94, 1.00, u));
-                }
-                else if (profile > 4.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.34, 0.64, v / height));
-                    horizontal = smoothstep(0.20, 0.34, u)
-                               * (1.0 - smoothstep(0.66, 0.80, u));
-                }
-                else if (profile > 3.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.32, 0.60, v / height));
-                    horizontal = (1.0 - smoothstep(0.30, 0.48, u))
-                               * smoothstep(0.02, 0.10, u);
-                }
-                else if (profile > 2.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.32, 0.62, v / height));
-                    horizontal = smoothstep(0.58, 0.76, u)
-                               * (1.0 - smoothstep(0.94, 1.00, u));
-                }
-                else if (profile > 1.5)
-                {
-                    vertical = waterline * (1.0 - smoothstep(0.74, 0.98, v / height));
-                }
-                else
-                {
-                    vertical = smoothstep(0.20, 0.34, v / height)
-                             * (1.0 - smoothstep(0.48, 0.74, v / height));
-                    vertical *= waterline;
-                }
-                return saturate(vertical * horizontal * cheekEdge);
-            }
+            // (구 LowerEsProfile 절차 12종은 삭제 — 실루엣 정본은 _LowerProfileAtlas
+            //  베이크드 타일과 _LowerSmokyMask(마스크 모드)뿐이다. smoothstep 프로파일은
+            //  캔버스 클로저를 보장하지 못해 "네모" 회귀의 근원이었다.)
 
             fixed4 frag(v2f i) : SV_Target
             {
@@ -394,6 +352,9 @@ Shader "ARMakeup/LowerLid"
                 float extSpan = max(_LowerExtSpan, 1e-4);
                 float extT = saturate((along - 1.0) / extSpan); // 0=코너 → 1=연장 끝
                 float inEye = 1.0 - smoothstep(0.985, 1.0 + 0.02 * _LowerExtSpan, along);
+                // 캔버스 클로저(개편) — 아래 전 텀 커버리지에 공통 곱. 원시 밴드 UV 기준
+                // (아핀 역변환 좌표가 아니라 캔버스 그 자체를 닫는 게이트다).
+                float closure = CanvasClosure(along, v);
 
                 // 삼각존 세로 폭 배수 — 라이너 트레이스가 하단 경계를 공유하므로 선계산.
                 float triShapeW = (_TriShape > 1.5) ? 1.6 : ((_TriShape > 0.5) ? 0.6 : 1.0);
@@ -433,7 +394,7 @@ Shader "ARMakeup/LowerLid"
                 float lnDist = abs(linerV - lnCenter);
                 float lnAmt = (1.0 - smoothstep(0.10 * _LinerThickness * lnTaper,
                                                 0.22 * _LinerThickness * lnTaper, lnDist))
-                              * linerEdge * _LinerIntensity * lnSeg;
+                              * linerEdge * _LinerIntensity * lnSeg * closure;
                 lnAmt = TexEdge(TexCoverage(saturate(lnAmt), lnTexC), lnTexE);
                 // ── 애교살 베이크드 프로파일(절차 SDF 대체) ──────────────────────────────
                 // 근본 교체 v4: FitArc SDF도 곡선을 정점 계수로 나르는 절차 경로라, 요구가
@@ -446,7 +407,7 @@ Shader "ARMakeup/LowerLid"
                 fixed3 aegyoProf = tex2D(_AegyoProfile, float2(aegyoUV.x, 1.0 - aegyoUV.y)).rgb;
                 // 애교살은 해부학적으로 눈 구간까지 — 연장 캔버스에선 코너에서 소프트 컷
                 // (프로파일 텍스처가 우측 엣지 클램프로 번지는 것 방지).
-                aegyoProf *= inEye;
+                aegyoProf *= inEye * closure;
                 float hiAmt = aegyoProf.r * _AegyoIntensity * AEGYO_HI_MAX;
                 hiAmt = TexEdge(TexCoverage(saturate(hiAmt), agTexC), agTexE); // 제형 커버·엣지(애교살 하이라이트)
                 float shAmt = aegyoProf.g * _AegyoIntensity * AEGYO_SH_MAX;   // G는 롤 아래에만 칠해짐 → 양옆 0
@@ -499,7 +460,7 @@ Shader "ARMakeup/LowerLid"
                 // (실기기). 1−(1−x)^지수로 저·중역을 들어 올리되 0=끔·1=최대는 그대로라
                 // 슬라이더 상단 데드존이 없다. 지수 1.8→2.6(2026-07-24 사진: 여전히 옅음).
                 float triStrength = 1.0 - pow(1.0 - saturate(_TriIntensity), 2.6);
-                float triAmt = triAlong * triV * triStrength;
+                float triAmt = triAlong * triV * triStrength * closure;
                 triAmt = TexEdge(TexCoverage(saturate(triAmt), trTexC), trTexE); // 제형 커버·엣지(삼각존)
 
                 // Photoshop/소스제어 마스크의 해부학적 밴드 UV: x=안쪽→바깥, y=lash→볼.
@@ -512,7 +473,7 @@ Shader "ARMakeup/LowerLid"
                 float ccMask = tex2D(_ConcealerMask, ccMaskUV).r
                              * ccBlueSelector * ccDarkSelector;
                 // 컨실러는 연장 캔버스에서 항상 정지(마스크 우측 엣지 클램프 번짐 방지).
-                float ccAmt = ccMask * _ConcealerIntensity * inEye;
+                float ccAmt = ccMask * _ConcealerIntensity * inEye * closure;
                 ccAmt = TexEdge(TexCoverage(saturate(ccAmt), ccTexC), ccTexE); // 제형 커버·엣지(눈밑 컨실러)
                 float ccA = saturate(ccAmt) * CONCEALER_ALPHA_CEILING;
 
@@ -527,7 +488,7 @@ Shader "ARMakeup/LowerLid"
                 // 엣지 픽셀 = 꼬리 밖 워시 강도), 연장 끝 전에 페이드로 소멸한다.
                 float esExtFade = along <= 1.0 ? 1.0 : (1.0 - smoothstep(0.45, 1.0, extT));
                 float esAmt = tex2D(_LowerSmokyMask, float2(along, 1.0 - smokyV)).r
-                            * _LowerShadowIntensity * esExtFade;
+                            * _LowerShadowIntensity * esExtFade * closure;
                 esAmt = TexEdge(TexCoverage(saturate(esAmt), esTexC), esTexE); // 제형 커버·엣지(아이섀도 하)
 
                 // 색소(피드 기준 풀강도): 라이너=루마 보존 틴트, 애교살=스크린(가산),
@@ -609,23 +570,34 @@ Shader "ARMakeup/LowerLid"
                         float edgeB, grainB, coverageB, bodyB;
                         TexBundleFromEnum(9.0, textureB, edgeB, grainB, coverageB, bodyB);
                         float liftedIntensityB = EyeshadowVisibilityLift(_LowerEsLayerColor[b].a);
-                        // profile 6 = 스모키 언더: 절차 밴드 대신 그린 마스크 실루엣을 커버리지로.
-                        // 세로는 heightB로 스트레치(핏 높이 핸들 유지). 마스크 UV는 컨실러와 동일
-                        // 1-v flip(PNG 위=래시라인). 다른 11개 프로파일은 종전 경로 그대로.
+                        // profile 6 = 마스크 모드: 그린 마스크(_LowerSmokyMask) 실루엣을
+                        // 커버리지로. 나머지 11종은 베이크드 아틀라스 타일(절차 폐기).
+                        // 두 경로 모두: 세로는 heightB 정규화(핏 높이 핸들), UV는 컨실러와
+                        // 동일 1-v flip(PNG 위=래시라인), 연장 구간(along>1)은 우측 엣지
+                        // 클램프 + 페이드(legacy esAmt 관례 공유). 아틀라스 연장 워시는
+                        // 꼬리 프로파일(3·11)에만 허용 — 비꼬리 타일의 인셋 텍셀 잔존값이
+                        // 눈꼬리 밖으로 새는 유령 워시 차단(구 절차 경로의 "u=1에서 0"
+                        // 계약 계승, 생성기 3px 보더와 이중 게이트).
+                        float vRelB = saturate(v / clamp(heightB, 0.25, 2.0));
+                        float extFadeB = along <= 1.0
+                            ? 1.0 : (1.0 - smoothstep(0.45, 1.0, extT));
                         float amtShapeB;
                         if (profileB > 5.5 && profileB < 6.5)
                         {
-                            float smokyV = saturate(v / clamp(heightB, 0.25, 2.0));
-                            // 연장 구간: 우측 엣지 클램프 연장 + 페이드(legacy esAmt와 동일 관례).
-                            amtShapeB = tex2D(_LowerSmokyMask, float2(along, 1.0 - smokyV)).r
-                                      * (along <= 1.0 ? 1.0 : (1.0 - smoothstep(0.45, 1.0, extT)));
+                            amtShapeB = tex2D(_LowerSmokyMask,
+                                              float2(along, 1.0 - vRelB)).r * extFadeB;
                         }
                         else
                         {
-                            // 절차 프로파일은 u=1 클램프에서 horizontal이 0 → 연장 자동 무시.
-                            amtShapeB = LowerEsProfile(along, v, heightB, profileB);
+                            float tailWashB =
+                                (profileB > 2.5 && profileB < 3.5) || profileB > 10.5
+                                    ? 1.0 : 0.0;
+                            amtShapeB = SampleLowerProfileAtlas(
+                                    profileB, min(along, 1.0), vRelB)
+                                * (along <= 1.0 ? 1.0 : tailWashB * extFadeB);
                         }
-                        float amtB = amtShapeB * liftedIntensityB;
+                        // closure — 캔버스 4변 봉쇄(마스크·아틀라스·핏이 뭘 하든 네모 불가).
+                        float amtB = amtShapeB * liftedIntensityB * closure;
                         amtB = TexEdge(TexCoverage(saturate(amtB), coverageB), edgeB);
 
                         fixed3 baseB = lerp(_LowerEsLayerColor[b].rgb,
@@ -680,7 +652,7 @@ Shader "ARMakeup/LowerLid"
                 // 절차적 애교살 위에 "over" 합성한다(둘 다 SrcAlpha로 피드 위에 얹힘).
                 float2 aegyoArtUV = InverseBandAffine(i.uv, _AegyoAffine, _AegyoAffineRot);
                 fixed4 art = tex2D(_AegyoTex, aegyoArtUV);
-                float artA = art.a * _AegyoStyleIntensity;
+                float artA = art.a * _AegyoStyleIntensity * closure;
                 float outA = artA + combA * (1.0 - artA);
                 fixed3 outRGB = (art.rgb * artA + combPig * combA * (1.0 - artA))
                                 / max(outA, 1e-4);

@@ -18,11 +18,61 @@ import {
   type MakeupRecipeRegion,
   type RegionAdjustmentFieldSchema,
 } from '../../../shared/contracts/fullFaceMakeupRecipe';
+import type {BrowThicknessProfile} from '../stencil/src/bridge/types';
+
+// 추천 룩이 controls(7부위) 밖의 세부 레인을 스텐실 번역에 전달하는 사이드채널.
+// controls는 MAKEUP_RECIPE_REGIONS 고정 키라 립글로스·아래 섀도·애교살 전용
+// 슬롯이 없다 — createRecommendedStencilLook만 소비하고,
+// createFullFaceMakeupRecipeFromEditState는 controls만 읽으므로 레시피
+// 와이어(ApplyRecipeJson)에는 절대 실리지 않는다(미지 region 와이프 리스크 0).
+export type RecommendedLookLanes = {
+  /** 립 가이드 존재 시 항상 유효 hex(플랜 '광택' 색 또는 '#FFFFFF' 클리어).
+   *  shape: 글로스 존 0=전체 1=중앙 도트 2=아랫입술만 — 텍스트 신호로 파생. */
+  lipGloss?: {colorHex: string; shape: number};
+  /** 립 가이드 존재 시 프리셋 표준 소프트 경계(0.35). innerColorHex는 플랜
+   *  '안쪽 포인트' 색 — 있으면 그라데 립(lipColor2 + lipGradient 0.75). */
+  lipStyle?: {edgeFeather: number; innerColorHex?: string};
+  /** cheek 가이드 존재 시 블러셔 모양(AR_BLUSH_SHAPES value + 카탈로그 lift/spread). */
+  blushShape?: {value: number; lift: number; spread: number};
+  /** brow 가이드 존재 시 눈썹룩(sys:var:brow:*) 파라미터 — 레퍼런스 알파
+   *  browStyle 한 겹 계약. 절차 축(browIntensity/파우더/펜슬/라이트너)은 개편으로
+   *  폐지됐고 알파 마스크 위에 기하 밴드를 덧그려 어긋나므로 싣지 않는다(BARE가
+   *  명시 0이라 생략으로 충분). 모양은 에셋(styleTemplate)이 소유하므로 두께·
+   *  정의감은 두께 축과 강도로 표현한다. shape는 컴포저 눈썹 UI 되읽기 키. */
+  brow?: {
+    shape: number;
+    styleTemplate: number;
+    styleIntensity: number;
+    thicknessProfile: BrowThicknessProfile;
+    thickness: number;
+    arch: number;
+  };
+  /** eye 가이드 존재 표식. colorHex는 플랜 '깊이' 색만(없으면 가이드 색 폴백).
+   *  '깊이' 색은 아래 밴드와 위 딥 포인트 밴드(눈꼬리 V)가 공유한다. */
+  lowerShadow?: {colorHex?: string};
+  /** eye 플랜 '베이스' 색 — 위 섀도 다층의 베이스 워시 밴드(넓고 높게, 매트). */
+  upperBaseColorHex?: string;
+  /** 섀도 실루엣 = 카탈로그 마스크. 절차 프로파일의 각진 양옆 경계 대신 마스크가
+   *  실루엣을 소유한다(위 마스크는 프로파일 커버리지에 곱해지는 게이트, 아래는
+   *  profile 6 실루엣 정본). 파일명만 담고 streaming URI는 번역층이 조립하며,
+   *  위/아래는 검증된 페어링(lookVariants·생성기 접미사 규칙)으로만 짝짓는다. */
+  shadowMask?: {upper: string; lower: string};
+  /** 애교살 — 항상 동반(룩 언급 무관). shimmer·height는 셰이더가 참조하지 않는
+   *  죽은 축이라 레인에서 제외한다(finish는 새틴 0이 최대 발색). */
+  aegyo?: {
+    colorHex: string;
+    intensity: number;
+    finish: number;
+  };
+  /** 플랜 '라인' 색 중 딥(저휘도) 통과분만 — 밝은 색 세탁 방지. */
+  eyelinerColorHex?: string;
+};
 
 export type FullFaceMakeupEditState = {
   selectedRegion: MakeupRecipeRegion;
   controls: FullFaceRegionControls;
   sourceFrameMetadata?: FullFaceMakeupSourceInput;
+  lookLanes?: RecommendedLookLanes;
 };
 
 export type FullFaceMakeupSavedContract = {

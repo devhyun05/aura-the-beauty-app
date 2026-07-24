@@ -223,6 +223,8 @@ interface Props {
   catalog: CatalogManifest;
   onApplyTexture: (action: TextureAction, leafId: string, uri: string) => void;
   onApplyMask: (region: MaskRegion, leafId: string, uri: string) => void;
+  /** 현재 적용 중인 존 마스크 uri(부위별) — 카탈로그 썸네일 선택 링 표시용 */
+  maskSelections?: Partial<Record<MaskRegion, string>>;
   onApplyTextureMap: (region: TextureMapRegion, leafId: string, uri: string) => void;
   onApplyOverlayImage: (leafId: string, uri: string) => void;
   onApplyLensDesign: (leafId: string, uri: string) => void;
@@ -374,6 +376,7 @@ export default function ComposerSheet({
   catalog,
   onApplyTexture,
   onApplyMask,
+  maskSelections,
   onApplyTextureMap,
   onApplyOverlayImage,
   onApplyLensDesign,
@@ -1232,6 +1235,7 @@ export default function ComposerSheet({
                 onApplyTexture(action, selectedLeaf.id, uri)
               }
               onApplyMask={(region, uri) => onApplyMask(region, selectedLeaf.id, uri)}
+              maskSelections={maskSelections}
               onApplyTextureMap={(region, uri) =>
                 onApplyTextureMap(region, selectedLeaf.id, uri)
               }
@@ -1572,6 +1576,7 @@ function CatalogStrip({
   onImport,
   onRemove,
   emptyHint,
+  selectedUri,
 }: {
   entries: AssetCatalogEntry[];
   onPick: (uri: string) => void;
@@ -1579,6 +1584,8 @@ function CatalogStrip({
   /** 롱프레스→확인 후 항목 삭제. 없으면 삭제 어포던스 비활성. */
   onRemove?: (id: string) => void;
   emptyHint: string;
+  /** 현재 적용 중인 항목 uri — 일치 항목에 선택 링 표시(무피드백 탭 해소). */
+  selectedUri?: string | null;
 }) {
   const confirmRemove = useCallback(
     (e: AssetCatalogEntry) => {
@@ -1610,34 +1617,43 @@ function CatalogStrip({
           showsHorizontalScrollIndicator={false}
           style={styles.catalogRow}
         >
-          {entries.map(e => (
-            <TouchableOpacity
-              key={e.id}
-              style={styles.catalogItem}
-              onPress={() => onPick(e.uri)}
-              onLongPress={onRemove ? () => confirmRemove(e) : undefined}
-            >
-              {/* 번들 항목은 uri가 streaming:…(네이티브 전용)이라 RN Image로 못
-                  읽는다 — 렌더 가능한 스킴(data:/file:/http(s):…)일 때만 <Image>,
-                  아니면 깨진 이미지 대신 이름 타일. apply(탭)은 그대로 uri로 동작. */}
-              {isRenderableThumb(e.thumbnail ?? e.uri) ? (
-                <Image
-                  source={{ uri: e.thumbnail ?? e.uri }}
-                  style={styles.catalogThumb}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={[styles.catalogThumb, styles.catalogThumbFallback]}>
-                  <Text style={styles.catalogThumbFallbackText} numberOfLines={3}>
-                    {e.name}
-                  </Text>
-                </View>
-              )}
-              <Text style={styles.catalogItemName} numberOfLines={1}>
-                {e.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {entries.map(e => {
+            const isSelected = !!selectedUri && e.uri === selectedUri;
+            return (
+              <TouchableOpacity
+                key={e.id}
+                style={[styles.catalogItem, isSelected && styles.catalogItemOn]}
+                onPress={() => onPick(e.uri)}
+                onLongPress={onRemove ? () => confirmRemove(e) : undefined}
+              >
+                {/* 번들 항목은 uri가 streaming:…(네이티브 전용)이라 RN Image로 못
+                    읽는다 — 렌더 가능한 스킴(data:/file:/http(s):…)일 때만 <Image>,
+                    아니면 깨진 이미지 대신 이름 타일. apply(탭)은 그대로 uri로 동작. */}
+                {isRenderableThumb(e.thumbnail ?? e.uri) ? (
+                  <Image
+                    source={{ uri: e.thumbnail ?? e.uri }}
+                    style={styles.catalogThumb}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={[styles.catalogThumb, styles.catalogThumbFallback]}>
+                    <Text style={styles.catalogThumbFallbackText} numberOfLines={3}>
+                      {e.name}
+                    </Text>
+                  </View>
+                )}
+                <Text
+                  style={[
+                    styles.catalogItemName,
+                    isSelected && styles.catalogItemNameOn,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {isSelected ? `◈ ${e.name}` : e.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       )}
       {onRemove && entries.length > 0 && (
@@ -1665,6 +1681,7 @@ function AxisEditor({
   catalog,
   onApplyTexture,
   onApplyMask,
+  maskSelections,
   onApplyTextureMap,
   onOpenCatalogImport,
   onRemoveCatalogEntry,
@@ -1702,6 +1719,7 @@ function AxisEditor({
   catalog: CatalogManifest;
   onApplyTexture: (action: TextureAction, uri: string) => void;
   onApplyMask: (region: MaskRegion, uri: string) => void;
+  maskSelections?: Partial<Record<MaskRegion, string>>;
   onApplyTextureMap: (region: TextureMapRegion, uri: string) => void;
   onOpenCatalogImport: () => void;
   onRemoveCatalogEntry?: (id: string) => void;
@@ -1781,6 +1799,7 @@ function AxisEditor({
                 catalog={catalog}
                 onApplyTexture={onApplyTexture}
                 onApplyMask={onApplyMask}
+                maskSelections={maskSelections}
                 onApplyTextureMap={onApplyTextureMap}
                 onOpenCatalogImport={onOpenCatalogImport}
                 onRemoveCatalogEntry={onRemoveCatalogEntry}
@@ -2040,6 +2059,7 @@ function AxisEditor({
                     catalog={catalog}
                     onApplyTexture={onApplyTexture}
                     onApplyMask={onApplyMask}
+                    maskSelections={maskSelections}
                     onApplyTextureMap={onApplyTextureMap}
                     onOpenCatalogImport={onOpenCatalogImport}
                     onRemoveCatalogEntry={onRemoveCatalogEntry}
@@ -2066,6 +2086,7 @@ function AxisEditor({
                   catalog={catalog}
                   onApplyTexture={onApplyTexture}
                   onApplyMask={onApplyMask}
+                  maskSelections={maskSelections}
                   onApplyTextureMap={onApplyTextureMap}
                   onOpenCatalogImport={onOpenCatalogImport}
                   onRemoveCatalogEntry={onRemoveCatalogEntry}
@@ -2094,6 +2115,7 @@ function AxisEditor({
                 catalog={catalog}
                 onApplyTexture={onApplyTexture}
                 onApplyMask={onApplyMask}
+                maskSelections={maskSelections}
                 onApplyTextureMap={onApplyTextureMap}
                 onOpenCatalogImport={onOpenCatalogImport}
                 onRemoveCatalogEntry={onRemoveCatalogEntry}
@@ -2142,6 +2164,7 @@ function ControlView({
   catalog,
   onApplyTexture,
   onApplyMask,
+  maskSelections,
   onApplyTextureMap,
   onOpenCatalogImport,
   onRemoveCatalogEntry,
@@ -2159,6 +2182,7 @@ function ControlView({
   catalog: CatalogManifest;
   onApplyTexture: (action: TextureAction, uri: string) => void;
   onApplyMask: (region: MaskRegion, uri: string) => void;
+  maskSelections?: Partial<Record<MaskRegion, string>>;
   onApplyTextureMap: (region: TextureMapRegion, uri: string) => void;
   onOpenCatalogImport: () => void;
   onRemoveCatalogEntry?: (id: string) => void;
@@ -2273,6 +2297,17 @@ function ControlView({
                       : control.key === 'eyelinerStyle'
                         ? {eyelinerHasGeometryProfiles: 0}
                         : {}),
+                    // 마지막 행동 승리 — 아래 존 마스크가 적용된 "하부 전용" 잎에서
+                    // 모양 칩을 고르면 마스크를 해제하고 칩 실루엣(아틀라스)으로
+                    // 돌아간다(마스크 적용 중 칩이 무반응이던 죽은 선택의 역방향 해소,
+                    // compileLayers의 마스크 우선 라우팅과 한 쌍). 위+아래(2) 잎은
+                    // 제외 — 칩은 분리된 상부 밴드의 모양이고 하부 마스크는 공존이
+                    // 계약이라, 상부만 바꾸려는 탭이 하부 마스크를 지우면 안 된다.
+                    ...(control.key === 'eyeshadowShape' &&
+                    (params.eyeshadowSurface ?? 2) === 1 &&
+                    ((params.eyeshadowLowerMaskImported as number) ?? 0) > 0
+                      ? {eyeshadowLowerMaskImported: 0}
+                      : {}),
                     ...(o.patch ?? {}),
                   })
                 }
@@ -2369,6 +2404,18 @@ function ControlView({
       // 모양 축 마스크 = "어디에"(존 스텐실, 색은 앱이). 텍스처 축 컬러 아트 = "무엇을".
       // 강도 슬라이더 없음 — 부위 자체 농도 축이 세기 담당. 마커로 적용 상태만 표시.
       const applied = ((params[control.appliedKey] as number) ?? 0) > 0;
+      // 아래 존 마스크는 하부 밴드가 있어야 보인다 — 위 전용(surface 0) 잎에서는
+      // 탭해도 아무것도 안 그려지는 죽은 선택이므로 컨트롤 대신 안내를 띄운다.
+      if (
+        control.region === 'eyeshadowLower' &&
+        (params.eyeshadowSurface ?? 2) === 0
+      ) {
+        return (
+          <Text style={styles.maskHint}>
+            아래 존 마스크는 적용 위치가 '아래'나 '위+아래'일 때 쓸 수 있어요
+          </Text>
+        );
+      }
       return (
         <View>
           <Text style={styles.maskHint}>
@@ -2384,6 +2431,9 @@ function ControlView({
           </TouchableOpacity>
           <CatalogStrip
             entries={entriesForControl(catalog, 'maskImport', control.region)}
+            // 선택 링은 "실제 적용 중"일 때만 — 마커가 꺼진 상태(칩으로 해제 등)에서
+            // 세션 경로만 남아 있으면 링을 끈다(적용됨 배지와 상태 일치).
+            selectedUri={applied ? maskSelections?.[control.region] ?? null : null}
             onPick={uri => onApplyMask(control.region, uri)}
             onImport={onOpenCatalogImport}
             onRemove={onRemoveCatalogEntry}
@@ -3682,6 +3732,17 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.75)',
     fontSize: 9,
     marginTop: 2,
+  },
+  // 현재 적용 항목 — 골드 링 + 이름 강조(칩 선택 문법과 동일 계열).
+  catalogItemOn: {
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: GOLD,
+    backgroundColor: 'rgba(201,161,94,0.14)',
+  },
+  catalogItemNameOn: {
+    color: GOLD,
+    fontWeight: '700',
   },
   catalogRemoveHint: {
     color: 'rgba(255,255,255,0.35)',

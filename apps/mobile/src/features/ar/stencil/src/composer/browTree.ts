@@ -26,7 +26,8 @@ export const BROW_REFERENCE_SHAPES = [
 /** 레퍼런스 알파 에셋을 담을 기본 browStyle sub 룩. */
 export const DEFAULT_BROW_STYLE_SUB_LOOK_ID =
   'sys:var:brow-style:natural-texture:s0';
-const REFERENCE_BROW_INTENSITY = 0.62;
+/** 레퍼런스 알파 눈썹의 기본 농도 — 세부부위 탭과 '전체' 탭 부위 룩의 공통 출처. */
+export const REFERENCE_BROW_INTENSITY = 0.62;
 export const BASIC_BROW_THICKNESS_MIN = 0.25;
 export const BASIC_BROW_THICKNESS_NEUTRAL = 1;
 export const BASIC_BROW_THICKNESS_MAX = 2.5;
@@ -51,7 +52,8 @@ const BROW_COLOR_KEY_BY_REGION: Partial<
   browStyle: 'browStyleColor',
 };
 
-const DEFAULT_BROW_COLOR = BROW_COLORS[2];
+/** 레퍼런스 알파 눈썹의 기본색(내추럴 브라운) — 세부부위 탭·부위 룩 공통. */
+export const DEFAULT_BROW_COLOR = BROW_COLORS[2];
 
 export type BrowTreeState = {
   enabled: boolean;

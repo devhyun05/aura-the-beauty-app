@@ -11,4 +11,9 @@ export type StencilInitialLook = {
   label: string;
   params: Partial<FilterParams>;
   eyeshadowLayers?: EyeshadowLayer[];
+  /** §16 카탈로그 마스크 참조 — flat params가 URI를 못 담아 사이드채널로 싣는다
+   *  (FilterPreset.maskRefs 선례). decomposeToTree가 해당 부위 잎에 붙이고,
+   *  params의 …MaskImported 마커와 짝이 맞아야 App reconcile이 setRegionMask를
+   *  보낸다(마커만 있고 URI가 없으면 하부가 번들 스모키 실루엣 고아 상태). */
+  maskRefs?: {region: string; uri: string}[];
 };

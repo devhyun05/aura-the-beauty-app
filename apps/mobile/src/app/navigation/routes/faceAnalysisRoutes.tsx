@@ -1705,6 +1705,9 @@ export function FaceAnalysisReportPreviewRouteScreen({
           goBackToPreviousOrMainTab(navigation, 'HomeTab');
         }}
         onGoldenMaskInteractionChange={setGoldenMaskInteracting}
+        onPressMakeupRecommendation={reportId =>
+          navigation.navigate('MakeupRecommendation', {analysisReportId: reportId})
+        }
         onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
         onRetake={() => {
           if (minimumPreview) {

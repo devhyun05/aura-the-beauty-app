@@ -81,11 +81,13 @@ function eyeshadowLayerFromParams(
 ): EyeshadowLayerV2 {
   const surface = normalizeSurface(p.eyeshadowSurface, role === 'base' ? 2 : 0);
   let profile = normalizeEyeshadowShape(p.eyeshadowShape);
-  // 하부 마스크 잎 자동 라우팅 — Unity는 profile 6(딥 스모키 언더)일 때만
-  // _LowerSmokyMask를 커버리지로 쓴다. shape 명시를 잎마다 기억하는 건 함정
-  // (v2-cat-point가 빠뜨려 마스크 대신 기본 파라메트릭 밴드가 그려졌다).
-  // 명시 shape(≠0)는 존중하고, 마스크 임포트+미지정일 때만 6으로 보낸다.
-  if (profile === 0 && surface !== 0 && (p.eyeshadowLowerMaskImported ?? 0) > 0) {
+  // 하부 마스크 잎 라우팅 — Unity는 profile 6(마스크 모드)일 때만 _LowerSmokyMask를
+  // 커버리지로 쓴다. 마스크가 임포트되어 있으면 shape 명시 여부와 무관하게 마스크가
+  // 실루엣 정본이다(마스크 우선). 구판의 "명시 shape(≠0)는 존중" 게이트는 카탈로그
+  // 마스크 탭이 아무 효과가 없는 죽은 선택("선택이 안 돼요")을 만들었다 — 반대 방향
+  // (칩 탭이 마스크를 해제)은 ComposerSheet의 모양 칩 onPress가 마커를 0으로 내리는
+  // 것으로 성립한다(마지막 행동 승리).
+  if (surface !== 0 && (p.eyeshadowLowerMaskImported ?? 0) > 0) {
     profile = 6;
   }
   return {
@@ -313,17 +315,31 @@ export function compileLayers(
   }
   // V2는 단 한 겹도 배열로 보내 surface/profile 의미를 잃지 않는다. 최대 8, 자동 병합 없음.
   const retainedEyeshadowLeaves = eyeshadowLeaves.slice(0, MAX_EYESHADOW_LAYERS_V2);
-  const eyeshadowLayers: EyeshadowLayerV2[] = retainedEyeshadowLeaves.map(leaf =>
-    eyeshadowLayerFromParams(leaf.params, leaf.role));
+  const eyeshadowLayers: EyeshadowLayerV2[] = retainedEyeshadowLeaves
+    .flatMap<EyeshadowLayerV2>(leaf => {
+      const band = eyeshadowLayerFromParams(leaf.params, leaf.role);
+      // 위+아래(surface 2) 잎 + 하부 마스크 — profile은 잎당 하나뿐이라 마스크 모드
+      // (6)가 상부 실루엣까지 삼킨다. 컴파일에서 상/하 두 밴드로 분리해 상부는 칩
+      // 모양, 하부는 마스크를 유지한다(와이어 계약 불변, 밴드 슬롯 1개 추가 소모).
+      if (band.surface === 2 && (leaf.params.eyeshadowLowerMaskImported ?? 0) > 0) {
+        const upper = eyeshadowLayerFromParams(
+          { ...leaf.params, eyeshadowLowerMaskImported: 0 }, leaf.role);
+        return [{ ...upper, surface: 0 }, { ...band, surface: 1 }];
+      }
+      return [band];
+    })
+    .slice(0, MAX_EYESHADOW_LAYERS_V2);
   if (retainedEyeshadowLeaves.length > 0) {
     // 마스크·마감맵은 밴드별 payload가 아니라 region-global Unity 리소스다. 배열 경로에서도
     // 보이는 잎 중 하나라도 요청하면 compiled.params에 마커를 남겨 App reconcile이 set/clear한다.
+    // 전체 잎 목록(eyeshadowLeaves) 기준 — 8밴드 캡으로 잘린 잎이 마커를 들고 있어도
+    // region-global 마스크가 조용히 clear되지 않는다(캡 마커 드롭 함정).
     for (const key of [
       'eyeshadowMaskImported',
       'eyeshadowLowerMaskImported',
       'eyeshadowFinishMapImported',
     ] as const) {
-      if (retainedEyeshadowLeaves.some(
+      if (eyeshadowLeaves.some(
         leaf => ((leaf.params[key] as number | undefined) ?? 0) > 0,
       )) {
         params[key] = 1;
@@ -439,11 +455,24 @@ export function seedLayers(
     const importedMarkers: Partial<FilterParams> = {};
     for (const key of [
       'eyeshadowMaskImported',
-      'eyeshadowLowerMaskImported',
       'eyeshadowFinishMapImported',
     ] as const) {
       if (((params[key] as number | undefined) ?? 0) > 0) importedMarkers[key] = 1;
     }
+    // 하부 마스크 마커는 실제 마스크 밴드(하부 surface + profile 6)에 붙인다 —
+    // 밴드 0에 무조건 고정하면 마스크-우선 라우팅(위 gate)이 재컴파일에서 밴드 0의
+    // 칩 실루엣을 마스크 모드로 하이재킹한다(저장→재편집 왕복 회귀). 해당 밴드가
+    // 없으면(마스크가 캡으로 잘림 등) 첫 하부 밴드, 그것도 없으면 밴드 0 폴백.
+    const hasLowerMask = ((params.eyeshadowLowerMaskImported as number | undefined) ?? 0) > 0;
+    const lowerMaskIndex = !hasLowerMask ? -1 : (() => {
+      const exact = retainedEyeshadowLayers.findIndex(band =>
+        normalizeSurface(band.surface, 0) !== 0 &&
+        normalizeEyeshadowShape(band.profile ?? band.shape) === 6);
+      if (exact >= 0) return exact;
+      const anyLower = retainedEyeshadowLayers.findIndex(band =>
+        normalizeSurface(band.surface, 0) !== 0);
+      return anyLower >= 0 ? anyLower : 0;
+    })();
     retainedEyeshadowLayers.forEach((band, bandIndex) => {
       layers.push({
         id: `c${++seq}`,
@@ -478,6 +507,7 @@ export function seedLayers(
           eyeshadowParticleParallax: band.particleParallax,
           eyeshadowParticleConfetti: band.particleConfetti,
           ...(bandIndex === 0 ? importedMarkers : {}),
+          ...(bandIndex === lowerMaskIndex ? { eyeshadowLowerMaskImported: 1 } : {}),
         }),
       });
     });

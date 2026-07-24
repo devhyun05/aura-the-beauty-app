@@ -169,89 +169,109 @@ SHAPES = {
 
 
 # ── ② 아래 섀도 (w = lash로부터의 깊이: 0=lash → 1=볼 방향 끝) ──────────────────
+# 초승달 계약(2026-07-24 전면 재설계): 구판은 "일정 깊이 플랫 + 좌우 좁은 페더"라
+# 밴드 캔버스가 그대로 비치는 사각 슬래브였다(실기기 "네모" 회귀의 마스크측 원인).
+# 실제 언더 섀도는 lash 곡선을 따라 얇게 붙고 양끝에서 깊이 자체가 0으로 수렴하는
+# 초승달이다 — 세기 페더가 아니라 깊이 프로파일 D(u)로 테이퍼한다.
+#   coverage = topG(w) · V(w / D(u)) · I(u)
+#   D(u): 눈 가로 위치별 최대 깊이(양끝 0 수렴), V: 로컬 깊이 대비 소프트 감쇠
+#   (35%까지 풀 → 100%에서 0, 플랫 구간 없음), I(u): 끝단 세기 마감.
+# 우측 엣지 잔존은 꼬리 계열(under_tail/under_full_tail)만 — 연장 캔버스(along>1)
+# 클램프 샘플이 "꼬리 밖 워시"로 쓰는 관례(상부 §16과 동일).
+
+
+def _arch(u: float) -> float:
+    """양끝 0 수렴 아치(0..1). sin은 u=1에서 -0 진동 → max 클램프(NaN 함정 방어)."""
+    return max(0.0, math.sin(math.pi * max(0.0, min(1.0, u))))
+
+
+def _crescent(u: float, w: float, depth: float, intensity: float = 1.0,
+              hold_right: bool = False) -> float:
+    """초승달 코어 — depth=이 u에서의 최대 깊이. hold_right=꼬리 워시 우측 보존."""
+    if depth <= 1e-4:
+        return 0.0
+    x = w / depth
+    v = 1.0 - smoothstep(0.35, 1.0, x)
+    top = smoothstep(0.0, 0.04, w) if w < 0.04 else 1.0  # lash 밀착(미세 소프트만)
+    end = 1.0 if hold_right else (1.0 - smoothstep(0.965, 1.0, u))
+    return intensity * v * top * smoothstep(0.0, 0.035, u) * end
 
 
 def under_wash(u: float, w: float) -> float:
-    """아래 전반 워시 — lash 바로 밑 은은하게, 깊이 65%에서 소멸. eye_base와 세트."""
-    wfall = 1.0 - smoothstep(0.10, 0.65, w)
-    hin = smoothstep(0.0, 0.15, u)
-    hout = 1.0 - smoothstep(0.88, 1.0, u)
-    return 0.9 * wfall * hin * hout
+    """아래 전반 워시 — lash 따라 얇은 초승달, 중앙~바깥 살짝 깊게."""
+    d = 0.34 * _arch(u) ** 0.6 * (0.85 + 0.15 * smoothstep(0.3, 0.8, u))
+    return _crescent(u, w, d, 0.88)
 
 
 def under_outer(u: float, w: float) -> float:
-    """아래 바깥 스머지 — 바깥 1/3 뭉치. eye_outer와 세트."""
-    return gauss(u, 0.80, 0.20) * (1.0 - smoothstep(0.05, 0.60, w))
+    """아래 바깥 스머지 — 바깥 1/3 뭉치, 안쪽으로 얇게 소멸."""
+    d = 0.46 * smoothstep(0.35, 0.80, u) * (1.0 - smoothstep(0.90, 1.0, u))
+    return _crescent(u, w, d, 0.95)
 
 
 def under_tail(u: float, w: float) -> float:
-    """아래 꼬리 연결 — 바깥 끝에서 위 꼬리 워시와 만나도록 우측으로 갈수록 진해짐."""
-    ramp = smoothstep(0.50, 0.95, u)
-    wfall = 1.0 - smoothstep(0.05, 0.50, w)
-    return ramp * wfall
+    """아래 꼬리 연결 — 꼬리로 갈수록 깊어지며 우측 워시 잔존(연장 캔버스행)."""
+    d = 0.42 * smoothstep(0.45, 0.92, u)
+    return _crescent(u, w, d, 0.95, hold_right=True)
 
 
 def under_smoky_deep(u: float, w: float) -> float:
-    """딥 스모키 언더 — 진하고 깊게, 바깥 가중."""
-    wfall = 1.0 - smoothstep(0.20, 0.90, w)
-    outer_gain = 0.75 + 0.25 * smoothstep(0.4, 0.9, u)
-    hin = smoothstep(0.0, 0.20, u)
-    hout = 1.0 - smoothstep(0.75, 1.0, u)
-    return wfall * outer_gain * hin * hout
+    """딥 스모키 언더 — 깊은 초승달, 바깥 가중."""
+    d = 0.62 * _arch(u) ** 0.45 * (0.8 + 0.2 * smoothstep(0.35, 0.9, u))
+    return _crescent(u, w, d, 0.95)
 
 
 def under_slim(u: float, w: float) -> float:
-    """슬림 언더 — lash 바로 밑 얇은 섀도 라인."""
-    wfall = 1.0 - smoothstep(0.05, 0.28, w)
-    hin = smoothstep(0.0, 0.18, u)
-    hout = 1.0 - smoothstep(0.78, 1.0, u)
-    return wfall * hin * hout
+    """슬림 언더 — lash 바로 밑 얇은 섀도 라인(초승달 최소 깊이)."""
+    d = 0.17 * _arch(u) ** 0.4
+    return _crescent(u, w, d)
 
 
 def under_center(u: float, w: float) -> float:
     """센터 언더 — 눈 밑 중앙(애교살 라인) 포인트."""
-    return gauss(u, 0.50, 0.20) * (1.0 - smoothstep(0.05, 0.45, w))
+    d = 0.40 * gauss(u, 0.50, 0.22)
+    return _crescent(u, w, d)
 
 
-# 풀 커버 패밀리의 아래짝 — 위 eye_full_*와 같은 접미사끼리 세트.
-# 좌우 페더는 폭의 ≥20%로 — 좁으면(≈8%) 밴드 사각 경계가 그대로 보인다(뚝 끊김).
+# 풀 커버 패밀리의 아래짝 — 위 eye_full_*와 같은 접미사끼리 세트. 전부 초승달
+# 계약: "풀"은 좌우 커버 범위가 넓다는 뜻이지 깊이 플랫 슬래브가 아니다.
 
 
 def under_full_wash(u: float, w: float) -> float:
-    wfall = 1.0 - smoothstep(0.10, 0.60, w)
-    return 0.9 * wfall * smoothstep(0.0, 0.22, u) * (1.0 - smoothstep(0.75, 1.0, u))
+    d = 0.40 * _arch(u) ** 0.5
+    return _crescent(u, w, d, 0.9)
 
 
 def under_full_smoky(u: float, w: float) -> float:
-    wfall = 1.0 - smoothstep(0.15, 0.80, w)
-    outer_gain = 0.75 + 0.25 * smoothstep(0.4, 0.9, u)
-    return 0.95 * wfall * outer_gain * smoothstep(0.0, 0.22, u) * (1.0 - smoothstep(0.75, 1.0, u))
+    d = 0.58 * _arch(u) ** 0.4 * (0.8 + 0.2 * smoothstep(0.35, 0.9, u))
+    return _crescent(u, w, d, 0.95)
 
 
 def under_full_gradient(u: float, w: float) -> float:
-    return (1.0 - smoothstep(0.05, 0.50, w)) * smoothstep(0.0, 0.20, u) * (1.0 - smoothstep(0.75, 1.0, u))
+    d = 0.46 * _arch(u) ** 0.5
+    return _crescent(u, w, d)
 
 
 def under_full_halo(u: float, w: float) -> float:
-    return gauss(u, 0.50, 0.24) * (1.0 - smoothstep(0.05, 0.55, w))
+    d = 0.50 * gauss(u, 0.50, 0.26)
+    return _crescent(u, w, d)
 
 
 def under_full_tail(u: float, w: float) -> float:
-    return smoothstep(0.45, 0.90, u) * (1.0 - smoothstep(0.05, 0.50, w))
+    d = 0.44 * smoothstep(0.40, 0.88, u)
+    return _crescent(u, w, d, 1.0, hold_right=True)
 
 
 def under_deep_wide(u: float, w: float) -> float:
-    """딥 와이드 언더 — 밴드 바닥까지 넓게(더 아래로는 앱의 핏 높이 축으로 스트레치)."""
-    wfall = 1.0 - smoothstep(0.55, 1.0, w)
-    hin = smoothstep(0.0, 0.20, u)
-    hout = 1.0 - smoothstep(0.72, 1.0, u)
-    return wfall * hin * hout
+    """딥 와이드 언더 — 깊고 넓은 초승달(더 아래로는 앱의 핏 높이 축으로 스트레치)."""
+    d = 0.80 * _arch(u) ** 0.35
+    return _crescent(u, w, d, 0.95)
 
 
 def under_full_wide(u: float, w: float) -> float:
-    """전체 와이드(아래) — eye_full_wide와 세트, 깊게 넓게."""
-    wfall = 1.0 - smoothstep(0.50, 0.95, w)
-    return wfall * smoothstep(0.0, 0.20, u) * (1.0 - smoothstep(0.72, 1.0, u))
+    """전체 와이드(아래) — eye_full_wide와 세트. 깊지만 양끝은 반드시 수렴."""
+    d = 0.72 * _arch(u) ** 0.4
+    return _crescent(u, w, d, 0.95)
 
 
 # ── 연장(§16b 와이드) — 가로 2:1(512x256) 마스크. U∈[0,2]: 좌측 절반=눈(0..1),
@@ -320,6 +340,93 @@ LOWER_SHAPES = {
     "under_deep_wide": under_deep_wide,
     "under_full_wide": under_full_wide,
 }
+
+
+# ── ②b 하부 프로파일 아틀라스 (LowerLid.shader _LowerProfileAtlas) ───────────────
+# 절차 LowerEsProfile(smoothstep 12종) 폐기의 대체물 — eyeshadowShape 0..11이
+# 4×3 타일(각 256×256, 행우선: row=p//4, col=p%4)로 구워진다. 타일 좌표계는
+# under_*와 동일(u=눈머리0→눈꼬리1, w=lash0→볼1, PNG 상단=lash — 셰이더 1-v 플립).
+# 실루엣은 카탈로그 under_* 함수를 재사용해 카탈로그 마스크와 룩이 일치한다.
+#
+# 클로저 계약: 전 타일 테두리 3px = 0 (캔버스 사각이 절대 비치지 않고, 셰이더
+# 인셋 텍셀까지 0 보장). 예외 — KEEP_RIGHT 타일(꼬리·테일 익스텐드)은 우측
+# 컬럼을 살린다: 연장 캔버스(along>1)가 우측 인셋 텍셀(253)을 클램프 샘플해
+# "꼬리 밖 워시 강도"로 쓰는 상부 §16 관례의 하부판(셰이더도 연장 워시를 꼬리
+# 프로파일에만 허용하는 이중 게이트). 샘플은 타일 안쪽 2.5px 인셋 + mip 없음
+# → 이웃 타일 번짐이 구조적으로 없다.
+
+
+def under_inner(u: float, w: float) -> float:
+    """아래 안쪽 스머지 — 눈머리 1/3 뭉치. under_outer의 미러(초승달 계약 준수)."""
+    d = 0.44 * gauss(u, 0.20, 0.16)
+    return _crescent(u, w, d, 0.95)
+
+
+def under_point(u: float, w: float) -> float:
+    """아래 포인트 — 눈꼬리 근처 작은 얕은 팝(초승달 계약 준수, 우측 엣지 0 수렴)."""
+    d = 0.32 * gauss(u, 0.78, 0.13)
+    return _crescent(u, w, d, 0.95)
+
+
+# eyeshadowShape enum(0리드 1크리스 2스모키 3꼬리 4안쪽 5중앙 6바깥 7베이스
+# 8메인 9포인트 10와이드 11꼬리연장)의 하부 해석 — under_* 실루엣 매핑.
+# 6(바깥)은 런타임에선 마스크 모드(_LowerSmokyMask)가 우선하고 이 타일은 폴백.
+ATLAS_PROFILES = [
+    under_wash,          # 0 리드 전체 → 언더 전반 워시
+    under_slim,          # 1 크리스 집중 → lash 밑 슬림 라인
+    under_full_smoky,    # 2 스모키
+    under_tail,          # 3 꼬리 포인트
+    under_inner,         # 4 안쪽 집중
+    under_center,        # 5 중앙 집중
+    under_outer,         # 6 바깥 집중 (마스크 모드 폴백)
+    under_full_wash,     # 7 베이스 프로파일
+    under_full_gradient, # 8 메인 프로파일
+    under_point,         # 9 포인트 프로파일
+    under_full_wide,     # 10 와이드
+    under_full_tail,     # 11 테일 익스텐드 (우측 엣지 워시 잔존)
+]
+# 꼬리 계열(hold_right 실루엣)만 우측 컬럼 보존 — 연장 캔버스의 워시 값은 셰이더
+# 인셋 샘플이 닿는 텍셀(우측에서 3번째, 253)에 실린다. 6(바깥)은 런타임에서 항상
+# 마스크 모드(_LowerSmokyMask)로 라우팅되어 타일이 폴백 전용이므로 제외.
+ATLAS_KEEP_RIGHT = {3, 11}
+ATLAS_COLS, ATLAS_ROWS = 4, 3
+ATLAS_TILE = 256
+# 테두리 3px — 셰이더 INSET(2.5px)이 클램프하는 텍셀(253)까지 0을 보장해야
+# 비꼬리 타일의 연장 유령 워시가 원천 차단된다(2px면 253이 실루엣 값으로 남음).
+ATLAS_BORDER = 3
+# 캔버스는 1024×1024 POT — NPOT(1024×768)이면 Unity 임포터(nPOTScale)가 세로
+# 리샘플해 텍셀 격자가 틀어진다. 4행째(미사용)는 전부 0.
+ATLAS_CANVAS_ROWS = 4
+ATLAS_OUT = (
+    Path(__file__).resolve().parent.parent
+    / "apps/unity/MakeupAR/Assets/Resources/lower_profile_atlas.png"
+)
+
+
+def render_lower_atlas() -> Path:
+    aw, ah = ATLAS_COLS * ATLAS_TILE, ATLAS_CANVAS_ROWS * ATLAS_TILE
+    img = Image.new("RGBA", (aw, ah), (0, 0, 0, 255))
+    px = img.load()
+    for p, fn in enumerate(ATLAS_PROFILES):
+        col, row = p % ATLAS_COLS, p // ATLAS_COLS
+        x0, y0 = col * ATLAS_TILE, row * ATLAS_TILE
+        for ty in range(ATLAS_TILE):
+            w = ty / (ATLAS_TILE - 1)  # PNG 상단 = lash
+            for tx in range(ATLAS_TILE):
+                u = tx / (ATLAS_TILE - 1)
+                g = round(max(0.0, min(1.0, fn(u, w))) * 255.0)
+                # 클로저 테두리 — 상·하·좌 항상 0, 우측은 KEEP_RIGHT만 보존.
+                on_border = (
+                    ty < ATLAS_BORDER or ty >= ATLAS_TILE - ATLAS_BORDER
+                    or tx < ATLAS_BORDER
+                    or (tx >= ATLAS_TILE - ATLAS_BORDER
+                        and p not in ATLAS_KEEP_RIGHT))
+                if on_border:
+                    g = 0
+                px[x0 + tx, y0 + ty] = (g, g, g, 255)
+    ATLAS_OUT.parent.mkdir(parents=True, exist_ok=True)
+    img.save(ATLAS_OUT)
+    return ATLAS_OUT
 
 
 # ── ③ 아이라이너 (알파 라인 아트, 512x160) ──────────────────────────────────────
@@ -561,9 +668,13 @@ def render(name: str) -> Path:
 
 def main() -> None:
     names = sys.argv[1:] or [
-        *SHAPES, *EXT_SHAPES, *LOWER_SHAPES, *LINERS, *CANON_HIGHLIGHTS]
+        *SHAPES, *EXT_SHAPES, *LOWER_SHAPES, *LINERS, *CANON_HIGHLIGHTS,
+        "lower_profile_atlas"]
     for name in names:
-        print(f"written: {render(name)}")
+        if name == "lower_profile_atlas":
+            print(f"written: {render_lower_atlas()}")
+        else:
+            print(f"written: {render(name)}")
 
 
 if __name__ == "__main__":

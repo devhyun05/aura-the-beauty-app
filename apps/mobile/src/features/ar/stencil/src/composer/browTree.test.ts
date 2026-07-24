@@ -1,4 +1,4 @@
-import {BARE, BROW_COLORS} from '../presets';
+import {BARE, BROW_COLORS, PRESETS} from '../presets';
 import {compileLayers} from './model';
 import {
   BASIC_BROW_LENGTH_MAX,
@@ -15,7 +15,13 @@ import {
   removeBrowTree,
 } from './browTree';
 import {buildVariantLibrary} from './lookVariants';
-import {buildSystemLibrary, decomposeToTree, flattenTree} from './lookTree';
+import {
+  buildSystemLibrary,
+  decomposeToTree,
+  flattenTree,
+  instantiate,
+  regionDefsForSlot,
+} from './lookTree';
 
 function expect(condition: boolean, message: string) {
   if (!condition) throw new Error(message);
@@ -95,6 +101,33 @@ expectEqual(
   0.5,
   '저장된 기존 1배 가로 길이는 슬라이더 중앙으로 역매핑된다',
 );
+
+// 눈썹 '전체' 탭 = 레퍼런스 알파 모양 5종. 절차적 결·채움·한올·라이트닝 조합 룩과
+// 복합 '슬림 아치'는 폐지됐고, 부위 룩은 세부부위 탭의 모양 축과 1:1이어야 한다.
+const browRegionDefs = regionDefsForSlot(library, '눈썹');
+expectEqual(
+  // 카드 순서는 regionDefsForSlot 공통 정렬(소유자→이름) 소관이라 집합으로 비교한다.
+  JSON.stringify(browRegionDefs.map(def => def.name).sort()),
+  JSON.stringify(BROW_REFERENCE_SHAPES.map(shape => shape.label).sort()),
+  "눈썹 '전체' 탭은 레퍼런스 알파 모양 5종만 노출한다",
+);
+for (const shape of BROW_REFERENCE_SHAPES) {
+  const def = browRegionDefs.find(candidate => candidate.name === shape.label);
+  if (!def) throw new Error(`${shape.label} 눈썹룩이 없다`);
+  const applied = compileLayers(
+    flattenTree(instantiate(library, def.id)!),
+  ).params;
+  expectEqual(
+    applied.browStyleTemplate,
+    shape.template,
+    `${shape.label} 눈썹룩은 대응하는 레퍼런스 알파 템플릿을 그린다`,
+  );
+  expectEqual(
+    readBrowTree(instantiate(library, def.id)).shapeValue,
+    shape.value,
+    `${shape.label} 눈썹룩은 세부부위 탭에서 같은 모양으로 되읽힌다`,
+  );
+}
 
 const shaped = patchBrowTree(null, library, {shapeValue: 4});
 expect(readBrowTree(shaped).enabled, '빈 룩에서 모양을 고르면 눈썹 잎을 만든다');
@@ -225,6 +258,75 @@ expectEqual(
   compileLayers(directLayers).params.browStyleTemplate,
   9,
   '색상만 직접 선택해도 현재 UI 모양의 레퍼런스 알파 템플릿을 적용한다',
+);
+
+// ── browStyleTemplate 왕복 보존(잠복 버그 회귀 봉인) ─────────────────────────
+// decomposeToTree(주입·저장 복원)가 regionOwnKeys 필터에서 template만 버리고
+// styleIntensity는 살려, 스타일 눈썹이 의도한 built-in 텍스처 대신 Unity의 직전
+// 템플릿(잔존 레퍼런스 마스크 포함)으로 그려지던 버그. patchBrowTree 경유 기존
+// 검증(위)은 이 필터를 우회해 잠복해 있었다 — 여기서 decompose 경로를 직접 봉인.
+const templateRoundTrip = compileLayers(
+  flattenTree(
+    decomposeToTree(
+      {
+        ...BARE,
+        browStyleColor: '#2A1E16',
+        browStyleIntensity: 0.7,
+        browStyleTemplate: 2,
+      },
+      [],
+      'template-round-trip',
+    ),
+  ),
+).params;
+expectEqual(
+  templateRoundTrip.browStyleTemplate,
+  2,
+  'decompose 왕복이 browStyleTemplate을 보존한다',
+);
+expectEqual(
+  templateRoundTrip.browStyleIntensity,
+  0.7,
+  'decompose 왕복이 browStyleIntensity를 보존한다',
+);
+
+// 전체 메이크업 룩(프리셋)도 세부부위 탭과 같은 레퍼런스 알파 눈썹을 쓴다 —
+// 시스템 라이브러리와 동일한 시드 경로에서 template이 와이어까지 살아남고,
+// 절차적 결·채움·펜슬은 꺼져 알파 위 덧그림이 생기지 않는다.
+const REFERENCE_BROW_PRESETS: {id: string; template: number}[] = [
+  {id: 'natural', template: 8},
+  {id: 'rosy', template: 7},
+  {id: 'peach', template: 6},
+  {id: 'glam', template: 5},
+  {id: 'glam2', template: 5},
+  {id: 'smoky', template: 9},
+];
+for (const {id, template} of REFERENCE_BROW_PRESETS) {
+  const preset = PRESETS.find(p => p.id === id);
+  if (!preset) throw new Error(`${id} preset missing`);
+  const compiled = compileLayers(
+    flattenTree(decomposeToTree({...BARE, ...preset.params}, [], preset.name)),
+  ).params;
+  expectEqual(
+    compiled.browStyleTemplate,
+    template,
+    `${id} 프리셋 시드가 레퍼런스 알파 template ${template}을 유지한다`,
+  );
+  expectEqual(
+    (compiled.browIntensity ?? 0) +
+      (compiled.browPowderIntensity ?? 0) +
+      (compiled.browPencilIntensity ?? 0),
+    0,
+    `${id} 프리셋은 알파 마스크 위에 절차적 눈썹을 덧그리지 않는다`,
+  );
+}
+
+// BARE 명시 0 — 전 필드 명시 관례 + 소유권 이탈 시 PASSTHROUGH 승격(carry 잔존)
+// 방어. (applyFilter 자체는 메시지마다 새 wire 기본값에 역직렬화돼 병합 잔존 없음.)
+expectEqual(
+  compileLayers([]).params.browStyleTemplate,
+  0,
+  '빈 룩 컴파일이 명시 template 0을 전송한다(상시 명시 전송 관례)',
 );
 
 console.log('AR brow tree contract passed');

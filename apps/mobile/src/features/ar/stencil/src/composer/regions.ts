@@ -895,7 +895,10 @@ export type MaskRegion = 'blush' | 'highlighter' | 'contour' | 'eyeshadow' | 'ey
 /** 룩 정의가 참조하는 카탈로그 마스크(§16) — 부위별 스텐실 URI. 시스템/디자이너 룩이
  *  잎에 선언하면(LeafDef.maskRef) 룩 적용 시 App이 세션 마스크 경로에 주입해 기존
  *  reconcileMasks 화해 경로를 그대로 태운다(사용자 직접 임포트가 룩 참조보다 우선).
- *  파일은 저장 스냅샷 미포함 규약 유지 — 마커(appliedKey)만 params로 왕복한다. */
+ *  URI와 마커(params[appliedKey])는 짝이다 — 함께 저장되고 함께 사라져야 한다.
+ *  저장 대상은 재설치를 견디는 URI(streaming: 번들 참조)뿐이며, 사용자 임포트
+ *  file:// 경로는 저장 시 마커와 함께 떨어뜨린다(죽은 경로를 전송하면 Unity가
+ *  직전 룩 텍스처를 유지해 엉뚱한 마스크가 남는다). 직렬화는 lookTree.ts 참조. */
 export interface LookMaskRef {
   region: MaskRegion;
   uri: string;
@@ -2145,7 +2148,13 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '🎨',
         productName: '브로우 스타일',
         onKeys: ['browStyleIntensity'],
-        defaults: { browStyleIntensity: 0.5, browThicknessProfile: 2 },
+        // browStyleTemplate은 defaults 소유가 계약이다 — regionOwnKeys가 여기서
+        // 유도되므로 빠지면 decomposeToTree(주입·저장 복원)가 잎에서 template만
+        // 버리고 styleIntensity는 살아남아, 스모키 프리셋 등이 의도한 built-in
+        // 텍스처 대신 Unity의 직전 템플릿(또는 잔존 레퍼런스 마스크)으로 그려진다.
+        // 0=default_brow. 사용자 임포트(_userStyleActive)는 Unity가 template보다
+        // 우선하므로 상시 전송해도 커스텀 텍스처를 덮지 않는다.
+        defaults: { browStyleIntensity: 0.5, browThicknessProfile: 2, browStyleTemplate: 0 },
         note: BROW_NOTE,
         axes: {
           shape: BROW_SHAPE_AXIS,

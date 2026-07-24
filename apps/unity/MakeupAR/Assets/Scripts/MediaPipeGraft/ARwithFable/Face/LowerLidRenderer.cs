@@ -85,6 +85,7 @@ namespace ARMakeup.Face
         Texture2D _runtimeConcealerFallback;
         Texture2D _importedLowerShadowMask; // 소유(교체·해제 시 파기)
         Texture2D _bundledLowerShadowMask;  // Resources 번들(lower_smoky_mask) — 파기 금지, 해제 복원용
+        Texture2D _lowerProfileAtlas;       // Resources 번들(lower_profile_atlas) — 파기 금지
         MakeupController _lowerLayerController;
         EyeshadowLayerParams[] _lastPendingLowerEyeshadowLayers;
         int _lowerEyeshadowLayerCount;
@@ -107,6 +108,8 @@ namespace ARMakeup.Face
         static readonly int ConcealerIntensityId = Shader.PropertyToID("_ConcealerIntensity");
         static readonly int ConcealerMaskId = Shader.PropertyToID("_ConcealerMask");
         static readonly int LowerSmokyMaskId = Shader.PropertyToID("_LowerSmokyMask");
+        static readonly int LowerProfileAtlasId = Shader.PropertyToID("_LowerProfileAtlas");
+        static readonly int LowerProfileAtlasOnId = Shader.PropertyToID("_LowerProfileAtlasOn");
         static readonly int LowerShadowColorId = Shader.PropertyToID("_LowerShadowColor");
         static readonly int LowerShadowIntensityId = Shader.PropertyToID("_LowerShadowIntensity");
         // 마감 — 애교살(하이라이트 밴드)·아이섀도 하. 블러셔와 동일 enum(0=새틴=기존 출력).
@@ -252,6 +255,20 @@ namespace ARMakeup.Face
                 // Repeat면 마스크 안쪽이 연장부로 타일링되므로 샘플러를 강제 고정.
                 _bundledLowerShadowMask.wrapMode = TextureWrapMode.Clamp;
                 _material.SetTexture(LowerSmokyMaskId, _bundledLowerShadowMask);
+            }
+            // 하부 프로파일 아틀라스(베이크드 개편) — 절차 LowerEsProfile 폐기의 정본.
+            // generate-eyeshadow-masks.py가 생성. 누락 시 AtlasOn=0으로 남아 비마스크
+            // 밴드가 안 그려질 뿐 크래시 없음(스모키 마스크와 동일 관례).
+            _lowerProfileAtlas = Resources.Load<Texture2D>("lower_profile_atlas");
+            if (_lowerProfileAtlas != null)
+            {
+                _lowerProfileAtlas.wrapMode = TextureWrapMode.Clamp;
+                _material.SetTexture(LowerProfileAtlasId, _lowerProfileAtlas);
+                _material.SetFloat(LowerProfileAtlasOnId, 1f);
+            }
+            else
+            {
+                Debug.LogWarning("[LowerLid] lower_profile_atlas 누락 — 하부 프로파일 밴드 미표시");
             }
             PushAffine(LinerAffineId, LinerAffineRotId, _linerAffine);
             PushAffine(AegyoAffineId, AegyoAffineRotId, _aegyoAffine);

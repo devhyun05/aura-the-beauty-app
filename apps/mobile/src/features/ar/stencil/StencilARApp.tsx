@@ -453,7 +453,8 @@ const TEXTURE_SPEC = {
 
 // 디자이너 마스크 임포트(모양 축, §16) → setRegionMask region + 세션 적용 마커 필드.
 // 텍스처(TEXTURE_SPEC=컬러 아트, "무엇을")와 구분되는 존 스텐실("어디에", 색은 앱이).
-// 마커는 UI 상태일 뿐(Unity 무시), 마스크 픽셀은 브리지로 스왑·파일은 세션 한정.
+// 마커는 UI 상태일 뿐(Unity 무시), 마스크 픽셀은 브리지로 스왑. URI는 잎(maskRef)에
+// 얹혀 저장 스냅샷까지 따라가고, 아래 maskPathsRef는 이번 세션 임포트 경로만 담는다.
 const MASK_SPEC = {
   blush: { region: 'blush', appliedKey: 'blushMaskImported' },
   highlighter: { region: 'highlighter', appliedKey: 'highlightMaskImported' },
@@ -474,13 +475,28 @@ type LookAssets = {
 // 컴파일된 룩 레이어에서 카탈로그 에셋 참조를 수집한다(부위별 마스크 1슬롯 + 라이너 1장).
 // 같은 부위(MaskRegion)에 여러 잎이 참조하면 뒤 잎이 이긴다(단일 머티리얼 슬롯 규약).
 function collectLookAssets(
-  layers: ReadonlyArray<{ maskRef?: { region: MaskRegion; uri: string }; linerStyleRef?: string; visible?: boolean }>,
+  layers: ReadonlyArray<{
+    maskRef?: { region: MaskRegion; uri: string };
+    linerStyleRef?: string;
+    visible?: boolean;
+    params?: Partial<FilterParams>;
+  }>,
 ): LookAssets {
   const maskPaths: Partial<Record<MaskRegion, string>> = {};
   let linerStyle: string | undefined;
   for (const layer of layers) {
     if (layer.visible === false) continue;
-    if (layer.maskRef) maskPaths[layer.maskRef.region] = layer.maskRef.uri;
+    // URI는 같은 잎의 임포트 마커가 켜져 있을 때만 인정한다 — 모양 칩 탭은 마커만
+    // 0으로 내리고 maskRef는 남기므로, 마커 검사가 없으면 해제된 잎의 옛 URI가
+    // (부위당 1슬롯 규약상 뒤 잎 우선으로) 살아있는 잎의 URI를 이길 수 있다.
+    if (
+      layer.maskRef &&
+      ((layer.params?.[MASK_SPEC[layer.maskRef.region].appliedKey] as
+        | number
+        | undefined) ?? 0) > 0
+    ) {
+      maskPaths[layer.maskRef.region] = layer.maskRef.uri;
+    }
     if (layer.linerStyleRef) linerStyle = layer.linerStyleRef;
   }
   return { maskPaths, linerStyle };
@@ -515,6 +531,7 @@ function buildInitialLookTree(look: StencilInitialLook): LookNode {
       look.label,
       [],
       look.eyeshadowLayers ?? [],
+      look.maskRefs ?? [],
     ),
     dirty: true,
   };
@@ -681,7 +698,8 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
   // 현재 렌즈 레이어 스택(#25) — 브리지 재전송용 최신값 (표시는 컴포저 트리가 담당)
   const lensLayersRef = useRef<LensLayer[]>([]);
   const eyeshadowLayersRef = useRef<EyeshadowLayer[]>([]);
-  // 디자이너 마스크(모양 축) 세션 상태 — 저장 스냅샷 미포함(파일은 세션 한정).
+  // 디자이너 마스크(모양 축) 세션 상태 — 이 두 ref만 세션 한정이다(잎의 maskRef는
+  // 저장 스냅샷에 포함되어 룩과 함께 복원된다).
   //  maskPaths: 이번 세션에 임포트한 부위별 파일 경로.
   //  maskSent: Unity에 마지막으로 화해시킨 상태(경로=적용, null=절차 복원) — 룩 전환 시
   //   부위별 set/clear를 재조정하되 같은 상태면 재전송(파일 IO) 회피.
@@ -697,6 +715,23 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
   // emitCompiled가 컴파일 결과(lookAssets)에서 매 방출마다 통째 교체한다. reconcileMasks는
   // 사용자 직접 임포트(maskPathsRef) 다음 순위로 이 경로를 폴백 참조한다(사용자 우선).
   const lookMaskPathsRef = useRef<Partial<Record<MaskRegion, string>>>({});
+  // 카탈로그 선택 링 표시용 상태 미러 — {룩 참조 ← 사용자 임포트 오버레이}. ref는
+  // 렌더를 못 깨우므로 emitCompiled/applyComposerMask가 여기로 함께 반영한다.
+  const [maskSelections, setMaskSelections] = useState<
+    Partial<Record<MaskRegion, string>>
+  >({});
+  const refreshMaskSelections = useCallback(() => {
+    const next = { ...lookMaskPathsRef.current, ...maskPathsRef.current };
+    setMaskSelections(prev => {
+      const prevKeys = Object.keys(prev) as MaskRegion[];
+      const nextKeys = Object.keys(next) as MaskRegion[];
+      if (prevKeys.length === nextKeys.length &&
+          nextKeys.every(k => prev[k] === next[k])) {
+        return prev; // 동일 상태 재렌더 회피(emitCompiled는 고빈도 경로)
+      }
+      return next;
+    });
+  }, []);
   // 아이라이너 콜르아트(§16) 마지막 전송 URI — 룩 참조 라이너 재전송(파일 IO) 회피용 댐퍼.
   const linerStyleSentRef = useRef<string | null>(null);
   // 질감 맵(#22) 세션 상태 — 마스크와 동형(저장 스냅샷 미포함, 파일은 세션 한정).
@@ -1445,6 +1480,7 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       // 마커(compiled.params[appliedKey])가 게이트하므로 lookAssets 없는 방출(v1 스타일
       // fast-path)에서 {}로 비워도 그 룩엔 마커가 없어 reconcileMasks가 clear로 정직하다.
       lookMaskPathsRef.current = compiled.lookAssets?.maskPaths ?? {};
+      refreshMaskSelections(); // 카탈로그 선택 링 미러 동기화(동일 상태면 no-op)
       // 아이라이너 콜르아트 — 값이 바뀔 때만 전송(재전송 파일 IO 회피). 룩 이탈 시 clear는
       // 불필요 — eyelinerStyleIntensity(잎)가 0으로 떨어지면 Unity가 렌더하지 않는다.
       const liner = compiled.lookAssets?.linerStyle ?? null;
@@ -1481,7 +1517,7 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       // 질감 맵(#22)도 마커 기반 화해(마스크와 동일 경로 — 룩 전환 누수 방지).
       reconcileMaps(compiled.params);
     },
-    [applyParams, applyOverlayLayers, applyLensLayers, applyEyeshadowLayers, reconcileMasks, reconcileMaps, sendToUnity],
+    [applyParams, applyOverlayLayers, applyLensLayers, applyEyeshadowLayers, reconcileMasks, reconcileMaps, refreshMaskSelections, sendToUnity],
   );
 
   // 트리 → 컴파일. §5 단일 적용점 사슬: 제품 번역(A12 — productId 잎에 색·마감·
@@ -2710,8 +2746,8 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
   // ── apply-by-uri 후단 (§16) ────────────────────────────────────────────────
   // 각 임포트의 "uri 얻은 뒤 적용" 후단을 헬퍼로 추출 — 사진 라이브러리 픽(launchImage
   // Library)과 카탈로그 항목 탭이 같은 경로를 공유한다. 카탈로그 탭은 파일선택 없이
-  // 주어진 uri로 바로 적용(새 네이티브 의존 0). 파일은 세션 한정(저장 스냅샷 미포함 규약
-  // 유지) — 카탈로그는 uri 목록일 뿐.
+  // 주어진 uri로 바로 적용(새 네이티브 의존 0) — 카탈로그는 uri 목록일 뿐이고,
+  // 마스크·라이너 아트 uri는 잎(maskRef/linerStyleRef)에 얹혀 저장까지 따라간다.
 
   // 텍스처(컬러 아트)는 브리지로 보내고, 강도는 선택된 잎에 올린다(다음 컴파일에 살아남게).
   const applyComposerTexture = useCallback(
@@ -2721,28 +2757,49 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       const tree = lookTreeRef.current;
       if (!tree) return;
       const node = findNode(tree, leafId);
-      if (node && isLeaf(node) && ((node.params[key] as number) ?? 0) === 0) {
-        // 히스토리 경로(changeTreeUser)로 — 컴포저 임포트도 undo에 남는다(MED-HIGH#1).
-        changeTreeUser(updateLeaf(tree, leafId, { params: { [key]: 0.85 } }));
-      }
+      if (!node || !isLeaf(node)) return;
+      // 라이너 콜르아트는 URI를 잎에 영속화한다 — 강도만 남으면 저장·재시작 후
+      // lookAssets.linerStyle이 비어 setEyelinerStyle이 안 나가고, Unity가 기본
+      // 윙 도안(default_eyeliner)을 대신 그린다(마스크와 같은 고아 함정).
+      // 방금 직접 보냈으므로 화해 댐퍼도 같이 맞춰 중복 파일 로드를 피한다.
+      const carriesLinerRef = action === 'eyeliner';
+      if (carriesLinerRef) linerStyleSentRef.current = uri;
+      const needsIntensity = ((node.params[key] as number) ?? 0) === 0;
+      if (!needsIntensity && !carriesLinerRef) return;
+      // 히스토리 경로(changeTreeUser)로 — 컴포저 임포트도 undo에 남는다(MED-HIGH#1).
+      changeTreeUser(
+        updateLeaf(tree, leafId, {
+          ...(needsIntensity ? { params: { [key]: 0.85 } } : {}),
+          ...(carriesLinerRef ? { linerStyleRef: uri } : {}),
+        }),
+      );
     },
     [sendToUnity, changeTreeUser],
   );
 
   // 모양 축 마스크(§16) — 세션 경로 기록 후 마커=1로 트리 갱신. 실제 setRegionMask
   // 전송은 emitCompiled의 reconcileMasks가 담당(룩 전환 화해 경로와 단일화).
+  // 가드가 경로 기록보다 먼저다 — 잎 해석 실패 시 경로만 남으면, 이후 다른 잎이
+  // 마커를 올릴 때 사용자-우선 규칙이 스테일 경로를 영구히 이기게 된다(구 버그).
   const applyComposerMask = useCallback(
     (maskRegion: MaskRegion, leafId: string, uri: string) => {
       const { appliedKey } = MASK_SPEC[maskRegion];
-      maskPathsRef.current[maskRegion] = uri;
       const tree = lookTreeRef.current;
       if (!tree) return;
       const node = findNode(tree, leafId);
-      if (node && isLeaf(node)) {
-        changeTreeUser(updateLeaf(tree, leafId, { params: { [appliedKey]: 1 } }));
-      }
+      if (!node || !isLeaf(node)) return;
+      maskPathsRef.current[maskRegion] = uri;
+      refreshMaskSelections();
+      // maskRef를 잎에 함께 영속화 — 마커만 저장되고 경로는 세션 한정이던 구조에선
+      // 재시작 후 "마커 1 + 경로 없음" 고아가 남아, 마스크-우선 라우팅(profile 6)이
+      // 의도한 실루엣 대신 번들 스모키를 그렸다. URI가 잎에 살면 collectLookAssets →
+      // lookMaskPathsRef로 복원돼 저장 룩에서도 같은 마스크가 그대로 적용된다.
+      changeTreeUser(updateLeaf(tree, leafId, {
+        params: { [appliedKey]: 1 },
+        maskRef: { region: maskRegion, uri },
+      }));
     },
-    [changeTreeUser],
+    [changeTreeUser, refreshMaskSelections],
   );
 
   // 질감 맵(#22 광 지도) — 마스크와 동형(마커만 잎에, 실제 setTextureMap은 reconcileMaps).
@@ -3033,6 +3090,20 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
           outlineGestureStartRef.current = {};
           outlineWarpStartRef.current = [];
           regionWarpsSentRef.current = [];
+          // 마스크·질감맵·라이너 전송 댐퍼 리셋 — Unity 재마운트는 머티리얼이 초기
+          // 상태(번들 마스크)로 돌아온 것이므로, 댐퍼를 남기면 resyncAll이 재전송을
+          // 스킵해 "카탈로그에서 골라도 적용 안 됨"으로 보였다(재기동 후 상시 재현).
+          maskSentRef.current = {
+            blush: null,
+            highlighter: null,
+            contour: null,
+            eyeshadow: null,
+            eyeshadowLower: null,
+          };
+          for (const tr of Object.keys(mapSentRef.current) as TextureMapRegion[]) {
+            mapSentRef.current[tr] = null;
+          }
+          linerStyleSentRef.current = null;
           // Unity 기동/재마운트(백그라운드 복귀·컨텍스트 로스) 완료 — 베이스 필터만이
           // 아니라 전 편집 상태를 재방출해 재동기화(전역 농도·레이어·가이드·조명 등).
           resyncAll();
@@ -4049,6 +4120,7 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
               catalog={catalog}
               onApplyTexture={applyComposerTexture}
               onApplyMask={applyComposerMask}
+              maskSelections={maskSelections}
               onApplyTextureMap={applyComposerTextureMap}
               onApplyOverlayImage={applyComposerOverlayImage}
               onApplyLensDesign={applyComposerLensDesign}

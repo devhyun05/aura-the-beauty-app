@@ -99,6 +99,12 @@ export const BARE: FilterParams = {
   browPencilIntensity: 0,
   browStyleColor: '#3A2A20',
   browStyleIntensity: 0,
+  // 명시 0 = built-in 기본 도안(default_brow). 이 필드의 applyFilter 경로는 매
+  // 메시지 새 wire 기본값에 역직렬화돼 병합 잔존이 없다(적대적 검증 확인) —
+  // 실질 왕복 수정은 regions.ts browStyle defaults 소유 편입이고, 이 항목은
+  // BARE 전 필드 명시 관례 + defaults에서 빠질 경우 PASSTHROUGH 승격(직전 룩
+  // carry 잔존) 방어다. 사용자 임포트는 Unity가 template보다 우선.
+  browStyleTemplate: 0,
   browThickness: 1,
   browLength: 1,
   browArch: 0,
@@ -214,20 +220,23 @@ export const PRESETS: FilterPreset[] = [
       eyelinerColor: '#181418',
       eyelinerIntensity: 0.4,
       eyelinerStyle: 0,
-      // 내추럴 — 자연스러운 소프트 브로우 (기본 옅게)
+      // 내추럴 — 레퍼런스 알파 '소프트 일자'(template 8). 절차적 결·채움은 끄고
+      // 눈썹룩(sys:var:brow:soft-straight)과 같은 browStyle 한 겹만 쓴다.
       browColor: '#4A3428',
-      browIntensity: 0.27,
+      browIntensity: 0,
       browPowderColor: '#4A3628',
-      browPowderIntensity: 0.18,
+      browPowderIntensity: 0,
       browLightenerIntensity: 0,
       browPencilColor: '#2A1E16',
       browPencilIntensity: 0,
-      browStyleColor: '#3A2A20',
-      browStyleIntensity: 0,
+      browStyleColor: '#4A3628',
+      browStyleIntensity: 0.58,
+      browStyleTemplate: 8,
+      browShape: 1,
       browThicknessProfile: 2,
       browThickness: 1,
       browLength: 1,
-      browArch: 0,
+      browArch: 0.08,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,
       lipStyleIntensity: 0,
@@ -279,16 +288,18 @@ export const PRESETS: FilterPreset[] = [
       eyelinerColor: '#181418',
       eyelinerIntensity: 0.5,
       eyelinerStyle: 0,
-      // 로지 — 살짝 더 또렷하고 아치 올림 (기본 옅게)
+      // 로지 — 레퍼런스 알파 '세미아치'(template 7). 눈썹룩 sys:var:brow:semi-arch와 동형.
       browColor: '#4A3428',
-      browIntensity: 0.3,
+      browIntensity: 0,
       browPowderColor: '#4A3628',
-      browPowderIntensity: 0.24,
+      browPowderIntensity: 0,
       browLightenerIntensity: 0,
       browPencilColor: '#2A1E16',
       browPencilIntensity: 0,
-      browStyleColor: '#3A2A20',
-      browStyleIntensity: 0,
+      browStyleColor: '#4A3628',
+      browStyleIntensity: 0.62,
+      browStyleTemplate: 7,
+      browShape: 2,
       browThicknessProfile: 2,
       browThickness: 1,
       browLength: 1,
@@ -346,20 +357,23 @@ export const PRESETS: FilterPreset[] = [
       eyelinerColor: '#181418',
       eyelinerIntensity: 0.45,
       eyelinerStyle: 2,
-      // 피치 — 밝은 갈색, 옅고 가벼운 브로우
+      // 피치 — 레퍼런스 알파 '둥근형'(template 6), 밝은 갈색으로 가볍게.
+      //  눈썹룩 sys:var:brow:round와 동형(색만 프리셋 톤에 맞춰 웜하게).
       browColor: '#6B5240',
-      browIntensity: 0.24,
+      browIntensity: 0,
       browPowderColor: '#6B5240',
-      browPowderIntensity: 0.18,
+      browPowderIntensity: 0,
       browLightenerIntensity: 0,
       browPencilColor: '#5A4433',
       browPencilIntensity: 0,
       browStyleColor: '#5A4433',
-      browStyleIntensity: 0,
+      browStyleIntensity: 0.52,
+      browStyleTemplate: 6,
+      browShape: 4,
       browThicknessProfile: 2,
       browThickness: 1,
       browLength: 1,
-      browArch: 0,
+      browArch: 0.08,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,
       lipStyleIntensity: 0,
@@ -424,23 +438,24 @@ export const PRESETS: FilterPreset[] = [
       eyelinerColor: '#141014',
       eyelinerIntensity: 0.6,
       eyelinerStyle: 0,
-      // 글램 — 예전의 절차적 펜슬 브로우 복원(사용자 "다시 살려"). 와일드 텍스처는
-      // 앞머리가 수평으로 눕고 이상해 폐기. 얇다는 피드백만 반영해 원본보다 살짝
-      // 진하고 두껍게(농도 0.36→0.42·펜슬 0.27→0.3·두께 1.1→1.15).
+      // 글램 — 레퍼런스 알파 '아치'(template 5)로 통일. 절차적 결·채움·펜슬 3겹은
+      // 알파 마스크 위에 기하학 밴드를 덧그려 어긋나므로 전부 끈다. 진하다는
+      // 글램 성격은 색(딥 브라운)과 농도로만 낸다. 눈썹룩 sys:var:brow:arch와 동형.
       browColor: '#2A1E16',
-      browIntensity: 0.42,
+      browIntensity: 0,
       browPowderColor: '#3A2A20',
-      browPowderIntensity: 0.28,
+      browPowderIntensity: 0,
       browLightenerIntensity: 0,
       browPencilColor: '#2A1E16',
-      browPencilIntensity: 0.3, // 절차적 펜슬 결(복원)
+      browPencilIntensity: 0,
       browStyleColor: '#2A1E16',
-      browStyleIntensity: 0, // 스타일 텍스처 OFF — 절차적 브로우로 복귀
-      browStyleTemplate: 0,
-      browThicknessProfile: 3, // 원본 글램 두께 프로파일 복원
-      browThickness: 1.15, // 살짝 두껍게
+      browStyleIntensity: 0.72,
+      browStyleTemplate: 5,
+      browShape: 3,
+      browThicknessProfile: 2,
+      browThickness: 1,
       browLength: 1,
-      browArch: 0.15,
+      browArch: 0.08,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,
       lipStyleIntensity: 0,
@@ -513,20 +528,22 @@ export const PRESETS: FilterPreset[] = [
       eyelinerIntensity: 0,
       eyelinerStyle: 0,
       eyelinerStyleIntensity: 0.85,
+      // 글램 2.0 — 글램과 같은 레퍼런스 알파 '아치'(template 5).
       browColor: '#2A1E16',
-      browIntensity: 0.42,
+      browIntensity: 0,
       browPowderColor: '#3A2A20',
-      browPowderIntensity: 0.28,
+      browPowderIntensity: 0,
       browLightenerIntensity: 0,
       browPencilColor: '#2A1E16',
-      browPencilIntensity: 0.3,
+      browPencilIntensity: 0,
       browStyleColor: '#2A1E16',
-      browStyleIntensity: 0,
-      browStyleTemplate: 0,
-      browThicknessProfile: 3,
-      browThickness: 1.15,
+      browStyleIntensity: 0.72,
+      browStyleTemplate: 5,
+      browShape: 3,
+      browThicknessProfile: 2,
+      browThickness: 1,
       browLength: 1,
-      browArch: 0.15,
+      browArch: 0.08,
       faceOverlayIntensity: 0,
       lipStyleIntensity: 0,
       blushStyleIntensity: 0,
@@ -581,20 +598,23 @@ export const PRESETS: FilterPreset[] = [
       eyelinerIntensity: 0.7,
       eyelinerStyle: 1,
       // 스모키 — 가장 진하고 풍성하게, 곧은 일자 느낌 (기본 톤다운)
+      // 스모키 — 레퍼런스 알파 '일자'(template 9). 짙은 일자 눈썹으로 눈매를 눌러준다.
+      // 절차적 결·채움은 알파 위 덧그림이라 끈다(눈썹룩 sys:var:brow:straight와 동형).
       browColor: '#2A1E16',
-      browIntensity: 0.4,
+      browIntensity: 0,
       browPowderColor: '#2A1E16',
-      browPowderIntensity: 0.3,
+      browPowderIntensity: 0,
       browLightenerIntensity: 0,
       browPencilColor: '#2A1E16',
-      browPencilIntensity: 0, // item3: 두께=밴드 스트레치(펜슬 털 길어짐) 폐기 → 새 dense 텍스처로 이관
+      browPencilIntensity: 0,
       browStyleColor: '#2A1E16',
-      browStyleIntensity: 0.7, // item3: 두꺼운 눈썹 = 촘촘한 스타일 텍스처(자연 길이 털)
-      browStyleTemplate: 2, // 두꺼운(풍성) 템플릿(default_brow_thick)
-      browThicknessProfile: 0, // item3: 밴드 자연 높이 유지(늘리지 않음) → 결이 늘어나지 않음
+      browStyleIntensity: 0.72,
+      browStyleTemplate: 9,
+      browShape: 0,
+      browThicknessProfile: 2,
       browThickness: 1,
       browLength: 1,
-      browArch: 0,
+      browArch: 0.08,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,
       lipStyleIntensity: 0,

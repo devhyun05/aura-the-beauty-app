@@ -11,12 +11,13 @@ import type {RootStackParamList} from '../routeTypes';
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 // 추천 룩의 부위 가이드 area → makeupColors 키. contour/base는 색 개인화 대상 아님
-// (base=파운데이션 스킨세이프). eye 가이드 색은 레시피의 eyeliner 부위가 대표한다.
+// (base=파운데이션 스킨세이프). eye 가이드 색(밝은 섀도 대표색)은 어떤 키에도 싣지
+// 않는다 — 섀도는 서비스의 guideColor 직접 경로가 소비하고, eyeliner 키에 실으면
+// 분석색 폴백이 라이너를 밝은 색으로 세탁해 눈매 대비가 사라진다(딥 기본색 유지).
 const LOOK_AREA_TO_COLOR_KEY: Record<string, keyof FaceAnalysisMakeupColors> = {
   lip: 'lip',
   cheek: 'blush',
   brow: 'brow',
-  eye: 'eyeliner',
 };
 
 /**

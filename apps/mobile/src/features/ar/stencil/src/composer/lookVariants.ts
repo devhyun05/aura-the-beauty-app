@@ -19,8 +19,25 @@ import {
   AR_BLUSH_COLORS,
   AR_BLUSH_SHAPES,
 } from '../../../../../shared/contracts/arBlushCatalog';
+import {
+  BROW_REFERENCE_SHAPES,
+  DEFAULT_BROW_COLOR,
+  REFERENCE_BROW_INTENSITY,
+} from './browTree';
 import type { LeafDef, LookLibrary, SlotKey } from './lookTree';
 import type { LookMaskRef, MaskRegion, RegionKey } from './regions';
+
+// 눈썹 부위 룩 id 슬러그 — BROW_REFERENCE_SHAPES.value(=browShape) 순서와 1:1.
+// 라벨(한글)은 바뀔 수 있어도 id는 저장물 참조라 고정이다.
+const BROW_LOOK_SLUGS = [
+  'straight',
+  'soft-straight',
+  'semi-arch',
+  'arch',
+  'round',
+] as const;
+const BROW_LOOK_COLOR = DEFAULT_BROW_COLOR;
+const BROW_LOOK_INTENSITY = REFERENCE_BROW_INTENSITY;
 
 // ── 카탈로그 에셋 URI 헬퍼(§16) — 번들 StreamingAssets 상대경로(streaming: 스킴).
 //    파일 실존은 catalogDefault.json 엔트리와 1:1(작성 시 검증). ──────────────────
@@ -119,7 +136,7 @@ function addRegionLook(
 /** 잎 1장짜리 sub 하나 — 립/블러셔처럼 단순한 룩의 축약 */
 function single(
   name: string,
-  region: RegionKey,
+  region: RegionKey | 'eyeshadowLower', // 유사-부위는 leafFromDef가 마이그레이션
   params: Partial<FilterParams>,
 ): SubSpec[] {
   return [{ name, leaves: [{ label: name, region, params }] }];
@@ -198,7 +215,7 @@ function addFaceLook(
 }
 
 /**
- * 부위 룩 변형 라이브러리 — 립 8 · 눈 6 · 블러셔 6 · 눈썹 4 · 피부 3 (27종).
+ * 부위 룩 변형 라이브러리 — 립 8 · 눈 6 · 블러셔 6 · 눈썹 5(레퍼런스 모양) · 피부 3.
  * buildSystemLibrary와 시그니처·결과를 공유하는 별도 진입점(기존 함수 무변경).
  */
 export function buildVariantLibrary(): LookLibrary {
@@ -518,58 +535,26 @@ export function buildVariantLibrary(): LookLibrary {
       blushSpread: AR_BLUSH_SHAPES[2].spread,
     }));
 
-  // ── 눈썹 4종 — 제품 종류가 각각 별도 부위(#19b 분리). 제품 스택 조합 다양화.
-  addRegionLook(lib, 'brow', 'natural', '내추럴 브로우', '눈썹', [
-    {
-      name: '결+채움',
-      leaves: [{
-        label: '브로우 마스카라',
-        region: 'brow', // 결(browColor/browIntensity)
-        params: { browColor: '#4A3428', browIntensity: 0.3, browThicknessProfile: 2 },
-      }],
-    },
-    {
-      name: '결+채움',
-      leaves: [{
-        // 별도 부위(채움) — 제품 합성으로 병합된다
-        label: '브로우 파우더',
-        region: 'browPowder',
-        params: { browPowderColor: '#4A3628', browPowderIntensity: 0.2, browThicknessProfile: 2 },
-      }],
-    },
-  ]);
-  addRegionLook(lib, 'brow', 'powder-full', '파우더 풀브로우', '눈썹',
-    single('브로우 파우더', 'browPowder', {
-      browPowderColor: '#3A2A20',
-      browPowderIntensity: 0.45,
-      browThicknessProfile: 3,
-      browThickness: 1.05,
-    }));
-  addRegionLook(lib, 'brow', 'pencil', '펜슬 한올한올', '눈썹',
-    single('브로우 펜슬', 'browPencil', {
-      browPencilColor: '#2A1E16',
-      browPencilIntensity: 0.5,
-      browPencilTexture: 0, // 샤프 펜슬
-      browThicknessProfile: 2,
-    }));
-  addRegionLook(lib, 'brow', 'soft-lighten', '소프트 라이트닝', '눈썹', [
-    {
-      name: '라이트너+결',
-      leaves: [{
-        label: '브로우 라이트너',
-        region: 'browLightener',
-        params: { browLightenerIntensity: 0.5 },
-      }],
-    },
-    {
-      name: '라이트너+결',
-      leaves: [{
-        label: '라이트 마스카라',
-        region: 'brow',
-        params: { browColor: '#6B5240', browIntensity: 0.22 },
-      }],
-    },
-  ]);
+  // ── 눈썹 5종 — 세부부위 '눈썹' 탭(BasicMode 눈썹 모양 축)의 레퍼런스 알파 에셋을
+  //    그대로 부위 룩으로 승격한 것이다. 절차적 결·채움·한올 조합(구 4종)은 알파
+  //    마스크 위에 기하학 밴드를 덧그려 어긋났고, 사용자가 실제로 고르는 축은 모양
+  //    5종이라 '전체' 탭 = 모양 5장으로 통일했다.
+  //    params는 patchBrowTree(세부부위 탭 탭 한 번)가 만드는 값과 1:1 —
+  //    browStyle 잎 한 장(템플릿=알파 에셋, browShape=밴드 기하)이라 ensureBrowTree가
+  //    정규화 없이 그대로 통과시키고, 두 경로가 픽셀 단위로 같은 눈썹을 그린다.
+  BROW_REFERENCE_SHAPES.forEach(shape => {
+    addRegionLook(lib, 'brow', BROW_LOOK_SLUGS[shape.value], shape.label, '눈썹',
+      single(shape.label, 'browStyle', {
+        browStyleTemplate: shape.template,
+        browStyleColor: BROW_LOOK_COLOR,
+        browStyleIntensity: BROW_LOOK_INTENSITY,
+        browShape: shape.value,
+        browThicknessProfile: 2,
+        browThickness: 1,
+        browLength: 1,
+        browArch: 0.08,
+      }));
+  });
 
   // ── 피부 3종 — 카탈로그 "피부 — 베이스" 제형 잎으로. 글로우/세미매트/커버.
   //    각 잎은 부위 소유 필드만(tone=skinBrightening/toneBaseColor,
@@ -955,34 +940,36 @@ export function buildVariantLibrary(): LookLibrary {
       contourEdgeSoftness: 0.58,
     }), false);
 
-  // 아이섀도 하 5종 — LowerLid 소프트 확산 밴드(eyeshadowLower*)로 라우팅.
-  // 예전엔 eyeshadow surface=1(IrisRenderer)로 갔는데, 눈 밑에 바닥 평평·옆 각진 사다리꼴
-  // 블록("파인애플 단면", 실기기)이 생겼다. LowerLid esBand는 래시라인에서 1−smoothstep
-  // 확산이라 각짐 없이 부드럽게 번진다. 리전은 'eyeshadow' 유지(마이그레이션 회피) —
-  // compileLayers가 Object.assign으로 eyeshadowLower*를 그대로 FilterParams에 반영한다.
+  // 아이섀도 하 5종 — 유사-부위 'eyeshadowLower' 잎: leafFromDef의
+  // migrateLegacyEyeshadowLayer가 eyeshadow(surface=아래) 밴드로 변환한다.
+  // (하부 베이크드 개편 2026-07-24) 구판은 region 'eyeshadow' 잎에 eyeshadowLower*
+  // 플랫 스칼라를 실었는데, compileLayers가 eyeshadow 잎을 전부 V2 밴드 배열로
+  // 돌리면서 eyeshadowLower* 키가 통째로 유실돼 이 5종은 아무것도 렌더하지 않는
+  // 죽은 룩이었다(주석의 Object.assign 경로는 더 이상 존재하지 않음). 실루엣은
+  // 이제 셰이더 아틀라스(모양 미지정=타일 0 초승달 워시)·마스크(딥 스모키)다.
   addRegionLook(lib, 'eyeshadow-lower', 'daily-beige', '데일리 베이지', '눈',
-    single('데일리 베이지', 'eyeshadow', {
+    single('데일리 베이지', 'eyeshadowLower', {
       eyeshadowLowerColor: '#C29A7B',
       eyeshadowLowerIntensity: 0.36, eyeshadowLowerFinish: 0,
     }), false);
   addRegionLook(lib, 'eyeshadow-lower', 'coral-shadow', '코랄 그늘', '눈',
-    single('코랄 그늘', 'eyeshadow', {
+    single('코랄 그늘', 'eyeshadowLower', {
       eyeshadowLowerColor: '#B06A4E',
       eyeshadowLowerIntensity: 0.42, eyeshadowLowerFinish: 0,
     }), false);
   addRegionLook(lib, 'eyeshadow-lower', 'rosy-under', '로지 언더', '눈',
-    single('로지 언더', 'eyeshadow', {
+    single('로지 언더', 'eyeshadowLower', {
       eyeshadowLowerColor: '#D89AA0',
       eyeshadowLowerIntensity: 0.42, eyeshadowLowerFinish: 0,
     }), false);
   addRegionLook(lib, 'eyeshadow-lower', 'mauve-shimmer', '모브 시머', '눈',
-    single('모브 시머', 'eyeshadow', {
+    single('모브 시머', 'eyeshadowLower', {
       eyeshadowLowerColor: '#6E5A8A',
       eyeshadowLowerIntensity: 0.46, eyeshadowLowerFinish: 3, eyeshadowLowerShimmer: 0.35,
     }), false);
-  // 꼬리집중 매트 — 언더 스모키의 눈꼬리 깊이(esBand 프로파일 2 + 매트 마감).
+  // 꼬리집중 매트 — 언더 스모키의 눈꼬리 깊이(legacy shape 2 → profile 6 마스크).
   addRegionLook(lib, 'eyeshadow-lower', 'deep-smoky-under', '딥 스모키 언더', '눈',
-    single('딥 스모키 언더', 'eyeshadow', {
+    single('딥 스모키 언더', 'eyeshadowLower', {
       eyeshadowLowerColor: '#5C4A46',
       eyeshadowLowerIntensity: 0.7, eyeshadowLowerShape: 2, eyeshadowLowerFinish: 1,
     }), false);
@@ -1272,33 +1259,8 @@ export function buildVariantLibrary(): LookLibrary {
       browThickness: 1.05,
       browArch: 0,
     }), false);
-  addRegionLook(lib, 'brow-style', 'slim-arch', '슬림 아치', '눈썹',
-    [
-      {
-        name: '자연 털 정돈',
-        // sub는 한 RegionKey만 소유한다. region의 kids 순서로 컨실을 먼저 합성한다.
-        leaves: [{
-          label: '아래 털 정돈',
-          region: 'browConceal',
-          params: {browConcealIntensity: 0.5},
-        }],
-      },
-      {
-        name: '슬림 아치 스타일',
-        leaves: [{
-          label: '슬림 아치',
-          region: 'browStyle',
-          params: {
-            browStyleColor: '#3A2A20',
-            browStyleIntensity: 0.4,
-            browShape: 2,
-            browThicknessProfile: 2,
-            browThickness: 0.95,
-            browArch: 0.42,
-          },
-        }],
-      },
-    ]);
+  // (구 '슬림 아치' 복합 룩은 폐지 — 눈썹 '전체' 탭에 남은 마지막 절차적 밴드 룩이라
+  //  레퍼런스 알파 5종으로 통일하며 함께 걷어냈다. 아치는 'brow:arch'가 대체한다.)
   addRegionLook(lib, 'brow-style', 'lifted-brow', '리프트 브로우', '눈썹',
     single('리프트 브로우', 'browStyle', {
       browStyleColor: '#2A1E16',

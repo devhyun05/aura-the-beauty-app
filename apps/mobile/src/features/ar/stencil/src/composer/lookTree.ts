@@ -31,7 +31,7 @@ import {
   REGION_GROUPS,
   REGION_MAP,
 } from './regions';
-import type { LookMaskRef, RegionKey } from './regions';
+import type { LookMaskRef, MaskRegion, RegionKey } from './regions';
 import { migrateLegacyEyeshadowLayer, newLayer, seedLayers } from './model';
 import type { ComposerLayer } from './model';
 
@@ -103,10 +103,15 @@ export interface ProductLeaf {
   technique?: { strength: number };
   /** 카탈로그 마스크 참조(§16) — 시스템/디자이너 룩이 부위 스텐실을 선언(선택). 룩 적용 시
    *  App이 세션 마스크 경로에 주입 후 마커(params[appliedKey])로 reconcileMasks 화해.
-   *  저장 스냅샷 미포함(파일은 세션 한정) — revive되면 마커만 남고 경로는 사라진다. */
+   *  저장 스냅샷에 포함된다 — URI가 빠지고 마커(params[appliedKey])만 남으면
+   *  reconcileMasks가 마스크를 해제해(setRegionMask '') 하부 밴드가 번들 실루엣으로
+   *  바뀌므로, 마커와 URI는 항상 같은 잎에서 함께 살고 함께 사라져야 한다.
+   *  (streaming:/카탈로그 URI는 재설치에도 유효하고, 사용자 임포트 파일 경로는
+   *  파일이 사라졌을 때 Unity가 직전 텍스처 유지 + 알림으로 처리한다.) */
   maskRef?: LookMaskRef;
   /** 아이라이너 콜르아트 참조(§16) — setEyelinerStyle로 보낼 streaming URI(선택).
-   *  gate는 params.eyelinerStyleIntensity(잎 소유). 마스크와 동일하게 세션 한정. */
+   *  gate는 params.eyelinerStyleIntensity(잎 소유). 마스크와 같은 이유로 저장
+   *  스냅샷에 포함한다(빠지면 강도만 남아 기본 윙 도안이 대신 그려진다). */
   linerStyleRef?: string;
 }
 
@@ -452,12 +457,18 @@ export function buildSystemLibrary(): LookLibrary {
         subIds.push(subId);
       }
       const regionId = `sys:${preset.id}:slot:${slot}`;
+      // 눈썹만 프리셋 분해본을 부위 룩 카드로 띄우지 않는다(internal) — 눈썹 '전체'
+      // 탭의 정본은 레퍼런스 알파 모양 5종(lookVariants 'brow')이고, 프리셋은 그중
+      // 하나를 골라 쓰는 소비자라 "내추럴 눈썹"·"글램 눈썹"이 같은 모양 룩을 이름만
+      // 바꿔 중복시켰다. 정의는 그대로 남아 전체 룩 합성·기존 스냅샷 복원에 쓰인다.
+      const internalRegion = slot === '눈썹';
       lib[regionId] = {
         id: regionId,
         name: `${preset.name} ${slot}`,
         level: 'region',
         slot,
         owner: 'system',
+        ...(internalRegion ? { internal: true } : {}),
         kids: subIds,
       };
       regionIds.push(regionId);
@@ -479,10 +490,11 @@ export function faceLookIdForPreset(presetId: string): string {
   return `sys:face:${presetId}`;
 }
 
-/** 슬롯 교체 패널용 — 같은 슬롯의 region 룩 정의 전부 (시스템+사용자) */
+/** 슬롯 교체 패널용 — 같은 슬롯의 region 룩 정의 전부 (시스템+사용자).
+ *  internal 정의는 상위 룩의 조각이라 카드로 띄우지 않는다(sub 픽커와 동일 규약). */
 export function regionDefsForSlot(lib: LookLibrary, slot: SlotKey): LookDef[] {
   return Object.values(lib)
-    .filter(d => d.level === 'region' && d.slot === slot)
+    .filter(d => d.level === 'region' && d.slot === slot && !d.internal)
     .sort((a, b) => (a.owner === b.owner ? a.name.localeCompare(b.name) : a.owner === 'system' ? -1 : 1));
 }
 
@@ -625,12 +637,52 @@ export function emptyFaceLook(name = '새 조합'): LookNode {
  * 컴파일된 현재 룩(플랫 params + 오버레이)을 익명 트리로 분해 — v1 저장물
  * 마이그레이션·'직접' 편집 시드 경로. 부위별 커스텀 region 룩으로 감싼다.
  */
+/** 마스크 슬롯 → 그 슬롯의 임포트 마커 키. URI(잎)와 마커(params)는 반드시 같은
+ *  잎에 함께 있어야 한다 — 마커 보유 잎만 삭제되면 남은 잎이 URI를 들고 있어도
+ *  compileLayers가 마커를 못 찾아 마스크가 조용히 해제되기 때문이다. */
+/** 저장에 안전한 에셋 URI — 앱 번들(StreamingAssets) 참조만 재설치·컨테이너 UUID
+ *  변경·tmp 정리를 견딘다. 사용자 임포트 file:// 경로는 저장 대상이 아니다. */
+const isDurableAssetUri = (uri: string): boolean => uri.startsWith('streaming:');
+
+const MASK_MARKER_KEY: Record<MaskRegion, keyof FilterParams> = {
+  blush: 'blushMaskImported',
+  highlighter: 'highlightMaskImported',
+  contour: 'contourMaskImported',
+  eyeshadow: 'eyeshadowMaskImported',
+  eyeshadowLower: 'eyeshadowLowerMaskImported',
+};
+
+/** §16 분해 경로 마스크 부착 — 잎의 부위·표면으로 슬롯을 정한다(위 섀도는
+ *  'eyeshadow', 하부 승격 잎(surface=1)은 'eyeshadowLower'). buildSystemLibrary의
+ *  프리셋 사이드채널과 같은 계약: 마스크 URI는 잎에, 임포트 마커는 params에.
+ *  마커를 들고 있는 잎에만 붙여 URI·마커가 항상 함께 살고 함께 사라지게 한다. */
+function decomposedMaskRef(
+  layer: ComposerLayer,
+  maskRefs: readonly {region: string; uri: string}[],
+): LookMaskRef | undefined {
+  if (maskRefs.length === 0) return undefined;
+  const region =
+    layer.region === 'eyeshadow'
+      ? (layer.params.eyeshadowSurface ?? 0) === 1
+        ? 'eyeshadowLower'
+        : 'eyeshadow'
+      : layer.region;
+  if (!(region in MASK_MARKER_KEY)) return undefined; // 알 수 없는 슬롯명은 무시
+  const slot = region as MaskRegion;
+  if (((layer.params[MASK_MARKER_KEY[slot]] as number | undefined) ?? 0) <= 0) {
+    return undefined;
+  }
+  const found = maskRefs.find(m => m.region === slot);
+  return found ? { region: slot, uri: found.uri } : undefined;
+}
+
 export function decomposeToTree(
   params: FilterParams,
   overlayLayers: OverlayLayer[],
   name: string,
   lensLayers: LensLayer[] = [],
   eyeshadowLayers: EyeshadowLayer[] = [],
+  maskRefs: readonly {region: string; uri: string}[] = [],
 ): LookNode {
   const root = emptyFaceLook(name);
   const layers = seedLayers(params, overlayLayers, lensLayers, eyeshadowLayers);
@@ -665,6 +717,10 @@ export function decomposeToTree(
           params: { ...layer.params },
           ...(layer.overlay ? { overlay: { ...layer.overlay } } : {}),
           ...(layer.lens ? { lens: { ...layer.lens } } : {}),
+          ...(() => {
+            const maskRef = decomposedMaskRef(layer, maskRefs);
+            return maskRef ? { maskRef } : {};
+          })(),
           // 분해 경로도 부위당 1겹 — 섀도는 '메인' 역할(§5 A13, buildSystemLibrary와 동일)
           ...(layer.region === 'eyeshadow' ? { role: 'main' } : {}),
         },
@@ -895,6 +951,12 @@ export function updateLeaf(
     productId?: string | null;
     colorwayId?: string | null;
     technique?: { strength: number };
+    /** 카탈로그 마스크 참조(§16) — null=해제. 사용자 카탈로그 선택을 잎에 영속화해
+     *  저장·재시작 후에도 마커(…MaskImported)와 URI가 함께 살아남게 한다. */
+    maskRef?: LookMaskRef | null;
+    /** 아이라이너 콜르아트 참조(§16) — null=해제. 마스크와 같은 이유로 잎에
+     *  영속화한다(URI가 없으면 강도만 남아 기본 윙 도안이 대신 그려진다). */
+    linerStyleRef?: string | null;
   },
 ): LookNode {
   if (root.id === leafId) return root; // 루트는 잎이 아님
@@ -923,6 +985,12 @@ export function updateLeaf(
           ? { colorwayId: patch.colorwayId ?? undefined }
           : {}),
         ...(patch.technique !== undefined ? { technique: patch.technique } : {}),
+        ...(patch.maskRef !== undefined
+          ? { maskRef: patch.maskRef ?? undefined }
+          : {}),
+        ...(patch.linerStyleRef !== undefined
+          ? { linerStyleRef: patch.linerStyleRef ?? undefined }
+          : {}),
       };
     },
     true,
@@ -1462,6 +1530,12 @@ export interface LeafSnapshot {
   productId?: string;
   colorwayId?: string;
   technique?: { strength: number };
+  /** 카탈로그 마스크·라이너 아트 참조(§16) — params의 임포트 마커와 짝이라
+   *  반드시 함께 직렬화한다. 빠지면 마커만 살아남아 마스크가 해제되고(하부는
+   *  번들 실루엣) 라이너는 기본 윙 도안으로 바뀐다. 부재=마스크 없는 잎이거나
+   *  이 필드 추가 이전 저장물(마커도 통상 없음 — 옛 스냅샷과 바이트 동일). */
+  maskRef?: LookMaskRef;
+  linerStyleRef?: string;
 }
 
 /** 그룹 스냅샷 — 멤버를 인스턴스 id가 아닌 region 순번(인덱스)으로 기록해
@@ -1493,23 +1567,41 @@ export interface LookSnapshot {
 }
 
 export function snapshotTree(root: LookNode): LookSnapshot {
+  const snapLeaf = (c: ProductLeaf): LeafSnapshot => {
+    // 마스크·라이너 아트 URI는 params의 임포트 마커와 짝이라 함께 저장한다. 단
+    // 재시작을 못 견디는 URI(사용자 임포트 file://)는 URI·마커를 **함께** 떨어뜨린다
+    // — 죽은 경로를 전송하면 Unity가 로드 실패 후 직전 룩 텍스처를 그대로 유지해
+    // 엉뚱한 마스크가 남고(부위 누수) 재전송 댐퍼까지 걸려 복구가 막힌다. 둘 다
+    // 없으면 그 부위는 절차 실루엣으로 정직하게 돌아간다.
+    const durableMask =
+      c.maskRef && isDurableAssetUri(c.maskRef.uri) ? c.maskRef : undefined;
+    const staleMarkerKey =
+      c.maskRef && !durableMask ? MASK_MARKER_KEY[c.maskRef.region] : undefined;
+    const params = { ...c.params };
+    if (staleMarkerKey) delete params[staleMarkerKey];
+    return {
+      kind: 'app',
+      id: c.id,
+      label: c.label,
+      region: c.region,
+      visible: c.visible,
+      ...(c.dirty ? { dirty: true } : {}),
+      params,
+      ...(c.overlay ? { overlay: { ...c.overlay } } : {}),
+      ...(c.lens ? { lens: { ...c.lens } } : {}),
+      ...(c.role ? { role: c.role } : {}),
+      ...(c.productId ? { productId: c.productId } : {}),
+      ...(c.colorwayId ? { colorwayId: c.colorwayId } : {}),
+      ...(c.technique ? { technique: { ...c.technique } } : {}),
+      ...(durableMask ? { maskRef: { ...durableMask } } : {}),
+      ...(c.linerStyleRef && isDurableAssetUri(c.linerStyleRef)
+        ? { linerStyleRef: c.linerStyleRef }
+        : {}),
+    };
+  };
   const snapChild = (c: TreeChild): LookSnapshot | LeafSnapshot =>
     isLeaf(c)
-      ? {
-          kind: 'app',
-          id: c.id,
-          label: c.label,
-          region: c.region,
-          visible: c.visible,
-          ...(c.dirty ? { dirty: true } : {}),
-          params: { ...c.params },
-          ...(c.overlay ? { overlay: { ...c.overlay } } : {}),
-          ...(c.lens ? { lens: { ...c.lens } } : {}),
-          ...(c.role ? { role: c.role } : {}),
-          ...(c.productId ? { productId: c.productId } : {}),
-          ...(c.colorwayId ? { colorwayId: c.colorwayId } : {}),
-          ...(c.technique ? { technique: { ...c.technique } } : {}),
-        }
+      ? snapLeaf(c)
       : {
           kind: 'look',
           ref: c.ref,
@@ -1632,6 +1724,10 @@ export function reviveTree(snap: LookSnapshot, lib: LookLibrary): LookNode {
           ...(k.productId ? { productId: k.productId } : {}),
           ...(k.colorwayId ? { colorwayId: k.colorwayId } : {}),
           ...(k.technique ? { technique: { ...k.technique } } : {}),
+          // 저장된 마스크·라이너 아트 URI 복원 — 마커만 살아남으면 reconcileMasks가
+          // 마스크를 해제해 저장 직전과 다른 실루엣이 그려진다.
+          ...(k.maskRef ? { maskRef: { ...k.maskRef } } : {}),
+          ...(k.linerStyleRef ? { linerStyleRef: k.linerStyleRef } : {}),
         } as ProductLeaf);
     }
     return reviveTree(k, lib);
@@ -1786,17 +1882,9 @@ function materializeSub(node: LookNode, lib: LookLibrary): string {
     level: 'sub',
     slot: node.slot,
     owner: 'user',
-    kids: node.kids.filter(isLeaf).map(lf => ({
-      label: lf.label,
-      region: lf.region,
-      params: { ...lf.params },
-      ...(lf.overlay ? { overlay: { ...lf.overlay } } : {}),
-      ...(lf.lens ? { lens: { ...lf.lens } } : {}),
-      ...(lf.role ? { role: lf.role } : {}),
-      ...(lf.productId ? { productId: lf.productId } : {}),
-      ...(lf.colorwayId ? { colorwayId: lf.colorwayId } : {}),
-      ...(lf.technique ? { technique: { ...lf.technique } } : {}),
-    })),
+    // 잎→정의 변환은 leafDefFromLeaf 하나로 — 인라인 사본은 필드가 늘 때마다
+    // 조용히 뒤처진다(마스크 URI를 떨어뜨려 저장된 룩이 마커만 남는 고아가 됐다).
+    kids: node.kids.filter(isLeaf).map(leafDefFromLeaf),
   };
   return id;
 }
@@ -2140,6 +2228,16 @@ function leafDefFromLeaf(lf: ProductLeaf): LeafDef {
     ...(lf.productId ? { productId: lf.productId } : {}),
     ...(lf.colorwayId ? { colorwayId: lf.colorwayId } : {}),
     ...(lf.technique ? { technique: { ...lf.technique } } : {}),
+    // 내 룩으로 저장(스코프 저장·저장 시트 반영/승격)해도 마스크·라이너 아트가
+    // 남아야 한다 — leafFromDef가 정의에서 다시 잎으로 복사한다(마커는 params에
+    // 이미 있음). 라이브러리 정의는 세션을 넘겨 재사용되므로 스냅샷과 같은
+    // 지속성 규칙을 쓴다(죽는 file:// 경로는 싣지 않는다).
+    ...(lf.maskRef && isDurableAssetUri(lf.maskRef.uri)
+      ? { maskRef: { ...lf.maskRef } }
+      : {}),
+    ...(lf.linerStyleRef && isDurableAssetUri(lf.linerStyleRef)
+      ? { linerStyleRef: lf.linerStyleRef }
+      : {}),
   };
 }
 
