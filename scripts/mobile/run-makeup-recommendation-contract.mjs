@@ -216,7 +216,8 @@ requireIncludes(service, [
   'anchorPreviewImageUrl: previewImageUrl',
   'const complete = requireCompleteBackendLook(validatedLook, resolvedImageStatus);',
   "|| (resolvedImageStatus === 'completed' && !imageUrl)",
-  "requireClaudeGeneration && generationSource !== 'claude'",
+  'requireProductionGeneration',
+  "generationSource !== 'deterministic_fallback'",
   'throw incompleteMakeupRecommendationError();',
   'const previewImageUrl = normalizeOptionalBackendText(report.previewImageUrl);',
   "look.role !== 'anchor' || !previewImageUrl",
@@ -420,8 +421,9 @@ if (
 
 requireIncludes(screen, [
   '<RecommendationResultsView',
-  'onOpenRecommendedProducts={() => onOpenRecommendedProducts?.(session.sourceAnalysisReportId)}',
-  'onOpenRecommendedProducts?: (sourceAnalysisReportId?: string) => void;',
+  'onOpenRecommendedProducts={() => onOpenRecommendedProducts?.(',
+  'session.reportId,',
+  'makeupRecommendationReportId?: string,',
   'reportImageUri,',
   'reportSummary: sourceReport',
   'questions: session.questions',
@@ -440,9 +442,10 @@ const makeupRecommendationRoute = read(
   'app/navigation/routes/makeupRecommendationRoutes.tsx',
 );
 requireIncludes(makeupRecommendationRoute, [
-  'onOpenRecommendedProducts={sourceAnalysisReportId =>',
+  'onOpenRecommendedProducts={(makeupRecommendationReportId, sourceAnalysisReportId) =>',
   "navigation.navigate('ProductRecommendation', {",
-  "initialSection: 'personalized',",
+  "initialSection: 'ar',",
+  '...(makeupRecommendationReportId ? {makeupRecommendationReportId} : {})',
   '...(sourceAnalysisReportId ? {reportId: sourceAnalysisReportId} : {})',
 ], 'Recommendation result product hub route');
 

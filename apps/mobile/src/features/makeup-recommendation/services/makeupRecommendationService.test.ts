@@ -349,7 +349,7 @@ for (const {label, look} of [
   );
 }
 
-for (const generationSource of [undefined, 'deterministic_fallback'] as const) {
+for (const generationSource of [undefined] as const) {
   expectThrows(
     () => mapBackendRecommendationLooks({
       reportId: 'report-v2-without-ai-proof',
@@ -357,7 +357,7 @@ for (const generationSource of [undefined, 'deterministic_fallback'] as const) {
       questions: [],
       answers: [],
       imageStatus: 'pending',
-      requireClaudeGeneration: true,
+      requireProductionGeneration: true,
       recommendation: {
         ...(generationSource ? {generationSource} : {}),
         looks: [{
@@ -368,9 +368,31 @@ for (const generationSource of [undefined, 'deterministic_fallback'] as const) {
         }],
       },
     }),
-    'V2 production result without generationSource=claude is rejected',
+    'V2 production result without a trusted generation source is rejected',
   );
 }
+const deterministicFallbackLooks = mapBackendRecommendationLooks({
+  reportId: 'report-v2-fallback',
+  prompt: '면접',
+  questions: [],
+  answers: [],
+  imageStatus: 'pending',
+  requireProductionGeneration: true,
+  recommendation: {
+    generationSource: 'deterministic_fallback',
+    looks: [{
+      ...COMPLETE_BACKEND_LOOK_FIELDS,
+      id: 'v2-fallback',
+      role: 'anchor',
+      title: '기본 추천',
+    }],
+  },
+});
+expectEqual(
+  deterministicFallbackLooks[0]?.generationSource,
+  'deterministic_fallback',
+  'V2 production accepts the safe deterministic fallback',
+);
 expectThrows(
   () => mapBackendRecommendationLooks({
     reportId: 'report-missing-completed-image',

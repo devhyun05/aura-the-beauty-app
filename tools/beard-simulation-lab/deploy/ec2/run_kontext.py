@@ -6,7 +6,7 @@
 확정 세팅 (playground 실험으로 검증됨):
   - 공식 HF Space와 같은 원본 RGB 직접 입력 및 파이프라인 자동 해상도 처리
   - guidance 2.5 / steps 28 / CPU generator seed 0
-  - 프롬프트: 2026-07-24 확정 정본 (수염만 제거하고 얼굴 정체성 보존)
+  - 프롬프트: 2026-07-25 v2 확정 정본 (수염 자국 제거와 얼굴 정체성 보존)
   - 모델 입력: 검증본과 동일한 단순 RGB 변환
   - 얼굴색 보존: 얼굴 피부 연결 영역에서 색차를 추정해 제한된 단일 LAB 이동을
     같은 피부 영역에만 적용 (배경·눈·눈썹·입술·머리 픽셀은 원출력 그대로 보존)
@@ -32,9 +32,12 @@ except Exception:
 
 MODEL = "/home/ubuntu/models/flux-kontext-dev"
 # 사용자 검수 확정 정본. 문구 변경 시 PROMPT_VERSION과 회귀 테스트를 함께 갱신한다.
-PROMPT_VERSION = "beard-removal-identity-preserving-2026-07-24"
+PROMPT_VERSION = "beard-removal-identity-preserving-2026-07-25-v2"
 PROMPT = (
-    "Remove only the mustache and all chin and jaw stubble, leaving original skin. "
+    "Retouch only the lower face to a freshly shaved appearance. "
+    "Replace dark gray or black speckles and shadows on the upper lip, chin, cheeks, and jaw "
+    "with natural skin texture and tone matching the surrounding face. "
+    "Leave no dark hair-shaped marks in those areas. "
     "Keep the eyebrows unchanged. "
     "Same person, same eyes, same eyebrows, same lips, same moles, same lighting, same background."
 )
@@ -170,11 +173,11 @@ def _color(out, ref):
     ).clip(0, 255).astype(np.uint8)
     return Image.fromarray(corrected_rgb, "RGB")
 
-def load_pipe(compile=True):
+def load_pipe(compile=False):
     """FLUX Kontext 파이프라인을 GPU에 1회 로드해 상주 서버에서 재사용한다.
 
-    dynamic torch.compile은 첫 워밍에서 수분간 컴파일될 수 있지만 상주 프로세스의
-    후속 요청을 가속한다. 실패하면 eager로 폴백한다.
+    torch.compile은 compile=True로 명시적으로 요청한 경우에만 적용한다.
+    프로덕션 기본값은 첫 요청 지연이 없는 eager 실행이다.
     """
     pipe = FluxKontextPipeline.from_pretrained(MODEL, torch_dtype=torch.bfloat16).to("cuda")
     if compile:
@@ -183,6 +186,8 @@ def load_pipe(compile=True):
             print("[run_kontext] torch.compile 적용(transformer, dynamic)", flush=True)
         except Exception as exc:
             print(f"[run_kontext] torch.compile 스킵(eager 폴백): {exc}", flush=True)
+    else:
+        print("[run_kontext] torch.compile 비활성(eager)", flush=True)
     return pipe
 
 

@@ -79,9 +79,10 @@ export function MakeupRecommendationRouteScreen({
           );
         }}
         onResultsVisibilityChange={setIsResultsVisible}
-        onOpenRecommendedProducts={sourceAnalysisReportId =>
+        onOpenRecommendedProducts={(makeupRecommendationReportId, sourceAnalysisReportId) =>
           navigation.navigate('ProductRecommendation', {
-            initialSection: 'personalized',
+            initialSection: 'ar',
+            ...(makeupRecommendationReportId ? {makeupRecommendationReportId} : {}),
             ...(sourceAnalysisReportId ? {reportId: sourceAnalysisReportId} : {}),
           })
         }

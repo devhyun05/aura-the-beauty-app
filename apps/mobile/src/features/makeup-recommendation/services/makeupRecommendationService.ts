@@ -1372,7 +1372,7 @@ export function mapBackendRecommendationLooks({
   imageError,
   anchorPreviewImageUrl,
   anchorPreviewImageStatus,
-  requireClaudeGeneration = false,
+  requireProductionGeneration = false,
 }: {
   reportId: string;
   recommendation: BackendRecommendation;
@@ -1383,11 +1383,15 @@ export function mapBackendRecommendationLooks({
   imageError?: string;
   anchorPreviewImageUrl?: string;
   anchorPreviewImageStatus?: MakeupRecommendationImageStatus;
-  requireClaudeGeneration?: boolean;
+  requireProductionGeneration?: boolean;
 }): MakeupLookRecommendation[] {
   const parsedRecommendation = parseBackendRecommendation(recommendation);
   const generationSource = parsedRecommendation.generationSource;
-  if (requireClaudeGeneration && generationSource !== 'claude') {
+  if (
+    requireProductionGeneration
+    && generationSource !== 'claude'
+    && generationSource !== 'deterministic_fallback'
+  ) {
     throw incompleteMakeupRecommendationError();
   }
   const matchAssessment = parsedRecommendation.matchAssessment;
@@ -1537,7 +1541,7 @@ export function mapBackendRecommendationReports(
         imageError: report.imageError,
         anchorPreviewImageUrl: previewImageUrl,
         anchorPreviewImageStatus: previewImageStatus,
-        requireClaudeGeneration: report.schemaVersion === 'makeup-recommendation-v2'
+        requireProductionGeneration: report.schemaVersion === 'makeup-recommendation-v2'
           || report.schema_version === 'makeup-recommendation-v2',
       }).map(look => look.role !== 'anchor' || !previewImageUrl
         ? look
@@ -2230,7 +2234,7 @@ export async function generateMakeupRecommendationV2(
     questions: session.questions,
     answers: session.answers,
     imageStatus: response.imageStatus,
-    requireClaudeGeneration: true,
+    requireProductionGeneration: true,
   });
   if (results.length === 0) throw new Error('추천 결과 형식을 확인하지 못했어요. 다시 시도해 주세요.');
   return {
@@ -2371,7 +2375,7 @@ export async function refreshGeneratedMakeupRecommendation(
     answers: session.answers,
     imageStatus: report.imageStatus,
     imageError: report.imageError,
-    requireClaudeGeneration: session.generationMode === 'v2',
+    requireProductionGeneration: session.generationMode === 'v2',
   });
   return {
     ...session,
@@ -2434,7 +2438,7 @@ export async function refineGeneratedMakeupRecommendation(
       questions: session.questions,
       answers: session.answers,
       imageStatus: response.imageStatus,
-      requireClaudeGeneration: session.generationMode === 'v2',
+      requireProductionGeneration: session.generationMode === 'v2',
     }),
   };
 }
