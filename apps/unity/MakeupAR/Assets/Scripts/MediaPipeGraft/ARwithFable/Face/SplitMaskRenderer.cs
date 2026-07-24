@@ -5,8 +5,8 @@ namespace ARMakeup.Face
 {
     /// <summary>
     /// 반반 모드 (#split) — 완성본 절반 vs 맨얼굴 절반 비교. 메이크업 셰이더는 전혀
-    /// 손대지 않고, 모든 메이크업이 공유하는 원본 피드(_CameraFeed, 메이크업 이전 grab)를
-    /// 풀스크린으로 다시 잡아 "맨얼굴 쪽 절반"에만 원본을 복원한다(SplitMask.shader).
+    /// 손대지 않고, FramePresenter가 보관한 시간 동기 무필터 카메라 프레임을 풀스크린으로
+    /// 다시 그려 "맨얼굴 쪽 절반"에만 원본을 복원한다(SplitMask.shader).
     ///
     /// 이 렌더러의 두 역할:
     ///  1) 풀스크린 쿼드로 복원 셰이더를 돌린다(LightingSimRenderer와 동형).
@@ -34,6 +34,9 @@ namespace ARMakeup.Face
 
         static readonly int SplitModeId = Shader.PropertyToID("_SplitMode");
         static readonly int SplitLineId = Shader.PropertyToID("_SplitLine");
+        static readonly int SourceTexId = Shader.PropertyToID("_SourceTex");
+        static readonly int ViewportToImageUId = Shader.PropertyToID("_ViewportToImageU");
+        static readonly int ViewportToImageVId = Shader.PropertyToID("_ViewportToImageV");
 
         void Awake()
         {
@@ -45,6 +48,8 @@ namespace ARMakeup.Face
         {
             if (Instance == this) Instance = null;
             Shader.SetGlobalFloat(SplitModeId, 0f);
+            if (_material != null) Destroy(_material);
+            if (_quad != null) Destroy(_quad);
         }
 
         public void Init(Camera cam, FaceLandmarkSource source)
@@ -54,8 +59,17 @@ namespace ARMakeup.Face
 
             var shader = Resources.Load<Shader>("SplitMask");
             if (shader == null) shader = Shader.Find("ARMakeup/SplitMask");
+            if (shader == null)
+            {
+                Debug.LogError("[SplitMaskRenderer] SplitMask shader not found");
+                enabled = false;
+                return;
+            }
             _material = new Material(shader);
             _material.renderQueue = MakeupQueues.SplitMask;
+
+            // 카메라가 XR Origin과 함께 이동해도 화면 쿼드가 뷰 앞에 고정되게 한다.
+            transform.SetParent(cam.transform, false);
 
             _quad = new Mesh { name = "SplitMaskQuad" };
             _quad.MarkDynamic();
@@ -83,11 +97,12 @@ namespace ARMakeup.Face
 
         void LateUpdate()
         {
-            var hasFace = _source != null && _source.HasFace && FramePresenter.Instance != null;
+            var hasFace = _source != null && _source.HasFace &&
+                          FramePresenter.Instance != null && _material != null;
             if (!hasFace)
             {
                 Shader.SetGlobalFloat(SplitModeId, 0f); // 얼굴 없으면 아무것도 안 자름
-                if (_renderer.enabled) _renderer.enabled = false;
+                if (_renderer != null && _renderer.enabled) _renderer.enabled = false;
                 return;
             }
 
@@ -104,9 +119,17 @@ namespace ARMakeup.Face
             Shader.SetGlobalVector(SplitLineId, new Vector4(mid.x, mid.y, normal.x, normal.y));
             Shader.SetGlobalFloat(SplitModeId, _mode);
 
-            var visible = _mode != 0;
+            var hasUnfilteredFrame = fp.TryGetUnfilteredFrame(
+                out var sourceTexture,
+                out var viewportToImageU,
+                out var viewportToImageV);
+            var visible = _mode != 0 && hasUnfilteredFrame;
             if (_renderer.enabled != visible) _renderer.enabled = visible;
             if (!visible) return;
+
+            _material.SetTexture(SourceTexId, sourceTexture);
+            _material.SetVector(ViewportToImageUId, viewportToImageU);
+            _material.SetVector(ViewportToImageVId, viewportToImageV);
 
             // 화면비 변화 시에만 풀스크린 쿼드 재구성.
             if (!Mathf.Approximately(_camera.aspect, _lastAspect))

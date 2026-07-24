@@ -57,13 +57,13 @@ namespace ARMakeup.Face
         public const int LipDecal = 3021;
         public const int LipLiner = 3022;      // 외곽 라이너 (엣지가 위에서 또렷하게)
 
-        // 반반 모드 — 메이크업 위·조명 아래. 맨얼굴 쪽 절반에 원본 피드(_CameraFeed)를
-        // 복원한다(SplitMaskRenderer). 복원된 절반도 조명 그레이드를 함께 받도록 조명 아래.
-        public const int SplitMask = 3100;
-
         // 조명 시뮬레이션(#4) — 전 메이크업 위·가이드 아래. 피드+메이크업 합성 화면을
         // GrabPass로 그레이드(화이트밸런스·노출·대비·채도). 코치 라인은 이 위에 순색으로.
         public const int Lighting = 3400;
+
+        // 반반 모드 — 메이크업·조명 등 모든 필터 레이어 위, 가이드 아래. 맨얼굴 쪽
+        // 절반을 FramePresenter의 무필터 원본으로 최종 복원한다(SplitMaskRenderer).
+        public const int SplitMask = 3900;
 
         // 튜토리얼 스텐실 — 전 메이크업 위. 완성 미리보기 위에 "어디에 바르는지"
         // 가이드 라인을 얹는 코치 오버레이라 항상 최상단(StencilGuideRenderer).

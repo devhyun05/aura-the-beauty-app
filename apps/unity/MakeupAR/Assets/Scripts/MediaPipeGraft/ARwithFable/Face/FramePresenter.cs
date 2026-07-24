@@ -265,6 +265,23 @@ namespace ARMakeup.Face
         public float ImageAspect => _imageAspect;
 
         /// <summary>
+        /// 현재 화면과 시간 동기화된 무필터 카메라 프레임과 화면→이미지 UV 변환을 함께
+        /// 제공한다. 반반 모드는 GrabPass 결과(이미 배경 필터가 적용될 수 있음)가 아니라
+        /// 이 원본을 사용해야 모든 필터 레이어를 맨얼굴 쪽에서 확실히 제거할 수 있다.
+        /// </summary>
+        public bool TryGetUnfilteredFrame(
+            out Texture texture,
+            out Vector3 viewportToImageU,
+            out Vector3 viewportToImageV)
+        {
+            texture = _texture;
+            viewportToImageU = Vector3.zero;
+            viewportToImageV = Vector3.zero;
+            return texture != null &&
+                   TryGetViewportToImage(out viewportToImageU, out viewportToImageV);
+        }
+
+        /// <summary>
         /// 센서 이미지 UV(원점 좌상단, y 아래) → 화면 뷰포트(원점 좌하단).
         /// 쿼드와 랜드마크가 공유하는 유일한 매핑. 얼굴형 보정 워프(FaceWarpField)를
         /// 순방향으로 먼저 적용해 모든 메이크업 정점이 배경 재샘플 워프와 정합한다.
