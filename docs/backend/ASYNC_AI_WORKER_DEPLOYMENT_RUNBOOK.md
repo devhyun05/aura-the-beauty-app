@@ -103,13 +103,69 @@ Recommended starting values:
 
 ```text
 queue type: Standard
-visibility timeout: 15 minutes
+visibility timeout: at least 15 minutes (preserve any longer existing value)
 message retention: 4 days or longer
 receive wait time: 20 seconds
 max receive count before DLQ: 3
+DLQ message retention: 14 days
 ```
 
-Why 15 minutes visibility timeout: a face analysis plus generated recommendation image can take longer than a normal HTTP request. The worker deletes the message only after the handler succeeds.
+Why at least 15 minutes: a face analysis plus generated recommendation image can take longer than a normal HTTP request. The worker deletes the message only after the handler succeeds.
+
+The Worker normally omits a per-receive visibility override and inherits the
+source queue setting. The `--visibility-timeout-seconds` CLI option is an
+explicit operational override and must not silently diverge from this runbook.
+
+The five-minute `ApproximateAgeOfOldestMessage` CloudWatch alarm is an
+operational alert; it does not delete a message or invoke AI by itself. A
+message that is only waiting in SQS does not itself consume external-provider
+inference. Do not auto-delete it at five minutes because that loses user work.
+Instead, inspect Worker health and quotas, scale on queue depth, and fix the
+cause. Messages whose dispatch keeps failing because of malformed input, an
+uncaught exception, or an infrastructure crash move to the DLQ after three
+receives. Provider or application failures that a handler catches, records as a
+terminal database failure, and returns normally are deleted by the Worker;
+`maxReceiveCount=3` is not three automatic external-AI retries.
+
+Audit the queue and DLQ without changing AWS:
+
+```powershell
+.\scripts\aws\configure_ai_job_queue.ps1
+```
+
+Create missing queues or apply the documented redrive settings explicitly:
+
+```powershell
+.\scripts\aws\configure_ai_job_queue.ps1 -Apply
+```
+
+Apply mode links the source queue to the DLQ with `maxReceiveCount=3`,
+uses `byQueue` redrive permission, preserves any source ARNs already allowed,
+and adds the current source queue. It sets the DLQ message retention period to
+14 days, never purges queues, and never lowers an existing retention or
+visibility timeout. For a Standard SQS queue, moving a message to a DLQ does not
+reset its original enqueue timestamp, so its actual remaining time in the DLQ
+is shorter by the time it already spent in the source queue.
+
+An existing DLQ with no explicit allow policy uses the SQS `allowAll` default.
+The script refuses to replace an existing/default `allowAll` policy because the
+DLQ may be shared by other source queues. Prefer a dedicated DLQ. Only after
+checking that restricting the DLQ cannot break another source, opt in explicitly:
+
+```powershell
+.\scripts\aws\configure_ai_job_queue.ps1 -AllowRestrictExistingDlq -Apply
+```
+
+Most SQS attributes can take up to 60 seconds to propagate, while
+`MessageRetentionPeriod` can take up to 15 minutes. The script first applies the
+DLQ allow policy and retention, and attaches or changes the source
+`RedrivePolicy` only after both are read back successfully. If it reports
+`SOURCE_ATTACHMENT_STATUS=PENDING_DLQ_RETENTION` and `RETRY_REQUIRED=1`, it
+exits nonzero so automation cannot treat the unfinished attachment as success.
+Wait up to 15 minutes and rerun with `-Apply`; after it reports
+`APPLIED_AND_VALIDATED`, rerun without `-Apply` for a final read-only check. Do
+not automatically redrive DLQ messages:
+inspect the error and terminal database row first.
 
 ## 5. ECS AI Worker Service
 
@@ -161,10 +217,28 @@ logs:CreateLogStream / logs:PutLogEvents through the ECS execution role
 Start with:
 
 ```text
-desired count: 1
+desired count: 2
 ```
 
-Scale later by queue depth, processing time, OpenAI/Bedrock rate limits, and RDS connection capacity.
+For a service with about 200 registered users, size for the measured peak rather
+than 200 simultaneous AI requests. The starting assumption is a burst of about
+20 queued AI jobs: keep two Workers warm for normal traffic and task-level
+redundancy, then allow Auto Scaling up to eight. Recheck the range after load
+tests and whenever Bedrock quotas or RDS connection limits change.
+
+The current task definition requests `0.5 vCPU` and `1 GB` per Worker. At the
+AWS Fargate Linux/x86 on-demand rates queried for Seoul on 2026-07-24, that is
+about `$0.02839` per task-hour. Two always-on Workers are about `$41.45` per
+730-hour month; eight Workers would be about `$165.80` if they stayed at the cap
+for the entire month. A one-hour burst of the six additional Workers is about
+`$0.17`. Recheck current AWS pricing before a budget decision. These figures
+exclude Bedrock/OpenAI calls, RDS, CloudWatch Logs, data transfer, taxes, and
+currency conversion.
+
+This is a starting configuration, not proof that 2-8 Workers is sufficient.
+Before production, replay a mixed burst that includes analysis, feedback, filter
+extraction, and standalone makeup recommendation jobs, then tune the maximum
+against provider quotas, database connections, latency, and the approved budget.
 
 ## 6. Media Postprocess Lambda
 
@@ -217,8 +291,8 @@ Recommended order:
 1. Deploy/confirm RDS schema.
 2. Deploy FastAPI API service with `AI_JOB_EXECUTION_MODE=inline`.
 3. Confirm mobile API path through CloudFront/API Gateway or ALB.
-4. Create SQS queue and DLQ.
-5. Deploy AI Worker ECS service with desired count `1`.
+4. Run `configure_ai_job_queue.ps1 -Apply`. If source attachment is pending, wait and rerun with `-Apply`; then rerun without `-Apply` to verify the source queue, DLQ, and redrive policy.
+5. Deploy AI Worker ECS service with desired count `2`.
 6. Change FastAPI API service to `AI_JOB_EXECUTION_MODE=sqs`.
 7. Run an analysis job and watch job status move through `pending -> processing -> completed`.
 8. Add S3 ObjectCreated trigger for media postprocess Lambda.
@@ -232,6 +306,7 @@ From `services/backend`, run before deployment:
 
 ```powershell
 python -m pytest tests/test_ai_job_queue.py tests/test_ai_job_worker.py tests/test_media_postprocess_lambda.py -q
+python -m pytest tests/test_ai_job_queue_infra.py tests/test_ai_job_queue_script_runtime.py tests/test_worker_capacity_tool.py -q
 python -m pytest tests/test_settings_and_services.py tests/test_setup_status.py -q
 python -m pytest tests/test_route_contract.py tests/test_export_openapi.py tests/test_validation_contract.py -q
 ```
@@ -253,9 +328,16 @@ CloudWatch checks:
 - FastAPI logs show `job:queued`.
 - Worker logs show `analysis:received`.
 - Worker logs show SQS message deletion only after handler success.
-- SQS visible messages return to zero after processing.
+- SQS visible and not-visible message counts both return to zero after the final
+  handler succeeds and deletes its message.
 - DLQ remains empty during successful smoke tests.
 - S3 thumbnail object appears under `/thumbnails/`.
+
+Re-run the read-only queue safety check after infrastructure changes:
+
+```powershell
+.\scripts\aws\configure_ai_job_queue.ps1
+```
 
 Configure the dev operational alarms and SNS email subscription from the repository:
 
@@ -271,13 +353,69 @@ notifications can be delivered.
 Configure SQS-driven ECS Worker Auto Scaling:
 
 ```powershell
-.\scripts\aws\configure_ai_worker_autoscaling.ps1 -MinCapacity 1 -MaxCapacity 3
+.\scripts\aws\configure_ai_worker_autoscaling.ps1
 ```
 
-The scale-out alarm adds one Worker for 1-4 visible jobs and two Workers for five
-or more visible jobs, capped by `MaxCapacity`. The scale-in alarm removes one
-Worker only after visible and in-flight messages both remain at zero for 15
-minutes. The script is idempotent and keeps at least one Worker running.
+The defaults are `MinCapacity=2` and `MaxCapacity=8`. On the first alarm breach,
+the `ChangeInCapacity` policy adds two Workers for 1-4 visible jobs, four for
+5-9, and six for 10 or more, capped by `MaxCapacity`. Because the two warm
+Workers may already hold one message each, a 20-job burst can expose about 18
+visible messages and request the eight-Worker cap in the first 60-second alarm
+evaluation.
+
+If the alarm remains active after the cooldown, Application Auto Scaling can
+apply another `ChangeInCapacity` adjustment on a later breach until the queue
+recovers or the eight-Worker cap is reached. Treat eight tasks as the maximum
+queued-job concurrency for this ECS policy.
+
+The task cap is not a hard external-provider call or cost cap: one analysis or
+image job can fan out to multiple provider calls. Before production, verify
+Bedrock/OpenAI quotas under load and add provider-specific concurrency or rate
+limits where needed. Use AWS Budgets or provider usage alerts as the separate
+spend guard; changing SQS retention does not cap inference spend.
+
+The scale-in alarm removes only one Worker after visible and in-flight messages
+have both remained at zero for 15 minutes. Its 900-second cooldown and the
+two-Worker minimum prevent rapid scale-in and scale-out churn.
+
+Review the measured-duration capacity scenarios before applying the policy. The
+calculator deterministically assigns the measured per-job p95 duration to every
+simulated job; its output is a conservative planning scenario, not a statistical
+end-to-end p95 forecast. It models the first alarm breach only and separates the
+60-second alarm detection window from 60/90-second ECS task startup. Because
+one-minute SQS samples are not phase-aligned with a burst, the calculator uses
+the conservative capacity and cost assumption that the earliest sample still
+sees every burst job as visible. A later sample can see fewer short jobs and
+request fewer Workers; this assumption can therefore understate latency for
+those short-job bursts. The calculator does not include extra SQS metric
+publication delay:
+
+```powershell
+python .\scripts\calculate_worker_capacity.py --job-counts 5,10,20
+```
+
+For a 20-job burst whose first metric sample still contains at least 10 visible
+jobs, the first breach requests the eight-Worker cap. With the current analysis
+profile, the p95 and final user-ready time are about `339.6` seconds in both
+startup cases. The last Worker handler completes, and can delete the final
+in-flight SQS message, at about `402.2` seconds. A 90-second startup raises the
+user-ready p50 from `157.9` to `187.9` seconds and the mean from `200.4` to
+`218.4` seconds, although the tied final wave is unchanged.
+
+The checked-in measurements cover analysis, feedback, and filter extraction;
+standalone `makeup_recommendation` has no measured duration profile and is
+explicitly excluded from the calculator. The filter-extraction profile has only
+three samples, and the measurement date/environment was not recorded. Re-measure
+all job types in the production-like environment before treating these numbers
+as a capacity baseline. Additional metric publication delay, provider
+throttling, retries, and database contention can increase the values. This is
+not an SLO guarantee. Validate ECS cold-start time, provider quotas, RDS
+connections, and mixed real traffic with a load test, and budget for up to eight
+tasks while the alarm persists and throughout the gradual scale-in tail. The
+policy removes one task after the first 15-minute empty-queue window and at most
+one more per 900-second cooldown. Returning from eight to the two-task minimum
+therefore takes roughly 90 minutes in ideal metric alignment and can approach
+105 minutes after sampling, publication, and task-stop lag.
 
 Configure reconciliation for AI reports left in `processing` after a crashed or
 interrupted Worker:
@@ -318,6 +456,6 @@ These are intentionally not locked by this branch:
 
 - Whether a later retry/reconciliation job is needed for rare cases where the thumbnail is still unavailable during the `complete-upload` best-effort wait window.
 - Whether analysis and image generation should eventually split into separate worker services.
-- Autoscaling policy based on SQS queue depth.
 - RDS Proxy need if worker count grows.
-- Exact DLQ redrive policy and alert threshold.
+- Whether load tests and Bedrock quotas justify changing the current 2-8 Worker range or splitting job types into separate queues.
+- Operator approval and audit-trail requirements for replaying messages from the DLQ.

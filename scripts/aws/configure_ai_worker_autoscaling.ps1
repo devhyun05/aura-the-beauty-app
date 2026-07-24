@@ -4,8 +4,8 @@ param(
   [string]$ClusterName = "aura-backend-dev",
   [string]$ServiceName = "aura-ai-worker",
   [string]$QueueName = "aura-ai-jobs-dev",
-  [int]$MinCapacity = 1,
-  [int]$MaxCapacity = 3
+  [int]$MinCapacity = 2,
+  [int]$MaxCapacity = 8
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,11 +41,16 @@ $scaleOutConfig = @{
     @{
       MetricIntervalLowerBound = 0
       MetricIntervalUpperBound = 4
-      ScalingAdjustment = 1
+      ScalingAdjustment = 2
     },
     @{
       MetricIntervalLowerBound = 4
-      ScalingAdjustment = 2
+      MetricIntervalUpperBound = 9
+      ScalingAdjustment = 4
+    },
+    @{
+      MetricIntervalLowerBound = 9
+      ScalingAdjustment = 6
     }
   )
 }

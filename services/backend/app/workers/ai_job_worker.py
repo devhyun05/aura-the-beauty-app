@@ -14,7 +14,7 @@ from app.workers.job_dispatcher import AIJobDispatcher, AIJobWorkerError, parse_
 
 DEFAULT_MAX_MESSAGES = 1
 DEFAULT_WAIT_TIME_SECONDS = 20
-DEFAULT_VISIBILITY_TIMEOUT_SECONDS = 900
+DEFAULT_VISIBILITY_TIMEOUT_SECONDS: int | None = None
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class SQSAIJobWorker:
     queue_url: str | None = None,
     max_messages: int = DEFAULT_MAX_MESSAGES,
     wait_time_seconds: int = DEFAULT_WAIT_TIME_SECONDS,
-    visibility_timeout_seconds: int = DEFAULT_VISIBILITY_TIMEOUT_SECONDS,
+    visibility_timeout_seconds: int | None = DEFAULT_VISIBILITY_TIMEOUT_SECONDS,
   ) -> None:
     self.settings = settings
     self.db = db
@@ -49,14 +49,18 @@ class SQSAIJobWorker:
       )
 
   async def poll_once(self) -> int:
+    receive_kwargs = {
+      "QueueUrl": self.queue_url,
+      "MaxNumberOfMessages": self.max_messages,
+      "WaitTimeSeconds": self.wait_time_seconds,
+      "MessageAttributeNames": ["All"],
+      "AttributeNames": ["ApproximateReceiveCount"],
+    }
+    if self.visibility_timeout_seconds is not None:
+      receive_kwargs["VisibilityTimeout"] = self.visibility_timeout_seconds
     response = await asyncio.to_thread(
       self.client.receive_message,
-      QueueUrl=self.queue_url,
-      MaxNumberOfMessages=self.max_messages,
-      WaitTimeSeconds=self.wait_time_seconds,
-      VisibilityTimeout=self.visibility_timeout_seconds,
-      MessageAttributeNames=["All"],
-      AttributeNames=["ApproximateReceiveCount"],
+      **receive_kwargs,
     )
     messages = response.get("Messages", [])
 
