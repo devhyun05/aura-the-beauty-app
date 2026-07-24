@@ -33,6 +33,7 @@ import {
   type ReportCompletionStatus,
 } from './services/reportCompletionStatus';
 import {GoldenMaskCard} from './components/GoldenMaskCard';
+import {ReportSectionCover} from './components/ReportSectionCover';
 import {
   disposePreparedGoldenMask,
   preloadGoldenMaskForReport,
@@ -80,6 +81,7 @@ const STORY_SECTION_NAV_LABELS: Record<FaceReportStorySection['id'], string> = {
   'color-skin': '컬러·피부',
   style: '스타일',
 };
+const REPORT_COVER_PAGE_ID = 'report:cover';
 import { ScrollAnimContext } from './visuals/RiseIn';
 import {S1CombinedSummary} from './sections/S1CombinedSummary';
 import { S2Proportion } from './sections/S2Proportion';
@@ -248,6 +250,35 @@ function StoryContentCard({
         ) : null}
         {children}
       </ScrollView>
+    </View>
+  );
+}
+
+function ReportCoverPage({
+  pageId,
+  registerCaptureTarget,
+  section,
+}: {
+  pageId: string;
+  registerCaptureTarget: (
+    pageId: string,
+    target: ReportPageCaptureTarget | null,
+  ) => void;
+  section: FaceReportStorySection;
+}) {
+  return (
+    <View
+      collapsable={false}
+      ref={node =>
+        registerCaptureTarget(
+          pageId,
+          node
+            ? {snapshotContentContainer: false, target: node}
+            : null,
+        )
+      }
+      style={{flex: 1}}>
+      <ReportSectionCover reportCover section={section} />
     </View>
   );
 }
@@ -579,9 +610,7 @@ export const ReportScreenScaffold = React.forwardRef<
   );
   const initialPageId =
     incomingData.initialPageId ??
-    (incomingData.goldenMask
-      ? 'summary:overview'
-      : initialModel.pages[0]?.id ?? null);
+    (initialModel.pages.length ? REPORT_COVER_PAGE_ID : null);
   const [activePageId, setActivePageId] = useState(initialPageId);
   const activePageIdRef = useRef(activePageId);
   const registerCaptureTarget = React.useCallback(
@@ -655,7 +684,7 @@ export const ReportScreenScaffold = React.forwardRef<
   const resetKey = `${data.reportId}:${data.s1.photo.uri ?? 'report'}:${data.s1.dateLine}`;
   const initialStoryPageId =
     data.initialPageId ??
-    (data.goldenMask ? 'summary:overview' : storyModel.pages[0]?.id ?? null);
+    (storyModel.pages.length ? REPORT_COVER_PAGE_ID : null);
   const handlePageChange = React.useCallback((pageId: string) => {
     activePageIdRef.current = pageId;
     setActivePageId(pageId);
@@ -809,18 +838,36 @@ export const ReportScreenScaffold = React.forwardRef<
     }
   };
 
-  const storyPages: StoryReportPage[] = storyModel.pages.map(page => {
-    const section = sectionById.get(page.sectionId)!;
-    return {
-      id: page.id,
-      sectionId: page.sectionId,
-      kind: page.kind,
-      title: page.title,
-      shortTitle: page.shortTitle,
-      accentColor: section.accent,
-      render: renderContent(page, section),
-    };
-  });
+  const summarySection = sectionById.get('summary')!;
+  const storyPages: StoryReportPage[] = [
+    {
+      id: REPORT_COVER_PAGE_ID,
+      sectionId: 'summary',
+      kind: 'cover',
+      title: 'AURA 얼굴 분석 보고서',
+      shortTitle: '표지',
+      accentColor: summarySection.accent,
+      render: (
+        <ReportCoverPage
+          pageId={REPORT_COVER_PAGE_ID}
+          registerCaptureTarget={registerCaptureTarget}
+          section={summarySection}
+        />
+      ),
+    },
+    ...storyModel.pages.map(page => {
+      const section = sectionById.get(page.sectionId)!;
+      return {
+        id: page.id,
+        sectionId: page.sectionId,
+        kind: page.kind,
+        title: page.title,
+        shortTitle: page.shortTitle,
+        accentColor: section.accent,
+        render: renderContent(page, section),
+      };
+    }),
+  ];
   const storySections: StoryReportSection[] = Object.values(
     FACE_REPORT_STORY_SECTIONS,
   ).map(section => {
@@ -830,14 +877,19 @@ export const ReportScreenScaffold = React.forwardRef<
       title: section.koreanTitle,
       shortTitle: STORY_SECTION_NAV_LABELS[section.id],
       accentColor: section.accent,
-      pageIds: availableSection?.pages.map(page => page.id) ?? [],
+      pageIds: availableSection
+        ? [
+            ...(section.id === 'summary' ? [REPORT_COVER_PAGE_ID] : []),
+            ...availableSection.pages.map(page => page.id),
+          ]
+        : [],
       available: Boolean(availableSection),
       showPageIndex: false,
     };
   });
   const firstStoryPageId =
     data.initialPageId ??
-    (data.goldenMask ? 'summary:overview' : storyModel.pages[0]?.id ?? null);
+    (storyModel.pages.length ? REPORT_COVER_PAGE_ID : null);
   React.useEffect(() => {
     activePageIdRef.current = firstStoryPageId;
     setActivePageId(firstStoryPageId);

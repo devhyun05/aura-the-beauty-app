@@ -119,7 +119,7 @@ const minimumData = buildMinimumFaceReportData({
   recommendedMood: '차분한 선명함',
   skinType: '복합성',
 });
-assert.equal(minimumData.initialPageId, 'summary:overview');
+assert.equal(minimumData.initialPageId, undefined);
 assert.equal(minimumData.s1.photo.uri, 'file:///face.jpg');
 assert.deepEqual(
   minimumData.s1.cards.map(card => card.label),
