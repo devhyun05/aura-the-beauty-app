@@ -156,6 +156,10 @@ namespace ARMakeup.Face
         Color32[] _irisColors; // 홍채 정점색(알파 = 눈 열림 게이트)
         float _irisIntensity, _eyelinerIntensity, _eyeshadowIntensity;
         bool _eyeshadowMaskWide; // §16b 와이드 마스크 활성 — 밴드 스윕을 끄고 연장 캔버스를 편다
+        // 디자인 마스크 컬럼별 상단 포락(v01, u 0=눈앞→1=꼬리) — 가이드(스텐실)가
+        // 캔버스 외곽이 아닌 실제 실루엣을 따라가게 한다. null = 마스크 없음.
+        float[] _designTopEnv;
+        const int DesignEnvSamples = 17;
         int _eyelinerThicknessProfile;
         int _eyelinerTailProfile;
         int _legacyEyelinerTailProfile;
@@ -250,6 +254,7 @@ namespace ARMakeup.Face
                 esMat.SetFloat(EyeshadowHasDesignId, 0f);
                 esMat.SetFloat(EyeshadowDesignWideId, 0f);
                 _eyeshadowMaskWide = false;
+                _designTopEnv = null;
                 return;
             }
             if (!ImageFileLoader.TryLoadMask(path, out var mask, out var error))
@@ -266,6 +271,40 @@ namespace ARMakeup.Face
             // 간주(x=u/2 샘플 + 연장 게이트 개방). 표준 1:1은 기존 계약 그대로.
             _eyeshadowMaskWide = mask.width >= mask.height * 2;
             esMat.SetFloat(EyeshadowDesignWideId, _eyeshadowMaskWide ? 1f : 0f);
+            BuildDesignTopEnvelope(mask, _eyeshadowMaskWide);
+        }
+
+        /// <summary>마스크 컬럼별 상단 포락 — 각 u에서 알파가 남는 최고 v(0=lash→1=위).
+        /// 와이드(§16b)는 좌측 절반(눈 구간)만 스캔. BakeMask 산출물이라 readable 보장.</summary>
+        void BuildDesignTopEnvelope(Texture2D mask, bool wide)
+        {
+            var px = mask.GetPixels32();
+            int w = mask.width, h = mask.height;
+            _designTopEnv = new float[DesignEnvSamples];
+            for (var sIdx = 0; sIdx < DesignEnvSamples; sIdx++)
+            {
+                var u = sIdx / (float)(DesignEnvSamples - 1);
+                var x = Mathf.Clamp(
+                    Mathf.RoundToInt(u * (wide ? 0.5f : 1f) * (w - 1)), 0, w - 1);
+                var top = 0f;
+                for (var y = h - 1; y >= 0; y--) // 위(눈썹쪽) 행부터
+                    if (px[y * w + x].r >= 64) { top = y / (float)(h - 1); break; }
+                _designTopEnv[sIdx] = top;
+            }
+        }
+
+        /// <summary>가이드용 — u01(0=눈앞→1=꼬리)에서 활성 디자인 마스크의 상단 포락.
+        /// 마스크 없으면 false(가이드는 기존 캔버스 크리스 높이 유지).</summary>
+        public bool TryGetDesignTopEnvelope(float u01, out float env01)
+        {
+            env01 = 1f;
+            var env = _designTopEnv;
+            if (env == null) return false;
+            var f = Mathf.Clamp01(u01) * (env.Length - 1);
+            var i0 = Mathf.FloorToInt(f);
+            var i1 = Mathf.Min(i0 + 1, env.Length - 1);
+            env01 = Mathf.Lerp(env[i0], env[i1], f - i0);
+            return true;
         }
 
         /// <summary>렌즈 레이어드(#25) — 3세부 슬롯 배열을 셰이더 유니폼에 기록한다
@@ -605,6 +644,7 @@ namespace ARMakeup.Face
         static readonly int EyeshadowDesignId = Shader.PropertyToID("_EyeshadowDesign");       // 모양 마스크(§16)
         static readonly int EyeshadowHasDesignId = Shader.PropertyToID("_EyeshadowHasDesign");
         static readonly int EyeshadowDesignWideId = Shader.PropertyToID("_EyeshadowDesignWide"); // §16b 와이드(u 0..2)
+        static readonly int EyeshadowMaskFeatherId = Shader.PropertyToID("_EyeshadowMaskFeather");
         Texture2D _eyeshadowDesign; // 소유(교체·해제 시 파기)
         // ── 멀티밴드(A14 ①) — Eyeshadow.shader ES_MAX와 일치. 밴드당 색(rgb)+강도(a),
         // 색2(그라데 스톱B), param(cutoff·finish·shape·gradient). 배열은 SetVectorArray로,
@@ -704,6 +744,8 @@ namespace ARMakeup.Face
                 var esMat = _eyeshadow.renderer.sharedMaterial;
                 if (ColorUtility.TryParseHtmlString(p.eyeshadowColor, out var esc)) esMat.SetColor(EyeshadowColorId, esc);
                 esMat.SetFloat(EyeshadowIntensityId, _eyeshadowIntensity);
+                // 마스크 좌우 페더(핏) — JsonUtility 생략 0 = 현행(마스크 그대로).
+                esMat.SetFloat(EyeshadowMaskFeatherId, Mathf.Clamp01(p.eyeshadowMaskFeather));
                 esMat.SetFloat(EyeshadowFinishId, p.eyeshadowFinish);
                 esMat.SetFloat(EyeshadowShimmerId, Mathf.Clamp01(p.eyeshadowShimmer));
                 // 제형(텍스처) GENERIC — 0=크림=현행(하위호환). 밴드 공통(멀티밴드 시 마지막 값 유지).

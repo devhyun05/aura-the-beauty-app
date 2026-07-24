@@ -598,6 +598,7 @@ export const AEGYO_TEXTURES: DomainOption[] = [
   { value: 2, label: '글리터 스틱', patch: { aegyoFinish: 3, aegyoShimmer: 0.7 } },
 ];
 export const EYELINER_LOWER_TEXTURES: DomainOption[] = [
+  { value: 3, label: '리퀴드' }, // 무변조=선명(기본) — 펜슬/스머지에서 되돌아올 칩
   { value: 0, label: '펜슬' },
   { value: 1, label: '스머지 파우더' },
   {
@@ -726,9 +727,12 @@ export const TEXTURE_ENUM_SEED: Record<
     2: { edgeSoft: 0.1, grain: 0.2, coverage: 0, body: 0 },
   },
   eyelinerLower: {
-    0: { edgeSoft: -0.2, grain: 0.5, coverage: 0, body: 0.3 },
-    1: { edgeSoft: 0.35, grain: 0.3, coverage: -0.1, body: 0 },
+    // 펜슬·스머지는 리퀴드와 확실히 갈리도록 페더를 크게(실기기 피드백).
+    // 3=리퀴드(무변조=선명, 기본) — Finish.cginc TEX_SEED(11,·)와 정확 미러.
+    0: { edgeSoft: 0.45, grain: 0.6, coverage: -0.05, body: 0.15 },
+    1: { edgeSoft: 0.9, grain: 0.35, coverage: -0.2, body: -0.1 },
     2: { edgeSoft: 0.1, grain: 0.15, coverage: -0.1, body: 0 },
+    3: TEX_ZERO,
   },
   brow: {
     0: TEX_ZERO,
@@ -1589,6 +1593,8 @@ export const REGION_GROUPS: RegionGroup[] = [
             { type: 'slider', label: '아이섀도', key: 'eyeshadowIntensity', max: 1.5, step: 0.05 },
           ],
           fit: [
+            // 마스크 좌우 페더 — 디자인 실루엣 양옆·눈꼬리 잔존 엣지 완화(0=마스크 그대로).
+            { type: 'slider', label: '마스크 페더', key: 'eyeshadowMaskFeather', min: 0, max: 1, fallback: 0, gold: true },
             {
               type: 'slider',
               label: '섀도 높이',
@@ -1679,7 +1685,10 @@ export const REGION_GROUPS: RegionGroup[] = [
         emoji: '﹏',
         productName: '펜슬 라이너',
         onKeys: ['eyelinerLowerIntensity'],
-        defaults: { eyelinerLowerIntensity: 0.4, eyelinerLowerFinish: 1, eyelinerLowerColor: '#3A241E' },
+        defaults: {
+          eyelinerLowerIntensity: 0.4, eyelinerLowerFinish: 1, eyelinerLowerColor: '#3A241E',
+          eyelinerLowerTexture: 3, // 기본 리퀴드(무변조) — 칩 선택 상태도 리퀴드로 표시
+        },
         axes: {
           // 구간(W1) — 전체 / 꼬리만 / 앞+꼬리(중앙 비움). lnAmt along 게이트(상라이너 관례).
           shape: [
@@ -1712,6 +1721,26 @@ export const REGION_GROUPS: RegionGroup[] = [
               min: 0.3,
               max: 2.5,
               fallback: 1,
+              gold: true,
+            },
+            // 눈꼬리 연장 테크닉(짧은 눈·꼬막눈 보정) — 트레이스: 꼬리 구간 라인을
+            // 삼각존 하단 경계로 내려 그리기(디태치). 연장: 눈꼬리 밖까지 길이.
+            {
+              type: 'slider',
+              label: '꼬리 트레이스',
+              key: 'eyelinerLowerTailTrace',
+              min: 0,
+              max: 1,
+              fallback: 0,
+              gold: true,
+            },
+            {
+              type: 'slider',
+              label: '꼬리 연장',
+              key: 'eyelinerLowerTailLen',
+              min: 0,
+              max: 1,
+              fallback: 0,
               gold: true,
             },
           ],
@@ -2244,6 +2273,8 @@ export const REGION_GROUPS: RegionGroup[] = [
           ],
           fit: [
             { type: 'slider', label: '오버립 (워프)', key: 'lipOverline', gold: true },
+            // 테두리 페더(블러 립) — 립 라인을 그라데이션으로 번지게. 0=선명(현행).
+            { type: 'slider', label: '테두리 페더', key: 'lipEdgeFeather', min: 0, max: 1, fallback: 0, gold: true },
           ],
         },
       },

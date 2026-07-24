@@ -51,6 +51,7 @@ fitAssessment\uc758 \uc5ec\uc12f dimensions\ub294 \ucd94\ucc9c \uc774\ubbf8\uc9c
 \uc785\ub825 \uadfc\uac70\uac00 \uc5c6\ub294 fit \ucd95\uc740 available=false, score=null\ub85c \ub450\uace0 \ucd94\uce21\ud558\uc9c0 \uc54a\ub294\ub2e4. overallScore\uc640 evidence\ub294 \uc11c\ubc84\uac00 \uc2e4\uc81c \uc0ac\uc6a9 \uac00\ub2a5\ud55c \ucd95\ub9cc\uc73c\ub85c \ub2e4\uc2dc \uacc4\uc0b0\ud55c\ub2e4.
 추천 룩은 role이 anchor인 단 하나이며, 상황·답변·퍼스널컬러·얼굴 구조를 모두 반영한 완성도 높은 하나의 룩으로 구성한다.
 룩에 base, brow, eye, cheek, lip 부위 가이드를 빠짐없이 넣는다.
+brow 색은 보고서 analysisReport.detail.makeupColors.brow(사진의 실제 모발·눈썹 색과 조화되는 기본값)가 있으면 그 톤을 기준으로 삼는다. 보고서·답변에 특이 염색 모발이나 탈색 눈썹 근거가 있으면 그에 조화되는 색(밝은 블론드·베이지 포함)을 쓴다. 상황·키워드·답변이 컬러 브로우, 포인트 브로우, 무대·화보·유니크 컨셉을 명시적으로 요구할 때는 모브·플럼 같은 패션 컬러를 자유롭게 쓴다. 그런 근거 없이 일상·내추럴·오피스 룩의 눈썹을 퍼스널컬러만으로 패션 컬러로 만들지 않는다.
 Do not copy or infer the analysis report's prior mood, base/area makeup guides, or recommendedMakeups. Generate every areaGuides entry freshly from situation, answers, personalColor, faceStructure, and skin evidence.
 서버가 각 guide를 상세 시술 순서로 보강하므로 color, texture, placement, technique에는 추천 이미지에 실제로 표현할 핵심 색·질감·범위·레이어 방향을 정확히 쓴다. JSON만 반환한다."""
 

@@ -85,10 +85,14 @@ function ruleValue(entries: {rules: Record<string, number>}[], field: string): n
   // 둥근 눈(openness high) → 가로 연장(wing +)
   const round = deriveFitDeltas(profileOf({metricOverrides: {eyeOpennessLeft: 0.5, eyeOpennessRight: 0.5}}), 'balance', {deltaScale: 1});
   assert(ruleValue(round.entries, 'eyelinerWingLength') > 0, 'round eye -> wing +');
+  // E-7 확장: 둥근 눈 → 아래 라인 삼각존 트레이스 + 눈꼬리 밖 연장(가로 확장 하부 받침)
+  assert(ruleValue(round.entries, 'eyelinerLowerTailTrace') > 0, 'round eye -> lower tail trace +');
+  assert(ruleValue(round.entries, 'eyelinerLowerTailLen') > 0, 'round eye -> lower tail ext +');
   // 가는 눈(openness low) → 세로 리프트(eyeshadowHeight +), 윙 안 씀
   const narrow = deriveFitDeltas(profileOf({metricOverrides: {eyeOpennessLeft: 0.2, eyeOpennessRight: 0.2}}), 'balance', {deltaScale: 1});
   assert(ruleValue(narrow.entries, 'eyeshadowHeight') > 0, 'narrow eye -> eyeshadowHeight +');
   assert(ruleValue(narrow.entries, 'eyelinerWingLength') === 0, 'narrow eye -> no wing');
+  assert(ruleValue(narrow.entries, 'eyelinerLowerTailTrace') === 0, 'narrow eye -> no lower trace');
 }
 
 // ── 애교살 있음 → 애교 강조 ────────────────────────────────────────────────

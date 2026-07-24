@@ -25,7 +25,6 @@ import type { LookMaskRef, MaskRegion, RegionKey } from './regions';
 // ── 카탈로그 에셋 URI 헬퍼(§16) — 번들 StreamingAssets 상대경로(streaming: 스킴).
 //    파일 실존은 catalogDefault.json 엔트리와 1:1(작성 시 검증). ──────────────────
 const maskUri = (file: string): string => `streaming:catalog/mask/${file}.png`;
-const linerUri = (file: string): string => `streaming:catalog/colorArt/${file}.png`;
 /** 부위별 카탈로그 마스크 참조 한 장(잎 maskRef). */
 const mask = (region: MaskRegion, file: string): LookMaskRef => ({
   region,
@@ -210,17 +209,17 @@ export function buildVariantLibrary(): LookLibrary {
   //    축에서, 광은 립글로스 세부부위에서 따로 쌓는다. 농도(lipIntensity)는 색 밝기로 체감을
   //    맞춘다(밝은 색↑·어두운 색↓). 유사색이던 MLBB·피치는 정리해 제거(6색 또렷이 구분).
   addRegionLook(lib, 'lip', 'rose', '로즈', '립',
-    single('로즈', 'lip', { lipColor: '#D96C7B', lipIntensity: 0.55 }));
+    single('로즈', 'lip', { lipColor: '#D96C7B', lipIntensity: 0.55, lipEdgeFeather: 0.35 }));
   addRegionLook(lib, 'lip', 'coral', '코랄', '립',
-    single('코랄', 'lip', { lipColor: '#F2846B', lipIntensity: 0.6 }));
+    single('코랄', 'lip', { lipColor: '#F2846B', lipIntensity: 0.6, lipEdgeFeather: 0.35 }));
   addRegionLook(lib, 'lip', 'mauve', '모브', '립',
-    single('모브', 'lip', { lipColor: '#A8647E', lipIntensity: 0.52 }));
+    single('모브', 'lip', { lipColor: '#A8647E', lipIntensity: 0.52, lipEdgeFeather: 0.35 }));
   addRegionLook(lib, 'lip', 'red', '레드', '립',
-    single('레드', 'lip', { lipColor: '#B01E3C', lipIntensity: 0.5 }));
+    single('레드', 'lip', { lipColor: '#B01E3C', lipIntensity: 0.5, lipEdgeFeather: 0.35 }));
   addRegionLook(lib, 'lip', 'burgundy', '버건디', '립',
-    single('버건디', 'lip', { lipColor: '#9E3B54', lipIntensity: 0.48 }));
+    single('버건디', 'lip', { lipColor: '#9E3B54', lipIntensity: 0.48, lipEdgeFeather: 0.35 }));
   addRegionLook(lib, 'lip', 'orange', '오렌지', '립',
-    single('오렌지', 'lip', { lipColor: '#E8703C', lipIntensity: 0.58 }));
+    single('오렌지', 'lip', { lipColor: '#E8703C', lipIntensity: 0.58, lipEdgeFeather: 0.35 }));
 
   // ── 그라데이션 립 3종 — 전용 '그라데이션' 세부부위(lipGradient)로 카테고리(서브탭) 노출.
   //    "색만" 칠한다(글로스·광은 넣지 않음 — 립글로스 탭에서 레이어로 따로 쌓는다).
@@ -229,37 +228,37 @@ export function buildVariantLibrary(): LookLibrary {
   addRegionLook(lib, 'lip-gradient', 'rose-gradient', '로즈 그라데', '립',
     single('로즈 그라데', 'lipGradient', {
       lipColor: '#DC6F87', lipColor2: '#AE2647', lipGradient: 0.82, lipShape: 1,
-      lipIntensity: 0.82, lipFinish: 0,
+      lipIntensity: 0.82, lipEdgeFeather: 0.35, lipFinish: 0,
     }), false);
   addRegionLook(lib, 'lip-gradient', 'coral-gradient', '코랄 그라데', '립',
     single('코랄 그라데', 'lipGradient', {
       lipColor: '#EE8062', lipColor2: '#CE3E22', lipGradient: 0.82, lipShape: 1,
-      lipIntensity: 0.82, lipFinish: 0,
+      lipIntensity: 0.82, lipEdgeFeather: 0.35, lipFinish: 0,
     }), false);
   addRegionLook(lib, 'lip-gradient', 'berry-gradient', '베리 그라데', '립',
     single('베리 그라데', 'lipGradient', {
       lipColor: '#C55766', lipColor2: '#8E1226', lipGradient: 0.85, lipShape: 1,
-      lipIntensity: 0.8, lipFinish: 0,
+      lipIntensity: 0.8, lipEdgeFeather: 0.35, lipFinish: 0,
     }), false);
   addRegionLook(lib, 'lip-gradient', 'pink-gradient', '핑크 그라데', '립',
     single('핑크 그라데', 'lipGradient', {
       lipColor: '#E98BAA', lipColor2: '#C63A6E', lipGradient: 0.82, lipShape: 1,
-      lipIntensity: 0.8, lipFinish: 0,
+      lipIntensity: 0.8, lipEdgeFeather: 0.35, lipFinish: 0,
     }), false);
   addRegionLook(lib, 'lip-gradient', 'orange-gradient', '오렌지 그라데', '립',
     single('오렌지 그라데', 'lipGradient', {
       lipColor: '#F1976C', lipColor2: '#DA531E', lipGradient: 0.82, lipShape: 1,
-      lipIntensity: 0.8, lipFinish: 0,
+      lipIntensity: 0.8, lipEdgeFeather: 0.35, lipFinish: 0,
     }), false);
   addRegionLook(lib, 'lip-gradient', 'mauve-gradient', '모브 그라데', '립',
     single('모브 그라데', 'lipGradient', {
       lipColor: '#B47C92', lipColor2: '#793858', lipGradient: 0.82, lipShape: 1,
-      lipIntensity: 0.78, lipFinish: 0,
+      lipIntensity: 0.78, lipEdgeFeather: 0.35, lipFinish: 0,
     }), false);
   addRegionLook(lib, 'lip-gradient', 'plum-gradient', '플럼 그라데', '립',
     single('플럼 그라데', 'lipGradient', {
       lipColor: '#9C6580', lipColor2: '#571F3F', lipGradient: 0.85, lipShape: 1,
-      lipIntensity: 0.78, lipFinish: 0,
+      lipIntensity: 0.78, lipEdgeFeather: 0.35, lipFinish: 0,
     }), false);
 
   // ── 눈 6종 — 섀도 색·finish·강도 변형, 일부는 라이너 스타일/질감 조합.
@@ -297,7 +296,7 @@ export function buildVariantLibrary(): LookLibrary {
         region: 'eyelinerUpper',
         params: {
           eyelinerColor: '#5A4433',
-          eyelinerIntensity: 0.4,
+          eyelinerIntensity: 0.6,
           eyelinerStyle: 0,
           eyelinerTexture: 2, // 펜슬 — 부드러운 로즈골드 무드
           eyelinerFinish: 1, // 구 새틴은 로컬 도메인에 없어 매트로 안전 치환
@@ -362,7 +361,7 @@ export function buildVariantLibrary(): LookLibrary {
         region: 'eyelinerUpper',
         params: {
           eyelinerColor: '#6E3A2A',
-          eyelinerIntensity: 0.35,
+          eyelinerIntensity: 0.5,
           eyelinerStyle: 2, // 가로 롱 — 데일리 무드
           eyelinerTexture: 0,
           eyelinerFinish: 1, // 구 새틴은 로컬 도메인에 없어 매트로 안전 치환
@@ -1549,23 +1548,49 @@ export function buildVariantLibrary(): LookLibrary {
     }] },
   ]);
 
-  // ── 아이라이너 콜르아트 세부부위 룩 5종 — 신규 liner_* 콜르아트를 setEyelinerStyle로.
-  //    gate=eyelinerStyleIntensity(잎 소유). 색·모양은 콜르아트 픽셀이 담는다. ──
-  const linerArtLook = (
-    nameSlug: string, name: string, file: string, intensity: number,
+  // ── 아이라이너 세부부위 룩 5종 — 콜르아트(setEyelinerStyle) 대신 파라메트릭 라이너
+  //    (IrisRenderer 두께/테일 프로파일)로 정의. 콜르아트는 플랫 알파 + 단색 틴트라
+  //    스티커처럼 보이고 윙 지터가 도드라져, 시스템 룩은 질감·마감 축을 가진 절차
+  //    라이너로 통일한다(콜르아트 경로 자체는 사용자 임포트 전용으로 존치).
+  //    슬러그·이름은 기존 저장 참조 보존을 위해 그대로 둔다.
+  const linerLook = (
+    nameSlug: string, name: string, params: LeafSpec['params'],
   ): void =>
     addRegionLook(lib, 'eyeliner-upper', nameSlug, name, '눈', [
-      { name, leaves: [{
-        label: name, region: 'eyelinerUpper',
-        params: { eyelinerStyleIntensity: intensity },
-        linerStyleRef: linerUri(file),
-      }] },
+      { name, leaves: [{ label: name, region: 'eyelinerUpper', params }] },
     ], false);
-  linerArtLook('art-slim', '슬림 아트라인', 'liner_slim', 0.82);
-  linerArtLook('art-bold-wing', '볼드 윙 아트', 'liner_bold', 0.9);
-  linerArtLook('art-cat-long', '롱 캣아이 아트', 'liner_cat_long', 0.9);
-  linerArtLook('art-puppy-droop', '퍼피 드룹 아트', 'liner_droop', 0.75);
-  linerArtLook('art-tightline', '타이트라인 아트', 'liner_tight', 0.7);
+  // 프로파일 인덱스 = regions.ts EYELINER_THICKNESS/TAIL_PROFILES 라벨 기준.
+  linerLook('art-slim', '슬림 아트라인', {
+    eyelinerColor: '#221A20', eyelinerIntensity: 0.75,
+    eyelinerHasGeometryProfiles: 1,
+    eyelinerThicknessProfile: 2, // 슬림
+    eyelinerTailProfile: 0, eyelinerWingLength: 0.7, // 윙업, 꼬리 짧게
+  });
+  linerLook('art-bold-wing', '볼드 윙 아트', {
+    eyelinerColor: '#1B141A', eyelinerIntensity: 0.85,
+    eyelinerHasGeometryProfiles: 1,
+    eyelinerThicknessProfile: 3, // 볼드
+    eyelinerTailProfile: 0, eyelinerWingLength: 1.1, // 윙업
+  });
+  linerLook('art-cat-long', '롱 캣아이 아트', {
+    eyelinerColor: '#1B141A', eyelinerIntensity: 0.85,
+    eyelinerHasGeometryProfiles: 1,
+    eyelinerThicknessProfile: 4, // 바깥 볼드 — 가는 몸통, 두꺼운 꼬리
+    eyelinerTailProfile: 4, eyelinerWingLength: 1.15, // 롱 업
+  });
+  linerLook('art-puppy-droop', '퍼피 드룹 아트', {
+    eyelinerColor: '#2A1E1C', eyelinerIntensity: 0.72,
+    eyelinerTexture: 1, // 젤 — 뭉근하게 처지는 무드
+    eyelinerHasGeometryProfiles: 1,
+    eyelinerThicknessProfile: 2, // 슬림
+    eyelinerTailProfile: 1, // 다운턴
+  });
+  linerLook('art-tightline', '타이트라인 아트', {
+    eyelinerColor: '#241C22', eyelinerIntensity: 0.7,
+    eyelinerHasGeometryProfiles: 1,
+    eyelinerThicknessProfile: 1, // 극슬림 — 점막 채우기 느낌
+    eyelinerTailProfile: 2, eyelinerWingLength: 0.3, // 가로 롱, 꼬리 최소
+  });
 
   // ── 하이라이터 부위별 마스크 룩 5종 — high_* 존 스텐실 1장씩(단일 머티리얼 슬롯 규약상
   //    한 룩=한 존). 색·마감은 기존 하이라이터 룩 분포 참고. ──
@@ -1624,7 +1649,7 @@ export function buildVariantLibrary(): LookLibrary {
     }] },
     { name: '라이너', leaves: [{
       label: '아이라인 상', region: 'eyelinerUpper',
-      params: { eyelinerColor: '#5A4433', eyelinerIntensity: 0.4, eyelinerStyle: 0, eyelinerTexture: 2, eyelinerFinish: 1 },
+      params: { eyelinerColor: '#5A4433', eyelinerIntensity: 0.6, eyelinerStyle: 0, eyelinerTexture: 2, eyelinerFinish: 1 },
     }] },
   ]);
   // 스모키 스택 v2 — 기존 2겹 스모키를 위 스모키 아웃(연장) + 아래 딥 스모키 마스크로
@@ -1642,8 +1667,12 @@ export function buildVariantLibrary(): LookLibrary {
     }] },
     { name: '볼드 윙 라이너', leaves: [{
       label: '아이라인 상', region: 'eyelinerUpper',
-      params: { eyelinerStyleIntensity: 0.9 },
-      linerStyleRef: linerUri('liner_bold'),
+      params: {
+        eyelinerColor: '#1B141A', eyelinerIntensity: 0.85,
+        eyelinerHasGeometryProfiles: 1,
+        eyelinerThicknessProfile: 3, // 볼드
+        eyelinerTailProfile: 0, eyelinerWingLength: 1.1, // 윙업
+      },
     }] },
   ]);
   // 코랄 데일리 v2 — 기존 코랄 데일리에 위 베이스 + 아래 워시 마스크로 안정적인 데일리 번짐.
@@ -1660,8 +1689,12 @@ export function buildVariantLibrary(): LookLibrary {
     }] },
     { name: '타이트라인', leaves: [{
       label: '아이라인 상', region: 'eyelinerUpper',
-      params: { eyelinerStyleIntensity: 0.65 },
-      linerStyleRef: linerUri('liner_tight'),
+      params: {
+        eyelinerColor: '#3A2A22', eyelinerIntensity: 0.6, // 웜 브라운 — 코랄 무드
+        eyelinerHasGeometryProfiles: 1,
+        eyelinerThicknessProfile: 1, // 극슬림
+        eyelinerTailProfile: 2, eyelinerWingLength: 0.3, // 가로 롱, 꼬리 최소
+      },
     }] },
   ]);
   // 모브 무드 v2 — 기존 모브 매트를 위 아우터 + 아래 스머지 마스크로 눈꼬리 그늘 강조.
@@ -1696,71 +1729,7 @@ export function buildVariantLibrary(): LookLibrary {
   highMaskLook('dewy-glow-v2', '듀이 글로우 v2', 'high_undereye', '#FFE9C8', 0.28, 0);
   highMaskLook('lilac-beam-v2', '라일락 빔 v2', 'high_browbone', '#EFE6F2', 0.32, 3, 0.62);
 
-  // ── 전체(face) 룩 3종(§16) — 여러 슬롯을 가로지르는 완성 메이크업. presets.ts의 칩용
-  //    PRESETS 항목(v2-glam-smoky / v2-natural-glow / v2-cat-point)과 id 1:1. ──
-  addFaceLook(lib, 'v2-glam-smoky', '글램 스모키', [
-    { slot: '눈', subName: '위 스모키(연장)', leaves: [{
-      label: '아이섀도', region: 'eyeshadow', role: 'main',
-      params: { eyeshadowColor: '#4A3A3E', eyeshadowIntensity: 0.7, eyeshadowFinish: 1, eyeshadowMaskImported: 1 },
-      maskRef: mask('eyeshadow', 'eye_full_smoky') }] },
-    { slot: '눈', subName: '아래 스모키', leaves: [{
-      label: '아래 섀도', region: 'eyeshadowLower',
-      params: { eyeshadowLowerColor: '#4A3A3E', eyeshadowLowerIntensity: 0.5, eyeshadowLowerShape: 2, eyeshadowLowerFinish: 1, eyeshadowLowerMaskImported: 1 },
-      maskRef: mask('eyeshadowLower', 'under_full_smoky') }] },
-    { slot: '눈', subName: '볼드 윙 라이너', leaves: [{
-      label: '아이라인 상', region: 'eyelinerUpper',
-      params: { eyelinerStyleIntensity: 0.9 },
-      linerStyleRef: linerUri('liner_bold') }] },
-    { slot: '컨투어', subName: '광대 하이라이트', leaves: [{
-      label: '하이라이터', region: 'highlighter',
-      params: { highlightColor: '#FFE9C8', highlightIntensity: 0.24, highlightFinish: 0, highlightMaskImported: 1 },
-      maskRef: mask('highlighter', 'high_cheekbone') }] },
-    { slot: '립', subName: '버건디 립', leaves: [{
-      label: '립', region: 'lip',
-      params: { lipColor: '#9E3B54', lipIntensity: 0.5, lipFinish: 1 } }] },
-  ]);
-  addFaceLook(lib, 'v2-natural-glow', '내추럴 글로우', [
-    { slot: '눈', subName: '위 베이스 워시', leaves: [{
-      label: '아이섀도', region: 'eyeshadow', role: 'main',
-      params: { eyeshadowColor: '#C7A488', eyeshadowIntensity: 0.42, eyeshadowFinish: 0, eyeshadowMaskImported: 1 },
-      maskRef: mask('eyeshadow', 'eye_base') }] },
-    { slot: '눈', subName: '아래 워시', leaves: [{
-      label: '아래 섀도', region: 'eyeshadowLower',
-      params: { eyeshadowLowerColor: '#C29A7B', eyeshadowLowerIntensity: 0.3, eyeshadowLowerFinish: 0, eyeshadowLowerMaskImported: 1 },
-      maskRef: mask('eyeshadowLower', 'under_wash') }] },
-    { slot: '눈', subName: '타이트라인', leaves: [{
-      label: '아이라인 상', region: 'eyelinerUpper',
-      params: { eyelinerStyleIntensity: 0.6 },
-      linerStyleRef: linerUri('liner_tight') }] },
-    { slot: '컨투어', subName: '눈밑 브라이트', leaves: [{
-      label: '하이라이터', region: 'highlighter',
-      params: { highlightColor: '#FFF4E4', highlightIntensity: 0.2, highlightFinish: 0, highlightMaskImported: 1 },
-      maskRef: mask('highlighter', 'high_undereye') }] },
-    { slot: '립', subName: '소프트 코랄 립', leaves: [{
-      label: '립', region: 'lip',
-      params: { lipColor: '#E8A98C', lipIntensity: 0.45, lipFinish: 0 } }] },
-  ]);
-  addFaceLook(lib, 'v2-cat-point', '롱 캣아이 포인트', [
-    { slot: '눈', subName: '위 윙 스윕(연장)', leaves: [{
-      label: '아이섀도', region: 'eyeshadow', role: 'main',
-      params: { eyeshadowColor: '#6E5A6A', eyeshadowIntensity: 0.55, eyeshadowFinish: 1, eyeshadowMaskImported: 1 },
-      maskRef: mask('eyeshadow', 'ext_wing_sweep') }] },
-    { slot: '눈', subName: '아래 꼬리', leaves: [{
-      label: '아래 섀도', region: 'eyeshadowLower',
-      params: { eyeshadowLowerColor: '#5C4A46', eyeshadowLowerIntensity: 0.34, eyeshadowLowerFinish: 1, eyeshadowLowerMaskImported: 1 },
-      maskRef: mask('eyeshadowLower', 'under_tail') }] },
-    { slot: '눈', subName: '롱 캣아이 라이너', leaves: [{
-      label: '아이라인 상', region: 'eyelinerUpper',
-      params: { eyelinerStyleIntensity: 0.9 },
-      linerStyleRef: linerUri('liner_cat_long') }] },
-    { slot: '컨투어', subName: '눈썹뼈 리프트', leaves: [{
-      label: '하이라이터', region: 'highlighter',
-      params: { highlightColor: '#FFF2DB', highlightIntensity: 0.18, highlightFinish: 0, highlightMaskImported: 1 },
-      maskRef: mask('highlighter', 'high_browbone') }] },
-    { slot: '립', subName: '로지 립', leaves: [{
-      label: '립', region: 'lip',
-      params: { lipColor: '#C56B7B', lipIntensity: 0.5, lipFinish: 0 } }] },
-  ]);
+  // (§16 전체(face) 룩 3종은 2026-07-24 제거 — presets.ts 칩 주석 참고.)
 
   return lib;
 }

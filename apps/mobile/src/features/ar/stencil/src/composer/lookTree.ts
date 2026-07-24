@@ -395,9 +395,14 @@ export function buildSystemLibrary(): LookLibrary {
       const list = bySlot.get(slot);
       if (!list || list.length === 0) continue;
       const subIds: string[] = [];
+      const regionSeen = new Map<RegionKey, number>();
       for (const layer of list) {
         const label = REGION_MAP[layer.region].label;
-        const subId = `sys:${preset.id}:${layer.region}`;
+        // 같은 부위 잎이 프리셋에 2개면(위 섀도 + 하부 승격 잎 등) id가 충돌해
+        // 뒤 잎이 앞 잎을 덮어썼다(스모키 위 섀도 유실). 2번째부터 서수 접미.
+        const nth = (regionSeen.get(layer.region) ?? 0) + 1;
+        regionSeen.set(layer.region, nth);
+        const subId = `sys:${preset.id}:${layer.region}${nth === 1 ? '' : `:${nth}`}`;
         // 세부부위 이름 = 잎 특성 유도(프리셋명 미사용) + 부위 내 중복 시 번호.
         // skin은 강도 티어 이름으로 흡수 + internal — 스무딩 0.05 차이뿐인 "피부결 N"
         // 번호 카드 6장이 픽커를 채우던 문제. 표시는 lookVariants 'skin-tier' 3종이
@@ -411,6 +416,13 @@ export function buildSystemLibrary(): LookLibrary {
         perRegion.set(baseName, count);
         usedSubNames.set(layer.region, perRegion);
         const subName = count === 1 ? baseName : `${baseName} ${count}`;
+        // §16 프리셋 사이드채널 마스크(preset.maskRefs) — 위 섀도 잎에만 주입(하부
+        // 승격 잎(surface=1)은 제외). 마스크가 실루엣을 소유하므로 임포트 마커를
+        // 함께 세워 App reconcile·셰이더 디자인 게이트가 열리게 한다.
+        const presetMask = layer.region === 'eyeshadow' &&
+          (layer.params.eyeshadowSurface ?? 0) !== 1
+            ? preset.maskRefs?.find(m => m.region === 'eyeshadow')
+            : undefined;
         lib[subId] = {
           id: subId,
           name: subName,
@@ -422,9 +434,15 @@ export function buildSystemLibrary(): LookLibrary {
             {
               label,
               region: layer.region,
-              params: { ...layer.params },
+              params: {
+                ...layer.params,
+                ...(presetMask ? { eyeshadowMaskImported: 1 } : {}),
+              },
               ...(layer.overlay ? { overlay: { ...layer.overlay } } : {}),
               ...(layer.lens ? { lens: { ...layer.lens } } : {}),
+              ...(presetMask
+                ? { maskRef: { region: 'eyeshadow' as const, uri: presetMask.uri } }
+                : {}),
               // 프리셋 분해는 부위당 1겹 — 섀도는 '메인' 역할로 시딩(§5 A13,
               // 핏 '.eyeshadow[main]' 셀렉터가 지목 가능하게).
               ...(layer.region === 'eyeshadow' ? { role: 'main' } : {}),

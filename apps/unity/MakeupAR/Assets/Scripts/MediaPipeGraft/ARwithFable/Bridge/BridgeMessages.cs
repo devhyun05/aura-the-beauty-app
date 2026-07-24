@@ -227,6 +227,8 @@ namespace ARMakeup.Bridge
         public float eyeshadowLowerShimmer = 0.5f; // 시머 게인 0..1 (finish=3일 때)
         public string irisColor = "#5B7B8C";      // 컬러렌즈 색 (intensity 0 = 끔)
         public float irisIntensity = 0f;
+        // 립 테두리 페더(블러 립) — 제형 edgeHi 배수 0..1, 0=현행 선명(생략 호환).
+        public float lipEdgeFeather = 0f;
         public string eyelinerColor = "#181418";  // 아이라이너 색
         public float eyelinerIntensity = 0f;
         public int eyelinerStyle = 0;              // 0=윙업 1=다운턴 2=가로롱
@@ -236,6 +238,8 @@ namespace ARMakeup.Bridge
         public int eyelinerThicknessProfile = 0;   // 0..5 해부학적 두께 프로파일
         public int eyelinerTailProfile = 0;        // 0..5 꼬리 geometry 프로파일
         public int eyelinerHasGeometryProfiles = 0;// 1=명시 override, 0=legacy style 복원
+        // 아이섀도 마스크 좌우 페더(핏) — 디자인 실루엣 양옆·눈꼬리 잔존 완화. 0=현행.
+        public float eyeshadowMaskFeather = 0f;
         public float eyelinerStyleIntensity = 0f;  // 임포트 아이라인 텍스처 강도(색은 eyelinerColor 공용)
         public string eyelinerLowerColor = "";     // 빈 값은 legacy eyelinerColor 폴백
         public float eyelinerLowerIntensity = 0f;  // 아이라인(하) — 하안검 밴드, 색은 eyelinerColor 공용 (0=끔)
@@ -379,6 +383,10 @@ namespace ARMakeup.Bridge
         // ── 모양 축 W1+W2 (하안검 밴드 4부위 + 쌍꺼풀) — 생략 0 = 현행 픽셀 동일 ──
         public int eyeshadowLowerShape = 0;  // 하안검 섀도 실루엣: 0=기본밴드 1=넓게 2=꼬리집중 — LowerLidRenderer
         public int eyelinerLowerSegment = 0; // 하안검 라이너 구간: 0=전체 1=꼬리만 2=앞+꼬리(중앙 비움) — LowerLidRenderer
+        // 눈꼬리 연장 테크닉(짧은 눈·꼬막눈 보정) — 0=끔(현행). trace: 꼬리 구간에서
+        // 라인 세로 중심을 삼각존 하단 경계로 램프(디태치). len: 눈꼬리 밖 연장 비율.
+        public float eyelinerLowerTailTrace = 0f;
+        public float eyelinerLowerTailLen = 0f;
         public int aegyoShape = 0;           // 애교살 실루엣: 0=초승달(현행) 1=일자 2=중앙도톰 — LowerLidRenderer
         public int triangleZoneShape = 0;    // 삼각존 모양: 0=기본 1=좁게 2=넓게 — LowerLidRenderer
         public int doubleLidShape = 0;       // 쌍꺼풀 라인: 0=인라인(현행) 1=아웃라인 2=세미 — DoubleLidRenderer

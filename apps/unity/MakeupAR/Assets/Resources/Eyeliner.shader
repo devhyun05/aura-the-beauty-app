@@ -79,6 +79,10 @@ Shader "ARMakeup/Eyeliner"
             static const float SEG_OPEN_HI  = 2.5;  // 열린 상한(페이드 없음) — 윙 팁(1.3)보다 큼
 
             // ── 질감 프로파일 // 실기기 튜닝 대상 ──
+            // 두께 방향 기본 커버리지: 선형 램프(lineA 그대로)는 풀알파가 lash쪽 한 줄뿐이라
+            // 리본 평균 알파 ≈ intensity×0.5 → 라인이 구조적으로 옅었다. lash쪽 CORE_EDGE
+            // 이상을 플래토로 리맵해 코어를 세우고 바깥 페더 폭은 유지한다.
+            static const float CORE_EDGE = 0.62;            // 코어 플래토 시작(lineA 기준)
             static const float GEL_EDGE_POW = 1.8;          // 젤: 알파 지수(>1 = 가장자리 소프트)
             static const float GEL_PEAK = 0.85;             // 젤: 피크 알파(소프트매트)
             static const float PENCIL_GRAIN_ALONG = 160.0;  // 펜슬: 그레인 셀 밀도(라인 방향, t축)
@@ -152,17 +156,20 @@ Shader "ARMakeup/Eyeliner"
             {
                 float lineA = saturate(i.uv.x); // 두께 방향 라인 알파 (1 라인 → 0 테두리)
                 float t = i.uv.y;               // 눈꺼풀 파라메트릭 (앞머리 0 → 코너 1 → 윙 팁 1.3)
+                // 코어 플래토(CORE_EDGE 주석) — 알파를 담는 램프는 전부 여기서 파생.
+                // 그레인 셀 좌표는 리본 지오메트리에 고정돼야 하므로 원 lineA를 쓴다.
+                float lineCore = smoothstep(0.0, CORE_EDGE, lineA);
 
-                // ── 질감: lineA를 질감별 알파 프로파일로 변환 ──
+                // ── 질감: lineCore를 질감별 알파 프로파일로 변환 ──
                 float profile;
                 if (_EyelinerTexture < 0.5)
                 {
-                    profile = lineA; // 리퀴드 = 샤프한 선형 램프 (기존 룩 그대로 = 기준선)
+                    profile = lineCore; // 리퀴드 = 진한 코어 + 샤프한 페더 (기준선)
                 }
                 else if (_EyelinerTexture < 1.5)
                 {
                     // 젤 = 가장자리 소프트(지수 완화) + 피크 낮춤(소프트매트 질감)
-                    profile = pow(lineA, GEL_EDGE_POW) * GEL_PEAK;
+                    profile = pow(lineCore, GEL_EDGE_POW) * GEL_PEAK;
                 }
                 else if (_EyelinerTexture < 2.5)
                 {
@@ -170,7 +177,7 @@ Shader "ARMakeup/Eyeliner"
                     // 컷오프를 흔들어 경계를 부스러뜨리고 (2) 몸통 알파를 깎아 입자감.
                     float g = Hash21(floor(float2(t * PENCIL_GRAIN_ALONG,
                                                   lineA * PENCIL_GRAIN_ACROSS)));
-                    float rough = saturate(lineA - PENCIL_EDGE_ROUGH * g * (1.0 - lineA));
+                    float rough = saturate(lineCore - PENCIL_EDGE_ROUGH * g * (1.0 - lineCore));
                     profile = rough * PENCIL_PEAK * lerp(1.0 - PENCIL_GRAIN_DEPTH, 1.0, g);
                 }
                 else
@@ -179,7 +186,7 @@ Shader "ARMakeup/Eyeliner"
                     float brushGrain = Hash21(floor(float2(t * PENCIL_GRAIN_ALONG,
                                                            lineA * PENCIL_GRAIN_ACROSS)));
                     float brushRoughness = 0.15;
-                    float brushEdge = saturate(lineA - brushRoughness * brushGrain * (1.0 - lineA));
+                    float brushEdge = saturate(lineCore - brushRoughness * brushGrain * (1.0 - lineCore));
                     float tipTaper = 1.0 - smoothstep(1.05, 1.30, t);
                     profile = brushEdge * tipTaper;
                 }
@@ -194,7 +201,7 @@ Shader "ARMakeup/Eyeliner"
                 else if (_EyelinerSegment > 0.5)     // 1 = 꼬리만 (윙 포함)
                     segMask = SegBand(t, SEG_TAIL_LO, SEG_OPEN_HI);
 
-                // 안쪽 경계(uv.x=1, lash 쪽) 서브픽셀 페더 — 리퀴드 profile=lineA가 이 엣지에서
+                // 안쪽 경계(uv.x=1, lash 쪽) 서브픽셀 페더 — 리퀴드 profile이 이 엣지에서
                 // 풀알파로 끝나 폴리곤 경계가 그대로 계단지던 것을 fwidth로 ~1.5px 안티에일리어싱.
                 // uv.x=1에서 0 → 1.5px 안쪽에서 1로 오르는 램프라, 바깥 램프·펜슬 그레인(낮은 lineA
                 // 영역)은 불변. 윙 삼각형은 uv.x<1이라(코너 근처 최대 ~0.83) 페더 구간 밖 = 무영향.

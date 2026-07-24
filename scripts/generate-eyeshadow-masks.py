@@ -48,8 +48,8 @@ def gauss(x: float, center: float, sigma: float) -> float:
 def base(u: float, v: float) -> float:
     """리드 전반 워시 — lash~20% 풀, 80% 소멸, 우측 엣지 0.45(옆 워시)."""
     vfall = 1.0 - smoothstep(0.20, 0.80, v)
-    hin = smoothstep(0.0, 0.15, u)
-    hout = 1.0 + (0.45 - 1.0) * smoothstep(0.85, 1.0, u)
+    hin = smoothstep(0.0, 0.22, u)
+    hout = 1.0 + (0.30 - 1.0) * smoothstep(0.62, 1.0, u)
     return vfall * hin * hout
 
 
@@ -94,6 +94,8 @@ def tail_long(u: float, v: float) -> float:
     return ramp * vfall
 
 
+# 좌우 페더 ≥18%·꼬리 잔존 ≤0.40 — 좁은 페더·높은 잔존은 눈꼬리에 컷크리즈처럼
+# 경계가 찍힌다(실기기 2026-07-24). 우측 엣지 값 = 꼬리 밖 연장 워시 강도(§16 관례 유지).
 # ── "눈 주변 전부" 풀 커버 패밀리 — 위(eye_full_*)와 아래(under_full_*)가 쌍으로
 #    설계됨. 같은 접미사끼리 함께 적용하면 눈 둘레 전체를 하나의 컨셉으로 덮는다. ──
 
@@ -101,8 +103,8 @@ def tail_long(u: float, v: float) -> float:
 def full_wash(u: float, v: float) -> float:
     """전체 워시(위) — 리드 전반 고르게, 꼬리 40% 잔존."""
     vfall = 1.0 - smoothstep(0.25, 0.85, v)
-    hin = smoothstep(0.0, 0.12, u)
-    hout = 1.0 + (0.4 - 1.0) * smoothstep(0.9, 1.0, u)
+    hin = smoothstep(0.0, 0.20, u)
+    hout = 1.0 + (0.28 - 1.0) * smoothstep(0.62, 1.0, u)
     return vfall * hin * hout
 
 
@@ -110,14 +112,15 @@ def full_smoky(u: float, v: float) -> float:
     """전체 스모키(위) — 높고 진하게, 바깥 가중, 꼬리 60% 잔존."""
     vfall = 1.0 - smoothstep(0.35, 0.95, v)
     outer_gain = 0.8 + 0.2 * smoothstep(0.4, 0.9, u)
-    hin = smoothstep(0.0, 0.10, u)
-    hout = 1.0 + (0.6 - 1.0) * smoothstep(0.92, 1.0, u)
+    hin = smoothstep(0.0, 0.20, u)
+    hout = 1.0 + (0.35 - 1.0) * smoothstep(0.60, 1.0, u)
     return vfall * outer_gain * hin * hout
 
 
 def full_gradient(u: float, v: float) -> float:
     """전체 그라데(위) — lash에서 급격히 사라지는 세로 그라데, 전 폭."""
-    return (1.0 - smoothstep(0.05, 0.60, v)) * smoothstep(0.0, 0.08, u)
+    return (1.0 - smoothstep(0.05, 0.60, v)) * smoothstep(0.0, 0.18, u) \
+        * (1.0 + (0.35 - 1.0) * smoothstep(0.62, 1.0, u))
 
 
 def full_halo(u: float, v: float) -> float:
@@ -135,15 +138,15 @@ def full_tail(u: float, v: float) -> float:
 def outer_wide(u: float, v: float) -> float:
     """아우터 와이드 — 눈꼬리(>) 근처를 넓고 높게. 우측 엣지 0.75로 옆까지 이어짐."""
     blob = gauss(u, 0.85, 0.30) * (1.0 - smoothstep(0.15, 0.75, v))
-    edge_hold = 0.75 * smoothstep(0.88, 1.0, u) * (1.0 - smoothstep(0.2, 0.7, v))
+    edge_hold = 0.40 * smoothstep(0.68, 1.0, u) * (1.0 - smoothstep(0.2, 0.7, v))
     return min(1.0, blob + edge_hold)
 
 
 def full_wide(u: float, v: float) -> float:
     """전체 와이드(위) — 밴드 끝까지 높게, 꼬리 0.7 잔존. under_full_wide와 세트."""
     vfall = 1.0 - smoothstep(0.45, 1.0, v)
-    hin = smoothstep(0.0, 0.08, u)
-    hout = 1.0 + (0.7 - 1.0) * smoothstep(0.9, 1.0, u)
+    hin = smoothstep(0.0, 0.18, u)
+    hout = 1.0 + (0.40 - 1.0) * smoothstep(0.62, 1.0, u)
     return vfall * hin * hout
 
 

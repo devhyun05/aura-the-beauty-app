@@ -45,6 +45,7 @@ services/backend/models/
 # iOS generated build products
 apps/mobile/ios/Pods/
 apps/mobile/ios/build/
+apps/mobile/ios/build_reum/
 apps/mobile/ios/DerivedData/
 apps/mobile/ios/**/*.xcuserdata/
 *.xcuserstate

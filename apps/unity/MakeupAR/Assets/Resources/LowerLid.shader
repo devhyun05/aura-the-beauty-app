@@ -73,6 +73,13 @@ Shader "ARMakeup/LowerLid"
         // 모양 축(W1+W2) — 부위별 실루엣 프리셋. 0=현행 프로파일과 바이트 동일(하위호환).
         _AegyoShape ("Aegyo Shape (0 crescent 1 straight 2 center)", Float) = 0
         _LinerSegment ("Lower Liner Segment (0 full 1 tail 2 front+tail)", Float) = 0
+        // 눈꼬리 연장(along>1 캔버스) — 렌더러 ExtFrac를 미러(0=연장 없는 구 메시 호환).
+        _LowerExtSpan ("Lower Band Ext Span (along units)", Float) = 0
+        // 삼각존 트레이스 — 꼬리 구간에서 라이너 세로 중심을 삼각존 하단 경계로 램프
+        // (0=현행 lash 밀착, 1=삼각존 하단 풀 깊이). 눈 세로·가로 확장 테크닉.
+        _LinerTailTrace ("Lower Liner Tail Trace (0 lash..1 tri bottom)", Range(0, 1)) = 0
+        // 라이너 꼬리 연장 — 연장 캔버스로 뻗는 비율(0=코너 정지=현행).
+        _LinerTailLen ("Lower Liner Tail Ext Length (0..1 of span)", Range(0, 1)) = 0
         _TriShape ("Triangle Zone Shape (0 base 1 narrow 2 wide)", Float) = 0
         _LowerShadowShape ("Lower Shadow Shape (0 band 1 wide 2 tail)", Float) = 0
         // W4 부위별 아핀. 공유 메시를 분리하지 않고 각 제품의 로컬 샘플 좌표만 역변환한다.
@@ -165,6 +172,9 @@ Shader "ARMakeup/LowerLid"
             // 모양 축(W1+W2) — 부위별 실루엣 프리셋. 0=현행 프로파일과 바이트 동일(하위호환).
             float _AegyoShape;
             float _LinerSegment;
+            float _LowerExtSpan;   // 눈꼬리 연장 span(along>1 구간 길이, 0=구 메시)
+            float _LinerTailTrace; // 라이너 삼각존 트레이스 깊이(0=lash 밀착)
+            float _LinerTailLen;   // 라이너 꼬리 연장 비율(0=코너 정지)
             float _TriShape;
             float _LowerShadowShape;
             float4 _LinerAffine;
@@ -288,8 +298,13 @@ Shader "ARMakeup/LowerLid"
 
                 if (profile < 0.5)
                 {
-                    // Base: 눈 아래 전반을 덮되 상·하단이 긴 램프로 사라지는 가장 부드러운 밴드.
-                    vertical = waterline * (1.0 - smoothstep(0.68, 0.92, v / height));
+                    // Base: lash에 붙는 은은한 워시. 이전(세로 0.68~0.92 램프 + 좌우 10%
+                    // 엣지)은 밴드 캔버스가 그대로 비치는 "사각 블롭"이었다 — role base
+                    // (surface both)와 모양 미지정 언더 워시 룩 전부가 이 기본값을 타므로
+                    // 좌우 페더를 폭의 ~25%로 넓히고 세로를 lash 쪽으로 눌러 스머지로 만든다.
+                    vertical = waterline * (1.0 - smoothstep(0.30, 0.85, v / height));
+                    horizontal = smoothstep(0.02, 0.25, u)
+                               * (1.0 - smoothstep(0.70, 0.96, u));
                 }
                 else if (profile > 10.5)
                 {
@@ -374,9 +389,25 @@ Shader "ARMakeup/LowerLid"
                 float linerAlong = linerUV.x;
                 float linerV = linerUV.y;
 
-                // 가로 가중: 코너 페이드(라인용).
-                float linerEdge = smoothstep(0.0, 0.08, linerAlong)
-                                * (1.0 - smoothstep(0.92, 1.0, linerAlong));
+                // 눈꼬리 연장 캔버스(along>1) — 부위별 게이트의 공용 기준.
+                // inEye: 연장 구간에서 꺼져야 하는 부위(컨실러·애교살)용 코너 소프트 컷.
+                float extSpan = max(_LowerExtSpan, 1e-4);
+                float extT = saturate((along - 1.0) / extSpan); // 0=코너 → 1=연장 끝
+                float inEye = 1.0 - smoothstep(0.985, 1.0 + 0.02 * _LowerExtSpan, along);
+
+                // 삼각존 세로 폭 배수 — 라이너 트레이스가 하단 경계를 공유하므로 선계산.
+                float triShapeW = (_TriShape > 1.5) ? 1.6 : ((_TriShape > 0.5) ? 0.6 : 1.0);
+
+                // 가로 가중: 코너 페이드(라인용). 꼬리 연장(_LinerTailLen>0)이면 바깥
+                // 페이드를 코너가 아니라 연장 끝으로 밀고 끝을 뾰족하게 테이퍼한다.
+                float lnTailEnd = 1.0 + _LinerTailLen * _LowerExtSpan;
+                float lnOuterFade = _LinerTailLen > 0.001
+                    ? (1.0 - smoothstep(lnTailEnd - 0.06, lnTailEnd, linerAlong))
+                    : (1.0 - smoothstep(0.92, 1.0, linerAlong));
+                float lnTaper = _LinerTailLen > 0.001
+                    ? (1.0 - 0.7 * smoothstep(0.95, lnTailEnd, linerAlong))
+                    : 1.0;
+                float linerEdge = smoothstep(0.0, 0.08, linerAlong) * lnOuterFade;
 
                 // (애교살 두께 프로파일 thick/soft는 SDF 경로로 이관 — 아래 "애교살 SDF" 블록에서
                 //  밴드 로컬 t 기준으로 재계산한다. 여기의 along/v/edge는 다른 부위 전용으로 남긴다.)
@@ -391,7 +422,17 @@ Shader "ARMakeup/LowerLid"
                     lnSeg = smoothstep(0.62, 0.72, linerAlong);
                 // 아이라인(하): lash 바로 아래 얇은 라인 (초승달 테이퍼와 무관).
                 // 두께 핸들(_LinerThickness) — 세로 폭 [0.10,0.22]를 배수. 1=원래(하위호환).
-                float lnAmt = (1.0 - smoothstep(0.10 * _LinerThickness, 0.22 * _LinerThickness, linerV))
+                // 삼각존 트레이스(_LinerTailTrace) — 꼬리 구간에서 라인 세로 중심을
+                // lash(0)에서 삼각존 하단 경계로 램프. 트레이스 0이면 중심 0 →
+                // |v-0| = v라 현행과 바이트 동일.
+                float lnTriBottom = min(TRI_V_WIDTH * _TriHeight * triShapeW, 1.0);
+                // 램프는 길게(0.40→코너) — 짧은 구간(0.55~0.90)은 급강하로 "확 꺾여"
+                // 보였다(실기기). 코너에서 최저점 도달 후 연장 구간은 수평 유지(1자).
+                float lnCenter = _LinerTailTrace
+                               * smoothstep(0.40, 1.0, min(linerAlong, 1.0)) * lnTriBottom;
+                float lnDist = abs(linerV - lnCenter);
+                float lnAmt = (1.0 - smoothstep(0.10 * _LinerThickness * lnTaper,
+                                                0.22 * _LinerThickness * lnTaper, lnDist))
                               * linerEdge * _LinerIntensity * lnSeg;
                 lnAmt = TexEdge(TexCoverage(saturate(lnAmt), lnTexC), lnTexE);
                 // ── 애교살 베이크드 프로파일(절차 SDF 대체) ──────────────────────────────
@@ -403,6 +444,9 @@ Shader "ARMakeup/LowerLid"
                 // 캔버스는 위(y↑)가 lash, Unity UV는 아래→위이므로 v를 뒤집어 샘플(컨실러 관례).
                 float2 aegyoUV = InverseBandAffine(i.uv, _AegyoAffine, _AegyoAffineRot);
                 fixed3 aegyoProf = tex2D(_AegyoProfile, float2(aegyoUV.x, 1.0 - aegyoUV.y)).rgb;
+                // 애교살은 해부학적으로 눈 구간까지 — 연장 캔버스에선 코너에서 소프트 컷
+                // (프로파일 텍스처가 우측 엣지 클램프로 번지는 것 방지).
+                aegyoProf *= inEye;
                 float hiAmt = aegyoProf.r * _AegyoIntensity * AEGYO_HI_MAX;
                 hiAmt = TexEdge(TexCoverage(saturate(hiAmt), agTexC), agTexE); // 제형 커버·엣지(애교살 하이라이트)
                 float shAmt = aegyoProf.g * _AegyoIntensity * AEGYO_SH_MAX;   // G는 롤 아래에만 칠해짐 → 양옆 0
@@ -410,20 +454,52 @@ Shader "ARMakeup/LowerLid"
                 // 중앙 펄: B게이트 영역에만 라이브 시머. _AegyoPearl 0(기본)=펄 없음(기존 프리셋).
                 float pearlAmt = aegyoProf.b * _AegyoIntensity * _AegyoPearl * AEGYO_HI_MAX;
 
-                // 삼각존: 눈꼬리 바로 아래 좁은 삼각 음영(눈밑 전체 아님). 애교살과 무관한
-                // 별도 텀 — 꼬리(u 바깥 1/3)에서 상승, 코너에서 페더, 세로는 lash 라인(v=0)
-                // 근처에 집중(위 라인↔아래로 잇는 음영). 초승달 테이퍼 vv가 아닌 원시 v를
-                // 써서 라인에 딱 붙는 삼각 그림자로 둔다.
+                // 삼각존: 눈꼬리 아래 피부의 삼각 음영(눈밑 전체 아님). 애교살과 무관한
+                // 별도 텀 — 꼬리(u 바깥 1/3)에서 상승, 세로는 lash 라인(v=0) 근처에 집중
+                // (위 라인↔아래로 잇는 음영). 초승달 테이퍼 vv가 아닌 원시 v를 써서
+                // 라인에 딱 붙는 삼각 그림자로 둔다.
+                // 트레이스 활성 시 삼각존은 "눈꼬리점~디태치 언더라인 사이 쐐기"를 채우는
+                // 것이 본래 테크닉 — 바깥 페이드를 라이너 꼬리 끝까지 밀어 쐐기 전체를 덮는다.
+                // 꼭짓점: 삼각존은 눈꼬리(1.0)에서 끝나지 않는다 — 실제 테크닉은 코너 밖
+                // 피부로 이어져 연장 캔버스 중간(1+0.5·span)의 꼭짓점으로 수렴한다(실기기
+                // 사진 2026-07-24: 코너 컷은 삼각형 바깥 절반이 통째로 비어 "중간에서 툭
+                // 끊김"으로 보였다). 구 메시(_LowerExtSpan 0)에선 1.0으로 축퇴 = 종전 동일.
+                float triTip = _LinerTailTrace > 0.001
+                    ? lnTailEnd
+                    : 1.0 + 0.5 * _LowerExtSpan;
                 float triAlong = smoothstep(TRI_U_START, TRI_U_START + TRI_U_RAMP, triUV.x)
-                                 * (1.0 - smoothstep(1.0 - TRI_FEATHER, 1.0, triUV.x));
+                                 * (1.0 - smoothstep(triTip - TRI_FEATHER, triTip, triUV.x));
                 // 높이 핸들(_TriHeight) — 세로 폭 TRI_V_WIDTH를 배수. 1=원래(하위호환).
-                // 모양(_TriShape) — 세로 폭 배수(0=기본=1.0=현행 바이트 동일, 1=좁게, 2=넓게).
-                float triShapeW = (_TriShape > 1.5) ? 1.6 : ((_TriShape > 0.5) ? 0.6 : 1.0);
+                // 모양(_TriShape) 세로 폭 배수(triShapeW)는 라이너 트레이스와 공유 — 상단 선계산.
                 // 페이드 거리는 밴드 세로 범위(v<=1)를 넘지 않게 클램프 — 넓게(1.6)×높이(2.0)
                 // 극값 조합에서 v=1 하단이 안 꺼져 직선 컷으로 삐져나오는 것 방지. 기본값
                 // (0.55×1×1=0.55<1)에선 min이 항등이라 바이트 동일.
-                float triV = 1.0 - smoothstep(0.0, min(TRI_V_WIDTH * _TriHeight * triShapeW, 1.0), triUV.y); // 라인에서 아래로 페이드
-                float triAmt = triAlong * triV * _TriIntensity;
+                // 트레이스 활성 시 채움 깊이를 디태치 라인 바로 아래까지 확장 — 삼각존
+                // 음영이 lash에만 붙어 라인과의 사이가 비어 보이던 문제(실기기) 해소.
+                float triDepth = min(TRI_V_WIDTH * _TriHeight * triShapeW, 1.0);
+                float triFillDepth = _LinerTailTrace > 0.001
+                    ? max(triDepth, lnCenter + 0.10 * _LinerThickness)
+                    : triDepth;
+                // 삼각형 정형(트레이스 꺼짐 기본형, 실기기 사진 2026-07-24): 세로 깊이가
+                // 시작점에서 0 → 꼬리로 갈수록 깊어졌다가 꼭짓점에서 다시 0으로 수렴해야
+                // "삼각형"이다. 종전 상수 깊이는 lash 평행 밴드라 삼각존으로 안 읽혔다.
+                // 트레이스 모드는 라이너가 하변을 그리는 종전 쐐기 기하 유지(튜닝 완료).
+                // 성장 완료(시작+1.5·램프≈0.92) < 수렴 시작(꼭짓점−1.5·페더) — 코너 바로
+                // 아래에서 최대 깊이 평탄 구간이 실제로 생기도록 두 구간을 분리한다.
+                float triGrow = _LinerTailTrace > 0.001
+                    ? 1.0
+                    : smoothstep(TRI_U_START, TRI_U_START + 1.5 * TRI_U_RAMP, triUV.x)
+                      * (1.0 - smoothstep(triTip - 1.5 * TRI_FEATHER, triTip, triUV.x));
+                float triLocalDepth = min(triFillDepth, 1.0) * triGrow;
+                // 세로 프로파일: 깊이 안쪽 55%는 평탄(풀 강도) 후 하단 페더. lash에서 즉시
+                // 페이드하던 종전 프로파일은 존 중심부까지 옅어져 "여전히 연해" 보였다.
+                float triV = 1.0 - smoothstep(0.55 * triLocalDepth,
+                                              max(triLocalDepth, 1e-4), triUV.y);
+                // 강도 응답 곡선 — 선형 alpha는 프리셋 대역(0.17~0.4)에서 음영이 너무 옅었다
+                // (실기기). 1−(1−x)^지수로 저·중역을 들어 올리되 0=끔·1=최대는 그대로라
+                // 슬라이더 상단 데드존이 없다. 지수 1.8→2.6(2026-07-24 사진: 여전히 옅음).
+                float triStrength = 1.0 - pow(1.0 - saturate(_TriIntensity), 2.6);
+                float triAmt = triAlong * triV * triStrength;
                 triAmt = TexEdge(TexCoverage(saturate(triAmt), trTexC), trTexE); // 제형 커버·엣지(삼각존)
 
                 // Photoshop/소스제어 마스크의 해부학적 밴드 UV: x=안쪽→바깥, y=lash→볼.
@@ -435,7 +511,8 @@ Shader "ARMakeup/LowerLid"
                 float ccDarkSelector = smoothstep(CC_DARK_LO, CC_DARK_HI, 1.0 - luma);
                 float ccMask = tex2D(_ConcealerMask, ccMaskUV).r
                              * ccBlueSelector * ccDarkSelector;
-                float ccAmt = ccMask * _ConcealerIntensity;
+                // 컨실러는 연장 캔버스에서 항상 정지(마스크 우측 엣지 클램프 번짐 방지).
+                float ccAmt = ccMask * _ConcealerIntensity * inEye;
                 ccAmt = TexEdge(TexCoverage(saturate(ccAmt), ccTexC), ccTexE); // 제형 커버·엣지(눈밑 컨실러)
                 float ccA = saturate(ccAmt) * CONCEALER_ALPHA_CEILING;
 
@@ -446,7 +523,11 @@ Shader "ARMakeup/LowerLid"
                 // 세로는 _LowerShadowHeight로 스트레치. UV는 컨실러와 동일 1-v flip(PNG 위=래시).
                 // 마스크가 안쪽/바깥 테이퍼를 담으므로 edge 코너페이드는 곱하지 않는다(윙 보존).
                 float smokyV = saturate(v / clamp(_LowerShadowHeight, 0.25, 2.0));
-                float esAmt = tex2D(_LowerSmokyMask, float2(along, 1.0 - smokyV)).r * _LowerShadowIntensity;
+                // 연장 구간: 마스크 우측 엣지가 클램프 샘플로 이어지되(상부 §16 관례 —
+                // 엣지 픽셀 = 꼬리 밖 워시 강도), 연장 끝 전에 페이드로 소멸한다.
+                float esExtFade = along <= 1.0 ? 1.0 : (1.0 - smoothstep(0.45, 1.0, extT));
+                float esAmt = tex2D(_LowerSmokyMask, float2(along, 1.0 - smokyV)).r
+                            * _LowerShadowIntensity * esExtFade;
                 esAmt = TexEdge(TexCoverage(saturate(esAmt), esTexC), esTexE); // 제형 커버·엣지(아이섀도 하)
 
                 // 색소(피드 기준 풀강도): 라이너=루마 보존 틴트, 애교살=스크린(가산),
@@ -535,10 +616,13 @@ Shader "ARMakeup/LowerLid"
                         if (profileB > 5.5 && profileB < 6.5)
                         {
                             float smokyV = saturate(v / clamp(heightB, 0.25, 2.0));
-                            amtShapeB = tex2D(_LowerSmokyMask, float2(along, 1.0 - smokyV)).r;
+                            // 연장 구간: 우측 엣지 클램프 연장 + 페이드(legacy esAmt와 동일 관례).
+                            amtShapeB = tex2D(_LowerSmokyMask, float2(along, 1.0 - smokyV)).r
+                                      * (along <= 1.0 ? 1.0 : (1.0 - smoothstep(0.45, 1.0, extT)));
                         }
                         else
                         {
+                            // 절차 프로파일은 u=1 클램프에서 horizontal이 0 → 연장 자동 무시.
                             amtShapeB = LowerEsProfile(along, v, heightB, profileB);
                         }
                         float amtB = amtShapeB * liftedIntensityB;

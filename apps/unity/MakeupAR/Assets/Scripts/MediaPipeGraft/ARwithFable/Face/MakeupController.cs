@@ -1358,7 +1358,7 @@ namespace ARMakeup.Face
             {
                 // R2 그라데 스톱B·강도 + 제형 텍스처(①) + 모양 실루엣(W4) — 시그니처 확장(립은 개별 인자 경유라 최소 침습).
                 LipRenderer.Instance.ApplyLipParams(p.lipColor, p.lipIntensity, p.lipFinish, p.lipShimmer, p.lipOverline,
-                    p.lipColor2, p.lipGradient, p.lipTexture, p.lipShape);
+                    p.lipColor2, p.lipGradient, p.lipTexture, p.lipShape, p.lipEdgeFeather);
                 LipRenderer.Instance.ApplyLinerParams(p.lipLinerColor, p.lipLinerIntensity, p.lipLinerFinish, p.lipLinerWidth, p.lipLinerTexture, p.lipLinerShape);
                 // 베이스립(맨 아래 누드 캔버스)·립글로스(맨 위 광 톱코트) — 색·강도·마감·제형·모양 독립(0=끔/새틴/크림/전체).
                 LipRenderer.Instance.ApplyLipBase(p.lipBaseColor, p.lipBaseIntensity, p.lipBaseFinish, p.lipBaseOverline, p.lipBaseTexture, p.lipBaseShape);
@@ -1403,7 +1403,8 @@ namespace ARMakeup.Face
                     p.aegyoHeight, p.aegyoStyleIntensity, p.aegyoColor,
                     p.aegyoFinish, p.aegyoShimmer, p.eyelinerLowerThickness,
                     p.eyelinerLowerFinish, p.eyelinerLowerShimmer, p.eyelinerLowerTexture, p.aegyoTexture,
-                    p.aegyoShape, p.eyelinerLowerSegment);
+                    p.aegyoShape, p.eyelinerLowerSegment,
+                    p.eyelinerLowerTailTrace, p.eyelinerLowerTailLen);
                 // 삼각존(#19b) — 같은 하안검 밴드의 꼬리 쪽 삼각 음영(색·강도·마감·제형·모양 독립, 0=끔/새틴/크림/기본).
                 LowerLidRenderer.Instance.ApplyTriangleZone(
                     p.triangleZoneColor, p.triangleZoneIntensity, p.triangleZoneFinish,

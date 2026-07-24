@@ -59,6 +59,8 @@ Shader "ARMakeup/Eyeshadow"
         // 와이드 계약(§16b) — 가로 2:1 마스크는 u 0..2(눈+눈꼬리 밖 연장 전체)를 덮는다.
         // 좌측 절반=눈(0..1), 우측 절반=연장(1..2). 임포터가 종횡비로 자동 감지해 설정.
         _EyeshadowDesignWide ("Eyeshadow Design Wide (u 0..2)", Float) = 0
+        // 마스크 좌우 페더(핏) — 디자인 실루엣 양옆·눈꼬리 잔존 엣지를 부드럽게. 0=현행.
+        _EyeshadowMaskFeather ("Eyeshadow Mask Side Feather", Range(0, 1)) = 0
     }
 
     SubShader
@@ -110,7 +112,20 @@ Shader "ARMakeup/Eyeshadow"
             float _EyeshadowShape;     // 모양 ID 0..11 (EyeshadowShape.cginc 정본)
             sampler2D _EyeshadowDesign; // 디자이너 모양 마스크(§16) — 밴드-로컬 uv2로 샘플
             float _EyeshadowHasDesign;  // 0 = 마스크 없음(절차 밴드 그대로, 하위호환)
-            float _EyeshadowDesignWide; // §16b: 1 = 2:1 와이드 마스크(u 0..2, x=u/2로 샘플)
+            float _EyeshadowDesignWide;
+            float _EyeshadowMaskFeather; // 마스크 좌우 페더(0=현행)
+
+            // 디자인 마스크 좌우 페더 — 실루엣 양끝(눈머리·눈꼬리+연장)을 핏 값만큼
+            // 부드럽게 죽인다(컷크리즈성 경계 완화). f=0이면 항등(바이트 동일).
+            float DesignSideFeather(float bandU, float wide)
+            {
+                float f = saturate(_EyeshadowMaskFeather);
+                if (f <= 1e-3) return 1.0;
+                float uEnd = wide > 0.5 ? 2.0 : 1.35; // 비와이드는 연장 근사 끝까지 페이드
+                float w = 0.08 + 0.30 * f;
+                return smoothstep(0.0, w, bandU)
+                     * (1.0 - smoothstep(uEnd - w * 1.8, uEnd, bandU));
+            } // §16b: 1 = 2:1 와이드 마스크(u 0..2, x=u/2로 샘플)
 
             // ── 멀티밴드(A14 ①) — 최대높이 메시 1장에 밴드별 세로 cutoff로 N밴드(≤8)를
             // over 합성한다(드로우콜 1, 큐 재번호 불필요). Properties 없이 유니폼만
@@ -191,7 +206,8 @@ Shader "ARMakeup/Eyeshadow"
                     {
                         float designU = _EyeshadowDesignWide > 0.5
                             ? i.bandUV.x * 0.5 : min(i.bandUV.x, 1.0);
-                        designGate = tex2D(_EyeshadowDesign, float2(designU, i.bandUV.y)).r;
+                        designGate = tex2D(_EyeshadowDesign, float2(designU, i.bandUV.y)).r
+                                   * DesignSideFeather(i.bandUV.x, _EyeshadowDesignWide);
                     }
 
                     fixed3 accum = fixed3(0, 0, 0); // over 프리멀티 누적색
@@ -292,7 +308,8 @@ Shader "ARMakeup/Eyeshadow"
                 {
                     float designU = _EyeshadowDesignWide > 0.5
                         ? i.bandUV.x * 0.5 : min(i.bandUV.x, 1.0);
-                    designGate = tex2D(_EyeshadowDesign, float2(designU, i.bandUV.y)).r;
+                    designGate = tex2D(_EyeshadowDesign, float2(designU, i.bandUV.y)).r
+                               * DesignSideFeather(i.bandUV.x, _EyeshadowDesignWide);
                 }
                 amt *= designGate;
                 amt = EyeshadowVisibilityLift(amt);

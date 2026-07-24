@@ -39,6 +39,13 @@ namespace ARMakeup.Face
         const int Eyes = 2;
         const int LidPts = 9;
         const int Seg = 25; // lash 아크 리샘플 밀도
+        // 눈꼬리 밖 연장 캔버스(눈꼬리 연장 테크닉) — 코너 접선 직선 연장 컬럼.
+        // uv.x(along)가 1을 넘어 1+ExtFrac까지 이어지는 관례로 셰이더가 구간을 식별하고
+        // 부위별로 게이트한다(컨실러·애교살 정지, 언더섀도 엣지 연장, 라이너 옵트인).
+        const int ExtPts = 4;          // 연장 컬럼 수
+        const float ExtFrac = 0.22f;   // 연장 길이(눈폭 배수) = along 1→1.22
+        const float ExtHeightTaper = 0.4f; // 연장 far end 밴드 높이 비율(소멸감)
+        const int Cols = Seg + ExtPts; // 총 컬럼 수(눈 + 연장)
         const int MaxLowerEyeshadowLayers = 8;
 
         const float BandHeightFactor = 0.45f; // 밴드 높이 = 눈 가로폭 × 이 값
@@ -126,6 +133,9 @@ namespace ARMakeup.Face
         // 모양 축(W1+W2) — 부위별 실루엣 프리셋 enum. 0=현행 프로파일과 바이트 동일(하위호환).
         static readonly int AegyoShapeId = Shader.PropertyToID("_AegyoShape");
         static readonly int LinerSegmentId = Shader.PropertyToID("_LinerSegment");
+        static readonly int LowerExtSpanId = Shader.PropertyToID("_LowerExtSpan");
+        static readonly int LinerTailTraceId = Shader.PropertyToID("_LinerTailTrace");
+        static readonly int LinerTailLenId = Shader.PropertyToID("_LinerTailLen");
         static readonly int TriShapeId = Shader.PropertyToID("_TriShape");
         static readonly int LowerShadowShapeId = Shader.PropertyToID("_LowerShadowShape");
         static readonly int LowerEsLayerColorId = Shader.PropertyToID("_LowerEsLayerColor");
@@ -237,31 +247,42 @@ namespace ARMakeup.Face
             // 임포트 마스크 해제 시 복원 원본으로 보관(SetLowerShadowMaskFromFile).
             _bundledLowerShadowMask = Resources.Load<Texture2D>("lower_smoky_mask");
             if (_bundledLowerShadowMask != null)
+            {
+                // 연장 캔버스(along>1)가 우측 엣지를 클램프 샘플하는 계약 — 임포터 기본
+                // Repeat면 마스크 안쪽이 연장부로 타일링되므로 샘플러를 강제 고정.
+                _bundledLowerShadowMask.wrapMode = TextureWrapMode.Clamp;
                 _material.SetTexture(LowerSmokyMaskId, _bundledLowerShadowMask);
+            }
             PushAffine(LinerAffineId, LinerAffineRotId, _linerAffine);
             PushAffine(AegyoAffineId, AegyoAffineRotId, _aegyoAffine);
             PushAffine(TriAffineId, TriAffineRotId, _triAffine);
+            // 연장 캔버스 span — 셰이더 게이트가 along>1 구간 폭을 알도록 미러.
+            _material.SetFloat(LowerExtSpanId, ExtFrac);
 
             _mesh = new Mesh { name = "LowerLid" };
             _mesh.MarkDynamic();
 
-            var vc = Eyes * Seg * 2;
+            var vc = Eyes * Cols * 2;
             var uvs = new Vector2[vc];
-            var tris = new int[Eyes * (Seg - 1) * 6];
+            var tris = new int[Eyes * (Cols - 1) * 6];
             for (var e = 0; e < Eyes; e++)
             {
-                var b = e * Seg * 2;
-                for (var i = 0; i < Seg; i++)
+                var b = e * Cols * 2;
+                for (var i = 0; i < Cols; i++)
                 {
-                    var along = i / (float)(Seg - 1); // 0 안쪽 → 1 바깥
+                    // 눈 구간 0..1(코너), 연장 구간 1..1+ExtFrac — along>1이 셰이더의
+                    // 연장 식별자. 연장은 물리 길이(눈폭 배수)에 비례해 균등 증가.
+                    var along = i < Seg
+                        ? i / (float)(Seg - 1)
+                        : 1f + ExtFrac * (i - Seg + 1) / (float)ExtPts;
                     uvs[b + 2 * i] = new Vector2(along, 0f);     // 상단(하안검 lash 라인)
                     uvs[b + 2 * i + 1] = new Vector2(along, 1f); // 하단(아래 페이드 끝)
                 }
-                for (var i = 0; i < Seg - 1; i++)
+                for (var i = 0; i < Cols - 1; i++)
                 {
                     int la0 = b + 2 * i, lo0 = b + 2 * i + 1;
                     int la1 = b + 2 * (i + 1), lo1 = b + 2 * (i + 1) + 1;
-                    var t = (e * (Seg - 1) + i) * 6;
+                    var t = (e * (Cols - 1) + i) * 6;
                     tris[t] = la0; tris[t + 1] = lo0; tris[t + 2] = la1;
                     tris[t + 3] = lo0; tris[t + 4] = lo1; tris[t + 5] = la1;
                 }
@@ -588,7 +609,8 @@ namespace ARMakeup.Face
             float heightMult, float aegyoStyleIntensity, string aegyoColor,
             int aegyoFinish, float aegyoShimmer, float linerThickness,
             int linerFinish, float linerShimmer, int linerTexture, int aegyoTexture,
-            int aegyoShape, int linerSegment)
+            int aegyoShape, int linerSegment,
+            float linerTailTrace = 0f, float linerTailLen = 0f)
         {
             _aegyoIntensity = Mathf.Clamp01(aegyoIntensity);
             _linerIntensity = Mathf.Clamp01(linerIntensity);
@@ -639,6 +661,10 @@ namespace ARMakeup.Face
             // 라이너 구간(0=전체=현행 바이트 동일 1=꼬리만 2=앞+꼬리).
             _material.SetFloat(AegyoShapeId, aegyoShape);
             _material.SetFloat(LinerSegmentId, linerSegment);
+            // 눈꼬리 연장 테크닉 — 트레이스(삼각존 하단 따라 그리기)·꼬리 연장 길이.
+            // JsonUtility 생략 0 = 끔(현행 바이트 동일).
+            _material.SetFloat(LinerTailTraceId, Mathf.Clamp01(linerTailTrace));
+            _material.SetFloat(LinerTailLenId, Mathf.Clamp01(linerTailLen));
         }
 
         /// <summary>사용자 임포트 애교살 그림 — 밴드 (가로×세로) UV에 워프. 투명 배경 PNG
@@ -731,9 +757,12 @@ namespace ARMakeup.Face
 
                 var width = eyeDist * BandHeightFactor; // 공유 캔버스는 제품별 높이 핸들과 독립
                 var depth = Depth(lm[lids[4]].z);
-                var b = e * Seg * 2;
+                var b = e * Cols * 2;
                 var triIdx = Mathf.RoundToInt(0.85f * (Seg - 1)); // 삼각존(눈꼬리 쪽)
                 var eyeXAxis = (_lash[Seg - 1] - _lash[0]).normalized;
+                // 연장 컬럼과 공유하는 현(chord) 법선 — 코너 진입 구간 블렌드 기준.
+                var chordNrm = new Vector2(-eyeXAxis.y, eyeXAxis.x);
+                if (Vector2.Dot(chordNrm, down) < 0f) chordNrm = -chordNrm;
                 var affineCenter = Vector2.zero;
                 // 애교살 SDF 곡선 계수(눈당 상수) — bandWidth = 이번 눈의 밴드 세로 폭(width).
                 var curveVec = new Vector4(_arcK0, _arcK1, _arcL, width);
@@ -744,6 +773,11 @@ namespace ARMakeup.Face
                     var tangent = (bb - a).normalized;
                     var normal = new Vector2(-tangent.y, tangent.x);
                     if (Vector2.Dot(normal, down) < 0f) normal = -normal; // 아래쪽 법선 규약
+                    // 코너 진입 구간(마지막 4컬럼)은 법선을 연장 컬럼의 현 법선으로 블렌드.
+                    // 국소 법선(코너에서 회전)↔연장 현 법선의 불연속으로 밴드 하단이
+                    // 경계에서 겹쳐 접히는 것 방지(실기기: 꼬리 연장 고강도에서 재현).
+                    if (i >= Seg - 4)
+                        normal = Vector2.Lerp(normal, chordNrm, (i - (Seg - 4)) / 3f).normalized;
                     var bottom = _lash[i] + normal * width;
                     _vertices[b + 2 * i] = ImageToWorld(_lash[i], depth);
                     _vertices[b + 2 * i + 1] = ImageToWorld(bottom, depth);
@@ -791,6 +825,34 @@ namespace ARMakeup.Face
                         _fitTriangleZoneVp[e] = FramePresenter.Instance.ImageToViewport(triImg);
                         _fitTriangleZoneFrame[e] = Time.frameCount;
                         _fitTriangleZoneValid[e] = true;
+                    }
+                }
+
+                // 연장 컬럼(눈꼬리 밖) — 눈 장축(현) 방향 직선 연장("거의 1자"). 하안검
+                // 코너 접선은 코너로 갈수록 위로 상승해 연장이 다시 올라가 보이므로
+                // (실기기: 디태치 라인 끝이 들림), 거의 수평인 현 방향을 쓴다. 방향을
+                // 꺾지 않아 밴드 접힘 없음(상안검 윙 캔버스와 동일 교훈), 모양은 셰이더 몫.
+                {
+                    for (var j = 0; j < ExtPts; j++)
+                    {
+                        var i = Seg + j;
+                        var tt = (j + 1) / (float)ExtPts; // (0,1], far=1
+                        var basePt = _lash[Seg - 1] + eyeXAxis * (eyeDist * ExtFrac * tt);
+                        var h = width * Mathf.Lerp(1f, ExtHeightTaper, tt); // far end 소멸감
+                        var bottom = basePt + chordNrm * h;
+                        _vertices[b + 2 * i] = ImageToWorld(basePt, depth);
+                        _vertices[b + 2 * i + 1] = ImageToWorld(bottom, depth);
+                        // 애교살 SDF 채널 — 로컬 좌표는 위치의 아핀 함수라 그대로 외삽된다.
+                        // (셰이더 애교살은 연장 구간에서 게이트되므로 실사용은 없음 — 채널을
+                        //  0으로 두면 보간 경계에서 값이 급변하므로 일관 좌표를 싣는다.)
+                        var topRel = basePt - _arcInner;
+                        var botRel = bottom - _arcInner;
+                        _sdfLocalXY[b + 2 * i] = new Vector2(
+                            Vector2.Dot(topRel, _arcXAxis), Vector2.Dot(topRel, _arcYAxis));
+                        _sdfLocalXY[b + 2 * i + 1] = new Vector2(
+                            Vector2.Dot(botRel, _arcXAxis), Vector2.Dot(botRel, _arcYAxis));
+                        _sdfCurve[b + 2 * i] = curveVec;
+                        _sdfCurve[b + 2 * i + 1] = curveVec;
                     }
                 }
             }

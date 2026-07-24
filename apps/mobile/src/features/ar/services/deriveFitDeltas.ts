@@ -32,6 +32,10 @@ const BASE_DELTA = {
   aegyoHeight: 0.1,
   blushLift: 0.1,
   lipOverline: 0.08, // 얇은 입술용 국소 오버립(L-1: 코너까지 확장 금지 — 은은하게)
+  // 눈꼬리 연장 테크닉(E-7 확장) — 아래 라인을 삼각존 하단으로 내려(디태치)
+  // 눈꼬리 밖까지 그려 가로 확장. 절대값 슬라이더(fallback 0)라 δ가 곧 값.
+  lowerTailTrace: 0.55,
+  lowerTailLen: 0.45,
 } as const;
 
 // youthful 레인은 중안부 축소 계열을 강조(계수 상향), balance는 기본.
@@ -111,6 +115,16 @@ export function deriveFitDeltas(
     const openness: MagnitudeBand | null = profile.eye.openness.band;
     if (openness === 'high') {
       push('eyelinerUpper', {eyelinerWingLength: BASE_DELTA.eyelinerWingLength}, basis('eye.openness', 'high', 'B'));
+      // E-7 확장(둥근·짧은 눈): 아래 라인을 삼각존 하단 트레이스로 디태치하고
+      // 눈꼬리 밖 연장 캔버스까지 그려 가로 확장을 아래에서도 받친다(B).
+      push(
+        'eyelinerLower',
+        {
+          eyelinerLowerTailTrace: BASE_DELTA.lowerTailTrace,
+          eyelinerLowerTailLen: BASE_DELTA.lowerTailLen,
+        },
+        basis('eye.openness', 'high', 'B'),
+      );
     } else if (openness === 'low') {
       push('eyeshadow', {eyeshadowHeight: BASE_DELTA.eyeshadowHeight}, basis('eye.openness', 'low', 'B'));
     }

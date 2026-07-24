@@ -16,7 +16,19 @@ export interface FilterPreset {
   /** 데코 오버레이(주근깨·젬 등 캐노니컬 데칼) — buildSystemLibrary가 seedLayers로
    *  데코 잎 복원. 컴파일 시 faceOverlayIntensity가 0이면 0.85로 자동 보정된다. */
   overlayLayers?: OverlayLayer[];
+  /** §16 카탈로그 마스크 참조 — flat params는 URI를 못 담으므로 사이드채널로 싣는다
+   *  (lensLayers/overlayLayers 선례). buildSystemLibrary 분해가 해당 부위 잎에
+   *  maskRef + 임포트 마커를 주입한다. region 값은 regions.MaskRegion과 일치
+   *  (regions→presets 의존이라 여기선 구조적 타입 — 순환 import 회피). */
+  maskRefs?: {region: string; uri: string}[];
 }
+
+/** 위 섀도 카탈로그 마스크 참조 축약 — 파라메트릭 프로파일의 각진 양옆 경계 대신
+ *  마스크가 실루엣을 소유하게 한다(§16). */
+const eyeMask = (file: string) => ({
+  region: 'eyeshadow',
+  uri: `streaming:catalog/mask/${file}.png`,
+});
 
 /** 보정이 전혀 없는 원본 상태 */
 export const BARE: FilterParams = {
@@ -36,6 +48,7 @@ export const BARE: FilterParams = {
   lipMaterialStrength: 0.85,
   lipShimmer: 0.5,
   lipOverline: 0, // 오버립 워프 (0=원래)
+  lipEdgeFeather: 0, // 테두리 페더(블러 립) — 스타일 값이라 명시 0(잔존 방지)
   // R2 그라데 — 색2는 색1과 동일 시작(단색), 강도 0 = 끔 = 기존 출력
   lipColor2: '#C94F6D',
   lipGradient: 0,
@@ -68,6 +81,7 @@ export const BARE: FilterParams = {
   // R2 그라데 — 색2는 색1과 동일 시작(단색), 강도 0 = 끔 = 기존 출력
   eyeshadowColor2: '#B06A4E',
   eyeshadowGradient: 0,
+  eyeshadowMaskFeather: 0, // 마스크 좌우 페더 — 스타일 값이라 명시 0(잔존 방지)
   irisColor: '#5B7B8C',
   irisIntensity: 0,
   eyelinerColor: '#181418',
@@ -155,6 +169,9 @@ export const BARE: FilterParams = {
   // 안 꺼지고 눈 아래 모양이 남는 버그. BARE는 '완전 맨얼굴'이어야 하므로 전부 명시 0.
   triangleZoneIntensity: 0,
   eyelinerLowerIntensity: 0,
+  // 눈꼬리 연장 테크닉 — 강도 게이트와 별개 스타일 값이라 생략 시 직전 룩에서 누수.
+  eyelinerLowerTailTrace: 0,
+  eyelinerLowerTailLen: 0,
   lowerLashIntensity: 0,
   mascaraIntensity: 0,
   doubleLidIntensity: 0,
@@ -173,6 +190,7 @@ export const PRESETS: FilterPreset[] = [
   {
     id: 'natural',
     name: '내추럴',
+    maskRefs: [eyeMask('eye_base')], // 위 섀도 실루엣 = 카탈로그 마스크(양옆 경계 소유)
     params: {
       skinSmoothing: 0.45,
       skinBrightening: 0.2,
@@ -180,8 +198,11 @@ export const PRESETS: FilterPreset[] = [
       foundationColor: '#F3D9C6',
       foundationIntensity: 0.18,
       foundationFinish: 0, // 새틴
-      lipColor: '#D96C7B',
-      lipIntensity: 0.35,
+      // 그라데 립 기본 — 바깥=누드 희석, 안쪽 코어=룩 원색(§메인립 그라데화)
+      lipColor: '#E49C9B',
+      lipColor2: '#D96C7B',
+      lipGradient: 0.75,
+      lipIntensity: 0.35, lipEdgeFeather: 0.35,
       blushColor: AR_BLUSH_COLORS[3].hex,
       blushIntensity: 0.55,
       blushShape: AR_BLUSH_SHAPES[3].value, // 데일리
@@ -190,7 +211,7 @@ export const PRESETS: FilterPreset[] = [
       irisColor: '#5B7B8C',
       irisIntensity: 0,
       eyelinerColor: '#181418',
-      eyelinerIntensity: 0.25,
+      eyelinerIntensity: 0.4,
       eyelinerStyle: 0,
       // 내추럴 — 자연스러운 소프트 브로우 (기본 옅게)
       browColor: '#4A3428',
@@ -233,6 +254,7 @@ export const PRESETS: FilterPreset[] = [
   {
     id: 'rosy',
     name: '로지',
+    maskRefs: [eyeMask('eye_full_wash')], // 위 섀도 실루엣 = 카탈로그 마스크(양옆 경계 소유)
     params: {
       skinSmoothing: 0.55,
       skinBrightening: 0.3,
@@ -240,8 +262,11 @@ export const PRESETS: FilterPreset[] = [
       foundationColor: '#F2D2CC',
       foundationIntensity: 0.28,
       foundationFinish: 2, // 듀이
-      lipColor: '#E04E68',
-      lipIntensity: 0.55,
+      // 그라데 립 기본 — 바깥=누드 희석, 안쪽 코어=룩 원색(§메인립 그라데화)
+      lipColor: '#E88E92',
+      lipColor2: '#E04E68',
+      lipGradient: 0.75,
+      lipIntensity: 0.55, lipEdgeFeather: 0.35,
       blushColor: AR_BLUSH_COLORS[5].hex,
       blushIntensity: 0.72,
       blushShape: AR_BLUSH_SHAPES[4].value, // 러블리
@@ -250,7 +275,7 @@ export const PRESETS: FilterPreset[] = [
       irisColor: '#6E8B5B',
       irisIntensity: 0,
       eyelinerColor: '#181418',
-      eyelinerIntensity: 0.35,
+      eyelinerIntensity: 0.5,
       eyelinerStyle: 0,
       // 로지 — 살짝 더 또렷하고 아치 올림 (기본 옅게)
       browColor: '#4A3428',
@@ -295,6 +320,7 @@ export const PRESETS: FilterPreset[] = [
   {
     id: 'peach',
     name: '피치',
+    maskRefs: [eyeMask('eye_full_gradient')], // 위 섀도 실루엣 = 카탈로그 마스크(양옆 경계 소유)
     params: {
       skinSmoothing: 0.5,
       skinBrightening: 0.35,
@@ -302,8 +328,11 @@ export const PRESETS: FilterPreset[] = [
       foundationColor: '#F5D4B8',
       foundationIntensity: 0.28,
       foundationFinish: 0, // 새틴
-      lipColor: '#F2846B',
-      lipIntensity: 0.5,
+      // 그라데 립 기본 — 바깥=누드 희석, 안쪽 코어=룩 원색(§메인립 그라데화)
+      lipColor: '#F1A893',
+      lipColor2: '#F2846B',
+      lipGradient: 0.75,
+      lipIntensity: 0.5, lipEdgeFeather: 0.35,
       blushColor: AR_BLUSH_COLORS[1].hex,
       blushIntensity: 0.68,
       blushShape: AR_BLUSH_SHAPES[6].value, // 선키스드 소프트
@@ -312,7 +341,7 @@ export const PRESETS: FilterPreset[] = [
       irisColor: '#8A6A4A',
       irisIntensity: 0,
       eyelinerColor: '#181418',
-      eyelinerIntensity: 0.3,
+      eyelinerIntensity: 0.45,
       eyelinerStyle: 2,
       // 피치 — 밝은 갈색, 옅고 가벼운 브로우
       browColor: '#6B5240',
@@ -357,6 +386,7 @@ export const PRESETS: FilterPreset[] = [
   {
     id: 'glam',
     name: '글램',
+    maskRefs: [eyeMask('eye_outer_wide')], // 위 섀도 실루엣 = 카탈로그 마스크(양옆 경계 소유)
     params: {
       skinSmoothing: 0.6,
       skinBrightening: 0.25,
@@ -364,8 +394,11 @@ export const PRESETS: FilterPreset[] = [
       foundationColor: '#EFD0BC',
       foundationIntensity: 0.38,
       foundationFinish: 2, // 듀이
-      lipColor: '#B01E3C',
-      lipIntensity: 0.7,
+      // 그라데 립 기본 — 바깥=누드 희석, 안쪽 코어=룩 원색(§메인립 그라데화)
+      lipColor: '#D0767C',
+      lipColor2: '#B01E3C',
+      lipGradient: 0.75,
+      lipIntensity: 0.7, lipEdgeFeather: 0.35,
       blushColor: AR_BLUSH_COLORS[7].hex,
       blushIntensity: 0.82,
       blushShape: AR_BLUSH_SHAPES[2].value, // 드레이핑
@@ -434,6 +467,7 @@ export const PRESETS: FilterPreset[] = [
   {
     id: 'smoky',
     name: '스모키',
+    maskRefs: [eyeMask('eye_full_smoky')], // 위 섀도 실루엣 = 카탈로그 마스크(양옆 경계 소유)
     params: {
       skinSmoothing: 0.5,
       skinBrightening: 0.15,
@@ -441,8 +475,11 @@ export const PRESETS: FilterPreset[] = [
       foundationColor: '#E8C4A8',
       foundationIntensity: 0.3,
       foundationFinish: 1, // 매트
-      lipColor: '#A65560',
-      lipIntensity: 0.4,
+      // 그라데 립 기본 — 바깥=누드 희석, 안쪽 코어=룩 원색(§메인립 그라데화)
+      lipColor: '#CB918E',
+      lipColor2: '#A65560',
+      lipGradient: 0.75,
+      lipIntensity: 0.4, lipEdgeFeather: 0.35,
       blushColor: AR_BLUSH_COLORS[6].hex,
       blushIntensity: 0.58,
       blushShape: AR_BLUSH_SHAPES[2].value, // 드레이핑
@@ -504,13 +541,9 @@ export const PRESETS: FilterPreset[] = [
       {part: 0, color: '#7A6A9E', blendMode: 1, intensity: 0.55, inner: 0, outer: 1},
     ],
   },
-  // §16 전체 룩 칩 — 실제 레시피는 lookVariants.addFaceLook이 `sys:face:<id>`로 등록한다
-  // (카탈로그 마스크·라이너 콜르아트 참조를 담기 위함 — flat params는 URI를 못 담는다).
-  // 여기 params는 칩 표시·선택용 껍데기이며 selectLook은 라이브러리 face def를 인스턴스화한다.
-  // SYSTEM_PRESET_IDS(lookTree)에 없어 buildSystemLibrary 분해 대상이 아니다(중복 없음).
-  {id: 'v2-glam-smoky', name: '글램 스모키', params: BARE},
-  {id: 'v2-natural-glow', name: '내추럴 글로우', params: BARE},
-  {id: 'v2-cat-point', name: '롱 캣아이 포인트', params: BARE},
+  // (§16 전체 룩 칩 3종 — 글램 스모키/내추럴 글로우/롱 캣아이 포인트 — 은 2026-07-24
+  //  제거됨. 부위 룩들은 lookVariants에 유지. 전체 룩을 되살리려면 칩 껍데기
+  //  {id, name, params: BARE} + lookVariants.addFaceLook 레시피를 id 1:1로 등록.)
 ];
 
 /** 립 컬러 스와치 */

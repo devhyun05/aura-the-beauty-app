@@ -70,6 +70,12 @@ namespace ARMakeup.Face
         // (하안검 0f63e2c 패턴 — 계수 EMA 근거도 동일).
         const float FitEma = 0.4f;
         readonly LidArcFit[] _lidFit = { new LidArcFit(FitEma), new LidArcFit(FitEma) };
+        // 윙 방향은 코너 인접 2점 차분이라 랜드마크 미분 노이즈가 그대로 실리고,
+        // 긴 레버암(눈폭×WingLenFactor)이 각도 노이즈를 팁 위치로 증폭한다 — 진한
+        // 아트 텍스처에서 윙 끝 떨림으로 보이는 원인. 아크핏은 수직 지터만 상쇄하므로
+        // 방향은 시간 EMA로 별도 안정화한다(공간 평균은 코너 접선을 바꿔 C1이 깨짐).
+        const float WingDirEma = 0.25f;
+        readonly Vector2[] _wingDir = new Vector2[Eyes];
 
         void Awake() => Instance = this;
 
@@ -168,6 +174,8 @@ namespace ARMakeup.Face
             {
                 _lidFit[0].Reset(); // 재획득 시 스테일 계수에서 EMA 출발 방지
                 _lidFit[1].Reset();
+                _wingDir[0] = Vector2.zero; // 윙 방향 EMA도 동일 근거로 초기화
+                _wingDir[1] = Vector2.zero;
                 return;
             }
 
@@ -203,8 +211,11 @@ namespace ARMakeup.Face
                 // 윙 캔버스: 바깥 눈꼬리 접선 그대로 직선 연장. 윙의 "올라감/내려감"은
                 // 텍스처(생성기 wing_rise)가 이미 갖고 있어 지오메트리가 꺾으면 이중
                 // 적용되고, 꺾인 모서리는 밴드 접힘의 원인이 된다. 직선 연장은 C1 연속.
-                var outDir = (_ctrl[LidPts - 1] - _ctrl[LidPts - 2]).normalized;
-                _ctrl[LidPts] = _ctrl[LidPts - 1] + outDir * (eyeDist * WingLenFactor);
+                var outDirRaw = (_ctrl[LidPts - 1] - _ctrl[LidPts - 2]).normalized;
+                _wingDir[e] = _wingDir[e].sqrMagnitude < 1e-8f
+                    ? outDirRaw
+                    : Vector2.Lerp(_wingDir[e], outDirRaw, WingDirEma).normalized;
+                _ctrl[LidPts] = _ctrl[LidPts - 1] + _wingDir[e] * (eyeDist * WingLenFactor);
 
                 SubdivideArc(_ctrl, CtrlPts, _lo);
                 // UV u는 컬럼 인덱스 균등(Init 고정)이라, 컬럼을 호길이 균등으로 재배치해야

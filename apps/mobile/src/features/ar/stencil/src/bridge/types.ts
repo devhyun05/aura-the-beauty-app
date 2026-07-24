@@ -97,6 +97,8 @@ export interface FilterParams {
   lipShimmer?: number;
   /** 오버립(R7 워프): 입술 외곽 확장 0..1 (0=원래). 골드=워프 조작 */
   lipOverline?: number;
+  /** 립 테두리 페더(블러 립) — 제형 엣지 폭 배수 0..1. 0=현행 선명(생략 호환). */
+  lipEdgeFeather?: number;
   /** 임포트 립 그림(데칼) 강도. 텍스처는 setLipStyle로 임포트 */
   lipStyleIntensity: number;
   /** 립 데칼 글리터 명멸 0..1 (0=끔). 움직임에 반응하는 절차 반짝을 데칼 위에 얹음 */
@@ -249,6 +251,8 @@ export interface FilterParams {
   /** 아이라이너 마감: 0=새틴 1=매트 2=글로시 (시머 없음 — 리본에 과함). 생략 시 0 */
   eyelinerFinish?: number;
   /** 임포트 아이라인 텍스처(밴드 워프) 강도. 색은 eyelinerColor 공용 */
+  /** 아이섀도 마스크 좌우 페더(핏) — 디자인 실루엣 양옆·눈꼬리 잔존 완화. 0=현행. */
+  eyeshadowMaskFeather?: number;
   eyelinerStyleIntensity: number;
   /** 아이라인(하) 독립 색. 생략/빈 값은 legacy eyelinerColor 폴백. */
   eyelinerLowerColor?: string;
@@ -451,6 +455,11 @@ export interface FilterParams {
   eyeshadowLowerShape?: number;
   /** 하안검 라이너 구간: 0=전체 1=꼬리만 2=앞+꼬리(중앙 비움). LowerLid.shader lnAmt 구간 게이트. 생략 0 */
   eyelinerLowerSegment?: number;
+  /** 눈꼬리 연장 테크닉(짧은 눈 보정) — 꼬리 구간에서 라인 세로 중심을 삼각존
+   *  하단 경계로 램프(디태치). 0=끔(현행 lash 밀착) .. 1=삼각존 하단 풀 깊이. */
+  eyelinerLowerTailTrace?: number;
+  /** 아래 라이너 눈꼬리 밖 연장 비율 — 0=코너 정지(현행) .. 1=연장 캔버스 끝. */
+  eyelinerLowerTailLen?: number;
   /** 애교살 실루엣: 0=초승달(현행) 1=일자 2=중앙도톰. LowerLid.shader pigHi 밴드 프로파일 분기. 생략 0 */
   aegyoShape?: number;
   /** 삼각존 모양: 0=기본 1=좁게 2=넓게. LowerLid.shader triV 폭 분기. 생략 0 */

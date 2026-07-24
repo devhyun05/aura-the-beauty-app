@@ -12,7 +12,10 @@ from app.services.makeup_recommendation_prompt import INPUT_PRIORITY
 # Precomputed makeup advice from a face-analysis report must not steer a new
 # situation-specific recommendation. Structural/color/skin facts are projected
 # explicitly below; no free-form report detail is allowlisted here.
-SAFE_DETAIL_FIELDS: tuple[str, ...] = ()
+# 사전 조언 필드(makeupGuideline 등)는 objective-analysis-v1 정책으로 제외한다.
+# makeupColors는 조언이 아니라 사진 관찰 기반 부위별 색 베이스라인(모발·눈썹 색 조화 포함)
+# 이라 유일하게 통과시킨다 — 추천 프롬프트가 brow 기본 톤 근거로 참조한다.
+SAFE_DETAIL_FIELDS: tuple[str, ...] = ("makeupColors",)
 ANALYSIS_INPUT_POLICY_VERSION = "objective-analysis-v1"
 
 

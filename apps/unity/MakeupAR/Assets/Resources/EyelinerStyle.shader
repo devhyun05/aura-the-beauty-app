@@ -41,6 +41,12 @@ Shader "ARMakeup/EyelinerStyle"
             float _LineIntensity;
             float _LumaKey;
 
+            // 아트 알파는 거의 바이너리(생성기 엣지 페더 0.35~0.5×두께)라 그대로 칠하면
+            // 균일한 벡터 스티커처럼 보인다 — 엣지 소프트 리맵 + 피크 캡으로 색소 느낌
+            // 완화. 임포트 그림에도 동일 적용(풀불투명 선 방지). // 실기기 튜닝 대상
+            static const float ART_EDGE_POW = 1.35; // 알파 지수(>1 = 가장자리 소프트, 코어 근사 불변)
+            static const float ART_PEAK = 0.8;      // 피크 알파 캡
+
             struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 grabPos : TEXCOORD1; };
 
@@ -63,7 +69,7 @@ Shader "ARMakeup/EyelinerStyle"
                 // 라인 모양 = 알파(투명 PNG) 또는 1-밝기(흰 배경 그림).
                 float texLuma = dot(tex.rgb, fixed3(0.299, 0.587, 0.114));
                 float shape = lerp(tex.a, 1.0 - texLuma, saturate(_LumaKey));
-                float amt = shape * _LineIntensity;
+                float amt = pow(shape, ART_EDGE_POW) * ART_PEAK * _LineIntensity;
                 fixed3 pigment = _LineColor.rgb * PigmentBaseKnee(luma, 0.6, 0.4, BROW_KNEE);
                 // §11 오클루전 — 손·머리카락이 앞이면 그 픽셀 색소 제외(세그 없으면 1).
                 return fixed4(pigment, amt * OccludeGate(i.grabPos));

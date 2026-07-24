@@ -138,9 +138,11 @@ namespace ARMakeup.Face
         // liner만 세팅(서로 기본 0이라 무간섭). 링 메시가 uv.y=중앙도·uv2.y=윗입술도를 실어준다.
         static readonly int LipBaseShapeId = Shader.PropertyToID("_LipBaseShape");
         static readonly int LipShapeId = Shader.PropertyToID("_LipShape");
+        static readonly int LipEdgeFeatherId = Shader.PropertyToID("_LipEdgeFeather");
         static readonly int LipLinerShapeId = Shader.PropertyToID("_LipLinerShape");
         static readonly int LipGlossShapeId = Shader.PropertyToID("_LipGlossShape");
         static readonly int GlossLumaLoId = Shader.PropertyToID("_GlossLumaLo");
+        static readonly int LipGlossBlobTexId = Shader.PropertyToID("_LipGlossBlobTex");
         // 제형 스튜디오(#21) — 마감 세부(0=미지정=enum 기존 동작). 립 메시 전용(라이너 무영향).
         static readonly int LipGlossLoId = Shader.PropertyToID("_LipGlossLo");
         static readonly int LipGlossGainId = Shader.PropertyToID("_LipGlossGain");
@@ -296,6 +298,10 @@ namespace ARMakeup.Face
             if (shader == null) shader = Shader.Find("ARMakeup/Lip");
             _material = new Material(shader);
             _material.renderQueue = MakeupQueues.Lip; // 부위별 고유 큐(구 +8 4중충돌 해소)
+            // 아랫입술 광 패치 맵(구운 아트) — 없으면 셰이더 기본 black = 코어 광 없음.
+            // 라이너 머티리얼엔 안 건다(글로스 강도 0이라 어차피 무효, 명시적으로도 무광).
+            var glossBlob = Resources.Load<Texture2D>("lip_gloss_blob");
+            if (glossBlob != null) _material.SetTexture(LipGlossBlobTexId, glossBlob);
 
             _mesh = new Mesh { name = "LipRing" };
             _mesh.MarkDynamic();
@@ -365,7 +371,8 @@ namespace ARMakeup.Face
         }
 
         public void ApplyLipParams(string colorHex, float intensity, int finish, float shimmer, float overline,
-                                   string color2Hex, float gradient, int texture, int shape)
+                                   string color2Hex, float gradient, int texture, int shape,
+                                   float edgeFeather = 0f)
         {
             _intensity = Mathf.Clamp01(intensity);
             _overline = Mathf.Clamp01(overline);
@@ -394,6 +401,9 @@ namespace ARMakeup.Face
             // 모양 축 W4(메인립 실루엣) — 0=풀립=현행(하위호환). 색축 그라데(_LipGradient)와
             // 직교한 알파 실루엣(1=그라데립 중앙 집중, 2=꼬리 뾰족 코너 강조). 라이너 인스턴스는 미설정(0).
             _material.SetFloat(LipShapeId, shape);
+            // 테두리 페더(블러 립) — 제형 edgeHi 배수. JsonUtility 생략 0 = 현행 선명.
+            // 라이너 머티리얼은 미설정(0) — 립라이너 경계는 페더와 무관하게 유지.
+            _material.SetFloat(LipEdgeFeatherId, Mathf.Clamp01(edgeFeather));
         }
 
         /// <summary>베이스립 — luma 보존 커버(입술 원색을 누드/스킨톤으로 보간). 색·강도

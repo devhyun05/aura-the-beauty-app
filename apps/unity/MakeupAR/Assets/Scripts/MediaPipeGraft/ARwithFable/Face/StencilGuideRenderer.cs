@@ -733,10 +733,17 @@ namespace ARMakeup.Face
                 var up = (ImgPt(lm, EyeBrowLower[e][2]) - lidMid).normalized; // 눈→눈썹
                 var creaseH = eyeW * ShadowCreaseFactor * _shadowHeightMult; // 핏(높이) 추종
                 var n = 0;
+                var irisEnv = IrisRenderer.Instance; // 디자인 마스크 실루엣 추종(§16 가이드 정합)
                 for (var i = 0; i < np; i++) _ctrl[n++] = ImgPt(lm, lids[i]);                // 바깥→안쪽(lash)
                 for (var i = np - 1; i >= 0; i--)
                 {
                     var warpedHeight = creaseH;
+                    // 마스크 룩은 실제 커버리지가 캔버스보다 낮고 모양이 달라 가이드가
+                    // 겉돌았다(실기기) — 크리스 높이에 마스크 상단 포락을 곱해 실루엣을
+                    // 따라간다. lids는 바깥→안쪽, 마스크 u는 눈앞(0)→꼬리(1)라 반전.
+                    if (irisEnv != null && irisEnv.TryGetDesignTopEnvelope(
+                            1f - i / (float)(np - 1), out var env01))
+                        warpedHeight *= Mathf.Max(env01, 0.12f); // 최소 두께로 라인 붕괴 방지
                     if (!RegionWarpUtility.IsZero(_eyeshadowWarp))
                         warpedHeight = Mathf.Max(0f, warpedHeight + eyeW *
                             RegionWarpUtility.SampleOpenProfile(
@@ -763,7 +770,10 @@ namespace ARMakeup.Face
                             var lo = Mathf.FloorToInt(pos);
                             var hi = Mathf.Min(lo + 1, np - 1);
                             var basePoint = Vector2.Lerp(ImgPt(lm, lids[lo]), ImgPt(lm, lids[hi]), pos - lo);
-                            var height = Mathf.Max(0f, creaseH + eyeW *
+                            var envH = creaseH; // 핏 캡처 폴백도 마스크 실루엣 추종(위 링과 동일 규약)
+                            if (irisEnv != null && irisEnv.TryGetDesignTopEnvelope(1f - t, out var envT))
+                                envH *= Mathf.Max(envT, 0.12f);
+                            var height = Mathf.Max(0f, envH + eyeW *
                                 RegionWarpUtility.SampleOpenProfile(_eyeshadowWarp, t, e == 1));
                             _outlineScratch[j] = FramePresenter.Instance.ImageToViewport(basePoint + up * height);
                         }
