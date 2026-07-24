@@ -14,6 +14,7 @@ import {getFaceAnalysisReportById} from '../../../shared/services/faceAnalysisSe
 import {
   getLikedMakeupFilterLooks,
 } from '../../../shared/services/makeupGuideService';
+import {useAiDataConsent} from '../../../features/legal/services/aiDataConsentContext';
 import {DetailRouteChrome} from '../detailHeaderChrome';
 import {useNavigationFlowState} from '../flowState';
 import {
@@ -145,6 +146,27 @@ const DEMO_DRIVE_STEPS: Array<{delayMs: number; step: Record<string, string>}> =
 export function AuradinSearchRouteScreen({navigation, route}: RootScreenProps<'AuradinSearch'>) {
   const [drive, setDrive] = React.useState(route.params);
   const {selectedFaceAnalysisReport} = useNavigationFlowState();
+  const {requestAiDataConsent} = useAiDataConsent();
+  const [isAiDataAllowed, setIsAiDataAllowed] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    void requestAiDataConsent().then(accepted => {
+      if (!active) {
+        return;
+      }
+      if (accepted) {
+        setIsAiDataAllowed(true);
+      } else if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.replace('ProductRecommendation');
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [navigation, requestAiDataConsent]);
 
   // R1 게이트 2: Auradin 진입 시 리포트 첨부(personalColor) 해석. 한 곳에서
   // 동기 확보(ready) / 과거 리포트 서버 조회(fetch) / 첨부 없음을 판정한다. 과거 리포트
@@ -204,7 +226,7 @@ export function AuradinSearchRouteScreen({navigation, route}: RootScreenProps<'A
     };
   }, [fetchReportId]);
 
-  if (resolving) {
+  if (!isAiDataAllowed || resolving) {
     return null; // 짧은 상세 GET 동안 대기 — 첨부 시드가 마운트 시점에 확정돼야 한다
   }
 
