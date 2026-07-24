@@ -53,6 +53,7 @@
 
 ## Physical iPhone Verification (WiFi Only)
 - Never boot or use an iOS Simulator/emulator; runtime testing is physical-device only.
+- When the user explicitly requests end-to-end physical-device verification, Codex owns the preflight, required Unity/native rebuild, overwrite installation, launch, and host-side health/process checks. Do not defer that workflow back to the user; request user help only for actions that inherently require a person, such as unlocking the phone, trusting the developer, or interacting with a live face/camera flow.
 - If iOS support is missing, install only the required combined iOS Platform Support in Xcode Components; do not use `xcodebuild -downloadPlatform iOS`.
 - Get the real UDID from `xcrun xctrace list devices | grep -v Simulator | grep iPhone`; `devicectl` UUID is not an xcodebuild UDID.
 - Confirm `xcrun devicectl list devices` shows the unlocked phone as `available`.
