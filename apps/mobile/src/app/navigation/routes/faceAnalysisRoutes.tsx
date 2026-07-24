@@ -76,6 +76,7 @@ import type {
 } from '../../../features/face-ratio/types';
 import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
 import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
+import {useAiDataConsent} from '../../../features/legal/services/aiDataConsentContext';
 import {
   analyzePersonalColorCapture,
   type PersonalColorAnalysisOutcome,
@@ -115,6 +116,7 @@ const STILL_ANALYSIS_WAIT_TIMEOUT_MS = 8000;
 const FACE_ANALYSIS_LOADING_ERROR_MESSAGE =
   '분석 결과를 만드는 데 시간이 오래 걸리고 있어요. 잠시 후 다시 시도해 주세요.';
 const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
+  'AI_DATA_CONSENT_REQUIRED',
   'FACE_ANALYSIS_AI_INCOMPLETE',
   'FACE_ANALYSIS_RESULT_INCOMPLETE',
   'ANALYSIS_API_UNAVAILABLE',
@@ -199,6 +201,8 @@ export function FaceCaptureRouteScreen({
     unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const {getAuthToken, isRestoringSession} = useAuthSession();
+  const {requestAiDataConsent} = useAiDataConsent();
+  const [isAiDataAllowed, setIsAiDataAllowed] = React.useState(false);
   const unifiedCaptureRequest = React.useMemo(
     () =>
       buildUnifiedFaceCaptureRequest({
@@ -213,7 +217,29 @@ export function FaceCaptureRouteScreen({
     }
   }, [getAuthToken, isRestoringSession, navigation]);
 
-  if (isRestoringSession || !getAuthToken()) {
+  React.useEffect(() => {
+    if (isRestoringSession || !getAuthToken()) {
+      return undefined;
+    }
+
+    let active = true;
+    void requestAiDataConsent().then(accepted => {
+      if (!active) {
+        return;
+      }
+      if (accepted) {
+        setIsAiDataAllowed(true);
+      } else {
+        goBackToPreviousOrMainTab(navigation, 'HomeTab');
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [getAuthToken, isRestoringSession, navigation, requestAiDataConsent]);
+
+  if (isRestoringSession || !getAuthToken() || !isAiDataAllowed) {
     return null;
   }
 

@@ -53,9 +53,23 @@ namespace ARMakeup.Face
         float _browExpandLower;
         Texture2D _importedTex; // 사용자 임포트본(로드 시 이전 것 파기)
         Texture _styleTexture;
-        // built-in 눈썹 텍스처 라이브러리 — browStyleTemplate로 선택(글램=정의, 두꺼운=풍성).
-        // 사용자 임포트(SetStyleTextureFromFile)가 있으면 그게 우선(_userStyleActive).
-        static readonly string[] StyleTemplateNames = { "default_brow", "default_brow_glam", "default_brow_thick", "default_brow_wild", "default_brow_soft" };
+        // built-in 눈썹 텍스처 라이브러리 — browStyleTemplate로 선택한다. 5..9는 사용자
+        // 레퍼런스에서 체크 배경을 제거한 실제 털 알파 마스크다. 사용자 임포트
+        // (SetStyleTextureFromFile)가 있으면 그게 우선(_userStyleActive).
+        const int LegacyStyleTemplateCount = 5;
+        static readonly string[] StyleTemplateNames =
+        {
+            "default_brow",
+            "default_brow_glam",
+            "default_brow_thick",
+            "default_brow_wild",
+            "default_brow_soft",
+            "EyebrowMasks/reference_brow_01",
+            "EyebrowMasks/reference_brow_02",
+            "EyebrowMasks/reference_brow_03",
+            "EyebrowMasks/reference_brow_04",
+            "EyebrowMasks/reference_brow_05",
+        };
         readonly Texture2D[] _styleTemplateCache = new Texture2D[StyleTemplateNames.Length];
         int _appliedStyleTemplate;
         bool _userStyleActive;
@@ -92,6 +106,8 @@ namespace ARMakeup.Face
         readonly Vector2[] _rawUp = new Vector2[Seg];
         readonly Vector2[] _rawLo = new Vector2[Seg];
         readonly Vector2[] _coverageLo = new Vector2[Seg];
+        readonly float[] _upDepth = new float[Seg];
+        readonly float[] _loDepth = new float[Seg];
 
         void Awake() => Instance = this;
 
@@ -203,7 +219,12 @@ namespace ARMakeup.Face
             _styleLumaKey = false;
             _material.SetTexture(StyleTexId, tex);
             _material.SetFloat(LumaKeyId, 0f);
-            ConfigureDefaultStyleUvCrop(tex);
+            if (template < LegacyStyleTemplateCount)
+                ConfigureDefaultStyleUvCrop(tex);
+            else
+                // Reference masks are already normalized to 512x160. Preserve the full
+                // canvas so their original silhouette/aspect is not vertically re-stretched.
+                SetStyleCrop(0f, 1f);
         }
 
         public void ApplyBrowCoverage(int thicknessProfile, float expandUpper, float expandLower)
@@ -347,35 +368,65 @@ namespace ARMakeup.Face
             BrowResponseReference.Apply(_material, lm);
             for (var e = 0; e < Brows; e++)
             {
-                BrowWarp.SubdivideArc(lm, BrowUpper[e], _up);
-                BrowWarp.SubdivideArc(lm, BrowLower[e], _lo);
-                // R7 두께/아치 — 제품 스택(BrowRenderer)과 동일 워프로 텍스처가 따라간다.
-                for (var i = 0; i < Seg; i++)
+                var preserveReferenceSilhouette =
+                    !_userStyleActive && _appliedStyleTemplate >= LegacyStyleTemplateCount;
+                if (preserveReferenceSilhouette)
                 {
-                    var along = i / (float)(Seg - 1);
-                    var rawLo = _lo[i];
-                    var rawUp = _up[i];
-                    _rawLo[i] = rawLo;
-                    _rawUp[i] = rawUp;
-                    BrowWarp.ShapeBand(
-                        ref _lo[i], ref _up[i], along, _thickness, _arch, _shape,
-                        _browThicknessProfile, _browExpandUpper, _browExpandLower);
-                    BrowWarp.TaperTail(ref _lo[i], ref _up[i], along, _browThicknessProfile,
-                        BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower));
-                    if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
-                        BrowWarp.EnsureMinimumFinalBandSpan(ref _lo[i], ref _up[i], rawLo, rawUp);
-                    _coverageLo[i] = _lo[i];
+                    // No endpoint extension or landmark-arc bending here: the supplied
+                    // alpha already owns its tail taper and straight/semi-arch/round shape.
+                    SubdivideArc(lm, BrowUpper[e], _up);
+                    SubdivideArc(lm, BrowLower[e], _lo);
                 }
-                // 꼬리 처짐 클램프 — 네 눈썹 렌더러 공유(밴드 동조).
-                var browWarped = BrowWarp.WarpAndLiftDroopingTail(
-                    _lo, _up, Seg, lm, FramePresenter.Instance.ImageAspect);
-                if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
+                else
+                {
+                    BrowWarp.SubdivideArc(lm, BrowUpper[e], _up);
+                    BrowWarp.SubdivideArc(lm, BrowLower[e], _lo);
+                }
+                BrowWarp.SubdivideArcDepth(lm, BrowUpper[e], _upDepth);
+                BrowWarp.SubdivideArcDepth(lm, BrowLower[e], _loDepth);
+
+                var browWarped = false;
+                if (preserveReferenceSilhouette)
+                {
+                    var textureAspect = _styleTexture == null || _styleTexture.width <= 0
+                        ? 160f / 512f
+                        : _styleTexture.height / (float)_styleTexture.width;
+                    BrowWarp.BuildReferenceTextureBand(
+                        _lo, _up, Seg, FramePresenter.Instance.ImageAspect,
+                        textureAspect, _thickness);
+                }
+                else
+                {
+                    BrowWarp.ShapeArcProfile(
+                        _lo, _up, Seg, _shape, FramePresenter.Instance.ImageAspect);
+                    // R7 두께/아치 — 제품 스택(BrowRenderer)과 동일 워프로 텍스처가 따라간다.
                     for (var i = 0; i < Seg; i++)
-                        BrowWarp.RestoreCoverageLowerFloor(ref _lo[i], ref _up[i], _coverageLo[i], _rawLo[i], _rawUp[i], browWarped);
-                var depth = Depth(lm[BrowUpper[e][2]].z);
+                    {
+                        var along = i / (float)(Seg - 1);
+                        var rawLo = _lo[i];
+                        var rawUp = _up[i];
+                        _rawLo[i] = rawLo;
+                        _rawUp[i] = rawUp;
+                        BrowWarp.ShapeBand(
+                            ref _lo[i], ref _up[i], along, _thickness, _arch, 0,
+                            _browThicknessProfile, _browExpandUpper, _browExpandLower);
+                        BrowWarp.TaperTail(ref _lo[i], ref _up[i], along, _browThicknessProfile,
+                            BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower));
+                        if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
+                            BrowWarp.EnsureMinimumFinalBandSpan(ref _lo[i], ref _up[i], rawLo, rawUp);
+                        _coverageLo[i] = _lo[i];
+                    }
+                    // Legacy/procedural style textures still follow the anatomical arc.
+                    browWarped = BrowWarp.WarpAndLiftDroopingTail(
+                        _lo, _up, Seg, lm, FramePresenter.Instance.ImageAspect);
+                    if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
+                        for (var i = 0; i < Seg; i++)
+                            BrowWarp.RestoreCoverageLowerFloor(ref _lo[i], ref _up[i], _coverageLo[i], _rawLo[i], _rawUp[i], browWarped);
+                }
                 var b = e * Seg * 2;
                 for (var i = 0; i < Seg; i++)
                 {
+                    var depth = Depth(0.5f * (_upDepth[i] + _loDepth[i]));
                     _vertices[b + 2 * i] = ImageToWorld(_lo[i], depth, browWarped);
                     _vertices[b + 2 * i + 1] = ImageToWorld(_up[i], depth, browWarped);
                 }

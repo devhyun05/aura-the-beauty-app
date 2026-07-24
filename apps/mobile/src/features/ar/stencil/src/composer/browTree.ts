@@ -1,0 +1,195 @@
+import {BROW_COLORS} from '../presets';
+import type {FilterParams} from '../bridge/types';
+import {
+  isLeaf,
+  setSubRegion,
+  subDefsForRegion,
+  updateBrowSharedAxis,
+  updateLeaf,
+} from './lookTree';
+import type {
+  LookLibrary,
+  LookNode,
+  ProductLeaf,
+} from './lookTree';
+import type {RegionKey} from './regions';
+
+/** Basic 눈썹 UI가 사용하는 실제 레퍼런스 알파 에셋 5종. */
+export const BROW_REFERENCE_SHAPES = [
+  {value: 0, label: '일자', template: 9},
+  {value: 1, label: '소프트 일자', template: 8},
+  {value: 2, label: '세미아치', template: 7},
+  {value: 3, label: '아치', template: 5},
+  {value: 4, label: '둥근형', template: 6},
+] as const;
+
+/** 레퍼런스 알파 에셋을 담을 기본 browStyle sub 룩. */
+export const DEFAULT_BROW_STYLE_SUB_LOOK_ID =
+  'sys:var:brow-style:natural-texture:s0';
+const REFERENCE_BROW_INTENSITY = 0.62;
+
+const BROW_PRODUCT_REGIONS: RegionKey[] = [
+  'brow',
+  'browPowder',
+  'browPencil',
+  'browLightener',
+  'browStyle',
+];
+
+const BROW_COLOR_KEY_BY_REGION: Partial<
+  Record<RegionKey, keyof FilterParams>
+> = {
+  brow: 'browColor',
+  browPowder: 'browPowderColor',
+  browPencil: 'browPencilColor',
+  browStyle: 'browStyleColor',
+};
+
+const DEFAULT_BROW_COLOR = BROW_COLORS[2];
+
+export type BrowTreeState = {
+  enabled: boolean;
+  shapeValue: number;
+  color: string;
+};
+
+function visibleBrowLeaves(root: LookNode | null): ProductLeaf[] {
+  if (!root?.visible) return [];
+  const leaves: ProductLeaf[] = [];
+
+  const visit = (node: LookNode) => {
+    if (!node.visible) return;
+    for (const child of node.kids) {
+      if (isLeaf(child)) {
+        if (
+          child.visible &&
+          BROW_PRODUCT_REGIONS.includes(child.region)
+        ) {
+          leaves.push(child);
+        }
+      } else {
+        visit(child);
+      }
+    }
+  };
+
+  visit(root);
+  return leaves;
+}
+
+export function readBrowTree(root: LookNode | null): BrowTreeState {
+  const leaves = visibleBrowLeaves(root);
+  const last = leaves[leaves.length - 1];
+  if (!last) {
+    return {
+      enabled: false,
+      shapeValue: BROW_REFERENCE_SHAPES[0].value,
+      color: DEFAULT_BROW_COLOR,
+    };
+  }
+
+  let color: string = DEFAULT_BROW_COLOR;
+  for (const leaf of leaves) {
+    const key = BROW_COLOR_KEY_BY_REGION[leaf.region];
+    const candidate = key ? leaf.params[key] : undefined;
+    if (typeof candidate === 'string') color = candidate;
+  }
+
+  const storedShape = last.params.browShape;
+  return {
+    enabled: true,
+    shapeValue:
+      BROW_REFERENCE_SHAPES.some(shape => shape.value === storedShape)
+        ? storedShape!
+        : BROW_REFERENCE_SHAPES[0].value,
+    color,
+  };
+}
+
+export function ensureBrowTree(
+  root: LookNode | null,
+  library: LookLibrary,
+): LookNode | null {
+  const leaves = visibleBrowLeaves(root);
+  const referenceTemplates = BROW_REFERENCE_SHAPES.map(shape => shape.template);
+  if (
+    leaves.length === 1 &&
+    leaves[0].region === 'browStyle' &&
+    referenceTemplates.includes(
+      leaves[0].params.browStyleTemplate as (typeof referenceTemplates)[number],
+    )
+  ) {
+    return root;
+  }
+
+  const defaultDefinitionId = library[DEFAULT_BROW_STYLE_SUB_LOOK_ID]
+    ? DEFAULT_BROW_STYLE_SUB_LOOK_ID
+    : subDefsForRegion(library, 'browStyle')[0]?.id;
+  if (!defaultDefinitionId) return root;
+
+  // 이전 빌드가 만든 결·파우더·펜슬 레이어를 그대로 두면 알파 에셋 위에
+  // 기하학 밴드가 겹친다. 명시적 지우개(browConceal)는 건드리지 않고 눈썹
+  // 제품만 하나의 browStyle 레이어로 정규화한다.
+  let next = root;
+  for (const region of BROW_PRODUCT_REGIONS) {
+    next = setSubRegion(next, library, '눈썹', region, null);
+  }
+  return setSubRegion(
+    next,
+    library,
+    '눈썹',
+    'browStyle',
+    defaultDefinitionId,
+  );
+}
+
+export function patchBrowTree(
+  root: LookNode | null,
+  library: LookLibrary,
+  patch: {shapeValue?: number; color?: string},
+): LookNode | null {
+  const ensured = ensureBrowTree(root, library);
+  if (!ensured) return root;
+
+  let next = ensured;
+  const requestedShape = patch.shapeValue ?? readBrowTree(root).shapeValue;
+  if (BROW_REFERENCE_SHAPES.some(shape => shape.value === requestedShape)) {
+    next = updateBrowSharedAxis(next, {browShape: requestedShape});
+    const selected = BROW_REFERENCE_SHAPES.find(
+      shape => shape.value === requestedShape,
+    )!;
+    for (const leaf of visibleBrowLeaves(next)) {
+      if (leaf.region !== 'browStyle') continue;
+      next = updateLeaf(next, leaf.id, {
+        params: {
+          browStyleTemplate: selected.template,
+          browStyleIntensity: REFERENCE_BROW_INTENSITY,
+        },
+      });
+    }
+  }
+
+  if (patch.color !== undefined) {
+    for (const leaf of visibleBrowLeaves(next)) {
+      const colorKey = BROW_COLOR_KEY_BY_REGION[leaf.region];
+      if (!colorKey) continue;
+      next = updateLeaf(next, leaf.id, {
+        params: {[colorKey]: patch.color},
+      });
+    }
+  }
+
+  return next;
+}
+
+/** 눈썹 제품만 끄고, 사용자가 선택한 지우개(browConceal)는 보존한다. */
+export function removeBrowTree(
+  root: LookNode | null,
+  library: LookLibrary,
+): LookNode | null {
+  let next = root;
+  for (const region of BROW_PRODUCT_REGIONS) {
+    next = setSubRegion(next, library, '눈썹', region, null);
+  }
+  return next;
+}

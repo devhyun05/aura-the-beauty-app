@@ -23,6 +23,7 @@ import {
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
 import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {AppScreen} from '../../../shared/ui';
+import {useAiDataConsent} from '../../legal/services/aiDataConsentContext';
 import {
   answerGeneratedMakeupRecommendationQuestionV2,
   createMakeupRecommendationIdempotencyKey,
@@ -249,6 +250,7 @@ export const MakeupRecommendationScreen = forwardRef<
   personalColor,
   reportId,
 }, ref) {
+  const {requestAiDataConsent} = useAiDataConsent();
   const [phase, setPhase] = useState<MakeupRecommendationScreenPhase>(() =>
     getInitialMakeupRecommendationScreenPhase({initialView, reportId}));
   useLayoutEffect(() => {
@@ -552,6 +554,9 @@ export const MakeupRecommendationScreen = forwardRef<
 
     void (async () => {
       try {
+        if (!await requestAiDataConsent()) {
+          return;
+        }
         await clearCurrentMakeupRecommendationSessionId(AsyncStorage);
         const startedSession = await startGeneratedMakeupRecommendationV2(
           input,
@@ -586,7 +591,7 @@ export const MakeupRecommendationScreen = forwardRef<
         if (workflowRequest.current?.id === operation.id) setIsStarting(false);
       }
     })();
-  }, [beginOperation, resolveReadySession]);
+  }, [beginOperation, requestAiDataConsent, resolveReadySession]);
 
   const startFromKeyword = useCallback((keyword: MakeupTrendKeyword) => {
     if (!selectedReport || !selectedSituation || isStarting) return;
