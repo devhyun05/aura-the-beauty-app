@@ -198,7 +198,7 @@ class Settings(BaseSettings):
   s3_bucket_name: str | None = None
   cdn_base_url: str | None = None
   cloudfront_domain: str | None = None
-  web_trial_enabled: bool = False
+  web_trial_enabled: bool = True
   web_trial_api_key: str | None = None
   web_trial_max_image_bytes: int = Field(default=5_000_000, ge=100_000, le=10_000_000)
   web_trial_rate_limit_per_hour: int = Field(default=3, ge=1, le=30)
