@@ -1,5 +1,11 @@
 import {uploadFaceCaptureImage} from '../../face-capture/services/faceCaptureUploadService';
-import {BackendApiError, getBackendApiBaseUrl, requestBackendJson} from '../../../shared/services/backendApi';
+import {
+  BackendApiError,
+  getBackendApiBaseUrl,
+  isBackendNetworkError,
+  isBackendTimeoutError,
+  requestBackendJson,
+} from '../../../shared/services/backendApi';
 import type {
   MakeupFeedbackAnalysisOutcome,
   MakeupFeedbackCaptureQuality,
@@ -48,6 +54,17 @@ const MAKEUP_FEEDBACK_SERVER_ERROR_MESSAGE =
   '서버에서 사진 분석을 시작하지 못했어요. 잠시 후 다시 시도하거나 다른 사진을 선택해 주세요.';
 
 const topicById = new Map(MAKEUP_FEEDBACK_TOPICS.map(topic => [topic.id, topic]));
+
+export function isRetryableMakeupFeedbackPollError(error: unknown): boolean {
+  return (
+    isBackendNetworkError(error)
+    || isBackendTimeoutError(error)
+    || (
+      error instanceof BackendApiError
+      && (error.status === 429 || error.status >= 500)
+    )
+  );
+}
 
 export function isMakeupFeedbackGoalValidationError(error: unknown): error is BackendApiError {
   return error instanceof BackendApiError && FEEDBACK_GOAL_VALIDATION_ERROR_CODES.has(error.code ?? '');
@@ -1577,10 +1594,30 @@ async function waitForCompleteFeedbackJob(
 
     await delay(Math.min(FEEDBACK_REPORT_POLL_INTERVAL_MS, FEEDBACK_ANALYSIS_TIMEOUT_MS - elapsedMs));
 
-    const {report} = await requestBackendJson<GetFeedbackReportResponse>(
-      '/feedback/reports/' + currentJob.id,
-    );
-    currentJob = report;
+    try {
+      const {report} = await requestBackendJson<GetFeedbackReportResponse>(
+        '/feedback/reports/' + currentJob.id,
+        {timeoutMs: 15000},
+      );
+      currentJob = report;
+    } catch (error) {
+      if (
+        !isRetryableMakeupFeedbackPollError(error)
+        || Date.now() - startedAt >= FEEDBACK_ANALYSIS_TIMEOUT_MS
+      ) {
+        throw error;
+      }
+
+      console.info('[aura:makeup-feedback] report:poll-retry', {
+        errorCode:
+          error instanceof BackendApiError
+            ? error.code ?? error.status
+            : error instanceof Error
+              ? error.name
+              : typeof error,
+        jobId: currentJob.id,
+      });
+    }
   }
 }
 

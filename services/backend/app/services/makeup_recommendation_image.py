@@ -456,12 +456,7 @@ def _put_recommendation_image(
 ) -> None:
   try:
     client_kwargs: dict[str, Any] = {'region_name': settings.aws_region}
-    if settings.aws_profile_name:
-      client = boto3.Session(profile_name=settings.aws_profile_name).client(
-        's3',
-        **client_kwargs,
-      )
-    elif (
+    if (
       settings.aws_access_key_id
       and settings.aws_secret_access_key
       and not settings.aws_use_iam_role
@@ -470,6 +465,11 @@ def _put_recommendation_image(
         's3',
         aws_access_key_id=settings.aws_access_key_id,
         aws_secret_access_key=settings.aws_secret_access_key,
+        **client_kwargs,
+      )
+    elif settings.aws_profile_name:
+      client = boto3.Session(profile_name=settings.aws_profile_name).client(
+        's3',
         **client_kwargs,
       )
     else:

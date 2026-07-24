@@ -908,23 +908,11 @@ async def list_analysis_reports(
   db: Database = Depends(require_database),
 ) -> dict:
   user = await ensure_user(db, auth)
+  # V2 보조 단계가 실패해도 completed 행에는 렌더링 가능한 템플릿 기반
+  # 기본 보고서가 투영된다. perception/consulting 유무로 목록에서 숨기지 않는다.
   filters = [
     "r.user_id = $1",
     "r.status = 'completed'",
-    """
-    (
-      jsonb_typeof(r.detail_payload->'result'->'faceAnalysisV2') is null
-      or (
-        jsonb_typeof(r.detail_payload->'result'->'faceAnalysisV2') = 'object'
-        and jsonb_typeof(
-          r.detail_payload->'result'->'faceAnalysisV2'->'perception'
-        ) = 'object'
-        and jsonb_typeof(
-          r.detail_payload->'result'->'faceAnalysisV2'->'consulting'
-        ) = 'object'
-      )
-    )
-    """,
   ]
   values: list[object] = [user["id"]]
 

@@ -15,7 +15,7 @@ class FakeDatabase:
 
 
 @pytest.mark.asyncio
-async def test_list_analysis_reports_only_exposes_completed_reports(monkeypatch):
+async def test_list_analysis_reports_exposes_completed_fallback_reports(monkeypatch):
   db = FakeDatabase()
 
   async def fake_ensure_user(_db, _auth):
@@ -32,6 +32,6 @@ async def test_list_analysis_reports_only_exposes_completed_reports(monkeypatch)
 
   normalized_query = " ".join(db.query.split()).lower()
   assert "r.status = 'completed'" in normalized_query
-  assert "'faceanalysisv2'->'perception'" in normalized_query
-  assert "'faceanalysisv2'->'consulting'" in normalized_query
+  assert "'faceanalysisv2'->'perception'" not in normalized_query
+  assert "'faceanalysisv2'->'consulting'" not in normalized_query
   assert db.args == ("user-1", 3)

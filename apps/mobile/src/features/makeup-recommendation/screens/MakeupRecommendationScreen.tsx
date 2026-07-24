@@ -106,7 +106,10 @@ export type MakeupRecommendationScreenProps = {
   analysisReportId?: string;
   initialView?: 'discovery' | 'history';
   onBack?: () => void;
-  onOpenRecommendedProducts?: (sourceAnalysisReportId?: string) => void;
+  onOpenRecommendedProducts?: (
+    makeupRecommendationReportId?: string,
+    sourceAnalysisReportId?: string,
+  ) => void;
   onResultsVisibilityChange?: (visible: boolean) => void;
   onApplyAR?: (look: MakeupLookRecommendation) => void;
   onStartFaceAnalysis?: () => void;
@@ -1269,7 +1272,10 @@ export const MakeupRecommendationScreen = forwardRef<
         onApplyAR={handleApplyAR}
         onAreaOpened={handleAreaOpened}
         onRefine={handleRefine}
-        onOpenRecommendedProducts={() => onOpenRecommendedProducts?.(session.sourceAnalysisReportId)}
+        onOpenRecommendedProducts={() => onOpenRecommendedProducts?.(
+          session.reportId,
+          session.sourceAnalysisReportId,
+        )}
         onReset={() => returnToDiscovery(true)}
         onRetry={retry}
         onRetryImages={handleRetryImages}

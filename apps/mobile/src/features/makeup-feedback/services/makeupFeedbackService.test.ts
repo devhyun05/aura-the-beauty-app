@@ -1,6 +1,10 @@
 import {readFileSync} from 'node:fs';
 
-import {BackendApiError} from '../../../shared/services/backendApi';
+import {
+  BackendApiError,
+  BackendNetworkError,
+  BackendTimeoutError,
+} from '../../../shared/services/backendApi';
 import type {MakeupFeedbackPhotoSelection} from '../types';
 import {MAKEUP_FEEDBACK_TOPICS} from '../types';
 import {
@@ -12,6 +16,7 @@ import {
   buildMakeupFeedbackJobCreateBody,
   getMakeupFeedbackAnalysisErrorAction,
   getMakeupFeedbackAnalysisErrorMessage,
+  isRetryableMakeupFeedbackPollError,
   mapBackendReportsToFeedbackResults,
   mapBackendJobToFeedbackOutcome as mapBackendJobToFeedbackResult,
 } from './makeupFeedbackService';
@@ -64,6 +69,27 @@ expectEqual(
   getMakeupFeedbackAnalysisErrorAction(new Error('Network request failed')),
   'retry',
   'network errors remain retryable',
+);
+
+expectEqual(
+  isRetryableMakeupFeedbackPollError(new BackendNetworkError()),
+  true,
+  'transient network failures keep polling the existing feedback job',
+);
+expectEqual(
+  isRetryableMakeupFeedbackPollError(new BackendTimeoutError(15000)),
+  true,
+  'individual feedback poll timeouts keep polling the existing job',
+);
+expectEqual(
+  isRetryableMakeupFeedbackPollError(new BackendApiError('temporary', 503)),
+  true,
+  'temporary backend failures keep polling the existing feedback job',
+);
+expectEqual(
+  isRetryableMakeupFeedbackPollError(new BackendApiError('unauthorized', 401)),
+  false,
+  'authentication failures stop feedback polling',
 );
 
 function expectBackendError(

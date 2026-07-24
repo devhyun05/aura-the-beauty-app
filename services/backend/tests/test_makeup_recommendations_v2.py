@@ -894,7 +894,7 @@ async def test_provider_recommendation_is_clamped_to_selected_prep_time(
 
 
 @pytest.mark.asyncio
-async def test_invalid_v2_recommendation_fails_closed_without_retry(
+async def test_invalid_v2_recommendation_uses_deterministic_fallback(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   attempts = 0
@@ -905,16 +905,14 @@ async def test_invalid_v2_recommendation_fails_closed_without_retry(
     return {"contextSummary": ["조건"], "looks": []}
 
   monkeypatch.setattr(makeup_service, "generate_json", invalid_response)
-  with pytest.raises(AppError) as exc_info:
-    await makeup_service.generate_recommendation_v2(Settings(), {}, [], [])
+  result = await makeup_service.generate_recommendation_v2(Settings(), {}, [], [])
 
   assert attempts == 1
-  assert exc_info.value.status_code == 502
-  assert exc_info.value.code == "BEDROCK_INVALID_RECOMMENDATION"
-  assert exc_info.value.details["validationErrors"]
+  assert result["generationSource"] == "deterministic_fallback"
+  assert result["looks"]
 
 @pytest.mark.asyncio
-async def test_v2_recommendation_provider_failure_propagates_without_fallback(
+async def test_v2_recommendation_provider_failure_uses_deterministic_fallback(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   provider_error = AppError(502, "BEDROCK_REQUEST_FAILED", "missing credentials")
@@ -923,15 +921,15 @@ async def test_v2_recommendation_provider_failure_propagates_without_fallback(
     raise provider_error
 
   monkeypatch.setattr(makeup_service, "generate_json", fail_provider)
-  with pytest.raises(AppError) as exc_info:
-    await makeup_service.generate_recommendation_v2(
-      Settings(),
-      {"selection": {"situation": {"label": "일상"}}},
-      _questions(),
-      [{"questionId": "change_level", "optionId": "balanced"}],
-    )
+  result = await makeup_service.generate_recommendation_v2(
+    Settings(),
+    {"selection": {"situation": {"label": "일상"}}},
+    _questions(),
+    [{"questionId": "change_level", "optionId": "balanced"}],
+  )
 
-  assert exc_info.value is provider_error
+  assert result["generationSource"] == "deterministic_fallback"
+  assert result["looks"]
 
 @pytest.mark.asyncio
 async def test_v2_generate_api_marks_session_failed_when_ai_generation_fails(
@@ -985,7 +983,7 @@ async def test_v2_generate_api_marks_session_failed_when_ai_generation_fails(
   assert failed_calls == [(db, USER_ID, SESSION_ID)]
 
 @pytest.mark.asyncio
-async def test_v2_recommendation_timeout_fails_closed_promptly(
+async def test_v2_recommendation_timeout_falls_back_promptly(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   def slow_converse(*_args, **_kwargs):
@@ -998,20 +996,18 @@ async def test_v2_recommendation_timeout_fails_closed_promptly(
   })
   started_at = time.perf_counter()
 
-  with pytest.raises(AppError) as exc_info:
-    await makeup_service.generate_recommendation_v2(
-      settings,
-      {
-        "analysisReport": {"faceShape": "oval"},
-        "selection": {"situation": {"label": "데이트"}},
-      },
-      _questions(),
-      [{"questionId": "change_level", "optionId": "balanced"}],
-    )
+  result = await makeup_service.generate_recommendation_v2(
+    settings,
+    {
+      "analysisReport": {"faceShape": "oval"},
+      "selection": {"situation": {"label": "데이트"}},
+    },
+    _questions(),
+    [{"questionId": "change_level", "optionId": "balanced"}],
+  )
 
-  assert time.perf_counter() - started_at < 0.2
-  assert exc_info.value.status_code >= 500
-  assert exc_info.value.code.startswith("BEDROCK_")
+  assert time.perf_counter() - started_at < 0.5
+  assert result["generationSource"] == "deterministic_fallback"
 
 @pytest.mark.asyncio
 async def test_analysis_context_requires_owned_completed_non_deleted_report() -> None:
