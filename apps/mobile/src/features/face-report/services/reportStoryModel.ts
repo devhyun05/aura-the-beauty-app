@@ -14,6 +14,7 @@ export type FaceReportStoryContentKey =
   | 'summary:combined'
   | 'summary:generation'
   | 'proportion'
+  | 'face3d:metrics'
   | `features:${string}`
   | 'impression'
   | 'personal-color:tone'
@@ -53,7 +54,7 @@ export interface FaceReportStoryModel {
 
 type StoryInput = Pick<
   ReportData,
-  'generationStatus' | 'goldenMask' | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7' | 's8'
+  'face3d' | 'generationStatus' | 'goldenMask' | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7' | 's8'
 > & {s9?: ReportData['s9']};
 
 interface SectionDefinition {
@@ -149,6 +150,17 @@ export function buildFaceReportStoryModel(data: StoryInput): FaceReportStoryMode
   if (data.s2) {
     facePages.push(
       contentPage('face', 'proportion:overview', '얼굴 비율', '비율', 'proportion'),
+    );
+  }
+  if (data.face3d) {
+    facePages.push(
+      contentPage(
+        'face',
+        'face3d:metrics',
+        '3D 입체 측정',
+        '3D 지표',
+        'face3d:metrics',
+      ),
     );
   }
   if (data.s3?.cards.length) {
