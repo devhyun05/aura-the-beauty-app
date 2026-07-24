@@ -41,6 +41,7 @@ import {
 } from './services/goldenMaskPreloadService';
 import {FaceReportCaptureAssetContext} from './services/reportCaptureAssetContext';
 import {captureScrollableReportPage} from './services/reportImageShare';
+import {Face3DMetricGrid} from '../face-3d/components/Face3DMetricGrid';
 
 type ReportPageCaptureTarget = {
   snapshotContentContainer: boolean;
@@ -814,6 +815,17 @@ export const ReportScreenScaffold = React.forwardRef<
         return data.s2 ? (
           <StoryContentCard {...captureProps} section={section} pagerRef={pagerRef} showChapterHeader={showChapterHeader}>
             <S2Proportion data={data.s2} onOpenRegionCard={openRegionCard} onRetake={onRetake} />
+          </StoryContentCard>
+        ) : null;
+      case 'face3d:metrics':
+        return data.face3d ? (
+          <StoryContentCard
+            {...captureProps}
+            inset
+            pagerRef={pagerRef}
+            section={section}
+            showChapterHeader={showChapterHeader}>
+            <Face3DMetricGrid profile={data.face3d} />
           </StoryContentCard>
         ) : null;
       case 'personal-color:tone':

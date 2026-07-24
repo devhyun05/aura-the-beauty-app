@@ -1430,6 +1430,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
 
   return {
     reportId: report.id,
+    ...(face3d ? {face3d} : {}),
     ...(!stylingSettled ? {generationStatus: 'loading' as const} : {}),
     contentRevision: report.contentRevision ?? 1,
     ...(report.contentStatus
