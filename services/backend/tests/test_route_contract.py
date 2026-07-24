@@ -17,6 +17,8 @@ EXPECTED_ROUTES = {
   ("GET", "/api/users/me"),
   ("DELETE", "/api/users/me"),
   ("PATCH", "/api/users/me/profile"),
+  ("GET", "/api/privacy/ai-consent"),
+  ("PUT", "/api/privacy/ai-consent"),
   ("GET", "/api/home"),
   ("GET", "/api/community/threads"),
   ("GET", "/api/community/search"),
