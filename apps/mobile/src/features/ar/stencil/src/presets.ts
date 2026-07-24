@@ -86,6 +86,7 @@ export const BARE: FilterParams = {
   browStyleColor: '#3A2A20',
   browStyleIntensity: 0,
   browThickness: 1,
+  browLength: 1,
   browArch: 0,
   faceOverlayIntensity: 0,
   eyelinerStyleIntensity: 0,
@@ -199,6 +200,7 @@ export const PRESETS: FilterPreset[] = [
       browStyleIntensity: 0,
       browThicknessProfile: 2,
       browThickness: 1,
+      browLength: 1,
       browArch: 0,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,
@@ -259,6 +261,7 @@ export const PRESETS: FilterPreset[] = [
       browStyleIntensity: 0,
       browThicknessProfile: 2,
       browThickness: 1,
+      browLength: 1,
       browArch: 0.08,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,
@@ -321,6 +324,7 @@ export const PRESETS: FilterPreset[] = [
       browStyleIntensity: 0,
       browThicknessProfile: 2,
       browThickness: 1,
+      browLength: 1,
       browArch: 0,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,
@@ -397,6 +401,7 @@ export const PRESETS: FilterPreset[] = [
       browStyleTemplate: 0,
       browThicknessProfile: 3, // 원본 글램 두께 프로파일 복원
       browThickness: 1.15, // 살짝 두껍게
+      browLength: 1,
       browArch: 0.15,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,
@@ -482,6 +487,7 @@ export const PRESETS: FilterPreset[] = [
       browStyleTemplate: 0,
       browThicknessProfile: 3,
       browThickness: 1.15,
+      browLength: 1,
       browArch: 0.15,
       faceOverlayIntensity: 0,
       lipStyleIntensity: 0,
@@ -545,6 +551,7 @@ export const PRESETS: FilterPreset[] = [
       browStyleTemplate: 2, // 두꺼운(풍성) 템플릿(default_brow_thick)
       browThicknessProfile: 0, // item3: 밴드 자연 높이 유지(늘리지 않음) → 결이 늘어나지 않음
       browThickness: 1,
+      browLength: 1,
       browArch: 0,
       faceOverlayIntensity: 0,
       eyelinerStyleIntensity: 0,

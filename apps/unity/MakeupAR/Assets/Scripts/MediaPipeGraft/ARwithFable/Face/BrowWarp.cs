@@ -3,7 +3,7 @@ using UnityEngine;
 namespace ARMakeup.Face
 {
     /// <summary>
-    /// R7 명명 워프 — 눈썹 두께/아치. 실제 상·하 랜드마크 간격을 측정 두께로 삼고,
+    /// R7 명명 워프 — 눈썹 두께/길이/아치. 실제 상·하 랜드마크 간격을 측정 두께로 삼고,
     /// shape/arch 중심선 주위로 그 간격×thickness의 밴드를 만든다. BrowRenderer(제품 스택)·
     /// StyleRenderer(텍스처)·PencilRenderer(개별 털)·StencilGuideRenderer(가이드)가
     /// 같은 함수를 쓰므로 네 렌더러가 함께 움직인다(핸들 조작 시 제품 분리 방지 — 설계 섹션 12 정정 1).
@@ -97,6 +97,14 @@ namespace ARMakeup.Face
         public const float ReferenceMaskHeadExtension = 0f;
         public const float ReferenceMaskTailExtension = 0.07f;
         public const float ReferenceMaskThicknessScale = 1.14f;
+        // Basic mode exposes a deliberately broad 10x silhouette spectrum. Keep these
+        // limits shared by every brow renderer so style, products and guide never drift.
+        public const float ThicknessMin = 0.25f;
+        public const float ThicknessMax = 2.5f;
+        // 눈썹머리는 고정하고 꼬리 방향의 접선 거리만 조절한다. 세로 곡률과 두께는
+        // 그대로라 두께/아치 슬라이더와 서로 간섭하지 않는다.
+        public const float LengthMin = 0.65f;
+        public const float LengthMax = 1.6f;
 
         // 0 is deliberately absent from these tables: profile 0 takes the byte-compatible
         // legacy path.  The other profiles are anatomical coverage choices, not face warps.
@@ -287,13 +295,13 @@ namespace ARMakeup.Face
         /// </summary>
         public static bool BuildReferenceTextureBand(
             Vector2[] lo, Vector2[] up, int count, float imageAspect,
-            float textureAspect, float thickness)
+            float textureAspect, float thickness, float length = 1f)
         {
             if (lo == null || up == null || count < 2 ||
                 lo.Length < count || up.Length < count ||
                 !IsFinite(imageAspect) || imageAspect <= GeometryEpsilon ||
                 !IsFinite(textureAspect) || textureAspect <= GeometryEpsilon ||
-                !IsFinite(thickness))
+                !IsFinite(thickness) || !IsFinite(length))
                 return false;
 
             var normalSumMetric = Vector2.zero;
@@ -329,11 +337,14 @@ namespace ARMakeup.Face
             tailCenter += placementOffset;
             headCenter += placementOffset;
 
-            tailCenter -= tangent * (span * ReferenceMaskTailExtension);
-            headCenter += tangent * (span * ReferenceMaskHeadExtension);
+            var clampedLength = Mathf.Clamp(length, LengthMin, LengthMax);
+            var scaledSpan = span * clampedLength;
+            tailCenter = headCenter - tangent * scaledSpan;
+            tailCenter -= tangent * (scaledSpan * ReferenceMaskTailExtension);
+            headCenter += tangent * (scaledSpan * ReferenceMaskHeadExtension);
 
             var bandHeight = span * ReferenceMaskThicknessScale * textureAspect *
-                             Mathf.Clamp(thickness, 0.4f, 2f);
+                             Mathf.Clamp(thickness, ThicknessMin, ThicknessMax);
             if (!IsFinite(bandHeight) || bandHeight < GeometryEpsilon) return false;
             var halfBand = normal * (0.5f * bandHeight);
 
@@ -343,6 +354,47 @@ namespace ARMakeup.Face
                 var center = Vector2.Lerp(tailCenter, headCenter, along);
                 lo[i] = FromMetric(center - halfBand, imageAspect);
                 up[i] = FromMetric(center + halfBand, imageAspect);
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 눈썹머리(count-1)를 고정하고 꼬리 방향의 접선 성분만 length배 한다.
+        /// 수직 곡률과 상·하 밴드 폭은 보존하므로 길이가 두께나 아치를 바꾸지 않는다.
+        /// </summary>
+        public static bool ScaleLengthFromHead(
+            Vector2[] lo, Vector2[] up, int count, float imageAspect, float length)
+        {
+            if (lo == null || up == null || count < 2 ||
+                lo.Length < count || up.Length < count ||
+                !IsFinite(imageAspect) || imageAspect <= GeometryEpsilon ||
+                !IsFinite(length))
+                return false;
+
+            var tail = 0.5f * (ToMetric(lo[0], imageAspect) +
+                               ToMetric(up[0], imageAspect));
+            var head = 0.5f * (ToMetric(lo[count - 1], imageAspect) +
+                               ToMetric(up[count - 1], imageAspect));
+            var axis = head - tail;
+            var span = axis.magnitude;
+            if (!IsFinite(span) || span < GeometryEpsilon) return false;
+
+            var tangent = axis / span;
+            var clampedLength = Mathf.Clamp(length, LengthMin, LengthMax);
+            for (var i = 0; i < count; i++)
+            {
+                if (!IsFinite(lo[i]) || !IsFinite(up[i])) return false;
+                var loMetric = ToMetric(lo[i], imageAspect);
+                var upMetric = ToMetric(up[i], imageAspect);
+                var center = 0.5f * (loMetric + upMetric);
+                var halfBand = 0.5f * (upMetric - loMetric);
+                var fromHead = center - head;
+                var stretchedCenter =
+                    head +
+                    tangent * (Vector2.Dot(fromHead, tangent) * clampedLength) +
+                    (fromHead - tangent * Vector2.Dot(fromHead, tangent));
+                lo[i] = FromMetric(stretchedCenter - halfBand, imageAspect);
+                up[i] = FromMetric(stretchedCenter + halfBand, imageAspect);
             }
             return true;
         }

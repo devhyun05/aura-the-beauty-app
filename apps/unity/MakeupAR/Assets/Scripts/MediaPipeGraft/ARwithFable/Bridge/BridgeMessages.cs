@@ -260,7 +260,8 @@ namespace ARMakeup.Bridge
         public float browStyleIntensity = 0f;      // 임포트/기본 눈썹 텍스처 강도
         public int browStyleFinish = 0;            // 스타일(텍스처 눈썹) 마감: 0=새틴(기본) 1=매트 2=듀이
         public int browStyleTemplate = 0;          // built-in 눈썹 텍스처 선택: 0..4=legacy, 5..9=레퍼런스 알파 마스크 1..5
-        public float browThickness = 1f;           // 눈썹 두께 배수 (1 = 원래)
+        public float browThickness = 1f;           // 눈썹 두께 배수 (0.25..2.5, 1 = 원래)
+        public float browLength = 1f;              // 눈썹머리 고정 가로 길이 배수 (0.65..1.6, 1 = 원래)
         public int browThicknessProfile = 0;       // 0=legacy 1=slim 2=regular 3=full 4=bold 5=headFull 6=bodyFull
         public float browExpandUpper = 0f;         // 실측 눈썹 높이 배수의 위쪽 개인 커버 델타
         public float browExpandLower = 0f;         // 실측 눈썹 높이 배수의 아래쪽 개인 커버 델타
@@ -474,6 +475,7 @@ namespace ARMakeup.Bridge
                 browPencilColor = null,
                 browStyleColor = null,
                 browThickness = 0f,
+                browLength = 0f,
                 eyelinerThickness = 0f,
                 eyelinerLowerThickness = 0f,
                 eyelinerWingLength = 0f,

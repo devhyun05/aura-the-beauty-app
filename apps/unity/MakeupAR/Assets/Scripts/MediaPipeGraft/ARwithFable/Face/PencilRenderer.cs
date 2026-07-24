@@ -56,7 +56,8 @@ namespace ARMakeup.Face
         Material _material;
         Vector3[] _vertices;
         float _intensity;
-        float _thickness = 1f; // R7 두께/아치 — BrowRenderer와 동일 워프(제품 동조)
+        float _thickness = 1f; // R7 두께/길이/아치 — BrowRenderer와 동일 워프(제품 동조)
+        float _length = 1f;
         float _arch = 0f;
         int _shape = 0;        // 눈썹 모양(#19b) — BrowRenderer와 동일 값 공유
         int _browThicknessProfile;
@@ -128,12 +129,16 @@ namespace ARMakeup.Face
             _renderer.enabled = false;
         }
 
-        public void ApplyPencilParams(string colorHex, float intensity, float thickness, float arch, int shape, int finish, int texture,
+        public void ApplyPencilParams(string colorHex, float intensity, float thickness, float length, float arch, int shape, int finish, int texture,
                                       int thicknessProfile, float expandUpper, float expandLower)
         {
             _intensity = Mathf.Clamp01(intensity);
             // R7 두께/아치 — BrowRenderer와 동일 클램프. 밴드가 워프되면 스트로크도 따라간다.
-            _thickness = Mathf.Clamp(thickness, 0.4f, 2f);
+            _thickness = Mathf.Clamp(
+                thickness, BrowWarp.ThicknessMin, BrowWarp.ThicknessMax);
+            _length = length <= 0f
+                ? 1f
+                : Mathf.Clamp(length, BrowWarp.LengthMin, BrowWarp.LengthMax);
             _arch = Mathf.Clamp(arch, 0f, 1f);
             _shape = Mathf.Clamp(shape, 0, 5); // 모양(#19b, 슬롯 공통 — 4=상승 5=반달 포함)
             _browThicknessProfile = Mathf.Clamp(thicknessProfile, 0, 6);
@@ -166,6 +171,8 @@ namespace ARMakeup.Face
                 BrowWarp.SubdivideArc(lm, BrowLower[e], _lo);
                 BrowWarp.SubdivideArcDepth(lm, BrowUpper[e], _upDepth);
                 BrowWarp.SubdivideArcDepth(lm, BrowLower[e], _loDepth);
+                BrowWarp.ScaleLengthFromHead(
+                    _lo, _up, Seg, FramePresenter.Instance.ImageAspect, _length);
                 BrowWarp.ShapeArcProfile(
                     _lo, _up, Seg, _shape, FramePresenter.Instance.ImageAspect);
                 // R7 두께/아치와 공용 꼬리 테이퍼 — 밴드를 먼저 워프하면 SampleBand 기반

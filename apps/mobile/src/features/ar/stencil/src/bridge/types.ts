@@ -291,6 +291,8 @@ export interface FilterParams {
   browStyleFinish?: number;
   /** 눈썹 룩의 전체 굵기 배수 (1=프로파일 기본). */
   browThickness: number;
+  /** 눈썹머리를 고정하고 꼬리 방향으로 조절하는 가로 길이 배수 (1=원래). */
+  browLength: number;
   /** 굵기 분포 0=legacy 1=slim 2=regular 3=full 4=bold 5=headFull 6=bodyFull. 생략=0 */
   browThicknessProfile?: BrowThicknessProfile;
   /** 실측 상·하단에서 H(원 눈썹 높이) 배수로 더 덮는 개인 공간 델타. 생략/0=무변조. */

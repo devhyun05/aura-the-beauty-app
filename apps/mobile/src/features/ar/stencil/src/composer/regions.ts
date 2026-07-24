@@ -1042,6 +1042,14 @@ const BROW_SHAPE_AXIS: ComposerControl[] = [
     max: 1.6,
     fallback: 1,
   },
+  {
+    type: 'slider',
+    label: '가로 길이',
+    key: 'browLength',
+    min: 0.65,
+    max: 1.6,
+    fallback: 1,
+  },
 ];
 const BROW_FIT_AXIS: ComposerControl[] = [
   { type: 'slider', label: '내 눈썹 아래 덮기', key: 'browExpandLower', min: -0.25, max: 0.75, step: 0.05, fallback: 0, gold: true },
