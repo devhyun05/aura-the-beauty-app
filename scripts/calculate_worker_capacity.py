@@ -31,6 +31,10 @@ DURATION_PROFILES_SECONDS = {
   },
 }
 DEFAULT_JOB_COUNTS = (5, 10, 20)
+MIN_WORKERS = 2
+MAX_WORKERS = 8
+ALARM_DETECTION_SECONDS = 60
+TASK_STARTUP_DELAYS_SECONDS = (60, 90)
 
 
 @dataclass(frozen=True)
@@ -79,18 +83,75 @@ def summarize(completions: list[float]) -> CompletionSummary:
   )
 
 
-def autoscaled_worker_count(job_count: int) -> int:
-  # The always-on worker usually receives one message before the 60-second
-  # SQS metric is evaluated, leaving four visible messages for a five-job burst.
-  if job_count <= 1:
-    return 1
-  if job_count <= 5:
-    return 2
-  return 3
+def summarize_scenario(
+  *,
+  job_count: int,
+  duration_seconds: float,
+  worker_available_at: list[float],
+  user_ready_seconds: float,
+) -> dict:
+  user_ready_times = simulate_completion_times(
+    job_count=job_count,
+    duration_seconds=duration_seconds,
+    worker_available_at=worker_available_at,
+    user_ready_seconds=user_ready_seconds,
+  )
+  worker_completion_times = simulate_completion_times(
+    job_count=job_count,
+    duration_seconds=duration_seconds,
+    worker_available_at=worker_available_at,
+    user_ready_seconds=duration_seconds,
+  )
+  return {
+    **asdict(summarize(user_ready_times)),
+    "worker_last_seconds": summarize(worker_completion_times).last_seconds,
+  }
+
+
+def first_scale_out_worker_count(job_count: int) -> int:
+  # SQS one-minute metric samples are not phase-aligned with a traffic burst.
+  # Use the conservative upper bound where the earliest sample still sees the
+  # whole burst. A later sample can see fewer short jobs and scale out less.
+  visible_jobs = job_count
+  if visible_jobs == 0:
+    return MIN_WORKERS
+  if visible_jobs <= 4:
+    adjustment = 2
+  elif visible_jobs <= 9:
+    adjustment = 4
+  else:
+    adjustment = 6
+  return min(MAX_WORKERS, MIN_WORKERS + adjustment)
 
 
 def build_report(job_counts: tuple[int, ...]) -> dict:
-  report: dict = {"durationProfilesSeconds": DURATION_PROFILES_SECONDS, "scenarios": {}}
+  report: dict = {
+    "durationProfilesSeconds": DURATION_PROFILES_SECONDS,
+    "modelScope": {
+      "method": "deterministic_each_job_uses_measured_p95",
+      "includedJobTypes": list(DURATION_PROFILES_SECONDS),
+      "excludedJobTypes": {
+        "makeup_recommendation": (
+          "No standalone measured worker-duration profile is available yet."
+        ),
+      },
+    },
+    "autoscalingModel": {
+      "adjustmentType": "ChangeInCapacity",
+      "scope": "first_alarm_breach",
+      "minWorkers": MIN_WORKERS,
+      "maxWorkers": MAX_WORKERS,
+      "alarmDetectionSeconds": ALARM_DETECTION_SECONDS,
+      "taskStartupDelaysSeconds": TASK_STARTUP_DELAYS_SECONDS,
+      "persistentAlarmWorkerCeiling": MAX_WORKERS,
+      "queueDepthAssumption": "all_burst_jobs_visible_at_earliest_metric_sample",
+    },
+    "scenarioFields": {
+      "first/p50/p95/last/average_seconds": "user_ready",
+      "worker_last_seconds": "worker_completion_and_final_message_deletion",
+    },
+    "scenarios": {},
+  }
 
   for job_type, profile in DURATION_PROFILES_SECONDS.items():
     duration = profile["worker_p95"]
@@ -99,25 +160,27 @@ def build_report(job_counts: tuple[int, ...]) -> dict:
 
     for job_count in job_counts:
       scenarios: dict[str, dict] = {}
-      for worker_count in (1, 2, 3):
-        completions = simulate_completion_times(
+      for worker_count in (2, 4, 6, 8):
+        scenarios[f"warm_{worker_count}_workers"] = summarize_scenario(
           job_count=job_count,
           duration_seconds=duration,
           worker_available_at=[0.0] * worker_count,
           user_ready_seconds=user_ready,
         )
-        scenarios[f"warm_{worker_count}_workers"] = asdict(summarize(completions))
 
-      target_workers = autoscaled_worker_count(job_count)
-      for delay in (60.0, 90.0):
-        completions = simulate_completion_times(
+      target_workers = first_scale_out_worker_count(job_count)
+      for startup_delay in TASK_STARTUP_DELAYS_SECONDS:
+        scaled_worker_available_at = ALARM_DETECTION_SECONDS + startup_delay
+        scenario_name = (
+          f"first_scale_out_{target_workers}_workers_"
+          f"alarm_{ALARM_DETECTION_SECONDS}s_startup_{startup_delay}s"
+        )
+        scenarios[scenario_name] = summarize_scenario(
           job_count=job_count,
           duration_seconds=duration,
-          worker_available_at=[0.0] + [delay] * (target_workers - 1),
+          worker_available_at=[0.0] * MIN_WORKERS
+          + [scaled_worker_available_at] * (target_workers - MIN_WORKERS),
           user_ready_seconds=user_ready,
-        )
-        scenarios[f"autoscale_{target_workers}_workers_delay_{int(delay)}s"] = asdict(
-          summarize(completions),
         )
 
       job_type_scenarios[str(job_count)] = scenarios
@@ -129,7 +192,10 @@ def build_report(job_counts: tuple[int, ...]) -> dict:
 
 def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(
-    description="Estimate FIFO AI job completion times from measured p95 durations.",
+    description=(
+      "Estimate FIFO AI job user-ready and worker-completion timelines "
+      "from measured p95 durations."
+    ),
   )
   parser.add_argument(
     "--job-counts",

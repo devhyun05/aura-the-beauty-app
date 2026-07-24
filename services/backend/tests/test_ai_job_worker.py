@@ -202,6 +202,22 @@ async def test_worker_poll_once_receives_with_long_polling_options() -> None:
     "AttributeNames": ["ApproximateReceiveCount"],
   }
 
+@pytest.mark.asyncio
+async def test_worker_uses_queue_default_visibility_without_override() -> None:
+  sqs_client = FakeSQSClient()
+  worker = SQSAIJobWorker(
+    Settings(sqs_ai_job_queue_url=QUEUE_URL),
+    db=object(),
+    client=sqs_client,
+    dispatcher=SuccessDispatcher(),
+  )
+
+  received = await worker.poll_once()
+
+  assert received == 0
+  assert sqs_client.receive_message_kwargs is not None
+  assert "VisibilityTimeout" not in sqs_client.receive_message_kwargs
+
 
 @pytest.mark.asyncio
 async def test_worker_deletes_message_after_successful_dispatch() -> None:
@@ -265,7 +281,10 @@ async def test_worker_finishes_current_poll_then_stops_after_shutdown_request() 
   class StopAfterCurrentPollWorker(SQSAIJobWorker):
     poll_count = 0
 
-    async def poll_once(self) -> int:
+    async def poll_once(
+      self,
+      shutdown_requested: asyncio.Event | None = None,
+    ) -> int:
       self.poll_count += 1
       stop_event.set()
       return 0
