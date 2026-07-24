@@ -8,6 +8,10 @@ from app.core.errors import AppError
 from app.core.settings import Settings, get_settings
 from app.db.session import Database, database
 from app.services.ai_job_queue import build_sqs_client
+from app.services.ecs_task_protection import (
+  ECSTaskProtectionError,
+  ECSTaskScaleInProtector,
+)
 from app.services.notification_schema import ensure_notification_schema
 from app.workers.job_dispatcher import AIJobDispatcher, AIJobWorkerError, parse_ai_job_message
 
@@ -31,6 +35,7 @@ class SQSAIJobWorker:
     max_messages: int = DEFAULT_MAX_MESSAGES,
     wait_time_seconds: int = DEFAULT_WAIT_TIME_SECONDS,
     visibility_timeout_seconds: int | None = DEFAULT_VISIBILITY_TIMEOUT_SECONDS,
+    task_protector: ECSTaskScaleInProtector | None = None,
   ) -> None:
     self.settings = settings
     self.db = db
@@ -40,6 +45,7 @@ class SQSAIJobWorker:
     self.max_messages = max_messages
     self.wait_time_seconds = wait_time_seconds
     self.visibility_timeout_seconds = visibility_timeout_seconds
+    self.task_protector = task_protector or ECSTaskScaleInProtector()
 
     if not self.queue_url:
       raise AppError(
@@ -48,7 +54,10 @@ class SQSAIJobWorker:
         "SQS_AI_JOB_QUEUE_URL is required to run the AI job worker.",
       )
 
-  async def poll_once(self) -> int:
+  async def poll_once(
+    self,
+    shutdown_requested: asyncio.Event | None = None,
+  ) -> int:
     receive_kwargs = {
       "QueueUrl": self.queue_url,
       "MaxNumberOfMessages": self.max_messages,
@@ -64,8 +73,54 @@ class SQSAIJobWorker:
     )
     messages = response.get("Messages", [])
 
-    for raw_message in messages:
-      await self.handle_message(raw_message)
+    if not messages:
+      return 0
+
+    if shutdown_requested is not None and shutdown_requested.is_set():
+      logger.info(
+        "[aura:ai-job-worker] batch:deferred-after-shutdown messageCount=%s",
+        len(messages),
+      )
+      return len(messages)
+
+    try:
+      protection_enabled = await self.task_protector.enable()
+    except ECSTaskProtectionError:
+      logger.exception(
+        "[aura:ai-job-worker] task-protection:enable-failed messageCount=%s",
+        len(messages),
+      )
+      raise
+
+    try:
+      if shutdown_requested is not None and shutdown_requested.is_set():
+        logger.info(
+          "[aura:ai-job-worker] batch:deferred-after-protection messageCount=%s",
+          len(messages),
+        )
+        return len(messages)
+
+      if protection_enabled:
+        logger.info(
+          "[aura:ai-job-worker] task-protection:enabled messageCount=%s",
+          len(messages),
+        )
+
+      for raw_message in messages:
+        if shutdown_requested is not None and shutdown_requested.is_set():
+          logger.info(
+            "[aura:ai-job-worker] batch:remaining-deferred-after-shutdown",
+          )
+          break
+        await self.handle_message(raw_message)
+    finally:
+      if protection_enabled:
+        try:
+          await self.task_protector.disable()
+        except ECSTaskProtectionError:
+          logger.exception("[aura:ai-job-worker] task-protection:disable-failed")
+          raise
+        logger.info("[aura:ai-job-worker] task-protection:disabled")
 
     return len(messages)
 
@@ -113,7 +168,7 @@ class SQSAIJobWorker:
     shutdown_requested = stop_event or asyncio.Event()
 
     while not shutdown_requested.is_set():
-      await self.poll_once()
+      await self.poll_once(shutdown_requested)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -183,6 +238,9 @@ def main() -> None:
     logger.info("[aura:ai-job-worker] stopped")
   except AppError as exc:
     logger.error("%s: %s", exc.code, exc.message)
+    raise SystemExit(1) from exc
+  except ECSTaskProtectionError as exc:
+    logger.error("ECS_TASK_PROTECTION_FAILED: %s", exc)
     raise SystemExit(1) from exc
 
 

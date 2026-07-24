@@ -328,7 +328,7 @@ ECS task requirements:
 - Create the AI Worker ECS service with command `python -m app.workers.ai_job_worker`.
 - Create an SQS AI job queue and DLQ.
 - Attach API task role permission for `sqs:SendMessage` on the AI job queue.
-- Attach worker task role permissions for `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:ChangeMessageVisibility`, and `sqs:GetQueueAttributes`.
+- Attach worker task role permissions for `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:ChangeMessageVisibility`, `sqs:GetQueueAttributes`, `ecs:GetTaskProtection`, and `ecs:UpdateTaskProtection`; scope the ECS actions to Worker task ARNs in the selected cluster.
 - Attach shared S3/RDS/Secrets/Bedrock/OpenAI-related configuration to both API and worker services.
 - Attach execution role for pulling image and writing logs.
 - Configure API service desired count separately from worker desired count.

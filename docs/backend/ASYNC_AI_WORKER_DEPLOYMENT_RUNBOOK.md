@@ -117,14 +117,19 @@ source queue setting. The `--visibility-timeout-seconds` CLI option is an
 explicit operational override and must not silently diverge from this runbook.
 
 The five-minute `ApproximateAgeOfOldestMessage` CloudWatch alarm is an
-operational alert; it does not delete a message or invoke AI by itself. A
-message that is only waiting in SQS does not itself consume external-provider
-inference. Do not auto-delete it at five minutes because that loses user work.
-Instead, inspect Worker health and quotas, scale on queue depth, and fix the
-cause. Messages whose dispatch keeps failing because of malformed input, an
-uncaught exception, or an infrastructure crash move to the DLQ after three
-receives. Provider or application failures that a handler catches, records as a
-terminal database failure, and returns normally are deleted by the Worker;
+operational alert; it does not delete a message, stop a Worker, or invoke AI by
+itself. The age is for the oldest message that has not been deleted, so the
+message may be visible and waiting or invisible because a Worker already owns
+it. A visible message that is only waiting does not consume provider inference,
+but an in-flight message may already have an active Bedrock/OpenAI call. Treat
+the alarm as a symptom and inspect visible count, in-flight count, Worker logs,
+task stop reasons, and provider latency before deciding what happened.
+
+Do not auto-delete a message at five minutes because that loses user work.
+Messages whose dispatch keeps failing because of malformed input, an uncaught
+exception, or an infrastructure crash move to the DLQ after three receives.
+Provider or application failures that a handler catches, records as a terminal
+database failure, and returns normally are deleted by the Worker;
 `maxReceiveCount=3` is not three automatic external-AI retries.
 
 Audit the queue and DLQ without changing AWS:
@@ -214,6 +219,70 @@ bedrock:InvokeModel when Bedrock analysis/embedding is used
 logs:CreateLogStream / logs:PutLogEvents through the ECS execution role
 ```
 
+The Worker task role also needs these narrowly scoped ECS permissions:
+
+```text
+ecs:GetTaskProtection on arn:aws:ecs:<region>:<account>:task/<cluster>/*
+ecs:UpdateTaskProtection on arn:aws:ecs:<region>:<account>:task/<cluster>/*
+```
+
+Audit or apply the policy resolved from the active Worker service:
+
+```powershell
+# Read-only validation
+.\scripts\aws\configure_ai_worker_task_protection.ps1
+
+# Explicit mutation, followed by a read-back validation
+.\scripts\aws\configure_ai_worker_task_protection.ps1 -Apply
+```
+
+Apply IAM before deploying code that requires task protection. In dev, the API
+and Worker currently share a task role, but the policy resource is restricted
+to tasks in the selected cluster and only the Worker calls the ECS agent
+endpoint. Split the Worker onto a dedicated task role as a later least-privilege
+hardening step.
+
+For every non-empty SQS receive, the Worker uses this lifecycle:
+
+```text
+receive message
+-> enable ECS task scale-in protection (30-minute expiry)
+-> call the job handler and external AI provider
+-> persist the terminal result
+-> delete the SQS message
+-> disable task scale-in protection
+```
+
+At startup, the Worker detects ECS from `AWS_EXECUTION_ENV` or
+`ECS_CONTAINER_METADATA_URI_V4`. If ECS is detected but `ECS_AGENT_URI` is
+missing, startup fails before the first SQS receive. When the URI exists,
+protection remains fail-closed: if the agent does not confirm protection after
+bounded retries, the Worker does not call AI, does not delete the message, and
+exits so ECS can replace it. The message becomes available again after its
+visibility timeout. Outside ECS, where the runtime markers and
+`ECS_AGENT_URI` are absent, protection is skipped for local development and
+unit tests.
+
+Task protection prevents ECS Service Auto Scaling and rolling deployments from
+selecting the busy task for termination. It does not prevent a process crash,
+OOM, manual `StopTask`, Fargate infrastructure loss, or provider failure.
+`maxReceiveCount=3` bounds repeated receives and moves a persistently
+interrupted message to the DLQ instead of retrying forever. The dispatchers also
+skip terminal database jobs, so a message redelivered after a completed result
+does not call AI again.
+
+No queue can provide exactly-once execution across an external provider call
+and a database write. If a task dies after a provider accepts the request but
+before the terminal result is persisted, a later receive can still repeat that
+provider call. For job types or providers that support it, add a stable
+job-based provider idempotency key or a durable invocation ledger and enforce a
+per-job attempt/spend budget.
+
+The 30-minute protection expiry is finite so a dead Worker cannot stay
+protected forever. If any job can approach 30 minutes, add periodic protection
+renewal and `ChangeMessageVisibility` renewal before enabling that workload;
+task protection and SQS visibility are independent leases.
+
 Start with:
 
 ```text
@@ -292,11 +361,12 @@ Recommended order:
 2. Deploy FastAPI API service with `AI_JOB_EXECUTION_MODE=inline`.
 3. Confirm mobile API path through CloudFront/API Gateway or ALB.
 4. Run `configure_ai_job_queue.ps1 -Apply`. If source attachment is pending, wait and rerun with `-Apply`; then rerun without `-Apply` to verify the source queue, DLQ, and redrive policy.
-5. Deploy AI Worker ECS service with desired count `2`.
-6. Change FastAPI API service to `AI_JOB_EXECUTION_MODE=sqs`.
-7. Run an analysis job and watch job status move through `pending -> processing -> completed`.
-8. Add S3 ObjectCreated trigger for media postprocess Lambda.
-9. Upload an image and confirm thumbnail object creation.
+5. Run `configure_ai_worker_task_protection.ps1 -Apply`, then rerun it without `-Apply` and require `STATUS=VALIDATED`.
+6. Deploy AI Worker ECS service with desired count `2`.
+7. Change FastAPI API service to `AI_JOB_EXECUTION_MODE=sqs`.
+8. Run an analysis job and watch job status move through `pending -> processing -> completed`.
+9. Add S3 ObjectCreated trigger for media postprocess Lambda.
+10. Upload an image and confirm thumbnail object creation.
 
 This order keeps the API usable while the queue and worker are being attached.
 
@@ -305,7 +375,7 @@ This order keeps the API usable while the queue and worker are being attached.
 From `services/backend`, run before deployment:
 
 ```powershell
-python -m pytest tests/test_ai_job_queue.py tests/test_ai_job_worker.py tests/test_media_postprocess_lambda.py -q
+python -m pytest tests/test_ai_job_queue.py tests/test_ai_job_worker.py tests/test_ai_job_worker_task_protection.py tests/test_media_postprocess_lambda.py -q
 python -m pytest tests/test_ai_job_queue_infra.py tests/test_ai_job_queue_script_runtime.py tests/test_worker_capacity_tool.py -q
 python -m pytest tests/test_settings_and_services.py tests/test_setup_status.py -q
 python -m pytest tests/test_route_contract.py tests/test_export_openapi.py tests/test_validation_contract.py -q
@@ -376,7 +446,11 @@ spend guard; changing SQS retention does not cap inference spend.
 
 The scale-in alarm removes only one Worker after visible and in-flight messages
 have both remained at zero for 15 minutes. Its 900-second cooldown and the
-two-Worker minimum prevent rapid scale-in and scale-out churn.
+two-Worker minimum reduce rapid scale-in and scale-out churn. They do not by
+themselves eliminate a race with delayed SQS metrics: a Worker can receive a
+new message after the most recent empty datapoint but before ECS applies a
+scale-in decision. Task scale-in protection on each busy Worker is the
+authoritative defense for that race.
 
 Review the measured-duration capacity scenarios before applying the policy. The
 calculator deterministically assigns the measured per-job p95 duration to every

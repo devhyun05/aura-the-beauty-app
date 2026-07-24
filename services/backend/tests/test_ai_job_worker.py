@@ -281,7 +281,10 @@ async def test_worker_finishes_current_poll_then_stops_after_shutdown_request() 
   class StopAfterCurrentPollWorker(SQSAIJobWorker):
     poll_count = 0
 
-    async def poll_once(self) -> int:
+    async def poll_once(
+      self,
+      shutdown_requested: asyncio.Event | None = None,
+    ) -> int:
       self.poll_count += 1
       stop_event.set()
       return 0
