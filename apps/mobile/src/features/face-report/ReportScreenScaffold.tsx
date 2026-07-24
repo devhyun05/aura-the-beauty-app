@@ -282,10 +282,12 @@ function StoryContentCard({
 
 function ReportCoverPage({
   pageId,
+  photoUri,
   registerCaptureTarget,
   section,
 }: {
   pageId: string;
+  photoUri?: string | null;
   registerCaptureTarget: (
     pageId: string,
     target: ReportPageCaptureTarget | null,
@@ -304,7 +306,11 @@ function ReportCoverPage({
         )
       }
       style={{flex: 1}}>
-      <ReportSectionCover reportCover section={section} />
+      <ReportSectionCover
+        reportCover
+        reportPhotoUri={photoUri}
+        section={section}
+      />
     </View>
   );
 }
@@ -878,6 +884,7 @@ export const ReportScreenScaffold = React.forwardRef<
       render: (
         <ReportCoverPage
           pageId={REPORT_COVER_PAGE_ID}
+          photoUri={data.s1.photo.uri ?? null}
           registerCaptureTarget={registerCaptureTarget}
           section={summarySection}
         />

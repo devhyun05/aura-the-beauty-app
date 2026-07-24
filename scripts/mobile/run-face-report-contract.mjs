@@ -36,6 +36,9 @@ const shareSource = source(
 const scaffoldSource = source(
   'apps/mobile/src/features/face-report/ReportScreenScaffold.tsx',
 );
+const reportCoverSource = source(
+  'apps/mobile/src/features/face-report/components/ReportSectionCover.tsx',
+);
 const previewSource = source(
   'apps/mobile/src/features/face-report/screens/FaceAnalysisReportPreviewScreen.tsx',
 );
@@ -92,6 +95,15 @@ requireAll(scaffoldSource, [
   'scrollRef.current?.scrollTo({animated: false, y: 0})',
   'entryResetKey',
 ], 'report scaffold progress, capture, restore, and scroll reset');
+requireAll(scaffoldSource, [
+  'photoUri={data.s1.photo.uri ?? null}',
+  'reportPhotoUri={photoUri}',
+], 'captured user photo wiring for report cover');
+requireAll(reportCoverSource, [
+  'reportCover && reportPhotoUri',
+  '? {uri: reportPhotoUri}',
+  '? COVER_IMAGES.summary',
+], 'captured user photo report cover with legacy fallback');
 requireContract(
   !scaffoldSource.includes('function ReportCompletionStepper('),
   'report progress must use the compact non-spinner status treatment',

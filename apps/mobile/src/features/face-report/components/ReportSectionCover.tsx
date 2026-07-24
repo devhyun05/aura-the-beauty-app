@@ -14,14 +14,19 @@ const COVER_IMAGES: Record<FaceReportStorySection['id'], ImageSourcePropType> = 
 
 export function ReportSectionCover({
   reportCover = false,
+  reportPhotoUri,
   section,
 }: {
   reportCover?: boolean;
+  reportPhotoUri?: string | null;
   section: FaceReportStorySection;
 }) {
-  const coverImage = reportCover
-    ? COVER_IMAGES.summary
-    : COVER_IMAGES[section.id];
+  const coverImage: ImageSourcePropType =
+    reportCover && reportPhotoUri
+      ? {uri: reportPhotoUri}
+      : reportCover
+        ? COVER_IMAGES.summary
+        : COVER_IMAGES[section.id];
   const eyebrowLead = reportCover ? 'REPORT' : section.number;
   const englishTitle = reportCover ? 'AURA' : section.englishTitle;
   const koreanTitle = reportCover ? '얼굴 분석 보고서' : section.koreanTitle;
@@ -32,7 +37,7 @@ export function ReportSectionCover({
       accessibilityLabel={
         reportCover ? 'AURA 얼굴 분석 보고서 표지' : `${section.koreanTitle} 섹션 표지`
       }
-      imageStyle={{opacity: 0.94}}
+      imageStyle={{opacity: reportCover && reportPhotoUri ? 1 : 0.94}}
       resizeMode="cover"
       source={coverImage}
       style={{flex: 1}}>
