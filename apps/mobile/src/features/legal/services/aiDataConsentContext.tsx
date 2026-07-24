@@ -27,6 +27,13 @@ type AiDataConsentContextValue = {
 
 const AiDataConsentContext = createContext<AiDataConsentContextValue | null>(null);
 
+function shouldBypassAiDataConsentForLocalDeviceTest(): boolean {
+  return (
+    process.env.EXPO_PUBLIC_DEV_AUTH_ENABLED === 'true' &&
+    process.env.EXPO_PUBLIC_AI_DATA_CONSENT_BYPASS === 'true'
+  );
+}
+
 export function AiDataConsentProvider({children}: {children: ReactNode}) {
   const {session} = useAuthSession();
   const [consent, setConsent] = useState<AiDataConsentState | null>(null);
@@ -57,6 +64,12 @@ export function AiDataConsentProvider({children}: {children: ReactNode}) {
   }, [resolvePending, userId]);
 
   const requestAiDataConsent = useCallback(async () => {
+    // Local physical-device fast path. Both flags must be set explicitly so
+    // shared and production builds retain the consent flow by default.
+    if (shouldBypassAiDataConsentForLocalDeviceTest()) {
+      return true;
+    }
+
     if (!userId) {
       return false;
     }
