@@ -172,7 +172,9 @@ export interface RegionCardData {
   // 부위 근거·인사이트·조언(P2). 값이 없으면 컴포넌트가 paragraph로 폴백.
   insight?: string;
   evidence?: string;
-  recommendation?: string;
+  // 부위별 메이크업 팁 — 항목별로 분리된 배열이라야 각 팁이 별도 문단으로
+  // 렌더된다(하나의 문자열로 이어붙이면 여러 팁이 한 덩어리로 읽힌다).
+  recommendation?: string[];
   paragraph: string;
   // 이 부위와 관련된 AI 인사이트 전체(압축 없이) — 실제 분석 리포트에서만 채워짐.
   insightItems?: InsightItemData[];

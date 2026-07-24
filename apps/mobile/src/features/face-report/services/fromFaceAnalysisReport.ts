@@ -727,14 +727,15 @@ const MAKEUP_RECOMMENDATION_FIELDS: Record<
 function buildRegionRecommendation(
   key: 'upper' | 'mid' | 'lower' | 'jaw',
   makeupGuideline: FaceAnalysisMakeupGuideline | undefined,
-): string {
+): string[] {
   if (!makeupGuideline) {
-    return '';
+    return [];
   }
+  // 필드별로 분리된 배열로 반환한다 — 문자열 하나로 이어붙이면 브로우·아이섀도·
+  // 아이라이너 팁이 문단 구분 없이 한 덩어리로 읽힌다(가독성 저하).
   return MAKEUP_RECOMMENDATION_FIELDS[key]
     .map(field => makeupGuideline[field])
-    .filter(Boolean)
-    .join(' ');
+    .filter(Boolean);
 }
 
 function hasGeometryMetric(
@@ -1258,7 +1259,7 @@ function buildS3(
     const recommendation = buildRegionRecommendation(key, makeupGuideline);
     const descriptors = featureDescriptors ? featureDescriptors[key] : [];
     const hasNarrative = Boolean(
-      insight || evidence || recommendation || descriptors.length || insightItems.length,
+      insight || evidence || recommendation.length || descriptors.length || insightItems.length,
     );
     if (measurementItems.length === 0 && !hasNarrative) {
       return [];

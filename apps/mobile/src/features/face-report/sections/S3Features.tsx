@@ -190,10 +190,17 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
           </Text>
         </View>
       ) : null}
-      {card.recommendation ? (
-        <Text style={[font(12.5, '600', 1.6), {color: color.accentInk}]}>
-          메이크업 · {card.recommendation}
-        </Text>
+      {card.recommendation && card.recommendation.length > 0 ? (
+        <View style={{gap: 6}}>
+          <Text style={[font(11, '800'), {color: color.faint}]}>메이크업 팁</Text>
+          {card.recommendation.map((tip, index) => (
+            <Text
+              key={`${index}-${tip}`}
+              style={[font(12.5, '600', 1.6), {color: color.accentInk}]}>
+              {tip}
+            </Text>
+          ))}
+        </View>
       ) : null}
       {card.measurementItems && card.measurementItems.length > 0 ? (
         <View
