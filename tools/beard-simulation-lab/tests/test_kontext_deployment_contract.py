@@ -55,7 +55,7 @@ def test_shipping_kontext_uses_approved_prompt_and_settings() -> None:
     source = RUN_KONTEXT.read_text(encoding="utf-8")
     assignments = _module_assignments(source)
 
-    assert assignments["PROMPT_VERSION"] == "beard-removal-identity-preserving-2026-07-24"
+    assert assignments["PROMPT_VERSION"] == "beard-removal-identity-preserving-2026-07-25-v2"
     assert assignments["GUIDANCE"] == 2.5
     assert assignments["STEPS"] == 28
     assert assignments["DEFAULT_SEED"] == 0
@@ -63,7 +63,10 @@ def test_shipping_kontext_uses_approved_prompt_and_settings() -> None:
     assert assignments["_COLOR_STRENGTH"] == 1.0
 
     assert assignments["PROMPT"] == (
-        "Remove only the mustache and all chin and jaw stubble, leaving original skin. "
+        "Retouch only the lower face to a freshly shaved appearance. "
+        "Replace dark gray or black speckles and shadows on the upper lip, chin, cheeks, and jaw "
+        "with natural skin texture and tone matching the surrounding face. "
+        "Leave no dark hair-shaped marks in those areas. "
         "Keep the eyebrows unchanged. "
         "Same person, same eyes, same eyebrows, same lips, same moles, same lighting, same background."
     )
@@ -90,7 +93,7 @@ def test_shipping_kontext_uses_bounded_face_skin_color_correction() -> None:
     assert "alpha *= face_skin.astype(np.float32)" in source
     assert "out_rgb.astype(np.float32) * (1.0 - alpha[..., None])" in source
     assert "res = _color(res, img)" in source
-    assert "def load_pipe(compile=True)" in source
+    assert "def load_pipe(compile=False)" in source
     assert "def infer(" in source
     assert "space_compat=True" in source
     assert "selected_seed = DEFAULT_SEED if seed is None else seed" in source
