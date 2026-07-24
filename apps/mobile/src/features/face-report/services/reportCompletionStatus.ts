@@ -73,9 +73,11 @@ export function resolveReportCompletionStatus(
       data.generationStatus,
   );
   const generationFailed = data.generationStatus === 'failed';
+  const coreState: ReportCompletionStageState =
+    !data.s2 || data.s2.hairlineMissing ? 'partial' : 'complete';
 
   const stages: ReportCompletionStage[] = [
-    {key: 'core', label: '기본 분석', state: 'complete'},
+    {key: 'core', label: '기본 분석', state: coreState},
     {
       key: 'narrative',
       label: '얼굴 해석',

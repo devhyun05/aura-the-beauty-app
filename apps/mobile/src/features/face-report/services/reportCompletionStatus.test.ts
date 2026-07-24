@@ -16,7 +16,7 @@ function report(
     reportId: 'report-status-test',
     topBarTitle: '얼굴 분석 보고서',
     s1: {} as ReportData['s1'],
-    s2: null,
+    s2: {hairlineMissing: false} as ReportData['s2'],
     s3: null,
     s4: null,
     s5: null,
@@ -90,6 +90,46 @@ expectEqual(
   'completed report says it is complete',
 );
 expectEqual(complete.complete, true, 'terminal stages complete the report');
+
+const partialCore = resolveReportCompletionStatus(
+  report({
+    s2: {hairlineMissing: true} as ReportData['s2'],
+    contentStatus: {
+      narrativeStatus: 'completed',
+      stylingStatus: 'completed',
+    },
+  }),
+);
+expectEqual(
+  partialCore.stages[0]?.state,
+  'partial',
+  'missing vertical-ratio anchor keeps core analysis partial',
+);
+expectEqual(
+  partialCore.complete,
+  false,
+  'partial vertical-ratio measurement is not labelled fully complete',
+);
+
+const missingCore = resolveReportCompletionStatus(
+  report({
+    s2: null,
+    contentStatus: {
+      narrativeStatus: 'completed',
+      stylingStatus: 'completed',
+    },
+  }),
+);
+expectEqual(
+  missingCore.stages[0]?.state,
+  'partial',
+  'missing proportion section keeps core analysis partial',
+);
+expectEqual(
+  missingCore.complete,
+  false,
+  'missing proportion section is not labelled fully complete',
+);
 
 const fallbackComplete = resolveReportCompletionStatus(
   report({

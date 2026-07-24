@@ -147,7 +147,10 @@ export function resolveStillAnalysisCapture(
       : null,
     imageUri: pendingCapture.image.uri,
     photoCaptureId: pendingCapture.captureId,
-    semanticMattes: undefined,
+    // Unified capture persists an ARFrame as a plain JPEG, so it cannot contain
+    // Apple auxiliary semantic mattes. Its synchronized `hairline` result is the
+    // authoritative source; do not run the impossible embedded-matte fallback.
+    semanticMattes: {hair: false, requested: false, skin: false},
   };
 }
 
