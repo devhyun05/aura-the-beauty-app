@@ -44,11 +44,11 @@ export function ReportSectionCover({
       <View style={{flex: 1, paddingHorizontal: 27, paddingTop: 31, paddingBottom: 28, justifyContent: 'space-between'}}>
         <View style={{alignItems: 'flex-start'}}>
           <View style={{flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 18}}>
-            <Text style={{fontFamily: 'Pretendard', fontSize: 11, fontWeight: '800', color: '#FFFFFF', letterSpacing: 2.1}}>
+            <Text style={{fontFamily: 'Pretendard', fontSize: 13, fontWeight: '800', color: '#FFFFFF', letterSpacing: 2.1}}>
               {eyebrowLead}
             </Text>
             <View style={{height: 1, width: 42, backgroundColor: 'rgba(255,255,255,0.75)'}} />
-            <Text style={{fontFamily: 'Pretendard', fontSize: 9.5, fontWeight: '700', color: 'rgba(255,255,255,0.84)', letterSpacing: 1.45}}>
+            <Text style={{fontFamily: 'Pretendard', fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.84)', letterSpacing: 1.45}}>
               FACE ANALYSIS
             </Text>
           </View>
@@ -65,7 +65,7 @@ export function ReportSectionCover({
           <View style={{height: 3, width: 30, borderRadius: 2, backgroundColor: section.accent, marginTop: 18}} />
         </View>
         <View style={{alignSelf: 'flex-start', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.58)', paddingTop: 10, minWidth: 156}}>
-          <Text style={{fontFamily: 'Lora', fontSize: 10.5, color: 'rgba(255,255,255,0.9)', letterSpacing: 1.4}}>
+          <Text style={{fontFamily: 'Lora', fontSize: 12, color: 'rgba(255,255,255,0.9)', letterSpacing: 1.4}}>
             YOUR BEAUTY, DECODED
           </Text>
         </View>

@@ -154,6 +154,8 @@ requireAll(loadingSource, [
 
 // 순수(RN 무의존) 파일만 나열한다.
 const entries = [
+  'face-report/reportTokens.ts',
+  'face-report/reportTokens.test.ts',
   'face-report/reportFormat.ts',
   'face-report/reportFormat.test.ts',
   'face-ratio/verticalThirdsDisplayGeometry.ts',
@@ -207,6 +209,7 @@ run(process.execPath, [
 ]);
 
 run(process.execPath, [join(outDir, 'features/face-report/reportFormat.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/reportTokens.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-ratio/verticalThirdsDisplayGeometry.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/reportFeatureAxes.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/reportStoryModel.test.js')]);

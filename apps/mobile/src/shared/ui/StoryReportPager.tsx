@@ -311,7 +311,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                     style={{
                       color: selected ? INK : MUTED,
                       fontFamily: 'Pretendard',
-                      fontSize: 13,
+                      fontSize: 15,
                       fontWeight: selected ? '800' : '500',
                     }}>
                     {section.shortTitle ?? section.title}
@@ -357,7 +357,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                       borderRadius: 9,
                       flex: 1,
                       justifyContent: 'center',
-                      minHeight: 30,
+                      minHeight: 38,
                       opacity: pressed ? 0.55 : 1,
                       paddingHorizontal: 3,
                     })}>
@@ -366,7 +366,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                       style={{
                         color: selected ? INK : MUTED,
                         fontFamily: 'Pretendard',
-                        fontSize: 10.5,
+                        fontSize: 12,
                         fontWeight: selected ? '800' : '600',
                       }}>
                       {page.shortTitle ?? (page.kind === 'cover' ? '표지' : page.title)}
@@ -462,7 +462,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
               style={{
                 color: INK,
                 fontFamily: 'Pretendard',
-                fontSize: 12.5,
+                fontSize: 14,
                 fontWeight: '800',
                 maxWidth: 150,
               }}>
@@ -472,7 +472,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
               style={{
                 color: MUTED,
                 fontFamily: 'Pretendard',
-                fontSize: 10.5,
+                fontSize: 12,
                 fontWeight: '700',
               }}>
               {currentIndex + 1} / {pages.length}
@@ -519,10 +519,10 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
               }}>
               <View style={{alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between'}}>
                 <View>
-                  <Text style={{color: INK, fontFamily: 'Pretendard', fontSize: 20, fontWeight: '800'}}>
+                  <Text style={{color: INK, fontFamily: 'Pretendard', fontSize: 22, fontWeight: '800'}}>
                     보고서 목차
                   </Text>
-                  <Text style={{color: MUTED, fontFamily: 'Pretendard', fontSize: 12, marginTop: 3}}>
+                  <Text style={{color: MUTED, fontFamily: 'Pretendard', fontSize: 14, marginTop: 3}}>
                     원하는 카드로 바로 이동하세요
                   </Text>
                 </View>
@@ -547,7 +547,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                 showsVerticalScrollIndicator={false}>
                 {sections.filter(section => section.pageIds.length > 0).map(section => (
                   <View key={section.id} style={{gap: 8}}>
-                    <Text style={{color: INK, fontFamily: 'Pretendard', fontSize: 13, fontWeight: '800'}}>
+                    <Text style={{color: INK, fontFamily: 'Pretendard', fontSize: 15, fontWeight: '800'}}>
                       {section.title}
                     </Text>
                     <View style={{gap: 6}}>
@@ -569,7 +569,7 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                               backgroundColor: selected ? '#E8F1F4' : '#FFFFFF',
                               borderRadius: 14,
                               flexDirection: 'row',
-                              minHeight: 48,
+                              minHeight: 52,
                               opacity: pressed ? 0.64 : 1,
                               paddingHorizontal: 14,
                             })}>
@@ -578,12 +578,12 @@ export const StoryReportPager = forwardRef<StoryReportPagerRef, StoryReportPager
                                 color: selected ? INK : MUTED,
                                 flex: 1,
                                 fontFamily: 'Pretendard',
-                                fontSize: 13,
+                                fontSize: 15,
                                 fontWeight: selected ? '800' : '600',
                               }}>
                               {page.title}
                             </Text>
-                            <Text style={{color: MUTED, fontFamily: 'Pretendard', fontSize: 11}}>
+                            <Text style={{color: MUTED, fontFamily: 'Pretendard', fontSize: 13}}>
                               {(pageIndexById.get(page.id) ?? 0) + 1}
                             </Text>
                           </Pressable>

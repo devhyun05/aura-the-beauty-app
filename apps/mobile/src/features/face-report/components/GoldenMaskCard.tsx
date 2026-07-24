@@ -423,20 +423,20 @@ const styles = StyleSheet.create({
   description: {
     color: color.text,
     fontFamily: 'Pretendard',
-    fontSize: 12.5,
-    lineHeight: 19,
+    fontSize: 14,
+    lineHeight: 21,
   },
   eyebrow: {
     color: color.accentDeep,
     fontFamily: 'Pretendard',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     letterSpacing: 1.1,
   },
   hint: {
     color: color.muted,
     fontFamily: 'Pretendard',
-    fontSize: 11,
+    fontSize: 13,
     paddingBottom: 16,
     textAlign: 'center',
   },
@@ -477,7 +477,7 @@ const styles = StyleSheet.create({
   meshToggleText: {
     color: color.ink,
     fontFamily: 'Pretendard',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
   },
   meshToggleTextActive: {
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
   proofBadgeText: {
     color: 'rgba(255,255,255,0.86)',
     fontFamily: 'Pretendard',
-    fontSize: 8.5,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.8,
   },
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
   retryText: {
     color: color.white,
     fontFamily: 'Pretendard',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
   },
   root: {
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
   sourcePhotoLabel: {
     color: 'rgba(255,255,255,0.9)',
     fontFamily: 'Pretendard',
-    fontSize: 9.5,
+    fontSize: 12,
     fontWeight: '700',
     textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: {height: 1, width: 0},
@@ -553,8 +553,8 @@ const styles = StyleSheet.create({
   stateDescription: {
     color: color.text,
     fontFamily: 'Pretendard',
-    fontSize: 11.5,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 20,
     maxWidth: 220,
     textAlign: 'center',
   },
@@ -569,17 +569,17 @@ const styles = StyleSheet.create({
   stateTitle: {
     color: color.ink,
     fontFamily: 'Pretendard',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     marginTop: 4,
   },
   title: {
     color: color.ink,
     fontFamily: 'Pretendard',
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.3,
-    lineHeight: 28,
+    lineHeight: 30,
   },
   unityView: {
     ...StyleSheet.absoluteFill,
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
   summaryGestureText: {
     color: 'rgba(255,255,255,0.76)',
     fontFamily: 'Pretendard',
-    fontSize: 9.5,
+    fontSize: 12,
     fontWeight: '600',
   },
   summaryProof: {
@@ -606,7 +606,7 @@ const styles = StyleSheet.create({
   summaryProofText: {
     color: 'rgba(156,201,219,0.92)',
     fontFamily: 'Pretendard',
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.8,
     textAlign: 'center',

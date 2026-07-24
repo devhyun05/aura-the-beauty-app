@@ -184,12 +184,12 @@ function ReportCompletionIndicator({
                 borderWidth: 1,
                 flex: 1,
                 gap: 4,
-                minHeight: 48,
+                minHeight: 56,
                 paddingHorizontal: 7,
                 paddingVertical: 6,
               }}>
               <Text
-                numberOfLines={1}
+                numberOfLines={2}
                 style={[font(10.5, '700', 1.25), {color: color.ink}]}>
                 {stage.label}
               </Text>
