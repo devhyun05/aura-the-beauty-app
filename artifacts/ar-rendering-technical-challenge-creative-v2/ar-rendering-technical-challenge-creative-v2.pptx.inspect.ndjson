@@ -1,0 +1,87 @@
+{"kind":"deck","id":"pr/h6olf8","name":"Deck"}
+{"kind":"layout","layoutId":"e03fc5ee-0422-4211-85ef-e26e63b2ab79","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"5285ce86-3c06-443f-ae63-2feb57c8b4ba","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/4sp24d","slide":1,"title":"TECHNICAL CHALLENGE  ·  AR MAKEUP","textShapes":19}
+{"kind":"textbox","id":"sh/bal0relg","slide":1,"name":"eyebrow-1","text":"TECHNICAL CHALLENGE  ·  AR MAKEUP","textPreview":"TECHNICAL CHALLENGE  ·  AR MAKEUP","textChars":33,"textLines":1,"bbox":[64,42,400,22]}
+{"kind":"textbox","id":"sh/wbuh0j21","slide":1,"name":"page-1","text":"1 / 2","textPreview":"1 / 2","textChars":5,"textLines":1,"bbox":[1140,694,76,15]}
+{"kind":"textbox","id":"sh/xc3ito3m","slide":1,"name":"s1-title","text":"자연스러움은 세 오차가 같은 순간에 맞을 때 생깁니다","textPreview":"자연스러움은 세 오차가 같은 순간에 맞을 때 생깁니다","textChars":29,"textLines":1,"bbox":[64,78,1120,58]}
+{"kind":"textbox","id":"sh/ydcz2tk7","slide":1,"name":"s1-subtitle","text":"움직임의 시각, 입술의 실제 경계, 원본의 명암 구조를 한 프레임 안에서 함께 보정했습니다.","textPreview":"움직임의 시각, 입술의 실제 경계, 원본의 명암 구조를 한 프레임 안에서 함께 보정했습니다.","textChars":51,"textLines":1,"bbox":[64,146,1090,31]}
+{"kind":"shape","id":"sh/jyl0vyls","slide":1,"name":"s1-image-shadow","bbox":[78,218,378,384]}
+{"kind":"shape","id":"sh/l0nixo3i","slide":1,"name":"s1-fullface-outline","bbox":[64,204,378,384]}
+{"kind":"textbox","id":"sh/ehszqp4n","slide":1,"name":"s1-image-caption","text":"실시간 얼굴 · 랜드마크 · 메이크업","textPreview":"실시간 얼굴 · 랜드마크 · 메이크업","textChars":20,"textLines":1,"bbox":[64,599,378,20]}
+{"kind":"shape","id":"sh/z210jul8","slide":1,"name":"s1-callout-a-0","bbox":[432,274,62,0]}
+{"kind":"shape","id":"sh/j6pg7i9g","slide":1,"name":"s1-callout-b-0","bbox":[494,257,0,17]}
+{"kind":"shape","id":"sh/i5gzedsv","slide":1,"name":"s1-callout-c-0","bbox":[494,257,42,0]}
+{"kind":"shape","id":"sh/587y9srm","slide":1,"name":"s1-callout-a-1","bbox":[432,404,62,0]}
+{"kind":"shape","id":"sh/k7yhgna1","slide":1,"name":"s1-callout-b-1","bbox":[494,387,0,17]}
+{"kind":"shape","id":"sh/v25g3i9k","slide":1,"name":"s1-callout-c-1","bbox":[494,387,42,0]}
+{"kind":"shape","id":"sh/a1wzadsz","slide":1,"name":"s1-callout-a-2","bbox":[432,534,62,0]}
+{"kind":"shape","id":"sh/x47y5sra","slide":1,"name":"s1-callout-b-2","bbox":[494,517,0,17]}
+{"kind":"shape","id":"sh/w3yhcna5","slide":1,"name":"s1-callout-c-2","bbox":[494,517,42,0]}
+{"kind":"shape","id":"sh/ne5gzy98","slide":1,"name":"s1-anchor-0","bbox":[426,268,12,12]}
+{"kind":"shape","id":"sh/mdwz6tsn","slide":1,"name":"s1-num-bg-0","bbox":[536,220,50,50]}
+{"kind":"textbox","id":"sh/q9czitcv","slide":1,"name":"s1-num-0","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[536,233,50,24]}
+{"kind":"textbox","id":"sh/bal0byd0","slide":1,"name":"s1-label-0","text":"움직임·잔상","textPreview":"움직임·잔상","textChars":6,"textLines":1,"bbox":[606,221,210,22]}
+{"kind":"textbox","id":"sh/cbuhk3ul","slide":1,"name":"s1-callout-title-0","text":"화면과 좌표의 촬영 시각을 맞춘다","textPreview":"화면과 좌표의 촬영 시각을 맞춘다","textChars":18,"textLines":1,"bbox":[606,248,560,30]}
+{"kind":"textbox","id":"sh/dcnid8v6","slide":1,"name":"s1-callout-body-0","text":"같은 시각의 화면·좌표를 선택하고, 중간 위치를 보간해 급격한 변화를 완화","textPreview":"같은 시각의 화면·좌표를 선택하고, 중간 위치를 보간해 급격한 변화를 완화","textChars":41,"textLines":1,"bbox":[606,288,566,42]}
+{"kind":"shape","id":"sh/ydwzmdcr","slide":1,"name":"s1-callout-rule-0","bbox":[536,335,636,0]}
+{"kind":"shape","id":"sh/zy50fidc","slide":1,"name":"s1-anchor-1","bbox":[426,398,12,12]}
+{"kind":"shape","id":"sh/0zehonux","slide":1,"name":"s1-num-bg-1","bbox":[536,350,50,50]}
+{"kind":"textbox","id":"sh/l0nih8bi","slide":1,"name":"s1-num-1","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[536,363,50,24]}
+{"kind":"textbox","id":"sh/m1wjqdcn","slide":1,"name":"s1-label-1","text":"입술 경계","textPreview":"입술 경계","textChars":5,"textLines":1,"bbox":[606,351,210,22]}
+{"kind":"textbox","id":"sh/n250jit8","slide":1,"name":"s1-callout-title-1","text":"기준점 너머 실제 입술 끝선을 찾는다","textPreview":"기준점 너머 실제 입술 끝선을 찾는다","textChars":20,"textLines":1,"bbox":[606,378,560,30]}
+{"kind":"textbox","id":"sh/h8bu5gjm","slide":1,"name":"s1-callout-body-1","text":"기본 형태를 잡은 뒤 약 120방향으로 경계를 재탐색하고 입 안 영역은 제외","textPreview":"기본 형태를 잡은 뒤 약 120방향으로 경계를 재탐색하고 입 안 영역은 제외","textChars":42,"textLines":1,"bbox":[606,418,566,42]}
+{"kind":"shape","id":"sh/w7itwbi1","slide":1,"name":"s1-callout-rule-1","bbox":[536,465,636,0]}
+{"kind":"shape","id":"sh/v69c361w","slide":1,"name":"s1-anchor-2","bbox":[426,528,12,12]}
+{"kind":"shape","id":"sh/u50bu10b","slide":1,"name":"s1-num-bg-2","bbox":[536,480,50,50]}
+{"kind":"textbox","id":"sh/5cbu9gzy","slide":1,"name":"s1-num-2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[536,493,50,24]}
+{"kind":"textbox","id":"sh/4b2t0vid","slide":1,"name":"s1-label-2","text":"색·질감","textPreview":"색·질감","textChars":4,"textLines":1,"bbox":[606,481,210,22]}
+{"kind":"textbox","id":"sh/jatc7q1s","slide":1,"name":"s1-callout-title-2","text":"색을 덮지 않고 원본 명암을 남긴다","textPreview":"색을 덮지 않고 원본 명암을 남긴다","textChars":19,"textLines":1,"bbox":[606,508,560,30]}
+{"kind":"textbox","id":"sh/i9kbyl07","slide":1,"name":"s1-callout-body-2","text":"원본 밝기·주름·광택을 선택한 립 컬러에 반영하고 경계만 부드럽게 처리","textPreview":"원본 밝기·주름·광택을 선택한 립 컬러에 반영하고 경계만 부드럽게 처리","textChars":39,"textLines":1,"bbox":[606,548,566,42]}
+{"kind":"shape","id":"sh/d0vud0zu","slide":1,"name":"s1-conclusion-line","bbox":[64,648,1152,0]}
+{"kind":"textbox","id":"sh/sz2t4vi9","slide":1,"name":"s1-conclusion-key","text":"같은 시각  ×  실제 경계  ×  원본 명암","textPreview":"같은 시각  ×  실제 경계  ×  원본 명암","textChars":25,"textLines":1,"bbox":[64,663,570,32]}
+{"kind":"textbox","id":"sh/ov6xcz2h","slide":1,"name":"s1-conclusion-body","text":"세 조건이 함께 맞아야 화장이 얼굴에 붙어 보입니다.","textPreview":"세 조건이 함께 맞아야 화장이 얼굴에 붙어 보입니다.","textChars":29,"textLines":1,"bbox":[648,666,568,27]}
+{"kind":"image","id":"im/hs329sfu","slide":1,"name":"","geometry":"roundRect","alt":"랜드마크와 AR 메이크업이 함께 보이는 실시간 얼굴 화면","bbox":[64,204,378,384]}
+{"kind":"notes","id":"nt/4sp24d","slide":1,"text":"자연스러움을 깨는 원인은 하나가 아니라 시각, 경계, 명암의 세 오차입니다.\n세 보정을 같은 프레임에서 적용해야 밀림, 번짐, 평면감을 함께 줄일 수 있습니다.\n\n[Sources]\n- /Users/yeoduchi/302-group5-final-project/docs/unity-ar/glam2-refs/ours-glam-fullface.png\n- /var/folders/bl/w00rm3lj0wsfm0l8t26rkd980000gn/T/TemporaryItems/NSIRD_screencaptureui_8rfjM6/스크린샷 2026-07-25 오전 1.48.05.png\n[/Sources]"}
+{"kind":"slide","id":"sl/mjkwn3","slide":2,"title":"RESULT  ·  NATURALNESS","textShapes":25}
+{"kind":"textbox","id":"sh/gruts3qd","slide":2,"name":"eyebrow-2","text":"RESULT  ·  NATURALNESS","textPreview":"RESULT  ·  NATURALNESS","textChars":22,"textLines":1,"bbox":[64,42,400,22]}
+{"kind":"textbox","id":"sh/fqlczy98","slide":2,"name":"page-2","text":"2 / 2","textPreview":"2 / 2","textChars":5,"textLines":1,"bbox":[1140,694,76,15]}
+{"kind":"textbox","id":"sh/upcbqtsn","slide":2,"name":"s2-title","text":"세 보정이 합쳐지자 화장이 얼굴에 붙었습니다","textPreview":"세 보정이 합쳐지자 화장이 얼굴에 붙었습니다","textChars":24,"textLines":1,"bbox":[64,78,1080,58]}
+{"kind":"textbox","id":"sh/to3axor2","slide":2,"name":"s2-subtitle","text":"립 컬러의 명암을 되살리고, 그 결과를 실시간 얼굴 위에서 안정적으로 유지했습니다.","textPreview":"립 컬러의 명암을 되살리고, 그 결과를 실시간 얼굴 위에서 안정적으로 유지했습니다.","textChars":46,"textLines":1,"bbox":[64,146,1030,31]}
+{"kind":"textbox","id":"sh/snutojah","slide":2,"name":"s2-before-kicker","text":"BEFORE","textPreview":"BEFORE","textChars":6,"textLines":1,"bbox":[64,206,120,20]}
+{"kind":"textbox","id":"sh/7m1svy9w","slide":2,"name":"s2-before-title","text":"색만 덮은 결과","textPreview":"색만 덮은 결과","textChars":8,"textLines":1,"bbox":[64,232,300,31]}
+{"kind":"shape","id":"sh/dknu9sr6","slide":2,"name":"s2-before-outline","bbox":[64,278,310,218]}
+{"kind":"textbox","id":"sh/cjet0nql","slide":2,"name":"s2-after-kicker","text":"AFTER","textPreview":"AFTER","textChars":5,"textLines":1,"bbox":[448,206,120,20]}
+{"kind":"textbox","id":"sh/utofepkj","slide":2,"name":"s2-after-title","text":"원본 명암을 살린 결과","textPreview":"원본 명암을 살린 결과","textChars":12,"textLines":1,"bbox":[448,232,340,31]}
+{"kind":"shape","id":"sh/gf6xgz2p","slide":2,"name":"s2-after-outline","bbox":[448,278,310,218]}
+{"kind":"shape","id":"sh/hgfe94ja","slide":2,"name":"s2-lip-arrow-line","bbox":[388,387,38,0]}
+{"kind":"textbox","id":"sh/6p4vapkn","slide":2,"name":"s2-lip-arrow","text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[380,365,56,43]}
+{"kind":"shape","id":"sh/8rmdcf2t","slide":2,"name":"s2-final-outline","bbox":[944,194,272,370]}
+{"kind":"textbox","id":"sh/tsfe5kje","slide":2,"name":"s2-final-caption","text":"실시간 얼굴 위 최종 결과","textPreview":"실시간 얼굴 위 최종 결과","textChars":14,"textLines":1,"bbox":[944,575,272,20]}
+{"kind":"shape","id":"sh/ql8fm90r","slide":2,"name":"s2-bridge-line","bbox":[792,252,0,238]}
+{"kind":"shape","id":"sh/rmhwfe1c","slide":2,"name":"s2-bridge-arrow","bbox":[792,371,132,0]}
+{"kind":"shape","id":"sh/nepkrmds","slide":2,"name":"s2-bridge-num-bg-0","bbox":[776,246,32,32]}
+{"kind":"textbox","id":"sh/2tgjihw7","slide":2,"name":"s2-bridge-num-0","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[776,254,32,17]}
+{"kind":"textbox","id":"sh/pgr2tcvi","slide":2,"name":"s2-bridge-title-0","text":"시각 일치","textPreview":"시각 일치","textChars":5,"textLines":1,"bbox":[818,250,112,23]}
+{"kind":"shape","id":"sh/ofilk7ed","slide":2,"name":"s2-bridge-num-bg-1","bbox":[776,346,32,32]}
+{"kind":"textbox","id":"sh/bi9kvmdo","slide":2,"name":"s2-bridge-num-1","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[776,354,32,17]}
+{"kind":"textbox","id":"sh/ah03mhw3","slide":2,"name":"s2-bridge-title-1","text":"실제 경계","textPreview":"실제 경계","textChars":5,"textLines":1,"bbox":[818,350,112,23]}
+{"kind":"shape","id":"sh/xkr2xwvu","slide":2,"name":"s2-bridge-num-bg-2","bbox":[776,446,32,32]}
+{"kind":"textbox","id":"sh/cjilore9","slide":2,"name":"s2-bridge-num-2","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[776,454,32,17]}
+{"kind":"textbox","id":"sh/zm9kz6d0","slide":2,"name":"s2-bridge-title-2","text":"명암 보존","textPreview":"명암 보존","textChars":5,"textLines":1,"bbox":[818,450,112,23]}
+{"kind":"shape","id":"sh/yl03q1cf","slide":2,"name":"s2-result-rule","bbox":[64,622,1152,0]}
+{"kind":"textbox","id":"sh/wb21gbad","slide":2,"name":"s2-result-num-0","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[64,646,38,20]}
+{"kind":"textbox","id":"sh/hcb2pgby","slide":2,"name":"s2-result-title-0","text":"움직임을 즉시 따라감","textPreview":"움직임을 즉시 따라감","textChars":11,"textLines":1,"bbox":[104,642,280,27]}
+{"kind":"textbox","id":"sh/upkje1s7","slide":2,"name":"s2-result-sub-0","text":"밀림 감소","textPreview":"밀림 감소","textChars":5,"textLines":1,"bbox":[104,674,280,20]}
+{"kind":"shape","id":"sh/vqtkn6ts","slide":2,"name":"s2-result-sep-1","bbox":[448,642,0,48]}
+{"kind":"textbox","id":"sh/8n21crah","slide":2,"name":"s2-result-num-1","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[476,646,38,20]}
+{"kind":"textbox","id":"sh/9ob2lwb2","slide":2,"name":"s2-result-title-1","text":"피부·입 안 경계를 지킴","textPreview":"피부·입 안 경계를 지킴","textChars":13,"textLines":1,"bbox":[516,642,280,27]}
+{"kind":"textbox","id":"sh/ml0jahsb","slide":2,"name":"s2-result-sub-1","text":"번짐 방지","textPreview":"번짐 방지","textChars":5,"textLines":1,"bbox":[516,674,280,20]}
+{"kind":"shape","id":"sh/7m90jmtw","slide":2,"name":"s2-result-sep-2","bbox":[832,642,0,48]}
+{"kind":"textbox","id":"sh/kji18ra5","slide":2,"name":"s2-result-num-2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[860,646,38,20]}
+{"kind":"textbox","id":"sh/lkrihcbq","slide":2,"name":"s2-result-title-2","text":"밝기·주름·광택을 남김","textPreview":"밝기·주름·광택을 남김","textChars":12,"textLines":1,"bbox":[900,642,280,27]}
+{"kind":"textbox","id":"sh/po7y9sri","slide":2,"name":"s2-result-sub-2","text":"입체감 유지","textPreview":"입체감 유지","textChars":6,"textLines":1,"bbox":[900,674,280,20]}
+{"kind":"image","id":"im/nqxknydc","slide":2,"name":"","geometry":"roundRect","alt":"단색 블렌딩으로 평면적으로 보이는 입술","bbox":[64,278,310,218]}
+{"kind":"image","id":"im/g72l8nmd","slide":2,"name":"","geometry":"roundRect","alt":"원본 명암과 광택을 보존한 입술","bbox":[448,278,310,218]}
+{"kind":"image","id":"im/832l43m1","slide":2,"name":"","geometry":"roundRect","alt":"세 가지 보정이 적용된 최종 실시간 AR 메이크업 얼굴","bbox":[944,194,272,370]}
+{"kind":"notes","id":"nt/mjkwn3","slide":2,"text":"입술 전후에서는 단색을 덮는 방식과 원본 명암을 살리는 방식의 차이를 보여줍니다.\n세 보정이 합쳐진 최종 얼굴에서는 움직임, 경계, 입체감이 함께 유지됩니다.\n\n[Sources]\n- /Users/yeoduchi/302-group5-final-project/docs/unity-ar/glam2-refs/captures/0721-baseline-lips.png\n- /private/tmp/codex-ar-rendering-slides-creative-v2/lip-result-crop.png\n- /private/tmp/codex-ar-rendering-slides-creative-v2/final-face-crop.png\n- /var/folders/bl/w00rm3lj0wsfm0l8t26rkd980000gn/T/TemporaryItems/NSIRD_screencaptureui_8rfjM6/스크린샷 2026-07-25 오전 1.48.05.png\n[/Sources]"}

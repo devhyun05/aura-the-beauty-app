@@ -1,0 +1,126 @@
+{"kind":"deck","id":"pr/if9jtr","name":"Deck"}
+{"kind":"layout","layoutId":"9066ce86-0cd5-4ff8-83b1-f2c482195341","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"6fa704a6-918a-4464-a3b4-a284b9055f4b","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/irwr0l","slide":1,"title":"TECHNICAL CHALLENGE","textShapes":38}
+{"kind":"textbox","id":"sh/knixcf65","slide":1,"name":"s1-eyebrow","text":"TECHNICAL CHALLENGE","textPreview":"TECHNICAL CHALLENGE","textChars":19,"textLines":1,"bbox":[64,42,440,23]}
+{"kind":"textbox","id":"sh/jm9gjapk","slide":1,"name":"s1-title","text":"자연스러움을 위한\nAR 메이크업 렌더링","textPreview":"자연스러움을 위한 | AR 메이크업 렌더링","textChars":21,"textLines":2,"bbox":[64,80,486,122]}
+{"kind":"textbox","id":"sh/il0fa5oz","slide":1,"name":"s1-subtitle","text":"실시간 영상에서 밀림·번짐·평면감을 줄이기 위해\n세 가지 오차를 한 프레임에서 함께 보정했습니다.","textPreview":"실시간 영상에서 밀림·번짐·평면감을 줄이기 위해 | 세 가지 오차를 한 프레임에서 함께 보정했습니다.","textChars":54,"textLines":2,"bbox":[64,223,470,62]}
+{"kind":"shape","id":"sh/tsbypk7m","slide":1,"name":"s1-image-bg","bbox":[64,319,234,221]}
+{"kind":"shape","id":"sh/rqtgnapw","slide":1,"name":"s1-face-border","bbox":[73,310,218,223]}
+{"kind":"shape","id":"sh/6pkfepob","slide":1,"name":"s1-problem-box","bbox":[320,310,230,230]}
+{"kind":"textbox","id":"sh/1wbyt47y","slide":1,"name":"s1-problem-label","text":"자연스러움을 깨는 오차","textPreview":"자연스러움을 깨는 오차","textChars":12,"textLines":1,"bbox":[340,330,190,25]}
+{"kind":"shape","id":"sh/gv2xkz6d","slide":1,"name":"s1-issue-num-bg-0","bbox":[340,374,34,28]}
+{"kind":"textbox","id":"sh/ixofy5k7","slide":1,"name":"s1-issue-num-0","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[340,380,34,17]}
+{"kind":"textbox","id":"sh/jyxw7a1s","slide":1,"name":"s1-issue-0","text":"밀림","textPreview":"밀림","textChars":2,"textLines":1,"bbox":[388,376,66,23]}
+{"kind":"textbox","id":"sh/kz6x0f2d","slide":1,"name":"s1-issue-sub-0","text":"시각 오차","textPreview":"시각 오차","textChars":5,"textLines":1,"bbox":[456,378,72,20]}
+{"kind":"shape","id":"sh/50fy9kjy","slide":1,"name":"s1-issue-num-bg-1","bbox":[340,423,34,28]}
+{"kind":"textbox","id":"sh/61of2pk3","slide":1,"name":"s1-issue-num-1","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[340,429,34,17]}
+{"kind":"textbox","id":"sh/7mhgbu1o","slide":1,"name":"s1-issue-1","text":"번짐","textPreview":"번짐","textChars":2,"textLines":1,"bbox":[388,425,66,23]}
+{"kind":"textbox","id":"sh/snqx4f29","slide":1,"name":"s1-issue-sub-1","text":"경계 오차","textPreview":"경계 오차","textChars":5,"textLines":1,"bbox":[456,427,72,20]}
+{"kind":"shape","id":"sh/tozydkju","slide":1,"name":"s1-issue-num-bg-2","bbox":[340,472,34,28]}
+{"kind":"textbox","id":"sh/m54fqlkz","slide":1,"name":"s1-issue-num-2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[340,478,34,17]}
+{"kind":"textbox","id":"sh/nqdwzq1k","slide":1,"name":"s1-issue-2","text":"평면감","textPreview":"평면감","textChars":3,"textLines":1,"bbox":[388,474,66,23]}
+{"kind":"textbox","id":"sh/ra9crmhc","slide":1,"name":"s1-issue-sub-2","text":"명암 손실","textPreview":"명암 손실","textChars":5,"textLines":1,"bbox":[456,476,72,20]}
+{"kind":"shape","id":"sh/q90byh0r","slide":1,"name":"s1-panel","bbox":[584,54,632,486]}
+{"kind":"shape","id":"sh/dwbutwzi","slide":1,"name":"s1-old-pill-bg","bbox":[612,82,108,34]}
+{"kind":"textbox","id":"sh/cbit0rix","slide":1,"name":"s1-old-pill","text":"기존 방식","textPreview":"기존 방식","textChars":5,"textLines":1,"bbox":[612,89,108,21]}
+{"kind":"textbox","id":"sh/369cnm10","slide":1,"name":"s1-old-title","text":"요소별로 따로 처리","textPreview":"요소별로 따로 처리","textChars":10,"textLines":1,"bbox":[746,88,300,26]}
+{"kind":"shape","id":"sh/250buh0v","slide":1,"name":"s1-old-row-0","bbox":[612,135,574,26]}
+{"kind":"textbox","id":"sh/p8rupcz6","slide":1,"name":"s1-old-text-0","text":"화면은 최신 프레임 · 좌표는 이전 프레임","textPreview":"화면은 최신 프레임 · 좌표는 이전 프레임","textChars":23,"textLines":1,"bbox":[628,139,540,18]}
+{"kind":"shape","id":"sh/47itwril","slide":1,"name":"s1-old-row-1","bbox":[612,169,574,26]}
+{"kind":"textbox","id":"sh/n2tcz6hk","slide":1,"name":"s1-old-text-1","text":"기준점만 연결한 대략적 입술 형태","textPreview":"기준점만 연결한 대략적 입술 형태","textChars":18,"textLines":1,"bbox":[628,173,540,18]}
+{"kind":"shape","id":"sh/m1kv610z","slide":1,"name":"s1-old-row-2","bbox":[612,203,574,26]}
+{"kind":"textbox","id":"sh/kvuh4ju5","slide":1,"name":"s1-old-text-2","text":"단색 블렌딩으로 원본 명암 손실","textPreview":"단색 블렌딩으로 원본 명암 손실","textChars":17,"textLines":1,"bbox":[628,207,540,18]}
+{"kind":"shape","id":"sh/lw3id4bq","slide":1,"name":"s1-panel-divider","bbox":[612,251,574,0]}
+{"kind":"textbox","id":"sh/y9cz29cz","slide":1,"name":"s1-down-arrow","text":"↓","textPreview":"↓","textChars":1,"textLines":1,"bbox":[854,255,92,48]}
+{"kind":"shape","id":"sh/jal0betk","slide":1,"name":"s1-new-pill-bg","bbox":[612,311,108,34]}
+{"kind":"textbox","id":"sh/8ze18juh","slide":1,"name":"s1-new-pill","text":"개선 방식","textPreview":"개선 방식","textChars":5,"textLines":1,"bbox":[612,318,108,21]}
+{"kind":"textbox","id":"sh/t0nihobm","slide":1,"name":"s1-new-title","text":"세 보정을 한 프레임에서 동시 적용","textPreview":"세 보정을 한 프레임에서 동시 적용","textChars":19,"textLines":1,"bbox":[746,317,420,26]}
+{"kind":"shape","id":"sh/6xcj69cb","slide":1,"name":"s1-core-node","bbox":[638,388,126,66]}
+{"kind":"textbox","id":"sh/7yl0fetw","slide":1,"name":"s1-core-text","text":"동시 보정","textPreview":"동시 보정","textChars":5,"textLines":1,"bbox":[638,407,126,27]}
+{"kind":"shape","id":"sh/g3e1c3ud","slide":1,"name":"s1-branch-main","bbox":[764,421,54,0]}
+{"kind":"shape","id":"sh/h4niloby","slide":1,"name":"s1-branch-vertical","bbox":[818,366,0,111]}
+{"kind":"shape","id":"sh/1cfi1ozy","slide":1,"name":"s1-branch-0","bbox":[818,372,24,0]}
+{"kind":"shape","id":"sh/gb61sjyd","slide":1,"name":"s1-fix-bg-0","bbox":[842,352,326,42]}
+{"kind":"textbox","id":"sh/fax0zeh8","slide":1,"name":"s1-fix-num-0","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[856,362,28,20]}
+{"kind":"textbox","id":"sh/e9ojq9gn","slide":1,"name":"s1-fix-title-0","text":"같은 시각","textPreview":"같은 시각","textChars":5,"textLines":1,"bbox":[892,360,92,23]}
+{"kind":"textbox","id":"sh/t8vix4z2","slide":1,"name":"s1-fix-body-0","text":"화면 T1 = 좌표 T1","textPreview":"화면 T1 = 좌표 T1","textChars":13,"textLines":1,"bbox":[990,362,162,20]}
+{"kind":"shape","id":"sh/s7m1ojyh","slide":1,"name":"s1-branch-1","bbox":[818,428,24,0]}
+{"kind":"shape","id":"sh/r6d0vehw","slide":1,"name":"s1-fix-bg-1","bbox":[842,408,326,42]}
+{"kind":"textbox","id":"sh/654jm9gb","slide":1,"name":"s1-fix-num-1","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[856,418,28,20]}
+{"kind":"textbox","id":"sh/d4z298f6","slide":1,"name":"s1-fix-title-1","text":"실제 경계","textPreview":"실제 경계","textChars":5,"textLines":1,"bbox":[892,416,92,23]}
+{"kind":"textbox","id":"sh/c3q103yl","slide":1,"name":"s1-fix-body-1","text":"끝선 재탐색 · 내부 제외","textPreview":"끝선 재탐색 · 내부 제외","textChars":14,"textLines":1,"bbox":[990,418,162,20]}
+{"kind":"shape","id":"sh/u90fu5w3","slide":1,"name":"s1-branch-2","bbox":[818,484,24,0]}
+{"kind":"shape","id":"sh/vatg3axo","slide":1,"name":"s1-fix-bg-2","bbox":[842,464,326,42]}
+{"kind":"textbox","id":"sh/wb2xwfe9","slide":1,"name":"s1-fix-num-2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[856,474,28,20]}
+{"kind":"textbox","id":"sh/hcby50fu","slide":1,"name":"s1-fix-title-2","text":"원본 명암","textPreview":"원본 명암","textChars":5,"textLines":1,"bbox":[892,472,92,23]}
+{"kind":"textbox","id":"sh/ml0fqlw7","slide":1,"name":"s1-fix-body-2","text":"밝기·주름·광택 복원","textPreview":"밝기·주름·광택 복원","textChars":11,"textLines":1,"bbox":[990,474,162,20]}
+{"kind":"shape","id":"sh/7m9gzqxs","slide":1,"name":"bottom-top-0","bbox":[64,562,1152,0]}
+{"kind":"shape","id":"sh/8nixsved","slide":1,"name":"bottom-icon-0","bbox":[76,570,48,48]}
+{"kind":"textbox","id":"sh/9ory10fi","slide":1,"name":"bottom-symbol-0","text":"↔","textPreview":"↔","textChars":1,"textLines":1,"bbox":[76,578,48,31]}
+{"kind":"textbox","id":"sh/6hkz2pwb","slide":1,"name":"bottom-title-0","text":"프레임·좌표 동기화","textPreview":"프레임·좌표 동기화","textChars":10,"textLines":1,"bbox":[148,580,230,30]}
+{"kind":"shape","id":"sh/ridgbudw","slide":1,"name":"bottom-v-0","bbox":[390,577,0,34]}
+{"kind":"textbox","id":"sh/3al47i9w","slide":1,"name":"bottom-body-0","text":"촬영 시각을 맞추고 중간 위치를 보간해 움직임의 밀림을 줄였습니다.","textPreview":"촬영 시각을 맞추고 중간 위치를 보간해 움직임의 밀림을 줄였습니다.","textChars":37,"textLines":1,"bbox":[420,581,775,27]}
+{"kind":"shape","id":"sh/29c3ed8r","slide":1,"name":"bottom-line-0","bbox":[64,626,1152,0]}
+{"kind":"shape","id":"sh/pc3m9sr2","slide":1,"name":"bottom-icon-1","bbox":[76,634,48,48]}
+{"kind":"textbox","id":"sh/4bulgnqh","slide":1,"name":"bottom-symbol-1","text":"✓","textPreview":"✓","textChars":1,"textLines":1,"bbox":[76,642,48,31]}
+{"kind":"textbox","id":"sh/re54b298","slide":1,"name":"bottom-title-1","text":"경계·명암 복원","textPreview":"경계·명암 복원","textChars":8,"textLines":1,"bbox":[148,644,230,30]}
+{"kind":"shape","id":"sh/qdc3ix8n","slide":1,"name":"bottom-v-1","bbox":[390,641,0,34]}
+{"kind":"textbox","id":"sh/dgnmdcre","slide":1,"name":"bottom-body-1","text":"실제 끝선과 원본 밝기 구조를 되살려 번짐과 평면감을 줄였습니다.","textPreview":"실제 끝선과 원본 밝기 구조를 되살려 번짐과 평면감을 줄였습니다.","textChars":36,"textLines":1,"bbox":[420,645,775,27]}
+{"kind":"shape","id":"sh/cfelk7qt","slide":1,"name":"bottom-line-1","bbox":[64,690,1152,0]}
+{"kind":"textbox","id":"sh/zi54f294","slide":1,"name":"page-1","text":"1 / 2","textPreview":"1 / 2","textChars":5,"textLines":1,"bbox":[1142,697,74,14]}
+{"kind":"image","id":"im/5gb6horq","slide":1,"name":"","geometry":"roundRect","alt":"실시간 AR 메이크업 적용 화면","bbox":[73,310,218,223]}
+{"kind":"notes","id":"nt/irwr0l","slide":1,"text":"기존에는 화면, 좌표, 색을 각각 처리해 서로 다른 오차가 남았습니다.\n개선 방식은 같은 프레임 안에서 시각, 경계, 명암을 함께 보정하는 구조입니다.\n\n[Sources]\n- /Users/yeoduchi/302-group5-final-project/docs/unity-ar/glam2-refs/ours-glam-fullface.png\n- /var/folders/bl/w00rm3lj0wsfm0l8t26rkd980000gn/T/TemporaryItems/NSIRD_screencaptureui_OCcwsK/스크린샷 2026-07-25 오전 12.39.47.png\n- /var/folders/bl/w00rm3lj0wsfm0l8t26rkd980000gn/T/TemporaryItems/NSIRD_screencaptureui_EaJ1RM/스크린샷 2026-07-25 오전 1.33.45.png\n[/Sources]"}
+{"kind":"slide","id":"sl/dcx1h5","slide":2,"title":"RESULT  ·  NATURALNESS","textShapes":26}
+{"kind":"textbox","id":"sh/x4buxori","slide":2,"name":"s2-eyebrow","text":"RESULT  ·  NATURALNESS","textPreview":"RESULT  ·  NATURALNESS","textChars":22,"textLines":1,"bbox":[64,42,440,23]}
+{"kind":"textbox","id":"sh/a10vm9sr","slide":2,"name":"s2-title","text":"세 가지 보정이\n합쳐진 최종 결과","textPreview":"세 가지 보정이 | 합쳐진 최종 결과","textChars":18,"textLines":2,"bbox":[64,80,486,122]}
+{"kind":"textbox","id":"sh/b29cve9c","slide":2,"name":"s2-subtitle","text":"위치·경계·명암이 함께 맞을 때\n화장이 얼굴 위에 자연스럽게 붙어 보였습니다.","textPreview":"위치·경계·명암이 함께 맞을 때 | 화장이 얼굴 위에 자연스럽게 붙어 보였습니다.","textChars":43,"textLines":2,"bbox":[64,223,470,62]}
+{"kind":"textbox","id":"sh/ofidkzal","slide":2,"name":"s2-before-label","text":"색만 덮은 결과","textPreview":"색만 덮은 결과","textChars":8,"textLines":1,"bbox":[64,320,198,25]}
+{"kind":"textbox","id":"sh/pgrut4r6","slide":2,"name":"s2-after-label","text":"명암을 살린 결과","textPreview":"명암을 살린 결과","textChars":9,"textLines":1,"bbox":[346,320,198,25]}
+{"kind":"shape","id":"sh/ne9cru9g","slide":2,"name":"s2-before-border","bbox":[64,354,206,150]}
+{"kind":"textbox","id":"sh/0bydgzap","slide":2,"name":"s2-arrow","text":"→","textPreview":"→","textChars":1,"textLines":1,"bbox":[278,405,58,42]}
+{"kind":"shape","id":"sh/9kjmdk7i","slide":2,"name":"s2-after-border","bbox":[346,354,198,150]}
+{"kind":"shape","id":"sh/8jalkfqx","slide":2,"name":"s2-panel","bbox":[584,54,632,486]}
+{"kind":"shape","id":"sh/7i14bupc","slide":2,"name":"s2-result-pill-bg","bbox":[612,82,108,34]}
+{"kind":"textbox","id":"sh/mhs3ip8r","slide":2,"name":"s2-result-pill","text":"최종 결과","textPreview":"최종 결과","textChars":5,"textLines":1,"bbox":[612,89,108,21]}
+{"kind":"textbox","id":"sh/lgjm9k76","slide":2,"name":"s2-result-title","text":"화장이 얼굴에 붙어 보이는 상태","textPreview":"화장이 얼굴에 붙어 보이는 상태","textChars":17,"textLines":1,"bbox":[746,88,400,26]}
+{"kind":"shape","id":"sh/kfalgfql","slide":2,"name":"s2-image-back","bbox":[614,144,232,344]}
+{"kind":"shape","id":"sh/yd83e58v","slide":2,"name":"s2-final-face-border","bbox":[624,134,212,344]}
+{"kind":"textbox","id":"sh/xczm50ra","slide":2,"name":"s2-final-caption","text":"최종 AR 적용 화면","textPreview":"최종 AR 적용 화면","textChars":11,"textLines":1,"bbox":[624,489,212,20]}
+{"kind":"shape","id":"sh/cbqlcvqp","slide":2,"name":"s2-core-node","bbox":[868,236,116,68]}
+{"kind":"textbox","id":"sh/ovu5sfyl","slide":2,"name":"s2-core-text","text":"자연스러움","textPreview":"자연스러움","textChars":5,"textLines":1,"bbox":[868,256,116,26]}
+{"kind":"shape","id":"sh/pw3m1kz6","slide":2,"name":"s2-branch-main","bbox":[984,270,32,0]}
+{"kind":"shape","id":"sh/2tc3q5gf","slide":2,"name":"s2-branch-vertical","bbox":[1016,180,0,184]}
+{"kind":"shape","id":"sh/3ul4zah0","slide":2,"name":"s2-branch-0","bbox":[1016,195,18,0]}
+{"kind":"shape","id":"sh/gralovy9","slide":2,"name":"s2-outcome-bg-0","bbox":[1034,164,154,62]}
+{"kind":"textbox","id":"sh/1s3mx0zu","slide":2,"name":"s2-outcome-num-0","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1048,174,28,18]}
+{"kind":"textbox","id":"sh/e5s3mlgj","slide":2,"name":"s2-outcome-title-0","text":"늦지 않음","textPreview":"늦지 않음","textChars":5,"textLines":1,"bbox":[1080,172,94,21]}
+{"kind":"textbox","id":"sh/fq14vqho","slide":2,"name":"s2-outcome-body-0","text":"움직임을 즉시 따라감","textPreview":"움직임을 즉시 따라감","textChars":11,"textLines":1,"bbox":[1048,200,126,17]}
+{"kind":"shape","id":"sh/0ne50zyt","slide":2,"name":"s2-branch-1","bbox":[1016,283,18,0]}
+{"kind":"shape","id":"sh/lonm94fe","slide":2,"name":"s2-outcome-bg-1","bbox":[1034,252,154,62]}
+{"kind":"textbox","id":"sh/vip8zy1g","slide":2,"name":"s2-outcome-num-1","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1048,262,28,18]}
+{"kind":"textbox","id":"sh/uhg7qt0v","slide":2,"name":"s2-outcome-title-1","text":"번지지 않음","textPreview":"번지지 않음","textChars":6,"textLines":1,"bbox":[1080,260,94,21]}
+{"kind":"textbox","id":"sh/hkrq1ozm","slide":2,"name":"s2-outcome-body-1","text":"피부·입 안 경계 보호","textPreview":"피부·입 안 경계 보호","textChars":12,"textLines":1,"bbox":[1048,288,126,17]}
+{"kind":"shape","id":"sh/wjips3i1","slide":2,"name":"s2-branch-2","bbox":[1016,371,18,0]}
+{"kind":"shape","id":"sh/jm983yhc","slide":2,"name":"s2-outcome-bg-2","bbox":[1034,340,154,62]}
+{"kind":"textbox","id":"sh/il07ut0r","slide":2,"name":"s2-outcome-num-2","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1048,350,28,18]}
+{"kind":"textbox","id":"sh/5orq58zi","slide":2,"name":"s2-outcome-title-2","text":"입체감 유지","textPreview":"입체감 유지","textChars":6,"textLines":1,"bbox":[1080,348,94,21]}
+{"kind":"textbox","id":"sh/4nipw3ix","slide":2,"name":"s2-outcome-body-2","text":"밝기·주름·광택 보존","textPreview":"밝기·주름·광택 보존","textChars":11,"textLines":1,"bbox":[1048,376,126,17]}
+{"kind":"shape","id":"sh/zq5ore18","slide":2,"name":"bottom-top-0","bbox":[64,562,1152,0]}
+{"kind":"shape","id":"sh/ypw7i90n","slide":2,"name":"bottom-icon-0","bbox":[76,570,48,48]}
+{"kind":"textbox","id":"sh/qlkzudcv","slide":2,"name":"bottom-symbol-0","text":"✓","textPreview":"✓","textChars":1,"textLines":1,"bbox":[76,578,48,31]}
+{"kind":"textbox","id":"sh/b6tgnydg","slide":2,"name":"bottom-title-0","text":"같은 시각·실제 경계","textPreview":"같은 시각·실제 경계","textChars":11,"textLines":1,"bbox":[148,580,230,30]}
+{"kind":"shape","id":"sh/c72hw3ul","slide":2,"name":"bottom-v-0","bbox":[390,577,0,34]}
+{"kind":"textbox","id":"sh/d8byp8v6","slide":2,"name":"bottom-body-0","text":"밀림과 번짐을 동시에 줄였습니다.","textPreview":"밀림과 번짐을 동시에 줄였습니다.","textChars":18,"textLines":1,"bbox":[420,581,775,27]}
+{"kind":"shape","id":"sh/y94zydcr","slide":2,"name":"bottom-line-0","bbox":[64,626,1152,0]}
+{"kind":"shape","id":"sh/zadgridc","slide":2,"name":"bottom-icon-1","bbox":[76,634,48,48]}
+{"kind":"textbox","id":"sh/kbmh0nux","slide":2,"name":"bottom-symbol-1","text":"✦","textPreview":"✦","textChars":1,"textLines":1,"bbox":[76,642,48,31]}
+{"kind":"textbox","id":"sh/lcvytsvi","slide":2,"name":"bottom-title-1","text":"원본 명암 보존","textPreview":"원본 명암 보존","textChars":8,"textLines":1,"bbox":[148,644,230,30]}
+{"kind":"shape","id":"sh/md4z2xc3","slide":2,"name":"bottom-v-1","bbox":[390,641,0,34]}
+{"kind":"textbox","id":"sh/7edgvid8","slide":2,"name":"bottom-body-1","text":"밝기·주름·광택을 선택한 립 컬러에 반영했습니다.","textPreview":"밝기·주름·광택을 선택한 립 컬러에 반영했습니다.","textChars":27,"textLines":1,"bbox":[420,645,775,27]}
+{"kind":"shape","id":"sh/h8f2lwfq","slide":2,"name":"bottom-line-1","bbox":[64,690,1152,0]}
+{"kind":"textbox","id":"sh/w761sre5","slide":2,"name":"page-2","text":"2 / 2","textPreview":"2 / 2","textChars":5,"textLines":1,"bbox":[1142,697,74,14]}
+{"kind":"image","id":"im/f2pgbalo","slide":2,"name":"","geometry":"roundRect","alt":"단색 블렌딩으로 평면적으로 보이는 입술","bbox":[64,354,206,150]}
+{"kind":"image","id":"im/szex0vmx","slide":2,"name":"","geometry":"roundRect","alt":"원본 명암과 광택을 보존한 입술","bbox":[346,354,198,150]}
+{"kind":"image","id":"im/wne1onqt","slide":2,"name":"","geometry":"roundRect","alt":"세 가지 보정이 적용된 최종 AR 메이크업 결과","bbox":[624,134,212,344]}
+{"kind":"notes","id":"nt/dcx1h5","slide":2,"text":"입술 전후 비교에서는 색을 덮는 대신 원본 명암과 광택이 살아난 차이를 보여줍니다.\n최종 결과는 지연, 번짐, 평면감을 함께 줄였다는 점으로 정리할 수 있습니다.\n\n[Sources]\n- /Users/yeoduchi/302-group5-final-project/docs/unity-ar/glam2-refs/captures/0721-baseline-lips.png\n- /private/tmp/codex-ar-rendering-slides-reference-style/lip-result-crop.png\n- /private/tmp/codex-ar-rendering-slides-reference-style/final-face-crop.png\n- /var/folders/bl/w00rm3lj0wsfm0l8t26rkd980000gn/T/TemporaryItems/NSIRD_screencaptureui_EaJ1RM/스크린샷 2026-07-25 오전 1.33.45.png\n[/Sources]"}
