@@ -835,7 +835,11 @@ async def test_generation_limit_rejects_fourth_live_window() -> None:
   db = GenerationLimitDatabase(request_count=4)
 
   with pytest.raises(AppError) as exc_info:
-    await makeup_service.enforce_scenario_generation_limit(db, USER_ID)
+    await makeup_service.enforce_scenario_generation_limit(
+      db,
+      USER_ID,
+      enabled=True,
+    )
 
   assert exc_info.value.status_code == 429
   assert exc_info.value.code == "MAKEUP_SCENARIO_RATE_LIMITED"

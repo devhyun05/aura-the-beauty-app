@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.core.errors import AppError
+from app.core.settings import get_settings
 from app.db.session import Database
 
 
@@ -16,9 +17,14 @@ async def enforce_product_rate_limit(
   scope: str,
   limit: int,
   window_seconds: int = 60,
+  enabled: bool | None = None,
 ) -> None:
   if scope not in PRODUCT_RATE_SCOPES:
     raise ValueError("Unsupported product rate-limit scope.")
+  if enabled is None:
+    enabled = get_settings().user_feature_usage_limits_enabled
+  if not enabled:
+    return
   row = await db.fetchrow(
     """
     insert into product_request_rate_limits (user_id,scope,window_started_at,request_count)
