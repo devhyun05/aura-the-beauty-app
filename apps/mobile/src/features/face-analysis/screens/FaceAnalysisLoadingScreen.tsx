@@ -1,7 +1,10 @@
 import React, {useEffect, useState} from 'react';
 import {AccessibilityInfo, Pressable, StyleSheet} from 'react-native';
+import {BlurView} from 'expo-blur';
 import {LinearGradient} from 'expo-linear-gradient';
 import {useVideoPlayer, VideoView} from 'expo-video';
+import {ChevronLeft} from 'lucide-react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Text, View, XStack, YStack} from 'tamagui';
 
 import {colors, radius, spacing, typography} from '../../../shared/theme';
@@ -17,7 +20,6 @@ type FaceAnalysisLoadingScreenProps = {
   analysisErrorMessage?: string | null;
   anchorPreview?: AnchorPreview | null;
   capturedPhotoUri?: string;
-  headerTitle?: string;
   isAnalysisReady?: boolean;
   onBack?: () => void;
   onComplete?: () => void;
@@ -43,7 +45,10 @@ export function FaceAnalysisLoadingScreen({
   onRetake,
   onRetry,
 }: FaceAnalysisLoadingScreenProps) {
+  const insets = useSafeAreaInsets();
   const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
+  const [reduceTransparencyEnabled, setReduceTransparencyEnabled] =
+    useState(false);
   const hasAnalysisError = Boolean(analysisErrorMessage);
   const player = useVideoPlayer(faceAnalysisLoadingVideoSource, videoPlayer => {
     videoPlayer.loop = true;
@@ -58,14 +63,24 @@ export function FaceAnalysisLoadingScreen({
         setReduceMotionEnabled(enabled);
       }
     });
-    const subscription = AccessibilityInfo.addEventListener(
+    void AccessibilityInfo.isReduceTransparencyEnabled().then(enabled => {
+      if (isMounted) {
+        setReduceTransparencyEnabled(enabled);
+      }
+    });
+    const motionSubscription = AccessibilityInfo.addEventListener(
       'reduceMotionChanged',
       setReduceMotionEnabled,
+    );
+    const transparencySubscription = AccessibilityInfo.addEventListener(
+      'reduceTransparencyChanged',
+      setReduceTransparencyEnabled,
     );
 
     return () => {
       isMounted = false;
-      subscription.remove();
+      motionSubscription.remove();
+      transparencySubscription.remove();
     };
   }, []);
 
@@ -120,6 +135,49 @@ export function FaceAnalysisLoadingScreen({
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
         />
+
+        {onBack ? (
+          <Pressable
+            accessibilityHint="얼굴 분석을 중단하고 이전 화면으로 돌아갑니다."
+            accessibilityLabel="얼굴 분석 닫기"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={onBack}
+            style={({pressed}) => [
+              styles.glassBackButton,
+              {
+                top: insets.top + spacing.md,
+                transform: [{scale: pressed ? 0.965 : 1}],
+              },
+            ]}>
+            <BlurView
+              intensity={reduceTransparencyEnabled ? 0 : 58}
+              pointerEvents="none"
+              style={StyleSheet.absoluteFill}
+              tint="light"
+            />
+            <LinearGradient
+              colors={
+                reduceTransparencyEnabled
+                  ? ['rgba(255,255,255,0.92)', 'rgba(244,249,251,0.88)']
+                  : ['rgba(255,255,255,0.62)', 'rgba(255,255,255,0.18)']
+              }
+              end={{x: 0.78, y: 1}}
+              pointerEvents="none"
+              start={{x: 0.2, y: 0}}
+              style={StyleSheet.absoluteFill}
+            />
+            <LinearGradient
+              colors={['rgba(255,255,255,0.95)', 'rgba(255,255,255,0)']}
+              end={{x: 0.78, y: 0.72}}
+              pointerEvents="none"
+              start={{x: 0.12, y: 0}}
+              style={styles.glassBackHighlight}
+            />
+            <View pointerEvents="none" style={styles.glassBackInnerRing} />
+            <ChevronLeft color="#16303B" size={21} strokeWidth={2.35} />
+          </Pressable>
+        ) : null}
 
         <YStack style={styles.content}>
           {hasAnalysisError ? (
@@ -278,6 +336,41 @@ const styles = StyleSheet.create({
     fontWeight: typography.fontWeight.bold,
     letterSpacing: 0,
     lineHeight: typography.lineHeight.md,
+  },
+  glassBackButton: {
+    alignItems: 'center',
+    borderColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 22,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    left: spacing.lg,
+    overflow: 'hidden',
+    position: 'absolute',
+    shadowColor: '#173846',
+    shadowOffset: {height: 8, width: 0},
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    width: 44,
+    zIndex: 20,
+  },
+  glassBackHighlight: {
+    borderTopLeftRadius: 22,
+    height: 23,
+    left: 2,
+    position: 'absolute',
+    right: 2,
+    top: 1,
+  },
+  glassBackInnerRing: {
+    borderColor: 'rgba(255,255,255,0.38)',
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    bottom: 2,
+    left: 2,
+    position: 'absolute',
+    right: 2,
+    top: 2,
   },
   loadingCopy: {
     alignItems: 'center',

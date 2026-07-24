@@ -5,31 +5,10 @@ import {
   loadOptionalMediaLibraryModule,
   loadOptionalSharingModule,
 } from '../../../shared/services/optionalNativeShareModules';
-import type {OptionalViewShotRef} from '../../../shared/ui/OptionalViewShot';
 
 declare const require: (moduleName: string) => unknown;
 
-export type ReportShareFormat = 'summary' | 'story' | 'full';
-export type ReportShareTarget = 'save-image' | 'share-report';
-
-export type ReportSharePrivacy = {
-  blurPhotoBackground: boolean;
-  includeDate: boolean;
-  includeName: boolean;
-  includePhoto: boolean;
-};
-
-export const DEFAULT_REPORT_SHARE_PRIVACY: ReportSharePrivacy = {
-  blurPhotoBackground: true,
-  includeDate: true,
-  includeName: false,
-  includePhoto: false,
-};
-
-export const reportShareTargetLabels: Record<ReportShareTarget, string> = {
-  'save-image': '사진에 저장',
-  'share-report': '공유하기',
-};
+export type ReportSaveScope = 'current' | 'all';
 
 type ReactNativeShareModule = {
   open: (options: {
@@ -70,6 +49,32 @@ export type CaptureReportImageOptions = {
   timeoutMs?: number;
 };
 
+type NativeViewShotModule = {
+  captureRef: (
+    target: unknown,
+    options: {
+      format: 'jpg';
+      quality: number;
+      result: 'tmpfile';
+      snapshotContentContainer: boolean;
+      useRenderInContext: boolean;
+    },
+  ) => Promise<string>;
+};
+
+function loadNativeViewShotModule(): NativeViewShotModule | null {
+  try {
+    const loaded = require('react-native-view-shot') as {
+      captureRef?: NativeViewShotModule['captureRef'];
+      default?: {captureRef?: NativeViewShotModule['captureRef']};
+    };
+    const captureRef = loaded.captureRef ?? loaded.default?.captureRef;
+    return typeof captureRef === 'function' ? {captureRef} : null;
+  } catch {
+    return null;
+  }
+}
+
 function assertCaptureStillActive(shouldContinue?: () => boolean) {
   if (shouldContinue && !shouldContinue()) {
     throw new Error('보고서 이미지 준비가 취소되었어요.');
@@ -101,37 +106,36 @@ async function waitForLayoutFrames(frameCount: number) {
   }
 }
 
-export async function captureReportImage(
-  reportCaptureRef: {current: OptionalViewShotRef | null},
-  options: CaptureReportImageOptions = {},
+export async function captureScrollableReportPage(
+  target: unknown,
+  {
+    snapshotContentContainer,
+    ...options
+  }: CaptureReportImageOptions & {snapshotContentContainer: boolean},
 ) {
   await waitForFaceReportCaptureAssets(options);
-  await waitForLayoutFrames(2);
+  await waitForLayoutFrames(3);
   assertCaptureStillActive(options.shouldContinue);
 
-  const captureTarget = reportCaptureRef.current;
-  const capture = captureTarget?.capture;
-  if (!captureTarget || !capture) {
-    throw new Error('공유 이미지를 준비하지 못했어요. 잠시 후 다시 시도해 주세요.');
+  const viewShot = loadNativeViewShotModule();
+  if (!viewShot) {
+    throw new Error(
+      '현재 설치된 앱에서 실제 보고서 캡처 기능을 사용할 수 없어요. 앱을 새로 설치한 뒤 다시 시도해 주세요.',
+    );
   }
 
-  const imageUri = await capture.call(captureTarget);
+  const imageUri = await viewShot.captureRef(target, {
+    format: 'jpg',
+    quality: 0.95,
+    result: 'tmpfile',
+    snapshotContentContainer,
+    useRenderInContext: true,
+  });
   assertCaptureStillActive(options.shouldContinue);
   if (!imageUri) {
-    throw new Error('공유 이미지를 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
+    throw new Error('실제 보고서 이미지를 만들지 못했어요. 잠시 후 다시 시도해 주세요.');
   }
   return imageUri;
-}
-
-export async function captureReportImages(
-  refs: Array<{current: OptionalViewShotRef | null}>,
-  options: CaptureReportImageOptions = {},
-) {
-  const images: string[] = [];
-  for (const ref of refs) {
-    images.push(await captureReportImage(ref, options));
-  }
-  return images;
 }
 
 export async function shareReportImagesWithSystemSheet({
@@ -179,16 +183,6 @@ export async function shareReportImagesWithSystemSheet({
   return shareResult.action === Share.dismissedAction ? 'dismissed' : 'shared';
 }
 
-export async function shareReportImageWithSystemSheet({
-  imageUri,
-  title,
-}: {
-  imageUri: string;
-  title: string;
-}) {
-  return shareReportImagesWithSystemSheet({imageUris: [imageUri], title});
-}
-
 export async function requestReportImageSavePermission() {
   const mediaLibraryModule = loadOptionalMediaLibraryModule();
   if (!mediaLibraryModule) {
@@ -222,13 +216,6 @@ export async function saveReportImageToLibrary(imageUri: string) {
       message: error instanceof Error ? error.message : String(error),
     });
     await mediaLibraryModule.createAssetAsync(imageUri);
-  }
-}
-
-export async function saveReportImagesToLibrary(imageUris: string[]) {
-  await requestReportImageSavePermission();
-  for (const imageUri of imageUris) {
-    await saveReportImageToLibrary(imageUri);
   }
 }
 

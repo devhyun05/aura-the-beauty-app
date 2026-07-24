@@ -309,6 +309,7 @@ export interface ReportData {
 
 export interface ReportScreenProps {
   data: ReportData;
+  entryResetKey?: string;
   entryAnimation?: boolean; // rise-in on scroll into view (default true)
   onBack?: () => void;
   onGoldenMaskInteractionChange?: (interacting: boolean) => void;
@@ -320,7 +321,4 @@ export interface ReportScreenProps {
     // `data.footer.cta` (메이크업 추천), so wiring it to retake would fire
     // 재촬영 from a button that promises makeup recommendations.
     onPressCta?: () => void;
-    // 개발 단계 QA용: 분석 요약에서 저장/세션 측정값 원본을 접어서 확인한다.
-    measurementDebugPayload?: unknown;
-    measurementDebugSummary?: {label: string; value: string}[];
   }

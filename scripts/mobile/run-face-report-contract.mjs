@@ -33,36 +33,84 @@ const shareSheetSource = source(
 const shareSource = source(
   'apps/mobile/src/features/face-report/services/reportImageShare.ts',
 );
-const optionalViewShotSource = source(
-  'apps/mobile/src/shared/ui/OptionalViewShot.tsx',
+const scaffoldSource = source(
+  'apps/mobile/src/features/face-report/ReportScreenScaffold.tsx',
+);
+const previewSource = source(
+  'apps/mobile/src/features/face-report/screens/FaceAnalysisReportPreviewScreen.tsx',
+);
+const routesSource = source(
+  'apps/mobile/src/app/navigation/routes/faceAnalysisRoutes.tsx',
+);
+const loadingSource = source(
+  'apps/mobile/src/features/face-analysis/screens/FaceAnalysisLoadingScreen.tsx',
 );
 
 requireAll(shareSheetSource, [
-  'useRenderInContext: true',
-  'captureReportImages(captureRefs, {',
-  'isReady: areCapturePhotosSettled',
-  'shouldContinue: () =>',
+  'type ReportSaveScope,',
+  'controller.capturePage(',
+  'requestReportImageSavePermission()',
+  'saveReportImageToLibrary(imageUri)',
+  'controller.restorePage(originalPageId)',
+  '현재 카드',
+  '전체 보고서',
   'exportInFlightRef.current',
   'const operationId = ++exportOperationRef.current',
-  'onLoadStart={() => onPhotoLoadStart(captureAssetId)}',
-  'onLoadEnd={() => onPhotoLoadSettled(captureAssetId)}',
-  'onError={() => onPhotoLoadSettled(captureAssetId)}',
-], 'face report share-card capture lifecycle');
+], 'actual face-report capture lifecycle');
+requireContract(
+  !shareSheetSource.includes('ReportShareCard') &&
+    !shareSheetSource.includes('OptionalViewShot'),
+  'share sheet must not render synthetic report cards for saving',
+);
 
 requireAll(shareSource, [
   'FACE_REPORT_CAPTURE_SETTLE_TIMEOUT_MS = 10_000',
   'if (Date.now() >= deadline)',
   'await waitForFaceReportCaptureAssets(options)',
-  'await waitForLayoutFrames(2)',
-  'const imageUri = await capture.call(captureTarget)',
+  'await waitForLayoutFrames(3)',
+  'viewShot.captureRef(target',
+  'snapshotContentContainer',
   'assertCaptureStillActive(options.shouldContinue)',
-], 'face report bounded capture wait');
+], 'face report full-content bounded capture wait');
 
-requireAll(optionalViewShotSource, [
-  'height?: number',
-  'width?: number',
-  'useRenderInContext?: boolean',
-], 'optional view-shot capture options');
+requireAll(scaffoldSource, [
+  'function ReportCompletionStepper(',
+  'const capturePage = React.useCallback(',
+  'prepareGoldenMaskForCapture',
+  'dataRef.current.s1.photo.uri ?? null',
+  'getExportSnapshot: () => ({',
+  'restorePage: pageId =>',
+  'scrollRef.current?.scrollTo({animated: false, y: 0})',
+  'entryResetKey',
+], 'report scaffold progress, capture, restore, and scroll reset');
+const goldenMaskSource = source(
+  'apps/mobile/src/features/face-report/components/GoldenMaskCard.tsx',
+);
+requireAll(goldenMaskSource, [
+  'captureMode && capturePosterUri',
+  'captureUnityGoldenMaskPoster(requestIdRef.current)',
+  'onPosterUnavailable?.()',
+], 'native Golden Mask poster capture with a safe fallback');
+requireContract(
+  !scaffoldSource.includes('MeasurementDebug') &&
+    !previewSource.includes('measurementDebug'),
+  'production report must not expose development measurement data',
+);
+requireContract(
+  !routesSource.includes('기하검증'),
+  'production face-report route must not expose geometry validation',
+);
+requireAll(routesSource, [
+  'routeName="FaceAnalysisLoading"',
+  'headerHidden',
+  'entryResetKey={route.key}',
+], 'loading chrome and report entry reset');
+requireAll(loadingSource, [
+  "import {BlurView} from 'expo-blur'",
+  'isReduceTransparencyEnabled',
+  'reduceTransparencyChanged',
+  'accessibilityLabel="얼굴 분석 닫기"',
+], 'glass loading-screen overlay back button');
 
 // 순수(RN 무의존) 파일만 나열한다.
 const entries = [

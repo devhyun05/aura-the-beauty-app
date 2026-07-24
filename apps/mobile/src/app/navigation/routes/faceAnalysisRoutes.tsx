@@ -1536,6 +1536,7 @@ export function FaceAnalysisLoadingRouteScreen({
 
   return (
     <DetailRouteChrome
+      headerHidden
       routeName="FaceAnalysisLoading"
       onBack={handleBack}>
       <FaceAnalysisLoadingScreen
@@ -1644,9 +1645,10 @@ export function FaceAnalysisReportPreviewRouteScreen({
       <FaceAnalysisReportPreviewScreen
         analysisReport={selectedFaceAnalysisReport}
         capturedPhotoUri={selectedFaceCapture?.imageUri}
+        entryResetKey={route.key}
         initialPageId={
           route.params?.initialPageId ??
-          (minimumPreview ? 'summary:cover' : undefined)
+          (minimumPreview ? 'summary:overview' : undefined)
         }
         minimumPreview={minimumPreview}
         onBack={() => {
@@ -1692,13 +1694,6 @@ export function FaceAnalysisReportPreviewRouteScreen({
         sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
         verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
       />
-      {__DEV__ && selectedFaceGeometry2d ? (
-        <Pressable
-          onPress={() => navigation.navigate('FaceGeometryDebug')}
-          style={styles.devFaceGeometryDebugButton}>
-          <Text style={styles.devFaceGeometryDebugButtonLabel}>▷ 기하검증</Text>
-        </Pressable>
-      ) : null}
     </>
   );
 }
@@ -1959,21 +1954,6 @@ function FaceAnalysisReportBottomNav({
 }
 
 const styles = StyleSheet.create({
-  devFaceGeometryDebugButton: {
-    backgroundColor: 'rgba(17, 24, 39, 0.85)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    position: 'absolute',
-    right: 12,
-    top: 56,
-    zIndex: 40,
-  },
-  devFaceGeometryDebugButtonLabel: {
-    color: '#facc15',
-    fontSize: 12,
-    fontWeight: '700',
-  },
   reportFooterDismissLayer: {
     backgroundColor: 'transparent',
     bottom: 0,
