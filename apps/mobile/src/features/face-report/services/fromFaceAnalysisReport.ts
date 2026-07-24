@@ -223,8 +223,6 @@ const S2_BAND_COPY = {
     pillLabel: '상안부',
     title: '상안부',
     desc: '이마 · 눈썹 · 눈 — 또렷한 눈매가 시작되는 구획이에요',
-    descMissing:
-      '헤어라인 미확인으로 이번 회차에는 구획하지 못했어요 — 눈썹·눈 분석은 아래 카드에서 볼 수 있어요',
   },
   mid: {pillLabel: '중안부', title: '중안부', desc: '코 · 인중 · 볼 — 완만한 곡선이 이어지는 구획이에요'},
   lower: {pillLabel: '하안부', title: '하안부', desc: '입술 · E라인 — 시선이 잠시 머무는 구획이에요'},
@@ -261,71 +259,71 @@ export function buildFaceProportionSection(
   const chinY = Me.y / imgH;
   const hairlineEligible =
     vt.measurementMode === 'full_vertical_thirds' && vt.hairlineAnalysis.analysisEligible && H !== null;
-  // No real hairline: still need a plausible y to anchor the "미확인" pill inside
-  // the hatched region (0..browY) — not presented as a measurement (see
-  // hairlineMissing below, which swaps the line for the hatch+pill instead).
-  const hairlineY = hairlineEligible && H ? H.y / imgH : browY * 0.42;
+  const hairlineY = hairlineEligible && H ? H.y / imgH : null;
 
-  const upperBandOk = {top: hairlineY, height: Math.max(0, browY - hairlineY)};
-  const upperPillY = hairlineY + upperBandOk.height / 2;
+  const upperPillY =
+    hairlineY === null ? null : hairlineY + Math.max(0, browY - hairlineY) / 2;
   const midPillY = browY + (noseBaseY - browY) / 2;
   const lowerPillY = noseBaseY + (chinY - noseBaseY) / 2;
+  const bands: S2Data['bands'] = [
+    ...(hairlineY !== null && upperPillY !== null
+      ? [{
+          key: 'upper' as const,
+          top: hairlineY,
+          height: Math.max(0, browY - hairlineY),
+          pillLabel: S2_BAND_COPY.upper.pillLabel,
+          pillY: upperPillY,
+          pillCentered: true,
+          title: S2_BAND_COPY.upper.title,
+          desc: S2_BAND_COPY.upper.desc,
+        }]
+      : []),
+    {
+      key: 'mid',
+      top: browY,
+      height: noseBaseY - browY,
+      pillLabel: S2_BAND_COPY.mid.pillLabel,
+      pillY: midPillY,
+      pillCentered: true,
+      restingTint: true,
+      title: S2_BAND_COPY.mid.title,
+      desc: S2_BAND_COPY.mid.desc,
+    },
+    {
+      key: 'lower',
+      top: noseBaseY,
+      height: chinY - noseBaseY,
+      pillLabel: S2_BAND_COPY.lower.pillLabel,
+      pillY: lowerPillY,
+      pillCentered: true,
+      title: S2_BAND_COPY.lower.title,
+      desc: S2_BAND_COPY.lower.desc,
+    },
+  ];
 
   return {
     eyebrow: 'PROPORTION',
     title: '얼굴의 구획부터 볼게요',
     sub: '세로 구획을 보면 얼굴에서 어느 부위가 상대적으로 강조되는지 알 수 있어요.',
-    photo: {uri: sourceImage.uri, placeholderLabel: '얼굴 전체 정면 컷'},
-    photoAspectRatio: sourceImage.width / sourceImage.height,
-    hairlineMissing: !hairlineEligible,
+    photo: {
+      uri: sourceImage.uri,
+      placeholderLabel: '얼굴 전체 정면 컷',
+      sourceHeight: sourceImage.height,
+      sourceWidth: sourceImage.width,
+    },
+    hairlineMissing: hairlineY === null,
     hairlineY,
     browY,
     noseBaseY,
     chinY,
     lineLabels: {hairline: '헤어라인', brow: '미간', noseBase: '코밑', chin: '턱끝'},
-    hairlineMissingPill: '헤어라인 미확인',
-    hairlineHatchHeight: browY,
-    upperBandOk,
-    bands: [
-      {
-        key: 'upper',
-        top: 0,
-        height: browY,
-        pillLabel: S2_BAND_COPY.upper.pillLabel,
-        pillY: upperPillY,
-        pillCentered: true,
-        title: S2_BAND_COPY.upper.title,
-        desc: S2_BAND_COPY.upper.desc,
-        descMissing: S2_BAND_COPY.upper.descMissing,
-      },
-      {
-        key: 'mid',
-        top: browY,
-        height: noseBaseY - browY,
-        pillLabel: S2_BAND_COPY.mid.pillLabel,
-        pillY: midPillY,
-        pillCentered: true,
-        restingTint: true,
-        title: S2_BAND_COPY.mid.title,
-        desc: S2_BAND_COPY.mid.desc,
-      },
-      {
-        key: 'lower',
-        top: noseBaseY,
-        height: chinY - noseBaseY,
-        pillLabel: S2_BAND_COPY.lower.pillLabel,
-        pillY: lowerPillY,
-        pillCentered: true,
-        title: S2_BAND_COPY.lower.title,
-        desc: S2_BAND_COPY.lower.desc,
-      },
-    ],
+    bands,
     missingNotice: S2_HAIRLINE_MISSING_NOTICE,
     viewCardLabel: '카드 보기 ›',
     ratioNumbers:
       vt.verticalThirds && !lowConfidence
         ? {
-            upper: vt.verticalThirds.displayRatio.upper,
+            upper: hairlineY === null ? null : vt.verticalThirds.displayRatio.upper,
             middle: vt.verticalThirds.displayRatio.middle,
             lower: vt.verticalThirds.displayRatio.lower,
           }

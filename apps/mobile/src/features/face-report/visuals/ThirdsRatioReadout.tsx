@@ -8,15 +8,26 @@ import {describeThirdsInternally, formatThirdsRatio} from '../reportFormat';
 interface Props {
   ratio: NonNullable<S2Data['ratioNumbers']> | undefined;
   faceShape: S2Data['faceShape'];
+  hairlineMissing: boolean;
 }
 
 /** S2 비율 판독 — (1) 세로 3분할: 숫자 + 자기 내부 서술 + 1:1:1은 캔온일 뿐 교육 맥락,
  *  (2) 얼굴형: 성별 참고선 기준 방향 카테고리(가로 ←→ 세로) + 맞춤 문장 + 참고선 고지.
  *  정직화: '이상 1:1:1'·'평균 밴드' 폐기. 측정은 진짜, 프레임만 정직하게. 저신뢰도
  *  게이팅은 buildS2가 ratio/faceShape를 비우는 것으로 이미 처리한다. */
-export function ThirdsRatioReadout({ratio, faceShape}: Props) {
-  const r = ratio ? formatThirdsRatio(ratio) : null;
-  const selfDesc = ratio ? describeThirdsInternally(ratio) : null;
+export function ThirdsRatioReadout({ratio, faceShape, hairlineMissing}: Props) {
+  const measuredRatio = ratio
+    ? {...ratio, upper: hairlineMissing ? null : ratio.upper}
+    : null;
+  const r = measuredRatio ? formatThirdsRatio(measuredRatio) : null;
+  const selfDesc = measuredRatio ? describeThirdsInternally(measuredRatio) : null;
+  const ratioLabels = r
+    ? [
+        ...(measuredRatio?.upper == null ? [] : [`상안부 ${r.upperLabel}`]),
+        `중안부 ${r.middleLabel}`,
+        `하안부 ${r.lowerLabel}`,
+      ]
+    : [];
 
   if (!r && !faceShape) {
     return null;
@@ -51,11 +62,7 @@ export function ThirdsRatioReadout({ratio, faceShape}: Props) {
               {selfDesc ?? `${r.upperLabel} · ${r.middleLabel} · ${r.lowerLabel}`}
             </Text>
             <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
-              {[
-                `상안부 ${r.upperLabel}`,
-                `중안부 ${r.middleLabel}`,
-                `하안부 ${r.lowerLabel}`,
-              ].map(label => (
+              {ratioLabels.map(label => (
                 <Text key={label} style={[font(10.5, '600'), {color: color.muted}]}>
                   {label}
                 </Text>

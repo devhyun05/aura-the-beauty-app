@@ -23,6 +23,14 @@ export interface PhotoSlotData {
   sourceWidth?: number;
 }
 
+export interface SourceAlignedPhotoSlotData extends PhotoSlotData {
+  // Measurement overlays use source-image coordinates. Cropping this slot or
+  // omitting its dimensions would create a second, misaligned coordinate path.
+  cropRect?: never;
+  sourceHeight: number;
+  sourceWidth: number;
+}
+
 export type EvidenceKind = 'measured' | 'artist';
 
 export type RailState =
@@ -72,27 +80,20 @@ export interface S1Data {
 export type BandKey = 'upper' | 'mid' | 'lower';
 export interface S2BandData {
   key: BandKey;
-  top: number; height: number;        // normalized band rect (hairline-missing geometry for upper)
+  top: number; height: number;        // normalized measured band rect
   pillLabel: string; pillY: number;   // right-side cyan pill
   pillCentered: boolean;              // translateY(-50%) in the HTML
   restingTint?: boolean;              // mid band shows a resting tint
   title: string; desc: string;        // region-lens copy
-  descMissing?: string;               // upper variant when hairline is missing
 }
 export interface S2Data {
   eyebrow: string; title: string; sub: string;
-  photo: PhotoSlotData;
-  // Real photo width/height ratio. GuidePhotoOverlay's guide lines are normalized
-  // fractions of the ORIGINAL image; without this the fixed-4:5 frame's cover-crop
-  // shifts them off the real hairline/brow/nose/chin position for non-4:5 photos.
-  // Defaults to 4/5 (the demo fixture's assumed ratio) when omitted.
-  photoAspectRatio?: number;
+  photo: SourceAlignedPhotoSlotData;
   hairlineMissing: boolean;
-  hairlineY: number; browY: number; noseBaseY: number; chinY: number;
+  hairlineY: number | null; browY: number; noseBaseY: number; chinY: number;
   lineLabels: { hairline: string; brow: string; noseBase: string; chin: string };
-  hairlineMissingPill: string;
-  hairlineHatchHeight: number;               // 0.38
-  upperBandOk: { top: number; height: number };
+  // Contains only measured regions. When H is unavailable, upper is absent
+  // rather than represented by a synthetic band.
   bands: S2BandData[];
   missingNotice: { title: string; body: string; cta: string };
   viewCardLabel: string;

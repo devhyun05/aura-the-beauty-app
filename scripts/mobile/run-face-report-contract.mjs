@@ -156,6 +156,8 @@ requireAll(loadingSource, [
 const entries = [
   'face-report/reportFormat.ts',
   'face-report/reportFormat.test.ts',
+  'face-ratio/verticalThirdsDisplayGeometry.ts',
+  'face-ratio/verticalThirdsDisplayGeometry.test.ts',
   'face-report/reportFeatureAxes.ts',
   'face-report/reportFeatureAxes.test.ts',
   'face-report/services/reportStoryModel.ts',
@@ -205,6 +207,7 @@ run(process.execPath, [
 ]);
 
 run(process.execPath, [join(outDir, 'features/face-report/reportFormat.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-ratio/verticalThirdsDisplayGeometry.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/reportFeatureAxes.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/reportStoryModel.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/reportContentUpgrade.test.js')]);
@@ -262,3 +265,69 @@ requireContract(
   'personal-color good and avoid swatches must stay together directly below the drape photos',
 );
 console.log('personal-color drape layout contract passed');
+
+const s2ProportionSource = source(
+  'apps/mobile/src/features/face-report/sections/S2Proportion.tsx',
+);
+const thirdsOverlaySource = source(
+  'apps/mobile/src/features/face-report/visuals/GuidePhotoOverlay.tsx',
+);
+const reportTypesSource = source(
+  'apps/mobile/src/features/face-report/reportTypes.ts',
+);
+const reportAdapterSource = source(
+  'apps/mobile/src/features/face-report/services/fromFaceAnalysisReport.ts',
+);
+const thirdsReadoutSource = source(
+  'apps/mobile/src/features/face-report/visuals/ThirdsRatioReadout.tsx',
+);
+
+requireContract(
+  !s2ProportionSource.includes('aspectRatio='),
+  'S2 must not pass a design-time aspect ratio into the measurement overlay',
+);
+requireAll(thirdsOverlaySource, [
+  'getVerticalThirdsPhotoAspectRatio({',
+  'height: data.photo.sourceHeight',
+  'width: data.photo.sourceWidth',
+  'aspectRatio: sourceAspectRatio',
+  "data.bands.filter(band => band.key !== 'upper')",
+], 'source-aligned vertical-thirds photo');
+for (const removedPath of [
+  'aspectRatio?:',
+  'data.photoAspectRatio',
+  '4 / 5',
+  '<Hatch',
+  'hairlineMissingPill',
+  'hairlineHatchHeight',
+  'upperBandOk',
+]) {
+  requireContract(
+    !thirdsOverlaySource.includes(removedPath),
+    `vertical-thirds overlay must not restore removed path: ${removedPath}`,
+  );
+}
+requireAll(reportTypesSource, [
+  'photo: SourceAlignedPhotoSlotData;',
+  'cropRect?: never;',
+  'sourceHeight: number;',
+  'sourceWidth: number;',
+  'hairlineY: number | null;',
+], 'vertical-thirds source-coordinate type contract');
+requireContract(
+  !reportTypesSource.includes('photoAspectRatio'),
+  'S2 must derive frame geometry from source dimensions, not an override field',
+);
+requireAll(reportAdapterSource, [
+  'sourceHeight: sourceImage.height',
+  'sourceWidth: sourceImage.width',
+  '...(hairlineY !== null && upperPillY !== null',
+  'upper: hairlineY === null ? null',
+], 'hairline eligibility removes the synthetic upper region');
+requireAll(thirdsReadoutSource, [
+  'upper: hairlineMissing ? null : ratio.upper',
+  '...(measuredRatio?.upper == null ? [] :',
+  '`중안부 ${r.middleLabel}`',
+  '`하안부 ${r.lowerLabel}`',
+], 'missing hairline readout contains measured regions only');
+console.log('vertical-thirds single-coordinate-path contract passed');
