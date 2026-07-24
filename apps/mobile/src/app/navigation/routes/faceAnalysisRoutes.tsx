@@ -1675,10 +1675,7 @@ export function FaceAnalysisReportPreviewRouteScreen({
         analysisReport={selectedFaceAnalysisReport}
         capturedPhotoUri={selectedFaceCapture?.imageUri}
         entryResetKey={route.key}
-        initialPageId={
-          route.params?.initialPageId ??
-          (minimumPreview ? 'summary:overview' : undefined)
-        }
+        initialPageId={route.params?.initialPageId}
         minimumPreview={minimumPreview}
         onBack={() => {
           if (goldenMaskInteracting) {

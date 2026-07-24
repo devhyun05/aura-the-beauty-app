@@ -12,14 +12,29 @@ const COVER_IMAGES: Record<FaceReportStorySection['id'], ImageSourcePropType> = 
   style: require('../assets/covers/styling.jpg'),
 };
 
-export function ReportSectionCover({section}: {section: FaceReportStorySection}) {
+export function ReportSectionCover({
+  reportCover = false,
+  section,
+}: {
+  reportCover?: boolean;
+  section: FaceReportStorySection;
+}) {
+  const coverImage = reportCover
+    ? COVER_IMAGES.summary
+    : COVER_IMAGES[section.id];
+  const eyebrowLead = reportCover ? 'REPORT' : section.number;
+  const englishTitle = reportCover ? 'AURA' : section.englishTitle;
+  const koreanTitle = reportCover ? '얼굴 분석 보고서' : section.koreanTitle;
+
   return (
     <ImageBackground
       accessibilityIgnoresInvertColors
-      accessibilityLabel={`${section.koreanTitle} 섹션 표지`}
+      accessibilityLabel={
+        reportCover ? 'AURA 얼굴 분석 보고서 표지' : `${section.koreanTitle} 섹션 표지`
+      }
       imageStyle={{opacity: 0.94}}
       resizeMode="cover"
-      source={COVER_IMAGES[section.id]}
+      source={coverImage}
       style={{flex: 1}}>
       <LinearGradient
         colors={['rgba(9,20,25,0.68)', 'rgba(9,20,25,0.12)', 'rgba(9,20,25,0.72)']}
@@ -30,7 +45,7 @@ export function ReportSectionCover({section}: {section: FaceReportStorySection})
         <View style={{alignItems: 'flex-start'}}>
           <View style={{flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 18}}>
             <Text style={{fontFamily: 'Pretendard', fontSize: 11, fontWeight: '800', color: '#FFFFFF', letterSpacing: 2.1}}>
-              {section.number}
+              {eyebrowLead}
             </Text>
             <View style={{height: 1, width: 42, backgroundColor: 'rgba(255,255,255,0.75)'}} />
             <Text style={{fontFamily: 'Pretendard', fontSize: 9.5, fontWeight: '700', color: 'rgba(255,255,255,0.84)', letterSpacing: 1.45}}>
@@ -42,10 +57,10 @@ export function ReportSectionCover({section}: {section: FaceReportStorySection})
             minimumFontScale={0.7}
             numberOfLines={2}
             style={{fontFamily: 'Lora', fontSize: 43, lineHeight: 48, color: '#FFFFFF', letterSpacing: -1.2}}>
-            {section.englishTitle}
+            {englishTitle}
           </Text>
           <Text style={{fontFamily: 'Pretendard', fontSize: 19, fontWeight: '700', color: '#FFFFFF', marginTop: 8, letterSpacing: -0.2}}>
-            {section.koreanTitle}
+            {koreanTitle}
           </Text>
           <View style={{height: 3, width: 30, borderRadius: 2, backgroundColor: section.accent, marginTop: 18}} />
         </View>
