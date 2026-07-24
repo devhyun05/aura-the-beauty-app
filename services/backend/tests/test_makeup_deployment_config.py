@@ -8,7 +8,9 @@ from app.core.settings import Settings
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_seoul_makeup_model_defaults_use_global_inference_profiles() -> None:
+def test_seoul_makeup_model_defaults_use_global_inference_profiles(
+  monkeypatch,
+) -> None:
   env_example = (PROJECT_ROOT / "services/backend/.env.example").read_text(encoding="utf-8")
   workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(encoding="utf-8")
 
@@ -22,6 +24,10 @@ def test_seoul_makeup_model_defaults_use_global_inference_profiles() -> None:
     assert f"{name}={model_id}" in env_example
     assert f"{name}: ${{{{ vars.{name} || '{model_id}' }}}}" in workflow
     assert f"{name}=${{{{ env.{name} }}}}" in workflow
+    # GitHub repository variables are intentionally injected into the deploy
+    # job. Remove them here so this assertion verifies code defaults rather
+    # than whichever runtime model override happens to be configured.
+    monkeypatch.delenv(name, raising=False)
 
   settings = Settings(bedrock_model_id="anthropic.claude-3-5-sonnet-20241022-v2:0")
   assert settings.effective_scenario_model_id == expected["BEDROCK_SCENARIO_MODEL_ID"]
