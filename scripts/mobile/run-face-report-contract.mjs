@@ -96,13 +96,14 @@ requireAll(scaffoldSource, [
   'entryResetKey',
 ], 'report scaffold progress, capture, restore, and scroll reset');
 requireAll(scaffoldSource, [
-  'photoUri={data.s1.photo.uri ?? null}',
-  'reportPhotoUri={photoUri}',
+  'photo={data.s1.photo}',
+  '<ReportSectionCover photo={photo} reportCover section={section} />',
 ], 'captured user photo wiring for report cover');
 requireAll(reportCoverSource, [
-  'reportCover && reportPhotoUri',
-  '? {uri: reportPhotoUri}',
-  '? COVER_IMAGES.summary',
+  'const useUserPhoto = reportCover && Boolean(photo?.uri)',
+  '<PhotoSlot',
+  'slot={photo}',
+  'reportCover ? COVER_IMAGES.summary',
 ], 'captured user photo report cover with legacy fallback');
 requireContract(
   !scaffoldSource.includes('function ReportCompletionStepper('),
