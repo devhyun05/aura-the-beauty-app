@@ -116,7 +116,9 @@ class Settings(BaseSettings):
   # 두어 추출 지연(Sonnet 비전)을 줄이고, 얼굴 분석은 effective_analysis_model_id(Sonnet)를 유지.
   # 비우면(빈 문자열/None) effective_analysis_model_id로 폴백해 손쉽게 Sonnet 복귀 가능.
   bedrock_reference_extraction_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-  makeup_recommendation_provider_timeout_seconds: float = Field(default=45.0, ge=5.0, le=120.0)
+  # Keep the provider budget below the mobile request budget (130s) so the API
+  # still has time to validate, persist, and return the completed report.
+  makeup_recommendation_provider_timeout_seconds: float = Field(default=120.0, ge=5.0, le=120.0)
   makeup_recommendation_max_tokens: int = Field(default=6000, ge=2000, le=9000)
   bedrock_credential_readiness_timeout_seconds: float = Field(default=5.0, ge=1.0, le=15.0)
   bedrock_analysis_region: str | None = None

@@ -2069,12 +2069,10 @@ async def generate_recommendation_v2(
         validation_errors,
       )
 
-  raise AppError(
-    502,
-    "BEDROCK_INVALID_RECOMMENDATION",
-    "Bedrock returned an invalid makeup recommendation.",
-    {
-      "modelId": settings.effective_recommendation_model_id,
-      "validationErrors": validation_errors[:12],
-    },
+  logger.warning(
+    "[aura:makeup-recommendation] recommendation-v2:deterministic-fallback "
+    "modelId=%s errors=%s",
+    settings.effective_recommendation_model_id,
+    validation_errors[:12],
   )
+  return deterministic_recommendation_v2(context_snapshot, answers, questions)

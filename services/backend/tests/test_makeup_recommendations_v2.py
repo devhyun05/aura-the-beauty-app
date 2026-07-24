@@ -823,7 +823,7 @@ async def test_v2_recommendation_routes_to_sonnet_and_projects_legacy_steps(
 
   assert calls[0]["modelId"] == "global.anthropic.claude-sonnet-4-6"
   assert calls[0]["max_tokens"] == 6000
-  assert calls[0]["timeout_seconds"] == 45.0
+  assert calls[0]["timeout_seconds"] == 120.0
   assert [look["role"] for look in result["looks"]] == ["anchor", "bold", "discovery"]
   assert result["generationSource"] == "claude"
   assert result["matchAssessment"]["version"] == "makeup-match-v1"
@@ -888,7 +888,7 @@ async def test_provider_recommendation_is_clamped_to_selected_prep_time(
 
 
 @pytest.mark.asyncio
-async def test_invalid_v2_recommendation_fails_closed_without_retry(
+async def test_invalid_v2_recommendation_uses_deterministic_fallback_without_retry(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   attempts = 0
@@ -899,13 +899,17 @@ async def test_invalid_v2_recommendation_fails_closed_without_retry(
     return {"contextSummary": ["조건"], "looks": []}
 
   monkeypatch.setattr(makeup_service, "generate_json", invalid_response)
-  with pytest.raises(AppError) as exc_info:
-    await makeup_service.generate_recommendation_v2(Settings(), {}, [], [])
+  result = await makeup_service.generate_recommendation_v2(
+    Settings(),
+    {"selection": {"situation": {"label": "일상"}}},
+    _questions(),
+    [{"questionId": "change_level", "optionId": "balanced"}],
+  )
 
   assert attempts == 1
-  assert exc_info.value.status_code == 502
-  assert exc_info.value.code == "BEDROCK_INVALID_RECOMMENDATION"
-  assert exc_info.value.details["validationErrors"]
+  assert result["looks"]
+  assert result["generationSource"] == "deterministic_fallback"
+  assert result["matchAssessment"]["generationSource"] == "deterministic_fallback"
 
 @pytest.mark.asyncio
 async def test_v2_recommendation_provider_failure_propagates_without_fallback(
