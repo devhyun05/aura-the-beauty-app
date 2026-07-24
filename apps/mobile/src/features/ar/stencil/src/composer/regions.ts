@@ -1063,6 +1063,14 @@ const BROW_SHAPE_AXIS: ComposerControl[] = [
     max: 1.6,
     fallback: 1,
   },
+  {
+    type: 'slider',
+    label: '가로 길이',
+    key: 'browLength',
+    min: 0.65,
+    max: 1.6,
+    fallback: 1,
+  },
 ];
 const BROW_FIT_AXIS: ComposerControl[] = [
   { type: 'slider', label: '내 눈썹 아래 덮기', key: 'browExpandLower', min: -0.25, max: 0.75, step: 0.05, fallback: 0, gold: true },
@@ -2000,9 +2008,9 @@ export const REGION_GROUPS: RegionGroup[] = [
         key: 'browConceal',
         label: '지우개',
         emoji: '🧽',
-        productName: '스킨톤 컨실',
+        productName: '눈썹 지우기',
         onKeys: ['browConcealIntensity'],
-        defaults: { browConcealIntensity: 0.6, browThicknessProfile: 2 },
+        defaults: { browConcealIntensity: 1, browThicknessProfile: 2 },
         note: BROW_NOTE,
         axes: {
           shape: BROW_SHAPE_AXIS,
@@ -2014,7 +2022,7 @@ export const REGION_GROUPS: RegionGroup[] = [
             { type: 'segments', key: 'browConcealFinish', options: SATIN_FINISHES },
           ],
           opacity: [
-            { type: 'slider', label: '지우기 (컨실)', key: 'browConcealIntensity' },
+            { type: 'slider', label: '지우기 강도', key: 'browConcealIntensity' },
           ],
           fit: BROW_FIT_AXIS,
         },

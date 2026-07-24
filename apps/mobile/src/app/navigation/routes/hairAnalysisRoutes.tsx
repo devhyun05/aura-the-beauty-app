@@ -2,6 +2,8 @@ import React from 'react';
 import {Alert} from 'react-native';
 
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {AiDataConsentGate} from '../../../features/legal/components/AiDataConsentGate';
+import {useAiDataConsent} from '../../../features/legal/services/aiDataConsentContext';
 import {HairAnalysisIntroScreen} from '../../../features/hair-analysis/screens/HairAnalysisIntroScreen';
 import {HairAnalysisResultScreen} from '../../../features/hair-analysis/screens/HairAnalysisResultScreen';
 import {HairProgressScreen} from '../../../features/hair-analysis/screens/HairProgressScreen';
@@ -36,13 +38,21 @@ import {
 
 
 export function HairAnalysisIntroRouteScreen({navigation}: RootScreenProps<'HairAnalysisIntro'>) {
+  const {requestAiDataConsent} = useAiDataConsent();
+
   return (
     <DetailRouteChrome
       routeName="HairAnalysisIntro"
       onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <HairAnalysisIntroScreen
         onOpenSaved={() => navigation.navigate('SavedHairSimulations')}
-        onStart={() => navigation.navigate('HairAnalysisCapture')}
+        onStart={() => {
+          void requestAiDataConsent().then(accepted => {
+            if (accepted) {
+              navigation.navigate('HairAnalysisCapture');
+            }
+          });
+        }}
       />
     </DetailRouteChrome>
   );
@@ -51,24 +61,30 @@ export function HairAnalysisIntroRouteScreen({navigation}: RootScreenProps<'Hair
 export function HairAnalysisCaptureRouteScreen({navigation}: RootScreenProps<'HairAnalysisCapture'>) {
   const {setSelectedHairCapture} = useNavigationFlowState();
   return (
-    <CameraFaceCaptureScreen
-      allowCameraToggle={false}
-      allowGallery={false}
-      captureMode="face"
-      captureType="hair_analysis"
-      deferUpload
-      onCapture={capture => {
-        if (!capture) {
-          return;
-        }
-        setSelectedHairCapture(capture);
-        navigation.replace('FaceCaptureConfirmation', {target: 'hairAnalysis'});
-      }}
-      onClose={() => {
+    <AiDataConsentGate
+      onDecline={() => {
         setSelectedHairCapture(null);
         navigation.replace('HairAnalysisIntro');
-      }}
-    />
+      }}>
+      <CameraFaceCaptureScreen
+        allowCameraToggle={false}
+        allowGallery={false}
+        captureMode="face"
+        captureType="hair_analysis"
+        deferUpload
+        onCapture={capture => {
+          if (!capture) {
+            return;
+          }
+          setSelectedHairCapture(capture);
+          navigation.replace('FaceCaptureConfirmation', {target: 'hairAnalysis'});
+        }}
+        onClose={() => {
+          setSelectedHairCapture(null);
+          navigation.replace('HairAnalysisIntro');
+        }}
+      />
+    </AiDataConsentGate>
   );
 }
 

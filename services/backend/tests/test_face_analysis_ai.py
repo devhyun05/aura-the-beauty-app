@@ -5,7 +5,11 @@ import pytest
 
 from app.core.errors import AppError
 from app.schemas.face_analysis_v2 import MeasurementCoveragePlan, MetricEnvelope
-from app.services.face_analysis_ai import FaceAnalysisAI
+from app.services.face_analysis_ai import (
+  AnalysisCallMetrics,
+  FaceAnalysisAI,
+  StageGenerationMetrics,
+)
 
 
 def ai_metric(value: str = "smooth") -> dict[str, Any]:
@@ -21,6 +25,29 @@ def ai_metric(value: str = "smooth") -> dict[str, Any]:
   }
 
 
+def styling_looks() -> dict[str, Any]:
+  rows = [
+    {"category": "base", "note": "얇은 베이스", "why": "피부 결을 살려요"},
+    {"category": "brow", "note": "결 눈썹", "why": "눈썹 흐름을 살려요"},
+    {"category": "blush", "note": "볼 중앙", "why": "볼 중심을 살려요"},
+    {"category": "lip", "note": "차분한 립", "why": "색 축과 연결해요"},
+  ]
+  return {
+    "natural": {
+      "title": "결을 살린 룩",
+      "subtitle": "차분한 방향",
+      "description": "현재 선을 부드럽게 연결해요",
+      "rows": rows,
+    },
+    "glam": {
+      "title": "선명도를 더한 룩",
+      "subtitle": "또렷한 방향",
+      "description": "같은 비율에 대비를 더해요",
+      "rows": rows,
+    },
+  }
+
+
 class FakeStructuredClient:
   def __init__(self, responses: list[dict[str, Any]]) -> None:
     self.responses = list(responses)
@@ -28,6 +55,16 @@ class FakeStructuredClient:
 
   async def analyze_structured_json(self, **kwargs) -> dict[str, Any]:
     self.calls.append(kwargs)
+    on_call_metrics = kwargs.get("on_call_metrics")
+    if on_call_metrics is not None:
+      call_index = len(self.calls)
+      on_call_metrics(
+        AnalysisCallMetrics(
+          duration_ms=100 * call_index,
+          input_tokens=10 * call_index,
+          output_tokens=5 * call_index,
+        ),
+      )
     return self.responses.pop(0)
 
 
@@ -144,6 +181,30 @@ async def test_measurement_rejects_authoritative_and_unknown_keys() -> None:
   assert result.rejected_authoritative_keys == ["face3d.noseTipProjection"]
   assert result.rejected_unknown_keys == ["unknown.metric"]
   assert client.calls[0]["source_image_bytes"] == b"jpeg"
+
+
+@pytest.mark.asyncio
+async def test_validation_retry_aggregates_every_provider_call_usage() -> None:
+  client = FakeStructuredClient(
+    [
+      {"metrics": {}},
+      {"metrics": {}, "photoQuality": {"usable": True, "warnings": []}},
+    ],
+  )
+  metrics = StageGenerationMetrics()
+
+  await FaceAnalysisAI(client).measure(
+    source_image_bytes=b"jpeg",
+    coverage=COVERAGE,
+    camera_profile=PROFILE,
+    generation_metrics=metrics,
+  )
+
+  assert metrics.input_tokens == 30
+  assert metrics.output_tokens == 15
+  assert metrics.total_tokens == 45
+  assert metrics.provider_call_count == 2
+  assert metrics.validation_retry_count == 1
 
 
 @pytest.mark.asyncio
@@ -287,6 +348,7 @@ async def test_consulting_never_sends_image() -> None:
     "summary": "맞춤 요약",
     "shortSummary": "짧은 요약",
     "tags": ["차분"],
+    "stylingLooks": styling_looks(),
   }
   client = FakeStructuredClient([response])
 
@@ -296,6 +358,100 @@ async def test_consulting_never_sends_image() -> None:
   developer_prompt = client.calls[0]["developer_prompt"]
   assert "Keep face shape and vertical facial thirds as separate facts" in developer_prompt
   assert "Never describe a dominant or elongated" in developer_prompt
+
+
+@pytest.mark.asyncio
+async def test_consulting_repairs_missing_styling_looks() -> None:
+  response = {
+    "makeup": {
+      "base": "얇은 베이스", "brow": "결 눈썹", "eyeshadow": "차분한 음영",
+      "eyeliner": "얇은 라인", "blush": "볼 중앙", "contour": "외곽 음영",
+      "highlight": "중앙 광", "lip": "차분한 립",
+    },
+    "colorAndProduct": {
+      "summary": "차분한 색을 골라요",
+      "items": ["부드러운 질감을 골라요"],
+      "rationaleMetricKeys": [],
+    },
+    "hair": {"summary": "옆선을 정리해요", "items": ["선을 연결해요"], "rationaleMetricKeys": []},
+    "fashion": {"summary": "단정한 선을 써요", "items": ["결을 맞춰요"], "rationaleMetricKeys": []},
+    "photography": {"summary": "정면광을 써요", "items": ["눈높이를 맞춰요"], "rationaleMetricKeys": []},
+    "overallMood": "차분한 선명함",
+    "summary": "측정된 선을 살리는 방향이에요",
+    "shortSummary": "현재 선을 살려요",
+    "tags": ["차분함"],
+  }
+  client = FakeStructuredClient(
+    [
+      response,
+      {**response, "stylingLooks": styling_looks()},
+    ],
+  )
+
+  result = await FaceAnalysisAI(client).consult(profile={}, derived={})
+
+  assert len(client.calls) == 2
+  assert "missing_required_styling_looks" in client.calls[1]["user_prompt"]
+  assert result.styling_looks is not None
+
+
+@pytest.mark.asyncio
+async def test_consulting_repairs_raw_numbers_and_vertical_contradictions() -> None:
+  def response(*, base: str, summary: str) -> dict[str, Any]:
+    return {
+      "makeup": {
+        "base": base, "brow": "눈썹 결 정리", "eyeshadow": "음영 정리",
+        "eyeliner": "점막 가까이 정리", "blush": "볼 중심에 가볍게",
+        "contour": "외곽을 부드럽게", "highlight": "중앙부에 얇게", "lip": "입술선 정리",
+      },
+      "colorAndProduct": {
+        "summary": "차분한 색을 골라요", "items": ["맑은 질감을 골라요"],
+        "rationaleMetricKeys": [],
+      },
+      "hair": {
+        "summary": "옆선을 정리해요", "items": ["얼굴 옆에 여백을 둬요"],
+        "rationaleMetricKeys": [],
+      },
+      "fashion": {
+        "summary": "단정한 선이 어울려요", "items": ["부드러운 소재를 골라요"],
+        "rationaleMetricKeys": [],
+      },
+      "photography": {
+        "summary": "정면광을 써요", "items": ["카메라 높이를 눈에 맞춰요"],
+        "rationaleMetricKeys": [],
+      },
+      "overallMood": "차분한 선명함",
+      "summary": summary,
+      "shortSummary": summary,
+      "tags": ["차분함"],
+      "stylingLooks": styling_looks(),
+    }
+
+  client = FakeStructuredClient(
+    [
+      response(base="베이스를 2겹 발라요", summary="중안부가 우세하지만 전체 비율은 균형이에요"),
+      response(base="베이스를 얇게 발라요", summary="중안부의 세로 흐름이 상대적으로 강조돼요"),
+    ],
+  )
+
+  result = await FaceAnalysisAI(client).consult(
+    profile={},
+    derived={
+      "verticalBalance": {
+        "label": "중안부 우세",
+        "description": "중안부가 상대적으로 길어요",
+        "confidence": 0.9,
+        "rationaleMetricKeys": [],
+        "sensitivity": 1,
+      },
+    },
+    perception={},
+  )
+
+  assert len(client.calls) == 2
+  assert "user_copy_contains_raw_number" in client.calls[1]["user_prompt"]
+  assert "contradicts_vertical_balance" in client.calls[1]["user_prompt"]
+  assert result.summary == "중안부의 세로 흐름이 상대적으로 강조돼요"
 
 
 @pytest.mark.asyncio
@@ -312,6 +468,7 @@ async def test_consulting_uses_account_gender_directive() -> None:
       "fashion": {"summary": "f", "items": ["i"], "rationaleMetricKeys": []},
       "photography": {"summary": "p", "items": ["i"], "rationaleMetricKeys": []},
       "overallMood": "차분한 균형", "summary": "s", "shortSummary": "s", "tags": ["t"],
+      "stylingLooks": styling_looks(),
     }
 
   male_client = FakeStructuredClient([_response()])

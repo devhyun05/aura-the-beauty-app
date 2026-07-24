@@ -65,6 +65,7 @@ export const UNITY_GOLDEN_MASK_BRIDGE_TARGET = {
   resetMethod: 'ResetGoldenMaskViewJson',
   rotateMethod: 'SetGoldenMaskRotationJson',
   unloadMethod: 'UnloadGoldenMaskJson',
+  wireframeVisibilityMethod: 'SetGoldenMaskWireframeVisibleJson',
 } as const;
 
 export const UNITY_MAKEUP_NATIVE_EVENT_NAME = 'UnityMakeupEvent';
@@ -369,6 +370,7 @@ export type ArwFilterParams = {
   browStyleColor: string;
   browStyleIntensity: number;
   browThickness: number;
+  browLength: number;
   browArch: number;
   highlightColor: string;
   highlightIntensity: number;
@@ -416,6 +418,7 @@ export const ARW_BARE_FILTER_PARAMS: ArwFilterParams = {
   browStyleColor: '#3A2A20',
   browStyleIntensity: 0,
   browThickness: 1,
+  browLength: 1,
   browArch: 0,
   highlightColor: '#FFF2DB',
   highlightIntensity: 0,
@@ -682,6 +685,23 @@ export function setUnityGoldenMaskRotation({
     UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
     UNITY_GOLDEN_MASK_BRIDGE_TARGET.rotateMethod,
     JSON.stringify({pitch, requestId: requestId.trim(), yaw}),
+  );
+}
+
+export function setUnityGoldenMaskWireframeVisible({
+  requestId,
+  visible,
+}: {
+  requestId: string;
+  visible: boolean;
+}): boolean {
+  if (!requestId.trim()) {
+    return false;
+  }
+  return postUnityMessage(
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.gameObject,
+    UNITY_GOLDEN_MASK_BRIDGE_TARGET.wireframeVisibilityMethod,
+    JSON.stringify({requestId: requestId.trim(), visible}),
   );
 }
 

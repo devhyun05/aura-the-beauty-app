@@ -1,5 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
-import * as FileSystem from 'expo-file-system/legacy';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   PanResponder,
@@ -13,82 +12,77 @@ import {UnityMakeupNativeView} from '../../ar/components/UnityMakeupNativeView';
 import {
   addUnityGoldenMaskEventListener,
   captureUnityGoldenMaskPoster,
-  isUnityMakeupFrameworkAvailable,
-  isUnityMakeupReady,
-  loadUnityGoldenMask,
-  prepareUnityMakeupRuntime,
   resetUnityGoldenMaskView,
   setUnityGoldenMaskRotation,
-  unloadUnityGoldenMask,
+  setUnityGoldenMaskWireframeVisible,
 } from '../../ar/services/unityMakeupBridge';
 import type {GoldenMaskReportDescriptor} from '../../../shared/contracts/goldenMask';
 import type {StoryReportPagerRef} from '../../../shared/ui/StoryReportPager';
-import {downloadGoldenMaskForReport} from '../services/goldenMaskReportService';
+import type {PhotoSlotData} from '../reportTypes';
+import {
+  disposePreparedGoldenMask,
+  getPreparedGoldenMask,
+  preloadGoldenMaskForReport,
+} from '../services/goldenMaskPreloadService';
+import {resolveGoldenMaskRotation} from '../services/goldenMaskInteraction';
+import {PhotoSlot} from '../visuals/PhotoSlot';
+import {color} from '../reportTokens';
 
 type GoldenMaskCardProps = {
   active: boolean;
+  captureMode?: boolean;
+  capturePosterUri?: string | null;
   descriptor: GoldenMaskReportDescriptor;
+  layout?: 'standalone' | 'evidence';
+  onInteractionChange?: (interacting: boolean) => void;
   onPosterUnavailable?: () => void;
   onPosterReady?: (fileUri: string) => void;
   pagerRef: React.RefObject<StoryReportPagerRef | null>;
   posterRequestKey?: number;
   reportId: string;
+  sourcePhoto?: PhotoSlotData;
 };
 
 type ViewerStatus = 'loading' | 'ready' | 'error';
 
-const READY_TIMEOUT_MS = 6_000;
-const LOAD_TIMEOUT_MS = 10_000;
-const YAW_LIMIT = 38;
-const PITCH_LIMIT = 15;
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.max(minimum, Math.min(maximum, value));
-}
-
-function createRequestId(reportId: string): string {
-  return `golden-mask:${reportId}:${Date.now()}:${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
-}
-
-function waitForUnityReady(): Promise<boolean> {
-  if (isUnityMakeupReady()) {
-    return Promise.resolve(true);
-  }
-  prepareUnityMakeupRuntime();
-  return new Promise(resolve => {
-    const startedAt = Date.now();
-    const timer = setInterval(() => {
-      if (isUnityMakeupReady()) {
-        clearInterval(timer);
-        resolve(true);
-      } else if (Date.now() - startedAt >= READY_TIMEOUT_MS) {
-        clearInterval(timer);
-        resolve(false);
-      }
-    }, 120);
-  });
-}
-
 export function GoldenMaskCard({
   active,
+  captureMode = false,
+  capturePosterUri,
   descriptor,
+  layout = 'standalone',
+  onInteractionChange,
   onPosterUnavailable,
   onPosterReady,
   pagerRef,
   posterRequestKey = 0,
   reportId,
+  sourcePhoto,
 }: GoldenMaskCardProps) {
+  const evidenceLayout = layout === 'evidence';
+  const preparedAtRender = getPreparedGoldenMask(
+    reportId,
+    descriptor.topologyFingerprint,
+  );
   const [retryKey, setRetryKey] = useState(0);
-  const [status, setStatus] = useState<ViewerStatus>('loading');
+  const [status, setStatus] = useState<ViewerStatus>(
+    preparedAtRender ? 'ready' : 'loading',
+  );
   const [errorMessage, setErrorMessage] = useState('');
-  const requestIdRef = useRef('');
+  const [wireframeVisible, setWireframeVisible] = useState(false);
+  const requestIdRef = useRef(preparedAtRender?.requestId ?? '');
   const yawRef = useRef(0);
   const pitchRef = useRef(0);
   const dragStartRef = useRef({pitch: 0, yaw: 0});
   const lastTapAtRef = useRef(0);
   const lastPosterRequestKeyRef = useRef(0);
+  const setInteractionLocked = useCallback(
+    (locked: boolean) => {
+      pagerRef.current?.setPagingEnabled(!locked);
+      onInteractionChange?.(locked);
+    },
+    [onInteractionChange, pagerRef],
+  );
 
   useEffect(() => {
     if (!active) {
@@ -96,28 +90,39 @@ export function GoldenMaskCard({
     }
 
     let mounted = true;
-    let loadTimeout: ReturnType<typeof setTimeout> | null = null;
-    let downloadedFileUri: string | null = null;
-    const deleteDownloadedFile = () => {
-      const fileUri = downloadedFileUri;
-      downloadedFileUri = null;
-      if (fileUri) {
-        void FileSystem.deleteAsync(fileUri, {idempotent: true}).catch(
-          () => undefined,
-        );
-      }
-    };
-    const requestId = createRequestId(reportId);
-    requestIdRef.current = requestId;
+    const startedAt = Date.now();
     yawRef.current = 0;
     pitchRef.current = 0;
-    setStatus('loading');
+    setWireframeVisible(false);
+    const prepared = getPreparedGoldenMask(
+      reportId,
+      descriptor.topologyFingerprint,
+    );
+    if (prepared) {
+      requestIdRef.current = prepared.requestId;
+      setUnityGoldenMaskWireframeVisible({
+        requestId: prepared.requestId,
+        visible: false,
+      });
+      setStatus('ready');
+    } else {
+      setStatus('loading');
+    }
     setErrorMessage('');
+    console.info('[aura:golden-mask] viewer:start', {
+      preloaded: Boolean(prepared),
+      reportId,
+      requestId: prepared?.requestId,
+    });
 
     const subscription = addUnityGoldenMaskEventListener(event => {
-      if (!mounted || event.requestId !== requestId) {
+      if (!mounted || event.requestId !== requestIdRef.current) {
         return;
       }
+      console.info('[aura:golden-mask] unity:event', {
+        requestId: event.requestId,
+        type: event.type,
+      });
       if (event.type === 'golden_mask_poster_ready') {
         onPosterReady?.(event.fileUri);
         return;
@@ -128,47 +133,38 @@ export function GoldenMaskCard({
         onPosterUnavailable?.();
         return;
       }
-      if (loadTimeout) {
-        clearTimeout(loadTimeout);
-        loadTimeout = null;
-      }
-      if (event.type === 'golden_mask_ready') {
-        deleteDownloadedFile();
-        setStatus('ready');
-        return;
-      }
       if (event.type === 'golden_mask_failed') {
-        deleteDownloadedFile();
         setStatus('error');
         setErrorMessage('3D 얼굴을 표시하지 못했어요. 다시 시도해 주세요.');
       }
     });
 
     void (async () => {
-      if (!isUnityMakeupFrameworkAvailable()) {
-        throw new Error('이 빌드에서는 3D 얼굴 뷰어를 사용할 수 없어요.');
-      }
-      const [{fileUri}, ready] = await Promise.all([
-        downloadGoldenMaskForReport(reportId, descriptor),
-        waitForUnityReady(),
-      ]);
-      downloadedFileUri = fileUri;
+      const result =
+        prepared ??
+        (await preloadGoldenMaskForReport(reportId, descriptor));
+      console.info('[aura:golden-mask] viewer:prepared', {
+        elapsedMs: Date.now() - startedAt,
+        ready: result.ready,
+        requestId: result.requestId,
+      });
       if (!mounted) {
-        deleteDownloadedFile();
         return;
       }
-      if (!ready || !loadUnityGoldenMask({fileUri, requestId})) {
+      requestIdRef.current = result.requestId;
+      if (!result.ready) {
         throw new Error('3D 얼굴 뷰어를 준비하지 못했어요.');
       }
-      loadTimeout = setTimeout(() => {
-        if (mounted) {
-          deleteDownloadedFile();
-          setStatus('error');
-          setErrorMessage('골든마스크를 불러오는 데 시간이 오래 걸리고 있어요.');
-        }
-      }, LOAD_TIMEOUT_MS);
-    })().catch(() => {
-      deleteDownloadedFile();
+      setUnityGoldenMaskWireframeVisible({
+        requestId: result.requestId,
+        visible: false,
+      });
+      setStatus('ready');
+    })().catch(error => {
+      console.info('[aura:golden-mask] viewer:error', {
+        message: error instanceof Error ? error.message : String(error),
+        requestId: requestIdRef.current,
+      });
       if (mounted) {
         setStatus('error');
         setErrorMessage('골든마스크를 불러오지 못했어요. 다시 시도해 주세요.');
@@ -177,13 +173,8 @@ export function GoldenMaskCard({
 
     return () => {
       mounted = false;
-      if (loadTimeout) {
-        clearTimeout(loadTimeout);
-      }
       subscription.remove();
-      unloadUnityGoldenMask(requestId);
-      deleteDownloadedFile();
-      pagerRef.current?.setPagingEnabled(true);
+      setInteractionLocked(false);
     };
   }, [
     active,
@@ -193,6 +184,7 @@ export function GoldenMaskCard({
     pagerRef,
     reportId,
     retryKey,
+    setInteractionLocked,
   ]);
 
   useEffect(() => {
@@ -204,8 +196,10 @@ export function GoldenMaskCard({
       return;
     }
     lastPosterRequestKeyRef.current = posterRequestKey;
-    captureUnityGoldenMaskPoster(requestIdRef.current);
-  }, [active, posterRequestKey, status]);
+    if (!captureUnityGoldenMaskPoster(requestIdRef.current)) {
+      onPosterUnavailable?.();
+    }
+  }, [active, onPosterUnavailable, posterRequestKey, status]);
 
   const panResponder = useMemo(
     () =>
@@ -213,31 +207,28 @@ export function GoldenMaskCard({
         onMoveShouldSetPanResponder: (_, gesture) =>
           status === 'ready' &&
           Math.abs(gesture.dx) + Math.abs(gesture.dy) > 3,
+        onMoveShouldSetPanResponderCapture: (_, gesture) =>
+          status === 'ready' &&
+          Math.abs(gesture.dx) + Math.abs(gesture.dy) > 3,
         onPanResponderGrant: () => {
           dragStartRef.current = {
             pitch: pitchRef.current,
             yaw: yawRef.current,
           };
-          pagerRef.current?.setPagingEnabled(false);
+          setInteractionLocked(true);
         },
         onPanResponderMove: (_, gesture) => {
           const requestId = requestIdRef.current;
-          const yaw = clamp(
-            dragStartRef.current.yaw + gesture.dx * 0.28,
-            -YAW_LIMIT,
-            YAW_LIMIT,
-          );
-          const pitch = clamp(
-            dragStartRef.current.pitch - gesture.dy * 0.2,
-            -PITCH_LIMIT,
-            PITCH_LIMIT,
+          const {pitch, yaw} = resolveGoldenMaskRotation(
+            dragStartRef.current,
+            gesture,
           );
           yawRef.current = yaw;
           pitchRef.current = pitch;
           setUnityGoldenMaskRotation({pitch, requestId, yaw});
         },
         onPanResponderRelease: (_, gesture) => {
-          pagerRef.current?.setPagingEnabled(true);
+          setInteractionLocked(false);
           if (Math.abs(gesture.dx) + Math.abs(gesture.dy) > 5) {
             return;
           }
@@ -251,75 +242,174 @@ export function GoldenMaskCard({
             lastTapAtRef.current = now;
           }
         },
+        onPanResponderTerminationRequest: () => false,
         onPanResponderTerminate: () => {
-          pagerRef.current?.setPagingEnabled(true);
+          setInteractionLocked(false);
         },
+        onShouldBlockNativeResponder: () => true,
         onStartShouldSetPanResponder: () => status === 'ready',
+        onStartShouldSetPanResponderCapture: () => status === 'ready',
       }),
-    [pagerRef, status],
+    [setInteractionLocked, status],
   );
 
   return (
-    <View style={styles.root}>
-      <View style={styles.copy}>
-        <Text style={styles.eyebrow}>GOLDEN MASK</Text>
-        <Text accessibilityRole="header" style={styles.title}>
-          나의 3D 페이스
-        </Text>
-        <Text style={styles.description}>
-          TrueDepth로 측정한 얼굴 메시를 고대 조각처럼 담았어요.
-        </Text>
-      </View>
+    <View style={[styles.root, evidenceLayout ? styles.evidenceRoot : null]}>
+      {!evidenceLayout ? (
+        <View style={styles.copy}>
+          <Text style={styles.eyebrow}>GOLDEN MASK</Text>
+          <Text accessibilityRole="header" style={styles.title}>
+            나의 3D 페이스
+          </Text>
+          <Text style={styles.description}>
+            TrueDepth로 측정한 얼굴 표면을 나만의 Golden Mask로 담았어요.
+          </Text>
+        </View>
+      ) : null}
 
       <View
-        accessibilityActions={[{name: 'activate', label: '정면으로 돌아가기'}]}
-        accessibilityHint="손가락으로 드래그하면 얼굴을 회전하고, 두 번 탭하면 정면으로 돌아갑니다."
-        accessibilityLabel="골든마스크 3D 얼굴"
-        accessibilityRole="image"
-        onAccessibilityAction={() => {
-          yawRef.current = 0;
-          pitchRef.current = 0;
-          resetUnityGoldenMaskView(requestIdRef.current);
-        }}
-        style={styles.viewer}
-        {...panResponder.panHandlers}>
-        {active ? (
-          <UnityMakeupNativeView
-            pointerEvents="none"
-            runtimeMode="still"
-            style={styles.unityView}
-          />
-        ) : null}
+        style={[
+          styles.viewer,
+          evidenceLayout ? styles.evidenceViewer : null,
+        ]}>
+        <View
+          accessibilityActions={[{name: 'activate', label: '정면으로 돌아가기'}]}
+          accessibilityHint="좌우로 드래그하면 옆모습까지, 위아래로 드래그하면 높은 각도와 낮은 각도를 볼 수 있습니다. 두 번 탭하면 정면으로 돌아갑니다."
+          accessibilityLabel="골든마스크 3D 얼굴"
+          accessibilityRole="image"
+          onAccessibilityAction={() => {
+            yawRef.current = 0;
+            pitchRef.current = 0;
+            resetUnityGoldenMaskView(requestIdRef.current);
+          }}
+          style={styles.interactionSurface}
+          {...panResponder.panHandlers}>
+          {captureMode && capturePosterUri ? (
+            <PhotoSlot
+              shape="rect"
+              slot={{
+                placeholderLabel: '3D 얼굴 이미지',
+                uri: capturePosterUri,
+              }}
+              style={styles.unityView}
+            />
+          ) : active ? (
+            <UnityMakeupNativeView
+              pointerEvents="none"
+              runtimeMode="still"
+              style={styles.unityView}
+            />
+          ) : null}
 
-        {status === 'loading' ? (
-          <View style={styles.stateOverlay}>
-            <ActivityIndicator color="#76736D" size="small" />
-            <Text style={styles.stateTitle}>골든마스크를 준비하고 있어요</Text>
-            <Text style={styles.stateDescription}>잠시만 기다려 주세요.</Text>
-          </View>
-        ) : null}
+          {status === 'ready' && !evidenceLayout ? (
+            <View pointerEvents="none" style={styles.proofBadge}>
+              <Text style={styles.proofBadgeText}>
+                TRUEDEPTH · DEPTH INCLUDED
+              </Text>
+            </View>
+          ) : null}
 
-        {status === 'error' ? (
-          <View style={styles.stateOverlay}>
-            <Text style={styles.stateTitle}>골든마스크를 열지 못했어요</Text>
-            <Text style={styles.stateDescription}>{errorMessage}</Text>
-            <Pressable
-              accessibilityLabel="골든마스크 다시 불러오기"
-              accessibilityRole="button"
-              onPress={() => setRetryKey(value => value + 1)}
-              style={({pressed}) => [
-                styles.retryButton,
-                pressed ? styles.retryButtonPressed : null,
+          {status === 'loading' ? (
+            <View style={styles.stateOverlay}>
+              <ActivityIndicator color={color.muted} size="small" />
+              <Text style={styles.stateTitle}>골든마스크를 준비하고 있어요</Text>
+              <Text style={styles.stateDescription}>잠시만 기다려 주세요.</Text>
+            </View>
+          ) : null}
+
+          {status === 'error' ? (
+            <View style={styles.stateOverlay}>
+              <Text style={styles.stateTitle}>골든마스크를 열지 못했어요</Text>
+              <Text style={styles.stateDescription}>{errorMessage}</Text>
+              <Pressable
+                accessibilityLabel="골든마스크 다시 불러오기"
+                accessibilityRole="button"
+                onPress={() => {
+                  disposePreparedGoldenMask(reportId);
+                  requestIdRef.current = '';
+                  setWireframeVisible(false);
+                  setRetryKey(value => value + 1);
+                }}
+                style={({pressed}) => [
+                  styles.retryButton,
+                  pressed ? styles.retryButtonPressed : null,
+                ]}>
+                <Text style={styles.retryText}>다시 시도</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+
+        {status === 'ready' ? (
+          <Pressable
+            accessibilityHint="얼굴 표면의 삼각형 메시 선을 표시하거나 숨깁니다."
+            accessibilityLabel="3D 얼굴 메시 선"
+            accessibilityRole="switch"
+            accessibilityState={{checked: wireframeVisible}}
+            hitSlop={8}
+            onPress={() => {
+              const visible = !wireframeVisible;
+              setWireframeVisible(visible);
+              setUnityGoldenMaskWireframeVisible({
+                requestId: requestIdRef.current,
+                visible,
+              });
+            }}
+            style={({pressed}) => [
+              styles.meshToggle,
+              wireframeVisible ? styles.meshToggleActive : null,
+              pressed ? styles.meshTogglePressed : null,
+            ]}>
+            <View
+              style={[
+                styles.meshToggleDot,
+                wireframeVisible ? styles.meshToggleDotActive : null,
+              ]}
+            />
+            <Text
+              style={[
+                styles.meshToggleText,
+                wireframeVisible ? styles.meshToggleTextActive : null,
               ]}>
-              <Text style={styles.retryText}>다시 시도</Text>
-            </Pressable>
-          </View>
+              메시
+            </Text>
+          </Pressable>
+        ) : null}
+
+        {status === 'ready' && evidenceLayout ? (
+          <>
+            {sourcePhoto ? (
+              <View
+                accessible
+                accessibilityLabel="3D 얼굴과 비교할 원본 얼굴 사진"
+                accessibilityRole="image"
+                pointerEvents="none"
+                style={styles.sourcePhotoBadge}>
+                <View style={styles.sourcePhotoRing}>
+                  <PhotoSlot
+                    shape="circle"
+                    slot={sourcePhoto}
+                    style={styles.sourcePhoto}
+                  />
+                </View>
+                <Text style={styles.sourcePhotoLabel}>원본 비교</Text>
+              </View>
+            ) : null}
+            <View pointerEvents="none" style={styles.summaryProof}>
+              <Text style={styles.summaryProofText}>TRUEDEPTH · 3D</Text>
+            </View>
+            <View pointerEvents="none" style={styles.summaryGesture}>
+              <Text style={styles.summaryGestureText}>드래그해 확인</Text>
+            </View>
+          </>
         ) : null}
       </View>
 
-      <Text style={styles.hint}>
-        드래그하여 회전 · 두 번 탭하여 정면 보기
-      </Text>
+      {!evidenceLayout ? (
+        <Text style={styles.hint}>
+          좌우·위아래로 회전 · 두 번 탭하여 정면 보기
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -331,26 +421,88 @@ const styles = StyleSheet.create({
     paddingTop: 22,
   },
   description: {
-    color: '#716F69',
+    color: color.text,
     fontFamily: 'Pretendard',
-    fontSize: 12.5,
-    lineHeight: 19,
+    fontSize: 14,
+    lineHeight: 21,
   },
   eyebrow: {
-    color: '#7D786F',
-    fontFamily: 'Lora',
-    fontSize: 12,
-    letterSpacing: 2,
+    color: color.accentDeep,
+    fontFamily: 'Pretendard',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 1.1,
   },
   hint: {
-    color: '#8C8982',
+    color: color.muted,
     fontFamily: 'Pretendard',
-    fontSize: 11,
+    fontSize: 13,
     paddingBottom: 16,
     textAlign: 'center',
   },
+  interactionSurface: {
+    ...StyleSheet.absoluteFill,
+  },
+  meshToggle: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(248,247,242,0.90)',
+    borderColor: 'rgba(42,44,42,0.16)',
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    position: 'absolute',
+    right: 14,
+    top: 14,
+    zIndex: 3,
+  },
+  meshToggleActive: {
+    backgroundColor: color.accentDeep,
+    borderColor: color.accentDeep,
+  },
+  meshToggleDot: {
+    backgroundColor: color.muted,
+    borderRadius: 999,
+    height: 5,
+    width: 5,
+  },
+  meshToggleDotActive: {
+    backgroundColor: color.white,
+  },
+  meshTogglePressed: {
+    opacity: 0.72,
+  },
+  meshToggleText: {
+    color: color.ink,
+    fontFamily: 'Pretendard',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  meshToggleTextActive: {
+    color: color.white,
+  },
+  proofBadge: {
+    backgroundColor: 'rgba(20,24,24,0.62)',
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 999,
+    borderWidth: 1,
+    left: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    position: 'absolute',
+    top: 14,
+  },
+  proofBadgeText: {
+    color: 'rgba(255,255,255,0.86)',
+    fontFamily: 'Pretendard',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
   retryButton: {
-    backgroundColor: '#252A2C',
+    backgroundColor: color.ink,
     borderRadius: 999,
     marginTop: 7,
     paddingHorizontal: 18,
@@ -360,51 +512,122 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   retryText: {
-    color: '#FFFFFF',
+    color: color.white,
     fontFamily: 'Pretendard',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
   },
   root: {
-    backgroundColor: '#F4F2ED',
+    backgroundColor: color.surface,
     flex: 1,
     gap: 14,
   },
-  stateDescription: {
-    color: '#85817A',
+  sourcePhoto: {
+    height: 52,
+    width: 52,
+  },
+  sourcePhotoBadge: {
+    alignItems: 'center',
+    bottom: 14,
+    gap: 5,
+    left: 14,
+    position: 'absolute',
+    zIndex: 3,
+  },
+  sourcePhotoLabel: {
+    color: 'rgba(255,255,255,0.9)',
     fontFamily: 'Pretendard',
-    fontSize: 11.5,
-    lineHeight: 17,
+    fontSize: 12,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: {height: 1, width: 0},
+    textShadowRadius: 3,
+  },
+  sourcePhotoRing: {
+    backgroundColor: color.surface,
+    borderColor: color.white,
+    borderRadius: 999,
+    borderWidth: 2,
+    padding: 2,
+  },
+  stateDescription: {
+    color: color.text,
+    fontFamily: 'Pretendard',
+    fontSize: 13,
+    lineHeight: 20,
     maxWidth: 220,
     textAlign: 'center',
   },
   stateOverlay: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
-    backgroundColor: '#ECEAE5',
+    backgroundColor: color.surface2,
     gap: 7,
     justifyContent: 'center',
     padding: 24,
   },
   stateTitle: {
-    color: '#4F4D48',
+    color: color.ink,
     fontFamily: 'Pretendard',
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     marginTop: 4,
   },
   title: {
-    color: '#343330',
-    fontFamily: 'Lora',
-    fontSize: 27,
-    lineHeight: 33,
+    color: color.ink,
+    fontFamily: 'Pretendard',
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    lineHeight: 30,
   },
   unityView: {
     ...StyleSheet.absoluteFill,
   },
+  summaryGesture: {
+    bottom: 24,
+    position: 'absolute',
+    right: 17,
+    zIndex: 2,
+  },
+  summaryGestureText: {
+    color: 'rgba(255,255,255,0.76)',
+    fontFamily: 'Pretendard',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  summaryProof: {
+    bottom: 25,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    zIndex: 2,
+  },
+  summaryProofText: {
+    color: 'rgba(156,201,219,0.92)',
+    fontFamily: 'Pretendard',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    textAlign: 'center',
+  },
+  evidenceRoot: {
+    backgroundColor: 'transparent',
+    flex: 0,
+    gap: 0,
+  },
+  evidenceViewer: {
+    backgroundColor: '#050709',
+    borderColor: 'rgba(22,48,59,0.12)',
+    borderRadius: 28,
+    flex: 0,
+    height: 320,
+    marginHorizontal: 0,
+    minHeight: 0,
+  },
   viewer: {
-    backgroundColor: '#ECEAE5',
-    borderColor: 'rgba(90,86,78,0.12)',
+    backgroundColor: color.surface2,
+    borderColor: color.outline8,
     borderRadius: 24,
     borderWidth: 1,
     flex: 1,

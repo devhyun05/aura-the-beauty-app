@@ -5,8 +5,8 @@ export const color = {
   ink: '#16303B',
   body: '#44606C',
   text: '#5C7480',
-  muted: '#8DA3AD',
-  faint: '#7A929D',
+  muted: '#667F8A',
+  faint: '#5F7884',
   accent: '#22AEDD',
   accentDeep: '#0E7DA8',
   accentInk: '#0E4B60',
@@ -18,15 +18,15 @@ export const color = {
   magenta: '#FF0B83',
   bg: '#F6FAFC',
   surface: '#FFFFFF',
-  surface2: '#EEF3F5',
+  surface2: '#F2F6F8',
   rail: '#E7EFF3',
   dial: '#F1F6F8',
   hatchA: '#DDEBF1',
   hatchB: '#F0F7FA',
   hatchC: '#EDF3F6',
   divider: '#EEF3F5',
-  outline: 'rgba(22,48,59,0.07)',
-  outline8: 'rgba(22,48,59,0.08)',
+  outline: 'rgba(22,48,59,0.10)',
+  outline8: 'rgba(22,48,59,0.10)',
   outline6: 'rgba(22,48,59,0.06)',
   tick: 'rgba(22,48,59,0.14)',
   dashed22: 'rgba(22,48,59,0.22)',
@@ -51,10 +51,36 @@ export const color = {
   lipGlam: '#A2385E',
 } as const;
 
-export const radius = { xs: 8, sm: 10, md: 14, lg: 16, xl: 20, pill: 999 } as const;
+export const radius = { xs: 8, sm: 10, md: 14, lg: 16, xl: 18, pill: 999 } as const;
 
 // Layout rhythm shared across sections (all other spacing literals match the HTML exactly).
 export const space = { screenX: 20, sectionTop: 30, cardPad: 16, cardGap: 12 } as const;
+
+/**
+ * Readable mobile type scale for the report. The original report was ported
+ * from desktop HTML with 9–11px text, which is too small on a physical phone.
+ * Keep the legacy numeric call sites working while resolving them onto a
+ * semantic, mobile-first minimum scale.
+ */
+export const reportTypography = {
+  micro: 12,
+  caption: 13,
+  captionStrong: 14,
+  body: 15,
+  label: 16,
+  sectionTitle: 24,
+} as const;
+
+export function resolveReportFontSize(size: number): number {
+  if (size <= 10.5) return reportTypography.micro;
+  if (size <= 11.5) return reportTypography.caption;
+  if (size <= 12.5) return reportTypography.captionStrong;
+  if (size <= 13.5) return reportTypography.body;
+  if (size <= 15) return reportTypography.label;
+  if (size <= 17) return 18;
+  if (size === 22) return reportTypography.sectionTitle;
+  return size;
+}
 
 /** Pretendard text style. lh = unitless line-height multiplier, ls = letterSpacing in px. */
 export const font = (
@@ -62,31 +88,36 @@ export const font = (
   weight: NonNullable<TextStyle['fontWeight']>,
   lh?: number,
   ls?: number,
-): TextStyle => ({
-  fontFamily: 'Pretendard',
-  fontSize: size,
-  fontWeight: weight,
-  ...(lh != null ? { lineHeight: Math.round(size * lh * 10) / 10 } : null),
-  ...(ls != null ? { letterSpacing: ls } : null),
-});
+): TextStyle => {
+  const resolvedSize = resolveReportFontSize(size);
+  return {
+    fontFamily: 'Pretendard',
+    fontSize: resolvedSize,
+    fontWeight: weight,
+    ...(lh != null
+      ? {lineHeight: Math.round(resolvedSize * lh * 10) / 10}
+      : null),
+    ...(ls != null ? {letterSpacing: ls} : null),
+  };
+};
 
 export const text = {
   eyebrow: font(10.5, '700', undefined, 1.68), // .16em @10.5px
-  h1: font(21, '800', undefined, -0.21),       // -.01em @21px
-  h2: font(19, '800'),
-  sectionSub: font(12.5, '400', 1.6),
+  h1: font(22, '800', undefined, -0.22),       // -.01em @22px
+  h2: font(18, '700'),
+  sectionSub: font(13.5, '400', 1.55),
   railLabel: font(12, '600'),
   railCaption: font(11.5, '400', 1.5),
 } as const;
 
 // CSS shadows translated to the closest RN shadow*/elevation equivalents.
 export const shadow: Record<string, ViewStyle> = {
-  card: { shadowColor: color.ink, shadowOpacity: 0.05, shadowRadius: 15, shadowOffset: { width: 0, height: 5 }, elevation: 3 },
+  card: { shadowColor: color.ink, shadowOpacity: 0, shadowRadius: 0, shadowOffset: { width: 0, height: 0 }, elevation: 0 },
   circleButton: { shadowColor: color.ink, shadowOpacity: 0.1, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 2 },
-  photo: { shadowColor: color.ink, shadowOpacity: 0.08, shadowRadius: 15, shadowOffset: { width: 0, height: 10 }, elevation: 5 },
+  photo: { shadowColor: color.ink, shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 1 },
   marker: { shadowColor: color.magenta, shadowOpacity: 0.45, shadowRadius: 2.5, shadowOffset: { width: 0, height: 1 }, elevation: 2 },
   overlayLine: { shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 4, shadowOffset: { width: 0, height: 0 } },
-  cta: { shadowColor: color.accent, shadowOpacity: 0.35, shadowRadius: 9, shadowOffset: { width: 0, height: 6 }, elevation: 6 },
+  cta: { shadowColor: color.accentDeep, shadowOpacity: 0.16, shadowRadius: 7, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
 };
 
 /** Percentage DimensionValue helper for normalized 0..100 positions. */

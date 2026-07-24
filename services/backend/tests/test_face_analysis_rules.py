@@ -113,12 +113,38 @@ def test_l1_is_deterministic_and_internal_asymmetry_is_hidden() -> None:
   assert first.cheekbone_and_eline.label == "중앙부 입체감이 또렷한 편"
 
 
+def test_measurement_interpretations_expose_verified_public_evidence() -> None:
+  result = derive_face_analysis(
+    {
+      "geometry2d.canthalTiltLeftDeg": metric(3.2),
+      "geometry2d.canthalTiltRightDeg": metric(2.8),
+      "face3d.noseTipProjection": metric(0.21, source="depth"),
+      "face3d.malarProjectionLeft": metric(0.12, source="depth"),
+      "face3d.malarProjectionRight": metric(0.13, source="depth"),
+    },
+  )
+
+  tilt = result.measurement_interpretations["canthalTilt"]
+  assert tilt.result_label == "눈꼬리가 위로 향하는 흐름"
+  assert tilt.display_value == "좌 3.2° · 우 2.8°"
+  assert tilt.rationale_metric_keys == [
+    "geometry2d.canthalTiltLeftDeg",
+    "geometry2d.canthalTiltRightDeg",
+  ]
+  assert (
+    result.measurement_interpretations["noseTipProjection"].result_label
+    == "코끝 입체감이 또렷한 편"
+  )
+  assert "malarProjection" in result.measurement_interpretations
+
+
 def test_missing_evidence_is_not_invented() -> None:
   result = derive_face_analysis({})
 
   assert result.face_shape.label == "측정 보류"
   assert result.face_shape.confidence == 0
   assert result.color_axes.label == "측정 보류"
+  assert result.measurement_interpretations == {}
 
 # ── 종단 체인(3차 리뷰): normalizer 발행 → 규칙 소비까지 연결 검증 ──────────
 

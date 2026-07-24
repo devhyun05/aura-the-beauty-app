@@ -1,5 +1,6 @@
 // reportTypes.ts — typed props/DTO model for the face-analysis report.
-// 원칙(2026-07-18 완화): 원측정(mm)·모집단 백분위·confidence %는 계속 비노출.
+// 원칙: 원측정(mm)·모집단 백분위는 비노출. 기기 측정 신뢰도는 원시값과
+// 분리된 사용자 설명으로 표시할 수 있다.
 // 세로 3분할의 정규화 비율은 노출 허용, 얼굴형은 성별 참고선 기준 방향 카테고리로만
 // (가짜 '평균 밴드'는 폐기 — 2026-07-18 정직화).
 import type {FaceShapeView} from './reportFormat';
@@ -9,6 +10,7 @@ import type {VisualWeightPresentation} from './visualWeightPresentation';
 export type {VisualWeightPresentation} from './visualWeightPresentation';
 import type {StyleLaneCard} from './styleLaneRecommendations';
 import type {GoldenMaskReportDescriptor} from '../../shared/contracts/goldenMask';
+import type {Face3DPhotoEvidence} from '../face-3d/services/face3DPhotoEvidence';
 export type {StyleLaneCard, StyleLaneMove, StyleLaneKey} from './styleLaneRecommendations';
 
 export interface PhotoSlotData {
@@ -17,6 +19,16 @@ export interface PhotoSlotData {
   // S3 region cards: normalized (0..1) sub-rect of the full photo to crop the
   // display to. Absent for the legacy fixed-guide fallback (full photo).
   cropRect?: { x: number; y: number; w: number; h: number };
+  sourceHeight?: number;
+  sourceWidth?: number;
+}
+
+export interface SourceAlignedPhotoSlotData extends PhotoSlotData {
+  // Measurement overlays use source-image coordinates. Cropping this slot or
+  // omitting its dimensions would create a second, misaligned coordinate path.
+  cropRect?: never;
+  sourceHeight: number;
+  sourceWidth: number;
 }
 
 export type EvidenceKind = 'measured' | 'artist';
@@ -68,27 +80,20 @@ export interface S1Data {
 export type BandKey = 'upper' | 'mid' | 'lower';
 export interface S2BandData {
   key: BandKey;
-  top: number; height: number;        // normalized band rect (hairline-missing geometry for upper)
+  top: number; height: number;        // normalized measured band rect
   pillLabel: string; pillY: number;   // right-side cyan pill
   pillCentered: boolean;              // translateY(-50%) in the HTML
   restingTint?: boolean;              // mid band shows a resting tint
   title: string; desc: string;        // region-lens copy
-  descMissing?: string;               // upper variant when hairline is missing
 }
 export interface S2Data {
   eyebrow: string; title: string; sub: string;
-  photo: PhotoSlotData;
-  // Real photo width/height ratio. GuidePhotoOverlay's guide lines are normalized
-  // fractions of the ORIGINAL image; without this the fixed-4:5 frame's cover-crop
-  // shifts them off the real hairline/brow/nose/chin position for non-4:5 photos.
-  // Defaults to 4/5 (the demo fixture's assumed ratio) when omitted.
-  photoAspectRatio?: number;
+  photo: SourceAlignedPhotoSlotData;
   hairlineMissing: boolean;
-  hairlineY: number; browY: number; noseBaseY: number; chinY: number;
+  hairlineY: number | null; browY: number; noseBaseY: number; chinY: number;
   lineLabels: { hairline: string; brow: string; noseBase: string; chin: string };
-  hairlineMissingPill: string;
-  hairlineHatchHeight: number;               // 0.38
-  upperBandOk: { top: number; height: number };
+  // Contains only measured regions. When H is unavailable, upper is absent
+  // rather than represented by a synthetic band.
   bands: S2BandData[];
   missingNotice: { title: string; body: string; cta: string };
   viewCardLabel: string;
@@ -96,6 +101,9 @@ export interface S2Data {
   ratioNumbers?: { upper: number | null; middle: number; lower: number };
   // 얼굴형 — 성별 문헌 참고선 기준 방향 카테고리(가로/균형/세로). '평균 밴드' 폐기.
   faceShape?: FaceShapeView | null;
+  // 측정 결론을 먼저 보여 주고, 아래 수치/가이드가 그 근거가 되도록 분리한다.
+  insightLabel?: string;
+  insightDescription?: string;
   paragraph: string;
 }
 
@@ -108,7 +116,35 @@ export type FeatureGuide =
   // Real landmark polyline (restored regionVisuals), re-normalized to the
   // crop frame by buildS3 — points are already 0..1 in the CROPPED view, not
   // the full original image.
-  | { kind: 'polyline'; points: { x: number; y: number }[] };
+  | { kind: 'polyline'; points: { x: number; y: number }[] }
+  | {
+      kind: 'measurement';
+      key: string;
+      label: string;
+      measurementKind: 'angle' | 'contour' | 'distance' | 'length' | 'symmetry';
+      metricKeys: string[];
+      points: {x: number; y: number}[];
+    };
+
+export interface RegionMeasurementItemData {
+  key: string;
+  label: string;
+  resultLabel: string;
+  interpretation: string;
+  displayValue?: string;
+  values?: RegionMeasurementValueData[];
+  detail: string;
+  groupLabel?: string;
+  confidenceLabel?: string;
+  metricKeys: string[];
+  visualType: 'depth' | 'line' | 'line-and-depth';
+}
+
+export interface RegionMeasurementValueData {
+  label: string;
+  metricKey: string;
+  normalizedValue: number;
+}
 
 export interface RegionCardData {
   key: string;
@@ -119,6 +155,7 @@ export interface RegionCardData {
   // that need the rect without unpacking photo). Absent = legacy fallback.
   cropRect?: { x: number; y: number; w: number; h: number };
   guide: FeatureGuide;
+  guides?: FeatureGuide[];
   guideLabel: string;
   guideLabelX: number;                  // normalized offset of the label pill
   guideLabelAlign?: 'left' | 'right';
@@ -133,6 +170,9 @@ export interface RegionCardData {
   // 1층 사진 판정(VLM) 상세 구절(쌍꺼풀 유형·안검 처짐·애교살 등). 판정된 것만.
   // 비어 있으면 컴포넌트가 상세 칩 블록을 숨긴다.
   featureDescriptors?: string[];
+  measurementItems?: RegionMeasurementItemData[];
+  photoEvidence?: Face3DPhotoEvidence;
+  visualAspectRatio?: number;
 }
 export interface S3Data { eyebrow: string; title: string; sub: string; cards: RegionCardData[] }
 
@@ -227,7 +267,7 @@ export interface S7Data {
   glamCard: LookCardData;
 }
 
-// ---------- S8 (구조화 피부 9부면) ----------
+// ---------- S8 (구조화 피부 특징 9개) ----------
 export interface SkinAspectData { label: string; description: string }
 export interface S8Data {
   eyebrow: string; title: string; sub: string;
@@ -241,19 +281,22 @@ export interface S9Data {
 }
 
 // ---------- screen ----------
-// Completed reports guarantee s1 and s5 (which has its own internal "설문 전"
-// empty state). The transient minimum report intentionally supplies only s1
-// while the remaining sections are generated. s2/s4 depend on on-device measurements that can
-// fail or come back "insufficient" for a given photo — rendering them from a
-// failed measurement would mean fabricating guide-line pixel positions or
-// color axes that were never actually measured. s3/s6/s7's real data sources
-// (region bbox storage, AI perception parsing, natural/glam split generation)
-// aren't wired on the backend at all yet (see
-// docs/superpowers/plans/2026-07-16-face-report-redesign-plan.md §1). In every
-// null case the scaffold hides the section rather than guessing — same
-// "조용한 실패 금지, 조용한 생성 금지" posture as the rest of the report.
+// 최소 보고서는 측정 기반 섹션부터 시작하고 perception/consulting revision이
+// 도착하는 순서대로 확장된다. 측정 실패나 아직 처리 중인 섹션은 null로 유지해
+// 존재하지 않는 가이드·인사이트를 임의로 만들지 않는다.
 export interface ReportData {
   reportId: string;
+  contentRevision?: number;
+  contentStatus?: {
+    coreReadyAt?: string;
+    narrativeStatus?: string;
+    stylingStatus?: string;
+    sources?: {
+      core?: 'llm' | 'template';
+      narrative?: 'llm' | 'template';
+      styling?: 'llm' | 'template';
+    };
+  };
   goldenMask?: GoldenMaskReportDescriptor;
   generationStatus?: 'loading' | 'failed';
   generationError?: string;
@@ -267,22 +310,16 @@ export interface ReportData {
 
 export interface ReportScreenProps {
   data: ReportData;
+  entryResetKey?: string;
   entryAnimation?: boolean; // rise-in on scroll into view (default true)
   onBack?: () => void;
+  onGoldenMaskInteractionChange?: (interacting: boolean) => void;
   onMore?: () => void;
+  onShare?: () => void;
   onRetake?: () => void;    // S2 재촬영 링크 (헤어라인 미확인 안내)
   onResurvey?: () => void;  // S5 다시 답하기
-  // Footer CTA. Separate from onRetake: the CTA is labelled with
-  // `data.footer.cta` (메이크업 추천), so wiring it to retake would fire
-  // 재촬영 from a button that promises makeup recommendations.
-  onPressCta?: () => void;
-  // Points at the separate expanded vertical document used for 공유/이미지 저장.
-  // Story covers, pager chrome and CTA are intentionally outside this target.
-  captureRef?: React.Ref<any>;
-  // The expanded S1-S9 document exists only while this save/share request is active.
-  captureRequestId?: number | null;
-  onCaptureDocumentSettledChange?: (requestId: number, settled: boolean) => void;
-  // 개발 단계 QA용: 보고서 맨 아래에서 저장/세션 측정값 원본을 접어서 확인한다.
-  measurementDebugPayload?: unknown;
-  measurementDebugSummary?: {label: string; value: string}[];
-}
+    // Footer CTA. Separate from onRetake: the CTA is labelled with
+    // `data.footer.cta` (메이크업 추천), so wiring it to retake would fire
+    // 재촬영 from a button that promises makeup recommendations.
+    onPressCta?: () => void;
+  }

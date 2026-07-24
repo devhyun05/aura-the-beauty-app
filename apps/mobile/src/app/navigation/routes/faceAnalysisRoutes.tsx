@@ -8,12 +8,17 @@ import {
   FaceAnalysisReportsListScreen,
 } from '../../../features/face-analysis';
 import {
+  deleteFaceAnalysisReport,
   logFaceAnalysisDebug,
+  recordFaceAnalysisPreviewTiming,
   type FaceAnalysisAnchorPreview,
 } from '../../../shared/services/faceAnalysisService';
 import {FaceAnalysisReportPreviewScreen} from '../../../features/face-report/screens/FaceAnalysisReportPreviewScreen';
-import {summarizeVerticalThirds} from '../../../features/face-report/services/fromFaceAnalysisReport';
+import {
+  summarizeVerticalThirds,
+} from '../../../features/face-report/services/fromFaceAnalysisReport';
 import type {MinimumFaceReportPreview} from '../../../features/face-report/services/minimumFaceReport';
+import {shouldEnableFaceReportBackGesture} from '../../../features/face-report/services/goldenMaskInteraction';
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
@@ -47,7 +52,17 @@ import {
   flushPendingGoldenMaskUploads,
   queueGoldenMaskUploadForReport,
 } from '../../../features/face-capture/services/goldenMaskUploadService';
+import {
+  buildLocalGoldenMaskDescriptor,
+  preloadGoldenMaskFromCapture,
+  type GoldenMaskPreparedResult,
+} from '../../../features/face-report/services/goldenMaskPreloadService';
 import {derivePersonalColorCorrectionStatus} from '../../../features/face-analysis/services/faceAnalysisMeasurements';
+import {
+  FACE_REPORT_OPEN_DEADLINE_MS,
+  FACE_REPORT_OPEN_MINIMUM_MS,
+  resolveFaceReportOpenDecision,
+} from '../../../features/face-analysis/services/faceAnalysisReportGate';
 import {raceWithNullTimeout} from '../../../features/face-analysis/services/stillAnalysisWait';
 import {buildFaceGeometryAnalysisPayload} from '../../../features/face-geometry/services/faceGeometryAiPayload';
 import {analyzeFaceGeometry2d} from '../../../features/face-geometry/services/faceGeometryService';
@@ -61,6 +76,7 @@ import type {
 } from '../../../features/face-ratio/types';
 import {MakeupExtractionActionSheet} from '../../../features/home/components/MakeupExtractionActionSheet';
 import {MakeupFeedbackActionSheet} from '../../../features/home/components/MakeupFeedbackActionSheet';
+import {useAiDataConsent} from '../../../features/legal/services/aiDataConsentContext';
 import {
   analyzePersonalColorCapture,
   type PersonalColorAnalysisOutcome,
@@ -68,7 +84,6 @@ import {
 import {getMeasuredPersonalColorSummary} from '../../../features/personal-color/services/personalColorCore/presentation';
 import {useAuthSession} from '../../../features/auth';
 import {BackendApiError} from '../../../shared/services/backendApi';
-import {deleteFaceAnalysisReport} from '../../../shared/services/faceAnalysisService';
 import {trackMakeupJourneyEvent} from '../../../shared/services/makeupJourneyAnalytics';
 import {colors, spacing} from '../../../shared/theme';
 import {isMakeupJourneyEnabled} from '../../../shared/config/featureFlags';
@@ -101,6 +116,7 @@ const STILL_ANALYSIS_WAIT_TIMEOUT_MS = 8000;
 const FACE_ANALYSIS_LOADING_ERROR_MESSAGE =
   '분석 결과를 만드는 데 시간이 오래 걸리고 있어요. 잠시 후 다시 시도해 주세요.';
 const NON_RETRYABLE_ANALYSIS_ERROR_CODES = new Set([
+  'AI_DATA_CONSENT_REQUIRED',
   'FACE_ANALYSIS_AI_INCOMPLETE',
   'FACE_ANALYSIS_RESULT_INCOMPLETE',
   'ANALYSIS_API_UNAVAILABLE',
@@ -133,7 +149,10 @@ export function resolveStillAnalysisCapture(
       : null,
     imageUri: pendingCapture.image.uri,
     photoCaptureId: pendingCapture.captureId,
-    semanticMattes: undefined,
+    // Unified capture persists an ARFrame as a plain JPEG, so it cannot contain
+    // Apple auxiliary semantic mattes. Its synchronized `hairline` result is the
+    // authoritative source; do not run the impossible embedded-matte fallback.
+    semanticMattes: {hair: false, requested: false, skin: false},
   };
 }
 
@@ -182,6 +201,8 @@ export function FaceCaptureRouteScreen({
     unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   const {getAuthToken, isRestoringSession} = useAuthSession();
+  const {requestAiDataConsent} = useAiDataConsent();
+  const [isAiDataAllowed, setIsAiDataAllowed] = React.useState(false);
   const unifiedCaptureRequest = React.useMemo(
     () =>
       buildUnifiedFaceCaptureRequest({
@@ -196,7 +217,29 @@ export function FaceCaptureRouteScreen({
     }
   }, [getAuthToken, isRestoringSession, navigation]);
 
-  if (isRestoringSession || !getAuthToken()) {
+  React.useEffect(() => {
+    if (isRestoringSession || !getAuthToken()) {
+      return undefined;
+    }
+
+    let active = true;
+    void requestAiDataConsent().then(accepted => {
+      if (!active) {
+        return;
+      }
+      if (accepted) {
+        setIsAiDataAllowed(true);
+      } else {
+        goBackToPreviousOrMainTab(navigation, 'HomeTab');
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [getAuthToken, isRestoringSession, navigation, requestAiDataConsent]);
+
+  if (isRestoringSession || !getAuthToken() || !isAiDataAllowed) {
     return null;
   }
 
@@ -351,6 +394,11 @@ export function FaceAnalysisLoadingRouteScreen({
   const [isAnalysisReady, setIsAnalysisReady] = React.useState(false);
   const [anchorPreview, setAnchorPreview] =
     React.useState<FaceAnalysisAnchorPreview | null>(null);
+  const [perceptionReportReady, setPerceptionReportReady] =
+    React.useState(false);
+  const [reportOpenGate, setReportOpenGate] = React.useState<
+    'waiting' | 'preferred' | 'deadline'
+  >('waiting');
   const [analysisErrorMessage, setAnalysisErrorMessage] = React.useState<string | null>(null);
   const [analysisRequestKey, setAnalysisRequestKey] = React.useState(0);
   const [uploadRequestKey, setUploadRequestKey] = React.useState(0);
@@ -361,6 +409,13 @@ export function FaceAnalysisLoadingRouteScreen({
   const analysisRetryCountRef = React.useRef(0);
   const pendingUploadPromiseRef = React.useRef<Promise<void> | null>(null);
   const pendingUnifiedCapture = route.params?.pendingUnifiedCapture ?? null;
+  const [goldenMaskPreloadStatus, setGoldenMaskPreloadStatus] = React.useState<
+    'not-required' | 'pending' | 'ready' | 'failed'
+  >(pendingUnifiedCapture?.goldenMask ? 'pending' : 'not-required');
+  const [preparedGoldenMask, setPreparedGoldenMask] = React.useState<{
+    descriptor: ReturnType<typeof buildLocalGoldenMaskDescriptor>;
+    reportId: string;
+  } | null>(null);
   const pendingStillAnalysisCapture =
     React.useMemo<StillAnalysisCapture | null>(
       () => resolveStillAnalysisCapture(pendingUnifiedCapture, null),
@@ -385,6 +440,9 @@ export function FaceAnalysisLoadingRouteScreen({
   const completionRouteHandledRef = React.useRef(false);
   const goldenMaskQueueLifecyclePromiseRef =
     React.useRef<Promise<unknown> | null>(null);
+  const goldenMaskPreloadPromiseRef =
+    React.useRef<Promise<GoldenMaskPreparedResult> | null>(null);
+  const preparedGoldenMaskRef = React.useRef(preparedGoldenMask);
   const goldenMaskPendingArtifactRef = React.useRef(
     pendingUnifiedCapture?.goldenMask ?? null,
   );
@@ -430,6 +488,10 @@ export function FaceAnalysisLoadingRouteScreen({
       minimumReportPreviewRef.current = null;
       fullReportLoggedRef.current = false;
       completionRouteHandledRef.current = false;
+      goldenMaskPreloadPromiseRef.current = null;
+      preparedGoldenMaskRef.current = null;
+      setPreparedGoldenMask(null);
+      setGoldenMaskPreloadStatus('not-required');
       return;
     }
     if (analysisAttemptRef.current?.captureKey === captureKey) {
@@ -447,10 +509,68 @@ export function FaceAnalysisLoadingRouteScreen({
     minimumReportPreviewRef.current = null;
     fullReportLoggedRef.current = false;
     completionRouteHandledRef.current = false;
+    setPerceptionReportReady(false);
+    setReportOpenGate('waiting');
+    goldenMaskPreloadPromiseRef.current = null;
+    preparedGoldenMaskRef.current = null;
+    setPreparedGoldenMask(null);
+    setGoldenMaskPreloadStatus(
+      pendingUnifiedCapture?.goldenMask ? 'pending' : 'not-required',
+    );
     logAttempt('capture-preparation:start', {
       hasPendingUpload: Boolean(pendingStillAnalysisCapture),
     });
-  }, [logAttempt, pendingStillAnalysisCapture, stillAnalysisCapture?.photoCaptureId]);
+  }, [
+    logAttempt,
+    pendingStillAnalysisCapture,
+    pendingUnifiedCapture?.goldenMask,
+    stillAnalysisCapture?.photoCaptureId,
+  ]);
+
+  React.useEffect(() => {
+    if (!stillAnalysisCapture?.photoCaptureId) {
+      setReportOpenGate('waiting');
+      return undefined;
+    }
+
+    const startedAt =
+      route.params?.loadingStartedAtMs ??
+      analysisAttemptRef.current?.startedAt ??
+      Date.now();
+    const elapsedMs = Math.max(0, Date.now() - startedAt);
+    if (elapsedMs >= FACE_REPORT_OPEN_DEADLINE_MS) {
+      setReportOpenGate('deadline');
+      return undefined;
+    }
+    if (elapsedMs >= FACE_REPORT_OPEN_MINIMUM_MS) {
+      setReportOpenGate('preferred');
+    } else {
+      setReportOpenGate('waiting');
+    }
+
+    const minimumTimer =
+      elapsedMs < FACE_REPORT_OPEN_MINIMUM_MS
+        ? setTimeout(
+            () => setReportOpenGate('preferred'),
+            FACE_REPORT_OPEN_MINIMUM_MS - elapsedMs,
+          )
+        : null;
+    const deadlineTimer = setTimeout(
+      () => setReportOpenGate('deadline'),
+      FACE_REPORT_OPEN_DEADLINE_MS - elapsedMs,
+    );
+
+    return () => {
+      if (minimumTimer) {
+        clearTimeout(minimumTimer);
+      }
+      clearTimeout(deadlineTimer);
+    };
+  }, [
+    analysisRequestKey,
+    route.params?.loadingStartedAtMs,
+    stillAnalysisCapture?.photoCaptureId,
+  ]);
 
   React.useEffect(() => {
     analysisRetryCountRef.current = 0;
@@ -869,6 +989,9 @@ export function FaceAnalysisLoadingRouteScreen({
           // 측정 원본 4축 — 서버 저장(detail_payload)·AI 입력·과거 보고서 복원용.
           {
             face3d: selectedFace3DProfile ?? null,
+            face3dPhotoEvidence:
+              unifiedFaceCaptureFlow.committedCapture?.result
+                .face3dPhotoEvidence ?? null,
             faceGeometry2d: faceGeometry,
             faceVerticalThirds: verticalThirds,
             personalColor: personalColorOutcome,
@@ -884,16 +1007,51 @@ export function FaceAnalysisLoadingRouteScreen({
                 unifiedFaceCaptureFlow.committedCapture?.result.goldenMask;
               const userId = session?.user.id;
               if (!goldenMask || !userId) {
+                goldenMaskPreloadPromiseRef.current = null;
+                preparedGoldenMaskRef.current = null;
+                setPreparedGoldenMask(null);
+                setGoldenMaskPreloadStatus('not-required');
                 return;
               }
 
-              // 보고서 폴링을 기다리게 하지 않는다. 먼저 no-backup cache에 복사해
-              // 사용자별 retry queue에 넣고, 업로드·귀속은 병렬로 시도한다.
-              goldenMaskQueuePromise = queueGoldenMaskUploadForReport({
-                artifact: goldenMask,
+              // 보고서 화면에서 시작하면 늦다. ARKit 원본 로컬 파일을 분석 대기
+              // 화면에서 Unity에 먼저 올려 첫 프레임까지 준비한 뒤, 원본을 삭제할 수
+              // 있는 업로드 큐로 넘긴다. 보고서 생성 폴링과는 계속 병렬이다.
+              setGoldenMaskPreloadStatus('pending');
+              const preloadStartedAt = Date.now();
+              const preloadPromise = preloadGoldenMaskFromCapture(
                 reportId,
-                userId,
+                goldenMask,
+              ).then(result => {
+                const nextPreparedGoldenMask = result.ready
+                  ? {
+                      descriptor: buildLocalGoldenMaskDescriptor(goldenMask),
+                      reportId,
+                    }
+                  : null;
+                preparedGoldenMaskRef.current = nextPreparedGoldenMask;
+                if (isMounted) {
+                  setPreparedGoldenMask(nextPreparedGoldenMask);
+                  setGoldenMaskPreloadStatus(
+                    result.ready ? 'ready' : 'failed',
+                  );
+                }
+                logAttempt('golden-mask:preload-settled', {
+                  elapsedMs: Date.now() - preloadStartedAt,
+                  ready: result.ready,
+                  success: result.ready,
+                });
+                return result;
               });
+              goldenMaskPreloadPromiseRef.current = preloadPromise;
+
+              goldenMaskQueuePromise = preloadPromise.then(() =>
+                queueGoldenMaskUploadForReport({
+                  artifact: goldenMask,
+                  reportId,
+                  userId,
+                }),
+              );
               goldenMaskQueueLifecyclePromiseRef.current =
                 goldenMaskQueuePromise;
               void goldenMaskQueuePromise.catch(error => {
@@ -915,18 +1073,61 @@ export function FaceAnalysisLoadingRouteScreen({
                 success: true,
               });
             },
+            onProgressiveReport: report => {
+              if (!isMounted) {
+                return;
+              }
+              const localGoldenMask = preparedGoldenMaskRef.current;
+              setSelectedFaceAnalysisReport(
+                localGoldenMask?.reportId === report.id && !report.goldenMask
+                  ? {...report, goldenMask: localGoldenMask.descriptor}
+                  : report,
+              );
+              setPerceptionReportReady(true);
+              logAttempt('perception-report:ready', {
+                contentRevision: report.contentRevision ?? null,
+                success: true,
+              });
+            },
           },
           // 화면 이탈 시 폴링 중단 — 최대 240초 백그라운드 매달림 방지.
           analysisAbortController.signal,
         );
       })
-      .then(report => {
+      .then(async report => {
         if (!isMounted || !report) {
           return;
         }
 
-        setSelectedFaceAnalysisReport(report);
+        const localGoldenMask = preparedGoldenMaskRef.current;
+        setSelectedFaceAnalysisReport(
+          localGoldenMask?.reportId === report.id && !report.goldenMask
+            ? {...report, goldenMask: localGoldenMask.descriptor}
+            : report,
+        );
+        setAnchorPreview(currentPreview =>
+          currentPreview ?? {
+            faceShape: report.faceShape,
+            reportId: report.id,
+            ...(report.faceAnalysisV2?.derived
+              ? {derived: report.faceAnalysisV2.derived}
+              : {}),
+            ...(report.recommendedMood
+              ? {recommendedMood: report.recommendedMood}
+              : {}),
+            ...(report.skinType ? {skinType: report.skinType} : {}),
+          },
+        );
+        setPerceptionReportReady(
+          report.contentStatus?.narrativeStatus === 'completed',
+        );
         analysisRetryCountRef.current = 0;
+        // 보고서 완료가 Golden Mask 첫 프레임보다 빨라도 화면을 먼저 열지 않는다.
+        // 모델이 없는 기기/세션은 promise가 없으므로 기존 경로 그대로 진행한다.
+        await goldenMaskPreloadPromiseRef.current;
+        if (!isMounted) {
+          return;
+        }
         setIsAnalysisReady(true);
         if (
           minimumReportLoggedRef.current &&
@@ -1097,17 +1298,30 @@ export function FaceAnalysisLoadingRouteScreen({
   const minimumPersonalColor = selectedPersonalColor
     ? getMeasuredPersonalColorSummary(selectedPersonalColor).personalColor
     : undefined;
-  const minimumRatioSummary = selectedFaceVerticalThirds
-    ? summarizeVerticalThirds(selectedFaceVerticalThirds)
+  const minimumFaceVerticalThirds =
+    selectedFaceVerticalThirds?.captureId ===
+    stillAnalysisCapture?.photoCaptureId
+      ? selectedFaceVerticalThirds
+      : null;
+  const minimumRatioSummary = minimumFaceVerticalThirds
+    ? summarizeVerticalThirds(minimumFaceVerticalThirds)
     : undefined;
-  const minimumHas3DModel = Boolean(
-    pendingUnifiedCapture?.goldenMask ??
-      unifiedFaceCaptureFlow.committedCapture?.result.goldenMask,
-  );
+  const minimumHas3DModel = goldenMaskPreloadStatus === 'ready';
+  const reportOpenDecision = resolveFaceReportOpenDecision({
+    elapsedMs:
+      reportOpenGate === 'deadline'
+        ? FACE_REPORT_OPEN_DEADLINE_MS
+        : reportOpenGate === 'preferred'
+          ? FACE_REPORT_OPEN_MINIMUM_MS
+          : 0,
+    perceptionReady: perceptionReportReady,
+  });
+  const reportGateAllowsOpen = reportOpenDecision !== 'wait';
 
   React.useEffect(() => {
     if (
       !anchorPreview ||
+      !reportGateAllowsOpen ||
       minimumReportLoggedRef.current ||
       !(stillAnalysisCapture?.imageUri)
     ) {
@@ -1116,23 +1330,57 @@ export function FaceAnalysisLoadingRouteScreen({
 
     const minimumPreview: MinimumFaceReportPreview = {
       capturedPhotoUri: stillAnalysisCapture.imageUri,
+      ...(anchorPreview.derived ? {derived: anchorPreview.derived} : {}),
       faceShape: anchorPreview.faceShape,
+      ...(preparedGoldenMask
+        ? {
+            goldenMask: preparedGoldenMask.descriptor,
+          }
+        : {}),
       has3DModel: minimumHas3DModel,
       personalColor: minimumPersonalColor,
       ratioSummary: minimumRatioSummary,
-      recommendedMood: anchorPreview.recommendedMood,
-      skinType: anchorPreview.skinType,
+      ...(anchorPreview.recommendedMood
+        ? {recommendedMood: anchorPreview.recommendedMood}
+        : {}),
+      ...(anchorPreview.reportId ? {reportId: anchorPreview.reportId} : {}),
+      ...(anchorPreview.skinType ? {skinType: anchorPreview.skinType} : {}),
     };
     minimumReportLoggedRef.current = true;
     minimumReportPreviewRef.current = minimumPreview;
+    const previewElapsedMs = Math.max(
+      0,
+      Date.now() -
+        (
+          route.params?.loadingStartedAtMs ??
+          analysisAttemptRef.current?.startedAt ??
+          Date.now()
+        ),
+    );
+    console.info('[aura:analysis] minimum-report:shown', {
+      elapsedMs: previewElapsedMs,
+      fallbackAtDeadline: reportOpenDecision === 'open-fallback',
+      perceptionReady: perceptionReportReady,
+      reportId: anchorPreview.reportId ?? null,
+    });
+    if (anchorPreview.reportId) {
+      recordFaceAnalysisPreviewTiming(
+        anchorPreview.reportId,
+        previewElapsedMs,
+        perceptionReportReady,
+      );
+    }
     navigation.navigate('FaceAnalysisReportDetail', {
       afterAnalysisRoute: route.params?.afterAnalysisRoute,
       minimumPreview,
     });
     logAttempt('minimum-report:shown', {
-      hasFaceVerticalThirds: Boolean(selectedFaceVerticalThirds),
+      fallbackAtDeadline:
+        reportOpenDecision === 'open-fallback',
+      hasFaceVerticalThirds: Boolean(minimumFaceVerticalThirds),
       hasGoldenMask: minimumHas3DModel,
       hasPersonalColor: Boolean(selectedPersonalColor),
+      perceptionReady: perceptionReportReady,
       success: true,
     });
   }, [
@@ -1140,12 +1388,36 @@ export function FaceAnalysisLoadingRouteScreen({
     logAttempt,
     minimumHas3DModel,
     minimumPersonalColor,
+    preparedGoldenMask,
     minimumRatioSummary,
     navigation,
+    perceptionReportReady,
+    reportGateAllowsOpen,
+    reportOpenDecision,
+    reportOpenGate,
     route.params?.afterAnalysisRoute,
-    selectedFaceVerticalThirds,
+    route.params?.loadingStartedAtMs,
+    minimumFaceVerticalThirds,
     selectedPersonalColor,
     stillAnalysisCapture?.imageUri,
+  ]);
+
+  React.useEffect(() => {
+    if (
+      !isAnalysisReady ||
+      !minimumReportLoggedRef.current ||
+      route.params?.afterAnalysisRoute !== 'ProductRecommendation' ||
+      completionRouteHandledRef.current
+    ) {
+      return;
+    }
+    completionRouteHandledRef.current = true;
+    navigation.navigate('ProductRecommendation');
+  }, [
+    isAnalysisReady,
+    navigation,
+    reportOpenGate,
+    route.params?.afterAnalysisRoute,
   ]);
 
   const handleRetryAnalysis = React.useCallback(() => {
@@ -1259,7 +1531,9 @@ export function FaceAnalysisLoadingRouteScreen({
   }, [navigation]);
   const handleAnalysisComplete = React.useCallback(() => {
     const minimumReportIsOpen = minimumReportLoggedRef.current;
-    if (!minimumReportIsOpen && !navigation.isFocused()) {
+    // 최종 결과가 매우 빨리 끝나도 10~15초 의미 기반 진입 게이트를 우회하지 않는다.
+    // 게이트 효과가 먼저 최소/점진 보고서를 연 뒤에만 후속 라우팅을 허용한다.
+    if (!minimumReportIsOpen) {
       return;
     }
 
@@ -1277,31 +1551,21 @@ export function FaceAnalysisLoadingRouteScreen({
       logAttempt('full-report:shown', {success: true});
     }
 
-    // replace: 로딩을 스택에서 제거한다. navigate로 남겨두면 다음 분석 세션에서
-    // 캡처 교체 시 이 화면의 효과들이 백그라운드로 재실행돼 보고서 POST가 중복되고,
-    // 완료 자동 이동이 새 흐름(3D 측정 등) 위를 덮는 문제가 있었다.
     if (route.params?.afterAnalysisRoute === 'ProductRecommendation') {
       if (completionRouteHandledRef.current) {
         return;
       }
       completionRouteHandledRef.current = true;
-      if (minimumReportIsOpen) {
-        navigation.navigate('ProductRecommendation');
-      } else {
-        navigation.replace('ProductRecommendation');
-      }
+      navigation.navigate('ProductRecommendation');
       return;
     }
-
-    if (minimumReportIsOpen) {
-      return;
-    }
-
-    navigation.replace('FaceAnalysisReportDetail');
+    // 일반 보고서는 이미 열린 동일 route에서 props만 갱신한다. replace/reset은
+    // 사용자가 보고 있던 카드와 스크롤 위치를 잃게 만든다.
   }, [logAttempt, navigation, route.params?.afterAnalysisRoute]);
 
   return (
     <DetailRouteChrome
+      headerHidden
       routeName="FaceAnalysisLoading"
       onBack={handleBack}>
       <FaceAnalysisLoadingScreen
@@ -1363,7 +1627,8 @@ export function FaceAnalysisReportPreviewRouteScreen({
 }: RootScreenProps<'FaceAnalysisReportDetail'>) {
   const shouldReturnToProfile = route.params?.returnTo === 'profile';
   const minimumPreview = route.params?.minimumPreview ?? null;
-  const finalizedMinimumHandoffRef = React.useRef(false);
+  const [goldenMaskInteracting, setGoldenMaskInteracting] =
+    React.useState(false);
   const {
     selectedFaceAnalysisReport,
     selectedFaceCapture,
@@ -1372,6 +1637,7 @@ export function FaceAnalysisReportPreviewRouteScreen({
     selectedFaceVerticalThirds,
     selectedPersonalColor,
     setSelectedFaceAnalysisReport,
+    unifiedFaceCaptureFlow,
   } = useNavigationFlowState();
   // 안전망: 보고서는 카메라가 필요 없다. 상류에서 lease 해제가 누락돼도 여기서
   // run-consumer(가시 소유자·explicit lease)를 0으로 만들어 런타임 모드가 idle로 가게 한다
@@ -1386,52 +1652,44 @@ export function FaceAnalysisReportPreviewRouteScreen({
   }, []);
 
   React.useEffect(() => {
-    if (minimumPreview) {
-      navigation.setOptions({gestureEnabled: false});
-    }
-  }, [minimumPreview, navigation]);
+    navigation.setOptions({
+      // The report pager owns both horizontal directions. Keeping the native
+      // iOS back gesture enabled lets an edge swipe win before the pager's
+      // PanResponder can classify it, which unexpectedly exits the report.
+      gestureEnabled: shouldEnableFaceReportBackGesture(),
+    });
+  }, [navigation]);
 
   React.useEffect(() => {
-    if (
-      !minimumPreview ||
-      !selectedFaceAnalysisReport ||
-      route.params?.afterAnalysisRoute ||
-      finalizedMinimumHandoffRef.current
-    ) {
-      return;
+    if (!goldenMaskInteracting) {
+      return undefined;
     }
-
-    finalizedMinimumHandoffRef.current = true;
-    navigation.reset({
-      index: 1,
-      routes: [
-        {name: 'MainTabs', params: {screen: 'HomeTab'}},
-        {
-          name: 'FaceAnalysisReportDetail',
-          params: {initialPageId: 'summary:overview'},
-        },
-      ],
+    return navigation.addListener('beforeRemove', event => {
+      event.preventDefault();
     });
-  }, [
-    minimumPreview,
-    navigation,
-    route.params?.afterAnalysisRoute,
-    selectedFaceAnalysisReport,
-  ]);
+  }, [goldenMaskInteracting, navigation]);
 
   return (
     <>
       <FaceAnalysisReportPreviewScreen
         analysisReport={selectedFaceAnalysisReport}
         capturedPhotoUri={selectedFaceCapture?.imageUri}
-        initialPageId={
-          route.params?.initialPageId ??
-          (minimumPreview ? 'summary:overview' : undefined)
-        }
+        entryResetKey={route.key}
+        initialPageId={route.params?.initialPageId}
         minimumPreview={minimumPreview}
         onBack={() => {
+          if (goldenMaskInteracting) {
+            return;
+          }
           if (minimumPreview) {
-            navigateMainTab(navigation, 'HomeTab');
+            // 최소 보고서 아래의 로딩 화면까지 제거해 폴링을 abort한다. 단순
+            // navigate는 두 화면을 스택에 남겨 완료 시 홈 위로 다시 열릴 수 있다.
+            navigation.reset({
+              index: 0,
+              routes: [
+                {name: 'MainTabs', params: {screen: 'HomeTab'}},
+              ],
+            });
             return;
           }
           if (shouldReturnToProfile) {
@@ -1440,6 +1698,7 @@ export function FaceAnalysisReportPreviewRouteScreen({
           }
           goBackToPreviousOrMainTab(navigation, 'HomeTab');
         }}
+        onGoldenMaskInteractionChange={setGoldenMaskInteracting}
         onPressProducts={reportId => navigation.navigate('ProductRecommendation', {reportId})}
         onRetake={() => {
           if (minimumPreview) {
@@ -1449,19 +1708,18 @@ export function FaceAnalysisReportPreviewRouteScreen({
           navigation.navigate('FaceCapture');
         }}
         face3d={route.params?.reportId ? null : selectedFace3DProfile}
+        face3dPhotoEvidence={
+          route.params?.reportId
+            ? null
+            : unifiedFaceCaptureFlow.committedCapture?.result
+                .face3dPhotoEvidence ?? null
+        }
         faceGeometry2d={route.params?.reportId ? null : selectedFaceGeometry2d}
         personalColor={route.params?.reportId ? null : selectedPersonalColor}
         reportId={route.params?.reportId ?? null}
         sessionCaptureId={selectedFaceCapture?.photoCaptureId ?? null}
         verticalThirds={route.params?.reportId ? null : selectedFaceVerticalThirds}
       />
-      {__DEV__ && selectedFaceGeometry2d ? (
-        <Pressable
-          onPress={() => navigation.navigate('FaceGeometryDebug')}
-          style={styles.devFaceGeometryDebugButton}>
-          <Text style={styles.devFaceGeometryDebugButtonLabel}>▷ 기하검증</Text>
-        </Pressable>
-      ) : null}
     </>
   );
 }
@@ -1722,21 +1980,6 @@ function FaceAnalysisReportBottomNav({
 }
 
 const styles = StyleSheet.create({
-  devFaceGeometryDebugButton: {
-    backgroundColor: 'rgba(17, 24, 39, 0.85)',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    position: 'absolute',
-    right: 12,
-    top: 56,
-    zIndex: 40,
-  },
-  devFaceGeometryDebugButtonLabel: {
-    color: '#facc15',
-    fontSize: 12,
-    fontWeight: '700',
-  },
   reportFooterDismissLayer: {
     backgroundColor: 'transparent',
     bottom: 0,

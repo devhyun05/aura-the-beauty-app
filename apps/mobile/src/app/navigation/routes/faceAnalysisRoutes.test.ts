@@ -82,6 +82,11 @@ expectEqual(
   'pre-upload still analysis keeps a stable capture key',
 );
 expectEqual(
+  pendingStillCapture?.semanticMattes?.requested,
+  false,
+  'unified JPEG skips the unavailable embedded semantic-matte path',
+);
+expectEqual(
   resolveStillAnalysisCapture(null, captureResult)?.photoCaptureId,
   captureResult.photoCaptureId,
   'legacy uploaded capture remains the fallback still-analysis source',

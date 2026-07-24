@@ -201,6 +201,45 @@ def test_structured_v2_stage_missing_tool_reports_stop_reason():
     assert exc_info.value.details.get("stopReason") == "max_tokens"
 
 
+def test_structured_v2_stage_caches_static_tool_and_system_prefix():
+    fake = _FakeBedrockClient(
+        {
+            "stop_reason": "end_turn",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "name": "return_structured_output",
+                    "input": {"ok": True},
+                }
+            ],
+        }
+    )
+    service = _bedrock_service(fake)
+
+    result = service._analyze_structured_json_sync(
+        developer_prompt="static developer instructions",
+        user_prompt="dynamic report facts",
+        json_schema={"type": "object"},
+        source_image_bytes=None,
+        max_tokens=2800,
+    )
+
+    assert result == {"ok": True}
+    request_body = fake.request_bodies[0]
+    assert request_body["system"] == [
+        {
+            "type": "text",
+            "text": "static developer instructions",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    assert request_body["messages"][0]["content"][0] == {
+        "type": "text",
+        "text": "dynamic report facts",
+    }
+    assert "cache_control" not in request_body["messages"][0]["content"][0]
+
+
 def test_bedrock_call_metrics_logs_tokens_and_duration(caplog):
     # Stage 7 계측: 양 경로가 동일 포맷으로 토큰·지연을 남겨 A/B 비교를 가능케 한다.
     import logging
@@ -217,6 +256,68 @@ def test_bedrock_call_metrics_logs_tokens_and_duration(caplog):
     assert metric_logs
     assert "inputTokens=1200" in metric_logs[0]
     assert "outputTokens=3400" in metric_logs[0]
+
+
+def test_bedrock_call_metrics_preserves_total_input_and_reports_cache_usage(caplog):
+    import logging
+
+    service = _service()
+    with caplog.at_level(logging.INFO):
+        metrics = service._log_bedrock_call_metrics(
+            {
+                "usage": {
+                    "input_tokens": 200,
+                    "cache_read_input_tokens": 900,
+                    "cache_creation_input_tokens": 100,
+                    "output_tokens": 340,
+                }
+            },
+            context="stage",
+            started_at=0.0,
+            stage="perceive",
+        )
+
+    assert metrics.input_tokens == 1200
+    assert metrics.cache_read_input_tokens == 900
+    assert metrics.cache_write_input_tokens == 100
+    metric_logs = [r.getMessage() for r in caplog.records if ":metrics" in r.getMessage()]
+    assert "inputTokens=1200" in metric_logs[0]
+    assert "uncachedInputTokens=200" in metric_logs[0]
+    assert "cacheReadInputTokens=900" in metric_logs[0]
+    assert "cacheWriteInputTokens=100" in metric_logs[0]
+
+
+def test_structured_v2_stage_reports_provider_usage_to_callback():
+    fake = _FakeBedrockClient(
+        {
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 1200, "output_tokens": 340},
+            "content": [
+                {
+                    "type": "tool_use",
+                    "name": "return_structured_output",
+                    "input": {"ok": True},
+                }
+            ],
+        }
+    )
+    service = _bedrock_service(fake)
+    observed = []
+
+    result = service._analyze_structured_json_sync(
+        developer_prompt="dev",
+        user_prompt="user",
+        json_schema={"type": "object"},
+        source_image_bytes=None,
+        max_tokens=2800,
+        stage="measure",
+        on_call_metrics=observed.append,
+    )
+
+    assert result == {"ok": True}
+    assert len(observed) == 1
+    assert observed[0].input_tokens == 1200
+    assert observed[0].output_tokens == 340
 
 
 def test_bedrock_request_uses_configured_max_tokens():

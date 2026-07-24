@@ -1,6 +1,10 @@
 import type {Face3DProfileV3} from '../../face-3d/types';
 import {parseFace3DProfile} from '../../face-3d/services/face3DContract';
 import {
+  parseFace3DPhotoEvidence,
+  type Face3DPhotoEvidence,
+} from '../../face-3d/services/face3DPhotoEvidence';
+import {
   parseGoldenMaskCaptureArtifact,
   type GoldenMaskCaptureArtifact,
 } from '../../../shared/contracts/goldenMask';
@@ -96,6 +100,7 @@ export type UnifiedFaceCaptureResult = {
   };
   captureId: string;
   face3d: Face3DProfileV3;
+  face3dPhotoEvidence?: Face3DPhotoEvidence;
   goldenMask?: GoldenMaskCaptureArtifact;
   hairline: {
     analysisEligible: boolean;
@@ -601,6 +606,10 @@ function parseCompletedEvent(
     timestamps.segmentationSensorTimestampMs,
   );
   const parsedFace3D = parseFace3DProfile(payload.face3d);
+  const parsedFace3DPhotoEvidence =
+    payload.face3dPhotoEvidence === undefined || payload.face3dPhotoEvidence === null
+      ? null
+      : parseFace3DPhotoEvidence(payload.face3dPhotoEvidence);
   const parsedGoldenMask =
     payload.goldenMask === undefined || payload.goldenMask === null
       ? null
@@ -724,6 +733,21 @@ function parseCompletedEvent(
   }
 
   const warnings = readWarnings(payload.warnings);
+  const face3DPhotoEvidenceMatches =
+    parsedFace3DPhotoEvidence !== null
+    && parsedFace3DPhotoEvidence.captureId === captureId
+    && parsedFace3DPhotoEvidence.image.width === width
+    && parsedFace3DPhotoEvidence.image.height === height
+    && parsedFace3DPhotoEvidence.frame.cameraFrameToken === cameraFrameToken
+    && parsedFace3DPhotoEvidence.frame.faceNativeFrameToken === faceNativeFrameToken
+    && parsedFace3DPhotoEvidence.topologyFingerprint === parsedFace3D.topologyFingerprint;
+  if (
+    payload.face3dPhotoEvidence !== undefined
+    && payload.face3dPhotoEvidence !== null
+    && !face3DPhotoEvidenceMatches
+  ) {
+    warnings.push('face3d_photo_evidence_invalid');
+  }
   if (
     payload.goldenMask !== undefined &&
     payload.goldenMask !== null &&
@@ -804,6 +828,9 @@ function parseCompletedEvent(
     ...(cameraMetadata ? {cameraMetadata} : {}),
     captureId,
     face3d: parsedFace3D,
+    ...(face3DPhotoEvidenceMatches && parsedFace3DPhotoEvidence
+      ? {face3dPhotoEvidence: parsedFace3DPhotoEvidence}
+      : {}),
     ...(goldenMask ? {goldenMask} : {}),
     hairline: normalizedHairline,
     image: {

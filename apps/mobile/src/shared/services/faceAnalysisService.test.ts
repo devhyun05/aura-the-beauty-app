@@ -179,5 +179,32 @@ expectEqual(
   'legacy recommended makeup remains backward compatible',
 );
 
+expectEqual(
+  hasCompleteBackendReportText({
+    ...completeReportWithoutRecommendedMakeup,
+    detailPayload: {
+      ...completeReportWithoutRecommendedMakeup.detailPayload,
+      result: {
+        ...completeReportWithoutRecommendedMakeup.detailPayload?.result,
+        contentStatus: {
+          narrativeStatus: 'failed',
+          stylingStatus: 'completed',
+          sources: {
+            core: 'template',
+            narrative: 'template',
+            styling: 'llm',
+          },
+        },
+        faceAnalysisV2: {
+          perception: null,
+          consulting: {summary: '스타일링 결과'},
+        },
+      },
+    },
+  }),
+  true,
+  'detailed V2 report accepts projected fallback when one AI stage failed',
+);
+
 process.env.EXPO_PUBLIC_API_BASE_URL = originalApiBaseUrl;
 process.env.EXPO_PUBLIC_CDN_BASE_URL = originalCdnBaseUrl;

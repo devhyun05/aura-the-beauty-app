@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
+import {Text, View} from 'react-native';
+import {ScanFace} from 'lucide-react-native';
 import type { BandKey, S2Data } from '../reportTypes';
+import {color, font} from '../reportTokens';
 import { EmptyNotice } from '../visuals/EmptyNotice';
 import { GuidePhotoOverlay } from '../visuals/GuidePhotoOverlay';
 import { RegionLens } from '../visuals/RegionLens';
+import { ReadableParagraphs } from '../visuals/ReadableParagraphs';
 import { RiseIn } from '../visuals/RiseIn';
-import { SectionHeader } from '../visuals/SectionHeader';
 import { ThirdsRatioReadout } from '../visuals/ThirdsRatioReadout';
 
 interface Props {
@@ -17,15 +20,15 @@ interface Props {
 export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
   const [picked, setPicked] = useState<BandKey | null>(null);
   const pickedBand = data.bands.find(b => b.key === picked) ?? null;
-  const lensDesc = pickedBand
-    ? (pickedBand.key === 'upper' && data.hairlineMissing && pickedBand.descMissing
-        ? pickedBand.descMissing
-        : pickedBand.desc)
-    : '';
+  const lensDesc = pickedBand?.desc ?? '';
 
   return (
-    <RiseIn style={{ paddingTop: 28, paddingHorizontal: 20 }}>
-      <SectionHeader eyebrow={data.eyebrow} title={data.title} sub={data.sub} mb={12} />
+    <RiseIn style={{ paddingHorizontal: 20 }}>
+      <Text
+        accessibilityRole="header"
+        style={[font(22, '800', 1.25, -0.25), {color: color.ink, marginBottom: 16}]}>
+        얼굴
+      </Text>
       <GuidePhotoOverlay
         data={data}
         picked={picked}
@@ -48,9 +51,38 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
           style={{ marginTop: 10 }}
         />
       )}
-      {/* 3분할 자기 서술은 ThirdsRatioReadout 안에 있고, 얼굴형은 별도 블록이다.
-          기존 하단 문단(엔진 3분할 요약)은 얼굴형 밑에 붙어 "게이지 밑에 또 3분할
-          얘기"로 혼동을 줬으므로 제거 — S2 맞춤 rich 문단은 B5(proportionInsight)가 담당. */}
+      <View style={{marginTop: 22}}>
+        <View style={{alignItems: 'center', flexDirection: 'row', gap: 12}}>
+          <View
+            style={{
+              alignItems: 'center',
+              backgroundColor: color.accentDeep,
+              borderRadius: 22,
+              height: 44,
+              justifyContent: 'center',
+              width: 44,
+            }}>
+            <ScanFace color={color.white} size={21} strokeWidth={1.7} />
+          </View>
+          <Text style={[font(17, '800'), {color: color.ink}]}>얼굴 비율</Text>
+        </View>
+        <View style={{gap: 6, marginLeft: 56, marginTop: 8}}>
+          {data.insightLabel ? (
+            <Text style={[font(13.5, '700', 1.5), {color: color.ink}]}>
+              {data.insightLabel}
+            </Text>
+          ) : null}
+          <ReadableParagraphs
+            text={data.insightDescription ?? data.paragraph}
+            textStyle={[font(13.5, '400', 1.65), {color: color.body}]}
+          />
+        </View>
+      </View>
+      <ThirdsRatioReadout
+        ratio={data.ratioNumbers}
+        faceShape={data.faceShape}
+        hairlineMissing={data.hairlineMissing}
+      />
     </RiseIn>
   );
 }

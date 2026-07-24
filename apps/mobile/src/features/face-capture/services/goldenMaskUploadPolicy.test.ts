@@ -20,7 +20,14 @@ function assert(condition: boolean, label: string): void {
 assert(getGoldenMaskRetryDelayMs(0) === 20_000, 'retry starts at 20 seconds');
 assert(getGoldenMaskRetryDelayMs(4) === 300_000, 'retry caps at five minutes');
 assert(getGoldenMaskRetryDelayMs(40) === 300_000, 'retry remains capped');
-assert(!shouldRetryGoldenMaskBackendStatus(404), 'missing report is terminal');
+assert(
+  shouldRetryGoldenMaskBackendStatus(404),
+  'route-missing bare 404 preserves the only local mesh for rollout retry',
+);
+assert(
+  !shouldRetryGoldenMaskBackendStatus(404, 'ANALYSIS_REPORT_NOT_FOUND'),
+  'coded missing report is terminal',
+);
 assert(
   !shouldRetryGoldenMaskBackendStatus(409),
   'attachment conflict is terminal',

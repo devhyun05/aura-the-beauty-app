@@ -50,7 +50,9 @@ export function describeThirdsInternally(r: {
     .filter(c => Math.abs(c.d) > TH)
     .sort((a, b) => Math.abs(b.d) - Math.abs(a.d))[0];
   if (!top) {
-    return '세 구획이 고르게 나뉘어 균형 잡힌 편이에요';
+    return r.upper == null
+      ? '측정된 중안부와 하안부가 고르게 나뉘어 균형 잡힌 편이에요'
+      : '세 구획이 고르게 나뉘어 균형 잡힌 편이에요';
   }
   const pct = Math.round(Math.abs(top.d) * 100);
   const shorter = top.d < 0;

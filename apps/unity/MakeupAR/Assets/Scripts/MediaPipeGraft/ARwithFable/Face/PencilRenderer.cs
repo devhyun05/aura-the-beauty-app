@@ -56,7 +56,8 @@ namespace ARMakeup.Face
         Material _material;
         Vector3[] _vertices;
         float _intensity;
-        float _thickness = 1f; // R7 두께/아치 — BrowRenderer와 동일 워프(제품 동조)
+        float _thickness = 1f; // R7 두께/길이/아치 — BrowRenderer와 동일 워프(제품 동조)
+        float _length = 1f;
         float _arch = 0f;
         int _shape = 0;        // 눈썹 모양(#19b) — BrowRenderer와 동일 값 공유
         int _browThicknessProfile;
@@ -73,6 +74,8 @@ namespace ARMakeup.Face
         readonly Vector2[] _rawUp = new Vector2[Seg];
         readonly Vector2[] _rawLo = new Vector2[Seg];
         readonly Vector2[] _coverageLo = new Vector2[Seg];
+        readonly float[] _upDepth = new float[Seg];
+        readonly float[] _loDepth = new float[Seg];
 
         void Awake() => Instance = this;
         void OnDestroy()
@@ -126,12 +129,16 @@ namespace ARMakeup.Face
             _renderer.enabled = false;
         }
 
-        public void ApplyPencilParams(string colorHex, float intensity, float thickness, float arch, int shape, int finish, int texture,
+        public void ApplyPencilParams(string colorHex, float intensity, float thickness, float length, float arch, int shape, int finish, int texture,
                                       int thicknessProfile, float expandUpper, float expandLower)
         {
             _intensity = Mathf.Clamp01(intensity);
             // R7 두께/아치 — BrowRenderer와 동일 클램프. 밴드가 워프되면 스트로크도 따라간다.
-            _thickness = Mathf.Clamp(thickness, 0.4f, 2f);
+            _thickness = Mathf.Clamp(
+                thickness, BrowWarp.ThicknessMin, BrowWarp.ThicknessMax);
+            _length = length <= 0f
+                ? 1f
+                : Mathf.Clamp(length, BrowWarp.LengthMin, BrowWarp.LengthMax);
             _arch = Mathf.Clamp(arch, 0f, 1f);
             _shape = Mathf.Clamp(shape, 0, 5); // 모양(#19b, 슬롯 공통 — 4=상승 5=반달 포함)
             _browThicknessProfile = Mathf.Clamp(thicknessProfile, 0, 6);
@@ -162,6 +169,12 @@ namespace ARMakeup.Face
             {
                 BrowWarp.SubdivideArc(lm, BrowUpper[e], _up);
                 BrowWarp.SubdivideArc(lm, BrowLower[e], _lo);
+                BrowWarp.SubdivideArcDepth(lm, BrowUpper[e], _upDepth);
+                BrowWarp.SubdivideArcDepth(lm, BrowLower[e], _loDepth);
+                BrowWarp.ScaleLengthFromHead(
+                    _lo, _up, Seg, FramePresenter.Instance.ImageAspect, _length);
+                BrowWarp.ShapeArcProfile(
+                    _lo, _up, Seg, _shape, FramePresenter.Instance.ImageAspect);
                 // R7 두께/아치와 공용 꼬리 테이퍼 — 밴드를 먼저 워프하면 SampleBand 기반
                 // 스트로크의 뿌리 분포·길이·폭이 파우더 밴드와 함께 점진 축소된다.
                 var shapeBand = _thickness != 1f || _arch != 0f || _shape != 0 ||
@@ -175,7 +188,7 @@ namespace ARMakeup.Face
                     _rawUp[i] = rawUp;
                     if (shapeBand)
                         BrowWarp.ShapeBand(
-                            ref _lo[i], ref _up[i], along, _thickness, _arch, _shape,
+                            ref _lo[i], ref _up[i], along, _thickness, _arch, 0,
                             _browThicknessProfile, _browExpandUpper, _browExpandLower);
                     BrowWarp.TaperTail(ref _lo[i], ref _up[i], along, _browThicknessProfile,
                         BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower));
@@ -189,8 +202,6 @@ namespace ARMakeup.Face
                 if (BrowWarp.IsCoverageActive(_browThicknessProfile, _browExpandUpper, _browExpandLower))
                     for (var i = 0; i < Seg; i++)
                         BrowWarp.RestoreCoverageLowerFloor(ref _lo[i], ref _up[i], _coverageLo[i], _rawLo[i], _rawUp[i], browWarped);
-                var depth = Depth(lm[BrowUpper[e][2]].z);
-
                 for (var s = 0; s < StrokesPerBrow; s++)
                 {
                     // 결정론적 해시(스트로크별 흔들림 — 프레임 무관 시드).
@@ -203,6 +214,7 @@ namespace ARMakeup.Face
                     // 밴드 위 위치 u(0 꼬리 → 1 앞머리) + 약간 흔들기
                     var u = Mathf.Clamp01((s + 0.5f) / StrokesPerBrow + (h1 - 0.5f) * 0.5f / StrokesPerBrow);
                     SampleBand(u, e, out var lo, out var up, out var along);
+                    var depth = SampleDepth(u);
 
                     var upDir = up - lo;
                     var bandH = upDir.magnitude;
@@ -234,6 +246,17 @@ namespace ARMakeup.Face
             }
             _mesh.vertices = _vertices;
             _mesh.RecalculateBounds();
+        }
+
+        float SampleDepth(float u)
+        {
+            var f = Mathf.Clamp(u, 0f, 0.9999f) * (Seg - 1);
+            var i0 = (int)f;
+            var i1 = Mathf.Min(i0 + 1, Seg - 1);
+            var t = f - i0;
+            var z0 = 0.5f * (_upDepth[i0] + _loDepth[i0]);
+            var z1 = 0.5f * (_upDepth[i1] + _loDepth[i1]);
+            return Depth(Mathf.Lerp(z0, z1, t));
         }
 
         void EmitDegenerate(ref int vi, Vector2 p, float depth, bool alreadyWarped)

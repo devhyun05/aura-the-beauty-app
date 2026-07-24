@@ -56,12 +56,15 @@ export function PhotoSlot({ slot, shape = 'rect', radius = 0, style }: Props) {
     <View style={[{ borderRadius: br, overflow: 'hidden', backgroundColor: color.hatchB }, style]}>
       {slot.uri && hasCrop && c ? (
         <View style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
-          <Image
-            {...imageReadinessProps}
-            source={{ uri: slot.uri }}
-            contentFit="cover"
-            transition={transition}
-            style={{
+            <Image
+              {...imageReadinessProps}
+              source={{ uri: slot.uri }}
+              // The outer percentage transform already performs the normalized
+              // crop. A second `cover` pass re-crops the source and moves every
+              // landmark overlay, so the transformed full image must fill here.
+              contentFit="fill"
+              transition={transition}
+              style={{
               position: 'absolute',
               width: `${100 / c.w}%`,
               height: `${100 / c.h}%`,

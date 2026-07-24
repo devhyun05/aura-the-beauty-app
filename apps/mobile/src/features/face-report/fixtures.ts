@@ -15,7 +15,7 @@ export const demoReport: ReportData = {
     legacyBadge: '이 판정은 이전 기준으로 측정된 결과예요',
     cards: [
       { label: '얼굴형', value: '타원형 우세 · 곡선' },
-      { label: '퍼스널컬러', value: '여름 뮤트 중심' },
+      { label: '퍼스널 컬러', value: '여름 뮤트 중심' },
       { label: '대비 인상', value: '저대비 · 부드러움' },
       { label: '추천 무드', value: '은은한 정돈' },
     ],
@@ -25,20 +25,15 @@ export const demoReport: ReportData = {
     eyebrow: 'PROPORTION',
     title: '얼굴의 구획부터 볼게요',
     sub: '세로 구획을 보면 얼굴에서 어느 부위가 상대적으로 강조되는지 알 수 있어요.',
-    photo: { placeholderLabel: '얼굴 전체 정면 컷' },
+    photo: {
+      placeholderLabel: '얼굴 전체 정면 컷',
+      sourceHeight: 5,
+      sourceWidth: 4,
+    },
     hairlineMissing: true,
-    hairlineY: 0.16, browY: 0.38, noseBaseY: 0.64, chinY: 0.88,
+    hairlineY: null, browY: 0.38, noseBaseY: 0.64, chinY: 0.88,
     lineLabels: { hairline: '헤어라인', brow: '미간', noseBase: '코밑', chin: '턱끝' },
-    hairlineMissingPill: '헤어라인 미확인',
-    hairlineHatchHeight: 0.38,
-    upperBandOk: { top: 0.16, height: 0.22 },
     bands: [
-      {
-        key: 'upper', top: 0, height: 0.38, pillLabel: '상안부', pillY: 0.27, pillCentered: false,
-        title: '상안부',
-        desc: '이마 · 눈썹 · 눈 — 또렷한 눈매가 시작되는 구획이에요',
-        descMissing: '헤어라인 미확인으로 이번 회차에는 구획하지 못했어요 — 눈썹·눈 분석은 아래 카드에서 볼 수 있어요',
-      },
       {
         key: 'mid', top: 0.38, height: 0.26, pillLabel: '중안부', pillY: 0.51, pillCentered: true, restingTint: true,
         title: '중안부', desc: '코 · 인중 · 볼 — 완만한 곡선이 이어지는 구획이에요',
@@ -154,7 +149,7 @@ export const demoReport: ReportData = {
       {type: 'autumn_deep', label: '가을 딥', ratio: 0.01},
     ],
     toneMap: {
-      caption: '12타입 prototype과의 가까움이에요. 굵은 영역이 현재 결과가 걸쳐 있는 톤 범위예요.',
+      caption: '12가지 세부 톤 중 가까운 위치를 보여줘요. 굵은 영역은 현재 결과가 걸쳐 있는 톤 범위예요.',
       area: {x: 0.12, y: 0.36, w: 0.82, h: 0.26},
       points: [
         {type: 'spring_light', label: '봄 라이트', x: 0.62, y: 0.22, weight: 0.03, active: false},
@@ -271,7 +266,7 @@ export const demoReport: ReportData = {
   s8: {
     eyebrow: 'SKIN',
     title: '피부는 이렇게 보여요',
-    sub: '사진에서 관찰 가능한 피부 부면을 항목별로 정리했어요.',
+    sub: '사진에서 관찰 가능한 피부 특징을 항목별로 정리했어요.',
     aspects: [
       { key: 'texture', heading: '피부결', label: '매끄러운 편', description: '전반적으로 매끄럽고 미세한 요철이 적어요.' },
       { key: 'pores', heading: '모공', label: '미세모공', description: 'T존에 미세한 모공이 관찰돼요.' },
@@ -315,8 +310,8 @@ export const demoReport: ReportData = {
       {
         laneKey: 'accent',
         chip: '개성 강조',
-        title: '눈을(를) 주인공으로',
-        description: '한 곳에 포인트를 집중하는 원포인트 전략이에요. 시선을 가장 오래 끄는 눈을(를) 주인공으로, 나머지는 덜어냈어요.',
+        title: '눈을 주인공으로',
+        description: '한 곳에 포인트를 집중하는 원포인트 전략이에요. 시선을 가장 오래 끄는 눈을 주인공으로 삼고, 나머지는 덜어냈어요.',
         moves: [
           { region: '눈', note: '색과 대비를 끌어올려 이 부위를 확실한 주인공으로.' },
           { region: '립', note: '톤을 낮춰 강조 부위와 경쟁하지 않게 절제.' },

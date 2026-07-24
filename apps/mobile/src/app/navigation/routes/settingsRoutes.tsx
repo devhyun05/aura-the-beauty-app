@@ -2,6 +2,7 @@ import React from 'react';
 import {Alert} from 'react-native';
 
 import {useAuthSession} from '../../../features/auth';
+import {useAiDataConsent} from '../../../features/legal/services/aiDataConsentContext';
 import {
   AccountDeletionScreen,
   AccountManagementScreen,
@@ -23,6 +24,8 @@ import {clearGoldenMaskCleanupTombstonesForUser} from '../../../features/face-ca
 export function AppSettingsRouteScreen({
   navigation,
 }: RootScreenProps<'AppSettings'>) {
+  const {openAiDataConsentSettings} = useAiDataConsent();
+
   return (
     <DetailRouteChrome
       backgroundColor={APP_SETTINGS_BACKGROUND_COLOR}
@@ -32,6 +35,7 @@ export function AppSettingsRouteScreen({
       onBack={() => goBackToPreviousOrMainTab(navigation, 'HomeTab')}>
       <AppSettingsScreen
         onPressAccountManagement={() => navigation.navigate('AccountManagement')}
+        onPressAiDataConsent={openAiDataConsentSettings}
         onPressFaq={() => navigation.navigate('Faq')}
         onPressProfile={() => navigation.navigate('ProfileEdit')}
         onPressQuickActions={() => navigation.navigate('FloatingActionSettings')}

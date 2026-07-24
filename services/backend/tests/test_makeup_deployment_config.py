@@ -29,6 +29,22 @@ def test_seoul_makeup_model_defaults_use_global_inference_profiles() -> None:
   assert settings.effective_recommendation_model_id == expected["BEDROCK_RECOMMENDATION_MODEL_ID"]
 
 
+def test_dev_deploy_routes_analysis_to_global_sonnet_46() -> None:
+  workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
+    encoding="utf-8",
+  )
+
+  expected = {
+    "BEDROCK_ANALYSIS_INFERENCE_ID": "global.anthropic.claude-sonnet-4-6",
+    "BEDROCK_ANALYSIS_REGION": "ap-northeast-2",
+    "MAKEUP_FEEDBACK_GLOBAL_INFERENCE_ALLOWED": "true",
+  }
+  for name, value in expected.items():
+    assert f"{name}: ${{{{ vars.{name} || '{value}' }}}}" in workflow
+    assert workflow.count(f"{name}=${{{{ env.{name} }}}}") == 2
+    assert f'"{name}"' in workflow
+
+
 def test_makeup_journey_deploy_smoke_covers_every_public_route() -> None:
   workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
     encoding="utf-8",
@@ -77,14 +93,14 @@ def test_makeup_journey_eas_profiles_keep_production_closed_by_default() -> None
   }
 
 
-def test_deploy_defaults_face_analysis_v2_off_for_api_and_worker() -> None:
+def test_deploy_defaults_face_analysis_v2_on_for_api_and_worker() -> None:
   workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
     encoding="utf-8",
   )
 
   assert (
     "FACE_ANALYSIS_V2_ENABLED: "
-    "${{ vars.FACE_ANALYSIS_V2_ENABLED || 'false' }}"
+    "${{ vars.FACE_ANALYSIS_V2_ENABLED || 'true' }}"
   ) in workflow
   assert workflow.count("FACE_ANALYSIS_V2_ENABLED=${{ env.FACE_ANALYSIS_V2_ENABLED }}") == 2
 

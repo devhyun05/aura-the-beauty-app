@@ -298,6 +298,12 @@ Table analysis_stage_runs {
   raw_response jsonb [not null, default: '{}']
   error_payload jsonb [not null, default: '{}']
   attempt_count integer [not null, default: 1]
+  duration_ms bigint [note: 'Elapsed generation/validation time measured with server monotonic clock']
+  duration_source text [note: 'server_monotonic']
+  input_tokens bigint
+  output_tokens bigint
+  provider_call_count integer
+  validation_retry_count integer
   started_at timestamptz
   completed_at timestamptz
   created_at timestamptz [not null, default: `now()`]

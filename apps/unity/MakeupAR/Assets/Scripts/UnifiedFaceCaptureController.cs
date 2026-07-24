@@ -139,7 +139,10 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
     private const float MaximumPitchDegrees = 7.0f;
     private const float MaximumRollDegrees = 5.0f;
     private const float MaximumNeutralExpressionActivation = 0.5f;
-    private const double HairlineFinalizationWaitSeconds = 0.75;
+    // SegmentationSource may legitimately keep an accepted exact-frame request
+    // in flight for up to its 2s watchdog. Finalizing earlier turns that valid
+    // pending result into a permanent hairline omission.
+    private const double HairlineFinalizationWaitSeconds = 2.25;
     private const double HairlineSegmentationTimestampToleranceMs = 1.0;
     private const double HairlineAdvisoryMaximumAgeMs = 600.0;
     private const double HairlineAdvisoryStableSeconds = 0.4;
@@ -602,15 +605,17 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
             int anchorOrdinal = Math.Min(
                 4,
                 activeRequest.Policy.TargetValidFrames);
-            if (acceptedEvaluation
-                && collector.ValidFrameCount >= anchorOrdinal)
+            if (acceptedEvaluation)
             {
                 ResolveAdvisorySources();
                 bool segmentationAccepted =
                     segmentationSource != null
                     && segmentationSource.HasAcceptedFrameToken(
                         nativeSample.CameraFrameToken);
-                if (fixedAnchorCandidate == null)
+                bool canUseAsAnchor =
+                    collector.ValidFrameCount >= anchorOrdinal
+                    || segmentationAccepted;
+                if (fixedAnchorCandidate == null && canUseAsAnchor)
                 {
                     fixedAnchorCandidate =
                         new CaptureCandidate(nativeSample, pose);
@@ -770,7 +775,13 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         bool hasExactSegmentation = TryEvaluateFixedAnchorHairline(
             out SegmentationSource.SegmentationFrameSnapshot segmentationSnapshot,
             out HairlineDetectionResult hairlineResult);
-        if (!hasExactSegmentation && now < finalizationDeadlineSeconds)
+        bool exactSegmentationMayStillArrive =
+            segmentationSource != null
+            && segmentationSource.HasAcceptedFrameToken(
+                fixedAnchorCandidate.Sample.CameraFrameToken);
+        if (!hasExactSegmentation
+            && exactSegmentationMayStillArrive
+            && now < finalizationDeadlineSeconds)
         {
             return;
         }
@@ -1319,6 +1330,27 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
             + "-"
             + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                 .ToString(CultureInfo.InvariantCulture);
+        bool hasFace3DPhotoEvidence =
+            Face3DPhotoEvidenceBuilder.TryBuild(
+                anchorSample.MeshSnapshot,
+                anchorSample.ProjectedVertices,
+                anchorSample.CameraFrameToken,
+                anchorSample.FaceNativeFrameToken,
+                anchorSample.FaceNativeTimestampMs,
+                anchorSample.ImageWidth,
+                anchorSample.ImageHeight,
+                semanticMap,
+                captureId,
+                profile.TopologyFingerprint,
+                out string face3DPhotoEvidenceJson,
+                out string face3DPhotoEvidenceReason);
+        if (!hasFace3DPhotoEvidence)
+        {
+            warningSet.Add(
+                string.IsNullOrWhiteSpace(face3DPhotoEvidenceReason)
+                    ? "face3d_photo_evidence_unavailable"
+                    : face3DPhotoEvidenceReason);
+        }
         bool hasGoldenMask = false;
         GoldenMaskArtifactDescriptor goldenMask = null;
         string goldenMaskReason = "golden_mask_artifact_unavailable";
@@ -1366,6 +1398,11 @@ public sealed class UnifiedFaceCaptureController : MonoBehaviour
         json.Append(",\"height\":").Append(anchorSample.ImageHeight);
         json.Append(",\"orientation\":\"upright\",\"mirrored\":false}");
         json.Append(",\"face3d\":").Append(profile.ToCanonicalJson());
+        if (hasFace3DPhotoEvidence)
+        {
+            json.Append(",\"face3dPhotoEvidence\":")
+                .Append(face3DPhotoEvidenceJson);
+        }
         if (hasGoldenMask)
         {
             json.Append(",\"goldenMask\":").Append(goldenMask.ToJson());

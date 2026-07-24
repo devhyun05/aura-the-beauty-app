@@ -31,6 +31,7 @@ import {
   isJudgmentVersionCurrent,
   judgeFaceLength,
 } from '../constants';
+import {getVerticalThirdsPhotoAspectRatio} from '../verticalThirdsDisplayGeometry';
 
 type FaceVerticalThirdsCapture = {
   capturedAt?: string;
@@ -75,14 +76,6 @@ function isSuccessResult(
   result: FaceVerticalThirdsResult | null,
 ): result is FaceVerticalThirdsResult {
   return result?.status === 'partial_success' || result?.status === 'full_success';
-}
-
-function getAspectRatio(result: FaceVerticalThirdsResult | null) {
-  if (result?.sourceImage.width && result.sourceImage.height) {
-    return result.sourceImage.width / result.sourceImage.height;
-  }
-
-  return 3 / 4;
 }
 
 function getStageSourceUri(result: FaceVerticalThirdsResult | null, fallbackUri: string) {
@@ -531,7 +524,12 @@ function PhotoStage({
         collapsable={false}
         onLayout={onLayout}
         ref={overlayRef}
-        style={[styles.photoStage, {aspectRatio: getAspectRatio(result)}]}>
+        style={[
+          styles.photoStage,
+          {
+            aspectRatio: getVerticalThirdsPhotoAspectRatio(result.sourceImage),
+          },
+        ]}>
         <Image
           onLoad={onImageLoad}
           resizeMode="cover"

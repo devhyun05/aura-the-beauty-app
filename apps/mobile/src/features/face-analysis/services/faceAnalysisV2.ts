@@ -7,10 +7,17 @@ export type FaceAnalysisStageStatus =
 
 export type FaceAnalysisStageState = {
   cacheHit: boolean;
+  durationMs?: number | null;
+  durationSource?: 'server_monotonic' | null;
   errorCode?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  providerCallCount?: number | null;
   runId?: string | null;
   status: FaceAnalysisStageStatus;
+  totalTokens?: number | null;
   updatedAt?: string | null;
+  validationRetryCount?: number | null;
 };
 
 export type FaceAnalysisPipelineState = {
@@ -42,6 +49,16 @@ export type FaceAnalysisInsight = {
   sensitivity: 0 | 1 | 2 | 3;
 };
 
+export type FaceAnalysisMeasurementInterpretation = {
+  confidence: number;
+  description: string;
+  displayValue?: string | null;
+  rationaleMetricKeys: string[];
+  resultLabel: string;
+  sensitivity: 0 | 1 | 2;
+  title: string;
+};
+
 // 서버 상세 응답 투영은 sensitivity>=3 insight(예: asymmetry)를 통째로 제거한다
 // (analysis.py _project_internal_only_records) — 각 insight 는 부재할 수 있다.
 export type FaceAnalysisDerivedResult = {
@@ -55,6 +72,7 @@ export type FaceAnalysisDerivedResult = {
   rulesVersion: string;
   skinColor?: FaceAnalysisInsight;
   verticalBalance?: FaceAnalysisInsight;
+  measurementInterpretations?: Record<string, FaceAnalysisMeasurementInterpretation>;
 };
 
 export type FaceAnalysisV2 = {
@@ -81,6 +99,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string');
 }
 
+function isOptionalNonNegativeNumber(value: unknown): boolean {
+  return value == null || (typeof value === 'number' && value >= 0);
+}
+
 function isStageState(value: unknown): value is FaceAnalysisStageState {
   if (!isRecord(value)) {
     return false;
@@ -88,7 +110,15 @@ function isStageState(value: unknown): value is FaceAnalysisStageState {
   return (
     ['pending', 'processing', 'completed', 'partial', 'failed'].includes(
       String(value.status),
-    ) && typeof value.cacheHit === 'boolean'
+    ) &&
+    typeof value.cacheHit === 'boolean' &&
+    isOptionalNonNegativeNumber(value.durationMs) &&
+    (value.durationSource == null || value.durationSource === 'server_monotonic') &&
+    isOptionalNonNegativeNumber(value.inputTokens) &&
+    isOptionalNonNegativeNumber(value.outputTokens) &&
+    isOptionalNonNegativeNumber(value.totalTokens) &&
+    isOptionalNonNegativeNumber(value.providerCallCount) &&
+    isOptionalNonNegativeNumber(value.validationRetryCount)
   );
 }
 
@@ -130,6 +160,30 @@ function isInsight(value: unknown): value is FaceAnalysisInsight {
   );
 }
 
+function isMeasurementInterpretation(
+  value: unknown,
+): value is FaceAnalysisMeasurementInterpretation {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.title === 'string' &&
+    typeof value.resultLabel === 'string' &&
+    typeof value.description === 'string' &&
+    (value.displayValue == null || typeof value.displayValue === 'string') &&
+    typeof value.confidence === 'number' &&
+    typeof value.sensitivity === 'number' &&
+    isStringArray(value.rationaleMetricKeys)
+  );
+}
+
+function isMeasurementInterpretationMap(value: unknown): boolean {
+  return (
+    value == null ||
+    (isRecord(value) && Object.values(value).every(isMeasurementInterpretation))
+  );
+}
+
 const derivedInsightKeys = [
   'asymmetry',
   'cheekboneAndEline',
@@ -160,6 +214,7 @@ export function parseFaceAnalysisV2(value: unknown): FaceAnalysisV2 | undefined 
     !isRecord(derived) ||
     typeof derived.rulesVersion !== 'string' ||
     !derivedInsightKeys.every(key => derived[key] == null || isInsight(derived[key])) ||
+    !isMeasurementInterpretationMap(derived.measurementInterpretations) ||
     !isRecord(pipeline) ||
     !isStageState(pipeline.aiMeasurement) ||
     !isStageState(pipeline.aiPerception) ||

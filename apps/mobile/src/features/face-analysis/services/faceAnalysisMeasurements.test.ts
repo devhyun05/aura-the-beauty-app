@@ -934,4 +934,109 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   expectEqual(json.includes('debugAnchors'), false, 'debugAnchors must NOT serialize');
 }
 
+// ── 13. 대표 프레임 3D 사진 증거와 다중 측정 가이드 왕복 ────────────────
+{
+  const evidence = {
+    captureId: 'c-photo',
+    coordinateSpace: 'portrait_unmirrored_normalized',
+    frame: {
+      cameraFrameToken: 'camera-4',
+      faceNativeFrameToken: 'face-4',
+      faceNativeTimestampMs: 1234,
+    },
+    guides: [{
+      key: 'alarWidth',
+      kind: 'distance',
+      label: '콧볼 너비',
+      metricKeys: ['alarWidth'],
+      points: [{x: 0.45, y: 0.55}, {x: 0.55, y: 0.55}],
+    }],
+    image: {height: 1920, width: 1080},
+    regions: {
+      nose: {
+        hull: [{x: 0.45, y: 0.4}, {x: 0.55, y: 0.4}, {x: 0.5, y: 0.6}],
+        metricKeys: ['noseTipProjection'],
+        pin: {
+          x: 0.5,
+          y: 0.57,
+          relativeDepth: 1,
+          signedDepthNormalized: 0.34,
+          label: '코끝',
+          metricKey: 'noseTipProjection',
+        },
+        samples: [
+          {x: 0.46, y: 0.45, relativeDepth: 0.2, signedDepthNormalized: 0.12},
+          {x: 0.54, y: 0.45, relativeDepth: 0.3, signedDepthNormalized: 0.16},
+          {x: 0.5, y: 0.57, relativeDepth: 1, signedDepthNormalized: 0.34},
+        ],
+      },
+    },
+    schemaVersion: 'aura.face3d-photo-evidence.v1',
+    topologyFingerprint: 'topology-1',
+  } as const;
+  const payload = buildFaceAnalysisMeasurementsPayload({
+    captureId: 'server-photo-capture',
+    face3d: null,
+    face3dPhotoEvidence: evidence as any,
+    faceGeometry2d: null,
+    faceVerticalThirds: null,
+    personalColor: null,
+  });
+  const restored = parseFaceAnalysisMeasurements(payload);
+  expectEqual(
+    restored?.face3dPhotoEvidence?.regions.nose?.pin.label,
+    '코끝',
+    '3D photo evidence survives measurements round trip',
+  );
+  expectEqual(
+    restored?.face3dPhotoEvidence?.regions.nose?.pin.signedDepthNormalized,
+    0.34,
+    'signed depth survives measurements round trip',
+  );
+  expectEqual(
+    restored?.face3dPhotoEvidence?.captureId,
+    'server-photo-capture',
+    'stored 3D photo evidence is rebound to the server photo capture identity',
+  );
+  expectEqual(
+    evidence.captureId,
+    'c-photo',
+    'rebinding stored evidence does not mutate the Unity session evidence',
+  );
+}
+
+{
+  const restored = parseFaceAnalysisMeasurements({
+    captureId: 'c-guides',
+    regionVisuals: {
+      upper: {
+        cropRect: {x: 0.2, y: 0.2, w: 0.6, h: 0.3},
+        guides: [
+          {
+            key: 'interCanthalDistance',
+            kind: 'distance',
+            label: '눈 사이 거리',
+            metricKeys: ['interCanthalRatio'],
+            points: [{x: 0.43, y: 0.4}, {x: 0.57, y: 0.4}],
+          },
+          {
+            key: 'canthalTilt',
+            kind: 'angle',
+            label: '눈꼬리 기울기',
+            metricKeys: ['canthalTiltLeftDeg', 'canthalTiltRightDeg'],
+            points: [{x: 0.3, y: 0.4}, {x: 0.42, y: 0.38}],
+          },
+        ],
+        sourceImage: {height: 1920, width: 1080},
+      },
+    },
+    schemaVersion: 'aura-face-analysis-measurements-v1',
+  });
+  expectEqual(
+    restored?.regionVisuals?.upper?.guides?.[1]?.kind,
+    'angle',
+    'measurement-specific guide arrays retain their kind',
+  );
+}
+
 console.log('faceAnalysisMeasurements.test.ts passed');

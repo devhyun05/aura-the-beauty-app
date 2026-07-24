@@ -1,10 +1,13 @@
-import {StyleSheet, Text, View} from 'react-native';
+import {ChevronDown} from 'lucide-react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 
 import {colors, radius} from '../../theme/makeupResultTokens';
 import type {FinalRecipeStep} from './finalAreaGuideRecipe';
 
 export interface FinalMakeupRecipeStepCardProps {
   accentHex: string;
+  expanded?: boolean;
+  onPress?: () => void;
   step: FinalRecipeStep;
 }
 
@@ -12,6 +15,8 @@ const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 export function FinalMakeupRecipeStepCard({
   accentHex,
+  expanded = true,
+  onPress,
   step,
 }: FinalMakeupRecipeStepCardProps) {
   const safeAccentHex = HEX_COLOR.test(accentHex) ? accentHex : colors.heroPlaceholder;
@@ -24,8 +29,13 @@ export function FinalMakeupRecipeStepCard({
   return (
     <View
       accessibilityLabel={`${step.order}단계 ${step.title}`}
+      accessibilityState={{expanded, selected: expanded}}
       style={styles.card}>
-      <View style={styles.header}>
+      <Pressable
+        accessibilityHint={onPress ? '선택한 단계의 자세한 사용법을 보여줍니다.' : undefined}
+        accessibilityRole={onPress ? 'button' : undefined}
+        onPress={onPress}
+        style={({pressed}) => [styles.header, pressed && styles.pressed]}>
         <View style={[styles.numberBadge, {backgroundColor: safeAccentHex}]}>
           <Text style={styles.numberText}>{step.order}</Text>
         </View>
@@ -35,9 +45,26 @@ export function FinalMakeupRecipeStepCard({
             <Text style={styles.productType}>제품 유형 · {step.productType}</Text>
           ) : null}
         </View>
-      </View>
+        <View style={styles.headerSwatches}>
+          {step.colors.slice(0, 3).map(color => (
+            <View
+              key={`${color.role}:${color.name}:${color.hex}:summary`}
+              style={[
+                styles.headerSwatch,
+                {backgroundColor: HEX_COLOR.test(color.hex) ? color.hex : colors.heroPlaceholder},
+              ]}
+            />
+          ))}
+        </View>
+        <ChevronDown
+          color={expanded ? colors.ink : colors.sub2}
+          size={18}
+          strokeWidth={2}
+          style={{transform: [{rotate: expanded ? '180deg' : '0deg'}]}}
+        />
+      </Pressable>
 
-      {step.colors.length > 0 ? (
+      {expanded && step.colors.length > 0 ? (
         <View style={styles.colorSection}>
           <Text style={styles.sectionLabel}>사용 색상 · {step.colors.length}개</Text>
           <View style={styles.colorList}>
@@ -60,7 +87,7 @@ export function FinalMakeupRecipeStepCard({
         </View>
       ) : null}
 
-      {details.length > 0 ? (
+      {expanded && details.length > 0 ? (
         <View style={styles.detailGrid}>
           {details.map(detail => (
             <View key={detail.label} style={styles.detailTile}>
@@ -71,21 +98,21 @@ export function FinalMakeupRecipeStepCard({
         </View>
       ) : null}
 
-      {step.technique ? (
+      {expanded && step.technique ? (
         <View style={styles.instructionBlock}>
           <Text style={styles.sectionLabel}>바르는 방법</Text>
           <Text style={styles.instructionText}>{step.technique}</Text>
         </View>
       ) : null}
 
-      {step.blending ? (
+      {expanded && step.blending ? (
         <View style={styles.techniqueBlock}>
           <Text style={styles.sectionLabel}>블렌딩</Text>
           <Text style={styles.detailText}>{step.blending}</Text>
         </View>
       ) : null}
 
-      {step.finishCheck ? (
+      {expanded && step.finishCheck ? (
         <View style={styles.finishBlock}>
           <View style={styles.finishDot} />
           <View style={styles.finishCopy}>
@@ -108,6 +135,14 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   header: {alignItems: 'center', flexDirection: 'row', gap: 11},
+  headerSwatches: {alignItems: 'center', flexDirection: 'row', gap: 3},
+  headerSwatch: {
+    borderColor: 'rgba(16,24,40,0.12)',
+    borderRadius: 7,
+    borderWidth: 1,
+    height: 14,
+    width: 14,
+  },
   numberBadge: {
     alignItems: 'center',
     borderColor: 'rgba(255,255,255,0.8)',
@@ -185,4 +220,5 @@ const styles = StyleSheet.create({
   finishCopy: {flex: 1, gap: 3, minWidth: 0},
   finishLabel: {color: '#51675A', fontSize: 10, fontWeight: '800'},
   finishText: {color: colors.ink3, fontSize: 12, fontWeight: '600', lineHeight: 18},
+  pressed: {opacity: 0.72},
 });

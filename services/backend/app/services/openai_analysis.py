@@ -46,6 +46,7 @@ from app.services.face_analysis_measurements import (
   PERSONAL_COLOR_TONE_CODES,
   PERSONAL_COLOR_TONE_TO_SEASON,
 )
+from app.services.face_analysis_ai import AnalysisCallMetrics
 
 
 logger = logging.getLogger(__name__)
@@ -1918,6 +1919,7 @@ class OpenAIAnalysisService:
     source_image_bytes: bytes | None,
     max_tokens: int,
     stage: str | None = None,
+    on_call_metrics: Callable[[AnalysisCallMetrics], None] | None = None,
   ) -> dict[str, Any]:
     provider = self.settings.analysis_provider
     schema_instruction = json.dumps(json_schema, ensure_ascii=False, separators=(",", ":"))
@@ -1964,7 +1966,17 @@ class OpenAIAnalysisService:
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": max_tokens,
         "temperature": 0.1,
-        "system": developer_prompt,
+        # Bedrock processes cache prefixes in tools → system → messages order.
+        # Marking the static system block therefore caches the stage tool schema
+        # and developer instructions while keeping the per-report facts/image
+        # in the uncached user message.
+        "system": [
+          {
+            "type": "text",
+            "text": developer_prompt,
+            "cache_control": {"type": "ephemeral"},
+          },
+        ],
         "messages": [{"role": "user", "content": content}],
       }
       if tool_enforced:
@@ -1991,12 +2003,14 @@ class OpenAIAnalysisService:
         context="stage",
         max_tokens=max_tokens,
       )
-      self._log_bedrock_call_metrics(
+      call_metrics = self._log_bedrock_call_metrics(
         response_payload,
         context="stage",
         started_at=started_at,
         stage=stage,
       )
+      if on_call_metrics is not None:
+        on_call_metrics(call_metrics)
       if tool_enforced:
         # 조용한 fallback 없음 — 도구 응답이 없으면 명시적으로 실패.
         tool_result = self._extract_bedrock_tool_input(
@@ -2049,6 +2063,27 @@ class OpenAIAnalysisService:
       )
       output_text = getattr(response, "output_text", "")
       stop_reason = ""
+      usage = getattr(response, "usage", None)
+      if isinstance(usage, dict):
+        input_tokens = usage.get("input_tokens")
+        output_tokens = usage.get("output_tokens")
+      else:
+        input_tokens = getattr(usage, "input_tokens", None)
+        output_tokens = getattr(usage, "output_tokens", None)
+      call_metrics = AnalysisCallMetrics(
+        duration_ms=round((time.monotonic() - started_at) * 1000),
+        input_tokens=int(input_tokens or 0),
+        output_tokens=int(output_tokens or 0),
+      )
+      logger.info(
+        "[aura:openai] stage:metrics stage=%s durationMs=%s inputTokens=%s outputTokens=%s",
+        stage or "-",
+        call_metrics.duration_ms,
+        call_metrics.input_tokens,
+        call_metrics.output_tokens,
+      )
+      if on_call_metrics is not None:
+        on_call_metrics(call_metrics)
     else:
       raise AppError(503, "AI_PROVIDER_UNSUPPORTED", f"Unsupported AI_PROVIDER: {provider}")
 
@@ -2082,6 +2117,7 @@ class OpenAIAnalysisService:
     source_image_bytes: bytes | None,
     max_tokens: int,
     stage: str | None = None,
+    on_call_metrics: Callable[[AnalysisCallMetrics], None] | None = None,
   ) -> dict[str, Any]:
     try:
       return await asyncio.to_thread(
@@ -2092,6 +2128,7 @@ class OpenAIAnalysisService:
         source_image_bytes,
         max_tokens,
         stage,
+        on_call_metrics,
       )
     except AppError:
       raise
@@ -2465,7 +2502,7 @@ class OpenAIAnalysisService:
     context: str,
     started_at: float,
     stage: str | None = None,
-  ) -> None:
+  ) -> AnalysisCallMetrics:
     """토큰·지연 계측(Stage 7). analyze_text(프로드)와 V2 스테이지(dev)를 동일
     포맷으로 남겨, dev 트래픽만으로 라이브 vs V2 A/B(비용·지연)를 비교할 수 있게 한다.
 
@@ -2477,13 +2514,45 @@ class OpenAIAnalysisService:
     usage = usage if isinstance(usage, dict) else {}
     duration_ms = round((time.monotonic() - started_at) * 1000)
     stop_reason = str(response_payload.get("stop_reason") or "")
+    uncached_input_tokens = int(usage.get("input_tokens") or 0)
+    cache_read_input_tokens = int(
+      usage.get("cache_read_input_tokens")
+      or usage.get("cacheReadInputTokens")
+      or 0
+    )
+    cache_write_input_tokens = int(
+      usage.get("cache_creation_input_tokens")
+      or usage.get("cache_write_input_tokens")
+      or usage.get("cacheWriteInputTokens")
+      or 0
+    )
+    # Preserve the pre-cache meaning of inputTokens as the total logical prompt
+    # size so stage/runtime comparisons do not look artificially smaller on hits.
+    total_input_tokens = (
+      uncached_input_tokens
+      + cache_read_input_tokens
+      + cache_write_input_tokens
+    )
+    metrics = AnalysisCallMetrics(
+      duration_ms=duration_ms,
+      input_tokens=total_input_tokens,
+      output_tokens=int(usage.get("output_tokens") or 0),
+      stop_reason=stop_reason or None,
+      cache_read_input_tokens=cache_read_input_tokens,
+      cache_write_input_tokens=cache_write_input_tokens,
+    )
     logger.info(
-      "[aura:bedrock] %s:metrics stage=%s durationMs=%s inputTokens=%s outputTokens=%s",
+      "[aura:bedrock] %s:metrics stage=%s durationMs=%s inputTokens=%s "
+      "uncachedInputTokens=%s cacheReadInputTokens=%s cacheWriteInputTokens=%s "
+      "outputTokens=%s",
       context,
       stage or "-",
       duration_ms,
-      usage.get("input_tokens"),
-      usage.get("output_tokens"),
+      metrics.input_tokens,
+      uncached_input_tokens,
+      metrics.cache_read_input_tokens,
+      metrics.cache_write_input_tokens,
+      metrics.output_tokens,
     )
     # 실험 지표 sink(로그 레벨 무관). context: analysis=단일호출, stage=V2 스테이지.
     append_analysis_metric(
@@ -2493,11 +2562,15 @@ class OpenAIAnalysisService:
         "context": context,
         "stage": stage,
         "durationMs": duration_ms,
-        "inputTokens": usage.get("input_tokens"),
-        "outputTokens": usage.get("output_tokens"),
+        "inputTokens": metrics.input_tokens,
+        "uncachedInputTokens": uncached_input_tokens,
+        "cacheReadInputTokens": metrics.cache_read_input_tokens,
+        "cacheWriteInputTokens": metrics.cache_write_input_tokens,
+        "outputTokens": metrics.output_tokens,
         "stopReason": stop_reason or "end_turn",
       },
     )
+    return metrics
 
   def _extract_bedrock_tool_input(
     self,
@@ -2751,6 +2824,59 @@ class OpenAIAnalysisService:
       )
     return f"{_ANALYSIS_CORE_INSTRUCTIONS}{section}{directive} {anchor_block}{dynamic}"
 
+  async def analyze_face_report_anchor(
+    self,
+    payload: dict[str, Any],
+    source_image_bytes: bytes,
+    *,
+    face_shape: str,
+  ) -> dict[str, Any]:
+    """Generate the three-field report preview independently of the full pipeline.
+
+    V2 already has an authoritative, measurement-derived face shape before its
+    sequential AI stages begin. Keep that value fixed and spend the lightweight
+    call only on skin type and recommended mood so the preview and completed
+    report cannot disagree about face shape.
+    """
+    started_at = time.monotonic()
+    anchor_raw = await self.analyze_structured_json(
+      developer_prompt=(
+        "Return only the requested non-medical face-report anchor fields as concise Korean JSON. "
+        "The supplied faceShape is authoritative and must be copied exactly."
+      ),
+      user_prompt=(
+        self._fanout_group_prompt(
+          payload,
+          stage="anchor",
+          directive=_FANOUT_ANCHOR_DIRECTIVE,
+        )
+        + f" The authoritative faceShape is {face_shape!r}; copy it exactly."
+      ),
+      json_schema=ANCHOR_TOOL_SCHEMA,
+      source_image_bytes=source_image_bytes,
+      max_tokens=512,
+      stage="anchor",
+    )
+    skin_type = self._first_normalized_text(anchor_raw.get("skinType"))
+    recommended_mood = self._first_normalized_text(anchor_raw.get("recommendedMood"))
+    if not skin_type or not recommended_mood:
+      raise AppError(
+        502,
+        "FACE_ANALYSIS_ANCHOR_INCOMPLETE",
+        "Face analysis anchor did not return the required preview fields.",
+      )
+    anchor_values = {
+      "faceShape": face_shape,
+      "skinType": skin_type,
+      "recommendedMood": recommended_mood,
+    }
+    logger.info(
+      "[aura:analysis] analysis:anchor-ready provider=%s durationMs=%s",
+      self.settings.analysis_provider,
+      round((time.monotonic() - started_at) * 1000),
+    )
+    return anchor_values
+
   async def _analyze_image_bedrock_fanout(
     self,
     payload: dict[str, Any],
@@ -2792,12 +2918,17 @@ class OpenAIAnalysisService:
       anchor_values.get("faceShape"),
     )
 
-    # 앵커 확정 즉시 콜백(로딩 프리뷰용) — 실패해도 본 분석은 계속.
+    # 앵커 확정 즉시 콜백(로딩 프리뷰용)을 시작하되, DB 왕복 때문에 아래
+    # 병렬 레그 시작이 늦어지지 않게 별도 task로 겹친다.
+    anchor_callback_task: asyncio.Task[None] | None = None
     if on_anchor is not None:
-      try:
-        await on_anchor(anchor_values)
-      except Exception as exc:  # noqa: BLE001 - 프리뷰 부가기능은 분석을 깨지 않는다.
-        logger.warning("[aura:bedrock] anchor-callback failed: %s", exc.__class__.__name__)
+      async def notify_anchor() -> None:
+        try:
+          await on_anchor(anchor_values)
+        except Exception as exc:  # noqa: BLE001 - 프리뷰 부가기능은 분석을 깨지 않는다.
+          logger.warning("[aura:bedrock] anchor-callback failed: %s", exc.__class__.__name__)
+
+      anchor_callback_task = asyncio.create_task(notify_anchor())
 
     # 2) perception ∥ prescription ∥ styling ∥ skin ∥ feature — 앵커 주입, 동시
     #    실행(6분할). 독립 병렬 레그라 지연은 max(레그)에 흡수. prescription에서
@@ -2825,6 +2956,8 @@ class OpenAIAnalysisService:
       leg("feature", _FANOUT_FEATURE_DIRECTIVE, FEATURE_TOOL_SCHEMA),
       return_exceptions=True,
     )
+    if anchor_callback_task is not None:
+      await anchor_callback_task
     # fail-closed: 한쪽이라도 실패하면 전체 실패(현행 all-or-nothing 시맨틱 보존).
     for result in results:
       if isinstance(result, BaseException):

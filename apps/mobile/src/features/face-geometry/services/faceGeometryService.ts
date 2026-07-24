@@ -152,7 +152,9 @@ export async function analyzeFaceGeometry2d(
     map: correctedMap,
     rollCorrectionApplied: rollCorrection.applied,
   });
-  const regionVisuals = regionVisualsBuilder(correctedMap, detected.imageWidth, detected.imageHeight);
+  // 측정값은 roll 보정 좌표에서 계산하지만, 사진 위 근거선은 반드시 원본
+  // 픽셀 좌표를 써야 한다. 보정 좌표를 저장하면 촬영 사진과 반대 방향으로 밀린다.
+  const regionVisuals = regionVisualsBuilder(pixelMap, detected.imageWidth, detected.imageHeight);
   // 오버레이 정합: 앵커는 원본(비회전) 좌표로 수집해 촬영 사진 위에 정확히 얹는다.
   // (지표값은 correctedMap 기준으로 이미 계산됨 — 앵커는 위치 검증용, 값은 라벨로 표시)
   const debugAnchors = collectFaceGeometryDebugAnchors(

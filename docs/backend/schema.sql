@@ -376,10 +376,35 @@ create table if not exists analysis_stage_runs (
   raw_response jsonb not null default '{}'::jsonb,
   error_payload jsonb not null default '{}'::jsonb,
   attempt_count integer not null default 1 check (attempt_count >= 1),
+  duration_ms bigint,
+  duration_source text,
+  input_tokens bigint,
+  output_tokens bigint,
+  provider_call_count integer,
+  validation_retry_count integer,
   started_at timestamptz,
   completed_at timestamptz,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  constraint chk_analysis_stage_runs_duration_ms
+    check (duration_ms is null or duration_ms >= 0),
+  constraint chk_analysis_stage_runs_duration_source
+    check (duration_source is null or duration_source = 'server_monotonic'),
+  constraint chk_analysis_stage_runs_token_usage
+    check (
+      (input_tokens is null or input_tokens >= 0)
+      and (output_tokens is null or output_tokens >= 0)
+    ),
+  constraint chk_analysis_stage_runs_call_counts
+    check (
+      (provider_call_count is null or provider_call_count >= 0)
+      and (validation_retry_count is null or validation_retry_count >= 0)
+      and (
+        provider_call_count is null
+        or validation_retry_count is null
+        or validation_retry_count <= provider_call_count
+      )
+    )
 );
 
 create table if not exists hair_analyses (

@@ -18,6 +18,7 @@ import {
   type ReferenceMakeupPhoto,
 } from '../../../features/reference-makeup-extraction';
 import {CameraFaceCaptureScreen} from '../../../features/face-capture/screens/CameraFaceCaptureScreen';
+import {AiDataConsentGate} from '../../../features/legal/components/AiDataConsentGate';
 import {getRecommendedFilterStencilRouteParams} from './arRouteActions';
 import type {FaceCaptureUploadResult} from '../../../features/face-capture/services/faceCaptureUploadService';
 import {
@@ -270,25 +271,29 @@ export function ReferenceMakeupExtractionUploadRouteScreen({
 
   if (route.params?.initialSource === 'gallery') {
     return (
-      <DetailRouteChrome
-        routeName="ReferenceMakeupExtractionUpload"
-        onBack={handleClose}
-        onClose={handleClose}>
-        <ReferenceMakeupExtractionAlbumUploadScreen
-          onCancel={handleClose}
-          onSelectPhoto={handleSelectAlbumPhoto}
-        />
-      </DetailRouteChrome>
+      <AiDataConsentGate onDecline={handleClose}>
+        <DetailRouteChrome
+          routeName="ReferenceMakeupExtractionUpload"
+          onBack={handleClose}
+          onClose={handleClose}>
+          <ReferenceMakeupExtractionAlbumUploadScreen
+            onCancel={handleClose}
+            onSelectPhoto={handleSelectAlbumPhoto}
+          />
+        </DetailRouteChrome>
+      </AiDataConsentGate>
     );
   }
 
   return (
-    <CameraFaceCaptureScreen
-      captureMode="reference"
-      captureType="filter_extraction"
-      onCapture={handleStartAnalysis}
-      onClose={handleClose}
-    />
+    <AiDataConsentGate onDecline={handleClose}>
+      <CameraFaceCaptureScreen
+        captureMode="reference"
+        captureType="filter_extraction"
+        onCapture={handleStartAnalysis}
+        onClose={handleClose}
+      />
+    </AiDataConsentGate>
   );
 }
 

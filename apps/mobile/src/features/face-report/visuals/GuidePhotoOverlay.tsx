@@ -4,7 +4,7 @@ import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTimin
 import * as Haptics from 'expo-haptics';
 import { color, pct, radius, shadow } from '../reportTokens';
 import type { BandKey, S2Data } from '../reportTypes';
-import { Hatch } from './Hatch';
+import {getVerticalThirdsPhotoAspectRatio} from '../../face-ratio/verticalThirdsDisplayGeometry';
 import { PhotoSlot } from './PhotoSlot';
 import { Pill } from './Pill';
 
@@ -41,51 +41,52 @@ function Band({ active, top, height, restTint, activeTint, onPress }: {
 }
 
 /**
- * S2 4:5 measurement photo with calibration lines, left dark pills, right cyan band pills,
- * tappable region bands, and the hairline-missing variant (hatched top + dashed pill).
+ * Source-aligned S2 measurement photo with calibration lines, left dark pills,
+ * right cyan band pills, and tappable measured-region bands.
  */
 export function GuidePhotoOverlay({ data, picked, onPickBand }: {
-  data: S2Data; picked: BandKey | null; onPickBand: (k: BandKey) => void;
+  data: S2Data;
+  picked: BandKey | null;
+  onPickBand: (k: BandKey) => void;
 }) {
   const press = (k: BandKey) => { Haptics.selectionAsync(); onPickBand(k); };
+  const sourceAspectRatio = getVerticalThirdsPhotoAspectRatio({
+    height: data.photo.sourceHeight,
+    width: data.photo.sourceWidth,
+  });
+  const hairlineY = data.hairlineMissing ? null : data.hairlineY;
+  const measuredBands = data.hairlineMissing
+    ? data.bands.filter(band => band.key !== 'upper')
+    : data.bands;
+
   return (
-    <View style={[{ borderRadius: radius.xl, backgroundColor: color.surface }, shadow.photo]}>
-      <View style={{ borderRadius: radius.xl, overflow: 'hidden', aspectRatio: data.photoAspectRatio ?? 4 / 5 }}>
+    <View style={{ borderRadius: radius.md, backgroundColor: color.surface }}>
+      <View style={{ borderRadius: radius.md, overflow: 'hidden', aspectRatio: sourceAspectRatio }}>
         <PhotoSlot slot={data.photo} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
-        {data.hairlineMissing ? (
+        {hairlineY !== null ? (
           <>
-            <Hatch colorA="rgba(255,255,255,0.14)" stripe={8}
-              style={{ position: 'absolute', left: 0, right: 0, top: 0, height: pct(data.hairlineHatchHeight * 100) }} />
-            <View pointerEvents="none" style={{ position: 'absolute', left: 10, top: pct(data.hairlineY * 100) }}>
-              <Pill variant="lightDashed" label={data.hairlineMissingPill} />
-            </View>
+            <GuideLine y={hairlineY} />
+            <LinePill label={data.lineLabels.hairline} y={hairlineY} />
           </>
-        ) : (
-          <>
-            <GuideLine y={data.hairlineY} />
-            <LinePill label={data.lineLabels.hairline} y={data.hairlineY} />
-          </>
-        )}
+        ) : null}
         <GuideLine y={data.browY} />
         <LinePill label={data.lineLabels.brow} y={data.browY} />
         <GuideLine y={data.noseBaseY} />
         <LinePill label={data.lineLabels.noseBase} y={data.noseBaseY} />
         <GuideLine y={data.chinY} />
         <LinePill label={data.lineLabels.chin} y={data.chinY} />
-        {data.bands.map(b => {
-          const geom = b.key === 'upper' && !data.hairlineMissing ? data.upperBandOk : { top: b.top, height: b.height };
-          // Exact HTML alphas: upper(missing) .16, upper(ok)/lower .2, mid .3
+        {measuredBands.map(b => {
           const activeTint = b.restingTint
             ? color.bandActive
-            : b.key === 'upper' && data.hairlineMissing ? 'rgba(110,203,232,0.16)' : color.bandActiveSoft;
+            : color.bandActiveSoft;
           return (
-            <Band key={b.key} active={picked === b.key} top={geom.top} height={geom.height}
+            <Band key={b.key} active={picked === b.key} top={b.top} height={b.height}
               restTint={b.restingTint ? color.bandRest : 'rgba(110,203,232,0)'}
               activeTint={activeTint}
               onPress={() => press(b.key)} />
           );
         })}
-        {data.bands.map(b => (
+        {measuredBands.map(b => (
           <View key={b.key + '-pill'} pointerEvents="none"
             style={{ position: 'absolute', right: 10, top: pct(b.pillY * 100), marginTop: b.pillCentered ? -10 : 0 }}>
             <Pill variant="accent" label={b.pillLabel} />

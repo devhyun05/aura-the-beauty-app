@@ -9,8 +9,7 @@ const repoRoot = resolve(scriptDir, '../..');
 const outDir = mkdtempSync(join(tmpdir(), 'aura-face-report-'));
 const tscPath = join(repoRoot, 'apps/mobile/node_modules/typescript/bin/tsc');
 const srcRoot = join(repoRoot, 'apps/mobile/src');
-const featuresDir = join(srcRoot, 'features');
-const mobileTypeRoots = join(repoRoot, 'apps/mobile/node_modules/@types');
+const featuresDir = join(repoRoot, 'apps/mobile/src/features');
 
 function source(relativePath) {
   return readFileSync(join(repoRoot, relativePath), 'utf8');
@@ -24,163 +23,176 @@ function requireContract(condition, message) {
 
 function requireAll(content, snippets, label) {
   for (const snippet of snippets) {
-    requireContract(content.includes(snippet), label + ' missing: ' + snippet);
+    requireContract(content.includes(snippet), `${label} missing: ${snippet}`);
   }
 }
 
-const scaffoldSource = source('apps/mobile/src/features/face-report/ReportScreenScaffold.tsx');
-const previewSource = source('apps/mobile/src/features/face-report/screens/FaceAnalysisReportPreviewScreen.tsx');
-const shareSource = source('apps/mobile/src/features/face-report/services/reportImageShare.ts');
-const readinessSource = source('apps/mobile/src/features/face-report/services/reportCaptureReadiness.ts');
-const photoSlotSource = source('apps/mobile/src/features/face-report/visuals/PhotoSlot.tsx');
+const shareSheetSource = source(
+  'apps/mobile/src/features/face-report/components/FaceReportShareSheet.tsx',
+);
+const shareSource = source(
+  'apps/mobile/src/features/face-report/services/reportImageShare.ts',
+);
+const scaffoldSource = source(
+  'apps/mobile/src/features/face-report/ReportScreenScaffold.tsx',
+);
+const reportCoverSource = source(
+  'apps/mobile/src/features/face-report/components/ReportSectionCover.tsx',
+);
+const previewSource = source(
+  'apps/mobile/src/features/face-report/screens/FaceAnalysisReportPreviewScreen.tsx',
+);
+const minimumReportSource = source(
+  'apps/mobile/src/features/face-report/services/minimumFaceReport.ts',
+);
+const routesSource = source(
+  'apps/mobile/src/app/navigation/routes/faceAnalysisRoutes.tsx',
+);
+const loadingSource = source(
+  'apps/mobile/src/features/face-analysis/screens/FaceAnalysisLoadingScreen.tsx',
+);
 
-requireAll(scaffoldSource, [
-  'useRenderInContext: true',
-  'captureRequestId !== null && captureRequestId !== undefined',
-  '<FaceReportCaptureDocument',
-  'accessibilityElementsHidden',
-  'importantForAccessibility="no-hide-descendants"',
-  'pointerEvents="none"',
-  'countFaceReportCaptureAssets',
-  'expectedAssetCount',
-  'FaceReportCaptureAssetContext.Provider',
-  '<View onLayout={() => setLayoutReady(true)}>',
-  '<S1Summary data={data.s1} />',
-  '<S2Proportion',
-  '<S3Features',
-  '<S4PersonalColor',
-  '<S5Body',
-  '<S6Impression',
-  '<S7Styling',
-  '<S8Skin',
-  '<S9StyleLanes',
-], 'face report lazy capture document');
-
-requireAll(scaffoldSource, [
-  'GOLDEN_MASK_CAPTURE_IMAGE_SETTLE_TIMEOUT_MS = 10_000',
-  'onLoadStart={handlePending}',
-  'onLoad={handleLoaded}',
-  'onLoadEnd={handleLoadEnd}',
-  'onError={handleFailed}',
-  "loadOutcomeRef.current = 'failed'",
-  "currentState.status === 'loaded'",
-  "currentState.status === 'failed'",
-  'Golden Mask 이미지를 보고서에 불러오지 못했어요.',
-  'requestId !== currentState.requestId',
-  'uri !== currentState.uri',
-  'await waitForGoldenMaskCaptureImageSettled({',
-  'getState: () => goldenMaskCaptureImageStateRef.current',
-  'requestId: captureRequestId',
-  'uri: posterUri',
-  'if (Date.now() >= deadline)',
-  'posterUri = await waitForGoldenMaskPoster();',
-  'if (posterUri) {',
-  'await waitForNextFrame();',
-], 'Golden Mask lazy capture image readiness');
-
+requireAll(shareSheetSource, [
+  'type ReportSaveScope,',
+  'controller.capturePage(',
+  'requestReportImageSavePermission()',
+  'saveReportImageToLibrary(imageUri)',
+  'controller.restorePage(originalPageId)',
+  '현재 카드',
+  '전체 보고서',
+  'exportInFlightRef.current',
+  'const operationId = ++exportOperationRef.current',
+], 'actual face-report capture lifecycle');
 requireContract(
-  /posterUri = await waitForGoldenMaskPoster\(\);\r?\n {10}}\r?\n {10}if \(posterUri\) \{/.test(
-    scaffoldSource,
-  ),
-  'Existing and newly generated Golden Mask posters must share the Image readiness wait',
+  !shareSheetSource.includes('ReportShareCard') &&
+    !shareSheetSource.includes('OptionalViewShot'),
+  'share sheet must not render synthetic report cards for saving',
 );
-requireContract(
-  (scaffoldSource.match(/await waitForNextFrame\(\);/g) ?? []).length >= 2,
-  'Golden Mask capture must wait two layout frames after Image settlement',
-);
-
-const captureAssetCountStart = scaffoldSource.indexOf(
-  'function countFaceReportCaptureAssets',
-);
-const captureAssetCountEnd = scaffoldSource.indexOf(
-  'function FaceReportCaptureDocument',
-  captureAssetCountStart,
-);
-requireContract(
-  captureAssetCountStart >= 0 &&
-    captureAssetCountEnd > captureAssetCountStart &&
-    !scaffoldSource
-      .slice(captureAssetCountStart, captureAssetCountEnd)
-      .includes('goldenMask'),
-  'Golden Mask readiness must stay separate from the fixed regular asset count',
-);
-
-const goldenMaskImageWaitIndex = scaffoldSource.indexOf(
-  'await waitForGoldenMaskCaptureImageSettled({',
-);
-const verticalCaptureIndex = scaffoldSource.indexOf(
-  'return await verticalCaptureRef.current?.capture?.()',
-  goldenMaskImageWaitIndex,
-);
-requireContract(
-  goldenMaskImageWaitIndex >= 0 &&
-    verticalCaptureIndex > goldenMaskImageWaitIndex,
-  'Golden Mask Image must settle before the vertical native capture call',
-);
-
-requireAll(readinessSource, [
-  'assetStates.size !== expectedAssetCount',
-  'Array.from(assetStates.values()).every(Boolean)',
-], 'face report readiness predicate');
-
-requireAll(photoSlotSource, [
-  'captureAssetContext.registerAsset(captureAssetId)',
-  'onLoadStart: handleLoadStart',
-  'onLoadEnd: handleLoadSettled',
-  'onError: handleLoadSettled',
-  'const transition = hasCaptureAsset ? 0 : 150',
-], 'face report image readiness events');
 
 requireAll(shareSource, [
   'FACE_REPORT_CAPTURE_SETTLE_TIMEOUT_MS = 10_000',
   'if (Date.now() >= deadline)',
   'await waitForFaceReportCaptureAssets(options)',
-  'await waitForLayoutFrames(2)',
-  'const imageUri = await capture.call(captureTarget)',
-], 'face report bounded capture wait');
+  'await waitForLayoutFrames(3)',
+  'viewShot.captureRef(target',
+  'snapshotContentContainer',
+  'assertCaptureStillActive(options.shouldContinue)',
+], 'face report full-content bounded capture wait');
 
-const timeoutBranchIndex = shareSource.indexOf('if (Date.now() >= deadline)');
-const timeoutThrowIndex = shareSource.indexOf('throw new Error(', timeoutBranchIndex);
-const captureCallIndex = shareSource.indexOf('const imageUri = await capture.call(captureTarget)');
+requireAll(scaffoldSource, [
+  'function ReportCompletionIndicator(',
+  'function reportStageStatePresentation(',
+  'status.stages.map(stage =>',
+  '완성된 내용부터 볼 수 있어요',
+  '기본 내용 제공',
+  '생성 실패',
+  '보고서 생성 완료',
+  'const capturePage = React.useCallback(',
+  'prepareGoldenMaskForCapture',
+  'dataRef.current.s1.photo.uri ?? null',
+  'getExportSnapshot: () => ({',
+  'restorePage: pageId =>',
+  'scrollRef.current?.scrollTo({animated: false, y: 0})',
+  'entryResetKey',
+], 'report scaffold progress, capture, restore, and scroll reset');
+requireAll(scaffoldSource, [
+  'photoUri={data.s1.photo.uri ?? null}',
+  'reportPhotoUri={photoUri}',
+], 'captured user photo wiring for report cover');
+requireAll(reportCoverSource, [
+  'reportCover && reportPhotoUri',
+  '? {uri: reportPhotoUri}',
+  '? COVER_IMAGES.summary',
+], 'captured user photo report cover with legacy fallback');
 requireContract(
-  timeoutBranchIndex >= 0 && timeoutThrowIndex > timeoutBranchIndex && captureCallIndex > timeoutThrowIndex,
-  'timeout must throw before the native capture call',
+  !scaffoldSource.includes('function ReportCompletionStepper('),
+  'report progress must use the compact non-spinner status treatment',
 );
-
 requireAll(previewSource, [
-  'shareInFlightRef.current',
-  'const operationId = ++shareOperationRef.current',
-  'captureRequestIdRef.current = operationId',
-  'setCaptureRequestId(operationId)',
-  'isReady: () => captureRequestIdRef.current === operationId',
-  'shouldContinue: () => isMountedRef.current',
-  'shareOperationRef.current += 1',
-  'finally {',
-  'setCaptureRequestId(null)',
-  'setActiveShareTarget(null)',
-], 'face report request lifecycle');
-
-const finallyIndex = previewSource.indexOf('      } finally {', previewSource.indexOf('const handleShareAction'));
-const lazyUnmountIndex = previewSource.indexOf('setCaptureRequestId(null)', finallyIndex);
-requireContract(
-  finallyIndex >= 0 && lazyUnmountIndex > finallyIndex,
-  'success and failure must both unmount the lazy capture document in finally',
+  'const recommendationReportId =',
+  'report?.id ??',
+  'minimumPreview?.reportId',
+  'onPressProducts(recommendationReportId)',
+], 'progressive report recommendation CTA');
+requireAll(minimumReportSource, [
+  "preview.reportId && !preview.errorMessage",
+  "'메이크업 추천 받으러 가기'",
+  "'메이크업 추천 준비 중'",
+], 'minimum report recommendation CTA label');
+requireAll(scaffoldSource, [
+  'accessibilityState={{disabled: !onPress}}',
+  'disabled={!onPress}',
+], 'recommendation CTA disabled semantics');
+const goldenMaskSource = source(
+  'apps/mobile/src/features/face-report/components/GoldenMaskCard.tsx',
 );
+const goldenMaskPreloadSource = source(
+  'apps/mobile/src/features/face-report/services/goldenMaskPreloadService.ts',
+);
+requireAll(goldenMaskSource, [
+  'captureMode && capturePosterUri',
+  'captureUnityGoldenMaskPoster(requestIdRef.current)',
+  'onPosterUnavailable?.()',
+], 'native Golden Mask poster capture with a safe fallback');
+requireAll(goldenMaskPreloadSource, [
+  "currentSession?.status !== 'error'",
+  'canReuseCurrent(reportId, topologyFingerprint)',
+  'canReuseCurrent(reportId, descriptor.topologyFingerprint)',
+], 'failed Golden Mask preload sessions must remain retryable');
+requireContract(
+  !scaffoldSource.includes('setMaskLayoutY(Number.POSITIVE_INFINITY);'),
+  'report entry must not erase the measured Golden Mask layout after mount',
+);
+requireContract(
+  !scaffoldSource.includes('MeasurementDebug') &&
+    !previewSource.includes('measurementDebug'),
+  'production report must not expose development measurement data',
+);
+requireContract(
+  !routesSource.includes('기하검증'),
+  'production face-report route must not expose geometry validation',
+);
+requireAll(routesSource, [
+  'routeName="FaceAnalysisLoading"',
+  'headerHidden',
+  'entryResetKey={route.key}',
+], 'loading chrome and report entry reset');
+requireAll(loadingSource, [
+  "import {BlurView} from 'expo-blur'",
+  'isReduceTransparencyEnabled',
+  'reduceTransparencyChanged',
+  'accessibilityLabel="얼굴 분석 닫기"',
+], 'glass loading-screen overlay back button');
+
 // 순수(RN 무의존) 파일만 나열한다.
 const entries = [
+  'face-report/reportTokens.ts',
+  'face-report/reportTokens.test.ts',
   'face-report/reportFormat.ts',
   'face-report/reportFormat.test.ts',
+  'face-ratio/verticalThirdsDisplayGeometry.ts',
+  'face-ratio/verticalThirdsDisplayGeometry.test.ts',
   'face-report/reportFeatureAxes.ts',
   'face-report/reportFeatureAxes.test.ts',
   'face-report/services/reportStoryModel.ts',
   'face-report/services/minimumFaceReport.ts',
   'face-report/services/reportStoryModel.test.ts',
+  'face-report/services/reportContentUpgrade.ts',
+  'face-report/services/reportContentUpgrade.test.ts',
+  'face-report/services/reportCompletionStatus.ts',
+  'face-report/services/reportCompletionStatus.test.ts',
+  'face-report/services/goldenMaskInteraction.ts',
+  'face-report/services/goldenMaskInteraction.test.ts',
+  'face-report/services/faceDepthPresentation.ts',
+  'face-report/services/faceDepthPresentation.test.ts',
   'face-report/services/reportCaptureReadiness.ts',
   'face-report/services/reportCaptureReadiness.test.ts',
   'face-geometry/services/faceGeometryCore/regionVisualsBuilder.ts',
   'face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.ts',
   'ar/stencil/src/composer/bodyProfile.ts',
   'ar/stencil/src/composer/bodyProfile.test.ts',
+  'face-analysis/services/faceAnalysisReportGate.ts',
+  'face-analysis/services/faceAnalysisReportGate.test.ts',
 ];
 
 function run(command, args) {
@@ -196,21 +208,141 @@ run(process.execPath, [
   '--module', 'commonjs',
   '--target', 'ES2020',
   '--esModuleInterop',
-  '--jsx', 'react-jsx',
-  '--types', 'node,react',
-  '--typeRoots', mobileTypeRoots,
   '--strict',
   '--skipLibCheck',
+  '--types', 'node,react',
+  '--typeRoots', join(repoRoot, 'apps/mobile/node_modules/@types'),
   '--rootDir', srcRoot,
   '--outDir', outDir,
   ...entries.map(file => join(featuresDir, file)),
+  join(srcRoot, 'shared/ui/storyReportPagerGesture.ts'),
+  join(srcRoot, 'shared/ui/storyReportPagerGesture.test.ts'),
   join(srcRoot, 'shared/services/faceAnalysisService.test.ts'),
 ]);
 
 run(process.execPath, [join(outDir, 'features/face-report/reportFormat.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/reportTokens.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-ratio/verticalThirdsDisplayGeometry.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/reportFeatureAxes.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/reportStoryModel.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/services/reportContentUpgrade.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/services/reportCompletionStatus.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/services/goldenMaskInteraction.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/services/faceDepthPresentation.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/reportCaptureReadiness.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-geometry/services/faceGeometryCore/regionVisualsBuilder.test.js')]);
 run(process.execPath, [join(outDir, 'features/ar/stencil/src/composer/bodyProfile.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-analysis/services/faceAnalysisReportGate.test.js')]);
+run(process.execPath, [join(outDir, 'shared/ui/storyReportPagerGesture.test.js')]);
 run(process.execPath, [join(outDir, 'shared/services/faceAnalysisService.test.js')]);
+
+const regionCardSource = readFileSync(
+  join(featuresDir, 'face-report/sections/S3Features.tsx'),
+  'utf8',
+);
+if (regionCardSource.includes('이 부위의 결론')) {
+  throw new Error('Region report must not render the removed conclusion label.');
+}
+for (const required of [
+  '<ReportGlassSurface',
+  'cropRect: undefined',
+  'accessibilityState={{expanded: selected, selected}}',
+]) {
+  if (!regionCardSource.includes(required)) {
+    throw new Error(`Region report progressive disclosure contract missing: ${required}`);
+  }
+}
+console.log('region report visual hierarchy contract passed');
+
+const personalColorSource = readFileSync(
+  join(featuresDir, 'face-report/sections/S4PersonalColor.tsx'),
+  'utf8',
+);
+requireContract(
+  personalColorSource.includes('slot={{...photo, cropRect: undefined}}'),
+  'personal-color drape portraits must preserve the source face aspect ratio',
+);
+const goodSwatchesIndex = personalColorSource.indexOf(
+  '<SwatchRow swatches={d.goodSwatches}',
+);
+const badTitleIndex = personalColorSource.indexOf('{d.badTitle}');
+const badSwatchesIndex = personalColorSource.indexOf(
+  '<SwatchRow swatches={d.badSwatches}',
+);
+const bestDetailIndex = personalColorSource.indexOf(
+  '<SelectedColorDetail swatch={best}',
+);
+requireContract(
+  goodSwatchesIndex >= 0 &&
+    badTitleIndex > goodSwatchesIndex &&
+    badSwatchesIndex > badTitleIndex &&
+    bestDetailIndex > badSwatchesIndex,
+  'personal-color good and avoid swatches must stay together directly below the drape photos',
+);
+console.log('personal-color drape layout contract passed');
+
+const s2ProportionSource = source(
+  'apps/mobile/src/features/face-report/sections/S2Proportion.tsx',
+);
+const thirdsOverlaySource = source(
+  'apps/mobile/src/features/face-report/visuals/GuidePhotoOverlay.tsx',
+);
+const reportTypesSource = source(
+  'apps/mobile/src/features/face-report/reportTypes.ts',
+);
+const reportAdapterSource = source(
+  'apps/mobile/src/features/face-report/services/fromFaceAnalysisReport.ts',
+);
+const thirdsReadoutSource = source(
+  'apps/mobile/src/features/face-report/visuals/ThirdsRatioReadout.tsx',
+);
+
+requireContract(
+  !s2ProportionSource.includes('aspectRatio='),
+  'S2 must not pass a design-time aspect ratio into the measurement overlay',
+);
+requireAll(thirdsOverlaySource, [
+  'getVerticalThirdsPhotoAspectRatio({',
+  'height: data.photo.sourceHeight',
+  'width: data.photo.sourceWidth',
+  'aspectRatio: sourceAspectRatio',
+  "data.bands.filter(band => band.key !== 'upper')",
+], 'source-aligned vertical-thirds photo');
+for (const removedPath of [
+  'aspectRatio?:',
+  'data.photoAspectRatio',
+  '4 / 5',
+  '<Hatch',
+  'hairlineMissingPill',
+  'hairlineHatchHeight',
+  'upperBandOk',
+]) {
+  requireContract(
+    !thirdsOverlaySource.includes(removedPath),
+    `vertical-thirds overlay must not restore removed path: ${removedPath}`,
+  );
+}
+requireAll(reportTypesSource, [
+  'photo: SourceAlignedPhotoSlotData;',
+  'cropRect?: never;',
+  'sourceHeight: number;',
+  'sourceWidth: number;',
+  'hairlineY: number | null;',
+], 'vertical-thirds source-coordinate type contract');
+requireContract(
+  !reportTypesSource.includes('photoAspectRatio'),
+  'S2 must derive frame geometry from source dimensions, not an override field',
+);
+requireAll(reportAdapterSource, [
+  'sourceHeight: sourceImage.height',
+  'sourceWidth: sourceImage.width',
+  '...(hairlineY !== null && upperPillY !== null',
+  'upper: hairlineY === null ? null',
+], 'hairline eligibility removes the synthetic upper region');
+requireAll(thirdsReadoutSource, [
+  'upper: hairlineMissing ? null : ratio.upper',
+  '...(measuredRatio?.upper == null ? [] :',
+  '`중안부 ${r.middleLabel}`',
+  '`하안부 ${r.lowerLabel}`',
+], 'missing hairline readout contains measured regions only');
+console.log('vertical-thirds single-coordinate-path contract passed');

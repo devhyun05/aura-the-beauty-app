@@ -216,6 +216,7 @@ namespace ARMakeup.Face
         float _linerThickness = 1f;     // 아이라인 리본 두께 (eyelinerThickness)
         float _innerLiftOverride = -1f; // 아이라인 앞머리 리프트 (<0=IrisRenderer 기본값)
         float _browThickness = 1f;     // 눈썹 두께 (browThickness)
+        float _browLength = 1f;        // 눈썹머리 고정 가로 길이 (browLength)
         float _browArch = 0f;          // 눈썹 아치 (browArch)
         int _browShape;                // 눈썹 모양 프리셋 (browShape)
         int _browThicknessProfile;
@@ -500,7 +501,11 @@ namespace ARMakeup.Face
             _innerLiftOverride = p.eyelinerInnerLift < 0f
                 ? -1f : Mathf.Clamp(p.eyelinerInnerLift, 0f, 0.15f);
             // 눈썹 — BrowRenderer와 동일 클램프. 가이드가 BrowWarp.ShapeBand로 실제 눈썹 일치.
-            _browThickness = Mathf.Clamp(p.browThickness, 0.4f, 2f);
+            _browThickness = Mathf.Clamp(
+                p.browThickness, BrowWarp.ThicknessMin, BrowWarp.ThicknessMax);
+            _browLength = p.browLength <= 0f
+                ? 1f
+                : Mathf.Clamp(p.browLength, BrowWarp.LengthMin, BrowWarp.LengthMax);
             _browArch = Mathf.Clamp(p.browArch, 0f, 1f);
             _browShape = Mathf.Clamp(p.browShape, 0, 5);
             _browThicknessProfile = Mathf.Clamp(p.browThicknessProfile, 0, 6);
@@ -684,6 +689,8 @@ namespace ARMakeup.Face
                 const int m = BrowWarp.BandSegments;
                 BrowWarp.SubdivideArc(lm, BrowLower[e], _browLo);
                 BrowWarp.SubdivideArc(lm, up, _browUp);
+                BrowWarp.ScaleLengthFromHead(
+                    _browLo, _browUp, m, FramePresenter.Instance.ImageAspect, _browLength);
                 // 상·하단 쌍을 함께 셰이핑하고 꼬리 폭 테이퍼 후 안티-드룹 적용 → 링 정점으로
                 // 조립. 제품 렌더러(BrowRenderer 등)와 동일 순서라 가이드 일치.
                 for (var i = 0; i < m; i++)
@@ -1589,6 +1596,8 @@ namespace ARMakeup.Face
             const int n = BrowWarp.BandSegments;
             BrowWarp.SubdivideArc(lm, BrowLower[e], _browLo);
             BrowWarp.SubdivideArc(lm, BrowUpper[e], _browUp);
+            BrowWarp.ScaleLengthFromHead(
+                _browLo, _browUp, n, FramePresenter.Instance.ImageAspect, _browLength);
             for (var i = 0; i < n; i++)
             {
                 var lo = _browLo[i];

@@ -12,9 +12,37 @@ namespace Aura.ARwithFable.Tests
         {
             Assert.That(FilterParams.MinBlushShape, Is.EqualTo(0));
             Assert.That(FilterParams.MaxBlushShape, Is.EqualTo(7));
+            Assert.That(MaskGenerator.BlushShapeYOffset, Is.EqualTo(0.020f).Within(0.0001f));
             Assert.That(MaskGenerator.ClampBlushShape(-3), Is.EqualTo(0));
             Assert.That(MaskGenerator.ClampBlushShape(4), Is.EqualTo(4));
             Assert.That(MaskGenerator.ClampBlushShape(99), Is.EqualTo(7));
+        }
+
+        [Test]
+        public void EveryShapeAppliesTheSharedVerticalOffset()
+        {
+            var baseCenters = new[]
+            {
+                new Vector2(0.285f, 0.450f),
+                new Vector2(0.330f, 0.485f),
+                new Vector2(0.305f, 0.455f),
+                new Vector2(0.305f, 0.455f),
+                new Vector2(0.325f, 0.455f),
+                new Vector2(0.335f, 0.552f),
+                new Vector2(0.272f, 0.460f),
+                new Vector2(0.285f, 0.465f),
+            };
+
+            for (var shape = FilterParams.MinBlushShape;
+                 shape <= FilterParams.MaxBlushShape;
+                 shape++)
+            {
+                var center = baseCenters[shape];
+                var value = MaskGenerator.EvaluateBlushShape(
+                    shape, center.x, center.y + MaskGenerator.BlushShapeYOffset);
+                Assert.That(value, Is.EqualTo(1f).Within(0.0001f),
+                    $"blush shape {shape} did not move up by the shared offset");
+            }
         }
 
         [Test]
@@ -49,20 +77,23 @@ namespace Aura.ARwithFable.Tests
         [Test]
         public void ReferenceShapesKeepTheirAnatomicalIntent()
         {
-            var drapeTemple = MaskGenerator.EvaluateBlushShape(2, 0.135f, 0.540f);
-            var classicTemple = MaskGenerator.EvaluateBlushShape(0, 0.135f, 0.540f);
+            var yOffset = MaskGenerator.BlushShapeYOffset;
+            var drapeTemple = MaskGenerator.EvaluateBlushShape(2, 0.135f, 0.540f + yOffset);
+            var classicTemple = MaskGenerator.EvaluateBlushShape(0, 0.135f, 0.540f + yOffset);
             Assert.That(drapeTemple, Is.GreaterThan(classicTemple + 0.20f));
 
-            var underEyeHigh = MaskGenerator.EvaluateBlushShape(5, 0.335f, 0.552f);
-            var underEyeLow = MaskGenerator.EvaluateBlushShape(5, 0.335f, 0.350f);
+            var underEyeHigh = MaskGenerator.EvaluateBlushShape(5, 0.335f, 0.552f + yOffset);
+            var underEyeLow = MaskGenerator.EvaluateBlushShape(5, 0.335f, 0.350f + yOffset);
             Assert.That(underEyeHigh, Is.GreaterThan(underEyeLow + 0.70f));
 
-            var softNose = MaskGenerator.EvaluateBlushShape(6, 0.500f, 0.460f);
-            var bandNose = MaskGenerator.EvaluateBlushShape(7, 0.500f, 0.460f);
+            var softNose = MaskGenerator.EvaluateBlushShape(6, 0.500f, 0.460f + yOffset);
+            var bandNose = MaskGenerator.EvaluateBlushShape(7, 0.500f, 0.460f + yOffset);
             Assert.That(bandNose, Is.GreaterThan(softNose + 0.20f));
 
-            var sunKissedOuterCheek = MaskGenerator.EvaluateBlushShape(6, 0.272f, 0.460f);
-            var sunKissedInnerCheek = MaskGenerator.EvaluateBlushShape(6, 0.290f, 0.460f);
+            var sunKissedOuterCheek = MaskGenerator.EvaluateBlushShape(
+                6, 0.272f, 0.460f + yOffset);
+            var sunKissedInnerCheek = MaskGenerator.EvaluateBlushShape(
+                6, 0.290f, 0.460f + yOffset);
             Assert.That(sunKissedOuterCheek, Is.GreaterThan(sunKissedInnerCheek));
         }
 
