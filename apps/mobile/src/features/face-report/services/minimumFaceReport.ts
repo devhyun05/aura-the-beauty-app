@@ -76,7 +76,6 @@ export function buildMinimumFaceReportData(
       stylingStatus: 'processing',
     },
     topBarTitle: '맞춤 분석 보고서',
-    initialPageId: 'summary:overview',
     generationStatus: preview.errorMessage ? 'failed' : 'loading',
     generationError: preview.errorMessage,
     ...(preview.goldenMask ? {goldenMask: preview.goldenMask} : {}),
