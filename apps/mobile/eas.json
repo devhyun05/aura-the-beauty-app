@@ -7,12 +7,14 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://d3t1pbvtir1lj.cloudfront.net",
         "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "1",
         "EXPO_PUBLIC_UNIFIED_FACE_CAPTURE": "1"
       }
     },
     "production": {
       "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://d3t1pbvtir1lj.cloudfront.net",
         "EXPO_PUBLIC_MAKEUP_JOURNEY_ENABLED": "0",
         "EXPO_PUBLIC_UNIFIED_FACE_CAPTURE": "1"
       }
