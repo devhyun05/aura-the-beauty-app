@@ -788,6 +788,15 @@ FORBIDDEN_CONSTRAINT_FRAGMENTS = {
 # R1 (schema.sql:product-category-brow-v1) — brow가 빠지면 Auradin 브로우 찜이 lip으로 강등된다.
 EXPECTED_ENUM_VALUES = {
   "product_category": {"lip", "cheek", "shadow", "liner", "base", "brow"},
+  "consent_type": {
+    "privacy_policy",
+    "camera_analysis",
+    "ai_processing",
+    "third_party_ai",
+    "marketing",
+    "engagement_personalization",
+    "color_cohort",
+  },
 }
 
 EXPECTED_INDEX_CONTRACTS = {

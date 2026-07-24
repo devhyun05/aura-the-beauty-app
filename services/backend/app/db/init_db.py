@@ -352,6 +352,11 @@ POST_SCHEMA_MIGRATIONS = {
     create index if not exists idx_user_consents_user_type_recorded
       on user_consents (user_id, consent_type, recorded_at desc);
   """,
+  "schema.sql:ai-data-consent-types-v1": """
+    alter type consent_type add value if not exists 'camera_analysis';
+    alter type consent_type add value if not exists 'ai_processing';
+    alter type consent_type add value if not exists 'third_party_ai';
+  """,
   "schema.sql:community-core-v1": """
     create extension if not exists vector;
     create extension if not exists pg_trgm;
