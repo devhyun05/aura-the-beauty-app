@@ -1,6 +1,6 @@
 import type {ReportData} from '../reportTypes';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
-import type {Face3DProfile} from '../../face-3d/types';
+import type {Face3DReportProfile} from '../../face-3d/types';
 import type {Face3DPhotoEvidence} from '../../face-3d/services/face3DPhotoEvidence';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
 import type {RegionVisuals} from '../../face-geometry/services/faceGeometryCore/regionVisualsBuilder';
@@ -31,7 +31,7 @@ export function buildMinimumFaceReportData(
   preview: MinimumFaceReportPreview,
   verticalThirds?: FaceVerticalThirdsResult | null,
   local?: {
-    face3d?: Face3DProfile | null;
+    face3d?: Face3DReportProfile | null;
     face3dPhotoEvidence?: Face3DPhotoEvidence | null;
     geometryMetrics?: FaceGeometryMetrics | null;
     personalColor?: MeasuredPersonalColorView | null;
@@ -70,6 +70,7 @@ export function buildMinimumFaceReportData(
 
   return {
     reportId: preview.reportId ?? 'face-analysis-generating',
+    ...(local?.face3d ? {face3d: local.face3d} : {}),
     contentRevision: 0,
     contentStatus: {
       narrativeStatus: 'processing',

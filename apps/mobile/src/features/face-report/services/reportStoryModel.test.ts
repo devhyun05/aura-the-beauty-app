@@ -52,6 +52,34 @@ assert.equal(full.featurePageIds.mid, 'features:mid');
 assert.equal(full.featurePageIds.lower, 'features:lower');
 assert.equal(full.sectionCoverPageIds['color-skin'], 'personal-color:tone');
 
+// The legacy report exposed all normalized ARKit/TrueDepth metrics in a
+// dedicated grid. The story report must keep an explicit page for that data;
+// burying values inside region cards is not a replacement for the 11-metric view.
+const withFace3dInput = {
+  ...fullInput(),
+  face3d: {
+    metrics: {} as NonNullable<ReportData['face3d']>['metrics'],
+    schemaVersion: 'aura.face3d-profile.v3' as const,
+    source: 'arkit_face_mesh' as const,
+    targetFrameCount: 8,
+    topologyFingerprint: 'test-topology',
+    validFrameCount: 8,
+    warnings: [],
+  },
+};
+const withFace3d = buildFaceReportStoryModel(withFace3dInput);
+assert.equal(withFace3d.pages.length, 15);
+assert.deepEqual(withFace3d.pages.slice(0, 4).map(page => page.id), [
+  'summary:overview',
+  'proportion:overview',
+  'face3d:metrics',
+  'features:upper',
+]);
+assert.equal(
+  withFace3d.pages.find(page => page.id === 'face3d:metrics')?.contentKey,
+  'face3d:metrics',
+);
+
 const withGoldenMaskInput = fullInput();
 withGoldenMaskInput.goldenMask = {
   available: true,

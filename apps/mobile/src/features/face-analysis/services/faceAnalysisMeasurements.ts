@@ -9,8 +9,8 @@
 // spring_light→springLight)를 견뎌야 한다 — 원형/변형 양형을 수용해 원 키로
 // 역정규화한다. 저장(DB)과 프롬프트는 raw 키 그대로다.
 
-import type {Face3DProfile} from '../../face-3d/types';
-import {parseTrustedServerFace3DProfile} from '../../face-3d/services/face3DContract';
+import type {Face3DProfile, Face3DReportProfile} from '../../face-3d/types';
+import {parseFace3DReportProfile} from '../../face-3d/services/face3DContract';
 import {
   parseFace3DPhotoEvidence,
   type Face3DPhotoEvidence,
@@ -83,7 +83,7 @@ export type FaceAnalysisRegionVisuals = RegionVisuals;
 
 export type FaceAnalysisReportMeasurements = {
   captureId: string;
-  face3d?: Face3DProfile;
+  face3d?: Face3DReportProfile;
   face3dPhotoEvidence?: Face3DPhotoEvidence;
   faceGeometry2d?: FaceGeometryResult;
   faceVerticalThirds?: FaceVerticalThirdsResult;
@@ -1440,9 +1440,9 @@ export function parseFaceAnalysisMeasurements(
     value.faceVerticalThirds,
     options.imageUrl ?? '',
   );
-  // 인증된 backend detail 복원 경계에서만 serverCalibrationReceiptStatus를 허용한다.
-  // Unity/device 이벤트 parser는 같은 필드를 fail-closed로 거부한다.
-  const face3d = parseTrustedServerFace3DProfile(value.face3d) ?? undefined;
+  // 인증된 backend detail은 v3 내부 신뢰 필드와 mm 값을 제거한다. 보고서에는
+  // 정규화 지표만 복원하고, Unity/device/AI 자격 판정용 프로필과 분리한다.
+  const face3d = parseFace3DReportProfile(value.face3d) ?? undefined;
   const parsedFace3dPhotoEvidence = parseFace3DPhotoEvidence(
     value.face3dPhotoEvidence,
   );

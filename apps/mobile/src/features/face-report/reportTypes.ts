@@ -11,6 +11,7 @@ export type {VisualWeightPresentation} from './visualWeightPresentation';
 import type {StyleLaneCard} from './styleLaneRecommendations';
 import type {GoldenMaskReportDescriptor} from '../../shared/contracts/goldenMask';
 import type {Face3DPhotoEvidence} from '../face-3d/services/face3DPhotoEvidence';
+import type {Face3DReportProfile} from '../face-3d/types';
 export type {StyleLaneCard, StyleLaneMove, StyleLaneKey} from './styleLaneRecommendations';
 
 export interface PhotoSlotData {
@@ -286,6 +287,7 @@ export interface S9Data {
 // 존재하지 않는 가이드·인사이트를 임의로 만들지 않는다.
 export interface ReportData {
   reportId: string;
+  face3d?: Face3DReportProfile;
   contentRevision?: number;
   contentStatus?: {
     coreReadyAt?: string;

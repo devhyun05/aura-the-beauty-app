@@ -5,7 +5,7 @@ import {colors, radius, spacing, typography} from '../../../shared/theme';
 import {
   FACE_3D_EXPOSED_METRIC_KEYS,
   type Face3DMetricKey,
-  type Face3DProfile,
+  type Face3DReportProfile,
 } from '../types';
 
 export const FACE_3D_METRIC_PRESENTATION: Record<
@@ -62,7 +62,7 @@ function formatMetricValue(value: number | null): string {
   return value === null ? '측정 불가' : value.toFixed(3);
 }
 
-export function Face3DMetricGrid({profile}: {profile: Face3DProfile}) {
+export function Face3DMetricGrid({profile}: {profile: Face3DReportProfile}) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
