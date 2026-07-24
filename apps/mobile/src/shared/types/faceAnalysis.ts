@@ -6,6 +6,7 @@ import type {GoldenMaskReportDescriptor} from '../contracts/goldenMask';
 export interface FaceAnalysisMakeupGuideline {
   brow: string;
   blush: string;
+  contour: string;
   highlight: string;
   eyeshadow: string;
   eyeliner: string;

@@ -475,6 +475,7 @@ function parseMakeupGuideline(
   return {
     brow: firstText(aiGuideline?.brow) ?? '',
     blush: firstText(aiGuideline?.blush) ?? '',
+    contour: firstText(aiGuideline?.contour) ?? '',
     highlight: firstText(aiGuideline?.highlight) ?? '',
     eyeshadow: firstText(aiGuideline?.eyeshadow) ?? '',
     eyeliner: firstText(aiGuideline?.eyeliner) ?? '',

@@ -1,19 +1,18 @@
 // Adapter: real FaceAnalysisReport + on-device measurements → the numeric-free
 // ReportData the S1–S7 UI (ported from the report redesign design bundle)
 // consumes. S1/S2/S4/S5 are built from deterministic on-device
-// measurements/survey answers. S3/S6/S7 are built from `regionNotes` /
-// `impressionNotes` / `stylingLooks` — text the backend's existing Bedrock
-// analysis call now also generates alongside faceShape/recommendedMood/etc
-// (services/backend/app/services/openai_analysis.py). S3 region crops + guide
-// lines and S6 impression-axis positions now come from real per-user
-// measurements (regionVisuals / impressionNotes.axes) when present. Missing AI
-// fields hide their sections; this adapter never invents analysis copy or
-// neutral positions.
+// measurements/survey answers. S3/S6/S7 are built directly from the full,
+// uncompressed `faceAnalysisV2.perception` / `derived` / `stylingLooks` —
+// every AI insight description is rendered, not summarized into a single
+// sentence (services/backend/app/schemas/face_analysis_v2.py PerceptionResult).
+// S3 region crops + guide lines and S6 impression-axis positions come from
+// real per-user measurements (regionVisuals / perception.impressionAxes) when
+// present. Missing AI fields hide their sections; this adapter never invents
+// analysis copy or neutral positions.
 
 import type {
-  FaceAnalysisImpressionNotes,
+  FaceAnalysisMakeupGuideline,
   FaceAnalysisReport,
-  FaceAnalysisRegionNotes,
   FaceAnalysisSkinPerception,
   FaceAnalysisSkinPerceptionAspect,
   FaceAnalysisStylingLookRowCategory,
@@ -23,7 +22,9 @@ import {formatReportCreatedAtLabel} from '../../../shared/utils/reportDate';
 import {getFaceAnalysisReportSummaryItems} from '../../face-analysis/services/faceAnalysisReportDetailModel';
 import type {
   FaceAnalysisDerivedResult,
+  FaceAnalysisInsight,
   FaceAnalysisMeasurementInterpretation,
+  FaceAnalysisPerception,
 } from '../../face-analysis/services/faceAnalysisV2';
 import type {MeasuredPersonalColorView} from '../../face-analysis/services/faceAnalysisMeasurements';
 import type {Face3DMetricKey, Face3DProfile} from '../../face-3d/types';
@@ -48,6 +49,7 @@ import type {AxisName, PaletteItem} from '../../personal-color/services/personal
 import {analyzeBody, resolveStyleGender} from '../../ar/stencil/src/composer/bodyProfile';
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import type {
+  InsightItemData,
   LookCardData,
   ReportData,
   RegionMeasurementItemData,
@@ -507,6 +509,7 @@ function buildToneMap(probabilities: ToneProbabilityData[]) {
 export function buildPersonalColorSection(
   personalColor: MeasuredPersonalColorView | null | undefined,
   heroUri: string | undefined,
+  derived?: FaceAnalysisDerivedResult | null,
 ): S4Data | null {
   if (!personalColor || personalColor.status === 'insufficient' || !personalColor.tone) {
     return null;
@@ -553,6 +556,15 @@ export function buildPersonalColorSection(
       secondaryLabel: tone.secondary ? TYPE_LABEL_KO[tone.secondary] : null,
       typeScore: Math.min(1, Math.max(0, tone.typeScore)),
     },
+    // 규칙 기반(derived) 색·피부 해석 서술문 — 이미 생성되지만 카드에 없던 내용.
+    ...((derived?.colorAxes?.description || derived?.skinColor?.description)
+      ? {
+          interpretation: {
+            ...(derived.colorAxes?.description ? {colorAxes: derived.colorAxes.description} : {}),
+            ...(derived.skinColor?.description ? {skinColor: derived.skinColor.description} : {}),
+          },
+        }
+      : {}),
     toneProbabilities,
     toneMap,
     axes: axesData,
@@ -625,28 +637,25 @@ function buildS5(bodyProfile: BodyProfile | null | undefined, gender: string | n
 // illustrative pointers, not a claimed measurement.
 const S3_REGION_META: Record<
   'upper' | 'mid' | 'lower' | 'jaw',
-  {chip: string; title: string; guide: S3Data['cards'][number]['guide']; guideLabel: string; guideLabelX: number}
+  {chip: string; title: string; guide: S3Data['cards'][number]['guide']; guideLabel: string}
 > = {
   upper: {
     chip: '상안부',
     title: '눈썹 · 눈',
     guide: {kind: 'none'},
     guideLabel: '',
-    guideLabelX: 0.14,
   },
   mid: {
     chip: '중안부',
     title: '코 · 볼 · 중앙부',
     guide: {kind: 'none'},
     guideLabel: '',
-    guideLabelX: 0.5,
   },
   lower: {
     chip: '하안부',
     title: '입술',
     guide: {kind: 'none'},
     guideLabel: '',
-    guideLabelX: 0.28,
   },
   jaw: {
     chip: '외곽 라인',
@@ -656,27 +665,76 @@ const S3_REGION_META: Record<
     // "AI가 턱을 잘못 인식한 선"처럼 보이므로 숨기는 편이 정직하다.
     guide: {kind: 'none'},
     guideLabel: '',
-    guideLabelX: 0.18,
   },
 };
 
-// 구버전 보고서는 regionNotes 값이 string일 수 있고 신버전은
-// {insight, evidence, recommendation} 객체다. 어댑터 경계에서 둘을 흡수한다.
-function normalizeRegionNote(
-  raw: unknown,
-): {insight: string; evidence: string; recommendation: string} {
-  if (raw && typeof raw === 'object') {
-    const o = raw as Record<string, unknown>;
-    return {
-      insight: typeof o.insight === 'string' ? o.insight : '',
-      evidence: typeof o.evidence === 'string' ? o.evidence : '',
-      recommendation: typeof o.recommendation === 'string' ? o.recommendation : '',
-    };
+// perception(원본 AI 인사이트)에서 부위별로 관련 있는 항목만 뽑아 압축 없이
+// {heading, label, description} 그대로 나열한다 — regionNotes의 단일 압축
+// 문장 대신 이 리스트가 부위 카드의 본문이 된다.
+function pushInsight(
+  items: InsightItemData[],
+  key: string,
+  heading: string,
+  insight: FaceAnalysisInsight | undefined,
+): void {
+  if (insight && insight.label && insight.description) {
+    items.push({key, heading, label: insight.label, description: insight.description});
   }
-  if (typeof raw === 'string') {
-    return {insight: raw, evidence: '', recommendation: ''};
+}
+
+function buildRegionInsightItems(
+  key: 'upper' | 'mid' | 'lower' | 'jaw',
+  perception: FaceAnalysisPerception | null,
+): InsightItemData[] {
+  if (!perception) {
+    return [];
   }
-  return {insight: '', evidence: '', recommendation: ''};
+  const items: InsightItemData[] = [];
+  const {featureImpression, linesAndPlanes, volume} = perception;
+  if (key === 'upper') {
+    pushInsight(items, 'eyeImpression', '눈 인상', featureImpression.eyeImpression);
+    pushInsight(items, 'eyelidWeight', '눈꺼풀', featureImpression.eyelidWeight);
+    pushInsight(items, 'underEyeZone', '눈밑', featureImpression.underEyeZone);
+    pushInsight(items, 'browImpression', '눈썹 인상', featureImpression.browImpression);
+  } else if (key === 'mid') {
+    pushInsight(items, 'noseCheekConnection', '코-볼 연결', linesAndPlanes.noseCheekConnection);
+    pushInsight(items, 'dimensionality', '입체감', linesAndPlanes.dimensionality);
+    pushInsight(items, 'noseShadowEffect', '코 음영', linesAndPlanes.noseShadowEffect);
+    pushInsight(items, 'upperLowerDistribution', '상하 볼륨 분포', volume.upperLowerDistribution);
+  } else if (key === 'lower') {
+    pushInsight(items, 'lipImpression', '입술 인상', featureImpression.lipImpression);
+    pushInsight(items, 'mouthCornerImpression', '입꼬리', volume.mouthCornerImpression);
+    pushInsight(items, 'lowerFaceImpression', '하안부 인상', linesAndPlanes.lowerFaceImpression);
+  } else {
+    pushInsight(items, 'jawlineDefinition', '턱선', linesAndPlanes.jawlineDefinition);
+    pushInsight(items, 'contourDefinition', '윤곽', linesAndPlanes.contourDefinition);
+    pushInsight(items, 'lineShape', '선 형태', linesAndPlanes.lineShape);
+    pushInsight(items, 'lineWeight', '선 굵기', linesAndPlanes.lineWeight);
+  }
+  return items;
+}
+
+const MAKEUP_RECOMMENDATION_FIELDS: Record<
+  'upper' | 'mid' | 'lower' | 'jaw',
+  (keyof FaceAnalysisMakeupGuideline)[]
+> = {
+  upper: ['brow', 'eyeshadow', 'eyeliner'],
+  mid: ['blush', 'contour', 'highlight'],
+  lower: ['lip'],
+  jaw: ['contour'],
+};
+
+function buildRegionRecommendation(
+  key: 'upper' | 'mid' | 'lower' | 'jaw',
+  makeupGuideline: FaceAnalysisMakeupGuideline | undefined,
+): string {
+  if (!makeupGuideline) {
+    return '';
+  }
+  return MAKEUP_RECOMMENDATION_FIELDS[key]
+    .map(field => makeupGuideline[field])
+    .filter(Boolean)
+    .join(' ');
 }
 
 function hasGeometryMetric(
@@ -1113,7 +1171,7 @@ function cropFromPhotoEvidence(
 }
 
 function buildS3(
-  regionNotes: FaceAnalysisRegionNotes | undefined,
+  perception: FaceAnalysisPerception | null,
   photo: S1Data['photo'],
   regionVisuals: RegionVisuals | null,
   geometryMetrics: FaceGeometryMetrics | null,
@@ -1121,6 +1179,7 @@ function buildS3(
   face3d: Face3DProfile | null,
   face3dPhotoEvidence: Face3DPhotoEvidence | null,
   derived: FaceAnalysisDerivedResult | null,
+  makeupGuideline: FaceAnalysisMakeupGuideline | undefined,
 ): S3Data | null {
   // 자기참조 축(위치=실측 결정론적). 지표 없으면 null → 각 축 판정 보류/미표시.
   const regionAxes = geometryMetrics ? buildRegionFeatureAxes(geometryMetrics) : null;
@@ -1187,18 +1246,19 @@ function buildS3(
         points: evidenceGuide.points.map(reframe),
       })) ?? [];
     const guides = [...face3dGuides, ...regionGuides];
-    const note = normalizeRegionNote(regionNotes?.[key]);
     const derivedInsight = {
       upper: derived?.eyeBrow,
       mid: derived?.cheekboneAndEline ?? derived?.nosePhiltrumLips,
       lower: derived?.nosePhiltrumLips,
       jaw: derived?.faceShape,
     }[key];
-    const insight = note.insight || derivedInsight?.label || '';
-    const evidence = note.evidence || derivedInsight?.description || '';
+    const insightItems = buildRegionInsightItems(key, perception);
+    const insight = derivedInsight?.label || insightItems[0]?.label || '';
+    const evidence = derivedInsight?.description || insightItems[0]?.description || '';
+    const recommendation = buildRegionRecommendation(key, makeupGuideline);
     const descriptors = featureDescriptors ? featureDescriptors[key] : [];
     const hasNarrative = Boolean(
-      insight || evidence || note.recommendation || descriptors.length,
+      insight || evidence || recommendation || descriptors.length || insightItems.length,
     );
     if (measurementItems.length === 0 && !hasNarrative) {
       return [];
@@ -1232,13 +1292,13 @@ function buildS3(
       guide: guides[0] ?? meta.guide,
       ...(guides.length > 0 ? {guides} : {}),
       guideLabel: guides[0]?.label ?? meta.guideLabel,
-      guideLabelX: meta.guideLabelX,
       axes,
       insight,
       evidence,
-      recommendation: note.recommendation,
+      recommendation,
       paragraph: insight || evidence,
       ...(descriptors.length > 0 ? {featureDescriptors: descriptors} : {}),
+      ...(insightItems.length > 0 ? {insightItems} : {}),
       ...(measurementItems.length > 0 ? {measurementItems} : {}),
       ...(face3dPhotoEvidence && evidenceRegionKeys[key].length > 0
         ? {photoEvidence: face3dPhotoEvidence}
@@ -1282,7 +1342,7 @@ export function buildCoreFeatureSection({
     measuredAt: '',
   });
   return buildS3(
-    undefined,
+    null,
     {uri: photoUri, placeholderLabel: '얼굴 확대 컷'},
     regionVisuals ?? null,
     geometryMetrics ?? null,
@@ -1290,24 +1350,70 @@ export function buildCoreFeatureSection({
     face3d ?? null,
     face3dPhotoEvidence ?? null,
     derived ?? null,
+    undefined,
   );
 }
 
+const GESTALT_HEADING_KO: Record<string, string> = {
+  overallMood: '전체 무드',
+  perceptualCenter: '시선 중심',
+  featurePresenceRanking: '이목구비 존재감',
+  detailDensity: '디테일 밀도',
+  negativeSpace: '여백',
+  centerVsOuter: '중앙 vs 외곽',
+  clarityVsSoftness: '명료함 vs 부드러움',
+};
+const GESTALT_ORDER = [
+  'overallMood',
+  'perceptualCenter',
+  'featurePresenceRanking',
+  'detailDensity',
+  'negativeSpace',
+  'centerVsOuter',
+  'clarityVsSoftness',
+] as const;
+
+function buildGestaltDetails(gestalt: FaceAnalysisPerception['gestalt']): InsightItemData[] {
+  const items: InsightItemData[] = [];
+  for (const key of GESTALT_ORDER) {
+    pushInsight(items, key, GESTALT_HEADING_KO[key], gestalt[key]);
+  }
+  (gestalt.standoutFeatures ?? []).forEach((feature, index) => {
+    pushInsight(items, `standoutFeature:${index}`, `돋보이는 특징 ${index + 1}`, feature);
+  });
+  return items;
+}
+
+function buildGestaltKeywords(gestalt: FaceAnalysisPerception['gestalt']): string[] {
+  const keywords = [
+    ...(gestalt.standoutFeatures ?? []).slice(0, 3),
+    gestalt.overallMood,
+    gestalt.perceptualCenter,
+    gestalt.clarityVsSoftness,
+    gestalt.centerVsOuter,
+  ]
+    .map(item => item?.label)
+    .filter((label): label is string => Boolean(label));
+  const unique = Array.from(new Set(keywords)).slice(0, 6);
+  return unique.length > 0 ? unique : [gestalt.overallMood?.label].filter(Boolean) as string[];
+}
+
 function buildS6(
-  impressionNotes: FaceAnalysisImpressionNotes | undefined,
+  perception: FaceAnalysisPerception | null,
   visualWeight: S6Data['visualWeight'],
 ): S6Data | null {
-  if (!impressionNotes) {
+  if (!perception) {
     return null;
   }
+  const {gestalt} = perception;
   return {
     eyebrow: 'IMPRESSION',
     title: '모아 보면 이런 인상이에요',
     sub: '이목구비와 윤곽을 함께 보면 얼굴에서 먼저 느껴지는 분위기를 알 수 있어요.',
-    axes: impressionNotes.axes ?? [],
-    keywords: impressionNotes.keywords,
+    axes: perception.impressionAxes ?? [],
+    keywords: buildGestaltKeywords(gestalt),
+    details: buildGestaltDetails(gestalt),
     visualWeight,
-    paragraph: impressionNotes.paragraph,
   };
 }
 
@@ -1460,7 +1566,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
     ),
     s2,
     s3: buildS3(
-      report.regionNotes,
+      report.faceAnalysisV2?.perception ?? null,
       featurePhoto,
       regionVisuals ?? null,
       geometryMetrics ?? null,
@@ -1468,10 +1574,11 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
       face3d ?? null,
       face3dPhotoEvidence ?? null,
       derived,
+      report.makeupGuideline,
     ),
-    s4: buildPersonalColorSection(personalColor, heroUri),
+    s4: buildPersonalColorSection(personalColor, heroUri, derived),
     s5: buildS5(bodyProfile, gender),
-    s6: buildS6(report.impressionNotes, visualWeight),
+    s6: buildS6(report.faceAnalysisV2?.perception ?? null, visualWeight),
     s7: stylingSettled ? buildS7(report.stylingLooks) : null,
     s8: buildS8(report.skinPerception),
     s9: {

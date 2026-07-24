@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol, TypeVar
@@ -36,8 +35,9 @@ CONSULTING_PROMPT_VERSION = "s1-consulting-v7"
 _KOREAN_OUTPUT_DIRECTIVE = (
   "Write every label, description, summary, recommendation, and look title/subtitle as "
   "concise natural Korean (한국어) — short phrases, no filler. Keep only enum status codes "
-  "and metric keys in English. Never repeat raw measurements or write digits in user-facing "
-  "copy; translate evidence into a cautious visual interpretation and a useful implication."
+  "and metric keys in English. Digits are allowed in user-facing copy where they read "
+  "naturally (예: 삼분할 대신 3분할); translate evidence into a cautious visual interpretation "
+  "and a useful implication."
 )
 FORBIDDEN_INFERENCES = (
   "medical diagnosis, disease, age, ethnicity, health status, cosmetic procedures, "
@@ -119,63 +119,6 @@ def _jsonable(value: Any) -> Any:
   return value
 
 
-_USER_COPY_FIELDS = {
-  "borderTone",
-  "description",
-  "items",
-  "label",
-  "note",
-  "overallMood",
-  "season",
-  "shortSummary",
-  "subtitle",
-  "subtype",
-  "summary",
-  "tags",
-  "title",
-  "why",
-}
-_METADATA_FIELDS = {"rationaleMetricKeys"}
-
-
-def _user_copy_strings(
-  value: Any,
-  path: tuple[str, ...] = (),
-) -> list[tuple[tuple[str, ...], str]]:
-  payload = _jsonable(value)
-  found: list[tuple[tuple[str, ...], str]] = []
-  if isinstance(payload, dict):
-    for key, item in payload.items():
-      if key in _METADATA_FIELDS:
-        continue
-      child_path = (*path, key)
-      if isinstance(item, str) and (
-        key in _USER_COPY_FIELDS or "makeup" in path
-      ):
-        found.append((child_path, item))
-      elif isinstance(item, (dict, list)):
-        found.extend(_user_copy_strings(item, child_path))
-  elif isinstance(payload, list):
-    for index, item in enumerate(payload):
-      child_path = (*path, str(index))
-      if isinstance(item, str) and path and path[-1] in _USER_COPY_FIELDS:
-        found.append((child_path, item))
-      elif isinstance(item, (dict, list)):
-        found.extend(_user_copy_strings(item, child_path))
-  return found
-
-
-def _validate_user_copy(value: BaseModel) -> list[dict[str, Any]]:
-  return [
-    {
-      "location": list(path),
-      "type": "user_copy_contains_raw_number",
-    }
-    for path, text in _user_copy_strings(value)
-    if re.search(r"\d", text)
-  ]
-
-
 class FaceAnalysisAI:
   def __init__(self, client: StructuredAnalysisClient) -> None:
     self.client = client
@@ -194,6 +137,14 @@ class FaceAnalysisAI:
   ) -> OutputModel:
     validation_errors: list[dict[str, Any]] = []
     current_prompt = user_prompt
+    last_stop_reason: str | None = None
+
+    def _record_call(metrics: AnalysisCallMetrics) -> None:
+      nonlocal last_stop_reason
+      last_stop_reason = metrics.stop_reason
+      if generation_metrics is not None:
+        generation_metrics.record_call(metrics)
+
     for attempt in range(2):
       response = await self.client.analyze_structured_json(
         developer_prompt=developer_prompt,
@@ -202,11 +153,7 @@ class FaceAnalysisAI:
         source_image_bytes=source_image_bytes,
         max_tokens=max_tokens,
         stage=stage,
-        on_call_metrics=(
-          generation_metrics.record_call
-          if generation_metrics is not None
-          else None
-        ),
+        on_call_metrics=_record_call,
       )
       try:
         output = model_type.model_validate(response)
@@ -223,6 +170,17 @@ class FaceAnalysisAI:
         )
         if not validation_errors:
           return output
+      # 절단(stop_reason=max_tokens)으로 필드가 누락된 경우 재시도는 무의미하다 —
+      # 오류 문구를 덧붙인 더 긴 프롬프트는 또 절단될 뿐이라 스테이지 지연만 배가된다
+      # (관측된 +30초 낭비의 주범). 즉시 중단하고 상위 폴백에 맡긴다. 상한을 모델
+      # 최대치로 둔 지금은 사실상 도달하지 않는 안전장치.
+      if last_stop_reason == "max_tokens":
+        logger.warning(
+          "[aura:face-analysis-v2] stage=%s truncated (stop_reason=max_tokens); "
+          "skipping retry",
+          stage or "-",
+        )
+        break
       if attempt == 0:
         if generation_metrics is not None:
           generation_metrics.record_validation_retry()
@@ -242,7 +200,7 @@ class FaceAnalysisAI:
       502,
       "FACE_ANALYSIS_STAGE_OUTPUT_INVALID",
       "Face analysis stage returned invalid structured output.",
-      {"validationErrors": validation_errors},
+      {"validationErrors": validation_errors, "stopReason": last_stop_reason},
     )
 
   async def measure(
@@ -265,7 +223,9 @@ class FaceAnalysisAI:
       model_type=MeasurementStageOutput,
       developer_prompt=(
         "You measure only explicitly requested visible beauty attributes in one neutral front S1 "
-        f"photo. Never infer {FORBIDDEN_INFERENCES}. Return schema-valid JSON only."
+        f"photo. Never infer {FORBIDDEN_INFERENCES}. Return schema-valid JSON only. "
+        "Keep each metric envelope minimal: omit the reason field and leave warnings empty for "
+        "normal estimated metrics; set reason only when status is unmeasured or blocked."
       ),
       user_prompt=(
         "Estimate only missingObservableKeys. Never remeasure authoritativeKeys. Use source=ai, "
@@ -273,8 +233,9 @@ class FaceAnalysisAI:
         + json.dumps(prompt_payload, ensure_ascii=False, separators=(",", ":"))
       ),
       source_image_bytes=source_image_bytes,
-      # 성공 런도 출력이 2700~2800(상한 2800)에 붙어 절단 위험 → 헤드룸 확보.
-      max_tokens=3200,
+      # 상한을 모델 최대치(8192)로 둬 절단을 원천 차단한다. 상한은 실제 생성량만큼만
+      # 소요되므로 시간 손해가 없고, 낮은 상한이 유발하던 절단→무의미 재시도만 제거된다.
+      max_tokens=8192,
       stage="measure",
       generation_metrics=generation_metrics,
     )
@@ -319,9 +280,9 @@ class FaceAnalysisAI:
       developer_prompt=(
         "You provide non-medical beauty perception from an S1 photo and supplied measurements. "
         f"Never infer {FORBIDDEN_INFERENCES}. Do not create measurements. "
-        "Write each Insight description as a complete reader-facing explanation that connects "
-        "the visible conclusion to supplied rationaleMetricKeys and explains how it affects the "
-        "overall impression; do not return a list of disconnected adjectives. "
+        "Write each Insight description as ONE concise reader-facing sentence that links the "
+        "visible conclusion to its rationaleMetricKeys and names its effect on the overall "
+        "impression; do not write a paragraph and do not return disconnected adjectives. "
         "Return three impressionAxes only when supported: clarity (부드러운/선명한), "
         "focus (중앙/외곽), and line (곡선적/직선적). Set value from minus one for the left "
         "label to one for the right label; omit an unsupported axis instead of guessing. "
@@ -339,11 +300,10 @@ class FaceAnalysisAI:
         separators=(",", ":"),
       ),
       source_image_bytes=source_image_bytes,
-      # perceive는 인사이트 다수를 출력해 영문에서도 ~2600 토큰(상한 3200에 근접).
-      # 한국어는 토큰이 더 무거워 상한을 넘겨 절단됐다 → 헤드룸 크게 확보.
-      max_tokens=4800,
+      # 상한을 모델 최대치(8192)로 둬 절단을 원천 차단. 실제 출력은 설명 1문장화로
+      # ~2200 토큰까지 줄어들어 상한에 닿지 않는다(상한은 시간이 아니라 절단만 좌우).
+      max_tokens=8192,
       stage="perceive",
-      semantic_validator=_validate_user_copy,
       generation_metrics=generation_metrics,
     )
     skin_type = anchor_payload.get("skinType")
@@ -418,7 +378,7 @@ class FaceAnalysisAI:
     )
 
     def validate_consulting(output: ConsultingResult) -> list[dict[str, Any]]:
-      errors = _validate_user_copy(output)
+      errors: list[dict[str, Any]] = []
       if output.styling_looks is None:
         errors.append(
           {
@@ -471,6 +431,8 @@ class FaceAnalysisAI:
         "without combining contradictory traits. "
         "When an anchor is supplied, keep recommendedMood exactly as overallMood and use the "
         "anchor labels consistently throughout the advice. "
+        "Keep every user-facing string concise: one short sentence per row why/note and per "
+        "advice item; do not pad descriptions. "
         f"{_KOREAN_OUTPUT_DIRECTIVE} Return JSON only."
       ),
       user_prompt=json.dumps(
@@ -479,8 +441,8 @@ class FaceAnalysisAI:
         separators=(",", ":"),
       ),
       source_image_bytes=None,
-      # 한국어 + 1회 재검증(룩 title 길이 등) 대비 헤드룸.
-      max_tokens=3200,
+      # 상한을 모델 최대치(8192)로 둬 절단을 원천 차단(절단→재시도 낭비 제거).
+      max_tokens=8192,
       stage="consult",
       semantic_validator=validate_consulting,
       generation_metrics=generation_metrics,

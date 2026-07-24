@@ -25,17 +25,21 @@ function DrapeStage({ header, headerColor, stageColor, photo, name, caption }: {
   return (
     <View style={{ flex: 1, gap: 6 }}>
       <Text style={[font(11, '800'), { color: headerColor, textAlign: 'center' }]}>{header}</Text>
+      {/* height는 고정값이라야 한다 — minHeight면 캡션 줄 수가 다를 때 두 스테이지의
+          높이가 서로 달라져 나란히 놓인 박스 크기가 어긋나 보인다. */}
       <Animated.View style={[{
         borderRadius: radius.lg, paddingTop: 14, paddingHorizontal: 8, paddingBottom: 12,
-        alignItems: 'center', gap: 9, minHeight: 226, justifyContent: 'space-between',
+        alignItems: 'center', gap: 9, height: 236, justifyContent: 'space-between',
       }, stageStyle]}>
-        {/* 헤어라인~턱 중심의 세로 타원 — 색이 얼굴에 바로 맞닿게(얇은 흰 링만). */}
+        {/* 헤어라인~턱 중심의 세로 타원 — 실제 얼굴 크롭을 유지해 얼굴이 타원을 꽉
+            채우게 한다(cropRect를 지우면 어깨·배경까지 포함된 원본 프레임이
+            "cover"되어 얼굴이 작게 보인다). */}
         <View style={{
           width: 112, height: 142, borderRadius: 999, overflow: 'hidden',
           borderWidth: 3, borderColor: 'rgba(255,255,255,0.9)',
         }}>
           <PhotoSlot
-            slot={{...photo, cropRect: undefined}}
+            slot={photo}
             shape="oval"
             style={{width: 112, height: 142}}
           />
@@ -401,6 +405,33 @@ function SelectedColorDetail({swatch}: {swatch: SwatchData}) {
   );
 }
 
+/** 색·피부 해석(규칙 기반, derived) — 이미 생성되지만 예전엔 화면에 없던 서술문. */
+function ColorInterpretation({ interpretation }: { interpretation: NonNullable<S4Data['interpretation']> }) {
+  if (!interpretation.colorAxes && !interpretation.skinColor) {
+    return null;
+  }
+  return (
+    <View style={{ gap: 10 }}>
+      {interpretation.colorAxes ? (
+        <View style={{ gap: 3 }}>
+          <Text style={[font(12, '800'), { color: color.faint }]}>색상 해석</Text>
+          <Text style={[font(13, '400', 1.6), { color: color.body }]}>
+            {interpretation.colorAxes}
+          </Text>
+        </View>
+      ) : null}
+      {interpretation.skinColor ? (
+        <View style={{ gap: 3 }}>
+          <Text style={[font(12, '800'), { color: color.faint }]}>피부 해석</Text>
+          <Text style={[font(13, '400', 1.6), { color: color.body }]}>
+            {interpretation.skinColor}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 /** Tone classification, colorful map, and the five measured color axes. */
 export function S4ToneOverview({ data }: { data: S4Data }) {
   return (
@@ -412,6 +443,7 @@ export function S4ToneOverview({ data }: { data: S4Data }) {
             현재 측정값이 각 타입에 얼마나 가까운지 보여줘요.
           </Text>
         </View>
+        {data.interpretation ? <ColorInterpretation interpretation={data.interpretation} /> : null}
         <ToneProbabilityList data={data.toneProbabilities} />
         <ToneMapChart data={data.toneMap} />
         <View style={{ gap: 12 }}>

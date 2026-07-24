@@ -4,8 +4,10 @@ import {ChevronDown} from 'lucide-react-native';
 import { color, font, radius } from '../reportTokens';
 import type { RegionCardData, S3Data } from '../reportTypes';
 import { BlendBar } from '../visuals/BlendBar';
+import { Card } from '../visuals/Card';
 import { GuideOverlay } from '../visuals/GuideOverlay';
 import {FaceDepthPointOverlay} from '../visuals/FaceDepthPointOverlay';
+import { InsightList } from '../visuals/InsightList';
 import { PhotoSlot } from '../visuals/PhotoSlot';
 import {ReadableParagraphs} from '../visuals/ReadableParagraphs';
 import { RiseIn } from '../visuals/RiseIn';
@@ -82,8 +84,6 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
               guide={card.guide}
               guides={card.guides}
               label={activeMeasurement?.label ?? card.guideLabel}
-              labelX={card.guideLabelX}
-              labelAlign={card.guideLabelAlign}
             />
           ) : null}
           {card.photo.uri ? (
@@ -126,33 +126,31 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
               marginTop: -1,
               shadowOpacity: 0,
             }}>
-            <View style={{alignItems: 'stretch', flexDirection: 'row'}}>
-              <View style={{flex: 1, justifyContent: 'center', paddingRight: 12}}>
-                <ReadableParagraphs
-                  gap={8}
-                  text={card.insight ?? card.paragraph}
-                  textStyle={[
-                    font(card.insight ? 16 : 14.5, card.insight ? '800' : '700', 1.45),
-                    {color: color.ink},
-                  ]}
-                />
-              </View>
+            {/* 헤드라인은 항상 전체 너비를 쓴다 — 이전에는 43% 고정 측정 칼럼과
+                한 행에서 경쟁해 굵은 헤드라인이 좁은 폭에 눌려 줄바꿈이 깨졌다. */}
+            <View style={{gap: 8}}>
+              <ReadableParagraphs
+                gap={8}
+                text={card.insight ?? card.paragraph}
+                textStyle={[
+                  font(card.insight ? 16 : 14.5, card.insight ? '800' : '700', 1.45),
+                  {color: color.ink},
+                ]}
+              />
               {activeMeasurement ? (
                 <View
                   style={{
-                    borderLeftColor: 'rgba(22,48,59,0.12)',
-                    borderLeftWidth: 1,
-                    gap: 3,
-                    justifyContent: 'center',
-                    paddingLeft: 12,
-                    width: '43%',
+                    alignItems: 'center',
+                    borderTopColor: 'rgba(22,48,59,0.12)',
+                    borderTopWidth: 1,
+                    flexDirection: 'row',
+                    gap: 8,
+                    paddingTop: 8,
                   }}>
-                  <Text numberOfLines={1} style={[font(10, '700'), {color: color.body}]}>
+                  <Text style={[font(10, '700'), {color: color.body}]}>
                     {activeMeasurement.label}
                   </Text>
-                  <Text
-                    numberOfLines={1}
-                    style={[font(15, '800'), {color: color.accentDeep}]}>
+                  <Text style={[font(13.5, '800'), {color: color.accentDeep, flex: 1}]}>
                     {activeMeasurement.displayValue ?? activeMeasurement.resultLabel}
                   </Text>
                 </View>
@@ -161,6 +159,11 @@ export function S3RegionCard({ card }: { card: RegionCardData }) {
           </ReportGlassSurface>
         ) : null}
       </View>
+      {card.insightItems && card.insightItems.length > 0 ? (
+        <Card gap={0}>
+          <InsightList items={card.insightItems} />
+        </Card>
+      ) : null}
       {showsDepth ? (
         <Text style={[font(10.5, '400', 1.5), {color: color.muted}]}>
           큰 점은 대표 측정점, 작은 점은 계산에 사용한 3D 메시 정점이에요.

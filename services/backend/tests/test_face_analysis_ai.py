@@ -396,7 +396,7 @@ async def test_consulting_repairs_missing_styling_looks() -> None:
 
 
 @pytest.mark.asyncio
-async def test_consulting_repairs_raw_numbers_and_vertical_contradictions() -> None:
+async def test_consulting_repairs_vertical_contradictions() -> None:
   def response(*, base: str, summary: str) -> dict[str, Any]:
     return {
       "makeup": {
@@ -449,7 +449,6 @@ async def test_consulting_repairs_raw_numbers_and_vertical_contradictions() -> N
   )
 
   assert len(client.calls) == 2
-  assert "user_copy_contains_raw_number" in client.calls[1]["user_prompt"]
   assert "contradicts_vertical_balance" in client.calls[1]["user_prompt"]
   assert result.summary == "중안부의 세로 흐름이 상대적으로 강조돼요"
 
