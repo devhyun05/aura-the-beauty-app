@@ -101,9 +101,18 @@ async def complete_stage_run(
   raw_response: dict[str, Any],
   *,
   status: StageStatus = StageStatus.COMPLETED,
+  duration_ms: int,
+  duration_source: str,
+  input_tokens: int,
+  output_tokens: int,
+  provider_call_count: int,
+  validation_retry_count: int,
+  total_tokens: int,
 ) -> dict[str, Any] | None:
   if status not in {StageStatus.COMPLETED, StageStatus.PARTIAL}:
     raise ValueError("Completed stage run status must be completed or partial")
+  if total_tokens != input_tokens + output_tokens:
+    raise ValueError("Stage total tokens must equal input plus output tokens")
   return await db.fetchrow(
     """
     update analysis_stage_runs
@@ -111,6 +120,12 @@ async def complete_stage_run(
         normalized_output = $3::jsonb,
         raw_response = $4::jsonb,
         error_payload = '{}'::jsonb,
+        duration_ms = $5,
+        duration_source = $6,
+        input_tokens = $7,
+        output_tokens = $8,
+        provider_call_count = $9,
+        validation_retry_count = $10,
         completed_at = now(),
         updated_at = now()
     where id = $1 and status = 'processing'
@@ -120,6 +135,12 @@ async def complete_stage_run(
     status.value,
     json.dumps(normalized_output, ensure_ascii=False),
     json.dumps(raw_response, ensure_ascii=False),
+    duration_ms,
+    duration_source,
+    input_tokens,
+    output_tokens,
+    provider_call_count,
+    validation_retry_count,
   )
 
 
@@ -127,12 +148,28 @@ async def fail_stage_run(
   db: Database,
   run_id: UUID,
   error_payload: dict[str, Any],
+  *,
+  duration_ms: int,
+  duration_source: str,
+  input_tokens: int,
+  output_tokens: int,
+  provider_call_count: int,
+  validation_retry_count: int,
+  total_tokens: int,
 ) -> dict[str, Any] | None:
+  if total_tokens != input_tokens + output_tokens:
+    raise ValueError("Stage total tokens must equal input plus output tokens")
   return await db.fetchrow(
     """
     update analysis_stage_runs
     set status = 'failed',
         error_payload = $2::jsonb,
+        duration_ms = $3,
+        duration_source = $4,
+        input_tokens = $5,
+        output_tokens = $6,
+        provider_call_count = $7,
+        validation_retry_count = $8,
         completed_at = now(),
         updated_at = now()
     where id = $1 and status = 'processing'
@@ -140,4 +177,10 @@ async def fail_stage_run(
     """,
     run_id,
     json.dumps(error_payload, ensure_ascii=False),
+    duration_ms,
+    duration_source,
+    input_tokens,
+    output_tokens,
+    provider_call_count,
+    validation_retry_count,
   )

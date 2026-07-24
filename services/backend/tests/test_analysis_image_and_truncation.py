@@ -219,6 +219,39 @@ def test_bedrock_call_metrics_logs_tokens_and_duration(caplog):
     assert "outputTokens=3400" in metric_logs[0]
 
 
+def test_structured_v2_stage_reports_provider_usage_to_callback():
+    fake = _FakeBedrockClient(
+        {
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 1200, "output_tokens": 340},
+            "content": [
+                {
+                    "type": "tool_use",
+                    "name": "return_structured_output",
+                    "input": {"ok": True},
+                }
+            ],
+        }
+    )
+    service = _bedrock_service(fake)
+    observed = []
+
+    result = service._analyze_structured_json_sync(
+        developer_prompt="dev",
+        user_prompt="user",
+        json_schema={"type": "object"},
+        source_image_bytes=None,
+        max_tokens=2800,
+        stage="measure",
+        on_call_metrics=observed.append,
+    )
+
+    assert result == {"ok": True}
+    assert len(observed) == 1
+    assert observed[0].input_tokens == 1200
+    assert observed[0].output_tokens == 340
+
+
 def test_bedrock_request_uses_configured_max_tokens():
     fake = _FakeBedrockClient(
         {

@@ -5,7 +5,11 @@ import pytest
 
 from app.core.errors import AppError
 from app.schemas.face_analysis_v2 import MeasurementCoveragePlan, MetricEnvelope
-from app.services.face_analysis_ai import FaceAnalysisAI
+from app.services.face_analysis_ai import (
+  AnalysisCallMetrics,
+  FaceAnalysisAI,
+  StageGenerationMetrics,
+)
 
 
 def ai_metric(value: str = "smooth") -> dict[str, Any]:
@@ -51,6 +55,16 @@ class FakeStructuredClient:
 
   async def analyze_structured_json(self, **kwargs) -> dict[str, Any]:
     self.calls.append(kwargs)
+    on_call_metrics = kwargs.get("on_call_metrics")
+    if on_call_metrics is not None:
+      call_index = len(self.calls)
+      on_call_metrics(
+        AnalysisCallMetrics(
+          duration_ms=100 * call_index,
+          input_tokens=10 * call_index,
+          output_tokens=5 * call_index,
+        ),
+      )
     return self.responses.pop(0)
 
 
@@ -167,6 +181,30 @@ async def test_measurement_rejects_authoritative_and_unknown_keys() -> None:
   assert result.rejected_authoritative_keys == ["face3d.noseTipProjection"]
   assert result.rejected_unknown_keys == ["unknown.metric"]
   assert client.calls[0]["source_image_bytes"] == b"jpeg"
+
+
+@pytest.mark.asyncio
+async def test_validation_retry_aggregates_every_provider_call_usage() -> None:
+  client = FakeStructuredClient(
+    [
+      {"metrics": {}},
+      {"metrics": {}, "photoQuality": {"usable": True, "warnings": []}},
+    ],
+  )
+  metrics = StageGenerationMetrics()
+
+  await FaceAnalysisAI(client).measure(
+    source_image_bytes=b"jpeg",
+    coverage=COVERAGE,
+    camera_profile=PROFILE,
+    generation_metrics=metrics,
+  )
+
+  assert metrics.input_tokens == 30
+  assert metrics.output_tokens == 15
+  assert metrics.total_tokens == 45
+  assert metrics.provider_call_count == 2
+  assert metrics.validation_retry_count == 1
 
 
 @pytest.mark.asyncio

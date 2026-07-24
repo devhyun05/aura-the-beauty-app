@@ -111,6 +111,12 @@ EXPECTED_CONSTRAINTS = {
     "fk_analysis_reports_golden_mask_media",
     "chk_analysis_reports_golden_mask_metadata",
   },
+  "analysis_stage_runs": {
+    "chk_analysis_stage_runs_duration_ms",
+    "chk_analysis_stage_runs_duration_source",
+    "chk_analysis_stage_runs_token_usage",
+    "chk_analysis_stage_runs_call_counts",
+  },
   "face_measurement_preferences": {
     "face_measurement_preferences_pkey",
     "face_measurement_preferences_user_id_fkey",
@@ -205,6 +211,14 @@ EXPECTED_COLUMNS = {
     "deleted_at",
     "golden_mask_media_id",
     "golden_mask_metadata",
+  },
+  "analysis_stage_runs": {
+    "duration_ms",
+    "duration_source",
+    "input_tokens",
+    "output_tokens",
+    "provider_call_count",
+    "validation_retry_count",
   },
   "face_measurement_preferences": {
     "user_id",
@@ -461,6 +475,12 @@ EXPECTED_COLUMN_CONTRACTS = {
     "is_nullable": "NO",
     "default_contains": "{}",
   },
+  "analysis_stage_runs.duration_ms": {"is_nullable": "YES"},
+  "analysis_stage_runs.duration_source": {"is_nullable": "YES"},
+  "analysis_stage_runs.input_tokens": {"is_nullable": "YES"},
+  "analysis_stage_runs.output_tokens": {"is_nullable": "YES"},
+  "analysis_stage_runs.provider_call_count": {"is_nullable": "YES"},
+  "analysis_stage_runs.validation_retry_count": {"is_nullable": "YES"},
   "face_measurement_preferences.user_id": {"is_nullable": "NO"},
   "face_measurement_preferences.self_selected_locale": {"is_nullable": "YES"},
   "face_measurement_preferences.locale_selection_source": {
@@ -565,6 +585,19 @@ EXPECTED_CONSTRAINT_CONTRACTS = {
     "golden_mask_metadata ? 'schemaversion'::text",
     "schemaversion",
     "aura.golden-mask.v1",
+  ),
+  "chk_analysis_stage_runs_duration_ms": ("duration_ms >= 0",),
+  "chk_analysis_stage_runs_duration_source": (
+    "duration_source = 'server_monotonic'::text",
+  ),
+  "chk_analysis_stage_runs_token_usage": (
+    "input_tokens >= 0",
+    "output_tokens >= 0",
+  ),
+  "chk_analysis_stage_runs_call_counts": (
+    "provider_call_count >= 0",
+    "validation_retry_count >= 0",
+    "validation_retry_count <= provider_call_count",
   ),
   "fk_product_recommendation_runs_source_makeup_report": (
     "foreign key (source_makeup_report_id)",

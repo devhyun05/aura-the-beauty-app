@@ -3,6 +3,8 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 import hashlib
 import json
+import logging
+import time
 from typing import Any, Protocol, TypeVar
 from uuid import UUID
 
@@ -28,6 +30,7 @@ from app.services.face_analysis_ai import (
   MEASUREMENT_PROMPT_VERSION,
   PERCEPTION_PROMPT_VERSION,
   FaceAnalysisAI,
+  StageGenerationMetrics,
 )
 from app.services.face_analysis_measurements import (
   build_measurement_coverage,
@@ -49,6 +52,7 @@ from app.services.face_analysis_stage_runs import (
 
 
 FACE_ANALYSIS_SCHEMA_VERSION = "aura-face-analysis-v2"
+logger = logging.getLogger(__name__)
 
 
 class StageStore(Protocol):
@@ -65,6 +69,7 @@ class StageStore(Protocol):
     self,
     run_id: UUID,
     error: dict[str, Any],
+    **kwargs: Any,
   ) -> dict[str, Any] | None: ...
 
 
@@ -91,8 +96,9 @@ class DatabaseStageStore:
     self,
     run_id: UUID,
     error: dict[str, Any],
+    **kwargs: Any,
   ) -> dict[str, Any] | None:
-    return await fail_stage_run(self.db, run_id, error)
+    return await fail_stage_run(self.db, run_id, error, **kwargs)
 
 
 PersistCallback = Callable[[UUID, FaceAnalysisV2], Awaitable[None]]
@@ -448,6 +454,42 @@ def _json_object(value: Any) -> dict[str, Any]:
   return {}
 
 
+def _observability_state(
+  *,
+  duration_ms: int | None,
+  duration_source: str | None,
+  input_tokens: int | None,
+  output_tokens: int | None,
+  provider_call_count: int | None,
+  validation_retry_count: int | None,
+) -> dict[str, Any]:
+  total_tokens = (
+    input_tokens + output_tokens
+    if input_tokens is not None and output_tokens is not None
+    else None
+  )
+  return {
+    "duration_ms": duration_ms,
+    "duration_source": duration_source,
+    "input_tokens": input_tokens,
+    "output_tokens": output_tokens,
+    "total_tokens": total_tokens,
+    "provider_call_count": provider_call_count,
+    "validation_retry_count": validation_retry_count,
+  }
+
+
+def _row_observability_state(row: Any) -> dict[str, Any]:
+  return _observability_state(
+    duration_ms=_row_value(row, "duration_ms"),
+    duration_source=_row_value(row, "duration_source"),
+    input_tokens=_row_value(row, "input_tokens"),
+    output_tokens=_row_value(row, "output_tokens"),
+    provider_call_count=_row_value(row, "provider_call_count"),
+    validation_retry_count=_row_value(row, "validation_retry_count"),
+  )
+
+
 def initialize_face_analysis_v2(request_payload: dict[str, Any]) -> FaceAnalysisV2:
   measurements = request_payload.get("measurements")
   camera_profile = normalize_camera_measurements(measurements)
@@ -614,12 +656,14 @@ class FaceAnalysisPipeline:
     ai: FaceAnalysisAI,
     stage_store: StageStore | None = None,
     persist_callback: PersistCallback | None = None,
+    monotonic_ns: Callable[[], int] = time.monotonic_ns,
   ) -> None:
     self.db = db
     self.settings = settings
     self.ai = ai
     self.stage_store = stage_store or DatabaseStageStore(db)
     self.persist_callback = persist_callback or self._persist
+    self.monotonic_ns = monotonic_ns
 
   async def _persist(self, report_id: UUID, result: FaceAnalysisV2) -> None:
     await persist_face_analysis_v2(self.db, report_id, result)
@@ -646,7 +690,7 @@ class FaceAnalysisPipeline:
     *,
     model_type: type[StageOutput],
     kwargs: dict[str, Any],
-    invoke: Callable[[], Awaitable[StageOutput]],
+    invoke: Callable[[StageGenerationMetrics], Awaitable[StageOutput]],
   ) -> tuple[StageOutput | None, StageState]:
     cached = await self.stage_store.find(**kwargs)
     if cached is not None:
@@ -658,6 +702,7 @@ class FaceAnalysisPipeline:
         run_id=str(_row_value(cached, "id")),
         updated_at=_now(),
         cache_hit=True,
+        **_row_observability_state(cached),
       )
 
     run = await self.stage_store.start(**kwargs)
@@ -669,9 +714,20 @@ class FaceAnalysisPipeline:
         updated_at=_now(),
       )
 
+    generation_metrics = StageGenerationMetrics()
+    started_ns = self.monotonic_ns()
     try:
       async with asyncio.timeout(self.settings.face_analysis_stage_timeout_seconds):
-        output = await invoke()
+        output = await invoke(generation_metrics)
+      duration_ms = max(0, round((self.monotonic_ns() - started_ns) / 1_000_000))
+      observability = _observability_state(
+        duration_ms=duration_ms,
+        duration_source="server_monotonic",
+        input_tokens=generation_metrics.input_tokens,
+        output_tokens=generation_metrics.output_tokens,
+        provider_call_count=generation_metrics.provider_call_count,
+        validation_retry_count=generation_metrics.validation_retry_count,
+      )
       payload = output.model_dump(by_alias=True, mode="json")
       status = StageStatus.COMPLETED
       if isinstance(output, MeasurementStageOutput) and not output.photo_quality.usable:
@@ -681,11 +737,28 @@ class FaceAnalysisPipeline:
         payload,
         payload,
         status=status,
+        **observability,
+      )
+      logger.info(
+        "[aura:face-analysis-v2] stage-observability reportId=%s stage=%s "
+        "status=%s durationMs=%s durationSource=%s inputTokens=%s outputTokens=%s "
+        "totalTokens=%s providerCallCount=%s validationRetryCount=%s",
+        kwargs["report_id"],
+        kwargs["stage"].value,
+        status.value,
+        observability["duration_ms"],
+        observability["duration_source"],
+        observability["input_tokens"],
+        observability["output_tokens"],
+        observability["total_tokens"],
+        observability["provider_call_count"],
+        observability["validation_retry_count"],
       )
       return output, StageState(
         status=status,
         run_id=str(run_id),
         updated_at=_now(),
+        **observability,
       )
     except TimeoutError:
       error = {"code": "FACE_ANALYSIS_STAGE_TIMEOUT", "reason": "timeout"}
@@ -694,12 +767,36 @@ class FaceAnalysisPipeline:
     except Exception as exc:  # noqa: BLE001 - stage failures must preserve the camera report.
       error = {"code": "FACE_ANALYSIS_STAGE_FAILED", "reason": exc.__class__.__name__}
 
-    await self.stage_store.fail(run_id, error)
+    duration_ms = max(0, round((self.monotonic_ns() - started_ns) / 1_000_000))
+    observability = _observability_state(
+      duration_ms=duration_ms,
+      duration_source="server_monotonic",
+      input_tokens=generation_metrics.input_tokens,
+      output_tokens=generation_metrics.output_tokens,
+      provider_call_count=generation_metrics.provider_call_count,
+      validation_retry_count=generation_metrics.validation_retry_count,
+    )
+    await self.stage_store.fail(run_id, error, **observability)
+    logger.info(
+      "[aura:face-analysis-v2] stage-observability reportId=%s stage=%s "
+      "status=failed durationMs=%s durationSource=%s inputTokens=%s outputTokens=%s "
+      "totalTokens=%s providerCallCount=%s validationRetryCount=%s",
+      kwargs["report_id"],
+      kwargs["stage"].value,
+      observability["duration_ms"],
+      observability["duration_source"],
+      observability["input_tokens"],
+      observability["output_tokens"],
+      observability["total_tokens"],
+      observability["provider_call_count"],
+      observability["validation_retry_count"],
+    )
     return None, StageState(
       status=StageStatus.FAILED,
       run_id=str(run_id),
       error_code=error["code"],
       updated_at=_now(),
+      **observability,
     )
 
   @staticmethod
@@ -746,10 +843,11 @@ class FaceAnalysisPipeline:
     measurement, result.pipeline.ai_measurement = await self._execute_stage(
       model_type=MeasurementStageOutput,
       kwargs=measurement_kwargs,
-      invoke=lambda: self.ai.measure(
+      invoke=lambda metrics: self.ai.measure(
         source_image_bytes=source_image_bytes,
         coverage=result.coverage,
         camera_profile=model_camera_profile,
+        generation_metrics=metrics,
       ),
     )
     if measurement is not None:
@@ -831,11 +929,12 @@ class FaceAnalysisPipeline:
       output, state = await self._execute_stage(
         model_type=PerceptionResult,
         kwargs=perception_kwargs,
-        invoke=lambda: self.ai.perceive(
+        invoke=lambda metrics: self.ai.perceive(
           source_image_bytes=source_image_bytes,
           profile=model_face_profile,
           derived=model_derived,
           anchor=resolved_anchor,
+          generation_metrics=metrics,
         ),
       )
       return "perception", output, state
@@ -844,11 +943,12 @@ class FaceAnalysisPipeline:
       output, state = await self._execute_stage(
         model_type=ConsultingResult,
         kwargs=consulting_kwargs,
-        invoke=lambda: self.ai.consult(
+        invoke=lambda metrics: self.ai.consult(
           profile=consulting_model_input["faceProfile"],
           derived=consulting_model_input["derived"],
           profile_gender=profile_gender,
           anchor=resolved_anchor,
+          generation_metrics=metrics,
         ),
       )
       return "consulting", output, state

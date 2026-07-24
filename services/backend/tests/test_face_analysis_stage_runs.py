@@ -10,7 +10,10 @@ from app.services.face_analysis_stage_runs import (
   find_completed_stage_run,
   start_stage_run,
 )
-from app.services.face_analysis_schema import FACE_ANALYSIS_STAGE_SCHEMA_SQL
+from app.services.face_analysis_schema import (
+  FACE_ANALYSIS_OBSERVABILITY_SCHEMA_SQL,
+  FACE_ANALYSIS_STAGE_SCHEMA_SQL,
+)
 
 
 REPORT_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -83,14 +86,31 @@ async def test_start_appends_attempt_and_reuses_current_processing_row() -> None
 @pytest.mark.asyncio
 async def test_completion_and_failure_update_only_processing_run() -> None:
   db = FakeDatabase([{"id": RUN_ID}, {"id": RUN_ID}])
+  observability = {
+    "duration_ms": 1250,
+    "duration_source": "server_monotonic",
+    "input_tokens": 120,
+    "output_tokens": 45,
+    "total_tokens": 165,
+    "provider_call_count": 2,
+    "validation_retry_count": 1,
+  }
 
-  await complete_stage_run(db, RUN_ID, {"ok": True}, {"usage": {"outputTokens": 20}})
-  await fail_stage_run(db, RUN_ID, {"code": "STAGE_TIMEOUT"})
+  await complete_stage_run(
+    db,
+    RUN_ID,
+    {"ok": True},
+    {"usage": {"outputTokens": 20}},
+    **observability,
+  )
+  await fail_stage_run(db, RUN_ID, {"code": "STAGE_TIMEOUT"}, **observability)
 
   assert "status = 'processing'" in db.fetchrow_calls[0][0]
   assert db.fetchrow_calls[0][1][1] == "completed"
+  assert db.fetchrow_calls[0][1][4:] == (1250, "server_monotonic", 120, 45, 2, 1)
   assert "status = 'processing'" in db.fetchrow_calls[1][0]
   assert "status = 'failed'" in db.fetchrow_calls[1][0]
+  assert db.fetchrow_calls[1][1][2:] == (1250, "server_monotonic", 120, 45, 2, 1)
 
 
 def test_schema_has_cache_and_single_processing_indexes() -> None:
@@ -98,3 +118,13 @@ def test_schema_has_cache_and_single_processing_indexes() -> None:
   assert "on delete cascade" in FACE_ANALYSIS_STAGE_SCHEMA_SQL
   assert "idx_analysis_stage_runs_completed_cache" in FACE_ANALYSIS_STAGE_SCHEMA_SQL
   assert "uq_analysis_stage_runs_one_processing" in FACE_ANALYSIS_STAGE_SCHEMA_SQL
+  for column in (
+    "duration_ms",
+    "duration_source",
+    "input_tokens",
+    "output_tokens",
+    "provider_call_count",
+    "validation_retry_count",
+  ):
+    assert f"add column if not exists {column}" in FACE_ANALYSIS_OBSERVABILITY_SCHEMA_SQL
+  assert "server_monotonic" in FACE_ANALYSIS_OBSERVABILITY_SCHEMA_SQL

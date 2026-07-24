@@ -6,7 +6,11 @@ import asyncpg
 
 from app.core.settings import get_settings
 from app.db.connection_config import DatabaseConfigurationError, connect_database
-from app.services.face_analysis_schema import FACE_ANALYSIS_STAGE_SCHEMA_SQL
+from app.services.face_analysis_schema import (
+  FACE_ANALYSIS_OBSERVABILITY_SCHEMA_SQL,
+  FACE_ANALYSIS_OBSERVABILITY_SCHEMA_VERSION,
+  FACE_ANALYSIS_STAGE_SCHEMA_SQL,
+)
 from app.services.face_measurement_schema import (
   FACE_MEASUREMENT_MIGRATION_SQL,
   FACE_MEASUREMENT_SCHEMA_VERSION,
@@ -554,6 +558,7 @@ POST_SCHEMA_MIGRATIONS = {
     alter table analysis_reports add column if not exists embedding vector(1024);
   """,
   "schema.sql:analysis-stage-runs-v1": FACE_ANALYSIS_STAGE_SCHEMA_SQL,
+  FACE_ANALYSIS_OBSERVABILITY_SCHEMA_VERSION: FACE_ANALYSIS_OBSERVABILITY_SCHEMA_SQL,
   FACE_MEASUREMENT_SCHEMA_VERSION: FACE_MEASUREMENT_MIGRATION_SQL,
   ANALYSIS_LAB_REMOVAL_SCHEMA_VERSION: ANALYSIS_LAB_REMOVAL_SQL,
   "schema.sql:media-thumbnails-v1": """
