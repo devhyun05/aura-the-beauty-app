@@ -3222,7 +3222,39 @@ class OpenAIAnalysisService:
       source_read_started_at = time.monotonic()
       source_image_bytes = await asyncio.to_thread(self._read_source_image_bytes, payload)
       source_image_read_ms = round((time.monotonic() - source_read_started_at) * 1000)
+      return await self.analyze_text_bytes(
+        payload,
+        source_image_bytes,
+        on_anchor=on_anchor,
+        source_image_read_ms=source_image_read_ms,
+      )
+    except AppError:
+      raise
+    except (OpenAIError, BotoCoreError, ClientError) as exc:
+      logger.exception("[aura:ai] text-analysis:failed")
+      raise AppError(
+        502,
+        "AI_INVOCATION_FAILED",
+        "AI text analysis invocation failed.",
+        details={"reason": exc.__class__.__name__, "message": str(exc)},
+      ) from exc
+    except Exception as exc:
+      logger.exception("[aura:ai] text-analysis:failed")
+      raise AppError(
+        502,
+        "AI_INVOCATION_FAILED",
+        "AI text analysis invocation failed.",
+        details={"reason": exc.__class__.__name__},
+      ) from exc
 
+  async def analyze_text_bytes(
+    self,
+    payload: dict[str, Any],
+    source_image_bytes: bytes,
+    on_anchor: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    source_image_read_ms: int = 0,
+  ) -> dict[str, Any]:
+    try:
       text_analysis_started_at = time.monotonic()
       if (
         self.settings.analysis_provider == "bedrock"

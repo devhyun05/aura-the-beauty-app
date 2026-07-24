@@ -120,30 +120,19 @@ def test_web_trial_rejects_invalid_image_signature(
 
 
 @pytest.mark.asyncio
-async def test_web_trial_analysis_deletes_temporary_source(
+async def test_web_trial_analysis_uses_in_memory_source(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-  calls: list[tuple[str, str]] = []
-
-  class FakeS3:
-    def __init__(self, _settings: Settings) -> None:
-      pass
-
-    def put_private_object(self, **kwargs) -> None:
-      calls.append(("put", kwargs["object_key"]))
-
-    def delete_object_permanently(self, **kwargs) -> None:
-      calls.append(("delete", kwargs["object_key"]))
-
   class FakeAnalysis:
     def __init__(self, _settings: Settings) -> None:
       pass
 
-    async def analyze_text(self, payload):
+    async def analyze_text_bytes(self, payload, image_bytes):
       assert payload["source"] == "web_trial"
+      assert payload["contentType"] == "image/jpeg"
+      assert image_bytes == JPEG_BYTES
       return {"personalColor": {"label": "여름 라이트"}, "faceShape": "둥근형"}
 
-  monkeypatch.setattr(web_trial, "S3Service", FakeS3)
   monkeypatch.setattr(web_trial, "OpenAIAnalysisService", FakeAnalysis)
   job_id = UUID("11111111-1111-1111-1111-111111111111")
   web_trial._jobs[job_id] = web_trial.WebTrialJob(
@@ -164,34 +153,19 @@ async def test_web_trial_analysis_deletes_temporary_source(
     "personalColor": {"label": "여름 라이트"},
     "faceShape": "둥근형",
   }
-  assert [name for name, _key in calls] == ["put", "delete"]
-  assert calls[0][1] == calls[1][1]
 
 
 @pytest.mark.asyncio
-async def test_web_trial_analysis_failure_still_deletes_source(
+async def test_web_trial_analysis_failure_returns_retryable_error(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-  calls: list[str] = []
-
-  class FakeS3:
-    def __init__(self, _settings: Settings) -> None:
-      pass
-
-    def put_private_object(self, **kwargs) -> None:
-      calls.append("put")
-
-    def delete_object_permanently(self, **kwargs) -> None:
-      calls.append("delete")
-
   class FailingAnalysis:
     def __init__(self, _settings: Settings) -> None:
       pass
 
-    async def analyze_text(self, _payload):
+    async def analyze_text_bytes(self, _payload, _image_bytes):
       raise AppError(502, "AI_INVOCATION_FAILED", "provider detail")
 
-  monkeypatch.setattr(web_trial, "S3Service", FakeS3)
   monkeypatch.setattr(web_trial, "OpenAIAnalysisService", FailingAnalysis)
   job_id = UUID("22222222-2222-2222-2222-222222222222")
   web_trial._jobs[job_id] = web_trial.WebTrialJob(
@@ -208,7 +182,6 @@ async def test_web_trial_analysis_failure_still_deletes_source(
 
   assert web_trial._jobs[job_id].status == "failed"
   assert web_trial._jobs[job_id].error_code == "AI_INVOCATION_FAILED"
-  assert calls == ["put", "delete"]
 
 
 def test_web_trial_rate_limit_is_per_client() -> None:
