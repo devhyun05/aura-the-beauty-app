@@ -105,4 +105,31 @@ const DOWNTURNED_REPORT: PersonalFitReportInput = {
   assert(buildAnalysisFitSheet(DOWNTURNED_REPORT, 'accent') === null, 'accent -> no shape sheet');
 }
 
+// ── v0.2: 시트 메타(sourceReportId·styleLane·분석일 이름) ───────────────────
+{
+  const sheet = buildAnalysisFitSheet(DOWNTURNED_REPORT, 'balance');
+  assert(sheet!.sourceReportId === 'r-1', 'sheet records source report id');
+  assert(sheet!.styleLane === 'balance', 'sheet records style lane');
+  assert(sheet!.name.includes('7/21'), 'sheet name carries analysis date');
+}
+
+// ── v0.2: clarity 규칙은 accent 레인에서도 시트를 만든다(§6) ────────────────
+{
+  const lowContrast: PersonalFitReportInput = {
+    id: 'r-c',
+    analyzedAt: '2026-07-21T00:00:00.000Z',
+    featureObservations: {
+      eyeContrast: {value: 'low', confidence: 0.9, evidence: 'x'},
+    },
+  };
+  const sheet = buildAnalysisFitSheet(lowContrast, 'accent');
+  assert(sheet != null, 'accent + clarity rule -> sheet exists (not empty lane)');
+  assert(
+    sheet!.entries.some(
+      e => e.region === 'eyelinerUpper' && (e.rules.eyelinerThickness ?? 0) > 0,
+    ),
+    'clarity row flows in accent lane',
+  );
+}
+
 console.log('personalFitService: all assertions passed');

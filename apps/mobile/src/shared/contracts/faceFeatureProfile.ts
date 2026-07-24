@@ -17,7 +17,8 @@ export const FACE_FEATURE_PROFILE_SCHEMA_VERSION =
 
 // 밴드 경계값(임계값)의 버전. 자체 분포(mean±SD) 확정 시 증가. schemaVersion
 // (그릇)과 분리 — 임계값 튜닝은 이 버전만 올린다(AR맞춤핏 계약 §8과 동일 사상).
-export const FACE_FEATURE_BAND_MAPPING_VERSION = 'bands-v0-provisional' as const;
+// v1: 세로3분할 개별 밴드(contour.thirds)·눈 크기(eye.scale) 신설 — 확장 기획 v0.2 §2-1.
+export const FACE_FEATURE_BAND_MAPPING_VERSION = 'bands-v1-provisional' as const;
 
 // ── 밴드 enum ─────────────────────────────────────────────────────────────
 
@@ -102,6 +103,9 @@ export type FaceFeatureEyeProfile = {
   canthalTilt: MeasuredBand<DirectionBand>;
   // 눈 개방(세로:가로 aspect) — 둥근(high)↔가는(low). population 잠정.
   openness: MeasuredBand<MagnitudeBand>;
+  // 눈 크기(눈 가로폭/얼굴폭 = eyeWidthRatio×interCanthalRatio 합성) — 작음(low,
+  // 꼬막눈)↔큼(high). openness(aspect)와 직교. population 잠정. [확장 기획 E-K1]
+  scale: MeasuredBand<MagnitudeBand>;
   // 눈 사이 거리 — eyeWidth/interCanthal 자기참조.
   spacing: MeasuredBand<SpacingBand>;
   // VLM
@@ -151,6 +155,14 @@ export type FaceFeatureContourProfile = {
   jawWidth: MeasuredBand<MagnitudeBand>;
   // 세로 3분할 우세 — 자기 세 부위 비교, 자기참조.
   verticalBalance: MeasuredBand<VerticalDominantBand>;
+  // 세로 3분할 부위별 밴드 — 각 부위를 세 부위 평균 대비 low(짧음)/balanced/
+  // high(김)로 개별 판정. upper(트리키온) 부재 시 중↔하 쌍대비 폴백으로
+  // middle·lower만 판정하고 upper는 보류. 자기참조. [확장 기획 v0.2 §2-1]
+  thirds: {
+    upper: MeasuredBand<MagnitudeBand>;
+    middle: MeasuredBand<MagnitudeBand>;
+    lower: MeasuredBand<MagnitudeBand>;
+  };
   // 얼굴형 — faceAnalysisV2.derived.faceShape 라벨 재사용(없으면 null).
   faceShape: string | null;
 };

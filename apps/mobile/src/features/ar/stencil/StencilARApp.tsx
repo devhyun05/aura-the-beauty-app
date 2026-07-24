@@ -66,7 +66,6 @@ import type { StencilInitialLook } from './stencilInitialLook';
 import { suggestStyleName } from './src/storage/styleStore';
 import {
   loadAutoFit,
-  loadFitSheets,
   loadUserProducts,
   loadUserWarpFilters,
   loadUserLibrary,
@@ -124,7 +123,7 @@ import {
   upsertEntry,
 } from './src/composer/fitSheets';
 import type {FitDelta} from './src/composer/fitSheets';
-import {loadAnalysisFitSheet} from '../services/personalFitLoad';
+import {reconcileAnalysisFitSheet} from '../services/personalFitLoad';
 import {ANALYSIS_FIT_SHEET_ID} from '../services/personalFitService';
 import {
   FIT_HANDLE_REGIONS,
@@ -910,18 +909,13 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       setUserProducts(products);
     });
     // 내 핏(§5 A13) — 시트가 있으면 다음 컴파일부터 자동 적용(메인 시트).
-    // 로드 후, 최신 분석에서 파생한 "분석 맞춤 핏"을 라이브러리에 upsert한다(기본은
-    // 미적용 = 원본; mainId는 저장값 존중). 사용자가 ★로 켜면 그 핏, 끄면 원본.
-    loadFitSheets().then(async store => {
-      let sheets = store.sheets;
-      const analysisSheet = await loadAnalysisFitSheet();
-      if (analysisSheet) {
-        const rest = sheets.filter(s => s.id !== analysisSheet.id);
-        sheets = [...rest, analysisSheet as unknown as FitSheetData];
-      }
-      fitSheetsRef.current = sheets;
+    // 분석 맞춤 핏은 화해 경로(확장 기획 v0.2 §5-3): 생성은 분석 완료 시점이 담당
+    // 하고, 여기서는 저장 시트가 최신 분석과 다를 때만 재생성·저장한다. 새 분석이면
+    // 자동 ★(§5-4), 같은 분석에서의 사용자 켬/끔은 존중된다.
+    reconcileAnalysisFitSheet().then(store => {
+      fitSheetsRef.current = store.sheets;
       mainFitIdRef.current = store.mainId;
-      setFitSheets(sheets);
+      setFitSheets(store.sheets);
       setMainFitId(store.mainId);
     });
     loadAutoFit().then(record => {

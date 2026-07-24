@@ -8,10 +8,15 @@
 
 export const PERSONAL_FIT_SCHEMA_VERSION = 'aura-personal-fit.v0' as const;
 // 매핑 테이블(밴드→축·부호·δ)의 버전. δ 튜닝은 이 버전만 증가(schema와 분리).
-export const PERSONAL_FIT_MAPPING_VERSION = 'fit-map-v0-provisional' as const;
+// v1: 확장 기획 v0.2 — 세로3분할·얼굴형·꼬막눈·대비·눈썹 규칙 + 카테고리 신설.
+export const PERSONAL_FIT_MAPPING_VERSION = 'fit-map-v1-provisional' as const;
 
 // 스타일 레인 — 동일 프로파일에서 세 가지 핏 정책. §4.1.
 export type StyleLane = 'balance' | 'youthful' | 'accent';
+
+// 규칙 카테고리(확장 기획 §6) — reshaping은 형태 보정(레인 게이트: accent에서 0),
+// clarity는 결점·선명도 보정(레인 무관 적용). accent = "reshaping만 0"의 실체.
+export type FitRuleCategory = 'reshaping' | 'clarity';
 
 // 근거 추적(보고서 어조 게이트와 동일 사상) — 어느 밴드에서 왜 나왔나.
 export type PersonalFitBasis = {
@@ -21,6 +26,9 @@ export type PersonalFitBasis = {
   band: string;
   // 근거 등급(리서치 테이블) A/B/C.
   grade: 'A' | 'B' | 'C';
+  // 규칙 카테고리 — 레인 게이트 판정의 키(§6). 구버전 시트엔 없을 수 있어 optional,
+  // 부재는 reshaping으로 해석한다(보수적 — accent에서 제외되는 쪽).
+  category?: FitRuleCategory;
   mappingVersion: string;
 };
 

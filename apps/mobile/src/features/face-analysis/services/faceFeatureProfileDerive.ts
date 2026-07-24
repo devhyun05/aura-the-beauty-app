@@ -52,6 +52,10 @@ const THRESHOLDS = {
   // ↓ population 기준선 필요(잠정) ─────────────────────────────────
   opennessCenter: 0.33, // population: 눈 height/width 대략 중심(둥근↔가는 경계)
   opennessDeadzone: 0.06,
+  // 눈 크기(눈폭/얼굴폭 = eyeWidthRatio×interCanthalRatio 합성). 인체측정 대략치
+  // (눈폭 ~30mm / 관골간 폭 ~135mm ≈ 0.22)를 잠정 중심으로.
+  eyeScaleCenter: 0.22,
+  eyeScaleDeadzone: 0.03,
   eyeGapCenter: 1.6, // population: eyeBrowGap(=gap/eyeWidth) 중심
   eyeGapDeadzone: 0.35,
   mouthWidthCenter: 0.45, // population: mouthWidth/faceWidth 중심
@@ -226,6 +230,45 @@ function verticalBalanceBand(
   return measured(dominant.key, dominant.ratio, metricKeys, 'self-referential');
 }
 
+// 세로 3분할 부위별 밴드 — 세 부위가 다 있으면 평균 대비 low/balanced/high.
+// upper(트리키온) 부재 시 middle↔lower 쌍대비 폴백: 두 부위의 상대만 판정하고
+// upper는 보류한다("어느 쪽이 김"은 자기 두 부위 비교라 자기참조로 성립).
+function thirdsBands(
+  thirds: {upper: number | null; middle: number; lower: number} | null,
+): {
+  upper: MeasuredBand<MagnitudeBand>;
+  middle: MeasuredBand<MagnitudeBand>;
+  lower: MeasuredBand<MagnitudeBand>;
+} {
+  const metricKeys = ['verticalThirds'] as const;
+  const hold = () => unresolved<MagnitudeBand>(metricKeys, 'self-referential');
+  if (!thirds || !Number.isFinite(thirds.middle) || !Number.isFinite(thirds.lower)) {
+    return {upper: hold(), middle: hold(), lower: hold()};
+  }
+  const tol = THRESHOLDS.verticalBalancedTolerance;
+  const hasUpper = thirds.upper != null && Number.isFinite(thirds.upper);
+  if (!hasUpper) {
+    // 쌍대비 폴백 — 비율 차의 절반을 각 부위 편차로 배분(평균 대비와 동일 스케일).
+    const dev = (thirds.middle - thirds.lower) / 2;
+    const bandOf = (d: number, v: number): MeasuredBand<MagnitudeBand> =>
+      Math.abs(d) < tol
+        ? measured('balanced', v, metricKeys, 'self-referential')
+        : measured(d > 0 ? 'high' : 'low', v, metricKeys, 'self-referential');
+    return {
+      upper: hold(),
+      middle: bandOf(dev, thirds.middle),
+      lower: bandOf(-dev, thirds.lower),
+    };
+  }
+  const upper = thirds.upper as number;
+  const mean = (upper + thirds.middle + thirds.lower) / 3;
+  const bandOf = (v: number): MeasuredBand<MagnitudeBand> =>
+    Math.abs(v - mean) < tol
+      ? measured('balanced', v, metricKeys, 'self-referential')
+      : measured(v > mean ? 'high' : 'low', v, metricKeys, 'self-referential');
+  return {upper: bandOf(upper), middle: bandOf(thirds.middle), lower: bandOf(thirds.lower)};
+}
+
 export type DeriveFeatureBandsInput = {
   // 없으면 전 지표 판정 보류(VLM 슬롯만 채워짐 — 2층은 관찰만으로도 성립).
   metrics?: FaceGeometryMetrics | null;
@@ -275,6 +318,10 @@ export function deriveMeasuredFeatureBands(
     metricValue(m, 'jawWidthRatio'),
     metricValue(m, 'lowerJawWidthRatio'),
   );
+  // 눈폭/얼굴폭 합성: eyeWidthRatio(눈폭/눈사이) × interCanthalRatio(눈사이/얼굴폭).
+  const interCanthal = metricValue(m, 'interCanthalRatio');
+  const eyeScale =
+    eyeWidth != null && interCanthal != null ? eyeWidth * interCanthal : null;
 
   return {
     schemaVersion: FACE_FEATURE_PROFILE_SCHEMA_VERSION,
@@ -291,6 +338,12 @@ export function deriveMeasuredFeatureBands(
         THRESHOLDS.opennessCenter,
         THRESHOLDS.opennessDeadzone,
         ['eyeOpennessLeft', 'eyeOpennessRight'],
+      ),
+      scale: magnitudeBand(
+        eyeScale,
+        THRESHOLDS.eyeScaleCenter,
+        THRESHOLDS.eyeScaleDeadzone,
+        ['eyeWidthRatioLeft', 'eyeWidthRatioRight', 'interCanthalRatio'],
       ),
       spacing: spacingBand(eyeWidth, [
         'eyeWidthRatioLeft',
@@ -346,6 +399,7 @@ export function deriveMeasuredFeatureBands(
         ['jawWidthRatio', 'lowerJawWidthRatio'],
       ),
       verticalBalance: verticalBalanceBand(input.verticalThirds ?? null),
+      thirds: thirdsBands(input.verticalThirds ?? null),
       faceShape: input.faceShapeLabel ?? null,
     },
   };

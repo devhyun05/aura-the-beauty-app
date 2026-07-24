@@ -1062,7 +1062,12 @@ const BROW_SHAPE_AXIS: ComposerControl[] = [
     min: 0.75,
     max: 1.6,
     fallback: 1,
+    // ⚠ gold 승격 금지(확장 기획 §4-1 정정): lookStore.migrateBrowCoverageFitSheets가
+    // 핏 룰의 browThickness를 레거시로 간주해 로드마다 browExpand로 이관·삭제한다.
+    // 편입하려면 그 마이그레이션의 버전 가드 은퇴가 선행.
   },
+  // gold: 룩 소관 축이지만 핏 δ(E-1′ 눈썹 꼬리 연장)가 가산+클램프로 미세 보정만
+  // 하므로 핏 화이트리스트에 편입 — 확장 기획 v0.2 §4-1 결정.
   {
     type: 'slider',
     label: '가로 길이',
@@ -1070,6 +1075,7 @@ const BROW_SHAPE_AXIS: ComposerControl[] = [
     min: 0.65,
     max: 1.6,
     fallback: 1,
+    gold: true,
   },
 ];
 const BROW_FIT_AXIS: ComposerControl[] = [

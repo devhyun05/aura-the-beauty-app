@@ -21,12 +21,14 @@ function profileOf(args: {
   metricOverrides?: Record<string, number>;
   thirds?: {upper: number | null; middle: number; lower: number} | null;
   observations?: FaceFeatureObservations;
+  faceShapeLabel?: string;
 }) {
   return buildFaceFeatureProfile({
     metrics: metrics(args.metricOverrides ?? {}),
     verticalThirds: args.thirds ?? null,
     measuredAt: '2026-07-21T00:00:00.000Z',
     observations: args.observations,
+    faceShapeLabel: args.faceShapeLabel ?? null,
   });
 }
 
@@ -147,6 +149,108 @@ function ruleValue(entries: {rules: Record<string, number>}[], field: string): n
     'eyelinerUpper rules merged across rows',
   );
   assert(stripped.some(e => e.region === 'eyeshadow'), 'eyeshadow region present');
+}
+
+// ── fit-map-v1: V-3 중안부 짧음 → 블러셔 저배치(youthful은 미발동) ──────────
+{
+  const thirds = {upper: 1.1, middle: 0.85, lower: 1.05};
+  const bal = deriveFitDeltas(profileOf({thirds}), 'balance', {deltaScale: 1});
+  assert(ruleValue(bal.entries, 'blushLift') < 0, 'short midface -> blushLift − (low placement)');
+  const you = deriveFitDeltas(profileOf({thirds}), 'youthful', {deltaScale: 1});
+  assert(
+    ruleValue(you.entries, 'blushLift') > 0,
+    'youthful lane -> high placement regardless of band (no V-3 conflict)',
+  );
+}
+
+// ── fit-map-v1: 하안부 김/짧음 → 컨투어 하향 / 턱끝 하이라이트 ──────────────
+{
+  const long = deriveFitDeltas(
+    profileOf({thirds: {upper: 1.0, middle: 1.0, lower: 1.3}}),
+    'balance',
+    {deltaScale: 1},
+  );
+  assert(ruleValue(long.entries, 'contourLift') < 0, 'long lower third -> contour drop');
+  const short = deriveFitDeltas(
+    profileOf({thirds: {upper: 1.1, middle: 1.1, lower: 0.8}}),
+    'balance',
+    {deltaScale: 1},
+  );
+  assert(ruleValue(short.entries, 'highlightLift') < 0, 'short lower third -> chin-ward highlight');
+}
+
+// ── fit-map-v1: 얼굴형(F-1~4·C-5 위치·퍼짐 성분) ───────────────────────────
+{
+  const round = deriveFitDeltas(
+    profileOf({faceShapeLabel: '둥근형'}),
+    'balance',
+    {deltaScale: 1},
+  );
+  assert(ruleValue(round.entries, 'contourSpread') > 0, 'round face -> contour spread +');
+  assert(ruleValue(round.entries, 'highlightSpread') < 0, 'round face -> highlight focus −');
+  const long = deriveFitDeltas(
+    profileOf({faceShapeLabel: '긴 타원형'}),
+    'balance',
+    {deltaScale: 1},
+  );
+  assert(ruleValue(long.entries, 'contourLift') < 0, 'long face -> contour drop');
+  const heart = deriveFitDeltas(
+    profileOf({faceShapeLabel: '하트형'}),
+    'balance',
+    {deltaScale: 1},
+  );
+  assert(ruleValue(heart.entries, 'blushLift') < 0, 'heart face -> blush lowered');
+  const oval = deriveFitDeltas(
+    profileOf({faceShapeLabel: '타원형'}),
+    'balance',
+    {deltaScale: 1},
+  );
+  assert(oval.entries.length === 0, 'oval(balanced) face -> no shape rows');
+}
+
+// ── fit-map-v1: E-K1 꼬막눈 → 가로·세로 동시 확장 ──────────────────────────
+{
+  const p = profileOf({
+    metricOverrides: {
+      eyeWidthRatioLeft: 0.75,
+      eyeWidthRatioRight: 0.75,
+      interCanthalRatio: 0.2,
+    },
+  });
+  const fit = deriveFitDeltas(p, 'balance', {deltaScale: 1});
+  assert(ruleValue(fit.entries, 'eyelinerWingLength') > 0, 'small eye -> wing +');
+  assert(ruleValue(fit.entries, 'eyelinerLowerTailTrace') > 0, 'small eye -> lower trace +');
+  assert(ruleValue(fit.entries, 'eyeshadowHeight') > 0, 'small eye -> shadow height +');
+  assert(ruleValue(fit.entries, 'mascaraLength') > 0, 'small eye -> mascara + (C aux)');
+}
+
+// ── fit-map-v1: E-1′ 처진 눈꼬리 → 눈썹 꼬리 재작도·연장 ────────────────────
+{
+  const p = profileOf({metricOverrides: {canthalTiltLeftDeg: -10, canthalTiltRightDeg: -10}});
+  const fit = deriveFitDeltas(p, 'balance', {deltaScale: 1});
+  assert(ruleValue(fit.entries, 'browArch') > 0, 'downturned -> brow arch +');
+  assert(ruleValue(fit.entries, 'browLength') > 0, 'downturned -> brow tail extend +');
+  assert(fit.entries.some(e => e.region === 'brow'), 'brow region row present');
+}
+
+// ── fit-map-v1: W-3′ clarity — accent 레인에서도 유지 ──────────────────────
+{
+  const p = profileOf({
+    metricOverrides: {canthalTiltLeftDeg: -10, canthalTiltRightDeg: -10},
+    observations: {eyeContrast: ob('low')},
+  });
+  const accent = deriveFitDeltas(p, 'accent', {deltaScale: 1});
+  // reshaping(눈꼬리 리프트·눈썹)은 전부 생략, clarity(대비 상향)만 남는다.
+  assert(accent.entries.length === 1, 'accent keeps only clarity rows');
+  assert(accent.entries[0].basis.category === 'clarity', 'remaining row is clarity');
+  assert(ruleValue(accent.entries, 'eyelinerThickness') > 0, 'low contrast -> liner thicker');
+  assert(ruleValue(accent.entries, 'eyeCornerLift') === 0, 'accent -> no reshaping deltas');
+  const balance = deriveFitDeltas(p, 'balance', {deltaScale: 1});
+  assert(
+    ruleValue(balance.entries, 'eyelinerThickness') > 0 &&
+      ruleValue(balance.entries, 'eyeCornerLift') > 0,
+    'balance keeps both categories',
+  );
 }
 
 console.log('deriveFitDeltas: all assertions passed');

@@ -45,6 +45,8 @@ export type PersonalFitBaseDelta = {region: string; rules: Record<string, number
 // 분석 맞춤 핏을 담는 저장 시트(스텐실 FitSheet 부분집합). id가 고정이라 재분석 시
 // 같은 시트를 갱신(upsert)하고, mainId로 켜고/끄는 게 곧 원본↔내핏 토글이다.
 // 켜짐/꺼짐은 mainId가 제어하므로 여기서는 실제 δ(scale=1)를 담는다(전역 게이트 무관).
+// 단일 슬롯 정책(확장 기획 §5-2): 리포트마다 시트를 쌓지 않고 최신 분석이 이 슬롯을
+// 덮어쓴다 — 이전 핏 보존은 기존 시트 복제 경로의 몫.
 export const ANALYSIS_FIT_SHEET_ID = 'fit-analysis';
 export const ANALYSIS_FIT_SHEET_NAME = '분석 맞춤 핏';
 
@@ -52,7 +54,17 @@ export type AnalysisFitSheet = {
   id: string;
   name: string;
   entries: PersonalFitBaseDelta[];
+  // 어느 분석·어느 레인에서 파생됐나 — 재생성 화해(§5-3)와 자동 ★(§5-4)의 키.
+  sourceReportId: string;
+  styleLane: StyleLane;
 };
+
+// 분석일 표기 — analyzedAt(ISO)에서 파생(결정론, Date.now 미사용). 파싱 불가면 생략.
+function sheetName(analyzedAt: string): string {
+  const d = new Date(analyzedAt);
+  if (Number.isNaN(d.getTime())) return ANALYSIS_FIT_SHEET_NAME;
+  return `${ANALYSIS_FIT_SHEET_NAME} · ${d.getMonth() + 1}/${d.getDate()}`;
+}
 
 /**
  * 분석 리포트 → 저장용 "분석 맞춤 핏" 시트. 발동 규칙이 없으면 null(빈 시트 안 만듦).
@@ -62,9 +74,16 @@ export function buildAnalysisFitSheet(
   report: PersonalFitReportInput | null,
   styleLane: StyleLane = 'balance',
 ): AnalysisFitSheet | null {
+  if (!report) return null;
   const entries = buildPersonalFitBaseDeltas(report, styleLane, 1);
   if (entries.length === 0) return null;
-  return {id: ANALYSIS_FIT_SHEET_ID, name: ANALYSIS_FIT_SHEET_NAME, entries};
+  return {
+    id: ANALYSIS_FIT_SHEET_ID,
+    name: sheetName(report.analyzedAt),
+    entries,
+    sourceReportId: report.id,
+    styleLane,
+  };
 }
 
 /**

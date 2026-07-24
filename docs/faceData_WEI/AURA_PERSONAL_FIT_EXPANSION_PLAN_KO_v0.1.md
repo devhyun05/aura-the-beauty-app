@@ -1,7 +1,10 @@
-# AURA 맞춤핏 확장 기획 v0.1 — 요인 전수 반영·분석별 재생성·레인 일원화
+# AURA 맞춤핏 확장 기획 v0.2 — 요인 전수 반영·분석별 재생성·레인 일원화
 
 상태: 기획 확정(2026-07-24 대화 합의). 구현 전 — 단계별 착수 순서는 §8.
 작성: 2026-07-24, 저장소 정찰 기반. 선행 문서: [AR맞춤핏 계약 v0.2](AR맞춤핏-계약초안-v0.md), [테크닉 테이블 v0](AURA_MAKEUP_TECHNIQUE_TABLE_KO_v0.md), [특징 프로파일 계획 v0.1](AURA_FACE_FEATURE_PROFILE_PLAN_KO_v0.1.md).
+v0.1→v0.2 개정(2026-07-24, dev 병합 5d8e986a9 반영): 눈썹 `browThickness`(전체 굵기)·`browLength`(꼬리 방향 가로 길이) 축 신설됨 — 핏 소비를 위해 **gold 승격 결정**(§4-1, 룩/핏 경계 논점 기록). 눈썹 규칙에 두 축 배선(§3-3). "아이라이너 길이"는 기존 gold `eyelinerWingLength`+하부 테일 축으로 충족 — 신설 불요 확인.
+
+**1단계 구현 완료(2026-07-24)** — 구현 중 확정된 정정 4건: ① `browThickness` gold 승격은 **보류**(lookStore `migrateBrowCoverageFitSheets`가 핏 룰의 browThickness를 레거시로 간주해 로드마다 이관·삭제 — 마이그레이션 버전 가드 은퇴가 선행 조건; `browLength`만 승격). ② 얼굴형·블러셔 **각도** 규칙(C-2~5)은 절대 목표라 δ 도메인과 부정합 — 위치·퍼짐 성분만 핏 규칙으로, 각도·마스크 선택은 레시피 층으로 이관(§3-1). ③ W-3′는 intensity 축이 비-gold라 `eyelinerThickness`를 대비 프록시로 구현. ④ `eyeScale`은 기존 저장 지표 합성(eyeWidthRatio×interCanthalRatio)으로 파생 — 신규 캡처 코드 불요, 과거 리포트에도 소급. E-9(눈사이 가까움)는 그라데이션 시작점이 핏 축이 아니라 미구현 — E-10과 함께 3단계 `eyelinerInnerExtension`에서.
 목적: 세로3분할(상·중·하안부) 개별 밴드, 꼬막눈, 돌출·함몰눈, 눈썹-눈 거리, 눈꼬리 개폐 등 요인 전수를 맞춤핏에 반영하고, 분석할 때마다 핏이 새로 생성되게 한다.
 
 핵심 결정(합의 완료):
@@ -25,7 +28,7 @@
 | 눈사이 거리 멂/가까움 | 밴드(`eye.spacing`)·근거(E-9/10, B급) 모두 있는데 **매핑 규칙만 미구현** |
 | 얼굴형별 셰이딩·블러셔 | `contour.faceShape` 밴드 있음, F-1~F-4는 **A급** — 통째로 미구현 |
 | 눈매 대비 낮음 | `eyeContrast` VLM 있음, W-3 **A급** — 미구현 |
-| 눈썹 전 요인 | `slope`/`apex`/`eyeGap` 밴드·`browExpandUpper/Lower`·`browArch` 축 전부 있는데 규칙 0건 |
+| 눈썹 전 요인 | `slope`/`apex`/`eyeGap` 밴드·`browExpandUpper/Lower`·`browArch` 축 전부 있는데 규칙 0건. v0.2: `browThickness`·`browLength` 축 추가 확보(dev 병합) — 단 gold 미지정이라 핏 규칙 소비엔 승격 필요(§4-1) |
 
 구현 완료 행(유지): E-1(처진 눈꼬리 — 단 눈썹 δ 부분 미구현), E-3(hooded), E-4(무쌍), E-7/E-8(개방도), 애교살 present, C-1(중안부 김), L-1(얇은 입술), E-7 확장(하부 테일 디태치).
 
@@ -67,7 +70,7 @@
 | # | 발동 | 효과 | 카테고리 | 근거 |
 |---|---|---|---|---|
 | E-9/10 | `eye.spacing` close/wide | close: 그라데이션 시작 outer·`eyelinerInnerExtension 0` / wide: 시작 inner·`eyelinerInnerExtension +δ` | R | **B** (테이블 기존 행 — 구현만) |
-| E-K1 | `eyeScale` low (꼬막눈) | `eyelinerWingLength +δ` + `eyeshadowHeight +δ` + 하부 섀도 은은히 + 보조 `mascaraLength +δ`(C급) | R | A(W-3 기제) — Milady 눈모양 교정표 대조 후 확정 |
+| E-K1 | `eyeScale` low (꼬막눈) | `eyelinerWingLength +δ`(라이너 길이) + `eyelinerLowerTailTrace/Len +δ`(하부 테일 — 구현 완료 축 재사용) + `eyeshadowHeight +δ` + 보조 `mascaraLength +δ`(C급). 근거 확인 시 `browThickness −δ` 보조 후보 | R | A(W-3 기제) — Milady 눈모양 교정표 대조 후 확정 |
 | E-K2 | `eyeDepth=protruding` | 눈두덩 매트 음영 intensity +δ, 중앙 하이라이트 억제. 매트 마감 자체는 **레시피 층**(finish=matte 제안) — 핏=형태/배치, 레시피=색/질감 경계 유지 | R | 리서치 §9 (Milady 유력) |
 | E-K3 | `eyeDepth=deepSet` | 눈꺼풀 중앙 밝게 +δ(신설 `eyeshadowCenterHighlight`), 어두운 크리스 감쇠 −δ | R | 리서치 §9 |
 | E-K4 | `eyeCornerAperture` open/closed | 라이너 꼬리 방향 분기(위 리프트 vs 하강 평행) — **부호 미확정, 양방향 가설 기록**. 축은 `eyeCornerLift`(부호 허용 확인)·`eyelinerWingLength`·`eyelinerLowerTailTrace/Len` 재사용 | R | 리서치 §9. ⚠ 기각된 E-2(올라간 눈꼬리) 뒷문 재유입 금지 — tilt와 aperture는 별개 속성임을 검증 단계에서 분리 |
@@ -78,10 +81,11 @@
 
 | # | 발동 | 효과 | 카테고리 | 근거 |
 |---|---|---|---|---|
-| B-E11 | `brow.eyeGap` 좁음/넓음 | 좁음: `browExpandLower −δ`·`browArch +δ` / 넓음: `browExpandLower +δ` | R | **공백** — Milady Ch.8 확보 선행(§9). 축·밴드 완비라 통과 즉시 배선 |
-| E-1′ | `eye.canthalTilt=down` | 기존 E-1에 눈썹 δ 추가: 꼬리 직선/사선 재작도(`browArch`) | R | B (E-1 미구현 부분) |
-| B-1′ | `eye.spacing` × brow | 미간 좁음 → 앞머리 간격↑·바깥 연장 / 넓음 → 안쪽으로 | R | A(구조)/세부 공백 — 앞머리 위치 축은 후순위 신설 후보 |
-| B-3′ | `browDensity=sparse` | 스트로크형 텍스처 + 앞머리 감쇠 — **레시피 층** | — | B/C |
+| B-E11 | `brow.eyeGap` 좁음/넓음 | 좁음: `browExpandLower −δ`·`browArch +δ`·`browThickness −δ`(슬림으로 눈두덩 확보) / 넓음: `browExpandLower +δ` | R | **공백** — Milady Ch.8 확보 선행(§9). 축·밴드 완비라 통과 즉시 배선 |
+| E-1′ | `eye.canthalTilt=down` | 기존 E-1에 눈썹 δ 추가: 꼬리 직선/사선 재작도(`browArch`) + 꼬리 연장(`browLength +δ`)으로 리프트 라인 지지 | R | B (E-1 미구현 부분) |
+| B-1′ | `eye.spacing` × brow | 미간 좁음 → 앞머리 간격↑·바깥 연장(`browLength +δ` — 꼬리 방향 축이라 바깥 연장 즉시 가능) / 넓음 → 안쪽으로(⚠ `browLength`는 눈썹머리 고정이라 **안쪽 연장 불가** — 앞머리 위치 축은 여전히 후순위 신설 후보) | R | A(구조)/세부 공백 |
+| B-F1 | `contour.faceShape` × brow | 긴 얼굴 → 수평 일자·가로 강조(`browLength +δ`·`browArch −δ`) / 둥근 → 아치 상향(`browArch +δ`) — B-1 얼굴형별 처방의 축 배선 | R | A(구조)/본문 공백 — Milady 본문 확보 시 활성(§9-2) |
+| B-3′ | `browDensity=sparse` | 스트로크형 텍스처 + 앞머리 감쇠 — **레시피 층**. `browThickness`는 밀도 아닌 형태 축이라 여기 미사용 | — | B/C |
 
 ### 3-4. 입·눈밑 (L·T계열)
 
@@ -112,6 +116,14 @@
 
 기존 축 재사용으로 충분한 규칙(V-3, F-1~4 일부, C-2~5, E-9, E-K1, W-3′, T-1, B-E11, L-P1)은 Unity 무변경.
 
+### 4-1. gold 승격 (v0.2 신설 — Unity 무변경, RN 플래그만)
+
+dev 병합(5d8e986a9)으로 `browThickness`(0.75~1.6)·`browLength`(0.65~1.6, 눈썹머리 고정·꼬리 방향)가 축으로 존재하나 **BROW_SHAPE_AXIS(룩 소관, gold 없음)** 에 있다. `applyFitToLayers`의 룰 델타는 gold 화이트리스트 강제라, 핏 규칙(B-E11·E-1′·B-1′·B-F1)이 쓰려면 gold 승격이 필요.
+
+- **결정(구현 시 정정): `browLength`만 gold 승격.** `browThickness`는 lookStore `migrateBrowCoverageFitSheets`가 핏 룰의 browThickness를 레거시 대칭 굵기로 간주해 로드·저장마다 browExpand로 이관·삭제하므로, 승격 시 사용자 굵기 핏 델타가 조용히 증발한다 — 그 마이그레이션의 버전 가드 은퇴가 선행 조건. 룩/핏 경계("모양·굵기는 룩, 덮기는 내 핏") 논점은 다음으로 해소 — 핏 δ는 룩 파라미터 위 **가산+클램프**라 룩 선택을 대체하지 않고 미세 보정만 하며, 배수 축(fallback 1)이라 δ=0이면 완전 무변조. 사용자 수동 핏이 자동 시트를 이기는 기존 우선순위도 그대로.
+- 아이라이너 길이는 승격 불요: `eyelinerWingLength`·`eyelinerLowerTailTrace/Len` 모두 이미 gold.
+- ⚠ `eyelinerInnerLift`는 임시 디버그(계약 v0.2에서 deprecated) — 신규 매핑 사용 금지 유지.
+
 ## 5. 시트 수명주기 — 분석별 재생성
 
 현행 문제: 생성이 AR 화면 마운트 시 1회뿐 — 분석 직후 무반응, AR 화면 체류 중 재분석 시 미갱신.
@@ -137,7 +149,7 @@
 
 ## 8. 구현 단계 (의존성 순)
 
-- **1단계 (Unity 무변경, 빠른 효과)**: §2-1 측정·밴드 신설 + F-1~4·C-2~5(얼굴형) + W-3′(대비) + V-3(중안부 짧음) + E-9 + E-K1(기존 축분) + §5 재생성 배선 + §6 레인·카테고리 구조. 계약 러너 테스트 확장, `bands-v1`/`fit-map-v1`.
+- **1단계 (Unity 무변경, 빠른 효과)**: §2-1 측정·밴드 신설 + F-1~4·C-2~5(얼굴형) + W-3′(대비) + V-3(중안부 짧음) + E-9 + E-K1(기존 축분) + §4-1 gold 승격(`browThickness`·`browLength`) + E-1′ 눈썹 δ + §5 재생성 배선 + §6 레인·카테고리 구조. 계약 러너 테스트 확장, `bands-v1`/`fit-map-v1`.
 - **2단계 (백엔드)**: `eyeDepth`·`darkCircles` VLM enum + 프롬프트 + 프론트 계약·빌더. T-1 배선.
 - **3단계 (Unity 축 신설)**: §4 우선순위 순(hairlineShade → chinShade → innerExtension → centerHighlight → lipOverline 분해). 셰이더+브리지+골드 축+재수출.
 - **리서치 병행**: §9 통과분만 증분 반영.
@@ -145,7 +157,7 @@
 ## 9. 리서치 태스크 (검증 게이트 — 통과 전 엔진 진입 금지)
 
 1. Milady Standard Makeup 눈모양 교정표 — 돌출눈(E-K2)·함몰눈(E-K3)·작은 눈(E-K1 보강). 교과서 정례라 B급 이상 유력.
-2. Milady Ch.8 — 눈썹-눈 거리(B-E11), 눈썹 세부(B-1′).
+2. Milady Ch.8 — 눈썹-눈 거리(B-E11), 눈썹 세부(B-1′), 얼굴형별 눈썹 처방 본문(B-F1 — `browLength`/`browArch` 배선 대기).
 3. K-뷰티 아티스트 교육서 — 애교살(E-12′), 눈꼬리 개폐(E-K4 방향 부호), 인중 오버립(L-P1).
 4. 다크서클 커버 처방의 교과서 근거(T-1).
 5. 홍채 노출 → 라이너 처방 문헌.

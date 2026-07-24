@@ -179,9 +179,75 @@ function derive(overrides: Record<string, number>, extra = {}) {
 {
   const p = derive({}, {sourceReportId: 'r-1'});
   assert(p.schemaVersion === 'aura-face-feature-profile.v0', 'schemaVersion set');
-  assert(p.bandMappingVersion === 'bands-v0-provisional', 'bandMappingVersion set');
+  assert(p.bandMappingVersion === 'bands-v1-provisional', 'bandMappingVersion set');
   assert(p.sourceReportId === 'r-1', 'sourceReportId threaded');
   assert(p.measuredAt === '2026-07-21T00:00:00.000Z', 'measuredAt threaded (no Date.now)');
+}
+
+// ── 세로3분할 부위별 밴드(bands-v1) ────────────────────────────────────────
+{
+  // 중안부가 평균보다 김 → middle high, 나머지 low/balanced.
+  const p = derive({}, {verticalThirds: {upper: 1.0, middle: 1.2, lower: 1.0}});
+  assert(p.contour.thirds.middle.band === 'high', 'long midface -> middle high');
+  assert(p.contour.thirds.upper.band === 'low', 'others below mean -> low');
+}
+{
+  // 중안부 짧음(V-3 발동 케이스).
+  const p = derive({}, {verticalThirds: {upper: 1.1, middle: 0.9, lower: 1.1}});
+  assert(p.contour.thirds.middle.band === 'low', 'short midface -> middle low');
+}
+{
+  // 균형 — 전 부위 balanced.
+  const p = derive({}, {verticalThirds: {upper: 1.0, middle: 1.0, lower: 1.02}});
+  assert(
+    p.contour.thirds.upper.band === 'balanced' &&
+      p.contour.thirds.middle.band === 'balanced' &&
+      p.contour.thirds.lower.band === 'balanced',
+    'even thirds -> all balanced',
+  );
+}
+{
+  // upper 부재 → 쌍대비 폴백: middle·lower만 상대 판정, upper 보류.
+  const p = derive({}, {verticalThirds: {upper: null, middle: 0.85, lower: 1.15}});
+  assert(p.contour.thirds.upper.band === null, 'no hairline -> upper held');
+  assert(p.contour.thirds.middle.band === 'low', 'pairwise: middle shorter -> low');
+  assert(p.contour.thirds.lower.band === 'high', 'pairwise: lower longer -> high');
+}
+{
+  const p = derive({});
+  assert(
+    p.contour.thirds.upper.band === null && p.contour.thirds.middle.band === null,
+    'no thirds -> all held',
+  );
+}
+
+// ── 눈 크기(eye.scale, bands-v1): eyeWidthRatio×interCanthalRatio ─────────
+{
+  // 0.75×0.22 ≈ 0.165 < 0.19 → 꼬막눈(low).
+  const p = derive({
+    eyeWidthRatioLeft: 0.75,
+    eyeWidthRatioRight: 0.75,
+    interCanthalRatio: 0.22,
+  });
+  assert(p.eye.scale.band === 'low', 'small eye vs face -> scale low');
+  assert(
+    p.eye.scale.calibration === 'provisional-population',
+    'eye scale is provisional-population',
+  );
+}
+{
+  // 1.0×0.22 = 0.22 = 중심 → balanced.
+  const p = derive({
+    eyeWidthRatioLeft: 1.0,
+    eyeWidthRatioRight: 1.0,
+    interCanthalRatio: 0.22,
+  });
+  assert(p.eye.scale.band === 'balanced', 'typical eye -> scale balanced');
+}
+{
+  // interCanthalRatio 부재 → 합성 불가, 보류.
+  const p = derive({eyeWidthRatioLeft: 1.0, eyeWidthRatioRight: 1.0});
+  assert(p.eye.scale.band === null, 'missing interCanthal -> scale held');
 }
 
 console.log('faceFeatureProfileDerive: all assertions passed');

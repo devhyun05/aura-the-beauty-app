@@ -22,6 +22,7 @@ import {shouldEnableFaceReportBackGesture} from '../../../features/face-report/s
 import {FaceAnalysisLoadingScreen} from '../../../features/face-analysis/screens/FaceAnalysisLoadingScreen';
 import {Face3DMeasurementScreen} from '../../../features/face-analysis/screens/Face3DMeasurementScreen';
 import {isUnityMakeupNativeViewSupported} from '../../../features/ar/components/UnityMakeupNativeView';
+import {regenerateAnalysisFitSheet} from '../../../features/ar/services/personalFitLoad';
 import {
   ensureUnityMakeupRunningForStillAnalysis,
   hideUnityMakeupView,
@@ -1098,6 +1099,11 @@ export function FaceAnalysisLoadingRouteScreen({
         if (!isMounted || !report) {
           return;
         }
+
+        // 분석 완료 시마다 "분석 맞춤 핏" 재생성(확장 기획 v0.2 §5-1) — 리포트를
+        // 직접 넘겨 추가 fetch 없이 시트를 만들고 저장한다. 새 분석이면 자동 ★.
+        // 화면 흐름과 무관한 부가 기능이라 fire-and-forget(실패 무해).
+        void regenerateAnalysisFitSheet(report);
 
         const localGoldenMask = preparedGoldenMaskRef.current;
         setSelectedFaceAnalysisReport(
