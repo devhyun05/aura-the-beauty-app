@@ -77,7 +77,7 @@
 
 ## 5. 빌드·디버깅 노하우 (오늘 확립)
 
-- Unity 소스/StreamingAssets 변경 → `scripts/unity/build_ios_unity_framework.sh` 재익스포트 → `pod install` → xcodebuild. **Podfile.lock을 빌드 전에 원복하면 "Check Pods Manifest.lock" 실패** — 원복은 모든 빌드 후에.
+- Unity 소스/StreamingAssets와 네이티브 Pod 입력이 실제로 함께 변경된 전체 Unity 통합 빌드에서만 `scripts/unity/build_ios_unity_framework.sh` 재익스포트 후 `pod install`을 고려한다. Seojin 최소 증분 Release, React Native/TypeScript/backend 변경, 기존 UnityFramework 재사용 시에는 `pod install`을 실행하지 않는다. Pod sandbox mismatch가 나도 자동 재생성하지 말고 임시 변경을 원복한 뒤 정확한 입력 변경을 먼저 확인한다.
 - 밴드 지오메트리는 파이썬 래스터 하네스로 빌드 전 검증 가능(접힘·역행·UV 왜곡을 수치+그림으로 재현). 세션 스크래치 `liner_raster.py` 참조 — 필요하면 repo로 옮길 것.
 - 기기 로그: `pymobiledevice3 syslog live --match aura`(앱 재시작 불필요). 브리지 페이로드는 `<private>` — 값 확인은 RN 컴파일 jest 프로브로.
 - RN만 바뀌면 리빌드 불필요(Metro). 맥 IP가 바뀌면 개발서버 오류 → 리빌드(ip.txt 갱신) 또는 Dev Menu Configure Bundler.
