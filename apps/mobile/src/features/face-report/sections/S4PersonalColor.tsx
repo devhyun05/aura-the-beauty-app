@@ -34,7 +34,11 @@ function DrapeStage({ header, headerColor, stageColor, photo, name, caption }: {
           width: 112, height: 142, borderRadius: 999, overflow: 'hidden',
           borderWidth: 3, borderColor: 'rgba(255,255,255,0.9)',
         }}>
-          <PhotoSlot slot={photo} shape="oval" style={{ width: 112, height: 142 }} />
+          <PhotoSlot
+            slot={{...photo, cropRect: undefined}}
+            shape="oval"
+            style={{width: 112, height: 142}}
+          />
         </View>
         <View style={{ backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: radius.pill, paddingVertical: 4, paddingHorizontal: 10 }}>
           <Text style={[font(10.5, '800'), { color: color.ink }]}>
@@ -489,9 +493,9 @@ export function S4DrapePalette({
         </View>
         <Text style={[font(13, '800'), { color: color.ink }]}>{d.goodTitle}</Text>
         <SwatchRow swatches={d.goodSwatches} selectedName={best.name} onPick={pickBest} />
-        <SelectedColorDetail swatch={best} />
         <Text style={[font(13, '800'), { color: color.ink, marginTop: 2 }]}>{d.badTitle}</Text>
         <SwatchRow swatches={d.badSwatches} selectedName={worst.name} onPick={pickWorst} />
+        <SelectedColorDetail swatch={best} />
         <SelectedColorDetail swatch={worst} />
         <Text style={[font(11.5, '400', 1.6), {
           color: color.muted, borderTopWidth: 1, borderTopColor: color.divider, paddingTop: 11,

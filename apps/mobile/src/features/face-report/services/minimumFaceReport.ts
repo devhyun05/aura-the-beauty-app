@@ -104,7 +104,10 @@ export function buildMinimumFaceReportData(
     s9: null,
     footer: {
       disclaimer: '현재 준비된 항목만 표시하고 있어요.',
-      cta: '',
+      cta:
+        preview.reportId && !preview.errorMessage
+          ? '메이크업 추천 받으러 가기'
+          : '메이크업 추천 준비 중',
     },
   };
 }

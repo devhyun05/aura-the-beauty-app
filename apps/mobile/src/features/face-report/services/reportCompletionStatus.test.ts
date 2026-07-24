@@ -40,7 +40,7 @@ const minimum = resolveReportCompletionStatus(
 );
 expectEqual(
   minimum.compactLabel,
-  '1/3 · 기본 분석 완료 · 얼굴 해석 · 스타일링 분석 진행 중',
+  '1/3 · 기본 분석 완료 · 얼굴·피부 해석 · 스타일 추천 진행 중',
   'minimum report names both independently active generation stages',
 );
 expectEqual(minimum.complete, false, 'minimum report is incomplete');
@@ -66,13 +66,13 @@ const progressive = resolveReportCompletionStatus(
 );
 expectEqual(
   progressive.compactLabel,
-  '2/3 · 기본 분석 · 얼굴 해석 완료 · 스타일링 분석 진행 중',
+  '2/3 · 기본 분석 · 얼굴·피부 해석 완료 · 스타일 추천 진행 중',
   'progressive report shows which sections are already complete',
 );
 expectEqual(progressive.successfulCount, 2, 'progressive report counts successes');
 expectEqual(
   progressive.currentLabel,
-  '스타일링 분석 진행 중',
+  '스타일 추천 진행 중',
   'progressive report names the active work',
 );
 
@@ -169,7 +169,7 @@ const partialFailure = resolveReportCompletionStatus(
 );
 expectEqual(
   partialFailure.compactLabel,
-  '2/3 성공 · 스타일링 분석 실패',
+  '2/3 성공 · 스타일 추천 실패',
   'partial failure uses the selected compact wording',
 );
 expectEqual(

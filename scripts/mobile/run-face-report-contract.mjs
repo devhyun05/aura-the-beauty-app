@@ -39,6 +39,9 @@ const scaffoldSource = source(
 const previewSource = source(
   'apps/mobile/src/features/face-report/screens/FaceAnalysisReportPreviewScreen.tsx',
 );
+const minimumReportSource = source(
+  'apps/mobile/src/features/face-report/services/minimumFaceReport.ts',
+);
 const routesSource = source(
   'apps/mobile/src/app/navigation/routes/faceAnalysisRoutes.tsx',
 );
@@ -75,9 +78,11 @@ requireAll(shareSource, [
 
 requireAll(scaffoldSource, [
   'function ReportCompletionIndicator(',
-  "status.displayState === 'complete'",
-  '{status.successfulCount}/{status.totalCount} 성공',
-  '{status.issueLabel}',
+  'function reportStageStatePresentation(',
+  'status.stages.map(stage =>',
+  '완성된 내용부터 볼 수 있어요',
+  '기본 내용 제공',
+  '생성 실패',
   '보고서 생성 완료',
   'const capturePage = React.useCallback(',
   'prepareGoldenMaskForCapture',
@@ -91,6 +96,21 @@ requireContract(
   !scaffoldSource.includes('function ReportCompletionStepper('),
   'report progress must use the compact non-spinner status treatment',
 );
+requireAll(previewSource, [
+  'const recommendationReportId =',
+  'report?.id ??',
+  'minimumPreview?.reportId',
+  'onPressProducts(recommendationReportId)',
+], 'progressive report recommendation CTA');
+requireAll(minimumReportSource, [
+  "preview.reportId && !preview.errorMessage",
+  "'메이크업 추천 받으러 가기'",
+  "'메이크업 추천 준비 중'",
+], 'minimum report recommendation CTA label');
+requireAll(scaffoldSource, [
+  'accessibilityState={{disabled: !onPress}}',
+  'disabled={!onPress}',
+], 'recommendation CTA disabled semantics');
 const goldenMaskSource = source(
   'apps/mobile/src/features/face-report/components/GoldenMaskCard.tsx',
 );
@@ -215,3 +235,30 @@ for (const required of [
   }
 }
 console.log('region report visual hierarchy contract passed');
+
+const personalColorSource = readFileSync(
+  join(featuresDir, 'face-report/sections/S4PersonalColor.tsx'),
+  'utf8',
+);
+requireContract(
+  personalColorSource.includes('slot={{...photo, cropRect: undefined}}'),
+  'personal-color drape portraits must preserve the source face aspect ratio',
+);
+const goodSwatchesIndex = personalColorSource.indexOf(
+  '<SwatchRow swatches={d.goodSwatches}',
+);
+const badTitleIndex = personalColorSource.indexOf('{d.badTitle}');
+const badSwatchesIndex = personalColorSource.indexOf(
+  '<SwatchRow swatches={d.badSwatches}',
+);
+const bestDetailIndex = personalColorSource.indexOf(
+  '<SelectedColorDetail swatch={best}',
+);
+requireContract(
+  goodSwatchesIndex >= 0 &&
+    badTitleIndex > goodSwatchesIndex &&
+    badSwatchesIndex > badTitleIndex &&
+    bestDetailIndex > badSwatchesIndex,
+  'personal-color good and avoid swatches must stay together directly below the drape photos',
+);
+console.log('personal-color drape layout contract passed');

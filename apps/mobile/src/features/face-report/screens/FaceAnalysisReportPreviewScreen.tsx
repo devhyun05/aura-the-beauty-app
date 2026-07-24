@@ -246,6 +246,9 @@ export function FaceAnalysisReportPreviewScreen({
   }, [reloadBodyProfile]);
 
   const profileName = loadState.status === 'success' ? loadState.profile?.name : undefined;
+  const recommendationReportId =
+    report?.id ??
+    (!minimumPreview?.errorMessage ? minimumPreview?.reportId : undefined);
 
   // 상세 보고서의 상단 더보기는 공유·저장·추천 제품만 제공한다.
   // 삭제는 보고서 목록 카드의 점점점 메뉴에서만 수행한다.
@@ -306,8 +309,8 @@ export function FaceAnalysisReportPreviewScreen({
         onGoldenMaskInteractionChange={onGoldenMaskInteractionChange}
         onMore={report ? handleMore : undefined}
         onPressCta={
-          report && onPressProducts
-            ? () => onPressProducts(report.id)
+          recommendationReportId && onPressProducts
+            ? () => onPressProducts(recommendationReportId)
             : undefined
         }
         onResurvey={() => setIsBodySurveyOpen(true)}
