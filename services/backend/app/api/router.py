@@ -23,6 +23,7 @@ from app.api import (
   search_events,
   search_sessions,
   users,
+  web_trial,
 )
 
 
@@ -49,3 +50,4 @@ api_router.include_router(ar.router)
 api_router.include_router(consulting.router)
 api_router.include_router(consulting_partner.router)
 api_router.include_router(consulting_realtime.router)
+api_router.include_router(web_trial.router)
