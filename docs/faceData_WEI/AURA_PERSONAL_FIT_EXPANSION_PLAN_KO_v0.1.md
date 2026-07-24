@@ -1,8 +1,9 @@
 # AURA 맞춤핏 확장 기획 v0.2 — 요인 전수 반영·분석별 재생성·레인 일원화
 
-상태: 기획 확정(2026-07-24 대화 합의). 구현 전 — 단계별 착수 순서는 §8.
+상태: 기획 확정(2026-07-24 대화 합의). 구현 전 — 단계별 착수 순서는 §8. 자동 δ 안전 계층은 §11(2026-07-25 신설).
 작성: 2026-07-24, 저장소 정찰 기반. 선행 문서: [AR맞춤핏 계약 v0.2](AR맞춤핏-계약초안-v0.md), [테크닉 테이블 v0](AURA_MAKEUP_TECHNIQUE_TABLE_KO_v0.md), [특징 프로파일 계획 v0.1](AURA_FACE_FEATURE_PROFILE_PLAN_KO_v0.1.md).
 v0.1→v0.2 개정(2026-07-24, dev 병합 5d8e986a9 반영): 눈썹 `browThickness`(전체 굵기)·`browLength`(꼬리 방향 가로 길이) 축 신설됨 — 핏 소비를 위해 **gold 승격 결정**(§4-1, 룩/핏 경계 논점 기록). 눈썹 규칙에 두 축 배선(§3-3). "아이라이너 길이"는 기존 gold `eyelinerWingLength`+하부 테일 축으로 충족 — 신설 불요 확인.
+v0.2 보강(2026-07-25, 자동 δ 안전): 실기기에서 두 증상 발견 — ① 새 분석이 사용자가 켠 수동 핏 시트의 ★를 빼앗음, ② 자동 δ에 의미적 상한이 없어 언더아이 블러셔가 눈두덩으로 올라가는 등 해부학 침범. 다중 에이전트 진단으로 원인 확정 후 자동 δ 안전 계층 신설 — §11.
 
 **1단계 구현 완료(2026-07-24)** — 구현 중 확정된 정정 4건: ① `browThickness` gold 승격은 **보류**(lookStore `migrateBrowCoverageFitSheets`가 핏 룰의 browThickness를 레거시로 간주해 로드마다 이관·삭제 — 마이그레이션 버전 가드 은퇴가 선행 조건; `browLength`만 승격). ② 얼굴형·블러셔 **각도** 규칙(C-2~5)은 절대 목표라 δ 도메인과 부정합 — 위치·퍼짐 성분만 핏 규칙으로, 각도·마스크 선택은 레시피 층으로 이관(§3-1). ③ W-3′는 intensity 축이 비-gold라 `eyelinerThickness`를 대비 프록시로 구현. ④ `eyeScale`은 기존 저장 지표 합성(eyeWidthRatio×interCanthalRatio)으로 파생 — 신규 캡처 코드 불요, 과거 리포트에도 소급. E-9(눈사이 가까움)는 그라데이션 시작점이 핏 축이 아니라 미구현 — E-10과 함께 3단계 `eyelinerInnerExtension`에서.
 목적: 세로3분할(상·중·하안부) 개별 밴드, 꼬막눈, 돌출·함몰눈, 눈썹-눈 거리, 눈꼬리 개폐 등 요인 전수를 맞춤핏에 반영하고, 분석할 때마다 핏이 새로 생성되게 한다.
@@ -167,3 +168,24 @@ dev 병합(5d8e986a9)으로 `browThickness`(0.75~1.6)·`browLength`(0.65~1.6, �
 
 - E-2 올라간 눈꼬리, L-3 입 폭, E-6 하안검 처짐 구분 처방, C-6 광대 랜드마크 규칙 — 테이블 §3 기각·공백 기록 존중, 본 확장에서 제외.
 - 모든 δ 크기는 여전히 실기기 슬라이더 튜닝 — 문헌은 방향·부호까지만.
+
+## 11. 자동 δ 안전 계층 (2026-07-25 신설)
+
+실기기 증상 2건을 다중 에이전트 진단(재생성 배선·적용 의미론·필드 범위·Unity 렌더 4영역 병렬 + 회의적 반증)으로 원인 확정하고 고쳤다.
+
+### 11-1. 자동 ★가 사용자 메인 시트를 빼앗던 문제 (확정·수정)
+- **원인**: `persistAnalysisFitSheet`가 새 분석(sourceReportId 변경)일 때 이전 `store.mainId`를 보지 않고 무조건 `fit-analysis`를 메인으로 세웠다 — 사용자가 자기 수동 핏 시트를 ★로 켜뒀어도 새 분석이 그 선택을 빼앗아, 사용자 눈엔 "기존 핏이 덮어씌워진" 것으로 보였다(mainId는 단일 선택 + 미적용시 null).
+- **수정**([personalFitLoad.ts](../../apps/mobile/src/features/ar/services/personalFitLoad.ts)): 자동 ★는 **메인 자리가 비어 있을 때만**(`store.mainId == null || === fit-analysis`) 들어간다. §5-4 정정 — 자동 ON의 대상은 "핏 미적용 상태"이지 "사용자의 다른 선택"이 아니다.
+
+### 11-2. 자동 δ 의미적 상한 부재 (확정·수정)
+- **원인**: `applyFitToLayers`의 필드 [min,max] 클램프만으로는 부족 — **슬라이더 범위 자체가 해부학 안전선을 넘는다**. 언더아이 블러셔 마스크는 lift 0에서 이미 눈 개구부(캐노니컬 v0.594)에 닿아, 슬라이더 최대 +0.08이면 마스크가 눈두덩~눈썹(v0.72)까지 올라간다("눈 위 섀도"). 또 판정 소스가 독립인 규칙들이 같은 필드에 누적된다 — `eyelinerLowerTailTrace`는 E-7(둥근 눈 +0.55)+E-K1(작은 눈 +0.4)이 "작고 둥근 눈"에서 함께 터져 0.95(슬라이더 95%)에 달해 룩 값을 삼킨다. `eyeshadowHeight`도 3규칙(hooded·openness low·scale low) 독립 동시 발동 +0.3.
+- **수정**([autoFitBudget.ts](../../apps/mobile/src/features/ar/services/autoFitBudget.ts)): 부위별 합산 δ에 **필드별·방향별 예산(AUTO_FIT_BUDGET)**을 씌우는 순수 계층 신설. `buildPersonalFitBaseDeltas`가 `toFitEntries` 직후 `clampAutoFitEntries` 통과. 상한은 Unity 렌더 좌표 계산(FaceMakeup.shader·MaskGenerator·IrisRenderer·LowerLid) 기반 — 예: 블러셔 up 0.02/down 0.05(비대칭), tailTrace 0.55·tailLen 0.45(스택 봉인, 단일 규칙 효과는 보존), eyeshadowHeight 0.2. **눈-눈썹 간격 좁음**(`brow.eyeGap.band==='low'`)이면 눈썹 침범 위험이 커져 eyeshadowHeight 상한을 0.1로 재차등. 수동 핏은 이 경로를 안 타므로 WYSIWYG 불변. 계약 러너 테스트 `autoFitBudget.test.ts` 신설.
+
+### 11-3. 반박된 가설 (재유입 방지 기록)
+- 캐스케이드 덮어쓰기: `resolveLeafFit`은 필드별 first-match라 **다른 필드를 절대 지우지 않는다** — "새 축이 기존 축을 덮어쓴다"의 원인이 아니다(실코드 실행 확인). 실제 체감 원인은 11-1(★ 강탈)과 절대값 축 스택(11-2).
+- `_BlushAffine.dy` 이중 누적(lift 0.15+dy 0.15=0.30): `REGION_FIT_TRAITS.blush`가 positionY를 affine이 아닌 `blushLift`로 배정해 블러셔 dy·sy는 구조적으로 0 강제 — 계약 밖 수제 페이로드로만 가능, 라이브 경로 도달 불가.
+- blushShape 전환 시 lift/spread 시드: 카탈로그 값이 전부 0이라 캡 우회 불가 + "새 마스크가 옛 배치 안 물려받기"는 의도된 계약(테스트 존재).
+
+### 11-4. 미해결 (후속 — 자동 채널 분리 전제)
+- **shape 의존 완전 봉인**: 언더아이 등 잎의 `blushShape`를 알아야 하는 봉인(undereye면 up δ=0)은 순수 계층이 프로파일만 봐서 불가. 지금은 up 상한 0.02로 근사(0.08→0.02, "눈두덩 섀도"의 실질 원인 제거) — 완전 봉인은 자동/수동 채널 분리(계약 baseDeltas 경로 부활) 후 apply 층에서. C-1(중안부 김→고배치)의 완전한 시각 강도도 이 봉인 후에야 안전하게 키운다.
+- **절대값 축 fill 시맨틱**: fallback 0 축(tailTrace 등)에서 "룩이 값을 정했으면 δ를 더하지 말고 채우기(max)"도 자동 채널 분리가 전제 — 지금은 스택 상한으로 완화만. 룩이 해당 축을 명시하는 경우가 드물어 실사용 영향은 낮음.

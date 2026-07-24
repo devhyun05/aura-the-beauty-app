@@ -14,6 +14,7 @@ import type {FaceGeometryMetrics} from '../../face-geometry/types';
 import type {FaceFeatureObservations} from '../../../shared/contracts/faceFeatureProfile';
 import {toFitEntries, type StyleLane} from '../../../shared/contracts/personalFitProfile';
 import {buildFaceFeatureProfile} from '../../face-analysis/services/faceFeatureProfileBuilder';
+import {clampAutoFitEntries} from './autoFitBudget';
 import {deriveFitDeltas} from './deriveFitDeltas';
 
 // [레거시] always-on 기저(baseDeltas) 경로의 전역 스케일. 이제 분석 핏은 저장된
@@ -110,5 +111,11 @@ export function buildPersonalFitBaseDeltas(
     deltaScale,
     sourceReportId: report.id,
   });
-  return toFitEntries(fit);
+  // 자동 δ 안전 예산(2026-07-25) — 부위별 합산 δ를 해부학·설계 안전선으로 자른다.
+  // 필드 [min,max] 클램프(applyFitToLayers)만으로는 슬라이더 범위 자체가 눈 침범을
+  // 허용하므로, 그 앞단에서 자동 δ를 봉인한다. 눈-눈썹 간격 좁음은 눈썹 침범 위험을
+  // 키워 eyeshadowHeight 상한을 추가로 조인다.
+  return clampAutoFitEntries(toFitEntries(fit), {
+    narrowBrowGap: profile.brow.eyeGap.band === 'low',
+  });
 }

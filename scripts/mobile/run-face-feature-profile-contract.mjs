@@ -20,6 +20,7 @@ const entries = [
   'features/face-report/visualWeightPresentation.test.ts',
   'features/face-report/regionFeatureDescriptors.test.ts',
   'features/ar/services/deriveFitDeltas.test.ts',
+  'features/ar/services/autoFitBudget.test.ts',
   'features/ar/services/personalFitService.test.ts',
   'features/face-report/styleLaneRecommendations.test.ts',
 ];
@@ -61,6 +62,9 @@ run(process.execPath, [
 ]);
 run(process.execPath, [
   join(outDir, 'features/ar/services/deriveFitDeltas.test.js'),
+]);
+run(process.execPath, [
+  join(outDir, 'features/ar/services/autoFitBudget.test.js'),
 ]);
 run(process.execPath, [
   join(outDir, 'features/ar/services/personalFitService.test.js'),

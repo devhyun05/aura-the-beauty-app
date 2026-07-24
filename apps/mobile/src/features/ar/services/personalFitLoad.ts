@@ -7,9 +7,10 @@
 //   받아 fetch 없이 시트를 만들고 저장한다(분석 플로우 완료 지점에서 호출).
 // - AR 진입은 화해(reconcile)로 강등: 저장 시트의 sourceReportId가 최신 리포트와
 //   같으면 재생성/상세 fetch를 생략한다.
-// - 자동 ★(§5-4): "새 분석"(sourceReportId 변경)일 때만 mainId를 분석 시트로
-//   설정한다. 같은 리포트에서 사용자가 껐다면(mainId 이동/해제) 다시 켜지 않는다 —
-//   새 분석 = 새 핏이므로 그때 다시 자동 ON.
+// - 자동 ★(§5-4): "새 분석"(sourceReportId 변경)이고 메인 자리가 비어 있을
+//   때만(미적용이거나 이미 분석 시트) mainId를 분석 시트로 설정한다. 같은
+//   리포트 재화해는 사용자의 켬/끔을 존중하고, 사용자가 자기 시트를 메인으로
+//   켜뒀다면 새 분석도 그 선택을 빼앗지 않는다.
 //
 // 실패는 조용히 무해(기존 저장물 유지) — 개인 핏은 부가 기능이라 AR 필터
 // 자체를 깨지 않는다.
@@ -74,18 +75,24 @@ async function persistAnalysisFitSheet(
   }
 
   const isNewReport = !prev || prev.sourceReportId !== sheet.sourceReportId;
+  // 자동 ★는 "비어 있는 자리"에만 들어간다. 사용자가 자기 시트를 메인으로
+  // 켜둔 상태면 새 분석이 그 선택을 빼앗지 않는다 — 새 분석 핏은 라이브러리에
+  // 들어가 있으니 사용자가 직접 고르면 된다(§5-4 정정: 자동 ON의 대상은
+  // "핏 미적용 상태"이지 "사용자의 다른 선택"이 아니다).
+  const mainSlotFree =
+    store.mainId == null || store.mainId === ANALYSIS_FIT_SHEET_ID;
+  const autoMain = isNewReport && mainSlotFree;
   const sheets = [
     ...store.sheets.filter(s => s.id !== ANALYSIS_FIT_SHEET_ID),
     sheet as unknown as FitSheet,
   ];
   const next: FitSheetsStore = {
     sheets,
-    // 자동 ★: 새 분석에서만. 같은 리포트 재화해는 사용자의 켬/끔 선택을 존중.
-    mainId: isNewReport ? ANALYSIS_FIT_SHEET_ID : store.mainId,
+    mainId: autoMain ? ANALYSIS_FIT_SHEET_ID : store.mainId,
   };
   await saveFitSheets(next);
   console.info('[aura:personal-fit] analysis-fit-sheet:persisted', {
-    autoMain: isNewReport,
+    autoMain,
     regions: sheet.entries.map(e => e.region),
     reportId: sheet.sourceReportId,
     styleLane: sheet.styleLane,
