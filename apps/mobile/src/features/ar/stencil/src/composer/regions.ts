@@ -888,6 +888,15 @@ export type TextureAction = 'brow' | 'eyeliner' | 'lip' | 'blush' | 'aegyo';
  *  setRegionMask region 값과 1:1. */
 export type MaskRegion = 'blush' | 'highlighter' | 'contour' | 'eyeshadow' | 'eyeshadowLower';
 
+/** 룩 정의가 참조하는 카탈로그 마스크(§16) — 부위별 스텐실 URI. 시스템/디자이너 룩이
+ *  잎에 선언하면(LeafDef.maskRef) 룩 적용 시 App이 세션 마스크 경로에 주입해 기존
+ *  reconcileMasks 화해 경로를 그대로 태운다(사용자 직접 임포트가 룩 참조보다 우선).
+ *  파일은 저장 스냅샷 미포함 규약 유지 — 마커(appliedKey)만 params로 왕복한다. */
+export interface LookMaskRef {
+  region: MaskRegion;
+  uri: string;
+}
+
 /** 질감 맵 임포트 대상(#22, 에셋 3층의 ③) — 픽셀별 "빛 반응 지도"로 부위 마감(광)을
  *  변조. 컬러 아트(TextureAction="무엇을")·존 마스크(MaskRegion="어디에")와 구분되는
  *  "어떻게 빛나는지". 대상 = 마감 세부(#21)를 여는 3부위(립·아이섀도·블러셔). App의

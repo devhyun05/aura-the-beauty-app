@@ -192,16 +192,16 @@ def under_smoky_deep(u: float, w: float) -> float:
     """딥 스모키 언더 — 진하고 깊게, 바깥 가중."""
     wfall = 1.0 - smoothstep(0.20, 0.90, w)
     outer_gain = 0.75 + 0.25 * smoothstep(0.4, 0.9, u)
-    hin = smoothstep(0.0, 0.10, u)
-    hout = 1.0 - smoothstep(0.92, 1.0, u)
+    hin = smoothstep(0.0, 0.20, u)
+    hout = 1.0 - smoothstep(0.75, 1.0, u)
     return wfall * outer_gain * hin * hout
 
 
 def under_slim(u: float, w: float) -> float:
     """슬림 언더 — lash 바로 밑 얇은 섀도 라인."""
     wfall = 1.0 - smoothstep(0.05, 0.28, w)
-    hin = smoothstep(0.0, 0.12, u)
-    hout = 1.0 - smoothstep(0.90, 1.0, u)
+    hin = smoothstep(0.0, 0.18, u)
+    hout = 1.0 - smoothstep(0.78, 1.0, u)
     return wfall * hin * hout
 
 
@@ -211,21 +211,22 @@ def under_center(u: float, w: float) -> float:
 
 
 # 풀 커버 패밀리의 아래짝 — 위 eye_full_*와 같은 접미사끼리 세트.
+# 좌우 페더는 폭의 ≥20%로 — 좁으면(≈8%) 밴드 사각 경계가 그대로 보인다(뚝 끊김).
 
 
 def under_full_wash(u: float, w: float) -> float:
     wfall = 1.0 - smoothstep(0.10, 0.60, w)
-    return 0.9 * wfall * smoothstep(0.0, 0.12, u) * (1.0 - smoothstep(0.88, 1.0, u))
+    return 0.9 * wfall * smoothstep(0.0, 0.22, u) * (1.0 - smoothstep(0.75, 1.0, u))
 
 
 def under_full_smoky(u: float, w: float) -> float:
     wfall = 1.0 - smoothstep(0.15, 0.80, w)
     outer_gain = 0.75 + 0.25 * smoothstep(0.4, 0.9, u)
-    return 0.95 * wfall * outer_gain * smoothstep(0.0, 0.10, u) * (1.0 - smoothstep(0.92, 1.0, u))
+    return 0.95 * wfall * outer_gain * smoothstep(0.0, 0.22, u) * (1.0 - smoothstep(0.75, 1.0, u))
 
 
 def under_full_gradient(u: float, w: float) -> float:
-    return (1.0 - smoothstep(0.05, 0.50, w)) * smoothstep(0.0, 0.08, u) * (1.0 - smoothstep(0.92, 1.0, u))
+    return (1.0 - smoothstep(0.05, 0.50, w)) * smoothstep(0.0, 0.20, u) * (1.0 - smoothstep(0.75, 1.0, u))
 
 
 def under_full_halo(u: float, w: float) -> float:
@@ -239,15 +240,15 @@ def under_full_tail(u: float, w: float) -> float:
 def under_deep_wide(u: float, w: float) -> float:
     """딥 와이드 언더 — 밴드 바닥까지 넓게(더 아래로는 앱의 핏 높이 축으로 스트레치)."""
     wfall = 1.0 - smoothstep(0.55, 1.0, w)
-    hin = smoothstep(0.0, 0.10, u)
-    hout = 1.0 - smoothstep(0.90, 1.0, u)
+    hin = smoothstep(0.0, 0.20, u)
+    hout = 1.0 - smoothstep(0.72, 1.0, u)
     return wfall * hin * hout
 
 
 def under_full_wide(u: float, w: float) -> float:
     """전체 와이드(아래) — eye_full_wide와 세트, 깊게 넓게."""
     wfall = 1.0 - smoothstep(0.50, 0.95, w)
-    return wfall * smoothstep(0.0, 0.08, u) * (1.0 - smoothstep(0.90, 1.0, u))
+    return wfall * smoothstep(0.0, 0.20, u) * (1.0 - smoothstep(0.72, 1.0, u))
 
 
 # ── 연장(§16b 와이드) — 가로 2:1(512x256) 마스크. U∈[0,2]: 좌측 절반=눈(0..1),

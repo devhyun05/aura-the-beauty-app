@@ -215,6 +215,17 @@ Shader "ARMakeup/Lip"
             #define LIP_BASE_FLOOR 0.2    // 베이스 중앙 그라데: 코너 최소 알파
             #define LIP_TIDY_HI 0.35      // 베이스 외곽 정리: uv.x(반경) 이 값까지 페이드인
             #define LIP_DOT_LO 0.4        // 글로스 중앙 도트: centerness 이상만 발광(쥬시 도트)
+            // ── 립글로스 유리알(V2) — '흰 물감 넓은 가산'(기름막)을 클리어코트 모델로 대체.
+            //    넓은 광은 블러 luma(주름 반점 제거), 정점은 고주파 잔차 글린트(유리알 점광),
+            //    코트 아래는 평활+딥닝(푸석 주름 소거·투명한 깊은 발색). 전부 실기기 튜닝 대상.
+            #define GLOSS_BLUR_TAP    2.5   // 블러 피드 탭 간격(텍셀) — 입술 주름 주파수보다 넓게
+            #define GLOSS_WET_SMOOTH  0.85  // 젖은 평활 게인(강도 1에서 피드 주름 스무딩 비율)
+            #define GLOSS_DEEPEN      0.35  // 젖은 딥닝(제곱 보간) — 코트 아래 발색 어둡고 진하게
+            #define GLOSS_TINT_GAIN   0.45  // 글로스 틴트색 광 게인(넓은 층 — 기름막 안 되게 하향)
+            #define GLOSS_SHEEN_GAIN  0.55  // 아랫입술 중앙 소프트 광 코어(유리 곡면 정반사)
+            #define GLOSS_GLINT_GAIN  1.10  // 고주파 잔차 글린트 게인(유리알 정점, 작고 예리)
+            #define GLOSS_GLINT_LO    0.55  // 글린트 luma 하한
+            #define GLOSS_GLINT_HI    0.80  // 글린트 luma 상한(이상 풀 게인)
 
             struct appdata
             {
@@ -352,6 +363,27 @@ Shader "ARMakeup/Lip"
 
                 float luma = dot(feed, fixed3(0.299, 0.587, 0.114));
 
+                // ── 립글로스 유리알(V2) 공용 항 — 5탭 크로스 블러 피드. 원시 luma로 광을
+                // 내면 입술 주름의 미세 하이라이트가 전부 증폭돼 반점광(기름칠)이 되므로,
+                // 넓은 광·표면 평활은 블러 luma로, 유리알 정점은 고주파 잔차로 분리한다.
+                // 글로스 강도 0이면 wetSmooth=0 → lumaWet=luma·이후 가산 전부 0(하위호환).
+                // _CameraFeed_TexelSize=0(그랩 텍스처 특성)이면 탭이 겹쳐 feedBlur=feed로
+                // 안전 축약(평활·글린트만 무변조, 딥닝·광은 유효).
+                float glossZone = LipGlossShapeZone(_LipGlossShape, i.uv.y, i.lipUpper);
+                float2 gduv = _CameraFeed_TexelSize.xy * GLOSS_BLUR_TAP;
+                // float 누적 — fixed는 일부 GPU에서 범위 ±2라 5탭 합(최대 5.0)이 오버플로.
+                float3 feedBlur = (float3(feed)
+                    + tex2D(_CameraFeed, saturate(screenUV + gduv)).rgb
+                    + tex2D(_CameraFeed, saturate(screenUV - gduv)).rgb
+                    + tex2D(_CameraFeed, saturate(screenUV + float2(gduv.x, -gduv.y))).rgb
+                    + tex2D(_CameraFeed, saturate(screenUV + float2(-gduv.x, gduv.y))).rgb) * 0.2;
+                float lumaBlur = dot(feedBlur, fixed3(0.299, 0.587, 0.114));
+                // 젖은 평활 커버리지 — 글로스 강도·경계·존 비례. 틴트/베이스 발색 luma에도
+                // 반영해 코트 아래 입술 표면 자체가 매끈해 보이게 한다(푸석 주름 소거).
+                float wetSmooth = saturate(_LipGlossIntensity * GLOSS_WET_SMOOTH)
+                                * edgeGloss * glossZone;
+                float lumaWet = lerp(luma, lumaBlur, wetSmooth);
+
                 // ── 합성 순서: 피드 → ① 베이스 커버 → ② 메인 틴트 → ③ Finish → ④ 글로스.
                 // 각 레이어를 "피드 위 반투명 오버"로 스택하고, 결과를 SrcAlpha 한 번으로
                 // 내보내기 위해 합성 알파 A(레이어 합집합)와 프리멀티 색을 직접 계산한다.
@@ -373,23 +405,24 @@ Shader "ARMakeup/Lip"
                 float lipTintLuma = dot(lipBase, fixed3(0.299, 0.587, 0.114));
                 float lipDeepen = _LipIntensity * saturate((lipTintLuma - 0.45) * 2.2);
                 lipBase = lerp(lipBase, lipBase * 0.80, lipDeepen * 0.5);
-                fixed3 textureBody = lipBase * PigmentBase(luma, 1.5, 0.15);
-                textureBody = TexBody(textureBody, luma, lipTexBody);
-                fixed3 pigment = TexBody(textureBody, luma, lnTexB); // 제형 발색 body(라이너, 메인 립 0=무변조)
+                // 유리알(V2): 발색 luma는 lumaWet(글로스 시 평활) — 코트 아래 주름 소거.
+                fixed3 textureBody = lipBase * PigmentBase(lumaWet, 1.5, 0.15);
+                textureBody = TexBody(textureBody, lumaWet, lipTexBody);
+                fixed3 pigment = TexBody(textureBody, lumaWet, lnTexB); // 제형 발색 body(라이너, 메인 립 0=무변조)
                 // 질감 맵(#22) — 링 uv(x=반경)로 광 게인·시머 밀도를 픽셀별 변조.
                 // 맵 없으면(_HasFinishMap=0) 계수 1.0 → 스칼라 그대로(하위호환).
                 fixed4 lipFinishMap = tex2D(_LipFinishMap, float2(i.uv.x, 0.0));
                 float lipGlossGain = _LipGlossGain;
                 float lipShimmerDensity = _LipShimmerDensity;
                 ModulateFinishByMap(lipFinishMap, _LipHasFinishMap, lipGlossGain, lipShimmerDensity);
-                pigment = ApplyFinish(pigment, luma, screenUV, _LipFinish, _LipShimmer,
+                pigment = ApplyFinish(pigment, lumaWet, screenUV, _LipFinish, _LipShimmer,
                                       _LipGlossLo, lipGlossGain, _LipShimmerSize,
                                       lipShimmerDensity, _LipMatte, _LipSheen,
                                       screenUV, _PearlLightGain); // A15 방향 게인(맨얼굴 피드 루마 그라디언트)
-                pigment = ApplyLipTextureSurface(pigment, textureBody, luma, i.uv, lipTexGrain, lipTexSheen, lipTexSpecLo, lipTexSpecGain);
+                pigment = ApplyLipTextureSurface(pigment, textureBody, lumaWet, i.uv, lipTexGrain, lipTexSheen, lipTexSpecLo, lipTexSpecGain);
                 // 재질 아키타입(벨벳/메탈/홀로) — matType=0 또는 강도=0이면 pigment 그대로.
                 // 립은 법선 미계산 → 정면 기본값(0,0,1). (추후 립 메시 법선 시 대체)
-                pigment = ApplyMaterial(pigment, luma, screenUV, i.vnormal, _LipMaterial, _LipMaterialStrength);
+                pigment = ApplyMaterial(pigment, lumaWet, screenUV, i.vnormal, _LipMaterial, _LipMaterialStrength);
                 pigment = ApplyGrain(pigment, float2(i.uv.x, 0.0));   // 매트 파우더 입자감(전역, 0=무변조)
                 pigment = TexGrain(pigment, float2(i.uv.x, 0.0), lnTexG); // 제형 그레인(라이너, 메인 립 0=무변조)
 
@@ -397,11 +430,11 @@ Shader "ARMakeup/Lip"
                 // 베이스립 template(16) 시드 번들. -1=무변조, 0=크림 1=스틱.
                 float lbTexE, lbTexG, lbTexC, lbTexB;
                 TexBundleFromEnum(16.0, _LipBaseTexture, lbTexE, lbTexG, lbTexC, lbTexB);
-                fixed3 baseTone = _LipBaseColor.rgb * PigmentBase(luma, 1.5, 0.15);
-                baseTone = TexBody(baseTone, luma, lbTexB); // 제형 발색 body(베이스립)
+                fixed3 baseTone = _LipBaseColor.rgb * PigmentBase(lumaWet, 1.5, 0.15);
+                baseTone = TexBody(baseTone, lumaWet, lbTexB); // 제형 발색 body(베이스립)
                 // 베이스립 마감 — 메인 립과 독립(0=새틴=무변형). 립 메시 uv가 1D(반경)라
                 // 스파클 좌표는 screenUV(메인 립 finish와 동일 규약), 시머 게인은 립 공용 _LipShimmer.
-                baseTone = ApplyFinish(baseTone, luma, screenUV, _LipBaseFinish, _LipShimmer,
+                baseTone = ApplyFinish(baseTone, lumaWet, screenUV, _LipBaseFinish, _LipShimmer,
                                        0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
                 baseTone = TexGrain(baseTone, float2(i.uv.x, 0.0), lbTexG); // 제형 그레인(베이스립)
 
@@ -425,7 +458,7 @@ Shader "ARMakeup/Lip"
                                    + abs(_LipTexCoverage) + abs(_LipTexBody);
                 if (lipTexCustom > 1e-5)
                 {
-                    pigment = TexBody(pigment, luma, _LipTexBody);
+                    pigment = TexBody(pigment, lumaWet, _LipTexBody);
                     pigment = TexGrain(pigment, float2(i.uv.x, 0.0), _LipTexGrain);
                     aTint = TexEdge(TexCoverage(aTint, _LipTexCoverage), _LipTexEdge);
                 }
@@ -444,39 +477,47 @@ Shader "ARMakeup/Lip"
                 float A = 1.0 - (1.0 - aTint) * (1.0 - aBase);
                 fixed3 premult = pigment * aTint + (1.0 - aTint) * aBase * baseTone;
 
-                // ④ 립글로스(맨 위) — 마감과 독립된 가산 광. 프리멀티 색에 직접 더한다.
-                // A는 안 올려 목적지 피드가 살아있으므로, 클리어 글로스 단독(틴트·베이스 0)도
-                // feed 위에 밝힘으로 얹힌다(SrcAlpha였다면 검정 위 블렌드로 오히려 어두워짐 —
-                // 적대 리뷰 confirmed). 강도 0이면 무가산 → 기존과 동일.
+                // ④ 립글로스(맨 위) — 유리알 클리어코트(V2). 종전 '원시 luma 문턱 넓은 흰
+                // 가산'은 주름 하이라이트를 전부 증폭해 기름막·반점광이 됐다. 대체 모델:
+                //    (a) 젖은 평활+딥닝 언더코트 — 틴트 아래·피드 위(언더 컴포짓)에 블러 피드
+                //        를 깔아 주름 요철(푸석함)을 지우고, 제곱 보간으로 살짝 어둡고 진하게
+                //        (젖은 표면은 깊어 보인다 = 투명한데 또렷한 발색).
+                //    (b) 글로스 틴트색 광 — 블러 luma 문턱(주름 반점 없는 매끈한 곡면광), 게인 하향.
+                //    (c) 소프트 코어 — 아랫입술 중앙 가우시안(유리 곡면의 넓은 정반사).
+                //    (d) 유리알 글린트 — 고주파 잔차(luma−blur) 정점만 예리하게(젖은 유리 점광).
+                // 프리멀티 가산이라 클리어 글로스 단독(틴트·베이스 0)도 feed 위에 유효(SrcAlpha
+                // 였다면 검정 위 블렌드로 어두워짐 — 적대 리뷰 confirmed). 강도 0이면 wetSmooth·
+                // glossAmt·wet 전부 0 → 기존 픽셀 동일(하위호환). 계수는 실기기 튜닝 대상.
                 // 립글로스 template(18) 시드 번들. -1=무변조, 0=글로스 1=오일 2=플럼퍼.
                 float lgTexE, lgTexG, lgTexC, lgTexB;
                 TexBundleFromEnum(18.0, _LipGlossTexture, lgTexE, lgTexG, lgTexC, lgTexB);
-                float glossAmt = edgeGloss * smoothstep(_GlossLumaLo, 1.0, luma) * _LipGlossIntensity;
+                // (a) 언더 컴포짓 — 남은 (1−A)만 채우므로 틴트/베이스 발색은 안 가린다.
+                float3 wetTone = lerp(feedBlur, feedBlur * feedBlur, GLOSS_DEEPEN);
+                premult += wetTone * wetSmooth * (1.0 - A);
+                A += wetSmooth * (1.0 - A);
+                // (b) 틴트색 광 — 블러 luma 문턱. 모양 축 W4(립글로스 존)는 위 glossZone 공용.
+                float glossAmt = edgeGloss * smoothstep(_GlossLumaLo, 1.0, lumaBlur) * _LipGlossIntensity;
                 glossAmt = TexEdge(TexCoverage(saturate(glossAmt), lgTexC), lgTexE); // 제형 커버·엣지(글로스)
-                // 모양 축 W4(립글로스 존) — 0=전체면 zone 1(바이트 동일). 라이너 인스턴스는
-                // _LipGlossShape 미설정(0)+글로스 강도 0이라 무영향.
-                glossAmt *= LipGlossShapeZone(_LipGlossShape, i.uv.y, i.lipUpper);
+                glossAmt *= glossZone;
                 // 립글로스 마감 — 가산량(glossAmt)은 유지하고 글로스 틴트색만 마감 변조
                 // (0=새틴=무변형, 하위호환). 매트=톤다운·시머=펄 글로스. 제형 body는 색 발색.
-                fixed3 glossPig = ApplyFinish(TexBody(_LipGlossColor.rgb, luma, lgTexB), luma, screenUV, _LipGlossFinish,
+                fixed3 glossPig = ApplyFinish(TexBody(_LipGlossColor.rgb, lumaBlur, lgTexB), lumaBlur, screenUV, _LipGlossFinish,
                                               _LipShimmer, 0, 0, 0, 0, 0, 0, screenUV, _PearlLightGain);
                 glossPig = TexGrain(glossPig, float2(i.uv.x, 0.0), lgTexG); // 제형 그레인(글로스)
-                premult += glossPig * glossAmt;
-                // ── 물광(젤리/글래스) — '흰 물감 가로줄'이 아니라 젖은 반사 "질감"을 낸다.
-                //    (a) 실제 카메라 하이라이트 증폭(자연스러운 젖은 반사, 빛 따라 이동)
-                //    (b) 아랫입술 중앙의 부드러운 방사형 sheen(밴드 아님 — 가우시안 falloff)
-                //    (c) 잘게 부서진 스파클(균일 흰칠이 아니라 광택 알갱이). 전부 _LipGlossIntensity 비례.
-                //    링 uv: x=반경(0 바깥→1 입라인), y=중앙도(0 코너→1 중앙), lipUpper=윗입술도. 튜닝 대상.
-                //    하드 스파클/미러볼(스크린 격자 점)은 쓰지 않는다 — 아랫입술 중앙의 부드러운
-                //    소프트 하이라이트(가우시안) + 실제 카메라 하이라이트를 매끄럽게 증폭해 젖은
-                //    반사만 낸다. _LipGlossIntensity 비례(0이면 0 → 하위호환). 위치/세기 튜닝 대상.
+                premult += glossPig * glossAmt * GLOSS_TINT_GAIN;
+                // (c)+(d) 유리 정반사 — 링 uv: x=반경(0 바깥→1 입라인), y=중앙도(0 코너→1 중앙).
+                // 글린트는 "원시 luma가 블러 luma보다 확 튀는" 진짜 하이라이트 능선에서만 점화
+                // → 균일 흰칠이 아니라 젖은 유리에 맺힌 점광. 글로스 틴트색(glossPig)으로 가산해
+                // 유색 글로스(피치/로즈)면 정반사도 그 톤을 따른다(기본 흰=무색광).
                 float glLower = 1.0 - saturate(i.lipUpper);                     // 아랫입술
                 float glDx = i.uv.x - 0.42;                                     // 입술살 중앙 기준 반경 오프셋
                 float glDc = 1.0 - i.uv.y;                                      // 중앙에서 0(코너로 멀어짐)
-                float glSheen = exp(-(glDx * glDx * 20.0 + glDc * glDc * 4.0)) * glLower; // 부드러운 spot(가우시안)
-                float glHi = smoothstep(0.55, 0.92, luma);                     // 실제 하이라이트(부드럽게)
-                float glWet = saturate(glSheen * 0.75 + glHi * 0.6);           // 매끈한 젖은 반사
-                premult += fixed3(1.0, 1.0, 1.0) * glWet * edgeGloss * _LipGlossIntensity * 0.7;
+                float glCore = exp(-(glDx * glDx * 20.0 + glDc * glDc * 4.0)) * glLower; // 부드러운 spot(가우시안)
+                float glResid = saturate(luma - lumaBlur);                      // 고주파 하이라이트 잔차
+                float glGlint = smoothstep(GLOSS_GLINT_LO, GLOSS_GLINT_HI, luma)
+                              * smoothstep(0.015, 0.06, glResid);
+                float wet = edgeGloss * glossZone * _LipGlossIntensity;
+                premult += glossPig * (glCore * GLOSS_SHEEN_GAIN + glGlint * GLOSS_GLINT_GAIN) * wet;
                 // 입자(글리터) — 립 위 반짝. premult에 가산(립글로스와 동일, 알파 불변).
                 // c=0으로 호출해 순수 반짝 기여만 얻어 더한다. coverage=edge(립 모양).
                 premult += ApplyParticles(fixed3(0,0,0), luma, float2(i.uv.x, 0.0), screenUV,

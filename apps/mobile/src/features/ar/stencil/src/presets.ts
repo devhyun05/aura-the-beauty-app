@@ -484,8 +484,11 @@ export const PRESETS: FilterPreset[] = [
       powderFinish: 1, // 매트
       // 세부부위 확충 — 하안검 섀도 + 삼각존 + 캣아이 마스카라 + 아래 속눈썹(스모키 딥 컨셉).
       eyeshadowLowerColor: '#5C4A46',
-      eyeshadowLowerIntensity: 0.12,
+      eyeshadowLowerIntensity: 0.18,
       eyeshadowLowerFinish: 1,
+      // 꼬리집중(→profile 6) — 실루엣을 정본 스모키 마스크로. 미지정(profile 0)은
+      // 밴드 캔버스가 그대로 비치는 사각 블롭이 된다(전 하부 룩 공통 함정).
+      eyeshadowLowerShape: 2,
       triangleZoneColor: '#9A5A50', // 붉은기 도는 밝은 톤(다크브라운 X) — 눈밑을 어둡게 안 죽임
       triangleZoneIntensity: 0.22,
       mascaraColor: '#141014',
@@ -501,6 +504,13 @@ export const PRESETS: FilterPreset[] = [
       {part: 0, color: '#7A6A9E', blendMode: 1, intensity: 0.55, inner: 0, outer: 1},
     ],
   },
+  // §16 전체 룩 칩 — 실제 레시피는 lookVariants.addFaceLook이 `sys:face:<id>`로 등록한다
+  // (카탈로그 마스크·라이너 콜르아트 참조를 담기 위함 — flat params는 URI를 못 담는다).
+  // 여기 params는 칩 표시·선택용 껍데기이며 selectLook은 라이브러리 face def를 인스턴스화한다.
+  // SYSTEM_PRESET_IDS(lookTree)에 없어 buildSystemLibrary 분해 대상이 아니다(중복 없음).
+  {id: 'v2-glam-smoky', name: '글램 스모키', params: BARE},
+  {id: 'v2-natural-glow', name: '내추럴 글로우', params: BARE},
+  {id: 'v2-cat-point', name: '롱 캣아이 포인트', params: BARE},
 ];
 
 /** 립 컬러 스와치 */

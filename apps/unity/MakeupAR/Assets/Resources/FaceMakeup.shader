@@ -860,6 +860,16 @@ Shader "ARMakeup/FaceMakeup"
                 float spreadW = smoothstep(0.04, 0.22, abs(i.uv.x - 0.5));
                 buv.x += (i.uv.x < 0.5 ? _BlushSpread : -_BlushSpread) * spreadW;
                 buv = ZoneAffineUV(buv, i.uv, spreadW, _BlushAffine, _BlushAffineRot);
+                // 부위 리프트(R4·배치A)로 볼/하이라이터/컨투어를 위로 올리면 마스크가 눈
+                // 개구부를 침범한다 — 파운데(featKeep)와 동일한 캐노니컬 눈 타원(실측 상수)으로
+                // 눈알 위에선 발색을 지운다. 파운데는 부분 제외(0.85)지만 이 장식 레이어는
+                // 눈 위에 있을 이유가 없어 전제외. 타원이 개구부에 타이트(눈꺼풀 여백은
+                // 페더로 보존)라 리프트 안 한 기본 배치는 눈에서 이미 0 → 사실상 무변(하위호환).
+                float uFoldEye = 0.5 - abs(i.uv.x - 0.5); // 좌우 미러 → 우안 기준 타원 공용
+                float dEyeKeep = length((float2(uFoldEye, i.uv.y)
+                    - float2(FEAT_EYE_CX, FEAT_EYE_CY)) / float2(FEAT_EYE_RX, FEAT_EYE_RY));
+                // 타원 안=0(제거) → 밖=1(유지). foundation의 (1 - 1.0*eyeFeat)와 동일식.
+                float eyeKeep = smoothstep(1.0 - FEAT_FEATHER, 1.0 + FEAT_FEATHER, dEyeKeep);
                 // 질감 맵(#22) — 얼굴 메시 uv로 광 게인·시머 밀도를 픽셀별 변조(볼 접착).
                 // 맵 없으면(_HasFinishMap=0) 계수 1.0 → 스칼라 그대로(하위호환).
                 fixed4 blushFinishMap = tex2D(_BlushFinishMap, i.uv);
@@ -870,7 +880,7 @@ Shader "ARMakeup/FaceMakeup"
                 float blushTexEdge, blushTexGrain, blushTexCoverage, blushTexBody;
                 TexBundleFromEnum(4.0, _BlushTexture,
                                   blushTexEdge, blushTexGrain, blushTexCoverage, blushTexBody);
-                col = TintFinish(col, _BlushColor.rgb, tex2D(_BlushMask, buv).r * _BlushIntensity,
+                col = TintFinish(col, _BlushColor.rgb, tex2D(_BlushMask, buv).r * _BlushIntensity * eyeKeep,
                                  i.uv, _BlushFinish, _BlushShimmer,
                                  _BlushGlossLo, blushGlossGain, _BlushShimmerSize,
                                  blushShimmerDensity, _BlushMatte, _BlushSheen, screenUV,
@@ -883,7 +893,7 @@ Shader "ARMakeup/FaceMakeup"
                                      _BlushParticleSize, _BlushParticleDensity, _BlushParticleBrightness,
                                      _BlushParticleColor.rgb, _BlushParticleTwinkle, _BlushParticleShape,
                                      _BlushParticleFeather, _BlushParticleParallax, _BlushParticleConfetti,
-                                     tex2D(_BlushMask, buv).r);
+                                     tex2D(_BlushMask, buv).r * eyeKeep);
 
                 // 넓은 면 보정 — 컨투어=감산(곱, 그림자), 하이라이터·컨실러=가산(스크린, 광채).
                 // 부위 핏 아핀(배치 A ②) — 컨투어·하이라이터 마스크 UV를 블러셔와 동일 워프로
@@ -905,7 +915,7 @@ Shader "ARMakeup/FaceMakeup"
                 // -1=레거시 무변조, enum 0=파우더 시드부터 명시 적용한다.
                 float coTexEdge, coTexGrain, coTexCoverage, coTexBody;
                 TexBundleFromEnum(6.0, _ContourTexture, coTexEdge, coTexGrain, coTexCoverage, coTexBody);
-                float shAmt = tex2D(_ContourMask, cuv).r * _ContourIntensity;
+                float shAmt = tex2D(_ContourMask, cuv).r * _ContourIntensity * eyeKeep;
                 shAmt = TexEdge(TexCoverage(saturate(shAmt), coTexCoverage), coTexEdge);
                 fixed3 shTarget = col * _ContourColor.rgb;
                 shTarget = TexBody(shTarget, wideLuma, coTexBody);
@@ -927,7 +937,7 @@ Shader "ARMakeup/FaceMakeup"
                                  + dot(hlZone1, _HighlightZoneWeights1);
                 float hlMask = lerp(hlLegacyMask, saturate(hlZoneMask),
                                     step(0.5, _HighlightHasZoneAtlas));
-                float hlAmt = hlMask * _HighlightIntensity;
+                float hlAmt = hlMask * _HighlightIntensity * eyeKeep;
                 hlAmt = TexEdge(TexCoverage(saturate(hlAmt), hiTexCoverage), hiTexEdge);
                 fixed3 hlTarget = 1.0 - (1.0 - col) * (1.0 - _HighlightColor.rgb);
                 hlTarget = TexBody(hlTarget, wideLuma, hiTexBody);

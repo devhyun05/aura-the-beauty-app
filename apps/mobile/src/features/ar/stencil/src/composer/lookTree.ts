@@ -31,7 +31,7 @@ import {
   REGION_GROUPS,
   REGION_MAP,
 } from './regions';
-import type { RegionKey } from './regions';
+import type { LookMaskRef, RegionKey } from './regions';
 import { migrateLegacyEyeshadowLayer, newLayer, seedLayers } from './model';
 import type { ComposerLayer } from './model';
 
@@ -101,6 +101,13 @@ export interface ProductLeaf {
   colorwayId?: string;
   /** 테크닉(§5) — Phase A는 강도만(제품 coverage와 곱연산) */
   technique?: { strength: number };
+  /** 카탈로그 마스크 참조(§16) — 시스템/디자이너 룩이 부위 스텐실을 선언(선택). 룩 적용 시
+   *  App이 세션 마스크 경로에 주입 후 마커(params[appliedKey])로 reconcileMasks 화해.
+   *  저장 스냅샷 미포함(파일은 세션 한정) — revive되면 마커만 남고 경로는 사라진다. */
+  maskRef?: LookMaskRef;
+  /** 아이라이너 콜르아트 참조(§16) — setEyelinerStyle로 보낼 streaming URI(선택).
+   *  gate는 params.eyelinerStyleIntensity(잎 소유). 마스크와 동일하게 세션 한정. */
+  linerStyleRef?: string;
 }
 
 export interface LookNode {
@@ -161,6 +168,10 @@ export interface LeafDef {
   productId?: string | null;
   colorwayId?: string;
   technique?: { strength: number };
+  /** 카탈로그 마스크 참조(§16) — 잎이 참조하는 부위 스텐실 URI(선택). ProductLeaf 참조. */
+  maskRef?: LookMaskRef;
+  /** 아이라이너 콜르아트 참조(§16) — setEyelinerStyle URI(선택). ProductLeaf 참조. */
+  linerStyleRef?: string;
 }
 
 export interface LookDef {
@@ -494,6 +505,8 @@ function leafFromDef(def: LeafDef): ProductLeaf {
     ...(def.productId ? { productId: def.productId } : {}),
     ...(def.colorwayId ? { colorwayId: def.colorwayId } : {}),
     ...(def.technique ? { technique: { ...def.technique } } : {}),
+    ...(def.maskRef ? { maskRef: { ...def.maskRef } } : {}),
+    ...(def.linerStyleRef ? { linerStyleRef: def.linerStyleRef } : {}),
   };
 }
 
@@ -797,6 +810,8 @@ export function flattenTree(root: LookNode | null): ComposerLayer[] {
           ...(child.productId ? { productId: child.productId } : {}),
           ...(child.colorwayId ? { colorwayId: child.colorwayId } : {}),
           ...(child.technique ? { technique: child.technique } : {}),
+          ...(child.maskRef ? { maskRef: child.maskRef } : {}),
+          ...(child.linerStyleRef ? { linerStyleRef: child.linerStyleRef } : {}),
         });
       } else {
         walk(child, chain);

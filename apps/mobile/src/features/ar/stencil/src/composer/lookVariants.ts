@@ -20,11 +20,23 @@ import {
   AR_BLUSH_SHAPES,
 } from '../../../../../shared/contracts/arBlushCatalog';
 import type { LeafDef, LookLibrary, SlotKey } from './lookTree';
-import type { RegionKey } from './regions';
+import type { LookMaskRef, MaskRegion, RegionKey } from './regions';
+
+// ── 카탈로그 에셋 URI 헬퍼(§16) — 번들 StreamingAssets 상대경로(streaming: 스킴).
+//    파일 실존은 catalogDefault.json 엔트리와 1:1(작성 시 검증). ──────────────────
+const maskUri = (file: string): string => `streaming:catalog/mask/${file}.png`;
+const linerUri = (file: string): string => `streaming:catalog/colorArt/${file}.png`;
+/** 부위별 카탈로그 마스크 참조 한 장(잎 maskRef). */
+const mask = (region: MaskRegion, file: string): LookMaskRef => ({
+  region,
+  uri: maskUri(file),
+});
 
 interface LeafSpec {
   label: string;
-  region: RegionKey;
+  // 'eyeshadowLower'는 경계 유사-부위 — leafFromDef의 migrateLegacyEyeshadowLayer가
+  // eyeshadow(surface=아래)로 변환한다(newLayer·migrate 선례). 아래 섀도 마스크 룩용.
+  region: RegionKey | 'eyeshadowLower';
   params: Partial<FilterParams>;
   /** 동일 제품을 여러 해부학 존에 나눠 바르는 경우에도 제품 정체성을 보존한다. */
   productId?: string;
@@ -34,6 +46,11 @@ interface LeafSpec {
   role?: string;
   /** 자유 배치 데코 payload — FilterParams 무소유 부위가 직접 캐리한다. */
   overlay?: LeafDef['overlay'];
+  /** 카탈로그 마스크 참조(§16) — 부위 스텐실 URI. 룩 적용 시 App이 세션 경로에 주입.
+   *  마커(params[…MaskImported])도 함께 세워야 reconcileMasks가 set한다. */
+  maskRef?: LookMaskRef;
+  /** 아이라이너 콜르아트 참조(§16) — setEyelinerStyle URI. gate=eyelinerStyleIntensity. */
+  linerStyleRef?: string;
 }
 
 interface SubSpec {
@@ -75,12 +92,15 @@ function addRegionLook(
       ...(internal ? { internal: true } : {}),
       kids: sub.leaves.map(leaf => ({
         label: leaf.label,
-        region: leaf.region,
+        // 'eyeshadowLower' 경계 유사-부위는 leafFromDef가 eyeshadow로 마이그레이션한다.
+        region: leaf.region as RegionKey,
         params: { ...leaf.params },
         ...(leaf.productId ? { productId: leaf.productId } : {}),
         ...(leaf.lens ? { lens: { ...leaf.lens } } : {}),
         ...(leaf.role ? { role: leaf.role } : {}),
         ...(leaf.overlay ? { overlay: { ...leaf.overlay } } : {}),
+        ...(leaf.maskRef ? { maskRef: { ...leaf.maskRef } } : {}),
+        ...(leaf.linerStyleRef ? { linerStyleRef: leaf.linerStyleRef } : {}),
       })),
     };
     return subId;
@@ -104,6 +124,78 @@ function single(
   params: Partial<FilterParams>,
 ): SubSpec[] {
   return [{ name, leaves: [{ label: name, region, params }] }];
+}
+
+/** LeafSpec → 직렬화 LeafDef 잎(카탈로그 마스크·라이너 참조 포함). addFaceLook 전용. */
+function specToLeafDef(leaf: LeafSpec): LeafDef {
+  return {
+    label: leaf.label,
+    // 'eyeshadowLower' 경계 유사-부위는 leafFromDef가 eyeshadow로 마이그레이션한다.
+    region: leaf.region as RegionKey,
+    params: { ...leaf.params },
+    ...(leaf.productId ? { productId: leaf.productId } : {}),
+    ...(leaf.lens ? { lens: { ...leaf.lens } } : {}),
+    ...(leaf.role ? { role: leaf.role } : {}),
+    ...(leaf.overlay ? { overlay: { ...leaf.overlay } } : {}),
+    ...(leaf.maskRef ? { maskRef: { ...leaf.maskRef } } : {}),
+    ...(leaf.linerStyleRef ? { linerStyleRef: leaf.linerStyleRef } : {}),
+  };
+}
+
+/**
+ * 전체(face) 룩(§16) — 여러 슬롯을 가로지르는 완성 메이크업 1장을 라이브러리에 등록한다.
+ * buildSystemLibrary가 PRESETS를 분해해 만드는 face 룩과 동형 구조(face→region→sub→leaf)
+ * 이나, 여기선 잎이 카탈로그 마스크·라이너 콜르아트를 직접 참조할 수 있다(프리셋 flat
+ * params는 마스크 URI를 담지 못하므로). presetId는 presets.ts의 칩용 PRESETS 항목 id와
+ * 1:1 — selectLook(presetId)이 faceLookIdForPreset(presetId)로 이 def를 인스턴스화한다.
+ * parts는 각각 한 sub(= 한 RegionKey 파트)이며, 같은 슬롯 파트들은 한 region def로 묶인다.
+ */
+function addFaceLook(
+  lib: LookLibrary,
+  presetId: string,
+  name: string,
+  parts: { slot: SlotKey; subName: string; leaves: LeafSpec[] }[],
+): void {
+  const faceId = `sys:face:${presetId}`;
+  const subsBySlot = new Map<SlotKey, string[]>();
+  parts.forEach((part, i) => {
+    const subId = `${faceId}:s${i}`;
+    lib[subId] = {
+      id: subId,
+      name: part.subName,
+      level: 'sub',
+      slot: part.slot,
+      owner: 'system',
+      internal: true, // 파트=완성 룩의 조각 — 세부부위 카드에 단독 노출하지 않는다.
+      kids: part.leaves.map(specToLeafDef),
+    };
+    const arr = subsBySlot.get(part.slot) ?? [];
+    arr.push(subId);
+    subsBySlot.set(part.slot, arr);
+  });
+  const regionIds: string[] = [];
+  let ri = 0;
+  for (const [slot, subIds] of subsBySlot) {
+    const regionId = `${faceId}:r${ri}`;
+    ri += 1;
+    lib[regionId] = {
+      id: regionId,
+      name: `${name} ${slot}`,
+      level: 'region',
+      slot,
+      owner: 'system',
+      kids: subIds,
+    };
+    regionIds.push(regionId);
+  }
+  lib[faceId] = {
+    id: faceId,
+    name,
+    level: 'face',
+    slot: '피부',
+    owner: 'system',
+    kids: regionIds,
+  };
 }
 
 /**
@@ -1397,6 +1489,278 @@ export function buildVariantLibrary(): LookLibrary {
       ],
     },
   ], false);
+
+  // ════════════════════════════════════════════════════════════════════════
+  // §16 디자이너 마스크 룩 — 오늘 추가된 카탈로그 마스크/라이너 콜르아트를 실사용한다.
+  //  마스크 잎은 부위 마커(…MaskImported:1)와 maskRef(카탈로그 스텐실 URI)를 함께 든다.
+  //  App(collectLookAssets→emitCompiled)이 룩 적용 시 세션 경로에 주입해 기존
+  //  reconcileMasks 화해 경로로 setRegionMask한다(사용자 직접 임포트가 룩 참조보다 우선).
+  //  위(region 'eyeshadow')·아래(region 'eyeshadowLower')는 서로 다른 마스크 슬롯이라
+  //  한 룩에서 동시 적용된다. 색·강도·마감 값은 기존 눈/하이라이터 룩 분포를 참고.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // ── 아이섀도 마스크 세부부위 룩 4종 — 위+아래 마스크 쌍으로 실루엣 정밀화 ──
+  addRegionLook(lib, 'eye-mask', 'daily-base', '데일리 베이스', '눈', [
+    { name: '위 베이스 워시', leaves: [{
+      label: '베이스 워시', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#C7A488', eyeshadowIntensity: 0.5, eyeshadowFinish: 0, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_base'),
+    }] },
+    { name: '아래 워시', leaves: [{
+      label: '아래 워시', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#C29A7B', eyeshadowLowerIntensity: 0.34, eyeshadowLowerFinish: 0, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_wash'),
+    }] },
+  ]);
+  addRegionLook(lib, 'eye-mask', 'soft-smoky', '소프트 스모키', '눈', [
+    { name: '위 아우터 스모키', leaves: [{
+      label: '아우터 스모키', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#7A5C50', eyeshadowIntensity: 0.6, eyeshadowFinish: 1, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_outer'),
+    }] },
+    { name: '아래 스머지', leaves: [{
+      label: '아래 스머지', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#6E574E', eyeshadowLowerIntensity: 0.4, eyeshadowLowerFinish: 1, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_outer'),
+    }] },
+  ]);
+  addRegionLook(lib, 'eye-mask', 'center-halo', '센터 할로', '눈', [
+    { name: '위 센터 할로', leaves: [{
+      label: '센터 할로', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#B98C9A', eyeshadowIntensity: 0.55, eyeshadowFinish: 3, eyeshadowShimmer: 0.5, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_halo'),
+    }] },
+    { name: '아래 센터', leaves: [{
+      label: '아래 센터', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#C79AA4', eyeshadowLowerIntensity: 0.4, eyeshadowLowerFinish: 3, eyeshadowLowerShimmer: 0.4, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_center'),
+    }] },
+  ]);
+  addRegionLook(lib, 'eye-mask', 'cat-sweep', '캣 스윕', '눈', [
+    { name: '위 윙 스윕(연장)', leaves: [{
+      label: '윙 스윕', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#5C4A46', eyeshadowIntensity: 0.62, eyeshadowFinish: 1, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'ext_wing_sweep'),
+    }] },
+    { name: '아래 꼬리 연결', leaves: [{
+      label: '아래 꼬리', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#5C4A46', eyeshadowLowerIntensity: 0.34, eyeshadowLowerFinish: 1, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_tail'),
+    }] },
+  ]);
+
+  // ── 아이라이너 콜르아트 세부부위 룩 5종 — 신규 liner_* 콜르아트를 setEyelinerStyle로.
+  //    gate=eyelinerStyleIntensity(잎 소유). 색·모양은 콜르아트 픽셀이 담는다. ──
+  const linerArtLook = (
+    nameSlug: string, name: string, file: string, intensity: number,
+  ): void =>
+    addRegionLook(lib, 'eyeliner-upper', nameSlug, name, '눈', [
+      { name, leaves: [{
+        label: name, region: 'eyelinerUpper',
+        params: { eyelinerStyleIntensity: intensity },
+        linerStyleRef: linerUri(file),
+      }] },
+    ], false);
+  linerArtLook('art-slim', '슬림 아트라인', 'liner_slim', 0.82);
+  linerArtLook('art-bold-wing', '볼드 윙 아트', 'liner_bold', 0.9);
+  linerArtLook('art-cat-long', '롱 캣아이 아트', 'liner_cat_long', 0.9);
+  linerArtLook('art-puppy-droop', '퍼피 드룹 아트', 'liner_droop', 0.75);
+  linerArtLook('art-tightline', '타이트라인 아트', 'liner_tight', 0.7);
+
+  // ── 하이라이터 부위별 마스크 룩 5종 — high_* 존 스텐실 1장씩(단일 머티리얼 슬롯 규약상
+  //    한 룩=한 존). 색·마감은 기존 하이라이터 룩 분포 참고. ──
+  const highMaskLook = (
+    nameSlug: string, name: string, file: string,
+    color: string, intensity: number, finish: number, shimmer?: number,
+  ): void =>
+    addRegionLook(lib, 'highlighter-mask', nameSlug, name, '컨투어',
+      single(name, 'highlighter', {
+        highlightColor: color,
+        highlightIntensity: intensity,
+        highlightFinish: finish,
+        ...(shimmer !== undefined ? { highlightShimmer: shimmer } : {}),
+        highlightMaskImported: 1,
+      }).map(sub => ({
+        ...sub,
+        leaves: sub.leaves.map(leaf => ({ ...leaf, maskRef: mask('highlighter', file) })),
+      })), false);
+  highMaskLook('cheek-glow', '광대 글로우', 'high_cheekbone', '#FFF2DB', 0.24, 0);
+  highMaskLook('nose-beam', '콧대 하이라이트', 'high_nose', '#FFE9C8', 0.22, 0);
+  highMaskLook('cupid-tzone', 'T존 큐피드', 'high_cupid', '#FFF2DB', 0.2, 0);
+  highMaskLook('undereye-bright', '언더아이 브라이트', 'high_undereye', '#FFF4E4', 0.2, 0);
+  highMaskLook('browbone-lift', '눈썹뼈 리프트', 'high_browbone', '#EFE6F2', 0.2, 3, 0.4);
+
+  // ════════════════════════════════════════════════════════════════════════
+  // §16 기존 눈·하이라이터 룩의 v2 리파인 — 기존 정의는 불변(병존), 신규 '-v2' 항목만
+  //  추가한다. 기존 색/강도/마감을 출발점으로 오늘 마스크·연장·콜르아트로 실루엣 정밀화.
+  // ════════════════════════════════════════════════════════════════════════
+
+  // 데일리 브라운 v2 — 기존 단일 섀도에 위 eye_base + 아래 under_wash 마스크 쌍을 얹어
+  //  번짐 경계를 또렷이. 색(#C29A7B)·강도 유지.
+  addRegionLook(lib, 'eye', 'daily-brown-v2', '데일리 브라운 v2', '눈', [
+    { name: '위 베이스', leaves: [{
+      label: '아이섀도', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#C29A7B', eyeshadowIntensity: 0.5, eyeshadowFinish: 0, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_base'),
+    }] },
+    { name: '아래 워시', leaves: [{
+      label: '아래 섀도', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#C29A7B', eyeshadowLowerIntensity: 0.32, eyeshadowLowerFinish: 0, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_wash'),
+    }] },
+  ]);
+  // 로즈골드 시머 v2 — 기존 로즈골드 시머 색을 센터 할로 마스크로 중앙 집중, 아래 센터로
+  //  받쳐 입체감. 기존 라이너 대신 이너 톤은 유지.
+  addRegionLook(lib, 'eye', 'rosegold-v2', '로즈골드 시머 v2', '눈', [
+    { name: '위 할로', leaves: [{
+      label: '아이섀도', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#D89AA0', eyeshadowIntensity: 0.6, eyeshadowFinish: 3, eyeshadowShimmer: 0.6, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_halo'),
+    }] },
+    { name: '아래 센터', leaves: [{
+      label: '아래 섀도', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#D89AA0', eyeshadowLowerIntensity: 0.4, eyeshadowLowerFinish: 3, eyeshadowLowerShimmer: 0.45, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_center'),
+    }] },
+    { name: '라이너', leaves: [{
+      label: '아이라인 상', region: 'eyelinerUpper',
+      params: { eyelinerColor: '#5A4433', eyelinerIntensity: 0.4, eyelinerStyle: 0, eyelinerTexture: 2, eyelinerFinish: 1 },
+    }] },
+  ]);
+  // 스모키 스택 v2 — 기존 2겹 스모키를 위 스모키 아웃(연장) + 아래 딥 스모키 마스크로
+  //  꼬리까지 확장하고, 볼드 윙 콜르아트로 라인 강조.
+  addRegionLook(lib, 'eye', 'smoky-v2', '스모키 스택 v2', '눈', [
+    { name: '위 스모키 아웃(연장)', leaves: [{
+      label: '딥 스모키', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#4A3A3E', eyeshadowIntensity: 0.72, eyeshadowFinish: 1, eyeshadowHeight: 1.25, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'ext_smoky_out'),
+    }] },
+    { name: '아래 딥 스모키', leaves: [{
+      label: '아래 스모키', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#4A3A3E', eyeshadowLowerIntensity: 0.5, eyeshadowLowerShape: 2, eyeshadowLowerFinish: 1, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_smoky_deep'),
+    }] },
+    { name: '볼드 윙 라이너', leaves: [{
+      label: '아이라인 상', region: 'eyelinerUpper',
+      params: { eyelinerStyleIntensity: 0.9 },
+      linerStyleRef: linerUri('liner_bold'),
+    }] },
+  ]);
+  // 코랄 데일리 v2 — 기존 코랄 데일리에 위 베이스 + 아래 워시 마스크로 안정적인 데일리 번짐.
+  addRegionLook(lib, 'eye', 'coral-v2', '코랄 데일리 v2', '눈', [
+    { name: '위 베이스', leaves: [{
+      label: '아이섀도', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#E0A183', eyeshadowIntensity: 0.55, eyeshadowFinish: 0, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_base'),
+    }] },
+    { name: '아래 워시', leaves: [{
+      label: '아래 섀도', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#B06A4E', eyeshadowLowerIntensity: 0.34, eyeshadowLowerFinish: 0, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_wash'),
+    }] },
+    { name: '타이트라인', leaves: [{
+      label: '아이라인 상', region: 'eyelinerUpper',
+      params: { eyelinerStyleIntensity: 0.65 },
+      linerStyleRef: linerUri('liner_tight'),
+    }] },
+  ]);
+  // 모브 무드 v2 — 기존 모브 매트를 위 아우터 + 아래 스머지 마스크로 눈꼬리 그늘 강조.
+  addRegionLook(lib, 'eye', 'mauve-v2', '모브 무드 v2', '눈', [
+    { name: '위 아우터', leaves: [{
+      label: '아이섀도', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#6E5A8A', eyeshadowIntensity: 0.6, eyeshadowFinish: 1, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_outer'),
+    }] },
+    { name: '아래 스머지', leaves: [{
+      label: '아래 섀도', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#6E5A8A', eyeshadowLowerIntensity: 0.4, eyeshadowLowerFinish: 1, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_outer'),
+    }] },
+  ]);
+  // 글리터 팝 v2 — 기존 글리터 토퍼를 센터 할로 마스크로 눈두덩 중앙에 집중, 아래 센터로 확산.
+  addRegionLook(lib, 'eye', 'glitter-v2', '글리터 팝 v2', '눈', [
+    { name: '위 할로 글리터', leaves: [{
+      label: '아이섀도', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#D8B49A', eyeshadowIntensity: 0.65, eyeshadowFinish: 3, eyeshadowShimmer: 0.9, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_halo'),
+    }] },
+    { name: '아래 센터', leaves: [{
+      label: '아래 섀도', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#C79AA4', eyeshadowLowerIntensity: 0.36, eyeshadowLowerFinish: 3, eyeshadowLowerShimmer: 0.4, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_center'),
+    }] },
+  ]);
+
+  // 하이라이터 v2 3종 — 기존 색·마감을 부위별 마스크에 얹어 존을 정밀 배치.
+  highMaskLook('soft-champagne-v2', '은은 샴페인 v2', 'high_cheekbone', '#FFF2DB', 0.18, 0);
+  highMaskLook('dewy-glow-v2', '듀이 글로우 v2', 'high_undereye', '#FFE9C8', 0.28, 0);
+  highMaskLook('lilac-beam-v2', '라일락 빔 v2', 'high_browbone', '#EFE6F2', 0.32, 3, 0.62);
+
+  // ── 전체(face) 룩 3종(§16) — 여러 슬롯을 가로지르는 완성 메이크업. presets.ts의 칩용
+  //    PRESETS 항목(v2-glam-smoky / v2-natural-glow / v2-cat-point)과 id 1:1. ──
+  addFaceLook(lib, 'v2-glam-smoky', '글램 스모키', [
+    { slot: '눈', subName: '위 스모키(연장)', leaves: [{
+      label: '아이섀도', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#4A3A3E', eyeshadowIntensity: 0.7, eyeshadowFinish: 1, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_full_smoky') }] },
+    { slot: '눈', subName: '아래 스모키', leaves: [{
+      label: '아래 섀도', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#4A3A3E', eyeshadowLowerIntensity: 0.5, eyeshadowLowerShape: 2, eyeshadowLowerFinish: 1, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_full_smoky') }] },
+    { slot: '눈', subName: '볼드 윙 라이너', leaves: [{
+      label: '아이라인 상', region: 'eyelinerUpper',
+      params: { eyelinerStyleIntensity: 0.9 },
+      linerStyleRef: linerUri('liner_bold') }] },
+    { slot: '컨투어', subName: '광대 하이라이트', leaves: [{
+      label: '하이라이터', region: 'highlighter',
+      params: { highlightColor: '#FFE9C8', highlightIntensity: 0.24, highlightFinish: 0, highlightMaskImported: 1 },
+      maskRef: mask('highlighter', 'high_cheekbone') }] },
+    { slot: '립', subName: '버건디 립', leaves: [{
+      label: '립', region: 'lip',
+      params: { lipColor: '#9E3B54', lipIntensity: 0.5, lipFinish: 1 } }] },
+  ]);
+  addFaceLook(lib, 'v2-natural-glow', '내추럴 글로우', [
+    { slot: '눈', subName: '위 베이스 워시', leaves: [{
+      label: '아이섀도', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#C7A488', eyeshadowIntensity: 0.42, eyeshadowFinish: 0, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'eye_base') }] },
+    { slot: '눈', subName: '아래 워시', leaves: [{
+      label: '아래 섀도', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#C29A7B', eyeshadowLowerIntensity: 0.3, eyeshadowLowerFinish: 0, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_wash') }] },
+    { slot: '눈', subName: '타이트라인', leaves: [{
+      label: '아이라인 상', region: 'eyelinerUpper',
+      params: { eyelinerStyleIntensity: 0.6 },
+      linerStyleRef: linerUri('liner_tight') }] },
+    { slot: '컨투어', subName: '눈밑 브라이트', leaves: [{
+      label: '하이라이터', region: 'highlighter',
+      params: { highlightColor: '#FFF4E4', highlightIntensity: 0.2, highlightFinish: 0, highlightMaskImported: 1 },
+      maskRef: mask('highlighter', 'high_undereye') }] },
+    { slot: '립', subName: '소프트 코랄 립', leaves: [{
+      label: '립', region: 'lip',
+      params: { lipColor: '#E8A98C', lipIntensity: 0.45, lipFinish: 0 } }] },
+  ]);
+  addFaceLook(lib, 'v2-cat-point', '롱 캣아이 포인트', [
+    { slot: '눈', subName: '위 윙 스윕(연장)', leaves: [{
+      label: '아이섀도', region: 'eyeshadow', role: 'main',
+      params: { eyeshadowColor: '#6E5A6A', eyeshadowIntensity: 0.55, eyeshadowFinish: 1, eyeshadowMaskImported: 1 },
+      maskRef: mask('eyeshadow', 'ext_wing_sweep') }] },
+    { slot: '눈', subName: '아래 꼬리', leaves: [{
+      label: '아래 섀도', region: 'eyeshadowLower',
+      params: { eyeshadowLowerColor: '#5C4A46', eyeshadowLowerIntensity: 0.34, eyeshadowLowerFinish: 1, eyeshadowLowerMaskImported: 1 },
+      maskRef: mask('eyeshadowLower', 'under_tail') }] },
+    { slot: '눈', subName: '롱 캣아이 라이너', leaves: [{
+      label: '아이라인 상', region: 'eyelinerUpper',
+      params: { eyelinerStyleIntensity: 0.9 },
+      linerStyleRef: linerUri('liner_cat_long') }] },
+    { slot: '컨투어', subName: '눈썹뼈 리프트', leaves: [{
+      label: '하이라이터', region: 'highlighter',
+      params: { highlightColor: '#FFF2DB', highlightIntensity: 0.18, highlightFinish: 0, highlightMaskImported: 1 },
+      maskRef: mask('highlighter', 'high_browbone') }] },
+    { slot: '립', subName: '로지 립', leaves: [{
+      label: '립', region: 'lip',
+      params: { lipColor: '#C56B7B', lipIntensity: 0.5, lipFinish: 0 } }] },
+  ]);
 
   return lib;
 }

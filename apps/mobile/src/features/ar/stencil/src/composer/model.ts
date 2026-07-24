@@ -28,7 +28,7 @@ import {
   REGION_MAP,
   regionOwnKeys,
 } from './regions';
-import type { RegionKey } from './regions';
+import type { LookMaskRef, RegionKey } from './regions';
 
 // 캐노니컬 오버레이 스파이크(N장 합성) — Unity 셰이더 슬롯 수와 일치해야 한다.
 export const MAX_OVERLAY_LAYERS = 4;
@@ -80,7 +80,14 @@ function eyeshadowLayerFromParams(
   role?: string,
 ): EyeshadowLayerV2 {
   const surface = normalizeSurface(p.eyeshadowSurface, role === 'base' ? 2 : 0);
-  const profile = normalizeEyeshadowShape(p.eyeshadowShape);
+  let profile = normalizeEyeshadowShape(p.eyeshadowShape);
+  // 하부 마스크 잎 자동 라우팅 — Unity는 profile 6(딥 스모키 언더)일 때만
+  // _LowerSmokyMask를 커버리지로 쓴다. shape 명시를 잎마다 기억하는 건 함정
+  // (v2-cat-point가 빠뜨려 마스크 대신 기본 파라메트릭 밴드가 그려졌다).
+  // 명시 shape(≠0)는 존중하고, 마스크 임포트+미지정일 때만 6으로 보낸다.
+  if (profile === 0 && surface !== 0 && (p.eyeshadowLowerMaskImported ?? 0) > 0) {
+    profile = 6;
+  }
   return {
     surface,
     profile,
@@ -140,6 +147,11 @@ export interface ComposerLayer {
   colorwayId?: string;
   /** 테크닉(§5) — Phase A는 강도만. coverage⊗강도가 부위 intensity로 번역된다 */
   technique?: { strength: number };
+  /** 카탈로그 마스크 참조(§16) — 잎이 선언한 부위 스텐실 URI. flattenTree가 주석,
+   *  App의 collectLookAssets가 세션 마스크 경로에 주입한다(reconcileMasks 화해 경로). */
+  maskRef?: LookMaskRef;
+  /** 아이라이너 콜르아트 참조(§16) — setEyelinerStyle URI. App이 룩 적용 시 전송한다. */
+  linerStyleRef?: string;
 }
 
 let seq = 0;

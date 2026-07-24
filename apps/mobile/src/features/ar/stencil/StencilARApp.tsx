@@ -463,6 +463,30 @@ const MASK_SPEC = {
   eyeshadowLower: { region: 'eyeshadowLower', appliedKey: 'eyeshadowLowerMaskImported' },
 } as const;
 
+// 룩 정의가 참조하는 카탈로그 에셋(§16) — 컴파일 결과에 얹혀 emitCompiled로 흐른다.
+//  maskPaths: 부위별 카탈로그 마스크 URI(룩 잎 maskRef 수집). reconcileMasks가 사용자
+//   세션 임포트(maskPathsRef) 다음 우선순위로 폴백 참조한다(사용자 임포트가 우선).
+//  linerStyle: 아이라이너 콜르아트 URI(setEyelinerStyle). 마커=eyelinerStyleIntensity(잎).
+type LookAssets = {
+  maskPaths: Partial<Record<MaskRegion, string>>;
+  linerStyle?: string;
+};
+
+// 컴파일된 룩 레이어에서 카탈로그 에셋 참조를 수집한다(부위별 마스크 1슬롯 + 라이너 1장).
+// 같은 부위(MaskRegion)에 여러 잎이 참조하면 뒤 잎이 이긴다(단일 머티리얼 슬롯 규약).
+function collectLookAssets(
+  layers: ReadonlyArray<{ maskRef?: { region: MaskRegion; uri: string }; linerStyleRef?: string; visible?: boolean }>,
+): LookAssets {
+  const maskPaths: Partial<Record<MaskRegion, string>> = {};
+  let linerStyle: string | undefined;
+  for (const layer of layers) {
+    if (layer.visible === false) continue;
+    if (layer.maskRef) maskPaths[layer.maskRef.region] = layer.maskRef.uri;
+    if (layer.linerStyleRef) linerStyle = layer.linerStyleRef;
+  }
+  return { maskPaths, linerStyle };
+}
+
 // 질감 맵 임포트(#22, 에셋 3층의 ③) → setTextureMap region + 세션 적용 마커 필드.
 // 마스크(MASK_SPEC="어디에")·텍스처(TEXTURE_SPEC=컬러 아트 "무엇을")와 구분되는
 // "어떻게 빛나는지"(광 지도). 마스크와 동일한 룩-화해(reconcile) 방식 — 마커는 UI
@@ -670,6 +694,12 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
     eyeshadow: null,
     eyeshadowLower: null,
   });
+  // 룩 참조 마스크(§16) 세션 상태 — 룩 잎 maskRef가 가리키는 부위별 카탈로그 URI.
+  // emitCompiled가 컴파일 결과(lookAssets)에서 매 방출마다 통째 교체한다. reconcileMasks는
+  // 사용자 직접 임포트(maskPathsRef) 다음 순위로 이 경로를 폴백 참조한다(사용자 우선).
+  const lookMaskPathsRef = useRef<Partial<Record<MaskRegion, string>>>({});
+  // 아이라이너 콜르아트(§16) 마지막 전송 URI — 룩 참조 라이너 재전송(파일 IO) 회피용 댐퍼.
+  const linerStyleSentRef = useRef<string | null>(null);
   // 질감 맵(#22) 세션 상태 — 마스크와 동형(저장 스냅샷 미포함, 파일은 세션 한정).
   //  mapPaths: 이번 세션에 임포트한 부위별 광 지도 파일 경로.
   //  mapSent: Unity에 마지막으로 화해시킨 상태(경로=적용, null=맵 해제) — 룩 전환 시
@@ -732,6 +762,7 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
     eyeshadowLayers: EyeshadowLayer[];
     regionAffines: RegionAffine[];
     regionWarps: RegionWarp[];
+    lookAssets?: LookAssets;
   }>({
     params: BARE,
     overlayLayers: [],
@@ -1365,7 +1396,8 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       (Object.keys(MASK_SPEC) as MaskRegion[]).forEach(mr => {
         const { region, appliedKey } = MASK_SPEC[mr];
         const marker = (p[appliedKey] as number | undefined) ?? 0;
-        const sessionPath = maskPathsRef.current[mr];
+        // 사용자 직접 임포트(maskPathsRef)가 룩 참조(lookMaskPathsRef)보다 우선한다.
+        const sessionPath = maskPathsRef.current[mr] ?? lookMaskPathsRef.current[mr];
         const desired = marker > 0 && sessionPath ? sessionPath : null;
         if (maskSentRef.current[mr] === desired) return; // 변화 시에만 (재로드/IO 회피)
         maskSentRef.current[mr] = desired;
@@ -1404,6 +1436,7 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
         eyeshadowLayers?: EyeshadowLayer[];
         regionAffines?: RegionAffine[];
         regionWarps?: RegionWarp[];
+        lookAssets?: LookAssets;
       },
       warp: WarpLane,
       gain: number,
@@ -1414,6 +1447,17 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
         regionAffines: compiled.regionAffines ?? [],
         regionWarps: compiled.regionWarps ?? [],
       };
+      // 룩 참조 카탈로그 마스크(§16) — 매 방출마다 부위별 경로를 통째 교체한다(스테일 방지).
+      // 마커(compiled.params[appliedKey])가 게이트하므로 lookAssets 없는 방출(v1 스타일
+      // fast-path)에서 {}로 비워도 그 룩엔 마커가 없어 reconcileMasks가 clear로 정직하다.
+      lookMaskPathsRef.current = compiled.lookAssets?.maskPaths ?? {};
+      // 아이라이너 콜르아트 — 값이 바뀔 때만 전송(재전송 파일 IO 회피). 룩 이탈 시 clear는
+      // 불필요 — eyelinerStyleIntensity(잎)가 0으로 떨어지면 Unity가 렌더하지 않는다.
+      const liner = compiled.lookAssets?.linerStyle ?? null;
+      if (liner && linerStyleSentRef.current !== liner) {
+        linerStyleSentRef.current = liner;
+        sendToUnity({ type: 'setEyelinerStyle', path: liner });
+      }
       // count를 먼저 전환해야 multi→single에서 뒤따르는 scalar apply가 스킵되지 않는다.
       applyEyeshadowLayers(compiled.eyeshadowLayers ?? []);
       const warped = applyWarpToParams(compiled.params, warp, gain);
@@ -1443,7 +1487,7 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       // 질감 맵(#22)도 마커 기반 화해(마스크와 동일 경로 — 룩 전환 누수 방지).
       reconcileMaps(compiled.params);
     },
-    [applyParams, applyOverlayLayers, applyLensLayers, applyEyeshadowLayers, reconcileMasks, reconcileMaps],
+    [applyParams, applyOverlayLayers, applyLensLayers, applyEyeshadowLayers, reconcileMasks, reconcileMaps, sendToUnity],
   );
 
   // 트리 → 컴파일. §5 단일 적용점 사슬: 제품 번역(A12 — productId 잎에 색·마감·
@@ -1467,6 +1511,8 @@ function FilterScreen({ onBack, initialLook }: StencilARAppProps) {
       ...compileLayers(applyFitToLayers(layers, fitState, baseDeltas)),
       regionAffines: assembleRegionAffines(layers, fitState),
       regionWarps: assembleRegionWarps(layers, fitState),
+      // 룩 잎의 카탈로그 마스크·라이너 콜르아트 참조(§16) — emitCompiled가 세션 경로에 주입.
+      lookAssets: collectLookAssets(layers),
     };
   }, []);
 
