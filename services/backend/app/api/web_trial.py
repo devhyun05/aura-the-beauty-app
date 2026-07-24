@@ -23,7 +23,6 @@ from app.core.responses import success
 from app.core.settings import Settings, get_settings
 from app.schemas.base import CamelModel
 from app.services.openai_analysis import OpenAIAnalysisService
-from app.services.s3 import S3Service
 
 
 logger = logging.getLogger(__name__)
@@ -211,33 +210,13 @@ async def _run_face_analysis_job(
 ) -> None:
   job = _jobs[job_id]
   job.status = "processing"
-  bucket = settings.s3_bucket_name
-  if not bucket:
-    job.status = "failed"
-    job.error_code = "S3_NOT_CONFIGURED"
-    job.error_message = "분석 저장소가 준비되지 않았어요."
-    return
-
-  extension = ".png" if content_type == "image/png" else ".jpg"
-  object_key = f"uploads/face-analysis/web-trial/{job_id}{extension}"
-  s3 = S3Service(settings)
   try:
-    await asyncio.to_thread(
-      s3.put_private_object,
-      bucket=bucket,
-      object_key=object_key,
-      body=image_bytes,
-      content_type=content_type,
-      tags={"purpose": "web-trial", "retention": "ephemeral"},
-    )
-    result = await OpenAIAnalysisService(settings).analyze_text({
-      "bucket": bucket,
+    result = await OpenAIAnalysisService(settings).analyze_text_bytes({
       "contentType": content_type,
-      "objectKey": object_key,
       "profileGender": "unspecified",
       "source": "web_trial",
       "task": "face_makeup_recommendation_report_v1",
-    })
+    }, image_bytes)
     job.result = result
     job.status = "completed"
   except AppError as exc:
@@ -250,15 +229,6 @@ async def _run_face_analysis_job(
     job.error_code = "WEB_TRIAL_ANALYSIS_FAILED"
     job.error_message = "AI 얼굴 분석을 완료하지 못했어요. 다시 시도해 주세요."
     job.status = "failed"
-  finally:
-    try:
-      await asyncio.to_thread(
-        s3.delete_object_permanently,
-        bucket=bucket,
-        object_key=object_key,
-      )
-    except Exception:  # noqa: BLE001 - cleanup failure must be observable.
-      logger.exception("[aura:web-trial] source-image:delete-failed objectKey=%s", object_key)
 
 
 @router.post("/face-analysis/jobs", status_code=202)
