@@ -25,6 +25,9 @@ function fullInput(): Pick<ReportData, 'goldenMask' | 's1' | 's2' | 's3' | 's4' 
 
 const full = buildFaceReportStoryModel(fullInput());
 assert.equal(full.pages.length, 14);
+// 인상은 컬러·피부(퍼스널 컬러+피부) 다음에 온다 — 얼굴 분석 UX 검토(2026-07-24):
+// 컬러·피부가 인상보다 먼저 나와야 한다는 요청 반영. sectionId도 'color-skin'으로
+// 함께 옮겨야 탭 하이라이트가 페이지 이동 중 얼굴↔컬러·피부로 되돌아가지 않는다.
 assert.deepEqual(full.pages.map(page => page.id), [
   'summary:overview',
   'proportion:overview',
@@ -32,10 +35,10 @@ assert.deepEqual(full.pages.map(page => page.id), [
   'features:mid',
   'features:lower',
   'features:jaw',
-  'impression:overview',
   'personal-color:tone',
   'personal-color:drape',
   'skin:overview',
+  'impression:overview',
   'styling:natural',
   'styling:glam',
   'body:overview',

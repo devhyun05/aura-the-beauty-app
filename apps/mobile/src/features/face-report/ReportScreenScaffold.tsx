@@ -20,7 +20,7 @@ import {
   type StoryReportSection,
 } from '../../shared/ui/StoryReportPager';
 import { color, font, radius, shadow } from './reportTokens';
-import type { BandKey, ReportData, ReportScreenProps } from './reportTypes';
+import type { BandKey, PhotoSlotData, ReportData, ReportScreenProps } from './reportTypes';
 import {
   buildFaceReportStoryModel,
   FACE_REPORT_STORY_SECTIONS,
@@ -283,12 +283,12 @@ function StoryContentCard({
 
 function ReportCoverPage({
   pageId,
-  photoUri,
+  photo,
   registerCaptureTarget,
   section,
 }: {
   pageId: string;
-  photoUri?: string | null;
+  photo?: PhotoSlotData;
   registerCaptureTarget: (
     pageId: string,
     target: ReportPageCaptureTarget | null,
@@ -307,11 +307,7 @@ function ReportCoverPage({
         )
       }
       style={{flex: 1}}>
-      <ReportSectionCover
-        reportCover
-        reportPhotoUri={photoUri}
-        section={section}
-      />
+      <ReportSectionCover photo={photo} reportCover section={section} />
     </View>
   );
 }
@@ -896,7 +892,7 @@ export const ReportScreenScaffold = React.forwardRef<
       render: (
         <ReportCoverPage
           pageId={REPORT_COVER_PAGE_ID}
-          photoUri={data.s1.photo.uri ?? null}
+          photo={data.s1.photo}
           registerCaptureTarget={registerCaptureTarget}
           section={summarySection}
         />

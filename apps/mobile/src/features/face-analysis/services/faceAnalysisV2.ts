@@ -59,6 +59,82 @@ export type FaceAnalysisMeasurementInterpretation = {
   title: string;
 };
 
+// perception 하위 인사이트는 sensitivity>=3이면 서버 응답 투영에서 개별
+// 제거될 수 있어(app/api/analysis.py _project_internal_only_records) 전부
+// optional — derived의 동일 패턴과 같은 이유다.
+export type FaceAnalysisSkinInsights = {
+  texture?: FaceAnalysisInsight;
+  pores?: FaceAnalysisInsight;
+  sebumDryness?: FaceAnalysisInsight;
+  shineDistribution?: FaceAnalysisInsight;
+  shineType?: FaceAnalysisInsight;
+  pigmentation?: FaceAnalysisInsight;
+  redness?: FaceAnalysisInsight;
+  darkCircles?: FaceAnalysisInsight;
+  toneUniformity?: FaceAnalysisInsight;
+};
+
+export type FaceAnalysisFeatureImpression = {
+  eyeImpression?: FaceAnalysisInsight;
+  eyelidWeight?: FaceAnalysisInsight;
+  underEyeZone?: FaceAnalysisInsight;
+  browImpression?: FaceAnalysisInsight;
+  lipImpression?: FaceAnalysisInsight;
+};
+
+export type FaceAnalysisLinesAndPlanes = {
+  lineShape?: FaceAnalysisInsight;
+  lineWeight?: FaceAnalysisInsight;
+  dimensionality?: FaceAnalysisInsight;
+  contourDefinition?: FaceAnalysisInsight;
+  noseShadowEffect?: FaceAnalysisInsight;
+  noseCheekConnection?: FaceAnalysisInsight;
+  lowerFaceImpression?: FaceAnalysisInsight;
+  jawlineDefinition?: FaceAnalysisInsight;
+};
+
+export type FaceAnalysisGestaltPerception = {
+  perceptualCenter?: FaceAnalysisInsight;
+  featurePresenceRanking?: FaceAnalysisInsight;
+  detailDensity?: FaceAnalysisInsight;
+  negativeSpace?: FaceAnalysisInsight;
+  centerVsOuter?: FaceAnalysisInsight;
+  clarityVsSoftness?: FaceAnalysisInsight;
+  overallMood?: FaceAnalysisInsight;
+  standoutFeatures?: FaceAnalysisInsight[];
+};
+
+export type FaceAnalysisVolumePerception = {
+  upperLowerDistribution?: FaceAnalysisInsight;
+  visibleHollows?: FaceAnalysisInsight[];
+  mouthCornerImpression?: FaceAnalysisInsight;
+};
+
+export type FaceAnalysisPersonalColorPerception = {
+  status: 'provisional' | 'insufficient';
+  season: string | null;
+  subtype: string | null;
+  borderTone: string | null;
+  rationaleMetricKeys: string[];
+};
+
+export type FaceAnalysisImpressionAxis = {
+  key: string;
+  leftLabel: string;
+  rightLabel: string;
+  value: number;
+};
+
+export type FaceAnalysisPerception = {
+  skin: FaceAnalysisSkinInsights;
+  featureImpression: FaceAnalysisFeatureImpression;
+  linesAndPlanes: FaceAnalysisLinesAndPlanes;
+  gestalt: FaceAnalysisGestaltPerception;
+  volume: FaceAnalysisVolumePerception;
+  personalColor: FaceAnalysisPersonalColorPerception;
+  impressionAxes: FaceAnalysisImpressionAxis[];
+};
+
 // 서버 상세 응답 투영은 sensitivity>=3 insight(예: asymmetry)를 통째로 제거한다
 // (analysis.py _project_internal_only_records) — 각 insight 는 부재할 수 있다.
 export type FaceAnalysisDerivedResult = {
@@ -86,7 +162,7 @@ export type FaceAnalysisV2 = {
   };
   derived: FaceAnalysisDerivedResult;
   faceProfile: Record<string, FaceAnalysisMetricEnvelope>;
-  perception?: Record<string, unknown> | null;
+  perception?: FaceAnalysisPerception | null;
   pipeline: FaceAnalysisPipelineState;
   schemaVersion: 'aura-face-analysis-v2';
 };

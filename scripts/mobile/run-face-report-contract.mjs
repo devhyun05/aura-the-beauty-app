@@ -265,8 +265,9 @@ const personalColorSource = readFileSync(
   'utf8',
 );
 requireContract(
-  personalColorSource.includes('slot={{...photo, cropRect: undefined}}'),
-  'personal-color drape portraits must preserve the source face aspect ratio',
+  personalColorSource.includes('slot={photo}') &&
+    !personalColorSource.includes('slot={{...photo, cropRect: undefined}}'),
+  'personal-color drape portraits must use the aspect-corrected crop from the adapter',
 );
 const goodSwatchesIndex = personalColorSource.indexOf(
   '<SwatchRow swatches={d.goodSwatches}',
@@ -299,6 +300,11 @@ const reportTypesSource = source(
 const reportAdapterSource = source(
   'apps/mobile/src/features/face-report/services/fromFaceAnalysisReport.ts',
 );
+requireAll(reportAdapterSource, [
+  'function computeDrapeCropRect(',
+  'sourceImage.height / sourceImage.width',
+  'const drapeCropRect = computeDrapeCropRect(sourceImage)',
+], 'aspect-corrected personal-color drape crop');
 const thirdsReadoutSource = source(
   'apps/mobile/src/features/face-report/visuals/ThirdsRatioReadout.tsx',
 );
