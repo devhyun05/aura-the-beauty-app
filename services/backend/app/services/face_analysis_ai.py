@@ -75,6 +75,8 @@ class AnalysisCallMetrics:
   input_tokens: int
   output_tokens: int
   stop_reason: str | None = None
+  cache_read_input_tokens: int = 0
+  cache_write_input_tokens: int = 0
 
 
 @dataclass
