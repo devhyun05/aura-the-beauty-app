@@ -1,296 +1,73 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
-  ImageBackground,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import {useReducedMotion} from 'react-native-reanimated';
-import {Check, Download, Images, Share2, X} from 'lucide-react-native';
+import {Download, FileText, Images, Share2, ShieldCheck, X} from 'lucide-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {
-  OptionalViewShot,
-  type OptionalViewShotRef,
-} from '../../../shared/ui/OptionalViewShot';
+import type {
+  ReportExportSnapshot,
+  ReportScreenScaffoldRef,
+} from '../ReportScreenScaffold';
 import type {ReportData} from '../reportTypes';
-import {color, font, radius} from '../reportTokens';
+import {color, font, radius, shadow} from '../reportTokens';
 import {
-  captureReportImages,
   cleanupReportShareImages,
-  DEFAULT_REPORT_SHARE_PRIVACY,
   getReportCaptureTitle,
   getShareErrorMessage,
-  saveReportImagesToLibrary,
+  requestReportImageSavePermission,
+  saveReportImageToLibrary,
   shareReportImagesWithSystemSheet,
-  type ReportShareFormat,
-  type ReportSharePrivacy,
+  type ReportSaveScope,
 } from '../services/reportImageShare';
 
 type FaceReportShareSheetProps = {
   data: ReportData;
   onClose: () => void;
   profileName?: string;
+  reportRef: React.RefObject<ReportScreenScaffoldRef | null>;
   visible: boolean;
 };
 
-type ShareCardKind =
-  | 'summary'
-  | 'face'
-  | 'color-skin'
-  | 'style'
-  | 'recommendation'
-  | 'body';
+type BusyTarget = 'save' | 'share';
 
-const FORMAT_LABELS: Record<ReportShareFormat, {label: string; detail: string}> = {
-  summary: {label: '피드', detail: '4:5 · 1장'},
-  story: {label: '스토리', detail: '9:16 · 1장'},
-  full: {label: '전체', detail: '카드 묶음'},
-};
-
-const SHARE_CAPTURE_OPTIONS = {
-  format: 'jpg',
-  quality: 0.95,
-  result: 'tmpfile',
-  useRenderInContext: true,
-} as const;
-
-function getCardCopy(data: ReportData, kind: ShareCardKind) {
-  const highlights = data.s1.cards.slice(0, 4).map(card => `${card.label} · ${card.value}`);
-  switch (kind) {
-    case 'summary':
-      return {
-        eyebrow: 'MY AURA REPORT',
-        title: data.s1.headline,
-        description: data.s1.body,
-        items: highlights,
-      };
-    case 'face':
-      return {
-        eyebrow: '02 · FACE',
-        title: data.s2?.title ?? data.s3?.title ?? '나의 얼굴 특징',
-        description:
-          data.s2?.paragraph ??
-          data.s6?.paragraph ??
-          '얼굴의 비율과 이목구비, 전체 인상을 함께 살펴봤어요.',
-        items: [
-          ...(data.s3?.cards.slice(0, 3).map(card => card.regionTitle) ?? []),
-          ...(data.s6?.keywords.slice(0, 2) ?? []),
-        ],
-      };
-    case 'color-skin':
-      return {
-        eyebrow: '03 · COLOR & SKIN',
-        title: data.s4?.season.headline ?? data.s8?.title ?? '컬러와 피부',
-        description:
-          data.s4?.sub ??
-          data.s8?.sub ??
-          '나에게 어울리는 색과 피부 관찰 결과를 한 장에 정리했어요.',
-        items: [
-          ...(data.s4?.drape.goodSwatches.slice(0, 3).map(swatch => swatch.name) ?? []),
-          ...(data.s8?.aspects.slice(0, 2).map(aspect => `${aspect.heading} · ${aspect.label}`) ?? []),
-        ],
-      };
-    case 'style':
-      return {
-        eyebrow: '04 · STYLE',
-        title: data.s7?.title ?? '나에게 어울리는 스타일',
-        description: '분석 결과를 실제 메이크업과 스타일 선택으로 이어보세요.',
-        items: [
-          data.s7?.naturalCard.title,
-          data.s7?.glamCard.title,
-        ].filter((item): item is string => Boolean(item)),
-      };
-    case 'body':
-      return {
-        eyebrow: 'APPENDIX · BODY',
-        title: data.s5?.title ?? '체형 스타일 가이드',
-        description: data.s5?.sub ?? '설문을 바탕으로 체형 스타일 팁을 정리했어요.',
-        items: [
-          data.s5 ? `${data.s5.silhouetteLabel} · ${data.s5.silhouetteValue}` : null,
-          data.s5 ? `${data.s5.skeletonLabel} · ${data.s5.skeletonValue}` : null,
-          ...(data.s5?.doItems.slice(0, 2) ?? []),
-        ].filter((item): item is string => Boolean(item)),
-      };
-    case 'recommendation':
-      return {
-        eyebrow: 'NEXT STEP',
-        title: data.footer.cta,
-        description: '내 분석을 바탕으로 어울리는 메이크업을 바로 확인해 보세요.',
-        items: ['얼굴 특징 기반', '퍼스널 컬러 반영', '피부 관찰 결과 반영'],
-      };
+function resolveExportPageIds(
+  scope: ReportSaveScope,
+  snapshot: ReportExportSnapshot,
+): string[] {
+  if (scope === 'current') {
+    return snapshot.activePageId ? [snapshot.activePageId] : [];
   }
-}
-
-function ReportShareCard({
-  captureAssetId,
-  data,
-  kind,
-  onPhotoLoadSettled,
-  onPhotoLoadStart,
-  privacy,
-  profileName,
-  story = false,
-}: {
-  captureAssetId: string;
-  data: ReportData;
-  kind: ShareCardKind;
-  onPhotoLoadSettled: (captureAssetId: string) => void;
-  onPhotoLoadStart: (captureAssetId: string) => void;
-  privacy: ReportSharePrivacy;
-  profileName?: string;
-  story?: boolean;
-}) {
-  const copy = getCardCopy(data, kind);
-  const photoUri = privacy.includePhoto ? data.s1.photo.uri : undefined;
-  const content = (
-    <View style={[styles.captureContent, story ? styles.captureContentStory : null]}>
-      <View style={styles.captureBrandRow}>
-        <Text style={styles.captureBrand}>AURA</Text>
-        <Text style={styles.capturePage}>{copy.eyebrow}</Text>
-      </View>
-      <View style={styles.captureCopy}>
-        {privacy.includeName && profileName ? (
-          <Text style={styles.captureName}>{profileName}님의 분석</Text>
-        ) : null}
-        <Text numberOfLines={4} style={[styles.captureTitle, story ? styles.captureTitleStory : null]}>
-          {copy.title}
-        </Text>
-        <Text numberOfLines={4} style={styles.captureDescription}>
-          {copy.description}
-        </Text>
-      </View>
-      <View style={styles.captureItems}>
-        {copy.items.slice(0, story ? 5 : 4).map((item, index) => (
-          <View key={`${item}-${index}`} style={styles.captureItem}>
-            <View style={styles.captureCheck}>
-              <Check color={color.white} size={11} strokeWidth={3} />
-            </View>
-            <Text numberOfLines={2} style={styles.captureItemText}>{item}</Text>
-          </View>
-        ))}
-      </View>
-      <View style={styles.captureFooter}>
-        <Text style={styles.captureFooterText}>YOUR BEAUTY, DECODED</Text>
-        {privacy.includeDate ? (
-          <Text style={styles.captureFooterText}>{data.s1.dateLine}</Text>
-        ) : null}
-      </View>
-    </View>
-  );
-
-  if (!photoUri) {
-    return (
-      <View style={[styles.captureCard, story ? styles.captureCardStory : null]}>
-        <View style={styles.captureAuraOne} />
-        <View style={styles.captureAuraTwo} />
-        {content}
-      </View>
-    );
-  }
-
-  return (
-    <ImageBackground
-      blurRadius={privacy.blurPhotoBackground ? 22 : 0}
-      onError={() => onPhotoLoadSettled(captureAssetId)}
-      onLoadEnd={() => onPhotoLoadSettled(captureAssetId)}
-      onLoadStart={() => onPhotoLoadStart(captureAssetId)}
-      resizeMode="cover"
-      source={{uri: photoUri}}
-      style={[styles.captureCard, story ? styles.captureCardStory : null]}>
-      <View style={styles.capturePhotoScrim} />
-      {content}
-    </ImageBackground>
-  );
-}
-
-function PrivacyRow({
-  disabled,
-  label,
-  onValueChange,
-  value,
-}: {
-  disabled?: boolean;
-  label: string;
-  onValueChange: (value: boolean) => void;
-  value: boolean;
-}) {
-  return (
-    <View style={[styles.privacyRow, disabled ? styles.privacyRowDisabled : null]}>
-      <Text style={styles.privacyLabel}>{label}</Text>
-      <Switch
-        accessibilityLabel={label}
-        disabled={disabled}
-        onValueChange={onValueChange}
-        trackColor={{false: '#CFDADD', true: color.accentDeep}}
-        value={value}
-      />
-    </View>
-  );
+  return snapshot.pages.map(page => page.id);
 }
 
 export function FaceReportShareSheet({
   data,
   onClose,
   profileName,
+  reportRef,
   visible,
 }: FaceReportShareSheetProps) {
   const insets = useSafeAreaInsets();
-  const reduceMotion = useReducedMotion();
-  const [format, setFormat] = useState<ReportShareFormat>('summary');
-  const [privacy, setPrivacy] = useState(DEFAULT_REPORT_SHARE_PRIVACY);
-  const [busyTarget, setBusyTarget] = useState<'save' | 'share' | null>(null);
+  const [scope, setScope] = useState<ReportSaveScope>('current');
+  const [snapshot, setSnapshot] = useState<ReportExportSnapshot | null>(null);
+  const [busyTarget, setBusyTarget] = useState<BusyTarget | null>(null);
+  const [progress, setProgress] = useState({completed: 0, total: 0});
   const exportInFlightRef = useRef(false);
   const exportOperationRef = useRef(0);
-  const isMountedRef = useRef(true);
-
-  const summaryRef = useRef<OptionalViewShotRef | null>(null);
-  const storyRef = useRef<OptionalViewShotRef | null>(null);
-  const faceRef = useRef<OptionalViewShotRef | null>(null);
-  const colorSkinRef = useRef<OptionalViewShotRef | null>(null);
-  const styleRef = useRef<OptionalViewShotRef | null>(null);
-  const recommendationRef = useRef<OptionalViewShotRef | null>(null);
-  const bodyRef = useRef<OptionalViewShotRef | null>(null);
-  const capturePhotoUri = privacy.includePhoto ? data.s1.photo.uri : undefined;
-  const capturePhotoAssetIds = useMemo(
-    () =>
-      capturePhotoUri
-        ? [
-            'summary',
-            'story',
-            'face',
-            'color-skin',
-            'style',
-            'recommendation',
-            ...(data.s5 ? ['body'] : []),
-          ]
-        : [],
-    [capturePhotoUri, data.s5],
-  );
-  const capturePhotoStateRef = useRef<{
-    signature: string;
-    states: Map<string, boolean>;
-  }>({signature: '', states: new Map()});
-  const capturePhotoSignature = `${capturePhotoUri ?? 'none'}:${capturePhotoAssetIds.join(',')}`;
-
-  if (capturePhotoStateRef.current.signature !== capturePhotoSignature) {
-    capturePhotoStateRef.current = {
-      signature: capturePhotoSignature,
-      states: new Map(capturePhotoAssetIds.map(assetId => [assetId, false])),
-    };
-  }
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    isMountedRef.current = true;
     return () => {
-      isMountedRef.current = false;
+      mountedRef.current = false;
       exportOperationRef.current += 1;
     };
   }, []);
@@ -298,298 +75,292 @@ export function FaceReportShareSheet({
   useEffect(() => {
     if (!visible) {
       exportOperationRef.current += 1;
+      return;
     }
-  }, [visible]);
+    setScope('current');
+    setProgress({completed: 0, total: 0});
+    setSnapshot(reportRef.current?.getExportSnapshot() ?? null);
+  }, [reportRef, visible]);
 
-  const handlePhotoLoadStart = useCallback((captureAssetId: string) => {
-    if (capturePhotoStateRef.current.states.has(captureAssetId)) {
-      capturePhotoStateRef.current.states.set(captureAssetId, false);
-    }
-  }, []);
-
-  const handlePhotoLoadSettled = useCallback((captureAssetId: string) => {
-    if (capturePhotoStateRef.current.states.has(captureAssetId)) {
-      capturePhotoStateRef.current.states.set(captureAssetId, true);
-    }
-  }, []);
-
-  const areCapturePhotosSettled = useCallback(() => {
-    const states = capturePhotoStateRef.current.states;
-    return states.size === capturePhotoAssetIds.length
-      && Array.from(states.values()).every(Boolean);
-  }, [capturePhotoAssetIds.length]);
-
-  const captureRefs = useMemo(() => {
-    if (format === 'summary') return [summaryRef];
-    if (format === 'story') return [storyRef];
-    return [
-      summaryRef,
-      faceRef,
-      colorSkinRef,
-      styleRef,
-      recommendationRef,
-      ...(data.s5 ? [bodyRef] : []),
-    ];
-  }, [data.s5, format]);
-
-  const runExport = async (target: 'save' | 'share') => {
+  const runExport = async (target: BusyTarget) => {
     if (exportInFlightRef.current) return;
+
+    const controller = reportRef.current;
+    const nextSnapshot = controller?.getExportSnapshot() ?? snapshot;
+    if (!controller || !nextSnapshot) {
+      Alert.alert(
+        target === 'save' ? '저장하지 못했어요' : '공유하지 못했어요',
+        '실제 보고서 화면이 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.',
+      );
+      return;
+    }
+
+    const pageIds = resolveExportPageIds(scope, nextSnapshot);
+    if (!pageIds.length) {
+      Alert.alert(
+        target === 'save' ? '저장하지 못했어요' : '공유하지 못했어요',
+        '저장할 실제 보고서 카드를 찾지 못했어요.',
+      );
+      return;
+    }
+
     exportInFlightRef.current = true;
     const operationId = ++exportOperationRef.current;
-    setBusyTarget(target);
+    const originalPageId = nextSnapshot.activePageId;
     const imageUris: string[] = [];
+    let savedCount = 0;
+    setBusyTarget(target);
+    setProgress({completed: 0, total: pageIds.length});
+
+    const shouldContinue = () =>
+      mountedRef.current &&
+      visible &&
+      exportOperationRef.current === operationId;
+
     try {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      imageUris.push(...await captureReportImages(captureRefs, {
-        isReady: areCapturePhotosSettled,
-        shouldContinue: () =>
-          isMountedRef.current
-          && visible
-          && exportOperationRef.current === operationId,
-      }));
       if (target === 'save') {
-        await saveReportImagesToLibrary(imageUris);
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('저장했어요', `${imageUris.length}장의 보고서 이미지를 사진에 저장했어요.`);
-      } else {
+        await requestReportImageSavePermission();
+      }
+
+      for (let index = 0; index < pageIds.length; index += 1) {
+        const imageUri = await controller.capturePage(
+          pageIds[index],
+          shouldContinue,
+        );
+        imageUris.push(imageUri);
+
+        if (target === 'save') {
+          await saveReportImageToLibrary(imageUri);
+          savedCount += 1;
+        }
+        if (mountedRef.current) {
+          setProgress({completed: index + 1, total: pageIds.length});
+        }
+      }
+
+      if (target === 'share') {
         await shareReportImagesWithSystemSheet({
           imageUris,
-          title: getReportCaptureTitle(
-            privacy.includeName ? profileName : undefined,
-          ),
+          title: getReportCaptureTitle(profileName),
         });
+      } else {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert(
+          '실제 보고서를 저장했어요',
+          `${savedCount}장의 보고서 카드를 사진 앱에 저장했어요.`,
+        );
       }
     } catch (error) {
-      if (!isMountedRef.current || exportOperationRef.current !== operationId) {
+      if (!mountedRef.current || exportOperationRef.current !== operationId) {
         return;
       }
-      console.info('[aura:analysis] report-export:failed', {
-        format,
+      const message =
+        target === 'save' && savedCount > 0
+          ? `${savedCount}장은 저장했지만 나머지를 완료하지 못했어요.\n${getShareErrorMessage(error)}`
+          : getShareErrorMessage(error);
+      console.info('[aura:analysis] actual-report-export:failed', {
+        completed: target === 'save' ? savedCount : imageUris.length,
         message: error instanceof Error ? error.message : String(error),
+        scope,
         target,
+        total: pageIds.length,
       });
-      Alert.alert(target === 'save' ? '저장하지 못했어요' : '공유하지 못했어요', getShareErrorMessage(error));
+      Alert.alert(
+        target === 'save' ? '저장을 완료하지 못했어요' : '공유하지 못했어요',
+        message,
+      );
     } finally {
+      controller.restorePage(originalPageId);
       cleanupReportShareImages(imageUris);
       exportInFlightRef.current = false;
-      if (isMountedRef.current) {
+      if (mountedRef.current) {
         setBusyTarget(null);
       }
     }
   };
 
-  const setPrivacyValue = (key: keyof ReportSharePrivacy, value: boolean) => {
-    void Haptics.selectionAsync();
-    setPrivacy(current => ({...current, [key]: value}));
-  };
+  const activePage =
+    snapshot?.pages.find(page => page.id === snapshot.activePageId) ?? null;
+  const pageCount = snapshot?.pages.length ?? 0;
+  const selectedCount = scope === 'current' ? (activePage ? 1 : 0) : pageCount;
+  const progressLabel =
+    busyTarget && progress.total > 0
+      ? `${progress.completed}/${progress.total}`
+      : null;
 
   return (
     <Modal
-      animationType={reduceMotion ? 'fade' : 'slide'}
+      animationType="slide"
       onRequestClose={busyTarget ? undefined : onClose}
       transparent
       visible={visible}>
-      <View accessibilityViewIsModal style={styles.backdrop}>
+      <View style={styles.modal}>
         <Pressable
-          accessibilityLabel="공유 설정 닫기"
+          accessibilityLabel="보고서 저장 창 닫기"
           disabled={Boolean(busyTarget)}
           onPress={onClose}
-          style={StyleSheet.absoluteFill}
+          style={styles.backdrop}
         />
-        <View style={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}>
-          <View style={styles.sheetHandle} />
-          <View style={styles.sheetHeader}>
-            <View style={styles.sheetHeaderCopy}>
-              <Text accessibilityRole="header" style={styles.sheetTitle}>보고서 공유</Text>
-              <Text style={styles.sheetDescription}>공유 전 포함할 정보를 직접 선택하세요.</Text>
+        <View
+          accessibilityViewIsModal
+          style={[
+            styles.sheet,
+            {paddingBottom: Math.max(insets.bottom, 16)},
+          ]}>
+          <View style={styles.handle} />
+          <View style={styles.header}>
+            <View style={{flex: 1, gap: 3}}>
+              <Text style={styles.eyebrow}>ACTUAL REPORT</Text>
+              <Text style={styles.title}>실제 보고서 저장</Text>
             </View>
             <Pressable
-              accessibilityLabel="공유 설정 닫기"
+              accessibilityLabel="보고서 저장 창 닫기"
               accessibilityRole="button"
               disabled={Boolean(busyTarget)}
+              hitSlop={8}
               onPress={onClose}
-              style={({pressed}) => [styles.closeButton, pressed ? styles.buttonPressed : null]}>
+              style={({pressed}) => [
+                styles.closeButton,
+                pressed ? styles.pressed : null,
+              ]}>
               <X color={color.ink} size={19} />
             </Pressable>
           </View>
 
           <ScrollView
-            contentContainerStyle={styles.sheetScroll}
+            contentContainerStyle={styles.content}
             showsVerticalScrollIndicator={false}>
-            <View style={styles.formatTabs}>
-              {(Object.keys(FORMAT_LABELS) as ReportShareFormat[]).map(item => {
-                const selected = format === item;
+            <View style={styles.scopeTabs}>
+              {(
+                [
+                  {
+                    detail: '지금 보고 있는 카드 1장',
+                    icon: FileText,
+                    label: '현재 카드',
+                    value: 'current',
+                  },
+                  {
+                    detail: `보고서 전체 ${pageCount}장`,
+                    icon: Images,
+                    label: '전체 보고서',
+                    value: 'all',
+                  },
+                ] as const
+              ).map(option => {
+                const selected = scope === option.value;
+                const Icon = option.icon;
                 return (
                   <Pressable
                     accessibilityRole="button"
                     accessibilityState={{selected}}
-                    key={item}
+                    disabled={Boolean(busyTarget)}
+                    key={option.value}
                     onPress={() => {
                       void Haptics.selectionAsync();
-                      setFormat(item);
+                      setScope(option.value);
                     }}
                     style={({pressed}) => [
-                      styles.formatTab,
-                      selected ? styles.formatTabSelected : null,
-                      pressed ? styles.buttonPressed : null,
+                      styles.scopeTab,
+                      selected ? styles.scopeTabSelected : null,
+                      pressed ? styles.pressed : null,
                     ]}>
-                    <Text style={[styles.formatLabel, selected ? styles.formatLabelSelected : null]}>
-                      {FORMAT_LABELS[item].label}
+                    <Icon
+                      color={selected ? color.white : color.accentDeep}
+                      size={18}
+                      strokeWidth={2.2}
+                    />
+                    <Text
+                      style={[
+                        styles.scopeLabel,
+                        selected ? styles.scopeTextSelected : null,
+                      ]}>
+                      {option.label}
                     </Text>
-                    <Text style={[styles.formatDetail, selected ? styles.formatDetailSelected : null]}>
-                      {item === 'full' && data.s5 ? '6장' : FORMAT_LABELS[item].detail}
+                    <Text
+                      style={[
+                        styles.scopeDetail,
+                        selected ? styles.scopeDetailSelected : null,
+                      ]}>
+                      {option.detail}
                     </Text>
                   </Pressable>
                 );
               })}
             </View>
 
-            <View style={styles.preview}>
-              <View style={[styles.previewCard, format === 'story' ? styles.previewCardStory : null]}>
-                <Text style={styles.previewBrand}>AURA</Text>
-                <Text numberOfLines={3} style={styles.previewTitle}>{data.s1.headline}</Text>
-                <Text style={styles.previewMeta}>
-                  {format === 'full'
-                    ? `핵심 카드 ${data.s5 ? 6 : 5}장`
-                    : FORMAT_LABELS[format].detail}
+            <View style={styles.actualCard}>
+              <View style={styles.actualCardIcon}>
+                <FileText color={color.accentDeep} size={20} strokeWidth={2.2} />
+              </View>
+              <View style={{flex: 1, gap: 4}}>
+                <Text style={styles.actualCardLabel}>
+                  {scope === 'current' ? '현재 실제 카드' : '전체 실제 보고서'}
+                </Text>
+                <Text numberOfLines={2} style={styles.actualCardTitle}>
+                  {scope === 'current'
+                    ? activePage?.title ?? data.s1.headline
+                    : `${data.s1.headline} · ${selectedCount}장`}
+                </Text>
+                <Text style={styles.actualCardDescription}>
+                  화면과 같은 본문·사진·분석 결과를 임시 요약 이미지 없이 저장해요.
                 </Text>
               </View>
-              {format === 'full' ? (
-                <>
-                  <View style={[styles.previewCard, styles.previewStackOne]} />
-                  <View style={[styles.previewCard, styles.previewStackTwo]} />
-                </>
-              ) : null}
             </View>
 
-            <View style={styles.privacyCard}>
-              <Text style={styles.sectionTitle}>개인정보</Text>
-              <PrivacyRow
-                label="원본 얼굴 사진 포함"
-                onValueChange={value => setPrivacyValue('includePhoto', value)}
-                value={privacy.includePhoto}
-              />
-              <PrivacyRow
-                disabled={!privacy.includePhoto}
-                label="사진 배경 흐림"
-                onValueChange={value => setPrivacyValue('blurPhotoBackground', value)}
-                value={privacy.blurPhotoBackground}
-              />
-              <PrivacyRow
-                disabled={!profileName}
-                label="이름 포함"
-                onValueChange={value => setPrivacyValue('includeName', value)}
-                value={privacy.includeName}
-              />
-              <PrivacyRow
-                label="분석 날짜 포함"
-                onValueChange={value => setPrivacyValue('includeDate', value)}
-                value={privacy.includeDate}
-              />
+            <View style={styles.privacyNotice}>
+              <ShieldCheck color="#6C5313" size={20} strokeWidth={2.1} />
+              <Text style={styles.privacyText}>
+                저장 이미지에는 보고서에 보이는 얼굴 사진과 분석 결과가 포함될 수
+                있어요. 공유 전 받는 사람과 공개 범위를 확인해 주세요.
+              </Text>
             </View>
           </ScrollView>
 
           <View style={styles.actions}>
             <Pressable
+              accessibilityLabel={`실제 보고서 ${selectedCount}장 사진에 저장`}
               accessibilityRole="button"
-              disabled={Boolean(busyTarget)}
+              disabled={Boolean(busyTarget) || selectedCount === 0}
               onPress={() => void runExport('save')}
-              style={({pressed}) => [styles.secondaryAction, pressed ? styles.buttonPressed : null]}>
+              style={({pressed}) => [
+                styles.secondaryAction,
+                pressed ? styles.pressed : null,
+              ]}>
               {busyTarget === 'save' ? (
-                <ActivityIndicator color={color.ink} size="small" />
+                <ActivityIndicator color={color.accentDeep} size="small" />
               ) : (
-                <Download color={color.ink} size={18} />
+                <Download color={color.accentDeep} size={18} />
               )}
-              <Text style={styles.secondaryActionText}>사진에 저장</Text>
+              <Text style={styles.secondaryActionText}>
+                {busyTarget === 'save' && progressLabel
+                  ? `저장 중 ${progressLabel}`
+                  : '사진에 저장'}
+              </Text>
             </Pressable>
             <Pressable
+              accessibilityLabel={`실제 보고서 ${selectedCount}장 공유`}
               accessibilityRole="button"
-              disabled={Boolean(busyTarget)}
+              disabled={Boolean(busyTarget) || selectedCount === 0}
               onPress={() => void runExport('share')}
-              style={({pressed}) => [styles.primaryAction, pressed ? styles.buttonPressed : null]}>
+              style={({pressed}) => [
+                styles.primaryAction,
+                pressed ? styles.pressed : null,
+              ]}>
               {busyTarget === 'share' ? (
                 <ActivityIndicator color={color.white} size="small" />
-              ) : format === 'full' ? (
-                <Images color={color.white} size={18} />
               ) : (
                 <Share2 color={color.white} size={18} />
               )}
               <Text style={styles.primaryActionText}>
-                {format === 'full' ? '여러 장 공유' : '공유하기'}
+                {busyTarget === 'share' && progressLabel
+                  ? `준비 중 ${progressLabel}`
+                  : selectedCount > 1
+                    ? '여러 장 공유'
+                    : '공유하기'}
               </Text>
             </Pressable>
           </View>
-        </View>
-
-        <View pointerEvents="none" style={styles.captureHost}>
-          <OptionalViewShot
-            ref={summaryRef}
-            options={{...SHARE_CAPTURE_OPTIONS, height: 1350, width: 1080}}>
-            <ReportShareCard
-              captureAssetId="summary"
-              data={data}
-              kind="summary"
-              onPhotoLoadSettled={handlePhotoLoadSettled}
-              onPhotoLoadStart={handlePhotoLoadStart}
-              privacy={privacy}
-              profileName={profileName}
-            />
-          </OptionalViewShot>
-          <OptionalViewShot
-            ref={storyRef}
-            options={{...SHARE_CAPTURE_OPTIONS, height: 1920, width: 1080}}>
-            <ReportShareCard
-              captureAssetId="story"
-              data={data}
-              kind="summary"
-              onPhotoLoadSettled={handlePhotoLoadSettled}
-              onPhotoLoadStart={handlePhotoLoadStart}
-              privacy={privacy}
-              profileName={profileName}
-              story
-            />
-          </OptionalViewShot>
-          {(['face', 'color-skin', 'style', 'recommendation'] as ShareCardKind[]).map(kind => {
-            const ref =
-              kind === 'face'
-                ? faceRef
-                : kind === 'color-skin'
-                  ? colorSkinRef
-                  : kind === 'style'
-                    ? styleRef
-                    : recommendationRef;
-            return (
-              <OptionalViewShot
-                key={kind}
-                ref={ref}
-                options={{...SHARE_CAPTURE_OPTIONS, height: 1350, width: 1080}}>
-                <ReportShareCard
-                  captureAssetId={kind}
-                  data={data}
-                  kind={kind}
-                  onPhotoLoadSettled={handlePhotoLoadSettled}
-                  onPhotoLoadStart={handlePhotoLoadStart}
-                  privacy={privacy}
-                  profileName={profileName}
-                />
-              </OptionalViewShot>
-            );
-          })}
-          {data.s5 ? (
-            <OptionalViewShot
-              ref={bodyRef}
-              options={{...SHARE_CAPTURE_OPTIONS, height: 1350, width: 1080}}>
-              <ReportShareCard
-                captureAssetId="body"
-                data={data}
-                kind="body"
-                onPhotoLoadSettled={handlePhotoLoadSettled}
-                onPhotoLoadStart={handlePhotoLoadStart}
-                privacy={privacy}
-                profileName={profileName}
-              />
-            </OptionalViewShot>
-          ) : null}
         </View>
       </View>
     </Modal>
@@ -603,138 +374,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
   },
-  backdrop: {
-    backgroundColor: 'rgba(7, 22, 28, 0.42)',
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  buttonPressed: {
-    opacity: 0.7,
-    transform: [{scale: 0.99}],
-  },
-  captureAuraOne: {
-    backgroundColor: 'rgba(113, 184, 205, 0.16)',
-    borderRadius: 160,
-    height: 300,
-    position: 'absolute',
-    right: -120,
-    top: -80,
-    width: 300,
-  },
-  captureAuraTwo: {
-    backgroundColor: 'rgba(218, 192, 151, 0.17)',
-    borderRadius: 130,
-    bottom: -100,
-    height: 260,
-    left: -90,
-    position: 'absolute',
-    width: 260,
-  },
-  captureBrand: {
-    color: color.ink,
-    fontFamily: 'Pretendard',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 3,
-  },
-  captureBrandRow: {
+  actualCard: {
     alignItems: 'center',
+    backgroundColor: color.surface2,
+    borderColor: color.divider,
+    borderRadius: radius.lg,
+    borderWidth: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 14,
+    padding: 16,
   },
-  captureCard: {
-    backgroundColor: '#F1F6F6',
-    height: 450,
-    overflow: 'hidden',
-    width: 360,
-  },
-  captureCardStory: {
-    height: 640,
-  },
-  captureCheck: {
-    alignItems: 'center',
-    backgroundColor: color.accentDeep,
-    borderRadius: 14,
-    height: 23,
-    justifyContent: 'center',
-    width: 23,
-  },
-  captureContent: {
-    flex: 1,
-    justifyContent: 'space-between',
-    padding: 29,
-  },
-  captureContentStory: {
-    paddingBottom: 42,
-    paddingTop: 40,
-  },
-  captureCopy: {
-    gap: 10,
-  },
-  captureDescription: {
+  actualCardDescription: {
     ...font(12.5, '500', 1.55),
-    color: color.body,
-    maxWidth: 290,
-  },
-  captureFooter: {
-    alignItems: 'center',
-    borderTopColor: 'rgba(22, 48, 59, 0.18)',
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-  },
-  captureFooterText: {
-    ...font(8.5, '700', undefined, 0.7),
     color: color.muted,
   },
-  captureItem: {
+  actualCardIcon: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    borderRadius: 15,
-    flexDirection: 'row',
-    gap: 10,
-    minHeight: 42,
-    paddingHorizontal: 11,
+    backgroundColor: color.surface,
+    borderRadius: 23,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
   },
-  captureItemText: {
-    ...font(11, '700', 1.35),
-    color: color.ink,
-    flex: 1,
-  },
-  captureItems: {
-    gap: 7,
-  },
-  captureName: {
-    ...font(11, '800'),
+  actualCardLabel: {
+    ...font(11, '800', undefined, 0.5),
     color: color.accentDeep,
   },
-  capturePage: {
-    ...font(9, '800', undefined, 1),
-    color: color.muted,
+  actualCardTitle: {
+    ...font(15, '800', 1.35),
+    color: color.ink,
   },
-  capturePhotoScrim: {
-    backgroundColor: 'rgba(241, 246, 246, 0.76)',
+  backdrop: {
+    backgroundColor: 'rgba(7, 22, 28, 0.44)',
     bottom: 0,
     left: 0,
     position: 'absolute',
     right: 0,
-    top: 0,
-  },
-  captureTitle: {
-    color: color.ink,
-    fontFamily: 'Pretendard',
-    fontSize: 27,
-    fontWeight: '800',
-    lineHeight: 34,
-  },
-  captureTitleStory: {
-    fontSize: 34,
-    lineHeight: 42,
-  },
-  captureHost: {
-    left: -10000,
-    position: 'absolute',
     top: 0,
   },
   closeButton: {
@@ -745,174 +420,126 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 44,
   },
-  formatDetail: {
-    ...font(9.5, '600'),
-    color: color.muted,
+  content: {
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
   },
-  formatDetailSelected: {
-    color: 'rgba(255,255,255,0.76)',
-  },
-  formatLabel: {
-    ...font(13, '800'),
-    color: color.ink,
-  },
-  formatLabelSelected: {
-    color: color.white,
-  },
-  formatTab: {
-    alignItems: 'center',
-    borderRadius: 14,
-    flex: 1,
-    gap: 2,
-    justifyContent: 'center',
-    minHeight: 54,
-  },
-  formatTabSelected: {
-    backgroundColor: color.accentDeep,
-  },
-  formatTabs: {
-    backgroundColor: color.surface2,
-    borderRadius: 17,
-    flexDirection: 'row',
-    padding: 3,
-  },
-  preview: {
-    alignItems: 'center',
-    height: 190,
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  previewBrand: {
+  eyebrow: {
+    ...font(10, '800', undefined, 1.1),
     color: color.accentDeep,
-    fontFamily: 'Pretendard',
-    fontSize: 9,
-    letterSpacing: 2,
   },
-  previewCard: {
-    backgroundColor: '#EEF5F6',
-    borderColor: 'rgba(22,48,59,0.08)',
-    borderRadius: 15,
-    borderWidth: 1,
-    height: 166,
-    justifyContent: 'space-between',
-    padding: 15,
-    width: 134,
-    zIndex: 3,
+  handle: {
+    alignSelf: 'center',
+    backgroundColor: color.divider,
+    borderRadius: 2,
+    height: 4,
+    marginBottom: 8,
+    width: 38,
   },
-  previewCardStory: {
-    height: 178,
-    width: 100,
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
   },
-  previewMeta: {
-    ...font(8.5, '700'),
-    color: color.muted,
+  modal: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-  previewStackOne: {
-    position: 'absolute',
-    transform: [{rotate: '6deg'}, {translateX: 18}],
-    zIndex: 2,
-  },
-  previewStackTwo: {
-    position: 'absolute',
-    transform: [{rotate: '-6deg'}, {translateX: -18}],
-    zIndex: 1,
-  },
-  previewTitle: {
-    color: color.ink,
-    fontFamily: 'Pretendard',
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 18,
+  pressed: {
+    opacity: 0.72,
+    transform: [{scale: 0.985}],
   },
   primaryAction: {
+    ...shadow.cta,
     alignItems: 'center',
     backgroundColor: color.accentDeep,
     borderRadius: radius.lg,
-    flex: 1.12,
+    flex: 1,
     flexDirection: 'row',
     gap: 8,
     justifyContent: 'center',
     minHeight: 52,
+    paddingHorizontal: 12,
   },
   primaryActionText: {
     ...font(13.5, '800'),
     color: color.white,
   },
-  privacyCard: {
-    backgroundColor: color.surface2,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  privacyNotice: {
+    alignItems: 'flex-start',
+    backgroundColor: '#FFF8E5',
+    borderColor: '#E9D99E',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 11,
+    padding: 14,
   },
-  privacyLabel: {
-    ...font(13, '700'),
+  privacyText: {
+    ...font(12.5, '500', 1.55),
+    color: '#6C5313',
+    flex: 1,
+  },
+  scopeDetail: {
+    ...font(11, '600', 1.35),
+    color: color.muted,
+    textAlign: 'center',
+  },
+  scopeDetailSelected: {
+    color: 'rgba(255,255,255,0.76)',
+  },
+  scopeLabel: {
+    ...font(13.5, '800'),
     color: color.ink,
   },
-  privacyRow: {
+  scopeTab: {
     alignItems: 'center',
-    borderBottomColor: color.divider,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 48,
+    borderRadius: 15,
+    flex: 1,
+    gap: 3,
+    justifyContent: 'center',
+    minHeight: 86,
+    paddingHorizontal: 8,
   },
-  privacyRowDisabled: {
-    opacity: 0.4,
+  scopeTabSelected: {
+    backgroundColor: color.accentDeep,
+  },
+  scopeTabs: {
+    backgroundColor: color.surface2,
+    borderRadius: 18,
+    flexDirection: 'row',
+    padding: 4,
+  },
+  scopeTextSelected: {
+    color: color.white,
   },
   secondaryAction: {
     alignItems: 'center',
-    backgroundColor: color.surface2,
+    backgroundColor: color.surface,
+    borderColor: color.divider,
     borderRadius: radius.lg,
+    borderWidth: 1,
     flex: 1,
     flexDirection: 'row',
-    gap: 7,
+    gap: 8,
     justifyContent: 'center',
     minHeight: 52,
+    paddingHorizontal: 12,
   },
   secondaryActionText: {
-    ...font(13, '800'),
-    color: color.ink,
-  },
-  sectionTitle: {
-    ...font(11, '800', undefined, 0.8),
-    color: color.muted,
-    marginBottom: 2,
+    ...font(13.5, '800'),
+    color: color.accentDeep,
   },
   sheet: {
     backgroundColor: color.surface,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    maxHeight: '92%',
-    paddingTop: 9,
+    maxHeight: '88%',
+    paddingTop: 10,
   },
-  sheetDescription: {
-    ...font(11.5, '400'),
-    color: color.muted,
-    marginTop: 3,
-  },
-  sheetHandle: {
-    alignSelf: 'center',
-    backgroundColor: color.divider,
-    borderRadius: 2,
-    height: 4,
-    marginBottom: 10,
-    width: 42,
-  },
-  sheetHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-  },
-  sheetHeaderCopy: {
-    flex: 1,
-  },
-  sheetScroll: {
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  sheetTitle: {
+  title: {
     ...font(20, '800'),
     color: color.ink,
   },

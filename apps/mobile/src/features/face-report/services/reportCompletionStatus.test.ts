@@ -16,7 +16,7 @@ function report(
     reportId: 'report-status-test',
     topBarTitle: '얼굴 분석 보고서',
     s1: {} as ReportData['s1'],
-    s2: null,
+    s2: {hairlineMissing: false} as ReportData['s2'],
     s3: null,
     s4: null,
     s5: null,
@@ -40,10 +40,20 @@ const minimum = resolveReportCompletionStatus(
 );
 expectEqual(
   minimum.compactLabel,
-  '측정 ✓  관찰 중  스타일 대기',
-  'minimum report names the active and pending stages',
+  '1/3 · 기본 분석 완료 · 얼굴 해석 · 스타일링 분석 진행 중',
+  'minimum report names both independently active generation stages',
 );
 expectEqual(minimum.complete, false, 'minimum report is incomplete');
+expectEqual(
+  minimum.stages[1]?.state,
+  'active',
+  'narrative stage reflects its backend status',
+);
+expectEqual(
+  minimum.stages[2]?.state,
+  'active',
+  'styling stage reflects its backend status',
+);
 
 const progressive = resolveReportCompletionStatus(
   report({
@@ -56,8 +66,14 @@ const progressive = resolveReportCompletionStatus(
 );
 expectEqual(
   progressive.compactLabel,
-  '측정 ✓  관찰 ✓  스타일 중',
+  '2/3 · 기본 분석 · 얼굴 해석 완료 · 스타일링 분석 진행 중',
   'progressive report shows which sections are already complete',
+);
+expectEqual(progressive.successfulCount, 2, 'progressive report counts successes');
+expectEqual(
+  progressive.currentLabel,
+  '스타일링 분석 진행 중',
+  'progressive report names the active work',
 );
 
 const complete = resolveReportCompletionStatus(
@@ -70,10 +86,50 @@ const complete = resolveReportCompletionStatus(
 );
 expectEqual(
   complete.compactLabel,
-  '측정 ✓  관찰 ✓  스타일 ✓ · 완료',
+  '보고서 생성 완료',
   'completed report says it is complete',
 );
 expectEqual(complete.complete, true, 'terminal stages complete the report');
+
+const partialCore = resolveReportCompletionStatus(
+  report({
+    s2: {hairlineMissing: true} as ReportData['s2'],
+    contentStatus: {
+      narrativeStatus: 'completed',
+      stylingStatus: 'completed',
+    },
+  }),
+);
+expectEqual(
+  partialCore.stages[0]?.state,
+  'partial',
+  'missing vertical-ratio anchor keeps core analysis partial',
+);
+expectEqual(
+  partialCore.complete,
+  false,
+  'partial vertical-ratio measurement is not labelled fully complete',
+);
+
+const missingCore = resolveReportCompletionStatus(
+  report({
+    s2: null,
+    contentStatus: {
+      narrativeStatus: 'completed',
+      stylingStatus: 'completed',
+    },
+  }),
+);
+expectEqual(
+  missingCore.stages[0]?.state,
+  'partial',
+  'missing proportion section keeps core analysis partial',
+);
+expectEqual(
+  missingCore.complete,
+  false,
+  'missing proportion section is not labelled fully complete',
+);
 
 const fallbackComplete = resolveReportCompletionStatus(
   report({
@@ -86,13 +142,45 @@ const fallbackComplete = resolveReportCompletionStatus(
 );
 expectEqual(
   fallbackComplete.complete,
-  true,
-  'terminal fallback stages still complete the report',
+  false,
+  'fallback and partial stages are not labelled as full success',
+);
+expectEqual(fallbackComplete.failed, true, 'terminal issues remain visible');
+expectEqual(
+  fallbackComplete.stages[1]?.state,
+  'fallback',
+  'template narrative is labelled as a provided fallback',
+);
+expectEqual(
+  fallbackComplete.stages[2]?.state,
+  'partial',
+  'partial styling keeps its actual terminal state',
+);
+
+const partialFailure = resolveReportCompletionStatus(
+  report({
+    generationStatus: 'failed',
+    contentStatus: {
+      narrativeStatus: 'completed',
+      stylingStatus: 'failed',
+      sources: {narrative: 'llm', styling: 'llm'},
+    },
+  }),
+);
+expectEqual(
+  partialFailure.compactLabel,
+  '2/3 성공 · 스타일링 분석 실패',
+  'partial failure uses the selected compact wording',
+);
+expectEqual(
+  partialFailure.displayState,
+  'issues',
+  'partial failure uses the terminal issue state',
 );
 
 const savedLegacy = resolveReportCompletionStatus(report({}));
 expectEqual(
   savedLegacy.compactLabel,
-  '측정 ✓  관찰 ✓  스타일 ✓ · 완료',
+  '보고서 생성 완료',
   'saved reports without stage metadata remain complete',
 );

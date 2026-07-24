@@ -32,7 +32,8 @@ echo "[1/7] S3 버킷 준비: $BUCKET"
 # 2) 스크립트 업로드 (인스턴스가 실행 시점에 S3에서 fetch) -------------------
 aws s3 cp "$HERE/run_on_instance.sh" "s3://$BUCKET/scripts/run_on_instance.sh" >/dev/null
 aws s3 cp "$HERE/../ec2/run_kontext.py" "s3://$BUCKET/scripts/run_kontext.py" >/dev/null
-echo "[2/7] 스크립트 업로드: scripts/run_on_instance.sh, scripts/run_kontext.py"
+aws s3 cp "$HERE/../ec2/serve_kontext.py" "s3://$BUCKET/scripts/serve_kontext.py" >/dev/null
+echo "[2/7] 스크립트 업로드: run_on_instance.sh, run_kontext.py, serve_kontext.py"
 
 # 3) 인스턴스 IAM 역할 + 프로파일 (SSM 코어 + S3) ----------------------------
 aws iam get-role --role-name "$INSTANCE_ROLE" >/dev/null 2>&1 || \

@@ -30,6 +30,8 @@ import {color} from '../reportTokens';
 
 type GoldenMaskCardProps = {
   active: boolean;
+  captureMode?: boolean;
+  capturePosterUri?: string | null;
   descriptor: GoldenMaskReportDescriptor;
   layout?: 'standalone' | 'evidence';
   onInteractionChange?: (interacting: boolean) => void;
@@ -45,6 +47,8 @@ type ViewerStatus = 'loading' | 'ready' | 'error';
 
 export function GoldenMaskCard({
   active,
+  captureMode = false,
+  capturePosterUri,
   descriptor,
   layout = 'standalone',
   onInteractionChange,
@@ -192,8 +196,10 @@ export function GoldenMaskCard({
       return;
     }
     lastPosterRequestKeyRef.current = posterRequestKey;
-    captureUnityGoldenMaskPoster(requestIdRef.current);
-  }, [active, posterRequestKey, status]);
+    if (!captureUnityGoldenMaskPoster(requestIdRef.current)) {
+      onPosterUnavailable?.();
+    }
+  }, [active, onPosterUnavailable, posterRequestKey, status]);
 
   const panResponder = useMemo(
     () =>
@@ -278,7 +284,16 @@ export function GoldenMaskCard({
           }}
           style={styles.interactionSurface}
           {...panResponder.panHandlers}>
-          {active ? (
+          {captureMode && capturePosterUri ? (
+            <PhotoSlot
+              shape="rect"
+              slot={{
+                placeholderLabel: '3D 얼굴 이미지',
+                uri: capturePosterUri,
+              }}
+              style={styles.unityView}
+            />
+          ) : active ? (
             <UnityMakeupNativeView
               pointerEvents="none"
               runtimeMode="still"

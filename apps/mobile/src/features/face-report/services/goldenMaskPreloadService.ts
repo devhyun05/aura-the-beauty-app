@@ -58,6 +58,13 @@ function matchesCurrent(reportId: string, topologyFingerprint: string): boolean 
   );
 }
 
+function canReuseCurrent(reportId: string, topologyFingerprint: string): boolean {
+  return (
+    matchesCurrent(reportId, topologyFingerprint) &&
+    currentSession?.status !== 'error'
+  );
+}
+
 async function loadPreparedSession({
   fileUri,
   reportId,
@@ -138,7 +145,7 @@ function startPreparedSession({
   reportId: string;
   topologyFingerprint: string;
 }): Promise<GoldenMaskPreparedResult> {
-  if (matchesCurrent(reportId, topologyFingerprint) && currentSession) {
+  if (canReuseCurrent(reportId, topologyFingerprint) && currentSession) {
     console.info('[aura:golden-mask] preload:reuse', {
       reportId,
       status: currentSession.status,
@@ -216,7 +223,10 @@ export async function preloadGoldenMaskForReport(
   reportId: string,
   descriptor: GoldenMaskReportDescriptor,
 ): Promise<GoldenMaskPreparedResult> {
-  if (matchesCurrent(reportId, descriptor.topologyFingerprint) && currentSession) {
+  if (
+    canReuseCurrent(reportId, descriptor.topologyFingerprint) &&
+    currentSession
+  ) {
     return currentSession.promise;
   }
   const {fileUri} = await downloadGoldenMaskForReport(reportId, descriptor);

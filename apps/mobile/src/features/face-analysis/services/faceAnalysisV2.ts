@@ -7,10 +7,17 @@ export type FaceAnalysisStageStatus =
 
 export type FaceAnalysisStageState = {
   cacheHit: boolean;
+  durationMs?: number | null;
+  durationSource?: 'server_monotonic' | null;
   errorCode?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  providerCallCount?: number | null;
   runId?: string | null;
   status: FaceAnalysisStageStatus;
+  totalTokens?: number | null;
   updatedAt?: string | null;
+  validationRetryCount?: number | null;
 };
 
 export type FaceAnalysisPipelineState = {
@@ -92,6 +99,10 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(item => typeof item === 'string');
 }
 
+function isOptionalNonNegativeNumber(value: unknown): boolean {
+  return value == null || (typeof value === 'number' && value >= 0);
+}
+
 function isStageState(value: unknown): value is FaceAnalysisStageState {
   if (!isRecord(value)) {
     return false;
@@ -99,7 +110,15 @@ function isStageState(value: unknown): value is FaceAnalysisStageState {
   return (
     ['pending', 'processing', 'completed', 'partial', 'failed'].includes(
       String(value.status),
-    ) && typeof value.cacheHit === 'boolean'
+    ) &&
+    typeof value.cacheHit === 'boolean' &&
+    isOptionalNonNegativeNumber(value.durationMs) &&
+    (value.durationSource == null || value.durationSource === 'server_monotonic') &&
+    isOptionalNonNegativeNumber(value.inputTokens) &&
+    isOptionalNonNegativeNumber(value.outputTokens) &&
+    isOptionalNonNegativeNumber(value.totalTokens) &&
+    isOptionalNonNegativeNumber(value.providerCallCount) &&
+    isOptionalNonNegativeNumber(value.validationRetryCount)
   );
 }
 

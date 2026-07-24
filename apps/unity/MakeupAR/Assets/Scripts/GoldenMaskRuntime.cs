@@ -26,7 +26,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
     // unchanged, while the merged summary card presents the mask at the same
     // apparent size as the former full-height viewer.
     private const float PresentationFramingScale = 1.08f;
-    private const float ProfileShellStartYaw = 84.0f;
 
     [Serializable]
     private sealed class LoadRequest
@@ -60,15 +59,12 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
     private Camera presentationCamera;
     private GameObject presentationRoot;
     private Mesh faceMesh;
-    private Mesh shellMesh;
     private Mesh backingMesh;
     private Mesh wireframeMesh;
     private Material marbleMaterial;
-    private Material shellMaterial;
     private Material cavityMaterial;
     private Material wireframeMaterial;
     private MeshRenderer faceRenderer;
-    private MeshRenderer shellRenderer;
     private MeshRenderer cavityRenderer;
     private MeshRenderer wireframeRenderer;
     private int presentationLayer = FallbackGoldenMaskLayer;
@@ -344,16 +340,8 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         {
             // At a near-profile angle the real opening rims provide their own
             // depth cue; hiding the small recessed caps avoids fan edges at
-            // silhouette while preserving the measured face and shell.
+            // silhouette while preserving the measured face surface.
             cavityRenderer.enabled = Mathf.Abs(displayYaw) < 72.0f;
-        }
-        if (shellRenderer != null)
-        {
-            // Keep the clean, thin cut edge for a true profile only. Showing
-            // an outer shell during a three-quarter view can read as a second
-            // face over the measured ARKit surface.
-            shellRenderer.enabled =
-                Mathf.Abs(displayYaw) >= ProfileShellStartYaw;
         }
         Quaternion target = Quaternion.Euler(
             requestedPitch,
@@ -377,11 +365,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         {
             Destroy(marbleMaterial);
             marbleMaterial = null;
-        }
-        if (shellMaterial != null)
-        {
-            Destroy(shellMaterial);
-            shellMaterial = null;
         }
         if (cavityMaterial != null)
         {
@@ -424,10 +407,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         EnsureFrontFacingWinding(faceMesh, indices);
         SmoothShadingNormals(faceMesh, indices);
         faceMesh.RecalculateBounds();
-        shellMesh = BuildBoundaryShellMesh(
-            vertices,
-            indices,
-            PresentationShellThicknessMeters);
         wireframeMesh = BuildWireframeMesh(faceMesh, indices);
 
         presentationRoot = new GameObject("Golden Mask Presentation");
@@ -455,16 +434,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         wireframeRenderer.shadowCastingMode = ShadowCastingMode.Off;
         wireframeRenderer.receiveShadows = false;
         wireframeRenderer.enabled = false;
-
-        GameObject shell = new GameObject("Golden Mask Finished Edges");
-        shell.layer = presentationLayer;
-        shell.transform.SetParent(presentationRoot.transform, false);
-        MeshFilter shellFilter = shell.AddComponent<MeshFilter>();
-        shellFilter.sharedMesh = shellMesh;
-        shellRenderer = shell.AddComponent<MeshRenderer>();
-        shellRenderer.sharedMaterial = shellMaterial;
-        shellRenderer.shadowCastingMode = ShadowCastingMode.Off;
-        shellRenderer.receiveShadows = false;
 
         // ARKit's measured topology intentionally has eye and mouth openings.
         // A recessed, presentation-only inner surface makes those openings
@@ -540,12 +509,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
                 new Color(0.026f, 0.029f, 0.036f, 1.0f));
             marbleMaterial.SetFloat("_KeyStrength", 0.92f);
             marbleMaterial.SetFloat("_ShadowDepth", 0.74f);
-
-            shellMaterial = new Material(marbleMaterial)
-            {
-                name = "Golden Mask Smooth Cut Surface"
-            };
-            shellMaterial.SetFloat("_CullMode", 0.0f);
 
             cavityMaterial = new Material(shader)
             {
@@ -759,200 +722,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
             normals = next;
         }
         mesh.normals = normals;
-    }
-
-    private static Mesh BuildBoundaryShellMesh(
-        Vector3[] vertices,
-        int[] triangleIndices,
-        float thickness)
-    {
-        Dictionary<ulong, int> counts = new Dictionary<ulong, int>();
-        Dictionary<ulong, Vector2Int> directions =
-            new Dictionary<ulong, Vector2Int>();
-        for (int triangle = 0;
-            triangle + 2 < triangleIndices.Length;
-            triangle += 3)
-        {
-            RegisterBoundaryEdge(
-                counts,
-                directions,
-                triangleIndices[triangle],
-                triangleIndices[triangle + 1]);
-            RegisterBoundaryEdge(
-                counts,
-                directions,
-                triangleIndices[triangle + 1],
-                triangleIndices[triangle + 2]);
-            RegisterBoundaryEdge(
-                counts,
-                directions,
-                triangleIndices[triangle + 2],
-                triangleIndices[triangle]);
-        }
-        List<Vector3> shellVertices = new List<Vector3>();
-        List<int> shellIndices = new List<int>();
-        Dictionary<int, List<int>> boundaryNeighbours =
-            new Dictionary<int, List<int>>();
-        foreach (KeyValuePair<ulong, int> edge in counts)
-        {
-            if (edge.Value != 1)
-            {
-                continue;
-            }
-            Vector2Int pair = directions[edge.Key];
-            AddBoundaryNeighbour(boundaryNeighbours, pair.x, pair.y);
-            AddBoundaryNeighbour(boundaryNeighbours, pair.y, pair.x);
-        }
-        HashSet<ulong> visited = new HashSet<ulong>();
-        List<int> outerLoop = null;
-        foreach (KeyValuePair<int, List<int>> entry in boundaryNeighbours)
-        {
-            foreach (int neighbour in entry.Value)
-            {
-                if (visited.Contains(EdgeKey(entry.Key, neighbour)))
-                {
-                    continue;
-                }
-                List<int> loop = TraceBoundaryLoop(
-                    entry.Key,
-                    neighbour,
-                    boundaryNeighbours,
-                    visited);
-                if (loop.Count >= 3
-                    && (outerLoop == null || loop.Count > outerLoop.Count))
-                {
-                    outerLoop = loop;
-                }
-            }
-        }
-        if (outerLoop != null)
-        {
-            Vector3[] cleanCutRing = BuildCleanCutRing(
-                vertices,
-                outerLoop,
-                thickness);
-            int ringCount = outerLoop.Count;
-            for (int index = 0; index < ringCount; index += 1)
-            {
-                shellVertices.Add(vertices[outerLoop[index]]);
-            }
-            for (int index = 0; index < ringCount; index += 1)
-            {
-                shellVertices.Add(cleanCutRing[index]);
-            }
-            for (int index = 0; index < outerLoop.Count; index += 1)
-            {
-                int next = (index + 1) % outerLoop.Count;
-                int rear = ringCount + index;
-                int rearNext = ringCount + next;
-                shellIndices.Add(index);
-                shellIndices.Add(next);
-                shellIndices.Add(rearNext);
-                shellIndices.Add(index);
-                shellIndices.Add(rearNext);
-                shellIndices.Add(rear);
-            }
-
-        }
-        Mesh mesh = new Mesh
-        {
-            name = "Golden Mask Clean Planar Cut",
-            indexFormat = shellVertices.Count > ushort.MaxValue
-                ? IndexFormat.UInt32
-                : IndexFormat.UInt16
-        };
-        mesh.SetVertices(shellVertices);
-        mesh.SetTriangles(shellIndices, 0);
-        mesh.RecalculateNormals();
-        mesh.RecalculateBounds();
-        return mesh;
-    }
-
-    private static Vector3[] BuildCleanCutRing(
-        Vector3[] sourceVertices,
-        List<int> outerLoop,
-        float thickness)
-    {
-        int count = outerLoop.Count;
-        Vector3[] smoothed = new Vector3[count];
-        Vector2 originalMinimum =
-            new Vector2(float.PositiveInfinity, float.PositiveInfinity);
-        Vector2 originalMaximum =
-            new Vector2(float.NegativeInfinity, float.NegativeInfinity);
-        for (int index = 0; index < count; index += 1)
-        {
-            Vector3 source = sourceVertices[outerLoop[index]];
-            Vector2 point = new Vector2(source.x, source.y);
-            smoothed[index] = source;
-            originalMinimum = Vector2.Min(originalMinimum, point);
-            originalMaximum = Vector2.Max(originalMaximum, point);
-        }
-
-        // The front ring remains the untouched measured contour. Only the
-        // presentation-only rear cut is low-pass filtered into one clean
-        // closed curve. Its measured width, height, and thin shell depth are
-        // retained so profile inspection never becomes a thick slab.
-        Vector3[] scratch = new Vector3[count];
-        for (int pass = 0; pass < 6; pass += 1)
-        {
-            for (int index = 0; index < count; index += 1)
-            {
-                Vector3 previous =
-                    smoothed[(index - 1 + count) % count];
-                Vector3 current = smoothed[index];
-                Vector3 next = smoothed[(index + 1) % count];
-                scratch[index] =
-                    previous * 0.25f
-                    + current * 0.50f
-                    + next * 0.25f;
-            }
-            Vector3[] swap = smoothed;
-            smoothed = scratch;
-            scratch = swap;
-        }
-
-        Vector2 smoothedMinimum =
-            new Vector2(float.PositiveInfinity, float.PositiveInfinity);
-        Vector2 smoothedMaximum =
-            new Vector2(float.NegativeInfinity, float.NegativeInfinity);
-        for (int index = 0; index < count; index += 1)
-        {
-            Vector2 point = new Vector2(
-                smoothed[index].x,
-                smoothed[index].y);
-            smoothedMinimum = Vector2.Min(
-                smoothedMinimum,
-                point);
-            smoothedMaximum = Vector2.Max(
-                smoothedMaximum,
-                point);
-        }
-        Vector2 originalCenter =
-            (originalMinimum + originalMaximum) * 0.5f;
-        Vector2 smoothedCenter =
-            (smoothedMinimum + smoothedMaximum) * 0.5f;
-        Vector2 originalSize = originalMaximum - originalMinimum;
-        Vector2 smoothedSize = smoothedMaximum - smoothedMinimum;
-        float scaleX = smoothedSize.x > 0.000001f
-            ? originalSize.x / smoothedSize.x
-            : 1.0f;
-        float scaleY = smoothedSize.y > 0.000001f
-            ? originalSize.y / smoothedSize.y
-            : 1.0f;
-
-        Vector3[] ring = new Vector3[count];
-        for (int index = 0; index < count; index += 1)
-        {
-            Vector2 smoothedPoint = new Vector2(
-                smoothed[index].x,
-                smoothed[index].y);
-            Vector2 offset = smoothedPoint - smoothedCenter;
-            ring[index] = new Vector3(
-                originalCenter.x + offset.x * scaleX,
-                originalCenter.y + offset.y * scaleY,
-                smoothed[index].z - thickness);
-        }
-        return ring;
     }
 
     private static Mesh BuildCavityBackingMesh(
@@ -1242,7 +1011,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         wireframeVisible = false;
         activeRequestId = string.Empty;
         faceRenderer = null;
-        shellRenderer = null;
         cavityRenderer = null;
         wireframeRenderer = null;
         if (presentationRoot != null)
@@ -1255,11 +1023,6 @@ public sealed class GoldenMaskRuntime : MonoBehaviour
         {
             Destroy(faceMesh);
             faceMesh = null;
-        }
-        if (shellMesh != null)
-        {
-            Destroy(shellMesh);
-            shellMesh = null;
         }
         if (backingMesh != null)
         {

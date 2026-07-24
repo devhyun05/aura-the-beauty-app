@@ -213,9 +213,9 @@ export function summarizeRegionMeasurements(
 // Mirrors FaceAnalysisReportDetailScreen.tsx's VERTICAL_THIRDS_BLOCKED_MESSAGES
 // copy (kept local — this adapter must not import from a screen component).
 const S2_HAIRLINE_MISSING_NOTICE = {
-  title: '헤어라인이 확인되지 않았어요',
-  body: '앞머리에 가려 헤어라인을 찾지 못해, 이번 보고서는 미간·코밑·턱끝 세 지점으로만 구획했어요.',
-  cta: '이마가 보이게 다시 찍기 ›',
+  title: '헤어라인 기준점을 측정하지 못했어요',
+  body: '이번 보고서는 미간·코밑·턱끝 세 지점만 측정했어요.',
+  cta: '다시 측정하기 ›',
 };
 
 const S2_BAND_COPY = {

@@ -19,6 +19,7 @@ from app.services.face_analysis_pipeline import (
   project_legacy_analysis_result,
 )
 from app.services.face_analysis_ai import FaceAnalysisAI
+from app.services.face_analysis_ai import AnalysisCallMetrics
 from app.services.face_analysis_stage_runs import compute_stage_input_hash
 
 
@@ -168,23 +169,27 @@ class FakeStageStore:
     self.completed: list[StageName] = []
     self.failed: list[StageName] = []
     self.started: dict[StageName, dict] = {}
-    self._current_stage: StageName | None = None
+    self.observability: dict[StageName, dict] = {}
+    self._run_stages: dict[UUID, StageName] = {}
 
   async def find(self, *, stage: StageName, **_kwargs):
     return self.cached.get(stage)
 
   async def start(self, *, stage: StageName, **kwargs):
-    self._current_stage = stage
     self.started[stage] = kwargs
-    return {"id": uuid4(), "attempt_count": 1}
+    run_id = uuid4()
+    self._run_stages[run_id] = stage
+    return {"id": run_id, "attempt_count": 1}
 
-  async def complete(self, _run_id, _output, _raw, **_kwargs):
-    assert self._current_stage
-    self.completed.append(self._current_stage)
+  async def complete(self, run_id, _output, _raw, **kwargs):
+    stage = self._run_stages[run_id]
+    self.completed.append(stage)
+    self.observability[stage] = kwargs
 
-  async def fail(self, _run_id, _error):
-    assert self._current_stage
-    self.failed.append(self._current_stage)
+  async def fail(self, run_id, _error, **kwargs):
+    stage = self._run_stages[run_id]
+    self.failed.append(stage)
+    self.observability[stage] = kwargs
 
 
 def settings():
@@ -200,6 +205,49 @@ def test_initial_snapshot_contains_camera_profile_and_l1() -> None:
   assert result.face_profile["face3d.noseTipProjection"].source.value == "depth"
   assert result.derived.rules_version == "s1-l1-v1"
   assert result.pipeline.overall == "processing"
+
+
+@pytest.mark.asyncio
+async def test_stage_runtime_uses_monotonic_boundary_and_exposes_token_totals() -> None:
+  clock_values = iter((10_000_000_000, 10_125_000_000))
+  store = FakeStageStore()
+  pipeline = FaceAnalysisPipeline(
+    db=object(),
+    settings=settings(),
+    ai=FakeAI(),
+    stage_store=store,
+    persist_callback=lambda _report_id, _result: _async_none(),
+    monotonic_ns=lambda: next(clock_values),
+  )
+
+  async def invoke(metrics):
+    metrics.record_call(
+      AnalysisCallMetrics(duration_ms=110, input_tokens=120, output_tokens=45),
+    )
+    return MeasurementStageOutput.model_validate(
+      {"metrics": {}, "photoQuality": {"usable": True, "warnings": []}},
+    )
+
+  _, state = await pipeline._execute_stage(
+    model_type=MeasurementStageOutput,
+    kwargs={
+      "report_id": REPORT_ID,
+      "stage": StageName.AI_MEASUREMENT,
+      "input_hash": "hash",
+      "schema_version": "schema",
+      "prompt_version": "prompt",
+      "model": "model",
+    },
+    invoke=invoke,
+  )
+
+  assert state.duration_ms == 125
+  assert state.duration_source == "server_monotonic"
+  assert state.input_tokens == 120
+  assert state.output_tokens == 45
+  assert state.total_tokens == 165
+  assert state.provider_call_count == 1
+  assert store.observability[StageName.AI_MEASUREMENT]["duration_ms"] == 125
 
 
 @pytest.mark.asyncio

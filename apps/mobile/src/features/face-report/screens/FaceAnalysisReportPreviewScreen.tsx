@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -21,13 +21,14 @@ import {
 import type {BodyProfile} from '../../ar/stencil/src/composer/bodyProfile';
 import {loadBodyProfile} from '../../ar/stencil/src/storage/bodyProfileStore';
 import BodyPanel from '../../ar/stencil/src/components/BodyPanel';
-import {ReportScreenScaffold} from '../ReportScreenScaffold';
+import {
+  ReportScreenScaffold,
+  type ReportScreenScaffoldRef,
+} from '../ReportScreenScaffold';
 import {FaceReportShareSheet} from '../components/FaceReportShareSheet';
 import {color, font} from '../reportTokens';
 import {
   buildReportDataFromFaceAnalysisReport,
-  summarizeFace3DProfile,
-  summarizeRegionMeasurements,
 } from '../services/fromFaceAnalysisReport';
 import {
   buildMinimumFaceReportData,
@@ -40,6 +41,7 @@ export type FaceAnalysisReportPreviewScreenProps = {
   // redesigned S1–S7 UI instead of the current production layout.
   analysisReport?: FaceAnalysisReport | null;
   capturedPhotoUri?: string;
+  entryResetKey?: string;
   face3d?: Face3DProfile | null;
   face3dPhotoEvidence?: Face3DPhotoEvidence | null;
   faceGeometry2d?: FaceGeometryResult | null;
@@ -85,6 +87,7 @@ function CenteredMessage({
 export function FaceAnalysisReportPreviewScreen({
   analysisReport,
   capturedPhotoUri,
+  entryResetKey,
   face3d,
   face3dPhotoEvidence,
   faceGeometry2d,
@@ -100,6 +103,7 @@ export function FaceAnalysisReportPreviewScreen({
   onPressProducts,
 }: FaceAnalysisReportPreviewScreenProps) {
   const insets = useSafeAreaInsets();
+  const reportScreenRef = useRef<ReportScreenScaffoldRef | null>(null);
   const [loadState, setLoadState] = useState<FaceAnalysisReportDetailLoadState>({status: 'loading'});
   const [bodyProfile, setBodyProfile] = useState<BodyProfile | null>(null);
   const [isBodySurveyOpen, setIsBodySurveyOpen] = useState(false);
@@ -236,63 +240,6 @@ export function FaceAnalysisReportPreviewScreen({
     return {...reportData, initialPageId};
   }, [initialPageId, minimumReportData, reportData]);
 
-  const measurementDebugPayload = useMemo(() => {
-    if (!report) {
-      return null;
-    }
-
-    return {
-      reportId: report.id,
-      explicitReportId: reportId ?? null,
-      reportCaptureId: measurements?.captureId ?? null,
-      sessionCaptureId: sessionCaptureId ?? null,
-      useSessionMeasurements,
-      storedMeasurements: measurements ?? null,
-      sessionMeasurements: {
-        face3d: face3d ?? null,
-        face3dPhotoEvidence: face3dPhotoEvidence ?? null,
-        faceGeometry2d: faceGeometry2d ?? null,
-        faceVerticalThirds: verticalThirds ?? null,
-        personalColor: personalColor ?? null,
-      },
-      effectiveForReportRendering: {
-        face3d: effectiveFace3d,
-        face3dPhotoEvidence: effectiveFace3dPhotoEvidence,
-        faceGeometryMetrics: effectiveGeometryMetrics,
-        faceRegionVisuals: effectiveRegionVisuals,
-        faceVerticalThirds: effectiveVerticalThirds,
-        personalColor: effectivePersonalColor,
-      },
-    };
-  }, [
-    effectiveFace3d,
-    effectiveFace3dPhotoEvidence,
-    effectiveGeometryMetrics,
-    effectivePersonalColor,
-    effectiveRegionVisuals,
-    effectiveVerticalThirds,
-    face3d,
-    faceGeometry2d,
-    measurements,
-    personalColor,
-    report,
-    reportId,
-    sessionCaptureId,
-    useSessionMeasurements,
-    verticalThirds,
-  ]);
-
-  const measurementDebugSummary = useMemo(
-    () => [
-      {label: '3D 측정', value: summarizeFace3DProfile(effectiveFace3d)},
-      {
-        label: '부위 기준선',
-        value: summarizeRegionMeasurements(effectiveRegionVisuals, effectiveGeometryMetrics),
-      },
-    ],
-    [effectiveFace3d, effectiveGeometryMetrics, effectiveRegionVisuals],
-  );
-
   const handleCloseBodySurvey = useCallback(() => {
     setIsBodySurveyOpen(false);
     reloadBodyProfile();
@@ -352,7 +299,9 @@ export function FaceAnalysisReportPreviewScreen({
   return (
     <>
       <ReportScreenScaffold
+        ref={reportScreenRef}
         data={visibleReportData}
+        entryResetKey={entryResetKey}
         onBack={onBack}
         onGoldenMaskInteractionChange={onGoldenMaskInteractionChange}
         onMore={report ? handleMore : undefined}
@@ -364,13 +313,12 @@ export function FaceAnalysisReportPreviewScreen({
         onResurvey={() => setIsBodySurveyOpen(true)}
         onRetake={onRetake}
         onShare={() => setIsShareSheetVisible(true)}
-        measurementDebugPayload={measurementDebugPayload}
-        measurementDebugSummary={measurementDebugSummary}
       />
       <FaceReportShareSheet
         data={visibleReportData}
         onClose={() => setIsShareSheetVisible(false)}
         profileName={profileName}
+        reportRef={reportScreenRef}
         visible={isShareSheetVisible}
       />
       {/*

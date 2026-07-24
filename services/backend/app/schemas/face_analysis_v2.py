@@ -275,6 +275,20 @@ class StageState(FaceAnalysisV2Model):
   error_code: str | None = Field(default=None, alias="errorCode")
   updated_at: str | None = Field(default=None, alias="updatedAt")
   cache_hit: bool = Field(default=False, alias="cacheHit")
+  duration_ms: int | None = Field(default=None, ge=0, alias="durationMs")
+  duration_source: Literal["server_monotonic"] | None = Field(
+    default=None,
+    alias="durationSource",
+  )
+  input_tokens: int | None = Field(default=None, ge=0, alias="inputTokens")
+  output_tokens: int | None = Field(default=None, ge=0, alias="outputTokens")
+  total_tokens: int | None = Field(default=None, ge=0, alias="totalTokens")
+  provider_call_count: int | None = Field(default=None, ge=0, alias="providerCallCount")
+  validation_retry_count: int | None = Field(
+    default=None,
+    ge=0,
+    alias="validationRetryCount",
+  )
 
   @classmethod
   def pending(cls) -> "StageState":

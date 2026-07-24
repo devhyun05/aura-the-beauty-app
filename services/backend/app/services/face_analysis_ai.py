@@ -2,6 +2,7 @@ import json
 import logging
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Callable, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -61,6 +62,34 @@ _CONSULT_GENDER_DIRECTIVES = {
 }
 
 
+@dataclass(frozen=True)
+class AnalysisCallMetrics:
+  duration_ms: int
+  input_tokens: int
+  output_tokens: int
+  stop_reason: str | None = None
+
+
+@dataclass
+class StageGenerationMetrics:
+  input_tokens: int = 0
+  output_tokens: int = 0
+  provider_call_count: int = 0
+  validation_retry_count: int = 0
+
+  @property
+  def total_tokens(self) -> int:
+    return self.input_tokens + self.output_tokens
+
+  def record_call(self, metrics: AnalysisCallMetrics) -> None:
+    self.input_tokens += metrics.input_tokens
+    self.output_tokens += metrics.output_tokens
+    self.provider_call_count += 1
+
+  def record_validation_retry(self) -> None:
+    self.validation_retry_count += 1
+
+
 class StructuredAnalysisClient(Protocol):
   async def analyze_structured_json(
     self,
@@ -71,6 +100,7 @@ class StructuredAnalysisClient(Protocol):
     source_image_bytes: bytes | None,
     max_tokens: int,
     stage: str | None = None,
+    on_call_metrics: Callable[[AnalysisCallMetrics], None] | None = None,
   ) -> dict[str, Any]: ...
 
 
@@ -158,6 +188,7 @@ class FaceAnalysisAI:
     max_tokens: int,
     stage: str | None = None,
     semantic_validator: Callable[[OutputModel], list[dict[str, Any]]] | None = None,
+    generation_metrics: StageGenerationMetrics | None = None,
   ) -> OutputModel:
     validation_errors: list[dict[str, Any]] = []
     current_prompt = user_prompt
@@ -169,6 +200,11 @@ class FaceAnalysisAI:
         source_image_bytes=source_image_bytes,
         max_tokens=max_tokens,
         stage=stage,
+        on_call_metrics=(
+          generation_metrics.record_call
+          if generation_metrics is not None
+          else None
+        ),
       )
       try:
         output = model_type.model_validate(response)
@@ -186,6 +222,8 @@ class FaceAnalysisAI:
         if not validation_errors:
           return output
       if attempt == 0:
+        if generation_metrics is not None:
+          generation_metrics.record_validation_retry()
         # 1차 검증 실패의 실제 사유를 남긴다 — "왜 재시도했나"(스테이지 지연 +15초의
         # 주범)를 추정 없이 확인하려는 관측성 로그. 예: consult 룩 title max_length 초과.
         logger.warning(
@@ -211,6 +249,7 @@ class FaceAnalysisAI:
     source_image_bytes: bytes,
     coverage: MeasurementCoveragePlan,
     camera_profile: dict[str, MetricEnvelope],
+    generation_metrics: StageGenerationMetrics | None = None,
   ) -> MeasurementStageOutput:
     model_profile = filter_metrics_for_model(camera_profile)
     prompt_payload = {
@@ -235,6 +274,7 @@ class FaceAnalysisAI:
       # 성공 런도 출력이 2700~2800(상한 2800)에 붙어 절단 위험 → 헤드룸 확보.
       max_tokens=3200,
       stage="measure",
+      generation_metrics=generation_metrics,
     )
     authoritative = set(coverage.authoritative_keys)
     allowed = set(coverage.missing_observable_keys)
@@ -263,6 +303,7 @@ class FaceAnalysisAI:
     profile: dict[str, MetricEnvelope],
     derived: DerivedResult | dict[str, Any],
     anchor: Mapping[str, Any] | None = None,
+    generation_metrics: StageGenerationMetrics | None = None,
   ) -> PerceptionResult:
     model_profile = filter_metrics_for_model(profile)
     model_derived = filter_internal_only_payload(_jsonable(derived))
@@ -301,6 +342,7 @@ class FaceAnalysisAI:
       max_tokens=4800,
       stage="perceive",
       semantic_validator=_validate_user_copy,
+      generation_metrics=generation_metrics,
     )
     skin_type = anchor_payload.get("skinType")
     recommended_mood = anchor_payload.get("recommendedMood")
@@ -338,6 +380,7 @@ class FaceAnalysisAI:
     perception: PerceptionResult | dict[str, Any] | None = None,
     profile_gender: str | None = None,
     anchor: Mapping[str, Any] | None = None,
+    generation_metrics: StageGenerationMetrics | None = None,
   ) -> ConsultingResult:
     model_profile = filter_metrics_for_model(profile)
     anchor_payload = {
@@ -438,6 +481,7 @@ class FaceAnalysisAI:
       max_tokens=3200,
       stage="consult",
       semantic_validator=validate_consulting,
+      generation_metrics=generation_metrics,
     )
     recommended_mood = anchor_payload.get("recommendedMood")
     return (
