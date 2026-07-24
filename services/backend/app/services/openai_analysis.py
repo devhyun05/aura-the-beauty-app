@@ -1960,7 +1960,17 @@ class OpenAIAnalysisService:
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": max_tokens,
         "temperature": 0.1,
-        "system": developer_prompt,
+        # Bedrock processes cache prefixes in tools → system → messages order.
+        # Marking the static system block therefore caches the stage tool schema
+        # and developer instructions while keeping the per-report facts/image
+        # in the uncached user message.
+        "system": [
+          {
+            "type": "text",
+            "text": developer_prompt,
+            "cache_control": {"type": "ephemeral"},
+          },
+        ],
         "messages": [{"role": "user", "content": content}],
       }
       if tool_enforced:
@@ -2498,18 +2508,44 @@ class OpenAIAnalysisService:
     usage = usage if isinstance(usage, dict) else {}
     duration_ms = round((time.monotonic() - started_at) * 1000)
     stop_reason = str(response_payload.get("stop_reason") or "")
+    uncached_input_tokens = int(usage.get("input_tokens") or 0)
+    cache_read_input_tokens = int(
+      usage.get("cache_read_input_tokens")
+      or usage.get("cacheReadInputTokens")
+      or 0
+    )
+    cache_write_input_tokens = int(
+      usage.get("cache_creation_input_tokens")
+      or usage.get("cache_write_input_tokens")
+      or usage.get("cacheWriteInputTokens")
+      or 0
+    )
+    # Preserve the pre-cache meaning of inputTokens as the total logical prompt
+    # size so stage/runtime comparisons do not look artificially smaller on hits.
+    total_input_tokens = (
+      uncached_input_tokens
+      + cache_read_input_tokens
+      + cache_write_input_tokens
+    )
     metrics = AnalysisCallMetrics(
       duration_ms=duration_ms,
-      input_tokens=int(usage.get("input_tokens") or 0),
+      input_tokens=total_input_tokens,
       output_tokens=int(usage.get("output_tokens") or 0),
       stop_reason=stop_reason or None,
+      cache_read_input_tokens=cache_read_input_tokens,
+      cache_write_input_tokens=cache_write_input_tokens,
     )
     logger.info(
-      "[aura:bedrock] %s:metrics stage=%s durationMs=%s inputTokens=%s outputTokens=%s",
+      "[aura:bedrock] %s:metrics stage=%s durationMs=%s inputTokens=%s "
+      "uncachedInputTokens=%s cacheReadInputTokens=%s cacheWriteInputTokens=%s "
+      "outputTokens=%s",
       context,
       stage or "-",
       duration_ms,
       metrics.input_tokens,
+      uncached_input_tokens,
+      metrics.cache_read_input_tokens,
+      metrics.cache_write_input_tokens,
       metrics.output_tokens,
     )
     # 실험 지표 sink(로그 레벨 무관). context: analysis=단일호출, stage=V2 스테이지.
@@ -2521,6 +2557,9 @@ class OpenAIAnalysisService:
         "stage": stage,
         "durationMs": duration_ms,
         "inputTokens": metrics.input_tokens,
+        "uncachedInputTokens": uncached_input_tokens,
+        "cacheReadInputTokens": metrics.cache_read_input_tokens,
+        "cacheWriteInputTokens": metrics.cache_write_input_tokens,
         "outputTokens": metrics.output_tokens,
         "stopReason": stop_reason or "end_turn",
       },
