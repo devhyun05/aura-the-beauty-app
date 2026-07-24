@@ -144,6 +144,19 @@ export type Face3DProfile =
   | Face3DProfileV2
   | Face3DProfileV3;
 
+// Authenticated report detail responses intentionally omit millimeter values
+// and v3 receipt/sensor trust material. This structural type is display-only:
+// it cannot be passed to the analysis-eligibility gate as a trusted profile.
+export type Face3DReportProfile = {
+  metrics: Face3DMetrics;
+  schemaVersion: Face3DProfile['schemaVersion'];
+  source: Face3DProfile['source'];
+  targetFrameCount: number;
+  topologyFingerprint: string;
+  validFrameCount: number;
+  warnings: string[];
+};
+
 export type Face3DStartRequest = {
   gateVersion: 'face3d-gate-v1';
   maximumDurationMs: number;

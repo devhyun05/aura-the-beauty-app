@@ -8,7 +8,7 @@ import {
 } from '../../../shared/services/faceAnalysisService';
 import {getUserProfile} from '../../../shared/services/userService';
 import type {FaceAnalysisReport} from '../../../shared/types/faceAnalysis';
-import type {Face3DProfile} from '../../face-3d/types';
+import type {Face3DReportProfile} from '../../face-3d/types';
 import type {Face3DPhotoEvidence} from '../../face-3d/services/face3DPhotoEvidence';
 import type {FaceGeometryResult} from '../../face-geometry/types';
 import type {FaceVerticalThirdsResult} from '../../face-ratio/types';
@@ -42,7 +42,7 @@ export type FaceAnalysisReportPreviewScreenProps = {
   analysisReport?: FaceAnalysisReport | null;
   capturedPhotoUri?: string;
   entryResetKey?: string;
-  face3d?: Face3DProfile | null;
+  face3d?: Face3DReportProfile | null;
   face3dPhotoEvidence?: Face3DPhotoEvidence | null;
   faceGeometry2d?: FaceGeometryResult | null;
   initialPageId?: string;

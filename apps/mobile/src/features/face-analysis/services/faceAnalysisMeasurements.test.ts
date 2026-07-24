@@ -149,6 +149,52 @@ function buildFace3dFixture(): Face3DProfile {
   };
 }
 
+function buildFace3dV3Fixture(): Face3DProfile {
+  const metric = {
+    confidence: 0.8,
+    mad: 0.004,
+    unit: 'normalized' as const,
+    validFrameCount: 7,
+    value: 0.1,
+    valueMm: 2.1,
+    valueMmConfidence: 0.72,
+    valueMmMad: 0.11,
+    valueMmValidFrameCount: 6,
+  };
+
+  return {
+    aggregation: 'median_mad',
+    calibrationReceipt: null,
+    captureNonce: 'capture-nonce-v3',
+    captureWindowMs: 420,
+    collectionPolicyId: 'unified-micro-burst-5of8-v1',
+    completionRatio: 7 / 8,
+    confidenceCalibrationStatus: 'uncalibrated',
+    gateVersion: 'face3d-gate-v2',
+    metrics: {
+      centralProjectionScore: metric,
+      chinProjection: metric,
+      lowerLipToELine: metric,
+      noseTipProjection: metric,
+      upperLipToELine: metric,
+    },
+    profileBindingSha256: null,
+    sampleMode: 'micro_burst',
+    schemaVersion: 'aura.face3d-profile.v3',
+    sensorProvenance: {
+      depthDataObservedRatio: null,
+      deviceModel: null,
+      faceTrackingSupported: null,
+      trueDepthHardware: null,
+    },
+    source: 'arkit_face_mesh',
+    targetFrameCount: 8,
+    topologyFingerprint: 'synthetic-v8-i12-uv8-v3',
+    validFrameCount: 7,
+    warnings: ['micro_burst_target_not_reached'],
+  };
+}
+
 function buildPersonalColorFixture(): PersonalColorMeasurementInput {
   const axis = {basis: 'within-frame-relative' as const, confidence: 0.8, floored: false, value: 0.32};
   const typeKeys: PersonalColor12Type[] = [
@@ -427,6 +473,70 @@ function buildPersonalColorFixture(): PersonalColorMeasurementInput {
     (personalColor.reported as Record<string, unknown>).privacy,
     undefined,
     'privacy 재부착 금지',
+  );
+}
+
+// Backend detail responses intentionally remove millimeter values and receipt /
+// sensor trust material. The remaining normalized v3 metrics must still be
+// available to the saved-report display path.
+{
+  const payload = expectDefined(
+    buildFaceAnalysisMeasurementsPayload({
+      captureId: 'cap-v3',
+      face3d: buildFace3dV3Fixture(),
+      faceGeometry2d: null,
+      faceVerticalThirds: null,
+      personalColor: null,
+    }),
+    'v3 payload',
+  );
+  const projected = simulateBackendCamelize(payload) as Record<string, unknown>;
+  const projectedFace3d = expectDefined(
+    projected.face3d as Record<string, unknown> | undefined,
+    'projected v3 face3d',
+  );
+  for (const field of [
+    'calibrationReceipt',
+    'captureNonce',
+    'profileBindingSha256',
+    'sensorProvenance',
+    'serverCalibrationReceiptStatus',
+  ]) {
+    delete projectedFace3d[field];
+  }
+  const projectedMetrics = expectDefined(
+    projectedFace3d.metrics as Record<string, unknown> | undefined,
+    'projected v3 metrics',
+  );
+  for (const metric of Object.values(projectedMetrics)) {
+    if (typeof metric !== 'object' || metric === null || Array.isArray(metric)) {
+      continue;
+    }
+    for (const field of [
+      'valueMm',
+      'valueMmConfidence',
+      'valueMmMad',
+      'valueMmValidFrameCount',
+    ]) {
+      delete (metric as Record<string, unknown>)[field];
+    }
+  }
+
+  const decoded = expectDefined(
+    parseFaceAnalysisMeasurements(projected),
+    'projected v3 decode',
+  );
+  const face3d = expectDefined(decoded.face3d, 'projected v3 display profile');
+  expectEqual(face3d.schemaVersion, 'aura.face3d-profile.v3', 'projected v3 schema');
+  expectEqual(
+    face3d.metrics.noseTipProjection.value,
+    0.1,
+    'projected v3 normalized metric retained',
+  );
+  expectEqual(
+    face3d.metrics.noseTipProjection.valueMm,
+    undefined,
+    'projected v3 millimeter metric remains private',
   );
 }
 
