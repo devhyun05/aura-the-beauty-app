@@ -287,10 +287,9 @@ function SummaryStoryCard({
   const [maskInteracting, setMaskInteracting] = useState(false);
 
   React.useEffect(() => {
+    setMaskMounted(false);
     const frame = requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({animated: false, y: 0});
-      setMaskLayoutY(Number.POSITIVE_INFINITY);
-      setMaskMounted(false);
     });
     return () => cancelAnimationFrame(frame);
   }, [entryResetKey]);

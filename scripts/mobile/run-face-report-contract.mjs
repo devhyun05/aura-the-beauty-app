@@ -94,11 +94,23 @@ requireContract(
 const goldenMaskSource = source(
   'apps/mobile/src/features/face-report/components/GoldenMaskCard.tsx',
 );
+const goldenMaskPreloadSource = source(
+  'apps/mobile/src/features/face-report/services/goldenMaskPreloadService.ts',
+);
 requireAll(goldenMaskSource, [
   'captureMode && capturePosterUri',
   'captureUnityGoldenMaskPoster(requestIdRef.current)',
   'onPosterUnavailable?.()',
 ], 'native Golden Mask poster capture with a safe fallback');
+requireAll(goldenMaskPreloadSource, [
+  "currentSession?.status !== 'error'",
+  'canReuseCurrent(reportId, topologyFingerprint)',
+  'canReuseCurrent(reportId, descriptor.topologyFingerprint)',
+], 'failed Golden Mask preload sessions must remain retryable');
+requireContract(
+  !scaffoldSource.includes('setMaskLayoutY(Number.POSITIVE_INFINITY);'),
+  'report entry must not erase the measured Golden Mask layout after mount',
+);
 requireContract(
   !scaffoldSource.includes('MeasurementDebug') &&
     !previewSource.includes('measurementDebug'),
