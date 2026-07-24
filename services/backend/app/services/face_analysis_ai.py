@@ -24,20 +24,27 @@ from app.services.face_analysis_measurements import (
 logger = logging.getLogger(__name__)
 
 
-MEASUREMENT_PROMPT_VERSION = "s1-measurement-v1"
-# 한국어 출력 지시문 추가로 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
-PERCEPTION_PROMPT_VERSION = "s1-perception-v4"
-# 양쪽 룩과 근거 행을 성공 출력의 필수 계약으로 승격해 캐시를 무효화한다.
-CONSULTING_PROMPT_VERSION = "s1-consulting-v7"
+# 봉투 축소 지시(reason/warnings 생략) 추가로 계약이 바뀌므로 버전 상향.
+MEASUREMENT_PROMPT_VERSION = "s1-measurement-v2"
+# raw measurement·내부 필드명 노출 금지를 복원(치명적 버그: 설명문에 metric key/각도값이
+# 그대로 노출됨)하며 계약이 바뀌므로 버전 상향(스테이지 캐시 무효화).
+PERCEPTION_PROMPT_VERSION = "s1-perception-v5"
+# 위와 동일한 이유로 버전 상향 — 양쪽 룩과 근거 행 계약은 그대로 유지.
+CONSULTING_PROMPT_VERSION = "s1-consulting-v8"
 # 사용자에게 보이는 라벨·설명·추천 문장은 모두 한국어여야 한다(단일 경로와 동일 원칙).
 # enum status 코드·metric 키만 영문 유지. perceive/consult 두 스테이지가 리포트의
 # 자유 텍스트(피부 라벨·부위 노트·요약·메이크업 가이드)를 전부 생성하므로 여기에 건다.
 _KOREAN_OUTPUT_DIRECTIVE = (
   "Write every label, description, summary, recommendation, and look title/subtitle as "
-  "concise natural Korean (한국어) — short phrases, no filler. Keep only enum status codes "
-  "and metric keys in English. Digits are allowed in user-facing copy where they read "
-  "naturally (예: 삼분할 대신 3분할); translate evidence into a cautious visual interpretation "
-  "and a useful implication."
+  "concise natural Korean (한국어) — short phrases, no filler. "
+  "Never quote internal field or metric-key identifiers in user-facing copy — no dotted or "
+  "snake_case tokens like skin.pores, brow_slope_asymmetry, canthal_tilt_asymmetry, "
+  "verticalThirds.lowerNormalized. Never repeat a raw measurement value (angles in degrees, "
+  "mm, percentages, color-distance numbers like dL≈61) either — always translate the "
+  "evidence into a cautious visual interpretation and a useful implication instead of citing "
+  "the number or key behind it. A small natural-language ordinal is fine only when it reads "
+  "like everyday Korean with no unit attached (예: 3분할, 두 겹) — never pair a number with a "
+  "unit, a percent sign, or a field name."
 )
 FORBIDDEN_INFERENCES = (
   "medical diagnosis, disease, age, ethnicity, health status, cosmetic procedures, "
@@ -68,8 +75,6 @@ class AnalysisCallMetrics:
   input_tokens: int
   output_tokens: int
   stop_reason: str | None = None
-  cache_read_input_tokens: int = 0
-  cache_write_input_tokens: int = 0
 
 
 @dataclass
