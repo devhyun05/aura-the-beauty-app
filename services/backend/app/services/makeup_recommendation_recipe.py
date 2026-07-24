@@ -1,5 +1,7 @@
 """Build reproducible, shop-order makeup application plans for recommendation guides."""
 
+import colorsys
+import json
 from copy import deepcopy
 import re
 from typing import Any
@@ -605,3 +607,149 @@ def enrich_makeup_application_plans(
     look["areaGuides"] = [guide for _, guide in indexed_guides]
     look.pop("area_guides", None)
   return enriched
+
+
+# ------------------------------------------------------------ flush-area color harmony
+
+# 치크·립 혈색 hue 안전망 — 프롬프트 가드레일이 뚫려도(퍼스널컬러 팔레트 혼동,
+# 붉은기 코렉터 개념 누수) 민트 치크 같은 색이 사용자에게 도달하지 않게 한다.
+# 두 arc 모두 0°를 감싸는 (start > end) 형태를 전제로 판정한다.
+FLUSH_HUE_ARCS: dict[str, tuple[float, float]] = {
+  "cheek": (315.0, 40.0),
+  "lip": (300.0, 50.0),
+}
+# 채도가 이보다 낮으면 베이지·그레이지 중성색으로 보고 hue를 판정하지 않는다.
+NEUTRAL_SATURATION_MAX = 0.12
+# 무대·컨셉 요청, 또는 사용자가 비혈색 색을 직접 지목한 요청은 비혈색 치크·립도
+# 정당하다 — 개입하지 않는다(요청 > 안전망).
+UNCONVENTIONAL_COLOR_CONTEXT = re.compile(
+  r"무대|화보|페스티벌|파티|공연|콘서트|클럽|네온|코스프레|할로윈|아트\s*메이크업|유니크"
+  r"|컬러\s*메이크업|원색|옐로우|레몬|민트|그린|블루|라벤더|퍼플|바이올렛",
+)
+
+
+def _hex_to_hsl(value: str) -> tuple[float, float, float]:
+  red, green, blue = (int(value[index : index + 2], 16) / 255 for index in (1, 3, 5))
+  hue, lightness, saturation = colorsys.rgb_to_hls(red, green, blue)
+  return hue * 360.0, saturation, lightness
+
+
+def _hsl_to_hex(hue: float, saturation: float, lightness: float) -> str:
+  red, green, blue = colorsys.hls_to_rgb((hue % 360.0) / 360.0, lightness, saturation)
+  return "#" + "".join(f"{round(channel * 255):02X}" for channel in (red, green, blue))
+
+
+def _hue_distance(left: float, right: float) -> float:
+  delta = abs(left - right) % 360.0
+  return min(delta, 360.0 - delta)
+
+
+def _flush_color_name(hue: float, saturation: float, lightness: float) -> str:
+  base = (
+    "모브"
+    if 290.0 <= hue < 330.0
+    else "로즈"
+    if hue >= 330.0 or hue < 15.0
+    else "코럴"
+    if hue < 32.0
+    else "피치"
+  )
+  prefix = (
+    "라이트 "
+    if lightness >= 0.75
+    else "딥 "
+    if lightness <= 0.4
+    else "뮤티드 "
+    if saturation <= 0.35
+    else ""
+  )
+  return prefix + base
+
+
+def _harmonize_flush_color(color: Any, arc: tuple[float, float]) -> dict[str, str] | None:
+  if not isinstance(color, dict):
+    return None
+  hex_value = str(color.get("hex") or "").strip().upper()
+  if not _HEX_PATTERN.fullmatch(hex_value):
+    return None
+  hue, saturation, lightness = _hex_to_hsl(hex_value)
+  start, end = arc
+  if saturation <= NEUTRAL_SATURATION_MAX or hue >= start or hue <= end:
+    return None
+  # 경계 그대로 클램프하면 hex 반올림 후 재판정에서 arc 밖으로 벗어날 수 있어
+  # 안쪽으로 2° 들여 넣는다(멱등 보장).
+  clamped_hue = (
+    (start + 2.0) % 360.0
+    if _hue_distance(hue, start) <= _hue_distance(hue, end)
+    else (end - 2.0) % 360.0
+  )
+  adjusted_hex = _hsl_to_hex(clamped_hue, saturation, lightness)
+  adjustment = {
+    "fromName": str(color.get("name") or ""),
+    "fromHex": hex_value,
+    "toHex": adjusted_hex,
+  }
+  color["hex"] = adjusted_hex
+  color["name"] = _flush_color_name(clamped_hue, saturation, lightness)
+  adjustment["toName"] = color["name"]
+  return adjustment
+
+
+def allows_unconventional_area_colors(
+  context_snapshot: dict[str, Any],
+  answers: list[dict[str, Any]] | None = None,
+) -> bool:
+  """비혈색 치크·립도 정당한 컨셉 요청(무대·페스티벌 등)이 있는지 판정한다."""
+  selection = (
+    context_snapshot.get("selection")
+    if isinstance(context_snapshot.get("selection"), dict)
+    else {}
+  )
+  searchable = json.dumps(
+    {"selection": selection, "answers": answers or []},
+    ensure_ascii=False,
+    default=str,
+  )
+  return bool(UNCONVENTIONAL_COLOR_CONTEXT.search(searchable))
+
+
+def harmonize_flush_area_colors(
+  recommendation: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+  """치크·립 가이드·플랜 색을 혈색 hue 범위로 강제한다(위반 시 클램프+이름 교체)."""
+  harmonized = deepcopy(recommendation)
+  adjustments: list[dict[str, str]] = []
+  looks = harmonized.get("looks")
+  if not isinstance(looks, list):
+    return harmonized, adjustments
+  for look in looks:
+    if not isinstance(look, dict):
+      continue
+    guides = look.get("areaGuides")
+    if not isinstance(guides, list):
+      guides = look.get("area_guides")
+    if not isinstance(guides, list):
+      continue
+    for guide in guides:
+      if not isinstance(guide, dict):
+        continue
+      area = str(guide.get("area") or "")
+      arc = FLUSH_HUE_ARCS.get(area)
+      if arc is None:
+        continue
+      guide_adjustment = _harmonize_flush_color(guide.get("color"), arc)
+      if guide_adjustment:
+        adjustments.append({"area": area, **guide_adjustment})
+      plan = guide.get("applicationPlan")
+      if not isinstance(plan, dict):
+        plan = guide.get("application_plan")
+      steps = plan.get("steps") if isinstance(plan, dict) else None
+      for step in steps if isinstance(steps, list) else []:
+        if not isinstance(step, dict):
+          continue
+        colors = step.get("colors")
+        for plan_color in colors if isinstance(colors, list) else []:
+          plan_adjustment = _harmonize_flush_color(plan_color, arc)
+          if plan_adjustment:
+            adjustments.append({"area": area, **plan_adjustment})
+  return harmonized, adjustments

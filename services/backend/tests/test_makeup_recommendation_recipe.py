@@ -11,7 +11,11 @@ from app.services import makeup_recommendation as recommendation_service
 from app.services import makeup_recommendation_image as image_service
 from app.services import makeup_recommendation_products as product_service
 from app.services.makeup_recommendation_prompt import adapt_v1_recommendation
-from app.services.makeup_recommendation_recipe import enrich_makeup_application_plans
+from app.services.makeup_recommendation_recipe import (
+  allows_unconventional_area_colors,
+  enrich_makeup_application_plans,
+  harmonize_flush_area_colors,
+)
 from app.services.makeup_recommendation_session import complete_generation
 
 
@@ -369,3 +373,98 @@ async def test_complete_generation_persists_application_plan_json() -> None:
   assert saved_guide["applicationOrder"] == 1
   assert saved_guide["applicationPlan"]["recipeVersion"] == "makeup-application-v1"
   assert result["recommendation"]["looks"][0]["areaGuides"][0]["applicationPlan"] == saved_guide["applicationPlan"]
+
+
+def test_harmonize_clamps_mint_cheek_and_keeps_flush_and_eye_colors() -> None:
+  recommendation = {
+    "looks": [
+      {
+        "areaGuides": [
+          {"area": "cheek", "color": {"name": "라이트 민트", "hex": "#B8E6D0"}},
+          {"area": "lip", "color": {"name": "뮤티드 로즈", "hex": "#A85D68"}},
+          {"area": "eye", "color": {"name": "카키 스모키", "hex": "#6B7A4F"}},
+        ],
+      },
+    ],
+  }
+
+  harmonized, adjustments = harmonize_flush_area_colors(recommendation)
+  guides = {guide["area"]: guide for guide in harmonized["looks"][0]["areaGuides"]}
+
+  assert [adjustment["area"] for adjustment in adjustments] == ["cheek"]
+  assert adjustments[0]["fromHex"] == "#B8E6D0"
+  assert guides["cheek"]["color"]["hex"] != "#B8E6D0"
+  assert "민트" not in guides["cheek"]["color"]["name"]
+  assert guides["lip"]["color"] == {"name": "뮤티드 로즈", "hex": "#A85D68"}
+  assert guides["eye"]["color"] == {"name": "카키 스모키", "hex": "#6B7A4F"}
+  # 클램프 결과는 혈색 범위 안이어야 한다 — 재적용 시 무보정(멱등).
+  again, second_pass = harmonize_flush_area_colors(harmonized)
+  assert second_pass == []
+  assert again == harmonized
+
+
+def test_harmonize_allows_low_saturation_neutrals() -> None:
+  recommendation = {
+    "looks": [
+      {"areaGuides": [{"area": "lip", "color": {"name": "그레이지", "hex": "#B8AEB0"}}]},
+    ],
+  }
+
+  harmonized, adjustments = harmonize_flush_area_colors(recommendation)
+
+  assert adjustments == []
+  assert harmonized["looks"][0]["areaGuides"][0]["color"]["hex"] == "#B8AEB0"
+
+
+def test_harmonize_clamps_plan_step_colors_in_flush_areas() -> None:
+  recommendation = {
+    "looks": [
+      {
+        "areaGuides": [
+          {
+            "area": "lip",
+            "color": {"name": "로즈", "hex": "#A85D68"},
+            "applicationPlan": {
+              "steps": [
+                {
+                  "colors": [
+                    {"role": "메인", "name": "로즈", "hex": "#A85D68"},
+                    {"role": "광택", "name": "민트 글로스", "hex": "#7FE0C3"},
+                    {"role": "광택", "name": "클리어", "hex": "#FFFFFF"},
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  }
+
+  harmonized, adjustments = harmonize_flush_area_colors(recommendation)
+  colors = harmonized["looks"][0]["areaGuides"][0]["applicationPlan"]["steps"][0]["colors"]
+
+  assert [adjustment["fromHex"] for adjustment in adjustments] == ["#7FE0C3"]
+  assert colors[0]["hex"] == "#A85D68"
+  assert colors[1]["hex"] != "#7FE0C3"
+  assert "민트" not in colors[1]["name"]
+  assert colors[1]["role"] == "광택"
+  assert colors[2]["hex"] == "#FFFFFF"
+
+
+def test_unconventional_concept_context_bypasses_flush_clamp() -> None:
+  assert allows_unconventional_area_colors(
+    {"selection": {"keyword": {"label": "페스티벌 헤드라이너"}}},
+  )
+  assert allows_unconventional_area_colors(
+    {"selection": {}},
+    [{"label": "무대 위에서 돋보이게"}],
+  )
+  # 사용자가 비혈색 색을 직접 지목하면 요청이 안전망보다 우선한다.
+  assert allows_unconventional_area_colors(
+    {"selection": {"customSituationText": "옐로우 메이크업 해보고 싶어"}},
+  )
+  assert not allows_unconventional_area_colors(
+    {"selection": {"situation": {"label": "소개팅"}, "customSituationText": "첫 데이트"}},
+    [{"label": "자연스럽게"}],
+  )

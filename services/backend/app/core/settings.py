@@ -109,7 +109,9 @@ class Settings(BaseSettings):
   makeup_feedback_global_inference_allowed: bool = False
   bedrock_scenario_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
   bedrock_question_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
-  bedrock_recommendation_model_id: str | None = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+  # 추천 본문 생성은 lookMap·fit 6축·5부위 가이드를 한 번에 채우는 무거운 계약이라
+  # Haiku에서 색 선택 품질이 무너져(민트 치크 등) Sonnet을 쓴다. 질문·시나리오는 Haiku 유지.
+  bedrock_recommendation_model_id: str | None = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
   # 레퍼런스 메이크업 추출(비전)은 얼굴 분석과 분리된 모델을 사용한다. 기본 Haiku 4.5로
   # 두어 추출 지연(Sonnet 비전)을 줄이고, 얼굴 분석은 effective_analysis_model_id(Sonnet)를 유지.
   # 비우면(빈 문자열/None) effective_analysis_model_id로 폴백해 손쉽게 Sonnet 복귀 가능.

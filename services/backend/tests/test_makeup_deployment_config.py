@@ -15,7 +15,7 @@ def test_seoul_makeup_model_defaults_use_global_inference_profiles() -> None:
   expected = {
     "BEDROCK_SCENARIO_MODEL_ID": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
     "BEDROCK_QUESTION_MODEL_ID": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
-    "BEDROCK_RECOMMENDATION_MODEL_ID": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "BEDROCK_RECOMMENDATION_MODEL_ID": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
   }
 
   for name, model_id in expected.items():

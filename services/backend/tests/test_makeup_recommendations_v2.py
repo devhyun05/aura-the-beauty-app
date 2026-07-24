@@ -116,6 +116,12 @@ def test_custom_and_gender_prompt_contracts_preserve_only_explicit_optional_deta
   assert "자유 입력의 상황은 다시 묻지 말고" in question_prompt
   assert "성별을 다시 묻거나" in QUESTION_V2_SYSTEM_PROMPT
   assert "미선택은 성별을 추정하지 않는 중성적 표현" in RECOMMENDATION_V2_SYSTEM_PROMPT
+  assert "치크와 립은 혈색 계열" in RECOMMENDATION_V2_SYSTEM_PROMPT
+  assert "치크·립 색으로 옮기지 않는다" in RECOMMENDATION_V2_SYSTEM_PROMPT
+  assert "퍼스널컬러는 색을 고르는 팔레트가 아니라 워스트 컬러 회피 필터다" in RECOMMENDATION_V2_SYSTEM_PROMPT
+  assert "웜톤이면 쿨톤 시즌 사용자에게도 웜톤을 추천" in RECOMMENDATION_V2_SYSTEM_PROMPT
+  assert "뮤트가 어울리는 상황이면 쿨톤 뮤트를 추천한다" in RECOMMENDATION_V2_SYSTEM_PROMPT
+  assert "시즌 타입을 이유로 상황에 맞는 무드·계열·톤을 좁히지 않는다" in RECOMMENDATION_V2_SYSTEM_PROMPT
   assert '"gender":"unspecified"' in recommendation_prompt
 
 

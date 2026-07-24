@@ -36,7 +36,11 @@ from app.services.makeup_recommendation_prompt import (
   build_recommendation_prompt,
   sanitize_recommendation_context,
 )
-from app.services.makeup_recommendation_recipe import enrich_makeup_application_plans
+from app.services.makeup_recommendation_recipe import (
+  allows_unconventional_area_colors,
+  enrich_makeup_application_plans,
+  harmonize_flush_area_colors,
+)
 from app.services.makeup_recommendation_timing import (
   resolve_prep_time_budget_minutes,
 )
@@ -2039,6 +2043,14 @@ async def generate_recommendation_v2(
       ) from exc
     try:
       response = _normalize_recommendation_tool_response(response)
+      if not allows_unconventional_area_colors(context_snapshot, answers):
+        response, color_adjustments = harmonize_flush_area_colors(response)
+        if color_adjustments:
+          logger.warning(
+            "[aura:makeup-recommendation] recommendation-v2:flush-color-clamped modelId=%s adjustments=%s",
+            settings.effective_recommendation_model_id,
+            color_adjustments,
+          )
       enriched = enrich_makeup_application_plans(
         response,
         max_total_minutes=time_budget_minutes,
