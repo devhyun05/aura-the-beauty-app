@@ -41,7 +41,6 @@ import {buildRegionFeatureAxes, type RegionAxesKey} from '../reportFeatureAxes';
 import {buildRegionFeatureDescriptors} from '../regionFeatureDescriptors';
 import {buildVisualWeightPresentation} from '../visualWeightPresentation';
 import {buildStyleLaneRecommendations} from '../styleLaneRecommendations';
-import {formatDepthMeasurementValues} from './faceDepthPresentation';
 import {buildFaceFeatureProfile} from '../../face-analysis/services/faceFeatureProfileBuilder';
 import {buildVisualWeightMap} from '../../face-analysis/services/visualWeightMap';
 import type {FaceGeometryMetrics} from '../../face-geometry/types';
@@ -703,6 +702,17 @@ const S3_REGION_META: Record<
 // perception(원본 AI 인사이트)에서 부위별로 관련 있는 항목만 뽑아 압축 없이
 // {heading, label, description} 그대로 나열한다 — regionNotes의 단일 압축
 // 문장 대신 이 리스트가 부위 카드의 본문이 된다.
+const INTERNAL_ENUM_LABEL_TOKENS = new Set([
+  'absent', 'balanced', 'central', 'dense', 'high', 'inner', 'left', 'low',
+  'medium', 'mild', 'monolid', 'none', 'outer', 'present', 'pronounced',
+  'right', 'sparse',
+]);
+
+function isInternalEnumOnlyLabel(label: string): boolean {
+  const tokens = label.trim().toLowerCase().split(/[\s,·/|]+/).filter(Boolean);
+  return tokens.length > 0 && tokens.every(token => INTERNAL_ENUM_LABEL_TOKENS.has(token));
+}
+
 function pushInsight(
   items: InsightItemData[],
   key: string,
@@ -710,7 +720,12 @@ function pushInsight(
   insight: FaceAnalysisInsight | undefined,
 ): void {
   if (insight && insight.label && insight.description) {
-    items.push({key, heading, label: insight.label, description: insight.description});
+    items.push({
+      key,
+      heading,
+      label: isInternalEnumOnlyLabel(insight.label) ? '분석 결과' : insight.label,
+      description: insight.description,
+    });
   }
 }
 
@@ -783,20 +798,6 @@ function face3dMetric(
 ) {
   const metric = profile?.metrics[key];
   return metric?.value != null && Number.isFinite(metric.value) ? metric : null;
-}
-
-function confidenceLabel(
-  profile: Face3DReportProfile | null,
-  keys: (keyof Face3DReportProfile['metrics'])[],
-): string | undefined {
-  const confidences = keys
-    .map(key => face3dMetric(profile, key)?.confidence)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  if (confidences.length === 0) return undefined;
-  const percent = Math.round(
-    (confidences.reduce((sum, value) => sum + value, 0) / confidences.length) * 100,
-  );
-  return `측정 신뢰도 ${Math.max(0, Math.min(100, percent))}%`;
 }
 
 const LOCAL_MEASUREMENT_COPY: Record<
@@ -873,52 +874,6 @@ const LOCAL_MEASUREMENT_COPY: Record<
   },
 };
 
-function measurementNumber(
-  key: string,
-  geometryMetrics: FaceGeometryMetrics | null,
-  face3d: Face3DReportProfile | null,
-): number | null {
-  const geometryValue = (
-    geometryMetrics as unknown as Record<string, {value?: unknown}> | null
-  )?.[key]?.value;
-  if (typeof geometryValue === 'number' && Number.isFinite(geometryValue)) {
-    return geometryValue;
-  }
-  const depthValue = (
-    face3d?.metrics as unknown as Record<string, {value?: unknown}> | undefined
-  )?.[key]?.value;
-  return typeof depthValue === 'number' && Number.isFinite(depthValue)
-    ? depthValue
-    : null;
-}
-
-function measurementDisplayValue(
-  metricKeys: string[],
-  geometryMetrics: FaceGeometryMetrics | null,
-  face3d: Face3DReportProfile | null,
-): string | undefined {
-  const values = metricKeys
-    .map(metricKey => ({
-      key: metricKey,
-      value: measurementNumber(metricKey, geometryMetrics, face3d),
-    }))
-    .filter((entry): entry is {key: string; value: number} => entry.value !== null);
-  if (values.length === 0) return undefined;
-  const paired = values.length === 2;
-  return values.map((entry, index) => {
-    const prefix = paired ? `${index === 0 ? '좌' : '우'} ` : '';
-    if (entry.key.endsWith('Deg')) {
-      return `${prefix}${entry.value.toFixed(1)}°`;
-    }
-    const fromGeometry = Boolean(
-      (geometryMetrics as unknown as Record<string, unknown> | null)?.[entry.key],
-    );
-    return fromGeometry
-      ? `${prefix}${(entry.value * 100).toFixed(1)}%`
-      : `${prefix}상대값 ${entry.value.toFixed(2)}`;
-  }).join(' · ');
-}
-
 const DEPTH_VALUE_LABELS: Partial<Record<Face3DMetricKey, string>> = {
   noseTipProjection: '코끝',
   centralProjectionScore: '중앙부',
@@ -959,35 +914,22 @@ function buildRegionMeasurementItems(
     config: Omit<
       RegionMeasurementItemData,
       'confidenceLabel' | 'displayValue' | 'interpretation' | 'resultLabel' | 'values'
-    > & {
-      confidenceKeys?: (keyof Face3DReportProfile['metrics'])[];
-    },
+    >,
   ): RegionMeasurementItemData => {
-    const {confidenceKeys, ...rest} = config;
     const server = interpretations[config.key];
     const local = LOCAL_MEASUREMENT_COPY[config.key] ?? {
       resultLabel: '측정 결과를 확인했어요',
       interpretation: '표시된 기준선과 측정값을 함께 봐 주세요.',
     };
-    const confidence = confidenceKeys
-      ? confidenceLabel(face3d, confidenceKeys)
-      : undefined;
     const values =
       config.visualType === 'depth' || config.visualType === 'line-and-depth'
         ? measurementDepthValues(config.metricKeys, face3d)
         : [];
-    const displayValue =
-      values.length > 0
-        ? formatDepthMeasurementValues(values)
-        : server?.displayValue
-          ?? measurementDisplayValue(config.metricKeys, geometryMetrics, face3d);
     return {
-      ...rest,
-      resultLabel: server?.resultLabel ?? local.resultLabel,
+      ...config,
+      resultLabel: local.resultLabel,
       interpretation: server?.description ?? local.interpretation,
-      ...(displayValue ? {displayValue} : {}),
       ...(values.length > 0 ? {values} : {}),
-      ...(confidence ? {confidenceLabel: confidence} : {}),
     };
   };
 
@@ -1051,7 +993,6 @@ function buildRegionMeasurementItems(
         detail: '코끝과 양 볼 기준면의 전후 관계를 대표 측정 프레임에서 확인했어요.',
         metricKeys: ['noseTipProjection'],
         visualType: 'depth',
-        confidenceKeys: ['noseTipProjection'],
       }));
     }
     if (face3dMetric(face3d, 'noseLength')) {
@@ -1062,7 +1003,6 @@ function buildRegionMeasurementItems(
         detail: '미간 기준점부터 코끝까지의 3D 길이 관계예요.',
         metricKeys: ['noseLength'],
         visualType: 'line',
-        confidenceKeys: ['noseLength'],
       }));
     }
     if (face3dMetric(face3d, 'nasalBridgeStraightness') || face3dMetric(face3d, 'nasalAxisDeviation')) {
@@ -1073,7 +1013,6 @@ function buildRegionMeasurementItems(
         detail: '콧대 중심선의 직선 흐름과 얼굴 중앙선 대비 방향을 확인했어요.',
         metricKeys: ['nasalBridgeStraightness', 'nasalAxisDeviation'],
         visualType: 'line',
-        confidenceKeys: ['nasalBridgeStraightness', 'nasalAxisDeviation'],
       }));
     }
     if (face3dMetric(face3d, 'alarWidth')) {
@@ -1084,7 +1023,6 @@ function buildRegionMeasurementItems(
         detail: '좌우 콧볼의 해부학적 최외측점 사이를 측정했어요.',
         metricKeys: ['alarWidth'],
         visualType: 'line',
-        confidenceKeys: ['alarWidth'],
       }));
     }
     if (face3dMetric(face3d, 'centralProjectionScore')) {
@@ -1095,7 +1033,6 @@ function buildRegionMeasurementItems(
         detail: '얼굴 중앙 영역과 양 볼 기준면의 전후 관계를 확인했어요.',
         metricKeys: ['centralProjectionScore'],
         visualType: 'depth',
-        confidenceKeys: ['centralProjectionScore'],
       }));
     }
     if (face3dMetric(face3d, 'malarProjectionLeft') || face3dMetric(face3d, 'malarProjectionRight')) {
@@ -1106,7 +1043,6 @@ function buildRegionMeasurementItems(
         detail: '좌우 광대 부근 표면의 전방 돌출을 각각 측정했어요.',
         metricKeys: ['malarProjectionLeft', 'malarProjectionRight'],
         visualType: 'depth',
-        confidenceKeys: ['malarProjectionLeft', 'malarProjectionRight'],
       }));
     }
     return result;
@@ -1141,7 +1077,6 @@ function buildRegionMeasurementItems(
         detail: '코끝과 턱끝을 잇는 기준선에 대한 위·아래 입술의 전후 관계예요.',
         metricKeys: [...lipDepthKeys],
         visualType: 'depth',
-        confidenceKeys: [...lipDepthKeys],
       }));
     }
     return result;
@@ -1173,7 +1108,6 @@ function buildRegionMeasurementItems(
       detail: '턱끝과 중안부 기준면의 전후 관계를 대표 측정 프레임에서 확인했어요.',
       metricKeys: ['chinProjection'],
       visualType: 'depth',
-      confidenceKeys: ['chinProjection'],
     }));
   }
   return result;
@@ -1286,7 +1220,10 @@ function buildS3(
       jaw: derived?.faceShape,
     }[key];
     const insightItems = buildRegionInsightItems(key, perception);
-    const insight = derivedInsight?.label || insightItems[0]?.label || '';
+    const derivedLabel = derivedInsight?.label;
+    const insight = derivedLabel && !isInternalEnumOnlyLabel(derivedLabel)
+      ? derivedLabel
+      : insightItems[0]?.label ?? (derivedInsight ? `${meta.chip} 분석` : '');
     const evidence = derivedInsight?.description || insightItems[0]?.description || '';
     const recommendation = buildRegionRecommendation(key, makeupGuideline);
     const descriptors = featureDescriptors ? featureDescriptors[key] : [];
