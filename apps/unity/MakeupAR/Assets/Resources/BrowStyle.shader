@@ -94,9 +94,16 @@ Shader "ARMakeup/BrowStyle"
                 float stTexE, stTexG, stTexC, stTexB;
                 // W1에서 스타일 제형 축은 폐지됐다. 유효 templateId가 아닌 -1로 항상 무변조한다.
                 TexBundleFromEnum(-1.0, _StyleTexture, stTexE, stTexG, stTexC, stTexB);
+                // 기본 0.62 부근은 기존 출력과 같게 유지하고, 사용자가 슬라이더를
+                // 상단 35%까지 올렸을 때만 알파가 최대 45% 더 붙어 최고 농도가
+                // 확실히 진해진다. fixed 출력에서 최종 알파는 안전하게 포화된다.
+                float intensity = saturate(_BrowIntensity);
+                float maximumIntensityBoost = lerp(
+                    1.0, 1.45, smoothstep(0.65, 1.0, intensity));
                 float amt = shape
                     * BrowStyleCoverageEdge(i.uv.y, _BrowCoverageMode, _BrowCoverageDown)
-                    * _BrowIntensity;
+                    * intensity
+                    * maximumIntensityBoost;
                 amt = TexEdge(TexCoverage(saturate(amt), stTexC), stTexE); // 제형 커버·엣지
                 fixed3 pigment = _BrowColor.rgb * PigmentBaseKnee(normalizedLuma, 0.7, 0.45, BROW_KNEE);
                 pigment = TexBody(pigment, normalizedLuma, stTexB); // 제형 발색 body

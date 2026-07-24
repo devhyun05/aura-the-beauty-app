@@ -8,7 +8,7 @@
  *       심플한 밑줄 탭. 룩 없는 세부부위를 고르면 카드는 '없음'만(빈 상태 안내).
  *  1) 카드 캐러셀  — '전체'=전체룩 카드, 슬롯=부위 스타일 카드(중분류로 필터).
  *  2) 필터 저장    — 룩 선택 상태에서 수정사항이 하나라도 있으면 노출(→ 저장 시트).
- *  3) 농도 슬라이더 — 부위 탭에서만: 중분류 선택 시 그 세부부위 잎, 아니면 첫 잎.
+ *  3) 조절 슬라이더 — 부위별 농도. 눈썹 탭은 실제 제품 농도와 전체 두께·길이를 함께 조절.
  *
  * 상태는 전부 App의 lookTree(작업본) — BasicMode는 UI 로컬 선택 카테고리만 소유.
  */
@@ -41,6 +41,10 @@ import {
 } from '../composer/blushTree';
 import {
   BROW_REFERENCE_SHAPES,
+  browLengthFromSlider,
+  browThicknessFromSlider,
+  normalizeBrowLength,
+  normalizeBrowThickness,
   patchBrowTree,
   readBrowTree,
   removeBrowTree,
@@ -299,6 +303,23 @@ export default function BasicMode({
   };
   const chooseBrowColor = (color: string) => {
     onChangeTree(patchBrowTree(tree, library, {color}));
+  };
+  const changeBrowIntensity = (intensity: number) => {
+    onChangeTree(patchBrowTree(tree, library, {intensity}));
+  };
+  const changeBrowThickness = (normalized: number) => {
+    onChangeTree(
+      patchBrowTree(tree, library, {
+        thickness: browThicknessFromSlider(normalized),
+      }),
+    );
+  };
+  const changeBrowLength = (normalized: number) => {
+    onChangeTree(
+      patchBrowTree(tree, library, {
+        length: browLengthFromSlider(normalized),
+      }),
+    );
   };
 
   // 카테고리 표시 2종: 내용물 있음(밝은 텍스트) / 수정됨(● 도트).
@@ -758,16 +779,54 @@ export default function BasicMode({
         </Text>
       )}
 
-      {/* 2) 농도 — 블러셔 중분류는 잎 값을 직접 저장하고, 나머지는 기존 게인을 쓴다. */}
+      {/* 2) 조절 — 눈썹은 두께+가로 길이+실제 제품 농도, 블러셔는 잎 농도, 나머지는 기존 게인. */}
       {!isFit && (
       <View style={styles.densityWrap}>
+        {isBrowTab && (
+          <>
+            <ParamSlider
+              label="눈썹 두께"
+              value={normalizeBrowThickness(browState.thickness)}
+              onChange={changeBrowThickness}
+              accessibilityLabel="눈썹 두께"
+              accessibilityValue={{
+                min: 0,
+                max: 100,
+                now: Math.round(
+                  normalizeBrowThickness(browState.thickness) * 100,
+                ),
+              }}
+              accent={NEUTRAL_ACCENT}
+            />
+            <ParamSlider
+              label="눈썹 가로 길이"
+              value={normalizeBrowLength(browState.length)}
+              onChange={changeBrowLength}
+              accessibilityLabel="눈썹 가로 길이"
+              accessibilityValue={{
+                min: 0,
+                max: 100,
+                now: Math.round(normalizeBrowLength(browState.length) * 100),
+              }}
+              accent={NEUTRAL_ACCENT}
+            />
+          </>
+        )}
         <ParamSlider
           label={
-            isAll ? '전체 농도' : isTeethTab ? '치아 미백' : `${catLabel(cat)} 농도`
+            isAll
+              ? '전체 농도'
+              : isTeethTab
+                ? '치아 미백'
+                : isBrowTab
+                  ? '눈썹 농도'
+                  : `${catLabel(cat)} 농도`
           }
           value={
             isBlushTab
               ? normalizeArBlushIntensity(blushState.intensity)
+              : isBrowTab
+                ? browState.intensity
               : isTeethTab
                 ? teethState.intensity
                 : isAll
@@ -777,13 +836,21 @@ export default function BasicMode({
           onChange={
             isBlushTab
               ? changeBlushIntensity
+              : isBrowTab
+                ? changeBrowIntensity
               : isTeethTab
                 ? changeTeethIntensity
                 : isAll
                   ? onOpacity
                   : v => onSlotGain(slot!, v)
           }
-          accessibilityLabel={isBlushTab ? '블러셔 윤곽 농도' : undefined}
+          accessibilityLabel={
+            isBlushTab
+              ? '블러셔 윤곽 농도'
+              : isBrowTab
+                ? '눈썹 색상 농도'
+                : undefined
+          }
           accessibilityValue={
             isBlushTab
               ? {
@@ -793,6 +860,12 @@ export default function BasicMode({
                     normalizeArBlushIntensity(blushState.intensity) * 100,
                   ),
                 }
+              : isBrowTab
+                ? {
+                    min: 0,
+                    max: 100,
+                    now: Math.round(browState.intensity * 100),
+                  }
               : undefined
           }
           accent={NEUTRAL_ACCENT}

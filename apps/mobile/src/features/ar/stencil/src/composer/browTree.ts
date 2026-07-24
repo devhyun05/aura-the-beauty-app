@@ -27,6 +27,12 @@ export const BROW_REFERENCE_SHAPES = [
 export const DEFAULT_BROW_STYLE_SUB_LOOK_ID =
   'sys:var:brow-style:natural-texture:s0';
 const REFERENCE_BROW_INTENSITY = 0.62;
+export const BASIC_BROW_THICKNESS_MIN = 0.25;
+export const BASIC_BROW_THICKNESS_NEUTRAL = 1;
+export const BASIC_BROW_THICKNESS_MAX = 2.5;
+export const BASIC_BROW_LENGTH_MIN = 0.65;
+export const BASIC_BROW_LENGTH_NEUTRAL = 1;
+export const BASIC_BROW_LENGTH_MAX = 1.6;
 
 const BROW_PRODUCT_REGIONS: RegionKey[] = [
   'brow',
@@ -51,7 +57,95 @@ export type BrowTreeState = {
   enabled: boolean;
   shapeValue: number;
   color: string;
+  intensity: number;
+  thickness: number;
+  length: number;
 };
+
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+const clampBrowThickness = (value: number): number =>
+  Math.min(
+    BASIC_BROW_THICKNESS_MAX,
+    Math.max(BASIC_BROW_THICKNESS_MIN, value),
+  );
+const clampBrowLength = (value: number): number =>
+  Math.min(BASIC_BROW_LENGTH_MAX, Math.max(BASIC_BROW_LENGTH_MIN, value));
+
+/**
+ * 기본 모드 중앙(50)은 기존 1배를 유지한다. 양 끝은 0.25배↔2.5배로 넓혀
+ * 최소/최대에서 실루엣 차이가 즉시 보이도록 한다.
+ */
+export function browThicknessFromSlider(value: number): number {
+  const normalized = clamp01(value);
+  if (normalized <= 0.5) {
+    return (
+      BASIC_BROW_THICKNESS_MIN +
+      (BASIC_BROW_THICKNESS_NEUTRAL - BASIC_BROW_THICKNESS_MIN) *
+        normalized *
+        2
+    );
+  }
+  return (
+    BASIC_BROW_THICKNESS_NEUTRAL +
+    (BASIC_BROW_THICKNESS_MAX - BASIC_BROW_THICKNESS_NEUTRAL) *
+      (normalized - 0.5) *
+      2
+  );
+}
+
+export function normalizeBrowThickness(value: number): number {
+  const thickness = clampBrowThickness(value);
+  if (thickness <= BASIC_BROW_THICKNESS_NEUTRAL) {
+    return (
+      ((thickness - BASIC_BROW_THICKNESS_MIN) /
+        (BASIC_BROW_THICKNESS_NEUTRAL - BASIC_BROW_THICKNESS_MIN)) *
+      0.5
+    );
+  }
+  return (
+    0.5 +
+    ((thickness - BASIC_BROW_THICKNESS_NEUTRAL) /
+      (BASIC_BROW_THICKNESS_MAX - BASIC_BROW_THICKNESS_NEUTRAL)) *
+      0.5
+  );
+}
+
+/**
+ * 가로 길이는 눈썹머리를 고정하고 꼬리 방향으로 0.65배↔1.6배 조절한다.
+ * 중앙(50)은 저장된 기존 룩과 같은 1배다.
+ */
+export function browLengthFromSlider(value: number): number {
+  const normalized = clamp01(value);
+  if (normalized <= 0.5) {
+    return (
+      BASIC_BROW_LENGTH_MIN +
+      (BASIC_BROW_LENGTH_NEUTRAL - BASIC_BROW_LENGTH_MIN) * normalized * 2
+    );
+  }
+  return (
+    BASIC_BROW_LENGTH_NEUTRAL +
+    (BASIC_BROW_LENGTH_MAX - BASIC_BROW_LENGTH_NEUTRAL) *
+      (normalized - 0.5) *
+      2
+  );
+}
+
+export function normalizeBrowLength(value: number): number {
+  const length = clampBrowLength(value);
+  if (length <= BASIC_BROW_LENGTH_NEUTRAL) {
+    return (
+      ((length - BASIC_BROW_LENGTH_MIN) /
+        (BASIC_BROW_LENGTH_NEUTRAL - BASIC_BROW_LENGTH_MIN)) *
+      0.5
+    );
+  }
+  return (
+    0.5 +
+    ((length - BASIC_BROW_LENGTH_NEUTRAL) /
+      (BASIC_BROW_LENGTH_MAX - BASIC_BROW_LENGTH_NEUTRAL)) *
+      0.5
+  );
+}
 
 function visibleBrowLeaves(root: LookNode | null): ProductLeaf[] {
   if (!root?.visible) return [];
@@ -85,14 +179,48 @@ export function readBrowTree(root: LookNode | null): BrowTreeState {
       enabled: false,
       shapeValue: BROW_REFERENCE_SHAPES[0].value,
       color: DEFAULT_BROW_COLOR,
+      intensity: REFERENCE_BROW_INTENSITY,
+      thickness: BASIC_BROW_THICKNESS_NEUTRAL,
+      length: BASIC_BROW_LENGTH_NEUTRAL,
     };
   }
 
   let color: string = DEFAULT_BROW_COLOR;
+  let intensity = REFERENCE_BROW_INTENSITY;
+  let thickness = BASIC_BROW_THICKNESS_NEUTRAL;
+  let length = BASIC_BROW_LENGTH_NEUTRAL;
   for (const leaf of leaves) {
     const key = BROW_COLOR_KEY_BY_REGION[leaf.region];
     const candidate = key ? leaf.params[key] : undefined;
     if (typeof candidate === 'string') color = candidate;
+    const intensityCandidate =
+      leaf.region === 'brow'
+        ? leaf.params.browIntensity
+        : leaf.region === 'browPowder'
+          ? leaf.params.browPowderIntensity
+          : leaf.region === 'browPencil'
+            ? leaf.params.browPencilIntensity
+            : leaf.region === 'browStyle'
+              ? leaf.params.browStyleIntensity
+              : undefined;
+    if (
+      typeof intensityCandidate === 'number' &&
+      Number.isFinite(intensityCandidate)
+    ) {
+      intensity = clamp01(intensityCandidate);
+    }
+    if (
+      typeof leaf.params.browThickness === 'number' &&
+      Number.isFinite(leaf.params.browThickness)
+    ) {
+      thickness = clampBrowThickness(leaf.params.browThickness);
+    }
+    if (
+      typeof leaf.params.browLength === 'number' &&
+      Number.isFinite(leaf.params.browLength)
+    ) {
+      length = clampBrowLength(leaf.params.browLength);
+    }
   }
 
   const storedShape = last.params.browShape;
@@ -103,6 +231,9 @@ export function readBrowTree(root: LookNode | null): BrowTreeState {
         ? storedShape!
         : BROW_REFERENCE_SHAPES[0].value,
     color,
+    intensity,
+    thickness,
+    length,
   };
 }
 
@@ -146,13 +277,20 @@ export function ensureBrowTree(
 export function patchBrowTree(
   root: LookNode | null,
   library: LookLibrary,
-  patch: {shapeValue?: number; color?: string},
+  patch: {
+    shapeValue?: number;
+    color?: string;
+    intensity?: number;
+    thickness?: number;
+    length?: number;
+  },
 ): LookNode | null {
+  const current = readBrowTree(root);
   const ensured = ensureBrowTree(root, library);
   if (!ensured) return root;
 
   let next = ensured;
-  const requestedShape = patch.shapeValue ?? readBrowTree(root).shapeValue;
+  const requestedShape = patch.shapeValue ?? current.shapeValue;
   if (BROW_REFERENCE_SHAPES.some(shape => shape.value === requestedShape)) {
     next = updateBrowSharedAxis(next, {browShape: requestedShape});
     const selected = BROW_REFERENCE_SHAPES.find(
@@ -163,7 +301,7 @@ export function patchBrowTree(
       next = updateLeaf(next, leaf.id, {
         params: {
           browStyleTemplate: selected.template,
-          browStyleIntensity: REFERENCE_BROW_INTENSITY,
+          browStyleIntensity: current.intensity,
         },
       });
     }
@@ -176,6 +314,34 @@ export function patchBrowTree(
       next = updateLeaf(next, leaf.id, {
         params: {[colorKey]: patch.color},
       });
+    }
+  }
+
+  if (
+    patch.intensity !== undefined ||
+    patch.thickness !== undefined ||
+    patch.length !== undefined
+  ) {
+    for (const leaf of visibleBrowLeaves(next)) {
+      const params: Partial<FilterParams> = {};
+      if (patch.thickness !== undefined) {
+        params.browThickness = clampBrowThickness(patch.thickness);
+      }
+      if (patch.length !== undefined) {
+        params.browLength = clampBrowLength(patch.length);
+      }
+      if (patch.intensity !== undefined) {
+        const intensity = clamp01(patch.intensity);
+        if (leaf.region === 'brow') params.browIntensity = intensity;
+        else if (leaf.region === 'browPowder') {
+          params.browPowderIntensity = intensity;
+        } else if (leaf.region === 'browPencil') {
+          params.browPencilIntensity = intensity;
+        } else if (leaf.region === 'browStyle') {
+          params.browStyleIntensity = intensity;
+        }
+      }
+      next = updateLeaf(next, leaf.id, {params});
     }
   }
 

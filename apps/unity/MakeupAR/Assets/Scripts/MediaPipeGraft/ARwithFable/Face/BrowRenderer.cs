@@ -67,8 +67,9 @@ namespace ARMakeup.Face
         // 패치를 위에서 가져온다. gap은 샘플 패치 하단이 눈썹 털과 겹치지 않게 한다.
         const float ConcealSkinPatchGap = 0.22f;
 
-        // 셰이핑(공유, 파라미터): 두께 배수·아치 올림. 1.0/0.0 = 원래 모양.
+        // 셰이핑(공유, 파라미터): 두께·가로 길이 배수, 아치 올림. 1.0/1.0/0.0 = 원래 모양.
         float _thickness = 1f;
+        float _length = 1f;
         float _arch = 0f;
         int _shape = 0; // 눈썹 모양(#19b, 슬롯 공통): 0내추럴 1일자 2아치 3각진
         int _thicknessProfile;
@@ -291,7 +292,11 @@ namespace ARMakeup.Face
 
         public void ApplyBrowParams(FilterParams p)
         {
-            _thickness = Mathf.Clamp(p.browThickness, 0.4f, 2f);
+            _thickness = Mathf.Clamp(
+                p.browThickness, BrowWarp.ThicknessMin, BrowWarp.ThicknessMax);
+            _length = p.browLength <= 0f
+                ? 1f
+                : Mathf.Clamp(p.browLength, BrowWarp.LengthMin, BrowWarp.LengthMax);
             _arch = Mathf.Clamp(p.browArch, 0f, 1f);
             _shape = Mathf.Clamp(p.browShape, 0, 5);
             ApplyBrowCoverage(p.browThicknessProfile, p.browExpandUpper, p.browExpandLower);
@@ -451,6 +456,8 @@ namespace ARMakeup.Face
                     _loW[i] = _lo[i];
                     _upW[i] = _up[i];
                 }
+                BrowWarp.ScaleLengthFromHead(
+                    _loW, _upW, Seg, FramePresenter.Instance.ImageAspect, _length);
                 BrowWarp.ShapeArcProfile(
                     _loW, _upW, Seg, _shape, FramePresenter.Instance.ImageAspect);
                 // R7 두께/아치 + 모양 + 꼬리 처짐 클램프 — 그리는 제품은 워프·클램프된

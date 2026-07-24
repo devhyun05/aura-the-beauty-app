@@ -1,7 +1,15 @@
 import {BARE, BROW_COLORS} from '../presets';
 import {compileLayers} from './model';
 import {
+  BASIC_BROW_LENGTH_MAX,
+  BASIC_BROW_LENGTH_MIN,
+  BASIC_BROW_THICKNESS_MAX,
+  BASIC_BROW_THICKNESS_MIN,
   BROW_REFERENCE_SHAPES,
+  browLengthFromSlider,
+  browThicknessFromSlider,
+  normalizeBrowLength,
+  normalizeBrowThickness,
   patchBrowTree,
   readBrowTree,
   removeBrowTree,
@@ -47,6 +55,46 @@ expectEqual(
   11,
   '기본 브라운 6색과 컬러 브로우 5색을 모두 제공한다',
 );
+expectEqual(
+  browThicknessFromSlider(0),
+  BASIC_BROW_THICKNESS_MIN,
+  '두께 슬라이더 최소는 0.25배까지 확실히 얇아진다',
+);
+expectEqual(
+  browThicknessFromSlider(0.5),
+  1,
+  '두께 슬라이더 중앙은 기존 1배 실루엣을 유지한다',
+);
+expectEqual(
+  browThicknessFromSlider(1),
+  BASIC_BROW_THICKNESS_MAX,
+  '두께 슬라이더 최대는 2.5배까지 확실히 두꺼워진다',
+);
+expectEqual(
+  normalizeBrowThickness(1),
+  0.5,
+  '저장된 기존 1배 두께는 슬라이더 중앙으로 역매핑된다',
+);
+expectEqual(
+  browLengthFromSlider(0),
+  BASIC_BROW_LENGTH_MIN,
+  '가로 길이 슬라이더 최소는 0.65배까지 꼬리를 줄인다',
+);
+expectEqual(
+  browLengthFromSlider(0.5),
+  1,
+  '가로 길이 슬라이더 중앙은 기존 눈썹머리·꼬리 위치를 유지한다',
+);
+expectEqual(
+  browLengthFromSlider(1),
+  BASIC_BROW_LENGTH_MAX,
+  '가로 길이 슬라이더 최대는 꼬리 방향으로 1.6배 늘린다',
+);
+expectEqual(
+  normalizeBrowLength(1),
+  0.5,
+  '저장된 기존 1배 가로 길이는 슬라이더 중앙으로 역매핑된다',
+);
 
 const shaped = patchBrowTree(null, library, {shapeValue: 4});
 expect(readBrowTree(shaped).enabled, '빈 룩에서 모양을 고르면 눈썹 잎을 만든다');
@@ -76,6 +124,43 @@ expectEqual(
   readBrowTree(recolored).shapeValue,
   4,
   '색 변경은 모양을 보존한다',
+);
+
+const emphasized = patchBrowTree(recolored, library, {
+  intensity: 1,
+  thickness: BASIC_BROW_THICKNESS_MAX,
+  length: BASIC_BROW_LENGTH_MAX,
+});
+const emphasizedParams = compileLayers(flattenTree(emphasized)).params;
+expectEqual(
+  emphasizedParams.browStyleIntensity,
+  1,
+  '기본 모드 눈썹 농도 최대는 실제 스타일 강도 1까지 전달된다',
+);
+expectEqual(
+  emphasizedParams.browThickness,
+  BASIC_BROW_THICKNESS_MAX,
+  '기본 모드 눈썹 두께 최대는 실제 2.5배로 전달된다',
+);
+expectEqual(
+  emphasizedParams.browLength,
+  BASIC_BROW_LENGTH_MAX,
+  '기본 모드 눈썹 가로 길이 최대는 실제 꼬리 길이 1.6배로 전달된다',
+);
+expectEqual(
+  readBrowTree(emphasized).intensity,
+  1,
+  '트리 상태가 사용자가 조정한 최대 농도를 읽는다',
+);
+expectEqual(
+  readBrowTree(emphasized).thickness,
+  BASIC_BROW_THICKNESS_MAX,
+  '트리 상태가 사용자가 조정한 최대 두께를 읽는다',
+);
+expectEqual(
+  readBrowTree(emphasized).length,
+  BASIC_BROW_LENGTH_MAX,
+  '트리 상태가 사용자가 조정한 최대 가로 길이를 읽는다',
 );
 
 expectEqual(

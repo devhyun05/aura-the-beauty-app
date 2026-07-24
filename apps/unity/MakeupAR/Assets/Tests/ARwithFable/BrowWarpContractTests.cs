@@ -24,6 +24,7 @@ namespace Aura.ARwithFable.Tests
         {
             var parameters = new FilterParams();
             Assert.That(parameters.browConcealIntensity, Is.Zero);
+            Assert.That(parameters.browLength, Is.EqualTo(1f));
             parameters.browConcealIntensity = 0.4f;
             Assert.That(parameters.browConcealIntensity, Is.EqualTo(0.4f));
         }
@@ -215,6 +216,91 @@ namespace Aura.ARwithFable.Tests
                     textureAspect * BrowWarp.ReferenceMaskThicknessScale /
                     (1f + BrowWarp.ReferenceMaskTailExtension +
                      BrowWarp.ReferenceMaskHeadExtension)).Within(0.0001f));
+        }
+
+        [Test]
+        public void ReferenceTextureThicknessRangeIsVisiblyWide()
+        {
+            const int samples = BrowWarp.BandSegments;
+            const float imageAspect = 1f;
+            const float textureAspect = 160f / 512f;
+            var thinLower = new Vector2[samples];
+            var thinUpper = new Vector2[samples];
+            var thickLower = new Vector2[samples];
+            var thickUpper = new Vector2[samples];
+
+            for (var i = 0; i < samples; i++)
+            {
+                var along = i / (float)(samples - 1);
+                thinLower[i] = thickLower[i] = new Vector2(0.2f + 0.24f * along, 0.44f);
+                thinUpper[i] = thickUpper[i] = new Vector2(0.2f + 0.24f * along, 0.40f);
+            }
+
+            Assert.That(BrowWarp.BuildReferenceTextureBand(
+                thinLower, thinUpper, samples, imageAspect, textureAspect,
+                BrowWarp.ThicknessMin), Is.True);
+            Assert.That(BrowWarp.BuildReferenceTextureBand(
+                thickLower, thickUpper, samples, imageAspect, textureAspect,
+                BrowWarp.ThicknessMax), Is.True);
+
+            var thinHeight = (thinUpper[samples / 2] - thinLower[samples / 2]).magnitude;
+            var thickHeight = (thickUpper[samples / 2] - thickLower[samples / 2]).magnitude;
+            Assert.That(BrowWarp.ThicknessMin, Is.EqualTo(0.25f));
+            Assert.That(BrowWarp.ThicknessMax, Is.EqualTo(2.5f));
+            Assert.That(thickHeight / thinHeight, Is.EqualTo(10f).Within(0.001f));
+        }
+
+        [Test]
+        public void ReferenceTextureLengthChangesOnlyTowardOuterTail()
+        {
+            const int samples = BrowWarp.BandSegments;
+            const float imageAspect = 0.75f;
+            const float textureAspect = 160f / 512f;
+            var shortLower = new Vector2[samples];
+            var shortUpper = new Vector2[samples];
+            var longLower = new Vector2[samples];
+            var longUpper = new Vector2[samples];
+
+            for (var i = 0; i < samples; i++)
+            {
+                var along = i / (float)(samples - 1);
+                var centerY = 0.42f - 0.03f * Mathf.Sin(along * Mathf.PI);
+                shortLower[i] = longLower[i] =
+                    new Vector2(0.20f + 0.24f * along, centerY + 0.012f);
+                shortUpper[i] = longUpper[i] =
+                    new Vector2(0.20f + 0.24f * along, centerY - 0.012f);
+            }
+
+            Assert.That(BrowWarp.BuildReferenceTextureBand(
+                shortLower, shortUpper, samples, imageAspect, textureAspect,
+                1f, BrowWarp.LengthMin), Is.True);
+            Assert.That(BrowWarp.BuildReferenceTextureBand(
+                longLower, longUpper, samples, imageAspect, textureAspect,
+                1f, BrowWarp.LengthMax), Is.True);
+
+            var shortTail = Metric(0.5f * (shortLower[0] + shortUpper[0]), imageAspect);
+            var shortHead = Metric(
+                0.5f * (shortLower[samples - 1] + shortUpper[samples - 1]), imageAspect);
+            var longTail = Metric(0.5f * (longLower[0] + longUpper[0]), imageAspect);
+            var longHead = Metric(
+                0.5f * (longLower[samples - 1] + longUpper[samples - 1]), imageAspect);
+            var shortSpan = Vector2.Distance(shortTail, shortHead);
+            var longSpan = Vector2.Distance(longTail, longHead);
+            var shortHeight = Vector2.Distance(
+                Metric(shortLower[samples / 2], imageAspect),
+                Metric(shortUpper[samples / 2], imageAspect));
+            var longHeight = Vector2.Distance(
+                Metric(longLower[samples / 2], imageAspect),
+                Metric(longUpper[samples / 2], imageAspect));
+
+            Assert.That(Vector2.Distance(shortHead, longHead), Is.LessThan(0.00001f),
+                "가로 길이 조절이 안쪽 눈썹머리를 움직이면 안 된다");
+            Assert.That(longSpan / shortSpan,
+                Is.EqualTo(BrowWarp.LengthMax / BrowWarp.LengthMin).Within(0.001f));
+            Assert.That(longHeight, Is.EqualTo(shortHeight).Within(0.00001f),
+                "가로 길이 조절은 눈썹 두께를 바꾸면 안 된다");
+            Assert.That(BrowWarp.LengthMin, Is.EqualTo(0.65f));
+            Assert.That(BrowWarp.LengthMax, Is.EqualTo(1.6f));
         }
 
         static Vector2 Metric(Vector2 point, float imageAspect) =>

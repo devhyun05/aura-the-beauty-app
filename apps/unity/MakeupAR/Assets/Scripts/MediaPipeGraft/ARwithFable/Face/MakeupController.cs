@@ -1352,15 +1352,15 @@ namespace ARMakeup.Face
                 BlushStyleRenderer.Instance.ApplyParams(p.blushStyleIntensity, p.blushStyleSparkle);
             if (BrowRenderer.Instance != null)
                 BrowRenderer.Instance.ApplyBrowParams(p);
-            // 모양·굵기 프로파일·상하 커버·아치는 세 눈썹 제품이 공유(제품 동조).
+            // 모양·가로 길이·굵기 프로파일·상하 커버·아치는 세 눈썹 제품이 공유(제품 동조).
             if (PencilRenderer.Instance != null)
                 PencilRenderer.Instance.ApplyPencilParams(
-                    p.browPencilColor, p.browPencilIntensity, p.browThickness, p.browArch,
+                    p.browPencilColor, p.browPencilIntensity, p.browThickness, p.browLength, p.browArch,
                     p.browShape, p.browPencilFinish, p.browPencilTexture,
                     p.browThicknessProfile, p.browExpandUpper, p.browExpandLower);
             if (StyleRenderer.Instance != null)
                 StyleRenderer.Instance.ApplyStyleParams(
-                    p.browStyleColor, p.browStyleIntensity, p.browThickness, p.browArch,
+                    p.browStyleColor, p.browStyleIntensity, p.browThickness, p.browLength, p.browArch,
                     p.browShape, p.browStyleFinish, p.browStyleTexture, p.browStyleTemplate,
                     p.browThicknessProfile, p.browExpandUpper, p.browExpandLower);
             if (EyelinerStyleRenderer.Instance != null)
