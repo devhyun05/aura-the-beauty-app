@@ -58,7 +58,7 @@ export function SpectrumRail({ axis, gap = 7, gradientColors }: {
     <View style={{ gap }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
         <Text style={[font(12, '600'), { color: color.text, flex: 1 }]}>{axis.leftLabel}</Text>
-        <Text style={[font(11, '700', undefined, 0.66), { color: color.muted, textAlign: 'center', width: 42 }]}>
+        <Text style={[font(11, '700', undefined, 0.66), { color: color.muted, textAlign: 'center', width: 52 }]}>
           {axis.axisLabel ?? ''}
         </Text>
         <Text style={[font(12, '600'), { color: color.text, flex: 1, textAlign: 'right' }]}>{axis.rightLabel}</Text>

@@ -36,12 +36,12 @@ export function SwatchRow({ swatches, bad = false, selectedName, onPick }: Props
                 }} />
               </>
             )}
-            <View style={{ alignItems: 'center', minHeight: 34 }}>
-              <Text numberOfLines={1} style={[font(10, '700'), { color: color.ink, textAlign: 'center' }]}>
+            <View style={{ alignItems: 'center', minHeight: 46 }}>
+              <Text numberOfLines={2} style={[font(10, '700', 1.25), { color: color.ink, textAlign: 'center' }]}>
                 {s.name}
               </Text>
               {s.familyLabel ? (
-                <Text numberOfLines={1} style={[font(9, '500'), { color: color.faint, textAlign: 'center' }]}>
+                <Text numberOfLines={2} style={[font(9, '500', 1.25), { color: color.faint, textAlign: 'center' }]}>
                   {s.familyLabel}
                 </Text>
               ) : null}

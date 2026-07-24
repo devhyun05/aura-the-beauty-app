@@ -36,8 +36,14 @@ const shareSource = source(
 const scaffoldSource = source(
   'apps/mobile/src/features/face-report/ReportScreenScaffold.tsx',
 );
+const reportCoverSource = source(
+  'apps/mobile/src/features/face-report/components/ReportSectionCover.tsx',
+);
 const previewSource = source(
   'apps/mobile/src/features/face-report/screens/FaceAnalysisReportPreviewScreen.tsx',
+);
+const minimumReportSource = source(
+  'apps/mobile/src/features/face-report/services/minimumFaceReport.ts',
 );
 const routesSource = source(
   'apps/mobile/src/app/navigation/routes/faceAnalysisRoutes.tsx',
@@ -75,9 +81,11 @@ requireAll(shareSource, [
 
 requireAll(scaffoldSource, [
   'function ReportCompletionIndicator(',
-  "status.displayState === 'complete'",
-  '{status.successfulCount}/{status.totalCount} 성공',
-  '{status.issueLabel}',
+  'function reportStageStatePresentation(',
+  'status.stages.map(stage =>',
+  '완성된 내용부터 볼 수 있어요',
+  '기본 내용 제공',
+  '생성 실패',
   '보고서 생성 완료',
   'const capturePage = React.useCallback(',
   'prepareGoldenMaskForCapture',
@@ -87,10 +95,34 @@ requireAll(scaffoldSource, [
   'scrollRef.current?.scrollTo({animated: false, y: 0})',
   'entryResetKey',
 ], 'report scaffold progress, capture, restore, and scroll reset');
+requireAll(scaffoldSource, [
+  'photoUri={data.s1.photo.uri ?? null}',
+  'reportPhotoUri={photoUri}',
+], 'captured user photo wiring for report cover');
+requireAll(reportCoverSource, [
+  'reportCover && reportPhotoUri',
+  '? {uri: reportPhotoUri}',
+  '? COVER_IMAGES.summary',
+], 'captured user photo report cover with legacy fallback');
 requireContract(
   !scaffoldSource.includes('function ReportCompletionStepper('),
   'report progress must use the compact non-spinner status treatment',
 );
+requireAll(previewSource, [
+  'const recommendationReportId =',
+  'report?.id ??',
+  'minimumPreview?.reportId',
+  'onPressProducts(recommendationReportId)',
+], 'progressive report recommendation CTA');
+requireAll(minimumReportSource, [
+  "preview.reportId && !preview.errorMessage",
+  "'메이크업 추천 받으러 가기'",
+  "'메이크업 추천 준비 중'",
+], 'minimum report recommendation CTA label');
+requireAll(scaffoldSource, [
+  'accessibilityState={{disabled: !onPress}}',
+  'disabled={!onPress}',
+], 'recommendation CTA disabled semantics');
 const goldenMaskSource = source(
   'apps/mobile/src/features/face-report/components/GoldenMaskCard.tsx',
 );
@@ -134,8 +166,12 @@ requireAll(loadingSource, [
 
 // 순수(RN 무의존) 파일만 나열한다.
 const entries = [
+  'face-report/reportTokens.ts',
+  'face-report/reportTokens.test.ts',
   'face-report/reportFormat.ts',
   'face-report/reportFormat.test.ts',
+  'face-ratio/verticalThirdsDisplayGeometry.ts',
+  'face-ratio/verticalThirdsDisplayGeometry.test.ts',
   'face-report/reportFeatureAxes.ts',
   'face-report/reportFeatureAxes.test.ts',
   'face-report/services/reportStoryModel.ts',
@@ -185,6 +221,8 @@ run(process.execPath, [
 ]);
 
 run(process.execPath, [join(outDir, 'features/face-report/reportFormat.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-report/reportTokens.test.js')]);
+run(process.execPath, [join(outDir, 'features/face-ratio/verticalThirdsDisplayGeometry.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/reportFeatureAxes.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/reportStoryModel.test.js')]);
 run(process.execPath, [join(outDir, 'features/face-report/services/reportContentUpgrade.test.js')]);
@@ -215,3 +253,96 @@ for (const required of [
   }
 }
 console.log('region report visual hierarchy contract passed');
+
+const personalColorSource = readFileSync(
+  join(featuresDir, 'face-report/sections/S4PersonalColor.tsx'),
+  'utf8',
+);
+requireContract(
+  personalColorSource.includes('slot={{...photo, cropRect: undefined}}'),
+  'personal-color drape portraits must preserve the source face aspect ratio',
+);
+const goodSwatchesIndex = personalColorSource.indexOf(
+  '<SwatchRow swatches={d.goodSwatches}',
+);
+const badTitleIndex = personalColorSource.indexOf('{d.badTitle}');
+const badSwatchesIndex = personalColorSource.indexOf(
+  '<SwatchRow swatches={d.badSwatches}',
+);
+const bestDetailIndex = personalColorSource.indexOf(
+  '<SelectedColorDetail swatch={best}',
+);
+requireContract(
+  goodSwatchesIndex >= 0 &&
+    badTitleIndex > goodSwatchesIndex &&
+    badSwatchesIndex > badTitleIndex &&
+    bestDetailIndex > badSwatchesIndex,
+  'personal-color good and avoid swatches must stay together directly below the drape photos',
+);
+console.log('personal-color drape layout contract passed');
+
+const s2ProportionSource = source(
+  'apps/mobile/src/features/face-report/sections/S2Proportion.tsx',
+);
+const thirdsOverlaySource = source(
+  'apps/mobile/src/features/face-report/visuals/GuidePhotoOverlay.tsx',
+);
+const reportTypesSource = source(
+  'apps/mobile/src/features/face-report/reportTypes.ts',
+);
+const reportAdapterSource = source(
+  'apps/mobile/src/features/face-report/services/fromFaceAnalysisReport.ts',
+);
+const thirdsReadoutSource = source(
+  'apps/mobile/src/features/face-report/visuals/ThirdsRatioReadout.tsx',
+);
+
+requireContract(
+  !s2ProportionSource.includes('aspectRatio='),
+  'S2 must not pass a design-time aspect ratio into the measurement overlay',
+);
+requireAll(thirdsOverlaySource, [
+  'getVerticalThirdsPhotoAspectRatio({',
+  'height: data.photo.sourceHeight',
+  'width: data.photo.sourceWidth',
+  'aspectRatio: sourceAspectRatio',
+  "data.bands.filter(band => band.key !== 'upper')",
+], 'source-aligned vertical-thirds photo');
+for (const removedPath of [
+  'aspectRatio?:',
+  'data.photoAspectRatio',
+  '4 / 5',
+  '<Hatch',
+  'hairlineMissingPill',
+  'hairlineHatchHeight',
+  'upperBandOk',
+]) {
+  requireContract(
+    !thirdsOverlaySource.includes(removedPath),
+    `vertical-thirds overlay must not restore removed path: ${removedPath}`,
+  );
+}
+requireAll(reportTypesSource, [
+  'photo: SourceAlignedPhotoSlotData;',
+  'cropRect?: never;',
+  'sourceHeight: number;',
+  'sourceWidth: number;',
+  'hairlineY: number | null;',
+], 'vertical-thirds source-coordinate type contract');
+requireContract(
+  !reportTypesSource.includes('photoAspectRatio'),
+  'S2 must derive frame geometry from source dimensions, not an override field',
+);
+requireAll(reportAdapterSource, [
+  'sourceHeight: sourceImage.height',
+  'sourceWidth: sourceImage.width',
+  '...(hairlineY !== null && upperPillY !== null',
+  'upper: hairlineY === null ? null',
+], 'hairline eligibility removes the synthetic upper region');
+requireAll(thirdsReadoutSource, [
+  'upper: hairlineMissing ? null : ratio.upper',
+  '...(measuredRatio?.upper == null ? [] :',
+  '`중안부 ${r.middleLabel}`',
+  '`하안부 ${r.lowerLabel}`',
+], 'missing hairline readout contains measured regions only');
+console.log('vertical-thirds single-coordinate-path contract passed');

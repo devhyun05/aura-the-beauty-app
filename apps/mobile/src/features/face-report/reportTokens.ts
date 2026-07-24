@@ -5,8 +5,8 @@ export const color = {
   ink: '#16303B',
   body: '#44606C',
   text: '#5C7480',
-  muted: '#8DA3AD',
-  faint: '#7A929D',
+  muted: '#667F8A',
+  faint: '#5F7884',
   accent: '#22AEDD',
   accentDeep: '#0E7DA8',
   accentInk: '#0E4B60',
@@ -56,19 +56,50 @@ export const radius = { xs: 8, sm: 10, md: 14, lg: 16, xl: 18, pill: 999 } as co
 // Layout rhythm shared across sections (all other spacing literals match the HTML exactly).
 export const space = { screenX: 20, sectionTop: 30, cardPad: 16, cardGap: 12 } as const;
 
+/**
+ * Readable mobile type scale for the report. The original report was ported
+ * from desktop HTML with 9–11px text, which is too small on a physical phone.
+ * Keep the legacy numeric call sites working while resolving them onto a
+ * semantic, mobile-first minimum scale.
+ */
+export const reportTypography = {
+  micro: 12,
+  caption: 13,
+  captionStrong: 14,
+  body: 15,
+  label: 16,
+  sectionTitle: 24,
+} as const;
+
+export function resolveReportFontSize(size: number): number {
+  if (size <= 10.5) return reportTypography.micro;
+  if (size <= 11.5) return reportTypography.caption;
+  if (size <= 12.5) return reportTypography.captionStrong;
+  if (size <= 13.5) return reportTypography.body;
+  if (size <= 15) return reportTypography.label;
+  if (size <= 17) return 18;
+  if (size === 22) return reportTypography.sectionTitle;
+  return size;
+}
+
 /** Pretendard text style. lh = unitless line-height multiplier, ls = letterSpacing in px. */
 export const font = (
   size: number,
   weight: NonNullable<TextStyle['fontWeight']>,
   lh?: number,
   ls?: number,
-): TextStyle => ({
-  fontFamily: 'Pretendard',
-  fontSize: size,
-  fontWeight: weight,
-  ...(lh != null ? { lineHeight: Math.round(size * lh * 10) / 10 } : null),
-  ...(ls != null ? { letterSpacing: ls } : null),
-});
+): TextStyle => {
+  const resolvedSize = resolveReportFontSize(size);
+  return {
+    fontFamily: 'Pretendard',
+    fontSize: resolvedSize,
+    fontWeight: weight,
+    ...(lh != null
+      ? {lineHeight: Math.round(resolvedSize * lh * 10) / 10}
+      : null),
+    ...(ls != null ? {letterSpacing: ls} : null),
+  };
+};
 
 export const text = {
   eyebrow: font(10.5, '700', undefined, 1.68), // .16em @10.5px

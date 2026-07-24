@@ -4,19 +4,12 @@ import Svg, {G, Line, Rect, Text as SvgText} from 'react-native-svg';
 
 import {colors, radius, typography} from '../../../shared/theme';
 import type {FaceVerticalThirdsResult, VerticalThirdsKeypoint} from '../types';
+import {getVerticalThirdsPhotoAspectRatio} from '../verticalThirdsDisplayGeometry';
 
 export function formatRatio(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value)
     ? value.toFixed(2)
     : '-';
-}
-
-export function getAspectRatio(result: FaceVerticalThirdsResult | null) {
-  if (result?.sourceImage.width && result.sourceImage.height) {
-    return result.sourceImage.width / result.sourceImage.height;
-  }
-
-  return 3 / 4;
 }
 
 function getLineStroke(imageHeight: number) {
@@ -250,7 +243,13 @@ export function PhotoStage({
 }) {
   return (
     <View style={styles.photoStageWrap}>
-      <View style={[styles.photoStage, {aspectRatio: getAspectRatio(result)}]}>
+      <View
+        style={[
+          styles.photoStage,
+          {
+            aspectRatio: getVerticalThirdsPhotoAspectRatio(result.sourceImage),
+          },
+        ]}>
         <Image
           resizeMode="cover"
           source={{uri: imageUri}}

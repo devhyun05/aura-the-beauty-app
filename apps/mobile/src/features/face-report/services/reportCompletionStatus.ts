@@ -80,7 +80,7 @@ export function resolveReportCompletionStatus(
     {key: 'core', label: '기본 분석', state: coreState},
     {
       key: 'narrative',
-      label: '얼굴 해석',
+      label: '얼굴·피부 해석',
       state: resolveStageState({
         failed: generationFailed,
         hasStageMetadata,
@@ -90,7 +90,7 @@ export function resolveReportCompletionStatus(
     },
     {
       key: 'styling',
-      label: '스타일링 분석',
+      label: '스타일 추천',
       state: resolveStageState({
         failed: generationFailed,
         hasStageMetadata,

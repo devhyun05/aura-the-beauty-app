@@ -20,11 +20,7 @@ interface Props {
 export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
   const [picked, setPicked] = useState<BandKey | null>(null);
   const pickedBand = data.bands.find(b => b.key === picked) ?? null;
-  const lensDesc = pickedBand
-    ? (pickedBand.key === 'upper' && data.hairlineMissing && pickedBand.descMissing
-        ? pickedBand.descMissing
-        : pickedBand.desc)
-    : '';
+  const lensDesc = pickedBand?.desc ?? '';
 
   return (
     <RiseIn style={{ paddingHorizontal: 20 }}>
@@ -34,7 +30,6 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
         얼굴
       </Text>
       <GuidePhotoOverlay
-        aspectRatio={0.89}
         data={data}
         picked={picked}
         onPickBand={k => setPicked(p => (p === k ? null : k))}
@@ -83,7 +78,11 @@ export function S2Proportion({ data, onOpenRegionCard, onRetake }: Props) {
           />
         </View>
       </View>
-      <ThirdsRatioReadout ratio={data.ratioNumbers} faceShape={data.faceShape} />
+      <ThirdsRatioReadout
+        ratio={data.ratioNumbers}
+        faceShape={data.faceShape}
+        hairlineMissing={data.hairlineMissing}
+      />
     </RiseIn>
   );
 }

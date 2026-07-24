@@ -25,20 +25,15 @@ export const demoReport: ReportData = {
     eyebrow: 'PROPORTION',
     title: '얼굴의 구획부터 볼게요',
     sub: '세로 구획을 보면 얼굴에서 어느 부위가 상대적으로 강조되는지 알 수 있어요.',
-    photo: { placeholderLabel: '얼굴 전체 정면 컷' },
+    photo: {
+      placeholderLabel: '얼굴 전체 정면 컷',
+      sourceHeight: 5,
+      sourceWidth: 4,
+    },
     hairlineMissing: true,
-    hairlineY: 0.16, browY: 0.38, noseBaseY: 0.64, chinY: 0.88,
+    hairlineY: null, browY: 0.38, noseBaseY: 0.64, chinY: 0.88,
     lineLabels: { hairline: '헤어라인', brow: '미간', noseBase: '코밑', chin: '턱끝' },
-    hairlineMissingPill: '헤어라인 미확인',
-    hairlineHatchHeight: 0.38,
-    upperBandOk: { top: 0.16, height: 0.22 },
     bands: [
-      {
-        key: 'upper', top: 0, height: 0.38, pillLabel: '상안부', pillY: 0.27, pillCentered: false,
-        title: '상안부',
-        desc: '이마 · 눈썹 · 눈 — 또렷한 눈매가 시작되는 구획이에요',
-        descMissing: '헤어라인 미확인으로 이번 회차에는 구획하지 못했어요 — 눈썹·눈 분석은 아래 카드에서 볼 수 있어요',
-      },
       {
         key: 'mid', top: 0.38, height: 0.26, pillLabel: '중안부', pillY: 0.51, pillCentered: true, restingTint: true,
         title: '중안부', desc: '코 · 인중 · 볼 — 완만한 곡선이 이어지는 구획이에요',

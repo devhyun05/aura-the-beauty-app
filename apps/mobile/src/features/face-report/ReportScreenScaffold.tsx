@@ -30,6 +30,7 @@ import {
 import {keepActivePageContent} from './services/reportContentUpgrade';
 import {
   resolveReportCompletionStatus,
+  type ReportCompletionStageState,
   type ReportCompletionStatus,
 } from './services/reportCompletionStatus';
 import {GoldenMaskCard} from './components/GoldenMaskCard';
@@ -124,71 +125,96 @@ function ChapterMark({
   );
 }
 
+function reportStageStatePresentation(state: ReportCompletionStageState): {
+  color: string;
+  label: string;
+} {
+  if (state === 'complete') return {color: color.accentDeep, label: '완료'};
+  if (state === 'active') return {color: '#1389B5', label: '생성 중'};
+  if (state === 'pending') return {color: color.faint, label: '대기'};
+  if (state === 'partial') return {color: '#B96B32', label: '일부 생성'};
+  if (state === 'fallback') return {color: '#B96B32', label: '기본 내용 제공'};
+  return {color: '#B34B4B', label: '생성 실패'};
+}
+
 function ReportCompletionIndicator({
   status,
 }: {
   status: ReportCompletionStatus;
 }) {
+  const title =
+    status.displayState === 'complete'
+      ? '보고서 생성 완료'
+      : status.displayState === 'issues'
+        ? '보고서 생성 결과'
+        : '보고서 내용 생성 중';
+  const description =
+    status.displayState === 'complete'
+      ? '모든 내용을 확인할 수 있어요'
+      : '완성된 내용부터 볼 수 있어요';
+
   return (
     <View
       accessible
       accessibilityLabel={status.accessibilityLabel}
       accessibilityLiveRegion="polite"
       style={{
-        alignItems: 'flex-end',
-        alignSelf: 'flex-end',
-        gap: 1,
-        marginTop: -2,
-        maxWidth: 280,
-        minHeight: 28,
+        gap: 7,
+        marginTop: 2,
+        width: '100%',
       }}>
-      {status.displayState === 'complete' ? (
-        <Text
-          numberOfLines={1}
-          style={[font(11, '700', 1.3), {color: color.accentDeep}]}>
-          보고서 생성 완료
+      <View style={{alignItems: 'center', gap: 2}}>
+        <Text style={[font(11.5, '700', 1.3), {color: color.ink}]}>
+          {title}
         </Text>
-      ) : status.displayState === 'issues' ? (
-        <Text numberOfLines={1} style={font(11, '700', 1.3)}>
-          <Text style={{color: color.accentDeep}}>
-            {status.successfulCount}/{status.totalCount} 성공
-          </Text>
-          <Text style={{color: color.faint}}> · </Text>
-          <Text style={{color: '#B96B32'}}>{status.issueLabel}</Text>
+        <Text style={[font(10, '500', 1.3), {color: color.muted}]}>
+          {description}
         </Text>
-      ) : (
-        <>
-          <View style={{alignItems: 'center', flexDirection: 'row', gap: 5}}>
-            <Text
-              numberOfLines={1}
-              style={[font(11.5, '700', 1.3), {color: color.accentDeep}]}>
-              {status.successfulCount}/{status.totalCount}
-            </Text>
+      </View>
+      <View style={{flexDirection: 'row', gap: 6}}>
+        {status.stages.map(stage => {
+          const presentation = reportStageStatePresentation(stage.state);
+          return (
             <View
+              key={stage.key}
               style={{
-                backgroundColor: '#22AEDD',
-                borderRadius: 3,
-                height: 5,
-                width: 5,
-              }}
-            />
-            {status.completedLabels.length > 0 ? (
+                backgroundColor: color.surface2,
+                borderColor: color.divider,
+                borderRadius: radius.sm,
+                borderWidth: 1,
+                flex: 1,
+                gap: 4,
+                minHeight: 56,
+                paddingHorizontal: 7,
+                paddingVertical: 6,
+              }}>
               <Text
-                numberOfLines={1}
-                style={[font(10, '500', 1.3), {color: color.muted}]}>
-                {status.completedLabels.join(' · ')} 완료
+                numberOfLines={2}
+                style={[font(10.5, '700', 1.25), {color: color.ink}]}>
+                {stage.label}
               </Text>
-            ) : null}
-          </View>
-          {status.currentLabel ? (
-            <Text
-              numberOfLines={1}
-              style={[font(10, '500', 1.3), {color: color.faint}]}>
-              {status.currentLabel}
-            </Text>
-          ) : null}
-        </>
-      )}
+              <View style={{alignItems: 'center', flexDirection: 'row', gap: 4}}>
+                <View
+                  style={{
+                    backgroundColor: presentation.color,
+                    borderRadius: 3,
+                    height: 6,
+                    width: 6,
+                  }}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    font(9.5, '700', 1.25),
+                    {color: presentation.color, flexShrink: 1},
+                  ]}>
+                  {presentation.label}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -256,10 +282,12 @@ function StoryContentCard({
 
 function ReportCoverPage({
   pageId,
+  photoUri,
   registerCaptureTarget,
   section,
 }: {
   pageId: string;
+  photoUri?: string | null;
   registerCaptureTarget: (
     pageId: string,
     target: ReportPageCaptureTarget | null,
@@ -278,7 +306,11 @@ function ReportCoverPage({
         )
       }
       style={{flex: 1}}>
-      <ReportSectionCover reportCover section={section} />
+      <ReportSectionCover
+        reportCover
+        reportPhotoUri={photoUri}
+        section={section}
+      />
     </View>
   );
 }
@@ -553,10 +585,12 @@ function MakeupCtaCard({
           <Pressable
             accessibilityLabel={data.footer.cta}
             accessibilityRole="button"
+            accessibilityState={{disabled: !onPress}}
+            disabled={!onPress}
             onPress={onPress}
             style={({pressed}) => [{
               alignItems: 'center', backgroundColor: color.accentDeep, borderRadius: radius.lg,
-              paddingVertical: 16, opacity: pressed ? 0.86 : 1,
+              paddingVertical: 16, opacity: !onPress ? 0.5 : pressed ? 0.86 : 1,
             }, shadow.cta]}>
             <Text style={[font(14.5, '800'), {color: color.white}]}>{data.footer.cta}</Text>
           </Pressable>
@@ -850,6 +884,7 @@ export const ReportScreenScaffold = React.forwardRef<
       render: (
         <ReportCoverPage
           pageId={REPORT_COVER_PAGE_ID}
+          photoUri={data.s1.photo.uri ?? null}
           registerCaptureTarget={registerCaptureTarget}
           section={summarySection}
         />

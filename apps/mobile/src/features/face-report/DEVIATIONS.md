@@ -14,7 +14,7 @@
 10. **간격 토큰화 범위** — 색·라운드·타입·섀도는 `reportTokens.ts`로 전부 토큰화. 간격은 HTML의 픽셀 리듬을 그대로 보존하기 위해 공통 리듬(`space`)만 토큰이고 나머지는 원본과 동일한 리터럴입니다.
 11. **상단바 여백** — HTML의 `padding-top: 64px`(상태바 포함 고정값)는 기기별 safe-area(`useSafeAreaInsets`) 기반으로 치환: `max(inset.top, 54) + 10`.
 12. **모노스페이스 플레이스홀더** — 사진 슬롯/실루엣 자리표시자의 `ui-monospace`는 앱 폰트 정책상 Pretendard로 통일(크기·행간·색 동일).
-13. **S2 사진 비율(실데이터 연결 시 추가)** — 원본은 `aspectRatio: 4/5` 고정. 실제 촬영 사진(보통 3:4 등)을 `contentFit="cover"`로 그 프레임에 넣으면 세로 크롭이 발생해, 원본 이미지 기준으로 정규화한 헤어라인/눈썹/코끝/턱끝 y좌표가 실제 위치에서 어긋난다. `S2Data.photoAspectRatio`(옵션, 기본 4/5)를 추가해 실사진 비율을 그대로 프레임에 반영 — 기존 `VerticalThirdsOverlay`가 쓰는 것과 같은 해법.
+13. **S2 측정 사진은 원본 좌표계만 사용** — 실제 촬영 사진(보통 3:4 등)을 고정 프레임에 `contentFit="cover"`로 넣으면 세로 크롭이 발생해, 원본 이미지 기준 H/G/Sn/Me 가이드가 얼굴에서 어긋난다. S2는 `SourceAlignedPhotoSlotData.sourceWidth/sourceHeight`를 필수로 받고 `getVerticalThirdsPhotoAspectRatio`에서 프레임 비율을 계산한다. 임의 `aspectRatio` prop, 별도 비율 필드, crop rect, 기본 4:5 폴백은 금지한다. 헤어라인을 측정하지 못한 회차에는 상안부 band·pill·수치도 데이터에서 제외한다.
 
 ## 파일 구성
 ```

@@ -20,6 +20,12 @@ function assert(cond: boolean, label: string): void {
   assert(balanced.includes('균형'), 'all within threshold -> balanced');
   const longLower = describeThirdsInternally({upper: null, middle: 1.0, lower: 1.15});
   assert(longLower.includes('하안부') && longLower.includes('15%') && longLower.includes('길'), 'null upper, lower 15% longer');
+  const balancedWithoutUpper = describeThirdsInternally({upper: null, middle: 1.0, lower: 1.02});
+  assert(
+    balancedWithoutUpper.includes('측정된 중안부와 하안부') &&
+      !balancedWithoutUpper.includes('세 구획'),
+    'null upper must describe only measured middle/lower regions',
+  );
 }
 // formatThirdsRatio — 상안부 결측(헤어라인 미확인)은 대시
 {
