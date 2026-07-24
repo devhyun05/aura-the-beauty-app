@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.core.errors import AppError
+from app.core.settings import get_settings
 from app.db.session import Database
 
 # 비용이 발생하는 보고서/AI 생성 기능별 스코프.
@@ -93,6 +94,7 @@ async def enforce_report_generation_limit(
   feature: str,
   per_minute: int,
   per_day: int,
+  enabled: bool | None = None,
 ) -> None:
   """비용이 나가는 생성 요청에 사용자별 분당·일일 한도를 함께 건다.
 
@@ -101,6 +103,11 @@ async def enforce_report_generation_limit(
   """
   if feature not in REPORT_RATE_FEATURES:
     raise ValueError(f"Unsupported report rate-limit feature: {feature}")
+
+  if enabled is None:
+    enabled = get_settings().user_feature_usage_limits_enabled
+  if not enabled:
+    return
 
   await _ensure_table(db)
   await _enforce_window(

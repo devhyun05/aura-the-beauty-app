@@ -787,9 +787,21 @@ class _RateLimitDb:
 
 @pytest.mark.asyncio
 async def test_rate_limit_is_atomic_and_returns_retry_hint() -> None:
-  await enforce_product_rate_limit(_RateLimitDb(2), user_id=uuid4(), scope="search", limit=2)
+  await enforce_product_rate_limit(
+    _RateLimitDb(2),
+    user_id=uuid4(),
+    scope="search",
+    limit=2,
+    enabled=True,
+  )
   with pytest.raises(AppError) as error:
-    await enforce_product_rate_limit(_RateLimitDb(3), user_id=uuid4(), scope="search", limit=2)
+    await enforce_product_rate_limit(
+      _RateLimitDb(3),
+      user_id=uuid4(),
+      scope="search",
+      limit=2,
+      enabled=True,
+    )
   assert error.value.code == "PRODUCT_RATE_LIMITED"
   assert error.value.details["retryAfterSeconds"] == 12
 

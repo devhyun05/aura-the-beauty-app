@@ -337,6 +337,10 @@ class Settings(BaseSettings):
   product_personalization_experiment_percent: int = Field(default=50, ge=0, le=100)
   product_cohort_experiment_percent: int = Field(default=50, ge=0, le=100)
   product_personalization_require_age_14: bool = True
+  # 사용자에게 노출되는 기능별 분/일 사용량 제한. 배포 초기에는 모든 정상 기능을
+  # 제한 없이 사용할 수 있도록 끄고, 필요할 때만 환경 변수로 명시적으로 켠다.
+  # 인증·소유권 검사와 외부 공급자 자체 quota/backoff에는 영향을 주지 않는다.
+  user_feature_usage_limits_enabled: bool = False
   product_recommendation_rate_limit_per_minute: int = Field(default=120, ge=1, le=10000)
   product_search_rate_limit_per_minute: int = Field(default=60, ge=1, le=10000)
   product_write_rate_limit_per_minute: int = Field(default=120, ge=1, le=10000)
