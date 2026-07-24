@@ -11,6 +11,7 @@ export type {VisualWeightPresentation} from './visualWeightPresentation';
 import type {StyleLaneCard} from './styleLaneRecommendations';
 import type {GoldenMaskReportDescriptor} from '../../shared/contracts/goldenMask';
 import type {Face3DPhotoEvidence} from '../face-3d/services/face3DPhotoEvidence';
+import type {Face3DReportProfile} from '../face-3d/types';
 export type {StyleLaneCard, StyleLaneMove, StyleLaneKey} from './styleLaneRecommendations';
 
 // 압축 없이 원본 AI 인사이트(라벨+설명문)를 그대로 나열하는 공용 항목 —
@@ -302,6 +303,7 @@ export interface S9Data {
 // 존재하지 않는 가이드·인사이트를 임의로 만들지 않는다.
 export interface ReportData {
   reportId: string;
+  face3d?: Face3DReportProfile;
   contentRevision?: number;
   contentStatus?: {
     coreReadyAt?: string;

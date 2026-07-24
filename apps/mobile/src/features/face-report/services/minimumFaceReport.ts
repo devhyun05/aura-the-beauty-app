@@ -70,6 +70,7 @@ export function buildMinimumFaceReportData(
 
   return {
     reportId: preview.reportId ?? 'face-analysis-generating',
+    ...(local?.face3d ? {face3d: local.face3d} : {}),
     contentRevision: 0,
     contentStatus: {
       narrativeStatus: 'processing',
