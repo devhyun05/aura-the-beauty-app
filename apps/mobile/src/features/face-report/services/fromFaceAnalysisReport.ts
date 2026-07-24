@@ -506,15 +506,43 @@ function buildToneMap(probabilities: ToneProbabilityData[]) {
   };
 }
 
+// DrapeStage 타원 컨테이너의 실측 크기(S4PersonalColor.tsx) — 크롭 비율을
+// 여기에 맞춰야 왜곡이 없다.
+const DRAPE_OVAL_WIDTH = 112;
+const DRAPE_OVAL_HEIGHT = 142;
+
+// cropRect의 w/h는 원본 이미지 픽셀 기준 정규화 값이라, 원본이 정사각형이
+// 아니면 w/h 비율 ≠ 실제 화면 비율이다(PhotoSlot은 이 픽셀 비율 차이를 보정하지
+// 않고 contentFit="fill"로 그대로 늘린다). 실제 원본 픽셀 크기(sourceImage)를
+// 알아야 왜곡 없이 타원 비율에 맞는 w를 역산할 수 있다 — 모르면 크롭을 아예
+// 생략해 "작게 보임"에 그치게 한다(왜곡보다 안전).
+function computeDrapeCropRect(
+  sourceImage: {width: number; height: number} | undefined,
+): {x: number; y: number; w: number; h: number} | undefined {
+  if (!sourceImage || sourceImage.width <= 0 || sourceImage.height <= 0) {
+    return undefined;
+  }
+  const containerAspect = DRAPE_OVAL_WIDTH / DRAPE_OVAL_HEIGHT;
+  const h = 0.7;
+  const w = Math.min(
+    1,
+    containerAspect * h * (sourceImage.height / sourceImage.width),
+  );
+  const x = Math.max(0, Math.min(1 - w, 0.5 - w / 2));
+  return {x, y: 0.12, w, h};
+}
+
 export function buildPersonalColorSection(
   personalColor: MeasuredPersonalColorView | null | undefined,
   heroUri: string | undefined,
   derived?: FaceAnalysisDerivedResult | null,
+  sourceImage?: {width: number; height: number},
 ): S4Data | null {
   if (!personalColor || personalColor.status === 'insufficient' || !personalColor.tone) {
     return null;
   }
   const {tone, axes, palette} = personalColor;
+  const drapeCropRect = computeDrapeCropRect(sourceImage);
 
   const axesData: SpectrumAxisData[] = AXIS_ORDER.map(name => {
     const axis = axes[name];
@@ -572,7 +600,11 @@ export function buildPersonalColorSection(
       title: '어울리는 색, 나란히 대보기',
       sub: '잘 어울리는 색과 피할 색을 얼굴에 나란히 대보면 차이가 바로 보여요',
       photo: heroUri
-        ? {uri: heroUri, placeholderLabel: '셀피', cropRect: {x: 0.29, y: 0.12, w: 0.42, h: 0.7}}
+        ? {
+            uri: heroUri,
+            placeholderLabel: '셀피',
+            ...(drapeCropRect ? {cropRect: drapeCropRect} : {}),
+          }
         : {placeholderLabel: '셀피'},
       goodTag: '잘 어울리는 색',
       badTag: '피할 색',
@@ -1577,7 +1609,7 @@ export function buildReportDataFromFaceAnalysisReport(input: FaceReportAdapterIn
       derived,
       report.makeupGuideline,
     ),
-    s4: buildPersonalColorSection(personalColor, heroUri, derived),
+    s4: buildPersonalColorSection(personalColor, heroUri, derived, face3dPhotoEvidence?.image),
     s5: buildS5(bodyProfile, gender),
     s6: buildS6(report.faceAnalysisV2?.perception ?? null, visualWeight),
     s7: stylingSettled ? buildS7(report.stylingLooks) : null,
