@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import binascii
+import hashlib
 import hmac
 import logging
 import time
@@ -9,7 +10,12 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID, uuid4
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from fastapi import APIRouter, Depends, Header, Response
+from fastapi import Request
 from pydantic import Field, StrictBool
 
 from app.core.errors import AppError
@@ -22,6 +28,13 @@ from app.services.s3 import S3Service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/web-trial", tags=["web-trial"])
+_WEB_TRIAL_PUBLIC_KEY_SPKI_B64 = (
+  "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhxTFA2GwL+0Fw3Fir2EJqMkNeTh6"
+  "NVE1psvcG0hsrhKwLIglI/oZroZow/jajwf81tQxaogi0ggsd5fWmHUbEA=="
+)
+_WEB_TRIAL_PUBLIC_KEY = serialization.load_der_public_key(
+  base64.b64decode(_WEB_TRIAL_PUBLIC_KEY_SPKI_B64),
+)
 
 
 class WebTrialFaceAnalysisCreate(CamelModel):
@@ -45,24 +58,81 @@ _job_tasks: set[asyncio.Task] = set()
 _request_times: defaultdict[str, deque[float]] = defaultdict(deque)
 
 
+def _verify_signed_request(
+  *,
+  body: bytes,
+  client_id: str,
+  method: str,
+  path: str,
+  signature: str | None,
+  timestamp: str | None,
+) -> bool:
+  try:
+    unix_timestamp = int(timestamp or "")
+  except ValueError:
+    return False
+  if abs(round(time.time()) - unix_timestamp) > 300:
+    return False
+  try:
+    raw_signature = base64.b64decode(signature or "", validate=True)
+  except (binascii.Error, ValueError):
+    return False
+  if len(raw_signature) != 64:
+    return False
+  canonical_path = path.removeprefix("/api/").lstrip("/")
+  body_hash = hashlib.sha256(body).hexdigest()
+  message = (
+    f"{unix_timestamp}\n{method.upper()}\n{canonical_path}\n{client_id}\n{body_hash}"
+  ).encode()
+  r = int.from_bytes(raw_signature[:32], "big")
+  s = int.from_bytes(raw_signature[32:], "big")
+  try:
+    _WEB_TRIAL_PUBLIC_KEY.verify(
+      encode_dss_signature(r, s),
+      message,
+      ec.ECDSA(hashes.SHA256()),
+    )
+  except (InvalidSignature, ValueError):
+    return False
+  return True
+
+
 def _authorize(
   *,
+  body: bytes = b"",
   client_id: str | None,
+  method: str = "GET",
+  path: str = "/api/web-trial",
   provided_key: str | None,
+  signature: str | None = None,
   settings: Settings,
+  timestamp: str | None = None,
 ) -> str:
-  configured_key = (settings.web_trial_api_key or "").strip()
-  if not settings.web_trial_enabled or not configured_key:
+  if not settings.web_trial_enabled:
     raise AppError(
       503,
       "WEB_TRIAL_UNAVAILABLE",
       "웹 얼굴 분석 체험을 잠시 이용할 수 없어요.",
     )
-  if not provided_key or not hmac.compare_digest(provided_key, configured_key):
-    raise AppError(401, "WEB_TRIAL_UNAUTHORIZED", "웹 체험 요청을 확인하지 못했어요.")
   normalized_client_id = (client_id or "").strip()
   if len(normalized_client_id) < 16 or len(normalized_client_id) > 128:
     raise AppError(400, "WEB_TRIAL_CLIENT_REQUIRED", "웹 체험 기기 정보를 확인하지 못했어요.")
+  configured_key = (settings.web_trial_api_key or "").strip()
+  shared_key_valid = bool(
+    configured_key
+    and provided_key
+    and hmac.compare_digest(provided_key, configured_key)
+  )
+  signed_request_valid = _verify_signed_request(
+    body=body,
+    client_id=normalized_client_id,
+    method=method,
+    path=path,
+    signature=signature,
+    timestamp=timestamp,
+  )
+  if not shared_key_valid and not signed_request_valid:
+    raise AppError(401, "WEB_TRIAL_UNAUTHORIZED", "웹 체험 요청을 확인하지 못했어요.")
   return normalized_client_id
 
 
@@ -194,15 +264,29 @@ async def _run_face_analysis_job(
 @router.post("/face-analysis/jobs", status_code=202)
 async def create_web_trial_face_analysis(
   payload: WebTrialFaceAnalysisCreate,
+  request: Request,
   response: Response,
   x_aura_web_trial_key: str | None = Header(default=None, alias="X-Aura-Web-Trial-Key"),
   x_aura_web_trial_client: str | None = Header(default=None, alias="X-Aura-Web-Trial-Client"),
+  x_aura_web_trial_signature: str | None = Header(
+    default=None,
+    alias="X-Aura-Web-Trial-Signature",
+  ),
+  x_aura_web_trial_timestamp: str | None = Header(
+    default=None,
+    alias="X-Aura-Web-Trial-Timestamp",
+  ),
   settings: Settings = Depends(get_settings),
 ) -> dict:
   client_id = _authorize(
+    body=await request.body(),
     client_id=x_aura_web_trial_client,
+    method=request.method,
+    path=request.url.path,
     provided_key=x_aura_web_trial_key,
+    signature=x_aura_web_trial_signature,
     settings=settings,
+    timestamp=x_aura_web_trial_timestamp,
   )
   image_bytes = _decode_image(payload, settings)
   _enforce_rate_limit(client_id, settings)
@@ -221,15 +305,28 @@ async def create_web_trial_face_analysis(
 @router.get("/face-analysis/jobs/{job_id}")
 async def read_web_trial_face_analysis(
   job_id: UUID,
+  request: Request,
   response: Response,
   x_aura_web_trial_key: str | None = Header(default=None, alias="X-Aura-Web-Trial-Key"),
   x_aura_web_trial_client: str | None = Header(default=None, alias="X-Aura-Web-Trial-Client"),
+  x_aura_web_trial_signature: str | None = Header(
+    default=None,
+    alias="X-Aura-Web-Trial-Signature",
+  ),
+  x_aura_web_trial_timestamp: str | None = Header(
+    default=None,
+    alias="X-Aura-Web-Trial-Timestamp",
+  ),
   settings: Settings = Depends(get_settings),
 ) -> dict:
   client_id = _authorize(
     client_id=x_aura_web_trial_client,
+    method=request.method,
+    path=request.url.path,
     provided_key=x_aura_web_trial_key,
+    signature=x_aura_web_trial_signature,
     settings=settings,
+    timestamp=x_aura_web_trial_timestamp,
   )
   _prune_state(settings)
   job = _jobs.get(job_id)
