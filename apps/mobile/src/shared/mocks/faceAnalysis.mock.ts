@@ -113,6 +113,7 @@ export function getFaceAnalysisAvoidedMakeupImageAssetNames() {
 const makeupGuideline = {
   brow: '자연스러운 아치형으로 결을 살리고 애쉬 브라운을 추천해요.',
   blush: '뉴트럴 핑크를 광대 위에 넓고 얇게 연결해요.',
+  contour: '얼굴 외곽을 자연스럽게 정리해요.',
   highlight: 'T존과 눈밑 삼각존에 은은한 광채만 더해요.',
   eyeshadow: '뉴트럴 베이지 톤을 얇고 부드럽게 쌓아요.',
   eyeliner: '점막을 가볍게 채우고 브라운 아이라인으로 마무리해요.',

@@ -13,6 +13,15 @@ import type {GoldenMaskReportDescriptor} from '../../shared/contracts/goldenMask
 import type {Face3DPhotoEvidence} from '../face-3d/services/face3DPhotoEvidence';
 export type {StyleLaneCard, StyleLaneMove, StyleLaneKey} from './styleLaneRecommendations';
 
+// 압축 없이 원본 AI 인사이트(라벨+설명문)를 그대로 나열하는 공용 항목 —
+// S3 부위 카드/S6 인상 종합/S8 피부가 전부 이 모양으로 렌더한다.
+export interface InsightItemData {
+  key: string;
+  heading: string;
+  label: string;
+  description: string;
+}
+
 export interface PhotoSlotData {
   uri?: string;
   placeholderLabel: string;
@@ -156,17 +165,19 @@ export interface RegionCardData {
   cropRect?: { x: number; y: number; w: number; h: number };
   guide: FeatureGuide;
   guides?: FeatureGuide[];
-  guideLabel: string;
-  guideLabelX: number;                  // normalized offset of the label pill
-  guideLabelAlign?: 'left' | 'right';
+  guideLabel: string;                   // 측정 라벨 칩은 항상 우측 하단 고정(GuideOverlay)
   blend?: BlendData;                    // jaw card: rendered before the axes
   axes: SpectrumAxisData[];
   whatIf?: { axisIndex: number; config: WhatIfConfig };
   // 부위 근거·인사이트·조언(P2). 값이 없으면 컴포넌트가 paragraph로 폴백.
   insight?: string;
   evidence?: string;
-  recommendation?: string;
+  // 부위별 메이크업 팁 — 항목별로 분리된 배열이라야 각 팁이 별도 문단으로
+  // 렌더된다(하나의 문자열로 이어붙이면 여러 팁이 한 덩어리로 읽힌다).
+  recommendation?: string[];
   paragraph: string;
+  // 이 부위와 관련된 AI 인사이트 전체(압축 없이) — 실제 분석 리포트에서만 채워짐.
+  insightItems?: InsightItemData[];
   // 1층 사진 판정(VLM) 상세 구절(쌍꺼풀 유형·안검 처짐·애교살 등). 판정된 것만.
   // 비어 있으면 컴포넌트가 상세 칩 블록을 숨긴다.
   featureDescriptors?: string[];
@@ -209,6 +220,8 @@ export interface S4Data {
   season: { headline: string };
   // 봄 라이트 확신도 게이지용(typeScore 0..1).
   seasonConfidence?: { topLabel: string; secondaryLabel: string | null; typeScore: number };
+  // 규칙 기반(derived) 색·피부 해석 서술문 — 이미 생성되지만 화면에 없던 내용.
+  interpretation?: { colorAxes?: string; skinColor?: string };
   toneProbabilities: ToneProbabilityData[];
   toneMap: {
     caption: string;
@@ -252,7 +265,10 @@ export interface S6Data {
   eyebrow: string; title: string; sub: string;
   axes: ImpressionAxis[];   // AI가 반환한 축만 사용. 없으면 빈 배열.
   keywords: string[];
-  paragraph: string;
+  // 압축 문단 대신 gestalt 인사이트 전체(라벨+설명문)를 그대로 나열한다.
+  // 값이 없으면(예: 고정 fixture) paragraph로 폴백한다.
+  details?: InsightItemData[];
+  paragraph?: string;
   // 시각 무게 지도(2층). 근거 부족이면 null → 컴포넌트가 블록 숨김.
   visualWeight?: VisualWeightPresentation | null;
 }

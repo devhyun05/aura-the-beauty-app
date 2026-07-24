@@ -10,8 +10,6 @@ interface Props {
   guides?: FeatureGuide[];
   activeMetricKeys?: string[];
   label: string;
-  labelX: number;
-  labelAlign?: 'left' | 'right';
 }
 
 /** S3 photo-crop guide overlay: slanted eye-tail line + dot / dashed nose axis / lip ellipse / real polylines. */
@@ -20,8 +18,6 @@ export function GuideOverlay({
   guides,
   activeMetricKeys,
   label,
-  labelX,
-  labelAlign = 'left',
 }: Props) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const activeKeys = new Set(activeMetricKeys ?? []);
@@ -171,10 +167,9 @@ export function GuideOverlay({
         }} />
       )}
       {visibleGuides.length > 0 && activeLabel ? (
-        <View style={{
-          position: 'absolute', bottom: 10, flexDirection: 'row',
-          ...(labelAlign === 'left' ? { left: pct(labelX * 100) } : { right: pct(labelX * 100) }),
-        }}>
+        // 측정 라벨 칩은 얼굴을 가리지 않도록 항상 우측 하단에 고정한다 — 부위별로
+        // 측정 좌표 근처에 배치하던 이전 방식은 칩이 얼굴 위에 겹쳐 보이는 문제가 있었다.
+        <View style={{ position: 'absolute', bottom: 10, right: 10, flexDirection: 'row' }}>
           <Pill variant="dark" label={activeLabel} />
         </View>
       ) : null}

@@ -61,7 +61,7 @@ export const demoReport: ReportData = {
         key: 'upper', regionChip: '상안부', regionTitle: '이마 · 눈썹 · 눈',
         photo: { placeholderLabel: '눈가 확대 컷' },
         guide: { kind: 'slantLine', from: { x: 0.12, y: 0.52 }, length: 0.52, angleDeg: -7, marker: { x: 0.63, y: 0.44 } },
-        guideLabel: '눈꼬리 기울기 선', guideLabelX: 0.12,
+        guideLabel: '눈꼬리 기울기 선',
         axes: [
           { leftLabel: '내려간 눈꼬리', rightLabel: '올라간 눈꼬리', state: { kind: 'point', position: 0.64 } },
           { leftLabel: '좁은 눈 사이', rightLabel: '넓은 눈 사이', state: { kind: 'point', position: 0.47 }, caption: '평균에 가까운 간격이에요' },
@@ -86,7 +86,7 @@ export const demoReport: ReportData = {
         key: 'mid', regionChip: '중안부', regionTitle: '코 · 인중 · 볼',
         photo: { placeholderLabel: '코·인중 확대 컷' },
         guide: { kind: 'dashedVertical', x: 0.44, top: 0.18, height: 0.58 },
-        guideLabel: '콧대 중심선', guideLabelX: 0.5,
+        guideLabel: '콧대 중심선',
         axes: [
           {
             leftLabel: '짧은 인중', rightLabel: '긴 인중', state: { kind: 'band', start: 0.5, width: 0.26 },
@@ -100,7 +100,7 @@ export const demoReport: ReportData = {
         key: 'lower', regionChip: '하안부', regionTitle: '입술 · E라인',
         photo: { placeholderLabel: '입술 확대 컷' },
         guide: { kind: 'ellipse', cx: 0.5, cy: 0.56, rx: 0.24, ry: 0.08, dashed: false },
-        guideLabel: '입술 라인', guideLabelX: 0.26,
+        guideLabel: '입술 라인',
         axes: [
           { leftLabel: '얇은 입술', rightLabel: '도톰한 입술', state: { kind: 'point', position: 0.68 }, caption: '도톰한 쪽에 가까워요' },
           {
@@ -114,7 +114,7 @@ export const demoReport: ReportData = {
         key: 'jaw', regionChip: '외곽 라인', regionTitle: '광대 · 턱',
         photo: { placeholderLabel: '턱 라인 확대 컷' },
         guide: { kind: 'ellipse', cx: 0.5, cy: 0.9, rx: 0.32, ry: 0.6, dashed: true },
-        guideLabel: '턱 곡선 가이드', guideLabelX: 0.18, guideLabelAlign: 'right',
+        guideLabel: '턱 곡선 가이드',
         blend: {
           label: '얼굴형 블렌드', dominantLabel: '타원형 우세', secondaryLabel: '둥근형', dominantRatio: 0.65,
           caption: '타원형 특징이 우세하고, 둥근형 특징이 함께 보여요',

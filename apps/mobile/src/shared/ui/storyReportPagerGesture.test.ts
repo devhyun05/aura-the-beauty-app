@@ -20,17 +20,18 @@ expectEqual(
   'a clearly horizontal drag belongs to the pager',
 );
 expectEqual(
-  classifyStoryReportGesture(10, 2),
+  classifyStoryReportGesture(4, 1),
   'horizontal',
-  'a horizontal drag responds at the reduced activation distance',
+  'a horizontal drag responds at the reduced activation distance (tuned low to '
+    + 'beat the native ScrollView race — see StoryReportPager)',
 );
 expectEqual(
-  classifyStoryReportGesture(9, 2),
+  classifyStoryReportGesture(3, 1),
   'undecided',
   'movement below the horizontal activation distance remains undecided',
 );
 expectEqual(
-  classifyStoryReportGesture(9, 7),
+  classifyStoryReportGesture(5, 4),
   'undecided',
   'an ambiguous diagonal drag remains in the dead zone',
 );
