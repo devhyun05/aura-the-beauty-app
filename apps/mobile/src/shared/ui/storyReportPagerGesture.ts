@@ -4,7 +4,11 @@ export type StoryReportGestureAxis =
   | 'vertical';
 
 export const STORY_REPORT_VERTICAL_ACTIVATION_PX = 8;
-export const STORY_REPORT_HORIZONTAL_ACTIVATION_PX = 10;
+// 각 카드 내부의 세로 ScrollView와 같은 터치를 놓고 경쟁한다 — 애매한 초반 구간에서
+// 내부 ScrollView가 먼저 onScrollBeginDrag를 발생시키면 그 터치 동안 페이저가
+// 영영 캡처하지 못한다(StoryReportPager의 setPagingEnabled(false) 게이트).
+// 네이티브 스크롤뷰의 자체 인식 임계값을 이기려면 더 적은 픽셀에서 확정해야 한다.
+export const STORY_REPORT_HORIZONTAL_ACTIVATION_PX = 4;
 export const STORY_REPORT_VERTICAL_DOMINANCE_RATIO = 1.15;
 export const STORY_REPORT_HORIZONTAL_DOMINANCE_RATIO = 1.25;
 export const STORY_REPORT_SWIPE_DISTANCE_RATIO = 0.18;

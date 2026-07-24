@@ -553,6 +553,7 @@ const completeReport: FaceAnalysisReport = {
   makeupGuideline: {
     brow: '브라운 눈썹',
     blush: '로지 치크',
+    contour: '자연스러운 윤곽',
     highlight: '은은한 하이라이트',
     eyeshadow: '뉴트럴 섀도우',
     eyeliner: '브라운 라인',
