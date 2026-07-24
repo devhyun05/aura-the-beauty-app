@@ -351,7 +351,10 @@ async def create_hair_simulation(
             """,
             analysis_id,
           )
-          if int(per_analysis_count or 0) >= settings.hair_simulations_per_analysis:
+          if (
+            settings.user_feature_usage_limits_enabled
+            and int(per_analysis_count or 0) >= settings.hair_simulations_per_analysis
+          ):
             emit_hair_metric(
               "api",
               "HairQuotaRejected",
@@ -368,7 +371,10 @@ async def create_hair_simulation(
             """,
             user["id"],
           )
-          if int(daily_count or 0) >= settings.hair_simulations_per_day:
+          if (
+            settings.user_feature_usage_limits_enabled
+            and int(daily_count or 0) >= settings.hair_simulations_per_day
+          ):
             emit_hair_metric(
               "api",
               "HairQuotaRejected",

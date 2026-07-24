@@ -14,7 +14,7 @@ from botocore.exceptions import ClientError, ParamValidationError, ReadTimeoutEr
 from pydantic import ValidationError
 
 from app.core.errors import AppError
-from app.core.settings import Settings
+from app.core.settings import Settings, get_settings
 from app.schemas.makeup_recommendation import (
   AI_PICK_OPTION_ID,
   AI_PICK_OPTION_LABEL,
@@ -986,7 +986,17 @@ def _scenario_library_item(row: dict[str, Any]) -> dict[str, Any]:
   }
 
 
-async def enforce_scenario_generation_limit(db: Any, user_id: Any) -> None:
+async def enforce_scenario_generation_limit(
+  db: Any,
+  user_id: Any,
+  *,
+  enabled: bool | None = None,
+) -> None:
+  if enabled is None:
+    enabled = get_settings().user_feature_usage_limits_enabled
+  if not enabled:
+    return
+
   row = await db.fetchrow(
     """
     insert into makeup_scenario_generation_limits (user_id, window_started_at, request_count)

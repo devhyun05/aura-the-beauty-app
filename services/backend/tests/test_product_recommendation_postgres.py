@@ -935,9 +935,21 @@ async def test_product_recommendation_v2_contracts_in_postgres(
     assert personalized["items"][0]["productId"] == str(product_id)
     assert personalized["items"][0]["reasonCodes"] == ["ENGAGEMENT_PREFERENCE"]
 
-    await enforce_product_rate_limit(db, user_id=user_id, scope="detail", limit=1)  # type: ignore[arg-type]
+    await enforce_product_rate_limit(  # type: ignore[arg-type]
+      db,
+      user_id=user_id,
+      scope="detail",
+      limit=1,
+      enabled=True,
+    )
     with pytest.raises(AppError) as rate_error:
-      await enforce_product_rate_limit(db, user_id=user_id, scope="detail", limit=1)  # type: ignore[arg-type]
+      await enforce_product_rate_limit(  # type: ignore[arg-type]
+        db,
+        user_id=user_id,
+        scope="detail",
+        limit=1,
+        enabled=True,
+      )
     assert rate_error.value.code == "PRODUCT_RATE_LIMITED"
 
     await connection.execute(
