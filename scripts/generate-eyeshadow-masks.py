@@ -342,8 +342,12 @@ def _liner_alpha(u: float, v: float, base_th: float, tail_th: float,
         p = (u - WING_START) / wing_len
         if p > 1.0:
             return 0.0
-        yc += wing_rise * p
-        th *= 1.0 - smoothstep(0.35, 1.0, p)  # 끝으로 갈수록 뾰족
+        # 상승은 C1 이즈인(p² 계열) — 선형 램프는 WING_START에서 기울기 불연속이라
+        # 라인→윙 접합부가 V자로 꺾여 보인다(밴드 세로 스트레치 ~1.4×가 과장).
+        yc += wing_rise * (p * p * (3.0 - 2.0 * p))
+        # 테이퍼는 더 일찍·완전히 — 0.35~1.0 테이퍼는 세로 스트레치로 두꺼워진 윙 끝이
+        # 캔버스 엣지에서 잘린 듯 뭉툭했다. 0.85에서 0 도달 = 캔버스 안에서 뾰족하게 소멸.
+        th *= 1.0 - smoothstep(0.20, 0.85, p)
     if th <= 1e-6:  # 윙 끝 테이퍼가 0에 도달(u=1) — 0나눗셈 가드
         return 0.0
     d = abs(v - yc)
@@ -386,7 +390,7 @@ def liner_long(u: float, v: float) -> float:
 
 def liner_cat_long(u: float, v: float) -> float:
     # 롱 캣아이 — 끝까지 뻗으며 높이 치켜올림
-    return _liner_alpha(u, v, base_th=0.09, tail_th=0.24, wing_len=0.28, wing_rise=0.55)
+    return _liner_alpha(u, v, base_th=0.07, tail_th=0.17, wing_len=0.28, wing_rise=0.42)
 
 
 def liner_droop(u: float, v: float) -> float:

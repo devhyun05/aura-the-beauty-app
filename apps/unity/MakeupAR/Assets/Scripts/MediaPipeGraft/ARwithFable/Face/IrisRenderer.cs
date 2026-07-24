@@ -155,6 +155,7 @@ namespace ARMakeup.Face
         Overlay _stencil, _iris, _eyeliner, _eyeshadow;
         Color32[] _irisColors; // 홍채 정점색(알파 = 눈 열림 게이트)
         float _irisIntensity, _eyelinerIntensity, _eyeshadowIntensity;
+        bool _eyeshadowMaskWide; // §16b 와이드 마스크 활성 — 밴드 스윕을 끄고 연장 캔버스를 편다
         int _eyelinerThicknessProfile;
         int _eyelinerTailProfile;
         int _legacyEyelinerTailProfile;
@@ -248,6 +249,7 @@ namespace ARMakeup.Face
                 esMat.SetTexture(EyeshadowDesignId, Texture2D.whiteTexture);
                 esMat.SetFloat(EyeshadowHasDesignId, 0f);
                 esMat.SetFloat(EyeshadowDesignWideId, 0f);
+                _eyeshadowMaskWide = false;
                 return;
             }
             if (!ImageFileLoader.TryLoadMask(path, out var mask, out var error))
@@ -262,8 +264,8 @@ namespace ARMakeup.Face
             esMat.SetFloat(EyeshadowHasDesignId, 1f);
             // 와이드 계약(§16b) — 가로 2:1 이상이면 u 0..2(눈+연장) 전체를 덮는 마스크로
             // 간주(x=u/2 샘플 + 연장 게이트 개방). 표준 1:1은 기존 계약 그대로.
-            esMat.SetFloat(EyeshadowDesignWideId,
-                mask.width >= mask.height * 2 ? 1f : 0f);
+            _eyeshadowMaskWide = mask.width >= mask.height * 2;
+            esMat.SetFloat(EyeshadowDesignWideId, _eyeshadowMaskWide ? 1f : 0f);
         }
 
         /// <summary>렌즈 레이어드(#25) — 3세부 슬롯 배열을 셰이더 유니폼에 기록한다
@@ -1589,14 +1591,21 @@ namespace ARMakeup.Face
                         // Unity Mathf.SmoothStep(from,to,t)는 임계 리맵이 아니라 t를 [0,1] 보간계수로
                         // 쓰는 함수라, 여기 쓰면 s>TailSweepAlong 구간에서도 sweep이 안 꺼져 스윕이
                         // 눈꺼풀 전체로 번진다(LashRenderer와 동일 오용). 임계 리맵은 SmoothThreshold.
-                        var sweep = TailSweepStrength * (1f - SmoothThreshold(0f, TailSweepAlong, s));
+                        // §16b 와이드 마스크는 스윕 미적용 — tailDir(≈수평)이 컬럼 진행축과
+                        // 평행해 꼬리·연장 상단이 한 점에 역순으로 겹치고(상단 엣지 역행),
+                        // 겹친 쿼드에 마스크 윙이 4~5겹 그려져 검고 각진 플랩이 됐다.
+                        // 윙 모양은 마스크가 그리므로 캔버스는 수직으로만 세운다.
+                        var sweepStrength = _eyeshadowMaskWide ? 0f : TailSweepStrength;
+                        var sweep = sweepStrength * (1f - SmoothThreshold(0f, TailSweepAlong, s));
                         if (sweep > 0f) dir = Vector2.Lerp(dir, tailDir, sweep).normalized;
                     }
                     else // 연장 컬럼(눈꼬리 밖) — c=0 furthest → LidExtendPts-1 near tail
                     {
                         var tt = (LidExtendPts - c) / (float)LidExtendPts; // (0,1], far=1
                         p = tailPt + eyeAxisOut * (extLen * tt);
-                        dir = Vector2.Lerp(tailBaseDir, tailDir, TailSweepStrength).normalized; // 새 tailDir 완전 수렴(strength=1)
+                        dir = _eyeshadowMaskWide
+                            ? tailBaseDir // 와이드 마스크: 수직 캔버스(스윕 겹침 방지, 위 주석)
+                            : Vector2.Lerp(tailBaseDir, tailDir, TailSweepStrength).normalized; // 새 tailDir 완전 수렴(strength=1)
                         h = eyeRadius * ShadowHeightMult * heightMult
                             * Mathf.Lerp(1f, LidExtendHeightTaper, tt); // far end 소멸
                     }

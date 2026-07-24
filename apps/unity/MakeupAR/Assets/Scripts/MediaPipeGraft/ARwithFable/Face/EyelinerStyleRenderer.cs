@@ -39,8 +39,10 @@ namespace ARMakeup.Face
         const int Seg = (CtrlPts - 1) * (Sub + 1) + 1; // 28
 
         const float BandHeightFactor = 0.5f;  // 밴드 높이 = 눈 가로폭 × 이 값
-        const float WingLenFactor = 0.32f;    // 윙 연장 = 눈 가로폭 × 이 값
-        const float WingRise = 0.6f;          // 윙이 위로 꺾이는 정도
+        const float WingLenFactor = 0.42f;    // 윙 캔버스 연장 = 눈 가로폭 × 이 값(꼬리 길이 상한)
+        // 라인 코어(텍스처 yc≈0.10×밴드높이)가 lash 위에 떠 보이지 않게 밴드를 코어만큼
+        // 내려 앉힌다(밑단 페더는 lash 살짝 아래 = 타이트라인 느낌, 래스터 하네스로 튜닝).
+        const float BaselineSink = 0.06f;
 
         const float DistanceFromCamera = 0.5f;
         const float DepthScale = 1.0f;
@@ -198,23 +200,32 @@ namespace ARMakeup.Face
                         _ctrl[j] = EyeWarp.LiftCorner(
                             _ctrl[j], j / (float)(LidPts - 1), up, eyeDist, _cornerLift);
 
-                // 윙: 바깥 눈꼬리 접선을 위로 살짝 꺾어 연장.
+                // 윙 캔버스: 바깥 눈꼬리 접선 그대로 직선 연장. 윙의 "올라감/내려감"은
+                // 텍스처(생성기 wing_rise)가 이미 갖고 있어 지오메트리가 꺾으면 이중
+                // 적용되고, 꺾인 모서리는 밴드 접힘의 원인이 된다. 직선 연장은 C1 연속.
                 var outDir = (_ctrl[LidPts - 1] - _ctrl[LidPts - 2]).normalized;
-                var wingDir = (outDir + up * WingRise).normalized;
-                _ctrl[LidPts] = _ctrl[LidPts - 1] + wingDir * (eyeDist * WingLenFactor);
+                _ctrl[LidPts] = _ctrl[LidPts - 1] + outDir * (eyeDist * WingLenFactor);
 
                 SubdivideArc(_ctrl, CtrlPts, _lo);
+                // UV u는 컬럼 인덱스 균등(Init 고정)이라, 컬럼을 호길이 균등으로 재배치해야
+                // 텍스처가 물리 거리에 비례해 발린다. 안 하면 랜드마크가 조밀한 눈꼬리에서
+                // 윙 상승부가 가로로 ~6배 압축돼 "세로 깃대+깃발"로 왜곡된다(래스터 재현).
+                ResampleByArclength(_lo, Seg);
 
+                // 상단 엣지는 눈 전체(눈머리→윙 끝) 코드 법선 하나로 평행 오프셋.
+                // 점별 접선 법선은 윙 꺾임에서 오프셋 폭(≈0.6×눈폭) > 곡률 반경이 되어
+                // 상단 엣지가 역행·자기교차했다(윙 텍스처가 지그재그로 접혀 보이는 원인).
+                // 평행 오프셋은 하단 곡선의 복제라 구조적으로 접히지 않는다.
                 var width = eyeDist * BandHeightFactor;
+                var chord = (_lo[Seg - 1] - _lo[0]).normalized;
+                var bandN = new Vector2(-chord.y, chord.x);
+                if (Vector2.Dot(bandN, up) < 0f) bandN = -bandN;
                 for (var i = 0; i < Seg; i++)
                 {
-                    var a = _lo[Mathf.Max(i - 1, 0)];
-                    var bb = _lo[Mathf.Min(i + 1, Seg - 1)];
-                    var tangent = (bb - a).normalized;
-                    var normal = new Vector2(-tangent.y, tangent.x);
-                    if (Vector2.Dot(normal, up) < 0f) normal = -normal;
                     var wFactor = 0.7f + 0.6f * (i / (float)(Seg - 1)); // 안쪽 얇게 → 윙 두껍게
-                    _up[i] = _lo[i] + normal * (width * wFactor);
+                    var h = width * wFactor;
+                    _lo[i] -= bandN * (BaselineSink * h); // 라인 코어를 lash에 앉힘(상수 주석)
+                    _up[i] = _lo[i] + bandN * h;
                 }
 
                 var depth = Depth(lm[lids[4]].z);
@@ -227,6 +238,29 @@ namespace ARMakeup.Face
             }
             _mesh.vertices = _vertices;
             _mesh.RecalculateBounds();
+        }
+
+        readonly float[] _cumLen = new float[Seg];
+        readonly Vector2[] _resampleTmp = new Vector2[Seg];
+
+        /// <summary>pts[0..n-1]을 같은 곡선상 호길이 균등 n점으로 제자리 재배치한다.</summary>
+        void ResampleByArclength(Vector2[] pts, int n)
+        {
+            _cumLen[0] = 0f;
+            for (var i = 1; i < n; i++)
+                _cumLen[i] = _cumLen[i - 1] + (pts[i] - pts[i - 1]).magnitude;
+            var total = _cumLen[n - 1];
+            if (total < 1e-6f) return;
+            var seg = 1;
+            for (var i = 0; i < n; i++)
+            {
+                var target = total * i / (n - 1);
+                while (seg < n - 1 && _cumLen[seg] < target) seg++;
+                var span = _cumLen[seg] - _cumLen[seg - 1];
+                var t = span < 1e-9f ? 0f : (target - _cumLen[seg - 1]) / span;
+                _resampleTmp[i] = Vector2.Lerp(pts[seg - 1], pts[seg], t);
+            }
+            for (var i = 0; i < n; i++) pts[i] = _resampleTmp[i];
         }
 
         void SubdivideArc(Vector2[] ctrl, int n, Vector2[] outp)
@@ -245,14 +279,28 @@ namespace ARMakeup.Face
             outp[mi++] = ctrl[n - 1];
         }
 
+        // centripetal(α=0.5) Catmull-Rom — 균등 매개변수는 짧은 눈꼬리 세그먼트에서
+        // 긴 윙 세그먼트로 길이가 급변할 때 오버슈트해 하단 곡선이 코드 방향으로
+        // 역행하고, 평행 오프셋이어도 밴드 쿼드가 뒤집힌다(윙 텍스처 접힘).
+        // centripetal은 세그먼트 길이 편차에서 루프/역행이 생기지 않는다.
         static Vector2 CatmullRom(Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, float t)
         {
-            var t2 = t * t;
-            var t3 = t2 * t;
-            return 0.5f * (2f * p1 + (p2 - p0) * t
-                + (2f * p0 - 5f * p1 + 4f * p2 - p3) * t2
-                + (3f * p1 - p0 - 3f * p2 + p3) * t3);
+            const float MinKnot = 1e-4f; // 중복 컨트롤 포인트(끝점) 0나눗셈 가드
+            var t0 = 0f;
+            var t1 = t0 + Mathf.Max(Mathf.Sqrt((p1 - p0).magnitude), MinKnot);
+            var t2 = t1 + Mathf.Max(Mathf.Sqrt((p2 - p1).magnitude), MinKnot);
+            var t3 = t2 + Mathf.Max(Mathf.Sqrt((p3 - p2).magnitude), MinKnot);
+            var tt = Mathf.Lerp(t1, t2, t);
+            var a1 = Interp(p0, p1, t0, t1, tt);
+            var a2 = Interp(p1, p2, t1, t2, tt);
+            var a3 = Interp(p2, p3, t2, t3, tt);
+            var b1 = Interp(a1, a2, t0, t2, tt);
+            var b2 = Interp(a2, a3, t1, t3, tt);
+            return Interp(b1, b2, t1, t2, tt);
         }
+
+        static Vector2 Interp(Vector2 pa, Vector2 pb, float ta, float tb, float tt)
+            => ((tb - tt) * pa + (tt - ta) * pb) / (tb - ta);
 
         static Vector2 ImgPt(Vector3[] lm, int idx) => new Vector2(lm[idx].x, lm[idx].y);
         float Depth(float z) => DistanceFromCamera * (1f + z * DepthScale);
