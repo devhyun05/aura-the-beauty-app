@@ -1,6 +1,7 @@
 ALLOWED_UPLOAD_MEDIA_KINDS = frozenset(
   {
     "capture",
+    "face-analysis-source",
     "community-thread",
     "community-thread-thumbnail",
     "consulting-chat",
