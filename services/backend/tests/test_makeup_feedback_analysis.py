@@ -1779,6 +1779,65 @@ def test_compact_high_reasoning_path_uses_one_bedrock_call_and_expands_contract(
   ) == 13
 
 
+def test_compact_result_retries_once_when_no_topic_can_support_a_score(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  unscoreable = _compact_result()
+  for topic in unscoreable["topics"]:
+    topic["status"] = "optional"
+    topic["impact"] = "low"
+  repaired = _compact_result()
+  responses = iter((unscoreable, repaired))
+  calls: list[dict[str, object]] = []
+
+  class ResponseBody:
+    def __init__(self, value: dict) -> None:
+      self.value = value
+
+    def read(self) -> str:
+      return json.dumps(
+        {"content": [{"type": "text", "text": json.dumps(self.value, ensure_ascii=False)}]},
+        ensure_ascii=False,
+      )
+
+  class FakeBedrockClient:
+    def invoke_model(self, **kwargs):
+      calls.append(kwargs)
+      return {"body": ResponseBody(next(responses))}
+
+  service = MakeupFeedbackBedrockService(
+    Settings(
+      makeup_feedback_evidence_pipeline_enabled=False,
+      makeup_feedback_compact_single_call_enabled=True,
+    ),
+  )
+  monkeypatch.setattr(service, "_bedrock_runtime_client", lambda: FakeBedrockClient())
+
+  result = service._analyze_sync(_request_payload(), _vision_result())
+
+  assert len(calls) == 2
+  assert result["analysisDecision"] == "completed"
+  repair_body = json.loads(str(calls[1]["body"]))
+  repair_text = "\n".join(
+    str(part.get("text") or "")
+    for part in repair_body["messages"][0]["content"]
+    if isinstance(part, dict) and part.get("type") == "text"
+  )
+  assert "at least one visible topic must be strength or improvement" in repair_text
+
+
+def test_compact_result_repairs_string_boolean_from_bedrock() -> None:
+  compact = _compact_result()
+  compact["topics"][0]["lighting"] = "false"
+
+  result = analysis_module._expand_compact_single_call_result(
+    compact,
+    _request_payload(),
+  )
+
+  assert result["evaluations"][0]["observations"][0]["lightingSensitive"] is False
+
+
 def test_global_sonnet_46_requires_explicit_routing_opt_in() -> None:
   service = MakeupFeedbackBedrockService(
     Settings(

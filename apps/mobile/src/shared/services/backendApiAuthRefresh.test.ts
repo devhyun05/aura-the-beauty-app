@@ -4,6 +4,7 @@ import {
   AUTH_REFRESH_TEMPORARILY_UNAVAILABLE_CODE,
   AuthRefreshTemporarilyUnavailableError,
   BackendApiError,
+  BackendTimeoutError,
   requestBackendJson,
   setBackendAuthTokenProvider,
   setBackendAuthTokenRefreshProvider,
@@ -205,6 +206,24 @@ async function run() {
     );
     assert.equal(requests.length - repeated401Start, 2);
     assert.deepEqual(forcedRefreshArguments, [true, true]);
+
+    currentToken = null;
+    setBackendAuthTokenRefreshProvider(null);
+    globalThis.fetch = (async () => {
+      throw new Error(
+        'com.facebook.react.common.JavascriptException: '
+        + 'FetchRequestCanceledException: fetch request has been cancelled',
+      );
+    }) as typeof fetch;
+    await assert.rejects(
+      () => requestBackendJson('/native-fetch-cancel', {
+        authToken: null,
+        baseUrl: 'https://example.test',
+        timeoutMs: 10,
+      }),
+      (error: unknown) => error instanceof BackendTimeoutError,
+      'React Native native fetch cancellation must use the timeout recovery path',
+    );
   } finally {
     setBackendAuthTokenProvider(null);
     setBackendAuthTokenRefreshProvider(null);

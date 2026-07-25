@@ -268,6 +268,31 @@ if (mappedResult.analysisDecision !== 'completed') {
   throw new Error('valid completed result was mapped as retake');
 }
 
+const emptyExplicitFactsResult = mapBackendJobToFeedbackResult(
+  {
+    ...validJob,
+    feedbackPayload: {
+      ...validJob.feedbackPayload,
+      result: {
+        ...validJob.feedbackPayload.result,
+        interpretedGoal: {
+          ...validJob.feedbackPayload.result.interpretedGoal,
+          explicitFacts: [],
+        },
+      },
+    },
+  },
+  selection,
+);
+if (emptyExplicitFactsResult.analysisDecision !== 'completed') {
+  throw new Error('empty explicit facts completed result was mapped as retake');
+}
+expectEqual(
+  emptyExplicitFactsResult.interpretedGoal.explicitFacts.length,
+  0,
+  'server may return no explicit goal facts when the user gave no concrete facts',
+);
+
 expectEqual(
   getPriorityMakeupFeedbackEvaluation(mappedResult.evaluations)?.topicId,
   'brow',

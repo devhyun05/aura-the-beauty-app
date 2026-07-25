@@ -798,7 +798,6 @@ function mapInterpretedGoal(
     dynamicCriteria: mapDynamicCriteria(value.dynamicCriteria),
     explicitFacts: requireTextList(value.explicitFacts, 'interpretedGoal.explicitFacts', {
       maxItems: 6,
-      minItems: 1,
     }),
     intensity,
     label: localizeMakeupFeedbackIntensityTerms(
