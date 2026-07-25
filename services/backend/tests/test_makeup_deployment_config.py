@@ -107,6 +107,18 @@ def test_deploy_defaults_face_analysis_v2_on_for_api_and_worker() -> None:
   assert workflow.count("FACE_ANALYSIS_V2_ENABLED=${{ env.FACE_ANALYSIS_V2_ENABLED }}") == 2
 
 
+def test_deploy_disables_user_feature_usage_limits_for_api_and_worker() -> None:
+  workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
+    encoding="utf-8",
+  )
+
+  assert 'USER_FEATURE_USAGE_LIMITS_ENABLED: "false"' in workflow
+  assert "vars.USER_FEATURE_USAGE_LIMITS_ENABLED" not in workflow
+  assert workflow.count(
+    "USER_FEATURE_USAGE_LIMITS_ENABLED=${{ env.USER_FEATURE_USAGE_LIMITS_ENABLED }}",
+  ) == 2
+
+
 def test_api_task_validation_allows_every_workflow_managed_environment_variable() -> None:
   workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(
     encoding="utf-8",
