@@ -113,6 +113,30 @@ def make_upload_session(owner_user_id: UUID) -> dict:
   }
 
 
+@pytest.mark.parametrize("media_kind", ["capture", "face-analysis-source"])
+def test_presign_accepts_current_and_app_store_face_capture_media_kinds(media_kind: str) -> None:
+  payload = PresignedUploadRequest.model_validate(
+    {
+      "mediaKind": media_kind,
+      "contentType": "image/jpeg",
+      "source": "camera",
+    },
+  )
+
+  assert payload.media_kind == media_kind
+
+
+def test_presign_still_rejects_unknown_media_kind() -> None:
+  with pytest.raises(ValidationError, match="Unsupported upload media kind"):
+    PresignedUploadRequest.model_validate(
+      {
+        "mediaKind": "unknown-face-capture",
+        "contentType": "image/jpeg",
+        "source": "camera",
+      },
+    )
+
+
 @pytest.mark.asyncio
 async def test_presign_binds_server_generated_locations_to_user_and_single_upload_id() -> None:
   owner_user_id = uuid4()
