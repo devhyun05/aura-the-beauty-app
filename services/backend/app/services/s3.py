@@ -14,12 +14,15 @@ from app.core.media_policy import (
 from app.core.settings import Settings
 
 
-PRIVATE_HAIR_MEDIA_KINDS = {
+PRIVATE_MEDIA_KINDS = {
   "hair-analysis-source",
   "hair-analysis-mask",
   "hair-simulation-result",
+  "report-export-page",
+  "report-export-result",
 }
-PRIVATE_HAIR_OBJECT_PREFIXES = tuple(f"uploads/{kind}/" for kind in PRIVATE_HAIR_MEDIA_KINDS)
+PRIVATE_HAIR_MEDIA_KINDS = PRIVATE_MEDIA_KINDS
+PRIVATE_HAIR_OBJECT_PREFIXES = tuple(f"uploads/{kind}/" for kind in PRIVATE_MEDIA_KINDS)
 PRIVATE_GOLDEN_MASK_OBJECT_PREFIX = f"uploads/{GOLDEN_MASK_MEDIA_KIND}/"
 PUBLIC_MAKEUP_RECOMMENDATION_OBJECT_PREFIX = "uploads/generated-makeup-recommendations/"
 SERVER_MANAGED_MEDIA_KINDS = {
@@ -29,6 +32,8 @@ SERVER_MANAGED_MEDIA_KINDS = {
   "optimized",
   "photo-captures",
   "recommended-makeups",
+  "report-export-page",
+  "report-export-result",
 }
 MANAGED_MEDIA_OBJECT_PREFIXES = tuple(
   f"uploads/{kind}/"
@@ -115,7 +120,7 @@ class S3Service:
 
     object_key = f"uploads/{media_kind}/{uuid4()}{extension}"
     is_golden_mask = media_kind == GOLDEN_MASK_MEDIA_KIND
-    is_private_media = media_kind in PRIVATE_HAIR_MEDIA_KINDS or is_golden_mask
+    is_private_media = media_kind in PRIVATE_MEDIA_KINDS or is_golden_mask
     cache_control = "private, no-store" if is_private_media else "public, max-age=31536000, immutable"
     put_params = {
       "Bucket": self.settings.s3_bucket_name,

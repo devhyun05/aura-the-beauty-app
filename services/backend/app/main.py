@@ -34,6 +34,7 @@ from app.services.makeup_recommendation_schema import ensure_makeup_recommendati
 from app.services.notification_schema import ensure_notification_schema
 from app.services.notification_realtime import notification_database_listener
 from app.services.product_recommendation_schema import ensure_product_recommendation_runtime_schema
+from app.services.report_export_schema import ensure_report_export_schema
 
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_makeup_recommendation_schema(database)
     await ensure_notification_schema(database)
     await ensure_product_recommendation_runtime_schema(database)
+    await ensure_report_export_schema(database)
     await notification_database_listener.start(database)
     yield
   finally:

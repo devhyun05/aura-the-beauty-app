@@ -45,6 +45,9 @@ REGION_JPEG_QUALITIES = (90, 84, 76, 68, 60, 52, 44)
 LOCAL_FACE_LANDMARKER_MODEL_PATH = (
   Path(__file__).resolve().parents[2] / "models" / "face_landmarker.task"
 )
+LOCAL_FACE_DETECTOR_MODEL_PATH = (
+  Path(__file__).resolve().parents[2] / "models" / "blaze_face_short_range.tflite"
+)
 
 REGION_NAMES = (
   "full",
@@ -358,6 +361,87 @@ def _face_detector_result(detected: Any) -> FaceDetectorResult:
   return FaceDetectorResult(available=True, faces=tuple(observations))
 
 
+def _mediapipe_face_box_detector(image: Image.Image) -> FaceDetectorResult:
+  """Detect a face box and coarse eyes when full landmarks are unavailable."""
+
+  if mp is None or mp_tasks is None or mp_tasks_vision is None:
+    return FaceDetectorResult(available=False, error="mediapipe_unavailable")
+  if not LOCAL_FACE_DETECTOR_MODEL_PATH.exists():
+    return FaceDetectorResult(available=False, error="face_detector_model_missing")
+
+  try:
+    options = mp_tasks_vision.FaceDetectorOptions(
+      base_options=mp_tasks.BaseOptions(
+        model_asset_path=str(LOCAL_FACE_DETECTOR_MODEL_PATH),
+      ),
+      running_mode=mp_tasks_vision.RunningMode.IMAGE,
+      min_detection_confidence=0.2,
+    )
+    with mp_tasks_vision.FaceDetector.create_from_options(options) as detector:
+      detected = detector.detect(
+        mp.Image(
+          image_format=mp.ImageFormat.SRGB,
+          data=np.ascontiguousarray(image, dtype=np.uint8),
+        ),
+      )
+  except Exception as exc:  # noqa: BLE001 - fallback errors remain non-fatal.
+    return FaceDetectorResult(
+      available=False,
+      error=f"face_box_detection_failed:{exc.__class__.__name__}",
+    )
+
+  observations: list[FaceObservation] = []
+  for detection in list(detected.detections or []):
+    raw_box = detection.bounding_box
+    keypoints = list(detection.keypoints or [])
+    eye_points = sorted(
+      (
+        NormalizedPoint(float(point.x), float(point.y)).clamped()
+        for point in keypoints[:2]
+      ),
+      key=lambda point: point.x,
+    )
+    landmarks: dict[str, NormalizedPoint] = {}
+    region_points: dict[str, tuple[NormalizedPoint, ...]] = {}
+    if len(eye_points) == 2:
+      landmarks = {
+        "left_eye_outer": eye_points[0],
+        "right_eye_outer": eye_points[1],
+      }
+      region_points = {
+        "left_eye": (eye_points[0],),
+        "right_eye": (eye_points[1],),
+      }
+    categories = list(detection.categories or [])
+    observations.append(
+      FaceObservation(
+        bbox=NormalizedBox(
+          left=float(raw_box.origin_x) / image.width,
+          top=float(raw_box.origin_y) / image.height,
+          right=float(raw_box.origin_x + raw_box.width) / image.width,
+          bottom=float(raw_box.origin_y + raw_box.height) / image.height,
+        ).clamped(),
+        landmarks=landmarks,
+        confidence=float(categories[0].score) if categories else None,
+        region_points=region_points,
+      ),
+    )
+  observations.sort(key=lambda face: face.bbox.left)
+  return FaceDetectorResult(available=True, faces=tuple(observations))
+
+
+def _with_face_box_fallback(
+  image: Image.Image,
+  result: FaceDetectorResult,
+) -> FaceDetectorResult:
+  if result.available and result.faces:
+    return result
+  fallback = _mediapipe_face_box_detector(image)
+  if fallback.available:
+    return fallback
+  return result
+
+
 def _default_face_detector_batch(
   images: Sequence[Image.Image],
 ) -> tuple[FaceDetectorResult, ...]:
@@ -365,8 +449,11 @@ def _default_face_detector_batch(
     return ()
   if mp is None or mp_tasks is None or mp_tasks_vision is None:
     return tuple(
-      FaceDetectorResult(available=False, error="mediapipe_unavailable")
-      for _image in images
+      _with_face_box_fallback(
+        image,
+        FaceDetectorResult(available=False, error="mediapipe_unavailable"),
+      )
+      for image in images
     )
 
   from app.core.settings import get_settings
@@ -379,8 +466,11 @@ def _default_face_detector_batch(
   )
   if not model_path.exists():
     return tuple(
-      FaceDetectorResult(available=False, error="face_landmarker_model_missing")
-      for _image in images
+      _with_face_box_fallback(
+        image,
+        FaceDetectorResult(available=False, error="face_landmarker_model_missing"),
+      )
+      for image in images
     )
 
   try:
@@ -405,14 +495,20 @@ def _default_face_detector_batch(
               error=f"mediapipe_detection_failed:{exc.__class__.__name__}",
             ),
           )
-      return tuple(results)
+      return tuple(
+        _with_face_box_fallback(image, result)
+        for image, result in zip(images, results, strict=True)
+      )
   except Exception as exc:  # noqa: BLE001 - detector failure is a soft runtime capability issue.
     return tuple(
-      FaceDetectorResult(
-        available=False,
-        error=f"mediapipe_detection_failed:{exc.__class__.__name__}",
+      _with_face_box_fallback(
+        image,
+        FaceDetectorResult(
+          available=False,
+          error=f"mediapipe_detection_failed:{exc.__class__.__name__}",
+        ),
       )
-      for _image in images
+      for image in images
     )
 
 
@@ -673,10 +769,14 @@ def _alignment_eye_centers(
 def _alignment_frame_metadata(
   image: Image.Image,
   face: FaceObservation,
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
+  metadata: dict[str, Any] = {
+    "imageSize": {"width": image.width, "height": image.height},
+    "faceBox": face.bbox.clamped().as_dict(),
+  }
   eye_centers = _alignment_eye_centers(face)
   if eye_centers is None:
-    return None
+    return metadata
   image_left, image_right = eye_centers
   roll_deg = math.degrees(
     math.atan2(
@@ -684,15 +784,12 @@ def _alignment_frame_metadata(
       image_right.x - image_left.x,
     ),
   )
-  return {
-    "imageSize": {"width": image.width, "height": image.height},
-    "faceBox": face.bbox.clamped().as_dict(),
-    "eyeCenters": {
-      "imageLeft": image_left.as_dict(),
-      "imageRight": image_right.as_dict(),
-    },
-    "rollDeg": round(roll_deg, 6),
+  metadata["eyeCenters"] = {
+    "imageLeft": image_left.as_dict(),
+    "imageRight": image_right.as_dict(),
   }
+  metadata["rollDeg"] = round(roll_deg, 6)
+  return metadata
 
 
 def extract_makeup_face_crop_metadata(
@@ -757,12 +854,11 @@ def extract_personalized_makeup_face_metadata(
     return metadata
   source_alignment = _alignment_frame_metadata(source_image, source_face)
   generated_alignment = _alignment_frame_metadata(generated_image, generated_face)
-  if source_alignment is not None and generated_alignment is not None:
-    metadata["alignmentMetadata"] = {
-      "version": MAKEUP_ALIGNMENT_METADATA_VERSION,
-      "source": source_alignment,
-      "generated": generated_alignment,
-    }
+  metadata["alignmentMetadata"] = {
+    "version": MAKEUP_ALIGNMENT_METADATA_VERSION,
+    "source": source_alignment,
+    "generated": generated_alignment,
+  }
   return metadata
 
 

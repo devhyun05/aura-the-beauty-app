@@ -81,7 +81,7 @@ def test_personalized_face_metadata_retries_generated_crop_detection(
   assert metadata["cropMetadata"] == crop_metadata
 
 
-def test_personalized_face_metadata_rejects_missing_required_crops(
+def test_personalized_face_metadata_keeps_detection_metadata_optional(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
   monkeypatch.setattr(
@@ -95,13 +95,12 @@ def test_personalized_face_metadata_rejects_missing_required_crops(
     lambda _image_bytes: None,
   )
 
-  with pytest.raises(AppError) as exc_info:
-    makeup_recommendation_image._extract_personalized_face_metadata(
-      b"source",
-      b"generated",
-    )
+  metadata = makeup_recommendation_image._extract_personalized_face_metadata(
+    b"source",
+    b"generated",
+  )
 
-  assert exc_info.value.code == "MAKEUP_IMAGE_CROP_METADATA_MISSING"
+  assert metadata == {}
 
 
 def test_v2_schema_and_checker_cover_taxonomy_sessions_snapshots_and_assets() -> None:

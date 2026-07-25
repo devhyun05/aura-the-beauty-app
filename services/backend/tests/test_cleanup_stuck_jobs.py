@@ -97,8 +97,8 @@ def test_parse_args_rejects_non_positive_timeout() -> None:
 @pytest.mark.parametrize(
   ("dry_run", "expected_calls"),
   [
-    (True, ["find-stuck", "find-expired", "find-expired-uploads"]),
-    (False, ["cleanup-stuck", "cleanup-expired", "cleanup-expired-uploads"]),
+    (True, ["find-stuck", "find-expired", "find-expired-uploads", "find-expired-report-exports"]),
+    (False, ["cleanup-stuck", "cleanup-expired", "cleanup-expired-uploads", "cleanup-expired-report-exports"]),
   ],
 )
 async def test_run_processes_all_scheduled_cleanup_work(
@@ -156,6 +156,21 @@ async def test_run_processes_all_scheduled_cleanup_work(
     calls.append("cleanup-expired-uploads")
     return ExpiredMediaUploadResult(())
 
+  async def fake_find_expired_report_exports(db_arg: object) -> dict[str, int]:
+    assert db_arg is db
+    calls.append("find-expired-report-exports")
+    return {"expired": 0}
+
+  async def fake_cleanup_expired_report_exports(
+    db_arg: object,
+    *,
+    s3: object,
+  ) -> dict[str, int]:
+    assert db_arg is db
+    assert s3 is not None
+    calls.append("cleanup-expired-report-exports")
+    return {"deleted": 0, "failed": 0}
+
   monkeypatch.setattr(cleanup_module, "connect_database", fake_connect_database)
   monkeypatch.setattr(cleanup_module, "find_stuck_jobs", fake_find_stuck_jobs)
   monkeypatch.setattr(cleanup_module, "cleanup_stuck_jobs", fake_cleanup_stuck_jobs)
@@ -163,6 +178,8 @@ async def test_run_processes_all_scheduled_cleanup_work(
   monkeypatch.setattr(cleanup_module, "cleanup_expired_auradin_sessions", fake_cleanup_expired_sessions)
   monkeypatch.setattr(cleanup_module, "find_expired_media_uploads", fake_find_expired_uploads)
   monkeypatch.setattr(cleanup_module, "cleanup_expired_media_uploads", fake_cleanup_expired_uploads)
+  monkeypatch.setattr(cleanup_module, "find_expired_long_image_export_sessions", fake_find_expired_report_exports)
+  monkeypatch.setattr(cleanup_module, "cleanup_expired_long_image_export_sessions", fake_cleanup_expired_report_exports)
 
   result = await run(SimpleNamespace(timeout_minutes=120, dry_run=dry_run))
 

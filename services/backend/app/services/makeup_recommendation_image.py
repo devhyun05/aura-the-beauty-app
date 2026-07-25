@@ -141,9 +141,12 @@ def _application_plan_contract(guide: dict[str, Any]) -> str:
       f"#{step.get('order')} {_prompt_text(step.get('title'), 24)}"
       f"[{color_copy}]@{_prompt_text(step.get('placement'), 36)}>"
       f"{_prompt_text(step.get('technique'), 36)};"
+      f"tool:{_prompt_text(step.get('tool'), 24)};"
+      f"amount:{_prompt_text(step.get('amount'), 24)};"
+      f"blend:{_prompt_text(step.get('blending'), 36)};"
       f"finish:{_prompt_text(step.get('finishCheck'), 30)}"
     )
-  return " | ".join(contracts)[:820]
+  return " | ".join(contracts)[:1020]
 
 
 def _area_color_texture_contract(recommendation: dict[str, Any]) -> str:
@@ -519,12 +522,6 @@ def _extract_personalized_face_metadata(
     retry_crop_metadata = extract_makeup_face_crop_metadata(generated_image_bytes)
     if isinstance(retry_crop_metadata, dict):
       metadata["cropMetadata"] = retry_crop_metadata
-  if not _has_required_makeup_crops(metadata.get("cropMetadata")):
-    raise AppError(
-      502,
-      "MAKEUP_IMAGE_CROP_METADATA_MISSING",
-      "생성 이미지의 얼굴 부위를 확인하지 못했어요. 다시 시도해 주세요.",
-    )
   return metadata
 
 
@@ -609,16 +606,7 @@ def _generate_asset_sync(
       )
       if semantic_color_metadata is not None:
         face_metadata["semanticColorMetadata"] = semantic_color_metadata
-  except AppError as exc:
-    if exc.code == "MAKEUP_IMAGE_CROP_METADATA_MISSING":
-      raise
-    logger.warning(
-      "[aura:makeup-recommendation] face-metadata:skipped reportId=%s imageKey=%s",
-      report_id,
-      image_key,
-      exc_info=True,
-    )
-  except Exception:  # noqa: BLE001 - generic face metadata remains best-effort.
+  except Exception:  # noqa: BLE001 - face metadata must not block image delivery.
     logger.warning(
       "[aura:makeup-recommendation] face-metadata:skipped reportId=%s imageKey=%s",
       report_id,

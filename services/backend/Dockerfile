@@ -21,6 +21,10 @@ COPY services/backend/scripts/download_face_landmarker.py /tmp/download_face_lan
 RUN python /tmp/download_face_landmarker.py --output /app/models/face_landmarker.task \
   && rm /tmp/download_face_landmarker.py
 
+COPY services/backend/scripts/download_face_detector.py /tmp/download_face_detector.py
+RUN python /tmp/download_face_detector.py --output /app/models/blaze_face_short_range.tflite \
+  && rm /tmp/download_face_detector.py
+
 COPY services/backend/app ./app
 COPY docs/backend/schema.sql ./docs/backend/schema.sql
 COPY docs/backend/seed.sql ./docs/backend/seed.sql

@@ -20,6 +20,7 @@ from app.api import (
   notifications,
   privacy,
   products,
+  report_exports,
   search_events,
   search_sessions,
   users,
@@ -36,6 +37,7 @@ api_router.include_router(media.router)
 api_router.include_router(analysis.router)
 api_router.include_router(beard.router)
 api_router.include_router(products.router)
+api_router.include_router(report_exports.router)
 api_router.include_router(search_sessions.router)
 api_router.include_router(search_events.router)
 api_router.include_router(makeup_recommendations.router)

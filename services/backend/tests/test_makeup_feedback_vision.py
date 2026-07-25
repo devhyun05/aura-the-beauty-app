@@ -252,6 +252,59 @@ def test_extracts_personalized_alignment_with_screen_ordered_eye_centers() -> No
   assert "landmark" not in json.dumps(metadata).lower()
 
 
+def test_extracts_personalized_alignment_from_face_boxes_without_eye_centers() -> None:
+  face_without_eyes = replace(
+    _face(),
+    landmarks={},
+    region_points={},
+    pose=None,
+  )
+  detections = iter(
+    (
+      _detector_result(face_without_eyes),
+      _detector_result(
+        replace(
+          face_without_eyes,
+          bbox=NormalizedBox(left=0.24, top=0.16, right=0.76, bottom=0.88),
+        ),
+      ),
+    ),
+  )
+
+  metadata = extract_personalized_makeup_face_metadata(
+    _pattern_image_bytes(width=900, height=1100),
+    _pattern_image_bytes(width=600, height=800),
+    detector=lambda _image: next(detections),
+  )
+
+  alignment = metadata["alignmentMetadata"]
+  assert alignment["source"] == {
+    "imageSize": {"width": 900, "height": 1100},
+    "faceBox": {"left": 0.2, "top": 0.1, "right": 0.8, "bottom": 0.9},
+  }
+  assert alignment["generated"] == {
+    "imageSize": {"width": 600, "height": 800},
+    "faceBox": {"left": 0.24, "top": 0.16, "right": 0.76, "bottom": 0.88},
+  }
+
+
+def test_default_detector_uses_mediapipe_face_box_fallback(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  fallback = _detector_result(replace(_face(), landmarks={}, region_points={}))
+  monkeypatch.setattr(vision_module, "mp", None)
+  monkeypatch.setattr(
+    vision_module,
+    "_mediapipe_face_box_detector",
+    lambda _image: fallback,
+    raising=False,
+  )
+
+  results = vision_module._default_face_detector_batch((Image.new("RGB", (640, 960)),))
+
+  assert results == (fallback,)
+
+
 @pytest.mark.parametrize(
   "detector_result",
   [

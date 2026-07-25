@@ -175,6 +175,20 @@ def _patch_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
   )
 
 
+def test_previous_detector_no_face_marker_is_retried() -> None:
+  marker = {
+    "version": "makeup-face-alignment-backfill-v1",
+    "status": "no-face",
+    "attemptedAt": "2026-07-25T00:00:00Z",
+    "retryAfter": "2026-07-26T00:00:00Z",
+  }
+
+  assert makeup_api._alignment_backfill_marker_is_fresh(
+    marker,
+    now=datetime(2026, 7, 25, 1, tzinfo=timezone.utc),
+  ) is False
+
+
 @pytest.mark.asyncio
 async def test_existing_personalized_anchor_lazily_backfills_minimal_alignment(
   monkeypatch: pytest.MonkeyPatch,

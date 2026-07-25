@@ -20,6 +20,10 @@ from app.ops.cleanup_expired_media_uploads import (
   print_expired_media_upload_result,
 )
 from app.services.s3 import S3Service
+from app.services.report_export_sessions import (
+  cleanup_expired_long_image_export_sessions,
+  find_expired_long_image_export_sessions,
+)
 
 DEFAULT_TIMEOUT_MINUTES = 120
 ERROR_CODE = "STUCK_JOB_TIMEOUT"
@@ -213,6 +217,7 @@ async def run(args: argparse.Namespace) -> int:
       result = await find_stuck_jobs(db, cutoff=cutoff)
       expired_session_result = await find_expired_auradin_sessions(db)
       expired_upload_result = await find_expired_media_uploads(db)
+      report_export_result = await find_expired_long_image_export_sessions(db)
     else:
       result = await cleanup_stuck_jobs(db, cutoff=cutoff)
       expired_session_result = await cleanup_expired_auradin_sessions(db)
@@ -220,10 +225,18 @@ async def run(args: argparse.Namespace) -> int:
         db,
         s3=S3Service(get_settings()),
       )
+      report_export_result = await cleanup_expired_long_image_export_sessions(
+        db,
+        s3=S3Service(get_settings()),
+      )
     print_result(result, dry_run=args.dry_run, cutoff=cutoff)
     print_expired_auradin_session_result(expired_session_result, dry_run=args.dry_run)
     print_expired_media_upload_result(expired_upload_result, dry_run=args.dry_run)
-    return 1 if expired_upload_result.has_failures else 0
+    print(
+      f"[aura:report-export-cleanup] mode={'dry-run' if args.dry_run else 'execute'} "
+      f"result={json.dumps(report_export_result, sort_keys=True)}",
+    )
+    return 1 if expired_upload_result.has_failures or report_export_result.get("failed", 0) else 0
   finally:
     await db.close()
 

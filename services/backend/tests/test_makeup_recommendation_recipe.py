@@ -268,6 +268,10 @@ def test_saved_v2_adapter_does_not_invent_recipe_for_an_older_image() -> None:
 
 def test_image_prompt_keeps_all_area_layers_and_multicolor_tokens() -> None:
   anchor = _recommendation()["looks"][0]
+  first_step = anchor["areaGuides"][0]["applicationPlan"]["steps"][0]
+  first_step["tool"] = "납작 파운데이션 브러시"
+  first_step["amount"] = "진주 한 알 크기"
+  first_step["blending"] = "얼굴 중앙에서 바깥으로 눌러 블렌딩"
 
   prompt = image_service._prompt(
     "중요한 발표",
@@ -279,6 +283,14 @@ def test_image_prompt_keeps_all_area_layers_and_multicolor_tokens() -> None:
   assert all(f"{area}:" in prompt for area in ("base", "brow", "eye", "cheek", "lip"))
   assert all(token in prompt for token in ("베이스", "전이", "깊이", "라인"))
   assert all(token in prompt for token in ("바탕", "안쪽 포인트", "광택"))
+  assert all(
+    token in prompt
+    for token in (
+      "납작 파운데이션 브러시",
+      "진주 한 알 크기",
+      "얼굴 중앙에서 바깥으로 눌러 블렌딩",
+    )
+  )
 
 
 def test_replace_products_refinement_preserves_application_recipe() -> None:
