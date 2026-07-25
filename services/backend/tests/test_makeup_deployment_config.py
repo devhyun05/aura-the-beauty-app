@@ -8,7 +8,7 @@ from app.core.settings import Settings
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
-def test_seoul_makeup_model_defaults_use_global_inference_profiles() -> None:
+def test_seoul_makeup_model_defaults_use_global_inference_profiles(monkeypatch) -> None:
   env_example = (PROJECT_ROOT / "services/backend/.env.example").read_text(encoding="utf-8")
   workflow = (PROJECT_ROOT / ".github/workflows/deploy-backend-ecs.yml").read_text(encoding="utf-8")
 
@@ -20,8 +20,10 @@ def test_seoul_makeup_model_defaults_use_global_inference_profiles() -> None:
 
   for name, model_id in expected.items():
     assert f"{name}={model_id}" in env_example
-    assert f"{name}: ${{{{ vars.{name} || '{model_id}' }}}}" in workflow
+    assert f"{name}: {model_id}" in workflow
+    assert f"vars.{name}" not in workflow
     assert f"{name}=${{{{ env.{name} }}}}" in workflow
+    monkeypatch.delenv(name, raising=False)
 
   settings = Settings(bedrock_model_id="anthropic.claude-3-5-sonnet-20241022-v2:0")
   assert settings.effective_scenario_model_id == expected["BEDROCK_SCENARIO_MODEL_ID"]
@@ -40,7 +42,9 @@ def test_dev_deploy_routes_analysis_to_global_sonnet_46() -> None:
     "MAKEUP_FEEDBACK_GLOBAL_INFERENCE_ALLOWED": "true",
   }
   for name, value in expected.items():
-    assert f"{name}: ${{{{ vars.{name} || '{value}' }}}}" in workflow
+    rendered_value = f'"{value}"' if value == "true" else value
+    assert f"{name}: {rendered_value}" in workflow
+    assert f"vars.{name}" not in workflow
     assert workflow.count(f"{name}=${{{{ env.{name} }}}}") == 2
     assert f'"{name}"' in workflow
 
@@ -98,10 +102,8 @@ def test_deploy_defaults_face_analysis_v2_on_for_api_and_worker() -> None:
     encoding="utf-8",
   )
 
-  assert (
-    "FACE_ANALYSIS_V2_ENABLED: "
-    "${{ vars.FACE_ANALYSIS_V2_ENABLED || 'true' }}"
-  ) in workflow
+  assert 'FACE_ANALYSIS_V2_ENABLED: "true"' in workflow
+  assert "vars.FACE_ANALYSIS_V2_ENABLED" not in workflow
   assert workflow.count("FACE_ANALYSIS_V2_ENABLED=${{ env.FACE_ANALYSIS_V2_ENABLED }}") == 2
 
 
