@@ -8,10 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		0FA0A731B5B2E91D85A3C0C3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1CF056D4BCFBCB119E2FD9FD /* PrivacyInfo.xcprivacy */; };
-		A9F0A1012FA0000000FE0001 /* AURAPerformanceMonitor.m in Sources */ = {isa = PBXBuildFile; fileRef = A9F0A1002FA0000000FE0001 /* AURAPerformanceMonitor.m */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
 		4A831081BA29FEC55EC6EDD3 /* libPods-AURA.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 90F57427B8CDFED1AC0B228A /* libPods-AURA.a */; };
+		A9F0A1012FA0000000FE0001 /* AURAPerformanceMonitor.m in Sources */ = {isa = PBXBuildFile; fileRef = A9F0A1002FA0000000FE0001 /* AURAPerformanceMonitor.m */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
 		D4571014F692D984B908B4CE /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504346C7D22F1FFCE44CAEE5 /* ExpoModulesProvider.swift */; };
 		E5F0A1012F80111100FACE01 /* AURAFaceLandmarkDetector.m in Sources */ = {isa = PBXBuildFile; fileRef = E5F0A1002F80111100FACE01 /* AURAFaceLandmarkDetector.m */; };

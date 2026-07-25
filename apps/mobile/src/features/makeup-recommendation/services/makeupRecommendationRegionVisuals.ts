@@ -121,12 +121,13 @@ export function mapAnalysisRegionVisualsToSourceCrops(
 /**
  * Coordinate-space-safe fallback order:
  * 1) generated image + its own MediaPipe crop metadata;
- * 2) source report image + source report regionVisuals;
- * 3) the complete generated image, without invented crop coordinates;
- * 4) the complete source image, without invented crop coordinates;
- * 5) unavailable placeholder when no real image is ready.
+ * 2) generated image + source report regionVisuals for identity-preserving edits;
+ * 3) source report image + source report regionVisuals while generation is pending;
+ * 4) the complete generated image, without invented crop coordinates;
+ * 5) the complete source image, without invented crop coordinates;
+ * 6) unavailable placeholder when no real image is ready.
  *
- * Source coordinates are never paired with the generated AFTER image.
+ * Once AFTER is ready, an area guide must never show the unmade-up source.
  */
 export function resolveMakeupRecommendationAreaCropAsset(input: {
   area: PartKey;
@@ -150,6 +151,16 @@ export function resolveMakeupRecommendationAreaCropAsset(input: {
   const sourceCrop = mapAnalysisRegionVisualsToSourceCrops(
     input.sourceRegionVisuals,
   )?.[input.area];
+  if (input.generatedReady && sourceCrop?.boxes.length) {
+    return {
+      boxes: sourceCrop.boxes,
+      coordinateSpace: 'generated-image',
+      guides: [],
+      imageSource: input.generatedImage,
+      ready: true,
+    };
+  }
+
   if (input.sourceImageUri?.trim() && sourceCrop?.boxes.length) {
     return {
       boxes: sourceCrop.boxes,

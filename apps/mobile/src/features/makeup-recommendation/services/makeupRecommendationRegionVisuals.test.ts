@@ -70,26 +70,33 @@ expectEqual(
   'generated coordinates stay paired with AFTER image',
 );
 
-const sourceFallback = resolveMakeupRecommendationAreaCropAsset({
+const generatedWithSourceCropFallback = resolveMakeupRecommendationAreaCropAsset({
   area: 'lip',
   generatedImage: {uri: 'https://cdn/after.jpg'},
   generatedReady: true,
   sourceImageUri: 'https://cdn/source.jpg',
   sourceRegionVisuals: visuals,
 });
-expectEqual(sourceFallback.coordinateSpace, 'source-analysis-image', 'source fallback selected');
 expectEqual(
-  (sourceFallback.imageSource as {uri?: string}).uri,
-  'https://cdn/source.jpg',
-  'source coordinates never reuse AFTER image',
+  generatedWithSourceCropFallback.coordinateSpace,
+  'generated-image',
+  'source region coordinates crop the completed AFTER image',
 );
-expectEqual(sourceFallback.guides[0]?.label, 'lip line', 'source guide evidence retained');
+expectEqual(
+  (generatedWithSourceCropFallback.imageSource as {uri?: string}).uri,
+  'https://cdn/after.jpg',
+  'area guide never falls back to the unmade-up source once AFTER is ready',
+);
+expectEqual(
+  generatedWithSourceCropFallback.guides.length,
+  0,
+  'source-only guide overlays are not drawn on the generated image',
+);
 
 const generatedFullFallback = resolveMakeupRecommendationAreaCropAsset({
   area: 'brow',
   generatedImage: {uri: 'https://cdn/after.jpg'},
   generatedReady: true,
-  sourceRegionVisuals: visuals,
 });
 expectEqual(
   generatedFullFallback.coordinateSpace,

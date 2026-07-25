@@ -751,11 +751,8 @@ requireIncludes(regionVisualResolver, [
   'imageSource: {uri: input.sourceImageUri.trim()}',
   'isMakeupRecommendationCropRenderReady',
   'mapAnalysisRegionVisualsToSourceCrops',
-  'Source coordinates are never paired with the generated AFTER image.',
+  'Once AFTER is ready, an area guide must never show the unmade-up source.',
 ], 'Generated-first regionVisual fallback resolver');
-if (finalAreaCrop.includes('source={generatedImage}')) {
-  throw new Error('Source-analysis coordinates must never be rendered on the generated image.');
-}
 const finalAreaCropLayout = read(featureRoot, 'components/result/finalAreaCropLayout.ts');
 requireIncludes(finalAreaCropLayout, [
   '(box.right - box.left) * sourceWidth',
