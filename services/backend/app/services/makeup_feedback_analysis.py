@@ -3213,7 +3213,46 @@ class MakeupFeedbackBedrockService:
       ),
     )
     if compact_single_call:
-      parsed = _expand_compact_single_call_result(parsed, payload)
+      try:
+        parsed = _expand_compact_single_call_result(parsed, payload)
+      except AppError as exc:
+        details = exc.details if isinstance(exc.details, dict) else {}
+        missing_score_evidence = (
+          exc.code == "FEEDBACK_BEDROCK_OUTPUT_INVALID"
+          and details.get("field") == "topics"
+          and details.get("reason")
+          == "must contain at least one strength or improvement for scoring"
+        )
+        if not missing_score_evidence:
+          raise
+
+        logger.warning(
+          "[aura:feedback-bedrock] compact:retry reason=no-scoreable-topic",
+        )
+        repaired = self._invoke_json_stage(
+          client=client,
+          model_id=model_id,
+          stage="final-scoreable-repair",
+          system_prompt=self._build_system_prompt(),
+          content=[
+            *final_content,
+            {
+              "type": "text",
+              "text": (
+                "Contract correction: the prior result had no strength or improvement, "
+                "so no component could cite score evidence. Return the complete compact "
+                "JSON again. This photo passed server capture-quality checks; at least one "
+                "visible topic must be strength or improvement. If makeup is nearly absent, "
+                "treat a clearly visible, goal-relevant non-application result as improvement "
+                "and give a concrete makeup action. Do not score natural skin, facial features, "
+                "or attractiveness. Do not return every topic as optional, not_assessable, or "
+                "not_applicable."
+              ),
+            },
+          ],
+          max_tokens=BEDROCK_COMPACT_FINAL_MAX_TOKENS,
+        )
+        parsed = _expand_compact_single_call_result(repaired, payload)
     parsed["captureQuality"] = _capture_quality_for_model_result(parsed, vision_result)
 
     normalized_result = normalize_makeup_feedback_result(parsed, payload)
